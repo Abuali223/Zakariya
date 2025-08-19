@@ -61,3 +61,9 @@ window.AI = {
       : { answer: localExplain(q), source: "local" };
   }
 };
+// Avval onlayn invoke qilishga urinadi, xato bo'lsa lokalga qaytadi
+window.AI = {
+  async tutor(q, ctx) {
+    return onlineTutor(q, ctx); // navigator.onLine tekshiruvini olib tashladik
+  }
+};
