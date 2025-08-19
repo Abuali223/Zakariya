@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 
-/* ---- Embedded CONTENT (fetch YO‘Q) ---- */
+/* ===== 1) Kontent (fetch YO‘Q) ===== */
 const CONTENT = { packs: {
   colors:{title:"Ranglar",items:[
     {ar:"أَحْمَر",tr:"aḥmar",uz:"qizil"},
@@ -59,7 +59,7 @@ const CONTENT = { packs: {
 }};
 const PACKS = Object.keys(CONTENT.packs);
 
-/* ---- Router ---- */
+/* ===== 2) Router ===== */
 const routes = { dash, lessons, practice, tests, tutor, parent, profile };
 function nav(){
   const h = (location.hash||'#dash').slice(1);
@@ -68,7 +68,7 @@ function nav(){
 }
 addEventListener('hashchange', nav);
 
-/* ---- IndexedDB (progress) ---- */
+/* ===== 3) IndexedDB (progress) ===== */
 let dbp=null;
 function dbOpen(){
   if(dbp) return dbp;
@@ -99,7 +99,7 @@ async function srsUpdate(user,item,grade){
   alert(grade>=3?'Ajoyib!':'Qiyin belgilandi');
 }
 
-/* ---- Offline queue + (ixtiyoriy) Supabase sync ---- */
+/* ===== 4) Offline Queue + (ixtiyoriy) Supabase sync ===== */
 const QKEY='sync_q';
 function enqueue(rows){
   const q=JSON.parse(localStorage.getItem(QKEY)||'[]');
@@ -129,7 +129,7 @@ $('#btn-sync')?.addEventListener('click', flush);
 setInterval(flush, 10000);
 addEventListener('online', flush);
 
-/* ---- Sahifalar ---- */
+/* ===== 5) Sahifalar ===== */
 function dash(){
   const total = Object.values(CONTENT.packs).reduce((n,p)=>n+p.items.length,0);
   $('#page').innerHTML = `
@@ -179,7 +179,7 @@ function tests(){
   $('#page').innerHTML = `<h2>Testlar</h2><div class="card">Demo test: tez orada.</div>`;
 }
 
-/* ---- YANGI: AI Tutor (serversiz + onlayn fallback) ---- */
+/* ===== 6) AI Tutor (serversiz + onlayn fallback) ===== */
 function tutor(){
   $('#page').innerHTML = `
     <h2>AI Tutor</h2>
@@ -195,7 +195,7 @@ function tutor(){
           <button class="btn primary" id="t-send">Yuborish</button>
         </div>
       </div>
-      <p class="muted" style="margin-top:6px">Oflayn: lokal javob. Onlayn: serverdagi SI (agar config.js to‘ldirilgan bo‘lsa).</p>
+      <p class="muted" style="margin-top:6px">Oflayn: lokal javob. Onlayn: serverdagi SI (agar config.js to‘ldirilgan).</p>
     </div>`;
   $('#t-send').addEventListener('click', async ()=>{
     const q = $('#t-input').value.trim(); if(!q) return;
@@ -203,7 +203,7 @@ function tutor(){
     $('#t-input').value='';
     const ctx = { level: $('#t-level').value, topic: ($('#t-topic').value||'general') };
     const { answer, source } = await window.AI.tutor(q, ctx);
-    log.innerHTML += `<div class="card" style="margin:6px"><div>${answer.replace(/\\n/g,'<br>')}</div><div class="muted" style="margin-top:6px">manba: ${source}</div></div>`;
+    log.innerHTML += `<div class="card" style="margin:6px"><div>${answer.replace(/\n/g,'<br>')}</div><div class="muted" style="margin-top:6px">manba: ${source}</div></div>`;
   });
 }
 
@@ -221,7 +221,7 @@ function profile(){
   $('#page').innerHTML = `<h2>Profil</h2><div class="card">Login yoqsangiz, progress qurilmalar o‘rtasida sinxron bo‘ladi.</div>`;
 }
 
-/* ---- PWA install ---- */
+/* ===== 7) PWA install ===== */
 let deferredPrompt=null;
 addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredPrompt=e; $('#btn-install').hidden=false; });
 $('#btn-install')?.addEventListener('click', async ()=>{
@@ -229,9 +229,9 @@ $('#btn-install')?.addEventListener('click', async ()=>{
   await deferredPrompt.userChoice; deferredPrompt=null; $('#btn-install').hidden=true;
 });
 
-/* ---- Init ---- */
+/* ===== 8) Init ===== */
 (async()=>{
-  await initSupabase();
+  await initSupabase();        // ixtiyoriy, config.js bo‘lmasa local rejim
   if(!location.hash) location.hash = '#dash';
   nav();
 })();
