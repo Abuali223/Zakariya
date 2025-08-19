@@ -86,3 +86,7 @@ window.AI = {
    */
   async tutor(q, ctx){ return onlineTutor(q, ctx); }
 };
+// Har doim avval onlayn urinadi; xatoda lokalga tushadi
+window.AI = {
+  async tutor(q, ctx){ return onlineTutor(q, ctx); }
+};
