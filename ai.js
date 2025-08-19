@@ -1,24 +1,21 @@
 /* ai.js — Arab Tili (Gibrid AI: online + offline fallback)
    Talablar:
-   - window.SUPABASE_URL  = "https://<ref>.supabase.co"
-   - window.SUPABASE_ANON_KEY = "<anon public key>"
-   - index.html da supabase.js → config.js → ai.js → app.js tartibi (hammasi defer)
+   - index.html: supabase.js → config.js → ai.js → app.js (hammasi defer)
+   - config.js: window.SUPABASE_URL va window.SUPABASE_ANON_KEY to'ldirilgan
 */
 
-/* ---------- OFLAYN mini-lug'at ---------- */
+/* ---------- Oflayn mini-lug'at ---------- */
 const MINI_DICT = [
   { ar:"أَزْرَق", tr:"azraq", uz:"ko‘k",   eg:["السّماءُ أزرقُ.","الكتابُ أزرقُ."] },
   { ar:"أَحْمَر", tr:"aḥmar", uz:"qizil", eg:["التُّفّاحُ أَحمرُ.","البابُ أحمرُ."] },
   { ar:"قِطّ",   tr:"qiṭṭ",  uz:"mushuk", eg:["عندي قِطّ.","القِطّ صغير."] },
   { ar:"كِتَاب", tr:"kitāb", uz:"kitob", eg:["هذا كِتاب.","أُحبّ الكِتاب."] }
 ];
-
 const norm = s => (s||"").toLowerCase().trim();
-
 function localExplain(q){
   const n = norm(q);
   for(const w of MINI_DICT){
-    if(n.includes(w.uz)||n.includes(norm(w.tr))||n.includes(norm(w.ar))){
+    if(n.includes(w.uz) || n.includes(norm(w.tr)) || n.includes(norm(w.ar))){
       return [
         `**${w.ar}** (${w.tr}) — *${w.uz}*.`,
         "Misollar:",
@@ -33,17 +30,17 @@ function localExplain(q){
   return "Qisqa yordam: “ko‘k” — **أَزْرَق** (azraq). Yana so‘rasangiz, misol gap ham beraman.";
 }
 
-/* ---------- ONLAYN (Supabase Edge Function) ---------- */
-async function onlineTutor(question, ctx={level:"A1", topic:"general"}) {
+/* ---------- Onlayn (Supabase Edge Function) ---------- */
+async function onlineTutor(question, ctx={ level:"A1", topic:"general" }) {
   const URL = (window.SUPABASE_URL || "").replace(/\/+$/,"");
   const KEY = window.SUPABASE_ANON_KEY;
 
-  // Config yo'q bo'lsa darhol lokalga tushamiz
+  // Config yo'q bo'lsa – darhol lokal
   if(!window.supabase || !URL || !KEY){
     return { answer: localExplain(question), source: "local" };
   }
 
-  // 1) invoke orqali (standart va xavfsiz)
+  // 1) supabase.functions.invoke (tavsiya etiladi)
   try{
     const supa = window.supabase.createClient(URL, KEY);
     const { data, error } = await supa.functions.invoke("tutor", {
@@ -55,7 +52,7 @@ async function onlineTutor(question, ctx={level:"A1", topic:"general"}) {
     console.warn("[AI] invoke error:", error);
   }catch(e){ console.warn("[AI] invoke threw:", e); }
 
-  // 2) to'g'ridan-to'g'ri fetch (ba'zi JWT/CORS holatlari uchun)
+  // 2) To'g'ridan-to'g'ri fetch (ba'zi JWT/CORS holatlarida)
   try{
     const r = await fetch(`${URL}/functions/v1/tutor`, {
       method: "POST",
@@ -73,20 +70,16 @@ async function onlineTutor(question, ctx={level:"A1", topic:"general"}) {
     console.warn("[AI] direct fetch not ok:", r.status, data);
   }catch(e){ console.warn("[AI] direct fetch threw:", e); }
 
-  // 3) fallback: lokal
+  // 3) Fallback: lokal
   return { answer: localExplain(question), source: "local" };
 }
 
-/* ---------- Global API (app.js shu obyektni chaqiradi) ---------- */
+/* ---------- Global API ---------- */
 window.AI = {
   /**
-   * @param {string} q - foydalanuvchi savoli
-   * @param {{level?: string, topic?: string}} ctx
-   * @returns {Promise<{answer:string, source:'online (invoke)'|'online (direct)'|'local'>}
+   * @param {string} q  Foydalanuvchi savoli
+   * @param {{level?:string, topic?:string}} ctx  (ixtiyoriy)
+   * @returns {Promise<{answer:string, source:'online (invoke)'|'online (direct)'|'local'>}>
    */
-  async tutor(q, ctx){ return onlineTutor(q, ctx); }
-};
-// Har doim avval onlayn urinadi; xatoda lokalga tushadi
-window.AI = {
   async tutor(q, ctx){ return onlineTutor(q, ctx); }
 };
