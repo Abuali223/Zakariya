@@ -62,19 +62,18 @@
   </main>
 
   <footer class="wrap">© 2025 Arab Tili Platforma. PWA + Supabase sinxronlashga tayyor.</footer>
-
   <noscript>Ilovani ishlatish uchun JavaScript yoqing.</noscript>
 
-  <!-- ====== Skriptlar tartibi muhim: Supabase → config → ai → app ====== -->
+  <!-- Skriptlar tartibi muhim: Supabase → config → ai → app -->
   <script defer src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script defer src="./config.js?v=22"></script>
-  <script defer src="./ai.js?v=22"></script>
-  <script defer src="./app.js?v=22"></script>
+  <script defer src="./config.js?v=24"></script>
+  <script defer src="./ai.js?v=24"></script>
+  <script defer src="./app.js?v=24"></script>
 
-  <!-- Service Worker (keshni yangilash uchun versiya query qo‘shildi) -->
+  <!-- Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
-      addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=22'));
+      addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=24'));
     }
   </script>
 </body>
