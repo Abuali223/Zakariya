@@ -1,5 +1,5 @@
 // sw.js — PWA service worker (v5)
-const CACHE = 'arab-pwa-v6';
+const CACHE = 'arab-pwa-v7';
 
 const CORE = [
   './',
