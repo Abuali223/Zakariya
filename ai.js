@@ -1,6 +1,5 @@
-// ai.js — Gibrid AI: online (Supabase Edge Function `tutor`) + offline (local mini-tutor)
+// ai.js — Gibrid AI: online (Supabase Edge Function `tutor`) + offline fallback
 
-// Juda kichik lokal lug‘at (offline rejim uchun)
 const MINI_DICT = [
   { ar:"أَزْرَق", tr:"azraq", uz:"ko‘k",   eg:["السّماءُ أزرقُ.","الكتابُ أزرقُ."] },
   { ar:"أَحْمَر", tr:"aḥmar", uz:"qizil", eg:["التُّفّاحُ أَحمرُ.","البابُ أحمرُ."] },
@@ -8,12 +7,12 @@ const MINI_DICT = [
   { ar:"كِتَاب", tr:"kitāb", uz:"kitob", eg:["هذا كِتاب.","أُحبّ الكِتاب."] }
 ];
 
-const normalize = s => (s||"").toLowerCase().trim();
+const norm = s => (s||"").toLowerCase().trim();
 
 function localExplain(q){
-  const n = normalize(q);
+  const n = norm(q);
   for(const w of MINI_DICT){
-    if(n.includes(w.uz)||n.includes(normalize(w.tr))||n.includes(normalize(w.ar))){
+    if(n.includes(w.uz)||n.includes(norm(w.tr))||n.includes(norm(w.ar))){
       return [
         `**${w.ar}** (${w.tr}) — *${w.uz}*.`,
         "Misollar:",
@@ -28,32 +27,35 @@ function localExplain(q){
   return "Qisqa yordam: “ko‘k” — **أَزْرَق** (azraq). Yana so‘rasangiz, misol gap ham beraman.";
 }
 
-// --- Online (Supabase Edge Function: tutor) ---
+// --- ONLAYN chaqiruv (to‘g‘ri yo‘l) ---
 async function onlineTutor(q, ctx={level:"A1", topic:"general"}) {
-  // Supabase config tekshiruvi
+  // Supabase sozlanganmi?
   if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
     return { answer: localExplain(q), source: "local" };
   }
+
   try {
     const supa = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-    // Edge Function nomi: "tutor" (siz deploy qilgansiz)
+
+    // Edge Function nomi: "tutor" (Supabase’da shuni deploy qilgansiz)
     const { data, error } = await supa.functions.invoke("tutor", {
-      body: { q, ...ctx }
+      body: { q, ...ctx }   // server kodingiz { q, level, topic } ni qabul qiladi
     });
+
     if (error || !data?.answer) {
-      // Xatoda ham foydalanuvchi javobsiz qolmasin
+      console.error("[AI] tutor error:", error);
       return { answer: localExplain(q), source: "local" };
     }
     return { answer: data.answer, source: "online" };
-  } catch {
+  } catch (e) {
+    console.error("[AI] invoke failed:", e);
     return { answer: localExplain(q), source: "local" };
   }
 }
 
-// Global API — app.js bundan foydalanadi
+// Global API — app.js shu obyektni chaqiradi
 window.AI = {
   async tutor(q, ctx) {
-    // Internet bo‘lsa onlayn, bo‘lmasa lokal
     return navigator.onLine
       ? onlineTutor(q, ctx)
       : { answer: localExplain(q), source: "local" };
