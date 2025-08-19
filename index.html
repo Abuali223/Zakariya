@@ -1,68 +1,81 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <title>Arab Tili — Gibrid (PWA + Supabase)</title>
-  <link rel="manifest" href="manifest.json" />
+  <meta name="description" content="Arab tili uchun gibrid (PWA + Supabase) o‘quv platforma" />
   <meta name="theme-color" content="#7c6dff" />
-  <link rel="icon" href="assets/icons/icon-192.png" />
-  <script defer src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script defer src="config.js"></script>
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./assets/icons/icon-192.png">
+
   <style>
     :root{--bg:#0b1020;--panel:#0f152a;--panel2:#131a33;--fg:#e5e7eb;--muted:#9aa4b2;--accent:#7c6dff;--accent2:#22d3ee;--ok:#22c55e;--bad:#ef4444;--border:#1d274d}
-    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1020,#0b1228);color:var(--fg);font-family:system-ui,Segoe UI,Roboto}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0b1228);color:var(--fg);font-family:system-ui,Segoe UI,Roboto}
     header{position:sticky;top:0;background:rgba(13,18,40,.65);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);z-index:10}
     .wrap{max-width:1200px;margin:0 auto;padding:12px 16px}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.space{justify-content:space-between}
-    .cols{display:grid;grid-template-columns:260px 1fr;gap:16px} @media(max-width:900px){.cols{grid-template-columns:1fr}}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .space{justify-content:space-between}
+    .cols{display:grid;grid-template-columns:260px 1fr;gap:16px}
+    @media(max-width:900px){.cols{grid-template-columns:1fr}}
     .nav{position:sticky;top:70px;display:flex;gap:8px;flex-direction:column}
     .nav a{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#131a33;color:#e5e7eb;text-decoration:none}
     .nav a.active{border-color:var(--accent)}
     .card{background:#0f152a;border:1px solid var(--border);border-radius:14px;padding:14px}
     .btn{border:1px solid var(--border);background:#131a33;color:#e5e7eb;border-radius:10px;padding:8px 12px;cursor:pointer}
     .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0b1020;border:none;font-weight:700}
-    .grid6{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
-    .rtl{direction:rtl;font-family:"Amiri","Scheherazade New",serif}.flash{text-align:center;padding:16px 12px}.flash .rtl{font-size:32px}
-    .progress{height:8px;background:#172043;border-radius:999px;overflow:hidden}.progress>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
     footer{color:#9aa4b2;border-top:1px solid var(--border);padding:24px 16px}
   </style>
 </head>
 <body>
-<header>
-  <div class="wrap row space">
-    <div class="row"><h2>Arab Tili Platforma</h2><span>Gibrid — PWA + Supabase</span></div>
-    <div class="row">
-      <button id="btn-install" class="btn" hidden>➕ O‘rnatish</button>
-      <button id="btn-sync" class="btn">🔄 Sync</button>
-      <button id="btn-auth" class="btn primary">Kirish</button>
+  <header>
+    <div class="wrap row space">
+      <div class="row">
+        <h2 style="margin:0">Arab Tili Platforma</h2>
+        <span>Gibrid — PWA + Supabase</span>
+      </div>
+      <div class="row">
+        <button id="btn-install" class="btn" hidden>➕ O‘rnatish</button>
+        <button id="btn-sync" class="btn">🔄 Sync</button>
+        <button id="btn-auth" class="btn primary">Kirish</button>
+      </div>
     </div>
-  </div>
-</header>
+  </header>
 
-<main class="wrap cols">
-  <aside class="nav">
-    <a href="#dash" class="active">🏠 Dashboard</a>
-    <a href="#lessons">📚 Darslar</a>
-    <a href="#practice">🃏 Mashq (SRS)</a>
-    <a href="#tests">🧪 Testlar</a>
-    <a href="#tutor">🤖 AI Tutor</a>
-    <a href="#parent">👨‍👩‍👧 Ota-ona paneli</a>
-    <a href="#profile">👤 Profil</a>
-  </aside>
-  <section id="content" class="card"><div id="page"></div></section>
-</main>
+  <main class="wrap cols" id="app">
+    <aside class="nav" aria-label="Sahifa bo‘limlari">
+      <a href="#dash" class="active">🏠 Dashboard</a>
+      <a href="#lessons">📚 Darslar</a>
+      <a href="#practice">🃏 Mashq (SRS)</a>
+      <a href="#tests">🧪 Testlar</a>
+      <a href="#tutor">🤖 AI Tutor</a>
+      <a href="#parent">👨‍👩‍👧 Ota-ona paneli</a>
+      <a href="#profile">👤 Profil</a>
+    </aside>
+    <section id="content" class="card">
+      <div id="page"></div>
+    </section>
+  </main>
 
-<footer class="wrap">© 2025 Arab Tili Platforma. PWA + Supabase sinxronlashga tayyor.</footer>
+  <footer class="wrap">© 2025 Arab Tili Platforma. PWA + Supabase sinxronlashga tayyor.</footer>
 
-<!-- Gibrid SI -->
-<script src="ai.js"></script>
-<!-- Asosiy ilova -->
-<script src="app.js"></script>
-<script>
-  if ('serviceWorker' in navigator) {
-    addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-  }
-</script>
+  <noscript>Ilovani ishlatish uchun JavaScript yoqing.</noscript>
+
+  <!-- ====== Skriptlar tartibi muhim: Supabase → config → ai → app ====== -->
+  <script defer src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script defer src="./config.js?v=22"></script>
+  <script defer src="./ai.js?v=22"></script>
+  <script defer src="./app.js?v=22"></script>
+
+  <!-- Service Worker (keshni yangilash uchun versiya query qo‘shildi) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=22'));
+    }
+  </script>
 </body>
 </html>
