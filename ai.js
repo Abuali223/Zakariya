@@ -1,7 +1,5 @@
 /* ai.js — Arab Tili (Gibrid AI: online + offline fallback)
-   Talablar:
-   - index.html: supabase.js → config.js → ai.js → app.js (hammasi defer)
-   - config.js: window.SUPABASE_URL va window.SUPABASE_ANON_KEY to'ldirilgan
+   Talab: index.html da supabase.js → config.js → ai.js → app.js tartibi (defer)
 */
 
 /* ---------- Oflayn mini-lug'at ---------- */
@@ -35,12 +33,12 @@ async function onlineTutor(question, ctx={ level:"A1", topic:"general" }) {
   const URL = (window.SUPABASE_URL || "").replace(/\/+$/,"");
   const KEY = window.SUPABASE_ANON_KEY;
 
-  // Config yo'q bo'lsa – darhol lokal
-  if(!window.supabase || !URL || !KEY){
+  // Config bo'lmasa darhol lokal
+  if (!window.supabase || !URL || !KEY) {
     return { answer: localExplain(question), source: "local" };
   }
 
-  // 1) supabase.functions.invoke (tavsiya etiladi)
+  // 1) invoke (tavsiya etiladi)
   try{
     const supa = window.supabase.createClient(URL, KEY);
     const { data, error } = await supa.functions.invoke("tutor", {
@@ -52,7 +50,7 @@ async function onlineTutor(question, ctx={ level:"A1", topic:"general" }) {
     console.warn("[AI] invoke error:", error);
   }catch(e){ console.warn("[AI] invoke threw:", e); }
 
-  // 2) To'g'ridan-to'g'ri fetch (ba'zi JWT/CORS holatlarida)
+  // 2) to'g'ridan-to'g'ri fetch (ba'zi JWT/CORS holatlarida)
   try{
     const r = await fetch(`${URL}/functions/v1/tutor`, {
       method: "POST",
@@ -64,7 +62,7 @@ async function onlineTutor(question, ctx={ level:"A1", topic:"general" }) {
       body: JSON.stringify({ q: question, ...ctx })
     });
     const data = await r.json().catch(()=> ({}));
-    if(r.ok && data?.answer){
+    if (r.ok && data?.answer) {
       return { answer: data.answer, source: "online (direct)" };
     }
     console.warn("[AI] direct fetch not ok:", r.status, data);
@@ -76,10 +74,5 @@ async function onlineTutor(question, ctx={ level:"A1", topic:"general" }) {
 
 /* ---------- Global API ---------- */
 window.AI = {
-  /**
-   * @param {string} q  Foydalanuvchi savoli
-   * @param {{level?:string, topic?:string}} ctx  (ixtiyoriy)
-   * @returns {Promise<{answer:string, source:'online (invoke)'|'online (direct)'|'local'>}>
-   */
   async tutor(q, ctx){ return onlineTutor(q, ctx); }
 };
