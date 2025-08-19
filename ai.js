@@ -1,14 +1,13 @@
 // ai.js — Gibrid AI: online (Supabase Edge Function `tutor`) + offline fallback
 
+// --- Ofline mini lug'at (qisqa) ---
 const MINI_DICT = [
   { ar:"أَزْرَق", tr:"azraq", uz:"ko‘k",   eg:["السّماءُ أزرقُ.","الكتابُ أزرقُ."] },
   { ar:"أَحْمَر", tr:"aḥmar", uz:"qizil", eg:["التُّفّاحُ أَحمرُ.","البابُ أحمرُ."] },
   { ar:"قِطّ",   tr:"qiṭṭ",  uz:"mushuk", eg:["عندي قِطّ.","القِطّ صغير."] },
   { ar:"كِتَاب", tr:"kitāb", uz:"kitob", eg:["هذا كِتاب.","أُحبّ الكِتاب."] }
 ];
-
 const norm = s => (s||"").toLowerCase().trim();
-
 function localExplain(q){
   const n = norm(q);
   for(const w of MINI_DICT){
@@ -27,43 +26,48 @@ function localExplain(q){
   return "Qisqa yordam: “ko‘k” — **أَزْرَق** (azraq). Yana so‘rasangiz, misol gap ham beraman.";
 }
 
-// --- ONLAYN chaqiruv (to‘g‘ri yo‘l) ---
+// --- ONLAYN: avval invoke, bo'lmasa to'g'ridan-to'g'ri fetch ---
 async function onlineTutor(q, ctx={level:"A1", topic:"general"}) {
-  // Supabase sozlanganmi?
-  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+  const URL = (window.SUPABASE_URL || "").replace(/\/+$/, "");
+  const KEY = window.SUPABASE_ANON_KEY;
+
+  if (!window.supabase || !URL || !KEY) {
     return { answer: localExplain(q), source: "local" };
   }
 
+  // 1) Supabase invoke
   try {
-    const supa = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-
-    // Edge Function nomi: "tutor" (Supabase’da shuni deploy qilgansiz)
-    const { data, error } = await supa.functions.invoke("tutor", {
-      body: { q, ...ctx }   // server kodingiz { q, level, topic } ni qabul qiladi
-    });
-
-    if (error || !data?.answer) {
-      console.error("[AI] tutor error:", error);
-      return { answer: localExplain(q), source: "local" };
-    }
-    return { answer: data.answer, source: "online" };
+    const supa = window.supabase.createClient(URL, KEY);
+    const { data, error } = await supa.functions.invoke("tutor", { body: { q, ...ctx } });
+    if (!error && data?.answer) return { answer: data.answer, source: "online (invoke)" };
+    console.warn("[AI] invoke error:", error);
   } catch (e) {
-    console.error("[AI] invoke failed:", e);
-    return { answer: localExplain(q), source: "local" };
+    console.warn("[AI] invoke threw:", e);
   }
+
+  // 2) To'g'ridan-to'g'ri fetch
+  try {
+    const resp = await fetch(`${URL}/functions/v1/tutor`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${KEY}`,
+        "apikey": KEY
+      },
+      body: JSON.stringify({ q, ...ctx })
+    });
+    const data = await resp.json();
+    if (resp.ok && data?.answer) return { answer: data.answer, source: "online (direct)" };
+    console.warn("[AI] direct fetch not ok:", resp.status, data);
+  } catch (e) {
+    console.warn("[AI] direct fetch threw:", e);
+  }
+
+  // 3) Ofline fallback
+  return { answer: localExplain(q), source: "local" };
 }
 
 // Global API — app.js shu obyektni chaqiradi
 window.AI = {
-  async tutor(q, ctx) {
-    return navigator.onLine
-      ? onlineTutor(q, ctx)
-      : { answer: localExplain(q), source: "local" };
-  }
-};
-// Avval onlayn invoke qilishga urinadi, xato bo'lsa lokalga qaytadi
-window.AI = {
-  async tutor(q, ctx) {
-    return onlineTutor(q, ctx); // navigator.onLine tekshiruvini olib tashladik
-  }
+  async tutor(q, ctx) { return onlineTutor(q, ctx); }
 };
