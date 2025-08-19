@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arab Tili Platforma — Gibrid (PWA + Supabase)</title>
+  <meta name="description" content="Serversiz PWA, lekin internet bo‘lsa Supabase bilan sinxronlashadigan arab tili o‘quv platformasi.">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#7c6dff" />
+  <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png"/>
+  <script defer src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script defer src="config.js"></script>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#0f152a; --panel2:#131a33; --fg:#e5e7eb; --muted:#9aa4b2;
+      --accent:#7c6dff; --accent2:#22d3ee; --ok:#22c55e; --bad:#ef4444; --border:#1d274d;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0; background:linear-gradient(180deg, #0b1020, #0b1228); color:var(--fg); font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto}
+    header{position:sticky; top:0; z-index:10; background:rgba(13,18,40,.65); border-bottom:1px solid var(--border); backdrop-filter:saturate(180%) blur(10px)}
+    .wrap{max-width:1200px; margin:0 auto; padding:12px 16px}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .space{justify-content:space-between}
+    h1{font-size:clamp(18px,3.5vw,28px); margin:6px 0}
+    .tag{font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:999px; color:var(--muted)}
+    .main{max-width:1200px; margin:0 auto; padding:16px}
+    .cols{display:grid; grid-template-columns:260px 1fr; gap:16px}
+    @media (max-width:900px){ .cols{ grid-template-columns:1fr } }
+    .nav{position:sticky; top:70px; display:flex; gap:8px; flex-direction:column}
+    .nav a{display:block; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#131a33; color:#e5e7eb; text-decoration:none}
+    .nav a.active{border-color:var(--accent); box-shadow:0 0 0 1px rgba(124,109,255,.25)}
+    .card{background:#0f152a; border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow:0 4px 18px rgba(0,0,0,.25)}
+    .muted{color:#9aa4b2}
+    .btn{border:1px solid var(--border); background:#131a33; color:#e5e7eb; border-radius:10px; padding:8px 12px; cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg, var(--accent), var(--accent2)); color:#0b1020; font-weight:700; border:none}
+    .grid6{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px}
+    .rtl{direction:rtl; font-family:"Noto Naskh Arabic UI","Amiri","Scheherazade New",serif}
+    .flash{text-align:center; padding:16px 12px}
+    .flash .rtl{font-size:32px}
+    .bar{height:6px; background:#1a2a59; border-radius:6px; overflow:hidden}
+    .bar > div{height:100%; background:linear-gradient(90deg, var(--ok), #a3e635)}
+    input, select{background:#0f1735; border:1px solid var(--border); color:#e5e7eb; border-radius:8px; padding:8px 10px; min-width:0}
+    .pill{font-size:12px; background:#0f1735; border:1px solid var(--border); padding:4px 8px; border-radius:999px}
+    .list{display:grid; gap:10px}
+    footer{padding:24px 16px; border-top:1px solid var(--border); color:#9aa4b2}
+    .progress{height:8px; background:#172043; border-radius:999px; overflow:hidden}
+    .progress > div{height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2)); width:0%}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap row space">
+    <div class="row">
+      <h1>Arab Tili Platforma</h1>
+      <span class="tag">Gibrid — PWA + Supabase</span>
+    </div>
+    <div class="row">
+      <button id="btn-theme" class="btn">🌙 / ☀️</button>
+      <button id="btn-install" class="btn" hidden>➕ O‘rnatish</button>
+      <button id="btn-sync" class="btn">🔄 Sync</button>
+      <button id="btn-auth" class="btn primary">Kirish</button>
+    </div>
+  </div>
+</header>
+
+<main class="main cols">
+  <aside class="nav">
+    <a href="#dash" class="active">🏠 Dashboard</a>
+    <a href="#lessons">📚 Darslar</a>
+    <a href="#practice">🃏 Mashq (SRS)</a>
+    <a href="#tests">🧪 Testlar</a>
+    <a href="#tutor">🤖 AI Tutor</a>
+    <a href="#parent">👨‍👩‍👧 Ota-ona paneli</a>
+    <a href="#profile">👤 Profil</a>
+  </aside>
+
+  <section id="content" class="card">
+    <div id="page"></div>
+  </section>
+</main>
+
+<footer class="wrap">© 2025 Arab Tili Platforma. PWA + Supabase sinxronlashga tayyor.</footer>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+  }
+</script>
+</body>
+</html>
