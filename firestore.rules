@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
+    match /students/{id}              { allow read: if true; allow write: if isAdmin(); }
+    match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
+    match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
+    match /achievements_school/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /achievements_students/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /settings/{id}              { allow read: if true; allow write: if isAdmin(); }
+
+    // Arizalar: istalgan foydalanuvchi yuboradi (create), faqat admin o'qiydi/o'chiradi.
+    match /enrollments/{id} {
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() < 200;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Foydalanuvchilar: Gmail bilan kirib o'z rolini tanlaydi; rolni faqat admin o'zgartiradi.
+    match /users/{uid} {
+      allow read:   if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.role in ['parent','student','teacher']
+                    && request.resource.data.verified == false;
+      allow update, delete: if isAdmin();
+    }
+
+    // Qolgan hamma narsa taqiqlangan.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

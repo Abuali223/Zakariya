@@ -403,10 +403,10 @@
         <h2 data-t="c_title"></h2>
         <p style="font-size:17px;line-height:1.6;color:var(--muted);margin:0 0 36px" data-t="c_sub"></p>
         <div class="contact-info">
-          <div class="r"><span class="l" data-t="c_address_l"></span><span data-t="c_address_v"></span></div>
-          <div class="r"><span class="l" data-t="c_phone_l"></span><a href="tel:+998712004545">+998 71 200 45 45</a></div>
-          <div class="r"><span class="l">Telegram</span><a href="https://t.me/iqror_school" target="_blank" rel="noopener">@iqror_school</a></div>
-          <div class="r"><span class="l" data-t="c_hours_l"></span><span data-t="c_hours_v"></span></div>
+          <div class="r"><span class="l" data-t="c_address_l"></span><span id="c-address"></span></div>
+          <div class="r"><span class="l" data-t="c_phone_l"></span><a id="c-phone" href="#"></a></div>
+          <div class="r"><span class="l">Telegram</span><a id="c-telegram" href="#" target="_blank" rel="noopener"></a></div>
+          <div class="r"><span class="l" data-t="c_hours_l"></span><span id="c-hours"></span></div>
         </div>
       </div>
       <form class="form" id="enroll-form">
@@ -535,7 +535,7 @@ const T = {
   }
 };
 
-const STUDENTS = [
+let STUDENTS = [
   {id:"IQ-1001",name:"Aziza Karimova",g:11,tr:"IT",score:98,att:99,sc:[99,98,96,97]},
   {id:"IQ-1002",name:"Jasur Toshpulatov",g:10,tr:"MED",score:96,att:98,sc:[98,96,94,95]},
   {id:"IQ-1003",name:"Malika Yusupova",g:11,tr:"MED",score:95,att:97,sc:[96,95,93,96]},
@@ -553,7 +553,7 @@ const SUBJECTS = {
   IT:[{uz:"Matematika",ru:"Математика"},{uz:"Dasturlash",ru:"Программирование"},{uz:"Ingliz tili",ru:"Английский"},{uz:"Fizika",ru:"Физика"}],
   MED:[{uz:"Biologiya",ru:"Биология"},{uz:"Kimyo",ru:"Химия"},{uz:"Matematika",ru:"Математика"},{uz:"Ingliz tili",ru:"Английский"}]
 };
-const TEACHERS = [
+let TEACHERS = [
   {name:"Dilnoza Karimova",suz:"Matematika",sru:"Математика",rating:4.9,years:12,certs:8,avg:92,votes:214},
   {name:"Gulnora Saidova",suz:"Biologiya",sru:"Биология",rating:4.9,years:15,certs:9,avg:91,votes:198},
   {name:"Anvar Rustamov",suz:"Dasturlash",sru:"Программирование",rating:4.8,years:7,certs:6,avg:90,votes:176},
@@ -561,26 +561,27 @@ const TEACHERS = [
   {name:"Botir Xolmatov",suz:"Ingliz tili",sru:"Английский язык",rating:4.7,years:9,certs:5,avg:88,votes:183},
   {name:"Sherzod Qodirov",suz:"Frontend",sru:"Фронтенд",rating:4.6,years:5,certs:4,avg:87,votes:121}
 ];
-const SCHOOL_ACH = [
+let SCHOOL_ACH = [
   {year:2022,uz:"Respublika informatika olimpiadasida 2 ta medal",ru:"Две медали на республиканской олимпиаде по информатике"},
   {year:2023,uz:"«Yilning eng yaxshi xususiy maktabi» nominatsiyasi g‘olibi",ru:"Победитель номинации «Лучшая частная школа года»"},
   {year:2024,uz:"18 nafar bitiruvchi davlat granti asosida universitetga kirdi",ru:"18 выпускников поступили в вузы на государственный грант"},
   {year:2025,uz:"Bitiruvchilarning IELTS o‘rtacha natijasi — 7.0",ru:"Средний результат IELTS у выпускников — 7.0"},
   {year:2026,uz:"Xalqaro robototexnika musobaqasida jamoaviy 1-o‘rin",ru:"1-е командное место на международных соревнованиях по робототехнике"}
 ];
-const STUDENT_ACH = [
+let STUDENT_ACH = [
   {name:"Aziza Karimova",year:2026,uz:"Respublika informatika olimpiadasi — oltin medal",ru:"Республиканская олимпиада по информатике — золотая медаль"},
   {name:"Jasur Toshpulatov",year:2025,uz:"Biologiya fan olimpiadasi — kumush medal",ru:"Олимпиада по биологии — серебряная медаль"},
   {name:"Malika Yusupova",year:2026,uz:"IELTS — 8.0 ball",ru:"IELTS — 8.0 баллов"},
   {name:"Bekzod Rahimov",year:2025,uz:"Xalqaro robototexnika musobaqasi — 1-o‘rin",ru:"Международные соревнования по робототехнике — 1-е место"}
 ];
-const NEWS = [
+let NEWS = [
   {d:"12.06.2026",tuz:"Maktab hayoti",tru:"Жизнь школы",uz:"Robototexnika to‘garagi yangi laboratoriyada ish boshladi",ru:"Кружок робототехники начал работу в новой лаборатории"},
   {d:"28.05.2026",tuz:"Natijalar",tru:"Результаты",uz:"Bitiruvchilarning 96 foizi grant asosida o‘qishga kirdi",ru:"96% выпускников поступили на грант"},
   {d:"15.04.2026",tuz:"Yutuqlar",tru:"Достижения",uz:"«Zakovat» intellektual o‘yinida maktab jamoasi g‘alaba qozondi",ru:"Команда школы победила в интеллектуальной игре «Zakovat»"},
   {d:"02.03.2026",tuz:"Yangilik",tru:"Новости",uz:"MED yo‘nalishi uchun zamonaviy anatomiya kabineti ochildi",ru:"Открыт современный кабинет анатомии для направления MED"}
 ];
-const HERO_STATS = [{v:"480+",k:"stat1"},{v:"32",k:"stat2"},{v:"96%",k:"stat3"},{v:"14",k:"stat4"}];
+let HERO_STATS = [{v:"480+",k:"stat1"},{v:"32",k:"stat2"},{v:"96%",k:"stat3"},{v:"14",k:"stat4"}];
+let CONTACT = {address_uz:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",address_ru:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",phone:"+998 71 200 45 45",telegram:"@iqror_school",hours_uz:"Du–Sha, 8:00–18:00",hours_ru:"Пн–Сб, 8:00–18:00"};
 const IT_TRACKS = {uz:["Frontend","Python","Robototexnika","Chuqur matematika"],ru:["Фронтенд","Python","Робототехника","Углублённая математика"]};
 const MED_TRACKS = {uz:["Biologiya","Kimyo","Anatomiya","DTM tayyorlov"],ru:["Биология","Химия","Анатомия","Подготовка к DTM"]};
 const RANK_STYLE = {1:{bg:"#EDB84C",fg:"#3A2B00"},2:{bg:"#D8E2DF",fg:"#26413C"},3:{bg:"#EDD0A9",fg:"#5C3A10"}};
@@ -679,8 +680,8 @@ function renderSearchResult(){
   if(!foundStudent){ box.innerHTML=""; return; }
   const s=foundStudent;
   const rank = STUDENTS.slice().sort((a,b)=>b.score-a.score).findIndex(x=>x.id===s.id)+1;
-  const names=SUBJECTS[s.tr];
-  const subs=s.sc.map((v,i)=>`<div class="subrow"><span>${esc(names[i][lang])}</span><div class="sb"><i style="width:${v}%"></i></div><b>${v}</b></div>`).join("");
+  const subjArr = (s.subjects && s.subjects.length) ? s.subjects : (SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
+  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${x.s}%"></i></div><b>${x.s}</b></div>`).join("");
   box.innerHTML=`<div class="found">
     <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(t.grade(s.g))} · ${esc(s.tr)}</div>
@@ -693,10 +694,29 @@ function renderSearchResult(){
   </div>`;
 }
 
+function renderContact(){
+  const a=$("#c-address"); if(a)a.textContent=lang==="uz"?CONTACT.address_uz:(CONTACT.address_ru||CONTACT.address_uz);
+  const p=$("#c-phone"); if(p){p.textContent=CONTACT.phone||""; p.href="tel:"+String(CONTACT.phone||"").replace(/[^+\d]/g,"");}
+  const g=$("#c-telegram"); if(g){const tg=String(CONTACT.telegram||""); g.textContent=tg; g.href="https://t.me/"+tg.replace(/^@/,"");}
+  const h=$("#c-hours"); if(h)h.textContent=lang==="uz"?CONTACT.hours_uz:(CONTACT.hours_ru||CONTACT.hours_uz);
+}
 function renderAll(){
   applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
-  renderAchievements(); renderNews(); renderDirs(); renderSearchResult();
+  renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
 }
+// Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
+window.IqrorPublic = {
+  apply(d){
+    if(Array.isArray(d.students)) STUDENTS = d.students;
+    if(Array.isArray(d.teachers)) TEACHERS = d.teachers;
+    if(Array.isArray(d.news)) NEWS = d.news;
+    if(Array.isArray(d.schoolAch)) SCHOOL_ACH = d.schoolAch;
+    if(Array.isArray(d.studentAch)) STUDENT_ACH = d.studentAch;
+    if(d.stats){ HERO_STATS[0].v=d.stats.students??HERO_STATS[0].v; HERO_STATS[1].v=d.stats.teachers??HERO_STATS[1].v; HERO_STATS[2].v=d.stats.uni??HERO_STATS[2].v; HERO_STATS[3].v=d.stats.awards??HERO_STATS[3].v; }
+    if(d.contact) CONTACT = {...CONTACT, ...d.contact};
+    renderAll();
+  }
+};
 function setLang(l){
   lang=l; try{localStorage.setItem("iqror-lang",l);}catch(e){}
   renderAll();
@@ -744,8 +764,13 @@ $("#enroll-form").addEventListener("submit",async e=>{
 })();
 </script>
 
-<!-- Firebase (ixtiyoriy): analitika + ariza (enrollment) larni Firestore ga saqlash. Oflaynda ilova baribir ishlaydi. -->
+<!-- Firebase: real ma'lumot (Firestore) + analitika + ariza + Gmail login/rol. Oflaynda ham ishlaydi. -->
 <script type="module">
+  // Kesh avto-tozalash: eski service worker/keshlarni har kirishda olib tashlaymiz
+  try{ if('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); }catch(e){}
+  try{ if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }catch(e){}
+
+  const V="https://www.gstatic.com/firebasejs/10.12.5";
   const firebaseConfig = {
     apiKey:"AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
     authDomain:"iqror-72879.firebaseapp.com",
@@ -755,28 +780,106 @@ $("#enroll-form").addEventListener("submit",async e=>{
     appId:"1:1082381849678:web:f9a657404b83ac88c71f1f",
     measurementId:"G-LDD3BFGKVP"
   };
-  const V="https://www.gstatic.com/firebasejs/10.12.5";
-  (async()=>{
-    let appMod,anMod,authMod,fsMod;
-    try{
-      appMod = await import(`${V}/firebase-app.js`);
-    }catch(e){ return; } // internet yo‘q — jimgina o‘tkazib yuboramiz
-    try{
-      const app = appMod.initializeApp(firebaseConfig);
-      import(`${V}/firebase-analytics.js`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
-      let db=null, auth=null;
-      try{ fsMod = await import(`${V}/firebase-firestore.js`); db = fsMod.getFirestore(app);}catch(e){}
-      try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app); authMod.signInAnonymously(auth).catch(()=>{});}catch(e){}
-      window.IqrorFB = {
-        event(name,params){ try{ if(window.__an){ import(`${V}/firebase-analytics.js`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); } }catch(e){} },
-        async submitEnrollment(data){
-          if(!db||!fsMod) return false;
-          try{ await fsMod.addDoc(fsMod.collection(db,"enrollments"), {...data, created: fsMod.serverTimestamp()}); return true; }
-          catch(e){ return false; }
-        }
-      };
-    }catch(e){ /* jimgina oflayn */ }
-  })();
+  const ROLE_LABELS = { parent:"Ota-ona", student:"O‘quvchi", teacher:"O‘qituvchi", admin:"Administrator" };
+
+  let appMod, authMod, fsMod;
+  try{ appMod = await import(`${V}/firebase-app.js`); }
+  catch(e){ /* internet yo'q — dizayn + fallback ma'lumot bilan ishlayveradi */ }
+
+  if (appMod) {
+    const app = appMod.initializeApp(firebaseConfig);
+    import(`${V}/firebase-analytics.js`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
+
+    let db=null, auth=null;
+    try{ fsMod = await import(`${V}/firebase-firestore.js`); db = fsMod.getFirestore(app); }catch(e){}
+    try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app); }catch(e){}
+
+    // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----
+    async function loadPublic(){
+      if(!db||!fsMod) return;
+      const { collection, getDocs, query, orderBy, doc, getDoc } = fsMod;
+      const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
+      try{
+        const [stu,tea,nw,asch,astu,setSnap] = await Promise.all([
+          getDocs(collection(db,'students')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
+          getDoc(doc(db,'settings','site'))
+        ]);
+        const p = {};
+        const students = stu.docs.map(d=>{const x=d.data();return {id:x.studentId||d.id,name:x.name,g:x.grade,tr:x.track,score:Number(x.score)||0,att:Number(x.attendance)||0,subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        if(students.length) p.students = students;
+        const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:x.years||0,certs:x.certs||0,avg:x.avg||0,votes:x.votes||0};});
+        if(teachers.length) p.teachers = teachers;
+        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz};});
+        if(news.length) p.news = news;
+        const sa = asch.docs.map(d=>{const x=d.data();return {year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
+        if(sa.length) p.schoolAch = sa;
+        const sta = astu.docs.map(d=>{const x=d.data();return {name:x.name,year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
+        if(sta.length) p.studentAch = sta;
+        const setd = setSnap.exists()?setSnap.data():{};
+        if(setd.stats) p.stats = setd.stats;
+        if(setd.contact) p.contact = setd.contact;
+        if(window.IqrorPublic && Object.keys(p).length) window.IqrorPublic.apply(p);
+      }catch(e){ /* qoidalar hali e'lon qilinmagan bo'lishi mumkin — fallback qoladi */ }
+    }
+    loadPublic();
+
+    // ---- Analitika + ariza API ----
+    window.IqrorFB = {
+      event(name,params){ try{ if(window.__an) import(`${V}/firebase-analytics.js`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); }catch(e){} },
+      async submitEnrollment(data){ if(!db||!fsMod) return false; try{ await fsMod.addDoc(fsMod.collection(db,'enrollments'),{...data, created: fsMod.serverTimestamp()}); return true; }catch(e){ return false; } }
+    };
+
+    // ---- Gmail login + rol ----
+    if(auth && authMod && fsMod){
+      const { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } = authMod;
+      const { doc, getDoc, setDoc, serverTimestamp } = fsMod;
+      buildAuthUI();
+      onAuthStateChanged(auth, async (user)=>{
+        if(!user){ setAuthUI(null); return; }
+        let role=null;
+        try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()) role=ud.data().role; }catch(e){}
+        if(!role) askRole(user);
+        setAuthUI({ name:user.displayName||user.email, role });
+      });
+
+      function buildAuthUI(){
+        const nav=document.querySelector('.nav-inner'); if(!nav||document.getElementById('auth-ui')) return;
+        const w=document.createElement('div'); w.id='auth-ui'; w.style.cssText='display:flex;align-items:center;gap:8px';
+        w.innerHTML=`<button id="auth-login" class="btn-cta" style="background:var(--teal);color:#fff">Kirish</button>
+          <span id="auth-chip" style="display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600">
+            <span id="auth-name"></span><span id="auth-role" class="chip it"></span>
+            <button id="auth-out" style="background:transparent;color:var(--ink);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer">Chiqish</button></span>`;
+        nav.appendChild(w);
+        document.getElementById('auth-login').onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>alert('Kirishda xatolik: '+(e.code||e.message)));
+        document.getElementById('auth-out').onclick=()=>signOut(auth);
+      }
+      function setAuthUI(u){
+        const login=document.getElementById('auth-login'), chip=document.getElementById('auth-chip'); if(!login||!chip) return;
+        if(u){ login.style.display='none'; chip.style.display='inline-flex';
+          document.getElementById('auth-name').textContent=u.name||'';
+          const r=document.getElementById('auth-role'); const lbl=ROLE_LABELS[u.role]||''; r.textContent=lbl; r.style.display=lbl?'inline-block':'none';
+        } else { login.style.display='inline-block'; chip.style.display='none'; }
+      }
+      function askRole(user){
+        if(document.getElementById('role-modal')) return;
+        const bg=document.createElement('div'); bg.id='role-modal';
+        bg.style.cssText='position:fixed;inset:0;background:rgba(9,58,52,.55);display:grid;place-items:center;z-index:100;padding:18px';
+        bg.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:28px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
+          <h3 style="font-family:var(--serif);font-size:22px;margin:0 0 6px;color:var(--ink)">Rolingizni tanlang</h3>
+          <p style="color:var(--muted);font-size:14.5px;margin:0 0 18px">Iqror maktabida kimsiz? Administrator keyin maktab ma'lumotlari asosida tekshiradi va kerak bo‘lsa to‘g‘rilaydi.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            ${[['parent','👨‍👩‍👧 Ota-ona'],['student','🎓 O‘quvchi'],['teacher','👩‍🏫 O‘qituvchi']].map(r=>`<button data-role="${r[0]}" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">${r[1]}</button>`).join('')}
+          </div></div>`;
+        document.body.appendChild(bg);
+        bg.querySelectorAll('[data-role]').forEach(btn=>btn.onclick=async()=>{
+          try{ await setDoc(doc(db,'users',user.uid), { email:user.email, name:user.displayName||user.email, role:btn.dataset.role, verified:false, createdAt: serverTimestamp() });
+            bg.remove(); setAuthUI({ name:user.displayName||user.email, role:btn.dataset.role });
+            try{ window.IqrorFB && window.IqrorFB.event('role_selected',{role:btn.dataset.role}); }catch(e){}
+          }catch(e){ alert('Saqlab bo‘lmadi: '+(e.code||e.message)); }
+        });
+      }
+    }
+  }
 </script>
 </body>
 </html>
