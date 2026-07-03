@@ -1,103 +1,50 @@
-# Arab Tili — Gibrid Platforma (PWA + Supabase)
+# Iqror IT MED School — veb-platforma
 
-**Uzbek UI**, **serversiz PWA**, **offline SRS**, **onlayn bo‘lsa Supabase bilan sinxron**. GitHub Pages’da bevosita ishlaydi.
+**Iqror IT MED School** — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim beruvchi
+zamonaviy maktabning rasmiy veb-sayti. Ikki tilli (o‘zbek / rus), to‘liq statik va
+GitHub Pages'da bevosita ishlaydi.
 
-## 🚀 Tez start (GitHub Pages)
-1) Yangi repo oching (masalan, `arab-tili`).
-2) Ushbu fayllarni yuklang (yoki `gh` bilan push qiling).
-3) GitHub’da **Settings → Pages**: Source = `GitHub Actions` (workflow shu repoda bor).
-4) Birinchi deploydan keyin sizning saytingiz `https://<username>.github.io/arab-tili/` da ochiladi.
+🔗 **Sayt:** `https://<username>.github.io/<repo>/`
 
-> Agar Actions’dan foydalanmasangiz: **Settings → Pages → Source: `main` → `/ (root)`** qilib ham qo‘yishingiz mumkin (build talab qilinmaydi).
+## 📄 Fayllar
 
-## 🔑 Supabase ulash (ixtiyoriy, lekin tavsiya)
-1) https://supabase.com da project oching.
-2) **Project Settings → API** dan
-   - `Project URL`
-   - `anon public key`
-   ni oling.
-3) `config.example.js` ni **`config.js`** nomi bilan nusxalab, o‘sha qiymatlarni qo‘ying.
-4) Jadval va siyosatlar:
+| Fayl | Tavsif |
+|------|--------|
+| `index.html` | **Asosiy sayt** — mustaqil (self-contained), moslashuvchan (responsive) landing sahifa: hero, yo‘nalishlar, o‘quvchi natijalari (reyting + ID qidiruv), o‘qituvchilar reytingi, yutuqlar, maktab hayoti, aloqa/ariza formasi. UZ/RU tillari. |
+| `Iqror IT MED School.dc.html` | Dizayn manbasi (design-component format). `support.js` runtime + `image-slot.js` bilan render bo‘ladi. `index.html` — shu dizaynning ishlab chiqarishga tayyor kompilyatsiyasi. |
+| `support.js`, `image-slot.js` | Dizayn runtime va rasm-slot komponenti (faqat `.dc.html` uchun). |
+| `uploads/`, `assets/` | Logotip va rasm resurslari. |
+| `oquv-platforma.html` | **Bonus:** o‘quvchilar uchun oflayn o‘quv platformasi (darslar, SRS kartochkalar, testlar, AI murabbiy) — IT, tibbiyot va tibbiy informatika bo‘yicha. |
+| `arab-tili.html` va boshqalar | Avvalgi «Arab Tili» PWA loyihasi (saqlab qolindi). |
 
-```sql
--- Progress jadvali
-create table if not exists public.progress (
-  user uuid not null,
-  item text not null,
-  correct int not null default 0,
-  wrong int not null default 0,
-  ef float8 not null default 2.5,
-  interval int not null default 0,
-  due bigint not null default 0, -- Date.now() ms
-  updated_at bigint not null default 0,
-  rev int not null default 0,
-  primary key(user, item)
-);
+## 🔥 Firebase (ixtiyoriy)
 
--- Row Level Security
-alter table public.progress enable row level security;
+`index.html` ichida Firebase moduli mavjud (`iqror-72879` loyihasi):
 
-create policy "read own progress"
-on public.progress for select
-using ( auth.uid() = user );
+- **Analytics** — tashriflar statistikasi.
+- **Firestore** — ariza (enrollment) formasi ma'lumotlari `enrollments` to‘plamiga saqlanadi.
 
-create policy "upsert own progress"
-on public.progress for insert
-with check ( auth.uid() = user );
+Internet bo‘lmasa yoki Firebase sozlanmagan bo‘lsa, sayt baribir to‘liq ishlayveradi.
 
-create policy "update own progress"
-on public.progress for update
-using ( auth.uid() = user )
-with check ( auth.uid() = user );
+**Ariza formasi ishlashi uchun** Firebase konsolida:
+1. **Authentication → Anonymous** yoqilishi kerak (anonim yozuv uchun).
+2. **Firestore Database** yaratilib, quyidagi qoidalar qo‘shilishi tavsiya etiladi:
+
 ```
-
-> **Eslatma:** Demo holatda kontent JSON’lari statik papkada. Istasangiz, CMS yoki Supabase jadvalidan dinamik tortishingiz mumkin.
-
-## 🧠 SI (AI) endpointlari (ixtiyoriy)
-Supabase **Edge Functions** orqali AI chat yoki talaffuz baholashni yozishingiz mumkin. Frontend `supabase.functions.invoke('tutor', ...)` ni chaqiradi.
-
-Minimal misol (Deno, `tutor/index.ts`):
-```ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-
-serve(async (req) => {
-  const { q, level, topic } = await req.json();
-  // TODO: LLM API chaqiring va javobni qaytaring
-  return new Response(JSON.stringify({ answer: `Savol: ${q} (daraja: ${level}, mavzu: ${topic})` }), {
-    headers: { "Content-Type": "application/json" },
-  });
-});
-```
-
-## 📦 Tuzilma
-```
-/assets/icons/         # PWA ikonlar
-/content/*.json        # Mavzular va so‘zlar (statik JSON)
-index.html             # UI va sahifalar
-app.js                 # SRS, IndexedDB, Supabase sync, router
-manifest.json          # PWA manifest
-sw.js                  # Service Worker (oflayn)
-config.example.js      # Supabase sozlamasini bu fayldan ko'chiring -> config.js
-```
-
-## 🧩 Kontentni kengaytirish
-- Yangi mavzu qo‘shish uchun `content/` ichiga `mytopic.json` qo‘shing:
-```json
-{
-  "title": "Mavzu nomi",
-  "preview": "ك",
-  "items": [{ "ar": "كِتَاب", "tr": "kitāb", "uz": "kitob" }]
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /enrollments/{doc} {
+      allow create: if request.auth != null;   // faqat yozish (arizalarni o‘qish adminda)
+      allow read, update, delete: if false;
+    }
+  }
 }
 ```
-- `PACKS` massiviga `app.js` ichida fayl nomini (`mytopic`) qo‘shing.
 
-## 📱 PWA o‘rnatish
-- Brauzer yuqorisidagi “Install”/“Add to Home Screen” orqali ilova sifatida o‘rnatiladi.
-- Oflayn rejimda ham ishlaydi; onlayn bo‘lsa sinxronlashadi.
+## 🚀 Deploy (GitHub Pages)
 
-## 🛡 Maxfiylik
-- O‘quvchi ma’lumotlari qurilmada (IndexedDB) saqlanadi; login qilinganda Supabase bilan sinxron bo‘ladi.
-- RLS siyosati foydalanuvchi faqat o‘z progressini ko‘rishini kafolatlaydi.
+`.github/workflows/pages.yml` — `main` ga har push qilinganda saytni avtomatik deploy qiladi.
 
-## ❓ Savollar
-Muammo bo‘lsa, `config.js` to‘g‘ri to‘ldirilganini, GitHub Pages yoqilganini va fayllar `index.html` bilan rootda turganini tekshiring.
+- **Settings → Pages → Source: GitHub Actions** tanlangan bo‘lsa, deploy avtomatik ishlaydi.
+- Muqobil: **Settings → Pages → Source: `main` / `(root)`** ham qo‘llab-quvvatlanadi (`.nojekyll` mavjud).

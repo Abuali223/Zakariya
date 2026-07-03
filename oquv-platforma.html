@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="uz" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Iqror IT MED School — IT va Tibbiyot o‘quv platformasi</title>
+  <meta name="description" content="Iqror IT MED School — IT, tibbiyot va tibbiy informatika bo‘yicha oflayn ishlaydigan o‘quv platformasi (darslar, SRS kartochkalar, testlar, AI murabbiy)." />
+  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230ea5e9'/%3E%3Cpath d='M32 14v36M14 32h36' stroke='white' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <style>
+    :root{
+      --bg:#0a0f1e; --bg2:#0c1226; --panel:#111a30; --panel2:#0e1729; --elev:#152140;
+      --fg:#e8edf6; --muted:#93a1b8; --faint:#64748b;
+      --border:#1e2b4d; --border2:#26365e;
+      --it:#3b82f6; --med:#10b981; --minf:#a78bfa;
+      --accent:#0ea5e9; --accent2:#22d3ee;
+      --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+      --ring:rgba(14,165,233,.35);
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    :root[data-theme="light"]{
+      --bg:#eef2f9; --bg2:#e6ecf6; --panel:#ffffff; --panel2:#f5f8fd; --elev:#ffffff;
+      --fg:#0f1b34; --muted:#4a5a75; --faint:#7286a3;
+      --border:#dbe4f1; --border2:#c9d6ea;
+      --ring:rgba(14,165,233,.25);
+      --shadow:0 10px 30px rgba(20,40,80,.10);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{
+      background:
+        radial-gradient(1000px 600px at 100% -10%, rgba(59,130,246,.14), transparent 60%),
+        radial-gradient(900px 500px at -10% 10%, rgba(16,185,129,.12), transparent 55%),
+        linear-gradient(180deg,var(--bg),var(--bg2));
+      background-attachment:fixed;
+      color:var(--fg);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      line-height:1.55; min-height:100dvh; overflow-x:hidden;
+    }
+    a{color:inherit}
+    h1,h2,h3,h4{line-height:1.25;margin:0 0 .4em}
+    p{margin:0 0 .7em}
+    .muted{color:var(--muted)} .faint{color:var(--faint)} .small{font-size:.85rem}
+    .wrap{max-width:1240px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .between{justify-content:space-between}
+    .stack{display:flex;flex-direction:column;gap:12px}
+    .hide{display:none!important}
+    .grow{flex:1}
+    .center{text-align:center}
+
+    /* Header */
+    header.top{position:sticky;top:0;z-index:40;backdrop-filter:blur(12px);
+      background:color-mix(in srgb,var(--bg) 72%, transparent);border-bottom:1px solid var(--border)}
+    .brand{display:flex;gap:10px;align-items:center;text-decoration:none}
+    .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
+      background:linear-gradient(135deg,var(--it),var(--med));box-shadow:var(--shadow);color:#fff;font-weight:800;position:relative;overflow:hidden}
+    .logo svg{width:24px;height:24px}
+    .brand b{font-size:1.05rem;letter-spacing:.2px;display:block}
+    .brand .tag{font-size:.72rem;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+    .icon-btn{border:1px solid var(--border2);background:var(--panel);color:var(--fg);border-radius:12px;
+      width:40px;height:40px;display:grid;place-items:center;cursor:pointer;font-size:1.05rem;transition:.15s}
+    .icon-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--border2);
+      background:var(--panel);font-weight:600;font-size:.85rem}
+
+    /* Layout */
+    main.shell{display:grid;grid-template-columns:250px 1fr;gap:18px;max-width:1240px;margin:0 auto;padding:18px 16px 60px}
+    nav.side{position:sticky;top:80px;align-self:start;display:flex;flex-direction:column;gap:6px;max-height:calc(100dvh - 96px);overflow:auto}
+    nav.side a{display:flex;gap:10px;align-items:center;padding:11px 13px;border-radius:12px;border:1px solid transparent;
+      color:var(--muted);text-decoration:none;font-weight:600;transition:.15s}
+    nav.side a .ic{width:22px;text-align:center}
+    nav.side a:hover{background:var(--panel);color:var(--fg)}
+    nav.side a.active{background:var(--panel);color:var(--fg);border-color:var(--border2);box-shadow:var(--shadow)}
+    nav.side a.active .ic{filter:drop-shadow(0 0 6px var(--ring))}
+    .side-foot{margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--panel2)}
+
+    /* Cards & components */
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+    .card.tight{padding:14px}
+    .grid{display:grid;gap:16px}
+    .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+    .g-auto{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+    @media(max-width:1040px){main.shell{grid-template-columns:1fr}nav.side{display:none}}
+    @media(max-width:760px){.g2,.g3,.g4{grid-template-columns:1fr}.wrap{padding:12px}}
+    @media(max-width:920px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(2,1fr)}}
+
+    .btn{border:1px solid var(--border2);background:var(--panel);color:var(--fg);border-radius:12px;padding:10px 16px;
+      cursor:pointer;font-weight:600;font-size:.92rem;transition:.15s;display:inline-flex;gap:8px;align-items:center;text-decoration:none}
+    .btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04121e;border:none}
+    .btn.ghost{background:transparent}
+    .btn.sm{padding:7px 12px;font-size:.85rem;border-radius:10px}
+    .btn.block{width:100%;justify-content:center}
+    .btn.ok{background:var(--ok);color:#04160a;border:none}
+    .btn.bad{background:var(--bad);color:#fff;border:none}
+
+    .chip{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;font-size:.76rem;font-weight:700;
+      border:1px solid var(--border2);background:var(--panel)}
+    .chip.it{color:var(--it);border-color:color-mix(in srgb,var(--it) 45%,var(--border2))}
+    .chip.med{color:var(--med);border-color:color-mix(in srgb,var(--med) 45%,var(--border2))}
+    .chip.minf{color:var(--minf);border-color:color-mix(in srgb,var(--minf) 45%,var(--border2))}
+
+    .bar{height:9px;border-radius:999px;background:var(--elev);overflow:hidden;border:1px solid var(--border)}
+    .bar > i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s ease}
+
+    .ring{--p:0;--c:var(--accent);width:120px;height:120px;border-radius:50%;display:grid;place-items:center;
+      background:radial-gradient(closest-side,var(--panel) 78%,transparent 79%),
+        conic-gradient(var(--c) calc(var(--p)*1%),var(--elev) 0);position:relative}
+    .ring b{font-size:1.5rem}
+
+    .stat{padding:16px}
+    .stat .n{font-size:1.9rem;font-weight:800;line-height:1}
+    .stat .l{color:var(--muted);font-size:.82rem;margin-top:6px}
+    .stat .ic{font-size:1.3rem}
+
+    .lead{font-size:1.05rem;color:var(--muted)}
+    .kicker{text-transform:uppercase;letter-spacing:1.5px;font-size:.72rem;color:var(--accent);font-weight:800}
+
+    /* Lesson content */
+    .prose h3{margin-top:1.1em}
+    .prose ul{margin:.2em 0 .9em;padding-left:1.2em}
+    .prose li{margin:.25em 0}
+    .prose code, pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    pre{background:#050a16;border:1px solid var(--border);border-radius:12px;padding:14px;overflow:auto;font-size:.86rem;color:#d6e2ff}
+    :root[data-theme="light"] pre{background:#0d1730;color:#dbe6ff}
+    .note{border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
+      padding:10px 14px;border-radius:0 10px 10px 0;margin:.5em 0}
+    .objectives{list-style:none;padding:0;margin:0}
+    .objectives li{padding:8px 0 8px 30px;position:relative;border-bottom:1px dashed var(--border)}
+    .objectives li:before{content:"✓";position:absolute;left:4px;color:var(--ok);font-weight:800}
+    .termcard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--panel2)}
+    .termcard b{color:var(--accent2)}
+
+    /* Flashcard */
+    .flash-wrap{perspective:1400px;max-width:520px;margin:0 auto}
+    .flash{position:relative;height:280px;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.2,.7,.2,1);cursor:pointer}
+    .flash.flip{transform:rotateY(180deg)}
+    .flash .face{position:absolute;inset:0;backface-visibility:hidden;border-radius:18px;border:1px solid var(--border2);
+      display:grid;place-items:center;text-align:center;padding:26px;background:linear-gradient(180deg,var(--panel),var(--panel2));box-shadow:var(--shadow)}
+    .flash .back{transform:rotateY(180deg);background:linear-gradient(180deg,var(--elev),var(--panel))}
+    .flash .face .q{font-size:1.5rem;font-weight:700}
+    .flash .face .a{font-size:1.12rem}
+
+    /* Quiz */
+    .opt{display:block;width:100%;text-align:left;border:1px solid var(--border2);background:var(--panel);color:var(--fg);
+      padding:13px 15px;border-radius:12px;cursor:pointer;margin-bottom:10px;transition:.15s;font-weight:500}
+    .opt:hover:not(:disabled){border-color:var(--accent);background:var(--elev)}
+    .opt.correct{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,transparent)}
+    .opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 16%,transparent)}
+    .opt:disabled{cursor:default}
+
+    /* Chat */
+    .chat{display:flex;flex-direction:column;height:min(60dvh,460px);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    .chatlog{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--panel2)}
+    .msg{max-width:82%;padding:10px 14px;border-radius:14px;white-space:pre-wrap}
+    .msg.u{align-self:flex-end;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04121e;border-bottom-right-radius:4px}
+    .msg.a{align-self:flex-start;background:var(--elev);border:1px solid var(--border);border-bottom-left-radius:4px}
+    .msg .src{font-size:.7rem;color:var(--muted);margin-top:6px}
+    .chatbar{display:flex;gap:8px;padding:10px;background:var(--panel);border-top:1px solid var(--border)}
+    input,select,textarea{font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px}
+    input:focus,select:focus,textarea:focus{outline:2px solid var(--ring);outline-offset:1px;border-color:var(--accent)}
+
+    .badge{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--panel2)}
+    .badge .em{font-size:1.8rem;filter:grayscale(1);opacity:.4}
+    .badge.on .em{filter:none;opacity:1}
+    .badge.on{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+
+    /* Toast */
+    #toasts{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center}
+    .toast{background:var(--elev);border:1px solid var(--border2);color:var(--fg);padding:11px 18px;border-radius:12px;box-shadow:var(--shadow);
+      animation:pop .25s ease}
+    @keyframes pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+    /* Mobile bottom nav */
+    .mobnav{display:none}
+    @media(max-width:1040px){
+      .mobnav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:50;background:color-mix(in srgb,var(--bg) 85%,transparent);
+        backdrop-filter:blur(12px);border-top:1px solid var(--border);justify-content:space-around;padding:6px max(8px,env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom))}
+      .mobnav a{flex:1;text-align:center;color:var(--muted);text-decoration:none;font-size:.66rem;padding:6px 2px;border-radius:10px}
+      .mobnav a .ic{display:block;font-size:1.15rem;margin-bottom:1px}
+      .mobnav a.active{color:var(--accent)}
+      main.shell{padding-bottom:80px}
+    }
+    @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+    ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+    .divider{height:1px;background:var(--border);margin:14px 0}
+    .breadcrumb{color:var(--muted);font-size:.85rem;margin-bottom:10px}
+    .breadcrumb a{color:var(--accent);cursor:pointer;text-decoration:none}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap row between" style="padding-top:12px;padding-bottom:12px">
+      <a class="brand" href="#home" aria-label="Bosh sahifa">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+        </span>
+        <span><b>Iqror IT MED School</b><span class="tag">IT • Tibbiyot • Informatika</span></span>
+      </a>
+      <div class="row" style="gap:8px">
+        <span class="pill" id="xp-pill" title="Tajriba ballari">⚡ <span id="xp-val">0</span> XP</span>
+        <span class="pill" id="streak-pill" title="Ketma-ket kunlar">🔥 <span id="streak-val">0</span></span>
+        <span class="pill hide" id="cloud-pill" title="Bulutli sinxronlash (Firebase)">☁️ <span id="cloud-txt">Oflayn</span></span>
+        <button class="icon-btn" id="btn-theme" title="Mavzuni almashtirish" aria-label="Mavzu">🌙</button>
+        <button class="icon-btn hide" id="btn-install" title="Ilovani o‘rnatish" aria-label="O‘rnatish">⬇️</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="side" aria-label="Asosiy menyu" id="sidenav">
+      <a href="#home" data-sec="home"><span class="ic">🏠</span> Bosh sahifa</a>
+      <a href="#courses" data-sec="courses"><span class="ic">📚</span> Kurslar</a>
+      <a href="#srs" data-sec="srs"><span class="ic">🗂️</span> Kartochkalar (SRS)</a>
+      <a href="#quiz" data-sec="quiz"><span class="ic">🧪</span> Testlar</a>
+      <a href="#tutor" data-sec="tutor"><span class="ic">🤖</span> AI murabbiy</a>
+      <a href="#achievements" data-sec="achievements"><span class="ic">🏆</span> Yutuqlar</a>
+      <a href="#profile" data-sec="profile"><span class="ic">👤</span> Profil</a>
+      <div class="side-foot small muted">
+        <b class="fg" style="color:var(--fg)">Iqror IT MED School</b><br>
+        Oflayn ishlaydigan o‘quv platformasi. Ma’lumotlaringiz shu qurilmada saqlanadi.
+      </div>
+    </nav>
+
+    <section id="page" aria-live="polite"><!-- render target --></section>
+  </main>
+
+  <nav class="mobnav" aria-label="Mobil menyu" id="mobnav">
+    <a href="#home" data-sec="home"><span class="ic">🏠</span>Bosh</a>
+    <a href="#courses" data-sec="courses"><span class="ic">📚</span>Kurslar</a>
+    <a href="#srs" data-sec="srs"><span class="ic">🗂️</span>SRS</a>
+    <a href="#quiz" data-sec="quiz"><span class="ic">🧪</span>Test</a>
+    <a href="#tutor" data-sec="tutor"><span class="ic">🤖</span>AI</a>
+    <a href="#profile" data-sec="profile"><span class="ic">👤</span>Profil</a>
+  </nav>
+
+  <div id="toasts" aria-live="polite"></div>
+  <noscript><div class="wrap"><div class="card">Ilovani ishlatish uchun brauzeringizda JavaScript yoqilgan bo‘lishi kerak.</div></div></noscript>
+
+  <script>
+  "use strict";
+  /* =========================================================================
+     Iqror IT MED School — bir faylli (self-contained) o‘quv platformasi
+     Bo‘limlar: Ma'lumot bazasi (DB) · Holat (state) · SRS (SM-2) · Router ·
+     Sahifalar · Testlar · AI murabbiy · Yutuqlar · PWA/eksport
+     ========================================================================= */
+
+  /* ---- Ma'lumot bazasi (kontent) ---- */
+  const DB = {
+    tracks:[
+      {id:"it",title:"IT yo‘nalishi",icon:"💻",color:"#3b82f6",tagline:"Kompyuter, dasturlash, veb va tarmoqlar",
+        modules:[
+          {id:"it-basics",title:"Kompyuter va IT asoslari",summary:"Kompyuter qanday ishlashi, apparat va dasturiy ta’minot, operatsion tizim hamda internet asoslari.",
+            lessons:[
+              {id:"it-basics-l1",title:"Kompyuter tuzilishi va ishlash prinsipi",minutes:8,
+                objectives:["Apparat (hardware) va dasturiy (software) ta’minot farqini tushunish","Kompyuterning asosiy qismlari vazifasini bilish","Ma’lumot qanday saqlanishi va qayta ishlanishini tasavvur qilish"],
+                sections:[
+                  {heading:"Apparat va dasturiy ta’minot",paragraphs:["Kompyuter ikki qismdan iborat: apparat ta’minot (hardware) — qo‘l bilan ushlab bo‘ladigan fizik qurilmalar, va dasturiy ta’minot (software) — apparatni boshqaradigan dasturlar. Ular birgalikda ishlaydi: dasturiy ta’minot buyruq beradi, apparat esa bajaradi.","Masalan, brauzer — bu dastur (software), ekran va protsessor esa uni ishlatadigan apparatdir."]},
+                  {heading:"Asosiy qismlar",paragraphs:["Har bir kompyuterda ma’lumotni kiritish, qayta ishlash, saqlash va chiqarish uchun bir nechta muhim qism bor."],bullets:["Protsessor (CPU) — «miya», barcha hisob-kitob va buyruqlarni bajaradi.","Operativ xotira (RAM) — vaqtincha, tez xotira; kompyuter o‘chsa tozalanadi.","Doimiy xotira (SSD/HDD) — fayllar uzoq muddat saqlanadigan joy.","Kiritish qurilmalari — klaviatura, sichqoncha; chiqarish — monitor, printer."]},
+                  {heading:"Ma’lumot va ikkilik sanoq",paragraphs:["Kompyuter hamma narsani 0 va 1 (bit) ko‘rinishida saqlaydi. 8 bit = 1 bayt. Matn, rasm, video — barchasi ikkilik sanoq tizimida kodlanadi.","1024 bayt taxminan 1 kilobayt (KB), 1024 KB taxminan 1 megabayt (MB) va hokazo."]}
+                ],
+                summary:"Kompyuter apparat va dasturiy ta’minotdan iborat; protsessor ma’lumotni qayta ishlaydi, xotira uni saqlaydi, hamma narsa esa 0 va 1 ko‘rinishida kodlanadi.",
+                terms:[{term:"CPU (protsessor)",def:"Kompyuterning barcha hisob va buyruqlarni bajaradigan asosiy qismi."},{term:"RAM",def:"Vaqtincha tez xotira; qurilma o‘chganda ma’lumot yo‘qoladi."},{term:"Bit va bayt",def:"Bit — 0 yoki 1; 8 bit = 1 bayt, ma’lumot o‘lchov birligi."},{term:"Hardware / Software",def:"Apparat — fizik qurilmalar; dasturiy — ularni boshqaruvchi dasturlar."}]},
+              {id:"it-basics-l2",title:"Operatsion tizim va internet asoslari",minutes:9,
+                objectives:["Operatsion tizim vazifasini tushunish","Fayl va papka tizimi bilan ishlashni bilish","Internet va veb qanday ishlashini tasavvur qilish"],
+                sections:[
+                  {heading:"Operatsion tizim (OS)",paragraphs:["Operatsion tizim — apparat bilan dasturlar o‘rtasidagi ko‘prik. U xotirani boshqaradi, fayllarni tartibga soladi va boshqa dasturlarni ishga tushiradi. Mashhur OS lar: Windows, macOS, Linux, Android va iOS."],bullets:["Fayllar papkalarda (kataloglarda) tartiblanadi.","Har bir faylning nomi va kengaytmasi bor: hisobot.pdf, rasm.png.","OS bir vaqtda ko‘p dasturlarni boshqaradi (multitasking)."]},
+                  {heading:"Internet va veb",paragraphs:["Internet — dunyodagi kompyuterlarni bog‘lovchi global tarmoq. Veb (WWW) esa internet ustida ishlaydigan sahifalar tizimi; siz brauzer orqali veb-saytlarga kirasiz.","Har bir qurilmaning IP-manzili bor (masalan 192.168.1.5). Domen nomlari (google.com) esa IP-manzillarga DNS orqali o‘giriladi."]},
+                  {heading:"Xavfsiz ishlash",paragraphs:["Internetda o‘zingizni himoya qiling."],bullets:["Kuchli va noyob parollardan foydalaning.","Noma’lum havolalarga bosmang, shubhali fayllarni yuklamang.","Muhim hisoblarda ikki bosqichli tasdiqlashni yoqing.","HTTPS (qulf belgisi) bor saytlarga ishoning."]}
+                ],
+                summary:"Operatsion tizim apparat va dasturlarni bog‘laydi, fayllarni boshqaradi; internet esa qurilmalarni bog‘lovchi global tarmoq bo‘lib, veb-saytlar brauzer orqali ochiladi.",
+                terms:[{term:"Operatsion tizim",def:"Apparatni va dasturlarni boshqaradigan asosiy dasturiy ta’minot (Windows, Linux...)."},{term:"IP-manzil",def:"Tarmoqdagi har bir qurilmaning raqamli manzili."},{term:"DNS",def:"Domen nomlarini (google.com) IP-manzilga o‘giradigan tizim."},{term:"HTTPS",def:"Shifrlangan, xavfsiz veb-aloqa protokoli."}]}
+            ]},
+          {id:"it-prog",title:"Dasturlash asoslari (Python)",summary:"Algoritm tushunchasi, o‘zgaruvchilar, shartlar, sikllar va funksiyalar — Python misolida.",
+            lessons:[
+              {id:"it-prog-l1",title:"Algoritm, o‘zgaruvchi va ma’lumot turlari",minutes:10,
+                objectives:["Algoritm nima ekanini tushunish","O‘zgaruvchi va asosiy ma’lumot turlarini bilish","Oddiy Python dasturini o‘qiy olish"],
+                sections:[
+                  {heading:"Algoritm nima?",paragraphs:["Algoritm — biror masalani yechish uchun aniq, ketma-ket qadamlar to‘plami. Masalan, choy damlash retsepti ham algoritmdir. Dasturlashda biz algoritmni kompyuter tushunadigan tilda yozamiz.","Yaxshi algoritm aniq, cheklangan (tugaydigan) va bir ma’noli bo‘ladi."]},
+                  {heading:"O‘zgaruvchi va ma’lumot turlari",paragraphs:["O‘zgaruvchi — qiymat saqlanadigan nomlangan «quti». Python’da qiymat turi avtomatik aniqlanadi."],bullets:["int — butun son: 42","float — kasrli son: 3.14","str — matn (satr): «Salom»","bool — mantiqiy: True yoki False"],code:{lang:"python",text:"ism = \"Ali\"\nyosh = 20\nboy = 1.75\ntalaba = True\nprint(ism, yosh, boy)"}},
+                  {heading:"Amallar va kiritish",paragraphs:["Sonlar ustida +, -, *, / amallarini bajarish mumkin. input() foydalanuvchidan ma’lumot oladi (u har doim matn qaytaradi, kerak bo‘lsa int() bilan songa o‘giramiz)."],code:{lang:"python",text:"a = int(input(\"Birinchi son: \"))\nb = int(input(\"Ikkinchi son: \"))\nprint(\"Yig‘indi:\", a + b)"}}
+                ],
+                summary:"Algoritm — masala yechish qadamlari; o‘zgaruvchilar qiymatlarni saqlaydi; Python’da asosiy turlar int, float, str va bool.",
+                terms:[{term:"Algoritm",def:"Masalani yechishning aniq, ketma-ket qadamlari."},{term:"O‘zgaruvchi",def:"Qiymat saqlanadigan nomlangan xotira joyi."},{term:"Ma’lumot turi",def:"Qiymat ko‘rinishi: int, float, str, bool va boshqalar."},{term:"input() / print()",def:"input — ma’lumot olish, print — natijani ekranga chiqarish."}]},
+              {id:"it-prog-l2",title:"Shartlar, sikllar va funksiyalar",minutes:11,
+                objectives:["Shart operatorlari (if/else) bilan qaror qabul qilish","Sikllar (for/while) yordamida takrorlash","Funksiyalar yaratib, kodni qayta ishlatish"],
+                sections:[
+                  {heading:"Shartlar: if / elif / else",paragraphs:["Dastur ba’zan sharoitga qarab turli yo‘l tutishi kerak. Buning uchun if operatoridan foydalanamiz."],code:{lang:"python",text:"yosh = 18\nif yosh >= 18:\n    print(\"Voyaga yetgan\")\nelif yosh >= 13:\n    print(\"O‘smir\")\nelse:\n    print(\"Bola\")"}},
+                  {heading:"Sikllar: for va while",paragraphs:["Sikl — bir amalni ko‘p marta takrorlash usuli. for ma’lum sondagi takror uchun, while esa shart bajarilguncha ishlaydi."],code:{lang:"python",text:"# 1 dan 5 gacha\nfor i in range(1, 6):\n    print(i)\n\n# shart bajarilguncha\nson = 0\nwhile son < 3:\n    print(\"Salom\")\n    son = son + 1"}},
+                  {heading:"Funksiyalar",paragraphs:["Funksiya — nom berilgan kod bo‘lagi; uni istalgancha chaqirish mumkin. Bu takrorni kamaytiradi va kodni tartibli qiladi."],code:{lang:"python",text:"def salomlash(ism):\n    return \"Salom, \" + ism + \"!\"\n\nprint(salomlash(\"Dilnoza\"))"}}
+                ],
+                summary:"if/elif/else qaror qabul qiladi, for/while takrorlaydi, funksiyalar esa kodni qayta ishlatish va tartibga solishga yordam beradi.",
+                terms:[{term:"if / else",def:"Shartga qarab turli kod bajaradigan operator."},{term:"Sikl (loop)",def:"Amalni takrorlaydigan tuzilma: for va while."},{term:"Funksiya",def:"Nomlangan, qayta ishlatiladigan kod bo‘lagi."},{term:"range()",def:"Sonlar ketma-ketligini hosil qiluvchi Python funksiyasi."}]}
+            ]},
+          {id:"it-web",title:"Veb-texnologiyalar",summary:"HTML tuzilma, CSS dizayn va JavaScript interaktivligi — zamonaviy veb-sahifa asoslari.",
+            lessons:[
+              {id:"it-web-l1",title:"HTML va CSS asoslari",minutes:10,
+                objectives:["HTML yordamida sahifa tuzilmasini yaratish","CSS bilan ko‘rinishni bezash","Teg, atribut va selektor tushunchalarini bilish"],
+                sections:[
+                  {heading:"HTML — sahifa skeleti",paragraphs:["HTML (HyperText Markup Language) veb-sahifaning tuzilmasini belgilaydi. U teglardan iborat: <h1> sarlavha, <p> matn, <a> havola, <img> rasm. Teglar ko‘pincha ochiladi va yopiladi: <p>Matn</p>."],code:{lang:"html",text:"<!DOCTYPE html>\n<html>\n  <body>\n    <h1>Salom, dunyo!</h1>\n    <p>Bu mening birinchi sahifam.</p>\n    <a href=\"https://iqror.uz\">Havola</a>\n  </body>\n</html>"}},
+                  {heading:"CSS — ko‘rinish va uslub",paragraphs:["CSS (Cascading Style Sheets) sahifaning ranglari, o‘lchamlari va joylashuvini belgilaydi. Selektor orqali elementni tanlaymiz va unga uslub beramiz."],code:{lang:"css",text:"h1 {\n  color: #0ea5e9;\n  text-align: center;\n}\np {\n  font-size: 16px;\n  line-height: 1.5;\n}"}},
+                  {heading:"Responsiv dizayn",paragraphs:["Zamonaviy saytlar telefon, planshet va kompyuterda yaxshi ko‘rinishi kerak. Buning uchun moslashuvchan o‘lchamlar (%, rem) va media so‘rovlardan foydalaniladi."]}
+                ],
+                summary:"HTML sahifa tuzilmasini, CSS esa uning ko‘rinishini belgilaydi; responsiv dizayn sayt turli ekranlarga moslashishini ta’minlaydi.",
+                terms:[{term:"HTML teg",def:"Sahifa elementini belgilovchi buyruq, masalan <p> yoki <h1>."},{term:"Atribut",def:"Tegga qo‘shimcha ma’lumot beruvchi qism, masalan href."},{term:"CSS selektor",def:"Uslub beriladigan elementni tanlaydigan qoida."},{term:"Responsiv dizayn",def:"Sahifaning turli ekran o‘lchamlariga moslashishi."}]},
+              {id:"it-web-l2",title:"JavaScript bilan interaktivlik",minutes:10,
+                objectives:["JavaScript vazifasini tushunish","O‘zgaruvchi va funksiyalar bilan ishlash","Sahifa elementlariga hodisa (event) qo‘shish"],
+                sections:[
+                  {heading:"JavaScript nima?",paragraphs:["JavaScript — veb-sahifani jonlantiruvchi dasturlash tili. HTML tuzilma, CSS ko‘rinish bersa, JavaScript harakat va mantiqni qo‘shadi: tugma bosilganda o‘zgarish, ma’lumot tekshirish, animatsiya."]},
+                  {heading:"O‘zgaruvchi va funksiya",paragraphs:["O‘zgaruvchilar let/const bilan e’lon qilinadi, funksiyalar esa qayta ishlatiladigan mantiqni saqlaydi."],code:{lang:"javascript",text:"let ism = \"Aziz\";\nfunction salom(kim) {\n  return \"Salom, \" + kim + \"!\";\n}\nconsole.log(salom(ism));"}},
+                  {heading:"Hodisalar (events)",paragraphs:["Foydalanuvchi harakatlariga (bosish, yozish) javob berish uchun hodisa tinglovchilar (event listener) ishlatiladi."],code:{lang:"javascript",text:"const tugma = document.querySelector(\"button\");\ntugma.addEventListener(\"click\", () => {\n  alert(\"Tugma bosildi!\");\n});"}}
+                ],
+                summary:"JavaScript veb-sahifaga interaktivlik qo‘shadi: o‘zgaruvchilar, funksiyalar va hodisalar orqali foydalanuvchi harakatlariga javob beradi.",
+                terms:[{term:"JavaScript",def:"Veb-sahifani interaktiv qiladigan dasturlash tili."},{term:"DOM",def:"Sahifa elementlarining daraxt ko‘rinishidagi modeli."},{term:"Event listener",def:"Foydalanuvchi harakatiga javob beradigan funksiya."},{term:"console.log()",def:"Natijani brauzer konsoliga chiqaruvchi buyruq."}]}
+            ]},
+          {id:"it-data",title:"Ma’lumotlar bazasi va tarmoqlar",summary:"SQL va ma’lumotlar bazasi asoslari, kompyuter tarmoqlari hamda kiberxavfsizlik tamoyillari.",
+            lessons:[
+              {id:"it-data-l1",title:"Ma’lumotlar bazasi va SQL",minutes:10,
+                objectives:["Ma’lumotlar bazasi nima ekanini tushunish","Jadval, ustun va yozuv tushunchalarini bilish","Oddiy SQL so‘rovlarini o‘qiy olish"],
+                sections:[
+                  {heading:"Ma’lumotlar bazasi (MB)",paragraphs:["Ma’lumotlar bazasi — tartiblangan ma’lumotlar to‘plami. Relatsion bazalarda ma’lumot jadvallarda saqlanadi: har bir jadval ustunlar (maydonlar) va qatorlar (yozuvlar)dan iborat.","Masalan, «bemorlar» jadvalida id, ism, yosh va tug‘ilgan_sana ustunlari bo‘lishi mumkin."]},
+                  {heading:"SQL so‘rovlari",paragraphs:["SQL (Structured Query Language) — ma’lumotlar bazasi bilan muloqot tili. Asosiy buyruqlar: SELECT (o‘qish), INSERT (qo‘shish), UPDATE (yangilash), DELETE (o‘chirish)."],code:{lang:"sql",text:"-- Barcha bemorlarni olish\nSELECT ism, yosh FROM bemorlar\nWHERE yosh > 40\nORDER BY yosh DESC;"}},
+                  {heading:"Kalitlar va bog‘lanish",paragraphs:["Har bir jadvalda noyob birlamchi kalit (primary key) bo‘ladi, u yozuvlarni farqlaydi."],bullets:["Birlamchi kalit (PRIMARY KEY) — har bir yozuvni yagona aniqlaydi.","Tashqi kalit (FOREIGN KEY) — jadvallarni o‘zaro bog‘laydi.","Indeks — qidiruvni tezlashtiradi."]}
+                ],
+                summary:"Ma’lumotlar bazasi ma’lumotni jadvallarda saqlaydi; SQL tili orqali biz ma’lumotni o‘qiymiz, qo‘shamiz, yangilaymiz va o‘chiramiz.",
+                terms:[{term:"Jadval (table)",def:"Ustun va qatorlardan iborat ma’lumot to‘plami."},{term:"SQL",def:"Ma’lumotlar bazasi bilan ishlash tili (SELECT, INSERT...)."},{term:"Birlamchi kalit",def:"Har bir yozuvni yagona aniqlaydigan maydon."},{term:"SELECT",def:"Bazadan ma’lumot o‘qiydigan SQL buyrug‘i."}]},
+              {id:"it-data-l2",title:"Kompyuter tarmoqlari va kiberxavfsizlik",minutes:10,
+                objectives:["Tarmoq va uning turlarini bilish","TCP/IP va protokollar haqida tasavvurga ega bo‘lish","Asosiy kiberxavfsizlik tamoyillarini tushunish"],
+                sections:[
+                  {heading:"Tarmoqlar",paragraphs:["Kompyuter tarmog‘i — bir-biri bilan bog‘langan qurilmalar. LAN — mahalliy (uy, ofis), WAN — keng hududli (internet). Qurilmalar router va kommutator (switch) orqali bog‘lanadi."]},
+                  {heading:"TCP/IP va protokollar",paragraphs:["Ma’lumot tarmoqda kichik bo‘laklarga (paketlar) bo‘linib uzatiladi. TCP/IP — bu jarayonni boshqaruvchi asosiy protokollar to‘plami."],bullets:["HTTP/HTTPS — veb-sahifalar uchun.","DNS — domen nomlarini IP-manzilga o‘giradi.","TCP — ma’lumotni ishonchli yetkazadi."]},
+                  {heading:"Kiberxavfsizlik asoslari",paragraphs:["Kiberxavfsizlik — ma’lumot va tizimlarni ruxsatsiz kirish, o‘g‘irlash yoki buzishdan himoya qilish. Ayniqsa tibbiyotda bemor ma’lumotlari maxfiy bo‘lishi shart."],bullets:["Konfidensiallik, yaxlitlik, foydalanuvchanlik (CIA) — asosiy uch tamoyil.","Shifrlash ma’lumotni himoya qiladi.","Fishing va zararli dasturlardan ehtiyot bo‘ling."],note:"Tibbiy tizimlarda bemor ma’lumotlarini himoya qilish qonuniy talab (masalan HIPAA, GDPR)."}
+                ],
+                summary:"Tarmoqlar qurilmalarni bog‘laydi, TCP/IP ma’lumot almashinuvini boshqaradi; kiberxavfsizlik esa ma’lumotni himoya qilib, ayniqsa tibbiyotda muhim ahamiyatga ega.",
+                terms:[{term:"LAN / WAN",def:"Mahalliy va keng hududli tarmoqlar."},{term:"TCP/IP",def:"Internetda ma’lumot uzatishning asosiy protokollari."},{term:"Shifrlash",def:"Ma’lumotni o‘qib bo‘lmaydigan holatga keltirib himoyalash."},{term:"Fishing",def:"Aldov orqali maxfiy ma’lumotni o‘g‘irlash urinishi."}]}
+            ]}
+        ]},
+      {id:"med",title:"Tibbiyot yo‘nalishi",icon:"🩺",color:"#10b981",tagline:"Tibbiyot asoslari, anatomiya va birinchi yordam",
+        modules:[
+          {id:"med-term",title:"Tibbiy terminologiya va asoslar",summary:"Tibbiy atamalar tuzilishi, lotin-yunon ildizlari hamda tananing asosiy tizimlari.",
+            lessons:[
+              {id:"med-term-l1",title:"Tibbiy atamalar tuzilishi",minutes:9,
+                objectives:["Tibbiy atama qismlarini ajrata olish","Prefiks, ildiz va suffiks vazifasini bilish","Umumiy tibbiy atamalarni izohlay olish"],
+                sections:[
+                  {heading:"Atama qismlari",paragraphs:["Ko‘pchilik tibbiy atamalar lotin va yunon tillaridan olingan. Atama uch qismdan iborat bo‘lishi mumkin: prefiks (old qism), ildiz (asosiy ma’no) va suffiks (oxirgi qism)."],bullets:["Ildiz — asosiy ma’no, masalan «kardi» (yurak).","Prefiks — old qism, masalan «bradi-» (sekin).","Suffiks — oxirgi qism, masalan «-itis» (yallig‘lanish)."]},
+                  {heading:"Misollar",paragraphs:["Qismlarni birlashtirib ma’noni topamiz."],bullets:["Kardiologiya = kardi (yurak) + logiya (fan) → yurak haqidagi fan.","Bradikardiya = bradi (sekin) + kardi (yurak) → yurakning sekin urishi.","Gastrit = gastr (oshqozon) + itis (yallig‘lanish) → oshqozon yallig‘lanishi."]},
+                  {heading:"Foydali ildiz va suffikslar",bullets:["derma — teri, gastro — oshqozon, nefro — buyrak.","neyro — asab, hemo — qon.","-ologiya — fan, -itis — yallig‘lanish, -ektomiya — olib tashlash."],paragraphs:["Ushbu qismlarni yodlab olsangiz, yuzlab yangi atamaning ma’nosini mustaqil topa olasiz."]}
+                ],
+                summary:"Tibbiy atamalar prefiks, ildiz va suffiksdan tuziladi; qismlarni bilib, notanish atamaning ma’nosini topish mumkin.",
+                terms:[{term:"Ildiz (root)",def:"Atamaning asosiy ma’nosini bildiruvchi qism, masalan kardi — yurak."},{term:"Prefiks",def:"Atama boshidagi ma’no o‘zgartiruvchi qism, masalan bradi — sekin."},{term:"Suffiks",def:"Atama oxiridagi qism, masalan -itis — yallig‘lanish."},{term:"-ektomiya",def:"A’zoni jarrohlik yo‘li bilan olib tashlashni bildiruvchi suffiks."}]},
+              {id:"med-term-l2",title:"Tananing tizimlari va anatomik yo‘nalishlar",minutes:9,
+                objectives:["Tananing asosiy tizimlarini sanay olish","Anatomik yo‘nalish atamalarini bilish","A’zolar tizimlari o‘zaro bog‘liqligini tushunish"],
+                sections:[
+                  {heading:"A’zolar tizimlari",paragraphs:["Inson tanasi bir nechta o‘zaro bog‘langan tizimlardan iborat. Har biri o‘z vazifasini bajaradi, lekin birgalikda ishlaydi."],bullets:["Yurak-qon tomir tizimi — qon aylanishi.","Nafas tizimi — kislorod almashinuvi.","Ovqat hazm qilish tizimi — oziq-ovqatni hazm qilish.","Asab tizimi — boshqaruv va signal uzatish.","Suyak-mushak tizimi — tayanch va harakat."]},
+                  {heading:"Anatomik yo‘nalishlar",paragraphs:["Shifokorlar tana qismlarini aniq tasvirlash uchun standart yo‘nalish atamalaridan foydalanadi."],bullets:["Anterior (old) — Posterior (orqa).","Superior (yuqori) — Inferior (past).","Medial (o‘rtaga yaqin) — Lateral (chetga yaqin).","Proksimal (markazga yaqin) — Distal (uzoq)."]},
+                  {heading:"Nima uchun muhim?",paragraphs:["Aniq terminologiya tibbiy xatolarni kamaytiradi va shifokorlar, hamshiralar hamda IT tizimlari o‘rtasida bir xil tushunishni ta’minlaydi."]}
+                ],
+                summary:"Inson tanasi o‘zaro bog‘langan tizimlardan iborat; anatomik yo‘nalish atamalari tana qismlarini aniq tasvirlash imkonini beradi.",
+                terms:[{term:"Yurak-qon tomir tizimi",def:"Yurak va qon tomirlar orqali qonni aylantiruvchi tizim."},{term:"Anterior / Posterior",def:"Old va orqa tomonni bildiruvchi anatomik atamalar."},{term:"Proksimal / Distal",def:"Tana markaziga yaqin va undan uzoq joyni bildiradi."},{term:"A’zolar tizimi",def:"Umumiy vazifani bajaruvchi a’zolar guruhi."}]}
+            ]},
+          {id:"med-anat",title:"Anatomiya va fiziologiya",summary:"Yurak-qon tomir, nafas, asab hamda ovqat hazm qilish tizimlari tuzilishi va vazifasi.",
+            lessons:[
+              {id:"med-anat-l1",title:"Yurak-qon tomir va nafas tizimi",minutes:11,
+                objectives:["Yurak tuzilishi va qon aylanishini tushunish","Qon tomir turlarini farqlash","Nafas tizimi vazifasini bilish"],
+                sections:[
+                  {heading:"Yurak va qon aylanishi",paragraphs:["Yurak — mushakli nasos; u qonni butun tanaga haydaydi. Yurak to‘rt bo‘lmadan iborat: ikki bo‘lmacha (atrium) va ikki qorincha (ventrikul).","Qon kislorod va oziq moddalarni to‘qimalarga yetkazadi, karbonat angidrid va chiqindilarni olib ketadi."]},
+                  {heading:"Qon tomirlar",bullets:["Arteriyalar — qonni yurakdan olib ketadi (odatda kislorodli).","Venalar — qonni yurakka qaytaradi.","Kapillyarlar — eng mayda tomirlar; modda almashinuvi shu yerda kechadi."]},
+                  {heading:"Nafas tizimi",paragraphs:["Nafas tizimi kislorodni qabul qilib, karbonat angidridni chiqaradi. Havo burun → traxeya → bronxlar → o‘pkadagi alveolalarga boradi. Alveolalarda gaz almashinuvi ro‘y beradi: kislorod qonga o‘tadi, karbonat angidrid chiqadi."]}
+                ],
+                summary:"Yurak qonni haydaydi, arteriya-vena-kapillyarlar uni tarqatadi; nafas tizimi esa o‘pka alveolalarida kislorod va karbonat angidridni almashtiradi.",
+                terms:[{term:"Yurak qorinchasi",def:"Qonni yurakdan tashqariga haydaydigan bo‘lim (ventrikul)."},{term:"Arteriya",def:"Qonni yurakdan a’zolarga olib boradigan tomir."},{term:"Kapillyar",def:"Modda almashinuvi kechadigan eng mayda qon tomir."},{term:"Alveola",def:"O‘pkada gaz almashinuvi bo‘ladigan mayda havo pufakchasi."}]},
+              {id:"med-anat-l2",title:"Asab va ovqat hazm qilish tizimi",minutes:11,
+                objectives:["Asab tizimi qismlarini bilish","Neyron vazifasini tushunish","Ovqat hazm qilish bosqichlarini bilish"],
+                sections:[
+                  {heading:"Asab tizimi",paragraphs:["Asab tizimi tanani boshqaradi va signal uzatadi. U markaziy (bosh miya va orqa miya) hamda periferik (nervlar) qismlarga bo‘linadi.","Neyron — asab tizimining asosiy hujayrasi; elektr signallar orqali ma’lumot uzatadi."]},
+                  {heading:"Bosh miya",bullets:["Katta miya — fikrlash, xotira, harakat.","Miyacha — muvozanat va koordinatsiya.","Miya sopi — nafas va yurak urishi kabi hayotiy funksiyalar."]},
+                  {heading:"Ovqat hazm qilish tizimi",paragraphs:["Bu tizim oziq-ovqatni mayda moddalarga ajratib, qonga so‘riladigan holga keltiradi.","Yo‘l: og‘iz → qizilo‘ngach → oshqozon → ingichka ichak → yo‘g‘on ichak. Jigar va oshqozon osti bezi hazm shirasini ishlab chiqaradi."]}
+                ],
+                summary:"Asab tizimi neyronlar orqali tanani boshqaradi; ovqat hazm qilish tizimi esa oziq moddalarni parchalab, organizmga so‘rilishini ta’minlaydi.",
+                terms:[{term:"Neyron",def:"Elektr signal uzatuvchi asab hujayrasi."},{term:"Markaziy asab tizimi",def:"Bosh miya va orqa miyadan iborat boshqaruv markazi."},{term:"Oshqozon",def:"Ovqatni kislota va fermentlar bilan hazm qiladigan a’zo."},{term:"Ingichka ichak",def:"Oziq moddalar asosan so‘riladigan hazm a’zosi."}]}
+            ]},
+          {id:"med-aid",title:"Birinchi tibbiy yordam",summary:"Shoshilinch holatlarda birinchi yordam: CPR, qon ketishi, kuyish va shikastlanishlar.",
+            lessons:[
+              {id:"med-aid-l1",title:"CPR va shoshilinch holatlar",minutes:11,
+                objectives:["Shoshilinch vaziyatda to‘g‘ri ketma-ketlikni bilish","CPR (yurak-o‘pka reanimatsiyasi) tamoyilini tushunish","Shok belgilarini taniy olish"],
+                sections:[
+                  {heading:"Birinchi qadamlar",paragraphs:["Har qanday shoshilinch holatda avval xavfsizlikni tekshiring, keyin jabrlanuvchini baholang va tez tibbiy yordam chaqiring (103)."],bullets:["Xavf — o‘zingiz va atrofdagilar xavfsizligini tekshiring.","Reaksiya — jabrlanuvchini chaqiring, yelkasidan asta silkiting.","Yordam chaqiring — 103 raqamiga qo‘ng‘iroq qiling.","Nafas yo‘li ochiq ekanini, nafas va qon aylanishini baholang."]},
+                  {heading:"CPR — yurak-o‘pka reanimatsiyasi",paragraphs:["Agar kishi hushsiz bo‘lsa va normal nafas olmayotgan bo‘lsa, darhol yurak-o‘pka reanimatsiyasi boshlanadi. Kattalar uchun: ko‘krak markaziga daqiqasiga 100–120 marta, taxminan 5–6 sm chuqurlikda bosing.","Agar maxsus o‘qitilmagan bo‘lsangiz, faqat ko‘krakka bosish (hands-only CPR) ham hayot saqlaydi. O‘qitilgan bo‘lsangiz, 30 marta bosish va 2 marta sun’iy nafas (30:2) nisbatida davom eting."],note:"Bu ma’lumot faqat o‘quv maqsadida. Haqiqiy CPR ko‘nikmasini akkreditatsiyalangan kursda amaliy o‘rganing va doim 103 ni chaqiring."},
+                  {heading:"Shok",paragraphs:["Shok — a’zolarga yetarli qon bormayotgan xavfli holat. Belgilari: rangpar va sovuq teri, tez va kuchsiz puls, holsizlik. Jabrlanuvchini yotqizing, oyoqlarini biroz ko‘taring, isiting va tez yordam chaqiring."]}
+                ],
+                summary:"Shoshilinch holatda xavfsizlik, reaksiya va yordam chaqirish birinchi o‘rinda; nafas yo‘q bo‘lsa CPR qilinadi; shok belgilarini erta tanib, tez yordam kerak.",
+                terms:[{term:"CPR",def:"Yurak-o‘pka reanimatsiyasi: ko‘krakka bosish va sun’iy nafas."},{term:"103",def:"O‘zbekistonda tez tibbiy yordam raqami."},{term:"Shok",def:"A’zolarga qon yetishmasligidan kelib chiqadigan xavfli holat."},{term:"Kompressiya",def:"Ko‘krak qafasiga ritmik bosish orqali qon aylanishini qo‘llab-quvvatlash."}]},
+              {id:"med-aid-l2",title:"Qon ketishi, kuyish va shikastlanishlar",minutes:10,
+                objectives:["Tashqi qon ketishini to‘xtatish usulini bilish","Kuyish darajalarini farqlash","Singan suyakda nima qilishni tushunish"],
+                sections:[
+                  {heading:"Qon ketishini to‘xtatish",paragraphs:["Kuchli tashqi qon ketishida jarohatga toza mato bilan bevosita bosim bering va uni yuqoriga ko‘taring (agar singan bo‘lmasa).","Bosimni davom ettiring va tez yordam chaqiring. Toza qo‘lqop yoki paketdan foydalanib, o‘zingizni qondan himoya qiling."]},
+                  {heading:"Kuyishlar",bullets:["1-daraja — faqat teri qizaradi (yuza).","2-daraja — pufakchalar paydo bo‘ladi.","3-daraja — teri qatlamlari chuqur shikastlanadi.","Yordam: kuygan joyni 10–20 daqiqa oqib turgan salqin suv ostida ushlang; muz qo‘ymang, moy surtmang."],note:"Katta yoki chuqur kuyishlarda darhol tibbiy yordamga murojaat qiling."},
+                  {heading:"Singan suyaklar va cho‘zilish",paragraphs:["Singan suyakda joyni qimirlatmang, immobilizatsiya qiling (qo‘zg‘almas qilib bog‘lang) va tez yordam chaqiring.","Cho‘zilish yoki lat yeyishda RICE tamoyili qo‘llaniladi: Rest (dam), Ice (muz), Compression (bog‘lash), Elevation (ko‘tarish)."]}
+                ],
+                summary:"Qon ketishida bevosita bosim, kuyishda salqin suv, singan suyakda immobilizatsiya qo‘llaniladi; jiddiy hollarda doimo tez yordam chaqiriladi.",
+                terms:[{term:"Bevosita bosim",def:"Qon ketishini to‘xtatish uchun jarohatga to‘g‘ridan-to‘g‘ri bosish."},{term:"2-daraja kuyish",def:"Terida pufakchalar paydo bo‘ladigan kuyish darajasi."},{term:"Immobilizatsiya",def:"Shikastlangan qismni qo‘zg‘almas holatda saqlash."},{term:"RICE",def:"Cho‘zilishda: dam, muz, siqib bog‘lash va ko‘tarish tamoyili."}]}
+            ]},
+          {id:"med-pharm",title:"Farmakologiya asoslari",summary:"Dori shakllari, dozalash, asosiy dori guruhlari va xavfsiz qo‘llash.",
+            lessons:[
+              {id:"med-pharm-l1",title:"Dori shakllari va dozalash",minutes:10,
+                objectives:["Asosiy dori shakllarini bilish","Doza va qo‘llash yo‘llarini tushunish","Retsept mohiyatini anglash"],
+                sections:[
+                  {heading:"Dori shakllari",bullets:["Qattiq — tabletka, kapsula, kukun.","Suyuq — sirop, eritma, in’ektsiya.","Mahalliy — malham, krem, ko‘z tomchisi."]},
+                  {heading:"Qo‘llash yo‘llari",paragraphs:["Dori organizmga turli yo‘llar bilan kiritiladi; yo‘l ta’sir tezligi va davomiyligiga ta’sir qiladi."],bullets:["Peroral (og‘iz orqali) — eng keng tarqalgan.","In’ektsion — vena, mushak yoki teri ostiga.","Mahalliy — teri yoki shilliq qavatga.","Ingalyatsion — nafas orqali (masalan astma dorilari)."]},
+                  {heading:"Doza va xavfsizlik",paragraphs:["Doza — bir marta yoki bir kunda qabul qilinadigan dori miqdori. U bemorning yoshi, vazni va holatiga qarab belgilanadi.","Doza ortiqcha bo‘lsa, zaharlanish xavfi bor; kam bo‘lsa, samara bermaydi."],note:"Dorini faqat shifokor tavsiyasi bilan va ko‘rsatilgan dozada qabul qiling. O‘z-o‘zini davolash xavfli."}
+                ],
+                summary:"Dorilar qattiq, suyuq va mahalliy shakllarda bo‘ladi; ular turli yo‘llar bilan kiritiladi; to‘g‘ri doza samaradorlik va xavfsizlik uchun hal qiluvchi ahamiyatga ega.",
+                terms:[{term:"Doza",def:"Bir marta yoki bir kunda qabul qilinadigan dori miqdori."},{term:"Peroral",def:"Dorini og‘iz orqali qabul qilish yo‘li."},{term:"In’ektsiya",def:"Dorini igna orqali tanaga kiritish (vena, mushak, teri osti)."},{term:"Retsept",def:"Shifokor tomonidan yozilgan dori tayinlovi."}]},
+              {id:"med-pharm-l2",title:"Asosiy dori guruhlari va xavfsizlik",minutes:10,
+                objectives:["Keng tarqalgan dori guruhlarini bilish","Antibiotiklarni to‘g‘ri qo‘llashni tushunish","Qo‘shimcha va o‘zaro ta’sir haqida bilish"],
+                sections:[
+                  {heading:"Umumiy dori guruhlari",bullets:["Analgetiklar — og‘riqni qoldiradi (masalan parasetamol).","Antibiotiklar — bakterial infeksiyalarga qarshi.","Antipiretiklar — haroratni tushiradi.","Antigistaminlar — allergiyaga qarshi."]},
+                  {heading:"Antibiotiklarni to‘g‘ri qo‘llash",paragraphs:["Antibiotiklar faqat bakterial infeksiyalarga ta’sir qiladi, viruslarga (masalan oddiy shamollash) emas. Kursni oxirigacha tugatish kerak, aks holda bakteriyalar dorilarga chidamli (rezistent) bo‘lib qoladi."],note:"Antibiotikni shifokorsiz va noto‘g‘ri ishlatish antibiotikka chidamlilikni kuchaytiradi — bu global sog‘liq muammosi."},
+                  {heading:"Qo‘shimcha va o‘zaro ta’sir",paragraphs:["Har bir dori foydali ta’sir bilan birga qo‘shimcha (nojo‘ya) ta’sir ham berishi mumkin. Ba’zi dorilar bir-biri bilan yoki ovqat bilan o‘zaro ta’sir qiladi. Shu sabab qabul qilayotgan barcha dorilaringizni shifokorga ayting."]}
+                ],
+                summary:"Asosiy dori guruhlari turli maqsadlarga xizmat qiladi; antibiotiklar faqat bakteriyalarga qarshi ishlaydi va kursni tugatish shart; har bir dorining qo‘shimcha va o‘zaro ta’sirini hisobga olish kerak.",
+                terms:[{term:"Analgetik",def:"Og‘riqni kamaytiradigan dori (masalan parasetamol)."},{term:"Antibiotik",def:"Bakterial infeksiyalarga qarshi ishlatiladigan dori."},{term:"Antibiotik rezistentligi",def:"Bakteriyalarning dorilarga chidamli bo‘lib qolishi."},{term:"Nojo‘ya ta’sir",def:"Dorining kutilmagan yoki nomaqbul qo‘shimcha ta’siri."}]}
+            ]}
+        ]},
+      {id:"minf",title:"Tibbiy informatika",icon:"🧬",color:"#a78bfa",tagline:"Sog‘liqni saqlash va IT uyg‘unligi",
+        modules:[
+          {id:"minf-intro",title:"Sog‘liqni saqlash informatikasi",summary:"Tibbiy informatika nima, uning maqsadi va tibbiy ma’lumotlar turlari.",
+            lessons:[
+              {id:"minf-intro-l1",title:"Tibbiy informatika nima?",minutes:9,
+                objectives:["Tibbiy informatika ta’rifini bilish","Uning maqsad va foydasini tushunish","IT va tibbiyot qanday birlashishini ko‘rish"],
+                sections:[
+                  {heading:"Ta’rif",paragraphs:["Tibbiy informatika (health informatics) — tibbiyot, axborot texnologiyalari va ma’lumotlar tahlilini birlashtirgan soha.","Uning maqsadi — bemor ma’lumotlarini to‘g‘ri to‘plash, saqlash va tahlil qilib, sog‘liqni saqlash sifatini oshirish."]},
+                  {heading:"Nima uchun kerak?",bullets:["Bemor ma’lumotlarini tez va xavfsiz topish.","Xatolarni kamaytirish (masalan dori dozasida).","Tashxis va davolashda qaror qo‘llab-quvvatlash.","Kasalliklar tarqalishini kuzatish (epidemiologiya)."]},
+                  {heading:"Kim ishlatadi?",paragraphs:["Shifokorlar, hamshiralar, laboratoriya xodimlari va sog‘liqni saqlash menejerlari tibbiy informatika tizimlaridan foydalanadi. IT mutaxassislari esa bu tizimlarni yaratadi va qo‘llab-quvvatlaydi."]}
+                ],
+                summary:"Tibbiy informatika tibbiyot va IT ni birlashtirib, bemor ma’lumotlarini samarali boshqaradi hamda sog‘liqni saqlash sifatini oshiradi.",
+                terms:[{term:"Tibbiy informatika",def:"Tibbiyot, IT va ma’lumotlar tahlilini birlashtirgan soha."},{term:"Raqamli sog‘liqni saqlash",def:"Sog‘liqni saqlashda raqamli texnologiyalardan foydalanish."},{term:"Qaror qo‘llab-quvvatlash",def:"Shifokorga tashxis va davolashda yordam beruvchi tizim."},{term:"Epidemiologiya",def:"Kasalliklar tarqalishi va nazoratini o‘rganuvchi soha."}]},
+              {id:"minf-intro-l2",title:"Tibbiy ma’lumotlar turlari",minutes:9,
+                objectives:["Tibbiy ma’lumot turlarini farqlash","Strukturlangan va strukturlanmagan ma’lumotni tushunish","Ma’lumot sifati muhimligini bilish"],
+                sections:[
+                  {heading:"Ma’lumot turlari",bullets:["Demografik — ism, yosh, jins, manzil.","Klinik — tashxis, simptom, davolash rejasi.","Laboratoriya — qon tahlili, natijalar.","Tasviriy — rentgen, MRT, KT tasvirlari.","Retsept va dori ma’lumotlari."]},
+                  {heading:"Strukturlangan va strukturlanmagan",paragraphs:["Strukturlangan ma’lumot aniq maydonlarda saqlanadi (masalan «harorat: 38.5»).","Strukturlanmagan ma’lumot erkin matn, rasm yoki ovoz bo‘lishi mumkin (masalan shifokorning yozuvi). Uni avtomatik tahlil qilish qiyinroq."]},
+                  {heading:"Ma’lumot sifati",paragraphs:["Yaxshi qarorlar sifatli ma’lumotga tayanadi. Ma’lumot to‘liq, aniq, dolzarb va bir xil formatda bo‘lishi kerak. Sifatsiz ma’lumot noto‘g‘ri tashxisga olib kelishi mumkin."]}
+                ],
+                summary:"Tibbiy ma’lumot demografik, klinik, laboratoriya va tasviriy turlarga bo‘linadi; strukturlangan yoki strukturlanmagan bo‘lishi mumkin; sifatli ma’lumot to‘g‘ri qaror uchun asosdir.",
+                terms:[{term:"Strukturlangan ma’lumot",def:"Aniq maydon va formatda saqlangan ma’lumot."},{term:"Strukturlanmagan ma’lumot",def:"Erkin matn, rasm yoki ovoz kabi tartibsiz ma’lumot."},{term:"Klinik ma’lumot",def:"Tashxis, simptom va davolashga oid ma’lumot."},{term:"Ma’lumot sifati",def:"Ma’lumotning to‘liqligi, aniqligi va dolzarbligi."}]}
+            ]},
+          {id:"minf-ehr",title:"Elektron tibbiy yozuvlar (EHR)",summary:"EHR/EMR tizimlari, elektron bemor kartasi hamda ma’lumot maxfiyligi va xavfsizligi.",
+            lessons:[
+              {id:"minf-ehr-l1",title:"EHR va EMR: elektron bemor kartasi",minutes:10,
+                objectives:["EHR va EMR farqini bilish","Elektron bemor kartasi mazmunini tushunish","Foyda va qiyinchiliklarni ko‘rish"],
+                sections:[
+                  {heading:"EHR va EMR",paragraphs:["EMR (Electronic Medical Record) — bitta klinikadagi bemorning elektron kartasi. EHR (Electronic Health Record) — kengroq tushuncha: bemorning turli muassasalardagi to‘liq sog‘liq tarixi, u muassasalar o‘rtasida almashinishi mumkin."]},
+                  {heading:"Karta mazmuni",bullets:["Bemor ma’lumotlari va tibbiy tarix.","Tashxislar va davolash rejalari.","Retseptlar va dori ro‘yxati.","Laboratoriya va tasvir natijalari.","Allergiyalar va emlash ma’lumotlari."]},
+                  {heading:"Foyda va qiyinchiliklar",paragraphs:["EHR ma’lumotni tez topish, xatolarni kamaytirish va shifokorlar ishini muvofiqlashtirishni yaxshilaydi.","Qiyinchiliklar: yuqori narx, o‘qitish zarurati va tizimlar o‘rtasida moslik (interoperability) muammosi."]}
+                ],
+                summary:"EMR bitta klinika kartasi, EHR esa muassasalar o‘rtasida almashinadigan keng bemor yozuvi; ular ma’lumotni tartibga soladi, ammo moslik va maxfiylik masalalarini hal qilish kerak.",
+                terms:[{term:"EMR",def:"Bitta klinikadagi bemorning elektron tibbiy kartasi."},{term:"EHR",def:"Muassasalar o‘rtasida almashinadigan to‘liq elektron sog‘liq yozuvi."},{term:"Interoperability",def:"Turli tizimlarning ma’lumot almashina olish qobiliyati."},{term:"Bemor kartasi",def:"Bemorning tibbiy tarixi va ma’lumotlari jamlanmasi."}]},
+              {id:"minf-ehr-l2",title:"Ma’lumot maxfiyligi va xavfsizligi",minutes:10,
+                objectives:["Bemor ma’lumoti maxfiyligini anglash","HIPAA va GDPR tamoyillarini bilish","Xavfsizlik choralarini tushunish"],
+                sections:[
+                  {heading:"Nima uchun maxfiylik?",paragraphs:["Sog‘liq ma’lumoti eng nozik shaxsiy ma’lumotlardan biri. Uning oshkor bo‘lishi bemorga zarar yetkazishi mumkin, shu sabab u qonun bilan himoya qilinadi."]},
+                  {heading:"HIPAA va GDPR",bullets:["HIPAA (AQSh) — tibbiy ma’lumotni himoya qiladigan qonun.","GDPR (Yevropa) — shaxsiy ma’lumotlar himoyasi qonuni.","Ko‘p davlatlarda o‘xshash qonunlar mavjud."]},
+                  {heading:"Xavfsizlik choralari",bullets:["Kirish nazorati — faqat ruxsatli xodimlar ko‘radi.","Shifrlash — ma’lumot o‘g‘irlansa ham o‘qib bo‘lmaydi.","Audit jurnali — kim, qachon ko‘rganini qayd etadi.","Zaxira nusxa (backup) va kuchli parollar."],note:"Maxfiylik buzilishi qonuniy javobgarlik va bemor ishonchini yo‘qotishga olib keladi."}
+                ],
+                summary:"Bemor ma’lumoti qonun bilan himoyalangan; HIPAA va GDPR tamoyillariga amal qilib, kirish nazorati, shifrlash va audit orqali ma’lumot xavfsizligini ta’minlash kerak.",
+                terms:[{term:"HIPAA",def:"AQShda tibbiy ma’lumot maxfiyligini himoya qiluvchi qonun."},{term:"GDPR",def:"Yevropa Ittifoqining shaxsiy ma’lumotlar himoya qonuni."},{term:"Shifrlash",def:"Ma’lumotni o‘qib bo‘lmaydigan holatga keltirib himoyalash."},{term:"Kirish nazorati",def:"Ma’lumotga faqat ruxsatli shaxslarni qo‘yish."}]}
+            ]},
+          {id:"minf-std",title:"Tibbiy ma’lumot standartlari",summary:"HL7, FHIR, DICOM va tibbiy kodlash tizimlari orqali o‘zaro moslik.",
+            lessons:[
+              {id:"minf-std-l1",title:"HL7 va FHIR",minutes:10,
+                objectives:["Standartlar nima uchun kerakligini tushunish","HL7 va FHIR haqida tasavvurga ega bo‘lish","Ma’lumot almashinuvi qanday ishlashini bilish"],
+                sections:[
+                  {heading:"Nega standart kerak?",paragraphs:["Turli kasalxonalar turli tizimlardan foydalanadi. Ular bir-biri bilan ma’lumot almashishi uchun umumiy «til» — standart kerak. Standart bo‘lmasa, ma’lumot yo‘qoladi yoki noto‘g‘ri tushuniladi."]},
+                  {heading:"HL7 va FHIR",paragraphs:["HL7 (Health Level 7) — tibbiy ma’lumot almashinuvi standartlarini ishlab chiquvchi tashkilot va standartlar oilasi.","FHIR (Fast Healthcare Interoperability Resources) — HL7 ning zamonaviy, internetga asoslangan standarti. U ma’lumotni «resurslar» (Bemor, Kuzatuv, Retsept) ko‘rinishida, veb (REST/JSON) orqali almashadi."],bullets:["FHIR zamonaviy veb-texnologiyalarga (JSON, REST API) tayanadi.","Har bir resurs alohida, qayta ishlatiladigan bo‘lak.","Mobil va bulutli ilovalar bilan oson integratsiyalanadi."]},
+                  {heading:"Qanday ishlaydi?",paragraphs:["Ilova FHIR serveriga so‘rov yuboradi (masalan «shu bemorning tahlillarini ber») va JSON formatda javob oladi. Bu turli tizimlar bir-biri bilan gaplashishini ta’minlaydi."]}
+                ],
+                summary:"Standartlar turli tibbiy tizimlarni o‘zaro bog‘laydi; HL7 — standartlar oilasi, FHIR esa uning zamonaviy, veb (JSON/REST) asosidagi ma’lumot almashinuv standarti.",
+                terms:[{term:"HL7",def:"Tibbiy ma’lumot almashinuvi standartlarini ishlab chiquvchi tashkilot/standart."},{term:"FHIR",def:"HL7 ning zamonaviy, veb (JSON/REST) asosidagi moslik standarti."},{term:"Resurs (FHIR)",def:"Bemor yoki Kuzatuv kabi qayta ishlatiladigan ma’lumot bo‘lagi."},{term:"REST API",def:"Tizimlar internet orqali ma’lumot almashadigan interfeys."}]},
+              {id:"minf-std-l2",title:"ICD, DICOM va kodlash tizimlari",minutes:10,
+                objectives:["Tibbiy kodlash tizimlari maqsadini bilish","ICD, LOINC va SNOMED haqida tasavvurga ega bo‘lish","DICOM tasvir standartini tushunish"],
+                sections:[
+                  {heading:"Nega kodlash?",paragraphs:["Kasalliklar va muolajalar nomlari har xil aytilishi mumkin. Kodlash tizimlari ularga yagona kod berib, hisobot, tahlil va to‘lovlarni osonlashtiradi."]},
+                  {heading:"Asosiy tizimlar",bullets:["ICD-10/11 — kasalliklar va tashxislar xalqaro klassifikatsiyasi (JSST).","LOINC — laboratoriya tahlillari kodlari.","SNOMED CT — klinik atamalarning keng lug‘ati.","CPT — muolaja va xizmatlar kodlari."]},
+                  {heading:"DICOM — tibbiy tasvirlar",paragraphs:["DICOM (Digital Imaging and Communications in Medicine) — rentgen, KT, MRT kabi tibbiy tasvirlarni saqlash va almashish standarti.","DICOM fayli tasvir bilan birga bemor va qurilma ma’lumotini ham saqlaydi. PACS tizimlari bu tasvirlarni saqlaydi va ko‘rsatadi."]}
+                ],
+                summary:"Kodlash tizimlari (ICD, LOINC, SNOMED) tibbiy tushunchalarga yagona kod beradi; DICOM esa tibbiy tasvirlarni saqlash va almashinuv standartidir.",
+                terms:[{term:"ICD-10",def:"Kasalliklar va tashxislarning xalqaro klassifikatsiyasi."},{term:"LOINC",def:"Laboratoriya tahlillari uchun standart kodlar tizimi."},{term:"DICOM",def:"Tibbiy tasvirlarni saqlash va almashish standarti."},{term:"PACS",def:"Tibbiy tasvirlarni saqlash va ko‘rish tizimi."}]}
+            ]},
+          {id:"minf-ai",title:"Tibbiyotda AI va telemeditsina",summary:"Sun’iy intellekt, mashina o‘qitish, telemeditsina va kiyiladigan qurilmalarning tibbiyotdagi o‘rni.",
+            lessons:[
+              {id:"minf-ai-l1",title:"Tibbiyotda sun’iy intellekt",minutes:10,
+                objectives:["AI va mashina o‘qitish (ML) tushunchasini bilish","Tibbiyotda AI qo‘llanishlarini ko‘rish","Imkoniyat va cheklovlarni anglash"],
+                sections:[
+                  {heading:"AI va ML nima?",paragraphs:["Sun’iy intellekt (AI) — kompyuterlarning inson kabi aqlli vazifalarni bajarishi.","Mashina o‘qitish (ML) — AI ning bir turi; tizim ma’lumotlardan namuna (pattern) o‘rganib, bashorat qiladi. Qancha ko‘p sifatli ma’lumot bo‘lsa, natija shuncha yaxshi."]},
+                  {heading:"Tibbiyotda qo‘llanishlar",bullets:["Tasvir tahlili — rentgen yoki MRTda kasallikni aniqlash.","Erta ogohlantirish — bemor holati yomonlashishini bashorat qilish.","Dori kashfiyoti va tibbiy tadqiqot.","Qaror qo‘llab-quvvatlash — shifokorga tashxisda yordam."]},
+                  {heading:"Cheklov va etika",paragraphs:["AI shifokorni almashtirmaydi, balki unga yordam beradi. Modellar noto‘g‘ri yoki adolatsiz (bias) bo‘lishi mumkin, shu sabab natijalarni shifokor tekshirishi shart."],note:"AI natijalari maslahat sifatida qaraladi; yakuniy tibbiy qaror doim malakali mutaxassis zimmasida."}
+                ],
+                summary:"AI va mashina o‘qitish tibbiy tasvir tahlili, bashorat va qaror qo‘llab-quvvatlashda yordam beradi; ammo natijalar shifokor nazorati ostida, etik va xavfsiz qo‘llanishi kerak.",
+                terms:[{term:"Sun’iy intellekt (AI)",def:"Kompyuterlarning aqlli vazifalarni bajarishi."},{term:"Mashina o‘qitish (ML)",def:"Ma’lumotdan o‘rganib bashorat qiladigan AI turi."},{term:"Bias (xolislik yo‘qligi)",def:"Model natijasidagi adolatsizlik yoki noto‘g‘ri moyillik."},{term:"Qaror qo‘llab-quvvatlash",def:"Shifokorga tashxis va davolashda yordam beruvchi tizim."}]},
+              {id:"minf-ai-l2",title:"Telemeditsina va kiyiladigan qurilmalar",minutes:10,
+                objectives:["Telemeditsina afzalliklarini bilish","Kiyiladigan qurilmalar vazifasini tushunish","Raqamli sog‘liq kelajagini ko‘rish"],
+                sections:[
+                  {heading:"Telemeditsina",paragraphs:["Telemeditsina — masofadan turib tibbiy xizmat ko‘rsatish: videokonsultatsiya, masofaviy kuzatuv va onlayn retseptlar.","U ayniqsa uzoq hududlar va harakatlanishi qiyin bemorlar uchun foydali."]},
+                  {heading:"Kiyiladigan qurilmalar",paragraphs:["Kiyiladigan qurilmalar (smart-soat, fitnes-bilaguzuk) yurak urishi, qadamlar, uyqu va kislorod darajasini kuzatadi. Bu ma’lumotlar doimiy kuzatuvga va kasalliklarni erta aniqlashga yordam beradi."],bullets:["Yurak urishi (optik PPG sensori orqali).","Yurak ritmi/EKG — faqat ba’zi ilg‘or modellarda.","Qonda kislorod (SpO2) va jismoniy faollik.","Uyqu sifati; ba’zi qurilmalar yiqilishni aniqlaydi."]},
+                  {heading:"Kelajak va e’tibor",paragraphs:["Raqamli sog‘liq o‘sib bormoqda, ammo ma’lumot maxfiyligi va aniqligi muhim. Qurilma ma’lumoti tibbiy tashxis o‘rnini bosmaydi."]}
+                ],
+                summary:"Telemeditsina masofadan tibbiy xizmat beradi, kiyiladigan qurilmalar sog‘liqni doimiy kuzatadi; ular qulaylik yaratadi, ammo maxfiylik va aniqlik e’tiborni talab qiladi.",
+                terms:[{term:"Telemeditsina",def:"Masofadan turib tibbiy xizmat ko‘rsatish."},{term:"Kiyiladigan qurilma",def:"Sog‘liq ko‘rsatkichlarini kuzatuvchi shaxsiy qurilma (smart-soat)."},{term:"SpO2",def:"Qondagi kislorod to‘yinganlik darajasi ko‘rsatkichi."},{term:"Masofaviy kuzatuv",def:"Bemor holatini uzoqdan doimiy nazorat qilish."}]}
+            ]}
+        ]}
+    ],
+    quiz:[
+      {id:"it-q1",track:"it",q:"CPU qanday vazifani bajaradi?",options:["Ma’lumotni doimiy saqlaydi","Barcha hisob va buyruqlarni bajaradi","Faqat rasmlarni chizadi","Internetga ulaydi"],correct:1,explain:"CPU (protsessor) — kompyuterning asosiy hisoblash qismi.",difficulty:"oson"},
+      {id:"it-q2",track:"it",q:"RAM haqida qaysi javob to‘g‘ri?",options:["Ma’lumotni abadiy saqlaydi","Vaqtincha xotira; o‘chsa tozalanadi","Bu chiqarish qurilmasi","Bu operatsion tizim"],correct:1,explain:"RAM — vaqtinchalik tez xotira; quvvat o‘chsa ma’lumot yo‘qoladi.",difficulty:"oson"},
+      {id:"it-q3",track:"it",q:"1 bayt necha bitdan iborat?",options:["4","8","16","1024"],correct:1,explain:"1 bayt = 8 bit.",difficulty:"oson"},
+      {id:"it-q4",track:"it",q:"Python’da qaysi tur mantiqiy (True/False) qiymatni saqlaydi?",options:["int","str","bool","float"],correct:2,explain:"bool turi True yoki False qiymatlarini saqlaydi.",difficulty:"o‘rta"},
+      {id:"it-q5",track:"it",q:"Qaysi sikl ma’lum sondagi takror uchun ishlatiladi?",options:["if","for","def","try"],correct:1,explain:"for sikli belgilangan ketma-ketlik bo‘yicha takrorlaydi.",difficulty:"o‘rta"},
+      {id:"it-q6",track:"it",q:"HTML nima uchun ishlatiladi?",options:["Sahifa uslubini bezash","Sahifa tuzilmasini yaratish","Server ma’lumotini saqlash","Rasmlarni tahrirlash"],correct:1,explain:"HTML sahifaning tuzilmasini (skeletini) belgilaydi.",difficulty:"oson"},
+      {id:"it-q7",track:"it",q:"CSS ning asosiy vazifasi nima?",options:["Ma’lumotlar bazasini boshqarish","Sahifa ko‘rinishi va uslubini belgilash","Tarmoqni sozlash","Faylni shifrlash"],correct:1,explain:"CSS sahifaning rang, o‘lcham va joylashuvini belgilaydi.",difficulty:"oson"},
+      {id:"it-q8",track:"it",q:"Qaysi SQL buyrug‘i ma’lumotni o‘qiydi?",options:["INSERT","DELETE","SELECT","UPDATE"],correct:2,explain:"SELECT bazadan ma’lumotni o‘qiydi.",difficulty:"o‘rta"},
+      {id:"it-q9",track:"it",q:"DNS nima qiladi?",options:["Faylni siqadi","Domen nomini IP-manzilga o‘giradi","Parolni saqlaydi","Rasm chizadi"],correct:1,explain:"DNS domen nomlarini IP-manzillarga o‘giradi.",difficulty:"o‘rta"},
+      {id:"it-q10",track:"it",q:"Kuchli parol qanday bo‘lishi kerak?",options:["Qisqa va oddiy","Ism va tug‘ilgan yil","Uzun, murakkab va noyob","Hamma joyda bir xil"],correct:2,explain:"Kuchli parol uzun, murakkab va har bir hisob uchun noyob bo‘ladi.",difficulty:"oson"},
+      {id:"it-q11",track:"it",q:"HTTPS dagi qulf belgisi nimani bildiradi?",options:["Sayt tez ishlaydi","Aloqa shifrlangan va xavfsiz","Sayt bepul","Reklama yo‘q"],correct:1,explain:"HTTPS ma’lumotni shifrlab, xavfsiz aloqani ta’minlaydi.",difficulty:"o‘rta"},
+      {id:"med-q1",track:"med",q:"«Kardiologiya» atamasi nimani anglatadi?",options:["Buyrak haqidagi fan","Yurak haqidagi fan","Teri haqidagi fan","Asab haqidagi fan"],correct:1,explain:"kardi (yurak) + logiya (fan) = yurak haqidagi fan.",difficulty:"oson"},
+      {id:"med-q2",track:"med",q:"«-itis» suffiksi nimani bildiradi?",options:["Olib tashlash","Yallig‘lanish","Fan","Sekinlik"],correct:1,explain:"-itis yallig‘lanishni bildiradi (masalan gastrit — oshqozon yallig‘lanishi).",difficulty:"o‘rta"},
+      {id:"med-q3",track:"med",q:"Qaysi tomir qonni yurakka qaytaradi?",options:["Arteriya","Vena","Kapillyar","Nerv"],correct:1,explain:"Venalar qonni yurakka qaytaradi; arteriyalar esa yurakdan olib ketadi.",difficulty:"o‘rta"},
+      {id:"med-q4",track:"med",q:"O‘pkada gaz almashinuvi qayerda ro‘y beradi?",options:["Bronxlarda","Alveolalarda","Traxeyada","Diafragmada"],correct:1,explain:"Gaz almashinuvi o‘pkadagi alveolalarda bo‘ladi.",difficulty:"o‘rta"},
+      {id:"med-q5",track:"med",q:"Asab tizimining asosiy hujayrasi qanday ataladi?",options:["Neyron","Eritrotsit","Nefron","Alveola"],correct:0,explain:"Neyron — asab signallarini uzatuvchi hujayra.",difficulty:"o‘rta"},
+      {id:"med-q6",track:"med",q:"O‘zbekistonda tez tibbiy yordam raqami qaysi?",options:["101","102","103","104"],correct:2,explain:"103 — tez tibbiy yordam raqami.",difficulty:"oson"},
+      {id:"med-q7",track:"med",q:"Kattalarda CPRda ko‘krakka bosish tezligi qancha?",options:["Daqiqasiga 20–30","Daqiqasiga 60–80","Daqiqasiga 100–120","Daqiqasiga 200"],correct:2,explain:"Kattalarda daqiqasiga 100–120 marta bosiladi.",difficulty:"qiyin"},
+      {id:"med-q8",track:"med",q:"Kuygan joyga birinchi yordam nima?",options:["Muz qo‘yish","Moy surtish","10–20 daqiqa salqin suv","Pufakni yorish"],correct:2,explain:"Kuygan joyni salqin oqar suv ostida ushlash kerak; muz yoki moy zarar keltiradi.",difficulty:"o‘rta"},
+      {id:"med-q9",track:"med",q:"RICE tamoyilida «I» harfi nimani bildiradi?",options:["Isitish","Ice (muz)","Injection","Immunizatsiya"],correct:1,explain:"RICE: Rest, Ice (muz), Compression, Elevation.",difficulty:"qiyin"},
+      {id:"med-q10",track:"med",q:"Antibiotiklar nimaga qarshi ishlaydi?",options:["Viruslarga","Bakteriyalarga","Allergiyaga","Og‘riqqa"],correct:1,explain:"Antibiotiklar bakterial infeksiyalarga ta’sir qiladi, viruslarga emas.",difficulty:"oson"},
+      {id:"med-q11",track:"med",q:"Parasetamol qaysi guruhga kiradi?",options:["Antibiotik","Analgetik/antipiretik","Antigistamin","Vitamin"],correct:1,explain:"Parasetamol og‘riq va haroratni kamaytiradi (analgetik/antipiretik).",difficulty:"o‘rta"},
+      {id:"minf-q1",track:"minf",q:"Tibbiy informatika nimalarni birlashtiradi?",options:["Faqat jarrohlikni","Tibbiyot, IT va ma’lumot tahlilini","Faqat buxgalteriyani","Sportni"],correct:1,explain:"Tibbiy informatika tibbiyot, IT va ma’lumot tahlilini birlashtiradi.",difficulty:"oson"},
+      {id:"minf-q2",track:"minf",q:"«Harorat: 38.5» — bu qanday ma’lumot?",options:["Strukturlanmagan","Strukturlangan","Tasviriy","Ovozli"],correct:1,explain:"Aniq maydonda saqlangan qiymat — strukturlangan ma’lumot.",difficulty:"o‘rta"},
+      {id:"minf-q3",track:"minf",q:"EMR va EHR farqi nimada?",options:["Ular bir xil","EMR bitta klinika, EHR muassasalararo keng yozuv","EHR faqat qog‘ozda","EMR faqat rasm"],correct:1,explain:"EMR bitta klinika kartasi, EHR esa kengroq, muassasalar o‘rtasida almashinadigan yozuv.",difficulty:"qiyin"},
+      {id:"minf-q4",track:"minf",q:"Interoperability nimani anglatadi?",options:["Tizimlarning ma’lumot almashina olishi","Faylni siqish","Parol qo‘yish","Rasm chizish"],correct:0,explain:"Interoperability — turli tizimlarning o‘zaro ma’lumot almashina olishi.",difficulty:"qiyin"},
+      {id:"minf-q5",track:"minf",q:"HIPAA qaysi sohaga tegishli?",options:["Sport qoidalari","Tibbiy ma’lumot maxfiyligi","Soliq","Ta’lim baholari"],correct:1,explain:"HIPAA — AQShda tibbiy ma’lumot maxfiyligini himoya qiluvchi qonun.",difficulty:"o‘rta"},
+      {id:"minf-q6",track:"minf",q:"FHIR qanday texnologiyaga asoslanadi?",options:["Faks","Veb (JSON/REST)","Qog‘oz karta","Radio"],correct:1,explain:"FHIR zamonaviy veb-texnologiyalar (JSON/REST) ustiga qurilgan.",difficulty:"qiyin"},
+      {id:"minf-q7",track:"minf",q:"ICD-10 nima uchun ishlatiladi?",options:["Laboratoriya kodlari","Kasalliklar va tashxislar klassifikatsiyasi","Tasvir saqlash","Parol"],correct:1,explain:"ICD — kasalliklar va tashxislarning xalqaro klassifikatsiyasi.",difficulty:"o‘rta"},
+      {id:"minf-q8",track:"minf",q:"Tibbiy tasvirlar (rentgen, MRT) qaysi standartda saqlanadi?",options:["DICOM","HTML","MP3","CSV"],correct:0,explain:"DICOM — tibbiy tasvirlarni saqlash va almashish standarti.",difficulty:"o‘rta"},
+      {id:"minf-q9",track:"minf",q:"Tibbiyotda AI ning roli qanday?",options:["Shifokorni butunlay almashtiradi","Shifokorga yordam beradi, qaror u zimmasida","Faqat o‘yin uchun","Hech qanday foydasi yo‘q"],correct:1,explain:"AI shifokorga yordam beradi; yakuniy qaror malakali mutaxassis zimmasida.",difficulty:"qiyin"},
+      {id:"minf-q10",track:"minf",q:"Kiyiladigan qurilma (smart-soat) odatda nimani kuzatadi?",options:["Faqat vaqtni","Yurak urishi, qadam, uyqu","Faqat ob-havoni","Hech nima"],correct:1,explain:"Smart-soatlar yurak urishi, faollik va uyquni kuzatadi.",difficulty:"oson"},
+      {id:"minf-q11",track:"minf",q:"Telemeditsina nima?",options:["Masofadan tibbiy xizmat","Faqat jarrohlik","Dori ishlab chiqarish","Kasalxona qurish"],correct:0,explain:"Telemeditsina — masofadan turib tibbiy xizmat ko‘rsatish.",difficulty:"oson"}
+    ],
+    cards:[
+      {id:"it-c1",track:"it",front:"CPU",back:"Protsessor — kompyuterning barcha hisob va buyruqlarini bajaradigan asosiy qismi.",hint:"«Miya»"},
+      {id:"it-c2",track:"it",front:"RAM",back:"Operativ (vaqtincha) tez xotira; quvvat o‘chsa ma’lumot yo‘qoladi."},
+      {id:"it-c3",track:"it",front:"SSD / HDD",back:"Doimiy xotira; fayllar uzoq muddat saqlanadigan disk."},
+      {id:"it-c4",track:"it",front:"Bit va bayt",back:"Bit — 0 yoki 1; 8 bit = 1 bayt."},
+      {id:"it-c5",track:"it",front:"Operatsion tizim",back:"Apparat va dasturlarni boshqaruvchi asosiy dasturiy ta’minot (Windows, Linux...)."},
+      {id:"it-c6",track:"it",front:"IP-manzil",back:"Tarmoqdagi qurilmaning raqamli manzili."},
+      {id:"it-c7",track:"it",front:"DNS",back:"Domen nomini (google.com) IP-manzilga o‘giradigan tizim."},
+      {id:"it-c8",track:"it",front:"HTTPS",back:"Shifrlangan, xavfsiz veb-aloqa protokoli."},
+      {id:"it-c9",track:"it",front:"Algoritm",back:"Masalani yechishning aniq, ketma-ket qadamlari."},
+      {id:"it-c10",track:"it",front:"O‘zgaruvchi",back:"Qiymat saqlanadigan nomlangan xotira joyi."},
+      {id:"it-c11",track:"it",front:"int / float / str / bool",back:"Python asosiy turlari: butun son, kasr son, matn, mantiqiy qiymat."},
+      {id:"it-c12",track:"it",front:"if / else",back:"Shartga qarab turli kod bajaradigan operator."},
+      {id:"it-c13",track:"it",front:"for va while",back:"Amalni takrorlaydigan sikllar (loop)."},
+      {id:"it-c14",track:"it",front:"Funksiya",back:"Nomlangan, qayta ishlatiladigan kod bo‘lagi.",hint:"def"},
+      {id:"it-c15",track:"it",front:"HTML",back:"Veb-sahifa tuzilmasini belgilaydigan belgilash tili."},
+      {id:"it-c16",track:"it",front:"CSS",back:"Sahifa ko‘rinishi, rang va joylashuvini belgilaydigan uslublar tili."},
+      {id:"it-c17",track:"it",front:"JavaScript",back:"Veb-sahifani interaktiv qiladigan dasturlash tili."},
+      {id:"it-c18",track:"it",front:"DOM",back:"Sahifa elementlarining daraxt ko‘rinishidagi modeli."},
+      {id:"it-c19",track:"it",front:"Ma’lumotlar bazasi",back:"Tartiblangan ma’lumotlar to‘plami; ko‘pincha jadvallarda saqlanadi."},
+      {id:"it-c20",track:"it",front:"SQL",back:"Ma’lumotlar bazasi bilan ishlash tili (SELECT, INSERT...)."},
+      {id:"it-c21",track:"it",front:"Birlamchi kalit (Primary key)",back:"Har bir yozuvni yagona aniqlaydigan maydon."},
+      {id:"it-c22",track:"it",front:"LAN / WAN",back:"Mahalliy va keng hududli kompyuter tarmoqlari."},
+      {id:"it-c23",track:"it",front:"TCP/IP",back:"Internetda ma’lumot uzatishning asosiy protokollari."},
+      {id:"it-c24",track:"it",front:"Fishing",back:"Aldov orqali maxfiy ma’lumotni o‘g‘irlash urinishi."},
+      {id:"med-c1",track:"med",front:"Kardi-",back:"Yurakni bildiruvchi ildiz (kardiologiya — yurak fani)."},
+      {id:"med-c2",track:"med",front:"-itis",back:"Yallig‘lanishni bildiruvchi suffiks (gastrit — oshqozon yallig‘lanishi)."},
+      {id:"med-c3",track:"med",front:"-ektomiya",back:"A’zoni jarrohlik yo‘li bilan olib tashlash (appendektomiya)."},
+      {id:"med-c4",track:"med",front:"Bradikardiya",back:"Yurakning sekin urishi (bradi — sekin, kardi — yurak)."},
+      {id:"med-c5",track:"med",front:"Anterior / Posterior",back:"Old va orqa tomonni bildiruvchi anatomik atamalar."},
+      {id:"med-c6",track:"med",front:"Proksimal / Distal",back:"Tana markaziga yaqin va undan uzoq joyni bildiradi."},
+      {id:"med-c7",track:"med",front:"Yurak qorinchasi (ventrikul)",back:"Qonni yurakdan tashqariga haydaydigan bo‘lim."},
+      {id:"med-c8",track:"med",front:"Arteriya",back:"Qonni yurakdan a’zolarga olib boradigan tomir."},
+      {id:"med-c9",track:"med",front:"Vena",back:"Qonni yurakka qaytaradigan tomir."},
+      {id:"med-c10",track:"med",front:"Kapillyar",back:"Modda almashinuvi kechadigan eng mayda qon tomir."},
+      {id:"med-c11",track:"med",front:"Alveola",back:"O‘pkada gaz almashinuvi bo‘ladigan mayda havo pufakchasi."},
+      {id:"med-c12",track:"med",front:"Neyron",back:"Elektr signal uzatuvchi asab hujayrasi."},
+      {id:"med-c13",track:"med",front:"Markaziy asab tizimi",back:"Bosh miya va orqa miyadan iborat boshqaruv markazi."},
+      {id:"med-c14",track:"med",front:"Ingichka ichak",back:"Oziq moddalar asosan so‘riladigan hazm a’zosi."},
+      {id:"med-c15",track:"med",front:"CPR",back:"Yurak-o‘pka reanimatsiyasi: ko‘krakka bosish va sun’iy nafas.",hint:"100–120/daqiqa"},
+      {id:"med-c16",track:"med",front:"Shok",back:"A’zolarga qon yetishmasligidan kelib chiqadigan xavfli holat."},
+      {id:"med-c17",track:"med",front:"RICE",back:"Cho‘zilishda: Rest, Ice, Compression, Elevation (dam, muz, bog‘lash, ko‘tarish)."},
+      {id:"med-c18",track:"med",front:"2-daraja kuyish",back:"Terida pufakchalar paydo bo‘ladigan kuyish darajasi."},
+      {id:"med-c19",track:"med",front:"Doza",back:"Bir marta yoki bir kunda qabul qilinadigan dori miqdori."},
+      {id:"med-c20",track:"med",front:"Peroral",back:"Dorini og‘iz orqali qabul qilish yo‘li."},
+      {id:"med-c21",track:"med",front:"Antibiotik",back:"Bakterial infeksiyalarga qarshi dori; viruslarga ta’sir qilmaydi."},
+      {id:"med-c22",track:"med",front:"Antibiotik rezistentligi",back:"Bakteriyalarning dorilarga chidamli bo‘lib qolishi."},
+      {id:"med-c23",track:"med",front:"Analgetik",back:"Og‘riqni kamaytiradigan dori (masalan parasetamol)."},
+      {id:"med-c24",track:"med",front:"Nojo‘ya ta’sir",back:"Dorining kutilmagan yoki nomaqbul qo‘shimcha ta’siri."},
+      {id:"minf-c1",track:"minf",front:"Tibbiy informatika",back:"Tibbiyot, IT va ma’lumot tahlilini birlashtirgan soha."},
+      {id:"minf-c2",track:"minf",front:"Strukturlangan ma’lumot",back:"Aniq maydon va formatda saqlangan ma’lumot (masalan «harorat: 38.5»)."},
+      {id:"minf-c3",track:"minf",front:"Strukturlanmagan ma’lumot",back:"Erkin matn, rasm yoki ovoz kabi tartibsiz ma’lumot."},
+      {id:"minf-c4",track:"minf",front:"EMR",back:"Bitta klinikadagi bemorning elektron tibbiy kartasi."},
+      {id:"minf-c5",track:"minf",front:"EHR",back:"Muassasalar o‘rtasida almashinadigan to‘liq elektron sog‘liq yozuvi."},
+      {id:"minf-c6",track:"minf",front:"Interoperability",back:"Turli tizimlarning ma’lumot almashina olish qobiliyati."},
+      {id:"minf-c7",track:"minf",front:"HIPAA",back:"AQShda tibbiy ma’lumot maxfiyligini himoya qiluvchi qonun."},
+      {id:"minf-c8",track:"minf",front:"GDPR",back:"Yevropada shaxsiy ma’lumotlar himoyasi qonuni."},
+      {id:"minf-c9",track:"minf",front:"Shifrlash",back:"Ma’lumotni o‘qib bo‘lmaydigan holatga keltirib himoyalash."},
+      {id:"minf-c10",track:"minf",front:"Kirish nazorati",back:"Ma’lumotga faqat ruxsatli shaxslarni qo‘yish."},
+      {id:"minf-c11",track:"minf",front:"HL7",back:"Tibbiy ma’lumot almashinuvi standartlarini ishlab chiquvchi tashkilot/standart."},
+      {id:"minf-c12",track:"minf",front:"FHIR",back:"HL7 ning zamonaviy, veb (JSON/REST) asosidagi moslik standarti."},
+      {id:"minf-c13",track:"minf",front:"REST API",back:"Tizimlar internet orqali ma’lumot almashadigan interfeys."},
+      {id:"minf-c14",track:"minf",front:"ICD-10",back:"Kasalliklar va tashxislarning xalqaro klassifikatsiyasi."},
+      {id:"minf-c15",track:"minf",front:"LOINC",back:"Laboratoriya tahlillari uchun standart kodlar tizimi."},
+      {id:"minf-c16",track:"minf",front:"SNOMED CT",back:"Klinik atamalarning keng standart lug‘ati."},
+      {id:"minf-c17",track:"minf",front:"DICOM",back:"Tibbiy tasvirlarni (rentgen, MRT) saqlash va almashish standarti."},
+      {id:"minf-c18",track:"minf",front:"PACS",back:"Tibbiy tasvirlarni saqlash va ko‘rish tizimi."},
+      {id:"minf-c19",track:"minf",front:"Sun’iy intellekt (AI)",back:"Kompyuterlarning inson kabi aqlli vazifalarni bajarishi."},
+      {id:"minf-c20",track:"minf",front:"Mashina o‘qitish (ML)",back:"Ma’lumotdan o‘rganib bashorat qiladigan AI turi."},
+      {id:"minf-c21",track:"minf",front:"Bias",back:"Model natijasidagi adolatsizlik yoki noto‘g‘ri moyillik."},
+      {id:"minf-c22",track:"minf",front:"Telemeditsina",back:"Masofadan turib tibbiy xizmat ko‘rsatish."},
+      {id:"minf-c23",track:"minf",front:"Kiyiladigan qurilma",back:"Sog‘liq ko‘rsatkichlarini kuzatuvchi shaxsiy qurilma (smart-soat)."},
+      {id:"minf-c24",track:"minf",front:"SpO2",back:"Qondagi kislorod to‘yinganlik darajasi ko‘rsatkichi."}
+    ],
+    kb:[
+      {keywords:["python","piton","dasturlash tili"],topic:"Python",answer:"Python — o‘rganish oson, keng qo‘llaniladigan dasturlash tili. U sun’iy intellekt, veb, ilmiy hisob va avtomatlashtirishda ishlatiladi. Oddiy sintaksisi tufayli boshlovchilar uchun juda mos."},
+      {keywords:["cpr","reanimatsiya","yurak o‘pka","kokrakka bosish"],topic:"CPR",answer:"CPR (yurak-o‘pka reanimatsiyasi) nafas va yurak to‘xtaganda qo‘llaniladi. Kattalarda ko‘krak markaziga daqiqasiga 100–120 marta, 5–6 sm chuqurlikda bosiladi. Doim avval 103 ni chaqiring va amaliy ko‘nikmani rasmiy kursda o‘rganing."},
+      {keywords:["fhir","hl7","standart","ma’lumot almashinuvi"],topic:"FHIR",answer:"FHIR — HL7 ning zamonaviy tibbiy ma’lumot almashinuv standarti. U ma’lumotni «resurslar» ko‘rinishida, veb (JSON/REST) orqali almashadi va turli tizimlarni bir-biriga bog‘laydi."},
+      {keywords:["html","css","farq"],topic:"HTML va CSS",answer:"HTML sahifaning tuzilmasini (sarlavha, matn, havola) belgilaydi; CSS esa uning ko‘rinishini (rang, o‘lcham, joylashuv) bezaydi. Sodda qilib aytganda, HTML — skelet, CSS — kiyim."},
+      {keywords:["antibiotik","bakteriya","infeksiya"],topic:"Antibiotiklar",answer:"Antibiotiklar faqat bakterial infeksiyalarga ta’sir qiladi, viruslarga emas. Kursni oxirigacha, shifokor ko‘rsatmasi bo‘yicha tugatish kerak, aks holda bakteriyalar dorilarga chidamli bo‘lib qoladi."},
+      {keywords:["sql","ma’lumotlar bazasi","sorov","select"],topic:"SQL",answer:"SQL — ma’lumotlar bazasi bilan ishlash tili. Asosiy buyruqlar: SELECT (o‘qish), INSERT (qo‘shish), UPDATE (yangilash), DELETE (o‘chirish). Masalan: SELECT ism FROM bemorlar."},
+      {keywords:["ehr","emr","elektron karta","bemor kartasi"],topic:"EHR va EMR",answer:"EMR — bitta klinikadagi elektron bemor kartasi. EHR — muassasalar o‘rtasida almashinadigan kengroq sog‘liq yozuvi. Ikkalasi ham qog‘oz kartani almashtirib, ma’lumotni tez va xavfsiz topishga yordam beradi."},
+      {keywords:["cpu","protsessor"],topic:"CPU",answer:"CPU (protsessor) — kompyuterning «miyasi». U barcha hisob-kitob va buyruqlarni bajaradi. Tezligi gigagerts (GHz) da o‘lchanadi."},
+      {keywords:["ram","xotira"],topic:"RAM",answer:"RAM — vaqtincha, tez xotira. Ochiq dasturlar shu yerda ishlaydi va quvvat o‘chsa ma’lumot yo‘qoladi. SSD yoki HDD esa doimiy saqlash uchun ishlatiladi."},
+      {keywords:["shok","holat"],topic:"Shok",answer:"Shok — a’zolarga yetarli qon bormayotgan xavfli holat. Belgilari: rangpar sovuq teri, tez va kuchsiz puls, holsizlik. Bemorni yotqizing, isiting va darhol 103 ni chaqiring."},
+      {keywords:["kuyish","kuydi","olov"],topic:"Kuyish",answer:"Kuygan joyni 10–20 daqiqa oqar salqin suv ostida ushlang. Muz qo‘ymang, moy yoki tish pastasi surtmang, pufakni yormang. Katta yoki chuqur kuyishda tez yordamga murojaat qiling."},
+      {keywords:["dicom","tasvir","rentgen","mrt"],topic:"DICOM",answer:"DICOM — tibbiy tasvirlarni (rentgen, KT, MRT) saqlash va almashish standarti. Tasvir bilan birga bemor ma’lumotini ham saqlaydi. PACS tizimi bu tasvirlarni boshqaradi."},
+      {keywords:["ai","sun’iy intellekt","ml","mashina o‘qitish"],topic:"Tibbiyotda AI",answer:"Sun’iy intellekt tibbiyotda tasvir tahlili, bashorat va qaror qo‘llab-quvvatlashda yordam beradi. Biroq u shifokorni almashtirmaydi — yakuniy qaror malakali mutaxassis zimmasida."},
+      {keywords:["telemeditsina","masofa","videokonsultatsiya"],topic:"Telemeditsina",answer:"Telemeditsina — masofadan turib tibbiy xizmat ko‘rsatish: videokonsultatsiya, masofaviy kuzatuv va onlayn retsept. Ayniqsa uzoq hududlar va harakatlanishi qiyin bemorlar uchun foydali."},
+      {keywords:["terminologiya","atama","prefiks","suffiks","ildiz"],topic:"Tibbiy terminologiya",answer:"Tibbiy atamalar prefiks (old qism), ildiz (asosiy ma’no) va suffiksdan tuziladi. Masalan: gastrit = gastr (oshqozon) + itis (yallig‘lanish). Qismlarni bilib, notanish atamani tushunish mumkin."},
+      {keywords:["dns"],topic:"DNS",answer:"DNS (Domain Name System) domen nomini (masalan google.com) IP-manzilga o‘giradi. Bu bizga raqamli manzillarni eslab qolmasdan saytlarga kirish imkonini beradi."},
+      {keywords:["parol","xavfsizlik","kiberxavfsizlik"],topic:"Parol xavfsizligi",answer:"Kuchli parol uzun, murakkab (harf, raqam, belgi) va har bir hisob uchun noyob bo‘lishi kerak. Ikki bosqichli tasdiqlashni yoqing va parolni hech kim bilan ulashmang."},
+      {keywords:["hipaa","gdpr","maxfiylik","maxfiy"],topic:"Ma’lumot maxfiyligi",answer:"Bemor ma’lumoti qonun bilan himoyalangan (masalan HIPAA, GDPR). Uni himoya qilish uchun kirish nazorati, shifrlash, audit jurnali va zaxira nusxalardan foydalaniladi."},
+      {keywords:["srs","kartochka","takrorlash","interval"],topic:"SRS va takrorlash",answer:"SRS (interval takrori) — atamalarni uzoq muddat eslab qolishning samarali usuli. Yaxshi bilgan kartochkalar kamroq, qiyinlari tez-tez ko‘rsatiladi. Har kuni oz-ozdan takrorlash eng yaxshi natija beradi."},
+      {keywords:["streak","ketma-ket","kun","seriya"],topic:"Streak",answer:"Streak — ketma-ket faol kunlar soni. Har kuni kamida bir dars yoki kartochka bilan shug‘ullansangiz, streak oshadi. Bu o‘rganishni odatga aylantirishga yordam beradi."},
+      {keywords:["qanday boshlayman","boshlash","qayerdan"],topic:"Qayerdan boshlash",answer:"Bosh sahifadan «Davom etish» tugmasini bosing yoki Kurslar bo‘limidan o‘zingizga qiziq yo‘nalishni tanlang. Har darsdan keyin kartochka va test bilan bilimingizni mustahkamlang."},
+      {keywords:["vena","arteriya","qon tomir","kapillyar"],topic:"Qon tomirlar",answer:"Arteriyalar qonni yurakdan a’zolarga olib boradi, venalar esa qonni yurakka qaytaradi. Kapillyarlar — eng mayda tomirlar bo‘lib, modda almashinuvi aynan shu yerda kechadi."},
+      {keywords:["icd","kasallik kodi","kodlash","loinc","snomed"],topic:"ICD va kodlash",answer:"ICD-10/11 — kasalliklar va tashxislarning xalqaro klassifikatsiyasi. Kodlash tizimlari (ICD, LOINC, SNOMED) tibbiy tushunchalarga yagona kod berib, hisobot va tahlilni osonlashtiradi."},
+      {keywords:["doza","dori miqdori","dozalash"],topic:"Doza",answer:"Doza — bir marta yoki bir kunda qabul qilinadigan dori miqdori. U yosh, vazn va holatga qarab belgilanadi. Dorini faqat shifokor ko‘rsatmasi bo‘yicha, ko‘rsatilgan dozada qabul qiling."},
+      {keywords:["iqror","platforma","maktab","school","haqida"],topic:"Iqror IT MED School haqida",answer:"Iqror IT MED School — IT, tibbiyot va tibbiy informatikani o‘rgatuvchi oflayn platforma. Bu yerda darslar, takrorlash kartochkalari (SRS), testlar va AI murabbiy mavjud. Ma’lumotlaringiz shu qurilmada saqlanadi."}
+    ]
+  };
+
+  /* ---- Qisqa yordamchilar ---- */
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const page = $('#page');
+  const DAY = 86400000;
+  const todayStr = () => new Date().toISOString().slice(0,10);
+
+  /* ---- Indekslar ---- */
+  const TRACK_BY_ID = Object.fromEntries(DB.tracks.map(t=>[t.id,t]));
+  const ALL_LESSONS = [];
+  const LESSON_BY_ID = {};
+  DB.tracks.forEach(t=>t.modules.forEach(m=>m.lessons.forEach(l=>{
+    const rec={...l,trackId:t.id,moduleId:m.id,moduleTitle:m.title};
+    ALL_LESSONS.push(rec); LESSON_BY_ID[l.id]=rec;
+  })));
+  const CARD_BY_ID = Object.fromEntries(DB.cards.map(c=>[c.id,c]));
+
+  /* ---- Holat (localStorage) ---- */
+  const LS_KEY='iqror_state_v1';
+  function baseState(){return{profile:{name:''},xp:0,streak:{count:0,last:null},done:{},srs:{},quizBest:{},badges:[],settings:{theme:'dark'},tutorLog:[],created:todayStr(),activeDays:[]};}
+  let state = loadState();
+  function loadState(){
+    const s=baseState();
+    try{const raw=JSON.parse(localStorage.getItem(LS_KEY)||'{}');Object.assign(s,raw);
+      s.profile={...baseState().profile,...(raw.profile||{})};
+      s.streak={...baseState().streak,...(raw.streak||{})};
+      s.settings={...baseState().settings,...(raw.settings||{})};
+      s.done=raw.done||{};s.srs=raw.srs||{};s.quizBest=raw.quizBest||{};s.badges=raw.badges||[];s.tutorLog=raw.tutorLog||[];s.activeDays=raw.activeDays||[];
+    }catch(e){/* buzilgan bo'lsa toza holat */}
+    return s;
+  }
+  const save=()=>{
+    try{state.updatedAt=Date.now();localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}
+    try{if(window.IqrorCloud&&window.IqrorCloud.onLocalChange)window.IqrorCloud.onLocalChange();}catch(e){}
+  };
+
+  /* ---- Holatlarni birlashtirish (lokal + bulut) ---- */
+  function mergeStates(a,b){
+    if(!b)return a; if(!a)return b;
+    const m=Object.assign(baseState(),a);
+    m.xp=Math.max(a.xp||0,b.xp||0);
+    m.done=Object.assign({},b.done||{},a.done||{});
+    m.srs=Object.assign({},b.srs||{});
+    for(const k in (a.srs||{})){const x=a.srs[k],y=(b.srs||{})[k];m.srs[k]=(!y||(x.seen||0)>=(y.seen||0))?x:y;}
+    m.quizBest={};[...new Set([...Object.keys(a.quizBest||{}),...Object.keys(b.quizBest||{})])].forEach(k=>m.quizBest[k]=Math.max((a.quizBest||{})[k]||0,(b.quizBest||{})[k]||0));
+    m.badges=[...new Set([...(a.badges||[]),...(b.badges||[])])];
+    m.activeDays=[...new Set([...(a.activeDays||[]),...(b.activeDays||[])])];
+    const as=a.streak||{count:0,last:null},bs=b.streak||{count:0,last:null};
+    m.streak=(String(as.last||'')>=String(bs.last||''))?{...as}:{...bs};
+    m.profile=Object.assign({},b.profile||{},a.profile||{}); if(!m.profile.name)m.profile.name=(b.profile&&b.profile.name)||'';
+    m.settings=a.settings||b.settings||{theme:'dark'};
+    m.tutorLog=(a.tutorLog&&a.tutorLog.length)?a.tutorLog:(b.tutorLog||[]);
+    m.created=(a.created&&b.created)?(a.created<b.created?a.created:b.created):(a.created||b.created||todayStr());
+    m.updatedAt=Math.max(a.updatedAt||0,b.updatedAt||0);
+    return m;
+  }
+
+  /* ---- Bulut moduli bilan ko‘prik ---- */
+  let cloudStatus={s:'offline',t:'Oflayn'};
+  window.IqrorApp={
+    getState:()=>state,
+    mergeStates,
+    applyCloudState(obj){if(!obj)return;state=Object.assign(baseState(),obj);save();applyTheme();refreshHeader();checkBadges();toast('☁️ Bulut bilan sinxronlandi');router();},
+    setCloudStatus(s,t){cloudStatus={s,t};const pill=$('#cloud-pill'),txt=$('#cloud-txt');
+      if(pill&&txt){pill.classList.remove('hide');txt.textContent=t;pill.style.borderColor=s==='synced'?'var(--ok)':(s==='error'?'var(--bad)':'var(--border2)');}
+      const ps=$('#pf-cloud-status');if(ps)ps.textContent=t;
+      const so=$('#pf-signout');if(so)so.classList.toggle('hide',!(s==='synced'||s==='connecting'));}
+  };
+
+  /* ---- XP / daraja / streak ---- */
+  const LEVELS=['Yangi o‘quvchi','Boshlovchi','Amaliyotchi','Malakali','Mutaxassis','Ekspert','Ustoz'];
+  const levelOf = xp => Math.min(LEVELS.length-1, Math.floor(Math.sqrt(xp/60)));
+  const xpForLevel = lv => Math.ceil(lv*lv*60);
+  function addXp(n){state.xp=Math.max(0,(state.xp|0)+n);save();refreshHeader();}
+  function markActiveToday(){
+    const t=todayStr();
+    if(!state.activeDays.includes(t))state.activeDays.push(t);
+    if(state.streak.last===t)return;
+    const y=new Date(Date.now()-DAY).toISOString().slice(0,10);
+    state.streak.count = (state.streak.last===y)?(state.streak.count+1):1;
+    state.streak.last=t;save();refreshHeader();checkBadges();
+  }
+  function refreshHeader(){
+    $('#xp-val').textContent=state.xp|0;
+    $('#streak-val').textContent=state.streak.count|0;
+  }
+
+  /* ---- SRS: SM-2 algoritmi ---- */
+  function srsState(id){return state.srs[id];}
+  function isDue(id){const s=state.srs[id];return !s || (s.due||0)<=Date.now();}
+  function dueCards(){return DB.cards.filter(c=>isDue(c.id));}
+  function newCards(){return DB.cards.filter(c=>!state.srs[c.id]);}
+  function gradeCard(id,q){ // q: 0=Bilmadim,3=Qiyin,4=Yaxshi,5=Oson
+    let s=state.srs[id]||{ef:2.5,interval:0,reps:0,lapses:0,due:0,seen:0};
+    s.seen=(s.seen||0)+1;
+    if(q<3){s.reps=0;s.interval=1;s.lapses=(s.lapses||0)+1;}
+    else{
+      s.reps=(s.reps||0)+1;
+      if(s.reps===1)s.interval=1;
+      else if(s.reps===2)s.interval=6;
+      else s.interval=Math.max(1,Math.round(s.interval*s.ef));
+      s.ef=Math.max(1.3, s.ef + (0.1-(5-q)*(0.08+(5-q)*0.02)));
+    }
+    s.due=Date.now()+s.interval*DAY;
+    state.srs[id]=s;addXp(q>=4?3:2);markActiveToday();save();
+  }
+  function srsStats(){
+    const total=DB.cards.length;
+    const learned=DB.cards.filter(c=>{const s=state.srs[c.id];return s&&s.reps>=2;}).length;
+    return{total,learned,due:dueCards().length,seen:Object.keys(state.srs).length};
+  }
+
+  /* ---- Progress hisob-kitobi ---- */
+  const lessonDone = id => !!state.done[id];
+  function moduleProgress(m){const d=m.lessons.filter(l=>lessonDone(l.id)).length;return{done:d,total:m.lessons.length,pct:m.lessons.length?Math.round(d/m.lessons.length*100):0};}
+  function trackProgress(t){const ls=t.modules.flatMap(m=>m.lessons);const d=ls.filter(l=>lessonDone(l.id)).length;return{done:d,total:ls.length,pct:ls.length?Math.round(d/ls.length*100):0};}
+  function overallProgress(){const d=ALL_LESSONS.filter(l=>lessonDone(l.id)).length;return{done:d,total:ALL_LESSONS.length,pct:ALL_LESSONS.length?Math.round(d/ALL_LESSONS.length*100):0};}
+  function completeLesson(id){
+    if(lessonDone(id))return false;
+    state.done[id]=Date.now();addXp(50);markActiveToday();save();checkBadges();return true;
+  }
+
+  /* ---- Yutuqlar (badges) ---- */
+  const BADGES=[
+    {id:'first-lesson',em:'🎓',t:'Birinchi qadam',d:'Birinchi darsni tugatdingiz',test:()=>overallProgress().done>=1},
+    {id:'five-lessons',em:'📖',t:'Bilim ishqibozi',d:'5 ta dars tugatildi',test:()=>overallProgress().done>=5},
+    {id:'track-it',em:'💻',t:'IT bilimdoni',d:'IT yo‘nalishini yakunladingiz',test:()=>{const t=TRACK_BY_ID.it;return t&&trackProgress(t).pct===100;}},
+    {id:'track-med',em:'🩺',t:'Tibbiyot bilimdoni',d:'Tibbiyot yo‘nalishini yakunladingiz',test:()=>{const t=TRACK_BY_ID.med;return t&&trackProgress(t).pct===100;}},
+    {id:'srs-50',em:'🗂️',t:'Kartochka ustasi',d:'50 marta kartochka takrorlandi',test:()=>Object.values(state.srs).reduce((n,s)=>n+(s.seen||0),0)>=50},
+    {id:'quiz-perfect',em:'💯',t:'Mukammal test',d:'Testda 100% ball',test:()=>Object.values(state.quizBest).some(v=>v>=100)},
+    {id:'streak-3',em:'🔥',t:'Barqarorlik',d:'3 kun ketma-ket',test:()=>state.streak.count>=3},
+    {id:'streak-7',em:'⭐',t:'Bir hafta',d:'7 kun ketma-ket',test:()=>state.streak.count>=7},
+    {id:'graduate',em:'🏅',t:'Bitiruvchi',d:'Barcha darslar tugatildi',test:()=>overallProgress().pct===100},
+  ];
+  function checkBadges(){
+    let gained=null;
+    BADGES.forEach(b=>{if(!state.badges.includes(b.id)&&b.test()){state.badges.push(b.id);gained=b;}});
+    if(gained){save();toast(`🏆 Yangi yutuq: ${gained.t}`);}
+  }
+
+  /* ---- Toast ---- */
+  function toast(msg,ms=2600){
+    const el=document.createElement('div');el.className='toast';el.textContent=msg;
+    $('#toasts').appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(()=>el.remove(),300);},ms);
+  }
+
+  /* ---- Mavzu (theme) ---- */
+  function applyTheme(){
+    document.documentElement.dataset.theme=state.settings.theme;
+    $('#btn-theme').textContent=state.settings.theme==='dark'?'🌙':'☀️';
+    $('meta[name=theme-color]').setAttribute('content',state.settings.theme==='dark'?'#0a0f1e':'#eef2f9');
+  }
+  $('#btn-theme').addEventListener('click',()=>{state.settings.theme=state.settings.theme==='dark'?'light':'dark';save();applyTheme();});
+
+  /* =========================================================================
+     ROUTER
+     ========================================================================= */
+  const routes={home:renderHome,courses:renderCourses,track:renderTrack,lesson:renderLesson,srs:renderSRS,quiz:renderQuiz,tutor:renderTutor,achievements:renderAchievements,profile:renderProfile};
+  function parseHash(){const h=(location.hash||'#home').slice(1);return h.split('/').map(x=>{try{return decodeURIComponent(x);}catch(e){return x;}});}
+  function router(){
+    const parts=parseHash();const sec=parts[0]||'home';
+    $$('#sidenav a, #mobnav a').forEach(a=>a.classList.toggle('active',a.dataset.sec===sec));
+    (routes[sec]||renderHome)(parts.slice(1));
+    page.scrollIntoView({block:'start'});window.scrollTo({top:0,behavior:'instant'in window?'instant':'auto'});
+  }
+  addEventListener('hashchange',router);
+  const go=h=>{location.hash=h;};
+  window.go=go;
+
+  /* =========================================================================
+     SAHIFALAR
+     ========================================================================= */
+  function trackChip(t){return `<span class="chip ${t.id}">${t.icon} ${esc(t.title)}</span>`;}
+
+  function renderHome(){
+    const ov=overallProgress();const lv=levelOf(state.xp);const ss=srsStats();
+    const next=ALL_LESSONS.find(l=>!lessonDone(l.id));
+    const curLvXp=xpForLevel(lv),nextLvXp=xpForLevel(lv+1);
+    const lvPct=Math.min(100,Math.round((state.xp-curLvXp)/Math.max(1,nextLvXp-curLvXp)*100));
+    const hi = state.profile.name?`, ${esc(state.profile.name)}`:'';
+    page.innerHTML=`
+      <section class="card" style="background:
+        radial-gradient(700px 300px at 90% -30%,rgba(59,130,246,.18),transparent),
+        linear-gradient(180deg,var(--panel),var(--panel2))">
+        <div class="kicker">Iqror IT MED School</div>
+        <h1 style="font-size:clamp(1.5rem,3vw,2.1rem);margin-top:6px">Xush kelibsiz${hi}! 👋</h1>
+        <p class="lead" style="max-width:640px">IT, tibbiyot va tibbiy informatikani bitta joyda o‘rganing — darslar, takrorlash kartochkalari (SRS), testlar va AI murabbiy bilan. Hammasi oflayn ishlaydi.</p>
+        <div class="row" style="margin-top:6px">
+          ${next?`<button class="btn primary" onclick="go('lesson/${next.trackId}/${next.moduleId}/${next.id}')">▶ Davom etish: ${esc(next.title)}</button>`
+                :`<button class="btn primary" onclick="go('courses')">Kurslarni ko‘rish</button>`}
+          <button class="btn" onclick="go('srs')">🗂️ Bugungi takrorlash (${ss.due})</button>
+        </div>
+      </section>
+
+      <div class="grid g4" style="margin-top:16px">
+        <div class="card stat"><div class="ic">📚</div><div class="n">${ov.done}/${ov.total}</div><div class="l">Tugatilgan darslar</div></div>
+        <div class="card stat"><div class="ic">🗂️</div><div class="n">${ss.learned}</div><div class="l">O‘zlashtirilgan kartochka</div></div>
+        <div class="card stat"><div class="ic">🔥</div><div class="n">${state.streak.count}</div><div class="l">Ketma-ket kun</div></div>
+        <div class="card stat" role="link" tabindex="0" style="cursor:pointer" onclick="go('achievements')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('achievements')}"><div class="ic">🏆</div><div class="n">${state.badges.length}/${BADGES.length}</div><div class="l">Yutuqlar →</div></div>
+      </div>
+
+      <div class="grid g3" style="margin-top:16px;grid-template-columns:320px 1fr">
+        <div class="card center">
+          <h3>Umumiy progress</h3>
+          <div class="ring" style="--p:${ov.pct};margin:12px auto"><b>${ov.pct}%</b></div>
+          <div class="muted small">Daraja: <b style="color:var(--fg)">${LEVELS[lv]}</b> (${lv}-daraja)</div>
+          <div class="bar" style="margin-top:10px"><i style="width:${lvPct}%"></i></div>
+          <div class="faint small" style="margin-top:6px">${state.xp} XP · keyingi darajagacha ${Math.max(0,nextLvXp-state.xp)} XP</div>
+        </div>
+        <div class="card">
+          <h3>Yo‘nalishlar</h3>
+          <div class="stack" style="margin-top:6px">
+            ${DB.tracks.map(t=>{const tp=trackProgress(t);return `
+              <div>
+                <div class="row between"><div class="row" style="gap:8px">${trackChip(t)}<span class="muted small">${tp.done}/${tp.total} dars</span></div><b>${tp.pct}%</b></div>
+                <div class="bar" style="margin-top:6px;cursor:pointer" onclick="go('track/${t.id}')"><i style="width:${tp.pct}%;background:linear-gradient(90deg,${t.color},color-mix(in srgb,${t.color} 55%,#fff))"></i></div>
+              </div>`;}).join('')}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderCourses(){
+    page.innerHTML=`
+      <div class="breadcrumb">Kurslar</div>
+      <h1>Kurslar</h1>
+      <p class="lead">Uch yo‘nalish, ${ALL_LESSONS.length} ta dars. O‘zingizga qulay yo‘nalishdan boshlang.</p>
+      <div class="grid g3" style="margin-top:14px">
+        ${DB.tracks.map(t=>{const tp=trackProgress(t);return `
+          <div class="card" style="border-top:3px solid ${t.color}">
+            <div style="font-size:2rem">${t.icon}</div>
+            <h3 style="margin-top:6px">${esc(t.title)}</h3>
+            <p class="muted small">${esc(t.tagline)}</p>
+            <div class="row between small" style="margin-top:8px"><span class="muted">${t.modules.length} modul · ${t.modules.flatMap(m=>m.lessons).length} dars</span><b>${tp.pct}%</b></div>
+            <div class="bar" style="margin:8px 0 12px"><i style="width:${tp.pct}%;background:linear-gradient(90deg,${t.color},color-mix(in srgb,${t.color} 55%,#fff))"></i></div>
+            <button class="btn block" onclick="go('track/${t.id}')">Ochish →</button>
+          </div>`;}).join('')}
+      </div>`;
+  }
+
+  function renderTrack(p){
+    const t=TRACK_BY_ID[p[0]];if(!t){go('courses');return;}
+    page.innerHTML=`
+      <div class="breadcrumb"><a onclick="go('courses')">Kurslar</a> / ${esc(t.title)}</div>
+      <div class="card" style="border-left:4px solid ${t.color}">
+        <div class="row" style="gap:14px"><div style="font-size:2.2rem">${t.icon}</div>
+          <div class="grow"><h1 style="margin:0">${esc(t.title)}</h1><p class="muted" style="margin:4px 0 0">${esc(t.tagline)}</p></div>
+          <div class="center"><div class="ring" style="--p:${trackProgress(t).pct};--c:${t.color};width:84px;height:84px"><b style="font-size:1rem">${trackProgress(t).pct}%</b></div></div>
+        </div>
+      </div>
+      <div class="stack" style="margin-top:16px">
+        ${t.modules.map((m,mi)=>{const mp=moduleProgress(m);return `
+          <div class="card">
+            <div class="row between">
+              <div><div class="kicker" style="color:${t.color}">Modul ${mi+1}</div><h3 style="margin:4px 0 0">${esc(m.title)}</h3></div>
+              <div class="pill">${mp.done}/${mp.total}</div>
+            </div>
+            <p class="muted small" style="margin:8px 0">${esc(m.summary)}</p>
+            <div class="stack" style="gap:8px">
+              ${m.lessons.map((l,li)=>`
+                <button class="btn ghost between" style="justify-content:space-between;width:100%" onclick="go('lesson/${t.id}/${m.id}/${l.id}')">
+                  <span class="row" style="gap:10px"><span style="width:22px">${lessonDone(l.id)?'✅':(li+1)+'.'}</span><span>${esc(l.title)}</span></span>
+                  <span class="muted small">${l.minutes} daqiqa →</span>
+                </button>`).join('')}
+            </div>
+          </div>`;}).join('')}
+      </div>`;
+  }
+
+  function renderLesson(p){
+    const [tid,mid,lid]=p;const l=LESSON_BY_ID[lid];const t=TRACK_BY_ID[tid];
+    if(!l||!t){go('courses');return;}
+    const seq=ALL_LESSONS.filter(x=>x.trackId===tid);
+    const idx=seq.findIndex(x=>x.id===lid);const nextL=seq[idx+1];
+    const done=lessonDone(lid);
+    page.innerHTML=`
+      <div class="breadcrumb"><a onclick="go('courses')">Kurslar</a> / <a onclick="go('track/${t.id}')">${esc(t.title)}</a> / ${esc(l.moduleTitle)}</div>
+      <article class="card prose">
+        <div class="row between">
+          <div>${trackChip(t)} <span class="chip">⏱️ ${l.minutes} daqiqa</span></div>
+          ${done?'<span class="chip" style="color:var(--ok);border-color:var(--ok)">✅ Tugatilgan</span>':''}
+        </div>
+        <h1 style="margin-top:10px">${esc(l.title)}</h1>
+        <div class="card tight" style="background:var(--panel2)">
+          <b>Dars maqsadlari</b>
+          <ul class="objectives">${l.objectives.map(o=>`<li>${esc(o)}</li>`).join('')}</ul>
+        </div>
+        ${l.sections.map(s=>`
+          <section style="margin-top:16px">
+            <h3>${esc(s.heading)}</h3>
+            ${(s.paragraphs||[]).map(pr=>`<p>${esc(pr)}</p>`).join('')}
+            ${s.bullets&&s.bullets.length?`<ul>${s.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`:''}
+            ${s.code?`<pre><code>${esc(s.code.text)}</code></pre>`:''}
+            ${s.note?`<div class="note">⚠️ ${esc(s.note)}</div>`:''}
+          </section>`).join('')}
+        <div class="divider"></div>
+        <h3>Xulosa</h3><p class="muted">${esc(l.summary)}</p>
+        <h3 style="margin-top:14px">🔑 Muhim atamalar</h3>
+        <div class="grid g2" style="margin-top:6px">
+          ${l.terms.map(tm=>`<div class="termcard"><b>${esc(tm.term)}</b><div class="muted small" style="margin-top:4px">${esc(tm.def)}</div></div>`).join('')}
+        </div>
+        <div class="divider"></div>
+        <div class="row between">
+          <button class="btn ${done?'':'primary'}" id="btn-complete">${done?'↺ Bajarildi (yana +takrorlash)':'✓ Darsni tugatdim (+50 XP)'}</button>
+          ${nextL?`<button class="btn" onclick="go('lesson/${nextL.trackId}/${nextL.moduleId}/${nextL.id}')">Keyingi dars →</button>`
+                 :`<button class="btn" onclick="go('quiz/${t.id}')">Yo‘nalish testi →</button>`}
+        </div>
+      </article>`;
+    $('#btn-complete').addEventListener('click',()=>{
+      if(completeLesson(lid)){toast('✅ Ajoyib! Dars tugatildi (+50 XP)');renderLesson(p);}
+      else{toast('Bu dars allaqachon tugatilgan');if(nextL)go('lesson/'+nextL.trackId+'/'+nextL.moduleId+'/'+nextL.id);}
+    });
+  }
+
+  /* ---------- SRS sahifasi ---------- */
+  let srsSession=null;
+  function renderSRS(){
+    const ss=srsStats();
+    if(!srsSession){
+      page.innerHTML=`
+        <div class="breadcrumb">Kartochkalar (SRS)</div>
+        <h1>Takrorlash kartochkalari</h1>
+        <p class="lead">Interval takrori (SM-2) yordamida atama va tushunchalarni uzoq muddat eslab qoling.</p>
+        <div class="grid g4" style="margin:14px 0">
+          <div class="card stat"><div class="n">${ss.due}</div><div class="l">Bugun takrorlash uchun</div></div>
+          <div class="card stat"><div class="n">${ss.total-ss.seen}</div><div class="l">Yangi kartochka</div></div>
+          <div class="card stat"><div class="n">${ss.learned}</div><div class="l">O‘zlashtirilgan</div></div>
+          <div class="card stat"><div class="n">${ss.total}</div><div class="l">Jami kartochka</div></div>
+        </div>
+        <div class="card">
+          <div class="row between">
+            <div><b>Bugungi mashg‘ulot</b><div class="muted small">${ss.due} ta kartochka takrorlashga tayyor${ss.due===0?' — barchasi bajarilgan! Yangi kartochkalar bilan mashq qiling.':''}</div></div>
+            <div class="row">
+              <button class="btn primary" id="srs-start" ${ss.due===0&&ss.total-ss.seen===0?'disabled':''}>▶ Boshlash</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <b>Yo‘nalish bo‘yicha mashq</b>
+          <div class="row" style="margin-top:8px">
+            ${DB.tracks.map(t=>`<button class="btn sm" data-track="${t.id}">${t.icon} ${esc(t.title)}</button>`).join('')}
+          </div>
+        </div>`;
+      $('#srs-start').addEventListener('click',()=>startSRS(null));
+      $$('[data-track]').forEach(b=>b.addEventListener('click',()=>startSRS(b.dataset.track)));
+      return;
+    }
+    drawCard();
+  }
+  function startSRS(trackId){
+    let pool=trackId?DB.cards.filter(c=>c.track===trackId):dueCards();
+    if(pool.length===0)pool=trackId?DB.cards.filter(c=>c.track===trackId):newCards().slice(0,10);
+    if(pool.length===0){toast('Takrorlash uchun kartochka yo‘q');return;}
+    pool=[...pool].sort(()=>Math.random()-.5).slice(0,20);
+    srsSession={queue:pool,idx:0,flip:false,done:0,again:0};
+    renderSRS();
+  }
+  function drawCard(){
+    const s=srsSession;
+    if(s.idx>=s.queue.length){
+      const acc=s.done?Math.round((s.done-s.again)/s.done*100):0;
+      page.innerHTML=`<div class="breadcrumb">Kartochkalar (SRS)</div>
+        <div class="card center">
+          <div style="font-size:3rem">🎉</div>
+          <h2>Mashg‘ulot tugadi!</h2>
+          <p class="muted">${s.done} ta kartochka takrorlandi · aniqlik ~${acc}%</p>
+          <div class="row" style="justify-content:center;margin-top:10px">
+            <button class="btn primary" onclick="srsSession=null;renderSRS()">Yana mashq</button>
+            <button class="btn" onclick="go('home')">Bosh sahifa</button>
+          </div>
+        </div>`;
+      srsSession=null;return;
+    }
+    const c=s.queue[s.idx];
+    page.innerHTML=`
+      <div class="breadcrumb"><a onclick="srsSession=null;renderSRS()">Kartochkalar</a> / Mashg‘ulot</div>
+      <div class="row between"><div class="muted small">${s.idx+1} / ${s.queue.length}</div><span class="chip ${c.track}">${TRACK_BY_ID[c.track]?TRACK_BY_ID[c.track].icon:''} ${esc((TRACK_BY_ID[c.track]||{}).title||'')}</span></div>
+      <div class="bar" style="margin:8px 0 16px"><i style="width:${Math.round(s.idx/s.queue.length*100)}%"></i></div>
+      <div class="flash-wrap">
+        <div class="flash ${s.flip?'flip':''}" id="flash" tabindex="0" role="button" aria-label="Kartochkani aylantirish">
+          <div class="face front"><div><div class="muted small" style="margin-bottom:8px">Savol / atama</div><div class="q">${esc(c.front)}</div>${c.hint?`<div class="faint small" style="margin-top:12px">💡 ${esc(c.hint)}</div>`:''}</div></div>
+          <div class="face back"><div><div class="muted small" style="margin-bottom:8px">Javob</div><div class="a">${esc(c.back)}</div></div></div>
+        </div>
+      </div>
+      <div class="center" style="margin-top:16px">
+        ${!s.flip?`<button class="btn primary" id="reveal">Javobni ko‘rsatish</button>`:`
+          <div class="muted small" style="margin-bottom:8px">Qanchalik yaxshi esladingiz?</div>
+          <div class="row" style="justify-content:center">
+            <button class="btn bad" data-g="0">Bilmadim</button>
+            <button class="btn" data-g="3">Qiyin</button>
+            <button class="btn" data-g="4">Yaxshi</button>
+            <button class="btn ok" data-g="5">Oson</button>
+          </div>`}
+      </div>`;
+    const flip=()=>{s.flip=true;drawCard();};
+    if(!s.flip){$('#reveal').addEventListener('click',flip);$('#flash').addEventListener('click',flip);
+      $('#flash').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();flip();}});}
+    else{$$('[data-g]').forEach(b=>b.addEventListener('click',()=>{
+      gradeCard(c.id,+b.dataset.g);s.done++;if(+b.dataset.g<3)s.again++;s.idx++;s.flip=false;drawCard();
+    }));}
+  }
+
+  /* ---------- Testlar ---------- */
+  let quizSession=null;
+  function renderQuiz(p){
+    const preTrack=p&&p[0];
+    if(quizSession){drawQuiz();return;}
+    page.innerHTML=`
+      <div class="breadcrumb">Testlar</div>
+      <h1>Testlar</h1>
+      <p class="lead">Bilimingizni sinab ko‘ring. Har bir savoldan so‘ng izoh beriladi.</p>
+      <div class="grid g3" style="margin-top:14px">
+        ${DB.tracks.map(t=>{const best=state.quizBest[t.id];const n=DB.quiz.filter(q=>q.track===t.id).length;return `
+          <div class="card" style="border-top:3px solid ${t.color}">
+            <div style="font-size:1.8rem">${t.icon}</div>
+            <h3 style="margin-top:4px">${esc(t.title)}</h3>
+            <div class="muted small">${n} ta savol${best!=null?` · eng yaxshi: <b style="color:var(--fg)">${best}%</b>`:''}</div>
+            <button class="btn block ${preTrack===t.id?'primary':''}" style="margin-top:12px" data-quiz="${t.id}">Testni boshlash</button>
+          </div>`;}).join('')}
+      </div>
+      <div class="card center" style="margin-top:14px">
+        <b>Aralash test</b><div class="muted small">Barcha yo‘nalishlardan 12 ta tasodifiy savol</div>
+        <button class="btn" style="margin-top:10px" data-quiz="__mix">🎲 Aralash testni boshlash</button>
+      </div>`;
+    $$('[data-quiz]').forEach(b=>b.addEventListener('click',()=>startQuiz(b.dataset.quiz)));
+    if(preTrack&&TRACK_BY_ID[preTrack])startQuiz(preTrack);
+  }
+  function startQuiz(id){
+    let pool = id==='__mix' ? [...DB.quiz] : DB.quiz.filter(q=>q.track===id);
+    if(!pool.length){toast('Savollar topilmadi');return;}
+    pool=[...pool].sort(()=>Math.random()-.5).slice(0, id==='__mix'?12:Math.min(10,pool.length));
+    // Variantlarni aralashtirish (to‘g‘ri javob o‘rni bilinmasligi uchun)
+    pool=pool.map(q=>{const sh=q.options.map((o,i)=>({o,i})).sort(()=>Math.random()-.5);
+      return {...q,options:sh.map(x=>x.o),correct:sh.findIndex(x=>x.i===q.correct)};});
+    quizSession={id,queue:pool,idx:0,score:0,answered:false,picked:null};
+    drawQuiz();
+  }
+  function drawQuiz(){
+    const s=quizSession;
+    if(s.idx>=s.queue.length){
+      const pct=Math.round(s.score/s.queue.length*100);
+      let best=false;
+      if(s.id!=='__mix'){if((state.quizBest[s.id]||0)<pct){state.quizBest[s.id]=pct;best=true;}}
+      addXp(s.score*10);markActiveToday();checkBadges();save();
+      const emoji=pct>=80?'🏆':pct>=50?'👍':'📚';
+      page.innerHTML=`<div class="breadcrumb">Testlar / Natija</div>
+        <div class="card center">
+          <div style="font-size:3rem">${emoji}</div>
+          <h2>${s.score} / ${s.queue.length} to‘g‘ri (${pct}%)</h2>
+          <p class="muted">+${s.score*10} XP${best?' · 🎯 Yangi rekord!':''}</p>
+          <div class="row" style="justify-content:center;margin-top:10px">
+            <button class="btn primary" onclick="quizSession=null;renderQuiz(['${s.id==='__mix'?'':s.id}'])">Qayta ishlash</button>
+            <button class="btn" onclick="quizSession=null;go('quiz')">Boshqa test</button>
+          </div>
+        </div>`;
+      quizSession=null;return;
+    }
+    const q=s.queue[s.idx];
+    page.innerHTML=`
+      <div class="breadcrumb"><a onclick="quizSession=null;renderQuiz([])">Testlar</a> / Savol</div>
+      <div class="row between"><div class="muted small">Savol ${s.idx+1} / ${s.queue.length}</div><div class="pill">✔ ${s.score}</div></div>
+      <div class="bar" style="margin:8px 0 16px"><i style="width:${Math.round(s.idx/s.queue.length*100)}%"></i></div>
+      <div class="card">
+        <h3 style="margin-bottom:14px">${esc(q.q)}</h3>
+        <div id="opts">${q.options.map((o,i)=>`<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>
+        <div id="explain" class="hide"></div>
+        <div id="qnav" class="hide row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" id="qnext">Keyingi →</button></div>
+      </div>`;
+    function showAnswered(pick){
+      $$('#opts .opt').forEach((b,i)=>{b.disabled=true;if(i===q.correct)b.classList.add('correct');if(i===pick&&i!==q.correct)b.classList.add('wrong');});
+      const ex=$('#explain');ex.className='card tight';ex.style.marginTop='12px';
+      ex.innerHTML=`<b>${pick===q.correct?'✅ To‘g‘ri!':'❌ Noto‘g‘ri'}</b><div class="muted small" style="margin-top:4px">${esc(q.explain)}</div>`;
+      $('#qnav').classList.remove('hide');
+    }
+    $$('#opts .opt').forEach(btn=>btn.addEventListener('click',()=>{
+      if(s.answered)return;s.answered=true;const pick=+btn.dataset.i;s.picked=pick;
+      if(pick===q.correct)s.score++;
+      showAnswered(pick);
+    }));
+    if(s.answered)showAnswered(s.picked); // qayta chizishda javob berilgan holatni tiklash (soft-lock oldini olish)
+    $('#qnext').addEventListener('click',()=>{s.idx++;s.answered=false;s.picked=null;drawQuiz();});
+  }
+
+  /* ---------- AI murabbiy ---------- */
+  const norm=s=>(s||'').toLowerCase().replace(/[‘’'`.,!?:;()]/g,' ').replace(/\s+/g,' ').trim();
+  function localTutor(q){
+    const n=norm(q);const words=n.split(' ').filter(w=>w.length>2);
+    let best=null,bestScore=0;
+    for(const e of DB.kb){
+      let score=0;
+      for(const kw of e.keywords){const k=norm(kw);if(!k)continue;if(n.includes(k))score+=2;else if(words.some(w=>k.includes(w)||w.includes(k)))score+=1;}
+      if(score>bestScore){bestScore=score;best=e;}
+    }
+    // atamalardan qidirish (kartochkalar)
+    if(bestScore<2){
+      for(const c of DB.cards){if(n.includes(norm(c.front))){return{answer:`**${c.front}** — ${c.back}`,source:'kartochka bazasi'};}}
+    }
+    if(best&&bestScore>=1)return{answer:best.answer,source:'oflayn bilim bazasi'};
+    return{answer:'Bu savolga aniq javobim yo‘q, lekin men IT, tibbiyot va tibbiy informatika bo‘yicha yordam bera olaman. Masalan: "Python nima?", "CPR qanday bajariladi?", "FHIR nima?" deb so‘rang. Aniqroq atama yozsangiz, yaxshiroq javob beraman.',source:'oflayn'};
+  }
+  async function askTutor(q){
+    // Onlayn (ixtiyoriy): agar Supabase konfiguratsiyasi mavjud bo'lsa
+    try{
+      if(window.SUPABASE_URL&&window.SUPABASE_ANON_KEY&&window.fetch){
+        const r=await fetch(`${String(window.SUPABASE_URL).replace(/\/+$/,'')}/functions/v1/tutor`,{
+          method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${window.SUPABASE_ANON_KEY}`,'apikey':window.SUPABASE_ANON_KEY},
+          body:JSON.stringify({q})});
+        if(r.ok){const d=await r.json().catch(()=>({}));if(d&&d.answer)return{answer:d.answer,source:'onlayn AI'};}
+      }
+    }catch(e){/* oflayn rejimga o'tamiz */}
+    return localTutor(q);
+  }
+  const SUGGEST=['Python nima?','CPR qanday bajariladi?','FHIR nima?','HTML va CSS farqi','Antibiotik nima?','SQL so‘rovi nima?'];
+  function renderTutor(){
+    page.innerHTML=`
+      <div class="breadcrumb">AI murabbiy</div>
+      <h1>AI murabbiy 🤖</h1>
+      <p class="lead">IT, tibbiyot va tibbiy informatika bo‘yicha savol bering. Oflayn ishlaydi; onlayn AI sozlansa, undan foydalanadi.</p>
+      <div class="chat" style="margin-top:12px">
+        <div class="chatlog" id="chatlog"></div>
+        <div class="chatbar">
+          <input id="t-input" class="grow" placeholder="Savolingizni yozing..." autocomplete="off" />
+          <button class="btn primary" id="t-send">Yuborish</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">${SUGGEST.map(s=>`<button class="btn sm" data-sg="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
+    const log=$('#chatlog');
+    const add=(who,text,src)=>{const d=document.createElement('div');d.className='msg '+who;
+      d.innerHTML=fmt(text)+(src?`<div class="src">manba: ${esc(src)}</div>`:'');log.appendChild(d);log.scrollTop=log.scrollHeight;};
+    const fmt=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+    if(state.tutorLog.length)state.tutorLog.slice(-20).forEach(m=>add(m.who,m.text,m.src));
+    else add('a','Assalomu alaykum! Men Iqror IT MED School murabbiyiman. Nimani o‘rganmoqchisiz?','oflayn bilim bazasi');
+    const send=async()=>{
+      const q=$('#t-input').value.trim();if(!q)return;$('#t-input').value='';
+      add('u',q);state.tutorLog.push({who:'u',text:q});
+      const {answer,source}=await askTutor(q);
+      add('a',answer,source);state.tutorLog.push({who:'a',text:answer,src:source});
+      state.tutorLog=state.tutorLog.slice(-40);save();markActiveToday();
+    };
+    $('#t-send').addEventListener('click',send);
+    $('#t-input').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+    $$('[data-sg]').forEach(b=>b.addEventListener('click',()=>{$('#t-input').value=b.dataset.sg;send();}));
+  }
+
+  /* ---------- Yutuqlar ---------- */
+  function renderAchievements(){
+    const lv=levelOf(state.xp);
+    page.innerHTML=`
+      <div class="breadcrumb">Yutuqlar</div>
+      <h1>Yutuqlar va daraja</h1>
+      <div class="card">
+        <div class="row between"><div><div class="kicker">Joriy daraja</div><h2 style="margin:4px 0">${LEVELS[lv]}</h2></div><div class="pill">⚡ ${state.xp} XP</div></div>
+        <div class="bar" style="margin-top:10px"><i style="width:${Math.min(100,Math.round((state.xp-xpForLevel(lv))/Math.max(1,xpForLevel(lv+1)-xpForLevel(lv))*100))}%"></i></div>
+        <div class="faint small" style="margin-top:6px">Keyingi daraja: ${LEVELS[Math.min(LEVELS.length-1,lv+1)]} (${xpForLevel(lv+1)} XP)</div>
+      </div>
+      <h3 style="margin:18px 0 8px">Nishonlar (${state.badges.length}/${BADGES.length})</h3>
+      <div class="grid g3">
+        ${BADGES.map(b=>{const on=state.badges.includes(b.id);return `
+          <div class="badge ${on?'on':''}"><div class="em">${b.em}</div><div><b>${esc(b.t)}</b><div class="muted small">${esc(b.d)}</div></div></div>`;}).join('')}
+      </div>`;
+  }
+
+  /* ---------- Profil ---------- */
+  function renderProfile(){
+    const ov=overallProgress();const ss=srsStats();
+    page.innerHTML=`
+      <div class="breadcrumb">Profil</div>
+      <h1>Profil</h1>
+      <div class="grid g2" style="margin-top:8px">
+        <div class="card">
+          <h3>Sozlamalar</h3>
+          <label class="small muted">Ismingiz</label>
+          <input id="pf-name" class="block" style="width:100%;margin:6px 0 12px" value="${esc(state.profile.name)}" placeholder="Ism kiriting" />
+          <div class="row between">
+            <span>Mavzu</span>
+            <button class="btn sm" id="pf-theme">${state.settings.theme==='dark'?'🌙 Tungi':'☀️ Kunduzgi'}</button>
+          </div>
+          <div class="divider"></div>
+          <div class="row"><button class="btn sm" id="pf-export">⬇️ Ma’lumotni eksport</button>
+            <label class="btn sm" style="cursor:pointer">⬆️ Import<input type="file" id="pf-import" accept="application/json" class="hide"></label></div>
+          <div style="margin-top:10px"><button class="btn sm bad" id="pf-reset">🗑️ Progressni tozalash</button></div>
+        </div>
+        <div class="card">
+          <h3>Statistika</h3>
+          <div class="grid g2">
+            <div class="stat"><div class="n">${ov.done}/${ov.total}</div><div class="l">Darslar</div></div>
+            <div class="stat"><div class="n">${ss.learned}</div><div class="l">Kartochkalar</div></div>
+            <div class="stat"><div class="n">${state.streak.count}</div><div class="l">Streak (kun)</div></div>
+            <div class="stat"><div class="n">${(state.activeDays||[]).length}</div><div class="l">Faol kunlar</div></div>
+            <div class="stat"><div class="n">${Object.keys(state.quizBest).length}</div><div class="l">Ishlangan testlar</div></div>
+            <div class="stat"><div class="n">${state.badges.length}</div><div class="l">Yutuqlar</div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="muted small">Boshlagan sana: ${esc(state.created||todayStr())}</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="row between">
+          <h3 style="margin:0">☁️ Bulutli sinxronlash (Firebase)</h3>
+          <span class="chip" id="pf-cloud-status">${esc(cloudStatus.t)}</span>
+        </div>
+        <p class="muted small" style="margin-top:8px">Ma’lumotlaringiz shu qurilmada (localStorage) saqlanadi va oflayn ishlaydi. Internet mavjud bo‘lsa, progressingiz Firebase buluti bilan avtomatik zaxiralanadi va qurilmalar o‘rtasida sinxronlanadi.</p>
+        <div class="row" style="margin-top:6px">
+          <button class="btn sm" id="pf-sync-now">🔄 Hozir sinxronlash</button>
+          <button class="btn sm hide" id="pf-signout">🚪 Bulutdan chiqish</button>
+        </div>
+      </div>`;
+    $('#pf-name').addEventListener('change',e=>{state.profile.name=e.target.value.trim();save();toast('Saqlandi');refreshHeader();});
+    $('#pf-theme').addEventListener('click',()=>{state.settings.theme=state.settings.theme==='dark'?'light':'dark';save();applyTheme();renderProfile();});
+    $('#pf-export').addEventListener('click',()=>{
+      const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='iqror-progress.json';a.click();URL.revokeObjectURL(a.href);
+    });
+    $('#pf-import').addEventListener('change',e=>{
+      const f=e.target.files[0];if(!f)return;const r=new FileReader();
+      r.onload=()=>{try{const d=JSON.parse(r.result);state=Object.assign(baseState(),d);save();applyTheme();refreshHeader();toast('Import muvaffaqiyatli');renderProfile();}catch(err){toast('Faylni o‘qib bo‘lmadi');}};
+      r.readAsText(f);
+    });
+    $('#pf-reset').addEventListener('click',()=>{
+      if(confirm('Barcha progress o‘chiriladi. Davom etasizmi?')){state=baseState();save();applyTheme();refreshHeader();toast('Tozalandi');renderProfile();}
+    });
+    $('#pf-signout').classList.toggle('hide',!(cloudStatus.s==='synced'||cloudStatus.s==='connecting'));
+    $('#pf-sync-now').addEventListener('click',async()=>{
+      if(window.IqrorCloud&&window.IqrorCloud.syncNow){toast('🔄 Sinxronlanmoqda...');try{await window.IqrorCloud.syncNow();}catch(e){}}
+      else toast('Bulut hozircha mavjud emas (internet yoki Firebase sozlamasi kerak)');
+    });
+    $('#pf-signout').addEventListener('click',async()=>{
+      if(window.IqrorCloud&&window.IqrorCloud.signOut){await window.IqrorCloud.signOut();renderProfile();}
+    });
+  }
+
+  /* =========================================================================
+     PWA install + Init
+     ========================================================================= */
+  let deferredPrompt=null;
+  addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#btn-install').classList.remove('hide');});
+  $('#btn-install').addEventListener('click',async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$('#btn-install').classList.add('hide');});
+
+  (function init(){
+    applyTheme();refreshHeader();markActiveToday();
+    if(!location.hash)location.hash='#home';
+    router();
+  })();
+  </script>
+
+  <!-- Firebase bulut moduli (ixtiyoriy): analitika + anonim autentifikatsiya + Firestore sinxronlash.
+       Oflayn yoki sozlanmagan bo‘lsa, ilova baribir to‘liq ishlayveradi. -->
+  <script type="module">
+    const firebaseConfig = {
+      apiKey: "AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
+      authDomain: "iqror-72879.firebaseapp.com",
+      projectId: "iqror-72879",
+      storageBucket: "iqror-72879.firebasestorage.app",
+      messagingSenderId: "1082381849678",
+      appId: "1:1082381849678:web:f9a657404b83ac88c71f1f",
+      measurementId: "G-LDD3BFGKVP"
+    };
+    const V = "https://www.gstatic.com/firebasejs/10.12.5";
+    const A = () => window.IqrorApp || {};
+    const setStatus = (s,t) => { try{ A().setCloudStatus && A().setCloudStatus(s,t); }catch(e){} };
+
+    (async () => {
+      let appMod, authMod, fsMod, anMod;
+      try {
+        setStatus('connecting','Ulanmoqda...');
+        [appMod, authMod, fsMod] = await Promise.all([
+          import(`${V}/firebase-app.js`),
+          import(`${V}/firebase-auth.js`),
+          import(`${V}/firebase-firestore.js`)
+        ]);
+      } catch (e) {
+        // Internet yo‘q yoki CDN bloklangan — jimgina oflayn rejim
+        setStatus('offline','Oflayn rejim');
+        return;
+      }
+
+      try {
+        const app = appMod.initializeApp(firebaseConfig);
+        // Analitika (qo‘llab-quvvatlansa)
+        import(`${V}/firebase-analytics.js`).then(an => {
+          try { an.isSupported().then(ok => { if (ok) an.getAnalytics(app); }).catch(()=>{}); } catch(e){}
+        }).catch(()=>{});
+
+        const auth = authMod.getAuth(app);
+        const db = fsMod.getFirestore(app);
+        const { onAuthStateChanged, signInAnonymously, signOut } = authMod;
+        const { doc, getDoc, setDoc } = fsMod;
+
+        let uid = null, ready = false, pushTimer = null;
+
+        function handleErr(e){
+          const code = String((e && e.code) || e || '');
+          if (code.includes('permission')) setStatus('error','Sinxronlash o‘chiq (Firestore qoidalari)');
+          else if (code.includes('unavailable') || code.includes('network')) setStatus('offline','Oflayn (tarmoq yo‘q)');
+          else setStatus('error','Ulanish xatosi');
+        }
+        async function pushNow(){
+          if (!uid) return;
+          try {
+            const st = A().getState ? A().getState() : null;
+            if (!st) return;
+            await setDoc(doc(db,'progress',uid), JSON.parse(JSON.stringify(st)));
+            setStatus('synced','Sinxron ✓');
+          } catch (e) { handleErr(e); }
+        }
+        async function pullMerge(){
+          if (!uid) return;
+          try {
+            const snap = await getDoc(doc(db,'progress',uid));
+            if (snap.exists()) {
+              const cloud = snap.data();
+              const local = A().getState ? A().getState() : null;
+              const merged = A().mergeStates ? A().mergeStates(local, cloud) : cloud;
+              A().applyCloudState && A().applyCloudState(merged);
+            }
+          } catch (e) { handleErr(e); }
+        }
+
+        window.IqrorCloud = {
+          onLocalChange(){ if (!ready || !uid) return; clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, 1500); },
+          async syncNow(){ await pullMerge(); await pushNow(); },
+          async signOut(){ try { await signOut(auth); setStatus('offline','Chiqildi'); } catch(e){} },
+          isReady: () => ready
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+          if (user) { uid = user.uid; ready = true; setStatus('connecting','Sinxronlanmoqda...'); await pullMerge(); await pushNow(); }
+          else { uid = null; ready = false; setStatus('offline','Oflayn (kirilmagan)'); }
+        });
+
+        // Anonim kirish (Firebase konsolida yoqilgan bo‘lsa)
+        signInAnonymously(auth).catch((e) => {
+          if (String(e && e.code).includes('operation-not-allowed'))
+            setStatus('offline','Anonim kirish o‘chiq (Firebase sozlang)');
+          else setStatus('offline','Oflayn rejim');
+        });
+      } catch (e) {
+        setStatus('offline','Oflayn rejim');
+      }
+    })();
+  </script>
+</body>
+</html>

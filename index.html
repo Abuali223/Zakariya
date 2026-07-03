@@ -1,80 +1,782 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iqror IT MED School — IT va MED yo‘nalishlarida kuchli maktab ta'limi</title>
+<meta name="description" content="Iqror IT MED School — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim. Ochiq natijalar, reytinglar, o‘qituvchilar va yutuqlar bitta platformada.">
+<meta name="theme-color" content="#0D5148">
+<meta property="og:title" content="Iqror IT MED School">
+<meta property="og:description" content="IT va MED yo‘nalishlarida natijaga yo‘naltirilgan zamonaviy maktab.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 49'%3E%3Crect x='2' width='36' height='9' rx='2' fill='%231E8E7E'/%3E%3Cpath d='M2 13H38v8.5L20 36.5 2 21.5Z' fill='%23EDB84C'/%3E%3Cpath d='M20 38.5l6 5.2-6 5.3-6-5.3Z' fill='%231E8E7E'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800;900&family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F6F3EB; --ink:#12312B; --teal:#0D5148; --teal-2:#1E8E7E; --teal-d:#093A34;
+    --gold:#EDB84C; --gold-d:#E0A930; --muted:#5B7370; --border:#E2DCCC; --border-2:#ECE7D9;
+    --white:#FFFFFF; --it-bg:#EAF3F1; --it-fg:#0D5148; --med-bg:#FBF3DF; --med-fg:#8A6414;
+    --serif:'Bitter',Georgia,serif; --sans:'Golos Text',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --wrap:1240px; --shadow:0 12px 32px rgba(13,81,72,0.10);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden}
+  img{max-width:100%;display:block}
+  a{color:inherit}
+  ::selection{background:var(--gold);color:var(--teal)}
+  h1,h2,h3{font-family:var(--serif);margin:0;text-wrap:balance}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+  .reveal{animation:fadeUp .7s ease both}
+  input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--teal-2);outline-offset:2px}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding-left:32px;padding-right:32px}
+  .kicker{color:var(--teal-2);font-weight:700;font-size:13px;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
+  .section-head{max-width:640px;margin-bottom:48px}
+  .section-head h2{font-weight:800;font-size:40px;line-height:1.15;margin-bottom:16px}
+  .section-head p{font-size:17px;line-height:1.6;color:var(--muted);margin:0}
+  section{padding:96px 0}
 
-  <title>Arab Tili — Gibrid (PWA + Supabase)</title>
-  <meta name="description" content="Arab tili uchun gibrid (PWA + Supabase) o‘quv platforma" />
-  <meta name="theme-color" content="#7c6dff" />
+  /* ---- NAV ---- */
+  .nav{position:sticky;top:0;z-index:60;background:rgba(246,243,235,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  .nav-inner{display:flex;align-items:center;gap:28px;padding-top:14px;padding-bottom:14px}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}
+  .brand .mark{width:30px;height:37px;flex:0 0 auto}
+  .brand b{font-family:var(--serif);font-weight:800;font-size:22px;letter-spacing:.04em;display:block;line-height:1}
+  .brand small{font-size:10px;font-weight:600;letter-spacing:.28em;color:var(--teal-2);margin-top:3px;display:block}
+  .nav-links{display:flex;gap:22px;margin-left:auto;font-size:14.5px;font-weight:500}
+  .nav-links a{color:var(--ink);text-decoration:none;transition:color .15s}
+  .nav-links a:hover{color:var(--teal-2)}
+  .langsw{display:flex;gap:2px;background:#E9E4D6;border-radius:999px;padding:3px}
+  .langsw button{border:none;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);background:transparent;color:var(--muted);transition:.15s}
+  .langsw button.on{background:var(--teal);color:#fff}
+  .btn-cta{background:var(--gold);color:var(--teal);font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;text-decoration:none;transition:background .15s;white-space:nowrap}
+  .btn-cta:hover{background:var(--gold-d)}
+  .navtoggle{display:none;border:1px solid var(--border);background:var(--white);border-radius:10px;width:44px;height:44px;cursor:pointer;font-size:20px;align-items:center;justify-content:center}
 
-  <!-- PWA -->
-  <link rel="manifest" href="./manifest.json">
-  <link rel="icon" type="image/png" href="./assets/icons/icon-192.png">
+  /* ---- HERO ---- */
+  .hero{background:linear-gradient(160deg,#0D5148 0%,#0A423B 60%,#093A34 100%);color:#fff;position:relative;overflow:hidden}
+  .hero .ghost{position:absolute;right:-80px;top:-60px;opacity:.07;pointer-events:none}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:64px;align-items:center;padding:88px 0 0;position:relative}
+  .badge-pill{display:inline-block;background:rgba(237,184,76,.16);border:1px solid rgba(237,184,76,.5);color:var(--gold);font-size:13px;font-weight:600;letter-spacing:.06em;padding:7px 16px;border-radius:999px}
+  .hero h1{font-weight:800;font-size:56px;line-height:1.12;margin:24px 0 20px}
+  .hero p.sub{font-size:19px;line-height:1.6;color:rgba(255,255,255,.78);max-width:52ch;margin:0 0 36px}
+  .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
+  .btn-gold{background:var(--gold);color:var(--teal);font-weight:700;font-size:16px;padding:15px 30px;border-radius:12px;text-decoration:none;transition:background .15s}
+  .btn-gold:hover{background:var(--gold-d)}
+  .btn-ghost{border:1.5px solid rgba(255,255,255,.35);color:#fff;font-weight:600;font-size:16px;padding:15px 30px;border-radius:12px;text-decoration:none;transition:.15s}
+  .btn-ghost:hover{border-color:#fff;background:rgba(255,255,255,.06)}
+  .hero-visual{height:420px;border-radius:20px;background:
+      radial-gradient(120% 120% at 80% 10%,rgba(237,184,76,.22),transparent 55%),
+      linear-gradient(150deg,#0F5C51,#0A3f38);
+      border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;position:relative;overflow:hidden}
+  .hero-visual .emblem{width:150px;height:auto;opacity:.96;filter:drop-shadow(0 12px 30px rgba(0,0,0,.35))}
+  .hero-visual .cap{position:absolute;bottom:20px;left:24px;right:24px;font-size:13.5px;color:rgba(255,255,255,.72)}
+  .hero-stats{border-top:1px solid rgba(255,255,255,.16);display:grid;grid-template-columns:repeat(4,1fr);gap:32px;padding:32px 0 56px;margin-top:64px}
+  .hero-stats .v{font-family:var(--serif);font-weight:800;font-size:40px;color:var(--gold)}
+  .hero-stats .l{font-size:14.5px;color:rgba(255,255,255,.72);margin-top:6px}
 
-  <style>
-    :root{--bg:#0b1020;--panel:#0f152a;--panel2:#131a33;--fg:#e5e7eb;--muted:#9aa4b2;--accent:#7c6dff;--accent2:#22d3ee;--ok:#22c55e;--bad:#ef4444;--border:#1d274d}
-    *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#0b1020,#0b1228);color:var(--fg);font-family:system-ui,Segoe UI,Roboto}
-    header{position:sticky;top:0;background:rgba(13,18,40,.65);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);z-index:10}
-    .wrap{max-width:1200px;margin:0 auto;padding:12px 16px}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .space{justify-content:space-between}
-    .cols{display:grid;grid-template-columns:260px 1fr;gap:16px}
-    @media(max-width:900px){.cols{grid-template-columns:1fr}}
-    .nav{position:sticky;top:70px;display:flex;gap:8px;flex-direction:column}
-    .nav a{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#131a33;color:#e5e7eb;text-decoration:none}
-    .nav a.active{border-color:var(--accent)}
-    .card{background:#0f152a;border:1px solid var(--border);border-radius:14px;padding:14px}
-    .btn{border:1px solid var(--border);background:#131a33;color:#e5e7eb;border-radius:10px;padding:8px 12px;cursor:pointer}
-    .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0b1020;border:none;font-weight:700}
-    footer{color:#9aa4b2;border-top:1px solid var(--border);padding:24px 16px}
-  </style>
+  /* ---- CARDS / COURSES ---- */
+  .cards-2{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+  .course-card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:36px;display:flex;flex-direction:column;gap:20px;transition:.18s}
+  .course-card:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
+  .course-card .top{display:flex;align-items:center;gap:16px}
+  .course-card .ic{width:52px;height:52px;border-radius:14px;background:var(--teal);display:grid;place-items:center;flex:0 0 auto}
+  .course-card h3{font-weight:800;font-size:26px}
+  .course-card p{font-size:15.5px;line-height:1.65;color:var(--muted);margin:0}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:13.5px;font-weight:600;padding:7px 14px;border-radius:999px}
+  .chip.it{background:var(--it-bg);color:var(--it-fg)}
+  .chip.med{background:var(--med-bg);color:var(--med-fg)}
+  .card-meta{margin-top:auto;padding-top:16px;border-top:1px dashed var(--border);font-size:14px;font-weight:600;color:var(--teal-2)}
+
+  /* ---- RESULTS ---- */
+  .band{background:var(--white);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .results-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:start}
+  .lb{background:var(--bg);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .lb-head{display:flex;align-items:baseline;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--border)}
+  .lb-head h3{font-weight:800;font-size:20px}
+  .lb-head span{font-size:13px;font-weight:600;color:var(--muted)}
+  .lb-row{display:grid;grid-template-columns:44px 1fr 116px 150px;gap:14px;align-items:center;padding:13px 26px;border-bottom:1px solid var(--border-2)}
+  .lb-row .rank{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--serif);font-weight:800;font-size:15px}
+  .lb-row .nm{font-weight:600;font-size:15px}
+  .lb-row .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .trk{justify-self:start;font-size:12px;font-weight:700;letter-spacing:.08em;padding:5px 12px;border-radius:999px}
+  .trk.it{background:var(--it-bg);color:var(--it-fg)} .trk.med{background:var(--med-bg);color:var(--med-fg)}
+  .lb-score{display:flex;align-items:center;gap:10px}
+  .lb-bar{flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden}
+  .lb-bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
+  .lb-score b{font-family:var(--serif);font-weight:800;font-size:15px;width:32px;text-align:right}
+  .search-card{background:var(--teal);color:#fff;border-radius:20px;padding:32px;position:sticky;top:92px}
+  .search-card h3{font-weight:800;font-size:20px;margin-bottom:8px}
+  .search-card p{font-size:13.5px;color:rgba(255,255,255,.65);margin:0 0 20px;line-height:1.5}
+  .search-form{display:flex;gap:10px;margin-bottom:20px}
+  .search-form input{flex:1;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink)}
+  .search-form button{background:var(--gold);color:var(--teal);border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:14.5px;font-family:var(--sans);cursor:pointer;transition:.15s}
+  .search-form button:hover{background:var(--gold-d)}
+  .notfound{background:rgba(237,184,76,.12);border:1px solid rgba(237,184,76,.4);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--gold)}
+  .found{background:#fff;color:var(--ink);border-radius:14px;padding:24px}
+  .found .fh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+  .found .fh b{font-family:var(--serif);font-weight:800;font-size:19px}
+  .found .fid{background:var(--it-bg);color:var(--teal);font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+  .found .fg{font-size:13px;color:var(--muted);margin-bottom:18px}
+  .found .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+  .found .metrics .m{background:var(--bg);border-radius:10px;padding:12px;text-align:center}
+  .found .metrics .m b{font-family:var(--serif);font-weight:800;font-size:20px;color:var(--teal);display:block}
+  .found .metrics .m span{font-size:11.5px;color:var(--muted);margin-top:2px;display:block}
+  .found .subs-l{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  .subrow{display:grid;grid-template-columns:130px 1fr 34px;gap:10px;align-items:center;margin-bottom:10px}
+  .subrow span:first-child{font-size:13.5px;font-weight:500}
+  .subrow .sb{height:6px;background:var(--border-2);border-radius:99px;overflow:hidden}
+  .subrow .sb>i{display:block;height:100%;background:var(--gold);border-radius:99px}
+  .subrow b{font-weight:700;font-size:13.5px;text-align:right}
+
+  /* ---- TEACHERS ---- */
+  .cards-3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .tcard{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;display:flex;flex-direction:column;gap:14px;transition:.18s}
+  .tcard:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
+  .tcard .top{display:flex;align-items:center;gap:16px}
+  .avatar{width:72px;height:72px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--serif);font-weight:800;font-size:24px;color:var(--teal);background:var(--it-bg)}
+  .tcard .nm{font-family:var(--serif);font-weight:800;font-size:18px}
+  .tcard .subj{font-size:13.5px;color:var(--teal-2);font-weight:600;margin-top:3px}
+  .stars{color:var(--gold);font-size:17px;letter-spacing:2px}
+  .rating{font-family:var(--serif);font-weight:800;font-size:17px}
+  .votes{font-size:12.5px;color:var(--muted)}
+  .tstats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px dashed var(--border);padding-top:14px}
+  .tstats b{font-weight:700;font-size:16px} .tstats span{font-size:11.5px;color:var(--muted);margin-top:2px;display:block}
+
+  /* ---- ACHIEVEMENTS ---- */
+  .ach{background:linear-gradient(160deg,#0D5148,#093A34);color:#fff}
+  .ach .kicker{color:var(--gold)}
+  .ach h2{color:#fff}
+  .ach-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
+  .ach h3.col{font-family:var(--serif);font-weight:700;font-size:18px;margin-bottom:28px;color:rgba(255,255,255,.85)}
+  .tl-item{display:grid;grid-template-columns:76px 1fr;gap:24px;padding:18px 0 18px 28px;border-left:2px solid rgba(237,184,76,.35);position:relative}
+  .tl-item .dot{position:absolute;left:-6px;top:26px;width:10px;height:10px;border-radius:50%;background:var(--gold)}
+  .tl-item .yr{font-family:var(--serif);font-weight:800;font-size:19px;color:var(--gold)}
+  .tl-item .tx{font-size:15.5px;line-height:1.55;color:rgba(255,255,255,.88)}
+  .sa{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:20px 24px;display:grid;grid-template-columns:44px 1fr auto;gap:18px;align-items:center;margin-bottom:14px}
+  .sa .st{width:44px;height:44px;border-radius:50%;background:rgba(237,184,76,.16);border:1px solid rgba(237,184,76,.5);display:grid;place-items:center;color:var(--gold);font-size:18px}
+  .sa .nm{font-weight:600;font-size:15.5px}
+  .sa .tx{font-size:13.5px;color:rgba(255,255,255,.65);margin-top:3px;line-height:1.5}
+  .sa .yr{font-family:var(--serif);font-weight:800;font-size:15px;color:var(--gold)}
+
+  /* ---- NEWS ---- */
+  .cards-4{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+  .news{background:var(--white);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:.18s}
+  .news:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
+  .news .thumb{height:160px;display:grid;place-items:center;background:linear-gradient(150deg,#0F5C51,#0A3f38)}
+  .news .thumb svg{width:44px;height:54px;opacity:.9}
+  .news .body{padding:20px 22px 24px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .news .row{display:flex;align-items:center;gap:10px}
+  .news .tag{background:var(--it-bg);color:var(--teal);font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:999px}
+  .news .date{font-size:12.5px;color:var(--muted)}
+  .news h3{font-weight:700;font-size:16.5px;line-height:1.4}
+
+  /* ---- CONTACT ---- */
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
+  .contact-info{display:flex;flex-direction:column;gap:20px;font-size:15.5px}
+  .contact-info .r{display:grid;grid-template-columns:130px 1fr;gap:16px}
+  .contact-info .r span.l{color:var(--muted);font-weight:600}
+  .contact-info a{color:var(--teal);font-weight:700;text-decoration:none}
+  .form{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:36px;display:flex;flex-direction:column;gap:18px}
+  .form h3{font-weight:800;font-size:22px;margin-bottom:4px}
+  .form label{display:flex;flex-direction:column;gap:8px;font-size:13.5px;font-weight:600;color:var(--muted)}
+  .form input,.form select{border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink)}
+  .form button{background:var(--gold);color:var(--teal);border:none;border-radius:12px;padding:15px;font-weight:700;font-size:16px;font-family:var(--sans);cursor:pointer;margin-top:6px;transition:.15s}
+  .form button:hover{background:var(--gold-d)}
+  .form .thanks{background:var(--it-bg);border:1px solid var(--teal-2);color:var(--teal);border-radius:12px;padding:14px 16px;font-size:14.5px;font-weight:600}
+
+  /* ---- FOOTER ---- */
+  footer{background:var(--teal-d);color:rgba(255,255,255,.75)}
+  .foot-inner{display:flex;align-items:center;gap:40px;padding:56px 0 40px;flex-wrap:wrap}
+  footer .brand b{color:#fff;font-size:20px}
+  footer .brand small{color:var(--gold);font-size:9px}
+  footer p{font-size:14px;margin:0;max-width:44ch}
+  footer .rights{margin-left:auto;font-size:13px}
+
+  /* ---- RESPONSIVE ---- */
+  @media(max-width:1000px){
+    .hero-grid{grid-template-columns:1fr;gap:36px;padding-top:56px}
+    .hero h1{font-size:42px}
+    .results-grid{grid-template-columns:1fr}
+    .search-card{position:static}
+    .ach-grid{grid-template-columns:1fr;gap:40px}
+    .contact-grid{grid-template-columns:1fr;gap:40px}
+    .cards-3{grid-template-columns:1fr 1fr}
+    .cards-4{grid-template-columns:1fr 1fr}
+    .nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;gap:0;margin:0;padding:8px 0}
+    .nav-links.open{display:flex}
+    .nav-links a{padding:14px 32px;border-top:1px solid var(--border-2)}
+    .navtoggle{display:flex;margin-left:auto}
+    .nav-inner{gap:14px;position:relative;flex-wrap:wrap}
+    .btn-cta{order:3}
+  }
+  @media(max-width:760px){
+    .wrap{padding-left:20px;padding-right:20px}
+    section{padding:64px 0}
+    .section-head{margin-bottom:34px}
+    .section-head h2{font-size:30px}
+    .hero h1{font-size:34px}
+    .hero p.sub{font-size:17px}
+    .cards-2,.cards-3,.cards-4{grid-template-columns:1fr}
+    .hero-stats{grid-template-columns:1fr 1fr;gap:24px}
+    .lb-row{grid-template-columns:34px 1fr auto;gap:10px;padding:13px 16px}
+    .lb-row .lb-score{display:none}
+    .lb-row .trk{grid-column:2;justify-self:start;margin-top:2px}
+    .lb-mini{display:inline-block;font-family:var(--serif);font-weight:800;font-size:15px;color:var(--teal)}
+    .foot-inner{gap:20px}
+    footer .rights{margin-left:0;width:100%}
+  }
+  @media(max-width:760px){ .lb-row .lb-score.keep{display:flex;grid-column:1/-1} }
+  .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
 </head>
 <body>
-  <header>
-    <div class="wrap row space">
-      <div class="row">
-        <h2 style="margin:0">Arab Tili Platforma</h2>
-        <span>Gibrid — PWA + Supabase</span>
+  <!-- ================= NAV ================= -->
+  <nav class="nav" aria-label="Asosiy navigatsiya">
+    <div class="wrap nav-inner">
+      <a href="#top" class="brand" aria-label="Iqror IT MED School">
+        <svg class="mark" viewBox="0 0 40 49" fill="none" aria-hidden="true">
+          <rect x="2" y="0" width="36" height="9" rx="2" fill="#1E8E7E"></rect>
+          <path d="M2 13 H38 V21.5 L20 36.5 L2 21.5 Z" fill="#EDB84C"></path>
+          <path d="M20 38.5 L26 43.7 L20 49 L14 43.7 Z" fill="#1E8E7E"></path>
+        </svg>
+        <span><b>IQROR</b><small>IT · MED SCHOOL</small></span>
+      </a>
+      <button class="navtoggle" id="navtoggle" aria-label="Menyu" aria-expanded="false">☰</button>
+      <div class="nav-links" id="navlinks">
+        <a href="#yonalishlar" data-t="nav_courses"></a>
+        <a href="#natijalar" data-t="nav_results"></a>
+        <a href="#oqituvchilar" data-t="nav_teachers"></a>
+        <a href="#yutuqlar" data-t="nav_awards"></a>
+        <a href="#hayot" data-t="nav_life"></a>
+        <a href="#aloqa" data-t="nav_contact"></a>
       </div>
-      <div class="row">
-        <button id="btn-install" class="btn" hidden>➕ O‘rnatish</button>
-        <button id="btn-sync" class="btn">🔄 Sync</button>
-        <button id="btn-auth" class="btn primary">Kirish</button>
+      <div class="langsw" role="group" aria-label="Til / Язык">
+        <button id="lang-uz" data-lang="uz">UZ</button>
+        <button id="lang-ru" data-lang="ru">RU</button>
+      </div>
+      <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
+    </div>
+  </nav>
+
+  <!-- ================= HERO ================= -->
+  <header class="hero" id="top">
+    <svg class="ghost" width="520" height="640" viewBox="0 0 40 49" fill="none" aria-hidden="true">
+      <rect x="2" y="0" width="36" height="9" rx="2" fill="#FFFFFF"></rect>
+      <path d="M2 13 H38 V21.5 L20 36.5 L2 21.5 Z" fill="#EDB84C"></path>
+      <path d="M20 38.5 L26 43.7 L20 49 L14 43.7 Z" fill="#EDB84C"></path>
+    </svg>
+    <div class="wrap hero-grid">
+      <div class="reveal">
+        <span class="badge-pill" data-t="hero_badge"></span>
+        <h1 data-t="hero_title"></h1>
+        <p class="sub" data-t="hero_sub"></p>
+        <div class="hero-btns">
+          <a href="#aloqa" class="btn-gold" data-t="hero_btn1"></a>
+          <a href="#natijalar" class="btn-ghost" data-t="hero_btn2"></a>
+        </div>
+      </div>
+      <div class="reveal" style="animation-delay:.15s">
+        <div class="hero-visual">
+          <svg class="emblem" viewBox="0 0 40 49" fill="none" aria-hidden="true">
+            <rect x="2" y="0" width="36" height="9" rx="2" fill="#FFFFFF"></rect>
+            <path d="M2 13 H38 V21.5 L20 36.5 L2 21.5 Z" fill="#EDB84C"></path>
+            <path d="M20 38.5 L26 43.7 L20 49 L14 43.7 Z" fill="#FFFFFF"></path>
+          </svg>
+          <div class="cap" data-t="hero_visual_cap"></div>
+        </div>
       </div>
     </div>
+    <div class="wrap"><div class="hero-stats" id="hero-stats"></div></div>
   </header>
 
-  <main class="wrap cols" id="app">
-    <aside class="nav" aria-label="Sahifa bo‘limlari">
-      <a href="#dash" class="active">🏠 Dashboard</a>
-      <a href="#lessons">📚 Darslar</a>
-      <a href="#practice">🃏 Mashq (SRS)</a>
-      <a href="#tests">🧪 Testlar</a>
-      <a href="#tutor">🤖 AI Tutor</a>
-      <a href="#parent">👨‍👩‍👧 Ota-ona paneli</a>
-      <a href="#profile">👤 Profil</a>
-    </aside>
-    <section id="content" class="card">
-      <div id="page"></div>
-    </section>
-  </main>
+  <!-- ================= YO'NALISHLAR ================= -->
+  <section id="yonalishlar">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="courses_kicker"></div>
+        <h2 data-t="courses_title"></h2>
+        <p data-t="courses_sub"></p>
+      </div>
+      <div class="cards-2">
+        <div class="course-card">
+          <div class="top">
+            <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#EDB84C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></div>
+            <h3 data-t="it_title"></h3>
+          </div>
+          <p data-t="it_desc"></p>
+          <div class="chips" id="it-chips"></div>
+          <div class="card-meta" data-t="it_meta"></div>
+        </div>
+        <div class="course-card">
+          <div class="top">
+            <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#EDB84C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v10M7 12h10"></path><rect x="4" y="4" width="16" height="16" rx="4"></rect></svg></div>
+            <h3 data-t="med_title"></h3>
+          </div>
+          <p data-t="med_desc"></p>
+          <div class="chips" id="med-chips"></div>
+          <div class="card-meta" data-t="med_meta"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <footer class="wrap">© 2025 Arab Tili Platforma. PWA + Supabase sinxronlashga tayyor.</footer>
-  <noscript>Ilovani ishlatish uchun JavaScript yoqing.</noscript>
+  <!-- ================= NATIJALAR ================= -->
+  <section id="natijalar" class="band">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="res_kicker"></div>
+        <h2 data-t="res_title"></h2>
+        <p data-t="res_sub"></p>
+      </div>
+      <div class="results-grid">
+        <div class="lb">
+          <div class="lb-head"><h3 data-t="lb_title"></h3><span>2025/26</span></div>
+          <div id="leaderboard"></div>
+        </div>
+        <div class="search-card">
+          <h3 data-t="search_title"></h3>
+          <p data-t="search_hint"></p>
+          <form class="search-form" id="search-form">
+            <input id="search-input" type="text" data-t-ph="search_placeholder" aria-label="ID yoki ism">
+            <button type="submit" data-t="search_btn"></button>
+          </form>
+          <div id="search-result"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <!-- Skriptlar tartibi muhim: Supabase → config → ai → app -->
-  <script defer src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script defer src="./config.js?v=24"></script>
-  <script defer src="./ai.js?v=24"></script>
-  <script defer src="./app.js?v=24"></script>
+  <!-- ================= O'QITUVCHILAR ================= -->
+  <section id="oqituvchilar">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="t_kicker"></div>
+        <h2 data-t="t_title"></h2>
+        <p data-t="t_sub"></p>
+      </div>
+      <div class="cards-3" id="teachers"></div>
+    </div>
+  </section>
 
-  <!-- Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=24'));
-    }
-  </script>
+  <!-- ================= YUTUQLAR ================= -->
+  <section id="yutuqlar" class="ach">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="a_kicker"></div>
+        <h2 data-t="a_title"></h2>
+        <p style="color:rgba(255,255,255,.72)" data-t="a_sub"></p>
+      </div>
+      <div class="ach-grid">
+        <div>
+          <h3 class="col" data-t="a_school_title"></h3>
+          <div id="school-ach"></div>
+        </div>
+        <div>
+          <h3 class="col" data-t="a_students_title"></h3>
+          <div id="student-ach"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MAKTAB HAYOTI ================= -->
+  <section id="hayot">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="life_kicker"></div>
+        <h2 data-t="life_title"></h2>
+        <p data-t="life_sub"></p>
+      </div>
+      <div class="cards-4" id="news"></div>
+    </div>
+  </section>
+
+  <!-- ================= ALOQA ================= -->
+  <section id="aloqa" class="band">
+    <div class="wrap contact-grid">
+      <div>
+        <div class="kicker" data-t="c_kicker"></div>
+        <h2 data-t="c_title"></h2>
+        <p style="font-size:17px;line-height:1.6;color:var(--muted);margin:0 0 36px" data-t="c_sub"></p>
+        <div class="contact-info">
+          <div class="r"><span class="l" data-t="c_address_l"></span><span data-t="c_address_v"></span></div>
+          <div class="r"><span class="l" data-t="c_phone_l"></span><a href="tel:+998712004545">+998 71 200 45 45</a></div>
+          <div class="r"><span class="l">Telegram</span><a href="https://t.me/iqror_school" target="_blank" rel="noopener">@iqror_school</a></div>
+          <div class="r"><span class="l" data-t="c_hours_l"></span><span data-t="c_hours_v"></span></div>
+        </div>
+      </div>
+      <form class="form" id="enroll-form">
+        <h3 data-t="f_title"></h3>
+        <label><span data-t="f_name"></span><input name="name" required data-t-ph="f_name_ph"></label>
+        <label><span data-t="f_phone"></span><input name="phone" required placeholder="+998 __ ___ __ __"></label>
+        <label><span data-t="f_dir"></span><select name="direction" id="dir-select"></select></label>
+        <button type="submit" data-t="f_submit"></button>
+        <div class="thanks" id="form-thanks" hidden></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer>
+    <div class="wrap foot-inner">
+      <a href="#top" class="brand" aria-label="Iqror IT MED School">
+        <svg class="mark" width="28" height="34" viewBox="0 0 40 49" fill="none" aria-hidden="true">
+          <rect x="2" y="0" width="36" height="9" rx="2" fill="#FFFFFF"></rect>
+          <path d="M2 13 H38 V21.5 L20 36.5 L2 21.5 Z" fill="#EDB84C"></path>
+          <path d="M20 38.5 L26 43.7 L20 49 L14 43.7 Z" fill="#FFFFFF"></path>
+        </svg>
+        <span><b>IQROR</b><small>IT · MED SCHOOL</small></span>
+      </a>
+      <p data-t="footer_text"></p>
+      <span class="rights">© 2026 Iqror IT MED School. <span data-t="footer_rights"></span></span>
+    </div>
+  </footer>
+
+<script>
+"use strict";
+/* ============ Iqror IT MED School — landing (bilingual UZ/RU) ============ */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+
+const T = {
+  uz:{
+    nav_courses:"Yo‘nalishlar",nav_results:"Natijalar",nav_teachers:"O‘qituvchilar",nav_awards:"Yutuqlar",nav_life:"Maktab hayoti",nav_contact:"Aloqa",
+    cta_enroll:"Ro‘yxatdan o‘tish",
+    hero_badge:"2026/27 o‘quv yiliga qabul ochiq",
+    hero_title:"IT va MED yo‘nalishlarida kuchli maktab ta'limi",
+    hero_sub:"Iqror maktabida har bir o‘quvchining natijasi ochiq: reytinglar, yutuqlar va o‘sish dinamikasi — bitta platformada.",
+    hero_btn1:"Ro‘yxatdan o‘tish",hero_btn2:"Natijalarni ko‘rish",
+    hero_visual_cap:"Iqror IT · MED School — natijaga yo‘naltirilgan zamonaviy maktab",
+    stat1:"o‘quvchi",stat2:"o‘qituvchi",stat3:"universitetga kirish",stat4:"xalqaro yutuq",
+    courses_kicker:"Yo‘nalishlar",courses_title:"Ikki maqsad, bitta kuchli tayanch",
+    courses_sub:"Umumta'lim dasturi bilan birga har bir o‘quvchi IT yoki MED yo‘nalishida chuqurlashtirilgan dastur bo‘yicha o‘qiydi.",
+    it_title:"IT yo‘nalishi",
+    it_desc:"Dasturlash, robototexnika va chuqurlashtirilgan matematika — haqiqiy amaliy loyihalar bilan. Bitiruvchilar portfolio bilan chiqadi.",
+    it_meta:"240+ o‘quvchi · 5–11-sinflar",
+    med_title:"MED yo‘nalishi",
+    med_desc:"Biologiya, kimyo va anatomiya bo‘yicha kuchaytirilgan dastur — tibbiyot universitetlariga maqsadli tayyorgarlik.",
+    med_meta:"240+ o‘quvchi · 7–11-sinflar",
+    res_kicker:"Ochiq natijalar",res_title:"O‘quvchi natijalari",
+    res_sub:"Reyting har oy test, davomat va faollik asosida yangilanadi. Har bir o‘quvchi o‘z natijasini ID orqali ko‘ra oladi.",
+    lb_title:"TOP reyting",
+    search_title:"Natijani tekshirish",
+    search_hint:"Har bir o‘quvchiga maktab bergan ID orqali yoki ism bilan qidiring.",
+    search_placeholder:"Masalan: IQ-1004",search_btn:"Qidirish",
+    not_found:"Topilmadi. ID yoki ismni tekshirib qayta urinib ko‘ring.",
+    res_rank:"O‘rin",res_total:"Umumiy ball",res_attendance:"Davomat",res_subjects:"Fanlar kesimida",
+    t_kicker:"Jamoa",t_title:"O‘qituvchilar reytingi",
+    t_sub:"Reyting o‘quvchilar bahosi, ularning natijalari hamda o‘qituvchi malakasi asosida shakllanadi.",
+    t_votes:"baho",t_years:"yil tajriba",t_certs:"sertifikat",t_avg:"o‘quvchilar natijasi",
+    a_kicker:"Faxrimiz",a_title:"Maktab va o‘quvchi yutuqlari",
+    a_sub:"Har bir yutuq — tizimli mehnat natijasi. Eng muhimlarini shu yerda jamladik.",
+    a_school_title:"Maktab yutuqlari",a_students_title:"O‘quvchilar yutuqlari",
+    life_kicker:"Maktab hayoti",life_title:"Yangiliklar va voqealar",
+    life_sub:"Darslar, to‘garaklar, musobaqalar va bayramlar — maktabimiz hayotidan so‘nggi lavhalar.",
+    c_kicker:"Aloqa",c_title:"Bizga qo‘shiling",
+    c_sub:"Savollaringiz bo‘lsa qo‘ng‘iroq qiling yoki formani to‘ldiring — bir kun ichida bog‘lanamiz.",
+    c_address_l:"Manzil",c_address_v:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",
+    c_phone_l:"Telefon",c_hours_l:"Ish vaqti",c_hours_v:"Du–Sha, 8:00–18:00",
+    f_title:"Ro‘yxatdan o‘tish",f_name:"Ism-familiya",f_name_ph:"Ismingizni yozing",
+    f_phone:"Telefon raqam",f_dir:"Yo‘nalish",f_submit:"Yuborish",
+    f_thanks:"Rahmat! Arizangiz qabul qilindi — tez orada bog‘lanamiz.",
+    footer_text:"Natijaga yo‘naltirilgan zamonaviy maktab: IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim.",
+    footer_rights:"Barcha huquqlar himoyalangan.",
+    dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
+    grade:g=>g+"-sinf"
+  },
+  ru:{
+    nav_courses:"Направления",nav_results:"Результаты",nav_teachers:"Преподаватели",nav_awards:"Достижения",nav_life:"Жизнь школы",nav_contact:"Контакты",
+    cta_enroll:"Записаться",
+    hero_badge:"Открыт набор на 2026/27 учебный год",
+    hero_title:"Сильное школьное образование по направлениям IT и MED",
+    hero_sub:"В школе Iqror результат каждого ученика прозрачен: рейтинги, достижения и динамика роста — на одной платформе.",
+    hero_btn1:"Записаться",hero_btn2:"Смотреть результаты",
+    hero_visual_cap:"Iqror IT · MED School — современная школа, ориентированная на результат",
+    stat1:"учеников",stat2:"преподавателя",stat3:"поступление в вуз",stat4:"международных наград",
+    courses_kicker:"Направления",courses_title:"Две цели — одна сильная база",
+    courses_sub:"Вместе с общеобразовательной программой каждый ученик углублённо изучает направление IT или MED.",
+    it_title:"Направление IT",
+    it_desc:"Программирование, робототехника и углублённая математика — с реальными практическими проектами. Выпускники выходят с портфолио.",
+    it_meta:"240+ учеников · 5–11 классы",
+    med_title:"Направление MED",
+    med_desc:"Усиленная программа по биологии, химии и анатомии — целевая подготовка к медицинским вузам.",
+    med_meta:"240+ учеников · 7–11 классы",
+    res_kicker:"Открытые результаты",res_title:"Результаты учеников",
+    res_sub:"Рейтинг обновляется ежемесячно на основе тестов, посещаемости и активности. Каждый ученик видит свой результат по ID.",
+    lb_title:"TOP рейтинг",
+    search_title:"Проверить результат",
+    search_hint:"Ищите по ID, выданному школой, или по имени ученика.",
+    search_placeholder:"Например: IQ-1004",search_btn:"Поиск",
+    not_found:"Не найдено. Проверьте ID или имя и попробуйте снова.",
+    res_rank:"Место",res_total:"Общий балл",res_attendance:"Посещаемость",res_subjects:"По предметам",
+    t_kicker:"Команда",t_title:"Рейтинг преподавателей",
+    t_sub:"Рейтинг формируется из оценок учеников, их результатов и квалификации преподавателя.",
+    t_votes:"оценок",t_years:"лет опыта",t_certs:"сертификатов",t_avg:"результат учеников",
+    a_kicker:"Наша гордость",a_title:"Достижения школы и учеников",
+    a_sub:"Каждое достижение — результат системного труда. Самые важные собраны здесь.",
+    a_school_title:"Достижения школы",a_students_title:"Достижения учеников",
+    life_kicker:"Жизнь школы",life_title:"Новости и события",
+    life_sub:"Уроки, кружки, соревнования и праздники — свежие кадры из жизни нашей школы.",
+    c_kicker:"Контакты",c_title:"Присоединяйтесь",
+    c_sub:"Есть вопросы — позвоните или заполните форму, мы свяжемся с вами в течение дня.",
+    c_address_l:"Адрес",c_address_v:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",
+    c_phone_l:"Телефон",c_hours_l:"Часы работы",c_hours_v:"Пн–Сб, 8:00–18:00",
+    f_title:"Записаться",f_name:"Имя и фамилия",f_name_ph:"Введите имя",
+    f_phone:"Номер телефона",f_dir:"Направление",f_submit:"Отправить",
+    f_thanks:"Спасибо! Заявка принята — мы скоро свяжемся с вами.",
+    footer_text:"Современная школа, ориентированная на результат: углублённое образование по направлениям IT и MED.",
+    footer_rights:"Все права защищены.",
+    dirs:["Направление IT","Направление MED","Подготовительные курсы"],
+    grade:g=>g+" класс"
+  }
+};
+
+const STUDENTS = [
+  {id:"IQ-1001",name:"Aziza Karimova",g:11,tr:"IT",score:98,att:99,sc:[99,98,96,97]},
+  {id:"IQ-1002",name:"Jasur Toshpulatov",g:10,tr:"MED",score:96,att:98,sc:[98,96,94,95]},
+  {id:"IQ-1003",name:"Malika Yusupova",g:11,tr:"MED",score:95,att:97,sc:[96,95,93,96]},
+  {id:"IQ-1004",name:"Bekzod Rahimov",g:9,tr:"IT",score:93,att:96,sc:[94,95,90,92]},
+  {id:"IQ-1005",name:"Sevinch Abdullayeva",g:10,tr:"IT",score:91,att:98,sc:[92,93,89,90]},
+  {id:"IQ-1006",name:"Doston Ergashev",g:11,tr:"MED",score:90,att:94,sc:[91,90,88,90]},
+  {id:"IQ-1007",name:"Nilufar Sodiqova",g:9,tr:"MED",score:88,att:97,sc:[89,88,86,88]},
+  {id:"IQ-1008",name:"Temur Alimov",g:10,tr:"IT",score:87,att:93,sc:[88,89,84,86]},
+  {id:"IQ-1009",name:"Zarina Ismoilova",g:11,tr:"IT",score:85,att:95,sc:[86,87,82,84]},
+  {id:"IQ-1010",name:"Sardor Nazarov",g:9,tr:"MED",score:84,att:92,sc:[85,84,82,83]},
+  {id:"IQ-1011",name:"Kamila Yoqubova",g:10,tr:"MED",score:82,att:96,sc:[83,82,80,82]},
+  {id:"IQ-1012",name:"Ulug‘bek Mirzayev",g:9,tr:"IT",score:80,att:91,sc:[81,82,78,79]}
+];
+const SUBJECTS = {
+  IT:[{uz:"Matematika",ru:"Математика"},{uz:"Dasturlash",ru:"Программирование"},{uz:"Ingliz tili",ru:"Английский"},{uz:"Fizika",ru:"Физика"}],
+  MED:[{uz:"Biologiya",ru:"Биология"},{uz:"Kimyo",ru:"Химия"},{uz:"Matematika",ru:"Математика"},{uz:"Ingliz tili",ru:"Английский"}]
+};
+const TEACHERS = [
+  {name:"Dilnoza Karimova",suz:"Matematika",sru:"Математика",rating:4.9,years:12,certs:8,avg:92,votes:214},
+  {name:"Gulnora Saidova",suz:"Biologiya",sru:"Биология",rating:4.9,years:15,certs:9,avg:91,votes:198},
+  {name:"Anvar Rustamov",suz:"Dasturlash",sru:"Программирование",rating:4.8,years:7,certs:6,avg:90,votes:176},
+  {name:"Madina Tosheva",suz:"Kimyo",sru:"Химия",rating:4.8,years:11,certs:7,avg:89,votes:162},
+  {name:"Botir Xolmatov",suz:"Ingliz tili",sru:"Английский язык",rating:4.7,years:9,certs:5,avg:88,votes:183},
+  {name:"Sherzod Qodirov",suz:"Frontend",sru:"Фронтенд",rating:4.6,years:5,certs:4,avg:87,votes:121}
+];
+const SCHOOL_ACH = [
+  {year:2022,uz:"Respublika informatika olimpiadasida 2 ta medal",ru:"Две медали на республиканской олимпиаде по информатике"},
+  {year:2023,uz:"«Yilning eng yaxshi xususiy maktabi» nominatsiyasi g‘olibi",ru:"Победитель номинации «Лучшая частная школа года»"},
+  {year:2024,uz:"18 nafar bitiruvchi davlat granti asosida universitetga kirdi",ru:"18 выпускников поступили в вузы на государственный грант"},
+  {year:2025,uz:"Bitiruvchilarning IELTS o‘rtacha natijasi — 7.0",ru:"Средний результат IELTS у выпускников — 7.0"},
+  {year:2026,uz:"Xalqaro robototexnika musobaqasida jamoaviy 1-o‘rin",ru:"1-е командное место на международных соревнованиях по робототехнике"}
+];
+const STUDENT_ACH = [
+  {name:"Aziza Karimova",year:2026,uz:"Respublika informatika olimpiadasi — oltin medal",ru:"Республиканская олимпиада по информатике — золотая медаль"},
+  {name:"Jasur Toshpulatov",year:2025,uz:"Biologiya fan olimpiadasi — kumush medal",ru:"Олимпиада по биологии — серебряная медаль"},
+  {name:"Malika Yusupova",year:2026,uz:"IELTS — 8.0 ball",ru:"IELTS — 8.0 баллов"},
+  {name:"Bekzod Rahimov",year:2025,uz:"Xalqaro robototexnika musobaqasi — 1-o‘rin",ru:"Международные соревнования по робототехнике — 1-е место"}
+];
+const NEWS = [
+  {d:"12.06.2026",tuz:"Maktab hayoti",tru:"Жизнь школы",uz:"Robototexnika to‘garagi yangi laboratoriyada ish boshladi",ru:"Кружок робототехники начал работу в новой лаборатории"},
+  {d:"28.05.2026",tuz:"Natijalar",tru:"Результаты",uz:"Bitiruvchilarning 96 foizi grant asosida o‘qishga kirdi",ru:"96% выпускников поступили на грант"},
+  {d:"15.04.2026",tuz:"Yutuqlar",tru:"Достижения",uz:"«Zakovat» intellektual o‘yinida maktab jamoasi g‘alaba qozondi",ru:"Команда школы победила в интеллектуальной игре «Zakovat»"},
+  {d:"02.03.2026",tuz:"Yangilik",tru:"Новости",uz:"MED yo‘nalishi uchun zamonaviy anatomiya kabineti ochildi",ru:"Открыт современный кабинет анатомии для направления MED"}
+];
+const HERO_STATS = [{v:"480+",k:"stat1"},{v:"32",k:"stat2"},{v:"96%",k:"stat3"},{v:"14",k:"stat4"}];
+const IT_TRACKS = {uz:["Frontend","Python","Robototexnika","Chuqur matematika"],ru:["Фронтенд","Python","Робототехника","Углублённая математика"]};
+const MED_TRACKS = {uz:["Biologiya","Kimyo","Anatomiya","DTM tayyorlov"],ru:["Биология","Химия","Анатомия","Подготовка к DTM"]};
+const RANK_STYLE = {1:{bg:"#EDB84C",fg:"#3A2B00"},2:{bg:"#D8E2DF",fg:"#26413C"},3:{bg:"#EDD0A9",fg:"#5C3A10"}};
+
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+
+let lang = "uz";
+let foundStudent = null, searched = false;
+
+function applyText(){
+  const t = T[lang];
+  $$("[data-t]").forEach(el=>{const v=t[el.dataset.t];if(v!=null)el.textContent=v;});
+  $$("[data-t-ph]").forEach(el=>{const v=t[el.dataset.tPh];if(v!=null)el.setAttribute("placeholder",v);});
+  document.documentElement.lang = lang;
+  $("#lang-uz").classList.toggle("on",lang==="uz");
+  $("#lang-ru").classList.toggle("on",lang==="ru");
+}
+
+function renderChips(){
+  const t=T[lang];
+  $("#it-chips").innerHTML = IT_TRACKS[lang].map(n=>`<span class="chip it">${esc(n)}</span>`).join("");
+  $("#med-chips").innerHTML = MED_TRACKS[lang].map(n=>`<span class="chip med">${esc(n)}</span>`).join("");
+}
+function renderHeroStats(){
+  const t=T[lang];
+  $("#hero-stats").innerHTML = HERO_STATS.map(s=>`<div><div class="v">${esc(s.v)}</div><div class="l">${esc(t[s.k])}</div></div>`).join("");
+}
+function renderLeaderboard(){
+  const t=T[lang];
+  const rows = STUDENTS.slice().sort((a,b)=>b.score-a.score);
+  $("#leaderboard").innerHTML = rows.map((s,i)=>{
+    const rk = RANK_STYLE[i+1] || {bg:"#ECE7D9",fg:"#5B7370"};
+    const trkCls = s.tr==="IT"?"it":"med";
+    return `<div class="lb-row" style="background:${i<3?'#FDFBF5':'transparent'}">
+      <div class="rank" style="background:${rk.bg};color:${rk.fg}">${i+1}</div>
+      <div><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.id)} · ${esc(t.grade(s.g))}</div></div>
+      <span class="trk ${trkCls}">${esc(s.tr)}</span>
+      <div class="lb-score"><div class="lb-bar"><i style="width:${s.score}%"></i></div><b>${s.score}</b></div>
+    </div>`;
+  }).join("");
+}
+function renderTeachers(){
+  const t=T[lang];
+  $("#teachers").innerHTML = TEACHERS.map(tc=>{
+    const full=Math.round(tc.rating);
+    const stars="★".repeat(full)+"☆".repeat(5-full);
+    return `<div class="tcard">
+      <div class="top">
+        <div class="avatar" aria-hidden="true">${esc(initials(tc.name))}</div>
+        <div><div class="nm">${esc(tc.name)}</div><div class="subj">${esc(lang==="uz"?tc.suz:tc.sru)}</div></div>
+      </div>
+      <div class="top" style="gap:10px">
+        <span class="stars" aria-hidden="true">${stars}</span>
+        <span class="rating">${tc.rating.toFixed(1)}</span>
+        <span class="votes">${tc.votes} ${esc(t.t_votes)}</span>
+      </div>
+      <div class="tstats">
+        <div><b>${tc.years}</b><span>${esc(t.t_years)}</span></div>
+        <div><b>${tc.certs}</b><span>${esc(t.t_certs)}</span></div>
+        <div><b>${tc.avg}%</b><span>${esc(t.t_avg)}</span></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+function renderAchievements(){
+  $("#school-ach").innerHTML = SCHOOL_ACH.map(a=>`
+    <div class="tl-item"><span class="dot"></span>
+      <span class="yr">${a.year}</span>
+      <span class="tx">${esc(lang==="uz"?a.uz:a.ru)}</span>
+    </div>`).join("");
+  $("#student-ach").innerHTML = STUDENT_ACH.map(a=>`
+    <div class="sa">
+      <div class="st" aria-hidden="true">★</div>
+      <div><div class="nm">${esc(a.name)}</div><div class="tx">${esc(lang==="uz"?a.uz:a.ru)}</div></div>
+      <span class="yr">${a.year}</span>
+    </div>`).join("");
+}
+function renderNews(){
+  const emblem = `<svg viewBox="0 0 40 49" fill="none" aria-hidden="true"><rect x="2" width="36" height="9" rx="2" fill="#FFFFFF"/><path d="M2 13H38v8.5L20 36.5 2 21.5Z" fill="#EDB84C"/><path d="M20 38.5l6 5.2-6 5.3-6-5.3Z" fill="#FFFFFF"/></svg>`;
+  $("#news").innerHTML = NEWS.map(n=>`
+    <article class="news">
+      <div class="thumb">${emblem}</div>
+      <div class="body">
+        <div class="row"><span class="tag">${esc(lang==="uz"?n.tuz:n.tru)}</span><span class="date">${esc(n.d)}</span></div>
+        <h3>${esc(lang==="uz"?n.uz:n.ru)}</h3>
+      </div>
+    </article>`).join("");
+}
+function renderDirs(){
+  $("#dir-select").innerHTML = T[lang].dirs.map(d=>`<option>${esc(d)}</option>`).join("");
+}
+function renderSearchResult(){
+  const t=T[lang], box=$("#search-result");
+  if(searched && !foundStudent){ box.innerHTML=`<div class="notfound">${esc(t.not_found)}</div>`; return; }
+  if(!foundStudent){ box.innerHTML=""; return; }
+  const s=foundStudent;
+  const rank = STUDENTS.slice().sort((a,b)=>b.score-a.score).findIndex(x=>x.id===s.id)+1;
+  const names=SUBJECTS[s.tr];
+  const subs=s.sc.map((v,i)=>`<div class="subrow"><span>${esc(names[i][lang])}</span><div class="sb"><i style="width:${v}%"></i></div><b>${v}</b></div>`).join("");
+  box.innerHTML=`<div class="found">
+    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fg">${esc(t.grade(s.g))} · ${esc(s.tr)}</div>
+    <div class="metrics">
+      <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
+      <div class="m"><b>${s.score}</b><span>${esc(t.res_total)}</span></div>
+      <div class="m"><b>${s.att}%</b><span>${esc(t.res_attendance)}</span></div>
+    </div>
+    <div class="subs-l">${esc(t.res_subjects)}</div>${subs}
+  </div>`;
+}
+
+function renderAll(){
+  applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
+  renderAchievements(); renderNews(); renderDirs(); renderSearchResult();
+}
+function setLang(l){
+  lang=l; try{localStorage.setItem("iqror-lang",l);}catch(e){}
+  renderAll();
+  try{if(window.IqrorFB&&window.IqrorFB.event)window.IqrorFB.event("lang_switch",{lang:l});}catch(e){}
+}
+
+/* events */
+$("#lang-uz").addEventListener("click",()=>setLang("uz"));
+$("#lang-ru").addEventListener("click",()=>setLang("ru"));
+$("#navtoggle").addEventListener("click",e=>{
+  const links=$("#navlinks");const open=links.classList.toggle("open");
+  e.currentTarget.setAttribute("aria-expanded",String(open));
+});
+$$("#navlinks a").forEach(a=>a.addEventListener("click",()=>{
+  $("#navlinks").classList.remove("open");$("#navtoggle").setAttribute("aria-expanded","false");
+}));
+$("#search-form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const q=$("#search-input").value.trim().toLowerCase();
+  if(!q){foundStudent=null;searched=false;renderSearchResult();return;}
+  const digits=q.replace(/\D/g,"");
+  foundStudent = STUDENTS.find(s=>
+    s.id.toLowerCase()===q ||
+    (digits.length>=4 && s.id.replace(/\D/g,"")===digits) ||
+    s.name.toLowerCase().includes(q)
+  )||null;
+  searched=true; renderSearchResult();
+  try{if(window.IqrorFB&&window.IqrorFB.event)window.IqrorFB.event("result_search",{found:!!foundStudent});}catch(e){}
+});
+$("#enroll-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const f=e.currentTarget;
+  const data={name:f.name.value.trim(),phone:f.phone.value.trim(),direction:f.direction.value,lang,ts:new Date().toISOString()};
+  const th=$("#form-thanks");
+  th.textContent=T[lang].f_thanks; th.hidden=false;
+  f.querySelector("button").disabled=true;
+  try{ if(window.IqrorFB&&window.IqrorFB.submitEnrollment) await window.IqrorFB.submitEnrollment(data); }catch(err){}
+  setTimeout(()=>{f.reset();f.querySelector("button").disabled=false;renderDirs();},2500);
+});
+
+/* init */
+(function init(){
+  try{const s=localStorage.getItem("iqror-lang");if(s==="uz"||s==="ru")lang=s;}catch(e){}
+  renderAll();
+})();
+</script>
+
+<!-- Firebase (ixtiyoriy): analitika + ariza (enrollment) larni Firestore ga saqlash. Oflaynda ilova baribir ishlaydi. -->
+<script type="module">
+  const firebaseConfig = {
+    apiKey:"AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
+    authDomain:"iqror-72879.firebaseapp.com",
+    projectId:"iqror-72879",
+    storageBucket:"iqror-72879.firebasestorage.app",
+    messagingSenderId:"1082381849678",
+    appId:"1:1082381849678:web:f9a657404b83ac88c71f1f",
+    measurementId:"G-LDD3BFGKVP"
+  };
+  const V="https://www.gstatic.com/firebasejs/10.12.5";
+  (async()=>{
+    let appMod,anMod,authMod,fsMod;
+    try{
+      appMod = await import(`${V}/firebase-app.js`);
+    }catch(e){ return; } // internet yo‘q — jimgina o‘tkazib yuboramiz
+    try{
+      const app = appMod.initializeApp(firebaseConfig);
+      import(`${V}/firebase-analytics.js`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
+      let db=null, auth=null;
+      try{ fsMod = await import(`${V}/firebase-firestore.js`); db = fsMod.getFirestore(app);}catch(e){}
+      try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app); authMod.signInAnonymously(auth).catch(()=>{});}catch(e){}
+      window.IqrorFB = {
+        event(name,params){ try{ if(window.__an){ import(`${V}/firebase-analytics.js`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); } }catch(e){} },
+        async submitEnrollment(data){
+          if(!db||!fsMod) return false;
+          try{ await fsMod.addDoc(fsMod.collection(db,"enrollments"), {...data, created: fsMod.serverTimestamp()}); return true; }
+          catch(e){ return false; }
+        }
+      };
+    }catch(e){ /* jimgina oflayn */ }
+  })();
+</script>
 </body>
 </html>

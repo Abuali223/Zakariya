@@ -1,44 +1,21 @@
-// sw.js — minimal, cross-origin (supabase.co) so'rovlariga tegmaydi
-const CACHE = 'arab-pwa-v9';  // <— versiyani har yangilashda oshiring
+// sw.js — migratsiya uchun: eski Arab Tili service worker keshini tozalaydi va o‘zini o‘chiradi.
+// Yangi Iqror IT MED School sayti (index.html) service worker ishlatmaydi; bu fayl faqat
+// avval ro‘yxatdan o‘tgan eski SW ni yangilab, eskirgan keshlangan sahifani ko‘rsatmasligi uchun.
+self.addEventListener('install', () => self.skipWaiting());
 
-const CORE = [
-  './',
-  './index.html',
-  './app.js',
-  './ai.js',
-  './config.js',
-  './manifest.json',
-  './assets/icons/icon-192.png',
-  './assets/icons/icon-512.png'
-];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)));
-  self.skipWaiting();
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    } catch (e) {}
+    try { await self.registration.unregister(); } catch (e) {}
+    try {
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((c) => c.navigate(c.url));
+    } catch (e) {}
+  })());
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', e => {
-  try {
-    const u = new URL(e.request.url);
-    // ⚠️ Tashqi domenlar (masalan, supabase.co) — umuman ushlamaymiz
-    if (u.origin !== location.origin) return;
-
-    // SPA navigatsiya fallback
-    if (e.request.mode === 'navigate') {
-      e.respondWith(caches.match('./index.html').then(r => r || fetch(e.request)));
-      return;
-    }
-
-    // Oddiy cache-first
-    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
-  } catch (_) {}
-});
+// Barcha so‘rovlarni tarmoqqa o‘tkazib yuboramiz (keshdan bermaymiz).
+self.addEventListener('fetch', () => {});
