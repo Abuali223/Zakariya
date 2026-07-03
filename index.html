@@ -843,6 +843,8 @@ $("#enroll-form").addEventListener("submit",async e=>{
         let role=null;
         try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()) role=ud.data().role; }catch(e){}
         setAuthUI({ name:user.displayName||user.email, role });
+        // Admin bo'lsa "Admin panel" havolasini ko'rsatamiz (token yangilanadi)
+        try{ const tok=await user.getIdTokenResult(true); const el=document.getElementById('auth-admin'); if(el) el.style.display=(tok.claims&&tok.claims.admin)?'inline-flex':'none'; }catch(e){}
         // Rol faqat shu sessiyada endi kirgan bo'lsa so'raladi (sahifa ochilishida avto emas)
         if(!role && justLoggedIn){ justLoggedIn=false; askRole(user); }
       });
@@ -854,6 +856,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
           <span id="auth-chip" style="display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600">
             <span id="auth-name"></span><span id="auth-role" class="chip it"></span>
             <button id="auth-pickrole" class="chip" style="display:none;cursor:pointer;border:1px solid var(--gold);background:var(--med-bg);color:var(--med-fg)">Rolni tanlang</button>
+            <a id="auth-admin" href="./admin.html" style="display:none;background:var(--gold);color:var(--teal);padding:8px 12px;border-radius:10px;font-weight:700;text-decoration:none">⚙️ Admin panel</a>
             <button id="auth-out" style="background:transparent;color:var(--ink);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer">Chiqish</button></span>`;
         nav.appendChild(w);
         document.getElementById('auth-login').onclick=openAuthModal;
