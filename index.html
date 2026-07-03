@@ -917,7 +917,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
             if(mode==='register'){
               const cred=await createUserWithEmailAndPassword(auth,email,pass);
               const nm=$m('am-name').value.trim(); if(nm){ try{ await updateProfile(cred.user,{displayName:nm}); }catch(e){} }
-              try{ await sendEmailVerification(cred.user); }catch(e){}
+              // Email tasdiqlash havolasi yuborilmaydi (chalkashlik oldini olish uchun) — tekshiruvni admin panelda "Tasdiqlangan" orqali qiladi
             } else { await signInWithEmailAndPassword(auth,email,pass); }
             bg.remove();
           }catch(e){
