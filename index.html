@@ -30,6 +30,10 @@
   h1,h2,h3{font-family:var(--serif);margin:0;text-wrap:balance}
   @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
   .reveal{animation:fadeUp .7s ease both}
+  /* Sahifalar (bo'limlar) almashinuvi uchun yumshoq o'tish */
+  @keyframes pageIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+  .page-enter{animation:pageIn .5s cubic-bezier(.22,.61,.36,1) both;will-change:opacity,transform}
+  @media(prefers-reduced-motion:reduce){.reveal,.page-enter{animation:none}}
   input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--teal-2);outline-offset:2px}
   .wrap{max-width:var(--wrap);margin:0 auto;padding-left:32px;padding-right:32px}
   .kicker{color:var(--teal-2);font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
@@ -760,7 +764,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
 const PAGES = ['top','yonalishlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa'];
-function route(){
+function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
   if(!PAGES.includes(h)) h='top';
@@ -771,9 +775,12 @@ function route(){
   });
   const nl=document.getElementById('navlinks'); if(nl) nl.classList.remove('open');
   const nt=document.getElementById('navtoggle'); if(nt) nt.setAttribute('aria-expanded','false');
-  window.scrollTo(0,0);
+  // Yangi ochilgan bo'limni yumshoq animatsiya bilan ko'rsatamiz
+  const cur=document.getElementById(h);
+  if(cur && animate){ cur.classList.remove('page-enter'); void cur.offsetWidth; cur.classList.add('page-enter'); }
+  window.scrollTo({top:0,left:0,behavior:animate?'smooth':'auto'});
 }
-addEventListener('hashchange', route);
+addEventListener('hashchange', ()=>route(true));
 
 /* init */
 (function init(){

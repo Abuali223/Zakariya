@@ -22,6 +22,9 @@
   html,body{margin:0}
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5}
   h1,h2,h3{font-family:var(--serif);margin:0}
+  @keyframes viewIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .view-enter{animation:viewIn .4s cubic-bezier(.22,.61,.36,1) both}
+  @media(prefers-reduced-motion:reduce){.view-enter{animation:none}}
   a{color:var(--teal)}
   input,select,textarea,button{font:inherit}
   input,select,textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-size:15px;background:#fff;color:var(--ink)}
@@ -295,6 +298,7 @@ function buildTabs(){
 function openTab(tab){
   currentTab=tab;
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
