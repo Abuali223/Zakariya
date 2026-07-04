@@ -96,6 +96,21 @@
   .search-inp{width:240px;max-width:100%;border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:14px;background:#fff;color:var(--ink)}
   .search-inp:focus{outline:2px solid var(--teal-2);outline-offset:1px;border-color:var(--teal-2)}
   td a{color:var(--teal);font-weight:600;text-decoration:none}
+  .btn.ghost2{background:#fff;border:1px solid var(--border);color:var(--ink);font-weight:600}
+  .btn.ghost2:hover{border-color:var(--teal-2);color:var(--teal)}
+  /* Statistika (dashboard) */
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .stat-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px}
+  .stat-card b{font-family:var(--serif);font-size:30px;font-weight:700;color:var(--teal);display:block;line-height:1.1}
+  .stat-card span{font-size:13px;color:var(--muted)}
+  .dash2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .bars{padding:16px 20px;display:flex;flex-direction:column;gap:13px}
+  .bar-row{display:grid;grid-template-columns:104px 1fr 34px;gap:12px;align-items:center;font-size:13.5px}
+  .bar-row .bar-lbl{color:var(--muted);font-weight:600}
+  .bar-row .bar{height:10px;background:var(--bg);border-radius:99px;overflow:hidden}
+  .bar-row .bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
+  .bar-row b{text-align:right}
+  @media(max-width:820px){ .stat-grid{grid-template-columns:1fr 1fr} .dash2{grid-template-columns:1fr} }
   /* Sinf bo'yicha kartochkalar (O'quvchilar) */
   .cls-card{margin-bottom:18px}
   .cls-card-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--border-2);flex-wrap:wrap}
@@ -186,7 +201,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
@@ -281,7 +296,7 @@ const SCHEMAS = {
 const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year']);
 
 /* ---- State ---- */
-let currentTab = 'students';
+let currentTab = 'dashboard';
 let cache = {};
 
 /* Bazada yo'q bo'lgan navbatdagi noyob ID yaratadi (masalan IQ-1013) */
@@ -348,6 +363,7 @@ $('#btn-pass').addEventListener('click',()=>{
 /* ---- Tabs ---- */
 function buildTabs(){
   const items = [
+    {k:'dashboard', icon:mi('M520-640v-160q0-17 11.5-28.5T560-840h240q17 0 28.5 11.5T840-800v160q0 17-11.5 28.5T800-600H560q-17 0-28.5-11.5T520-640ZM120-480v-320q0-17 11.5-28.5T160-840h240q17 0 28.5 11.5T440-800v320q0 17-11.5 28.5T400-440H160q-17 0-28.5-11.5T120-480Zm400 320v-320q0-17 11.5-28.5T560-520h240q17 0 28.5 11.5T840-480v320q0 17-11.5 28.5T800-120H560q-17 0-28.5-11.5T520-160ZM120-160v-160q0-17 11.5-28.5T160-360h240q17 0 28.5 11.5T440-320v160q0 17-11.5 28.5T400-120H160q-17 0-28.5-11.5T120-160Z'), t:'Statistika'},
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
@@ -360,6 +376,7 @@ function openTab(tab){
   currentTab=tab;
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
+  if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
@@ -393,11 +410,125 @@ function labelTable(){
 
 /* ---- O'quvchilar: sinf bo'yicha alohida kartochkalar ---- */
 function gradeName(g){ return Number(g)===0 ? 'Tayyorlov' : (Number(g)+'-sinf'); }
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+
+/* ---- CSV eksport / import ---- */
+function downloadCSV(filename, headers, rows){
+  const q=v=>{ v=String(v==null?'':v); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[headers.map(q).join(',')].concat(rows.map(r=>r.map(q).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},800);
+}
+function parseCSV(text){
+  const rows=[]; let field='',row=[],inQ=false;
+  text=String(text).replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; } else field+=ch; continue; }
+    if(ch==='"'){inQ=true;continue;}
+    if(ch===','){row.push(field);field='';continue;}
+    if(ch==='\n'){row.push(field);rows.push(row);row=[];field='';continue;}
+    field+=ch;
+  }
+  if(field.length||row.length){row.push(field);rows.push(row);}
+  return rows.filter(r=>r.some(c=>String(c).trim()!==''));
+}
+
+/* ---- Statistika (dashboard) ---- */
+async function renderDashboard(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Statistika</h2></div><div id="dash"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  let students=[],teachers=[],enrollments=[],users=[];
+  try{ [students,teachers,enrollments,users] = await Promise.all([
+    loadCol('students','order'), loadCol('teachers','order'),
+    loadCol('enrollments',null).catch(()=>[]), loadCol('users',null).catch(()=>[])
+  ]); cache.students=students; cache.teachers=teachers; }
+  catch(e){ $('#dash').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const n=students.length;
+  const avg=n?Math.round(students.reduce((s,x)=>s+(Number(x.score)||0),0)/n):0;
+  const avgAtt=n?Math.round(students.reduce((s,x)=>s+(Number(x.attendance)||0),0)/n):0;
+  const uz=students.filter(s=>(s.lang||'uz')==='uz').length, ru=n-uz;
+  const byGrade={}; students.forEach(s=>{const g=Number(s.grade)||0; byGrade[g]=(byGrade[g]||0)+1;});
+  const grades=Object.keys(byGrade).map(Number).sort((a,b)=>a-b);
+  const maxG=Math.max(1,...grades.map(g=>byGrade[g]));
+  const bars=grades.map(g=>`<div class="bar-row"><span class="bar-lbl">${g===0?'Tayyorlov':g+'-sinf'}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${byGrade[g]}</b></div>`).join('');
+  const roles={parent:0,student:0,teacher:0,admin:0}; users.forEach(u=>{ if(roles[u.role]!=null) roles[u.role]++; });
+  const stat=(v,l)=>`<div class="stat-card"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
+  const roleBar=(l,v)=>`<div class="bar-row"><span class="bar-lbl">${l}</span><div class="bar"><i style="width:${pct(v,Math.max(1,users.length))}%"></i></div><b>${v}</b></div>`;
+  $('#dash').innerHTML = `
+    <div class="stat-grid">
+      ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt+'%','O‘rtacha davomat')}
+      ${stat(uz,'O‘zbek sinf')}${stat(ru,'Rus sinf')}${stat(enrollments.length,'Arizalar')}${stat(users.length,'Foydalanuvchi')}
+    </div>
+    <div class="dash2">
+      <div class="card"><div class="cls-card-head"><h3>Sinflar bo‘yicha o‘quvchilar</h3></div><div class="bars">${bars||'<div class="empty">Ma’lumot yo‘q</div>'}</div></div>
+      <div class="card"><div class="cls-card-head"><h3>Foydalanuvchilar (rol bo‘yicha)</h3></div><div class="bars">
+        ${roleBar('Ota-ona',roles.parent)}${roleBar('O‘quvchi',roles.student)}${roleBar('O‘qituvchi',roles.teacher)}${roleBar('Administrator',roles.admin)}
+      </div></div>
+    </div>`;
+}
+
+/* ---- O'quvchilar eksport/import ---- */
+function exportStudents(rows){
+  if(!rows||!rows.length){ toast('Eksport uchun ma’lumot yo‘q',true); return; }
+  const headers=['ID','Ism','Ota-ona tel.','Til','Sinf','Guruh','Yo‘nalish','Ball','Davomat'];
+  const data=rows.map(r=>[r.studentId||r._id, r.name||'', r.parentPhone||'', (r.lang==='ru'?'Rus':'O‘zbek'), (Number(r.grade)||0), r.classLetter||'', r.track||'', r.score==null?'':r.score, r.attendance==null?'':r.attendance]);
+  downloadCSV('oquvchilar.csv', headers, data);
+  toast(data.length+' ta o‘quvchi eksport qilindi ✓');
+}
+async function importStudents(file){
+  let text; try{ text=await file.text(); }catch(e){ toast('Faylni o‘qib bo‘lmadi',true); return; }
+  const rows=parseCSV(text);
+  if(rows.length<2){ toast('Fayl bo‘sh yoki sarlavha yo‘q',true); return; }
+  const head=rows[0].map(h=>String(h).trim().toLowerCase());
+  const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
+  const iId=col('id'), iName=col('ism','name','f.i.o','fio'), iPhone=col('tel','phone','telefon'),
+        iLang=col('til','lang','язык'), iGrade=col('sinf','grade','класс'), iGrp=col('guruh','group','групп'),
+        iTrack=col('nalish','track','yo‘n','yo\'n','напр'), iScore=col('ball','score','балл'), iAtt=col('davomat','att','посещ');
+  if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
+  const existing=(cache['students']||[]).map(r=>String(r._id));
+  const acc=[]; const toWrite=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
+    let id=iId>=0?String(r[iId]||'').trim():'';
+    if(!id){ id=nextId(existing.concat(acc),'IQ-',4); }
+    acc.push(id);
+    const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
+    const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
+    const rec={ studentId:id, name,
+      parentPhone:iPhone>=0?String(r[iPhone]||'').trim():'',
+      lang, grade:iGrade>=0?(parseInt(r[iGrade],10)||0):0,
+      classLetter:iGrp>=0?String(r[iGrp]||'').trim():'',
+      track:iTrack>=0?String(r[iTrack]||'').trim():'',
+      score:iScore>=0?(Number(r[iScore])||0):0,
+      attendance:iAtt>=0?(Number(r[iAtt])||0):0, order:1000+i };
+    toWrite.push({id, data:rec});
+  }
+  if(!toWrite.length){ toast('Import uchun yozuv topilmadi',true); return; }
+  if(!confirm(toWrite.length+' ta o‘quvchi import qilinsinmi? Mavjud IDlar yangilanadi.')) return;
+  try{
+    for(let i=0;i<toWrite.length;i+=450){
+      const batch=writeBatch(db);
+      toWrite.slice(i,i+450).forEach(x=>batch.set(doc(db,'students',x.id), x.data, {merge:true}));
+      await batch.commit();
+    }
+    toast(toWrite.length+' ta o‘quvchi import qilindi ✓');
+    renderStudents();
+  }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); }
+}
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
-    <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off"><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
+      <button class="btn ghost2" id="stu-export">⬇ Eksport</button>
+      <button class="btn ghost2" id="stu-import">⬆ Import</button>
+      <input type="file" id="stu-file" accept=".csv,text/csv" style="display:none">
+      <button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   $('#add').addEventListener('click',()=>openForm('students',null));
+  $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
+  $('#stu-import').addEventListener('click',()=>$('#stu-file').click());
+  $('#stu-file').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.target.value=''; if(f) importStudents(f); });
   let rows;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
   catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
@@ -432,9 +563,10 @@ async function renderStudents(){
 async function renderCollection(name){
   const s = SCHEMAS[name];
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
-    <div class="ph-actions"><input id="col-search" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div class="ph-actions"><input id="col-search" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   $('#add').addEventListener('click',()=>openForm(name,null));
+  $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', s.cols.map(c=>c[1]), rr.map(r=>s.cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
   let rows;
   try{ rows = await loadCol(name, s.order); cache[name]=rows; }
   catch(e){ $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
