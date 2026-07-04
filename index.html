@@ -73,8 +73,6 @@
   .btn-cta{order:4}
   #auth-ui{order:5;display:flex;align-items:center;gap:8px;min-width:0}
   #auth-name{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
-  /* Katta ekranда kirgan foydalanuvchiда nav to'lib ketmasin: email va Ro'yxatdan tugmasi yashiriladi */
-  @media(min-width:1321px){ body.is-auth .btn-cta{display:none} body.is-auth #auth-name{display:none} }
   .navtoggle{order:6}
   /* Planshet/iPad va tor laptoplar: to'liq menyu hamburgerga yig'iladi (nav to'lib ketmaydi) */
   @media(max-width:1320px){
@@ -91,6 +89,22 @@
     #auth-ui{width:auto;flex-wrap:wrap;justify-content:center;gap:8px;padding:12px 24px 6px;border-top:1px solid var(--border-2)}
     #auth-chip{flex-wrap:wrap;justify-content:center}
     #auth-name{max-width:none}
+  }
+  /* Kirgan foydalanuvchi (og'ir chip) — istalgan kenglikda hamburger, nav toshib ketmaydi */
+  @media(min-width:1321px){
+    body.is-auth .nav-inner{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;position:relative}
+    body.is-auth .brand{justify-self:start}
+    body.is-auth .langsw{justify-self:center;margin:0}
+    body.is-auth .navtoggle{display:flex;justify-self:end}
+    body.is-auth .nav-drop{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:var(--bg);border-bottom:1px solid var(--border);box-shadow:0 14px 26px rgba(13,81,72,.10);padding:6px 0;gap:0;z-index:70}
+    body.is-auth .nav-drop.open{display:flex}
+    body.is-auth .nav-links{position:static;display:flex;flex-direction:column;gap:0;margin:0;width:100%;font-size:15.5px}
+    body.is-auth .nav-links a{padding:14px 24px;border-top:1px solid var(--border-2)}
+    body.is-auth .nav-links a:first-child{border-top:none}
+    body.is-auth .btn-cta{margin:12px 24px 6px;text-align:center;padding:13px;display:block}
+    body.is-auth #auth-ui{width:auto;flex-wrap:wrap;justify-content:center;gap:8px;padding:12px 24px 6px;border-top:1px solid var(--border-2)}
+    body.is-auth #auth-chip{flex-wrap:wrap;justify-content:center}
+    body.is-auth #auth-name{max-width:none;display:inline-block}
   }
 
   /* ---- HERO ---- */
@@ -221,6 +235,32 @@
   .vid-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden}
   .vid-frame iframe,.vid-frame video{position:absolute;inset:0;width:100%;height:100%;border:0}
   .vid-x{position:absolute;top:-44px;right:0;width:36px;height:36px;border-radius:50%;border:none;background:#fff;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center}
+  .vid-box.img{width:auto;max-width:min(94vw,1100px)}
+  .vid-img{display:block;max-width:100%;max-height:86vh;border-radius:12px;object-fit:contain}
+  /* Galereya */
+  .gallery-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .gitem{position:relative;margin:0;border-radius:14px;overflow:hidden;background:var(--it-bg);aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border)}
+  .gitem img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s}
+  .gitem:hover img{transform:scale(1.05)}
+  .gi-ph{width:100%;height:100%;display:grid;place-items:center;color:var(--muted);font-size:13px;padding:12px;text-align:center}
+  .gitem figcaption{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(12,30,24,.82));color:#fff;font-size:13px;font-weight:500;padding:22px 12px 10px;opacity:0;transition:opacity .2s}
+  .gitem:hover figcaption,.gitem:focus-visible figcaption{opacity:1}
+  @media(max-width:1000px){ .gallery-grid{grid-template-columns:repeat(3,1fr)} }
+  @media(max-width:640px){ .gallery-grid{grid-template-columns:repeat(2,1fr);gap:10px} }
+  /* Ota-onalar fikri */
+  .rev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .rev-card{margin:0;background:var(--white);border:1px solid var(--border);border-radius:18px;padding:26px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow)}
+  .rev-card .stars{color:var(--gold);font-size:16px;letter-spacing:2px}
+  .rev-card blockquote{margin:0;font-size:15.5px;line-height:1.6;color:var(--ink)}
+  .rev-by{display:flex;align-items:center;gap:12px;margin-top:auto}
+  .rev-av{width:48px;height:48px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:17px;color:var(--teal);background:var(--it-bg);overflow:hidden}
+  .rev-av.photo{background:none}
+  .rev-av img{width:100%;height:100%;object-fit:cover}
+  .rev-meta{display:flex;flex-direction:column;line-height:1.3;min-width:0}
+  .rev-meta b{font-size:15px;color:var(--ink)}
+  .rev-meta small{font-size:12.5px;color:var(--muted)}
+  @media(max-width:1000px){ .rev-grid{grid-template-columns:1fr 1fr} }
+  @media(max-width:640px){ .rev-grid{grid-template-columns:1fr} }
   .news .body{padding:20px 22px 24px;display:flex;flex-direction:column;gap:10px;flex:1}
   .news .row{display:flex;align-items:center;gap:10px}
   .news .tag{background:var(--it-bg);color:var(--teal);font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:999px}
@@ -420,6 +460,8 @@
           <a href="#oqituvchilar" data-t="nav_teachers"></a>
           <a href="#yutuqlar" data-t="nav_awards"></a>
           <a href="#hayot" data-t="nav_life"></a>
+          <a href="#galereya" data-t="nav_gallery"></a>
+          <a href="#fikrlar" data-t="nav_reviews"></a>
           <a href="#aloqa" data-t="nav_contact"></a>
         </div>
         <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
@@ -594,6 +636,30 @@
     </div>
   </section>
 
+  <!-- ================= GALEREYA ================= -->
+  <section id="galereya">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="g_kicker"></div>
+        <h2 data-t="g_title"></h2>
+        <p data-t="g_sub"></p>
+      </div>
+      <div class="gallery-grid" id="gallery"></div>
+    </div>
+  </section>
+
+  <!-- ================= OTA-ONALAR FIKRI ================= -->
+  <section id="fikrlar" class="band">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="rev_kicker"></div>
+        <h2 data-t="rev_title"></h2>
+        <p data-t="rev_sub"></p>
+      </div>
+      <div class="rev-grid" id="testimonials"></div>
+    </div>
+  </section>
+
   <!-- ================= ALOQA ================= -->
   <section id="aloqa" class="band">
     <div class="wrap contact-grid">
@@ -656,7 +722,7 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 
 const T = {
   uz:{
-    nav_courses:"Yo‘nalishlar",nav_results:"Natijalar",nav_teachers:"O‘qituvchilar",nav_awards:"Yutuqlar",nav_life:"Maktab hayoti",nav_contact:"Aloqa",
+    nav_courses:"Yo‘nalishlar",nav_results:"Natijalar",nav_teachers:"O‘qituvchilar",nav_awards:"Yutuqlar",nav_life:"Maktab hayoti",nav_gallery:"Galereya",nav_reviews:"Fikrlar",nav_contact:"Aloqa",
     cta_enroll:"Ro‘yxatdan o‘tish",
     hero_badge:"2026/27 o‘quv yiliga qabul ochiq",
     hero_title:"IT va MED yo‘nalishlarida kuchli maktab ta'limi",
@@ -688,6 +754,8 @@ const T = {
     a_school_title:"Maktab yutuqlari",a_students_title:"O‘quvchilar yutuqlari",
     life_kicker:"Maktab hayoti",life_title:"Yangiliklar va voqealar",
     life_sub:"Darslar, to‘garaklar, musobaqalar va bayramlar — maktabimiz hayotidan so‘nggi lavhalar.",
+    g_kicker:"Galereya",g_title:"Maktab hayotidan lavhalar",g_sub:"Darslar, tadbirlar, musobaqalar va sayohatlar — rasm va videolarda.",g_empty:"Galereya tez orada to‘ldiriladi.",
+    rev_kicker:"Fikrlar",rev_title:"Ota-onalar va o‘quvchilar fikri",rev_sub:"Bizga ishonch bildirgan oilalarning samimiy izohlari.",rev_empty:"Fikrlar tez orada qo‘shiladi.",
     c_kicker:"Aloqa",c_title:"Bizga qo‘shiling",
     c_sub:"Savollaringiz bo‘lsa qo‘ng‘iroq qiling yoki formani to‘ldiring — bir kun ichida bog‘lanamiz.",
     c_address_l:"Manzil",c_address_v:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",
@@ -747,7 +815,7 @@ const T = {
     grade:g=>g+"-sinf"
   },
   ru:{
-    nav_courses:"Направления",nav_results:"Результаты",nav_teachers:"Преподаватели",nav_awards:"Достижения",nav_life:"Жизнь школы",nav_contact:"Контакты",
+    nav_courses:"Направления",nav_results:"Результаты",nav_teachers:"Преподаватели",nav_awards:"Достижения",nav_life:"Жизнь школы",nav_gallery:"Галерея",nav_reviews:"Отзывы",nav_contact:"Контакты",
     cta_enroll:"Записаться",
     hero_badge:"Открыт набор на 2026/27 учебный год",
     hero_title:"Сильное школьное образование по направлениям IT и MED",
@@ -777,6 +845,8 @@ const T = {
     a_kicker:"Наша гордость",a_title:"Достижения школы и учеников",
     a_sub:"Каждое достижение — результат системного труда. Самые важные собраны здесь.",
     a_school_title:"Достижения школы",a_students_title:"Достижения учеников",
+    g_kicker:"Галерея",g_title:"Моменты школьной жизни",g_sub:"Уроки, мероприятия, соревнования и поездки — в фото и видео.",g_empty:"Галерея скоро будет наполнена.",
+    rev_kicker:"Отзывы",rev_title:"Отзывы родителей и учеников",rev_sub:"Искренние слова семей, доверившихся нам.",rev_empty:"Отзывы скоро появятся.",
     life_kicker:"Жизнь школы",life_title:"Новости и события",
     life_sub:"Уроки, кружки, соревнования и праздники — свежие кадры из жизни нашей школы.",
     c_kicker:"Контакты",c_title:"Присоединяйтесь",
@@ -906,6 +976,8 @@ let NEWS = [
   {d:"02.03.2026",tuz:"Yangilik",tru:"Новости",uz:"MED yo‘nalishi uchun zamonaviy anatomiya kabineti ochildi",ru:"Открыт современный кабинет анатомии для направления MED"}
 ];
 let HERO_STATS = [{v:"480+",k:"stat1"},{v:"32",k:"stat2"},{v:"96%",k:"stat3"},{v:"14",k:"stat4"}];
+let GALLERY = [];
+let TESTIMONIALS = [];
 let CONTACT = {address_uz:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",address_ru:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",phone:"+998 71 200 45 45",telegram:"@iqror_school",hours_uz:"Du–Sha, 8:00–18:00",hours_ru:"Пн–Сб, 8:00–18:00"};
 const IT_TRACKS = {uz:["Frontend","Python","Robototexnika","Chuqur matematika"],ru:["Фронтенд","Python","Робототехника","Углублённая математика"]};
 const MED_TRACKS = {uz:["Biologiya","Kimyo","Anatomiya","DTM tayyorlov"],ru:["Биология","Химия","Анатомия","Подготовка к DTM"]};
@@ -1026,6 +1098,51 @@ function renderNews(){
     el.addEventListener("click",open);
     el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
   });
+}
+function openImage(url){
+  const bg=document.createElement("div"); bg.className="vid-modal";
+  bg.innerHTML=`<div class="vid-box img"><button class="vid-x" aria-label="Yopish">×</button><img class="vid-img" src="${esc(url)}" alt=""></div>`;
+  document.body.appendChild(bg);
+  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); };
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
+  bg.querySelector(".vid-x").onclick=close;
+  document.addEventListener("keydown",onKey);
+}
+function renderGallery(){
+  const t=T[lang], box=$("#gallery"); if(!box) return;
+  if(!GALLERY.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.g_empty)}</div>`; return; }
+  const play=`<span class="play-btn" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>`;
+  box.innerHTML = GALLERY.map(m=>{
+    const yt=ytId(m.video), isVid=!!m.video;
+    const thumb = m.img || (yt?`https://img.youtube.com/vi/${yt}/hqdefault.jpg`:"");
+    const cap=(lang==="uz"?m.cap_uz:m.cap_ru)||m.cap_uz||"";
+    const media = thumb ? `<img src="${esc(thumb)}" alt="${esc(cap)}" loading="lazy">` : `<div class="gi-ph">${esc(cap||"")}</div>`;
+    return `<figure class="gitem${isVid?" has-video":""}"${isVid?` data-video="${esc(m.video)}"`:(m.img?` data-img="${esc(m.img)}"`:"")} role="button" tabindex="0">
+      ${media}${isVid?play:""}${cap?`<figcaption>${esc(cap)}</figcaption>`:""}
+    </figure>`;
+  }).join("");
+  box.querySelectorAll(".gitem").forEach(el=>{
+    const open=()=>{ if(el.dataset.video) openVideo(el.dataset.video); else if(el.dataset.img) openImage(el.dataset.img); };
+    el.addEventListener("click",open);
+    el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  });
+}
+function renderTestimonials(){
+  const t=T[lang], box=$("#testimonials"); if(!box) return;
+  if(!TESTIMONIALS.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.rev_empty)}</div>`; return; }
+  box.innerHTML = TESTIMONIALS.map(r=>{
+    const full=Math.max(0,Math.min(5,Math.round(Number(r.rating)||5)));
+    const stars="★".repeat(full)+"☆".repeat(5-full);
+    const role=(lang==="uz"?r.role_uz:r.role_ru)||r.role_uz||"";
+    const text=(lang==="uz"?r.text_uz:r.text_ru)||r.text_uz||"";
+    const av = r.photo?`<span class="rev-av photo"><img src="${esc(r.photo)}" alt=""></span>`:`<span class="rev-av">${esc(initials(r.name||"?"))}</span>`;
+    return `<figure class="rev-card">
+      <div class="stars" aria-hidden="true">${stars}</div>
+      <blockquote>${esc(text)}</blockquote>
+      <figcaption class="rev-by">${av}<span class="rev-meta"><b>${esc(r.name||"")}</b><small>${esc(role)}</small></span></figcaption>
+    </figure>`;
+  }).join("");
 }
 function renderDirs(){
   $("#dir-select").innerHTML = T[lang].dirs.map(d=>`<option>${esc(d)}</option>`).join("");
@@ -1263,7 +1380,7 @@ function renderContact(){
 function renderAll(){
   applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
   renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
-  renderClsControls(); renderClsResults();
+  renderClsControls(); renderClsResults(); renderGallery(); renderTestimonials();
 }
 // Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
 window.IqrorPublic = {
@@ -1271,6 +1388,8 @@ window.IqrorPublic = {
     if(Array.isArray(d.students)) STUDENTS = d.students;
     if(Array.isArray(d.teachers)) TEACHERS = d.teachers;
     if(Array.isArray(d.news)) NEWS = d.news;
+    if(Array.isArray(d.gallery)) GALLERY = d.gallery;
+    if(Array.isArray(d.testimonials)) TESTIMONIALS = d.testimonials;
     if(Array.isArray(d.schoolAch)) SCHOOL_ACH = d.schoolAch;
     if(Array.isArray(d.studentAch)) STUDENT_ACH = d.studentAch;
     if(d.stats){ HERO_STATS[0].v=d.stats.students??HERO_STATS[0].v; HERO_STATS[1].v=d.stats.teachers??HERO_STATS[1].v; HERO_STATS[2].v=d.stats.uni??HERO_STATS[2].v; HERO_STATS[3].v=d.stats.awards??HERO_STATS[3].v; }
@@ -1324,7 +1443,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
-const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa','kabinet'];
+const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','galereya','fikrlar','aloqa','kabinet'];
 function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
@@ -1393,8 +1512,9 @@ addEventListener('hashchange', ()=>route(true));
       const { collection, getDocs, query, orderBy, doc, getDoc } = fsMod;
       const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
       try{
-        const [stu,tea,nw,asch,astu,setSnap] = await Promise.all([
+        const [stu,tea,nw,asch,astu,gal,rev,setSnap] = await Promise.all([
           getDocs(collection(db,'students')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
+          ord('gallery'), ord('testimonials'),
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
@@ -1408,6 +1528,10 @@ addEventListener('hashchange', ()=>route(true));
         if(sa.length) p.schoolAch = sa;
         const sta = astu.docs.map(d=>{const x=d.data();return {name:x.name,year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
         if(sta.length) p.studentAch = sta;
+        const gallery = gal.docs.map(d=>{const x=d.data();return {img:x.image||"",video:x.video||"",cap_uz:x.caption_uz||"",cap_ru:x.caption_ru||x.caption_uz||""};});
+        if(gallery.length) p.gallery = gallery;
+        const testimonials = rev.docs.map(d=>{const x=d.data();return {name:x.name,role_uz:x.role_uz||"",role_ru:x.role_ru||x.role_uz||"",photo:x.photo||"",text_uz:x.text_uz||"",text_ru:x.text_ru||x.text_uz||"",rating:Number(x.rating)||5};});
+        if(testimonials.length) p.testimonials = testimonials;
         const setd = setSnap.exists()?setSnap.data():{};
         if(setd.stats) p.stats = setd.stats;
         if(setd.contact) p.contact = setd.contact;

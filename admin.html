@@ -392,6 +392,31 @@ const SCHEMAS = {
       {k:'text_ru',l:'Matn (RU)',t:'textarea'},
       {k:'order',l:'Tartib',t:'number'}
     ]
+  },
+  gallery: {
+    title:'Galereya', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Z'), order:'order',
+    cols:[['caption_uz','Izoh'],['order','Tartib']],
+    fields:[
+      {k:'image',l:'Rasm (foto)',t:'image'},
+      {k:'video',l:'Video (YouTube havolasi yoki fayl)',t:'video'},
+      {k:'caption_uz',l:'Izoh (UZ)',t:'text'},
+      {k:'caption_ru',l:'Izoh (RU)',t:'text'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
+  },
+  testimonials: {
+    title:'Ota-onalar fikri', icon:mi('M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Z'), order:'order',
+    cols:[['name','Ism'],['role_uz','Kim'],['rating','Baho']],
+    fields:[
+      {k:'name',l:'Ism-familiya',t:'text',req:true},
+      {k:'photo',l:'Rasm (foto)',t:'image'},
+      {k:'role_uz',l:'Kim (UZ) — masalan: 11-sinf o‘quvchisi otasi',t:'text'},
+      {k:'role_ru',l:'Kim (RU)',t:'text'},
+      {k:'text_uz',l:'Fikr (UZ)',t:'textarea',req:true},
+      {k:'text_ru',l:'Fikr (RU)',t:'textarea'},
+      {k:'rating',l:'Baho (1–5)',t:'number',step:'1'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
   }
 };
 const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year']);

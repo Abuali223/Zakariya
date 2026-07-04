@@ -26,6 +26,14 @@ service cloud.firestore {
     match /timetable/{id}             { allow read: if true; allow write: if isAdmin(); }
     match /homework/{id}              { allow read: if true; allow write: if isAdmin(); }
 
+    // Qo'shimcha kontent: galereya, fikrlar, narxlar, qabul bosqichlari, FAQ, tadbirlar.
+    match /gallery/{id}               { allow read: if true; allow write: if isAdmin(); }
+    match /testimonials/{id}          { allow read: if true; allow write: if isAdmin(); }
+    match /plans/{id}                 { allow read: if true; allow write: if isAdmin(); }
+    match /admission_steps/{id}       { allow read: if true; allow write: if isAdmin(); }
+    match /faq/{id}                   { allow read: if true; allow write: if isAdmin(); }
+    match /events/{id}                { allow read: if true; allow write: if isAdmin(); }
+
     // Arizalar: istalgan foydalanuvchi yuboradi (create), faqat admin o'qiydi/o'chiradi.
     match /enrollments/{id} {
       allow create: if request.resource.data.name is string
