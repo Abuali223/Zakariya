@@ -274,7 +274,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -429,12 +429,20 @@ $('#login-form').addEventListener('submit', async e=>{
     $('#login-err').textContent=m; $('#login-err').style.display='block';
   }finally{ btn.disabled=false; btn.textContent='Email bilan kirish'; }
 });
-$('#google-btn').addEventListener('click', ()=>{
+// Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
+async function googleSignIn(){
+  const prov=new GoogleAuthProvider(), ua=navigator.userAgent;
+  const redirectPref = /iP(hone|ad|od)/.test(ua) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1) || /^((?!chrome|crios|fxios|edg|android).)*safari/i.test(ua);
+  if(redirectPref) return signInWithRedirect(auth, prov);
+  try{ return await signInWithPopup(auth, prov); }
+  catch(e){ const c=(e&&e.code)||''; if(c.includes('popup')||c.includes('blocked')||c.includes('cancelled')) return signInWithRedirect(auth, prov); throw e; }
+}
+getRedirectResult(auth).catch(()=>{});
+$('#google-btn').addEventListener('click', async ()=>{
   loginAttempted=true;
   $('#login-err').style.display='none';
-  signInWithPopup(auth, new GoogleAuthProvider()).catch(err=>{
-    $('#login-err').textContent='Google kirishda xatolik: '+(err.code||err.message); $('#login-err').style.display='block';
-  });
+  try{ await googleSignIn(); }
+  catch(err){ $('#login-err').textContent='Google kirishda xatolik: '+(err.code||err.message); $('#login-err').style.display='block'; }
 });
 
 onAuthStateChanged(auth, async user=>{

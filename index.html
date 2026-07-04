@@ -1452,10 +1452,24 @@ addEventListener('hashchange', ()=>route(true));
 
     // ---- Foydalanuvchi kirishi (email yoki Gmail) + rol ----
     if(auth && authMod && fsMod){
-      const { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
+      const { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut,
               createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } = authMod;
       const { doc, getDoc, setDoc, serverTimestamp } = fsMod;
       let justLoggedIn = false, currentUser = null, childIds = [], activeChild = '';
+      // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
+      async function googleSignIn(){
+        const prov=new GoogleAuthProvider(), ua=navigator.userAgent;
+        const redirectPref = /iP(hone|ad|od)/.test(ua) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1) || /^((?!chrome|crios|fxios|edg|android).)*safari/i.test(ua);
+        if(redirectPref) return signInWithRedirect(auth, prov);
+        try{ return await signInWithPopup(auth, prov); }
+        catch(e){ const c=(e&&e.code)||''; if(c.includes('popup')||c.includes('blocked')||c.includes('cancelled')) return signInWithRedirect(auth, prov); throw e; }
+      }
+      // Redirect orqali qaytganda natijani yakunlaymiz; yangi foydalanuvchidan rol so'raymiz.
+      getRedirectResult(auth).then(async res=>{
+        if(res && res.user){ justLoggedIn=true;
+          try{ const ud=await getDoc(doc(db,'users',res.user.uid)); if(!ud.exists() || !ud.data().role) askRole(res.user); }catch(e){}
+        }
+      }).catch(()=>{});
       const kabRefresh=()=>{ if(location.hash==='#kabinet' && window.IqrorPublic && window.IqrorPublic.renderKabinet) window.IqrorPublic.renderKabinet(); };
       // Bir oiladan bir nechta farzand: childIds — barcha farzand ID lari, activeChild — hozir ko'rilayotgani.
       async function persistChildren(){ if(currentUser){ await setDoc(doc(db,'users',currentUser.uid),{childIds:childIds.slice(),activeChildId:activeChild,childId:activeChild},{merge:true}); } }
@@ -1554,7 +1568,7 @@ addEventListener('hashchange', ()=>route(true));
           $m('am-toggle').textContent = mode==='login'?' Ro‘yxatdan o‘tish':' Kirish';
           $m('am-err').style.display='none';
         };
-        $m('am-google').onclick=()=>{ justLoggedIn=true; signInWithPopup(auth,new GoogleAuthProvider())
+        $m('am-google').onclick=()=>{ justLoggedIn=true; googleSignIn()
           .then(()=>bg.remove()).catch(e=>{ justLoggedIn=false; showErr('Google: '+(e.code||e.message)); }); };
         $m('am-submit').onclick=async()=>{
           const email=$m('am-email').value.trim(), pass=$m('am-pass').value;
