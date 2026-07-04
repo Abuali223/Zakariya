@@ -417,9 +417,57 @@ const SCHEMAS = {
       {k:'rating',l:'Baho (1–5)',t:'number',step:'1'},
       {k:'order',l:'Tartib',t:'number'}
     ]
+  },
+  plans: {
+    title:'Narxlar (tariflar)', icon:mi('M856-390 570-104q-12 12-27 18t-30 6q-15 0-30-6t-27-18L103-457q-11-11-17.5-25.5T79-513v-287q0-33 23.5-56.5T159-880h287q16 0 31 6.5t26 17.5l353 354q12 12 17.5 27t5.5 30q0 15-6 29.5T856-390ZM260-620q25 0 42.5-17.5T320-680q0-25-17.5-42.5T260-740q-25 0-42.5 17.5T200-680q0 25 17.5 42.5T260-620Z'), order:'order',
+    cols:[['name_uz','Reja'],['price','Narx (so‘m/oy)'],['featured','Ommabop'],['order','Tartib']],
+    fields:[
+      {k:'name_uz',l:'Reja nomi (UZ)',t:'text',req:true},
+      {k:'name_ru',l:'Reja nomi (RU)',t:'text'},
+      {k:'price',l:'Narx (masalan: 3 200 000)',t:'text',req:true},
+      {k:'featured',l:'Ommabop qilib ajratilsinmi?',t:'select',opts:[{v:'',l:'Yo‘q'},{v:'Ha',l:'Ha'}]},
+      {k:'features_uz',l:'Imkoniyatlar (UZ) — har birini yangi qatordan yozing',t:'textarea'},
+      {k:'features_ru',l:'Imkoniyatlar (RU) — har birini yangi qatordan yozing',t:'textarea'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
+  },
+  admission_steps: {
+    title:'Qabul bosqichlari', icon:mi('M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z'), order:'order',
+    cols:[['num','№'],['title_uz','Bosqich'],['order','Tartib']],
+    fields:[
+      {k:'num',l:'Raqam (1, 2, 3, 4)',t:'number',req:true},
+      {k:'title_uz',l:'Bosqich nomi (UZ)',t:'text',req:true},
+      {k:'title_ru',l:'Bosqich nomi (RU)',t:'text'},
+      {k:'text_uz',l:'Tavsif (UZ)',t:'textarea'},
+      {k:'text_ru',l:'Tavsif (RU)',t:'textarea'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
+  },
+  faq: {
+    title:'Savol-javob (FAQ)', icon:mi('M478-240q21 0 35.5-14.5T528-290q0-21-14.5-35.5T478-340q-21 0-35.5 14.5T428-290q0 21 14.5 35.5T478-240Zm-36-154h74q0-33 7.5-52t42.5-52q26-26 41-49.5t15-56.5q0-56-41-86t-97-30q-57 0-92.5 30T342-618l66 26q5-18 22.5-39t53.5-21q32 0 48 17.5t16 38.5q0 20-12 37.5T506-513q-44 39-54 59t-10 60Zm38 314q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z'), order:'order',
+    cols:[['q_uz','Savol'],['order','Tartib']],
+    fields:[
+      {k:'q_uz',l:'Savol (UZ)',t:'text',req:true},
+      {k:'q_ru',l:'Savol (RU)',t:'text'},
+      {k:'a_uz',l:'Javob (UZ)',t:'textarea',req:true},
+      {k:'a_ru',l:'Javob (RU)',t:'textarea'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
+  },
+  events: {
+    title:'O‘quv taqvimi (tadbirlar)', icon:mi('M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-160 0q-17 0-28.5-11.5T280-440q0-17 11.5-28.5T320-480q17 0 28.5 11.5T360-440q0 17-11.5 28.5T320-400Zm320 0q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400Z'), order:'order',
+    cols:[['date','Sana'],['title_uz','Tadbir'],['order','Tartib']],
+    fields:[
+      {k:'date',l:'Sana (2026-09-01 ko‘rinishida)',t:'text',req:true},
+      {k:'title_uz',l:'Tadbir nomi (UZ)',t:'text',req:true},
+      {k:'title_ru',l:'Tadbir nomi (RU)',t:'text'},
+      {k:'desc_uz',l:'Tavsif (UZ)',t:'textarea'},
+      {k:'desc_ru',l:'Tavsif (RU)',t:'textarea'},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
   }
 };
-const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year']);
+const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num']);
 
 /* ---- State ---- */
 let currentTab = 'dashboard';

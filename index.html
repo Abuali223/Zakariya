@@ -261,6 +261,64 @@
   .rev-meta small{font-size:12.5px;color:var(--muted)}
   @media(max-width:1000px){ .rev-grid{grid-template-columns:1fr 1fr} }
   @media(max-width:640px){ .rev-grid{grid-template-columns:1fr} }
+  /* ---- Bo'lim ichidagi kichik sarlavha (sub-head) ---- */
+  .sub-head{max-width:640px;margin:60px auto 26px;text-align:center}
+  .sub-head:first-child{margin-top:0}
+  .sub-head h3{font-family:var(--serif);font-weight:300;font-size:29px;color:var(--ink);margin:8px 0}
+  .sub-head p{font-size:15.5px;line-height:1.6;color:var(--muted);margin:0}
+  .sub-head .kicker{justify-content:center}
+  /* ---- QABUL: bosqichlar ---- */
+  .adm-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .adm-step{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;box-shadow:var(--shadow)}
+  .adm-num{width:42px;height:42px;border-radius:12px;background:var(--it-bg);color:var(--teal);font-weight:700;font-size:19px;display:grid;place-items:center;margin-bottom:14px}
+  .adm-c h4{font-size:17px;font-weight:700;color:var(--ink);margin:0 0 6px}
+  .adm-c p{font-size:14px;line-height:1.55;color:var(--muted);margin:0}
+  /* ---- QABUL: narxlar ---- */
+  .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+  .price-card{background:var(--white);border:1px solid var(--border);border-radius:18px;padding:30px 24px;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+  .price-card.featured{border-color:var(--gold);box-shadow:0 16px 42px rgba(207,162,76,.20)}
+  .price-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--on-gold);font-size:12px;font-weight:700;padding:5px 15px;border-radius:999px;white-space:nowrap}
+  .price-name{font-size:14px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--teal)}
+  .price-amt{margin:12px 0 20px;display:flex;align-items:baseline;gap:6px}
+  .price-amt b{font-family:var(--serif);font-weight:400;font-size:34px;color:var(--ink);line-height:1}
+  .price-amt span{font-size:14px;color:var(--muted)}
+  .price-feat{list-style:none;margin:0 0 22px;padding:0;display:flex;flex-direction:column;gap:11px;flex:1}
+  .price-feat li{position:relative;padding-left:26px;font-size:14.5px;line-height:1.45;color:var(--ink)}
+  .price-feat li::before{content:"✓";position:absolute;left:0;top:0;color:var(--teal);font-weight:700}
+  .price-cta{display:block;text-align:center;background:var(--it-bg);color:var(--teal);font-weight:700;padding:12px;border-radius:12px;text-decoration:none;transition:.15s}
+  .price-cta:hover{background:var(--teal);color:#fff}
+  .price-card.featured .price-cta{background:var(--gold);color:var(--on-gold)}
+  .price-card.featured .price-cta:hover{background:var(--gold-d)}
+  /* ---- QABUL: hujjatlar ---- */
+  .qab-docs{background:var(--it-bg);border-radius:20px;padding:32px 30px;margin-top:56px}
+  .doc-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:13px 34px}
+  .doc-list li{position:relative;padding-left:30px;font-size:15px;line-height:1.5;color:var(--ink)}
+  .doc-list li::before{content:"📄";position:absolute;left:0;top:0}
+  .doc-note{margin:22px 0 0;font-size:14px;color:var(--muted)}
+  /* ---- QABUL: FAQ ---- */
+  .faq-list{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  .faq-item{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:border-color .15s}
+  .faq-item.open{border-color:var(--teal-2)}
+  .faq-q{width:100%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;text-align:left;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink)}
+  .faq-ic{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--it-bg);color:var(--teal);font-size:18px;line-height:1;display:grid;place-items:center;transition:.2s}
+  .faq-item.open .faq-ic{background:var(--teal);color:#fff;transform:rotate(45deg)}
+  .faq-a{padding:0 22px 18px}
+  .faq-a p{margin:0;font-size:15px;line-height:1.6;color:var(--muted)}
+  /* ---- O'quv taqvimi (tadbirlar) ---- */
+  .ev-list{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .ev-item{display:flex;gap:16px;align-items:flex-start;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+  .ev-date{flex:0 0 auto;width:60px;text-align:center;background:var(--med-bg);border-radius:12px;padding:9px 0}
+  .ev-date b{display:block;font-family:var(--serif);font-size:24px;color:var(--med-fg);line-height:1.05}
+  .ev-date span{font-size:11.5px;font-weight:700;color:var(--med-fg);text-transform:uppercase;letter-spacing:.03em}
+  .ev-body h4{margin:0 0 5px;font-size:16px;font-weight:700;color:var(--ink)}
+  .ev-body p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+  @media(max-width:900px){
+    .adm-steps{grid-template-columns:1fr 1fr}
+    .price-grid{grid-template-columns:1fr}
+    .doc-list{grid-template-columns:1fr}
+    .ev-list{grid-template-columns:1fr}
+  }
+  @media(max-width:560px){ .adm-steps{grid-template-columns:1fr} }
   .news .body{padding:20px 22px 24px;display:flex;flex-direction:column;gap:10px;flex:1}
   .news .row{display:flex;align-items:center;gap:10px}
   .news .tag{background:var(--it-bg);color:var(--teal);font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:999px}
@@ -462,6 +520,7 @@
           <a href="#hayot" data-t="nav_life"></a>
           <a href="#galereya" data-t="nav_gallery"></a>
           <a href="#fikrlar" data-t="nav_reviews"></a>
+          <a href="#qabul" data-t="nav_admission"></a>
           <a href="#aloqa" data-t="nav_contact"></a>
         </div>
         <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
@@ -633,6 +692,8 @@
         <p data-t="life_sub"></p>
       </div>
       <div class="cards-4" id="news"></div>
+      <div class="sub-head"><div class="kicker" data-t="ev_kicker"></div><h3 data-t="ev_title"></h3><p data-t="ev_sub"></p></div>
+      <div class="ev-list" id="events"></div>
     </div>
   </section>
 
@@ -657,6 +718,28 @@
         <p data-t="rev_sub"></p>
       </div>
       <div class="rev-grid" id="testimonials"></div>
+    </div>
+  </section>
+
+  <!-- ================= QABUL VA NARXLAR ================= -->
+  <section id="qabul">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="qab_kicker"></div>
+        <h2 data-t="qab_title"></h2>
+        <p data-t="qab_sub"></p>
+      </div>
+      <div class="sub-head" style="margin-top:0"><div class="kicker" data-t="adm_kicker"></div><h3 data-t="adm_title"></h3><p data-t="adm_sub"></p></div>
+      <div class="adm-steps" id="adm-steps"></div>
+      <div class="sub-head"><div class="kicker" data-t="price_kicker"></div><h3 data-t="price_title"></h3><p data-t="price_sub"></p></div>
+      <div class="price-grid" id="plans"></div>
+      <div class="qab-docs">
+        <div class="sub-head" style="margin:0 0 20px"><div class="kicker" data-t="doc_kicker"></div><h3 data-t="doc_title"></h3></div>
+        <ul class="doc-list" id="docs"></ul>
+        <p class="doc-note" data-t="doc_note"></p>
+      </div>
+      <div class="sub-head"><div class="kicker" data-t="faq_kicker"></div><h3 data-t="faq_title"></h3><p data-t="faq_sub"></p></div>
+      <div class="faq-list" id="faq"></div>
     </div>
   </section>
 
@@ -722,7 +805,7 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 
 const T = {
   uz:{
-    nav_courses:"Yo‘nalishlar",nav_results:"Natijalar",nav_teachers:"O‘qituvchilar",nav_awards:"Yutuqlar",nav_life:"Maktab hayoti",nav_gallery:"Galereya",nav_reviews:"Fikrlar",nav_contact:"Aloqa",
+    nav_courses:"Yo‘nalishlar",nav_results:"Natijalar",nav_teachers:"O‘qituvchilar",nav_awards:"Yutuqlar",nav_life:"Maktab hayoti",nav_gallery:"Galereya",nav_reviews:"Fikrlar",nav_admission:"Qabul",nav_contact:"Aloqa",
     cta_enroll:"Ro‘yxatdan o‘tish",
     hero_badge:"2026/27 o‘quv yiliga qabul ochiq",
     hero_title:"IT va MED yo‘nalishlarida kuchli maktab ta'limi",
@@ -756,6 +839,15 @@ const T = {
     life_sub:"Darslar, to‘garaklar, musobaqalar va bayramlar — maktabimiz hayotidan so‘nggi lavhalar.",
     g_kicker:"Galereya",g_title:"Maktab hayotidan lavhalar",g_sub:"Darslar, tadbirlar, musobaqalar va sayohatlar — rasm va videolarda.",g_empty:"Galereya tez orada to‘ldiriladi.",
     rev_kicker:"Fikrlar",rev_title:"Ota-onalar va o‘quvchilar fikri",rev_sub:"Bizga ishonch bildirgan oilalarning samimiy izohlari.",rev_empty:"Fikrlar tez orada qo‘shiladi.",
+    ev_kicker:"O‘quv taqvimi",ev_title:"Yaqin tadbirlar",ev_sub:"Ochiq eshiklar kuni, imtihonlar va bayramlar — muhim sanalarni belgilab qo‘ying.",ev_empty:"Yaqin tadbirlar tez orada e'lon qilinadi.",
+    qab_kicker:"Qabul 2026/27",qab_title:"Qabul va narxlar",qab_sub:"Ariza berishdan o‘qishni boshlashgacha — bosqichlar, narxlar va kerakli hujjatlar bir sahifada.",
+    adm_kicker:"Qanday qabul qilamiz",adm_title:"Qabul bosqichlari",adm_sub:"To‘rt oddiy qadam — aloqadan o‘quv shartnomasigacha.",
+    price_kicker:"Narxlar",price_title:"O‘quv to‘lovi rejalari",price_sub:"Har bir reja to‘liq kunlik ta'lim, ovqatlanish va to‘garaklarni o‘z ichiga oladi. Yillik to‘lovda chegirma mavjud.",
+    price_cur:"so‘m",price_month:"/oy",price_popular:"Ommabop",price_cta:"Ariza qoldirish",
+    doc_kicker:"Hujjatlar",doc_title:"Qabul uchun kerakli hujjatlar",
+    docs:["Bola tug‘ilganlik guvohnomasi (nusxa)","Ota-ona pasporti (nusxa)","3×4 o‘lchamdagi 4 dona rasm","Oldingi maktabdan ma'lumotnoma (ko‘chib o‘tishda)","Tibbiy karta (086/U yoki 026/U)","To‘ldirilgan qabul arizasi"],
+    doc_note:"Barcha hujjatlarni qabul komissiyasiga asl nusxasi bilan olib keling.",
+    faq_kicker:"Savol-javob",faq_title:"Ko‘p beriladigan savollar",faq_sub:"Eng ko‘p so‘raladigan savollarga javoblar. Javob topolmasangiz — bizga qo‘ng‘iroq qiling.",faq_empty:"Savollar tez orada qo‘shiladi.",
     c_kicker:"Aloqa",c_title:"Bizga qo‘shiling",
     c_sub:"Savollaringiz bo‘lsa qo‘ng‘iroq qiling yoki formani to‘ldiring — bir kun ichida bog‘lanamiz.",
     c_address_l:"Manzil",c_address_v:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",
@@ -815,7 +907,7 @@ const T = {
     grade:g=>g+"-sinf"
   },
   ru:{
-    nav_courses:"Направления",nav_results:"Результаты",nav_teachers:"Преподаватели",nav_awards:"Достижения",nav_life:"Жизнь школы",nav_gallery:"Галерея",nav_reviews:"Отзывы",nav_contact:"Контакты",
+    nav_courses:"Направления",nav_results:"Результаты",nav_teachers:"Преподаватели",nav_awards:"Достижения",nav_life:"Жизнь школы",nav_gallery:"Галерея",nav_reviews:"Отзывы",nav_admission:"Приём",nav_contact:"Контакты",
     cta_enroll:"Записаться",
     hero_badge:"Открыт набор на 2026/27 учебный год",
     hero_title:"Сильное школьное образование по направлениям IT и MED",
@@ -847,6 +939,15 @@ const T = {
     a_school_title:"Достижения школы",a_students_title:"Достижения учеников",
     g_kicker:"Галерея",g_title:"Моменты школьной жизни",g_sub:"Уроки, мероприятия, соревнования и поездки — в фото и видео.",g_empty:"Галерея скоро будет наполнена.",
     rev_kicker:"Отзывы",rev_title:"Отзывы родителей и учеников",rev_sub:"Искренние слова семей, доверившихся нам.",rev_empty:"Отзывы скоро появятся.",
+    ev_kicker:"Учебный календарь",ev_title:"Ближайшие события",ev_sub:"День открытых дверей, экзамены и праздники — отметьте важные даты.",ev_empty:"Ближайшие события скоро будут объявлены.",
+    qab_kicker:"Приём 2026/27",qab_title:"Приём и цены",qab_sub:"От подачи заявки до начала учёбы — этапы, цены и необходимые документы на одной странице.",
+    adm_kicker:"Как проходит приём",adm_title:"Этапы приёма",adm_sub:"Четыре простых шага — от обращения до договора об обучении.",
+    price_kicker:"Цены",price_title:"Тарифы обучения",price_sub:"Каждый тариф включает обучение полного дня, питание и кружки. При годовой оплате действует скидка.",
+    price_cur:"сум",price_month:"/мес",price_popular:"Популярный",price_cta:"Оставить заявку",
+    doc_kicker:"Документы",doc_title:"Документы для приёма",
+    docs:["Свидетельство о рождении ребёнка (копия)","Паспорт родителя (копия)","4 фото размером 3×4","Справка из прежней школы (при переводе)","Медицинская карта (086/У или 026/У)","Заполненное заявление о приёме"],
+    doc_note:"Принесите все документы в приёмную комиссию вместе с оригиналами.",
+    faq_kicker:"Вопросы и ответы",faq_title:"Частые вопросы",faq_sub:"Ответы на самые частые вопросы. Не нашли ответ — позвоните нам.",faq_empty:"Вопросы скоро будут добавлены.",
     life_kicker:"Жизнь школы",life_title:"Новости и события",
     life_sub:"Уроки, кружки, соревнования и праздники — свежие кадры из жизни нашей школы.",
     c_kicker:"Контакты",c_title:"Присоединяйтесь",
@@ -978,6 +1079,41 @@ let NEWS = [
 let HERO_STATS = [{v:"480+",k:"stat1"},{v:"32",k:"stat2"},{v:"96%",k:"stat3"},{v:"14",k:"stat4"}];
 let GALLERY = [];
 let TESTIMONIALS = [];
+let EVENTS = [
+  {date:"2026-08-15",uz:"Ochiq eshiklar kuni",ru:"День открытых дверей",duz:"Maktab, sinflar va laboratoriyalar bilan tanishuv.",dru:"Знакомство со школой, классами и лабораториями."},
+  {date:"2026-08-25",uz:"Qabul imtihonlari",ru:"Вступительные экзамены",duz:"Yangi o‘quvchilar uchun bilim testlari.",dru:"Тесты знаний для новых учеников."},
+  {date:"2026-09-01",uz:"Bilimlar kuni",ru:"День знаний",duz:"Yangi o‘quv yilining tantanali ochilishi.",dru:"Торжественное открытие нового учебного года."},
+  {date:"2026-10-05",uz:"Ustozlar kuni",ru:"День учителя",duz:"O‘qituvchilarga bag‘ishlangan bayram tadbiri.",dru:"Праздничное мероприятие, посвящённое учителям."}
+];
+let ADMISSION_STEPS = [
+  {n:1,uz:"Ariza qoldirasiz",ru:"Оставляете заявку",tuz:"Sayt orqali yoki telefon qilib qisqa ariza qoldirasiz.",tru:"Оставляете короткую заявку через сайт или по телефону."},
+  {n:2,uz:"Suhbat va test",ru:"Собеседование и тест",tuz:"Bola bilan tanishuv suhbati va kichik bilim testi o‘tkaziladi.",tru:"Проводится ознакомительное собеседование и небольшой тест знаний."},
+  {n:3,uz:"Natija va joy",ru:"Результат и место",tuz:"Natijaga ko‘ra mos sinf va yo‘nalish taklif qilinadi.",tru:"По результату предлагается подходящий класс и направление."},
+  {n:4,uz:"Shartnoma",ru:"Договор",tuz:"O‘quv shartnomasi imzolanadi va bola o‘qishni boshlaydi.",tru:"Подписывается договор об обучении, и ребёнок начинает учёбу."}
+];
+let PLANS = [
+  {uz:"Boshlang‘ich",ru:"Начальная",price:"2 500 000",featured:false,
+   fuz:["To‘liq kunlik o‘qish (1–4-sinf)","Nonushta, tushlik va kechki tamaddi","Maktab avtobusi","Asosiy to‘garaklar"],
+   fru:["Обучение полного дня (1–4 класс)","Завтрак, обед и полдник","Школьный автобус","Основные кружки"]},
+  {uz:"O‘rta bo‘g‘in",ru:"Средняя",price:"3 200 000",featured:true,
+   fuz:["To‘liq kunlik o‘qish (5–8-sinf)","IT yoki MED yo‘nalishiga kirish","Ovqatlanish va avtobus","Barcha fan to‘garaklari"],
+   fru:["Обучение полного дня (5–8 класс)","Доступ к направлению IT или MED","Питание и автобус","Все предметные кружки"]},
+  {uz:"Yuqori sinf",ru:"Старшие классы",price:"3 800 000",featured:false,
+   fuz:["To‘liq kunlik o‘qish (9–11-sinf)","Chuqurlashtirilgan IT/MED dasturi","Universitetga maqsadli tayyorlov","Individual mentoring"],
+   fru:["Обучение полного дня (9–11 класс)","Углублённая программа IT/MED","Целевая подготовка к вузу","Индивидуальный ментор"]}
+];
+let FAQ = [
+  {uz:"Qabul qaysi yoshdan boshlanadi?",ru:"С какого возраста начинается приём?",
+   auz:"Maktabgacha tayyorlov 5 yoshdan, 1-sinf 6–7 yoshdan qabul qilinadi.",aru:"Дошкольная подготовка — с 5 лет, 1 класс — с 6–7 лет."},
+  {uz:"O‘qish qaysi tilda olib boriladi?",ru:"На каком языке ведётся обучение?",
+   auz:"Ta'lim o‘zbek va rus tillarida — oila o‘ziga qulay tilni tanlaydi.",aru:"Обучение на узбекском и русском — семья выбирает удобный язык."},
+  {uz:"To‘lovni bo‘lib to‘lash mumkinmi?",ru:"Можно ли оплачивать частями?",
+   auz:"Ha, oylik va choraklik to‘lov imkoniyati bor. Yillik to‘lovda chegirma beriladi.",aru:"Да, есть помесячная и поквартальная оплата. При годовой оплате действует скидка."},
+  {uz:"Maktab avtobusi xizmati bormi?",ru:"Есть ли услуга школьного автобуса?",
+   auz:"Ha, maktab avtobuslari bolani uyidan olib keladi va darsdan so‘ng qaytaradi.",aru:"Да, школьные автобусы забирают ребёнка из дома и отвозят после уроков."},
+  {uz:"Test sinovidan o‘tolmasa-chi?",ru:"А если ребёнок не пройдёт тест?",
+   auz:"Test tanlov emas — bilim darajasini aniqlash uchun. Natijaga ko‘ra mos dastur taklif etiladi.",aru:"Тест — это не отбор, а определение уровня знаний. По результату предлагается подходящая программа."}
+];
 let CONTACT = {address_uz:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",address_ru:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",phone:"+998 71 200 45 45",telegram:"@iqror_school",hours_uz:"Du–Sha, 8:00–18:00",hours_ru:"Пн–Сб, 8:00–18:00"};
 const IT_TRACKS = {uz:["Frontend","Python","Robototexnika","Chuqur matematika"],ru:["Фронтенд","Python","Робототехника","Углублённая математика"]};
 const MED_TRACKS = {uz:["Biologiya","Kimyo","Anatomiya","DTM tayyorlov"],ru:["Биология","Химия","Анатомия","Подготовка к DTM"]};
@@ -1143,6 +1279,63 @@ function renderTestimonials(){
       <figcaption class="rev-by">${av}<span class="rev-meta"><b>${esc(r.name||"")}</b><small>${esc(role)}</small></span></figcaption>
     </figure>`;
   }).join("");
+}
+const MON = {uz:["Yan","Fev","Mar","Apr","May","Iyn","Iyl","Avg","Sen","Okt","Noy","Dek"],ru:["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"]};
+function renderEvents(){
+  const t=T[lang], box=$("#events"); if(!box) return;
+  if(!EVENTS.length){ box.innerHTML=`<div class="cls-empty">${esc(t.ev_empty)}</div>`; return; }
+  box.innerHTML = EVENTS.map(e=>{
+    const m=String(e.date||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const day=m?String(+m[3]):"", mon=m?MON[lang][+m[2]-1]:"";
+    return `<div class="ev-item">
+      <div class="ev-date"><b>${esc(day)}</b><span>${esc(mon)}</span></div>
+      <div class="ev-body"><h4>${esc(lang==="uz"?e.uz:e.ru)}</h4><p>${esc(lang==="uz"?e.duz:e.dru)}</p></div>
+    </div>`;
+  }).join("");
+}
+function renderAdmission(){
+  const box=$("#adm-steps"); if(!box) return;
+  box.innerHTML = ADMISSION_STEPS.map(s=>`
+    <div class="adm-step">
+      <div class="adm-num">${esc(s.n)}</div>
+      <div class="adm-c"><h4>${esc(lang==="uz"?s.uz:s.ru)}</h4><p>${esc(lang==="uz"?s.tuz:s.tru)}</p></div>
+    </div>`).join("");
+}
+function renderPlans(){
+  const t=T[lang], box=$("#plans"); if(!box) return;
+  box.innerHTML = PLANS.map(p=>{
+    const feats=(lang==="uz"?p.fuz:p.fru)||[];
+    return `<div class="price-card${p.featured?" featured":""}">
+      ${p.featured?`<span class="price-badge">${esc(t.price_popular)}</span>`:""}
+      <div class="price-name">${esc(lang==="uz"?p.uz:p.ru)}</div>
+      <div class="price-amt"><b>${esc(p.price)}</b><span>${esc(t.price_cur)}${esc(t.price_month)}</span></div>
+      <ul class="price-feat">${feats.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>
+      <a href="#aloqa" class="price-cta">${esc(t.price_cta)}</a>
+    </div>`;
+  }).join("");
+}
+function renderDocs(){
+  const box=$("#docs"); if(!box) return;
+  box.innerHTML = (T[lang].docs||[]).map(d=>`<li>${esc(d)}</li>`).join("");
+}
+function renderFAQ(){
+  const t=T[lang], box=$("#faq"); if(!box) return;
+  if(!FAQ.length){ box.innerHTML=`<div class="cls-empty">${esc(t.faq_empty)}</div>`; return; }
+  box.innerHTML = FAQ.map((f,i)=>`
+    <div class="faq-item">
+      <button class="faq-q" aria-expanded="false" aria-controls="faq-a-${i}">
+        <span>${esc(lang==="uz"?f.uz:f.ru)}</span><span class="faq-ic" aria-hidden="true">+</span>
+      </button>
+      <div class="faq-a" id="faq-a-${i}" hidden><p>${esc(lang==="uz"?f.auz:f.aru)}</p></div>
+    </div>`).join("");
+  box.querySelectorAll(".faq-q").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const exp=btn.getAttribute("aria-expanded")==="true";
+      btn.setAttribute("aria-expanded",String(!exp));
+      const a=btn.nextElementSibling; if(a) a.hidden=exp;
+      btn.closest(".faq-item").classList.toggle("open",!exp);
+    });
+  });
 }
 function renderDirs(){
   $("#dir-select").innerHTML = T[lang].dirs.map(d=>`<option>${esc(d)}</option>`).join("");
@@ -1381,6 +1574,7 @@ function renderAll(){
   applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
   renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
   renderClsControls(); renderClsResults(); renderGallery(); renderTestimonials();
+  renderEvents(); renderAdmission(); renderPlans(); renderDocs(); renderFAQ();
 }
 // Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
 window.IqrorPublic = {
@@ -1390,6 +1584,10 @@ window.IqrorPublic = {
     if(Array.isArray(d.news)) NEWS = d.news;
     if(Array.isArray(d.gallery)) GALLERY = d.gallery;
     if(Array.isArray(d.testimonials)) TESTIMONIALS = d.testimonials;
+    if(Array.isArray(d.events)) EVENTS = d.events;
+    if(Array.isArray(d.admissionSteps)) ADMISSION_STEPS = d.admissionSteps;
+    if(Array.isArray(d.plans)) PLANS = d.plans;
+    if(Array.isArray(d.faq)) FAQ = d.faq;
     if(Array.isArray(d.schoolAch)) SCHOOL_ACH = d.schoolAch;
     if(Array.isArray(d.studentAch)) STUDENT_ACH = d.studentAch;
     if(d.stats){ HERO_STATS[0].v=d.stats.students??HERO_STATS[0].v; HERO_STATS[1].v=d.stats.teachers??HERO_STATS[1].v; HERO_STATS[2].v=d.stats.uni??HERO_STATS[2].v; HERO_STATS[3].v=d.stats.awards??HERO_STATS[3].v; }
@@ -1443,7 +1641,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
-const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','galereya','fikrlar','aloqa','kabinet'];
+const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','galereya','fikrlar','qabul','aloqa','kabinet'];
 function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
@@ -1512,9 +1710,10 @@ addEventListener('hashchange', ()=>route(true));
       const { collection, getDocs, query, orderBy, doc, getDoc } = fsMod;
       const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
       try{
-        const [stu,tea,nw,asch,astu,gal,rev,setSnap] = await Promise.all([
+        const [stu,tea,nw,asch,astu,gal,rev,plansS,admS,faqS,evS,setSnap] = await Promise.all([
           getDocs(collection(db,'students')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
           ord('gallery'), ord('testimonials'),
+          ord('plans'), ord('admission_steps'), ord('faq'), ord('events'),
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
@@ -1532,6 +1731,16 @@ addEventListener('hashchange', ()=>route(true));
         if(gallery.length) p.gallery = gallery;
         const testimonials = rev.docs.map(d=>{const x=d.data();return {name:x.name,role_uz:x.role_uz||"",role_ru:x.role_ru||x.role_uz||"",photo:x.photo||"",text_uz:x.text_uz||"",text_ru:x.text_ru||x.text_uz||"",rating:Number(x.rating)||5};});
         if(testimonials.length) p.testimonials = testimonials;
+        const splitLines = s => String(s||"").split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
+        const truthy = v => v===true||v==="true"||v==="Ha"||v==="Да"||v==="1"||v===1;
+        const plans = plansS.docs.map(d=>{const x=d.data();return {uz:x.name_uz||"",ru:x.name_ru||x.name_uz||"",price:x.price||"",featured:truthy(x.featured),fuz:splitLines(x.features_uz),fru:splitLines(x.features_ru||x.features_uz)};});
+        if(plans.length) p.plans = plans;
+        const admissionSteps = admS.docs.map((d,i)=>{const x=d.data();return {n:x.num||i+1,uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",tuz:x.text_uz||"",tru:x.text_ru||x.text_uz||""};});
+        if(admissionSteps.length) p.admissionSteps = admissionSteps;
+        const faq = faqS.docs.map(d=>{const x=d.data();return {uz:x.q_uz||"",ru:x.q_ru||x.q_uz||"",auz:x.a_uz||"",aru:x.a_ru||x.a_uz||""};});
+        if(faq.length) p.faq = faq;
+        const events = evS.docs.map(d=>{const x=d.data();return {date:x.date||"",uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",duz:x.desc_uz||"",dru:x.desc_ru||x.desc_uz||""};});
+        if(events.length) p.events = events;
         const setd = setSnap.exists()?setSnap.data():{};
         if(setd.stats) p.stats = setd.stats;
         if(setd.contact) p.contact = setd.contact;
