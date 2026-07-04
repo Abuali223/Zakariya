@@ -101,6 +101,8 @@
   td a{color:var(--teal);font-weight:600;text-decoration:none}
   .btn.ghost2{background:#fff;border:1px solid var(--border);color:var(--ink);font-weight:600}
   .btn.ghost2:hover{border-color:var(--teal-2);color:var(--teal)}
+  .btn.gold2{background:var(--teal);border:1px solid var(--teal);color:#fff;font-weight:700}
+  .btn.gold2:hover{background:var(--teal-d)}
   /* Statistika (dashboard) */
   .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
   .stat-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px}
@@ -521,15 +523,84 @@ async function importStudents(file){
     renderStudents();
   }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); }
 }
+/* ---- Chiroyli PDF (chop etish orqali) ---- */
+function studentGroups(rows){
+  const groups={};
+  rows.forEach(r=>{ const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—'; const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r); });
+  return Object.keys(groups).sort().map(k=>groups[k]);
+}
+function printHTML(html){
+  const f=document.createElement('iframe');
+  f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0';
+  document.body.appendChild(f);
+  const d=f.contentWindow.document; d.open(); d.write(html); d.close();
+  setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} setTimeout(()=>f.remove(),60000); }, 450);
+}
+function exportStudentsPDF(rows){
+  if(!rows||!rows.length){ toast('Chop etish uchun ma’lumot yo‘q',true); return; }
+  const now=new Date(); const p2=x=>String(x).padStart(2,'0');
+  const dateStr=`${p2(now.getDate())}.${p2(now.getMonth()+1)}.${now.getFullYear()}`;
+  const groups=studentGroups(rows);
+  const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
+  const emblem=`<svg width="46" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
+  const sections=groups.map(gr=>{
+    const list=gr.list.slice().sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
+    const trs=list.map((r,i)=>`<tr>
+      <td class="num">${i+1}</td>
+      <td class="mono">${esc(r.studentId||r._id)}</td>
+      <td class="nm">${esc(r.name||'')}</td>
+      <td class="c"><b>${esc(r.score==null?'—':r.score)}</b></td>
+      <td class="c">${r.attendance==null?'—':esc(r.attendance)+'%'}</td>
+      <td>${esc(r.parentPhone||'—')}</td>
+    </tr>`).join('');
+    return `<section class="cls">
+      <h2><span>${esc(gradeName(gr.g))} «${esc(gr.grp)}»</span><span class="lang">${esc(langLbl(gr.lang))} · ${list.length} o‘quvchi</span></h2>
+      <table><thead><tr><th class="num">№</th><th>ID</th><th>Ism-familiya</th><th class="c">Ball</th><th class="c">Davomat</th><th>Ota-ona tel.</th></tr></thead><tbody>${trs}</tbody></table>
+    </section>`;
+  }).join('');
+  const html=`<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>Iqror Academy — O‘quvchilar ro‘yxati</title>
+  <style>
+    @page{size:A4;margin:13mm 12mm}
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#26433D;margin:0;font-size:12px;line-height:1.4}
+    .head{display:flex;align-items:center;gap:13px;border-bottom:3px solid #155A4E;padding-bottom:12px}
+    .head h1{font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#155A4E;margin:0;letter-spacing:1.5px;line-height:1}
+    .head .sub{font-size:11px;color:#6B7C77;margin-top:3px}
+    .meta{display:flex;justify-content:space-between;font-size:11px;color:#6B7C77;margin:10px 2px 18px}
+    .cls{margin-bottom:16px;page-break-inside:avoid}
+    .cls h2{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#fff;background:#155A4E;padding:7px 12px;border-radius:6px 6px 0 0;margin:0;font-weight:600}
+    .cls h2 .lang{font-weight:400;font-size:11px;opacity:.92}
+    table{width:100%;border-collapse:collapse;border:1px solid #DCE4E0;border-top:none}
+    th{background:#EAF1EF;color:#155A4E;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:6px 10px;border-bottom:1px solid #D6E0DC}
+    td{padding:6px 10px;border-bottom:1px solid #EFEADD;font-size:11.5px}
+    tbody tr:nth-child(even) td{background:#FBFAF5}
+    tbody tr:last-child td{border-bottom:none}
+    td.num,th.num{width:28px;color:#9AA6A2;text-align:center}
+    td.c,th.c{text-align:center;width:58px}
+    td.c b{color:#155A4E}
+    td.mono{font-family:'Consolas','Courier New',monospace;color:#155A4E;font-size:10.5px;white-space:nowrap}
+    td.nm{font-weight:600}
+    .foot{margin-top:16px;text-align:center;font-size:9.5px;color:#9AA6A2;border-top:1px solid #E6E0D2;padding-top:8px}
+  </style></head><body>
+    <div class="head">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">O‘quvchilar ro‘yxati va natijalari</div></div></div>
+    <div class="meta"><span>Sana: ${dateStr}</span><span>Jami: <b>${rows.length}</b> o‘quvchi · <b>${groups.length}</b> sinf</span></div>
+    ${sections}
+    <div class="foot">Iqror Academy · iqror-72879.web.app · Chop etilgan sana: ${dateStr}</div>
+  </body></html>`;
+  printHTML(html);
+  toast('Chop etish oynasi ochildi — “PDF sifatida saqlash”ni tanlang');
+}
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
-      <button class="btn ghost2" id="stu-export">⬇ Eksport</button>
+      <button class="btn gold2" id="stu-pdf">📄 PDF</button>
+      <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       <button class="btn ghost2" id="stu-import">⬆ Import</button>
       <input type="file" id="stu-file" accept=".csv,text/csv" style="display:none">
       <button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   $('#add').addEventListener('click',()=>openForm('students',null));
+  $('#stu-pdf').addEventListener('click',()=>exportStudentsPDF(cache['students']||[]));
   $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
   $('#stu-import').addEventListener('click',()=>$('#stu-file').click());
   $('#stu-file').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.target.value=''; if(f) importStudents(f); });
