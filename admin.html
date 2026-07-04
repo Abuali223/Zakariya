@@ -91,6 +91,11 @@
   .chip{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
   .chip.it{background:var(--it-bg);color:var(--it-fg)} .chip.med{background:var(--med-bg);color:var(--med-fg)}
   .empty{padding:40px;text-align:center;color:var(--muted)}
+  /* Sinf bo'yicha kartochkalar (O'quvchilar) */
+  .cls-card{margin-bottom:18px}
+  .cls-card-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--border-2);flex-wrap:wrap}
+  .cls-card-head h3{font-size:18px;font-weight:700;font-family:var(--serif)}
+  .cls-card-head .cls-count{margin-left:auto;font-size:13px;color:var(--muted);font-weight:600}
 
   /* Mobil: jadvallar kartochka ko'rinishida (tartibli) */
   @media(max-width:640px){
@@ -333,6 +338,7 @@ function openTab(tab){
   currentTab=tab;
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
+  if(tab==='students') return renderStudents();
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
@@ -357,6 +363,42 @@ function labelTable(){
       });
     });
   });
+}
+
+/* ---- O'quvchilar: sinf bo'yicha alohida kartochkalar ---- */
+function gradeName(g){ return Number(g)===0 ? 'Tayyorlov' : (Number(g)+'-sinf'); }
+async function renderStudents(){
+  $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2><button class="btn gold" id="add">+ Qo‘shish</button></div><div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  $('#add').addEventListener('click',()=>openForm('students',null));
+  let rows;
+  try{ rows = await loadCol('students','order'); cache['students']=rows; }
+  catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
+  if(!rows.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.</div></div>`; return; }
+  const groups={};
+  rows.forEach(r=>{
+    const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—';
+    const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`;
+    (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r);
+  });
+  const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
+  const html=Object.keys(groups).sort().map(k=>{
+    const {g,lang,grp,list}=groups[k];
+    list.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
+    const trs=list.map(r=>`<tr>
+      <td data-label="ID">${esc(r.studentId||r._id)}</td>
+      <td data-label="Ism">${esc(r.name||'')}</td>
+      <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
+      <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
+    </tr>`).join('');
+    return `<div class="card cls-card">
+      <div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div>
+      <div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ball</th><th>Davomat %</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>
+    </div>`;
+  }).join('');
+  $('#cls-groups').innerHTML=html;
+  $('#view').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+  $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del)));
 }
 
 /* ---- Generic collection view ---- */
@@ -418,7 +460,7 @@ function openForm(name, row){
       } else {
         await addDoc(collection(db,name), data);
       }
-      toast('Saqlandi ✓'); closeModal(); renderCollection(name);
+      toast('Saqlandi ✓'); closeModal(); (name==='students'?renderStudents():renderCollection(name));
     }catch(err){ toast('Xatolik: '+(err.code||err.message), true); btn.disabled=false; btn.textContent='Saqlash'; }
   });
 }
@@ -447,7 +489,7 @@ function gatherSubjects(){
 async function delDoc(name,id){
   if(!confirm('Ushbu yozuvni o‘chirasizmi?'))return;
   try{ await deleteDoc(doc(db,name,id)); toast('O‘chirildi');
-    if(name==='enrollments') renderEnrollments(); else if(name==='users') renderUsers(); else renderCollection(name);
+    if(name==='enrollments') renderEnrollments(); else if(name==='users') renderUsers(); else if(name==='students') renderStudents(); else renderCollection(name);
   }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
 }
 
