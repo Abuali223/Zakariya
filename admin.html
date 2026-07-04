@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iqror IT MED School — Admin panel</title>
+<title>Iqror Academy — Admin panel</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 458.82 522.7'%3E%3Crect x='0' y='0' width='458.82' height='115.76' fill='%231F9982'/%3E%3Cpolygon points='118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26' fill='%23F6C05E'/%3E%3Cpolygon points='159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70' fill='%231F9982'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,9 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F7F4EC; --ink:#2C4A43; --teal:#155A4E; --teal-2:#2E9A88; --teal-d:#134640;
-    --gold:#EBC06A; --gold-d:#DFB055; --muted:#647B76; --border:#E6E0D2; --border-2:#EFEADD;
-    --white:#FFFFFF; --it-bg:#EAF3F1; --it-fg:#155A4E; --med-bg:#FBF4E2; --med-fg:#9A7526;
+    --bg:#F4F0E6; --ink:#2C4A43; --teal:#155A4E; --teal-2:#2E9A88; --teal-d:#134640;
+    --gold:#E6C282; --gold-d:#D6AE68; --muted:#647B76; --border:#E7E1D4; --border-2:#F0EBDF;
+    --white:#FCFAF4; --it-bg:#EAF1EF; --it-fg:#155A4E; --med-bg:#FAF3E4; --med-fg:#9A7526;
     --ok:#2E9A88; --bad:#C86A3A;
     --serif:'Roboto Condensed',system-ui,sans-serif; --sans:'Roboto Condensed',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     --shadow:0 12px 32px rgba(13,81,72,.12);
@@ -57,10 +57,11 @@
   header.top{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:12px 22px;background:rgba(246,243,235,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30}
   nav.side{background:#fff;border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px}
   nav.side button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:11px 13px;font-weight:600;color:var(--muted);cursor:pointer}
-  nav.side button .ic{width:20px;text-align:center}
+  nav.side button .ic{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+  nav.side button .ic svg{width:20px;height:20px;fill:currentColor}
   nav.side button:hover{background:var(--bg)}
   nav.side button.on{background:var(--teal);color:#fff}
-  main.content{padding:26px;max-width:1100px}
+  main.content{padding:26px 32px;max-width:1600px;width:100%}
   @media(max-width:820px){
     .app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}
     nav.side{flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:20}
@@ -170,9 +171,10 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const toast=(m,err=false)=>{const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;$('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity=0;t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2600);};
 
 /* ---- Collection schemas ---- */
+const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"/></svg>`;
 const SCHEMAS = {
   students: {
-    title:'O‘quvchilar', icon:'🎓', docId:'studentId', order:'order',
+    title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
     cols:[['studentId','ID'],['name','Ism'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
     fields:[
       {k:'studentId',l:'ID (masalan IQ-1013)',t:'text',req:true},
@@ -188,7 +190,7 @@ const SCHEMAS = {
     subjects:true
   },
   teachers: {
-    title:'O‘qituvchilar', icon:'👩‍🏫', order:'order',
+    title:'O‘qituvchilar', icon:mi('M0-240v-63q0-43 44-70t116-27q13 0 25 .5t23 2.5q-14 21-21 44t-7 48v65H0Zm240 0v-65q0-32 17.5-58.5T307-410q32-20 76.5-30t96.5-10q53 0 97.5 10t76.5 30q32 20 49 46.5t17 58.5v65H240Zm540 0v-65q0-26-6.5-49T754-397q11-2 22.5-2.5t23.5-.5q72 0 116 26.5t44 70.5v63H780Zm-455-80h311q-10-20-55.5-35T480-370q-55 0-100.5 15T325-320ZM160-440q-33 0-56.5-23.5T80-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T160-440Zm640 0q-33 0-56.5-23.5T720-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T800-440Zm-320-40q-50 0-85-35t-35-85q0-51 35-85.5t85-34.5q51 0 85.5 34.5T600-600q0 50-34.5 85T480-480Zm0-80q17 0 28.5-11.5T520-600q0-17-11.5-28.5T480-640q-17 0-28.5 11.5T440-600q0 17 11.5 28.5T480-560Z'), order:'order',
     cols:[['name','Ism'],['subject_uz','Fan'],['rating','Reyting'],['years','Tajriba'],['votes','Baho']],
     fields:[
       {k:'name',l:'Ism-familiya',t:'text',req:true},
@@ -203,7 +205,7 @@ const SCHEMAS = {
     ]
   },
   news: {
-    title:'Yangiliklar', icon:'📰', order:'order',
+    title:'Yangiliklar', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-640l67 67 66-67 67 67 67-67 66 67 67-67 67 67 66-67 67 67 67-67 66 67 67-67v640q0 33-23.5 56.5T800-120H160Zm0-80h280v-240H160v240Zm360 0h280v-80H520v80Zm0-160h280v-80H520v80ZM160-520h640v-120H160v120Z'), order:'order',
     cols:[['date','Sana'],['tag_uz','Teg'],['title_uz','Sarlavha (UZ)']],
     fields:[
       {k:'date',l:'Sana (12.06.2026)',t:'text',req:true},
@@ -215,7 +217,7 @@ const SCHEMAS = {
     ]
   },
   achievements_school: {
-    title:'Maktab yutuqlari', icon:'🏆', order:'order',
+    title:'Maktab yutuqlari', icon:mi('M280-120v-80h160v-124q-49-11-87.5-41.5T296-442q-75-9-125.5-65.5T120-640v-40q0-33 23.5-56.5T200-760h80v-80h400v80h80q33 0 56.5 23.5T840-680v40q0 76-50.5 132.5T664-442q-18 46-56.5 76.5T520-324v124h160v80H280Zm0-408v-152h-80v40q0 38 22 68.5t58 43.5Zm285 93q35-35 35-85v-240H360v240q0 50 35 85t85 35q50 0 85-35Zm115-93q36-13 58-43.5t22-68.5v-40h-80v152Z'), order:'order',
     cols:[['year','Yil'],['text_uz','Matn (UZ)']],
     fields:[
       {k:'year',l:'Yil',t:'number',req:true},
@@ -225,7 +227,7 @@ const SCHEMAS = {
     ]
   },
   achievements_students: {
-    title:'O‘quvchi yutuqlari', icon:'⭐', order:'order',
+    title:'O‘quvchi yutuqlari', icon:mi('m387-412 35-114-92-74h114l36-112 36 112h114l-93 74 35 114-92-71-93 71ZM240-40v-309q-38-42-59-96t-21-115q0-134 93-227t227-93q134 0 227 93t93 227q0 61-21 115t-59 96v309l-240-80-240 80Zm240-280q100 0 170-70t70-170q0-100-70-170t-170-70q-100 0-170 70t-70 170q0 100 70 170t170 70ZM320-159l160-41 160 41v-124q-35 20-75.5 31.5T480-240q-44 0-84.5-11.5T320-283v124Z'), order:'order',
     cols:[['name','O‘quvchi'],['year','Yil'],['text_uz','Matn (UZ)']],
     fields:[
       {k:'name',l:'O‘quvchi ismi',t:'text',req:true},
@@ -290,9 +292,9 @@ $('#btn-pass').addEventListener('click',()=>{
 function buildTabs(){
   const items = [
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
-    {k:'settings', icon:'⚙️', t:'Sozlamalar'},
-    {k:'users', icon:'👥', t:'Foydalanuvchilar'},
-    {k:'enrollments', icon:'📥', t:'Arizalar'}
+    {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
+    {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
+    {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
   ];
   $('#tabs').innerHTML = items.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
   $('#tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
