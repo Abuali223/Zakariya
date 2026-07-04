@@ -44,13 +44,13 @@
 
   /* ---- NAV ---- */
   .nav{position:sticky;top:0;z-index:60;background:rgba(246,243,235,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-  .nav-inner{display:flex;align-items:center;gap:28px;padding-top:14px;padding-bottom:14px}
+  .nav-inner{display:flex;align-items:center;gap:18px;padding-top:14px;padding-bottom:14px}
   .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}
   .brand .mark{width:32px;height:auto;flex:0 0 auto}
   .brand b{font-family:var(--serif);font-weight:700;font-size:22px;letter-spacing:.04em;display:block;line-height:1}
   .brand small{font-size:10px;font-weight:600;letter-spacing:.18em;color:var(--teal-2);margin-top:3px;display:block}
-  .nav-links{display:flex;gap:22px;margin-left:auto;font-size:14.5px;font-weight:500}
-  .nav-links a{color:var(--ink);text-decoration:none;transition:color .15s}
+  .nav-links{display:flex;gap:15px;margin-left:auto;font-size:14px;font-weight:500}
+  .nav-links a{color:var(--ink);text-decoration:none;transition:color .15s;white-space:nowrap}
   .nav-links a:hover{color:var(--teal-2)}
   .nav-links a.active{color:var(--teal-2);font-weight:700}
   .langsw{display:flex;gap:2px;background:#E9E4D6;border-radius:999px;padding:3px}
@@ -193,6 +193,41 @@
   .form button:hover{background:var(--gold-d)}
   .form .thanks{background:var(--it-bg);border:1px solid var(--teal-2);color:var(--teal);border-radius:12px;padding:14px 16px;font-size:14.5px;font-weight:600}
 
+  /* ---- IMKONIYATLAR (Facilities) ---- */
+  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .feat{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;display:flex;flex-direction:column;gap:12px;transition:.18s}
+  .feat:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
+  .feat .fi{width:54px;height:54px;border-radius:14px;background:var(--it-bg);display:grid;place-items:center;font-size:26px;flex:0 0 auto}
+  .feat h3{font-weight:600;font-size:19px}
+  .feat p{font-size:14.5px;line-height:1.6;color:var(--muted);margin:0}
+  .feat .fnote{margin-top:auto;font-size:13px;font-weight:600;color:var(--teal-2);padding-top:6px}
+
+  /* ---- SINF NATIJALARI (Class results) ---- */
+  .class-panel{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;margin-bottom:28px}
+  .cp-head h3{font-weight:600;font-size:22px;margin-bottom:6px}
+  .cp-head p{font-size:14.5px;color:var(--muted);margin:0 0 20px;line-height:1.55}
+  .cp-selects{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .cp-selects label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+  .cp-selects select{border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink);cursor:pointer}
+  .cp-selects select:disabled{opacity:.55;cursor:not-allowed;background:var(--bg)}
+  .cls-summary{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0 16px}
+  .cls-summary .cs{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 18px;min-width:118px}
+  .cls-summary .cs b{font-family:var(--serif);font-weight:700;font-size:22px;color:var(--teal);display:block;line-height:1.1}
+  .cls-summary .cs span{font-size:12px;color:var(--muted)}
+  .cls-table{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .cls-row{display:grid;grid-template-columns:40px 1fr 108px 104px;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border-2);font-size:14.5px}
+  .cls-row:last-child{border-bottom:none}
+  .cls-row.hd{background:var(--bg);font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .cls-row .cr-rank{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:14px;background:var(--it-bg);color:var(--teal)}
+  .cls-row .cr-nm{font-weight:600}
+  .cls-row .cr-nm small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+  .cls-bar{height:6px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:6px}
+  .cls-bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
+  .cls-detailbtn{background:var(--it-bg);color:var(--teal);border:none;border-radius:8px;padding:7px 10px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:.15s}
+  .cls-detailbtn:hover{background:#DCEBE7}
+  .cls-empty{background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:26px;text-align:center;color:var(--muted);font-size:14.5px;margin-top:20px}
+  .cls-detail{margin-top:16px}
+
   /* ---- FOOTER ---- */
   footer{background:var(--teal-d);color:rgba(255,255,255,.75)}
   .foot-inner{display:flex;align-items:center;gap:40px;padding:56px 0 40px;flex-wrap:wrap}
@@ -211,6 +246,7 @@
     .contact-grid{grid-template-columns:1fr;gap:40px}
     .cards-3{grid-template-columns:1fr 1fr}
     .cards-4{grid-template-columns:1fr 1fr}
+    .feat-grid{grid-template-columns:1fr 1fr}
     .nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;gap:0;margin:0;padding:8px 0}
     .nav-links.open{display:flex}
     .nav-links a{padding:14px 32px;border-top:1px solid var(--border-2)}
@@ -225,7 +261,10 @@
     .section-head h2{font-size:30px}
     .hero h1{font-size:34px}
     .hero p.sub{font-size:17px}
-    .cards-2,.cards-3,.cards-4{grid-template-columns:1fr}
+    .cards-2,.cards-3,.cards-4,.feat-grid{grid-template-columns:1fr}
+    .cp-selects{grid-template-columns:1fr}
+    .cls-row{grid-template-columns:32px 1fr 66px;gap:10px;padding:11px 14px}
+    .cls-row .cr-act{display:none}
     .hero-stats{grid-template-columns:1fr 1fr;gap:24px}
     .lb-row{grid-template-columns:34px 1fr auto;gap:10px;padding:13px 16px}
     .lb-row .lb-score{display:none}
@@ -253,6 +292,7 @@
       <button class="navtoggle" id="navtoggle" aria-label="Menyu" aria-expanded="false">☰</button>
       <div class="nav-links" id="navlinks">
         <a href="#yonalishlar" data-t="nav_courses"></a>
+        <a href="#imkoniyatlar" data-t="nav_facilities"></a>
         <a href="#natijalar" data-t="nav_results"></a>
         <a href="#oqituvchilar" data-t="nav_teachers"></a>
         <a href="#yutuqlar" data-t="nav_awards"></a>
@@ -329,6 +369,26 @@
     </div>
   </section>
 
+  <!-- ================= IMKONIYATLAR ================= -->
+  <section id="imkoniyatlar">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="fac_kicker"></div>
+        <h2 data-t="fac_title"></h2>
+        <p data-t="fac_sub"></p>
+      </div>
+      <div class="feat-grid">
+        <div class="feat"><div class="fi" aria-hidden="true">🕗</div><h3 data-t="fac1_t"></h3><p data-t="fac1_d"></p></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🚌</div><h3 data-t="fac2_t"></h3><p data-t="fac2_d"></p></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🍽️</div><h3 data-t="fac3_t"></h3><p data-t="fac3_d"></p><div class="fnote" data-t="fac3_n"></div></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🌐</div><h3 data-t="fac4_t"></h3><p data-t="fac4_d"></p></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🧸</div><h3 data-t="fac5_t"></h3><p data-t="fac5_d"></p></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🎓</div><h3 data-t="fac6_t"></h3><p data-t="fac6_d"></p></div>
+        <div class="feat"><div class="fi" aria-hidden="true">🎨</div><h3 data-t="fac7_t"></h3><p data-t="fac7_d"></p></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= NATIJALAR ================= -->
   <section id="natijalar" class="band">
     <div class="wrap">
@@ -336,6 +396,19 @@
         <div class="kicker" data-t="res_kicker"></div>
         <h2 data-t="res_title"></h2>
         <p data-t="res_sub"></p>
+      </div>
+      <!-- Sinf bo'yicha natijalar (ota-onalar farzandi sinfini tanlaydi) -->
+      <div class="class-panel">
+        <div class="cp-head">
+          <h3 data-t="cls_title"></h3>
+          <p data-t="cls_hint"></p>
+        </div>
+        <div class="cp-selects">
+          <label><span data-t="cls_lang"></span><select id="cls-lang"></select></label>
+          <label><span data-t="cls_grade"></span><select id="cls-grade" disabled></select></label>
+          <label><span data-t="cls_group"></span><select id="cls-group" disabled></select></label>
+        </div>
+        <div id="class-results"></div>
       </div>
       <div class="results-grid">
         <div class="lb">
@@ -490,6 +563,33 @@ const T = {
     f_thanks:"Rahmat! Arizangiz qabul qilindi — tez orada bog‘lanamiz.",
     footer_text:"Natijaga yo‘naltirilgan zamonaviy maktab: IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim.",
     footer_rights:"Barcha huquqlar himoyalangan.",
+    nav_facilities:"Imkoniyatlar",
+    fac_kicker:"Maktab imkoniyatlari",
+    fac_title:"To‘liq kunlik zamonaviy maktab",
+    fac_sub:"Iqror — bolangiz kun bo‘yi qulay, xavfsiz va rivojlantiruvchi muhitda bo‘ladigan xususiy maktab. Barcha sharoitlar bir joyda.",
+    fac1_t:"8 soatlik o‘quv rejimi",
+    fac1_d:"O‘quvchilar kuniga 8 soat izchil, to‘liq kunlik dastur asosida shug‘ullanadi — dars, mustaqil ish va to‘garaklar bitta tizimda.",
+    fac2_t:"Maktab avtobuslari",
+    fac2_d:"Maktabning o‘z avtobuslari o‘quvchilarni ertalab uyidan olib keladi va darsdan so‘ng uyiga qaytaradi.",
+    fac3_t:"Ovqatlanish",
+    fac3_d:"Kun davomida sifatli va muvozanatli ovqatlanish tashkil etilgan.",
+    fac3_n:"Boshlang‘ich sinflar: nonushta + 2 xil taomli tushlik + kechki tamaddi. Yuqori sinflar: tushlik + kechki tamaddi.",
+    fac4_t:"O‘zbek va rus sinflari",
+    fac4_d:"Ta'lim o‘zbek va rus tillarida olib boriladi — oila o‘ziga qulay tilni tanlaydi.",
+    fac5_t:"Tayyorlov bo‘limi",
+    fac5_d:"Maktabgacha tayyorlov bo‘limi bolalarni birinchi sinfga bilim va ko‘nikma jihatidan to‘liq tayyorlaydi.",
+    fac6_t:"9–11: universitetga tayyorlov",
+    fac6_d:"Yuqori sinf o‘quvchilari o‘zi tanlagan yo‘nalishda alohida chuqurlashtirib o‘qitiladi va universitetlarga maqsadli tayyorlanadi.",
+    fac7_t:"Qo‘shimcha to‘garaklar",
+    fac7_d:"Sport, san'at, til va fan to‘garaklari — o‘quvchi o‘z qiziqishi bo‘yicha qo‘shimcha rivojlanadi.",
+    cls_title:"Sinf bo‘yicha natijalar",
+    cls_hint:"Farzandingiz o‘qiydigan tilni, sinfni va guruhni tanlang — o‘sha sinf o‘quvchilarining natijalarini ko‘rasiz.",
+    cls_lang:"Ta'lim tili",cls_grade:"Sinf",cls_group:"Guruh",
+    cls_pick:"— tanlang —",cls_prep:"Tayyorlov",cls_uz:"O‘zbek",cls_ru:"Rus",
+    cls_prompt:"Natijalarni ko‘rish uchun til, sinf va guruhni tanlang.",
+    cls_none:"Bu sinf bo‘yicha hozircha ma'lumot yo‘q.",
+    cls_sum_count:"o‘quvchi",cls_sum_avg:"o‘rtacha ball",cls_sum_att:"o‘rtacha davomat",
+    cls_c_name:"O‘quvchi",cls_c_score:"Ball",cls_detail:"Batafsil",cls_close:"Yopish",cls_att_short:"Davomat",
     dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
     grade:g=>g+"-sinf"
   },
@@ -535,24 +635,72 @@ const T = {
     f_thanks:"Спасибо! Заявка принята — мы скоро свяжемся с вами.",
     footer_text:"Современная школа, ориентированная на результат: углублённое образование по направлениям IT и MED.",
     footer_rights:"Все права защищены.",
+    nav_facilities:"Возможности",
+    fac_kicker:"Возможности школы",
+    fac_title:"Современная школа полного дня",
+    fac_sub:"Iqror — частная школа, где ребёнок весь день находится в удобной, безопасной и развивающей среде. Все условия в одном месте.",
+    fac1_t:"8-часовой учебный режим",
+    fac1_d:"Ученики занимаются 8 часов в день по системной программе полного дня — уроки, самостоятельная работа и кружки в единой системе.",
+    fac2_t:"Школьные автобусы",
+    fac2_d:"Собственные автобусы школы забирают учеников из дома утром и отвозят домой после уроков.",
+    fac3_t:"Питание",
+    fac3_d:"В течение дня организовано качественное и сбалансированное питание.",
+    fac3_n:"Начальные классы: завтрак + обед из 2 блюд + полдник. Старшие классы: обед + полдник.",
+    fac4_t:"Узбекские и русские классы",
+    fac4_d:"Обучение ведётся на узбекском и русском языках — семья выбирает удобный язык.",
+    fac5_t:"Подготовительное отделение",
+    fac5_d:"Дошкольное подготовительное отделение полностью готовит детей к первому классу по знаниям и навыкам.",
+    fac6_t:"9–11: подготовка к вузу",
+    fac6_d:"Ученики старших классов углублённо обучаются по выбранному направлению и целенаправленно готовятся к поступлению в вузы.",
+    fac7_t:"Дополнительные кружки",
+    fac7_d:"Спорт, искусство, языки и наука — ученик дополнительно развивается по своим интересам.",
+    cls_title:"Результаты по классам",
+    cls_hint:"Выберите язык обучения, класс и группу вашего ребёнка — вы увидите результаты учеников этого класса.",
+    cls_lang:"Язык обучения",cls_grade:"Класс",cls_group:"Группа",
+    cls_pick:"— выберите —",cls_prep:"Подготовка",cls_uz:"Узбекский",cls_ru:"Русский",
+    cls_prompt:"Чтобы увидеть результаты, выберите язык, класс и группу.",
+    cls_none:"По этому классу пока нет данных.",
+    cls_sum_count:"учеников",cls_sum_avg:"средний балл",cls_sum_att:"средняя посещаемость",
+    cls_c_name:"Ученик",cls_c_score:"Балл",cls_detail:"Подробно",cls_close:"Закрыть",cls_att_short:"Посещаемость",
     dirs:["Направление IT","Направление MED","Подготовительные курсы"],
     grade:g=>g+" класс"
   }
 };
 
+const GEN = a => [["Matematika","Математика"],["Ona tili","Родной язык"],["Ingliz tili","Английский"],["Tabiat","Природа"]].map((n,i)=>({uz:n[0],ru:n[1],s:a[i]}));
+const PREP = a => [["Savod","Грамота"],["Matematika","Математика"],["Ingliz tili","Английский"]].map((n,i)=>({uz:n[0],ru:n[1],s:a[i]}));
 let STUDENTS = [
-  {id:"IQ-1001",name:"Aziza Karimova",g:11,tr:"IT",score:98,att:99,sc:[99,98,96,97]},
-  {id:"IQ-1002",name:"Jasur Toshpulatov",g:10,tr:"MED",score:96,att:98,sc:[98,96,94,95]},
-  {id:"IQ-1003",name:"Malika Yusupova",g:11,tr:"MED",score:95,att:97,sc:[96,95,93,96]},
-  {id:"IQ-1004",name:"Bekzod Rahimov",g:9,tr:"IT",score:93,att:96,sc:[94,95,90,92]},
-  {id:"IQ-1005",name:"Sevinch Abdullayeva",g:10,tr:"IT",score:91,att:98,sc:[92,93,89,90]},
-  {id:"IQ-1006",name:"Doston Ergashev",g:11,tr:"MED",score:90,att:94,sc:[91,90,88,90]},
-  {id:"IQ-1007",name:"Nilufar Sodiqova",g:9,tr:"MED",score:88,att:97,sc:[89,88,86,88]},
-  {id:"IQ-1008",name:"Temur Alimov",g:10,tr:"IT",score:87,att:93,sc:[88,89,84,86]},
-  {id:"IQ-1009",name:"Zarina Ismoilova",g:11,tr:"IT",score:85,att:95,sc:[86,87,82,84]},
-  {id:"IQ-1010",name:"Sardor Nazarov",g:9,tr:"MED",score:84,att:92,sc:[85,84,82,83]},
-  {id:"IQ-1011",name:"Kamila Yoqubova",g:10,tr:"MED",score:82,att:96,sc:[83,82,80,82]},
-  {id:"IQ-1012",name:"Ulug‘bek Mirzayev",g:9,tr:"IT",score:80,att:91,sc:[81,82,78,79]}
+  /* Yuqori sinflar (9–11) — yo'nalish bo'yicha guruh (IT/MED), o'zbek */
+  {id:"IQ-1001",name:"Aziza Karimova",g:11,lng:"uz",cls:"IT",tr:"IT",score:98,att:99,sc:[99,98,96,97]},
+  {id:"IQ-1002",name:"Jasur Toshpulatov",g:10,lng:"uz",cls:"MED",tr:"MED",score:96,att:98,sc:[98,96,94,95]},
+  {id:"IQ-1003",name:"Malika Yusupova",g:11,lng:"uz",cls:"MED",tr:"MED",score:95,att:97,sc:[96,95,93,96]},
+  {id:"IQ-1004",name:"Bekzod Rahimov",g:9,lng:"uz",cls:"IT",tr:"IT",score:93,att:96,sc:[94,95,90,92]},
+  {id:"IQ-1005",name:"Sevinch Abdullayeva",g:10,lng:"uz",cls:"IT",tr:"IT",score:91,att:98,sc:[92,93,89,90]},
+  {id:"IQ-1006",name:"Doston Ergashev",g:11,lng:"uz",cls:"MED",tr:"MED",score:90,att:94,sc:[91,90,88,90]},
+  {id:"IQ-1007",name:"Nilufar Sodiqova",g:9,lng:"uz",cls:"MED",tr:"MED",score:88,att:97,sc:[89,88,86,88]},
+  {id:"IQ-1008",name:"Temur Alimov",g:10,lng:"uz",cls:"IT",tr:"IT",score:87,att:93,sc:[88,89,84,86]},
+  {id:"IQ-1009",name:"Zarina Ismoilova",g:11,lng:"uz",cls:"IT",tr:"IT",score:85,att:95,sc:[86,87,82,84]},
+  {id:"IQ-1010",name:"Sardor Nazarov",g:9,lng:"uz",cls:"MED",tr:"MED",score:84,att:92,sc:[85,84,82,83]},
+  {id:"IQ-1011",name:"Kamila Yoqubova",g:10,lng:"uz",cls:"MED",tr:"MED",score:82,att:96,sc:[83,82,80,82]},
+  {id:"IQ-1012",name:"Ulug‘bek Mirzayev",g:9,lng:"uz",cls:"IT",tr:"IT",score:80,att:91,sc:[81,82,78,79]},
+  /* Boshlang'ich — o'zbek 1 «A» */
+  {id:"IQ-0201",name:"Sardor Ochilov",g:1,lng:"uz",cls:"A",tr:"",score:95,att:98,subjects:GEN([96,95,93,97])},
+  {id:"IQ-0202",name:"Madina Yusupova",g:1,lng:"uz",cls:"A",tr:"",score:93,att:99,subjects:GEN([94,92,90,95])},
+  {id:"IQ-0203",name:"Diyor Bekmurodov",g:1,lng:"uz",cls:"A",tr:"",score:90,att:97,subjects:GEN([91,89,88,92])},
+  {id:"IQ-0204",name:"Jasmina Alimova",g:1,lng:"uz",cls:"A",tr:"",score:88,att:96,subjects:GEN([89,87,86,90])},
+  /* Boshlang'ich — rus 1 «A» */
+  {id:"IQ-0211",name:"София Пак",g:1,lng:"ru",cls:"A",tr:"",score:94,att:98,subjects:GEN([95,93,92,96])},
+  {id:"IQ-0212",name:"Даниэль Цой",g:1,lng:"ru",cls:"A",tr:"",score:91,att:97,subjects:GEN([92,90,89,93])},
+  {id:"IQ-0213",name:"Алиса Ким",g:1,lng:"ru",cls:"A",tr:"",score:89,att:99,subjects:GEN([90,88,87,91])},
+  /* 5-sinf — o'zbek «A» */
+  {id:"IQ-0501",name:"Kamron Rustamov",g:5,lng:"uz",cls:"A",tr:"",score:92,att:95,subjects:GEN([93,91,90,94])},
+  {id:"IQ-0502",name:"Laylo Sobirova",g:5,lng:"uz",cls:"A",tr:"",score:90,att:97,subjects:GEN([91,89,88,92])},
+  {id:"IQ-0503",name:"Bobur Ismoilov",g:5,lng:"uz",cls:"A",tr:"",score:87,att:94,subjects:GEN([88,86,85,89])},
+  /* Tayyorlov — o'zbek «A» */
+  {id:"IQ-0101",name:"Ali Valiyev",g:0,lng:"uz",cls:"A",tr:"",score:96,att:98,subjects:PREP([97,96,95])},
+  {id:"IQ-0102",name:"Oysha Tosheva",g:0,lng:"uz",cls:"A",tr:"",score:94,att:99,subjects:PREP([95,94,92])},
+  /* Tayyorlov — rus «A» */
+  {id:"IQ-0111",name:"Артур Ким",g:0,lng:"ru",cls:"A",tr:"",score:93,att:97,subjects:PREP([94,93,91])}
 ];
 const SUBJECTS = {
   IT:[{uz:"Matematika",ru:"Математика"},{uz:"Dasturlash",ru:"Программирование"},{uz:"Ingliz tili",ru:"Английский"},{uz:"Fizika",ru:"Физика"}],
@@ -596,6 +744,8 @@ const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toU
 
 let lang = "uz";
 let foundStudent = null, searched = false;
+let clsSel = {lng:"", g:"", cls:""};
+const gradeLbl = g => (Number(g)===0 ? T[lang].cls_prep : T[lang].grade(g));
 
 function applyText(){
   const t = T[lang];
@@ -617,14 +767,16 @@ function renderHeroStats(){
 }
 function renderLeaderboard(){
   const t=T[lang];
-  const rows = STUDENTS.slice().sort((a,b)=>b.score-a.score);
+  const tracked = STUDENTS.filter(s=>s.tr);
+  const rows = (tracked.length?tracked:STUDENTS).slice().sort((a,b)=>b.score-a.score).slice(0,10);
   $("#leaderboard").innerHTML = rows.map((s,i)=>{
     const rk = RANK_STYLE[i+1] || {bg:"#ECE7D9",fg:"#5B7370"};
-    const trkCls = s.tr==="IT"?"it":"med";
+    const chip = s.tr ? `<span class="trk ${s.tr==="IT"?"it":"med"}">${esc(s.tr)}</span>`
+                      : `<span class="trk it">${esc(gradeLbl(s.g))}</span>`;
     return `<div class="lb-row" style="background:${i<3?'#FDFBF5':'transparent'}">
       <div class="rank" style="background:${rk.bg};color:${rk.fg}">${i+1}</div>
-      <div><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.id)} · ${esc(t.grade(s.g))}</div></div>
-      <span class="trk ${trkCls}">${esc(s.tr)}</span>
+      <div><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.id)} · ${esc(gradeLbl(s.g))}${s.cls&&s.tr?'':(s.cls?' «'+esc(s.cls)+'»':'')}</div></div>
+      ${chip}
       <div class="lb-score"><div class="lb-bar"><i style="width:${s.score}%"></i></div><b>${s.score}</b></div>
     </div>`;
   }).join("");
@@ -689,7 +841,7 @@ function renderSearchResult(){
   const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${x.s}%"></i></div><b>${x.s}</b></div>`).join("");
   box.innerHTML=`<div class="found">
     <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
-    <div class="fg">${esc(t.grade(s.g))} · ${esc(s.tr)}</div>
+    <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
     <div class="metrics">
       <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
       <div class="m"><b>${s.score}</b><span>${esc(t.res_total)}</span></div>
@@ -699,6 +851,71 @@ function renderSearchResult(){
   </div>`;
 }
 
+/* ---- Sinf bo'yicha natijalar (ota-onalar uchun) ---- */
+function renderClsControls(){
+  const t=T[lang];
+  const langSel=$("#cls-lang"), gSel=$("#cls-grade"), grpSel=$("#cls-group");
+  if(!langSel||!gSel||!grpSel) return;
+  const list = STUDENTS.filter(s=>s.lng);
+  const langs = [...new Set(list.map(s=>s.lng))];
+  const opt = (v,label,sel)=>`<option value="${esc(v)}"${String(v)===String(sel)?' selected':''}>${esc(label)}</option>`;
+  const ph = `<option value="">${esc(t.cls_pick)}</option>`;
+  langSel.innerHTML = ph + langs.map(l=>opt(l, l==="ru"?t.cls_ru:t.cls_uz, clsSel.lng)).join("");
+  if(clsSel.lng){
+    const grades=[...new Set(list.filter(s=>s.lng===clsSel.lng).map(s=>s.g))].sort((a,b)=>a-b);
+    gSel.disabled=false;
+    gSel.innerHTML = ph + grades.map(g=>opt(g, Number(g)===0?t.cls_prep:t.grade(g), clsSel.g)).join("");
+  } else { gSel.disabled=true; gSel.innerHTML=ph; }
+  if(clsSel.lng && clsSel.g!==""){
+    const groups=[...new Set(list.filter(s=>s.lng===clsSel.lng && String(s.g)===String(clsSel.g)).map(s=>s.cls))].sort();
+    grpSel.disabled=false;
+    grpSel.innerHTML = ph + groups.map(c=>opt(c, c, clsSel.cls)).join("");
+  } else { grpSel.disabled=true; grpSel.innerHTML=ph; }
+}
+function renderClsResults(){
+  const t=T[lang], box=$("#class-results"); if(!box) return;
+  if(!(clsSel.lng && clsSel.g!=="" && clsSel.cls)){ box.innerHTML=`<div class="cls-empty">${esc(t.cls_prompt)}</div>`; return; }
+  const rows = STUDENTS.filter(s=>s.lng===clsSel.lng && String(s.g)===String(clsSel.g) && s.cls===clsSel.cls).sort((a,b)=>b.score-a.score);
+  if(!rows.length){ box.innerHTML=`<div class="cls-empty">${esc(t.cls_none)}</div>`; return; }
+  const avg = Math.round(rows.reduce((s,x)=>s+(Number(x.score)||0),0)/rows.length);
+  const avgAtt = Math.round(rows.reduce((s,x)=>s+(Number(x.att)||0),0)/rows.length);
+  const head = `<div class="cls-row hd"><span>#</span><span class="cr-nm">${esc(t.cls_c_name)}</span><span class="cr-score">${esc(t.cls_c_score)}</span><span class="cr-act"></span></div>`;
+  const body = rows.map((s,i)=>`<div class="cls-row">
+      <div class="cr-rank">${i+1}</div>
+      <div class="cr-nm">${esc(s.name)}<small>${esc(s.id)}${s.tr?' · '+esc(s.tr):''} · ${esc(t.cls_att_short)} ${Number(s.att)||0}%</small></div>
+      <div class="cr-score"><b class="lb-mini">${Number(s.score)||0}</b><div class="cls-bar"><i style="width:${Number(s.score)||0}%"></i></div></div>
+      <div class="cr-act"><button class="cls-detailbtn" data-cid="${esc(s.id)}">${esc(t.cls_detail)}</button></div>
+    </div>`).join("");
+  box.innerHTML = `<div class="cls-summary">
+      <div class="cs"><b>${rows.length}</b><span>${esc(t.cls_sum_count)}</span></div>
+      <div class="cs"><b>${avg}</b><span>${esc(t.cls_sum_avg)}</span></div>
+      <div class="cs"><b>${avgAtt}%</b><span>${esc(t.cls_sum_att)}</span></div>
+    </div>
+    <div class="cls-table">${head}${body}</div>
+    <div class="cls-detail" id="cls-detail"></div>`;
+  box.querySelectorAll('[data-cid]').forEach(b=>b.addEventListener('click',()=>renderClsDetail(b.dataset.cid)));
+}
+function renderClsDetail(id){
+  const t=T[lang], host=$("#cls-detail"); if(!host) return;
+  const s=STUDENTS.find(x=>x.id===id); if(!s){ host.innerHTML=""; return; }
+  const rankArr=STUDENTS.filter(x=>x.lng===s.lng && String(x.g)===String(s.g) && x.cls===s.cls).sort((a,b)=>b.score-a.score);
+  const rank=rankArr.findIndex(x=>x.id===s.id)+1;
+  const subjArr=(s.subjects&&s.subjects.length)?s.subjects:(SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
+  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
+  host.innerHTML=`<div class="found">
+    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
+    <div class="metrics">
+      <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
+      <div class="m"><b>${Number(s.score)||0}</b><span>${esc(t.res_total)}</span></div>
+      <div class="m"><b>${Number(s.att)||0}%</b><span>${esc(t.res_attendance)}</span></div>
+    </div>
+    <div class="subs-l">${esc(t.res_subjects)}</div>${subs}
+    <button class="cls-detailbtn" id="cls-detail-close" style="margin-top:14px">${esc(t.cls_close)}</button>
+  </div>`;
+  const c=$("#cls-detail-close"); if(c)c.onclick=()=>{host.innerHTML="";};
+  try{host.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}
+}
 function renderContact(){
   const a=$("#c-address"); if(a)a.textContent=lang==="uz"?CONTACT.address_uz:(CONTACT.address_ru||CONTACT.address_uz);
   const p=$("#c-phone"); if(p){p.textContent=CONTACT.phone||""; p.href="tel:"+String(CONTACT.phone||"").replace(/[^+\d]/g,"");}
@@ -708,6 +925,7 @@ function renderContact(){
 function renderAll(){
   applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
   renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
+  renderClsControls(); renderClsResults();
 }
 // Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
 window.IqrorPublic = {
@@ -738,6 +956,9 @@ $("#navtoggle").addEventListener("click",e=>{
 $$("#navlinks a").forEach(a=>a.addEventListener("click",()=>{
   $("#navlinks").classList.remove("open");$("#navtoggle").setAttribute("aria-expanded","false");
 }));
+$("#cls-lang").addEventListener("change",e=>{ clsSel.lng=e.target.value; clsSel.g=""; clsSel.cls=""; renderClsControls(); renderClsResults(); });
+$("#cls-grade").addEventListener("change",e=>{ clsSel.g=e.target.value; clsSel.cls=""; renderClsControls(); renderClsResults(); });
+$("#cls-group").addEventListener("change",e=>{ clsSel.cls=e.target.value; renderClsResults(); });
 $("#search-form").addEventListener("submit",e=>{
   e.preventDefault();
   const q=$("#search-input").value.trim().toLowerCase();
@@ -763,7 +984,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
-const PAGES = ['top','yonalishlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa'];
+const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa'];
 function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
@@ -831,7 +1052,7 @@ addEventListener('hashchange', ()=>route(true));
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
-        const students = stu.docs.map(d=>{const x=d.data();return {id:x.studentId||d.id,name:x.name,g:x.grade,tr:x.track,score:Number(x.score)||0,att:Number(x.attendance)||0,subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,subjects:Array.isArray(x.subjects)?x.subjects:[]};});
         if(students.length) p.students = students;
         const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:x.years||0,certs:x.certs||0,avg:x.avg||0,votes:x.votes||0};});
         if(teachers.length) p.teachers = teachers;

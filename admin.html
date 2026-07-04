@@ -173,12 +173,14 @@ const toast=(m,err=false)=>{const t=document.createElement('div');t.className='t
 const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:'🎓', docId:'studentId', order:'order',
-    cols:[['studentId','ID'],['name','Ism'],['grade','Sinf'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
+    cols:[['studentId','ID'],['name','Ism'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
     fields:[
       {k:'studentId',l:'ID (masalan IQ-1013)',t:'text',req:true},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
-      {k:'grade',l:'Sinf',t:'number'},
-      {k:'track',l:'Yo‘nalish',t:'select',opts:['IT','MED']},
+      {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
+      {k:'grade',l:'Sinf (0 = Tayyorlov)',t:'number'},
+      {k:'classLetter',l:'Guruh (A/B yoki IT/MED)',t:'text'},
+      {k:'track',l:'Yo‘nalish (9–11 uchun)',t:'select',opts:[{v:'',l:'—'},'IT','MED']},
       {k:'score',l:'Umumiy ball',t:'number'},
       {k:'attendance',l:'Davomat %',t:'number'},
       {k:'order',l:'Tartib',t:'number'}
@@ -342,7 +344,7 @@ function openForm(name, row){
   const val = k => row && row[k]!=null ? row[k] : '';
   const fieldHtml = f => {
     const v = val(f.k);
-    if(f.t==='select') return `<div><label>${esc(f.l)}</label><select name="${f.k}">${f.opts.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></div>`;
+    if(f.t==='select') return `<div><label>${esc(f.l)}</label><select name="${f.k}">${f.opts.map(o=>{const ov=(o&&typeof o==='object')?o.v:o;const ol=(o&&typeof o==='object')?o.l:o;return `<option value="${esc(ov)}" ${String(ov)===String(v)?'selected':''}>${esc(ol)}</option>`;}).join('')}</select></div>`;
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
     return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
   };
