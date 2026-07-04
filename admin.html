@@ -11,10 +11,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F6F3EB; --ink:#12312B; --teal:#0D5148; --teal-2:#1E8E7E; --teal-d:#093A34;
-    --gold:#EDB84C; --gold-d:#E0A930; --muted:#5B7370; --border:#E2DCCC; --border-2:#ECE7D9;
-    --white:#FFFFFF; --it-bg:#EAF3F1; --it-fg:#0D5148; --med-bg:#FBF3DF; --med-fg:#8A6414;
-    --ok:#1E8E7E; --bad:#C2410C;
+    --bg:#F7F4EC; --ink:#2C4A43; --teal:#155A4E; --teal-2:#2E9A88; --teal-d:#134640;
+    --gold:#EBC06A; --gold-d:#DFB055; --muted:#647B76; --border:#E6E0D2; --border-2:#EFEADD;
+    --white:#FFFFFF; --it-bg:#EAF3F1; --it-fg:#155A4E; --med-bg:#FBF4E2; --med-fg:#9A7526;
+    --ok:#2E9A88; --bad:#C86A3A;
     --serif:'Bitter',Georgia,serif; --sans:'Golos Text',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     --shadow:0 12px 32px rgba(13,81,72,.12);
   }
@@ -39,11 +39,11 @@
 
   /* Login */
   .login-wrap{min-height:100dvh;display:grid;place-items:center;padding:20px;
-    background:radial-gradient(1000px 500px at 100% -10%,rgba(30,142,126,.15),transparent 60%),linear-gradient(160deg,#0D5148,#093A34)}
+    background:radial-gradient(1000px 500px at 100% -10%,rgba(46,154,136,.16),transparent 60%),linear-gradient(160deg,#1A6355,#13483F)}
   .login-card{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:34px;width:100%;max-width:400px}
   .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}
   .brand .mk{width:32px;height:auto}
-  .brand b{font-family:var(--serif);font-weight:800;font-size:20px;letter-spacing:.04em;display:block;line-height:1}
+  .brand b{font-family:var(--serif);font-weight:700;font-size:20px;letter-spacing:.04em;display:block;line-height:1}
   .brand small{font-size:9.5px;font-weight:600;letter-spacing:.26em;color:var(--teal-2);display:block;margin-top:3px}
   .stack{display:flex;flex-direction:column;gap:14px}
   .err{background:#fdece3;border:1px solid #f0d3c4;color:var(--bad);border-radius:10px;padding:10px 13px;font-size:13.5px}
@@ -67,7 +67,7 @@
     main.content{padding:16px}
   }
   .page-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap}
-  .page-head h2{font-size:26px;font-weight:800}
+  .page-head h2{font-size:26px;font-weight:700}
   .card{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
   .tablewrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:14.5px}
@@ -84,7 +84,7 @@
   .modal-bg.show{display:grid}
   .modal{background:#fff;border-radius:18px;box-shadow:var(--shadow);width:100%;max-width:560px;max-height:92dvh;overflow:auto}
   .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#fff}
-  .modal-h h3{font-size:19px;font-weight:800}
+  .modal-h h3{font-size:19px;font-weight:700}
   .modal-b{padding:22px;display:flex;flex-direction:column;gap:14px}
   .modal-f{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:#fff}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
