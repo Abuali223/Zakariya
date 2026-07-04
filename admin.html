@@ -274,7 +274,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -288,6 +288,8 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+// Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
+setPersistence(auth, browserLocalPersistence).catch(()=>{});
 const db = getFirestore(app);
 // Rasmni Storage'ga yuklaydi. Storage SDK faqat kerak bo'lganda (rasm yuklashда) yuklanadi.
 let _storage=null;

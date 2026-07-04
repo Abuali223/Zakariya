@@ -1377,7 +1377,10 @@ addEventListener('hashchange', ()=>route(true));
 
     let db=null, auth=null;
     try{ fsMod = await import(`${V}/firebase-firestore.js`); db = fsMod.getFirestore(app); }catch(e){}
-    try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app); }catch(e){}
+    try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app);
+      // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
+      try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
+    }catch(e){}
 
     // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----
     async function loadPublic(){
