@@ -91,6 +91,11 @@
   .chip{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
   .chip.it{background:var(--it-bg);color:var(--it-fg)} .chip.med{background:var(--med-bg);color:var(--med-fg)}
   .empty{padding:40px;text-align:center;color:var(--muted)}
+  /* Qidiruv */
+  .ph-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .search-inp{width:240px;max-width:100%;border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:14px;background:#fff;color:var(--ink)}
+  .search-inp:focus{outline:2px solid var(--teal-2);outline-offset:1px;border-color:var(--teal-2)}
+  td a{color:var(--teal);font-weight:600;text-decoration:none}
   /* Sinf bo'yicha kartochkalar (O'quvchilar) */
   .cls-card{margin-bottom:18px}
   .cls-card-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--border-2);flex-wrap:wrap}
@@ -205,10 +210,12 @@ const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"
 const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
-    cols:[['studentId','ID'],['name','Ism'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
+    autoId:{field:'studentId',prefix:'IQ-',pad:4},
+    cols:[['studentId','ID'],['name','Ism'],['parentPhone','Ota-ona tel.'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
     fields:[
-      {k:'studentId',l:'ID (masalan IQ-1013)',t:'text',req:true},
+      {k:'studentId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text',req:true},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
+      {k:'parentPhone',l:'Ota-ona telefoni',t:'text'},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
       {k:'grade',l:'Sinf (0 = Tayyorlov)',t:'number'},
       {k:'classLetter',l:'Guruh (A/B yoki IT/MED)',t:'text'},
@@ -221,9 +228,12 @@ const SCHEMAS = {
   },
   teachers: {
     title:'O‘qituvchilar', icon:mi('M0-240v-63q0-43 44-70t116-27q13 0 25 .5t23 2.5q-14 21-21 44t-7 48v65H0Zm240 0v-65q0-32 17.5-58.5T307-410q32-20 76.5-30t96.5-10q53 0 97.5 10t76.5 30q32 20 49 46.5t17 58.5v65H240Zm540 0v-65q0-26-6.5-49T754-397q11-2 22.5-2.5t23.5-.5q72 0 116 26.5t44 70.5v63H780Zm-455-80h311q-10-20-55.5-35T480-370q-55 0-100.5 15T325-320ZM160-440q-33 0-56.5-23.5T80-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T160-440Zm640 0q-33 0-56.5-23.5T720-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T800-440Zm-320-40q-50 0-85-35t-35-85q0-51 35-85.5t85-34.5q51 0 85.5 34.5T600-600q0 50-34.5 85T480-480Zm0-80q17 0 28.5-11.5T520-600q0-17-11.5-28.5T480-640q-17 0-28.5 11.5T440-600q0 17 11.5 28.5T480-560Z'), order:'order',
-    cols:[['name','Ism'],['subject_uz','Fan'],['rating','Reyting'],['years','Tajriba'],['votes','Baho']],
+    autoId:{field:'teacherId',prefix:'IQT-',pad:3},
+    cols:[['teacherId','ID'],['name','Ism'],['subject_uz','Fan'],['phone','Telefon'],['rating','Reyting'],['years','Tajriba']],
     fields:[
+      {k:'teacherId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text'},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
+      {k:'phone',l:'Telefon',t:'text'},
       {k:'subject_uz',l:'Fan (UZ)',t:'text',req:true},
       {k:'subject_ru',l:'Fan (RU)',t:'text'},
       {k:'rating',l:'Reyting (0–5)',t:'number',step:'0.1'},
@@ -273,6 +283,18 @@ const NUM = new Set(['grade','score','attendance','order','rating','years','cert
 /* ---- State ---- */
 let currentTab = 'students';
 let cache = {};
+
+/* Bazada yo'q bo'lgan navbatdagi noyob ID yaratadi (masalan IQ-1013) */
+function nextId(existing, prefix, pad){
+  const ids = (existing||[]).map(x=>String(x==null?'':x));
+  const set = new Set(ids);
+  let max = 0;
+  ids.forEach(id=>{ const m=id.match(/(\d+)\s*$/); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } });
+  let n = max+1;
+  const fmt = x => prefix + String(x).padStart(pad,'0');
+  while(set.has(fmt(n))) n++;
+  return fmt(n);
+}
 
 /* ---- Auth ---- */
 $('#login-form').addEventListener('submit', async e=>{
@@ -368,61 +390,70 @@ function labelTable(){
 /* ---- O'quvchilar: sinf bo'yicha alohida kartochkalar ---- */
 function gradeName(g){ return Number(g)===0 ? 'Tayyorlov' : (Number(g)+'-sinf'); }
 async function renderStudents(){
-  $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2><button class="btn gold" id="add">+ Qo‘shish</button></div><div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
+    <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off"><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   $('#add').addEventListener('click',()=>openForm('students',null));
   let rows;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
   catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
-  if(!rows.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.</div></div>`; return; }
-  const groups={};
-  rows.forEach(r=>{
-    const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—';
-    const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`;
-    (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r);
-  });
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
-  const html=Object.keys(groups).sort().map(k=>{
-    const {g,lang,grp,list}=groups[k];
-    list.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
-    const trs=list.map(r=>`<tr>
-      <td data-label="ID">${esc(r.studentId||r._id)}</td>
-      <td data-label="Ism">${esc(r.name||'')}</td>
-      <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
-      <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
-      <td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
-    </tr>`).join('');
-    return `<div class="card cls-card">
-      <div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div>
-      <div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ball</th><th>Davomat %</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>
-    </div>`;
-  }).join('');
-  $('#cls-groups').innerHTML=html;
-  $('#view').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
-  $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del)));
+  const draw=(q)=>{
+    q=(q||'').trim().toLowerCase();
+    const filtered = !q ? rows : rows.filter(r=>[r.studentId,r._id,r.name,r.parentPhone].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
+    if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?'Qidiruv bo‘yicha o‘quvchi topilmadi.':'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
+    const groups={};
+    filtered.forEach(r=>{ const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—'; const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r); });
+    $('#cls-groups').innerHTML = Object.keys(groups).sort().map(k=>{
+      const {g,lang,grp,list}=groups[k];
+      list.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
+      const trs=list.map(r=>`<tr>
+        <td data-label="ID">${esc(r.studentId||r._id)}</td>
+        <td data-label="Ism">${esc(r.name||'')}</td>
+        <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
+        <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
+        <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
+      </tr>`).join('');
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+    }).join('');
+    $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+    $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del)));
+  };
+  draw('');
+  const si=$('#stu-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 
-/* ---- Generic collection view ---- */
+/* ---- Generic collection view (qidiruv bilan) ---- */
 async function renderCollection(name){
   const s = SCHEMAS[name];
-  $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2><button class="btn gold" id="add">+ Qo‘shish</button></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+  $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
+    <div class="ph-actions"><input id="col-search" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   $('#add').addEventListener('click',()=>openForm(name,null));
   let rows;
   try{ rows = await loadCol(name, s.order); cache[name]=rows; }
-  catch(e){ $('#view .card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
-  if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha yozuv yo‘q. “+ Qo‘shish” bilan boshlang.</div>`; return; }
+  catch(e){ $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
   const th = s.cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th></th>';
-  const trs = rows.map(r=>{
-    const tds = s.cols.map(c=>{
-      let v = r[c[0]];
-      if(c[0]==='track') return `<td><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
-      return `<td>${esc(v==null?'':v)}</td>`;
+  const draw=(q)=>{
+    q=(q||'').trim().toLowerCase();
+    const filtered = !q ? rows : rows.filter(r=>s.cols.some(c=>String(r[c[0]]==null?'':r[c[0]]).toLowerCase().includes(q))||String(r._id).toLowerCase().includes(q));
+    if(!filtered.length){ $('#col-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha topilmadi.':'Hozircha yozuv yo‘q. “+ Qo‘shish” bilan boshlang.'}</div>`; return; }
+    const trs = filtered.map(r=>{
+      const tds = s.cols.map(c=>{
+        let v = r[c[0]];
+        if(c[0]==='track') return `<td data-label="${esc(c[1])}"><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
+        if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
+        return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
+      }).join('');
+      return `<tr>${tds}<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
     }).join('');
-    return `<tr>${tds}<td><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
-  }).join('');
-  $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
-  labelTable();
-  $('#view').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
-  $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
+    $('#col-card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
+    $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
+    $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
+  };
+  draw('');
+  const si=$('#col-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 
 /* ---- Add/Edit form (modal) ---- */
@@ -443,6 +474,12 @@ function openForm(name, row){
     <form id="m-form"><div class="modal-b">${body}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="submit" class="btn gold" id="m-save">Saqlash</button></div></form>`;
   openModal();
+  // Yangi qo'shishda ID ni avtomatik (bazada yo'q) qilib qo'yamiz
+  if(!isEdit && s.autoId){
+    const existing = (cache[name]||[]).map(r=>r[s.autoId.field]);
+    const inp = $('#m-form [name="'+s.autoId.field+'"]');
+    if(inp) inp.value = nextId(existing, s.autoId.prefix, s.autoId.pad);
+  }
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
   $('#m-form').addEventListener('submit', async e=>{
@@ -495,30 +532,36 @@ async function delDoc(name,id){
 
 /* ---- Users / roles ---- */
 async function renderUsers(){
-  $('#view').innerHTML = `<div class="page-head"><h2>Foydalanuvchilar</h2></div>
+  $('#view').innerHTML = `<div class="page-head"><h2>Foydalanuvchilar</h2>
+    <div class="ph-actions"><input id="usr-search" class="search-inp" placeholder="Qidiruv: ism, email yoki rol…" autocomplete="off"></div></div>
     <p class="small muted" style="margin:-8px 0 14px">Foydalanuvchilar Gmail orqali kirib o‘z rolini tanlaydi. Bu yerda maktab ma'lumotlariga qarab rolni tasdiqlang yoki to‘g‘rilang.</p>
-    <div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    <div class="card" id="usr-card"><div class="loading">Yuklanmoqda…</div></div>`;
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
-  catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
-  if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.</div>`; return; }
+  catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['admin','Administrator']];
-  const trs = rows.map(r=>`<tr>
-    <td>${esc(r.name||'')}</td><td>${esc(r.email||'')}</td>
-    <td><select data-role="${esc(r._id)}" style="min-width:150px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></td>
-    <td><label style="display:flex;gap:6px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" style="width:auto" data-ver="${esc(r._id)}" ${r.verified?'checked':''}> Tasdiqlangan</label></td>
-    <td><div class="row-actions"><button class="btn sm gold" data-saveu="${esc(r._id)}">Saqlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
-  </tr>`).join('');
-  $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
-  labelTable();
-  $('#view').querySelectorAll('[data-saveu]').forEach(b=>b.addEventListener('click',async()=>{
-    const id=b.dataset.saveu;
-    const role=$('[data-role="'+id+'"]').value;
-    const ver=$('[data-ver="'+id+'"]').checked;
-    try{ await setDoc(doc(db,'users',id),{role,verified:ver},{merge:true}); toast('Saqlandi ✓'); }
-    catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
-  }));
-  $('#view').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
+  const draw=(q)=>{
+    q=(q||'').trim().toLowerCase();
+    const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
+    if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
+    const trs = filtered.map(r=>`<tr>
+      <td data-label="Ism">${esc(r.name||'')}</td><td data-label="Email">${esc(r.email||'')}</td>
+      <td data-label="Rol"><select data-role="${esc(r._id)}" style="min-width:150px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></td>
+      <td data-label="Holat"><label style="display:flex;gap:6px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" style="width:auto" data-ver="${esc(r._id)}" ${r.verified?'checked':''}> Tasdiqlangan</label></td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm gold" data-saveu="${esc(r._id)}">Saqlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+    </tr>`).join('');
+    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    $('#usr-card').querySelectorAll('[data-saveu]').forEach(b=>b.addEventListener('click',async()=>{
+      const id=b.dataset.saveu;
+      const role=$('[data-role="'+id+'"]').value;
+      const ver=$('[data-ver="'+id+'"]').checked;
+      try{ await setDoc(doc(db,'users',id),{role,verified:ver},{merge:true}); toast('Saqlandi ✓'); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+    }));
+    $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
+  };
+  draw('');
+  const si=$('#usr-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 
 /* ---- Settings ---- */
