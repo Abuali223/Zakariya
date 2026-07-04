@@ -131,6 +131,13 @@
   .att-b.on.att-late{background:#E6C282;border-color:#DBB05A;color:#5C3A10}
   .att-b.on.att-excused{background:#8AA0A0;border-color:#8AA0A0;color:#fff}
   @media(max-width:640px){ .att-controls select,.att-controls input{min-width:0;width:100%} .att-controls label{flex:1 1 100%} .att-row{flex-direction:column;align-items:stretch;gap:8px} .att-btns{justify-content:space-between} .att-b{flex:1;text-align:center} }
+  .gr-year{font-size:12.5px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+  .gr-sel{border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:14px;font-weight:700;background:#fff;color:var(--ink);min-width:82px;font-family:var(--sans);cursor:pointer}
+  .gr-sel.g5{background:#1F9982;border-color:#1F9982;color:#fff}
+  .gr-sel.g4{background:#2E9A88;border-color:#2E9A88;color:#fff}
+  .gr-sel.g3{background:#E6C282;border-color:#DBB05A;color:#5C3A10}
+  .gr-sel.g2{background:#C86A3A;border-color:#C86A3A;color:#fff}
+  @media(max-width:640px){ .gr-sel{width:100%} }
   /* Sinf bo'yicha kartochkalar (O'quvchilar) */
   .cls-card{margin-bottom:18px}
   .cls-card-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--border-2);flex-wrap:wrap}
@@ -224,13 +231,13 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updat
 import { getFirestore, collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey:"AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
-  authDomain:"iqror-72879.firebaseapp.com",
-  projectId:"iqror-72879",
-  storageBucket:"iqror-72879.firebasestorage.app",
-  messagingSenderId:"1082381849678",
-  appId:"1:1082381849678:web:f9a657404b83ac88c71f1f",
-  measurementId:"G-LDD3BFGKVP"
+  apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
+  authDomain:"alilazer-cd582.firebaseapp.com",
+  projectId:"alilazer-cd582",
+  storageBucket:"alilazer-cd582.firebasestorage.app",
+  messagingSenderId:"831212822404",
+  appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1",
+  measurementId:"G-R4M2GJH05C"
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -387,6 +394,7 @@ function buildTabs(){
     {k:'dashboard', icon:mi('M520-640v-160q0-17 11.5-28.5T560-840h240q17 0 28.5 11.5T840-800v160q0 17-11.5 28.5T800-600H560q-17 0-28.5-11.5T520-640ZM120-480v-320q0-17 11.5-28.5T160-840h240q17 0 28.5 11.5T440-800v320q0 17-11.5 28.5T400-440H160q-17 0-28.5-11.5T120-480Zm400 320v-320q0-17 11.5-28.5T560-520h240q17 0 28.5 11.5T840-480v320q0 17-11.5 28.5T800-120H560q-17 0-28.5-11.5T520-160ZM120-160v-160q0-17 11.5-28.5T160-360h240q17 0 28.5 11.5T440-320v160q0 17-11.5 28.5T400-120H160q-17 0-28.5-11.5T120-160Z'), t:'Statistika'},
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
     {k:'attendance', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v560q0 33-23.5 56.5T800-120H160Zm0-80h640v-560H160v560Zm40-80h200v-80H200v80Zm382-80 198-198-57-57-141 142-57-57-56 57 113 113Zm-382-80h200v-80H200v80Zm0-160h200v-80H200v80Z'), t:'Davomat'},
+    {k:'grades', icon:mi('m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'), t:'Baholar'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
@@ -401,6 +409,7 @@ function openTab(tab){
   if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
   if(tab==='attendance') return renderAttendance();
+  if(tab==='grades') return renderGrades();
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
@@ -670,6 +679,66 @@ async function renderAttendance(){
   };
   $('#att-class').addEventListener('change',load);
   $('#att-date').addEventListener('change',load);
+}
+/* ---- Baholar jurnali (choraklar) ---- */
+const SUBJECTS=['Matematika','Algebra','Geometriya','Ona tili','Adabiyot','Ingliz tili','Rus tili','Fizika','Kimyo','Biologiya','Geografiya','Tarix','Informatika','Jismoniy tarbiya','Chizmachilik','Tarbiya'];
+const QUARTERS=[['q1','1-chorak'],['q2','2-chorak'],['q3','3-chorak'],['q4','4-chorak']];
+function academicYear(){ const d=new Date(), y=d.getFullYear(), m=d.getMonth()+1; return m>=9?`${y}-${y+1}`:`${y-1}-${y}`; }
+function gradeCls(v){ v=Number(v); return v>=5?'g5':v>=4?'g4':v>=3?'g3':v>=2?'g2':''; }
+async function renderGrades(){
+  const year=academicYear();
+  $('#view').innerHTML = `<div class="page-head"><h2>Baholar</h2></div>
+    <div class="card" style="padding:18px 20px;margin-bottom:16px">
+      <div class="gr-year">${year} o‘quv yili</div>
+      <div class="att-controls">
+        <label>Sinf<select id="gr-class"><option value="">— tanlang —</option></select></label>
+        <label>Fan<input id="gr-subject" list="gr-subjlist" placeholder="Masalan: Matematika" autocomplete="off"><datalist id="gr-subjlist">${SUBJECTS.map(s=>`<option value="${esc(s)}"></option>`).join('')}</datalist></label>
+        <label>Chorak<select id="gr-quarter">${QUARTERS.map(q=>`<option value="${q[0]}">${esc(q[1])}</option>`).join('')}</select></label>
+      </div>
+    </div>
+    <div id="gr-body"><div class="cls-empty" style="margin:0">Sinf, fan va chorakni tanlang.</div></div>`;
+  let students;
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#gr-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const {classes,keys}=classGroupsMap(students);
+  $('#gr-class').innerHTML=`<option value="">— tanlang —</option>`+keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
+  const load=async()=>{
+    const ck=$('#gr-class').value, subject=$('#gr-subject').value.trim(), q=$('#gr-quarter').value;
+    if(!ck||!subject||!q){ $('#gr-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf, fan va chorakni tanlang.</div>`; return; }
+    const cls=classes[ck], qLabel=(QUARTERS.find(x=>x[0]===q)||['','',''])[1];
+    $('#gr-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    const existing={};
+    try{
+      const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,'grades',`${s.studentId||s._id}__${year}`)).catch(()=>null)));
+      snaps.forEach((sn,i)=>{ if(sn&&sn.exists()){ const subs=sn.data().subjects||{}; const sid=cls.list[i].studentId||cls.list[i]._id; existing[sid]=(subs[subject]&&subs[subject][q]!=null)?subs[subject][q]:''; } });
+    }catch(e){}
+    const ordered=cls.list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const state={}; ordered.forEach(s=>{ const sid=s.studentId||s._id; state[sid]=(existing[sid]==null?'':String(existing[sid])); });
+    const optsFor=v=>['','5','4','3','2'].map(o=>`<option value="${o}" ${String(v)===o?'selected':''}>${o||'—'}</option>`).join('');
+    const rowsHtml=ordered.map(s=>{ const sid=s.studentId||s._id;
+      return `<div class="att-row" data-sid="${esc(sid)}"><span class="att-nm">${esc(s.name||sid)}</span><select class="gr-sel ${gradeCls(state[sid])}" data-sid="${esc(sid)}">${optsFor(state[sid])}</select></div>`;
+    }).join('');
+    $('#gr-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${cls.list.length} o‘quvchi · ${esc(subject)} · ${esc(qLabel)}</span></div>
+      <div id="gr-list">${rowsHtml}</div>
+      <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;justify-content:flex-end"><button class="btn gold" id="gr-save">Saqlash</button></div></div>`;
+    $('#gr-list').querySelectorAll('.gr-sel').forEach(sel=>sel.addEventListener('change',()=>{ state[sel.dataset.sid]=sel.value; sel.className='gr-sel '+gradeCls(sel.value); }));
+    $('#gr-save').addEventListener('click',async()=>{
+      const btn=$('#gr-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{
+        const entries=Object.entries(state);
+        for(let i=0;i<entries.length;i+=400){
+          const batch=writeBatch(db);
+          entries.slice(i,i+400).forEach(([sid,grade])=>batch.set(doc(db,'grades',`${sid}__${year}`),{studentId:sid,classKey:ck,year,subjects:{[subject]:{[q]:grade===''?null:Number(grade)}}},{merge:true}));
+          await batch.commit();
+        }
+        toast('Baholar saqlandi ✓');
+      }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+      btn.disabled=false; btn.textContent='Saqlash';
+    });
+  };
+  $('#gr-class').addEventListener('change',load);
+  $('#gr-subject').addEventListener('change',load);
+  $('#gr-quarter').addEventListener('change',load);
 }
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
