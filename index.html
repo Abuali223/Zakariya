@@ -133,7 +133,7 @@
   .search-form button{background:var(--gold);color:var(--teal);border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:14.5px;font-family:var(--sans);cursor:pointer;transition:.15s}
   .search-form button:hover{background:var(--gold-d)}
   .notfound{background:rgba(237,184,76,.12);border:1px solid rgba(237,184,76,.4);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--gold)}
-  .found{background:#fff;color:var(--ink);border-radius:14px;padding:24px}
+  .found{background:var(--white);color:var(--ink);border:1px solid var(--border);border-radius:16px;padding:24px}
   .found .fh{display:flex;align-items:center;gap:12px;margin-bottom:6px}
   .found .fh b{font-family:var(--serif);font-weight:700;font-size:19px}
   .found .fid{background:var(--it-bg);color:var(--teal);font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;margin-left:auto}
@@ -274,6 +274,18 @@
   .kab-add{max-width:420px}
   .kab-add .search-form{display:flex;gap:8px}
   .kab-add .search-form input{flex:1;min-width:0}
+  /* Kabinet — desktop uchun keng, premium maket */
+  .kab-narrow{max-width:600px}
+  .kab-main{display:flex;flex-direction:column;gap:16px;margin-top:16px}
+  .kab-main .kab-att-card{margin-top:0}
+  @media(min-width:960px){
+    #kab-detail.kab-2col{display:grid;grid-template-columns:340px minmax(0,1fr);gap:22px;align-items:start;margin-top:18px}
+    #kab-detail.kab-2col > .found{position:sticky;top:96px}
+    #kab-detail.kab-2col > .kab-main{margin-top:0}
+    .kab-att-card .metrics{gap:12px}
+    .ktt-grid{grid-template-columns:repeat(3,1fr)}
+    .gchart svg{max-width:560px}
+  }
   /* Kabinet: baholar jadvali + grafik */
   .gtable-wrap{overflow-x:auto;margin-bottom:14px}
   .gtable{width:100%;border-collapse:collapse;font-size:13.5px;min-width:340px}
@@ -598,7 +610,7 @@
         <h2 data-t="kab_title"></h2>
         <p data-t="kab_sub"></p>
       </div>
-      <div id="kabinet-body" style="max-width:600px"></div>
+      <div id="kabinet-body"></div>
     </div>
   </section>
 
@@ -1079,7 +1091,7 @@ function studentCardHTML(s){
 function renderKabinet(){
   const t=T[lang], host=$("#kabinet-body"); if(!host) return;
   const A=window.IqrorAuth;
-  if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="cls-empty">${esc(t.kab_login)}</div>`; return; }
+  if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="kab-narrow"><div class="cls-empty">${esc(t.kab_login)}</div></div>`; return; }
   const childIds = A.getChildIds ? A.getChildIds() : (A.getChildId&&A.getChildId()?[A.getChildId()]:[]);
   const active = A.getActiveChild ? A.getActiveChild() : (childIds[0]||"");
   const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
@@ -1095,18 +1107,18 @@ function renderKabinet(){
     inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
   }
   if(!childIds.length){
-    host.innerHTML=`<div class="found" style="padding:24px"><p style="margin:0 0 14px;color:var(--muted)">${esc(t.kab_prompt)}</p>${addForm}</div>`;
+    host.innerHTML=`<div class="kab-narrow"><div class="found" style="padding:24px"><p style="margin:0 0 14px;color:var(--muted)">${esc(t.kab_prompt)}</p>${addForm}</div></div>`;
     wireAdd(); return;
   }
   const chips = childIds.map(id=>{ const st=findStudent(id); const nm=st?st.name:id;
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div id="kab-att"></div><div id="kab-grades"></div><div id="kab-timetable"></div><div id="kab-homework"></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
-    <div id="kab-detail">${detail}</div>`;
+    <div id="kab-detail"${s?' class="kab-2col"':''}>${detail}</div>`;
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
