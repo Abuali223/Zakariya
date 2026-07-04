@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#35796B; --teal-d:#16453B;
@@ -1365,6 +1365,9 @@ addEventListener('hashchange', ()=>route(true));
   const ROLE_LABELS = { parent:"Ota-ona", student:"O‘quvchi", teacher:"O‘qituvchi", admin:"Administrator" };
 
   let appMod, authMod, fsMod;
+  // Mobil tezlik: sahifa chizilib bo'lgach, bo'sh vaqtда Firebase SDK yuklanadi
+  // (kontent darhol fallback ma'lumot bilan ko'rinadi, real ma'lumot keyin qo'shiladi).
+  await new Promise(r=>{ if('requestIdleCallback' in window) requestIdleCallback(()=>r(), {timeout:2500}); else setTimeout(r, 1200); });
   try{ appMod = await import(`${V}/firebase-app.js`); }
   catch(e){ /* internet yo'q — dizayn + fallback ma'lumot bilan ishlayveradi */ }
 
