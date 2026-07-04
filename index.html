@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Iqror Academy — IT va MED yo‘nalishlarida kuchli maktab ta'limi</title>
 <meta name="description" content="Iqror Academy — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim. Ochiq natijalar, reytinglar, o‘qituvchilar va yutuqlar bitta platformada.">
 <meta name="theme-color" content="#155A4E">
@@ -21,8 +21,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#4E9184; --teal-d:#16453B;
-    --gold:#E2B562; --gold-d:#CFA24C; --muted:#64706A; --border:#E7EAE6; --border-2:#F0F2EC;
+    --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#35796B; --teal-d:#16453B;
+    --gold:#E2B562; --gold-d:#CFA24C; --muted:#586459; --on-gold:#173E36; --border:#E7EAE6; --border-2:#F0F2EC;
     --white:#FFFFFF; --it-bg:#EAF2EF; --it-fg:#236B5D; --med-bg:#F7F1E3; --med-fg:#977322;
     --serif:'Roboto Condensed',system-ui,sans-serif; --sans:'Roboto Condensed',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     --wrap:1240px; --shadow:0 10px 28px rgba(18,42,32,0.08);
@@ -32,7 +32,7 @@
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden}
   img{max-width:100%;display:block}
   a{color:inherit}
-  ::selection{background:var(--gold);color:var(--teal)}
+  ::selection{background:var(--gold);color:var(--on-gold)}
   h1,h2,h3{font-family:var(--serif);margin:0;text-wrap:balance}
   @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
   .reveal{animation:fadeUp .7s ease both}
@@ -63,7 +63,7 @@
   .langsw{display:flex;gap:2px;background:#E9E4D6;border-radius:999px;padding:3px}
   .langsw button{border:none;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);background:transparent;color:var(--muted);transition:.15s}
   .langsw button.on{background:var(--teal);color:#fff}
-  .btn-cta{background:var(--gold);color:var(--teal);font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;text-decoration:none;transition:background .15s;white-space:nowrap}
+  .btn-cta{background:var(--gold);color:var(--on-gold);font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;text-decoration:none;transition:background .15s;white-space:nowrap}
   .btn-cta:hover{background:var(--gold-d)}
   .navtoggle{display:none;border:1px solid var(--border);background:var(--white);border-radius:10px;width:44px;height:44px;cursor:pointer;font-size:20px;align-items:center;justify-content:center;flex:0 0 auto}
   /* Desktop: nav-drop sheffofdek — bolalari to'g'ridan-to'g'ri nav-inner flex ichida */
@@ -82,7 +82,7 @@
   .hero h1{font-weight:300;font-size:56px;line-height:1.14;letter-spacing:0;margin:24px 0 22px}
   .hero p.sub{font-size:18.5px;line-height:1.65;color:rgba(255,255,255,.82);max-width:52ch;margin:0 0 36px}
   .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
-  .btn-gold{background:var(--gold);color:var(--teal);font-weight:700;font-size:16px;padding:15px 30px;border-radius:12px;text-decoration:none;transition:background .15s}
+  .btn-gold{background:var(--gold);color:var(--on-gold);font-weight:700;font-size:16px;padding:15px 30px;border-radius:12px;text-decoration:none;transition:background .15s}
   .btn-gold:hover{background:var(--gold-d)}
   .btn-ghost{border:1.5px solid rgba(255,255,255,.35);color:#fff;font-weight:600;font-size:16px;padding:15px 30px;border-radius:12px;text-decoration:none;transition:.15s}
   .btn-ghost:hover{border-color:#fff;background:rgba(255,255,255,.06)}
@@ -132,7 +132,7 @@
   .search-card p{font-size:13.5px;color:rgba(255,255,255,.65);margin:0 0 20px;line-height:1.5}
   .search-form{display:flex;gap:10px;margin-bottom:20px}
   .search-form input{flex:1;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink)}
-  .search-form button{background:var(--gold);color:var(--teal);border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:14.5px;font-family:var(--sans);cursor:pointer;transition:.15s}
+  .search-form button{background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:14.5px;font-family:var(--sans);cursor:pointer;transition:.15s}
   .search-form button:hover{background:var(--gold-d)}
   .notfound{background:rgba(237,184,76,.12);border:1px solid rgba(237,184,76,.4);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--gold)}
   .found{background:var(--white);color:var(--ink);border:1px solid var(--border);border-radius:16px;padding:24px}
@@ -209,7 +209,7 @@
   .form h3{font-weight:700;font-size:22px;margin-bottom:4px}
   .form label{display:flex;flex-direction:column;gap:8px;font-size:13.5px;font-weight:600;color:var(--muted)}
   .form input,.form select{border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink)}
-  .form button{background:var(--gold);color:var(--teal);border:none;border-radius:12px;padding:15px;font-weight:700;font-size:16px;font-family:var(--sans);cursor:pointer;margin-top:6px;transition:.15s}
+  .form button{background:var(--gold);color:var(--on-gold);border:none;border-radius:12px;padding:15px;font-weight:700;font-size:16px;font-family:var(--sans);cursor:pointer;margin-top:6px;transition:.15s}
   .form button:hover{background:var(--gold-d)}
   .form .thanks{background:var(--it-bg);border:1px solid var(--teal-2);color:var(--teal);border-radius:12px;padding:14px 16px;font-size:14.5px;font-weight:600}
 
@@ -413,6 +413,7 @@
     </div>
   </nav>
 
+  <main id="main">
   <!-- ================= HERO ================= -->
   <header class="hero" id="top">
     <svg class="ghost" width="520" height="596" viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true">
@@ -615,6 +616,7 @@
       <div id="kabinet-body"></div>
     </div>
   </section>
+  </main>
 
   <!-- ================= FOOTER ================= -->
   <footer>
@@ -1458,7 +1460,7 @@ addEventListener('hashchange', ()=>route(true));
             <span id="auth-name"></span><span id="auth-role" class="chip it"></span>
             <button id="auth-kab" class="chip" style="cursor:pointer;border:1px solid var(--teal-2);background:var(--it-bg);color:var(--teal)">👤 Kabinet</button>
             <button id="auth-pickrole" class="chip" style="display:none;cursor:pointer;border:1px solid var(--gold);background:var(--med-bg);color:var(--med-fg)">Rolni tanlang</button>
-            <a id="auth-admin" href="./admin.html" style="display:none;background:var(--gold);color:var(--teal);padding:8px 12px;border-radius:10px;font-weight:700;text-decoration:none">⚙️ Admin panel</a>
+            <a id="auth-admin" href="./admin.html" style="display:none;background:var(--gold);color:var(--on-gold);padding:8px 12px;border-radius:10px;font-weight:700;text-decoration:none">⚙️ Admin panel</a>
             <button id="auth-out" style="background:transparent;color:var(--ink);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer">Chiqish</button></span>`;
         nav.appendChild(w);
         document.getElementById('auth-login').onclick=openAuthModal;
@@ -1492,7 +1494,7 @@ addEventListener('hashchange', ()=>route(true));
           <input id="am-email" type="email" autocomplete="email" placeholder="Email" style="${inp}">
           <input id="am-pass" type="password" autocomplete="current-password" placeholder="Parol (kamida 6 belgi)" style="${inp}">
           <div id="am-err" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>
-          <button id="am-submit" style="width:100%;background:var(--gold);color:var(--teal);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px">Kirish</button>
+          <button id="am-submit" style="width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px">Kirish</button>
           <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:12px">
             <span id="am-toggle-txt">Hisobingiz yo‘qmi?</span>
             <a id="am-toggle" style="color:var(--teal);font-weight:600;cursor:pointer"> Ro‘yxatdan o‘tish</a></div>
