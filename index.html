@@ -6,6 +6,10 @@
 <title>Iqror Academy — IT va MED yo‘nalishlarida kuchli maktab ta'limi</title>
 <meta name="description" content="Iqror Academy — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim. Ochiq natijalar, reytinglar, o‘qituvchilar va yutuqlar bitta platformada.">
 <meta name="theme-color" content="#155A4E">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Iqror Academy">
 <meta property="og:title" content="Iqror Academy">
 <meta property="og:description" content="IT va MED yo‘nalishlarida natijaga yo‘naltirilgan zamonaviy maktab.">
 <meta property="og:type" content="website">
@@ -1117,9 +1121,8 @@ addEventListener('hashchange', ()=>route(true));
 
 <!-- Firebase: real ma'lumot (Firestore) + analitika + ariza + Gmail login/rol. Oflaynda ham ishlaydi. -->
 <script type="module">
-  // Kesh avto-tozalash: eski service worker/keshlarni har kirishda olib tashlaymiz
-  try{ if('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}); }catch(e){}
-  try{ if(window.caches) caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))).catch(()=>{}); }catch(e){}
+  // PWA: network-first service worker — onlaynда doim yangi kontent, oflaynда keshdan.
+  try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{}); }catch(e){}
 
   const V="https://www.gstatic.com/firebasejs/10.12.5";
   const firebaseConfig = {
