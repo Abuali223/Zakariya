@@ -524,6 +524,18 @@
     </div>
   </section>
 
+  <!-- ================= KABINET (ota-ona / o'quvchi) ================= -->
+  <section id="kabinet" class="band">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker" data-t="kab_kicker"></div>
+        <h2 data-t="kab_title"></h2>
+        <p data-t="kab_sub"></p>
+      </div>
+      <div id="kabinet-body" style="max-width:600px"></div>
+    </div>
+  </section>
+
   <!-- ================= FOOTER ================= -->
   <footer>
     <div class="wrap foot-inner">
@@ -616,6 +628,15 @@ const T = {
     cls_none:"Bu sinf bo‘yicha hozircha ma'lumot yo‘q.",
     cls_sum_count:"o‘quvchi",cls_sum_avg:"o‘rtacha ball",cls_sum_att:"o‘rtacha davomat",
     cls_c_name:"O‘quvchi",cls_c_score:"Ball",cls_detail:"Batafsil",cls_close:"Yopish",cls_att_short:"Davomat",
+    kab_nav:"Kabinet",
+    kab_kicker:"Shaxsiy kabinet",kab_title:"Mening kabinetim",
+    kab_sub:"Farzandingiz (yoki o‘zingiz) ID raqamini bir marta kiriting — natijalar, davomat va fanlar kesimini shu yerda kuzatib borasiz.",
+    kab_login:"Kabinetdan foydalanish uchun avval tizimga kiring (Kirish tugmasi).",
+    kab_prompt:"Farzandingizning maktab bergan ID raqamini kiriting:",
+    kab_ph:"Masalan: IQ-1004",kab_save:"Saqlash",kab_change:"ID ni o‘zgartirish",
+    kab_notfound:"Bunday ID topilmadi. Tekshirib qayta kiriting.",
+    kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
+    kab_missing:"Saqlangan ID bo‘yicha ma’lumot topilmadi:",
     dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
     grade:g=>g+"-sinf"
   },
@@ -688,6 +709,15 @@ const T = {
     cls_none:"По этому классу пока нет данных.",
     cls_sum_count:"учеников",cls_sum_avg:"средний балл",cls_sum_att:"средняя посещаемость",
     cls_c_name:"Ученик",cls_c_score:"Балл",cls_detail:"Подробно",cls_close:"Закрыть",cls_att_short:"Посещаемость",
+    kab_nav:"Кабинет",
+    kab_kicker:"Личный кабинет",kab_title:"Мой кабинет",
+    kab_sub:"Введите ID ребёнка (или свой) один раз — и следите за результатами, посещаемостью и предметами здесь.",
+    kab_login:"Чтобы пользоваться кабинетом, сначала войдите (кнопка «Войти»).",
+    kab_prompt:"Введите ID, выданный школой вашему ребёнку:",
+    kab_ph:"Например: IQ-1004",kab_save:"Сохранить",kab_change:"Изменить ID",
+    kab_notfound:"Такой ID не найден. Проверьте и введите снова.",
+    kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
+    kab_missing:"По сохранённому ID данные не найдены:",
     dirs:["Направление IT","Направление MED","Подготовительные курсы"],
     grade:g=>g+" класс"
   }
@@ -942,6 +972,51 @@ function renderClsDetail(id){
   const c=$("#cls-detail-close"); if(c)c.onclick=()=>{host.innerHTML="";};
   try{host.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}
 }
+/* ---- Shaxsiy kabinet (ota-ona / o'quvchi) ---- */
+function findStudent(id){ const q=String(id||"").trim().toUpperCase(); return STUDENTS.find(s=>String(s.id).toUpperCase()===q)||null; }
+function studentCardHTML(s){
+  const t=T[lang];
+  const rankArr=STUDENTS.filter(x=>x.lng===s.lng && String(x.g)===String(s.g) && x.cls===s.cls).sort((a,b)=>b.score-a.score);
+  const rank=rankArr.findIndex(x=>x.id===s.id)+1;
+  const subjArr=(s.subjects&&s.subjects.length)?s.subjects:(SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
+  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
+  return `<div class="found">
+    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
+    <div class="metrics">
+      <div class="m"><b>${rank||'-'}</b><span>${esc(t.res_rank)}</span></div>
+      <div class="m"><b>${Number(s.score)||0}</b><span>${esc(t.res_total)}</span></div>
+      <div class="m"><b>${Number(s.att)||0}%</b><span>${esc(t.res_attendance)}</span></div>
+    </div>
+    <div class="subs-l">${esc(t.res_subjects)}</div>${subs}</div>`;
+}
+function renderKabinet(){
+  const t=T[lang], host=$("#kabinet-body"); if(!host) return;
+  const A=window.IqrorAuth;
+  if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="cls-empty">${esc(t.kab_login)}</div>`; return; }
+  const childId = A.getChildId ? A.getChildId() : "";
+  if(!childId){
+    host.innerHTML=`<div class="found" style="padding:24px">
+      <p style="margin:0 0 14px;color:var(--muted)">${esc(t.kab_prompt)}</p>
+      <div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}"><button id="kab-save" type="button">${esc(t.kab_save)}</button></div>
+      <div id="kab-msg" class="notfound" style="display:none;margin-top:12px"></div></div>`;
+    const save=async()=>{
+      const val=$("#kab-input").value.trim();
+      const s=findStudent(val);
+      const msg=$("#kab-msg");
+      if(!s){ msg.style.display="block"; msg.textContent=t.kab_notfound; return; }
+      try{ await A.saveChild(s.id); renderKabinet(); }catch(e){ msg.style.display="block"; msg.textContent=t.kab_saveerr; }
+    };
+    $("#kab-save").onclick=save;
+    $("#kab-input").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); save(); } });
+    return;
+  }
+  const s=findStudent(childId);
+  if(!s){ host.innerHTML=`<div class="cls-empty">${esc(t.kab_missing)} <b>${esc(childId)}</b><br><button id="kab-reset" class="btn-ghost" style="margin-top:12px;border-color:var(--border)">${esc(t.kab_change)}</button></div>`;
+    const r=$("#kab-reset"); if(r) r.onclick=async()=>{ try{await A.saveChild("");}catch(e){} renderKabinet(); }; return; }
+  host.innerHTML=studentCardHTML(s)+`<button id="kab-change" class="btn-ghost" style="margin-top:16px;border-color:var(--border);color:var(--ink)">${esc(t.kab_change)}</button>`;
+  const ch=$("#kab-change"); if(ch) ch.onclick=async()=>{ try{await A.saveChild("");}catch(e){} renderKabinet(); };
+}
 function renderContact(){
   const a=$("#c-address"); if(a)a.textContent=lang==="uz"?CONTACT.address_uz:(CONTACT.address_ru||CONTACT.address_uz);
   const p=$("#c-phone"); if(p){p.textContent=CONTACT.phone||""; p.href="tel:"+String(CONTACT.phone||"").replace(/[^+\d]/g,"");}
@@ -964,7 +1039,9 @@ window.IqrorPublic = {
     if(d.stats){ HERO_STATS[0].v=d.stats.students??HERO_STATS[0].v; HERO_STATS[1].v=d.stats.teachers??HERO_STATS[1].v; HERO_STATS[2].v=d.stats.uni??HERO_STATS[2].v; HERO_STATS[3].v=d.stats.awards??HERO_STATS[3].v; }
     if(d.contact) CONTACT = {...CONTACT, ...d.contact};
     renderAll();
-  }
+    if(location.hash==='#kabinet') renderKabinet();
+  },
+  renderKabinet(){ renderKabinet(); }
 };
 function setLang(l){
   lang=l; try{localStorage.setItem("iqror-lang",l);}catch(e){}
@@ -1010,7 +1087,7 @@ $("#enroll-form").addEventListener("submit",async e=>{
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
-const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa'];
+const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa','kabinet'];
 function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
@@ -1025,6 +1102,7 @@ function route(animate){
   // Yangi ochilgan bo'limni yumshoq animatsiya bilan ko'rsatamiz
   const cur=document.getElementById(h);
   if(cur && animate){ cur.classList.remove('page-enter'); void cur.offsetWidth; cur.classList.add('page-enter'); }
+  if(h==='kabinet') renderKabinet();
   window.scrollTo({top:0,left:0,behavior:animate?'smooth':'auto'});
 }
 addEventListener('hashchange', ()=>route(true));
@@ -1107,15 +1185,22 @@ addEventListener('hashchange', ()=>route(true));
       const { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
               createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } = authMod;
       const { doc, getDoc, setDoc, serverTimestamp } = fsMod;
-      let justLoggedIn = false, currentUser = null;
+      let justLoggedIn = false, currentUser = null, childId = '';
+      const kabRefresh=()=>{ if(location.hash==='#kabinet' && window.IqrorPublic && window.IqrorPublic.renderKabinet) window.IqrorPublic.renderKabinet(); };
+      window.IqrorAuth = {
+        getUser: ()=>currentUser,
+        getChildId: ()=>childId,
+        async saveChild(id){ childId=id||''; if(currentUser){ await setDoc(doc(db,'users',currentUser.uid),{childId:childId},{merge:true}); } }
+      };
 
       buildAuthUI();
       onAuthStateChanged(auth, async (user)=>{
         currentUser = user;
-        if(!user){ setAuthUI(null); return; }
+        if(!user){ childId=''; setAuthUI(null); kabRefresh(); return; }
         let role=null;
-        try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()) role=ud.data().role; }catch(e){}
+        try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ role=ud.data().role; childId=ud.data().childId||''; } }catch(e){}
         setAuthUI({ name:user.displayName||user.email, role });
+        kabRefresh();
         // Admin bo'lsa (custom claim yoki role=='admin') "Admin panel" havolasini ko'rsatamiz
         try{
           let adminOk = (role==='admin');
@@ -1132,6 +1217,7 @@ addEventListener('hashchange', ()=>route(true));
         w.innerHTML=`<button id="auth-login" class="btn-cta" style="background:var(--teal);color:#fff">Kirish</button>
           <span id="auth-chip" style="display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600">
             <span id="auth-name"></span><span id="auth-role" class="chip it"></span>
+            <button id="auth-kab" class="chip" style="cursor:pointer;border:1px solid var(--teal-2);background:var(--it-bg);color:var(--teal)">👤 Kabinet</button>
             <button id="auth-pickrole" class="chip" style="display:none;cursor:pointer;border:1px solid var(--gold);background:var(--med-bg);color:var(--med-fg)">Rolni tanlang</button>
             <a id="auth-admin" href="./admin.html" style="display:none;background:var(--gold);color:var(--teal);padding:8px 12px;border-radius:10px;font-weight:700;text-decoration:none">⚙️ Admin panel</a>
             <button id="auth-out" style="background:transparent;color:var(--ink);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer">Chiqish</button></span>`;
@@ -1139,6 +1225,7 @@ addEventListener('hashchange', ()=>route(true));
         document.getElementById('auth-login').onclick=openAuthModal;
         document.getElementById('auth-out').onclick=()=>signOut(auth);
         document.getElementById('auth-pickrole').onclick=()=>{ if(currentUser) askRole(currentUser); };
+        document.getElementById('auth-kab').onclick=()=>{ location.hash='#kabinet'; };
       }
       function setAuthUI(u){
         const login=document.getElementById('auth-login'), chip=document.getElementById('auth-chip'); if(!login||!chip) return;

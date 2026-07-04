@@ -34,7 +34,13 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.role in ['parent','student','teacher']
                     && request.resource.data.verified == false;
-      allow update, delete: if isAdmin();
+      // Egasi o'z hujjatini yangilay oladi (masalan farzandi ID sini), lekin
+      // rol va tasdiqlangan holatini o'zgartira olmaydi — ularni faqat admin.
+      allow update: if isAdmin() ||
+                    (request.auth != null && request.auth.uid == uid
+                     && request.resource.data.role == resource.data.role
+                     && request.resource.data.verified == resource.data.verified);
+      allow delete: if isAdmin();
     }
 
     // Qolgan hamma narsa taqiqlangan.
