@@ -134,9 +134,11 @@
   .search-form button:hover{background:var(--gold-d)}
   .notfound{background:rgba(237,184,76,.12);border:1px solid rgba(237,184,76,.4);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--gold)}
   .found{background:#fff;color:var(--ink);border-radius:14px;padding:24px}
-  .found .fh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+  .found .fh{display:flex;align-items:center;gap:12px;margin-bottom:6px}
   .found .fh b{font-family:var(--serif);font-weight:700;font-size:19px}
-  .found .fid{background:var(--it-bg);color:var(--teal);font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+  .found .fid{background:var(--it-bg);color:var(--teal);font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;margin-left:auto}
+  .found-photo{width:52px;height:52px;border-radius:50%;overflow:hidden;flex:0 0 auto;border:1px solid var(--border)}
+  .found-photo img{width:100%;height:100%;object-fit:cover;display:block}
   .found .fg{font-size:13px;color:var(--muted);margin-bottom:18px}
   .found .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
   .found .metrics .m{background:var(--bg);border-radius:10px;padding:12px;text-align:center}
@@ -155,6 +157,8 @@
   .tcard:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
   .tcard .top{display:flex;align-items:center;gap:16px}
   .avatar{width:72px;height:72px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:24px;color:var(--teal);background:var(--it-bg)}
+  .avatar.photo{background:none;overflow:hidden}
+  .avatar img{width:100%;height:100%;object-fit:cover;display:block}
   .tcard .nm{font-family:var(--serif);font-weight:700;font-size:18px}
   .tcard .subj{font-size:13.5px;color:var(--teal-2);font-weight:600;margin-top:3px}
   .stars{color:var(--gold);font-size:17px;letter-spacing:2px}
@@ -185,6 +189,8 @@
   .news:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
   .news .thumb{height:160px;display:grid;place-items:center;background:linear-gradient(150deg,#1C6E5F,#154C44)}
   .news .thumb svg{width:44px;height:54px;opacity:.9}
+  .news .thumb.has-img{display:block}
+  .news .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .news .body{padding:20px 22px 24px;display:flex;flex-direction:column;gap:10px;flex:1}
   .news .row{display:flex;align-items:center;gap:10px}
   .news .tag{background:var(--it-bg);color:var(--teal);font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:999px}
@@ -281,6 +287,20 @@
   .gtable .gcell.g5{color:#1F9982}.gtable .gcell.g4{color:#2E9A88}.gtable .gcell.g3{color:#B98A2E}.gtable .gcell.g2{color:#C86A3A}
   .gchart{background:var(--bg);border-radius:12px;padding:14px 12px 6px}
   .gchart-t{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+  /* Kabinet: dars jadvali + uy vazifalari */
+  .ktt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .ktt-day{background:var(--bg);border-radius:10px;padding:12px 14px}
+  .ktt-day-h{font-weight:700;font-size:13px;color:var(--teal);margin-bottom:8px}
+  .ktt-row{display:flex;gap:10px;font-size:13.5px;padding:3px 0}
+  .ktt-time{color:var(--muted);min-width:52px;flex:0 0 auto}
+  .ktt-subj{color:var(--ink);font-weight:500;overflow-wrap:anywhere}
+  @media(max-width:560px){ .ktt-grid{grid-template-columns:1fr} }
+  .khw-list{display:flex;flex-direction:column;gap:10px}
+  .khw-item{background:var(--bg);border-radius:10px;padding:12px 14px}
+  .khw-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:4px}
+  .khw-subj{font-weight:700;font-size:13.5px;color:var(--teal)}
+  .khw-due{font-size:12px;color:var(--muted);flex:0 0 auto}
+  .khw-text{font-size:14px;color:var(--ink);overflow-wrap:anywhere}
 
   /* ---- FOOTER ---- */
   footer{background:var(--teal-d);color:rgba(255,255,255,.75)}
@@ -690,6 +710,9 @@ const T = {
     kab_gr_title:"Baholar",kab_gr_loading:"Baholar yuklanmoqda…",kab_gr_none:"Hozircha baho kiritilmagan.",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
+    kab_tt_title:"Dars jadvali",kab_tt_loading:"Jadval yuklanmoqda…",kab_tt_none:"Dars jadvali hali kiritilmagan.",
+    kab_wd_mon:"Dushanba",kab_wd_tue:"Seshanba",kab_wd_wed:"Chorshanba",kab_wd_thu:"Payshanba",kab_wd_fri:"Juma",kab_wd_sat:"Shanba",
+    kab_hw_title:"Uy vazifalari",kab_hw_loading:"Vazifalar yuklanmoqda…",kab_hw_none:"Hozircha uy vazifasi yo‘q.",
     dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
     grade:g=>g+"-sinf"
   },
@@ -778,6 +801,9 @@ const T = {
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
+    kab_tt_title:"Расписание",kab_tt_loading:"Загрузка расписания…",kab_tt_none:"Расписание пока не внесено.",
+    kab_wd_mon:"Понедельник",kab_wd_tue:"Вторник",kab_wd_wed:"Среда",kab_wd_thu:"Четверг",kab_wd_fri:"Пятница",kab_wd_sat:"Суббота",
+    kab_hw_title:"Домашние задания",kab_hw_loading:"Загрузка заданий…",kab_hw_none:"Домашних заданий пока нет.",
     dirs:["Направление IT","Направление MED","Подготовительные курсы"],
     grade:g=>g+" класс"
   }
@@ -904,7 +930,7 @@ function renderTeachers(){
     const stars="★".repeat(full)+"☆".repeat(5-full);
     return `<div class="tcard">
       <div class="top">
-        <div class="avatar" aria-hidden="true">${esc(initials(tc.name))}</div>
+        ${tc.photo?`<div class="avatar photo"><img src="${esc(tc.photo)}" alt=""></div>`:`<div class="avatar" aria-hidden="true">${esc(initials(tc.name))}</div>`}
         <div><div class="nm">${esc(tc.name)}</div><div class="subj">${esc(lang==="uz"?tc.suz:tc.sru)}</div></div>
       </div>
       <div class="top" style="gap:10px">
@@ -937,7 +963,7 @@ function renderNews(){
   const emblem = `<svg viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true"><rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"/></svg>`;
   $("#news").innerHTML = NEWS.map(n=>`
     <article class="news">
-      <div class="thumb">${emblem}</div>
+      <div class="thumb${n.img?' has-img':''}">${n.img?`<img src="${esc(n.img)}" alt="">`:emblem}</div>
       <div class="body">
         <div class="row"><span class="tag">${esc(lang==="uz"?n.tuz:n.tru)}</span><span class="date">${esc(n.d)}</span></div>
         <h3>${esc(lang==="uz"?n.uz:n.ru)}</h3>
@@ -956,7 +982,7 @@ function renderSearchResult(){
   const subjArr = (s.subjects && s.subjects.length) ? s.subjects : (SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
   const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${x.s}%"></i></div><b>${x.s}</b></div>`).join("");
   box.innerHTML=`<div class="found">
-    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fh">${s.photo?`<span class="found-photo"><img src="${esc(s.photo)}" alt=""></span>`:''}<b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
     <div class="metrics">
       <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
@@ -1019,7 +1045,7 @@ function renderClsDetail(id){
   const subjArr=(s.subjects&&s.subjects.length)?s.subjects:(SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
   const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
   host.innerHTML=`<div class="found">
-    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fh">${s.photo?`<span class="found-photo"><img src="${esc(s.photo)}" alt=""></span>`:''}<b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
     <div class="metrics">
       <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
@@ -1041,7 +1067,7 @@ function studentCardHTML(s){
   const subjArr=(s.subjects&&s.subjects.length)?s.subjects:(SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
   const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
   return `<div class="found">
-    <div class="fh"><b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
+    <div class="fh">${s.photo?`<span class="found-photo"><img src="${esc(s.photo)}" alt=""></span>`:''}<b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
     <div class="metrics">
       <div class="m"><b>${rank||'-'}</b><span>${esc(t.res_rank)}</span></div>
@@ -1076,7 +1102,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div id="kab-att"></div><div id="kab-grades"></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div id="kab-att"></div><div id="kab-grades"></div><div id="kab-timetable"></div><div id="kab-homework"></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1084,7 +1110,7 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabAttendance(s.id); renderKabGrades(s.id); }
+  if(s){ renderKabAttendance(s.id); renderKabGrades(s.id); renderKabTimetable(s); renderKabHomework(s); }
 }
 async function renderKabAttendance(studentId){
   const t=T[lang], box=$("#kab-att"); if(!box || !(window.IqrorFB&&window.IqrorFB.getAttendance)) return;
@@ -1148,6 +1174,28 @@ async function renderKabGrades(studentId){
     <div class="gtable-wrap"><table class="gtable"><thead><tr><th>${esc(t.kab_gr_subject)}</th><th>I</th><th>II</th><th>III</th><th>IV</th><th>${esc(t.kab_gr_year)}</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${growthChart(qAvg,t)}
   </div>`;
+}
+function kabClassKey(s){ return `${s.lng||'uz'}-${Number(s.g)||0}-${s.cls||'-'}`; }
+async function renderKabTimetable(s){
+  const t=T[lang], box=$("#kab-timetable"); if(!box || !(window.IqrorFB&&window.IqrorFB.getTimetable)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_tt_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_tt_loading)}</div></div>`;
+  const days=await window.IqrorFB.getTimetable(kabClassKey(s));
+  if($("#kab-timetable")!==box) return;
+  const WD=[['mon',t.kab_wd_mon],['tue',t.kab_wd_tue],['wed',t.kab_wd_wed],['thu',t.kab_wd_thu],['fri',t.kab_wd_fri],['sat',t.kab_wd_sat]];
+  const has = days && WD.some(([k])=>(days[k]||[]).length);
+  if(!has){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_tt_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_tt_none)}</div></div>`; return; }
+  const dayCol=([k,l])=>{ const rows=days[k]||[]; if(!rows.length) return '';
+    return `<div class="ktt-day"><div class="ktt-day-h">${esc(l)}</div>${rows.map(r=>`<div class="ktt-row"><span class="ktt-time">${esc(r.time||'')}</span><span class="ktt-subj">${esc(r.subject||'')}</span></div>`).join('')}</div>`; };
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_tt_title)}</div><div class="ktt-grid">${WD.map(dayCol).join('')}</div></div>`;
+}
+async function renderKabHomework(s){
+  const t=T[lang], box=$("#kab-homework"); if(!box || !(window.IqrorFB&&window.IqrorFB.getHomework)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_hw_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_hw_loading)}</div></div>`;
+  const items=await window.IqrorFB.getHomework(kabClassKey(s));
+  if($("#kab-homework")!==box) return;
+  if(!items || !items.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_hw_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_hw_none)}</div></div>`; return; }
+  const list=items.slice(0,20).map(h=>`<div class="khw-item"><div class="khw-top"><span class="khw-subj">${esc(h.subject||'')}</span>${h.dueDate?`<span class="khw-due">📅 ${esc(h.dueDate)}</span>`:''}</div><div class="khw-text">${esc(h.text||'')}</div></div>`).join('');
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_hw_title)}</div><div class="khw-list">${list}</div></div>`;
 }
 function renderContact(){
   const a=$("#c-address"); if(a)a.textContent=lang==="uz"?CONTACT.address_uz:(CONTACT.address_ru||CONTACT.address_uz);
@@ -1287,11 +1335,11 @@ addEventListener('hashchange', ()=>route(true));
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
-        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,photo:x.photo||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
         if(students.length) p.students = students;
-        const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:x.years||0,certs:x.certs||0,avg:x.avg||0,votes:x.votes||0};});
+        const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:x.years||0,certs:x.certs||0,avg:x.avg||0,votes:x.votes||0,photo:x.photo||""};});
         if(teachers.length) p.teachers = teachers;
-        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz};});
+        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,img:x.image||""};});
         if(news.length) p.news = news;
         const sa = asch.docs.map(d=>{const x=d.data();return {year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
         if(sa.length) p.schoolAch = sa;
@@ -1328,6 +1376,21 @@ addEventListener('hashchange', ()=>route(true));
           const subjects={}; let year='';
           snap.forEach(s=>{ const d=s.data(); if(d.year && String(d.year)>year) year=String(d.year); const subs=d.subjects||{}; Object.keys(subs).forEach(name=>{ subjects[name]=Object.assign({},subjects[name]||{},subs[name]); }); });
           return { subjects, year };
+        }catch(e){ return null; }
+      },
+      async getTimetable(classKey){
+        if(!db||!fsMod||!classKey) return null;
+        const { doc, getDoc } = fsMod;
+        try{ const s=await getDoc(doc(db,'timetable',classKey)); return s.exists()?(s.data().days||{}):{}; }catch(e){ return null; }
+      },
+      async getHomework(classKey){
+        if(!db||!fsMod||!classKey) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{
+          const snap=await getDocs(query(collection(db,'homework'), where('classKey','==',classKey)));
+          const items=snap.docs.map(d=>d.data());
+          items.sort((a,b)=>String(b.dueDate||'').localeCompare(String(a.dueDate||'')));
+          return items;
         }catch(e){ return null; }
       }
     };
