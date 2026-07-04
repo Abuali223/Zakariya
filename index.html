@@ -48,6 +48,7 @@
   .nav-links{display:flex;gap:22px;margin-left:auto;font-size:14.5px;font-weight:500}
   .nav-links a{color:var(--ink);text-decoration:none;transition:color .15s}
   .nav-links a:hover{color:var(--teal-2)}
+  .nav-links a.active{color:var(--teal-2);font-weight:700}
   .langsw{display:flex;gap:2px;background:#E9E4D6;border-radius:999px;padding:3px}
   .langsw button{border:none;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);background:transparent;color:var(--muted);transition:.15s}
   .langsw button.on{background:var(--teal);color:#fff}
@@ -757,10 +758,28 @@ $("#enroll-form").addEventListener("submit",async e=>{
   setTimeout(()=>{f.reset();f.querySelector("button").disabled=false;renderDirs();},2500);
 });
 
+/* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
+const PAGES = ['top','yonalishlar','natijalar','oqituvchilar','yutuqlar','hayot','aloqa'];
+function route(){
+  let h=(location.hash||'').replace('#','');
+  if(h==='home'||h==='') h='top';
+  if(!PAGES.includes(h)) h='top';
+  PAGES.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=(id===h)?'':'none'; });
+  document.querySelectorAll('.nav-links a').forEach(a=>{
+    const t=(a.getAttribute('href')||'').replace('#','');
+    a.classList.toggle('active', t===h);
+  });
+  const nl=document.getElementById('navlinks'); if(nl) nl.classList.remove('open');
+  const nt=document.getElementById('navtoggle'); if(nt) nt.setAttribute('aria-expanded','false');
+  window.scrollTo(0,0);
+}
+addEventListener('hashchange', route);
+
 /* init */
 (function init(){
   try{const s=localStorage.getItem("iqror-lang");if(s==="uz"||s==="ru")lang=s;}catch(e){}
   renderAll();
+  route();
 })();
 </script>
 
