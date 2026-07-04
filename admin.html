@@ -367,11 +367,15 @@ function openTab(tab){
   renderCollection(tab);
 }
 
-/* ---- Firestore helpers ---- */
+/* ---- Firestore helpers ----
+   orderBy'dan foydalanmaymiz: Firestore o'sha maydoni yo'q hujjatlarni
+   chetlab o'tadi (yozuv ko'rinmay qolishi mumkin). Barchasini yuklab,
+   mijoz tomonida tartiblaymiz. */
 async function loadCol(name, orderField){
-  const q = orderField ? query(collection(db,name), orderBy(orderField)) : collection(db,name);
-  const snap = await getDocs(q);
-  return snap.docs.map(d=>({ _id:d.id, ...d.data() }));
+  const snap = await getDocs(collection(db,name));
+  const arr = snap.docs.map(d=>({ _id:d.id, ...d.data() }));
+  if(orderField) arr.sort((a,b)=>(Number(a[orderField])||0)-(Number(b[orderField])||0));
+  return arr;
 }
 
 /* Mobil kartochka ko'rinishi uchun: har bir katakka sarlavha yorlig'ini beradi */
@@ -410,7 +414,7 @@ async function renderStudents(){
       const trs=list.map(r=>`<tr>
         <td data-label="ID">${esc(r.studentId||r._id)}</td>
         <td data-label="Ism">${esc(r.name||'')}</td>
-        <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
+        <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
@@ -443,7 +447,7 @@ async function renderCollection(name){
       const tds = s.cols.map(c=>{
         let v = r[c[0]];
         if(c[0]==='track') return `<td data-label="${esc(c[1])}"><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
-        if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
+        if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
       return `<tr>${tds}<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
@@ -491,6 +495,10 @@ function openForm(name, row){
       if(s.subjects) data.subjects = gatherSubjects();
       if(s.docId){
         const id = (data[s.docId]||'').trim(); if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
+        // Yangi qo'shishda mavjud ID ustiga yozib yubormaslik uchun ogohlantiramiz
+        if(!isEdit && (cache[name]||[]).some(r=>String(r._id)===id)){
+          if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
+        }
         await setDoc(doc(db,name,id), data, {merge:true});
       } else if(isEdit){
         await setDoc(doc(db,name,row._id), data, {merge:true});
