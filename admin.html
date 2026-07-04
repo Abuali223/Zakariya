@@ -340,8 +340,10 @@ function nextId(existing, prefix, pad){
 }
 
 /* ---- Auth ---- */
+let loginAttempted=false;
 $('#login-form').addEventListener('submit', async e=>{
   e.preventDefault();
+  loginAttempted=true;
   $('#login-err').style.display='none';
   const btn=$('#login-btn'); btn.disabled=true; btn.textContent='Kirilmoqda...';
   try{
@@ -357,6 +359,7 @@ $('#login-form').addEventListener('submit', async e=>{
   }finally{ btn.disabled=false; btn.textContent='Email bilan kirish'; }
 });
 $('#google-btn').addEventListener('click', ()=>{
+  loginAttempted=true;
   $('#login-err').style.display='none';
   signInWithPopup(auth, new GoogleAuthProvider()).catch(err=>{
     $('#login-err').textContent='Google kirishda xatolik: '+(err.code||err.message); $('#login-err').style.display='block';
@@ -373,10 +376,12 @@ onAuthStateChanged(auth, async user=>{
   }
   if(!isAdmin){
     await signOut(auth);
-    $('#login-err').textContent='Bu akkaunt administrator emas.'; $('#login-err').style.display='block';
+    if(loginAttempted){ $('#login-err').textContent='Bu akkaunt administrator emas. Administrator hisobi bilan kiring.'; $('#login-err').style.display='block'; }
+    loginAttempted=false;
     show('login'); return;
   }
-  $('#who').textContent = user.email;
+  loginAttempted=false;
+  $('#who').textContent = user.email || user.displayName || 'Administrator';
   show('app'); buildTabs(); openTab(currentTab);
 });
 function show(which){ $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
