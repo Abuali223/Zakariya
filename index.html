@@ -282,14 +282,22 @@
     .cls-row{grid-template-columns:32px 1fr 66px;gap:10px;padding:11px 14px}
     .cls-row .cr-act{display:none}
     .hero-stats{grid-template-columns:1fr 1fr;gap:24px}
-    .lb-row{grid-template-columns:34px 1fr auto;gap:10px;padding:13px 16px}
-    .lb-row .lb-score{display:none}
-    .lb-row .trk{grid-column:2;justify-self:start;margin-top:2px}
-    .lb-mini{display:inline-block;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--teal)}
+    .lb,.search-card,.results-grid>*{min-width:0}
+    .lb-row{display:flex;align-items:center;gap:11px;padding:12px 16px}
+    .lb-row .rank{flex:0 0 auto;width:34px;height:34px}
+    .lb-row>div:not(.lb-score){flex:1 1 auto;min-width:0}
+    .lb-row .nm{white-space:normal;overflow-wrap:anywhere}
+    .lb-row .sub{white-space:normal}
+    .lb-row .trk{flex:0 0 auto}
+    .lb-row .lb-score{flex:0 0 auto;gap:0}
+    .lb-row .lb-score .lb-bar{display:none}
+    .lb-row .lb-score b{font-size:16px;width:auto}
+    .search-card{padding:24px 22px}
+    .search-form input{min-width:0}
+    .found .metrics{gap:8px}
     .foot-inner{gap:20px}
     footer .rights{margin-left:0;width:100%}
   }
-  @media(max-width:760px){ .lb-row .lb-score.keep{display:flex;grid-column:1/-1} }
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
