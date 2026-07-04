@@ -150,6 +150,9 @@
   .img-prev img{width:100%;height:100%;object-fit:cover}
   .img-prev span{font-size:11px;color:var(--muted);text-align:center;padding:4px}
   .img-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .vid-up{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .vid-url{flex:1;min-width:220px;width:auto}
+  .vid-status{font-size:12px;color:var(--muted);margin-top:6px}
   /* Dars jadvali */
   .tt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;padding:18px 20px}
   .tt-day{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--bg)}
@@ -297,6 +300,15 @@ async function uploadImage(folder, file){
   await uploadBytes(r, file, { contentType: file.type });
   return await getDownloadURL(r);
 }
+async function uploadVideo(folder, file){
+  const { getStorage, ref, uploadBytes, getDownloadURL } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js");
+  if(!_storage) _storage = getStorage(app);
+  const clean = (file.name||'video').replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path = `videos/${folder}/${Date.now()}_${clean}`;
+  const r = ref(_storage, path);
+  await uploadBytes(r, file, { contentType: file.type });
+  return await getDownloadURL(r);
+}
 try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{}); }catch(e){}
 
 const $ = (s,r=document)=>r.querySelector(s);
@@ -350,6 +362,7 @@ const SCHEMAS = {
     fields:[
       {k:'date',l:'Sana (12.06.2026)',t:'text',req:true},
       {k:'image',l:'Rasm (foto)',t:'image'},
+      {k:'video',l:'Video (YouTube havolasi yoki fayl yuklash)',t:'video'},
       {k:'tag_uz',l:'Teg (UZ)',t:'text'},
       {k:'tag_ru',l:'Teg (RU)',t:'text'},
       {k:'title_uz',l:'Sarlavha (UZ)',t:'textarea',req:true},
@@ -988,6 +1001,13 @@ function openForm(name, row){
           <button type="button" class="btn sm danger img-clear" data-k="${f.k}" style="${v?'':'display:none'}">O‘chirish</button>
         </div>
       </div></div>`;
+    if(f.t==='video') return `<div class="img-field"><label>${esc(f.l)}</label>
+      <div class="vid-up">
+        <input name="${f.k}" type="url" value="${esc(v)}" placeholder="https://youtube.com/…  yoki fayl yuklang" class="vid-url">
+        <input type="file" accept="video/*" class="vid-file" data-k="${f.k}" style="display:none">
+        <button type="button" class="btn sm vid-pick" data-k="${f.k}">🎬 Yuklash</button>
+      </div>
+      <div class="vid-status" data-k="${f.k}">${v?'Video biriktirilgan ✓':'YouTube havolasini qo‘ying yoki qisqa video (maks. 80MB) yuklang'}</div></div>`;
     return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
   };
   // group fields into a 2-col grid where sensible
@@ -1005,7 +1025,7 @@ function openForm(name, row){
   }
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
-  wireImages(name);
+  wireImages(name); wireVideos(name);
   $('#m-form').addEventListener('submit', async e=>{
     e.preventDefault();
     const btn=$('#m-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
@@ -1052,6 +1072,22 @@ function wireImages(name){
   });
   document.querySelectorAll('#m-form .img-clear').forEach(btn=>{
     btn.onclick=()=>{ const k=btn.dataset.k; $('#m-form [name="'+k+'"]').value=''; $('#m-form .img-prev[data-k="'+k+'"]').innerHTML='<span>Rasm yo‘q</span>'; btn.style.display='none'; };
+  });
+}
+/* Video maydonlari: YouTube havolasi yoki fayl yuklash */
+function wireVideos(name){
+  document.querySelectorAll('#m-form .vid-pick').forEach(btn=>{
+    const k=btn.dataset.k, file=$('#m-form .vid-file[data-k="'+k+'"]'), urlInp=$('#m-form [name="'+k+'"]'), status=$('#m-form .vid-status[data-k="'+k+'"]');
+    btn.onclick=()=>file.click();
+    file.onchange=async()=>{
+      const f=file.files[0]; if(!f) return;
+      if(!/^video\//.test(f.type)){ toast('Faqat video fayl',true); file.value=''; return; }
+      if(f.size>80*1024*1024){ toast('Video 80MB dan katta bo‘lmasin. YouTube havolasidan foydalaning',true); file.value=''; return; }
+      status.textContent='Yuklanmoqda… (biroz kuting)';
+      try{ const url=await uploadVideo(name, f); urlInp.value=url; status.textContent='Video yuklandi ✓'; }
+      catch(e){ toast('Video yuklashda xatolik: '+(e.code||e.message),true); status.textContent='Xatolik'; }
+      file.value='';
+    };
   });
 }
 /* subjects sub-editor for students */
