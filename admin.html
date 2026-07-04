@@ -11,6 +11,9 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 458.82 522.7'%3E%3Crect x='0' y='0' width='458.82' height='115.76' fill='%231F9982'/%3E%3Cpolygon points='118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26' fill='%23F6C05E'/%3E%3Cpolygon points='159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70' fill='%231F9982'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -44,6 +47,8 @@
   .btn:disabled{opacity:.55;cursor:not-allowed}
 
   /* Login */
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .boot-spin{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite}
   .login-wrap{min-height:100dvh;display:grid;place-items:center;padding:20px;
     background:radial-gradient(1000px 500px at 100% -10%,rgba(46,154,136,.16),transparent 60%),linear-gradient(160deg,#1A6355,#13483F)}
   .login-card{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:34px;width:100%;max-width:400px}
@@ -208,8 +213,21 @@
 </style>
 </head>
 <body>
+  <!-- ===== BOOT (yuklanish) ===== -->
+  <div id="boot" style="min-height:100dvh;display:grid;place-items:center;font-family:var(--sans)">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--muted)">
+      <svg viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true" style="width:42px;height:48px"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+      <div class="boot-spin"></div>
+      <div style="font-size:14px">Yuklanmoqda…</div>
+    </div>
+  </div>
+  <script>
+    // Zaxira: agar Firebase moduli yuklanmasa (oflayn), 9s dan so'ng login ko'rsatamiz
+    setTimeout(function(){ var b=document.getElementById('boot'), a=document.getElementById('app');
+      if(b && b.style.display!=='none' && (!a || a.style.display!=='grid')){ b.style.display='none'; var l=document.getElementById('login'); if(l) l.style.display='grid'; } }, 9000);
+  </script>
   <!-- ===== LOGIN ===== -->
-  <div class="login-wrap" id="login">
+  <div class="login-wrap" id="login" style="display:none">
     <form class="login-card stack" id="login-form">
       <a class="brand" href="./" style="margin-bottom:6px">
         <svg class="mk" viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
@@ -255,7 +273,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
@@ -269,12 +286,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
-// Rasmni Storage'ga yuklab, yuklab olish URL manzilini qaytaradi
+// Rasmni Storage'ga yuklaydi. Storage SDK faqat kerak bo'lganda (rasm yuklashда) yuklanadi.
+let _storage=null;
 async function uploadImage(folder, file){
+  const { getStorage, ref, uploadBytes, getDownloadURL } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js");
+  if(!_storage) _storage = getStorage(app);
   const clean = (file.name||'rasm').replace(/[^a-zA-Z0-9._-]/g,'_');
   const path = `images/${folder}/${Date.now()}_${clean}`;
-  const r = sRef(storage, path);
+  const r = ref(_storage, path);
   await uploadBytes(r, file, { contentType: file.type });
   return await getDownloadURL(r);
 }
@@ -407,7 +426,7 @@ $('#google-btn').addEventListener('click', ()=>{
 
 onAuthStateChanged(auth, async user=>{
   if(!user){ show('login'); return; }
-  const tok = await user.getIdTokenResult(true).catch(()=>null);
+  const tok = await user.getIdTokenResult().catch(()=>null);
   let isAdmin = !!(tok && tok.claims && tok.claims.admin);
   if(!isAdmin){
     // Custom claim yo'q bo'lsa — users hujjatida role=='admin' tekshiramiz
@@ -423,7 +442,7 @@ onAuthStateChanged(auth, async user=>{
   $('#who').textContent = user.email || user.displayName || 'Administrator';
   show('app'); buildTabs(); openTab(currentTab);
 });
-function show(which){ $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
+function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
 
 $('#btn-logout').addEventListener('click',()=>signOut(auth));
 $('#btn-pass').addEventListener('click',()=>{
