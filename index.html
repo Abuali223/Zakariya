@@ -239,6 +239,18 @@
   .cls-detailbtn:hover{background:#DCEBE7}
   .cls-empty{background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:26px;text-align:center;color:var(--muted);font-size:14.5px;margin-top:20px}
   .cls-detail{margin-top:16px}
+  /* Kabinet — davomat */
+  .kab-att-card{margin-top:16px;background:var(--white);border:1px solid var(--border);border-radius:16px;padding:22px}
+  .kab-att-card .subs-l{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+  .kab-att-card .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .kab-att-card .metrics .m{background:var(--bg);border-radius:10px;padding:12px;text-align:center}
+  .kab-att-card .metrics .m b{font-family:var(--serif);font-weight:700;font-size:20px;color:var(--teal);display:block}
+  .kab-att-card .metrics .m span{font-size:11.5px;color:var(--muted);margin-top:2px;display:block}
+  .att-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-bottom:10px}
+  .att-legend span{display:inline-flex;align-items:center;gap:5px}
+  .att-legend i,.att-chip i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
+  .att-recent{display:flex;flex-wrap:wrap;gap:7px}
+  .att-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 9px}
 
   /* ---- FOOTER ---- */
   footer{background:var(--teal-d);color:rgba(255,255,255,.75)}
@@ -641,6 +653,8 @@ const T = {
     kab_notfound:"Bunday ID topilmadi. Tekshirib qayta kiriting.",
     kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
     kab_missing:"Saqlangan ID bo‘yicha ma’lumot topilmadi:",
+    kab_att_title:"Davomat",kab_att_loading:"Davomat yuklanmoqda…",kab_att_none:"Hozircha davomat kiritilmagan.",
+    kab_att_rate:"Davomat",kab_att_present:"Keldi",kab_att_absent:"Kelmadi",kab_att_late:"Kechikdi",kab_att_excused:"Sababli",
     dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
     grade:g=>g+"-sinf"
   },
@@ -722,6 +736,8 @@ const T = {
     kab_notfound:"Такой ID не найден. Проверьте и введите снова.",
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
     kab_missing:"По сохранённому ID данные не найдены:",
+    kab_att_title:"Посещаемость",kab_att_loading:"Загрузка посещаемости…",kab_att_none:"Посещаемость пока не внесена.",
+    kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",
     dirs:["Направление IT","Направление MED","Подготовительные курсы"],
     grade:g=>g+" класс"
   }
@@ -1018,8 +1034,28 @@ function renderKabinet(){
   const s=findStudent(childId);
   if(!s){ host.innerHTML=`<div class="cls-empty">${esc(t.kab_missing)} <b>${esc(childId)}</b><br><button id="kab-reset" class="btn-ghost" style="margin-top:12px;border-color:var(--border)">${esc(t.kab_change)}</button></div>`;
     const r=$("#kab-reset"); if(r) r.onclick=async()=>{ try{await A.saveChild("");}catch(e){} renderKabinet(); }; return; }
-  host.innerHTML=studentCardHTML(s)+`<button id="kab-change" class="btn-ghost" style="margin-top:16px;border-color:var(--border);color:var(--ink)">${esc(t.kab_change)}</button>`;
+  host.innerHTML=studentCardHTML(s)+`<div id="kab-att"></div><button id="kab-change" class="btn-ghost" style="margin-top:16px;border-color:var(--border);color:var(--ink)">${esc(t.kab_change)}</button>`;
   const ch=$("#kab-change"); if(ch) ch.onclick=async()=>{ try{await A.saveChild("");}catch(e){} renderKabinet(); };
+  renderKabAttendance(s.id);
+}
+async function renderKabAttendance(studentId){
+  const t=T[lang], box=$("#kab-att"); if(!box || !(window.IqrorFB&&window.IqrorFB.getAttendance)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_loading)}</div></div>`;
+  const a=await window.IqrorFB.getAttendance(studentId);
+  if($("#kab-att")!==box) return;
+  if(!a || !a.total){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_none)}</div></div>`; return; }
+  const rate=Math.round((a.present+a.late)/a.total*100);
+  const STL={present:'#1F9982',absent:'#C86A3A',late:'#DBB05A',excused:'#8AA0A0'};
+  const recent=a.recent.map(r=>{ const c=STL[r.st]||'#ccc'; const p=r.date.split('-'); return `<span class="att-chip"><i style="background:${c}"></i>${esc((p[2]||'')+'.'+(p[1]||''))}</span>`; }).join('');
+  box.innerHTML=`<div class="kab-att-card">
+    <div class="subs-l">${esc(t.kab_att_title)}</div>
+    <div class="metrics">
+      <div class="m"><b>${rate}%</b><span>${esc(t.kab_att_rate)}</span></div>
+      <div class="m"><b>${a.present}</b><span>${esc(t.kab_att_present)}</span></div>
+      <div class="m"><b>${a.absent}</b><span>${esc(t.kab_att_absent)}</span></div>
+    </div>
+    ${recent?`<div class="att-legend"><span><i style="background:#1F9982"></i>${esc(t.kab_att_present)}</span><span><i style="background:#C86A3A"></i>${esc(t.kab_att_absent)}</span><span><i style="background:#DBB05A"></i>${esc(t.kab_att_late)}</span><span><i style="background:#8AA0A0"></i>${esc(t.kab_att_excused)}</span></div><div class="att-recent">${recent}</div>`:''}
+  </div>`;
 }
 function renderContact(){
   const a=$("#c-address"); if(a)a.textContent=lang==="uz"?CONTACT.address_uz:(CONTACT.address_ru||CONTACT.address_uz);
@@ -1180,7 +1216,18 @@ addEventListener('hashchange', ()=>route(true));
     // ---- Analitika + ariza API ----
     window.IqrorFB = {
       event(name,params){ try{ if(window.__an) import(`${V}/firebase-analytics.js`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); }catch(e){} },
-      async submitEnrollment(data){ if(!db||!fsMod) return false; try{ await fsMod.addDoc(fsMod.collection(db,'enrollments'),{...data, created: fsMod.serverTimestamp()}); return true; }catch(e){ return false; } }
+      async submitEnrollment(data){ if(!db||!fsMod) return false; try{ await fsMod.addDoc(fsMod.collection(db,'enrollments'),{...data, created: fsMod.serverTimestamp()}); return true; }catch(e){ return false; } },
+      async getAttendance(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{
+          const snap = await getDocs(query(collection(db,'attendance'), where('studentId','==',studentId)));
+          let present=0,absent=0,late=0,excused=0; const recent=[];
+          snap.forEach(s=>{ const d=s.data(), days=d.days||{}, month=d.month||''; Object.keys(days).forEach(dd=>{ const st=days[dd]; if(st==='present')present++; else if(st==='absent')absent++; else if(st==='late')late++; else if(st==='excused')excused++; recent.push({date:`${month}-${dd}`,st}); }); });
+          recent.sort((a,b)=>b.date.localeCompare(a.date));
+          return {present,absent,late,excused,total:present+absent+late+excused,recent:recent.slice(0,15)};
+        }catch(e){ return null; }
+      }
     };
 
     // ---- Foydalanuvchi kirishi (email yoki Gmail) + rol ----

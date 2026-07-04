@@ -116,6 +116,21 @@
   .bar-row .bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
   .bar-row b{text-align:right}
   @media(max-width:820px){ .stat-grid{grid-template-columns:1fr 1fr} .dash2{grid-template-columns:1fr} }
+  /* Davomat */
+  .att-controls{display:flex;gap:16px;flex-wrap:wrap}
+  .att-controls label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+  .att-controls select,.att-controls input{border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:var(--ink);min-width:210px}
+  .att-quick{padding:6px 14px 10px}
+  .att-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 14px;border-bottom:1px solid var(--border-2)}
+  .att-row:last-child{border-bottom:none}
+  .att-nm{font-weight:600;font-size:14.5px}
+  .att-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .att-b{border:1px solid var(--border);background:#fff;color:var(--muted);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+  .att-b.on.att-present{background:#1F9982;border-color:#1F9982;color:#fff}
+  .att-b.on.att-absent{background:#C86A3A;border-color:#C86A3A;color:#fff}
+  .att-b.on.att-late{background:#E6C282;border-color:#DBB05A;color:#5C3A10}
+  .att-b.on.att-excused{background:#8AA0A0;border-color:#8AA0A0;color:#fff}
+  @media(max-width:640px){ .att-controls select,.att-controls input{min-width:0;width:100%} .att-controls label{flex:1 1 100%} .att-row{flex-direction:column;align-items:stretch;gap:8px} .att-btns{justify-content:space-between} .att-b{flex:1;text-align:center} }
   /* Sinf bo'yicha kartochkalar (O'quvchilar) */
   .cls-card{margin-bottom:18px}
   .cls-card-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--border-2);flex-wrap:wrap}
@@ -371,6 +386,7 @@ function buildTabs(){
   const items = [
     {k:'dashboard', icon:mi('M520-640v-160q0-17 11.5-28.5T560-840h240q17 0 28.5 11.5T840-800v160q0 17-11.5 28.5T800-600H560q-17 0-28.5-11.5T520-640ZM120-480v-320q0-17 11.5-28.5T160-840h240q17 0 28.5 11.5T440-800v320q0 17-11.5 28.5T400-440H160q-17 0-28.5-11.5T120-480Zm400 320v-320q0-17 11.5-28.5T560-520h240q17 0 28.5 11.5T840-480v320q0 17-11.5 28.5T800-120H560q-17 0-28.5-11.5T520-160ZM120-160v-160q0-17 11.5-28.5T160-360h240q17 0 28.5 11.5T440-320v160q0 17-11.5 28.5T400-120H160q-17 0-28.5-11.5T120-160Z'), t:'Statistika'},
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
+    {k:'attendance', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v560q0 33-23.5 56.5T800-120H160Zm0-80h640v-560H160v560Zm40-80h200v-80H200v80Zm382-80 198-198-57-57-141 142-57-57-56 57 113 113Zm-382-80h200v-80H200v80Zm0-160h200v-80H200v80Z'), t:'Davomat'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
@@ -384,6 +400,7 @@ function openTab(tab){
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
+  if(tab==='attendance') return renderAttendance();
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
@@ -589,6 +606,70 @@ function exportStudentsPDF(rows){
   </body></html>`;
   printHTML(html);
   toast('Chop etish oynasi ochildi — “PDF sifatida saqlash”ni tanlang');
+}
+/* ---- Davomat jurnali ---- */
+function classKeyOf(r){ return `${r.lang||'uz'}-${Number(r.grade)||0}-${r.classLetter||r.track||'-'}`; }
+function classLabelOf(r){ return `${gradeName(Number(r.grade)||0)} «${r.classLetter||r.track||'—'}» · ${(r.lang||'uz')==='ru'?'Rus':'O‘zbek'}`; }
+function todayStr(){ const d=new Date(),p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+const ATT_STATUS=[['present','Keldi','att-present'],['absent','Yo‘q','att-absent'],['late','Kech','att-late'],['excused','Sababli','att-excused']];
+function classGroupsMap(students){
+  const classes={};
+  students.forEach(s=>{ const k=classKeyOf(s); (classes[k]=classes[k]||{key:k,label:classLabelOf(s),g:Number(s.grade)||0,lang:s.lang||'uz',grp:s.classLetter||s.track||'-',list:[]}).list.push(s); });
+  const keys=Object.keys(classes).sort((a,b)=>{ const A=classes[a],B=classes[b]; return (A.g-B.g)||((A.lang==='ru'?1:0)-(B.lang==='ru'?1:0))||String(A.grp).localeCompare(String(B.grp)); });
+  return {classes,keys};
+}
+async function renderAttendance(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Davomat</h2></div>
+    <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Sinf<select id="att-class"><option value="">— tanlang —</option></select></label>
+      <label>Sana<input type="date" id="att-date" value="${todayStr()}"></label>
+    </div></div>
+    <div id="att-body"><div class="cls-empty" style="margin:0">Sinf va sanani tanlang.</div></div>`;
+  let students;
+  try{ students = (cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#att-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const {classes,keys}=classGroupsMap(students);
+  $('#att-class').innerHTML = `<option value="">— tanlang —</option>` + keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
+  const load=async()=>{
+    const ck=$('#att-class').value, date=$('#att-date').value;
+    if(!ck||!date){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf va sanani tanlang.</div>`; return; }
+    const cls=classes[ck], ym=date.slice(0,7), dd=date.slice(8,10);
+    $('#att-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    const existing={};
+    try{
+      const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,'attendance',`${s.studentId||s._id}__${ym}`)).catch(()=>null)));
+      snaps.forEach((sn,i)=>{ if(sn&&sn.exists()){ const days=sn.data().days||{}; existing[cls.list[i].studentId||cls.list[i]._id]=days[dd]||''; } });
+    }catch(e){}
+    const state={};
+    const ordered=cls.list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    ordered.forEach(s=>{ const sid=s.studentId||s._id; state[sid]=existing[sid]||'present'; });
+    const rowsHtml=ordered.map(s=>{ const sid=s.studentId||s._id;
+      return `<div class="att-row" data-sid="${esc(sid)}"><span class="att-nm">${esc(s.name||sid)}</span><div class="att-btns">${ATT_STATUS.map(st=>`<button type="button" class="att-b ${st[2]} ${state[sid]===st[0]?'on':''}" data-s="${st[0]}">${esc(st[1])}</button>`).join('')}</div></div>`;
+    }).join('');
+    $('#att-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${cls.list.length} o‘quvchi · ${esc(date)}</span></div>
+      <div class="att-quick"><button class="btn sm" id="att-all">✓ Hammasi keldi</button></div>
+      <div id="att-list">${rowsHtml}</div>
+      <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;justify-content:flex-end"><button class="btn gold" id="att-save">Saqlash</button></div></div>`;
+    $('#att-list').querySelectorAll('.att-row').forEach(row=>{
+      row.querySelectorAll('.att-b').forEach(btn=>btn.addEventListener('click',()=>{ state[row.dataset.sid]=btn.dataset.s; row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b===btn)); }));
+    });
+    $('#att-all').addEventListener('click',()=>{ Object.keys(state).forEach(sid=>state[sid]='present'); $('#att-list').querySelectorAll('.att-row').forEach(row=>row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b.dataset.s==='present'))); });
+    $('#att-save').addEventListener('click',async()=>{
+      const btn=$('#att-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{
+        const entries=Object.entries(state);
+        for(let i=0;i<entries.length;i+=400){
+          const batch=writeBatch(db);
+          entries.slice(i,i+400).forEach(([sid,status])=>batch.set(doc(db,'attendance',`${sid}__${ym}`),{studentId:sid,classKey:ck,month:ym,days:{[dd]:status}},{merge:true}));
+          await batch.commit();
+        }
+        toast('Davomat saqlandi ✓');
+      }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+      btn.disabled=false; btn.textContent='Saqlash';
+    });
+  };
+  $('#att-class').addEventListener('change',load);
+  $('#att-date').addEventListener('change',load);
 }
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
