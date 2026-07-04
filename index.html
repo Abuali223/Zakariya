@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Iqror Academy — IT va MED yo‘nalishlarida kuchli maktab ta'limi</title>
 <meta name="description" content="Iqror Academy — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim. Ochiq natijalar, reytinglar, o‘qituvchilar va yutuqlar bitta platformada.">
 <meta name="theme-color" content="#155A4E">
@@ -49,7 +49,7 @@
   .brand .mark{width:32px;height:auto;flex:0 0 auto}
   .brand b{font-family:var(--serif);font-weight:700;font-size:22px;letter-spacing:.04em;display:block;line-height:1}
   .brand small{font-size:10px;font-weight:600;letter-spacing:.18em;color:var(--teal-2);margin-top:3px;display:block}
-  .nav-links{display:flex;gap:15px;margin-left:auto;font-size:14px;font-weight:500}
+  .nav-links{display:flex;gap:15px;margin-left:auto;font-size:14px;font-weight:500;order:2}
   .nav-links a{color:var(--ink);text-decoration:none;transition:color .15s;white-space:nowrap}
   .nav-links a:hover{color:var(--teal-2)}
   .nav-links a.active{color:var(--teal-2);font-weight:700}
@@ -58,7 +58,14 @@
   .langsw button.on{background:var(--teal);color:#fff}
   .btn-cta{background:var(--gold);color:var(--teal);font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;text-decoration:none;transition:background .15s;white-space:nowrap}
   .btn-cta:hover{background:var(--gold-d)}
-  .navtoggle{display:none;border:1px solid var(--border);background:var(--white);border-radius:10px;width:44px;height:44px;cursor:pointer;font-size:20px;align-items:center;justify-content:center}
+  .navtoggle{display:none;border:1px solid var(--border);background:var(--white);border-radius:10px;width:44px;height:44px;cursor:pointer;font-size:20px;align-items:center;justify-content:center;flex:0 0 auto}
+  /* Desktop: nav-drop sheffofdek — bolalari to'g'ridan-to'g'ri nav-inner flex ichida */
+  .nav-drop{display:contents}
+  .brand{order:0}
+  .langsw{order:3}
+  .btn-cta{order:4}
+  #auth-ui{order:5;display:flex;align-items:center;gap:8px}
+  .navtoggle{order:6}
 
   /* ---- HERO ---- */
   .hero{background:linear-gradient(160deg,#1A6355 0%,#155249 60%,#13483F 100%);color:#fff;position:relative;overflow:hidden}
@@ -248,12 +255,20 @@
     .cards-3{grid-template-columns:1fr 1fr}
     .cards-4{grid-template-columns:1fr 1fr}
     .feat-grid{grid-template-columns:1fr 1fr}
-    .nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;gap:0;margin:0;padding:8px 0}
-    .nav-links.open{display:flex}
-    .nav-links a{padding:14px 32px;border-top:1px solid var(--border-2)}
-    .navtoggle{display:flex;margin-left:auto}
-    .nav-inner{gap:14px;position:relative;flex-wrap:wrap}
-    .btn-cta{order:3}
+    /* Mobil nav: brand chapda | UZ-RU markazda | hamburger o'ngda */
+    .nav-inner{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;position:relative}
+    .brand{justify-self:start}
+    .langsw{justify-self:center;margin:0}
+    .navtoggle{display:flex;justify-self:end}
+    /* Qolgan hamma narsa hamburger menyusida (nav-drop) */
+    .nav-drop{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:var(--bg);border-bottom:1px solid var(--border);box-shadow:0 14px 26px rgba(13,81,72,.10);padding:6px 0;gap:0;z-index:70}
+    .nav-drop.open{display:flex}
+    .nav-links{position:static;display:flex;flex-direction:column;gap:0;margin:0;width:100%;font-size:15.5px}
+    .nav-links a{padding:14px 24px;border-top:1px solid var(--border-2)}
+    .nav-links a:first-child{border-top:none}
+    .btn-cta{margin:12px 24px 6px;text-align:center;padding:13px}
+    #auth-ui{width:auto;flex-wrap:wrap;justify-content:center;gap:8px;padding:12px 24px 6px;border-top:1px solid var(--border-2)}
+    #auth-chip{flex-wrap:wrap;justify-content:center}
   }
   @media(max-width:760px){
     .wrap{padding-left:20px;padding-right:20px}
@@ -290,21 +305,23 @@
         </svg>
         <span><b>IQROR</b><small>ACADEMY</small></span>
       </a>
-      <button class="navtoggle" id="navtoggle" aria-label="Menyu" aria-expanded="false">☰</button>
-      <div class="nav-links" id="navlinks">
-        <a href="#yonalishlar" data-t="nav_courses"></a>
-        <a href="#imkoniyatlar" data-t="nav_facilities"></a>
-        <a href="#natijalar" data-t="nav_results"></a>
-        <a href="#oqituvchilar" data-t="nav_teachers"></a>
-        <a href="#yutuqlar" data-t="nav_awards"></a>
-        <a href="#hayot" data-t="nav_life"></a>
-        <a href="#aloqa" data-t="nav_contact"></a>
-      </div>
       <div class="langsw" role="group" aria-label="Til / Язык">
         <button id="lang-uz" data-lang="uz">UZ</button>
         <button id="lang-ru" data-lang="ru">RU</button>
       </div>
-      <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
+      <button class="navtoggle" id="navtoggle" aria-label="Menyu" aria-expanded="false">☰</button>
+      <div class="nav-drop" id="navdrop">
+        <div class="nav-links" id="navlinks">
+          <a href="#yonalishlar" data-t="nav_courses"></a>
+          <a href="#imkoniyatlar" data-t="nav_facilities"></a>
+          <a href="#natijalar" data-t="nav_results"></a>
+          <a href="#oqituvchilar" data-t="nav_teachers"></a>
+          <a href="#yutuqlar" data-t="nav_awards"></a>
+          <a href="#hayot" data-t="nav_life"></a>
+          <a href="#aloqa" data-t="nav_contact"></a>
+        </div>
+        <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
+      </div>
     </div>
   </nav>
 
@@ -951,12 +968,12 @@ function setLang(l){
 $("#lang-uz").addEventListener("click",()=>setLang("uz"));
 $("#lang-ru").addEventListener("click",()=>setLang("ru"));
 $("#navtoggle").addEventListener("click",e=>{
-  const links=$("#navlinks");const open=links.classList.toggle("open");
+  const drop=$("#navdrop");const open=drop.classList.toggle("open");
   e.currentTarget.setAttribute("aria-expanded",String(open));
 });
-$$("#navlinks a").forEach(a=>a.addEventListener("click",()=>{
-  $("#navlinks").classList.remove("open");$("#navtoggle").setAttribute("aria-expanded","false");
-}));
+$("#navdrop").addEventListener("click",e=>{
+  if(e.target.closest("a")){ $("#navdrop").classList.remove("open");$("#navtoggle").setAttribute("aria-expanded","false"); }
+});
 $("#cls-lang").addEventListener("change",e=>{ clsSel.lng=e.target.value; clsSel.g=""; clsSel.cls=""; renderClsControls(); renderClsResults(); });
 $("#cls-grade").addEventListener("change",e=>{ clsSel.g=e.target.value; clsSel.cls=""; renderClsControls(); renderClsResults(); });
 $("#cls-group").addEventListener("change",e=>{ clsSel.cls=e.target.value; renderClsResults(); });
@@ -995,7 +1012,7 @@ function route(animate){
     const t=(a.getAttribute('href')||'').replace('#','');
     a.classList.toggle('active', t===h);
   });
-  const nl=document.getElementById('navlinks'); if(nl) nl.classList.remove('open');
+  const nl=document.getElementById('navdrop'); if(nl) nl.classList.remove('open');
   const nt=document.getElementById('navtoggle'); if(nt) nt.setAttribute('aria-expanded','false');
   // Yangi ochilgan bo'limni yumshoq animatsiya bilan ko'rsatamiz
   const cur=document.getElementById(h);
@@ -1091,14 +1108,18 @@ addEventListener('hashchange', ()=>route(true));
         let role=null;
         try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()) role=ud.data().role; }catch(e){}
         setAuthUI({ name:user.displayName||user.email, role });
-        // Admin bo'lsa "Admin panel" havolasini ko'rsatamiz (token yangilanadi)
-        try{ const tok=await user.getIdTokenResult(true); const el=document.getElementById('auth-admin'); if(el) el.style.display=(tok.claims&&tok.claims.admin)?'inline-flex':'none'; }catch(e){}
+        // Admin bo'lsa (custom claim yoki role=='admin') "Admin panel" havolasini ko'rsatamiz
+        try{
+          let adminOk = (role==='admin');
+          try{ const tok=await user.getIdTokenResult(true); if(tok&&tok.claims&&tok.claims.admin) adminOk=true; }catch(e){}
+          const el=document.getElementById('auth-admin'); if(el) el.style.display=adminOk?'inline-flex':'none';
+        }catch(e){}
         // Rol faqat shu sessiyada endi kirgan bo'lsa so'raladi (sahifa ochilishida avto emas)
         if(!role && justLoggedIn){ justLoggedIn=false; askRole(user); }
       });
 
       function buildAuthUI(){
-        const nav=document.querySelector('.nav-inner'); if(!nav||document.getElementById('auth-ui')) return;
+        const nav=document.getElementById('navdrop')||document.querySelector('.nav-inner'); if(!nav||document.getElementById('auth-ui')) return;
         const w=document.createElement('div'); w.id='auth-ui'; w.style.cssText='display:flex;align-items:center;gap:8px';
         w.innerHTML=`<button id="auth-login" class="btn-cta" style="background:var(--teal);color:#fff">Kirish</button>
           <span id="auth-chip" style="display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600">

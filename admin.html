@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Iqror Academy — Admin panel</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 458.82 522.7'%3E%3Crect x='0' y='0' width='458.82' height='115.76' fill='%231F9982'/%3E%3Cpolygon points='118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26' fill='%23F6C05E'/%3E%3Cpolygon points='159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70' fill='%231F9982'/%3E%3C/svg%3E">
@@ -83,6 +83,22 @@
   .chip.it{background:var(--it-bg);color:var(--it-fg)} .chip.med{background:var(--med-bg);color:var(--med-fg)}
   .empty{padding:40px;text-align:center;color:var(--muted)}
 
+  /* Mobil: jadvallar kartochka ko'rinishida (tartibli) */
+  @media(max-width:640px){
+    #view .tablewrap{overflow:visible}
+    #view table,#view thead,#view tbody,#view tr,#view td{display:block;width:100%}
+    #view thead{display:none}
+    #view tbody tr{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:4px 2px;margin-bottom:12px;box-shadow:0 4px 14px rgba(13,81,72,.05)}
+    #view tbody td{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--border-2);white-space:normal;text-align:right}
+    #view tbody tr td:last-child{border-bottom:none}
+    #view tbody td::before{content:attr(data-label);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-size:11px;text-align:left;flex:0 0 auto}
+    #view tbody td.td-actions{justify-content:flex-end}
+    #view tbody td.td-actions::before{display:none}
+    #view td .row-actions{justify-content:flex-end}
+    #view td select{width:auto;min-width:140px}
+    .page-head{flex-wrap:wrap;gap:10px}
+  }
+
   /* Modal */
   .modal-bg{position:fixed;inset:0;background:rgba(9,58,52,.5);display:none;place-items:center;z-index:50;padding:18px;overflow:auto}
   .modal-bg.show{display:grid}
@@ -151,7 +167,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, collection, getDocs, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
@@ -271,7 +287,12 @@ $('#google-btn').addEventListener('click', ()=>{
 onAuthStateChanged(auth, async user=>{
   if(!user){ show('login'); return; }
   const tok = await user.getIdTokenResult(true).catch(()=>null);
-  if(!tok || !tok.claims.admin){
+  let isAdmin = !!(tok && tok.claims && tok.claims.admin);
+  if(!isAdmin){
+    // Custom claim yo'q bo'lsa — users hujjatida role=='admin' tekshiramiz
+    try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists() && ud.data().role==='admin') isAdmin=true; }catch(e){}
+  }
+  if(!isAdmin){
     await signOut(auth);
     $('#login-err').textContent='Bu akkaunt administrator emas.'; $('#login-err').style.display='block';
     show('login'); return;
@@ -316,6 +337,19 @@ async function loadCol(name, orderField){
   return snap.docs.map(d=>({ _id:d.id, ...d.data() }));
 }
 
+/* Mobil kartochka ko'rinishi uchun: har bir katakka sarlavha yorlig'ini beradi */
+function labelTable(){
+  document.querySelectorAll('#view table').forEach(tbl=>{
+    const heads=[...tbl.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+    tbl.querySelectorAll('tbody tr').forEach(tr=>{
+      [...tr.children].forEach((td,i)=>{
+        if(heads[i]) td.setAttribute('data-label',heads[i]);
+        else td.classList.add('td-actions');
+      });
+    });
+  });
+}
+
 /* ---- Generic collection view ---- */
 async function renderCollection(name){
   const s = SCHEMAS[name];
@@ -335,6 +369,7 @@ async function renderCollection(name){
     return `<tr>${tds}<td><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
   }).join('');
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
+  labelTable();
   $('#view').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
 }
@@ -416,14 +451,15 @@ async function renderUsers(){
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.</div>`; return; }
-  const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi']];
+  const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['admin','Administrator']];
   const trs = rows.map(r=>`<tr>
     <td>${esc(r.name||'')}</td><td>${esc(r.email||'')}</td>
-    <td><select data-role="${esc(r._id)}" style="min-width:130px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}${r.role==='admin'?'<option value="admin" selected>Administrator</option>':''}</select></td>
+    <td><select data-role="${esc(r._id)}" style="min-width:150px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></td>
     <td><label style="display:flex;gap:6px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" style="width:auto" data-ver="${esc(r._id)}" ${r.verified?'checked':''}> Tasdiqlangan</label></td>
     <td><div class="row-actions"><button class="btn sm gold" data-saveu="${esc(r._id)}">Saqlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
   </tr>`).join('');
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  labelTable();
   $('#view').querySelectorAll('[data-saveu]').forEach(b=>b.addEventListener('click',async()=>{
     const id=b.dataset.saveu;
     const role=$('[data-role="'+id+'"]').value;
@@ -474,6 +510,7 @@ async function renderEnrollments(){
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
   const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.direction||'')}</td><td>${esc((r.ts||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Yo‘nalish</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  labelTable();
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
 }
 
