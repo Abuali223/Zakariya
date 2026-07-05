@@ -1273,8 +1273,8 @@ async function renderEnrollments(){
   try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
   catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
-  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.direction||'')}</td><td>${esc((r.ts||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
-  $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Yo‘nalish</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc((r.ts||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
+  $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Yo‘nalish</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
   labelTable();
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
 }

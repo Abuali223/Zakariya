@@ -744,6 +744,7 @@
         <h3 data-t="f_title"></h3>
         <label><span data-t="f_name"></span><input name="name" required data-t-ph="f_name_ph"></label>
         <label><span data-t="f_phone"></span><input name="phone" required placeholder="+998 __ ___ __ __"></label>
+        <label><span data-t="f_grade"></span><select name="grade" id="grade-select" required></select></label>
         <label><span data-t="f_dir"></span><select name="direction" id="dir-select"></select></label>
         <button type="submit" data-t="f_submit"></button>
         <div class="thanks" id="form-thanks" hidden></div>
@@ -836,7 +837,7 @@ const T = {
     c_address_l:"Manzil",c_address_v:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",
     c_phone_l:"Telefon",c_hours_l:"Ish vaqti",c_hours_v:"Du–Sha, 8:00–18:00",
     f_title:"Ro‘yxatdan o‘tish",f_name:"Ism-familiya",f_name_ph:"Ismingizni yozing",
-    f_phone:"Telefon raqam",f_dir:"Yo‘nalish",f_submit:"Yuborish",
+    f_phone:"Telefon raqam",f_grade:"Farzand sinfi (yoshi)",f_dir:"Yo‘nalish",f_submit:"Yuborish",
     f_thanks:"Rahmat! Arizangiz qabul qilindi — tez orada bog‘lanamiz.",
     footer_text:"Natijaga yo‘naltirilgan zamonaviy maktab: IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim.",
     footer_rights:"Barcha huquqlar himoyalangan.",
@@ -938,7 +939,7 @@ const T = {
     c_address_l:"Адрес",c_address_v:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",
     c_phone_l:"Телефон",c_hours_l:"Часы работы",c_hours_v:"Пн–Сб, 8:00–18:00",
     f_title:"Записаться",f_name:"Имя и фамилия",f_name_ph:"Введите имя",
-    f_phone:"Номер телефона",f_dir:"Направление",f_submit:"Отправить",
+    f_phone:"Номер телефона",f_grade:"Класс (возраст) ребёнка",f_dir:"Направление",f_submit:"Отправить",
     f_thanks:"Спасибо! Заявка принята — мы скоро свяжемся с вами.",
     footer_text:"Современная школа, ориентированная на результат: углублённое образование по направлениям IT и MED.",
     footer_rights:"Все права защищены.",
@@ -1323,6 +1324,12 @@ function renderFAQ(){
 function renderDirs(){
   $("#dir-select").innerHTML = T[lang].dirs.map(d=>`<option>${esc(d)}</option>`).join("");
 }
+function renderGradeSelect(){
+  const t=T[lang], sel=$("#grade-select"); if(!sel) return;
+  const opts=[`<option value="" disabled selected>${esc(t.cls_pick)}</option>`,`<option>${esc(t.cls_prep)}</option>`];
+  for(let g=1; g<=11; g++) opts.push(`<option>${esc(t.grade(g))}</option>`);
+  sel.innerHTML=opts.join("");
+}
 function renderSearchResult(){
   const t=T[lang], box=$("#search-result");
   if(searched && !foundStudent){ box.innerHTML=`<div class="notfound">${esc(t.not_found)}</div>`; return; }
@@ -1558,6 +1565,7 @@ function renderAll(){
   renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
   renderClsControls(); renderClsResults(); renderGallery(); renderTestimonials();
   renderEvents(); renderAdmission(); renderPlans(); renderDocs(); renderFAQ();
+  renderGradeSelect();
 }
 // Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
 window.IqrorPublic = {
@@ -1615,12 +1623,12 @@ $("#search-form").addEventListener("submit",e=>{
 $("#enroll-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const f=e.currentTarget;
-  const data={name:f.name.value.trim(),phone:f.phone.value.trim(),direction:f.direction.value,lang,ts:new Date().toISOString()};
+  const data={name:f.name.value.trim(),phone:f.phone.value.trim(),grade:f.grade.value,direction:f.direction.value,lang,ts:new Date().toISOString()};
   const th=$("#form-thanks");
   th.textContent=T[lang].f_thanks; th.hidden=false;
   f.querySelector("button").disabled=true;
   try{ if(window.IqrorFB&&window.IqrorFB.submitEnrollment) await window.IqrorFB.submitEnrollment(data); }catch(err){}
-  setTimeout(()=>{f.reset();f.querySelector("button").disabled=false;renderDirs();},2500);
+  setTimeout(()=>{f.reset();f.querySelector("button").disabled=false;renderDirs();renderGradeSelect();},2500);
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
