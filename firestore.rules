@@ -41,6 +41,16 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedSubjects', [])
         : [];
     }
+    // O'quv ishlari bo'yicha (O'IBDO' / zavuch) — monitoring baholarini tasdiqlaydi.
+    function isZavuch() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'zavuch';
+    }
+    // Monitoring hujjati o'qituvchining o'z sinfi va o'z fanigami?
+    function isTeacherOwnDoc(d) {
+      return isTeacherForClass(d.get('classKey','')) && (d.get('subject','') in teacherSubjects());
+    }
 
     // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
     match /students/{id}              { allow read: if true; allow write: if isAdmin(); }
@@ -68,6 +78,22 @@ service cloud.firestore {
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /homework/{id}   { allow read: if request.auth != null; allow write: if isAdmin(); }
+
+    // Monitoring baholari — fan o'qituvchisi kiritadi (status='pending'), zavuch
+    // (O'IBDO') tasdiqlaydi (status='approved'). O'qituvchi tasdiqlangan bahoni
+    // o'zgartira olmaydi va o'zi tasdiqlay olmaydi.
+    match /monitoring/{id} {
+      allow read:   if isAdmin() || isZavuch()
+                    || ownsChild(resource.data.get('studentId',''))
+                    || isTeacherForClass(resource.data.get('classKey',''));
+      allow create: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(request.resource.data) && request.resource.data.get('status','') == 'pending');
+      allow update: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(request.resource.data)
+                        && resource.data.get('status','') == 'pending'
+                        && request.resource.data.get('status','') == 'pending');
+      allow delete: if isAdmin() || isZavuch();
+    }
 
     // Qo'shimcha kontent: galereya, fikrlar, narxlar, qabul bosqichlari, FAQ, tadbirlar.
     match /gallery/{id}               { allow read: if true; allow write: if isAdmin(); }
