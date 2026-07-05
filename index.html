@@ -385,6 +385,12 @@
   .att-legend i,.att-chip i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
   .att-recent{display:flex;flex-wrap:wrap;gap:7px}
   .att-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 9px}
+  /* Kabinet: monitoring baholari */
+  .mon-klist{display:flex;flex-direction:column;gap:8px}
+  .mon-krow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px}
+  .mon-ksubj{flex:1;font-weight:600;font-size:14.5px;color:var(--ink)}
+  .mon-kper{font-size:12.5px;color:var(--muted)}
+  .mon-kval{flex:0 0 auto;font-family:var(--serif);font-weight:700;font-size:20px;color:var(--teal);min-width:44px;text-align:right}
   /* Kabinet: bir nechta farzand */
   .kab-children{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:18px 20px;margin-bottom:6px}
   .kab-children-l{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
@@ -876,6 +882,7 @@ const T = {
     kab_att_title:"Davomat",kab_att_loading:"Davomat yuklanmoqda…",kab_att_none:"Hozircha davomat kiritilmagan.",
     kab_att_rate:"Davomat",kab_att_present:"Keldi",kab_att_absent:"Kelmadi",kab_att_late:"Kechikdi",kab_att_excused:"Sababli",
     kab_gr_title:"Baholar",kab_gr_loading:"Baholar yuklanmoqda…",kab_gr_none:"Hozircha baho kiritilmagan.",
+    kab_mon_title:"Monitoring baholari",kab_mon_loading:"Monitoring yuklanmoqda…",kab_mon_none:"Hozircha tasdiqlangan monitoring bahosi yo‘q.",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
     kab_tt_title:"Dars jadvali",kab_tt_loading:"Jadval yuklanmoqda…",kab_tt_none:"Dars jadvali hali kiritilmagan.",
@@ -982,6 +989,7 @@ const T = {
     kab_att_title:"Посещаемость",kab_att_loading:"Загрузка посещаемости…",kab_att_none:"Посещаемость пока не внесена.",
     kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
+    kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
     kab_tt_title:"Расписание",kab_tt_loading:"Загрузка расписания…",kab_tt_none:"Расписание пока не внесено.",
@@ -1152,7 +1160,8 @@ function renderHonorRoll(){
   const list = STUDENTS.filter(s=>(Number(s.score)||0)>=90).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
   if(!list.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.honor_empty)}</div>`; return; }
   box.innerHTML = list.map(s=>{
-    const cls = s.tr ? `${gradeLbl(s.g)} · ${s.tr}` : (s.cls?`${Number(s.g)||0}-${s.cls} sinf`:gradeLbl(s.g));
+    const letter = (s.cls && s.cls!==s.tr) ? s.cls : '';
+    const cls = letter ? `${gradeLbl(s.g)} «${letter}»` : gradeLbl(s.g);
     const media = s.photo ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" loading="lazy">` : `${emblem}<span class="honor-ini">${esc(initials(s.name))}</span>`;
     return `<figure class="honor-card">
       <div class="honor-photo">${media}</div>
@@ -1483,7 +1492,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1491,7 +1500,19 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabAttendance(s.id); renderKabGrades(s.id); renderKabTimetable(s); renderKabHomework(s); }
+  if(s){ renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+}
+async function renderKabMonitoring(studentId){
+  const t=T[lang], box=$("#kab-monitoring"); if(!box || !(window.IqrorFB&&window.IqrorFB.getMonitoring)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_mon_loading)}</div></div>`;
+  const raw=await window.IqrorFB.getMonitoring(studentId);
+  if($("#kab-monitoring")!==box) return;
+  const items=(raw||[]).filter(m=>m && m.status==='approved'); // faqat tasdiqlangan
+  if(!items.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_mon_none)}</div></div>`; return; }
+  const PER={m1:"1-monitoring",m2:"2-monitoring",m3:"3-monitoring",m4:"4-monitoring"};
+  const rows=items.slice().sort((a,b)=>String(a.subject||'').localeCompare(String(b.subject||''))||String(a.period||'').localeCompare(String(b.period||'')))
+    .map(m=>`<div class="mon-krow"><span class="mon-ksubj">${esc(m.subject||'')}</span><span class="mon-kper">${esc(PER[m.period]||m.period||'')}</span><span class="mon-kval">${esc(m.score)}</span></div>`).join('');
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="mon-klist">${rows}</div></div>`;
 }
 async function renderKabAttendance(studentId){
   const t=T[lang], box=$("#kab-att"); if(!box || !(window.IqrorFB&&window.IqrorFB.getAttendance)) return;
@@ -1806,6 +1827,14 @@ addEventListener('hashchange', ()=>route(true));
           const subjects={}; let year='';
           snap.forEach(s=>{ const d=s.data(); if(d.year && String(d.year)>year) year=String(d.year); const subs=d.subjects||{}; Object.keys(subs).forEach(name=>{ subjects[name]=Object.assign({},subjects[name]||{},subs[name]); }); });
           return { subjects, year };
+        }catch(e){ return null; }
+      },
+      async getMonitoring(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{
+          const snap = await getDocs(query(collection(db,'monitoring'), where('studentId','==',studentId)));
+          return snap.docs.map(d=>d.data()).filter(m=>m.status==='approved'); // faqat tasdiqlangan
         }catch(e){ return null; }
       },
       async getTimetable(classKey){

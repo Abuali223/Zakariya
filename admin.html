@@ -136,6 +136,12 @@
   .att-b.on.att-late{background:#E6C282;border-color:#DBB05A;color:#5C3A10}
   .att-b.on.att-excused{background:#8AA0A0;border-color:#8AA0A0;color:#fff}
   @media(max-width:640px){ .att-controls select,.att-controls input{min-width:0;width:100%} .att-controls label{flex:1 1 100%} .att-row{flex-direction:column;align-items:stretch;gap:8px} .att-btns{justify-content:space-between} .att-b{flex:1;text-align:center} }
+  /* Foydalanuvchi tahrirlash oynasi: sinf/fan checkbox'lari */
+  .ulbl{display:block;font-weight:700;font-size:14px;margin-bottom:8px;color:var(--ink)}
+  .uchk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--bg)}
+  .uchk{display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;padding:6px 8px;border-radius:8px;user-select:none}
+  .uchk:hover{background:#fff}
+  .uchk input{width:auto;flex:0 0 auto}
   .gr-year{font-size:12.5px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
   .gr-sel{border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:14px;font-weight:700;background:#fff;color:var(--ink);width:auto;min-width:92px;max-width:120px;flex:0 0 auto;font-family:var(--sans);cursor:pointer}
   .gr-sel.g5{background:#1F9982;border-color:#1F9982;color:#fff}
@@ -1300,7 +1306,7 @@ async function delDoc(name,id){
 async function renderUsers(){
   $('#view').innerHTML = `<div class="page-head"><h2>Foydalanuvchilar</h2>
     <div class="ph-actions"><input id="usr-search" class="search-inp" placeholder="Qidiruv: ism, email yoki rol…" autocomplete="off"></div></div>
-    <p class="small muted" style="margin:-8px 0 14px">Foydalanuvchilar Gmail orqali kirib o‘z rolini tanlaydi. Bu yerda maktab ma'lumotlariga qarab rolni tasdiqlang yoki to‘g‘rilang.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Foydalanuvchi Gmail/email bilan kiradi. Bu yerda <b>«Tahrirlash»</b> tugmasi orqali rol tayinlang. <b>Kurator</b> yoki <b>o‘qituvchi</b> tanlasangiz, ochilgan oynada sinf(lar)ni belgilaysiz (bir nechtasini belgilash mumkin); o‘qituvchi uchun fan(lar)ni ham.</p>
     <div class="card" id="usr-card"><div class="loading">Yuklanmoqda…</div></div>`;
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
@@ -1312,31 +1318,68 @@ async function renderUsers(){
     q=(q||'').trim().toLowerCase();
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
     if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
+    const roleName=rl=>(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
+    const summaryOf=r=> r.role==='kurator' ? `${(r.assignedClasses||[]).length} ta sinf`
+      : r.role==='teacher' ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan`
+      : '—';
+    const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
     const trs = filtered.map(r=>`<tr>
       <td data-label="Ism">${esc(r.name||'')}</td><td data-label="Email">${esc(r.email||'')}</td>
-      <td data-label="Rol"><select data-role="${esc(r._id)}" style="min-width:150px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></td>
-      <td data-label="Sinflar"><select multiple size="3" data-classes="${esc(r._id)}" title="Kurator (davomat) yoki o‘qituvchi (baho) uchun sinf(lar)" style="min-width:190px;font-size:12px">${CLS.keys.map(k=>`<option value="${esc(k)}" ${(Array.isArray(r.assignedClasses)&&r.assignedClasses.includes(k))?'selected':''}>${esc(CLS.classes[k].label)}</option>`).join('')}</select></td>
-      <td data-label="Fanlar"><select multiple size="3" data-subjects="${esc(r._id)}" title="O‘qituvchi uchun: baho kiritadigan fan(lar)" style="min-width:160px;font-size:12px">${SUBJECTS.map(sj=>`<option value="${esc(sj)}" ${(Array.isArray(r.assignedSubjects)&&r.assignedSubjects.includes(sj))?'selected':''}>${esc(sj)}</option>`).join('')}</select></td>
-      <td data-label="Holat"><label style="display:flex;gap:6px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" style="width:auto" data-ver="${esc(r._id)}" ${r.verified?'checked':''}> Tasdiqlangan</label></td>
-      <td class="td-actions"><div class="row-actions"><button class="btn sm gold" data-saveu="${esc(r._id)}">Saqlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+      <td data-label="Rol">${roleChip(r.role||'')}</td>
+      <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
+      <td data-label="Holat">${r.verified?'<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>':'<span class="muted">—</span>'}</td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
     </tr>`).join('');
-    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Sinflar</th><th>Fanlar</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
-    $('#usr-card').querySelectorAll('[data-saveu]').forEach(b=>b.addEventListener('click',async()=>{
-      const id=b.dataset.saveu;
-      const role=$('[data-role="'+id+'"]').value;
-      const ver=$('[data-ver="'+id+'"]').checked;
-      const clsSel=$('[data-classes="'+id+'"]');
-      const subjSel=$('[data-subjects="'+id+'"]');
-      const needsClasses = (role==='kurator' || role==='teacher');
-      const assignedClasses = (needsClasses && clsSel) ? [...clsSel.selectedOptions].map(o=>o.value) : [];
-      const assignedSubjects = (role==='teacher' && subjSel) ? [...subjSel.selectedOptions].map(o=>o.value) : [];
-      try{ await setDoc(doc(db,'users',id),{role,verified:ver,assignedClasses,assignedSubjects},{merge:true}); toast('Saqlandi ✓'); }
-      catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
-    }));
+    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts); }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
   };
   draw('');
   const si=$('#usr-search'); if(si) si.addEventListener('input',()=>draw(si.value));
+}
+// Rol + sinf/fan biriktirish oynasi (checkbox — Ctrl bosish shart emas)
+function openUserEditor(u, CLS, roleOpts){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
+  const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
+  const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
+      <div><h3 style="font-size:18px;margin:0">${esc(u.name||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.email||'')}</div></div>
+      <button id="u-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+    </div>
+    <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
+      <div><label class="ulbl">Rol</label>
+        <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff">${roleOpts.map(o=>`<option value="${o[0]}" ${u.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>
+      <div id="u-cls-wrap"><label class="ulbl">Biriktirilgan sinflar <span class="small muted" style="font-weight:400">— bir nechtasini belgilang</span></label>
+        <div class="uchk-grid">${clsChecks}</div></div>
+      <div id="u-subj-wrap"><label class="ulbl">Biriktirilgan fanlar <span class="small muted" style="font-weight:400">— o‘qituvchi baho kiritadigan fan(lar)</span></label>
+        <div class="uchk-grid">${subjChecks}</div></div>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="u-ver" ${u.verified?'checked':''} style="width:auto"> Tasdiqlangan</label>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)">
+      <button class="btn" id="u-cancel">Bekor</button><button class="btn gold" id="u-save">Saqlash</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const roleSel=ov.querySelector('#u-role');
+  const sync=()=>{ const r=roleSel.value;
+    ov.querySelector('#u-cls-wrap').style.display=(r==='kurator'||r==='teacher')?'block':'none';
+    ov.querySelector('#u-subj-wrap').style.display=(r==='teacher')?'block':'none'; };
+  sync(); roleSel.addEventListener('change',sync);
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',onKey);
+  ov.querySelector('#u-x').onclick=close; ov.querySelector('#u-cancel').onclick=close;
+  ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
+  ov.querySelector('#u-save').onclick=async()=>{
+    const role=roleSel.value, ver=ov.querySelector('#u-ver').checked;
+    const needsCls=(role==='kurator'||role==='teacher');
+    const assignedClasses = needsCls ? [...ov.querySelectorAll('[data-cls]:checked')].map(c=>c.value) : [];
+    const assignedSubjects = (role==='teacher') ? [...ov.querySelectorAll('[data-subj]:checked')].map(c=>c.value) : [];
+    const b=ov.querySelector('#u-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    try{ await setDoc(doc(db,'users',u._id),{role,verified:ver,assignedClasses,assignedSubjects},{merge:true}); toast('Saqlandi ✓'); close(); renderUsers(); }
+    catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
+  };
 }
 
 /* ---- Settings ---- */
