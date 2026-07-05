@@ -139,6 +139,17 @@
   .lb-row .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
   .trk{justify-self:start;font-size:12px;font-weight:700;letter-spacing:.08em;padding:5px 12px;border-radius:999px}
   .trk.it{background:var(--it-bg);color:var(--it-fg)} .trk.med{background:var(--med-bg);color:var(--med-fg)}
+  /* A'lochilar (90+) ro'yxati */
+  .honor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .honor-card{display:flex;align-items:center;gap:14px;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:14px 18px;box-shadow:0 8px 22px rgba(18,42,32,.05)}
+  .honor-rank{flex:0 0 auto;width:36px;height:36px;border-radius:10px;background:var(--med-bg);color:var(--med-fg);font-weight:700;display:grid;place-items:center;font-size:15px}
+  .honor-card:nth-child(1) .honor-rank{background:var(--gold);color:var(--on-gold)}
+  .honor-main{flex:1;min-width:0}
+  .honor-name{font-weight:700;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .honor-sub{font-size:13px;color:var(--muted)}
+  .honor-score{font-family:var(--serif);font-size:24px;font-weight:400;color:var(--teal);flex:0 0 auto}
+  .honor-foot{margin:26px auto 0;max-width:640px;text-align:center;font-size:14.5px;color:var(--muted)}
+  @media(max-width:760px){ .honor-grid{grid-template-columns:1fr} }
   .lb-score{display:flex;align-items:center;gap:10px}
   .lb-bar{flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden}
   .lb-bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
@@ -602,34 +613,8 @@
         <h2 data-t="res_title"></h2>
         <p data-t="res_sub"></p>
       </div>
-      <!-- Sinf bo'yicha natijalar (ota-onalar farzandi sinfini tanlaydi) -->
-      <div class="class-panel">
-        <div class="cp-head">
-          <h3 data-t="cls_title"></h3>
-          <p data-t="cls_hint"></p>
-        </div>
-        <div class="cp-selects">
-          <label><span data-t="cls_lang"></span><select id="cls-lang"></select></label>
-          <label><span data-t="cls_grade"></span><select id="cls-grade" disabled></select></label>
-          <label><span data-t="cls_group"></span><select id="cls-group" disabled></select></label>
-        </div>
-        <div id="class-results"></div>
-      </div>
-      <div class="results-grid">
-        <div class="lb">
-          <div class="lb-head"><h3 data-t="lb_title"></h3><span>2025/26</span></div>
-          <div id="leaderboard"></div>
-        </div>
-        <div class="search-card">
-          <h3 data-t="search_title"></h3>
-          <p data-t="search_hint"></p>
-          <form class="search-form" id="search-form">
-            <input id="search-input" type="text" data-t-ph="search_placeholder" data-t-aria="search_aria" aria-label="ID yoki ism">
-            <button type="submit" data-t="search_btn"></button>
-          </form>
-          <div id="search-result"></div>
-        </div>
-      </div>
+      <div class="honor-grid" id="honorroll"></div>
+      <p class="honor-foot" data-t="honor_foot"></p>
     </div>
   </section>
 
@@ -805,8 +790,10 @@ const T = {
     med_title:"MED yo‘nalishi",
     med_desc:"Biologiya, kimyo va anatomiya bo‘yicha kuchaytirilgan dastur — tibbiyot universitetlariga maqsadli tayyorgarlik.",
     med_meta:"240+ o‘quvchi · 7–11-sinflar",
-    res_kicker:"Ochiq natijalar",res_title:"O‘quvchi natijalari",
-    res_sub:"Reyting har oy test, davomat va faollik asosida yangilanadi. Har bir o‘quvchi o‘z natijasini ID orqali ko‘ra oladi.",
+    res_kicker:"A‘lochilar",res_title:"90+ ball olgan o‘quvchilar",
+    res_sub:"Har oy monitoring, davomat va faollik asosida yangilanadigan a‘lochilar ro‘yxati.",
+    honor_empty:"A‘lochilar ro‘yxati tez orada e‘lon qilinadi.",
+    honor_foot:"To‘liq natijalar, baholar va davomatni ota-onalar shaxsiy kabinetida (tizimga kirgach) ko‘radi.",
     lb_title:"TOP reyting",
     search_title:"Natijani tekshirish",
     search_hint:"Har bir o‘quvchiga maktab bergan ID orqali yoki ism bilan qidiring.",
@@ -908,8 +895,10 @@ const T = {
     med_title:"Направление MED",
     med_desc:"Усиленная программа по биологии, химии и анатомии — целевая подготовка к медицинским вузам.",
     med_meta:"240+ учеников · 7–11 классы",
-    res_kicker:"Открытые результаты",res_title:"Результаты учеников",
-    res_sub:"Рейтинг обновляется ежемесячно на основе тестов, посещаемости и активности. Каждый ученик видит свой результат по ID.",
+    res_kicker:"Отличники",res_title:"Ученики с баллом 90+",
+    res_sub:"Список отличников, обновляется ежемесячно на основе мониторинга, посещаемости и активности.",
+    honor_empty:"Список отличников скоро будет опубликован.",
+    honor_foot:"Полные результаты, оценки и посещаемость родители видят в личном кабинете (после входа).",
     lb_title:"TOP рейтинг",
     search_title:"Проверить результат",
     search_hint:"Ищите по ID, выданному школой, или по имени ученика.",
@@ -1147,6 +1136,22 @@ function renderLeaderboard(){
       <div><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.id)} · ${esc(gradeLbl(s.g))}${s.cls&&s.tr?'':(s.cls?' «'+esc(s.cls)+'»':'')}</div></div>
       ${chip}
       <div class="lb-score"><div class="lb-bar"><i style="width:${s.score}%"></i></div><b>${s.score}</b></div>
+    </div>`;
+  }).join("");
+}
+function renderHonorRoll(){
+  const t=T[lang], box=$("#honorroll"); if(!box) return;
+  const list = STUDENTS.filter(s=>(Number(s.score)||0)>=90).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
+  if(!list.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.honor_empty)}</div>`; return; }
+  box.innerHTML = list.map((s,i)=>{
+    const chip = s.tr ? `<span class="trk ${s.tr==="IT"?"it":"med"}">${esc(s.tr)}</span>`
+                      : `<span class="trk it">${esc(gradeLbl(s.g))}</span>`;
+    const sub = s.tr ? esc(gradeLbl(s.g)) : (s.cls?esc(gradeLbl(s.g))+" «"+esc(s.cls)+"»":esc(gradeLbl(s.g)));
+    return `<div class="honor-card">
+      <div class="honor-rank">${i+1}</div>
+      <div class="honor-main"><div class="honor-name">${esc(s.name)}</div><div class="honor-sub">${sub}</div></div>
+      ${chip}
+      <div class="honor-score">${Number(s.score)||0}</div>
     </div>`;
   }).join("");
 }
@@ -1571,9 +1576,9 @@ function renderContact(){
   const h=$("#c-hours"); if(h)h.textContent=lang==="uz"?CONTACT.hours_uz:(CONTACT.hours_ru||CONTACT.hours_uz);
 }
 function renderAll(){
-  applyText(); renderChips(); renderHeroStats(); renderLeaderboard(); renderTeachers();
-  renderAchievements(); renderNews(); renderDirs(); renderContact(); renderSearchResult();
-  renderClsControls(); renderClsResults(); renderGallery(); renderTestimonials();
+  applyText(); renderChips(); renderHeroStats(); renderHonorRoll(); renderTeachers();
+  renderAchievements(); renderNews(); renderDirs(); renderContact();
+  renderGallery(); renderTestimonials();
   renderEvents(); renderAdmission(); renderPlans(); renderDocs(); renderFAQ();
   renderGradeSelect();
   if(location.hash==='#kabinet' && typeof renderKabinet==='function') renderKabinet();
@@ -1614,22 +1619,6 @@ $("#navtoggle").addEventListener("click",e=>{
 });
 $("#navdrop").addEventListener("click",e=>{
   if(e.target.closest("a")){ $("#navdrop").classList.remove("open");$("#navtoggle").setAttribute("aria-expanded","false"); }
-});
-$("#cls-lang").addEventListener("change",e=>{ clsSel.lng=e.target.value; clsSel.g=""; clsSel.cls=""; renderClsControls(); renderClsResults(); });
-$("#cls-grade").addEventListener("change",e=>{ clsSel.g=e.target.value; clsSel.cls=""; renderClsControls(); renderClsResults(); });
-$("#cls-group").addEventListener("change",e=>{ clsSel.cls=e.target.value; renderClsResults(); });
-$("#search-form").addEventListener("submit",e=>{
-  e.preventDefault();
-  const q=$("#search-input").value.trim().toLowerCase();
-  if(!q){foundStudent=null;searched=false;renderSearchResult();return;}
-  const digits=q.replace(/\D/g,"");
-  foundStudent = STUDENTS.find(s=>
-    s.id.toLowerCase()===q ||
-    (digits.length>=4 && s.id.replace(/\D/g,"")===digits) ||
-    s.name.toLowerCase().includes(q)
-  )||null;
-  searched=true; renderSearchResult();
-  try{if(window.IqrorFB&&window.IqrorFB.event)window.IqrorFB.event("result_search",{found:!!foundStudent});}catch(e){}
 });
 $("#enroll-form").addEventListener("submit",async e=>{
   e.preventDefault();
