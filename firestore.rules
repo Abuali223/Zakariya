@@ -28,6 +28,20 @@ service cloud.firestore {
         && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedClasses', []));
     }
 
+    // Fan o'qituvchisi: role=='teacher' va shu sinf uning assignedClasses'ida.
+    function isTeacherForClass(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'teacher'
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedClasses', []));
+    }
+    // O'qituvchiga biriktirilgan fanlar (u faqat shu fan(lar) bahosini yozadi).
+    function teacherSubjects() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedSubjects', [])
+        : [];
+    }
+
     // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
     match /students/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
@@ -42,7 +56,15 @@ service cloud.firestore {
       allow read:  if isAdmin() || ownsChild(resource.data.get('studentId','')) || isKuratorFor(resource.data.get('classKey',''));
       allow write: if isAdmin() || isKuratorFor(request.resource.data.get('classKey',''));
     }
-    match /grades/{id}     { allow read: if isAdmin() || ownsChild(resource.data.get('studentId','')); allow write: if isAdmin(); }
+    // Baholar: admin YOKI shu farzand ota-onasi o'qiydi; o'z sinfidagi o'qituvchi ham o'qiydi.
+    // Yozishда o'qituvchi FAQAT o'z fani (subjects mapidagi kalitlar) bahosini o'zgartira oladi.
+    match /grades/{id} {
+      allow read:   if isAdmin() || ownsChild(resource.data.get('studentId','')) || isTeacherForClass(resource.data.get('classKey',''));
+      allow create: if isAdmin() || (isTeacherForClass(request.resource.data.get('classKey',''))
+                       && request.resource.data.get('subjects', {}).keys().hasOnly(teacherSubjects()));
+      allow update: if isAdmin() || (isTeacherForClass(request.resource.data.get('classKey',''))
+                       && request.resource.data.get('subjects', {}).diff(resource.data.get('subjects', {})).affectedKeys().hasOnly(teacherSubjects()));
+    }
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /homework/{id}   { allow read: if request.auth != null; allow write: if isAdmin(); }
@@ -84,7 +106,8 @@ service cloud.firestore {
                     (request.auth != null && request.auth.uid == uid
                      && request.resource.data.role == resource.data.role
                      && request.resource.data.verified == resource.data.verified
-                     && request.resource.data.get('assignedClasses', []) == resource.data.get('assignedClasses', []));
+                     && request.resource.data.get('assignedClasses', []) == resource.data.get('assignedClasses', [])
+                     && request.resource.data.get('assignedSubjects', []) == resource.data.get('assignedSubjects', []));
       allow delete: if isAdmin();
     }
 
