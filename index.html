@@ -140,8 +140,11 @@
   .trk{justify-self:start;font-size:12px;font-weight:700;letter-spacing:.08em;padding:5px 12px;border-radius:999px}
   .trk.it{background:var(--it-bg);color:var(--it-fg)} .trk.med{background:var(--med-bg);color:var(--med-fg)}
   /* A'lochilar (90+) — rasmli kartochkalar (poster uslubi) */
-  .honor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .honor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;align-items:start}
   .honor-card{position:relative;margin:0;aspect-ratio:3/4;border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#1C6E5F,#0E2C22);box-shadow:0 14px 34px rgba(9,40,30,.20);border:1px solid rgba(226,181,98,.25)}
+  /* Tayyor poster: rasm o'z o'lchamida to'liq ko'rinadi (ustiga matn chizilmaydi) */
+  .honor-card.poster{aspect-ratio:auto;background:#0E2C22}
+  .honor-card.poster img{position:static;display:block;width:100%;height:auto}
   .honor-photo{position:absolute;inset:0}
   .honor-photo img{width:100%;height:100%;object-fit:cover;object-position:top center}
   .honor-ini{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:clamp(40px,6vw,64px);color:rgba(255,255,255,.85)}
@@ -1160,6 +1163,10 @@ function renderHonorRoll(){
   const list = STUDENTS.filter(s=>(Number(s.score)||0)>=90).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
   if(!list.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.honor_empty)}</div>`; return; }
   box.innerHTML = list.map(s=>{
+    // Tayyor dizaynli poster yuklangan bo'lsa — faqat o'sha rasm (ustiga hech narsa chizilmaydi)
+    if(s.poster){
+      return `<figure class="honor-card poster"><img src="${esc(s.poster)}" alt="${esc(s.name)} — ${Number(s.score)||0} ${esc(t.honor_ball)}" loading="lazy"></figure>`;
+    }
     const letter = (s.cls && s.cls!==s.tr) ? s.cls : '';
     const cls = letter ? `${gradeLbl(s.g)} «${letter}»` : gradeLbl(s.g);
     const media = s.photo ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" loading="lazy">` : `${emblem}<span class="honor-ini">${esc(initials(s.name))}</span>`;
@@ -1772,7 +1779,7 @@ addEventListener('hashchange', ()=>route(true));
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
-        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,photo:x.photo||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,photo:x.photo||"",poster:x.posterImage||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
         if(students.length) p.students = students;
         const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
         if(teachers.length) p.teachers = teachers;
