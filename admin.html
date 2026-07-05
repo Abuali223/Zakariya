@@ -471,6 +471,9 @@ const NUM = new Set(['grade','score','attendance','order','rating','years','cert
 /* ---- State ---- */
 let currentTab = 'dashboard';
 let cache = {};
+// Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
+let SESSION = { role:'admin', isAdmin:true, assignedClasses:[] };
+const ROLE_LABEL = { admin:'Administrator', kurator:'Kurator', teacher:'O‘qituvchi', zavuch:'O‘quv ishlari bo‘yicha (O‘IBDO‘)', parent:'Ota-ona', student:'O‘quvchi' };
 
 /* Bazada yo'q bo'lgan navbatdagi noyob ID yaratadi (masalan IQ-1013) */
 function nextId(existing, prefix, pad){
@@ -522,19 +525,21 @@ $('#google-btn').addEventListener('click', async ()=>{
 onAuthStateChanged(auth, async user=>{
   if(!user){ show('login'); return; }
   const tok = await user.getIdTokenResult().catch(()=>null);
-  let isAdmin = !!(tok && tok.claims && tok.claims.admin);
-  if(!isAdmin){
-    // Custom claim yo'q bo'lsa — users hujjatida role=='admin' tekshiramiz
-    try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists() && ud.data().role==='admin') isAdmin=true; }catch(e){}
-  }
-  if(!isAdmin){
+  let role = (tok && tok.claims && tok.claims.admin) ? 'admin' : '';
+  let assignedClasses = [];
+  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(!role && d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; } }catch(e){}
+  // Panelга kirish huquqiga ega rollar (1-bosqich: admin + kurator)
+  const STAFF = ['admin','kurator'];
+  if(!STAFF.includes(role)){
     await signOut(auth);
-    if(loginAttempted){ $('#login-err').textContent='Bu akkaunt administrator emas. Administrator hisobi bilan kiring.'; $('#login-err').style.display='block'; }
+    if(loginAttempted){ $('#login-err').textContent='Bu akkaunt panelga kirish huquqiga ega emas. Administrator yoki kurator hisobi bilan kiring.'; $('#login-err').style.display='block'; }
     loginAttempted=false;
     show('login'); return;
   }
+  SESSION = { role, isAdmin: role==='admin', assignedClasses };
   loginAttempted=false;
-  $('#who').textContent = user.email || user.displayName || 'Administrator';
+  $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
+  if(!SESSION.isAdmin) currentTab='attendance';
   show('app'); buildTabs(); openTab(currentTab);
 });
 function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
@@ -559,10 +564,13 @@ function buildTabs(){
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
   ];
-  $('#tabs').innerHTML = items.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
+  // Kurator faqat "Davomat" tabini ko'radi; admin — hammasini.
+  const visible = SESSION.isAdmin ? items : items.filter(it=>it.k==='attendance');
+  $('#tabs').innerHTML = visible.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
   $('#tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
 }
 function openTab(tab){
+  if(!SESSION.isAdmin) tab='attendance';   // kurator faqat davomat
   currentTab=tab;
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
@@ -800,7 +808,9 @@ async function renderAttendance(){
   try{ students = (cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#att-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   const {classes,keys}=classGroupsMap(students);
-  $('#att-class').innerHTML = `<option value="">— tanlang —</option>` + keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
+  const visKeys = SESSION.isAdmin ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
+  $('#att-class').innerHTML = `<option value="">— tanlang —</option>` + visKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
+  if(!SESSION.isAdmin && !visKeys.length){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf biriktirilmagan. Administratorga murojaat qiling.</div>`; }
   const load=async()=>{
     const ck=$('#att-class').value, date=$('#att-date').value;
     if(!ck||!date){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf va sanani tanlang.</div>`; return; }
@@ -841,6 +851,7 @@ async function renderAttendance(){
   };
   $('#att-class').addEventListener('change',load);
   $('#att-date').addEventListener('change',load);
+  if(!SESSION.isAdmin && visKeys.length===1){ $('#att-class').value=visKeys[0]; load(); }
 }
 /* ---- Baholar jurnali (choraklar) ---- */
 const SUBJECTS=['Matematika','Algebra','Geometriya','Ona tili','Adabiyot','Ingliz tili','Rus tili','Fizika','Kimyo','Biologiya','Geografiya','Tarix','Informatika','Jismoniy tarbiya','Chizmachilik','Tarbiya'];
@@ -1209,7 +1220,9 @@ async function renderUsers(){
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
-  const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['admin','Administrator']];
+  const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],['admin','Administrator']];
+  let CLS={classes:{},keys:[]};
+  try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; CLS=classGroupsMap(st); }catch(e){}
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
@@ -1217,15 +1230,18 @@ async function renderUsers(){
     const trs = filtered.map(r=>`<tr>
       <td data-label="Ism">${esc(r.name||'')}</td><td data-label="Email">${esc(r.email||'')}</td>
       <td data-label="Rol"><select data-role="${esc(r._id)}" style="min-width:150px">${roleOpts.map(o=>`<option value="${o[0]}" ${r.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></td>
+      <td data-label="Sinflar (kurator)"><select multiple size="3" data-classes="${esc(r._id)}" title="Kurator uchun: davomat kiritadigan sinf(lar)" style="min-width:200px;font-size:12px">${CLS.keys.map(k=>`<option value="${esc(k)}" ${(Array.isArray(r.assignedClasses)&&r.assignedClasses.includes(k))?'selected':''}>${esc(CLS.classes[k].label)}</option>`).join('')}</select></td>
       <td data-label="Holat"><label style="display:flex;gap:6px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" style="width:auto" data-ver="${esc(r._id)}" ${r.verified?'checked':''}> Tasdiqlangan</label></td>
       <td class="td-actions"><div class="row-actions"><button class="btn sm gold" data-saveu="${esc(r._id)}">Saqlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
     </tr>`).join('');
-    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Sinflar (kurator)</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     $('#usr-card').querySelectorAll('[data-saveu]').forEach(b=>b.addEventListener('click',async()=>{
       const id=b.dataset.saveu;
       const role=$('[data-role="'+id+'"]').value;
       const ver=$('[data-ver="'+id+'"]').checked;
-      try{ await setDoc(doc(db,'users',id),{role,verified:ver},{merge:true}); toast('Saqlandi ✓'); }
+      const clsSel=$('[data-classes="'+id+'"]');
+      const assignedClasses = (role==='kurator' && clsSel) ? [...clsSel.selectedOptions].map(o=>o.value) : [];
+      try{ await setDoc(doc(db,'users',id),{role,verified:ver,assignedClasses},{merge:true}); toast('Saqlandi ✓'); }
       catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));

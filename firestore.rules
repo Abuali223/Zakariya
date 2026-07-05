@@ -19,6 +19,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('childIds', []).hasAny([sid]);
     }
 
+    // Kurator/sinf rahbari: users hujjatida role=='kurator' va shu sinf (classKey)
+    // uning assignedClasses ro'yxatida bo'lса — o'sha sinf davomatini yozadi/o'qiydi.
+    function isKuratorFor(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'kurator'
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedClasses', []));
+    }
+
     // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
     match /students/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
@@ -29,7 +38,10 @@ service cloud.firestore {
 
     // Elektron kundalik — MAXFIY. Baho va davomat voyaga yetmagan o'quvchining shaxsiy
     // ma'lumoti: faqat admin YOKI shu farzandni kabinetiga qo'shgan ota-ona o'qiydi.
-    match /attendance/{id} { allow read: if isAdmin() || ownsChild(resource.data.get('studentId','')); allow write: if isAdmin(); }
+    match /attendance/{id} {
+      allow read:  if isAdmin() || ownsChild(resource.data.get('studentId','')) || isKuratorFor(resource.data.get('classKey',''));
+      allow write: if isAdmin() || isKuratorFor(request.resource.data.get('classKey',''));
+    }
     match /grades/{id}     { allow read: if isAdmin() || ownsChild(resource.data.get('studentId','')); allow write: if isAdmin(); }
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
@@ -66,12 +78,13 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.role in ['parent','student']
                     && request.resource.data.verified == false;
-      // Egasi o'z hujjatini yangilay oladi (masalan farzandi ID sini), lekin
-      // rol va tasdiqlangan holatini o'zgartira olmaydi — ularni faqat admin.
+      // Egasi o'z hujjatini yangilay oladi (masalan farzandi ID sini), lekin rol,
+      // tasdiqlangan holat va biriktirilgan sinflarni o'zgartira olmaydi — faqat admin.
       allow update: if isAdmin() ||
                     (request.auth != null && request.auth.uid == uid
                      && request.resource.data.role == resource.data.role
-                     && request.resource.data.verified == resource.data.verified);
+                     && request.resource.data.verified == resource.data.verified
+                     && request.resource.data.get('assignedClasses', []) == resource.data.get('assignedClasses', []));
       allow delete: if isAdmin();
     }
 
