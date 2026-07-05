@@ -139,17 +139,22 @@
   .lb-row .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
   .trk{justify-self:start;font-size:12px;font-weight:700;letter-spacing:.08em;padding:5px 12px;border-radius:999px}
   .trk.it{background:var(--it-bg);color:var(--it-fg)} .trk.med{background:var(--med-bg);color:var(--med-fg)}
-  /* A'lochilar (90+) ro'yxati */
-  .honor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .honor-card{display:flex;align-items:center;gap:14px;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:14px 18px;box-shadow:0 8px 22px rgba(18,42,32,.05)}
-  .honor-rank{flex:0 0 auto;width:36px;height:36px;border-radius:10px;background:var(--med-bg);color:var(--med-fg);font-weight:700;display:grid;place-items:center;font-size:15px}
-  .honor-card:nth-child(1) .honor-rank{background:var(--gold);color:var(--on-gold)}
-  .honor-main{flex:1;min-width:0}
-  .honor-name{font-weight:700;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .honor-sub{font-size:13px;color:var(--muted)}
-  .honor-score{font-family:var(--serif);font-size:24px;font-weight:400;color:var(--teal);flex:0 0 auto}
-  .honor-foot{margin:26px auto 0;max-width:640px;text-align:center;font-size:14.5px;color:var(--muted)}
-  @media(max-width:760px){ .honor-grid{grid-template-columns:1fr} }
+  /* A'lochilar (90+) — rasmli kartochkalar (poster uslubi) */
+  .honor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .honor-card{position:relative;margin:0;aspect-ratio:3/4;border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#1C6E5F,#0E2C22);box-shadow:0 14px 34px rgba(9,40,30,.20);border:1px solid rgba(226,181,98,.25)}
+  .honor-photo{position:absolute;inset:0}
+  .honor-photo img{width:100%;height:100%;object-fit:cover;object-position:top center}
+  .honor-ini{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:clamp(40px,6vw,64px);color:rgba(255,255,255,.85)}
+  .honor-emb{position:absolute;right:-24px;bottom:40px;width:150px;opacity:.06;pointer-events:none}
+  .honor-cls{position:absolute;top:12px;left:12px;background:rgba(226,181,98,.95);color:var(--on-gold);font-size:12px;font-weight:700;letter-spacing:.04em;padding:5px 13px;border-radius:999px;z-index:2}
+  .honor-ov{position:absolute;left:0;right:0;bottom:0;padding:38px 16px 16px;background:linear-gradient(to top,rgba(9,40,30,.97),rgba(9,40,30,.72) 48%,transparent);z-index:1}
+  .honor-name{color:#fff;font-weight:700;font-size:16.5px;line-height:1.2;margin-bottom:7px}
+  .honor-score{display:flex;align-items:baseline;gap:6px}
+  .honor-score b{font-family:var(--serif);font-weight:700;font-size:32px;color:var(--gold);line-height:1}
+  .honor-score span{font-size:11.5px;font-weight:700;color:rgba(255,255,255,.82);letter-spacing:.1em;text-transform:uppercase}
+  .honor-foot{margin:30px auto 0;max-width:640px;text-align:center;font-size:14.5px;color:var(--muted)}
+  @media(max-width:900px){ .honor-grid{grid-template-columns:repeat(3,1fr)} }
+  @media(max-width:640px){ .honor-grid{grid-template-columns:repeat(2,1fr);gap:12px} }
   .lb-score{display:flex;align-items:center;gap:10px}
   .lb-bar{flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden}
   .lb-bar>i{display:block;height:100%;background:var(--teal-2);border-radius:99px}
@@ -793,6 +798,7 @@ const T = {
     res_kicker:"A‘lochilar",res_title:"90+ ball olgan o‘quvchilar",
     res_sub:"Har oy monitoring, davomat va faollik asosida yangilanadigan a‘lochilar ro‘yxati.",
     honor_empty:"A‘lochilar ro‘yxati tez orada e‘lon qilinadi.",
+    honor_ball:"ball",
     honor_foot:"To‘liq natijalar, baholar va davomatni ota-onalar shaxsiy kabinetida (tizimga kirgach) ko‘radi.",
     lb_title:"TOP reyting",
     search_title:"Natijani tekshirish",
@@ -898,6 +904,7 @@ const T = {
     res_kicker:"Отличники",res_title:"Ученики с баллом 90+",
     res_sub:"Список отличников, обновляется ежемесячно на основе мониторинга, посещаемости и активности.",
     honor_empty:"Список отличников скоро будет опубликован.",
+    honor_ball:"балл",
     honor_foot:"Полные результаты, оценки и посещаемость родители видят в личном кабинете (после входа).",
     lb_title:"TOP рейтинг",
     search_title:"Проверить результат",
@@ -1141,18 +1148,20 @@ function renderLeaderboard(){
 }
 function renderHonorRoll(){
   const t=T[lang], box=$("#honorroll"); if(!box) return;
+  const emblem=`<svg class="honor-emb" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#fff"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#E2B562"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#fff"/></svg>`;
   const list = STUDENTS.filter(s=>(Number(s.score)||0)>=90).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
   if(!list.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.honor_empty)}</div>`; return; }
-  box.innerHTML = list.map((s,i)=>{
-    const chip = s.tr ? `<span class="trk ${s.tr==="IT"?"it":"med"}">${esc(s.tr)}</span>`
-                      : `<span class="trk it">${esc(gradeLbl(s.g))}</span>`;
-    const sub = s.tr ? esc(gradeLbl(s.g)) : (s.cls?esc(gradeLbl(s.g))+" «"+esc(s.cls)+"»":esc(gradeLbl(s.g)));
-    return `<div class="honor-card">
-      <div class="honor-rank">${i+1}</div>
-      <div class="honor-main"><div class="honor-name">${esc(s.name)}</div><div class="honor-sub">${sub}</div></div>
-      ${chip}
-      <div class="honor-score">${Number(s.score)||0}</div>
-    </div>`;
+  box.innerHTML = list.map(s=>{
+    const cls = s.tr ? `${gradeLbl(s.g)} · ${s.tr}` : (s.cls?`${Number(s.g)||0}-${s.cls} sinf`:gradeLbl(s.g));
+    const media = s.photo ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" loading="lazy">` : `${emblem}<span class="honor-ini">${esc(initials(s.name))}</span>`;
+    return `<figure class="honor-card">
+      <div class="honor-photo">${media}</div>
+      <span class="honor-cls">${esc(cls)}</span>
+      <figcaption class="honor-ov">
+        <div class="honor-name">${esc(s.name)}</div>
+        <div class="honor-score"><b>${Number(s.score)||0}</b><span>${esc(t.honor_ball)}</span></div>
+      </figcaption>
+    </figure>`;
   }).join("");
 }
 function renderTeachers(){
