@@ -150,7 +150,7 @@
   .search-form input{flex:1;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-family:var(--sans);background:#fff;color:var(--ink)}
   .search-form button{background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:14.5px;font-family:var(--sans);cursor:pointer;transition:.15s}
   .search-form button:hover{background:var(--gold-d)}
-  .notfound{background:rgba(237,184,76,.12);border:1px solid rgba(237,184,76,.4);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--gold)}
+  .notfound{background:rgba(237,184,76,.16);border:1px solid rgba(207,162,76,.55);border-radius:12px;padding:14px 16px;font-size:14px;font-weight:600;color:#8a4b00}
   .found{background:var(--white);color:var(--ink);border:1px solid var(--border);border-radius:16px;padding:24px}
   .found .fh{display:flex;align-items:center;gap:12px;margin-bottom:6px}
   .found .fh b{font-family:var(--serif);font-weight:700;font-size:19px}
@@ -478,7 +478,7 @@
 </head>
 <body>
   <!-- ================= NAV ================= -->
-  <nav class="nav" aria-label="Asosiy navigatsiya">
+  <nav class="nav" data-t-aria="nav_aria" aria-label="Asosiy navigatsiya">
     <div class="wrap nav-inner">
       <a href="#top" class="brand" aria-label="Iqror Academy">
         <svg class="mark" viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true">
@@ -492,7 +492,7 @@
         <button id="lang-uz" data-lang="uz">UZ</button>
         <button id="lang-ru" data-lang="ru">RU</button>
       </div>
-      <button class="navtoggle" id="navtoggle" aria-label="Menyu" aria-expanded="false">☰</button>
+      <button class="navtoggle" id="navtoggle" data-t-aria="menu_aria" aria-label="Menyu" aria-expanded="false">☰</button>
       <div class="nav-drop" id="navdrop">
         <div class="nav-links" id="navlinks">
           <a href="#yonalishlar" data-t="nav_courses"></a>
@@ -624,7 +624,7 @@
           <h3 data-t="search_title"></h3>
           <p data-t="search_hint"></p>
           <form class="search-form" id="search-form">
-            <input id="search-input" type="text" data-t-ph="search_placeholder" aria-label="ID yoki ism">
+            <input id="search-input" type="text" data-t-ph="search_placeholder" data-t-aria="search_aria" aria-label="ID yoki ism">
             <button type="submit" data-t="search_btn"></button>
           </form>
           <div id="search-result"></div>
@@ -811,6 +811,7 @@ const T = {
     search_title:"Natijani tekshirish",
     search_hint:"Har bir o‘quvchiga maktab bergan ID orqali yoki ism bilan qidiring.",
     search_placeholder:"Masalan: IQ-1004",search_btn:"Qidirish",
+    search_aria:"ID yoki ism bo‘yicha qidirish",nav_aria:"Asosiy navigatsiya",menu_aria:"Menyu",
     not_found:"Topilmadi. ID yoki ismni tekshirib qayta urinib ko‘ring.",
     res_rank:"O‘rin",res_total:"Umumiy ball",res_attendance:"Davomat",res_subjects:"Fanlar kesimida",
     t_kicker:"Jamoa",t_title:"O‘qituvchilar reytingi",
@@ -913,6 +914,7 @@ const T = {
     search_title:"Проверить результат",
     search_hint:"Ищите по ID, выданному школой, или по имени ученика.",
     search_placeholder:"Например: IQ-1004",search_btn:"Поиск",
+    search_aria:"Поиск по ID или имени",nav_aria:"Основная навигация",menu_aria:"Меню",
     not_found:"Не найдено. Проверьте ID или имя и попробуйте снова.",
     res_rank:"Место",res_total:"Общий балл",res_attendance:"Посещаемость",res_subjects:"По предметам",
     t_kicker:"Команда",t_title:"Рейтинг преподавателей",
@@ -1115,9 +1117,12 @@ function applyText(){
   const t = T[lang];
   $$("[data-t]").forEach(el=>{const v=t[el.dataset.t];if(v!=null)el.textContent=v;});
   $$("[data-t-ph]").forEach(el=>{const v=t[el.dataset.tPh];if(v!=null)el.setAttribute("placeholder",v);});
+  $$("[data-t-aria]").forEach(el=>{const v=t[el.dataset.tAria];if(v!=null)el.setAttribute("aria-label",v);});
   document.documentElement.lang = lang;
   $("#lang-uz").classList.toggle("on",lang==="uz");
   $("#lang-ru").classList.toggle("on",lang==="ru");
+  $("#lang-uz").setAttribute("aria-pressed", String(lang==="uz"));
+  $("#lang-ru").setAttribute("aria-pressed", String(lang==="ru"));
 }
 
 function renderChips(){
@@ -1171,14 +1176,14 @@ function renderTeachers(){
 function renderAchievements(){
   $("#school-ach").innerHTML = SCHOOL_ACH.map(a=>`
     <div class="tl-item"><span class="dot"></span>
-      <span class="yr">${a.year}</span>
+      <span class="yr">${esc(a.year)}</span>
       <span class="tx">${esc(lang==="uz"?a.uz:a.ru)}</span>
     </div>`).join("");
   $("#student-ach").innerHTML = STUDENT_ACH.map(a=>`
     <div class="sa">
       <div class="st" aria-hidden="true">★</div>
       <div><div class="nm">${esc(a.name)}</div><div class="tx">${esc(lang==="uz"?a.uz:a.ru)}</div></div>
-      <span class="yr">${a.year}</span>
+      <span class="yr">${esc(a.year)}</span>
     </div>`).join("");
 }
 function ytId(u){ const m=String(u||"").match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m?m[1]:""; }
@@ -1188,13 +1193,15 @@ function openVideo(url){
     ? `<iframe src="https://www.youtube.com/embed/${yt}?autoplay=1&rel=0" title="Video" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
     : `<video src="${esc(url)}" controls autoplay playsinline></video>`;
   const bg=document.createElement("div"); bg.className="vid-modal";
-  bg.innerHTML=`<div class="vid-box"><button class="vid-x" aria-label="Yopish">×</button><div class="vid-frame">${media}</div></div>`;
+  bg.innerHTML=`<div class="vid-box" role="dialog" aria-modal="true" aria-label="Video"><button class="vid-x" aria-label="Yopish">×</button><div class="vid-frame">${media}</div></div>`;
   document.body.appendChild(bg);
-  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); };
+  const prevFocus=document.activeElement;
+  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); try{ prevFocus&&prevFocus.focus&&prevFocus.focus(); }catch(e){} };
   const onKey=e=>{ if(e.key==="Escape") close(); };
   bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
   bg.querySelector(".vid-x").onclick=close;
   document.addEventListener("keydown",onKey);
+  try{ bg.querySelector(".vid-x").focus(); }catch(e){}
 }
 function renderNews(){
   const emblem = `<svg viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true"><rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"/></svg>`;
@@ -1221,13 +1228,15 @@ function renderNews(){
 }
 function openImage(url){
   const bg=document.createElement("div"); bg.className="vid-modal";
-  bg.innerHTML=`<div class="vid-box img"><button class="vid-x" aria-label="Yopish">×</button><img class="vid-img" src="${esc(url)}" alt=""></div>`;
+  bg.innerHTML=`<div class="vid-box img" role="dialog" aria-modal="true" aria-label="Rasm"><button class="vid-x" aria-label="Yopish">×</button><img class="vid-img" src="${esc(url)}" alt=""></div>`;
   document.body.appendChild(bg);
-  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); };
+  const prevFocus=document.activeElement;
+  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); try{ prevFocus&&prevFocus.focus&&prevFocus.focus(); }catch(e){} };
   const onKey=e=>{ if(e.key==="Escape") close(); };
   bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
   bg.querySelector(".vid-x").onclick=close;
   document.addEventListener("keydown",onKey);
+  try{ bg.querySelector(".vid-x").focus(); }catch(e){}
 }
 function renderGallery(){
   const t=T[lang], box=$("#gallery"); if(!box) return;
@@ -1238,11 +1247,12 @@ function renderGallery(){
     const thumb = m.img || (yt?`https://img.youtube.com/vi/${yt}/hqdefault.jpg`:"");
     const cap=(lang==="uz"?m.cap_uz:m.cap_ru)||m.cap_uz||"";
     const media = thumb ? `<img src="${esc(thumb)}" alt="${esc(cap)}" loading="lazy">` : `<div class="gi-ph">${esc(cap||"")}</div>`;
-    return `<figure class="gitem${isVid?" has-video":""}"${isVid?` data-video="${esc(m.video)}"`:(m.img?` data-img="${esc(m.img)}"`:"")} role="button" tabindex="0">
+    const interactive = isVid || !!m.img;
+    return `<figure class="gitem${isVid?" has-video":""}"${isVid?` data-video="${esc(m.video)}"`:(m.img?` data-img="${esc(m.img)}"`:"")}${interactive?' role="button" tabindex="0"':''}>
       ${media}${isVid?play:""}${cap?`<figcaption>${esc(cap)}</figcaption>`:""}
     </figure>`;
   }).join("");
-  box.querySelectorAll(".gitem").forEach(el=>{
+  box.querySelectorAll(".gitem[role=button]").forEach(el=>{
     const open=()=>{ if(el.dataset.video) openVideo(el.dataset.video); else if(el.dataset.img) openImage(el.dataset.img); };
     el.addEventListener("click",open);
     el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
@@ -1337,7 +1347,7 @@ function renderSearchResult(){
   const s=foundStudent;
   const rank = STUDENTS.slice().sort((a,b)=>b.score-a.score).findIndex(x=>x.id===s.id)+1;
   const subjArr = (s.subjects && s.subjects.length) ? s.subjects : (SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
-  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${x.s}%"></i></div><b>${x.s}</b></div>`).join("");
+  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
   box.innerHTML=`<div class="found">
     <div class="fh">${s.photo?`<span class="found-photo"><img src="${esc(s.photo)}" alt=""></span>`:''}<b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
@@ -1439,7 +1449,7 @@ function renderKabinet(){
   if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="kab-narrow"><div class="cls-empty">${esc(t.kab_login)}</div></div>`; return; }
   const childIds = A.getChildIds ? A.getChildIds() : (A.getChildId&&A.getChildId()?[A.getChildId()]:[]);
   const active = A.getActiveChild ? A.getActiveChild() : (childIds[0]||"");
-  const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
+  const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
       <div id="kab-msg" class="notfound" style="display:none;margin-top:10px"></div></div>`;
   function wireAdd(){
     const btn=$("#kab-add-btn"), inp=$("#kab-input"); if(!btn||!inp) return;
@@ -1566,6 +1576,7 @@ function renderAll(){
   renderClsControls(); renderClsResults(); renderGallery(); renderTestimonials();
   renderEvents(); renderAdmission(); renderPlans(); renderDocs(); renderFAQ();
   renderGradeSelect();
+  if(location.hash==='#kabinet' && typeof renderKabinet==='function') renderKabinet();
 }
 // Firestore'dan real ma'lumot kelganda chaqiriladi (dizayn buzilmaydi, hech qachon bo'sh qolmaydi)
 window.IqrorPublic = {
@@ -1623,12 +1634,13 @@ $("#search-form").addEventListener("submit",e=>{
 $("#enroll-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const f=e.currentTarget;
-  const data={name:f.name.value.trim(),phone:f.phone.value.trim(),grade:f.grade.value,direction:f.direction.value,lang,ts:new Date().toISOString()};
+  const el=f.elements;
+  const data={name:el.name.value.trim(),phone:el.phone.value.trim(),grade:el.grade.value,direction:el.direction.value,lang,ts:new Date().toISOString()};
   const th=$("#form-thanks");
   th.textContent=T[lang].f_thanks; th.hidden=false;
   f.querySelector("button").disabled=true;
   try{ if(window.IqrorFB&&window.IqrorFB.submitEnrollment) await window.IqrorFB.submitEnrollment(data); }catch(err){}
-  setTimeout(()=>{f.reset();f.querySelector("button").disabled=false;renderDirs();renderGradeSelect();},2500);
+  setTimeout(()=>{f.reset();$("#form-thanks").hidden=true;f.querySelector("button").disabled=false;renderDirs();renderGradeSelect();},2500);
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
@@ -1641,6 +1653,7 @@ function route(animate){
   document.querySelectorAll('.nav-links a').forEach(a=>{
     const t=(a.getAttribute('href')||'').replace('#','');
     a.classList.toggle('active', t===h);
+    if(t===h) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current');
   });
   const nl=document.getElementById('navdrop'); if(nl) nl.classList.remove('open');
   const nt=document.getElementById('navtoggle'); if(nt) nt.setAttribute('aria-expanded','false');
@@ -1742,7 +1755,7 @@ addEventListener('hashchange', ()=>route(true));
         const p = {};
         const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,photo:x.photo||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
         if(students.length) p.students = students;
-        const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:x.years||0,certs:x.certs||0,avg:x.avg||0,votes:x.votes||0,photo:x.photo||""};});
+        const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
         if(teachers.length) p.teachers = teachers;
         const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,img:x.image||"",video:x.video||""};});
         if(news.length) p.news = news;
@@ -1899,18 +1912,18 @@ addEventListener('hashchange', ()=>route(true));
         const bg=document.createElement('div'); bg.id='auth-modal';
         bg.style.cssText='position:fixed;inset:0;background:rgba(9,58,52,.55);display:grid;place-items:center;z-index:100;padding:18px;overflow:auto';
         const inp='width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:var(--sans);margin-top:8px';
-        bg.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:26px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
+        bg.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="am-title" style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:26px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
             <h3 style="font-family:var(--serif);font-size:21px;margin:0;color:var(--ink)" id="am-title">Kirish</h3>
-            <button id="am-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--muted)">×</button></div>
+            <button id="am-x" aria-label="Yopish" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--muted)">×</button></div>
           <p style="color:var(--muted);font-size:13.5px;margin:2px 0 6px">Kirgach, rolingizni (ota-ona / o‘quvchi / o‘qituvchi) tanlaysiz.</p>
           <button id="am-google" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);background:#fff;border-radius:10px;padding:11px;font-size:15px;font-weight:600;cursor:pointer;margin:8px 0">
             <svg width="17" height="17" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.4c-.3 2.1-1.6 5.2-4.6 7.3l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.1-5.5c-2 1.4-4.6 2.3-8.4 2.3-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>
             Google bilan davom etish</button>
           <div style="text-align:center;color:var(--muted);font-size:13px;margin:6px 0">— yoki email bilan —</div>
-          <div id="am-namewrap" style="display:none"><input id="am-name" placeholder="Ism-familiya" style="${inp}"></div>
-          <input id="am-email" type="email" autocomplete="email" placeholder="Email" style="${inp}">
-          <input id="am-pass" type="password" autocomplete="current-password" placeholder="Parol (kamida 6 belgi)" style="${inp}">
+          <div id="am-namewrap" style="display:none"><input id="am-name" aria-label="Ism-familiya" placeholder="Ism-familiya" style="${inp}"></div>
+          <input id="am-email" type="email" autocomplete="email" aria-label="Email" placeholder="Email" style="${inp}">
+          <input id="am-pass" type="password" autocomplete="current-password" aria-label="Parol" placeholder="Parol (kamida 6 belgi)" style="${inp}">
           <div id="am-err" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>
           <button id="am-submit" style="width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px">Kirish</button>
           <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:12px">
@@ -1921,8 +1934,13 @@ addEventListener('hashchange', ()=>route(true));
         let mode='login';
         const $m=id=>document.getElementById(id);
         const showErr=m=>{ $m('am-err').textContent=m; $m('am-err').style.display='block'; };
-        $m('am-x').onclick=()=>bg.remove();
-        bg.onclick=e=>{ if(e.target===bg) bg.remove(); };
+        const prevFocus=document.activeElement;
+        function closeAM(){ if(bg.parentNode) bg.remove(); document.removeEventListener('keydown',amKey); try{ prevFocus&&prevFocus.focus&&prevFocus.focus(); }catch(e){} }
+        function amKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeAM(); } }
+        document.addEventListener('keydown',amKey);
+        setTimeout(()=>{ try{ $m('am-email').focus(); }catch(e){} },40);
+        $m('am-x').onclick=closeAM;
+        bg.onclick=e=>{ if(e.target===bg) closeAM(); };
         $m('am-toggle').onclick=()=>{
           mode = mode==='login'?'register':'login';
           $m('am-title').textContent = mode==='login'?'Kirish':'Ro‘yxatdan o‘tish';
@@ -1934,7 +1952,7 @@ addEventListener('hashchange', ()=>route(true));
           $m('am-err').style.display='none';
         };
         $m('am-google').onclick=()=>{ justLoggedIn=true; googleSignIn()
-          .then(()=>bg.remove()).catch(e=>{ justLoggedIn=false; showErr('Google: '+(e.code||e.message)); }); };
+          .then(()=>closeAM()).catch(e=>{ justLoggedIn=false; showErr('Google: '+(e.code||e.message)); }); };
         $m('am-submit').onclick=async()=>{
           const email=$m('am-email').value.trim(), pass=$m('am-pass').value;
           if(!email||!pass){ showErr('Email va parolni kiriting'); return; }
@@ -1945,7 +1963,7 @@ addEventListener('hashchange', ()=>route(true));
               const nm=$m('am-name').value.trim(); if(nm){ try{ await updateProfile(cred.user,{displayName:nm}); }catch(e){} }
               // Email tasdiqlash havolasi yuborilmaydi (chalkashlik oldini olish uchun) — tekshiruvni admin panelda "Tasdiqlangan" orqali qiladi
             } else { await signInWithEmailAndPassword(auth,email,pass); }
-            bg.remove();
+            closeAM();
           }catch(e){
             justLoggedIn=false; $m('am-submit').disabled=false;
             const c=e.code||''; let m='Xatolik: '+c;
@@ -1961,16 +1979,22 @@ addEventListener('hashchange', ()=>route(true));
         if(document.getElementById('role-modal')) return;
         const bg=document.createElement('div'); bg.id='role-modal';
         bg.style.cssText='position:fixed;inset:0;background:rgba(9,58,52,.55);display:grid;place-items:center;z-index:100;padding:18px';
-        bg.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:28px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
-          <h3 style="font-family:var(--serif);font-size:22px;margin:0 0 6px;color:var(--ink)">Rolingizni tanlang</h3>
+        bg.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="role-title" style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:28px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
+          <h3 id="role-title" style="font-family:var(--serif);font-size:22px;margin:0 0 6px;color:var(--ink)">Rolingizni tanlang</h3>
           <p style="color:var(--muted);font-size:14.5px;margin:0 0 18px">Iqror maktabida kimsiz? Administrator keyin maktab ma'lumotlari asosida tekshiradi va kerak bo‘lsa to‘g‘rilaydi.</p>
           <div style="display:flex;flex-direction:column;gap:10px">
             ${[['parent','👨‍👩‍👧 Ota-ona'],['student','🎓 O‘quvchi'],['teacher','👩‍🏫 O‘qituvchi']].map(r=>`<button data-role="${r[0]}" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">${r[1]}</button>`).join('')}
           </div></div>`;
         document.body.appendChild(bg);
+        const rolePrev=document.activeElement;
+        function closeRole(){ if(bg.parentNode) bg.remove(); document.removeEventListener('keydown',roleKey); try{ rolePrev&&rolePrev.focus&&rolePrev.focus(); }catch(e){} }
+        function roleKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeRole(); } }
+        document.addEventListener('keydown',roleKey);
+        bg.onclick=e=>{ if(e.target===bg) closeRole(); };
+        setTimeout(()=>{ try{ bg.querySelector('[data-role]').focus(); }catch(e){} },40);
         bg.querySelectorAll('[data-role]').forEach(btn=>btn.onclick=async()=>{
           try{ await setDoc(doc(db,'users',user.uid), { email:user.email, name:user.displayName||user.email, role:btn.dataset.role, verified:false, createdAt: serverTimestamp() });
-            bg.remove(); setAuthUI({ name:user.displayName||user.email, role:btn.dataset.role });
+            closeRole(); setAuthUI({ name:user.displayName||user.email, role:btn.dataset.role });
             try{ window.IqrorFB && window.IqrorFB.event('role_selected',{role:btn.dataset.role}); }catch(e){}
           }catch(e){ alert('Saqlab bo‘lmadi: '+(e.code||e.message)); }
         });

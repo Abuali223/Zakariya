@@ -323,12 +323,11 @@ const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
     autoId:{field:'studentId',prefix:'IQ-',pad:4},
-    cols:[['studentId','ID'],['name','Ism'],['parentPhone','Ota-ona tel.'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
+    cols:[['studentId','ID'],['name','Ism'],['lang','Til'],['grade','Sinf'],['classLetter','Guruh'],['track','Yo‘nalish'],['score','Ball'],['attendance','Davomat %']],
     fields:[
       {k:'studentId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text',req:true},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
       {k:'photo',l:'Rasm (foto)',t:'image'},
-      {k:'parentPhone',l:'Ota-ona telefoni',t:'text'},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
       {k:'grade',l:'Sinf (0 = Tayyorlov)',t:'number'},
       {k:'classLetter',l:'Guruh (A/B yoki IT/MED)',t:'text'},

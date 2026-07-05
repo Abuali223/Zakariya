@@ -34,7 +34,7 @@ body{font-family:var(--sans);background:#0E2E28;color:var(--ink);-webkit-font-sm
 /* entrance animation */
 .reveal{opacity:0;transform:translateY(22px);transition:opacity .6s cubic-bezier(.22,.61,.36,1),transform .6s cubic-bezier(.22,.61,.36,1)}
 .reveal.shown{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){.reveal{transition:none}.slide{transition:opacity .2s}}
+@media(prefers-reduced-motion:reduce){.reveal{transition:none}.slide{transition:opacity .2s}.hint{animation:none}}
 
 /* ---- Typography ---- */
 .kicker{display:inline-flex;align-items:center;gap:10px;color:var(--teal-2);font-weight:600;
@@ -368,9 +368,11 @@ b{font-weight:700}
     dotsWrap.appendChild(b); dots.push(b);
   });
 
+  var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   function animateCounters(slide){
     slide.querySelectorAll('.count').forEach(function(el){
       var to=parseInt(el.getAttribute('data-to'),10)||0, dur=1100, t0=null;
+      if(reduceMotion){ el.textContent=to; return; }
       function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur);
         var e=1-Math.pow(1-p,3); el.textContent=Math.round(to*e); if(p<1)requestAnimationFrame(step); }
       el.textContent='0'; requestAnimationFrame(step);
