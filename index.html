@@ -838,7 +838,7 @@ const T = {
     c_address_l:"Manzil",c_address_v:"Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasi 45",
     c_phone_l:"Telefon",c_hours_l:"Ish vaqti",c_hours_v:"Du–Sha, 8:00–18:00",
     f_title:"Ro‘yxatdan o‘tish",f_name:"Ism-familiya",f_name_ph:"Ismingizni yozing",
-    f_phone:"Telefon raqam",f_grade:"Farzand sinfi (yoshi)",f_dir:"Yo‘nalish",f_submit:"Yuborish",
+    f_phone:"Telefon raqam",f_grade:"Farzand sinfi (yoshi)",f_dir:"O‘qitish tili (sinf)",f_submit:"Yuborish",
     f_thanks:"Rahmat! Arizangiz qabul qilindi — tez orada bog‘lanamiz.",
     footer_text:"Natijaga yo‘naltirilgan zamonaviy maktab: IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim.",
     footer_rights:"Barcha huquqlar himoyalangan.",
@@ -888,7 +888,7 @@ const T = {
     kab_tt_title:"Dars jadvali",kab_tt_loading:"Jadval yuklanmoqda…",kab_tt_none:"Dars jadvali hali kiritilmagan.",
     kab_wd_mon:"Dushanba",kab_wd_tue:"Seshanba",kab_wd_wed:"Chorshanba",kab_wd_thu:"Payshanba",kab_wd_fri:"Juma",kab_wd_sat:"Shanba",
     kab_hw_title:"Uy vazifalari",kab_hw_loading:"Vazifalar yuklanmoqda…",kab_hw_none:"Hozircha uy vazifasi yo‘q.",
-    dirs:["IT yo‘nalishi","MED yo‘nalishi","Tayyorlov kurslari"],
+    dirs:["O‘zbek sinf","Rus sinf"],
     grade:g=>g+"-sinf"
   },
   ru:{
@@ -941,7 +941,7 @@ const T = {
     c_address_l:"Адрес",c_address_v:"г. Ташкент, Чиланзарский район, ул. Бунёдкор 45",
     c_phone_l:"Телефон",c_hours_l:"Часы работы",c_hours_v:"Пн–Сб, 8:00–18:00",
     f_title:"Записаться",f_name:"Имя и фамилия",f_name_ph:"Введите имя",
-    f_phone:"Номер телефона",f_grade:"Класс (возраст) ребёнка",f_dir:"Направление",f_submit:"Отправить",
+    f_phone:"Номер телефона",f_grade:"Класс (возраст) ребёнка",f_dir:"Язык обучения (класс)",f_submit:"Отправить",
     f_thanks:"Спасибо! Заявка принята — мы скоро свяжемся с вами.",
     footer_text:"Современная школа, ориентированная на результат: углублённое образование по направлениям IT и MED.",
     footer_rights:"Все права защищены.",
@@ -991,7 +991,7 @@ const T = {
     kab_tt_title:"Расписание",kab_tt_loading:"Загрузка расписания…",kab_tt_none:"Расписание пока не внесено.",
     kab_wd_mon:"Понедельник",kab_wd_tue:"Вторник",kab_wd_wed:"Среда",kab_wd_thu:"Четверг",kab_wd_fri:"Пятница",kab_wd_sat:"Суббота",
     kab_hw_title:"Домашние задания",kab_hw_loading:"Загрузка заданий…",kab_hw_none:"Домашних заданий пока нет.",
-    dirs:["Направление IT","Направление MED","Подготовительные курсы"],
+    dirs:["Узбекский класс","Русский класс"],
     grade:g=>g+" класс"
   }
 };
@@ -1983,7 +1983,7 @@ addEventListener('hashchange', ()=>route(true));
           <h3 id="role-title" style="font-family:var(--serif);font-size:22px;margin:0 0 6px;color:var(--ink)">Rolingizni tanlang</h3>
           <p style="color:var(--muted);font-size:14.5px;margin:0 0 18px">Iqror maktabida kimsiz? Administrator keyin maktab ma'lumotlari asosida tekshiradi va kerak bo‘lsa to‘g‘rilaydi.</p>
           <div style="display:flex;flex-direction:column;gap:10px">
-            ${[['parent','👨‍👩‍👧 Ota-ona'],['student','🎓 O‘quvchi'],['teacher','👩‍🏫 O‘qituvchi']].map(r=>`<button data-role="${r[0]}" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">${r[1]}</button>`).join('')}
+            ${[['parent','👨‍👩‍👧 Ota-ona'],['student','🎓 O‘quvchi']].map(r=>`<button data-role="${r[0]}" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">${r[1]}</button>`).join('')}
           </div></div>`;
         document.body.appendChild(bg);
         const rolePrev=document.activeElement;

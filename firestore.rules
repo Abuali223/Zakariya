@@ -61,8 +61,10 @@ service cloud.firestore {
     // Foydalanuvchilar: Gmail bilan kirib o'z rolini tanlaydi; rolni faqat admin o'zgartiradi.
     match /users/{uid} {
       allow read:   if request.auth != null && (request.auth.uid == uid || isAdmin());
+      // O'zi faqat ota-ona yoki o'quvchi rolini tanlaydi. O'qituvchi/kurator/zavuch
+      // kabi rollarни faqat admin tayinlaydi (quyidagi update qoidаsи isAdmin orqali).
       allow create: if request.auth != null && request.auth.uid == uid
-                    && request.resource.data.role in ['parent','student','teacher']
+                    && request.resource.data.role in ['parent','student']
                     && request.resource.data.verified == false;
       // Egasi o'z hujjatini yangilay oladi (masalan farzandi ID sini), lekin
       // rol va tasdiqlangan holatini o'zgartira olmaydi — ularni faqat admin.
