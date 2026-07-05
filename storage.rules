@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Rasmlar: hamma o'qiydi. Tizimga kirgan foydalanuvchi yuklaydi (maks. 5MB, faqat rasm).
+    // Yuklash oynasi faqat admin panelida bo'lgani uchun amalda faqat adminlar (o'qituvchilar)
+    // yuklaydi; yuklangan fayl admin uni Firestore'ga qo'shmaguncha saytda ko'rinmaydi.
+    match /images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+    // Videolar: hamma o'qiydi. Tizimga kirgan foydalanuvchi yuklaydi (maks. 80MB, faqat video).
+    match /videos/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 80 * 1024 * 1024
+                   && request.resource.contentType.matches('video/.*');
+    }
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
