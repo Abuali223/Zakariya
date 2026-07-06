@@ -41,6 +41,15 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedSubjects', [])
         : [];
     }
+    // Sinf rahbari (davomat): homeroomClasses ro'yxatiga admin biriktirgan sinflar.
+    // Rol muhim emas — boshlang'ich sinfda (1-4) sinf rahbari o'qituvchi bo'ladi,
+    // 5-11 da kurator bo'ladi. homeroomClasses'ni faqat admin o'rnatadi (self-update
+    // qoidasi buni himoya qiladi), shuning uchun bu ro'yxatda bo'lish — davomat huquqi.
+    function isHomeroomFor(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('homeroomClasses', []));
+    }
     // O'quv ishlari bo'yicha (O'IBDO' / zavuch) — monitoring baholarini tasdiqlaydi.
     function isZavuch() {
       return request.auth != null
@@ -63,8 +72,9 @@ service cloud.firestore {
     // Elektron kundalik — MAXFIY. Baho va davomat voyaga yetmagan o'quvchining shaxsiy
     // ma'lumoti: faqat admin YOKI shu farzandni kabinetiga qo'shgan ota-ona o'qiydi.
     match /attendance/{id} {
-      allow read:  if isAdmin() || ownsChild(resource.data.get('studentId','')) || isKuratorFor(resource.data.get('classKey',''));
-      allow write: if isAdmin() || isKuratorFor(request.resource.data.get('classKey',''));
+      allow read:  if isAdmin() || ownsChild(resource.data.get('studentId',''))
+                   || isKuratorFor(resource.data.get('classKey','')) || isHomeroomFor(resource.data.get('classKey',''));
+      allow write: if isAdmin() || isKuratorFor(request.resource.data.get('classKey','')) || isHomeroomFor(request.resource.data.get('classKey',''));
     }
     // Baholar: admin YOKI shu farzand ota-onasi o'qiydi; o'z sinfidagi o'qituvchi ham o'qiydi.
     // Yozishда o'qituvchi FAQAT o'z fani (subjects mapidagi kalitlar) bahosini o'zgartira oladi.
@@ -137,7 +147,8 @@ service cloud.firestore {
                      && request.resource.data.role == resource.data.role
                      && request.resource.data.verified == resource.data.verified
                      && request.resource.data.get('assignedClasses', []) == resource.data.get('assignedClasses', [])
-                     && request.resource.data.get('assignedSubjects', []) == resource.data.get('assignedSubjects', []));
+                     && request.resource.data.get('assignedSubjects', []) == resource.data.get('assignedSubjects', [])
+                     && request.resource.data.get('homeroomClasses', []) == resource.data.get('homeroomClasses', []));
       allow delete: if isAdmin();
     }
 

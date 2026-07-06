@@ -474,14 +474,14 @@ const SCHEMAS = {
   },
   classes: {
     title:'Sinflar', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v440q0 33-23.5 56.5T800-120H160Zm0-80h640v-440H447l-80-80H160v520Zm0 0v-520 520Zm320-140q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29Zm0-80q-8 0-14-6t-6-14q0-8 6-14t14-6q8 0 14 6t6 14q0 8-6 14t-14 6Z'),
-    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang. «Sinf rahbari»ni tanlasangiz — o‘sha kurator shu sinf davomatini yuritish huquqini avtomatik oladi.',
+    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang. «Sinf rahbari»ni tanlasangiz — o‘sha xodim shu sinf davomatini yuritish huquqini avtomatik oladi.',
     cols:[['grade','Sinf'],['letter','Guruh'],['lang','Til'],['supervisorName','Sinf rahbari'],['order','Tartib']],
     fields:[
       {k:'grade',l:'Sinf raqami (0 = Tayyorlov)',t:'number',req:true},
       {k:'letter',l:'Guruh harfi (A, B, IT, MED)',t:'text',req:true},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
-      {k:'supervisorUid',l:'Sinf rahbari (kurator)',t:'dynselect',src:'kuratorlar',formOnly:true,
-        note:'Ro‘yxatda «Kurator» roli berilgan foydalanuvchilar chiqadi. Rahbar davomat yuritishi uchun roli «Kurator» bo‘lishi shart — kurator «Foydalanuvchilar» bo‘limida tayinlanadi. Bitta sinfga bitta rahbar biriktiriladi.'},
+      {k:'supervisorUid',l:'Sinf rahbari (davomat)',t:'dynselect',src:'rahbarlar',formOnly:true,
+        note:'Kurator yoki o‘qituvchi tanlashingiz mumkin. Boshlang‘ich sinflarda (1-4) sinf rahbari — o‘qituvchi, 5-11 da — kurator bo‘ladi. Tanlangan xodim shu sinf davomatini yuritish huquqini oladi. Bitta sinfga bitta rahbar biriktiriladi. Ro‘yxat «Foydalanuvchilar» bo‘limida kurator/o‘qituvchi roli berilganlardan tuziladi.'},
       {k:'order',l:'Tartib',t:'number'}
     ],
     afterSave: async (data, row, formVals)=>{
@@ -497,10 +497,22 @@ const NUM = new Set(['grade','score','attendance','order','rating','years','cert
 let currentTab = 'dashboard';
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
-let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[] };
+let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
 const ROLE_LABEL = { admin:'Administrator', kurator:'Kurator', teacher:'O‘qituvchi', zavuch:'O‘quv ishlari bo‘yicha (O‘IBDO‘)', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (admin — hammasi)
 const ROLE_TABS = { kurator:['attendance'], teacher:['grades','monitoring'], zavuch:['monitoring'] };
+// Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
+function allowedTabs(){
+  const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
+  if((SESSION.homeroomClasses||[]).length && !base.includes('attendance')) base.unshift('attendance');
+  return base;
+}
+// Xodim DAVOMAT yuritadigan sinflar: sinf rahbarligi (homeroomClasses) + eski kurator (assignedClasses)
+function supervisedClasses(){
+  const set = new Set(SESSION.homeroomClasses||[]);
+  if(SESSION.role==='kurator') (SESSION.assignedClasses||[]).forEach(k=>set.add(k));
+  return set;
+}
 
 /* Bazada yo'q bo'lgan navbatdagi noyob ID yaratadi (masalan IQ-1013) */
 function nextId(existing, prefix, pad){
@@ -553,8 +565,8 @@ onAuthStateChanged(auth, async user=>{
   if(!user){ show('login'); return; }
   const tok = await user.getIdTokenResult().catch(()=>null);
   let role = (tok && tok.claims && tok.claims.admin) ? 'admin' : '';
-  let assignedClasses = [], assignedSubjects = [];
-  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(!role && d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; } }catch(e){}
+  let assignedClasses = [], assignedSubjects = [], homeroomClasses = [];
+  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(!role && d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
   // Panelга kirish huquqiga ega rollar: admin, kurator, o'qituvchi, zavuch
   const STAFF = ['admin','kurator','teacher','zavuch'];
   if(!STAFF.includes(role)){
@@ -563,10 +575,10 @@ onAuthStateChanged(auth, async user=>{
     loginAttempted=false;
     show('login'); return;
   }
-  SESSION = { role, isAdmin: role==='admin', assignedClasses, assignedSubjects };
+  SESSION = { role, isAdmin: role==='admin', assignedClasses, assignedSubjects, homeroomClasses };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
-  if(!SESSION.isAdmin) currentTab = (ROLE_TABS[role]||['attendance'])[0];
+  if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
   show('app'); buildTabs(); openTab(currentTab);
 });
 function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
@@ -593,13 +605,13 @@ function buildTabs(){
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
-  const allowTabs = ROLE_TABS[SESSION.role] || ['attendance'];
+  const allowTabs = allowedTabs();
   const visible = SESSION.isAdmin ? items : items.filter(it=>allowTabs.includes(it.k));
   $('#tabs').innerHTML = visible.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
   $('#tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
 }
 function openTab(tab){
-  if(!SESSION.isAdmin){ const allow=ROLE_TABS[SESSION.role]||['attendance']; if(!allow.includes(tab)) tab=allow[0]; }
+  if(!SESSION.isAdmin){ const allow=allowedTabs(); if(!allow.includes(tab)) tab=allow[0]; }
   currentTab=tab;
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
@@ -836,23 +848,39 @@ async function loadDefinedClasses(){ try{ cache.definedClasses = await loadCol('
 // Sinf hujjatidan (grade+letter+lang) davomat/baho tizimidagi sinf kalitini tuzadi —
 // classKeyOf(o'quvchi) bilan bir xil bo'ladi, shuning uchun ruxsatlar mos tushadi.
 function classDocKey(c){ return `${c.lang||'uz'}-${Number(c.grade)||0}-${c.letter||'-'}`; }
-/* «Sinf rahbari» tanlanganda RBAC bilan moslashtiradi: shu sinf kalitini tanlangan
-   kuratorning assignedClasses'iga qo'shadi va boshqa kuratorlardan olib tashlaydi
-   (bitta sinf — bitta rahbar). Sinf nomi o'zgargan bo'lsa eski kalitni ham tozalaydi.
-   Yagona haqiqat manbai — users.assignedClasses (davomat qoidasi shuni tekshiradi). */
+/* Sinf rahbari sifatida biriktirilgan foydalanuvchini topadi (kurator yoki o'qituvchi).
+   Yangi kanonik manba — homeroomClasses; eski kuratorlar assignedClasses orqali
+   biriktirilgan bo'lishi mumkin (backward-compat), shuni ham tekshiramiz. */
+function supervisorOf(users, key){
+  return users.find(u=>Array.isArray(u.homeroomClasses)&&u.homeroomClasses.includes(key))
+      || users.find(u=>u.role==='kurator'&&Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(key))
+      || null;
+}
+/* «Sinf rahbari» tanlanganda RBAC bilan moslashtiradi. Davomat huquqi endi
+   homeroomClasses orqali beriladi (rol muhim emas — boshlang'ich sinfda o'qituvchi,
+   5-11 da kurator). Bitta sinf — bitta rahbar: kalitni tanlangan xodimning
+   homeroomClasses'iga qo'shib, qolganlardan olib tashlaymiz. Eski usulda kurator
+   assignedClasses'iga yozilgan bo'lsa — o'sha ham tozalanadi (o'qituvchining
+   assignedClasses'i esa DARS beradigan sinflar bo'lgani uchun teginilmaydi).
+   Sinf nomi o'zgarsa eski kalit hamma joydan olib tashlanadi. */
 async function reconcileSupervisor(newKey, oldKey, newUid){
   const users = await loadCol('users', null);
-  cache.users = users;
   const batch = writeBatch(db); let n=0;
   users.forEach(u=>{
-    if(u.role!=='kurator') return;
-    let arr = Array.isArray(u.assignedClasses) ? u.assignedClasses.slice() : [];
-    let changed=false;
-    // Sinf nomi o'zgargan bo'lsa — eski kalit endi hech qaysi sinfga tegishli emas, olib tashlaymiz
-    if(oldKey && oldKey!==newKey && arr.includes(oldKey)){ arr=arr.filter(k=>k!==oldKey); changed=true; }
-    if(u._id===newUid){ if(!arr.includes(newKey)){ arr.push(newKey); changed=true; } }
-    else { if(arr.includes(newKey)){ arr=arr.filter(k=>k!==newKey); changed=true; } }
-    if(changed){ batch.set(doc(db,'users',u._id), {assignedClasses:arr}, {merge:true}); n++; }
+    if(u.role!=='kurator' && u.role!=='teacher') return;
+    let home = Array.isArray(u.homeroomClasses) ? u.homeroomClasses.slice() : [];
+    let assigned = Array.isArray(u.assignedClasses) ? u.assignedClasses.slice() : [];
+    let hChanged=false, aChanged=false;
+    const rm = k => { if(home.includes(k)){ home=home.filter(x=>x!==k); hChanged=true; }
+                      if(u.role==='kurator' && assigned.includes(k)){ assigned=assigned.filter(x=>x!==k); aChanged=true; } };
+    // Sinf nomi o'zgargan bo'lsa — eski kalit endi hech qaysi sinfga tegishli emas
+    if(oldKey && oldKey!==newKey) rm(oldKey);
+    if(u._id===newUid){ if(!home.includes(newKey)){ home.push(newKey); hChanged=true; } }
+    else { rm(newKey); }
+    if(hChanged || aChanged){
+      const patch={}; if(hChanged) patch.homeroomClasses=home; if(aChanged) patch.assignedClasses=assigned;
+      batch.set(doc(db,'users',u._id), patch, {merge:true}); n++;
+    }
   });
   if(n) await batch.commit();
   cache.users=null; // keyingi safar yangi o'qiladi
@@ -870,9 +898,10 @@ async function renderAttendance(){
   catch(e){ $('#att-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
-  const visKeys = SESSION.isAdmin ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
+  const sup = supervisedClasses();
+  const visKeys = SESSION.isAdmin ? keys : keys.filter(k=>sup.has(k));
   $('#att-class').innerHTML = `<option value="">— tanlang —</option>` + visKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
-  if(!SESSION.isAdmin && !visKeys.length){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf biriktirilmagan. Administratorga murojaat qiling.</div>`; }
+  if(!SESSION.isAdmin && !visKeys.length){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf rahbarligi biriktirilmagan. Administratorga murojaat qiling.</div>`; }
   const load=async()=>{
     const ck=$('#att-class').value, date=$('#att-date').value;
     if(!ck||!date){ $('#att-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf va sanani tanlang.</div>`; return; }
@@ -1204,7 +1233,7 @@ async function renderCollection(name){
   // shu tufayli ma'lumot hech qachon eskirmaydi va rollar bilan mos tushadi).
   if(name==='classes'){
     try{ const users=await loadCol('users',null);
-      rows.forEach(r=>{ const key=classDocKey(r); const k=users.find(u=>u.role==='kurator'&&(u.assignedClasses||[]).includes(key)); r.supervisorName = k?(k.name||k.email||'—'):''; });
+      rows.forEach(r=>{ const k=supervisorOf(users, classDocKey(r)); r.supervisorName = k?(k.name||k.email||'—'):''; });
     }catch(e){}
   }
   const th = s.cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th></th>';
@@ -1347,16 +1376,17 @@ async function populateDynselects(name, row){
   const sels = [...document.querySelectorAll('#m-form select[data-dyn]')];
   if(!sels.length) return;
   let users; try{ users = await loadCol('users', null); cache.users=users; }catch(e){ return; }
+  const roleTag = r => r==='kurator'?'Kurator':(r==='teacher'?'O‘qituvchi':r);
   for(const sel of sels){
     const src = sel.getAttribute('data-dyn');
     let opts=[];
-    if(src==='kuratorlar') opts = users.filter(u=>u.role==='kurator')
-      .map(u=>({v:u._id, l:(u.name||u.email||'—') + (u.name&&u.email?` · ${u.email}`:'')}));
-    // Tahrirlashda: shu sinf kalitiga biriktirilgan kuratorni oldindan tanlab qo'yamiz
+    if(src==='rahbarlar') opts = users.filter(u=>u.role==='kurator'||u.role==='teacher')
+      .map(u=>({v:u._id, l:(u.name||u.email||'—') + ` · ${roleTag(u.role)}` + (u.name&&u.email?` · ${u.email}`:'')}));
+    // Tahrirlashda: shu sinf kalitiga biriktirilgan rahbarni (kurator/o'qituvchi) oldindan tanlaymiz
     let cur='';
-    if(name==='classes' && row){ const key=classDocKey(row); const k=users.find(u=>u.role==='kurator'&&(u.assignedClasses||[]).includes(key)); if(k) cur=k._id; }
+    if(name==='classes' && row){ const k=supervisorOf(users, classDocKey(row)); if(k) cur=k._id; }
     sel.innerHTML = `<option value="">— tanlanmagan —</option>` + opts.map(o=>`<option value="${esc(o.v)}" ${o.v===cur?'selected':''}>${esc(o.l)}</option>`).join('');
-    if(!opts.length) sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida kuratorni tayinlang.</p>`);
+    if(!opts.length) sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» yoki «O‘qituvchi» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida rol tayinlang.</p>`);
   }
 }
 /* subjects sub-editor for students */
@@ -1404,8 +1434,9 @@ async function renderUsers(){
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
     if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
     const roleName=rl=>(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
-    const summaryOf=r=> r.role==='kurator' ? `${(r.assignedClasses||[]).length} ta sinf`
-      : r.role==='teacher' ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan`
+    const homeroomN=r=>(r.homeroomClasses||[]).length;
+    const summaryOf=r=> r.role==='kurator' ? `${(r.assignedClasses||[]).length||homeroomN(r)} ta sinf${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
+      : r.role==='teacher' ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
       : '—';
     const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
     const trs = filtered.map(r=>`<tr>
