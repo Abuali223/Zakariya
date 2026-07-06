@@ -474,14 +474,21 @@ const SCHEMAS = {
   },
   classes: {
     title:'Sinflar', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v440q0 33-23.5 56.5T800-120H160Zm0-80h640v-440H447l-80-80H160v520Zm0 0v-520 520Zm320-140q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29Zm0-80q-8 0-14-6t-6-14q0-8 6-14t14-6q8 0 14 6t6 14q0 8-6 14t-14 6Z'),
-    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang.',
-    cols:[['grade','Sinf'],['letter','Guruh'],['lang','Til'],['order','Tartib']],
+    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang. «Sinf rahbari»ni tanlasangiz — o‘sha kurator shu sinf davomatini yuritish huquqini avtomatik oladi.',
+    cols:[['grade','Sinf'],['letter','Guruh'],['lang','Til'],['supervisorName','Sinf rahbari'],['order','Tartib']],
     fields:[
       {k:'grade',l:'Sinf raqami (0 = Tayyorlov)',t:'number',req:true},
       {k:'letter',l:'Guruh harfi (A, B, IT, MED)',t:'text',req:true},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
+      {k:'supervisorUid',l:'Sinf rahbari (kurator)',t:'dynselect',src:'kuratorlar',formOnly:true,
+        note:'Ro‘yxatda «Kurator» roli berilgan foydalanuvchilar chiqadi. Rahbar davomat yuritishi uchun roli «Kurator» bo‘lishi shart — kurator «Foydalanuvchilar» bo‘limida tayinlanadi. Bitta sinfga bitta rahbar biriktiriladi.'},
       {k:'order',l:'Tartib',t:'number'}
-    ]
+    ],
+    afterSave: async (data, row, formVals)=>{
+      const newKey = classDocKey(data);
+      const oldKey = row ? classDocKey(row) : null;
+      await reconcileSupervisor(newKey, oldKey, (formVals && formVals.supervisorUid) || '');
+    }
   }
 };
 const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num']);
@@ -826,6 +833,31 @@ function classGroupsMap(students){
 }
 // «Sinflar» ro'yxatini har safar yangilab yuklaymiz (kichik kolleksiya)
 async function loadDefinedClasses(){ try{ cache.definedClasses = await loadCol('classes','order'); }catch(e){ cache.definedClasses = cache.definedClasses||[]; } return cache.definedClasses; }
+// Sinf hujjatidan (grade+letter+lang) davomat/baho tizimidagi sinf kalitini tuzadi —
+// classKeyOf(o'quvchi) bilan bir xil bo'ladi, shuning uchun ruxsatlar mos tushadi.
+function classDocKey(c){ return `${c.lang||'uz'}-${Number(c.grade)||0}-${c.letter||'-'}`; }
+/* «Sinf rahbari» tanlanganda RBAC bilan moslashtiradi: shu sinf kalitini tanlangan
+   kuratorning assignedClasses'iga qo'shadi va boshqa kuratorlardan olib tashlaydi
+   (bitta sinf — bitta rahbar). Sinf nomi o'zgargan bo'lsa eski kalitni ham tozalaydi.
+   Yagona haqiqat manbai — users.assignedClasses (davomat qoidasi shuni tekshiradi). */
+async function reconcileSupervisor(newKey, oldKey, newUid){
+  const users = await loadCol('users', null);
+  cache.users = users;
+  const batch = writeBatch(db); let n=0;
+  users.forEach(u=>{
+    if(u.role!=='kurator') return;
+    let arr = Array.isArray(u.assignedClasses) ? u.assignedClasses.slice() : [];
+    let changed=false;
+    // Sinf nomi o'zgargan bo'lsa — eski kalit endi hech qaysi sinfga tegishli emas, olib tashlaymiz
+    if(oldKey && oldKey!==newKey && arr.includes(oldKey)){ arr=arr.filter(k=>k!==oldKey); changed=true; }
+    if(u._id===newUid){ if(!arr.includes(newKey)){ arr.push(newKey); changed=true; } }
+    else { if(arr.includes(newKey)){ arr=arr.filter(k=>k!==newKey); changed=true; } }
+    if(changed){ batch.set(doc(db,'users',u._id), {assignedClasses:arr}, {merge:true}); n++; }
+  });
+  if(n) await batch.commit();
+  cache.users=null; // keyingi safar yangi o'qiladi
+  return n;
+}
 async function renderAttendance(){
   $('#view').innerHTML = `<div class="page-head"><h2>Davomat</h2></div>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
@@ -1168,6 +1200,13 @@ async function renderCollection(name){
   let rows;
   try{ rows = await loadCol(name, s.order); cache[name]=rows; }
   catch(e){ $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
+  // Sinf rahbarini foydalanuvchilardan HAR SAFAR yangi hisoblaymiz (hujjatda saqlanmaydi —
+  // shu tufayli ma'lumot hech qachon eskirmaydi va rollar bilan mos tushadi).
+  if(name==='classes'){
+    try{ const users=await loadCol('users',null);
+      rows.forEach(r=>{ const key=classDocKey(r); const k=users.find(u=>u.role==='kurator'&&(u.assignedClasses||[]).includes(key)); r.supervisorName = k?(k.name||k.email||'—'):''; });
+    }catch(e){}
+  }
   const th = s.cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th></th>';
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
@@ -1198,6 +1237,7 @@ function openForm(name, row){
   const fieldHtml = f => {
     const v = val(f.k);
     if(f.t==='select') return `<div><label>${esc(f.l)}</label><select name="${f.k}">${f.opts.map(o=>{const ov=(o&&typeof o==='object')?o.v:o;const ol=(o&&typeof o==='object')?o.l:o;return `<option value="${esc(ov)}" ${String(ov)===String(v)?'selected':''}>${esc(ol)}</option>`;}).join('')}</select></div>`;
+    if(f.t==='dynselect') return `<div><label>${esc(f.l)}</label><select name="${f.k}" data-dyn="${esc(f.src)}"><option value="">Yuklanmoqda…</option></select>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`;
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
     if(f.t==='image') return `<div class="img-field"><label>${esc(f.l)}</label>
       <div class="img-up">
@@ -1233,7 +1273,7 @@ function openForm(name, row){
   }
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
-  wireImages(name); wireVideos(name);
+  wireImages(name); wireVideos(name); populateDynselects(name, row);
   $('#m-form').addEventListener('submit', async e=>{
     e.preventDefault();
     const btn=$('#m-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
@@ -1241,6 +1281,9 @@ function openForm(name, row){
       const data={};
       new FormData(e.target).forEach((v,k)=>{ if(k.startsWith('subj_'))return; data[k]= NUM.has(k) ? (v===''?0:Number(v)) : v; });
       if(s.subjects) data.subjects = gatherSubjects();
+      // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi
+      const formVals={};
+      (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });
       if(s.docId){
         const id = (data[s.docId]||'').trim(); if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
         // Yangi qo'shishda mavjud ID ustiga yozib yubormaslik uchun ogohlantiramiz
@@ -1253,6 +1296,7 @@ function openForm(name, row){
       } else {
         await addDoc(collection(db,name), data);
       }
+      if(s.afterSave){ try{ await s.afterSave(data, isEdit?row:null, formVals); }catch(err){ toast('Saqlandi, lekin sinf rahbarini biriktirishda xatolik: '+(err.code||err.message), true); } }
       toast('Saqlandi ✓'); closeModal(); (name==='students'?renderStudents():renderCollection(name));
     }catch(err){ toast('Xatolik: '+(err.code||err.message), true); btn.disabled=false; btn.textContent='Saqlash'; }
   });
@@ -1297,6 +1341,23 @@ function wireVideos(name){
       file.value='';
     };
   });
+}
+/* Dinamik ochiluvchi ro'yxatlar (masalan «Sinf rahbari») — foydalanuvchilardan to'ldiriladi */
+async function populateDynselects(name, row){
+  const sels = [...document.querySelectorAll('#m-form select[data-dyn]')];
+  if(!sels.length) return;
+  let users; try{ users = await loadCol('users', null); cache.users=users; }catch(e){ return; }
+  for(const sel of sels){
+    const src = sel.getAttribute('data-dyn');
+    let opts=[];
+    if(src==='kuratorlar') opts = users.filter(u=>u.role==='kurator')
+      .map(u=>({v:u._id, l:(u.name||u.email||'—') + (u.name&&u.email?` · ${u.email}`:'')}));
+    // Tahrirlashda: shu sinf kalitiga biriktirilgan kuratorni oldindan tanlab qo'yamiz
+    let cur='';
+    if(name==='classes' && row){ const key=classDocKey(row); const k=users.find(u=>u.role==='kurator'&&(u.assignedClasses||[]).includes(key)); if(k) cur=k._id; }
+    sel.innerHTML = `<option value="">— tanlanmagan —</option>` + opts.map(o=>`<option value="${esc(o.v)}" ${o.v===cur?'selected':''}>${esc(o.l)}</option>`).join('');
+    if(!opts.length) sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida kuratorni tayinlang.</p>`);
+  }
 }
 /* subjects sub-editor for students */
 function subjectsEditor(row){
