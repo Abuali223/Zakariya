@@ -471,6 +471,17 @@ const SCHEMAS = {
       {k:'desc_ru',l:'Tavsif (RU)',t:'textarea'},
       {k:'order',l:'Tartib',t:'number'}
     ]
+  },
+  classes: {
+    title:'Sinflar', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v440q0 33-23.5 56.5T800-120H160Zm0-80h640v-440H447l-80-80H160v520Zm0 0v-520 520Zm320-140q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29Zm0-80q-8 0-14-6t-6-14q0-8 6-14t14-6q8 0 14 6t6 14q0 8-6 14t-14 6Z'),
+    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang.',
+    cols:[['grade','Sinf'],['letter','Guruh'],['lang','Til'],['order','Tartib']],
+    fields:[
+      {k:'grade',l:'Sinf raqami (0 = Tayyorlov)',t:'number',req:true},
+      {k:'letter',l:'Guruh harfi (A, B, IT, MED)',t:'text',req:true},
+      {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
+      {k:'order',l:'Tartib',t:'number'}
+    ]
   }
 };
 const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num']);
@@ -805,10 +816,16 @@ function todayStr(){ const d=new Date(),p=x=>String(x).padStart(2,'0'); return `
 const ATT_STATUS=[['present','Keldi','att-present'],['absent','Yo‘q','att-absent'],['late','Kech','att-late'],['excused','Sababli','att-excused']];
 function classGroupsMap(students){
   const classes={};
+  // Admin «Sinflar» bo'limida qo'lda yaratgan sinflar — o'quvchi bo'lmasa ham ko'rinadi
+  (cache.definedClasses||[]).forEach(c=>{ const g=Number(c.grade)||0, lang=c.lang||'uz', grp=c.letter||'-';
+    const k=`${lang}-${g}-${grp}`;
+    if(!classes[k]) classes[k]={key:k,label:`${gradeName(g)} «${c.letter||'—'}» · ${lang==='ru'?'Rus':'O‘zbek'}`,g:g,lang:lang,grp:grp,list:[]}; });
   students.forEach(s=>{ const k=classKeyOf(s); (classes[k]=classes[k]||{key:k,label:classLabelOf(s),g:Number(s.grade)||0,lang:s.lang||'uz',grp:s.classLetter||s.track||'-',list:[]}).list.push(s); });
   const keys=Object.keys(classes).sort((a,b)=>{ const A=classes[a],B=classes[b]; return (A.g-B.g)||((A.lang==='ru'?1:0)-(B.lang==='ru'?1:0))||String(A.grp).localeCompare(String(B.grp)); });
   return {classes,keys};
 }
+// «Sinflar» ro'yxatini har safar yangilab yuklaymiz (kichik kolleksiya)
+async function loadDefinedClasses(){ try{ cache.definedClasses = await loadCol('classes','order'); }catch(e){ cache.definedClasses = cache.definedClasses||[]; } return cache.definedClasses; }
 async function renderAttendance(){
   $('#view').innerHTML = `<div class="page-head"><h2>Davomat</h2></div>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
@@ -819,6 +836,7 @@ async function renderAttendance(){
   let students;
   try{ students = (cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#att-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
   const visKeys = SESSION.isAdmin ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
   $('#att-class').innerHTML = `<option value="">— tanlang —</option>` + visKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
@@ -885,6 +903,7 @@ async function renderGrades(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#gr-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
   const gvisKeys = SESSION.isAdmin ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
   $('#gr-class').innerHTML=`<option value="">— tanlang —</option>`+gvisKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
@@ -949,6 +968,7 @@ async function renderMonitoring(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#mon-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
   const mvisKeys = (SESSION.isAdmin||canApprove) ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
   $('#mon-class').innerHTML=`<option value="">— tanlang —</option>`+mvisKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
@@ -1023,6 +1043,7 @@ async function renderTimetable(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#tt-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
   $('#tt-class').innerHTML=`<option value="">— tanlang —</option>`+keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
   const load=async()=>{
@@ -1060,6 +1081,7 @@ async function renderHomework(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#hw-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
   $('#hw-class').innerHTML=`<option value="">— tanlang —</option>`+keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
   const load=async()=>{
@@ -1139,6 +1161,7 @@ async function renderCollection(name){
   const s = SCHEMAS[name];
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
     <div class="ph-actions"><input id="col-search" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    ${s.hint?`<p class="small muted" style="margin:-8px 0 14px">${esc(s.hint)}</p>`:''}
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   $('#add').addEventListener('click',()=>openForm(name,null));
   $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', s.cols.map(c=>c[1]), rr.map(r=>s.cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
@@ -1314,7 +1337,7 @@ async function renderUsers(){
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],['zavuch','Zavuch (O‘IBDO‘)'],['admin','Administrator']];
   let CLS={classes:{},keys:[]};
-  try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; CLS=classGroupsMap(st); }catch(e){}
+  try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));

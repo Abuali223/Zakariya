@@ -95,6 +95,10 @@ service cloud.firestore {
       allow delete: if isAdmin() || isZavuch();
     }
 
+    // Sinflar ro'yxati (admin qo'lда yaratadi — o'quvchi bo'lmasa ham sinf ko'rinadi).
+    // Hamma o'qiydi (dropdown'lar uchun kerak), faqat admin yozadi.
+    match /classes/{id}               { allow read: if true; allow write: if isAdmin(); }
+
     // Qo'shimcha kontent: galereya, fikrlar, narxlar, qabul bosqichlari, FAQ, tadbirlar.
     match /gallery/{id}               { allow read: if true; allow write: if isAdmin(); }
     match /testimonials/{id}          { allow read: if true; allow write: if isAdmin(); }
