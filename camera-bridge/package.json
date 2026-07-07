@@ -1,0 +1,14 @@
+{
+  "name": "iqror-camera-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yuz terminali → Iqror davomat ko'prigi",
+  "main": "index.cjs",
+  "scripts": {
+    "start": "node index.cjs",
+    "mark-absent": "node index.cjs mark-absent"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

@@ -341,6 +341,7 @@ const SCHEMAS = {
       {k:'track',l:'Yo‘nalish (9–11 uchun)',t:'select',opts:[{v:'',l:'—'},'IT','MED']},
       {k:'score',l:'Umumiy ball',t:'number'},
       {k:'attendance',l:'Davomat %',t:'number'},
+      {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat avtomatlashuvi uchun)',t:'text'},
       {k:'order',l:'Tartib',t:'number'}
     ],
     subjects:true
@@ -361,6 +362,7 @@ const SCHEMAS = {
       {k:'certs',l:'Sertifikatlar',t:'number'},
       {k:'avg',l:'O‘quvchilar natijasi %',t:'number'},
       {k:'votes',l:'Baholar soni',t:'number'},
+      {k:'cameraId',l:'Kamera ID (yuz terminalidagi xodim ID — kelish nazorati uchun)',t:'text'},
       {k:'order',l:'Tartib',t:'number'}
     ]
   },
@@ -607,7 +609,8 @@ function buildTabs(){
     {k:'homework', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM320-280h320v-80H320v80Zm0-160h320v-80H320v80Z'), t:'Uy vazifalari'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
-    {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'}
+    {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
+    {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -630,6 +633,7 @@ function openTab(tab){
   if(tab==='settings') return renderSettings();
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
+  if(tab==='checkins') return renderCheckins();
   renderCollection(tab);
 }
 
@@ -1609,6 +1613,39 @@ async function renderEnrollments(){
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Sinf tili</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
   labelTable();
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
+}
+
+/* ---- Kirish nazorati (yuz terminali → checkins) ---- */
+async function renderCheckins(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Kirish nazorati</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Kirish qismidagi yuz terminali orqali qayd etilgan kelishlar. Ma'lumot «ko‘prik» (camera-bridge) orqali avtomatik tushadi; davomat ham shu asosda avtomatik belgilanadi. Har bir o‘quvchi/xodimning <b>«Kamera ID»</b> maydoni terminaldagi ID bilan bir xil bo‘lishi kerak.</p>
+    <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Sana<input type="date" id="ci-date" value="${todayStr()}"></label>
+    </div></div>
+    <div id="ci-body"><div class="loading">Yuklanmoqda…</div></div>`;
+  const load=async()=>{
+    const day=$('#ci-date').value; if(!day){ $('#ci-body').innerHTML=`<div class="cls-empty" style="margin:0">Sanani tanlang.</div>`; return; }
+    $('#ci-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    let rows;
+    try{ const snap=await getDocs(query(collection(db,'checkins'), where('day','==',day))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ $('#ci-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
+    if(!rows.length){ $('#ci-body').innerHTML=`<div class="card"><div class="empty">Bu kunda hali kirish qayd etilmagan. Terminal ulanganini va «Kamera ID» to‘g‘riligini tekshiring.</div></div>`; return; }
+    // Har bir shaxsning ENG ERTA kirishini olamiz (birinchi kelish)
+    const first={}; rows.forEach(r=>{ const k=(r.personType||'')+':'+(r.refId||r.cameraId||r._id); const ts=r.ts||''; if(!first[k]||ts<first[k].ts) first[k]=r; });
+    const list=Object.values(first).sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
+    const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); return m?m[1]:esc(String(iso||'').slice(11,16)); };
+    const stChip=st=> st==='late' ? `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kech</span>`
+                    : st==='present' ? `<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>` : `<span class="muted">—</span>`;
+    const typeChip=tp=> tp==='staff' ? `<span class="chip" style="background:#EAE1F2;color:#5b3d8a">Xodim</span>` : `<span class="chip" style="background:var(--it-bg);color:var(--teal)">O‘quvchi</span>`;
+    const students=list.filter(r=>r.personType!=='staff'), staff=list.filter(r=>r.personType==='staff');
+    const nLate=students.filter(r=>r.status==='late').length, nPres=students.filter(r=>r.status==='present').length;
+    const trs=list.map(r=>`<tr><td data-label="Vaqt">${hhmm(r.ts)}</td><td data-label="Ism">${esc(r.name||r.refId||r.cameraId||'—')}</td><td data-label="Turi">${typeChip(r.personType)}</td><td data-label="Holat">${r.personType==='staff'?'<span class="muted">kirdi</span>':stChip(r.status)}</td></tr>`).join('');
+    $('#ci-body').innerHTML=`<div class="card">
+      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${students.length} o‘quvchi (${nPres} keldi · ${nLate} kech) · ${staff.length} xodim</span></div>
+      <div class="tablewrap"><table><thead><tr><th>Vaqt</th><th>Ism</th><th>Turi</th><th>Holat</th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+  };
+  $('#ci-date').addEventListener('change',load);
+  load();
 }
 
 /* ---- Modal utils ---- */

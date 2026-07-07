@@ -92,6 +92,14 @@ service cloud.firestore {
       allow update: if isAdmin() || (isTeacherForClass(request.resource.data.get('classKey',''))
                        && request.resource.data.get('subjects', {}).diff(resource.data.get('subjects', {})).affectedKeys().hasOnly(teacherSubjects()));
     }
+    // Kirish nazorati (yuz terminali → checkins). Ko'prik (camera-bridge) xizmat
+    // hisobi (Admin SDK) orqali yozadi — u qoidalarni chetlab o'tadi. Panelda faqat
+    // admin/zavuch o'qiydi. Mijoz tomonidan yozish taqiqlangan (faqat server yozadi).
+    match /checkins/{id} {
+      allow read:  if isAdmin() || isZavuch();
+      allow write: if isAdmin();
+    }
+
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /homework/{id}   { allow read: if request.auth != null; allow write: if isAdmin(); }
