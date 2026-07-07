@@ -62,7 +62,14 @@ service cloud.firestore {
     }
 
     // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
-    match /students/{id}              { allow read: if true; allow write: if isAdmin(); }
+    // Istisno: zavuch (O'IBDO') monitoringni tasdiqlaganda FAQAT 'score' maydonini
+    // yangilay oladi (90+ ro'yxati avtomatik yangilanishi uchun) — boshqa maydonlarga tegolmaydi.
+    match /students/{id} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isZavuch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score']));
+    }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
     match /achievements_school/{id}   { allow read: if true; allow write: if isAdmin(); }

@@ -891,6 +891,45 @@ async function reconcileSupervisor(newKey, oldKey, newUid){
   cache.users=null; // keyingi safar yangi o'qiladi
   return n;
 }
+
+/* ----- Xulosa maydonlarini avtomatik hisoblash (students.attendance / students.score) -----
+   Batafsil ma'lumot (attendance/monitoring) alohida kolleksiyalarda; ochiq 90+ ro'yxati va
+   O'quvchilar jadvali esa students hujjatidagi score/attendance ni o'qiydi. Shuning uchun
+   davomat/monitoring saqlangach, tegishli o'quvchilarning shu maydonlarini qayta hisoblab
+   yozamiz. Formula kabinetdagi batafsil kartochka bilan bir xil — ikki xil raqam chiqmaydi.
+   Students yozish faqat adminга ochiq (zavuch — faqat score), shuning uchun ruxsat tekshiriladi. */
+async function recomputeAttendancePct(sids){
+  if(!SESSION.isAdmin) return;                 // students.attendance ni faqat admin yozadi
+  const ids=[...new Set((sids||[]).filter(Boolean))]; if(!ids.length) return;
+  try{
+    const res = await Promise.all(ids.map(sid=>
+      getDocs(query(collection(db,'attendance'), where('studentId','==',sid))).then(snap=>{
+        let present=0, late=0, total=0;
+        snap.forEach(s=>{ const days=s.data().days||{}; Object.values(days).forEach(st=>{ total++; if(st==='present')present++; else if(st==='late')late++; }); });
+        return { sid, pct: total ? Math.round((present+late)/total*100) : null };
+      }).catch(()=>({sid,pct:null}))
+    ));
+    const batch=writeBatch(db); let n=0;
+    res.forEach(r=>{ if(r.pct!=null){ batch.set(doc(db,'students',r.sid), {attendance:r.pct}, {merge:true}); n++; } });
+    if(n){ await batch.commit(); cache.students=null; }
+  }catch(e){ /* xulosa yangilanmasa ham asosiy saqlash buzilmaydi */ }
+}
+async function recomputeMonitoringScore(sids){
+  if(!(SESSION.isAdmin || SESSION.role==='zavuch')) return;   // students.score: admin yoki zavuch
+  const ids=[...new Set((sids||[]).filter(Boolean))]; if(!ids.length) return;
+  try{
+    const res = await Promise.all(ids.map(sid=>
+      getDocs(query(collection(db,'monitoring'), where('studentId','==',sid))).then(snap=>{
+        let sum=0, cnt=0;
+        snap.forEach(s=>{ const d=s.data(); if(d.status==='approved' && typeof d.score==='number'){ sum+=d.score; cnt++; } });
+        return { sid, score: cnt ? Math.round(sum/cnt) : null };  // tasdiqlangan monitoring bo'lmasa — tegilmaydi (qo'ldagi ball saqlanadi)
+      }).catch(()=>({sid,score:null}))
+    ));
+    const batch=writeBatch(db); let n=0;
+    res.forEach(r=>{ if(r.score!=null){ batch.set(doc(db,'students',r.sid), {score:r.score}, {merge:true}); n++; } });
+    if(n){ await batch.commit(); cache.students=null; }
+  }catch(e){ /* xulosa yangilanmasa ham asosiy saqlash buzilmaydi */ }
+}
 async function renderAttendance(){
   $('#view').innerHTML = `<div class="page-head"><h2>Davomat</h2></div>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
@@ -940,6 +979,7 @@ async function renderAttendance(){
           entries.slice(i,i+400).forEach(([sid,status])=>batch.set(doc(db,'attendance',`${sid}__${ym}`),{studentId:sid,classKey:ck,month:ym,days:{[dd]:status}},{merge:true}));
           await batch.commit();
         }
+        await recomputeAttendancePct(entries.map(e=>e[0]));  // «Davomat %» ni avtomatik yangilaymiz
         toast('Davomat saqlandi ✓');
       }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
       btn.disabled=false; btn.textContent='Saqlash';
@@ -1101,6 +1141,7 @@ async function renderMonitoring(){
           entries.slice(i,i+400).forEach(([sid,v])=>batch.set(doc(db,'monitoring',`${sid}__${period}__${slug}`),{studentId:sid,classKey:ck,subject,period,score:Number(v.score),status,updatedAt:serverTimestamp()},{merge:true}));
           await batch.commit();
         }
+        if(entries.length && status==='approved') await recomputeMonitoringScore(entries.map(e=>e[0]));  // tasdiqlangach «Umumiy ball»ni yangilaymiz
         if(entries.length) toast((approve||canApprove)?'Saqlandi va tasdiqlandi ✓':'Saqlandi — tasdiqlashga yuborildi ✓');
         load();
       }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
