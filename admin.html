@@ -474,7 +474,12 @@ const SCHEMAS = {
   },
   classes: {
     title:'Sinflar', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v440q0 33-23.5 56.5T800-120H160Zm0-80h640v-440H447l-80-80H160v520Zm0 0v-520 520Zm320-140q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29Zm0-80q-8 0-14-6t-6-14q0-8 6-14t14-6q8 0 14 6t6 14q0 8-6 14t-14 6Z'), order:'order',
-    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang. «Sinf rahbari»ni tanlasangiz — o‘sha xodim shu sinf davomatini yuritish huquqini avtomatik oladi.',
+    hint:'Bu yerda sinf yaratsangiz, o‘quvchi qo‘shmasangiz ham u davomat, baholar va foydalanuvchi tayinlash ro‘yxatlarida paydo bo‘ladi. Guruh harfini (A/B/IT/MED) va tilni belgilang. «Sinf rahbari»ni tanlasangiz — o‘sha xodim shu sinf davomatini yuritish huquqini avtomatik oladi. Ro‘yxat sinf raqami va guruh harfi bo‘yicha o‘zi tartiblanadi (1-A, 1-B, 2-A…).',
+    // Jadval sinf raqami -> guruh harfi -> til bo'yicha tabiiy tartibda ko'rsatiladi (1-A, 1-B, 2-A…)
+    sortFn:(a,b)=> (Number(a.grade)||0)-(Number(b.grade)||0)
+      || String(a.letter||'').localeCompare(String(b.letter||''))
+      || String(a.lang||'').localeCompare(String(b.lang||''))
+      || (Number(a.order)||0)-(Number(b.order)||0),
     cols:[['grade','Sinf'],['letter','Guruh'],['lang','Til'],['supervisorName','Sinf rahbari'],['order','Tartib']],
     fields:[
       {k:'grade',l:'Sinf raqami (0 = Tayyorlov)',t:'number',req:true},
@@ -1227,7 +1232,7 @@ async function renderCollection(name){
   $('#add').addEventListener('click',()=>openForm(name,null));
   $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', s.cols.map(c=>c[1]), rr.map(r=>s.cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
   let rows;
-  try{ rows = await loadCol(name, s.order); cache[name]=rows; }
+  try{ rows = await loadCol(name, s.order); if(s.sortFn) rows.sort(s.sortFn); cache[name]=rows; }
   catch(e){ $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
   // Sinf rahbarini foydalanuvchilardan HAR SAFAR yangi hisoblaymiz (hujjatda saqlanmaydi —
   // shu tufayli ma'lumot hech qachon eskirmaydi va rollar bilan mos tushadi).
