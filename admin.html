@@ -951,6 +951,29 @@ async function renderAttendance(){
 }
 /* ---- Baholar jurnali (choraklar) ---- */
 const SUBJECTS=['Matematika','Algebra','Geometriya','Ona tili','Adabiyot','Ingliz tili','Rus tili','Fizika','Kimyo','Biologiya','Geografiya','Tarix','Informatika','Jismoniy tarbiya','Chizmachilik','Tarbiya'];
+/* Fan tanlash: to'liq <select> (datalist emas — datalist tanlangandan keyin
+   variantlarni filtrlab, fanni almashtirishga xalaqit berardi). O'qituvchi faqat
+   o'ziga biriktirilgan fanlarni ko'radi; admin/zavuch barcha fanlar + «Boshqa fan…». */
+function fanPicker(id){
+  if(SESSION.role==='teacher'){
+    const subs=(SESSION.assignedSubjects||[]);
+    return `<select id="${id}">${subs.length?'':`<option value="">— fan biriktirilmagan —</option>`}${subs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>`;
+  }
+  return `<select id="${id}"><option value="">— tanlang —</option>${SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}<option value="__other__">➕ Boshqa fan…</option></select>`;
+}
+function wireSubjectPicker(id, cb){
+  const el=$('#'+id); if(!el) return;
+  el.addEventListener('change',()=>{
+    if(el.value==='__other__'){
+      const v=(prompt('Fan nomini kiriting:')||'').trim();
+      if(v){
+        if(![...el.options].some(o=>o.value===v)){ const o=document.createElement('option'); o.value=v; o.textContent=v; el.insertBefore(o, [...el.options].find(x=>x.value==='__other__')); }
+        el.value=v;
+      } else { el.value=''; }
+    }
+    cb();
+  });
+}
 const QUARTERS=[['q1','1-chorak'],['q2','2-chorak'],['q3','3-chorak'],['q4','4-chorak']];
 function academicYear(){ const d=new Date(), y=d.getFullYear(), m=d.getMonth()+1; return m>=9?`${y}-${y+1}`:`${y-1}-${y}`; }
 function gradeCls(v){ v=Number(v); return v>=5?'g5':v>=4?'g4':v>=3?'g3':v>=2?'g2':''; }
@@ -961,7 +984,7 @@ async function renderGrades(){
       <div class="gr-year">${year} o‘quv yili</div>
       <div class="att-controls">
         <label>Sinf<select id="gr-class"><option value="">— tanlang —</option></select></label>
-        <label>Fan${SESSION.isAdmin?`<input id="gr-subject" list="gr-subjlist" placeholder="Masalan: Matematika" autocomplete="off"><datalist id="gr-subjlist">${SUBJECTS.map(s=>`<option value="${esc(s)}"></option>`).join('')}</datalist>`:`<select id="gr-subject">${(SESSION.assignedSubjects||[]).map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>`}</label>
+        <label>Fan${fanPicker('gr-subject')}</label>
         <label>Chorak<select id="gr-quarter">${QUARTERS.map(q=>`<option value="${q[0]}">${esc(q[1])}</option>`).join('')}</select></label>
       </div>
     </div>
@@ -1009,7 +1032,7 @@ async function renderGrades(){
     });
   };
   $('#gr-class').addEventListener('change',load);
-  $('#gr-subject').addEventListener('change',load);
+  wireSubjectPicker('gr-subject', load);
   $('#gr-quarter').addEventListener('change',load);
   if(!SESSION.isAdmin && gvisKeys.length===1){ $('#gr-class').value=gvisKeys[0]; load(); }
 }
@@ -1026,7 +1049,7 @@ async function renderMonitoring(){
       <div class="gr-year">${year} · ${canApprove&&!SESSION.isAdmin?'tasdiqlash':(canEnter&&!SESSION.isAdmin?'kiritish':'boshqaruv')}</div>
       <div class="att-controls">
         <label>Sinf<select id="mon-class"><option value="">— tanlang —</option></select></label>
-        <label>Fan${SESSION.role==='teacher'?`<select id="mon-subject">${(SESSION.assignedSubjects||[]).map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>`:`<input id="mon-subject" list="mon-subjlist" placeholder="Masalan: Matematika" autocomplete="off"><datalist id="mon-subjlist">${SUBJECTS.map(s=>`<option value="${esc(s)}"></option>`).join('')}</datalist>`}</label>
+        <label>Fan${fanPicker('mon-subject')}</label>
         <label>Davr<select id="mon-period">${MONPERIODS.map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('')}</select></label>
       </div>
     </div>
@@ -1087,7 +1110,7 @@ async function renderMonitoring(){
     if($('#mon-approve')) $('#mon-approve').addEventListener('click',()=>save(true));
   };
   $('#mon-class').addEventListener('change',load);
-  $('#mon-subject').addEventListener('change',load);
+  wireSubjectPicker('mon-subject', load);
   $('#mon-period').addEventListener('change',load);
   if(!SESSION.isAdmin && mvisKeys.length===1){ $('#mon-class').value=mvisKeys[0]; load(); }
 }
