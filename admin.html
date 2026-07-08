@@ -15,6 +15,9 @@
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#35796B; --teal-d:#16453B;
@@ -321,6 +324,8 @@ try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')
 
 const $ = (s,r=document)=>r.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Matematik formulalarni ($…$, \(…\)) chiroyli ko'rsatish (KaTeX)
+const renderMath = root => { try{ if(root&&window.renderMathInElement) window.renderMathInElement(root,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} };
 const toast=(m,err=false)=>{const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;$('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity=0;t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2600);};
 
 /* ---- Collection schemas ---- */
@@ -1734,7 +1739,7 @@ function openApplication(r){
   $('#modal').innerHTML = `<div class="modal-h"><h3>${esc(r.name||'')} — ${esc(r.specialty||'')}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">${verdict}<div class="small muted" style="margin:0 0 8px">Javoblar</div>${qhtml||'<div class="empty">Javob yo‘q.</div>'}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
-  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  openModal(); renderMath($('#modal .modal-b')); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
 }
 
 /* ---- Imtihon savollari muharriri (AI serversiz qo'lda) ---- */
@@ -1747,17 +1752,24 @@ async function openExamQuestions(spec, onSaved){
   let questions=[];
   try{ const s=await getDoc(doc(db,'exam_questions',id)); if(s.exists()&&Array.isArray(s.data().questions)) questions=s.data().questions.map(q=>({text:String(q.text||'')})); }catch(e){}
   const render=()=>{
-    const rows = questions.map((q,i)=>`<div class="eq-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+    const rows = questions.map((q,i)=>`<div class="eq-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:14px">
         <span class="q-num" style="flex:0 0 auto;background:var(--it-bg);color:var(--teal);width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:6px">${i+1}</span>
-        <textarea data-i="${i}" rows="2" style="flex:1;min-height:52px" placeholder="Savol matni…">${esc(q.text||'')}</textarea>
+        <div style="flex:1;min-width:0">
+          <textarea data-i="${i}" rows="2" style="width:100%;min-height:52px" placeholder="Savol matni… (formula uchun $…$, masalan: $a^2+b^2$)">${esc(q.text||'')}</textarea>
+          <div class="eq-prev" data-prev="${i}" style="margin-top:6px;padding:8px 10px;background:var(--border-2);border-radius:8px;font-size:14.5px;min-height:18px;white-space:pre-wrap;word-break:break-word"></div>
+        </div>
         <button type="button" class="x" data-rm="${i}" title="O‘chirish" style="flex:0 0 auto;margin-top:4px">×</button>
       </div>`).join('');
     $('#modal .modal-b').innerHTML = `
-      <p class="small muted" style="margin:0 0 12px">Ochiq (insho) savollar yozing — nomzod har biriga to‘liq javob beradi, AI javob sifatiga qarab darajani belgilaydi. 4–8 ta chuqur savol tavsiya etiladi.</p>
+      <p class="small muted" style="margin:0 0 6px">Ochiq (insho) savollar yozing — nomzod har biriga to‘liq javob beradi, AI javob sifatiga qarab darajani belgilaydi. 4–8 ta chuqur savol tavsiya etiladi.</p>
+      <p class="small" style="margin:0 0 12px;color:#33564c;background:#eef5f2;border:1px solid #d5e6df;border-radius:8px;padding:8px 10px">💡 <b>Formula/matematika</b> uchun matnni <code>$…$</code> ichiga yozing: <code>$p^2$</code> → $p^2$, <code>$a^2+b^2$</code> → $a^2+b^2$, <code>$\\frac{a}{b}$</code> → kasr. Boshqa saytdan «chiroyli» belgilarni ko‘chirmang — ular buziladi (☐). Oddiy yozing, quyida ko‘rinishi chiqadi.</p>
       <div id="eq-list">${rows||'<div class="empty" style="margin-bottom:10px">Hali savol yo‘q. «Savol qo‘shish» bilan boshlang.</div>'}</div>
       <button type="button" class="btn ghost" id="eq-add">➕ Savol qo‘shish</button>`;
     $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="eq-save">Saqlash</button>`;
+    renderMath($('#modal .modal-b'));
     const sync=()=>{ $('#modal').querySelectorAll('#eq-list textarea').forEach(t=>{ questions[Number(t.dataset.i)] = {text:t.value}; }); };
+    const updPrev=(t)=>{ const pv=$(`#eq-list [data-prev="${t.dataset.i}"]`); if(!pv) return; const v=t.value.trim(); pv.innerHTML = v ? esc(v) : `<span class="muted" style="opacity:.6">Ko‘rinishi shu yerda chiqadi…</span>`; renderMath(pv); };
+    $('#modal').querySelectorAll('#eq-list textarea').forEach(t=>{ updPrev(t); t.addEventListener('input',()=>updPrev(t)); });
     $('#eq-add').onclick=()=>{ sync(); questions.push({text:''}); render(); const tas=$('#modal').querySelectorAll('#eq-list textarea'); if(tas.length) tas[tas.length-1].focus(); };
     $('#modal').querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ sync(); questions.splice(Number(b.dataset.rm),1); render(); });
     $('#m-cancel').onclick=closeModal;

@@ -1,6 +1,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Iqror Academy — O‘qituvchilar tanlovi (imtihon)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 <style>
   :root{--teal:#155A4E;--teal-2:#1C7A69;--cream:#F4F1EA;--ink:#20302B;--muted:#6b7d76;--border:#e3ddd0;--white:#fff;--gold:#C79A3A;--serif:Georgia,'Times New Roman',serif;--sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   *{box-sizing:border-box}
@@ -71,6 +74,8 @@ const $ = s=>document.querySelector(s);
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Mutaxassislik slug — grader va exam_questions hujjat nomi bilan bir xil bo'lishi shart
 const slug = s => (String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,''))||'fan';
+// Matematik formulalarni ($…$, \(…\)) chiroyli ko'rsatish (KaTeX)
+function renderMath(root){ try{ if(root&&window.renderMathInElement) window.renderMathInElement(root,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} }
 const SPECIALTIES = ['Matematika','Fizika','Kimyo','Biologiya','Ona tili va adabiyot','Ingliz tili','Rus tili','Tarix','Geografiya','Informatika','Boshlang‘ich ta’lim','Jismoniy tarbiya'];
 
 const sel = $('#f-spec');
@@ -109,6 +114,7 @@ function renderExam({name,phone,spec,questions}){
       </div>
       <div class="err" id="exam-err" style="display:none"></div>
     </form></div>`;
+  renderMath($('#view'));
   window.scrollTo(0,0);
   $('#exam-form').addEventListener('submit', async e=>{
     e.preventDefault();

@@ -132,7 +132,7 @@ async function generate(specialty, count){
   count = Math.max(1, Math.min(20, Number(count) || 5));
   const j = await askJSON(
     `Siz "${specialty}" fani bo'yicha o'qituvchilarni tanlash uchun imtihon tuzuvchi ekspertsiz.`,
-    `${count} ta OCHIQ (yozma, batafsil javob talab qiladigan), kasbiy va yuqori darajadagi imtihon savoli tuzing. Savollar fan bilimini, o'qitish metodikasini va amaliy/pedagogik yondashuvni chuqur tekshirsin — «ha/yo'q» yoki bir so'zli javoblardan qoching. Har biriga id ("q1","q2"...) va matn bering. O'zbek tilida.`,
+    `${count} ta OCHIQ (yozma, batafsil javob talab qiladigan), kasbiy va yuqori darajadagi imtihon savoli tuzing. Savollar fan bilimini, o'qitish metodikasini va amaliy/pedagogik yondashuvni chuqur tekshirsin — «ha/yo'q» yoki bir so'zli javoblardan qoching. Har biriga id ("q1","q2"...) va matn bering. O'zbek tilida. Matematik formula yoki belgilar bo'lsa, ularni LaTeX ko'rinishida $...$ ichida yozing (masalan $p^2$, $a^2+b^2$, $\\frac{a}{b}$) — Unicode yuqori/pastki indeks belgilaridan foydalanmang.`,
     GEN_SCHEMA, 3000);
   const questions = (j.questions || []).map((q,i)=>({ id: q.id || ('q'+(i+1)), text: String(q.text||'') })).filter(q=>q.text);
   await db.collection('exam_questions').doc(slug(specialty)).set({
