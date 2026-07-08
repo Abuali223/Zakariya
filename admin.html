@@ -1723,7 +1723,7 @@ async function renderPayments(){
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun o‘quvchilarga hisob-faktura yarating. Ota-ona o‘z kabinetida <b>Click</b> yoki <b>Uzum</b> orqali to‘laydi — to‘lov kelganda «to‘landi» avtomatik belgilanadi (to‘lov serveri orqali). Naqd to‘lovni bu yerda qo‘lda belgilashingiz mumkin.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
-      <label>Oylik summa (so‘m)<input type="number" id="pm-amount" placeholder="masalan: 1200000" value=""></label>
+      <label>Oylik summa (so‘m)<input type="text" inputmode="numeric" id="pm-amount" placeholder="masalan: 2 900 000" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
     </div><div class="small muted" id="pm-genmsg" style="margin-top:8px"></div></div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
@@ -1767,7 +1767,7 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
   };
   $('#pm-gen').addEventListener('click',async()=>{
-    const month=$('#pm-month').value, amount=Number($('#pm-amount').value)||0;
+    const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
     if(amount<=0){ toast('Oylik summani kiriting',true); return; }
     const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
@@ -1788,6 +1788,8 @@ async function renderPayments(){
     btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish';
   });
   $('#pm-month').addEventListener('change',load);
+  // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
+  const amtEl=$('#pm-amount'); if(amtEl) amtEl.addEventListener('input',()=>{ const d=amtEl.value.replace(/\D/g,''); amtEl.value = d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   load();
 }
 
