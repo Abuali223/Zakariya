@@ -154,8 +154,14 @@ if(require.main === module){
     } else if(mode === 'grade'){
       const n = await gradeAll();
       console.log(`Baholash tugadi: ${n} ta ariza.`);
+    } else if(mode === 'test'){
+      // API kaliti va model ishlashini tekshiradi (bitta arzon so'rov)
+      process.stdout.write(`Model: ${MODEL} · kalit tekshirilmoqda… `);
+      const j = await askJSON('Siz sinov yordamchisisiz.', 'Faqat {"ok": true} JSON qaytaring.',
+        { type:'object', additionalProperties:false, required:['ok'], properties:{ ok:{type:'boolean'} } }, 200);
+      console.log(j && j.ok ? '✓ ISHLAYAPTI — kalit to‘g‘ri.' : '⚠ javob kutilganidek emas: '+JSON.stringify(j));
     } else {
-      console.error('Buyruqlar:\n  node index.cjs generate "<mutaxassislik>" [savollar soni]\n  node index.cjs grade');
+      console.error('Buyruqlar:\n  node index.cjs test\n  node index.cjs generate "<mutaxassislik>" [savollar soni]\n  node index.cjs grade');
       process.exit(1);
     }
     process.exit(0);

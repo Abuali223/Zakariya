@@ -38,6 +38,13 @@ cp config.example.json config.json
 | `anthropicKey` | Anthropic API kaliti (`sk-ant-...`). Yoki `ANTHROPIC_API_KEY` muhit o'zgaruvchisi |
 | `model` | Claude modeli (standart: `claude-opus-4-8` — eng kuchli) |
 
+Kalit to‘g‘ri sozlanganini tekshirish:
+
+```bash
+node index.cjs test
+# Model: claude-opus-4-8 · kalit tekshirilmoqda… ✓ ISHLAYAPTI — kalit to'g'ri.
+```
+
 ## 3. Savollarni yaratish
 
 Har bir mutaxassislik uchun bir marta savol to'plamini yarating:
