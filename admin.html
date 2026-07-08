@@ -1740,6 +1740,14 @@ async function renderPayments(){
     const paid=rows.filter(r=>r.status==='paid'), pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled');
     const total=paid.reduce((s,r)=>s+(Number(r.amount)||0),0);
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
+    // To'lov usuli bo'yicha hisobot
+    const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',payme:'Payme'};
+    const groups={}; paid.forEach(r=>{ const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=Number(r.amount)||0; });
+    const pendSum=pend.reduce((s,r)=>s+(Number(r.amount)||0),0);
+    const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
+      +`<tr><td data-label="Usul" class="muted">Kutilmoqda</td><td data-label="Soni" class="muted">${pend.length} ta</td><td data-label="Summa" class="muted">${fmtSom(pendSum)}</td></tr>`;
+    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">Jami yig‘ildi: ${fmtSom(total)} · umumiy: ${fmtSom(total+pendSum)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>To‘lov usuli</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
     const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
       : `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kutilmoqda</span>`;
@@ -1752,7 +1760,7 @@ async function renderPayments(){
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         <button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>
       </div></td></tr>`).join('');
-    $('#pm-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${paid.length} to‘landi · ${pend.length} kutilmoqda · yig‘ildi: ${fmtSom(total)}</span></div>
+    $('#pm-body').innerHTML=reportCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${paid.length} to‘landi · ${pend.length} kutilmoqda · yig‘ildi: ${fmtSom(total)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-cash]').forEach(b=>b.addEventListener('click',async()=>{ try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:'cash',paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
