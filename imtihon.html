@@ -1,0 +1,136 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iqror Academy — O‘qituvchilar tanlovi (imtihon)</title>
+<style>
+  :root{--teal:#155A4E;--teal-2:#1C7A69;--cream:#F4F1EA;--ink:#20302B;--muted:#6b7d76;--border:#e3ddd0;--white:#fff;--gold:#C79A3A;--serif:Georgia,'Times New Roman',serif;--sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);background:var(--cream);color:var(--ink);line-height:1.55}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 18px 60px}
+  header.top{text-align:center;padding:26px 0 10px}
+  .logo{display:inline-flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:700;font-size:22px;color:var(--teal)}
+  .logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--teal),var(--teal-2));display:inline-block}
+  h1{font-family:var(--serif);font-size:26px;margin:14px 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px}
+  .card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:22px 22px;margin-bottom:16px;box-shadow:0 2px 12px rgba(21,90,78,.05)}
+  label{display:block;font-weight:700;font-size:14px;margin:14px 0 6px}
+  input,select,textarea{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--sans);background:var(--white);color:var(--ink)}
+  textarea{min-height:120px;resize:vertical}
+  .q{border-top:1px solid var(--border);padding-top:16px;margin-top:16px}
+  .q:first-child{border-top:none;margin-top:0;padding-top:0}
+  .q-num{display:inline-block;background:var(--teal);color:#fff;border-radius:8px;padding:2px 9px;font-size:12.5px;font-weight:700;margin-right:8px}
+  .q-text{font-size:15.5px;font-weight:600;margin:0 0 8px}
+  .btn{display:inline-block;border:none;border-radius:11px;padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  .btn.gold{background:var(--gold);color:#2a2000}
+  .btn.teal{background:var(--teal);color:#fff}
+  .btn:disabled{opacity:.55;cursor:default}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  .note{background:#eef5f2;border:1px solid #d5e6df;border-radius:12px;padding:14px 16px;font-size:14px;color:#33564c}
+  .ok{background:#e9f6ee;border:1px solid #bfe4cc;border-radius:12px;padding:18px;color:#1d5b34;text-align:center}
+  .err{color:#b3261e;font-size:14px;margin-top:8px}
+  .foot{text-align:center;color:var(--muted);font-size:13px;margin-top:26px}
+  .loading{color:var(--muted);padding:8px 0}
+</style>
+<div class="wrap">
+  <header class="top">
+    <span class="logo"><span class="mark"></span>IQROR ACADEMY</span>
+    <h1>O‘qituvchilar tanlovi</h1>
+    <p class="sub">Mutaxassisligingizni tanlang va kasbiy imtihondan o‘ting. Javoblaringizni bilim darajangizni aniqlash uchun sun’iy intellekt baholaydi.</p>
+  </header>
+
+  <div id="view">
+    <div class="card">
+      <div class="note">Boshlash uchun ma’lumotlaringizni kiriting va mutaxassislik tanlang.</div>
+      <label>Ism-familiya *</label>
+      <input id="f-name" type="text" placeholder="Masalan: Aliyev Vali" autocomplete="name">
+      <label>Telefon</label>
+      <input id="f-phone" type="tel" placeholder="+998 90 123 45 67" autocomplete="tel">
+      <label>Mutaxassislik (fan) *</label>
+      <select id="f-spec"><option value="">— tanlang —</option></select>
+      <div style="margin-top:18px"><button class="btn teal" id="start-btn">Imtihonni boshlash</button></div>
+      <div class="err" id="start-err" style="display:none"></div>
+    </div>
+  </div>
+
+  <p class="foot">© Iqror Academy · Natijalar faqat maktab ma’muriyatiga ko‘rinadi.</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
+  authDomain:"alilazer-cd582.firebaseapp.com",
+  projectId:"alilazer-cd582",
+  storageBucket:"alilazer-cd582.firebasestorage.app",
+  messagingSenderId:"831212822404",
+  appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Mutaxassislik slug — grader va exam_questions hujjat nomi bilan bir xil bo'lishi shart
+const slug = s => (String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,''))||'fan';
+const SPECIALTIES = ['Matematika','Fizika','Kimyo','Biologiya','Ona tili va adabiyot','Ingliz tili','Rus tili','Tarix','Geografiya','Informatika','Boshlang‘ich ta’lim','Jismoniy tarbiya'];
+
+const sel = $('#f-spec');
+sel.innerHTML = `<option value="">— tanlang —</option>` + SPECIALTIES.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+
+$('#start-btn').addEventListener('click', async ()=>{
+  const name=$('#f-name').value.trim(), phone=$('#f-phone').value.trim(), spec=$('#f-spec').value;
+  const err=$('#start-err');
+  if(!name){ err.textContent='Ism-familiyangizni kiriting.'; err.style.display='block'; return; }
+  if(!spec){ err.textContent='Mutaxassislik tanlang.'; err.style.display='block'; return; }
+  err.style.display='none';
+  const btn=$('#start-btn'); btn.disabled=true; btn.textContent='Yuklanmoqda…';
+  let qdoc;
+  try{ const s=await getDoc(doc(db,'exam_questions',slug(spec))); qdoc = s.exists()?s.data():null; }
+  catch(e){ qdoc=null; }
+  btn.disabled=false; btn.textContent='Imtihonni boshlash';
+  const questions = (qdoc && Array.isArray(qdoc.questions)) ? qdoc.questions : [];
+  if(!questions.length){
+    err.textContent='Bu mutaxassislik uchun savollar hali tayyorlanmagan. Iltimos, keyinroq urinib ko‘ring yoki ma’muriyatga murojaat qiling.';
+    err.style.display='block'; return;
+  }
+  renderExam({name,phone,spec,questions});
+});
+
+function renderExam({name,phone,spec,questions}){
+  const qhtml = questions.map((q,i)=>`<div class="q">
+    <p class="q-text"><span class="q-num">${i+1}</span>${esc(q.text||'')}</p>
+    <textarea data-qid="${esc(q.id||('q'+(i+1)))}" placeholder="Javobingizni shu yerga yozing…"></textarea>
+  </div>`).join('');
+  $('#view').innerHTML = `<div class="card">
+    <div class="note"><b>${esc(spec)}</b> · ${questions.length} ta savol. Har bir savolga to‘liq, misollar bilan javob bering — javob sifati bilim darajangizni belgilaydi.</div>
+    <form id="exam-form">${qhtml}
+      <div style="margin-top:22px;display:flex;gap:12px;align-items:center">
+        <button type="submit" class="btn gold" id="submit-btn">Javoblarni yuborish</button>
+        <span class="muted small">Yuborilgach o‘zgartirib bo‘lmaydi.</span>
+      </div>
+      <div class="err" id="exam-err" style="display:none"></div>
+    </form></div>`;
+  window.scrollTo(0,0);
+  $('#exam-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const answers = [...document.querySelectorAll('#exam-form textarea')].map(t=>({qid:t.dataset.qid, text:t.value.trim()}));
+    if(answers.every(a=>!a.text)){ const er=$('#exam-err'); er.textContent='Kamida bitta savolga javob bering.'; er.style.display='block'; return; }
+    const btn=$('#submit-btn'); btn.disabled=true; btn.textContent='Yuborilmoqda…';
+    const now=new Date(); const day=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    try{
+      await addDoc(collection(db,'applications'), {
+        name, phone, specialty:spec, answers, status:'submitted',
+        ts: now.toISOString(), day, created: serverTimestamp()
+      });
+      $('#view').innerHTML = `<div class="card"><div class="ok">
+        <div style="font-size:40px;line-height:1">✅</div>
+        <h2 style="font-family:var(--serif);margin:8px 0">Rahmat, ${esc(name)}!</h2>
+        <p>Javoblaringiz qabul qilindi. Sun’iy intellekt ularni baholaydi va natijalar maktab ma’muriyatiga yetkaziladi. Ular siz bilan bog‘lanadi.</p>
+      </div></div>`;
+      window.scrollTo(0,0);
+    }catch(err){
+      const er=$('#exam-err'); er.textContent='Yuborishda xatolik: '+(err.code||err.message)+'. Qayta urining.'; er.style.display='block';
+      btn.disabled=false; btn.textContent='Javoblarni yuborish';
+    }
+  });
+}
+</script>

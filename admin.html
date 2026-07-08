@@ -610,7 +610,8 @@ function buildTabs(){
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
-    {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'}
+    {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
+    {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -634,6 +635,7 @@ function openTab(tab){
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
   if(tab==='checkins') return renderCheckins();
+  if(tab==='applications') return renderApplications();
   renderCollection(tab);
 }
 
@@ -1646,6 +1648,69 @@ async function renderCheckins(){
   };
   $('#ci-date').addEventListener('change',load);
   load();
+}
+
+/* ---- O'qituvchi tanlovi (nomzod imtihonlari + AI baholari) ---- */
+const LEVEL_STYLE = { 'Ekspert':['#e9f6ee','#1d5b34'], 'Yuqori':['var(--it-bg)','var(--teal)'], 'O‘rta':['var(--med-bg)','var(--med-fg)'], 'Boshlang‘ich':['#fbeae1','#C2410C'] };
+async function renderApplications(){
+  $('#view').innerHTML = `<div class="page-head"><h2>O‘qituvchi tanlovi</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Nomzodlar <b>imtihon.html</b> sahifasida mutaxassislik tanlab, kasbiy savollarga javob beradi. Javoblar shu yerga tushadi; <b>AI-grader</b> xizmati ularni baholab, darajani (Boshlang‘ich/O‘rta/Yuqori/Ekspert), ballni va tavsiyani belgilaydi. Yakuniy qarorni siz qabul qilasiz.</p>
+    <div class="card" id="app-card"><div class="loading">Yuklanmoqda…</div></div>`;
+  let rows;
+  try{ rows = await loadCol('applications', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
+  catch(e){ $('#app-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  if(!rows.length){ $('#app-card').innerHTML=`<div class="empty">Hozircha nomzod arizasi yo‘q. Nomzodlarni <b>/imtihon</b> sahifasiga yo‘naltiring.</div>`; return; }
+  const stChip=r=>{ const st=r.status||'submitted';
+    if(st==='graded'){ const lv=(r.result&&r.result.level)||'—'; const c=LEVEL_STYLE[lv]||['#eee','#555'];
+      return `<span class="chip" style="background:${c[0]};color:${c[1]}">${esc(lv)} · ${esc(String((r.result&&r.result.overallScore)!=null?r.result.overallScore:'—'))}</span>`; }
+    if(st==='grading') return `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Baholanmoqda…</span>`;
+    return `<span class="chip" style="background:var(--it-bg);color:var(--teal)">Yangi</span>`;
+  };
+  const recChip=r=>{ const rec=r.result&&r.result.recommendation; if(!rec) return '';
+    const yes=/tavsiya etiladi|ha|yes/i.test(rec)&&!/etilmaydi/i.test(rec);
+    return `<span class="chip" style="background:${yes?'#e9f6ee':'#fbeae1'};color:${yes?'#1d5b34':'#C2410C'}">${esc(rec)}</span>`;
+  };
+  const trs = rows.map(r=>`<tr>
+      <td data-label="Ism">${esc(r.name||'')}</td>
+      <td data-label="Mutaxassislik">${esc(r.specialty||'')}</td>
+      <td data-label="Telefon">${r.phone?`<a href="tel:${esc(String(r.phone).replace(/[^+\d]/g,''))}">${esc(r.phone)}</a>`:'—'}</td>
+      <td data-label="Sana">${esc(String(r.ts||'').slice(0,10))}</td>
+      <td data-label="Holat">${stChip(r)}</td>
+      <td data-label="Tavsiya">${recChip(r)}</td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm" data-view="${esc(r._id)}">Ko‘rish</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
+    </tr>`).join('');
+  $('#app-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Mutaxassislik</th><th>Telefon</th><th>Sana</th><th>Holat</th><th>Tavsiya</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  labelTable();
+  $('#app-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('applications', b.dataset.del)));
+  $('#app-card').querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>openApplication(rows.find(r=>r._id===b.dataset.view))));
+}
+function openApplication(r){
+  if(!r) return;
+  const res=r.result||null;
+  const ans=Array.isArray(r.answers)?r.answers:[];
+  const perById={}; if(res&&Array.isArray(res.perQuestion)) res.perQuestion.forEach(p=>{ perById[p.qid]=p; });
+  const verdict = res ? `<div class="card" style="margin:0 0 14px;padding:16px 18px;background:#f7f5ef">
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+        <div><div class="small muted">Daraja</div><div style="font-family:var(--serif);font-size:22px;font-weight:700;color:var(--teal)">${esc(res.level||'—')}</div></div>
+        <div><div class="small muted">Umumiy ball</div><div style="font-family:var(--serif);font-size:22px;font-weight:700">${esc(String(res.overallScore!=null?res.overallScore:'—'))}/100</div></div>
+        <div><div class="small muted">Tavsiya</div><div style="font-weight:700">${esc(res.recommendation||'—')}</div></div>
+      </div>
+      ${res.summary?`<p style="margin:12px 0 0">${esc(res.summary)}</p>`:''}
+      ${(res.strengths&&res.strengths.length)?`<p style="margin:10px 0 0"><b>Kuchli tomonlari:</b> ${res.strengths.map(esc).join('; ')}</p>`:''}
+      ${(res.weaknesses&&res.weaknesses.length)?`<p style="margin:6px 0 0"><b>Zaif tomonlari:</b> ${res.weaknesses.map(esc).join('; ')}</p>`:''}
+      ${res.model?`<p class="small muted" style="margin:10px 0 0">AI model: ${esc(res.model)}</p>`:''}
+    </div>` : `<div class="card" style="margin:0 0 14px;padding:14px 18px;background:#fff7e8"><b>Hali baholanmagan.</b> AI-grader xizmatini ishga tushiring (<code>node index.cjs grade</code>).</div>`;
+  const qhtml = ans.map((a,i)=>{ const p=perById[a.qid]||{};
+    return `<div class="card" style="margin:0 0 12px;padding:14px 16px">
+      <div class="small muted">${i+1}-savol${p.score!=null?` · <b style="color:var(--teal)">${esc(String(p.score))}/100</b>`:''}</div>
+      <p style="white-space:pre-wrap;margin:8px 0 0">${esc(a.text||'—')}</p>
+      ${p.feedback?`<p class="small" style="margin:10px 0 0;color:#33564c;border-top:1px dashed var(--border);padding-top:8px"><b>AI izohi:</b> ${esc(p.feedback)}</p>`:''}
+    </div>`;
+  }).join('');
+  $('#modal').innerHTML = `<div class="modal-h"><h3>${esc(r.name||'')} — ${esc(r.specialty||'')}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">${verdict}<div class="small muted" style="margin:0 0 8px">Javoblar</div>${qhtml||'<div class="empty">Javob yo‘q.</div>'}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
 }
 
 /* ---- Modal utils ---- */
