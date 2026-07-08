@@ -1654,10 +1654,32 @@ async function renderCheckins(){
 
 /* ---- O'qituvchi tanlovi (nomzod imtihonlari + AI baholari) ---- */
 const LEVEL_STYLE = { 'Ekspert':['#e9f6ee','#1d5b34'], 'Yuqori':['var(--it-bg)','var(--teal)'], 'O‘rta':['var(--med-bg)','var(--med-fg)'], 'Boshlang‘ich':['#fbeae1','#C2410C'] };
+// imtihon.html dagi ro'yxat bilan AYNAN bir xil bo'lishi shart (slug mos kelishi uchun)
+const EXAM_SPECIALTIES = ['Matematika','Fizika','Kimyo','Biologiya','Ona tili va adabiyot','Ingliz tili','Rus tili','Tarix','Geografiya','Informatika','Boshlang‘ich ta’lim','Jismoniy tarbiya'];
 async function renderApplications(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘qituvchi tanlovi</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Nomzodlar <b>imtihon.html</b> sahifasida mutaxassislik tanlab, kasbiy savollarga javob beradi. Javoblar shu yerga tushadi; <b>AI-grader</b> xizmati ularni baholab, darajani (Boshlang‘ich/O‘rta/Yuqori/Ekspert), ballni va tavsiyani belgilaydi. Yakuniy qarorni siz qabul qilasiz.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Nomzodlar <b>imtihon</b> sahifasida mutaxassislik tanlab, kasbiy savollarga javob beradi. Javoblar shu yerga tushadi; <b>AI-grader</b> xizmati ularni baholab, darajani (Boshlang‘ich/O‘rta/Yuqori/Ekspert), ballni va tavsiyani belgilaydi. Yakuniy qarorni siz qabul qilasiz.</p>
+    <div class="card" style="padding:16px 20px;margin-bottom:16px">
+      <div class="cls-card-head" style="margin-bottom:10px"><h3>Imtihon savollari</h3><span class="cls-count">Nomzodlar javob berishidan oldin har mutaxassislik uchun savol yozing</span></div>
+      <p class="small muted" style="margin:0 0 12px">Nomzodni <b><span id="exam-link"></span></b> havolasiga yo‘naltiring. Avval bu yerda mutaxassislikni tanlab savollarni kiriting — savol bo‘lmasa, nomzod imtihonni boshlay olmaydi.</p>
+      <div class="att-controls">
+        <label>Mutaxassislik<select id="eq-spec">${EXAM_SPECIALTIES.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label>
+        <label>&nbsp;<button class="btn gold" id="eq-edit" style="width:100%">Savollarni tahrirlash</button></label>
+      </div>
+      <div class="small muted" id="eq-status" style="margin-top:8px"></div>
+    </div>
     <div class="card" id="app-card"><div class="loading">Yuklanmoqda…</div></div>`;
+  const shareLink = location.origin + location.pathname.replace(/[^/]*$/,'') + 'imtihon.html';
+  $('#exam-link').textContent = shareLink;
+  const refreshStatus=async()=>{
+    const spec=$('#eq-spec').value; const el=$('#eq-status'); el.textContent='Tekshirilmoqda…';
+    try{ const s=await getDoc(doc(db,'exam_questions',monSlug(spec))); const n=(s.exists()&&Array.isArray(s.data().questions))?s.data().questions.length:0;
+      el.innerHTML = n ? `<span style="color:var(--teal)">✓ ${n} ta savol tayyor</span>` : `<span style="color:#C2410C">Hali savol yo‘q — nomzodlar imtihon topshira olmaydi</span>`;
+    }catch(e){ el.textContent=''; }
+  };
+  $('#eq-spec').addEventListener('change',refreshStatus);
+  $('#eq-edit').addEventListener('click',()=>openExamQuestions($('#eq-spec').value, refreshStatus));
+  refreshStatus();
   let rows;
   try{ rows = await loadCol('applications', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
   catch(e){ $('#app-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
@@ -1713,6 +1735,46 @@ function openApplication(r){
     <div class="modal-b">${verdict}<div class="small muted" style="margin:0 0 8px">Javoblar</div>${qhtml||'<div class="empty">Javob yo‘q.</div>'}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+}
+
+/* ---- Imtihon savollari muharriri (AI serversiz qo'lda) ---- */
+async function openExamQuestions(spec, onSaved){
+  const id = monSlug(spec);
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Imtihon savollari — ${esc(spec)}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>
+    <div class="modal-f"></div>`;
+  openModal(); $('#m-x').onclick=closeModal;
+  let questions=[];
+  try{ const s=await getDoc(doc(db,'exam_questions',id)); if(s.exists()&&Array.isArray(s.data().questions)) questions=s.data().questions.map(q=>({text:String(q.text||'')})); }catch(e){}
+  const render=()=>{
+    const rows = questions.map((q,i)=>`<div class="eq-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+        <span class="q-num" style="flex:0 0 auto;background:var(--it-bg);color:var(--teal);width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:6px">${i+1}</span>
+        <textarea data-i="${i}" rows="2" style="flex:1;min-height:52px" placeholder="Savol matni…">${esc(q.text||'')}</textarea>
+        <button type="button" class="x" data-rm="${i}" title="O‘chirish" style="flex:0 0 auto;margin-top:4px">×</button>
+      </div>`).join('');
+    $('#modal .modal-b').innerHTML = `
+      <p class="small muted" style="margin:0 0 12px">Ochiq (insho) savollar yozing — nomzod har biriga to‘liq javob beradi, AI javob sifatiga qarab darajani belgilaydi. 4–8 ta chuqur savol tavsiya etiladi.</p>
+      <div id="eq-list">${rows||'<div class="empty" style="margin-bottom:10px">Hali savol yo‘q. «Savol qo‘shish» bilan boshlang.</div>'}</div>
+      <button type="button" class="btn ghost" id="eq-add">➕ Savol qo‘shish</button>`;
+    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="eq-save">Saqlash</button>`;
+    const sync=()=>{ $('#modal').querySelectorAll('#eq-list textarea').forEach(t=>{ questions[Number(t.dataset.i)] = {text:t.value}; }); };
+    $('#eq-add').onclick=()=>{ sync(); questions.push({text:''}); render(); const tas=$('#modal').querySelectorAll('#eq-list textarea'); if(tas.length) tas[tas.length-1].focus(); };
+    $('#modal').querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ sync(); questions.splice(Number(b.dataset.rm),1); render(); });
+    $('#m-cancel').onclick=closeModal;
+    $('#eq-save').onclick=async()=>{
+      sync();
+      const clean = questions.map(q=>({text:String(q.text||'').trim()})).filter(q=>q.text);
+      if(!clean.length){ if(!confirm('Barcha savollar bo‘sh. Savollarni o‘chirib saqlansinmi?')) return; }
+      const out = clean.map((q,i)=>({id:'q'+(i+1), text:q.text}));
+      const btn=$('#eq-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{
+        await setDoc(doc(db,'exam_questions',id), {specialty:spec, slug:id, questions:out, count:out.length, generatedBy:'admin', updatedAt:serverTimestamp()}, {merge:true});
+        toast('Savollar saqlandi ✓'); closeModal(); if(typeof onSaved==='function') onSaved();
+      }catch(e){ toast('Xatolik: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+    };
+  };
+  $('#m-x').onclick=closeModal;
+  render();
 }
 
 /* ---- Oylik to'lovlar (hisob-fakturalar) ---- */
