@@ -100,6 +100,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Oylik o'quv to'lovi — hisob-fakturalar. Admin yaratadi/bekor qiladi; to'lov
+    // kelganda «paid» statusini to'lov serveri (Admin SDK) yozadi (qoidalarni chetlab).
+    // O'qiydi: admin/zavuch YOKI shu farzandni kabinetiga qo'shgan ota-ona.
+    match /invoices/{id} {
+      allow read:  if isAdmin() || isZavuch() || ownsChild(resource.data.get('studentId',''));
+      allow write: if isAdmin();
+    }
+    // To'lov jurnali (provayder chaqiruvlari) — faqat admin o'qiydi; server yozadi.
+    match /payments/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    // To'lov sozlamalari (service_id, merchant_id — maxfiy EMAS, to'lov havolasida ko'rinadi).
+    // Maxfiy kalit (secret_key) bu yerda EMAS — u faqat to'lov serverida saqlanadi.
+    match /config/payments { allow read: if true; allow write: if isAdmin(); }
+
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /homework/{id}   { allow read: if request.auth != null; allow write: if isAdmin(); }

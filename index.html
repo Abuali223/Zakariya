@@ -385,6 +385,16 @@
   .kab-att-card .metrics .m span{font-size:11.5px;color:var(--muted);margin-top:2px;display:block}
   .att-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-bottom:10px}
   .att-legend span{display:inline-flex;align-items:center;gap:5px}
+  .inv-list{display:flex;flex-direction:column;gap:8px}
+  .inv-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 13px;background:var(--bg);border-radius:11px}
+  .inv-m{font-weight:700;min-width:82px}
+  .inv-a{font-family:var(--serif);font-weight:700;color:var(--teal);flex:1;min-width:120px}
+  .inv-btns{display:flex;gap:8px}
+  .inv-pay{display:inline-block;padding:8px 16px;border-radius:9px;font-weight:700;font-size:13.5px;color:#fff;text-decoration:none}
+  .inv-pay.click{background:#00aaff}
+  .inv-pay.uzum{background:#7000ff}
+  .inv-pay:hover{opacity:.9}
+  .inv-paid{color:#1d7a44;font-weight:700;font-size:14px}
   .att-legend i,.att-chip i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
   .att-recent{display:flex;flex-wrap:wrap;gap:7px}
   .att-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 9px}
@@ -886,6 +896,7 @@ const T = {
     kab_att_rate:"Davomat",kab_att_present:"Keldi",kab_att_absent:"Kelmadi",kab_att_late:"Kechikdi",kab_att_excused:"Sababli",
     kab_gr_title:"Baholar",kab_gr_loading:"Baholar yuklanmoqda…",kab_gr_none:"Hozircha baho kiritilmagan.",
     kab_mon_title:"Monitoring baholari",kab_mon_loading:"Monitoring yuklanmoqda…",kab_mon_none:"Hozircha tasdiqlangan monitoring bahosi yo‘q.",
+    kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
     kab_tt_title:"Dars jadvali",kab_tt_loading:"Jadval yuklanmoqda…",kab_tt_none:"Dars jadvali hali kiritilmagan.",
@@ -993,6 +1004,7 @@ const T = {
     kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
     kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
+    kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
     kab_tt_title:"Расписание",kab_tt_loading:"Загрузка расписания…",kab_tt_none:"Расписание пока не внесено.",
@@ -1499,7 +1511,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1507,7 +1519,29 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+  if(s){ renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+}
+async function renderKabInvoices(studentId){
+  const t=T[lang], box=$("#kab-invoices"); if(!box || !(window.IqrorFB&&window.IqrorFB.getInvoices)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_loading)}</div></div>`;
+  const [invs, cfg] = await Promise.all([ window.IqrorFB.getInvoices(studentId), window.IqrorFB.getPayConfig() ]);
+  if($("#kab-invoices")!==box) return;
+  const list=(invs||[]).filter(i=>i&&i.status!=='canceled').sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
+  if(!list.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_none)}</div></div>`; return; }
+  const fmt=n=>{ n=Number(n)||0; return n.toLocaleString('ru-RU').replace(/,/g,' ')+' '+t.som; };
+  const clickUrl=inv=>{ if(!cfg||!cfg.clickServiceId||!cfg.clickMerchantId) return null;
+    return `https://my.click.uz/services/pay?service_id=${encodeURIComponent(cfg.clickServiceId)}&merchant_id=${encodeURIComponent(cfg.clickMerchantId)}&amount=${encodeURIComponent(Number(inv.amount)||0)}&transaction_param=${encodeURIComponent(inv.id)}`; };
+  const uzumUrl=inv=>{ if(!cfg||!cfg.uzumUrlTemplate) return null;
+    return cfg.uzumUrlTemplate.replace('{amount}',encodeURIComponent(Number(inv.amount)||0)).replace('{invoice}',encodeURIComponent(inv.id)); };
+  const rows=list.map(inv=>{
+    const paid=inv.status==='paid';
+    const cu=clickUrl(inv), uu=uzumUrl(inv);
+    const btns = paid ? `<span class="inv-paid">✓ ${esc(t.kab_pay_paid)}${inv.provider?` · ${esc(inv.provider)}`:''}</span>`
+      : `<span class="inv-btns">${cu?`<a class="inv-pay click" href="${esc(cu)}" target="_blank" rel="noopener">Click</a>`:''}${uu?`<a class="inv-pay uzum" href="${esc(uu)}" target="_blank" rel="noopener">Uzum</a>`:''}${(!cu&&!uu)?`<span class="muted">${esc(t.kab_pay_soon)}</span>`:''}</span>`;
+    return `<div class="inv-row"><span class="inv-m">${esc(inv.month||'')}</span><span class="inv-a">${fmt(inv.amount)}</span>${btns}</div>`;
+  }).join('');
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="inv-list">${rows}</div>
+    <p class="small muted" style="margin:12px 0 0;padding:0 2px">${esc(t.kab_pay_note)}</p></div>`;
 }
 async function renderKabMonitoring(studentId){
   const t=T[lang], box=$("#kab-monitoring"); if(!box || !(window.IqrorFB&&window.IqrorFB.getMonitoring)) return;
@@ -1843,6 +1877,18 @@ addEventListener('hashchange', ()=>route(true));
           const snap = await getDocs(query(collection(db,'monitoring'), where('studentId','==',studentId)));
           return snap.docs.map(d=>d.data()).filter(m=>m.status==='approved'); // faqat tasdiqlangan
         }catch(e){ return null; }
+      },
+      async getInvoices(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'invoices'), where('studentId','==',studentId)));
+          return snap.docs.map(d=>({id:d.id, ...d.data()}));
+        }catch(e){ return null; }
+      },
+      async getPayConfig(){
+        if(!db||!fsMod) return null;
+        const { doc, getDoc } = fsMod;
+        try{ const s=await getDoc(doc(db,'config','payments')); return s.exists()?s.data():null; }catch(e){ return null; }
       },
       async getTimetable(classKey){
         if(!db||!fsMod||!classKey) return null;

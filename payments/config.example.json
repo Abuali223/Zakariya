@@ -1,0 +1,13 @@
+{
+  "serviceAccount": "./service-account.json",
+  "port": 8790,
+  "click": {
+    "serviceId": "CLICK_SERVICE_ID",
+    "merchantId": "CLICK_MERCHANT_ID",
+    "secretKey": "CLICK_SECRET_KEY"
+  },
+  "uzum": {
+    "merchantId": "UZUM_MERCHANT_ID",
+    "secret": "UZUM_SECRET"
+  }
+}

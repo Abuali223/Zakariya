@@ -1,0 +1,9 @@
+{
+  "name": "iqror-payments",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Iqror — Click/Uzum to'lov serveri (hisob-fakturalarni to'landi qiladi)",
+  "main": "index.cjs",
+  "scripts": { "start": "node index.cjs" },
+  "dependencies": { "firebase-admin": "^12.0.0" }
+}

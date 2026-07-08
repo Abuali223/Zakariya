@@ -611,7 +611,8 @@ function buildTabs(){
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
-    {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'}
+    {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
+    {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -636,6 +637,7 @@ function openTab(tab){
   if(tab==='enrollments') return renderEnrollments();
   if(tab==='checkins') return renderCheckins();
   if(tab==='applications') return renderApplications();
+  if(tab==='payments') return renderPayments();
   renderCollection(tab);
 }
 
@@ -1711,6 +1713,74 @@ function openApplication(r){
     <div class="modal-b">${verdict}<div class="small muted" style="margin:0 0 8px">Javoblar</div>${qhtml||'<div class="empty">Javob yo‘q.</div>'}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+}
+
+/* ---- Oylik to'lovlar (hisob-fakturalar) ---- */
+function curMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function fmtSom(n){ n=Number(n)||0; return n.toLocaleString('ru-RU').replace(/,/g,' ')+' so‘m'; }
+async function renderPayments(){
+  $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun o‘quvchilarga hisob-faktura yarating. Ota-ona o‘z kabinetida <b>Click</b> yoki <b>Uzum</b> orqali to‘laydi — to‘lov kelganda «to‘landi» avtomatik belgilanadi (to‘lov serveri orqali). Naqd to‘lovni bu yerda qo‘lda belgilashingiz mumkin.</p>
+    <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
+      <label>Oylik summa (so‘m)<input type="number" id="pm-amount" placeholder="masalan: 1200000" value=""></label>
+      <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
+    </div><div class="small muted" id="pm-genmsg" style="margin-top:8px"></div></div>
+    <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
+  let students;
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const load=async()=>{
+    const month=$('#pm-month').value; if(!month){ return; }
+    $('#pm-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    let rows;
+    try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+    rows.sort((a,b)=>String(a.studentName||'').localeCompare(String(b.studentName||'')));
+    const paid=rows.filter(r=>r.status==='paid'), pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled');
+    const total=paid.reduce((s,r)=>s+(Number(r.amount)||0),0);
+    if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
+    const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
+      : r.status==='canceled'?`<span class="chip">Bekor</span>`
+      : `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kutilmoqda</span>`;
+    const trs=rows.map(r=>`<tr>
+      <td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'')}</td>
+      <td data-label="Summa">${fmtSom(r.amount)}</td>
+      <td data-label="Holat">${stBadge(r)}</td>
+      <td class="td-actions"><div class="row-actions">
+        ${r.status!=='paid'?`<button class="btn sm" data-cash="${esc(r._id)}">Naqd to‘landi</button>`:''}
+        ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
+        <button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>
+      </div></td></tr>`).join('');
+    $('#pm-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${paid.length} to‘landi · ${pend.length} kutilmoqda · yig‘ildi: ${fmtSom(total)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+    $('#pm-body').querySelectorAll('[data-cash]').forEach(b=>b.addEventListener('click',async()=>{ try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:'cash',paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+    $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+    $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+  };
+  $('#pm-gen').addEventListener('click',async()=>{
+    const month=$('#pm-month').value, amount=Number($('#pm-amount').value)||0;
+    if(!month){ toast('Oyni tanlang',true); return; }
+    if(amount<=0){ toast('Oylik summani kiriting',true); return; }
+    const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
+    try{
+      // Mavjud hisoblarni tekshiramiz (paid'ni buzmaymiz, dublikat yaratmaymiz)
+      const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
+      const existing=new Set(snap.docs.map(d=>d.id));
+      let created=0;
+      for(let i=0;i<students.length;i+=400){
+        const batch=writeBatch(db);
+        students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
+          batch.set(doc(db,'invoices',id),{studentId:sid,studentName:s.name||sid,classKey:classKeyOf(s),month,amount,status:'pending',provider:'',createdAt:serverTimestamp()}); created++; });
+        await batch.commit();
+      }
+      $('#pm-genmsg').textContent = created?`${created} ta yangi hisob-faktura yaratildi (${fmtSom(amount)}).`:'Bu oy uchun barcha hisoblar allaqachon mavjud.';
+      toast('Tayyor ✓'); load();
+    }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+    btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish';
+  });
+  $('#pm-month').addEventListener('change',load);
+  load();
 }
 
 /* ---- Modal utils ---- */
