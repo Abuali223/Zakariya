@@ -111,6 +111,16 @@
   .hero-stats{border-top:1px solid rgba(255,255,255,.16);display:grid;grid-template-columns:repeat(4,1fr);gap:32px;padding:32px 0 56px;margin-top:64px}
   .hero-stats .v{font-family:var(--serif);font-weight:700;font-size:40px;color:var(--gold)}
   .hero-stats .l{font-size:14.5px;color:rgba(255,255,255,.72);margin-top:6px}
+  /* Bosh sahifadagi aloqa + ariza bloki (teal fon ustida) */
+  .hero-contact{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start;padding:44px 0 76px;position:relative;border-top:1px solid rgba(255,255,255,.16);scroll-margin-top:96px}
+  .hero-contact .kicker.light{color:var(--gold)}
+  .hero-contact h2{color:#fff;font-weight:300;font-size:34px;line-height:1.2;margin:6px 0 14px}
+  .hero-contact .hc-info>p{color:rgba(255,255,255,.82);font-size:16.5px;line-height:1.6;margin:0 0 30px;max-width:46ch}
+  .hero-contact .contact-info.light{color:#fff}
+  .hero-contact .contact-info.light .r span.l{color:rgba(255,255,255,.6)}
+  .hero-contact .contact-info.light a{color:var(--gold)}
+  .hero-contact .contact-info.light span:not(.l){color:rgba(255,255,255,.92)}
+  @media(max-width:900px){ .hero-contact{grid-template-columns:1fr;gap:36px;padding:36px 0 60px} }
 
   /* ---- CARDS / COURSES ---- */
   .cards-2{display:grid;grid-template-columns:1fr 1fr;gap:28px}
@@ -550,9 +560,8 @@
           <a href="#galereya" data-t="nav_gallery"></a>
           <a href="#fikrlar" data-t="nav_reviews"></a>
           <a href="#qabul" data-t="nav_admission"></a>
-          <a href="#aloqa" data-t="nav_contact"></a>
         </div>
-        <a href="#aloqa" class="btn-cta" data-t="cta_enroll"></a>
+        <a href="#ariza" class="btn-cta" data-t="cta_enroll"></a>
       </div>
     </div>
   </nav>
@@ -571,7 +580,7 @@
         <h1 data-t="hero_title"></h1>
         <p class="sub" data-t="hero_sub"></p>
         <div class="hero-btns">
-          <a href="#aloqa" class="btn-gold" data-t="hero_btn1"></a>
+          <a href="#ariza" class="btn-gold" data-t="hero_btn1"></a>
           <a href="#natijalar" class="btn-ghost" data-t="hero_btn2"></a>
         </div>
       </div>
@@ -587,6 +596,39 @@
       </div>
     </div>
     <div class="wrap"><div class="hero-stats" id="hero-stats"></div></div>
+    <div class="wrap hero-contact" id="ariza">
+      <div class="hc-info">
+        <div class="kicker light" data-t="c_kicker"></div>
+        <h2 data-t="c_title"></h2>
+        <p data-t="c_sub"></p>
+        <div class="contact-info light">
+          <div class="r"><span class="l" data-t="c_address_l"></span><span id="c-address"></span></div>
+          <div class="r"><span class="l" data-t="c_phone_l"></span><a id="c-phone" href="#"></a></div>
+          <div class="r"><span class="l">Telegram</span><a id="c-telegram" href="#" target="_blank" rel="noopener"></a></div>
+          <div class="r"><span class="l" data-t="c_hours_l"></span><span id="c-hours"></span></div>
+        </div>
+      </div>
+      <form class="form" id="enroll-form">
+        <div class="form-banner">
+          <svg class="fb-mark" viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true">
+            <rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"></rect>
+            <polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"></polygon>
+            <polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"></polygon>
+          </svg>
+          <div class="fb-txt"><b>IQROR ACADEMY</b><span data-t="f_banner"></span></div>
+        </div>
+        <div class="form-body">
+          <h3 data-t="f_title"></h3>
+          <p class="form-note" data-t="f_note"></p>
+          <label><span data-t="f_name"></span><input name="name" required data-t-ph="f_name_ph"></label>
+          <label><span data-t="f_phone"></span><input name="phone" required placeholder="+998 __ ___ __ __"></label>
+          <label><span data-t="f_grade"></span><select name="grade" id="grade-select" required></select></label>
+          <label><span data-t="f_dir"></span><select name="direction" id="dir-select"></select></label>
+          <button type="submit" data-t="f_submit"></button>
+          <div class="thanks" id="form-thanks" hidden></div>
+        </div>
+      </form>
+    </div>
   </header>
 
   <!-- ================= YO'NALISHLAR ================= -->
@@ -743,43 +785,6 @@
       </div>
       <div class="sub-head"><div class="kicker" data-t="faq_kicker"></div><h3 data-t="faq_title"></h3><p data-t="faq_sub"></p></div>
       <div class="faq-list" id="faq"></div>
-    </div>
-  </section>
-
-  <!-- ================= ALOQA ================= -->
-  <section id="aloqa" class="band">
-    <div class="wrap contact-grid">
-      <div>
-        <div class="kicker" data-t="c_kicker"></div>
-        <h2 data-t="c_title"></h2>
-        <p style="font-size:17px;line-height:1.6;color:var(--muted);margin:0 0 36px" data-t="c_sub"></p>
-        <div class="contact-info">
-          <div class="r"><span class="l" data-t="c_address_l"></span><span id="c-address"></span></div>
-          <div class="r"><span class="l" data-t="c_phone_l"></span><a id="c-phone" href="#"></a></div>
-          <div class="r"><span class="l">Telegram</span><a id="c-telegram" href="#" target="_blank" rel="noopener"></a></div>
-          <div class="r"><span class="l" data-t="c_hours_l"></span><span id="c-hours"></span></div>
-        </div>
-      </div>
-      <form class="form" id="enroll-form">
-        <div class="form-banner">
-          <svg class="fb-mark" viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true">
-            <rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"></rect>
-            <polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"></polygon>
-            <polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"></polygon>
-          </svg>
-          <div class="fb-txt"><b>IQROR ACADEMY</b><span data-t="f_banner"></span></div>
-        </div>
-        <div class="form-body">
-          <h3 data-t="f_title"></h3>
-          <p class="form-note" data-t="f_note"></p>
-          <label><span data-t="f_name"></span><input name="name" required data-t-ph="f_name_ph"></label>
-          <label><span data-t="f_phone"></span><input name="phone" required placeholder="+998 __ ___ __ __"></label>
-          <label><span data-t="f_grade"></span><select name="grade" id="grade-select" required></select></label>
-          <label><span data-t="f_dir"></span><select name="direction" id="dir-select"></select></label>
-          <button type="submit" data-t="f_submit"></button>
-          <div class="thanks" id="form-thanks" hidden></div>
-        </div>
-      </form>
     </div>
   </section>
 
@@ -1372,7 +1377,7 @@ function renderPlans(){
       <div class="price-name">${esc(lang==="uz"?p.uz:p.ru)}</div>
       <div class="price-amt"><b>${esc(p.price)}</b><span>${esc(t.price_cur)}${esc(t.price_month)}</span></div>
       <ul class="price-feat">${feats.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>
-      <a href="#aloqa" class="price-cta">${esc(t.price_cta)}</a>
+      <a href="#ariza" class="price-cta">${esc(t.price_cta)}</a>
     </div>`;
   }).join("");
 }
@@ -1730,10 +1735,13 @@ $("#enroll-form").addEventListener("submit",async e=>{
 });
 
 /* Sahifa marshruti — har bo'lim alohida oyna (sahifa) bo'lib ochiladi */
-const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','galereya','fikrlar','qabul','aloqa','kabinet'];
+const PAGES = ['top','yonalishlar','imkoniyatlar','natijalar','oqituvchilar','yutuqlar','hayot','galereya','fikrlar','qabul','kabinet'];
 function route(animate){
   let h=(location.hash||'').replace('#','');
   if(h==='home'||h==='') h='top';
+  // «Ariza» — bosh sahifadagi (top) forma bo'limi; shu bo'limga silliq o'tamiz
+  let scrollTo=null;
+  if(h==='ariza'||h==='aloqa'){ scrollTo='ariza'; h='top'; }
   if(!PAGES.includes(h)) h='top';
   PAGES.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=(id===h)?'':'none'; });
   document.querySelectorAll('.nav-links a').forEach(a=>{
@@ -1747,6 +1755,7 @@ function route(animate){
   const cur=document.getElementById(h);
   if(cur && animate){ cur.classList.remove('page-enter'); void cur.offsetWidth; cur.classList.add('page-enter'); }
   if(h==='kabinet') renderKabinet();
+  if(scrollTo){ const el=document.getElementById(scrollTo); if(el){ el.scrollIntoView({behavior:animate?'smooth':'auto',block:'start'}); return; } }
   window.scrollTo({top:0,left:0,behavior:animate?'smooth':'auto'});
 }
 addEventListener('hashchange', ()=>route(true));
