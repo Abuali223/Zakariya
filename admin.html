@@ -1363,6 +1363,9 @@ function openForm(name, row){
   const val = k => row && row[k]!=null ? row[k] : '';
   const fieldHtml = f => {
     const v = val(f.k);
+    // Tahrirlashda ID (docId) maydonini QULFLAYMIZ — o'zgartirish yangi dublikat yaratmasin
+    const lockId = isEdit && s.docId && f.k===s.docId;
+    if(lockId) return `<div><label>${esc(f.l)} 🔒</label><input name="${f.k}" type="text" value="${esc(v)}" readonly style="background:#eef0ec;color:#667;cursor:not-allowed"><p class="small muted" style="margin:6px 0 0">ID o‘zgartirilmaydi (dublikatning oldini olish uchun).</p></div>`;
     if(f.t==='select') return `<div><label>${esc(f.l)}</label><select name="${f.k}">${f.opts.map(o=>{const ov=(o&&typeof o==='object')?o.v:o;const ol=(o&&typeof o==='object')?o.l:o;return `<option value="${esc(ov)}" ${String(ov)===String(v)?'selected':''}>${esc(ol)}</option>`;}).join('')}</select></div>`;
     if(f.t==='dynselect') return `<div><label>${esc(f.l)}</label><select name="${f.k}" data-dyn="${esc(f.src)}"><option value="">Yuklanmoqda…</option></select>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`;
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
@@ -1416,13 +1419,23 @@ function openForm(name, row){
       if(s.privateCol && Array.isArray(s.privateFields)){
         s.privateFields.forEach(k=>{ privData[k] = (k in data) ? data[k] : ''; if(k in data) data[k]=deleteField(); });
       }
+      // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
+      if(!isEdit && name==='students'){
+        const nm=String(data.name||'').trim().toLowerCase();
+        if(nm && (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm)){
+          if(!confirm('“'+String(data.name).trim()+'” ismli o‘quvchi allaqachon bor. Bu YANGI (boshqa) o‘quvchimi? Tahrirlash uchun jadvaldagi «Tahrir» tugmasidan foydalaning.')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
+        }
+      }
       let savedId;
       if(s.docId){
-        const id = (data[s.docId]||'').trim(); if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
+        // Tahrirlashda DOIM asl hujjatga yozamiz (ID qulflangan; hech qachon yangi dublikat yaratilmaydi)
+        const id = isEdit ? row._id : (data[s.docId]||'').trim();
+        if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
         // Yangi qo'shishda mavjud ID ustiga yozib yubormaslik uchun ogohlantiramiz
         if(!isEdit && (cache[name]||[]).some(r=>String(r._id)===id)){
           if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
         }
+        data[s.docId]=id;
         await setDoc(doc(db,name,id), data, {merge:true}); savedId=id;
       } else if(isEdit){
         await setDoc(doc(db,name,row._id), data, {merge:true}); savedId=row._id;
