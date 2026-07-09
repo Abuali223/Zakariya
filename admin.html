@@ -284,7 +284,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
@@ -338,6 +338,9 @@ const SCHEMAS = {
     fields:[
       {k:'studentId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text',req:true},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
+      {k:'pinfl',l:'JSHSHIR (14 xonali shaxsiy raqam)',t:'text',inputmode:'numeric',maxlength:14,placeholder:'14 ta raqam'},
+      {k:'parentPhone',l:'Ota-ona / vasiy telefoni',t:'tel',inputmode:'tel',placeholder:'+998 90 123 45 67'},
+      {k:'guardian',l:'Vasiy (kim)',t:'select',opts:[{v:'',l:'—'},'Ota','Ona','Bobo','Buvi','Amaki','Tog‘a','Xola','Amma']},
       {k:'photo',l:'Rasm (foto)',t:'image'},
       {k:'posterImage',l:'A‘lochi posteri (tayyor dizaynli rasm — 90+ ro‘yxatida shu ko‘rinadi)',t:'image'},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
@@ -349,6 +352,9 @@ const SCHEMAS = {
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat avtomatlashuvi uchun)',t:'text'},
       {k:'order',l:'Tartib',t:'number'}
     ],
+    // Maxfiy maydonlar ommaviy student hujjatida EMAS, alohida student_private
+    // kolleksiyasida saqlanadi (JSHSHIR, telefon — voyaga yetmaganning shaxsiy ma'lumoti)
+    privateCol:'student_private', privateFields:['pinfl','parentPhone','guardian'],
     subjects:true
   },
   teachers: {
@@ -747,7 +753,8 @@ async function importStudents(file){
   const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
   const iId=col('id'), iName=col('ism','name','f.i.o','fio'), iPhone=col('tel','phone','telefon'),
         iLang=col('til','lang','язык'), iGrade=col('sinf','grade','класс'), iGrp=col('guruh','group','групп'),
-        iTrack=col('nalish','track','yo‘n','yo\'n','напр'), iScore=col('ball','score','балл'), iAtt=col('davomat','att','посещ');
+        iTrack=col('nalish','track','yo‘n','yo\'n','напр'), iScore=col('ball','score','балл'), iAtt=col('davomat','att','посещ'),
+        iPinfl=col('jshshir','pinfl','жшшир','пинфл'), iVasiy=col('vasiy','guardian','опекун');
   if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
   const existing=(cache['students']||[]).map(r=>String(r._id));
   const acc=[]; const toWrite=[];
@@ -758,21 +765,27 @@ async function importStudents(file){
     acc.push(id);
     const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
     const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
+    // Ommaviy hujjat (maxfiy maydonlarsiz)
     const rec={ studentId:id, name,
-      parentPhone:iPhone>=0?String(r[iPhone]||'').trim():'',
       lang, grade:iGrade>=0?(parseInt(r[iGrade],10)||0):0,
       classLetter:iGrp>=0?String(r[iGrp]||'').trim():'',
       track:iTrack>=0?String(r[iTrack]||'').trim():'',
       score:iScore>=0?(Number(r[iScore])||0):0,
       attendance:iAtt>=0?(Number(r[iAtt])||0):0, order:1000+i };
-    toWrite.push({id, data:rec});
+    // Maxfiy maydonlar → student_private
+    const priv={};
+    if(iPhone>=0) priv.parentPhone=String(r[iPhone]||'').trim();
+    if(iPinfl>=0) priv.pinfl=String(r[iPinfl]||'').trim();
+    if(iVasiy>=0) priv.guardian=String(r[iVasiy]||'').trim();
+    toWrite.push({id, data:rec, priv});
   }
   if(!toWrite.length){ toast('Import uchun yozuv topilmadi',true); return; }
   if(!confirm(toWrite.length+' ta o‘quvchi import qilinsinmi? Mavjud IDlar yangilanadi.')) return;
   try{
     for(let i=0;i<toWrite.length;i+=450){
       const batch=writeBatch(db);
-      toWrite.slice(i,i+450).forEach(x=>batch.set(doc(db,'students',x.id), x.data, {merge:true}));
+      toWrite.slice(i,i+450).forEach(x=>{ batch.set(doc(db,'students',x.id), x.data, {merge:true});
+        if(x.priv && Object.keys(x.priv).length) batch.set(doc(db,'student_private',x.id), x.priv, {merge:true}); });
       await batch.commit();
     }
     toast(toWrite.length+' ta o‘quvchi import qilindi ✓');
@@ -1272,10 +1285,13 @@ async function renderStudents(){
   let rows;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
   catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
+  // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
+  try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
+    rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ r.pinfl=pd.pinfl||''; r.parentPhone=pd.parentPhone||''; r.guardian=pd.guardian||''; } }); }catch(e){}
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
-    const filtered = !q ? rows : rows.filter(r=>[r.studentId,r._id,r.name,r.parentPhone].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
+    const filtered = !q ? rows : rows.filter(r=>[r.studentId,r._id,r.name,r.parentPhone,r.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
     if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?'Qidiruv bo‘yicha o‘quvchi topilmadi.':'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
     const groups={};
     filtered.forEach(r=>{ const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—'; const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r); });
@@ -1367,7 +1383,7 @@ function openForm(name, row){
         <button type="button" class="btn sm vid-pick" data-k="${f.k}">🎬 Yuklash</button>
       </div>
       <div class="vid-status" data-k="${f.k}">${v?'Video biriktirilgan ✓':'YouTube havolasini qo‘ying yoki qisqa video (maks. 80MB) yuklang'}</div></div>`;
-    return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
+    return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.inputmode?`inputmode="${esc(f.inputmode)}"`:''} ${f.maxlength?`maxlength="${esc(String(f.maxlength))}"`:''} ${f.placeholder?`placeholder="${esc(f.placeholder)}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
   };
   // group fields into a 2-col grid where sensible
   const body = `<div class="grid2">${s.fields.map(fieldHtml).join('')}</div>` + (s.subjects ? subjectsEditor(row) : '');
@@ -1395,17 +1411,28 @@ function openForm(name, row){
       // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi
       const formVals={};
       (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });
+      // Maxfiy maydonlarni ommaviy hujjatdan ajratamiz (alohida kolleksiyaga yoziladi)
+      const privData={};
+      if(s.privateCol && Array.isArray(s.privateFields)){
+        s.privateFields.forEach(k=>{ privData[k] = (k in data) ? data[k] : ''; if(k in data) data[k]=deleteField(); });
+      }
+      let savedId;
       if(s.docId){
         const id = (data[s.docId]||'').trim(); if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
         // Yangi qo'shishda mavjud ID ustiga yozib yubormaslik uchun ogohlantiramiz
         if(!isEdit && (cache[name]||[]).some(r=>String(r._id)===id)){
           if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
         }
-        await setDoc(doc(db,name,id), data, {merge:true});
+        await setDoc(doc(db,name,id), data, {merge:true}); savedId=id;
       } else if(isEdit){
-        await setDoc(doc(db,name,row._id), data, {merge:true});
+        await setDoc(doc(db,name,row._id), data, {merge:true}); savedId=row._id;
       } else {
-        await addDoc(collection(db,name), data);
+        const ref=await addDoc(collection(db,name), data); savedId=ref.id;
+      }
+      // Maxfiy ma'lumotni alohida (himoyalangan) kolleksiyaga yozamiz
+      if(s.privateCol && savedId && Object.keys(privData).length){
+        try{ await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true}); }
+        catch(err){ toast('Saqlandi, lekin maxfiy maydonlarni yozishda xatolik: '+(err.code||err.message), true); }
       }
       if(s.afterSave){ try{ await s.afterSave(data, isEdit?row:null, formVals); }catch(err){ toast('Saqlandi, lekin sinf rahbarini biriktirishda xatolik: '+(err.code||err.message), true); } }
       toast('Saqlandi ✓'); closeModal(); (name==='students'?renderStudents():renderCollection(name));

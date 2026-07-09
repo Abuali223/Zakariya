@@ -70,6 +70,13 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isZavuch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score']));
     }
+    // Maxfiy shaxsiy ma'lumot (JSHSHIR, ota-ona telefoni, vasiy). Ommaviy student
+    // hujjatidan AJRATILGAN — hujjat id = studentId. Faqat admin/zavuch YOKI shu
+    // farzandni kabinetiga qo'shgan ota-ona o'qiydi. Yozishni faqat admin.
+    match /student_private/{id} {
+      allow read:  if isAdmin() || isZavuch() || ownsChild(id);
+      allow write: if isAdmin();
+    }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
     match /achievements_school/{id}   { allow read: if true; allow write: if isAdmin(); }
