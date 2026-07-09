@@ -1309,7 +1309,7 @@ async function renderStudents(){
       return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
-    $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del)));
+    $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
   };
   draw('');
   const si=$('#stu-search'); if(si) si.addEventListener('input',()=>draw(si.value));
@@ -1532,9 +1532,15 @@ function gatherSubjects(){
   })).filter(x=>x.uz);
 }
 
-async function delDoc(name,id){
-  if(!confirm('Ushbu yozuvni o‘chirasizmi?'))return;
-  try{ await deleteDoc(doc(db,name,id)); toast('O‘chirildi');
+async function delDoc(name,id,label){
+  const what = label ? `“${label}” (${id})` : `“${id}”`;
+  if(!confirm(`${what} — o‘chirilsinmi?\n\n⚠️ Bu amalni ortga qaytarib bo‘lmaydi.`)) return;
+  // O'quvchi kabi muhim yozuvlar uchun ikkinchi tasdiq
+  if(name==='students' && !confirm('O‘quvchi va uning maxfiy ma’lumoti (JSHSHIR, telefon) butunlay o‘chadi.\nDavom etamizmi?')) return;
+  try{ await deleteDoc(doc(db,name,id));
+    // O'quvchini o'chirsa — maxfiy ma'lumotini ham o'chiramiz (orfan qolmasin)
+    if(name==='students'){ try{ await deleteDoc(doc(db,'student_private',id)); }catch(e){} }
+    toast('O‘chirildi');
     if(name==='enrollments') renderEnrollments(); else if(name==='users') renderUsers(); else if(name==='students') renderStudents(); else renderCollection(name);
   }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
 }
