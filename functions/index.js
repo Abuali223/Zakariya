@@ -25,3 +25,12 @@ exports.syncAdminClaim = onDocumentWritten("users/{uid}", async (event) => {
     console.error("claim sync failed for", uid, e.message);
   }
 });
+
+// ---- AI yordamchi (HTTPS) — chatbot, ota-onaga xulosa, xavf tahlili ----
+// URL: shu funksiyaning bazasi. Sayt/admin config/ai.url ga shu manzilni yozadi.
+const { onRequest } = require("firebase-functions/v2/https");
+const { handleAI } = require("./ailogic");
+exports.ai = onRequest(
+  { region: "us-central1", cors: true, memory: "512MiB", timeoutSeconds: 120, maxInstances: 5 },
+  handleAI
+);

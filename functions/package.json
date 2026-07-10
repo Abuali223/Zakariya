@@ -1,11 +1,14 @@
 {
   "name": "iqror-functions",
   "description": "Admin custom-claim sync for Iqror Academy",
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.1.0"
+    "firebase-functions": "^6.1.0",
+    "@anthropic-ai/sdk": "^0.110.0"
   },
   "private": true
 }
