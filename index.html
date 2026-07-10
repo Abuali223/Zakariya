@@ -972,6 +972,7 @@ const T = {
     kab_gr_title:"Baholar",kab_gr_loading:"Baholar yuklanmoqda…",kab_gr_none:"Hozircha baho kiritilmagan.",
     kab_mon_title:"Monitoring baholari",kab_mon_loading:"Monitoring yuklanmoqda…",kab_mon_none:"Hozircha tasdiqlangan monitoring bahosi yo‘q.",
     kab_ts_title:"O‘qituvchi xulosasi",kab_ts_loading:"Yuklanmoqda…",kab_ts_note:"Sinf rahbari / fan o‘qituvchisi tomonidan yozilgan.",
+    kab_pf_title:"Choraklik xarakteristika",kab_pf_general:"Umumiy xarakteristika",kab_pf_subjects:"Fan o‘qituvchilari izohi",kab_pf_note:"Sinf rahbari va fan o‘qituvchilari tomonidan to‘ldiriladi.",
     kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
@@ -1087,6 +1088,7 @@ const T = {
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
     kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
     kab_ts_title:"Отзыв учителя",kab_ts_loading:"Загрузка…",kab_ts_note:"Написано классным руководителем / учителем.",
+    kab_pf_title:"Четвертная характеристика",kab_pf_general:"Общая характеристика",kab_pf_subjects:"Отзывы учителей-предметников",kab_pf_note:"Заполняется классным руководителем и учителями-предметниками.",
     kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
@@ -1594,7 +1596,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1602,7 +1604,33 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+  if(s){ renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+}
+// Choraklik xarakteristika — umumiy + fan izohlari (Firestore'dan to'g'ridan-to'g'ri)
+async function renderKabProfile(studentId){
+  const t=T[lang], box=$("#kab-profile");
+  if(!box || !(window.IqrorFB&&window.IqrorFB.getCharacteristics)) return;
+  box.innerHTML = `<div class="kab-att-card"><div class="subs-l">📋 ${esc(t.kab_pf_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_ts_loading)}</div></div>`;
+  let chars=null, notes=null;
+  try{ [chars,notes]=await Promise.all([window.IqrorFB.getCharacteristics(studentId), window.IqrorFB.getSubjectNotes(studentId)]); }catch(e){}
+  if($("#kab-profile")!==box) return;   // boshqa farzandga o'tilgan
+  chars=(chars||[]).filter(x=>x && String(x.text||'').trim());
+  notes=(notes||[]).filter(x=>x && String(x.text||'').trim());
+  if(!chars.length && !notes.length){ box.innerHTML=''; return; }   // yozuv yo'q — jim yashiramiz
+  const QN = lang==='ru' ? {q1:'1-я четверть',q2:'2-я четверть',q3:'3-я четверть',q4:'4-я четверть'} : {q1:'1-chorak',q2:'2-chorak',q3:'3-chorak',q4:'4-chorak'};
+  const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${QN[q]||q} · ${p.join('-')}`; };
+  const genByTerm={}; chars.forEach(x=>{ genByTerm[x.term||'']=String(x.text); });
+  const notesByTerm={}; notes.forEach(x=>{ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text)}); });
+  const terms=[...new Set([...Object.keys(genByTerm),...Object.keys(notesByTerm)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
+  const blocks=terms.map((term,i)=>{
+    const gen = genByTerm[term] ? `<div style="margin:6px 0 10px"><div class="small" style="font-weight:700;color:var(--muted)">${esc(t.kab_pf_general)}</div><p style="white-space:pre-wrap;line-height:1.6;margin:2px 0 0;color:var(--ink)">${esc(genByTerm[term])}</p></div>` : '';
+    const ns=(notesByTerm[term]||[]).sort((a,b)=>a.subject.localeCompare(b.subject));
+    const notesHtml = ns.length ? `<div class="small" style="font-weight:700;color:var(--muted);margin-top:6px">${esc(t.kab_pf_subjects)}</div>`+ns.map(n=>`<div class="subrow" style="align-items:flex-start"><span style="min-width:110px;font-weight:600">${esc(n.subject)}</span><span style="white-space:pre-wrap;line-height:1.5;flex:1;text-align:left">${esc(n.text)}</span></div>`).join('') : '';
+    return `<div style="${i?'margin-top:16px;border-top:1px dashed var(--border);padding-top:14px':''}">
+      <div class="small" style="font-weight:700;color:var(--brand,#1F9982);margin-bottom:6px">${esc(termLbl(term))}</div>${gen}${notesHtml}</div>`;
+  }).join('');
+  box.innerHTML = `<div class="kab-att-card"><div class="subs-l">📋 ${esc(t.kab_pf_title)}</div>${blocks}
+    <p class="small muted" style="margin:14px 0 0;border-top:1px dashed var(--border);padding-top:10px">${esc(t.kab_pf_note)}</p></div>`;
 }
 // Oylik xulosa — o'qituvchi/sinf rahbari QO'LDA yozadi; kabinet uni Firestore'dan o'qiydi.
 async function renderKabTeacherSummary(studentId){
@@ -2043,6 +2071,20 @@ addEventListener('hashchange', ()=>route(true));
         const { collection, getDocs, query, where } = fsMod;
         try{ const snap = await getDocs(query(collection(db,'student_summaries'), where('studentId','==',studentId)));
           return snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
+        }catch(e){ return null; }
+      },
+      async getCharacteristics(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'characteristics'), where('studentId','==',studentId)));
+          return snap.docs.map(d=>({id:d.id, ...d.data()}));
+        }catch(e){ return null; }
+      },
+      async getSubjectNotes(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'subject_notes'), where('studentId','==',studentId)));
+          return snap.docs.map(d=>({id:d.id, ...d.data()}));
         }catch(e){ return null; }
       },
       async getPayConfig(){

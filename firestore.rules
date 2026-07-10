@@ -60,9 +60,15 @@ service cloud.firestore {
     function isTeacherOwnDoc(d) {
       return isTeacherForClass(d.get('classKey','')) && (d.get('subject','') in teacherSubjects());
     }
-    // Oylik xulosani kim yozadi: admin/zavuch YOKI shu sinf(ck) rahbari/kuratori/o'qituvchisi.
-    function canWriteSummary(ck) {
-      return isAdmin() || isZavuch() || isHomeroomFor(ck) || isKuratorFor(ck) || isTeacherForClass(ck);
+    // UMUMIY xarakteristika/xulosa MUALLIFLARI: admin/zavuch/sinf rahbari/kurator.
+    // Fan o'qituvchisi (faqat assignedClasses, sinf rahbari EMAS) umumiyni yoza olmaydi —
+    // u faqat o'z fani izohini yozadi (subject_notes, isTeacherOwnDoc orqali).
+    function canWriteGeneral(ck) {
+      return isAdmin() || isZavuch() || isHomeroomFor(ck) || isKuratorFor(ck);
+    }
+    // Sinf profilini KO'RADIGAN xodimlar: umumiy mualliflar + o'sha sinf fan o'qituvchisi.
+    function isClassStaff(ck) {
+      return canWriteGeneral(ck) || isTeacherForClass(ck);
     }
 
     // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
@@ -81,18 +87,36 @@ service cloud.firestore {
       allow read:  if isAdmin() || isZavuch() || ownsChild(id);
       allow write: if isAdmin();
     }
-    // Oylik xulosa — o'qituvchi/sinf rahbari/zavuch QO'LDA yozadi (ota-onaga).
-    // O'qiydi: admin/zavuch YOKI shu farzand ota-onasi (kabinetda ko'rinadi).
-    // Yozadi: admin/zavuch YOKI shu sinf (classKey) rahbari/kuratori/o'qituvchisi.
-    // Hujjat id = "{studentId}__{YYYY-MM}"; har oy alohida xulosa.
+    // Oylik xulosa — sinf rahbari/kurator/zavuch/admin QO'LDA yozadi (ota-onaga).
+    // O'qiydi: shu farzand ota-onasi YOKI o'sha sinf xodimi. Hujjat id = "{sid}__{YYYY-MM}".
     match /student_summaries/{id} {
-      allow read:   if isAdmin() || isZavuch()
-                    || ownsChild(resource.data.get('studentId',''))
-                    || canWriteSummary(resource.data.get('classKey',''));
-      allow create: if canWriteSummary(request.resource.data.get('classKey',''));
-      allow update: if canWriteSummary(resource.data.get('classKey',''))
-                    && canWriteSummary(request.resource.data.get('classKey',''));
-      allow delete: if isAdmin() || isZavuch() || canWriteSummary(resource.data.get('classKey',''));
+      allow read:   if isClassStaff(resource.data.get('classKey',''))
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if canWriteGeneral(request.resource.data.get('classKey',''));
+      allow update: if canWriteGeneral(resource.data.get('classKey',''))
+                    && canWriteGeneral(request.resource.data.get('classKey',''));
+      allow delete: if canWriteGeneral(resource.data.get('classKey',''));
+    }
+    // O'quvchi PROFILI — choraklik xarakteristika.
+    // (A) FAN IZOHI — har fan o'qituvchisi FAQAT o'z sinfi + o'z fani izohini yozadi.
+    //     Hujjat id = "{sid}__{term}__{subjectSlug}" (term = "2025-2026-q2").
+    match /subject_notes/{id} {
+      allow read:   if isClassStaff(resource.data.get('classKey',''))
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if isAdmin() || isZavuch() || isTeacherOwnDoc(request.resource.data);
+      allow update: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(resource.data) && isTeacherOwnDoc(request.resource.data));
+      allow delete: if isAdmin() || isZavuch() || isTeacherOwnDoc(resource.data);
+    }
+    // (B) UMUMIY XARAKTERISTIKA — sinf rahbari/kurator/zavuch/admin yozadi.
+    //     Hujjat id = "{sid}__{term}".
+    match /characteristics/{id} {
+      allow read:   if isClassStaff(resource.data.get('classKey',''))
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if canWriteGeneral(request.resource.data.get('classKey',''));
+      allow update: if canWriteGeneral(resource.data.get('classKey',''))
+                    && canWriteGeneral(request.resource.data.get('classKey',''));
+      allow delete: if canWriteGeneral(resource.data.get('classKey',''));
     }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
