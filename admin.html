@@ -1567,7 +1567,7 @@ async function openStudentReport(sid, row){
     if(!s){ const d=await getDoc(doc(db,'students',sid)); s = d.exists()?{_id:d.id,...d.data()}:null; }
     if(!s){ $('#modal .modal-b').innerHTML='<div class="empty">O‘quvchi topilmadi.</div>'; return; }
     const curMonth = (()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); })();
-    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap] = await Promise.all([
+    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap] = await Promise.all([
       getDoc(doc(db,'student_private',sid)).then(d=>d.exists()?d.data():{}).catch(()=>({})),
       getDocs(query(collection(db,'attendance'), where('studentId','==',sid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'monitoring'), where('studentId','==',sid))).catch(()=>({docs:[]})),
