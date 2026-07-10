@@ -31,6 +31,6 @@ exports.syncAdminClaim = onDocumentWritten("users/{uid}", async (event) => {
 const { onRequest } = require("firebase-functions/v2/https");
 const { handleAI } = require("./ailogic");
 exports.ai = onRequest(
-  { region: "us-central1", cors: true, memory: "512MiB", timeoutSeconds: 120, maxInstances: 5 },
+  { region: "us-central1", cors: true, memory: "512MiB", timeoutSeconds: 120, maxInstances: 5, serviceAccount: "firebase-adminsdk-fbsvc@alilazer-cd582.iam.gserviceaccount.com" },
   handleAI
 );
