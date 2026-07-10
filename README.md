@@ -1,50 +1,52 @@
-# Iqror IT MED School — veb-platforma
+# Iqror Academy — veb-platforma
 
-**Iqror IT MED School** — IT va MED yo‘nalishlarida chuqurlashtirilgan ta'lim beruvchi
-zamonaviy maktabning rasmiy veb-sayti. Ikki tilli (o‘zbek / rus), to‘liq statik va
-GitHub Pages'da bevosita ishlaydi.
+**Iqror Academy** — IT va MED (tibbiyot) yo‘nalishlarida chuqurlashtirilgan ta'lim
+beruvchi zamonaviy maktabning rasmiy veb-platformasi: ochiq sayt, admin panel,
+ota-ona kabineti, o‘qituvchilar tanlovi imtihoni va backend xizmatlari.
+Ikki tilli (o‘zbek / rus).
 
-🔗 **Sayt:** `https://<username>.github.io/<repo>/`
+🔗 **Sayt:** https://alilazer-cd582.web.app
 
-## 📄 Fayllar
+## 📄 Sahifalar
 
 | Fayl | Tavsif |
 |------|--------|
-| `index.html` | **Asosiy sayt** — mustaqil (self-contained), moslashuvchan (responsive) landing sahifa: hero, yo‘nalishlar, o‘quvchi natijalari (reyting + ID qidiruv), o‘qituvchilar reytingi, yutuqlar, maktab hayoti, aloqa/ariza formasi. UZ/RU tillari. |
-| `Iqror IT MED School.dc.html` | Dizayn manbasi (design-component format). `support.js` runtime + `image-slot.js` bilan render bo‘ladi. `index.html` — shu dizaynning ishlab chiqarishga tayyor kompilyatsiyasi. |
-| `support.js`, `image-slot.js` | Dizayn runtime va rasm-slot komponenti (faqat `.dc.html` uchun). |
-| `uploads/`, `assets/` | Logotip va rasm resurslari. |
-| `oquv-platforma.html` | **Bonus:** o‘quvchilar uchun oflayn o‘quv platformasi (darslar, SRS kartochkalar, testlar, AI murabbiy) — IT, tibbiyot va tibbiy informatika bo‘yicha. |
-| `arab-tili.html` va boshqalar | Avvalgi «Arab Tili» PWA loyihasi (saqlab qolindi). |
+| `index.html` | **Asosiy sayt** — mustaqil (self-contained) landing sahifa: hero, yo‘nalishlar, o‘quvchi natijalari (reyting + ID qidiruv), o‘qituvchilar, yutuqlar, galereya, narxlar, FAQ, aloqa/ariza formasi, **ota-ona kabineti** (davomat, baholar, monitoring, to‘lovlar, dars jadvali, uy vazifalari, choraklik xarakteristika) va AI chatbot. |
+| `admin.html` | **Admin panel** — o‘quvchilar/o‘qituvchilar CRUD, davomat, baholar, monitoring, xarakteristika, to‘lovlar, arizalar, import (Excel/CSV/Google Sheets), ma'lumotnoma (transkript) chop etish. Rollar: admin, zavuch, kurator, sinf rahbari, fan o‘qituvchisi. |
+| `imtihon.html` | **O‘qituvchilar tanlovi** — nomzodlar uchun imtihon sahifasi (savollar KaTeX bilan, AI baholash). |
+| `oquv-platforma.html` | O‘quvchilar uchun oflayn o‘quv platformasi (darslar, SRS kartochkalar, testlar, AI murabbiy) — IT va tibbiyot bo‘yicha. |
+| `prezentatsiya.html` | Maktab taqdimoti (slaydlar). |
+| `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (o‘rnatiladigan ilova + network-first service worker). |
+| `vendor/` | O‘z-o‘zida joylashgan kutubxonalar: KaTeX (matematik formulalar), SheetJS (`xlsx`). |
+| `assets/`, `uploads/` | Logotip va rasm resurslari. |
 
-## 🔥 Firebase (ixtiyoriy)
+## 🔥 Firebase
 
-`index.html` ichida Firebase moduli mavjud (`iqror-72879` loyihasi):
+Loyiha Firebase (`alilazer-cd582`) ustida ishlaydi:
 
-- **Analytics** — tashriflar statistikasi.
-- **Firestore** — ariza (enrollment) formasi ma'lumotlari `enrollments` to‘plamiga saqlanadi.
+- **Hosting** — sayt (`firebase.json` → `public/`).
+- **Auth** — email/parol + Google kirish.
+- **Firestore** — barcha ma'lumotlar (o‘quvchilar, baholar, davomat, to‘lovlar, xarakteristika, arizalar…). Ruxsatlar: `firestore.rules`.
+- **Storage** — rasmlar: `storage.rules`.
+- **Cloud Functions** — `functions/` (AI: chatbot, oylik xulosa, imtihon baholash).
 
-Internet bo‘lmasa yoki Firebase sozlanmagan bo‘lsa, sayt baribir to‘liq ishlayveradi.
+## 🧩 Backend xizmatlari (ixtiyoriy, mustaqil Node servislari)
 
-**Ariza formasi ishlashi uchun** Firebase konsolida:
-1. **Authentication → Anonymous** yoqilishi kerak (anonim yozuv uchun).
-2. **Firestore Database** yaratilib, quyidagi qoidalar qo‘shilishi tavsiya etiladi:
+| Papka | Vazifa |
+|-------|--------|
+| `functions/` | Firebase Cloud Function (`ai`) — Claude API orqali AI xizmatlari. |
+| `ai-assistant/` | AI yordamchi serverning mustaqil varianti (Cloud Function o‘rniga). |
+| `ai-grader/` | Imtihon javoblarini AI bilan baholovchi xizmat. |
+| `camera-bridge/` | Yuz-terminal (kirish nazorati) → Firestore ko‘prigi. |
+| `payments/` | To‘lov provayderlari (Click / Uzum / Payme) webhook serveri. |
 
+Har bir xizmatning maxfiy sozlamalari (`config.json`, kalitlar) `.gitignore` bilan
+himoyalangan va repozitoriyaga qo‘shilmaydi.
+
+## 🚀 Deploy
+
+```bash
+firebase deploy --only hosting     # sayt
+firebase deploy --only firestore:rules
+firebase deploy --only functions:ai
 ```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /enrollments/{doc} {
-      allow create: if request.auth != null;   // faqat yozish (arizalarni o‘qish adminda)
-      allow read, update, delete: if false;
-    }
-  }
-}
-```
-
-## 🚀 Deploy (GitHub Pages)
-
-`.github/workflows/pages.yml` — `main` ga har push qilinganda saytni avtomatik deploy qiladi.
-
-- **Settings → Pages → Source: GitHub Actions** tanlangan bo‘lsa, deploy avtomatik ishlaydi.
-- Muqobil: **Settings → Pages → Source: `main` / `(root)`** ham qo‘llab-quvvatlanadi (`.nojekyll` mavjud).
