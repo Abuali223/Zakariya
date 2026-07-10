@@ -1790,11 +1790,19 @@ function initAIChat(){
   window.IqrorFB.getAIConfig().then(async cfg=>{
     if(!cfg || !cfg.url || cfg.enabled===false) return;   // sozlanmagan — widget ko'rinmaydi
     const base=String(cfg.url).replace(/\/+$/,'');
-    // Server tirikmi? Javob bermasa (server ishlamayapti) chatbot umuman ko'rsatilmaydi
-    try{ const ctrl=new AbortController(); const tm=setTimeout(()=>ctrl.abort(),4500);
-      const h=await fetch(base+'/health',{signal:ctrl.signal}); clearTimeout(tm);
-      if(!h.ok) return;
-    }catch(e){ return; }
+    // Server tirikmi? Cloud Function «sovuq start» qilishi mumkin — 2 marta,
+    // uzoqroq muddat bilan urinamiz. Javob bermasa chatbot ko'rsatilmaydi.
+    async function alive(){
+      for(let i=0;i<2;i++){
+        try{ const c=new AbortController(); const t=setTimeout(()=>c.abort(), i===0?7000:14000);
+          const r=await fetch(base+'/health',{signal:c.signal,mode:'cors'}); clearTimeout(t);
+          if(r.ok) return true;
+        }catch(e){}
+        if(i===0) await new Promise(r=>setTimeout(r,1200));
+      }
+      return false;
+    }
+    if(!(await alive())) return;
     root.hidden=false;
     const fab=$("#ai-fab"), panel=$("#ai-panel"), msgs=$("#ai-msgs"), form=$("#ai-form"), input=$("#ai-text");
     const history=[]; let opened=false;
