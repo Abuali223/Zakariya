@@ -1469,13 +1469,18 @@ async function openStudentReport(sid, row){
   try{
     if(!s){ const d=await getDoc(doc(db,'students',sid)); s = d.exists()?{_id:d.id,...d.data()}:null; }
     if(!s){ $('#modal .modal-b').innerHTML='<div class="empty">O‘quvchi topilmadi.</div>'; return; }
-    const [privD, attSnap, monSnap, invSnap, grdSnap] = await Promise.all([
+    const curMonth = (()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); })();
+    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap] = await Promise.all([
       getDoc(doc(db,'student_private',sid)).then(d=>d.exists()?d.data():{}).catch(()=>({})),
       getDocs(query(collection(db,'attendance'), where('studentId','==',sid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'monitoring'), where('studentId','==',sid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'invoices'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'grades'), where('studentId','==',sid))).catch(()=>({docs:[]}))
+      getDocs(query(collection(db,'grades'), where('studentId','==',sid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'student_summaries'), where('studentId','==',sid))).catch(()=>({docs:[]}))
     ]);
+    // O'qituvchi yozgan oylik xulosalar (ota-onaga) — oy → matn
+    const sumMap = {}; sumSnap.docs.forEach(d=>{ const x=d.data()||{}; if(x.month && String(x.text||'').trim()) sumMap[x.month]=String(x.text); });
+    const tsBodyHTML = () => { const ms=Object.keys(sumMap).sort((a,b)=>b.localeCompare(a)); return ms.length ? ms.map(m=>`<div style="margin:6px 0"><div class="small" style="font-weight:700;color:#155A4E">${esc(m)}</div><div style="white-space:pre-wrap;line-height:1.5">${esc(sumMap[m])}</div></div>`).join('') : '<div class="small muted">Yozuv yo‘q.</div>'; };
     // Davomat
     let present=0,late=0,absent=0,total=0;
     attSnap.docs.forEach(d=>{ const days=(d.data()||{}).days||{}; Object.values(days).forEach(st=>{ total++; if(st==='present')present++; else if(st==='late')late++; else if(st==='absent')absent++; }); });
@@ -1517,6 +1522,8 @@ async function openStudentReport(sid, row){
       <h4 class="rep-h">To‘lovlar (buxgalteriya)</h4>
       ${inv.length?`<table class="rep-t"><thead><tr><th>Oy</th><th style="text-align:right">Summa</th><th>Holat</th><th>Usul</th><th>To‘langan sana</th></tr></thead><tbody>${invRows}</tbody>
         <tfoot><tr><td colspan="5" style="padding-top:8px"><b>Jami to‘langan:</b> ${fmtSom(paidSum)} &nbsp;·&nbsp; <b>Qarz (kutilmoqda):</b> ${fmtSom(dueSum)}</td></tr></tfoot></table>`:'<div class="small muted">To‘lov yozuvi yo‘q.</div>'}
+      <h4 class="rep-h">O‘qituvchi xulosasi (ota-onaga)</h4>
+      <div id="rep-ts-body">${tsBodyHTML()}</div>
       <div class="small muted" style="margin-top:16px;border-top:1px dashed #ccc;padding-top:8px">Chop etilgan sana: ${new Date().toLocaleDateString('ru-RU')} · Iqror Academy</div>`;
     const style=`<style>
       body{font-family:Arial,system-ui,sans-serif;color:#20302B;margin:0;padding:22px;font-size:13px}
@@ -1529,26 +1536,40 @@ async function openStudentReport(sid, row){
     </style>`;
     $('#modal .modal-b').innerHTML = `<div id="rep-inner">${inner}</div>`;
     renderMath && renderMath($('#modal .modal-b'));
-    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><span id="rep-ai-slot"></span><button type="button" class="btn gold" id="rep-print">🖨 Chop etish / PDF</button>`;
+    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn gold" id="rep-print">🖨 Chop etish / PDF</button>`;
     $('#m-cancel2').onclick=closeModal;
     $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
-    // AI xulosa tugmasi (agar AI server sozlangan bo'lsa)
-    const aiUrl = await loadAIUrl();
-    if(aiUrl){
-      $('#rep-ai-slot').innerHTML = `<button type="button" class="btn ghost2" id="rep-ai">🤖 Ota-onaga AI xulosa</button>`;
-      $('#rep-ai').onclick=async()=>{
-        const btn=$('#rep-ai'); btn.disabled=true; btn.textContent='Yozilmoqda…';
-        let box=$('#rep-ai-box'); if(!box){ box=document.createElement('div'); box.id='rep-ai-box'; box.className='card'; box.style.cssText='margin:0 0 14px;padding:14px 16px;background:#eef5f2;border:1px solid #d5e6df;white-space:pre-wrap;line-height:1.55'; $('#rep-inner').prepend(box); }
-        box.textContent='…';
-        try{ const tok = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-          const r=await fetch(aiUrl+'/student-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentId:sid,lang:'uz',idToken:tok})});
-          const j=await r.json();
-          const msg = j.summary || (j.error==='forbidden'?'Ruxsat yo‘q':(j.error==='not_found'?'O‘quvchi topilmadi':(j.error||'—')));
-          box.innerHTML = `<div class="small muted" style="margin-bottom:6px">🤖 AI xulosa (ota-ona uchun):</div>`+esc(msg);
-        }catch(e){ box.textContent='AI serverga ulanib bo‘lmadi: '+(e.message||''); }
-        btn.disabled=false; btn.textContent='🤖 Ota-onaga AI xulosa';
-      };
-    }
+    // Oylik xulosa muharriri — o'qituvchi/sinf rahbari QO'LDA yozadi; ota-ona kabinetда ko'radi.
+    const edWrap=document.createElement('div'); edWrap.id='rep-ts-editor';
+    edWrap.style.cssText='display:none;margin-top:16px;border-top:2px solid #1F9982;padding-top:14px';
+    edWrap.innerHTML = `<div style="font-weight:700;color:#155A4E;margin-bottom:4px">📝 Oylik xulosa yozish (ota-onaga)</div>
+      <div class="small muted" style="margin-bottom:10px">Bu matnni ota-ona o‘z kabinetida ko‘radi. Har oy uchun alohida yoziladi. Matn bo‘sh saqlansa — o‘sha oy xulosasi o‘chiriladi.</div>
+      <label class="small" style="display:inline-flex;flex-direction:column;gap:4px">Oy<input type="month" id="ts-month" value="${curMonth}" style="padding:8px;border:1px solid #d7ddd4;border-radius:8px"></label>
+      <textarea id="ts-text" rows="5" placeholder="Masalan: Nurillo bu oy matematika va ona tilida sezilarli o‘sish ko‘rsatdi. Davomat a‘lo darajada. Kelgusi oyda o‘qishga yanada ko‘proq e‘tibor qaratishni tavsiya qilamiz." style="width:100%;margin-top:10px;padding:10px;border:1px solid #d7ddd4;border-radius:10px;font:inherit;line-height:1.5;resize:vertical"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px"><button type="button" class="btn gold" id="ts-save">Saqlash</button><span id="ts-status" class="small muted"></span></div>`;
+    $('#modal .modal-b').appendChild(edWrap);
+    const tsText=()=>$('#ts-text'), tsMonth=()=>$('#ts-month');
+    const fillTs=()=>{ tsText().value = sumMap[tsMonth().value] || ''; };
+    fillTs();
+    $('#rep-ts-toggle').onclick=()=>{ const open=edWrap.style.display!=='none'; edWrap.style.display=open?'none':'block'; if(!open){ edWrap.scrollIntoView({behavior:'smooth',block:'nearest'}); tsText().focus(); } };
+    tsMonth().onchange=fillTs;
+    $('#ts-save').onclick=async()=>{
+      const month=tsMonth().value, text=tsText().value.trim();
+      if(!/^\d{4}-\d{2}$/.test(month)){ toast('Oy noto‘g‘ri',true); return; }
+      const btn=$('#ts-save'); btn.disabled=true; $('#ts-status').textContent='Saqlanmoqda…';
+      try{
+        const ref=doc(db,'student_summaries', sid+'__'+month);
+        if(text){
+          await setDoc(ref,{ studentId:sid, classKey:classKeyOf(s), month, text,
+            byUid:(auth.currentUser&&auth.currentUser.uid)||'', byName:(auth.currentUser&&(auth.currentUser.displayName||auth.currentUser.email))||'',
+            updatedAt:serverTimestamp() },{merge:true});
+          sumMap[month]=text;
+        } else { await deleteDoc(ref); delete sumMap[month]; }
+        const body=$('#rep-ts-body'); if(body) body.innerHTML=tsBodyHTML();
+        $('#ts-status').textContent='Saqlandi ✓'; toast('Oylik xulosa saqlandi ✓');
+      }catch(e){ $('#ts-status').textContent='Xatolik: '+(e.code||e.message); toast('Saqlashda xatolik: '+(e.code||e.message),true); }
+      btn.disabled=false;
+    };
   }catch(e){ $('#modal .modal-b').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; }
 }
 
