@@ -2,7 +2,7 @@
   "name": "iqror-functions",
   "description": "Admin custom-claim sync for Iqror Academy",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
