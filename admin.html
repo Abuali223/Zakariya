@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <script defer src="/vendor/katex/katex.min.js"></script>
 <script defer src="/vendor/katex/contrib/auto-render.min.js"></script>
+<script defer src="/vendor/xlsx/xlsx.mini.min.js"></script>
 <style>
   :root{
     --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#35796B; --teal-d:#16453B;
@@ -807,10 +808,22 @@ function exportStudents(rows){
   downloadCSV('oquvchilar.csv', headers, data);
   toast(data.length+' ta o‘quvchi eksport qilindi ✓');
 }
+// Fayldan qatorlarni o'qish — .xlsx/.xls (SheetJS) yoki .csv
+async function readSheetRows(file){
+  const nm=(file.name||'').toLowerCase();
+  if(/\.xlsx?$/.test(nm) || /\.xls$/.test(nm)){
+    if(typeof XLSX==='undefined') throw new Error('Excel o‘quvchi hali yuklanmadi — sahifani yangilab qayta urining');
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf), {type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+  }
+  return parseCSV(await file.text());
+}
 async function importStudents(file){
-  let text; try{ text=await file.text(); }catch(e){ toast('Faylni o‘qib bo‘lmadi',true); return; }
-  const rows=parseCSV(text);
-  if(rows.length<2){ toast('Fayl bo‘sh yoki sarlavha yo‘q',true); return; }
+  let rows; try{ rows=await readSheetRows(file); }catch(e){ toast('Faylni o‘qib bo‘lmadi: '+(e.message||''),true); return; }
+  rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()));   // bo'sh qatorlarni tashlaymiz
+  if(rows.length<2){ toast('Fayl bo‘sh yoki sarlavha qatori yo‘q',true); return; }
   const head=rows[0].map(h=>String(h).trim().toLowerCase());
   const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
   const iId=col('id'), iName=col('ism','name','f.i.o','fio'), iPhone=col('tel','phone','telefon'),
@@ -819,40 +832,64 @@ async function importStudents(file){
         iPinfl=col('jshshir','pinfl','жшшир','пинфл'), iVasiy=col('vasiy','guardian','опекун');
   if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
   const existing=(cache['students']||[]).map(r=>String(r._id));
-  const acc=[]; const toWrite=[];
+  const acc=[]; const toWrite=[]; const warnings=[]; const nameCount={};
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
-    let id=iId>=0?String(r[iId]||'').trim():'';
-    if(!id){ id=nextId(existing.concat(acc),'IQ-',4); }
+    const givenId=iId>=0?String(r[iId]||'').trim():'';
+    let id=givenId || nextId(existing.concat(acc),'IQ-',4);
     acc.push(id);
     const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
     const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
-    // Ommaviy hujjat (maxfiy maydonlarsiz)
-    const rec={ studentId:id, name,
-      lang, grade:iGrade>=0?(parseInt(r[iGrade],10)||0):0,
+    const rec={ studentId:id, name, lang,
+      grade:iGrade>=0?(parseInt(r[iGrade],10)||0):0,
       classLetter:iGrp>=0?String(r[iGrp]||'').trim():'',
       track:iTrack>=0?String(r[iTrack]||'').trim():'',
       score:iScore>=0?(Number(r[iScore])||0):0,
       attendance:iAtt>=0?(Number(r[iAtt])||0):0, order:1000+i };
-    // Maxfiy maydonlar → student_private
     const priv={};
     if(iPhone>=0) priv.parentPhone=String(r[iPhone]||'').trim();
     if(iPinfl>=0) priv.pinfl=String(r[iPinfl]||'').trim();
     if(iVasiy>=0) priv.guardian=String(r[iVasiy]||'').trim();
     toWrite.push({id, data:rec, priv});
+    // Ogohlantirishlar
+    const ph=(priv.parentPhone||'').replace(/\D/g,'');
+    if(priv.parentPhone && ph.length>0 && ph.length<12) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
+    if(givenId && existing.includes(givenId)) warnings.push(`${givenId} allaqachon bor — ustiga yoziladi (${name})`);
+    nameCount[name]=(nameCount[name]||0)+1;
   }
+  Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta`));
   if(!toWrite.length){ toast('Import uchun yozuv topilmadi',true); return; }
-  if(!confirm(toWrite.length+' ta o‘quvchi import qilinsinmi? Mavjud IDlar yangilanadi.')) return;
-  try{
-    for(let i=0;i<toWrite.length;i+=450){
-      const batch=writeBatch(db);
-      toWrite.slice(i,i+450).forEach(x=>{ batch.set(doc(db,'students',x.id), x.data, {merge:true});
-        if(x.priv && Object.keys(x.priv).length) batch.set(doc(db,'student_private',x.id), x.priv, {merge:true}); });
-      await batch.commit();
-    }
-    toast(toWrite.length+' ta o‘quvchi import qilindi ✓');
-    renderStudents();
-  }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); }
+  openImportPreview(toWrite, warnings);
+}
+// Import — oldindan ko'rish (saqlashdan oldin tekshiruv)
+function openImportPreview(toWrite, warnings){
+  const groups={};
+  toWrite.forEach(x=>{ const d=x.data, g=Number(d.grade)||0, lang=d.lang||'uz', grp=d.classLetter||d.track||'—';
+    const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(x); });
+  const rowsHtml=Object.keys(groups).sort().map(k=>{ const {g,lang,grp,list}=groups[k];
+    const withPhone=list.filter(x=>x.priv&&x.priv.parentPhone).length;
+    return `<tr><td>${g===0?'Tayyorlov':g+'-sinf'} «${esc(grp)}»</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td></tr>`; }).join('');
+  const warnHtml = warnings.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#fff7e8;border:1px solid #f0d9a8"><b>⚠️ E’tibor bering (${warnings.length} ta):</b><ul style="margin:8px 0 0;padding-left:20px">${warnings.slice(0,40).map(w=>`<li class="small">${esc(w)}</li>`).join('')}</ul>${warnings.length>40?`<div class="small muted" style="margin-top:4px">…yana ${warnings.length-40} ta</div>`:''}<div class="small muted" style="margin-top:8px">Bular saqlashga to‘sqinlik qilmaydi — istasangiz avval faylda tuzatib qayta yuklang.</div></div>` : '';
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Import — oldindan ko‘rish</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin:0 0 10px">Jami <b>${toWrite.length}</b> o‘quvchi · <b>${Object.keys(groups).length}</b> ta sinf-guruh. Tekshiring, so‘ng «Saqlash». Mavjud IDlar yangilanadi.</p>
+      <div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Til</th><th class="c">Soni</th><th class="c">Tel</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+      ${warnHtml}
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="imp-save">Saqlash (${toWrite.length})</button></div>`;
+  openModal(); labelTable&&labelTable(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#imp-save').onclick=async()=>{
+    const btn=$('#imp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+    try{
+      for(let i=0;i<toWrite.length;i+=450){
+        const batch=writeBatch(db);
+        toWrite.slice(i,i+450).forEach(x=>{ batch.set(doc(db,'students',x.id), x.data, {merge:true});
+          if(x.priv && Object.keys(x.priv).length) batch.set(doc(db,'student_private',x.id), x.priv, {merge:true}); });
+        await batch.commit();
+      }
+      toast(toWrite.length+' ta o‘quvchi import qilindi ✓'); closeModal(); renderStudents();
+    }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+  };
 }
 /* ---- Chiroyli PDF (chop etish orqali) ---- */
 function studentGroups(rows){
@@ -1337,8 +1374,8 @@ async function renderStudents(){
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
-      <button class="btn ghost2" id="stu-import">⬆ Import</button>
-      <input type="file" id="stu-file" accept=".csv,text/csv" style="display:none">
+      <button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
+      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">
       <button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   $('#add').addEventListener('click',()=>openForm('students',null));
