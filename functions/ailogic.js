@@ -141,6 +141,26 @@ async function handleChat(body){ const kb=await loadKnowledge(); return { reply:
 async function handleStudentSummary(body){ const d=await loadStudentData(body.studentId); if(!d) return {error:'not_found'}; return { summary: await makeAI().studentSummary(studentDataText(d), body.lang||(d.s.lang==='ru'?'ru':'uz')) }; }
 async function handleRisk(body){ const students=await riskScan(body.withAI!==false, body.lang); return { count: students.length, students }; }
 
+// Google Sheets → CSV (server orqali; brauzerdagi CORS to'sig'ini chetlab o'tadi).
+// Faqat docs.google.com ruxsat etiladi (SSRF himoyasi). Jadval "havolasi bor har kim ko'ra oladi" bo'lishi kerak.
+function parseSheetUrl(u){
+  try{ const url=new URL(String(u||''));
+    if(!/(^|\.)docs\.google\.com$/.test(url.hostname)) return null;
+    const m=url.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/); if(!m) return null;
+    let gid='0'; const qg=url.searchParams.get('gid'); const hg=(url.hash||'').match(/gid=(\d+)/);
+    if(qg) gid=qg; else if(hg) gid=hg[1];
+    return 'https://docs.google.com/spreadsheets/d/'+m[1]+'/export?format=csv&gid='+gid;
+  }catch(e){ return null; }
+}
+async function handleSheet(body){
+  const exp=parseSheetUrl(body.url);
+  if(!exp) return { error:'bad_url' };
+  let r, text;
+  try{ r=await fetch(exp,{redirect:'follow'}); text=await r.text(); }catch(e){ return { error:'fetch_failed' }; }
+  if(!r.ok || /^\s*<(!doctype|html)/i.test(text)) return { error:'not_public' };
+  return { csv: text };
+}
+
 // HTTPS handler (yo'nalish bo'yicha)
 async function handleAI(req, res){
   const p = ((req.path||'/').replace(/\/+$/,'')) || '/';
@@ -151,6 +171,7 @@ async function handleAI(req, res){
     if(p==='/chat') return res.json(await handleChat(body));
     if(p==='/student-summary') return res.json(await handleStudentSummary(body));
     if(p==='/risk') return res.json(await handleRisk(body));
+    if(p==='/sheet') return res.json(await handleSheet(body));
     return res.status(404).json({ error:'not_found' });
   }catch(e){ console.error('AI err', e.message); return res.status(500).json({ error:'server', detail:e.message }); }
 }

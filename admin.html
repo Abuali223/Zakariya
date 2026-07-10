@@ -822,8 +822,41 @@ async function readSheetRows(file){
 }
 async function importStudents(file){
   let rows; try{ rows=await readSheetRows(file); }catch(e){ toast('Faylni o‘qib bo‘lmadi: '+(e.message||''),true); return; }
+  buildAndPreviewImport(rows);
+}
+// Google Sheets'dan import (server orqali — CORS'siz)
+async function importFromSheet(){
+  const aiUrl = await loadAIUrl();
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Google Sheets’dan import</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin:0 0 10px">Google Sheets havolasini qo‘ying. Jadval <b>«Havolasi bor har kim ko‘ra oladi»</b> qilib ochilishi kerak (Share → Anyone with the link → Viewer). Ustunlar xuddi Excel importidagidek (Ism, Til, Sinf, Guruh…).</p>
+      <label class="small" style="font-weight:700;display:block;margin-bottom:6px">Havola</label>
+      <input id="sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px">
+      ${aiUrl?'':'<div class="small" style="margin-top:10px;color:#C2410C">⚠️ Buning uchun AI server sozlangan bo‘lishi kerak (Sozlamalar → AI yordamchi). Hozircha faqat fayl (Excel/CSV) yuklash ishlaydi.</div>'}
+      <div class="small" id="sheet-msg" style="margin-top:8px;min-height:16px"></div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sheet-load" ${aiUrl?'':'disabled'}>Yuklab olish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const load=$('#sheet-load'); if(!load) return;
+  load.onclick=async()=>{
+    const u=($('#sheet-url').value||'').trim(); const msg=$('#sheet-msg');
+    if(!u){ msg.textContent='Havolani qo‘ying.'; return; }
+    const url=await loadAIUrl(); if(!url){ msg.textContent='AI server sozlanmagan.'; return; }
+    load.disabled=true; load.textContent='Yuklanmoqda…'; msg.textContent='';
+    try{
+      const r=await fetch(url+'/sheet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u})});
+      const j=await r.json();
+      if(j.error==='bad_url'){ msg.textContent='Havola noto‘g‘ri (Google Sheets bo‘lishi kerak).'; load.disabled=false; load.textContent='Yuklab olish'; return; }
+      if(j.error==='not_public'){ msg.textContent='Jadval ochiq emas. «Havolasi bor har kim ko‘ra oladi» qilib oching.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
+      if(!j.csv){ msg.textContent='Bo‘sh javob keldi.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
+      buildAndPreviewImport(parseCSV(j.csv));   // preview oynasini ochadi
+    }catch(e){ msg.textContent='Xatolik: '+(e.message||'ulanib bo‘lmadi'); load.disabled=false; load.textContent='Yuklab olish'; }
+  };
+}
+// Qatorlardan (CSV/xlsx/Sheets) yozuvlarni tuzib, oldindan ko'rishni ochadi
+function buildAndPreviewImport(rows){
   rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()));   // bo'sh qatorlarni tashlaymiz
-  if(rows.length<2){ toast('Fayl bo‘sh yoki sarlavha qatori yo‘q',true); return; }
+  if(rows.length<2){ toast('Fayl/jadval bo‘sh yoki sarlavha qatori yo‘q',true); return; }
   const head=rows[0].map(h=>String(h).trim().toLowerCase());
   const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
   const iId=col('id'), iName=col('ism','name','f.i.o','fio'), iPhone=col('tel','phone','telefon'),
@@ -1375,6 +1408,7 @@ async function renderStudents(){
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       <button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
+      <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
       <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">
       <button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
@@ -1383,6 +1417,7 @@ async function renderStudents(){
   $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
   $('#stu-import').addEventListener('click',()=>$('#stu-file').click());
   $('#stu-file').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.target.value=''; if(f) importStudents(f); });
+  $('#stu-sheet').addEventListener('click',importFromSheet);
   let rows;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
   catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
