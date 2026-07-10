@@ -1,0 +1,9 @@
+{
+  "serviceAccount": "service-account.json",
+  "anthropicKey": "sk-ant-...  (yoki ANTHROPIC_API_KEY muhit o'zgaruvchisi)",
+  "model": "claude-opus-4-8",
+  "port": 8791,
+  "allowOrigin": "https://alilazer-cd582.web.app",
+  "riskAttendance": 80,
+  "riskScore": 60
+}

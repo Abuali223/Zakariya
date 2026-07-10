@@ -338,6 +338,15 @@ const $ = (s,r=document)=>r.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Matematik formulalarni ($…$, \(…\)) chiroyli ko'rsatish (KaTeX)
 const renderMath = root => { try{ if(root&&window.renderMathInElement) window.renderMathInElement(root,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} };
+// AI yordamchi server manzili (config/ai) — bir marta o'qib keshlaymiz
+let AI_URL = null;
+async function loadAIUrl(){
+  if(AI_URL!==null) return AI_URL;
+  try{ const s=await getDoc(doc(db,'config','ai')); const d=s.exists()?s.data():null;
+    AI_URL = (d && d.url && d.enabled!==false) ? String(d.url).replace(/\/+$/,'') : ''; }
+  catch(e){ AI_URL=''; }
+  return AI_URL;
+}
 const toast=(m,err=false)=>{const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;$('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity=0;t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2600);};
 
 /* ---- Collection schemas ---- */
@@ -764,6 +773,17 @@ async function renderDashboard(){
   const roles={parent:0,student:0,teacher:0,admin:0}; users.forEach(u=>{ if(roles[u.role]!=null) roles[u.role]++; });
   const stat=(v,l)=>`<div class="stat-card"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
   const roleBar=(l,v)=>`<div class="bar-row"><span class="bar-lbl">${l}</span><div class="bar"><i style="width:${pct(v,Math.max(1,users.length))}%"></i></div><b>${v}</b></div>`;
+  // Xavf ostidagi o'quvchilar (qoida — past davomat yoki past ball)
+  const RISK_ATT=80, RISK_SCORE=60;
+  const risky=students.map(s=>{ const att=Number(s.attendance), sc=Number(s.score); const rs=[];
+      if(!isNaN(att)&&att>0&&att<RISK_ATT) rs.push(`davomat ${att}%`);
+      if(!isNaN(sc)&&sc>0&&sc<RISK_SCORE) rs.push(`ball ${sc}`);
+      return rs.length?{s,rs}:null; }).filter(Boolean)
+    .sort((a,b)=>(Number(a.s.score)||0)-(Number(b.s.score)||0)||(Number(a.s.attendance)||0)-(Number(b.s.attendance)||0));
+  const riskRows=risky.slice(0,60).map(r=>{ const g=Number(r.s.grade)||0;
+    return `<tr><td>${esc(r.s.studentId||r.s._id)}</td><td>${esc(r.s.name||'')}</td><td>${g===0?'Tayyorlov':g+'-sinf'} ${esc(r.s.classLetter||r.s.track||'')}</td><td>${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
+  const riskCard=`<div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>⚠️ Xavf ostidagi o‘quvchilar</h3><span class="cls-count">${risky.length} ta · past davomat (&lt;${RISK_ATT}%) yoki past ball (&lt;${RISK_SCORE})</span></div>
+    ${risky.length?`<div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Sinf</th><th>Sabab</th><th></th></tr></thead><tbody>${riskRows}</tbody></table></div>`:'<div class="empty">Hozircha xavf ostidagi o‘quvchi yo‘q ✓</div>'}</div>`;
   $('#dash').innerHTML = `
     <div class="stat-grid">
       ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt+'%','O‘rtacha davomat')}
@@ -774,7 +794,9 @@ async function renderDashboard(){
       <div class="card"><div class="cls-card-head"><h3>Foydalanuvchilar (rol bo‘yicha)</h3></div><div class="bars">
         ${roleBar('Ota-ona',roles.parent)}${roleBar('O‘quvchi',roles.student)}${roleBar('O‘qituvchi',roles.teacher)}${roleBar('Administrator',roles.admin)}
       </div></div>
-    </div>`;
+    </div>
+    ${riskCard}`;
+  $('#dash').querySelectorAll('[data-risk-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.riskReport, students.find(r=>r._id===b.dataset.riskReport))));
 }
 
 /* ---- O'quvchilar eksport/import ---- */
@@ -1435,9 +1457,23 @@ async function openStudentReport(sid, row){
     </style>`;
     $('#modal .modal-b').innerHTML = `<div id="rep-inner">${inner}</div>`;
     renderMath && renderMath($('#modal .modal-b'));
-    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><button type="button" class="btn gold" id="rep-print">🖨 Chop etish / PDF</button>`;
+    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><span id="rep-ai-slot"></span><button type="button" class="btn gold" id="rep-print">🖨 Chop etish / PDF</button>`;
     $('#m-cancel2').onclick=closeModal;
     $('#rep-print').onclick=()=>printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${inner}</body></html>`);
+    // AI xulosa tugmasi (agar AI server sozlangan bo'lsa)
+    const aiUrl = await loadAIUrl();
+    if(aiUrl){
+      $('#rep-ai-slot').innerHTML = `<button type="button" class="btn ghost2" id="rep-ai">🤖 Ota-onaga AI xulosa</button>`;
+      $('#rep-ai').onclick=async()=>{
+        const btn=$('#rep-ai'); btn.disabled=true; btn.textContent='Yozilmoqda…';
+        let box=$('#rep-ai-box'); if(!box){ box=document.createElement('div'); box.id='rep-ai-box'; box.className='card'; box.style.cssText='margin:0 0 14px;padding:14px 16px;background:#eef5f2;border:1px solid #d5e6df;white-space:pre-wrap;line-height:1.55'; $('#rep-inner').prepend(box); }
+        box.textContent='…';
+        try{ const r=await fetch(aiUrl+'/student-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentId:sid,lang:'uz'})});
+          const j=await r.json(); box.innerHTML = `<div class="small muted" style="margin-bottom:6px">🤖 AI xulosa (ota-ona uchun):</div>`+esc(j.summary||j.error||'—');
+        }catch(e){ box.textContent='AI serverga ulanib bo‘lmadi: '+(e.message||''); }
+        btn.disabled=false; btn.textContent='🤖 Ota-onaga AI xulosa';
+      };
+    }
   }catch(e){ $('#modal .modal-b').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; }
 }
 
