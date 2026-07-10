@@ -77,6 +77,12 @@ service cloud.firestore {
       allow read:  if isAdmin() || isZavuch() || ownsChild(id);
       allow write: if isAdmin();
     }
+    // Oylik AI xulosa (kesh). Faqat SERVER yozadi (Admin SDK). Admin/zavuch yoki
+    // shu farzand ota-onasi o'qiy oladi (kabinet odatda funksiya orqali oladi).
+    match /student_summaries/{id} {
+      allow read:  if isAdmin() || isZavuch() || ownsChild(resource.data.get('studentId',''));
+      allow write: if false;
+    }
     match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
     match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
     match /achievements_school/{id}   { allow read: if true; allow write: if isAdmin(); }

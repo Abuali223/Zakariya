@@ -4,9 +4,31 @@
  * Firebase Admin SDK avval index.js da initializeApp() qilingan.
  */
 const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const db = getFirestore();
 const MODEL = 'claude-opus-4-8';
 const RISK_ATT = 80, RISK_SCORE = 60;
+
+// Chaqiruvchini tekshirish (o'quvchi ma'lumoti maxfiy — faqat admin/zavuch yoki
+// shu farzand ota-onasi ko'radi). Kabinet/panel Firebase idToken yuboradi.
+async function callerUid(idToken){
+  if(!idToken) return null;
+  try{ const dec = await getAuth().verifyIdToken(String(idToken)); return dec.uid; }catch(e){ return null; }
+}
+async function authorizedForStudent(uid, studentId){
+  if(!uid) return false;
+  try{ const u = await db.collection('users').doc(uid).get(); if(!u.exists) return false;
+    const d = u.data();
+    if(d.role==='admin' || d.role==='zavuch') return true;
+    const kids = Array.isArray(d.childIds) ? d.childIds : (d.childId ? [d.childId] : []);
+    return kids.includes(studentId);
+  }catch(e){ return false; }
+}
+async function isStaff(uid){
+  if(!uid) return false;
+  try{ const u = await db.collection('users').doc(uid).get(); const r=u.exists?u.data().role:''; return r==='admin'||r==='zavuch'; }catch(e){ return false; }
+}
+function ym(m){ if(m && /^\d{4}-\d{2}$/.test(m)) return m; const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 
 const num = v => { const n = Number(v); return isNaN(n) ? null : n; };
 const fmtSom = n => (Number(n)||0).toLocaleString('ru-RU').replace(/,/g,' ') + ' so‘m';
@@ -138,8 +160,25 @@ async function riskScan(withAI, lang){
 }
 
 async function handleChat(body){ const kb=await loadKnowledge(); return { reply: await makeAI().chat(body.history||[], body.message||'', kb) }; }
-async function handleStudentSummary(body){ const d=await loadStudentData(body.studentId); if(!d) return {error:'not_found'}; return { summary: await makeAI().studentSummary(studentDataText(d), body.lang||(d.s.lang==='ru'?'ru':'uz')) }; }
-async function handleRisk(body){ const students=await riskScan(body.withAI!==false, body.lang); return { count: students.length, students }; }
+async function handleStudentSummary(body){
+  const uid = await callerUid(body.idToken);
+  if(!(await authorizedForStudent(uid, body.studentId))) return { error:'forbidden' };
+  const d = await loadStudentData(body.studentId);
+  if(!d) return { error:'not_found' };
+  const month = ym(body.month);
+  const lang = body.lang || (d.s.lang==='ru'?'ru':'uz');
+  // Kesh imzosi — akademik natija (davomat, ball, monitoring). O'zgarsa AI qayta yozadi.
+  const sig = JSON.stringify({ sc: d.s.score==null?null:Number(d.s.score), at: d.attPct, mon: d.mon.map(m=>m.subject+':'+m.avg).sort(), lang });
+  const ref = db.collection('student_summaries').doc(`${body.studentId}__${month}`);
+  try{ const c = await ref.get(); if(c.exists && c.data().sig===sig && c.data().text) return { summary: c.data().text, month, cached:true }; }catch(e){}
+  const text = await makeAI().studentSummary(studentDataText(d), lang);
+  try{ await ref.set({ studentId: body.studentId, month, lang, sig, text, updatedAt: new Date().toISOString() }); }catch(e){}
+  return { summary: text, month, cached:false };
+}
+async function handleRisk(body){
+  if(!(await isStaff(await callerUid(body.idToken)))) return { error:'forbidden' };
+  const students=await riskScan(body.withAI!==false, body.lang); return { count: students.length, students };
+}
 
 // Google Sheets → CSV (server orqali; brauzerdagi CORS to'sig'ini chetlab o'tadi).
 // Faqat docs.google.com ruxsat etiladi (SSRF himoyasi). Jadval "havolasi bor har kim ko'ra oladi" bo'lishi kerak.
@@ -176,4 +215,4 @@ async function handleAI(req, res){
   }catch(e){ console.error('AI err', e.message); return res.status(500).json({ error:'server', detail:e.message }); }
 }
 
-module.exports = { handleAI };
+module.exports = { handleAI, callerUid, authorizedForStudent, isStaff, ym, parseSheetUrl, handleStudentSummary };

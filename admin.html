@@ -1540,8 +1540,11 @@ async function openStudentReport(sid, row){
         const btn=$('#rep-ai'); btn.disabled=true; btn.textContent='Yozilmoqda…';
         let box=$('#rep-ai-box'); if(!box){ box=document.createElement('div'); box.id='rep-ai-box'; box.className='card'; box.style.cssText='margin:0 0 14px;padding:14px 16px;background:#eef5f2;border:1px solid #d5e6df;white-space:pre-wrap;line-height:1.55'; $('#rep-inner').prepend(box); }
         box.textContent='…';
-        try{ const r=await fetch(aiUrl+'/student-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentId:sid,lang:'uz'})});
-          const j=await r.json(); box.innerHTML = `<div class="small muted" style="margin-bottom:6px">🤖 AI xulosa (ota-ona uchun):</div>`+esc(j.summary||j.error||'—');
+        try{ const tok = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+          const r=await fetch(aiUrl+'/student-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentId:sid,lang:'uz',idToken:tok})});
+          const j=await r.json();
+          const msg = j.summary || (j.error==='forbidden'?'Ruxsat yo‘q':(j.error==='not_found'?'O‘quvchi topilmadi':(j.error||'—')));
+          box.innerHTML = `<div class="small muted" style="margin-bottom:6px">🤖 AI xulosa (ota-ona uchun):</div>`+esc(msg);
         }catch(e){ box.textContent='AI serverga ulanib bo‘lmadi: '+(e.message||''); }
         btn.disabled=false; btn.textContent='🤖 Ota-onaga AI xulosa';
       };

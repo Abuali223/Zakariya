@@ -971,6 +971,7 @@ const T = {
     kab_att_rate:"Davomat",kab_att_present:"Keldi",kab_att_absent:"Kelmadi",kab_att_late:"Kechikdi",kab_att_excused:"Sababli",
     kab_gr_title:"Baholar",kab_gr_loading:"Baholar yuklanmoqda…",kab_gr_none:"Hozircha baho kiritilmagan.",
     kab_mon_title:"Monitoring baholari",kab_mon_loading:"Monitoring yuklanmoqda…",kab_mon_none:"Hozircha tasdiqlangan monitoring bahosi yo‘q.",
+    kab_ai_title:"Oylik AI xulosa",kab_ai_loading:"Xulosa tayyorlanmoqda…",kab_ai_note:"Sun’iy intellekt tomonidan avtomatik tuzildi — natijalar yangilanganda o‘zi yangilanadi.",
     kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
@@ -1085,6 +1086,7 @@ const T = {
     kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
     kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
+    kab_ai_title:"Ежемесячный AI-обзор",kab_ai_loading:"Обзор готовится…",kab_ai_note:"Составлено искусственным интеллектом автоматически — обновляется при изменении результатов.",
     kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
@@ -1592,7 +1594,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-aisummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1600,7 +1602,29 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+  if(s){ renderKabAISummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+}
+// Oylik AI xulosa — server (funksiya) orqali, oyiga bir marta yaratiladi/keshlanadi
+async function renderKabAISummary(studentId){
+  const t=T[lang], box=$("#kab-aisummary");
+  if(!box || !(window.IqrorFB&&window.IqrorFB.getAIConfig)) return;
+  let cfg=null; try{ cfg=await window.IqrorFB.getAIConfig(); }catch(e){}
+  if(!cfg || !cfg.url || cfg.enabled===false){ box.innerHTML=''; return; }   // AI sozlanmagan — ko'rsatmaymiz
+  const u = window.IqrorAuth && window.IqrorAuth.getUser && window.IqrorAuth.getUser();
+  if(!u){ box.innerHTML=''; return; }
+  box.innerHTML = `<div class="kab-att-card"><div class="subs-l">🤖 ${esc(t.kab_ai_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_ai_loading)}</div></div>`;
+  try{
+    const base=String(cfg.url).replace(/\/+$/,'');
+    const tok=await u.getIdToken();
+    const now=new Date(); const month=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const r=await fetch(base+'/student-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentId, month, lang, idToken:tok})});
+    if($("#kab-aisummary")!==box) return;   // boshqa farzandga o'tilgan bo'lsa
+    const j=await r.json();
+    if(!j || !j.summary){ box.innerHTML=''; return; }   // xulosa yo'q/xato — jim yashiramiz
+    box.innerHTML = `<div class="kab-att-card"><div class="subs-l">🤖 ${esc(t.kab_ai_title)}</div>
+      <p style="white-space:pre-wrap;line-height:1.6;margin:0;color:var(--ink)">${esc(j.summary)}</p>
+      <p class="small muted" style="margin:14px 0 0;border-top:1px dashed var(--border);padding-top:10px">${esc(t.kab_ai_note)}</p></div>`;
+  }catch(e){ if($("#kab-aisummary")===box) box.innerHTML=''; }
 }
 async function renderKabInvoices(studentId){
   const t=T[lang], box=$("#kab-invoices"); if(!box || !(window.IqrorFB&&window.IqrorFB.getInvoices)) return;
