@@ -1531,7 +1531,7 @@ async function openStudentReport(sid, row){
     renderMath && renderMath($('#modal .modal-b'));
     $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><span id="rep-ai-slot"></span><button type="button" class="btn gold" id="rep-print">🖨 Chop etish / PDF</button>`;
     $('#m-cancel2').onclick=closeModal;
-    $('#rep-print').onclick=()=>printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${inner}</body></html>`);
+    $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
     // AI xulosa tugmasi (agar AI server sozlangan bo'lsa)
     const aiUrl = await loadAIUrl();
     if(aiUrl){
