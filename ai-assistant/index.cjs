@@ -205,6 +205,8 @@ function serve(){
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     if(req.method === 'OPTIONS'){ res.writeHead(204); return res.end(); }
+    // Sog'liq tekshiruvi — sayt shu orqali server tirikligini biladi (AI so'rovsiz, arzon)
+    if(req.method === 'GET' && req.url.startsWith('/health')){ res.writeHead(200,{'Content-Type':'application/json'}); return res.end(JSON.stringify({ ok:true, model: MODEL })); }
     if(req.method !== 'POST'){ res.writeHead(405); return res.end('POST only'); }
     let raw=''; req.on('data',c=>{ raw+=c; if(raw.length>1e6) req.destroy(); });
     req.on('end', async()=>{

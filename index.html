@@ -535,6 +535,7 @@
   .ai-fab{display:inline-flex;align-items:center;gap:9px;background:linear-gradient(135deg,var(--teal),var(--teal-2));color:#fff;border:none;border-radius:30px;padding:13px 20px;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 10px 26px rgba(18,42,32,.28);transition:transform .15s,box-shadow .15s}
   .ai-fab:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(18,42,32,.34)}
   .ai-panel{position:absolute;right:0;bottom:64px;width:min(380px,calc(100vw - 32px));height:min(560px,calc(100dvh - 120px));background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 60px rgba(18,42,32,.24);display:flex;flex-direction:column;overflow:hidden}
+  .ai-chat[hidden],.ai-panel[hidden]{display:none}   /* hidden atributi display'ni bosib o'tsin */
   .ai-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:linear-gradient(135deg,var(--teal-d),var(--teal));color:#fff;font-weight:700}
   .ai-head-t{display:inline-flex;align-items:center;gap:9px}
   .ai-dot{width:9px;height:9px;border-radius:50%;background:#5fd39a;box-shadow:0 0 0 3px rgba(95,211,154,.25)}
@@ -1786,9 +1787,14 @@ $("#enroll-form").addEventListener("submit",async e=>{
 /* AI yordamchi (chatbot) — server config/ai da sozlangan bo'lsagina ishlaydi */
 function initAIChat(){
   const root=$("#ai-chat"); if(!root || !(window.IqrorFB && window.IqrorFB.getAIConfig)) return;
-  window.IqrorFB.getAIConfig().then(cfg=>{
+  window.IqrorFB.getAIConfig().then(async cfg=>{
     if(!cfg || !cfg.url || cfg.enabled===false) return;   // sozlanmagan — widget ko'rinmaydi
     const base=String(cfg.url).replace(/\/+$/,'');
+    // Server tirikmi? Javob bermasa (server ishlamayapti) chatbot umuman ko'rsatilmaydi
+    try{ const ctrl=new AbortController(); const tm=setTimeout(()=>ctrl.abort(),4500);
+      const h=await fetch(base+'/health',{signal:ctrl.signal}); clearTimeout(tm);
+      if(!h.ok) return;
+    }catch(e){ return; }
     root.hidden=false;
     const fab=$("#ai-fab"), panel=$("#ai-panel"), msgs=$("#ai-msgs"), form=$("#ai-form"), input=$("#ai-text");
     const history=[]; let opened=false;
