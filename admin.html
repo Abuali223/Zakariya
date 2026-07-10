@@ -1817,6 +1817,36 @@ async function renderSettings(){
     catch(err){ toast('Xatolik: '+(err.code||err.message),true); }
     b.disabled=false; b.textContent='Saqlash';
   });
+  // ---- AI yordamchi sozlamalari (server manzili + Claude kaliti) ----
+  let ai={}; try{ const s=await getDoc(doc(db,'config','ai')); ai = s.exists()?s.data():{}; }catch(e){}
+  AI_URL = null;   // keshni yangilaymiz
+  const aiCard=document.createElement('div'); aiCard.className='card'; aiCard.style.cssText='margin-top:16px;padding:22px';
+  aiCard.innerHTML = `
+    <div class="cls-card-head" style="margin-bottom:6px"><h3>🤖 AI yordamchi</h3>
+      <span class="chip ${ai.keySet?'it':''}" style="${ai.keySet?'background:var(--it-bg);color:var(--teal)':'background:var(--med-bg);color:var(--med-fg)'}">${ai.keySet?'Kalit o‘rnatilgan ✓':'Kalit kiritilmagan'}</span></div>
+    <p class="small muted" style="margin:0 0 14px">Sayt chatboti va «AI xulosa» shu server orqali ishlaydi. <b>Kalit maxfiy saqlanadi — brauzerga qaytmaydi</b> (faqat server o‘qiydi). Server (<code>ai-assistant</code>) ishlab turishi shart.</p>
+    <form id="ai-form2" style="display:flex;flex-direction:column;gap:16px">
+      <div><label>AI server manzili (HTTPS)</label><input name="url" id="ai-url" value="${esc(ai.url||'')}" placeholder="https://ai.maktabingiz.uz"></div>
+      <div class="grid2">
+        <div><label>Anthropic (Claude) kaliti</label><input name="key" id="ai-key" type="password" autocomplete="off" placeholder="${ai.keySet?'••••  (o‘zgartirish uchun yangisini yozing)':'sk-ant-...'}"></div>
+        <div><label>Holati</label><select name="enabled" id="ai-enabled"><option value="1" ${ai.enabled!==false?'selected':''}>Yoqilgan</option><option value="0" ${ai.enabled===false?'selected':''}>O‘chirilgan</option></select></div>
+      </div>
+      <p class="small muted" style="margin:0">Kalit maydonini <b>bo‘sh qoldirsangiz</b>, avvalgi kalit o‘zgarmaydi. Yangi kalit kiritsangiz — eskisining ustiga yoziladi.</p>
+      <div><button class="btn gold" type="submit" id="ai-save2">AI sozlamalarini saqlash</button></div>
+    </form>`;
+  $('#view').appendChild(aiCard);
+  $('#ai-form2').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const b=$('#ai-save2'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    const url=$('#ai-url').value.trim(), key=$('#ai-key').value.trim(), enabled=$('#ai-enabled').value==='1';
+    try{
+      const cfg={ url, enabled, updatedAt:serverTimestamp() };
+      if(key) cfg.keySet=true;
+      await setDoc(doc(db,'config','ai'), cfg, {merge:true});           // ochiq: manzil, holat, keySet
+      if(key) await setDoc(doc(db,'secrets','ai'), {anthropicKey:key, updatedAt:serverTimestamp()}, {merge:true}); // maxfiy: kalit
+      toast('AI sozlamalari saqlandi ✓'); renderSettings();
+    }catch(err){ toast('Xatolik: '+(err.code||err.message),true); b.disabled=false; b.textContent='AI sozlamalarini saqlash'; }
+  });
 }
 
 /* ---- Enrollments inbox ---- */

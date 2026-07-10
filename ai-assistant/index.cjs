@@ -37,16 +37,26 @@ const num = v => { const n = Number(v); return isNaN(n) ? null : n; };
 const fmtSom = n => (Number(n)||0).toLocaleString('ru-RU').replace(/,/g,' ') + ' so‘m';
 
 /* ---------------- Claude ---------------- */
-let _client = null;
-function anthropic(){
+let _client = null, _key = null;
+// Kalit: config.json → ANTHROPIC_API_KEY → Firestore secrets/ai (admin paneldan kiritilgan).
+// secrets/ai ni faqat server (Admin SDK) o'qiy oladi; mijozlarga qoidada taqiqlangan.
+async function apiKey(){
+  if(_key) return _key;
+  _key = CFG.anthropicKey || process.env.ANTHROPIC_API_KEY || '';
+  if(!_key){ try{ const s = await db.collection('secrets').doc('ai').get(); if(s.exists) _key = s.data().anthropicKey || ''; }catch(e){} }
+  return _key;
+}
+async function anthropic(){
   if(_client) return _client;
+  const key = await apiKey();
+  if(!key) throw new Error('Anthropic kaliti topilmadi (config.json, ANTHROPIC_API_KEY yoki secrets/ai — admin paneldan kiriting).');
   const Pkg = require('@anthropic-ai/sdk');
   const Anthropic = Pkg.default || Pkg;
-  _client = new Anthropic({ apiKey: CFG.anthropicKey || process.env.ANTHROPIC_API_KEY });
+  _client = new Anthropic({ apiKey: key });
   return _client;
 }
 async function askText(system, messages, maxTokens, effort){
-  const r = await anthropic().messages.create({
+  const r = await (await anthropic()).messages.create({
     model: MODEL, max_tokens: maxTokens || 700,
     thinking: { type: 'adaptive' },
     output_config: { effort: effort || 'medium' },

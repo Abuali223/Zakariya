@@ -118,9 +118,13 @@ service cloud.firestore {
     match /payments/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
     // To'lov sozlamalari (service_id, merchant_id — maxfiy EMAS, to'lov havolasida ko'rinadi).
     // Maxfiy kalit (secret_key) bu yerda EMAS — u faqat to'lov serverida saqlanadi.
-    // config/* — ochiq sozlamalar (to'lov IDlari, AI server manzili). Maxfiy kalitlar
-    // bu yerda EMAS — ular serverda. Ommaviy o'qiladi, faqat admin yozadi.
+    // config/* — ochiq sozlamalar (to'lov IDlari, AI server manzili, keySet flag).
+    // Ommaviy o'qiladi, faqat admin yozadi.
     match /config/{id} { allow read: if true; allow write: if isAdmin(); }
+    // secrets/* — MAXFIY (masalan Anthropic kaliti). Hech qanday mijoz O'QIY OLMAYDI
+    // (admin ham qaytadan ko'ra olmaydi) — faqat server Admin SDK orqali o'qiydi.
+    // Admin faqat YOZADI (kalitni o'rnatadi/almashtiradi).
+    match /secrets/{id} { allow read: if false; allow write: if isAdmin(); }
 
     // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
     match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }

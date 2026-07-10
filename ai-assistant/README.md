@@ -19,7 +19,7 @@ cp config.example.json config.json      # to'ldiring
 | Maydon | Ma'nosi |
 |---|---|
 | `serviceAccount` | Firebase xizmat hisobi kaliti yo'li (git'ga qo'ymang) |
-| `anthropicKey` | Claude (Anthropic) API kaliti — **maxfiy**. Yoki `ANTHROPIC_API_KEY` muhit o'zgaruvchisi |
+| `anthropicKey` | Claude (Anthropic) API kaliti — **maxfiy**. Uch manzildan biri: shu yerda, `ANTHROPIC_API_KEY` muhit o'zgaruvchisi, YOKI **admin panel → Sozlamalar → AI yordamchi** (Firestore `secrets/ai` ga yoziladi, faqat server o'qiydi). config.json bo'sh bo'lsa server avtomatik `secrets/ai` dan oladi. |
 | `model` | Model (standart: eng kuchli) |
 | `port` | Server porti (masalan 8791) |
 | `allowOrigin` | Saytingiz manzili (CORS) — masalan `https://alilazer-cd582.web.app` |
