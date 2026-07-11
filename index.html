@@ -1619,13 +1619,16 @@ async function renderKabProfile(studentId){
   if(!chars.length && !notes.length){ box.innerHTML=''; return; }   // yozuv yo'q — jim yashiramiz
   const QN = lang==='ru' ? {q1:'1-я четверть',q2:'2-я четверть',q3:'3-я четверть',q4:'4-я четверть'} : {q1:'1-chorak',q2:'2-chorak',q3:'3-chorak',q4:'4-chorak'};
   const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${QN[q]||q} · ${p.join('-')}`; };
-  const genByTerm={}; chars.forEach(x=>{ genByTerm[x.term||'']=String(x.text); });
-  const notesByTerm={}; notes.forEach(x=>{ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text)}); });
+  const fmtWhen=(ts)=>{ try{ const d=ts&&ts.toDate?ts.toDate():(ts instanceof Date?ts:null); return d?d.toLocaleDateString('ru-RU'):''; }catch(e){ return ''; } };
+  const dstamp=(when)=>{ const w=fmtWhen(when); return w?` <span class="small muted">· ${esc(w)}</span>`:''; };
+  const genByTerm={}; chars.forEach(x=>{ genByTerm[x.term||'']={text:String(x.text),when:x.updatedAt}; });
+  const notesByTerm={}; notes.forEach(x=>{ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text),when:x.updatedAt}); });
   const terms=[...new Set([...Object.keys(genByTerm),...Object.keys(notesByTerm)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
   const blocks=terms.map((term,i)=>{
-    const gen = genByTerm[term] ? `<div style="margin:6px 0 10px"><div class="small" style="font-weight:700;color:var(--muted)">${esc(t.kab_pf_general)}</div><p style="white-space:pre-wrap;line-height:1.6;margin:2px 0 0;color:var(--ink)">${esc(genByTerm[term])}</p></div>` : '';
+    const g=genByTerm[term];
+    const gen = g ? `<div style="margin:6px 0 10px"><div class="small" style="font-weight:700;color:var(--muted)">${esc(t.kab_pf_general)}${dstamp(g.when)}</div><p style="white-space:pre-wrap;line-height:1.6;margin:2px 0 0;color:var(--ink)">${esc(g.text)}</p></div>` : '';
     const ns=(notesByTerm[term]||[]).sort((a,b)=>a.subject.localeCompare(b.subject));
-    const notesHtml = ns.length ? `<div class="small" style="font-weight:700;color:var(--muted);margin-top:6px">${esc(t.kab_pf_subjects)}</div>`+ns.map(n=>`<div class="subrow" style="align-items:flex-start"><span style="min-width:110px;font-weight:600">${esc(n.subject)}</span><span style="white-space:pre-wrap;line-height:1.5;flex:1;text-align:left">${esc(n.text)}</span></div>`).join('') : '';
+    const notesHtml = ns.length ? `<div class="small" style="font-weight:700;color:var(--muted);margin-top:6px">${esc(t.kab_pf_subjects)}</div>`+ns.map(n=>`<div class="subrow" style="align-items:flex-start"><span style="min-width:110px;font-weight:600">${esc(n.subject)}</span><span style="white-space:pre-wrap;line-height:1.5;flex:1;text-align:left">${esc(n.text)}${dstamp(n.when)}</span></div>`).join('') : '';
     return `<div style="${i?'margin-top:16px;border-top:1px dashed var(--border);padding-top:14px':''}">
       <div class="small" style="font-weight:700;color:var(--brand,#1F9982);margin-bottom:6px">${esc(termLbl(term))}</div>${gen}${notesHtml}</div>`;
   }).join('');

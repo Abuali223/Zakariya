@@ -1316,9 +1316,12 @@ async function renderMonitoring(){
   if(!SESSION.isAdmin && mvisKeys.length===1){ $('#mon-class').value=mvisKeys[0]; load(); }
 }
 
+/* Firestore Timestamp → o'qiladigan sana-vaqt (izoh kiritilgan payt) */
+function fmtWhen(ts){ try{ const d = ts&&ts.toDate? ts.toDate() : (ts instanceof Date? ts : null); if(!d) return ''; return d.toLocaleDateString('ru-RU')+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 /* ---- Xarakteristika (o'quvchi profili) — choraklik ----
    • Umumiy xarakteristika: sinf rahbari / kurator / zavuch / admin
-   • Fan izohi: har fan o'qituvchisi FAQAT o'z fani uchun
+   • Fan izohi: har fan o'qituvchisi FAQAT o'z fani uchun (boshqa o'qituvchiga ko'rinmaydi)
+   • Har izohga timestamp (kim, qachon) yoziladi.
    Ota-ona kabinetda va ma'lumotnomada (transkript) ko'radi. */
 async function renderProfile(){
   const canGeneral = SESSION.isAdmin || SESSION.role==='zavuch' || supervisedClasses().size>0;
@@ -1367,15 +1370,16 @@ async function renderProfile(){
     const existing={};
     try{
       const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,coll,docId(s.studentId||s._id))).catch(()=>null)));
-      snaps.forEach((sn,i)=>{ const sid=cls.list[i].studentId||cls.list[i]._id; if(sn&&sn.exists()) existing[sid]=String(sn.data().text||''); });
+      snaps.forEach((sn,i)=>{ const sid=cls.list[i].studentId||cls.list[i]._id; if(sn&&sn.exists()){ const d=sn.data(); existing[sid]={text:String(d.text||''), when:d.updatedAt, by:d.byName||''}; } });
     }catch(e){}
     const ordered=cls.list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
     const state={};
-    const rows=ordered.map(s=>{ const sid=s.studentId||s._id; state[sid]=existing[sid]||'';
+    const rows=ordered.map(s=>{ const sid=s.studentId||s._id; const ex=existing[sid]; state[sid]=ex?ex.text:'';
       const ph = type==='subject' ? esc(subject)+' bo‘yicha izoh…' : 'Umumiy xarakteristika…';
+      const w=ex?fmtWhen(ex.when):''; const meta = ex && (w||ex.by) ? `<div class="small muted" style="margin-top:4px">✎ ${ex.by?esc(ex.by):''}${ex.by&&w?' · ':''}${esc(w)}</div>` : '';
       return `<div class="pf-row" style="padding:12px 20px;border-bottom:1px solid var(--border-2)">
         <div style="font-weight:600;margin-bottom:6px">${esc(s.name||sid)} <span class="small muted">${esc(sid)}</span></div>
-        <textarea class="pf-inp" data-sid="${esc(sid)}" rows="2" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font:inherit;line-height:1.45;resize:vertical">${esc(state[sid])}</textarea>
+        <textarea class="pf-inp" data-sid="${esc(sid)}" rows="2" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font:inherit;line-height:1.45;resize:vertical">${esc(state[sid])}</textarea>${meta}
       </div>`;
     }).join('');
     const head = type==='subject' ? `${esc(subject)} · fan izohi` : 'umumiy xarakteristika';
@@ -1399,8 +1403,8 @@ async function renderProfile(){
           if(wrote) await batch.commit();
         }
         // keshni yangilaymiz
-        entries.forEach(([sid,txt])=>{ const t=String(txt||'').trim(); if(t) existing[sid]=t; else delete existing[sid]; });
-        $('#pf-status').textContent='Saqlandi ✓'; toast('Xarakteristika saqlandi ✓');
+        entries.forEach(([sid,txt])=>{ const t=String(txt||'').trim(); if(t){ existing[sid]=Object.assign({},existing[sid],{text:t}); } else delete existing[sid]; });
+        $('#pf-status').textContent='Saqlandi ✓ (o‘zgarishlar keyingi ochilishda sana bilan ko‘rinadi)'; toast('Xarakteristika saqlandi ✓');
       }catch(e){ $('#pf-status').textContent='Xatolik: '+(e.code||e.message); toast('Saqlashda xatolik: '+(e.code||e.message),true); }
       btn.disabled=false;
     });
@@ -1583,14 +1587,16 @@ async function openStudentReport(sid, row){
     // Choraklik xarakteristika (umumiy + fan izohlari) — davr bo'yicha guruhlab chop etamiz
     const qLbl=(q)=>(QUARTERS.find(x=>x[0]===q)||['',q])[1];
     const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${qLbl(q)} · ${p.join('-')}`; };
+    const stamp=(by,when)=>{ const w=fmtWhen(when); return (by||w)?` <span class="small muted">(${by?esc(by):''}${by&&w?', ':''}${esc(w)})</span>`:''; };
     const charByTerm={}; const notesByTerm={};
-    charSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()) charByTerm[x.term||'']=String(x.text); });
-    noteSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()){ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text)}); } });
+    charSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()) charByTerm[x.term||'']={text:String(x.text),by:x.byName||'',when:x.updatedAt}; });
+    noteSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()){ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text),by:x.byName||'',when:x.updatedAt}); } });
     const allTerms=[...new Set([...Object.keys(charByTerm),...Object.keys(notesByTerm)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
     const charBodyHTML = allTerms.length ? allTerms.map(term=>{
-      const gen=charByTerm[term]?`<div style="margin:4px 0 8px"><span class="small" style="font-weight:700;color:#586459">Umumiy:</span> <span style="white-space:pre-wrap;line-height:1.5">${esc(charByTerm[term])}</span></div>`:'';
+      const c=charByTerm[term];
+      const gen=c?`<div style="margin:4px 0 8px"><span class="small" style="font-weight:700;color:#586459">Umumiy:</span> <span style="white-space:pre-wrap;line-height:1.5">${esc(c.text)}</span>${stamp(c.by,c.when)}</div>`:'';
       const notes=(notesByTerm[term]||[]).sort((a,b)=>a.subject.localeCompare(b.subject));
-      const notesTbl=notes.length?`<table class="rep-t"><tbody>${notes.map(n=>`<tr><td style="width:32%;color:#586459">${esc(n.subject)}</td><td style="white-space:pre-wrap">${esc(n.text)}</td></tr>`).join('')}</tbody></table>`:'';
+      const notesTbl=notes.length?`<table class="rep-t"><tbody>${notes.map(n=>`<tr><td style="width:32%;color:#586459">${esc(n.subject)}</td><td style="white-space:pre-wrap">${esc(n.text)}${stamp(n.by,n.when)}</td></tr>`).join('')}</tbody></table>`:'';
       return `<div style="margin:8px 0 12px"><div class="small" style="font-weight:700;color:#155A4E;margin-bottom:4px">${esc(termLbl(term))}</div>${gen}${notesTbl}</div>`;
     }).join('') : '<div class="small muted">Yozuv yo‘q.</div>';
     // Davomat

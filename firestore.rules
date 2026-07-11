@@ -100,8 +100,12 @@ service cloud.firestore {
     // O'quvchi PROFILI — choraklik xarakteristika.
     // (A) FAN IZOHI — har fan o'qituvchisi FAQAT o'z sinfi + o'z fani izohini yozadi.
     //     Hujjat id = "{sid}__{term}__{subjectSlug}" (term = "2025-2026-q2").
+    //     O'QISH MAXFIY: fan o'qituvchisi FAQAT o'z fani izohini o'qiydi — boshqa
+    //     o'qituvchining izohini ko'ra OLMAYDI. Hammasini faqat admin/zavuch/sinf
+    //     rahbari/kurator (nazorat) va shu farzand ota-onasi ko'radi.
     match /subject_notes/{id} {
-      allow read:   if isClassStaff(resource.data.get('classKey',''))
+      allow read:   if canWriteGeneral(resource.data.get('classKey',''))
+                    || isTeacherOwnDoc(resource.data)
                     || ownsChild(resource.data.get('studentId',''));
       allow create: if isAdmin() || isZavuch() || isTeacherOwnDoc(request.resource.data);
       allow update: if isAdmin() || isZavuch()
