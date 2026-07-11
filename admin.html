@@ -362,8 +362,21 @@ const SCHEMAS = {
       {k:'studentId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text',req:true},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
       {k:'pinfl',l:'JSHSHIR (14 xonali shaxsiy raqam)',t:'text',inputmode:'numeric',maxlength:14,placeholder:'14 ta raqam'},
-      {k:'parentPhone',l:'Ota-ona / vasiy telefoni',t:'tel',inputmode:'tel',placeholder:'+998 90 123 45 67'},
+      {k:'birthDate',l:'Tug‘ilgan sana',t:'date'},
+      {k:'metrika',l:'Metrika (tug‘ilganlik guvohnomasi seriyasi)',t:'text',placeholder:'masalan: I-AN № 0957800'},
+      {k:'prevSchool',l:'Qaysi maktabdan kelgan',t:'text',placeholder:'oldingi ta’lim muassasasi'},
+      {k:'address',l:'Yashash manzili',t:'textarea'},
+      {k:'livesWith',l:'Kim bilan yashaydi',t:'text',placeholder:'masalan: ota, ona, ikki uka'},
+      {k:'health',l:'Sog‘liq holati',t:'text',placeholder:'masalan: Sog‘lom'},
+      {k:'interests',l:'Qiziqishlari',t:'textarea',placeholder:'masalan: futbol, ingliz tili, matematika'},
+      {k:'clubs',l:'To‘garaklar (qatnashadigan)',t:'text',placeholder:'masalan: karate, shaxmat'},
       {k:'guardian',l:'Vasiy (kim)',t:'select',opts:[{v:'',l:'—'},'Ota','Ona','Bobo','Buvi','Amaki','Tog‘a','Xola','Amma']},
+      {k:'fatherName',l:'Ota (F.I.Sh)',t:'text'},
+      {k:'fatherWork',l:'Ota ish joyi',t:'text'},
+      {k:'motherName',l:'Ona (F.I.Sh)',t:'text'},
+      {k:'motherWork',l:'Ona ish joyi',t:'text'},
+      {k:'parentPhone',l:'Ota telefoni',t:'tel',inputmode:'tel',placeholder:'+998 90 123 45 67'},
+      {k:'parentPhone2',l:'Ona telefoni',t:'tel',inputmode:'tel',placeholder:'+998 90 123 45 67'},
       {k:'photo',l:'Rasm (foto)',t:'image'},
       {k:'posterImage',l:'A‘lochi posteri (tayyor dizaynli rasm — 90+ ro‘yxatida shu ko‘rinadi)',t:'image'},
       {k:'lang',l:'Ta’lim tili',t:'select',opts:[{v:'uz',l:'O‘zbek'},{v:'ru',l:'Rus'}]},
@@ -377,7 +390,7 @@ const SCHEMAS = {
     ],
     // Maxfiy maydonlar ommaviy student hujjatida EMAS, alohida student_private
     // kolleksiyasida saqlanadi (JSHSHIR, telefon — voyaga yetmaganning shaxsiy ma'lumoti)
-    privateCol:'student_private', privateFields:['pinfl','parentPhone','guardian'],
+    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2'],
     subjects:true
   },
   teachers: {
@@ -1623,7 +1636,20 @@ async function openStudentReport(sid, row){
     const invRows = inv.map(i=>{ const st=i.status==='paid'?'To‘landi':i.status==='canceled'?'Bekor':'Kutilmoqda'; return `<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td>${esc(st)}</td><td>${esc(i.status==='paid'?(provLbl[i.provider]||i.provider||'—'):'—')}</td><td>${esc(String(i.paidAt&&i.paidAt.toDate?i.paidAt.toDate().toISOString().slice(0,10):(i.paidAt||'')).slice(0,10)||'—')}</td></tr>`; }).join('');
     const g=Number(s.grade)||0;
     const clsName=(g===0?'Tayyorlov':g+'-sinf')+' «'+(s.classLetter||s.track||'-')+'» · '+(s.lang==='ru'?'Rus':'O‘zbek');
-    const info=[['O‘quvchi ID',s.studentId||s._id],['Ism-familiya',s.name||''],['JSHSHIR',privD.pinfl||'—'],['Sinf',clsName],['Yo‘nalish',s.track||'—'],['Vasiy',privD.guardian||'—'],['Ota-ona / vasiy tel.',privD.parentPhone||'—'],['Umumiy ball',s.score==null?'—':String(s.score)],['Davomat',attPct==null?'—':attPct+'%']];
+    const P=(k)=>{ const v=privD[k]; return (v==null||v==='')?'':String(v); };
+    const fmtBD=(v)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); return m?`${m[3]}.${m[2]}.${m[1]}`:(v||'—'); };
+    const parentLine=(nm,wk)=>{ const a=[P(nm),P(wk)].filter(Boolean).join(' — '); return a||'—'; };
+    // To'liq bio — barcha maydonlar student_private'dan (maxfiy, faqat admin/zavuch/ota-ona)
+    const bioRows=[
+      ['O‘quvchi ID',s.studentId||s._id],['Familiya, ism, sharif',s.name||'—'],
+      ['Tug‘ilgan sana',fmtBD(P('birthDate'))],['JSHSHIR',P('pinfl')||'—'],['Metrika seriyasi',P('metrika')||'—'],
+      ['Sinf',clsName],['Yo‘nalish',s.track||'—'],['Qaysi maktabdan kelgan',P('prevSchool')||'—'],
+      ['Yashash manzili',P('address')||'—'],['Kim bilan yashaydi',P('livesWith')||'—'],['Sog‘liq holati',P('health')||'—'],
+      ['Qiziqishlari',P('interests')||'—'],['To‘garaklar',P('clubs')||'—'],['Vasiy',P('guardian')||'—'],
+      ['Ota',parentLine('fatherName','fatherWork')],['Ona',parentLine('motherName','motherWork')],
+      ['Telefon (ota)',P('parentPhone')||'—'],['Telefon (ona)',P('parentPhone2')||'—']
+    ];
+    const info=[...bioRows,['Umumiy ball',s.score==null?'—':String(s.score)],['Davomat',attPct==null?'—':attPct+'%']];
     const emblem=`<svg width="40" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
     const inner = `
       <div class="rep-head" style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #1F9982;padding-bottom:10px;margin-bottom:14px">
@@ -1669,7 +1695,7 @@ async function openStudentReport(sid, row){
       const docNo=`IQR-${(s.studentId||s._id)}-${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
       const verifyURL=`https://alilazer-cd582.web.app/verify?id=${encodeURIComponent(s.studentId||s._id)}`;
       let qrURL=''; try{ if(typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(verifyURL); q.make(); qrURL=q.createDataURL(4,10); } }catch(e){}
-      const bio=[['O‘quvchi ID',s.studentId||s._id],['Familiya, ism, sharif',s.name||''],['JSHSHIR',privD.pinfl||'—'],['Sinf',clsName],['Yo‘nalish',s.track||'—'],['Vasiy',privD.guardian||'—'],['Aloqa telefoni',privD.parentPhone||'—']];
+      const bio=bioRows;   // to'liq shaxsiy ma'lumotlar (yuqorida tuzilgan)
       const profInner=`
         <div class="p-head">${emblem}
           <div><div class="p-name">IQROR ACADEMY</div><div class="p-sub">IT va tibbiyot yo‘nalishlari bo‘yicha xususiy maktab</div><div class="p-addr">https://alilazer-cd582.web.app</div></div>
