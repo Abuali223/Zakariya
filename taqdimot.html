@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Iqror Academy — Loyiha taqdimoti</title>
+<meta name="theme-color" content="#155A4E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 458.82 522.7'%3E%3Crect width='458.82' height='115.76' fill='%231F9982'/%3E%3Cpolygon points='118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26' fill='%23F6C05E'/%3E%3Cpolygon points='159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70' fill='%231F9982'/%3E%3C/svg%3E">
+<style>
+:root{
+  --teal:#1F9982; --deep:#155A4E; --gold:#F6C05E; --gold-d:#E0A93C;
+  --ink:#0f2620; --paper:#F7F5EF; --mut:#5f7168; --line:rgba(255,255,255,.14);
+  --card:rgba(255,255,255,.06); --glass:rgba(255,255,255,.08);
+  --serif:"Georgia","Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--sans); color:#eaf3ef; background:#0a1b16; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+/* ---------- Background ---------- */
+.bg{position:fixed;inset:0;z-index:0;background:
+  radial-gradient(1200px 700px at 15% -10%, #1c5546 0%, transparent 60%),
+  radial-gradient(1000px 800px at 110% 20%, #12483b 0%, transparent 55%),
+  linear-gradient(160deg,#0c231c 0%,#0a1b16 55%,#0b241d 100%);}
+.blob{position:fixed;border-radius:50%;filter:blur(60px);opacity:.35;z-index:0;pointer-events:none;
+  animation:float 18s ease-in-out infinite;}
+.blob.b1{width:460px;height:460px;left:-120px;top:-100px;background:#1f9982;animation-delay:0s}
+.blob.b2{width:380px;height:380px;right:-100px;bottom:-120px;background:#f6c05e;opacity:.18;animation-delay:-6s}
+.blob.b3{width:300px;height:300px;right:22%;top:8%;background:#2fb89c;opacity:.20;animation-delay:-11s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,30px) scale(1.08)}}
+.grid-tex{position:fixed;inset:0;z-index:0;opacity:.05;pointer-events:none;
+  background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
+  background-size:44px 44px;mask:radial-gradient(circle at 50% 40%,#000 0%,transparent 75%)}
+
+/* ---------- Deck ---------- */
+.deck{position:relative;z-index:2;height:100%}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(24px,6vw,90px);opacity:0;visibility:hidden;transform:scale(.985);
+  transition:opacity .55s ease, transform .55s ease, visibility .55s;}
+.slide.active{opacity:1;visibility:visible;transform:none}
+.slide.past{transform:scale(1.02)}
+.wrap{width:100%;max-width:1120px;margin:0 auto}
+
+/* staggered reveal */
+.slide .up{opacity:0;transform:translateY(26px)}
+.slide.active .up{animation:rise .7s cubic-bezier(.16,.8,.26,1) both}
+.slide.active .up:nth-child(1){animation-delay:.06s}
+.slide.active .up:nth-child(2){animation-delay:.14s}
+.slide.active .up:nth-child(3){animation-delay:.22s}
+.slide.active .up:nth-child(4){animation-delay:.30s}
+.slide.active .up:nth-child(5){animation-delay:.38s}
+.slide.active .up:nth-child(6){animation-delay:.46s}
+.slide.active .up:nth-child(7){animation-delay:.54s}
+@keyframes rise{to{opacity:1;transform:none}}
+.g-stagger>*{opacity:0;transform:translateY(22px) scale(.98)}
+.slide.active .g-stagger>*{animation:rise .6s cubic-bezier(.16,.8,.26,1) both}
+.slide.active .g-stagger>*:nth-child(1){animation-delay:.28s}
+.slide.active .g-stagger>*:nth-child(2){animation-delay:.36s}
+.slide.active .g-stagger>*:nth-child(3){animation-delay:.44s}
+.slide.active .g-stagger>*:nth-child(4){animation-delay:.52s}
+.slide.active .g-stagger>*:nth-child(5){animation-delay:.60s}
+.slide.active .g-stagger>*:nth-child(6){animation-delay:.68s}
+.slide.active .g-stagger>*:nth-child(7){animation-delay:.76s}
+.slide.active .g-stagger>*:nth-child(8){animation-delay:.84s}
+
+/* ---------- Type ---------- */
+.eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:clamp(12px,1.4vw,15px);
+  letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:700;
+  padding:7px 14px;border:1px solid rgba(246,192,94,.35);border-radius:999px;background:rgba(246,192,94,.08)}
+h1{font-family:var(--serif);font-weight:700;line-height:1.02;font-size:clamp(38px,7.2vw,88px);
+  color:#fff;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:700;line-height:1.06;font-size:clamp(28px,4.6vw,54px);color:#fff}
+.lead{font-size:clamp(16px,2.1vw,23px);color:#cfe2da;line-height:1.5;max-width:60ch}
+.muted{color:#9fb8ae}
+.accent{color:var(--gold)}
+.tl{color:#7fe3c8}
+
+/* ---------- Cards / grids ---------- */
+.grid{display:grid;gap:clamp(12px,1.6vw,20px)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;
+  padding:clamp(16px,2vw,26px);backdrop-filter:blur(6px);transition:transform .3s,border-color .3s,background .3s}
+.card:hover{transform:translateY(-4px);border-color:rgba(246,192,94,.4);background:rgba(255,255,255,.09)}
+.card .ic{font-size:30px;line-height:1;display:block;margin-bottom:12px}
+.card h3{font-size:clamp(16px,1.7vw,20px);color:#fff;margin-bottom:6px;font-weight:700}
+.card p{font-size:clamp(13px,1.4vw,15px);color:#bcd2c9;line-height:1.45}
+.pill{display:inline-block;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;
+  background:rgba(255,255,255,.08);border:1px solid var(--line);color:#dcece5;margin:4px 6px 0 0}
+
+/* problem list */
+.plist{list-style:none;display:grid;gap:12px}
+.plist li{display:flex;gap:14px;align-items:flex-start;font-size:clamp(15px,1.8vw,19px);color:#d6e6df}
+.plist li b{color:#fff}
+.x{flex:0 0 auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(224,80,80,.16);color:#ff9d9d;font-weight:800}
+.chk{flex:0 0 auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(47,184,156,.18);color:#7fe3c8;font-weight:800}
+
+/* stats */
+.stat{ text-align:center }
+.stat .num{font-family:var(--serif);font-weight:700;font-size:clamp(42px,6.5vw,84px);
+  color:#fff;line-height:1;background:linear-gradient(180deg,#fff,#bfe9db);-webkit-background-clip:text;background-clip:text}
+.stat .num .accent2{color:var(--gold);-webkit-text-fill-color:var(--gold)}
+.stat .lbl{margin-top:10px;font-size:clamp(13px,1.5vw,16px);color:#a9c4ba;letter-spacing:.02em}
+
+/* role flow */
+.roles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.role{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;text-align:center}
+.role .rt{font-size:34px}
+.role h4{color:#fff;margin:8px 0 4px;font-size:16px}
+.role small{color:#a9c4ba;font-size:12.5px;line-height:1.4;display:block}
+
+/* logo mark */
+.mark{width:clamp(64px,9vw,104px);height:auto;filter:drop-shadow(0 8px 24px rgba(0,0,0,.4))}
+.mark-row{display:flex;align-items:center;gap:18px}
+
+/* cover device mock */
+.cover-flag{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+
+/* verify badge mock */
+.vbadge{display:inline-flex;align-items:center;gap:10px;background:#e6f4ef;color:#137a5f;
+  font-weight:800;padding:10px 18px;border-radius:999px;font-size:clamp(15px,1.8vw,19px)}
+.qr{width:118px;height:118px;border-radius:14px;background:
+  conic-gradient(from 0deg,#0e2b23 0 25%,#123a30 0 50%,#0e2b23 0 75%,#123a30 0);
+  border:6px solid #fff;display:grid;place-items:center;box-shadow:0 10px 30px rgba(0,0,0,.35);position:relative;overflow:hidden}
+.qr::before{content:"";position:absolute;inset:14px;border-radius:6px;
+  background:repeating-conic-gradient(#0e2b23 0% 12.5%, #eafff7 0% 25%);opacity:.85}
+.qr span{position:relative;font-size:26px}
+
+/* ---------- Chrome ---------- */
+.top{position:fixed;top:0;left:0;right:0;height:4px;z-index:20;background:rgba(255,255,255,.08)}
+.top .bar{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--gold));transition:width .5s ease;border-radius:0 3px 3px 0}
+.brand{position:fixed;top:18px;left:22px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-weight:800;letter-spacing:.02em;color:#eaf3ef;opacity:.9;font-size:14px}
+.brand svg{width:26px;height:auto}
+.nav{position:fixed;bottom:20px;right:22px;z-index:20;display:flex;align-items:center;gap:10px}
+.btn{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--glass);
+  color:#fff;font-size:20px;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(6px);
+  transition:background .2s,transform .1s}
+.btn:hover{background:rgba(255,255,255,.16)}
+.btn:active{transform:scale(.94)}
+.counter{position:fixed;bottom:30px;left:22px;z-index:20;color:#9fb8ae;font-size:13px;font-weight:600;letter-spacing:.05em}
+.dots{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:.3s}
+.dot.on{background:var(--gold);width:22px;border-radius:5px}
+.hint{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:19;color:#87a297;font-size:13px;
+  display:flex;gap:8px;align-items:center;animation:pulse 2.4s infinite}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+kbd{font-family:var(--sans);background:rgba(255,255,255,.1);border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:6px;padding:1px 7px;font-size:12px;color:#dcece5}
+
+@media (max-width:760px){
+  .g2,.g3,.g4,.roles{grid-template-columns:1fr 1fr}
+  .roles{grid-template-columns:1fr 1fr}
+  .hint{display:none}
+  .brand{font-size:12px}
+}
+@media (max-width:480px){ .g3,.g4{grid-template-columns:1fr} }
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid-tex"></div>
+
+<div class="top"><div class="bar" id="bar"></div></div>
+<div class="brand">
+  <svg viewBox="0 0 458.82 522.7"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+  Iqror Academy
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide">
+    <div class="wrap" style="text-align:center">
+      <div class="up" style="display:flex;justify-content:center;margin-bottom:20px">
+        <svg class="mark" viewBox="0 0 458.82 522.7"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+      </div>
+      <div class="up eyebrow" style="margin-bottom:18px">Raqamli maktab platformasi</div>
+      <h1 class="up">IQROR ACADEMY</h1>
+      <p class="up lead" style="margin:22px auto 0;text-align:center">Butun maktabni bitta platformada boshqaruvchi zamonaviy tizim —
+        <span class="tl">ochiq natijalar</span>, <span class="tl">ota-ona kabineti</span>,
+        <span class="tl">o‘quvchi profili</span> va <span class="tl">sun'iy intellekt</span>.</p>
+      <div class="up cover-flag" style="justify-content:center;margin-top:26px">
+        <span class="pill">🎓 IT & MED yo‘nalishlari</span>
+        <span class="pill">🇺🇿 / 🇷🇺 ikki til</span>
+        <span class="pill">🔒 himoyalangan</span>
+        <span class="pill">📱 PWA</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. PROBLEM -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:18px">Muammo</div>
+      <h2 class="up">An'anaviy maktab boshqaruvi — tarqoq va noshaffof</h2>
+      <ul class="plist up" style="margin-top:30px">
+        <li><span class="x">✕</span><div><b>Ota-ona bexabar.</b> Farzandi baholari, davomati va to‘lovlari haqida real vaqtda ma'lumot yo‘q.</div></li>
+        <li><span class="x">✕</span><div><b>Qog‘ozbozlik.</b> Jurnal, ma'lumotnoma, xarakteristika — hammasi qo‘lda, yo‘qoladi, ko‘chiriladi.</div></li>
+        <li><span class="x">✕</span><div><b>Natijalar yashirin.</b> O‘quvchini rag‘batlantiruvchi ochiq reyting yo‘q.</div></li>
+        <li><span class="x">✕</span><div><b>Maxfiylik nazoratsiz.</b> Shaxsiy ma'lumot va baholar kim ko‘rishini boshqarib bo‘lmaydi.</div></li>
+        <li><span class="x">✕</span><div><b>Hujjat ko‘chma emas.</b> Boshqa maktab yoki universitetga o‘tishда qaytadan yig‘iladi.</div></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. SOLUTION -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Yechim</div>
+      <h2 class="up">Iqror — butun maktab bitta ekranda</h2>
+      <p class="up lead" style="margin-top:14px">Ochiq sayt, ota-ona kabineti, admin panel va backend xizmatlari — bir tizimda, xavfsiz va tez.</p>
+      <div class="grid g4 g-stagger" style="margin-top:30px">
+        <div class="card"><span class="ic">🌐</span><h3>Ommaviy sayt</h3><p>Reyting, ID qidiruv, o‘qituvchilar, yutuqlar, ariza.</p></div>
+        <div class="card"><span class="ic">👨‍👩‍👧</span><h3>Ota-ona kabineti</h3><p>Davomat, baholar, monitoring, to‘lovlar, profil.</p></div>
+        <div class="card"><span class="ic">🛠️</span><h3>Admin panel</h3><p>CRUD, rollar, hisobotlar, import, xarakteristika.</p></div>
+        <div class="card"><span class="ic">🤖</span><h3>Sun'iy intellekt</h3><p>Chatbot, oylik xulosa, imtihon baholash.</p></div>
+        <div class="card"><span class="ic">💳</span><h3>To‘lovlar</h3><p>Click · Uzum · Payme, avtomatik hisob-faktura.</p></div>
+        <div class="card"><span class="ic">📷</span><h3>Yuz terminali</h3><p>Avtomatik davomat — kirish nazorati.</p></div>
+        <div class="card"><span class="ic">📊</span><h3>Import</h3><p>Excel · CSV · Google Sheets — bir zumda.</p></div>
+        <div class="card"><span class="ic">📄</span><h3>Rasmiy profil</h3><p>QR bilan tekshiriladigan hujjat (PDF).</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. OPEN RESULTS -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="grid g2" style="align-items:center;gap:40px">
+        <div>
+          <div class="up eyebrow" style="margin-bottom:16px">Ochiq natijalar</div>
+          <h2 class="up">Shaffof reyting — o‘quvchini rag‘batlantiradi</h2>
+          <p class="up lead" style="margin-top:14px">Har bir o‘quvchi o‘z <span class="tl">ID</span>si orqali natijasini topadi. Sinf reytinglari ochiq —
+            lekin <b>maxfiylik saqlanadi</b>.</p>
+          <ul class="plist up" style="margin-top:20px">
+            <li><span class="chk">✓</span><div>ID bo‘yicha qidiruv va sinf reytingi</div></li>
+            <li><span class="chk">✓</span><div>Faqat <b>90+ a'lochilar</b> ommaviy ko‘rinadi</div></li>
+            <li><span class="chk">✓</span><div>Shaxsiy ball/telefon/JSHSHIR — hech qachon ommaviy emas</div></li>
+          </ul>
+        </div>
+        <div class="up card" style="padding:26px">
+          <div class="pill" style="background:rgba(47,184,156,.15)">🏆 Sharaf taxtasi</div>
+          <div style="margin-top:16px;display:grid;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(246,192,94,.12);border:1px solid rgba(246,192,94,.3);border-radius:12px;padding:12px 16px">
+              <b style="color:#fff">🥇 IQ-0001</b><span class="accent" style="font-weight:800">98</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px">
+              <b style="color:#fff">🥈 IQ-0007</b><span class="tl" style="font-weight:800">95</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px">
+              <b style="color:#fff">🥉 IQ-0014</b><span class="tl" style="font-weight:800">92</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. PARENT CABINET -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Ota-ona kabineti</div>
+      <h2 class="up">Farzand haqida hamma narsa — real vaqtda</h2>
+      <div class="grid g3 g-stagger" style="margin-top:28px">
+        <div class="card"><span class="ic">📅</span><h3>Davomat</h3><p>Kelgan / kechikkan / kelmagan — kunma-kun.</p></div>
+        <div class="card"><span class="ic">📝</span><h3>Baholar</h3><p>Choraklik baholar va o‘rtacha ko‘rsatkich.</p></div>
+        <div class="card"><span class="ic">📈</span><h3>Monitoring</h3><p>Fan bo‘yicha o‘sish dinamikasi.</p></div>
+        <div class="card"><span class="ic">💳</span><h3>To‘lovlar</h3><p>Hisob-fakturalar, qarz, to‘langan sana.</p></div>
+        <div class="card"><span class="ic">📚</span><h3>Dars jadvali</h3><p>Sinf jadvali va uy vazifalari.</p></div>
+        <div class="card"><span class="ic">📋</span><h3>Xarakteristika</h3><p>Choraklik izoh + o‘qituvchi xulosasi.</p></div>
+      </div>
+      <p class="up muted" style="margin-top:18px;font-size:15px">Ota-ona <b>faqat o‘z farzandi</b> ma'lumotini ko‘radi — qat'iy ruxsat nazorati bilan.</p>
+    </div>
+  </section>
+
+  <!-- 6. STUDENT PROFILE -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="grid g2" style="align-items:center;gap:40px">
+        <div>
+          <div class="up eyebrow" style="margin-bottom:16px">O‘quvchi profili</div>
+          <h2 class="up">Har o‘quvchining raqamli tavsifnomasi</h2>
+          <ul class="plist up" style="margin-top:22px">
+            <li><span class="chk">✓</span><div><b>Fan izohi</b> — har fan o‘qituvchisi faqat o‘z fani uchun yozadi</div></li>
+            <li><span class="chk">✓</span><div><b>Umumiy xarakteristika</b> — sinf rahbari / zavuch / direktor</div></li>
+            <li><span class="chk">✓</span><div>Har izohda <b>kim + qachon</b> (timestamp)</div></li>
+            <li><span class="chk">✓</span><div><b>Chorak va sinf</b> bo‘yicha alohida saqlanadi</div></li>
+            <li><span class="chk">✓</span><div>To‘liq shaxsiy ma'lumot (maxfiy) + yutuqlar</div></li>
+          </ul>
+        </div>
+        <div class="up card" style="text-align:center;padding:30px">
+          <div class="pill" style="background:rgba(246,192,94,.12)">🎓 Rasmiy profil (PDF)</div>
+          <div style="margin:20px auto;display:flex;justify-content:center"><div class="qr"><span>🔗</span></div></div>
+          <div class="vbadge">✅ Tasdiqlandi — Iqror o‘quvchisi</div>
+          <p class="muted" style="margin-top:14px;font-size:14px">QR-kod orqali istalgan universitet hujjat haqiqiyligini bir zumda tekshiradi.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. RBAC -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Rollar tizimi (RBAC)</div>
+      <h2 class="up">Har kim faqat o‘z qismini ko‘radi va o‘zgartiradi</h2>
+      <div class="roles up g-stagger" style="margin-top:30px">
+        <div class="role"><div class="rt">👑</div><h4>Direktor / Admin</h4><small>Butun tizim, barcha hisobotlar</small></div>
+        <div class="role"><div class="rt">📚</div><h4>Zavuch (O‘IBDO‘)</h4><small>Monitoringni tasdiqlaydi, umumiy xarakteristika</small></div>
+        <div class="role"><div class="rt">🧑‍🏫</div><h4>Sinf rahbari / Kurator</h4><small>O‘z sinfi davomati va umumiy izohi</small></div>
+        <div class="role"><div class="rt">✏️</div><h4>Fan o‘qituvchisi</h4><small>Faqat o‘z fani bahosi va izohi</small></div>
+      </div>
+      <p class="up muted" style="margin-top:24px;font-size:15px">Bir o‘qituvchi boshqa o‘qituvchining izohini <b>ko‘ra olmaydi</b>. Har rol o‘z panelini ochadi.</p>
+    </div>
+  </section>
+
+  <!-- 8. SECURITY -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Xavfsizlik</div>
+      <h2 class="up">Ishonch — poydevorda qurilgan</h2>
+      <div class="grid g2 g-stagger" style="margin-top:28px">
+        <div class="card"><span class="ic">🔐</span><h3>Shaxsiy ma'lumot himoyasi</h3><p>JSHSHIR, telefon, manzil, sog‘liq — read-locked bazada. Ommaviy sahifaga <b>hech qachon</b> chiqmaydi (ikki qatlamli himoya).</p></div>
+        <div class="card"><span class="ic">🧩</span><h3>O‘qituvchi izolyatsiyasi</h3><p>Fan o‘qituvchisi faqat o‘z fani izohini ko‘radi va yozadi.</p></div>
+        <div class="card"><span class="ic">🏅</span><h3>Natijalar maxfiyligi</h3><p>Faqat 90+ a'lochilar ommaviy; qolgani himoyalangan.</p></div>
+        <div class="card"><span class="ic">✅</span><h3>Tekshirilgan qoidalar</h3><p>Firestore Security Rules haqiqiy tokenlar bilan <b>100+ marta</b> sinovdan o‘tgan.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. AI -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Sun'iy intellekt</div>
+      <h2 class="up">AI — o‘qituvchining yordamchisi</h2>
+      <div class="grid g3 g-stagger" style="margin-top:28px">
+        <div class="card"><span class="ic">💬</span><h3>Sayt chatboti</h3><p>Ota-onalarning savollariga 24/7 javob beradi.</p></div>
+        <div class="card"><span class="ic">🧠</span><h3>Imtihon baholash</h3><p>O‘qituvchilar tanlovida javoblarni AI ekspert baholaydi.</p></div>
+        <div class="card"><span class="ic">📑</span><h3>Avtomatik hisobot</h3><p>Natijalar asosida oylik xulosa tayyorlaydi.</p></div>
+      </div>
+      <p class="up muted" style="margin-top:22px;font-size:15px">Claude API + Firebase Cloud Functions — kalit xavfsiz serverda, brauzerda emas.</p>
+    </div>
+  </section>
+
+  <!-- 10. UNIVERSITY DOC -->
+  <section class="slide">
+    <div class="wrap" style="text-align:center">
+      <div class="up eyebrow" style="margin:0 auto 18px">Kelajak qiymati</div>
+      <h2 class="up">«IQRORdan bo‘lsang — <span class="accent">shu profilni</span> olib kel»</h2>
+      <p class="up lead" style="margin:20px auto 0">Rasmiy, to‘liq va QR orqali tekshiriladigan o‘quvchi profili — kelajakda
+        universitetlar tan oladigan hujjatga aylanadi.</p>
+      <div class="up grid g3" style="margin-top:34px">
+        <div class="card"><span class="ic">📜</span><h3>To‘liq</h3><p>Bio, baholar, xarakteristika, yutuqlar — bir hujjatda.</p></div>
+        <div class="card"><span class="ic">🔎</span><h3>Tekshiriladigan</h3><p>QR → tasdiqlash sahifasi. Soxtalashtirib bo‘lmaydi.</p></div>
+        <div class="card"><span class="ic">⬇️</span><h3>Ota-ona yuklaydi</h3><p>Kabinetdan bir tugma bilan PDF.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. TECH -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="up eyebrow" style="margin-bottom:16px">Texnologiya</div>
+      <h2 class="up">Mustahkam va zamonaviy poydevor</h2>
+      <div class="grid g4 g-stagger" style="margin-top:28px">
+        <div class="card"><span class="ic">🔥</span><h3>Firebase</h3><p>Hosting · Firestore · Auth · Cloud Functions</p></div>
+        <div class="card"><span class="ic">📱</span><h3>PWA</h3><p>Telefon/planshetga o‘rnatiladi, oflayn ishlaydi</p></div>
+        <div class="card"><span class="ic">🌍</span><h3>Ikki til</h3><p>O‘zbek va Rus — bir klik bilan</p></div>
+        <div class="card"><span class="ic">⚡</span><h3>Tez & yengil</h3><p>O‘z hostingida kutubxonalar, tashqi bog‘liqliksiz</p></div>
+      </div>
+      <div class="up" style="margin-top:22px">
+        <span class="pill">Real-time sinxronizatsiya</span>
+        <span class="pill">Xavfsizlik qoidalari</span>
+        <span class="pill">KaTeX (formulalar)</span>
+        <span class="pill">QR verifikatsiya</span>
+        <span class="pill">Rolga asoslangan kirish</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. NUMBERS -->
+  <section class="slide">
+    <div class="wrap" style="text-align:center">
+      <div class="up eyebrow" style="margin:0 auto 22px">Raqamlarda</div>
+      <div class="grid g4 g-stagger" data-count>
+        <div class="stat"><div class="num"><span class="count" data-to="8">0</span></div><div class="lbl">asosiy modul</div></div>
+        <div class="stat"><div class="num"><span class="count" data-to="5">0</span></div><div class="lbl">foydalanuvchi roli</div></div>
+        <div class="stat"><div class="num"><span class="count" data-to="2">0</span></div><div class="lbl">til (UZ / RU)</div></div>
+        <div class="stat"><div class="num"><span class="count" data-to="100">0</span><span class="accent2">+</span></div><div class="lbl">xavfsizlik testi</div></div>
+      </div>
+      <div class="grid g3 g-stagger" style="margin-top:34px">
+        <div class="stat"><div class="num"><span class="count" data-to="3">0</span></div><div class="lbl">to‘lov provayderi</div></div>
+        <div class="stat"><div class="num"><span class="count" data-to="4">0</span></div><div class="lbl">chorak bo‘yicha profil</div></div>
+        <div class="stat"><div class="num"><span class="count" data-to="24">0</span><span class="accent2">/7</span></div><div class="lbl">AI yordamchi</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. CLOSING -->
+  <section class="slide">
+    <div class="wrap" style="text-align:center">
+      <div class="up" style="display:flex;justify-content:center;margin-bottom:18px">
+        <svg class="mark" style="width:clamp(56px,7vw,84px)" viewBox="0 0 458.82 522.7"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+      </div>
+      <h1 class="up" style="font-size:clamp(32px,6vw,72px)">Kelajak maktabi — <span class="accent">bugun</span></h1>
+      <p class="up lead" style="margin:20px auto 0">Iqror Academy — o‘quvchi, ota-ona va o‘qituvchini bitta shaffof, xavfsiz tizimda birlashtiradi.</p>
+      <div class="up" style="margin-top:30px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a href="https://alilazer-cd582.web.app" target="_blank" rel="noopener" style="text-decoration:none">
+          <span class="pill" style="background:var(--gold);color:#20302B;border-color:var(--gold);font-size:15px;padding:12px 22px">🌐 alilazer-cd582.web.app</span></a>
+        <span class="pill" style="font-size:15px;padding:12px 22px">📄 Rasmiy profil · QR tasdiq</span>
+      </div>
+      <p class="up muted" style="margin-top:26px;font-size:14px">Rahmat! · Iqror Academy</p>
+    </div>
+  </section>
+
+</div>
+
+<!-- chrome -->
+<div class="counter"><span id="cur">1</span> / <span id="tot">13</span></div>
+<div class="dots" id="dots"></div>
+<div class="hint" id="hint"><kbd>→</kbd> keyingi · <kbd>F</kbd> to‘liq ekran</div>
+<div class="nav">
+  <button class="btn" id="prev" aria-label="Oldingi">‹</button>
+  <button class="btn" id="full" aria-label="To‘liq ekran">⤢</button>
+  <button class="btn" id="next" aria-label="Keyingi">›</button>
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, n=slides.length;
+  var bar=document.getElementById('bar'), cur=document.getElementById('cur'), tot=document.getElementById('tot');
+  var dotsWrap=document.getElementById('dots'), hint=document.getElementById('hint');
+  tot.textContent=n;
+  // dots
+  slides.forEach(function(_,k){ var d=document.createElement('div'); d.className='dot'; d.onclick=function(){go(k)}; dotsWrap.appendChild(d); });
+  var dots=[].slice.call(dotsWrap.children);
+
+  function animateCounts(slide){
+    var els=slide.querySelectorAll('.count');
+    els.forEach(function(el){
+      var to=parseInt(el.getAttribute('data-to'),10)||0, dur=1100, t0=null;
+      function step(ts){ if(!t0)t0=ts; var p=Math.min((ts-t0)/dur,1);
+        var e=1-Math.pow(1-p,3); el.textContent=Math.round(e*to); if(p<1)requestAnimationFrame(step); }
+      el.textContent='0'; requestAnimationFrame(step);
+    });
+  }
+
+  function go(k){
+    k=Math.max(0,Math.min(n-1,k));
+    slides.forEach(function(s,idx){ s.classList.remove('active','past'); if(idx<k)s.classList.add('past'); });
+    i=k; slides[i].classList.add('active');
+    bar.style.width=((i)/(n-1)*100)+'%';
+    cur.textContent=i+1;
+    dots.forEach(function(d,idx){ d.classList.toggle('on',idx===i); });
+    if(hint) hint.style.display = i===0 ? 'flex':'none';
+    if(slides[i].querySelector('[data-count]')) animateCounts(slides[i]);
+    try{ location.hash='s'+(i+1); }catch(e){}
+  }
+
+  document.getElementById('next').onclick=function(){go(i+1)};
+  document.getElementById('prev').onclick=function(){go(i-1)};
+  document.getElementById('full').onclick=function(){
+    if(!document.fullscreenElement){ (document.documentElement.requestFullscreen||function(){}).call(document.documentElement); }
+    else { (document.exitFullscreen||function(){}).call(document); }
+  };
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(n-1);}
+    else if(e.key==='f'||e.key==='F'){document.getElementById('full').click();}
+  });
+  // click zones (ignore links/buttons)
+  document.getElementById('deck').addEventListener('click',function(e){
+    if(e.target.closest('a,button')) return;
+    if(e.clientX > window.innerWidth*0.5) go(i+1); else go(i-1);
+  });
+  // swipe
+  var sx=0;
+  addEventListener('touchstart',function(e){sx=e.touches[0].clientX;},{passive:true});
+  addEventListener('touchend',function(e){ var dx=e.changedTouches[0].clientX-sx; if(Math.abs(dx)>50){ dx<0?go(i+1):go(i-1);} },{passive:true});
+
+  // deep-link: #s5 kabi havolalar (bir hujjatли almashuvda ham) ishlaydi
+  addEventListener('hashchange',function(){ var h=/^#s(\d+)$/.exec(location.hash||''); if(h){ var k=parseInt(h[1],10)-1; if(k!==i) go(k); } });
+  // start (honor hash)
+  var m=/^#s(\d+)$/.exec(location.hash||''); go(m?parseInt(m[1],10)-1:0);
+})();
+</script>
+</body>
+</html>
