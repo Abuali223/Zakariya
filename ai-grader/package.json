@@ -1,0 +1,15 @@
+{
+  "name": "iqror-ai-grader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "O'qituvchi tanlovi — AI savol generatori va javob baholovchi (Claude)",
+  "main": "index.cjs",
+  "scripts": {
+    "generate": "node index.cjs generate",
+    "grade": "node index.cjs grade"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "firebase-admin": "^12.0.0"
+  }
+}

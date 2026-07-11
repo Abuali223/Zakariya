@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Iqror Academy — Raqamli maktab platformasi | Taqdimot</title>
+<meta name="description" content="Maktab rahbari uchun taqdimot: Iqror Academy raqamli platformasi nima uchun kerak, qanday qulayliklar beradi.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F5F6F1; --ink:#1C2723; --teal:#236B5D; --teal-2:#35796B; --teal-d:#16453B;
+  --gold:#E2B562; --gold-d:#CFA24C; --muted:#586459; --on-gold:#173E36;
+  --border:#E7EAE6; --border-2:#F0F2EC; --white:#FFFFFF; --it-bg:#EAF2EF; --med-bg:#F7F1E3; --med-fg:#977322;
+  --sans:'Roboto Condensed',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --shadow:0 18px 44px rgba(18,42,32,0.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--sans);background:#0E2E28;color:var(--ink);-webkit-font-smoothing:antialiased;position:relative}
+.deck{position:fixed;inset:0;overflow:hidden}
+
+/* ---- Slide base ---- */
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(28px,5vw,90px);opacity:0;visibility:hidden;transform:scale(.985);
+  transition:opacity .55s ease,transform .55s ease,visibility .55s;background:var(--bg)}
+.slide.active{opacity:1;visibility:visible;transform:none;z-index:2}
+.slide-inner{width:100%;max-width:1180px;margin:0 auto}
+.slide.dark{background:radial-gradient(120% 130% at 80% 0%,#1F7163 0%,#155249 45%,#10423A 100%);color:#fff}
+.slide.dark .kicker{color:var(--gold)}
+.slide.dark .muted{color:rgba(255,255,255,.8)}
+
+/* entrance animation */
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .6s cubic-bezier(.22,.61,.36,1),transform .6s cubic-bezier(.22,.61,.36,1)}
+.reveal.shown{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.reveal{transition:none}.slide{transition:opacity .2s}.hint{animation:none}}
+
+/* ---- Typography ---- */
+.kicker{display:inline-flex;align-items:center;gap:10px;color:var(--teal-2);font-weight:600;
+  font-size:clamp(12px,1.4vw,14px);letter-spacing:.18em;text-transform:uppercase;margin-bottom:18px}
+.kicker::before{content:"";width:26px;height:2px;background:currentColor;border-radius:2px}
+h1{font-weight:300;font-size:clamp(34px,6.4vw,74px);line-height:1.08;letter-spacing:-.01em}
+h2{font-weight:400;font-size:clamp(28px,4.6vw,52px);line-height:1.12;letter-spacing:-.01em;margin-bottom:14px}
+.lead{font-size:clamp(16px,2.1vw,23px);line-height:1.6;color:var(--muted);max-width:60ch}
+.slide.dark .lead{color:rgba(255,255,255,.85)}
+b{font-weight:700}
+
+/* ---- Title slide ---- */
+.hero-badge{display:inline-block;background:rgba(226,181,98,.16);border:1px solid rgba(226,181,98,.5);
+  color:var(--gold);font-size:clamp(12px,1.5vw,15px);font-weight:600;letter-spacing:.06em;padding:8px 18px;border-radius:999px;margin-bottom:26px}
+.title-brand{display:flex;align-items:center;gap:18px;margin-bottom:30px}
+.emblem{width:clamp(52px,7vw,84px);height:auto;flex:0 0 auto;filter:drop-shadow(0 10px 24px rgba(0,0,0,.28))}
+.title-brand .wm b{font-family:var(--sans);font-weight:700;font-size:clamp(26px,3.6vw,42px);letter-spacing:.05em;line-height:1;display:block}
+.title-brand .wm small{font-size:clamp(11px,1.5vw,15px);font-weight:600;letter-spacing:.28em;color:var(--gold);display:block;margin-top:4px}
+.hero h1{margin-bottom:22px}
+.hero h1 .hl{color:var(--gold);font-weight:400}
+.hero-foot{margin-top:40px;display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;color:rgba(255,255,255,.72);font-size:clamp(13px,1.6vw,16px)}
+.hero-foot .dot{width:6px;height:6px;border-radius:50%;background:var(--gold)}
+
+/* ---- Feature grid ---- */
+.grid{display:grid;gap:clamp(12px,1.6vw,20px)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.card{background:var(--white);border:1px solid var(--border);border-radius:18px;padding:clamp(16px,2vw,26px);
+  box-shadow:var(--shadow);display:flex;gap:16px;align-items:flex-start}
+.slide.dark .card{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);box-shadow:none;color:#fff}
+.card .ic{flex:0 0 auto;width:clamp(44px,4.4vw,58px);height:clamp(44px,4.4vw,58px);border-radius:14px;
+  background:var(--it-bg);display:grid;place-items:center;font-size:clamp(22px,2.6vw,30px)}
+.slide.dark .card .ic{background:rgba(226,181,98,.16)}
+.card.gold .ic{background:var(--med-bg)}
+.card h3{font-size:clamp(16px,1.9vw,21px);font-weight:700;margin-bottom:5px;line-height:1.2}
+.card p{font-size:clamp(13px,1.55vw,16px);line-height:1.5;color:var(--muted)}
+.slide.dark .card p{color:rgba(255,255,255,.78)}
+
+/* problem list */
+.plist{display:flex;flex-direction:column;gap:clamp(10px,1.5vw,16px)}
+.pitem{display:flex;gap:16px;align-items:center;background:var(--white);border:1px solid var(--border);
+  border-left:4px solid var(--gold-d);border-radius:14px;padding:clamp(14px,1.7vw,20px) clamp(16px,2vw,24px);box-shadow:0 8px 22px rgba(18,42,32,.06)}
+.pitem .x{flex:0 0 auto;width:38px;height:38px;border-radius:10px;background:var(--med-bg);color:var(--med-fg);
+  display:grid;place-items:center;font-size:20px;font-weight:700}
+.pitem p{font-size:clamp(15px,1.9vw,20px);line-height:1.4;color:var(--ink)}
+.pitem p b{color:var(--teal-d)}
+
+/* pillars */
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(14px,1.8vw,24px);margin-top:8px}
+.pillar{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:clamp(20px,2.4vw,32px)}
+.pillar .n{font-size:clamp(13px,1.5vw,15px);color:var(--gold);font-weight:700;letter-spacing:.1em}
+.pillar h3{font-size:clamp(20px,2.5vw,28px);font-weight:600;margin:10px 0 8px}
+.pillar p{font-size:clamp(13px,1.55vw,16px);line-height:1.55;color:rgba(255,255,255,.8)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(12px,1.6vw,22px);margin-top:10px}
+.stat{text-align:center;background:var(--white);border:1px solid var(--border);border-radius:18px;padding:clamp(18px,2.4vw,32px) 10px;box-shadow:var(--shadow)}
+.stat .v{font-weight:300;font-size:clamp(30px,4.6vw,58px);line-height:1;color:var(--teal)}
+.stat .v .suf{color:var(--gold);font-weight:400}
+.stat .l{margin-top:10px;font-size:clamp(12px,1.4vw,16px);color:var(--muted);line-height:1.3}
+@media(max-width:820px){ .stats{grid-template-columns:repeat(2,1fr)} .stat:last-child{grid-column:1/-1} }
+
+/* closing outcomes */
+.out{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(14px,1.8vw,24px);margin:6px 0 30px}
+.oc{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:clamp(18px,2.3vw,30px);text-align:center}
+.oc .e{font-size:clamp(30px,3.6vw,44px)}
+.oc h3{font-size:clamp(17px,2vw,23px);font-weight:600;margin:10px 0 6px}
+.oc p{font-size:clamp(12px,1.5vw,15px);color:rgba(255,255,255,.78);line-height:1.5}
+.closing-cta{font-size:clamp(19px,2.6vw,30px);font-weight:300;line-height:1.4}
+.closing-cta .hl{color:var(--gold)}
+.url{display:inline-block;margin-top:22px;background:var(--gold);color:var(--on-gold);font-weight:700;
+  font-size:clamp(15px,1.9vw,20px);padding:14px 28px;border-radius:12px;text-decoration:none}
+
+@media(max-width:760px){
+  .g2,.g3{grid-template-columns:1fr}
+  .pillars,.out{grid-template-columns:1fr}
+  .slide{justify-content:flex-start;padding-top:84px;overflow-y:auto}
+  .slide-inner{max-width:100%}
+}
+
+/* ---- Chrome (fixed UI) ---- */
+.progress{position:fixed;top:0;left:0;height:4px;background:var(--gold);z-index:40;transition:width .5s ease;box-shadow:0 0 12px rgba(226,181,98,.5)}
+.chrome-tl{position:fixed;top:clamp(14px,2.2vw,26px);left:clamp(16px,3vw,40px);z-index:35;display:flex;align-items:center;gap:11px;pointer-events:none}
+.chrome-tl .emblem{width:clamp(26px,3vw,34px);filter:none}
+.chrome-tl b{font-size:clamp(14px,1.7vw,18px);font-weight:700;letter-spacing:.05em}
+.chrome-tl small{font-size:clamp(9px,1.1vw,11px);letter-spacing:.2em;font-weight:600;display:block;margin-top:1px}
+.slide.active.dark ~ .chrome-tl{}
+.counter{position:fixed;top:clamp(14px,2.2vw,26px);right:clamp(16px,3vw,40px);z-index:35;
+  font-size:clamp(13px,1.6vw,16px);font-weight:600;letter-spacing:.08em;color:var(--muted)}
+.counter b{color:var(--teal);font-size:1.35em}
+.nav-btns{position:fixed;bottom:clamp(16px,2.6vw,30px);right:clamp(16px,3vw,40px);z-index:35;display:flex;gap:10px}
+.nav-btns button{width:clamp(44px,4.6vw,54px);height:clamp(44px,4.6vw,54px);border-radius:50%;border:1px solid var(--border);
+  background:var(--white);color:var(--teal);font-size:22px;cursor:pointer;display:grid;place-items:center;box-shadow:0 8px 20px rgba(18,42,32,.12);transition:.15s}
+.nav-btns button:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
+.nav-btns button:disabled{opacity:.35;cursor:default}
+.dots{position:fixed;bottom:clamp(20px,3vw,34px);left:50%;transform:translateX(-50%);z-index:35;display:flex;gap:9px}
+.dots button{width:9px;height:9px;border-radius:50%;border:none;background:rgba(88,100,89,.32);cursor:pointer;padding:0;transition:.2s}
+.dots button.on{background:var(--teal);width:26px;border-radius:6px}
+.fs{position:fixed;bottom:clamp(16px,2.6vw,30px);left:clamp(16px,3vw,40px);z-index:35;width:clamp(40px,4.4vw,50px);height:clamp(40px,4.4vw,50px);
+  border-radius:12px;border:1px solid var(--border);background:var(--white);color:var(--muted);cursor:pointer;font-size:18px}
+.hint{position:fixed;bottom:clamp(64px,9vw,96px);left:50%;transform:translateX(-50%);z-index:35;
+  color:rgba(255,255,255,.7);font-size:clamp(12px,1.5vw,15px);display:flex;align-items:center;gap:8px;animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,7px)}}
+@media(max-width:760px){ .dots{display:none} .counter{top:auto;bottom:clamp(18px,3vw,26px);right:auto;left:50%;transform:translateX(-50%)} }
+
+/* click zones */
+.zone{position:fixed;top:0;bottom:0;z-index:20;cursor:pointer}
+.zone.left{left:0;width:22%}
+.zone.right{right:0;width:34%}
+
+/* print → PDF */
+@media print{
+  html,body{height:auto;overflow:visible}
+  .deck{position:static}
+  .slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;
+    height:100vh;page-break-after:always;break-after:page}
+  .reveal{opacity:1!important;transform:none!important}
+  .progress,.chrome-tl,.counter,.nav-btns,.dots,.fs,.hint,.zone{display:none!important}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide dark active">
+    <div class="slide-inner hero">
+      <div class="title-brand reveal">
+        <svg class="emblem" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#fff"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#E2B562"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#fff"/></svg>
+        <span class="wm"><b>IQROR</b><small>ACADEMY</small></span>
+      </div>
+      <div class="hero-badge reveal">Maktab rahbari uchun taqdimot · 2026</div>
+      <h1 class="reveal">Maktabingizning <span class="hl">raqamli platformasi</span></h1>
+      <p class="lead reveal">Bitta veb-sayt — ochiq natijalar, ota-onalar kabineti, o‘qituvchilar boshqaruvi va zamonaviy qabul tizimi. Hammasi bir joyda.</p>
+      <div class="hero-foot reveal">
+        <span>Shaffoflik</span><span class="dot"></span><span>Qulaylik</span><span class="dot"></span><span>Zamonaviy ta‘lim boshqaruvi</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. PROBLEM -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">Nega bu kerak?</div>
+      <h2 class="reveal">An‘anaviy maktabda nimalar qiyin?</h2>
+      <p class="lead reveal" style="margin-bottom:clamp(20px,3vw,34px)">Bugungi kunda ota-onalar shaffoflik, o‘quvchilar motivatsiya, maktab esa zamonaviy yuz kutadi.</p>
+      <div class="plist">
+        <div class="pitem reveal"><span class="x">✕</span><p>Ota-onalar farzandining <b>baholari va davomatidan bexabar</b> qoladi</p></div>
+        <div class="pitem reveal"><span class="x">✕</span><p>Baho, davomat va jadval <b>qog‘ozda</b> — yo‘qoladi, izlash qiyin</p></div>
+        <div class="pitem reveal"><span class="x">✕</span><p>Maktab haqidagi ma‘lumot <b>tarqoq</b>, qabul jarayoni noqulay</p></div>
+        <div class="pitem reveal"><span class="x">✕</span><p>Natijalar <b>yopiq</b> — o‘quvchida ochiq raqobat va motivatsiya yo‘q</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. SOLUTION -->
+  <section class="slide dark">
+    <div class="slide-inner">
+      <div class="kicker reveal">Yechim</div>
+      <h2 class="reveal">Iqror — hammasi bitta platformada</h2>
+      <p class="lead reveal" style="margin-bottom:clamp(20px,3vw,32px)">Uchta kuchli tayanch ustiga qurilgan yagona tizim:</p>
+      <div class="pillars">
+        <div class="pillar reveal"><div class="n">01</div><h3>Ommaviy sayt</h3><p>Maktabning raqamli yuzi: yo‘nalishlar, natijalar, galereya, qabul va narxlar.</p></div>
+        <div class="pillar reveal"><div class="n">02</div><h3>Shaxsiy kabinet</h3><p>Ota-ona va o‘quvchi uchun: davomat, baholar, jadval, uy vazifalari.</p></div>
+        <div class="pillar reveal"><div class="n">03</div><h3>Admin panel</h3><p>Rahbariyat uchun to‘liq boshqaruv: baza, arizalar, kontent, statistika.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. STATS -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">Bir qarashda</div>
+      <h2 class="reveal">Platforma imkoniyatlari — raqamlarda</h2>
+      <div class="stats" style="margin-top:clamp(18px,3vw,36px)">
+        <div class="stat reveal"><div class="v"><span class="count" data-to="480">0</span><span class="suf">+</span></div><div class="l">o‘quvchi bazada</div></div>
+        <div class="stat reveal"><div class="v"><span class="count" data-to="32">0</span></div><div class="l">o‘qituvchi profili</div></div>
+        <div class="stat reveal"><div class="v"><span class="count" data-to="2">0</span></div><div class="l">til — o‘zbek va rus</div></div>
+        <div class="stat reveal"><div class="v"><span class="count" data-to="24">0</span>/7</div><div class="l">istalgan vaqtda kirish</div></div>
+        <div class="stat reveal"><div class="v"><span class="count" data-to="100">0</span><span class="suf">%</span></div><div class="l">mobil, planshet, kompyuter</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. PARENTS -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">Ota-onalar uchun</div>
+      <h2 class="reveal">Farzandingiz — kaftingizda</h2>
+      <div class="grid g3" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card reveal"><span class="ic">👨‍👩‍👧</span><div><h3>Shaxsiy kabinet</h3><p>Bir oiladan bir nechta farzandni bitta akkauntga qo‘shib kuzatasiz.</p></div></div>
+        <div class="card reveal"><span class="ic">📊</span><div><h3>Baholar</h3><p>Har fan bo‘yicha choraklik va yillik baho, o‘sish dinamikasi grafigi.</p></div></div>
+        <div class="card reveal"><span class="ic">✅</span><div><h3>Davomat</h3><p>Keldi, kelmadi, kechikdi, sababli — kunma-kun aniq ko‘rinadi.</p></div></div>
+        <div class="card reveal"><span class="ic">🗓️</span><div><h3>Dars jadvali</h3><p>Haftalik jadval doim qo‘l ostida — farzand nima o‘qishini bilasiz.</p></div></div>
+        <div class="card reveal"><span class="ic">📝</span><div><h3>Uy vazifalari</h3><p>Berilgan vazifalar va topshirish sanasi — hech narsa e‘tibordan chetda qolmaydi.</p></div></div>
+        <div class="card reveal"><span class="ic">🔔</span><div><h3>Doim xabardor</h3><p>ID orqali istalgan vaqtda, istalgan qurilmadan real ma‘lumot.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. STUDENTS -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">O‘quvchilar uchun</div>
+      <h2 class="reveal">A‘lochilar ro‘yxati — sog‘lom raqobat</h2>
+      <div class="grid g2" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card reveal"><span class="ic">🏆</span><div><h3>A‘lochilar ro‘yxati</h3><p>90+ ball olganlar ommaviy ro‘yxatda — sog‘lom raqobat va rag‘bat.</p></div></div>
+        <div class="card reveal"><span class="ic">🔒</span><div><h3>Shaxsiy natija — maxfiy</h3><p>To‘liq natijani faqat o‘quvchi va ota-onasi kabinetda ko‘radi.</p></div></div>
+        <div class="card reveal"><span class="ic">📈</span><div><h3>O‘sish dinamikasi</h3><p>Fanlar kesimida balllar va choraklararo o‘sish aniq grafiklarda.</p></div></div>
+        <div class="card reveal"><span class="ic">⭐</span><div><h3>Yutuqlar devori</h3><p>Olimpiada, IELTS, musobaqa g‘alabalari — hammaga ko‘rinadi.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. TEACHERS -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">O‘qituvchilar uchun</div>
+      <h2 class="reveal">Kamroq qog‘oz, ko‘proq ta‘lim</h2>
+      <div class="grid g2" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card reveal"><span class="ic">⚡</span><div><h3>Tez baho kiritish</h3><p>Butun sinf uchun baho va davomatni bir necha soniyada kiritadi.</p></div></div>
+        <div class="card reveal"><span class="ic">🗂️</span><div><h3>Jadval va vazifalar</h3><p>Dars jadvali va uy vazifalarini oson yangilaydi — ota-onaga darhol ko‘rinadi.</p></div></div>
+        <div class="card reveal"><span class="ic">🌟</span><div><h3>O‘qituvchi reytingi</h3><p>Tajriba, sertifikat va o‘quvchi natijasiga asoslangan obro‘ profili.</p></div></div>
+        <div class="card reveal"><span class="ic">📱</span><div><h3>Istalgan qurilmadan</h3><p>Kompyuter, planshet yoki telefondan — qulay va sodda interfeys.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. DIRECTOR / ADMIN -->
+  <section class="slide dark">
+    <div class="slide-inner">
+      <div class="kicker reveal">Rahbariyat uchun</div>
+      <h2 class="reveal">To‘liq boshqaruv — bitta panelda</h2>
+      <div class="grid g3" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card reveal"><span class="ic">📈</span><div><h3>Statistika</h3><p>O‘quvchilar, o‘qituvchilar, arizalar va sinflar bo‘yicha umumiy manzara.</p></div></div>
+        <div class="card reveal"><span class="ic">🗃️</span><div><h3>To‘liq baza</h3><p>O‘quvchi va o‘qituvchi ma‘lumotlarini qo‘shish, tahrirlash, izlash.</p></div></div>
+        <div class="card reveal"><span class="ic">📥</span><div><h3>Arizalar</h3><p>Saytdan kelgan qabul arizalari — ism, telefon, sinf va yo‘nalish bilan.</p></div></div>
+        <div class="card reveal"><span class="ic">🖼️</span><div><h3>Kontent boshqaruvi</h3><p>Yangilik, galereya, narxlar, FAQ va taqvimni o‘zingiz yangilaysiz.</p></div></div>
+        <div class="card reveal"><span class="ic">🔐</span><div><h3>Rollar</h3><p>Ota-ona, o‘quvchi, o‘qituvchi va admin — xavfsiz rol boshqaruvi.</p></div></div>
+        <div class="card reveal"><span class="ic">🧩</span><div><h3>Kod bilmasdan</h3><p>Barcha o‘zgarishlar oddiy formalar orqali — dasturchi kerak emas.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. PUBLIC SITE FEATURES -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">Ommaviy sayt</div>
+      <h2 class="reveal">Maktabning raqamli yuzi</h2>
+      <div class="grid g3" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card gold reveal"><span class="ic">🎯</span><div><h3>Yo‘nalishlar</h3><p>IT va MED — chuqurlashtirilgan dasturlar bilan.</p></div></div>
+        <div class="card gold reveal"><span class="ic">📸</span><div><h3>Foto-galereya</h3><p>Rasm va videolarda maktab hayoti.</p></div></div>
+        <div class="card gold reveal"><span class="ic">💳</span><div><h3>Qabul va narxlar</h3><p>Bosqichlar, to‘lov rejalari va hujjatlar.</p></div></div>
+        <div class="card gold reveal"><span class="ic">💬</span><div><h3>Ota-onalar fikri</h3><p>Ishonch uyg‘otadigan haqiqiy sharhlar.</p></div></div>
+        <div class="card gold reveal"><span class="ic">❓</span><div><h3>Savol-javob</h3><p>Ko‘p beriladigan savollarga tayyor javoblar.</p></div></div>
+        <div class="card gold reveal"><span class="ic">🗓️</span><div><h3>O‘quv taqvimi</h3><p>Ochiq eshiklar kuni, imtihonlar, bayramlar.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. TECH -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker reveal">Texnologiya</div>
+      <h2 class="reveal">Tez, xavfsiz, hamma qurilmada</h2>
+      <div class="grid g3" style="margin-top:clamp(16px,2.5vw,28px)">
+        <div class="card reveal"><span class="ic">🌐</span><div><h3>Ikki til</h3><p>O‘zbek va rus — bir tugma bilan almashadi.</p></div></div>
+        <div class="card reveal"><span class="ic">👆</span><div><h3>Svayp boshqaruv</h3><p>Telefonда ekranni surib bo‘limlar orasida o‘tish.</p></div></div>
+        <div class="card reveal"><span class="ic">📲</span><div><h3>Ilovaga o‘xshaydi</h3><p>Telefon ekraniga o‘rnatiladi (PWA), oflaynда ham ochiladi.</p></div></div>
+        <div class="card reveal"><span class="ic">🔒</span><div><h3>Xavfsiz kirish</h3><p>Google yoki email/parol — himoyalangan tizim.</p></div></div>
+        <div class="card reveal"><span class="ic">⚡</span><div><h3>Yuqori tezlik</h3><p>Sahifa bir zumda ochiladi, natijalar darhol ko‘rinadi.</p></div></div>
+        <div class="card reveal"><span class="ic">☁️</span><div><h3>Ishonchli va tejamli</h3><p>Google Firebase — barqaror hosting va ma‘lumotlar bazasi.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. CLOSING -->
+  <section class="slide dark">
+    <div class="slide-inner" style="text-align:center">
+      <div class="kicker reveal" style="justify-content:center">Xulosa</div>
+      <h2 class="reveal" style="max-width:16ch;margin:0 auto 8px">Iqror maktabingizni kelajakka olib chiqadi</h2>
+      <div class="out" style="margin-top:clamp(24px,3.5vw,44px)">
+        <div class="oc reveal"><div class="e">🤝</div><h3>Obro‘ va ishonch</h3><p>Zamonaviy raqamli yuz ota-onalarda ishonch uyg‘otadi.</p></div>
+        <div class="oc reveal"><div class="e">🔎</div><h3>Shaffoflik</h3><p>Har bir natija ochiq — maktab, o‘qituvchi va o‘quvchi uchun.</p></div>
+        <div class="oc reveal"><div class="e">⏱️</div><h3>Qulaylik</h3><p>Qog‘ozbozlik o‘rniga — bir necha bosishda boshqaruv.</p></div>
+      </div>
+      <div class="closing-cta reveal">Raqamli maktab — <span class="hl">bugundan boshlanadi.</span></div>
+      <a class="url reveal" href="https://alilazer-cd582.web.app" target="_blank" rel="noopener">alilazer-cd582.web.app</a>
+    </div>
+  </section>
+
+</div>
+
+<!-- chrome -->
+<div class="chrome-tl">
+  <svg class="emblem" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#236B5D"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#E2B562"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#236B5D"/></svg>
+  <span><b>IQROR</b><small>ACADEMY</small></span>
+</div>
+<div class="counter"><b id="cur">01</b> / <span id="tot">11</span></div>
+<div class="dots" id="dots"></div>
+<button class="fs" id="fsBtn" aria-label="To‘liq ekran">⛶</button>
+<div class="nav-btns">
+  <button id="prev" aria-label="Oldingi">‹</button>
+  <button id="next" aria-label="Keyingi">›</button>
+</div>
+<div class="hint" id="hint">Suring yoki → tugmasini bosing</div>
+
+<div class="zone left" id="zoneL" aria-hidden="true"></div>
+<div class="zone right" id="zoneR" aria-hidden="true"></div>
+
+<script>
+(function(){
+  "use strict";
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var total=slides.length, idx=0;
+  var chromeTL=document.querySelector('.chrome-tl');
+  var counter=document.querySelector('.counter');
+  var progress=document.getElementById('progress');
+  var curEl=document.getElementById('cur'), totEl=document.getElementById('tot');
+  var prevBtn=document.getElementById('prev'), nextBtn=document.getElementById('next');
+  var hint=document.getElementById('hint');
+  totEl.textContent=('0'+total).slice(-2);
+
+  // dots
+  var dotsWrap=document.getElementById('dots'), dots=[];
+  slides.forEach(function(_,i){
+    var b=document.createElement('button'); b.setAttribute('aria-label','Slayd '+(i+1));
+    b.addEventListener('click',function(){go(i);});
+    dotsWrap.appendChild(b); dots.push(b);
+  });
+
+  var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function animateCounters(slide){
+    slide.querySelectorAll('.count').forEach(function(el){
+      var to=parseInt(el.getAttribute('data-to'),10)||0, dur=1100, t0=null;
+      if(reduceMotion){ el.textContent=to; return; }
+      function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur);
+        var e=1-Math.pow(1-p,3); el.textContent=Math.round(to*e); if(p<1)requestAnimationFrame(step); }
+      el.textContent='0'; requestAnimationFrame(step);
+    });
+  }
+
+  function go(n){
+    n=Math.max(0,Math.min(total-1,n));
+    slides.forEach(function(s,i){ s.classList.toggle('active',i===n); });
+    var active=slides[n];
+    // adapt chrome color on dark slides
+    var dark=active.classList.contains('dark');
+    chromeTL.style.color=dark?'#fff':'var(--ink)';
+    counter.style.color=dark?'rgba(255,255,255,.85)':'';
+    // stagger reveals
+    var rev=[].slice.call(active.querySelectorAll('.reveal'));
+    rev.forEach(function(el){ el.classList.remove('shown'); el.style.transitionDelay='0ms'; });
+    // force reflow
+    void active.offsetWidth;
+    rev.forEach(function(el,i){ el.style.transitionDelay=(90+i*85)+'ms'; el.classList.add('shown'); });
+    animateCounters(active);
+    idx=n;
+    curEl.textContent=('0'+(n+1)).slice(-2);
+    progress.style.width=((n+1)/total*100)+'%';
+    dots.forEach(function(d,i){ d.classList.toggle('on',i===n); });
+    prevBtn.disabled=(n===0); nextBtn.disabled=(n===total-1);
+    if(n>0 && hint){ hint.style.display='none'; }
+    try{ history.replaceState(null,'','#'+(n+1)); }catch(e){}
+  }
+  function nextS(){ go(idx+1); }
+  function prevS(){ go(idx-1); }
+
+  nextBtn.addEventListener('click',nextS);
+  prevBtn.addEventListener('click',prevS);
+  document.getElementById('zoneR').addEventListener('click',nextS);
+  document.getElementById('zoneL').addEventListener('click',prevS);
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){ e.preventDefault(); nextS(); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); prevS(); }
+    else if(e.key==='Home'){ go(0); }
+    else if(e.key==='End'){ go(total-1); }
+    else if(e.key==='f'||e.key==='F'){ toggleFs(); }
+  });
+
+  // swipe
+  var x0=0,y0=0,t0=0;
+  document.addEventListener('touchstart',function(e){ if(e.touches.length!==1)return; var t=e.touches[0]; x0=t.clientX;y0=t.clientY;t0=Date.now(); },{passive:true});
+  document.addEventListener('touchend',function(e){
+    var t=e.changedTouches[0]; if(!t)return;
+    var dx=t.clientX-x0, dy=t.clientY-y0, dt=Date.now()-t0;
+    if(dt>800) return;
+    if(Math.abs(dx)<60 || Math.abs(dx)<Math.abs(dy)*1.4) return;
+    if(dx<0) nextS(); else prevS();
+  },{passive:true});
+
+  // fullscreen
+  var fsBtn=document.getElementById('fsBtn');
+  function toggleFs(){
+    if(!document.fullscreenElement){ (document.documentElement.requestFullscreen||function(){})().catch&&document.documentElement.requestFullscreen().catch(function(){}); }
+    else { document.exitFullscreen&&document.exitFullscreen(); }
+  }
+  fsBtn.addEventListener('click',toggleFs);
+
+  // deep-link to slide via #n
+  var start=parseInt((location.hash||'').replace('#',''),10);
+  go(isNaN(start)?0:start-1);
+})();
+</script>
+</body>
+</html>

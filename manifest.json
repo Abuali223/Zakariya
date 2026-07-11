@@ -1,12 +1,17 @@
 {
-  "name": "Arab Tili — Gibrid Platforma (PWA)",
-  "short_name": "ArabTili",
-  "start_url": "./index.html",
+  "name": "Iqror Academy",
+  "short_name": "Iqror",
+  "description": "Iqror Academy — natijaga yo'naltirilgan zamonaviy maktab: IT va MED yo'nalishlari, ochiq natijalar.",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0b1020",
-  "theme_color": "#7c6dff",
+  "orientation": "portrait-primary",
+  "background_color": "#155A4E",
+  "theme_color": "#155A4E",
+  "lang": "uz",
   "icons": [
-    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

@@ -1,0 +1,271 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admin: custom claim (admin==true) YOKI users/{uid} hujjatida role=='admin'.
+    // Shu bilan admin panelidan boshqa foydalanuvchilarga admin roli tayinlash ishlaydi.
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Foydalanuvchi shu farzand ID sini o'z hujjatiga qo'shganmi (kabinet egaligi).
+    function ownsChild(sid) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('childIds', []).hasAny([sid]);
+    }
+
+    // Kurator/sinf rahbari: users hujjatida role=='kurator' va shu sinf (classKey)
+    // uning assignedClasses ro'yxatida bo'lса — o'sha sinf davomatini yozadi/o'qiydi.
+    function isKuratorFor(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'kurator'
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedClasses', []));
+    }
+
+    // Fan o'qituvchisi: role=='teacher' va shu sinf uning assignedClasses'ida.
+    function isTeacherForClass(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'teacher'
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedClasses', []));
+    }
+    // O'qituvchiga biriktirilgan fanlar (u faqat shu fan(lar) bahosini yozadi).
+    function teacherSubjects() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('assignedSubjects', [])
+        : [];
+    }
+    // Sinf rahbari (davomat): homeroomClasses ro'yxatiga admin biriktirgan sinflar.
+    // Rol muhim emas — boshlang'ich sinfda (1-4) sinf rahbari o'qituvchi bo'ladi,
+    // 5-11 da kurator bo'ladi. homeroomClasses'ni faqat admin o'rnatadi (self-update
+    // qoidasi buni himoya qiladi), shuning uchun bu ro'yxatda bo'lish — davomat huquqi.
+    function isHomeroomFor(ck) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (ck in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('homeroomClasses', []));
+    }
+    // O'quv ishlari bo'yicha (O'IBDO' / zavuch) — monitoring baholarini tasdiqlaydi.
+    function isZavuch() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role','') == 'zavuch';
+    }
+    // Monitoring hujjati o'qituvchining o'z sinfi va o'z fanigami?
+    function isTeacherOwnDoc(d) {
+      return isTeacherForClass(d.get('classKey','')) && (d.get('subject','') in teacherSubjects());
+    }
+    // UMUMIY xarakteristika/xulosa MUALLIFLARI: admin/zavuch/sinf rahbari/kurator.
+    // Fan o'qituvchisi (faqat assignedClasses, sinf rahbari EMAS) umumiyni yoza olmaydi —
+    // u faqat o'z fani izohini yozadi (subject_notes, isTeacherOwnDoc orqali).
+    function canWriteGeneral(ck) {
+      return isAdmin() || isZavuch() || isHomeroomFor(ck) || isKuratorFor(ck);
+    }
+    // Sinf profilini KO'RADIGAN xodimlar: umumiy mualliflar + o'sha sinf fan o'qituvchisi.
+    function isClassStaff(ck) {
+      return canWriteGeneral(ck) || isTeacherForClass(ck);
+    }
+
+    // Ommaviy student hujjatida BO'LMASLIGI shart bo'lgan maxfiy (PII) maydonlar.
+    // Bular faqat read-locked student_private'ga yoziladi. Bu qoida — himoya qatlami:
+    // mijoz kodida xato bo'lsa ham, shu maydonlar ommaviy hujjatga o'tib ketmaydi.
+    function noPII(d) {
+      return !d.keys().hasAny(['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2']);
+    }
+    // Ommaviy ko'rinadigan ma'lumotlar: hamma o'qiydi, faqat admin yozadi.
+    // Istisno: zavuch (O'IBDO') monitoringni tasdiqlaganda FAQAT 'score' maydonini
+    // yangilay oladi (90+ ro'yxati avtomatik yangilanishi uchun) — boshqa maydonlarga tegolmaydi.
+    match /students/{id} {
+      allow read: if true;
+      allow create: if isAdmin() && noPII(request.resource.data);
+      allow delete: if isAdmin();
+      allow update: if (isAdmin() && noPII(request.resource.data))
+        || (isZavuch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score']));
+    }
+    // Maxfiy shaxsiy ma'lumot (JSHSHIR, ota-ona telefoni, vasiy). Ommaviy student
+    // hujjatidan AJRATILGAN — hujjat id = studentId. Faqat admin/zavuch YOKI shu
+    // farzandni kabinetiga qo'shgan ota-ona o'qiydi. Yozishni faqat admin.
+    match /student_private/{id} {
+      allow read:  if isAdmin() || isZavuch() || ownsChild(id);
+      allow write: if isAdmin();
+    }
+    // Oylik xulosa — sinf rahbari/kurator/zavuch/admin QO'LDA yozadi (ota-onaga).
+    // O'qiydi: shu farzand ota-onasi YOKI o'sha sinf xodimi. Hujjat id = "{sid}__{YYYY-MM}".
+    match /student_summaries/{id} {
+      allow read:   if isClassStaff(resource.data.get('classKey',''))
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if canWriteGeneral(request.resource.data.get('classKey',''));
+      allow update: if canWriteGeneral(resource.data.get('classKey',''))
+                    && canWriteGeneral(request.resource.data.get('classKey',''));
+      allow delete: if canWriteGeneral(resource.data.get('classKey',''));
+    }
+    // O'quvchi PROFILI — choraklik xarakteristika.
+    // (A) FAN IZOHI — har fan o'qituvchisi FAQAT o'z sinfi + o'z fani izohini yozadi.
+    //     Hujjat id = "{sid}__{term}__{subjectSlug}" (term = "2025-2026-q2").
+    //     O'QISH MAXFIY: fan o'qituvchisi FAQAT o'z fani izohini o'qiydi — boshqa
+    //     o'qituvchining izohini ko'ra OLMAYDI. Hammasini faqat admin/zavuch/sinf
+    //     rahbari/kurator (nazorat) va shu farzand ota-onasi ko'radi.
+    match /subject_notes/{id} {
+      allow read:   if canWriteGeneral(resource.data.get('classKey',''))
+                    || isTeacherOwnDoc(resource.data)
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if isAdmin() || isZavuch() || isTeacherOwnDoc(request.resource.data);
+      allow update: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(resource.data) && isTeacherOwnDoc(request.resource.data));
+      allow delete: if isAdmin() || isZavuch() || isTeacherOwnDoc(resource.data);
+    }
+    // (B) UMUMIY XARAKTERISTIKA — sinf rahbari/kurator/zavuch/admin yozadi.
+    //     Hujjat id = "{sid}__{term}".
+    match /characteristics/{id} {
+      allow read:   if isClassStaff(resource.data.get('classKey',''))
+                    || ownsChild(resource.data.get('studentId',''));
+      allow create: if canWriteGeneral(request.resource.data.get('classKey',''));
+      allow update: if canWriteGeneral(resource.data.get('classKey',''))
+                    && canWriteGeneral(request.resource.data.get('classKey',''));
+      allow delete: if canWriteGeneral(resource.data.get('classKey',''));
+    }
+    match /teachers/{id}              { allow read: if true; allow write: if isAdmin(); }
+    match /news/{id}                  { allow read: if true; allow write: if isAdmin(); }
+    match /achievements_school/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /achievements_students/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /settings/{id}              { allow read: if true; allow write: if isAdmin(); }
+
+    // Elektron kundalik — MAXFIY. Baho va davomat voyaga yetmagan o'quvchining shaxsiy
+    // ma'lumoti: faqat admin YOKI shu farzandni kabinetiga qo'shgan ota-ona o'qiydi.
+    match /attendance/{id} {
+      allow read:  if isAdmin() || ownsChild(resource.data.get('studentId',''))
+                   || isKuratorFor(resource.data.get('classKey','')) || isHomeroomFor(resource.data.get('classKey',''));
+      allow write: if isAdmin() || isKuratorFor(request.resource.data.get('classKey','')) || isHomeroomFor(request.resource.data.get('classKey',''));
+    }
+    // Baholar: admin YOKI shu farzand ota-onasi o'qiydi; o'z sinfidagi o'qituvchi ham o'qiydi.
+    // Yozishда o'qituvchi FAQAT o'z fani (subjects mapidagi kalitlar) bahosini o'zgartira oladi.
+    match /grades/{id} {
+      allow read:   if isAdmin() || ownsChild(resource.data.get('studentId','')) || isTeacherForClass(resource.data.get('classKey',''));
+      allow create: if isAdmin() || (isTeacherForClass(request.resource.data.get('classKey',''))
+                       && request.resource.data.get('subjects', {}).keys().hasOnly(teacherSubjects()));
+      allow update: if isAdmin() || (isTeacherForClass(request.resource.data.get('classKey',''))
+                       && request.resource.data.get('subjects', {}).diff(resource.data.get('subjects', {})).affectedKeys().hasOnly(teacherSubjects()));
+    }
+    // Kirish nazorati (yuz terminali → checkins). Ko'prik (camera-bridge) xizmat
+    // hisobi (Admin SDK) orqali yozadi — u qoidalarni chetlab o'tadi. Panelda faqat
+    // admin/zavuch o'qiydi. Mijoz tomonidan yozish taqiqlangan (faqat server yozadi).
+    match /checkins/{id} {
+      allow read:  if isAdmin() || isZavuch();
+      allow write: if isAdmin();
+    }
+
+    // Oylik o'quv to'lovi — hisob-fakturalar. Admin yaratadi/bekor qiladi; to'lov
+    // kelganda «paid» statusini to'lov serveri (Admin SDK) yozadi (qoidalarni chetlab).
+    // O'qiydi: admin/zavuch YOKI shu farzandni kabinetiga qo'shgan ota-ona.
+    match /invoices/{id} {
+      allow read:  if isAdmin() || isZavuch() || ownsChild(resource.data.get('studentId',''));
+      allow write: if isAdmin();
+    }
+    // To'lov jurnali (provayder chaqiruvlari) — faqat admin o'qiydi; server yozadi.
+    match /payments/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    // To'lov sozlamalari (service_id, merchant_id — maxfiy EMAS, to'lov havolasida ko'rinadi).
+    // Maxfiy kalit (secret_key) bu yerda EMAS — u faqat to'lov serverida saqlanadi.
+    // config/* — ochiq sozlamalar (to'lov IDlari, AI server manzili, keySet flag).
+    // Ommaviy o'qiladi, faqat admin yozadi.
+    match /config/{id} { allow read: if true; allow write: if isAdmin(); }
+    // secrets/* — MAXFIY (masalan Anthropic kaliti). Hech qanday mijoz O'QIY OLMAYDI
+    // (admin ham qaytadan ko'ra olmaydi) — faqat server Admin SDK orqali o'qiydi.
+    // Admin faqat YOZADI (kalitni o'rnatadi/almashtiradi).
+    match /secrets/{id} { allow read: if false; allow write: if isAdmin(); }
+
+    // Dars jadvali va uy vazifalari — sinf bo'yicha (shaxsiy PII emas): tizimga kirganlar o'qiydi.
+    match /timetable/{id}  { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /homework/{id}   { allow read: if request.auth != null; allow write: if isAdmin(); }
+
+    // Monitoring baholari — fan o'qituvchisi kiritadi (status='pending'), zavuch
+    // (O'IBDO') tasdiqlaydi (status='approved'). O'qituvchi tasdiqlangan bahoni
+    // o'zgartira olmaydi va o'zi tasdiqlay olmaydi.
+    match /monitoring/{id} {
+      allow read:   if isAdmin() || isZavuch()
+                    || ownsChild(resource.data.get('studentId',''))
+                    || isTeacherForClass(resource.data.get('classKey',''));
+      allow create: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(request.resource.data) && request.resource.data.get('status','') == 'pending');
+      allow update: if isAdmin() || isZavuch()
+                    || (isTeacherOwnDoc(request.resource.data)
+                        && resource.data.get('status','') == 'pending'
+                        && request.resource.data.get('status','') == 'pending');
+      allow delete: if isAdmin() || isZavuch();
+    }
+
+    // Sinflar ro'yxati (admin qo'lда yaratadi — o'quvchi bo'lmasa ham sinf ko'rinadi).
+    // Hamma o'qiydi (dropdown'lar uchun kerak), faqat admin yozadi.
+    match /classes/{id}               { allow read: if true; allow write: if isAdmin(); }
+
+    // Qo'shimcha kontent: galereya, fikrlar, narxlar, qabul bosqichlari, FAQ, tadbirlar.
+    match /gallery/{id}               { allow read: if true; allow write: if isAdmin(); }
+    match /testimonials/{id}          { allow read: if true; allow write: if isAdmin(); }
+    match /plans/{id}                 { allow read: if true; allow write: if isAdmin(); }
+    match /admission_steps/{id}       { allow read: if true; allow write: if isAdmin(); }
+    match /faq/{id}                   { allow read: if true; allow write: if isAdmin(); }
+    match /events/{id}                { allow read: if true; allow write: if isAdmin(); }
+
+    // Arizalar: istalgan foydalanuvchi yuboradi (create), faqat admin o'qiydi/o'chiradi.
+    // Hujjat shakli va o'lchamlari cheklangan — spam va katta axlat hujjatlarning oldini oladi.
+    match /enrollments/{id} {
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() < 200
+                    && request.resource.data.keys().hasOnly(['name','phone','grade','direction','lang','ts','created'])
+                    && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() < 40))
+                    && (!('grade' in request.resource.data) || (request.resource.data.grade is string && request.resource.data.grade.size() < 40))
+                    && (!('direction' in request.resource.data) || (request.resource.data.direction is string && request.resource.data.direction.size() < 100))
+                    && (!('lang' in request.resource.data) || (request.resource.data.lang is string && request.resource.data.lang.size() < 4))
+                    && (!('ts' in request.resource.data) || (request.resource.data.ts is string && request.resource.data.ts.size() < 40));
+      allow read, update, delete: if isAdmin();
+    }
+
+    // O'qituvchilar tanlovi — imtihon savollari. Nomzod savol matnini o'qishi kerak,
+    // shuning uchun ochiq o'qiladi (javob/rubrika saqlanmaydi — AI ekspert sifatida baholaydi).
+    // Faqat admin yozadi; AI-grader xizmati Admin SDK orqali yozadi (qoidalarni chetlab o'tadi).
+    match /exam_questions/{id}        { allow read: if true; allow write: if isAdmin(); }
+
+    // Nomzod arizalari (imtihon javoblari + AI natijasi). Istalgan nomzod yuboradi;
+    // faqat admin/zavuch o'qiydi. AI-grader Admin SDK orqali natijani yozadi.
+    match /applications/{id} {
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() < 200
+                    && request.resource.data.keys().hasOnly(['name','phone','specialty','answers','status','ts','day','created'])
+                    && request.resource.data.status == 'submitted'
+                    && request.resource.data.answers is list
+                    && request.resource.data.answers.size() < 60
+                    && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() < 40))
+                    && (!('specialty' in request.resource.data) || (request.resource.data.specialty is string && request.resource.data.specialty.size() < 120));
+      allow read, update, delete: if isAdmin() || isZavuch();
+    }
+
+    // Foydalanuvchilar: Gmail bilan kirib o'z rolini tanlaydi; rolni faqat admin o'zgartiradi.
+    match /users/{uid} {
+      allow read:   if request.auth != null && (request.auth.uid == uid || isAdmin());
+      // O'zi faqat ota-ona yoki o'quvchi rolini tanlaydi. O'qituvchi/kurator/zavuch
+      // kabi rollarни faqat admin tayinlaydi (quyidagi update qoidаsи isAdmin orqali).
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.role in ['parent','student']
+                    && request.resource.data.verified == false;
+      // Egasi o'z hujjatini yangilay oladi (masalan farzandi ID sini), lekin rol,
+      // tasdiqlangan holat va biriktirilgan sinflarni o'zgartira olmaydi — faqat admin.
+      allow update: if isAdmin() ||
+                    (request.auth != null && request.auth.uid == uid
+                     && request.resource.data.role == resource.data.role
+                     && request.resource.data.verified == resource.data.verified
+                     && request.resource.data.get('assignedClasses', []) == resource.data.get('assignedClasses', [])
+                     && request.resource.data.get('assignedSubjects', []) == resource.data.get('assignedSubjects', [])
+                     && request.resource.data.get('homeroomClasses', []) == resource.data.get('homeroomClasses', []));
+      allow delete: if isAdmin();
+    }
+
+    // Qolgan hamma narsa taqiqlangan.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
