@@ -2063,7 +2063,11 @@ addEventListener('hashchange', ()=>route(true));
     import(`${V}/firebase-analytics.js`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
 
     let db=null, auth=null;
-    try{ fsMod = await import(`${V}/firebase-firestore.js`); db = fsMod.getFirestore(app); }catch(e){}
+    try{ fsMod = await import(`${V}/firebase-firestore.js`);
+      // Offline persistence: internetsiz ko'rilgan ma'lumot keshda saqlanadi, ulanishда yangilanadi
+      try{ db = fsMod.initializeFirestore(app, { localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }) }); }
+      catch(e){ db = fsMod.getFirestore(app); }
+    }catch(e){}
     try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app);
       // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
       try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}

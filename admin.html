@@ -298,7 +298,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
@@ -313,7 +313,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
-const db = getFirestore(app);
+// OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
+// saqlanadi va internet qaytganda AVTOMATIK bazaga sync bo'ladi (ilova yopilsa ham).
+// Xususiy rejim/qo'llab-quvvatlamaydigan brauzerlarda oddiy (memory) rejimga tushamiz.
+let db;
+try{ db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+catch(e){ db = getFirestore(app); }
 // Rasmni Storage'ga yuklaydi. Storage SDK faqat kerak bo'lganda (rasm yuklashда) yuklanadi.
 let _storage=null;
 async function uploadImage(folder, file){
