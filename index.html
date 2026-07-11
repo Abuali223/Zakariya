@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#155A4E">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
+<script defer src="/vendor/qr/qrcode.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Iqror Academy">
 <meta property="og:title" content="Iqror Academy">
@@ -973,6 +974,7 @@ const T = {
     kab_mon_title:"Monitoring baholari",kab_mon_loading:"Monitoring yuklanmoqda…",kab_mon_none:"Hozircha tasdiqlangan monitoring bahosi yo‘q.",
     kab_ts_title:"O‘qituvchi xulosasi",kab_ts_loading:"Yuklanmoqda…",kab_ts_note:"Sinf rahbari / fan o‘qituvchisi tomonidan yozilgan.",
     kab_pf_title:"Choraklik xarakteristika",kab_pf_general:"Umumiy xarakteristika",kab_pf_subjects:"Fan o‘qituvchilari izohi",kab_pf_note:"Sinf rahbari va fan o‘qituvchilari tomonidan to‘ldiriladi.",
+    kab_dl:"📄 Rasmiy profilni yuklab olish",kab_dl_hint:"Farzandingizning to‘liq rasmiy profili (PDF) — QR orqali tekshiriladi.",kab_dl_wait:"Tayyorlanmoqda…",
     kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
@@ -1089,6 +1091,7 @@ const T = {
     kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
     kab_ts_title:"Отзыв учителя",kab_ts_loading:"Загрузка…",kab_ts_note:"Написано классным руководителем / учителем.",
     kab_pf_title:"Четвертная характеристика",kab_pf_general:"Общая характеристика",kab_pf_subjects:"Отзывы учителей-предметников",kab_pf_note:"Заполняется классным руководителем и учителями-предметниками.",
+    kab_dl:"📄 Скачать официальный профиль",kab_dl_hint:"Полный официальный профиль ребёнка (PDF) — проверяется по QR.",kab_dl_wait:"Готовится…",
     kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
@@ -1596,7 +1599,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1604,7 +1607,8 @@ function renderKabinet(){
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
-  if(s){ renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+  if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
+    renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
 }
 // Choraklik xarakteristika — umumiy + fan izohlari (Firestore'dan to'g'ridan-to'g'ri)
 async function renderKabProfile(studentId){
@@ -1634,6 +1638,87 @@ async function renderKabProfile(studentId){
   }).join('');
   box.innerHTML = `<div class="kab-att-card"><div class="subs-l">📋 ${esc(t.kab_pf_title)}</div>${blocks}
     <p class="small muted" style="margin:14px 0 0;border-top:1px dashed var(--border);padding-top:10px">${esc(t.kab_pf_note)}</p></div>`;
+}
+// Hujjatni bosib chiqarish/PDF (yangi oyna, aks holda iframe)
+function printDoc(html){
+  try{ const w=window.open('','_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{w.print();}catch(e){} },500); return; } }catch(e){}
+  const f=document.createElement('iframe'); f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  f.onload=()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} setTimeout(()=>f.remove(),1500); };
+  document.body.appendChild(f); f.srcdoc=html;
+}
+// Ota-ona kabinetidan RASMIY PROFILNI yuklab olish (QR bilan) — faqat o'zi o'qiy oladigan ma'lumot
+async function downloadParentProfile(s, btn){
+  const t=T[lang], FB=window.IqrorFB; if(!FB||!s) return;
+  const old=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent=t.kab_dl_wait; }
+  try{
+    const sid=s.id;
+    const [priv, att, mon, grd, chars, notes] = await Promise.all([
+      FB.getStudentPrivate(sid), FB.getAttendance(sid), FB.getMonitoring(sid), FB.getGrades(sid), FB.getCharacteristics(sid), FB.getSubjectNotes(sid)
+    ]);
+    const P=(k)=>{ const v=priv&&priv[k]; return (v==null||v==='')?'':String(v); };
+    const fmtBD=(v)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); return m?`${m[3]}.${m[2]}.${m[1]}`:(v||'—'); };
+    const parentLine=(nm,wk)=>{ const a=[P(nm),P(wk)].filter(Boolean).join(' — '); return a||'—'; };
+    const fmtWhen=(ts)=>{ try{ const d=ts&&ts.toDate?ts.toDate():(ts instanceof Date?ts:null); return d?d.toLocaleDateString('ru-RU'):''; }catch(e){ return ''; } };
+    const clsName=`${gradeLbl(s.g)}${s.cls?' «'+s.cls+'»':''} · ${s.lng==='ru'?'Rus':'O‘zbek'}`;
+    const total=att?(att.total||0):0, present=att?(att.present||0):0, late=att?(att.late||0):0, absent=att?(att.absent||0):0;
+    const attPct=total?Math.round((present+late)/total*100):null;
+    const monBy={}; (mon||[]).forEach(m=>{ if(m&&typeof m.score==='number'){ (monBy[m.subject||'—']=monBy[m.subject||'—']||[]).push(m.score); } });
+    const monRows=Object.keys(monBy).sort().map(sub=>{ const a=monBy[sub]; const avg=Math.round(a.reduce((x,y)=>x+y,0)/a.length); return `<tr><td>${esc(sub)}</td><td style="text-align:center">${avg}</td></tr>`; }).join('');
+    const subs=(grd&&grd.subjects)||{}; const qs=['1','2','3','4'];
+    const gBody=Object.keys(subs).sort().map(sub=>{ const q=subs[sub]||{}; const nums=qs.map(k=>q[k]).filter(v=>typeof v==='number'); const avg=nums.length?(nums.reduce((x,y)=>x+y,0)/nums.length).toFixed(1):'—'; return `<tr><td>${esc(sub)}</td>${qs.map(k=>`<td style="text-align:center">${q[k]==null?'—':esc(String(q[k]))}</td>`).join('')}<td style="text-align:center"><b>${avg}</b></td></tr>`; }).join('');
+    const gradesHtml=gBody?`<table class="rep-t"><thead><tr><th>Fan</th><th>1-ch</th><th>2-ch</th><th>3-ch</th><th>4-ch</th><th>O‘rt.</th></tr></thead><tbody>${gBody}</tbody></table>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
+    const QN={q1:'1-chorak',q2:'2-chorak',q3:'3-chorak',q4:'4-chorak'};
+    const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${QN[q]||q} · ${p.join('-')}`; };
+    const stamp=(when)=>{ const w=fmtWhen(when); return w?` <span class="small muted">(${esc(w)})</span>`:''; };
+    const cList=(chars||[]).filter(x=>x&&String(x.text||'').trim());
+    const nList=(notes||[]).filter(x=>x&&String(x.text||'').trim());
+    const genByTerm={}; cList.forEach(x=>genByTerm[x.term||'']={text:String(x.text),when:x.updatedAt});
+    const notesByTerm={}; nList.forEach(x=>{ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text),when:x.updatedAt}); });
+    const terms=[...new Set([...Object.keys(genByTerm),...Object.keys(notesByTerm)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
+    const charHTML=terms.length?terms.map(term=>{
+      const g=genByTerm[term]; const gen=g?`<div style="margin:4px 0 8px"><span class="small" style="font-weight:700;color:#586459">Umumiy:</span> <span style="white-space:pre-wrap">${esc(g.text)}</span>${stamp(g.when)}</div>`:'';
+      const ns=(notesByTerm[term]||[]).sort((a,b)=>a.subject.localeCompare(b.subject));
+      const tbl=ns.length?`<table class="rep-t"><tbody>${ns.map(n=>`<tr><td style="width:32%;color:#586459">${esc(n.subject)}</td><td style="white-space:pre-wrap">${esc(n.text)}${stamp(n.when)}</td></tr>`).join('')}</tbody></table>`:'';
+      return `<div style="margin:8px 0 12px"><div class="small" style="font-weight:700;color:#155A4E;margin-bottom:4px">${esc(termLbl(term))}</div>${gen}${tbl}</div>`;
+    }).join(''):'<div class="small muted">Yozuv yo‘q.</div>';
+    const ach=(STUDENT_ACH||[]).filter(a=>a && String(a.name||'')===String(s.name));
+    const achHTML=ach.length?`<ul style="margin:4px 0;padding-left:20px">${ach.map(a=>`<li style="margin:3px 0">${a.year?`<b>${esc(String(a.year))}:</b> `:''}${esc((lang==='ru'?a.ru:a.uz)||a.uz||'')}</li>`).join('')}</ul>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
+    const today=new Date(), pad=n=>String(n).padStart(2,'0');
+    const docNo=`IQR-${sid}-${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+    const verifyURL=`${location.origin}/verify?id=${encodeURIComponent(sid)}`;
+    let qrURL=''; try{ if(typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(verifyURL); q.make(); qrURL=q.createDataURL(4,10); } }catch(e){}
+    const bio=[
+      ['O‘quvchi ID',sid],['Familiya, ism, sharif',s.name||'—'],['Tug‘ilgan sana',fmtBD(P('birthDate'))],['JSHSHIR',P('pinfl')||'—'],['Metrika seriyasi',P('metrika')||'—'],
+      ['Sinf',clsName],['Yo‘nalish',s.tr||'—'],['Qaysi maktabdan kelgan',P('prevSchool')||'—'],['Yashash manzili',P('address')||'—'],['Kim bilan yashaydi',P('livesWith')||'—'],
+      ['Sog‘liq holati',P('health')||'—'],['Qiziqishlari',P('interests')||'—'],['To‘garaklar',P('clubs')||'—'],['Vasiy',P('guardian')||'—'],
+      ['Ota',parentLine('fatherName','fatherWork')],['Ona',parentLine('motherName','motherWork')],['Telefon (ota)',P('parentPhone')||'—'],['Telefon (ona)',P('parentPhone2')||'—']
+    ];
+    const emblem=`<svg width="46" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
+    const profInner=`
+      <div class="p-head">${emblem}<div><div class="p-name">IQROR ACADEMY</div><div class="p-sub">IT va tibbiyot yo‘nalishlari bo‘yicha xususiy maktab</div><div class="p-addr">${esc(location.host)}</div></div></div>
+      <div class="p-title">O‘QUVCHI PROFILI — RASMIY MA’LUMOTNOMA</div>
+      <div class="p-meta"><span>Hujjat №: <b>${esc(docNo)}</b></span><span>Sana: <b>${today.toLocaleDateString('ru-RU')}</b></span></div>
+      <div class="p-sec">1. Shaxsiy ma’lumotlar</div>
+      <table class="rep-t"><tbody>${bio.map(x=>`<tr><td style="width:42%;color:#586459">${esc(x[0])}</td><td><b>${esc(x[1])}</b></td></tr>`).join('')}</tbody></table>
+      <div class="p-sec">2. O‘zlashtirish ko‘rsatkichlari</div>
+      <table class="rep-t"><tbody><tr><td style="width:42%">Umumiy davomat</td><td><b>${attPct==null?'—':attPct+'%'}</b> <span class="small muted">(kelgan ${present}, kechikkan ${late}, kelmagan ${absent}; jami ${total} kun)</span></td></tr></tbody></table>
+      <div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Monitoring — fan bo‘yicha o‘rtacha ball</div>
+      ${monRows?`<table class="rep-t"><thead><tr><th>Fan</th><th style="text-align:center">Ball</th></tr></thead><tbody>${monRows}</tbody></table>`:'<div class="small muted">Ma’lumot yo‘q.</div>'}
+      <div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Choraklik baholar</div>
+      ${gradesHtml}
+      <div class="p-sec">3. Xarakteristika (choraklik)</div>
+      ${charHTML}
+      <div class="p-sec">4. Yutuqlar</div>
+      ${achHTML}
+      <div class="p-foot">
+        <div class="p-qr">${qrURL?`<img src="${qrURL}" alt="QR" style="width:110px;height:110px;image-rendering:pixelated">`:''}<div class="small muted" style="max-width:170px">Haqiqiyligini tekshirish uchun QR-kodni skaner qiling yoki:<br>${esc(verifyURL)}</div></div>
+        <div class="p-sign"><div class="p-sline">Direktor</div><div class="p-sline" style="margin-top:26px">Sinf rahbari</div><div class="small muted" style="margin-top:20px">M.O‘. (muhr o‘rni)</div></div>
+      </div>
+      <div class="small muted" style="text-align:center;margin-top:12px;border-top:1px dashed #ccc;padding-top:8px">Ushbu hujjat Iqror Academy axborot tizimi orqali shakllantirildi · ${esc(docNo)}</div>`;
+    const profStyle=`<style>@page{size:A4;margin:14mm}body{font-family:Georgia,'Times New Roman',serif;color:#20302B;margin:0;padding:20px;font-size:12.5px;line-height:1.45}.p-head{display:flex;align-items:center;gap:14px;border-bottom:3px double #1F9982;padding-bottom:10px}.p-name{font-size:24px;font-weight:700;color:#155A4E;letter-spacing:.5px}.p-sub{font-size:12px;color:#586459}.p-addr{font-size:11px;color:#7c8a80}.p-title{text-align:center;font-size:15px;font-weight:700;color:#155A4E;margin:14px 0 4px}.p-meta{display:flex;justify-content:space-between;font-size:12px;color:#40514a;border-bottom:1px solid #e3ddd0;padding-bottom:8px;margin-bottom:6px}.p-sec{font-weight:700;color:#fff;background:#1F9982;padding:5px 10px;border-radius:5px;margin:16px 0 8px;font-size:13px}.rep-t{width:100%;border-collapse:collapse;margin:4px 0}.rep-t td,.rep-t th{border:1px solid #d7ddd4;padding:6px 9px;text-align:left;vertical-align:top}.rep-t th{background:#eef5f2;font-weight:700}.small{font-size:11px}.muted{color:#6b7d76}.p-foot{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-top:22px;border-top:2px solid #1F9982;padding-top:14px}.p-qr{display:flex;gap:12px;align-items:flex-start}.p-sign{text-align:right;min-width:230px}.p-sline{border-bottom:1px solid #40514a;min-width:220px;display:inline-block;padding-top:14px;font-size:12px;color:#40514a}ul{font-size:12px}</style>`;
+    printDoc(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — rasmiy profil</title>${profStyle}</head><body>${profInner}</body></html>`);
+  }catch(e){ alert('Xatolik: '+(e&&e.message||e)); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
 }
 // Oylik xulosa — o'qituvchi/sinf rahbari QO'LDA yozadi; kabinet uni Firestore'dan o'qiydi.
 async function renderKabTeacherSummary(studentId){
@@ -2089,6 +2174,11 @@ addEventListener('hashchange', ()=>route(true));
         try{ const snap = await getDocs(query(collection(db,'subject_notes'), where('studentId','==',studentId)));
           return snap.docs.map(d=>({id:d.id, ...d.data()}));
         }catch(e){ return null; }
+      },
+      async getStudentPrivate(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { doc, getDoc } = fsMod;
+        try{ const s=await getDoc(doc(db,'student_private',studentId)); return s.exists()?s.data():{}; }catch(e){ return null; }
       },
       async getPayConfig(){
         if(!db||!fsMod) return null;
