@@ -28,12 +28,16 @@ HOZIR (Firebase / Google, chet elда)          KEYIN (aHost VPS, O'zbekistон�
 | # | Bosqich | Kim | Holat |
 |---|---------|-----|-------|
 | 1 | **Firebase to'liq export (zaxira)** — 24 kolleksiya, 3 auth, 30 rasm (17 MB) | 🤖 Claude | ✅ Tayyor |
-| 2 | **PostgreSQL sxema** (`schema.sql`) | 🤖 Claude | 🔄 Ishда |
-| 3 | **RLS** — Firestore Rules → Postgres qoidalari (`rls.sql`) | 🤖 Claude | ⏳ |
-| 4 | **Import skriptlari** (JSON → Postgres, rasm → Storage, auth) | 🤖 Claude | ⏳ |
-| 5 | **Frontend adapter** (Firebase SDK → Supabase client) | 🤖 Claude | ⏳ |
-| 6 | **VPS o'rnatish qo'llanmasi** (Supabase Docker) | 🤖 Claude (yozadi) / 👤 User (ishga tushiradi) | ⏳ |
-| 7 | **Import + parallel sinov + cutover** | 👤 User (ishga tushiradi) / 🤖 Claude (yo'naltiradi) | ⏳ |
+| 2 | **PostgreSQL sxema** (`schema.sql`) — 31 jadval | 🤖 Claude | ✅ Tayyor (0 xato) |
+| 3 | **RLS** — Firestore Rules → Postgres qoidalari (`rls.sql`) | 🤖 Claude | ✅ Tayyor (test 25/25) |
+| 4 | **Import skriptlari** (JSON → Postgres, rasm → Storage, auth, URL rewrite) | 🤖 Claude | ✅ Tayyor (276 yozuv) |
+| 5 | **Frontend adapter** (Firebase SDK → Supabase shim, `sb/`) | 🤖 Claude | ✅ Tayyor (shim-test 17/17) |
+| 6 | **VPS o'rnatish qo'llanmasi** (Supabase Docker) | 🤖 Claude (yozadi) / 👤 User (ishga tushiradi) | ✅ Yozildi |
+| 7 | **Import + parallel sinov + cutover** | 👤 User (ishga tushiradi) / 🤖 Claude (yo'naltiradi) | ⏳ VPS kutmoqda |
+
+**Kod tomoni 100% tayyor.** Frontend Firebase yuzasi (Firestore 20 + Auth 15 + Storage 4 +
+App/Analytics) `sb/` shimlar bilan to'liq qoplangan. Cutover — bitta buyruq
+(`switch-backend.cjs`). Batafsil: `CUTOVER-CHECKLIST.md`.
 
 **Chegara:** Claude aHost VPS'ga kira olmaydi (xavfsizlik). Barcha kod/skript/qo'llanma
 tayyorlanadi; VPS'даги buyruqlarни foydalanuvchi ishga tushiradi va saytни sinaydi.

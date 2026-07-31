@@ -70,14 +70,27 @@ psql "$PGURL" -c "select count(*) from student_private;" # 32
 ```
 RLS ishlashini `test-rls.cjs` bilan sinash mumkin (test roli bilan).
 
-## 7. Frontend'ni Supabase'ga ulash
-- `index.html` / `admin.html` da Firebase o'rniga **Supabase adapter** (keyingi bosqichda
-  men beraman) sozlanadi:
-  ```js
-  const SUPABASE_URL = "https://api.iqror.uz";
-  const SUPABASE_ANON_KEY = "<.env dagi ANON_KEY>";
-  ```
-- Rasm URL'lari Supabase Storage manzillariga yangilanadi.
+## 7. Frontend'ni Supabase'ga ulash  (shimlar TAYYOR — `sb/` papkada)
+Frontend Firebase SDK o'rniga `sb/` ichidagi **shim**larni ishlatadi (bir xil API,
+lekin Supabase ustida). Cutover = bitta buyruq (qaytariladi).
+```bash
+cp sb/sb-config.example.js sb/sb-config.js     # SUPABASE_URL + ANON_KEY + BUCKET to'ldiring
+node migration/switch-backend.cjs supabase --dry   # avval ko'ring
+node migration/switch-backend.cjs supabase         # importlarni /sb ga o'tkazadi
+# rollback kerak bo'lsa:  node migration/switch-backend.cjs firebase
+```
+`/sb/` papka frontend bilan birga deploy qilinsin (index.html yonida `/sb/...`).
+
+Rasm URL'larини (eski Firebase → Supabase) import'dan keyin bir marta yangilang:
+```bash
+DRY=1 SUPABASE_URL=https://api.iqror.uz STORAGE_BUCKET=public \
+  DATABASE_URL="$PGURL" node migration/rewrite-storage-urls.cjs   # ko'rish
+SUPABASE_URL=https://api.iqror.uz STORAGE_BUCKET=public \
+  DATABASE_URL="$PGURL" node migration/rewrite-storage-urls.cjs   # yozish
+```
+
+Supabase dashboard'да yoqing: Email + Google + **Anonymous** kirish, `public` Storage
+bucket (ochiq), SMTP. To'liq ro'yxat — **`migration/CUTOVER-CHECKLIST.md`**.
 
 ## 8. Statik sayt (frontend) hosting
 Ikki variant:

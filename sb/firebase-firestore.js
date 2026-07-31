@@ -1,24 +1,16 @@
 // =====================================================================
-// sb-shim.js — Firestore (modular) API'ni Supabase ustida taqlid qiladi.
-// Maqsad: mavjud frontend kodini (collection/doc/getDoc/getDocs/setDoc/
-// addDoc/updateDoc/deleteDoc/query/where/orderBy/writeBatch/onSnapshot/
-// serverTimestamp/deleteField) MINIMAL o'zgarish bilan Supabase'ga ulash.
-// Ustun nomlari Firestore maydonlari bilan bir xil bo'lgani uchun .data()
-// qaytargan qator ≈ Firestore hujjati.
+// firebase-firestore.js (SHIM) — Firestore (modular) API'sini Supabase ustida taqlid.
+// ⚠️ Bu Firebase EMAS — Supabase adapteri. Nomi shu (firebase-firestore.js) chunki
+// frontend importlari ${V}/firebase-firestore.js ni chaqiradi; V -> /sb bo'lganda
+// shu fayl yuklanadi. Ustun nomlari Firestore maydonlari bilan bir xil bo'lgani
+// uchun qaytgan qator ≈ Firestore hujjati.
 //
-// Ulash: index.html/admin.html dagi
-//    import { ... } from ".../firebase-firestore.js"
-// o'rniga:
-//    import { ... } from "./migration/sb-shim.js"
-// va boshida: initSupabase(SUPABASE_URL, SUPABASE_ANON_KEY)
-//
-// ⚠️ Jonli Supabase'da PARALLEL-SINOV bosqichida tekshiriladi va aniqlanadi.
+// Qoplaydi: getFirestore, initializeFirestore, persistentLocalCache,
+// persistentMultipleTabManager, collection, doc, query, where, orderBy, limit,
+// getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, deleteField,
+// serverTimestamp, writeBatch, onSnapshot.
 // =====================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-let _sb = null;
-export function initSupabase(url, anonKey) { _sb = createClient(url, anonKey); return _sb; }
-export function supabase() { return _sb; }
+import { supabase } from "./_core.js";
 
 // db handle (Firestore init funksiyalarini bekorga chiqaramiz)
 export function getFirestore() { return { __sb: true }; }
@@ -78,12 +70,12 @@ function applyCons(q, cons) {
 
 // ---- reads ----
 export async function getDoc(ref) {
-  const { data, error } = await _sb.from(ref._t).select("*").eq("id", ref._id).maybeSingle();
+  const { data, error } = await supabase().from(ref._t).select("*").eq("id", ref._id).maybeSingle();
   if (error && error.code !== "PGRST116") throw error;
   return { id: ref._id, exists: () => !!data, data: () => wrapRow(data) };
 }
 export async function getDocs(refOrQuery) {
-  let q = _sb.from(refOrQuery._t).select("*");
+  let q = supabase().from(refOrQuery._t).select("*");
   if (refOrQuery._kind === "query") q = applyCons(q, refOrQuery._cons);
   const { data, error } = await q;
   if (error) throw error;
@@ -94,21 +86,21 @@ export async function getDocs(refOrQuery) {
 
 // ---- writes ----
 export async function setDoc(ref, data, _opts) {
-  const { error } = await _sb.from(ref._t).upsert({ id: ref._id, ...prep(data) }, { onConflict: "id" });
+  const { error } = await supabase().from(ref._t).upsert({ id: ref._id, ...prep(data) }, { onConflict: "id" });
   if (error) throw error;
 }
 export async function addDoc(collRef, data) {
   const id = (globalThis.crypto?.randomUUID?.() || Date.now() + Math.random().toString(36).slice(2));
-  const { error } = await _sb.from(collRef._t).insert({ id, ...prep(data) });
+  const { error } = await supabase().from(collRef._t).insert({ id, ...prep(data) });
   if (error) throw error;
   return { id };
 }
 export async function updateDoc(ref, data) {
-  const { error } = await _sb.from(ref._t).update(prep(data)).eq("id", ref._id);
+  const { error } = await supabase().from(ref._t).update(prep(data)).eq("id", ref._id);
   if (error) throw error;
 }
 export async function deleteDoc(ref) {
-  const { error } = await _sb.from(ref._t).delete().eq("id", ref._id);
+  const { error } = await supabase().from(ref._t).delete().eq("id", ref._id);
   if (error) throw error;
 }
 export function writeBatch(_db) {
@@ -134,9 +126,9 @@ export function onSnapshot(refOrQuery, cb) {
   emit();
   let ch = null;
   try {
-    ch = _sb.channel("c_" + refOrQuery._t + "_" + Math.random().toString(36).slice(2))
+    ch = supabase().channel("c_" + refOrQuery._t + "_" + Math.random().toString(36).slice(2))
       .on("postgres_changes", { event: "*", schema: "public", table: refOrQuery._t }, emit)
       .subscribe();
   } catch (e) {}
-  return () => { alive = false; try { ch && _sb.removeChannel(ch); } catch (e) {} };
+  return () => { alive = false; try { ch && supabase().removeChannel(ch); } catch (e) {} };
 }

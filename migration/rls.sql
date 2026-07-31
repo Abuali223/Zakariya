@@ -7,8 +7,14 @@
 -- =====================================================================
 create schema if not exists app;
 
+-- app.uid(): Supabase'да JWT 'sub' (auth.uid) dan, TEST'да app.uid GUC dan o'qiydi.
+-- Shu tufayli rls.sql HAM jonli Supabase'да, HAM sinovда o'zgartirishsiz ishlaydi.
 create or replace function app.uid() returns text language sql stable as $$
-  select nullif(current_setting('app.uid', true), '')
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif((nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'), ''),
+    nullif(current_setting('app.uid', true), '')
+  )
 $$;
 create or replace function app.is_admin() returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role = 'admin')
