@@ -1,0 +1,19 @@
+# /etc/systemd/system/iqror-pay.service — To'lov serveri doimiy ishlaydi
+# O'rnatish:
+#   cp migration/deploy/iqror-pay.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now iqror-pay
+[Unit]
+Description=Iqror to'lov serveri (Click/Uzum -> Supabase)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/iqror
+ExecStart=/usr/bin/node payments/index.cjs
+Restart=always
+RestartSec=3
+User=iqror
+Group=iqror
+
+[Install]
+WantedBy=multi-user.target
