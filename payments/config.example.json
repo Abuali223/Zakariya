@@ -1,5 +1,8 @@
 {
-  "serviceAccount": "./service-account.json",
+  "backend": "supabase",
+  "supabaseUrl": "https://api.iqror.uz",
+  "serviceRoleKey": "PASTE_SERVICE_ROLE_KEY (Supabase .env) — MAXFIY",
+  "serviceAccount": "./service-account.json (faqat backend=firebase bo'lganda)",
   "port": 8790,
   "click": {
     "serviceId": "CLICK_SERVICE_ID",

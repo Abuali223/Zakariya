@@ -23,12 +23,10 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
 
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
-initializeApp({ credential: cert(require(path.resolve(__dirname, CFG.serviceAccount))) });
-const db = getFirestore();
+// Data qatlami: CFG.backend='supabase' -> Supabase, aks holda Firebase (rollback).
+const { db } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
 const MODEL = CFG.model || 'claude-opus-4-8';
 const RISK_ATT = Number(CFG.riskAttendance) || 80;   // davomat % — shundan past = xavf
 const RISK_SCORE = Number(CFG.riskScore) || 60;      // umumiy ball — shundan past = xavf

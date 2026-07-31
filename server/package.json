@@ -1,0 +1,9 @@
+{
+  "name": "iqror-server-sb",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Iqror server xizmatlari uchun Supabase data qatlami (sb-admin) + backend tanlagich",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

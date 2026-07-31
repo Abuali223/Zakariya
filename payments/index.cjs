@@ -28,12 +28,9 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
-
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
-initializeApp({ credential: cert(require(path.resolve(__dirname, CFG.serviceAccount))) });
-const db = getFirestore();
+// Data qatlami: CFG.backend='supabase' -> Supabase service_role, aks holda Firebase (rollback).
+const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
 const CLICK = CFG.click || {};        // { serviceId, secretKey, merchantId }
 const UZUM  = CFG.uzum  || {};        // { secret, ... }
 

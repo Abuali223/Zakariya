@@ -35,9 +35,14 @@ HOZIR (Firebase / Google, chet elда)          KEYIN (aHost VPS, O'zbekistон�
 | 6 | **VPS o'rnatish qo'llanmasi** (Supabase Docker) | 🤖 Claude (yozadi) / 👤 User (ishga tushiradi) | ✅ Yozildi |
 | 7 | **Import + parallel sinov + cutover** | 👤 User (ishga tushiradi) / 🤖 Claude (yo'naltiradi) | ⏳ VPS kutmoqda |
 
-**Kod tomoni 100% tayyor.** Frontend Firebase yuzasi (Firestore 20 + Auth 15 + Storage 4 +
-App/Analytics) `sb/` shimlar bilan to'liq qoplangan. Cutover — bitta buyruq
-(`switch-backend.cjs`). Batafsil: `CUTOVER-CHECKLIST.md`.
+**Kod tomoni 100% tayyor.**
+- *Frontend:* Firebase yuzasi (Firestore 20 + Auth 15 + Storage 4 + App/Analytics)
+  `sb/` shimlar bilan qoplangan. Cutover — bitta buyruq (`switch-backend.cjs`).
+- *Server:* `ai-assistant` + `payments` Firebase Admin o'rniga Supabase service_role
+  (`server/sb-admin.js` + `backend.js`, `config.backend` bilan tanlanadi) — biznes-mantiq
+  o'zgarmadi. `ai-grader` kerak emas; `functions/` o'rniga `storage-rls.sql`.
+- *Sinovlar (VPS'siz):* frontend-shim 17/17, server-shim 13/13, to'lov oqimi 9/9,
+  RLS 25/25 — hammasi PASS. Batafsil: `CUTOVER-CHECKLIST.md`.
 
 **Chegara:** Claude aHost VPS'ga kira olmaydi (xavfsizlik). Barcha kod/skript/qo'llanma
 tayyorlanadi; VPS'даги buyruqlarни foydalanuvchi ishga tushiradi va saytни sinaydi.

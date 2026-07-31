@@ -42,8 +42,9 @@ docker compose ps          # hammasi 'running/healthy' bo'lishi kerak
 ```bash
 # Postgres'ga ulanish (Supabase ichidagi db)
 export PGURL="postgresql://postgres:PAROL@localhost:5432/postgres"
-psql "$PGURL" -f schema.sql      # 31 jadval
-psql "$PGURL" -f rls.sql         # 112 xavfsizlik siyosati
+psql "$PGURL" -f schema.sql        # 31 jadval
+psql "$PGURL" -f rls.sql           # 112 xavfsizlik siyosati
+psql "$PGURL" -f storage-rls.sql   # Storage: hamma o'qiydi, faqat admin yuklaydi
 ```
 
 ## 4. Ma'lumotni yuklash (JSON zaxira → Postgres)
@@ -91,6 +92,19 @@ SUPABASE_URL=https://api.iqror.uz STORAGE_BUCKET=public \
 
 Supabase dashboard'да yoqing: Email + Google + **Anonymous** kirish, `public` Storage
 bucket (ochiq), SMTP. To'liq ro'yxat — **`migration/CUTOVER-CHECKLIST.md`**.
+
+## 7b. Server xizmatlari (AI yordamchi + to'lov)
+Bu ikki Node xizmati Firebase Admin o'rniga Supabase service_role ishlatadi
+(`server/backend.js`, `config.backend="supabase"`). Biznes-mantiq o'zgarmadi.
+```bash
+cd server && npm install                       # @supabase/supabase-js
+cp ai-assistant/config.example.json ai-assistant/config.json   # to'ldiring (serviceRoleKey, anthropicKey)
+cp payments/config.example.json     payments/config.json       # to'ldiring (serviceRoleKey, click.secretKey)
+node ai-assistant/index.cjs serve              # :8791  /chat /student-summary /risk
+node payments/index.cjs                        # :8790  /click/prepare /click/complete /uzum
+```
+`ai-grader/` **kerak emas**. `functions/` — faqat Firebase (Supabase'da `storage-rls.sql`
++ `ai-assistant` o'rnini bosadi). Xizmatlarni `systemd` bilan doimiy ishga tushiring.
 
 ## 8. Statik sayt (frontend) hosting
 Ikki variant:
