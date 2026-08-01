@@ -20,6 +20,10 @@ function mapUser(u) {
     displayName: md.displayName || md.full_name || md.name || null,
     emailVerified: !!(u.email_confirmed_at || u.confirmed_at),
     isAnonymous: !!u.is_anonymous,
+    // Firebase moslik: Supabase JWT'da 'admin' custom-claim yo'q — rol users jadvalidan
+    // aniqlanadi. Shu sabab claims'ni bo'sh qaytaramiz -> kod users.role fallback'iga o'tadi.
+    async getIdToken() { try { const { data } = await supabase().auth.getSession(); return (data.session && data.session.access_token) || ""; } catch (_) { return ""; } },
+    async getIdTokenResult() { let t = ""; try { const { data } = await supabase().auth.getSession(); t = (data.session && data.session.access_token) || ""; } catch (_) {} return { token: t, claims: {} }; },
     _raw: u,
   };
 }
