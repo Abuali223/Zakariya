@@ -233,7 +233,7 @@
 
   /* ---- NEWS ---- */
   .cards-4{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
-  .news{background:var(--white);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:.18s}
+  .news{background:var(--white);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:.18s;cursor:pointer}
   .news:hover{border-color:var(--teal-2);box-shadow:var(--shadow);transform:translateY(-2px)}
   .news .thumb{height:160px;display:grid;place-items:center;background:linear-gradient(150deg,#1C6E5F,#154C44)}
   .news .thumb svg{width:44px;height:54px;opacity:.9}
@@ -336,7 +336,15 @@
   .news .row{display:flex;align-items:center;gap:10px}
   .news .tag{background:var(--it-bg);color:var(--teal);font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:999px}
   .news .date{font-size:12.5px;color:var(--muted)}
-  .news h3{font-weight:700;font-size:16.5px;line-height:1.4}
+  .news h3{font-weight:700;font-size:16.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .news .more{margin-top:auto;color:var(--teal);font-weight:700;font-size:13.5px}
+  .news:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(0,0,0,.08)}
+  .vid-box.news-box{width:min(640px,100%);background:var(--white);border-radius:16px;max-height:88vh;overflow:auto;padding:0}
+  .news-box .vid-x{top:12px;right:12px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .news-box .nm-img{width:100%;max-height:300px;object-fit:cover;display:block}
+  .news-box .nm-body{padding:24px 26px 28px;display:flex;flex-direction:column;gap:12px}
+  .news-box .nm-body h3{font-size:22px;line-height:1.32;margin:0}
+  .news-box .nm-body p{font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-wrap;margin:0}
 
   /* ---- CONTACT ---- */
   .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
@@ -1336,25 +1344,45 @@ function openVideo(url){
 function renderNews(){
   const emblem = `<svg viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true"><rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"/></svg>`;
   const play=`<span class="play-btn" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>`;
-  $("#news").innerHTML = NEWS.map(n=>{
+  $("#news").innerHTML = NEWS.map((n,i)=>{
     const yt=ytId(n.video), hasVideo=!!n.video;
     const thumbImg = n.img || (yt?`https://img.youtube.com/vi/${yt}/hqdefault.jpg`:"");
     const thumb = thumbImg
       ? `<div class="thumb has-img"><img src="${esc(thumbImg)}" alt="" loading="lazy">${hasVideo?play:""}</div>`
       : `<div class="thumb">${emblem}${hasVideo?play:""}</div>`;
-    return `<article class="news${hasVideo?' has-video':''}"${hasVideo?` data-video="${esc(n.video)}" role="button" tabindex="0"`:''}>
+    return `<article class="news${hasVideo?' has-video':''}" data-i="${i}" role="button" tabindex="0">
       ${thumb}
       <div class="body">
         <div class="row"><span class="tag">${esc(lang==="uz"?n.tuz:n.tru)}</span><span class="date">${esc(n.d)}</span></div>
         <h3>${esc(lang==="uz"?n.uz:n.ru)}</h3>
+        <span class="more">${lang==="uz"?"Batafsil →":"Подробнее →"}</span>
       </div>
     </article>`;
   }).join("");
-  $("#news").querySelectorAll(".has-video").forEach(el=>{
-    const open=()=>openVideo(el.dataset.video);
+  $("#news").querySelectorAll(".news").forEach(el=>{
+    const n=NEWS[+el.dataset.i];
+    const open=()=>{ if(n&&n.video) openVideo(n.video); else openNews(n); };
     el.addEventListener("click",open);
     el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
   });
+}
+function openNews(n){
+  if(!n) return;
+  const title = esc(lang==="uz"?n.uz:n.ru);
+  const body  = (lang==="uz"?n.buz:n.bru) || "";
+  const tag   = esc(lang==="uz"?n.tuz:n.tru);
+  const img   = n.img ? `<img class="nm-img" src="${esc(n.img)}" alt="">` : "";
+  const bodyHtml = body ? `<p>${esc(body)}</p>` : "";
+  const bg=document.createElement("div"); bg.className="vid-modal";
+  bg.innerHTML=`<div class="vid-box news-box" role="dialog" aria-modal="true" aria-label="Yangilik"><button class="vid-x" aria-label="Yopish">×</button>${img}<div class="nm-body"><div class="row"><span class="tag">${tag}</span><span class="date">${esc(n.d)}</span></div><h3>${title}</h3>${bodyHtml}</div></div>`;
+  document.body.appendChild(bg);
+  const prevFocus=document.activeElement;
+  const close=()=>{ bg.remove(); document.removeEventListener("keydown",onKey); try{ prevFocus&&prevFocus.focus&&prevFocus.focus(); }catch(e){} };
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
+  bg.querySelector(".vid-x").onclick=close;
+  document.addEventListener("keydown",onKey);
+  try{ bg.querySelector(".vid-x").focus(); }catch(e){}
 }
 function openImage(url){
   const bg=document.createElement("div"); bg.className="vid-modal";
@@ -2090,7 +2118,7 @@ addEventListener('hashchange', ()=>route(true));
         if(students.length) p.students = students;
         const teachers = tea.docs.map(d=>{const x=d.data();return {name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
         if(teachers.length) p.teachers = teachers;
-        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,img:x.image||"",video:x.video||""};});
+        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,buz:x.body_uz||"",bru:x.body_ru||x.body_uz||"",img:x.image||"",video:x.video||""};});
         if(news.length) p.news = news;
         const sa = asch.docs.map(d=>{const x=d.data();return {year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
         if(sa.length) p.schoolAch = sa;
