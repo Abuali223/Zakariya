@@ -25,9 +25,12 @@ cp config.example.json config.json
 |---|---|
 | `serviceAccount` | Firebase xizmat hisobi yo'li |
 | `port` | Server porti (masalan 8790) |
-| `click.serviceId` / `click.merchantId` | Click merchant kabinetidan (maxfiy emas) |
-| `click.secretKey` | Click **maxfiy** kaliti (SECRET_KEY) — imzo tekshiruvi uchun |
-| `uzum.*` | Uzum merchant ma'lumotlari (aniq maydonlar Uzum hujjatiga qarab) |
+| `uzum.serviceId` | Uzum kabinetidagi **xizmat ID** (serviceId) |
+| `uzum.login` / `uzum.password` | Uzum callback'lari uchun **Basic-auth** login/parol (kabinetdan) — parol **MAXFIY** |
+| `uzum.accountField` | Uzum `params` ichidagi hisob-faktura maydoni nomi (kabinetda belgilaysiz, masalan `invoice`) |
+| `uzum.amountUnit` | `tiyin` (default — Uzum so'm×100 yuboradi) yoki `som` |
+| `click.serviceId` / `click.merchantId` | (Ixtiyoriy) Click merchant kabinetidan (maxfiy emas) |
+| `click.secretKey` | (Ixtiyoriy) Click **maxfiy** kaliti (SECRET_KEY) — imzo tekshiruvi uchun |
 
 ## 3. Ishga tushirish
 ```bash
@@ -59,10 +62,39 @@ config/payments = {
 `clickServiceId`/`clickMerchantId` — maxfiy EMAS (to'lov havolasida ko'rinadi).
 **`secretKey` bu yerga YOZILMAYDI** — u faqat shu serverdagi `config.json` da.
 
-## 6. Uzum
-`/uzum/webhook` — **asos (scaffold)**. Uzum merchant hisobingizdagi aniq maydon
-nomlari, imzo (HMAC/shared secret) va prepare/confirm oqimini hujjatga qarab
-`handleUzum()` ichida yakunlaymiz. Uzum hujjatini/kalitlarini bergач, ulaymiz.
+## 6. Uzum Merchant API (asosiy usul) — TO'LIQ
+Uzum **5 ta endpoint** ni chaqiradi (server-to-server, har birida **Basic auth**
+`login:password`). Server so'rovni tekshirib, `invoices/<id>` ni boshqaradi:
+
+| Endpoint | Vazifa | Natija |
+|---|---|---|
+| `POST /uzum/check`   | hisob-faktura bor/to'lanmaganini tekshirish | `status:OK` |
+| `POST /uzum/create`  | tranzaksiya yaratish (rezerv) | `status:CREATED` |
+| `POST /uzum/confirm` | to'lov tasdiqlandi → invoice **«paid»** ★ | `status:CONFIRMED` |
+| `POST /uzum/reverse` | qaytarish (refund) → invoice **«reversed»** | `status:REVERSED` |
+| `POST /uzum/status`  | tranzaksiya holati | joriy status |
+
+Xato javobi: `{ serviceId, timestamp, status:"FAILED", errorCode }`. Kodlar:
+`10001` auth, `10005` params yetarli emas, `10006` serviceId noto'g'ri,
+`10007` allaqachon to'langan, `10008` topilmadi, `99999` summa/tekshiruv xatosi.
+
+**Xavfsizlik:** har chaqiruvda `serviceId` va Basic-auth login/parol tekshiriladi;
+summa hisob-faktura bilan solishtiriladi (default **tiyin** = so'm×100); ikki marta
+to'lash/tasdiqlash oldi olinadi (idempotent).
+
+### Uzum kabinetida sozlash
+1. **Callback (webhook) manzili** sifatida quyidagini kiriting:
+   `https://<domeningiz>/pay/uzum` — Uzum unga `/check`, `/create`, `/confirm`,
+   `/reverse`, `/status` qo'shib chaqiradi (masalan `https://iqroacademy.uz/pay/uzum/check`).
+2. **Basic-auth** login va parolni belgilang → `config.json` dagi `uzum.login`/`uzum.password`.
+3. **Hisob (account) parametri** nomini belgilang (masalan `invoice`) →
+   `config.json` dagi `uzum.accountField`. Uzum bu maydonda hisob-faktura `id` sini yuboradi.
+4. **serviceId** ni `config.json` ga yozing.
+
+> ⚠️ **Summa birligi** (tiyin/so'm) va `params` maydon nomi kabinet sozlamasiga
+> bog'liq — jonli rejimga o'tishdan oldin **kichik test to'lov** bilan tekshiring.
+
+Sinov:  `node payments/uzum.test.cjs`  (soxta Supabase ustida to'liq oqim).
 
 ## Xavfsizlik
 - `service-account.json`, `click.secretKey`, `uzum.secret` — maxfiy. `.gitignore` bor.

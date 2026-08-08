@@ -1,21 +1,27 @@
 /**
- * Iqror — TO'LOV serveri (Click + Uzum → invoices)
+ * Iqror — TO'LOV serveri (Uzum Merchant API + Click → invoices)
  * -------------------------------------------------------------------
- * Ota-ona kabinetdagi hisob-fakturani Click yoki Uzum orqali to'laganda,
- * to'lov tizimi shu serverga chaqiruv yuboradi. Server imzoni tekshirib,
- * `invoices/<id>` ni «paid» qiladi. Maxfiy kalit faqat shu serverda.
+ * Ota-ona kabinetdagi hisob-fakturani Uzum (yoki Click) orqali to'laganda,
+ * to'lov tizimi shu serverga chaqiruv yuboradi. Server so'rovni tekshirib,
+ * `invoices/<id>` ni «paid» qiladi. Maxfiy kalitlar faqat shu serverda.
  *
  * ⚠️ PUL bilan ishlaydi — ishonchli, HTTPS orqasidagi serverda ishlating.
- * Firestore'ga Admin SDK orqali yozadi (qoidalarni chetlab o'tadi).
+ * Supabase service_role (yoki Firebase Admin) orqali yozadi (RLS chetlab).
  *
- * Click SHOP-API (Merchant API) TO'LIQ va sinovdan o'tgan:
- *   POST /click/prepare   (action=0)
- *   POST /click/complete  (action=1)
+ * UZUM Merchant API (server-to-server) — Uzum 5 ta endpoint chaqiradi
+ * (har birida Basic auth: login:password kabinetdan):
+ *   POST /uzum/check     — hisob-faktura bor/to'lanmaganini tekshiradi
+ *   POST /uzum/create    — tranzaksiya yaratadi (rezerv)
+ *   POST /uzum/confirm   — to'lov tasdiqlandi → invoice «paid» ★
+ *   POST /uzum/reverse   — qaytarish (refund) → invoice «reversed»
+ *   POST /uzum/status    — tranzaksiya holatini qaytaradi
+ *   Javob status: OK / CREATED / CONFIRMED / REVERSED / FAILED(errorCode).
+ *   Hujjat: developer.uzumbank.uz/merchant
+ *
+ * CLICK SHOP-API (Merchant API) — TO'LIQ, saqlab qolingan (ixtiyoriy):
+ *   POST /click/prepare (action=0) · POST /click/complete (action=1)
  *   imzo = md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id
  *              [+ merchant_prepare_id]  + amount + action + sign_time)
- *
- * Uzum — ASOS (scaffold): /uzum/webhook. Uzum merchant hisobingizdagi aniq
- *   maydon nomlari va imzo sxemasi bilan yakunlanadi (README ga qarang).
  *
  * Ishga tushirish:
  *   npm install
@@ -32,7 +38,7 @@ const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CO
 // Data qatlami: CFG.backend='supabase' -> Supabase service_role, aks holda Firebase (rollback).
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
 const CLICK = CFG.click || {};        // { serviceId, secretKey, merchantId }
-const UZUM  = CFG.uzum  || {};        // { secret, ... }
+const UZUM  = CFG.uzum  || {};        // { serviceId, login, password, accountField?, amountUnit? }
 
 const md5 = s => crypto.createHash('md5').update(s).digest('hex');
 const amtEq = (a, b) => Math.abs(Number(a) - Number(b)) < 0.5;
@@ -80,8 +86,7 @@ async function handleComplete(p){
   return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:confirmId, error:0, error_note:'Success' };
 }
 
-/* ---------- UZUM (asos — merchant hujjatlari bilan yakunlanadi) ---------- */
-// Hisobni to'langan qiladi (Uzum handler tayyor bo'lганда shuni chaqiradi).
+// Hisob-fakturani «paid» qiladi (Uzum/Click confirm bosqichida chaqiriladi).
 async function markInvoicePaid(invoiceId, provider, trans){
   const ref = db.collection('invoices').doc(String(invoiceId||''));
   const s = await ref.get(); if(!s.exists) return { ok:false, reason:'not-found' };
@@ -89,22 +94,95 @@ async function markInvoicePaid(invoiceId, provider, trans){
   await ref.set({ status:'paid', provider, providerTrans:String(trans||''), paidAt: FieldValue.serverTimestamp() }, { merge:true });
   return { ok:true };
 }
-// TODO: Uzum merchant API aniq shakli (maydon nomlari + imzo) bilan to'ldiriladi.
-async function handleUzum(body){
-  // Uzum odatda: invoice (bizning id) + amount + imzo (HMAC/shared secret) yuboradi.
-  // Namuna (Uzum hujjatiga moslang): body.orderId, body.amount, body.signature.
-  const invoiceId = body.invoice || body.orderId || body.merchant_trans_id;
-  // XAVFSIZLIK: imzoni tekshiring (Uzum sxemasi bilan). Hozircha shared-secret placeholder:
-  if(UZUM.secret && body.signature !== undefined){
-    const expect = md5(String(invoiceId) + String(body.amount) + UZUM.secret);
-    if(expect !== String(body.signature).toLowerCase()) return { ok:false, error:'sign' };
+
+/* ---------- UZUM MERCHANT API ---------- */
+// Uzum bizning serverga 5 chaqiruv yuboradi (Basic auth): check → create →
+// confirm (→ reverse / status). To'lov TASDIQLANGANDA (confirm) invoice «paid».
+// Xato kodlari (Uzum Merchant API standarti):
+const UZ = { AUTH:10001, PARSE:10002, UNKNOWN_OP:10003, NOT_ENOUGH_PARAMS:10005,
+             INVALID_SERVICE:10006, ALREADY_PAID:10007, NOT_FOUND:10008, CANCELLED:10009, CHECK_ERROR:99999 };
+const uzTs   = () => Date.now();
+const uzFail = code => ({ serviceId: UZUM.serviceId, timestamp: uzTs(), status:'FAILED', errorCode: code });
+
+// Basic auth: Authorization: Basic base64(login:password) — kabinetdagi kalitlar.
+function uzumAuthOK(headers){
+  const h = String((headers||{}).authorization || '');
+  if(!/^Basic\s+/i.test(h)) return false;
+  let dec=''; try{ dec = Buffer.from(h.replace(/^Basic\s+/i,''), 'base64').toString('utf8'); }catch(e){ return false; }
+  const i = dec.indexOf(':'); if(i < 0) return false;
+  return !!UZUM.login && dec.slice(0,i) === UZUM.login && dec.slice(i+1) === UZUM.password;
+}
+// Hisob-faktura id sini Uzum `params` ichidan oladi (kabinetda belgilangan maydon).
+function uzInvoiceId(params){
+  if(!params || typeof params !== 'object') return null;
+  const keys = [UZUM.accountField, 'invoice', 'invoiceId', 'order', 'orderId', 'account'].filter(Boolean);
+  for(const k of keys){ if(params[k] != null && params[k] !== '') return String(params[k]); }
+  const vals = Object.values(params); return vals.length ? String(vals[0]) : null;
+}
+// Uzum summasi (default: tiyin = so'm×100) hisob-faktura summasiga mos keladimi.
+function uzAmountOK(bodyAmount, invAmount){
+  const a = Number(bodyAmount);
+  return UZUM.amountUnit === 'som' ? amtEq(a, invAmount) : amtEq(a, Number(invAmount) * 100);
+}
+const uzPayRef = transId => db.collection('payments').doc('uzum_' + String(transId));
+
+async function uzCheck(b){
+  if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
+  const id = uzInvoiceId(b.params); if(!id) return uzFail(UZ.NOT_ENOUGH_PARAMS);
+  const inv = await getInvoice(id); if(!inv) return uzFail(UZ.NOT_FOUND);
+  if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
+  if(b.amount != null && !uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
+  return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'OK',
+           data: { account: { invoice: id, month: inv.month || '', student: inv.studentName || '' } } };
+}
+async function uzCreate(b){
+  if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
+  const id = uzInvoiceId(b.params); if(!id) return uzFail(UZ.NOT_ENOUGH_PARAMS);
+  const inv = await getInvoice(id); if(!inv) return uzFail(UZ.NOT_FOUND);
+  if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
+  if(!uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
+  await uzPayRef(b.transId).set({ provider:'uzum', transId:String(b.transId), invoiceId:id,
+    studentId: inv.studentId || '', amount:Number(b.amount), status:'created',
+    raw:b, createdAt: FieldValue.serverTimestamp() });
+  return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
+}
+async function uzConfirm(b){
+  if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
+  const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
+  if(!pay) return uzFail(UZ.NOT_FOUND);
+  if(pay.status !== 'confirmed'){
+    await markInvoicePaid(pay.invoiceId, 'uzum', b.transId);
+    await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
   }
-  if(!invoiceId) return { ok:false, error:'no-invoice' };
-  const inv = await getInvoice(invoiceId);
-  if(!inv) return { ok:false, error:'not-found' };
-  if(!amtEq(body.amount, inv.amount)) return { ok:false, error:'amount' };
-  const r = await markInvoicePaid(invoiceId, 'uzum', body.transactionId || body.txn || '');
-  return r.ok ? { ok:true } : { ok:false, error:r.reason };
+  return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };
+}
+async function uzReverse(b){
+  if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
+  const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
+  if(!pay) return uzFail(UZ.NOT_FOUND);
+  if(pay.status !== 'reversed'){
+    await db.collection('invoices').doc(String(pay.invoiceId)).set(
+      { status:'reversed', reversedAt: FieldValue.serverTimestamp() }, { merge:true });
+    await uzPayRef(b.transId).set({ status:'reversed' }, { merge:true });
+  }
+  return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: pay.amount };
+}
+async function uzStatus(b){
+  if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
+  const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
+  if(!pay) return uzFail(UZ.NOT_FOUND);
+  const map = { created:'CREATED', confirmed:'CONFIRMED', reversed:'REVERSED' };
+  return { serviceId: UZUM.serviceId, transId: b.transId, status: map[pay.status] || 'CREATED' };
+}
+async function handleUzum(op, body){
+  switch(op){
+    case 'check':   return uzCheck(body);
+    case 'create':  return uzCreate(body);
+    case 'confirm': return uzConfirm(body);
+    case 'reverse': return uzReverse(body);
+    case 'status':  return uzStatus(body);
+    default:        return uzFail(UZ.UNKNOWN_OP);
+  }
 }
 
 /* ---------- HTTP server ---------- */
@@ -124,11 +202,15 @@ if(require.main === module){
     try{
       if(req.url.startsWith('/click/prepare'))       send(await handlePrepare(body));
       else if(req.url.startsWith('/click/complete')) send(await handleComplete(body));
-      else if(req.url.startsWith('/uzum'))           send(await handleUzum(body));
+      else if(req.url.startsWith('/uzum/')){
+        if(!uzumAuthOK(req.headers)){ res.writeHead(401, { 'Content-Type':'application/json' }); return res.end(JSON.stringify(uzFail(UZ.AUTH))); }
+        const op = (req.url.split('?')[0].split('/')[2] || '');
+        send(await handleUzum(op, body));
+      }
       else { res.writeHead(404); res.end('not found'); }
     }catch(e){ console.error('Xatolik:', e.message); res.writeHead(500); res.end('xatolik'); }
   });
-  server.listen(PORT, () => console.log(`Iqror to'lov serveri tinglayapti :${PORT}  (/click/prepare, /click/complete, /uzum)`));
+  server.listen(PORT, () => console.log(`Iqror to'lov serveri tinglayapti :${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
-module.exports = { handlePrepare, handleComplete, handleUzum, markInvoicePaid, clickSign, md5 };
+module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, markInvoicePaid, clickSign, md5 };
