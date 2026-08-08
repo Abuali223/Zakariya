@@ -233,7 +233,8 @@ create table if not exists teachers (
 -- ============ Kontent (ommaviy) ============
 create table if not exists news (
   id text primary key, date text, image text, video text,
-  "tag_uz" text, "tag_ru" text, "title_uz" text, "title_ru" text, "order" int
+  "tag_uz" text, "tag_ru" text, "title_uz" text, "title_ru" text,
+  "body_uz" text, "body_ru" text, "order" int
 );
 create table if not exists gallery (
   id text primary key, image text, video text,
