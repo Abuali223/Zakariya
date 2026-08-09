@@ -17,6 +17,11 @@
 const SERVER_TS = Symbol('serverTimestamp');
 const FieldValue = { serverTimestamp: () => SERVER_TS, delete: () => null };
 
+// Node < 22 uchun: @supabase/supabase-js realtime moduli global WebSocket talab
+// qiladi. Biz realtime ishlatmaymiz, lekin createClient uni tekshiradi — shu sabab
+// `ws` paketini global qilib beramiz (Node 22+ da WebSocket allaqachon global).
+try { if (typeof globalThis.WebSocket === 'undefined') globalThis.WebSocket = require('ws'); } catch (_) {}
+
 function prep(data) {
   const o = {};
   for (const k in data) { const v = data[k]; o[k] = (v === SERVER_TS) ? new Date().toISOString() : v; }
