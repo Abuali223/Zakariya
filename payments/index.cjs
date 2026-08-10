@@ -56,6 +56,7 @@ const clickErr = (p, code, note, isComplete) => Object.assign(
   isComplete ? { merchant_confirm_id: 0 } : { merchant_prepare_id: 0 });
 
 async function handlePrepare(p){
+  if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, recv:String(p.sign_string||'').toLowerCase(), ours:clickSign(p,false), secLen:(CLICK.secretKey||'').length }));
   if(clickSign(p, false) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   const inv = await getInvoice(p.merchant_trans_id);
   if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', false);
