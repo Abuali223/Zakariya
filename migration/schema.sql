@@ -275,6 +275,7 @@ create table if not exists settings (
 );
 create table if not exists config (
   id text primary key, url text, enabled boolean, "keySet" boolean,
+  "clickServiceId" text, "clickMerchantId" text, "uzumUrlTemplate" text,
   "updatedAt" timestamptz default now()
 );
 
