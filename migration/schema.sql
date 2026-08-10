@@ -154,6 +154,13 @@ create table if not exists payments (
   amount      numeric,
   status      text,
   raw         jsonb,
+  -- Click SHOP-API maydonlari
+  "click_trans_id"      text,
+  "merchant_trans_id"   text,
+  "merchant_prepare_id" text,
+  "merchant_confirm_id" text,
+  -- Uzum Merchant API maydoni
+  "transId"             text,
   "createdAt" timestamptz default now()
 );
 
