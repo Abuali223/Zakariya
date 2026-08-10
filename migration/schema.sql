@@ -139,8 +139,10 @@ create table if not exists invoices (
   month         text,
   amount        numeric,
   provider      text,
-  status        text,                          -- 'paid'|'canceled'|null
+  status        text,                          -- 'paid'|'canceled'|'reversed'|null
+  "providerTrans" text,                        -- to'lov tizimi tranzaksiya id
   "paidAt"      timestamptz,
+  "reversedAt"  timestamptz,
   "createdAt"   timestamptz default now()
 );
 create index if not exists idx_inv_student on invoices ("studentId");
