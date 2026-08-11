@@ -415,16 +415,29 @@
   .kab-att-card .metrics .m span{font-size:11.5px;color:var(--muted);margin-top:2px;display:block}
   .att-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-bottom:10px}
   .att-legend span{display:inline-flex;align-items:center;gap:5px}
-  .inv-list{display:flex;flex-direction:column;gap:8px}
-  .inv-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 13px;background:var(--bg);border-radius:11px}
-  .inv-m{font-weight:700;min-width:82px}
-  .inv-a{font-family:var(--serif);font-weight:700;color:var(--teal);flex:1;min-width:120px}
-  .inv-btns{display:flex;gap:8px}
-  .inv-pay{display:inline-block;padding:8px 16px;border-radius:9px;font-weight:700;font-size:13.5px;color:#fff;text-decoration:none}
-  .inv-pay.click{background:#00aaff}
-  .inv-pay.uzum{background:#7000ff}
-  .inv-pay:hover{opacity:.9}
-  .inv-paid{color:#1d7a44;font-weight:700;font-size:14px}
+  .inv-list{display:flex;flex-direction:column;gap:12px}
+  .inv-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:0 4px 14px rgba(18,42,32,.05);transition:box-shadow .18s,transform .18s}
+  .inv-card:hover{box-shadow:0 12px 28px rgba(18,42,32,.10);transform:translateY(-1px)}
+  .inv-card.paid{border-color:#CDE8D8;background:linear-gradient(180deg,#F4FBF7,var(--white))}
+  .inv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .inv-period{display:flex;align-items:center;gap:11px}
+  .inv-cal{width:42px;height:42px;border-radius:11px;background:var(--it-bg);color:var(--teal);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .inv-cal svg{width:22px;height:22px}
+  .inv-mo{font-weight:700;font-size:15px;color:var(--ink);line-height:1.2}
+  .inv-sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .inv-badge{font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;white-space:nowrap;align-self:center}
+  .inv-badge.paid{background:#E4F5EC;color:#1d7a44}
+  .inv-badge.due{background:var(--med-bg);color:var(--med-fg)}
+  .inv-amt{font-family:var(--serif);font-weight:700;font-size:28px;color:var(--teal);margin:14px 0 0;letter-spacing:-.01em}
+  .inv-amt small{font-size:15px;font-weight:600;color:var(--muted);margin-left:3px}
+  .inv-actions{display:flex;gap:10px;margin-top:14px}
+  .inv-pay{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:11px;font-weight:700;font-size:14px;color:#fff;text-decoration:none;transition:filter .15s,transform .1s}
+  .inv-pay:hover{filter:brightness(1.07)}
+  .inv-pay:active{transform:scale(.98)}
+  .inv-pay.click{background:linear-gradient(135deg,#22B8FF,#0092F4)}
+  .inv-pay.uzum{background:linear-gradient(135deg,#8A2BE2,#6A00E0)}
+  .inv-paidrow{display:flex;align-items:center;gap:7px;margin-top:12px;color:#1d7a44;font-weight:600;font-size:13px}
+  .inv-soon{margin-top:12px;font-size:13px;color:var(--muted)}
   .att-legend i,.att-chip i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
   .att-recent{display:flex;flex-wrap:wrap;gap:7px}
   .att-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 9px}
@@ -1774,20 +1787,33 @@ async function renderKabInvoices(studentId){
   if($("#kab-invoices")!==box) return;
   const list=(invs||[]).filter(i=>i&&i.status!=='canceled').sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
   if(!list.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_none)}</div></div>`; return; }
-  const fmt=n=>{ n=Number(n)||0; return n.toLocaleString('ru-RU').replace(/,/g,' ')+' '+t.som; };
+  const fmt=n=>(Number(n)||0).toLocaleString('ru-RU').replace(/,/g,' ');
+  const isRu=lang==='ru';
+  const MO=isRu?['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+              :['','Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+  const moLabel=m=>{ const p=String(m||'').split('-'); if(p.length>=2){ const mm=parseInt(p[1],10); return (MO[mm]||p[1])+' '+p[0]; } return m||''; };
+  const cal='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
   const clickUrl=inv=>{ if(!cfg||!cfg.clickServiceId||!cfg.clickMerchantId) return null;
     return `https://my.click.uz/services/pay?service_id=${encodeURIComponent(cfg.clickServiceId)}&merchant_id=${encodeURIComponent(cfg.clickMerchantId)}&amount=${encodeURIComponent(Number(inv.amount)||0)}&transaction_param=${encodeURIComponent(inv.id)}`; };
   const uzumUrl=inv=>{ if(!cfg||!cfg.uzumUrlTemplate) return null;
     return cfg.uzumUrlTemplate.replace('{amount}',encodeURIComponent(Number(inv.amount)||0)).replace('{invoice}',encodeURIComponent(inv.id)); };
-  const rows=list.map(inv=>{
+  const cards=list.map(inv=>{
     const paid=inv.status==='paid';
     const cu=clickUrl(inv), uu=uzumUrl(inv);
-    const btns = paid ? `<span class="inv-paid">✓ ${esc(t.kab_pay_paid)}${inv.provider?` · ${esc(inv.provider)}`:''}</span>`
-      : `<span class="inv-btns">${cu?`<a class="inv-pay click" href="${esc(cu)}" target="_blank" rel="noopener">Click</a>`:''}${uu?`<a class="inv-pay uzum" href="${esc(uu)}" target="_blank" rel="noopener">Uzum</a>`:''}${(!cu&&!uu)?`<span class="muted">${esc(t.kab_pay_soon)}</span>`:''}</span>`;
-    return `<div class="inv-row"><span class="inv-m">${esc(inv.month||'')}</span><span class="inv-a">${fmt(inv.amount)}</span>${btns}</div>`;
+    const badge = paid ? `<span class="inv-badge paid">✓ ${esc(t.kab_pay_paid)}</span>`
+                       : `<span class="inv-badge due">${isRu?'Ожидает':'Kutilmoqda'}</span>`;
+    let actions;
+    if(paid){ actions=`<div class="inv-paidrow">✓ ${isRu?'Оплачено':'To‘landi'}${inv.provider?` · ${esc(String(inv.provider))}`:''}</div>`; }
+    else if(cu||uu){ actions=`<div class="inv-actions">${cu?`<a class="inv-pay click" href="${esc(cu)}" target="_blank" rel="noopener">Click</a>`:''}${uu?`<a class="inv-pay uzum" href="${esc(uu)}" target="_blank" rel="noopener">Uzum</a>`:''}</div>`; }
+    else { actions=`<div class="inv-soon">${esc(t.kab_pay_soon)}</div>`; }
+    return `<div class="inv-card${paid?' paid':''}">
+      <div class="inv-head"><div class="inv-period"><span class="inv-cal">${cal}</span><div><div class="inv-mo">${esc(moLabel(inv.month))}</div><div class="inv-sub">${isRu?'Ежемесячный платёж':'Oylik to‘lov'}</div></div></div>${badge}</div>
+      <div class="inv-amt">${fmt(inv.amount)} <small>${esc(t.som)}</small></div>
+      ${actions}
+    </div>`;
   }).join('');
-  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="inv-list">${rows}</div>
-    <p class="small muted" style="margin:12px 0 0;padding:0 2px">${esc(t.kab_pay_note)}</p></div>`;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="inv-list">${cards}</div>
+    <p class="small muted" style="margin:14px 0 0;padding:0 2px">${esc(t.kab_pay_note)}</p></div>`;
 }
 async function renderKabMonitoring(studentId){
   const t=T[lang], box=$("#kab-monitoring"); if(!box || !(window.IqrorFB&&window.IqrorFB.getMonitoring)) return;
