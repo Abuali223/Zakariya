@@ -232,6 +232,52 @@
   .toast.err{background:var(--bad)}
   @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .loading{padding:40px;text-align:center;color:var(--muted)}
+
+  /* ====== Moliya (Finance) ====== */
+  .fin-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .fin-kpi{position:relative;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px 18px;overflow:hidden}
+  .fin-kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--acc,var(--teal))}
+  .fin-kpi .k-l{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .fin-kpi .k-v{font-family:var(--serif);font-size:26px;font-weight:700;line-height:1.1;margin-top:7px;color:var(--acc,var(--teal))}
+  .fin-kpi .k-v small{font-size:13px;font-weight:600;color:var(--muted)}
+  .fin-kpi .k-d{font-size:12px;margin-top:6px;color:var(--muted);font-weight:600}
+  .fin-kpi.ok{--acc:var(--ok)} .fin-kpi.warn{--acc:var(--med-fg)} .fin-kpi.teal{--acc:var(--teal)} .fin-kpi.bad{--acc:var(--bad)}
+  .fin-up{color:var(--ok);font-weight:700} .fin-down{color:var(--bad);font-weight:700}
+
+  .fin-chart{display:flex;align-items:flex-end;gap:10px;height:180px;padding:22px 4px 0;border-bottom:1px solid var(--border-2)}
+  .fin-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative}
+  .fin-col .fbar{width:70%;max-width:38px;background:var(--teal-2);border-radius:6px 6px 0 0;min-height:2px;transition:height .3s}
+  .fin-col .fbar.cur{background:var(--gold-d)}
+  .fin-col .fv{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .fin-col .fx{margin-top:8px;font-size:11px;color:var(--muted);font-weight:600}
+  .fin-legend{display:flex;gap:16px;margin-top:12px;font-size:12px;color:var(--muted);padding:0 4px}
+  .fin-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
+
+  .fin-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .fin-stack{display:flex;height:30px;border-radius:9px;overflow:hidden;margin:0 20px 16px}
+  .fin-stack span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;min-width:0}
+  .fin-pm{padding:0 20px 18px;display:flex;flex-direction:column;gap:11px}
+  .fin-pm-row{display:flex;align-items:center;justify-content:space-between;font-size:13.5px}
+  .fin-pm-l{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+  .fin-pm-r{font-weight:700}
+  .fin-pm-r .pc{color:var(--muted);font-weight:600;font-size:12px;margin-left:6px}
+  .fin-dot{width:11px;height:11px;border-radius:4px;display:inline-block;flex:none}
+
+  .fin-fc{padding:16px 20px 20px}
+  .fin-fc .fc-big{font-family:var(--serif);font-size:30px;font-weight:700;line-height:1.05;color:var(--teal)}
+  .fin-fc .fc-big small{font-size:14px;font-weight:600;color:var(--muted)}
+  .fin-fc .fc-sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .fin-fc .fc-bar{height:13px;border-radius:8px;background:var(--bg);margin:18px 0 8px;overflow:hidden}
+  .fin-fc .fc-bar>i{display:block;height:100%;background:var(--teal-2);border-radius:8px}
+  .fin-fc .fc-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-weight:600}
+  .fin-fc .fc-meta b{color:var(--ink)}
+  .fin-fc .fc-note{margin-top:14px;padding:10px 12px;background:var(--it-bg);border-radius:10px;font-size:12.5px;color:var(--teal);font-weight:600}
+
+  .fin-mo{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--med-bg);color:var(--med-fg);display:inline-block;margin:1px}
+  .fin-debt{font-weight:700;color:var(--bad);white-space:nowrap}
+  .fin-cols .bar-row{grid-template-columns:96px 1fr auto;gap:10px}
+  .fin-cols .bar-row b{font-size:12.5px;white-space:nowrap}
+  @media(max-width:820px){ .fin-kpis{grid-template-columns:1fr 1fr} .fin-cols{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -668,7 +714,8 @@ function buildTabs(){
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
-    {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'}
+    {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
+    {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -695,6 +742,7 @@ function openTab(tab){
   if(tab==='checkins') return renderCheckins();
   if(tab==='applications') return renderApplications();
   if(tab==='payments') return renderPayments();
+  if(tab==='finance') return renderFinance();
   renderCollection(tab);
 }
 
@@ -2341,6 +2389,137 @@ async function openExamQuestions(spec, onSaved){
 /* ---- Oylik to'lovlar (hisob-fakturalar) ---- */
 function curMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function fmtSom(n){ n=Number(n)||0; return n.toLocaleString('ru-RU').replace(/,/g,' ')+' so‘m'; }
+/* ==================== Moliya (Finance) ====================
+   «To‘lovlar»dagi invoices hujjatlaridan avtomatik hisoblanadi:
+   yig‘im foizi, kutilayotgan summa, qarzdorlar, daromad grafigi,
+   to‘lov usuli va yillik prognoz. Faqat o‘qiydi (yozmaydi). */
+async function renderFinance(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Moliya</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Yig‘im, qarzdorlik va daromad tahlili — <b>«To‘lovlar»</b> bo‘limidagi hisob-fakturalardan avtomatik hisoblanadi.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Oy<input type="month" id="fin-month" value="${curMonth()}"></label>
+    </div></div>
+    <div id="fin-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+
+  // Ma'lumot: barcha hisob-fakturalar + o'quvchilar (bir marta yuklaymiz, oy o'zgarganda qayta hisoblaymiz)
+  let INV=[], students=[];
+  try{
+    [INV, students] = await Promise.all([
+      loadCol('invoices'),
+      (cache.students&&cache.students.length)?Promise.resolve(cache.students):loadCol('students','order')
+    ]);
+    cache.students=students;
+  }catch(e){ $('#fin-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+
+  if(!INV.length){
+    $('#fin-body').innerHTML=`<div class="card"><div class="empty">Hali hisob-faktura yo‘q. <b>«To‘lovlar»</b> bo‘limida oylik hisob-fakturalarni yarating — shundan so‘ng bu yerda tahlil paydo bo‘ladi.</div></div>`;
+    return;
+  }
+
+  // ---- Yordamchilar ----
+  const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
+  const fmtC=n=>{ n=Number(n)||0; if(n>=1e9)return (n/1e9).toFixed(2).replace('.',',')+' mlrd'; if(n>=1e6)return (n/1e6).toFixed(1).replace('.',',')+' mln'; return Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); };
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
+  const isPend=i=>i.status!=='paid'&&i.status!=='canceled';
+  const gmap={}; students.forEach(s=>{ gmap[String(s.studentId||s._id)]=s; });
+  const gradeOf=i=>{ const s=gmap[String(i.studentId)]; if(s) return Number(s.grade)||0; const p=String(i.classKey||'').split('-'); return Number(p[1])||0; };
+  const PM={click:{l:'Click',c:'#236B5D'},uzum:{l:'Uzum',c:'#7C4DB8'},cash:{l:'Naqd',c:'#977322'},payme:{l:'Payme',c:'#2E7CC0'},'':{l:'Boshqa',c:'#8A9691'}};
+
+  const draw=(M)=>{
+    const paidAll=INV.filter(i=>i.status==='paid');
+    const mInv=INV.filter(i=>i.month===M);
+    const paid=mInv.filter(i=>i.status==='paid'), pend=mInv.filter(isPend);
+    const collected=sum(paid), pendSum=sum(pend);
+    const rate=pct(collected, collected+pendSum);
+    const prevM=monthList(M,2)[0];
+    const prevColl=sum(paidAll.filter(i=>i.month===prevM));
+    const delta = prevColl>0 ? Math.round((collected-prevColl)/prevColl*100) : null;
+
+    // Qarzdorlar (M va undan oldingi to'lanmagan hisoblar)
+    const debtMap={};
+    INV.filter(i=>isPend(i) && i.month && i.month<=M).forEach(i=>{
+      const k=String(i.studentId||i._id);
+      const g=debtMap[k]||(debtMap[k]={name:i.studentName||k, sid:k, ck:i.classKey||'', months:[], sum:0});
+      g.months.push(i.month); g.sum+=Number(i.amount)||0;
+    });
+    const debtors=Object.values(debtMap).sort((a,b)=>b.sum-a.sum);
+    const debtSum=debtors.reduce((s,d)=>s+d.sum,0);
+
+    // ---- KPI ----
+    const kpis=`<div class="fin-kpis">
+      <div class="fin-kpi ok"><div class="k-l">Bu oy yig‘ildi</div><div class="k-v">${fmtC(collected)}</div><div class="k-d">${delta==null?'&nbsp;':`<span class="${delta>=0?'fin-up':'fin-down'}">${delta>=0?'▲':'▼'} ${Math.abs(delta)}%</span> o‘tgan oyga`}</div></div>
+      <div class="fin-kpi warn"><div class="k-l">Kutilmoqda</div><div class="k-v">${fmtC(pendSum)}</div><div class="k-d">${pend.length} ta hisob-faktura</div></div>
+      <div class="fin-kpi teal"><div class="k-l">Yig‘im foizi</div><div class="k-v">${rate}<small>%</small></div><div class="k-d">${paid.length} / ${paid.length+pend.length} to‘ladi</div></div>
+      <div class="fin-kpi bad"><div class="k-l">Qarzdorlar</div><div class="k-v">${debtors.length}</div><div class="k-d">o‘quvchi · ${fmtC(debtSum)}</div></div>
+    </div>`;
+
+    // ---- Daromad grafigi (8 oy) ----
+    const keys=monthList(M,8);
+    const vals=keys.map(k=>sum(paidAll.filter(i=>i.month===k)));
+    const maxV=Math.max(1,...vals);
+    const chart=`<div class="card" style="margin-bottom:16px">
+      <div class="cls-card-head"><h3>Daromad dinamikasi</h3><span class="cls-count">Oxirgi 8 oy · yig‘ilgan (mln so‘m)</span></div>
+      <div class="fin-chart">${keys.map((k,idx)=>{ const h=Math.round((vals[idx]/maxV)*100); const cur=k===M;
+        return `<div class="fin-col"><div class="fbar ${cur?'cur':''}" style="height:${Math.max(h,2)}%"><span class="fv">${vals[idx]?Math.round(vals[idx]/1e6):0}</span></div><span class="fx">${mLabel(k)}</span></div>`;
+      }).join('')}</div>
+      <div class="fin-legend"><span><i style="background:var(--teal-2)"></i>Yig‘ilgan</span><span><i style="background:var(--gold-d)"></i>Joriy oy</span></div>
+    </div>`;
+
+    // ---- To'lov usuli ----
+    const pmGroups={};
+    paid.forEach(i=>{ const key=(i.provider||'') in PM ? (i.provider||'') : ''; pmGroups[key]=(pmGroups[key]||0)+(Number(i.amount)||0); });
+    const pmKeys=Object.keys(pmGroups).filter(k=>pmGroups[k]>0).sort((a,b)=>pmGroups[b]-pmGroups[a]);
+    const pmStack=collected>0?pmKeys.map(k=>{ const w=Math.round(pmGroups[k]/collected*100); return `<span style="width:${w}%;background:${PM[k].c}">${w>=8?w+'%':''}</span>`; }).join(''):'';
+    const pmLegend=pmKeys.length?pmKeys.map(k=>`<div class="fin-pm-row"><span class="fin-pm-l"><i class="fin-dot" style="background:${PM[k].c}"></i>${esc(PM[k].l)}</span><span class="fin-pm-r">${fmtC(pmGroups[k])}<span class="pc">${pct(pmGroups[k],collected)}%</span></span></div>`).join(''):`<div class="empty" style="padding:10px 0">Bu oy hali to‘lov yo‘q</div>`;
+    const pmCard=`<div class="card"><div class="cls-card-head"><h3>To‘lov usuli</h3><span class="cls-count">bu oy · ${fmtC(collected)}</span></div>
+      ${collected>0?`<div class="fin-stack" style="margin-top:16px">${pmStack}</div>`:'<div style="height:8px"></div>'}
+      <div class="fin-pm">${pmLegend}</div></div>`;
+
+    // ---- Yillik prognoz ----
+    const year=String(M).slice(0,4), elapsed=parseInt(String(M).slice(5,7),10)||1;
+    const ytd=sum(paidAll.filter(i=>String(i.month||'').startsWith(year+'-') && i.month<=M));
+    const avgM=elapsed?ytd/elapsed:0, remaining=12-elapsed, projected=ytd+avgM*remaining;
+    const prog=pct(ytd, projected);
+    const fcCard=`<div class="card"><div class="cls-card-head"><h3>Yillik prognoz</h3><span class="cls-count">${esc(year)} yil</span></div>
+      <div class="fin-fc">
+        <div class="fc-big">${fmtC(projected)} <small>kutilmoqda</small></div>
+        <div class="fc-sub">joriy o‘rtacha sur‘at bo‘yicha (${fmtC(avgM)}/oy)</div>
+        <div class="fc-bar"><i style="width:${prog}%"></i></div>
+        <div class="fc-meta"><span>Yig‘ildi: <b>${fmtC(ytd)}</b></span><span>${prog}%</span></div>
+        ${remaining>0?`<div class="fc-note">Qolgan ${remaining} oy uchun ~${fmtC(avgM*remaining)} kutilmoqda.</div>`:'<div class="fc-note">Yil yakunlandi.</div>'}
+      </div></div>`;
+
+    // ---- Qarzdorlar ro'yxati ----
+    const top=debtors.slice(0,12);
+    const debtRows=top.map(d=>{ const st=gmap[d.sid]; const cls=st?classLabelOf(st):(d.ck||'');
+      const chips=[...new Set(d.months)].sort().slice(-4).map(m=>`<span class="fin-mo">${mLabel(m)}</span>`).join('');
+      return `<tr>
+        <td data-label="O‘quvchi"><b>${esc(d.name)}</b><div class="small muted">${esc(cls)}</div></td>
+        <td data-label="Oylar">${chips}</td>
+        <td data-label="Qarz" class="fin-debt">${fmtC(d.sum)}</td>
+        <td class="td-actions"><button class="btn sm" data-remind="${esc(d.sid)}">Eslatma</button></td></tr>`;
+    }).join('');
+    const debtCard=`<div class="card"><div class="cls-card-head"><h3>Qarzdorlar</h3><span class="cls-count">${debtors.length} o‘quvchi · ${fmtC(debtSum)}${debtors.length>12?' · eng katta 12 tasi':''}</span></div>
+      ${debtors.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Oylar</th><th>Qarz</th><th></th></tr></thead><tbody>${debtRows}</tbody></table></div>`:'<div class="empty">Qarzdor yo‘q ✓</div>'}</div>`;
+
+    // ---- Sinf (daraja) bo'yicha daromad ----
+    const byGrade={}; paid.forEach(i=>{ const g=gradeOf(i); byGrade[g]=(byGrade[g]||0)+(Number(i.amount)||0); });
+    const gKeys=Object.keys(byGrade).map(Number).sort((a,b)=>a-b);
+    const maxG=Math.max(1,...gKeys.map(g=>byGrade[g]));
+    const gBars=gKeys.length?gKeys.map(g=>`<div class="bar-row"><span class="bar-lbl">${gradeName(g)}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${fmtC(byGrade[g])}</b></div>`).join(''):'<div class="empty">Ma’lumot yo‘q</div>';
+    const gradeCard=`<div class="card"><div class="cls-card-head"><h3>Sinf bo‘yicha daromad</h3><span class="cls-count">bu oy yig‘ilgan</span></div><div class="bars">${gBars}</div></div>`;
+
+    $('#fin-body').innerHTML = kpis + chart + `<div class="fin-cols">${pmCard}${fcCard}</div>` + `<div class="fin-cols">${debtCard}${gradeCard}</div>`;
+    // «Eslatma» — SMS/bildirishnoma Bosqich 3 da ishga tushadi
+    $('#fin-body').querySelectorAll('[data-remind]').forEach(b=>b.addEventListener('click',()=>toast('SMS eslatma — keyingi bosqichda (Bosqich 3) qo‘shiladi')));
+  };
+
+  draw($('#fin-month').value || curMonth());
+  $('#fin-month').addEventListener('change',()=>draw($('#fin-month').value||curMonth()));
+}
+
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun o‘quvchilarga hisob-faktura yarating. Ota-ona o‘z kabinetida <b>Click</b> yoki <b>Uzum</b> orqali to‘laydi — to‘lov kelganda «to‘landi» avtomatik belgilanadi (to‘lov serveri orqali). Naqd to‘lovni bu yerda qo‘lda belgilashingiz mumkin.</p>
