@@ -113,6 +113,13 @@ create policy inv_ins on invoices for insert with check (app.is_admin());
 create policy inv_upd on invoices for update using (app.is_admin()) with check (app.is_admin());
 create policy inv_del on invoices for delete using (app.is_admin());
 
+-- ============ expenses (buxgalteriya — admin/zavuch) ============
+alter table expenses enable row level security;
+create policy exp_sel on expenses for select using (app.is_admin() or app.is_zavuch());
+create policy exp_ins on expenses for insert with check (app.is_admin() or app.is_zavuch());
+create policy exp_upd on expenses for update using (app.is_admin() or app.is_zavuch()) with check (app.is_admin() or app.is_zavuch());
+create policy exp_del on expenses for delete using (app.is_admin());
+
 -- ============ users (o'zi/admin) ============
 alter table users enable row level security;
 create policy users_sel on users for select using (id = app.uid() or app.is_admin());

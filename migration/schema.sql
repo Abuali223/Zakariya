@@ -166,6 +166,19 @@ create table if not exists payments (
   "createdAt" timestamptz default now()
 );
 
+-- ============ Xarajatlar (buxgalteriya — chiqim) ============
+create table if not exists expenses (
+  id          text primary key,
+  date        text,                            -- "YYYY-MM-DD"
+  month       text,                            -- "YYYY-MM"
+  category    text,
+  amount      numeric,
+  note        text,
+  "createdAt" timestamptz default now(),
+  "updatedAt" timestamptz default now()
+);
+create index if not exists idx_exp_month on expenses (month);
+
 -- ============ Foydalanuvchilar (rollar) — id = auth uid ============
 create table if not exists users (
   id                 text primary key,        -- = auth.users.id (uid)

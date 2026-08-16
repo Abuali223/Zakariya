@@ -278,6 +278,55 @@
   .fin-cols .bar-row{grid-template-columns:96px 1fr auto;gap:10px}
   .fin-cols .bar-row b{font-size:12.5px;white-space:nowrap}
   @media(max-width:820px){ .fin-kpis{grid-template-columns:1fr 1fr} .fin-cols{grid-template-columns:1fr} }
+
+  /* ====== Buxgalteriya (Accounting) ====== */
+  .acc-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .acc-kpi{position:relative;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px 18px;overflow:hidden;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .acc-kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--acc,var(--teal))}
+  .acc-kpi .k-l{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .acc-kpi .k-v{font-family:var(--serif);font-size:25px;font-weight:700;line-height:1.1;margin-top:7px;color:var(--acc,var(--teal))}
+  .acc-kpi .k-v small{font-size:12px;font-weight:600;color:var(--muted)}
+  .acc-kpi .k-d{font-size:11.5px;margin-top:6px;color:var(--muted);font-weight:600}
+  .acc-kpi.pos{--acc:#2F9E76} .acc-kpi.neg{--acc:var(--bad)} .acc-kpi.teal{--acc:var(--teal)} .acc-kpi.gold{--acc:var(--gold-d)}
+  .acc-gauge{--p:0;width:50px;height:50px;border-radius:50%;flex:none;margin-top:2px;background:conic-gradient(var(--acc,var(--teal)) calc(var(--p)*3.6deg),var(--border) 0);display:flex;align-items:center;justify-content:center;position:relative}
+  .acc-gauge::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--white)}
+  .acc-gauge b{position:relative;font-size:11.5px;font-weight:800;color:var(--acc,var(--gold-d));z-index:1}
+  .acc-chart{position:relative}
+  .acc-grid{position:absolute;left:0;right:0;top:24px;bottom:26px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+  .acc-grid i{border-top:1px solid var(--border-2);height:0}
+  .acc-gc{position:relative;display:flex;align-items:flex-end;gap:12px;height:200px;padding-top:24px;border-bottom:1px solid var(--border)}
+  .acc-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .acc-gcbars{display:flex;align-items:flex-end;gap:5px;height:100%;width:100%;justify-content:center}
+  .acc-bar{width:30%;max-width:22px;border-radius:5px 5px 0 0;position:relative;min-height:2px}
+  .acc-in{background:linear-gradient(180deg,#3DB389,#1E6A5B)}
+  .acc-ex{background:linear-gradient(180deg,#D98A6A,#C0492E)}
+  .acc-bar span{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .acc-x{margin-top:8px;font-size:11px;color:var(--muted);font-weight:600}
+  .acc-legend{display:flex;gap:16px;margin-top:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .acc-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
+  .acc-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .acc-donut-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap;justify-content:center;padding:12px 0}
+  .acc-donut{--foyda:0;width:160px;height:160px;border-radius:50%;flex:none;position:relative;background:conic-gradient(#2F9E76 0 calc(var(--foyda)*1% - 0.8%),var(--white) calc(var(--foyda)*1% - 0.8%) calc(var(--foyda)*1% + 0.8%),var(--bad) calc(var(--foyda)*1% + 0.8%) 99.2%,var(--white) 99.2% 100%)}
+  .acc-donut::after{content:"";position:absolute;inset:24px;border-radius:50%;background:var(--white);box-shadow:inset 0 0 0 1px var(--border)}
+  .acc-dc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1}
+  .acc-dc .dl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .acc-dc .dv{font-family:var(--serif);font-size:19px;font-weight:700;color:var(--ink);line-height:1.1}
+  .acc-dc .du{font-size:10.5px;color:var(--muted)}
+  .acc-dleg{display:flex;flex-direction:column;gap:12px;min-width:140px}
+  .acc-dlrow{display:flex;align-items:center;gap:10px}
+  .acc-ddot{width:12px;height:12px;border-radius:4px;flex:none}
+  .acc-dlt{font-size:12px;color:var(--muted);font-weight:600}
+  .acc-dlv{font-size:15px;font-weight:800;line-height:1.1}
+  .acc-dlv small{font-size:11.5px;font-weight:600;color:var(--muted)}
+  .acc-cats{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+  .acc-crow .ct{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;gap:8px}
+  .acc-crow .cn{font-weight:600}
+  .acc-crow .cs{font-weight:700;white-space:nowrap}
+  .acc-crow .cp{color:var(--muted);font-weight:600;font-size:11.5px;margin-left:6px}
+  .acc-track{height:10px;border-radius:6px;background:var(--bg);overflow:hidden}
+  .acc-fill{height:100%;border-radius:6px}
+  .acc-cat-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:var(--it-bg);color:var(--teal);white-space:nowrap;display:inline-block}
+  @media(max-width:820px){ .acc-kpis{grid-template-columns:1fr 1fr} .acc-cols{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -715,7 +764,8 @@ function buildTabs(){
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
-    {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'}
+    {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'},
+    {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -743,6 +793,7 @@ function openTab(tab){
   if(tab==='applications') return renderApplications();
   if(tab==='payments') return renderPayments();
   if(tab==='finance') return renderFinance();
+  if(tab==='accounting') return renderAccounting();
   renderCollection(tab);
 }
 
@@ -2518,6 +2569,140 @@ async function renderFinance(){
 
   draw($('#fin-month').value || curMonth());
   $('#fin-month').addEventListener('change',()=>draw($('#fin-month').value||curMonth()));
+}
+
+/* ==================== Buxgalteriya (Accounting) ====================
+   Kirim — «To'lovlar»dagi paid invoices'dan avtomatik.
+   Chiqim — «expenses» jadvali (admin qo'lda kiritadi: qo'shish/tahrir/o'chir).
+   Foyda = kirim − chiqim. Diagrammalar: kirim/chiqim, foyda halqa, toifalar. */
+async function renderAccounting(){
+  const CATS=['Oyliklar','Ijara','Kommunal','Soliq','Jihoz / ta\'mir','Reklama','Boshqa'];
+  const ERAMP=['#A0331B','#BC4426','#CE6046','#D98A6A','#E6A98F','#EFC4B2','#F6DDD1'];
+  $('#view').innerHTML = `<div class="page-head"><h2>Buxgalteriya</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Kirim — <b>«To'lovlar»</b>dan avtomatik, chiqim (xarajat) — siz kiritasiz. Foyda = kirim − chiqim.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>
+      <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
+    </div></div>
+    <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+
+  let INV=[], EXP=[];
+  const reload=async()=>{
+    try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]); return true; }
+    catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
+  };
+
+  const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
+  const fmtC=n=>{ n=Number(n)||0; const sg=n<0?'−':''; n=Math.abs(n); let v; if(n>=1e9)v=(n/1e9).toFixed(2).replace('.',',')+' mlrd'; else if(n>=1e6)v=(n/1e6).toFixed(1).replace('.',',')+' mln'; else v=Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); return sg+v; };
+  const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
+  const emonth=e=>e.month||String(e.date||'').slice(0,7);
+
+  const draw=(M)=>{
+    const paidAll=INV.filter(i=>i.status==='paid');
+    const kirim=sum(paidAll.filter(i=>i.month===M));
+    const mExp=EXP.filter(e=>emonth(e)===M);
+    const chiqim=sum(mExp);
+    const foyda=kirim-chiqim;
+    const marja=kirim>0?Math.round(foyda/kirim*100):0;
+    const foydaPct=kirim>0?Math.max(0,Math.min(100,Math.round(foyda/kirim*100))):0;
+    const chiqPct=kirim>0?Math.round(chiqim/kirim*100):0;
+
+    // ---- KPI ----
+    const kpis=`<div class="acc-kpis">
+      <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v num">${fmtC(kirim)}</div><div class="k-d">yig‘ilgan to‘lovlar</div></div></div>
+      <div class="acc-kpi neg"><div><div class="k-l">Chiqim</div><div class="k-v num">${fmtC(chiqim)}</div><div class="k-d">${mExp.length} ta xarajat</div></div></div>
+      <div class="acc-kpi ${foyda>=0?'teal':'neg'}"><div><div class="k-l">${foyda>=0?'Foyda':'Zarar'}</div><div class="k-v num">${fmtC(foyda)}</div><div class="k-d">kirim − chiqim</div></div></div>
+      <div class="acc-kpi gold"><div><div class="k-l">Foyda marjasi</div><div class="k-v num">${marja}<small>%</small></div><div class="k-d">har 100 so‘mdan</div></div><div class="acc-gauge" style="--p:${Math.max(0,Math.min(100,marja))}"><b>${marja}%</b></div></div>
+    </div>`;
+
+    // ---- Kirim va chiqim grafigi (6 oy) ----
+    const keys=monthList(M,6);
+    const kin=keys.map(k=>sum(paidAll.filter(i=>i.month===k)));
+    const kex=keys.map(k=>sum(EXP.filter(e=>emonth(e)===k)));
+    const maxV=Math.max(1,...kin,...kex);
+    const anyLoss=keys.some((k,i)=>kex[i]>kin[i] && (kin[i]>0||kex[i]>0));
+    const chart=`<div class="card" style="margin-bottom:16px">
+      <div class="cls-card-head"><h3>Kirim va chiqim</h3><span class="cls-count">Oxirgi 6 oy · mln so‘m</span></div>
+      <div class="acc-chart">
+        <div class="acc-grid"><i></i><i></i><i></i><i></i></div>
+        <div class="acc-gc">${keys.map((k,i)=>`<div class="acc-col"><div class="acc-gcbars">
+          <div class="acc-bar acc-in" style="height:${kin[i]>0?Math.max(Math.round(kin[i]/maxV*100),3):0}%">${kin[i]?`<span>${Math.round(kin[i]/1e6)}</span>`:''}</div>
+          <div class="acc-bar acc-ex" style="height:${kex[i]>0?Math.max(Math.round(kex[i]/maxV*100),3):0}%">${kex[i]?`<span>${Math.round(kex[i]/1e6)}</span>`:''}</div>
+        </div><span class="acc-x">${mLabel(k)}</span></div>`).join('')}</div>
+      </div>
+      <div class="acc-legend"><span><i style="background:#2F9E76"></i>Kirim</span><span><i style="background:var(--bad)"></i>Chiqim</span>${anyLoss?`<span style="color:var(--bad);font-weight:700">↓ Zarar oylari bor (chiqim &gt; kirim)</span>`:''}</div>
+    </div>`;
+
+    // ---- Kirim taqsimoti (halqa) ----
+    const donut=`<div class="card"><div class="cls-card-head"><h3>Kirim taqsimoti</h3><span class="cls-count">${mLabel(M)}</span></div>
+      <div class="acc-donut-wrap">
+        <div class="acc-donut" style="--foyda:${foydaPct}"><div class="acc-dc"><span class="dl">Kirim</span><span class="dv num">${fmtC(kirim)}</span><span class="du">so‘m</span></div></div>
+        <div class="acc-dleg">
+          <div class="acc-dlrow"><span class="acc-ddot" style="background:#2F9E76"></span><div><div class="acc-dlt">${foyda>=0?'Foyda':'Zarar'}</div><div class="acc-dlv" style="color:${foyda>=0?'#2F9E76':'var(--bad)'}">${fmtC(foyda)} <small>${kirim>0?foydaPct+'%':''}</small></div></div></div>
+          <div class="acc-dlrow"><span class="acc-ddot" style="background:var(--bad)"></span><div><div class="acc-dlt">Chiqim</div><div class="acc-dlv" style="color:var(--bad)">${fmtC(chiqim)} <small>${kirim>0?chiqPct+'%':''}</small></div></div></div>
+        </div>
+      </div></div>`;
+
+    // ---- Xarajat toifalari ----
+    const byCat={}; mExp.forEach(e=>{ const c=e.category||'Boshqa'; byCat[c]=(byCat[c]||0)+(Number(e.amount)||0); });
+    const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+    const maxCat=Math.max(1,...catKeys.map(c=>byCat[c]));
+    const catBars=catKeys.length?catKeys.map((c,i)=>`<div class="acc-crow"><div class="ct"><span class="cn">${esc(c)}</span><span class="cs">${fmtC(byCat[c])}<span class="cp">${chiqim?Math.round(byCat[c]/chiqim*100):0}%</span></span></div><div class="acc-track"><div class="acc-fill" style="width:${Math.max(Math.round(byCat[c]/maxCat*100),4)}%;background:${ERAMP[Math.min(i,ERAMP.length-1)]}"></div></div></div>`).join(''):'<div class="empty">Bu oyda xarajat yo‘q</div>';
+    const catCard=`<div class="card"><div class="cls-card-head"><h3>Xarajat toifalari</h3><span class="cls-count">${fmtC(chiqim)}</span></div><div class="acc-cats">${catBars}</div></div>`;
+
+    // ---- Xarajatlar ro'yxati ----
+    const rows=mExp.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const trs=rows.map(e=>{ const dd=String(e.date||'').slice(8,10), mm=String(e.date||'').slice(5,7);
+      return `<tr>
+        <td data-label="Sana" class="num">${dd&&mm?dd+'.'+mm:esc(emonth(e))}</td>
+        <td data-label="Toifa"><span class="acc-cat-chip">${esc(e.category||'—')}</span></td>
+        <td data-label="Izoh">${esc(e.note||'')}</td>
+        <td data-label="Summa" style="text-align:right;font-weight:700;color:var(--bad);white-space:nowrap">${fmtSum(e.amount)}</td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button></div></td></tr>`;
+    }).join('');
+    const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
+      ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>'}</div>`;
+
+    $('#ac-body').innerHTML = kpis+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard;
+    $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
+    $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
+  };
+
+  function openExpenseForm(exp){
+    const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+    const e=exp||{};
+    const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
+    $('#modal').innerHTML=`<div class="modal-h"><h3>${exp?'Xarajatni tahrirlash':'Xarajat qo‘shish'}</h3><button class="x" id="m-x">×</button></div>
+      <div class="modal-b">
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="e-date" value="${esc(e.date||today)}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Toifa<select id="e-cat" style="${fld};background:#fff">${CATS.map(c=>`<option ${e.category===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input type="text" inputmode="numeric" id="e-amt" value="${e.amount?fmtSum(e.amount):''}" placeholder="masalan: 2 000 000" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="e-note" value="${esc(e.note||'')}" placeholder="masalan: Avgust oyliklari" style="${fld}"></label>
+      </div>
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="e-save">Saqlash</button></div>`;
+    openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    const amt=$('#e-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
+    $('#e-save').onclick=async()=>{
+      const date=$('#e-date').value, category=$('#e-cat').value, amount=Number(($('#e-amt').value||'').replace(/\D/g,''))||0, note=$('#e-note').value.trim();
+      if(!date){ toast('Sanani tanlang',true); return; }
+      if(amount<=0){ toast('Summani kiriting',true); return; }
+      const btn=$('#e-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{
+        const data={ date, month:date.slice(0,7), category, amount, note, updatedAt:serverTimestamp() };
+        if(exp&&exp._id) await setDoc(doc(db,'expenses',exp._id),data,{merge:true});
+        else { data.createdAt=serverTimestamp(); await addDoc(collection(db,'expenses'),data); }
+        toast('Saqlandi ✓'); closeModal(); if(await reload()) draw($('#ac-month').value||curMonth());
+      }catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+    };
+  }
+
+  if(!(await reload())) return;
+  draw($('#ac-month').value||curMonth());
+  $('#ac-month').addEventListener('change',()=>draw($('#ac-month').value||curMonth()));
+  $('#ac-add').addEventListener('click',()=>openExpenseForm(null));
 }
 
 async function renderPayments(){
