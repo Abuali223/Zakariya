@@ -216,6 +216,9 @@ create table if not exists enrollments (
   id        text primary key,
   name      text, phone text, grade text, direction text, lang text,
   ts        text,
+  status    text default 'yangi',            -- lead voronka: yangi|boglanildi|sinov|qabul|rad
+  note      text,
+  "updatedAt" timestamptz default now(),
   created   timestamptz default now()
 );
 create table if not exists applications (

@@ -327,6 +327,33 @@
   .acc-fill{height:100%;border-radius:6px}
   .acc-cat-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:var(--it-bg);color:var(--teal);white-space:nowrap;display:inline-block}
   @media(max-width:820px){ .acc-kpis{grid-template-columns:1fr 1fr} .acc-cols{grid-template-columns:1fr} }
+
+  /* ====== Marketing (CRM / CAC / ROI) ====== */
+  .acc-kpi.blue{--acc:#2A6FB0}
+  .acc-cats{padding:14px 20px}          /* Buxgalteriya toifa-panjarasiga chekka bo'shliq */
+  .acc-legend{padding:2px 20px 16px}
+  .mkt-cols{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-bottom:16px}
+  .mkt-pad{padding:16px 20px}
+  .mkt-funnel{display:flex;flex-direction:column;gap:8px;padding:14px 20px 18px}
+  .mkt-fstage{display:flex;align-items:center;gap:14px}
+  .mkt-fbarw{flex:1;height:42px;display:flex;align-items:center;min-width:0}
+  .mkt-fbar{height:100%;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;min-width:48px;transition:width .3s}
+  .mkt-fmeta{width:122px;flex:none;font-size:13px}
+  .mkt-fmeta b{display:block;font-weight:700}
+  .mkt-fmeta span{color:var(--muted);font-size:11.5px}
+  .mkt-fdrop{font-size:11px;color:var(--muted);margin:-2px 0 -2px 4px}
+  .mkt-fdrop b{color:var(--ok);font-weight:700}
+  .mkt-cbars{position:relative;display:flex;align-items:flex-end;gap:12px;height:170px;padding-top:22px;border-bottom:1px solid var(--border)}
+  .mkt-ccol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .mkt-cbar{width:52%;max-width:32px;background:linear-gradient(180deg,#3D86C4,#1C4E7E);border-radius:5px 5px 0 0;position:relative;min-height:3px}
+  .mkt-cbar.cur{background:linear-gradient(180deg,var(--gold),var(--gold-d))}
+  .mkt-cbar span{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .mkt-cx{margin-top:8px;font-size:11px;color:var(--muted);font-weight:600}
+  .mkt-note{margin-top:12px;padding:10px 12px;background:var(--it-bg);border-radius:10px;font-size:12.5px;color:var(--teal);font-weight:600}
+  .mkt-sel{font-size:12px;font-weight:700;padding:5px 9px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-family:inherit}
+  .mkt-sel.st-yangi{color:var(--muted)} .mkt-sel.st-boglanildi{color:#2A6FB0} .mkt-sel.st-sinov{color:var(--med-fg)}
+  .mkt-sel.st-qabul{color:var(--ok)} .mkt-sel.st-rad{color:var(--bad)}
+  @media(max-width:820px){ .mkt-cols{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -765,7 +792,8 @@ function buildTabs(){
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
     {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'},
-    {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'}
+    {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'},
+    {k:'marketing', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T667-480q0 43-19.5 78T560-346Z'), t:'Marketing'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -794,6 +822,7 @@ function openTab(tab){
   if(tab==='payments') return renderPayments();
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
+  if(tab==='marketing') return renderMarketing();
   renderCollection(tab);
 }
 
@@ -2703,6 +2732,115 @@ async function renderAccounting(){
   draw($('#ac-month').value||curMonth());
   $('#ac-month').addEventListener('change',()=>draw($('#ac-month').value||curMonth()));
   $('#ac-add').addEventListener('click',()=>openExpenseForm(null));
+}
+
+/* ==================== Marketing (CRM / CAC / ROI) ====================
+   Arizalar (enrollments) — leadlar; holat (status) bilan voronka.
+   Reklama xarajati — «expenses» (category=Reklama). Invoices — o'rtacha to'lov.
+   CAC = reklama ÷ qabul · Konversiya = qabul ÷ arizalar · ROI = daromad ÷ reklama. */
+async function renderMarketing(){
+  const STAGES=[['yangi','Yangi'],['boglanildi','Bog‘lanildi'],['sinov','Sinov darsi'],['qabul','Qabul qilindi'],['rad','Rad etildi']];
+  const ORDER={yangi:0,boglanildi:1,sinov:2,qabul:3};
+  $('#view').innerHTML = `<div class="page-head"><h2>Marketing</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Arizalar — <b>«Arizalar»</b>dan, reklama xarajati — <b>«Buxgalteriya»</b>dagi «Reklama» toifasidan. Lead holatini shu yerda boshqaring.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Oy<input type="month" id="mk-month" value="${curMonth()}"></label>
+    </div></div>
+    <div id="mk-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+
+  let LEADS=[], EXP=[], INV=[];
+  const reload=async()=>{
+    try{ [LEADS,EXP,INV]=await Promise.all([loadCol('enrollments'),loadCol('expenses'),loadCol('invoices')]); return true; }
+    catch(e){ $('#mk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return false; }
+  };
+  const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
+  const fmtC=n=>{ n=Number(n)||0; const s=n<0?'−':''; n=Math.abs(n); let v; if(n>=1e9)v=(n/1e9).toFixed(2).replace('.',',')+' mlrd'; else if(n>=1e6)v=(n/1e6).toFixed(1).replace('.',',')+' mln'; else v=Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); return s+v; };
+  const fmtCac=n=>{ n=Math.round(Number(n)||0); if(n>=1e6)return (n/1e6).toFixed(1).replace('.',',')+' mln'; return Math.round(n/1000)+' ming'; };
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
+  const lmonth=r=>String(r.ts||r.created||'').slice(0,7);
+  const emonth=e=>e.month||String(e.date||'').slice(0,7);
+  const stof=r=>r.status||'yangi';
+
+  const draw=(M)=>{
+    // o'rtacha oylik to'lov (ROI uchun) — to'langan invoicelardan, fallback 2.9 mln
+    const paidAmts=INV.filter(i=>i.status==='paid').map(i=>Number(i.amount)||0).filter(x=>x>0);
+    const avgFee=paidAmts.length?Math.round(paidAmts.reduce((a,b)=>a+b,0)/paidAmts.length):2900000;
+
+    const perMonthQabul=k=>LEADS.filter(r=>lmonth(r)===k && stof(r)==='qabul').length;
+    const perMonthReklama=k=>sum(EXP.filter(e=>emonth(e)===k && e.category==='Reklama'));
+
+    const mLeads=LEADS.filter(r=>lmonth(r)===M);
+    const nLeads=mLeads.length;
+    // voronka: har lead HOZIRGI holatiga ko'ra qaysi bosqichga yetgan (rad — faqat "Yangi"da)
+    const reached=stage=>mLeads.filter(r=>{ const c=stof(r); if(c==='rad') return stage==='yangi'; return (ORDER[c]??0)>=ORDER[stage]; }).length;
+    const nBog=reached('boglanildi'), nSin=reached('sinov'), nQab=reached('qabul');
+    const reklama=perMonthReklama(M);
+    const konv=nLeads?Math.round(nQab/nLeads*100):0;
+    const cac=nQab?Math.round(reklama/nQab):0;
+    const yearVal=avgFee*9;
+    const roiY=(reklama>0&&nQab>0)?Math.round(nQab*yearVal/reklama):null;
+    const roiM=(reklama>0&&nQab>0)?Math.round(nQab*avgFee/reklama):null;
+
+    // ---- KPI ----
+    const kpis=`<div class="acc-kpis">
+      <div class="acc-kpi teal"><div><div class="k-l">Yangi arizalar</div><div class="k-v num">${nLeads}</div><div class="k-d">bu oy</div></div></div>
+      <div class="acc-kpi gold"><div><div class="k-l">Konversiya</div><div class="k-v num">${konv}<small>%</small></div><div class="k-d">${nQab} qabul / ${nLeads}</div></div><div class="acc-gauge" style="--p:${Math.max(0,Math.min(100,konv))}"><b>${konv}%</b></div></div>
+      <div class="acc-kpi blue"><div><div class="k-l">CAC (1 o‘quvchi)</div><div class="k-v num">${nQab?fmtCac(cac):'—'}</div><div class="k-d">reklama ÷ qabul</div></div></div>
+      <div class="acc-kpi pos"><div><div class="k-l">Marketing ROI</div><div class="k-v num">${roiY==null?'—':roiY+'<small>×</small>'}</div><div class="k-d">${roiY==null?'reklama/qabul yo‘q':'1 so‘m → '+roiY+' (yillik) · oy '+roiM+'×'}</div></div></div>
+    </div>`;
+
+    // ---- Voronka ----
+    const fbar=(cnt,w,c,name,note)=>`<div class="mkt-fstage"><div class="mkt-fbarw"><div class="mkt-fbar" style="width:${Math.max(w,10)}%;background:${c}">${cnt}</div></div><div class="mkt-fmeta"><b>${name}</b><span>${note}</span></div></div>`;
+    const drop=(from,to,txt)=>`<div class="mkt-fdrop">↓ <b>${from>0?Math.round(to/from*100):0}%</b> ${txt}</div>`;
+    const mx=Math.max(1,nLeads);
+    const funnelCard=`<div class="card"><div class="cls-card-head"><h3>Arizalar voronkasi</h3><span class="cls-count">${mLabel(M)}</span></div>
+      ${nLeads?`<div class="mkt-funnel">
+        ${fbar(nLeads,100,'#236B5D','Yangi arizalar','kelib tushdi')}
+        ${drop(nLeads,nBog,'bog‘lanildi')}
+        ${fbar(nBog,nBog/mx*100,'#2C7A66','Bog‘lanildi','telefon/javob')}
+        ${drop(nBog,nSin,'sinovga keldi')}
+        ${fbar(nSin,nSin/mx*100,'#368876','Sinov darsi','keldi')}
+        ${drop(nSin,nQab,'qabul bo‘ldi')}
+        ${fbar(nQab,nQab/mx*100,'#3F8F7C','Qabul qilindi','o‘quvchi bo‘ldi')}
+      </div>`:'<div class="empty">Bu oy uchun ariza yo‘q.</div>'}</div>`;
+
+    // ---- CAC trend (6 oy) ----
+    const keys=monthList(M,6);
+    const cacs=keys.map(k=>{ const q=perMonthQabul(k); return q?Math.round(perMonthReklama(k)/q):0; });
+    const maxCac=Math.max(1,...cacs);
+    const cacCard=`<div class="card"><div class="cls-card-head"><h3>1 o‘quvchi narxi (CAC)</h3><span class="cls-count">Oxirgi 6 oy · ming so‘m</span></div>
+      <div class="mkt-pad">
+        <div class="mkt-cbars">${keys.map((k,i)=>`<div class="mkt-ccol"><div class="mkt-cbar ${k===M?'cur':''}" style="height:${cacs[i]>0?Math.max(Math.round(cacs[i]/maxCac*100),3):0}%">${cacs[i]?`<span>${Math.round(cacs[i]/1000)}</span>`:''}</div><span class="mkt-cx">${mLabel(k)}</span></div>`).join('')}</div>
+        <div class="mkt-note">💡 ${nQab&&reklama?`Bu oy 1 o‘quvchi ~${fmtCac(cac)} so‘mga tushdi, yillik to‘lovi esa ~${fmtC(yearVal)} — reklama juda foydali.`:'Reklama xarajati (Buxgalteriya → «Reklama») va qabul bo‘lgan arizalar bo‘yicha hisoblanadi.'}</div>
+      </div></div>`;
+
+    // ---- Lead pipeline (holat CRUD) ----
+    const rows=mLeads.slice().sort((a,b)=>String(b.ts||b.created||'').localeCompare(String(a.ts||a.created||'')));
+    const trs=rows.map(r=>{ const cur=stof(r); const dir=[r.direction,r.grade?esc(r.grade)+'-sinf':''].filter(Boolean).map(esc).join(' · ');
+      const sel=`<select class="mkt-sel st-${cur}" data-lead="${esc(r._id)}">${STAGES.map(([v,l])=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`).join('')}</select>`;
+      return `<tr>
+        <td data-label="Ism"><b>${esc(r.name||'')}</b></td>
+        <td data-label="Yo‘nalish">${dir||'—'}</td>
+        <td data-label="Telefon">${r.phone?`<a href="tel:${esc(String(r.phone).replace(/[^+\\d]/g,''))}">${esc(r.phone)}</a>`:'—'}</td>
+        <td data-label="Holat">${sel}</td>
+        <td data-label="Sana" class="num">${esc(String(r.ts||r.created||'').slice(0,10))}</td></tr>`;
+    }).join('');
+    const tableCard=`<div class="card"><div class="cls-card-head"><h3>Arizalar (lead pipeline)</h3><span class="cls-count">${rows.length} ta · holatni o‘zgartiring</span></div>
+      ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Yo‘nalish</th><th>Telefon</th><th>Holat</th><th>Sana</th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun ariza yo‘q.</div>'}</div>`;
+
+    $('#mk-body').innerHTML = kpis + `<div class="mkt-cols">${funnelCard}${cacCard}</div>` + tableCard;
+    $('#mk-body').querySelectorAll('select[data-lead]').forEach(sel=>sel.addEventListener('change',async()=>{
+      const id=sel.dataset.lead, val=sel.value;
+      try{ await setDoc(doc(db,'enrollments',id),{status:val,updatedAt:serverTimestamp()},{merge:true}); toast('Holat yangilandi ✓'); if(await reload()) draw($('#mk-month').value||curMonth()); }
+      catch(err){ toast('Xatolik: '+(err.code||err.message),true); }
+    }));
+  };
+
+  if(!(await reload())) return;
+  draw($('#mk-month').value||curMonth());
+  $('#mk-month').addEventListener('change',()=>draw($('#mk-month').value||curMonth()));
 }
 
 async function renderPayments(){
