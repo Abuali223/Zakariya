@@ -2295,7 +2295,7 @@ async function renderEnrollments(){
   try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
   catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
-  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc((r.ts||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
+  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc(String(r.ts||r.created||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Sinf tili</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
   labelTable();
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
@@ -2818,7 +2818,7 @@ async function renderMarketing(){
 
     // ---- Lead pipeline (holat CRUD) ----
     const rows=mLeads.slice().sort((a,b)=>String(b.ts||b.created||'').localeCompare(String(a.ts||a.created||'')));
-    const trs=rows.map(r=>{ const cur=stof(r); const dir=[r.direction,r.grade?esc(r.grade)+'-sinf':''].filter(Boolean).map(esc).join(' · ');
+    const trs=rows.map(r=>{ const cur=stof(r); const dir=[r.direction,r.grade].filter(Boolean).map(esc).join(' · ');
       const sel=`<select class="mkt-sel st-${cur}" data-lead="${esc(r._id)}">${STAGES.map(([v,l])=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`).join('')}</select>`;
       return `<tr>
         <td data-label="Ism"><b>${esc(r.name||'')}</b></td>
