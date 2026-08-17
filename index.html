@@ -1309,7 +1309,7 @@ function renderHonorRoll(){
 function renderTeachers(){
   const t=T[lang];
   $("#teachers").innerHTML = TEACHERS.map(tc=>{
-    const full=Math.round(tc.rating);
+    const full=Math.round(Number(tc.rating)||0);
     const stars="★".repeat(full)+"☆".repeat(5-full);
     return `<div class="tcard">
       <div class="top">
@@ -1318,7 +1318,7 @@ function renderTeachers(){
       </div>
       <div class="top" style="gap:10px">
         <span class="stars" aria-hidden="true">${stars}</span>
-        <span class="rating">${tc.rating.toFixed(1)}</span>
+        <span class="rating">${(Number(tc.rating)||0).toFixed(1)}</span>
         <span class="votes">${tc.votes} ${esc(t.t_votes)}</span>
       </div>
       <div class="tstats">
@@ -1976,10 +1976,15 @@ $("#enroll-form").addEventListener("submit",async e=>{
   const el=f.elements;
   const data={name:el.name.value.trim(),phone:el.phone.value.trim(),grade:el.grade.value,direction:el.direction.value,lang,ts:new Date().toISOString()};
   const th=$("#form-thanks");
-  th.textContent=T[lang].f_thanks; th.hidden=false;
-  f.querySelector("button").disabled=true;
-  try{ if(window.IqrorFB&&window.IqrorFB.submitEnrollment) await window.IqrorFB.submitEnrollment(data); }catch(err){}
-  setTimeout(()=>{f.reset();$("#form-thanks").hidden=true;f.querySelector("button").disabled=false;renderDirs();renderGradeSelect();},2500);
+  const _btn=f.querySelector("button"); _btn.disabled=true;
+  let _ok=false;
+  try{ _ok = (window.IqrorFB&&window.IqrorFB.submitEnrollment) ? await window.IqrorFB.submitEnrollment(data) : false; }catch(err){ _ok=false; }
+  if(_ok){
+    th.textContent=T[lang].f_thanks; th.style.color=''; th.hidden=false;
+    setTimeout(()=>{f.reset();$("#form-thanks").hidden=true;_btn.disabled=false;renderDirs();renderGradeSelect();},2500);
+  } else {
+    th.textContent=(lang==='ru'?'Ошибка отправки. Пожалуйста, позвоните нам.':'Yuborishda xatolik. Iltimos, telefon qilib bog\'laning.'); th.style.color='#C0392B'; th.hidden=false; _btn.disabled=false;
+  }
 });
 
 /* AI yordamchi (chatbot) — server config/ai da sozlangan bo'lsagina ishlaydi */

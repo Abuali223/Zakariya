@@ -1673,7 +1673,7 @@ async function renderStudents(){
   catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
   // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
   try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
-    rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ r.pinfl=pd.pinfl||''; r.parentPhone=pd.parentPhone||''; r.guardian=pd.guardian||''; } }); }catch(e){}
+    rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }catch(e){}
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=()=>{
     const q=(($('#stu-search')&&$('#stu-search').value)||'').trim().toLowerCase();
@@ -2018,7 +2018,7 @@ function openForm(name, row){
       // Maxfiy maydonlarni ommaviy hujjatdan ajratamiz (alohida kolleksiyaga yoziladi)
       const privData={};
       if(s.privateCol && Array.isArray(s.privateFields)){
-        s.privateFields.forEach(k=>{ privData[k] = (k in data) ? data[k] : ''; if(k in data) data[k]=deleteField(); });
+        s.privateFields.forEach(k=>{ privData[k] = (k in data) ? data[k] : ''; if(k in data) delete data[k]; });
       }
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
       if(!isEdit && name==='students'){
@@ -2823,7 +2823,7 @@ async function renderMarketing(){
       return `<tr>
         <td data-label="Ism"><b>${esc(r.name||'')}</b></td>
         <td data-label="Yo‘nalish">${dir||'—'}</td>
-        <td data-label="Telefon">${r.phone?`<a href="tel:${esc(String(r.phone).replace(/[^+\\d]/g,''))}">${esc(r.phone)}</a>`:'—'}</td>
+        <td data-label="Telefon">${r.phone?`<a href="tel:${esc(String(r.phone).replace(/[^+\d]/g,''))}">${esc(r.phone)}</a>`:'—'}</td>
         <td data-label="Holat">${sel}</td>
         <td data-label="Sana" class="num">${esc(String(r.ts||r.created||'').slice(0,10))}</td></tr>`;
     }).join('');
