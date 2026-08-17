@@ -26,7 +26,7 @@ create or replace function app.owns_child(sid text) returns boolean language sql
   select exists(select 1 from public.users where id = app.uid() and coalesce("childIds",'[]'::jsonb) ? sid)
 $$;
 create or replace function app.is_homeroom_for(ck text) returns boolean language sql stable security definer as $$
-  select exists(select 1 from public.users where id = app.uid() and coalesce("homeroomClasses",'[]'::jsonb) ? ck)
+  select exists(select 1 from public.users where id = app.uid() and role in ('admin','zavuch','kurator','teacher') and coalesce("homeroomClasses",'[]'::jsonb) ? ck)
 $$;
 create or replace function app.is_kurator_for(ck text) returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role='kurator' and coalesce("assignedClasses",'[]'::jsonb) ? ck)
@@ -130,6 +130,10 @@ create policy users_upd on users for update using (app.is_admin() or id = app.ui
      id = app.uid()
      and role     = (select u.role     from public.users u where u.id = app.uid())
      and verified = (select u.verified from public.users u where u.id = app.uid())
+     and coalesce("childIds",        '[]'::jsonb) = coalesce((select u."childIds"        from public.users u where u.id = app.uid()), '[]'::jsonb)
+     and coalesce("homeroomClasses", '[]'::jsonb) = coalesce((select u."homeroomClasses" from public.users u where u.id = app.uid()), '[]'::jsonb)
+     and coalesce("assignedClasses", '[]'::jsonb) = coalesce((select u."assignedClasses" from public.users u where u.id = app.uid()), '[]'::jsonb)
+     and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((select u."assignedSubjects" from public.users u where u.id = app.uid()), '[]'::jsonb)
   ));
 create policy users_del on users for delete using (app.is_admin());
 
