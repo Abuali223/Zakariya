@@ -1,0 +1,5 @@
+{
+  "serviceAccount": "./service-account.json",
+  "anthropicKey": "sk-ant-...  (yoki ANTHROPIC_API_KEY muhit o'zgaruvchisi)",
+  "model": "claude-opus-4-8"
+}

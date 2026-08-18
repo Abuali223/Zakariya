@@ -1,0 +1,19 @@
+{
+  "backend": "supabase",
+  "supabaseUrl": "https://api.iqror.uz",
+  "serviceRoleKey": "PASTE_SERVICE_ROLE_KEY (Supabase .env) — MAXFIY",
+  "serviceAccount": "./service-account.json (faqat backend=firebase bo'lganda)",
+  "port": 8790,
+  "uzum": {
+    "serviceId": "UZUM_SERVICE_ID (kabinetdagi xizmat ID)",
+    "login": "UZUM_LOGIN (Basic-auth login — kabinetdan)",
+    "password": "UZUM_PASSWORD (Basic-auth parol — MAXFIY)",
+    "accountField": "invoice",
+    "amountUnit": "tiyin"
+  },
+  "click": {
+    "serviceId": "CLICK_SERVICE_ID (ixtiyoriy)",
+    "merchantId": "CLICK_MERCHANT_ID",
+    "secretKey": "CLICK_SECRET_KEY"
+  }
+}

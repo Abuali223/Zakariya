@@ -1,0 +1,8 @@
+{
+  "serviceAccount": "./service-account.json",
+  "attendanceStart": "08:30",
+  "lateGraceMinutes": 5,
+  "deviceId": "kirish-terminali-1",
+  "port": 8787,
+  "webhookToken": "BU_YERGA_UZUN_MAXFIY_SATR_YOZING"
+}

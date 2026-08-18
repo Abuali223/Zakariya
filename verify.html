@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hujjatni tekshirish — Iqror Academy</title>
+<link rel="icon" href="/icon-192.png">
+<style>
+  :root{--teal:#1F9982;--ink:#155A4E;--bg:#f2f7f5;--line:#d7ddd4;--muted:#6b7d76}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:#20302B;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;max-width:460px;width:100%;padding:28px 26px;box-shadow:0 10px 40px rgba(21,90,78,.10)}
+  .head{display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--teal);padding-bottom:14px;margin-bottom:18px}
+  .org{font-family:Georgia,serif;font-size:20px;font-weight:700;color:var(--ink)}
+  .org small{display:block;font-family:system-ui;font-size:12px;color:var(--muted);font-weight:400}
+  .state{text-align:center;padding:10px 0}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;padding:9px 16px;border-radius:999px}
+  .ok{background:#e6f4ef;color:#137a5f}.bad{background:#fdeaea;color:#c0392b}.wait{background:#eef2f5;color:#5a6b76}
+  .big{font-size:30px;line-height:1;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin-top:16px}
+  td{border:1px solid var(--line);padding:9px 11px;font-size:14px;vertical-align:top}
+  td.k{color:var(--muted);width:42%}
+  .note{font-size:12px;color:var(--muted);margin-top:16px;text-align:center;line-height:1.5}
+  a{color:var(--teal)}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <svg width="42" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+      <div class="org">IQROR ACADEMY<small>Hujjat haqiqiyligini tekshirish</small></div>
+    </div>
+    <div id="out"><div class="state"><span class="badge wait">⏳ Tekshirilmoqda…</span></div></div>
+    <div class="note">Ushbu sahifa Iqror Academy rasmiy o‘quvchi profilining haqiqiyligini tasdiqlaydi.<br><a href="/">alilazer-cd582.web.app</a></div>
+  </div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getFirestore, collection, getDocs, getDoc, doc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  const cfg={apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",authDomain:"alilazer-cd582.firebaseapp.com",projectId:"alilazer-cd582",storageBucket:"alilazer-cd582.firebasestorage.app",messagingSenderId:"831212822404",appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1"};
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const out=document.getElementById('out');
+  const gradeLbl=g=>{g=Number(g)||0;return g===0?'Tayyorlov':g+'-sinf';};
+  const id=(new URLSearchParams(location.search).get('id')||'').trim();
+  function show(html){ out.innerHTML=html; }
+  function bad(msg){ show(`<div class="state"><div class="big">❌</div><span class="badge bad">Tasdiqlanmadi</span><p style="color:var(--muted);font-size:14px;margin-top:12px">${esc(msg)}</p></div>`); }
+  (async()=>{
+    if(!id){ bad('Hujjat ID ko‘rsatilmagan.'); return; }
+    try{
+      const app=initializeApp(cfg); const db=getFirestore(app);
+      let d=null;
+      // 1) hujjat id = studentId bo'lsa
+      try{ const s=await getDoc(doc(db,'students',id)); if(s.exists()) d={id:s.id,...s.data()}; }catch(e){}
+      // 2) aks holda studentId maydoni bo'yicha qidiramiz
+      if(!d){ const snap=await getDocs(query(collection(db,'students'), where('studentId','==',id), limit(1))); snap.forEach(x=>{ if(!d) d={id:x.id,...x.data()}; }); }
+      if(!d){ bad('Bunday ID bilan o‘quvchi topilmadi. Hujjat haqiqiy bo‘lmasligi mumkin.'); return; }
+      const cls=`${gradeLbl(d.grade)} «${esc(d.classLetter||d.track||'-')}» · ${d.lang==='ru'?'Rus':'O‘zbek'}`;
+      show(`<div class="state"><div class="big">✅</div><span class="badge ok">Tasdiqlandi — Iqror Academy o‘quvchisi</span></div>
+        <table><tbody>
+          <tr><td class="k">O‘quvchi ID</td><td><b>${esc(d.studentId||d.id)}</b></td></tr>
+          <tr><td class="k">Familiya, ism</td><td><b>${esc(d.name||'—')}</b></td></tr>
+          <tr><td class="k">Sinf</td><td>${cls}</td></tr>
+        </tbody></table>
+        <p class="note" style="margin-top:14px">Ushbu o‘quvchi Iqror Academy axborot tizimida ro‘yxatdan o‘tgan. Profil ma’lumotlari (baholar, xarakteristika) maktab tomonidan rasmiy tasdiqlangan.</p>`);
+    }catch(e){ bad('Tekshirishda xatolik: '+(e.code||e.message||'')); }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# /etc/systemd/system/iqror-ai.service — AI yordamchi doimiy ishlaydi
+# O'rnatish:
+#   cp migration/deploy/iqror-ai.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now iqror-ai
+[Unit]
+Description=Iqror AI yordamchi (Supabase)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/iqror
+ExecStart=/usr/bin/node ai-assistant/index.cjs serve
+Restart=always
+RestartSec=3
+# Anthropic kalitini config.json o'rniga ENV bilan ham berish mumkin:
+# Environment=ANTHROPIC_API_KEY=sk-ant-...
+User=iqror
+Group=iqror
+
+[Install]
+WantedBy=multi-user.target

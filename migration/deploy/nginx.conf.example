@@ -1,0 +1,48 @@
+# =====================================================================
+# nginx.conf (NAMUNA) — Iqror: statik sayt + Supabase API + AI/to'lov xizmatlari.
+# certbot bilan SSL: certbot --nginx -d iqror.uz -d www.iqror.uz -d api.iqror.uz
+# =====================================================================
+
+# 1) Statik frontend  (iqror.uz)  — index.html, admin.html, /sb/, vendor/, uploads/
+server {
+    listen 80;
+    server_name iqror.uz www.iqror.uz;
+    root /var/www/iqror;          # bu yerga frontend fayllar qo'yiladi
+    index index.html;
+
+    # /sb/ shim modullari to'g'ri MIME bilan berilishi (ES modul)
+    location ~* \.(js|mjs)$ { default_type text/javascript; }
+
+    location / { try_files $uri $uri/ =404; }
+
+    # (certbot 443 blokini o'zi qo'shadi)
+}
+
+# 2) API  (api.iqror.uz)  — Supabase (kong:8000) + AI (8791) + to'lov (8790)
+server {
+    listen 80;
+    server_name api.iqror.uz;
+
+    client_max_body_size 20m;     # rasm/video yuklash uchun
+
+    # AI yordamchi
+    location /ai/ {
+        proxy_pass http://127.0.0.1:8791/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+    # To'lov (Click/Uzum webhooklari)
+    location /pay/ {
+        proxy_pass http://127.0.0.1:8790/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+    # Supabase (auth/rest/storage/realtime) — qolgan hamma yo'l kong'ga
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;         # realtime (websocket)
+        proxy_set_header Connection "upgrade";
+    }
+}
