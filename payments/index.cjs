@@ -55,7 +55,13 @@ const clickErr = (p, code, note, isComplete) => Object.assign(
   { click_trans_id: p.click_trans_id, merchant_trans_id: p.merchant_trans_id, error: code, error_note: note },
   isComplete ? { merchant_confirm_id: 0 } : { merchant_prepare_id: 0 });
 
+// XAVFSIZLIK: Click faqat secretKey sozlangan VA service_id mos bo'lsagina ishlaydi.
+// Aks holda (secret bo'sh/placeholder) imzoni soxtalashtirib istalgan hisob-fakturani
+// «to'landi» qilib bo'lardi. Fail-closed — sozlanmagan bo'lsa rad etiladi.
+const clickReady = p => !!CLICK.secretKey && (!CLICK.serviceId || String(p.service_id) === String(CLICK.serviceId));
+
 async function handlePrepare(p){
+  if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, recv:String(p.sign_string||'').toLowerCase(), ours:clickSign(p,false), secLen:(CLICK.secretKey||'').length }));
   if(clickSign(p, false) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   const inv = await getInvoice(p.merchant_trans_id);
@@ -70,6 +76,7 @@ async function handlePrepare(p){
   return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_prepare_id:prepareId, error:0, error_note:'Success' };
 }
 async function handleComplete(p){
+  if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
   if(clickSign(p, true) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
   const inv = await getInvoice(p.merchant_trans_id);
   if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', true);
@@ -92,6 +99,8 @@ async function markInvoicePaid(invoiceId, provider, trans){
   const ref = db.collection('invoices').doc(String(invoiceId||''));
   const s = await ref.get(); if(!s.exists) return { ok:false, reason:'not-found' };
   if(s.data().status === 'paid') return { ok:true, already:true };
+  // Qaytarilgan/bekor qilingan hisob-fakturani qayta «paid» qilmaymiz (refund tirilmasin).
+  if(s.data().status === 'reversed' || s.data().status === 'canceled') return { ok:false, reason:'terminal' };
   await ref.set({ status:'paid', provider, providerTrans:String(trans||''), paidAt: FieldValue.serverTimestamp() }, { merge:true });
   return { ok:true };
 }
@@ -111,7 +120,7 @@ function uzumAuthOK(headers){
   if(!/^Basic\s+/i.test(h)) return false;
   let dec=''; try{ dec = Buffer.from(h.replace(/^Basic\s+/i,''), 'base64').toString('utf8'); }catch(e){ return false; }
   const i = dec.indexOf(':'); if(i < 0) return false;
-  return !!UZUM.login && dec.slice(0,i) === UZUM.login && dec.slice(i+1) === UZUM.password;
+  return !!UZUM.login && !!UZUM.password && dec.slice(0,i) === UZUM.login && dec.slice(i+1) === UZUM.password;
 }
 // Hisob-faktura id sini Uzum `params` ichidan oladi (kabinetda belgilangan maydon).
 function uzInvoiceId(params){
@@ -142,6 +151,10 @@ async function uzCreate(b){
   const inv = await getInvoice(id); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
   if(!uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
+  // Idempotentlik: allaqachon yakuniy holatdagi tranzaksiyani 'created'ga qaytarmaymiz.
+  const _ex = await uzPayRef(b.transId).get();
+  if(_ex.exists && (_ex.data().status === 'confirmed' || _ex.data().status === 'reversed'))
+    return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
   await uzPayRef(b.transId).set({ provider:'uzum', transId:String(b.transId), invoiceId:id,
     studentId: inv.studentId || '', amount:Number(b.amount), status:'created',
     raw:b, createdAt: FieldValue.serverTimestamp() });
@@ -151,6 +164,8 @@ async function uzConfirm(b){
   if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
   const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
   if(!pay) return uzFail(UZ.NOT_FOUND);
+  // Yakuniy holat (qaytarilgan/bekor) — confirm qayta to'lamaydi.
+  if(pay.status === 'reversed' || pay.status === 'canceled') return uzFail(UZ.CANCELLED);
   if(pay.status !== 'confirmed'){
     await markInvoicePaid(pay.invoiceId, 'uzum', b.transId);
     await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
