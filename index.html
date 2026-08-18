@@ -1957,7 +1957,11 @@ window.IqrorPublic = {
     renderAll();
     if(location.hash==='#kabinet') renderKabinet();
   },
-  renderKabinet(){ renderKabinet(); }
+  renderKabinet(){ renderKabinet(); },
+  // 2c: ommaviy yuklama 'students_public' (attendance YO'Q). Kabinet uchun
+  // ota-ona O'Z farzandining davomatini xom 'students' qatoridan oladi va shu
+  // yerda STUDENTS ichiga patch qiladi. Boshqa o'quvchilar davomati yuklanmaydi.
+  patchStudentAtt(id, att){ const s=STUDENTS.find(x=>String(x.id)===String(id)); if(s){ s.att=Number(att)||0; return true; } return false; }
 };
 function setLang(l){
   lang=l; try{localStorage.setItem("iqror-lang",l);}catch(e){}
@@ -2151,7 +2155,7 @@ addEventListener('hashchange', ()=>route(true));
       const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
       try{
         const [stu,tea,nw,asch,astu,gal,rev,plansS,admS,faqS,evS,setSnap] = await Promise.all([
-          getDocs(collection(db,'students')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
+          getDocs(collection(db,'students_public')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
           ord('gallery'), ord('testimonials'),
           ord('plans'), ord('admission_steps'), ord('faq'), ord('events'),
           getDoc(doc(db,'settings','site'))
@@ -2309,6 +2313,10 @@ addEventListener('hashchange', ()=>route(true));
       async function persistChildren(){ if(currentUser){ try{ await setDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild},{merge:true}); }catch(e){} } }
       // Farzandlar endi child_claims jadvalidan (maxfiy kod bilan biriktirilgan) yuklanadi.
       async function loadChildIds(uid){ try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',uid))); return snap.docs.map(d=>String((d.data()||{}).studentId||'')).filter(Boolean); }catch(e){ return []; } }
+      // 2c: ommaviy yuklama 'students_public' (attendance YO'Q). Ota-ona O'Z
+      // farzandi davomatini xom 'students'dan (owns_child ruxsati) olib, ommaviy
+      // STUDENTS ro'yxatiga patch qiladi. Xatolik bo'lsa kabinet 0% ko'rsatadi (buzilmaydi).
+      async function enrichChildAtt(ids){ try{ for(const cid of (ids||[])){ if(!cid) continue; try{ const sd=await getDoc(doc(db,'students',cid)); if(sd.exists() && window.IqrorPublic && window.IqrorPublic.patchStudentAtt) window.IqrorPublic.patchStudentAtt(cid, (sd.data()||{}).attendance); }catch(e){} } }catch(e){} }
       window.IqrorAuth = {
         getUser: ()=>currentUser,
         getChildIds: ()=>childIds.slice(),
@@ -2320,6 +2328,7 @@ addEventListener('hashchange', ()=>route(true));
           catch(e){ return {ok:false, err:'code'}; }
           childIds = await loadChildIds(currentUser.uid);
           if(!childIds.includes(id)) return {ok:false, err:'code'};
+          await enrichChildAtt([id]);
           activeChild=id; await persistChildren(); return {ok:true}; },
         async removeChild(id){ id=String(id||'').trim();
           try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',currentUser.uid))); for(const dd of snap.docs){ if(String((dd.data()||{}).studentId||'')===id) await deleteDoc(doc(db,'child_claims',dd.id)); } }catch(e){}
@@ -2338,6 +2347,7 @@ addEventListener('hashchange', ()=>route(true));
           activeChild = (d.activeChildId && childIds.includes(d.activeChildId)) ? d.activeChildId : (childIds[0]||'');
         } }catch(e){}
         setAuthUI({ name:user.displayName||user.email, role });
+        await enrichChildAtt(childIds);
         kabRefresh();
         // Admin bo'lsa (custom claim yoki role=='admin') "Admin panel" havolasini ko'rsatamiz
         try{

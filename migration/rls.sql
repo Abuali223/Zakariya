@@ -46,13 +46,25 @@ create or replace function app.is_class_staff(ck text) returns boolean language 
   select app.can_write_general(ck) or app.is_teacher_for_class(ck)
 $$;
 
--- ============ students (ommaviy o'qiladi; PII ustunlari YO'Q -> tuzilmaviy himoya) ============
+-- ============ students (PII ustunlari YO'Q -> tuzilmaviy himoya) ============
+-- 2c: xom jadval endi FAQAT kirgan foydalanuvchilarga (anon emas) — cameraId/
+-- attendance sizmasin. Ommaviy honor board 'students_public' KO'RINISHINI o'qiydi
+-- (ism/sinf/ball/foto; cameraId/attendance YO'Q). Ko'rinish security-2c.sql'da.
 alter table students enable row level security;
-create policy students_sel on students for select using (true);
+create policy students_sel on students for select using (app.uid() is not null);
 create policy students_ins on students for insert with check (app.is_admin());
 create policy students_upd on students for update using (app.is_admin() or app.is_zavuch()) with check (app.is_admin() or app.is_zavuch());
 create policy students_del on students for delete using (app.is_admin());
 -- Izoh: 'score-only for zavuch' — ustun-darajali GRANT/trigger bilan (keyingi nafislik).
+
+-- 2c: ommaviy (anon) honor board uchun xavfsiz ko'rinish — cameraId/attendance YO'Q.
+create or replace view public.students_public as
+  select id, "studentId", name, grade, "classLetter", track, lang, score,
+         photo, "posterImage", subjects, "order", "updatedAt"
+  from public.students;
+grant select on public.students_public to anon, authenticated;
+revoke all on public.students_public from public;
+grant select on public.students_public to service_role;
 
 -- ============ student_private (PII — qulflangan) ============
 alter table student_private enable row level security;
