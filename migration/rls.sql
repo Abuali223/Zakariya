@@ -22,8 +22,10 @@ $$;
 create or replace function app.is_zavuch() returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role = 'zavuch')
 $$;
+-- owns_child: MAXFIY KOD tizimi (security-2b.sql) — child_claims'dan o'qiydi (users.childIds'ga tayanmaydi).
+-- (child_claims/student_codes jadvallari security-2b.sql'da yaratiladi.)
 create or replace function app.owns_child(sid text) returns boolean language sql stable security definer as $$
-  select exists(select 1 from public.users where id = app.uid() and coalesce("childIds",'[]'::jsonb) ? sid)
+  select exists(select 1 from public.child_claims where uid = app.uid() and "studentId" = sid)
 $$;
 create or replace function app.is_homeroom_for(ck text) returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role in ('admin','zavuch','kurator','teacher') and coalesce("homeroomClasses",'[]'::jsonb) ? ck)

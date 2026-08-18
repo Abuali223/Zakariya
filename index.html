@@ -989,6 +989,7 @@ const T = {
     kab_login:"Kabinetdan foydalanish uchun avval tizimga kiring (Kirish tugmasi).",
     kab_prompt:"Farzandingizning maktab bergan ID raqamini kiriting (bir nechtasini qo‘shishingiz mumkin):",
     kab_ph:"Masalan: IQ-1004",kab_save:"Saqlash",kab_change:"ID ni o‘zgartirish",kab_add:"Qo‘shish",
+    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",
     kab_children:"Farzandlaringiz",kab_remove:"Olib tashlash",kab_remove_q:"Bu farzand ro‘yxatdan olib tashlansinmi?",
     kab_dup:"Bu ID allaqachon qo‘shilgan.",
     kab_notfound:"Bunday ID topilmadi. Tekshirib qayta kiriting.",
@@ -1106,6 +1107,7 @@ const T = {
     kab_login:"Чтобы пользоваться кабинетом, сначала войдите (кнопка «Войти»).",
     kab_prompt:"Введите ID, выданный школой вашему ребёнку (можно добавить несколько):",
     kab_ph:"Например: IQ-1004",kab_save:"Сохранить",kab_change:"Изменить ID",kab_add:"Добавить",
+    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",
     kab_children:"Ваши дети",kab_remove:"Убрать",kab_remove_q:"Убрать этого ребёнка из списка?",
     kab_dup:"Этот ID уже добавлен.",
     kab_notfound:"Такой ID не найден. Проверьте и введите снова.",
@@ -1625,14 +1627,17 @@ function renderKabinet(){
   if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="kab-narrow"><div class="cls-empty">${esc(t.kab_login)}</div></div>`; return; }
   const childIds = A.getChildIds ? A.getChildIds() : (A.getChildId&&A.getChildId()?[A.getChildId()]:[]);
   const active = A.getActiveChild ? A.getActiveChild() : (childIds[0]||"");
-  const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
+  const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><input id="kab-code" type="text" placeholder="${esc(t.kab_code_ph)}" aria-label="${esc(t.kab_code_ph)}" style="max-width:150px"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
       <div id="kab-msg" class="notfound" style="display:none;margin-top:10px"></div></div>`;
   function wireAdd(){
     const btn=$("#kab-add-btn"), inp=$("#kab-input"); if(!btn||!inp) return;
-    const add=async()=>{ const val=inp.value.trim(); if(!val) return; const s=findStudent(val); const msg=$("#kab-msg");
+    const add=async()=>{ const val=inp.value.trim(); const codeEl=$("#kab-code"); const code=(codeEl&&codeEl.value.trim())||''; if(!val) return; const s=findStudent(val); const msg=$("#kab-msg");
       if(!s){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_notfound; } return; }
       if(childIds.includes(s.id)){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_dup; } return; }
-      try{ await A.addChild(s.id); renderKabinet(); }catch(e){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_saveerr; } }
+      if(!code){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_code_need; } return; }
+      const r=await A.addChild(s.id, code);
+      if(r&&r.ok){ renderKabinet(); }
+      else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr; }
     };
     btn.onclick=add;
     inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
@@ -2283,7 +2288,7 @@ addEventListener('hashchange', ()=>route(true));
     if(auth && authMod && fsMod){
       const { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut,
               createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } = authMod;
-      const { doc, getDoc, setDoc, serverTimestamp } = fsMod;
+      const { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, getDocs, query, where, deleteDoc } = fsMod;
       let justLoggedIn = false, currentUser = null, childIds = [], activeChild = '';
       // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
       async function googleSignIn(){
@@ -2301,14 +2306,24 @@ addEventListener('hashchange', ()=>route(true));
       }).catch(()=>{});
       const kabRefresh=()=>{ if(location.hash==='#kabinet' && window.IqrorPublic && window.IqrorPublic.renderKabinet) window.IqrorPublic.renderKabinet(); };
       // Bir oiladan bir nechta farzand: childIds — barcha farzand ID lari, activeChild — hozir ko'rilayotgani.
-      async function persistChildren(){ if(currentUser){ await setDoc(doc(db,'users',currentUser.uid),{childIds:childIds.slice(),activeChildId:activeChild,childId:activeChild},{merge:true}); } }
+      async function persistChildren(){ if(currentUser){ try{ await setDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild},{merge:true}); }catch(e){} } }
+      // Farzandlar endi child_claims jadvalidan (maxfiy kod bilan biriktirilgan) yuklanadi.
+      async function loadChildIds(uid){ try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',uid))); return snap.docs.map(d=>String((d.data()||{}).studentId||'')).filter(Boolean); }catch(e){ return []; } }
       window.IqrorAuth = {
         getUser: ()=>currentUser,
         getChildIds: ()=>childIds.slice(),
         getActiveChild: ()=>activeChild,
         getChildId: ()=>activeChild, // eski API bilan moslik
-        async addChild(id){ id=String(id||'').trim(); if(!id) return; if(!childIds.includes(id)) childIds.push(id); activeChild=id; await persistChildren(); },
-        async removeChild(id){ id=String(id||'').trim(); childIds=childIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
+        async addChild(id, code){ id=String(id||'').trim(); code=String(code||'').trim(); if(!id) return {ok:false};
+          if(childIds.includes(id)){ activeChild=id; await persistChildren(); return {ok:true,dup:true}; }
+          try{ await addDoc(collection(db,'child_claims'),{ uid:currentUser.uid, studentId:id, code }); }
+          catch(e){ return {ok:false, err:'code'}; }
+          childIds = await loadChildIds(currentUser.uid);
+          if(!childIds.includes(id)) return {ok:false, err:'code'};
+          activeChild=id; await persistChildren(); return {ok:true}; },
+        async removeChild(id){ id=String(id||'').trim();
+          try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',currentUser.uid))); for(const dd of snap.docs){ if(String((dd.data()||{}).studentId||'')===id) await deleteDoc(doc(db,'child_claims',dd.id)); } }catch(e){}
+          childIds=childIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
         async setActiveChild(id){ id=String(id||'').trim(); if(childIds.includes(id)){ activeChild=id; if(currentUser){ await setDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild},{merge:true}); } } },
         async saveChild(id){ id=String(id||'').trim(); if(id){ if(!childIds.includes(id)) childIds.push(id); activeChild=id; } else { childIds=[]; activeChild=''; } await persistChildren(); }
       };
@@ -2319,7 +2334,7 @@ addEventListener('hashchange', ()=>route(true));
         if(!user){ childIds=[]; activeChild=''; setAuthUI(null); kabRefresh(); return; }
         let role=null;
         try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); role=d.role;
-          childIds = Array.isArray(d.childIds) ? d.childIds.slice() : (d.childId ? [d.childId] : []);
+          childIds = await loadChildIds(user.uid);
           activeChild = (d.activeChildId && childIds.includes(d.activeChildId)) ? d.activeChildId : (childIds[0]||'');
         } }catch(e){}
         setAuthUI({ name:user.displayName||user.email, role });

@@ -1674,6 +1674,8 @@ async function renderStudents(){
   // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
   try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
     rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }catch(e){}
+  // Maxfiy biriktirish kodlari (ota-onaga beriladi; admin/zavuch ko'radi)
+  try{ const csnap=await getDocs(collection(db,'student_codes')); const cmap={}; csnap.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }catch(e){}
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=()=>{
     const q=(($('#stu-search')&&$('#stu-search').value)||'').trim().toLowerCase();
@@ -1695,9 +1697,10 @@ async function renderStudents(){
         <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
+        <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
     $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
