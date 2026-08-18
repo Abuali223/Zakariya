@@ -159,7 +159,11 @@ create policy chk_sel on checkins for select using (app.is_admin() or app.is_zav
 
 -- ============ enrollments / applications (ochiq yuboriladi; admin o'qiydi) ============
 alter table enrollments enable row level security;
-create policy enr_ins on enrollments for insert with check (true);
+-- 2d: ommaviy (admin bo'lmagan) INSERT'da status faqat 'yangi'/null va note bo'sh —
+-- soxta 'qabul' lead yoki note injeksiyasini bloklaydi. Admin cheklanmaydi (voronka).
+create policy enr_ins on enrollments for insert with check (
+  app.is_admin() or ((status is null or status = 'yangi') and note is null)
+);
 create policy enr_sel on enrollments for select using (app.is_admin());
 create policy enr_upd on enrollments for update using (app.is_admin());
 create policy enr_del on enrollments for delete using (app.is_admin());
