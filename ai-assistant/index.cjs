@@ -26,7 +26,7 @@ const http = require('http');
 
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 // Data qatlami: CFG.backend='supabase' -> Supabase, aks holda Firebase (rollback).
-const { db } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
+const { db, verifyToken } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
 const MODEL = CFG.model || 'claude-opus-4-8';
 const RISK_ATT = Number(CFG.riskAttendance) || 80;   // davomat % — shundan past = xavf
 const RISK_SCORE = Number(CFG.riskScore) || 60;      // umumiy ball — shundan past = xavf
@@ -178,6 +178,36 @@ async function riskScan(withAI, lang){
   return flagged;
 }
 
+/* ---------------- Autentifikatsiya / ruxsat (RLS bilan bir xil model) ----------------
+ * verifyToken(jwt) -> uid (Supabase). Rol users.role'dan, farzand egaligi
+ * child_claims'dan (2b). Bu server service_role bilan ishlaydi (RLS'ni chetlab
+ * o'tadi), shuning uchun maxfiy endpointlarda ruxsatni O'ZIMIZ tekshiramiz. */
+function bearer(req){
+  const h = req.headers['authorization'] || req.headers['Authorization'] || '';
+  const m = /^Bearer\s+(.+)$/i.exec(String(h).trim());
+  return m ? m[1].trim() : '';
+}
+async function userRole(uid){
+  try{ const d = await db.collection('users').doc(uid).get(); return d.exists ? String((d.data()||{}).role||'') : ''; }
+  catch(e){ return ''; }
+}
+async function ownsChild(uid, sid){
+  if(!uid || !sid) return false;
+  try{ const snap = await db.collection('child_claims').where('uid','==',uid).where('studentId','==',sid).get(); return (snap.docs||[]).length > 0; }
+  catch(e){ return false; }
+}
+// /chat — jamoat endpointi (kirmagan tashrifchilar uchun). Auth emas, lekin
+// token-burn/DoS'ni kamaytirish uchun oddiy IP throttle.
+const _hits = new Map();
+function chatAllowed(req){
+  const ip = String(req.headers['x-forwarded-for']||'').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+  const now = Date.now(), win = 60*1000, LIM = Number(CFG.chatRateLimit) || 20;
+  const arr = (_hits.get(ip)||[]).filter(t => now - t < win);
+  arr.push(now); _hits.set(ip, arr);
+  if(_hits.size > 5000) _hits.clear();   // xotira himoyasi (soddaligicha)
+  return arr.length <= LIM;
+}
+
 /* ---------------- HTTP handlerlar ---------------- */
 async function handleChat(body){
   const knowledge = await loadKnowledge();
@@ -212,9 +242,27 @@ function serve(){
       let body={}; try{ body = raw?JSON.parse(raw):{}; }catch(e){ res.writeHead(400); return res.end('{"error":"bad_json"}'); }
       try{
         let out;
-        if(req.url.startsWith('/chat')) out = await handleChat(body);
-        else if(req.url.startsWith('/student-summary')) out = await handleStudentSummary(body);
-        else if(req.url.startsWith('/risk')) out = await handleRisk(body);
+        if(req.url.startsWith('/chat')){
+          if(!chatAllowed(req)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          out = await handleChat(body);
+        }
+        else if(req.url.startsWith('/student-summary')){
+          // Maxfiy: o'quvchi bahosi/davomati/qarzi. Faqat admin/zavuch YOKI shu farzand egasi.
+          const uid = await verifyToken(bearer(req));
+          if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
+          const role = await userRole(uid);
+          const allowed = role==='admin' || role==='zavuch' || await ownsChild(uid, String(body.studentId||''));
+          if(!allowed){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
+          out = await handleStudentSummary(body);
+        }
+        else if(req.url.startsWith('/risk')){
+          // Maxfiy: barcha xavf ostidagi o'quvchilar ro'yxati. Faqat admin/zavuch.
+          const uid = await verifyToken(bearer(req));
+          if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
+          const role = await userRole(uid);
+          if(!(role==='admin' || role==='zavuch')){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
+          out = await handleRisk(body);
+        }
         else { res.writeHead(404); return res.end('{"error":"not_found"}'); }
         res.writeHead(200, {'Content-Type':'application/json; charset=utf-8'});
         res.end(JSON.stringify(out));
