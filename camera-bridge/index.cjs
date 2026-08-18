@@ -149,10 +149,16 @@ if (mode === '__module__') {
   // Webhook serveri — terminal tanilish voqealarini shu yerga POST qiladi.
   const PORT = Number(CFG.port || 8787);
   const TOKEN = CFG.webhookToken || '';
+  // XAVFSIZLIK (fail-closed): token MAJBURIY. Sozlanmagan bo'lsa server barcha
+  // POST'ni rad etadi — aks holda begona odam soxta davomat voqealarini yuborishi
+  // (bolani «keldi/yo'q» qilishi) yoki checkins'ni spam qilishi mumkin edi.
+  if (!TOKEN) console.error("⚠ XAVFSIZLIK: camera-bridge webhookToken sozlanmagan — barcha POST rad etiladi (fail-closed). config.json ga webhookToken qo'shing.");
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') { res.writeHead(200); return res.end('ok'); }
     if (req.method !== 'POST') { res.writeHead(405); return res.end('POST kutiladi'); }
-    if (TOKEN) { const t = req.headers['x-iqror-token'] || (new URL(req.url, 'http://x')).searchParams.get('token'); if (t !== TOKEN) { res.writeHead(401); return res.end('token noto\'g\'ri'); } }
+    if (!TOKEN) { res.writeHead(503); return res.end('webhookToken sozlanmagan (fail-closed)'); }
+    const t = req.headers['x-iqror-token'] || (new URL(req.url, 'http://x')).searchParams.get('token');
+    if (t !== TOKEN) { res.writeHead(401); return res.end('token noto\'g\'ri'); }
     let data = ''; req.on('data', c => { data += c; if (data.length > 1e6) req.destroy(); });
     req.on('end', async () => {
       let body = {}; try { body = data ? JSON.parse(data) : {}; } catch (e) { try { body = Object.fromEntries(new URLSearchParams(data)); } catch (_) { body = {}; } }

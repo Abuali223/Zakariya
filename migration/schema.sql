@@ -309,3 +309,22 @@ create table if not exists config (
 create table if not exists secrets (
   id text primary key, "anthropicKey" text, "updatedAt" timestamptz default now()
 );
+
+-- ============ 2b: ota-ona↔farzand maxfiy kod tizimi ============
+-- To'liq mantiq (RLS, trigger, funksiyalar, ko'chirish) — migration/security-2b.sql.
+-- Bu yerda faqat jadval tuzilmasi (fresh setup uzilmasin uchun).
+create table if not exists student_codes (
+  id text primary key,                    -- = studentId
+  code text,
+  "updatedAt" timestamptz default now()
+);
+create table if not exists child_claims (
+  id text primary key,                    -- shim addDoc random uuid
+  uid text,
+  "studentId" text,
+  code text,
+  created timestamptz default now()
+);
+create unique index if not exists uq_child_claims on child_claims (uid, "studentId");
+-- 2c: ommaviy honor board uchun xavfsiz ko'rinish (cameraId/attendance YO'Q) —
+-- to'liq ta'rif migration/security-2c.sql / rls.sql'da.
