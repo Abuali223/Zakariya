@@ -855,11 +855,15 @@ function updateBell(){
   if(total>0){ bd.textContent = total>99?'99+':String(total); bd.style.display=''; bell.classList.add('has-new'); bell.title=`${total} ta yangi ariza`; }
   else{ bd.style.display='none'; bell.classList.remove('has-new'); bell.title='Yangi ariza yo‘q'; }
 }
+// «Arizalar» bell: faqat KO'RILMAGAN (admin oxirgi ochgandan keyin kelgan) leadlar.
+// Admin «Arizalar» bo'limini ochganda "ko'rilgan" deb belgilanadi (localStorage) va belgi tozalanadi.
+function enrollSeenAt(){ try{ return Number(localStorage.getItem('iqror-enroll-seen'))||0; }catch(e){ return 0; } }
+function markEnrollSeen(){ try{ localStorage.setItem('iqror-enroll-seen', String(Date.now())); }catch(e){} BADGES.enrollments=0; setTabBadge('enrollments',0); updateBell(); }
 function watchBadges(){
   badgeUnsub.forEach(u=>{ try{u();}catch(e){} }); badgeUnsub=[];
   if(!SESSION.isAdmin){ if($('#btn-bell')) $('#btn-bell').style.display='none'; return; }
-  // Qabul arizalari (enrollments) — ko'rilib, o'chirilgunча hisobda turadi
-  badgeUnsub.push(onSnapshot(collection(db,'enrollments'), snap=>{ BADGES.enrollments=snap.size; setTabBadge('enrollments', snap.size); updateBell(); }, ()=>{}));
+  // Qabul arizalari (enrollments) — faqat ko'rilmagan (yangi kelgan) lar hisobda
+  badgeUnsub.push(onSnapshot(collection(db,'enrollments'), snap=>{ const seen=enrollSeenAt(); const n=snap.docs.filter(d=>{ const x=d.data()||{}; const t=Date.parse(x.created||x.ts||'')||0; return t>seen; }).length; BADGES.enrollments=n; setTabBadge('enrollments', n); updateBell(); }, ()=>{}));
   // O'qituvchi arizalari (applications) — hali baholanmaganlari
   badgeUnsub.push(onSnapshot(collection(db,'applications'), snap=>{ const n=snap.docs.filter(d=>((d.data()||{}).status||'submitted')!=='graded').length; BADGES.applications=n; setTabBadge('applications', n); updateBell(); }, ()=>{}));
 }
@@ -2304,6 +2308,7 @@ async function renderSettings(){
 
 /* ---- Enrollments inbox ---- */
 async function renderEnrollments(){
+  markEnrollSeen();   // bo'lim ochildi -> yangi arizalar "ko'rilgan", bell tozalanadi
   $('#view').innerHTML = `<div class="page-head"><h2>Arizalar</h2></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
   let rows;
   try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
