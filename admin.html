@@ -361,7 +361,7 @@
   .ltv-cmp-row{display:flex;align-items:center;gap:10px}
   .ltv-cmp-l{width:40px;flex:none;font-size:12px;font-weight:800;color:var(--muted)}
   .ltv-cmp-barw{flex:1;min-width:0;background:var(--bg);border-radius:8px;overflow:hidden}
-  .ltv-cmp-bar{height:34px;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;color:#fff;font-weight:800;font-size:13.5px;white-space:nowrap;border-radius:8px;min-width:44px;transition:width .3s}
+  .ltv-cmp-bar{height:34px;display:flex;align-items:center;justify-content:flex-start;padding:0 12px;color:#fff;font-weight:800;font-size:13.5px;white-space:nowrap;border-radius:8px;min-width:64px;transition:width .3s}
   .ltv-cmp-bar.ltv{background:linear-gradient(90deg,#2C7A66,#1C6E5F)}
   .ltv-cmp-bar.cac{background:linear-gradient(90deg,#C99A3B,#B45309)}
   @media(max-width:820px){ .mkt-cols{grid-template-columns:1fr} }
@@ -2854,12 +2854,12 @@ async function renderMarketing(){
         <div class="acc-kpis" style="margin:12px 0 0">
           <div class="acc-kpi teal"><div><div class="k-l">ARPU (oylik)</div><div class="k-v num">${fmtCac(arpu)}</div><div class="k-d">o‘rtacha to‘lov</div></div></div>
           <div class="acc-kpi gold"><div><div class="k-l">LTV (1 o‘quvchi)</div><div class="k-v num">${fmtC(ltv)}</div><div class="k-d">${tenure} yil × ${mpy} oy</div></div></div>
-          <div class="acc-kpi blue"><div><div class="k-l">LTV : CAC</div><div class="k-v num">${ratio==null?'—':ratio.toFixed(1)+'<small>×</small>'}</div><div class="k-d">${blendCac?('CAC '+fmtCac(blendCac)):'reklama yo‘q'}</div></div><div class="acc-gauge" style="--p:${ratio==null?0:Math.max(0,Math.min(100,ratio/5*100))}"><b>${ratio==null?'—':ratio.toFixed(1)+'×'}</b></div></div>
+          <div class="acc-kpi blue"><div><div class="k-l">LTV : CAC</div><div class="k-v num">${ratio==null?'—':ratio.toFixed(1)+'<small>×</small>'}</div><div class="k-d">${blendCac?('CAC '+fmtCac(blendCac)+(ratio!=null&&ratio>=3?' · sog‘lom':'')):'reklama yo‘q'}</div></div></div>
           <div class="acc-kpi ${ratio==null?'':(ratio>=3?'pos':(ratio>=1?'gold':'neg'))}"><div><div class="k-l">Qoplash</div><div class="k-v num">${payback==null?'—':payback.toFixed(1)+'<small> yil</small>'}</div><div class="k-d">reklama qaytishi</div></div></div>
         </div>
         <div class="ltv-cmp">
-          <div class="ltv-cmp-row"><span class="ltv-cmp-l">LTV</span><div class="ltv-cmp-barw"><div class="ltv-cmp-bar ltv" style="width:${Math.round(ltv/ltvMax*94)}%">${fmtC(ltv)}</div></div></div>
-          <div class="ltv-cmp-row"><span class="ltv-cmp-l">CAC</span><div class="ltv-cmp-barw"><div class="ltv-cmp-bar cac" style="width:${Math.max(Math.round(blendCac/ltvMax*94),blendCac>0?6:0)}%">${blendCac?fmtCac(blendCac):'0'}</div></div></div>
+          <div class="ltv-cmp-row"><span class="ltv-cmp-l">LTV</span><div class="ltv-cmp-barw"><div class="ltv-cmp-bar ltv" style="width:${Math.round(ltv/ltvMax*100)}%">${fmtC(ltv)}</div></div></div>
+          <div class="ltv-cmp-row"><span class="ltv-cmp-l">CAC</span><div class="ltv-cmp-barw"><div class="ltv-cmp-bar cac" style="width:${Math.max(Math.round(blendCac/ltvMax*100),blendCac>0?9:0)}%">${blendCac?fmtCac(blendCac):'0'}</div></div></div>
         </div>
         <div class="mkt-note" style="background:${health[2]};color:${health[1]}">${ratio==null?'💡 LTV:CAC uchun reklama xarajati (Buxgalteriya → «Reklama») va qabul bo‘lgan o‘quvchi kerak.':`Holat: <b>${health[0]}</b> — 1 so‘m reklama → ${ratio.toFixed(1)} so‘m umrbod daromad. ${ratio>=3?'Ajoyib — ko‘proq reklamaga arziydi.':ratio>=1?'Foydali, lekin CAC’ni pasaytirish yoki qolishni oshirish tavsiya etiladi.':'Zarar — har o‘quvchi reklama xarajatini qoplamayapti.'}`}</div>
       </div></div>`;
