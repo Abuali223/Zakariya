@@ -2902,6 +2902,44 @@ async function renderMarketing(){
   $('#mk-month').addEventListener('change',()=>draw($('#mk-month').value||curMonth()));
 }
 
+// Biriktirilmagan Click to'lovini o'quvchiga QO'LDA biriktirish (balansga qo'llash).
+async function openAssign(payment, students, reload){
+  if(!payment) return;
+  const list = (students&&students.length)?students:(cache.students||[]);
+  $('#modal').innerHTML = `<div class="modal-h"><h3>To‘lovni biriktirish</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small muted" style="margin-bottom:10px">To‘lovchi: <b>${esc(payment.payerName||'—')}</b> · ${esc(payment.payerPhone||'')} · ${esc(payment.payerClass||'')} · summa <b>${fmtSom(payment.amount)}</b></div>
+      <input id="as-search" type="text" placeholder="O‘quvchi ismi yoki ID…" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:8px">
+      <div id="as-list" style="max-height:320px;overflow:auto"></div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const assignTo=async(sid)=>{ if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
+    try{ await applyPaymentClient(sid, Number(payment.amount)||0);
+      await setDoc(doc(db,'payments',payment._id),{ matched:true, studentId:sid, status:'applied' },{merge:true});
+      toast('To‘lov biriktirildi ✓'); closeModal(); if(reload) reload();
+    }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+  const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
+    const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,50);
+    $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id, g=Number(s.grade)||0; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
+      <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${g===0?'Tayyorlov':g+'-sinf'} ${esc(s.classLetter||s.track||'')}</span></span>
+      <span class="btn sm gold">Tanlash</span></div>`; }).join('')||'<div class="empty">Topilmadi.</div>';
+    $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>assignTo(el.dataset.sid)); };
+  $('#as-search').addEventListener('input',e=>draw(e.target.value)); draw('');
+}
+// Summani o'quvchi balansiga qo'llaydi (waterfall) — to'lov serveri bilan bir xil mantiq.
+async function applyPaymentClient(studentId, amount){
+  amount=Number(amount)||0; if(amount<=0) return;
+  let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
+  let available=amount+credit;
+  const snap=await getDocs(query(collection(db,'invoices'), where('studentId','==',studentId)));
+  const list=snap.docs.map(d=>({_id:d.id,...d.data()})).filter(x=>x.status!=='paid'&&x.status!=='canceled'&&x.status!=='reversed').sort((a,b)=>String(a.month||a._id).localeCompare(String(b.month||b._id)));
+  for(const inv of list){ if(available<=0) break; const paidSoFar=Number(inv.paidAmount)||0; const remaining=(Number(inv.amount)||0)-paidSoFar; if(remaining<=0) continue;
+    const pay=Math.min(available,remaining); const newPaid=paidSoFar+pay; const full=newPaid>=(Number(inv.amount)||0)-0.5;
+    await setDoc(doc(db,'invoices',inv._id), Object.assign({paidAmount:newPaid,status:full?'paid':'partial',provider:'click'}, full?{paidAt:serverTimestamp()}:{}), {merge:true});
+    available-=pay; }
+  await setDoc(doc(db,'student_credit',studentId),{studentId,credit:available,updatedAt:serverTimestamp()},{merge:true});
+}
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun o‘quvchilarga hisob-faktura yarating. Ota-ona o‘z kabinetida <b>Click</b> yoki <b>Uzum</b> orqali to‘laydi — to‘lov kelganda «to‘landi» avtomatik belgilanadi (to‘lov serveri orqali). Naqd to‘lovni bu yerda qo‘lda belgilashingiz mumkin.</p>
@@ -2921,32 +2959,47 @@ async function renderPayments(){
     try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
     rows.sort((a,b)=>String(a.studentName||'').localeCompare(String(b.studentName||'')));
-    const paid=rows.filter(r=>r.status==='paid'), pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled');
-    const total=paid.reduce((s,r)=>s+(Number(r.amount)||0),0);
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
-    // To'lov usuli bo'yicha hisobot
+    // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
+    const paidOf=r=>Number(r.paidAmount)||0, isCanc=r=>r.status==='canceled';
+    const debtOf=r=>isCanc(r)?0:Math.max(0,(Number(r.amount)||0)-paidOf(r));
+    const fullPaid=rows.filter(r=>r.status==='paid'), partial=rows.filter(r=>r.status==='partial');
+    const pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
+    const collected=rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
+    const debtTotal=rows.reduce((s,r)=>s+debtOf(r),0);
+    // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
+    let unmatched=[];
+    try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
     const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',payme:'Payme'};
-    const groups={}; paid.forEach(r=>{ const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=Number(r.amount)||0; });
-    const pendSum=pend.reduce((s,r)=>s+(Number(r.amount)||0),0);
+    const groups={}; rows.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
     const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
-      +`<tr><td data-label="Usul" class="muted">Kutilmoqda</td><td data-label="Soni" class="muted">${pend.length} ta</td><td data-label="Summa" class="muted">${fmtSom(pendSum)}</td></tr>`;
-    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">Jami yig‘ildi: ${fmtSom(total)} · umumiy: ${fmtSom(total+pendSum)}</span></div>
+      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${pend.length+partial.length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
+    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">Yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
+    const unmatchedCard = unmatched.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--gold)"><div class="cls-card-head"><h3>⚠️ Biriktirilmagan to‘lovlar</h3><span class="cls-count">${unmatched.length} ta · o‘quvchi topilmadi (qo‘lda biriktiring)</span></div>
+      <div class="tablewrap"><table><thead><tr><th>To‘lovchi</th><th>Telefon</th><th>Sinf</th><th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
+        <td data-label="To‘lovchi">${esc(u.payerName||'—')}</td><td data-label="Telefon">${esc(u.payerPhone||'—')}</td>
+        <td data-label="Sinf">${esc(u.payerClass||'—')}</td><td data-label="Summa"><b>${fmtSom(u.amount)}</b></td>
+        <td class="td-actions"><button class="btn sm gold" data-assign="${esc(u._id)}">Biriktirish</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
     const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
+      : r.status==='partial'?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
-      : `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kutilmoqda</span>`;
-    const trs=rows.map(r=>`<tr>
+      : `<span class="chip" style="background:#FDECEC;color:#B42318">Kutilmoqda</span>`;
+    const trs=rows.map(r=>{ const d=debtOf(r); return `<tr>
       <td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'')}</td>
       <td data-label="Summa">${fmtSom(r.amount)}</td>
+      <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
+      <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
       <td data-label="Holat">${stBadge(r)}</td>
       <td class="td-actions"><div class="row-actions">
-        ${r.status!=='paid'?`<button class="btn sm" data-cash="${esc(r._id)}">Naqd to‘landi</button>`:''}
+        ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm" data-cash="${esc(r._id)}">${r.status==='partial'?'Qolganini naqd':'Naqd to‘landi'}</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         <button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>
-      </div></td></tr>`).join('');
-    $('#pm-body').innerHTML=reportCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${paid.length} to‘landi · ${pend.length} kutilmoqda · yig‘ildi: ${fmtSom(total)}</span></div>
-      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
-    $('#pm-body').querySelectorAll('[data-cash]').forEach(b=>b.addEventListener('click',async()=>{ try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:'cash',paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+      </div></td></tr>`; }).join('');
+    $('#pm-body').innerHTML=reportCard+unmatchedCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(debtTotal)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+    $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
+    $('#pm-body').querySelectorAll('[data-cash]').forEach(b=>b.addEventListener('click',async()=>{ const rr=rows.find(x=>x._id===b.dataset.cash); try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:'cash',paidAmount:Number(rr&&rr.amount)||0,paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
   };

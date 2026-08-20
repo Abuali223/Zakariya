@@ -23,9 +23,20 @@ create table if not exists student_credit(
 );
 alter table student_credit enable row level security;
 drop policy if exists sc_credit_sel on student_credit;
+drop policy if exists sc_credit_ins on student_credit;
+drop policy if exists sc_credit_upd on student_credit;
 create policy sc_credit_sel on student_credit for select using (app.is_admin() or app.is_zavuch() or app.owns_child(id));
-grant select on student_credit to anon, authenticated;
+-- Admin qo'lda biriktirganда (client) kreditни yozishi/yangilashi mumkin.
+create policy sc_credit_ins on student_credit for insert with check (app.is_admin());
+create policy sc_credit_upd on student_credit for update using (app.is_admin()) with check (app.is_admin());
+grant select, insert, update on student_credit to authenticated;
+grant select on student_credit to anon;
 grant all on student_credit to service_role;
+
+-- payments: admin biriktirilmagan to'lovni o'quvchiga QO'LDA biriktirganда yangilaydi (mark applied).
+drop policy if exists pay_upd on payments;
+create policy pay_upd on payments for update using (app.is_admin()) with check (app.is_admin());
+grant select, update on payments to authenticated;
 
 -- 3) Qo'llangan tranzaksiyalar (idempotentlik — ikki marta hisoblamaslik)
 create table if not exists applied_payments(

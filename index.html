@@ -1806,22 +1806,26 @@ async function renderKabInvoices(studentId){
   const clickLogo='<span class="inv-plogo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21.5 12 12 21.5 2.5 12z" fill="rgba(255,255,255,.28)"/><path d="M12 7.8 16.2 12 12 16.2 7.8 12z" fill="#fff"/></svg></span>';
   const uzumLogo='<span class="inv-plogo"><svg viewBox="0 0 24 24" fill="none"><path d="M7 5v7a5 5 0 0 0 10 0V5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></span>';
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const remOf=inv=>Math.max(0,(Number(inv.amount)||0)-(Number(inv.paidAmount)||0));   // qolgan (qarzdorlik)
   const clickUrl=inv=>{ if(!cfg||!cfg.clickServiceId||!cfg.clickMerchantId) return null;
-    return `https://my.click.uz/services/pay?service_id=${encodeURIComponent(cfg.clickServiceId)}&merchant_id=${encodeURIComponent(cfg.clickMerchantId)}&amount=${encodeURIComponent(Number(inv.amount)||0)}&transaction_param=${encodeURIComponent(inv.id)}`; };
+    return `https://my.click.uz/services/pay?service_id=${encodeURIComponent(cfg.clickServiceId)}&merchant_id=${encodeURIComponent(cfg.clickMerchantId)}&amount=${encodeURIComponent(remOf(inv))}&transaction_param=${encodeURIComponent(inv.id)}`; };
   const uzumUrl=inv=>{ if(!cfg||!cfg.uzumUrlTemplate) return null;
-    return cfg.uzumUrlTemplate.replace('{amount}',encodeURIComponent(Number(inv.amount)||0)).replace('{invoice}',encodeURIComponent(inv.id)); };
+    return cfg.uzumUrlTemplate.replace('{amount}',encodeURIComponent(remOf(inv))).replace('{invoice}',encodeURIComponent(inv.id)); };
   const cards=list.map(inv=>{
-    const paid=inv.status==='paid';
+    const amt=Number(inv.amount)||0, paidA=Number(inv.paidAmount)||0, rem=Math.max(0,amt-paidA);
+    const paid=inv.status==='paid', partial=inv.status==='partial';
     const cu=clickUrl(inv), uu=uzumUrl(inv);
     const badge = paid ? `<span class="inv-badge paid">✓ ${esc(t.kab_pay_paid)}</span>`
+                       : partial ? `<span class="inv-badge due" style="background:#FEF3C7;color:#92400E">${isRu?'Частично':'Qisman'}</span>`
                        : `<span class="inv-badge due">${isRu?'Ожидает':'Kutilmoqda'}</span>`;
     let actions;
     if(paid){ actions=`<div class="inv-paidbox">${chk}<span>${isRu?'Оплачено':'To‘landi'}${inv.provider?` · ${esc(String(inv.provider))}`:''}</span></div>`; }
     else if(cu||uu){ actions=`<div class="inv-actions">${cu?`<a class="inv-pay click" href="${esc(cu)}" target="_blank" rel="noopener">${clickLogo}Click</a>`:''}${uu?`<a class="inv-pay uzum" href="${esc(uu)}" target="_blank" rel="noopener">${uzumLogo}Uzum</a>`:''}</div>`; }
     else { actions=`<div class="inv-soon">${esc(t.kab_pay_soon)}</div>`; }
+    const paidNote = partial ? `<div class="small" style="margin-top:3px;color:#92400E">${isRu?'Оплачено':'To‘langan'}: ${fmt(paidA)} / ${fmt(amt)} ${esc(t.som)}</div>` : '';
     return `<div class="inv-card${paid?' paid':''}">
       <div class="inv-top"><div class="inv-period"><span class="inv-cal">${cal}</span><div><div class="inv-mo">${esc(moLabel(inv.month))}</div><div class="inv-sub">${isRu?'Ежемесячный платёж':'Oylik to‘lov'}</div></div></div>${badge}</div>
-      <div class="inv-body"><div class="inv-amt-l">${isRu?'Сумма к оплате':'To‘lov summasi'}</div><div class="inv-amt">${fmt(inv.amount)} <small>${esc(t.som)}</small></div>${actions}</div>
+      <div class="inv-body"><div class="inv-amt-l">${paid?(isRu?'Сумма':'Summa'):partial?(isRu?'Осталось оплатить':'To‘lovga qoldi'):(isRu?'Сумма к оплате':'To‘lov summasi')}</div><div class="inv-amt">${fmt(paid?amt:rem)} <small>${esc(t.som)}</small></div>${paidNote}${actions}</div>
     </div>`;
   }).join('');
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="inv-list">${cards}</div>

@@ -148,6 +148,30 @@ async function applyPaymentToStudent(studentId, amount, transId){
   return result;
 }
 
+// Summani BITTA aniq invoice balansiga qo'llaydi (kabinet «Click» tugmasi / precise).
+// paidAmount += amount; to'lsa -> paid, kam -> partial, ortiqcha -> student_credit. IDEMPOTENT.
+async function applyToInvoice(invoiceId, amount, transId){
+  invoiceId = String(invoiceId||''); amount = Number(amount)||0;
+  const guardRef = db.collection('applied_payments').doc(String(transId||''));
+  try{ const g = await guardRef.get(); if(g.exists) return (g.data()||{}).result || { dup:true }; }catch(e){}
+  const inv = await getInvoice(invoiceId); if(!inv) return { error:'notfound' };
+  const paidSoFar = Number(inv.paidAmount)||0;
+  const newPaid = paidSoFar + amount;
+  const paidFull = newPaid >= Number(inv.amount) - 0.5;
+  const overflow = Math.max(0, newPaid - Number(inv.amount));
+  await db.collection('invoices').doc(invoiceId).set(Object.assign(
+    { paidAmount: paidFull ? Number(inv.amount) : newPaid, status: paidFull ? 'paid' : 'partial', provider:'click' },
+    paidFull ? { providerTrans: String(transId||''), paidAt: FieldValue.serverTimestamp() } : {}
+  ), { merge:true });
+  if(overflow > 0 && inv.studentId){
+    let cr = 0; try{ const c = await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr = Number((c.data()||{}).credit)||0; }catch(e){}
+    await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit: cr + overflow, updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+  }
+  const result = { invoiceId, applied: amount, status: paidFull ? 'paid' : 'partial', overflow, studentId: inv.studentId||'' };
+  try{ await guardRef.set({ studentId: String(inv.studentId||''), amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
+  return result;
+}
+
 // Uzum uchun: account = aniq invoice ID ({sid}__{oy}) yoki kod -> to'lanmagan invoice (eng eski).
 async function resolveInvoiceByCode(rawId){
   rawId = String(rawId||'').trim(); if(!rawId) return null;
@@ -189,7 +213,7 @@ async function handlePrepare(p){
     const inv = await getInvoice(mti);
     if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', false);
     if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', false);
-    if(!amtEq(amount, inv.amount)) return clickErr(p, -2, 'Summa mos emas', false);
+    // Balans modeli: summa aynan mos kelishi shart emas — qolganiga (partial) yoki to'liq tushadi.
     await payRef.set({ provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:mti,
       invoiceId:String(inv.id), studentId:String(inv.studentId||''), merchant_prepare_id:prepareId,
       amount, status:'prepared', matched:true, raw:{ mode:'precise' }, createdAt: FieldValue.serverTimestamp() });
@@ -221,12 +245,9 @@ async function handleComplete(p){
   if(mode === 'precise'){
     const inv = await getInvoice(String(pay.invoiceId||''));
     if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', true);
-    if(!amtEq(p.amount, inv.amount)) return clickErr(p, -2, 'Summa mos emas', true);
     if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', true);
-    await db.collection('invoices').doc(String(pay.invoiceId)).set({
-      status:'paid', paidAmount:Number(inv.amount), provider:'click', providerTrans:String(p.click_trans_id), paidAt: FieldValue.serverTimestamp()
-    }, { merge:true });
-    await payRef.set({ status:'paid', merchant_confirm_id:confirmId }, { merge:true });
+    await applyToInvoice(String(pay.invoiceId), Number(p.amount)||0, p.click_trans_id);  // qolganiga/to'liq
+    await payRef.set({ status:'paid', studentId:String(inv.studentId||''), merchant_confirm_id:confirmId }, { merge:true });
   } else {
     // ERKIN: balans modeli. Biriktirilgan -> qo'llanadi (qisman/to'liq/avans); aks holda -> biriktirilmagan.
     const amount = Number(pay.amount) || Number(p.amount) || 0;
