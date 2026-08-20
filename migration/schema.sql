@@ -138,8 +138,9 @@ create table if not exists invoices (
   "classKey"    text,
   month         text,
   amount        numeric,
+  "paidAmount"  numeric default 0,             -- qisman to'lov (balans modeli)
   provider      text,
-  status        text,                          -- 'paid'|'canceled'|'reversed'|null
+  status        text,                          -- 'pending'|'partial'|'paid'|'canceled'|'reversed'|null
   "providerTrans" text,                        -- to'lov tizimi tranzaksiya id
   "paidAt"      timestamptz,
   "reversedAt"  timestamptz,
@@ -163,7 +164,17 @@ create table if not exists payments (
   "merchant_confirm_id" text,
   -- Uzum Merchant API maydoni
   "transId"             text,
+  -- Erkin Click to'lovi (balans modeli) uchun
+  "payerName"  text, "payerPhone" text, "payerClass" text, matched boolean,
   "createdAt" timestamptz default now()
+);
+
+-- Ortiqcha to'lov (avans) va idempotentlik — to'lov balans modeli (payments-balance.sql)
+create table if not exists student_credit(
+  id text primary key, "studentId" text, credit numeric default 0, "updatedAt" timestamptz default now()
+);
+create table if not exists applied_payments(
+  id text primary key, "studentId" text, amount numeric, result jsonb, "createdAt" timestamptz default now()
 );
 
 -- ============ Xarajatlar (buxgalteriya — chiqim) ============
