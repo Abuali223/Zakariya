@@ -3107,13 +3107,13 @@ function computeTuition(s, priv, ctx){
   return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey };
 }
 // Referral: bir martalik 500 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
-function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return t;
-  const applied=Math.min(amt, t.net); if(applied<=0) return t;
+function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
+  const applied=Math.min(amt, t.net); if(applied<=0) return 0;   // net 0 (grant) bo'lsa qo'llanmaydi -> keyingi safar
   t.net-=applied; t.discount+=applied;
   const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':'';
   t.info=base+`Referral −${applied}`;
   if(t.net===0){ t.isGrant=true; t.status='paid'; }
-  return t; }
+  return applied; }
 function pmReferralMaps(students, privOf, ledger, month){
   const knownIds=new Set(students.map(s=>String(s.studentId||s._id)));
   const ledgerIds=new Set((ledger||[]).map(l=>l.id));
@@ -3222,14 +3222,14 @@ async function renderPayments(){
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
           const t=computeTuition(s, privOf(sid), ctx);
           if(t.skip){ skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }
-          applyReferral(t, refAmtOf(sid));
+          const rApplied=applyReferral(t, refAmtOf(sid));
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey,
             status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
           if(t.status==='paid') inv.paidAt=serverTimestamp();
           batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++;
-          if(pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
+          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
         if(wrote) await batch.commit();
       }
       // --- Referral ledgeri: qo'llangan referrallarni yozamiz (idempotent — takror qo'llanmaydi) ---
@@ -3269,13 +3269,13 @@ async function renderPayments(){
         const batch=writeBatch(db); let wrote=false;
         docs.slice(i,i+400).forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
           const t=computeTuition(s, privOf(sid), ctx); if(t.skip){ skipped++; return; }
-          applyReferral(t, refAmtOf(sid));
+          const rApplied=applyReferral(t, refAmtOf(sid));
           if(Number(inv.amount)===t.net && String(inv.discountInfo||'')===String(t.info)) return;   // o'zgarish yo'q
           batch.set(doc(db,'invoices',d.id), { amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:t.status,
             provider:t.isGrant?'grant':(inv.provider||''), paidAt:(t.status==='paid'?serverTimestamp():null) }, {merge:true});
           changed++; wrote=true;
-          if(pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
+          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
         if(wrote) await batch.commit();
       }
       for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }
