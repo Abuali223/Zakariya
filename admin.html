@@ -1330,9 +1330,15 @@ async function renderAttendance(){
       const btn=$('#att-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{
         const entries=Object.entries(state);
+        // Shim jsonb'ni chuqur birlashtirmaydi (days ustunini butunlay almashtiradi) — avval shu oydagi
+        // mavjud kunlarni o'qib, yangi kunni ustiga qo'shamiz, aks holda oldingi kunlar o'chib ketadi.
+        const existDays={};
+        try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',ym)));
+          asnap.docs.forEach(d=>{ const x=d.data()||{}; existDays[x.studentId||String(d.id).split('__')[0]]=x.days||{}; }); }catch(e){}
         for(let i=0;i<entries.length;i+=400){
           const batch=writeBatch(db);
-          entries.slice(i,i+400).forEach(([sid,status])=>batch.set(doc(db,'attendance',`${sid}__${ym}`),{studentId:sid,classKey:ck,month:ym,days:{[dd]:status}},{merge:true}));
+          entries.slice(i,i+400).forEach(([sid,status])=>{ const merged=Object.assign({}, existDays[sid]||{}, {[dd]:status});
+            batch.set(doc(db,'attendance',`${sid}__${ym}`),{studentId:sid,classKey:ck,month:ym,days:merged},{merge:true}); });
           await batch.commit();
         }
         await recomputeAttendancePct(entries.map(e=>e[0]));  // «Davomat %» ni avtomatik yangilaymiz
@@ -2019,7 +2025,7 @@ function openForm(name, row){
     const lockId = isEdit && s.docId && f.k===s.docId;
     if(lockId) return `<div><label>${esc(f.l)} 🔒</label><input name="${f.k}" type="text" value="${esc(v)}" readonly style="background:#eef0ec;color:#667;cursor:not-allowed"><p class="small muted" style="margin:6px 0 0">ID o‘zgartirilmaydi (dublikatning oldini olish uchun).</p></div>`;
     if(f.t==='select') return `<div><label>${esc(f.l)}</label><select name="${f.k}">${f.opts.map(o=>{const ov=(o&&typeof o==='object')?o.v:o;const ol=(o&&typeof o==='object')?o.l:o;return `<option value="${esc(ov)}" ${String(ov)===String(v)?'selected':''}>${esc(ol)}</option>`;}).join('')}</select></div>`;
-    if(f.t==='dynselect') return `<div><label>${esc(f.l)}</label><select name="${f.k}" data-dyn="${esc(f.src)}"><option value="">Yuklanmoqda…</option></select>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`;
+    if(f.t==='dynselect') return `<div><label>${esc(f.l)}</label><select name="${f.k}" data-dyn="${esc(f.src)}"><option value="${esc(v)}" selected>${v?'⏳ joriy qiymat saqlanadi…':'Yuklanmoqda…'}</option></select>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`;
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
     if(f.t==='image') return `<div class="img-field"><label>${esc(f.l)}</label>
       <div class="img-up">
@@ -3100,17 +3106,37 @@ function computeTuition(s, priv, ctx){
   const status=(net===0)?'paid':'pending';
   return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey };
 }
-// Generatsiya/qayta-hisoblash uchun umumiy kontekst: narx jadvali, maxfiy maydonlar, kasal kun, aka-uka to'plami.
+// Referral: bir martalik 500 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
+function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return t;
+  const applied=Math.min(amt, t.net); if(applied<=0) return t;
+  t.net-=applied; t.discount+=applied;
+  const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':'';
+  t.info=base+`Referral −${applied}`;
+  if(t.net===0){ t.isGrant=true; t.status='paid'; }
+  return t; }
+function pmReferralMaps(students, privOf, ledger, month){
+  const knownIds=new Set(students.map(s=>String(s.studentId||s._id)));
+  const ledgerIds=new Set((ledger||[]).map(l=>l.id));
+  const existRef={}; (ledger||[]).forEach(l=>{ if(l.month===month && l.referrerId) existRef[l.referrerId]=(existRef[l.referrerId]||0)+(Number(l.amount)||0); });
+  const pendingRef={}; students.forEach(s=>{ const nid=String(s.studentId||s._id); const rid=String((privOf(nid)||{}).referrerId||'').trim();
+    if(rid && rid!==nid && knownIds.has(rid) && !ledgerIds.has(nid)) (pendingRef[rid]=pendingRef[rid]||[]).push(nid); });
+  const refAmtOf=sid=>(existRef[sid]||0)+((pendingRef[sid]||[]).length*500000);
+  return { existRef, pendingRef, refAmtOf };
+}
+// Generatsiya/qayta-hisoblash uchun umumiy kontekst: narx jadvali, maxfiy maydonlar, kasal kun, aka-uka, referral ledger.
 async function pmLoadCtx(month, students, amount){
-  const privMap={}; try{ const ps=await getDocs(collection(db,'student_private')); ps.docs.forEach(d=>{ privMap[d.id]=d.data()||{}; }); }catch(e){}
+  // KRITIK o'qishlar — xato bo'lsa TASHLAYDI (tashqi try/catch xatoni ko'rsatadi; jimgina noto'g'ri narx/chegirma yo'q).
+  const privMap={}; { const ps=await getDocs(collection(db,'student_private')); ps.docs.forEach(d=>{ privMap[d.id]=d.data()||{}; }); }
   const privOf=sid=>privMap[sid]||{};
-  const priceMap={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }catch(e){}
+  const priceMap={}; { const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }
+  // Ikkilamchi — xato bo'lsa xavfsiz default (kasal=0, referral yo'q).
   let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
   const sickMap={}; try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',month)));
     asnap.docs.forEach(d=>{ const x=d.data()||{}; let n=0; Object.values(x.days||{}).forEach(st=>{ if(st==='sick')n++; }); if(n) sickMap[x.studentId||String(d.id).split('__')[0]]=n; }); }catch(e){}
+  let ledger=[]; try{ const l=await getDocs(collection(db,'referral_ledger')); ledger=l.docs.map(d=>({id:d.id,...(d.data()||{})})); }catch(e){}
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
   const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0 };
-  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, priceEmpty:!Object.keys(priceMap).length };
+  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, priceEmpty:!Object.keys(priceMap).length };
 }
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
@@ -3182,9 +3208,11 @@ async function renderPayments(){
     if(!month){ toast('Oyni tanlang',true); return; }
     const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
     try{
-      // --- Chegirma dvigateli konteksti (narx, maxfiy maydonlar, kasal kun, aka-uka) ---
-      const { privOf, tenHolders, conflicts, ctx, priceEmpty } = await pmLoadCtx(month, students, amount);
+      // --- Chegirma dvigateli konteksti (narx, maxfiy maydonlar, kasal kun, aka-uka, referral) ---
+      const { privOf, conflicts, ctx, ledger, priceEmpty } = await pmLoadCtx(month, students, amount);
       if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; }
+      const { pendingRef, refAmtOf } = pmReferralMaps(students, privOf, ledger, month);
+      const newLedger=[];
       // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const existing=new Set(snap.docs.map(d=>d.id));
@@ -3194,24 +3222,19 @@ async function renderPayments(){
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
           const t=computeTuition(s, privOf(sid), ctx);
           if(t.skip){ skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }
+          applyReferral(t, refAmtOf(sid));
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey,
             status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
           if(t.status==='paid') inv.paidAt=serverTimestamp();
-          batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++; });
+          batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++;
+          if(pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
         if(wrote) await batch.commit();
       }
-      // --- Referral: yangi o'quvchi olib kelgan oilaga bir marta 500 000 kredit (idempotent, ledger orqali) ---
+      // --- Referral ledgeri: qo'llangan referrallarni yozamiz (idempotent — takror qo'llanmaydi) ---
       let referrals=0;
-      try{ const led=await getDocs(collection(db,'referral_ledger')); const ledSet=new Set(led.docs.map(d=>d.id));
-        for(const s of students){ const sid=s.studentId||s._id; const rid=String(privOf(sid).referrerId||'').trim();
-          if(rid && rid!==sid && !ledSet.has(sid)){
-            await setDoc(doc(db,'referral_ledger',sid), {referrerId:rid, amount:500000, appliedAt:serverTimestamp()});
-            let cur=0; try{ const c=await getDoc(doc(db,'student_credit',rid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){}
-            await setDoc(doc(db,'student_credit',rid), {studentId:rid, credit:cur+500000, updatedAt:serverTimestamp()}, {merge:true});
-            referrals++; }
-        } }catch(e){}
+      for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); referrals++; }); await b.commit(); }
       // Avans (student_credit) bor o'quvchilarga yangi hisob-fakturaga avtomatik qo'llaymiz.
       let settled=0;
       try{ const cs=await getDocs(query(collection(db,'student_credit'), where('credit','>',0)));
@@ -3219,7 +3242,7 @@ async function renderPayments(){
       // --- Hisobot ---
       const parts=[];
       parts.push(created?`${created} ta hisob-faktura yaratildi${discounted?` (${discounted} tasida chegirma)`:''}.`:'Yangi hisob-faktura yaratilmadi (barchasi mavjud yoki o‘tkazildi).');
-      if(referrals) parts.push(`${referrals} referral × 500 000 kredit berildi.`);
+      if(referrals) parts.push(`${referrals} referral × 500 000 chegirma qo‘llandi.`);
       if(settled) parts.push(`${settled} o‘quvchida avans qo‘llandi.`);
       let html=esc(parts.join(' '));
       if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
@@ -3235,7 +3258,9 @@ async function renderPayments(){
     if(!confirm('Bu oydagi KUTILAYOTGAN (to‘lanmagan) hisob-fakturalar narx va chegirma bo‘yicha qayta hisoblanadi.\nTo‘langan / qisman to‘langan / bekor qilinganlar tegilmaydi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
-      const { privOf, ctx } = await pmLoadCtx(month, students, amount);
+      const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
+      const { pendingRef, refAmtOf } = pmReferralMaps(students, privOf, ledger, month);
+      const newLedger=[];
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const docs=snap.docs.filter(d=>{ const x=d.data()||{}; return x.status==='pending' && (Number(x.paidAmount)||0)===0; });
@@ -3244,13 +3269,16 @@ async function renderPayments(){
         const batch=writeBatch(db); let wrote=false;
         docs.slice(i,i+400).forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
           const t=computeTuition(s, privOf(sid), ctx); if(t.skip){ skipped++; return; }
+          applyReferral(t, refAmtOf(sid));
           if(Number(inv.amount)===t.net && String(inv.discountInfo||'')===String(t.info)) return;   // o'zgarish yo'q
           batch.set(doc(db,'invoices',d.id), { amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:t.status,
             provider:t.isGrant?'grant':(inv.provider||''), paidAt:(t.status==='paid'?serverTimestamp():null) }, {merge:true});
-          changed++; wrote=true; });
+          changed++; wrote=true;
+          if(pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
         if(wrote) await batch.commit();
       }
+      for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }
       $('#pm-genmsg').textContent=`${changed} ta kutilayotgan hisob-faktura qayta hisoblandi${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }

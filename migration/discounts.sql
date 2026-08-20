@@ -86,8 +86,10 @@ create table if not exists referral_ledger (
   id           text primary key,        -- = yangi o'quvchi (referred) studentId
   "referrerId" text,                     -- kim olib keldi (referrer studentId)
   amount       numeric,
+  month        text,                     -- chegirma qo'llangan oy (YYYY-MM)
   "appliedAt"  timestamptz default now()
 );
+alter table referral_ledger add column if not exists month text;
 alter table referral_ledger enable row level security;
 drop policy if exists rl_sel on referral_ledger;
 drop policy if exists rl_ins on referral_ledger;
