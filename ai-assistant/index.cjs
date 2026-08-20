@@ -227,6 +227,46 @@ async function handleRisk(body){
   return { count: students.length, students };
 }
 
+/* ---------------- Google Sheets import (ommaviy CSV proksi) ----------------
+ * Faqat docs.google.com — SSRF yo'q: id/gid ichki quriladi, boshqa host mumkin emas.
+ * Ommaviy («havolasi bor hamma ko'radi») jadval CSV'sini qaytaradi. Bazaga tegmaydi. */
+function parseSheetRef(u){
+  try{
+    const url = new URL(String(u||''));
+    if(!/(^|\.)docs\.google\.com$/.test(url.hostname)) return null;
+    const m = url.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/); if(!m) return null;
+    let gid = null;
+    const qg = url.searchParams.get('gid'); const hg = (url.hash||'').match(/gid=(\d+)/);
+    if(qg && /^\d+$/.test(qg)) gid = qg; else if(hg) gid = hg[1];
+    return { id: m[1], gid };
+  }catch(e){ return null; }
+}
+async function fetchCsv(u){
+  let r, text;
+  try{ r = await fetch(u, { redirect:'follow' }); text = await r.text(); }
+  catch(e){ return { err:'fetch_failed' }; }
+  if(!r.ok) return { err: (r.status===401||r.status===403||r.status===404) ? 'not_public' : 'fetch_failed' };
+  if(/^\s*<(!doctype|html)/i.test(text)) return { err:'not_public' };   // login/HTML sahifa = ochiq emas
+  return { text };
+}
+async function handleSheet(body){
+  const ref = parseSheetRef(body.url);
+  if(!ref) return { error:'bad_url' };
+  const base = 'https://docs.google.com/spreadsheets/d/' + ref.id;
+  const g = ref.gid!=null ? ('&gid=' + ref.gid) : '';
+  // 1) export?format=csv (gid bo'lsa — o'sha varaq, bo'lmasa — birinchi varaq)
+  // 2) gviz/tq (ba'zan export bo'sh qaytadi, gviz ishlaydi) — zaxira
+  const urls = [ base + '/export?format=csv' + g, base + '/gviz/tq?tqx=out:csv' + g ];
+  let lastErr = 'not_public';
+  for(const u of urls){
+    const res = await fetchCsv(u);
+    if(res.err){ lastErr = res.err; continue; }
+    if(res.text && res.text.replace(/[\s,]/g,'').length){ return { csv: res.text }; }  // bo'sh emas
+    lastErr = 'empty_sheet';   // varaq bo'sh yoki noto'g'ri varaq (gid)
+  }
+  return { error: lastErr };
+}
+
 /* ---------------- Server ---------------- */
 function serve(){
   const ORIGIN = CFG.allowOrigin || '*';
@@ -265,13 +305,18 @@ function serve(){
           if(!(role==='admin' || role==='zavuch')){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
           out = await handleRisk(body);
         }
+        else if(req.url.startsWith('/sheet')){
+          // Ommaviy Google Sheets CSV'sini o'qib beradi (import uchun). Bazaga tegmaydi.
+          if(!chatAllowed(req)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          out = await handleSheet(body);
+        }
         else { res.writeHead(404); return res.end('{"error":"not_found"}'); }
         res.writeHead(200, {'Content-Type':'application/json; charset=utf-8'});
         res.end(JSON.stringify(out));
       }catch(e){ console.error('ERR', e.message); res.writeHead(500); res.end(JSON.stringify({error:'server', detail:e.message})); }
     });
   });
-  server.listen(PORT, ()=>console.log(`Iqror AI yordamchi tinglayapti :${PORT}  (/chat, /student-summary, /risk) · model ${MODEL}`));
+  server.listen(PORT, ()=>console.log(`Iqror AI yordamchi tinglayapti :${PORT}  (/chat, /student-summary, /risk, /sheet) · model ${MODEL}`));
 }
 
 /* ---------------- CLI ---------------- */
@@ -302,4 +347,4 @@ if(require.main === module){
   })().catch(e=>{ console.error('Xatolik:', e.stack||e.message); process.exit(1); });
 }
 
-module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, riskScan, handleChat, handleStudentSummary, handleRisk };
+module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, riskScan, handleChat, handleStudentSummary, handleRisk, handleSheet, parseSheetRef };

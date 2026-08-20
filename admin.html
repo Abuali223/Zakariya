@@ -1014,12 +1014,18 @@ async function importFromSheet(){
       const j=await r.json();
       if(j.error==='bad_url'){ msg.textContent='Havola noto‘g‘ri (Google Sheets bo‘lishi kerak).'; load.disabled=false; load.textContent='Yuklab olish'; return; }
       if(j.error==='not_public'){ msg.textContent='Jadval ochiq emas. «Havolasi bor har kim ko‘ra oladi» qilib oching.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
+      if(j.error==='empty_sheet'){ msg.textContent='Jadval bo‘sh yoki ma’lumot boshqa varaqda. To‘g‘ri varaqni oching va havolani (…#gid=…) shundan nusxa oling.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
+      if(j.error==='fetch_failed'){ msg.textContent='Google‘ga ulanib bo‘lmadi. Biroz o‘tib qayta urinib ko‘ring.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
       if(!j.csv){ msg.textContent='Bo‘sh javob keldi.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
       buildAndPreviewImport(parseCSV(j.csv));   // preview oynasini ochadi
     }catch(e){ msg.textContent='Xatolik: '+(e.message||'ulanib bo‘lmadi'); load.disabled=false; load.textContent='Yuklab olish'; }
   };
 }
-// Qatorlardan (CSV/xlsx/Sheets) yozuvlarni tuzib, oldindan ko'rishni ochadi
+// Ism/guruh normalizatsiyasi — dublikatni aniqlash uchun (apostrof turlari, ortiqcha bo'shliq)
+function normName(s){ return String(s||'').toLowerCase().replace(/[''ʼ`‘’ʻ]/g,'').replace(/\s+/g,' ').trim(); }
+function normGrp(s){ return String(s||'').toLowerCase().replace(/[''ʼ`‘’ʻ\s]/g,'').trim(); }
+// Qatorlardan (CSV/xlsx/Sheets) yozuvlarni tuzib, oldindan ko'rishni ochadi.
+// MUHIM: loyihada allaqachon bor o'quvchi QAYTA yuklanmaydi — faqat yangilar qo'shiladi.
 function buildAndPreviewImport(rows){
   rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()));   // bo'sh qatorlarni tashlaymiz
   if(rows.length<2){ toast('Fayl/jadval bo‘sh yoki sarlavha qatori yo‘q',true); return; }
@@ -1030,17 +1036,30 @@ function buildAndPreviewImport(rows){
         iTrack=col('nalish','track','yo‘n','yo\'n','напр'), iScore=col('ball','score','балл'), iAtt=col('davomat','att','посещ'),
         iPinfl=col('jshshir','pinfl','жшшир','пинфл'), iVasiy=col('vasiy','guardian','опекун');
   if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
-  const existing=(cache['students']||[]).map(r=>String(r._id));
-  const acc=[]; const toWrite=[]; const warnings=[]; const nameCount={};
+  // Mavjud o'quvchilar — ID bo'yicha va "ism|sinf|guruh" tabiiy kalit bo'yicha indeks
+  const stu=(cache['students']||[]);
+  const existing=stu.map(r=>String(r._id));
+  const byId=new Set(existing.map(x=>x.toUpperCase()));
+  const nkOf=(name,grade,grp)=>normName(name)+'|'+(parseInt(grade,10)||0)+'|'+normGrp(grp);
+  const seenNK=new Set(stu.map(r=>nkOf(r.name, r.grade, r.classLetter||r.track)));   // bazadagi kalitlar
+  const acc=[]; const toWrite=[]; const warnings=[]; const skipped=[]; const nameCount={};
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
     const givenId=iId>=0?String(r[iId]||'').trim():'';
+    const grade=iGrade>=0?(parseInt(r[iGrade],10)||0):0;
+    const grp=(iGrp>=0?String(r[iGrp]||'').trim():'') || (iTrack>=0?String(r[iTrack]||'').trim():'');
+    const nk=nkOf(name, grade, grp);
+    // Allaqachon bor? (ID mos yoki ism+sinf+guruh mos — fayl ichidagi takror ham) → o'tkazib yuboramiz
+    if((givenId && byId.has(givenId.toUpperCase())) || seenNK.has(nk)){
+      skipped.push(name + (grp?` («${grp}»)`:'') );
+      continue;
+    }
+    seenNK.add(nk);   // shu import ichida keyingi bir xil qatorni ham to'sadi
     let id=givenId || nextId(existing.concat(acc),'IQ-',4);
-    acc.push(id);
+    acc.push(id); byId.add(String(id).toUpperCase());
     const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
     const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
-    const rec={ studentId:id, name, lang,
-      grade:iGrade>=0?(parseInt(r[iGrade],10)||0):0,
+    const rec={ studentId:id, name, lang, grade,
       classLetter:iGrp>=0?String(r[iGrp]||'').trim():'',
       track:iTrack>=0?String(r[iTrack]||'').trim():'',
       score:iScore>=0?(Number(r[iScore])||0):0,
@@ -1050,29 +1069,34 @@ function buildAndPreviewImport(rows){
     if(iPinfl>=0) priv.pinfl=String(r[iPinfl]||'').trim();
     if(iVasiy>=0) priv.guardian=String(r[iVasiy]||'').trim();
     toWrite.push({id, data:rec, priv});
-    // Ogohlantirishlar
     const ph=(priv.parentPhone||'').replace(/\D/g,'');
     if(priv.parentPhone && ph.length>0 && ph.length<12) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
-    if(givenId && existing.includes(givenId)) warnings.push(`${givenId} allaqachon bor — ustiga yoziladi (${name})`);
     nameCount[name]=(nameCount[name]||0)+1;
   }
-  Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta`));
-  if(!toWrite.length){ toast('Import uchun yozuv topilmadi',true); return; }
-  openImportPreview(toWrite, warnings);
+  Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta (yangi)`));
+  if(!toWrite.length){
+    if(skipped.length){ toast(`Barcha ${skipped.length} o‘quvchi allaqachon bor — yangi qo‘shilmadi ✓`); }
+    else toast('Import uchun yozuv topilmadi',true);
+    return;
+  }
+  openImportPreview(toWrite, warnings, skipped);
 }
 // Import — oldindan ko'rish (saqlashdan oldin tekshiruv)
-function openImportPreview(toWrite, warnings){
+function openImportPreview(toWrite, warnings, skipped){
+  skipped=skipped||[];
   const groups={};
   toWrite.forEach(x=>{ const d=x.data, g=Number(d.grade)||0, lang=d.lang||'uz', grp=d.classLetter||d.track||'—';
     const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(x); });
   const rowsHtml=Object.keys(groups).sort().map(k=>{ const {g,lang,grp,list}=groups[k];
     const withPhone=list.filter(x=>x.priv&&x.priv.parentPhone).length;
     return `<tr><td>${g===0?'Tayyorlov':g+'-sinf'} «${esc(grp)}»</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td></tr>`; }).join('');
+  const skipHtml = skipped.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#eef6f2;border:1px solid #cfe6da"><b>↩︎ Allaqachon bor — o‘tkazib yuborildi (${skipped.length} ta):</b><div class="small muted" style="margin-top:6px">${skipped.slice(0,30).map(esc).join(' · ')}${skipped.length>30?` …yana ${skipped.length-30} ta`:''}</div><div class="small muted" style="margin-top:8px">Bu o‘quvchilar loyihada mavjud, qayta qo‘shilmaydi (dublikat bo‘lmaydi).</div></div>` : '';
   const warnHtml = warnings.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#fff7e8;border:1px solid #f0d9a8"><b>⚠️ E’tibor bering (${warnings.length} ta):</b><ul style="margin:8px 0 0;padding-left:20px">${warnings.slice(0,40).map(w=>`<li class="small">${esc(w)}</li>`).join('')}</ul>${warnings.length>40?`<div class="small muted" style="margin-top:4px">…yana ${warnings.length-40} ta</div>`:''}<div class="small muted" style="margin-top:8px">Bular saqlashga to‘sqinlik qilmaydi — istasangiz avval faylda tuzatib qayta yuklang.</div></div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Import — oldindan ko‘rish</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <p class="small muted" style="margin:0 0 10px">Jami <b>${toWrite.length}</b> o‘quvchi · <b>${Object.keys(groups).length}</b> ta sinf-guruh. Tekshiring, so‘ng «Saqlash». Mavjud IDlar yangilanadi.</p>
+      <p class="small muted" style="margin:0 0 10px"><b style="color:var(--brand,#1F9982)">${toWrite.length}</b> ta YANGI o‘quvchi · <b>${Object.keys(groups).length}</b> ta sinf-guruh${skipped.length?` · <b>${skipped.length}</b> ta mavjud (o‘tkazildi)`:''}. Tekshiring, so‘ng «Saqlash».</p>
       <div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Til</th><th class="c">Soni</th><th class="c">Tel</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+      ${skipHtml}
       ${warnHtml}
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="imp-save">Saqlash (${toWrite.length})</button></div>`;
@@ -1086,7 +1110,7 @@ function openImportPreview(toWrite, warnings){
           if(x.priv && Object.keys(x.priv).length) batch.set(doc(db,'student_private',x.id), x.priv, {merge:true}); });
         await batch.commit();
       }
-      toast(toWrite.length+' ta o‘quvchi import qilindi ✓'); closeModal(); renderStudents();
+      toast(toWrite.length+' ta yangi o‘quvchi qo‘shildi ✓'); closeModal(); renderStudents();
     }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
   };
 }
