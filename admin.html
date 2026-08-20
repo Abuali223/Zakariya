@@ -2929,7 +2929,7 @@ async function openAssign(payment, students, reload){
 }
 // Summani o'quvchi balansiga qo'llaydi (waterfall) — to'lov serveri bilan bir xil mantiq.
 async function applyPaymentClient(studentId, amount){
-  amount=Number(amount)||0; if(amount<=0) return;
+  amount=Number(amount)||0; if(amount<0) return;   // amount=0 -> faqat mavjud kreditni (avansni) hisob-fakturaga qo'llaydi
   let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
   let available=amount+credit;
   const snap=await getDocs(query(collection(db,'invoices'), where('studentId','==',studentId)));
@@ -2961,7 +2961,8 @@ async function renderPayments(){
     rows.sort((a,b)=>String(a.studentName||'').localeCompare(String(b.studentName||'')));
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
-    const paidOf=r=>Number(r.paidAmount)||0, isCanc=r=>r.status==='canceled';
+    // status==='paid' -> to'liq to'langan deb hisoblanadi (Uzum/eski ma'lumot paidAmount'siz bo'lishi mumkin).
+    const paidOf=r=>r.status==='paid'?(Number(r.amount)||0):(Number(r.paidAmount)||0), isCanc=r=>r.status==='canceled';
     const debtOf=r=>isCanc(r)?0:Math.max(0,(Number(r.amount)||0)-paidOf(r));
     const fullPaid=rows.filter(r=>r.status==='paid'), partial=rows.filter(r=>r.status==='partial');
     const pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
@@ -3019,7 +3020,11 @@ async function renderPayments(){
           batch.set(doc(db,'invoices',id),{studentId:sid,studentName:s.name||sid,classKey:classKeyOf(s),month,amount,status:'pending',provider:'',createdAt:serverTimestamp()}); created++; });
         await batch.commit();
       }
-      $('#pm-genmsg').textContent = created?`${created} ta yangi hisob-faktura yaratildi (${fmtSom(amount)}).`:'Bu oy uchun barcha hisoblar allaqachon mavjud.';
+      // Avans (student_credit) bor o'quvchilarga yangi hisob-fakturaga avtomatik qo'llaymiz.
+      let settled=0;
+      try{ const cs=await getDocs(query(collection(db,'student_credit'), where('credit','>',0)));
+        for(const cd of cs.docs){ if(Number((cd.data()||{}).credit)>0){ await applyPaymentClient(cd.id, 0); settled++; } } }catch(e){}
+      $('#pm-genmsg').textContent = (created?`${created} ta yangi hisob-faktura yaratildi (${fmtSom(amount)}).`:'Bu oy uchun barcha hisoblar allaqachon mavjud.')+(settled?` · ${settled} o‘quvchida avans qo‘llandi.`:'');
       toast('Tayyor ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish';

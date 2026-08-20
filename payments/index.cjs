@@ -267,7 +267,8 @@ async function markInvoicePaid(invoiceId, provider, trans){
   if(s.data().status === 'paid') return { ok:true, already:true };
   // Qaytarilgan/bekor qilingan hisob-fakturani qayta «paid» qilmaymiz (refund tirilmasin).
   if(s.data().status === 'reversed' || s.data().status === 'canceled') return { ok:false, reason:'terminal' };
-  await ref.set({ status:'paid', provider, providerTrans:String(trans||''), paidAt: FieldValue.serverTimestamp() }, { merge:true });
+  // Balans modeli: to'liq to'langan -> paidAmount = amount (qarzdorlik/yig'ildi to'g'ri chiqsin).
+  await ref.set({ status:'paid', paidAmount:Number(s.data().amount)||0, provider, providerTrans:String(trans||''), paidAt: FieldValue.serverTimestamp() }, { merge:true });
   return { ok:true };
 }
 
