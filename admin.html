@@ -525,11 +525,16 @@ const SCHEMAS = {
       {k:'score',l:'Umumiy ball',t:'number'},
       {k:'attendance',l:'Davomat %',t:'number'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat avtomatlashuvi uchun)',t:'text'},
+      {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'O‘qituvchi farzandi (50%)'},{v:'olympiad',l:'Olimpiada g‘olibi (100% grant)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
+      {k:'teacherId',l:'Qaysi o‘qituvchining farzandi',t:'dynselect',src:'oqituvchilar',note:'Faqat «O‘qituvchi farzandi» tanlanganda kerak.'},
+      {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
+      {k:'siblingDiscount',l:'Aka-uka chegirmasi (10%) — shu farzandga',t:'select',opts:[{v:'',l:'— yo‘q'},{v:'Ha',l:'Ha (10%)'}]},
+      {k:'referrerId',l:'Kim olib kelgan (referral) — 500 000 unga',t:'text',placeholder:'olib kelgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
     ],
     // Maxfiy maydonlar ommaviy student hujjatida EMAS, alohida student_private
     // kolleksiyasida saqlanadi (JSHSHIR, telefon — voyaga yetmaganning shaxsiy ma'lumoti)
-    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2'],
+    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2','specialCategory','teacherId','contractAmount','siblingDiscount','referrerId'],
     subjects:true
   },
   teachers: {
@@ -686,7 +691,7 @@ const SCHEMAS = {
     }
   }
 };
-const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num']);
+const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num','contractAmount']);
 
 /* ---- State ---- */
 let currentTab = 'dashboard';
@@ -802,6 +807,7 @@ function buildTabs(){
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
+    {k:'pricetable', icon:mi('M120-120v-720h720v720H120Zm80-80h240v-160H200v160Zm320 0h240v-160H520v160ZM200-360h240v-160H200v160Zm320 0h240v-160H520v160ZM200-600h560v-160H200v160Z'), t:'Narx jadvali'},
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
     {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'},
     {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'},
@@ -831,6 +837,7 @@ function openTab(tab){
   if(tab==='enrollments') return renderEnrollments();
   if(tab==='checkins') return renderCheckins();
   if(tab==='applications') return renderApplications();
+  if(tab==='pricetable') return renderPriceTable();
   if(tab==='payments') return renderPayments();
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
@@ -2142,18 +2149,22 @@ function wireVideos(name){
 async function populateDynselects(name, row){
   const sels = [...document.querySelectorAll('#m-form select[data-dyn]')];
   if(!sels.length) return;
-  let users; try{ users = await loadCol('users', null); cache.users=users; }catch(e){ return; }
+  const need = s => sels.some(sel=>sel.getAttribute('data-dyn')===s);
+  let users=[]; if(need('rahbarlar')){ try{ users = await loadCol('users', null); cache.users=users; }catch(e){} }
+  let teachers=[]; if(need('oqituvchilar')){ try{ teachers = (cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){} }
   const roleTag = r => r==='kurator'?'Kurator':(r==='teacher'?'O‘qituvchi':r);
   for(const sel of sels){
     const src = sel.getAttribute('data-dyn');
     let opts=[];
     if(src==='rahbarlar') opts = users.filter(u=>u.role==='kurator'||u.role==='teacher')
       .map(u=>({v:u._id, l:(u.name||u.email||'—') + ` · ${roleTag(u.role)}` + (u.name&&u.email?` · ${u.email}`:'')}));
-    // Tahrirlashda: shu sinf kalitiga biriktirilgan rahbarni (kurator/o'qituvchi) oldindan tanlaymiz
-    let cur='';
+    else if(src==='oqituvchilar') opts = teachers.map(t=>({v:t.teacherId||t._id, l:(t.name||'—')+(t.subject_uz?` · ${t.subject_uz}`:'')}));
+    // Tahrirlashda joriy qiymatni oldindan tanlaymiz (sinf uchun — biriktirilgan rahbar)
+    let cur = row ? (row[sel.name]||'') : '';
     if(name==='classes' && row){ const k=supervisorOf(users, classDocKey(row)); if(k) cur=k._id; }
-    sel.innerHTML = `<option value="">— tanlanmagan —</option>` + opts.map(o=>`<option value="${esc(o.v)}" ${o.v===cur?'selected':''}>${esc(o.l)}</option>`).join('');
-    if(!opts.length) sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» yoki «O‘qituvchi» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida rol tayinlang.</p>`);
+    sel.innerHTML = `<option value="">— tanlanmagan —</option>` + opts.map(o=>`<option value="${esc(o.v)}" ${String(o.v)===String(cur)?'selected':''}>${esc(o.l)}</option>`).join('');
+    if(!opts.length && src==='rahbarlar') sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» yoki «O‘qituvchi» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida rol tayinlang.</p>`);
+    else if(!opts.length && src==='oqituvchilar') sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">O‘qituvchilar ro‘yxati bo‘sh. Avval «O‘qituvchilar» bo‘limida qo‘shing.</p>`);
   }
 }
 /* subjects sub-editor for students */
@@ -2971,13 +2982,144 @@ async function applyPaymentClient(studentId, amount){
     available-=pay; }
   await setDoc(doc(db,'student_credit',studentId),{studentId,credit:available,updatedAt:serverTimestamp()},{merge:true});
 }
+async function renderPriceTable(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Narx jadvali</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Sinf / yo‘nalish / til bo‘yicha oylik asosiy narx. Barcha chegirmalar shu narxdan avtomatik hisoblanadi. Yil boshida bir marta to‘ldiring — ro‘yxat o‘quvchilaringizdan avtomatik tuziladi.</p>
+    <div id="pt-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  let students;
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }catch(e){}
+  let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
+  const grp=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  const keys={};
+  students.forEach(s=>{ const k=priceKeyOf(s); if(!keys[k]) keys[k]={grade:Number(s.grade)||0, track:String(s.track||'').trim(), lang:s.lang||'uz', count:0}; keys[k].count++; });
+  Object.keys(existing).forEach(k=>{ if(!keys[k]){ const x=existing[k]; keys[k]={grade:Number(x.grade)||0, track:String(x.track||'').trim(), lang:x.lang||'uz', count:0}; } });
+  const ordered=Object.keys(keys).sort((a,b)=>{ const A=keys[a],B=keys[b]; return (A.grade-B.grade)||String(A.track).localeCompare(String(B.track))||String(A.lang).localeCompare(String(B.lang)); });
+  const rowHtml=ordered.map(k=>{ const g=keys[k]; const amt=existing[k]?(Number(existing[k].amount)||0):0;
+    return `<tr><td data-label="Sinf">${g.grade===0?'Tayyorlov':g.grade+'-sinf'}</td><td data-label="Yo‘nalish">${esc(g.track||'—')}</td><td data-label="Til">${g.lang==='ru'?'Rus':'O‘zbek'}</td><td data-label="O‘quvchi" style="text-align:center">${g.count||'—'}</td><td data-label="Oylik narx"><input type="text" inputmode="numeric" class="pt-amt" data-key="${esc(k)}" data-grade="${g.grade}" data-track="${esc(g.track)}" data-lang="${esc(g.lang)}" value="${amt?grp(amt):''}" placeholder="masalan: 2 900 000" style="width:170px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;text-align:right;font-family:var(--sans)"></td></tr>`; }).join('');
+  $('#pt-body').innerHTML = `
+    <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
+      <label>Kasal kun stavkasi (so‘m/kun)<input type="text" inputmode="numeric" id="pt-sick" value="${grp(sickRate)}" style="text-align:right"></label>
+      <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
+    </div><div class="small muted" id="pt-msg" style="margin-top:8px">Kasal kun stavkasi — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga).</div></div>
+    <div class="card"><div class="cls-card-head"><h3>Oylik narxlar</h3><span class="cls-count">${ordered.length} ta sinf-guruh</span></div>
+      ${ordered.length?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Yo‘nalish</th><th>Til</th><th class="c">O‘quvchi</th><th>Oylik narx (so‘m)</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`:'<div class="empty" style="padding:20px">Avval «O‘quvchilar» bo‘limida o‘quvchilarni kiriting — sinflar shu yerda avtomatik chiqadi.</div>'}</div>`;
+  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
+  const save=$('#pt-save'); if(save) save.addEventListener('click',async()=>{
+    save.disabled=true; save.textContent='Saqlanmoqda…';
+    try{
+      const inputs=[...$('#pt-body').querySelectorAll('.pt-amt')];
+      let n=0;
+      for(let i=0;i<inputs.length;i+=400){
+        const batch=writeBatch(db);
+        inputs.slice(i,i+400).forEach((el,idx)=>{ const amt=Number(el.value.replace(/\D/g,''))||0;
+          batch.set(doc(db,'price_table',el.dataset.key), {grade:Number(el.dataset.grade)||0, track:el.dataset.track||'', lang:el.dataset.lang||'uz', amount:amt, order:i+idx, updatedAt:serverTimestamp()}); n++; });
+        await batch.commit();
+      }
+      const sr=Number(($('#pt-sick').value||'').replace(/\D/g,''))||40000;
+      await setDoc(doc(db,'config','finance'), {sickRate:sr, updatedAt:serverTimestamp()}, {merge:true});
+      $('#pt-msg').textContent=`✓ ${n} ta narx va kasal stavkasi (${fmtSom(sr)}) saqlandi.`;
+      toast('Saqlandi ✓');
+    }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+    save.disabled=false; save.textContent='Saqlash';
+  });
+}
+/* ===== Avtomatik CHEGIRMA dvigateli (test qilingan — 21/21) =====
+ * priceKeyOf: narx jadvali kaliti (til-sinf[-yo'nalish]). classLetter EMAS (harf narxga ta'sir qilmaydi).
+ * computeSiblingSet: umumiy telefon -> oila; 10% ni bitta MOS farzandga (past ballik) tayinlaydi.
+ * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
+function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
+function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
+function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isNaN(Number(v)) ? Number(v) : null); }
+function computeSiblingSet(students, privOf){
+  const EXCL=['teacher_child','olympiad','contract'];
+  const phoneMap={};
+  students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
+    [pv.parentPhone, pv.parentPhone2].map(pmNormPhone).filter(p=>p.length>=7)
+      .forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
+  const parent={};
+  const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const union=(a,b)=>{ parent[find(a)]=find(b); };
+  students.forEach(s=>{ const sid=s.studentId||s._id; if(!(sid in parent)) parent[sid]=sid; });
+  Object.values(phoneMap).forEach(sids=>{ for(let i=1;i<sids.length;i++) union(sids[0],sids[i]); });
+  const comp={}; students.forEach(s=>{ const sid=s.studentId||s._id; const r=find(sid); (comp[r]=comp[r]||[]).push(s); });
+  const CAP=8;
+  const meta=s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
+    const exclusive=EXCL.includes(pv.specialCategory);
+    const score=pmNum(s.score);
+    const gets20=!exclusive && score!=null && score>=90;
+    const eligible10=!exclusive && !gets20;
+    return {sid, pv, exclusive, score, gets20, eligible10}; };
+  const tiebreak=(a,b)=>{ const sa=a.score==null?-Infinity:a.score, sb=b.score==null?-Infinity:b.score;
+    if(sa!==sb) return sa-sb; return String(a.sid).localeCompare(String(b.sid)); };
+  const tenHolders=new Set(); const conflicts=[];
+  Object.values(comp).forEach(members=>{
+    const ms=members.map(meta); const size=members.length;
+    const overrides=ms.filter(m=>m.pv.siblingDiscount==='Ha');
+    if(overrides.length){
+      const overrideEligible=overrides.filter(m=>m.eligible10);
+      overrides.filter(m=>!m.eligible10).forEach(m=>conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (20% oladi)':'eksklyuziv'} — e'tiborsiz`));
+      if(overrideEligible.length){
+        overrideEligible.sort(tiebreak); tenHolders.add(overrideEligible[0].sid);
+        if(overrideEligible.length>1) conflicts.push(`Oilada ${overrideEligible.length} ta 'Ha' — faqat ${overrideEligible[0].sid} ga 10% berildi`);
+        return;
+      }
+    }
+    if(size>=2 && size<=CAP){ const elig=ms.filter(m=>m.eligible10); if(elig.length){ elig.sort(tiebreak); tenHolders.add(elig[0].sid); } }
+    else if(size>CAP){ conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon?) — avtomatik 10% berilmadi`); }
+  });
+  return { tenHolders, conflicts };
+}
+function computeTuition(s, priv, ctx){
+  const pv=priv||{}; const cat=pv.specialCategory||''; const sid=s.studentId||s._id;
+  const round=n=>Math.round(n); const priceKey=priceKeyOf(s);
+  let base;
+  if(cat==='contract'){ const ca=Number(pv.contractAmount);
+    if(!(isFinite(ca)&&ca>0)) return {skip:true, skipReason:'contract_amount_missing', sid, name:s.name, priceKey};
+    base=ca;
+  } else { const pAmt=Number(ctx.priceMap && ctx.priceMap[priceKey]);
+    if(isFinite(pAmt)&&pAmt>0) base=pAmt;
+    else { const fa=Number(ctx.flatAmount); if(isFinite(fa)&&fa>0) base=fa;
+      else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; } }
+  let net, pct=0, sickN=0, sickAmt=0, info='', isGrant=false;
+  if(cat==='olympiad'){ net=0; pct=1; info='Olimpiada 100% grant'; isGrant=true; }
+  else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='O‘qituvchi farzandi 50%'; }
+  else if(cat==='contract'){ net=base; info='Kontrakt (belgilangan summa)'; }
+  else { const score=pmNum(s.score);
+    if(score!=null && score>=90){ pct=0.20; info='Monitoring ≥90 · 20%'; }
+    else if(ctx.tenHolders && ctx.tenHolders.has(sid)){ pct=0.10; info='Aka-uka · 10%'; }
+    else info='Chegirmasiz';
+    net=round(base*(1-pct));
+    if(pct>0){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;
+      const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
+      sickAmt=sickN*rate;
+      if(sickAmt>0){ net=Math.max(0, net-sickAmt); info+=` + ${sickN} kasal kun (−${sickAmt})`; } } }
+  const discount=base-net;
+  if(net===0 && !isGrant){ isGrant=true; }
+  const status=(net===0)?'paid':'pending';
+  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey };
+}
+// Generatsiya/qayta-hisoblash uchun umumiy kontekst: narx jadvali, maxfiy maydonlar, kasal kun, aka-uka to'plami.
+async function pmLoadCtx(month, students, amount){
+  const privMap={}; try{ const ps=await getDocs(collection(db,'student_private')); ps.docs.forEach(d=>{ privMap[d.id]=d.data()||{}; }); }catch(e){}
+  const privOf=sid=>privMap[sid]||{};
+  const priceMap={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }catch(e){}
+  let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
+  const sickMap={}; try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',month)));
+    asnap.docs.forEach(d=>{ const x=d.data()||{}; let n=0; Object.values(x.days||{}).forEach(st=>{ if(st==='sick')n++; }); if(n) sickMap[x.studentId||String(d.id).split('__')[0]]=n; }); }catch(e){}
+  const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
+  const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0 };
+  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, priceEmpty:!Object.keys(priceMap).length };
+}
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun o‘quvchilarga hisob-faktura yarating. Ota-ona o‘z kabinetida <b>Click</b> yoki <b>Uzum</b> orqali to‘laydi — to‘lov kelganda «to‘landi» avtomatik belgilanadi (to‘lov serveri orqali). Naqd to‘lovni bu yerda qo‘lda belgilashingiz mumkin.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (o‘qituvchi farzandi, olimpiada, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
-      <label>Oylik summa (so‘m)<input type="text" inputmode="numeric" id="pm-amount" placeholder="masalan: 2 900 000" value=""></label>
+      <label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
+      <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
     </div><div class="small muted" id="pm-genmsg" style="margin-top:8px"></div></div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
   let students;
@@ -3019,7 +3161,7 @@ async function renderPayments(){
       : `<span class="chip" style="background:#FDECEC;color:#B42318">Kutilmoqda</span>`;
     const trs=rows.map(r=>{ const d=debtOf(r); return `<tr>
       <td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'')}</td>
-      <td data-label="Summa">${fmtSom(r.amount)}</td>
+      <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
       <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
       <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
       <td data-label="Holat">${stBadge(r)}</td>
@@ -3038,27 +3180,81 @@ async function renderPayments(){
   $('#pm-gen').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    if(amount<=0){ toast('Oylik summani kiriting',true); return; }
     const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
     try{
-      // Mavjud hisoblarni tekshiramiz (paid'ni buzmaymiz, dublikat yaratmaymiz)
+      // --- Chegirma dvigateli konteksti (narx, maxfiy maydonlar, kasal kun, aka-uka) ---
+      const { privOf, tenHolders, conflicts, ctx, priceEmpty } = await pmLoadCtx(month, students, amount);
+      if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; }
+      // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const existing=new Set(snap.docs.map(d=>d.id));
-      let created=0;
+      let created=0, discounted=0; const skipped=[];
       for(let i=0;i<students.length;i+=400){
-        const batch=writeBatch(db);
+        const batch=writeBatch(db); let wrote=false;
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
-          batch.set(doc(db,'invoices',id),{studentId:sid,studentName:s.name||sid,classKey:classKeyOf(s),month,amount,status:'pending',provider:'',createdAt:serverTimestamp()}); created++; });
-        await batch.commit();
+          const t=computeTuition(s, privOf(sid), ctx);
+          if(t.skip){ skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }
+          const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
+            amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
+            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey,
+            status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
+          if(t.status==='paid') inv.paidAt=serverTimestamp();
+          batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++; });
+        if(wrote) await batch.commit();
       }
+      // --- Referral: yangi o'quvchi olib kelgan oilaga bir marta 500 000 kredit (idempotent, ledger orqali) ---
+      let referrals=0;
+      try{ const led=await getDocs(collection(db,'referral_ledger')); const ledSet=new Set(led.docs.map(d=>d.id));
+        for(const s of students){ const sid=s.studentId||s._id; const rid=String(privOf(sid).referrerId||'').trim();
+          if(rid && rid!==sid && !ledSet.has(sid)){
+            await setDoc(doc(db,'referral_ledger',sid), {referrerId:rid, amount:500000, appliedAt:serverTimestamp()});
+            let cur=0; try{ const c=await getDoc(doc(db,'student_credit',rid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){}
+            await setDoc(doc(db,'student_credit',rid), {studentId:rid, credit:cur+500000, updatedAt:serverTimestamp()}, {merge:true});
+            referrals++; }
+        } }catch(e){}
       // Avans (student_credit) bor o'quvchilarga yangi hisob-fakturaga avtomatik qo'llaymiz.
       let settled=0;
       try{ const cs=await getDocs(query(collection(db,'student_credit'), where('credit','>',0)));
         for(const cd of cs.docs){ if(Number((cd.data()||{}).credit)>0){ await applyPaymentClient(cd.id, 0); settled++; } } }catch(e){}
-      $('#pm-genmsg').textContent = (created?`${created} ta yangi hisob-faktura yaratildi (${fmtSom(amount)}).`:'Bu oy uchun barcha hisoblar allaqachon mavjud.')+(settled?` · ${settled} o‘quvchida avans qo‘llandi.`:'');
+      // --- Hisobot ---
+      const parts=[];
+      parts.push(created?`${created} ta hisob-faktura yaratildi${discounted?` (${discounted} tasida chegirma)`:''}.`:'Yangi hisob-faktura yaratilmadi (barchasi mavjud yoki o‘tkazildi).');
+      if(referrals) parts.push(`${referrals} referral × 500 000 kredit berildi.`);
+      if(settled) parts.push(`${settled} o‘quvchida avans qo‘llandi.`);
+      let html=esc(parts.join(' '));
+      if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
+      if(conflicts.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ Aka-uka chegirmasi eslatmalari:</b><div class="small">${conflicts.slice(0,15).map(esc).join(' · ')}</div></div>`;
+      $('#pm-genmsg').innerHTML = html;
       toast('Tayyor ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish';
+  });
+  $('#pm-recalc').addEventListener('click',async()=>{
+    const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
+    if(!month){ toast('Oyni tanlang',true); return; }
+    if(!confirm('Bu oydagi KUTILAYOTGAN (to‘lanmagan) hisob-fakturalar narx va chegirma bo‘yicha qayta hisoblanadi.\nTo‘langan / qisman to‘langan / bekor qilinganlar tegilmaydi. Davom etilsinmi?')) return;
+    const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
+    try{
+      const { privOf, ctx } = await pmLoadCtx(month, students, amount);
+      const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
+      const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
+      const docs=snap.docs.filter(d=>{ const x=d.data()||{}; return x.status==='pending' && (Number(x.paidAmount)||0)===0; });
+      let changed=0, skipped=0;
+      for(let i=0;i<docs.length;i+=400){
+        const batch=writeBatch(db); let wrote=false;
+        docs.slice(i,i+400).forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
+          const t=computeTuition(s, privOf(sid), ctx); if(t.skip){ skipped++; return; }
+          if(Number(inv.amount)===t.net && String(inv.discountInfo||'')===String(t.info)) return;   // o'zgarish yo'q
+          batch.set(doc(db,'invoices',d.id), { amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
+            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:t.status,
+            provider:t.isGrant?'grant':(inv.provider||''), paidAt:(t.status==='paid'?serverTimestamp():null) }, {merge:true});
+          changed++; wrote=true; });
+        if(wrote) await batch.commit();
+      }
+      $('#pm-genmsg').textContent=`${changed} ta kutilayotgan hisob-faktura qayta hisoblandi${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
+      toast('Qayta hisoblandi ✓'); load();
+    }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+    btn.disabled=false; btn.textContent='↻ Qayta hisoblash';
   });
   $('#pm-month').addEventListener('change',load);
   // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
