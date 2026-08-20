@@ -140,8 +140,10 @@ async function loadStudentData(sid){
   const monBySub={}; monSnap.docs.forEach(d=>{ const m=d.data(); if(m && m.status==='approved' && typeof m.score==='number') (monBySub[m.subject||'—']=monBySub[m.subject||'—']||[]).push(m.score); });
   const mon = Object.keys(monBySub).map(k=>({ subject:k, avg: Math.round(monBySub[k].reduce((a,b)=>a+b,0)/monBySub[k].length) }));
   const inv = invSnap.docs.map(d=>d.data());
-  const paid = inv.filter(i=>i.status==='paid').reduce((x,i)=>x+(Number(i.amount)||0),0);
-  const due  = inv.filter(i=>i.status!=='paid'&&i.status!=='canceled').reduce((x,i)=>x+(Number(i.amount)||0),0);
+  // Balans-aware: qisman to'lov (paidAmount) ham hisobga olinadi.
+  const paidAmt = i => i.status==='paid' ? (Number(i.amount)||0) : (Number(i.paidAmount)||0);
+  const paid = inv.reduce((x,i)=>x+paidAmt(i),0);
+  const due  = inv.reduce((x,i)=>x+(i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
   const grades = grdSnap.docs.map(d=>d.data());
   return { s, attPct, present, late, absent, total, mon, paid, due, grades };
 }

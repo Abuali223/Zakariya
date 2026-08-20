@@ -1783,10 +1783,11 @@ async function openStudentReport(sid, row){
     }).join('');
     // To'lovlar (buxgalteriya)
     const inv = invSnap.docs.map(d=>({_id:d.id,...d.data()})).sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
-    const paidSum = inv.filter(i=>i.status==='paid').reduce((x,i)=>x+(Number(i.amount)||0),0);
-    const dueSum  = inv.filter(i=>i.status!=='paid'&&i.status!=='canceled').reduce((x,i)=>x+(Number(i.amount)||0),0);
+    const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+    const paidSum = inv.reduce((x,i)=>x+paidAmt(i),0);
+    const dueSum  = inv.reduce((x,i)=>x+(i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
     const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',payme:'Payme'};
-    const invRows = inv.map(i=>{ const st=i.status==='paid'?'To‘landi':i.status==='canceled'?'Bekor':'Kutilmoqda'; return `<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td>${esc(st)}</td><td>${esc(i.status==='paid'?(provLbl[i.provider]||i.provider||'—'):'—')}</td><td>${esc(String(i.paidAt&&i.paidAt.toDate?i.paidAt.toDate().toISOString().slice(0,10):(i.paidAt||'')).slice(0,10)||'—')}</td></tr>`; }).join('');
+    const invRows = inv.map(i=>{ const st=i.status==='paid'?'To‘landi':i.status==='partial'?`Qisman (${fmtSom(paidAmt(i))})`:i.status==='canceled'?'Bekor':'Kutilmoqda'; return `<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td>${esc(st)}</td><td>${esc(i.status==='paid'||i.status==='partial'?(provLbl[i.provider]||i.provider||'—'):'—')}</td><td>${esc(String(i.paidAt&&i.paidAt.toDate?i.paidAt.toDate().toISOString().slice(0,10):(i.paidAt||'')).slice(0,10)||'—')}</td></tr>`; }).join('');
     const g=Number(s.grade)||0;
     const clsName=(g===0?'Tayyorlov':g+'-sinf')+' «'+(s.classLetter||s.track||'-')+'» · '+(s.lang==='ru'?'Rus':'O‘zbek');
     const P=(k)=>{ const v=privD[k]; return (v==null||v==='')?'':String(v); };
@@ -2522,26 +2523,29 @@ async function renderFinance(){
   const fmtC=n=>{ n=Number(n)||0; if(n>=1e9)return (n/1e9).toFixed(2).replace('.',',')+' mlrd'; if(n>=1e6)return (n/1e6).toFixed(1).replace('.',',')+' mln'; return Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); };
   const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
   const isPend=i=>i.status!=='paid'&&i.status!=='canceled';
+  // Balans-aware: to'langan qism (qisman to'lov ham hisobga olinadi) va qolgan qarz.
+  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+  const debtAmt=i=>i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i));
+  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
   const gmap={}; students.forEach(s=>{ gmap[String(s.studentId||s._id)]=s; });
   const gradeOf=i=>{ const s=gmap[String(i.studentId)]; if(s) return Number(s.grade)||0; const p=String(i.classKey||'').split('-'); return Number(p[1])||0; };
   const PM={click:{l:'Click',c:'#236B5D'},uzum:{l:'Uzum',c:'#7C4DB8'},cash:{l:'Naqd',c:'#977322'},payme:{l:'Payme',c:'#2E7CC0'},'':{l:'Boshqa',c:'#8A9691'}};
 
   const draw=(M)=>{
-    const paidAll=INV.filter(i=>i.status==='paid');
     const mInv=INV.filter(i=>i.month===M);
-    const paid=mInv.filter(i=>i.status==='paid'), pend=mInv.filter(isPend);
-    const collected=sum(paid), pendSum=sum(pend);
+    const paid=mInv.filter(i=>i.status==='paid'), pend=mInv.filter(i=>debtAmt(i)>0);
+    const collected=mInv.reduce((s,i)=>s+paidAmt(i),0), pendSum=mInv.reduce((s,i)=>s+debtAmt(i),0);
     const rate=pct(collected, collected+pendSum);
     const prevM=monthList(M,2)[0];
-    const prevColl=sum(paidAll.filter(i=>i.month===prevM));
+    const prevColl=monthColl(prevM);
     const delta = prevColl>0 ? Math.round((collected-prevColl)/prevColl*100) : null;
 
-    // Qarzdorlar (M va undan oldingi to'lanmagan hisoblar)
+    // Qarzdorlar (M va undan oldingi — qolgan qarzi bor hisoblar; qisman to'lov ayiriladi)
     const debtMap={};
-    INV.filter(i=>isPend(i) && i.month && i.month<=M).forEach(i=>{
+    INV.filter(i=>i.month && i.month<=M && debtAmt(i)>0).forEach(i=>{
       const k=String(i.studentId||i._id);
       const g=debtMap[k]||(debtMap[k]={name:i.studentName||k, sid:k, ck:i.classKey||'', months:[], sum:0});
-      g.months.push(i.month); g.sum+=Number(i.amount)||0;
+      g.months.push(i.month); g.sum+=debtAmt(i);
     });
     const debtors=Object.values(debtMap).sort((a,b)=>b.sum-a.sum);
     const debtSum=debtors.reduce((s,d)=>s+d.sum,0);
@@ -2556,7 +2560,7 @@ async function renderFinance(){
 
     // ---- Daromad grafigi (8 oy) ----
     const keys=monthList(M,8);
-    const vals=keys.map(k=>sum(paidAll.filter(i=>i.month===k)));
+    const vals=keys.map(k=>monthColl(k));
     const maxV=Math.max(1,...vals);
     const chart=`<div class="card" style="margin-bottom:16px">
       <div class="cls-card-head"><h3>Daromad dinamikasi</h3><span class="cls-count">Oxirgi 8 oy · yig‘ilgan (mln so‘m)</span></div>
@@ -2568,7 +2572,7 @@ async function renderFinance(){
 
     // ---- To'lov usuli ----
     const pmGroups={};
-    paid.forEach(i=>{ const key=(i.provider||'') in PM ? (i.provider||'') : ''; pmGroups[key]=(pmGroups[key]||0)+(Number(i.amount)||0); });
+    mInv.forEach(i=>{ const a=paidAmt(i); if(a<=0)return; const key=(i.provider||'') in PM ? (i.provider||'') : ''; pmGroups[key]=(pmGroups[key]||0)+a; });
     const pmKeys=Object.keys(pmGroups).filter(k=>pmGroups[k]>0).sort((a,b)=>pmGroups[b]-pmGroups[a]);
     const pmStack=collected>0?pmKeys.map(k=>{ const w=Math.round(pmGroups[k]/collected*100); return `<span style="width:${w}%;background:${PM[k].c}">${w>=8?w+'%':''}</span>`; }).join(''):'';
     const pmLegend=pmKeys.length?pmKeys.map(k=>`<div class="fin-pm-row"><span class="fin-pm-l"><i class="fin-dot" style="background:${PM[k].c}"></i>${esc(PM[k].l)}</span><span class="fin-pm-r">${fmtC(pmGroups[k])}<span class="pc">${pct(pmGroups[k],collected)}%</span></span></div>`).join(''):`<div class="empty" style="padding:10px 0">Bu oy hali to‘lov yo‘q</div>`;
@@ -2578,7 +2582,7 @@ async function renderFinance(){
 
     // ---- Yillik prognoz ----
     const year=String(M).slice(0,4), elapsed=parseInt(String(M).slice(5,7),10)||1;
-    const ytd=sum(paidAll.filter(i=>String(i.month||'').startsWith(year+'-') && i.month<=M));
+    const ytd=INV.filter(i=>String(i.month||'').startsWith(year+'-') && i.month<=M).reduce((s,i)=>s+paidAmt(i),0);
     const avgM=elapsed?ytd/elapsed:0, remaining=12-elapsed, projected=ytd+avgM*remaining;
     const prog=pct(ytd, projected);
     const fcCard=`<div class="card"><div class="cls-card-head"><h3>Yillik prognoz</h3><span class="cls-count">${esc(year)} yil</span></div>
@@ -2604,7 +2608,7 @@ async function renderFinance(){
       ${debtors.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Oylar</th><th>Qarz</th><th></th></tr></thead><tbody>${debtRows}</tbody></table></div>`:'<div class="empty">Qarzdor yo‘q ✓</div>'}</div>`;
 
     // ---- Sinf (daraja) bo'yicha daromad ----
-    const byGrade={}; paid.forEach(i=>{ const g=gradeOf(i); byGrade[g]=(byGrade[g]||0)+(Number(i.amount)||0); });
+    const byGrade={}; mInv.forEach(i=>{ const a=paidAmt(i); if(a<=0)return; const g=gradeOf(i); byGrade[g]=(byGrade[g]||0)+a; });
     const gKeys=Object.keys(byGrade).map(Number).sort((a,b)=>a-b);
     const maxG=Math.max(1,...gKeys.map(g=>byGrade[g]));
     const gBars=gKeys.length?gKeys.map(g=>`<div class="bar-row"><span class="bar-lbl">${gradeName(g)}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${fmtC(byGrade[g])}</b></div>`).join(''):'<div class="empty">Ma’lumot yo‘q</div>';
@@ -2647,10 +2651,12 @@ async function renderAccounting(){
   const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
   const emonth=e=>e.month||String(e.date||'').slice(0,7);
+  // Balans-aware kirim: qisman to'lov ham hisobga olinadi.
+  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
 
   const draw=(M)=>{
-    const paidAll=INV.filter(i=>i.status==='paid');
-    const kirim=sum(paidAll.filter(i=>i.month===M));
+    const kirim=monthColl(M);
     const mExp=EXP.filter(e=>emonth(e)===M);
     const chiqim=sum(mExp);
     const foyda=kirim-chiqim;
@@ -2668,7 +2674,7 @@ async function renderAccounting(){
 
     // ---- Kirim va chiqim grafigi (6 oy) ----
     const keys=monthList(M,6);
-    const kin=keys.map(k=>sum(paidAll.filter(i=>i.month===k)));
+    const kin=keys.map(k=>monthColl(k));
     const kex=keys.map(k=>sum(EXP.filter(e=>emonth(e)===k)));
     const maxV=Math.max(1,...kin,...kex);
     const anyLoss=keys.some((k,i)=>kex[i]>kin[i] && (kin[i]>0||kex[i]>0));
