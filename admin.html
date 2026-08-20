@@ -525,16 +525,17 @@ const SCHEMAS = {
       {k:'score',l:'Umumiy ball',t:'number'},
       {k:'attendance',l:'Davomat %',t:'number'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat avtomatlashuvi uchun)',t:'text'},
-      {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'O‘qituvchi farzandi (50%)'},{v:'olympiad',l:'Olimpiada g‘olibi (100% grant)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
-      {k:'teacherId',l:'Qaysi o‘qituvchining farzandi',t:'dynselect',src:'oqituvchilar',note:'Faqat «O‘qituvchi farzandi» tanlanganda kerak.'},
+      {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
+      {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
       {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
       {k:'siblingDiscount',l:'Aka-uka chegirmasi (10%) — shu farzandga',t:'select',opts:[{v:'',l:'— yo‘q'},{v:'Ha',l:'Ha (10%)'}]},
-      {k:'referrerId',l:'Kim olib kelgan (referral) — 500 000 unga',t:'text',placeholder:'olib kelgan o‘quvchi ID (IQ-...)'},
+      {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
+      {k:'referrerId',l:'Kim tavsiya qilgan (referral) — 300 000 unga',t:'text',placeholder:'tavsiya qilgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
     ],
     // Maxfiy maydonlar ommaviy student hujjatida EMAS, alohida student_private
     // kolleksiyasida saqlanadi (JSHSHIR, telefon — voyaga yetmaganning shaxsiy ma'lumoti)
-    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2','specialCategory','teacherId','contractAmount','siblingDiscount','referrerId'],
+    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2','specialCategory','teacherId','contractAmount','siblingDiscount','referrerId','hearAbout'],
     subjects:true
   },
   teachers: {
@@ -3065,7 +3066,7 @@ function computeSiblingSet(students, privOf){
     const overrides=ms.filter(m=>m.pv.siblingDiscount==='Ha');
     if(overrides.length){
       const overrideEligible=overrides.filter(m=>m.eligible10);
-      overrides.filter(m=>!m.eligible10).forEach(m=>conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (20% oladi)':'eksklyuziv'} — e'tiborsiz`));
+      overrides.filter(m=>!m.eligible10).forEach(m=>conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':'eksklyuziv'} — e'tiborsiz`));
       if(overrideEligible.length){
         overrideEligible.sort(tiebreak); tenHolders.add(overrideEligible[0].sid);
         if(overrideEligible.length>1) conflicts.push(`Oilada ${overrideEligible.length} ta 'Ha' — faqat ${overrideEligible[0].sid} ga 10% berildi`);
@@ -3089,15 +3090,16 @@ function computeTuition(s, priv, ctx){
     else { const fa=Number(ctx.flatAmount); if(isFinite(fa)&&fa>0) base=fa;
       else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; } }
   let net, pct=0, sickN=0, sickAmt=0, info='', isGrant=false;
-  if(cat==='olympiad'){ net=0; pct=1; info='Olimpiada 100% grant'; isGrant=true; }
-  else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='O‘qituvchi farzandi 50%'; }
+  if(cat==='olympiad'){ net=0; pct=1; info='100% grant (olimpiada/ijtimoiy)'; isGrant=true; }
+  else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='Xodim farzandi 50%'; }
   else if(cat==='contract'){ net=base; info='Kontrakt (belgilangan summa)'; }
   else { const score=pmNum(s.score);
-    if(score!=null && score>=90){ pct=0.20; info='Monitoring ≥90 · 20%'; }
+    if(score!=null && score>=100){ pct=1; info='Monitoring 100 · 100%'; isGrant=true; }
+    else if(score!=null && score>=90){ pct=0.20; info='Monitoring 90–99 · 20%'; }
     else if(ctx.tenHolders && ctx.tenHolders.has(sid)){ pct=0.10; info='Aka-uka · 10%'; }
     else info='Chegirmasiz';
     net=round(base*(1-pct));
-    if(pct>0){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;
+    if(pct===0.20 || pct===0.10){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;   // kasal chegirmasi faqat 10/20% oluvchilarga
       const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
       sickAmt=sickN*rate;
       if(sickAmt>0){ net=Math.max(0, net-sickAmt); info+=` + ${sickN} kasal kun (−${sickAmt})`; } } }
@@ -3106,7 +3108,7 @@ function computeTuition(s, priv, ctx){
   const status=(net===0)?'paid':'pending';
   return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey };
 }
-// Referral: bir martalik 500 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
+// Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
   const applied=Math.min(amt, t.net); if(applied<=0) return 0;   // net 0 (grant) bo'lsa qo'llanmaydi -> keyingi safar
   t.net-=applied; t.discount+=applied;
@@ -3120,7 +3122,7 @@ function pmReferralMaps(students, privOf, ledger, month){
   const existRef={}; (ledger||[]).forEach(l=>{ if(l.month===month && l.referrerId) existRef[l.referrerId]=(existRef[l.referrerId]||0)+(Number(l.amount)||0); });
   const pendingRef={}; students.forEach(s=>{ const nid=String(s.studentId||s._id); const rid=String((privOf(nid)||{}).referrerId||'').trim();
     if(rid && rid!==nid && knownIds.has(rid) && !ledgerIds.has(nid)) (pendingRef[rid]=pendingRef[rid]||[]).push(nid); });
-  const refAmtOf=sid=>(existRef[sid]||0)+((pendingRef[sid]||[]).length*500000);
+  const refAmtOf=sid=>(existRef[sid]||0)+((pendingRef[sid]||[]).length*300000);
   return { existRef, pendingRef, refAmtOf };
 }
 // Generatsiya/qayta-hisoblash uchun umumiy kontekst: narx jadvali, maxfiy maydonlar, kasal kun, aka-uka, referral ledger.
@@ -3140,7 +3142,7 @@ async function pmLoadCtx(month, students, amount){
 }
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (o‘qituvchi farzandi, olimpiada, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
       <label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
@@ -3229,7 +3231,7 @@ async function renderPayments(){
             status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
           if(t.status==='paid') inv.paidAt=serverTimestamp();
           batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++;
-          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
+          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
         if(wrote) await batch.commit();
       }
       // --- Referral ledgeri: qo'llangan referrallarni yozamiz (idempotent — takror qo'llanmaydi) ---
@@ -3242,7 +3244,7 @@ async function renderPayments(){
       // --- Hisobot ---
       const parts=[];
       parts.push(created?`${created} ta hisob-faktura yaratildi${discounted?` (${discounted} tasida chegirma)`:''}.`:'Yangi hisob-faktura yaratilmadi (barchasi mavjud yoki o‘tkazildi).');
-      if(referrals) parts.push(`${referrals} referral × 500 000 chegirma qo‘llandi.`);
+      if(referrals) parts.push(`${referrals} referral × 300 000 chegirma qo‘llandi.`);
       if(settled) parts.push(`${settled} o‘quvchida avans qo‘llandi.`);
       let html=esc(parts.join(' '));
       if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
@@ -3275,7 +3277,7 @@ async function renderPayments(){
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:t.status,
             provider:t.isGrant?'grant':(inv.provider||''), paidAt:(t.status==='paid'?serverTimestamp():null) }, {merge:true});
           changed++; wrote=true;
-          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:500000, month})); });
+          if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
         if(wrote) await batch.commit();
       }
       for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }

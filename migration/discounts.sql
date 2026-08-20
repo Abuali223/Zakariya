@@ -24,13 +24,15 @@ alter table config add column if not exists "flatAmount"    numeric;
 --    teacherId:       teacher_child bo'lganda qaysi o'qituvchi (IQT-...)
 --    contractAmount:  contract bo'lganda belgilangan oylik summa
 --    siblingDiscount: '' | 'Ha'  (aka-uka 10% ni shu farzandga qo'lda tayinlash)
---    referrerId:      shu o'quvchini kim olib kelgan (referrer studentId) — 500k referrerga
+--    referrerId:      shu o'quvchini kim tavsiya qilgan (referrer studentId) — 300k referrerga
+--    hearAbout:       bizni qayerdan eshitdingiz (marketing manbasi / referralni aniqlash)
 -- ---------------------------------------------------------------------
 alter table student_private add column if not exists "specialCategory" text;
 alter table student_private add column if not exists "teacherId"       text;
 alter table student_private add column if not exists "contractAmount"  numeric;
 alter table student_private add column if not exists "siblingDiscount" text;
 alter table student_private add column if not exists "referrerId"      text;
+alter table student_private add column if not exists "hearAbout"       text;
 
 -- ---------------------------------------------------------------------
 -- 3) invoices: chegirma shaffofligi (moliya tahlili net "amount"dan ishlaydi)
