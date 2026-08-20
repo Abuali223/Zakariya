@@ -44,6 +44,50 @@ const md5 = s => crypto.createHash('md5').update(s).digest('hex');
 const amtEq = (a, b) => Math.abs(Number(a) - Number(b)) < 0.5;
 const getInvoice = async id => { const s = await db.collection('invoices').doc(String(id||'')).get(); return s.exists ? s.data() : null; };
 
+/* ---------- To'lov identifikatorini invoice'ga aylantirish (moslashuvchan) ----------
+ * merchant_trans_id / Uzum account quyidagilardan biri bo'lishi mumkin:
+ *   1) "{sid}__{YYYY-MM}"  — ANIQ invoice ID (kabinet «Click» tugmasi) — o'zgarmagan
+ *   2) "IQ-0042 KOD"       — o'quvchi ID + maxfiy kod (Click ilova / QR / kassa)
+ *   3) "KOD"               — faqat maxfiy kod (kod noyob bo'lsa)
+ * Kod = 2b student_codes (admin paneldagi «Kod» ustuni). Server service_role bilan
+ * o'qiydi (RLS chetlab). Topilса o'quvchining TO'LANMAGAN hisob-fakturasi qaytadi
+ * (mos summali afzal, aks holda eng eski). */
+async function studentIdByCode(code){
+  code = String(code||'').trim().toUpperCase(); if(!code) return null;
+  try{ const snap = await db.collection('student_codes').where('code','==',code).get();
+       const docs = snap.docs || []; return docs.length === 1 ? String(docs[0].id) : null; }
+  catch(e){ return null; }
+}
+async function codeMatches(sid, code){
+  code = String(code||'').trim().toUpperCase(); if(!sid || !code) return false;
+  try{ const s = await db.collection('student_codes').doc(String(sid)).get();
+       return s.exists && String((s.data()||{}).code||'').toUpperCase() === code; }
+  catch(e){ return false; }
+}
+async function unpaidInvoices(sid){
+  try{ const snap = await db.collection('invoices').where('studentId','==',String(sid)).get();
+       return (snap.docs || []).map(d=>d.data())
+         .filter(x=>x && x.status!=='paid' && x.status!=='canceled' && x.status!=='reversed')
+         .sort((a,b)=>String(a.month||a.id||'').localeCompare(String(b.month||b.id||''))); }
+  catch(e){ return []; }
+}
+async function resolveInvoice(rawId, amountMatches){
+  rawId = String(rawId||'').trim(); if(!rawId) return null;
+  if(rawId.includes('__')) return await getInvoice(rawId);                 // 1) aniq invoice ID
+  const parts = rawId.toUpperCase().split(/[\s*\/+#:.,;|]+/).filter(Boolean);
+  let sid = null;
+  if(parts.length >= 2){                                                   // 2) ID + kod (har ikki tartib)
+    if(await codeMatches(parts[0], parts[1])) sid = parts[0];
+    else if(await codeMatches(parts[1], parts[0])) sid = parts[1];
+  } else if(parts.length === 1){                                          // 3) faqat kod
+    sid = await studentIdByCode(parts[0]);
+  }
+  if(!sid) return null;
+  const list = await unpaidInvoices(sid); if(!list.length) return null;
+  if(amountMatches){ const hit = list.find(x=>amountMatches(x.amount)); if(hit) return hit; }
+  return list[0];
+}
+
 /* ---------- CLICK ---------- */
 function clickSign(p, isComplete){
   const parts = [p.click_trans_id, p.service_id, CLICK.secretKey, p.merchant_trans_id];
@@ -64,30 +108,32 @@ async function handlePrepare(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, recv:String(p.sign_string||'').toLowerCase(), ours:clickSign(p,false), secLen:(CLICK.secretKey||'').length }));
   if(clickSign(p, false) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
-  const inv = await getInvoice(p.merchant_trans_id);
+  const inv = await resolveInvoice(p.merchant_trans_id, amt => amtEq(p.amount, amt));
   if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', false);
   if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', false);
   if(!amtEq(p.amount, inv.amount)) return clickErr(p, -2, 'Summa mos emas', false);
   const prepareId = String(Date.now());
   await db.collection('payments').doc('click_' + p.click_trans_id).set({
     provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:String(p.merchant_trans_id),
-    merchant_prepare_id:prepareId, amount:Number(p.amount), status:'prepared', createdAt: FieldValue.serverTimestamp()
+    invoiceId:String(inv.id), merchant_prepare_id:prepareId, amount:Number(p.amount), status:'prepared', createdAt: FieldValue.serverTimestamp()
   });
   return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_prepare_id:prepareId, error:0, error_note:'Success' };
 }
 async function handleComplete(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
   if(clickSign(p, true) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
-  const inv = await getInvoice(p.merchant_trans_id);
-  if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', true);
   const payRef = db.collection('payments').doc('click_' + p.click_trans_id);
   const paySnap = await payRef.get(); const pay = paySnap.exists ? paySnap.data() : null;
   if(!pay || String(pay.merchant_prepare_id) !== String(p.merchant_prepare_id)) return clickErr(p, -6, 'Tranzaksiya topilmadi', true);
+  // Prepare bosqichida hal qilingan HAQIQIY invoice ID (merchant_trans_id kod bo'lishi mumkin).
+  const invId = String(pay.invoiceId || p.merchant_trans_id);
+  const inv = await getInvoice(invId);
+  if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', true);
   if(Number(p.error) < 0){ await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true); }
   if(!amtEq(p.amount, inv.amount)) return clickErr(p, -2, 'Summa mos emas', true);
   if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', true);
   const confirmId = String(Date.now());
-  await db.collection('invoices').doc(String(p.merchant_trans_id)).set({
+  await db.collection('invoices').doc(invId).set({
     status:'paid', provider:'click', providerTrans:String(p.click_trans_id), paidAt: FieldValue.serverTimestamp()
   }, { merge:true });
   await payRef.set({ status:'paid', merchant_confirm_id:confirmId }, { merge:true });
@@ -138,24 +184,24 @@ const uzPayRef = transId => db.collection('payments').doc('uzum_' + String(trans
 
 async function uzCheck(b){
   if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
-  const id = uzInvoiceId(b.params); if(!id) return uzFail(UZ.NOT_ENOUGH_PARAMS);
-  const inv = await getInvoice(id); if(!inv) return uzFail(UZ.NOT_FOUND);
+  const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
+  const inv = await resolveInvoice(raw, b.amount!=null ? (amt=>uzAmountOK(b.amount, amt)) : null); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
   if(b.amount != null && !uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
   return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'OK',
-           data: { account: { invoice: id, month: inv.month || '', student: inv.studentName || '' } } };
+           data: { account: { invoice: inv.id, month: inv.month || '', student: inv.studentName || '' } } };
 }
 async function uzCreate(b){
   if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);
-  const id = uzInvoiceId(b.params); if(!id) return uzFail(UZ.NOT_ENOUGH_PARAMS);
-  const inv = await getInvoice(id); if(!inv) return uzFail(UZ.NOT_FOUND);
+  const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
+  const inv = await resolveInvoice(raw, amt=>uzAmountOK(b.amount, amt)); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
   if(!uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
   // Idempotentlik: allaqachon yakuniy holatdagi tranzaksiyani 'created'ga qaytarmaymiz.
   const _ex = await uzPayRef(b.transId).get();
   if(_ex.exists && (_ex.data().status === 'confirmed' || _ex.data().status === 'reversed'))
     return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
-  await uzPayRef(b.transId).set({ provider:'uzum', transId:String(b.transId), invoiceId:id,
+  await uzPayRef(b.transId).set({ provider:'uzum', transId:String(b.transId), invoiceId:String(inv.id),
     studentId: inv.studentId || '', amount:Number(b.amount), status:'created',
     raw:b, createdAt: FieldValue.serverTimestamp() });
   return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
@@ -214,6 +260,9 @@ if(require.main === module){
     if(req.method !== 'POST'){ res.writeHead(405); return res.end('POST kutiladi'); }
     const raw = await readBody(req);
     const body = parseBody(raw, req.headers['content-type']);
+    // DIAGNOSTIKA: Click/Uzum aynan nima yuborishini ko'rish uchun (config.json: "debugPay": true).
+    // Aniqlab bo'lgach o'chiring — loglar shaxsiy ma'lumot (ism/telefon/summa) o'z ichiga oladi.
+    if(CFG.debugPay && /^\/(click|uzum)\//.test(req.url)) console.error('[PAY-BODY]', req.url, JSON.stringify(body));
     const send = obj => { res.writeHead(200, { 'Content-Type':'application/json' }); res.end(JSON.stringify(obj)); };
     try{
       if(req.url.startsWith('/click/prepare'))       send(await handlePrepare(body));
