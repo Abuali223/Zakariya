@@ -2855,7 +2855,7 @@ async function renderFinance(){
       <div class="fin-kpi warn"><div class="k-l">Kutilmoqda</div><div class="k-v">${fmtC(pendSum)}</div><div class="k-d">${pend.length} ta hisob-faktura</div></div>
       <div class="fin-kpi teal"><div class="k-l">Yig‘im foizi</div><div class="k-v">${rate}<small>%</small></div><div class="k-d">${paid.length} / ${paid.length+pend.length} to‘ladi</div></div>
       <div class="fin-kpi bad"><div class="k-l">Qarzdorlar</div><div class="k-v">${debtors.length}</div><div class="k-d">o‘quvchi · ${fmtC(debtSum)}</div></div>
-      ${avansTotal>0?`<div class="fin-kpi ok"><div class="k-l">Avans (oldindan)</div><div class="k-v">${fmtC(avansTotal)}</div><div class="k-d">${avansCount} o‘quvchi balansida · keyingi oyga o‘tadi</div></div>`:''}
+      ${avansTotal>0?`<div class="fin-kpi ok" id="fin-avans" style="cursor:pointer" title="Bosing — avansli o‘quvchilar ro‘yxati"><div class="k-l">Avans (oldindan) ›</div><div class="k-v">${fmtC(avansTotal)}</div><div class="k-d">${avansCount} o‘quvchi · bosing</div></div>`:''}
     </div>`;
 
     // ---- Daromad grafigi (8 oy) ----
@@ -2917,10 +2917,27 @@ async function renderFinance(){
     $('#fin-body').innerHTML = kpis + chart + `<div class="fin-cols">${pmCard}${fcCard}</div>` + `<div class="fin-cols">${debtCard}${gradeCard}</div>`;
     // «Eslatma» — SMS/bildirishnoma Bosqich 3 da ishga tushadi
     $('#fin-body').querySelectorAll('[data-remind]').forEach(b=>b.addEventListener('click',()=>toast('SMS eslatma — keyingi bosqichda (Bosqich 3) qo‘shiladi')));
+    const avEl=$('#fin-avans'); if(avEl) avEl.addEventListener('click',()=>openAvansList(credits, gmap));
   };
 
   draw($('#fin-month').value || curMonth());
   $('#fin-month').addEventListener('change',()=>draw($('#fin-month').value||curMonth()));
+}
+// Avansli o'quvchilar ro'yxati (Moliyaдаги «Avans» KPI'ni bosганда) — kim, qancha + tarix.
+function openAvansList(credits, gmap){
+  const nameOf=sid=>{ const s=(gmap||{})[sid]; return s?(s.name||sid):sid; };
+  const clsOf=sid=>{ const s=(gmap||{})[sid]; return s?classLabelOf(s):''; };
+  const rows=(credits||[]).map(c=>({ sid:String(c.studentId||c.id||''), credit:Number(c.credit)||0 }))
+    .filter(x=>x.sid && x.credit>0).sort((a,b)=>b.credit-a.credit);
+  $('#modal').innerHTML=`<div class="modal-h"><h3>Avansli o‘quvchilar</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">${rows.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Sinf</th><th>Avans</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
+      <td>${esc(nameOf(r.sid))} <span class="small muted">${esc(r.sid)}</span></td>
+      <td>${esc(clsOf(r.sid))}</td>
+      <td style="text-align:right;font-weight:700;color:#0891B2">${fmtSom(r.credit)}</td>
+      <td class="td-actions"><button class="btn sm ghost2" data-hist="${esc(r.sid)}">📋 Tarix</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Avansli o‘quvchi yo‘q.</div>'}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#modal').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf(b.dataset.hist))));
 }
 
 /* ==================== Buxgalteriya (Accounting) ====================
