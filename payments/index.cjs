@@ -162,6 +162,8 @@ async function applyToInvoice(invoiceId, amount, transId, provider){
   try{ await guardRef.create({ amount, createdAt: FieldValue.serverTimestamp() }); }
   catch(e){ try{ const g = await guardRef.get(); return (g.data()||{}).result || { dup:true }; }catch(_){ return { dup:true }; } }
   const inv = await getInvoice(invoiceId); if(!inv){ try{ await guardRef.delete(); }catch(_){ } return { error:'notfound' }; }
+  // Qaytarilgan/bekor qilingan hisob-fakturani qayta to'lash mumkin emas (refund tirilmasin).
+  if(inv.status==='reversed' || inv.status==='canceled'){ try{ await guardRef.delete(); }catch(_){ } return { error:'terminal' }; }
   try{
   const paidSoFar = Number(inv.paidAmount)||0;
   const newPaid = paidSoFar + amount;
@@ -245,11 +247,12 @@ async function handleComplete(p){
   const payRef = db.collection('payments').doc('click_' + p.click_trans_id);
   const paySnap = await payRef.get(); const pay = paySnap.exists ? paySnap.data() : null;
   if(!pay || String(pay.merchant_prepare_id) !== String(p.merchant_prepare_id)) return clickErr(p, -6, 'Tranzaksiya topilmadi', true);
-  if(Number(p.error) < 0){ await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true); }
   const confirmId = String(Date.now());
-  // Idempotentlik: allaqachon yakunlangan bo'lsa qayta hisoblamaymiz.
+  // Idempotentlik AVVAL: yakuniy holatдаги (paid/applied/unmatched) to'lovni CANCEL/apply qilmaymiz
+  // (kech kelgan error<0 to'langan to'lovni 'canceled' qilib invoice bilan nomuvofiqlik yaratmasin).
   if(pay.status === 'paid' || pay.status === 'applied' || pay.status === 'unmatched')
     return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:String(pay.merchant_confirm_id||confirmId), error:0, error_note:'Success' };
+  if(Number(p.error) < 0){ await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true); }
   const mode = (pay.raw && pay.raw.mode) || 'precise';
 
   if(mode === 'precise'){
@@ -318,6 +321,7 @@ async function uzCheck(b){
   const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
   const inv = await resolveInvoiceByCode(raw); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
+  if(inv.status === 'reversed' || inv.status === 'canceled') return uzFail(UZ.CANCELLED);   // qaytarilgan/bekor -> qayta to'lanmaydi
   // Qolgan balansga tekshiramiz (qisman to'langan hisobни ham Uzum bilan yopish mumkin bo'lsin).
   if(b.amount != null && !uzAmountOK(b.amount, (Number(inv.amount)||0)-(Number(inv.paidAmount)||0))) return uzFail(UZ.CHECK_ERROR);
   return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'OK',
@@ -328,6 +332,7 @@ async function uzCreate(b){
   const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
   const inv = await resolveInvoiceByCode(raw); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
+  if(inv.status === 'reversed' || inv.status === 'canceled') return uzFail(UZ.CANCELLED);   // qaytarilgan/bekor -> qayta to'lanmaydi
   if(!uzAmountOK(b.amount, (Number(inv.amount)||0)-(Number(inv.paidAmount)||0))) return uzFail(UZ.CHECK_ERROR);
   // Idempotentlik: allaqachon yakuniy holatdagi tranzaksiyani 'created'ga qaytarmaymiz.
   const _ex = await uzPayRef(b.transId).get();
@@ -356,8 +361,26 @@ async function uzReverse(b){
   const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
   if(!pay) return uzFail(UZ.NOT_FOUND);
   if(pay.status !== 'reversed'){
-    await db.collection('invoices').doc(String(pay.invoiceId)).set(
-      { status:'reversed', paidAmount:0, reversedAt: FieldValue.serverTimestamp() }, { merge:true });
+    // FAQAT tasdiqlangan (confirmed) to'lov invoice balansiga ta'sir qilgan. Butun paidAmount'ni
+    // 0 qilmaymiz — AYNAN shu tranzaksiya summasini ayiramiz (boshqa to'lovlar saqlanadi),
+    // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
+    if(pay.status === 'confirmed'){
+      const som = UZUM.amountUnit === 'som' ? Number(pay.amount)||0 : (Number(pay.amount)||0)/100;
+      const inv = await getInvoice(String(pay.invoiceId));
+      if(inv){
+        const amt = Number(inv.amount)||0, paid0 = Number(inv.paidAmount)||0;
+        const fromInvoice = Math.min(som, paid0);            // paidAmount'dan ayiriladigan qism
+        const fromCredit  = Math.max(0, som - fromInvoice);  // ortiqcha -> avansdan qaytariladi
+        const newPaid = Math.max(0, paid0 - fromInvoice);
+        const status = newPaid<=0 ? 'reversed' : (newPaid >= amt-0.5 ? 'paid' : 'partial');
+        await db.collection('invoices').doc(String(pay.invoiceId)).set(
+          { paidAmount:newPaid, status, reversedAt: FieldValue.serverTimestamp() }, { merge:true });
+        if(fromCredit>0 && inv.studentId){
+          let cr=0; try{ const c=await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr=Number((c.data()||{}).credit)||0; }catch(e){}
+          await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit:Math.max(0,cr-fromCredit), updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+        }
+      }
+    }
     await uzPayRef(b.transId).set({ status:'reversed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: pay.amount };
