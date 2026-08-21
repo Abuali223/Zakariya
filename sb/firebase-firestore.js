@@ -75,12 +75,23 @@ export async function getDoc(ref) {
   return { id: ref._id, exists: () => !!data, data: () => wrapRow(data) };
 }
 export async function getDocs(refOrQuery) {
-  let q = supabase().from(refOrQuery._t).select("*");
-  if (refOrQuery._kind === "query") q = applyCons(q, refOrQuery._cons);
-  const { data, error } = await q;
-  if (error) throw error;
-  const rows = data || [];
-  const docs = rows.map(r => ({ id: r.id, exists: () => true, data: () => wrapRow(r) }));
+  const cons = refOrQuery._kind === "query" ? (refOrQuery._cons || []) : [];
+  const hasLimit = cons.some(c => c._c === "limit");
+  const PAGE = 1000;
+  let all = [], from = 0;
+  // PostgREST standart max-rows (odatda 1000) ni chetlab, hamma qatorni sahifalab olamiz.
+  // Aniq .limit(n) berilgan so'rovlarda — bitta o'qish (limitni hurmat qilamiz).
+  while (true) {
+    let q = applyCons(supabase().from(refOrQuery._t).select("*"), cons);
+    if (!hasLimit) q = q.range(from, from + PAGE - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data || [];
+    all = all.concat(rows);
+    if (hasLimit || rows.length < PAGE) break;
+    from += PAGE;
+  }
+  const docs = all.map(r => ({ id: r.id, exists: () => true, data: () => wrapRow(r) }));
   return { docs, size: docs.length, empty: docs.length === 0, forEach: fn => docs.forEach(fn) };
 }
 
