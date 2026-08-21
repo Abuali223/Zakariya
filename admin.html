@@ -1038,13 +1038,38 @@ function normGrp(s){ return String(s||'').toLowerCase().replace(/[''ʼ`‘’ʻ\
 function buildAndPreviewImport(rows){
   rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()));   // bo'sh qatorlarni tashlaymiz
   if(rows.length<2){ toast('Fayl/jadval bo‘sh yoki sarlavha qatori yo‘q',true); return; }
-  const head=rows[0].map(h=>String(h).trim().toLowerCase());
-  const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
-  const iId=col('id'), iName=col('ism','name','f.i.o','fio'), iPhone=col('tel','phone','telefon'),
-        iLang=col('til','lang','язык'), iGrade=col('sinf','grade','класс'), iGrp=col('guruh','group','групп'),
-        iTrack=col('nalish','track','yo‘n','yo\'n','напр'), iScore=col('ball','score','балл'), iAtt=col('davomat','att','посещ'),
-        iPinfl=col('jshshir','pinfl','жшшир','пинфл'), iVasiy=col('vasiy','guardian','опекун');
+  const head=rows[0].map(h=>String(h).trim().toLowerCase().replace(/[‘’ʻ`]/g,"'"));
+  const N=head.length;
+  const has=(h,...ks)=>ks.some(k=>h.includes(k));
+  const isPar=h=>has(h,'ota','ona','father','mother','roditel','родит','vasiy','guardian','опекун');
+  const findH=pred=>{ for(let i=0;i<N;i++) if(pred(head[i]))return i; return -1; };
+  // Sinf ustuni: sarlavha bo'yicha, topilmasa qiymat namunasi ("9-b","1-A","Tayyorlov") bo'yicha
+  const classRe=/^\s*(tayyorlov|prep)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яё]/i;
+  let iClass=findH(h=>has(h,'sinf','klass','grade','класс','guruh','group','групп'));
+  if(iClass<0){ for(let c=0;c<N;c++){ let hit=0,tot=0; for(let r=1;r<Math.min(rows.length,30);r++){ const v=String((rows[r]||[])[c]||'').trim(); if(v){tot++; if(classRe.test(v))hit++;} } if(tot>=3 && hit/tot>=0.5){ iClass=c; break; } } }
+  // Telefon/ism: ota va ona ustunlarini alohida taniymiz
+  const iFatherPh=findH(h=>has(h,'tel','phone','telefon','raqam','номер') && has(h,'ota','father'));
+  const iMotherPh=findH(h=>has(h,'tel','phone','telefon','raqam','номер') && has(h,'ona','mother'));
+  const iAnyPh=findH(h=>has(h,'tel','phone','telefon','raqam') && !isPar(h));
+  const iFatherNm=findH(h=>has(h,'ism','name','fio','familiya','f.i') && has(h,'ota','father'));
+  const iMotherNm=findH(h=>has(h,'ism','name','fio','familiya','f.i') && has(h,'ona','mother'));
+  const iId=findH(h=>h==='id'||/(^|[^a-z0-9])id([^a-z0-9]|$)/.test(h));
+  const iLang=findH(h=>has(h,'til','lang','язык'));
+  const iTrack=findH(h=>has(h,'nalish','track',"yo'n",'напр'));
+  const iScore=findH(h=>has(h,'ball','score','балл'));
+  const iAtt=findH(h=>has(h,'davomat','att','посещ'));
+  const iPinfl=findH(h=>has(h,'jshshir','pinfl','жшшир','пинфл'));
+  const iGuard=findH(h=>has(h,'vasiy','guardian','опекун'));
+  // O'quvchi ismi: nomi bo'yicha (ota/ona ustunlarisiz); topilmasa — birinchi ishlatilmagan ustun (odatda 1-ustun)
+  let iName=findH(h=>has(h,"o'quvchi",'oquvchi','bola','farzand','fish','f.i.sh') && !isPar(h));
+  if(iName<0) iName=findH(h=>has(h,'ism','name','fio','f.i.o','familiya') && !isPar(h));
+  if(iName<0){ const used=new Set([iClass,iFatherPh,iMotherPh,iAnyPh,iFatherNm,iMotherNm,iId,iLang,iTrack,iScore,iAtt,iPinfl,iGuard].filter(x=>x>=0));
+    for(let c=0;c<N;c++){ if(!used.has(c)){ iName=c; break; } } }
   if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
+  // "9-b" / "1-A" / "Tayyorlov" → grade + harf
+  const parseClass=v=>{ v=String(v||'').trim(); if(!v) return {grade:0,letter:''};
+    if(/tayyorlov|prep/i.test(v)) return {grade:0, letter:((v.match(/[-–—]\s*([a-zа-яё])/i)||[])[1]||'').toUpperCase()};
+    const m=v.match(/(\d{1,2})\s*[-–—]?\s*([a-zа-яё])?/i); return m?{grade:parseInt(m[1],10)||0, letter:(m[2]||'').toUpperCase()}:{grade:0,letter:''}; };
   // Mavjud o'quvchilar — ID bo'yicha va "ism|sinf|guruh" tabiiy kalit bo'yicha indeks
   const stu=(cache['students']||[]);
   const existing=stu.map(r=>String(r._id));
@@ -1055,8 +1080,9 @@ function buildAndPreviewImport(rows){
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
     const givenId=iId>=0?String(r[iId]||'').trim():'';
-    const grade=iGrade>=0?(parseInt(r[iGrade],10)||0):0;
-    const grp=(iGrp>=0?String(r[iGrp]||'').trim():'') || (iTrack>=0?String(r[iTrack]||'').trim():'');
+    const cls=iClass>=0?parseClass(r[iClass]):{grade:0,letter:''};
+    const grade=cls.grade;
+    const grp=cls.letter || (iTrack>=0?String(r[iTrack]||'').trim():'');
     const nk=nkOf(name, grade, grp);
     // Allaqachon bor? (ID mos yoki ism+sinf+guruh mos — fayl ichidagi takror ham) → o'tkazib yuboramiz
     if((givenId && byId.has(givenId.toUpperCase())) || seenNK.has(nk)){
@@ -1069,17 +1095,21 @@ function buildAndPreviewImport(rows){
     const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
     const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
     const rec={ studentId:id, name, lang, grade,
-      classLetter:iGrp>=0?String(r[iGrp]||'').trim():'',
+      classLetter:cls.letter,
       track:iTrack>=0?String(r[iTrack]||'').trim():'',
       score:iScore>=0?(Number(r[iScore])||0):0,
       attendance:iAtt>=0?(Number(r[iAtt])||0):0, order:1000+i };
     const priv={};
-    if(iPhone>=0) priv.parentPhone=String(r[iPhone]||'').trim();
-    if(iPinfl>=0) priv.pinfl=String(r[iPinfl]||'').trim();
-    if(iVasiy>=0) priv.guardian=String(r[iVasiy]||'').trim();
+    const fph=iFatherPh>=0?String(r[iFatherPh]||'').trim():'', mph=iMotherPh>=0?String(r[iMotherPh]||'').trim():'', aph=iAnyPh>=0?String(r[iAnyPh]||'').trim():'';
+    if(fph||aph) priv.parentPhone=fph||aph;
+    if(mph) priv.parentPhone2=mph;
+    if(iFatherNm>=0){ const v=String(r[iFatherNm]||'').trim(); if(v) priv.fatherName=v; }
+    if(iMotherNm>=0){ const v=String(r[iMotherNm]||'').trim(); if(v) priv.motherName=v; }
+    if(iGuard>=0){ const v=String(r[iGuard]||'').trim(); if(v) priv.guardian=v; }
+    if(iPinfl>=0){ const v=String(r[iPinfl]||'').trim(); if(v) priv.pinfl=v; }
     toWrite.push({id, data:rec, priv});
     const ph=(priv.parentPhone||'').replace(/\D/g,'');
-    if(priv.parentPhone && ph.length>0 && ph.length<12) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
+    if(priv.parentPhone && ph.length>0 && ph.length<7) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
     nameCount[name]=(nameCount[name]||0)+1;
   }
   Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta (yangi)`));
