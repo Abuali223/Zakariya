@@ -2936,17 +2936,20 @@ async function renderAccounting(){
       <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-payroll" style="width:100%" title="Barcha o‘qituvchilar maoshini shu oyga «Maosh» xarajati qilib yozadi">💼 Oylik maoshni yozish</button></label>
-    </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — o‘qituvchilar kartasidagi hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati sifatida avtomatik yozadi (bir oyga bir marta — qayta bossangiz yangilanadi).</div></div>
+      <label>&nbsp;<button class="btn ghost2" id="ac-adv" style="width:100%" title="Xodimга oy ichida oldindan berilgan maosh (avans) — maoshdan ushlab qolinadi">👤 Xodim avansi</button></label>
+    </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[], CREDITS=[];
+  let INV=[], EXP=[], CREDITS=[], ADV=[];
   const reload=async()=>{
     try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
       try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
+      try{ ADV=await loadCol('staff_advances'); }catch(e){ ADV=[]; }
       return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
   const avansTotal=()=>CREDITS.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
+  const advOfMonth=M=>ADV.filter(a=>String(a.month||String(a.date||'').slice(0,7))===M);
 
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
   const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
@@ -3031,9 +3034,21 @@ async function renderAccounting(){
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div><b style="color:#0891B2">Avans (oldindan to‘langan): ${fmtC(av)}</b><div class="small muted" style="margin-top:2px">Bu — kelajak oylar uchun oldindan to‘langan pul (o‘quvchi balansida). U <b>daromad</b>, xarajat emas. «Kirim»/«Foyda»ga hali qo‘shilmaydi — tegishli oy uchun <b>«To‘lovlar → Hisob-fakturalar yaratish»</b> bosilганда avtomatik qo‘llanib, o‘sha oyning «Kirim»iga o‘tadi.</div></div>
       </div></div>` : '';
-    $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard;
+    // ---- Xodim avanslari (bu oy) — oldindan berilgan maosh; oy oxirida maoshdan ushlanadi ----
+    const madv=advOfMonth(M).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const advSum=madv.reduce((s,a)=>s+(Number(a.amount)||0),0);
+    const advCard = madv.length ? `<div class="card" style="margin-top:16px;border-left:4px solid #B45309"><div class="cls-card-head"><h3>Xodim avanslari · ${mLabel(M)}</h3><span class="cls-count">${madv.length} ta · ${fmtC(advSum)}</span></div>
+      <p class="small muted" style="margin:0 16px 6px">Oldindan berilgan maosh — «Oylik maoshni yozish»да har xodimning maoshidan ushlab qolinadi (naqd qoldiq = maosh − avans). «Maosh» xarajatiga alohida qo‘shilmaydi.</p>
+      <div class="tablewrap"><table><thead><tr><th>Sana</th><th>Xodim</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${madv.map(a=>`<tr>
+        <td data-label="Sana" class="num">${esc(String(a.date||'').slice(8,10)+'.'+String(a.date||'').slice(5,7))}</td>
+        <td data-label="Xodim">${esc(a.teacherName||a.teacherId||'—')}</td>
+        <td data-label="Izoh">${esc(a.note||'')}</td>
+        <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
+        <td class="td-actions"><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
+    $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard;
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
+    $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
   };
 
   function openExpenseForm(exp){
@@ -3081,10 +3096,42 @@ async function renderAccounting(){
     // Bu oyda QO'LDA kiritilgan «Maosh» xarajati (avtomatik payroll'дан boshqa) — ikki marta hisoblanmasin
     const manual=EXP.filter(e=>e.month===M && String(e.category)==='Maosh' && e._id!==id);
     const manualSum=manual.reduce((s,e)=>s+(Number(e.amount)||0),0);
-    if(!confirm(`${mLabel(M)} oyi · ${withSal.length} o‘qituvchi maoshi — jami ${fmtSum(total)} so‘m «Maosh» xarajati qilib yozilsinmi?${exists?'\n\nBu oy uchun avtomatik maosh allaqachon bor — u YANGILANADI (dublikat bo‘lmaydi).':''}${manual.length?`\n\n⚠️ DIQQAT: bu oyda QO‘LDA kiritilgan ${manual.length} ta «Maosh» xarajati ham bor (${fmtSum(manualSum)} so‘m). Ular alohida qoladi — IKKI MARTA hisoblanmasligi uchun ularni o‘chiring yoki bu tugmani bosmang.`:''}`)) return;
+    // Shu oyда berilgan xodim avanslari — maosh xarajati TO'LIQ qoladi, naqd beriladigan qoldiq = maosh − avans
+    const advSum=advOfMonth(M).reduce((s,a)=>s+(Number(a.amount)||0),0);
+    if(!confirm(`${mLabel(M)} oyi · ${withSal.length} o‘qituvchi maoshi — jami ${fmtSum(total)} so‘m «Maosh» xarajati qilib yozilsinmi?${advSum>0?`\n\nShu oyда avans berilgan: ${fmtSum(advSum)} so‘m -> oy oxirida NAQD beriladigan qoldiq: ${fmtSum(Math.max(0,total-advSum))} so‘m. («Maosh» xarajati TO‘LIQ ${fmtSum(total)} yoziladi — avans uning bir qismi.)`:''}${exists?'\n\nBu oy uchun avtomatik maosh allaqachon bor — u YANGILANADI (dublikat bo‘lmaydi).':''}${manual.length?`\n\n⚠️ DIQQAT: bu oyda QO‘LDA kiritilgan ${manual.length} ta «Maosh» xarajati ham bor (${fmtSum(manualSum)} so‘m). Ular alohida qoladi — IKKI MARTA hisoblanmasligi uchun ularni o‘chiring yoki bu tugmani bosmang.`:''}`)) return;
     try{ await setDoc(doc(db,'expenses',id), { date:M+'-01', month:M, category:'Maosh', amount:total, note:`Avtomatik: ${withSal.length} o‘qituvchi oylik maoshi`, updatedAt:serverTimestamp() }, {merge:true});
       toast('Maosh xarajati yozildi ✓'); if(await reload()) draw(M); }
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+  });
+  // Xodim avansi — oy ichida oldindan berilgan maosh (staff_advances). Maosh xarajatiga
+  // qo'shimcha yozilmaydi (payroll TO'LIQ maoshni qamraydi) — faqat qoldiqni bilish uchun.
+  $('#ac-adv').addEventListener('click', async ()=>{
+    let teachers=[]; try{ teachers=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){ toast('O‘qituvchilarni yuklab bo‘lmadi: '+(e.code||e.message),true); return; }
+    if(!teachers.length){ toast('Avval «O‘qituvchilar» bo‘limida xodim qo‘shing',true); return; }
+    const M=$('#ac-month').value||curMonth();
+    const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+    const dflt = (String(today).slice(0,7)===M) ? today : M+'-15';
+    const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
+    $('#modal').innerHTML=`<div class="modal-h"><h3>Xodim avansi — ${esc(mLabel(M))}</h3><button class="x" id="m-x">×</button></div>
+      <div class="modal-b">
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Xodim<select id="av-t" style="${fld};background:#fff">${teachers.map(t=>`<option value="${esc(t.teacherId||t._id)}">${esc(t.name||t.teacherId||t._id)}</option>`).join('')}</select></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="av-date" value="${esc(dflt)}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Avans summasi (so‘m)<input type="text" inputmode="numeric" id="av-amt" placeholder="masalan: 1 000 000" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="av-note" placeholder="ixtiyoriy" style="${fld}"></label>
+      </div>
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">Saqlash</button></div>`;
+    openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    const amt=$('#av-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
+    $('#av-save').onclick=async()=>{
+      const tid=$('#av-t').value, date=$('#av-date').value, amount=Number(($('#av-amt').value||'').replace(/\D/g,''))||0, note=$('#av-note').value.trim();
+      const tn=(teachers.find(t=>String(t.teacherId||t._id)===String(tid))||{}).name||tid;
+      if(!date){ toast('Sanani tanlang',true); return; }
+      if(amount<=0){ toast('Summani kiriting',true); return; }
+      const btn=$('#av-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{ await addDoc(collection(db,'staff_advances'), { teacherId:String(tid), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() });
+        toast('Xodim avansi yozildi ✓'); closeModal(); if(await reload()) draw($('#ac-month').value||curMonth()); }
+      catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+    };
   });
 }
 
