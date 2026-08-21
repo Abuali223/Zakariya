@@ -902,7 +902,7 @@ function labelTable(){
 }
 
 /* ---- O'quvchilar: sinf bo'yicha alohida kartochkalar ---- */
-function gradeName(g){ return Number(g)===0 ? 'Tayyorlov' : (Number(g)+'-sinf'); }
+function gradeName(g){ g=Number(g); return g===0 ? 'Tayyorlov' : g===13 ? 'Variativ' : (g+'-sinf'); }
 const pct=(a,b)=>b?Math.round(a/b*100):0;
 
 /* ---- CSV eksport / import ---- */
@@ -1044,7 +1044,7 @@ function buildAndPreviewImport(rows){
   const isPar=h=>has(h,'ota','ona','father','mother','roditel','родит','vasiy','guardian','опекун');
   const findH=pred=>{ for(let i=0;i<N;i++) if(pred(head[i]))return i; return -1; };
   // Sinf ustuni: sarlavha bo'yicha, topilmasa qiymat namunasi ("9-b","1-A","Tayyorlov") bo'yicha
-  const classRe=/^\s*(tayyorlov|prep)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яё]/i;
+  const classRe=/^\s*(tayyorlov|prep|variativ|variant)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яё]/i;
   let iClass=findH(h=>has(h,'sinf','klass','grade','класс','guruh','group','групп'));
   if(iClass<0){ for(let c=0;c<N;c++){ let hit=0,tot=0; for(let r=1;r<Math.min(rows.length,30);r++){ const v=String((rows[r]||[])[c]||'').trim(); if(v){tot++; if(classRe.test(v))hit++;} } if(tot>=3 && hit/tot>=0.5){ iClass=c; break; } } }
   // Telefon/ism: ota va ona ustunlarini alohida taniymiz
@@ -1068,6 +1068,7 @@ function buildAndPreviewImport(rows){
   if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
   // "9-b" / "1-A" / "Tayyorlov" → grade + harf
   const parseClass=v=>{ v=String(v||'').trim(); if(!v) return {grade:0,letter:''};
+    if(/variativ|variant/i.test(v)) return {grade:13, letter:''};   // Variativ = maxsus daraja (sentinel 13)
     if(/tayyorlov|prep/i.test(v)) return {grade:0, letter:((v.match(/[-–—]\s*([a-zа-яё])/i)||[])[1]||'').toUpperCase()};
     const m=v.match(/(\d{1,2})\s*[-–—]?\s*([a-zа-яё])?/i); return m?{grade:parseInt(m[1],10)||0, letter:(m[2]||'').toUpperCase()}:{grade:0,letter:''}; };
   // Mavjud o'quvchilar indekslari: ID, "ism|sinf" tabiiy kalit, va ism bo'yicha (yangilash uchun)
@@ -1077,7 +1078,7 @@ function buildAndPreviewImport(rows){
   const nkOf=(name,grade,grp)=>normName(name)+'|'+(parseInt(grade,10)||0)+'|'+normGrp(grp);
   const seenNK=new Set(stu.map(r=>nkOf(r.name, r.grade, r.classLetter||r.track)));
   const byName={}; stu.forEach(r=>{ const k=normName(r.name); (byName[k]=byName[k]||[]).push(r); });
-  const clsLbl=(g,l)=>(Number(g)===0?'Tayyorlov':(Number(g)||0)+'-sinf')+(l?` «${l}»`:' «—»');
+  const clsLbl=(g,l)=>gradeName(g)+(l?` «${l}»`:(Number(g)===13?'':' «—»'));
   const acc=[]; const toWrite=[]; const toUpdate=[]; const warnings=[]; const skipped=[]; const nameCount={}; const updatedIds=new Set();
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
@@ -1766,7 +1767,7 @@ async function renderHomework(){
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
-      <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${g===0?'Tayyorlov':g+'-sinf'}</option>`).join('')}</select>
+      <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${g===0?'Tayyorlov':g+'-sinf'}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
@@ -1827,7 +1828,7 @@ async function renderStudents(){
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
     $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
