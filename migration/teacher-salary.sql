@@ -13,6 +13,7 @@ alter table teachers add column if not exists "salaryBonus" numeric;   -- bonusl
 alter table teachers add column if not exists degree        text;      -- '', 'bakalavr', 'magistr', 'phd'
 alter table teachers add column if not exists "langLevel"   text;      -- '', 'A1'..'C2'
 alter table teachers add column if not exists russian       text;      -- '', 'ha'
+alter table teachers add column if not exists "otherCerts"  jsonb;     -- [{name,amount}] qo'shimcha sertifikatlar
 
 -- ---- config/salary: bonus stavkalari (barcha o'qituvchilarga umumiy) ----
 alter table config add column if not exists russian     numeric;   -- rus tili bonusi
