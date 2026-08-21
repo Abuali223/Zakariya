@@ -263,8 +263,10 @@ create table if not exists teachers (
   "teacherId"  text, name text, phone text, photo text,
   "subject_uz" text, "subject_ru" text,
   rating numeric, years int, certs int, avg numeric, votes int,
+  "cameraId" text,
   "order" int
 );
+alter table teachers add column if not exists "cameraId" text;
 
 -- ============ Kontent (ommaviy) ============
 create table if not exists news (
