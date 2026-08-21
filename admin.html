@@ -1795,6 +1795,7 @@ async function renderStudents(){
     if(!confirm(`${ids.length} ta o‘quvchi BUTUNLAY o‘chiriladi:\n\n${names.slice(0,20).join(', ')}${names.length>20?` …yana ${names.length-20}`:''}\n\nBu qaytarilmaydi. Davom etilsinmi?`)) return;
     const btn=$('#stu-buldel'); btn.disabled=true; btn.textContent='O‘chirilmoqda…';
     let done=0; for(const id of ids){ try{ await deleteDoc(doc(db,'students',id)); try{ await deleteDoc(doc(db,'student_private',id)); }catch(e){} try{ await deleteDoc(doc(db,'student_codes',id)); }catch(e){} done++; }catch(e){} }
+    cache.students=null;   // o'chirilgan o'quvchilar keshda qolmasin
     toast(`${done} ta o‘quvchi o‘chirildi ✓`); renderStudents();
   });
   $('#stu-pdf').addEventListener('click',()=>exportStudentsPDF(cache['students']||[]));
@@ -2191,6 +2192,7 @@ function openForm(name, row){
         catch(err){ toast('Saqlandi, lekin maxfiy maydonlarni yozishda xatolik: '+(err.code||err.message), true); }
       }
       if(s.afterSave){ try{ await s.afterSave(data, isEdit?row:null, formVals); }catch(err){ toast('Saqlandi, lekin sinf rahbarini biriktirishda xatolik: '+(err.code||err.message), true); } }
+      cache[name]=null;   // KESH yangilanadi — tahrirlangan yozuv boshqa bo'limlarda ham (To'lovlar/Moliya…) darhol aks etsin
       toast('Saqlandi ✓'); closeModal(); (name==='students'?renderStudents():renderCollection(name));
     }catch(err){ toast('Xatolik: '+(err.code||err.message), true); btn.disabled=false; btn.textContent='Saqlash'; }
   });
@@ -2287,6 +2289,7 @@ async function delDoc(name,id,label){
   try{ await deleteDoc(doc(db,name,id));
     // O'quvchini o'chirsa — maxfiy ma'lumotini ham o'chiramiz (orfan qolmasin)
     if(name==='students'){ try{ await deleteDoc(doc(db,'student_private',id)); }catch(e){} }
+    cache[name]=null;   // KESH yangilanadi — o'chirilgan yozuv boshqa bo'limlarda qolmasin
     toast('O‘chirildi');
     if(name==='enrollments') renderEnrollments(); else if(name==='users') renderUsers(); else if(name==='students') renderStudents(); else renderCollection(name);
   }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
@@ -2677,7 +2680,8 @@ async function renderFinance(){
     const debtMap={};
     INV.filter(i=>i.month && i.month<=M && debtAmt(i)>0).forEach(i=>{
       const k=String(i.studentId||i._id);
-      const g=debtMap[k]||(debtMap[k]={name:i.studentName||k, sid:k, ck:i.classKey||'', months:[], sum:0});
+      const cur=gmap[k];   // JORIY o'quvchi ma'lumoti (tahrirlangan ism/sinf darhol aks etadi)
+      const g=debtMap[k]||(debtMap[k]={name:(cur&&cur.name)||i.studentName||k, sid:k, ck:(cur?classKeyOf(cur):'')||i.classKey||'', months:[], sum:0});
       g.months.push(i.month); g.sum+=debtAmt(i);
     });
     const debtors=Object.values(debtMap).sort((a,b)=>b.sum-a.sum);
@@ -3258,13 +3262,17 @@ async function renderPayments(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  // O'quvchi tahrirlanganda ism/sinf DARHOL aks etsin: hisob-fakturадаги eski snapshot emas,
+  // JORIY o'quvchi ma'lumotidan ko'rsatamiz (studentId — barqaror kalit).
+  const stById={}; students.forEach(s=>{ stById[s.studentId||s._id]=s; });
+  const nameOf=r=>{ const s=stById[r.studentId]; return (s&&s.name)||r.studentName||r.studentId||''; };
   const load=async()=>{
     const month=$('#pm-month').value; if(!month){ return; }
     $('#pm-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let rows;
     try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
-    rows.sort((a,b)=>String(a.studentName||'').localeCompare(String(b.studentName||'')));
+    rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
     // status==='paid' -> to'liq to'langan deb hisoblanadi (Uzum/eski ma'lumot paidAmount'siz bo'lishi mumkin).
@@ -3294,7 +3302,7 @@ async function renderPayments(){
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
       : `<span class="chip" style="background:#FDECEC;color:#B42318">Kutilmoqda</span>`;
     const trs=rows.map(r=>{ const d=debtOf(r); return `<tr>
-      <td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'')}</td>
+      <td data-label="O‘quvchi">${esc(nameOf(r))}</td>
       <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
       <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
       <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
@@ -3381,7 +3389,8 @@ async function renderPayments(){
           const rApplied=applyReferral(t, refAmtOf(sid));
           const rc=reconcileInvoice(inv, t);
           if(!rc.changed) return;   // o'zgarish yo'q
-          batch.set(doc(db,'invoices',d.id), { amount:rc.amount, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:rc.isGrant,
+          batch.set(doc(db,'invoices',d.id), { studentName:(s.name||inv.studentName||sid), classKey:classKeyOf(s),   // snapshotni JORIY o'quvchi ma'lumotiga yangilaydi (eksport/kabinet ham to'g'ri chiqsin)
+            amount:rc.amount, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:rc.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:rc.status, paidAmount:rc.paidAmount,
             provider:rc.isGrant?'grant':(inv.provider||''), paidAt:(rc.status==='paid'?(inv.paidAt||serverTimestamp()):(inv.paidAt||null)) }, {merge:true});
           changed++; wrote=true;
