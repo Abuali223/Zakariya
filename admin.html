@@ -541,7 +541,7 @@ const SCHEMAS = {
   teachers: {
     title:'O‘qituvchilar', icon:mi('M0-240v-63q0-43 44-70t116-27q13 0 25 .5t23 2.5q-14 21-21 44t-7 48v65H0Zm240 0v-65q0-32 17.5-58.5T307-410q32-20 76.5-30t96.5-10q53 0 97.5 10t76.5 30q32 20 49 46.5t17 58.5v65H240Zm540 0v-65q0-26-6.5-49T754-397q11-2 22.5-2.5t23.5-.5q72 0 116 26.5t44 70.5v63H780Zm-455-80h311q-10-20-55.5-35T480-370q-55 0-100.5 15T325-320ZM160-440q-33 0-56.5-23.5T80-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T160-440Zm640 0q-33 0-56.5-23.5T720-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T800-440Zm-320-40q-50 0-85-35t-35-85q0-51 35-85.5t85-34.5q51 0 85.5 34.5T600-600q0 50-34.5 85T480-480Zm0-80q17 0 28.5-11.5T520-600q0-17-11.5-28.5T480-640q-17 0-28.5 11.5T440-600q0 17 11.5 28.5T480-560Z'), order:'order',
     autoId:{field:'teacherId',prefix:'IQT-',pad:3},
-    cols:[['teacherId','ID'],['name','Ism'],['subject_uz','Fan'],['phone','Telefon'],['rating','Reyting'],['years','Tajriba']],
+    cols:[['teacherId','ID'],['name','Ism'],['subject_uz','Fan'],['phone','Telefon'],['years','Tajriba'],['salary','Maosh']],
     fields:[
       {k:'teacherId',l:'ID (avtomatik — kerak bo‘lsa o‘zgartiring)',t:'text'},
       {k:'name',l:'Ism-familiya',t:'text',req:true},
@@ -551,9 +551,14 @@ const SCHEMAS = {
       {k:'subject_ru',l:'Fan (RU)',t:'text'},
       {k:'rating',l:'Reyting (0–5)',t:'number',step:'0.1'},
       {k:'years',l:'Yillik tajriba',t:'number'},
-      {k:'certs',l:'Sertifikatlar',t:'number'},
+      {k:'certs',l:'Sertifikatlar (soni)',t:'number'},
       {k:'avg',l:'O‘quvchilar natijasi %',t:'number'},
       {k:'votes',l:'Baholar soni',t:'number'},
+      // ---- Maosh (avtomatik: asosiy oylik + darajaga qarab bonuslar) ----
+      {k:'baseSalary',l:'Asosiy oylik (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 5 000 000'},
+      {k:'degree',l:'Ma’lumot darajasi',t:'select',opts:[{v:'',l:'—'},{v:'bakalavr',l:'Bakalavr'},{v:'magistr',l:'Magistr'},{v:'phd',l:'PhD (nomzod/doktor)'}]},
+      {k:'langLevel',l:'Til sertifikati darajasi',t:'select',opts:[{v:'',l:'—'},{v:'A1',l:'A1'},{v:'A2',l:'A2'},{v:'B1',l:'B1'},{v:'B2',l:'B2'},{v:'C1',l:'C1'},{v:'C2',l:'C2'}]},
+      {k:'russian',l:'Rus tilini biladi',t:'select',opts:[{v:'',l:'Yo‘q'},{v:'ha',l:'Ha'}]},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi xodim ID — kelish nazorati uchun)',t:'text'},
       {k:'order',l:'Tartib',t:'number'}
     ]
@@ -693,6 +698,91 @@ const SCHEMAS = {
   }
 };
 const NUM = new Set(['grade','score','attendance','order','rating','years','certs','avg','votes','year','num','contractAmount']);
+
+/* ===== O'qituvchi MAOSHI (avtomatik: asosiy oylik + darajaga qarab bonuslar) =====
+   Stavkalar config/salary hujjatidan yuklanadi (admin tahrirlaydi); yo'q bo'lsa — quyidagi standart. */
+const SALARY_DEFAULTS = {
+  russian: 100000,                                                   // rus tilini bilsa
+  degree:   { bakalavr:0, magistr:100000, phd:200000 },              // ma'lumot darajasi
+  langLevel:{ A1:50000, A2:100000, B1:150000, B2:200000, C1:250000, C2:300000 },  // til sertifikati (A1..C2)
+  perYear: 30000, yearsCap: 15                                       // har yillik tajriba (cheklov: 15 yil)
+};
+let SALARY_RATES = null;
+async function loadSalaryRates(force){
+  if(SALARY_RATES && !force) return SALARY_RATES;
+  const r = JSON.parse(JSON.stringify(SALARY_DEFAULTS));
+  try{ const c=await getDoc(doc(db,'config','salary')); if(c.exists()){ const d=c.data()||{};
+    if(isFinite(Number(d.russian))) r.russian=Number(d.russian);
+    if(isFinite(Number(d.perYear))) r.perYear=Number(d.perYear);
+    if(isFinite(Number(d.yearsCap))) r.yearsCap=Number(d.yearsCap);
+    ['bakalavr','magistr','phd'].forEach(k=>{ if(d.degree&&isFinite(Number(d.degree[k]))) r.degree[k]=Number(d.degree[k]); });
+    ['A1','A2','B1','B2','C1','C2'].forEach(k=>{ if(d.langLevel&&isFinite(Number(d.langLevel[k]))) r.langLevel[k]=Number(d.langLevel[k]); });
+  } }catch(e){}
+  SALARY_RATES = r; return r;
+}
+function salaryNum(v){ return Number(String(v==null?'':v).replace(/\D/g,''))||0; }   // "5 000 000" -> 5000000
+function computeSalary(t, r){
+  r = r || SALARY_RATES || SALARY_DEFAULTS;
+  const base = salaryNum(t.baseSalary);
+  const russian  = String(t.russian||'').toLowerCase()==='ha' ? (Number(r.russian)||0) : 0;
+  const degree   = Number(r.degree[String(t.degree||'').toLowerCase()])   || 0;
+  const langLevel= Number(r.langLevel[String(t.langLevel||'').toUpperCase()]) || 0;
+  const years    = Math.min(Number(t.years)||0, Number(r.yearsCap)||0);
+  const experience = years * (Number(r.perYear)||0);
+  const bonus = russian + degree + langLevel + experience;
+  return { base, russian, degree, langLevel, experience, years, bonus, total: base+bonus };
+}
+// O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
+async function wireSalaryPanel(){
+  let rates = await loadSalaryRates();
+  const form=document.querySelector('#m-form'); if(!form) return;
+  const box=form.querySelector('.modal-b'); if(!box) return;
+  const panel=document.createElement('div'); panel.className='card';
+  panel.style.cssText='margin-top:6px;background:#f6faf8;border:1px solid var(--border-2)';
+  panel.innerHTML='<div id="sal-out"></div><div id="sal-rates-box" style="display:none;margin-top:10px;border-top:1px dashed var(--border-2);padding-top:10px"></div>';
+  box.appendChild(panel);
+  const g=n=>{ const el=form.querySelector(`[name="${n}"]`); return el?el.value:''; };
+  const drawRates=()=>{
+    const rb=document.querySelector('#sal-rates-box'); if(!rb) return;
+    const num=(id,l,v)=>`<div><label style="font-size:13px">${esc(l)}</label><input id="${id}" type="text" inputmode="numeric" value="${v?String(v).replace(/\B(?=(\d{3})+(?!\d))/g,' '):''}" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;text-align:right"></div>`;
+    rb.innerHTML=`<div class="small muted" style="margin-bottom:8px">Bonus stavkalari — barcha o‘qituvchilarga amal qiladi (so‘m):</div>
+      <div class="grid2">
+        ${num('sr-russian','Rus tili',rates.russian)}
+        ${num('sr-magistr','Magistr',rates.degree.magistr)}
+        ${num('sr-phd','PhD',rates.degree.phd)}
+        ${num('sr-perYear','Tajriba (1 yil uchun)',rates.perYear)}
+        ${['A1','A2','B1','B2','C1','C2'].map(k=>num('sr-'+k,'Til '+k,rates.langLevel[k])).join('')}
+        <div><label style="font-size:13px">Tajriba cheklovi (yil)</label><input id="sr-yearsCap" type="text" inputmode="numeric" value="${rates.yearsCap||''}" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;text-align:right"></div>
+      </div>
+      <button type="button" class="btn gold sm" id="sr-save" style="margin-top:10px">Stavkalarni saqlash</button> <span class="small muted" id="sr-msg"></span>`;
+    rb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{ if(el.id==='sr-yearsCap')return; const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
+    const gn=id=>Number((document.getElementById(id)||{}).value?.replace(/\D/g,''))||0;
+    document.getElementById('sr-save').onclick=async()=>{
+      const cfg={ russian:gn('sr-russian'), perYear:gn('sr-perYear'), yearsCap:gn('sr-yearsCap'),
+        degree:{ bakalavr:0, magistr:gn('sr-magistr'), phd:gn('sr-phd') },
+        langLevel:{ A1:gn('sr-A1'),A2:gn('sr-A2'),B1:gn('sr-B1'),B2:gn('sr-B2'),C1:gn('sr-C1'),C2:gn('sr-C2') },
+        updatedAt: serverTimestamp() };
+      try{ await setDoc(doc(db,'config','salary'), cfg, {merge:true}); rates=await loadSalaryRates(true); draw();
+        const m=document.getElementById('sr-msg'); if(m) m.textContent='✓ saqlandi'; toast('Bonus stavkalari saqlandi ✓'); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+  };
+  const draw=()=>{
+    const t={ baseSalary:g('baseSalary'), degree:g('degree'), langLevel:g('langLevel'), russian:g('russian'), years:g('years') };
+    const s=computeSalary(t, rates);
+    const line=(l,v)=>v>0?`<div style="display:flex;justify-content:space-between;padding:2px 0"><span class="muted">${esc(l)}</span><span>+${fmtSom(v)}</span></div>`:'';
+    const out=document.querySelector('#sal-out'); if(!out) return;
+    out.innerHTML=`<div class="cls-card-head" style="margin-bottom:8px"><h3 style="margin:0;font-size:15px">Hisoblangan maosh</h3><button type="button" class="btn sm ghost2" id="sal-rates">⚙️ Bonus stavkalari</button></div>
+      <div style="display:flex;justify-content:space-between;padding:2px 0"><span class="muted">Asosiy oylik</span><span>${fmtSom(s.base)}</span></div>
+      ${line('Rus tili',s.russian)}${line('Ma’lumot darajasi',s.degree)}${line('Til sertifikati',s.langLevel)}${line('Tajriba ('+s.years+' yil)',s.experience)}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border-2);margin-top:6px;padding-top:6px;font-weight:800"><span>Jami maosh</span><span style="color:var(--teal)">${fmtSom(s.total)}</span></div>`;
+    const rbtn=document.querySelector('#sal-rates'); if(rbtn) rbtn.onclick=()=>{ const rb=document.querySelector('#sal-rates-box'); if(!rb)return; if(rb.style.display==='none'){ rb.style.display='block'; drawRates(); } else rb.style.display='none'; };
+  };
+  const bs=form.querySelector('[name="baseSalary"]');
+  if(bs){ if(bs.value){ const d=bs.value.replace(/\D/g,''); bs.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }   // tahrirlashda mingliklarni ajratamiz
+    bs.addEventListener('input',()=>{ const d=bs.value.replace(/\D/g,''); bs.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }); }
+  ['baseSalary','degree','langLevel','russian','years'].forEach(n=>{ const el=form.querySelector(`[name="${n}"]`); if(el){ el.addEventListener('input',draw); el.addEventListener('change',draw); } });
+  draw();
+}
 
 /* ---- State ---- */
 let currentTab = 'dashboard';
@@ -2096,6 +2186,7 @@ async function renderCollection(name){
         let v = r[c[0]];
         if(c[0]==='track') return `<td data-label="${esc(c[1])}"><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
         if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
+        if(c[0]==='salary'||c[0]==='baseSalary') return `<td data-label="${esc(c[1])}">${v?`<b>${fmtSom(v)}</b>`:'—'}</td>`;
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
       return `<tr>${tds}<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
@@ -2156,6 +2247,7 @@ function openForm(name, row){
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
   wireImages(name); wireVideos(name); populateDynselects(name, row);
+  if(name==='teachers') wireSalaryPanel();
   $('#m-form').addEventListener('submit', async e=>{
     e.preventDefault();
     const btn=$('#m-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
@@ -2163,6 +2255,8 @@ function openForm(name, row){
       const data={};
       new FormData(e.target).forEach((v,k)=>{ if(k.startsWith('subj_'))return; data[k]= NUM.has(k) ? (v===''?0:Number(v)) : v; });
       if(s.subjects) data.subjects = gatherSubjects();
+      // O'qituvchi: asosiy oylikni toza raqamga aylantiramiz va MAOSHNI avtomatik hisoblab yozamiz.
+      if(name==='teachers'){ await loadSalaryRates(); data.baseSalary = salaryNum(data.baseSalary); const sal=computeSalary(data); data.salary = sal.total; data.salaryBonus = sal.bonus; }
       // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi
       const formVals={};
       (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });

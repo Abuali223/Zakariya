@@ -264,9 +264,17 @@ create table if not exists teachers (
   "subject_uz" text, "subject_ru" text,
   rating numeric, years int, certs int, avg numeric, votes int,
   "cameraId" text,
-  "order" int
+  "order" int,
+  "baseSalary" numeric, salary numeric, "salaryBonus" numeric,
+  degree text, "langLevel" text, russian text
 );
 alter table teachers add column if not exists "cameraId" text;
+alter table teachers add column if not exists "baseSalary" numeric;
+alter table teachers add column if not exists salary numeric;
+alter table teachers add column if not exists "salaryBonus" numeric;
+alter table teachers add column if not exists degree text;
+alter table teachers add column if not exists "langLevel" text;
+alter table teachers add column if not exists russian text;
 
 -- ============ Kontent (ommaviy) ============
 create table if not exists news (

@@ -24,4 +24,5 @@
 \ir fix-teachers-cameraid.sql
 \ir audit-fixes.sql
 \ir staff-access.sql
+\ir teacher-salary.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
