@@ -3058,12 +3058,17 @@ async function openAssign(payment, students, reload){
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const assignTo=async(sid)=>{ if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
-    try{ await applyPaymentClient(sid, Number(payment.amount)||0);
-      // To'lov qatori ALLAQACHON mavjud (biriktirilmagan ro'yxatdan) — sof UPDATE (upsert emas).
-      // setDoc=UPSERT INSERT huquqini talab qiladi (payments'da yo'q -> 42501); updateDoc = sof PATCH.
+    const btn=$('#as-list').querySelector(`[data-sid="${sid}"] .btn`); if(btn) btn.textContent='...';
+    try{
+      // 1) AVVAL to'lovni biriktirilgan deb belgilaymiz — shunda ro'yxatdan chiqadi va pul IKKI
+      //    marta qo'llanmaydi. Qator allaqachon mavjud -> sof UPDATE (updateDoc); setDoc=UPSERT
+      //    INSERT huquqini talab qiladi (payments'da yo'q -> 42501).
       await updateDoc(doc(db,'payments',payment._id),{ matched:true, studentId:sid, status:'applied' });
+      // 2) So'ng pulni o'quvchi balansiga qo'llaymiz. Xato bo'lsa — belgilashni qaytaramiz (pul qo'llanmagan).
+      try{ await applyPaymentClient(sid, Number(payment.amount)||0); }
+      catch(e){ try{ await updateDoc(doc(db,'payments',payment._id),{ matched:false, studentId:'', status:'unmatched' }); }catch(_){} throw e; }
       toast('To‘lov biriktirildi ✓'); closeModal(); if(reload) reload();
-    }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+    }catch(e){ if(btn) btn.textContent='Tanlash'; toast('Xatolik: '+(e.code||e.message),true); } };
   const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
     const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,50);
     $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id, g=Number(s.grade)||0; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
