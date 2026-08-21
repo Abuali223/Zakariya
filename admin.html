@@ -3134,11 +3134,14 @@ async function renderPriceTable(){
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
 function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isNaN(Number(v)) ? Number(v) : null); }
+// Aka-uka FAQAT ota-ona telefoni bir xil bo'lsa (familiyaga QARALMAYDI). To'liq 9 xonali
+// mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqamlar guruhlamaydi.
+function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}$/.test(p)) ? p : ''; }
 function computeSiblingSet(students, privOf){
   const EXCL=['teacher_child','olympiad','contract'];
   const phoneMap={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
-    [pv.parentPhone, pv.parentPhone2].map(pmNormPhone).filter(p=>p.length>=7)
+    [...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))]
       .forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
   const parent={};
   const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
@@ -3272,7 +3275,7 @@ async function renderPayments(){
     let rows;
     try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
-    rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+    // Saralash sinf bo'yicha guruhlashda amalga oshiriladi (quyida).
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
     // status==='paid' -> to'liq to'langan deb hisoblanadi (Uzum/eski ma'lumot paidAmount'siz bo'lishi mumkin).
@@ -3301,7 +3304,12 @@ async function renderPayments(){
       : r.status==='partial'?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
       : `<span class="chip" style="background:#FDECEC;color:#B42318">Kutilmoqda</span>`;
-    const trs=rows.map(r=>{ const d=debtOf(r); return `<tr>
+    // Sinf bo'yicha guruhlab ko'rsatamiz (To'lovlarda o'quvchilar aralashmasin) — JORIY o'quvchi sinfidan.
+    const clsKeyOfRow=r=>{ const s=stById[r.studentId]; return s?classKeyOf(s):(String(r.classKey||'')||'zz'); };
+    const clsLabelOfRow=r=>{ const s=stById[r.studentId]; return s?classLabelOf(s):(String(r.classKey||'')||'Sinf belgilanmagan'); };
+    const clsSort=(a,b)=>{ const pa=String(a).split('-'),pb=String(b).split('-'); const ga=Number(pa[1])||0,gb=Number(pb[1])||0; if(ga!==gb)return ga-gb; const la=pa[0]==='ru'?1:0,lb=pb[0]==='ru'?1:0; if(la!==lb)return la-lb; return pa.slice(2).join('-').localeCompare(pb.slice(2).join('-')); };
+    const byCls={}; rows.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
+    const rowHtml=r=>{ const d=debtOf(r); return `<tr>
       <td data-label="O‘quvchi">${esc(nameOf(r))}</td>
       <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
       <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
@@ -3311,7 +3319,11 @@ async function renderPayments(){
         ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm" data-cash="${esc(r._id)}">${r.status==='partial'?'Qolganini naqd':'Naqd to‘landi'}</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         <button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>
-      </div></td></tr>`; }).join('');
+      </div></td></tr>`; };
+    const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+      const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
+      return `<tr><td colspan="6" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
+        + gp.rows.map(rowHtml).join(''); }).join('');
     $('#pm-body').innerHTML=reportCard+unmatchedCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
