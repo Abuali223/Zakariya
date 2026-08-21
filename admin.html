@@ -2804,6 +2804,10 @@ async function renderFinance(){
     ]);
     cache.students=students;
   }catch(e){ $('#fin-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  // Avans (student_credit) — o'quvchilar balansidagi oldindan to'lovlar (ortiqcha to'lov keyingi oyga o'tadi).
+  let credits=[]; try{ credits=await loadCol('student_credit'); }catch(e){}
+  const avansTotal = credits.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
+  const avansCount = credits.filter(c=>Number(c.credit)>0).length;
 
   if(!INV.length){
     $('#fin-body').innerHTML=`<div class="card"><div class="empty">Hali hisob-faktura yo‘q. <b>«To‘lovlar»</b> bo‘limida oylik hisob-fakturalarni yarating — shundan so‘ng bu yerda tahlil paydo bo‘ladi.</div></div>`;
@@ -2851,6 +2855,7 @@ async function renderFinance(){
       <div class="fin-kpi warn"><div class="k-l">Kutilmoqda</div><div class="k-v">${fmtC(pendSum)}</div><div class="k-d">${pend.length} ta hisob-faktura</div></div>
       <div class="fin-kpi teal"><div class="k-l">Yig‘im foizi</div><div class="k-v">${rate}<small>%</small></div><div class="k-d">${paid.length} / ${paid.length+pend.length} to‘ladi</div></div>
       <div class="fin-kpi bad"><div class="k-l">Qarzdorlar</div><div class="k-v">${debtors.length}</div><div class="k-d">o‘quvchi · ${fmtC(debtSum)}</div></div>
+      ${avansTotal>0?`<div class="fin-kpi ok"><div class="k-l">Avans (oldindan)</div><div class="k-v">${fmtC(avansTotal)}</div><div class="k-d">${avansCount} o‘quvchi balansida · keyingi oyga o‘tadi</div></div>`:''}
     </div>`;
 
     // ---- Daromad grafigi (8 oy) ----
@@ -2930,7 +2935,8 @@ async function renderAccounting(){
     <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
-    </div></div>
+      <label>&nbsp;<button class="btn ghost2" id="ac-payroll" style="width:100%" title="Barcha o‘qituvchilar maoshini shu oyga «Maosh» xarajati qilib yozadi">💼 Oylik maoshni yozish</button></label>
+    </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — o‘qituvchilar kartasidagi hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati sifatida avtomatik yozadi (bir oyga bir marta — qayta bossangiz yangilanadi).</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
   let INV=[], EXP=[];
@@ -3052,6 +3058,19 @@ async function renderAccounting(){
   draw($('#ac-month').value||curMonth());
   $('#ac-month').addEventListener('change',()=>draw($('#ac-month').value||curMonth()));
   $('#ac-add').addEventListener('click',()=>openExpenseForm(null));
+  // Oylik maosh -> «Maosh» xarajati (bir oyga bir marta: id=payroll__oy, qayta bossa yangilanadi)
+  $('#ac-payroll').addEventListener('click', async ()=>{
+    const M=$('#ac-month').value||curMonth();
+    let teachers=[]; try{ teachers=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){ toast('O‘qituvchilarni yuklab bo‘lmadi: '+(e.code||e.message),true); return; }
+    const withSal=teachers.filter(t=>Number(t.salary)>0);
+    const total=withSal.reduce((s,t)=>s+(Number(t.salary)||0),0);
+    if(total<=0){ toast('Maosh hisoblangan o‘qituvchi yo‘q — avval o‘qituvchi maoshini kiriting',true); return; }
+    const id='payroll__'+M; const exists=EXP.some(e=>e._id===id);
+    if(!confirm(`${mLabel(M)} oyi · ${withSal.length} o‘qituvchi maoshi — jami ${fmtSum(total)} so‘m «Maosh» xarajati qilib yozilsinmi?${exists?'\n\nBu oy uchun avtomatik maosh allaqachon bor — u YANGILANADI (dublikat bo‘lmaydi).':''}`)) return;
+    try{ await setDoc(doc(db,'expenses',id), { date:M+'-01', month:M, category:'Maosh', amount:total, note:`Avtomatik: ${withSal.length} o‘qituvchi oylik maoshi`, updatedAt:serverTimestamp() }, {merge:true});
+      toast('Maosh xarajati yozildi ✓'); if(await reload()) draw(M); }
+    catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+  });
 }
 
 /* ==================== Marketing (CRM / CAC / ROI) ====================
