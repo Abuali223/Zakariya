@@ -155,7 +155,7 @@ async function applyPaymentToStudent(studentId, amount, transId){
 
 // Summani BITTA aniq invoice balansiga qo'llaydi (kabinet «Click» tugmasi / precise).
 // paidAmount += amount; to'lsa -> paid, kam -> partial, ortiqcha -> student_credit. IDEMPOTENT.
-async function applyToInvoice(invoiceId, amount, transId){
+async function applyToInvoice(invoiceId, amount, transId, provider){
   invoiceId = String(invoiceId||''); amount = Number(amount)||0;
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
   // ATOMIK band qilish (idempotentlik) — takroriy/bir vaqtli callback ikki marta hisoblamasin.
@@ -168,7 +168,7 @@ async function applyToInvoice(invoiceId, amount, transId){
   const paidFull = newPaid >= Number(inv.amount) - 0.5;
   const overflow = Math.max(0, newPaid - Number(inv.amount));
   await db.collection('invoices').doc(invoiceId).set(Object.assign(
-    { paidAmount: paidFull ? Number(inv.amount) : newPaid, status: paidFull ? 'paid' : 'partial', provider:'click' },
+    { paidAmount: paidFull ? Number(inv.amount) : newPaid, status: paidFull ? 'paid' : 'partial', provider: provider||'click' },
     paidFull ? { providerTrans: String(transId||''), paidAt: FieldValue.serverTimestamp() } : {}
   ), { merge:true });
   if(overflow > 0 && inv.studentId){
@@ -318,7 +318,8 @@ async function uzCheck(b){
   const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
   const inv = await resolveInvoiceByCode(raw); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
-  if(b.amount != null && !uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
+  // Qolgan balansga tekshiramiz (qisman to'langan hisobни ham Uzum bilan yopish mumkin bo'lsin).
+  if(b.amount != null && !uzAmountOK(b.amount, (Number(inv.amount)||0)-(Number(inv.paidAmount)||0))) return uzFail(UZ.CHECK_ERROR);
   return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'OK',
            data: { account: { invoice: inv.id, month: inv.month || '', student: inv.studentName || '' } } };
 }
@@ -327,7 +328,7 @@ async function uzCreate(b){
   const raw = uzInvoiceId(b.params); if(!raw) return uzFail(UZ.NOT_ENOUGH_PARAMS);
   const inv = await resolveInvoiceByCode(raw); if(!inv) return uzFail(UZ.NOT_FOUND);
   if(inv.status === 'paid') return uzFail(UZ.ALREADY_PAID);
-  if(!uzAmountOK(b.amount, inv.amount)) return uzFail(UZ.CHECK_ERROR);
+  if(!uzAmountOK(b.amount, (Number(inv.amount)||0)-(Number(inv.paidAmount)||0))) return uzFail(UZ.CHECK_ERROR);
   // Idempotentlik: allaqachon yakuniy holatdagi tranzaksiyani 'created'ga qaytarmaymiz.
   const _ex = await uzPayRef(b.transId).get();
   if(_ex.exists && (_ex.data().status === 'confirmed' || _ex.data().status === 'reversed'))
@@ -344,7 +345,8 @@ async function uzConfirm(b){
   // Yakuniy holat (qaytarilgan/bekor) — confirm qayta to'lamaydi.
   if(pay.status === 'reversed' || pay.status === 'canceled') return uzFail(UZ.CANCELLED);
   if(pay.status !== 'confirmed'){
-    await markInvoicePaid(pay.invoiceId, 'uzum', b.transId);
+    const som = UZUM.amountUnit === 'som' ? Number(pay.amount) : Number(pay.amount)/100;   // tiyin -> so'm
+    await applyToInvoice(pay.invoiceId, som, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
     await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };

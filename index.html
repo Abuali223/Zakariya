@@ -2159,7 +2159,7 @@ addEventListener('hashchange', ()=>route(true));
       const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
       try{
         const [stu,tea,nw,asch,astu,gal,rev,plansS,admS,faqS,evS,setSnap] = await Promise.all([
-          getDocs(collection(db,'students_public')), ord('teachers'), ord('news'), ord('achievements_school'), ord('achievements_students'),
+          getDocs(collection(db,'students_public')), ord('teachers_public'), ord('news'), ord('achievements_school'), ord('achievements_students'),
           ord('gallery'), ord('testimonials'),
           ord('plans'), ord('admission_steps'), ord('faq'), ord('events'),
           getDoc(doc(db,'settings','site'))
@@ -2209,7 +2209,7 @@ addEventListener('hashchange', ()=>route(true));
           let present=0,absent=0,late=0,excused=0; const recent=[];
           snap.forEach(s=>{ const d=s.data(), days=d.days||{}, month=d.month||''; Object.keys(days).forEach(dd=>{ const st=days[dd]; if(st==='present')present++; else if(st==='absent')absent++; else if(st==='late')late++; else if(st==='excused')excused++; recent.push({date:`${month}-${dd}`,st}); }); });
           recent.sort((a,b)=>b.date.localeCompare(a.date));
-          return {present,absent,late,excused,total:present+absent+late+excused,recent:recent.slice(0,15)};
+          return {present,absent,late,excused,total:present+absent+late,recent:recent.slice(0,15)};
         }catch(e){ return null; }
       },
       async getGrades(studentId){
