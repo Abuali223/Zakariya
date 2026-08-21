@@ -1774,8 +1774,21 @@ async function renderStudents(){
       <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
       <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">
       <button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div id="stu-bulk" class="card" style="display:none;padding:10px 16px;margin-bottom:12px;background:#fff7e8;border:1px solid #f0d9a8;align-items:center;gap:12px"><b><span id="stu-selc">0</span> ta tanlandi</b><button class="btn sm danger" id="stu-buldel">🗑 Tanlanganlarni o‘chirish</button><button class="btn sm ghost" id="stu-bulclr">Bekor</button></div>
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   $('#add').addEventListener('click',()=>openForm('students',null));
+  const updateBulk=()=>{ const cg=$('#cls-groups'); const n=cg?cg.querySelectorAll('.stu-sel:checked').length:0;
+    const bar=$('#stu-bulk'); if(bar) bar.style.display=n?'flex':'none'; const c=$('#stu-selc'); if(c) c.textContent=n; };
+  $('#stu-bulclr').addEventListener('click',()=>{ $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.checked=false); $('#cls-groups').querySelectorAll('.stu-selall').forEach(c=>c.checked=false); updateBulk(); });
+  $('#stu-buldel').addEventListener('click',async()=>{
+    const ids=[...$('#cls-groups').querySelectorAll('.stu-sel:checked')].map(c=>c.dataset.id);
+    if(!ids.length) return;
+    const names=ids.map(id=>((cache['students']||[]).find(r=>r._id===id)||{}).name).filter(Boolean);
+    if(!confirm(`${ids.length} ta o‘quvchi BUTUNLAY o‘chiriladi:\n\n${names.slice(0,20).join(', ')}${names.length>20?` …yana ${names.length-20}`:''}\n\nBu qaytarilmaydi. Davom etilsinmi?`)) return;
+    const btn=$('#stu-buldel'); btn.disabled=true; btn.textContent='O‘chirilmoqda…';
+    let done=0; for(const id of ids){ try{ await deleteDoc(doc(db,'students',id)); try{ await deleteDoc(doc(db,'student_private',id)); }catch(e){} try{ await deleteDoc(doc(db,'student_codes',id)); }catch(e){} done++; }catch(e){} }
+    toast(`${done} ta o‘quvchi o‘chirildi ✓`); renderStudents();
+  });
   $('#stu-pdf').addEventListener('click',()=>exportStudentsPDF(cache['students']||[]));
   $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
   $('#stu-import').addEventListener('click',()=>$('#stu-file').click());
@@ -1805,6 +1818,7 @@ async function renderStudents(){
       const {g,lang,grp,list}=groups[k];
       list.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
       const trs=list.map(r=>`<tr>
+        <td class="c"><input type="checkbox" class="stu-sel" data-id="${esc(r._id)}"></td>
         <td data-label="ID">${esc(r.studentId||r._id)}</td>
         <td data-label="Ism">${esc(r.name||'')}</td>
         <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
@@ -1813,11 +1827,14 @@ async function renderStudents(){
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))} «${esc(grp)}»</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr><th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th><th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
     $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
     $('#cls-groups').querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.report, rows.find(r=>r._id===b.dataset.report))));
+    $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.addEventListener('change',updateBulk));
+    $('#cls-groups').querySelectorAll('.stu-selall').forEach(sa=>sa.addEventListener('change',()=>{ const tbl=sa.closest('table'); if(tbl) tbl.querySelectorAll('.stu-sel').forEach(c=>c.checked=sa.checked); updateBulk(); }));
+    updateBulk();
   };
   draw();
   const si=$('#stu-search'); if(si) si.addEventListener('input',draw);
