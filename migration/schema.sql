@@ -266,15 +266,16 @@ create table if not exists teachers (
   "cameraId" text,
   "order" int,
   "baseSalary" numeric, salary numeric, "salaryBonus" numeric,
-  degree text, "langLevel" text, russian text, "otherCerts" jsonb
+  degree text, category text, languages jsonb, "otherCerts" jsonb,
+  "langLevel" text, russian text
 );
 alter table teachers add column if not exists "cameraId" text;
 alter table teachers add column if not exists "baseSalary" numeric;
 alter table teachers add column if not exists salary numeric;
 alter table teachers add column if not exists "salaryBonus" numeric;
 alter table teachers add column if not exists degree text;
-alter table teachers add column if not exists "langLevel" text;
-alter table teachers add column if not exists russian text;
+alter table teachers add column if not exists category text;
+alter table teachers add column if not exists languages jsonb;
 alter table teachers add column if not exists "otherCerts" jsonb;
 
 -- ============ Kontent (ommaviy) ============
