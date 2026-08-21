@@ -1819,7 +1819,15 @@ async function renderStudents(){
     let filtered = rows;
     if(fg!=='') filtered = filtered.filter(r=>String(Number(r.grade)||0)===String(fg));
     if(fl)      filtered = filtered.filter(r=>(r.lang||'uz')===fl);
-    if(q)       filtered = filtered.filter(r=>[r.studentId,r._id,r.name,r.parentPhone,r.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
+    if(q){
+      const qd=q.replace(/\D/g,'');   // qidiruvdagi raqamlar (telefon uchun)
+      filtered = filtered.filter(r=>{
+        if([r.studentId,r._id,r.name,r.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(q))) return true;
+        // Telefon — format farqidan qat'i nazar (faqat raqamlar), OTA va ONA telefoni ikkalasи
+        if(qd.length>=4){ const phs=[r.parentPhone,r.parentPhone2].map(x=>String(x==null?'':x).replace(/\D/g,'')); if(phs.some(p=>p&&p.includes(qd))) return true; }
+        return [r.parentPhone,r.parentPhone2].some(v=>String(v==null?'':v).toLowerCase().includes(q));
+      });
+    }
     if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?'Filtr/qidiruv bo‘yicha o‘quvchi topilmadi.':'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
     const groups={};
     filtered.forEach(r=>{ const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—'; const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r); });
