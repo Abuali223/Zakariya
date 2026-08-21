@@ -20,4 +20,10 @@ begin
   return NEW;
 end $$;
 
+-- 3) users_ins: admin/direktor upsert (setDoc) orqali foydalanuvchi rolini yangilay olsin.
+--    Shim setDoc = UPSERT -> mavjud qatorni yangilashда ham INSERT with-check ishlaydi;
+--    eski siyosat faqat 'self parent/student'ga ruxsat berardi -> admin rol biriktirsa 42501.
+drop policy if exists users_ins on users;
+create policy users_ins on users for insert with check (app.is_admin() or (id = app.uid() and role in ('parent','student') and verified = false));
+
 notify pgrst, 'reload schema';

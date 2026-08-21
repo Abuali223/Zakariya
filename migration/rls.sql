@@ -137,7 +137,9 @@ create policy exp_del on expenses for delete using (app.is_admin());
 -- ============ users (o'zi/admin) ============
 alter table users enable row level security;
 create policy users_sel on users for select using (id = app.uid() or app.is_admin());
-create policy users_ins on users for insert with check (id = app.uid() and role in ('parent','student') and verified = false);
+-- admin/direktor istalgan foydalanuvchini/rolni yozadi; o'zini faqat parent/student (verified=false) qilib qo'shadi.
+-- (Shim setDoc = UPSERT -> mavjudni yangilashda ham INSERT with-check tekshiriladi, shuning uchun admin shart.)
+create policy users_ins on users for insert with check (app.is_admin() or (id = app.uid() and role in ('parent','student') and verified = false));
 -- self-update: rol/verified/biriktirilgan sinflarni O'ZGARTIRA OLMAYDI (eski qiymat bilan solishtiramiz)
 create policy users_upd on users for update using (app.is_admin() or id = app.uid())
   with check (app.is_admin() or (
