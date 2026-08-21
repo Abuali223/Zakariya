@@ -89,7 +89,7 @@ create policy att_upd on attendance for update using (app.is_admin() or app.is_k
 alter table monitoring enable row level security;
 create policy mon_sel on monitoring for select using (app.is_admin() or app.is_zavuch() or app.owns_child("studentId") or app.is_teacher_for_class("classKey"));
 create policy mon_ins on monitoring for insert with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject) and status='pending'));
-create policy mon_upd on monitoring for update using (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject))) with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject)));
+create policy mon_upd on monitoring for update using (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject))) with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject) and status='pending'));
 create policy mon_del on monitoring for delete using (app.is_admin() or app.is_zavuch());
 
 -- ============ characteristics (umumiy xarakteristika) ============

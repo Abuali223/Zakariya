@@ -772,7 +772,12 @@ onAuthStateChanged(auth, async user=>{
   const STAFF = ['admin','director','kurator','teacher','zavuch'];
   if(!STAFF.includes(role)){
     await signOut(auth);
-    if(loginAttempted){ $('#login-err').textContent='Bu akkaunt panelga kirish huquqiga ega emas. Administrator, kurator, o‘qituvchi yoki zavuch hisobi bilan kiring.'; $('#login-err').style.display='block'; }
+    // Xabar HAR DOIM ko'rsatiladi (yangi kirishда ham, saqlangan sessiya qayta yuklanganда ham).
+    const rl = ROLE_LABEL[role] || role || '—';
+    const msg = (role && role!=='parent' && role!=='student')
+      ? `«${rl}» roli uchun panelga kirish hali sozlanmagan. Administratorga murojaat qiling.`
+      : 'Bu akkaunt panelga kirish huquqiga ega emas. Direktor, administrator, O‘IBDO‘, o‘qituvchi yoki kurator hisobi bilan kiring.';
+    if($('#login-err')){ $('#login-err').textContent=msg; $('#login-err').style.display='block'; }
     loginAttempted=false;
     show('login'); return;
   }
@@ -946,7 +951,7 @@ async function renderDashboard(){
   const byGrade={}; students.forEach(s=>{const g=Number(s.grade)||0; byGrade[g]=(byGrade[g]||0)+1;});
   const grades=Object.keys(byGrade).map(Number).sort((a,b)=>a-b);
   const maxG=Math.max(1,...grades.map(g=>byGrade[g]));
-  const bars=grades.map(g=>`<div class="bar-row"><span class="bar-lbl">${g===0?'Tayyorlov':g+'-sinf'}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${byGrade[g]}</b></div>`).join('');
+  const bars=grades.map(g=>`<div class="bar-row"><span class="bar-lbl">${gradeName(g)}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${byGrade[g]}</b></div>`).join('');
   const roles={parent:0,student:0,teacher:0,admin:0}; users.forEach(u=>{ if(roles[u.role]!=null) roles[u.role]++; });
   const stat=(v,l)=>`<div class="stat-card"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
   const roleBar=(l,v)=>`<div class="bar-row"><span class="bar-lbl">${l}</span><div class="bar"><i style="width:${pct(v,Math.max(1,users.length))}%"></i></div><b>${v}</b></div>`;
@@ -958,7 +963,7 @@ async function renderDashboard(){
       return rs.length?{s,rs}:null; }).filter(Boolean)
     .sort((a,b)=>(Number(a.s.score)||0)-(Number(b.s.score)||0)||(Number(a.s.attendance)||0)-(Number(b.s.attendance)||0));
   const riskRows=risky.slice(0,60).map(r=>{ const g=Number(r.s.grade)||0;
-    return `<tr><td>${esc(r.s.studentId||r.s._id)}</td><td>${esc(r.s.name||'')}</td><td>${g===0?'Tayyorlov':g+'-sinf'} ${esc(r.s.classLetter||r.s.track||'')}</td><td>${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
+    return `<tr><td>${esc(r.s.studentId||r.s._id)}</td><td>${esc(r.s.name||'')}</td><td>${gradeName(g)} ${esc(r.s.classLetter||r.s.track||'')}</td><td>${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
   const riskCard=`<div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>⚠️ Xavf ostidagi o‘quvchilar</h3><span class="cls-count">${risky.length} ta · past davomat (&lt;${RISK_ATT}%) yoki past ball (&lt;${RISK_SCORE})</span></div>
     ${risky.length?`<div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Sinf</th><th>Sabab</th><th></th></tr></thead><tbody>${riskRows}</tbody></table></div>`:'<div class="empty">Hozircha xavf ostidagi o‘quvchi yo‘q ✓</div>'}</div>`;
   $('#dash').innerHTML = `
@@ -1147,7 +1152,7 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
     const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(x); });
   const rowsHtml=Object.keys(groups).sort().map(k=>{ const {g,lang,grp,list}=groups[k];
     const withPhone=list.filter(x=>x.priv&&x.priv.parentPhone).length;
-    return `<tr><td>${g===0?'Tayyorlov':g+'-sinf'} «${esc(grp)}»</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td></tr>`; }).join('');
+    return `<tr><td>${gradeName(g)} «${esc(grp)}»</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td></tr>`; }).join('');
   const newHtml = toWrite.length ? `<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Til</th><th class="c">Soni</th><th class="c">Tel</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>` : '';
   // YANGILANADIGANLAR (mavjud o'quvchi — sinf/telefon o'zgargan)
   const updClass=toUpdate.filter(u=>u.classChanged);
@@ -1768,7 +1773,7 @@ async function renderHomework(){
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
-      <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${g===0?'Tayyorlov':g+'-sinf'}</option>`).join('')}<option value="13">Variativ</option></select>
+      <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
@@ -1900,13 +1905,13 @@ async function openStudentReport(sid, row){
     }).join('');
     // To'lovlar (buxgalteriya)
     const inv = invSnap.docs.map(d=>({_id:d.id,...d.data()})).sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
-    const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+    const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(i.status==='reversed'?0:(Number(i.paidAmount)||0));
     const paidSum = inv.reduce((x,i)=>x+paidAmt(i),0);
     const dueSum  = inv.reduce((x,i)=>x+(i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
     const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',payme:'Payme'};
     const invRows = inv.map(i=>{ const st=i.status==='paid'?'To‘landi':i.status==='partial'?`Qisman (${fmtSom(paidAmt(i))})`:i.status==='canceled'?'Bekor':'Kutilmoqda'; return `<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td>${esc(st)}</td><td>${esc(i.status==='paid'||i.status==='partial'?(provLbl[i.provider]||i.provider||'—'):'—')}</td><td>${esc(String(i.paidAt&&i.paidAt.toDate?i.paidAt.toDate().toISOString().slice(0,10):(i.paidAt||'')).slice(0,10)||'—')}</td></tr>`; }).join('');
     const g=Number(s.grade)||0;
-    const clsName=(g===0?'Tayyorlov':g+'-sinf')+' «'+(s.classLetter||s.track||'-')+'» · '+(s.lang==='ru'?'Rus':'O‘zbek');
+    const clsName=(gradeName(g))+' «'+(s.classLetter||s.track||'-')+'» · '+(s.lang==='ru'?'Rus':'O‘zbek');
     const P=(k)=>{ const v=privD[k]; return (v==null||v==='')?'':String(v); };
     const fmtBD=(v)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); return m?`${m[3]}.${m[2]}.${m[1]}`:(v||'—'); };
     const parentLine=(nm,wk)=>{ const a=[P(nm),P(wk)].filter(Boolean).join(' — '); return a||'—'; };
@@ -2651,8 +2656,8 @@ async function renderFinance(){
   const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
   const isPend=i=>i.status!=='paid'&&i.status!=='canceled';
   // Balans-aware: to'langan qism (qisman to'lov ham hisobga olinadi) va qolgan qarz.
-  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
-  const debtAmt=i=>i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i));
+  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(i.status==='reversed'?0:(Number(i.paidAmount)||0));
+  const debtAmt=i=>(i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i));
   const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
   const gmap={}; students.forEach(s=>{ gmap[String(s.studentId||s._id)]=s; });
   const gradeOf=i=>{ const s=gmap[String(i.studentId)]; if(s) return Number(s.grade)||0; const p=String(i.classKey||'').split('-'); return Number(p[1])||0; };
@@ -2779,7 +2784,7 @@ async function renderAccounting(){
   const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
   const emonth=e=>e.month||String(e.date||'').slice(0,7);
   // Balans-aware kirim: qisman to'lov ham hisobga olinadi.
-  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(i.status==='reversed'?0:(Number(i.paidAmount)||0));
   const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
 
   const draw=(M)=>{
@@ -3055,21 +3060,22 @@ async function openAssign(payment, students, reload){
   const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
     const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,50);
     $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id, g=Number(s.grade)||0; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
-      <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${g===0?'Tayyorlov':g+'-sinf'} ${esc(s.classLetter||s.track||'')}</span></span>
+      <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${gradeName(g)} ${esc(s.classLetter||s.track||'')}</span></span>
       <span class="btn sm gold">Tanlash</span></div>`; }).join('')||'<div class="empty">Topilmadi.</div>';
     $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>assignTo(el.dataset.sid)); };
   $('#as-search').addEventListener('input',e=>draw(e.target.value)); draw('');
 }
 // Summani o'quvchi balansiga qo'llaydi (waterfall) — to'lov serveri bilan bir xil mantiq.
-async function applyPaymentClient(studentId, amount){
+async function applyPaymentClient(studentId, amount, provider){
   amount=Number(amount)||0; if(amount<0) return;   // amount=0 -> faqat mavjud kreditni (avansni) hisob-fakturaga qo'llaydi
+  provider = provider || (amount>0 ? 'click' : 'credit');   // avans (amount=0) -> 'credit' (soxta Click daromadi bo'lmasin)
   let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
   let available=amount+credit;
   const snap=await getDocs(query(collection(db,'invoices'), where('studentId','==',studentId)));
   const list=snap.docs.map(d=>({_id:d.id,...d.data()})).filter(x=>x.status!=='paid'&&x.status!=='canceled'&&x.status!=='reversed').sort((a,b)=>String(a.month||a._id).localeCompare(String(b.month||b._id)));
   for(const inv of list){ if(available<=0) break; const paidSoFar=Number(inv.paidAmount)||0; const remaining=(Number(inv.amount)||0)-paidSoFar; if(remaining<=0) continue;
     const pay=Math.min(available,remaining); const newPaid=paidSoFar+pay; const full=newPaid>=(Number(inv.amount)||0)-0.5;
-    await setDoc(doc(db,'invoices',inv._id), Object.assign({paidAmount:newPaid,status:full?'paid':'partial',provider:'click'}, full?{paidAt:serverTimestamp()}:{}), {merge:true});
+    await setDoc(doc(db,'invoices',inv._id), Object.assign({paidAmount:newPaid,status:full?'paid':'partial',provider}, full?{paidAt:serverTimestamp()}:{}), {merge:true});
     available-=pay; }
   await setDoc(doc(db,'student_credit',studentId),{studentId,credit:available,updatedAt:serverTimestamp()},{merge:true});
 }
@@ -3088,7 +3094,7 @@ async function renderPriceTable(){
   Object.keys(existing).forEach(k=>{ if(!keys[k]){ const x=existing[k]; keys[k]={grade:Number(x.grade)||0, track:String(x.track||'').trim(), lang:x.lang||'uz', count:0}; } });
   const ordered=Object.keys(keys).sort((a,b)=>{ const A=keys[a],B=keys[b]; return (A.grade-B.grade)||String(A.track).localeCompare(String(B.track))||String(A.lang).localeCompare(String(B.lang)); });
   const rowHtml=ordered.map(k=>{ const g=keys[k]; const amt=existing[k]?(Number(existing[k].amount)||0):0;
-    return `<tr><td data-label="Sinf">${g.grade===0?'Tayyorlov':g.grade+'-sinf'}</td><td data-label="Yo‘nalish">${esc(g.track||'—')}</td><td data-label="Til">${g.lang==='ru'?'Rus':'O‘zbek'}</td><td data-label="O‘quvchi" style="text-align:center">${g.count||'—'}</td><td data-label="Oylik narx"><input type="text" inputmode="numeric" class="pt-amt" data-key="${esc(k)}" data-grade="${g.grade}" data-track="${esc(g.track)}" data-lang="${esc(g.lang)}" value="${amt?grp(amt):''}" placeholder="masalan: 2 900 000" style="width:170px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;text-align:right;font-family:var(--sans)"></td></tr>`; }).join('');
+    return `<tr><td data-label="Sinf">${gradeName(g.grade)}</td><td data-label="Yo‘nalish">${esc(g.track||'—')}</td><td data-label="Til">${g.lang==='ru'?'Rus':'O‘zbek'}</td><td data-label="O‘quvchi" style="text-align:center">${g.count||'—'}</td><td data-label="Oylik narx"><input type="text" inputmode="numeric" class="pt-amt" data-key="${esc(k)}" data-grade="${g.grade}" data-track="${esc(g.track)}" data-lang="${esc(g.lang)}" value="${amt?grp(amt):''}" placeholder="masalan: 2 900 000" style="width:170px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;text-align:right;font-family:var(--sans)"></td></tr>`; }).join('');
   $('#pt-body').innerHTML = `
     <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Kasal kun stavkasi (so‘m/kun)<input type="text" inputmode="numeric" id="pt-sick" value="${grp(sickRate)}" style="text-align:right"></label>
@@ -3261,7 +3267,8 @@ async function renderPayments(){
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
     // status==='paid' -> to'liq to'langan deb hisoblanadi (Uzum/eski ma'lumot paidAmount'siz bo'lishi mumkin).
-    const paidOf=r=>r.status==='paid'?(Number(r.amount)||0):(Number(r.paidAmount)||0), isCanc=r=>r.status==='canceled';
+    const isCanc=r=>r.status==='canceled'||r.status==='reversed';
+    const paidOf=r=>r.status==='paid'?(Number(r.amount)||0):(isCanc(r)?0:(Number(r.paidAmount)||0));
     const debtOf=r=>isCanc(r)?0:Math.max(0,(Number(r.amount)||0)-paidOf(r));
     const fullPaid=rows.filter(r=>r.status==='paid'), partial=rows.filter(r=>r.status==='partial');
     const pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
@@ -3355,7 +3362,7 @@ async function renderPayments(){
   $('#pm-recalc').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    if(!confirm('Bu oydagi hisob-fakturalar (KUTILAYOTGAN va QISMAN/to‘liq to‘langan) narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nTo‘langan summa saqlanadi — ortiqcha bo‘lsa AVANSga o‘tadi. Bekor qilinganlar tegilmaydi. Davom etilsinmi?')) return;
+    if(!confirm('Bu oydagi KUTILAYOTGAN va QISMAN to‘langan hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nTo‘langan summa saqlanadi — ortiqcha bo‘lsa AVANSga o‘tadi. To‘liq to‘langan / bekor qilingan hisoblar tegilmaydi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
       const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
@@ -3363,7 +3370,8 @@ async function renderPayments(){
       const newLedger=[]; const creditMap={};
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
-      const docs=snap.docs.filter(d=>{ const st=(d.data()||{}).status; return st!=='canceled' && st!=='reversed'; });
+      // Faqat KUTILAYOTGAN va QISMAN to'langan (to'liq to'langan qayta billing qilinmaydi — qarz tiklanmasin).
+      const docs=snap.docs.filter(d=>{ const st=(d.data()||{}).status; return st==='pending' || st==='partial'; });
       let changed=0, skipped=0, avans=0;
       for(let i=0;i<docs.length;i+=400){
         const batch=writeBatch(db); let wrote=false;

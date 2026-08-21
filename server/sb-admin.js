@@ -49,6 +49,10 @@ function makeDocRef(sb, table, id) {
       const { error } = await sb.from(table).upsert({ id, ...prep(data) }, { onConflict: 'id' });
       if (error) throw error;
     },
+    async create(data) {   // ATOMIK insert — id allaqachon bo'lsa XATO beradi (idempotentlik guard uchun)
+      const { error } = await sb.from(table).insert({ id, ...prep(data) });
+      if (error) throw error;
+    },
     async update(data) {
       const { error } = await sb.from(table).update(prep(data)).eq('id', id);
       if (error) throw error;

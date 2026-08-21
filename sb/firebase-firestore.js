@@ -83,7 +83,8 @@ export async function getDocs(refOrQuery) {
   // Aniq .limit(n) berilgan so'rovlarda — bitta o'qish (limitni hurmat qilamiz).
   while (true) {
     let q = applyCons(supabase().from(refOrQuery._t).select("*"), cons);
-    if (!hasLimit) q = q.range(from, from + PAGE - 1);
+    // Barqaror tartib (id oxirgi kalit) — sahifalashда dublikat/yo'qolishning oldini oladi (1000+ qator).
+    if (!hasLimit) q = q.order("id", { ascending: true }).range(from, from + PAGE - 1);
     const { data, error } = await q;
     if (error) throw error;
     const rows = data || [];

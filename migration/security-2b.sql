@@ -34,7 +34,7 @@ insert into student_codes(id, code)
 create or replace function app.gen_student_code() returns trigger language plpgsql security definer as $$
 begin
   insert into public.student_codes(id, code)
-    values (NEW.id, upper(substr(md5(random()::text || NEW.id || clock_timestamp()::text), 1, 6)))
+    values (NEW.id, upper(substr(md5(random()::text || NEW.id || clock_timestamp()::text), 1, 8)))
     on conflict (id) do nothing;
   return NEW;
 end $$;

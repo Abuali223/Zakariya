@@ -120,7 +120,10 @@ async function attributeStudent(mti, params){
 async function applyPaymentToStudent(studentId, amount, transId){
   studentId = String(studentId||''); amount = Number(amount)||0;
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
-  try{ const g = await guardRef.get(); if(g.exists) return (g.data()||{}).result || { applied:[], leftover:0, dup:true }; }catch(e){}
+  // ATOMIK band qilish — bir vaqtda kelgan takroriy callback ikki marta hisoblamasin (create id konfliktida xato beradi).
+  try{ await guardRef.create({ studentId, amount, createdAt: FieldValue.serverTimestamp() }); }
+  catch(e){ try{ const g = await guardRef.get(); return (g.data()||{}).result || { applied:[], leftover:0, dup:true }; }catch(_){ return { dup:true }; } }
+  try{
   let credit = 0;
   try{ const c = await db.collection('student_credit').doc(studentId).get(); if(c.exists) credit = Number((c.data()||{}).credit)||0; }catch(e){}
   let available = amount + credit;
@@ -146,6 +149,8 @@ async function applyPaymentToStudent(studentId, amount, transId){
   const result = { applied, leftover: available, usedCredit: credit };
   try{ await guardRef.set({ studentId, amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
   return result;
+  }catch(e){ try{ await guardRef.delete(); }catch(_){}   // mutatsiya xatosi -> band qilishni bo'shatamiz (qayta urinish mumkin)
+    throw e; }
 }
 
 // Summani BITTA aniq invoice balansiga qo'llaydi (kabinet «Click» tugmasi / precise).
@@ -153,8 +158,11 @@ async function applyPaymentToStudent(studentId, amount, transId){
 async function applyToInvoice(invoiceId, amount, transId){
   invoiceId = String(invoiceId||''); amount = Number(amount)||0;
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
-  try{ const g = await guardRef.get(); if(g.exists) return (g.data()||{}).result || { dup:true }; }catch(e){}
-  const inv = await getInvoice(invoiceId); if(!inv) return { error:'notfound' };
+  // ATOMIK band qilish (idempotentlik) — takroriy/bir vaqtli callback ikki marta hisoblamasin.
+  try{ await guardRef.create({ amount, createdAt: FieldValue.serverTimestamp() }); }
+  catch(e){ try{ const g = await guardRef.get(); return (g.data()||{}).result || { dup:true }; }catch(_){ return { dup:true }; } }
+  const inv = await getInvoice(invoiceId); if(!inv){ try{ await guardRef.delete(); }catch(_){ } return { error:'notfound' }; }
+  try{
   const paidSoFar = Number(inv.paidAmount)||0;
   const newPaid = paidSoFar + amount;
   const paidFull = newPaid >= Number(inv.amount) - 0.5;
@@ -170,6 +178,8 @@ async function applyToInvoice(invoiceId, amount, transId){
   const result = { invoiceId, applied: amount, status: paidFull ? 'paid' : 'partial', overflow, studentId: inv.studentId||'' };
   try{ await guardRef.set({ studentId: String(inv.studentId||''), amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
   return result;
+  }catch(e){ try{ await guardRef.delete(); }catch(_){}   // mutatsiya xatosi -> band qilishni bo'shatamiz
+    throw e; }
 }
 
 // Uzum uchun: account = aniq invoice ID ({sid}__{oy}) yoki kod -> to'lanmagan invoice (eng eski).
@@ -345,7 +355,7 @@ async function uzReverse(b){
   if(!pay) return uzFail(UZ.NOT_FOUND);
   if(pay.status !== 'reversed'){
     await db.collection('invoices').doc(String(pay.invoiceId)).set(
-      { status:'reversed', reversedAt: FieldValue.serverTimestamp() }, { merge:true });
+      { status:'reversed', paidAmount:0, reversedAt: FieldValue.serverTimestamp() }, { merge:true });
     await uzPayRef(b.transId).set({ status:'reversed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: pay.amount };

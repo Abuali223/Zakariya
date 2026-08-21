@@ -1246,7 +1246,7 @@ const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toU
 let lang = "uz";
 let foundStudent = null, searched = false;
 let clsSel = {lng:"", g:"", cls:""};
-const gradeLbl = g => (Number(g)===0 ? T[lang].cls_prep : T[lang].grade(g));
+const gradeLbl = g => Number(g)===0 ? T[lang].cls_prep : Number(g)===13 ? (lang==='ru'?'Вариатив':'Variativ') : T[lang].grade(g);
 
 function applyText(){
   const t = T[lang];
@@ -1806,7 +1806,7 @@ async function renderKabInvoices(studentId){
   const clickLogo='<span class="inv-plogo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21.5 12 12 21.5 2.5 12z" fill="rgba(255,255,255,.28)"/><path d="M12 7.8 16.2 12 12 16.2 7.8 12z" fill="#fff"/></svg></span>';
   const uzumLogo='<span class="inv-plogo"><svg viewBox="0 0 24 24" fill="none"><path d="M7 5v7a5 5 0 0 0 10 0V5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></span>';
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-  const remOf=inv=>Math.max(0,(Number(inv.amount)||0)-(Number(inv.paidAmount)||0));   // qolgan (qarzdorlik)
+  const remOf=inv=>(inv.status==='canceled'||inv.status==='reversed')?0:Math.max(0,(Number(inv.amount)||0)-(Number(inv.paidAmount)||0));   // qolgan (qarzdorlik)
   const clickUrl=inv=>{ if(!cfg||!cfg.clickServiceId||!cfg.clickMerchantId) return null;
     return `https://my.click.uz/services/pay?service_id=${encodeURIComponent(cfg.clickServiceId)}&merchant_id=${encodeURIComponent(cfg.clickMerchantId)}&amount=${encodeURIComponent(remOf(inv))}&transaction_param=${encodeURIComponent(inv.id)}`; };
   const uzumUrl=inv=>{ if(!cfg||!cfg.uzumUrlTemplate) return null;
@@ -2355,7 +2355,7 @@ addEventListener('hashchange', ()=>route(true));
         kabRefresh();
         // Admin bo'lsa (custom claim yoki role=='admin') "Admin panel" havolasini ko'rsatamiz
         try{
-          let adminOk = (role==='admin');
+          let adminOk = (role==='admin' || role==='director');
           try{ const tok=await user.getIdTokenResult(true); if(tok&&tok.claims&&tok.claims.admin) adminOk=true; }catch(e){}
           const el=document.getElementById('auth-admin'); if(el) el.style.display=adminOk?'inline-flex':'none';
         }catch(e){}
