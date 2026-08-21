@@ -26,4 +26,5 @@
 \ir staff-access.sql
 \ir teacher-salary.sql
 \ir staff-advances.sql
+\ir credit-ledger.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

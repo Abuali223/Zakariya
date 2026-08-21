@@ -115,6 +115,13 @@ async function attributeStudent(mti, params){
 }
 
 // To'lov summasini o'quvchi BALANSIGA qo'llaydi (waterfall: eng eski invoice avval).
+// AVANS HARAKATI jurnali — student_credit har o'zgarishini sababi bilan yozadi (izlanish uchun).
+async function logCredit(studentId, delta, balanceAfter, reason, provider){
+  if(!studentId || Math.abs(Number(delta)||0) < 0.5) return;
+  const id = 'cl_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  try{ await db.collection('credit_ledger').doc(id).set({ studentId:String(studentId), delta:Number(delta)||0,
+    balanceAfter:Number(balanceAfter)||0, reason, provider:provider||'', at: FieldValue.serverTimestamp() }); }catch(e){}
+}
 // Kam -> qisman (qarzdorlik qoladi); to'liq -> paid; ortiqcha -> student_credit (avans).
 // Mavjud kredit avval ishlatiladi. IDEMPOTENT: transId bo'yicha ikki marta hisoblanmaydi.
 async function applyPaymentToStudent(studentId, amount, transId){
@@ -146,6 +153,7 @@ async function applyPaymentToStudent(studentId, amount, transId){
   }
   await db.collection('student_credit').doc(studentId).set(
     { studentId, credit: available, updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+  await logCredit(studentId, available - credit, available, (available-credit)>0?'overpay':'applied', 'click');
   const result = { applied, leftover: available, usedCredit: credit };
   try{ await guardRef.set({ studentId, amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
   return result;
@@ -176,6 +184,7 @@ async function applyToInvoice(invoiceId, amount, transId, provider){
   if(overflow > 0 && inv.studentId){
     let cr = 0; try{ const c = await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr = Number((c.data()||{}).credit)||0; }catch(e){}
     await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit: cr + overflow, updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+    await logCredit(String(inv.studentId), overflow, cr + overflow, 'overpay', provider||'click');
   }
   const result = { invoiceId, applied: amount, status: paidFull ? 'paid' : 'partial', overflow, studentId: inv.studentId||'' };
   try{ await guardRef.set({ studentId: String(inv.studentId||''), amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
@@ -378,6 +387,7 @@ async function uzReverse(b){
         if(fromCredit>0 && inv.studentId){
           let cr=0; try{ const c=await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr=Number((c.data()||{}).credit)||0; }catch(e){}
           await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit:Math.max(0,cr-fromCredit), updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+          await logCredit(String(inv.studentId), -fromCredit, Math.max(0,cr-fromCredit), 'reversed', 'uzum');
         }
       }
     }

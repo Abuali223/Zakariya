@@ -3331,6 +3331,39 @@ async function applyPaymentClient(studentId, amount, provider){
     await setDoc(doc(db,'invoices',inv._id), Object.assign({paidAmount:newPaid,status:full?'paid':'partial',provider}, full?{paidAt:serverTimestamp()}:{}), {merge:true});
     available-=pay; }
   await setDoc(doc(db,'student_credit',studentId),{studentId,credit:available,updatedAt:serverTimestamp()},{merge:true});
+  // AVANS HARAKATI jurnali: balans o'zgarishini sababi bilan yozamiz (izlanish uchun).
+  const delta=available-credit;
+  if(Math.abs(delta)>=0.5){ const nm=((cache.students||[]).find(s=>String(s.studentId||s._id)===String(studentId))||{}).name||'';
+    try{ await addDoc(collection(db,'credit_ledger'),{ studentId:String(studentId), studentName:nm, delta, balanceAfter:available,
+      reason: delta>0?'overpay':'applied', provider, at:serverTimestamp() }); }catch(e){} }
+}
+// O'quvchining TO'LIQ moliyaviy tarixi: hisob-fakturalar + onlayn to'lovlar (kim/qachon) + avans harakati.
+async function openPayHistory(sid, name){
+  sid=String(sid||''); if(!sid){ toast('O‘quvchi ID topilmadi',true); return; }
+  $('#modal').innerHTML=`<div class="modal-h"><h3>To‘lov / avans tarixi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b" id="ph-body"><div class="loading">Yuklanmoqda…</div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  let invs=[], pays=[], ledg=[], credit=0;
+  try{ const s=await getDocs(query(collection(db,'invoices'), where('studentId','==',sid))); invs=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  try{ const s=await getDocs(query(collection(db,'payments'), where('studentId','==',sid))); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  try{ const s=await getDocs(query(collection(db,'credit_ledger'), where('studentId','==',sid))); ledg=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
+  const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
+  const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',payme:'Payme',mixed:'Aralash',credit:'Avans',grant:'Grant'};
+  invs.sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
+  pays.sort((a,b)=>String(dstr(b.createdAt)).localeCompare(String(dstr(a.createdAt))));
+  ledg.sort((a,b)=>String(dstr(b.at)).localeCompare(String(dstr(a.at))));
+  const reasonLbl={overpay:'Ortiqcha to‘lov → avans',applied:'Avans qo‘llandi',recompute:'Qayta hisoblash ortiqchasi',reversed:'Qaytarish (reversal)',manual:'Qo‘lda'};
+  const invRows=invs.map(i=>`<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td style="text-align:right">${fmtSom(i.paidAmount||0)}</td><td>${esc(provLbl[i.provider]||i.provider||'—')}</td><td>${esc(dstr(i.paidAt))}</td><td>${esc(i.status||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Hisob-faktura yo‘q</td></tr>';
+  const payRows=pays.map(p=>`<tr><td>${esc(dstr(p.createdAt))}</td><td>${esc(provLbl[p.provider]||p.provider||'—')}</td><td>${esc(p.payerName||'—')}${p.payerPhone?` · ${esc(p.payerPhone)}`:''}</td><td style="text-align:right">${fmtSom(p.amount)}</td><td>${esc(p.status||'')}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Onlayn to‘lov yo‘q (Naqd to‘lov hisob-fakturada ko‘rinadi)</td></tr>';
+  const ledgRows=ledg.map(l=>{ const d=Number(l.delta)||0; return `<tr><td>${esc(dstr(l.at))}</td><td>${esc(reasonLbl[l.reason]||l.reason||'')}${l.note?` · ${esc(l.note)}`:''}</td><td style="text-align:right;color:${d>=0?'#1F9982':'#B42318'}">${d>=0?'+':''}${fmtSom(d)}</td><td style="text-align:right">${fmtSom(l.balanceAfter||0)}</td></tr>`; }).join('')||'<tr><td colspan="4" class="muted">Avans harakati yozuvi yo‘q (jurnal shu tuzatishdan keyin to‘ldiriladi)</td></tr>';
+  const body=$('#ph-body'); if(!body) return;
+  body.innerHTML=`
+    <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b></div>
+    <h4 style="margin:10px 0 4px;font-size:14px">Hisob-fakturalar</h4><div class="tablewrap"><table><thead><tr><th>Oy</th><th>Summa</th><th>To‘langan</th><th>Usul</th><th>Sana</th><th>Holat</th></tr></thead><tbody>${invRows}</tbody></table></div>
+    <h4 style="margin:14px 0 4px;font-size:14px">Onlayn to‘lovlar (Click/Uzum) — kim to‘lagan</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>To‘lovchi</th><th>Summa</th><th>Holat</th></tr></thead><tbody>${payRows}</tbody></table></div>
+    <h4 style="margin:14px 0 4px;font-size:14px">Avans harakati (qayerdan / qayerga)</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Sabab</th><th>O‘zgarish</th><th>Balans</th></tr></thead><tbody>${ledgRows}</tbody></table></div>`;
 }
 async function renderPriceTable(){
   $('#view').innerHTML = `<div class="page-head"><h2>Narx jadvali</h2></div>
@@ -3580,6 +3613,7 @@ async function renderPayments(){
       <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
       <td data-label="Holat">${stBadge(r)}</td>
       <td class="td-actions"><div class="row-actions">
+        <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
         ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm" data-cash="${esc(r._id)}">${r.status==='partial'?'Qolganini naqd':'Naqd to‘landi'}</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(r.status==='paid'||r.status==='partial')?'':`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`}
@@ -3597,6 +3631,7 @@ async function renderPayments(){
       try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:prov,paidAmount:Number(rr&&rr.amount)||0,paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+    $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
   };
   if($('#pm-gen')) $('#pm-gen').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
@@ -3679,7 +3714,9 @@ async function renderPayments(){
       }
       for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }
       // Ortiqcha to'lovlarni avansga (student_credit) qo'shamiz
-      for(const sid of Object.keys(creditMap)){ const amt=creditMap[sid]; if(amt>0){ let cur=0; try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){} await setDoc(doc(db,'student_credit',sid), {studentId:sid, credit:cur+amt, updatedAt:serverTimestamp()}, {merge:true}); } }
+      for(const sid of Object.keys(creditMap)){ const amt=creditMap[sid]; if(amt>0){ let cur=0; try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){} await setDoc(doc(db,'student_credit',sid), {studentId:sid, credit:cur+amt, updatedAt:serverTimestamp()}, {merge:true});
+        // AVANS jurnali: qayta-hisoblashда narx kamayib, ortiqcha to'lov avansga o'tdi
+        const nm=(byId[sid]||{}).name||''; try{ await addDoc(collection(db,'credit_ledger'),{ studentId:String(sid), studentName:nm, delta:amt, balanceAfter:cur+amt, reason:'recompute', month, note:'Qayta hisoblash: narx kamaydi, ortiqcha to‘lov avansga', at:serverTimestamp() }); }catch(e){} } }
       $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
