@@ -2939,11 +2939,14 @@ async function renderAccounting(){
     </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — o‘qituvchilar kartasidagi hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati sifatida avtomatik yozadi (bir oyga bir marta — qayta bossangiz yangilanadi).</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[];
+  let INV=[], EXP=[], CREDITS=[];
   const reload=async()=>{
-    try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]); return true; }
+    try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
+      try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
+      return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
+  const avansTotal=()=>CREDITS.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
 
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
   const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
@@ -3021,7 +3024,14 @@ async function renderAccounting(){
     const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
       ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>'}</div>`;
 
-    $('#ac-body').innerHTML = kpis+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard;
+    // Avans (oldindan to'langan) — bu DAROMAD (xarajat emas). Foydaga hali qo'shilmaydi:
+    // tegishli oy hisob-fakturasi yaratilганда avtomatik qo'llanib, o'sha oy «Kirim»iga o'tadi.
+    const av=avansTotal();
+    const avansNote = av>0 ? `<div class="card" style="margin-bottom:16px;border-left:4px solid #0891B2;background:#f0fafb">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><b style="color:#0891B2">Avans (oldindan to‘langan): ${fmtC(av)}</b><div class="small muted" style="margin-top:2px">Bu — kelajak oylar uchun oldindan to‘langan pul (o‘quvchi balansida). U <b>daromad</b>, xarajat emas. «Kirim»/«Foyda»ga hali qo‘shilmaydi — tegishli oy uchun <b>«To‘lovlar → Hisob-fakturalar yaratish»</b> bosilганда avtomatik qo‘llanib, o‘sha oyning «Kirim»iga o‘tadi.</div></div>
+      </div></div>` : '';
+    $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard;
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
   };
