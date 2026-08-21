@@ -3146,6 +3146,20 @@ function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
   t.info=base+`Referral −${applied}`;
   if(t.net===0){ t.isGrant=true; t.status='paid'; }
   return applied; }
+// Mavjud hisob-fakturaga yangi net (chegirmalar bilan) qo'llaydi — QISMAN/to'liq to'langanni ham hisobga oladi.
+// paidAmount faqat kamayadi: net < to'langan bo'lsa ortiqcha qism avansga (credit) o'tadi.
+function reconcileInvoice(inv, t){
+  const iv=inv||{}; const paid0=Number(iv.paidAmount)||0; const net=Number(t.net)||0;
+  let paidAmount=paid0, creditExcess=0, status;
+  if(paid0>net){ creditExcess=paid0-net; paidAmount=net; }
+  if(net===0) status='paid';
+  else if(paidAmount>=net) status='paid';
+  else if(paidAmount>0) status='partial';
+  else status='pending';
+  const changed = (Number(iv.amount)||0)!==net || (Number(iv.paidAmount)||0)!==paidAmount
+    || String(iv.status||'')!==status || String(iv.discountInfo||'')!==String(t.info);
+  return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant||net===0, changed };
+}
 function pmReferralMaps(students, privOf, ledger, month){
   const knownIds=new Set(students.map(s=>String(s.studentId||s._id)));
   const ledgerIds=new Set((ledger||[]).map(l=>l.id));
@@ -3287,31 +3301,35 @@ async function renderPayments(){
   $('#pm-recalc').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    if(!confirm('Bu oydagi KUTILAYOTGAN (to‘lanmagan) hisob-fakturalar narx va chegirma bo‘yicha qayta hisoblanadi.\nTo‘langan / qisman to‘langan / bekor qilinganlar tegilmaydi. Davom etilsinmi?')) return;
+    if(!confirm('Bu oydagi hisob-fakturalar (KUTILAYOTGAN va QISMAN/to‘liq to‘langan) narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nTo‘langan summa saqlanadi — ortiqcha bo‘lsa AVANSga o‘tadi. Bekor qilinganlar tegilmaydi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
       const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
       const { pendingRef, refAmtOf } = pmReferralMaps(students, privOf, ledger, month);
-      const newLedger=[];
+      const newLedger=[]; const creditMap={};
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
-      const docs=snap.docs.filter(d=>{ const x=d.data()||{}; return x.status==='pending' && (Number(x.paidAmount)||0)===0; });
-      let changed=0, skipped=0;
+      const docs=snap.docs.filter(d=>{ const st=(d.data()||{}).status; return st!=='canceled' && st!=='reversed'; });
+      let changed=0, skipped=0, avans=0;
       for(let i=0;i<docs.length;i+=400){
         const batch=writeBatch(db); let wrote=false;
         docs.slice(i,i+400).forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
           const t=computeTuition(s, privOf(sid), ctx); if(t.skip){ skipped++; return; }
           const rApplied=applyReferral(t, refAmtOf(sid));
-          if(Number(inv.amount)===t.net && String(inv.discountInfo||'')===String(t.info)) return;   // o'zgarish yo'q
-          batch.set(doc(db,'invoices',d.id), { amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
-            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:t.status,
-            provider:t.isGrant?'grant':(inv.provider||''), paidAt:(t.status==='paid'?serverTimestamp():null) }, {merge:true});
+          const rc=reconcileInvoice(inv, t);
+          if(!rc.changed) return;   // o'zgarish yo'q
+          batch.set(doc(db,'invoices',d.id), { amount:rc.amount, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:rc.isGrant,
+            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:rc.status, paidAmount:rc.paidAmount,
+            provider:rc.isGrant?'grant':(inv.provider||''), paidAt:(rc.status==='paid'?(inv.paidAt||serverTimestamp()):(inv.paidAt||null)) }, {merge:true});
           changed++; wrote=true;
+          if(rc.creditExcess>0){ creditMap[sid]=(creditMap[sid]||0)+rc.creditExcess; avans++; }
           if(rApplied>0 && pendingRef[sid]) pendingRef[sid].forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
         if(wrote) await batch.commit();
       }
       for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }
-      $('#pm-genmsg').textContent=`${changed} ta kutilayotgan hisob-faktura qayta hisoblandi${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
+      // Ortiqcha to'lovlarni avansga (student_credit) qo'shamiz
+      for(const sid of Object.keys(creditMap)){ const amt=creditMap[sid]; if(amt>0){ let cur=0; try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){} await setDoc(doc(db,'student_credit',sid), {studentId:sid, credit:cur+amt, updatedAt:serverTimestamp()}, {merge:true}); } }
+      $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     btn.disabled=false; btn.textContent='↻ Qayta hisoblash';
