@@ -17,7 +17,7 @@ create or replace function app.uid() returns text language sql stable as $$
   )
 $$;
 create or replace function app.is_admin() returns boolean language sql stable security definer as $$
-  select exists(select 1 from public.users where id = app.uid() and role = 'admin')
+  select exists(select 1 from public.users where id = app.uid() and role in ('admin','director'))
 $$;
 create or replace function app.is_zavuch() returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role = 'zavuch')

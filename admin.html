@@ -699,7 +699,7 @@ let currentTab = 'dashboard';
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
 let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
-const ROLE_LABEL = { admin:'Administrator', kurator:'Kurator', teacher:'O‘qituvchi', zavuch:'O‘quv ishlari bo‘yicha (O‘IBDO‘)', parent:'Ota-ona', student:'O‘quvchi' };
+const ROLE_LABEL = { admin:'Administrator', director:'Direktor', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', admin_head:'Ma‘muriyat rahbari', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (admin — hammasi)
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['monitoring','profile'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
@@ -769,14 +769,15 @@ onAuthStateChanged(auth, async user=>{
   let assignedClasses = [], assignedSubjects = [], homeroomClasses = [];
   try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(!role && d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
   // Panelга kirish huquqiga ega rollar: admin, kurator, o'qituvchi, zavuch
-  const STAFF = ['admin','kurator','teacher','zavuch'];
+  const STAFF = ['admin','director','kurator','teacher','zavuch'];
   if(!STAFF.includes(role)){
     await signOut(auth);
     if(loginAttempted){ $('#login-err').textContent='Bu akkaunt panelga kirish huquqiga ega emas. Administrator, kurator, o‘qituvchi yoki zavuch hisobi bilan kiring.'; $('#login-err').style.display='block'; }
     loginAttempted=false;
     show('login'); return;
   }
-  SESSION = { role, isAdmin: role==='admin', assignedClasses, assignedSubjects, homeroomClasses };
+  // Direktor = to'liq admin ruxsati (kanonik ruxsat-rol). O'IBDO' = zavuch (allaqachon).
+  SESSION = { role: role==='director'?'admin':role, isAdmin: (role==='admin'||role==='director'), assignedClasses, assignedSubjects, homeroomClasses };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
@@ -2294,7 +2295,13 @@ async function renderUsers(){
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
-  const roleOpts=[['parent','Ota-ona'],['student','O‘quvchi'],['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],['zavuch','Zavuch (O‘IBDO‘)'],['admin','Administrator']];
+  const roleOpts=[
+    ['director','Direktor'],['admin','Administrator'],['zavuch','O‘IBDO‘'],
+    ['hr','HR'],['admin_head','Ma‘muriyat rahbari'],['finance_mgr','Moliya menejeri'],['marketing_mgr','Marketing menejeri'],
+    ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
+    ['reception','Qabulxona xodimi'],['treasurer','G‘aznachi'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
+    ['parent','Ota-ona'],['student','O‘quvchi']
+  ];
   let CLS={classes:{},keys:[]};
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
   const draw=(q)=>{
