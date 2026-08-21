@@ -3129,10 +3129,10 @@ function computeTuition(s, priv, ctx){
     else if(ctx.tenHolders && ctx.tenHolders.has(sid)){ pct=0.10; info='Aka-uka · 10%'; }
     else info='Chegirmasiz';
     net=round(base*(1-pct));
-    if(pct===0.20 || pct===0.10){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;   // kasal chegirmasi faqat 10/20% oluvchilarga
+    if(pct<1){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;   // kasal chegirmasi: grant/kontrakt/xodim/100% dan tashqari hammaga (to'liq narxlilar ham)
       const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
       sickAmt=sickN*rate;
-      if(sickAmt>0){ net=Math.max(0, net-sickAmt); info+=` + ${sickN} kasal kun (−${sickAmt})`; } } }
+      if(sickAmt>0){ net=Math.max(0, net-sickAmt); info=(info&&info!=='Chegirmasiz'?info+' + ':'')+`${sickN} kasal kun (−${sickAmt})`; } } }
   const discount=base-net;
   if(net===0 && !isGrant){ isGrant=true; }
   const status=(net===0)?'paid':'pending';
