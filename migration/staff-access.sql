@@ -68,10 +68,19 @@ create policy exp_upd on expenses for update using (app.is_admin() or app.is_zav
 
 drop policy if exists pay_sel on payments;
 create policy pay_sel on payments for select using (app.is_admin() or app.is_finance());
+-- To'lovni o'quvchiga biriktirish (matched/studentId/status) — g'aznachi/moliya menejeri ham qila olsin.
+-- (Mijoz updateDoc = sof PATCH ishlatadi, INSERT talab qilinmaydi — pay_upd yetarli.)
+drop policy if exists pay_upd on payments;
+create policy pay_upd on payments for update using (app.is_admin() or app.is_finance()) with check (app.is_admin() or app.is_finance());
 
 drop policy if exists sc_credit_sel on student_credit;
 create policy sc_credit_sel on student_credit for select
   using (app.is_admin() or app.is_zavuch() or app.is_finance() or app.owns_child(id));
+-- Avans (student_credit) — to'lov biriktirishда yoziladi; moliya rollari ham yoza olsin.
+drop policy if exists sc_credit_ins on student_credit;
+create policy sc_credit_ins on student_credit for insert with check (app.is_admin() or app.is_finance());
+drop policy if exists sc_credit_upd on student_credit;
+create policy sc_credit_upd on student_credit for update using (app.is_admin() or app.is_finance()) with check (app.is_admin() or app.is_finance());
 
 drop policy if exists pt_sel on price_table;
 create policy pt_sel on price_table for select using (app.is_admin() or app.is_zavuch() or app.is_finance());

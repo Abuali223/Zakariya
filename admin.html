@@ -432,7 +432,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
@@ -3059,7 +3059,9 @@ async function openAssign(payment, students, reload){
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const assignTo=async(sid)=>{ if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
     try{ await applyPaymentClient(sid, Number(payment.amount)||0);
-      await setDoc(doc(db,'payments',payment._id),{ matched:true, studentId:sid, status:'applied' },{merge:true});
+      // To'lov qatori ALLAQACHON mavjud (biriktirilmagan ro'yxatdan) — sof UPDATE (upsert emas).
+      // setDoc=UPSERT INSERT huquqini talab qiladi (payments'da yo'q -> 42501); updateDoc = sof PATCH.
+      await updateDoc(doc(db,'payments',payment._id),{ matched:true, studentId:sid, status:'applied' });
       toast('To‘lov biriktirildi ✓'); closeModal(); if(reload) reload();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
   const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
