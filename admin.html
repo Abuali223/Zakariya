@@ -3664,7 +3664,6 @@ async function renderPayments(){
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
-      <label>&nbsp;<button class="btn gold" id="pm-record" style="width:100%" title="Naqd / Bank / Terminal — qo‘lda to‘lovni qabul qilib balansga qo‘shadi (Click/Uzum avtomatik keladi)">➕ To‘lov qabul qilish</button></label>
       ${SESSION.isAdmin?`<label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
@@ -3727,7 +3726,7 @@ async function renderPayments(){
       <td data-label="Holat">${stBadge(r)}</td>
       <td class="td-actions"><div class="row-actions">
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
-        ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm" data-cash="${esc(r._id)}">${r.status==='partial'?'Qolganini naqd':'Naqd to‘landi'}</button>`:''}
+        ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘langan summani o‘quvchi avansiga qaytarib, hisob-fakturani o‘chiradi">↩ Avansga</button>`:''}
         ${(r.status==='paid'||r.status==='partial')?'':`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`}
@@ -3739,10 +3738,9 @@ async function renderPayments(){
     $('#pm-body').innerHTML=reportCard+unmatchedCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
-    $('#pm-body').querySelectorAll('[data-cash]').forEach(b=>b.addEventListener('click',async()=>{ const rr=rows.find(x=>x._id===b.dataset.cash);
-      // Qisman boshqa usulда to'langan bo'lsa (masalan Click), butun summani 'cash'ga yozmaymiz -> 'mixed' (aralash), aks holda 'cash'.
-      const had=Number(rr&&rr.paidAmount)||0, prev=String(rr&&rr.provider||''); const prov=(had>0 && prev && prev!=='cash')?'mixed':'cash';
-      try{ await setDoc(doc(db,'invoices',b.dataset.cash),{status:'paid',provider:prov,paidAmount:Number(rr&&rr.amount)||0,paidAt:serverTimestamp()},{merge:true}); toast('Naqd to‘lov belgilandi ✓'); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
+    $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
+      // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
+      openRecordPayment(students, load, { sid:rr.studentId, name:nameOf(rr), amount:debtOf(rr) }); }));
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
@@ -3866,25 +3864,31 @@ async function renderPayments(){
   });
   $('#pm-month').addEventListener('change',load);
   if($('#pm-audit')) $('#pm-audit').addEventListener('click',openFinanceAudit);
-  if($('#pm-record')) $('#pm-record').addEventListener('click',()=>openRecordPayment(students, load));
   // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
   const amtEl=$('#pm-amount'); if(amtEl) amtEl.addEventListener('input',()=>{ const d=amtEl.value.replace(/\D/g,''); amtEl.value = d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   load();
 }
 // YAGONA to'lov qabul qilish: bank / Click / Uzum / Terminal / Naqd — hammasi bir oqim, idempotent.
 // payments'ga yoziladi (yagona joy) + balansga qo'llanadi (waterfall, ortiqcha -> avans).
-async function openRecordPayment(students, reload){
+async function openRecordPayment(students, reload, pre){
   const list = (students&&students.length)?students:(cache.students||[]);
+  pre = pre||{};   // {sid, name, amount} — qatordan chaqirilganda o'quvchi va qarz oldindan to'ldiriladi.
   // Click/Uzum AVTOMATIK keladi (server webhook) — bu yerда FAQAT qo'lда usullar (ikki marta hisoblanmasin).
   const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal']];
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
+  const preSid = pre.sid ? String(pre.sid) : '';
+  const preName = preSid ? (pre.name || ((list.find(x=>String(x.studentId||x._id)===preSid)||{}).name) || preSid) : '';
+  const preAmtStr = (Number(pre.amount)>0) ? String(Math.round(Number(pre.amount))).replace(/\B(?=(\d{3})+(?!\d))/g,' ') : '';
+  const studentBlock = preSid
+    ? `<div class="small" style="font-weight:700;background:#eef3f1;border-radius:10px;padding:10px 12px">O‘quvchi: <b>${esc(preName)}</b> <span class="muted" style="font-weight:500">· ${esc(preSid)}</span><input type="hidden" id="rp-sid" value="${esc(preSid)}"></div>`
+    : `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">O‘quvchi<input id="rp-search" type="text" placeholder="Ism yoki ID…" autocomplete="off" style="${fld}"><div id="rp-list" style="max-height:180px;overflow:auto;margin-top:4px"></div><input type="hidden" id="rp-sid"><div id="rp-sel" class="small muted"></div></label>`;
   $('#modal').innerHTML=`<div class="modal-h"><h3>To‘lov qabul qilish</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">O‘quvchi<input id="rp-search" type="text" placeholder="Ism yoki ID…" autocomplete="off" style="${fld}"><div id="rp-list" style="max-height:180px;overflow:auto;margin-top:4px"></div><input type="hidden" id="rp-sid"><div id="rp-sel" class="small muted"></div></label>
+      ${studentBlock}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="rp-m" style="${fld};background:#fff">${METHODS.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select></label>
       <div class="grid2" style="margin-top:8px">
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input id="rp-amt" type="text" inputmode="numeric" placeholder="2 900 000" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input id="rp-amt" type="text" inputmode="numeric" placeholder="2 900 000" value="${esc(preAmtStr)}" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(today)}" style="${fld}"></label>
       </div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="rp-note" type="text" placeholder="ixtiyoriy (masalan bank kvitansiya №)" style="${fld}"></label>
@@ -3893,18 +3897,20 @@ async function openRecordPayment(students, reload){
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="rp-save">Qabul qilish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const amt=$('#rp-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
-  const draw=q=>{ q=String(q||'').trim().toLowerCase();
-    const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,30);
-    $('#rp-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id; return `<div data-sid="${esc(sid)}" style="padding:6px 8px;border:1px solid var(--border-2);border-radius:7px;margin-bottom:4px;cursor:pointer"><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${gradeName(Number(s.grade)||0)} ${esc(s.classLetter||s.track||'')}</span></div>`; }).join('')||'<div class="small muted">Topilmadi.</div>';
-    $('#rp-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>{ const sid=el.dataset.sid, s=list.find(x=>String(x.studentId||x._id)===sid)||{}; $('#rp-sid').value=sid; $('#rp-sel').innerHTML=`✓ <b>${esc(s.name||sid)}</b> tanlandi`; $('#rp-list').innerHTML=''; $('#rp-search').value=s.name||sid; }); };
-  $('#rp-search').addEventListener('input',e=>draw(e.target.value));
+  if(!preSid){
+    const draw=q=>{ q=String(q||'').trim().toLowerCase();
+      const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,30);
+      $('#rp-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id; return `<div data-sid="${esc(sid)}" style="padding:6px 8px;border:1px solid var(--border-2);border-radius:7px;margin-bottom:4px;cursor:pointer"><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${gradeName(Number(s.grade)||0)} ${esc(s.classLetter||s.track||'')}</span></div>`; }).join('')||'<div class="small muted">Topilmadi.</div>';
+      $('#rp-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>{ const sid=el.dataset.sid, s=list.find(x=>String(x.studentId||x._id)===sid)||{}; $('#rp-sid').value=sid; $('#rp-sel').innerHTML=`✓ <b>${esc(s.name||sid)}</b> tanlandi`; $('#rp-list').innerHTML=''; $('#rp-search').value=s.name||sid; }); };
+    $('#rp-search').addEventListener('input',e=>draw(e.target.value)); draw('');
+  }
   let saving=false;
   $('#rp-save').onclick=async()=>{
     if(saving) return;
     const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=$('#rp-date').value, note=$('#rp-note').value.trim();
     if(!sid){ toast('O‘quvchini tanlang',true); return; }
     if(amount<=0){ toast('Summani kiriting',true); return; }
-    const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||sid;
+    const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
     saving=true; const btn=$('#rp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
     const payId='man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     try{
@@ -3916,7 +3922,6 @@ async function openRecordPayment(students, reload){
       toast('To‘lov qabul qilindi ✓'); closeModal(); if(reload) reload();
     }catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish'; toast('Xatolik: '+(e.code||e.message),true); }
   };
-  draw('');
 }
 
 /* ---- Modal utils ---- */
