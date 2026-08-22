@@ -3803,7 +3803,8 @@ async function renderPayments(){
 // payments'ga yoziladi (yagona joy) + balansga qo'llanadi (waterfall, ortiqcha -> avans).
 async function openRecordPayment(students, reload){
   const list = (students&&students.length)?students:(cache.students||[]);
-  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal'],['click','Click'],['uzum','Uzum'],['payme','Payme']];
+  // Click/Uzum AVTOMATIK keladi (server webhook) — bu yerда FAQAT qo'lда usullar (ikki marta hisoblanmasin).
+  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal']];
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
   $('#modal').innerHTML=`<div class="modal-h"><h3>To‘lov qabul qilish</h3><button class="x" id="m-x">×</button></div>
@@ -3815,7 +3816,7 @@ async function openRecordPayment(students, reload){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(today)}" style="${fld}"></label>
       </div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="rp-note" type="text" placeholder="ixtiyoriy (masalan bank kvitansiya №)" style="${fld}"></label>
-      <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi.</div>
+      <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi. <b>Click/Uzum</b> avtomatik keladi — bu yerга kiritmang.</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="rp-save">Qabul qilish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
