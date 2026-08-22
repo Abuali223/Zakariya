@@ -3573,7 +3573,8 @@ async function renderPayments(){
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
       ${SESSION.isAdmin?`<label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
-      <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>`:''}
+      <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
+      <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>`:''}
     </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`}</div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
   let students;
@@ -3738,6 +3739,21 @@ async function renderPayments(){
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     btn.disabled=false; btn.textContent='↻ Qayta hisoblash';
+  });
+  // Shu oyning TO'LANMAGAN (pending) hisob-fakturalarini o'chirish — to'langan/qisman/bekorlarga TEGMAYDI (pul saqlanadi).
+  if($('#pm-clear')) $('#pm-clear').addEventListener('click',async()=>{
+    const month=$('#pm-month').value; if(!month){ toast('Oyni tanlang',true); return; }
+    let snap; try{ snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); return; }
+    const all=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    const pend=all.filter(x=>x.status==='pending'); const kept=all.length-pend.length;
+    if(!all.length){ toast(`${month} uchun hisob-faktura yo‘q.`,true); return; }
+    if(!pend.length){ toast(`${month}: to‘lanmagan hisob-faktura yo‘q. ${kept} ta to‘langan/qisman/bekor — tegilmaydi.`,true); return; }
+    if(!confirm(`${month} oyi uchun ${pend.length} ta TO‘LANMAGAN (kutilayotgan) hisob-faktura o‘chiriladi.${kept?`\n\n${kept} ta to‘langan/qisman/bekor hisob-faktura TEGILMAYDI (pul saqlanadi).`:''}\n\nPul oqimiga ta’sir qilmaydi (bu hisoblarda to‘lov yo‘q). Davom etilsinmi?`)) return;
+    const cb=$('#pm-clear'); cb.disabled=true; cb.textContent='O‘chirilmoqda…';
+    let done=0; for(const inv of pend){ try{ await deleteDoc(doc(db,'invoices',inv._id)); done++; }catch(e){} }
+    if($('#pm-genmsg')) $('#pm-genmsg').textContent=`${done} ta to‘lanmagan hisob-faktura o‘chirildi${kept?` · ${kept} ta to‘langan/qisman tegilmadi`:''}.`;
+    toast(`${done} ta to‘lanmagan hisob-faktura o‘chirildi ✓`);
+    cb.disabled=false; cb.textContent='🗑 To‘lanmaganlarni tozalash'; load();
   });
   $('#pm-month').addEventListener('change',load);
   // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
