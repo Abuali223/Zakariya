@@ -229,21 +229,26 @@ async function handlePrepare(p){
   const prepareId = String(Date.now());
   const payRef = db.collection('payments').doc('click_' + p.click_trans_id);
 
-  // A) ANIQ invoice ID (kabinet «Click» tugmasi) -> QAT'IY: summa aynan mos kelishi shart.
+  // A) ANIQ invoice ID (kabinet «Click» tugmasi).
   if(mti.includes('__')){
     const inv = await getInvoice(mti);
-    if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', false);
-    if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', false);
-    // Balans modeli: summa aynan mos kelishi shart emas — qolganiga (partial) yoki to'liq tushadi.
-    await payRef.set({ provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:mti,
-      invoiceId:String(inv.id), studentId:String(inv.studentId||''), merchant_prepare_id:prepareId,
-      amount, status:'prepared', matched:true, raw:{ mode:'precise' }, createdAt: FieldValue.serverTimestamp() });
-    return { click_trans_id:p.click_trans_id, merchant_trans_id:mti, merchant_prepare_id:prepareId, error:0, error_note:'Success' };
+    if(inv && inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', false);
+    if(inv){
+      // Balans modeli: summa aynan mos kelishi shart emas — qolganiga (partial) yoki to'liq tushadi.
+      await payRef.set({ provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:mti,
+        invoiceId:String(inv.id), studentId:String(inv.studentId||''), merchant_prepare_id:prepareId,
+        amount, status:'prepared', matched:true, raw:{ mode:'precise' }, createdAt: FieldValue.serverTimestamp() });
+      return { click_trans_id:p.click_trans_id, merchant_trans_id:mti, merchant_prepare_id:prepareId, error:0, error_note:'Success' };
+    }
+    // Invoice YO'Q (o'chirilgan / oy noto'g'ri) -> RAD ETMAYMIZ (to'lov yo'qolmasin). Pastga (ERKIN)
+    // tushamiz: mti'даги o'quvchi ID sini ajratib, balansiga yoki biriktirilmagan sifatida qabul qilamiz.
   }
 
-  // B) ERKIN to'lov (ism/telefon + ixtiyoriy summa) -> BALANS modeli. Har doim qabul qilinadi
+  // B) ERKIN to'lov (ism/telefon/kod + ixtiyoriy summa) -> BALANS modeli. HAR DOIM QABUL QILINADI
   //    (pul keladi -> yoziladi; biriktirilmasa admin biriktiradi). Attribution: kod yoki telefon.
-  const at = await attributeStudent(mti, p);
+  let at = await attributeStudent(mti, p);
+  // precise mti (sid__oy) invoice topilmagan bo'lsa — o'quvchi ID sini ajratib olamiz (bor bo'lsa)
+  if(!at.sid && mti.includes('__')){ const sidPart = mti.split('__')[0]; if(sidPart){ try{ const ui = await unpaidInvoices(sidPart); if(ui && ui.length) at = { sid: sidPart, via:'invoice-id' }; }catch(e){} } }
   await payRef.set({ provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:mti,
     studentId: at.sid || '', matched: !!at.sid, merchant_prepare_id:prepareId, amount, status:'prepared',
     payerName: mti, payerPhone: String(p.param3||''), payerClass: String(p.param2||''),
@@ -266,8 +271,15 @@ async function handleComplete(p){
 
   if(mode === 'precise'){
     const inv = await getInvoice(String(pay.invoiceId||''));
-    if(!inv) return clickErr(p, -5, 'Hisob-faktura topilmadi', true);
-    if(inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', true);
+    if(inv && inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', true);
+    if(!inv){
+      // Invoice prepare bilan complete orasида o'chirilgan -> pulni YO'QOTMAYMIZ.
+      const amount = Number(pay.amount)||Number(p.amount)||0;
+      if(pay.studentId){ await applyPaymentToStudent(String(pay.studentId), amount, p.click_trans_id);
+        await payRef.set({ status:'applied', amount, merchant_confirm_id:confirmId }, { merge:true }); }
+      else { await payRef.set({ status:'unmatched', amount, merchant_confirm_id:confirmId }, { merge:true }); }
+      return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:confirmId, error:0, error_note:'Success' };
+    }
     await applyToInvoice(String(pay.invoiceId), Number(p.amount)||0, p.click_trans_id);  // qolganiga/to'liq
     await payRef.set({ status:'paid', studentId:String(inv.studentId||''), merchant_confirm_id:confirmId }, { merge:true });
   } else {
