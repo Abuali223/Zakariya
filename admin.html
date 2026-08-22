@@ -3376,11 +3376,25 @@ async function openPayHistory(sid, name){
   const payRows=pays.map(p=>`<tr><td>${esc(dstr(p.createdAt))}</td><td>${esc(provLbl[p.provider]||p.provider||'—')}</td><td>${esc(p.payerName||'—')}${p.payerPhone?` · ${esc(p.payerPhone)}`:''}</td><td style="text-align:right">${fmtSom(p.amount)}</td><td>${esc(p.status||'')}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Onlayn to‘lov yo‘q (Naqd to‘lov hisob-fakturada ko‘rinadi)</td></tr>';
   const ledgRows=ledg.map(l=>{ const d=Number(l.delta)||0; return `<tr><td>${esc(dstr(l.at))}</td><td>${esc(reasonLbl[l.reason]||l.reason||'')}${l.note?` · ${esc(l.note)}`:''}</td><td style="text-align:right;color:${d>=0?'#1F9982':'#B42318'}">${d>=0?'+':''}${fmtSom(d)}</td><td style="text-align:right">${fmtSom(l.balanceAfter||0)}</td></tr>`; }).join('')||'<tr><td colspan="4" class="muted">Avans harakati yozuvi yo‘q (jurnal shu tuzatishdan keyin to‘ldiriladi)</td></tr>';
   const body=$('#ph-body'); if(!body) return;
+  // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
+  const paysSum=pays.filter(p=>p.status!=='canceled'&&p.status!=='reversed').reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
+  const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.</div>` : '';
   body.innerHTML=`
-    <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b></div>
+    <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}</div>
+    ${warn}
     <h4 style="margin:10px 0 4px;font-size:14px">Hisob-fakturalar</h4><div class="tablewrap"><table><thead><tr><th>Oy</th><th>Summa</th><th>To‘langan</th><th>Usul</th><th>Sana</th><th>Holat</th></tr></thead><tbody>${invRows}</tbody></table></div>
     <h4 style="margin:14px 0 4px;font-size:14px">Onlayn to‘lovlar (Click/Uzum) — kim to‘lagan</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>To‘lovchi</th><th>Summa</th><th>Holat</th></tr></thead><tbody>${payRows}</tbody></table></div>
     <h4 style="margin:14px 0 4px;font-size:14px">Avans harakati (qayerdan / qayerga)</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Sabab</th><th>O‘zgarish</th><th>Balans</th></tr></thead><tbody>${ledgRows}</tbody></table></div>`;
+  const fx=$('#ph-fix'); if(fx) fx.onclick=async()=>{
+    const v=prompt('To‘g‘ri avans summasi (so‘m). Masalan bitta 2 900 000 to‘lov bo‘lsa: 2900000', String(credit));
+    if(v==null) return; const nv=Number(String(v).replace(/\D/g,'')); if(!isFinite(nv)||nv<0){ toast('Noto‘g‘ri summa',true); return; }
+    if(nv===credit){ toast('O‘zgarish yo‘q'); return; }
+    try{ await setDoc(doc(db,'student_credit',sid),{studentId:sid,credit:nv,updatedAt:serverTimestamp()},{merge:true});
+      try{ await addDoc(collection(db,'credit_ledger'),{studentId:String(sid),studentName:name||sid,delta:nv-credit,balanceAfter:nv,reason:'manual',note:'Admin qo‘lda tuzatdi (takror hisoblangan avans)',at:serverTimestamp()}); }catch(e){}
+      toast('Avans tuzatildi ✓'); openPayHistory(sid, name); }
+    catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+  };
 }
 async function renderPriceTable(){
   $('#view').innerHTML = `<div class="page-head"><h2>Narx jadvali</h2></div>
