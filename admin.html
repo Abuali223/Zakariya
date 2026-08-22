@@ -3405,6 +3405,76 @@ async function openPayHistory(sid, name){
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
   };
 }
+// ==== MOLIYA TEKSHIRUVI (reconciliation) =============================
+// Muvozanat qoidasi: har o'quvchi uchun REAL to'lov (payments) == hisob-
+// fakturaga qo'llangan (invoices) + joriy avans (student_credit). Referral
+// chegirma (invoice net'ini kamaytiradi), avansga tegmaydi — shu bois avans
+// har doim real pul bilan qoplangan bo'lishi shart. Nomutanosiblik =
+// takror hisoblangan avans / yo'qolgan pul / biriktirilmagan to'lov alomati.
+async function openFinanceAudit(){
+  if(!SESSION.isAdmin){ toast('Faqat administrator uchun',true); return; }
+  $('#modal').innerHTML=`<div class="modal-h"><h3>🔍 Moliya tekshiruvi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b" id="fa-body"><div class="loading">Tekshirilmoqda…</div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  let invs=[], pays=[], creds=[];
+  try{ const s=await getDocs(collection(db,'invoices')); invs=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  try{ const s=await getDocs(collection(db,'payments')); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  try{ const s=await getDocs(collection(db,'student_credit')); creds=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  const body=$('#fa-body'); if(!body) return;
+  const R=Math.round, fmtN=n=>fmtSom(n);
+  // Nom xaritasi (ko'rsatish uchun): cache -> invoice -> payment nomi.
+  const nameMap={}; (cache.students||[]).forEach(s=>{ const id=String(s.studentId||s._id||''); if(id&&s.name) nameMap[id]=s.name; });
+  // I = hisob-fakturaga qo'llangan (to'langan) summa; C = joriy avans; P = real to'lov.
+  const I={}, C={}, P={};
+  invs.forEach(i=>{ const sid=String(i.studentId||''); if(!sid) return;
+    const v = (i.status==='paid') ? (Number(i.amount)||0)
+            : ((i.status==='reversed'||i.status==='canceled') ? 0 : (Number(i.paidAmount)||0));
+    if(v) I[sid]=(I[sid]||0)+v;
+    if(i.studentName && !nameMap[sid]) nameMap[sid]=i.studentName; });
+  creds.forEach(c=>{ const sid=String(c.studentId||c._id||''); if(!sid) return; C[sid]=(C[sid]||0)+(Number(c.credit)||0); });
+  let unmatchedSum=0, unmatchedN=0;
+  pays.forEach(p=>{ const st=String(p.status||''); if(st==='canceled'||st==='reversed') return;
+    const amt=Number(p.amount)||0; if(!amt) return; const sid=String(p.studentId||'');
+    if(!sid){ unmatchedSum+=amt; unmatchedN++; return; }
+    P[sid]=(P[sid]||0)+amt; if(p.payerName && !nameMap[sid]) nameMap[sid]=p.payerName; });
+  const ids=new Set([...Object.keys(I),...Object.keys(C),...Object.keys(P)]);
+  const rows=[];
+  ids.forEach(sid=>{ const p=R(P[sid]||0), i=R(I[sid]||0), c=R(C[sid]||0); const disc=(i+c)-p;
+    if(Math.abs(disc)>=1) rows.push({sid, name:nameMap[sid]||sid, p, i, c, disc}); });
+  rows.sort((a,b)=>Math.abs(b.disc)-Math.abs(a.disc));
+  const over=rows.filter(r=>r.disc>0), under=rows.filter(r=>r.disc<0);
+  const overSum=over.reduce((s,r)=>s+r.disc,0), underSum=under.reduce((s,r)=>s-r.disc,0);
+  let head;
+  if(rows.length===0){
+    head=`<div class="small" style="color:#1F7A4D;background:#E9F8F0;border-radius:10px;padding:12px 14px;font-weight:700">✓ Nomutanosiblik topilmadi — har o‘quvchida real to‘lov = hisob-faktura + avans. Moliya oqimi to‘g‘ri.</div>`;
+  } else {
+    head=`<div class="small" style="color:#B42318;background:#FDECEC;border-radius:10px;padding:12px 14px"><b>${rows.length}</b> ta o‘quvchida nomutanosiblik topildi.`
+      + (over.length?`<br>⚠️ <b>Ortiqcha (soxta):</b> ${over.length} ta · jami <b>${fmtN(overSum)}</b> — tizim real puldan ko‘p «to‘langan» ko‘rsatyapti (takror hisoblangan avans yoki xato). Bu daromadni oshirib ko‘rsatadi.`:'')
+      + (under.length?`<br>ℹ️ <b>Qo‘llanmagan:</b> ${under.length} ta · jami <b>${fmtN(underSum)}</b> — pul tushgan, lekin hisob-faktura/avansda aks etmagan (biriktirilmagan to‘lov bo‘lishi mumkin).`:'')
+      + `</div>`;
+  }
+  const unmatchedLine = unmatchedN ? `<div class="small muted" style="margin:8px 0">📥 O‘quvchisi aniqlanmagan to‘lovlar: <b>${unmatchedN}</b> ta · <b>${fmtN(unmatchedSum)}</b> — «To‘lovlar» ro‘yxatidan tegishli o‘quvchiga biriktiring.</div>` : '';
+  const rowH=rows.map(r=>{ const isOver=r.disc>0; const col=isOver?'#B42318':'#B54708';
+    return `<tr>
+      <td>${esc(r.name)}<div class="small muted">${esc(r.sid)}</div></td>
+      <td style="text-align:right">${fmtN(r.p)}</td>
+      <td style="text-align:right">${fmtN(r.i)}</td>
+      <td style="text-align:right">${fmtN(r.c)}</td>
+      <td style="text-align:right;font-weight:800;color:${col}">${r.disc>0?'+':''}${fmtN(r.disc)}</td>
+      <td style="color:${col}">${isOver?'⚠️ Ortiqcha':'ℹ️ Qo‘llanmagan'}</td>
+      <td><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button></td>
+    </tr>`; }).join('');
+  const table = rows.length? `<div class="tablewrap" style="margin-top:10px"><table>
+    <thead><tr><th>O‘quvchi</th><th>Real to‘lov</th><th>H-faktura</th><th>Avans</th><th>Farq</th><th>Holat</th><th></th></tr></thead>
+    <tbody>${rowH}</tbody></table></div>` : '';
+  body.innerHTML=`
+    <div class="small muted" style="margin-bottom:8px">Qoida: har o‘quvchi uchun <b>real to‘lov</b> (Click/Uzum/naqd/bank/terminal) = <b>hisob-fakturaga qo‘llangan</b> + <b>joriy avans</b>. Tekshirildi: <b>${ids.size}</b> o‘quvchi.</div>
+    ${head}
+    ${unmatchedLine}
+    ${table}`;
+  body.querySelectorAll('[data-ph]').forEach(b=>b.onclick=()=>{ const sid=b.getAttribute('data-ph'); openPayHistory(sid, nameMap[sid]||sid); });
+}
 async function renderPriceTable(){
   $('#view').innerHTML = `<div class="page-head"><h2>Narx jadvali</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Sinf / yo‘nalish / til bo‘yicha oylik asosiy narx. Barcha chegirmalar shu narxdan avtomatik hisoblanadi. Yil boshida bir marta to‘ldiring — ro‘yxat o‘quvchilaringizdan avtomatik tuziladi.</p>
@@ -3594,11 +3664,12 @@ async function renderPayments(){
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
-      <label>&nbsp;<button class="btn gold" id="pm-record" style="width:100%" title="Bank / Click / Uzum / Terminal / Naqd — istalgan usuldagi to‘lovni qabul qilib balansga qo‘shadi">➕ To‘lov qabul qilish</button></label>
+      <label>&nbsp;<button class="btn gold" id="pm-record" style="width:100%" title="Naqd / Bank / Terminal — qo‘lda to‘lovni qabul qilib balansga qo‘shadi (Click/Uzum avtomatik keladi)">➕ To‘lov qabul qilish</button></label>
       ${SESSION.isAdmin?`<label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
-      <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>`:''}
+      <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>
+      <label>&nbsp;<button class="btn ghost2" id="pm-audit" style="width:100%" title="Har o‘quvchida real to‘lov = hisob-faktura + avans ekanini tekshiradi (takror hisoblangan avans / nomutanosiblikni topadi)">🔍 Moliya tekshiruvi</button></label>`:''}
     </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`}</div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
   let students;
@@ -3794,6 +3865,7 @@ async function renderPayments(){
     cb.disabled=false; cb.textContent='🗑 To‘lanmaganlarni tozalash'; load();
   });
   $('#pm-month').addEventListener('change',load);
+  if($('#pm-audit')) $('#pm-audit').addEventListener('click',openFinanceAudit);
   if($('#pm-record')) $('#pm-record').addEventListener('click',()=>openRecordPayment(students, load));
   // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
   const amtEl=$('#pm-amount'); if(amtEl) amtEl.addEventListener('input',()=>{ const d=amtEl.value.replace(/\D/g,''); amtEl.value = d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
