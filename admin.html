@@ -845,7 +845,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','profile'],
-  hr:['teachers'], admin:['enrollments','feedback'], admin_head:['enrollments','feedback'],
+  hr:['teachers'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
@@ -961,6 +961,7 @@ function buildTabs(){
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
     {k:'feedback', icon:mi('M240-400h480v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z'), t:'Arz-shikoyat'},
+    {k:'sick', icon:mi('M420-360h120v-90h90v-120h-90v-90H420v90h-90v120h90v90Zm60 264q-9 0-17.5-1.5T446-102q-149-63-237.5-192.5T120-580v-206q0-25 14.5-45t37.5-29l280-105q14-5 28-5t28 5l280 105q23 9 37.5 29t14.5 45v206q0 156-88.5 285.5T514-102q-8 4-16.5 5.5T480-96Z'), t:'Kasal bolalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
     {k:'pricetable', icon:mi('M120-120v-720h720v720H120Zm80-80h240v-160H200v160Zm320 0h240v-160H520v160ZM200-360h240v-160H200v160Zm320 0h240v-160H520v160ZM200-600h560v-160H200v160Z'), t:'Narx jadvali'},
@@ -999,6 +1000,7 @@ function openTab(tab){
   if(tab==='accounting') return renderAccounting();
   if(tab==='marketing') return renderMarketing();
   if(tab==='feedback') return renderFeedback();
+  if(tab==='sick') return renderSick();
   renderCollection(tab);
 }
 
@@ -3665,6 +3667,41 @@ async function pmLoadCtx(month, students, amount){
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
   const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0 };
   return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, priceEmpty:!Object.keys(priceMap).length };
+}
+// ==== KASAL BOLALAR — «Bemor» davomatidan avtomatik ro'yxat (Direktor + Ma'muriyat rahbari) ====
+async function renderSick(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Kasal bolalar</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Davomatда <b>«Bemor»</b> belgilangan o‘quvchilar — oy bo‘yicha avtomatik. Kasal kunlar davomat foiziga zarar bermaydi.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Oy<input type="month" id="sk-month" value="${curMonth()}"></label>
+    </div></div>
+    <div id="sk-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  let students;
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#sk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const stById={}; students.forEach(s=>{ stById[s.studentId||s._id]=s; });
+  const load=async()=>{
+    const M=$('#sk-month').value; if(!M) return;
+    $('#sk-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    let att;
+    try{ const snap=await getDocs(query(collection(db,'attendance'), where('month','==',M))); att=snap.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ $('#sk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+    const list=[];
+    att.forEach(a=>{ const days=a.days||{}; const sd=Object.keys(days).filter(dd=>days[dd]==='sick').sort((x,y)=>Number(x)-Number(y)); if(!sd.length) return;
+      const sid=a.studentId||String(a._id).split('__')[0]; const s=stById[sid]||null;
+      list.push({ sid, name:(s&&s.name)||a.studentName||sid, cls:(s?classLabelOf(s):(a.classKey||'—')), ck:(s?classKeyOf(s):(a.classKey||'zz')), days:sd, n:sd.length }); });
+    list.sort((a,b)=> (b.n-a.n) || String(a.cls).localeCompare(String(b.cls)) || String(a.name).localeCompare(String(b.name)));
+    if(!list.length){ $('#sk-body').innerHTML=`<div class="card"><div class="empty">Bu oy «Bemor» belgilangan o‘quvchi yo‘q ✓</div></div>`; return; }
+    const totalKids=list.length, totalDays=list.reduce((s,x)=>s+x.n,0);
+    const rows=list.map(x=>`<tr>
+      <td data-label="O‘quvchi">${esc(x.name)}</td>
+      <td data-label="Sinf">${esc(x.cls)}</td>
+      <td data-label="Kasal kun" style="text-align:center"><b style="color:#8B6DB3">${x.n}</b></td>
+      <td data-label="Kunlar" class="small muted">${x.days.map(d=>esc(String(Number(d))+'-kun')).join(', ')}</td></tr>`).join('');
+    $('#sk-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(M)}</h3><span class="cls-count">${totalKids} o‘quvchi · ${totalDays} kasal kun</span></div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Sinf</th><th>Kasal kun</th><th>Kunlar</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  };
+  $('#sk-month').addEventListener('change',load); load();
 }
 // ==== ARZ-SHIKOYAT / E'TIROF (feedback inbox) — Direktor + Ma'muriyat rahbari ====
 async function renderFeedback(){
