@@ -1002,6 +1002,7 @@ const T = {
     kab_ts_title:"O‘qituvchi xulosasi",kab_ts_loading:"Yuklanmoqda…",kab_ts_note:"Sinf rahbari / fan o‘qituvchisi tomonidan yozilgan.",
     kab_pf_title:"Choraklik xarakteristika",kab_pf_general:"Umumiy xarakteristika",kab_pf_subjects:"Fan o‘qituvchilari izohi",kab_pf_note:"Sinf rahbari va fan o‘qituvchilari tomonidan to‘ldiriladi.",
     kab_dl:"📄 Rasmiy profilni yuklab olish",kab_dl_hint:"Farzandingizning to‘liq rasmiy profili (PDF) — QR orqali tekshiriladi.",kab_dl_wait:"Tayyorlanmoqda…",
+    fb_title:"Murojaat: arz-shikoyat yoki e‘tirof",fb_hint:"Fikringiz to‘g‘ridan-to‘g‘ri maktab ma‘muriyatiga boradi. Ismingiz ko‘rinadi.",fb_type_shikoyat:"Shikoyat",fb_type_etirof:"E‘tirof (minnatdorchilik)",fb_type_taklif:"Taklif",fb_ph:"Murojaatingizni yozing…",fb_send:"Yuborish",fb_sent:"Yuborildi ✓ Rahmat!",fb_err:"Yuborilmadi. Qayta urining.",fb_empty:"Iltimos, matn yozing.",fb_mine:"Sizning murojaatlaringiz",fb_none:"Hozircha murojaat yo‘q.",fb_st_new:"Yangi",fb_st_read:"Ko‘rildi",fb_st_resolved:"Hal qilindi",fb_reply:"Ma‘muriyat javobi:",
     kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
@@ -1120,6 +1121,7 @@ const T = {
     kab_ts_title:"Отзыв учителя",kab_ts_loading:"Загрузка…",kab_ts_note:"Написано классным руководителем / учителем.",
     kab_pf_title:"Четвертная характеристика",kab_pf_general:"Общая характеристика",kab_pf_subjects:"Отзывы учителей-предметников",kab_pf_note:"Заполняется классным руководителем и учителями-предметниками.",
     kab_dl:"📄 Скачать официальный профиль",kab_dl_hint:"Полный официальный профиль ребёнка (PDF) — проверяется по QR.",kab_dl_wait:"Готовится…",
+    fb_title:"Обращение: жалоба или благодарность",fb_hint:"Ваше сообщение направляется напрямую администрации школы. Ваше имя будет видно.",fb_type_shikoyat:"Жалоба",fb_type_etirof:"Благодарность",fb_type_taklif:"Предложение",fb_ph:"Напишите ваше обращение…",fb_send:"Отправить",fb_sent:"Отправлено ✓ Спасибо!",fb_err:"Не отправлено. Попробуйте ещё раз.",fb_empty:"Пожалуйста, напишите текст.",fb_mine:"Ваши обращения",fb_none:"Пока нет обращений.",fb_st_new:"Новое",fb_st_read:"Просмотрено",fb_st_resolved:"Решено",fb_reply:"Ответ администрации:",
     kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
@@ -1650,7 +1652,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1659,7 +1661,43 @@ function renderKabinet(){
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
-    renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); }
+    renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); renderKabFeedback(s); }
+}
+// Arz-shikoyat / e'tirof — ota-ona/o'quvchi maktab ma'muriyatiga yozadi; o'z murojaatlari + javobni ko'radi.
+async function renderKabFeedback(s){
+  const t=T[lang], box=$("#kab-feedback");
+  if(!box || !(window.IqrorFB&&window.IqrorFB.submitFeedback)) return;
+  const A=window.IqrorAuth, role=(A&&A.getUser&&A.getUser()&&A.getUser().__role)||'parent';
+  const draw=(mine)=>{
+    const rows=(mine||[]).map(f=>{ const st=f.status==='resolved'?t.fb_st_resolved:(f.status==='read'?t.fb_st_read:t.fb_st_new);
+      const stc=f.status==='resolved'?'#1F9982':(f.status==='read'?'#B45309':'#B42318');
+      const tl={shikoyat:t.fb_type_shikoyat,etirof:t.fb_type_etirof,taklif:t.fb_type_taklif}[f.type]||f.type;
+      return `<div style="border:1px solid #e6ece8;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b style="font-size:13px">${esc(tl)}</b><span style="font-size:12px;font-weight:700;color:${stc}">${esc(st)}</span></div>
+        <div style="font-size:13px;color:#33443d;margin-top:4px;white-space:pre-wrap">${esc(f.text||'')}</div>
+        ${f.reply?`<div style="margin-top:6px;padding:8px 10px;background:#f0f7f4;border-radius:8px;font-size:13px"><b>${esc(t.fb_reply)}</b> ${esc(f.reply)}</div>`:''}</div>`; }).join('');
+    box.innerHTML=`<div class="kab-att-card"><div class="subs-l">📨 ${esc(t.fb_title)}</div>
+      <div class="small" style="color:var(--muted);margin:2px 0 10px">${esc(t.fb_hint)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <select id="fb-type" style="padding:9px 11px;border:1px solid #d7ddd4;border-radius:9px;font:inherit;background:#fff">
+          <option value="shikoyat">${esc(t.fb_type_shikoyat)}</option>
+          <option value="etirof">${esc(t.fb_type_etirof)}</option>
+          <option value="taklif">${esc(t.fb_type_taklif)}</option></select></div>
+      <textarea id="fb-text" rows="3" placeholder="${esc(t.fb_ph)}" style="width:100%;padding:10px;border:1px solid #d7ddd4;border-radius:10px;font:inherit;line-height:1.5;resize:vertical"></textarea>
+      <div id="fb-msg" class="small" style="margin:6px 0;display:none"></div>
+      <button id="fb-send" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.fb_send)}</button>
+      ${rows?`<div style="margin-top:16px"><div class="subs-l" style="font-size:14px;margin-bottom:8px">${esc(t.fb_mine)}</div>${rows}</div>`:''}</div>`;
+    const btn=$("#fb-send"), txt=$("#fb-text"), msg=$("#fb-msg");
+    if(btn) btn.onclick=async()=>{ const text=(txt&&txt.value.trim())||''; const type=($("#fb-type")&&$("#fb-type").value)||'shikoyat';
+      if(!text){ if(msg){ msg.style.display='block'; msg.style.color='#B42318'; msg.textContent=t.fb_empty; } return; }
+      btn.disabled=true; btn.textContent='…';
+      const ok=await window.IqrorFB.submitFeedback({ type, text, authorRole:role, studentId:(s&&s.id)||'', studentName:(s&&s.name)||'' });
+      btn.disabled=false; btn.textContent=t.fb_send;
+      if(ok){ if(msg){ msg.style.display='block'; msg.style.color='#1F9982'; msg.textContent=t.fb_sent; } if(txt) txt.value=''; try{ const m=await window.IqrorFB.getMyFeedback(); if($("#kab-feedback")===box) draw(m); }catch(e){} }
+      else if(msg){ msg.style.display='block'; msg.style.color='#B42318'; msg.textContent=t.fb_err; } };
+  };
+  draw([]);
+  try{ const mine=await window.IqrorFB.getMyFeedback(); if($("#kab-feedback")===box) draw(mine); }catch(e){}
 }
 // Choraklik xarakteristika — umumiy + fan izohlari (Firestore'dan to'g'ridan-to'g'ri)
 async function renderKabProfile(studentId){
@@ -2287,6 +2325,25 @@ addEventListener('hashchange', ()=>route(true));
           items.sort((a,b)=>String(b.dueDate||'').localeCompare(String(a.dueDate||'')));
           return items;
         }catch(e){ return null; }
+      },
+      // Arz-shikoyat / e'tirof — ota-ona/o'quvchi maktab ma'muriyatiga yuboradi (feedback).
+      async submitFeedback(data){
+        if(!db||!fsMod) return false;
+        const A=window.IqrorAuth, u=(A&&A.getUser&&A.getUser())||null; if(!u) return false;
+        try{ await fsMod.addDoc(fsMod.collection(db,'feedback'), {
+            type:String((data&&data.type)||'shikoyat'), uid:u.uid,
+            authorName:u.displayName||u.email||'', authorRole:String((data&&data.authorRole)||'parent'),
+            studentId:String((data&&data.studentId)||''), studentName:String((data&&data.studentName)||''),
+            text:String((data&&data.text)||'').slice(0,4000), status:'new', createdAt:fsMod.serverTimestamp() });
+          return true; }catch(e){ return false; }
+      },
+      async getMyFeedback(){
+        if(!db||!fsMod) return [];
+        const A=window.IqrorAuth, u=(A&&A.getUser&&A.getUser())||null; if(!u) return [];
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap=await getDocs(query(collection(db,'feedback'), where('uid','==',u.uid)));
+          return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0)));
+        }catch(e){ return []; }
       }
     };
 

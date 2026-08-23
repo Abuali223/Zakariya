@@ -845,7 +845,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','profile'],
-  hr:['teachers'], admin:['enrollments'], admin_head:['enrollments'],
+  hr:['teachers'], admin:['enrollments','feedback'], admin_head:['enrollments','feedback'],
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
@@ -960,6 +960,7 @@ function buildTabs(){
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
+    {k:'feedback', icon:mi('M240-400h480v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z'), t:'Arz-shikoyat'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
     {k:'pricetable', icon:mi('M120-120v-720h720v720H120Zm80-80h240v-160H200v160Zm320 0h240v-160H520v160ZM200-360h240v-160H200v160Zm320 0h240v-160H520v160ZM200-600h560v-160H200v160Z'), t:'Narx jadvali'},
@@ -997,6 +998,7 @@ function openTab(tab){
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
   if(tab==='marketing') return renderMarketing();
+  if(tab==='feedback') return renderFeedback();
   renderCollection(tab);
 }
 
@@ -3663,6 +3665,55 @@ async function pmLoadCtx(month, students, amount){
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
   const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0 };
   return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, priceEmpty:!Object.keys(priceMap).length };
+}
+// ==== ARZ-SHIKOYAT / E'TIROF (feedback inbox) — Direktor + Ma'muriyat rahbari ====
+async function renderFeedback(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Arz-shikoyat va e‘tiroflar</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Ota-onalar va o‘quvchilardan kelgan murojaatlar. Holat: Yangi → Ko‘rildi → Hal qilindi. Javob yozsangiz — kabinetда ko‘rinadi.</p>
+    <div class="card" style="padding:12px 18px;margin-bottom:14px"><div class="att-controls">
+      <label>Tur<select id="fb-f-type"><option value="">Barchasi</option><option value="shikoyat">Shikoyat</option><option value="etirof">E‘tirof</option><option value="taklif">Taklif</option></select></label>
+      <label>Holat<select id="fb-f-status"><option value="">Barchasi</option><option value="new">Yangi</option><option value="read">Ko‘rildi</option><option value="resolved">Hal qilindi</option></select></label>
+    </div></div>
+    <div id="fb-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  let ALL=[];
+  const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,16).replace('T',' '); }catch(e){} return String(v).slice(0,16).replace('T',' '); };
+  const typeLbl={shikoyat:'Shikoyat',etirof:'E‘tirof',taklif:'Taklif'};
+  const typeCol={shikoyat:'#B42318',etirof:'#1F9982',taklif:'#B45309'};
+  const stLbl={new:'Yangi',read:'Ko‘rildi',resolved:'Hal qilindi'};
+  const stCol={new:'#B42318',read:'#B45309',resolved:'#1F9982'};
+  const draw=()=>{
+    const ft=$('#fb-f-type').value, fs=$('#fb-f-status').value;
+    const rows=ALL.filter(f=>(!ft||f.type===ft)&&(!fs||(f.status||'new')===fs))
+      .sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0)));
+    const newN=ALL.filter(f=>(f.status||'new')==='new').length;
+    if(!rows.length){ $('#fb-body').innerHTML='<div class="card"><div class="empty">Murojaat yo‘q.</div></div>'; return; }
+    const cards=rows.map(f=>{ const sid=f._id; const stt=f.status||'new';
+      return `<div class="card" style="margin-bottom:12px;border-left:4px solid ${typeCol[f.type]||'#8A9691'}">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div><b style="color:${typeCol[f.type]||'#333'}">${esc(typeLbl[f.type]||f.type||'')}</b>
+            <span class="small muted"> · ${esc(f.authorName||'—')} (${esc(f.authorRole==='student'?'o‘quvchi':'ota-ona')})${f.studentName?` · ${esc(f.studentName)}`:''} · ${esc(dstr(f.createdAt))}</span></div>
+          <span class="chip" style="background:${stCol[stt]}22;color:${stCol[stt]};font-weight:700">${esc(stLbl[stt]||'')}</span>
+        </div>
+        <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5">${esc(f.text||'')}</div>
+        ${f.reply?`<div style="margin-top:8px;padding:9px 12px;background:#f0f7f4;border-radius:9px"><b class="small">Javob:</b> ${esc(f.reply)}</div>`:''}
+        <div class="row-actions" style="margin-top:10px">
+          ${stt==='new'?`<button class="btn sm ghost2" data-read="${esc(sid)}">Ko‘rildi</button>`:''}
+          ${stt!=='resolved'?`<button class="btn sm" data-resolve="${esc(sid)}">Hal qilindi</button>`:''}
+          <button class="btn sm ghost2" data-reply="${esc(sid)}">✉️ Javob yozish</button>
+          ${SESSION.isAdmin?`<button class="btn sm danger" data-del="${esc(sid)}">O‘chir</button>`:''}
+        </div></div>`; }).join('');
+    $('#fb-body').innerHTML=`<div class="small muted" style="margin-bottom:10px">Jami: ${rows.length}${newN?` · <b style="color:#B42318">${newN} yangi</b>`:''}</div>`+cards;
+    const upd=async(sid,patch)=>{ try{ await setDoc(doc(db,'feedback',sid),Object.assign({updatedAt:serverTimestamp()},patch),{merge:true}); const it=ALL.find(x=>x._id===sid); if(it)Object.assign(it,patch); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+    $('#fb-body').querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>upd(b.dataset.read,{status:'read'}));
+    $('#fb-body').querySelectorAll('[data-resolve]').forEach(b=>b.onclick=()=>upd(b.dataset.resolve,{status:'resolved'}));
+    $('#fb-body').querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>{ const it=ALL.find(x=>x._id===b.dataset.reply)||{}; const v=prompt('Javob (ota-ona/o‘quvchi kabinetда ko‘radi):', it.reply||''); if(v==null) return; upd(b.dataset.reply,{reply:String(v).trim(), status:'resolved'}); });
+    $('#fb-body').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Murojaat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'feedback',b.dataset.del)); ALL=ALL.filter(x=>x._id!==b.dataset.del); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+  };
+  try{ const s=await getDocs(collection(db,'feedback')); ALL=s.docs.map(d=>({_id:d.id,...d.data()})); }
+  catch(e){ $('#fb-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«feedback» jadvali bazada yaratilganini tekshiring (migration/feedback.sql).</span></div></div>`; return; }
+  $('#fb-f-type').addEventListener('change',draw);
+  $('#fb-f-status').addEventListener('change',draw);
+  draw();
 }
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
