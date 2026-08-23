@@ -1004,6 +1004,7 @@ const T = {
     kab_dl:"📄 Rasmiy profilni yuklab olish",kab_dl_hint:"Farzandingizning to‘liq rasmiy profili (PDF) — QR orqali tekshiriladi.",kab_dl_wait:"Tayyorlanmoqda…",
     fb_title:"Murojaat: arz-shikoyat yoki e‘tirof",fb_hint:"Fikringiz to‘g‘ridan-to‘g‘ri maktab ma‘muriyatiga boradi. Ismingiz ko‘rinadi.",fb_type_shikoyat:"Shikoyat",fb_type_etirof:"E‘tirof (minnatdorchilik)",fb_type_taklif:"Taklif",fb_ph:"Murojaatingizni yozing…",fb_send:"Yuborish",fb_sent:"Yuborildi ✓ Rahmat!",fb_err:"Yuborilmadi. Qayta urining.",fb_empty:"Iltimos, matn yozing.",fb_mine:"Sizning murojaatlaringiz",fb_none:"Hozircha murojaat yo‘q.",fb_st_new:"Yangi",fb_st_read:"Ko‘rildi",fb_st_resolved:"Hal qilindi",fb_reply:"Ma‘muriyat javobi:",
     rate_title:"Ustozlarga baho",rate_hint:"Har bir ustozga 1–5 yulduz qo‘ying. Sizdan bitta ovoz — istalgan vaqt o‘zgartirsangiz bo‘ladi.",rate_g5:"Reyting qo‘yish 5-sinfdan boshlab mumkin.",rate_thanks:"Rahmat! Bahoyingiz qabul qilindi.",rate_err:"Saqlanmadi. Qayta urining.",
+    exam_title:"📅 Imtihon jadvali",exam_loading:"Yuklanmoqda…",exam_none:"Hozircha imtihon rejalashtirilmagan.",
     kab_pay_title:"To‘lovlar",kab_pay_loading:"To‘lovlar yuklanmoqda…",kab_pay_none:"Hozircha to‘lov hisob-fakturasi yo‘q.",kab_pay_paid:"To‘landi",kab_pay_soon:"To‘lov tez orada ulanadi",kab_pay_note:"Tugmani bosib Click yoki Uzum ilovasi orqali to‘lang. To‘lov qabul qilingach, holat avtomatik «To‘landi» bo‘ladi.",som:"so‘m",
     kab_gr_avg:"O‘rtacha",kab_gr_subjects:"Fanlar",kab_gr_quarters:"Choraklar",
     kab_gr_subject:"Fan",kab_gr_year:"Yillik",kab_gr_dynamics:"O‘sish dinamikasi (chorak o‘rtachasi)",
@@ -1124,6 +1125,7 @@ const T = {
     kab_dl:"📄 Скачать официальный профиль",kab_dl_hint:"Полный официальный профиль ребёнка (PDF) — проверяется по QR.",kab_dl_wait:"Готовится…",
     fb_title:"Обращение: жалоба или благодарность",fb_hint:"Ваше сообщение направляется напрямую администрации школы. Ваше имя будет видно.",fb_type_shikoyat:"Жалоба",fb_type_etirof:"Благодарность",fb_type_taklif:"Предложение",fb_ph:"Напишите ваше обращение…",fb_send:"Отправить",fb_sent:"Отправлено ✓ Спасибо!",fb_err:"Не отправлено. Попробуйте ещё раз.",fb_empty:"Пожалуйста, напишите текст.",fb_mine:"Ваши обращения",fb_none:"Пока нет обращений.",fb_st_new:"Новое",fb_st_read:"Просмотрено",fb_st_resolved:"Решено",fb_reply:"Ответ администрации:",
     rate_title:"Оценка учителей",rate_hint:"Поставьте каждому учителю 1–5 звёзд. Один голос от вас — можно изменить в любое время.",rate_g5:"Оценивать можно с 5 класса.",rate_thanks:"Спасибо! Ваша оценка принята.",rate_err:"Не сохранено. Попробуйте ещё раз.",
+    exam_title:"📅 Расписание экзаменов",exam_loading:"Загрузка…",exam_none:"Экзамены пока не запланированы.",
     kab_pay_title:"Оплаты",kab_pay_loading:"Загрузка оплат…",kab_pay_none:"Пока нет счетов на оплату.",kab_pay_paid:"Оплачено",kab_pay_soon:"Оплата скоро будет подключена",kab_pay_note:"Нажмите кнопку и оплатите через приложение Click или Uzum. После оплаты статус автоматически станет «Оплачено».",som:"сум",
     kab_gr_avg:"Средний",kab_gr_subjects:"Предметы",kab_gr_quarters:"Четверти",
     kab_gr_subject:"Предмет",kab_gr_year:"Год",kab_gr_dynamics:"Динамика роста (среднее за четверть)",
@@ -1654,7 +1656,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1663,7 +1665,17 @@ function renderKabinet(){
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
-    renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+    renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+}
+// Imtihon jadvali — o'quvchi/ota-ona sinf bo'yicha ko'radi.
+async function renderKabExams(s){
+  const t=T[lang], box=$("#kab-exams"); if(!box || !(window.IqrorFB&&window.IqrorFB.getExams)) return;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.exam_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.exam_loading)}</div></div>`;
+  const items=await window.IqrorFB.getExams(kabClassKey(s));
+  if($("#kab-exams")!==box) return;
+  if(!items || !items.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.exam_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.exam_none)}</div></div>`; return; }
+  const list=items.map(x=>`<div class="khw-item"><div class="khw-top"><span class="khw-subj">${esc(x.subject||'')}</span><span class="khw-due">📅 ${esc(x.date||'')}${x.time?` · ${esc(x.time)}`:''}${x.room?` · ${esc(x.room)}`:''}</span></div>${x.note?`<div class="khw-text">${esc(x.note)}</div>`:''}</div>`).join('');
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.exam_title)}</div><div class="khw-list">${list}</div></div>`;
 }
 // Ustozga reyting — ota-ona har doim; o'quvchi 5-sinfdan. Bir foydalanuvchi bir ustozga bitta ovoz.
 async function renderKabRating(s){
@@ -2395,6 +2407,13 @@ addEventListener('hashchange', ()=>route(true));
         try{ const snap=await getDocs(query(collection(db,'teacher_ratings'), where('uid','==',u.uid)));
           const map={}; snap.docs.forEach(d=>{ const x=d.data(); map[x.teacherId]=Number(x.stars)||0; }); return map;
         }catch(e){ return {}; }
+      },
+      async getExams(classKey){
+        if(!db||!fsMod||!classKey) return [];
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap=await getDocs(query(collection(db,'exams'), where('classKey','==',classKey)));
+          return snap.docs.map(d=>d.data()).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+        }catch(e){ return []; }
       }
     };
 

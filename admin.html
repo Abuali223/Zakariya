@@ -844,7 +844,7 @@ let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects
 const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
-const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','profile'],
+const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','profile'],
   hr:['teachers'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
@@ -957,6 +957,7 @@ function buildTabs(){
     {k:'profile', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h140v-80H360v80Zm-120 320v-640 640Z'), t:'Xarakteristika'},
     {k:'timetable', icon:mi('M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z'), t:'Dars jadvali'},
     {k:'homework', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM320-280h320v-80H320v80Zm0-160h320v-80H320v80Z'), t:'Uy vazifalari'},
+    {k:'exams', icon:mi('M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm280 240 120-60-120-60v120Z'), t:'Imtihon jadvali'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
@@ -1001,6 +1002,7 @@ function openTab(tab){
   if(tab==='marketing') return renderMarketing();
   if(tab==='feedback') return renderFeedback();
   if(tab==='sick') return renderSick();
+  if(tab==='exams') return renderExams();
   renderCollection(tab);
 }
 
@@ -1921,6 +1923,52 @@ async function renderHomework(){
     $('#hw-list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Vazifa o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'homework',b.dataset.del)); toast('O‘chirildi'); load(); }catch(e){ toast('Xatolik',true); } });
   };
   $('#hw-class').addEventListener('change',load);
+}
+// ==== IMTIHON JADVALI — har sinf uchun; o'quvchi/ota-ona kabinetда ko'radi (Direktor + Zavuch) ====
+async function renderExams(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Imtihon jadvali</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Har sinf uchun imtihon sanalari. O‘quvchi va ota-ona kabinetда ko‘radi.</p>
+    <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Sinf<select id="ex-class"><option value="">— tanlang —</option></select></label>
+    </div></div>
+    <div id="ex-body"><div class="cls-empty" style="margin:0">Sinfni tanlang.</div></div>`;
+  let students;
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#ex-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  await loadDefinedClasses();
+  const {classes,keys}=classGroupsMap(students);
+  $('#ex-class').innerHTML=`<option value="">— tanlang —</option>`+keys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
+  const load=async()=>{
+    const ck=$('#ex-class').value; if(!ck){ $('#ex-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinfni tanlang.</div>`; return; }
+    const cls=classes[ck];
+    $('#ex-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    let items=[];
+    try{ const snap=await getDocs(query(collection(db,'exams'), where('classKey','==',ck))); items=snap.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+    items.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+    const list=items.length? items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+        <div><b>${esc(x.subject||'')}</b> <span class="small muted">· ${esc(x.date||'')}${x.time?` · ${esc(x.time)}`:''}${x.room?` · ${esc(x.room)}-xona`:''}</span>${x.note?`<div class="small muted">${esc(x.note)}</div>`:''}</div>
+        <button class="btn sm danger" data-del="${esc(x._id)}">O‘chir</button></div>`).join('') : `<div class="empty">Hozircha imtihon yo‘q.</div>`;
+    $('#ex-body').innerHTML=`
+      <div class="card" style="margin-bottom:16px"><div class="cls-card-head"><h3>Yangi imtihon — ${esc(cls.label)}</h3></div>
+        <div style="padding:16px 20px">
+          <div class="grid2"><div><label>Fan</label><input id="ex-subject" placeholder="Masalan: Matematika"></div>
+          <div><label>Sana</label><input id="ex-date" type="date"></div></div>
+          <div class="grid2" style="margin-top:10px"><div><label>Vaqt (ixtiyoriy)</label><input id="ex-time" type="time"></div>
+          <div><label>Xona (ixtiyoriy)</label><input id="ex-room" placeholder="Masalan: 204"></div></div>
+          <div style="margin-top:10px"><label>Izoh (ixtiyoriy)</label><input id="ex-note" placeholder="Masalan: yozma, 90 daqiqa"></div>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end"><button class="btn gold" id="ex-add">Qo‘shish</button></div>
+        </div></div>
+      <div class="card"><div class="cls-card-head"><h3>Imtihonlar</h3><span class="cls-count">${items.length}</span></div><div id="ex-list">${list}</div></div>`;
+    $('#ex-add').onclick=async()=>{
+      const subject=$('#ex-subject').value.trim(), date=$('#ex-date').value, time=$('#ex-time').value, room=$('#ex-room').value.trim(), note=$('#ex-note').value.trim();
+      if(!subject||!date){ toast('Fan va sanani kiriting',true); return; }
+      const btn=$('#ex-add'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{ await addDoc(collection(db,'exams'),{classKey:ck,subject,date,time:time||'',room:room||'',note:note||'',createdAt:serverTimestamp()}); toast('Imtihon qo‘shildi ✓'); load(); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Qo‘shish'; }
+    };
+    $('#ex-list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Imtihon o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'exams',b.dataset.del)); toast('O‘chirildi'); load(); }catch(e){ toast('Xatolik',true); } });
+  };
+  $('#ex-class').addEventListener('change',load);
 }
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
