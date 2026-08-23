@@ -28,4 +28,5 @@
 \ir staff-advances.sql
 \ir credit-ledger.sql
 \ir manual-payments.sql
+\ir roles-rbac.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

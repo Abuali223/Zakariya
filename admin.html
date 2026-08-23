@@ -841,9 +841,11 @@ let currentTab = 'dashboard';
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
 let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
-const ROLE_LABEL = { admin:'Administrator', director:'Direktor', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', admin_head:'Ma‘muriyat rahbari', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
-// Har bir xodim roli ko'radigan tab(lar) (admin — hammasi)
-const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['monitoring','profile'],
+const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
+// Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
+// Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
+const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','profile'],
+  hr:['teachers'], admin:['enrollments'], admin_head:['enrollments'],
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
@@ -908,11 +910,14 @@ $('#google-btn').addEventListener('click', async ()=>{
 onAuthStateChanged(auth, async user=>{
   if(!user){ show('login'); return; }
   const tok = await user.getIdTokenResult().catch(()=>null);
-  let role = (tok && tok.claims && tok.claims.admin) ? 'admin' : '';
+  // Rol MANBAI — users.role (yagona haqiqat). Eski (legacy) superuser claim'i bo'lsa,
+  // endi u DIREKTORga ishora qiladi (superuser 'admin'dan 'director'ga ko'chdi).
+  let role = '';
   let assignedClasses = [], assignedSubjects = [], homeroomClasses = [];
-  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(!role && d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
-  // Panelга kirish huquqiga ega rollar: admin, kurator, o'qituvchi, zavuch
-  const STAFF = ['admin','director','kurator','teacher','zavuch','finance_mgr','treasurer','marketing_mgr'];
+  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
+  if(!role && tok && tok.claims && tok.claims.admin) role='director';
+  // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
+  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','marketing_mgr'];
   if(!STAFF.includes(role)){
     await signOut(auth);
     // Xabar HAR DOIM ko'rsatiladi (yangi kirishда ham, saqlangan sessiya qayta yuklanganда ham).
@@ -924,8 +929,8 @@ onAuthStateChanged(auth, async user=>{
     loginAttempted=false;
     show('login'); return;
   }
-  // Direktor = to'liq admin ruxsati (kanonik ruxsat-rol). O'IBDO' = zavuch (allaqachon).
-  SESSION = { role: role==='director'?'admin':role, isAdmin: (role==='admin'||role==='director'), assignedClasses, assignedSubjects, homeroomClasses };
+  // Superuser = FAQAT Direktor. 'admin'/'admin_head' endi ma'muriyat rahbari (cheklangan).
+  SESSION = { role, isAdmin: (role==='director'), assignedClasses, assignedSubjects, homeroomClasses };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
@@ -2463,8 +2468,8 @@ async function renderUsers(){
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   const roleOpts=[
-    ['director','Direktor'],['admin','Administrator'],['zavuch','O‘IBDO‘'],
-    ['hr','HR'],['admin_head','Ma‘muriyat rahbari'],['finance_mgr','Moliya menejeri'],['marketing_mgr','Marketing menejeri'],
+    ['director','Direktor (superuser)'],['admin','Ma‘muriyat rahbari'],['zavuch','O‘IBDO‘'],
+    ['hr','HR'],['finance_mgr','Moliya menejeri'],['marketing_mgr','Marketing menejeri'],
     ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
     ['reception','Qabulxona xodimi'],['treasurer','G‘aznachi'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
     ['parent','Ota-ona'],['student','O‘quvchi']
