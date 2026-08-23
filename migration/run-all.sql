@@ -30,4 +30,5 @@
 \ir manual-payments.sql
 \ir roles-rbac.sql
 \ir feedback.sql
+\ir teacher-ratings.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
