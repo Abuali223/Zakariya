@@ -844,7 +844,7 @@ let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects
 const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
-const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','profile'],
+const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
   hr:['teachers'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
@@ -958,6 +958,7 @@ function buildTabs(){
     {k:'timetable', icon:mi('M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z'), t:'Dars jadvali'},
     {k:'homework', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM320-280h320v-80H320v80Zm0-160h320v-80H320v80Z'), t:'Uy vazifalari'},
     {k:'exams', icon:mi('M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm280 240 120-60-120-60v120Z'), t:'Imtihon jadvali'},
+    {k:'olympiads', icon:mi('M480-320q83 0 141.5-58.5T680-520v-200H280v200q0 83 58.5 141.5T480-320Zm0 80q-117 0-198.5-81.5T200-520v-280h560v280q0 117-81.5 198.5T480-240Zm-160 160v-80h320v80H320ZM160-620v-120h80q-17 0-28.5 11.5T200-700v80h-40Zm640 0v-80q0-17-11.5-28.5T760-740h80v120h-80ZM480-540Z'), t:'Olimpiada'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
     {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
@@ -1003,6 +1004,7 @@ function openTab(tab){
   if(tab==='feedback') return renderFeedback();
   if(tab==='sick') return renderSick();
   if(tab==='exams') return renderExams();
+  if(tab==='olympiads') return renderOlympiads();
   renderCollection(tab);
 }
 
@@ -1969,6 +1971,92 @@ async function renderExams(){
     $('#ex-list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Imtihon o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'exams',b.dataset.del)); toast('O‘chirildi'); load(); }catch(e){ toast('Xatolik',true); } });
   };
   $('#ex-class').addEventListener('change',load);
+}
+// ==== OLIMPIADA BOSHQARUVI — o'quvchi olimpiada ishtiroki/natijasi (Direktor + Zavuch) ====
+async function renderOlympiads(){
+  const LEVELS=[['maktab','Maktab'],['tuman','Tuman/shahar'],['viloyat','Viloyat'],['respublika','Respublika'],['xalqaro','Xalqaro']];
+  const RESULTS=[['ishtirokchi','Ishtirokchi'],['3','3-o‘rin'],['2','2-o‘rin'],['1','1-o‘rin'],['golib','G‘olib'],['laureat','Laureat']];
+  const LVL={}; LEVELS.forEach(l=>LVL[l[0]]=l[1]); const RES={}; RESULTS.forEach(r=>RES[r[0]]=r[1]);
+  const lvlCol={maktab:'#8A9691',tuman:'#0891B2',viloyat:'#2563EB',respublika:'#7C3AED',xalqaro:'#B45309'};
+  $('#view').innerHTML = `<div class="page-head"><h2>Olimpiada</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">O‘quvchilarning olimpiada/tanlov ishtiroki va natijalari. Daraja: Maktab → Xalqaro. G‘olibga 100% grant chegirmasini belgilash mumkin.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Daraja<select id="ol-f-level"><option value="">Barchasi</option>${LEVELS.map(l=>`<option value="${l[0]}">${esc(l[1])}</option>`).join('')}</select></label>
+      <label>Natija<select id="ol-f-res"><option value="">Barchasi</option>${RESULTS.map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></label>
+      <label>&nbsp;<button class="btn gold" id="ol-add-btn" style="width:100%">+ Olimpiada qo‘shish</button></label>
+    </div></div>
+    <div id="ol-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  let students, ALL=[];
+  try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
+  catch(e){ $('#ol-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+  const stById={}; students.forEach(s=>{ stById[s.studentId||s._id]=s; });
+  const nm=o=>{ const s=stById[o.studentId]; return (s&&s.name)||o.studentName||o.studentId||''; };
+  const cl=o=>{ const s=stById[o.studentId]; return s?classLabelOf(s):(o.classKey||'—'); };
+  const draw=()=>{
+    const fl=$('#ol-f-level').value, fr=$('#ol-f-res').value;
+    const rows=ALL.filter(o=>(!fl||o.level===fl)&&(!fr||String(o.result)===fr)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const winners=ALL.filter(o=>o.result && o.result!=='ishtirokchi').length;
+    if(!ALL.length){ $('#ol-body').innerHTML=`<div class="card"><div class="empty">Hozircha olimpiada yozuvi yo‘q. «+ Olimpiada qo‘shish» tugmasini bosing.</div></div>`; return; }
+    const trs=rows.map(o=>`<tr>
+      <td data-label="O‘quvchi">${esc(nm(o))}<div class="small muted">${esc(cl(o))}</div></td>
+      <td data-label="Fan/Olimpiada">${esc(o.subject||'')}${o.name?`<div class="small muted">${esc(o.name)}</div>`:''}</td>
+      <td data-label="Daraja"><span class="chip" style="background:${lvlCol[o.level]||'#8A9691'}22;color:${lvlCol[o.level]||'#555'};font-weight:700">${esc(LVL[o.level]||o.level||'')}</span></td>
+      <td data-label="Natija"><b style="color:${(o.result&&o.result!=='ishtirokchi')?'#1F9982':'#555'}">${esc(RES[o.result]||o.result||'')}</b></td>
+      <td data-label="Sana">${esc(o.date||'')}</td>
+      <td data-label="Murabbiy" class="small muted">${esc(o.mentor||'')}</td>
+      <td class="td-actions"><div class="row-actions">
+        ${SESSION.isAdmin?`<button class="btn sm ghost2" data-grant="${esc(o._id)}" title="Shu o‘quvchiga 100% grant (olimpiada) chegirmasini belgilash">🎓 Grant</button>`:''}
+        <button class="btn sm danger" data-del="${esc(o._id)}">O‘chir</button></div></td></tr>`).join('');
+    $('#ol-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>Natijalar</h3><span class="cls-count">Jami ${ALL.length} · g‘oliblar ${winners}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Fan / Olimpiada</th><th>Daraja</th><th>Natija</th><th>Sana</th><th>Murabbiy</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+    $('#ol-body').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Yozuv o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'olympiads',b.dataset.del)); ALL=ALL.filter(x=>x._id!==b.dataset.del); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+    $('#ol-body').querySelectorAll('[data-grant]').forEach(b=>b.onclick=async()=>{ const o=ALL.find(x=>x._id===b.dataset.grant); if(!o) return;
+      if(!confirm(`«${nm(o)}» — 100% grant (olimpiada) chegirmasi belgilanadi. Keyingi hisob-fakturalar 0 so‘m bo‘ladi. Davom etilsinmi?`)) return;
+      try{ await setDoc(doc(db,'student_private',String(o.studentId)),{specialCategory:'olympiad'},{merge:true}); toast('100% grant belgilandi ✓ («To‘lovlar»да qayta hisoblang)'); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+  };
+  const openOlyForm=()=>{
+    const sopts=students.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(s=>`<option value="${esc(s.studentId||s._id)}">${esc(s.name||'')} · ${esc(classLabelOf(s))}</option>`).join('');
+    const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
+    $('#modal').innerHTML=`<div class="modal-h"><h3>Olimpiada qo‘shish</h3><button class="x" id="m-x">×</button></div>
+      <div class="modal-b">
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">O‘quvchi<select id="ol-student" style="${fld};background:#fff"><option value="">— tanlang —</option>${sopts}</select></label>
+        <div class="grid2" style="margin-top:8px">
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Fan<input id="ol-subject" placeholder="Masalan: Matematika" style="${fld}"></label>
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Olimpiada nomi<input id="ol-name" placeholder="ixtiyoriy" style="${fld}"></label>
+        </div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Daraja<select id="ol-level" style="${fld};background:#fff">${LEVELS.map(l=>`<option value="${l[0]}">${esc(l[1])}</option>`).join('')}</select></label>
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Natija<select id="ol-res" style="${fld};background:#fff">${RESULTS.map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></label>
+        </div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="ol-date" type="date" style="${fld}"></label>
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Murabbiy (ixtiyoriy)<input id="ol-mentor" placeholder="o‘qituvchi ismi" style="${fld}"></label>
+        </div>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="ol-note" placeholder="ixtiyoriy" style="${fld}"></label>
+      </div>
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="ol-save">Saqlash</button></div>`;
+    openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    $('#ol-save').onclick=async()=>{
+      const sid=$('#ol-student').value, subject=$('#ol-subject').value.trim(), name=$('#ol-name').value.trim(),
+        level=$('#ol-level').value, result=$('#ol-res').value, date=$('#ol-date').value, mentor=$('#ol-mentor').value.trim(), note=$('#ol-note').value.trim();
+      if(!sid){ toast('O‘quvchini tanlang',true); return; }
+      if(!subject){ toast('Fanni kiriting',true); return; }
+      const s=stById[sid]||{}; const btn=$('#ol-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{ await addDoc(collection(db,'olympiads'),{ studentId:String(sid), studentName:s.name||sid, classKey:s?classKeyOf(s):'', subject, name, level, result, date:date||'', mentor, note, createdAt:serverTimestamp() });
+        toast('Saqlandi ✓'); closeModal(); load(); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+    };
+  };
+  const load=async()=>{
+    try{ const snap=await getDocs(collection(db,'olympiads')); ALL=snap.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ $('#ol-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«olympiads» jadvali bazada yaratilganini tekshiring (migration/olympiads.sql).</span></div></div>`; return; }
+    draw();
+  };
+  $('#ol-add-btn').addEventListener('click',openOlyForm);
+  $('#ol-f-level').addEventListener('change',draw);
+  $('#ol-f-res').addEventListener('change',draw);
+  load();
 }
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar</h2>
