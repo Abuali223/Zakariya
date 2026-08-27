@@ -106,7 +106,10 @@ export class GoogleAuthProvider {
   static credential() { return null; }
 }
 async function _oauthGoogle() {
-  const redirectTo = (typeof location !== "undefined") ? location.href : undefined;
+  // MUHIM: redirectTo'да fragment (#...) BO'LMASLIGI kerak — OAuth token ham fragmentда
+  // qaytadi va #ariza kabi mavjud fragment bilan to'qnashib, seans o'rnatilmaydi
+  // (bad_oauth_state). Shu sabab hash'ni olib tashlaymiz (origin+path+query qoladi).
+  const redirectTo = (typeof location !== "undefined") ? location.href.split("#")[0] : undefined;
   const { error } = await supabase().auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
   if (error) throw mapErr(error);
   return new Promise(() => {});   // brauzer Google'ga yo'naltiriladi (sahifa almashadi)
