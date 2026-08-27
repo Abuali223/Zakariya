@@ -2214,20 +2214,20 @@ addEventListener('hashchange', ()=>route(true));
   // Mobil tezlik: sahifa chizilib bo'lgach, bo'sh vaqtда Firebase SDK yuklanadi
   // (kontent darhol fallback ma'lumot bilan ko'rinadi, real ma'lumot keyin qo'shiladi).
   await new Promise(r=>{ if('requestIdleCallback' in window) requestIdleCallback(()=>r(), {timeout:2500}); else setTimeout(r, 1200); });
-  try{ appMod = await import(`${V}/firebase-app.js`); }
+  try{ appMod = await import(`${V}/firebase-app.js?v=2`); }
   catch(e){ /* internet yo'q — dizayn + fallback ma'lumot bilan ishlayveradi */ }
 
   if (appMod) {
     const app = appMod.initializeApp(firebaseConfig);
-    import(`${V}/firebase-analytics.js`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
+    import(`${V}/firebase-analytics.js?v=2`).then(an=>{try{an.isSupported().then(ok=>{if(ok)window.__an=an.getAnalytics(app);}).catch(()=>{});}catch(e){}}).catch(()=>{});
 
     let db=null, auth=null;
-    try{ fsMod = await import(`${V}/firebase-firestore.js`);
+    try{ fsMod = await import(`${V}/firebase-firestore.js?v=2`);
       // Offline persistence: internetsiz ko'rilgan ma'lumot keshda saqlanadi, ulanishда yangilanadi
       try{ db = fsMod.initializeFirestore(app, { localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }) }); }
       catch(e){ db = fsMod.getFirestore(app); }
     }catch(e){}
-    try{ authMod = await import(`${V}/firebase-auth.js`); auth = authMod.getAuth(app);
+    try{ authMod = await import(`${V}/firebase-auth.js?v=2`); auth = authMod.getAuth(app);
       // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
       try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
     }catch(e){}
@@ -2279,7 +2279,7 @@ addEventListener('hashchange', ()=>route(true));
 
     // ---- Analitika + ariza API ----
     window.IqrorFB = {
-      event(name,params){ try{ if(window.__an) import(`${V}/firebase-analytics.js`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); }catch(e){} },
+      event(name,params){ try{ if(window.__an) import(`${V}/firebase-analytics.js?v=2`).then(an=>an.logEvent(window.__an,name,params||{})).catch(()=>{}); }catch(e){} },
       async submitEnrollment(data){ if(!db||!fsMod) return false; try{ await fsMod.addDoc(fsMod.collection(db,'enrollments'),{...data, created: fsMod.serverTimestamp()}); return true; }catch(e){ return false; } },
       async getAttendance(studentId){
         if(!db||!fsMod||!studentId) return null;
