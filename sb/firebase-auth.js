@@ -98,6 +98,13 @@ export async function sendEmailVerification(user) {
   const email = (user && user.email) || (_currentUser && _currentUser.email);
   try { if (email) await supabase().auth.resend({ type: "signup", email }); } catch (_) {}
 }
+// Parolni tiklash xati (recovery). Foydalanuvchi havolani bosganда recovery seansi bilan
+// qaytadi -> updatePassword(...) bilan yangi parol qo'yadi. redirectTo'да fragment BO'LMASIN.
+export async function sendPasswordResetEmail(_auth, email) {
+  const redirectTo = (typeof location !== "undefined") ? location.href.split("#")[0] : undefined;
+  const { error } = await supabase().auth.resetPasswordForEmail(String(email || "").trim(), { redirectTo });
+  if (error) throw mapErr(error);
+}
 
 export class GoogleAuthProvider {
   constructor() { this.providerId = "google.com"; this.scopes = []; }

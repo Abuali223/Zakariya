@@ -2422,7 +2422,8 @@ addEventListener('hashchange', ()=>route(true));
     // ---- Foydalanuvchi kirishi (email yoki Gmail) + rol ----
     if(auth && authMod && fsMod){
       const { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut,
-              createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } = authMod;
+              createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification,
+              sendPasswordResetEmail, updatePassword } = authMod;
       const { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, getDocs, query, where, deleteDoc } = fsMod;
       let justLoggedIn = false, currentUser = null, childIds = [], activeChild = '', userRole = null;
       // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
@@ -2470,6 +2471,7 @@ addEventListener('hashchange', ()=>route(true));
       };
 
       buildAuthUI();
+      checkPasswordRecovery();
       onAuthStateChanged(auth, async (user)=>{
         currentUser = user;
         if(!user){ childIds=[]; activeChild=''; userRole=null; setAuthUI(null); kabRefresh(); return; }
@@ -2529,13 +2531,15 @@ addEventListener('hashchange', ()=>route(true));
           <button id="am-google" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);background:#fff;border-radius:10px;padding:11px;font-size:15px;font-weight:600;cursor:pointer;margin:8px 0">
             <svg width="17" height="17" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.4c-.3 2.1-1.6 5.2-4.6 7.3l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.1-5.5c-2 1.4-4.6 2.3-8.4 2.3-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>
             Google bilan davom etish</button>
-          <div style="text-align:center;color:var(--muted);font-size:13px;margin:6px 0">— yoki email bilan —</div>
+          <div id="am-orwrap" style="text-align:center;color:var(--muted);font-size:13px;margin:6px 0">— yoki email bilan —</div>
           <div id="am-namewrap" style="display:none"><input id="am-name" aria-label="Ism-familiya" placeholder="Ism-familiya" style="${inp}"></div>
           <input id="am-email" type="email" autocomplete="email" aria-label="Email" placeholder="Email" style="${inp}">
           <input id="am-pass" type="password" autocomplete="current-password" aria-label="Parol" placeholder="Parol (kamida 6 belgi)" style="${inp}">
           <div id="am-err" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>
           <button id="am-submit" style="width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px">Kirish</button>
-          <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:12px">
+          <div id="am-forgot-wrap" style="text-align:center;font-size:13px;margin-top:10px"><a id="am-forgot" style="color:var(--teal);font-weight:600;cursor:pointer">Parolni unutdingizmi?</a></div>
+          <div id="am-back-wrap" style="display:none;text-align:center;font-size:13.5px;margin-top:10px"><a id="am-back" style="color:var(--teal);font-weight:600;cursor:pointer">← Kirishga qaytish</a></div>
+          <div id="am-toggle-wrap" style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:10px">
             <span id="am-toggle-txt">Hisobingiz yo‘qmi?</span>
             <a id="am-toggle" style="color:var(--teal);font-weight:600;cursor:pointer"> Ro‘yxatdan o‘tish</a></div>
         </div>`;
@@ -2550,20 +2554,39 @@ addEventListener('hashchange', ()=>route(true));
         setTimeout(()=>{ try{ $m('am-email').focus(); }catch(e){} },40);
         $m('am-x').onclick=closeAM;
         bg.onclick=e=>{ if(e.target===bg) closeAM(); };
-        $m('am-toggle').onclick=()=>{
-          mode = mode==='login'?'register':'login';
-          $m('am-title').textContent = mode==='login'?'Kirish':'Ro‘yxatdan o‘tish';
-          $m('am-submit').textContent = mode==='login'?'Kirish':'Ro‘yxatdan o‘tish';
-          $m('am-namewrap').style.display = mode==='register'?'block':'none';
-          $m('am-pass').autocomplete = mode==='register'?'new-password':'current-password';
-          $m('am-toggle-txt').textContent = mode==='login'?'Hisobingiz yo‘qmi?':'Hisobingiz bormi?';
-          $m('am-toggle').textContent = mode==='login'?' Ro‘yxatdan o‘tish':' Kirish';
-          $m('am-err').style.display='none';
-        };
+        function setMode(m){
+          mode=m; const isLogin=m==='login', isReg=m==='register', isReset=m==='reset';
+          $m('am-title').textContent = isReset?'Parolni tiklash':(isReg?'Ro‘yxatdan o‘tish':'Kirish');
+          $m('am-submit').textContent = isReset?'Tiklash havolasini yuborish':(isReg?'Ro‘yxatdan o‘tish':'Kirish');
+          $m('am-namewrap').style.display = isReg?'block':'none';
+          $m('am-pass').style.display = isReset?'none':'block';
+          $m('am-google').style.display = isReset?'none':'flex';
+          if($m('am-orwrap')) $m('am-orwrap').style.display = isReset?'none':'block';
+          $m('am-forgot-wrap').style.display = isLogin?'block':'none';
+          $m('am-toggle-wrap').style.display = isReset?'none':'block';
+          $m('am-back-wrap').style.display = isReset?'block':'none';
+          $m('am-pass').autocomplete = isReg?'new-password':'current-password';
+          $m('am-toggle-txt').textContent = isLogin?'Hisobingiz yo‘qmi?':'Hisobingiz bormi?';
+          $m('am-toggle').textContent = isLogin?' Ro‘yxatdan o‘tish':' Kirish';
+          $m('am-err').style.display='none'; $m('am-submit').disabled=false;
+        }
+        $m('am-toggle').onclick=()=> setMode(mode==='login'?'register':'login');
+        $m('am-forgot').onclick=()=> setMode('reset');
+        $m('am-back').onclick=()=> setMode('login');
         $m('am-google').onclick=()=>{ justLoggedIn=true; googleSignIn()
           .then(()=>closeAM()).catch(e=>{ justLoggedIn=false; showErr('Google: '+(e.code||e.message)); }); };
         $m('am-submit').onclick=async()=>{
           const email=$m('am-email').value.trim(), pass=$m('am-pass').value;
+          if(mode==='reset'){
+            if(!email){ showErr('Emailingizni kiriting'); return; }
+            $m('am-submit').disabled=true;
+            try{ await sendPasswordResetEmail(auth, email);
+              const e=$m('am-err'); e.style.cssText='display:block;background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px';
+              e.textContent='✓ Tiklash havolasi '+email+' ga yuborildi. Pochtangizni (va «Spam»ni) tekshiring.';
+              $m('am-submit').style.display='none';
+            }catch(err){ $m('am-submit').disabled=false; showErr('Yuborilmadi: '+(err.code||err.message)); }
+            return;
+          }
           if(!email||!pass){ showErr('Email va parolni kiriting'); return; }
           $m('am-submit').disabled=true; justLoggedIn=true;
           try{
@@ -2583,6 +2606,38 @@ addEventListener('hashchange', ()=>route(true));
             showErr(m);
           }
         };
+      }
+      // Parolni tiklash havolasidан qaytганда (URL'да type=recovery) — yangi parol formasi.
+      function checkPasswordRecovery(){
+        try{ const h=(location.hash||'')+(location.search||''); if(h.indexOf('type=recovery')!==-1) setTimeout(openNewPasswordModal,300); }catch(e){}
+      }
+      function openNewPasswordModal(){
+        if(document.getElementById('pw-modal')) return;
+        const bg=document.createElement('div'); bg.id='pw-modal';
+        bg.style.cssText='position:fixed;inset:0;background:rgba(9,58,52,.55);display:grid;place-items:center;z-index:110;padding:18px';
+        const inp='width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:var(--sans);margin-top:8px';
+        bg.innerHTML=`<div role="dialog" aria-modal="true" style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:26px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
+          <h3 style="font-family:var(--serif);font-size:21px;margin:0 0 6px;color:var(--ink)">Yangi parol</h3>
+          <p style="color:var(--muted);font-size:13.5px;margin:2px 0 6px">Hisobingiz uchun yangi parol kiriting (kamida 6 belgi).</p>
+          <input id="pw-new" type="password" autocomplete="new-password" placeholder="Yangi parol" style="${inp}">
+          <input id="pw-new2" type="password" autocomplete="new-password" placeholder="Yangi parolni takrorlang" style="${inp}">
+          <div id="pw-err" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>
+          <button id="pw-save" style="width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px">Parolni saqlash</button>
+        </div>`;
+        document.body.appendChild(bg);
+        const $p=id=>document.getElementById(id);
+        const perr=m=>{ $p('pw-err').textContent=m; $p('pw-err').style.display='block'; };
+        $p('pw-save').onclick=async()=>{
+          const p1=$p('pw-new').value, p2=$p('pw-new2').value;
+          if(!p1||p1.length<6){ perr('Parol kamida 6 belgi bo‘lsin'); return; }
+          if(p1!==p2){ perr('Parollar mos emas'); return; }
+          $p('pw-save').disabled=true;
+          try{ await updatePassword(null, p1);
+            try{ history.replaceState(null,'',location.pathname); }catch(e){}
+            bg.remove(); alert('✓ Parol yangilandi. Endi hisobingizdan foydalanishingiz mumkin.');
+          }catch(e){ $p('pw-save').disabled=false; perr('Xatolik: '+(e.code||e.message)+'. Havola eskirган bo‘lishi mumkin — qaytadan «Parolni unutdingizmi?» qiling.'); }
+        };
+        setTimeout(()=>{ try{ $p('pw-new').focus(); }catch(e){} },40);
       }
       function askRole(user){
         if(document.getElementById('role-modal')) return;
