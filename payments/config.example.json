@@ -15,5 +15,20 @@
     "serviceId": "CLICK_SERVICE_ID (ixtiyoriy)",
     "merchantId": "CLICK_MERCHANT_ID",
     "secretKey": "CLICK_SECRET_KEY"
+  },
+  "sms": {
+    "enabled": true,
+    "dryRun": false,
+    "eskizEmail": "ESKIZ_EMAIL (kabinet emaili)",
+    "eskizPassword": "ESKIZ_PAROL — MAXFIY (yoki quyidagi token bilan)",
+    "token": "",
+    "from": "4546",
+    "newLookbackDays": 14,
+    "reminderDayOfMonth": 10,
+    "reminderDays": [1, 4],
+    "templates": {
+      "new": "Hurmatli ota-ona! {name} uchun {month} oy to'lovi shakllantirildi: {amount} so'm. Batafsil: iqroacademy.uz. IQROR Academy",
+      "debt": "Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy"
+    }
   }
 }

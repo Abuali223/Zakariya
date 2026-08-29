@@ -34,4 +34,5 @@
 \ir sick-panel.sql
 \ir exams.sql
 \ir olympiads.sql
+\ir sms-log.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
