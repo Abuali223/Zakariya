@@ -2058,6 +2058,16 @@ async function renderOlympiads(){
   $('#ol-f-res').addEventListener('change',draw);
   load();
 }
+// ===== Filtr xotirasi: bo'lim qayta chizilganda (masalan, saqlangач) filtr saqlanadi =====
+// Barcha «.search-inp» filtrlari id bo'yicha eslab qolinadi. Foydalanuvchi o'zi
+// bo'shatmaguncha (matnni tozalash / «Barcha …» ni tanlash) filtr turaveradi.
+const FILTER_MEM = {};
+function _fmemSave(e){ const t=e.target; if(t&&t.id&&t.classList&&t.classList.contains('search-inp')) FILTER_MEM[t.id]=t.value; }
+document.addEventListener('input', _fmemSave, true);
+document.addEventListener('change', _fmemSave, true);
+// Saqlangan qiymatni inputga qaytaradi va shu qiymatni (draw uchun) qaytaradi.
+function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM[id]; if(el&&v!=null) el.value=v; return v!=null?v:''; }
+
 async function renderStudents(){
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
@@ -2141,6 +2151,7 @@ async function renderStudents(){
     $('#cls-groups').querySelectorAll('.stu-selall').forEach(sa=>sa.addEventListener('change',()=>{ const tbl=sa.closest('table'); if(tbl) tbl.querySelectorAll('.stu-sel').forEach(c=>c.checked=sa.checked); updateBulk(); }));
     updateBulk();
   };
+  fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang');
   draw();
   const si=$('#stu-search'); if(si) si.addEventListener('input',draw);
   const fgEl=$('#stu-fgrade'); if(fgEl) fgEl.addEventListener('change',draw);
@@ -2393,7 +2404,7 @@ async function renderCollection(name){
     $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
     $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
   };
-  draw('');
+  draw(fmemApply('col-search'));
   const si=$('#col-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 
@@ -2638,7 +2649,7 @@ async function renderUsers(){
     $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts); }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
   };
-  draw('');
+  draw(fmemApply('usr-search'));
   const si=$('#usr-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 // Rol + sinf/fan biriktirish oynasi (checkbox — Ctrl bosish shart emas)
