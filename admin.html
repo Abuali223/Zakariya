@@ -2430,7 +2430,7 @@ async function renderCollection(name){
         let v = r[c[0]];
         if(c[0]==='track') return `<td data-label="${esc(c[1])}"><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
         if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
-        if(c[0]==='salary'||c[0]==='baseSalary') return `<td data-label="${esc(c[1])}">${v?`<b>${fmtSom(v)}</b>`:'—'}</td>`;
+        if(c[0]==='salary'||c[0]==='baseSalary'){ const n=salaryNum(v); return `<td data-label="${esc(c[1])}">${n>0?`<b>${fmtSom(n)}</b>`:'—'}</td>`; }
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
       return `<tr>${tds}<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
@@ -2761,6 +2761,23 @@ async function renderSettings(){
     catch(err){ toast('Xatolik: '+(err.code||err.message),true); }
     b.disabled=false; b.textContent='Saqlash';
   });
+  // ---- Xavfsizlik: Qaytarish (refund) PIN — direktor to'lovni qaytarganda so'raladi ----
+  let sec={}; try{ const s2=await getDoc(doc(db,'config','security')); sec = s2.exists()?s2.data():{}; }catch(e){}
+  const secCard=document.createElement('div'); secCard.className='card'; secCard.style.cssText='margin-top:16px;padding:22px';
+  secCard.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>🔐 Qaytarish (refund) PIN</h3>
+      <span class="chip ${sec.refundPin?'it':''}" style="${sec.refundPin?'background:var(--it-bg);color:var(--teal)':'background:var(--med-bg);color:var(--med-fg)'}">${sec.refundPin?'O‘rnatilgan ✓':'O‘rnatilmagan'}</span></div>
+    <p class="small muted" style="margin:0 0 14px">To‘lovni qaytarishda (adashib tushgan to‘lov) shu PIN so‘raladi — faqat direktor biladi. <b>Google bilan kirilsa ham ishlaydi.</b> Bo‘sh qoldirsangiz — refund faqat direktorda, PINsiz.</p>
+    <form id="sec-form" style="display:flex;flex-direction:column;gap:12px">
+      <div><label>Yangi PIN (kamida 4 belgi)</label><input name="pin" id="sec-pin" type="password" autocomplete="new-password" placeholder="${sec.refundPin?'••••  (o‘zgartirish uchun yangisini yozing)':'masalan: 4291'}"></div>
+      <div><button class="btn gold" id="sec-save" type="submit">PINni saqlash</button></div>
+    </form>`;
+  $('#view').appendChild(secCard);
+  $('#sec-form').addEventListener('submit', async e=>{ e.preventDefault();
+    const pin=$('#sec-pin').value.trim(); if(pin.length<4){ toast('PIN kamida 4 belgi',true); return; }
+    const b=$('#sec-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    try{ await setDoc(doc(db,'config','security'),{ refundPin:pin, updatedAt:serverTimestamp() },{merge:true}); toast('PIN saqlandi ✓'); renderSettings(); }
+    catch(err){ toast('Xatolik: '+(err.code||err.message),true); b.disabled=false; b.textContent='PINni saqlash'; } });
+
   // ---- AI yordamchi sozlamalari (server manzili + Claude kaliti) ----
   let ai={}; try{ const s=await getDoc(doc(db,'config','ai')); ai = s.exists()?s.data():{}; }catch(e){}
   AI_URL = null;   // keshni yangilaymiz
@@ -3636,7 +3653,7 @@ async function openPayHistory(sid, name){
   const ledgRows=ledg.map(l=>{ const d=Number(l.delta)||0; return `<tr><td>${esc(dstr(l.at))}</td><td>${esc(reasonLbl[l.reason]||l.reason||'')}${l.note?` · ${esc(l.note)}`:''}</td><td style="text-align:right;color:${d>=0?'#1F9982':'#B42318'}">${d>=0?'+':''}${fmtSom(d)}</td><td style="text-align:right">${fmtSom(l.balanceAfter||0)}</td></tr>`; }).join('')||'<tr><td colspan="4" class="muted">Avans harakati yozuvi yo‘q (jurnal shu tuzatishdan keyin to‘ldiriladi)</td></tr>';
   const body=$('#ph-body'); if(!body) return;
   // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
-  const paysSum=pays.filter(p=>p.status!=='canceled'&&p.status!=='reversed').reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const paysSum=pays.filter(p=>p.status!=='canceled'&&p.status!=='reversed'&&p.status!=='refunded').reduce((s,p)=>s+(Number(p.amount)||0),0);
   const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
   const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.</div>` : '';
   body.innerHTML=`
@@ -3684,10 +3701,13 @@ async function openFinanceAudit(){
     if(i.studentName && !nameMap[sid]) nameMap[sid]=i.studentName; });
   creds.forEach(c=>{ const sid=String(c.studentId||c._id||''); if(!sid) return; C[sid]=(C[sid]||0)+(Number(c.credit)||0); });
   let unmatchedSum=0, unmatchedN=0;
-  pays.forEach(p=>{ const st=String(p.status||''); if(st==='canceled'||st==='reversed') return;
+  pays.forEach(p=>{ const st=String(p.status||''); if(st==='canceled'||st==='reversed'||st==='refunded') return;
     const amt=Number(p.amount)||0; if(!amt) return; const sid=String(p.studentId||'');
     if(!sid){ unmatchedSum+=amt; unmatchedN++; return; }
     P[sid]=(P[sid]||0)+amt; if(p.payerName && !nameMap[sid]) nameMap[sid]=p.payerName; });
+  // Qaytarilgan (refund) summalar: invoice paidAmount kamaytirilgan (I↓), lekin payments qatori
+  // to'liq turadi. Balans (P==I+C) buzilmasligi uchun invoice-refundlarni P dan ayiramiz.
+  try{ const rs=await getDocs(collection(db,'refunds')); rs.docs.forEach(d=>{ const r=d.data()||{}; const sid=String(r.studentId||''); const amt=Number(r.amount)||0; if(sid&&amt&&r.target==='invoice') P[sid]=(P[sid]||0)-amt; }); }catch(e){}
   const ids=new Set([...Object.keys(I),...Object.keys(C),...Object.keys(P)]);
   const rows=[];
   ids.forEach(sid=>{ const p=R(P[sid]||0), i=R(I[sid]||0), c=R(C[sid]||0); const disc=(i+c)-p;
@@ -4065,7 +4085,7 @@ async function renderPayments(){
     // O'quvchisi topilmagan (eski/o'chirilgan / ID o'zgargan) invoyslar — statistika bilan farqni tushuntiradi + tozalash.
     const orphanCard = orphan.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>⚠️ O‘quvchisi topilmagan hisob-fakturalar</h3><span class="cls-count">${orphan.length} ta · o‘quvchi ro‘yxatda yo‘q</span></div>
       <div style="padding:10px 16px" class="small muted">Bu oyda jami <b>${rows.length}</b> hisob-faktura, ro‘yxatda esa <b>${curAll.length}</b> o‘quvchi — farq (${orphan.length} ta) o‘chirilgan yoki ID‘si o‘zgargan o‘quvchilarnikidir.${SESSION.isAdmin?' Tozalash uchun quyidagi tugmani bosing.':''}</div>
-      ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 Bu oydagi ${orphan.length} ta “o‘quvchisiz” hisobni o‘chirish</button></div>`:''}
+      ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 To‘lovsiz “o‘quvchisiz” hisoblarni o‘chirish (${orphan.filter(r=>paidOf(r)<=0).length} ta)</button>${orphan.some(r=>paidOf(r)>0)?`<div class="small muted" style="margin-top:6px">To‘lov tushganlari (${orphan.filter(r=>paidOf(r)>0).length} ta) saqlanadi — daromad hisobotida qoladi.</div>`:''}</div>`:''}
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi (eski)</th><th>Sinf (eski)</th><th>Summa</th><th>To‘langan</th><th>Holat</th></tr></thead><tbody>${orphan.map(r=>`<tr><td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'—')}</td><td data-label="Sinf">${esc(r.classKey||'—')}</td><td data-label="Summa">${fmtSom(r.amount)}</td><td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'—'}</td><td data-label="Holat">${esc(r.status||'—')}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='partial'?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman${r.provider?` · ${esc(r.provider)}`:''}</span>`
@@ -4098,9 +4118,12 @@ async function renderPayments(){
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="6" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
-      if(!confirm(`Bu oydagi ${orphan.length} ta “o‘quvchisi topilmagan” hisob-faktura BUTUNLAY o‘chiriladi.\n(Ro‘yxatda bo‘lmagan/o‘chirilgan o‘quvchilarning eski hisoblari.) Davom etilsinmi?`)) return;
-      ob.disabled=true; let done=0; for(const r of orphan){ try{ await deleteDoc(doc(db,'invoices',r._id)); done++; }catch(e){} }
-      toast(`${done} ta o‘chirildi ✓`); load(); }); }
+      // MUHIM: to'lov TUSHGAN orphanlarni o'chirmaymiz — ular real daromad (hisobotdan yo'qolib ketmasin).
+      const delable=orphan.filter(r=>paidOf(r)<=0), kept=orphan.filter(r=>paidOf(r)>0);
+      if(!delable.length){ toast('O‘chiriladigan bo‘sh hisob yo‘q — barchasida to‘lov bor (saqlanadi).',true); return; }
+      if(!confirm(`Bu oydagi ${delable.length} ta “o‘quvchisi topilmagan” TO‘LOVSIZ hisob-faktura o‘chiriladi.`+(kept.length?`\nTo‘lov tushgan ${kept.length} ta hisob SAQLANADI (daromad yo‘qolmasin).`:'')+`\nDavom etilsinmi?`)) return;
+      ob.disabled=true; let done=0; for(const r of delable){ try{ await deleteDoc(doc(db,'invoices',r._id)); done++; }catch(e){} }
+      toast(`${done} ta o‘chirildi ✓${kept.length?` · ${kept.length} ta to‘lovli saqlandi`:''}`); load(); }); }
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
       // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
       openRecordPayment(students, load, { sid:rr.studentId, name:nameOf(rr), amount:debtOf(rr), period:rr.month }); }));
@@ -4298,6 +4321,9 @@ async function openRecordPayment(students, reload, pre){
 // ---- To'lovni qaytarish (FAQAT direktor; summa + sabab + direktor paroli) ----
 async function openRefund(ctx, reload){
   if(!SESSION.isAdmin){ toast('Faqat direktor to‘lovni qaytara oladi',true); return; }
+  // Direktor PIN (Sozlamalar) — Google bilan kirgan direktorда ham ishlaydi (parol o'rniga).
+  let refundPin=''; try{ const s=await getDoc(doc(db,'config','security')); refundPin=String((s.exists()?s.data():{}).refundPin||''); }catch(e){}
+  let studCredit=0; if(ctx.type==='invoice' && ctx.invoice && ctx.invoice.studentId){ try{ const c=await getDoc(doc(db,'student_credit',String(ctx.invoice.studentId))); if(c.exists()) studCredit=Number((c.data()||{}).credit)||0; }catch(e){} }
   const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
   const isInv = ctx.type==='invoice';
   const maxAmt = Number(isInv?ctx.paid:ctx.amount)||0;
@@ -4308,7 +4334,8 @@ async function openRefund(ctx, reload){
       <div class="small" style="font-weight:700;background:#fdecec;color:#B42318;border-radius:10px;padding:10px 12px">${esc(who)} — qaytariladigan: <b>${maxStr}</b> so‘m gacha</div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}"></label>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab (majburiy)<input id="rf-reason" type="text" placeholder="masalan: adashib kiritilgan" style="${fld}"></label>
-      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor paroli<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>
+      ${refundPin?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor PIN kodi<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>`:`<div class="small" style="margin-top:8px;color:#B45309">ℹ️ Refund PIN o‘rnatilmagan — Sozlamalar → «🔐 Qaytarish PIN»da o‘rnating (himoya uchun).</div>`}
+      ${studCredit>0?`<div class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px">⚠️ Bu o‘quvchida avans <b>${fmtSom(studCredit)}</b> so‘m bor. Qaytargach avansni ham «📋 To‘lov tarixi → ✏️ Avansni tuzatish» bilan tekshiring (avans qayta qo‘llanishi mumkin).</div>`:''}
       <div class="small muted" style="margin-top:8px">${isInv?'Hisob-faktura to‘langan summasidan ayiriladi — qarz qayta paydo bo‘ladi.':'Biriktirilmagan to‘lov «qaytarilgan» deb belgilanadi.'} Amal jurnalga (refunds) yoziladi.</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn danger" id="rf-do">Qaytarish</button></div>`;
@@ -4318,25 +4345,24 @@ async function openRefund(ctx, reload){
   $('#rf-do').onclick=async()=>{
     if(busy) return;
     const amount=Number(($('#rf-amt').value||'').replace(/\D/g,''))||0;
-    const reason=$('#rf-reason').value.trim(), pass=$('#rf-pass').value;
+    const reason=$('#rf-reason').value.trim(), pass=(($('#rf-pass')&&$('#rf-pass').value)||'');
     if(amount<=0){ toast('Summani kiriting',true); return; }
     if(amount>maxAmt+0.5){ toast('Summa qaytariladigandan ko‘p',true); return; }
     if(!reason){ toast('Sababni yozing',true); return; }
-    if(!pass){ toast('Direktor parolini kiriting',true); return; }
-    busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent='Tekshirilmoqda…';
+    if(refundPin && pass!==refundPin){ toast('PIN noto‘g‘ri',true); return; }
+    if(!confirm(`${fmtSom(amount)} so‘m qaytarilsinmi?\nSabab: ${reason}`)) return;
+    busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent='Qaytarilmoqda…';
     const email=(auth.currentUser&&auth.currentUser.email)||'';
-    try{ await signInWithEmailAndPassword(auth, email, pass); }   // parolni tasdiqlash (o'sha direktor)
-    catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Parol noto‘g‘ri',true); return; }
-    btn.textContent='Qaytarilmoqda…';
     try{
       if(isInv){
         const inv=ctx.invoice, paid0=Number(ctx.paid)||0, total=Number(inv.amount)||0;
         const newPaid=Math.max(0, paid0-amount), status = newPaid<=0?'pending':(newPaid>=total-0.5?'paid':'partial');
-        await setDoc(doc(db,'invoices',inv._id), { paidAmount:newPaid, status, reversedAt:serverTimestamp() }, {merge:true});
+        // Avval jurnalga yozamiz (pul o'zgarishi hech qachon jurnalsiz qolmasin), keyin invoice.
         await addDoc(collection(db,'refunds'), { target:'invoice', targetId:String(inv._id||''), studentId:String(inv.studentId||''), studentName:ctx.name||'', amount, reason, byEmail:email, month:inv.month||'', createdAt:serverTimestamp() });
+        await setDoc(doc(db,'invoices',inv._id), { paidAmount:newPaid, status, reversedAt:serverTimestamp() }, {merge:true});
       } else {
-        await setDoc(doc(db,'payments',ctx.payment._id), { status:'refunded' }, {merge:true});
         await addDoc(collection(db,'refunds'), { target:'payment', targetId:String(ctx.payment._id||''), studentId:'', studentName:ctx.payerName||'', amount, reason, byEmail:email, month:'', createdAt:serverTimestamp() });
+        await setDoc(doc(db,'payments',ctx.payment._id), { status:'refunded' }, {merge:true});
       }
       toast('Qaytarildi ✓'); closeModal(); if(reload) reload();
     }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Xatolik: '+(e.code||e.message),true); }
@@ -4346,7 +4372,7 @@ async function openRefund(ctx, reload){
 // ---- CHEK (termal 80/58 mm) — kirim/chiqim uchun: logo + QR (ijtimoiy tarmoqlar) + summa + sabab ----
 let _qrP=null;
 function loadQR(){ if(window.QRCode) return Promise.resolve(); if(_qrP) return _qrP;
-  _qrP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); return _qrP; }
+  _qrP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=res; s.onerror=(e)=>{ _qrP=null; rej(e); }; document.head.appendChild(s); }); return _qrP; }
 async function qrDataUrl(text){ try{ await loadQR(); const d=document.createElement('div');
   new window.QRCode(d,{text:String(text||''),width:180,height:180,correctLevel:window.QRCode.CorrectLevel.M});
   const cv=d.querySelector('canvas'), img=d.querySelector('img');
