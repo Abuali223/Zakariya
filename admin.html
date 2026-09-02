@@ -1711,10 +1711,11 @@ async function renderMonitoring(){
       <div class="att-controls">
         <label>Sinf<select id="mon-class"><option value="">— tanlang —</option></select></label>
         <label>Fan${fanPicker('mon-subject')}</label>
-        <label>Davr<select id="mon-period">${MONPERIODS.map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('')}</select></label>
+        <label>Oy<input type="month" id="mon-period" value="${curMonth()}"></label>
       </div>
+      <div class="small muted" style="margin-top:6px">Monitoring HAR OY kiritiladi. Tasdiqlangan ball KEYINGI oy to‘loviga chegirma beradi (90+ → 20%, 100 → 100%).</div>
     </div>
-    <div id="mon-body"><div class="cls-empty" style="margin:0">Sinf, fan va davrni tanlang.</div></div>`;
+    <div id="mon-body"><div class="cls-empty" style="margin:0">Sinf, fan va oyni tanlang.</div></div>`;
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#mon-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
@@ -1725,7 +1726,7 @@ async function renderMonitoring(){
   if(!SESSION.isAdmin && !mvisKeys.length){ $('#mon-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf biriktirilmagan. Administratorga murojaat qiling.</div>`; }
   const load=async()=>{
     const ck=$('#mon-class').value, subject=$('#mon-subject').value.trim(), period=$('#mon-period').value;
-    if(!ck||!subject||!period){ $('#mon-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf, fan va davrni tanlang.</div>`; return; }
+    if(!ck||!subject||!period){ $('#mon-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf, fan va oyni tanlang.</div>`; return; }
     const cls=classes[ck], slug=monSlug(subject);
     $('#mon-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     const existing={};
@@ -3818,8 +3819,9 @@ function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isN
 // Aka-uka FAQAT ota-ona telefoni bir xil bo'lsa (familiyaga QARALMAYDI). To'liq 9 xonali
 // mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqamlar guruhlamaydi.
 function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}$/.test(p)) ? p : ''; }
-function computeSiblingSet(students, privOf){
+function computeSiblingSet(students, privOf, scoreFn){
   const EXCL=['teacher_child','olympiad','contract'];
+  const getScore = scoreFn || (s=>pmNum(s.score));   // lag qo'llanganda — o'tgan oy monitoring balli
   const phoneMap={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
     [...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))]
@@ -3833,7 +3835,7 @@ function computeSiblingSet(students, privOf){
   const CAP=8;
   const meta=s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
     const exclusive=EXCL.includes(pv.specialCategory);
-    const score=pmNum(s.score);
+    const score=getScore(s);
     const gets20=!exclusive && score!=null && score>=90;
     const eligible10=!exclusive && !gets20;
     return {sid, pv, exclusive, score, gets20, eligible10}; };
@@ -3872,9 +3874,9 @@ function computeTuition(s, priv, ctx){
   if(cat==='olympiad'){ net=0; pct=1; info='100% grant (olimpiada/ijtimoiy)'; isGrant=true; }
   else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='Xodim farzandi 50%'; }
   else if(cat==='contract'){ net=base; info='Kontrakt (belgilangan summa)'; }
-  else { const score=pmNum(s.score);
-    if(score!=null && score>=100){ pct=1; info='Monitoring 100 · 100%'; isGrant=true; }
-    else if(score!=null && score>=90){ pct=0.20; info='Monitoring 90–99 · 20%'; }
+  else { const score = ctx.monScoreFn ? ctx.monScoreFn(sid) : pmNum(s.score);   // O'TGAN OY monitoring balli (lag)
+    if(score!=null && score>=100){ pct=1; info='Monitoring 100 · 100% (o‘tgan oy)'; isGrant=true; }
+    else if(score!=null && score>=90){ pct=0.20; info='Monitoring 90–99 · 20% (o‘tgan oy)'; }
     else if(ctx.tenHolders && ctx.tenHolders.has(sid)){ pct=0.10; info='Aka-uka · 10%'; }
     else info='Chegirmasiz';
     net=round(base*(1-pct));
@@ -3947,9 +3949,16 @@ async function pmLoadCtx(month, students, amount){
   const sickMap={}; try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',sickMonth)));
     asnap.docs.forEach(d=>{ const x=d.data()||{}; let n=0; Object.values(x.days||{}).forEach(st=>{ if(st==='sick')n++; }); if(n) sickMap[x.studentId||String(d.id).split('__')[0]]=n; }); }catch(e){}
   let ledger=[]; try{ const l=await getDocs(collection(db,'referral_ledger')); ledger=l.docs.map(d=>({id:d.id,...(d.data()||{})})); }catch(e){}
-  const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
-  const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0 };
-  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, priceEmpty:!Object.keys(priceMap).length };
+  // MONITORING LAG: shu oy (M) invoysiga O'TGAN OY (M-1) TASDIQLANGAN monitoring balli qo'llanadi.
+  // Har o'quvchi uchun o'sha oydagi fanlar bo'yicha o'rtacha (approved) ball; yo'q bo'lsa — chegirma yo'q.
+  const monMonth=prevMonthStr(month);
+  const monAgg={}; try{ const ms=await getDocs(query(collection(db,'monitoring'), where('period','==',monMonth)));
+    ms.docs.forEach(d=>{ const x=d.data()||{}; if(x.status!=='approved') return; const sid=String(x.studentId||''); const sc=Number(x.score);
+      if(!sid||!isFinite(sc)) return; (monAgg[sid]=monAgg[sid]||{sum:0,cnt:0}); monAgg[sid].sum+=sc; monAgg[sid].cnt++; }); }catch(e){}
+  const monScoreFn=sid=>{ const a=monAgg[String(sid)]; return (a&&a.cnt)?(a.sum/a.cnt):null; };
+  const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id));
+  const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
+  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
 }
 // ==== KASAL BOLALAR — «Bemor» davomatidan avtomatik ro'yxat (Direktor + Ma'muriyat rahbari) ====
 async function renderSick(){
