@@ -960,6 +960,7 @@ onAuthStateChanged(auth, async user=>{
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
   show('app'); buildTabs(); openTab(currentTab); watchBadges();
+  startOutboxSync();   // offline to'lov navbatini kuzatish + avtomatik yuborish
 });
 function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
 
@@ -4271,6 +4272,67 @@ async function renderPayments(){
 }
 // YAGONA to'lov qabul qilish: bank / Click / Uzum / Terminal / Naqd — hammasi bir oqim, idempotent.
 // payments'ga yoziladi (yagona joy) + balansga qo'llanadi (waterfall, ortiqcha -> avans).
+// ==== TO'LOV OUTBOX (offline-safe) ===================================
+// Internet uzilsa to'lov localStorage'ga (outbox) navbatga qo'yiladi va DASTUR
+// ISHLAYVERADI; ulanish tiklanganda AVTOMATIK yuboriladi. payId barqaror bo'lgani
+// uchun applied_payments posboni takror qo'llashni bloklaydi (idempotent) —
+// hech qanday holatda pul ikki marta hisoblanmaydi.
+const OUTBOX_KEY='iqror_pay_outbox_v1';
+function obLoad(){ try{ return JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]'); }catch(e){ return []; } }
+function obSave(a){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(a||[])); }catch(e){} }
+function obAdd(it){ const a=obLoad(); a.push(it); obSave(a); obBadge(); }
+function obRemove(payId){ obSave(obLoad().filter(x=>x.payId!==payId)); obBadge(); }
+function obPending(){ return obLoad().filter(x=>x.status!=='failed'); }
+// Takror aniqlash: shu o'quvchiga shu summa outboxда (yuborilmagan) allaqachon turibdimi?
+function obRecentDup(sid, amount){ const now=Date.now(); return obPending().some(x=>String(x.sid)===String(sid)&&Number(x.amount)===Number(amount)&&(now-(x.ts||0))<15*60000); }
+// Tarmoq xatosimi (qayta urinamiz) yoki haqiqiy xatomi (masalan ustun yo'q — qayta urinmaymiz)?
+function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return false; const m=String((e&&(e.message||e))||''); return /failed to fetch|networkerror|load failed|timeout|connection|err_|abort/i.test(m)||!(e&&e.code); }
+// Bitta navbat elementini serverga yuborish (pending -> apply -> applied). Idempotent.
+async function obFlushOne(it){
+  await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
+    payerName:it.nm||'', matched:true, raw:{ manual:true, method:it.method, date:it.date, note:it.note||'', forPeriod:it.period||'' }, createdAt:serverTimestamp() });
+  await applyPaymentClient(String(it.sid), Number(it.amount)||0, it.method, it.payId);
+  await setDoc(doc(db,'payments',it.payId), { status:'applied' }, {merge:true});
+}
+let _obFlushing=false;
+async function flushOutbox(){
+  if(_obFlushing || !navigator.onLine) return;
+  const items=obPending(); if(!items.length){ obBadge(); return; }
+  _obFlushing=true; let done=0;
+  try{
+    for(const it of items){
+      try{ await obFlushOne(it); obRemove(it.payId); done++; }
+      catch(e){
+        if(obIsNetErr(e)) break;                             // tarmoq — keyinroq qayta urinamiz
+        const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — attempts++, cheklaymiz
+        if(x){ x.attempts=(x.attempts||0)+1; x.lastError=String((e&&(e.code||e.message))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
+      }
+    }
+  } finally { _obFlushing=false; }
+  obBadge();
+  if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} }
+}
+// Pastki o'ng burchakdagi ko'rsatkich (navbatda nechta to'lov turgani).
+function obBadge(){
+  let el=document.getElementById('ob-badge'); const items=obLoad(); const n=obPending().length, failed=items.length-n;
+  if(!items.length){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='ob-badge';
+    el.style.cssText='position:fixed;bottom:16px;right:16px;z-index:99999;max-width:280px;padding:11px 14px;border-radius:12px;font:600 13px/1.35 system-ui,-apple-system,sans-serif;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer';
+    el.title='Bosib qayta yuborishga urinish'; el.onclick=()=>{ obBadge(); flushOutbox(); }; document.body.appendChild(el); }
+  const online=navigator.onLine;
+  el.style.background = failed? '#B42318' : (online? '#B54708' : '#475467');
+  el.innerHTML = (n? `⏳ ${n} ta to‘lov navbatda${online?' — yuborilmoqda…':' · internet yo‘q'}` : '')
+    + (failed? `${n?'<br>':''}⚠️ ${failed} ta yuborilmadi (tekshiring)` : '')
+    + `<div style="font-weight:400;font-size:11px;margin-top:3px;opacity:.9">${online?'Bosib qayta urinish':'Ulanish tiklanganda avtomatik yuboriladi'}</div>`;
+}
+let _obSyncStarted=false;
+function startOutboxSync(){
+  if(_obSyncStarted) return; _obSyncStarted=true;
+  window.addEventListener('online', ()=>{ obBadge(); flushOutbox(); });
+  window.addEventListener('offline', obBadge);
+  setInterval(()=>{ if(navigator.onLine && obPending().length) flushOutbox(); }, 20000);   // har 20 s
+  obBadge(); if(navigator.onLine) flushOutbox();
+}
 async function openRecordPayment(students, reload, pre){
   const list = (students&&students.length)?students:(cache.students||[]);
   pre = pre||{};   // {sid, name, amount} — qatordan chaqirilganda o'quvchi va qarz oldindan to'ldiriladi.
@@ -4313,41 +4375,46 @@ async function openRecordPayment(students, reload, pre){
     if(!sid){ toast('O‘quvchini tanlang',true); return; }
     if(amount<=0){ toast('Summani kiriting',true); return; }
     const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
-    // TAKROR BOSISHDAN HIMOYA: shu o'quvchiga shu summa oxirgi 3 daqiqada allaqachon yozilganmi?
-    // (Internet sekinlashganda tugma qayta bosilib, bir to'lov 2-3 marta yozilib qolardi — shu bloklaydi.)
-    try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
+    // TAKROR HIMOYASI (1) — LOKAL navbat (internet YO'Q bo'lsa ham ishlaydi): shu summa allaqachon navbatда turibdimi?
+    if(obRecentDup(sid, amount) && !confirm(`⚠️ Bu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon navbatда (yuborilmoqda). Bu takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta qo‘shilsinmi?`)) return;
+    // TAKROR HIMOYASI (2) — SERVER (online bo'lsa): oxirgi 3 daqiqada shu summa yozilganmi (yuborilgan to'lovlar uchun)?
+    if(navigator.onLine){ try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
       const dup=rq.docs.map(d=>d.data()).find(p=>Number(p.amount)===amount && p.raw&&p.raw.manual && p.status!=='canceled' && p.status!=='failed'
         && p.createdAt&&p.createdAt.toDate && (now-p.createdAt.toDate().getTime())<180000);
-      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror (internet sekinlashib qayta bosilgan) bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)) return;
-    }catch(e){}
+      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)) return;
+    }catch(e){} }
     saving=true; const btn=$('#rp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
-    const payId='man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-    let payWritten=false;
-    try{
-      // 1) To'lovni AVVAL 'pending' holatда yozamiz (hali qo'llanmagan). 'applied' — faqat waterfall MUVAFFAQ bo'lgach.
-      await setDoc(doc(db,'payments',payId), { id:payId, studentId:String(sid), provider:method, amount, status:'pending',
-        payerName:nm, matched:true, raw:{ manual:true, method, date, note, forPeriod:period }, createdAt:serverTimestamp() });
-      payWritten=true;
-      // 2) Balansga IDEMPOTENT qo'llaymiz (payId posboni — ikki marta qo'llanmaydi).
-      await applyPaymentClient(String(sid), amount, method, payId);
-      // 3) Faqat MUVAFFAQIYATdan keyin 'applied' — endi «applied» so'zi haqiqatan qo'llanganini bildiradi.
-      //    (Faqat mavjud 'status' ustuni — appliedAt ustuni yo'q, PGRST204 bermasin.)
-      await setDoc(doc(db,'payments',payId), { status:'applied' }, {merge:true});
-      toast('To‘lov qabul qilindi ✓'); if(reload) reload();
-      const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
+    const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
+    // 1) AVVAL outbox'ga (localStorage) DURDMLI yozamiz — brauzer yopilsa/internet uzilsa ham to'lov YO'QOLMAYDI.
+    const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period, nm, ts:Date.now() };
+    obAdd(item);
+    // 2) DARHOL yuborishga urinamiz (navigator.onLine noto'g'ri bo'lishi mumkin — shuning uchun har doim urinamiz).
+    //    _obFlushing posboni — fon (20s) flusher bilan bir elementni BIR VAQTDA yubormaslik (ikki marta qo'llanmasin).
+    let sent=false, hardErr=null;
+    if(!_obFlushing){ _obFlushing=true;
+      try{ await obFlushOne(item); obRemove(item.payId); sent=true; }
+      catch(e){ if(obIsNetErr(e)){ /* navbatда qoladi — avtomatik yuboriladi */ } else { hardErr=String((e&&(e.code||e.message))||''); obRemove(item.payId); } }
+      finally{ _obFlushing=false; }
+    }   // fon flusher ishlayotgan bo'lsa — element navbatда, u yuboradi (quyida «navbatда» ko'rsatiladi).
+    if(reload) reload();
+    const printBtnRow=`<div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
+    if(sent){
+      toast('To‘lov qabul qilindi ✓');
       $('#modal').innerHTML=`<div class="modal-h"><h3>✓ To‘lov qabul qilindi</h3><button class="x" id="m-x2">×</button></div>
         <div class="modal-b"><div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>
-        <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
-        <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
-      $('#m-x2').onclick=closeModal; $('#rp-close').onclick=closeModal;
-      $('#rp-print').onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:period||undefined, method:methLbl, date });
-    }catch(e){
-      // Waterfall XATO berdi (internet uzildi) — to'lovni 'failed' deb belgilaymiz: daromadga KIRMAYDI, takror
-      // «applied» bo'lib qolmaydi, keyin qayta urinish/tozalash mumkin (fantom yozuv paydo bo'lmasin).
-      if(payWritten){ try{ await setDoc(doc(db,'payments',payId),{ status:'failed' },{merge:true}); }catch(_){} }
+        <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>${printBtnRow}`;
+    } else if(hardErr){
       saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
-      toast('Qo‘llashda xatolik (internet?) — to‘lov «failed» belgilandi, qayta urinib ko‘ring: '+(e.code||e.message),true);
+      toast('Xatolik: '+hardErr,true); return;
+    } else {
+      // Internet yo'q / server javob bermadi — navbatда, ulanish tiklanganda AVTOMATIK yuboriladi.
+      obBadge(); toast('⏳ Internet yo‘q — to‘lov navbatga qo‘yildi, ulanganда avtomatik yuboriladi');
+      $('#modal').innerHTML=`<div class="modal-h"><h3>⏳ To‘lov navbatga qo‘yildi</h3><button class="x" id="m-x2">×</button></div>
+        <div class="modal-b"><div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>
+        <div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich turadi). Chekni hozir ham chiqarishingiz mumkin.</div></div>${printBtnRow}`;
     }
+    const x2=$('#m-x2'); if(x2) x2.onclick=closeModal; const rc=$('#rp-close'); if(rc) rc.onclick=closeModal;
+    const rp=$('#rp-print'); if(rp) rp.onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:period||undefined, method:methLbl, date });
   };
 }
 
