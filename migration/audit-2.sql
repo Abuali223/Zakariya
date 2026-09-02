@@ -18,7 +18,7 @@ alter table public.exam_questions add column if not exists model text;
 --    ai — sayt chatboti; boshqalar) ochiq qoladi.
 drop policy if exists config_sel on config;
 create policy config_sel on config for select using (
-      (id = 'salary'              and (app.is_admin() or app.is_hr()))
+      (id = 'salary'              and (app.is_admin() or app.is_hr() or app.is_finance()))   -- moliya payroll hisoblaydi
    or (id in ('finance','ltv')     and app.is_staff())
    or (id not in ('salary','finance','ltv'))
 );

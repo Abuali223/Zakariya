@@ -3120,6 +3120,7 @@ async function renderAccounting(){
       <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-payroll" style="width:100%" title="Barcha o‘qituvchilar maoshini shu oyga «Maosh» xarajati qilib yozadi">💼 Oylik maoshni yozish</button></label>
+      <label>&nbsp;<button class="btn ghost2" id="ac-paysal" style="width:100%" title="Har xodimni tanlab oylik maoshini berish + chek (qaysi oy uchunligi bilan)">💵 Maosh berish (xodimga)</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-adv" style="width:100%" title="Xodimга oy ichida oldindan berilgan maosh (avans) — maoshdan ushlab qolinadi">👤 Xodim avansi</button></label>
     </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
@@ -3232,11 +3233,11 @@ async function renderAccounting(){
     $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard;
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
-      printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, date:e.date||new Date().toISOString().slice(0,10) }); }));
+      printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||new Date().toISOString().slice(0,10) }); }));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-arec]').forEach(b=>b.addEventListener('click',()=>{ const a=madv.find(x=>x._id===b.dataset.arec); if(!a) return;
-      printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, date:a.date||new Date().toISOString().slice(0,10) }); }));
+      printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, period:a.month, date:a.date||new Date().toISOString().slice(0,10) }); }));
   };
 
   function openExpenseForm(exp){
@@ -3268,7 +3269,7 @@ async function renderAccounting(){
           <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
           <div class="modal-f"><button type="button" class="btn ghost" id="e-close">Yopish</button><button type="button" class="btn gold" id="e-print">🧾 Chek chiqarish</button></div>`;
         $('#m-x2').onclick=closeModal; $('#e-close').onclick=closeModal;
-        $('#e-print').onclick=()=>printReceipt({ kind:'expense', amount, reason:`${category}${note?' · '+note:''}`, date });
+        $('#e-print').onclick=()=>printReceipt({ kind:'expense', amount, reason:`${category}${note?' · '+note:''}`, period:date.slice(0,7), date });
       }catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
     };
   }
@@ -3329,8 +3330,51 @@ async function renderAccounting(){
           <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
           <div class="modal-f"><button type="button" class="btn ghost" id="av-close">Yopish</button><button type="button" class="btn gold" id="av-print">🧾 Chek chiqarish</button></div>`;
         $('#m-x2').onclick=closeModal; $('#av-close').onclick=closeModal;
-        $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount, reason:`Xodim avansi${note?' · '+note:''}`, date }); }
+        $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount, reason:`Xodim avansi${note?' · '+note:''}`, period:date.slice(0,7), date }); }
       catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+    };
+  });
+  // Maosh berish (har xodimni tanlab) — payout jurnali (salary_payments) + chek. XARAJATga qo'shilmaydi.
+  $('#ac-paysal').addEventListener('click', async ()=>{
+    let teachers=[]; try{ teachers=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){ toast('O‘qituvchilarni yuklab bo‘lmadi: '+(e.code||e.message),true); return; }
+    if(!teachers.length){ toast('Avval «O‘qituvchilar» bo‘limida xodim qo‘shing',true); return; }
+    await loadSalaryRates();
+    const M=$('#ac-month').value||curMonth();
+    const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+    const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
+    $('#modal').innerHTML=`<div class="modal-h"><h3>Maosh berish (xodimga)</h3><button class="x" id="m-x">×</button></div>
+      <div class="modal-b">
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Xodim<select id="sp-t" style="${fld};background:#fff">${teachers.map(t=>`<option value="${esc(t.teacherId||t._id)}">${esc(t.name||t.teacherId||t._id)}</option>`).join('')}</select></label>
+        <div class="grid2" style="margin-top:8px">
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi oy uchun<input type="month" id="sp-month" value="${esc(M)}" style="${fld}"></label>
+          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Berilgan sana<input type="date" id="sp-date" value="${esc(today)}" style="${fld}"></label>
+        </div>
+        <div id="sp-info" class="small" style="margin-top:10px;background:#eef3f1;border-radius:10px;padding:12px;font-weight:700"></div>
+        <input type="hidden" id="sp-gross"><input type="hidden" id="sp-adv"><input type="hidden" id="sp-net">
+        <div class="small muted" style="margin-top:8px">Naqd beriladigan = maosh − shu oyda berilgan avans. Bu payout jurnaliga yoziladi (chek chiqaradi); «Maosh» xarajati «Oylik maoshni yozish» orqali alohida yoziladi (ikki marta hisoblanmaydi).</div>
+      </div>
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sp-do">Berish + chek</button></div>`;
+    openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    const calc=()=>{ const tid=$('#sp-t').value, mm=$('#sp-month').value||M, t=teachers.find(x=>String(x.teacherId||x._id)===String(tid))||{};
+      const gross=computeSalary(t).total||0, adv=advOfMonth(mm).filter(a=>String(a.teacherId)===String(tid)).reduce((s,a)=>s+(Number(a.amount)||0),0), net=Math.max(0,gross-adv);
+      $('#sp-gross').value=gross; $('#sp-adv').value=adv; $('#sp-net').value=net;
+      $('#sp-info').innerHTML=`Maosh: <b>${fmtSum(gross)}</b> so‘m · Avans (shu oy): <b>${fmtSum(adv)}</b> · <span style="color:#1F9982">Naqd beriladigan: <b>${fmtSum(net)}</b> so‘m</span>`; };
+    $('#sp-t').onchange=calc; $('#sp-month').onchange=calc; calc();
+    $('#sp-do').onclick=async()=>{
+      const tid=$('#sp-t').value, mm=$('#sp-month').value||M, dt=$('#sp-date').value;
+      const t=teachers.find(x=>String(x.teacherId||x._id)===String(tid))||{}, tn=t.name||tid;
+      const gross=Number($('#sp-gross').value)||0, adv=Number($('#sp-adv').value)||0, net=Number($('#sp-net').value)||0;
+      if(gross<=0){ toast('Bu xodimga maosh hisoblanmagan — avval maoshini kiriting',true); return; }
+      const btn=$('#sp-do'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      try{ await addDoc(collection(db,'salary_payments'), { teacherId:String(tid), teacherName:tn, month:mm, gross, advance:adv, net, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() });
+        toast('Maosh berildi ✓');
+        $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Maosh berildi</h3><button class="x" id="m-x2">×</button></div>
+          <div class="modal-b"><div class="small" style="background:#eef3f1;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} · ${esc(mLabel(mm))} — naqd <b>${fmtSum(net)}</b> so‘m</div>
+          <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
+          <div class="modal-f"><button type="button" class="btn ghost" id="sp-close">Yopish</button><button type="button" class="btn gold" id="sp-print">🧾 Chek chiqarish</button></div>`;
+        $('#m-x2').onclick=closeModal; $('#sp-close').onclick=closeModal;
+        $('#sp-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount:net, reason:'Oylik maosh', period:mm, date:dt });
+      }catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Xatolik: '+(e.code||e.message),true); }
     };
   });
 }
@@ -4041,7 +4085,7 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
     $('#pm-body').querySelectorAll('[data-receipt]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.receipt); if(!rr) return;
-      printReceipt({ kind:'income', who:nameOf(rr), amount:paidOf(rr), reason:`${rr.month} oy to‘lovi`, method:(provLbl[rr.provider]||rr.provider||''), date:new Date().toISOString().slice(0,10) }); }));
+      printReceipt({ kind:'income', who:nameOf(rr), amount:paidOf(rr), reason:'To‘lov', period:rr.month, method:(provLbl[rr.provider]||rr.provider||''), date:new Date().toISOString().slice(0,10) }); }));
     $('#pm-body').querySelectorAll('[data-refund]').forEach(b=>b.addEventListener('click',()=>{
       const rr=rows.find(x=>x._id===b.dataset.refund); if(!rr) return;
       openRefund({ type:'invoice', invoice:rr, paid:paidOf(rr), name:nameOf(rr), month:rr.month }, load); }));
@@ -4292,8 +4336,11 @@ async function printReceipt(r){
   const fs=width>=80?'13px':'11px', big=width>=80?'20px':'16px', qrw=width>=80?'120px':'96px', lg=width>=80?'52px':'40px';
   const emblem=`<svg style="width:${lg}px;height:auto;display:block;margin:0 auto 4px" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
   const kind=r.kind==='expense'?'XARAJAT CHEKI':'TO‘LOV CHEKI';
+  const MU=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
+  const perLbl=m=>{ const p=String(m||'').split('-'); return (p.length===2 && MU[Number(p[1])-1])?`${MU[Number(p[1])-1]} ${p[0]}`:String(m||''); };
   const rowsHtml=[
     r.who?`<tr><td>${r.kind==='expense'?'Kimga':'O‘quvchi'}</td><td class="r">${esc(r.who)}</td></tr>`:'',
+    r.period?`<tr><td>Oy</td><td class="r">${esc(perLbl(r.period))}</td></tr>`:'',
     r.reason?`<tr><td>Sabab</td><td class="r">${esc(r.reason)}</td></tr>`:'',
     r.method?`<tr><td>Usul</td><td class="r">${esc(r.method)}</td></tr>`:'',
     `<tr><td>Sana</td><td class="r">${esc(r.date||new Date().toISOString().slice(0,10))}</td></tr>`
