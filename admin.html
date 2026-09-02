@@ -3206,7 +3206,7 @@ async function renderAccounting(){
         <td data-label="Toifa"><span class="acc-cat-chip">${esc(e.category||'—')}</span></td>
         <td data-label="Izoh">${esc(e.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:var(--bad);white-space:nowrap">${fmtSum(e.amount)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button></div></td></tr>`;
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button></div></td></tr>`;
     }).join('');
     const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
       ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>'}</div>`;
@@ -3231,6 +3231,8 @@ async function renderAccounting(){
         <td class="td-actions"><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
     $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard;
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
+    $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
+      printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, date:e.date||new Date().toISOString().slice(0,10) }); }));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
   };
@@ -4001,6 +4003,7 @@ async function renderPayments(){
       <td data-label="Holat">${stBadge(r)}</td>
       <td class="td-actions"><div class="row-actions">
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
+        ${paidOf(r)>0?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
         ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
@@ -4023,6 +4026,8 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
+    $('#pm-body').querySelectorAll('[data-receipt]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.receipt); if(!rr) return;
+      printReceipt({ kind:'income', who:nameOf(rr), amount:paidOf(rr), reason:`${rr.month} oy to‘lovi`, method:(provLbl[rr.provider]||rr.provider||''), date:new Date().toISOString().slice(0,10) }); }));
     $('#pm-body').querySelectorAll('[data-refund]').forEach(b=>b.addEventListener('click',()=>{
       const rr=rows.find(x=>x._id===b.dataset.refund); if(!rr) return;
       openRefund({ type:'invoice', invoice:rr, paid:paidOf(rr), name:nameOf(rr), month:rr.month }, load); }));
@@ -4247,6 +4252,47 @@ async function openRefund(ctx, reload){
       toast('Qaytarildi ✓'); closeModal(); if(reload) reload();
     }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Xatolik: '+(e.code||e.message),true); }
   };
+}
+
+// ---- CHEK (termal 80/58 mm) — kirim/chiqim uchun: logo + QR (ijtimoiy tarmoqlar) + summa + sabab ----
+let _qrP=null;
+function loadQR(){ if(window.QRCode) return Promise.resolve(); if(_qrP) return _qrP;
+  _qrP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); return _qrP; }
+async function qrDataUrl(text){ try{ await loadQR(); const d=document.createElement('div');
+  new window.QRCode(d,{text:String(text||''),width:180,height:180,correctLevel:window.QRCode.CorrectLevel.M});
+  const cv=d.querySelector('canvas'), img=d.querySelector('img');
+  return (cv&&cv.toDataURL('image/png'))||(img&&img.src)||''; }catch(e){ return ''; } }
+let RECEIPT=null;
+async function loadReceiptCfg(){ if(RECEIPT) return RECEIPT; RECEIPT={width:80,socialUrl:'https://iqroacademy.uz'};
+  try{ const c=await getDoc(doc(db,'config','receipt')); if(c.exists()){ const d=c.data()||{}; if(Number(d.width)>0) RECEIPT.width=Number(d.width); if(d.socialUrl) RECEIPT.socialUrl=String(d.socialUrl); } }catch(e){} return RECEIPT; }
+async function printReceipt(r){
+  const cfg=await loadReceiptCfg(); const width=Number(r.width||cfg.width||80);
+  const qr=await qrDataUrl(r.social||cfg.socialUrl||'https://iqroacademy.uz');
+  const fs=width>=80?'13px':'11px', big=width>=80?'20px':'16px', qrw=width>=80?'120px':'96px', lg=width>=80?'52px':'40px';
+  const emblem=`<svg style="width:${lg}px;height:auto;display:block;margin:0 auto 4px" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
+  const kind=r.kind==='expense'?'XARAJAT CHEKI':'TO‘LOV CHEKI';
+  const rowsHtml=[
+    r.who?`<tr><td>${r.kind==='expense'?'Kimga':'O‘quvchi'}</td><td class="r">${esc(r.who)}</td></tr>`:'',
+    r.reason?`<tr><td>Sabab</td><td class="r">${esc(r.reason)}</td></tr>`:'',
+    r.method?`<tr><td>Usul</td><td class="r">${esc(r.method)}</td></tr>`:'',
+    `<tr><td>Sana</td><td class="r">${esc(r.date||new Date().toISOString().slice(0,10))}</td></tr>`
+  ].join('');
+  const html=`<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>Chek</title><style>
+    @page{ size:${width}mm auto; margin:0 } *{box-sizing:border-box}
+    body{width:${width}mm;margin:0;padding:6px 8px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#000;font-size:${fs}}
+    .c{text-align:center}.b{font-weight:700}.hr{border-top:1px dashed #000;margin:6px 0}
+    table{width:100%;border-collapse:collapse;font-size:inherit}td{padding:2px 0;vertical-align:top}td.r{text-align:right;font-weight:700}
+    .big{font-size:${big};font-weight:800;text-align:center}.qr{width:${qrw};height:auto;margin:6px auto 2px;display:block}
+    .sm{font-size:${width>=80?'11px':'9px'}}
+  </style></head><body>
+    ${emblem}<div class="c b">IQROR ACADEMY</div><div class="c sm">${kind}</div>
+    <div class="hr"></div><table>${rowsHtml}</table><div class="hr"></div>
+    <div class="big">${fmtSom(r.amount)} so‘m</div><div class="hr"></div>
+    ${qr?`<img class="qr" src="${qr}" alt="QR">`:''}<div class="c sm">Ijtimoiy tarmoqlarimiz — QR ni skanerlang</div>
+    <div class="c sm">${esc(new Date().toLocaleString('uz-UZ'))}</div>
+  </body></html>`;
+  const w=window.open('','_blank','width=380,height=680'); if(!w){ toast('Pop-up bloklangan — ruxsat bering',true); return; }
+  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
 }
 
 /* ---- Modal utils ---- */
