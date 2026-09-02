@@ -15,6 +15,7 @@ create table if not exists public.sms_log (
   type         text,                          -- 'new' | 'debt'
   message      text,
   status       text,                          -- 'sent' | 'failed'
+  attempts     integer default 0,             -- yuborishga urinishlar soni (xato bo'lsa qayta uriniladi)
   "providerId" text,                          -- Eskiz xabar id
   error        text,
   month        text,

@@ -81,7 +81,7 @@ grant select, insert, update, delete on price_table to authenticated;
 grant all on price_table to service_role;
 
 -- ---------------------------------------------------------------------
--- 5) referral_ledger: referral 500k idempotentligi + audit
+-- 5) referral_ledger: referral 300k idempotentligi + audit
 --    id = yangi (olib kelingan) studentId  -> har referral bir marta hisoblanadi
 -- ---------------------------------------------------------------------
 create table if not exists referral_ledger (

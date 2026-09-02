@@ -35,4 +35,5 @@
 \ir exams.sql
 \ir olympiads.sql
 \ir sms-log.sql
+\ir audit-2.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

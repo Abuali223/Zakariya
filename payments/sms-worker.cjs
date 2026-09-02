@@ -46,7 +46,10 @@ async function phoneMap() {
   } catch (e) { log('phoneMap xato:', e.message); }
   return m;
 }
-async function alreadyLogged(id) { try { const s = await db.collection('sms_log').doc(id).get(); return s.exists; } catch (e) { return false; } }
+const MAXTRIES = Number(SMS.maxRetries || 3);   // xato bo'lsa shuncha marta qayta uriniladi, keyin to'xtaydi
+async function getSms(id) { try { const s = await db.collection('sms_log').doc(id).get(); return s.exists ? (s.data() || {}) : null; } catch (e) { return null; } }
+// SMS allaqachon YUBORILGANmi (sent) yoki qayta urinishlar tugaganmi? -> {skip, attempts}
+async function smsDone(id) { const p = await getSms(id); return { skip: !!(p && (p.status === 'sent' || (Number(p.attempts) || 0) >= MAXTRIES)), attempts: Number(p && p.attempts) || 0 }; }
 async function logSms(id, rec) { try { await db.collection('sms_log').doc(id).set({ ...rec, createdAt: FieldValue.serverTimestamp() }); } catch (e) { log('logSms xato:', e.message); } }
 
 // (1) YANGI FAKTURA xabarlari — oxirgi N kunda yaratilgan, to'lanmagan, amount>0.
@@ -62,13 +65,14 @@ async function runNew(eskiz, phones, dry) {
     if (amt <= 0) continue;                                          // grant/0 so'mlik — xabar yo'q
     if (['paid', 'canceled', 'reversed'].includes(inv.status)) continue;
     const id = `${inv.id}__new`;
-    if (await alreadyLogged(id)) { skip++; continue; }
+    const dn = await smsDone(id);
+    if (dn.skip) { skip++; continue; }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     const msg = fillTpl(tpl('new', DEF_NEW), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) });
     if (dry) { log('[DRY new]', phone, '::', msg); sent++; continue; }
     const r = await eskiz.send(phone, msg);
-    await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, status: r.ok ? 'sent' : 'failed', providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
+    await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, status: r.ok ? 'sent' : 'failed', attempts: dn.attempts + 1, providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
     if (r.ok) sent++; else { fail++; log('SMS(new) xato:', phone, r.error); }
   }
   log(`YANGI: ${sent} yuborildi · ${skip} o'tkazildi · ${fail} xato`);
@@ -91,13 +95,14 @@ async function runDebt(eskiz, phones, dry, force) {
       if (due <= 0 || !inv.month) continue;
       if (!(today > `${inv.month}-${dom}`)) continue;                // faqat 10-sanadan keyin
       const id = `${inv.id}__debt__${today}`;
-      if (await alreadyLogged(id)) { skip++; continue; }
+      const dn = await smsDone(id);
+      if (dn.skip) { skip++; continue; }
       const phone = (phones[inv.studentId] || {}).phone;
       if (!phone) { skip++; continue; }
       const msg = fillTpl(tpl('debt', DEF_DEBT), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(inv.amount), due: fmtSom(due) });
       if (dry) { log('[DRY debt]', phone, '::', msg); sent++; continue; }
       const r = await eskiz.send(phone, msg);
-      await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, status: r.ok ? 'sent' : 'failed', providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
+      await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, status: r.ok ? 'sent' : 'failed', attempts: dn.attempts + 1, providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
       if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', phone, r.error); }
     }
   }

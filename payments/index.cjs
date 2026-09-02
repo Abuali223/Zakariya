@@ -359,8 +359,12 @@ async function uzCreate(b){
   const _ex = await uzPayRef(b.transId).get();
   if(_ex.exists && (_ex.data().status === 'confirmed' || _ex.data().status === 'reversed'))
     return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
+  // MUHIM: payments qatorini SO'M da saqlaymiz (admin «Moliya tekshiruvi»/«To'lovlar tarixi» so'mda
+  // o'qiydi). Uzum tiyin (so'm×100) yuboradi — shu yerda normallashtiramiz; protokol javoblari
+  // (create/reverse response) b.amount (tiyin) qoladi. Invoice qo'llash pastda so'mda ishlaydi.
+  const som = UZUM.amountUnit === 'som' ? Number(b.amount) : Number(b.amount)/100;
   await uzPayRef(b.transId).set({ provider:'uzum', transId:String(b.transId), invoiceId:String(inv.id),
-    studentId: inv.studentId || '', amount:Number(b.amount), status:'created',
+    studentId: inv.studentId || '', amount:som, status:'created',
     raw:b, createdAt: FieldValue.serverTimestamp() });
   return { serviceId: UZUM.serviceId, timestamp: uzTs(), status:'CREATED', transTime: uzTs(), transId: b.transId, amount: b.amount };
 }
@@ -371,8 +375,8 @@ async function uzConfirm(b){
   // Yakuniy holat (qaytarilgan/bekor) — confirm qayta to'lamaydi.
   if(pay.status === 'reversed' || pay.status === 'canceled') return uzFail(UZ.CANCELLED);
   if(pay.status !== 'confirmed'){
-    const som = UZUM.amountUnit === 'som' ? Number(pay.amount) : Number(pay.amount)/100;   // tiyin -> so'm
-    await applyToInvoice(pay.invoiceId, som, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
+    // pay.amount endi SO'M da saqlanadi (uzCreate normallashtiradi) — to'g'ridan-to'g'ri qo'llaymiz.
+    await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
     await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };
@@ -386,7 +390,7 @@ async function uzReverse(b){
     // 0 qilmaymiz — AYNAN shu tranzaksiya summasini ayiramiz (boshqa to'lovlar saqlanadi),
     // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
     if(pay.status === 'confirmed'){
-      const som = UZUM.amountUnit === 'som' ? Number(pay.amount)||0 : (Number(pay.amount)||0)/100;
+      const som = Number(pay.amount)||0;   // pay.amount SO'M da saqlangan (uzCreate)
       const inv = await getInvoice(String(pay.invoiceId));
       if(inv){
         const amt = Number(inv.amount)||0, paid0 = Number(inv.paidAmount)||0;
@@ -405,7 +409,7 @@ async function uzReverse(b){
     }
     await uzPayRef(b.transId).set({ status:'reversed' }, { merge:true });
   }
-  return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: pay.amount };
+  return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: (UZUM.amountUnit==='som'?Number(pay.amount)||0:(Number(pay.amount)||0)*100) };
 }
 async function uzStatus(b){
   if(String(b.serviceId) !== String(UZUM.serviceId)) return uzFail(UZ.INVALID_SERVICE);

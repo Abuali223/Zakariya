@@ -1646,9 +1646,19 @@ async function renderGrades(){
       const btn=$('#gr-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{
         const entries=Object.entries(state);
+        // Shim jsonb'ni chuqur birlashtirmaydi (subjects ustunini butunlay almashtiradi) — avval
+        // har o'quvchining mavjud fanlar/choraklarini o'qib, yangi bahoni ustiga qo'shamiz,
+        // aks holda boshqa fan/choraklardagi baholar o'chib ketadi (davomatdagi kabi).
+        const existSubs={};
+        try{ const gsnaps=await Promise.all(entries.map(([sid])=>getDoc(doc(db,'grades',`${sid}__${year}`)).catch(()=>null)));
+          gsnaps.forEach((sn,i)=>{ if(sn&&sn.exists()) existSubs[entries[i][0]]=(sn.data().subjects)||{}; }); }catch(e){}
         for(let i=0;i<entries.length;i+=400){
           const batch=writeBatch(db);
-          entries.slice(i,i+400).forEach(([sid,grade])=>batch.set(doc(db,'grades',`${sid}__${year}`),{studentId:sid,classKey:ck,year,subjects:{[subject]:{[q]:grade===''?null:Number(grade)}}},{merge:true}));
+          entries.slice(i,i+400).forEach(([sid,grade])=>{
+            const cur=existSubs[sid]||{};
+            const merged=Object.assign({}, cur, {[subject]: Object.assign({}, cur[subject]||{}, {[q]: grade===''?null:Number(grade)})});
+            batch.set(doc(db,'grades',`${sid}__${year}`),{studentId:sid,classKey:ck,year,subjects:merged},{merge:true});
+          });
           await batch.commit();
         }
         toast('Baholar saqlandi ✓');
@@ -2370,7 +2380,7 @@ async function openStudentReport(sid, row){
 async function renderCollection(name){
   const s = SCHEMAS[name];
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
-    <div class="ph-actions"><input id="col-search" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
     ${s.hint?`<p class="small muted" style="margin:-8px 0 14px">${esc(s.hint)}</p>`:''}
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   $('#add').addEventListener('click',()=>openForm(name,null));
@@ -2404,8 +2414,8 @@ async function renderCollection(name){
     $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
     $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
   };
-  draw(fmemApply('col-search'));
-  const si=$('#col-search'); if(si) si.addEventListener('input',()=>draw(si.value));
+  draw(fmemApply('col-search-'+name));
+  const si=$('#col-search-'+name); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 
 /* ---- Add/Edit form (modal) ---- */
@@ -3501,7 +3511,7 @@ async function applyPaymentClient(studentId, amount, provider, payId){
   // Idempotentlik posboni: shu to'lov (payId) allaqachon qo'llangan bo'lsa — QAYTA qo'llamaymiz.
   if(payId){
     try{ const g=await getDoc(doc(db,'applied_payments',payId)); if(g.exists()) return {dup:true}; }catch(e){}
-    try{ await setDoc(doc(db,'applied_payments',payId),{ id:payId, studentId, amount, at:serverTimestamp() }); }catch(e){}
+    try{ await setDoc(doc(db,'applied_payments',payId),{ id:payId, studentId, amount, createdAt:serverTimestamp() }); }catch(e){}
   }
   try{
   let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}

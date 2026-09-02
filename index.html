@@ -1683,7 +1683,7 @@ async function renderKabRating(s){
   if(!box || !(window.IqrorFB&&window.IqrorFB.submitRating)) return;
   const teachers=(Array.isArray(TEACHERS)?TEACHERS:[]).filter(tc=>tc&&tc.id);
   if(!teachers.length){ box.innerHTML=''; return; }   // id yo'q (eski keш) — reyting ko'rsatilmaydi
-  const A=window.IqrorAuth, role=(A&&A.getRole&&A.getRole())||null, grade=Number(s&&s.grade)||0;
+  const A=window.IqrorAuth, role=(A&&A.getRole&&A.getRole())||null, grade=Number(s&&(s.g!=null?s.g:s.grade))||0;
   if(role==='student' && grade<5){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">⭐ ${esc(t.rate_title)}</div><div class="small" style="color:var(--muted);padding:6px 0">${esc(t.rate_g5)}</div></div>`; return; }
   const raterRole = role==='student'?'student':'parent';
   let mine={};
