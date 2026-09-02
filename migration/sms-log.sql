@@ -21,6 +21,7 @@ create table if not exists public.sms_log (
   month        text,
   "createdAt"  timestamptz default now()
 );
+alter table public.sms_log add column if not exists attempts integer default 0;   -- mavjud jadvalga ham
 create index if not exists sms_log_invoice_idx on public.sms_log("invoiceId");
 create index if not exists sms_log_type_idx    on public.sms_log(type);
 create index if not exists sms_log_created_idx on public.sms_log("createdAt");

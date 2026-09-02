@@ -37,4 +37,5 @@
 \ir sms-log.sql
 \ir audit-2.sql
 \ir cashier-role.sql
+\ir refunds.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
