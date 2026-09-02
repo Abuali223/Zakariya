@@ -3810,6 +3810,10 @@ async function renderPriceTable(){
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
+// Oy yordamchilari: "2026-10" -> oldingi oy "2026-09"; o'zbekcha oy nomi.
+function prevMonthStr(m){ const p=String(m||'').split('-'); let y=Number(p[0])||0, mo=(Number(p[1])||0)-1; if(mo<1){ mo=12; y--; } return y+'-'+String(mo).padStart(2,'0'); }
+const UZ_MONTHS=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
+function fmtMonthUz(m){ const p=String(m||'').split('-'); return (p.length===2 && UZ_MONTHS[Number(p[1])-1])?`${UZ_MONTHS[Number(p[1])-1]} ${p[0]}`:String(m||''); }
 function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isNaN(Number(v)) ? Number(v) : null); }
 // Aka-uka FAQAT ota-ona telefoni bir xil bo'lsa (familiyaga QARALMAYDI). To'liq 9 xonali
 // mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqamlar guruhlamaydi.
@@ -3938,7 +3942,9 @@ async function pmLoadCtx(month, students, amount){
   const priceMap={}; { const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }
   // Ikkilamchi — xato bo'lsa xavfsiz default (kasal=0, referral yo'q).
   let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
-  const sickMap={}; try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',month)));
+  // KASAL LAG: shu oy (M) invoysiga O'TGAN OY (M-1) kasal kunlari qo'llanadi (sentyabr kasal -> oktyabr chegirmasi).
+  const sickMonth=prevMonthStr(month);
+  const sickMap={}; try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',sickMonth)));
     asnap.docs.forEach(d=>{ const x=d.data()||{}; let n=0; Object.values(x.days||{}).forEach(st=>{ if(st==='sick')n++; }); if(n) sickMap[x.studentId||String(d.id).split('__')[0]]=n; }); }catch(e){}
   let ledger=[]; try{ const l=await getDocs(collection(db,'referral_ledger')); ledger=l.docs.map(d=>({id:d.id,...(d.data()||{})})); }catch(e){}
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf);
@@ -4333,6 +4339,19 @@ function startOutboxSync(){
   setInterval(()=>{ if(navigator.onLine && obPending().length) flushOutbox(); }, 20000);   // har 20 s
   obBadge(); if(navigator.onLine) flushOutbox();
 }
+// Chek uchun: shu summa QAYSI oy fakturalarини qoplaydi (eng eski to'lanmagan -> keyingi). Waterfall bilan bir xil.
+async function pmCoveredMonths(sid, amount){
+  try{
+    const snap=await getDocs(query(collection(db,'invoices'), where('studentId','==',String(sid))));
+    const list=snap.docs.map(d=>({_id:d.id,...d.data()}))
+      .filter(x=>x.status!=='paid'&&x.status!=='canceled'&&x.status!=='reversed')
+      .sort((a,b)=>String(a.month||a._id).localeCompare(String(b.month||b._id)));
+    let avail=Number(amount)||0; const months=[];
+    for(const inv of list){ if(avail<=0.5) break; const rem=(Number(inv.amount)||0)-(Number(inv.paidAmount)||0); if(rem<=0) continue;
+      if(inv.month) months.push(inv.month); avail-=Math.min(avail,rem); }
+    return months;
+  }catch(e){ return []; }
+}
 async function openRecordPayment(students, reload, pre){
   const list = (students&&students.length)?students:(cache.students||[]);
   pre = pre||{};   // {sid, name, amount} — qatordan chaqirilganda o'quvchi va qarz oldindan to'ldiriladi.
@@ -4385,8 +4404,12 @@ async function openRecordPayment(students, reload, pre){
     }catch(e){} }
     saving=true; const btn=$('#rp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
     const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
+    // CHEK OYLARI: qo'lда yozilган bo'lsa — o'sha; aks holda AVTOMATIK (to'lov QAYSI oy fakturalarини qoplasa) —
+    // to'lov QO'LLANISHIDAN OLDIN hisoblaymiz (keyin fakturalar to'lanib, qoplangan oylar yo'qoladi).
+    let receiptPeriod=period;
+    if(!receiptPeriod && navigator.onLine){ const cov=await pmCoveredMonths(sid, amount); if(cov.length) receiptPeriod=cov.map(fmtMonthUz).join(', '); }
     // 1) AVVAL outbox'ga (localStorage) DURDMLI yozamiz — brauzer yopilsa/internet uzilsa ham to'lov YO'QOLMAYDI.
-    const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period, nm, ts:Date.now() };
+    const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period:receiptPeriod||period, nm, ts:Date.now() };
     obAdd(item);
     // 2) DARHOL yuborishga urinamiz (navigator.onLine noto'g'ri bo'lishi mumkin — shuning uchun har doim urinamiz).
     //    _obFlushing posboni — fon (20s) flusher bilan bir elementni BIR VAQTDA yubormaslik (ikki marta qo'llanmasin).
@@ -4414,7 +4437,7 @@ async function openRecordPayment(students, reload, pre){
         <div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich turadi). Chekni hozir ham chiqarishingiz mumkin.</div></div>${printBtnRow}`;
     }
     const x2=$('#m-x2'); if(x2) x2.onclick=closeModal; const rc=$('#rp-close'); if(rc) rc.onclick=closeModal;
-    const rp=$('#rp-print'); if(rp) rp.onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:period||undefined, method:methLbl, date });
+    const rp=$('#rp-print'); if(rp) rp.onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date });
   };
 }
 
