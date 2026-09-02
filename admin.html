@@ -4103,7 +4103,7 @@ async function renderPayments(){
       toast(`${done} ta o‘chirildi ✓`); load(); }); }
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
       // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
-      openRecordPayment(students, load, { sid:rr.studentId, name:nameOf(rr), amount:debtOf(rr) }); }));
+      openRecordPayment(students, load, { sid:rr.studentId, name:nameOf(rr), amount:debtOf(rr), period:rr.month }); }));
     $('#pm-body').querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Bekor qilinsinmi?'))return; try{ await setDoc(doc(db,'invoices',b.dataset.cancel),{status:'canceled'},{merge:true}); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
@@ -4254,6 +4254,7 @@ async function openRecordPayment(students, reload, pre){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input id="rp-amt" type="text" inputmode="numeric" placeholder="2 900 000" value="${esc(preAmtStr)}" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(today)}" style="${fld}"></label>
       </div>
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaysi oy(lar) uchun <span class="muted" style="font-weight:500">— chekda ko‘rinadi (kelgusi oylar uchun ham)</span><input id="rp-period" type="text" placeholder="masalan: Sentyabr 2026  yoki  Sen–Noy 2026" value="${esc(pre.period||'')}" style="${fld}"></label>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="rp-note" type="text" placeholder="ixtiyoriy (masalan bank kvitansiya №)" style="${fld}"></label>
       <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi. <b>Click/Uzum</b> avtomatik keladi — bu yerга kiritmang.</div>
     </div>
@@ -4270,7 +4271,7 @@ async function openRecordPayment(students, reload, pre){
   let saving=false;
   $('#rp-save').onclick=async()=>{
     if(saving) return;
-    const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=$('#rp-date').value, note=$('#rp-note').value.trim();
+    const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=$('#rp-date').value, note=$('#rp-note').value.trim(), period=$('#rp-period').value.trim();
     if(!sid){ toast('O‘quvchini tanlang',true); return; }
     if(amount<=0){ toast('Summani kiriting',true); return; }
     const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
@@ -4279,7 +4280,7 @@ async function openRecordPayment(students, reload, pre){
     try{
       // 1) To'lovni YAGONA joyga (payments) yozamiz — barcha usullar bir xil oqim.
       await setDoc(doc(db,'payments',payId), { id:payId, studentId:String(sid), provider:method, amount, status:'applied',
-        payerName:nm, matched:true, raw:{ manual:true, method, date, note }, createdAt:serverTimestamp() });
+        payerName:nm, matched:true, raw:{ manual:true, method, date, note, forPeriod:period }, createdAt:serverTimestamp() });
       // 2) Balansga IDEMPOTENT qo'llaymiz (payId posboni — ikki marta qo'llanmaydi).
       await applyPaymentClient(String(sid), amount, method, payId);
       toast('To‘lov qabul qilindi ✓'); if(reload) reload();
@@ -4289,7 +4290,7 @@ async function openRecordPayment(students, reload, pre){
         <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
         <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
       $('#m-x2').onclick=closeModal; $('#rp-close').onclick=closeModal;
-      $('#rp-print').onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', method:methLbl, date });
+      $('#rp-print').onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:period||undefined, method:methLbl, date });
     }catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish'; toast('Xatolik: '+(e.code||e.message),true); }
   };
 }
