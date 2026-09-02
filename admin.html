@@ -3228,13 +3228,15 @@ async function renderAccounting(){
         <td data-label="Xodim">${esc(a.teacherName||a.teacherId||'—')}</td>
         <td data-label="Izoh">${esc(a.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
-        <td class="td-actions"><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
+        <td class="td-actions"><button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
     $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard;
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
       printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, date:e.date||new Date().toISOString().slice(0,10) }); }));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
+    $('#ac-body').querySelectorAll('[data-arec]').forEach(b=>b.addEventListener('click',()=>{ const a=madv.find(x=>x._id===b.dataset.arec); if(!a) return;
+      printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, date:a.date||new Date().toISOString().slice(0,10) }); }));
   };
 
   function openExpenseForm(exp){
@@ -3321,7 +3323,13 @@ async function renderAccounting(){
       if(amount<=0){ toast('Summani kiriting',true); return; }
       const btn=$('#av-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{ await addDoc(collection(db,'staff_advances'), { teacherId:String(tid), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() });
-        toast('Xodim avansi yozildi ✓'); closeModal(); if(await reload()) draw($('#ac-month').value||curMonth()); }
+        toast('Xodim avansi yozildi ✓'); if(await reload()) draw($('#ac-month').value||curMonth());
+        $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Xodim avansi yozildi</h3><button class="x" id="m-x2">×</button></div>
+          <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} — ${fmtSum(amount)} so‘m</div>
+          <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
+          <div class="modal-f"><button type="button" class="btn ghost" id="av-close">Yopish</button><button type="button" class="btn gold" id="av-print">🧾 Chek chiqarish</button></div>`;
+        $('#m-x2').onclick=closeModal; $('#av-close').onclick=closeModal;
+        $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount, reason:`Xodim avansi${note?' · '+note:''}`, date }); }
       catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
     };
   });
