@@ -3260,7 +3260,13 @@ async function renderAccounting(){
         const data={ date, month:date.slice(0,7), category, amount, note, updatedAt:serverTimestamp() };
         if(exp&&exp._id) await setDoc(doc(db,'expenses',exp._id),data,{merge:true});
         else { data.createdAt=serverTimestamp(); await addDoc(collection(db,'expenses'),data); }
-        toast('Saqlandi ✓'); closeModal(); if(await reload()) draw($('#ac-month').value||curMonth());
+        toast('Saqlandi ✓'); if(await reload()) draw($('#ac-month').value||curMonth());
+        $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Xarajat saqlandi</h3><button class="x" id="m-x2">×</button></div>
+          <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(category)} — ${fmtSum(amount)} so‘m</div>
+          <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
+          <div class="modal-f"><button type="button" class="btn ghost" id="e-close">Yopish</button><button type="button" class="btn gold" id="e-print">🧾 Chek chiqarish</button></div>`;
+        $('#m-x2').onclick=closeModal; $('#e-close').onclick=closeModal;
+        $('#e-print').onclick=()=>printReceipt({ kind:'expense', amount, reason:`${category}${note?' · '+note:''}`, date });
       }catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
     };
   }
@@ -4201,7 +4207,14 @@ async function openRecordPayment(students, reload, pre){
         payerName:nm, matched:true, raw:{ manual:true, method, date, note }, createdAt:serverTimestamp() });
       // 2) Balansga IDEMPOTENT qo'llaymiz (payId posboni — ikki marta qo'llanmaydi).
       await applyPaymentClient(String(sid), amount, method, payId);
-      toast('To‘lov qabul qilindi ✓'); closeModal(); if(reload) reload();
+      toast('To‘lov qabul qilindi ✓'); if(reload) reload();
+      const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
+      $('#modal').innerHTML=`<div class="modal-h"><h3>✓ To‘lov qabul qilindi</h3><button class="x" id="m-x2">×</button></div>
+        <div class="modal-b"><div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>
+        <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
+        <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
+      $('#m-x2').onclick=closeModal; $('#rp-close').onclick=closeModal;
+      $('#rp-print').onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', method:methLbl, date });
     }catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish'; toast('Xatolik: '+(e.code||e.message),true); }
   };
 }
@@ -4263,11 +4276,11 @@ async function qrDataUrl(text){ try{ await loadQR(); const d=document.createElem
   const cv=d.querySelector('canvas'), img=d.querySelector('img');
   return (cv&&cv.toDataURL('image/png'))||(img&&img.src)||''; }catch(e){ return ''; } }
 let RECEIPT=null;
-async function loadReceiptCfg(){ if(RECEIPT) return RECEIPT; RECEIPT={width:80,socialUrl:'https://iqroacademy.uz'};
+async function loadReceiptCfg(){ if(RECEIPT) return RECEIPT; RECEIPT={width:80,socialUrl:'https://taplink.cc/iqror'};
   try{ const c=await getDoc(doc(db,'config','receipt')); if(c.exists()){ const d=c.data()||{}; if(Number(d.width)>0) RECEIPT.width=Number(d.width); if(d.socialUrl) RECEIPT.socialUrl=String(d.socialUrl); } }catch(e){} return RECEIPT; }
 async function printReceipt(r){
   const cfg=await loadReceiptCfg(); const width=Number(r.width||cfg.width||80);
-  const qr=await qrDataUrl(r.social||cfg.socialUrl||'https://iqroacademy.uz');
+  const qr=await qrDataUrl(r.social||cfg.socialUrl||'https://taplink.cc/iqror');
   const fs=width>=80?'13px':'11px', big=width>=80?'20px':'16px', qrw=width>=80?'120px':'96px', lg=width>=80?'52px':'40px';
   const emblem=`<svg style="width:${lg}px;height:auto;display:block;margin:0 auto 4px" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
   const kind=r.kind==='expense'?'XARAJAT CHEKI':'TO‘LOV CHEKI';
