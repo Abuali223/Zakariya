@@ -3921,6 +3921,11 @@ async function renderPayments(){
       <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-audit" style="width:100%" title="Har o‘quvchida real to‘lov = hisob-faktura + avans ekanini tekshiradi (takror hisoblangan avans / nomutanosiblikni topadi)">🔍 Moliya tekshiruvi</button></label>`:''}
     </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`}</div>
+    <div class="ph-actions" style="margin-bottom:12px">
+      <input id="pm-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
+      <select id="pm-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
+      <select id="pm-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
+    </div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
@@ -3942,24 +3947,43 @@ async function renderPayments(){
     const isCanc=r=>r.status==='canceled'||r.status==='reversed';
     const paidOf=r=>r.status==='paid'?(Number(r.amount)||0):(isCanc(r)?0:(Number(r.paidAmount)||0));
     const debtOf=r=>isCanc(r)?0:Math.max(0,(Number(r.amount)||0)-paidOf(r));
-    const fullPaid=rows.filter(r=>r.status==='paid'), partial=rows.filter(r=>r.status==='partial');
-    const pend=rows.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
-    const collected=rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
-    const debtTotal=rows.reduce((s,r)=>s+debtOf(r),0);
+    // O'quvchisi ro'yxatda topilmagan (o'chirilgan/ID o'zgargan) invoyslar — alohida (266≠288 sababi).
+    const orphan=rows.filter(r=>!stById[r.studentId]);
+    const curAll=rows.filter(r=>stById[r.studentId]);                       // joriy o'quvchilar (butun oy)
+    // Filtr — o'quvchi bo'limidek: qidiruv + sinf + til (JORIY o'quvchi bo'yicha).
+    const _q=(($('#pm-search')&&$('#pm-search').value)||'').trim().toLowerCase(), _qd=_q.replace(/\D/g,'');
+    const _fg=($('#pm-fgrade')&&$('#pm-fgrade').value)||'', _fl=($('#pm-flang')&&$('#pm-flang').value)||'';
+    const cur=curAll.filter(r=>{ const s=stById[r.studentId]||{};
+      if(_fg!==''&&String(Number(s.grade)||0)!==String(_fg)) return false;
+      if(_fl&&(s.lang||'uz')!==_fl) return false;
+      if(_q){ const okTxt=[nameOf(r),r.studentId,s.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(_q));
+        const ph=[s.parentPhone,s.parentPhone2].map(v=>String(v==null?'':v).replace(/\D/g,''));
+        if(!(okTxt||(_qd.length>=4&&ph.some(p=>p&&p.includes(_qd))))) return false; }
+      return true; });
+    const fullPaid=cur.filter(r=>r.status==='paid'), partial=cur.filter(r=>r.status==='partial');
+    const pend=cur.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
+    const collected=curAll.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
+    const debtTotal=curAll.reduce((s,r)=>s+debtOf(r),0);
+    const curDebt=cur.reduce((s,r)=>s+debtOf(r),0);   // filtrlangan jadval qarzi (sarlavha uchun)
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
     const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans'};
-    const groups={}; rows.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
+    const groups={}; curAll.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
     const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
-      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${pend.length+partial.length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
-    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">Yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
+      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${curAll.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
+    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">${curAll.length} o‘quvchi · yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
     const unmatchedCard = unmatched.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--gold)"><div class="cls-card-head"><h3>⚠️ Biriktirilmagan to‘lovlar</h3><span class="cls-count">${unmatched.length} ta · o‘quvchi topilmadi (qo‘lda biriktiring)</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lovchi</th><th>Telefon</th><th>Sinf</th><th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
         <td data-label="To‘lovchi">${esc(u.payerName||'—')}</td><td data-label="Telefon">${esc(u.payerPhone||'—')}</td>
         <td data-label="Sinf">${esc(u.payerClass||'—')}</td><td data-label="Summa"><b>${fmtSom(u.amount)}</b></td>
         <td class="td-actions"><button class="btn sm gold" data-assign="${esc(u._id)}">Biriktirish</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
+    // O'quvchisi topilmagan (eski/o'chirilgan / ID o'zgargan) invoyslar — statistika bilan farqni tushuntiradi + tozalash.
+    const orphanCard = orphan.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>⚠️ O‘quvchisi topilmagan hisob-fakturalar</h3><span class="cls-count">${orphan.length} ta · o‘quvchi ro‘yxatda yo‘q</span></div>
+      <div style="padding:10px 16px" class="small muted">Bu oyda jami <b>${rows.length}</b> hisob-faktura, ro‘yxatda esa <b>${curAll.length}</b> o‘quvchi — farq (${orphan.length} ta) o‘chirilgan yoki ID‘si o‘zgargan o‘quvchilarnikidir.${SESSION.isAdmin?' Tozalash uchun quyidagi tugmani bosing.':''}</div>
+      ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 Bu oydagi ${orphan.length} ta “o‘quvchisiz” hisobni o‘chirish</button></div>`:''}
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi (eski)</th><th>Sinf (eski)</th><th>Summa</th><th>To‘langan</th><th>Holat</th></tr></thead><tbody>${orphan.map(r=>`<tr><td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'—')}</td><td data-label="Sinf">${esc(r.classKey||'—')}</td><td data-label="Summa">${fmtSom(r.amount)}</td><td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'—'}</td><td data-label="Holat">${esc(r.status||'—')}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='partial'?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
@@ -3968,7 +3992,7 @@ async function renderPayments(){
     const clsKeyOfRow=r=>{ const s=stById[r.studentId]; return s?classKeyOf(s):(String(r.classKey||'')||'zz'); };
     const clsLabelOfRow=r=>{ const s=stById[r.studentId]; return s?classLabelOf(s):(String(r.classKey||'')||'Sinf belgilanmagan'); };
     const clsSort=(a,b)=>{ const pa=String(a).split('-'),pb=String(b).split('-'); const ga=Number(pa[1])||0,gb=Number(pb[1])||0; if(ga!==gb)return ga-gb; const la=pa[0]==='ru'?1:0,lb=pb[0]==='ru'?1:0; if(la!==lb)return la-lb; return pa.slice(2).join('-').localeCompare(pb.slice(2).join('-')); };
-    const byCls={}; rows.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
+    const byCls={}; cur.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
     const rowHtml=r=>{ const d=debtOf(r); return `<tr>
       <td data-label="O‘quvchi">${esc(nameOf(r))}</td>
       <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
@@ -3986,9 +4010,13 @@ async function renderPayments(){
       const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
       return `<tr><td colspan="6" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
         + gp.rows.map(rowHtml).join(''); }).join('');
-    $('#pm-body').innerHTML=reportCard+unmatchedCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(debtTotal)}</span></div>
-      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="6" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
+    { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
+      if(!confirm(`Bu oydagi ${orphan.length} ta “o‘quvchisi topilmagan” hisob-faktura BUTUNLAY o‘chiriladi.\n(Ro‘yxatda bo‘lmagan/o‘chirilgan o‘quvchilarning eski hisoblari.) Davom etilsinmi?`)) return;
+      ob.disabled=true; let done=0; for(const r of orphan){ try{ await deleteDoc(doc(db,'invoices',r._id)); done++; }catch(e){} }
+      toast(`${done} ta o‘chirildi ✓`); load(); }); }
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
       // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
       openRecordPayment(students, load, { sid:rr.studentId, name:nameOf(rr), amount:debtOf(rr) }); }));
@@ -4117,6 +4145,11 @@ async function renderPayments(){
   if($('#pm-audit')) $('#pm-audit').addEventListener('click',openFinanceAudit);
   // Summa maydonini kiritilganda birliklarga ajratib ko'rsatadi (2 900 000)
   const amtEl=$('#pm-amount'); if(amtEl) amtEl.addEventListener('input',()=>{ const d=amtEl.value.replace(/\D/g,''); amtEl.value = d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
+  // Filtr (o'quvchi bo'limidek) — saqlanadi (FILTER_MEM) va boshqa saytdan qaytganda tiklanadi.
+  { const si=$('#pm-search'); if(si) si.addEventListener('input',load); }
+  { const g=$('#pm-fgrade'); if(g) g.addEventListener('change',load); }
+  { const l=$('#pm-flang'); if(l) l.addEventListener('change',load); }
+  fmemApply('pm-search'); fmemApply('pm-fgrade'); fmemApply('pm-flang');
   load();
 }
 // YAGONA to'lov qabul qilish: bank / Click / Uzum / Terminal / Naqd — hammasi bir oqim, idempotent.
