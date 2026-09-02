@@ -841,12 +841,12 @@ let currentTab = 'dashboard';
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
 let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
-const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
+const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
   hr:['teachers'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
-  finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], marketing_mgr:['marketing','enrollments'] };
+  finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], kassir:['payments'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
@@ -917,7 +917,7 @@ onAuthStateChanged(auth, async user=>{
   try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
   if(!role && tok && tok.claims && tok.claims.admin) role='director';
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
-  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','marketing_mgr'];
+  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr'];
   if(!STAFF.includes(role)){
     await signOut(auth);
     // Xabar HAR DOIM ko'rsatiladi (yangi kirishда ham, saqlangan sessiya qayta yuklanganда ham).
@@ -2631,7 +2631,7 @@ async function renderUsers(){
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   const roleOpts=[
     ['director','Direktor (superuser)'],['admin','Ma‘muriyat rahbari'],['zavuch','O‘IBDO‘'],
-    ['hr','HR'],['finance_mgr','Moliya menejeri'],['marketing_mgr','Marketing menejeri'],
+    ['hr','HR'],['finance_mgr','Moliya menejeri'],['kassir','Kassir (faqat to‘lov qabul qiladi)'],['marketing_mgr','Marketing menejeri'],
     ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
     ['reception','Qabulxona xodimi'],['treasurer','G‘aznachi'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
     ['parent','Ota-ona'],['student','O‘quvchi']
