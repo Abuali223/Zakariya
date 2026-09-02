@@ -39,4 +39,5 @@
 \ir cashier-role.sql
 \ir refunds.sql
 \ir salary-payments.sql
+\ir staff.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
