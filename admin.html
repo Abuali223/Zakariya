@@ -3644,23 +3644,26 @@ async function openPayHistory(sid, name){
   try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
   const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
   const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans',grant:'Grant'};
+  const paySt={applied:'Qo‘llandi',pending:'Kutilmoqda',failed:'Xato (qo‘llanmagan)',canceled:'Bekor',reversed:'Qaytarilgan',refunded:'Qaytarilgan',unmatched:'Biriktirilmagan'};
+  const payStCol={applied:'#1F9982',pending:'#B54708',failed:'#B42318',canceled:'#98A2B3',reversed:'#98A2B3',refunded:'#98A2B3',unmatched:'#B54708'};
   invs.sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
   pays.sort((a,b)=>String(dstr(b.createdAt)).localeCompare(String(dstr(a.createdAt))));
   ledg.sort((a,b)=>String(dstr(b.at)).localeCompare(String(dstr(a.at))));
   const reasonLbl={overpay:'Ortiqcha to‘lov → avans',applied:'Avans qo‘llandi',recompute:'Qayta hisoblash ortiqchasi',reversed:'Qaytarish (reversal)',manual:'Qo‘lda'};
   const invRows=invs.map(i=>`<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td style="text-align:right">${fmtSom(i.paidAmount||0)}</td><td>${esc(provLbl[i.provider]||i.provider||'—')}</td><td>${esc(dstr(i.paidAt))}</td><td>${esc(i.status||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Hisob-faktura yo‘q</td></tr>';
-  const payRows=pays.map(p=>`<tr><td>${esc(dstr(p.createdAt))}</td><td>${esc(provLbl[p.provider]||p.provider||'—')}</td><td>${esc(p.payerName||'—')}${p.payerPhone?` · ${esc(p.payerPhone)}`:''}</td><td style="text-align:right">${fmtSom(p.amount)}</td><td>${esc(p.status||'')}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Onlayn to‘lov yo‘q (Naqd to‘lov hisob-fakturada ko‘rinadi)</td></tr>';
+  const canCancelPay=p=>SESSION.isAdmin && p.status!=='canceled' && p.status!=='refunded' && p.status!=='reversed';
+  const payRows=pays.map(p=>{ const st=String(p.status||''); return `<tr><td>${esc(dstr(p.createdAt))}</td><td>${esc(provLbl[p.provider]||p.provider||'—')}</td><td>${esc(p.payerName||'—')}${p.payerPhone?` · ${esc(p.payerPhone)}`:''}</td><td style="text-align:right">${fmtSom(p.amount)}</td><td style="color:${payStCol[st]||'inherit'};font-weight:600">${esc(paySt[st]||st||'—')}</td>${SESSION.isAdmin?`<td class="td-actions">${canCancelPay(p)?`<button class="btn sm danger" data-cancelpay="${esc(p._id)}" title="Takror/xato yozuvni bekor qilish (fakturaga tegmaydi)">🚫 Bekor</button>`:''}</td>`:''}</tr>`; }).join('')||`<tr><td colspan="${SESSION.isAdmin?6:5}" class="muted">Onlayn to‘lov yo‘q (Naqd to‘lov hisob-fakturada ko‘rinadi)</td></tr>`;
   const ledgRows=ledg.map(l=>{ const d=Number(l.delta)||0; return `<tr><td>${esc(dstr(l.at))}</td><td>${esc(reasonLbl[l.reason]||l.reason||'')}${l.note?` · ${esc(l.note)}`:''}</td><td style="text-align:right;color:${d>=0?'#1F9982':'#B42318'}">${d>=0?'+':''}${fmtSom(d)}</td><td style="text-align:right">${fmtSom(l.balanceAfter||0)}</td></tr>`; }).join('')||'<tr><td colspan="4" class="muted">Avans harakati yozuvi yo‘q (jurnal shu tuzatishdan keyin to‘ldiriladi)</td></tr>';
   const body=$('#ph-body'); if(!body) return;
   // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
-  const paysSum=pays.filter(p=>p.status!=='canceled'&&p.status!=='reversed'&&p.status!=='refunded').reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const paysSum=pays.filter(p=>['canceled','reversed','refunded','failed','pending'].indexOf(String(p.status||''))<0).reduce((s,p)=>s+(Number(p.amount)||0),0);
   const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
   const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.</div>` : '';
   body.innerHTML=`
     <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}</div>
     ${warn}
     <h4 style="margin:10px 0 4px;font-size:14px">Hisob-fakturalar</h4><div class="tablewrap"><table><thead><tr><th>Oy</th><th>Summa</th><th>To‘langan</th><th>Usul</th><th>Sana</th><th>Holat</th></tr></thead><tbody>${invRows}</tbody></table></div>
-    <h4 style="margin:14px 0 4px;font-size:14px">Onlayn to‘lovlar (Click/Uzum) — kim to‘lagan</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>To‘lovchi</th><th>Summa</th><th>Holat</th></tr></thead><tbody>${payRows}</tbody></table></div>
+    <h4 style="margin:14px 0 4px;font-size:14px">To‘lov yozuvlari (Click/Uzum/Naqd) — kim to‘lagan${SESSION.isAdmin?' <span class="small muted" style="font-weight:400">· takror/xato yozuvni 🚫 bilan bekor qiling</span>':''}</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>To‘lovchi</th><th>Summa</th><th>Holat</th>${SESSION.isAdmin?'<th></th>':''}</tr></thead><tbody>${payRows}</tbody></table></div>
     <h4 style="margin:14px 0 4px;font-size:14px">Avans harakati (qayerdan / qayerga)</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Sabab</th><th>O‘zgarish</th><th>Balans</th></tr></thead><tbody>${ledgRows}</tbody></table></div>`;
   const fx=$('#ph-fix'); if(fx) fx.onclick=async()=>{
     const v=prompt('To‘g‘ri avans summasi (so‘m). Masalan bitta 2 900 000 to‘lov bo‘lsa: 2900000', String(credit));
@@ -3671,6 +3674,17 @@ async function openPayHistory(sid, name){
       toast('Avans tuzatildi ✓'); openPayHistory(sid, name); }
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
   };
+  // Takror / xato («failed»/«pending» yoki internet uzilib fantom bo'lib qolgan) to'lov YOZUVINI bekor qilish.
+  // MUHIM: bu faqat YOZUVNI 'canceled' qiladi (daromad/tekshiruvdan chiqadi) — fakturaga TEGMAYDI.
+  // Agar to'lov fakturaga haqiqatan qo'llangan bo'lsa (pul qaytariladigan bo'lsa) — «↩ Qaytarish»ni ishlating.
+  body.querySelectorAll('[data-cancelpay]').forEach(b=>b.onclick=async()=>{
+    if(!SESSION.isAdmin) return; const pid=b.getAttribute('data-cancelpay'); const p=pays.find(x=>x._id===pid); if(!p) return;
+    if(!confirm(`Bu to‘lov YOZUVI bekor qilinsinmi?\n${fmtSom(p.amount)} so‘m · ${dstr(p.createdAt)} · ${provLbl[p.provider]||p.provider||''}\n\nBu faqat takror/xato yozuv uchun (fakturaga tegmaydi).\nAgar pul haqiqatan qaytarilishi kerak bo‘lsa — «↩ Qaytarish»ni ishlating.`)) return;
+    b.disabled=true;
+    try{ await setDoc(doc(db,'payments',pid),{ status:'canceled', canceledAt:serverTimestamp(), canceledBy:(auth.currentUser&&auth.currentUser.email)||'' },{merge:true});
+      toast('To‘lov yozuvi bekor qilindi ✓'); openPayHistory(sid, name); }
+    catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
+  });
 }
 // ==== MOLIYA TEKSHIRUVI (reconciliation) =============================
 // Muvozanat qoidasi: har o'quvchi uchun REAL to'lov (payments) == hisob-
@@ -3701,7 +3715,7 @@ async function openFinanceAudit(){
     if(i.studentName && !nameMap[sid]) nameMap[sid]=i.studentName; });
   creds.forEach(c=>{ const sid=String(c.studentId||c._id||''); if(!sid) return; C[sid]=(C[sid]||0)+(Number(c.credit)||0); });
   let unmatchedSum=0, unmatchedN=0;
-  pays.forEach(p=>{ const st=String(p.status||''); if(st==='canceled'||st==='reversed'||st==='refunded') return;
+  pays.forEach(p=>{ const st=String(p.status||''); if(['canceled','reversed','refunded','failed','pending'].indexOf(st)>=0) return;
     const amt=Number(p.amount)||0; if(!amt) return; const sid=String(p.studentId||'');
     if(!sid){ unmatchedSum+=amt; unmatchedN++; return; }
     P[sid]=(P[sid]||0)+amt; if(p.payerName && !nameMap[sid]) nameMap[sid]=p.payerName; });
@@ -4298,14 +4312,25 @@ async function openRecordPayment(students, reload, pre){
     if(!sid){ toast('O‘quvchini tanlang',true); return; }
     if(amount<=0){ toast('Summani kiriting',true); return; }
     const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
+    // TAKROR BOSISHDAN HIMOYA: shu o'quvchiga shu summa oxirgi 3 daqiqada allaqachon yozilganmi?
+    // (Internet sekinlashganda tugma qayta bosilib, bir to'lov 2-3 marta yozilib qolardi — shu bloklaydi.)
+    try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
+      const dup=rq.docs.map(d=>d.data()).find(p=>Number(p.amount)===amount && p.raw&&p.raw.manual && p.status!=='canceled' && p.status!=='failed'
+        && p.createdAt&&p.createdAt.toDate && (now-p.createdAt.toDate().getTime())<180000);
+      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror (internet sekinlashib qayta bosilgan) bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)) return;
+    }catch(e){}
     saving=true; const btn=$('#rp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
     const payId='man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    let payWritten=false;
     try{
-      // 1) To'lovni YAGONA joyga (payments) yozamiz — barcha usullar bir xil oqim.
-      await setDoc(doc(db,'payments',payId), { id:payId, studentId:String(sid), provider:method, amount, status:'applied',
+      // 1) To'lovni AVVAL 'pending' holatда yozamiz (hali qo'llanmagan). 'applied' — faqat waterfall MUVAFFAQ bo'lgach.
+      await setDoc(doc(db,'payments',payId), { id:payId, studentId:String(sid), provider:method, amount, status:'pending',
         payerName:nm, matched:true, raw:{ manual:true, method, date, note, forPeriod:period }, createdAt:serverTimestamp() });
+      payWritten=true;
       // 2) Balansga IDEMPOTENT qo'llaymiz (payId posboni — ikki marta qo'llanmaydi).
       await applyPaymentClient(String(sid), amount, method, payId);
+      // 3) Faqat MUVAFFAQIYATdan keyin 'applied' — endi «applied» so'zi haqiqatan qo'llanganini bildiradi.
+      await setDoc(doc(db,'payments',payId), { status:'applied', appliedAt:serverTimestamp() }, {merge:true});
       toast('To‘lov qabul qilindi ✓'); if(reload) reload();
       const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
       $('#modal').innerHTML=`<div class="modal-h"><h3>✓ To‘lov qabul qilindi</h3><button class="x" id="m-x2">×</button></div>
@@ -4314,7 +4339,13 @@ async function openRecordPayment(students, reload, pre){
         <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
       $('#m-x2').onclick=closeModal; $('#rp-close').onclick=closeModal;
       $('#rp-print').onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:period||undefined, method:methLbl, date });
-    }catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish'; toast('Xatolik: '+(e.code||e.message),true); }
+    }catch(e){
+      // Waterfall XATO berdi (internet uzildi) — to'lovni 'failed' deb belgilaymiz: daromadga KIRMAYDI, takror
+      // «applied» bo'lib qolmaydi, keyin qayta urinish/tozalash mumkin (fantom yozuv paydo bo'lmasin).
+      if(payWritten){ try{ await setDoc(doc(db,'payments',payId),{ status:'failed', error:String(e.code||e.message) },{merge:true}); }catch(_){} }
+      saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
+      toast('Qo‘llashda xatolik (internet?) — to‘lov «failed» belgilandi, qayta urinib ko‘ring: '+(e.code||e.message),true);
+    }
   };
 }
 
