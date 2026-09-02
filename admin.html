@@ -3681,7 +3681,8 @@ async function openPayHistory(sid, name){
     if(!SESSION.isAdmin) return; const pid=b.getAttribute('data-cancelpay'); const p=pays.find(x=>x._id===pid); if(!p) return;
     if(!confirm(`Bu to‘lov YOZUVI bekor qilinsinmi?\n${fmtSom(p.amount)} so‘m · ${dstr(p.createdAt)} · ${provLbl[p.provider]||p.provider||''}\n\nBu faqat takror/xato yozuv uchun (fakturaga tegmaydi).\nAgar pul haqiqatan qaytarilishi kerak bo‘lsa — «↩ Qaytarish»ni ishlating.`)) return;
     b.disabled=true;
-    try{ await setDoc(doc(db,'payments',pid),{ status:'canceled', canceledAt:serverTimestamp(), canceledBy:(auth.currentUser&&auth.currentUser.email)||'' },{merge:true});
+    // FAQAT mavjud 'status' ustunini yozamiz (payments jadvalida canceledAt/By ustuni yo'q -> PGRST204).
+    try{ await setDoc(doc(db,'payments',pid),{ status:'canceled' },{merge:true});
       toast('To‘lov yozuvi bekor qilindi ✓'); openPayHistory(sid, name); }
     catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
   });
@@ -4330,7 +4331,8 @@ async function openRecordPayment(students, reload, pre){
       // 2) Balansga IDEMPOTENT qo'llaymiz (payId posboni — ikki marta qo'llanmaydi).
       await applyPaymentClient(String(sid), amount, method, payId);
       // 3) Faqat MUVAFFAQIYATdan keyin 'applied' — endi «applied» so'zi haqiqatan qo'llanganini bildiradi.
-      await setDoc(doc(db,'payments',payId), { status:'applied', appliedAt:serverTimestamp() }, {merge:true});
+      //    (Faqat mavjud 'status' ustuni — appliedAt ustuni yo'q, PGRST204 bermasin.)
+      await setDoc(doc(db,'payments',payId), { status:'applied' }, {merge:true});
       toast('To‘lov qabul qilindi ✓'); if(reload) reload();
       const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
       $('#modal').innerHTML=`<div class="modal-h"><h3>✓ To‘lov qabul qilindi</h3><button class="x" id="m-x2">×</button></div>
@@ -4342,7 +4344,7 @@ async function openRecordPayment(students, reload, pre){
     }catch(e){
       // Waterfall XATO berdi (internet uzildi) — to'lovni 'failed' deb belgilaymiz: daromadga KIRMAYDI, takror
       // «applied» bo'lib qolmaydi, keyin qayta urinish/tozalash mumkin (fantom yozuv paydo bo'lmasin).
-      if(payWritten){ try{ await setDoc(doc(db,'payments',payId),{ status:'failed', error:String(e.code||e.message) },{merge:true}); }catch(_){} }
+      if(payWritten){ try{ await setDoc(doc(db,'payments',payId),{ status:'failed' },{merge:true}); }catch(_){} }
       saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
       toast('Qo‘llashda xatolik (internet?) — to‘lov «failed» belgilandi, qayta urinib ko‘ring: '+(e.code||e.message),true);
     }
