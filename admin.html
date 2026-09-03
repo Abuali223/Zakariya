@@ -3750,7 +3750,7 @@ async function openFinanceAudit(){
       <td style="text-align:right">${fmtN(r.c)}</td>
       <td style="text-align:right;font-weight:800;color:${col}">${r.disc>0?'+':''}${fmtN(r.disc)}</td>
       <td style="color:${col}">${isOver?'⚠️ Ortiqcha':'ℹ️ Qo‘llanmagan'}</td>
-      <td><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button></td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button>${(!isOver && SESSION.isAdmin)?`<button class="btn sm gold" data-fix="${esc(r.sid)}" data-amt="${Math.abs(r.disc)}" title="Osilib qolgan pulni fakturaga qo‘llash">🔧 Qo‘llash</button>`:''}</div></td>
     </tr>`; }).join('');
   const table = rows.length? `<div class="tablewrap" style="margin-top:10px"><table>
     <thead><tr><th>O‘quvchi</th><th>Real to‘lov</th><th>H-faktura</th><th>Avans</th><th>Farq</th><th>Holat</th><th></th></tr></thead>
@@ -3761,6 +3761,16 @@ async function openFinanceAudit(){
     ${unmatchedLine}
     ${table}`;
   body.querySelectorAll('[data-ph]').forEach(b=>b.onclick=()=>{ const sid=b.getAttribute('data-ph'); openPayHistory(sid, nameMap[sid]||sid); });
+  // «Qo'llash»: osilib qolgan pulni (real > qo'llangan) eng eski to'lanmagan fakturaga qo'llaydi.
+  // YANGI to'lov yozuvi YARATMAYDI — mavjud pulni fakturaga biriktiradi (ikki marta hisoblanmaydi).
+  body.querySelectorAll('[data-fix]').forEach(b=>b.onclick=async()=>{
+    if(!SESSION.isAdmin) return; const sid=b.getAttribute('data-fix'); const amt=Math.round(Number(b.getAttribute('data-amt'))||0); if(amt<=0) return;
+    if(!confirm(`${nameMap[sid]||sid}: osilib qolgan ${fmtN(amt)} so‘m eng eski to‘lanmagan fakturaga qo‘llansinmi?\n(Yangi to‘lov yozuvi yaratilmaydi — mavjud pul fakturaga biriktiriladi. Ortiqchasi avansga o‘tadi.)`)) return;
+    b.disabled=true; const t0=b.textContent; b.textContent='…';
+    try{ await applyPaymentClient(String(sid), amt, 'cash', 'fix_'+Date.now()+'_'+Math.random().toString(36).slice(2,6));
+      toast('Fakturaga qo‘llandi ✓'); openFinanceAudit(); }
+    catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+(e.code||e.message),true); }
+  });
 }
 async function renderPriceTable(){
   $('#view').innerHTML = `<div class="page-head"><h2>Narx jadvali</h2></div>
