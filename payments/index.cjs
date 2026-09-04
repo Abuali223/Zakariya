@@ -34,6 +34,9 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+// Konstant-vaqtли solishtiruv (imzo/parol uchun — timing side-channelни kamaytiradi).
+function tseq(a, b){ const ab = Buffer.from(String(a==null?'':a)), bb = Buffer.from(String(b==null?'':b));
+  if(ab.length !== bb.length) return false; try{ return crypto.timingSafeEqual(ab, bb); }catch(e){ return false; } }
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 // Data qatlami: CFG.backend='supabase' -> Supabase service_role, aks holda Firebase (rollback).
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
@@ -222,7 +225,7 @@ const clickReady = p => !!CLICK.secretKey && (!CLICK.serviceId || String(p.servi
 async function handlePrepare(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, recv:String(p.sign_string||'').toLowerCase(), ours:clickSign(p,false), secLen:(CLICK.secretKey||'').length }));
-  if(clickSign(p, false) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
+  if(!tseq(clickSign(p, false), String(p.sign_string||'').toLowerCase())) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   const amount = Number(p.amount);
   if(!(amount > 0)) return clickErr(p, -2, 'Summa mos emas', false);
   const mti = String(p.merchant_trans_id || '');
@@ -257,7 +260,7 @@ async function handlePrepare(p){
 }
 async function handleComplete(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
-  if(clickSign(p, true) !== String(p.sign_string||'').toLowerCase()) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
+  if(!tseq(clickSign(p, true), String(p.sign_string||'').toLowerCase())) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
   const payRef = db.collection('payments').doc('click_' + p.click_trans_id);
   const paySnap = await payRef.get(); const pay = paySnap.exists ? paySnap.data() : null;
   if(!pay || String(pay.merchant_prepare_id) !== String(p.merchant_prepare_id)) return clickErr(p, -6, 'Tranzaksiya topilmadi', true);
@@ -321,7 +324,7 @@ function uzumAuthOK(headers){
   if(!/^Basic\s+/i.test(h)) return false;
   let dec=''; try{ dec = Buffer.from(h.replace(/^Basic\s+/i,''), 'base64').toString('utf8'); }catch(e){ return false; }
   const i = dec.indexOf(':'); if(i < 0) return false;
-  return !!UZUM.login && !!UZUM.password && dec.slice(0,i) === UZUM.login && dec.slice(i+1) === UZUM.password;
+  return !!UZUM.login && !!UZUM.password && tseq(dec.slice(0,i), UZUM.login) && tseq(dec.slice(i+1), UZUM.password);
 }
 // Hisob-faktura id sini Uzum `params` ichidan oladi (kabinetda belgilangan maydon).
 function uzInvoiceId(params){
@@ -457,7 +460,8 @@ if(require.main === module){
       else { res.writeHead(404); res.end('not found'); }
     }catch(e){ console.error('Xatolik:', e.message); res.writeHead(500); res.end('xatolik'); }
   });
-  server.listen(PORT, () => console.log(`Iqror to'lov serveri tinglayapti :${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
+  // FAQAT localhost — nginx (TLS) shu portga proxy qiladi. Provayder webhooklari api.iqror.uz (nginx) orqali keladi.
+  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror to'lov serveri tinglayapti 127.0.0.1:${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
 module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, markInvoicePaid, clickSign, md5 };

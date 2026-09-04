@@ -201,13 +201,28 @@ async function ownsChild(uid, sid){
 // /chat — jamoat endpointi (kirmagan tashrifchilar uchun). Auth emas, lekin
 // token-burn/DoS'ni kamaytirish uchun oddiy IP throttle.
 const _hits = new Map();
+// MUHIM: nginx `$proxy_add_x_forwarded_for` HAQIQIY mijoz IP'sini XFF ning ENG O'NGIGA qo'shadi.
+// Mijoz yuborgan soxta chap qiymatga ISHONMAYMIZ (aks holda throttle chetlab o'tiladi -> cost-DoS).
+// Shuning uchun ENG O'NGDAGI (nginx qo'shgan) qiymatni olamiz; yo'q bo'lsa — soket manzili.
+function clientIp(req){
+  const xff = String(req.headers['x-forwarded-for']||'').split(',').map(s=>s.trim()).filter(Boolean);
+  return (xff.length ? xff[xff.length-1] : (req.socket && req.socket.remoteAddress)) || '?';
+}
+// Global kunlik /chat cheklovi — bitta mijoz emas, BUTUN endpoint uchun (Anthropic xarajati himoyasi).
+let _chatDay = new Date().toISOString().slice(0,10), _chatDayCount = 0;
+function chatGlobalOk(){
+  const d = new Date().toISOString().slice(0,10);
+  if(d !== _chatDay){ _chatDay = d; _chatDayCount = 0; }
+  _chatDayCount++;
+  return _chatDayCount <= (Number(CFG.chatDailyCap) || 2000);
+}
 function chatAllowed(req){
-  const ip = String(req.headers['x-forwarded-for']||'').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+  const ip = clientIp(req);
   const now = Date.now(), win = 60*1000, LIM = Number(CFG.chatRateLimit) || 20;
   const arr = (_hits.get(ip)||[]).filter(t => now - t < win);
   arr.push(now); _hits.set(ip, arr);
-  if(_hits.size > 5000) _hits.clear();   // xotira himoyasi (soddaligicha)
-  return arr.length <= LIM;
+  if(_hits.size > 20000) _hits.clear();   // xotira himoyasi (haqiqiy IP -> bitta mijoz shishira olmaydi)
+  return arr.length <= LIM && chatGlobalOk();
 }
 
 /* ---------------- HTTP handlerlar ---------------- */
@@ -316,7 +331,8 @@ function serve(){
       }catch(e){ console.error('ERR', e.message); res.writeHead(500); res.end(JSON.stringify({error:'server', detail:e.message})); }
     });
   });
-  server.listen(PORT, ()=>console.log(`Iqror AI yordamchi tinglayapti :${PORT}  (/chat, /student-summary, /risk, /sheet) · model ${MODEL}`));
+  // FAQAT localhost — nginx (TLS) shu portga proxy qiladi. Tashqaridan to'g'ridan-to'g'ri kirish yopiladi.
+  server.listen(PORT, '127.0.0.1', ()=>console.log(`Iqror AI yordamchi tinglayapti 127.0.0.1:${PORT}  (/chat, /student-summary, /risk, /sheet) · model ${MODEL}`));
 }
 
 /* ---------------- CLI ---------------- */
