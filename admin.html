@@ -3909,6 +3909,21 @@ async function renderPriceTable(){
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
+// Monitoring chegirmasi HISOBLANADIGAN fanlar (sinf bandi + til). O'tgan oyning SHU fanlardagi
+// TASDIQLANGAN monitoring ballari O'RTACHASI -> 90+ = 20%, 100 = 100%. Ro'yxatni shu yerda tahrirlang.
+// Band tashqarisi (1-4, 10-11, variativ) -> filtr yo'q (mavjud barcha fan o'rtachasi).
+const MON_DISC_SUBJECTS = {
+  '5-6-uz': ['Ona tili','Matematika','Ingliz tili','IT','Biologiya'],
+  '5-6-ru': ['Rus tili','Matematika','Ingliz tili','IT','Biologiya'],
+  '7-9-uz': ['Ona tili','Matematika','Ingliz tili','IT','Biologiya','Kimyo'],
+  '7-9-ru': ['Rus tili','Matematika','Ingliz tili','IT','Biologiya','Kimyo'],
+};
+function monDiscountSlugs(grade, lang){
+  const g=Number(grade)||0, l=(lang==='ru'?'ru':'uz');
+  let band=null; if(g>=5&&g<=6) band='5-6'; else if(g>=7&&g<=9) band='7-9';
+  if(!band) return null;   // 1-4 / 10-11 / variativ -> cheklov yo'q
+  return new Set((MON_DISC_SUBJECTS[band+'-'+l]||[]).map(monSlug));
+}
 // Oy yordamchilari: "2026-10" -> oldingi oy "2026-09"; o'zbekcha oy nomi.
 function prevMonthStr(m){ const p=String(m||'').split('-'); let y=Number(p[0])||0, mo=(Number(p[1])||0)-1; if(mo<1){ mo=12; y--; } return y+'-'+String(mo).padStart(2,'0'); }
 const UZ_MONTHS=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
@@ -4050,9 +4065,14 @@ async function pmLoadCtx(month, students, amount){
   // MONITORING LAG: shu oy (M) invoysiga O'TGAN OY (M-1) TASDIQLANGAN monitoring balli qo'llanadi.
   // Har o'quvchi uchun o'sha oydagi fanlar bo'yicha o'rtacha (approved) ball; yo'q bo'lsa — chegirma yo'q.
   const monMonth=prevMonthStr(month);
+  // Har o'quvchi sinf+til -> chegirma fanlar to'plami (5-9 uchun; boshqasига cheklov yo'q).
+  const stMeta={}; students.forEach(s=>{ stMeta[String(s.studentId||s._id)]={grade:Number(s.grade)||0, lang:s.lang||'uz'}; });
   const monAgg={}; try{ const ms=await getDocs(query(collection(db,'monitoring'), where('period','==',monMonth)));
     ms.docs.forEach(d=>{ const x=d.data()||{}; if(x.status!=='approved') return; const sid=String(x.studentId||''); const sc=Number(x.score);
-      if(!sid||!isFinite(sc)) return; (monAgg[sid]=monAgg[sid]||{sum:0,cnt:0}); monAgg[sid].sum+=sc; monAgg[sid].cnt++; }); }catch(e){}
+      if(!sid||!isFinite(sc)) return;
+      const m=stMeta[sid]; const allow=m?monDiscountSlugs(m.grade,m.lang):null;
+      if(allow && !allow.has(monSlug(x.subject||''))) return;   // belgilangan fanlar tashqarisi -> chegirmaga kirmaydi
+      (monAgg[sid]=monAgg[sid]||{sum:0,cnt:0}); monAgg[sid].sum+=sc; monAgg[sid].cnt++; }); }catch(e){}
   const monScoreFn=sid=>{ const a=monAgg[String(sid)]; return (a&&a.cnt)?(a.sum/a.cnt):null; };
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id));
   const ctx={ priceMap, flatAmount:amount, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
