@@ -3181,11 +3181,12 @@ async function renderAccounting(){
     </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[], CREDITS=[], ADV=[];
+  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[];
   const reload=async()=>{
     try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
       try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
       try{ ADV=await loadCol('staff_advances'); }catch(e){ ADV=[]; }
+      try{ REF=await loadCol('refunds'); }catch(e){ REF=[]; }
       return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
@@ -3202,9 +3203,14 @@ async function renderAccounting(){
   // Balans-aware kirim: qisman to'lov ham hisobga olinadi.
   const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
   const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
+  // Qaytarilgan (refund) summasi — invoice oyi bo'yicha (Kirim aynan shu oyda kamaygan); payment-refund uchun createdAt.
+  const dtM=v=>{ try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,7); }catch(e){} return String(v||'').slice(0,7); };
+  const refMonth=r=>String(r.month||'')||dtM(r.createdAt);
+  const refundOfMonth=k=>REF.reduce((s,r)=>s+(refMonth(r)===k?(Number(r.amount)||0):0),0);
 
   const draw=(M)=>{
     const kirim=monthColl(M);
+    const qaytarilgan=refundOfMonth(M);
     const mExp=EXP.filter(e=>emonth(e)===M);
     const chiqim=sum(mExp);
     const foyda=kirim-chiqim;
@@ -3214,8 +3220,9 @@ async function renderAccounting(){
 
     // ---- KPI ----
     const kpis=`<div class="acc-kpis">
-      <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v num">${fmtC(kirim)}</div><div class="k-d">yig‘ilgan to‘lovlar</div></div></div>
+      <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v num">${fmtC(kirim)}</div><div class="k-d">yig‘ilgan to‘lovlar${qaytarilgan>0?` · qaytarilgan ayirilgan`:''}</div></div></div>
       <div class="acc-kpi neg"><div><div class="k-l">Chiqim</div><div class="k-v num">${fmtC(chiqim)}</div><div class="k-d">${mExp.length} ta xarajat</div></div></div>
+      ${qaytarilgan>0?`<div class="acc-kpi neg"><div><div class="k-l">Qaytarilgan</div><div class="k-v num">−${fmtC(qaytarilgan)}</div><div class="k-d">daromaddan ayirilgan (chiqim EMAS)</div></div></div>`:''}
       <div class="acc-kpi ${foyda>=0?'teal':'neg'}"><div><div class="k-l">${foyda>=0?'Foyda':'Zarar'}</div><div class="k-v num">${fmtC(foyda)}</div><div class="k-d">kirim − chiqim</div></div></div>
       <div class="acc-kpi gold"><div><div class="k-l">Foyda marjasi</div><div class="k-v num">${marja}<small>%</small></div><div class="k-d">har 100 so‘mdan</div></div><div class="acc-gauge" style="--p:${Math.max(0,Math.min(100,marja))}"><b>${marja}%</b></div></div>
     </div>`;

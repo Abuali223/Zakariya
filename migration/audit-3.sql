@@ -40,4 +40,9 @@ create policy inv_ins on invoices for insert with check (app.is_admin() or app.i
 drop policy if exists cl_ins on credit_ledger;
 create policy cl_ins on credit_ledger for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
 
+-- 6) refunds — Buxgalteriyada «Qaytarilgan» summani ko'rsatish uchun moliya/zavuch ham O'QIY oladi
+--    (YOZISH — refunds_ins — faqat direktor, o'zgarmaydi).
+drop policy if exists refunds_sel on public.refunds;
+create policy refunds_sel on public.refunds for select using (app.is_admin() or app.is_finance() or app.is_zavuch());
+
 notify pgrst, 'reload schema';
