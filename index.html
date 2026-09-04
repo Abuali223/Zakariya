@@ -1615,8 +1615,8 @@ function studentCardHTML(s){
   const t=T[lang];
   const rankArr=STUDENTS.filter(x=>x.lng===s.lng && String(x.g)===String(s.g) && x.cls===s.cls).sort((a,b)=>b.score-a.score);
   const rank=rankArr.findIndex(x=>x.id===s.id)+1;
-  const subjArr=(s.subjects&&s.subjects.length)?s.subjects:(SUBJECTS[s.tr]||[]).map((n,i)=>({uz:n.uz,ru:n.ru,s:(s.sc||[])[i]}));
-  const subs=subjArr.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join("");
+  // FANLAR KESIMIDA — demo (s.subjects) bo'lsa o'sha; aks holda REAL monitoring'dan renderKabMonitoring to'ldiradi (#kab-subjbars).
+  const subs=(s.subjects&&s.subjects.length)?s.subjects.map(x=>`<div class="subrow"><span>${esc(x[lang]||x.uz||"")}</span><div class="sb"><i style="width:${Number(x.s)||0}%"></i></div><b>${Number(x.s)||0}</b></div>`).join(""):'';
   return `<div class="found">
     <div class="fh">${s.photo?`<span class="found-photo"><img src="${esc(s.photo)}" alt=""></span>`:''}<b>${esc(s.name)}</b><span class="fid">${esc(s.id)}</span></div>
     <div class="fg">${esc(gradeLbl(s.g))}${s.cls?' «'+esc(s.cls)+'»':''}${s.tr?' · '+esc(s.tr):''}</div>
@@ -1625,7 +1625,8 @@ function studentCardHTML(s){
       <div class="m"><b>${Number(s.score)||0}</b><span>${esc(t.res_total)}</span></div>
       <div class="m"><b>${Number(s.att)||0}%</b><span>${esc(t.res_attendance)}</span></div>
     </div>
-    <div class="subs-l">${esc(t.res_subjects)}</div>${subs}</div>`;
+    <div class="subs-l">${esc(t.res_subjects)}</div>
+    <div id="kab-subjbars">${subs||`<div class="cls-empty" style="margin:0;padding:6px 0;font-size:12px;color:var(--muted)">${esc(t.kab_mon_loading||'Yuklanmoqda…')}</div>`}</div></div>`;
 }
 function renderKabinet(){
   const t=T[lang], host=$("#kabinet-body"); if(!host) return;
@@ -1917,11 +1918,17 @@ async function renderKabMonitoring(studentId){
   const raw=await window.IqrorFB.getMonitoring(studentId);
   if($("#kab-monitoring")!==box) return;
   const items=(raw||[]).filter(m=>m && m.status==='approved'); // faqat tasdiqlangan
-  if(!items.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_mon_none)}</div></div>`; return; }
+  const fillBars=html=>{ const sb=$("#kab-subjbars"); if(sb) sb.innerHTML=html; };
+  const noneBar=`<div class="cls-empty" style="margin:0;padding:6px 0;font-size:12px;color:var(--muted)">${esc(t.kab_mon_none)}</div>`;
+  if(!items.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_mon_none)}</div></div>`; fillBars(noneBar); return; }
   const PER={m1:"1-monitoring",m2:"2-monitoring",m3:"3-monitoring",m4:"4-monitoring"};
   const rows=items.slice().sort((a,b)=>String(a.subject||'').localeCompare(String(b.subject||''))||String(a.period||'').localeCompare(String(b.period||'')))
     .map(m=>`<div class="mon-krow"><span class="mon-ksubj">${esc(m.subject||'')}</span><span class="mon-kper">${esc(PER[m.period]||m.period||'')}</span><span class="mon-kval">${esc(m.score)}</span></div>`).join('');
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_mon_title)}</div><div class="mon-klist">${rows}</div></div>`;
+  // FANLAR KESIMIDA (karta boshidagi barlar) — har fanning ENG SO'NGGI monitoring bali (real ma'lumot).
+  const bySubj={}; items.forEach(m=>{ const k=String(m.subject||''); if(!k) return; const p=String(m.period||''); if(!bySubj[k]||p>=bySubj[k].p) bySubj[k]={p, v:Number(m.score)||0}; });
+  const bars=Object.keys(bySubj).sort((a,b)=>a.localeCompare(b)).map(k=>{ const v=bySubj[k].v; return `<div class="subrow"><span>${esc(k)}</span><div class="sb"><i style="width:${Math.max(0,Math.min(100,v))}%"></i></div><b>${v}</b></div>`; }).join('');
+  fillBars(bars||noneBar);
 }
 async function renderKabAttendance(studentId){
   const t=T[lang], box=$("#kab-att"); if(!box || !(window.IqrorFB&&window.IqrorFB.getAttendance)) return;
