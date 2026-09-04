@@ -29,4 +29,15 @@ drop policy if exists teachers_sel on public.teachers;
 create policy teachers_sel on public.teachers for select
   using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_zavuch());
 
+-- 4) [P0] Kassir to'lov qabul qilganda 42501/403 berardi. Sabab: shim `setDoc` = Supabase UPSERT
+--    (INSERT ... ON CONFLICT) -> Postgres INSERT huquqini ham talab qiladi (faktura mavjud bo'lsa ham,
+--    INSERT with-check baholanadi). `inv_ins` kassirni qamramagan edi. Kassir/moliya UPSERT qila olsin.
+drop policy if exists inv_ins on invoices;
+create policy inv_ins on invoices for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
+
+-- 5) credit_ledger (avans harakati jurnali) — ilgari faqat admin yozardi -> moliya/kassir to'lovlarida
+--    jurnal bo'sh qolardi (applyPaymentClient'da try/catch yutardi). Endi to'lov oluvchilar ham yozadi.
+drop policy if exists cl_ins on credit_ledger;
+create policy cl_ins on credit_ledger for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
+
 notify pgrst, 'reload schema';

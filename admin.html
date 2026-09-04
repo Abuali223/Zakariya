@@ -4153,8 +4153,9 @@ async function renderPayments(){
     const clsLabelOfRow=r=>{ const s=stById[r.studentId]; return s?classLabelOf(s):(String(r.classKey||'')||'Sinf belgilanmagan'); };
     const clsSort=(a,b)=>{ const pa=String(a).split('-'),pb=String(b).split('-'); const ga=Number(pa[1])||0,gb=Number(pb[1])||0; if(ga!==gb)return ga-gb; const la=pa[0]==='ru'?1:0,lb=pb[0]==='ru'?1:0; if(la!==lb)return la-lb; return pa.slice(2).join('-').localeCompare(pb.slice(2).join('-')); };
     const byCls={}; cur.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
-    const rowHtml=r=>{ const d=debtOf(r); return `<tr>
-      <td data-label="O‘quvchi">${esc(nameOf(r))}</td>
+    const rowHtml=(r,n)=>{ const d=debtOf(r); return `<tr>
+      <td data-label="№" style="text-align:center;color:var(--muted);font-variant-numeric:tabular-nums">${n}</td>
+      <td data-label="O‘quvchi">${esc(nameOf(r))}<div class="small muted">${esc(r.studentId||'')}</div></td>
       <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
       <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
       <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
@@ -4169,10 +4170,10 @@ async function renderPayments(){
       </div></td></tr>`; };
     const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
       const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
-      return `<tr><td colspan="6" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
-        + gp.rows.map(rowHtml).join(''); }).join('');
+      return `<tr><td colspan="7" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
+        + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
     $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
-      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="6" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
+      <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
       // MUHIM: to'lov TUSHGAN orphanlarni o'chirmaymiz — ular real daromad (hisobotdan yo'qolib ketmasin).
