@@ -40,4 +40,5 @@
 \ir refunds.sql
 \ir salary-payments.sql
 \ir staff.sql
+\ir audit-3.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

@@ -1,7 +1,9 @@
 /* Iqror Academy — network-first service worker.
    Onlaynda doim yangi kontent (fresh), oflaynda keshdan ishlaydi.
-   Firebase/Google so'rovlariga tegmaydi (boshqa origin). */
-const V = 'iqror-v1';
+   Firebase/Google so'rovlariga tegmaydi (boshqa origin).
+   MUHIM: kod fayllari (HTML/JS/JSON) uchun fetch {cache:'reload'} — brauzer HTTP/CDN
+   keshini chetlab, serverdan DOIM yangi oladi (deploy darhol ko'rinadi). */
+const V = 'iqror-v3';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
@@ -19,11 +21,15 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // faqat o'z origin
 
+  // Kod/ma'lumot (HTML/JS/JSON) — HAR DOIM serverdan yangi (brauzer keshi chetlanadi).
+  const isCode = req.mode === 'navigate' || /\.(?:html|js|json|webmanifest)$/.test(url.pathname);
+  // Statik aktivlar (rasm/css/shrift) — oddiy (kesh foydali).
+  const isAsset = /\.(?:png|jpg|jpeg|svg|css|ico|woff2?|ttf)$/.test(url.pathname);
+
   e.respondWith((async () => {
     try {
-      const fresh = await fetch(req);
-      if (fresh && fresh.status === 200 &&
-          (req.mode === 'navigate' || /\.(?:html|png|jpg|jpeg|svg|css|js|json|webmanifest|ico)$/.test(url.pathname))) {
+      const fresh = await fetch(req, isCode ? { cache: 'reload' } : undefined);
+      if (fresh && fresh.status === 200 && (isCode || isAsset)) {
         const cache = await caches.open(V);
         cache.put(req, fresh.clone());
       }
@@ -32,7 +38,8 @@ self.addEventListener('fetch', (e) => {
       const cached = await caches.match(req);
       if (cached) return cached;
       if (req.mode === 'navigate') {
-        const idx = (await caches.match('/index.html')) || (await caches.match('/'));
+        // Avval AYNI sahifani (masalan admin.html) keshdan; bo'lmasa bosh sahifa.
+        const idx = (await caches.match(req.url)) || (await caches.match('/index.html')) || (await caches.match('/'));
         if (idx) return idx;
       }
       throw err;

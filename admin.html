@@ -863,6 +863,7 @@ async function wireSalaryPanel(row){
 
 /* ---- State ---- */
 let currentTab = 'dashboard';
+let VIEW_GEN = 0;   // ko'rinish avlodi — tez tab almashganda eski (kech tugagan) render #view'ni buzmasin
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
 let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
@@ -1006,7 +1007,7 @@ function buildTabs(){
 }
 function openTab(tab){
   if(!SESSION.isAdmin){ const allow=allowedTabs(); if(!allow.includes(tab)) tab=allow[0]; }
-  currentTab=tab;
+  currentTab=tab; VIEW_GEN++;   // yangi ko'rinish — eski renderlarning kech yozuvi bekor bo'ladi
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   if(tab==='dashboard') return renderDashboard();
@@ -1699,7 +1700,16 @@ async function renderGrades(){
 }
 /* ---- Monitoring baholari (o'qituvchi kiritadi, zavuch tasdiqlaydi) ---- */
 const MONPERIODS=[['m1','1-monitoring'],['m2','2-monitoring'],['m3','3-monitoring'],['m4','4-monitoring']];
-function monSlug(s){ return (String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,''))||'fan'; }
+// Fan -> docId bo'lagi. Kirill (o'zbek+rus) LOTINGA o'giriladi — aks holda "Математика"/"Физика"
+// ikkalasi ham 'fan'ga qisqarib docId TO'QNASHARDI (monitoring/subject_notes/exam ma'lumoti yo'qolardi).
+function monSlug(s){
+  s=String(s||'').trim().toLowerCase();
+  const M={'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'x','ц':'ts','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'i','ь':'','э':'e','ю':'yu','я':'ya','ў':'o','қ':'q','ғ':'g','ҳ':'h'};
+  s=s.replace(/[а-яёўқғҳ]/g, c=>(M[c]!=null?M[c]:c));
+  let slug=s.replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'');
+  if(!slug){ let h=0; const o=String(s||''); for(let i=0;i<o.length;i++){ h=((h<<5)-h+o.charCodeAt(i))|0; } slug='fan_'+(h>>>0).toString(36); }
+  return slug;
+}
 function monBadge(st){ return st==='approved'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Tasdiqlangan</span>`:(st?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kutilmoqda</span>`:''); }
 async function renderMonitoring(){
   const canApprove = SESSION.isAdmin || SESSION.role==='zavuch';
@@ -2137,9 +2147,10 @@ async function renderStudents(){
   $('#stu-import').addEventListener('click',()=>$('#stu-file').click());
   $('#stu-file').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.target.value=''; if(f) importStudents(f); });
   $('#stu-sheet').addEventListener('click',importFromSheet);
-  let rows;
+  let rows; const _g=VIEW_GEN;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
-  catch(e){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
+  catch(e){ if(_g!==VIEW_GEN) return; $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
+  if(_g!==VIEW_GEN) return;   // boshqa tab ochildi — eski render to'xtaydi
   { const tt=$('#stu-total'); if(tt) tt.textContent = `Jami: ${rows.length} ta o‘quvchi`; }
   // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
   try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
@@ -2412,9 +2423,10 @@ async function renderCollection(name){
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   $('#add').addEventListener('click',()=>openForm(name,null));
   $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', s.cols.map(c=>c[1]), rr.map(r=>s.cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
-  let rows;
+  let rows; const _g=VIEW_GEN;
   try{ rows = await loadCol(name, s.order); if(s.sortFn) rows.sort(s.sortFn); cache[name]=rows; }
-  catch(e){ $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
+  catch(e){ if(_g!==VIEW_GEN) return; $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
+  if(_g!==VIEW_GEN) return;   // boshqa tab ochildi
   // Sinf rahbarini foydalanuvchilardan HAR SAFAR yangi hisoblaymiz (hujjatda saqlanmaydi —
   // shu tufayli ma'lumot hech qachon eskirmaydi va rollar bilan mos tushadi).
   if(name==='classes'){
@@ -3613,7 +3625,9 @@ async function applyPaymentClient(studentId, amount, provider, payId){
   // Idempotentlik posboni: shu to'lov (payId) allaqachon qo'llangan bo'lsa — QAYTA qo'llamaymiz.
   if(payId){
     try{ const g=await getDoc(doc(db,'applied_payments',payId)); if(g.exists()) return {dup:true}; }catch(e){}
-    try{ await setDoc(doc(db,'applied_payments',payId),{ id:payId, studentId, amount, createdAt:serverTimestamp() }); }catch(e){}
+    // Posbonни AVVAL yozamiz; XATO BO'LSA — QO'LLAMAYMIZ (fail-safe). Ilgari catch{} yutar edi ->
+    // posbonsiz qolib, qayta urinish shu payIdни yangilangan invoyslarга takror qo'llardi (double-count).
+    await setDoc(doc(db,'applied_payments',payId),{ id:payId, studentId, amount, createdAt:serverTimestamp() });
   }
   try{
   let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
@@ -4080,10 +4094,12 @@ async function renderPayments(){
   const nameOf=r=>{ const s=stById[r.studentId]; return (s&&s.name)||r.studentName||r.studentId||''; };
   const load=async()=>{
     const month=$('#pm-month').value; if(!month){ return; }
+    const _g=VIEW_GEN;
     $('#pm-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let rows;
     try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
-    catch(e){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+    catch(e){ if(_g!==VIEW_GEN) return; $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+    if(_g!==VIEW_GEN) return;   // boshqa tab ochildi
     // Saralash sinf bo'yicha guruhlashda amalga oshiriladi (quyida).
     if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
@@ -4304,14 +4320,16 @@ async function renderPayments(){
 // hech qanday holatda pul ikki marta hisoblanmaydi.
 const OUTBOX_KEY='iqror_pay_outbox_v1';
 function obLoad(){ try{ return JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]'); }catch(e){ return []; } }
-function obSave(a){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(a||[])); }catch(e){} }
-function obAdd(it){ const a=obLoad(); a.push(it); obSave(a); obBadge(); }
+// obSave qaytadi: TRUE = haqiqatan saqlandi (qayta o'qib tekshiriladi — Safari private / kvota / silent no-op'ни tutadi).
+function obSave(a){ try{ const s=JSON.stringify(a||[]); localStorage.setItem(OUTBOX_KEY, s); return localStorage.getItem(OUTBOX_KEY)===s; }catch(e){ return false; } }
+function obAdd(it){ const a=obLoad(); a.push(it); const ok=obSave(a); if(ok) obBadge(); return ok; }   // ok=false -> saqlanmadi (chaqiruvchi ogohlantiradi)
 function obRemove(payId){ obSave(obLoad().filter(x=>x.payId!==payId)); obBadge(); }
 function obPending(){ return obLoad().filter(x=>x.status!=='failed'); }
 // Takror aniqlash: shu o'quvchiga shu summa outboxда (yuborilmagan) allaqachon turibdimi?
 function obRecentDup(sid, amount){ const now=Date.now(); return obPending().some(x=>String(x.sid)===String(sid)&&Number(x.amount)===Number(amount)&&(now-(x.ts||0))<15*60000); }
 // Tarmoq xatosimi (qayta urinamiz) yoki haqiqiy xatomi (masalan ustun yo'q — qayta urinmaymiz)?
-function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return false; const m=String((e&&(e.message||e))||''); return /failed to fetch|networkerror|load failed|timeout|connection|err_|abort/i.test(m)||!(e&&e.code); }
+function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return false; /* server javob berdi (PGRST/Postgres) -> qattiq */
+  const m=String((e&&(e.message||e))||'').toLowerCase(); return /failed to fetch|networkerror|load failed|timeout|connection|err_|abort|fetch/.test(m); }   /* mos kelmasa -> qattiq (cheksiz retry emas) */
 // Bitta navbat elementini serverga yuborish (pending -> apply -> applied). Idempotent.
 async function obFlushOne(it){
   await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
@@ -4320,22 +4338,30 @@ async function obFlushOne(it){
   await setDoc(doc(db,'payments',it.payId), { status:'applied' }, {merge:true});
 }
 let _obFlushing=false;
-async function flushOutbox(){
-  if(_obFlushing || !navigator.onLine) return;
-  const items=obPending(); if(!items.length){ obBadge(); return; }
-  _obFlushing=true; let done=0;
-  try{
-    for(const it of items){
-      try{ await obFlushOne(it); obRemove(it.payId); done++; }
-      catch(e){
-        if(obIsNetErr(e)) break;                             // tarmoq — keyinroq qayta urinamiz
-        const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — attempts++, cheklaymiz
-        if(x){ x.attempts=(x.attempts||0)+1; x.lastError=String((e&&(e.code||e.message))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
-      }
+async function _obFlushCore(){
+  const items=obPending(); if(!items.length) return 0;
+  let done=0;
+  for(const it of items){
+    try{ await obFlushOne(it); obRemove(it.payId); done++; }
+    catch(e){
+      if(obIsNetErr(e)) break;                             // tarmoq — keyinroq qayta urinamiz
+      const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — attempts++, cheklaymiz
+      if(x){ x.attempts=(x.attempts||0)+1; x.lastError=String((e&&(e.code||e.message))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
     }
-  } finally { _obFlushing=false; }
-  obBadge();
-  if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} }
+  }
+  return done;
+}
+// Web Locks bilan TABLAR ARO SERIAL — bir payId ikki tabда bir vaqtда qo'llanmaydi (double-count yo'q).
+async function flushOutbox(opts){
+  opts=opts||{};
+  if(!navigator.onLine){ obBadge(); return; }
+  if(!obPending().length){ obBadge(); return; }
+  const run=async()=>{ if(_obFlushing) return; _obFlushing=true; let done=0;
+    try{ done=await _obFlushCore(); } finally{ _obFlushing=false; }
+    obBadge(); if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} } };
+  if(navigator.locks && navigator.locks.request){
+    await navigator.locks.request('iqror_pay_flush', opts.wait?{mode:'exclusive'}:{mode:'exclusive', ifAvailable:true}, async(lock)=>{ if(!lock) return; await run(); });
+  } else { await run(); }
 }
 // Pastki o'ng burchakdagi ko'rsatkich (navbatda nechta to'lov turgani).
 function obBadge(){
@@ -4343,7 +4369,7 @@ function obBadge(){
   if(!items.length){ if(el) el.remove(); return; }
   if(!el){ el=document.createElement('div'); el.id='ob-badge';
     el.style.cssText='position:fixed;bottom:16px;right:16px;z-index:99999;max-width:280px;padding:11px 14px;border-radius:12px;font:600 13px/1.35 system-ui,-apple-system,sans-serif;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer';
-    el.title='Bosib qayta yuborishga urinish'; el.onclick=()=>{ obBadge(); flushOutbox(); }; document.body.appendChild(el); }
+    el.title='Navbatni ochish'; el.onclick=openOutboxModal; document.body.appendChild(el); }
   const online=navigator.onLine;
   el.style.background = failed? '#B42318' : (online? '#B54708' : '#475467');
   el.innerHTML = (n? `⏳ ${n} ta to‘lov navbatda${online?' — yuborilmoqda…':' · internet yo‘q'}` : '')
@@ -4357,6 +4383,24 @@ function startOutboxSync(){
   window.addEventListener('offline', obBadge);
   setInterval(()=>{ if(navigator.onLine && obPending().length) flushOutbox(); }, 20000);   // har 20 s
   obBadge(); if(navigator.onLine) flushOutbox();
+}
+// Navbat modali: navbatдаgi + «failed» (3 marta urinib bo'lmagan) to'lovlarни ko'rish/qayta urinish/o'chirish.
+function obRetryFailed(){ const a=obLoad(); a.forEach(x=>{ if(x.status==='failed'){ delete x.status; x.attempts=0; delete x.lastError; } }); obSave(a); obBadge(); flushOutbox({wait:true}); }
+function openOutboxModal(){
+  const meth={cash:'Naqd',bank:'Bank',terminal:'Terminal'};
+  const items=obLoad();
+  const rows=items.map(x=>{ const bad=x.status==='failed';
+    return `<tr><td>${esc(x.nm||x.sid)}<div class="small muted">${esc(x.sid)}</div></td><td style="text-align:right">${fmtSom(x.amount)}</td><td>${esc(meth[x.method]||x.method||'')}</td>
+      <td style="color:${bad?'#B42318':'#B54708'};font-weight:600">${bad?`Yuborilmadi${x.lastError?` · ${esc(String(x.lastError).slice(0,40))}`:''}`:'Navbatda'}</td>
+      <td><button class="btn sm danger" data-obdel="${esc(x.payId)}" title="Bu yozuvni navbatdan o‘chirish (pul qo‘llanmaydi)">O‘chir</button></td></tr>`; }).join('')
+    || '<tr><td colspan="5" class="muted" style="padding:16px;text-align:center">Navbat bo‘sh — barcha to‘lovlar yuborilgan ✓</td></tr>';
+  $('#modal').innerHTML=`<div class="modal-h"><h3>⏳ To‘lov navbati</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted" style="margin-bottom:8px">Internet uzilganда saqlangan to‘lovlar. Ulanish tiklanganda avtomatik yuboriladi. «Yuborilmadi» — 3 marta urinib bo‘lmagan (tekshiring / qayta urining).</div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Usul</th><th>Holat</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${items.length?`<button type="button" class="btn gold" id="ob-retry">🔄 Hammasini qayta yuborish</button>`:''}</div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const rt=$('#ob-retry'); if(rt) rt.onclick=()=>{ closeModal(); obRetryFailed(); };
+  $('#modal').querySelectorAll('[data-obdel]').forEach(b=>b.onclick=()=>{ if(confirm('Bu navbat yozuvi o‘chirilsinmi?\n(To‘lov qo‘llanmaydi — faqat haqiqatan xato/takror bo‘lsa o‘chiring.)')){ obSave(obLoad().filter(x=>x.payId!==b.dataset.obdel)); obBadge(); openOutboxModal(); } });
 }
 // Chek uchun: shu summa QAYSI oy fakturalarини qoplaydi (eng eski to'lanmagan -> keyingi). Waterfall bilan bir xil.
 async function pmCoveredMonths(sid, amount){
@@ -4429,34 +4473,36 @@ async function openRecordPayment(students, reload, pre){
     if(!receiptPeriod && navigator.onLine){ const cov=await pmCoveredMonths(sid, amount); if(cov.length) receiptPeriod=cov.map(fmtMonthUz).join(', '); }
     // 1) AVVAL outbox'ga (localStorage) DURDMLI yozamiz — brauzer yopilsa/internet uzilsa ham to'lov YO'QOLMAYDI.
     const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period:receiptPeriod||period, nm, ts:Date.now() };
-    obAdd(item);
-    // 2) DARHOL yuborishga urinamiz (navigator.onLine noto'g'ri bo'lishi mumkin — shuning uchun har doim urinamiz).
-    //    _obFlushing posboni — fon (20s) flusher bilan bir elementni BIR VAQTDA yubormaslik (ikki marta qo'llanmasin).
-    let sent=false, hardErr=null;
-    if(!_obFlushing){ _obFlushing=true;
-      try{ await obFlushOne(item); obRemove(item.payId); sent=true; }
-      catch(e){ if(obIsNetErr(e)){ /* navbatда qoladi — avtomatik yuboriladi */ } else { hardErr=String((e&&(e.code||e.message))||''); obRemove(item.payId); } }
-      finally{ _obFlushing=false; }
-    }   // fon flusher ishlayotgan bo'lsa — element navbatда, u yuboradi (quyida «navbatда» ko'rsatiladi).
-    if(reload) reload();
-    const printBtnRow=`<div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
-    if(sent){
-      toast('To‘lov qabul qilindi ✓');
-      $('#modal').innerHTML=`<div class="modal-h"><h3>✓ To‘lov qabul qilindi</h3><button class="x" id="m-x2">×</button></div>
-        <div class="modal-b"><div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>
-        <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>${printBtnRow}`;
-    } else if(hardErr){
-      saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
-      toast('Xatolik: '+hardErr,true); return;
-    } else {
-      // Internet yo'q / server javob bermadi — navbatда, ulanish tiklanganda AVTOMATIK yuboriladi.
-      obBadge(); toast('⏳ Internet yo‘q — to‘lov navbatga qo‘yildi, ulanganда avtomatik yuboriladi');
-      $('#modal').innerHTML=`<div class="modal-h"><h3>⏳ To‘lov navbatga qo‘yildi</h3><button class="x" id="m-x2">×</button></div>
-        <div class="modal-b"><div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>
-        <div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich turadi). Chekni hozir ham chiqarishingiz mumkin.</div></div>${printBtnRow}`;
+    // Natija UI — bir joyda (chek tugmasi bilan).
+    const doReceipt=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date });
+    const finishUI=(title, bodyHtml)=>{
+      $('#modal').innerHTML=`<div class="modal-h"><h3>${title}</h3><button class="x" id="m-x2">×</button></div>
+        <div class="modal-b">${bodyHtml}</div>
+        <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
+      const x2=$('#m-x2'); if(x2) x2.onclick=closeModal; const rc=$('#rp-close'); if(rc) rc.onclick=closeModal;
+      const rp=$('#rp-print'); if(rp) rp.onclick=doReceipt;
+    };
+    const okBody=`<div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`;
+    const queuedBody=`<div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich). Chekni hozir ham chiqarishingiz mumkin.</div>`;
+    // 1) AVVAL outbox'ga durdmli yozamiz. obAdd=false -> localStorage ishlamadi (Safari private/kvota).
+    const saved=obAdd(item);
+    if(!saved){
+      // Navbatga saqlanmadi — YO'QOTMASLIK uchun to'g'ridan yuborishga urinamiz; u ham bo'lmasa OGOHLANTIRAMIZ.
+      try{ await obFlushOne(item); if(reload) reload(); toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); }
+      catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
+        alert('⚠️ To‘lov HALI YOZILMADI: brauzer xotirasi ishlamayapti (masalan maxfiy rejim) va internet ham yo‘q/xato.\nIltimos qayta kiriting yoki internetli qurilmada kiriting.');
+        toast('To‘lov saqlanmadi — qayta urining',true); }
+      return;
     }
-    const x2=$('#m-x2'); if(x2) x2.onclick=closeModal; const rc=$('#rp-close'); if(rc) rc.onclick=closeModal;
-    const rp=$('#rp-print'); if(rp) rp.onclick=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date });
+    if(reload) reload();
+    // 2) Yuborishga urinamiz — Web Lock bilan TABLAR ARO SERIAL (bir payId ikki marta qo'llanmaydi).
+    await flushOutbox({wait:true});
+    // 3) Natijani navbat holatidan aniqlaymiz.
+    const cur=obLoad().find(x=>x.payId===item.payId);
+    if(!cur){ toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); }
+    else if(cur.status==='failed'){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
+      toast('Xatolik: '+(cur.lastError||'server rad etdi')+' — «⏳ navbat»dan ko‘ring',true); obBadge(); }
+    else { obBadge(); toast('⏳ Internet yo‘q — navbatga qo‘yildi, ulanganда avtomatik yuboriladi'); finishUI('⏳ To‘lov navbatga qo‘yildi', queuedBody); }
   };
 }
 
@@ -4477,7 +4523,7 @@ async function openRefund(ctx, reload){
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}"></label>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab (majburiy)<input id="rf-reason" type="text" placeholder="masalan: adashib kiritilgan" style="${fld}"></label>
       ${refundPin?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor PIN kodi<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>`:`<div class="small" style="margin-top:8px;color:#B45309">ℹ️ Refund PIN o‘rnatilmagan — Sozlamalar → «🔐 Qaytarish PIN»da o‘rnating (himoya uchun).</div>`}
-      ${studCredit>0?`<div class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px">⚠️ Bu o‘quvchida avans <b>${fmtSom(studCredit)}</b> so‘m bor. Qaytargach avansni ham «📋 To‘lov tarixi → ✏️ Avansni tuzatish» bilan tekshiring (avans qayta qo‘llanishi mumkin).</div>`:''}
+      ${studCredit>0?`<label class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-clawback" style="margin-top:2px"><span>Bu o‘quvchida <b>${fmtSom(studCredit)}</b> so‘m <b>avans</b> bor. Belgilansa — qaytargach avans ham <b>0</b> ga tushiriladi (o‘quvchi butunlay ketayotган bo‘lsa). Belgilanmasa — avans qoladi.</span></label>`:''}
       <div class="small muted" style="margin-top:8px">${isInv?'Hisob-faktura to‘langan summasidan ayiriladi — qarz qayta paydo bo‘ladi.':'Biriktirilmagan to‘lov «qaytarilgan» deb belgilanadi.'} Amal jurnalga (refunds) yoziladi.</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn danger" id="rf-do">Qaytarish</button></div>`;
@@ -4502,6 +4548,12 @@ async function openRefund(ctx, reload){
         // Avval jurnalga yozamiz (pul o'zgarishi hech qachon jurnalsiz qolmasin), keyin invoice.
         await addDoc(collection(db,'refunds'), { target:'invoice', targetId:String(inv._id||''), studentId:String(inv.studentId||''), studentName:ctx.name||'', amount, reason, byEmail:email, month:inv.month||'', createdAt:serverTimestamp() });
         await setDoc(doc(db,'invoices',inv._id), { paidAmount:newPaid, status, reversedAt:serverTimestamp() }, {merge:true});
+        // Avansni ham 0 ga tushirish (direktor belgilagan bo'lsa) — o'quvchi ketayotgan bo'lsa (maktab zarari oldini oladi).
+        const cbEl=$('#rf-clawback');
+        if(cbEl && cbEl.checked && studCredit>0){
+          await setDoc(doc(db,'student_credit',String(inv.studentId)), { studentId:String(inv.studentId), credit:0, updatedAt:serverTimestamp() }, {merge:true});
+          try{ await addDoc(collection(db,'credit_ledger'), { studentId:String(inv.studentId), studentName:ctx.name||'', delta:-studCredit, balanceAfter:0, reason:'manual', note:'Refundда avans 0 ga tushirildi', at:serverTimestamp() }); }catch(e){}
+        }
       } else {
         await addDoc(collection(db,'refunds'), { target:'payment', targetId:String(ctx.payment._id||''), studentId:'', studentName:ctx.payerName||'', amount, reason, byEmail:email, month:'', createdAt:serverTimestamp() });
         await setDoc(doc(db,'payments',ctx.payment._id), { status:'refunded' }, {merge:true});
