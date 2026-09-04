@@ -872,7 +872,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
   hr:['teachers','staff'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
-  finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], kassir:['payments'], marketing_mgr:['marketing','enrollments'] };
+  finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], kassir:['payments','accounting'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();

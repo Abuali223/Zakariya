@@ -55,4 +55,29 @@ create policy cl_ins on credit_ledger for insert with check (app.is_admin() or a
 drop policy if exists refunds_sel on public.refunds;
 create policy refunds_sel on public.refunds for select using (app.is_admin() or app.is_finance() or app.is_zavuch());
 
+-- 7) KASSIR barcha KIRIM/CHIQIMni bajaradi: xarajatlar (expenses) TO'LIQ CRUD + maosh berish
+--    (salary_payments) + xodim avansi (staff_advances). Kirim (payments/invoices) allaqachon kassirda.
+drop policy if exists exp_sel on expenses;
+create policy exp_sel on expenses for select using (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_marketing() or app.is_cashier());
+drop policy if exists exp_ins on expenses;
+create policy exp_ins on expenses for insert with check (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier());
+drop policy if exists exp_upd on expenses;
+create policy exp_upd on expenses for update using (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier()) with check (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier());
+drop policy if exists exp_del on expenses;
+create policy exp_del on expenses for delete using (app.is_admin() or app.is_cashier());
+
+drop policy if exists salpay_ins on public.salary_payments;
+create policy salpay_ins on public.salary_payments for insert with check (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
+drop policy if exists salpay_del on public.salary_payments;
+create policy salpay_del on public.salary_payments for delete using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
+
+drop policy if exists sa_sel on staff_advances;
+create policy sa_sel on staff_advances for select using (app.is_admin() or app.is_finance() or app.is_cashier());
+drop policy if exists sa_ins on staff_advances;
+create policy sa_ins on staff_advances for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
+drop policy if exists sa_upd on staff_advances;
+create policy sa_upd on staff_advances for update using (app.is_admin() or app.is_finance() or app.is_cashier()) with check (app.is_admin() or app.is_finance() or app.is_cashier());
+drop policy if exists sa_del on staff_advances;
+create policy sa_del on staff_advances for delete using (app.is_admin() or app.is_finance() or app.is_cashier());
+
 notify pgrst, 'reload schema';
