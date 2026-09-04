@@ -3208,6 +3208,46 @@ async function renderAccounting(){
   const refMonth=r=>String(r.month||'')||dtM(r.createdAt);
   const refundOfMonth=k=>REF.reduce((s,r)=>s+(refMonth(r)===k?(Number(r.amount)||0):0),0);
 
+  // Direktor uchun A4 moliyaviy hisobot (printHTML — pop-up bloklanmaydi).
+  function printAccountingReport(M){
+    const kirim=monthColl(M);
+    const mExp=EXP.filter(e=>emonth(e)===M); const chiqim=sum(mExp); const foyda=kirim-chiqim;
+    const marja=kirim>0?Math.round(foyda/kirim*100):0;
+    const qaytarilgan=refundOfMonth(M); const av=avansTotal();
+    const mInv=INV.filter(i=>i.month===M);
+    const debt=mInv.reduce((s,i)=>s+((i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
+    const byCat={}; mExp.forEach(e=>{ const c=e.category||'Boshqa'; byCat[c]=(byCat[c]||0)+(Number(e.amount)||0); });
+    const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+    const PMlab={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans','':'Boshqa'};
+    const byPm={}; mInv.forEach(i=>{ const p=paidAmt(i); if(p<=0)return; const k=i.provider||''; byPm[k]=(byPm[k]||0)+p; });
+    const pmKeys=Object.keys(byPm).sort((a,b)=>byPm[b]-byPm[a]);
+    const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; }); INV.forEach(i=>{ const k=String(i.studentId||''); if(k&&!nameC[k]&&i.studentName)nameC[k]=i.studentName; });
+    const avList=CREDITS.map(c=>({sid:String(c.studentId||c._id||''),amt:Math.max(0,Number(c.credit)||0)})).filter(x=>x.amt>0).sort((a,b)=>b.amt-a.amt);
+    const S=n=>fmtSum(n)+' so‘m'; const dstr=new Date().toISOString().slice(0,10);
+    const who=(auth.currentUser&&(auth.currentUser.displayName||auth.currentUser.email))||'';
+    const emblem=`<svg style="width:46px;height:auto" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
+    const row=(l,v,c)=>`<tr><td>${l}</td><td style="text-align:right;font-weight:700;${c?`color:${c}`:''}">${v}</td></tr>`;
+    const catRows=catKeys.length?catKeys.map(c=>`<tr><td>${esc(c)}</td><td style="text-align:right">${S(byCat[c])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">Xarajat yo‘q</td></tr>`;
+    const pmRows=pmKeys.length?pmKeys.map(k=>`<tr><td>${esc(PMlab[k]||k)}</td><td style="text-align:right">${S(byPm[k])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">—</td></tr>`;
+    const avRows=avList.length?avList.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.amt)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Avans yo‘q</td></tr>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Hisobot ${mLabel(M)} ${M.slice(0,4)}</title>
+      <style>@page{ size:A4; margin:16mm; } *{ box-sizing:border-box; } body{ font:13px/1.5 'Segoe UI',system-ui,sans-serif; color:#1a2e28; margin:0; }
+      .hd{ display:flex; align-items:center; gap:14px; border-bottom:3px solid #1F9982; padding-bottom:12px; margin-bottom:16px; }
+      .hd h1{ margin:0; font-size:20px; color:#1F9982; letter-spacing:.5px; } .hd .sub{ font-size:12px; color:#555; margin-top:3px; }
+      h2{ font-size:14px; margin:18px 0 6px; color:#1F9982; border-left:4px solid #F6C05E; padding-left:8px; }
+      table{ width:100%; border-collapse:collapse; margin-bottom:6px; } th,td{ border:1px solid #d5ddd8; padding:6px 9px; text-align:left; font-size:12.5px; }
+      th{ background:#eef3f1; } .kpi td:first-child{ width:62%; } .big td{ font-size:14px; }
+      .sign{ margin-top:40px; display:flex; justify-content:space-between; font-size:12.5px; } .muted{ color:#666; }</style></head><body>
+      <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}</div></div></div>
+      <h2>Umumiy ko‘rsatkichlar</h2>
+      <table class="kpi big">${row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
+      <h2>Kirim — to‘lov usuli bo‘yicha</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
+      <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
+      <h2>Avans — kimlarda (${avList.length} o‘quvchi · ${S(av)})</h2><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Avans</th></tr></thead><tbody>${avRows}</tbody></table>
+      <div class="sign"><div>Direktor: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
+      </body></html>`;
+    printHTML(html);
+  }
   const draw=(M)=>{
     const kirim=monthColl(M);
     const qaytarilgan=refundOfMonth(M);
@@ -3293,7 +3333,19 @@ async function renderAccounting(){
         <td data-label="Izoh">${esc(a.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
         <td class="td-actions"><button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
-    $('#ac-body').innerHTML = kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard;
+    // ---- Avans — kimlarda (2,9 mln kimdan iboratini ko'rsatadi) ----
+    const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; });
+    INV.forEach(i=>{ const k=String(i.studentId||''); if(k && !nameC[k] && i.studentName) nameC[k]=i.studentName; });
+    const avList=CREDITS.map(c=>({sid:String(c.studentId||c._id||''), amt:Math.max(0,Number(c.credit)||0)})).filter(x=>x.amt>0).sort((a,b)=>b.amt-a.amt);
+    const avansListCard = avList.length ? `<div class="card" style="margin-top:16px;border-left:4px solid #0891B2"><div class="cls-card-head"><h3>Avans — kimlarda</h3><span class="cls-count">${avList.length} o‘quvchi · ${fmtC(av)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Avans (so‘m)</th></tr></thead><tbody>${avList.map((x,i)=>`<tr><td class="num">${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td class="small muted">${esc(x.sid)}</td><td style="text-align:right;font-weight:700;color:#0891B2;white-space:nowrap">${fmtSum(x.amt)}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    // ---- Direktor uchun A4 hisobot ----
+    const reportCard=`<div class="card" style="margin-bottom:16px"><div class="cls-card-head"><h3>📄 Direktor hisoboti</h3><span class="cls-count">${mLabel(M)} ${M.slice(0,4)}</span></div>
+      <div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn gold" id="ac-report">📄 A4 hisobot — chop etish / PDF saqlash</button>
+        <span class="small muted">Oylik moliyaviy hisobot: kirim, chiqim, foyda, xarajat toifalari, qaytarilgan, avans, qarzdorlik + imzo joyi.</span></div></div>`;
+    $('#ac-body').innerHTML = reportCard+kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard+avansListCard;
+    { const rb=$('#ac-report'); if(rb) rb.onclick=()=>printAccountingReport(M); }
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
       printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||new Date().toISOString().slice(0,10) }); }));
