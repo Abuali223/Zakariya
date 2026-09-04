@@ -25,9 +25,20 @@ create policy tr_upd on public.teacher_ratings for update
 --    admin/HR/moliya/zavuch. Qolgan xodim/anon -> teachers_public (maoshsiz KO'RINISH).
 --    (Panelда 'teachers' faqat renderDashboard[director]/loadPayees[hr,finance]/
 --     populateDynselects[admin,zavuch] da o'qiladi — barchasi shu ro'yxatда, try/catch bilan.)
+-- MAOSH MAXFIYLIGI: o'qituvchi/xodim oyligi FAQAT direktor/moliya/HR ga DOIM ko'rinadi;
+-- KASSIRGA faqat oy oxiri (29-31-sanalar) — maosh berish uchun. Boshqalar ko'ra olmaydi.
+-- (salary teachers/staff jadvalidagi USTUN -> butun qatorni shu roldan tashqarига yopamiz;
+--  qolganlar/ommaviy sayt maoshsiz `teachers_public` KO'RINISHINI o'qiydi.)
+create or replace function app.can_see_salary() returns boolean language sql stable security definer as $$
+  select app.is_admin() or app.is_hr() or app.is_finance()
+      or (app.is_cashier() and extract(day from (now() at time zone 'Asia/Tashkent'))::int >= 29);
+$$;
 drop policy if exists teachers_sel on public.teachers;
-create policy teachers_sel on public.teachers for select
-  using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_zavuch());
+create policy teachers_sel on public.teachers for select using (app.can_see_salary());
+drop policy if exists staff_sel on public.staff;
+create policy staff_sel on public.staff for select using (app.can_see_salary());
+drop policy if exists salpay_sel on public.salary_payments;
+create policy salpay_sel on public.salary_payments for select using (app.can_see_salary());
 
 -- 4) [P0] Kassir to'lov qabul qilganda 42501/403 berardi. Sabab: shim `setDoc` = Supabase UPSERT
 --    (INSERT ... ON CONFLICT) -> Postgres INSERT huquqini ham talab qiladi (faktura mavjud bo'lsa ham,

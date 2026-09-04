@@ -877,8 +877,20 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
   if((SESSION.homeroomClasses||[]).length && !base.includes('attendance')) base.unshift('attendance');
+  // Kassir oy oxiri (29-31) — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
+  if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
   return base;
 }
+// Maoshni ko'ra oladimi: direktor/HR/moliya doim; kassir faqat oy oxiri (29-31). RLS ham shu qoidани majburlaydi.
+function canSeeSalary(){
+  if(SESSION.isAdmin) return true;
+  const r=SESSION.role;
+  if(r==='hr'||r==='finance_mgr'||r==='treasurer') return true;
+  if(r==='kassir') return new Date().getDate()>=29;
+  return false;
+}
+// O'qituvchi/xodim yozuvini boshqara oladimi (qo'shish/tahrir/o'chir) — faqat direktor/HR.
+function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }
 // Xodim DAVOMAT yuritadigan sinflar: sinf rahbarligi (homeroomClasses) + eski kurator (assignedClasses)
 function supervisedClasses(){
   const set = new Set(SESSION.homeroomClasses||[]);
@@ -2417,12 +2429,17 @@ async function openStudentReport(sid, row){
 /* ---- Generic collection view (qidiruv bilan) ---- */
 async function renderCollection(name){
   const s = SCHEMAS[name];
+  // MAOSH MAXFIYLIGI: teachers/staff da maosh ustuni faqat ko'rish huquqi bo'lsa; boshqarish (qo'shish/
+  // tahrir/o'chir) faqat direktor/HR. (Kassir 29-31 da FAQAT o'qiydi.)
+  const salaryHide = (name==='teachers'||name==='staff') && !canSeeSalary();
+  const cols = salaryHide ? s.cols.filter(c=>c[0]!=='salary'&&c[0]!=='baseSalary') : s.cols;
+  const canMng = (name==='teachers'||name==='staff') ? canManageStaffCol() : true;
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
-    <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button><button class="btn gold" id="add">+ Qo‘shish</button></div></div>
+    <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button>${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
     ${s.hint?`<p class="small muted" style="margin:-8px 0 14px">${esc(s.hint)}</p>`:''}
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
-  $('#add').addEventListener('click',()=>openForm(name,null));
-  $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', s.cols.map(c=>c[1]), rr.map(r=>s.cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
+  { const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm(name,null)); }
+  $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', cols.map(c=>c[1]), rr.map(r=>cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
   let rows; const _g=VIEW_GEN;
   try{ rows = await loadCol(name, s.order); if(s.sortFn) rows.sort(s.sortFn); cache[name]=rows; }
   catch(e){ if(_g!==VIEW_GEN) return; $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
@@ -2434,24 +2451,26 @@ async function renderCollection(name){
       rows.forEach(r=>{ const k=supervisorOf(users, classDocKey(r)); r.supervisorName = k?(k.name||k.email||'—'):''; });
     }catch(e){}
   }
-  const th = s.cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th></th>';
+  const th = cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+(canMng?'<th></th>':'');
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
-    const filtered = !q ? rows : rows.filter(r=>s.cols.some(c=>String(r[c[0]]==null?'':r[c[0]]).toLowerCase().includes(q))||String(r._id).toLowerCase().includes(q));
+    const filtered = !q ? rows : rows.filter(r=>cols.some(c=>String(r[c[0]]==null?'':r[c[0]]).toLowerCase().includes(q))||String(r._id).toLowerCase().includes(q));
     if(!filtered.length){ $('#col-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha topilmadi.':'Hozircha yozuv yo‘q. “+ Qo‘shish” bilan boshlang.'}</div>`; return; }
     const trs = filtered.map(r=>{
-      const tds = s.cols.map(c=>{
+      const tds = cols.map(c=>{
         let v = r[c[0]];
         if(c[0]==='track') return `<td data-label="${esc(c[1])}"><span class="chip ${v==='IT'?'it':'med'}">${esc(v||'')}</span></td>`;
         if(c[0]==='phone') return `<td data-label="${esc(c[1])}">${v?`<a href="tel:${esc(String(v).replace(/[^+\d]/g,''))}">${esc(v)}</a>`:'—'}</td>`;
         if(c[0]==='salary'||c[0]==='baseSalary'){ const n=salaryNum(v); return `<td data-label="${esc(c[1])}">${n>0?`<b>${fmtSom(n)}</b>`:'—'}</td>`; }
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
-      return `<tr>${tds}<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td></tr>`;
+      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>`:''}</tr>`;
     }).join('');
     $('#col-card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
-    $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
-    $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
+    if(canMng){
+      $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
+      $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
+    }
   };
   draw(fmemApply('col-search-'+name));
   const si=$('#col-search-'+name); if(si) si.addEventListener('input',()=>draw(si.value));
