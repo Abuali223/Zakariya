@@ -27,10 +27,10 @@ git show FETCH_HEAD:sw.js       | sudo tee "$WEB/sw.js"       >/dev/null
 # Deploy landdid-mi? admin.html'da kutilgan marker borligini tekshiramiz:
 if ! grep -q iqror_pay_outbox "$WEB/admin.html"; then echo "❌ admin.html deploy landmadi (marker yo'q)"; exit 1; fi
 
-echo "==> 4/5 index.html (to'lov UI) yangilanmoqda..."
-git show FETCH_HEAD:index.html > /tmp/iqror-new-index.html
-git show FETCH_HEAD:migration/patch-invoice-ui.cjs > /tmp/iqror-patch.cjs
-sudo node /tmp/iqror-patch.cjs /tmp/iqror-new-index.html "$WEB/index.html"
+echo "==> 4/5 index.html (TO'LIQ, shim bilan) joylanmoqda..."
+sudo cp "$WEB/index.html" "$WEB/index.html.bak" 2>/dev/null || true   # zaxira
+git show FETCH_HEAD:index.html | sed "$SHIM" | sudo tee "$WEB/index.html" >/dev/null
+if ! grep -q kab-subjbars "$WEB/index.html"; then echo "❌ index.html deploy landmadi (marker yo'q)"; exit 1; fi
 
 echo "==> 5/5 Xizmatlar qayta ishga tushmoqda..."
 sudo systemctl restart iqror-ai iqror-pay
