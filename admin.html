@@ -877,17 +877,15 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
   if((SESSION.homeroomClasses||[]).length && !base.includes('attendance')) base.unshift('attendance');
-  // Kassir oy oxiri (29-31) — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
+  // Kassir — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
   if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
   return base;
 }
-// Maoshni ko'ra oladimi: direktor/HR/moliya doim; kassir faqat oy oxiri (29-31). RLS ham shu qoidани majburlaydi.
+// Maoshni ko'ra oladimi: direktor/HR/moliya/kassir. Boshqalar yo'q. RLS ham shu qoidани majburlaydi.
 function canSeeSalary(){
   if(SESSION.isAdmin) return true;
   const r=SESSION.role;
-  if(r==='hr'||r==='finance_mgr'||r==='treasurer') return true;
-  if(r==='kassir') return new Date().getDate()>=29;
-  return false;
+  return r==='hr'||r==='finance_mgr'||r==='treasurer'||r==='kassir';
 }
 // O'qituvchi/xodim yozuvini boshqara oladimi (qo'shish/tahrir/o'chir) — faqat direktor/HR.
 function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }

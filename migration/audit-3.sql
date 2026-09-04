@@ -25,13 +25,12 @@ create policy tr_upd on public.teacher_ratings for update
 --    admin/HR/moliya/zavuch. Qolgan xodim/anon -> teachers_public (maoshsiz KO'RINISH).
 --    (Panelда 'teachers' faqat renderDashboard[director]/loadPayees[hr,finance]/
 --     populateDynselects[admin,zavuch] da o'qiladi — barchasi shu ro'yxatда, try/catch bilan.)
--- MAOSH MAXFIYLIGI: o'qituvchi/xodim oyligi FAQAT direktor/moliya/HR ga DOIM ko'rinadi;
--- KASSIRGA faqat oy oxiri (29-31-sanalar) — maosh berish uchun. Boshqalar ko'ra olmaydi.
--- (salary teachers/staff jadvalidagi USTUN -> butun qatorni shu roldan tashqarига yopamiz;
+-- MAOSH MAXFIYLIGI: o'qituvchi/xodim oyligi FAQAT direktor/moliya/HR va KASSIR ga ko'rinadi.
+-- Boshqalar (o'qituvchi/zavuch/kurator/marketing) ko'ra olmaydi.
+-- (salary teachers/staff jadvalidagi USTUN -> butun qatorni shu rollardan tashqarига yopamiz;
 --  qolganlar/ommaviy sayt maoshsiz `teachers_public` KO'RINISHINI o'qiydi.)
 create or replace function app.can_see_salary() returns boolean language sql stable security definer as $$
-  select app.is_admin() or app.is_hr() or app.is_finance()
-      or (app.is_cashier() and extract(day from (now() at time zone 'Asia/Tashkent'))::int >= 29);
+  select app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier();
 $$;
 drop policy if exists teachers_sel on public.teachers;
 create policy teachers_sel on public.teachers for select using (app.can_see_salary());
