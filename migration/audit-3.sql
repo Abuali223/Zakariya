@@ -84,4 +84,18 @@ create policy sa_del on staff_advances for delete using (app.is_admin() or app.i
 alter table public.teachers add column if not exists email text;
 alter table public.staff    add column if not exists email text;
 
+-- 9) [PII-minimal] Kassir/moliya o'quvchi TELEFONINI ko'rsin — lekin qolgan PII
+--    (JSHSHIR, manzil, sog'liq, oila a'zolari) YOPIQ qolsin. Shu bois butun
+--    student_private'ni ochmaymiz; FAQAT telefon ustunlarini beruvchi rolga
+--    bog'langan view yaratamiz. View egasi (postgres) huquqi bilan ishlaydi
+--    (student_private RLS'ini chetlab o'tadi), ammo WHERE — faqat direktor/zavuch/
+--    moliya/kassir va o'z farzandi bo'yicha ota-ona qatorlarni oladi.
+create or replace view public.student_phones as
+  select id, "parentPhone", "parentPhone2"
+  from public.student_private
+  where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.owns_child(id);
+grant select on public.student_phones to anon, authenticated;
+revoke all on public.student_phones from public;
+grant select on public.student_phones to service_role;
+
 notify pgrst, 'reload schema';

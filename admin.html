@@ -2172,6 +2172,12 @@ async function renderStudents(){
   // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
   try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
     rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }catch(e){}
+  // Kassir/moliya (boshqara olmaydiganlar) to'liq PII'ni ko'rmaydi, lekin TELEFON ko'rinsin.
+  // student_phones — faqat telefon ustunlarini beruvchi rolga bog'langan view (qolgan PII yopiq).
+  if(!canMng){
+    try{ const fsnap=await getDocs(collection(db,'student_phones')); const fmap={}; fsnap.docs.forEach(d=>{ fmap[d.id]=d.data()||{}; });
+      rows.forEach(r=>{ const pd=fmap[r._id]; if(pd){ if(r.parentPhone==null) r.parentPhone=pd.parentPhone; if(r.parentPhone2==null) r.parentPhone2=pd.parentPhone2; } }); }catch(e){}
+  }
   // Maxfiy biriktirish kodlari (ota-onaga beriladi; admin/zavuch ko'radi)
   try{ const csnap=await getDocs(collection(db,'student_codes')); const cmap={}; csnap.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }catch(e){}
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
