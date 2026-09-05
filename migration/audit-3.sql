@@ -80,4 +80,8 @@ create policy sa_upd on staff_advances for update using (app.is_admin() or app.i
 drop policy if exists sa_del on staff_advances;
 create policy sa_del on staff_advances for delete using (app.is_admin() or app.is_finance() or app.is_cashier());
 
+-- 8) O'qituvchi/xodim EMAIL ustuni (jadvalda va formada — masalan adadaboyev@gmail.com).
+alter table public.teachers add column if not exists email text;
+alter table public.staff    add column if not exists email text;
+
 notify pgrst, 'reload schema';
