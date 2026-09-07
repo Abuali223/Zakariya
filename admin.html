@@ -3848,10 +3848,13 @@ async function openFinanceAudit(){
     <div class="modal-b" id="fa-body"><div class="loading">Tekshirilmoqda…</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  let invs=[], pays=[], creds=[];
-  try{ const s=await getDocs(collection(db,'invoices')); invs=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
-  try{ const s=await getDocs(collection(db,'payments')); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
-  try{ const s=await getDocs(collection(db,'student_credit')); creds=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  // frontend[12]: o'qish xatosi bo'lsa bo'sh ro'yxat -> "✓ nomutanosiblik yo'q" SOXTA chiqardi.
+  // Har o'qishni majburiy qilamiz; biror manba o'qilmasa — tekshiruvni to'xtatib xato ko'rsatamiz.
+  let invs, pays, creds;
+  try{
+    const [si,sp,sc]=await Promise.all([ getDocs(collection(db,'invoices')), getDocs(collection(db,'payments')), getDocs(collection(db,'student_credit')) ]);
+    invs=si.docs.map(d=>({_id:d.id,...d.data()})); pays=sp.docs.map(d=>({_id:d.id,...d.data()})); creds=sc.docs.map(d=>({_id:d.id,...d.data()}));
+  }catch(e){ const b=$('#fa-body'); if(b) b.innerHTML=`<div class="small" style="color:#B42318;background:#FDECEC;border-radius:10px;padding:12px 14px">Ma'lumotni o'qib bo'lmadi (${esc(e.code||e.message)}). Tekshiruv BAJARILMADI — internetni tekshirib qayta oching.</div>`; return; }
   const body=$('#fa-body'); if(!body) return;
   const R=Math.round, fmtN=n=>fmtSom(n);
   // Nom xaritasi (ko'rsatish uchun): cache -> invoice -> payment nomi.
@@ -3928,7 +3931,10 @@ async function renderPriceTable(){
   let students;
   try{ students=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=students; }
   catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
-  const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }catch(e){}
+  // frontend[17]: mavjud narxlar O'QILMASA (tarmoq/RLS) tahrirni ochmaymiz — aks holда bo'sh
+  // inputlar bilan «Saqlash» narxlarни 0 ga yozib yuborardi. Xato -> ogohlantirib to'xtaymiz.
+  const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }
+  catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Mavjud narxlarni o‘qib bo‘lmadi: ${esc(e.code||e.message)}. Saqlash bloklandi (narxlar yo‘qolmasligi uchun). Internetni tekshirib qayta oching.</div></div>`; return; }
   let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
   const grp=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   const keys={};
