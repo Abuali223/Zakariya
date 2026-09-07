@@ -127,8 +127,8 @@ async function logCredit(studentId, delta, balanceAfter, reason, provider){
 }
 // Kam -> qisman (qarzdorlik qoladi); to'liq -> paid; ortiqcha -> student_credit (avans).
 // Mavjud kredit avval ishlatiladi. IDEMPOTENT: transId bo'yicha ikki marta hisoblanmaydi.
-async function applyPaymentToStudent(studentId, amount, transId){
-  studentId = String(studentId||''); amount = Number(amount)||0;
+async function applyPaymentToStudent(studentId, amount, transId, provider){
+  studentId = String(studentId||''); amount = Number(amount)||0; provider = provider || 'click';
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
   // ATOMIK band qilish — bir vaqtda kelgan takroriy callback ikki marta hisoblamasin (create id konfliktida xato beradi).
   try{ await guardRef.create({ studentId, amount, createdAt: FieldValue.serverTimestamp() }); }
@@ -148,7 +148,7 @@ async function applyPaymentToStudent(studentId, amount, transId){
     const newPaid = paidSoFar + pay;
     const paidFull = newPaid >= Number(inv.amount) - 0.5;
     await db.collection('invoices').doc(String(inv.id)).set(Object.assign(
-      { paidAmount: newPaid, status: paidFull ? 'paid' : 'partial', provider: 'click' },
+      { paidAmount: newPaid, status: paidFull ? 'paid' : 'partial', provider },
       paidFull ? { providerTrans: String(transId||''), paidAt: FieldValue.serverTimestamp() } : {}
     ), { merge:true });
     applied.push({ invoiceId: inv.id, amount: pay, status: paidFull ? 'paid' : 'partial' });
@@ -156,7 +156,7 @@ async function applyPaymentToStudent(studentId, amount, transId){
   }
   await db.collection('student_credit').doc(studentId).set(
     { studentId, credit: available, updatedAt: FieldValue.serverTimestamp() }, { merge:true });
-  await logCredit(studentId, available - credit, available, (available-credit)>0?'overpay':'applied', 'click');
+  await logCredit(studentId, available - credit, available, (available-credit)>0?'overpay':'applied', provider);
   const result = { applied, leftover: available, usedCredit: credit };
   try{ await guardRef.set({ studentId, amount, result, createdAt: FieldValue.serverTimestamp() }); }catch(e){}
   return result;
@@ -391,7 +391,10 @@ async function uzConfirm(b){
     // pay.amount endi SO'M da saqlanadi (uzCreate normallashtiradi) — to'g'ridan-to'g'ri qo'llaymiz.
     const ar = await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
     // backend[1]: create->confirm orasида invoice bekor/qaytarilgan bo'lsa pulni yo'qotmaymiz -> o'quvchi balansiga.
-    if(ar && ar.error && pay.studentId){ await applyPaymentToStudent(String(pay.studentId), Number(pay.amount)||0, 'uzum_'+b.transId+'_cr'); }
+    if(ar && ar.error){
+      if(pay.studentId){ await applyPaymentToStudent(String(pay.studentId), Number(pay.amount)||0, 'uzum_'+b.transId+'_cr', 'uzum'); }
+      else { try{ await uzPayRef(b.transId).set({ note:'invoice terminal, studentId yo‘q — qo‘lda biriktiring' }, { merge:true }); }catch(e){} }
+    }
     await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };

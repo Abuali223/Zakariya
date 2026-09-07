@@ -65,6 +65,7 @@ server {
     }
     location /realtime/ {
         proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;                         # websocket uchun (HTTP/1.1 shart)
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Upgrade $http_upgrade;         # realtime (websocket)
