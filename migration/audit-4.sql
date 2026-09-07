@@ -322,4 +322,46 @@ drop policy if exists refunds_sel on public.refunds;
 create policy refunds_sel on public.refunds for select
   using (app.is_admin() or app.is_finance() or app.is_zavuch() or app.is_cashier());
 
+-- =====================================================================
+-- FIREBASE -> SUPABASE ko'chirish (legacy sahifalar) qo'llab-quvvatlashi
+-- =====================================================================
+
+-- schema[5]: config/receipt {width, socialUrl} ustunlari YO'Q edi -> chek sozlamasi
+--   saqlanmasdi (PGRST204). config — bitta tiplangan jadval (har config-doc maydoni ustun).
+alter table public.config add column if not exists width      numeric;
+alter table public.config add column if not exists "socialUrl" text;
+
+-- schema[3]: checkins.day — admin panel `where('day','==',day)` bilan so'raydi, ustun yo'q edi (42703).
+alter table public.checkins add column if not exists day text;
+
+-- oquv-platforma.html cloud-sync: har (anonim yoki haqiqiy) foydalanuvchi O'Z progressini
+--   saqlaydi. Holat ixtiyoriy JSON -> BITTA jsonb ustunда ('state'); sahifa {state:...} yozadi.
+create table if not exists public.progress(
+  id          text primary key,          -- = auth uid
+  state       jsonb,
+  "updatedAt" timestamptz default now()
+);
+alter table public.progress enable row level security;
+grant select, insert, update on public.progress to authenticated;
+grant all on public.progress to service_role;
+drop policy if exists progress_sel on public.progress;
+create policy progress_sel on public.progress for select using (id = app.uid());
+drop policy if exists progress_ins on public.progress;
+create policy progress_ins on public.progress for insert with check (id = app.uid());
+drop policy if exists progress_upd on public.progress;
+create policy progress_upd on public.progress for update using (id = app.uid()) with check (id = app.uid());
+
+-- schema[4]: Realtime — admin panel onSnapshot (badge'lar) uchun jadvallarni
+--   supabase_realtime publikatsiyasiga qo'shamiz (bo'lmasa realtime jim ishlamaydi).
+do $$
+declare t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['enrollments','applications','feedback'] loop
+      begin execute format('alter publication supabase_realtime add table public.%I', t);
+      exception when duplicate_object then null; when others then null; end;
+    end loop;
+  end if;
+end $$;
+
 notify pgrst, 'reload schema';

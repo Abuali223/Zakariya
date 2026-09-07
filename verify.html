@@ -31,7 +31,7 @@
       <div class="org">IQROR ACADEMY<small>Hujjat haqiqiyligini tekshirish</small></div>
     </div>
     <div id="out"><div class="state"><span class="badge wait">⏳ Tekshirilmoqda…</span></div></div>
-    <div class="note">Ushbu sahifa Iqror Academy rasmiy o‘quvchi profilining haqiqiyligini tasdiqlaydi.<br><a href="/">alilazer-cd582.web.app</a></div>
+    <div class="note">Ushbu sahifa Iqror Academy rasmiy o‘quvchi profilining haqiqiyligini tasdiqlaydi.<br><a href="/">iqroacademy.uz</a></div>
   </div>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -48,10 +48,12 @@
     try{
       const app=initializeApp(cfg); const db=getFirestore(app);
       let d=null;
-      // 1) hujjat id = studentId bo'lsa
-      try{ const s=await getDoc(doc(db,'students',id)); if(s.exists()) d={id:s.id,...s.data()}; }catch(e){}
+      // Supabase: anon FAQAT students_public KO'RINISHINI o'qiydi (xom 'students' RLS bilan yopiq,
+      // cameraId/attendance sizmaydi). students_public'да id/studentId/name/grade/classLetter/track/lang bor.
+      // 1) hujjat id = studentId (yoki hujjat id) bo'lsa
+      try{ const s=await getDoc(doc(db,'students_public',id)); if(s.exists()) d={id:s.id,...s.data()}; }catch(e){}
       // 2) aks holda studentId maydoni bo'yicha qidiramiz
-      if(!d){ const snap=await getDocs(query(collection(db,'students'), where('studentId','==',id), limit(1))); snap.forEach(x=>{ if(!d) d={id:x.id,...x.data()}; }); }
+      if(!d){ const snap=await getDocs(query(collection(db,'students_public'), where('studentId','==',id), limit(1))); snap.forEach(x=>{ if(!d) d={id:x.id,...x.data()}; }); }
       if(!d){ bad('Bunday ID bilan o‘quvchi topilmadi. Hujjat haqiqiy bo‘lmasligi mumkin.'); return; }
       const cls=`${gradeLbl(d.grade)} «${esc(d.classLetter||d.track||'-')}» · ${d.lang==='ru'?'Rus':'O‘zbek'}`;
       show(`<div class="state"><div class="big">✅</div><span class="badge ok">Tasdiqlandi — Iqror Academy o‘quvchisi</span></div>

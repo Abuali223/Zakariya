@@ -1346,7 +1346,9 @@
           try {
             const st = A().getState ? A().getState() : null;
             if (!st) return;
-            await setDoc(doc(db,'progress',uid), JSON.parse(JSON.stringify(st)));
+            // Supabase: 'progress' tiplangan jadval -> ixtiyoriy holatni BITTA jsonb ustunда ('state')
+            // saqlaymiz (aks holda har yangi maydon PGRST204 berardi).
+            await setDoc(doc(db,'progress',uid), { state: JSON.parse(JSON.stringify(st)) });
             setStatus('synced','Sinxron ✓');
           } catch (e) { handleErr(e); }
         }
@@ -1355,7 +1357,9 @@
           try {
             const snap = await getDoc(doc(db,'progress',uid));
             if (snap.exists()) {
-              const cloud = snap.data();
+              const raw = snap.data() || {};
+              const cloud = raw.state || raw;   // yangi: {state:...}; eski (Firebase) ma'lumot uchun fallback
+
               const local = A().getState ? A().getState() : null;
               const merged = A().mergeStates ? A().mergeStates(local, cloud) : cloud;
               A().applyCloudState && A().applyCloudState(merged);

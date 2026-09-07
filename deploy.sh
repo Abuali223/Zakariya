@@ -54,10 +54,18 @@ sudo cp "$WEB/index.html" "$WEB/index.html.bak" 2>/dev/null || true
 git show FETCH_HEAD:admin.html | sed "$SHIM" | sudo tee "$WEB/admin.html" >/dev/null
 git show FETCH_HEAD:sw.js       | sudo tee "$WEB/sw.js"       >/dev/null
 git show FETCH_HEAD:index.html | sed "$SHIM" | sudo tee "$WEB/index.html" >/dev/null
+# Legacy sahifalar ham Supabase shim bilan (Firebase -> /sb): imtihon (o'qituvchi tanlovi),
+# verify (hujjat tekshiruvi), oquv-platforma (o'quv platforma cloud-sync).
+for f in imtihon.html verify.html oquv-platforma.html; do
+  sudo cp "$WEB/$f" "$WEB/$f.bak" 2>/dev/null || true
+  git show "FETCH_HEAD:$f" | sed "$SHIM" | sudo tee "$WEB/$f" >/dev/null
+done
 # Markerlar (deploy landdi-mi?):
 grep -q iqror_pay_outbox "$WEB/admin.html" || { echo "❌ admin.html deploy landmadi"; exit 1; }
 grep -q "apply_payment"  "$WEB/admin.html" || { echo "❌ admin.html eski (apply_payment yo'q)"; exit 1; }
 grep -q kab-subjbars     "$WEB/index.html" || { echo "❌ index.html deploy landmadi"; exit 1; }
+grep -q "/sb/firebase-firestore.js" "$WEB/verify.html" || { echo "❌ verify.html shim landmadi"; exit 1; }
+grep -q "students_public" "$WEB/verify.html" || { echo "❌ verify.html eski (students_public yo'q)"; exit 1; }
 
 echo "==> 6/6 Xizmatlar qayta ishga tushmoqda..."
 sudo systemctl restart iqror-ai iqror-pay
