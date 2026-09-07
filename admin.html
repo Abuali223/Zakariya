@@ -868,7 +868,10 @@ let currentTab = 'dashboard';
 let VIEW_GEN = 0;   // ko'rinish avlodi — tez tab almashganda eski (kech tugagan) render #view'ni buzmasin
 let cache = {};
 // Seans: rol va vakolatlar. Admin — hammasi; kurator — faqat biriktirilgan sinflar davomati.
-let SESSION = { role:'admin', isAdmin:true, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
+// Boshlang'ich (login'дан OLDINGI) qiymat FAIL-CLOSED bo'lsin: onAuthStateChanged users
+// qatorini o'qib SESSION'ни qayta o'rnatadi; agar biror kod undan oldin o'qisa — admin bo'lib
+// qolmasin (frontend[20], defense-in-depth). Panelga kirish baribir STAFF tekshiruvидан o'tadi.
+let SESSION = { role:'', isAdmin:false, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
 const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
@@ -1110,7 +1113,9 @@ const pct=(a,b)=>b?Math.round(a/b*100):0;
 
 /* ---- CSV eksport / import ---- */
 function downloadCSV(filename, headers, rows){
-  const q=v=>{ v=String(v==null?'':v); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  // CSV formula injeksiyasi (frontend[21]): =,+,-,@,tab,CR bilan boshlanган katak Excel/Sheets'да
+  // FORMULA bo'lib bajarilishi mumkin -> oldiga ' qo'yib zararsizlantiramiz.
+  const q=v=>{ v=String(v==null?'':v); if(/^[=+\-@\t\r]/.test(v)) v="'"+v; return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const lines=[headers.map(q).join(',')].concat(rows.map(r=>r.map(q).join(',')));
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
@@ -3558,6 +3563,10 @@ async function renderAccounting(){
       const gross=Number($('#sp-gross').value)||0, adv=Number($('#sp-adv').value)||0, net=Number($('#sp-net').value)||0;
       if(gross<=0){ toast('Bu xodimga maosh hisoblanmagan — avval maoshini kiriting',true); return; }
       const btn=$('#sp-do'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+      // finance[12]: shu xodimga shu oy uchun maosh ALLAQACHON berilgan bo'lsa — takror ogohlantirish.
+      try{ const ex=await getDocs(query(collection(db,'salary_payments'), where('teacherId','==',String(tid))));
+        if(ex.docs.some(d=>String((d.data()||{}).month)===String(mm)) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
+      }catch(e){}
       try{ await addDoc(collection(db,'salary_payments'), { teacherId:String(tid), teacherName:tn, month:mm, gross, advance:adv, net, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() });
         toast('Maosh berildi ✓');
         $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Maosh berildi</h3><button class="x" id="m-x2">×</button></div>

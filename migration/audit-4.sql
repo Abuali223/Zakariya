@@ -310,4 +310,16 @@ do $$ begin
     with check ( bucket_id = 'public' and (app.is_admin() or app.is_hr() or app.is_zavuch()) );
 exception when undefined_table then null; when undefined_object then null; when others then null; end $$;   -- storage sxemasi yo'q bo'lsa (invalid_schema_name 3F000) -> 'others' tutadi
 
+-- rls[7]/roles[15]: avans harakati jurnalini (credit_ledger) moliya/kassir/zavuch ham O'QISIN —
+--   ular "To'lov/avans tarixi" va Buxgalteriyani yuritadi (ilgari faqat direktor+ota-ona ko'rardi).
+drop policy if exists cl_sel on public.credit_ledger;
+create policy cl_sel on public.credit_ledger for select
+  using (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_zavuch() or app.owns_child("studentId"));
+
+-- roles[23]: kassir Buxgalteriyada «Qaytarilgan» (refunds) summasini ko'rsin (kirim/chiqimni kassir yuritadi).
+--   (audit-3 refunds_sel = admin/finance/zavuch edi; kassirni qo'shamiz.)
+drop policy if exists refunds_sel on public.refunds;
+create policy refunds_sel on public.refunds for select
+  using (app.is_admin() or app.is_finance() or app.is_zavuch() or app.is_cashier());
+
 notify pgrst, 'reload schema';
