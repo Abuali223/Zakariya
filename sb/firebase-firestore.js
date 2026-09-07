@@ -131,6 +131,14 @@ export function writeBatch(_db) {
   };
 }
 
+// ---- rpc: Postgres funksiyasini chaqirish (Firebase'da yo'q — Supabase kengaytmasi).
+//      Masalan apply_payment (atomik to'lov waterfall'i) va claim_child (farzand biriktirish).
+export async function rpc(fn, params) {
+  const { data, error } = await supabase().rpc(fn, params || {});
+  if (error) throw error;
+  return data;
+}
+
 // ---- onSnapshot (boshlang'ich o'qish + realtime) ----
 export function onSnapshot(refOrQuery, cb) {
   let alive = true;

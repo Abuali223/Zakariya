@@ -283,8 +283,18 @@ async function handleComplete(p){
       else { await payRef.set({ status:'unmatched', amount, merchant_confirm_id:confirmId }, { merge:true }); }
       return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:confirmId, error:0, error_note:'Success' };
     }
-    await applyToInvoice(String(pay.invoiceId), Number(p.amount)||0, p.click_trans_id);  // qolganiga/to'liq
-    await payRef.set({ status:'paid', studentId:String(inv.studentId||''), merchant_confirm_id:confirmId }, { merge:true });
+    const ar = await applyToInvoice(String(pay.invoiceId), Number(p.amount)||0, p.click_trans_id);  // qolganiga/to'liq
+    if(ar && ar.error){
+      // backend[0]: invoice bekor/qaytarilgan (terminal) yoki topilmadi -> pulni YO'QOTMAYMIZ.
+      // O'quvchining boshqa qarzlari/avansiga qo'llaymiz (aks holda pul qabul qilinib "paid" bo'lib,
+      // hech qayerga qo'llanmasdan yo'qolardi).
+      const amt2 = Number(p.amount)||Number(pay.amount)||0;
+      if(inv.studentId){ await applyPaymentToStudent(String(inv.studentId), amt2, p.click_trans_id+'_cr');
+        await payRef.set({ status:'applied', studentId:String(inv.studentId), amount:amt2, merchant_confirm_id:confirmId, note:'invoice terminal -> student balans' }, { merge:true }); }
+      else { await payRef.set({ status:'unmatched', amount:amt2, merchant_confirm_id:confirmId }, { merge:true }); }
+    } else {
+      await payRef.set({ status:'paid', studentId:String(inv.studentId||''), merchant_confirm_id:confirmId }, { merge:true });
+    }
   } else {
     // ERKIN: balans modeli. Biriktirilgan -> qo'llanadi (qisman/to'liq/avans); aks holda -> biriktirilmagan.
     const amount = Number(pay.amount) || Number(p.amount) || 0;
@@ -379,7 +389,9 @@ async function uzConfirm(b){
   if(pay.status === 'reversed' || pay.status === 'canceled') return uzFail(UZ.CANCELLED);
   if(pay.status !== 'confirmed'){
     // pay.amount endi SO'M da saqlanadi (uzCreate normallashtiradi) — to'g'ridan-to'g'ri qo'llaymiz.
-    await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
+    const ar = await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
+    // backend[1]: create->confirm orasида invoice bekor/qaytarilgan bo'lsa pulni yo'qotmaymiz -> o'quvchi balansiga.
+    if(ar && ar.error && pay.studentId){ await applyPaymentToStudent(String(pay.studentId), Number(pay.amount)||0, 'uzum_'+b.transId+'_cr'); }
     await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };

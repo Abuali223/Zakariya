@@ -19,6 +19,16 @@ server {
 }
 
 # 2) API  (api.iqror.uz)  — Supabase (kong:8000) + AI (8791) + to'lov (8790)
+#
+# ⚠️ XAVFSIZLIK (ops[3]/ops[4]):
+#   * Faqat KERAKLI Supabase yo'llari (/rest /auth /storage /realtime) tashqariga ochiq.
+#     Studio (dashboard), pg-meta (/pg) va Kong admin (8001) INTERNETGA CHIQMAYDI —
+#     ilgari `location /` hammasini kong'ga uzatib, ularni (faqat basic-auth bilan) ochib qo'yardi.
+#   * Docker portlarini FAQAT localhost'ga bog'lang (ufw Docker'ni chetlab o'tadi!):
+#     docker-compose'да "127.0.0.1:8000:8000", "127.0.0.1:54321:54321" va h.k.
+#     (kong 8000/8443, pooler 5432/6543, studio 3000 — hech biri 0.0.0.0'да bo'lmasin).
+#   * X-Forwarded-For'ni nginx O'ZI $remote_addr'га o'rnatadi (mijoz spoof qila olmaydi);
+#     backend rate-limit shu sarlavhaga ishonadi -> backend 127.0.0.1'да tinglashi shart.
 server {
     listen 80;
     server_name api.iqror.uz;
@@ -37,12 +47,29 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
-    # Supabase (auth/rest/storage/realtime) — qolgan hamma yo'l kong'ga
-    location / {
+    # Supabase API — FAQAT shu yo'llar kong'ga (Studio/pg-meta/Kong-admin OCHILMAYDI).
+    location /rest/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+    location /auth/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+    location /storage/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+    location /realtime/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Upgrade $http_upgrade;         # realtime (websocket)
         proxy_set_header Connection "upgrade";
     }
+    # Qolgan hamma narsa (Studio, /pg, boshqalar) — YOPIQ.
+    location / { return 404; }
 }

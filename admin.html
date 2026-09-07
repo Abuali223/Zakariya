@@ -432,7 +432,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
@@ -1530,7 +1530,7 @@ async function recomputeAttendancePct(sids){
       }).catch(()=>({sid,pct:null}))
     ));
     const batch=writeBatch(db); let n=0;
-    res.forEach(r=>{ if(r.pct!=null){ batch.set(doc(db,'students',r.sid), {attendance:r.pct}, {merge:true}); n++; } });
+    res.forEach(r=>{ if(r.pct!=null){ batch.update(doc(db,'students',r.sid), {attendance:r.pct}); n++; } });   // update (upsert emas): students_ins direktorда, students_upd zavuchда -> zavuch davomatni jim yangilay olsin
     if(n){ await batch.commit(); cache.students=null; }
   }catch(e){ /* xulosa yangilanmasa ham asosiy saqlash buzilmaydi */ }
 }
@@ -1546,7 +1546,7 @@ async function recomputeMonitoringScore(sids){
       }).catch(()=>({sid,score:null}))
     ));
     const batch=writeBatch(db); let n=0;
-    res.forEach(r=>{ if(r.score!=null){ batch.set(doc(db,'students',r.sid), {score:r.score}, {merge:true}); n++; } });
+    res.forEach(r=>{ if(r.score!=null){ batch.update(doc(db,'students',r.sid), {score:r.score}); n++; } });   // update (upsert emas): zavuch monitoring tasdiqlaganda students.score jim yangilanmay qolmasin (roles[8])
     if(n){ await batch.commit(); cache.students=null; }
   }catch(e){ /* xulosa yangilanmasa ham asosiy saqlash buzilmaydi */ }
 }
@@ -1596,9 +1596,12 @@ async function renderAttendance(){
         const entries=Object.entries(state);
         // Shim jsonb'ni chuqur birlashtirmaydi (days ustunini butunlay almashtiradi) — avval shu oydagi
         // mavjud kunlarni o'qib, yangi kunni ustiga qo'shamiz, aks holda oldingi kunlar o'chib ketadi.
-        const existDays={};
+        const existDays={}; let readOk=false;
         try{ const asnap=await getDocs(query(collection(db,'attendance'), where('month','==',ym)));
-          asnap.docs.forEach(d=>{ const x=d.data()||{}; existDays[x.studentId||String(d.id).split('__')[0]]=x.days||{}; }); }catch(e){}
+          asnap.docs.forEach(d=>{ const x=d.data()||{}; existDays[x.studentId||String(d.id).split('__')[0]]=x.days||{}; }); readOk=true; }catch(e){ readOk=false; }
+        // frontend[5]: mavjud kunlar O'QILMASA (tarmoq/RLS xatosi) days ustunini butunlay
+        // almashtirmaymiz — aks holda o'sha oydagi boshqa kunlar YO'QOLADI. Saqlashni bekor qilamiz.
+        if(!readOk) throw new Error("Mavjud davomat o‘qilmadi — saqlash bekor qilindi (kunlar yo‘qolmasligi uchun). Qayta urining.");
         for(let i=0;i<entries.length;i+=400){
           const batch=writeBatch(db);
           entries.slice(i,i+400).forEach(([sid,status])=>{ const merged=Object.assign({}, existDays[sid]||{}, {[dd]:status});
@@ -1660,9 +1663,11 @@ async function renderGrades(){
   catch(e){ $('#gr-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   await loadDefinedClasses();
   const {classes,keys}=classGroupsMap(students);
-  const gvisKeys = SESSION.isAdmin ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
+  // Zavuch (O'IBDO') — butun maktab baholar jurnalini ko'radi (direktor kabi barcha sinflar) (roles[9]).
+  const grAll = SESSION.isAdmin || SESSION.role==='zavuch';
+  const gvisKeys = grAll ? keys : keys.filter(k=>SESSION.assignedClasses.includes(k));
   $('#gr-class').innerHTML=`<option value="">— tanlang —</option>`+gvisKeys.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join('');
-  if(!SESSION.isAdmin && !gvisKeys.length){ $('#gr-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf biriktirilmagan. Administratorga murojaat qiling.</div>`; }
+  if(!grAll && !gvisKeys.length){ $('#gr-body').innerHTML=`<div class="cls-empty" style="margin:0">Sizga hali sinf biriktirilmagan. Administratorga murojaat qiling.</div>`; }
   const load=async()=>{
     const ck=$('#gr-class').value, subject=$('#gr-subject').value.trim(), q=$('#gr-quarter').value;
     if(!ck||!subject||!q){ $('#gr-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf, fan va chorakni tanlang.</div>`; return; }
@@ -1690,9 +1695,12 @@ async function renderGrades(){
         // Shim jsonb'ni chuqur birlashtirmaydi (subjects ustunini butunlay almashtiradi) — avval
         // har o'quvchining mavjud fanlar/choraklarini o'qib, yangi bahoni ustiga qo'shamiz,
         // aks holda boshqa fan/choraklardagi baholar o'chib ketadi (davomatdagi kabi).
-        const existSubs={};
-        try{ const gsnaps=await Promise.all(entries.map(([sid])=>getDoc(doc(db,'grades',`${sid}__${year}`)).catch(()=>null)));
-          gsnaps.forEach((sn,i)=>{ if(sn&&sn.exists()) existSubs[entries[i][0]]=(sn.data().subjects)||{}; }); }catch(e){}
+        const existSubs={}; let readOk=false;
+        try{ const gsnaps=await Promise.all(entries.map(([sid])=>getDoc(doc(db,'grades',`${sid}__${year}`))));
+          gsnaps.forEach((sn,i)=>{ if(sn&&sn.exists()) existSubs[entries[i][0]]=(sn.data().subjects)||{}; }); readOk=true; }catch(e){ readOk=false; }
+        // frontend[5]: mavjud baholar O'QILMASA (tarmoq/RLS) subjects ustunini butunlay
+        // almashtirmaymiz — boshqa fan/choraklardagi baholar yo'qolmasin. Saqlashni bekor qilamiz.
+        if(!readOk) throw new Error("Mavjud baholar o‘qilmadi — saqlash bekor qilindi (baholar yo‘qolmasligi uchun). Qayta urining.");
         for(let i=0;i<entries.length;i+=400){
           const batch=writeBatch(db);
           entries.slice(i,i+400).forEach(([sid,grade])=>{
@@ -2447,6 +2455,9 @@ async function renderCollection(name){
   const salaryHide = (name==='teachers'||name==='staff') && !canSeeSalary();
   const cols = salaryHide ? s.cols.filter(c=>c[0]!=='salary'&&c[0]!=='baseSalary') : s.cols;
   const canMng = (name==='teachers'||name==='staff') ? canManageStaffCol() : true;
+  // O'chirish (teachers/staff) — DB'da FAQAT direktor (teachers_del/staff_del). HR qo'shadi/tahrirlaydi,
+  // lekin o'chira olmaydi -> tugma HR'да ko'rinmasin (42501 chiqmasin) (roles[3]).
+  const canDel = (name==='teachers'||name==='staff') ? SESSION.isAdmin : canMng;
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
     <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button>${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
     ${s.hint?`<p class="small muted" style="margin:-8px 0 14px">${esc(s.hint)}</p>`:''}
@@ -2478,7 +2489,7 @@ async function renderCollection(name){
         if(c[0]==='salary'||c[0]==='baseSalary'){ const n=salaryNum(v); return `<td data-label="${esc(c[1])}">${n>0?`<b>${fmtSom(n)}</b>`:'—'}</td>`; }
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
-      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></div></td>`:''}</tr>`;
+      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>`:''}</tr>`;
     }).join('');
     $('#col-card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
     if(canMng){
@@ -2585,7 +2596,24 @@ function openForm(name, row){
       }
       // Maxfiy ma'lumotni alohida (himoyalangan) kolleksiyaga yozamiz
       if(s.privateCol && savedId && Object.keys(privData).length){
-        try{ await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true}); }
+        try{
+          // frontend[7]: TAHRIRда PII forma to'ldirishда o'qilmagan bo'lsa ({merge:true} bo'sh
+          // qiymatni eski ustiga yozib JSHSHIR/telefon/vasiyni O'CHIRARDI). Yozishdan OLDIN joriy
+          // student_private'ni QAYTA (fail-closed) o'qiymiz: forma bo'sh qoldirgan maydonlar eski
+          // qiymatni saqlaydi; qayta o'qib bo'lmasa — maxfiy blokni umuman YOZMAYMIZ (yo'qolmasin).
+          if(isEdit){
+            let curPriv;
+            try{ const pd=await getDoc(doc(db,s.privateCol,savedId)); curPriv=pd.exists()?(pd.data()||{}):{}; }
+            catch(_){ curPriv=null; }
+            if(curPriv===null){ toast('Saqlandi. Maxfiy maydonlar o‘qilmadi — ular O‘ZGARTIRILMADI (yo‘qolmasligi uchun).', true); }
+            else {
+              s.privateFields.forEach(k=>{ if((privData[k]==null||privData[k]==='') && curPriv[k]!=null && curPriv[k]!=='') privData[k]=curPriv[k]; });
+              await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true});
+            }
+          } else {
+            await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true});
+          }
+        }
         catch(err){ toast('Saqlandi, lekin maxfiy maydonlarni yozishda xatolik: '+(err.code||err.message), true); }
       }
       if(s.afterSave){ try{ await s.afterSave(data, isEdit?row:null, formVals); }catch(err){ toast('Saqlandi, lekin sinf rahbarini biriktirishda xatolik: '+(err.code||err.message), true); } }
@@ -2865,7 +2893,7 @@ async function renderEnrollments(){
   try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
   catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
-  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc(String(r.ts||r.created||'').slice(0,10))}</td><td><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button></td></tr>`).join('');
+  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc(String(r.ts||r.created||'').slice(0,10))}</td><td>${SESSION.isAdmin?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:'<span class="muted">—</span>'}</td></tr>`).join('');   // enr_del faqat direktor (roles[2])
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Sinf tili</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
   labelTable();
   $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
@@ -3072,7 +3100,7 @@ async function renderFinance(){
 
   // ---- Yordamchilar ----
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
-  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||esc(k); };   // esc: invoices.month xom qiymati (masalan '2025-99<img onerror>') innerHTML'ga XSS bo'lib tushmasin (A-03)
   const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
   const fmtC=n=>{ n=Number(n)||0; if(n>=1e9)return (n/1e9).toFixed(2).replace('.',',')+' mlrd'; if(n>=1e6)return (n/1e6).toFixed(1).replace('.',',')+' mln'; return Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); };
   const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(f?f(x):x.amount)||0),0);
@@ -3228,7 +3256,7 @@ async function renderAccounting(){
   const advOfMonth=M=>ADV.filter(a=>String(a.month||String(a.date||'').slice(0,7))===M);
 
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
-  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||esc(k); };   // esc: invoices.month xom qiymati (masalan '2025-99<img onerror>') innerHTML'ga XSS bo'lib tushmasin (A-03)
   const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
   const fmtC=n=>{ n=Number(n)||0; const sg=n<0?'−':''; n=Math.abs(n); let v; if(n>=1e9)v=(n/1e9).toFixed(2).replace('.',',')+' mlrd'; else if(n>=1e6)v=(n/1e6).toFixed(1).replace('.',',')+' mln'; else v=Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); return sg+v; };
   const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
@@ -3240,7 +3268,10 @@ async function renderAccounting(){
   // Qaytarilgan (refund) summasi — invoice oyi bo'yicha (Kirim aynan shu oyda kamaygan); payment-refund uchun createdAt.
   const dtM=v=>{ try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,7); }catch(e){} return String(v||'').slice(0,7); };
   const refMonth=r=>String(r.month||'')||dtM(r.createdAt);
-  const refundOfMonth=k=>REF.reduce((s,r)=>s+(refMonth(r)===k?(Number(r.amount)||0):0),0);
+  // «Qaytarilgan» KPI — faqat REAL pul qaytarilishi (invoice/payment refund). Avans clawback
+  // (target:'credit') Moliya tekshiruvi balansи uchun yoziladi, lekin daromaddan qayta ayirilmaydi
+  // (avans allaqachon Kirimда hisoblangan) — aks holda ikki marta ayirilardi (finance[4]).
+  const refundOfMonth=k=>REF.reduce((s,r)=>s+((refMonth(r)===k && r.target!=='credit')?(Number(r.amount)||0):0),0);
 
   // Direktor uchun A4 moliyaviy hisobot (printHTML — pop-up bloklanmaydi).
   function printAccountingReport(M){
@@ -3561,7 +3592,7 @@ async function renderMarketing(){
     catch(e){ $('#mk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return false; }
   };
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
-  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||k; };
+  const mLabel=k=>{ k=String(k||''); return MO[(parseInt(k.slice(5,7),10)||1)-1]||esc(k); };   // esc: invoices.month xom qiymati (masalan '2025-99<img onerror>') innerHTML'ga XSS bo'lib tushmasin (A-03)
   const monthList=(end,n)=>{ const [y,m]=String(end).split('-').map(Number); const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; };
   const fmtC=n=>{ n=Number(n)||0; const s=n<0?'−':''; n=Math.abs(n); let v; if(n>=1e9)v=(n/1e9).toFixed(2).replace('.',',')+' mlrd'; else if(n>=1e6)v=(n/1e6).toFixed(1).replace('.',',')+' mln'; else v=Math.round(n).toLocaleString('ru-RU').replace(/,/g,' '); return s+v; };
   const fmtCac=n=>{ n=Math.round(Number(n)||0); if(n>=1e6)return (n/1e6).toFixed(1).replace('.',',')+' mln'; return Math.round(n/1000)+' ming'; };
@@ -3658,7 +3689,9 @@ async function renderMarketing(){
 
     // ---- Lead pipeline (holat CRUD) ----
     const rows=mLeads.slice().sort((a,b)=>String(b.ts||b.created||'').localeCompare(String(a.ts||a.created||'')));
-    const trs=rows.map(r=>{ const cur=stof(r); const dir=[r.direction,r.grade].filter(Boolean).map(esc).join(' · ');
+    const stKeys=STAGES.map(s=>s[0]);
+    const trs=rows.map(r=>{ let cur=stof(r); if(!stKeys.includes(cur)) cur='yangi';   // A-02: enrollments.status xom qiymati (REST orqali yozilishi mumkin) class atributiga esc'siz tushmasin -> faqat ma'lum bosqichlar
+      const dir=[r.direction,r.grade].filter(Boolean).map(esc).join(' · ');
       const sel=`<select class="mkt-sel st-${cur}" data-lead="${esc(r._id)}">${STAGES.map(([v,l])=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`).join('')}</select>`;
       return `<tr>
         <td data-label="Ism"><b>${esc(r.name||'')}</b></td>
@@ -3673,7 +3706,7 @@ async function renderMarketing(){
     $('#mk-body').innerHTML = kpis + `<div class="mkt-cols">${funnelCard}${cacCard}</div>` + ltvCard + tableCard;
     $('#mk-body').querySelectorAll('select[data-lead]').forEach(sel=>sel.addEventListener('change',async()=>{
       const id=sel.dataset.lead, val=sel.value;
-      try{ await setDoc(doc(db,'enrollments',id),{status:val,updatedAt:serverTimestamp()},{merge:true}); toast('Holat yangilandi ✓'); if(await reload()) draw($('#mk-month').value||curMonth()); }
+      try{ await updateDoc(doc(db,'enrollments',id),{status:val,updatedAt:serverTimestamp()}); toast('Holat yangilandi ✓'); if(await reload()) draw($('#mk-month').value||curMonth()); }   // updateDoc (setDoc=UPSERT emas): enr_ins status='yangi'ga uriladi -> marketing boshqa holatga o'tkaza olmasdi (roles[1])
       catch(err){ toast('Xatolik: '+(err.code||err.message),true); }
     }));
     // LTV taxminlarini tahrirlash (config/ltv ga saqlanadi)
@@ -3729,29 +3762,13 @@ async function openAssign(payment, students, reload){
 async function applyPaymentClient(studentId, amount, provider, payId){
   amount=Number(amount)||0; if(amount<0) return;   // amount=0 -> faqat mavjud kreditni (avansni) hisob-fakturaga qo'llaydi
   provider = provider || (amount>0 ? 'click' : 'credit');   // avans (amount=0) -> 'credit' (soxta Click daromadi bo'lmasin)
-  // Idempotentlik posboni: shu to'lov (payId) allaqachon qo'llangan bo'lsa — QAYTA qo'llamaymiz.
-  if(payId){
-    try{ const g=await getDoc(doc(db,'applied_payments',payId)); if(g.exists()) return {dup:true}; }catch(e){}
-    // Posbonни AVVAL yozamiz; XATO BO'LSA — QO'LLAMAYMIZ (fail-safe). Ilgari catch{} yutar edi ->
-    // posbonsiz qolib, qayta urinish shu payIdни yangilangan invoyslarга takror qo'llardi (double-count).
-    await setDoc(doc(db,'applied_payments',payId),{ id:payId, studentId, amount, createdAt:serverTimestamp() });
-  }
-  try{
-  let credit=0; try{ const c=await getDoc(doc(db,'student_credit',studentId)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
-  let available=amount+credit;
-  const snap=await getDocs(query(collection(db,'invoices'), where('studentId','==',studentId)));
-  const list=snap.docs.map(d=>({_id:d.id,...d.data()})).filter(x=>x.status!=='paid'&&x.status!=='canceled'&&x.status!=='reversed').sort((a,b)=>String(a.month||a._id).localeCompare(String(b.month||b._id)));
-  for(const inv of list){ if(available<=0) break; const paidSoFar=Number(inv.paidAmount)||0; const remaining=(Number(inv.amount)||0)-paidSoFar; if(remaining<=0) continue;
-    const pay=Math.min(available,remaining); const newPaid=paidSoFar+pay; const full=newPaid>=(Number(inv.amount)||0)-0.5;
-    await setDoc(doc(db,'invoices',inv._id), Object.assign({paidAmount:newPaid,status:full?'paid':'partial',provider}, full?{paidAt:serverTimestamp()}:{}), {merge:true});
-    available-=pay; }
-  await setDoc(doc(db,'student_credit',studentId),{studentId,credit:available,updatedAt:serverTimestamp()},{merge:true});
-  // AVANS HARAKATI jurnali: balans o'zgarishini sababi bilan yozamiz (izlanish uchun).
-  const delta=available-credit;
-  if(Math.abs(delta)>=0.5){ const nm=((cache.students||[]).find(s=>String(s.studentId||s._id)===String(studentId))||{}).name||'';
-    try{ await addDoc(collection(db,'credit_ledger'),{ studentId:String(studentId), studentName:nm, delta, balanceAfter:available,
-      reason: delta>0?'overpay':'applied', provider, at:serverTimestamp() }); }catch(e){} }
-  }catch(e){ if(payId){ try{ await deleteDoc(doc(db,'applied_payments',payId)); }catch(_){} } throw e; }   // xato -> posbonni bo'shatamiz (qayta urinish mumkin)
+  // ATOMIK: butun waterfall (invoyslar + avans + jurnal) va idempotentlik posboni (applied_payments)
+  // serverда BITTA tranzaksiyada bajariladi — apply_payment RPC (migration/audit-4.sql). Xato bo'lsa
+  // TO'LIQ qaytariladi (posbon ham) -> qayta urinish xavfsiz; posbon mavjud bo'lsa {dup:true} qaytadi va
+  // QAYTA qo'llanmaydi. Bu ilgargi klient-yon waterfall'dagi double-count / "yozildi-lekin-qo'llanmadi"
+  // (fantom) muammolarini butunlay yopadi.
+  const res = await rpc('apply_payment', { p_sid:String(studentId), p_amount:amount, p_provider:provider, p_pay_id: payId||null });
+  return (res && res.dup) ? {dup:true} : res;
 }
 // O'quvchining TO'LIQ moliyaviy tarixi: hisob-fakturalar + onlayn to'lovlar (kim/qachon) + avans harakati.
 async function openPayHistory(sid, name){
@@ -3845,7 +3862,9 @@ async function openFinanceAudit(){
     P[sid]=(P[sid]||0)+amt; if(p.payerName && !nameMap[sid]) nameMap[sid]=p.payerName; });
   // Qaytarilgan (refund) summalar: invoice paidAmount kamaytirilgan (I↓), lekin payments qatori
   // to'liq turadi. Balans (P==I+C) buzilmasligi uchun invoice-refundlarni P dan ayiramiz.
-  try{ const rs=await getDocs(collection(db,'refunds')); rs.docs.forEach(d=>{ const r=d.data()||{}; const sid=String(r.studentId||''); const amt=Number(r.amount)||0; if(sid&&amt&&r.target==='invoice') P[sid]=(P[sid]||0)-amt; }); }catch(e){}
+  // invoice-refund (paidAmount↓) VA credit-clawback (avans↓) — ikkalasi ham P dan ayiriladi,
+  // aks holda clawback bo'lgan o'quvchi doimiy "Qo'llanmagan" bo'lib ko'rinadi (finance[4]).
+  try{ const rs=await getDocs(collection(db,'refunds')); rs.docs.forEach(d=>{ const r=d.data()||{}; const sid=String(r.studentId||''); const amt=Number(r.amount)||0; if(sid&&amt&&(r.target==='invoice'||r.target==='credit')) P[sid]=(P[sid]||0)-amt; }); }catch(e){}
   const ids=new Set([...Object.keys(I),...Object.keys(C),...Object.keys(P)]);
   const rows=[];
   ids.forEach(sid=>{ const p=R(P[sid]||0), i=R(I[sid]||0), c=R(C[sid]||0); const disc=(i+c)-p;
@@ -4183,7 +4202,7 @@ async function renderFeedback(){
           ${SESSION.isAdmin?`<button class="btn sm danger" data-del="${esc(sid)}">O‘chir</button>`:''}
         </div></div>`; }).join('');
     $('#fb-body').innerHTML=`<div class="small muted" style="margin-bottom:10px">Jami: ${rows.length}${newN?` · <b style="color:#B42318">${newN} yangi</b>`:''}</div>`+cards;
-    const upd=async(sid,patch)=>{ try{ await setDoc(doc(db,'feedback',sid),Object.assign({updatedAt:serverTimestamp()},patch),{merge:true}); const it=ALL.find(x=>x._id===sid); if(it)Object.assign(it,patch); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+    const upd=async(sid,patch)=>{ try{ await updateDoc(doc(db,'feedback',sid),Object.assign({updatedAt:serverTimestamp()},patch)); const it=ALL.find(x=>x._id===sid); if(it)Object.assign(it,patch); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };   // updateDoc: fb_ins (uid=app.uid()) ga urilmasin, fb_upd (admin/admin_head) ishlaydi (roles[0])
     $('#fb-body').querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>upd(b.dataset.read,{status:'read'}));
     $('#fb-body').querySelectorAll('[data-resolve]').forEach(b=>b.onclick=()=>upd(b.dataset.resolve,{status:'resolved'}));
     $('#fb-body').querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>{ const it=ALL.find(x=>x._id===b.dataset.reply)||{}; const v=prompt('Javob (ota-ona/o‘quvchi kabinetда ko‘radi):', it.reply||''); if(v==null) return; upd(b.dataset.reply,{reply:String(v).trim(), status:'resolved'}); });
@@ -4293,7 +4312,7 @@ async function renderPayments(){
         ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
         ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
-        ${(r.status==='paid'||r.status==='partial')?'':`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`}
+        ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial'))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
       </div></td></tr>`; };
     const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
       const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
@@ -4581,19 +4600,24 @@ async function openRecordPayment(students, reload, pre){
   let saving=false;
   $('#rp-save').onclick=async()=>{
     if(saving) return;
+    // TAKROR HIMOYASI (0) — ikki bosish (double-click): navbatga/serverга tekshiruvдан OLDIN,
+    // birinchi `await`дан OLDIN bloklaymiz. Ilgari `saving=true` await'дan KEYIN edi -> tez ikki
+    // bosishda ikkalasi ham o'tib, ikkita payId bilan ikki marta to'lov ketardi.
+    saving=true; const btn=$('#rp-save'); if(btn) btn.disabled=true;
+    const unlock=()=>{ saving=false; if(btn){ btn.disabled=false; btn.textContent='Qabul qilish'; } };
     const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=$('#rp-date').value, note=$('#rp-note').value.trim(), period=$('#rp-period').value.trim();
-    if(!sid){ toast('O‘quvchini tanlang',true); return; }
-    if(amount<=0){ toast('Summani kiriting',true); return; }
+    if(!sid){ toast('O‘quvchini tanlang',true); unlock(); return; }
+    if(amount<=0){ toast('Summani kiriting',true); unlock(); return; }
     const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
     // TAKROR HIMOYASI (1) — LOKAL navbat (internet YO'Q bo'lsa ham ishlaydi): shu summa allaqachon navbatда turibdimi?
-    if(obRecentDup(sid, amount) && !confirm(`⚠️ Bu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon navbatда (yuborilmoqda). Bu takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta qo‘shilsinmi?`)) return;
+    if(obRecentDup(sid, amount) && !confirm(`⚠️ Bu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon navbatда (yuborilmoqda). Bu takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta qo‘shilsinmi?`)){ unlock(); return; }
     // TAKROR HIMOYASI (2) — SERVER (online bo'lsa): oxirgi 3 daqiqada shu summa yozilganmi (yuborilgan to'lovlar uchun)?
     if(navigator.onLine){ try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
       const dup=rq.docs.map(d=>d.data()).find(p=>Number(p.amount)===amount && p.raw&&p.raw.manual && p.status!=='canceled' && p.status!=='failed'
         && p.createdAt&&p.createdAt.toDate && (now-p.createdAt.toDate().getTime())<180000);
-      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)) return;
+      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)){ unlock(); return; }
     }catch(e){} }
-    saving=true; const btn=$('#rp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+    if(btn) btn.textContent='Saqlanmoqda…';
     const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
     // CHEK OYLARI: qo'lда yozilган bo'lsa — o'sha; aks holda AVTOMATIK (to'lov QAYSI oy fakturalarини qoplasa) —
     // to'lov QO'LLANISHIDAN OLDIN hisoblaymiz (keyin fakturalar to'lanib, qoplangan oylar yo'qoladi).
@@ -4679,6 +4703,9 @@ async function openRefund(ctx, reload){
         // Avansni ham 0 ga tushirish (direktor belgilagan bo'lsa) — o'quvchi ketayotgan bo'lsa (maktab zarari oldini oladi).
         const cbEl=$('#rf-clawback');
         if(cbEl && cbEl.checked && studCredit>0){
+          // finance[4]: avans clawback'ini refunds'ga (target:'credit') ham yozamiz — Moliya
+          // tekshiruvi bu summani doimiy "Qo'llanmagan" deb ko'rsatmasin (balans p==i+c saqlanadi).
+          try{ await addDoc(collection(db,'refunds'), { target:'credit', targetId:String(inv.studentId), studentId:String(inv.studentId), studentName:ctx.name||'', amount:studCredit, reason:(reason?reason+' · ':'')+'avans 0 ga tushirildi', byEmail:email, month:inv.month||'', createdAt:serverTimestamp() }); }catch(e){}
           await setDoc(doc(db,'student_credit',String(inv.studentId)), { studentId:String(inv.studentId), credit:0, updatedAt:serverTimestamp() }, {merge:true});
           try{ await addDoc(collection(db,'credit_ledger'), { studentId:String(inv.studentId), studentName:ctx.name||'', delta:-studCredit, balanceAfter:0, reason:'manual', note:'Refundда avans 0 ga tushirildi', at:serverTimestamp() }); }catch(e){}
         }

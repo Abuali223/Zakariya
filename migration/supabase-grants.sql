@@ -9,6 +9,9 @@
 -- Ruxsat berilsa ham, RLS siyosatlari kim nimani ko'rishini belgilaydi.
 -- =====================================================================
 
+-- app sxemasi rls.sql'da yaratiladi, lekin bu fayl run-all'da undan OLDIN ishlaydi ->
+-- toza bazada "schema app does not exist" xatosini oldini olamiz (idempotent).
+create schema if not exists app;
 grant usage on schema public to anon, authenticated, service_role;
 grant usage on schema app    to anon, authenticated, service_role;
 

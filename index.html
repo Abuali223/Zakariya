@@ -1644,7 +1644,7 @@ function renderKabinet(){
       if(!code){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_code_need; } return; }
       const r=await A.addChild(s.id, code);
       if(r&&r.ok){ renderKabinet(); }
-      else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr; }
+      else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.msg)||((r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr); }   // r.msg: server xabari (lockout / kod noto'g'ri)
     };
     btn.onclick=add;
     inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
@@ -1876,7 +1876,9 @@ async function renderKabInvoices(studentId){
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_loading)}</div></div>`;
   const [invs, cfg] = await Promise.all([ window.IqrorFB.getInvoices(studentId), window.IqrorFB.getPayConfig() ]);
   if($("#kab-invoices")!==box) return;
-  const list=(invs||[]).filter(i=>i&&i.status!=='canceled').sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
+  // 'reversed' (qaytarilgan) — admin kabi ro'yxatdan chiqariladi: aks holda kabinetда soxta
+  // "Kutilmoqda" + qarz va amount=0 to'lov havolasi ko'rinardi (public[2]).
+  const list=(invs||[]).filter(i=>i&&i.status!=='canceled'&&i.status!=='reversed').sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
   if(!list.length){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_none)}</div></div>`; return; }
   const fmt=n=>(Number(n)||0).toLocaleString('ru-RU').replace(/,/g,' ');
   const isRu=lang==='ru';
@@ -2464,8 +2466,11 @@ addEventListener('hashchange', ()=>route(true));
         getChildId: ()=>activeChild, // eski API bilan moslik
         async addChild(id, code){ id=String(id||'').trim(); code=String(code||'').trim(); if(!id) return {ok:false};
           if(childIds.includes(id)){ activeChild=id; await persistChildren(); return {ok:true,dup:true}; }
-          try{ await addDoc(collection(db,'child_claims'),{ uid:currentUser.uid, studentId:id, code }); }
+          // A-06: biriktirish faqat claim_child RPC orqali — brute-force lockout (15 daqiqada 5 xato)
+          // serverда majburlanadi. To'g'ridan-to'g'ri child_claims INSERT endi yopiq (cc_ins=false).
+          let res; try{ res = await fsMod.rpc('claim_child', { p_sid:id, p_code:code }); }
           catch(e){ return {ok:false, err:'code'}; }
+          if(!res || !res.ok){ return {ok:false, err:(res&&res.locked)?'locked':'code', msg:(res&&res.error)||'' }; }
           childIds = await loadChildIds(currentUser.uid);
           if(!childIds.includes(id)) return {ok:false, err:'code'};
           await enrichChildAtt([id]);
