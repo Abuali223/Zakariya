@@ -22,8 +22,27 @@ begin
     execute format('revoke insert, update, delete on public.%I from anon, authenticated', v.table_name);
   end loop;
 end $$;
--- Kelajakda qo'shiladigan view'lar avtomatik yozuvsiz bo'lishi uchun eslatma:
--- yangi view yaratganda "revoke insert,update,delete ... from anon,authenticated" qo'shing.
+-- ILDIZ SABAB (revyu M-1): supabase-grants.sql'daги `alter default privileges ... on tables`
+--   KELAJAKDAGI har bir view'ga ham anon/authenticated uchun DML beradi (Postgres "TABLES"
+--   default-privilege view'ni qamraydi) -> yangi view qo'shilishi bilan A-07 teshigi QAYTA
+--   ochilardi. Buni event trigger bilan ILDIZDAN yopamiz: har CREATE VIEW'дан keyin o'sha
+--   view'дан anon/authenticated DML'i AVTOMATIK olib tashlanadi. (Jadval grantlariga tegmaymiz —
+--   ko'p jadval yozuvи default-privilege'ga tayanadi.)
+create or replace function app.revoke_view_dml() returns event_trigger
+  language plpgsql security definer set search_path = public, pg_temp as $$
+declare r record;
+begin
+  for r in select object_identity from pg_event_trigger_ddl_commands()
+           where command_tag in ('CREATE VIEW','CREATE MATERIALIZED VIEW') loop
+    begin
+      execute format('revoke insert, update, delete on %s from anon, authenticated', r.object_identity);
+    exception when others then null; end;
+  end loop;
+end $$;
+drop event trigger if exists trg_revoke_view_dml;
+create event trigger trg_revoke_view_dml on ddl_command_end
+  when tag in ('CREATE VIEW','CREATE MATERIALIZED VIEW')
+  execute function app.revoke_view_dml();
 
 -- =====================================================================
 -- A-06 [P0] Farzand biriktirish kodini brute-force. Mavjud o'quvchilar kodi
@@ -64,6 +83,13 @@ grant all on public.child_claim_attempts to service_role;
 
 -- claim_child: yagona biriktirish yo'li. SECURITY DEFINER -> child_claims RLS'ni
 --   chetlab o'tadi, lekin lockout + kod tekshiruvi ichkarida majburlanadi.
+-- Kod katta-kichik harfga SEZGIR bo'lmasin (revyu m-2): kodlar upper(md5) bilan KATTA
+-- saqlanadi; ota-ona kichik harfда kiritsa ham to'g'ri hisoblansin (aks holда noto'g'ri
+-- "xato" sanalib lockout'ga olib kelardi).
+create or replace function app.code_ok(sid text, c text) returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.student_codes where id = sid and upper(code) = upper(c) and coalesce(c,'') <> '')
+$$;
+
 create or replace function public.claim_child(p_sid text, p_code text)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_fails int; v_ok boolean;
@@ -221,12 +247,13 @@ grant execute on function public.apply_payment(text, numeric, text, text) to aut
 --   ariza) direktorда qoladi — ular uchun UI tugmasi yashiriladi (frontend).
 -- =====================================================================
 
--- roles[0] feedback: Direktor/Ma'muriyat rahbari holat/javobni UPDATE qiladi
---   (fb_upd allaqachon bor). setDoc=UPSERT INSERT'ga urilmasin uchun fb_ins'ga
---   ham admin/admin_head shoxobchasi (frontend updateDoc'ga o'tadi — ikki tomon).
+-- roles[0] feedback: holat/javob endi frontend'да updateDoc (PATCH) bilan yoziladi ->
+--   fb_upd (admin/admin_head, allaqachon bor) ishlaydi. fb_ins'ni KENGAYTIRMAYMIZ
+--   (uid = app.uid() qoladi) — aks holda admin begona uid nomidan murojaat "yoza" olardi
+--   (mualliflikni soxtalashtirish, revyu m-1). Faqat o'z nomidan insert.
 drop policy if exists fb_ins on public.feedback;
 create policy fb_ins on public.feedback for insert
-  with check (uid = app.uid() or app.is_admin() or app.is_admin_head());
+  with check (uid = app.uid());
 
 -- roles[6] expenses: moliya menejeri/g'aznachi xarajatni o'chira olsin (yaratadi ham).
 drop policy if exists exp_del on public.expenses;
@@ -281,6 +308,6 @@ do $$ begin
   drop policy if exists iqror_admin_insert on storage.objects;
   create policy iqror_admin_insert on storage.objects for insert
     with check ( bucket_id = 'public' and (app.is_admin() or app.is_hr() or app.is_zavuch()) );
-exception when undefined_table then null; when undefined_object then null; end $$;
+exception when undefined_table then null; when undefined_object then null; when others then null; end $$;   -- storage sxemasi yo'q bo'lsa (invalid_schema_name 3F000) -> 'others' tutadi
 
 notify pgrst, 'reload schema';
