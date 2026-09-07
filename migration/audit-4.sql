@@ -162,17 +162,24 @@ begin
     end if;
   end if;
 
-  -- Joriy avans (qatorni qulflaymiz — parallel to'lovlar seriya bo'lsin).
+  -- Shu o'quvchi bo'yicha BARCHA to'lovlarni seriyalash (yangi o'quvchida student_credit
+  -- qatori hali yo'q -> FOR UPDATE qulflay olmaydi; advisory lock poygani to'liq yopadi).
+  perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(p_sid, '')));
+
+  -- Joriy avans.
   select coalesce(credit, 0) into v_credit from public.student_credit where id = p_sid for update;
   if not found then v_credit := 0; end if;
   v_available := p_amount + coalesce(v_credit, 0);
 
   -- Waterfall: eng eski (oy bo'yicha) to'lanmagan invoysdan boshlab; qulflaymiz.
+  -- MUHIM: status IS NULL (eski/import qilingan) invoyslar ham TO'LANMAGAN hisoblanadi
+  -- (SQL 3-qiymatli mantiqda `null not in (...)` = null, ya'ni chiqib ketardi — eski klient
+  -- esa ularni kiritardi). Tartib: month bo'sh/null bo'lsa id (eski klient `month||id` kabi).
   for inv in
     select id, coalesce(amount, 0) as amount, coalesce("paidAmount", 0) as paid
       from public.invoices
-     where "studentId" = p_sid and status not in ('paid', 'canceled', 'reversed')
-     order by coalesce(month, id) asc
+     where "studentId" = p_sid and (status is null or status not in ('paid', 'canceled', 'reversed'))
+     order by coalesce(nullif(month, ''), id) asc
      for update
   loop
     exit when v_available <= 0;
