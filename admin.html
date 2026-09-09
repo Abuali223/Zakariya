@@ -1014,7 +1014,8 @@ function buildTabs(){
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
     {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'},
     {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'},
-    {k:'marketing', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T667-480q0 43-19.5 78T560-346Z'), t:'Marketing'}
+    {k:'marketing', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T667-480q0 43-19.5 78T560-346Z'), t:'Marketing'},
+    {k:'bus', icon:mi('M240-80q-17 0-28.5-11.5T200-120v-72q-18-11-29-28.5T160-260v-380q0-83 77-111.5T480-780q172 0 246 28t74 112v380q0 21-11 38.5T760-192v72q0 17-11.5 28.5T720-80h-40q-17 0-28.5-11.5T640-120v-40H320v40q0 17-11.5 28.5T280-80h-40Zm0-440h480v-120H240v120Zm90 240q21 0 35.5-14.5T380-330q0-21-14.5-35.5T330-380q-21 0-35.5 14.5T280-330q0 21 14.5 35.5T330-280Zm300 0q21 0 35.5-14.5T680-330q0-21-14.5-35.5T630-380q-21 0-35.5 14.5T580-330q0 21 14.5 35.5T630-280Z'), t:'Avtobus'}
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
@@ -1045,6 +1046,7 @@ function openTab(tab){
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
   if(tab==='marketing') return renderMarketing();
+  if(tab==='bus') return renderBus();
   if(tab==='feedback') return renderFeedback();
   if(tab==='sick') return renderSick();
   if(tab==='exams') return renderExams();
@@ -2130,6 +2132,58 @@ async function renderOlympiads(){
   $('#ol-add-btn').addEventListener('click',openOlyForm);
   $('#ol-f-level').addEventListener('change',draw);
   $('#ol-f-res').addEventListener('change',draw);
+  load();
+}
+
+/* ---- 🚌 Maktab avtobusi — yo'nalishlar + haydovchi maxfiy havolasi (faqat direktor) ---- */
+function busSlug(name){ return String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,20) || 'yol'; }
+function busRandom(n){ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; let a=null; try{ a=crypto.getRandomValues(new Uint32Array(n)); }catch(e){} for(let i=0;i<n;i++){ s+=c[(a?a[i]:Math.floor(Math.random()*4294967296))%c.length]; } return s; }
+async function renderBus(){
+  $('#view').innerHTML = `<div class="page-head"><h2>🚌 Avtobus yo‘nalishlari</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Har yo‘nalish uchun <b>maxfiy havola</b> yarating va haydovchiga bering (Telegram/SMS). Haydovchi havolani telefonда ochib «Yo‘lга chiqdim» bosadi — ota-onalar kabinetда avtobusni jonli kuzatadi. Havola maxfiy: agar tarqalsa, «Kalitni yangilash» bilan almashtiring.</p>
+    <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Yangi yo‘nalish nomi<input id="bus-name" placeholder="masalan: Asaka maktab" class="search-inp"></label>
+      <label>&nbsp;<button class="btn gold" id="bus-add-btn" style="width:100%">+ Yo‘nalish qo‘shish</button></label>
+    </div></div>
+    <div id="bus-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
+  const origin=location.origin;
+  let ALL=[];
+  const draw=()=>{
+    if(!ALL.length){ $('#bus-body').innerHTML=`<div class="card"><div class="empty">Hozircha yo‘nalish yo‘q. Yuqorida nom kiritib «+ Yo‘nalish qo‘shish» bosing.</div></div>`; return; }
+    const cards=ALL.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(r=>{
+      const link=`${origin}/haydovchi.html?y=${encodeURIComponent(r._id)}&kalit=${encodeURIComponent(r.driver_key||'')}`;
+      return `<div class="card" style="margin-bottom:12px">
+        <div class="cls-card-head"><h3>${esc(r.name||r._id)} ${r.active===false?'<span class="chip" style="background:#eee;color:#999">o‘chirilgan</span>':'<span class="chip" style="background:#e6f4ef;color:#137a5f">faol</span>'}</h3></div>
+        <label class="small" style="font-weight:700;display:block;margin:6px 0 4px">Haydovchi havolasi (maxfiy — faqat haydovchiga bering):</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input readonly value="${esc(link)}" data-link="${esc(r._id)}" style="flex:1;min-width:220px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:13px/1.4 monospace;background:#f7f9f8">
+          <button class="btn sm" data-copy="${esc(r._id)}">📋 Nusxa</button>
+        </div>
+        <div class="row-actions" style="margin-top:10px">
+          <button class="btn sm ghost2" data-regen="${esc(r._id)}" title="Eski havola ishlamay qoladi">🔑 Kalitни yangilash</button>
+          <button class="btn sm" data-toggle="${esc(r._id)}">${r.active===false?'Faollashtirish':'Vaqtincha o‘chirish'}</button>
+          <button class="btn sm danger" data-del="${esc(r._id)}">O‘chirish</button>
+        </div></div>`;
+    }).join('');
+    $('#bus-body').innerHTML=cards;
+    $('#bus-body').querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{ const inp=$('#bus-body').querySelector(`input[data-link="${b.dataset.copy}"]`); if(!inp) return; inp.focus(); inp.select(); try{ navigator.clipboard.writeText(inp.value); }catch(e){ try{ document.execCommand('copy'); }catch(_){} } toast('Havola nusxalandi ✓'); });
+    $('#bus-body').querySelectorAll('[data-regen]').forEach(b=>b.onclick=async()=>{ const r=ALL.find(x=>x._id===b.dataset.regen); if(!r) return; if(!confirm('Kalit yangilanadi — ESKI havola ishlamay qoladi. Haydovchiga yangi havolani qaytadan berish kerak. Davom etilsinmi?')) return; const key=busRandom(12); try{ await setDoc(doc(db,'bus_routes',r._id),{driver_key:key},{merge:true}); r.driver_key=key; draw(); toast('Kalit yangilandi ✓'); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+    $('#bus-body').querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{ const r=ALL.find(x=>x._id===b.dataset.toggle); if(!r) return; const na=(r.active===false); try{ await setDoc(doc(db,'bus_routes',r._id),{active:na},{merge:true}); r.active=na; draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+    $('#bus-body').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ const r=ALL.find(x=>x._id===b.dataset.del); if(!r) return; if(!confirm(`«${r.name||r._id}» yo‘nalishi o‘chirilsinmi?`)) return; try{ await deleteDoc(doc(db,'bus_routes',r._id)); try{ await deleteDoc(doc(db,'bus_positions',r._id)); }catch(e){} ALL=ALL.filter(x=>x._id!==r._id); draw(); toast('O‘chirildi'); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+  };
+  const load=async()=>{
+    try{ const snap=await getDocs(collection(db,'bus_routes')); ALL=snap.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ $('#bus-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«bus_routes» jadvali bazada yaratilganini tekshiring (migration/bus.sql). Bu bo‘lim faqat DIREKTOR uchun.</span></div></div>`; return; }
+    draw();
+  };
+  $('#bus-add-btn').onclick=async()=>{
+    const name=($('#bus-name').value||'').trim(); if(!name){ toast('Yo‘nalish nomini kiriting',true); return; }
+    const id=busSlug(name)+'-'+busRandom(4).toLowerCase(); const key=busRandom(12);
+    const btn=$('#bus-add-btn'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
+    try{ await setDoc(doc(db,'bus_routes',id),{name,driver_key:key,active:true,createdAt:serverTimestamp()}); $('#bus-name').value=''; ALL.push({_id:id,name,driver_key:key,active:true}); draw(); toast('Yo‘nalish qo‘shildi ✓'); }
+    catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
+    btn.disabled=false; btn.textContent='+ Yo‘nalish qo‘shish';
+  };
   load();
 }
 // ===== Filtr xotirasi: bo'lim qayta chizilganda (masalan, saqlangач) filtr saqlanadi =====

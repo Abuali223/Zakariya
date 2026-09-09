@@ -1661,12 +1661,100 @@ function renderKabinet(){
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
+    <div id="kab-bus"></div>
     <div id="kab-detail"${s?' class="kab-2col"':''}>${detail}</div>`;
+  renderKabBus();
   host.querySelectorAll('[data-sel]').forEach(b=>b.onclick=async()=>{ if(b.dataset.sel===active) return; try{ await A.setActiveChild(b.dataset.sel); }catch(e){} renderKabinet(); });
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
     renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+}
+
+// 🚌 Maktab avtobusi — kabinetда jonli xarita (Leaflet + OpenStreetMap).
+let _busTimer=null, _busMap=null, _busMarker=null;
+function ensureLeaflet(){
+  return new Promise((resolve)=>{
+    if(window.L){ resolve(true); return; }
+    try{
+      const css=document.createElement('link'); css.rel='stylesheet';
+      css.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+      document.head.appendChild(css);
+      const js=document.createElement('script');
+      js.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      js.onload=()=>resolve(!!window.L); js.onerror=()=>resolve(false);
+      document.head.appendChild(js);
+    }catch(e){ resolve(false); }
+  });
+}
+function busAgo(updatedAt){
+  let ms=0; try{ const d=updatedAt&&updatedAt.toDate?updatedAt.toDate():new Date(updatedAt); ms=Date.now()-d.getTime(); }catch(e){ return ''; }
+  const s=Math.max(0,Math.floor(ms/1000));
+  if(s<60) return s+' soniya oldin';
+  const m=Math.floor(s/60); if(m<60) return m+' daqiqa oldin';
+  const h=Math.floor(m/60); return h+' soat oldin';
+}
+async function renderKabBus(){
+  const box=$("#kab-bus"), FB=window.IqrorFB;
+  if(!box || !FB || !FB.getBusRoutes) return;
+  if(_busTimer){ clearInterval(_busTimer); _busTimer=null; }
+  try{ if(_busMap){ _busMap.remove(); } }catch(e){}
+  _busMap=null; _busMarker=null;
+  const routes=await FB.getBusRoutes();
+  if($("#kab-bus")!==box) return;                       // kabinet oralig'ida qayta render bo'lган
+  if(!routes || !routes.length){ box.innerHTML=''; return; }   // avtobus sozlanmagan -> panel ko'rinmaydi
+  let sel=''; try{ sel=localStorage.getItem('iqror_bus_route')||''; }catch(e){}
+  if(!routes.some(r=>r.id===sel)) sel=routes[0].id;
+  const opts=routes.map(r=>`<option value="${esc(r.id)}"${r.id===sel?' selected':''}>${esc(r.name||r.id)}</option>`).join('');
+  box.innerHTML=`<div class="kab-att-card" style="margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="subs-l" style="margin:0">🚌 Maktab avtobusi</div>
+        <select id="bus-route" style="padding:8px 10px;border:1px solid var(--line,#d7ddd4);border-radius:10px;font-size:14px;max-width:62%">${opts}</select>
+      </div>
+      <div id="bus-map" style="height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--line,#d7ddd4);background:#eef4f2"></div>
+      <div id="bus-status" class="small" style="margin-top:8px;color:var(--muted,#6b7d76)">Yuklanmoqda…</div>
+    </div>`;
+  const routeSel=$("#bus-route");
+  if(routeSel) routeSel.onchange=()=>{ try{ localStorage.setItem('iqror_bus_route',routeSel.value); }catch(e){} startBusMap(routeSel.value); };
+  const ok=await ensureLeaflet();
+  if($("#kab-bus")!==box) return;
+  if(!ok){ const st=$("#bus-status"); if(st) st.textContent='Xarita yuklanmadi (internetni tekshiring).'; return; }
+  startBusMap(sel);
+}
+function startBusMap(routeId){
+  const FB=window.IqrorFB, mapEl=$("#bus-map"), st=$("#bus-status");
+  if(!mapEl || !window.L) return;
+  if(_busTimer){ clearInterval(_busTimer); _busTimer=null; }
+  if(!_busMap){
+    _busMap=L.map(mapEl,{zoomControl:true,attributionControl:true}).setView([41.311,69.240],12);   // default: Toshkent
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_busMap);
+    setTimeout(()=>{ try{ _busMap && _busMap.invalidateSize(); }catch(e){} },250);
+    // konteyner ko'rinadigan bo'lganda o'lchamини to'g'rilaymiz (yashirin bo'lса buzilmasin)
+    try{ const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ try{ _busMap && _busMap.invalidateSize(); }catch(_){} } }); io.observe(mapEl); }catch(e){}
+  }
+  let firstFix=true;
+  const tick=async()=>{
+    if($("#bus-map")!==mapEl){ if(_busTimer){ clearInterval(_busTimer); _busTimer=null; } return; }
+    const p=await FB.getBusPosition(routeId);
+    const s2=$("#bus-status");
+    let stale=false; if(p&&p.updatedAt){ try{ const d=p.updatedAt.toDate?p.updatedAt.toDate():new Date(p.updatedAt); stale=(Date.now()-d.getTime())>120000; }catch(e){} }
+    const active = p && p.active!==false && p.lat!=null && p.lng!=null && !stale;
+    if(!active){
+      if(s2) s2.innerHTML=`⚪️ <b>Avtobus hozir yo‘lда emas.</b>${p&&p.updatedAt?` <span style="color:var(--muted,#6b7d76)">(oxirgi: ${esc(busAgo(p.updatedAt))})</span>`:''}`;
+      if(_busMarker){ try{ _busMap.removeLayer(_busMarker); }catch(e){} _busMarker=null; }
+      return;
+    }
+    const ll=[Number(p.lat),Number(p.lng)];
+    if(!_busMarker){
+      const icon=L.divIcon({html:'<div style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">🚌</div>',className:'',iconSize:[30,30],iconAnchor:[15,15]});
+      _busMarker=L.marker(ll,{icon}).addTo(_busMap);
+    } else { _busMarker.setLatLng(ll); }
+    if(firstFix){ _busMap.setView(ll,15); firstFix=false; }
+    const dirLbl = p.direction==='from_school' ? '🏠 Maktabdan' : '🏫 Maktabga';
+    if(s2) s2.innerHTML=`🟢 <b style="color:#137a5f">Avtobus yo‘lда</b> · ${esc(dirLbl)} · <span style="color:var(--muted,#6b7d76)">yangilandi: ${esc(busAgo(p.updatedAt))}</span>`;
+  };
+  tick();
+  _busTimer=setInterval(tick,7000);
 }
 // Imtihon jadvali — o'quvchi/ota-ona sinf bo'yicha ko'radi.
 async function renderKabExams(s){
@@ -2430,6 +2518,20 @@ addEventListener('hashchange', ()=>route(true));
         try{ const snap=await getDocs(query(collection(db,'exams'), where('classKey','==',classKey)));
           return snap.docs.map(d=>d.data()).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
         }catch(e){ return []; }
+      },
+      // 🚌 Maktab avtobusi — yo'nalishlar (ommaviy view) + joriy joylashuv.
+      async getBusRoutes(){
+        if(!db||!fsMod) return [];
+        const { collection, getDocs } = fsMod;
+        try{ const snap=await getDocs(collection(db,'bus_routes_public'));
+          return snap.docs.map(d=>({id:d.id, ...d.data()})).filter(r=>r.active!==false)
+            .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+        }catch(e){ return []; }
+      },
+      async getBusPosition(routeId){
+        if(!db||!fsMod||!routeId) return null;
+        const { doc, getDoc } = fsMod;
+        try{ const s=await getDoc(doc(db,'bus_positions',String(routeId))); return s.exists()?({id:routeId, ...s.data()}):null; }catch(e){ return null; }
       }
     };
 

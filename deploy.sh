@@ -27,7 +27,7 @@ echo "==> 3/6 SQL migratsiyalar (idempotent audit-*)..."
 # Deploy va baza sinxron bo'lsin: yangi frontend eski bazaга tushmasin (masalan apply_payment
 # RPC / student_phones view / RLS tuzatmalari). audit-*.sql fayllari QAYTA ishga tushirishга xavfsiz.
 if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
-  for f in audit-2.sql audit-3.sql audit-4.sql; do
+  for f in audit-2.sql audit-3.sql audit-4.sql bus.sql; do
     echo "    -> $f"
     if ! sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "$REPO/migration/$f" >/tmp/iqror-sql.log 2>&1; then
       echo "❌ SQL migratsiya xato: $f"; tail -8 /tmp/iqror-sql.log; exit 1
@@ -56,7 +56,7 @@ git show FETCH_HEAD:sw.js       | sudo tee "$WEB/sw.js"       >/dev/null
 git show FETCH_HEAD:index.html | sed "$SHIM" | sudo tee "$WEB/index.html" >/dev/null
 # Legacy sahifalar ham Supabase shim bilan (Firebase -> /sb): imtihon (o'qituvchi tanlovi),
 # verify (hujjat tekshiruvi), oquv-platforma (o'quv platforma cloud-sync).
-for f in imtihon.html verify.html oquv-platforma.html; do
+for f in imtihon.html verify.html oquv-platforma.html haydovchi.html; do
   sudo cp "$WEB/$f" "$WEB/$f.bak" 2>/dev/null || true
   git show "FETCH_HEAD:$f" | sed "$SHIM" | sudo tee "$WEB/$f" >/dev/null
 done
@@ -66,6 +66,9 @@ grep -q "apply_payment"  "$WEB/admin.html" || { echo "❌ admin.html eski (apply
 grep -q kab-subjbars     "$WEB/index.html" || { echo "❌ index.html deploy landmadi"; exit 1; }
 grep -q "/sb/firebase-firestore.js" "$WEB/verify.html" || { echo "❌ verify.html shim landmadi"; exit 1; }
 grep -q "students_public" "$WEB/verify.html" || { echo "❌ verify.html eski (students_public yo'q)"; exit 1; }
+grep -q "update_bus_position" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html deploy landmadi"; exit 1; }
+grep -q "/sb/firebase-firestore.js" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html shim landmadi"; exit 1; }
+grep -q "getBusRoutes" "$WEB/index.html" || { echo "❌ index.html eski (avtobus yo'q)"; exit 1; }
 
 echo "==> 6/6 Xizmatlar qayta ishga tushmoqda..."
 sudo systemctl restart iqror-ai iqror-pay

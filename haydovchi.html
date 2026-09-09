@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Avtobus — Haydovchi · Iqror Academy</title>
+<link rel="icon" href="/icon-192.png">
+<meta name="theme-color" content="#1F9982">
+<style>
+  :root{--teal:#1F9982;--ink:#155A4E;--bg:#eef4f2;--line:#d7ddd4;--muted:#6b7d76;--danger:#c0392b;--ok:#137a5f}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:#20302B;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:20px;max-width:460px;width:100%;padding:22px 20px;box-shadow:0 10px 40px rgba(21,90,78,.10);margin-top:8px}
+  .head{display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--teal);padding-bottom:12px;margin-bottom:16px}
+  .org{font-family:Georgia,serif;font-size:18px;font-weight:700;color:var(--ink)}
+  .org small{display:block;font-family:system-ui;font-size:11px;color:var(--muted);font-weight:400}
+  h1{font-size:15px;color:var(--muted);font-weight:600;margin:0 0 4px}
+  .route{font-size:22px;font-weight:800;color:var(--ink);margin:0 0 16px;line-height:1.2}
+  label{display:block;font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 6px}
+  input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;font-size:16px;background:#fbfdfc}
+  .dir{display:flex;gap:10px;margin:6px 0}
+  .dir button{flex:1;padding:14px 8px;border:2px solid var(--line);border-radius:14px;background:#fff;font-size:15px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s}
+  .dir button.on{border-color:var(--teal);background:#e6f4ef;color:var(--ink)}
+  .big{width:100%;margin-top:20px;padding:18px;border:none;border-radius:16px;font-size:19px;font-weight:800;color:#fff;background:var(--teal);cursor:pointer;box-shadow:0 6px 20px rgba(31,153,130,.35)}
+  .big.stop{background:var(--danger);box-shadow:0 6px 20px rgba(192,57,43,.35)}
+  .big:disabled{opacity:.5}
+  .status{margin-top:18px;padding:14px;border-radius:14px;background:#f4f8f6;border:1px solid var(--line);font-size:14px;line-height:1.7}
+  .status .live{display:inline-flex;align-items:center;gap:8px;font-weight:800;color:var(--ok)}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--ok);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+  .row{display:flex;justify-content:space-between;gap:8px;color:#33564c}
+  .row b{color:var(--ink)}
+  .err{color:var(--danger);font-weight:600}
+  .note{font-size:12px;color:var(--muted);margin-top:16px;text-align:center;line-height:1.6}
+  .warn{background:#fff7e8;border:1px solid #f0d8a8;border-radius:12px;padding:11px 13px;font-size:13px;color:#8a5a12;margin-top:14px;line-height:1.6}
+  a{color:var(--teal)}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <svg width="38" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
+      <div class="org">IQROR ACADEMY<small>Avtobus — haydovchi paneli</small></div>
+    </div>
+    <div id="app"></div>
+    <div class="note">🚌 Yo‘lга chiqishda «Yo‘lга chiqdim» bosing. Ekran <b>yoniq</b> tursin — telefonни tutqichга qo‘ying. Yetib borgach «Yetib keldim» bosing.<br><a href="/">iqroacademy.uz</a></div>
+  </div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getFirestore, doc, getDoc, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+  const cfg={apiKey:"x",authDomain:"x",projectId:"x"};   // shim buni e'tiborsiz qoldiradi (sb-config.js ishlatadi)
+  let db=null; try{ const app=initializeApp(cfg); db=getFirestore(app); }catch(e){}
+
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const qp=new URLSearchParams(location.search);
+  let ROUTE=(qp.get('y')||qp.get('route')||'').trim();
+  let KEY=(qp.get('kalit')||qp.get('key')||'').trim();
+  const app=document.getElementById('app');
+
+  let routeName='';
+  let watchId=null, sendTimer=null, wakeLock=null, tracking=false;
+  let last=null, lastSentAt=0, sentCount=0, startedAt=0;
+  let direction='to_school';
+  let driverName = localStorage.getItem('iqror_bus_driver')||'';
+
+  const fmtTime=d=>{ try{ return new Date(d).toLocaleTimeString('uz',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }catch(e){ return ''; } };
+
+  async function loadRoute(){
+    if(!ROUTE) return;
+    try{ const s=await getDoc(doc(db,'bus_routes_public',ROUTE)); if(s.exists()){ routeName=(s.data()||{}).name||ROUTE; } else { routeName=''; } }catch(e){ routeName=ROUTE; }
+  }
+
+  function renderSetup(){
+    app.innerHTML=`
+      <h1>Yo‘nalish tanlanmagan</h1>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 4px">Maxfiy havolani administrator beradi. Yoki qo‘lда kiriting:</p>
+      <label>Yo‘nalish kodi</label><input id="f-route" value="${esc(ROUTE)}" placeholder="masalan: asaka">
+      <label>Maxfiy kalit</label><input id="f-key" value="${esc(KEY)}" placeholder="kalit">
+      <button class="big" id="f-go">Davom etish</button>`;
+    document.getElementById('f-go').onclick=()=>{
+      ROUTE=(document.getElementById('f-route').value||'').trim();
+      KEY=(document.getElementById('f-key').value||'').trim();
+      if(!ROUTE||!KEY) return;
+      const u=new URL(location.href); u.searchParams.set('y',ROUTE); u.searchParams.set('kalit',KEY); history.replaceState(null,'',u);
+      start_ui();
+    };
+  }
+
+  function renderMain(){
+    app.innerHTML=`
+      <h1>Yo‘nalish</h1>
+      <div class="route">🚌 ${esc(routeName||ROUTE)}</div>
+      <label>Yo‘nalish tomoni</label>
+      <div class="dir">
+        <button data-d="to_school" class="${direction==='to_school'?'on':''}">🏫 Maktabga</button>
+        <button data-d="from_school" class="${direction==='from_school'?'on':''}">🏠 Maktabdan</button>
+      </div>
+      <label>Ismingiz (ixtiyoriy)</label>
+      <input id="f-name" value="${esc(driverName)}" placeholder="Haydovchi ismi">
+      <button class="big" id="f-start">▶️ Yo‘lга chiqdim</button>
+      <div id="st" class="status" style="display:none"></div>`;
+    app.querySelectorAll('.dir button').forEach(b=>b.onclick=()=>{
+      direction=b.dataset.d; app.querySelectorAll('.dir button').forEach(x=>x.classList.toggle('on',x===b));
+    });
+    document.getElementById('f-start').onclick=startTracking;
+    document.getElementById('f-name').oninput=e=>{ driverName=e.target.value.trim(); try{ localStorage.setItem('iqror_bus_driver',driverName); }catch(_){} };
+  }
+
+  function drawStatus(extra){
+    const st=document.getElementById('st'); if(!st) return; st.style.display='block';
+    if(!tracking){ st.style.display='none'; return; }
+    const acc=last&&last.acc!=null?` ±${Math.round(last.acc)}m`:'';
+    const coords=last?`${last.lat.toFixed(5)}, ${last.lng.toFixed(5)}${acc}`:'—';
+    const mins=startedAt?Math.floor((Date.now()-startedAt)/60000):0;
+    st.innerHTML=`
+      <div class="live"><span class="dot"></span> Joylashuv ulashilmoqda…</div>
+      <div class="row" style="margin-top:8px"><span>Yo‘nalish</span><b>${direction==='to_school'?'🏫 Maktabga':'🏠 Maktabdan'}</b></div>
+      <div class="row"><span>Koordinata</span><b>${esc(coords)}</b></div>
+      <div class="row"><span>Oxirgi yuborildi</span><b>${lastSentAt?fmtTime(lastSentAt):'—'}</b></div>
+      <div class="row"><span>Yuborildi / davomiylik</span><b>${sentCount} ta · ${mins} daq</b></div>
+      ${extra?`<div class="row"><span></span><span class="err">${esc(extra)}</span></div>`:''}`;
+  }
+
+  async function acquireWake(){
+    try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{}); } }catch(e){}
+  }
+  document.addEventListener('visibilitychange',()=>{ if(tracking && document.visibilityState==='visible' && !wakeLock) acquireWake(); });
+
+  async function sendNow(){
+    if(!last||!db) return;
+    try{
+      const r=await rpc('update_bus_position',{ p_route:ROUTE, p_key:KEY, p_lat:last.lat, p_lng:last.lng,
+        p_heading:(last.heading==null?null:last.heading), p_speed:(last.speed==null?null:last.speed),
+        p_direction:direction, p_driver:driverName||null });
+      if(r&&r.ok){ lastSentAt=Date.now(); sentCount++; drawStatus(''); }
+      else { drawStatus((r&&r.msg)||'Server rad etdi'); }
+    }catch(e){ drawStatus('Ulanish xatosi — qayta urinilmoqda'); }
+  }
+
+  function startTracking(){
+    if(!('geolocation' in navigator)){ alert('Bu qurilmada joylashuv mavjud emas'); return; }
+    tracking=true; startedAt=Date.now(); sentCount=0; last=null; lastSentAt=0;
+    renderTracking();
+    acquireWake();
+    watchId=navigator.geolocation.watchPosition(pos=>{
+      const c=pos.coords||{};
+      last={ lat:c.latitude, lng:c.longitude, acc:c.accuracy, heading:(isFinite(c.heading)?c.heading:null), speed:(isFinite(c.speed)?c.speed:null) };
+      drawStatus('');
+      if(!lastSentAt) sendNow();   // birinchi fiksni darhol yubor
+    }, err=>{
+      let m='Joylashuv xatosi';
+      if(err&&err.code===1) m='Ruxsat berilmadi — brauzerда joylashuvni yoqing';
+      else if(err&&err.code===3) m='Signal kuchsiz — kutilmoqda';
+      drawStatus(m);
+    }, { enableHighAccuracy:true, maximumAge:4000, timeout:20000 });
+    sendTimer=setInterval(()=>{ if(last) sendNow(); }, 7000);   // har 7 soniyada
+  }
+
+  async function stopTracking(){
+    tracking=false;
+    if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    if(sendTimer){ clearInterval(sendTimer); sendTimer=null; }
+    try{ if(wakeLock){ await wakeLock.release(); wakeLock=null; } }catch(e){}
+    try{ await rpc('stop_bus',{p_route:ROUTE,p_key:KEY}); }catch(e){}
+    renderMain();
+    const st=document.getElementById('st'); if(st){ st.style.display='block'; st.innerHTML=`<b style="color:var(--ok)">✓ Kuzatuv to‘xtatildi.</b> Xavfsiz yetib borganingizdan xursandmiz!`; }
+  }
+
+  function renderTracking(){
+    app.innerHTML=`
+      <h1>Yo‘nalish</h1>
+      <div class="route">🚌 ${esc(routeName||ROUTE)}</div>
+      <div id="st" class="status"></div>
+      <button class="big stop" id="f-stop">⏹️ Yetib keldim (to‘xtatish)</button>
+      <div class="warn">Ekran o‘chib qolmasin — telefonни tutqichда yoniq qoldiring. Ilova yopilса, ulashish to‘xtaydi.</div>`;
+    document.getElementById('f-stop').onclick=stopTracking;
+    drawStatus('');
+  }
+
+  async function start_ui(){
+    await loadRoute();
+    renderMain();
+  }
+
+  (async()=>{
+    if(!db){ app.innerHTML=`<div class="err">Ulanish sozlanmagan (sb-config).</div>`; return; }
+    if(!ROUTE||!KEY){ renderSetup(); return; }
+    await start_ui();
+  })();
+</script>
+</body>
+</html>
