@@ -57,6 +57,11 @@
   const qp=new URLSearchParams(location.search);
   let ROUTE=(qp.get('y')||qp.get('route')||'').trim();
   let KEY=(qp.get('kalit')||qp.get('key')||'').trim();
+  // Havola bir marta to'liq ochilgach kalit SHU QURILMA xotirasiga saqlanadi — keyin bosh
+  // ekrandagi belgi parametrsiz (yoki parametr yo'qolgan holда) ochilса ham ishlayveradi.
+  try{ if(!ROUTE) ROUTE=localStorage.getItem('iqror_bus_route_id')||''; }catch(e){}
+  try{ if(!KEY)   KEY=localStorage.getItem('iqror_bus_route_key')||''; }catch(e){}
+  function saveCreds(){ try{ if(ROUTE&&KEY){ localStorage.setItem('iqror_bus_route_id',ROUTE); localStorage.setItem('iqror_bus_route_key',KEY); } }catch(e){} }
   const app=document.getElementById('app');
 
   let routeName='';
@@ -180,6 +185,7 @@
   }
 
   async function start_ui(){
+    saveCreds();
     await loadRoute();
     renderMain();
   }

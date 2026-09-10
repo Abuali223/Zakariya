@@ -2409,8 +2409,12 @@ async function openStudentReport(sid, row){
     </style>`;
     $('#modal .modal-b').innerHTML = `<div id="rep-inner">${inner}</div>`;
     renderMath && renderMath($('#modal .modal-b'));
-    $('#modal .modal-f').innerHTML = `<button type="button" class="btn ghost" id="m-cancel2">Yopish</button><button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn gold" id="rep-print">🖨 Ichki hisobot</button>`;
-    $('#m-cancel2').onclick=closeModal;
+    // Ma'lumotnoma ostida: «Yopish» o'rniga «💵 To'lov qilish» (× header'да qoladi). To'lov shu yerда
+    // qabul qilinsa — apply_payment RPC orqali ketadi -> To'lovlar bo'limida VA ma'lumotnomada aks etadi.
+    const canPay = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
+    $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
+    if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
+    if($('#rep-pay')) $('#rep-pay').onclick=()=>openRecordPayment(cache.students||[], null, { sid:String(s.studentId||s._id), name:s.name||'', amount:dueSum, onDone:()=>openStudentReport(sid, row) });
     $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
     // 🎓 RASMIY PROFIL — universitetga beriladigan to'liq, muhr/imzo o'rni va QR bilan (to'lov ma'lumoti YO'Q)
     $('#rep-prof').onclick=()=>{
@@ -2418,12 +2422,12 @@ async function openStudentReport(sid, row){
       const achHTML=ach.length?`<ul style="margin:4px 0;padding-left:20px">${ach.map(a=>`<li style="margin:3px 0">${a.year?`<b>${esc(String(a.year))}:</b> `:''}${esc(a.text_uz||a.text_ru||'')}</li>`).join('')}</ul>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
       const today=new Date(), pad=n=>String(n).padStart(2,'0');
       const docNo=`IQR-${(s.studentId||s._id)}-${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
-      const verifyURL=`https://alilazer-cd582.web.app/verify?id=${encodeURIComponent(s.studentId||s._id)}`;
+      const verifyURL=`https://iroacademy.uz/verify.html?id=${encodeURIComponent(s.studentId||s._id)}`;
       let qrURL=''; try{ if(typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(verifyURL); q.make(); qrURL=q.createDataURL(4,10); } }catch(e){}
       const bio=bioRows;   // to'liq shaxsiy ma'lumotlar (yuqorida tuzilgan)
       const profInner=`
         <div class="p-head">${emblem}
-          <div><div class="p-name">IQROR ACADEMY</div><div class="p-sub">IT va tibbiyot yo‘nalishlari bo‘yicha xususiy maktab</div><div class="p-addr">https://alilazer-cd582.web.app</div></div>
+          <div><div class="p-name">IQROR ACADEMY</div><div class="p-sub">IT va tibbiyot yo‘nalishlari bo‘yicha xususiy maktab</div><div class="p-addr">https://iroacademy.uz</div></div>
         </div>
         <div class="p-title">O‘QUVCHI PROFILI — RASMIY MA’LUMOTNOMA</div>
         <div class="p-meta"><span>Hujjat №: <b>${esc(docNo)}</b></span><span>Berilgan sana: <b>${today.toLocaleDateString('ru-RU')}</b></span></div>
@@ -4298,6 +4302,8 @@ async function renderPayments(){
       <input id="pm-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
       <select id="pm-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="pm-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
+      <select id="pm-fmethod" class="search-inp" style="max-width:150px" title="To‘lov usuli bo‘yicha"><option value="">Barcha usullar</option><option value="click">Click</option><option value="uzum">Uzum</option><option value="cash">Naqd</option><option value="bank">Bank</option><option value="terminal">Terminal</option><option value="payme">Payme</option><option value="credit">Avans</option></select>
+      <label class="small muted" style="display:flex;align-items:center;gap:5px;white-space:nowrap">Sana <input id="pm-from" type="date" class="search-inp" style="max-width:145px" title="To‘lov sanasi (dan)"><span>–</span><input id="pm-to" type="date" class="search-inp" style="max-width:145px" title="To‘lov sanasi (gacha)"></label>
     </div>
     <div id="pm-body"><div class="loading">Yuklanmoqda…</div></div>`;
   let students;
@@ -4328,26 +4334,37 @@ async function renderPayments(){
     // Filtr — o'quvchi bo'limidek: qidiruv + sinf + til (JORIY o'quvchi bo'yicha).
     const _q=(($('#pm-search')&&$('#pm-search').value)||'').trim().toLowerCase(), _qd=_q.replace(/\D/g,'');
     const _fg=($('#pm-fgrade')&&$('#pm-fgrade').value)||'', _fl=($('#pm-flang')&&$('#pm-flang').value)||'';
+    // Yangi: to'lov usuli + to'lov sanasi (dan–gacha). Usul/sana faol bo'lsa — faqat TO'LANGAN
+    // (o'sha usul/sanadagi) hisoblar qoladi -> ko'rinish "davr yig'imi" ga aylanadi, hisobotга ta'sir qiladi.
+    const _fm=($('#pm-fmethod')&&$('#pm-fmethod').value)||'';
+    const _from=($('#pm-from')&&$('#pm-from').value)||'', _to=($('#pm-to')&&$('#pm-to').value)||'';
+    const paidDateOf=r=>{ const v=r.paidAt; if(!v) return ''; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
     const cur=curAll.filter(r=>{ const s=stById[r.studentId]||{};
       if(_fg!==''&&String(Number(s.grade)||0)!==String(_fg)) return false;
       if(_fl&&(s.lang||'uz')!==_fl) return false;
+      if(_fm && String(r.provider||'')!==_fm) return false;                       // to'lov usuli
+      if(_from||_to){ const d=paidDateOf(r); if(!d) return false;                 // to'lov sanasi oralig'i
+        if(_from&&d<_from) return false; if(_to&&d>_to) return false; }
       if(_q){ const okTxt=[nameOf(r),r.studentId,s.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(_q));
         const ph=[s.parentPhone,s.parentPhone2].map(v=>String(v==null?'':v).replace(/\D/g,''));
         if(!(okTxt||(_qd.length>=4&&ph.some(p=>p&&p.includes(_qd))))) return false; }
       return true; });
+    const anyFilter = !!(_q||_fg!==''||_fl||_fm||_from||_to);   // biror filtr faolmi -> hisobot ham filtrlanadi
+    const repSet = anyFilter ? cur : curAll;
     const fullPaid=cur.filter(r=>r.status==='paid'), partial=cur.filter(r=>r.status==='partial');
     const pend=cur.filter(r=>r.status!=='paid'&&r.status!=='canceled'&&r.status!=='partial');
-    const collected=curAll.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
-    const debtTotal=curAll.reduce((s,r)=>s+debtOf(r),0);
+    const collected=repSet.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
+    const debtTotal=repSet.reduce((s,r)=>s+debtOf(r),0);
     const curDebt=cur.reduce((s,r)=>s+debtOf(r),0);   // filtrlangan jadval qarzi (sarlavha uchun)
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
     const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans'};
-    const groups={}; curAll.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
+    const groups={}; repSet.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
     const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
-      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${curAll.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
-    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}</h3><span class="cls-count">${curAll.length} o‘quvchi · yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
+      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${repSet.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
+    const filterLbl = anyFilter ? ` · filtr${_fm?' · '+(provLbl[_fm]||_fm):''}${(_from||_to)?` · ${_from||'…'}–${_to||'…'}`:''}` : '';
+    const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}${esc(filterLbl)}</h3><span class="cls-count">${repSet.length} ${anyFilter?'to‘lov/hisob':'o‘quvchi'} · yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
     const unmatchedCard = unmatched.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--gold)"><div class="cls-card-head"><h3>⚠️ Biriktirilmagan to‘lovlar</h3><span class="cls-count">${unmatched.length} ta · o‘quvchi topilmadi (qo‘lda biriktiring)</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lovchi</th><th>Telefon</th><th>Sinf</th><th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
@@ -4524,7 +4541,10 @@ async function renderPayments(){
   { const si=$('#pm-search'); if(si) si.addEventListener('input',load); }
   { const g=$('#pm-fgrade'); if(g) g.addEventListener('change',load); }
   { const l=$('#pm-flang'); if(l) l.addEventListener('change',load); }
-  fmemApply('pm-search'); fmemApply('pm-fgrade'); fmemApply('pm-flang');
+  { const m=$('#pm-fmethod'); if(m) m.addEventListener('change',load); }
+  { const f=$('#pm-from'); if(f) f.addEventListener('change',load); }
+  { const t=$('#pm-to'); if(t) t.addEventListener('change',load); }
+  fmemApply('pm-search'); fmemApply('pm-fgrade'); fmemApply('pm-flang'); fmemApply('pm-fmethod'); fmemApply('pm-from'); fmemApply('pm-to');
   load();
 }
 // YAGONA to'lov qabul qilish: bank / Click / Uzum / Terminal / Naqd — hammasi bir oqim, idempotent.
@@ -4657,7 +4677,9 @@ async function openRecordPayment(students, reload, pre){
       <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi. <b>Click/Uzum</b> avtomatik keladi — bu yerга kiritmang.</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="rp-save">Qabul qilish</button></div>`;
-  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  // pre.onDone — bu oyna yopilganda chaqiriladi (masalan o'quvchi ma'lumotnomasini qayta ochish).
+  const rpDone=()=>{ closeModal(); if(pre&&pre.onDone) try{ pre.onDone(); }catch(e){} };
+  openModal(); $('#m-x').onclick=rpDone; $('#m-cancel').onclick=rpDone;
   const amt=$('#rp-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   if(!preSid){
     const draw=q=>{ q=String(q||'').trim().toLowerCase();
@@ -4700,7 +4722,7 @@ async function openRecordPayment(students, reload, pre){
       $('#modal').innerHTML=`<div class="modal-h"><h3>${title}</h3><button class="x" id="m-x2">×</button></div>
         <div class="modal-b">${bodyHtml}</div>
         <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
-      const x2=$('#m-x2'); if(x2) x2.onclick=closeModal; const rc=$('#rp-close'); if(rc) rc.onclick=closeModal;
+      const x2=$('#m-x2'); if(x2) x2.onclick=rpDone; const rc=$('#rp-close'); if(rc) rc.onclick=rpDone;
       const rp=$('#rp-print'); if(rp) rp.onclick=doReceipt;
     };
     const okBody=`<div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`;
