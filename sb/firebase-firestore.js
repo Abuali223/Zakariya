@@ -39,6 +39,9 @@ function prep(data) {
     const v = data[k];
     if (v === SERVER_TS) o[k] = new Date().toISOString();
     else if (v === DELETE_FIELD) o[k] = null;
+    // wrapVal o'ragan timestamp (o'qilgan timestamptz) QAYTA yozilganda {seconds:...} obyekti
+    // bo'lib ketardi -> PostgREST timestamptz uchun 22007 (invalid datetime). ISO satrga qaytaramiz.
+    else if (v && typeof v === "object" && typeof v.toDate === "function" && typeof v.toString === "function") o[k] = v.toString();
     else o[k] = v;
   }
   return o;
