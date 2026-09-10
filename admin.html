@@ -4178,6 +4178,13 @@ function pmReferralMaps(students, privOf, ledger, month){
 async function pmLoadCtx(month, students, amount){
   // KRITIK o'qishlar — xato bo'lsa TASHLAYDI (tashqi try/catch xatoni ko'rsatadi; jimgina noto'g'ri narx/chegirma yo'q).
   const privMap={}; { const ps=await getDocs(collection(db,'student_private')); ps.docs.forEach(d=>{ privMap[d.id]=d.data()||{}; }); }
+  // MUHIM (chegirma nuqsoni tuzatildi): student_private hujjat id'si = o'quvchi hujjatining _id'si,
+  // lekin butun moliya tizimi (invoices/monitoring/attendance/credit) studentId bilan ishlaydi.
+  // Import qilingan o'quvchilarда _id ≠ studentId bo'lishi mumkin -> privOf(studentId) bo'sh qaytarib,
+  // XODIM FARZANDI / GRANT / KONTRAKT / AKA-UKA / REFERRAL chegirmalari qo'llanmasди. Har ikki kalit
+  // bilan topilishi uchun studentId'ni _id ning maxfiy ma'lumotiga taxallus (alias) qilamiz.
+  students.forEach(s=>{ const sid=String(s.studentId||''), _id=String(s._id||'');
+    if(sid && _id && sid!==_id && privMap[_id] && !privMap[sid]) privMap[sid]=privMap[_id]; });
   const privOf=sid=>privMap[sid]||{};
   const priceMap={}; { const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }
   // Ikkilamchi — xato bo'lsa xavfsiz default (kasal=0, referral yo'q).
