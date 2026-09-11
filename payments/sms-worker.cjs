@@ -51,6 +51,11 @@ async function getSms(id) { try { const s = await db.collection('sms_log').doc(i
 // SMS allaqachon YUBORILGANmi (sent) yoki qayta urinishlar tugaganmi? -> {skip, attempts}
 async function smsDone(id) { const p = await getSms(id); return { skip: !!(p && (p.status === 'sent' || (Number(p.attempts) || 0) >= MAXTRIES)), attempts: Number(p && p.attempts) || 0 }; }
 async function logSms(id, rec) { try { await db.collection('sms_log').doc(id).set({ ...rec, createdAt: FieldValue.serverTimestamp() }); } catch (e) { log('logSms xato:', e.message); } }
+// TAKROR YUBORISHDAN HIMOYA: yuborishдан OLDIN sms_log'ni ATOMIK CLAIM qilamiz (create -> id konfliktida
+// xato -> false). Shunda jarayon send bilan log orasида uzilса YOKI javob no-aniq bo'lса, keyingi cron
+// QAYTA yubormaydi (SMS puli behuda ketmaydi). Parallel cron nusxalari ham bittasi claim oladi.
+async function claimSms(id, rec) { try { await db.collection('sms_log').doc(id).create({ ...rec, status: 'sending', attempts: 1, createdAt: FieldValue.serverTimestamp() }); return true; } catch (e) { return false; } }
+async function markSms(id, patch) { try { await db.collection('sms_log').doc(id).update(patch); } catch (e) { log('markSms xato:', e.message); } }
 
 // (1) YANGI FAKTURA xabarlari — oxirgi N kunda yaratilgan, to'lanmagan, amount>0.
 async function runNew(eskiz, phones, dry) {
@@ -71,8 +76,10 @@ async function runNew(eskiz, phones, dry) {
     if (!phone) { skip++; continue; }
     const msg = fillTpl(tpl('new', DEF_NEW), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) });
     if (dry) { log('[DRY new]', phone, '::', msg); sent++; continue; }
+    // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
+    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
     const r = await eskiz.send(phone, msg);
-    await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, status: r.ok ? 'sent' : 'failed', attempts: dn.attempts + 1, providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
+    await markSms(id, { status: r.ok ? 'sent' : 'failed', providerId: r.id || '', error: r.ok ? '' : String(r.error || '') });
     if (r.ok) sent++; else { fail++; log('SMS(new) xato:', phone, r.error); }
   }
   log(`YANGI: ${sent} yuborildi · ${skip} o'tkazildi · ${fail} xato`);
@@ -101,8 +108,9 @@ async function runDebt(eskiz, phones, dry, force) {
       if (!phone) { skip++; continue; }
       const msg = fillTpl(tpl('debt', DEF_DEBT), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(inv.amount), due: fmtSom(due) });
       if (dry) { log('[DRY debt]', phone, '::', msg); sent++; continue; }
+      if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: inv.month || '' }))) { skip++; continue; }
       const r = await eskiz.send(phone, msg);
-      await logSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, status: r.ok ? 'sent' : 'failed', attempts: dn.attempts + 1, providerId: r.id || '', error: r.ok ? '' : String(r.error || ''), month: inv.month || '' });
+      await markSms(id, { status: r.ok ? 'sent' : 'failed', providerId: r.id || '', error: r.ok ? '' : String(r.error || '') });
       if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', phone, r.error); }
     }
   }
