@@ -36,7 +36,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import { getFirestore, collection, getDocs, getDoc, doc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-  const cfg={apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",authDomain:"alilazer-cd582.firebaseapp.com",projectId:"alilazer-cd582",storageBucket:"alilazer-cd582.firebasestorage.app",messagingSenderId:"831212822404",appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1"};
+  const cfg={apiKey:"x",authDomain:"x",projectId:"x"};   // /sb shim buni e'tiborsiz qoldiradi (sb-config.js ishlatadi)
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const out=document.getElementById('out');
   const gradeLbl=g=>{g=Number(g)||0;return g===0?'Tayyorlov':g+'-sinf';};

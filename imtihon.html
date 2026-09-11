@@ -66,14 +66,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-const firebaseConfig = {
-  apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
-  authDomain:"alilazer-cd582.firebaseapp.com",
-  projectId:"alilazer-cd582",
-  storageBucket:"alilazer-cd582.firebasestorage.app",
-  messagingSenderId:"831212822404",
-  appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1"
-};
+// /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
+const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x" };
 const db = getFirestore(initializeApp(firebaseConfig));
 const $ = s=>document.querySelector(s);
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

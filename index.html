@@ -2304,15 +2304,8 @@ addEventListener('hashchange', ()=>route(true));
   try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{}); }catch(e){}
 
   const V="https://www.gstatic.com/firebasejs/10.12.5";
-  const firebaseConfig = {
-    apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
-    authDomain:"alilazer-cd582.firebaseapp.com",
-    projectId:"alilazer-cd582",
-    storageBucket:"alilazer-cd582.firebasestorage.app",
-    messagingSenderId:"831212822404",
-    appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1",
-    measurementId:"G-R4M2GJH05C"
-  };
+  // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
+  const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
   const ROLE_LABELS = { parent:"Ota-ona", student:"O‘quvchi", teacher:"O‘qituvchi", admin:"Administrator" };
 
   let appMod, authMod, fsMod;

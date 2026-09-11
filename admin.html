@@ -434,15 +434,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey:"AIzaSyA3M9XGDdy4mPEol4CNtB15nv-DjTg9ZSo",
-  authDomain:"alilazer-cd582.firebaseapp.com",
-  projectId:"alilazer-cd582",
-  storageBucket:"alilazer-cd582.firebasestorage.app",
-  messagingSenderId:"831212822404",
-  appId:"1:831212822404:web:e7124182b0eef7fd8cc7d1",
-  measurementId:"G-R4M2GJH05C"
-};
+// /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
+const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)

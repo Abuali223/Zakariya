@@ -1293,15 +1293,8 @@
   <!-- Firebase bulut moduli (ixtiyoriy): analitika + anonim autentifikatsiya + Firestore sinxronlash.
        Oflayn yoki sozlanmagan bo‘lsa, ilova baribir to‘liq ishlayveradi. -->
   <script type="module">
-    const firebaseConfig = {
-      apiKey: "AIzaSyAfOT0etOb72udhI7jVOOdck-K97Fr__DA",
-      authDomain: "iqror-72879.firebaseapp.com",
-      projectId: "iqror-72879",
-      storageBucket: "iqror-72879.firebasestorage.app",
-      messagingSenderId: "1082381849678",
-      appId: "1:1082381849678:web:f9a657404b83ac88c71f1f",
-      measurementId: "G-LDD3BFGKVP"
-    };
+    // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
+    const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
     const V = "https://www.gstatic.com/firebasejs/10.12.5";
     const A = () => window.IqrorApp || {};
     const setStatus = (s,t) => { try{ A().setCloudStatus && A().setCloudStatus(s,t); }catch(e){} };
