@@ -2572,6 +2572,11 @@ async function renderCollection(name){
 function openForm(name, row){
   const s = SCHEMAS[name];
   const isEdit = !!row;
+  // Tahrirда forma OCHILGANда HAQIQATAN yuklangan (row'да mavjud) maxfiy maydonlar to'plami.
+  // Bu — "foydalanuvchi maydonni ataylab bo'shatdi" (empty SAQLANSIN) ni "forma maydonni umuman
+  // yuklamagan" (eski qiymat saqlansin — PII yo'qolmasin) dan ajratish uchun (chegirma-o'chirish bug'i).
+  const _loadedPriv = new Set();
+  if(isEdit && s && Array.isArray(s.privateFields)) s.privateFields.forEach(k=>{ if(row && (k in row)) _loadedPriv.add(k); });
   const val = k => row && row[k]!=null ? row[k] : '';
   const fieldHtml = f => {
     const v = val(f.k);
@@ -2635,8 +2640,9 @@ function openForm(name, row){
       (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });
       // Maxfiy maydonlarni ommaviy hujjatdan ajratamiz (alohida kolleksiyaga yoziladi)
       const privData={};
+      const _renderedPriv = new Set();   // formада CHIQARILGAN (foydalanuvchi ko'rgan/tahrirlagan) maxfiy maydonlar
       if(s.privateCol && Array.isArray(s.privateFields)){
-        s.privateFields.forEach(k=>{ privData[k] = (k in data) ? data[k] : ''; if(k in data) delete data[k]; });
+        s.privateFields.forEach(k=>{ const inForm=(k in data); if(inForm) _renderedPriv.add(k); privData[k] = inForm ? data[k] : ''; if(inForm) delete data[k]; });
       }
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
       if(!isEdit && name==='students'){
@@ -2674,7 +2680,11 @@ function openForm(name, row){
             catch(_){ curPriv=null; }
             if(curPriv===null){ toast('Saqlandi. Maxfiy maydonlar o‘qilmadi — ular O‘ZGARTIRILMADI (yo‘qolmasligi uchun).', true); }
             else {
-              s.privateFields.forEach(k=>{ if((privData[k]==null||privData[k]==='') && curPriv[k]!=null && curPriv[k]!=='') privData[k]=curPriv[k]; });
+              // Maydon formада CHIQARILGAN VA yuklangan bo'lsa -> bo'sh qiymat ATAYLAB (foydalanuvchi
+              // o'chirdi) -> saqlanadi. Aks holда (chiqarilmagan yoki yuklanmagan) -> eski qiymat saqlanadi
+              // (PII yo'qolmasin). Shu bilan «Xodim farzandi» chegirmasini o'chirish endi saqlanadi.
+              s.privateFields.forEach(k=>{ const trust=_renderedPriv.has(k)&&_loadedPriv.has(k);
+                if(!trust && (privData[k]==null||privData[k]==='') && curPriv[k]!=null && curPriv[k]!=='') privData[k]=curPriv[k]; });
               await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true});
             }
           } else {
