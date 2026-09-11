@@ -11,10 +11,15 @@
 --   ★ Money-move — faqat DIREKTOR/MOLIYA yoki server (service_role). BITTA tranzaksiya
 --     (atomik): apply_payment xato bersa — manbadan ayirish ham bekor bo'ladi.
 --
---   Ishlatish (admin TASDIQLAGACH, har biriга alohida):
---     select public.reattribute_avans('IQ-0259','IQ-0256', 2610000, 'Oybekov Muhammadulloh 2B');
+--   Ishlatish (admin TASDIQLAGACH, har biriга alohida). 5-argument p_ref — TAKRORLANISH
+--   himoyasi: bir xil ref bilan ikki marta ishga tushirilса, 2-marta {dup:true} qaytadi
+--   (pul ikki marta KO'CHMAYDI). Har ko'chirishga NOYOB ref bering:
+--     select public.reattribute_avans('IQ-0259','IQ-0256', 2610000, 'Oybekov Muhammadulloh 2B', 'move-2026-09-01');
 -- =====================================================================
-create or replace function public.reattribute_avans(p_from text, p_to text, p_amount numeric, p_note text default '')
+-- Eski 4-argli imzoni olib tashlaymiz (yangi 5-argli, p_ref bilan almashtiramiz) — aks holда
+-- 4-argli chaqiruv ikkala imzoga mos kelib "function is not unique" xatosini berardi.
+drop function if exists public.reattribute_avans(text, text, numeric, text);
+create or replace function public.reattribute_avans(p_from text, p_to text, p_amount numeric, p_note text default '', p_ref text default '')
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_from text; v_to text;
@@ -22,6 +27,7 @@ declare
   v_fname text;
   v_claims jsonb;
   v_res jsonb;
+  v_inserted int := 0;
 begin
   -- Ruxsat: pul ko'chirish — faqat direktor/moliya yoki server.
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
@@ -32,6 +38,15 @@ begin
 
   p_amount := coalesce(p_amount, 0);
   if p_amount <= 0 then return jsonb_build_object('ok', false, 'reason', 'amount<=0'); end if;
+
+  -- TAKRORLANISHДАН HIMOYA: p_ref berilган bo'lsa, aynan shu ko'chirish faqat BIR marta
+  -- bajariladi (tasodifan ikki marta ishga tushirilса -> {dup:true}, pul ikki marta ko'chmaydi).
+  if coalesce(p_ref, '') <> '' then
+    insert into public.applied_payments(id, "studentId", amount, "createdAt")
+      values ('reattr:' || p_ref, p_to, p_amount, now()) on conflict (id) do nothing;
+    get diagnostics v_inserted = row_count;
+    if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
+  end if;
 
   -- Kanonik studentId (audit-7 kabi): _id yoki studentId kelishi mumkin.
   select "studentId" into v_from from public.students where id = p_from or "studentId" = p_from order by (id = p_from) desc limit 1;
@@ -62,6 +77,6 @@ begin
 
   return jsonb_build_object('ok', true, 'from', v_from, 'to', v_to, 'amount', p_amount, 'target', v_res);
 end $$;
-grant execute on function public.reattribute_avans(text, text, numeric, text) to authenticated, service_role;
+grant execute on function public.reattribute_avans(text, text, numeric, text, text) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
