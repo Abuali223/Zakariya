@@ -1,7 +1,7 @@
 // =====================================================================
 // sb-admin.js — Firebase Admin SDK (Firestore) yuzasini Supabase service_role
 // ustida taqlid qiladi (SERVER tomoni). service_role RLS'ni chetlab o'tadi —
-// Admin SDK kabi. Server xizmatlari (ai-assistant, ai-grader, payments) shu
+// Admin SDK kabi. Server xizmatlari (ai-assistant, payments) shu
 // orqali Supabase'ga o'tadi: biznes-mantiq o'zgarmaydi, faqat data qatlami.
 //
 // Qoplaydi (xizmatlar aynan shundan foydalanadi):

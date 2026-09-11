@@ -126,7 +126,7 @@ Firestore Security Rules → PostgreSQL **Row Level Security**:
 
 ## Fayllar (`migration/`)
 - `MIGRATION.md` — shu reja
-- `export-firebase.cjs` — Firebase → JSON zaxira (bajarildi)
+- `export-firebase.cjs` — Firebase → JSON zaxira (bajarildi; migratsiya tugagach olib tashlandi)
 - `schema.sql` — PostgreSQL jadval sxemasi
 - `rls.sql` — xavfsizlik qoidalari (keyingi)
 - `import.cjs` — JSON → Supabase (keyingi)

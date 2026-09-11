@@ -72,7 +72,7 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '  (got 
   await db.collection('invoices').doc('INV1').update({ status: 'paid' });
   eq(REC.ops, [['update', { status: 'paid' }], ['eq', 'id', 'INV1']], 'update -> update().eq(id)');
 
-  // ref.set from query doc (ai-grader/payments uslubi)
+  // ref.set from query doc (payments uslubi)
   CANNED = [{ id: 'Q1' }];
   const q2 = await db.collection('applications').where('status', '==', 'submitted').get();
   await q2.docs[0].ref.set({ status: 'graded' }, { merge: true });
