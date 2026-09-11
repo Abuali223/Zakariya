@@ -324,18 +324,6 @@ async function handleComplete(p){
   return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:confirmId, error:0, error_note:'Success' };
 }
 
-// Hisob-fakturani «paid» qiladi (Uzum/Click confirm bosqichida chaqiriladi).
-async function markInvoicePaid(invoiceId, provider, trans){
-  const ref = db.collection('invoices').doc(String(invoiceId||''));
-  const s = await ref.get(); if(!s.exists) return { ok:false, reason:'not-found' };
-  if(s.data().status === 'paid') return { ok:true, already:true };
-  // Qaytarilgan/bekor qilingan hisob-fakturani qayta «paid» qilmaymiz (refund tirilmasin).
-  if(s.data().status === 'reversed' || s.data().status === 'canceled') return { ok:false, reason:'terminal' };
-  // Balans modeli: to'liq to'langan -> paidAmount = amount (qarzdorlik/yig'ildi to'g'ri chiqsin).
-  await ref.set({ status:'paid', paidAmount:Number(s.data().amount)||0, provider, providerTrans:String(trans||''), paidAt: FieldValue.serverTimestamp() }, { merge:true });
-  return { ok:true };
-}
-
 /* ---------- UZUM MERCHANT API ---------- */
 // Uzum bizning serverga 5 chaqiruv yuboradi (Basic auth): check → create →
 // confirm (→ reverse / status). To'lov TASDIQLANGANDA (confirm) invoice «paid».
@@ -496,4 +484,4 @@ if(require.main === module){
   server.listen(PORT, '127.0.0.1', () => console.log(`Iqror to'lov serveri tinglayapti 127.0.0.1:${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
-module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, markInvoicePaid, clickSign, md5 };
+module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5 };
