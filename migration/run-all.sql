@@ -42,5 +42,6 @@
 \ir staff.sql
 \ir audit-3.sql
 \ir audit-4.sql
+\ir audit-5.sql
 \ir bus.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

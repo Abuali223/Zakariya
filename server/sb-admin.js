@@ -90,6 +90,8 @@ function makeDb(cfg) {
   }
   return {
     _sb: sb,
+    // Postgres funksiyasini chaqirish (apply_payment / apply_to_invoice — atomik to'lov).
+    async rpc(fn, params) { const { data, error } = await sb.rpc(fn, params || {}); if (error) throw error; return data; },
     collection(name) {
       const q = makeQuery(sb, name, []);
       return {

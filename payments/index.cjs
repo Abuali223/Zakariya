@@ -129,6 +129,14 @@ async function logCredit(studentId, delta, balanceAfter, reason, provider){
 // Mavjud kredit avval ishlatiladi. IDEMPOTENT: transId bo'yicha ikki marta hisoblanmaydi.
 async function applyPaymentToStudent(studentId, amount, transId, provider){
   studentId = String(studentId||''); amount = Number(amount)||0; provider = provider || 'click';
+  // [P0 tuzatildi] Supabase: ATOMIK + IDEMPOTENT apply_payment RPC (kassir yo'li bilan bir xil yagona
+  // haqiqat manbai). Butun waterfall bitta tranzaksiyada; xato bo'lsa TO'LIQ rollback (posbon ham),
+  // shuning uchun provayder qayta yuborganда ikki marta hisoblanmaydi. (Eski JS yo'li atomik EMAS edi.)
+  if(db.rpc){
+    const r = await db.rpc('apply_payment', { p_sid: studentId, p_amount: amount, p_provider: provider, p_pay_id: String(transId||'')||null });
+    return (r && r.dup) ? { dup:true } : (r || {});
+  }
+  // ---- Firebase (rollback) — eski, atomik BO'LMAGAN JS waterfall ----
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
   // ATOMIK band qilish — bir vaqtda kelgan takroriy callback ikki marta hisoblamasin (create id konfliktida xato beradi).
   try{ await guardRef.create({ studentId, amount, createdAt: FieldValue.serverTimestamp() }); }
@@ -167,7 +175,16 @@ async function applyPaymentToStudent(studentId, amount, transId, provider){
 // Summani BITTA aniq invoice balansiga qo'llaydi (kabinet «Click» tugmasi / precise).
 // paidAmount += amount; to'lsa -> paid, kam -> partial, ortiqcha -> student_credit. IDEMPOTENT.
 async function applyToInvoice(invoiceId, amount, transId, provider){
-  invoiceId = String(invoiceId||''); amount = Number(amount)||0;
+  invoiceId = String(invoiceId||''); amount = Number(amount)||0; provider = provider || 'click';
+  // [P0 tuzatildi] Supabase: ATOMIK + IDEMPOTENT apply_to_invoice RPC (aynan shu invoysга; ortiqcha ->
+  // avans). Terminal (bekor/qaytarilgan)/topilmadi holatlarини {error:...} bilan qaytaradi (chaqiruvchi
+  // buni o'quvchi balansiga fallback uchun ishlatadi). Eski JS yo'li atomik emas edi -> qisman-yozuv-keyin-
+  // xato + posbon o'chirilishi ikki marta hisoblardi.
+  if(db.rpc){
+    const r = await db.rpc('apply_to_invoice', { p_invoice: invoiceId, p_amount: amount, p_provider: provider, p_pay_id: String(transId||'')||null });
+    return (r && r.dup) ? { dup:true } : (r || {});
+  }
+  // ---- Firebase (rollback) — eski, atomik BO'LMAGAN inkremental JS ----
   const guardRef = db.collection('applied_payments').doc(String(transId||''));
   // ATOMIK band qilish (idempotentlik) — takroriy/bir vaqtli callback ikki marta hisoblamasin.
   try{ await guardRef.create({ amount, createdAt: FieldValue.serverTimestamp() }); }
