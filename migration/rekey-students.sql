@@ -57,6 +57,22 @@ begin
     -- child_claims: eski _id bilan biriktirilganlar bo'lsa (kutilmaydi — migratsiya o'quvchisi biriktirilmasди) — studentId'ga.
     update public.child_claims set "studentId" = r.new_id where "studentId" = r.old_id;
 
+    -- student_credit (AVANS): apply_payment xatosi eski _id bilan avans yozgan bo'lishi mumkin
+    --   (Click erkin to'lov -> _id -> invoys topilmadi -> butun summa avansга _id kaliti bilan).
+    --   Kanonik studentId'ga ko'chiramiz; ikkalasi bo'lsa — kreditlarни QO'SHAMIZ (pul yo'qolmasin).
+    if exists (select 1 from public.student_credit where id = r.new_id)
+       and exists (select 1 from public.student_credit where id = r.old_id) then
+      update public.student_credit n
+         set credit = coalesce(n.credit,0) + coalesce((select credit from public.student_credit where id = r.old_id),0),
+             "updatedAt" = now()
+       where n.id = r.new_id;
+      delete from public.student_credit where id = r.old_id;
+    else
+      update public.student_credit set id = r.new_id, "studentId" = r.new_id where id = r.old_id;
+    end if;
+    -- Avans harakati jurnali ham kanonik kalitга.
+    update public.credit_ledger set "studentId" = r.new_id where "studentId" = r.old_id;
+
     -- Nihoyat, students hujjatining o'zi.
     update public.students set id = r.new_id where id = r.old_id;
 
