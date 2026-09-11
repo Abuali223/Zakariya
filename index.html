@@ -1966,6 +1966,9 @@ async function renderKabInvoices(studentId){
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_pay_loading)}</div></div>`;
   const [invs, cfg, credit] = await Promise.all([ window.IqrorFB.getInvoices(studentId), window.IqrorFB.getPayConfig(), (window.IqrorFB.getCredit?window.IqrorFB.getCredit(studentId):0) ]);
   if($("#kab-invoices")!==box) return;
+  // FAIL-CLOSED: getInvoices XATOДА null qaytaradi ([] = haqiqatan bo'sh). null bo'lsa "qarz yo'q" deb
+  // KO'RSATMAYMIZ (ota-ona qarzini bilmay qolmasin) — xato holatини ko'rsatamiz.
+  if(invs===null){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="cls-empty" style="margin:0;padding:16px;color:#B42318">${esc(lang==='ru'?'Не удалось загрузить данные об оплате. Обновите страницу (проверьте интернет).':'To‘lov ma’lumotini yuklab bo‘lmadi. Sahifani yangilang (internetni tekshiring).')}</div></div>`; return; }
   // 'reversed' (qaytarilgan) — admin kabi ro'yxatdan chiqariladi: aks holda kabinetда soxta
   // "Kutilmoqda" + qarz va amount=0 to'lov havolasi ko'rinardi (public[2]).
   const list=(invs||[]).filter(i=>i&&i.status!=='canceled'&&i.status!=='reversed').sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));

@@ -2960,10 +2960,12 @@ async function renderSettings(){
 /* ---- Enrollments inbox ---- */
 async function renderEnrollments(){
   markEnrollSeen();   // bo'lim ochildi -> yangi arizalar "ko'rilgan", bell tozalanadi
+  const _g=VIEW_GEN;  // boshqa tabга o'tilса, kech qaytgan render begona tabга yozmasin
   $('#view').innerHTML = `<div class="page-head"><h2>Arizalar</h2></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
   let rows;
   try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
-  catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  catch(e){ if(_g!==VIEW_GEN) return; $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  if(_g!==VIEW_GEN) return;
   if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
   const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc(String(r.ts||r.created||'').slice(0,10))}</td><td>${SESSION.isAdmin?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:'<span class="muted">—</span>'}</td></tr>`).join('');   // enr_del faqat direktor (roles[2])
   $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Sinf tili</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;

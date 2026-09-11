@@ -27,7 +27,7 @@ echo "==> 3/6 SQL migratsiyalar (idempotent audit-*)..."
 # Deploy va baza sinxron bo'lsin: yangi frontend eski bazaга tushmasin (masalan apply_payment
 # RPC / student_phones view / RLS tuzatmalari). audit-*.sql fayllari QAYTA ishga tushirishга xavfsiz.
 if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
-  for f in audit-2.sql audit-3.sql audit-4.sql audit-5.sql bus.sql; do
+  for f in audit-2.sql audit-3.sql audit-4.sql audit-5.sql audit-6.sql bus.sql; do
     echo "    -> $f"
     if ! sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "$REPO/migration/$f" >/tmp/iqror-sql.log 2>&1; then
       echo "❌ SQL migratsiya xato: $f"; tail -8 /tmp/iqror-sql.log; exit 1
