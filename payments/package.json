@@ -4,6 +4,6 @@
   "private": true,
   "description": "Iqror — Click/Uzum to'lov serveri (hisob-fakturalarni to'landi qiladi)",
   "main": "index.cjs",
-  "scripts": { "start": "node index.cjs", "test": "node uzum.test.cjs && node flow.test.cjs" },
+  "scripts": { "start": "node index.cjs", "test": "node attr.test.cjs && node uzum.test.cjs && node flow.test.cjs" },
   "dependencies": { "@supabase/supabase-js": "^2.45.0", "ws": "^8.18.0" }
 }

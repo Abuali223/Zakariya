@@ -78,6 +78,12 @@ async function unpaidInvoices(sid){
 const normPhone = p => String(p||'').replace(/\D/g,'').slice(-9);
 const normTxt = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
 const normClass = s => String(s||'').trim().toLowerCase().replace(/\s+/g,'');
+// Ism "mos"mi? Kamida bitta ma'noli so'z (>=3 harf) ustma-ust tushsin. Bir xil telefonli
+// BOSHQA bolaning to'lovi shu o'quvchiga noto'g'ri tushmasin (masalan "Qobiljonov" vs "Oybekov").
+const nameOverlap = (a, b) => {
+  const ta = new Set(normTxt(a).split(' ').filter(w => w.length >= 3));
+  return normTxt(b).split(' ').filter(w => w.length >= 3).some(w => ta.has(w));
+};
 
 // Telefon (+ ism/sinf bilan aniqlashtirish) bo'yicha o'quvchini topadi.
 // Qaytadi: { status:'ok', studentId } | 'notfound' | 'ambiguous' | 'nophone'.
@@ -88,14 +94,23 @@ async function findStudentByPhone(phone, name, klass){
   catch(e){ return { status:'error' }; }
   const ids = privs.filter(x => normPhone(x.parentPhone) === ph || normPhone(x.parentPhone2) === ph).map(x => x.id);
   if(!ids.length) return { status:'notfound' };
-  if(ids.length === 1) return { status:'ok', studentId: ids[0] };
-  // Aka-uka (bir telefon) — ism/sinf bilan ajratamiz.
+  // Nomzod o'quvchilar (ism/sinf tekshiruvi) — BITTA bo'lsa ham yuklaymiz: bir xil telefonли
+  // (aka-uka yoki xato kiritilgan) boshqa bolaning to'lovi shu bolaga ko'r-ko'rona tushmasin.
   let studs = [];
   try{ studs = (await db.collection('students').get()).docs.map(d=>({ id:d.id, ...(d.data()||{}) })); }catch(e){}
   const cand = studs.filter(s => ids.includes(s.id));
   const nm = normTxt(name), kl = normClass(klass);
-  let hit = nm ? cand.filter(s => normTxt(s.name) === nm) : [];
-  if(hit.length !== 1 && kl){ const byCls = cand.filter(s => normClass(String(s.grade||'') + (s.classLetter || s.track || '')) === kl); if(byCls.length === 1) hit = byCls; }
+  if(ids.length === 1){
+    // Bitta telefon mos. Ism berilmagan bo'lsa -> telefonга ishonamiz (eski xatti-harakat).
+    // Ism berilган bo'lsa -> o'sha o'quvchi ismiga mos kelishини talab qilamiz.
+    if(!nm) return { status:'ok', studentId: ids[0] };
+    if(cand.length === 1 && nameOverlap(cand[0].name, name)) return { status:'ok', studentId: ids[0] };
+    return { status:'ambiguous', candidates: ids };   // ism mos emas -> admin qo'lда biriktiradi
+  }
+  // Aka-uka (bir telefon) — ism/sinf bilan ajratamiz.
+  let hit = nm ? cand.filter(s => normTxt(s.name) === nm) : [];                          // (1) to'liq ism
+  if(hit.length !== 1 && nm){ const ov = cand.filter(s => nameOverlap(s.name, name)); if(ov.length === 1) hit = ov; }  // (2) ism-so'z mos
+  if(hit.length !== 1 && kl){ const byCls = cand.filter(s => normClass(String(s.grade||'') + (s.classLetter || s.track || '')) === kl); if(byCls.length === 1) hit = byCls; }  // (3) sinf
   if(hit.length === 1) return { status:'ok', studentId: hit[0].id };
   return { status:'ambiguous', candidates: ids };
 }
