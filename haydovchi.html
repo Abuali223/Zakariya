@@ -53,7 +53,7 @@
   const cfg={apiKey:"x",authDomain:"x",projectId:"x"};   // shim buni e'tiborsiz qoldiradi (sb-config.js ishlatadi)
   let db=null; try{ const app=initializeApp(cfg); db=getFirestore(app); }catch(e){}
 
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const qp=new URLSearchParams(location.search);
   let ROUTE=(qp.get('y')||qp.get('route')||'').trim();
   let KEY=(qp.get('kalit')||qp.get('key')||'').trim();

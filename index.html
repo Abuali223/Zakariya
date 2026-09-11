@@ -1247,6 +1247,8 @@ const MED_TRACKS = {uz:["Biologiya","Kimyo","Anatomiya","DTM tayyorlov"],ru:["Б
 const RANK_STYLE = {1:{bg:"#EDB84C",fg:"#3A2B00"},2:{bg:"#D8E2DF",fg:"#26413C"},3:{bg:"#EDD0A9",fg:"#5C3A10"}};
 
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Timestamp -> sana (ru) — bir marta (ilgari renderKab* ichida ikki marta takrorlanardi).
+const fmtWhen = (ts)=>{ try{ const d=ts&&ts.toDate?ts.toDate():(ts instanceof Date?ts:null); return d?d.toLocaleDateString('ru-RU'):''; }catch(e){ return ''; } };
 const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
 
 let lang = "uz";
@@ -1845,7 +1847,6 @@ async function renderKabProfile(studentId){
   if(!chars.length && !notes.length){ box.innerHTML=''; return; }   // yozuv yo'q — jim yashiramiz
   const QN = lang==='ru' ? {q1:'1-я четверть',q2:'2-я четверть',q3:'3-я четверть',q4:'4-я четверть'} : {q1:'1-chorak',q2:'2-chorak',q3:'3-chorak',q4:'4-chorak'};
   const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${QN[q]||q} · ${p.join('-')}`; };
-  const fmtWhen=(ts)=>{ try{ const d=ts&&ts.toDate?ts.toDate():(ts instanceof Date?ts:null); return d?d.toLocaleDateString('ru-RU'):''; }catch(e){ return ''; } };
   const dstamp=(when)=>{ const w=fmtWhen(when); return w?` <span class="small muted">· ${esc(w)}</span>`:''; };
   const genByTerm={}; chars.forEach(x=>{ genByTerm[x.term||'']={text:String(x.text),when:x.updatedAt}; });
   const notesByTerm={}; notes.forEach(x=>{ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text),when:x.updatedAt}); });
@@ -1880,7 +1881,6 @@ async function downloadParentProfile(s, btn){
     const P=(k)=>{ const v=priv&&priv[k]; return (v==null||v==='')?'':String(v); };
     const fmtBD=(v)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); return m?`${m[3]}.${m[2]}.${m[1]}`:(v||'—'); };
     const parentLine=(nm,wk)=>{ const a=[P(nm),P(wk)].filter(Boolean).join(' — '); return a||'—'; };
-    const fmtWhen=(ts)=>{ try{ const d=ts&&ts.toDate?ts.toDate():(ts instanceof Date?ts:null); return d?d.toLocaleDateString('ru-RU'):''; }catch(e){ return ''; } };
     const clsName=`${gradeLbl(s.g)}${s.cls?' «'+s.cls+'»':''} · ${s.lng==='ru'?'Rus':'O‘zbek'}`;
     const total=att?(att.total||0):0, present=att?(att.present||0):0, late=att?(att.late||0):0, absent=att?(att.absent||0):0;
     const attPct=total?Math.round((present+late)/total*100):null;
