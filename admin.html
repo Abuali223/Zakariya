@@ -4389,6 +4389,33 @@ async function renderPayments(){
       <div style="padding:10px 16px" class="small muted">Bu oyda jami <b>${rows.length}</b> hisob-faktura, ro‘yxatda esa <b>${curAll.length}</b> o‘quvchi — farq (${orphan.length} ta) o‘chirilgan yoki ID‘si o‘zgargan o‘quvchilarnikidir.${SESSION.isAdmin?' Tozalash uchun quyidagi tugmani bosing.':''}</div>
       ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 To‘lovsiz “o‘quvchisiz” hisoblarni o‘chirish (${orphan.filter(r=>paidOf(r)<=0).length} ta)</button>${orphan.some(r=>paidOf(r)>0)?`<div class="small muted" style="margin-top:6px">To‘lov tushganlari (${orphan.filter(r=>paidOf(r)>0).length} ta) saqlanadi — daromad hisobotida qoladi.</div>`:''}</div>`:''}
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi (eski)</th><th>Sinf (eski)</th><th>Summa</th><th>To‘langan</th><th>Holat</th></tr></thead><tbody>${orphan.map(r=>`<tr><td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'—')}</td><td data-label="Sinf">${esc(r.classKey||'—')}</td><td data-label="Summa">${fmtSom(r.amount)}</td><td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'—'}</td><td data-label="Holat">${esc(r.status||'—')}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    // 💰 AVANSLAR (fakturasi yo'q): puli tushgan, lekin bu oyга hisob-faktura yaratilmagan o'quvchilar.
+    //   Fakturasiz bo'lgani uchun asosiy jadval/qidiruvда (u faqat invoices ustidан ishlaydi) KO'RINMAYDI
+    //   -> shu yerда ism/ID bilan topiladi ("to'lov qildim, lekin ro'yxatда yo'q" chalkashligini yopadi).
+    let avansCard='';
+    try{
+      const invSids=new Set(curAll.map(r=>String(r.studentId)));
+      const av=(await loadCol('student_credit'))
+        .filter(c=>Number(c.credit)>0 && !invSids.has(String(c._id)))     // avans bor, bu oyда fakturasi yo'q
+        .map(c=>({c, s:stById[c._id]}))
+        .filter(x=>x.s)                                                    // haqiqiy o'quvchi (yetim/o'chirilган emas)
+        .filter(x=>{ const s=x.s;                                         // asosiy jadval bilan bir xil filtr
+          if(_fg!==''&&String(Number(s.grade)||0)!==String(_fg)) return false;
+          if(_fl&&(s.lang||'uz')!==_fl) return false;
+          if(_q){ const okTxt=[s.name,s.studentId||s._id,s.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(_q));
+            const ph=[s.parentPhone,s.parentPhone2].map(v=>String(v==null?'':v).replace(/\D/g,''));
+            if(!(okTxt||(_qd.length>=4&&ph.some(p=>p&&p.includes(_qd))))) return false; }
+          return true; })
+        .sort((a,b)=>Number(b.c.credit)-Number(a.c.credit));
+      if(av.length){
+        const avRows=av.map(x=>{ const s=x.s, sid=s.studentId||s._id;
+          return `<tr><td data-label="O‘quvchi">${esc(s.name||'')}<div class="small muted">${esc(sid)} · ${gradeName(Number(s.grade)||0)} ${esc(s.classLetter||s.track||'')}</div></td>
+            <td data-label="Avans"><b style="color:#1F9982">${fmtSom(x.c.credit)}</b></td>
+            <td class="td-actions"><button class="btn sm ghost2" data-hist="${esc(sid)}" title="To‘lov / avans tarixi">📋</button></td></tr>`; }).join('');
+        avansCard=`<div class="card" style="margin-bottom:14px;border-color:#1F9982"><div class="cls-card-head"><h3>💰 Avanslar (fakturasi yo‘q)</h3><span class="cls-count">${av.length} ta · puli tushgan, lekin bu oyga hisob-faktura yaratilmagan — «Hisob-fakturalar yaratish» bossangiz avtomatik yopiladi</span></div>
+          <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Avans</th><th></th></tr></thead><tbody>${avRows}</tbody></table></div></div>`;
+      }
+    }catch(e){}
     const stBadge=r=> r.status==='paid'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">To‘landi${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='partial'?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman${r.provider?` · ${esc(r.provider)}`:''}</span>`
       : r.status==='canceled'?`<span class="chip">Bekor</span>`
@@ -4417,7 +4444,7 @@ async function renderPayments(){
       const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
       return `<tr><td colspan="7" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
         + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
-    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
+    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
       <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
