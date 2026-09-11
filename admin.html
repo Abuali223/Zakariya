@@ -492,6 +492,8 @@ const toast=(m,err=false)=>{const t=document.createElement('div');t.className='t
 
 /* ---- Collection schemas ---- */
 const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"/></svg>`;
+// To'lov usuli -> yorliq (BITTA manba — ilgari 3 joyda nomuvofiq nusxada edi: ba'zisi 'grant'siz).
+const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', credit:'Avans', grant:'Grant' };
 const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
@@ -2366,7 +2368,7 @@ async function openStudentReport(sid, row){
     const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
     const paidSum = inv.reduce((x,i)=>x+paidAmt(i),0);
     const dueSum  = inv.reduce((x,i)=>x+(i.status==='canceled'?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
-    const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans'};
+    const provLbl=PROV_LBL;
     const invRows = inv.map(i=>{ const st=i.status==='paid'?'To‘landi':i.status==='partial'?`Qisman (${fmtSom(paidAmt(i))})`:i.status==='canceled'?'Bekor':'Kutilmoqda'; return `<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td>${esc(st)}</td><td>${esc(i.status==='paid'||i.status==='partial'?(provLbl[i.provider]||i.provider||'—'):'—')}</td><td>${esc(String(i.paidAt&&i.paidAt.toDate?i.paidAt.toDate().toISOString().slice(0,10):(i.paidAt||'')).slice(0,10)||'—')}</td></tr>`; }).join('');
     const g=Number(s.grade)||0;
     const clsName=(gradeName(g))+' «'+(s.classLetter||s.track||'-')+'» · '+(s.lang==='ru'?'Rus':'O‘zbek');
@@ -3861,7 +3863,7 @@ async function openPayHistory(sid, name){
   try{ const s=await getDocs(query(collection(db,'credit_ledger'), where('studentId','==',sid))); ledg=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
   try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
   const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
-  const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans',grant:'Grant'};
+  const provLbl=PROV_LBL;
   const paySt={applied:'Qo‘llandi',pending:'Kutilmoqda',failed:'Xato (qo‘llanmagan)',canceled:'Bekor',reversed:'Qaytarilgan',refunded:'Qaytarilgan',unmatched:'Biriktirilmagan'};
   const payStCol={applied:'#1F9982',pending:'#B54708',failed:'#B42318',canceled:'#98A2B3',reversed:'#98A2B3',refunded:'#98A2B3',unmatched:'#B54708'};
   invs.sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
@@ -4377,7 +4379,7 @@ async function renderPayments(){
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
-    const provLbl={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans'};
+    const provLbl=PROV_LBL;
     const groups={}; repSet.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
     const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
       +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${repSet.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
