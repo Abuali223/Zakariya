@@ -1455,7 +1455,7 @@ function exportStudentsPDF(rows){
     <div class="head">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">O‘quvchilar ro‘yxati va natijalari</div></div></div>
     <div class="meta"><span>Sana: ${dateStr}</span><span>Jami: <b>${rows.length}</b> o‘quvchi · <b>${groups.length}</b> sinf</span></div>
     ${sections}
-    <div class="foot">Iqror Academy · iqror-72879.web.app · Chop etilgan sana: ${dateStr}</div>
+    <div class="foot">Iqror Academy · iroacademy.uz · Chop etilgan sana: ${dateStr}</div>
   </body></html>`;
   printHTML(html);
   toast('Chop etish oynasi ochildi — “PDF sifatida saqlash”ni tanlang');
@@ -2088,7 +2088,11 @@ async function renderOlympiads(){
     $('#ol-body').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm('Yozuv o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'olympiads',b.dataset.del)); ALL=ALL.filter(x=>x._id!==b.dataset.del); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
     $('#ol-body').querySelectorAll('[data-grant]').forEach(b=>b.onclick=async()=>{ const o=ALL.find(x=>x._id===b.dataset.grant); if(!o) return;
       if(!confirm(`«${nm(o)}» — 100% grant (olimpiada) chegirmasi belgilanadi. Keyingi hisob-fakturalar 0 so‘m bo‘ladi. Davom etilsinmi?`)) return;
-      try{ await setDoc(doc(db,'student_private',String(o.studentId)),{specialCategory:'olympiad'},{merge:true}); toast('100% grant belgilandi ✓ («To‘lovlar»да qayta hisoblang)'); }
+      // MUHIM (kalit mutanosibligi): student_private hujjat _id bilan kalitlangan. o.studentId = IQ-xxxx.
+      // Import qilingan o'quvchida (_id≠studentId) studentId bilan yozsak — FANTOM qator yaratiladi va grant
+      // ko'rinmaydi + boshqa maxfiy maydonlarни (referrerId/contractAmount) niqoblaydi. _id ni topib yozamiz.
+      const _st=stById[o.studentId]; const _pid=(_st&&_st._id)||String(o.studentId);
+      try{ await setDoc(doc(db,'student_private',_pid),{specialCategory:'olympiad'},{merge:true}); toast('100% grant belgilandi ✓ («To‘lovlar»да qayta hisoblang)'); }
       catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
   };
   const openOlyForm=()=>{
@@ -2309,15 +2313,20 @@ async function openStudentReport(sid, row){
     if(!s){ const d=await getDoc(doc(db,'students',sid)); s = d.exists()?{_id:d.id,...d.data()}:null; }
     if(!s){ $('#modal .modal-b').innerHTML='<div class="empty">O‘quvchi topilmadi.</div>'; return; }
     const curMonth = (()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); })();
+    // MUHIM (kalit mutanosibligi): sid = hujjat _id. student_private _id bilan kalitlangan (to'g'ri),
+    // lekin attendance/monitoring/invoices/grades/summaries/characteristics/subject_notes studentId bilan
+    // kalitlangan. Import qilingan o'quvchida (_id≠studentId) bularni sid=_id bilan qidirsak BO'SH chiqadi
+    // -> hisobot davomat/baho/to'lovni ko'rsatmaydi. studentId bo'yicha qidiramiz.
+    const qid = (s && s.studentId) || sid;
     const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap, achSnap] = await Promise.all([
       getDoc(doc(db,'student_private',sid)).then(d=>d.exists()?d.data():{}).catch(()=>({})),
-      getDocs(query(collection(db,'attendance'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'monitoring'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'invoices'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'grades'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'student_summaries'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'characteristics'), where('studentId','==',sid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'subject_notes'), where('studentId','==',sid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'attendance'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'monitoring'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'invoices'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'grades'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'student_summaries'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'characteristics'), where('studentId','==',qid))).catch(()=>({docs:[]})),
+      getDocs(query(collection(db,'subject_notes'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'achievements_students'), where('name','==',s.name||'—'))).catch(()=>({docs:[]}))
     ]);
     // O'qituvchi yozgan oylik xulosalar (ota-onaga) — oy → matn

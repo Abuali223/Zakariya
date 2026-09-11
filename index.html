@@ -1673,6 +1673,8 @@ function renderKabinet(){
 
 // 🚌 Maktab avtobusi — kabinetда jonli xarita (Leaflet + OpenStreetMap).
 let _busTimer=null, _busMap=null, _busMarker=null;
+// Kabinetдан chiqilganда poll'ni to'xtatamiz (aks holda timer abadiy so'rov yuboraverardi).
+function stopKabBus(){ if(_busTimer){ clearInterval(_busTimer); _busTimer=null; } try{ if(_busMap){ _busMap.remove(); } }catch(e){} _busMap=null; _busMarker=null; }
 function ensureLeaflet(){
   return new Promise((resolve)=>{
     if(window.L){ resolve(true); return; }
@@ -2247,6 +2249,7 @@ function route(animate){
   const cur=document.getElementById(h);
   if(cur && animate){ cur.classList.remove('page-enter'); void cur.offsetWidth; cur.classList.add('page-enter'); }
   if(h==='kabinet') renderKabinet();
+  else if(typeof stopKabBus==='function') stopKabBus();   // kabinetдан chiqildi -> avtobus pollни to'xtat
   if(scrollTo){ const el=document.getElementById(scrollTo); if(el){ el.scrollIntoView({behavior:animate?'smooth':'auto',block:'start'}); return; } }
   window.scrollTo({top:0,left:0,behavior:animate?'smooth':'auto'});
 }
