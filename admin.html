@@ -2246,6 +2246,20 @@ async function renderStudents(){
   }
   // Maxfiy biriktirish kodlari (ota-onaga beriladi; admin/zavuch ko'radi)
   try{ const csnap=await getDocs(collection(db,'student_codes')); const cmap={}; csnap.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }catch(e){}
+  // JORIY OY to'lov holati — «To'langan» ustuni uchun. Fakturalar studentId bilan kalitlangan;
+  //   to'lov (To'lovlar VA o'quvchi ma'lumotnomasidan) fakturани yangilagani uchun bu ikkala bo'lim
+  //   bir manbadan (invoices) o'qiydi — o'zaro sinxron. Ro'yxatga qaytilganда yangilanadi.
+  const _payMonth=curMonth(); const payMap={};
+  try{ const isnap=await getDocs(query(collection(db,'invoices'), where('month','==',_payMonth))); isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }catch(e){}
+  const payStatusOf=(sid)=>{ const inv=payMap[String(sid)]; if(!inv||inv.status==='canceled'||inv.status==='reversed') return null;
+    const amt=Number(inv.amount)||0, paid=inv.status==='paid'?amt:(Number(inv.paidAmount)||0), debt=Math.max(0,amt-paid);
+    if(inv.status==='paid'||debt<=0.5) return {k:'paid'};
+    if(paid>0) return {k:'partial',debt}; return {k:'debt',debt}; };
+  const payCell=(sid)=>{ const st=payStatusOf(sid);
+    if(!st) return '<span class="muted">—</span>';
+    if(st.k==='paid') return '<span class="chip it" style="background:var(--it-bg);color:var(--teal)">✓ To‘landi</span>';
+    if(st.k==='partial') return `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman · qarz ${fmtSom(st.debt)}</span>`;
+    return `<span class="chip" style="background:#FDECEC;color:#B42318">Qarz ${fmtSom(st.debt)}</span>`; };
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=()=>{
     const q=(($('#stu-search')&&$('#stu-search').value)||'').trim().toLowerCase();
@@ -2277,9 +2291,10 @@ async function renderStudents(){
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
+        <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canMng?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canMng?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
@@ -2418,7 +2433,9 @@ async function openStudentReport(sid, row){
     const canPay = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
     $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
     if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
-    if($('#rep-pay')) $('#rep-pay').onclick=()=>openRecordPayment(cache.students||[], null, { sid:String(s.studentId||s._id), name:s.name||'', amount:dueSum, onDone:()=>openStudentReport(sid, row) });
+    // reload=renderStudents -> to'lovдан keyin «O'quvchilar» ro'yxatидаги «To'langan» ustuni DARHOL yangilanadi
+    //   (bo'lim uzilishi yopiladi: bu yerда qilingan to'lov ro'yxatда ham, To'lovlar bo'limида ham aks etadi).
+    if($('#rep-pay')) $('#rep-pay').onclick=()=>openRecordPayment(cache.students||[], renderStudents, { sid:String(s.studentId||s._id), name:s.name||'', amount:dueSum, onDone:()=>openStudentReport(sid, row) });
     $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
     // 🎓 RASMIY PROFIL — universitetga beriladigan to'liq, muhr/imzo o'rni va QR bilan (to'lov ma'lumoti YO'Q)
     $('#rep-prof').onclick=()=>{
@@ -4434,7 +4451,12 @@ async function renderPayments(){
     const clsKeyOfRow=r=>{ const s=stById[r.studentId]; return s?classKeyOf(s):(String(r.classKey||'')||'zz'); };
     const clsLabelOfRow=r=>{ const s=stById[r.studentId]; return s?classLabelOf(s):(String(r.classKey||'')||'Sinf belgilanmagan'); };
     const clsSort=(a,b)=>{ const pa=String(a).split('-'),pb=String(b).split('-'); const ga=Number(pa[1])||0,gb=Number(pb[1])||0; if(ga!==gb)return ga-gb; const la=pa[0]==='ru'?1:0,lb=pb[0]==='ru'?1:0; if(la!==lb)return la-lb; return pa.slice(2).join('-').localeCompare(pb.slice(2).join('-')); };
-    const byCls={}; cur.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
+    // ODATDA jadval FAQAT QARZDORLARni (qisman + to'lanmagan) ko'rsatadi — to'liq to'langanlar «O'quvchilar»
+    //   bo'limидаги «To'langan» ustunида ko'rinadi (ikkala bo'lim ham invoices'дан o'qiydi — sinxron).
+    //   LEKIN usul/sana filtri faol bo'lса (davr yig'imi hisoboti) — o'sha to'langan yozuvlar ko'rsatiladi.
+    const periodFilter = !!(_fm||_from||_to);
+    const tableSrc = periodFilter ? cur : cur.filter(r=>r.status!=='paid' && !isCanc(r) && debtOf(r)>0);
+    const byCls={}; tableSrc.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
     const rowHtml=(r,n)=>{ const d=debtOf(r); return `<tr>
       <td data-label="№" style="text-align:center;color:var(--muted);font-variant-numeric:tabular-nums">${n}</td>
       <td data-label="O‘quvchi">${esc(nameOf(r))}<div class="small muted">${esc(r.studentId||'')}</div></td>
@@ -4451,11 +4473,13 @@ async function renderPayments(){
         ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial'))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
       </div></td></tr>`; };
     const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
-      const coll=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), debt=gp.rows.reduce((s,r)=>s+debtOf(r),0);
-      return `<tr><td colspan="7" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gp.rows.length} ta · yig‘ildi ${fmtSom(coll)}${debt>0?` · qarz ${fmtSom(debt)}`:''}</span></td></tr>`
+      const gpDebt=gp.rows.reduce((s,r)=>s+debtOf(r),0), gpColl=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
+      const gpMeta = periodFilter ? `${gp.rows.length} ta · yig‘ildi ${fmtSom(gpColl)}` : `${gp.rows.length} qarzdor · qarz ${fmtSom(gpDebt)}${gpColl>0?` · qisman yig‘ildi ${fmtSom(gpColl)}`:''}`;
+      return `<tr><td colspan="7" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gpMeta}</span></td></tr>`
         + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
-    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
-      <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||'<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">Filtr bo‘yicha o‘quvchi topilmadi.</td></tr>'}</tbody></table></div></div>`;
+    const emptyMsg = trs ? '' : (cur.length ? (periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan. To‘langanlar «O‘quvchilar» bo‘limида ko‘rinadi.') : 'Bu oy uchun hisob-faktura yo‘q.');
+    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${periodFilter?'':' · qarzdorlar'}${(_q||_fg!==''||_fl||_fm||_from||_to)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
+      <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||`<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">${emptyMsg}</td></tr>`}</tbody></table></div></div>`;
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
       // MUHIM: to'lov TUSHGAN orphanlarni o'chirmaymiz — ular real daromad (hisobotdan yo'qolib ketmasin).
