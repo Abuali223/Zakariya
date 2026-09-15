@@ -50,4 +50,7 @@
 \ir audit-8.sql
 \ir pay-notes.sql
 \ir reverse-payment.sql
+\ir audit-9.sql
+\ir refund-rpc.sql
+\ir adjust-credit.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
