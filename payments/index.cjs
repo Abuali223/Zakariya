@@ -101,11 +101,12 @@ async function findStudentByPhone(phone, name, klass){
   const cand = studs.filter(s => ids.includes(s.id));
   const nm = normTxt(name), kl = normClass(klass);
   if(ids.length === 1){
-    // Bitta telefon mos. Ism berilmagan bo'lsa -> telefonга ishonamiz (eski xatti-harakat).
-    // Ism berilган bo'lsa -> o'sha o'quvchi ismiga mos kelishини talab qilamiz.
-    if(!nm) return { status:'ok', studentId: ids[0] };
-    if(cand.length === 1 && nameOverlap(cand[0].name, name)) return { status:'ok', studentId: ids[0] };
-    return { status:'ambiguous', candidates: ids };   // ism mos emas -> admin qo'lда biriktiradi
+    // Bitta telefon mos. Ism BERILGAN va o'sha o'quvchiga mos kelsagina biriktiramiz.
+    // Ism YO'Q (bo'sh) yoki mos emas -> ko'r-ko'rona telefonga ishonmaymiz (bir xil/xato terilган
+    // telefon boshqa oilaga tegishli bo'lishi mumkin) -> 'ambiguous' -> admin qo'lда biriktiradi
+    // (biriktirilmagan ro'yxatда telefon ko'rinadi, bir bosishда ulanadi).
+    if(nm && cand.length === 1 && nameOverlap(cand[0].name, name)) return { status:'ok', studentId: ids[0] };
+    return { status:'ambiguous', candidates: ids };
   }
   // Aka-uka (bir telefon) — ism/sinf bilan ajratamiz.
   let hit = nm ? cand.filter(s => normTxt(s.name) === nm) : [];                          // (1) to'liq ism

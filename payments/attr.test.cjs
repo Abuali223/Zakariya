@@ -53,9 +53,9 @@ async function prep(name, phone, klass, amount) {
   r = await prep('Qobiljonov Abdurrohman', '979980808', '5A');
   ok(r.matched === false && !r.studentId, `T2 boshqa ism (Qobiljonov) -> biriktirilmagan (via=${r.raw && r.raw.via})`);
 
-  // T3: no name provided -> trust phone -> matched
+  // T3: no name provided -> DON'T blindly trust phone -> unmatched (admin qo'lda biriktiradi)
   r = await prep('', '979980808', '');
-  ok(r.matched === true && r.studentId === 'IQ-0259', 'T3 ism yo\'q -> telefonga ishonadi -> IQ-0259');
+  ok(r.matched === false && !r.studentId, `T3 ism yo'q -> biriktirilmagan (via=${r.raw && r.raw.via})`);
 
   // T4: two siblings share phone -> disambiguate by name
   state.student_private['IQ-0256'] = { id: 'IQ-0256', parentPhone: '+998910000000' };
