@@ -3987,6 +3987,11 @@ async function openFinanceAudit(){
   // invoice-refund (paidAmount↓) VA credit-clawback (avans↓) — ikkalasi ham P dan ayiriladi,
   // aks holda clawback bo'lgan o'quvchi doimiy "Qo'llanmagan" bo'lib ko'rinadi (finance[4]).
   try{ const rs=await getDocs(collection(db,'refunds')); rs.docs.forEach(d=>{ const r=d.data()||{}; const sid=String(r.studentId||''); const amt=Number(r.amount)||0; if(sid&&amt&&(r.target==='invoice'||r.target==='credit')) P[sid]=(P[sid]||0)-amt; }); }catch(e){}
+  // Reattribution manbalari: puli BOSHQA o'quvchiga KO'CHIRILGAN o'quvchilar. Ularга «🔧 Qo'llash»
+  //   tugmasi KO'RSATILMAYDI — aks holда allaqachon ko'chirilган pulni IKKINCHI marta qo'llab
+  //   (double-apply) soxta "paid" yaratardi. (credit_ledger reason='reattribute-out…' bo'yicha.)
+  const reattrSrc=new Set();
+  try{ const lg=await getDocs(collection(db,'credit_ledger')); lg.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.reason||'').indexOf('reattribute-out')===0){ const s=String(x.studentId||''); if(s) reattrSrc.add(s); } }); }catch(e){}
   const ids=new Set([...Object.keys(I),...Object.keys(C),...Object.keys(P)]);
   const rows=[];
   ids.forEach(sid=>{ const p=R(P[sid]||0), i=R(I[sid]||0), c=R(C[sid]||0); const disc=(i+c)-p;
@@ -4012,7 +4017,7 @@ async function openFinanceAudit(){
       <td style="text-align:right">${fmtN(r.c)}</td>
       <td style="text-align:right;font-weight:800;color:${col}">${r.disc>0?'+':''}${fmtN(r.disc)}</td>
       <td style="color:${col}">${isOver?'⚠️ Ortiqcha':'ℹ️ Qo‘llanmagan'}</td>
-      <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button>${(!isOver && SESSION.isAdmin)?`<button class="btn sm gold" data-fix="${esc(r.sid)}" data-amt="${Math.abs(r.disc)}" title="Osilib qolgan pulni fakturaga qo‘llash">🔧 Qo‘llash</button>`:''}</div></td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button>${(!isOver && SESSION.isAdmin)?(reattrSrc.has(r.sid)?`<span class="small muted" title="Bu o‘quvchi puli boshqa o‘quvchiga ko‘chirilgan (reattribution). Qayta «Qo‘llash» ikki marta hisoblanadi (double-apply) — shu sabab bloklangan. To‘lov tarixini tekshiring.">↔ ko‘chirilgan</span>`:`<button class="btn sm gold" data-fix="${esc(r.sid)}" data-amt="${Math.abs(r.disc)}" title="Osilib qolgan pulni fakturaga qo‘llash">🔧 Qo‘llash</button>`):''}</div></td>
     </tr>`; }).join('');
   const table = rows.length? `<div class="tablewrap" style="margin-top:10px"><table>
     <thead><tr><th>O‘quvchi</th><th>Real to‘lov</th><th>H-faktura</th><th>Avans</th><th>Farq</th><th>Holat</th><th></th></tr></thead>
