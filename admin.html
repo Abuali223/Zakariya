@@ -4109,7 +4109,7 @@ function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isN
 // Aka-uka FAQAT ota-ona telefoni bir xil bo'lsa (familiyaga QARALMAYDI). To'liq 9 xonali
 // mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqamlar guruhlamaydi.
 function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}$/.test(p)) ? p : ''; }
-function computeSiblingSet(students, privOf, scoreFn){
+function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const EXCL=['teacher_child','olympiad','contract'];
   const getScore = scoreFn || (s=>pmNum(s.score));   // lag qo'llanganda — o'tgan oy monitoring balli
   const phoneMap={};
@@ -4127,8 +4127,11 @@ function computeSiblingSet(students, privOf, scoreFn){
     const exclusive=EXCL.includes(pv.specialCategory);
     const score=getScore(s);
     const gets20=!exclusive && score!=null && score>=90;
-    const eligible10=!exclusive && !gets20;
-    return {sid, pv, exclusive, score, gets20, eligible10}; };
+    // Fakturasi YARATILMAYDIGAN (narx/kontrakt yo'q -> o'tkaziladigan) bola 10% slotни OLMASIN —
+    //   aks holда oila chegirmani yo'qotardi (slot faktura chiqmaydigan bolaga ketardi).
+    const billable = canBillFn ? !!canBillFn(s) : true;
+    const eligible10=!exclusive && !gets20 && billable;
+    return {sid, pv, exclusive, score, gets20, eligible10, billable}; };
   const tiebreak=(a,b)=>{ const sa=a.score==null?-Infinity:a.score, sb=b.score==null?-Infinity:b.score;
     if(sa!==sb) return sa-sb; return String(a.sid).localeCompare(String(b.sid)); };
   const tenHolders=new Set(); const conflicts=[];
@@ -4262,7 +4265,12 @@ async function pmLoadCtx(month, students, amount){
       if(allow && !allow.has(monSlug(x.subject||''))) return;   // belgilangan fanlar tashqarisi -> chegirmaga kirmaydi
       (monAgg[sid]=monAgg[sid]||{sum:0,cnt:0}); monAgg[sid].sum+=sc; monAgg[sid].cnt++; }); }catch(e){}
   const monScoreFn=sid=>{ const a=monAgg[String(sid)]; return (a&&a.cnt)?(a.sum/a.cnt):null; };
-  const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id));
+  // Bola fakturaga tushadimi (skip bo'lmaydimi)? — aka-uka slotни faqat billable bolага berish uchun.
+  const canBill=(s)=>{ const pv=privOf(s.studentId||s._id)||{};
+    if(pv.specialCategory==='contract') return isFinite(Number(pv.contractAmount)) && Number(pv.contractAmount)>0;
+    const pAmt=Number(priceMap[priceKeyOf(s)]); if(isFinite(pAmt)&&pAmt>0) return true;
+    return !Object.keys(priceMap).length ? (Number(amount)>0) : false; };   // priceEmpty -> zaxira summа; aks holда skip
+  const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill);
   const ctx={ priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
   return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
 }
@@ -4845,11 +4853,19 @@ async function openRecordPayment(students, reload, pre){
     // 1) AVVAL outbox'ga durdmli yozamiz. obAdd=false -> localStorage ishlamadi (Safari private/kvota).
     const saved=obAdd(item);
     if(!saved){
-      // Navbatga saqlanmadi — YO'QOTMASLIK uchun to'g'ridan yuborishga urinamiz; u ham bo'lmasa OGOHLANTIRAMIZ.
-      try{ await obFlushOne(item); if(reload) reload(); toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); }
-      catch(e){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
-        alert('⚠️ To‘lov HALI YOZILMADI: brauzer xotirasi ishlamayapti (masalan maxfiy rejim) va internet ham yo‘q/xato.\nIltimos qayta kiriting yoki internetli qurilmada kiriting.');
-        toast('To‘lov saqlanmadi — qayta urining',true); }
+      // Navbatga saqlanmadi (localStorage yo'q — maxfiy rejim/kvota). Pulni YO'QOTMASLIK/IKKI MARTA
+      // hisoblamaslik uchun AYNAN SHU item (o'zgarmagan payId) bilan bir necha marta yuboramiz: payId
+      // bir xil -> apply_payment IDEMPOTENT (server qayta qo'llamaydi). Baribir bo'lmasa "NOANIQ" deymiz
+      // (ko'r-ko'rona qayta kiritmasin — server allaqachon qabul qilган bo'lishi mumkin -> double-charge).
+      let ok=false;
+      for(let attempt=0; attempt<3 && !ok; attempt++){
+        try{ await obFlushOne(item); ok=true; }
+        catch(e){ if(attempt<2) await new Promise(r=>setTimeout(r, 1500*(attempt+1))); }
+      }
+      if(ok){ if(reload) reload(); toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); }
+      else{ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
+        alert('⚠️ To‘lov holati NOANIQ: brauzer xotirasi ishlamayapti va yuborish tasdiqlanmadi.\n\nQAYTA KIRITISHDAN OLDIN — o‘quvchining «To‘lov/avans tarixi» (📋) da bu summa allaqachon tushган-tushmaganini TEKSHIRING (server qabul qilган bo‘lishi mumkin — ko‘r-ko‘rona qayta kiritsangiz IKKI marta yozilishi mumkin).');
+        toast('Holat noaniq — avval tarixni tekshiring',true); }
       return;
     }
     if(reload) reload();
