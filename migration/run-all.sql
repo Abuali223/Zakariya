@@ -48,4 +48,5 @@
 \ir audit-7.sql
 \ir reattribute-avans.sql
 \ir audit-8.sql
+\ir pay-notes.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

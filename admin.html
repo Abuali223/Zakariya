@@ -2328,7 +2328,7 @@ async function openStudentReport(sid, row){
     // kalitlangan. Import qilingan o'quvchida (_id≠studentId) bularni sid=_id bilan qidirsak BO'SH chiqadi
     // -> hisobot davomat/baho/to'lovni ko'rsatmaydi. studentId bo'yicha qidiramiz.
     const qid = (s && s.studentId) || sid;
-    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap, achSnap] = await Promise.all([
+    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap, achSnap, payNoteD] = await Promise.all([
       getDoc(doc(db,'student_private',sid)).then(d=>d.exists()?d.data():{}).catch(()=>({})),
       getDocs(query(collection(db,'attendance'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'monitoring'), where('studentId','==',qid))).catch(()=>({docs:[]})),
@@ -2337,7 +2337,8 @@ async function openStudentReport(sid, row){
       getDocs(query(collection(db,'student_summaries'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'characteristics'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'subject_notes'), where('studentId','==',qid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'achievements_students'), where('name','==',s.name||'—'))).catch(()=>({docs:[]}))
+      getDocs(query(collection(db,'achievements_students'), where('name','==',s.name||'—'))).catch(()=>({docs:[]})),
+      getDoc(doc(db,'pay_notes',qid)).then(d=>d.exists()?(d.data()||{}):{}).catch(()=>({}))   // ichki to'lov eslatmasi (qarzdorga qo'ng'iroq)
     ]);
     // O'qituvchi yozgan oylik xulosalar (ota-onaga) — oy → matn
     const sumMap = {}; sumSnap.docs.forEach(d=>{ const x=d.data()||{}; if(x.month && String(x.text||'').trim()) sumMap[x.month]=String(x.text); });
@@ -2431,6 +2432,21 @@ async function openStudentReport(sid, row){
     // Ma'lumotnoma ostida: «Yopish» o'rniga «💵 To'lov qilish» (× header'да qoladi). To'lov shu yerда
     // qabul qilinsa — apply_payment RPC orqali ketadi -> To'lovlar bo'limida VA ma'lumotnomada aks etadi.
     const canPay = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
+    // 📞 ICHKI TO'LOV ESLATMASI — qarzdor bilan qo'ng'iroqда: qachon to'layman dedi va h.k.
+    //   FAQAT shu ma'lumotnomада ko'rinadi (chop etilmaydi — rep-inner'дан TASHQARIDA), faqat to'lov
+    //   bilan ishlovchilar (direktor/moliya/kassir). pay_notes jadvali (RLS).
+    if(canPay){
+      const _pn=(payNoteD&&payNoteD.note)||'', _pnW=(payNoteD&&payNoteD.updatedAt)?fmtWhen(payNoteD.updatedAt):'', _pnBy=(payNoteD&&payNoteD.by)||'';
+      $('#modal .modal-b').insertAdjacentHTML('beforeend', `<div style="margin-top:14px;border:1px dashed var(--gold);border-radius:12px;padding:12px 14px;background:#FFFBF2">
+        <div class="small" style="font-weight:700;color:#8a5a00">📞 To‘lov eslatmasi <span style="font-weight:500">(ichki — faqat shu yerда ko‘rinadi)</span></div>
+        <div class="small muted" style="margin:2px 0 6px">Qarzdor bilan gaplashganда: qachon to‘lashini, va’da sanasini yozib qo‘ying.</div>
+        <textarea id="rep-pn-txt" rows="3" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit" placeholder="Masalan: 20-sentabrga to‘layman dedi.">${esc(_pn)}</textarea>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px"><button type="button" class="btn sm gold" id="rep-pn-save">💾 Saqlash</button><span class="small muted" id="rep-pn-status">${_pnW?`Oxirgi: ${esc(_pnBy)}${_pnBy?', ':''}${esc(_pnW)}`:''}</span></div></div>`);
+      const _pnSave=$('#rep-pn-save'); if(_pnSave) _pnSave.onclick=async()=>{ _pnSave.disabled=true;
+        try{ await setDoc(doc(db,'pay_notes',qid),{ note:($('#rep-pn-txt').value||'').trim(), updatedAt:serverTimestamp(), by:(SESSION.email||SESSION.role||'') },{merge:true});
+          const st=$('#rep-pn-status'); if(st) st.textContent='Saqlandi ✓'; toast('Eslatma saqlandi ✓'); }
+        catch(e){ toast('Xatolik: '+(e.code||e.message),true); } finally{ _pnSave.disabled=false; } };
+    }
     $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
     if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
     // reload=renderStudents -> to'lovдан keyin «O'quvchilar» ro'yxatидаги «To'langan» ustuni DARHOL yangilanadi
@@ -4405,7 +4421,7 @@ async function renderPayments(){
     const provLbl=PROV_LBL;
     const groups={}; repSet.forEach(r=>{ const p=paidOf(r); if(p<=0||isCanc(r))return; const lbl=provLbl[r.provider]||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=p; });
     const repRows=Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
-      +`<tr><td data-label="Usul" class="muted">Qarzdorlik</td><td data-label="Soni" class="muted">${repSet.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
+      +`<tr id="pm-debt-row" style="cursor:pointer" title="Bosing — faqat qarzdorlar ro‘yxatiga o‘tish"><td data-label="Usul" class="muted"><b>Qarzdorlik ▸</b></td><td data-label="Soni" class="muted">${repSet.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
     const filterLbl = anyFilter ? ` · filtr${_fm?' · '+(provLbl[_fm]||_fm):''}${(_from||_to)?` · ${_from||'…'}–${_to||'…'}`:''}` : '';
     const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}${esc(filterLbl)}</h3><span class="cls-count">${repSet.length} ${anyFilter?'to‘lov/hisob':'o‘quvchi'} · yig‘ildi: ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
@@ -4483,6 +4499,11 @@ async function renderPayments(){
     const emptyMsg = trs ? '' : (cur.length ? (periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan. To‘langanlar «O‘quvchilar» bo‘limида ko‘rinadi.') : 'Bu oy uchun hisob-faktura yo‘q.');
     $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${periodFilter?'':' · qarzdorlar'}${(_q||_fg!==''||_fl||_fm||_from||_to)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
       <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||`<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">${emptyMsg}</td></tr>`}</tbody></table></div></div>`;
+    // Hisobotдаги «Qarzdorlik» qatorига bosilса — davr/usul filtrini tozalab (aks holда kolleksiya
+    //   ko'rinardi), FAQAT qarzdorlar ro'yxatига o'tamiz va o'sha jadvalга suramiz.
+    { const dr=$('#pm-debt-row'); if(dr) dr.addEventListener('click',async()=>{
+        if($('#pm-fmethod')) $('#pm-fmethod').value=''; if($('#pm-from')) $('#pm-from').value=''; if($('#pm-to')) $('#pm-to').value='';
+        await load(); const cards=$('#pm-body')?$('#pm-body').querySelectorAll('.card'):[]; const last=cards[cards.length-1]; if(last) last.scrollIntoView({behavior:'smooth',block:'start'}); }); }
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
       // MUHIM: to'lov TUSHGAN orphanlarni o'chirmaymiz — ular real daromad (hisobotdan yo'qolib ketmasin).
