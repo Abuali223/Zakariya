@@ -430,19 +430,28 @@ async function uzReverse(b){
     // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
     if(pay.status === 'confirmed'){
       const som = Number(pay.amount)||0;   // pay.amount SO'M da saqlangan (uzCreate)
-      const inv = await getInvoice(String(pay.invoiceId));
-      if(inv){
-        const amt = Number(inv.amount)||0, paid0 = Number(inv.paidAmount)||0;
-        const fromInvoice = Math.min(som, paid0);            // paidAmount'dan ayiriladigan qism
-        const fromCredit  = Math.max(0, som - fromInvoice);  // ortiqcha -> avansdan qaytariladi
-        const newPaid = Math.max(0, paid0 - fromInvoice);
-        const status = newPaid<=0 ? 'reversed' : (newPaid >= amt-0.5 ? 'paid' : 'partial');
-        await db.collection('invoices').doc(String(pay.invoiceId)).set(
-          { paidAmount:newPaid, status, reversedAt: FieldValue.serverTimestamp() }, { merge:true });
-        if(fromCredit>0 && inv.studentId){
-          let cr=0; try{ const c=await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr=Number((c.data()||{}).credit)||0; }catch(e){}
-          await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit:Math.max(0,cr-fromCredit), updatedAt: FieldValue.serverTimestamp() }, { merge:true });
-          await logCredit(String(inv.studentId), -fromCredit, Math.max(0,cr-fromCredit), 'reversed', 'uzum');
+      if(db.rpc){
+        // [High B tuzatildi] ATOMIK + IDEMPOTENT reverse_payment RPC: invoice↓ + avans clawback +
+        // credit_ledger — BITTA tranzaksiya (advisory lock + 'reverse:'+ref posbon). Eski JS yo'li
+        // 4 alohida yozuv edi -> crash/parallel'da invoice ikki marta kamayishi mumkin edi.
+        // p_ref noyob (transId) -> webhook retry ikki marta pulни qaytarmaydi ({dup:true}).
+        await db.rpc('reverse_payment', { p_invoice: String(pay.invoiceId), p_amount: som, p_provider: 'uzum', p_ref: 'uzum_'+String(b.transId) });
+      } else {
+        // ---- Firebase (rollback) — eski, atomik BO'LMAGAN yo'l ----
+        const inv = await getInvoice(String(pay.invoiceId));
+        if(inv){
+          const amt = Number(inv.amount)||0, paid0 = Number(inv.paidAmount)||0;
+          const fromInvoice = Math.min(som, paid0);            // paidAmount'dan ayiriladigan qism
+          const fromCredit  = Math.max(0, som - fromInvoice);  // ortiqcha -> avansdan qaytariladi
+          const newPaid = Math.max(0, paid0 - fromInvoice);
+          const status = newPaid<=0 ? 'reversed' : (newPaid >= amt-0.5 ? 'paid' : 'partial');
+          await db.collection('invoices').doc(String(pay.invoiceId)).set(
+            { paidAmount:newPaid, status, reversedAt: FieldValue.serverTimestamp() }, { merge:true });
+          if(fromCredit>0 && inv.studentId){
+            let cr=0; try{ const c=await db.collection('student_credit').doc(String(inv.studentId)).get(); if(c.exists) cr=Number((c.data()||{}).credit)||0; }catch(e){}
+            await db.collection('student_credit').doc(String(inv.studentId)).set({ studentId:String(inv.studentId), credit:Math.max(0,cr-fromCredit), updatedAt: FieldValue.serverTimestamp() }, { merge:true });
+            await logCredit(String(inv.studentId), -fromCredit, Math.max(0,cr-fromCredit), 'reversed', 'uzum');
+          }
         }
       }
     }
