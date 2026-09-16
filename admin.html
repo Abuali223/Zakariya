@@ -4388,6 +4388,7 @@ async function renderPayments(){
       <input id="pm-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
       <select id="pm-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="pm-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
+      <select id="pm-fstatus" class="search-inp" style="max-width:180px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Qarzdorlar</option><option value="partial">Qisman to‘laganlar</option><option value="paid">To‘liq to‘laganlar</option></select>
       <select id="pm-fmethod" class="search-inp" style="max-width:150px" title="To‘lov usuli bo‘yicha"><option value="">Barcha usullar</option><option value="click">Click</option><option value="uzum">Uzum</option><option value="cash">Naqd</option><option value="bank">Bank</option><option value="terminal">Terminal</option><option value="payme">Payme</option><option value="credit">Avans</option></select>
       <label class="small muted" style="display:flex;align-items:center;gap:5px;white-space:nowrap">Sana <input id="pm-from" type="date" class="search-inp" style="max-width:145px" title="To‘lov sanasi (dan)"><span>–</span><input id="pm-to" type="date" class="search-inp" style="max-width:145px" title="To‘lov sanasi (gacha)"></label>
     </div>
@@ -4424,6 +4425,7 @@ async function renderPayments(){
     // (o'sha usul/sanadagi) hisoblar qoladi -> ko'rinish "davr yig'imi" ga aylanadi, hisobotга ta'sir qiladi.
     const _fm=($('#pm-fmethod')&&$('#pm-fmethod').value)||'';
     const _from=($('#pm-from')&&$('#pm-from').value)||'', _to=($('#pm-to')&&$('#pm-to').value)||'';
+    const _fs=($('#pm-fstatus')&&$('#pm-fstatus').value)||'';   // to'lov holati filtri: ''=barchasi, 'debt'=qarzdorlar, 'partial'=qisman, 'paid'=to'liq
     const paidDateOf=r=>{ const v=r.paidAt; if(!v) return ''; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
     const cur=curAll.filter(r=>{ const s=stById[r.studentId]||{};
       if(_fg!==''&&String(Number(s.grade)||0)!==String(_fg)) return false;
@@ -4510,11 +4512,20 @@ async function renderPayments(){
     const clsKeyOfRow=r=>{ const s=stById[r.studentId]; return s?classKeyOf(s):(String(r.classKey||'')||'zz'); };
     const clsLabelOfRow=r=>{ const s=stById[r.studentId]; return s?classLabelOf(s):(String(r.classKey||'')||'Sinf belgilanmagan'); };
     const clsSort=(a,b)=>{ const pa=String(a).split('-'),pb=String(b).split('-'); const ga=Number(pa[1])||0,gb=Number(pb[1])||0; if(ga!==gb)return ga-gb; const la=pa[0]==='ru'?1:0,lb=pb[0]==='ru'?1:0; if(la!==lb)return la-lb; return pa.slice(2).join('-').localeCompare(pb.slice(2).join('-')); };
-    // ODATDA jadval FAQAT QARZDORLARni (qisman + to'lanmagan) ko'rsatadi — to'liq to'langanlar «O'quvchilar»
-    //   bo'limидаги «To'langan» ustunида ko'rinadi (ikkala bo'lim ham invoices'дан o'qiydi — sinxron).
-    //   LEKIN usul/sana filtri faol bo'lса (davr yig'imi hisoboti) — o'sha to'langan yozuvlar ko'rsatiladi.
+    // Jadval endi ODATDA HAMMANI ko'rsatadi (to'liq to'laganlar ham) — chekni qayta chop etish uchun.
+    //   «To'lov holati» filtri (pm-fstatus) bilan chegaralanadi:
+    //     ''       -> BARCHASI (to'liq to'laganlar ham; bekor/reversed tashqari),
+    //     'debt'   -> qarzdorlar (to'liq to'lamagan, qarzi bor: qisman + kutilmoqda),
+    //     'partial'-> qisman to'laganlar,
+    //     'paid'   -> to'liq to'laganlar.
+    //   Bekor/reversed (isCanc) hech qachon asosiy jadvalда ko'rinmaydi.
     const periodFilter = !!(_fm||_from||_to);
-    const tableSrc = periodFilter ? cur : cur.filter(r=>r.status!=='paid' && !isCanc(r) && debtOf(r)>0);
+    const statusMatch = r => { if(isCanc(r)) return false;
+      if(_fs==='debt')    return r.status!=='paid' && debtOf(r)>0;
+      if(_fs==='partial') return r.status==='partial';
+      if(_fs==='paid')    return r.status==='paid';
+      return true; };
+    const tableSrc = cur.filter(statusMatch);
     const byCls={}; tableSrc.forEach(r=>{ const k=clsKeyOfRow(r); (byCls[k]=byCls[k]||{label:clsLabelOfRow(r),rows:[]}).rows.push(r); });
     const rowHtml=(r,n)=>{ const d=debtOf(r); return `<tr>
       <td data-label="№" style="text-align:center;color:var(--muted);font-variant-numeric:tabular-nums">${n}</td>
@@ -4533,15 +4544,18 @@ async function renderPayments(){
       </div></td></tr>`; };
     const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
       const gpDebt=gp.rows.reduce((s,r)=>s+debtOf(r),0), gpColl=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
-      const gpMeta = periodFilter ? `${gp.rows.length} ta · yig‘ildi ${fmtSom(gpColl)}` : `${gp.rows.length} qarzdor · qarz ${fmtSom(gpDebt)}${gpColl>0?` · qisman yig‘ildi ${fmtSom(gpColl)}`:''}`;
+      const gpMeta = (_fs==='debt') ? `${gp.rows.length} qarzdor · qarz ${fmtSom(gpDebt)}${gpColl>0?` · qisman yig‘ildi ${fmtSom(gpColl)}`:''}`
+        : `${gp.rows.length} ta · yig‘ildi ${fmtSom(gpColl)}${gpDebt>0?` · qarz ${fmtSom(gpDebt)}`:''}`;
       return `<tr><td colspan="7" style="background:#eef3f1;font-weight:700;padding:9px 12px">${esc(gp.label)} <span class="muted" style="font-weight:500">· ${gpMeta}</span></td></tr>`
         + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
-    const emptyMsg = trs ? '' : (cur.length ? (periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan. To‘langanlar «O‘quvchilar» bo‘limида ko‘rinadi.') : 'Bu oy uchun hisob-faktura yo‘q.');
-    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+orphanAvCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${periodFilter?'':' · qarzdorlar'}${(_q||_fg!==''||_fl||_fm||_from||_to)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
+    const emptyMsg = trs ? '' : (cur.length ? (_fs==='debt'?'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan.':_fs==='partial'?'Qisman to‘lagan o‘quvchi yo‘q.':_fs==='paid'?'To‘liq to‘lagan o‘quvchi yo‘q.':(periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'Ko‘rsatiladigan o‘quvchi yo‘q.')) : 'Bu oy uchun hisob-faktura yo‘q.');
+    const stTblLbl = _fs==='debt'?' · qarzdorlar':_fs==='partial'?' · qisman to‘laganlar':_fs==='paid'?' · to‘liq to‘laganlar':' · barchasi';
+    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+orphanAvCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${stTblLbl}${(_q||_fg!==''||_fl||_fm||_from||_to)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
       <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||`<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">${emptyMsg}</td></tr>`}</tbody></table></div></div>`;
     // Hisobotдаги «Qarzdorlik» qatorига bosilса — davr/usul filtrini tozalab (aks holда kolleksiya
     //   ko'rinardi), FAQAT qarzdorlar ro'yxatига o'tamiz va o'sha jadvalга suramiz.
     { const dr=$('#pm-debt-row'); if(dr) dr.addEventListener('click',async()=>{
+        if($('#pm-fstatus')) $('#pm-fstatus').value='debt';   // «Qarzdorlik ▸» -> holat filtrini «Qarzdorlar»ga o'tkazamiz
         if($('#pm-fmethod')) $('#pm-fmethod').value=''; if($('#pm-from')) $('#pm-from').value=''; if($('#pm-to')) $('#pm-to').value='';
         await load(); const cards=$('#pm-body')?$('#pm-body').querySelectorAll('.card'):[]; const last=cards[cards.length-1]; if(last) last.scrollIntoView({behavior:'smooth',block:'start'}); }); }
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
@@ -4679,10 +4693,11 @@ async function renderPayments(){
   { const si=$('#pm-search'); if(si) si.addEventListener('input',load); }
   { const g=$('#pm-fgrade'); if(g) g.addEventListener('change',load); }
   { const l=$('#pm-flang'); if(l) l.addEventListener('change',load); }
+  { const st=$('#pm-fstatus'); if(st) st.addEventListener('change',load); }
   { const m=$('#pm-fmethod'); if(m) m.addEventListener('change',load); }
   { const f=$('#pm-from'); if(f) f.addEventListener('change',load); }
   { const t=$('#pm-to'); if(t) t.addEventListener('change',load); }
-  fmemApply('pm-search'); fmemApply('pm-fgrade'); fmemApply('pm-flang'); fmemApply('pm-fmethod'); fmemApply('pm-from'); fmemApply('pm-to');
+  fmemApply('pm-search'); fmemApply('pm-fgrade'); fmemApply('pm-flang'); fmemApply('pm-fstatus'); fmemApply('pm-fmethod'); fmemApply('pm-from'); fmemApply('pm-to');
   load();
 }
 // YAGONA to'lov qabul qilish: bank / Click / Uzum / Terminal / Naqd — hammasi bir oqim, idempotent.
