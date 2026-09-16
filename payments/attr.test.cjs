@@ -71,6 +71,24 @@ async function prep(name, phone, klass, amount) {
   r = await prep('Butunlay Boshqa Odam', '910000000', 'ZZ');
   ok(r.matched === false && !r.studentId, 'T5 aka-uka, ism hech kimга mos emas -> biriktirilmagan');
 
+  // T6: KIRIL alifbosida ism (baza LOTINда) -> translit bilan mos -> AYNAN o'sha o'quvchiga.
+  //   IQ-0259 = "Oybekov Abdulloh Xojiakbar" (lotin). Ota-ona kirilда yozadi (979980808 -> yolg'iz IQ-0259).
+  state.student_private['IQ-0259'].parentPhone2 = '';   // 979980808 yana yolg'iz IQ-0259 bo'lsin
+  r = await prep('Ойбеков Абдуллоҳ Хожиакбар', '979980808', '3 б');
+  ok(r.matched === true && r.studentId === 'IQ-0259', `T6 kiril ism (lotin baza) -> IQ-0259 (via=${r.raw && r.raw.via})`);
+
+  // T7: aka-uka (bir telefon), KIRIL ism bilan to'g'ri bolага -> IQ-0256 (Muhammadulloh).
+  state.student_private['IQ-0259'].parentPhone2 = '910000000';   // yana ikkalasi 910000000
+  r = await prep('Ойбеков Муҳаммадуллоҳ', '910000000', '2 б');
+  ok(r.matched === true && r.studentId === 'IQ-0256', `T7 aka-uka kiril ism -> Muhammadulloh=IQ-0256 (via=${r.raw && r.raw.via})`);
+
+  // T8: LOTIN ism, sinf KIRILда ("6 б") — translit sinf mosligини ta'minlaydi (nomlar farq qilса ham).
+  //   Bu yerда ism aniq (Xadicha) bo'lgani uchun ism bo'yicha mos keladi; sinf kirilда ham buzmaydi.
+  state.student_private['IQ-0300'] = { id: 'IQ-0300', parentPhone: '+998915151777' };
+  state.students['IQ-0300'] = { id: 'IQ-0300', studentId: 'IQ-0300', name: 'Turgunboyeva Xadicha', grade: 6, classLetter: 'b' };
+  r = await prep('Тургунбоева Хадича', '915151777', '6 б');
+  ok(r.matched === true && r.studentId === 'IQ-0300', `T8 kiril ism+sinf -> IQ-0300 (via=${r.raw && r.raw.via})`);
+
   fs.unlinkSync(CFGFILE);
   console.log(fails ? `\n❌ ${fails} FAILED` : '\n✅ ALL PASS — attribution ismni tekshiradi');
   process.exit(fails ? 1 : 0);

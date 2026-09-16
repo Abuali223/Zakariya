@@ -76,8 +76,27 @@ async function unpaidInvoices(sid){
 }
 // Telefonni normallashtiradi: faqat raqamlar, oxirgi 9 ta (+998/bo'sh joy farqi muhim emas).
 const normPhone = p => String(p||'').replace(/\D/g,'').slice(-9);
-const normTxt = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-const normClass = s => String(s||'').trim().toLowerCase().replace(/\s+/g,'');
+// Kiril <-> Lotin: ota-ona to'lovда ismни/sinfни ISTALGAN alifboда yozса ham to'lov AYNAN
+//   o'sha o'quvchiga tushsin. Ikkala tomon ham UMUMIY "translit kalit"га keltiriladi
+//   (kiril->lotin + iotli unlilar folding), so'ng solishtiriladi.
+//   Misol: "Хадичахон 6 б" == "Xadichaxon 6b",  "Тургунбоева" == "Turgunboyeva".
+const CYR2LAT = {
+  'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y',
+  'к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f',
+  'х':'x','ц':'ts','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'i','ь':'','э':'e','ю':'yu','я':'ya',
+  'ў':'o','қ':'q','ғ':'g','ҳ':'h'   // o'zbekcha maxsus harflar
+};
+const translit = s => {
+  let t = String(s||'').toLowerCase();
+  t = t.replace(/[Ѐ-ӿ]/g, ch => Object.prototype.hasOwnProperty.call(CYR2LAT, ch) ? CYR2LAT[ch] : ch);  // kiril -> lotin
+  // Iotli unlilar / й — ikkala alifbo bir xil ko'rinsin (е≈ye, ё≈yo, ю≈yu, я≈ya):
+  t = t.replace(/yo/g,'o').replace(/yu/g,'u').replace(/ya/g,'a').replace(/ye/g,'e').replace(/yi/g,'i');
+  t = t.replace(/kh/g,'x');                    // ruscha "kh" -> o'zbekcha "x"
+  t = t.replace(/[^a-z0-9\s]/g,'');            // apostrof/tinish belgilar olib tashlanadi (o' -> o, g' -> g)
+  return t;
+};
+const normTxt = s => translit(s).replace(/\s+/g,' ').trim();
+const normClass = s => translit(s).replace(/\s+/g,'');
 // Ism "mos"mi? Kamida bitta ma'noli so'z (>=3 harf) ustma-ust tushsin. Bir xil telefonli
 // BOSHQA bolaning to'lovi shu o'quvchiga noto'g'ri tushmasin (masalan "Qobiljonov" vs "Oybekov").
 const nameOverlap = (a, b) => {
