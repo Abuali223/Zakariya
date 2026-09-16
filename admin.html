@@ -2197,6 +2197,7 @@ function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM
 
 async function renderStudents(){
   const canMng=canManageStudents();   // kassir -> FAQAT ko'rish (qo'shish/tahrir/o'chir/import yo'q)
+  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar (direktor/moliya/kassir)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
@@ -2292,7 +2293,7 @@ async function renderStudents(){
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
       return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canMng?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
@@ -2303,6 +2304,7 @@ async function renderStudents(){
       $('#cls-groups').querySelectorAll('.stu-selall').forEach(sa=>sa.addEventListener('change',()=>{ const tbl=sa.closest('table'); if(tbl) tbl.querySelectorAll('.stu-sel').forEach(c=>c.checked=sa.checked); updateBulk(); }));
     }
     $('#cls-groups').querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.report, rows.find(r=>r._id===b.dataset.report))));
+    $('#cls-groups').querySelectorAll('[data-note]').forEach(b=>b.addEventListener('click',()=>openPayNote(b.dataset.note, b.getAttribute('data-nm'))));
     updateBulk();
   };
   fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang');
@@ -2313,6 +2315,28 @@ async function renderStudents(){
 }
 
 /* ---- Bitta o'quvchining to'liq ma'lumotnomasi (transkript + buxgalteriya) — chop etish/PDF ---- */
+// 📞 TO'LOV ESLATMASI (ichki) — qarzdor bilan qo'ng'iroqда: qachon to'layman dedi va h.k.
+//   ALOHIDA tugma (Tahrir/O'chir yonида) -> ALOHIDA oyna. pay_notes jadvaliга ALOHIDA saqlanadi
+//   (o'quvchi ma'lumotlari ichida EMAS). id = studentId (invoices bilan bir xil kalit). Faqat
+//   to'lov bilan ishlovchilar (direktor/moliya/kassir) — pay_notes RLS.
+async function openPayNote(key, name){
+  key=String(key||''); if(!key){ toast('O‘quvchi ID topilmadi',true); return; }
+  $('#modal').innerHTML=`<div class="modal-h"><h3>📞 To‘lov eslatmasi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b" id="pn-body"><div class="loading">Yuklanmoqda…</div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="pn-save">💾 Saqlash</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  let d={}; try{ const g=await getDoc(doc(db,'pay_notes',key)); if(g.exists()) d=g.data()||{}; }catch(e){}
+  const _w=d.updatedAt?fmtWhen(d.updatedAt):'', _by=d.by||'';
+  const body=$('#pn-body'); if(!body) return;
+  body.innerHTML=`<div class="small muted" style="margin-bottom:8px"><b>${esc(name||key)}</b> · ${esc(key)}</div>
+    <div class="small muted" style="margin-bottom:6px">Qarzdor bilan gaplashganда: qachon to‘lashini, va’da sanasini yozib qo‘ying. Eslatma o‘quvchi ma’lumotlaridan <b>ALOHIDA</b> saqlanadi va faqat to‘lov bilan ishlovchilarга ko‘rinadi (hisobotда/chopда chiqmaydi).</div>
+    <textarea id="pn-txt" rows="5" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit" placeholder="Masalan: 20-sentabrga to‘layman dedi.">${esc(d.note||'')}</textarea>
+    <div class="small muted" id="pn-status" style="margin-top:8px">${_w?`Oxirgi: ${esc(_by)}${_by?', ':''}${esc(_w)}`:''}</div>`;
+  const sv=$('#pn-save'); if(sv) sv.onclick=async()=>{ sv.disabled=true;
+    try{ await setDoc(doc(db,'pay_notes',key),{ note:(($('#pn-txt')&&$('#pn-txt').value)||'').trim(), updatedAt:serverTimestamp(), by:(SESSION.email||SESSION.role||'') },{merge:true});
+      toast('Eslatma saqlandi ✓'); closeModal(); }
+    catch(e){ sv.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } };
+}
 async function openStudentReport(sid, row){
   $('#modal').innerHTML = `<div class="modal-h"><h3>Ma’lumotnoma</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>
@@ -2328,7 +2352,7 @@ async function openStudentReport(sid, row){
     // kalitlangan. Import qilingan o'quvchida (_id≠studentId) bularni sid=_id bilan qidirsak BO'SH chiqadi
     // -> hisobot davomat/baho/to'lovni ko'rsatmaydi. studentId bo'yicha qidiramiz.
     const qid = (s && s.studentId) || sid;
-    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap, achSnap, payNoteD] = await Promise.all([
+    const [privD, attSnap, monSnap, invSnap, grdSnap, sumSnap, charSnap, noteSnap, achSnap] = await Promise.all([
       getDoc(doc(db,'student_private',sid)).then(d=>d.exists()?d.data():{}).catch(()=>({})),
       getDocs(query(collection(db,'attendance'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'monitoring'), where('studentId','==',qid))).catch(()=>({docs:[]})),
@@ -2337,8 +2361,7 @@ async function openStudentReport(sid, row){
       getDocs(query(collection(db,'student_summaries'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'characteristics'), where('studentId','==',qid))).catch(()=>({docs:[]})),
       getDocs(query(collection(db,'subject_notes'), where('studentId','==',qid))).catch(()=>({docs:[]})),
-      getDocs(query(collection(db,'achievements_students'), where('name','==',s.name||'—'))).catch(()=>({docs:[]})),
-      getDoc(doc(db,'pay_notes',qid)).then(d=>d.exists()?(d.data()||{}):{}).catch(()=>({}))   // ichki to'lov eslatmasi (qarzdorga qo'ng'iroq)
+      getDocs(query(collection(db,'achievements_students'), where('name','==',s.name||'—'))).catch(()=>({docs:[]}))
     ]);
     // O'qituvchi yozgan oylik xulosalar (ota-onaga) — oy → matn
     const sumMap = {}; sumSnap.docs.forEach(d=>{ const x=d.data()||{}; if(x.month && String(x.text||'').trim()) sumMap[x.month]=String(x.text); });
@@ -2432,21 +2455,8 @@ async function openStudentReport(sid, row){
     // Ma'lumotnoma ostida: «Yopish» o'rniga «💵 To'lov qilish» (× header'да qoladi). To'lov shu yerда
     // qabul qilinsa — apply_payment RPC orqali ketadi -> To'lovlar bo'limida VA ma'lumotnomada aks etadi.
     const canPay = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
-    // 📞 ICHKI TO'LOV ESLATMASI — qarzdor bilan qo'ng'iroqда: qachon to'layman dedi va h.k.
-    //   FAQAT shu ma'lumotnomада ko'rinadi (chop etilmaydi — rep-inner'дан TASHQARIDA), faqat to'lov
-    //   bilan ishlovchilar (direktor/moliya/kassir). pay_notes jadvali (RLS).
-    if(canPay){
-      const _pn=(payNoteD&&payNoteD.note)||'', _pnW=(payNoteD&&payNoteD.updatedAt)?fmtWhen(payNoteD.updatedAt):'', _pnBy=(payNoteD&&payNoteD.by)||'';
-      $('#modal .modal-b').insertAdjacentHTML('beforeend', `<div style="margin-top:14px;border:1px dashed var(--gold);border-radius:12px;padding:12px 14px;background:#FFFBF2">
-        <div class="small" style="font-weight:700;color:#8a5a00">📞 To‘lov eslatmasi <span style="font-weight:500">(ichki — faqat shu yerда ko‘rinadi)</span></div>
-        <div class="small muted" style="margin:2px 0 6px">Qarzdor bilan gaplashganда: qachon to‘lashini, va’da sanasini yozib qo‘ying.</div>
-        <textarea id="rep-pn-txt" rows="3" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit" placeholder="Masalan: 20-sentabrga to‘layman dedi.">${esc(_pn)}</textarea>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:8px"><button type="button" class="btn sm gold" id="rep-pn-save">💾 Saqlash</button><span class="small muted" id="rep-pn-status">${_pnW?`Oxirgi: ${esc(_pnBy)}${_pnBy?', ':''}${esc(_pnW)}`:''}</span></div></div>`);
-      const _pnSave=$('#rep-pn-save'); if(_pnSave) _pnSave.onclick=async()=>{ _pnSave.disabled=true;
-        try{ await setDoc(doc(db,'pay_notes',qid),{ note:($('#rep-pn-txt').value||'').trim(), updatedAt:serverTimestamp(), by:(SESSION.email||SESSION.role||'') },{merge:true});
-          const st=$('#rep-pn-status'); if(st) st.textContent='Saqlandi ✓'; toast('Eslatma saqlandi ✓'); }
-        catch(e){ toast('Xatolik: '+(e.code||e.message),true); } finally{ _pnSave.disabled=false; } };
-    }
+    // 📞 To'lov eslatmasi endi ma'lumotnoma ICHIDA emas — «O'quvchilar» ro'yxatidа alohida 📞 tugma
+    //   (openPayNote). Bu yerда ko'rsatilmaydi (chop/hisobotга aralashmasin).
     $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
     if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
     // reload=renderStudents -> to'lovдан keyin «O'quvchilar» ro'yxatидаги «To'langan» ustuni DARHOL yangilanadi
