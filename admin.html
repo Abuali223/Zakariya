@@ -2236,22 +2236,9 @@ async function renderStudents(){
   catch(e){ if(_g!==VIEW_GEN) return; $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
   if(_g!==VIEW_GEN) return;   // boshqa tab ochildi — eski render to'xtaydi
   { const tt=$('#stu-total'); if(tt) tt.textContent = `Jami: ${rows.length} ta o‘quvchi`; }
-  // Maxfiy ma'lumotlarni (JSHSHIR, telefon, vasiy) himoyalangan kolleksiyadan yuklab, jadval/forma uchun birlashtiramiz
-  try{ const psnap=await getDocs(collection(db,'student_private')); const pmap={}; psnap.docs.forEach(d=>{ pmap[d.id]=d.data(); });
-    rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }catch(e){}
-  // Kassir/moliya (boshqara olmaydiganlar) to'liq PII'ni ko'rmaydi, lekin TELEFON ko'rinsin.
-  // student_phones — faqat telefon ustunlarini beruvchi rolga bog'langan view (qolgan PII yopiq).
-  if(!canMng){
-    try{ const fsnap=await getDocs(collection(db,'student_phones')); const fmap={}; fsnap.docs.forEach(d=>{ fmap[d.id]=d.data()||{}; });
-      rows.forEach(r=>{ const pd=fmap[r._id]; if(pd){ if(r.parentPhone==null) r.parentPhone=pd.parentPhone; if(r.parentPhone2==null) r.parentPhone2=pd.parentPhone2; } }); }catch(e){}
-  }
-  // Maxfiy biriktirish kodlari (ota-onaga beriladi; admin/zavuch ko'radi)
-  try{ const csnap=await getDocs(collection(db,'student_codes')); const cmap={}; csnap.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }catch(e){}
-  // JORIY OY to'lov holati — «To'langan» ustuni uchun. Fakturalar studentId bilan kalitlangan;
-  //   to'lov (To'lovlar VA o'quvchi ma'lumotnomasidan) fakturани yangilagani uchun bu ikkala bo'lim
-  //   bir manbadan (invoices) o'qiydi — o'zaro sinxron. Ro'yxatga qaytilganда yangilanadi.
+  // Qo'shimcha ma'lumotlar (maxfiy maydonlar/telefon/kod + joriy oy to'lov holati) endi sahifa
+  //   chizilgach FON rejimida yuklanadi (quyida) — sekin/qotgan so'rov «Yuklanmoqda…»da muzlatmasin.
   const _payMonth=curMonth(); const payMap={};
-  try{ const isnap=await getDocs(query(collection(db,'invoices'), where('month','==',_payMonth))); isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }catch(e){}
   const payStatusOf=(sid)=>{ const inv=payMap[String(sid)]; if(!inv||inv.status==='canceled'||inv.status==='reversed') return null;
     const amt=Number(inv.amount)||0, paid=inv.status==='paid'?amt:(Number(inv.paidAmount)||0), debt=Math.max(0,amt-paid);
     if(inv.status==='paid'||debt<=0.5) return {k:'paid'};
@@ -2308,10 +2295,31 @@ async function renderStudents(){
     updateBulk();
   };
   fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang');
-  draw();
+  draw();   // ⚡ SAHIFA DARHOL ko'rinadi (bazaviy ro'yxat) — qotib qolmaydi.
   const si=$('#stu-search'); if(si) si.addEventListener('input',draw);
   const fgEl=$('#stu-fgrade'); if(fgEl) fgEl.addEventListener('change',draw);
   const flEl=$('#stu-flang'); if(flEl) flEl.addEventListener('change',draw);
+  // Qo'shimcha ma'lumot (maxfiy maydonlar, telefon, biriktirish kodi, to'lov holati) — FON rejimida,
+  //   PARALLEL + har biri TIMEOUT (9s) bilan. Bitta sekin/qotgan so'rov butun sahifani muzlatmaydi;
+  //   kelgach ro'yxat qayta chiziladi (telefon/kod/«To'langan» ustuni to'ladi).
+  (async()=>{
+    const TO=p=>Promise.race([Promise.resolve(p).catch(()=>null), new Promise(r=>setTimeout(()=>r(null),9000))]);
+    let ps,fs,cs,isnap;
+    try{ [ps,fs,cs,isnap] = await Promise.all([
+      TO(getDocs(collection(db,'student_private'))),
+      canMng?Promise.resolve(null):TO(getDocs(collection(db,'student_phones'))),
+      TO(getDocs(collection(db,'student_codes'))),
+      TO(getDocs(query(collection(db,'invoices'), where('month','==',_payMonth)))),
+    ]); }catch(e){ return; }
+    if(_g!==VIEW_GEN) return;   // boshqa tabga o'tilган — chizmaymiz
+    if(ps){ const pmap={}; ps.docs.forEach(d=>{ pmap[d.id]=d.data(); });
+      rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }
+    if(fs){ const fmap={}; fs.docs.forEach(d=>{ fmap[d.id]=d.data()||{}; });
+      rows.forEach(r=>{ const pd=fmap[r._id]; if(pd){ if(r.parentPhone==null) r.parentPhone=pd.parentPhone; if(r.parentPhone2==null) r.parentPhone2=pd.parentPhone2; } }); }
+    if(cs){ const cmap={}; cs.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }
+    if(isnap){ isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }
+    draw();   // boyitilган ma'lumot bilan qayta chizamiz
+  })();
 }
 
 /* ---- Bitta o'quvchining to'liq ma'lumotnomasi (transkript + buxgalteriya) — chop etish/PDF ---- */
@@ -4170,18 +4178,19 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
 function computeTuition(s, priv, ctx){
   const pv=priv||{}; const cat=pv.specialCategory||''; const sid=s.studentId||s._id;
   const round=n=>Math.round(n); const priceKey=priceKeyOf(s);
-  let base;
+  let base, usedFallback=false;
   if(cat==='contract'){ const ca=Number(pv.contractAmount);
     if(!(isFinite(ca)&&ca>0)) return {skip:true, skipReason:'contract_amount_missing', sid, name:s.name, priceKey};
     base=ca;
   } else { const pAmt=Number(ctx.priceMap && ctx.priceMap[priceKey]);
     if(isFinite(pAmt)&&pAmt>0) base=pAmt;
-    // «Zaxira summa» fallback FAQAT narx jadvali BUTUNLAY bo'sh bo'lганda ishlatiladi (yil boshiда).
-    // Jadval bor-u, faqat SHU sinf narxi yo'q bo'lsa -> JIM zaxira summани QO'YMAYMIZ (aks holда
-    // maydonда qolgan eski summа bilan sinfни kam hisoblab yuborardik) -> o'tkazamiz + admin ogohlantiriladi.
-    else if(ctx.priceEmpty){ const fa=Number(ctx.flatAmount); if(isFinite(fa)&&fa>0) base=fa;
-      else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; }
-    else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; }
+    else { const fa=Number(ctx.flatAmount);
+      // Narx topilmadi (masalan ru-7 narx jadvalида yo'q). «Zaxira summa» ANIQ kiritilган (>0) bo'lsa
+      //   -> uni QO'YAMIZ, lekin JIM emas: admin ogohlantiriladi (qaysi o'quvchiga zaxira narx
+      //   qo'llангани ko'rinadi -> tekshirib, kerak bo'lsa narx jadvaliga qo'shib qayta hisoblaydi).
+      //   Zaxira summа ham yo'q bo'lса -> o'tkazamiz (skip) + ogohlantiramiz.
+      if(isFinite(fa)&&fa>0){ base=fa; usedFallback=true; }
+      else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; } }
   let net, pct=0, sickN=0, sickAmt=0, info='', isGrant=false;
   if(cat==='olympiad'){ net=0; pct=1; info='100% grant (olimpiada/ijtimoiy)'; isGrant=true; }
   else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='Xodim farzandi 50%'; }
@@ -4199,7 +4208,7 @@ function computeTuition(s, priv, ctx){
   const discount=base-net;
   if(net===0 && !isGrant){ isGrant=true; }
   const status=(net===0)?'paid':'pending';
-  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey };
+  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey, fallback:usedFallback };
 }
 // Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
@@ -4378,7 +4387,7 @@ async function renderPayments(){
     <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
-      ${SESSION.isAdmin?`<label>Zaxira summa (narx jadvali bo‘lmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
+      ${SESSION.isAdmin?`<label>Zaxira summa (sinf narxi topilmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
       <label>&nbsp;<button class="btn gold" id="pm-gen" style="width:100%">Hisob-fakturalar yaratish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>
@@ -4594,12 +4603,13 @@ async function renderPayments(){
       // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const existing=new Set(snap.docs.map(d=>d.id));
-      let created=0, discounted=0; const skipped=[];
+      let created=0, discounted=0; const skipped=[], fallbackList=[];
       for(let i=0;i<students.length;i+=400){
         const batch=writeBatch(db); let wrote=false;
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
           const t=computeTuition(s, privOf(sid), ctx);
           if(t.skip){ skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }
+          if(t.fallback) fallbackList.push(`${s.name||sid} [${t.priceKey}]`);   // narx jadvalidа yo'q -> zaxira summа qo'llandi (tekshirilsin)
           const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[]);
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
@@ -4624,6 +4634,7 @@ async function renderPayments(){
       if(settled) parts.push(`${settled} o‘quvchida avans qo‘llandi.`);
       let html=esc(parts.join(' '));
       if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
+      if(fallbackList.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ ${fallbackList.length} o‘quvchiga zaxira summa qo‘llandi (sinf narxi jadvalда yo‘q):</b><div class="small">${fallbackList.slice(0,25).map(esc).join(' · ')}${fallbackList.length>25?` …yana ${fallbackList.length-25}`:''} — narxni «Narx jadvali»ga qo‘shib «↻ Qayta hisoblash» qiling.</div></div>`;
       if(conflicts.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ Aka-uka chegirmasi eslatmalari:</b><div class="small">${conflicts.slice(0,15).map(esc).join(' · ')}</div></div>`;
       $('#pm-genmsg').innerHTML = html;
       toast('Tayyor ✓'); load();
