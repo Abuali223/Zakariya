@@ -53,4 +53,5 @@
 \ir audit-9.sql
 \ir refund-rpc.sql
 \ir adjust-credit.sql
+\ir reception-access.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

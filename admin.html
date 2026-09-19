@@ -872,6 +872,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
   hr:['teachers','staff'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
+  reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], kassir:['payments','accounting','students'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
@@ -955,7 +956,7 @@ onAuthStateChanged(auth, async user=>{
   try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
   if(!role && tok && tok.claims && tok.claims.admin) role='director';
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
-  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr'];
+  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception'];
   if(!STAFF.includes(role)){
     await signOut(auth);
     // Xabar HAR DOIM ko'rsatiladi (yangi kirishда ham, saqlangan sessiya qayta yuklanganда ham).
