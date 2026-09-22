@@ -4587,7 +4587,7 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('O‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'invoices',b.dataset.del)); load(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-hist]').forEach(b=>b.addEventListener('click',()=>openPayHistory(b.dataset.hist, nameOf({studentId:b.dataset.hist}))));
     $('#pm-body').querySelectorAll('[data-receipt]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.receipt); if(!rr) return;
-      printReceipt({ kind:'income', who:nameOf(rr), amount:paidOf(rr), reason:'To‘lov', period:rr.month, method:(provLbl[rr.provider]||rr.provider||''), date:new Date().toISOString().slice(0,10) }); }));
+      openReceiptPicker(rr, nameOf(rr)); }));   // AYNAN bitta to'lov cheki (umumiy emas)
     $('#pm-body').querySelectorAll('[data-refund]').forEach(b=>b.addEventListener('click',()=>{
       const rr=rows.find(x=>x._id===b.dataset.refund); if(!rr) return;
       openRefund({ type:'invoice', invoice:rr, paid:paidOf(rr), name:nameOf(rr), month:rr.month }, load); }));
@@ -4991,6 +4991,34 @@ async function qrDataUrl(text){ try{ await loadQR(); const d=document.createElem
 let RECEIPT=null;
 async function loadReceiptCfg(){ if(RECEIPT) return RECEIPT; RECEIPT={width:80,socialUrl:'https://taplink.cc/iqror'};
   try{ const c=await getDoc(doc(db,'config','receipt')); if(c.exists()){ const d=c.data()||{}; if(Number(d.width)>0) RECEIPT.width=Number(d.width); if(d.socialUrl) RECEIPT.socialUrl=String(d.socialUrl); } }catch(e){} return RECEIPT; }
+// Chek: AYNAN BITTA to'lovni chop etadi (invoice UMUMIY summasi EMAS). Bir o'quvchiда bir necha
+//   to'lov bo'lsa (masalan 2 000 000 naqd + 830 000 Click) — har birini ALOHIDA chek qiladi.
+//   Payments yozuvlari (Click/Uzum/naqd/bank/terminal — hammasi 'payments' kolleksiyasida) bo'yicha.
+async function openReceiptPicker(rr, who){
+  who = who || (rr.studentName||rr.studentId||'');
+  const sid=String(rr.studentId||'');
+  const dOf=v=>{ if(!v) return new Date().toISOString().slice(0,10); try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
+  let pays=[];
+  try{ const s=await getDocs(query(collection(db,'payments'), where('studentId','==',sid))); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+  const real=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','unmatched'].indexOf(String(p.status||''))<0 && (Number(p.amount)||0)>0)
+    .sort((a,b)=>String(dOf(b.createdAt)).localeCompare(String(dOf(a.createdAt))));   // eng yangi birinchi
+  const prnt=(amount,method,date)=>printReceipt({ kind:'income', who, amount, reason:'To‘lov', period:rr.month, method, date });
+  if(!real.length){   // alohida to'lov yozuvi topilmadi -> invoice umumiy to'langan summasi (eski zaxira)
+    const cum = rr.status==='paid'?(Number(rr.amount)||0):(Number(rr.paidAmount)||0);
+    prnt(cum, PROV_LBL[rr.provider]||rr.provider||'', new Date().toISOString().slice(0,10)); return;
+  }
+  if(real.length===1){ const p=real[0]; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dOf(p.createdAt)); return; }
+  // Bir necha to'lov -> qaysi to'lov cheki kerakligini tanlaymiz (har biri alohida).
+  const trs=real.map((p,i)=>`<tr><td>${esc(dOf(p.createdAt))}</td><td>${esc(PROV_LBL[p.provider]||p.provider||'—')}</td>
+    <td style="text-align:right;font-weight:700">${fmtSom(p.amount)}</td>
+    <td class="td-actions"><button class="btn sm gold" data-rcpt="${i}">🧾 Chek</button></td></tr>`).join('');
+  $('#modal').innerHTML=`<div class="modal-h"><h3>🧾 Qaysi to‘lov cheki?</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted" style="margin-bottom:8px"><b>${esc(who)}</b> — har to‘lov <b>ALOHIDA</b> chek chiqadi (umumiy emas).</div>
+      <div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#modal').querySelectorAll('[data-rcpt]').forEach(b=>b.onclick=()=>{ const p=real[Number(b.dataset.rcpt)]; if(!p) return; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dOf(p.createdAt)); });
+}
 async function printReceipt(r){
   const cfg=await loadReceiptCfg(); const width=Number(r.width||cfg.width||80);
   const qr=await qrDataUrl(r.social||cfg.socialUrl||'https://taplink.cc/iqror');
@@ -5016,7 +5044,7 @@ async function printReceipt(r){
   </style></head><body>
     ${emblem}<div class="c b">IQROR ACADEMY</div><div class="c sm">${kind}</div>
     <div class="hr"></div><table>${rowsHtml}</table><div class="hr"></div>
-    <div class="big">${fmtSom(r.amount)} so‘m</div><div class="hr"></div>
+    <div class="big">${fmtSom(r.amount)}</div><div class="hr"></div>
     ${qr?`<img class="qr" src="${qr}" alt="QR">`:''}<div class="c sm">Ijtimoiy tarmoqlarimiz — QR ni skanerlang</div>
     <div class="c sm">${esc(new Date().toLocaleString('uz-UZ'))}</div>
   </body></html>`;
