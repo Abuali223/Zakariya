@@ -34,4 +34,29 @@ grant select on public.student_phones to anon, authenticated;
 revoke all on public.student_phones from public;
 grant select on public.student_phones to service_role;
 
+-- ---- O'QUVCHI KIRITISH + TAHRIRLASH (reception) ----
+-- students: reception yangi o'quvchi QO'SHA (INSERT) va TAHRIRLAY (UPDATE) oladi.
+--   O'CHIRISH (students_del) O'ZGARMAYDI — direktorда qoladi (reception o'chira olmaydi).
+drop policy if exists students_ins on public.students;
+create policy students_ins on public.students for insert with check (app.is_admin() or app.is_reception());
+drop policy if exists students_upd on public.students;
+create policy students_upd on public.students for update using (app.is_admin() or app.is_zavuch() or app.is_reception())
+  with check (app.is_admin() or app.is_zavuch() or app.is_reception());
+
+-- student_private (maxfiy: JSHSHIR, metrika/tug'ilganlik guvohnomasi, manzil, ota-ona…): reception
+--   O'QIY (hujjatlar bor-yo'qligini ko'rish + tahrirда qayta o'qish) va YOZA (kiritish/tahrir) oladi.
+--   O'CHIRISH (priv_del) O'ZGARMAYDI — direktorда.
+drop policy if exists priv_sel on public.student_private;
+create policy priv_sel on public.student_private for select
+  using (app.is_admin() or app.is_zavuch() or app.is_reception() or app.owns_child(id));
+drop policy if exists priv_ins on public.student_private;
+create policy priv_ins on public.student_private for insert with check (app.is_admin() or app.is_reception());
+drop policy if exists priv_upd on public.student_private;
+create policy priv_upd on public.student_private for update using (app.is_admin() or app.is_reception())
+  with check (app.is_admin() or app.is_reception());
+
+-- student_codes (ota-onaga biriktirish kodi): reception «Kod» ustunini ko'rsin.
+drop policy if exists sc_sel on public.student_codes;
+create policy sc_sel on public.student_codes for select using (app.is_admin() or app.is_zavuch() or app.is_reception());
+
 notify pgrst, 'reload schema';

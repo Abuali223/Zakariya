@@ -891,7 +891,9 @@ function canSeeSalary(){
 // O'qituvchi/xodim yozuvini boshqara oladimi (qo'shish/tahrir/o'chir) — faqat direktor/HR.
 function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }
 // O'quvchi yozuvini boshqara oladimi (qo'shish/tahrir/o'chir/import). Kassir — FAQAT ko'rish.
-function canManageStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch'; }
+function canManageStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch' || SESSION.role==='reception'; }
+// O'CHIRISH / bulk-o'chirish / Excel-import — reception BUNGA kirmaydi (u faqat KIRITISH+TAHRIR qiladi).
+function canDeleteStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch'; }
 // Xodim DAVOMAT yuritadigan sinflar: sinf rahbarligi (homeroomClasses) + eski kurator (assignedClasses)
 function supervisedClasses(){
   const set = new Set(SESSION.homeroomClasses||[]);
@@ -2197,7 +2199,8 @@ document.addEventListener('change', _fmemSave, true);
 function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM[id]; if(el&&v!=null) el.value=v; return v!=null?v:''; }
 
 async function renderStudents(){
-  const canMng=canManageStudents();   // kassir -> FAQAT ko'rish (qo'shish/tahrir/o'chir/import yo'q)
+  const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
+  const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
   const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar (direktor/moliya/kassir)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
@@ -2205,16 +2208,15 @@ async function renderStudents(){
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
-      ${canMng?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
+      ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
       <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
-      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">
-      <button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
-    ${canMng?`<div id="stu-bulk" class="card" style="display:none;padding:10px 16px;margin-bottom:12px;background:#fff7e8;border:1px solid #f0d9a8;align-items:center;gap:12px"><b><span id="stu-selc">0</span> ta tanlandi</b><button class="btn sm danger" id="stu-buldel">🗑 Tanlanganlarni o‘chirish</button><button class="btn sm ghost" id="stu-bulclr">Bekor</button></div>`:''}
+      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
+    ${canDel?`<div id="stu-bulk" class="card" style="display:none;padding:10px 16px;margin-bottom:12px;background:#fff7e8;border:1px solid #f0d9a8;align-items:center;gap:12px"><b><span id="stu-selc">0</span> ta tanlandi</b><button class="btn sm danger" id="stu-buldel">🗑 Tanlanganlarni o‘chirish</button><button class="btn sm ghost" id="stu-bulclr">Bekor</button></div>`:''}
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
-  const updateBulk=()=>{ if(!canMng) return; const cg=$('#cls-groups'); const n=cg?cg.querySelectorAll('.stu-sel:checked').length:0;
+  const updateBulk=()=>{ if(!canDel) return; const cg=$('#cls-groups'); const n=cg?cg.querySelectorAll('.stu-sel:checked').length:0;
     const bar=$('#stu-bulk'); if(bar) bar.style.display=n?'flex':'none'; const c=$('#stu-selc'); if(c) c.textContent=n; };
-  if(canMng){
-    $('#add').addEventListener('click',()=>openForm('students',null));
+  if(canMng){ const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm('students',null)); }   // qo'shish — reception ham
+  if(canDel){
     $('#stu-bulclr').addEventListener('click',()=>{ $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.checked=false); $('#cls-groups').querySelectorAll('.stu-selall').forEach(c=>c.checked=false); updateBulk(); });
     $('#stu-buldel').addEventListener('click',async()=>{
       const ids=[...$('#cls-groups').querySelectorAll('.stu-sel:checked')].map(c=>c.dataset.id);
@@ -2273,7 +2275,7 @@ async function renderStudents(){
       const {g,lang,grp,list}=groups[k];
       list.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
       const trs=list.map(r=>`<tr>
-        ${canMng?`<td class="c"><input type="checkbox" class="stu-sel" data-id="${esc(r._id)}"></td>`:''}
+        ${canDel?`<td class="c"><input type="checkbox" class="stu-sel" data-id="${esc(r._id)}"></td>`:''}
         <td data-label="ID">${esc(r.studentId||r._id)}</td>
         <td data-label="Ism">${esc(r.name||'')}</td>
         <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
@@ -2281,12 +2283,14 @@ async function renderStudents(){
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button><button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canMng?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+    }
+    if(canDel){
       $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
       $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.addEventListener('change',updateBulk));
       $('#cls-groups').querySelectorAll('.stu-selall').forEach(sa=>sa.addEventListener('change',()=>{ const tbl=sa.closest('table'); if(tbl) tbl.querySelectorAll('.stu-sel').forEach(c=>c.checked=sa.checked); updateBulk(); }));
