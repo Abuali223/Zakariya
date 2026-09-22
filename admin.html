@@ -3865,36 +3865,86 @@ async function renderMarketing(){
 async function openAssign(payment, students, reload){
   if(!payment) return;
   const list = (students&&students.length)?students:(cache.students||[]);
+  const total = Number(payment.amount)||0;
+  const sById = {}; list.forEach(s=>{ sById[String(s.studentId||s._id)]=s; });
+  const sub = s => `${s.studentId||s._id} · ${gradeName(Number(s.grade)||0)} ${s.classLetter||s.track||''}`;
+  const fmtInt=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   $('#modal').innerHTML = `<div class="modal-h"><h3>To‘lovni biriktirish</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <div class="small muted" style="margin-bottom:10px">To‘lovchi: <b>${esc(payment.payerName||'—')}</b> · ${esc(payment.payerPhone||'')} · ${esc(payment.payerClass||'')} · summa <b>${fmtSom(payment.amount)}</b></div>
+      <div class="small muted" style="margin-bottom:8px">To‘lovchi: <b>${esc(payment.payerName||'—')}</b> · ${esc(payment.payerPhone||'')} · ${esc(payment.payerClass||'')} · summa <b>${fmtSom(total)}</b></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button type="button" class="btn sm gold" id="as-mode-1">👤 Bitta o‘quvchiga</button>
+        <button type="button" class="btn sm ghost2" id="as-mode-2">👥 Bir nechaga bo‘lib</button>
+      </div>
+      <div id="as-picked"></div>
       <input id="as-search" type="text" placeholder="O‘quvchi ismi yoki ID…" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:8px">
-      <div id="as-list" style="max-height:320px;overflow:auto"></div>
+      <div id="as-list" style="max-height:280px;overflow:auto"></div>
     </div>
-    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button></div>`;
+    <div class="modal-f" id="as-foot" style="display:flex;align-items:center;gap:8px"><button type="button" class="btn ghost" id="m-cancel">Bekor</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  let assignBusy=false;
-  const assignTo=async(sid)=>{ if(assignBusy) return; if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
-    assignBusy=true;   // qayta kirishni bloklaymiz — tez ikki bosishda pul IKKI marta qo'llanmasin
-    const btn=$('#as-list').querySelector(`[data-sid="${sid}"] .btn`); if(btn) btn.textContent='...';
+  let mode=1, busy=false; const picked={};   // sid -> summa (bo'lib rejimi)
+
+  // ---- Bitta o'quvchiga (butun summani) ----
+  const assignOne=async(sid)=>{ if(busy) return; if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
+    busy=true;
     try{
-      // 1) AVVAL to'lovni biriktirilgan deb belgilaymiz — shunda ro'yxatdan chiqadi va pul IKKI
-      //    marta qo'llanmaydi. Qator allaqachon mavjud -> sof UPDATE (updateDoc); setDoc=UPSERT
-      //    INSERT huquqini talab qiladi (payments'da yo'q -> 42501).
+      // Qator allaqachon mavjud -> sof UPDATE (setDoc=UPSERT payments'da INSERT talab qiladi -> 42501).
       await updateDoc(doc(db,'payments',payment._id),{ matched:true, studentId:sid, status:'applied' });
-      // 2) So'ng pulni o'quvchi balansiga qo'llaymiz — IDEMPOTENT (payId=payment._id, ikki marta qo'llanmaydi).
-      //    Xato bo'lsa — belgilashni qaytaramiz (pul qo'llanmagan).
-      try{ await applyPaymentClient(sid, Number(payment.amount)||0, payment.provider||'click', String(payment._id)); }
+      try{ await applyPaymentClient(sid, total, payment.provider||'click', String(payment._id)); }
       catch(e){ try{ await updateDoc(doc(db,'payments',payment._id),{ matched:false, studentId:'', status:'unmatched' }); }catch(_){} throw e; }
       toast('To‘lov biriktirildi ✓'); closeModal(); if(reload) reload();
-    }catch(e){ if(btn) btn.textContent='Tanlash'; assignBusy=false; toast('Xatolik: '+(e.code||e.message),true); } };
+    }catch(e){ busy=false; toast('Xatolik: '+(e.code||e.message),true); } };
+
+  // ---- Bir nechaga bo'lib (split): har o'quvchiga qismini ----
+  const doSplit=async()=>{ if(busy) return;
+    const allocs=Object.keys(picked).filter(sid=>(Number(picked[sid])||0)>0).map(sid=>({sid, amount:Math.round(Number(picked[sid])||0)}));
+    if(!allocs.length) return; const sum=allocs.reduce((a,x)=>a+x.amount,0);
+    if(Math.abs(sum-total)>0.5){ toast('Yig‘indi to‘lov summasiga TENG bo‘lishi kerak',true); return; }
+    if(!confirm(`${fmtSom(total)} — ${allocs.length} o‘quvchiga bo‘lib biriktirilsinmi?\n\n${allocs.map(a=>`${(sById[a.sid]||{}).name||a.sid}: ${fmtSom(a.amount)}`).join('\n')}`)) return;
+    busy=true; const dob=$('#as-do'); if(dob){ dob.disabled=true; dob.textContent='Biriktirilmoqda…'; }
+    try{
+      const res=await rpc('split_payment', { p_pay_id:String(payment._id), p_provider:payment.provider||'click', p_allocs:allocs });
+      if(res && res.ok===false){ throw new Error(res.reason||res.error||'split-failed'); }
+      toast((res&&res.dup)?'Allaqachon bo‘lingan ✓':'To‘lov bo‘lib biriktirildi ✓'); closeModal(); if(reload) reload();
+    }catch(e){ busy=false; if(dob){ dob.disabled=false; dob.textContent='Bo‘lib biriktirish'; } toast('Xatolik: '+(e.code||e.message),true); } };
+
+  const updateFoot=()=>{
+    if(mode!==2){ $('#as-foot').innerHTML=`<button type="button" class="btn ghost" id="m-cancel">Bekor</button>`; $('#m-cancel').onclick=closeModal; return; }
+    const sids=Object.keys(picked), sum=sids.reduce((a,sid)=>a+(Number(picked[sid])||0),0), rem=total-sum;
+    const ok = sids.length>=1 && Math.abs(sum-total)<0.5 && sids.every(sid=>(Number(picked[sid])||0)>0);
+    $('#as-foot').innerHTML=`<button type="button" class="btn ghost" id="m-cancel">Bekor</button>
+      <span class="small" style="flex:1;text-align:center;font-weight:700;color:${(Math.abs(rem)<0.5&&sids.length)?'#1F9982':'#B42318'}">${sids.length?`${fmtInt(sum)} / ${fmtInt(total)} · ${rem>0?`qoldi ${fmtInt(rem)}`:rem<0?`ortiqcha ${fmtInt(-rem)}`:'to‘liq ✓'}`:'o‘quvchi qo‘shing'}</span>
+      <button type="button" class="btn gold" id="as-do" ${ok?'':'disabled style="opacity:.5"'}>Bo‘lib biriktirish</button>`;
+    $('#m-cancel').onclick=closeModal; const dob=$('#as-do'); if(dob&&ok) dob.onclick=doSplit;
+  };
+  const drawPicked=()=>{
+    if(mode!==2){ $('#as-picked').innerHTML=''; return; }
+    const sids=Object.keys(picked);
+    $('#as-picked').innerHTML = sids.length ? `<div style="border:1px solid var(--gold);border-radius:10px;padding:8px 10px;margin-bottom:8px;background:#FFFBF2">
+      ${sids.map(sid=>{ const s=sById[sid]||{}; return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+        <span style="flex:1"><b>${esc(s.name||sid)}</b> <span class="small muted">${esc(String(sid))}</span></span>
+        <input class="as-amt" data-sid="${esc(sid)}" inputmode="numeric" value="${fmtInt(picked[sid])}" style="width:130px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
+        <button class="btn sm ghost2 as-rm" data-sid="${esc(sid)}" title="Olib tashlash">✕</button></div>`; }).join('')}
+      <div style="text-align:right;margin-top:6px"><button type="button" class="btn sm ghost2" id="as-equal">➗ Teng bo‘l</button></div></div>`
+      : `<div class="small muted" style="margin-bottom:8px">Quyidan aka-ukalarni tanlab qo‘shing, keyin har biriga summani kiriting.</div>`;
+    $('#as-picked').querySelectorAll('.as-amt').forEach(inp=>{ inp.addEventListener('input',()=>{ const d=inp.value.replace(/\D/g,''); inp.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); picked[inp.dataset.sid]=Number(d)||0; updateFoot(); }); });
+    $('#as-picked').querySelectorAll('.as-rm').forEach(b=>b.onclick=()=>{ delete picked[b.dataset.sid]; drawPicked(); updateFoot(); });
+    const eq=$('#as-equal'); if(eq) eq.onclick=()=>{ const ks=Object.keys(picked); if(!ks.length) return; const base=Math.floor(total/ks.length); ks.forEach(sid=>picked[sid]=base); picked[ks[ks.length-1]]=total-base*(ks.length-1); drawPicked(); updateFoot(); };
+  };
   const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
     const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,50);
-    $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id, g=Number(s.grade)||0; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
-      <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sid)} · ${gradeName(g)} ${esc(s.classLetter||s.track||'')}</span></span>
-      <span class="btn sm gold">Tanlash</span></div>`; }).join('')||'<div class="empty">Topilmadi.</div>';
-    $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>assignTo(el.dataset.sid)); };
-  $('#as-search').addEventListener('input',e=>draw(e.target.value)); draw('');
+    $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
+      <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sub(s))}</span></span>
+      <span class="btn sm gold">${mode===2?'+ Qo‘shish':'Tanlash'}</span></div>`; }).join('')||'<div class="empty">Topilmadi.</div>';
+    $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>{ const sid=el.dataset.sid;
+      if(mode===2){ if(!(sid in picked)) picked[sid]=0; drawPicked(); updateFoot(); }
+      else assignOne(sid); }); };
+  const setMode=(m)=>{ mode=m;
+    $('#as-mode-1').className='btn sm '+(m===1?'gold':'ghost2'); $('#as-mode-2').className='btn sm '+(m===2?'gold':'ghost2');
+    drawPicked(); updateFoot(); draw($('#as-search').value); };
+  $('#as-mode-1').onclick=()=>setMode(1); $('#as-mode-2').onclick=()=>setMode(2);
+  $('#as-search').addEventListener('input',e=>draw(e.target.value));
+  setMode(1); draw('');
 }
 // Summani o'quvchi balansiga qo'llaydi (waterfall) — to'lov serveri bilan bir xil mantiq.
 // payId berilса — IDEMPOTENT: applied_payments posboni bir to'lovni ikki marta qo'llatmaydi.
@@ -3935,7 +3985,7 @@ async function openPayHistory(sid, name){
   const ledgRows=ledg.map(l=>{ const d=Number(l.delta)||0; return `<tr><td>${esc(dstr(l.at))}</td><td>${esc(reasonLbl[l.reason]||l.reason||'')}${l.note?` · ${esc(l.note)}`:''}</td><td style="text-align:right;color:${d>=0?'#1F9982':'#B42318'}">${d>=0?'+':''}${fmtSom(d)}</td><td style="text-align:right">${fmtSom(l.balanceAfter||0)}</td></tr>`; }).join('')||'<tr><td colspan="4" class="muted">Avans harakati yozuvi yo‘q (jurnal shu tuzatishdan keyin to‘ldiriladi)</td></tr>';
   const body=$('#ph-body'); if(!body) return;
   // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
-  const paysSum=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created'].indexOf(String(p.status||''))<0).reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const paysSum=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','split'].indexOf(String(p.status||''))<0).reduce((s,p)=>s+(Number(p.amount)||0),0);
   const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
   const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.</div>` : '';
   body.innerHTML=`
@@ -4001,7 +4051,7 @@ async function openFinanceAudit(){
     if(i.studentName && !nameMap[sid]) nameMap[sid]=i.studentName; });
   creds.forEach(c=>{ const sid=String(c.studentId||c._id||''); if(!sid) return; C[sid]=(C[sid]||0)+(Number(c.credit)||0); });
   let unmatchedSum=0, unmatchedN=0;
-  pays.forEach(p=>{ const st=String(p.status||''); if(['canceled','reversed','refunded','failed','pending','prepared','created'].indexOf(st)>=0) return;   // 'prepared'/'created' = Click/Uzum TASDIQLANMAGAN oraliq holat -> real to'lov emas
+  pays.forEach(p=>{ const st=String(p.status||''); if(['canceled','reversed','refunded','failed','pending','prepared','created','split'].indexOf(st)>=0) return;   // 'prepared'/'created' = Click/Uzum TASDIQLANMAGAN oraliq holat -> real to'lov emas
     const amt=Number(p.amount)||0; if(!amt) return; const sid=String(p.studentId||'');
     if(!sid){ unmatchedSum+=amt; unmatchedN++; return; }
     P[sid]=(P[sid]||0)+amt; if(p.payerName && !nameMap[sid]) nameMap[sid]=p.payerName; });
@@ -5000,7 +5050,7 @@ async function openReceiptPicker(rr, who){
   const dOf=v=>{ if(!v) return new Date().toISOString().slice(0,10); try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
   let pays=[];
   try{ const s=await getDocs(query(collection(db,'payments'), where('studentId','==',sid))); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
-  const real=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','unmatched'].indexOf(String(p.status||''))<0 && (Number(p.amount)||0)>0)
+  const real=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','unmatched','split'].indexOf(String(p.status||''))<0 && (Number(p.amount)||0)>0)
     .sort((a,b)=>String(dOf(b.createdAt)).localeCompare(String(dOf(a.createdAt))));   // eng yangi birinchi
   const prnt=(amount,method,date)=>printReceipt({ kind:'income', who, amount, reason:'To‘lov', period:rr.month, method, date });
   if(!real.length){   // alohida to'lov yozuvi topilmadi -> invoice umumiy to'langan summasi (eski zaxira)
