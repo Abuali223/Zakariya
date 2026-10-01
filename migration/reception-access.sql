@@ -59,4 +59,25 @@ create policy priv_upd on public.student_private for update using (app.is_admin(
 drop policy if exists sc_sel on public.student_codes;
 create policy sc_sel on public.student_codes for select using (app.is_admin() or app.is_zavuch() or app.is_reception());
 
+-- ---- UNDIRUV (qarzdorlik + eslatma) ----
+-- invoices: reception o'quvchi QARZDORLIGINI ko'rsin (O'quvchilar ro'yxatidagi «To'langan/Qarz»
+--   ustuni + ma'lumotnoma). FAQAT O'QISH — yozish (ins/upd/del) O'ZGARMAYDI (direktor/moliya).
+--   Mavjud rollarni saqlaymiz (admin/zavuch/finance/marketing/cashier/owns_child) + reception.
+drop policy if exists inv_sel on public.invoices;
+create policy inv_sel on public.invoices for select
+  using (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_marketing() or app.is_cashier()
+         or app.is_reception() or app.owns_child("studentId"));
+
+-- pay_notes (📞 undiruv eslatmasi): reception qarzdor bilan qo'ng'iroqda eslatma o'qiydi va yozadi.
+drop policy if exists pn_sel on public.pay_notes;
+create policy pn_sel on public.pay_notes for select
+  using (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
+drop policy if exists pn_ins on public.pay_notes;
+create policy pn_ins on public.pay_notes for insert
+  with check (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
+drop policy if exists pn_upd on public.pay_notes;
+create policy pn_upd on public.pay_notes for update
+  using (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception())
+  with check (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
+
 notify pgrst, 'reload schema';

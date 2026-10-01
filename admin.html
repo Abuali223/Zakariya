@@ -2201,7 +2201,7 @@ function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM
 async function renderStudents(){
   const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
   const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
-  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar (direktor/moliya/kassir)
+  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer' || SESSION.role==='reception';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar + qabulxona (undiruv qo'ng'irog'i)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
