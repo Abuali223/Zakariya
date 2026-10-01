@@ -2206,6 +2206,8 @@ async function renderStudents(){
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
+      <input type="month" id="stu-fmonth" class="search-inp" style="max-width:150px" title="Qarzdorlik oyi — eski oylarni ham tanlash mumkin" value="${curMonth()}">
+      <select id="stu-fdebt" class="search-inp" style="max-width:160px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Faqat qarzdorlar</option><option value="paid">Faqat to‘langan</option></select>
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
@@ -2241,7 +2243,7 @@ async function renderStudents(){
   { const tt=$('#stu-total'); if(tt) tt.textContent = `Jami: ${rows.length} ta o‘quvchi`; }
   // Qo'shimcha ma'lumotlar (maxfiy maydonlar/telefon/kod + joriy oy to'lov holati) endi sahifa
   //   chizilgach FON rejimida yuklanadi (quyida) — sekin/qotgan so'rov «Yuklanmoqda…»da muzlatmasin.
-  const _payMonth=curMonth(); const payMap={};
+  let _payMonth=($('#stu-fmonth')&&$('#stu-fmonth').value)||curMonth(); const payMap={};
   const payStatusOf=(sid)=>{ const inv=payMap[String(sid)]; if(!inv||inv.status==='canceled'||inv.status==='reversed') return null;
     const amt=Number(inv.amount)||0, paid=inv.status==='paid'?amt:(Number(inv.paidAmount)||0), debt=Math.max(0,amt-paid);
     if(inv.status==='paid'||debt<=0.5) return {k:'paid'};
@@ -2268,7 +2270,14 @@ async function renderStudents(){
         return [r.parentPhone,r.parentPhone2].some(v=>String(v==null?'':v).toLowerCase().includes(q));
       });
     }
-    if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?'Filtr/qidiruv bo‘yicha o‘quvchi topilmadi.':'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
+    // To'lov holati filtri (tanlangan oy bo'yicha): qarzdorlar / to'langanlar. «Faqat qarzdorlar» +
+    //   eski oyni tanlab -> o'sha oyning hali to'lanmagan qarzdorlari ko'rinadi (undiruv uchun).
+    const fdebt=($('#stu-fdebt')&&$('#stu-fdebt').value)||'';
+    if(fdebt){ filtered = filtered.filter(r=>{ const st=payStatusOf(r.studentId||r._id);
+      if(fdebt==='debt') return !!st && (st.k==='debt'||st.k==='partial');
+      if(fdebt==='paid') return !!st && st.k==='paid';
+      return true; }); }
+    if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?(fdebt==='debt'?'Bu oy (tanlangan) bo‘yicha qarzdor topilmadi.':'Filtr/qidiruv bo‘yicha o‘quvchi topilmadi.'):'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
     const groups={};
     filtered.forEach(r=>{ const g=Number(r.grade)||0, lang=r.lang||'uz', grp=r.classLetter||r.track||'—'; const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(r); });
     $('#cls-groups').innerHTML = Object.keys(groups).sort().map(k=>{
@@ -2285,7 +2294,7 @@ async function renderStudents(){
         <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
@@ -2299,32 +2308,40 @@ async function renderStudents(){
     $('#cls-groups').querySelectorAll('[data-note]').forEach(b=>b.addEventListener('click',()=>openPayNote(b.dataset.note, b.getAttribute('data-nm'))));
     updateBulk();
   };
-  fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang');
+  fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang'); fmemApply('stu-fmonth'); fmemApply('stu-fdebt');
   draw();   // ⚡ SAHIFA DARHOL ko'rinadi (bazaviy ro'yxat) — qotib qolmaydi.
   const si=$('#stu-search'); if(si) si.addEventListener('input',draw);
   const fgEl=$('#stu-fgrade'); if(fgEl) fgEl.addEventListener('change',draw);
   const flEl=$('#stu-flang'); if(flEl) flEl.addEventListener('change',draw);
-  // Qo'shimcha ma'lumot (maxfiy maydonlar, telefon, biriktirish kodi, to'lov holati) — FON rejimida,
-  //   PARALLEL + har biri TIMEOUT (9s) bilan. Bitta sekin/qotgan so'rov butun sahifani muzlatmaydi;
-  //   kelgach ro'yxat qayta chiziladi (telefon/kod/«To'langan» ustuni to'ladi).
+  const ddEl=$('#stu-fdebt'); if(ddEl) ddEl.addEventListener('change',draw);
+  const TO9=p=>Promise.race([Promise.resolve(p).catch(()=>null), new Promise(r=>setTimeout(()=>r(null),9000))]);
+  // (1) Maxfiy maydon/telefon/kod — oydan MUSTAQIL, bir marta (FON rejimida).
   (async()=>{
-    const TO=p=>Promise.race([Promise.resolve(p).catch(()=>null), new Promise(r=>setTimeout(()=>r(null),9000))]);
-    let ps,fs,cs,isnap;
-    try{ [ps,fs,cs,isnap] = await Promise.all([
-      TO(getDocs(collection(db,'student_private'))),
-      canMng?Promise.resolve(null):TO(getDocs(collection(db,'student_phones'))),
-      TO(getDocs(collection(db,'student_codes'))),
-      TO(getDocs(query(collection(db,'invoices'), where('month','==',_payMonth)))),
+    let ps,fs,cs;
+    try{ [ps,fs,cs] = await Promise.all([
+      TO9(getDocs(collection(db,'student_private'))),
+      canMng?Promise.resolve(null):TO9(getDocs(collection(db,'student_phones'))),
+      TO9(getDocs(collection(db,'student_codes'))),
     ]); }catch(e){ return; }
-    if(_g!==VIEW_GEN) return;   // boshqa tabga o'tilган — chizmaymiz
+    if(_g!==VIEW_GEN) return;
     if(ps){ const pmap={}; ps.docs.forEach(d=>{ pmap[d.id]=d.data(); });
       rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }
     if(fs){ const fmap={}; fs.docs.forEach(d=>{ fmap[d.id]=d.data()||{}; });
       rows.forEach(r=>{ const pd=fmap[r._id]; if(pd){ if(r.parentPhone==null) r.parentPhone=pd.parentPhone; if(r.parentPhone2==null) r.parentPhone2=pd.parentPhone2; } }); }
     if(cs){ const cmap={}; cs.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }
-    if(isnap){ isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }
-    draw();   // boyitilган ma'lumot bilan qayta chizamiz
+    draw();
   })();
+  // (2) To'lov holati — TANLANGAN oy bo'yicha. Oy o'zgarsa qayta yuklanadi (eski oy qarzdorlarini ko'rish).
+  const loadPay=async(month)=>{
+    _payMonth=month||curMonth();
+    const isnap=await TO9(getDocs(query(collection(db,'invoices'), where('month','==',_payMonth))));
+    if(_g!==VIEW_GEN) return;
+    Object.keys(payMap).forEach(k=>delete payMap[k]);   // eski oyni tozalab, yangisini qo'yamiz (atomik — faqat shu yerda)
+    if(isnap){ isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }
+    draw();
+  };
+  loadPay(($('#stu-fmonth')&&$('#stu-fmonth').value)||curMonth());
+  { const mEl=$('#stu-fmonth'); if(mEl) mEl.addEventListener('change',()=>loadPay(mEl.value)); }
 }
 
 /* ---- Bitta o'quvchining to'liq ma'lumotnomasi (transkript + buxgalteriya) — chop etish/PDF ---- */
