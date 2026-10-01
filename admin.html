@@ -4859,7 +4859,7 @@ function startOutboxSync(){
 // Navbat modali: navbatдаgi + «failed» (3 marta urinib bo'lmagan) to'lovlarни ko'rish/qayta urinish/o'chirish.
 function obRetryFailed(){ const a=obLoad(); a.forEach(x=>{ if(x.status==='failed'){ delete x.status; x.attempts=0; delete x.lastError; } }); obSave(a); obBadge(); flushOutbox({wait:true}); }
 function openOutboxModal(){
-  const meth={cash:'Naqd',bank:'Bank',terminal:'Terminal'};
+  const meth={cash:'Naqd',bank:'Bank',terminal:'Terminal',uzum:'Uzum (qo‘lda)'};
   const items=obLoad();
   const rows=items.map(x=>{ const bad=x.status==='failed';
     return `<tr><td>${esc(x.nm||x.sid)}<div class="small muted">${esc(x.sid)}</div></td><td style="text-align:right">${fmtSom(x.amount)}</td><td>${esc(meth[x.method]||x.method||'')}</td>
@@ -4890,8 +4890,9 @@ async function pmCoveredMonths(sid, amount){
 async function openRecordPayment(students, reload, pre){
   const list = (students&&students.length)?students:(cache.students||[]);
   pre = pre||{};   // {sid, name, amount} — qatordan chaqirilganda o'quvchi va qarz oldindan to'ldiriladi.
-  // Click/Uzum AVTOMATIK keladi (server webhook) — bu yerда FAQAT qo'lда usullar (ikki marta hisoblanmasin).
-  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal']];
+  // Click AVTOMATIK keladi (server webhook) — kiritilmaydi (ikki marta hisoblanmasin). Uzum VAQTINCHA
+  //   qo'lda kiritiladi (integratsiya/kelishuv tayyor bo'lguncha). Webhook ulangach bu optionni olib tashlang.
+  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal'],['uzum','Uzum (qo‘lda)']];
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
   const preSid = pre.sid ? String(pre.sid) : '';
@@ -4910,7 +4911,7 @@ async function openRecordPayment(students, reload, pre){
       </div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaysi oy(lar) uchun <span class="muted" style="font-weight:500">— chekda ko‘rinadi (kelgusi oylar uchun ham)</span><input id="rp-period" type="text" placeholder="masalan: Sentyabr 2026  yoki  Sen–Noy 2026" value="${esc(pre.period||'')}" style="${fld}"></label>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="rp-note" type="text" placeholder="ixtiyoriy (masalan bank kvitansiya №)" style="${fld}"></label>
-      <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi. <b>Click/Uzum</b> avtomatik keladi — bu yerга kiritmang.</div>
+      <div class="small muted" style="margin-top:8px">To‘lov o‘quvchining eng eski to‘lanmagan oyiga qo‘llanadi; ortiqchasi avansga o‘tadi. <b>Click</b> avtomatik keladi — kiritmang. <b>Uzum</b> vaqtincha qo‘lda kiritiladi (integratsiya tayyor bo‘lguncha — keyin avtomatlashadi).</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="rp-save">Qabul qilish</button></div>`;
   // pre.onDone — bu oyna yopilganda chaqiriladi (masalan o'quvchi ma'lumotnomasini qayta ochish).
