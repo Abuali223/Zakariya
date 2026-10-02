@@ -3088,15 +3088,21 @@ async function renderCheckins(){
 }
 
 /* ---- Xodimlar davomati (Hikvision yuz terminali -> staff_checkins) ---- */
+// Ish haftasi: Dushanba–Juma (JS getDay: 1..5). Yakshanba(0)+Shanba(6) — dam.
+const SA_WORKDAYS=[1,2,3,4,5];
 async function renderStaffAttendance(){
+  const canEdit = SESSION.isAdmin || SESSION.role==='hr';
   $('#view').innerHTML = `<div class="page-head"><h2>Xodimlar davomati</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Hikvision yuz terminalidan (keldi / ketdi / tanaffus) avtomatik tushadi. Har xodimning <b>«Kamera ID»</b> maydoni terminaldagi shaxs ID bilan bir xil bo‘lishi kerak. Ushlab qolish (kechikish/kelmaslik) — keyingi bosqich.</p>
-    <div class="card" style="padding:16px 20px;margin-bottom:16px"><div class="att-controls">
-      <label>Sana<input type="date" id="sa-date" value="${todayStr()}"></label>
+    <p class="small muted" style="margin:-8px 0 14px">Hikvision yuz terminalidan (keldi / ketdi / tanaffus) avtomatik tushadi. Har xodimning <b>«Kamera ID»</b> maydoni terminaldagi shaxs ID bilan bir xil bo‘lishi kerak. Ish haftasi: <b>Dush–Juma</b>. «Ruhsat/kasallik» kamera orqali bilinmaydi — qo‘lda kiritiladi.</p>
+    <div class="card" style="padding:16px 20px;margin-bottom:16px"><div class="att-controls" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <label>Ko‘rinish<select id="sa-mode"><option value="day">Kunlik</option><option value="month">Oylik hisobot</option></select></label>
+      <label id="sa-day-wrap">Sana<input type="date" id="sa-date" value="${todayStr()}"></label>
+      <label id="sa-mon-wrap" style="display:none">Oy<input type="month" id="sa-month" value="${curMonth()}"></label>
+      ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn gold" id="sa-leave-add" style="width:100%">+ Ruhsat / Kasallik</button></label>`:''}
     </div></div>
     <div id="sa-body"><div class="loading">Yuklanmoqda…</div></div>`;
   const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); if(m) return m[1]; const d=new Date(iso); return isNaN(d)?'—':String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
-  const fmtDur=min=>{ if(min==null) return '<span class="muted">—</span>'; const h=Math.floor(min/60), m=min%60; return (h?h+' soat ':'')+(m||!h?m+' daq':''); };
+  const fmtDur=min=>{ if(min==null) return '<span class="muted">—</span>'; min=Math.round(min); const h=Math.floor(min/60), m=min%60; return (h?h+' soat ':'')+(m||!h?m+' daq':''); };
   const agg=(list)=>{
     const ins=list.filter(x=>x.status==='in'), outs=list.filter(x=>x.status==='out');
     const kelgan=ins.length?ins[0].ts:'', ketgan=outs.length?outs[outs.length-1].ts:'';
@@ -3105,7 +3111,12 @@ async function renderStaffAttendance(){
     let work=null; if(kelgan&&ketgan){ work=Math.max(0, Date.parse(ketgan)-Date.parse(kelgan)-brk); }
     return { kelgan, ketgan, brkMin:brk?Math.round(brk/60000):0, workMin:work==null?null:Math.round(work/60000) };
   };
-  const load=async()=>{
+  const buildRoster=(staff,teachers)=>{ const r=[];
+    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim' }); });
+    (teachers||[]).forEach(t=>{ if(t.cameraId) r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi' }); });
+    r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
+  // ------- KUNLIK -------
+  const loadDay=async()=>{
     const day=$('#sa-date').value; if(!day) return; const _g=VIEW_GEN;
     $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let staff=[], teachers=[], rows=[];
@@ -3113,12 +3124,9 @@ async function renderStaffAttendance(){
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','==',day))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
     if(_g!==VIEW_GEN) return;
-    const roster=[];
-    staff.forEach(s=>{ if(s.cameraId) roster.push({ cam:String(s.cameraId), name:s.name||'', pos:s.position||'Xodim' }); });
-    teachers.forEach(t=>{ if(t.cameraId) roster.push({ cam:String(t.cameraId), name:t.name||'', pos:'O‘qituvchi' }); });
+    const roster=buildRoster(staff,teachers);
     const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
     Object.values(byPerson).forEach(l=>l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))));
-    roster.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
     const seen=new Set(), bodyRows=[];
     roster.forEach(r=>{ seen.add(r.cam); const a=agg(byPerson[r.cam]||[]); const came=!!a.kelgan;
       bodyRows.push(`<tr>
@@ -3141,7 +3149,108 @@ async function renderStaffAttendance(){
       ${(!roster.length && !unmatched.length)?`<div class="empty" style="padding:20px">Bu kunda hodisa yo‘q. Terminal ulanganini va xodimlarning «Kamera ID»si to‘g‘riligini tekshiring.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Kelgan</th><th>Ketgan</th><th>Tanaffus</th><th>Ish vaqti</th><th>Holat</th></tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`}</div>`;
   };
-  $('#sa-date').addEventListener('change',load); load();
+  // ------- OYLIK HISOBOT -------
+  const expandDays=(a,b)=>{ const out=[]; let d=new Date(a+'T00:00:00'); const end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)) return out; let g=0; while(d<=end && g<400){ out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`); d.setDate(d.getDate()+1); g++; } return out; };
+  const loadMonth=async()=>{
+    const mon=$('#sa-month').value; if(!mon) return; const _g=VIEW_GEN;
+    $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    const [y,mo]=mon.split('-').map(Number); const mStart=mon+'-01', mEnd=mon+'-31', today=todayStr();
+    let staff=[], teachers=[], rows=[], leaves=[];
+    try{ [staff, teachers] = await Promise.all([ loadCol('staff').catch(()=>[]), loadCol('teachers').catch(()=>[]) ]); }catch(e){}
+    try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','>=',mStart), where('day','<=',mEnd))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
+    try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',mEnd), where('endDay','>=',mStart))); leaves=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+    if(_g!==VIEW_GEN) return;
+    const roster=buildRoster(staff,teachers);
+    // Ish kunlari (Dush–Juma), faqat BUGUNGACHA (bugun hali tugamagani uchun hisobga olinmaydi)
+    const last=new Date(y,mo,0).getDate(); const workSet=new Set();
+    for(let d=1; d<=last; d++){ const ds=`${mon}-${String(d).padStart(2,'0')}`; if(ds>=today) break; if(SA_WORKDAYS.includes(new Date(y,mo-1,d).getDay())) workSet.add(ds); }
+    const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
+    // ruhsat/kasallik kunlarini refType:refId bo'yicha yig'amiz
+    const lvByRef={}; leaves.forEach(lv=>{ const key=(lv.refType||'')+':'+(lv.refId||''); const t=(lv.type==='kasallik')?'kasallik':'ruhsat'; const o=lvByRef[key]=lvByRef[key]||{ruhsat:new Set(),kasallik:new Set()}; expandDays(lv.startDay,lv.endDay).forEach(d=>{ if(d>=mStart&&d<=mEnd) o[t].add(d); }); });
+    const bodyRows = roster.map(r=>{
+      const list=byPerson[r.cam]||[]; const byDay={}; list.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
+      let workMin=0, brkMin=0, arr=[]; const presentWork=new Set();
+      Object.keys(byDay).forEach(day=>{ const a=agg(byDay[day].slice().sort((x,z)=>String(x.ts||'').localeCompare(String(z.ts||'')))); if(a.kelgan){ if(a.workMin!=null) workMin+=a.workMin; brkMin+=a.brkMin; const m=String(a.kelgan).match(/T(\d{2}):(\d{2})/); if(m) arr.push((+m[1])*60+(+m[2])); if(workSet.has(day)) presentWork.add(day); } });
+      const present=Object.keys(byDay).filter(d=>byDay[d].some(x=>x.status==='in')).length;
+      const lv=lvByRef[r.refType+':'+r.refId]||{ruhsat:new Set(),kasallik:new Set()};
+      const ruhsat=[...lv.ruhsat].filter(d=>workSet.has(d)).length;
+      const kasallik=[...lv.kasallik].filter(d=>workSet.has(d)).length;
+      const excused=new Set([...lv.ruhsat,...lv.kasallik]);
+      let absent=0; workSet.forEach(d=>{ if(!presentWork.has(d) && !excused.has(d)) absent++; });
+      const avg = arr.length ? (()=>{ const v=Math.round(arr.reduce((s,n)=>s+n,0)/arr.length); return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); })() : null;
+      return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg };
+    });
+    const bodyHtml = bodyRows.map(o=>`<tr>
+        <td data-label="Xodim">${esc(o.r.name||o.r.cam)}<div class="small muted">${esc(o.r.pos)} · ID ${esc(o.r.cam)}</div></td>
+        <td data-label="Ishlagan kun" style="font-variant-numeric:tabular-nums">${o.present||'<span class="muted">0</span>'}</td>
+        <td data-label="Ish vaqti">${o.workMin?fmtDur(o.workMin):'<span class="muted">—</span>'}</td>
+        <td data-label="Tanaffus">${o.brkMin?fmtDur(o.brkMin):'<span class="muted">—</span>'}</td>
+        <td data-label="Ruhsat" style="font-variant-numeric:tabular-nums">${o.ruhsat?`<span style="color:#B45309">${o.ruhsat}</span>`:'<span class="muted">—</span>'}</td>
+        <td data-label="Kasallik" style="font-variant-numeric:tabular-nums">${o.kasallik?`<span style="color:#7C3AED">${o.kasallik}</span>`:'<span class="muted">—</span>'}</td>
+        <td data-label="Ruhsatsiz" style="font-variant-numeric:tabular-nums">${o.absent?`<span class="chip" style="background:#FDECEC;color:#B42318">${o.absent}</span>`:'<span class="muted">0</span>'}</td>
+        <td data-label="O‘rt. kelish" style="font-variant-numeric:tabular-nums">${o.avg||'<span class="muted">—</span>'}</td></tr>`).join('');
+    // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
+    const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
+    const lvRows=lvSorted.map(l=>`<tr>
+        <td data-label="Xodim">${esc(l.name||l.refId||'—')}</td>
+        <td data-label="Tur">${l.type==='kasallik'?'<span class="chip" style="background:#F3E8FF;color:#7C3AED">Kasallik</span>':'<span class="chip" style="background:#FEF3E2;color:#B45309">Ruhsat</span>'}</td>
+        <td data-label="Dan">${esc(l.startDay||'')}</td>
+        <td data-label="Gacha">${esc(l.endDay||'')}</td>
+        <td data-label="Sabab">${esc(l.reason||'')}</td>
+        ${canEdit?`<td><button class="btn sm danger" data-lvdel="${esc(l._id)}">O‘chir</button></td>`:''}</tr>`).join('');
+    $('#sa-body').innerHTML=`<div class="card">
+      <div class="cls-card-head"><h3>${esc(mon)}</h3><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span></div>
+      ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
+      `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
+      <div class="small muted" style="padding:10px 16px">«Ruhsatsiz» = ish kuni (Dush–Juma) bo‘lib, kelmagan va ruhsat/kasallik kiritilmagan kunlar. «Ruhsat/Kasallik» — qo‘lda kiritilgan kunlar.</div>`}
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="cls-card-head"><h3>Oydagi ruhsat / kasalliklar</h3><span class="cls-count">${lvSorted.length} ta</span></div>
+      ${lvSorted.length?`<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Tur</th><th>Dan</th><th>Gacha</th><th>Sabab</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${lvRows}</tbody></table></div>`:`<div class="empty" style="padding:16px">Bu oyda ruhsat/kasallik kiritilmagan.${canEdit?' «+ Ruhsat / Kasallik» tugmasi bilan qo‘shing.':''}</div>`}
+    </div>`;
+    if(canEdit) $('#sa-body').querySelectorAll('[data-lvdel]').forEach(b=>b.onclick=async()=>{ if(!confirm('Ushbu yozuv o‘chirilsinmi?')) return; try{ await deleteDoc(doc(db,'staff_leaves',b.dataset.lvdel)); toast('O‘chirildi ✓'); loadMonth(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+  };
+  // ------- rejim almashtirish -------
+  const route=()=>{ const m=$('#sa-mode').value; $('#sa-day-wrap').style.display=(m==='day')?'':'none'; $('#sa-mon-wrap').style.display=(m==='month')?'':'none'; if(m==='month') loadMonth(); else loadDay(); };
+  $('#sa-mode').addEventListener('change',route);
+  $('#sa-date').addEventListener('change',loadDay);
+  $('#sa-month').addEventListener('change',loadMonth);
+  if(canEdit && $('#sa-leave-add')) $('#sa-leave-add').onclick=async()=>{
+    const [staff,teachers]=await Promise.all([loadCol('staff').catch(()=>[]),loadCol('teachers').catch(()=>[])]);
+    openStaffLeave(buildRoster(staff,teachers), ()=>{ if($('#sa-mode').value==='month') loadMonth(); });
+  };
+  route();
+}
+// Ruhsat / kasallik qo'shish modali (direktor/HR)
+async function openStaffLeave(roster, onSaved){
+  if(!roster || !roster.length){ toast('Avval xodimlarga «Kamera ID» kiriting',true); return; }
+  const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
+  const opts=roster.map(r=>`<option value="${esc(r.refType+':'+r.refId)}">${esc(r.name||r.cam)} · ${esc(r.pos)}</option>`).join('');
+  $('#modal').innerHTML=`<div class="modal-h"><h3>Ruhsat / Kasallik qo‘shish</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Xodim<select id="lv-who" style="${FLD}">${opts}</select></label>
+      <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Turi<select id="lv-type" style="${FLD}"><option value="ruhsat">Ruhsat (o‘z arizasi bilan)</option><option value="kasallik">Kasallik (bemorlik)</option></select></label>
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <label class="small" style="flex:1;min-width:130px;display:flex;flex-direction:column;gap:4px">Dan (sana)<input type="date" id="lv-from" value="${todayStr()}" style="${FLD}"></label>
+        <label class="small" style="flex:1;min-width:130px;display:flex;flex-direction:column;gap:4px">Gacha (sana)<input type="date" id="lv-to" value="${todayStr()}" style="${FLD}"></label>
+      </div>
+      <label class="small" style="display:flex;flex-direction:column;gap:4px">Sabab (ixtiyoriy)<input type="text" id="lv-reason" placeholder="Masalan: oilaviy sabab" style="${FLD}"></label>
+      <div class="small muted" style="margin-top:8px">Bir necha kunlik bo‘lsa — «Dan»–«Gacha» oralig‘ini belgilang. Hisobotda faqat ish kunlari (Dush–Juma) sanaladi.</div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="lv-save">💾 Saqlash</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#lv-save').onclick=async()=>{
+    const sel=($('#lv-who').value||'').split(':'); const refType=sel[0]||'', refId=sel.slice(1).join(':');
+    const who=roster.find(r=>r.refType===refType && String(r.refId)===String(refId));
+    const type=$('#lv-type').value||'ruhsat'; const from=$('#lv-from').value||''; const to=($('#lv-to').value||from); const reason=($('#lv-reason').value||'').trim();
+    if(!who || !from){ toast('Xodim va sanani tanlang',true); return; }
+    if(to<from){ toast('«Gacha» sanasi «Dan»dan oldin bo‘lmasin',true); return; }
+    const btn=$('#lv-save'); btn.disabled=true;
+    try{ await addDoc(collection(db,'staff_leaves'), { refId:String(who.refId), refType:who.refType, cameraId:String(who.cam||''), name:who.name||'', type, startDay:from, endDay:to, reason, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() });
+      toast('Saqlandi ✓'); closeModal(); if(onSaved) onSaved();
+    }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
+  };
 }
 
 /* ---- O'qituvchi tanlovi (nomzod imtihonlari + AI baholari) ---- */
