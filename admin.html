@@ -569,6 +569,7 @@ const SCHEMAS = {
       {k:'email',l:'Email',t:'text',inputmode:'email',placeholder:'masalan: xodim@gmail.com'},
       {k:'salary',l:'Oylik maosh (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 3 000 000'},
       {k:'note',l:'Izoh',t:'text'},
+      {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat uchun)',t:'text'},
       {k:'order',l:'Tartib',t:'number'}
     ]
   },
@@ -871,7 +872,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
-  hr:['teachers','staff'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
+  hr:['teachers','staff','staffatt'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
   finance_mgr:['payments','finance','accounting','pricetable'], treasurer:['payments'], kassir:['payments','accounting','students'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
@@ -1007,6 +1008,7 @@ function buildTabs(){
     {k:'feedback', icon:mi('M240-400h480v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z'), t:'Arz-shikoyat'},
     {k:'sick', icon:mi('M420-360h120v-90h90v-120h-90v-90H420v90h-90v120h90v90Zm60 264q-9 0-17.5-1.5T446-102q-149-63-237.5-192.5T120-580v-206q0-25 14.5-45t37.5-29l280-105q14-5 28-5t28 5l280 105q23 9 37.5 29t14.5 45v206q0 156-88.5 285.5T514-102q-8 4-16.5 5.5T480-96Z'), t:'Kasal bolalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
+    {k:'staffatt', icon:mi('M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q150 0 255 105t105 255q0 150-105 255T480-120Zm112-192 56-56-128-128v-184h-80v216l152 152Z'), t:'Xodimlar davomati'},
     {k:'applications', icon:mi('M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v440q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM360-280h240v-80H360v80Zm0-160h240v-80H360v80Zm-120-320v200-200 640-640Zm157 400 57-57 46 46 96-96 57 57-153 153-100-100Z'), t:'O‘qituvchi tanlovi'},
     {k:'pricetable', icon:mi('M120-120v-720h720v720H120Zm80-80h240v-160H200v160Zm320 0h240v-160H520v160ZM200-360h240v-160H200v160Zm320 0h240v-160H520v160ZM200-600h560v-160H200v160Z'), t:'Narx jadvali'},
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
@@ -1038,6 +1040,7 @@ function openTab(tab){
   if(tab==='users') return renderUsers();
   if(tab==='enrollments') return renderEnrollments();
   if(tab==='checkins') return renderCheckins();
+  if(tab==='staffatt') return renderStaffAttendance();
   if(tab==='applications') return renderApplications();
   if(tab==='pricetable') return renderPriceTable();
   if(tab==='payments') return renderPayments();
@@ -3082,6 +3085,63 @@ async function renderCheckins(){
   };
   $('#ci-date').addEventListener('change',load);
   load();
+}
+
+/* ---- Xodimlar davomati (Hikvision yuz terminali -> staff_checkins) ---- */
+async function renderStaffAttendance(){
+  $('#view').innerHTML = `<div class="page-head"><h2>Xodimlar davomati</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Hikvision yuz terminalidan (keldi / ketdi / tanaffus) avtomatik tushadi. Har xodimning <b>«Kamera ID»</b> maydoni terminaldagi shaxs ID bilan bir xil bo‘lishi kerak. Ushlab qolish (kechikish/kelmaslik) — keyingi bosqich.</p>
+    <div class="card" style="padding:16px 20px;margin-bottom:16px"><div class="att-controls">
+      <label>Sana<input type="date" id="sa-date" value="${todayStr()}"></label>
+    </div></div>
+    <div id="sa-body"><div class="loading">Yuklanmoqda…</div></div>`;
+  const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); if(m) return m[1]; const d=new Date(iso); return isNaN(d)?'—':String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+  const fmtDur=min=>{ if(min==null) return '<span class="muted">—</span>'; const h=Math.floor(min/60), m=min%60; return (h?h+' soat ':'')+(m||!h?m+' daq':''); };
+  const agg=(list)=>{
+    const ins=list.filter(x=>x.status==='in'), outs=list.filter(x=>x.status==='out');
+    const kelgan=ins.length?ins[0].ts:'', ketgan=outs.length?outs[outs.length-1].ts:'';
+    let brk=0, openBO=null;
+    list.forEach(x=>{ if(x.status==='break_out') openBO=x.ts; else if(x.status==='break_in' && openBO){ const d=Date.parse(x.ts)-Date.parse(openBO); if(d>0) brk+=d; openBO=null; } });
+    let work=null; if(kelgan&&ketgan){ work=Math.max(0, Date.parse(ketgan)-Date.parse(kelgan)-brk); }
+    return { kelgan, ketgan, brkMin:brk?Math.round(brk/60000):0, workMin:work==null?null:Math.round(work/60000) };
+  };
+  const load=async()=>{
+    const day=$('#sa-date').value; if(!day) return; const _g=VIEW_GEN;
+    $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+    let staff=[], teachers=[], rows=[];
+    try{ [staff, teachers] = await Promise.all([ loadCol('staff').catch(()=>[]), loadCol('teachers').catch(()=>[]) ]); }catch(e){}
+    try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','==',day))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
+    if(_g!==VIEW_GEN) return;
+    const roster=[];
+    staff.forEach(s=>{ if(s.cameraId) roster.push({ cam:String(s.cameraId), name:s.name||'', pos:s.position||'Xodim' }); });
+    teachers.forEach(t=>{ if(t.cameraId) roster.push({ cam:String(t.cameraId), name:t.name||'', pos:'O‘qituvchi' }); });
+    const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
+    Object.values(byPerson).forEach(l=>l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))));
+    roster.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const seen=new Set(), bodyRows=[];
+    roster.forEach(r=>{ seen.add(r.cam); const a=agg(byPerson[r.cam]||[]); const came=!!a.kelgan;
+      bodyRows.push(`<tr>
+        <td data-label="Xodim">${esc(r.name||r.cam)}<div class="small muted">${esc(r.pos)}${r.name?` · ID ${esc(r.cam)}`:''}</div></td>
+        <td data-label="Kelgan" style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'<span class="muted">—</span>'}</td>
+        <td data-label="Ketgan" style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'<span class="muted">—</span>'}</td>
+        <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}</td>
+        <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
+        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}</td></tr>`); });
+    const unmatched=Object.keys(byPerson).filter(pid=>!seen.has(pid));
+    unmatched.forEach(pid=>{ const list=byPerson[pid]; const a=agg(list); const nm=(list.find(x=>x.name)||{}).name||'';
+      bodyRows.push(`<tr style="background:#FFFBF2">
+        <td data-label="Xodim">${esc(nm||'(noma’lum)')}<div class="small" style="color:#B45309">⚠️ Kamera ID ${esc(pid)} — hech kimga bog‘lanmagan</div></td>
+        <td style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'—'}</td><td style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'—'}</td>
+        <td>${a.brkMin?fmtDur(a.brkMin):'—'}</td><td>${fmtDur(a.workMin)}</td>
+        <td><span class="chip" style="background:#FEF3E2;color:#B45309">Bog‘lanmagan</span></td></tr>`); });
+    const came=roster.filter(r=>(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
+    $('#sa-body').innerHTML=`<div class="card">
+      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${roster.length} xodim · ${came} keldi · ${roster.length-came} kelmadi${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}</span></div>
+      ${(!roster.length && !unmatched.length)?`<div class="empty" style="padding:20px">Bu kunda hodisa yo‘q. Terminal ulanganini va xodimlarning «Kamera ID»si to‘g‘riligini tekshiring.</div>`:
+      `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Kelgan</th><th>Ketgan</th><th>Tanaffus</th><th>Ish vaqti</th><th>Holat</th></tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`}</div>`;
+  };
+  $('#sa-date').addEventListener('change',load); load();
 }
 
 /* ---- O'qituvchi tanlovi (nomzod imtihonlari + AI baholari) ---- */

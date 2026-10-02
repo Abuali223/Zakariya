@@ -42,6 +42,7 @@ const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CO
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
 const CLICK = CFG.click || {};        // { serviceId, secretKey, merchantId }
 const UZUM  = CFG.uzum  || {};        // { serviceId, login, password, accountField?, amountUnit? }
+const HIK   = CFG.hik   || {};        // { secret, debug } — Hikvision yuz terminali (xodimlar keldi-ketdi)
 
 const md5 = s => crypto.createHash('md5').update(s).digest('hex');
 const amtEq = (a, b) => Math.abs(Number(a) - Number(b)) < 0.5;
@@ -497,11 +498,57 @@ async function handleUzum(op, body){
 }
 
 /* ---------- HTTP server ---------- */
-function readBody(req){ return new Promise(res=>{ let d=''; req.on('data',c=>{ d+=c; if(d.length>1e6) req.destroy(); }); req.on('end',()=>res(d)); }); }
+function readBody(req){ return new Promise(res=>{ let d=''; req.on('data',c=>{ d+=c; if(d.length>8e6) req.destroy(); }); req.on('end',()=>res(d)); }); }
 function parseBody(raw, ctype){
   if((ctype||'').includes('application/json')){ try{ return JSON.parse(raw||'{}'); }catch(e){ return {}; } }
   return Object.fromEntries(new URLSearchParams(raw||''));
 }
+// ---------- Hikvision yuz terminali: xodimlar keldi-ketdi + tanaffus ----------
+function hikMapStatus(v){
+  const x=String(v||'').toLowerCase().replace(/[\s_-]/g,'');
+  if(x==='checkin') return 'in';
+  if(x==='checkout') return 'out';
+  if(x==='breakout') return 'break_out';
+  if(x==='breakin') return 'break_in';
+  return x||'unknown';
+}
+function hikParse(raw){
+  const s=String(raw||''); let ev=null;
+  try{ ev=JSON.parse(s); }catch(_){}
+  if(!ev){ const m=s.match(/\{[\s\S]*?"AccessControllerEvent"[\s\S]*\}/); if(m){ try{ ev=JSON.parse(m[0]); }catch(_){} } }
+  const out={ personId:'', name:'', status:'unknown', ts:'', serial:'', raw:null };
+  if(ev){
+    const ace=ev.AccessControllerEvent||ev.accessControllerEvent||ev;
+    out.personId=String(ace.employeeNoString||ace.employeeNo||ace.userID||ace.empNo||ace.cardNo||'').trim();
+    out.name=String(ace.name||ev.name||'').trim();
+    out.status=hikMapStatus(ace.attendanceStatus||ace.labelName||ace.statusValue||ev.attendanceStatus||'');
+    out.ts=String(ev.dateTime||ace.dateTime||ev.time||'').trim();
+    out.serial=String(ev.serialNo||ace.serialNo||ace.serialNumber||'').trim();
+    out.raw=ev; return out;
+  }
+  const g=t=>{ const m=s.match(new RegExp('<'+t+'>([^<]*)</'+t+'>','i')); return m?m[1].trim():''; };
+  out.personId=g('employeeNoString')||g('employeeNo')||g('cardNo');
+  out.name=g('name'); out.status=hikMapStatus(g('attendanceStatus'));
+  out.ts=g('dateTime')||g('time'); out.serial=g('serialNo')||g('serialNumber');
+  out.raw={ xml:s.slice(0,2000) }; return out;
+}
+function hikDay(ts){ const m=String(ts||'').match(/^(\d{4}-\d{2}-\d{2})/); if(m) return m[1];
+  try{ return new Date(ts||Date.now()).toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
+async function handleHikEvent(raw){
+  const ev=hikParse(raw);
+  if(HIK.debug) console.error('[HIK-EVENT]', JSON.stringify({ pid:ev.personId, status:ev.status, ts:ev.ts, serial:ev.serial }), '\nRAW:', String(raw||'').slice(0,1500));
+  // Davomat hodisasi emas (eshik/auth — personId va status yo'q) -> jim o'tkazamiz (lekin 200 qaytaramiz).
+  if(!ev.personId && ev.status==='unknown') return { ok:true, skipped:true };
+  const id='hik_'+(ev.serial ? ev.serial : (ev.personId+'_'+(Date.parse(ev.ts)||Date.now())));   // idempotentlik
+  let iso; try{ iso=ev.ts?new Date(ev.ts).toISOString():new Date().toISOString(); }catch(e){ iso=new Date().toISOString(); }
+  try{
+    await db.collection('staff_checkins').doc(id).set({
+      id, personId:ev.personId, name:ev.name, status:ev.status, ts:iso, day:hikDay(ev.ts), raw:ev.raw, createdAt: FieldValue.serverTimestamp()
+    }, { merge:true });
+  }catch(e){ console.error('[HIK] yozishda xato:', e.message); return { ok:false, error:e.message }; }
+  return { ok:true, id, status:ev.status };
+}
+
 if(require.main === module){
   const PORT = Number(CFG.port || 8790);
   const server = http.createServer(async (req, res) => {
@@ -521,6 +568,13 @@ if(require.main === module){
         const op = (req.url.split('?')[0].split('/')[2] || '');
         send(await handleUzum(op, body));
       }
+      else if(req.url.startsWith('/hik/')){
+        // Hikvision yuz terminali -> xodimlar keldi-ketdi. URL'dagi maxfiy segment bilan himoyalangan
+        //   (qurilma qo'shimcha auth yubora olmaydi). Hodisa RAW tanada (multipart/XML/JSON).
+        const seg = (req.url.split('?')[0].split('/')[2] || '');
+        if(!HIK.secret || !tseq(seg, HIK.secret)){ res.writeHead(404); return res.end('not found'); }
+        send(await handleHikEvent(raw));
+      }
       else { res.writeHead(404); res.end('not found'); }
     }catch(e){ console.error('Xatolik:', e.message); res.writeHead(500); res.end('xatolik'); }
   });
@@ -528,4 +582,4 @@ if(require.main === module){
   server.listen(PORT, '127.0.0.1', () => console.log(`Iqror to'lov serveri tinglayapti 127.0.0.1:${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
-module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5 };
+module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5, hikParse, hikMapStatus, handleHikEvent };
