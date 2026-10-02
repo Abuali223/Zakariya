@@ -156,7 +156,51 @@ node sms-worker.cjs debt             # faqat qarzdorlik (kun tekshiruvisiz, majb
 sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/sms-log.sql
 ```
 
+## 8. Xodimlar davomati — Hikvision yuz terminali (`/hik`)
+
+Xodimlar **keldi-ketdi va tanaffus**ni Hikvision **yuz terminali** qayd qiladi.
+Terminal (internetga ulangan) hodisani **to'g'ridan-to'g'ri** shu serverga yuboradi
+(ko'prik kompyuter KERAK EMAS) → `/hik/<secret>` → `staff_checkins` jadvaliga yoziladi.
+Admin panel → **«Xodimlar davomati»** bo'limi `personId`↔`cameraId` bo'yicha xodimга
+bog'lab kelgan/ketgan/tanaffus/ish vaqtini hisoblaydi.
+
+> Yuz orqali tanish — kartaga bog'liq emas: terminalda har bir odamга **shaxs ID**
+> (employeeNo) biriktiriladi, yuz tanilganda hodisada aynan shu ID keladi.
+
+### 8.1 Sozlash (`config.json` → `hik`)
+| Maydon | Ma'nosi |
+|---|---|
+| `secret` | URL yo'lidagi **maxfiy kalit**. Terminal `https://<domen>/pay/hik/<secret>` ga yuboradi. Uzun tasodifiy satr qo'ying. Bo'sh/yo'q bo'lsa endpoint **o'chiq** (404) |
+| `debug` | `true` bo'lsa har kelgan XOM hodisa logга yoziladi (`journalctl -u iqror-pay`) — birinchi sinovda format moslash uchun. Moslangach `false` qiling |
+
+`config.json` ga qo'shib, serverni qayta ishga tushiring:
+```bash
+sudo systemctl restart iqror-pay
+```
+
+### 8.2 Terminalda sozlash (HTTP Listening / Event → HTTP host)
+Hikvision veb-interfeysi → *Configuration → Network → Advanced → HTTP Listening*
+(yoki *Event → Basic Event → … → Linkage → Upload to HTTP*):
+- **Destination URL:** `https://<domeningiz>/pay/hik/<secret>`
+  (masalan `https://iqroacademy.uz/pay/hik/67b6…`)
+- **Method:** POST, **Format:** JSON (bo'lsa).
+
+> nginx `/pay/` ni shu serverga uzatadi (Uzum/Click kabi). Terminal **404** olsa —
+> nginx'да `location /pay/ { proxy_pass http://127.0.0.1:8790/; }` borligини tekshiring.
+
+### 8.3 Har bir xodim «Kamera ID»si
+Admin panel → **Xodimlar** (va **O'qituvchilar**) → har kishiga terminaldagi
+**shaxs ID / Employee No** ni «Kamera ID» maydonига yozing. Davomat shu ID orqali
+bog'lanadi.
+
+### 8.4 Birinchi sinov
+1. Bitta xodim terminalда yuzini ko'rsatsin.
+2. Serverда: `sudo journalctl -u iqror-pay -n 50 --no-pager` — `[hik]` XOM hodisани
+   ko'ring (`debug:true` bo'lsa). ID/status qaysi maydonda kelganini tekshiring.
+3. Admin → **Xodimlar davomati** → o'sha sanа → yozuv chiqishi kerak.
+4. Format boshqacha bo'lsa — logни yuboring, parser (`hikParse`/`hikMapStatus`) moslanadi.
+
 ## Xavfsizlik
-- `service-account.json`, `click.secretKey`, `uzum.secret` — maxfiy. `.gitignore` bor.
+- `service-account.json`, `click.secretKey`, `uzum.secret`, `hik.secret` — maxfiy. `.gitignore` bor.
 - «paid» statusини faqat shu server yozadi (Firestore qoidalari mijozga taqiqlaydi).
 - Har bir to'lov `payments` kolleksiyasida jurnalga yoziladi.

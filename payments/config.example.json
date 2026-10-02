@@ -16,6 +16,10 @@
     "merchantId": "CLICK_MERCHANT_ID",
     "secretKey": "CLICK_SECRET_KEY"
   },
+  "hik": {
+    "secret": "HIK_SECRET (URL yo'lidagi maxfiy kalit — terminal shu bilan /hik/<secret> ga yuboradi; ixtiyoriy uzun tasodifiy satr)",
+    "debug": true
+  },
   "sms": {
     "enabled": true,
     "dryRun": false,
