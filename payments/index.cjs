@@ -512,41 +512,61 @@ function hikMapStatus(v){
   if(x==='breakin') return 'break_in';
   return x||'unknown';
 }
-function hikParse(raw){
-  const s=String(raw||''); let ev=null;
-  try{ ev=JSON.parse(s); }catch(_){}
-  if(!ev){ const m=s.match(/\{[\s\S]*?"AccessControllerEvent"[\s\S]*\}/); if(m){ try{ ev=JSON.parse(m[0]); }catch(_){} } }
-  const out={ personId:'', name:'', status:'unknown', ts:'', serial:'', raw:null };
-  if(ev){
-    const ace=ev.AccessControllerEvent||ev.accessControllerEvent||ev;
-    out.personId=String(ace.employeeNoString||ace.employeeNo||ace.userID||ace.empNo||ace.cardNo||'').trim();
-    out.name=String(ace.name||ev.name||'').trim();
-    out.status=hikMapStatus(ace.attendanceStatus||ace.labelName||ace.statusValue||ev.attendanceStatus||'');
-    out.ts=String(ev.dateTime||ace.dateTime||ev.time||'').trim();
-    out.serial=String(ev.serialNo||ace.serialNo||ace.serialNumber||'').trim();
-    out.raw=ev; return out;
+// Xom tanadan BALANSLANGAN {...} JSON bloklarini ajratadi (multipart + bitta POSTda bir nechta hodisa).
+//   Qavs chuqurligини sanaydi; satr ("...") ichidagi qavs/tirnoqlar hisobga olinmaydi.
+function hikJsonBlocks(s){
+  s=String(s||''); const out=[]; let depth=0, start=-1, inStr=false, esc=false;
+  for(let i=0;i<s.length;i++){ const c=s[i];
+    if(inStr){ if(esc) esc=false; else if(c==='\\') esc=true; else if(c==='"') inStr=false; continue; }
+    if(c==='"'){ inStr=true; continue; }
+    if(c==='{'){ if(depth===0) start=i; depth++; }
+    else if(c==='}'){ if(depth>0){ depth--; if(depth===0 && start>=0){ out.push(s.slice(start,i+1)); start=-1; } } }
   }
-  const g=t=>{ const m=s.match(new RegExp('<'+t+'>([^<]*)</'+t+'>','i')); return m?m[1].trim():''; };
-  out.personId=g('employeeNoString')||g('employeeNo')||g('cardNo');
-  out.name=g('name'); out.status=hikMapStatus(g('attendanceStatus'));
-  out.ts=g('dateTime')||g('time'); out.serial=g('serialNo')||g('serialNumber');
-  out.raw={ xml:s.slice(0,2000) }; return out;
+  return out;
 }
+// Bitta parsed obyektdan davomat maydonlari.
+function hikFields(ev){
+  const ace=(ev && (ev.AccessControllerEvent||ev.accessControllerEvent))||ev||{};
+  return {
+    personId:String(ace.employeeNoString||ace.employeeNo||ace.userID||ace.empNo||'').trim(),
+    name:String(ace.name||ev.name||'').trim(),
+    status:hikMapStatus(ace.attendanceStatus||ev.attendanceStatus||''),
+    ts:String(ev.dateTime||ace.dateTime||ev.time||'').trim(),
+    serial:String(ace.serialNo||ev.serialNo||'').trim(),
+    raw:ev
+  };
+}
+// Xom tanadan hodisa(lar) massivi: JSON bloklar -> har biri; bo'lmasa butun JSON; bo'lmasa XML.
+function hikEvents(raw){
+  const s=String(raw||''); const evs=[];
+  for(const b of hikJsonBlocks(s)){ try{ const o=JSON.parse(b); if(o && typeof o==='object') evs.push(hikFields(o)); }catch(_){} }
+  if(evs.length) return evs;
+  try{ const o=JSON.parse(s); if(o && typeof o==='object') return [hikFields(o)]; }catch(_){}
+  const g=t=>{ const m=s.match(new RegExp('<'+t+'>([^<]*)</'+t+'>','i')); return m?m[1].trim():''; };
+  return [{ personId:(g('employeeNoString')||g('employeeNo')).trim(), name:g('name'), status:hikMapStatus(g('attendanceStatus')), ts:g('dateTime')||g('time'), serial:g('serialNo')||g('serialNumber'), raw:{ xml:s.slice(0,2000) } }];
+}
+// Eski nom (test/moslik uchun) — bitta hodisa.
+function hikParse(raw){ return hikEvents(raw)[0] || { personId:'', name:'', status:'unknown', ts:'', serial:'', raw:null }; }
 function hikDay(ts){ const m=String(ts||'').match(/^(\d{4}-\d{2}-\d{2})/); if(m) return m[1];
   try{ return new Date(ts||Date.now()).toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
 async function handleHikEvent(raw){
-  const ev=hikParse(raw);
-  if(HIK.debug) console.error('[HIK-EVENT]', JSON.stringify({ pid:ev.personId, status:ev.status, ts:ev.ts, serial:ev.serial }), '\nRAW:', String(raw||'').slice(0,1500));
-  // Davomat hodisasi emas (eshik/auth — personId va status yo'q) -> jim o'tkazamiz (lekin 200 qaytaramiz).
-  if(!ev.personId && ev.status==='unknown') return { ok:true, skipped:true };
-  const id='hik_'+(ev.serial ? ev.serial : (ev.personId+'_'+(Date.parse(ev.ts)||Date.now())));   // idempotentlik
-  let iso; try{ iso=ev.ts?new Date(ev.ts).toISOString():new Date().toISOString(); }catch(e){ iso=new Date().toISOString(); }
-  try{
-    await db.collection('staff_checkins').doc(id).set({
-      id, personId:ev.personId, name:ev.name, status:ev.status, ts:iso, day:hikDay(ev.ts), raw:ev.raw, createdAt: FieldValue.serverTimestamp()
-    }, { merge:true });
-  }catch(e){ console.error('[HIK] yozishda xato:', e.message); return { ok:false, error:e.message }; }
-  return { ok:true, id, status:ev.status };
+  const evs=hikEvents(raw);
+  if(HIK.debug) console.error('[HIK-EVENT]', JSON.stringify(evs.map(e=>({pid:e.personId,status:e.status,ts:e.ts,serial:e.serial}))), '\nRAW:', String(raw||'').slice(0,1500));
+  let written=0, skipped=0; const ids=[];
+  for(const ev of evs){
+    // FAQAT attributlanadigan davomat skani yoziladi: shaxs ID SHART.
+    //   Eshik/tizim hodisalari va notanish yuz (employeeNo yo'q) -> o'tkazib yuboriladi.
+    if(!ev.personId){ skipped++; continue; }
+    const id='hik_'+(ev.serial ? ev.serial : (ev.personId+'_'+(Date.parse(ev.ts)||Date.now())));   // idempotentlik
+    let iso; try{ iso=ev.ts?new Date(ev.ts).toISOString():new Date().toISOString(); }catch(e){ iso=new Date().toISOString(); }
+    try{
+      await db.collection('staff_checkins').doc(id).set({
+        id, personId:ev.personId, name:ev.name, status:ev.status, ts:iso, day:hikDay(ev.ts), raw:ev.raw, createdAt: FieldValue.serverTimestamp()
+      }, { merge:true });
+      written++; ids.push(id);
+    }catch(e){ console.error('[HIK] yozishda xato:', e.message); }
+  }
+  return { ok:true, written, skipped, ids };
 }
 
 if(require.main === module){
@@ -582,4 +602,4 @@ if(require.main === module){
   server.listen(PORT, '127.0.0.1', () => console.log(`Iqror to'lov serveri tinglayapti 127.0.0.1:${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
-module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5, hikParse, hikMapStatus, handleHikEvent };
+module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5, hikParse, hikEvents, hikFields, hikMapStatus, handleHikEvent };

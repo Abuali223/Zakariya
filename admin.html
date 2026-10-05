@@ -3115,10 +3115,17 @@ async function renderStaffAttendance(){
   const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); if(m) return m[1]; const d=new Date(iso); return isNaN(d)?'—':String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const fmtDur=min=>{ if(min==null) return '<span class="muted">—</span>'; min=Math.round(min); const h=Math.floor(min/60), m=min%60; return (h?h+' soat ':'')+(m||!h?m+' daq':''); };
   const agg=(list)=>{
-    const ins=list.filter(x=>x.status==='in'), outs=list.filter(x=>x.status==='out');
-    const kelgan=ins.length?ins[0].ts:'', ketgan=outs.length?outs[outs.length-1].ts:'';
+    const sorted=(list||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
+    const ins=sorted.filter(x=>x.status==='in'), outs=sorted.filter(x=>x.status==='out');
+    // kelgan: birinchi 'in', bo'lmasa kunning birinchi skani. ketgan: oxirgi 'out', bo'lmasa oxirgi skan.
+    let kelgan = ins.length ? ins[0].ts : (sorted.length ? sorted[0].ts : '');
+    let ketgan = outs.length ? outs[outs.length-1].ts : '';
+    if(!ketgan && sorted.length>1){ const last=sorted[sorted.length-1].ts; if(last && last!==kelgan) ketgan=last; }
     let brk=0, openBO=null;
-    list.forEach(x=>{ if(x.status==='break_out') openBO=x.ts; else if(x.status==='break_in' && openBO){ const d=Date.parse(x.ts)-Date.parse(openBO); if(d>0) brk+=d; openBO=null; } });
+    sorted.forEach(x=>{ if(x.status==='break_out') openBO=x.ts; else if(x.status==='break_in' && openBO){ const d=Date.parse(x.ts)-Date.parse(openBO); if(d>0) brk+=d; openBO=null; } });
+    // Qurilma alohida "tanaffus" yubormasa: oraliq chiqish->keyingi kirish bo'shliqlari ham tanaffus.
+    const io=sorted.filter(x=>x.status==='in'||x.status==='out');
+    for(let i=0;i<io.length-1;i++){ if(io[i].status==='out' && io[i+1].status==='in'){ const d=Date.parse(io[i+1].ts)-Date.parse(io[i].ts); if(d>0) brk+=d; } }
     let work=null; if(kelgan&&ketgan){ work=Math.max(0, Date.parse(ketgan)-Date.parse(kelgan)-brk); }
     return { kelgan, ketgan, brkMin:brk?Math.round(brk/60000):0, workMin:work==null?null:Math.round(work/60000) };
   };
