@@ -2256,16 +2256,21 @@ async function renderStudents(){
   { const tt=$('#stu-total'); if(tt) tt.textContent = `Jami: ${rows.length} ta o‘quvchi`; }
   // Qo'shimcha ma'lumotlar (maxfiy maydonlar/telefon/kod + joriy oy to'lov holati) endi sahifa
   //   chizilgach FON rejimida yuklanadi (quyida) — sekin/qotgan so'rov «Yuklanmoqda…»da muzlatmasin.
-  let _payMonth=($('#stu-fmonth')&&$('#stu-fmonth').value)||curMonth(); const payMap={};
+  let _payMonth=($('#stu-fmonth')&&$('#stu-fmonth').value)||curMonth(); const payMap={}; const priorMap={};
   const payStatusOf=(sid)=>{ const inv=payMap[String(sid)]; if(!inv||inv.status==='canceled'||inv.status==='reversed') return null;
     const amt=Number(inv.amount)||0, paid=inv.status==='paid'?amt:(Number(inv.paidAmount)||0), debt=Math.max(0,amt-paid);
     if(inv.status==='paid'||debt<=0.5) return {k:'paid'};
     if(paid>0) return {k:'partial',debt}; return {k:'debt',debt}; };
-  const payCell=(sid)=>{ const st=payStatusOf(sid);
-    if(!st) return '<span class="muted">—</span>';
-    if(st.k==='paid') return '<span class="chip it" style="background:var(--it-bg);color:var(--teal)">✓ To‘landi</span>';
-    if(st.k==='partial') return `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman · qarz ${fmtSom(st.debt)}</span>`;
-    return `<span class="chip" style="background:#FDECEC;color:#B42318">Qarz ${fmtSom(st.debt)}</span>`; };
+  // Tanlangan oydan OLDINGI oylarning (to'lanmagan) qarzi — yangi oyda ham ko'rinib tursin (undiruv uchun).
+  const priorChip=(sid)=>{ const pr=priorMap[String(sid)]; if(!pr||pr.sum<=0.5) return '';
+    const ms=[...new Set(pr.months||[])].sort(); return ` <span class="chip" style="background:#FEF3E2;color:#B45309" title="Oldingi oy(lar)dan qolgan qarz: ${esc(ms.join(', '))}">⚠️ eski qarz ${fmtSom(pr.sum)}</span>`; };
+  const payCell=(sid)=>{ const st=payStatusOf(sid); const pc=priorChip(sid);
+    if(!st) return pc ? pc.trim() : '<span class="muted">—</span>';
+    let base;
+    if(st.k==='paid') base='<span class="chip it" style="background:var(--it-bg);color:var(--teal)">✓ To‘landi</span>';
+    else if(st.k==='partial') base=`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman · qarz ${fmtSom(st.debt)}</span>`;
+    else base=`<span class="chip" style="background:#FDECEC;color:#B42318">Qarz ${fmtSom(st.debt)}</span>`;
+    return base + pc; };
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=()=>{
     const q=(($('#stu-search')&&$('#stu-search').value)||'').trim().toLowerCase();
@@ -2286,9 +2291,9 @@ async function renderStudents(){
     // To'lov holati filtri (tanlangan oy bo'yicha): qarzdorlar / to'langanlar. «Faqat qarzdorlar» +
     //   eski oyni tanlab -> o'sha oyning hali to'lanmagan qarzdorlari ko'rinadi (undiruv uchun).
     const fdebt=($('#stu-fdebt')&&$('#stu-fdebt').value)||'';
-    if(fdebt){ filtered = filtered.filter(r=>{ const st=payStatusOf(r.studentId||r._id);
-      if(fdebt==='debt') return !!st && (st.k==='debt'||st.k==='partial');
-      if(fdebt==='paid') return !!st && st.k==='paid';
+    if(fdebt){ filtered = filtered.filter(r=>{ const sid=r.studentId||r._id; const st=payStatusOf(sid); const hasPrior=!!priorMap[String(sid)];
+      if(fdebt==='debt') return (!!st && (st.k==='debt'||st.k==='partial')) || hasPrior;   // joriy OYOKI eski oy qarzi
+      if(fdebt==='paid') return !!st && st.k==='paid' && !hasPrior;                          // to'liq toza (eski qarzsiz)
       return true; }); }
     if(!filtered.length){ $('#cls-groups').innerHTML=`<div class="card"><div class="empty">${rows.length?(fdebt==='debt'?'Bu oy (tanlangan) bo‘yicha qarzdor topilmadi.':'Filtr/qidiruv bo‘yicha o‘quvchi topilmadi.'):'Hozircha o‘quvchi yo‘q. “+ Qo‘shish” bilan boshlang.'}</div></div>`; return; }
     const groups={};
@@ -2347,10 +2352,18 @@ async function renderStudents(){
   // (2) To'lov holati — TANLANGAN oy bo'yicha. Oy o'zgarsa qayta yuklanadi (eski oy qarzdorlarini ko'rish).
   const loadPay=async(month)=>{
     _payMonth=month||curMonth();
-    const isnap=await TO9(getDocs(query(collection(db,'invoices'), where('month','==',_payMonth))));
+    // Joriy oy fakturalari + tanlangan oydan OLDINGI oylarning qarzlari (yangi oyda ham ko'rinsin).
+    const [isnap,psnap]=await Promise.all([
+      TO9(getDocs(query(collection(db,'invoices'), where('month','==',_payMonth)))),
+      TO9(getDocs(query(collection(db,'invoices'), where('month','<',_payMonth))))
+    ]);
     if(_g!==VIEW_GEN) return;
-    Object.keys(payMap).forEach(k=>delete payMap[k]);   // eski oyni tozalab, yangisini qo'yamiz (atomik — faqat shu yerda)
+    Object.keys(payMap).forEach(k=>delete payMap[k]);     // eski oyni tozalab, yangisini qo'yamiz (atomik — faqat shu yerda)
+    Object.keys(priorMap).forEach(k=>delete priorMap[k]);
     if(isnap){ isnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(k) payMap[k]=inv; }); }
+    if(psnap){ psnap.docs.forEach(d=>{ const inv=d.data()||{}; const k=String(inv.studentId||''); if(!k) return; const stt=String(inv.status||'');
+      if(stt==='canceled'||stt==='reversed') return; const amt=Number(inv.amount)||0, paid=stt==='paid'?amt:(Number(inv.paidAmount)||0), debt=Math.max(0,amt-paid);
+      if(debt>0.5){ const o=priorMap[k]=priorMap[k]||{sum:0,months:[]}; o.sum+=debt; o.months.push(inv.month); } }); }
     draw();
   };
   loadPay(($('#stu-fmonth')&&$('#stu-fmonth').value)||curMonth());
