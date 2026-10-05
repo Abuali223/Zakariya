@@ -2319,12 +2319,13 @@ async function renderStudents(){
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
         <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
       return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+      $('#cls-groups').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status))));
     }
     if(canDel){
       $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
@@ -2401,6 +2402,51 @@ async function openPayNote(key, name){
     try{ await setDoc(doc(db,'pay_notes',key),{ note:(($('#pn-txt')&&$('#pn-txt').value)||'').trim(), updatedAt:serverTimestamp(), by:(SESSION.email||SESSION.role||'') },{merge:true});
       toast('Eslatma saqlandi ✓'); closeModal(); }
     catch(e){ sv.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } };
+}
+// ⏯️ TEZKOR HOLAT (Faollashtirish / Muzlatish / Chiqarish / Sinov) — bir oynada, sana bilan.
+//   Public students hujjatiga payStatus + activeFrom/stopFrom yozadi (prorata shundan hisoblanadi).
+async function openStatusModal(s){
+  if(!s){ toast('O‘quvchi topilmadi',true); return; }
+  const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
+  const cur=s.payStatus||'faol';
+  const curLbl=({faol:'Faol',sinov:'Sinov',muzlatilgan:'Muzlatilgan',chiqdi:'Chiqib ketgan'})[cur]||'Faol';
+  $('#modal').innerHTML=`<div class="modal-h"><h3>Holat — ${esc(s.name||s._id)}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small muted" style="margin-bottom:10px">Joriy: <b>${esc(curLbl)}</b>${s.activeFrom?` · faollashtirilgan: ${esc(s.activeFrom)}`:''}${s.stopFrom?` · to‘xtatish: ${esc(s.stopFrom)}`:''}</div>
+      <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Amal
+        <select id="st-sel" style="${FLD}">
+          <option value="faol">▶️ Faollashtirish (to‘lov boshlanadi)</option>
+          <option value="muzlatilgan">❄️ Muzlatish (vaqtincha to‘xtatish)</option>
+          <option value="chiqdi">⏹️ Chiqarish (butunlay ketdi)</option>
+          <option value="sinov">🧪 Sinovga (to‘lovsiz)</option>
+        </select></label>
+      <label class="small" id="st-date-wrap" style="display:flex;flex-direction:column;gap:4px">
+        <span id="st-date-lbl">Faollashtirish sanasi</span>
+        <input type="date" id="st-date" value="${todayStr()}" style="${FLD}"></label>
+      <div class="small muted" id="st-hint" style="margin-top:8px"></div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="st-save">💾 Saqlash</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const sel=$('#st-sel'), dw=$('#st-date-wrap'), dl=$('#st-date-lbl'), hint=$('#st-hint');
+  const upd=()=>{ const v=sel.value;
+    if(v==='sinov'){ dw.style.display='none'; hint.textContent='Sinov: faktura yaratilmaydi. Keyin «Faollashtirish» qilsangiz, o‘sha sanadan to‘lov boshlanadi.'; }
+    else { dw.style.display='';
+      if(v==='faol'){ dl.textContent='Faollashtirish sanasi (shu kundan to‘lov)'; hint.textContent='Oy o‘rtasi bo‘lsa — shu kundan prorata (ish kunlari) hisoblanadi.'; }
+      else if(v==='muzlatilgan'){ dl.textContent='To‘xtatish sanasi (shu kungacha to‘lanadi)'; hint.textContent='Shu kundan keyin faktura yo‘q. Qaytganda yana «Faollashtirish» qiling.'; }
+      else { dl.textContent='Chiqib ketgan sana (shu kungacha to‘lanadi)'; hint.textContent='Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.'; } } };
+  sel.value = (cur==='faol') ? 'muzlatilgan' : 'faol';   // qulay: joriy holatga teskari amalni taklif qiladi
+  upd(); sel.onchange=upd;
+  $('#st-save').onclick=async()=>{
+    const v=sel.value, dt=($('#st-date')&&$('#st-date').value)||todayStr();
+    const patch={};
+    if(v==='faol'){ patch.payStatus='faol'; patch.activeFrom=dt; patch.stopFrom=''; }
+    else if(v==='sinov'){ patch.payStatus='sinov'; }
+    else { patch.payStatus=v; patch.stopFrom=dt; }   // muzlatilgan / chiqdi
+    const btn=$('#st-save'); btn.disabled=true;
+    try{ await setDoc(doc(db,'students', s._id), patch, {merge:true});
+      cache.students=null; toast('Holat saqlandi ✓'); closeModal(); renderStudents();
+    }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
+  };
 }
 async function openStudentReport(sid, row){
   $('#modal').innerHTML = `<div class="modal-h"><h3>Ma’lumotnoma</h3><button class="x" id="m-x">×</button></div>
