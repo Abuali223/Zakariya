@@ -3241,13 +3241,13 @@ async function openCameraIdFromReport(onSaved){
   const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
   $('#modal').innerHTML=`<div class="modal-h"><h3>Kamera ID — HIK reportdan</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b" id="cir-body">
-      <p class="small muted" style="margin:0 0 10px">Hikvision terminalidan eksport qilingan <b>report (.xls)</b> faylni tanlang. Tizim fayldagi <b>ism</b>larni bizdagi xodim/o‘qituvchilarga solishtirib, har kimning <b>Person ID</b>‘sini «Kamera ID» maydoniga yozadi. <b>Davomat yozuvlari import qilinmaydi</b> — faqat ID biriktiriladi.</p>
+      <p class="small muted" style="margin:0 0 10px">Hikvision terminalidan eksport qilingan <b>report (.xls)</b> faylni tanlang. Tizim fayldagi <b>ism</b>larni bizdagi xodim/o‘qituvchilarga solishtirib, har kimning <b>Person ID</b>‘sini «Kamera ID» maydoniga yozadi. Faylда bor, bizda yo‘q kishilarni <b>yangi</b> xodim/o‘qituvchi sifatida qo‘shishingiz mumkin. <b>Davomat yozuvlari import qilinmaydi.</b></p>
       <input type="file" id="cir-file" accept=".xls,.xlsx,.html,.htm,.csv" style="${FLD}">
       <div id="cir-preview" style="margin-top:12px"></div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="cir-apply" style="display:none">💾 Tanlanganlarni saqlash</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  let matches=[];
+  let matches=[], newCands=[], staffList=[], teacherList=[];
   const decode=s=>String(s||'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#39;|&apos;/gi,"'").replace(/&quot;/gi,'"').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n));
   $('#cir-file').onchange=async(ev)=>{
     const f=ev.target.files&&ev.target.files[0]; if(!f) return;
@@ -3266,6 +3266,7 @@ async function openCameraIdFromReport(onSaved){
     const rpList=Object.entries(persons).map(([rid,name])=>({rid,name}));
     if(!rpList.length){ $('#cir-preview').innerHTML='<div class="empty">Faylda ma‘lumot topilmadi (HIK «Original Records Report» .xls kutilyapti).</div>'; return; }
     const [staff,teachers]=await Promise.all([loadCol('staff').catch(()=>[]),loadCol('teachers').catch(()=>[])]);
+    staffList=staff; teacherList=teachers;
     const people=[]; staff.forEach(s=>people.push({refType:'staff',refId:String(s._id),name:s.name||'',cur:String(s.cameraId||'')}));
     teachers.forEach(t=>people.push({refType:'teacher',refId:String(t._id),name:t.name||'',cur:String(t.cameraId||'')}));
     // Fuzzy 1:1 moslashtiruv: avval aniq (nameKey teng), so'ng bardoshli (namesMatch).
@@ -3280,6 +3281,7 @@ async function openCameraIdFromReport(onSaved){
     pTok.forEach((P,pi)=>{ if(pDone[pi]||P.t.length<2) return; const cand=[]; rTok.forEach((R,ri)=>{ if(!rDone[ri]&&R.t.length>=2&&namesMatch(P.t,R.t)) cand.push(ri); }); if(cand.length!==1) return; const ri=cand[0]; let back=0; pTok.forEach((Q,qi)=>{ if(!pDone[qi]&&Q.t.length>=2&&namesMatch(Q.t,rTok[ri].t)) back++; }); if(back===1) accept(pi,ri); });
     const unmatchedRp=rpList.filter((r,ri)=>!rDone[ri]);
     const unmatchedP=people.filter((p,pi)=>!pDone[pi]);
+    newCands=unmatchedRp;
     const stChip=s=> s==='yangi'?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">yangi</span>':(s==='mos'?'<span class="chip" style="background:#eef2ee;color:#667">mos</span>':'<span class="chip" style="background:#FEF3E2;color:#B45309">o‘zgaradi</span>');
     const rows=matches.map((m,i)=>`<tr>
       <td><input type="checkbox" class="cir-ck" data-i="${i}" ${m.status==='mos'?'':'checked'}></td>
@@ -3291,19 +3293,33 @@ async function openCameraIdFromReport(onSaved){
     $('#cir-preview').innerHTML=`
       <div class="small" style="margin:4px 0 8px">Ism bo‘yicha mos keldi: <b>${matches.length}</b> · yoziladi: <b>${willSet}</b> · fayldagi topilmaganlar: <b>${unmatchedRp.length}</b></div>
       ${matches.length?`<div class="tablewrap" style="max-height:320px;overflow:auto"><table><thead><tr><th><input type="checkbox" id="cir-all" checked></th><th>Xodim</th><th>Joriy ID</th><th>Report ID</th><th>Holat</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">Ism bo‘yicha mos keladigan xodim topilmadi. Ismlar bir xil yozilganini tekshiring yoki qo‘lda kiriting.</div>'}
-      ${unmatchedRp.length?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer">Faylда bor, bizda topilmagan (${unmatchedRp.length}) — qo‘lda biriktiring</summary><div class="small muted" style="margin-top:6px;max-height:140px;overflow:auto">${unmatchedRp.map(r=>`${esc(r.name)} · ID ${esc(r.rid)}`).join('<br>')}</div></details>`:''}
-      ${unmatchedP.length?`<details style="margin-top:8px"><summary class="small" style="cursor:pointer">Bizda bor, faylда yo‘q (${unmatchedP.length})</summary><div class="small muted" style="margin-top:6px;max-height:140px;overflow:auto">${unmatchedP.map(p=>esc(p.name||'(nomsiz)')).join('<br>')}</div></details>`:''}`;
-    $('#cir-apply').style.display = matches.length?'':'none';
+      ${unmatchedRp.length?`<div style="margin-top:14px"><div class="small" style="font-weight:600;margin-bottom:6px">Faylда bor, bizda yo‘q (${unmatchedRp.length}) — yangi qo‘shish:</div>
+        <div class="tablewrap" style="max-height:240px;overflow:auto"><table><thead><tr><th>Ism (fayldan)</th><th>Report ID</th><th>Qo‘shish</th></tr></thead><tbody>${unmatchedRp.map((r,i)=>`<tr><td>${esc(r.name)}</td><td style="font-variant-numeric:tabular-nums">${esc(r.rid)}</td><td><select class="cir-new" data-i="${i}" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px;font:inherit"><option value="">— o‘tkazib yuborish —</option><option value="teacher">O‘qituvchi</option><option value="staff">Xodim</option></select></td></tr>`).join('')}</tbody></table></div>
+        <div class="small muted" style="margin-top:4px">Yangi yozuv faqat ism + Kamera ID bilan yaratiladi — keyin «O‘qituvchilar»/«Xodimlar»da maosh, fan/lavozim va h.k.ni to‘ldirasiz.</div></div>`:''}
+      ${unmatchedP.length?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer">Bizda bor, faylда yo‘q (${unmatchedP.length})</summary><div class="small muted" style="margin-top:6px;max-height:140px;overflow:auto">${unmatchedP.map(p=>esc(p.name||'(nomsiz)')).join('<br>')}</div></details>`:''}`;
+    $('#cir-apply').style.display = (matches.length||unmatchedRp.length)?'':'none';
     const allck=$('#cir-all'); if(allck) allck.onchange=()=>$('#cir-preview').querySelectorAll('.cir-ck').forEach(c=>c.checked=allck.checked);
   };
   $('#cir-apply').onclick=async()=>{
     const picks=[...$('#cir-preview').querySelectorAll('.cir-ck')].filter(c=>c.checked).map(c=>matches[+c.dataset.i]).filter(Boolean);
-    if(!picks.length){ toast('Hech narsa tanlanmadi',true); return; }
+    const adds=[...$('#cir-preview').querySelectorAll('.cir-new')].map(s=>({cand:newCands[+s.dataset.i], type:s.value})).filter(x=>x.cand && (x.type==='teacher'||x.type==='staff'));
+    if(!picks.length && !adds.length){ toast('Hech narsa tanlanmadi',true); return; }
     const btn=$('#cir-apply'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
-    let ok=0, err=0;
+    let ok=0, err=0, added=0;
+    // 1) mavjudlarga Kamera ID
     for(const m of picks){ try{ await setDoc(doc(db, m.refType==='teacher'?'teachers':'staff', m.refId), {cameraId:String(m.rid)}, {merge:true}); ok++; }catch(e){ err++; } }
+    // 2) yangi xodim/o'qituvchi — skelet yozuv (ism + Kamera ID); maosh/fan keyin to'ldiriladi
+    if(adds.length){
+      let tIds=teacherList.map(t=>t.teacherId), sIds=staffList.map(s=>s.staffId);
+      for(const a of adds){ try{
+        if(a.type==='teacher'){ const id=nextId(tIds,'IQT-',3); tIds.push(id); await addDoc(collection(db,'teachers'), { teacherId:id, name:a.cand.name, subject_uz:'', phone:'', baseSalary:0, salary:0, cameraId:String(a.cand.rid), order:9999 }); }
+        else { const id=nextId(sIds,'IQX-',3); sIds.push(id); await addDoc(collection(db,'staff'), { staffId:id, name:a.cand.name, position:'Aniqlanmagan', salary:0, cameraId:String(a.cand.rid), order:9999 }); }
+        added++;
+      }catch(e){ err++; } }
+      cache.teachers=null; cache.staff=null;
+    }
     btn.disabled=false; btn.textContent='💾 Tanlanganlarni saqlash';
-    toast(`Kamera ID saqlandi: ${ok}${err?(' · xato: '+err):''} ✓`); closeModal(); if(onSaved) onSaved();
+    toast(`Kamera ID: ${ok}${added?(' · yangi qo‘shildi: '+added):''}${err?(' · xato: '+err):''} ✓`); closeModal(); if(onSaved) onSaved();
   };
 }
 // Ruhsat / kasallik qo'shish modali (direktor/HR)
