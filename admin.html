@@ -519,6 +519,9 @@ const SCHEMAS = {
       {k:'track',l:'Yo‘nalish (9–11 uchun)',t:'select',opts:[{v:'',l:'—'},'IT','MED']},
       {k:'score',l:'Umumiy ball',t:'number'},
       {k:'attendance',l:'Davomat %',t:'number'},
+      {k:'payStatus',l:'To‘lov holati',t:'select',opts:[{v:'',l:'Faol'},{v:'sinov',l:'Sinov (to‘lovsiz)'},{v:'muzlatilgan',l:'Muzlatilgan (vaqtincha to‘xtatilgan)'},{v:'chiqdi',l:'Chiqib ketgan'}]},
+      {k:'activeFrom',l:'Faollashtirish sanasi (shu kundan to‘lov; oy o‘rtasi bo‘lsa shu kundan hisoblanadi)',t:'date'},
+      {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha to‘lanadi)',t:'date'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat avtomatlashuvi uchun)',t:'text'},
       {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
       {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
@@ -2271,6 +2274,12 @@ async function renderStudents(){
     else if(st.k==='partial') base=`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Qisman · qarz ${fmtSom(st.debt)}</span>`;
     else base=`<span class="chip" style="background:#FDECEC;color:#B42318">Qarz ${fmtSom(st.debt)}</span>`;
     return base + pc; };
+  // O'quvchi holati belgisi (LC-UP uslubi): faol -> belgisiz; sinov/muzlatilgan/chiqdi -> rangli chip.
+  const statusBadge=(r)=>{ const st=r.payStatus||''; if(!st||st==='faol') return '';
+    if(st==='sinov') return ` <span class="chip" style="background:var(--med-bg);color:var(--med-fg)" title="Sinov muddatida — faktura yaratilmaydi">Sinov</span>`;
+    if(st==='muzlatilgan') return ` <span class="chip" style="background:#F3E8FF;color:#7C3AED" title="Muzlatilgan — vaqtincha to‘xtatilgan${r.stopFrom?' · '+esc(r.stopFrom)+' gacha':''}">❄️ Muzlatilgan</span>`;
+    if(st==='chiqdi') return ` <span class="chip" style="background:#eef2ee;color:#667" title="Chiqib ketgan${r.stopFrom?' · '+esc(r.stopFrom):''}">Chiqdi</span>`;
+    return ''; };
   const langLbl=l=>l==='ru'?'Rus':'O‘zbek';
   const draw=()=>{
     const q=(($('#stu-search')&&$('#stu-search').value)||'').trim().toLowerCase();
@@ -2304,7 +2313,7 @@ async function renderStudents(){
       const trs=list.map(r=>`<tr>
         ${canDel?`<td class="c"><input type="checkbox" class="stu-sel" data-id="${esc(r._id)}"></td>`:''}
         <td data-label="ID">${esc(r.studentId||r._id)}</td>
-        <td data-label="Ism">${esc(r.name||'')}</td>
+        <td data-label="Ism">${esc(r.name||'')}${statusBadge(r)}</td>
         <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
@@ -4536,6 +4545,28 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   });
   return { tenHolders, conflicts };
 }
+// ---- Prorata (oy o'rtasida kelgan/ketgan) — ISH KUNLARI (Dush–Juma) bo'yicha ----
+function _saDate(x){ if(!x) return null; const d=new Date(x); return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+function saWorkdays(a,b){ if(!a||!b) return 0; let d=new Date(a.getFullYear(),a.getMonth(),a.getDate()); const end=new Date(b.getFullYear(),b.getMonth(),b.getDate()); if(d>end) return 0; let n=0,g=0; while(d<=end&&g<400){ const w=d.getDay(); if(w>=1&&w<=5)n++; d.setDate(d.getDate()+1); g++; } return n; }
+// O'quvchining `month` ('YYYY-MM') dagi faol oralig'i + prorata ulushi.
+//   {skip, reason}  yoki  {skip:false, fraction, actDays, fullDays, partial}
+function billingInterval(s, month){
+  const mm=String(month||'').match(/^(\d{4})-(\d{2})/); if(!mm) return {skip:false, fraction:1};
+  const y=+mm[1], mo=+mm[2]; const mStart=new Date(y,mo-1,1), mEnd=new Date(y,mo,0);
+  const st=(s&&s.payStatus)||'faol';
+  if(st==='sinov') return {skip:true, reason:'sinov'};
+  const af=_saDate(s&&s.activeFrom), sf=_saDate(s&&s.stopFrom);
+  if(af && af>mEnd) return {skip:true, reason:'hali boshlanmagan'};
+  if((st==='muzlatilgan'||st==='chiqdi') && sf && sf<mStart) return {skip:true, reason:'to‘xtatilgan'};
+  let start = (af && af>mStart) ? af : mStart;
+  let end = mEnd;
+  if((st==='muzlatilgan'||st==='chiqdi') && sf && sf<end) end=sf;
+  if(start>end) return {skip:true, reason:'oraliq yo‘q'};
+  const full=saWorkdays(mStart,mEnd), act=saWorkdays(start,end);
+  if(full<=0) return {skip:false, fraction:1};
+  const fraction=Math.min(1, act/full);
+  return {skip:false, fraction, actDays:act, fullDays:full, partial: fraction<0.999};
+}
 function computeTuition(s, priv, ctx){
   const pv=priv||{}; const cat=pv.specialCategory||''; const sid=s.studentId||s._id;
   const round=n=>Math.round(n); const priceKey=priceKeyOf(s);
@@ -4566,10 +4597,19 @@ function computeTuition(s, priv, ctx){
       const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
       sickAmt=sickN*rate;
       if(sickAmt>0){ net=Math.max(0, net-sickAmt); info=(info&&info!=='Chegirmasiz'?info+' + ':'')+`${sickN} kasal kun (−${sickAmt})`; } } }
+  // --- Holat + prorata (oy o'rtasida kelgan/ketgan; ISH KUNLARI bo'yicha) ---
+  //   sinov -> faktura yo'q; muzlatilgan/chiqdi -> to'xtatish sanasidan keyin yo'q;
+  //   activeFrom oy o'rtasida -> o'sha kundan prorata (qisman oy).
+  let proMeta=null;
+  if(ctx && ctx.month){
+    const bi=billingInterval(s, ctx.month);
+    if(bi.skip) return { skip:true, skipReason:'status', statusSkip:true, statusReason:bi.reason, sid, name:s.name, priceKey };
+    if(bi.partial && net>0){ net=round(net*bi.fraction); info=(info&&info!=='Chegirmasiz'?info+' · ':'')+`${bi.actDays}/${bi.fullDays} ish kuni (prorata)`; proMeta={proratedDays:bi.actDays, monthWorkdays:bi.fullDays}; }
+  }
   const discount=base-net;
   if(net===0 && !isGrant){ isGrant=true; }
   const status=(net===0)?'paid':'pending';
-  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey, fallback:usedFallback };
+  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta };
 }
 // Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
@@ -4656,7 +4696,7 @@ async function pmLoadCtx(month, students, amount){
     const pAmt=Number(priceMap[priceKeyOf(s)]); if(isFinite(pAmt)&&pAmt>0) return true;
     return !Object.keys(priceMap).length ? (Number(amount)>0) : false; };   // priceEmpty -> zaxira summа; aks holда skip
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill);
-  const ctx={ priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
+  const ctx={ month, priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
   return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
 }
 // ==== KASAL BOLALAR — «Bemor» davomatidan avtomatik ro'yxat (Direktor + Ma'muriyat rahbari) ====
@@ -4969,7 +5009,7 @@ async function renderPayments(){
         const batch=writeBatch(db); let wrote=false;
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
           const t=computeTuition(s, privOf(sid), ctx);
-          if(t.skip){ skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }
+          if(t.skip){ if(!t.statusSkip) skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }   // sinov/muzlatilgan/chiqdi -> jim o'tkaziladi
           if(t.fallback) fallbackList.push(`${s.name||sid} [${t.priceKey}]`);   // narx jadvalidа yo'q -> zaxira summа qo'llandi (tekshirilsin)
           const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[]);
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
