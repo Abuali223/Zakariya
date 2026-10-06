@@ -57,4 +57,5 @@
 \ir split-payment.sql
 \ir staff-attendance.sql
 \ir staff-leaves.sql
+\ir student-status.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
