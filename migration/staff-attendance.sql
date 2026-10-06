@@ -34,6 +34,6 @@ grant all    on public.staff_checkins to service_role;
 -- O'qish: direktor/HR (xodimlar davomati — payroll/HR ishi). Yozish: FAQAT server (service_role —
 --   kamera ko'prigi); authenticated'ga insert/update/delete policy yo'q -> klient yoza olmaydi.
 drop policy if exists sc_chk_sel on public.staff_checkins;
-create policy sc_chk_sel on public.staff_checkins for select using (app.is_admin() or app.is_hr());
+create policy sc_chk_sel on public.staff_checkins for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 
 notify pgrst, 'reload schema';

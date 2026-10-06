@@ -558,10 +558,12 @@ async function handleHikEvent(raw){
     //   Eshik/tizim hodisalari va notanish yuz (employeeNo yo'q) -> o'tkazib yuboriladi.
     if(!ev.personId){ skipped++; continue; }
     const id='hik_'+(ev.serial ? ev.serial : (ev.personId+'_'+(Date.parse(ev.ts)||Date.now())));   // idempotentlik
-    let iso; try{ iso=ev.ts?new Date(ev.ts).toISOString():new Date().toISOString(); }catch(e){ iso=new Date().toISOString(); }
+    // Qurilma vaqtini ORIGINAL (mahalliy offset bilan, masalan +05:00) saqlaymiz -> kechikish/ko'rinish
+    //   mahalliy soatda to'g'ri bo'ladi (UTCga aylantirsak 08:00 -> 03:00 bo'lib ketardi).
+    const tsStr = (ev.ts && !isNaN(Date.parse(ev.ts))) ? ev.ts : new Date().toISOString();
     try{
       await db.collection('staff_checkins').doc(id).set({
-        id, personId:ev.personId, name:ev.name, status:ev.status, ts:iso, day:hikDay(ev.ts), raw:ev.raw, createdAt: FieldValue.serverTimestamp()
+        id, personId:ev.personId, name:ev.name, status:ev.status, ts:tsStr, day:hikDay(tsStr), raw:ev.raw, createdAt: FieldValue.serverTimestamp()
       }, { merge:true });
       written++; ids.push(id);
     }catch(e){ console.error('[HIK] yozishda xato:', e.message); }

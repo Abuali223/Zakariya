@@ -31,7 +31,7 @@ grant all on public.staff_leaves to service_role;
 
 -- O'qish + yozish: FAQAT direktor/HR (xodimlar davomati — HR ishi).
 drop policy if exists sl_sel on public.staff_leaves;
-create policy sl_sel on public.staff_leaves for select using (app.is_admin() or app.is_hr());
+create policy sl_sel on public.staff_leaves for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 drop policy if exists sl_ins on public.staff_leaves;
 create policy sl_ins on public.staff_leaves for insert with check (app.is_admin() or app.is_hr());
 drop policy if exists sl_upd on public.staff_leaves;
