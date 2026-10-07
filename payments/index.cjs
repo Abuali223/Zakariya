@@ -277,7 +277,7 @@ const clickReady = p => !!CLICK.secretKey && (!CLICK.serviceId || String(p.servi
 
 async function handlePrepare(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
-  if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, recv:String(p.sign_string||'').toLowerCase(), ours:clickSign(p,false), secLen:(CLICK.secretKey||'').length }));
+  if(CFG.debugClick) console.error('[CLICK-DEBUG]', JSON.stringify({ ct:p.click_trans_id, sid:p.service_id, mti:p.merchant_trans_id, amt:p.amount, act:p.action, st:p.sign_time, sigMatch:(String(p.sign_string||'').toLowerCase()===clickSign(p,false)), hasSecret:!!CLICK.secretKey }));
   if(!tseq(clickSign(p, false), String(p.sign_string||'').toLowerCase())) return clickErr(p, -1, 'SIGN CHECK FAILED', false);
   const amount = Number(p.amount);
   if(!(amount > 0)) return clickErr(p, -2, 'Summa mos emas', false);
@@ -498,7 +498,30 @@ async function handleUzum(op, body){
 }
 
 /* ---------- HTTP server ---------- */
-function readBody(req){ return new Promise(res=>{ let d=''; req.on('data',c=>{ d+=c; if(d.length>8e6) req.destroy(); }); req.on('end',()=>res(d)); }); }
+// Log uchun shaxsiy ma'lumotni yashirish (debug loglari yoqilib qolsa ham PII oqib ketmasin).
+function redactPII(o){
+  if(!o || typeof o!=='object') return o;
+  const SENS=/name|fio|phone|tel|passport|pinfl|jshshir|address|manzil|guardian/i;
+  const out=Array.isArray(o)?[]:{};
+  for(const k of Object.keys(o)){ const v=o[k];
+    if(SENS.test(k)) out[k]='***';
+    else if(v && typeof v==='object') out[k]=redactPII(v);
+    else out[k]=v; }
+  return out;
+}
+const MAX_BODY = 8e6;   // ~8 MB chegara (Hik multipart hodisasi ham shu ichida)
+// Tanani o'qish — HECH QACHON osilib qolmaydi: end/error/aborted/close hammasi resolve qiladi.
+//   Chegaradan oshsa {tooLarge:true} qaytaradi (chaqiruvchi 413 beradi), req.destroy()dan keyin
+//   'end' kelmasdi va await abadiy osilib qolardi.
+function readBody(req){ return new Promise(resolve=>{
+  const chunks=[]; let len=0, done=false, tooLarge=false;
+  const finish=()=>{ if(done) return; done=true; resolve({ raw: tooLarge?'':Buffer.concat(chunks).toString('utf8'), tooLarge }); };
+  req.on('data',c=>{ len+=c.length; if(len>MAX_BODY){ tooLarge=true; try{ req.destroy(); }catch(_){}; return finish(); } chunks.push(c); });
+  req.on('end',finish);
+  req.on('error',finish);
+  req.on('aborted',finish);
+  req.on('close',finish);
+}); }
 function parseBody(raw, ctype){
   if((ctype||'').includes('application/json')){ try{ return JSON.parse(raw||'{}'); }catch(e){ return {}; } }
   return Object.fromEntries(new URLSearchParams(raw||''));
@@ -533,8 +556,21 @@ function hikFields(ev){
     status:hikMapStatus(ace.attendanceStatus||ev.attendanceStatus||''),
     ts:String(ev.dateTime||ace.dateTime||ev.time||'').trim(),
     serial:String(ace.serialNo||ev.serialNo||'').trim(),
+    device:String(ev.macAddress||ev.ipAddress||ev.deviceID||ace.deviceName||ace.devIndex||ev.devIndex||'').trim(),
     raw:ev
   };
+}
+// Barqaror (deterministik), QURILMA bilan nomlangan hodisa IDsi — idempotentlik uchun.
+//   serialNo bir qurilmada noyob, lekin TURLI qurilmalarda takrorlanishi mumkin -> qurilma bilan namespace.
+//   serial bo'lmasa: Date.now() ISHLATILMAYDI (qayta kelgan hodisa yangi ID olib DUBL bo'lardi);
+//   o'rniga ts yoki xom hodisadan barqaror kalit.
+function hikEventId(ev){
+  const dev=(String(ev.device||'').replace(/[^0-9A-Za-z._:-]/g,'')) || 'dev';
+  if(ev.serial) return 'hik_'+dev+'_'+ev.serial;
+  const tms=Date.parse(ev.ts);
+  if(ev.ts && !isNaN(tms)) return 'hik_'+dev+'_'+ev.personId+'_'+tms+'_'+ev.status;
+  const h=crypto.createHash('sha1').update(dev+'|'+ev.personId+'|'+ev.status+'|'+JSON.stringify(ev.raw||'')).digest('hex').slice(0,16);
+  return 'hik_'+dev+'_'+ev.personId+'_'+h;
 }
 // Xom tanadan hodisa(lar) massivi: JSON bloklar -> har biri; bo'lmasa butun JSON; bo'lmasa XML.
 function hikEvents(raw){
@@ -551,13 +587,14 @@ function hikDay(ts){ const m=String(ts||'').match(/^(\d{4}-\d{2}-\d{2})/); if(m)
   try{ return new Date(ts||Date.now()).toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
 async function handleHikEvent(raw){
   const evs=hikEvents(raw);
-  if(HIK.debug) console.error('[HIK-EVENT]', JSON.stringify(evs.map(e=>({pid:e.personId,status:e.status,ts:e.ts,serial:e.serial}))), '\nRAW:', String(raw||'').slice(0,1500));
+  // RAW tana ataylab LOGLANMAYDI — Hik multipart ichida yuz-shabloni (biometrik) / ism bo'lishi mumkin.
+  if(HIK.debug) console.error('[HIK-EVENT]', JSON.stringify(evs.map(e=>({pid:e.personId,status:e.status,ts:e.ts,serial:e.serial,device:e.device}))));
   let written=0, skipped=0; const ids=[];
   for(const ev of evs){
     // FAQAT attributlanadigan davomat skani yoziladi: shaxs ID SHART.
     //   Eshik/tizim hodisalari va notanish yuz (employeeNo yo'q) -> o'tkazib yuboriladi.
     if(!ev.personId){ skipped++; continue; }
-    const id='hik_'+(ev.serial ? ev.serial : (ev.personId+'_'+(Date.parse(ev.ts)||Date.now())));   // idempotentlik
+    const id=hikEventId(ev);   // qurilma bilan namespace + deterministik (idempotentlik)
     // Qurilma vaqtini ORIGINAL (mahalliy offset bilan, masalan +05:00) saqlaymiz -> kechikish/ko'rinish
     //   mahalliy soatda to'g'ri bo'ladi (UTCga aylantirsak 08:00 -> 03:00 bo'lib ketardi).
     const tsStr = (ev.ts && !isNaN(Date.parse(ev.ts))) ? ev.ts : new Date().toISOString();
@@ -576,11 +613,12 @@ if(require.main === module){
   const server = http.createServer(async (req, res) => {
     if(req.method === 'GET' && req.url === '/health'){ res.writeHead(200); return res.end('ok'); }
     if(req.method !== 'POST'){ res.writeHead(405); return res.end('POST kutiladi'); }
-    const raw = await readBody(req);
+    const { raw, tooLarge } = await readBody(req);
+    if(tooLarge){ res.writeHead(413); return res.end('payload too large'); }
     const body = parseBody(raw, req.headers['content-type']);
     // DIAGNOSTIKA: Click/Uzum aynan nima yuborishini ko'rish uchun (config.json: "debugPay": true).
     // Aniqlab bo'lgach o'chiring — loglar shaxsiy ma'lumot (ism/telefon/summa) o'z ichiga oladi.
-    if(CFG.debugPay && /^\/(click|uzum)\//.test(req.url)) console.error('[PAY-BODY]', req.url, JSON.stringify(body));
+    if(CFG.debugPay && /^\/(click|uzum)\//.test(req.url)) console.error('[PAY-BODY]', req.url, JSON.stringify(redactPII(body)));
     const send = obj => { res.writeHead(200, { 'Content-Type':'application/json' }); res.end(JSON.stringify(obj)); };
     try{
       if(req.url.startsWith('/click/prepare'))       send(await handlePrepare(body));
@@ -604,4 +642,4 @@ if(require.main === module){
   server.listen(PORT, '127.0.0.1', () => console.log(`Iqror to'lov serveri tinglayapti 127.0.0.1:${PORT}  (/uzum/{check,create,confirm,reverse,status}, /click/prepare, /click/complete)`));
 }
 
-module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5, hikParse, hikEvents, hikFields, hikMapStatus, handleHikEvent };
+module.exports = { handlePrepare, handleComplete, handleUzum, uzumAuthOK, clickSign, md5, hikParse, hikEvents, hikFields, hikMapStatus, hikEventId, handleHikEvent, readBody, redactPII };
