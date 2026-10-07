@@ -556,6 +556,9 @@ const SCHEMAS = {
       // ---- Maosh: asosiy oylik + «Malaka va sertifikatlar» paneli (quyida, belgilash ro'yxati) ----
       {k:'baseSalary',l:'Asosiy oylik (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 5 000 000'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi xodim ID — kelish nazorati uchun)',t:'text'},
+      {k:'payStatus',l:'Ish holati',t:'select',opts:[{v:'',l:'Faol'},{v:'sinov',l:'Sinov (maoshsiz)'},{v:'muzlatilgan',l:'Muzlatilgan (vaqtincha)'},{v:'chiqdi',l:'Ishdan chiqqan'}]},
+      {k:'activeFrom',l:'Faollashtirish sanasi (ishga kirgan kun; oy o‘rtasi bo‘lsa shu kundan maosh)',t:'date'},
+      {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha maosh)',t:'date'},
       {k:'order',l:'Tartib',t:'number'}
     ]
   },
@@ -573,6 +576,9 @@ const SCHEMAS = {
       {k:'salary',l:'Oylik maosh (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 3 000 000'},
       {k:'note',l:'Izoh',t:'text'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat uchun)',t:'text'},
+      {k:'payStatus',l:'Ish holati',t:'select',opts:[{v:'',l:'Faol'},{v:'sinov',l:'Sinov (maoshsiz)'},{v:'muzlatilgan',l:'Muzlatilgan (vaqtincha)'},{v:'chiqdi',l:'Ishdan chiqqan'}]},
+      {k:'activeFrom',l:'Faollashtirish sanasi (ishga kirgan kun; oy o‘rtasi bo‘lsa shu kundan maosh)',t:'date'},
+      {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha maosh)',t:'date'},
       {k:'order',l:'Tartib',t:'number'}
     ]
   },
@@ -761,8 +767,8 @@ async function loadPayees(){
   let teachers=[]; try{ teachers=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){}
   let staff=[];    try{ staff=(cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=staff; }catch(e){}
   try{ await loadSalaryRates(); }catch(e){}
-  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id) }));
-  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id) }));
+  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'' }));
+  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'' }));
   return A.concat(B);
 }
 // O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
@@ -2405,20 +2411,24 @@ async function openPayNote(key, name){
 }
 // ⏯️ TEZKOR HOLAT (Faollashtirish / Muzlatish / Chiqarish / Sinov) — bir oynada, sana bilan.
 //   Public students hujjatiga payStatus + activeFrom/stopFrom yozadi (prorata shundan hisoblanadi).
-async function openStatusModal(s){
-  if(!s){ toast('O‘quvchi topilmadi',true); return; }
+async function openStatusModal(s, collName, onSaved){
+  collName = collName || 'students';
+  if(!s){ toast('Topilmadi',true); return; }
+  const isStu = (collName==='students');
+  const MW = isStu ? 'to‘lov' : 'maosh';      // pul so'zi (o'quvchi: to'lov; xodim: maosh)
+  const REC = isStu ? 'faktura' : 'maosh';
   const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
   const cur=s.payStatus||'faol';
-  const curLbl=({faol:'Faol',sinov:'Sinov',muzlatilgan:'Muzlatilgan',chiqdi:'Chiqib ketgan'})[cur]||'Faol';
+  const curLbl=({faol:'Faol',sinov:'Sinov',muzlatilgan:'Muzlatilgan',chiqdi:'Chiqdi'})[cur]||'Faol';
   $('#modal').innerHTML=`<div class="modal-h"><h3>Holat — ${esc(s.name||s._id)}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small muted" style="margin-bottom:10px">Joriy: <b>${esc(curLbl)}</b>${s.activeFrom?` · faollashtirilgan: ${esc(s.activeFrom)}`:''}${s.stopFrom?` · to‘xtatish: ${esc(s.stopFrom)}`:''}</div>
       <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Amal
         <select id="st-sel" style="${FLD}">
-          <option value="faol">▶️ Faollashtirish (to‘lov boshlanadi)</option>
+          <option value="faol">▶️ Faollashtirish (${MW} boshlanadi)</option>
           <option value="muzlatilgan">❄️ Muzlatish (vaqtincha to‘xtatish)</option>
           <option value="chiqdi">⏹️ Chiqarish (butunlay ketdi)</option>
-          <option value="sinov">🧪 Sinovga (to‘lovsiz)</option>
+          <option value="sinov">🧪 Sinovga (${MW}siz)</option>
         </select></label>
       <label class="small" id="st-date-wrap" style="display:flex;flex-direction:column;gap:4px">
         <span id="st-date-lbl">Faollashtirish sanasi</span>
@@ -2429,11 +2439,11 @@ async function openStatusModal(s){
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const sel=$('#st-sel'), dw=$('#st-date-wrap'), dl=$('#st-date-lbl'), hint=$('#st-hint');
   const upd=()=>{ const v=sel.value;
-    if(v==='sinov'){ dw.style.display='none'; hint.textContent='Sinov: faktura yaratilmaydi. Keyin «Faollashtirish» qilsangiz, o‘sha sanadan to‘lov boshlanadi.'; }
+    if(v==='sinov'){ dw.style.display='none'; hint.textContent=`Sinov: ${REC} hisoblanmaydi. Keyin «Faollashtirish» qilsangiz, o‘sha sanadan ${MW} boshlanadi.`; }
     else { dw.style.display='';
-      if(v==='faol'){ dl.textContent='Faollashtirish sanasi (shu kundan to‘lov)'; hint.textContent='Oy o‘rtasi bo‘lsa — shu kundan prorata (ish kunlari) hisoblanadi.'; }
-      else if(v==='muzlatilgan'){ dl.textContent='To‘xtatish sanasi (shu kungacha to‘lanadi)'; hint.textContent='Shu kundan keyin faktura yo‘q. Qaytganda yana «Faollashtirish» qiling.'; }
-      else { dl.textContent='Chiqib ketgan sana (shu kungacha to‘lanadi)'; hint.textContent='Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.'; } } };
+      if(v==='faol'){ dl.textContent=`Faollashtirish sanasi (shu kundan ${MW})`; hint.textContent='Oy o‘rtasi bo‘lsa — shu kundan prorata (ish kunlari) hisoblanadi.'; }
+      else if(v==='muzlatilgan'){ dl.textContent='To‘xtatish sanasi (shu kungacha to‘lanadi)'; hint.textContent=`Shu kundan keyin ${REC} yo‘q. Qaytganda yana «Faollashtirish» qiling.`; }
+      else { dl.textContent='Chiqqan sana (shu kungacha to‘lanadi)'; hint.textContent=isStu?'Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.':'Shu kundan keyin maosh yo‘q.'; } } };
   sel.value = (cur==='faol') ? 'muzlatilgan' : 'faol';   // qulay: joriy holatga teskari amalni taklif qiladi
   upd(); sel.onchange=upd;
   $('#st-save').onclick=async()=>{
@@ -2443,8 +2453,9 @@ async function openStatusModal(s){
     else if(v==='sinov'){ patch.payStatus='sinov'; }
     else { patch.payStatus=v; patch.stopFrom=dt; }   // muzlatilgan / chiqdi
     const btn=$('#st-save'); btn.disabled=true;
-    try{ await setDoc(doc(db,'students', s._id), patch, {merge:true});
-      cache.students=null; toast('Holat saqlandi ✓'); closeModal(); renderStudents();
+    try{ await setDoc(doc(db, collName, s._id), patch, {merge:true});
+      cache[collName]=null; toast('Holat saqlandi ✓'); closeModal();
+      if(onSaved) onSaved(); else if(isStu) renderStudents();
     }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
   };
 }
@@ -2710,12 +2721,13 @@ async function renderCollection(name){
         if(c[0]==='salary'||c[0]==='baseSalary'){ const n=salaryNum(v); return `<td data-label="${esc(c[1])}">${n>0?`<b>${fmtSom(n)}</b>`:'—'}</td>`; }
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
-      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions"><button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>`:''}</tr>`;
+      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions">${(name==='teachers'||name==='staff')?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>`:''}</tr>`;
     }).join('');
     $('#col-card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
     if(canMng){
       $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
       $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
+      if(name==='teachers'||name==='staff') $('#col-card').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status), name, ()=>renderCollection(name))));
     }
   };
   draw(fmemApply('col-search-'+name));
@@ -3176,15 +3188,23 @@ const SA_RULES = { workStartMin: 8*60, workEndMin: 17*60, lateGraceMin: 10, earl
 function saMin(ts){ const m=String(ts||'').match(/T(\d{2}):(\d{2})/); if(m) return (+m[1])*60+(+m[2]); const d=new Date(ts); return isNaN(d)?null:d.getHours()*60+d.getMinutes(); }
 // Oylik davomat jarimasi. byDay={day:[skanlar]}, leaveSet=ruxsatli kunlar (ruhsat/kasallik), salary=oylik.
 //   Faqat O'TGAN ish kunlari (Dush–Juma, bugundan oldin) hisobga olinadi.
-function attMetrics(byDay, leaveSet, month, salary){
+function attMetrics(byDay, leaveSet, month, salary, person){
   const mm=String(month||'').match(/^(\d{4})-(\d{2})/); if(!mm) return null;
   const y=+mm[1], mo=+mm[2]; const today=todayStr();
   const mEndDate=new Date(y,mo,0), last=mEndDate.getDate();
   const fullWD=saWorkdays(new Date(y,mo-1,1), mEndDate);           // oydagi JAMI ish kunlari (kunlik stavka uchun)
   const dailyRate=(salary>0 && fullWD>0)?Math.round(salary/fullWD):0;
+  // Holat (sinov/muzlatilgan/chiqdi/faollashtirish) -> faqat FAOL oraliqdagi kunlar jarimaga kiradi
+  //   (muzlatilgan/faol-emas kunlar "yo'qlama" sanalmaydi — ular maosh prorata bilan hisobga olingan).
+  let aStart=null, aEnd=null;
+  if(person){ const bi=billingInterval(person, month);
+    if(bi && bi.skip) return { absent:0, late:0, early:0, dailyRate, absenceAmt:0, lateAmt:0, earlyAmt:0, total:0, fullWD };
+    if(bi){ aStart=bi.startStr||null; aEnd=bi.endStr||null; } }
   let absent=0, late=0, early=0;
   for(let dd=1; dd<=last; dd++){ const ds=`${month}-${String(dd).padStart(2,'0')}`; if(ds>=today) break;   // bugun tugamagan -> hisobga olinmaydi
     const w=new Date(y,mo-1,dd).getDay(); if(!(w>=1&&w<=5)) continue;                                      // faqat ish kuni
+    if(aStart && ds<aStart) continue;                                                                      // hali faol emas (ishga kirmagan/muzlatilgan)
+    if(aEnd && ds>aEnd) continue;                                                                          // to'xtatilgandan keyin
     if(leaveSet && leaveSet.has(ds)) continue;                                                             // ruhsat/kasallik -> jarima yo'q
     const scans=((byDay&&byDay[ds])||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
     if(!scans.length){ absent++; continue; }
@@ -3224,8 +3244,8 @@ async function renderStaffAttendance(){
     return { kelgan, ketgan, brkMin:brk?Math.round(brk/60000):0, workMin:work==null?null:Math.round(work/60000) };
   };
   const buildRoster=(staff,teachers)=>{ const r=[];
-    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0 }); });
-    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi', salary:sal }); } });
+    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'' }); });
+    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'' }); } });
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
   // ------- KUNLIK -------
   const loadDay=async()=>{
@@ -3292,7 +3312,7 @@ async function renderStaffAttendance(){
       const excused=new Set([...lv.ruhsat,...lv.kasallik]);
       let absent=0; workSet.forEach(d=>{ if(!presentWork.has(d) && !excused.has(d)) absent++; });
       const avg = arr.length ? (()=>{ const v=Math.round(arr.reduce((s,n)=>s+n,0)/arr.length); return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); })() : null;
-      const dm = attMetrics(byDay, excused, mon, r.salary) || {late:0,early:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
+      const dm = attMetrics(byDay, excused, mon, r.salary, r) || {late:0,early:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
       return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm };
     });
     const bodyHtml = bodyRows.map(o=>`<tr>
@@ -4078,10 +4098,14 @@ async function renderAccounting(){
     openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
     const dnum=v=>Number(String(v==null?'':v).replace(/\D/g,''))||0;
     const calc=()=>{ const tid=$('#sp-t').value, mm=$('#sp-month').value||M, p=payees.find(x=>x.id===String(tid))||{};
-      const gross=Number(p.salary)||0, adv=advOfMonth(mm).filter(a=>String(a.teacherId)===String(tid)).reduce((s,a)=>s+(Number(a.amount)||0),0);
+      const grossFull=Number(p.salary)||0;
+      const bi=billingInterval(p, mm);                                    // holat/sana: sinov->0, muzlatilgan/chiqdi->to'xtatguncha, ishga kirgan->prorata
+      const gross=(bi&&bi.skip)?0:Math.round(grossFull*((bi&&bi.fraction)||1));
+      const adv=advOfMonth(mm).filter(a=>String(a.teacherId)===String(tid)).reduce((s,a)=>s+(Number(a.amount)||0),0);
       const ded=dnum($('#sp-ded')&&$('#sp-ded').value); const net=Math.max(0,gross-adv-ded);
       $('#sp-gross').value=gross; $('#sp-adv').value=adv; $('#sp-net').value=net;
-      $('#sp-info').innerHTML=`Maosh: <b>${fmtSum(gross)}</b> · Avans: <b>${fmtSum(adv)}</b> · Davomat ushlanmasi: <b>${fmtSum(ded)}</b> · <span style="color:#1F9982">Naqd: <b>${fmtSum(net)}</b> so‘m</span>`; };
+      const proNote=(bi&&bi.skip)?` <span style="color:#B45309">(${esc(bi.reason||'faol emas')}: maosh yo‘q)</span>`:((bi&&bi.partial)?` <span style="color:#B45309">(prorata ${bi.actDays}/${bi.fullDays} ish kuni)</span>`:'');
+      $('#sp-info').innerHTML=`Maosh: <b>${fmtSum(gross)}</b>${proNote} · Avans: <b>${fmtSum(adv)}</b> · Davomat ushlanmasi: <b>${fmtSum(ded)}</b> · <span style="color:#1F9982">Naqd: <b>${fmtSum(net)}</b> so‘m</span>`; };
     // Tanlangan xodim+oy bo'yicha davomat ushlanmasini avtomatik hisoblab, maydonga qo'yadi (tahrirlasa bo'ladi).
     const loadDed=async()=>{ const tid=$('#sp-t').value, mm=$('#sp-month').value||M, p=payees.find(x=>x.id===String(tid))||{};
       const info=$('#sp-ded-info'), inp=$('#sp-ded');
@@ -4092,7 +4116,7 @@ async function renderAccounting(){
       try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); lvs=s.docs.map(d=>d.data()||{}); }catch(e){}
       const byDay={}; cks.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
       const leaveSet=new Set(); lvs.forEach(l=>{ let d=new Date((l.startDay||'')+'T00:00:00'); const end=new Date((l.endDay||l.startDay||'')+'T00:00:00'); let g=0; while(!isNaN(d)&&!isNaN(end)&&d<=end&&g<400){ const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; if(ds>=mS&&ds<=mE) leaveSet.add(ds); d.setDate(d.getDate()+1); g++; } });
-      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0)||{total:0,absent:0,late:0,early:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
+      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p)||{total:0,absent:0,late:0,early:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
       if(inp) inp.value=String(dm.total||0);
       if(info) info.textContent=`yo‘qlama ${dm.absent} (${fmtSum(dm.absenceAmt)}) · kech ${dm.late} (${fmtSum(dm.lateAmt)}) · erta ${dm.early} (${fmtSum(dm.earlyAmt)})`;
       calc();
@@ -4659,9 +4683,10 @@ function billingInterval(s, month){
   if((st==='muzlatilgan'||st==='chiqdi') && sf && sf<end) end=sf;
   if(start>end) return {skip:true, reason:'oraliq yo‘q'};
   const full=saWorkdays(mStart,mEnd), act=saWorkdays(start,end);
-  if(full<=0) return {skip:false, fraction:1};
+  const fmtD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  if(full<=0) return {skip:false, fraction:1, startStr:fmtD(start), endStr:fmtD(end)};
   const fraction=Math.min(1, act/full);
-  return {skip:false, fraction, actDays:act, fullDays:full, partial: fraction<0.999};
+  return {skip:false, fraction, actDays:act, fullDays:full, partial: fraction<0.999, startStr:fmtD(start), endStr:fmtD(end)};
 }
 function computeTuition(s, priv, ctx){
   const pv=priv||{}; const cat=pv.specialCategory||''; const sid=s.studentId||s._id;
