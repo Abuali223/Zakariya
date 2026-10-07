@@ -100,7 +100,17 @@ export async function getDocs(refOrQuery) {
 }
 
 // ---- writes ----
-export async function setDoc(ref, data, _opts) {
+export async function setDoc(ref, data, opts) {
+  // Supabase upsert (INSERT ... ON CONFLICT (id) DO UPDATE): faqat BERILGAN ustunlarni yozadi,
+  //   ro'yxatda yo'q ustunlar O'ZGARMAY qoladi. Bu Firestore setDoc(..., {merge:true}) bilan
+  //   AYNAN bir xil va kodda ko'p joy shunga tayanadi (masalan {specialCategory:'olympiad'}
+  //   faqat o'sha ustunni yangilaydi, qolgan PII'ni saqlaydi).
+  // DIQQAT: Firestore'ning merge'SIZ setDoc'i (to'liq REPLACE — ro'yxatda yo'q maydonlarni
+  //   O'CHIRADI) ATAYLAB emulatsiya QILINMAYDI: aks holда qisman obyekt yozuvchi o'nlab
+  //   chaqiruvlar boshqa ustunlarni NULL qilib, MA'LUMOT YO'QOTILARDI. Maydonni tozalash kerak
+  //   bo'lsa — uni ochiq `null` qilib bering. Shuning uchun opts.merge qiymatidan qat'i nazar
+  //   (true, false yoki berilmаган) xatti-harakat bir xil: xavfsiz merge-upsert.
+  void opts;   // merge semantikasi upsert orqali ta'minlanadi (yuqoridagi izohga qarang)
   const { error } = await supabase().from(ref._t).upsert({ id: ref._id, ...prep(data) }, { onConflict: "id" });
   if (error) throw error;
 }
