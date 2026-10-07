@@ -3421,9 +3421,11 @@ async function renderStaffAttendance(){
     if(b){ openForm('staff', null, { cameraId:b.dataset.linkcam, name:b.dataset.linkname||'' }, ()=>{ cache.staff=null; route(); }); return; }
     // Mavjud xodim/o'qituvchini TAHRIRLASH (ism, lavozim, ish vaqti, Kamera ID...)
     const ed=e.target.closest('[data-editperson]');
-    if(ed){ const [rt,rid]=String(ed.dataset.editperson||'').split(':'); const arr=(rt==='staff')?lastStaff:lastTeachers;
+    if(ed){ const [rt,rid]=String(ed.dataset.editperson||'').split(':');
+      const coll=(rt==='teacher')?'teachers':'staff';   // refType ('teacher'/'staff') -> SCHEMAS kaliti ('teachers'/'staff')
+      const arr=(rt==='teacher')?lastTeachers:lastStaff;
       const full=(arr||[]).find(x=>String(x._id)===rid);
-      if(full) openForm(rt, full, null, ()=>{ cache[rt]=null; route(); });
+      if(full) openForm(coll, full, null, ()=>{ cache[coll]=null; route(); });
       else toast('Yozuv topilmadi — ro‘yxatni yangilang',true);
       return; }
   });
