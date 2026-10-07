@@ -3,26 +3,10 @@
 //   node payments/attr.test.cjs
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), Module = require('module');
 
+const { makeFake } = require('./_fake-sb.cjs');
 const state = { student_private: {}, students: {}, student_codes: {}, payments: {}, invoices: {} };
-function match(r, filters) { return filters.every(([f, v]) => String(r[f]) === String(v)); }
-function makeFake() {
-  return { from(table) {
-    const filters = [];
-    const api = {
-      select() { return api; },
-      eq(f, v) { filters.push([f, v]); return api; },
-      maybeSingle() { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows[0] || null, error: null }); },
-      upsert(obj) { state[table] = state[table] || {}; state[table][obj.id] = Object.assign({}, state[table][obj.id], obj); return Promise.resolve({ error: null }); },
-      insert(obj) { state[table] = state[table] || {}; if (state[table][obj.id]) return Promise.resolve({ error: { message: 'dup' } }); state[table][obj.id] = obj; return Promise.resolve({ error: null }); },
-      update(obj) { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) Object.assign(state[table][id], obj); return Promise.resolve({ error: null }); } }; },
-      delete() { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) delete state[table][id]; return Promise.resolve({ error: null }); } }; },
-      then(res) { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows, error: null }).then(res); },
-    };
-    return api;
-  } };
-}
 const orig = Module._load;
-Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: () => makeFake() }; return orig.apply(this, arguments); };
+Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: () => makeFake(state) }; return orig.apply(this, arguments); };
 
 const CFGFILE = path.join(__dirname, '_attr-config.json');
 const SECRET = 'ATTRSECRET';

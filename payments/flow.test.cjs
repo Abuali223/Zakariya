@@ -4,27 +4,12 @@
 // Ishga tushirish:  node payments/flow.test.cjs
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), Module = require('module');
 
-// ---- soxta, stateful Supabase mijozi (in-memory jadvallar) ----
-const state = { invoices: {}, payments: {} };
-function match(r, filters) { return filters.every(([f, v]) => String(r[f]) === String(v)); }
-function makeFake() {
-  return { from(table) {
-    const filters = [];
-    const api = {
-      select() { return api; },
-      eq(f, v) { filters.push([f, v]); return api; },
-      maybeSingle() { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows[0] || null, error: null }); },
-      upsert(obj) { state[table] = state[table] || {}; state[table][obj.id] = Object.assign({}, state[table][obj.id], obj); return Promise.resolve({ error: null }); },
-      update(obj) { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) Object.assign(state[table][id], obj); return Promise.resolve({ error: null }); } }; },
-      delete() { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) delete state[table][id]; return Promise.resolve({ error: null }); } }; },
-      then(res) { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows, error: null }).then(res); },
-    };
-    return api;
-  } };
-}
-// @supabase/supabase-js ni intercept qilamiz
+// ---- soxta, stateful Supabase mijozi (pul RPC'lari bilan — _fake-sb.cjs) ----
+const { makeFake } = require('./_fake-sb.cjs');
+const state = { invoices: {}, payments: {}, students: {}, student_credit: {}, applied_payments: {} };
+// @supabase/supabase-js ni intercept qilamiz (index.cjs require'idan OLDIN)
 const orig = Module._load;
-Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: () => makeFake() }; return orig.apply(this, arguments); };
+Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: () => makeFake(state) }; return orig.apply(this, arguments); };
 
 // ---- vaqtinchalik config (payments/ ichida, backend=supabase) ----
 const CFGFILE = path.join(__dirname, '_flow-config.json');
@@ -43,11 +28,14 @@ function sign(p, isComplete) {
 }
 
 (async () => {
-  // seed: to'lanmagan invoice 500000
-  state.invoices['INV-42'] = { id: 'INV-42', amount: 500000, status: 'unpaid', studentId: 'S1' };
+  // seed: o'quvchi + aniq (precise) invoice ID '{sid}__{oy}' — "Click" tugmasi shu ko'rinishda yuboradi.
+  //   (Balans modeli: invoice ANIQ ID orqali topiladi; summa aynan mos kelishi shart emas.)
+  const INV = 'S1__2026-08';
+  state.students['S1'] = { id: 'S1', studentId: 'S1', name: 'Ali' };
+  state.invoices[INV] = { id: INV, amount: 500000, status: 'unpaid', studentId: 'S1', month: '2026-08' };
 
   // 1) PREPARE (to'g'ri imzo)
-  const p0 = { click_trans_id: 'CT9', service_id: '111', merchant_trans_id: 'INV-42', amount: '500000', action: '0', sign_time: '2026-01-01 10:00:00' };
+  const p0 = { click_trans_id: 'CT9', service_id: '111', merchant_trans_id: INV, amount: '500000', action: '0', sign_time: '2026-01-01 10:00:00' };
   p0.sign_string = sign(p0, false);
   const r1 = await handlePrepare(p0);
   ok(r1.error === 0, 'PREPARE muvaffaqiyat (error=0)');
@@ -59,21 +47,34 @@ function sign(p, isComplete) {
   const rBad = await handlePrepare(bad);
   ok(rBad.error === -1, 'yaroqsiz imzo -> error=-1 (SIGN FAILED)');
 
-  // 3) COMPLETE (to'g'ri imzo) -> invoice paid
-  const p1 = { click_trans_id: 'CT9', service_id: '111', merchant_trans_id: 'INV-42', merchant_prepare_id: r1.merchant_prepare_id, amount: '500000', action: '1', sign_time: '2026-01-01 10:05:00', error: '0' };
+  // 3) COMPLETE (to'g'ri imzo) -> invoice paid (apply_to_invoice RPC orqali)
+  const p1 = { click_trans_id: 'CT9', service_id: '111', merchant_trans_id: INV, merchant_prepare_id: r1.merchant_prepare_id, amount: '500000', action: '1', sign_time: '2026-01-01 10:05:00', error: '0' };
   p1.sign_string = sign(p1, true);
   const r2 = await handleComplete(p1);
   ok(r2.error === 0, 'COMPLETE muvaffaqiyat (error=0)');
-  ok(state.invoices['INV-42'].status === 'paid', 'INVOICE "paid" bo\'ldi ★');
-  ok(state.invoices['INV-42'].provider === 'click' && !!state.invoices['INV-42'].paidAt, 'provider=click + paidAt yozildi');
+  ok(state.invoices[INV].status === 'paid', 'INVOICE "paid" bo\'ldi ★ (apply_to_invoice)');
+  ok(state.invoices[INV].provider === 'click' && !!state.invoices[INV].paidAt, 'provider=click + paidAt yozildi');
   ok(state.payments['click_CT9'].status === 'paid', 'payments doc "paid"');
 
-  // 4) noto'g'ri summa -> rad (yangi invoice)
-  state.invoices['INV-7'] = { id: 'INV-7', amount: 300000, status: 'unpaid' };
-  const pw = { click_trans_id: 'CTX', service_id: '111', merchant_trans_id: 'INV-7', amount: '999999', action: '0', sign_time: 't' };
-  pw.sign_string = sign(pw, false);
-  const rw = await handlePrepare(pw);
-  ok(rw.error === -2, 'summa mos emas -> error=-2');
+  // 4) summa <= 0 -> rad (-2). (Balans modelida musbat summa HAR DOIM qabul qilinadi — qisman/avans;
+  //    faqat <=0 rad etiladi. Ilgari "aynan mos emas" rad etilardi, endi yo'q.)
+  const pz = { click_trans_id: 'CTZ', service_id: '111', merchant_trans_id: 'S2__2026-08', amount: '0', action: '0', sign_time: 't' };
+  pz.sign_string = sign(pz, false);
+  const rz = await handlePrepare(pz);
+  ok(rz.error === -2, 'summa <=0 -> error=-2');
+
+  // 5) BALANS modeli: ortiqcha to'lov -> invoice "paid" + ortig'i o'quvchi AVANSIga (student_credit).
+  const INV5 = 'S5__2026-08';
+  state.students['S5'] = { id: 'S5', studentId: 'S5', name: 'Vali' };
+  state.invoices[INV5] = { id: INV5, amount: 300000, status: 'unpaid', studentId: 'S5', month: '2026-08' };
+  const pp0 = { click_trans_id: 'CT5', service_id: '111', merchant_trans_id: INV5, amount: '500000', action: '0', sign_time: 't5' };
+  pp0.sign_string = sign(pp0, false);
+  const pr5 = await handlePrepare(pp0);
+  const pp1 = { click_trans_id: 'CT5', service_id: '111', merchant_trans_id: INV5, merchant_prepare_id: pr5.merchant_prepare_id, amount: '500000', action: '1', sign_time: 't5b', error: '0' };
+  pp1.sign_string = sign(pp1, true);
+  await handleComplete(pp1);
+  ok(state.invoices[INV5].status === 'paid', 'ortiqcha to\'lov -> invoice "paid"');
+  ok(state.student_credit['S5'] && state.student_credit['S5'].credit === 200000, 'ortig\'i (200000) o\'quvchi avansiga yozildi ★');
 
   fs.unlinkSync(CFGFILE);
   console.log('\n' + (fails ? ('❌ ' + fails + ' FAILED') : '✅ ALL PASS — to\'lov oqimi Supabase backend ustida ishlaydi'));
