@@ -585,6 +585,16 @@ function hikEvents(raw){
 function hikParse(raw){ return hikEvents(raw)[0] || { personId:'', name:'', status:'unknown', ts:'', serial:'', raw:null }; }
 function hikDay(ts){ const m=String(ts||'').match(/^(\d{4}-\d{2}-\d{2})/); if(m) return m[1];
   try{ return new Date(ts||Date.now()).toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
+// Istalgan vaqtni Asia/Tashkent (+05:00, DST yo'q) formatiga keltiradi:
+//   tz-ko'rsatilgan (Z yoki ±offset) -> o'sha instant +05:00 da; naive (offsetsiz) -> allaqachon mahalliy.
+function toTashkent(raw){
+  const s=String(raw||'').trim(); if(!s) return null; const p=n=>String(n).padStart(2,'0');
+  if(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)){ const d=new Date(s); if(isNaN(d)) return null; const z=new Date(d.getTime()+5*3600000);
+    return `${z.getUTCFullYear()}-${p(z.getUTCMonth()+1)}-${p(z.getUTCDate())}T${p(z.getUTCHours())}:${p(z.getUTCMinutes())}:${p(z.getUTCSeconds())}+05:00`; }
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}+05:00`;
+  return null;
+}
 async function handleHikEvent(raw){
   const evs=hikEvents(raw);
   // RAW tana ataylab LOGLANMAYDI — Hik multipart ichida yuz-shabloni (biometrik) / ism bo'lishi mumkin.
@@ -595,9 +605,11 @@ async function handleHikEvent(raw){
     //   Eshik/tizim hodisalari va notanish yuz (employeeNo yo'q) -> o'tkazib yuboriladi.
     if(!ev.personId){ skipped++; continue; }
     const id=hikEventId(ev);   // qurilma bilan namespace + deterministik (idempotentlik)
-    // Qurilma vaqtini ORIGINAL (mahalliy offset bilan, masalan +05:00) saqlaymiz -> kechikish/ko'rinish
-    //   mahalliy soatda to'g'ri bo'ladi (UTCga aylantirsak 08:00 -> 03:00 bo'lib ketardi).
-    const tsStr = (ev.ts && !isNaN(Date.parse(ev.ts))) ? ev.ts : new Date().toISOString();
+    // Vaqtni DOIM Asia/Tashkent (+05:00, DST yo'q) ga keltiramiz -> sayt mahalliy soatni to'g'ri
+    //   ko'rsatadi. Qurilma UTC (...Z) yuborsa — +5 soat suriladi; +05:00 yuborsa — o'zgarmaydi;
+    //   offsetsiz (naive) yuborsa — allaqachon mahalliy deb olinadi. (Ilgari ev.ts as-is saqlanib,
+    //   qurilma UTC yuborganda 07:37 -> 02:37 bo'lib ko'rinardi.)
+    const tsStr = toTashkent(ev.ts) || toTashkent(new Date().toISOString());
     try{
       await db.collection('staff_checkins').doc(id).set({
         id, personId:ev.personId, name:ev.name, status:ev.status, ts:tsStr, day:hikDay(tsStr), raw:ev.raw, createdAt: FieldValue.serverTimestamp()

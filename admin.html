@@ -3192,7 +3192,7 @@ async function renderCheckins(){
     // Har bir shaxsning ENG ERTA kirishini olamiz (birinchi kelish)
     const first={}; rows.forEach(r=>{ const k=(r.personType||'')+':'+(r.refId||r.cameraId||r._id); const ts=r.ts||''; if(!first[k]||ts<first[k].ts) first[k]=r; });
     const list=Object.values(first).sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
-    const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); return m?m[1]:esc(String(iso||'').slice(11,16)); };
+    const hhmm=iso=>{ const p=tzHMParts(iso); return p?String(p.h).padStart(2,'0')+':'+String(p.m).padStart(2,'0'):esc(String(iso||'').slice(11,16)); };
     const stChip=st=> st==='late' ? `<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kech</span>`
                     : st==='present' ? `<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>` : `<span class="muted">—</span>`;
     const typeChip=tp=> tp==='staff' ? `<span class="chip" style="background:#EAE1F2;color:#5b3d8a">Xodim</span>` : `<span class="chip" style="background:var(--it-bg);color:var(--teal)">O‘quvchi</span>`;
@@ -3227,7 +3227,16 @@ function personRules(p){
            workDays: wd || new Set(SA_WORKDAYS) };
 }
 // ts (ISO, mahalliy offsetli) -> kun ichidagi daqiqa (HH*60+MM). Topilmasa null.
-function saMin(ts){ const m=String(ts||'').match(/T(\d{2}):(\d{2})/); if(m) return (+m[1])*60+(+m[2]); const d=new Date(ts); return isNaN(d)?null:d.getHours()*60+d.getMinutes(); }
+// Asia/Tashkent soat:daqiqa (DOIMO +05:00, DST yo'q). tz-ko'rsatilgan (Z yoki ±offset) vaqtни
+//   mahalliyга o'tkazamiz; offsetsiz (naive) vaqt — allaqachon qurilma-mahalliy deb olinadi.
+//   Shu bilan qurilma UTC yuborsa ham (masalan ...Z) sayt TO'G'RI mahalliy soatni ko'rsatadi.
+function tzHMParts(iso){
+  const s=String(iso||'').trim(); if(!s) return null;
+  if(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)){ const d=new Date(s); if(!isNaN(d)){ const z=new Date(d.getTime()+5*3600000); return {h:z.getUTCHours(), m:z.getUTCMinutes()}; } }
+  const m=s.match(/T(\d{2}):(\d{2})/); if(m) return {h:+m[1], m:+m[2]};
+  const d=new Date(s); return isNaN(d)?null:{h:d.getHours(), m:d.getMinutes()};
+}
+function saMin(ts){ const p=tzHMParts(ts); return p?p.h*60+p.m:null; }
 // Oylik davomat jarimasi. byDay={day:[skanlar]}, leaveSet=ruxsatli kunlar (ruhsat/kasallik), salary=oylik.
 //   Faqat O'TGAN ish kunlari (Dush–Juma, bugundan oldin) hisobga olinadi.
 function attMetrics(byDay, leaveSet, month, salary, person){
@@ -3275,7 +3284,7 @@ async function renderStaffAttendance(){
       ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn ghost" id="sa-cam-import" style="width:100%" title="HIK report (.xls) faylidagi ismlarga qarab Kamera ID'larni avtomatik to‘ldirish">⇪ Kamera ID (report)</button></label>`:''}
     </div></div>
     <div id="sa-body"><div class="loading">Yuklanmoqda…</div></div>`;
-  const hhmm=iso=>{ const m=String(iso||'').match(/T(\d{2}:\d{2})/); if(m) return m[1]; const d=new Date(iso); return isNaN(d)?'—':String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+  const hhmm=iso=>{ const p=tzHMParts(iso); return p?String(p.h).padStart(2,'0')+':'+String(p.m).padStart(2,'0'):'—'; };
   const fmtDur=min=>{ if(min==null) return '<span class="muted">—</span>'; min=Math.round(min); const h=Math.floor(min/60), m=min%60; return (h?h+' soat ':'')+(m||!h?m+' daq':''); };
   const agg=(list)=>{
     const sorted=(list||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
@@ -3356,7 +3365,7 @@ async function renderStaffAttendance(){
     const bodyRows = roster.map(r=>{
       const list=byPerson[r.cam]||[]; const byDay={}; list.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
       let workMin=0, brkMin=0, arr=[]; const presentWork=new Set();
-      Object.keys(byDay).forEach(day=>{ const a=agg(byDay[day].slice().sort((x,z)=>String(x.ts||'').localeCompare(String(z.ts||'')))); if(a.kelgan){ if(a.workMin!=null) workMin+=a.workMin; brkMin+=a.brkMin; const m=String(a.kelgan).match(/T(\d{2}):(\d{2})/); if(m) arr.push((+m[1])*60+(+m[2])); if(workSet.has(day)) presentWork.add(day); } });
+      Object.keys(byDay).forEach(day=>{ const a=agg(byDay[day].slice().sort((x,z)=>String(x.ts||'').localeCompare(String(z.ts||'')))); if(a.kelgan){ if(a.workMin!=null) workMin+=a.workMin; brkMin+=a.brkMin; const km=saMin(a.kelgan); if(km!=null) arr.push(km); if(workSet.has(day)) presentWork.add(day); } });
       const present=Object.keys(byDay).filter(d=>byDay[d].some(x=>x.status==='in')).length;
       const lv=lvByRef[r.refType+':'+r.refId]||{ruhsat:new Set(),kasallik:new Set()};
       const ruhsat=[...lv.ruhsat].filter(d=>workSet.has(d)).length;
