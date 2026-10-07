@@ -487,18 +487,9 @@ const toast=(m,err=false)=>{const t=document.createElement('div');t.className='t
 const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"/></svg>`;
 // To'lov usuli -> yorliq (BITTA manba — ilgari 3 joyda nomuvofiq nusxada edi: ba'zisi 'grant'siz).
 const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', credit:'Avans', grant:'Grant' };
-// Xodim lavozimlari (datalist — tanlash yoki yozish) va ish kunlari presetlari (workDays CSV, JS getDay).
-const STAFF_POSITIONS = ['Qorovul','Oshpaz','Oshxona xodimi','Tozalovchi','Farrosh','Haydovchi','G‘aznachi','Kassir','HR','Moliya','Hamshira','Laborant','Kutubxonachi','Psixolog','Xavfsizlik','Ma’muriyat','Administrator','Texnik xodim','Bog‘bon'];
-const WORKDAYS_OPTS = [
-  {v:'',l:'Standart (Dush–Juma)'},
-  {v:'1,2,3,4,5',l:'Dush–Juma (5 kun)'},
-  {v:'1,2,3,4,5,6',l:'Dush–Shanba (6 kun)'},
-  {v:'0,1,2,3,4,5,6',l:'Har kuni (7 kun)'},
-  {v:'1,2,3,4',l:'Dush–Payshanba (4 kun)'},
-  {v:'2,3,4,5,6',l:'Sesh–Shanba (6 kun)'},
-  {v:'1,3,5',l:'Dush/Chor/Juma'},
-  {v:'2,4,6',l:'Sesh/Pay/Shanba'}
-];
+// Lavozim/rol ro'yxati — «Foydalanuvchilar» bo'limidagi rollar bilan BIR XIL (datalist: tanla yoki yoz).
+//   (Ota-ona/O'quvchi — xodim emas, shuning uchun kiritilmadi. Oxirida amaliy xodim lavozimlari ham bor.)
+const STAFF_POSITIONS = ['Direktor','Ma‘muriyat rahbari','O‘IBDO‘','HR','Moliya menejeri','Kassir','Marketing menejeri','O‘qituvchi','Kurator','Qabulxona xodimi','G‘aznachi','Xo‘jalik xodimi','Bosh oshpaz','Oshxona xodimi','Tozalov xodimi','Qorovul','Xavfsizlik xodimi','Hamshira','Laborant','Kutubxonachi','Haydovchi','Farrosh','Bog‘bon'];
 const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
@@ -570,7 +561,7 @@ const SCHEMAS = {
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi xodim ID — kelish nazorati uchun)',t:'text'},
       {k:'workStart',l:'Ish boshlanishi (bo‘sh = standart 08:00)',t:'time'},
       {k:'workEnd',l:'Ish tugashi (bo‘sh = standart 17:00)',t:'time'},
-      {k:'workDays',l:'Ish kunlari',t:'select',opts:WORKDAYS_OPTS},
+      {k:'workDays',l:'Ish kunlari',t:'weekdays',note:'Kerakli kunlarni belgilang (bo‘sh = standart Dush–Juma). Shanba/Yakshanba ham mumkin.'},
       {k:'payStatus',l:'Ish holati',t:'select',opts:[{v:'',l:'Faol'},{v:'sinov',l:'Sinov (maoshsiz)'},{v:'muzlatilgan',l:'Muzlatilgan (vaqtincha)'},{v:'chiqdi',l:'Ishdan chiqqan'}]},
       {k:'activeFrom',l:'Faollashtirish sanasi (ishga kirgan kun; oy o‘rtasi bo‘lsa shu kundan maosh)',t:'date'},
       {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha maosh)',t:'date'},
@@ -593,7 +584,7 @@ const SCHEMAS = {
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat uchun)',t:'text'},
       {k:'workStart',l:'Ish boshlanishi (bo‘sh = standart 08:00)',t:'time'},
       {k:'workEnd',l:'Ish tugashi (bo‘sh = standart 17:00)',t:'time'},
-      {k:'workDays',l:'Ish kunlari',t:'select',opts:WORKDAYS_OPTS},
+      {k:'workDays',l:'Ish kunlari',t:'weekdays',note:'Kerakli kunlarni belgilang (bo‘sh = standart Dush–Juma). Shanba/Yakshanba ham mumkin.'},
       {k:'payStatus',l:'Ish holati',t:'select',opts:[{v:'',l:'Faol'},{v:'sinov',l:'Sinov (maoshsiz)'},{v:'muzlatilgan',l:'Muzlatilgan (vaqtincha)'},{v:'chiqdi',l:'Ishdan chiqqan'}]},
       {k:'activeFrom',l:'Faollashtirish sanasi (ishga kirgan kun; oy o‘rtasi bo‘lsa shu kundan maosh)',t:'date'},
       {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha maosh)',t:'date'},
@@ -2772,6 +2763,13 @@ function openForm(name, row, prefill, afterSaveCb){
     if(f.t==='dynselect') return `<div><label>${esc(f.l)}</label><select name="${f.k}" data-dyn="${esc(f.src)}"><option value="${esc(v)}" selected>${v?'⏳ joriy qiymat saqlanadi…':'Yuklanmoqda…'}</option></select>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`;
     // datalist: dropdown + o'z matnini kiritish ham mumkin (masalan lavozim: tanla yoki yoz)
     if(f.t==='datalist'){ const lid='dl_'+f.k; return `<div><label>${esc(f.l)}</label><input name="${f.k}" list="${lid}" value="${esc(v)}" autocomplete="off" ${f.placeholder?`placeholder="${esc(f.placeholder)}"`:''} ${f.req?'required':''}><datalist id="${lid}">${(f.opts||[]).map(o=>`<option value="${esc(o)}"></option>`).join('')}</datalist>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`; }
+    // weekdays: ish kunlarini alohida belgilash (Dush..Yakshanba). CSV (JS getDay) yashirin inputда saqlanadi.
+    if(f.t==='weekdays'){ const sel=new Set(String(v||'').split(',').map(x=>parseInt(x,10)).filter(n=>n>=0&&n<=6));
+      const days=[[1,'Dush'],[2,'Sesh'],[3,'Chor'],[4,'Pay'],[5,'Juma'],[6,'Shan'],[0,'Yak']];
+      return `<div><label>${esc(f.l)}</label><input type="hidden" name="${f.k}" value="${esc(v)}">
+        <div class="wd-group" data-k="${f.k}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
+          ${days.map(([n,lb])=>`<label style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border);border-radius:9px;cursor:pointer;font-size:13.5px;user-select:none"><input type="checkbox" class="wd-chk" value="${n}" ${sel.has(n)?'checked':''}>${lb}</label>`).join('')}
+        </div>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`; }
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
     if(f.t==='image') return `<div class="img-field"><label>${esc(f.l)}</label>
       <div class="img-up">
@@ -2807,7 +2805,7 @@ function openForm(name, row, prefill, afterSaveCb){
   }
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
-  wireImages(name); wireVideos(name); populateDynselects(name, row);
+  wireImages(name); wireVideos(name); populateDynselects(name, row); wireWeekdays();
   if(name==='teachers') wireSalaryPanel(row);
   $('#m-form').addEventListener('submit', async e=>{
     e.preventDefault();
@@ -2890,6 +2888,15 @@ function openForm(name, row, prefill, afterSaveCb){
 }
 
 /* Rasm yuklash maydonlarini ulash */
+/* Ish kunlari belgilash — tanlangan kunlarни yashirin inputда CSV (barqaror tartib: Dush..Yak) qiladi */
+function wireWeekdays(){
+  document.querySelectorAll('#m-form .wd-group').forEach(g=>{
+    const k=g.dataset.k; const hidden=document.querySelector('#m-form input[type=hidden][name="'+k+'"]'); if(!hidden) return;
+    const order=[1,2,3,4,5,6,0];
+    const upd=()=>{ const on=new Set([...g.querySelectorAll('.wd-chk:checked')].map(c=>+c.value)); hidden.value=order.filter(d=>on.has(d)).join(','); };
+    g.querySelectorAll('.wd-chk').forEach(c=>c.addEventListener('change',upd));
+  });
+}
 function wireImages(name){
   document.querySelectorAll('#m-form .img-pick').forEach(btn=>{
     const k=btn.dataset.k, file=$('#m-form .img-file[data-k="'+k+'"]');
