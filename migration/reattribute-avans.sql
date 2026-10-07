@@ -38,15 +38,9 @@ begin
 
   p_amount := coalesce(p_amount, 0);
   if p_amount <= 0 then return jsonb_build_object('ok', false, 'reason', 'amount<=0'); end if;
-
-  -- TAKRORLANISHДАН HIMOYA: p_ref berilган bo'lsa, aynan shu ko'chirish faqat BIR marta
-  -- bajariladi (tasodifan ikki marta ishga tushirilса -> {dup:true}, pul ikki marta ko'chmaydi).
-  if coalesce(p_ref, '') <> '' then
-    insert into public.applied_payments(id, "studentId", amount, "createdAt")
-      values ('reattr:' || p_ref, p_to, p_amount, now()) on conflict (id) do nothing;
-    get diagnostics v_inserted = row_count;
-    if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
-  end if;
+  -- p_ref MAJBURIY: takrorlanish himoyasi (va audit izi) HAR DOIM bo'lsin. Refsiz
+  --   ikki marta chaqirilса pul ikki marta ko'chib ketardi.
+  if coalesce(p_ref, '') = '' then return jsonb_build_object('ok', false, 'reason', 'ref-required'); end if;
 
   -- Kanonik studentId (audit-7 kabi): _id yoki studentId kelishi mumkin.
   select "studentId" into v_from from public.students where id = p_from or "studentId" = p_from order by (id = p_from) desc limit 1;
@@ -61,6 +55,13 @@ begin
   if coalesce(v_from_credit, 0) < p_amount - 0.5 then
     return jsonb_build_object('ok', false, 'reason', 'insufficient', 'have', coalesce(v_from_credit, 0), 'need', p_amount);
   end if;
+
+  -- TAKRORLANISHДАН HIMOYA — endi, VALIDATSIYA O'TGACH (aks holда muvaffaqiyatsiz urinish ham
+  --   ref'ni "yoqib" yuborib, keyingi TO'G'RI urinishни {dup} bilan bloklardi). Kanonik v_to bilan.
+  insert into public.applied_payments(id, "studentId", amount, "createdAt")
+    values ('reattr:' || p_ref, v_to, p_amount, now()) on conflict (id) do nothing;
+  get diagnostics v_inserted = row_count;
+  if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
 
   -- 1) Manbadan AYIRAMIZ + jurnal.
   update public.student_credit set credit = credit - p_amount, "updatedAt" = now() where id = v_from;

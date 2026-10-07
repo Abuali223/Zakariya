@@ -24,6 +24,8 @@ declare
   v_sid text; v_amt numeric; v_total numeric := 0; v_n int := 0;
   v_child_id text; v_res jsonb; v_results jsonb := '[]'::jsonb;
   v_pname text; v_provider text;
+  v_agg jsonb := '{}'::jsonb;   -- { kanonik_sid: yig'ilgan_summa } — bir sid ikki marta kelsa QO'SHILADI (yo'qolmaydi)
+  v_prev numeric;
 begin
   -- Ruxsat: to'lov biriktirish/bo'lish — kassir/moliya/direktor yoki server.
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
@@ -47,18 +49,8 @@ begin
   v_provider := coalesce(nullif(p_provider, ''), nullif(v_pay.provider, ''), 'click');
   v_pname := v_pay.pname;
 
-  -- Yig'indi = to'lov summasi (± 0.5) bo'lishi SHART.
-  for v_alloc in select value from jsonb_array_elements(p_allocs) loop
-    v_amt := coalesce((v_alloc->>'amount')::numeric, 0);
-    if v_amt <= 0 then continue; end if;
-    v_total := v_total + v_amt; v_n := v_n + 1;
-  end loop;
-  if v_n < 1 then return jsonb_build_object('ok', false, 'reason', 'no-positive-allocs'); end if;
-  if abs(v_total - v_pay.amount) > 0.5 then
-    return jsonb_build_object('ok', false, 'reason', 'sum-mismatch', 'allocated', v_total, 'payment', v_pay.amount);
-  end if;
-
-  -- Har o'quvchiga: child payment yozuvi (P) + apply_payment (I+C). Bir tranzaksiyaда (atomik).
+  -- 1) Har allocatsiyani KANONIK sidга keltirib, sid bo'yicha YIG'AMIZ (bir sid bir necha marta
+  --    kelsa summalar qo'shiladi). Yig'indi = to'lov summasi (± 0.5) bo'lishi SHART.
   for v_alloc in select value from jsonb_array_elements(p_allocs) loop
     v_amt := coalesce((v_alloc->>'amount')::numeric, 0);
     if v_amt <= 0 then continue; end if;
@@ -67,12 +59,22 @@ begin
       where id = (v_alloc->>'sid') or "studentId" = (v_alloc->>'sid')
       order by (id = (v_alloc->>'sid')) desc limit 1;
     v_sid := coalesce(nullif(v_sid, ''), v_alloc->>'sid');
+    v_prev := coalesce((v_agg->>v_sid)::numeric, 0);
+    v_agg := jsonb_set(v_agg, array[v_sid], to_jsonb(v_prev + v_amt));   -- QO'SHAMIZ (ustiga yozmaymiz)
+    v_total := v_total + v_amt; v_n := v_n + 1;
+  end loop;
+  if v_n < 1 then return jsonb_build_object('ok', false, 'reason', 'no-positive-allocs'); end if;
+  if abs(v_total - v_pay.amount) > 0.5 then
+    return jsonb_build_object('ok', false, 'reason', 'sum-mismatch', 'allocated', v_total, 'payment', v_pay.amount);
+  end if;
+
+  -- 2) Har KANONIK o'quvchiga BITTA child payment yozuvi (P) + apply_payment (I+C). Atomik.
+  --    (Yig'ilgani uchun bir sid ikki marta kelgan bo'lsa ham to'liq summa qo'llanadi, yo'qolmaydi.)
+  for v_sid, v_amt in select key, value::numeric from jsonb_each_text(v_agg) loop
     v_child_id := p_pay_id || ':s:' || v_sid;
-    -- P: child payment yozuvi (idempotent — ON CONFLICT DO NOTHING).
     insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched, "createdAt")
       values (v_child_id, v_sid, v_provider, v_amt, 'applied', v_pname, true, now())
       on conflict (id) do nothing;
-    -- I+C: o'quvchi balansiga qo'llaymiz (apply_payment idempotent, guard = v_child_id).
     v_res := public.apply_payment(v_sid, v_amt, v_provider, v_child_id);
     v_results := v_results || jsonb_build_object('sid', v_sid, 'amount', v_amt, 'apply', v_res);
   end loop;
