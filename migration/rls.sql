@@ -170,6 +170,9 @@ create policy enr_sel on enrollments for select using (app.is_admin());
 create policy enr_upd on enrollments for update using (app.is_admin());
 create policy enr_del on enrollments for delete using (app.is_admin());
 alter table applications enable row level security;
+-- Ariza topshirish (ommaviy). Natija/baholash maydonlari (result/gradedAt) oldindan
+-- to'ldirilmasin — bu QAT'IYLASHTIRISH applications-guard.sql'da (u ustunlar qo'shilgach,
+-- run-all oxirida ishlaydi; bu yerda result/gradedAt ustunlari HALI mavjud emas).
 create policy app_ins on applications for insert with check (status = 'submitted');
 create policy app_sel on applications for select using (app.is_admin() or app.is_zavuch());
 create policy app_upd on applications for update using (app.is_admin() or app.is_zavuch());
