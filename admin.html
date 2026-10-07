@@ -3296,12 +3296,14 @@ async function renderStaffAttendance(){
     (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'' }); });
     (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'' }); } });
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
+  let lastStaff=[], lastTeachers=[];   // tahrirlash uchun eng oxirgi yuklangan to'liq yozuvlar
   // ------- KUNLIK -------
   const loadDay=async()=>{
     const day=$('#sa-date').value; if(!day) return; const _g=VIEW_GEN;
     $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let staff=[], teachers=[], rows=[];
     try{ [staff, teachers] = await Promise.all([ loadCol('staff').catch(()=>[]), loadCol('teachers').catch(()=>[]) ]); }catch(e){}
+    lastStaff=staff; lastTeachers=teachers;
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','==',day))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
     if(_g!==VIEW_GEN) return;
@@ -3316,7 +3318,7 @@ async function renderStaffAttendance(){
         <td data-label="Ketgan" style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'<span class="muted">—</span>'}</td>
         <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}</td>
         <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
-        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}</td></tr>`); });
+        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}</td></tr>`); });
     const unmatched=Object.keys(byPerson).filter(pid=>!seen.has(pid));
     unmatched.forEach(pid=>{ const list=byPerson[pid]; const a=agg(list); const nm=(list.find(x=>x.name)||{}).name||'';
       bodyRows.push(`<tr style="background:#FFFBF2">
@@ -3338,6 +3340,7 @@ async function renderStaffAttendance(){
     const [y,mo]=mon.split('-').map(Number); const mStart=mon+'-01', mEnd=mon+'-31', today=todayStr();
     let staff=[], teachers=[], rows=[], leaves=[];
     try{ [staff, teachers] = await Promise.all([ loadCol('staff').catch(()=>[]), loadCol('teachers').catch(()=>[]) ]); }catch(e){}
+    lastStaff=staff; lastTeachers=teachers;
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','>=',mStart), where('day','<=',mEnd))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
     try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',mEnd), where('endDay','>=',mStart))); leaves=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
@@ -3377,7 +3380,7 @@ async function renderStaffAttendance(){
         <td data-label="O‘rt. kelish" style="font-variant-numeric:tabular-nums">${o.avg||'<span class="muted">—</span>'}</td>
         <td data-label="Kechikish" style="font-variant-numeric:tabular-nums">${o.dm.late?`<span style="color:#B45309">${o.dm.late}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Erta ketish" style="font-variant-numeric:tabular-nums">${o.dm.early?`<span style="color:#B45309">${o.dm.early}</span>`:'<span class="muted">—</span>'}</td>
-        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Yo‘qlama ${fmtSom(o.dm.absenceAmt||0)} · Kechikish ${fmtSom(o.dm.lateAmt||0)} · Erta ketish ${fmtSom(o.dm.earlyAmt||0)}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td></tr>`).join('');
+        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Yo‘qlama ${fmtSom(o.dm.absenceAmt||0)} · Kechikish ${fmtSom(o.dm.lateAmt||0)} · Erta ketish ${fmtSom(o.dm.earlyAmt||0)}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
     // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
     const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
     const lvRows=lvSorted.map(l=>`<tr>
@@ -3413,8 +3416,16 @@ async function renderStaffAttendance(){
   if(canEdit && $('#sa-staff-add')) $('#sa-staff-add').onclick=()=>{ cache.staff=null; openForm('staff', null, null, ()=>{ cache.staff=null; route(); }); };
   // «Bog'lanmagan» Kamera ID -> shu ID bilan yangi xodim yaratib bog'lash (prefill: cameraId + ism).
   if(canEdit) $('#sa-body').addEventListener('click', e=>{
-    const b=e.target.closest('[data-linkcam]'); if(!b) return;
-    openForm('staff', null, { cameraId:b.dataset.linkcam, name:b.dataset.linkname||'' }, ()=>{ cache.staff=null; route(); });
+    // «Bog'lanmagan» Kamera ID -> yangi xodim yaratib bog'lash
+    const b=e.target.closest('[data-linkcam]');
+    if(b){ openForm('staff', null, { cameraId:b.dataset.linkcam, name:b.dataset.linkname||'' }, ()=>{ cache.staff=null; route(); }); return; }
+    // Mavjud xodim/o'qituvchini TAHRIRLASH (ism, lavozim, ish vaqti, Kamera ID...)
+    const ed=e.target.closest('[data-editperson]');
+    if(ed){ const [rt,rid]=String(ed.dataset.editperson||'').split(':'); const arr=(rt==='staff')?lastStaff:lastTeachers;
+      const full=(arr||[]).find(x=>String(x._id)===rid);
+      if(full) openForm(rt, full, null, ()=>{ cache[rt]=null; route(); });
+      else toast('Yozuv topilmadi — ro‘yxatni yangilang',true);
+      return; }
   });
   route();
 }
