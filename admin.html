@@ -3214,6 +3214,15 @@ const SA_WORKDAYS=[1,2,3,4,5];
 //   Ish vaqti 08:00–17:00; kechikish/erta ketish 10 daq ruxsat, har biri 20 000 jarima;
 //   ruhsatsiz yo'qlama -> kunlik stavka (maosh / oydagi ish kunlari).
 const SA_RULES = { workStartMin: 8*60, workEndMin: 17*60, lateGraceMin: 10, earlyGraceMin: 10, latePenalty: 20000, earlyPenalty: 20000 };
+// Kechikish / erta ketish jarima summalari — admin config/finance'da sozlaydi («Narxlar» bo'limi).
+//   Yo'q bo'lsa standart (20 000). 0 ham mumkin (jarimani o'chirish). SA_RULES ustига yoziladi ->
+//   personRules/attMetrics shundan oladi (hammaga amal qiladi). Davomat/maosh hisobidan OLDIN chaqiriladi.
+async function loadSaRates(){
+  try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
+    if(d.latePenalty!=null && d.latePenalty!=='' && isFinite(Number(d.latePenalty)) && Number(d.latePenalty)>=0) SA_RULES.latePenalty=Number(d.latePenalty);
+    if(d.earlyPenalty!=null && d.earlyPenalty!=='' && isFinite(Number(d.earlyPenalty)) && Number(d.earlyPenalty)>=0) SA_RULES.earlyPenalty=Number(d.earlyPenalty);
+  } }catch(e){}
+}
 // 'HH:MM' -> kun daqiqasi (bo'lmasa null).
 function hmToMin(s){ const m=String(s||'').match(/^(\d{1,2}):(\d{2})/); if(!m) return null; const h=+m[1], mi=+m[2]; return (h>=0&&h<24&&mi>=0&&mi<60)?h*60+mi:null; }
 // Shaxsiy ish vaqti/kunlari (xodim/o'qituvchi). Bo'sh maydonlar -> UMUMIY standart (SA_RULES / Dush–Juma).
@@ -3355,6 +3364,7 @@ async function renderStaffAttendance(){
     try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',mEnd), where('endDay','>=',mStart))); leaves=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
     if(_g!==VIEW_GEN) return;
     try{ await loadSalaryRates(); }catch(e){}   // o'qituvchi maoshi (kunlik stavka/jarima uchun)
+    try{ await loadSaRates(); }catch(e){}       // kechikish/erta ketish jarima summalari (sozlanadigan)
     const roster=buildRoster(staff,teachers);
     // Ish kunlari (Dush–Juma), faqat BUGUNGACHA (bugun hali tugamagani uchun hisobga olinmaydi)
     const last=new Date(y,mo,0).getDate(); const workSet=new Set();
@@ -3403,7 +3413,7 @@ async function renderStaffAttendance(){
       <div class="cls-card-head"><h3>${esc(mon)}</h3><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span></div>
       ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
-      <div class="small muted" style="padding:10px 16px">«Ruhsatsiz» = ish kuni (standart Dush–Juma) bo‘lib, kelmagan va ruhsat/kasallik kiritilmagan kunlar. «Ushlanma» = yo‘qlama (kunlik stavka) + kechikish (${fmtSom(SA_RULES.latePenalty)}/marta, standart 08:${String(SA_RULES.lateGraceMin).padStart(2,'0')} dan keyin) + erta ketish. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
+      <div class="small muted" style="padding:10px 16px">«Ruhsatsiz» = ish kuni (standart Dush–Juma) bo‘lib, kelmagan va ruhsat/kasallik kiritilmagan kunlar. «Ushlanma» = yo‘qlama (kunlik stavka) + kechikish (${fmtSom(SA_RULES.latePenalty)}/marta, standart 08:${String(SA_RULES.lateGraceMin).padStart(2,'0')} dan keyin) + erta ketish (${fmtSom(SA_RULES.earlyPenalty)}/marta). <b>Jarima summalari «Narxlar» bo‘limida sozlanadi</b> (0 — jarima yo‘q). <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
     </div>
     <div class="card" style="margin-top:16px">
       <div class="cls-card-head"><h3>Oydagi ruhsat / kasalliklar</h3><span class="cls-count">${lvSorted.length} ta</span></div>
@@ -4191,6 +4201,7 @@ async function renderAccounting(){
       const info=$('#sp-ded-info'), inp=$('#sp-ded');
       if(!p.cameraId){ if(inp) inp.value='0'; if(info) info.textContent='(Kamera ID yo‘q — davomat kuzatilmaydi)'; calc(); return; }
       if(info) info.textContent='hisoblanmoqda…';
+      try{ await loadSaRates(); }catch(e){}   // sozlanadigan kechikish/erta ketish jarimasi
       const mS=mm+'-01', mE=mm+'-31'; let cks=[], lvs=[];
       try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',String(p.cameraId)), where('day','>=',mS), where('day','<=',mE))); cks=s.docs.map(d=>d.data()||{}); }catch(e){}
       try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); lvs=s.docs.map(d=>d.data()||{}); }catch(e){}
@@ -4638,7 +4649,12 @@ async function renderPriceTable(){
   // inputlar bilan «Saqlash» narxlarни 0 ga yozib yuborardi. Xato -> ogohlantirib to'xtaymiz.
   const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }
   catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Mavjud narxlarni o‘qib bo‘lmadi: ${esc(e.code||e.message)}. Saqlash bloklandi (narxlar yo‘qolmasligi uchun). Internetni tekshirib qayta oching.</div></div>`; return; }
-  let sickRate=40000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).sickRate)>0) sickRate=Number(c.data().sickRate); }catch(e){}
+  let sickRate=40000, latePen=20000, earlyPen=20000;
+  try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
+    if(Number(d.sickRate)>0) sickRate=Number(d.sickRate);
+    if(d.latePenalty!=null && d.latePenalty!=='' && isFinite(Number(d.latePenalty)) && Number(d.latePenalty)>=0) latePen=Number(d.latePenalty);
+    if(d.earlyPenalty!=null && d.earlyPenalty!=='' && isFinite(Number(d.earlyPenalty)) && Number(d.earlyPenalty)>=0) earlyPen=Number(d.earlyPenalty);
+  } }catch(e){}
   const grp=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   const keys={};
   students.forEach(s=>{ const k=priceKeyOf(s); if(!keys[k]) keys[k]={grade:Number(s.grade)||0, track:String(s.track||'').trim(), lang:s.lang||'uz', count:0}; keys[k].count++; });
@@ -4649,11 +4665,13 @@ async function renderPriceTable(){
   $('#pt-body').innerHTML = `
     <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Kasal kun stavkasi (so‘m/kun)<input type="text" inputmode="numeric" id="pt-sick" value="${grp(sickRate)}" style="text-align:right"></label>
+      <label>Kechikish jarimasi (so‘m/marta)<input type="text" inputmode="numeric" id="pt-late" value="${grp(latePen)}" style="text-align:right"></label>
+      <label>Erta ketish jarimasi (so‘m/marta)<input type="text" inputmode="numeric" id="pt-early" value="${grp(earlyPen)}" style="text-align:right"></label>
       <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
-    </div><div class="small muted" id="pt-msg" style="margin-top:8px">Kasal kun stavkasi — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga).</div></div>
+    </div><div class="small muted" id="pt-msg" style="margin-top:8px">Kasal kun stavkasi — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Kechikish/erta ketish jarimasi</b> — har bir kechikkan/erta ketgan kun uchun davomat ushlanmasiga qo‘shiladigan summa (0 — jarima yo‘q). Barcha xodim/o‘qituvchilarga amal qiladi.</div></div>
     <div class="card"><div class="cls-card-head"><h3>Oylik narxlar</h3><span class="cls-count">${ordered.length} ta sinf-guruh</span></div>
       ${ordered.length?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Yo‘nalish</th><th>Til</th><th class="c">O‘quvchi</th><th>Oylik narx (so‘m)</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`:'<div class="empty" style="padding:20px">Avval «O‘quvchilar» bo‘limida o‘quvchilarni kiriting — sinflar shu yerda avtomatik chiqadi.</div>'}</div>`;
-  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
+  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick, #pt-late, #pt-early').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
   const save=$('#pt-save'); if(save) save.addEventListener('click',async()=>{
     save.disabled=true; save.textContent='Saqlanmoqda…';
     try{
@@ -4666,8 +4684,11 @@ async function renderPriceTable(){
         await batch.commit();
       }
       const sr=Number(($('#pt-sick').value||'').replace(/\D/g,''))||40000;
-      await setDoc(doc(db,'config','finance'), {sickRate:sr, updatedAt:serverTimestamp()}, {merge:true});
-      $('#pt-msg').textContent=`✓ ${n} ta narx va kasal stavkasi (${fmtSom(sr)}) saqlandi.`;
+      // Jarima summalari: bo'sh -> standart 20000; '0' -> 0 (jarima o'chiriladi).
+      const lpRaw=($('#pt-late').value||'').replace(/\D/g,''),  lp=lpRaw===''?20000:Number(lpRaw);
+      const epRaw=($('#pt-early').value||'').replace(/\D/g,''), ep=epRaw===''?20000:Number(epRaw);
+      await setDoc(doc(db,'config','finance'), {sickRate:sr, latePenalty:lp, earlyPenalty:ep, updatedAt:serverTimestamp()}, {merge:true});
+      $('#pt-msg').textContent=`✓ ${n} ta narx, kasal stavkasi (${fmtSom(sr)}), kechikish (${fmtSom(lp)}) va erta ketish (${fmtSom(ep)}) jarimasi saqlandi.`;
       toast('Saqlandi ✓');
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     save.disabled=false; save.textContent='Saqlash';
