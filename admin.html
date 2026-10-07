@@ -3208,8 +3208,13 @@ function attMetrics(byDay, leaveSet, month, salary, person){
     if(leaveSet && leaveSet.has(ds)) continue;                                                             // ruhsat/kasallik -> jarima yo'q
     const scans=((byDay&&byDay[ds])||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
     if(!scans.length){ absent++; continue; }
-    const kel=saMin(scans[0].ts); if(kel!=null && kel > SA_RULES.workStartMin+SA_RULES.lateGraceMin) late++;
-    if(scans.length>1){ const ket=saMin(scans[scans.length-1].ts); if(ket!=null && ket < SA_RULES.workEndMin-SA_RULES.earlyGraceMin) early++; }
+    // Kechikish/erta ketish — skan STATUSI bo'yicha (agg() bilan bir xil), shunchaki birinchi/oxirgi skan emas:
+    //   adashgan break/out birinchi kelsa jarimani buzmasin.
+    const ins=scans.filter(x=>x.status==='in'), outs=scans.filter(x=>x.status==='out');
+    const kelTs = ins.length ? ins[0].ts : scans[0].ts;                                              // kelish: birinchi 'in' (bo'lmasa birinchi skan)
+    const kel=saMin(kelTs); if(kel!=null && kel > SA_RULES.workStartMin+SA_RULES.lateGraceMin) late++;
+    const ketTs = outs.length ? outs[outs.length-1].ts : (scans.length>1 ? scans[scans.length-1].ts : null);  // ketish: oxirgi 'out' (bo'lmasa, >1 skan bo'lsa oxirgisi)
+    if(ketTs){ const ket=saMin(ketTs); if(ket!=null && ket < SA_RULES.workEndMin-SA_RULES.earlyGraceMin) early++; }
   }
   const absenceAmt=absent*dailyRate, lateAmt=late*SA_RULES.latePenalty, earlyAmt=early*SA_RULES.earlyPenalty;
   return { absent, late, early, dailyRate, absenceAmt, lateAmt, earlyAmt, total:absenceAmt+lateAmt+earlyAmt, fullWD };
@@ -3310,9 +3315,11 @@ async function renderStaffAttendance(){
       const ruhsat=[...lv.ruhsat].filter(d=>workSet.has(d)).length;
       const kasallik=[...lv.kasallik].filter(d=>workSet.has(d)).length;
       const excused=new Set([...lv.ruhsat,...lv.kasallik]);
-      let absent=0; workSet.forEach(d=>{ if(!presentWork.has(d) && !excused.has(d)) absent++; });
       const avg = arr.length ? (()=>{ const v=Math.round(arr.reduce((s,n)=>s+n,0)/arr.length); return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); })() : null;
-      const dm = attMetrics(byDay, excused, mon, r.salary, r) || {late:0,early:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
+      const dm = attMetrics(byDay, excused, mon, r.salary, r) || {absent:0,late:0,early:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0};
+      // «Ruhsatsiz» = attMetrics'dagi absent (hayot-sikl oralig'i bilan FILTRLANGAN) — «Ushlanma» ustuni bilan mos.
+      //   (ilgari workSet'dan qo'lda sanalardi -> oy o'rtasida kirgan/muzlatilgan uchun ustun va pul MOS kelmasdi.)
+      const absent = dm.absent||0;
       return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm };
     });
     const bodyHtml = bodyRows.map(o=>`<tr>
@@ -4677,6 +4684,9 @@ function billingInterval(s, month){
   if(st==='sinov') return {skip:true, reason:'sinov'};
   const af=_saDate(s&&s.activeFrom), sf=_saDate(s&&s.stopFrom);
   if(af && af>mEnd) return {skip:true, reason:'hali boshlanmagan'};
+  // Muzlatilgan/chiqdi, lekin to'xtatish SANASI yo'q -> to'liq oy YOZMAYMIZ (ortiqcha undiruv);
+  //   xavfsiz standart: o'tkazib yuboramiz (skip). Qisman oy kerak bo'lsa admin stopFrom kiritadi.
+  if((st==='muzlatilgan'||st==='chiqdi') && !sf) return {skip:true, reason:(st==='chiqdi'?'chiqgan (sana yo‘q)':'muzlatilgan (sana yo‘q)')};
   if((st==='muzlatilgan'||st==='chiqdi') && sf && sf<mStart) return {skip:true, reason:'to‘xtatilgan'};
   let start = (af && af>mStart) ? af : mStart;
   let end = mEnd;
@@ -4717,7 +4727,9 @@ function computeTuition(s, priv, ctx){
     if(pct<1){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;   // kasal chegirmasi: grant/kontrakt/xodim/100% dan tashqari hammaga (to'liq narxlilar ham)
       const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
       sickAmt=sickN*rate;
-      if(sickAmt>0){ net=Math.max(0, net-sickAmt); info=(info&&info!=='Chegirmasiz'?info+' + ':'')+`${sickN} kasal kun (−${sickAmt})`; } } }
+      // DIQQAT: kasal summasi shu yerda AYIRILMAYDI — prorata (oy o'rtasi) dan KEYIN flat ayiriladi
+      //   (aks holda net*fraction kasal chegirmasini ham ulushga ko'paytirib, ikki marta kamaytirardi).
+      if(sickAmt>0){ info=(info&&info!=='Chegirmasiz'?info+' + ':'')+`${sickN} kasal kun (−${sickAmt})`; } } }
   // --- Holat + prorata (oy o'rtasida kelgan/ketgan; ISH KUNLARI bo'yicha) ---
   //   sinov -> faktura yo'q; muzlatilgan/chiqdi -> to'xtatish sanasidan keyin yo'q;
   //   activeFrom oy o'rtasida -> o'sha kundan prorata (qisman oy).
@@ -4727,6 +4739,8 @@ function computeTuition(s, priv, ctx){
     if(bi.skip) return { skip:true, skipReason:'status', statusSkip:true, statusReason:bi.reason, sid, name:s.name, priceKey };
     if(bi.partial && net>0){ net=round(net*bi.fraction); info=(info&&info!=='Chegirmasiz'?info+' · ':'')+`${bi.actDays}/${bi.fullDays} ish kuni (prorata)`; proMeta={proratedDays:bi.actDays, monthWorkdays:bi.fullDays}; }
   }
+  // Kasal kun chegirmasi — prorataDAN KEYIN, FLAT (kunlik qat'iy summa, ulushga ko'paytirilMAYDI).
+  if(sickAmt>0){ net=Math.max(0, net-sickAmt); }
   const discount=base-net;
   if(net===0 && !isGrant){ isGrant=true; }
   const status=(net===0)?'paid':'pending';
