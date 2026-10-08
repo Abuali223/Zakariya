@@ -1,9 +1,13 @@
 -- =====================================================================
--- staff_break_marks — ish vaqtidagi tanaffusni «SABABLI» deb belgilash (bitta tugma).
---   Xodim ish vaqtida chiqib-kirsa, davomat jarimasiga (oshiqcha tanaffus) tushadi.
---   Ma'muriyat/HR bu kunni «sababli» deb belgilasa — o'sha kunning tanaffus jarimasi
---   O'TKAZIB YUBORILADI (oylik kesilmaydi). Belgilanmasa — «o'z hisobidan» (kesiladi).
---   Bitta (xodim, kun) = bitta yozuv; mavjudligi = sababli. Toggle: qo'shish/o'chirish.
+-- staff_break_marks — ish vaqtidagi chiqib-kelishni belgilash (ikki tugma).
+--   Xodim/o'qituvchi ish vaqtida chiqib-kiradi. Ma'muriyat/HR kunlik davomatda
+--   har xodim qatorida bitta qaror qiladi:
+--     • «Sababli»  (type='excused')  -> o'sha kun tanaffus jarimasi YO'Q (oylik kesilmaydi).
+--     • «O'z hisobidan» (type='personal', awayMin=qo'lda kiritilgan daqiqa) ->
+--        o'sha vaqt oylikdan kesiladi: (awayMin/60 × «tanaffus jarimasi soatiga», Narx jadvali).
+--   Belgilanmasa -> kamera aniqlagan oshiqcha tanaffus bo'yicha (eski xatti-harakat).
+--   Bitta (xodim, kun) = bitta yozuv. Tugma: qo'shish/o'zgartirish/o'chirish.
+--   ORQAGA MOSLIK: eski yozuvlar (type yo'q) -> 'excused' (sababli) deb qaraladi.
 -- Idempotent. run-all.sql + deploy.sh'da (staff-leaves.sql kabi).
 --   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-break-marks.sql
 -- =====================================================================
@@ -15,9 +19,14 @@ create table if not exists public.staff_break_marks (
   "cameraId"  text,
   name        text,
   day         text,                          -- 'YYYY-MM-DD'
+  type        text default 'excused',        -- 'excused' (sababli) | 'personal' (o'z hisobidan)
+  "awayMin"   integer default 0,             -- 'personal' uchun: ish vaqtidan tashqarida bo'lgan daqiqa
   "createdBy" text,
   "createdAt" timestamptz default now()
 );
+-- Mavjud bazaga ustunlar (idempotent). Eski yozuvlarda type bo'sh -> 'excused' deb qaraladi (frontend).
+alter table public.staff_break_marks add column if not exists type      text default 'excused';
+alter table public.staff_break_marks add column if not exists "awayMin" integer default 0;
 create index if not exists sbm_ref_idx on public.staff_break_marks("refType","refId");
 create index if not exists sbm_day_idx on public.staff_break_marks(day);
 

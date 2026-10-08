@@ -80,11 +80,16 @@
 - **YECHIM («Narx jadvali»):** «Ruxsat etilgan tanaffus (daq/kun)» (standart 60) + «Oshiqcha tanaffus jarimasi (so'm/soat)» (standart **0 = jarima yo'q**). Kunlik tanaffus ruxsatdan oshsa — oshig'iga soatiga jarima. `config/finance` (`allowedBreakMin`/`breakPenaltyPerHour`). Oylik hisobot «Ushlanma» tooltip'ida va maosh berishda ko'rinadi.
 - `scanBreakMin()` — tanaffus mantig'i `agg()`+`attMetrics`'da bir xil. JS test 9/9. Faqat `admin.html`.
 
-## 11) «Sababli / O'z hisobidan» — bitta tugma (ish vaqtidagi tanaffus)
+## 11) «Sababli / O'z hisobidan» — IKKI tugma (ish vaqtidagi chiqib-kelish) + oylikka ta'sir
 
-- Ma'muriyat/HR kunlik davomatда **har xodim qatorida** bitta tugma (`Tanaffus` ustunida): **«Sababli»** (o'sha kun tanaffus jarimasi tushmaydi) / **«O'z hisobidan»** (kesiladi). Standart — o'z hisobidan.
-- **Tugma ENDI har bir xodim uchun ko'rinadi** (ilgari faqat kamera avtomatik tanaffus aniqlagan kunlarda chiqardi — `a.brkMin>0`; kameralar ko'pincha toza chiqdi-kirdi juftini yozmagani uchun tugma umuman ko'rinmas edi). Endi faqat `canEdit` sharti bilan — ma'muriyat har kim uchun belgilay oladi. Jarima baribir faqat tanaffus aniqlangan kunda hisoblanadi (tugma — niyatni yozadi).
-- `staff_break_marks` jadvali (RLS: o'qish admin/hr/finance/cashier; yozish faqat admin/hr). `attMetrics` 6-param `breakExcused` — sababli kunlar tanaffus jarimasidan chiqariladi (kech/erta/yo'qlamaga tegmaydi). Kunlik + oylik + maosh berish — hammasi hisobga oladi.
+- Ma'muriyat/HR kunlik davomatда **har xodim qatorida** (`Tanaffus` ustunida) IKKI tugma:
+  - **«Sababli»** (type='excused') → o'sha kun chiqishi uchun oylik **kesilmaydi**.
+  - **«O'z hisobidan»** (type='personal') → bosilganda **necha DAQIQA** ketgani so'raladi (prompt); oylikdan **soatbay** kesiladi = `awayMin/60 × breakPenaltyPerHour` (Narx jadvalidagi «tanaffus jarimasi soatiga»).
+  - Qayta bosish / 0 kiritish → belgini **o'chiradi** (standart holatga qaytadi).
+- **Nega qo'lda vaqt:** kameralar ko'pincha toza chiqdi→kirdi juftini yozmaydi (`scanBreakMin`≈0), shuning uchun avtomatik aniqlash ishlamaydi — ma'muriyat ketgan vaqtni qo'lda kiritadi.
+- **`attMetrics` yangilandi** (6-param `breakMarks` = `{kun → {type, awayMin}}`): `personal` → `awayMin` to'liq `excessBreakMin`ga qo'shiladi (kamera aniqlagani INOBATGA OLINMAYDI — ikki marta hisoblanmaydi); `excused` → jarima yo'q; belgisiz → kamera bo'yicha. **Orqaga moslik:** eski Set yoki `type`siz yozuv → `excused`. Uch chaqiruv joyi (kunlik `bmMap`, oylik `bmByRef`, maosh `loadDed breakMarks`) bir xil normalizatsiya.
+- `staff_break_marks` jadvali: `type text default 'excused'` + `"awayMin" integer default 0` ustunlari (idempotent ALTER). RLS: o'qish admin/hr/finance/cashier; yozish faqat admin/hr.
+- **Tekshirildi:** `attMetrics` birlik testi 10/10 (excused=0, personal=awayMin×stavka, personal avtomatikni bosib o'tadi, eski Set/typesiz→excused, string awayMin, stavka=0). PG16: ustunlar idempotent, HR RLS bilan insert/update/delete round-trip. JS sintaksis toza.
 
 ## 12) Qabulxona (reception) huquqlari cheklandi
 
