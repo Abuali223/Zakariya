@@ -776,8 +776,9 @@ async function loadPayees(){
   let teachers=[]; try{ teachers=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){}
   let staff=[];    try{ staff=(cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=staff; }catch(e){}
   try{ await loadSalaryRates(); }catch(e){}
-  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'' }));
-  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'' }));
+  // workStart/workEnd/workDays — SHAXSIY ish vaqti/kunlari (soatbay maosh hisobi personRules orqali shulardan oladi).
+  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'' }));
+  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'' }));
   return A.concat(B);
 }
 // O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
@@ -3284,53 +3285,74 @@ function saMin(ts){ const p=tzHMParts(ts); return p?p.h*60+p.m:null; }
 // Oylik davomat jarimasi. byDay={day:[skanlar]}, leaveSet=ruxsatli kunlar (ruhsat/kasallik), salary=oylik.
 //   Faqat O'TGAN ish kunlari (Dush–Juma, bugundan oldin) hisobga olinadi.
 function attMetrics(byDay, leaveSet, month, salary, person, breakMarks){
-  // breakMarks: { 'YYYY-MM-DD': {type:'excused'|'personal', awayMin:int} } — kun -> chiqib-kelish belgisi.
-  //   'excused' -> o'sha kun tanaffus jarimasi yo'q. 'personal' -> awayMin daqiqa kesiladi (soatbay).
-  //   belgisiz -> kamera aniqlagan oshiqcha tanaffus. (Eski Set yoki belgi/typesiz -> 'excused'.)
+  // SOATBAY (hours-based) MAOSH MODELI:
+  //   soatlik stavka = oylik / (oydagi ish kunlari × kunlik sof ish soati).
+  //   kunlik sof ish soati = (ish tugashi − ish boshlanishi − ruxsat etilgan tanaffus/tushlik).
+  //   Ishlamagan har daqiqa (kech kelish + erta ketish + «O'z hisobidan» chiqish + yo'qlama)
+  //   shu stavkada oylikdan ayiriladi. total = jami ushlanma (so'm). Xodim shuncha soat ishladi ->
+  //   shuncha oylik: net = oylik − total.
+  //   breakMarks: {kun -> {type:'excused'|'personal', awayMin}} (eski Set yoki typesiz -> 'excused').
   const mm=String(month||'').match(/^(\d{4})-(\d{2})/); if(!mm) return null;
   const y=+mm[1], mo=+mm[2]; const today=todayStr();
   const R=personRules(person);                                    // shaxsiy ish vaqti/kunlari (bo'sh -> standart)
   const mEndDate=new Date(y,mo,0), last=mEndDate.getDate();
-  const fullWD=saWorkdaysFor(new Date(y,mo-1,1), mEndDate, R.workDays);   // oydagi JAMI ish kunlari (SHAXSIY kunlar bo'yicha; kunlik stavka uchun)
-  const dailyRate=(salary>0 && fullWD>0)?Math.round(salary/fullWD):0;
-  // Holat (sinov/muzlatilgan/chiqdi/faollashtirish) -> faqat FAOL oraliqdagi kunlar jarimaga kiradi
-  //   (muzlatilgan/faol-emas kunlar "yo'qlama" sanalmaydi — ular maosh prorata bilan hisobga olingan).
+  const fullWD=saWorkdaysFor(new Date(y,mo-1,1), mEndDate, R.workDays);   // oydagi JAMI ish kunlari (shaxsiy kunlar bo'yicha)
+  const dailyMin=Math.max(0, (R.workEndMin-R.workStartMin) - R.allowedBreakMin);   // kunlik sof ish daqiqasi (tanaffus chiqarilgan)
+  const monthlyMin=fullWD*dailyMin;                                                // oylik sof ish daqiqasi (norma, masalan 172 soat)
+  const dailyRate=(salary>0 && fullWD>0)?Math.round(salary/fullWD):0;              // kunlik stavka (yo'qlama uchun)
+  const perMin=(salary>0 && monthlyMin>0)?(salary/monthlyMin):0;                   // daqiqa stavkasi (so'm/daq)
+  const hourRate=Math.round(perMin*60);                                            // soatlik stavka (ko'rsatish uchun)
+  const empty={ absent:0,late:0,early:0,lateMin:0,earlyMin:0,breakMin:0,excessBreakMin:0,
+    dailyRate,perMin,hourRate,monthlyMin,scheduledMin:0,workedMin:0,
+    absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0,partialAmt:0,total:0,fullWD };
+  // Holat (sinov/muzlatilgan/chiqdi/faollashtirish) -> faqat FAOL oraliqdagi kunlar hisobga olinadi.
   let aStart=null, aEnd=null;
   if(person){ const bi=billingInterval(person, month);
-    if(bi && bi.skip) return { absent:0, late:0, early:0, excessBreakMin:0, dailyRate, absenceAmt:0, lateAmt:0, earlyAmt:0, breakAmt:0, total:0, fullWD };
+    if(bi && bi.skip) return empty;
     if(bi){ aStart=bi.startStr||null; aEnd=bi.endStr||null; } }
-  let absent=0, late=0, early=0, excessBreakMin=0;
   // Kun bo'yicha chiqib-kelish belgisi (yangi obyekt-xarita, eski Set, yoki typesiz -> 'excused').
   const bmGet=(ds)=>{ if(!breakMarks) return null;
     if(breakMarks instanceof Set) return breakMarks.has(ds)?{type:'excused',awayMin:0}:null;
     const m=breakMarks[ds]; if(!m) return null;
     return { type:(m.type==='personal'?'personal':'excused'), awayMin:Math.max(0,Number(m.awayMin)||0) }; };
+  let absent=0, lateDays=0, earlyDays=0, lateMin=0, earlyMin=0, breakMin=0, missMin=0, scheduledMin=0;
   for(let dd=1; dd<=last; dd++){ const ds=`${month}-${String(dd).padStart(2,'0')}`; if(ds>=today) break;   // bugun tugamagan -> hisobga olinmaydi
     const w=new Date(y,mo-1,dd).getDay(); if(!R.workDays.has(w)) continue;                                 // faqat SHAXSIY ish kuni
     if(aStart && ds<aStart) continue;                                                                      // hali faol emas (ishga kirmagan/muzlatilgan)
     if(aEnd && ds>aEnd) continue;                                                                          // to'xtatilgandan keyin
-    if(leaveSet && leaveSet.has(ds)) continue;                                                             // ruhsat/kasallik -> jarima yo'q
+    if(leaveSet && leaveSet.has(ds)) continue;                                                             // ruhsat/kasallik -> ushlanma yo'q
+    scheduledMin += dailyMin;
     const scans=((byDay&&byDay[ds])||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
-    if(!scans.length){ absent++; continue; }
-    // Kechikish/erta ketish — skan STATUSI bo'yicha (agg() bilan bir xil), shunchaki birinchi/oxirgi skan emas:
-    //   adashgan break/out birinchi kelsa jarimani buzmasin.
-    const ins=scans.filter(x=>x.status==='in'), outs=scans.filter(x=>x.status==='out');
-    const kelTs = ins.length ? ins[0].ts : scans[0].ts;                                              // kelish: birinchi 'in' (bo'lmasa birinchi skan)
-    const kel=saMin(kelTs); if(kel!=null && kel > R.workStartMin+R.lateGraceMin) late++;
-    const ketTs = outs.length ? outs[outs.length-1].ts : (scans.length>1 ? scans[scans.length-1].ts : null);  // ketish: oxirgi 'out' (bo'lmasa, >1 skan bo'lsa oxirgisi)
-    if(ketTs){ const ket=saMin(ketTs); if(ket!=null && ket < R.workEndMin-R.earlyGraceMin) early++; }
-    // Ish vaqtidagi chiqib-kelish:
-    //   • «Sababli» (excused)  -> tanaffus jarimasi YO'Q (oylik kesilmaydi).
-    //   • «O'z hisobidan» (personal) -> qo'lda kiritilgan ketgan vaqt (awayMin) TO'LIQ jarimaga (soatbay).
-    //   • belgisiz -> kamera aniqlagan oshiqcha tanaffus (ruxsat etilganidan oshig'i).
     const bm=bmGet(ds);
-    if(bm && bm.type==='personal') excessBreakMin += bm.awayMin;              // o'z hisobidan (qo'lda)
-    else if(bm){ /* sababli -> jarima yo'q */ }
-    else excessBreakMin += Math.max(0, scanBreakMin(scans) - R.allowedBreakMin);   // avtomatik (kamera)
+    if(!scans.length){
+      // Skan yo'q. «O'z hisobidan» belgilansa — ma'muriyat «keldi, X daq ketdi» deydi (yo'qlama emas).
+      if(bm && bm.type==='personal'){ breakMin+=bm.awayMin; missMin+=Math.min(dailyMin, bm.awayMin); }
+      else absent++;   // yo'qlama (to'liq kun kesiladi — kunlik stavka)
+      continue;
+    }
+    // KELDI. Kech/erta — skan STATUSI bo'yicha (agg() bilan bir xil).
+    const ins=scans.filter(x=>x.status==='in'), outs=scans.filter(x=>x.status==='out');
+    const kelTs = ins.length ? ins[0].ts : scans[0].ts;
+    const kel=saMin(kelTs); let lm=(kel!=null)?Math.max(0, kel - R.workStartMin):0; lm=Math.max(0, lm - R.lateGraceMin);   // kech daqiqa (grace keyin)
+    const ketTs = outs.length ? outs[outs.length-1].ts : (scans.length>1 ? scans[scans.length-1].ts : null);
+    let em=0; if(ketTs){ const ket=saMin(ketTs); if(ket!=null){ em=Math.max(0, R.workEndMin - ket); em=Math.max(0, em - R.earlyGraceMin); } }   // erta ketish daqiqa
+    // Ish vaqtidagi chiqib-kelish: «Sababli» -> 0; «O'z hisobidan» -> awayMin; belgisiz -> kamera (oshiqcha tanaffus).
+    let bkm=0;
+    if(bm && bm.type==='personal') bkm=bm.awayMin;
+    else if(bm) bkm=0;
+    else bkm=Math.max(0, scanBreakMin(scans) - R.allowedBreakMin);
+    if(lm>0) lateDays++; if(em>0) earlyDays++;
+    lateMin+=lm; earlyMin+=em; breakMin+=bkm;
+    missMin += Math.min(dailyMin, lm+em+bkm);   // kunlik kesim bir kunlik normadan oshmaydi
   }
-  const absenceAmt=absent*dailyRate, lateAmt=late*R.latePenalty, earlyAmt=early*R.earlyPenalty;
-  const breakAmt=Math.round(excessBreakMin/60*(R.breakPenaltyPerHour||0));   // oshiqcha tanaffus jarimasi (soatiga)
-  return { absent, late, early, excessBreakMin, dailyRate, absenceAmt, lateAmt, earlyAmt, breakAmt, total:absenceAmt+lateAmt+earlyAmt+breakAmt, fullWD };
+  const absenceAmt=Math.round(absent*dailyRate);
+  const partialAmt=Math.round(missMin*perMin);                  // kech+erta+o'z hisobidan (daqiqalar) soatbay
+  const lateAmt=Math.round(lateMin*perMin), earlyAmt=Math.round(earlyMin*perMin), breakAmt=Math.round(breakMin*perMin);   // ko'rsatish uchun
+  const total=absenceAmt+partialAmt;                            // jami ushlanma
+  const workedMin=Math.max(0, scheduledMin - absent*dailyMin - missMin);   // haqiqatda ishlangan sof daqiqa
+  return { absent, late:lateDays, early:earlyDays, lateMin, earlyMin, breakMin, excessBreakMin:breakMin,
+    dailyRate, perMin, hourRate, monthlyMin, scheduledMin, workedMin,
+    absenceAmt, lateAmt, earlyAmt, breakAmt, partialAmt, total, fullWD };
 }
 async function renderStaffAttendance(){
   const canEdit = SESSION.isAdmin || SESSION.role==='hr';
@@ -3391,7 +3413,7 @@ async function renderStaffAttendance(){
         <td data-label="Ketgan" style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'<span class="muted">—</span>'}</td>
         <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}${canEdit?`<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn sm ${isExc?'gold':'ghost2'}" data-brkset="excused" ${refAttr} title="Sababli — ish vaqtidagi chiqish uchun oylikdan kesilmaydi">${isExc?'✓ Sababli':'Sababli'}</button>
-          <button class="btn sm" style="${isPers?'background:#FDECEC;color:#B42318;border-color:#F3B4B4':''}" data-brkset="personal" ${refAttr} title="O‘z hisobidan — ketgan vaqt oylikdan kesiladi (soatbay, Narx jadvalidagi tanaffus jarimasi)">${isPers?`✓ O‘z hisobidan · ${esc(fmtDur(bm.awayMin))}`:'O‘z hisobidan'}</button>
+          <button class="btn sm" style="${isPers?'background:#FDECEC;color:#B42318;border-color:#F3B4B4':''}" data-brkset="personal" ${refAttr} title="O‘z hisobidan — ketgan vaqt oylikdan soatbay kesiladi (soatlik stavka = oylik ÷ oylik ish soati)">${isPers?`✓ O‘z hisobidan · ${esc(fmtDur(bm.awayMin))}`:'O‘z hisobidan'}</button>
         </div>`:''}</td>
         <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
         <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}</td></tr>`); });
@@ -3448,7 +3470,11 @@ async function renderStaffAttendance(){
       // «Ruhsatsiz» = attMetrics'dagi absent (hayot-sikl oralig'i bilan FILTRLANGAN) — «Ushlanma» ustuni bilan mos.
       //   (ilgari workSet'dan qo'lda sanalardi -> oy o'rtasida kirgan/muzlatilgan uchun ustun va pul MOS kelmasdi.)
       const absent = dm.absent||0;
-      return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm };
+      // Hisoblangan oylik: nominal oylik (holat/sana bo'yicha prorata) − davomat ushlanmasi.
+      const bi=billingInterval(r, mon); const grossFull=Number(r.salary)||0;
+      const gross=(bi&&bi.skip)?0:Math.round(grossFull*((bi&&bi.fraction)||1));
+      const net=Math.max(0, gross-(dm.total||0));
+      return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm, gross, net };
     });
     const bodyHtml = bodyRows.map(o=>`<tr>
         <td data-label="Xodim">${esc(o.r.name||o.r.cam)}<div class="small muted">${esc(o.r.pos)} · ID ${esc(o.r.cam)}</div></td>
@@ -3461,7 +3487,8 @@ async function renderStaffAttendance(){
         <td data-label="O‘rt. kelish" style="font-variant-numeric:tabular-nums">${o.avg||'<span class="muted">—</span>'}</td>
         <td data-label="Kechikish" style="font-variant-numeric:tabular-nums">${o.dm.late?`<span style="color:#B45309">${o.dm.late}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Erta ketish" style="font-variant-numeric:tabular-nums">${o.dm.early?`<span style="color:#B45309">${o.dm.early}</span>`:'<span class="muted">—</span>'}</td>
-        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Yo‘qlama ${fmtSom(o.dm.absenceAmt||0)} · Kechikish ${fmtSom(o.dm.lateAmt||0)} · Erta ketish ${fmtSom(o.dm.earlyAmt||0)}${(o.dm.breakAmt||0)?` · Tanaffus/o‘z hisobidan ${fmtSom(o.dm.breakAmt)} (${o.dm.excessBreakMin} daq)`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
+        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Ishladi ${Math.floor((o.dm.workedMin||0)/60)}s ${Math.round((o.dm.workedMin||0)%60)}d / ${Math.floor((o.dm.monthlyMin||0)/60)}s norma · soatiga ${fmtSom(o.dm.hourRate||0)} — Yo‘qlama ${o.dm.absent} kun (${fmtSom(o.dm.absenceAmt||0)})${(o.dm.lateMin||0)?` · kech ${o.dm.lateMin} daq (${fmtSom(o.dm.lateAmt||0)})`:''}${(o.dm.earlyMin||0)?` · erta ${o.dm.earlyMin} daq (${fmtSom(o.dm.earlyAmt||0)})`:''}${(o.dm.breakMin||0)?` · o‘z hisobidan ${o.dm.breakMin} daq (${fmtSom(o.dm.breakAmt||0)})`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td>
+        <td data-label="Oylik (hisob)" style="font-variant-numeric:tabular-nums" title="Hisoblangan oylik = nominal ${fmtSom(o.gross)} − ushlanma ${fmtSom(o.dm.total||0)} (avans alohida)">${o.gross?`<b style="color:#1F9982">${fmtSom(o.net)}</b>`:'<span class="muted">—</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
     // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
     const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
     const lvRows=lvSorted.map(l=>`<tr>
@@ -3474,8 +3501,8 @@ async function renderStaffAttendance(){
     $('#sa-body').innerHTML=`<div class="card">
       <div class="cls-card-head"><h3>${esc(mon)}</h3><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span></div>
       ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
-      `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
-      <div class="small muted" style="padding:10px 16px">«Ruhsatsiz» = ish kuni (standart Dush–Juma) bo‘lib, kelmagan va ruhsat/kasallik kiritilmagan kunlar. «Ushlanma» = yo‘qlama (kunlik stavka) + kechikish (${fmtSom(SA_RULES.latePenalty)}/marta, standart 08:${String(SA_RULES.lateGraceMin).padStart(2,'0')} dan keyin) + erta ketish (${fmtSom(SA_RULES.earlyPenalty)}/marta) + oshiqcha tanaffus (ruxsat ${SA_RULES.allowedBreakMin} daq/kun, oshig‘i ${fmtSom(SA_RULES.breakPenaltyPerHour)}/soat). <b>Kunlik davomatda</b> har xodimning ish vaqtidagi chiqishini <b>«Sababli»</b> (kesilmaydi) yoki <b>«O‘z hisobidan»</b> (kiritilgan ketgan vaqt soatbay, ${fmtSom(SA_RULES.breakPenaltyPerHour)}/soat bo‘yicha kesiladi) deb belgilash mumkin. <b>Jarima summalari «Narx jadvali» bo‘limida sozlanadi</b> (0 — jarima yo‘q). <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
+      `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th><th>Oylik (hisob)</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
+      <div class="small muted" style="padding:10px 16px"><b>Oylik SOATBAY hisoblanadi:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). Kunlik sof soat = ish vaqti − ruxsat etilgan tanaffus (masalan 08:00–17:00, 1 soat tushlik → 8 soat). Xodim qancha soat ishlasa — shuncha oylik. <b>Ushlanma</b> = ishlamagan vaqt shu soatbay stavkada: yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish (kiritilgan daqiqa). «Sababli» chiqish — kesilmaydi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma (avans alohida). «Ruhsatsiz» = ish kuni bo‘lib kelmagan va ruhsat/kasallik kiritilmagan kunlar. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
     </div>
     <div class="card" style="margin-top:16px">
       <div class="cls-card-head"><h3>Oydagi ruhsat / kasalliklar</h3><span class="cls-count">${lvSorted.length} ta</span></div>
@@ -3509,10 +3536,12 @@ async function renderStaffAttendance(){
             else { await setDoc(doc(db,'staff_break_marks',id), { refId:rid, refType:rt, cameraId:cam, name:bt.dataset.brkname||'', day:dy, type:'excused', awayMin:0, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }); toast('Sababli ✓'); }
           } else {   // personal — ketgan vaqtni (daqiqa) so'raydi
             const curAway=Number(bt.dataset.curaway)||0;
-            const ans=prompt('«O‘z hisobidan» — xodim ish vaqtidan necha DAQIQA tashqarida bo‘ldi?\n(Masalan 90 — bir yarim soat. Oylikdan soatbay kesiladi. Bekor qilish — bo‘sh qoldiring yoki 0.)', curAway?String(curAway):'');
-            if(ans===null) return;   // bekor
-            const mins=Math.max(0, Math.round(Number(String(ans).replace(',','.'))||0));
-            if(!mins){ if(cur) { await deleteDoc(doc(db,'staff_break_marks',id)); toast('Belgi olib tashlandi'); } else { toast('0 daqiqa — belgilanmadi'); return; } }
+            const ans=prompt('«O‘z hisobidan» — xodim ish vaqtidan necha DAQIQA tashqarida bo‘ldi?\n(Masalan 90 — bir yarim soat. Oylikdan soatbay kesiladi.\nHech narsa o‘zgartirmaslik: Bekor bosing (yoki bo‘sh qoldiring). Belgini O‘CHIRISH: 0 kiriting.)', curAway?String(curAway):'');
+            if(ans===null) return;                       // Bekor tugmasi — o'zgarmaydi
+            const trimmed=String(ans).trim();
+            if(trimmed==='') return;                     // bo'sh qoldirildi — o'zgarmaydi (xavfsiz)
+            const mins=Math.max(0, Math.round(Number(trimmed.replace(',','.'))||0));
+            if(!mins){ if(cur){ await deleteDoc(doc(db,'staff_break_marks',id)); toast('Belgi olib tashlandi'); } else { toast('0 daqiqa — belgilanmadi'); return; } }   // 0 — o'chirish
             else { await setDoc(doc(db,'staff_break_marks',id), { refId:rid, refType:rt, cameraId:cam, name:bt.dataset.brkname||'', day:dy, type:'personal', awayMin:mins, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }); toast(`O‘z hisobidan: ${mins} daq ✓`); }
           }
           loadDay();
@@ -4292,9 +4321,14 @@ async function renderAccounting(){
       try{ const s=await getDocs(query(collection(db,'staff_break_marks'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); s.docs.forEach(d=>{ const x=d.data()||{}; if(x.day&&String(x.day)>=mS&&String(x.day)<=mE) breakMarks[String(x.day)]={ type:(x.type==='personal'?'personal':'excused'), awayMin:Math.max(0,Number(x.awayMin)||0) }; }); }catch(e){}
       const byDay={}; cks.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
       const leaveSet=new Set(); lvs.forEach(l=>{ let d=new Date((l.startDay||'')+'T00:00:00'); const end=new Date((l.endDay||l.startDay||'')+'T00:00:00'); let g=0; while(!isNaN(d)&&!isNaN(end)&&d<=end&&g<400){ const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; if(ds>=mS&&ds<=mE) leaveSet.add(ds); d.setDate(d.getDate()+1); g++; } });
-      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p, breakMarks)||{total:0,absent:0,late:0,early:0,excessBreakMin:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
+      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p, breakMarks)||{total:0,absent:0,late:0,early:0,lateMin:0,earlyMin:0,breakMin:0,excessBreakMin:0,workedMin:0,monthlyMin:0,hourRate:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
       if(inp) inp.value=String(dm.total||0);
-      if(info) info.textContent=`yo‘qlama ${dm.absent} (${fmtSum(dm.absenceAmt)}) · kech ${dm.late} (${fmtSum(dm.lateAmt)}) · erta ${dm.early} (${fmtSum(dm.earlyAmt)})`+((dm.breakAmt||0)?` · tanaffus/o‘z hisobidan ${dm.excessBreakMin} daq (${fmtSum(dm.breakAmt)})`:'');
+      if(info){ const hh=m=>`${Math.floor((m||0)/60)}s ${Math.round((m||0)%60)}d`;
+        info.innerHTML=`<b>Ishladi ${hh(dm.workedMin)}</b> / ${hh(dm.monthlyMin)} norma · soatiga ${fmtSum(dm.hourRate)}`
+          +`<br>Ushlanma: yo‘qlama ${dm.absent} kun (${fmtSum(dm.absenceAmt)})`
+          +(dm.lateMin?` · kech ${dm.lateMin} daq (${fmtSum(dm.lateAmt)})`:'')
+          +(dm.earlyMin?` · erta ${dm.earlyMin} daq (${fmtSum(dm.earlyAmt)})`:'')
+          +(dm.breakMin?` · o‘z hisobidan ${dm.breakMin} daq (${fmtSum(dm.breakAmt)})`:''); }
       calc();
     };
     $('#sp-t').onchange=loadDed; $('#sp-month').onchange=loadDed; if($('#sp-ded')) $('#sp-ded').oninput=calc; loadDed();
@@ -4734,13 +4768,10 @@ async function renderPriceTable(){
   // inputlar bilan «Saqlash» narxlarни 0 ga yozib yuborardi. Xato -> ogohlantirib to'xtaymiz.
   const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }
   catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Mavjud narxlarni o‘qib bo‘lmadi: ${esc(e.code||e.message)}. Saqlash bloklandi (narxlar yo‘qolmasligi uchun). Internetni tekshirib qayta oching.</div></div>`; return; }
-  let sickRate=40000, latePen=20000, earlyPen=20000, allowBreak=60, breakPen=0;
+  let sickRate=40000, allowBreak=60;
   try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
     if(Number(d.sickRate)>0) sickRate=Number(d.sickRate);
-    if(d.latePenalty!=null && d.latePenalty!=='' && isFinite(Number(d.latePenalty)) && Number(d.latePenalty)>=0) latePen=Number(d.latePenalty);
-    if(d.earlyPenalty!=null && d.earlyPenalty!=='' && isFinite(Number(d.earlyPenalty)) && Number(d.earlyPenalty)>=0) earlyPen=Number(d.earlyPenalty);
     if(d.allowedBreakMin!=null && d.allowedBreakMin!=='' && isFinite(Number(d.allowedBreakMin)) && Number(d.allowedBreakMin)>=0) allowBreak=Number(d.allowedBreakMin);
-    if(d.breakPenaltyPerHour!=null && d.breakPenaltyPerHour!=='' && isFinite(Number(d.breakPenaltyPerHour)) && Number(d.breakPenaltyPerHour)>=0) breakPen=Number(d.breakPenaltyPerHour);
   } }catch(e){}
   const grp=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   const keys={};
@@ -4752,15 +4783,12 @@ async function renderPriceTable(){
   $('#pt-body').innerHTML = `
     <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Kasal kun stavkasi (so‘m/kun)<input type="text" inputmode="numeric" id="pt-sick" value="${grp(sickRate)}" style="text-align:right"></label>
-      <label>Kechikish jarimasi (so‘m/marta)<input type="text" inputmode="numeric" id="pt-late" value="${grp(latePen)}" style="text-align:right"></label>
-      <label>Erta ketish jarimasi (so‘m/marta)<input type="text" inputmode="numeric" id="pt-early" value="${grp(earlyPen)}" style="text-align:right"></label>
-      <label>Ruxsat etilgan tanaffus (daq/kun)<input type="text" inputmode="numeric" id="pt-brkmin" value="${grp(allowBreak)}" style="text-align:right"></label>
-      <label>Oshiqcha tanaffus jarimasi (so‘m/soat)<input type="text" inputmode="numeric" id="pt-brkpen" value="${grp(breakPen)}" style="text-align:right"></label>
+      <label>Tushlik/tanaffus (daq/kun)<input type="text" inputmode="numeric" id="pt-brkmin" value="${grp(allowBreak)}" style="text-align:right"></label>
       <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
-    </div><div class="small muted" id="pt-msg" style="margin-top:8px">Kasal kun stavkasi — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Kechikish/erta ketish jarimasi</b> — har bir kechikkan/erta ketgan kun uchun davomat ushlanmasiga qo‘shiladigan summa (0 — jarima yo‘q). <b>Ruxsat etilgan tanaffus</b> — kuniga shuncha daqiqa tanaffus bepul (masalan tushlik); <b>oshiqcha tanaffus jarimasi</b> — shundan oshgan vaqtga soatiga olinadigan summa (0 — jarima yo‘q). Barcha xodim/o‘qituvchilarga amal qiladi.</div></div>
+    </div><div class="small muted" id="pt-msg" style="margin-top:8px"><b>Kasal kun stavkasi</b> — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Tushlik/tanaffus (daq/kun)</b> — kuniga haq to‘lanmaydigan tanaffus (masalan tushlik, 60 daq); kunlik sof ish soati = (ish vaqti − shu tanaffus). Davomat ushlanmasi SOATBAY hisoblanadi: soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat); kech/erta/«o‘z hisobidan»/yo‘qlama shu stavkada ayiriladi (alohida jarima summasi YO‘Q). Barcha xodim/o‘qituvchilarga amal qiladi; shaxsiy ish vaqti kartochkada belgilanadi.</div></div>
     <div class="card"><div class="cls-card-head"><h3>Oylik narxlar</h3><span class="cls-count">${ordered.length} ta sinf-guruh</span></div>
       ${ordered.length?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Yo‘nalish</th><th>Til</th><th class="c">O‘quvchi</th><th>Oylik narx (so‘m)</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`:'<div class="empty" style="padding:20px">Avval «O‘quvchilar» bo‘limida o‘quvchilarni kiriting — sinflar shu yerda avtomatik chiqadi.</div>'}</div>`;
-  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick, #pt-late, #pt-early, #pt-brkmin, #pt-brkpen').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
+  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick, #pt-brkmin').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
   const save=$('#pt-save'); if(save) save.addEventListener('click',async()=>{
     save.disabled=true; save.textContent='Saqlanmoqda…';
     try{
@@ -4773,14 +4801,11 @@ async function renderPriceTable(){
         await batch.commit();
       }
       const sr=Number(($('#pt-sick').value||'').replace(/\D/g,''))||40000;
-      // Jarima summalari: bo'sh -> standart 20000; '0' -> 0 (jarima o'chiriladi).
-      const lpRaw=($('#pt-late').value||'').replace(/\D/g,''),  lp=lpRaw===''?20000:Number(lpRaw);
-      const epRaw=($('#pt-early').value||'').replace(/\D/g,''), ep=epRaw===''?20000:Number(epRaw);
-      // Tanaffus: ruxsat bo'sh -> 60 daq; jarima bo'sh -> 0 (jarima yo'q).
+      // Tushlik/tanaffus: bo'sh -> 60 daq (kunlik sof ish soati shundan hisoblanadi).
       const abRaw=($('#pt-brkmin').value||'').replace(/\D/g,''), ab=abRaw===''?60:Number(abRaw);
-      const bpRaw=($('#pt-brkpen').value||'').replace(/\D/g,''), bp=bpRaw===''?0:Number(bpRaw);
-      await setDoc(doc(db,'config','finance'), {sickRate:sr, latePenalty:lp, earlyPenalty:ep, allowedBreakMin:ab, breakPenaltyPerHour:bp, updatedAt:serverTimestamp()}, {merge:true});
-      $('#pt-msg').textContent=`✓ ${n} ta narx, kasal (${fmtSom(sr)}), kechikish (${fmtSom(lp)}), erta ketish (${fmtSom(ep)}) jarimasi va tanaffus (ruxsat ${ab} daq, oshig'i ${fmtSom(bp)}/soat) saqlandi.`;
+      // Maosh ENDI soatbay hisoblanadi — alohida kech/erta/tanaffus jarima summalari ishlatilmaydi (0 ga tenglashtiriladi).
+      await setDoc(doc(db,'config','finance'), {sickRate:sr, allowedBreakMin:ab, latePenalty:0, earlyPenalty:0, breakPenaltyPerHour:0, updatedAt:serverTimestamp()}, {merge:true});
+      $('#pt-msg').textContent=`✓ ${n} ta narx, kasal kun (${fmtSom(sr)}) va tushlik/tanaffus (${ab} daq/kun) saqlandi. Davomat ushlanmasi soatbay hisoblanadi.`;
       toast('Saqlandi ✓');
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     save.disabled=false; save.textContent='Saqlash';

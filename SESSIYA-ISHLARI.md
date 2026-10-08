@@ -98,6 +98,22 @@
 - **Qabulxona saqlagan imkoniyatlar:** o'quvchi qo'shish/asosiy ma'lumot + hujjat (PII) tahriri, qarzdorlik ko'rish, 📞 eslatma, chegirma maydonlari, arizalarni ko'rish. **Cheklangan:** faqat o'quvchi holati.
 - **Eslatma (reachability):** `ROLE_TABS` bo'yicha `students` tab'i faqat direktor + qabulxona + kassir(ko'rish)da. `admin`/`admin_head`/`zavuch` o'quvchilar ekranini ko'rmaydi, shuning uchun `students`/`student_private` RLS'i `is_admin()` (direktor) bilan qolgan — o'zgartirilmadi.
 
+## 13) Maosh — SOATBAY (hours-based) modelga o'tkazildi
+
+- **Foydalanuvchi talabi:** oylik ÷ kunga ÷ ish soatiga → soatlik stavka; xodim necha soat ishlasa shuncha oylik. Kech/erta/«o'z hisobidan»/yo'qlama — hammasi soatbay ayiriladi. «Shu soat ishladingiz → shuncha oylik» hisoboti.
+- **`attMetrics` to'liq qayta yozildi:**
+  - `dailyMin = ish vaqti − tushlik (allowedBreakMin)` (masalan 08:00–17:00, 60 daq → 480 daq = 8 soat).
+  - `monthlyMin = oydagi ish kunlari × dailyMin` (AVTOMATIK — foydalanuvchi tanlovi; har oy ish kuniga qarab o'zgaradi).
+  - `perMin = oylik ÷ monthlyMin`; `hourRate = perMin×60` (soatlik stavka).
+  - Kunlik: kech (grace keyin) + erta (grace keyin) + «o'z hisobidan» awayMin (yoki belgisiz→kamera) → `missMin += min(dailyMin, lm+em+bkm)` (bir kunlik normadan oshmaydi). Yo'qlama → to'liq kun (`dailyRate`).
+  - `total = round(absent×dailyRate) + round(missMin×perMin)` (jami ushlanma). `workedMin = scheduledMin − absent×dailyMin − missMin`.
+  - **Finding-2 tuzatildi:** skan yo'q + «o'z hisobidan» belgisi → «keldi, X daq ketdi» (yo'qlama emas).
+- **Ko'rsatish:** oylik hisobotga **«Oylik (hisob)»** ustuni qo'shildi (= nominal prorata − ushlanma); Ushlanma tooltipi: ishlagan soat / norma + soatlik stavka + taqsimot. Maosh dialogida «Ishladi Xs / norma · soatiga …» + taqsimot.
+- **Pre-existing bug tuzatildi:** `loadPayees` endi `workStart/workEnd/workDays` ni ham beradi → maosh dialogi shaxsiy ish vaqtini ishlatadi (ilgari standartga tushib qolardi).
+- **Finding-1 tuzatildi:** «o'z hisobidan» prompti — Bekor yoki bo'sh → o'zgarmaydi; faqat **0** → belgini o'chiradi (ilgari bo'sh ham o'chirardi).
+- **Narx jadvali:** eski kech/erta/oshiqcha-tanaffus **jarima summasi** maydonlari OLIB TASHLANDI (endi soatbay). Qoldi: kasal kun stavkasi + tushlik/tanaffus (daq/kun — kunlik sof soat shundan). Saqlashda jarimalar 0 ga yoziladi.
+- **Tekshirildi:** `attMetrics` birlik testi 13/13 (soatbay) + ko'p kunlik agregatsiya (22 ish kuni, 1 yo'qlama + kech 70daq + personal 120 → net 4 218 750, ≈165 soat × stavka). Grace, kunlik cap, personal-on-no-scan, eski Set/typesiz, hourRate×8≈dailyRate. JS sintaksis toza; 12 ustun = 12 sarlavha; ✏️ 1 ta.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
