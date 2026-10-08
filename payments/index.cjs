@@ -432,11 +432,15 @@ async function uzConfirm(b){
     // pay.amount endi SO'M da saqlanadi (uzCreate normallashtiradi) — to'g'ridan-to'g'ri qo'llaymiz.
     const ar = await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
     // backend[1]: create->confirm orasида invoice bekor/qaytarilgan bo'lsa pulni yo'qotmaymiz -> o'quvchi balansiga.
+    // QAYSI YO'L ishlaganini YOZAMIZ (appliedTo) — reverse paytida to'g'ri target tanlash uchun:
+    //   'invoice' -> reverse_payment(invoice); 'balance' -> waterfall (teskarisi qo'lda).
+    let appliedTo = 'invoice';
     if(ar && ar.error){
+      appliedTo = 'balance';
       if(pay.studentId){ await applyPaymentToStudent(String(pay.studentId), Number(pay.amount)||0, 'uzum_'+b.transId+'_cr', 'uzum'); }
       else { try{ await uzPayRef(b.transId).set({ note:'invoice terminal, studentId yo‘q — qo‘lda biriktiring' }, { merge:true }); }catch(e){} }
     }
-    await uzPayRef(b.transId).set({ status:'confirmed' }, { merge:true });
+    await uzPayRef(b.transId).set({ status:'confirmed', appliedTo }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };
 }
@@ -450,6 +454,15 @@ async function uzReverse(b){
     // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
     if(pay.status === 'confirmed'){
       const som = Number(pay.amount)||0;   // pay.amount SO'M da saqlangan (uzCreate)
+      if(pay.appliedTo === 'balance'){
+        // Pul invoice'ga EMAS, o'quvchi BALANSIGA qo'llangan edi (confirm paytida invoice terminal bo'lgan).
+        // reverse_payment(invoice) bu yerda NOTO'G'RI — u aloqasiz invoice/avansni buzadi. Balansga
+        // qo'llangan to'lovni teskari qilish (waterfall'ni ochib) avtomatik qilinmaydi; MA'MURIYATga
+        // belgilab qo'yamiz (needsManualReverse) va Uzum'ga REVERSED qaytaramiz (webhook xato bermasin).
+        await uzPayRef(b.transId).set({ status:'reversed', needsManualReverse:true,
+          reverseNote:'Pul o‘quvchi balansiga qo‘llangan edi — QO‘LDA qaytaring (som='+som+', studentId='+String(pay.studentId||'')+')' }, { merge:true });
+        return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: (UZUM.amountUnit==='som'?som:som*100) };
+      }
       if(db.rpc){
         // [High B tuzatildi] ATOMIK + IDEMPOTENT reverse_payment RPC: invoice↓ + avans clawback +
         // credit_ledger — BITTA tranzaksiya (advisory lock + 'reverse:'+ref posbon). Eski JS yo'li

@@ -997,7 +997,8 @@ onAuthStateChanged(auth, async user=>{
     show('login'); return;
   }
   // Superuser = FAQAT Direktor. 'admin'/'admin_head' endi ma'muriyat rahbari (cheklangan).
-  SESSION = { role, isAdmin: (role==='director'), assignedClasses, assignedSubjects, homeroomClasses };
+  //   email — audit uchun (yozuvlarda «kim» qildi: createdBy/by maydonlari SESSION.email||role oladi).
+  SESSION = { role, isAdmin: (role==='director'), email:(user.email||user.displayName||''), assignedClasses, assignedSubjects, homeroomClasses };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
@@ -3330,12 +3331,13 @@ function attMetrics(byDay, leaveSet, month, salary, person, breakMarks){
       else absent++;   // yo'qlama (to'liq kun kesiladi — kunlik stavka)
       continue;
     }
-    // KELDI. Kech/erta — skan STATUSI bo'yicha (agg() bilan bir xil).
+    // KELDI. Kech/erta — FAQAT haqiqiy skan STATUSI bo'yicha (adashgan tanaffus/ikkilangan skan
+    //   jarimani BUZMASIN): kech faqat 'in' skan bo'lsa; erta ketish faqat 'out' skan bo'lsa.
+    //   Chiqish skani yo'q bo'lsa (xodim checkout'ni unutsa) — ERTA KETISH JARIMASI YO'Q (aks holda
+    //   to'liq kunlik maoshi noto'g'ri kesilardi); ketgan vaqtni qo'lda «o'z hisobidan» belgilash mumkin.
     const ins=scans.filter(x=>x.status==='in'), outs=scans.filter(x=>x.status==='out');
-    const kelTs = ins.length ? ins[0].ts : scans[0].ts;
-    const kel=saMin(kelTs); let lm=(kel!=null)?Math.max(0, kel - R.workStartMin):0; lm=Math.max(0, lm - R.lateGraceMin);   // kech daqiqa (grace keyin)
-    const ketTs = outs.length ? outs[outs.length-1].ts : (scans.length>1 ? scans[scans.length-1].ts : null);
-    let em=0; if(ketTs){ const ket=saMin(ketTs); if(ket!=null){ em=Math.max(0, R.workEndMin - ket); em=Math.max(0, em - R.earlyGraceMin); } }   // erta ketish daqiqa
+    let lm=0; if(ins.length){ const kel=saMin(ins[0].ts); if(kel!=null){ lm=Math.max(0, kel - R.workStartMin); lm=Math.max(0, lm - R.lateGraceMin); } }   // kech daqiqa (grace keyin)
+    let em=0; if(outs.length){ const ket=saMin(outs[outs.length-1].ts); if(ket!=null){ em=Math.max(0, R.workEndMin - ket); em=Math.max(0, em - R.earlyGraceMin); } }   // erta ketish daqiqa
     // Ish vaqtidagi chiqib-kelish: «Sababli» -> 0; «O'z hisobidan» -> awayMin; belgisiz -> kamera (oshiqcha tanaffus).
     let bkm=0;
     if(bm && bm.type==='personal') bkm=bm.awayMin;
@@ -3372,10 +3374,11 @@ async function renderStaffAttendance(){
   const agg=(list)=>{
     const sorted=(list||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
     const ins=sorted.filter(x=>x.status==='in'), outs=sorted.filter(x=>x.status==='out');
-    // kelgan: birinchi 'in', bo'lmasa kunning birinchi skani. ketgan: oxirgi 'out', bo'lmasa oxirgi skan.
+    // kelgan: birinchi 'in' (bo'lmasa kunning birinchi skani — «birinchi ko'rilgan»).
+    // ketgan: FAQAT oxirgi 'out' skan. Chiqish skani yo'q bo'lsa — «—» (adashgan tanaffus/ikkilangan
+    //   skanni «ketgan» deb ko'rsatmaymiz; aks holda Ish vaqti ham noto'g'ri chiqadi).
     let kelgan = ins.length ? ins[0].ts : (sorted.length ? sorted[0].ts : '');
     let ketgan = outs.length ? outs[outs.length-1].ts : '';
-    if(!ketgan && sorted.length>1){ const last=sorted[sorted.length-1].ts; if(last && last!==kelgan) ketgan=last; }
     const brkMin=scanBreakMin(sorted);
     let work=null; if(kelgan&&ketgan){ work=Math.max(0, Math.round((Date.parse(ketgan)-Date.parse(kelgan))/60000)-brkMin); }
     return { kelgan, ketgan, brkMin, workMin:work };
@@ -3462,8 +3465,11 @@ async function renderStaffAttendance(){
       Object.keys(byDay).forEach(day=>{ const a=agg(byDay[day].slice().sort((x,z)=>String(x.ts||'').localeCompare(String(z.ts||'')))); if(a.kelgan){ if(a.workMin!=null) workMin+=a.workMin; brkMin+=a.brkMin; const km=saMin(a.kelgan); if(km!=null) arr.push(km); if(workSet.has(day)) presentWork.add(day); } });
       const present=Object.keys(byDay).filter(d=>byDay[d].some(x=>x.status==='in')).length;
       const lv=lvByRef[r.refType+':'+r.refId]||{ruhsat:new Set(),kasallik:new Set()};
-      const ruhsat=[...lv.ruhsat].filter(d=>workSet.has(d)).length;
-      const kasallik=[...lv.kasallik].filter(d=>workSet.has(d)).length;
+      // Ruhsat/kasallik — SHAXSIY ish kunlari bo'yicha (attMetrics bilan bir xil baza; Shan/Yak ishlaydiganlar ham to'g'ri).
+      const pwd=personRules(r).workDays; const pWorkSet=new Set();
+      for(let d=1; d<=last; d++){ const ds=`${mon}-${String(d).padStart(2,'0')}`; if(ds>=today) break; if(pwd.has(new Date(y,mo-1,d).getDay())) pWorkSet.add(ds); }
+      const ruhsat=[...lv.ruhsat].filter(d=>pWorkSet.has(d)).length;
+      const kasallik=[...lv.kasallik].filter(d=>pWorkSet.has(d)).length;
       const excused=new Set([...lv.ruhsat,...lv.kasallik]);
       const avg = arr.length ? (()=>{ const v=Math.round(arr.reduce((s,n)=>s+n,0)/arr.length); return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); })() : null;
       const dm = attMetrics(byDay, excused, mon, r.salary, r, bmByRef[r.refType+':'+r.refId]) || {absent:0,late:0,early:0,excessBreakMin:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
@@ -4054,7 +4060,7 @@ async function renderAccounting(){
     const pmRows=pmKeys.length?pmKeys.map(k=>`<tr><td>${esc(PMlab[k]||k)}</td><td style="text-align:right">${S(byPm[k])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">—</td></tr>`;
     const avRows=avList.length?avList.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.amt)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Avans yo‘q</td></tr>`;
     const debtRows=debtors.length?debtors.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.name)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.d)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Qarzdorlik yo‘q</td></tr>`;
-    const salRows=salMonth.length?salMonth.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.teacherName||x.teacherId||'—')}</td><td style="text-align:right">${S(x.gross)}</td><td style="text-align:right">${x.advance?('−'+S(x.advance)):'—'}</td><td style="text-align:right;font-weight:700">${S(x.net)}</td></tr>`).join(''):'';
+    const salRows=salMonth.length?salMonth.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.teacherName||x.teacherId||'—')}</td><td style="text-align:right">${S(x.gross)}</td><td style="text-align:right">${x.advance?('−'+S(x.advance)):'—'}</td><td style="text-align:right">${x.deduction?('−'+S(x.deduction)):'—'}</td><td style="text-align:right;font-weight:700">${S(x.net)}</td></tr>`).join(''):'';
     const html=`<!doctype html><html><head><meta charset="utf-8"><title>Hisobot ${mLabel(M)} ${M.slice(0,4)}</title>
       <style>@page{ size:A4; margin:16mm; } *{ box-sizing:border-box; } body{ font:13px/1.5 'Segoe UI',system-ui,sans-serif; color:#1a2e28; margin:0; }
       .hd{ display:flex; align-items:center; gap:14px; border-bottom:3px solid #1F9982; padding-bottom:12px; margin-bottom:16px; }
@@ -4069,7 +4075,7 @@ async function renderAccounting(){
       <h2>Kirim — to‘lov usuli bo‘yicha</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
       <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
       <h2>Oylik maosh — ${S(salTotal)}${salMonth.length?` · ${salMonth.length} xodim (berilgan)`:(salFromExp>0?' · «Maosh» xarajati':'')}</h2>
-      ${salMonth.length?`<table><thead><tr><th>№</th><th>Xodim</th><th style="text-align:right">Hisoblangan</th><th style="text-align:right">Avans</th><th style="text-align:right">Berilgan (net)</th></tr></thead><tbody>${salRows}</tbody></table>`:`<table><tbody><tr><td class="muted">Bu oy «Maosh berish (xodimga)» yozuvi yo‘q.${salFromExp>0?` Umumiy «Maosh» xarajati sifatida: ${S(salFromExp)}.`:''}</td></tr></tbody></table>`}
+      ${salMonth.length?`<table><thead><tr><th>№</th><th>Xodim</th><th style="text-align:right">Hisoblangan</th><th style="text-align:right">Avans</th><th style="text-align:right">Davomat ushlanmasi</th><th style="text-align:right">Berilgan (net)</th></tr></thead><tbody>${salRows}</tbody></table>`:`<table><tbody><tr><td class="muted">Bu oy «Maosh berish (xodimga)» yozuvi yo‘q.${salFromExp>0?` Umumiy «Maosh» xarajati sifatida: ${S(salFromExp)}.`:''}</td></tr></tbody></table>`}
       <h2>Qarzdorlar — ${mLabel(M)} (${debtors.length} ta · ${S(debtSum)})</h2><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Qarz</th></tr></thead><tbody>${debtRows}</tbody></table>
       <h2>Avans — kimlarda (${avList.length} o‘quvchi · ${S(av)})</h2><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Avans</th></tr></thead><tbody>${avRows}</tbody></table>
       <div class="sign"><div>Direktor: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
@@ -5096,7 +5102,12 @@ async function renderFeedback(){
     </div></div>
     <div id="fb-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   let ALL=[];
-  const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,16).replace('T',' '); }catch(e){} return String(v).slice(0,16).replace('T',' '); };
+  // Vaqtni Asia/Tashkent (+05:00) da ko'rsatamiz (davomat/skanlar bilan bir xil; UTC emas).
+  const dstr=v=>{ if(!v) return '—'; let d=null;
+    try{ if(v&&v.toDate) d=v.toDate(); }catch(e){}
+    if(!d){ const p=new Date(v); if(!isNaN(p)) d=p; }
+    if(d) return new Date(d.getTime()+5*3600000).toISOString().slice(0,16).replace('T',' ');
+    return String(v).slice(0,16).replace('T',' '); };
   const typeLbl={shikoyat:'Shikoyat',etirof:'E‘tirof',taklif:'Taklif'};
   const typeCol={shikoyat:'#B42318',etirof:'#1F9982',taklif:'#B45309'};
   const stLbl={new:'Yangi',read:'Ko‘rildi',resolved:'Hal qilindi'};
@@ -5352,11 +5363,17 @@ async function renderPayments(){
       const { privOf, conflicts, ctx, ledger, priceEmpty } = await pmLoadCtx(month, students, amount);
       if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; }
       const { existRef, pendingRef } = pmReferralMaps(students, privOf, ledger, month);
-      const newLedger=[];
       // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const existing=new Set(snap.docs.map(d=>d.id));
-      let created=0, discounted=0; const skipped=[], fallbackList=[];
+      // REPAIR (idempotentlik): oldingi generatsiya invoice'larni yaratib, referral_ledger'ni yozmay uzilgan
+      //   bo'lsa — referral KEYINGI oyda QAYTA qo'llanib, ikki marta chegirma berilardi. Mavjud
+      //   invoice'lardagi referralUsedIds ledgerda yo'q bo'lsa — tiklab qo'yamiz (o'z-o'zini davolaydi).
+      const ledgerIds=new Set((ledger||[]).map(l=>l.id));
+      const repairLedger=[];
+      snap.docs.forEach(d=>{ const x=d.data()||{}; (Array.isArray(x.referralUsedIds)?x.referralUsedIds:[]).forEach(nid=>{
+        if(nid && !ledgerIds.has(String(nid))){ ledgerIds.add(String(nid)); repairLedger.push({id:String(nid), referrerId:String(x.studentId||'')}); } }); });
+      let created=0, discounted=0, referrals=0; const skipped=[], fallbackList=[];
       for(let i=0;i<students.length;i+=400){
         const batch=writeBatch(db); let wrote=false;
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
@@ -5367,15 +5384,16 @@ async function renderPayments(){
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey,
+            referralUsedIds:rRef.usedIds,   // qaysi referrallar BU invoice'da ishlatilgani (repair/audit uchun)
             status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
           if(t.status==='paid') inv.paidAt=serverTimestamp();
           batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++;
-          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
+          // Referral ledgeri SHU BATCHDA (invoice bilan birga commit bo'ladi) — alohida oxirgi batch desync bermasin.
+          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>{ batch.set(doc(db,'referral_ledger',String(nid)), {referrerId:sid, amount:300000, month, appliedAt:serverTimestamp()}); referrals++; }); });
         if(wrote) await batch.commit();
       }
-      // --- Referral ledgeri: qo'llangan referrallarni yozamiz (idempotent — takror qo'llanmaydi) ---
-      let referrals=0;
-      for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); referrals++; }); await b.commit(); }
+      // Yetishmayotgan ledger qatorlarini tiklaymiz (REPAIR — mavjud invoice'lar uchun).
+      for(let i=0;i<repairLedger.length;i+=400){ const b=writeBatch(db); repairLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:300000, month, appliedAt:serverTimestamp()}); referrals++; }); await b.commit(); }
       // Avans (student_credit) bor o'quvchilarga yangi hisob-fakturaga avtomatik qo'llaymiz.
       let settled=0;
       try{ const cs=await getDocs(query(collection(db,'student_credit'), where('credit','>',0)));

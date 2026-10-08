@@ -27,16 +27,19 @@ create or replace function app.guard_reception_student_lifecycle()
   returns trigger language plpgsql
   set search_path = public, app, pg_temp as $$
 begin
-  if app.is_reception() and not app.is_admin_head() then
+  -- O'quvchi HOLATI = faqat Ma'muriyat (app.is_admin_head()) huquqi. students'ga yoza oladigan boshqa
+  --    roller (qabulxona VA O'IBDO'/zavuch) buni o'zgartira olmaydi. Superuser/service_role (seed/backend)
+  --   tegilmaydi (ular reception/zavuch emas).
+  if (app.is_reception() or app.is_zavuch()) and not app.is_admin_head() then
     if tg_op = 'INSERT' then
-      new."payStatus"  := '';   -- qabulxona o'quvchini oddiy (faol) qilib yaratadi
+      new."payStatus"  := '';   -- oddiy (faol) qilib yaratiladi
       new."activeFrom" := '';
       new."stopFrom"   := '';
     elsif tg_op = 'UPDATE' then
       if (new."payStatus"  is distinct from old."payStatus")
       or (new."activeFrom" is distinct from old."activeFrom")
       or (new."stopFrom"   is distinct from old."stopFrom") then
-        raise exception 'Qabulxona xodimi o''quvchi holatini (faollashtirish/muzlatish/chiqarish) o''zgartira olmaydi — bu Ma''muriyat huquqi'
+        raise exception 'O''quvchi holatini (faollashtirish/muzlatish/chiqarish) faqat Ma''muriyat o''zgartira oladi'
           using errcode = '42501';
       end if;
     end if;

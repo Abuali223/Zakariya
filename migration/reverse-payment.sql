@@ -62,7 +62,10 @@ begin
   v_from_invoice := least(p_amount, v_inv.paid);
   v_from_credit  := greatest(0, p_amount - v_from_invoice);
   v_newpaid := greatest(0, v_inv.paid - v_from_invoice);
-  v_status  := case when v_newpaid <= 0 then 'reversed'
+  -- To'liq qaytarilsa -> 'pending' (NE 'reversed'): refund_invoice kabi QARZ TIRILADI (ota-ona pulni
+  --   qaytarib oldi, lekin o'qish haqi hali qarzda — aks holda moliya hamma joyida qarz=0 ko'rib,
+  --   undiruvni to'xtatardi). «reversedAt» belgisi audit sifatida saqlanadi.
+  v_status  := case when v_newpaid <= 0 then 'pending'
                     when v_newpaid >= v_inv.amount - 0.5 then 'paid'
                     else 'partial' end;
   update public.invoices
@@ -77,8 +80,10 @@ begin
       values (v_sid, v_sid, greatest(0, v_cr - v_from_credit), now())
       on conflict (id) do update set credit = excluded.credit, "updatedAt" = now();
     select name into v_name from public.students where id = v_sid or "studentId" = v_sid limit 1;
+    -- delta = HAQIQATDA olib tashlangan avans (= least(mavjud, qaytariladigan)); aks holda avans
+    --   allaqachon (qisman) sarflangan bo'lsa, delta balanceAfter bilan mos kelmay, ledger yig'indisi buziladi.
     insert into public.credit_ledger(id, "studentId", "studentName", delta, "balanceAfter", reason, provider, "at")
-      values (gen_random_uuid()::text, v_sid, coalesce(v_name,''), -v_from_credit,
+      values (gen_random_uuid()::text, v_sid, coalesce(v_name,''), -least(v_cr, v_from_credit),
               greatest(0, v_cr - v_from_credit), 'reversed', v_provider, now());
   end if;
 
