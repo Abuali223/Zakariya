@@ -1197,11 +1197,15 @@ async function renderDashboard(){
     return `<tr><td>${esc(r.s.studentId||r.s._id)}</td><td>${esc(r.s.name||'')}</td><td>${gradeName(g)} ${esc(r.s.classLetter||r.s.track||'')}</td><td>${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
   const riskCard=`<div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>⚠️ Xavf ostidagi o‘quvchilar</h3><span class="cls-count">${risky.length} ta · past davomat (&lt;${RISK_ATT}%) yoki past ball (&lt;${RISK_SCORE})</span></div>
     ${risky.length?`<div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Sinf</th><th>Sabab</th><th></th></tr></thead><tbody>${riskRows}</tbody></table></div>`:'<div class="empty">Hozircha xavf ostidagi o‘quvchi yo‘q ✓</div>'}</div>`;
+  // ---- MOLIYA DASHBOARDI (faqat direktor/moliya) — oylik sof foyda/zarar + moliyaviy oqim + xarajat taqsimoti ----
+  //   Bloklamaydi: o'quvchi statistikasi DARHOL chiqadi, moliya (barcha invoice/xarajat) fonда yuklanadi.
+  const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
   $('#dash').innerHTML = `
     <div class="stat-grid">
       ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt+'%','O‘rtacha davomat')}
       ${stat(uz,'O‘zbek sinf')}${stat(ru,'Rus sinf')}${stat(enrollments.length,'Arizalar')}${stat(users.length,'Foydalanuvchi')}
     </div>
+    ${canFin?'<div id="dash-fin"><div class="card" style="margin-top:16px;padding:22px"><div class="loading">Moliya ma’lumoti yuklanmoqda…</div></div></div>':''}
     <div class="dash2">
       <div class="card"><div class="cls-card-head"><h3>Sinflar bo‘yicha o‘quvchilar</h3></div><div class="bars">${bars||'<div class="empty">Ma’lumot yo‘q</div>'}</div></div>
       <div class="card"><div class="cls-card-head"><h3>Foydalanuvchilar (rol bo‘yicha)</h3></div><div class="bars">
@@ -1210,6 +1214,82 @@ async function renderDashboard(){
     </div>
     ${riskCard}`;
   $('#dash').querySelectorAll('[data-risk-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.riskReport, students.find(r=>r._id===b.dataset.riskReport))));
+  // Moliya bo'limini FONDA yuklab, joyiga qo'yamiz (dashboard'ni kutib turmaydi).
+  if(canFin) dashFinance().then(h=>{ const el=$('#dash-fin'); if(el) el.innerHTML=h||'<div class="card" style="margin-top:16px;padding:18px"><div class="empty">Moliya ma’lumoti topilmadi.</div></div>'; })
+    .catch(e=>{ const el=$('#dash-fin'); if(el) el.innerHTML=`<div class="card" style="margin-top:16px;padding:18px"><div class="empty">Moliyani yuklashda xato: ${esc(e.code||e.message||'')}</div></div>`; });
+}
+
+/* ---- Statistika dashboard: MOLIYA bo'limi (oylik sof foyda/zarar + oqim + xarajat taqsimoti) ----
+   Faqat moliyani ko'ra oladiganlar (direktor/moliya menejeri/g'aznachi). Boshqalar — bo'sh. */
+async function dashFinance(){
+  const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
+  if(!canFin) return '';
+  let INV=[],EXP=[],CREDITS=[],REF=[];
+  try{ [INV,EXP]=await Promise.all([loadCol('invoices').catch(()=>[]), loadCol('expenses').catch(()=>[])]); }catch(e){}
+  try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
+  try{ REF=await loadCol('refunds'); }catch(e){ REF=[]; }
+  // Hisob-kitob (renderAccounting bilan bir xil mantiq) — balans-aware.
+  const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
+  const emonth=e=>e.month||String(e.date||'').slice(0,7);
+  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
+  const expOf=k=>EXP.filter(e=>emonth(e)===k).reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
+  const mLbl=k=>MO[(parseInt(String(k).slice(5,7),10)||1)-1]||esc(String(k));
+  const fmtC=n=>{ n=Number(n)||0; const sg=n<0?'−':''; n=Math.abs(n); let v; if(n>=1e9)v=(n/1e9).toFixed(2).replace('.',',')+' mlrd'; else if(n>=1e6)v=(n/1e6).toFixed(1).replace('.',',')+' mln'; else v=Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ').replace(/,/g,' '); return sg+v; };
+  const S=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  const cur=curMonth();
+  const months=(()=>{ const [y,m]=cur.split('-').map(Number); const out=[]; for(let i=5;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; })();
+  const flow=months.map(k=>({ k, inc:monthColl(k), exp:expOf(k) }));
+  const kirim=monthColl(cur), chiqim=expOf(cur), foyda=kirim-chiqim;
+  const marja=kirim>0?Math.round(foyda/kirim*100):0;
+  const avans=CREDITS.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
+  const debt=INV.filter(i=>i.month===cur).reduce((s,i)=>s+((i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
+  const byCat={}; EXP.filter(e=>emonth(e)===cur).forEach(e=>{ const c=e.category||'Boshqa'; byCat[c]=(byCat[c]||0)+(Number(e.amount)||0); });
+  const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+  const maxCat=Math.max(1,...catKeys.map(c=>byCat[c]));
+  // ---- Moliyaviy oqim: guruhlangan ustun diagrammasi (SVG) — Kirim (yashil) vs Chiqim (sariq), 6 oy ----
+  //   Ranglar CVD (rang ko'rlik) uchun tekshirilgan (ΔE>8) + ustunlarда qiymat yorliqlari bor.
+  const CIN='#1F7A4D', CEX='#E08A2E';
+  const flowChart=(data)=>{ const W=640,H=210,padL=10,padR=10,padT=26,padB=30;
+    const maxV=Math.max(1,...data.flatMap(d=>[d.inc,d.exp])); const nn=data.length||1; const gw=(W-padL-padR)/nn;
+    const bw=Math.max(8,Math.min(24,(gw-12)/2)); const plotH=H-padT-padB; const yOf=v=>padT+plotH*(1-v/maxV);
+    const base=padT+plotH; let s=`<line x1="${padL}" y1="${base}" x2="${W-padR}" y2="${base}" stroke="#E3E8E6" stroke-width="1"/>`;
+    data.forEach((d,i)=>{ const cx=padL+gw*i+gw/2; const ix=cx-bw-1, ex=cx+1; const iy=yOf(d.inc), ey=yOf(d.exp); const net=d.inc-d.exp;
+      s+=`<rect x="${ix.toFixed(1)}" y="${iy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-iy).toFixed(1)}" rx="3" fill="${CIN}"><title>${mLbl(d.k)}: Kirim ${S(d.inc)} so‘m</title></rect>`;
+      s+=`<rect x="${ex.toFixed(1)}" y="${ey.toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-ey).toFixed(1)}" rx="3" fill="${CEX}"><title>${mLbl(d.k)}: Chiqim ${S(d.exp)} so‘m</title></rect>`;
+      s+=`<text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#5a6b66">${mLbl(d.k)}</text>`;
+      s+=`<text x="${cx.toFixed(1)}" y="16" text-anchor="middle" font-size="10.5" font-weight="700" fill="${net>=0?'#1F7A4D':'#B42318'}"><title>Sof foyda ${S(net)} so‘m</title>${fmtC(net)}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block" role="img" aria-label="Oylik kirim va chiqim diagrammasi">${s}</svg>`;
+  };
+  const catBars=catKeys.map(c=>{ const v=byCat[c], p=Math.round(v/maxCat*100), pp=chiqim?Math.round(v/chiqim*100):0;
+    return `<div class="bar-row"><span class="bar-lbl" title="${esc(c)}">${esc(c)}</span><div class="bar"><i style="width:${p}%;background:${CEX}"></i></div><b>${S(v)} <small style="color:#8a948f;font-weight:600">${pp}%</small></b></div>`; }).join('');
+  const kpi=(label,val,sub,color)=>`<div class="stat-card"><b${color?` style="color:${color}"`:''}>${esc(val)}</b><span>${esc(label)}${sub?` · ${esc(sub)}`:''}</span></div>`;
+  return `
+    <div class="card" style="margin-top:16px">
+      <div class="cls-card-head"><h3>💰 Moliya — ${mLbl(cur)} ${cur.slice(0,4)}</h3><span class="cls-count">joriy oy</span></div>
+      <div class="stat-grid" style="margin:12px 0 2px">
+        ${kpi(foyda>=0?'Sof foyda':'Sof zarar', fmtC(foyda), 'kirim − chiqim', foyda>=0?'#1F7A4D':'#B42318')}
+        ${kpi('Kirim', fmtC(kirim), 'yig‘ilgan to‘lov', '#1F7A4D')}
+        ${kpi('Chiqim', fmtC(chiqim), 'xarajatlar', '#C2410C')}
+        ${kpi('Foyda marjasi', marja+'%', 'har 100 so‘mdan', foyda>=0?'':'#B42318')}
+        ${kpi('Qarzdorlik', fmtC(debt), 'shu oy', '#B42318')}
+        ${kpi('Avans', fmtC(avans), 'oldindan to‘langan', '#0891B2')}
+      </div>
+    </div>
+    <div class="dash2" style="margin-top:16px">
+      <div class="card"><div class="cls-card-head"><h3>Moliyaviy oqim — kirim va chiqim</h3><span class="cls-count">so‘nggi 6 oy</span></div>
+        <div style="display:flex;gap:18px;align-items:center;font-size:12.5px;margin:10px 2px 2px;flex-wrap:wrap">
+          <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${CIN};vertical-align:-1px;margin-right:6px"></i>Kirim</span>
+          <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${CEX};vertical-align:-1px;margin-right:6px"></i>Chiqim</span>
+          <span style="color:#8a948f">· ustun ustidagi raqam — o‘sha oyning sof foydasi</span>
+        </div>
+        ${flowChart(flow)}
+      </div>
+      <div class="card"><div class="cls-card-head"><h3>Xarajat taqsimoti — nimaga sarflangani</h3><span class="cls-count">${mLbl(cur)}: ${fmtC(chiqim)}</span></div>
+        <div class="bars fin-cols" style="margin-top:10px">${catKeys.length?catBars:'<div class="empty">Bu oy xarajat kiritilmagan</div>'}</div>
+      </div>
+    </div>`;
 }
 
 /* ---- O'quvchilar eksport/import ---- */

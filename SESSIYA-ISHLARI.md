@@ -130,6 +130,16 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
 - **[L1]** Ruhsat/kasallik sanashda shaxsiy ish kunlari ishlatiladi (global Dush–Juma emas). **[L2]** A4 maosh hisobotiga «Davomat ushlanmasi» ustuni qo'shildi (gross−avans−ushlanma=net mos). **[L3]** `SESSION.email` o'rnatiladi (audit `by/createdBy` endi rolni emas, foydalanuvchini yozadi). **[L4]** Arz-shikoyat vaqti Asia/Tashkent (+05:00) da (UTC emas).
 - **Rad etilgan (yolg'on signal):** reception chegirma = pulga ta'sir (foydalanuvchi atayin xohladi), refund over-refund (clamp bor), cashier applied_payments (RLS to'sadi), owns_child key (import holati), bus search_path (pg_temp bor), onSnapshot onError (kichik). + **M3 (admin/admin_head'da «students» tab yo'q)** — buzadigan xato emas, qoldirdim (ularga o'quvchi boshqaruvi berish = alohida qaror).
 
+## 15) Statistika — MOLIYA DASHBOARDI qo'shildi
+
+- **Asosiy «Statistika» paneliga** (direktor/moliya) moliyaviy bo'lim: oylik **sof foyda/zarar**, moliyaviy oqim, xarajat taqsimoti.
+- **KPI plitkalar** (joriy oy): Sof foyda/zarar (yashil/qizil), Kirim, Chiqim, Foyda marjasi, Qarzdorlik, Avans.
+- **Moliyaviy oqim** — so'nggi 6 oy «Kirim vs Chiqim» guruhlangan ustun diagrammasi (inline SVG, tashqi kutubxonasiz); har oy ustida o'sha oyning sof foydasi. Ranglar CVD (rang ko'rlik) uchun validator bilan tekshirilgan (Kirim #1F7A4D, Chiqim #E08A2E, ΔE>8) + qiymat yorliqlari + hover (`<title>`).
+- **Xarajat taqsimoti** — joriy oy xarajatlari toifa bo'yicha (Maosh/Kommunal/Ijara…) saralangan gorizontal ustunlar + summa + %.
+- Hisob-kitob `renderAccounting` bilan bir xil mantiq (balans-aware `paidAmt`, `monthColl`, `byCat`). Faqat `isAdmin || finance_mgr || treasurer`.
+- **Bloklamaydi:** o'quvchi statistikasi darhol chiqadi; moliya (barcha invoice/xarajat) FONDA yuklanadi (`dash-fin` placeholder).
+- Tekshirildi: JS sintaksis toza; Chromium bilan vizual preview (grafiklar to'g'ri chiqadi, layout mobil/desktop).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
