@@ -112,7 +112,10 @@
 - **Pre-existing bug tuzatildi:** `loadPayees` endi `workStart/workEnd/workDays` ni ham beradi → maosh dialogi shaxsiy ish vaqtini ishlatadi (ilgari standartga tushib qolardi).
 - **Finding-1 tuzatildi:** «o'z hisobidan» prompti — Bekor yoki bo'sh → o'zgarmaydi; faqat **0** → belgini o'chiradi (ilgari bo'sh ham o'chirardi).
 - **Narx jadvali:** eski kech/erta/oshiqcha-tanaffus **jarima summasi** maydonlari OLIB TASHLANDI (endi soatbay). Qoldi: kasal kun stavkasi + tushlik/tanaffus (daq/kun — kunlik sof soat shundan). Saqlashda jarimalar 0 ga yoziladi.
-- **Tekshirildi:** `attMetrics` birlik testi 13/13 (soatbay) + ko'p kunlik agregatsiya (22 ish kuni, 1 yo'qlama + kech 70daq + personal 120 → net 4 218 750, ≈165 soat × stavka). Grace, kunlik cap, personal-on-no-scan, eski Set/typesiz, hourRate×8≈dailyRate. JS sintaksis toza; 12 ustun = 12 sarlavha; ✏️ 1 ta.
+- **Mustaqil adversarial ko'rikdan keyin yana 2 edge-case tuzatildi:**
+  - **Prorata bazasi** (real pul): `billingInterval` endi `personRules(s).workDays` bo'yicha prorata qiladi (`saWorkdaysFor`), ilgari qat'iy Dush–Juma edi. Shaxsiy ish kunli + oy o'rtasida kirgan xodimda gross va ushlanma endi BIR XIL bazada (misol: Dush/Chor/Juma, 15-dan → 7/13, ilgari 12/22 — ~21 000 so'm farq). Standart Dush–Juma va to'liq oy — o'zgarmaydi.
+  - **Taqsimot mosligi** (faqat ko'rsatish): Ushlanma tooltipi/info endi komponentlarni DAQIQADA + bitta «qisman» summasi ko'rsatadi (ilgari kunlik cap ishlaganda komponent summalari jamidan oshib ketardi; pul to'g'ri edi).
+- **Tekshirildi:** `attMetrics` birlik testi 13/13 (soatbay) + ko'p kunlik agregatsiya (22 ish kuni, 1 yo'qlama + kech 70daq + personal 120 → net 4 218 750, ≈165 soat × stavka) + `billingInterval` prorata 3/3 (standart/shaxsiy/to'liq). Grace, kunlik cap, personal-on-no-scan, eski Set/typesiz, hourRate×8≈dailyRate. JS sintaksis toza; 12 ustun = 12 sarlavha; ✏️ 1 ta. Ko'rik: (a)-(h) toza (NaN/Infinity/manfiy to'lov/ustun-mismatch yo'q).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

@@ -3487,7 +3487,7 @@ async function renderStaffAttendance(){
         <td data-label="O‘rt. kelish" style="font-variant-numeric:tabular-nums">${o.avg||'<span class="muted">—</span>'}</td>
         <td data-label="Kechikish" style="font-variant-numeric:tabular-nums">${o.dm.late?`<span style="color:#B45309">${o.dm.late}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Erta ketish" style="font-variant-numeric:tabular-nums">${o.dm.early?`<span style="color:#B45309">${o.dm.early}</span>`:'<span class="muted">—</span>'}</td>
-        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Ishladi ${Math.floor((o.dm.workedMin||0)/60)}s ${Math.round((o.dm.workedMin||0)%60)}d / ${Math.floor((o.dm.monthlyMin||0)/60)}s norma · soatiga ${fmtSom(o.dm.hourRate||0)} — Yo‘qlama ${o.dm.absent} kun (${fmtSom(o.dm.absenceAmt||0)})${(o.dm.lateMin||0)?` · kech ${o.dm.lateMin} daq (${fmtSom(o.dm.lateAmt||0)})`:''}${(o.dm.earlyMin||0)?` · erta ${o.dm.earlyMin} daq (${fmtSom(o.dm.earlyAmt||0)})`:''}${(o.dm.breakMin||0)?` · o‘z hisobidan ${o.dm.breakMin} daq (${fmtSom(o.dm.breakAmt||0)})`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td>
+        <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Ishladi ${Math.floor((o.dm.workedMin||0)/60)}s ${Math.round((o.dm.workedMin||0)%60)}d / ${Math.floor((o.dm.monthlyMin||0)/60)}s norma · soatiga ${fmtSom(o.dm.hourRate||0)} — Yo‘qlama ${o.dm.absent} kun (${fmtSom(o.dm.absenceAmt||0)})${((o.dm.lateMin||0)+(o.dm.earlyMin||0)+(o.dm.breakMin||0))?` + qisman ${fmtSom(o.dm.partialAmt||0)} (${[(o.dm.lateMin?`kech ${o.dm.lateMin}d`:''),(o.dm.earlyMin?`erta ${o.dm.earlyMin}d`:''),(o.dm.breakMin?`o‘z hisobidan ${o.dm.breakMin}d`:'')].filter(Boolean).join(' · ')})`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td>
         <td data-label="Oylik (hisob)" style="font-variant-numeric:tabular-nums" title="Hisoblangan oylik = nominal ${fmtSom(o.gross)} − ushlanma ${fmtSom(o.dm.total||0)} (avans alohida)">${o.gross?`<b style="color:#1F9982">${fmtSom(o.net)}</b>`:'<span class="muted">—</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
     // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
     const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
@@ -4324,11 +4324,11 @@ async function renderAccounting(){
       const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p, breakMarks)||{total:0,absent:0,late:0,early:0,lateMin:0,earlyMin:0,breakMin:0,excessBreakMin:0,workedMin:0,monthlyMin:0,hourRate:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
       if(inp) inp.value=String(dm.total||0);
       if(info){ const hh=m=>`${Math.floor((m||0)/60)}s ${Math.round((m||0)%60)}d`;
+        // Taqsimot DAQIQADA (aniq); summa — JAMI (yo'qlama + qisman). Kunlik cap bo'lsa ham jami to'g'ri.
+        const comp=[(dm.lateMin?`kech ${dm.lateMin}d`:''),(dm.earlyMin?`erta ${dm.earlyMin}d`:''),(dm.breakMin?`o‘z hisobidan ${dm.breakMin}d`:'')].filter(Boolean).join(' · ');
         info.innerHTML=`<b>Ishladi ${hh(dm.workedMin)}</b> / ${hh(dm.monthlyMin)} norma · soatiga ${fmtSum(dm.hourRate)}`
-          +`<br>Ushlanma: yo‘qlama ${dm.absent} kun (${fmtSum(dm.absenceAmt)})`
-          +(dm.lateMin?` · kech ${dm.lateMin} daq (${fmtSum(dm.lateAmt)})`:'')
-          +(dm.earlyMin?` · erta ${dm.earlyMin} daq (${fmtSum(dm.earlyAmt)})`:'')
-          +(dm.breakMin?` · o‘z hisobidan ${dm.breakMin} daq (${fmtSum(dm.breakAmt)})`:''); }
+          +`<br>Ushlanma ${fmtSum(dm.total||0)}: yo‘qlama ${dm.absent} kun (${fmtSum(dm.absenceAmt)})`
+          +(comp?` + qisman ${fmtSum(dm.partialAmt||0)} (${comp})`:''); }
       calc();
     };
     $('#sp-t').onchange=loadDed; $('#sp-month').onchange=loadDed; if($('#sp-ded')) $('#sp-ded').oninput=calc; loadDed();
@@ -4905,7 +4905,11 @@ function billingInterval(s, month){
   let end = mEnd;
   if((st==='muzlatilgan'||st==='chiqdi') && sf && sf<end) end=sf;
   if(start>end) return {skip:true, reason:'oraliq yo‘q'};
-  const full=saWorkdays(mStart,mEnd), act=saWorkdays(start,end);
+  // Prorata asosi — SHAXSIY ish kunlari bo'yicha (attMetrics fullWD bilan bir xil bazani ishlatadi,
+  //   aks holda shaxsiy ish kunli + oy o'rtasida kirgan/muzlatilgan xodimda gross va ushlanma mos kelmaydi).
+  //   Student/standart xodim -> personRules workDays bo'sh -> Dush–Juma (saWorkdays bilan bir xil).
+  const _wd=personRules(s).workDays;
+  const full=saWorkdaysFor(mStart,mEnd,_wd), act=saWorkdaysFor(start,end,_wd);
   const fmtD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   if(full<=0) return {skip:false, fraction:1, startStr:fmtD(start), endStr:fmtD(end)};
   const fraction=Math.min(1, act/full);
