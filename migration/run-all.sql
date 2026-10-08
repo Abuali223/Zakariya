@@ -60,6 +60,8 @@
 \ir student-status.sql
 \ir staff-status.sql
 \ir staff-workhours.sql
+\ir staff-break-marks.sql
+\ir reception-guard.sql
 \ir applications-guard.sql
 \ir secdef-searchpath.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

@@ -913,6 +913,11 @@ function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }
 function canManageStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch' || SESSION.role==='reception'; }
 // O'CHIRISH / bulk-o'chirish / Excel-import — reception BUNGA kirmaydi (u faqat KIRITISH+TAHRIR qiladi).
 function canDeleteStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch'; }
+// O'quvchi HOLATINI (faollashtirish/muzlatish/chiqarish/sinov) o'zgartirish — faqat MA'MURIYAT
+//   (direktor/ma'muriyat rahbari). Qabulxona/O'IBDO' BUNDA yo'q. (DB'da trigger ham bloklaydi.)
+function canManageStudentStatus(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head'; }
+// Qarzdorlik/moliya ko'rish — qabulxonaga BERILMAYDI (foydalanuvchi talabi).
+function canSeeStudentFinance(){ return SESSION.role!=='reception'; }
 // Xodim DAVOMAT yuritadigan sinflar: sinf rahbarligi (homeroomClasses) + eski kurator (assignedClasses)
 function supervisedClasses(){
   const set = new Set(SESSION.homeroomClasses||[]);
@@ -2232,13 +2237,15 @@ function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM
 async function renderStudents(){
   const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
   const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
-  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer' || SESSION.role==='reception';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar + qabulxona (undiruv qo'ng'irog'i)
+  const canLife=canManageStudentStatus();   // ⏯️ holat (faollashtirish/muzlatish/chiqarish) — faqat Ma'muriyat
+  const canFin=canSeeStudentFinance();      // qarzdorlik ustuni/filtri — qabulxonaга yopiq
+  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';   // 📞 to'lov eslatmasi — faqat to'lov bilan ishlovchilar (reception EMAS)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
-      <input type="month" id="stu-fmonth" class="search-inp" style="max-width:150px" title="Qarzdorlik oyi — eski oylarni ham tanlash mumkin" value="${curMonth()}">
-      <select id="stu-fdebt" class="search-inp" style="max-width:160px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Faqat qarzdorlar</option><option value="paid">Faqat to‘langan</option></select>
+      ${canFin?`<input type="month" id="stu-fmonth" class="search-inp" style="max-width:150px" title="Qarzdorlik oyi — eski oylarni ham tanlash mumkin" value="${curMonth()}">
+      <select id="stu-fdebt" class="search-inp" style="max-width:160px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Faqat qarzdorlar</option><option value="paid">Faqat to‘langan</option></select>`:''}
       <button class="btn gold2" id="stu-pdf">📄 PDF</button>
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
@@ -2333,13 +2340,15 @@ async function renderStudents(){
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
-        <td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canMng?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        ${canFin?`<td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>`:''}
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
-      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th><th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
+      return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th>${canFin?`<th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th>`:''}<th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+    }
+    if(canLife){   // holat o'zgartirish faqat Ma'muriyat
       $('#cls-groups').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status))));
     }
     if(canDel){
@@ -2421,6 +2430,9 @@ async function openPayNote(key, name){
 // ⏯️ TEZKOR HOLAT (Faollashtirish / Muzlatish / Chiqarish / Sinov) — bir oynada, sana bilan.
 //   Public students hujjatiga payStatus + activeFrom/stopFrom yozadi (prorata shundan hisoblanadi).
 async function openStatusModal(s, collName, onSaved){
+  const _coll = collName || 'students';
+  // Himoya: o'quvchi holatini faqat Ma'muriyat o'zgartiradi (qabulxona/boshqalar emas). DB'da trigger ham bor.
+  if(_coll==='students' && !canManageStudentStatus()){ toast('O‘quvchi holatini faqat Ma’muriyat o‘zgartira oladi',true); return; }
   collName = collName || 'students';
   if(!s){ toast('Topilmadi',true); return; }
   const isStu = (collName==='students');
@@ -2791,7 +2803,13 @@ function openForm(name, row, prefill, afterSaveCb){
     return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.inputmode?`inputmode="${esc(f.inputmode)}"`:''} ${f.maxlength?`maxlength="${esc(String(f.maxlength))}"`:''} ${f.placeholder?`placeholder="${esc(f.placeholder)}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
   };
   // group fields into a 2-col grid where sensible
-  const body = `<div class="grid2">${s.fields.map(fieldHtml).join('')}</div>` + (s.subjects ? subjectsEditor(row) : '');
+  // Qabulxona uchun o'quvchi formasidan HOLAT (payStatus/activeFrom/stopFrom) va MOLIYA
+  //   (specialCategory/contractAmount/siblingDiscount/referrerId) maydonlari OLIB TASHLANADI.
+  //   (DB'da trigger ham bu maydonlarni qabulxona o'zgartirishini bloklaydi.)
+  const _recHide = (name==='students' && SESSION.role==='reception')
+    ? new Set(['payStatus','activeFrom','stopFrom','specialCategory','contractAmount','siblingDiscount','referrerId']) : null;
+  const _fields = _recHide ? s.fields.filter(f=>!_recHide.has(f.k)) : s.fields;
+  const body = `<div class="grid2">${_fields.map(fieldHtml).join('')}</div>` + (s.subjects ? subjectsEditor(row) : '');
   $('#modal').innerHTML = `
     <div class="modal-h"><h3>${isEdit?'Tahrirlash':'Yangi qo‘shish'} — ${esc(s.title)}</h3><button class="x" id="m-x">×</button></div>
     <form id="m-form"><div class="modal-b">${body}</div>
@@ -3263,7 +3281,7 @@ function tzHMParts(iso){
 function saMin(ts){ const p=tzHMParts(ts); return p?p.h*60+p.m:null; }
 // Oylik davomat jarimasi. byDay={day:[skanlar]}, leaveSet=ruxsatli kunlar (ruhsat/kasallik), salary=oylik.
 //   Faqat O'TGAN ish kunlari (Dush–Juma, bugundan oldin) hisobga olinadi.
-function attMetrics(byDay, leaveSet, month, salary, person){
+function attMetrics(byDay, leaveSet, month, salary, person, breakExcused){
   const mm=String(month||'').match(/^(\d{4})-(\d{2})/); if(!mm) return null;
   const y=+mm[1], mo=+mm[2]; const today=todayStr();
   const R=personRules(person);                                    // shaxsiy ish vaqti/kunlari (bo'sh -> standart)
@@ -3292,7 +3310,9 @@ function attMetrics(byDay, leaveSet, month, salary, person){
     const ketTs = outs.length ? outs[outs.length-1].ts : (scans.length>1 ? scans[scans.length-1].ts : null);  // ketish: oxirgi 'out' (bo'lmasa, >1 skan bo'lsa oxirgisi)
     if(ketTs){ const ket=saMin(ketTs); if(ket!=null && ket < R.workEndMin-R.earlyGraceMin) early++; }
     // Ish vaqtidagi tanaffus: kunlik tanaffus ruxsat etilgandan OSHSA — oshig'i (daqiqa) yig'iladi.
-    excessBreakMin += Math.max(0, scanBreakMin(scans) - R.allowedBreakMin);
+    // «Sababli» belgilangan kun -> tanaffus jarimasi O'TKAZIB YUBORILADI (oylik kesilmaydi).
+    if(!(breakExcused && breakExcused.has(ds)))
+      excessBreakMin += Math.max(0, scanBreakMin(scans) - R.allowedBreakMin);
   }
   const absenceAmt=absent*dailyRate, lateAmt=late*R.latePenalty, earlyAmt=early*R.earlyPenalty;
   const breakAmt=Math.round(excessBreakMin/60*(R.breakPenaltyPerHour||0));   // oshiqcha tanaffus jarimasi (soatiga)
@@ -3340,15 +3360,19 @@ async function renderStaffAttendance(){
     catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
     if(_g!==VIEW_GEN) return;
     const roster=buildRoster(staff,teachers);
+    // Shu kun uchun «Sababli» belgilangan tanaffuslar (refType:refId).
+    let bmSet=new Set();
+    try{ const bs=await getDocs(query(collection(db,'staff_break_marks'), where('day','==',day))); bs.docs.forEach(d=>{ const x=d.data()||{}; if(x.refType&&x.refId) bmSet.add(String(x.refType)+':'+String(x.refId)); }); }catch(e){}
     const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
     Object.values(byPerson).forEach(l=>l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))));
     const seen=new Set(), bodyRows=[];
     roster.forEach(r=>{ seen.add(r.cam); const a=agg(byPerson[r.cam]||[]); const came=!!a.kelgan;
+      const isExc=bmSet.has(r.refType+':'+r.refId);   // tanaffus «sababli» belgilanganmi
       bodyRows.push(`<tr>
         <td data-label="Xodim">${esc(r.name||r.cam)}<div class="small muted">${esc(r.pos)}${r.name?` · ID ${esc(r.cam)}`:''}</div></td>
         <td data-label="Kelgan" style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'<span class="muted">—</span>'}</td>
         <td data-label="Ketgan" style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'<span class="muted">—</span>'}</td>
-        <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}</td>
+        <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}${(canEdit && a.brkMin>0)?`<div style="margin-top:4px"><button class="btn sm ${isExc?'gold':'ghost2'}" data-brktoggle="${esc(r.refType)}:${esc(r.refId)}" data-brkcam="${esc(r.cam)}" data-brkday="${esc(day)}" data-brkname="${esc(r.name||'')}" data-on="${isExc?'1':'0'}" title="Tanaffus: «Sababli» — oylik kesilmaydi · «O‘z hisobidan» — kesiladi">${isExc?'✓ Sababli':'O‘z hisobidan'}</button></div>`:''}</td>
         <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
         <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}</td></tr>`); });
     const unmatched=Object.keys(byPerson).filter(pid=>!seen.has(pid));
@@ -3376,6 +3400,7 @@ async function renderStaffAttendance(){
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','>=',mStart), where('day','<=',mEnd))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
     try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',mEnd), where('endDay','>=',mStart))); leaves=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+    let bmarks=[]; try{ const s=await getDocs(query(collection(db,'staff_break_marks'), where('day','>=',mStart), where('day','<=',mEnd))); bmarks=s.docs.map(d=>d.data()||{}); }catch(e){}
     if(_g!==VIEW_GEN) return;
     try{ await loadSalaryRates(); }catch(e){}   // o'qituvchi maoshi (kunlik stavka/jarima uchun)
     try{ await loadSaRates(); }catch(e){}       // kechikish/erta ketish jarima summalari (sozlanadigan)
@@ -3386,6 +3411,8 @@ async function renderStaffAttendance(){
     const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
     // ruhsat/kasallik kunlarini refType:refId bo'yicha yig'amiz
     const lvByRef={}; leaves.forEach(lv=>{ const key=(lv.refType||'')+':'+(lv.refId||''); const t=(lv.type==='kasallik')?'kasallik':'ruhsat'; const o=lvByRef[key]=lvByRef[key]||{ruhsat:new Set(),kasallik:new Set()}; expandDays(lv.startDay,lv.endDay).forEach(d=>{ if(d>=mStart&&d<=mEnd) o[t].add(d); }); });
+    // «Sababli» tanaffus belgilari (refType:refId -> kunlar to'plami) — o'sha kunning tanaffus jarimasi tushmaydi.
+    const bmByRef={}; bmarks.forEach(m=>{ if(!m.refType||!m.refId||!m.day) return; const k=m.refType+':'+m.refId; (bmByRef[k]=bmByRef[k]||new Set()).add(String(m.day)); });
     const bodyRows = roster.map(r=>{
       const list=byPerson[r.cam]||[]; const byDay={}; list.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
       let workMin=0, brkMin=0, arr=[]; const presentWork=new Set();
@@ -3396,7 +3423,7 @@ async function renderStaffAttendance(){
       const kasallik=[...lv.kasallik].filter(d=>workSet.has(d)).length;
       const excused=new Set([...lv.ruhsat,...lv.kasallik]);
       const avg = arr.length ? (()=>{ const v=Math.round(arr.reduce((s,n)=>s+n,0)/arr.length); return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); })() : null;
-      const dm = attMetrics(byDay, excused, mon, r.salary, r) || {absent:0,late:0,early:0,excessBreakMin:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
+      const dm = attMetrics(byDay, excused, mon, r.salary, r, bmByRef[r.refType+':'+r.refId]) || {absent:0,late:0,early:0,excessBreakMin:0,total:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
       // «Ruhsatsiz» = attMetrics'dagi absent (hayot-sikl oralig'i bilan FILTRLANGAN) — «Ushlanma» ustuni bilan mos.
       //   (ilgari workSet'dan qo'lda sanalardi -> oy o'rtasida kirgan/muzlatilgan uchun ustun va pul MOS kelmasdi.)
       const absent = dm.absent||0;
@@ -3449,6 +3476,15 @@ async function renderStaffAttendance(){
   if(canEdit && $('#sa-staff-add')) $('#sa-staff-add').onclick=()=>{ cache.staff=null; openForm('staff', null, null, ()=>{ cache.staff=null; route(); }); };
   // «Bog'lanmagan» Kamera ID -> shu ID bilan yangi xodim yaratib bog'lash (prefill: cameraId + ism).
   if(canEdit) $('#sa-body').addEventListener('click', e=>{
+    // Tanaffus «Sababli / O'z hisobidan» toggle — bitta tugma (oylik kesiladimi, yo'qmi)
+    const bt=e.target.closest('[data-brktoggle]');
+    if(bt){ const [rt,rid]=String(bt.dataset.brktoggle||'').split(':'); const dy=bt.dataset.brkday, cam=bt.dataset.brkcam||''; const id=`${rt}_${rid}_${dy}`;
+      (async()=>{ try{
+          if(bt.dataset.on==='1') await deleteDoc(doc(db,'staff_break_marks',id));   // sababli -> o'z hisobidan
+          else await setDoc(doc(db,'staff_break_marks',id), { refId:rid, refType:rt, cameraId:cam, name:bt.dataset.brkname||'', day:dy, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() });
+          toast('Saqlandi ✓'); loadDay();
+        }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } })();
+      return; }
     // «Bog'lanmagan» Kamera ID -> yangi xodim yaratib bog'lash
     const b=e.target.closest('[data-linkcam]');
     if(b){ openForm('staff', null, { cameraId:b.dataset.linkcam, name:b.dataset.linkname||'' }, ()=>{ cache.staff=null; route(); }); return; }
@@ -4219,9 +4255,11 @@ async function renderAccounting(){
       const mS=mm+'-01', mE=mm+'-31'; let cks=[], lvs=[];
       try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',String(p.cameraId)), where('day','>=',mS), where('day','<=',mE))); cks=s.docs.map(d=>d.data()||{}); }catch(e){}
       try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); lvs=s.docs.map(d=>d.data()||{}); }catch(e){}
+      const breakExcused=new Set();
+      try{ const s=await getDocs(query(collection(db,'staff_break_marks'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); s.docs.forEach(d=>{ const x=d.data()||{}; if(x.day&&String(x.day)>=mS&&String(x.day)<=mE) breakExcused.add(String(x.day)); }); }catch(e){}
       const byDay={}; cks.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
       const leaveSet=new Set(); lvs.forEach(l=>{ let d=new Date((l.startDay||'')+'T00:00:00'); const end=new Date((l.endDay||l.startDay||'')+'T00:00:00'); let g=0; while(!isNaN(d)&&!isNaN(end)&&d<=end&&g<400){ const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; if(ds>=mS&&ds<=mE) leaveSet.add(ds); d.setDate(d.getDate()+1); g++; } });
-      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p)||{total:0,absent:0,late:0,early:0,excessBreakMin:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
+      const dm=attMetrics(byDay, leaveSet, mm, Number(p.salary)||0, p, breakExcused)||{total:0,absent:0,late:0,early:0,excessBreakMin:0,absenceAmt:0,lateAmt:0,earlyAmt:0,breakAmt:0};
       if(inp) inp.value=String(dm.total||0);
       if(info) info.textContent=`yo‘qlama ${dm.absent} (${fmtSum(dm.absenceAmt)}) · kech ${dm.late} (${fmtSum(dm.lateAmt)}) · erta ${dm.early} (${fmtSum(dm.earlyAmt)})`+((dm.breakAmt||0)?` · oshiqcha tanaffus ${dm.excessBreakMin} daq (${fmtSum(dm.breakAmt)})`:'');
       calc();
