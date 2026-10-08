@@ -82,7 +82,8 @@
 
 ## 11) «Sababli / O'z hisobidan» — bitta tugma (ish vaqtidagi tanaffus)
 
-- Ma'muriyat/HR kunlik davomatда har xodim qatorida (tanaffus bo'lgan kunlarda) bitta tugma: **«Sababli»** (o'sha kun tanaffus jarimasi tushmaydi) / **«O'z hisobidan»** (kesiladi). Standart — o'z hisobidan.
+- Ma'muriyat/HR kunlik davomatда **har xodim qatorida** bitta tugma (`Tanaffus` ustunida): **«Sababli»** (o'sha kun tanaffus jarimasi tushmaydi) / **«O'z hisobidan»** (kesiladi). Standart — o'z hisobidan.
+- **Tugma ENDI har bir xodim uchun ko'rinadi** (ilgari faqat kamera avtomatik tanaffus aniqlagan kunlarda chiqardi — `a.brkMin>0`; kameralar ko'pincha toza chiqdi-kirdi juftini yozmagani uchun tugma umuman ko'rinmas edi). Endi faqat `canEdit` sharti bilan — ma'muriyat har kim uchun belgilay oladi. Jarima baribir faqat tanaffus aniqlangan kunda hisoblanadi (tugma — niyatni yozadi).
 - `staff_break_marks` jadvali (RLS: o'qish admin/hr/finance/cashier; yozish faqat admin/hr). `attMetrics` 6-param `breakExcused` — sababli kunlar tanaffus jarimasidan chiqariladi (kech/erta/yo'qlamaga tegmaydi). Kunlik + oylik + maosh berish — hammasi hisobga oladi.
 
 ## 12) Qabulxona (reception) huquqlari cheklandi
