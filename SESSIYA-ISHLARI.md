@@ -80,6 +80,17 @@
 - **YECHIM («Narx jadvali»):** «Ruxsat etilgan tanaffus (daq/kun)» (standart 60) + «Oshiqcha tanaffus jarimasi (so'm/soat)» (standart **0 = jarima yo'q**). Kunlik tanaffus ruxsatdan oshsa — oshig'iga soatiga jarima. `config/finance` (`allowedBreakMin`/`breakPenaltyPerHour`). Oylik hisobot «Ushlanma» tooltip'ida va maosh berishda ko'rinadi.
 - `scanBreakMin()` — tanaffus mantig'i `agg()`+`attMetrics`'da bir xil. JS test 9/9. Faqat `admin.html`.
 
+## 11) «Sababli / O'z hisobidan» — bitta tugma (ish vaqtidagi tanaffus)
+
+- Ma'muriyat/HR kunlik davomatда har xodim qatorida (tanaffus bo'lgan kunlarda) bitta tugma: **«Sababli»** (o'sha kun tanaffus jarimasi tushmaydi) / **«O'z hisobidan»** (kesiladi). Standart — o'z hisobidan.
+- `staff_break_marks` jadvali (RLS: o'qish admin/hr/finance/cashier; yozish faqat admin/hr). `attMetrics` 6-param `breakExcused` — sababli kunlar tanaffus jarimasidan chiqariladi (kech/erta/yo'qlamaga tegmaydi). Kunlik + oylik + maosh berish — hammasi hisobga oladi.
+
+## 12) Qabulxona (reception) huquqlari cheklandi
+
+- **O'quvchi holati** (faollashtirish/muzlatish/chiqarish/sinov) — endi faqat **Ma'muriyat** (direktor/ma'muriyat rahbari). Frontend: ⏯️ tugma `canManageStudentStatus()`; formadan `payStatus/activeFrom/stopFrom` yashirildi. Backend: `students` BEFORE INS/UPD trigger.
+- **Moliya** qabulxonaga berilmaydi: 📞 to'lov eslatmasi + qarzdorlik ustuni/filtri olib tashlandi; chegirma/kontrakt/aka-uka/referral maydonlari yashirildi. Backend: reception `inv_sel` + `pay_notes` (pn_*) dan olib tashlandi; `student_private` moliya maydonlariga trigger. Fayllar: `reception-access.sql`, `reception-guard.sql`.
+- **Saqlanadi:** o'quvchi qo'shish/asosiy ma'lumot + hujjat (PII) tahriri, arizalarни ko'rish.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
