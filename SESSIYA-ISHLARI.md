@@ -87,9 +87,10 @@
 
 ## 12) Qabulxona (reception) huquqlari cheklandi
 
-- **O'quvchi holati** (faollashtirish/muzlatish/chiqarish/sinov) — endi faqat **Ma'muriyat** (direktor/ma'muriyat rahbari). Frontend: ⏯️ tugma `canManageStudentStatus()`; formadan `payStatus/activeFrom/stopFrom` yashirildi. Backend: `students` BEFORE INS/UPD trigger.
-- **Moliya** qabulxonaga berilmaydi: 📞 to'lov eslatmasi + qarzdorlik ustuni/filtri olib tashlandi; chegirma/kontrakt/aka-uka/referral maydonlari yashirildi. Backend: reception `inv_sel` + `pay_notes` (pn_*) dan olib tashlandi; `student_private` moliya maydonlariga trigger. Fayllar: `reception-access.sql`, `reception-guard.sql`.
-- **Saqlanadi:** o'quvchi qo'shish/asosiy ma'lumot + hujjat (PII) tahriri, arizalarни ko'rish.
+- **FAQAT o'quvchi holati cheklandi** (faollashtirish/muzlatish/chiqarish/sinov) — endi faqat **Ma'muriyat/direktor**. Frontend: ⏯️ tugma `canManageStudentStatus()`; o'quvchi formasidan `payStatus/activeFrom/stopFrom` maydonlari qabulxonaga yashirildi (`_recHide`). Backend: `students` BEFORE INS/UPD trigger (`trg_reception_student_lifecycle`) — UPDATE'da 42501 xato, INSERT'da jim tozalanadi. Fayl: `reception-guard.sql`.
+- **MOLIYA KO'RISH QABULXONADA QOLDI** (foydalanuvchi aniqligi: bular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun): qarzdorlik ustuni/filtri (`canSeeStudentFinance()=true`, `inv_sel` da `is_reception()`), 📞 to'lov eslatmasi (`canNote` + `pay_notes` pn_sel/ins/upd da `is_reception()`), chegirma/kontrakt/aka-uka/referral maydonlari (`student_private` — moliya triggeri OLIB TASHLANDI). To'lov KIRITISH/qaytarish (apply_payment RPC'lar, invoices YOZISH) baribir faqat moliya/kassirda. Fayl: `reception-access.sql`.
+- **Qabulxona saqlagan imkoniyatlar:** o'quvchi qo'shish/asosiy ma'lumot + hujjat (PII) tahriri, qarzdorlik ko'rish, 📞 eslatma, chegirma maydonlari, arizalarni ko'rish. **Cheklangan:** faqat o'quvchi holati.
+- **Eslatma (reachability):** `ROLE_TABS` bo'yicha `students` tab'i faqat direktor + qabulxona + kassir(ko'rish)da. `admin`/`admin_head`/`zavuch` o'quvchilar ekranini ko'rmaydi, shuning uchun `students`/`student_private` RLS'i `is_admin()` (direktor) bilan qolgan — o'zgartirilmadi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

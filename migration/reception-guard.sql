@@ -2,15 +2,17 @@
 -- reception-guard.sql — Qabulxona (reception) xodimiga CHEKLOV (DB darajasida).
 --
 --   MAQSAD: qabulxona xodimi o'quvchi QO'SHADI va asosiy ma'lumotini TAHRIRLAYDI,
---   LEKIN:
---     (a) o'quvchi HOLATINI (faollashtirish/muzlatish/chiqarish/sinov =
---         payStatus/activeFrom/stopFrom) O'ZGARTIRA OLMAYDI — bu faqat Ma'muriyat
---         (direktor/ma'muriyat rahbari = app.is_admin_head()) huquqi.
---     (b) MOLIYAVIY maydonlarni (chegirma toifasi/kontrakt summasi/aka-uka chegirmasi/
---         referral = specialCategory/contractAmount/siblingDiscount/referrerId) o'zgartira olmaydi.
+--   LEKIN o'quvchi HOLATINI (faollashtirish/muzlatish/chiqarish/sinov =
+--     payStatus/activeFrom/stopFrom) O'ZGARTIRA OLMAYDI — bu faqat Ma'muriyat
+--     (direktor/ma'muriyat rahbari = app.is_admin_head()) huquqi.
 --
---   RLS satr darajasida ishlaydi, USTUN darajasida cheklay olmaydi — shuning uchun
---   TRIGGER ishlatamiz (frontend ham bu maydonlarni qabulxonaga ko'rsatmaydi; bu — DB
+--   MOLIYAVIY maydonlar (chegirma/kontrakt/aka-uka/referral) qabulxonaga QOLDIRILADI —
+--     ular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun kerak
+--     (foydalanuvchi talabi). Oldingi deploy'da qo'yilgan moliya triggeri BU YERDA OLIB
+--     TASHLANADI (pastda drop).
+--
+--   RLS satr darajasida ishlaydi, USTUN darajasida cheklay olmaydi — shuning uchun HOLAT
+--   uchun TRIGGER ishlatamiz (frontend ham bu maydonlarni qabulxonaga ko'rsatmaydi; bu — DB
 --   darajasidagi asl himoya, API orqali chetlab o'tishning oldini oladi).
 --
 --   UPDATE: qabulxona himoyalangan maydonni O'ZGARTIRSA -> xato (42501).
@@ -45,31 +47,10 @@ drop trigger if exists trg_reception_student_lifecycle on public.students;
 create trigger trg_reception_student_lifecycle before insert or update on public.students
   for each row execute function app.guard_reception_student_lifecycle();
 
--- ---- MOLIYAVIY maydonlar (chegirma/kontrakt/referral) — qabulxonaga yopiq ----
-create or replace function app.guard_reception_private_finance()
-  returns trigger language plpgsql
-  set search_path = public, app, pg_temp as $$
-begin
-  if app.is_reception() and not app.is_admin_head() then
-    if tg_op = 'INSERT' then
-      new."specialCategory" := null;
-      new."contractAmount"  := null;
-      new."siblingDiscount" := null;
-      new."referrerId"      := null;
-    elsif tg_op = 'UPDATE' then
-      if (new."specialCategory" is distinct from old."specialCategory")
-      or (new."contractAmount"  is distinct from old."contractAmount")
-      or (new."siblingDiscount" is distinct from old."siblingDiscount")
-      or (new."referrerId"      is distinct from old."referrerId") then
-        raise exception 'Qabulxona xodimi moliyaviy maydonlarni (chegirma/kontrakt/referral) o''zgartira olmaydi — bu Ma''muriyat huquqi'
-          using errcode = '42501';
-      end if;
-    end if;
-  end if;
-  return new;
-end $$;
+-- ---- MOLIYAVIY maydon triggeri OLIB TASHLANADI (chegirma/kontrakt/referral qabulxonaga QOLADI) ----
+-- Oldingi deploy'da qo'yilgan bo'lsa — jim o'chiriladi (idempotent). Bu maydonlar pulga ta'sir
+--   qilmaydi, faqat ota-onaga xabar/undiruv uchun; qabulxona ularni to'ldira/tahrirlay oladi.
 drop trigger if exists trg_reception_private_finance on public.student_private;
-create trigger trg_reception_private_finance before insert or update on public.student_private
-  for each row execute function app.guard_reception_private_finance();
+drop function if exists app.guard_reception_private_finance();
 
 notify pgrst, 'reload schema';

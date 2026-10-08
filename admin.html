@@ -916,8 +916,9 @@ function canDeleteStudents(){ return SESSION.isAdmin || SESSION.role==='admin' |
 // O'quvchi HOLATINI (faollashtirish/muzlatish/chiqarish/sinov) o'zgartirish — faqat MA'MURIYAT
 //   (direktor/ma'muriyat rahbari). Qabulxona/O'IBDO' BUNDA yo'q. (DB'da trigger ham bloklaydi.)
 function canManageStudentStatus(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head'; }
-// Qarzdorlik/moliya ko'rish — qabulxonaga BERILMAYDI (foydalanuvchi talabi).
-function canSeeStudentFinance(){ return SESSION.role!=='reception'; }
+// Qarzdorlik KO'RISH (ustun/filtr) — qabulxonaga ham BERILADI (pulga ta'sir qilmaydi,
+//   faqat ota-onaga xabar berish/undiruv uchun). FAQAT o'quvchi HOLATI cheklangan (yuqorida).
+function canSeeStudentFinance(){ return true; }
 // Xodim DAVOMAT yuritadigan sinflar: sinf rahbarligi (homeroomClasses) + eski kurator (assignedClasses)
 function supervisedClasses(){
   const set = new Set(SESSION.homeroomClasses||[]);
@@ -2238,8 +2239,8 @@ async function renderStudents(){
   const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
   const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
   const canLife=canManageStudentStatus();   // ⏯️ holat (faollashtirish/muzlatish/chiqarish) — faqat Ma'muriyat
-  const canFin=canSeeStudentFinance();      // qarzdorlik ustuni/filtri — qabulxonaга yopiq
-  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';   // 📞 to'lov eslatmasi — faqat to'lov bilan ishlovchilar (reception EMAS)
+  const canFin=canSeeStudentFinance();      // qarzdorlik ustuni/filtri — qabulxonaga HAM (ota-onaga xabar uchun)
+  const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer' || SESSION.role==='reception';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar + qabulxona (ota-onaga xabar uchun)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
@@ -2803,11 +2804,12 @@ function openForm(name, row, prefill, afterSaveCb){
     return `<div><label>${esc(f.l)}</label><input name="${f.k}" type="${f.t}" ${f.step?`step="${f.step}"`:''} ${f.inputmode?`inputmode="${esc(f.inputmode)}"`:''} ${f.maxlength?`maxlength="${esc(String(f.maxlength))}"`:''} ${f.placeholder?`placeholder="${esc(f.placeholder)}"`:''} ${f.req?'required':''} value="${esc(v)}"></div>`;
   };
   // group fields into a 2-col grid where sensible
-  // Qabulxona uchun o'quvchi formasidan HOLAT (payStatus/activeFrom/stopFrom) va MOLIYA
-  //   (specialCategory/contractAmount/siblingDiscount/referrerId) maydonlari OLIB TASHLANADI.
-  //   (DB'da trigger ham bu maydonlarni qabulxona o'zgartirishini bloklaydi.)
+  // Qabulxona uchun o'quvchi formasidan FAQAT HOLAT (payStatus/activeFrom/stopFrom) maydonlari
+  //   OLIB TASHLANADI (o'quvchi holatini faqat Ma'muriyat o'zgartiradi). Chegirma/kontrakt/aka-uka/
+  //   referral maydonlari QOLADI — ular pulga ta'sir qilmaydi, faqat ota-onaga xabar/undiruv uchun.
+  //   (DB'da trigger ham bu holat maydonlarini qabulxona o'zgartirishini bloklaydi.)
   const _recHide = (name==='students' && SESSION.role==='reception')
-    ? new Set(['payStatus','activeFrom','stopFrom','specialCategory','contractAmount','siblingDiscount','referrerId']) : null;
+    ? new Set(['payStatus','activeFrom','stopFrom']) : null;
   const _fields = _recHide ? s.fields.filter(f=>!_recHide.has(f.k)) : s.fields;
   const body = `<div class="grid2">${_fields.map(fieldHtml).join('')}</div>` + (s.subjects ? subjectsEditor(row) : '');
   $('#modal').innerHTML = `

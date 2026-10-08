@@ -59,26 +59,27 @@ create policy priv_upd on public.student_private for update using (app.is_admin(
 drop policy if exists sc_sel on public.student_codes;
 create policy sc_sel on public.student_codes for select using (app.is_admin() or app.is_zavuch() or app.is_reception());
 
--- ---- MOLIYA (qarzdorlik + eslatma) — QABULXONAGA YOPIQ ----
--- DIQQAT: qabulxona xodimiga MOLIYAVIY imkoniyatlar BERILMAYDI (foydalanuvchi talabi).
---   Shu sababli reception inv_sel (qarzdorlik ko'rish) va pay_notes (undiruv eslatmasi) dan
---   OLIB TASHLANDI. Bu imkoniyatlar faqat moliya bilan ishlovchilarга qoladi.
--- invoices: FAQAT O'QISH — admin/zavuch/finance/marketing/cashier/owns_child (reception EMAS).
+-- ---- QARZDORLIK KO'RISH + UNDIRUV ESLATMASI (reception HAM) ----
+-- DIQQAT: bular PULGA TA'SIR QILMAYDI — qarzdorlikni ko'rish (O'QISH) va 📞 undiruv eslatmasi
+--   faqat OTA-ONAGA XABAR BERISH / undiruv uchun. To'lov kiritish/qaytarish/o'zgartirish (apply_payment
+--   RPC'lar, invoices YOZISH) reception'ga BERILMAYDI — faqat moliya/kassir. Shu sababli reception
+--   inv_sel (O'QISH) va pay_notes (eslatma) ga QAYTARILDI (foydalanuvchi talabi).
+-- invoices: FAQAT O'QISH — admin/zavuch/finance/marketing/cashier/reception/owns_child.
 drop policy if exists inv_sel on public.invoices;
 create policy inv_sel on public.invoices for select
   using (app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_marketing() or app.is_cashier()
-         or app.owns_child("studentId"));
+         or app.is_reception() or app.owns_child("studentId"));
 
--- pay_notes (📞 undiruv eslatmasi): admin/finance/cashier (reception EMAS).
+-- pay_notes (📞 undiruv eslatmasi): admin/finance/cashier/reception.
 drop policy if exists pn_sel on public.pay_notes;
 create policy pn_sel on public.pay_notes for select
-  using (app.is_admin() or app.is_finance() or app.is_cashier());
+  using (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
 drop policy if exists pn_ins on public.pay_notes;
 create policy pn_ins on public.pay_notes for insert
-  with check (app.is_admin() or app.is_finance() or app.is_cashier());
+  with check (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
 drop policy if exists pn_upd on public.pay_notes;
 create policy pn_upd on public.pay_notes for update
-  using (app.is_admin() or app.is_finance() or app.is_cashier())
-  with check (app.is_admin() or app.is_finance() or app.is_cashier());
+  using (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception())
+  with check (app.is_admin() or app.is_finance() or app.is_cashier() or app.is_reception());
 
 notify pgrst, 'reload schema';
