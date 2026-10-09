@@ -3546,8 +3546,11 @@ async function renderStaffAttendance(){
         <td>${a.brkMin?fmtDur(a.brkMin):'—'}</td><td>${fmtDur(a.workMin)}</td>
         <td><span class="chip" style="background:#FEF3E2;color:#B45309">Bog‘lanmagan</span></td></tr>`); });
     const came=roster.filter(r=>(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
+    // «Erkin ish soati» xodim kelmasa — «kelmadi» deb SANALMAYDI (qatoridagi belgi bilan mos; davomat kesilmaydi).
+    const flexAbsent=roster.filter(r=>personRules(r).flexible && !(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
+    const notCame=Math.max(0, roster.length-came-flexAbsent);
     $('#sa-body').innerHTML=`<div class="card">
-      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${roster.length} xodim · ${came} keldi · ${roster.length-came} kelmadi${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}</span></div>
+      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${roster.length} xodim · ${came} keldi · ${notCame} kelmadi${flexAbsent?` · ${flexAbsent} erkin`:''}${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}</span></div>
       ${(!roster.length && !unmatched.length)?`<div class="empty" style="padding:20px">Bu kunda hodisa yo‘q. Terminal ulanganini va xodimlarning «Kamera ID»si to‘g‘riligini tekshiring.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Kelgan</th><th>Ketgan</th><th>Tanaffus</th><th>Ish vaqti</th><th>Holat</th></tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`}</div>`;
   };
