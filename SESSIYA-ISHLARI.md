@@ -138,7 +138,14 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
 - **Xarajat taqsimoti** — joriy oy xarajatlari toifa bo'yicha (Maosh/Kommunal/Ijara…) saralangan gorizontal ustunlar + summa + %.
 - Hisob-kitob `renderAccounting` bilan bir xil mantiq (balans-aware `paidAmt`, `monthColl`, `byCat`). Faqat `isAdmin || finance_mgr || treasurer`.
 - **Bloklamaydi:** o'quvchi statistikasi darhol chiqadi; moliya (barcha invoice/xarajat) FONDA yuklanadi (`dash-fin` placeholder).
+- **To'lov usuli bo'yicha kirim** — donut diagramma (Naqd/Click/Uzum/Bank/Terminal…) + izoh (usul · summa · %). Ranglar app'ning kanonik to'lov-usuli ranglari (renderAccounting bilan bir xil).
 - Tekshirildi: JS sintaksis toza; Chromium bilan vizual preview (grafiklar to'g'ri chiqadi, layout mobil/desktop).
+
+## 16) To'lov TAKROR himoyasi kuchaytirildi (double-apply)
+
+- **Muammo:** kassir bitta to'lovni ikki marta kiritsa (har submit — yangi payId) — `apply_payment` ikki marta qo'llanardi (idempotentlik faqat BIR xil payId uchun). Takror posboni bor edi, lekin oynasi **3 DAQIQA** — kassir bir necha daqiqa/soatdan keyin qayta kiritsa ushlanmasdi.
+- **Tuzatildi:** server-tomon takror tekshiruvi oynasi **12 soat (bugun)**ga uzaytirildi + xabar aniqroq («allaqachon N daqiqa/soat oldin yozilgan — ota-ona BIR marta to'lagan bo'lsa Bekor bosing»). Double-click + lokal navbat posbonlari saqlanadi.
+- **Eslatma:** «🚫 Bekor» to'lov YOZUVINI yashiradi, LEKIN fakturaga tegmaydi (dizayn). Agar pul fakturaga qo'llangan bo'lsa (applied), uni «Bekor» qilish fakturani tuzatmaydi — qarz/to'langan noto'g'ri qoladi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

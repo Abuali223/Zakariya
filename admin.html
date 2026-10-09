@@ -1247,6 +1247,12 @@ async function dashFinance(){
   const byCat={}; EXP.filter(e=>emonth(e)===cur).forEach(e=>{ const c=e.category||'Boshqa'; byCat[c]=(byCat[c]||0)+(Number(e.amount)||0); });
   const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
   const maxCat=Math.max(1,...catKeys.map(c=>byCat[c]));
+  // ---- To'lov usuli bo'yicha kirim (joriy oy) — invoice provider × to'langan summa (renderAccounting kabi) ----
+  const PMLAB={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans','':'Boshqa'};
+  const PMCOL={click:'#236B5D',uzum:'#7C4DB8',cash:'#977322',bank:'#1F7A55',terminal:'#7A5C1F',payme:'#2E7CC0',mixed:'#B45309',credit:'#0891B2','':'#8A9691'};
+  const byPm={}; INV.filter(i=>i.month===cur).forEach(i=>{ const p=paidAmt(i); if(p<=0) return; const k=i.provider||''; byPm[k]=(byPm[k]||0)+p; });
+  const pmKeys=Object.keys(byPm).sort((a,b)=>byPm[b]-byPm[a]);
+  const pmTotal=pmKeys.reduce((s,k)=>s+byPm[k],0);
   // ---- Moliyaviy oqim: guruhlangan ustun diagrammasi (SVG) — Kirim (yashil) vs Chiqim (sariq), 6 oy ----
   //   Ranglar CVD (rang ko'rlik) uchun tekshirilgan (ΔE>8) + ustunlarда qiymat yorliqlari bor.
   const CIN='#1F7A4D', CEX='#E08A2E';
@@ -1264,6 +1270,14 @@ async function dashFinance(){
   };
   const catBars=catKeys.map(c=>{ const v=byCat[c], p=Math.round(v/maxCat*100), pp=chiqim?Math.round(v/chiqim*100):0;
     return `<div class="bar-row"><span class="bar-lbl" title="${esc(c)}">${esc(c)}</span><div class="bar"><i style="width:${p}%;background:${CEX}"></i></div><b>${S(v)} <small style="color:#8a948f;font-weight:600">${pp}%</small></b></div>`; }).join('');
+  // ---- To'lov usuli donut diagrammasi (SVG) + izoh (usul · summa · %) ----
+  const donut=()=>{ const R=58,CX=72,CY=72,SW=24,C=2*Math.PI*R; let off=0,segs='';
+    pmKeys.forEach(k=>{ const frac=pmTotal?byPm[k]/pmTotal:0; const len=frac*C; const gap=pmKeys.length>1?3:0;
+      segs+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${PMCOL[k]||'#8A9691'}" stroke-width="${SW}" stroke-dasharray="${Math.max(0,len-gap).toFixed(2)} ${(C-Math.max(0,len-gap)).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"><title>${PMLAB[k]||k}: ${S(byPm[k])} so‘m (${Math.round(frac*100)}%)</title></circle>`;
+      off+=len; });
+    return `<svg viewBox="0 0 144 144" width="144" height="144" role="img" aria-label="To‘lov usuli bo‘yicha kirim">${segs}<text x="${CX}" y="${CY-4}" text-anchor="middle" font-size="11" fill="#8a948f">Jami</text><text x="${CX}" y="${CY+13}" text-anchor="middle" font-size="13" font-weight="700" fill="#1C2723">${fmtC(pmTotal)}</text></svg>`; };
+  const pmLegend=pmKeys.map(k=>{ const pp=pmTotal?Math.round(byPm[k]/pmTotal*100):0;
+    return `<div class="bar-row" style="grid-template-columns:16px 120px 1fr auto;gap:10px"><span style="width:12px;height:12px;border-radius:3px;background:${PMCOL[k]||'#8A9691'};align-self:center"></span><span class="bar-lbl">${esc(PMLAB[k]||k)}</span><div class="bar"><i style="width:${pp}%;background:${PMCOL[k]||'#8A9691'}"></i></div><b>${S(byPm[k])} <small style="color:#8a948f;font-weight:600">${pp}%</small></b></div>`; }).join('');
   const kpi=(label,val,sub,color)=>`<div class="stat-card"><b${color?` style="color:${color}"`:''}>${esc(val)}</b><span>${esc(label)}${sub?` · ${esc(sub)}`:''}</span></div>`;
   return `
     <div class="card" style="margin-top:16px">
@@ -1289,6 +1303,12 @@ async function dashFinance(){
       <div class="card"><div class="cls-card-head"><h3>Xarajat taqsimoti — nimaga sarflangani</h3><span class="cls-count">${mLbl(cur)}: ${fmtC(chiqim)}</span></div>
         <div class="bars fin-cols" style="margin-top:10px">${catKeys.length?catBars:'<div class="empty">Bu oy xarajat kiritilmagan</div>'}</div>
       </div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha kirim</h3><span class="cls-count">${mLbl(cur)}: ${fmtC(pmTotal)}</span></div>
+      ${pmKeys.length?`<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 20px">
+        <div style="flex:0 0 auto">${donut()}</div>
+        <div class="bars" style="flex:1 1 320px;min-width:260px;padding:0">${pmLegend}</div>
+      </div>`:'<div class="empty" style="padding:18px">Bu oy to‘lov yo‘q</div>'}
     </div>`;
 }
 
@@ -5718,11 +5738,17 @@ async function openRecordPayment(students, reload, pre){
     const s=list.find(x=>String(x.studentId||x._id)===String(sid))||{}; const nm=s.name||preName||sid;
     // TAKROR HIMOYASI (1) — LOKAL navbat (internet YO'Q bo'lsa ham ishlaydi): shu summa allaqachon navbatда turibdimi?
     if(obRecentDup(sid, amount) && !confirm(`⚠️ Bu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon navbatда (yuborilmoqda). Bu takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta qo‘shilsinmi?`)){ unlock(); return; }
-    // TAKROR HIMOYASI (2) — SERVER (online bo'lsa): oxirgi 3 daqiqada shu summa yozilganmi (yuborilgan to'lovlar uchun)?
+    // TAKROR HIMOYASI (2) — SERVER (online bo'lsa): BUGUN (oxirgi 12 soatda) shu summa shu o‘quvchiga
+    //   allaqachon yozilganmi? Ilgari oyna 3 DAQIQA edi -> kassir bir necha daqiqa/soatdan keyin yoki
+    //   ikkinchi tab/urinishda qayta kiritganda ushlanmasdi -> IKKI marta to'lov qo'llanardi (double-apply).
     if(navigator.onLine){ try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
-      const dup=rq.docs.map(d=>d.data()).find(p=>Number(p.amount)===amount && p.raw&&p.raw.manual && p.status!=='canceled' && p.status!=='failed'
-        && p.createdAt&&p.createdAt.toDate && (now-p.createdAt.toDate().getTime())<180000);
-      if(dup && !confirm(`⚠️ DIQQAT: bu o‘quvchiga ${fmtSom(amount)} so‘m hozirgina (oxirgi 3 daqiqada) yozilgan.\nBu — takror bo‘lishi mumkin.\nHaqiqatan YANA bir marta yozilsinmi?`)){ unlock(); return; }
+      let dupAgo=null;
+      rq.docs.map(d=>d.data()).forEach(p=>{ if(Number(p.amount)!==amount || !(p.raw&&p.raw.manual) || p.status==='canceled' || p.status==='failed') return;
+        let t=null; try{ if(p.createdAt&&p.createdAt.toDate) t=p.createdAt.toDate().getTime(); }catch(e){}
+        if(t==null) return; const ago=now-t; if(ago>=0 && ago<43200000 && (dupAgo==null||ago<dupAgo)) dupAgo=ago; });
+      if(dupAgo!=null){ const mm=Math.round(dupAgo/60000); const agoTxt=mm<60?`${mm} daqiqa`:`${Math.floor(mm/60)} soat ${mm%60} daqiqa`;
+        if(!confirm(`⚠️ DIQQAT — BU TAKROR BO‘LISHI MUMKIN!\n\nShu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon ${agoTxt} oldin (bugun) yozilgan.\n\nAgar ota-ona FAQAT BIR MARTA to‘lagan bo‘lsa — «Bekor»ni bosing, QAYTA yozmang.\nFaqat bu HAQIQATAN alohida, yangi to‘lov bo‘lsa — «OK».`)){ unlock(); return; }
+      }
     }catch(e){} }
     if(btn) btn.textContent='Saqlanmoqda…';
     const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
