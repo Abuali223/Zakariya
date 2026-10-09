@@ -145,7 +145,7 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
 
 - **Muammo:** kassir bitta to'lovni ikki marta kiritsa (har submit — yangi payId) — `apply_payment` ikki marta qo'llanardi (idempotentlik faqat BIR xil payId uchun). Takror posboni bor edi, lekin oynasi **3 DAQIQA** — kassir bir necha daqiqa/soatdan keyin qayta kiritsa ushlanmasdi.
 - **Tuzatildi:** server-tomon takror tekshiruvi oynasi **12 soat (bugun)**ga uzaytirildi + xabar aniqroq («allaqachon N daqiqa/soat oldin yozilgan — ota-ona BIR marta to'lagan bo'lsa Bekor bosing»). Double-click + lokal navbat posbonlari saqlanadi.
-- **Eslatma:** «🚫 Bekor» to'lov YOZUVINI yashiradi, LEKIN fakturaga tegmaydi (dizayn). Agar pul fakturaga qo'llangan bo'lsa (applied), uni «Bekor» qilish fakturani tuzatmaydi — qarz/to'langan noto'g'ri qoladi.
+- **«Bekor» endi QO'LLANGAN to'lovlar uchun bloklangan** (foydalanuvchi talabi): `canCancelPay` — `MONEY_MOVED` (`applied`/`confirmed`/`paid`) holatlar Bekor qilinmaydi (tugma o'rnida «🔒 qo'llangan» izohi + tushuntirish). Faqat fantom/xato (`failed`/`pending`/`unmatched`/`prepared`/`created`) yozuvlar Bekor qilinadi. Handler'да ham defense-in-depth tekshiruv (eskirgan DOM/poyga). Shunday qilib «applied to'lovni Bekor qilib fakturani buzish» xatosi takrorlanmaydi — noto'g'ri to'lov faqat fakturani qayta hisoblash orqali to'g'rilanadi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
