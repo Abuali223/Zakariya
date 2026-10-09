@@ -156,6 +156,19 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
 - `printMonthReport(mon, bodyRows, roster, workSet, lvSorted)` — `renderStaffAttendance` ichida; mavjud `printAccountingReport` naqshi (A4 `<!doctype html>` + `@page` + `printHTML` iframe). Ma'lumot `loadMonth`da allaqachon hisoblangan `bodyRows`dan olinadi (qayta so'rov yo'q). Oy nomi `fmtMonthUz`, summa `fmtSom`.
 - Tekshirildi: JS sintaksis toza (`node --check`); Chromium bilan A4 yotiq PDF + screenshot — 14 ustun to'liq sig'adi, layout toza.
 
+## 18) «Erkin ish soati» — direktor va aniq jadvalsiz xodimlar
+
+- **Talab:** «Drektor va bazi xodimlar uchun ish soati erkin bo'lish kerak… maktab ishi bilan bazan kech keladi, maktabda uzoq qolib ketadi, aniq ish soati belgilanmagan. Bu xodimlar uchun ma'lumotiga ish soatini erkin belgilash joyini qo'shib qo'yamiz.»
+- **Qo'shildi:** Xodim/O'qituvchi **kartochkasiga** «Erkin ish soati (aniq jadvalsiz)» belgisi (checkbox). Yoqilsa — davomatда **kech kelish / erta ketish / yo'qlama AVTOMATIK kesilmaydi**. Faqat ma'muriyat qo'lda «O'z hisobidan» belgilasa — o'sha daqiqa soatbay kesiladi. Ish vaqti/ish kunlari qoladi (faqat soat normasini hisoblash uchun ishlatiladi).
+- **Texnik:**
+  - `personRules(p)` -> `flexible` bayrog'i (`flexibleHours` '1'|true|1|'true').
+  - `attMetrics` — `R.flexible` bo'lsa kunlik kech/erta/yo'qlama/avto-tanaffus mantiqi o'tkazib yuboriladi (faqat `personal` «O'z hisobidan» kesiladi). Oddiy xodimlar uchun hech narsa o'zgarmadi.
+  - Forma: yangi `t:'checkbox'` maydon turi — yashirin input + bir xil nomli checkbox (belgilansa '1', aks holda '' — merge-upsert eski '1'ni to'g'ri tozalaydi).
+  - `buildRoster` + `loadPayees` — payee/roster obyektlariga `flexibleHours` qo'shildi (attMetrics ikkala chaqiruvda ham ko'radi).
+  - Davomat ekranida (kunlik + oylik) va PDF hisobotда «⏱ Erkin» belgisi; kunlik «Holat» da flexible xodim kelmasa qizil «Kelmadi» o'rniga ko'k «Erkin (belgilanmagan)».
+  - **DB:** `migration/staff-workhours.sql` ga `flexibleHours text` ustuni (teachers + staff, idempotent). **Deploy'da migratsiya ishga tushishi SHART** (frontend-only sed yetmaydi — aks holda saqlashда «column not found»).
+- **Tekshirildi:** 19 ta birlik testi (flex kech/yo'qlama kesmaydi, personal kesadi, excused 0, hourRate/monthlyMin saqlanadi, oddiy xodim o'zgarmagan); Chromium FormData (belgilanmagan->'', belgilangan->'1'); PG16'da migratsiya idempotent + insert/read; JS sintaksis toza.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

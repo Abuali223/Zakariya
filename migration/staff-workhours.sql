@@ -18,4 +18,11 @@ alter table public.staff    add column if not exists "workStart" text;
 alter table public.staff    add column if not exists "workEnd"   text;
 alter table public.staff    add column if not exists "workDays"  text;
 
+-- ERKIN ISH SOATI (direktor va aniq jadvali yo'q xodimlar uchun).
+--   '1' = erkin -> davomat (kech kelish / erta ketish / yo'qlama) AVTOMATIK kesilmaydi
+--     (maktab ishi bilan kech kelsa/uzoq qolsa jarima yo'q). Faqat ma'muriyat qo'lda
+--     «O'z hisobidan» belgilasa — o'sha daqiqa soatbay kesiladi. '' | null = oddiy (jadvalli).
+alter table public.teachers add column if not exists "flexibleHours" text;
+alter table public.staff    add column if not exists "flexibleHours" text;
+
 notify pgrst, 'reload schema';

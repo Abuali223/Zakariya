@@ -559,6 +559,7 @@ const SCHEMAS = {
       // ---- Maosh: asosiy oylik + «Malaka va sertifikatlar» paneli (quyida, belgilash ro'yxati) ----
       {k:'baseSalary',l:'Asosiy oylik (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 5 000 000'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi xodim ID — kelish nazorati uchun)',t:'text'},
+      {k:'flexibleHours',l:'Erkin ish soati (aniq jadvalsiz)',t:'checkbox',note:'Direktor va aniq ish soati belgilanmagan xodimlar uchun. Yoqilsa — kech kelish / erta ketish / yo‘qlama AVTOMATIK kesilmaydi (maktab ishi bilan kech kelsa/uzoq qolsa jarima yo‘q). Faqat qo‘lda «O‘z hisobidan» belgilansa kesiladi. Quyidagi ish vaqti/kunlari faqat soat normasini hisoblash uchun ishlatiladi.'},
       {k:'workStart',l:'Ish boshlanishi (bo‘sh = standart 08:00)',t:'time'},
       {k:'workEnd',l:'Ish tugashi (bo‘sh = standart 17:00)',t:'time'},
       {k:'workDays',l:'Ish kunlari',t:'weekdays',note:'Kerakli kunlarni belgilang (bo‘sh = standart Dush–Juma). Shanba/Yakshanba ham mumkin.'},
@@ -582,6 +583,7 @@ const SCHEMAS = {
       {k:'salary',l:'Oylik maosh (so‘m)',t:'text',inputmode:'numeric',placeholder:'masalan: 3 000 000'},
       {k:'note',l:'Izoh',t:'text'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — davomat uchun)',t:'text'},
+      {k:'flexibleHours',l:'Erkin ish soati (aniq jadvalsiz)',t:'checkbox',note:'Direktor va aniq ish soati belgilanmagan xodimlar uchun. Yoqilsa — kech kelish / erta ketish / yo‘qlama AVTOMATIK kesilmaydi (maktab ishi bilan kech kelsa/uzoq qolsa jarima yo‘q). Faqat qo‘lda «O‘z hisobidan» belgilansa kesiladi. Quyidagi ish vaqti/kunlari faqat soat normasini hisoblash uchun ishlatiladi.'},
       {k:'workStart',l:'Ish boshlanishi (bo‘sh = standart 08:00)',t:'time'},
       {k:'workEnd',l:'Ish tugashi (bo‘sh = standart 17:00)',t:'time'},
       {k:'workDays',l:'Ish kunlari',t:'weekdays',note:'Kerakli kunlarni belgilang (bo‘sh = standart Dush–Juma). Shanba/Yakshanba ham mumkin.'},
@@ -777,8 +779,8 @@ async function loadPayees(){
   let staff=[];    try{ staff=(cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=staff; }catch(e){}
   try{ await loadSalaryRates(); }catch(e){}
   // workStart/workEnd/workDays — SHAXSIY ish vaqti/kunlari (soatbay maosh hisobi personRules orqali shulardan oladi).
-  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'' }));
-  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'' }));
+  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }));
+  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }));
   return A.concat(B);
 }
 // O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
@@ -2885,6 +2887,14 @@ function openForm(name, row, prefill, afterSaveCb){
         <div class="wd-group" data-k="${f.k}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
           ${days.map(([n,lb])=>`<label style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border);border-radius:9px;cursor:pointer;font-size:13.5px;user-select:none"><input type="checkbox" class="wd-chk" value="${n}" ${sel.has(n)?'checked':''}>${lb}</label>`).join('')}
         </div>${f.note?`<p class="small muted" style="margin:6px 0 0">${esc(f.note)}</p>`:''}</div>`; }
+    // checkbox: ha/yo'q belgi (masalan «Erkin ish soati»). Yashirin input + bir xil nomli checkbox ->
+    //   belgilanmasa FormData'da '' (merge upsert eski qiymatni '' qilib to'g'ri yangilaydi), belgilansa '1'.
+    if(f.t==='checkbox'){ const on=(v===true||v==='1'||v===1||v==='true');
+      return `<div style="grid-column:1/-1"><label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer">
+        <input type="hidden" name="${f.k}" value="">
+        <input type="checkbox" name="${f.k}" value="1" ${on?'checked':''} style="width:18px;height:18px;margin-top:2px;flex:0 0 auto">
+        <span><b>${esc(f.l)}</b>${f.note?`<br><span class="small muted" style="font-weight:400">${esc(f.note)}</span>`:''}</span>
+      </label></div>`; }
     if(f.t==='textarea') return `<div><label>${esc(f.l)}</label><textarea name="${f.k}" rows="2">${esc(v)}</textarea></div>`;
     if(f.t==='image') return `<div class="img-field"><label>${esc(f.l)}</label>
       <div class="img-up">
@@ -3356,11 +3366,12 @@ function personRules(p){
   const ws=hmToMin(p&&p.workStart), we=hmToMin(p&&p.workEnd);
   let wd=null; const raw=String((p&&p.workDays)||'').trim();
   if(raw){ const s=new Set(raw.split(',').map(x=>parseInt(x,10)).filter(n=>n>=0&&n<=6)); if(s.size) wd=s; }
+  const fv=p&&p.flexibleHours; const flexible=(fv===true||fv==='1'||fv===1||fv==='true');   // erkin ish soati (direktor va h.k.)
   return { workStartMin: ws!=null?ws:SA_RULES.workStartMin, workEndMin: we!=null?we:SA_RULES.workEndMin,
            lateGraceMin:SA_RULES.lateGraceMin, earlyGraceMin:SA_RULES.earlyGraceMin,
            latePenalty:SA_RULES.latePenalty, earlyPenalty:SA_RULES.earlyPenalty,
            allowedBreakMin:SA_RULES.allowedBreakMin, breakPenaltyPerHour:SA_RULES.breakPenaltyPerHour,
-           workDays: wd || new Set(SA_WORKDAYS) };
+           flexible, workDays: wd || new Set(SA_WORKDAYS) };
 }
 // Bir kunlik skanlardan TANAFFUS (daqiqa) — qurilma 'break' yuborsa ham, oraliq chiqish->kirish
 //   bo'shliqlari ham. (agg() va attMetrics bir xil mantiqdan foydalanadi.)
@@ -3425,6 +3436,12 @@ function attMetrics(byDay, leaveSet, month, salary, person, breakMarks){
     scheduledMin += dailyMin;
     const scans=((byDay&&byDay[ds])||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
     const bm=bmGet(ds);
+    // ERKIN ISH SOATI (direktor va aniq jadvalsiz xodimlar): kech kelish / erta ketish / yo'qlama
+    //   AVTOMATIK kesilmaydi. Faqat ma'muriyat qo'lda «O'z hisobidan» belgilasa — o'sha daqiqa kesiladi.
+    if(R.flexible){
+      if(bm && bm.type==='personal'){ breakMin+=bm.awayMin; missMin+=Math.min(dailyMin, bm.awayMin); }
+      continue;
+    }
     if(!scans.length){
       // Skan yo'q. «O'z hisobidan» belgilansa — ma'muriyat «keldi, X daq ketdi» deydi (yo'qlama emas).
       if(bm && bm.type==='personal'){ breakMin+=bm.awayMin; missMin+=Math.min(dailyMin, bm.awayMin); }
@@ -3459,7 +3476,7 @@ function attMetrics(byDay, leaveSet, month, salary, person, breakMarks){
 async function renderStaffAttendance(){
   const canEdit = SESSION.isAdmin || SESSION.role==='hr';
   $('#view').innerHTML = `<div class="page-head"><h2>Xodimlar davomati</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Hikvision yuz terminalidan (keldi / ketdi / tanaffus) avtomatik tushadi. Har xodimning <b>«Kamera ID»</b> maydoni terminaldagi shaxs ID bilan bir xil bo‘lishi kerak. Ish haftasi: <b>Dush–Juma</b>. «Ruhsat/kasallik» kamera orqali bilinmaydi — qo‘lda kiritiladi. Ish vaqtidagi chiqishni har xodim qatorida <b>«Sababli»</b> (oylik kesilmaydi) yoki <b>«O‘z hisobidan»</b> (ketgan vaqt soatbay kesiladi) deb belgilang.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Hikvision yuz terminalidan (keldi / ketdi / tanaffus) avtomatik tushadi. Har xodimning <b>«Kamera ID»</b> maydoni terminaldagi shaxs ID bilan bir xil bo‘lishi kerak. Ish haftasi: <b>Dush–Juma</b>. «Ruhsat/kasallik» kamera orqali bilinmaydi — qo‘lda kiritiladi. Ish vaqtidagi chiqishni har xodim qatorida <b>«Sababli»</b> (oylik kesilmaydi) yoki <b>«O‘z hisobidan»</b> (ketgan vaqt soatbay kesiladi) deb belgilang. Direktor va aniq ish soati belgilanmagan xodimlar uchun kartochkasida <b>«Erkin ish soati»</b>ni yoqing — ularda kech kelish / erta ketish / yo‘qlama avtomatik kesilmaydi.</p>
     <div class="card" style="padding:16px 20px;margin-bottom:16px"><div class="att-controls" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
       <label>Ko‘rinish<select id="sa-mode"><option value="day">Kunlik</option><option value="month">Oylik hisobot</option></select></label>
       <label id="sa-day-wrap">Sana<input type="date" id="sa-date" value="${todayStr()}"></label>
@@ -3484,8 +3501,8 @@ async function renderStaffAttendance(){
     return { kelgan, ketgan, brkMin, workMin:work };
   };
   const buildRoster=(staff,teachers)=>{ const r=[];
-    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'' }); });
-    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'' }); } });
+    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
+    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }); } });
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
   let lastStaff=[], lastTeachers=[];   // tahrirlash uchun eng oxirgi yuklangan to'liq yozuvlar
   // ------- KUNLIK -------
@@ -3506,12 +3523,13 @@ async function renderStaffAttendance(){
     Object.values(byPerson).forEach(l=>l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))));
     const seen=new Set(), bodyRows=[];
     roster.forEach(r=>{ seen.add(r.cam); const a=agg(byPerson[r.cam]||[]); const came=!!a.kelgan;
+      const isFlex=personRules(r).flexible;                   // erkin ish soati (kech/erta/yo'qlama kesilmaydi)
       const bm=bmMap[r.refType+':'+r.refId]||null;            // chiqib-kelish belgisi (yoki yo'q)
       const isExc=!!bm && bm.type!=='personal';               // «Sababli» (eski typesiz ham shu)
       const isPers=!!bm && bm.type==='personal';              // «O'z hisobidan» (awayMin daqiqa)
       const refAttr=`data-brkref="${esc(r.refType)}:${esc(r.refId)}" data-brkcam="${esc(r.cam)}" data-brkday="${esc(day)}" data-brkname="${esc(r.name||'')}" data-curtype="${bm?esc(bm.type):''}" data-curaway="${isPers?esc(String(bm.awayMin)):'0'}"`;
       bodyRows.push(`<tr>
-        <td data-label="Xodim">${esc(r.name||r.cam)}<div class="small muted">${esc(r.pos)}${r.name?` · ID ${esc(r.cam)}`:''}</div></td>
+        <td data-label="Xodim">${esc(r.name||r.cam)}${isFlex?` <span class="chip" style="background:#EAF4FF;color:#0369A1;font-size:11px" title="Erkin ish soati — davomat avtomatik kesilmaydi">⏱ Erkin</span>`:''}<div class="small muted">${esc(r.pos)}${r.name?` · ID ${esc(r.cam)}`:''}</div></td>
         <td data-label="Kelgan" style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'<span class="muted">—</span>'}</td>
         <td data-label="Ketgan" style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'<span class="muted">—</span>'}</td>
         <td data-label="Tanaffus">${a.brkMin?fmtDur(a.brkMin):'<span class="muted">—</span>'}${canEdit?`<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
@@ -3519,7 +3537,7 @@ async function renderStaffAttendance(){
           <button class="btn sm" style="${isPers?'background:#FDECEC;color:#B42318;border-color:#F3B4B4':''}" data-brkset="personal" ${refAttr} title="O‘z hisobidan — ketgan vaqt oylikdan soatbay kesiladi (soatlik stavka = oylik ÷ oylik ish soati)">${isPers?`✓ O‘z hisobidan · ${esc(fmtDur(bm.awayMin))}`:'O‘z hisobidan'}</button>
         </div>`:''}</td>
         <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
-        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>'}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}</td></tr>`); });
+        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':(isFlex?'<span class="chip" style="background:#EAF4FF;color:#0369A1">Erkin (belgilanmagan)</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>')}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}</td></tr>`); });
     const unmatched=Object.keys(byPerson).filter(pid=>!seen.has(pid));
     unmatched.forEach(pid=>{ const list=byPerson[pid]; const a=agg(list); const nm=(list.find(x=>x.name)||{}).name||'';
       bodyRows.push(`<tr style="background:#FFFBF2">
@@ -3549,7 +3567,7 @@ async function renderStaffAttendance(){
     bodyRows.forEach(o=>{ T.present+=o.present||0; T.workMin+=o.workMin||0; T.ushlanma+=(o.dm&&o.dm.total)||0; T.gross+=o.gross||0; T.net+=o.net||0; });
     const trs=bodyRows.map((o,i)=>`<tr>
       <td class="n">${i+1}</td>
-      <td class="nm">${esc(o.r.name||o.r.cam)}<div class="sub">${esc(o.r.pos||'')} · ID ${esc(o.r.cam)}</div></td>
+      <td class="nm">${esc(o.r.name||o.r.cam)}${personRules(o.r).flexible?' <span style="color:#0369A1;font-size:9px">⏱ erkin</span>':''}<div class="sub">${esc(o.r.pos||'')} · ID ${esc(o.r.cam)}</div></td>
       <td class="c">${o.present||0}</td>
       <td class="c">${dur(o.workMin)}</td>
       <td class="c">${dur(o.brkMin)}</td>
@@ -3634,7 +3652,7 @@ async function renderStaffAttendance(){
       return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm, gross, net };
     });
     const bodyHtml = bodyRows.map(o=>`<tr>
-        <td data-label="Xodim">${esc(o.r.name||o.r.cam)}<div class="small muted">${esc(o.r.pos)} · ID ${esc(o.r.cam)}</div></td>
+        <td data-label="Xodim">${esc(o.r.name||o.r.cam)}${personRules(o.r).flexible?` <span class="chip" style="background:#EAF4FF;color:#0369A1;font-size:11px" title="Erkin ish soati — kech/erta/yo‘qlama kesilmaydi">⏱ Erkin</span>`:''}<div class="small muted">${esc(o.r.pos)} · ID ${esc(o.r.cam)}</div></td>
         <td data-label="Ishlagan kun" style="font-variant-numeric:tabular-nums">${o.present||'<span class="muted">0</span>'}</td>
         <td data-label="Ish vaqti">${o.workMin?fmtDur(o.workMin):'<span class="muted">—</span>'}</td>
         <td data-label="Tanaffus">${o.brkMin?fmtDur(o.brkMin):'<span class="muted">—</span>'}</td>
