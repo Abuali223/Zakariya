@@ -27,7 +27,7 @@ echo "==> 3/6 SQL migratsiyalar (idempotent audit-*)..."
 # Deploy va baza sinxron bo'lsin: yangi frontend eski bazaга tushmasin (masalan apply_payment
 # RPC / student_phones view / RLS tuzatmalari). audit-*.sql fayllari QAYTA ishga tushirishга xavfsiz.
 if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
-  for f in audit-2.sql audit-3.sql audit-4.sql audit-5.sql audit-6.sql bus.sql audit-7.sql reattribute-avans.sql audit-8.sql pay-notes.sql reverse-payment.sql audit-9.sql refund-rpc.sql adjust-credit.sql reception-access.sql split-payment.sql staff-attendance.sql staff-leaves.sql student-status.sql staff-status.sql staff-workhours.sql staff-break-marks.sql reception-guard.sql applications-guard.sql auth-phone.sql otp-codes.sql parent-student-links.sql secdef-searchpath.sql; do
+  for f in audit-2.sql audit-3.sql audit-4.sql audit-5.sql audit-6.sql bus.sql audit-7.sql reattribute-avans.sql audit-8.sql pay-notes.sql reverse-payment.sql audit-9.sql refund-rpc.sql adjust-credit.sql reception-access.sql split-payment.sql staff-attendance.sql staff-leaves.sql student-status.sql staff-status.sql staff-workhours.sql staff-break-marks.sql reception-guard.sql applications-guard.sql auth-phone.sql otp-codes.sql auth-login-attempts.sql parent-student-links.sql secdef-searchpath.sql; do
     echo "    -> $f"
     if ! sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "$REPO/migration/$f" >/tmp/iqror-sql.log 2>&1; then
       echo "❌ SQL migratsiya xato: $f"; tail -8 /tmp/iqror-sql.log; exit 1

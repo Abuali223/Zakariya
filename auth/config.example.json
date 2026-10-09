@@ -1,0 +1,28 @@
+{
+  "backend": "supabase",
+  "supabaseUrl": "https://api.iqror.uz",
+  "serviceRoleKey": "PASTE_SERVICE_ROLE_KEY (Supabase) — MAXFIY",
+  "anonKey": "PASTE_ANON_KEY (ommaviy — login/parol tekshiruvi uchun)",
+  "authPort": 8792,
+  "auth": {
+    "hmacSecret": "UZUN_TASODIFIY_SATR — OTP hash + ticket imzosi (MAXFIY, masalan: openssl rand -hex 32)",
+    "phoneEmailDomain": "phone.iqroacademy.uz",
+    "otpTtlSec": 180,
+    "otpMaxAttempts": 5,
+    "otpResendSec": 60,
+    "otpMaxPerHour": 5,
+    "ticketTtlSec": 600,
+    "loginMaxFails": 10,
+    "loginLockMin": 15,
+    "otpTemplate": "IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.",
+    "corsOrigin": ""
+  },
+  "sms": {
+    "enabled": true,
+    "dryRun": false,
+    "eskizEmail": "ESKIZ_EMAIL (kabinet emaili)",
+    "eskizPassword": "ESKIZ_PAROL — MAXFIY (yoki token bilan)",
+    "token": "",
+    "from": "4546"
+  }
+}

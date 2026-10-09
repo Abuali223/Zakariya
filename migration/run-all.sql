@@ -65,6 +65,7 @@
 \ir applications-guard.sql
 \ir auth-phone.sql
 \ir otp-codes.sql
+\ir auth-login-attempts.sql
 \ir parent-student-links.sql
 \ir secdef-searchpath.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

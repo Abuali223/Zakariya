@@ -1,0 +1,15 @@
+{
+  "name": "iqror-auth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Iqror — telefon + parol + OTP auth serveri (Supabase Auth + Eskiz SMS)",
+  "main": "index.cjs",
+  "scripts": {
+    "start": "node index.cjs",
+    "test": "node auth.test.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "ws": "^8.18.0"
+  }
+}

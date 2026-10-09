@@ -1,0 +1,20 @@
+# /etc/systemd/system/iqror-auth.service — AUTH serveri (telefon+parol+OTP) doimiy ishlaydi
+# O'rnatish:
+#   cp migration/deploy/iqror-auth.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now iqror-auth
+# Shart: /opt/iqror/auth/config.json to'ldirilgan (serviceRoleKey/anonKey/hmacSecret/eskiz).
+[Unit]
+Description=Iqror AUTH serveri (telefon+parol+OTP -> Supabase Auth + Eskiz)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/iqror
+ExecStart=/usr/bin/node auth/index.cjs
+Restart=always
+RestartSec=3
+User=iqror
+Group=iqror
+
+[Install]
+WantedBy=multi-user.target
