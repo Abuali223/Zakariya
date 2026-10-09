@@ -3535,6 +3535,57 @@ async function renderStaffAttendance(){
   };
   // ------- OYLIK HISOBOT -------
   const expandDays=(a,b)=>{ const out=[]; let d=new Date(a+'T00:00:00'); const end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)) return out; let g=0; while(d<=end && g<400){ out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`); d.setDate(d.getDate()+1); g++; } return out; };
+  // ------- OYLIK HISOBOTNI PDF/CHOP ETISH -------
+  // bodyRows (loadMonth'da hisoblangan) -> A4 (yotiq) hisobot -> printHTML (chop/PDF).
+  // Ekrandagi jadvalning BARCHA ustunlari + Nominal oylik + JAMI qatori + ruhsat/kasallik ro'yxati.
+  const printMonthReport=(mon, bodyRows, roster, workSet, lvSorted)=>{
+    if(!bodyRows || !bodyRows.length){ toast('Chop etish uchun maʼlumot yoʻq',true); return; }
+    const dur=min=>{ if(min==null) return '—'; min=Math.round(min); if(!min) return '—'; const h=Math.floor(min/60),m=min%60; return (h?h+'s ':'')+(m||!h?m+'d':''); };
+    const S=n=>fmtSom(n);
+    const dstr=new Date().toISOString().slice(0,10);
+    const who=(SESSION.email||SESSION.role||'');
+    const emblem=`<svg style="width:42px;height:auto" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
+    const T={present:0, workMin:0, ushlanma:0, gross:0, net:0};
+    bodyRows.forEach(o=>{ T.present+=o.present||0; T.workMin+=o.workMin||0; T.ushlanma+=(o.dm&&o.dm.total)||0; T.gross+=o.gross||0; T.net+=o.net||0; });
+    const trs=bodyRows.map((o,i)=>`<tr>
+      <td class="n">${i+1}</td>
+      <td class="nm">${esc(o.r.name||o.r.cam)}<div class="sub">${esc(o.r.pos||'')} · ID ${esc(o.r.cam)}</div></td>
+      <td class="c">${o.present||0}</td>
+      <td class="c">${dur(o.workMin)}</td>
+      <td class="c">${dur(o.brkMin)}</td>
+      <td class="c">${o.ruhsat||'—'}</td>
+      <td class="c">${o.kasallik||'—'}</td>
+      <td class="c">${o.absent?`<b style="color:#B42318">${o.absent}</b>`:'—'}</td>
+      <td class="c">${o.avg||'—'}</td>
+      <td class="c">${o.dm.late||'—'}</td>
+      <td class="c">${o.dm.early||'—'}</td>
+      <td class="r">${o.dm.total?`<span style="color:#B42318">${S(o.dm.total)}</span>`:'—'}</td>
+      <td class="r">${o.gross?S(o.gross):'—'}</td>
+      <td class="r"><b style="color:#1F7A4D">${o.gross?S(o.net):'—'}</b></td>
+    </tr>`).join('');
+    const tfoot=`<tr class="tot"><td></td><td>JAMI (${bodyRows.length} xodim)</td><td class="c">${T.present}</td><td class="c">${dur(T.workMin)}</td><td colspan="7"></td><td class="r">${S(T.ushlanma)}</td><td class="r">${S(T.gross)}</td><td class="r">${S(T.net)}</td></tr>`;
+    const lvRows=(lvSorted||[]).map((l,i)=>`<tr><td class="n">${i+1}</td><td class="nm">${esc(l.name||l.refId||'—')}</td><td class="c">${l.type==='kasallik'?'Kasallik':'Ruhsat'}</td><td class="c">${esc(l.startDay||'')}</td><td class="c">${esc(l.endDay||'')}</td><td class="nm">${esc(l.reason||'')}</td></tr>`).join('');
+    const html=`<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>Davomat hisoboti — ${fmtMonthUz(mon)}</title>
+    <style>@page{ size:A4 landscape; margin:12mm; } *{ box-sizing:border-box; } body{ font:11px/1.45 'Segoe UI',system-ui,sans-serif; color:#1a2e28; margin:0; }
+    .hd{ display:flex; align-items:center; gap:12px; border-bottom:3px solid #1F9982; padding-bottom:10px; margin-bottom:12px; }
+    .hd h1{ margin:0; font-size:17px; color:#1F9982; letter-spacing:.4px; } .hd .sub{ font-size:11px; color:#555; margin-top:2px; }
+    h2{ font-size:12.5px; margin:16px 0 6px; color:#1F9982; border-left:4px solid #F6C05E; padding-left:8px; }
+    table{ width:100%; border-collapse:collapse; } th,td{ border:1px solid #d5ddd8; padding:4px 6px; font-size:10.5px; vertical-align:top; }
+    th{ background:#eef3f1; text-align:center; font-size:10px; } td.nm{ text-align:left; } .sub{ color:#777; font-size:9px; margin-top:1px; }
+    td.c{ text-align:center; font-variant-numeric:tabular-nums; } td.r{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; } td.n{ text-align:center; color:#888; }
+    tr.tot td{ background:#f3f7f5; font-weight:700; } .note{ font-size:9.5px; color:#555; margin:6px 0 0; }
+    .sign{ margin-top:28px; display:flex; justify-content:space-between; font-size:11px; } .muted{ color:#666; }
+    tbody tr{ page-break-inside:avoid; }</style></head><body>
+    <div class="hd">${emblem}<div><h1>IQROR ACADEMY — Xodimlar davomati</h1><div class="sub">Oylik hisobot · <b>${fmtMonthUz(mon)}</b> · ${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma) · tuzildi: ${dstr}${who?' · '+esc(who):''}</div></div></div>
+    <table><thead><tr><th>№</th><th>Xodim</th><th>Ishlagan<br>kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt.<br>kelish</th><th>Kechikish<br>(kun)</th><th>Erta ketish<br>(kun)</th><th>Ushlanma</th><th>Nominal<br>oylik</th><th>Oylik<br>(hisob)</th></tr></thead>
+    <tbody>${trs}</tbody><tfoot>${tfoot}</tfoot></table>
+    <p class="note"><b>Oylik SOATBAY:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). <b>Ushlanma</b> = yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish. «Sababli» chiqish kesilmaydi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma (avans alohida).</p>
+    ${lvSorted&&lvSorted.length?`<h2>Oydagi ruhsat / kasalliklar (${lvSorted.length} ta)</h2>
+    <table><thead><tr><th>№</th><th>Xodim</th><th>Tur</th><th>Dan</th><th>Gacha</th><th>Sabab</th></tr></thead><tbody>${lvRows}</tbody></table>`:''}
+    <div class="sign"><div>Direktor: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
+    </body></html>`;
+    printHTML(html);
+  };
   const loadMonth=async()=>{
     const mon=$('#sa-month').value; if(!mon) return; const _g=VIEW_GEN;
     $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
@@ -3605,7 +3656,7 @@ async function renderStaffAttendance(){
         <td data-label="Sabab">${esc(l.reason||'')}</td>
         ${canEdit?`<td><button class="btn sm danger" data-lvdel="${esc(l._id)}">O‘chir</button></td>`:''}</tr>`).join('');
     $('#sa-body').innerHTML=`<div class="card">
-      <div class="cls-card-head"><h3>${esc(mon)}</h3><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span></div>
+      <div class="cls-card-head"><h3>${esc(mon)}</h3><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span>${roster.length?`<button class="btn sm gold" id="sa-pdf" title="Oylik davomat hisobotini PDF/chop etish — kechikish, tanaffus, ushlanma, oylik">🖨 PDF / Hisobot</button>`:''}</div></div>
       ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th><th>Oylik (hisob)</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
       <div class="small muted" style="padding:10px 16px"><b>Oylik SOATBAY hisoblanadi:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). Kunlik sof soat = ish vaqti − ruxsat etilgan tanaffus (masalan 08:00–17:00, 1 soat tushlik → 8 soat). Xodim qancha soat ishlasa — shuncha oylik. <b>Ushlanma</b> = ishlamagan vaqt shu soatbay stavkada: yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish (kiritilgan daqiqa). «Sababli» chiqish — kesilmaydi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma (avans alohida). «Ruhsatsiz» = ish kuni bo‘lib kelmagan va ruhsat/kasallik kiritilmagan kunlar. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
@@ -3615,6 +3666,7 @@ async function renderStaffAttendance(){
       ${lvSorted.length?`<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Tur</th><th>Dan</th><th>Gacha</th><th>Sabab</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${lvRows}</tbody></table></div>`:`<div class="empty" style="padding:16px">Bu oyda ruhsat/kasallik kiritilmagan.${canEdit?' «+ Ruhsat / Kasallik» tugmasi bilan qo‘shing.':''}</div>`}
     </div>`;
     if(canEdit) $('#sa-body').querySelectorAll('[data-lvdel]').forEach(b=>b.onclick=async()=>{ if(!confirm('Ushbu yozuv o‘chirilsinmi?')) return; try{ await deleteDoc(doc(db,'staff_leaves',b.dataset.lvdel)); toast('O‘chirildi ✓'); loadMonth(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+    const pdfBtn=$('#sa-pdf'); if(pdfBtn) pdfBtn.onclick=()=>printMonthReport(mon, bodyRows, roster, workSet, lvSorted);
   };
   // ------- rejim almashtirish -------
   const route=()=>{ const m=$('#sa-mode').value; $('#sa-day-wrap').style.display=(m==='day')?'':'none'; $('#sa-mon-wrap').style.display=(m==='month')?'':'none'; if(m==='month') loadMonth(); else loadDay(); };

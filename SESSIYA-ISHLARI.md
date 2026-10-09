@@ -147,6 +147,15 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
 - **Tuzatildi:** server-tomon takror tekshiruvi oynasi **12 soat (bugun)**ga uzaytirildi + xabar aniqroq («allaqachon N daqiqa/soat oldin yozilgan — ota-ona BIR marta to'lagan bo'lsa Bekor bosing»). Double-click + lokal navbat posbonlari saqlanadi.
 - **«Bekor» endi QO'LLANGAN to'lovlar uchun bloklangan** (foydalanuvchi talabi): `canCancelPay` — `MONEY_MOVED` (`applied`/`confirmed`/`paid`) holatlar Bekor qilinmaydi (tugma o'rnida «🔒 qo'llangan» izohi + tushuntirish). Faqat fantom/xato (`failed`/`pending`/`unmatched`/`prepared`/`created`) yozuvlar Bekor qilinadi. Handler'да ham defense-in-depth tekshiruv (eskirgan DOM/poyga). Shunday qilib «applied to'lovni Bekor qilib fakturani buzish» xatosi takrorlanmaydi — noto'g'ri to'lov faqat fakturani qayta hisoblash orqali to'g'rilanadi.
 
+## 17) Oylik davomat hisobotini PDF/chop etish
+
+- **Talab:** «Xodim va o'qituvchilarni kechikish tanafus barcha malumotlari oylik hisobotini pdf qilib chiqarib olish imkoni bo'lsin.»
+- **Qo'shildi:** Xodimlar davomati → **Oylik hisobot** rejimida jadval sarlavhasida **«🖨 PDF / Hisobot»** tugmasi (faqat xodim bo'lsa ko'rinadi).
+- **Hisobot (A4 yotiq):** ekrandagi jadvalning BARCHA ustunlari — №, Xodim (lavozim+Kamera ID), Ishlagan kun, Ish vaqti (soatbay), Tanaffus, Ruhsat, Kasallik, Ruhsatsiz, O'rt. kelish, Kechikish (kun), Erta ketish (kun), Ushlanma, **Nominal oylik**, **Oylik (hisob)** + pastda **JAMI** qatori (ishlagan kun / ish vaqti / ushlanma / nominal / net yig'indisi).
+- Hisobot oxirida: soatbay model izohi (grace daqiqalari bilan) + **Oydagi ruhsat / kasalliklar** ro'yxati (xodim · tur · dan · gacha · sabab) + direktor imzo/sana.
+- `printMonthReport(mon, bodyRows, roster, workSet, lvSorted)` — `renderStaffAttendance` ichida; mavjud `printAccountingReport` naqshi (A4 `<!doctype html>` + `@page` + `printHTML` iframe). Ma'lumot `loadMonth`da allaqachon hisoblangan `bodyRows`dan olinadi (qayta so'rov yo'q). Oy nomi `fmtMonthUz`, summa `fmtSom`.
+- Tekshirildi: JS sintaksis toza (`node --check`); Chromium bilan A4 yotiq PDF + screenshot — 14 ustun to'liq sig'adi, layout toza.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
