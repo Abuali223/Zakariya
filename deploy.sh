@@ -42,7 +42,7 @@ fi
 
 echo "==> 4/6 /sb shimlar joylanmoqda (sb-config.js TEGILMAYDI)..."
 sudo mkdir -p "$WEB/sb"
-for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebase-storage.js firebase-analytics.js; do
+for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebase-storage.js firebase-analytics.js auth-api.js; do
   git show "FETCH_HEAD:sb/$f" | sudo tee "$WEB/sb/$f" >/dev/null
 done
 if ! grep -q "function rpc" "$WEB/sb/firebase-firestore.js"; then echo "❌ /sb shim eski (rpc yo'q)"; exit 1; fi

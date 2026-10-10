@@ -265,12 +265,22 @@ function startServer() {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,
     'login': H.login, 'reset-confirm': H.resetConfirm, 'change-phone-confirm': H.changePhoneConfirm,
   };
-  const CORS = AUTH.corsOrigin || '';
+  // CORS: ruxsat etilgan origin(lar) ro'yxati (vergul bilan yoki massiv). Brauzer api.iqror.uz'ga
+  //   cross-origin murojaat qiladi (sayt iqroacademy.uz'да) — shuning uchun mos originни qaytaramiz.
+  const CORS_LIST = (Array.isArray(AUTH.corsOrigin) ? AUTH.corsOrigin : String(AUTH.corsOrigin || '').split(','))
+    .map(s => String(s).trim()).filter(Boolean);
+  const corsFor = req => {
+    if (!CORS_LIST.length) return {};
+    const origin = req.headers.origin || '';
+    const allow = CORS_LIST.includes('*') ? '*' : (CORS_LIST.includes(origin) ? origin : '');
+    if (!allow) return {};
+    return { 'Access-Control-Allow-Origin': allow, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+  };
   const PORT = Number(AUTH.port || CFG.authPort || 8792);   // 8790=to'lov, 8791=AI — band
 
   const server = http.createServer(async (req, res) => {
     const seg = (req.url || '').split('?')[0].replace(/\/+$/, '').split('/').pop();
-    const cors = CORS ? { 'Access-Control-Allow-Origin': CORS, 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } : {};
+    const cors = corsFor(req);
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
     if (req.method === 'GET' && (seg === 'health' || req.url === '/health')) { res.writeHead(200, cors); return res.end('ok'); }
     if (req.method !== 'POST') { res.writeHead(405, cors); return res.end('POST kutiladi'); }

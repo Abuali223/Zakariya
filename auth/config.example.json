@@ -15,7 +15,7 @@
     "loginMaxFails": 10,
     "loginLockMin": 15,
     "otpTemplate": "IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.",
-    "corsOrigin": ""
+    "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz"
   },
   "sms": {
     "enabled": true,
