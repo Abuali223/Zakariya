@@ -11,6 +11,7 @@
     "otpMaxAttempts": 5,
     "otpResendSec": 60,
     "otpMaxPerHour": 5,
+    "otpMaxPerIpHour": 20,
     "ticketTtlSec": 600,
     "loginMaxFails": 10,
     "loginLockMin": 15,

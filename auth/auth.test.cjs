@@ -194,6 +194,18 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     ok('locked after many fails', r.ok === false && r.locked === true, JSON.stringify(r));
   }
 
+  // ---------------- pending teacher cannot log in (no tokens) ----------------
+  sec('security: pending teacher login refused (no tokens)');
+  {
+    const { H, lastCode } = setup();
+    const ph = '998901237777';
+    await H.requestOtp({ phone: ph, purpose: 'register' });
+    const r1 = await H.verifyOtp({ phone: ph, purpose: 'register', code: lastCode() });
+    await H.register({ ticket: r1.ticket, password: 'Teach0rd', firstName: 'O', lastName: 'Q', role: 'teacher' });
+    const r = await H.login({ phone: ph, password: 'Teach0rd' });
+    ok('pending teacher refused', r.ok === false && r.status === 'pending' && !r.access_token, JSON.stringify(r));
+  }
+
   // ---------------- password reset ----------------
   sec('flow: password reset (new must differ)');
   {
@@ -205,8 +217,7 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     // reset otp
     let r = await H.requestOtp({ phone: ph, purpose: 'reset' }); ok('reset otp ok', r.ok === true);
     r1 = await H.verifyOtp({ phone: ph, purpose: 'reset', code: lastCode() }); ok('reset verify -> ticket', r1.ok === true && !!r1.ticket);
-    r = await H.resetConfirm({ ticket: r1.ticket, newPassword: 'OldPass01' });
-    ok('same-as-old rejected', r.ok === false && /bir xil/.test(r.error || ''), JSON.stringify(r));
+    // Xavfsizlik: «yangi≠eski» orakuli olib tashlangan — reset parol o'rnatadi (eski parolni oshkor qilmaydi).
     r = await H.resetConfirm({ ticket: r1.ticket, newPassword: 'NewPass02' });
     ok('reset ok', r.ok === true, JSON.stringify(r));
     // login old fails, new works

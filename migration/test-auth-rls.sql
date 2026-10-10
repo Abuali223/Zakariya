@@ -69,4 +69,40 @@ select count(*) as users_visible_to_admin from public.users;
 update public.users set verified=true, status='active' where id='u_tt';
 reset role; reset app.uid;
 select verified as tt_verified_by_admin, status as tt_status_by_admin from public.users where id='u_tt';
+\echo '================= HARDENING (ko''rikdan keyin) ================='
+set role postgres;
+-- yangi pending o'qituvchi + unga (xayoliy) biriktirilgan sinf — gate'ni sinash uchun
+insert into public.users(id,role,verified,status,"assignedClasses") values
+  ('u_tp','teacher',false,'pending','["g5a"]'::jsonb) on conflict (id) do update set status='pending',verified=false,"assignedClasses"='["g5a"]'::jsonb;
+insert into public.teachers(id,name) values ('t_x','O''qituvchi X') on conflict (id) do nothing;
+
+\echo '--- SELF-INSERT: oddiy user O''ZIGA role=teacher yoza OLMAYDI (BLOKLANADI) ---'
+set role authenticated; set app.uid='u_hacker';
+insert into public.users(id,role,verified,"assignedClasses") values ('u_hacker','teacher',false,'["g5a"]'::jsonb);
+reset role; reset app.uid;
+select count(*) as hacker_row_created from public.users where id='u_hacker';   -- 0 kutilади
+
+\echo '--- PENDING o''qituvchi teachers ro''yxatini O''QIY OLMAYDI (is_staff active emas) (0) ---'
+set role authenticated; set app.uid='u_tp';
+select count(*) as pending_reads_teachers from public.teachers;
+\echo '--- PENDING o''qituvchi students ro''yxatini O''QIY OLMAYDI (0) ---'
+select count(*) as pending_reads_students from public.students;
+reset role; reset app.uid;
+
+\echo '--- otp_consume ATOMIK: noto''g''ri kod attempts oshiradi, 5-dan keyin locked ---'
+set role postgres;
+delete from public.otp_codes where phone='998900000009';
+insert into public.otp_codes(phone,"codeHash",purpose,"expiresAt",attempts) values ('998900000009','GOOD','register', now()+interval '3 min',0);
+select (public.otp_consume('998900000009','register','BAD',5))->>'remaining' as r1_remaining;   -- 4
+select (public.otp_consume('998900000009','register','BAD',5))->>'remaining' as r2_remaining;   -- 3
+select (public.otp_consume('998900000009','register','BAD',5))->>'remaining' as r3_remaining;   -- 2
+select (public.otp_consume('998900000009','register','BAD',5))->>'remaining' as r4_remaining;   -- 1
+select (public.otp_consume('998900000009','register','BAD',5))->>'remaining' as r5_remaining;   -- 0
+select (public.otp_consume('998900000009','register','GOOD',5))->>'locked' as after_cap_locked;  -- true (cap, to'g'ri kod ham o'tmaydi)
+\echo '--- otp_consume: toza kodda to''g''ri kod -> ok, consumed ---'
+insert into public.otp_codes(phone,"codeHash",purpose,"expiresAt",attempts) values ('998900000010','GOOD2','register', now()+interval '3 min',0);
+select (public.otp_consume('998900000010','register','GOOD2',5))->>'ok' as good_ok;   -- true
+select (public.otp_consume('998900000010','register','GOOD2',5))->>'nocode' as reused_nocode;  -- true (consumed)
+reset role;
+
 \echo '================= TUGADI ================='

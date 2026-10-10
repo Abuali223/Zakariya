@@ -104,7 +104,40 @@ Auth bazasi `SUPABASE_URL` originidan olinadi (`<origin>/authapi`); boshqa bo'ls
 
 ---
 
-## 5) Qolgan ochiq savollar / tavsiyalar
+## 5) Xavfsizlik ko'rigi (bajarildi)
+
+Adversarial xavfsizlik ko'rigi o'tkazildi (12 tasdiqlangan topilma). **Barcha CRITICAL/HIGH tuzatildi va
+PG16'да tekshirildi** (`migration/test-auth-rls.sql`):
+
+- **[CRITICAL] OTP brute-force (race)** — urinish sanog'i endi ATOMIK (`otp_consume`, FOR UPDATE):
+  5-dan keyin to'g'ri kod ham o'tmaydi; ishlatilgan kod qayta ishlamaydi.
+- **[CRITICAL] O'qituvchi self-insert eskalatsiyasi** — `users_ins` endi teacher'ni ruxsat BERMAYDI
+  (oddiy user o'ziga role=teacher + sinf yoza olmaydi). O'qituvchi faqat server/admin tomonidan.
+- **[HIGH] Tasdiqlanmagan o'qituvchi ma'lumot o'qishi** — `is_staff()`/`is_teacher_for_class()` endi
+  `status='active'` talab qiladi: pending/blocked o'qituvchi (seansi bo'lsa ham) xodim/o'quvchi
+  ro'yxatini RLS darajasida o'qiy olmaydi.
+- **[MEDIUM] Login pending/blocked** — `login()` bunday hisobga token bermaydi.
+- **[MEDIUM] SMS flood** — telefon (5/soat) + **IP (20/soat)** limitlari.
+- **[LOW] Parol tiklash orakuli** — «yangi≠eski» sinovi (joriy parolni oshkor qilardi) RESET'дан
+  olib tashlandi (profil «parolni o'zgartirish»да saqlanadi — u xavfsiz).
+- **[LOW] Orphan reclaim** — register faqat HAQIQIY yetim (users qatori yo'q) auth hisobini o'chiradi
+  (tirik hisobni buzmaydi). changePhone — users avval, auth keyin, xatoда orqaga qaytaradi.
+- **[LOW] Admin telefon-login** — AuthAPI yuklanishini KUTADI (telefon email deb ketmaydi).
+
+### Tavsiya etilgan qo'shimcha qattiqlashtirish (ixtiyoriy, kod emas — konfiguratsiya)
+
+- **nginx `limit_req`** `/authapi/` uchun (ayniqsa `/authapi/login` va `/authapi/verify-otp`) — tarmoq
+  darajasida brute-force/flood sekinlashtiradi. Masalan:
+  ```nginx
+  limit_req_zone $binary_remote_addr zone=authapi:10m rate=10r/s;
+  location /authapi/ { limit_req zone=authapi burst=20 nodelay; proxy_pass http://127.0.0.1:8792/; ... }
+  ```
+- **GoTrue-direct login**: bizning login-lockout faqat `/authapi/login`ni qo'riqlaydi; sintetik email
+  bilan to'g'ridan-to'g'ri Supabase GoTrue'ga ham urinish mumkin. Himoya: (a) parol bcrypt + murakkab
+  (8+/katta/kichik/raqam); (b) Supabase GoTrue'ning o'z rate-limit sozlamalari; (c) pending/blocked hisob
+  RLS'да hech narsa ko'rmaydi. Supabase loyiha sozlamalarida GoTrue rate-limit yoqilganini tekshiring.
+
+## 6) Qolgan ochiq savollar / tavsiyalar
 
 - **Eskiz shabloni** moderatsiyadan o'tishi kerak (yagona tashqi bog'liqlik).
 - **Supabase ommaviy signup**: hozir yetim/squat hisob register'да avtomatik tiklanadi. Qo'shimcha

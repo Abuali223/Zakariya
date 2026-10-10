@@ -36,12 +36,13 @@ create policy users_upd on users for update using (app.is_admin() or id = app.ui
      and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((select u."assignedSubjects" from public.users u where u.id = app.uid()), '[]'::jsonb)
   ));
 
--- 4) Self-insert: teacher'ni ham ruxsat beramiz (verified=false -> admin tasdig'igача cheklangan).
---    (Avval faqat parent/student edi.) role/verified bundan boshqa bo'lsa — admin shart.
---    Eslatma: ODATDA ro'yxatdan o'tish SERVER (service_role) orqali bo'ladi; bu policy — zaxira/mijoz yo'li.
+-- 4) Self-insert: FAQAT parent/student (verified=false). O'QITUVCHI self-insert QILMAYDI —
+--    aks holda har qanday kirgan foydalanuvchi o'ziga role='teacher' + ixtiyoriy assignedClasses
+--    yozib, admin tasdig'isiz sinf baholariga yozish huquqini olardi (xavfsizlik ko'rigi: CRITICAL).
+--    O'qituvchi hisobini FAQAT auth-server (service_role, RLS chetlab) yoki admin yaratadi.
 drop policy if exists users_ins on users;
 create policy users_ins on users for insert with check (
-  app.is_admin() or (id = app.uid() and role in ('parent','student','teacher') and verified = false)
+  app.is_admin() or (id = app.uid() and role in ('parent','student') and verified = false)
 );
 
 notify pgrst, 'reload schema';

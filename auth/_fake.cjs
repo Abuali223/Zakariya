@@ -58,9 +58,22 @@ function makeFake(state) {
   }
 
   async function rpc(fn, params) {
+    const p = params || {};
     if (fn === 'auth_uid_by_email') {
-      const u = state.authUsers.find(a => String(a.email).toLowerCase() === String((params || {}).p_email).toLowerCase());
+      const u = state.authUsers.find(a => String(a.email).toLowerCase() === String(p.p_email).toLowerCase());
       return { data: u ? u.id : null, error: null };
+    }
+    if (fn === 'otp_consume') {
+      // migration/auth-hardening.sql otp_consume bilan bir xil mantiq (test uchun — ketma-ket).
+      const rows = (state.otp_codes || []).filter(o => o.phone === p.p_phone && o.purpose === p.p_purpose && !o.consumed)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      const r = rows[0];
+      if (!r) return { data: { ok: false, nocode: true }, error: null };
+      if (Date.parse(r.expiresAt) < Date.now()) return { data: { ok: false, expired: true }, error: null };
+      if ((r.attempts || 0) >= p.p_max) return { data: { ok: false, locked: true }, error: null };
+      if (r.codeHash === p.p_hash) { r.consumed = true; return { data: { ok: true, uid: r.uid || null }, error: null }; }
+      r.attempts = (r.attempts || 0) + 1;
+      return { data: { ok: false, remaining: Math.max(0, p.p_max - r.attempts), locked: r.attempts >= p.p_max }, error: null };
     }
     return { data: null, error: { message: 'unknown rpc ' + fn } };
   }

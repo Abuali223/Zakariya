@@ -59,6 +59,7 @@ function makeHandlers(deps) {
   const OTP_MAX_ATTEMPTS = Number(C.otpMaxAttempts || 5);
   const OTP_RESEND = Number(C.otpResendSec || 60);
   const OTP_MAX_HOUR = Number(C.otpMaxPerHour || 5);
+  const OTP_MAX_IP_HOUR = Number(C.otpMaxPerIpHour || 20);   // bitta IP soatiga qancha OTP so'rovi (SMS flood)
   const TICKET_TTL = Number(C.ticketTtlSec || 600);
   const LOGIN_MAX_FAILS = Number(C.loginMaxFails || 10);
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
@@ -98,10 +99,16 @@ function makeHandlers(deps) {
       if (await userByPhone(canon)) return { ok: false, error: 'Bu telefon band.' };
     }
 
-    // (2) Anti-abuse: soatlik limit + 60s qayta-yuborish (SMS yuboriladigan yo'lда).
+    // (2) Anti-abuse: soatlik limit (telefon + IP) + 60s qayta-yuborish (SMS yuboriladigan yo'lда).
     const hourAgo = new Date(Date.now() - 3600e3).toISOString();
     const { data: recent } = await sb.from('otp_codes').select('id').eq('phone', canon).gte('createdAt', hourAgo);
     if ((recent || []).length >= OTP_MAX_HOUR) return { ok: false, error: `Soatiga ${OTP_MAX_HOUR} martadan ortiq kod so‘rab bo‘lmaydi. Keyinroq urinib ko‘ring.` };
+    // IP bo'yicha limit — bitta manba ko'p raqamga SMS «pompalamasin» (toll fraud).
+    const ip = String(body._ip || '').slice(0, 64);
+    if (ip) {
+      const { data: byIp } = await sb.from('otp_codes').select('id').eq('ip', ip).gte('createdAt', hourAgo);
+      if ((byIp || []).length >= OTP_MAX_IP_HOUR) return { ok: false, error: 'Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.' };
+    }
     const last = await lastOtp(canon, purpose);
     if (last && last.createdAt) {
       const age = (Date.now() - Date.parse(last.createdAt)) / 1000;
@@ -113,7 +120,7 @@ function makeHandlers(deps) {
     const expiresAt = new Date(Date.now() + OTP_TTL * 1000).toISOString();
     // Oldingi ishlatilmagan kodlarni bekor qilamiz (faqat oxirgisi amal qilsin).
     await sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false);
-    const { error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid });
+    const { error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid, ip });
     if (insErr) return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' };
 
     const msg = String(OTP_TPL).replace('{code}', code);
@@ -126,22 +133,22 @@ function makeHandlers(deps) {
     const canon = L.normPhone(body.phone);
     const purpose = String(body.purpose || '');
     if (!canon || !PURPOSES.has(purpose)) return { ok: false, error: 'Noto‘g‘ri so‘rov.' };
-    const row = await lastOtp(canon, purpose);
-    if (!row || row.consumed) return { ok: false, error: 'Kod topilmadi. «Qayta yuborish»ni bosing.' };
-    if (Date.parse(row.expiresAt) < Date.now()) return { ok: false, expired: true, error: 'Kod muddati tugagan. «Qayta yuborish»ni bosing.' };
-    if ((row.attempts || 0) >= OTP_MAX_ATTEMPTS) return { ok: false, locked: true, error: 'Juda ko‘p urinish. Kodni qayta yuboring.' };
-    const expect = L.hmacCode(HMAC, canon, purpose, String(body.code || '').trim());
-    if (!L.tseq(row.codeHash, expect)) {
-      const attempts = (row.attempts || 0) + 1;
-      await sb.from('otp_codes').update({ attempts }).eq('id', row.id);
-      const remaining = Math.max(0, OTP_MAX_ATTEMPTS - attempts);
-      return { ok: false, remaining, locked: remaining === 0, error: 'Kod noto‘g‘ri.' + (remaining ? ` Qolgan urinish: ${remaining}.` : ' Kodni qayta yuboring.') };
+    const hash = L.hmacCode(HMAC, canon, purpose, String(body.code || '').trim());
+    // ATOMIK tekshiruv (otp_consume FOR UPDATE) — urinish sanog'i poyga (race) orqali chetlab
+    //   o'tilmaydi; cap haqiqiy ishlaydi (brute-force yopiq). Hash serverда hisoblanadi.
+    const { data, error } = await sb.rpc('otp_consume', { p_phone: canon, p_purpose: purpose, p_hash: hash, p_max: OTP_MAX_ATTEMPTS });
+    if (error) return { ok: false, error: 'Server xatosi. Qayta urinib ko‘ring.' };
+    const r = data || {};
+    if (r.ok) {
+      const payload = { phone: canon, purpose };
+      if (purpose === 'change_phone') { payload.uid = r.uid; payload.newPhone = canon; }
+      return { ok: true, ticket: L.signTicket(HMAC, payload, TICKET_TTL) };
     }
-    await sb.from('otp_codes').update({ consumed: true }).eq('id', row.id);
-    const payload = { phone: canon, purpose };
-    if (purpose === 'change_phone') { payload.uid = row.uid; payload.newPhone = canon; }
-    const ticket = L.signTicket(HMAC, payload, TICKET_TTL);
-    return { ok: true, ticket };
+    if (r.nocode) return { ok: false, error: 'Kod topilmadi. «Qayta yuborish»ni bosing.' };
+    if (r.expired) return { ok: false, expired: true, error: 'Kod muddati tugagan. «Qayta yuborish»ni bosing.' };
+    if (r.locked && r.remaining === undefined) return { ok: false, locked: true, error: 'Juda ko‘p urinish. Kodni qayta yuboring.' };
+    const remaining = r.remaining || 0;
+    return { ok: false, remaining, locked: !!r.locked, error: 'Kod noto‘g‘ri.' + (remaining ? ` Qolgan urinish: ${remaining}.` : ' Kodni qayta yuboring.') };
   }
 
   async function register(body) {
@@ -161,11 +168,14 @@ function makeHandlers(deps) {
     const displayName = (firstName + ' ' + lastName).trim();
     let cr = await admin.auth.admin.createUser({ email, password: String(body.password), email_confirm: true, user_metadata: { displayName } });
     if (cr.error) {
-      // Email band bo'lishi mumkin — ammo public.users qatori yo'q (yuqorida tekshirdik) -> YETIM (squat/tashlab
-      //   ketilgan) auth hisobi. Uni o'chirib, qayta yaratamiz (haqiqiy egasi blog'lanib qolmasin).
+      // Email band. FAQAT haqiqiy YETIM (public.users qatori YO'Q) auth hisobini o'chirib qayta
+      //   yaratamiz. Agar o'sha auth hisobda users qatori BO'LSA — bu TIRIK hisob (telefon
+      //   o'zgartirish desync'i va h.k.) — uni O'CHIRMAYMIZ (aks holda hisobni yo'q qilardik).
       let orphanId = null;
       try { const { data } = await sb.rpc('auth_uid_by_email', { p_email: email }); orphanId = data || null; } catch (_) {}
-      if (orphanId) {
+      let orphanHasRow = false;
+      if (orphanId) { const { data: ur } = await sb.from('users').select('id').eq('id', orphanId).limit(1); orphanHasRow = !!(ur && ur[0]); }
+      if (orphanId && !orphanHasRow) {
         try { await admin.auth.admin.deleteUser(orphanId); } catch (_) {}
         cr = await admin.auth.admin.createUser({ email, password: String(body.password), email_confirm: true, user_metadata: { displayName } });
       }
@@ -196,14 +206,22 @@ function makeHandlers(deps) {
     const email = L.phoneToEmail(canon, DOMAIN);
     const { data, error } = await anon().auth.signInWithPassword({ email, password: String(body.password || '') });
     if (error || !data || !data.session) {
-      await sb.from('auth_login_attempts').insert({ phone: canon, ok: false });
+      await sb.from('auth_login_attempts').insert({ phone: canon, ok: false, ip: String(body._ip||'').slice(0,64) });
       return { ok: false, error: 'Telefon yoki parol noto‘g‘ri.' };
     }
-    await sb.from('auth_login_attempts').insert({ phone: canon, ok: true });
+    await sb.from('auth_login_attempts').insert({ phone: canon, ok: true, ip: String(body._ip||'').slice(0,64) });
     const urow = await userByPhone(canon);
+    // Tasdiqlanmagan (pending) / bloklangan hisobga TOKEN BERMAYMIZ (frontend gate'ga qo'shimcha
+    //   server himoyasi). RLS ham is_staff()'да status='active' talab qiladi (defence-in-depth).
+    const us = String((urow && urow.status) || 'active');
+    if (us === 'pending' || us === 'blocked') {
+      return { ok: false, status: us, error: (us === 'blocked')
+        ? 'Hisobingiz bloklangan. Administratorga murojaat qiling.'
+        : 'Hisobingiz administrator tasdig‘ini kutmoqda. Tasdiqlangach kiring.' };
+    }
     return {
       ok: true, access_token: data.session.access_token, refresh_token: data.session.refresh_token,
-      role: (urow && urow.role) || '', verified: !!(urow && urow.verified), status: (urow && urow.status) || 'active',
+      role: (urow && urow.role) || '', verified: !!(urow && urow.verified), status: us,
     };
   }
 
@@ -214,10 +232,12 @@ function makeHandlers(deps) {
     if (!urow) return { ok: false, error: 'Foydalanuvchi topilmadi.' };
     const pv = L.validatePassword(body.newPassword);
     if (!pv.ok) return { ok: false, error: pv.errors.join('. ') };
-    const email = L.phoneToEmail(t.phone, DOMAIN);
-    // Yangi parol eskisi bilan bir xil BO'LMASIN — eski bilan kirishga urinib tekshiramiz.
-    const probe = await anon().auth.signInWithPassword({ email, password: String(body.newPassword) });
-    if (probe.data && probe.data.session) return { ok: false, error: 'Yangi parol eskisi bilan bir xil bo‘lmasligi kerak.' };
+    // DIQQAT: «yangi parol eskisidan farqli» tekshiruvi BU YERDA QILINMAYDI. Avval eski parol bilan
+    //   signInWithPassword(newPassword) sinovi bor edi — u JORIY parolni oshkor qiladigan ORAKUL
+    //   edi (ticketli hujumchi nomzod parollarni tekshirib eski parolni bilib olardi). Parol
+    //   TIKLASHДА foydalanuvchi eski parolni bilmaydi, shuning uchun bu tekshiruv keraksiz.
+    //   «Farqli bo'lsin» qoidasi profil «parolni o'zgartirish»да (foydalanuvchi joriy parolni
+    //   kiritadigan joyда) saqlanadi — u xavfsiz.
     const { error } = await admin.auth.admin.updateUserById(urow.id, { password: String(body.newPassword) });
     if (error) return { ok: false, error: 'Parolni yangilashda xatolik.' };
     return { ok: true, message: 'Parol yangilandi. Endi yangi parol bilan kiring.' };
@@ -229,10 +249,18 @@ function makeHandlers(deps) {
     const taken = await userByPhone(t.newPhone);
     if (taken && taken.id !== t.uid) return { ok: false, error: 'Bu telefon band.' };
     const email = L.phoneToEmail(t.newPhone, DOMAIN);
-    const { error: aErr } = await admin.auth.admin.updateUserById(t.uid, { email });
-    if (aErr) return { ok: false, error: 'Telefonni yangilashda xatolik.' };
+    // Avval public.users (service_role), KEYIN auth email. Auth xato bo'lsa users'ni ORQAGA qaytaramiz
+    //   -> auth va profil hech qachon desync bo'lmaydi (register orphan-reclaim xavfi yo'q).
+    const { data: cur } = await sb.from('users').select('phone,email').eq('id', t.uid).limit(1);
+    const oldPhone = (cur && cur[0] && cur[0].phone) || null;
+    const oldEmail = (cur && cur[0] && cur[0].email) || null;
     const { error: uErr } = await sb.from('users').update({ phone: t.newPhone, email, updatedAt: nowISO() }).eq('id', t.uid);
     if (uErr) return { ok: false, error: 'Telefonni yangilashda xatolik (profil).' };
+    const { error: aErr } = await admin.auth.admin.updateUserById(t.uid, { email });
+    if (aErr) {
+      await sb.from('users').update({ phone: oldPhone, email: oldEmail, updatedAt: nowISO() }).eq('id', t.uid);   // revert
+      return { ok: false, error: 'Telefonni yangilashda xatolik.' };
+    }
     return { ok: true, message: 'Telefon raqam yangilandi.' };
   }
 
@@ -291,6 +319,8 @@ function startServer() {
     const send = (obj, code) => { res.writeHead(code || 200, { 'Content-Type': 'application/json', ...cors }); res.end(JSON.stringify(obj)); };
     try {
       const body = parseBody(raw, req.headers['content-type']);
+      // Mijoz IP (nginx X-Forwarded-For'ni $remote_addr'ga o'rnatadi — mijoz spoof qila olmaydi).
+      body._ip = (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || (req.socket && req.socket.remoteAddress) || '';
       const out = await fn(body);
       send(out, out && out.ok === false && (out.locked ? 429 : 200));
     } catch (e) {

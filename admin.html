@@ -440,7 +440,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 // Telefon+parol+OTP (mijoz qatlami). Dinamik import -> yuklanmasa email/Google oqimi ishlayveradi.
 // (deploy.sh SHIM: gstatic URL -> /sb, shu sabab /sb/auth-api.js yuklanadi.)
-let AuthAPI=null; import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js").then(m=>{ AuthAPI=m; }).catch(()=>{});
+let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 // OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
@@ -953,10 +953,11 @@ $('#login-form').addEventListener('submit', async e=>{
   const btn=$('#login-btn'); btn.disabled=true; btn.textContent='Kirilmoqda...';
   const idRaw=$('#email').value.trim(), pass=$('#pass').value;
   // Kiritilgan qiymat TELEFONmi (998... / +998...) yoki EMAILmi — shunga qarab yo'naltiramiz.
+  //   AuthAPI hali yuklanmagan bo'lsa — KUTAMIZ (aks holda telefon email deb noto'g'ri ketardi).
+  if(!AuthAPI){ try{ await AuthAPIready; }catch(e){} }
   const phone = AuthAPI ? AuthAPI.normPhone(idRaw) : null;
   try{
     if(phone){
-      if(!AuthAPI){ throw { message:'Biroz kuting va qayta urinib ko‘ring.' }; }
       const r=await AuthAPI.login(phone, pass);           // seansni o'zi o'rnatadi (setSession)
       if(!r.ok){ throw { code: r.locked?'too-many':'invalid-cred', message:r.error }; }
       // muvaffaqiyat -> onAuthStateChanged rolni hal qiladi (STAFF bo'lmasa chiqarib yuboradi)
