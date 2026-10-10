@@ -169,6 +169,20 @@ Baseline toza edi (JS sintaksis, testlar, 60 migratsiya). 6 agent parallel ko'ri
   - **DB:** `migration/staff-workhours.sql` ga `flexibleHours text` ustuni (teachers + staff, idempotent). **Deploy'da migratsiya ishga tushishi SHART** (frontend-only sed yetmaydi — aks holda saqlashда «column not found»).
 - **Tekshirildi:** 19 ta birlik testi (flex kech/yo'qlama kesmaydi, personal kesadi, excused 0, hourRate/monthlyMin saqlanadi, oddiy xodim o'zgarmagan); Chromium FormData (belgilanmagan->'', belgilangan->'1'); PG16'da migratsiya idempotent + insert/read; JS sintaksis toza.
 
+## 19) Telefon + parol + OTP foydalanuvchi tizimi (6 bosqich)
+
+Yangi auth: telefon (+998) + parol bilan ro'yxatdan o'tish/kirish, OTP (Eskiz SMS) tasdiqlash,
+rollar (admin/teacher/parent), profil, ota-ona kabineti. Mavjud email/Google + moliya buzilmadi.
+
+- **1 — DB** (`8a8a0a1`): `users` phone/firstName/lastName/status + RLS (rol/telefon/holatni o'zi o'zgartira olmaydi); `otp_codes` (mijozga yopiq); `child_claims.status`.
+- **2 — auth server** (`3bd716a`): `auth/` xizmati. Parol — Supabase Auth bcrypt (sintetik email `998...@phone...`); OTP — HMAC hash, TTL/urinish/rate-limit; rol server tomonда majburlanadi (teacher→pending). Login lockout + umumiy xato. 60/60 test.
+- **3 — mijoz qatlami** (`e95696f`): `sb/auth-api.js` (UI chaqiradi). Frontend/backend validatorlari aynan bir xil.
+- **4 — frontend** (`60b88ac`): `index.html` telefon modali (ro'yxat/kirish/tiklash, maska, jonli parol qoidalari, ko'z, OTP taymer); `admin.html` login telefon YOKI email. 26/26 UI test.
+- **5 — profil + tasdiqlash** (`87b1c27`): pending o'qituvchi gate; «Foydalanuvchilar» tabida tasdiqlash (banner + «✓ Tasdiqlash»); «Profil» (ism/parol/telefon-OTP); o'quvchi kodini 📋 nusxalash. 17/17 profil test.
+- **6 — testlar + docs**: `migration/test-auth-rls.sql` (cross-rol RLS — parent faqat o'zini/farzandini; pending o'qituvchi o'zini tasdiqlay OLMAYDI; otp/login yopiq); `auth/DEPLOY.md` (fayllar/.env/deploy/ochiq savollar).
+- **Arxitektura qarorlari (foydalanuvchi tasdiqlagan):** Eskiz SMS · o'qituvchi admin tasdig'idan keyin · ota-ona o'quvchi kodi bilan DARHOL (mavjud `claim_child`) · Supabase Auth + sintetik email.
+- **⚠️ Deploy:** migratsiya + `auth/` xizmati (systemd `iqror-auth`, nginx `/authapi/`, port 8792) + Eskiz OTP shabloni moderatsiyasi shart. Batafsil — `auth/DEPLOY.md`.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
