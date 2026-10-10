@@ -418,7 +418,7 @@
           <span class="bell-badge" id="bell-badge" style="display:none">0</span>
         </button>
         <span class="small muted" id="who"></span>
-        <button class="btn sm" id="btn-pass">Parol</button>
+        <button class="btn sm" id="btn-pass">Profil</button>
         <button class="btn sm" id="btn-logout">Chiqish</button>
       </div>
     </header>
@@ -431,7 +431,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, updateProfile, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
@@ -994,10 +994,20 @@ onAuthStateChanged(auth, async user=>{
   const tok = await user.getIdTokenResult().catch(()=>null);
   // Rol MANBAI — users.role (yagona haqiqat). Eski (legacy) superuser claim'i bo'lsa,
   // endi u DIREKTORga ishora qiladi (superuser 'admin'dan 'director'ga ko'chdi).
-  let role = '';
+  let role = '', uStatus = '';
   let assignedClasses = [], assignedSubjects = [], homeroomClasses = [];
-  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(d.role) role=d.role; if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
+  try{ const ud = await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); if(d.role) role=d.role; uStatus=String(d.status||''); if(Array.isArray(d.assignedClasses)) assignedClasses=d.assignedClasses; if(Array.isArray(d.assignedSubjects)) assignedSubjects=d.assignedSubjects; if(Array.isArray(d.homeroomClasses)) homeroomClasses=d.homeroomClasses; } }catch(e){}
   if(!role && tok && tok.claims && tok.claims.admin) role='director';
+  // Telefon bilan ro'yxatdan o'tgan o'qituvchi admin TASDIG'ini kutadi (status='pending');
+  //   bloklangan hisob — kirmaydi. (Mavjud email adminlarда status bo'sh -> ta'sir qilmaydi.)
+  if(uStatus==='pending' || uStatus==='blocked'){
+    await signOut(auth);
+    const msg = (uStatus==='blocked')
+      ? 'Hisobingiz bloklangan. Administratorga murojaat qiling.'
+      : 'Hisobingiz administrator tasdig‘ini kutmoqda. Tasdiqlangach kirishingiz mumkin.';
+    if($('#login-err')){ $('#login-err').textContent=msg; $('#login-err').style.display='block'; }
+    loginAttempted=false; show('login'); return;
+  }
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
   const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception'];
   if(!STAFF.includes(role)){
@@ -1024,11 +1034,105 @@ function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#logi
 
 $('#btn-bell').addEventListener('click',()=>{ if(BADGES.enrollments>0 || BADGES.applications===0) openTab('enrollments'); else openTab('applications'); });
 $('#btn-logout').addEventListener('click',()=>signOut(auth));
-$('#btn-pass').addEventListener('click',()=>{
-  const np=prompt('Yangi parol (kamida 6 belgi):');
-  if(!np)return; if(np.length<6){toast('Parol juda qisqa',true);return;}
-  updatePassword(auth.currentUser, np).then(()=>toast('Parol yangilandi')).catch(e=>toast('Xatolik: '+(e.code||e.message),true));
-});
+$('#btn-pass').addEventListener('click', openProfile);
+// Shaxsiy profil: ism-familiya, parol (joriy parol bilan), va (telefon hisobida) telefonni OTP bilan o'zgartirish.
+async function openProfile(){
+  if(document.getElementById('prof-modal')) return;
+  const u=auth.currentUser; if(!u){ toast('Avval tizimga kiring',true); return; }
+  let ud={}; try{ const d=await getDoc(doc(db,'users',u.uid)); if(d.exists()) ud=d.data()||{}; }catch(e){}
+  const curPhone=String(ud.phone||'').replace(/\D/g,'');
+  const pretty=p=>{ const d=String(p||'').replace(/\D/g,''); return d.length===12?`+${d.slice(0,3)} ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}`:(p||'—'); };
+  const ov=document.createElement('div'); ov.id='prof-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:130;padding:16px;overflow:auto';
+  const INP='width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;box-sizing:border-box;margin-top:6px';
+  const SEC='border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:14px';
+  const eye=id=>`<button type="button" data-eye="${id}" style="position:absolute;right:8px;top:19px;border:none;background:transparent;cursor:pointer;font-size:15px">👁</button>`;
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)">
+      <h3 style="font-size:18px;margin:0">Profil</h3><button id="pf-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted)">×</button></div>
+    <div style="padding:18px 22px">
+      <div style="${SEC}">
+        <div style="font-weight:700;margin-bottom:2px">Ism-familiya</div>
+        <input id="pf-first" placeholder="Ism" value="${esc(ud.firstName||'')}" style="${INP}">
+        <input id="pf-last" placeholder="Familiya" value="${esc(ud.lastName||'')}" style="${INP}">
+        <button class="btn gold sm" id="pf-name-save" style="margin-top:10px">Saqlash</button>
+      </div>
+      <div style="${SEC}">
+        <div style="font-weight:700;margin-bottom:2px">Parolni o‘zgartirish</div>
+        <div style="position:relative"><input id="pf-cur" type="password" placeholder="Joriy parol" autocomplete="current-password" style="${INP};padding-right:40px">${eye('pf-cur')}</div>
+        <div style="position:relative"><input id="pf-new" type="password" placeholder="Yangi parol" autocomplete="new-password" style="${INP};padding-right:40px">${eye('pf-new')}</div>
+        <div id="pf-pwchk" style="font-size:12px;color:var(--muted);margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:1px 10px"><span data-c="len">○ 8+ belgi</span><span data-c="upper">○ Katta harf</span><span data-c="lower">○ Kichik harf</span><span data-c="digit">○ Raqam</span></div>
+        <button class="btn gold sm" id="pf-pw-save" style="margin-top:10px">Parolni yangilash</button>
+      </div>
+      ${curPhone?`<div style="${SEC}">
+        <div style="font-weight:700;margin-bottom:2px">Telefon raqam</div>
+        <div class="small muted">Joriy: <b>${esc(pretty(curPhone))}</b></div>
+        <div id="pf-ph-area"><button class="btn sm" id="pf-ph-start" style="margin-top:10px">Telefonni o‘zgartirish</button></div>
+      </div>`:''}
+      <div id="pf-msg" style="display:none;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:12px"></div>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const $p=id=>document.getElementById(id);
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',onKey);
+  $p('pf-x').onclick=close; ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
+  ov.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$p(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } });
+  const msg=(m,ok)=>{ const e=$p('pf-msg'); e.textContent=m; e.style.display='block'; e.style.cssText+=ok?';background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D':';background:#fdece3;border:1px solid #f0d3c4;color:#C2410C'; };
+  // parol jonli checklist
+  const pwLive=()=>{ if(!AuthAPI) return; const v=AuthAPI.validatePassword($p('pf-new').value); $p('pf-pwchk').querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); };
+  $p('pf-new').addEventListener('input',pwLive);
+  // ism saqlash
+  $p('pf-name-save').onclick=async()=>{
+    const fn=$p('pf-first').value.trim(), ln=$p('pf-last').value.trim();
+    if(!fn||!ln){ msg('Ism va familiyani kiriting.'); return; }
+    const b=$p('pf-name-save'); b.disabled=true;
+    try{ await setDoc(doc(db,'users',u.uid),{firstName:fn,lastName:ln,name:(fn+' '+ln).trim(),updatedAt:serverTimestamp()},{merge:true});
+      try{ await updateProfile(u,{displayName:(fn+' '+ln).trim()}); }catch(e){}
+      msg('Ism-familiya saqlandi ✓',true);
+    }catch(e){ msg('Xatolik: '+(e.code||e.message)); } b.disabled=false;
+  };
+  // parol o'zgartirish (joriy parol bilan)
+  $p('pf-pw-save').onclick=async()=>{
+    const cur=$p('pf-cur').value, np=$p('pf-new').value;
+    const v=AuthAPI?AuthAPI.validatePassword(np):{ok:np.length>=8,errors:['Kamida 8 belgi']};
+    if(!v.ok){ msg(v.errors.join('. ')); return; }
+    if(cur===np){ msg('Yangi parol eskisidan farqli bo‘lsin.'); return; }
+    const email=u.email; if(!email){ msg('Hisob emaili topilmadi.'); return; }
+    const b=$p('pf-pw-save'); b.disabled=true; b.textContent='…';
+    try{ await signInWithEmailAndPassword(auth,email,cur); }   // joriy parolni tekshirish (re-auth)
+    catch(e){ msg('Joriy parol noto‘g‘ri.'); b.disabled=false; b.textContent='Parolni yangilash'; return; }
+    try{ await updatePassword(auth.currentUser,np); msg('Parol yangilandi ✓',true); $p('pf-cur').value=''; $p('pf-new').value=''; pwLive(); }
+    catch(e){ msg('Xatolik: '+(e.code||e.message)); } b.disabled=false; b.textContent='Parolni yangilash';
+  };
+  // telefon o'zgartirish (OTP)
+  if(curPhone && $p('pf-ph-start')){
+    $p('pf-ph-start').onclick=()=>{
+      if(!AuthAPI){ msg('Telefon o‘zgartirish hozir mavjud emas.'); return; }
+      $p('pf-ph-area').innerHTML=`<input id="pf-newph" type="tel" inputmode="numeric" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
+        <button class="btn gold sm" id="pf-ph-otp" style="margin-top:8px">Kod yuborish</button>`;
+      const nph=$p('pf-newph'); nph.oninput=()=>{ nph.value=AuthAPI.maskPhone(nph.value); };
+      $p('pf-ph-otp').onclick=async()=>{
+        const phone=AuthAPI.normPhone(nph.value); if(!phone){ msg('Telefon raqam noto‘g‘ri.'); return; }
+        const jwt=await AuthAPI.currentJwt(); const b=$p('pf-ph-otp'); b.disabled=true; b.textContent='…';
+        const r=await AuthAPI.requestOtp(phone,'change_phone',{jwt}); b.disabled=false; b.textContent='Kod yuborish';
+        if(!r.ok){ msg(r.error||'Kod yuborilmadi.'); return; }
+        $p('pf-ph-area').innerHTML=`<div class="small muted">${pretty(phone)} raqamiga kod yuborildi.</div>
+          <input id="pf-phcode" type="tel" inputmode="numeric" maxlength="6" placeholder="6 xonali kod" style="${INP};letter-spacing:6px;text-align:center">
+          <button class="btn gold sm" id="pf-ph-confirm" style="margin-top:8px">Tasdiqlash</button>`;
+        $p('pf-ph-confirm').onclick=async()=>{
+          const code=($p('pf-phcode').value||'').replace(/\D/g,''); if(code.length!==6){ msg('6 xonali kodni kiriting.'); return; }
+          const b2=$p('pf-ph-confirm'); b2.disabled=true; b2.textContent='…';
+          const vr=await AuthAPI.verifyOtp(phone,'change_phone',code);
+          if(!vr.ok){ msg(vr.error||'Kod noto‘g‘ri.'); b2.disabled=false; b2.textContent='Tasdiqlash'; return; }
+          const cr=await AuthAPI.changePhoneConfirm(vr.ticket);
+          if(cr.ok){ msg('Telefon raqam yangilandi ✓',true); $p('pf-ph-area').innerHTML=`<div class="small" style="color:var(--teal)">Yangi raqam: <b>${pretty(phone)}</b></div>`; }
+          else { msg(cr.error||'Xatolik.'); b2.disabled=false; b2.textContent='Tasdiqlash'; }
+        };
+      };
+    };
+  }
+}
 
 /* ---- Tabs ---- */
 function buildTabs(){
@@ -2457,7 +2561,7 @@ async function renderStudents(){
         <td data-label="Ota-ona tel.">${r.parentPhone?`<a href="tel:${esc(String(r.parentPhone).replace(/[^+\d]/g,''))}">${esc(r.parentPhone)}</a>`:'—'}</td>
         <td data-label="Ball">${esc(r.score==null?'':r.score)}</td>
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
-        <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code></td>
+        <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code>${r._linkCode?` <button class="btn sm ghost2" data-copycode="${esc(String(r.studentId||r._id))}|${esc(r._linkCode)}" title="O‘quvchi ID va kodni nusxalash — ota-ona kabinetда «Farzand qo‘shish» uchun">📋</button>`:''}</td>
         ${canFin?`<td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>`:''}
         <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
@@ -2476,6 +2580,12 @@ async function renderStudents(){
     }
     $('#cls-groups').querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.report, rows.find(r=>r._id===b.dataset.report))));
     $('#cls-groups').querySelectorAll('[data-note]').forEach(b=>b.addEventListener('click',()=>openPayNote(b.dataset.note, b.getAttribute('data-nm'))));
+    $('#cls-groups').querySelectorAll('[data-copycode]').forEach(b=>b.addEventListener('click',async()=>{
+      const [sid,code]=String(b.dataset.copycode||'').split('|');
+      const txt=`O‘quvchi ID: ${sid}\nKod: ${code}`;
+      try{ await navigator.clipboard.writeText(txt); toast('Nusxalandi: ID + kod ✓'); }
+      catch(e){ prompt('Nusxalang (ota-onaga bering):', txt); }
+    }));
     updateBulk();
   };
   fmemApply('stu-search'); fmemApply('stu-fgrade'); fmemApply('stu-flang'); fmemApply('stu-fmonth'); fmemApply('stu-fdebt');
@@ -3166,16 +3276,33 @@ async function renderUsers(){
       : r.role==='teacher' ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
       : '—';
     const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
-    const trs = filtered.map(r=>`<tr>
-      <td data-label="Ism">${esc(r.name||'')}</td><td data-label="Email">${esc(r.email||'')}</td>
+    // Telefon (kanonik 998...) -> chiroyli ko'rinish; aloqa ustunida telefon (bo'lsa) yoki email.
+    const uph=p=>{ const d=String(p||'').replace(/\D/g,''); return d.length===12?`+${d.slice(0,3)} ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}`:''; };
+    const contact=r=> r.phone ? `<a href="tel:+${esc(String(r.phone).replace(/\D/g,''))}">${esc(uph(r.phone))}</a>` : esc(r.email||'—');
+    const statusCell=r=> (String(r.status||'')==='pending') ? '<span style="color:#B45309;font-weight:700">⏳ Kutilmoqda</span>'
+      : (String(r.status||'')==='blocked') ? '<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>'
+      : (r.verified ? '<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>' : '<span class="muted">—</span>');
+    // Pending (yangi o'qituvchi) — yuqorida saralansin.
+    const pend = filtered.filter(r=>String(r.status||'')==='pending');
+    const ordered = pend.concat(filtered.filter(r=>String(r.status||'')!=='pending'));
+    const banner = pend.length ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13.5px"><b>${pend.length} ta yangi o‘qituvchi</b> tasdiqlashni kutmoqda. «✓ Tasdiqlash» tugmasi bilan faollashtiring.</div>` : '';
+    const trs = ordered.map(r=>{ const isPend=String(r.status||'')==='pending'; return `<tr${isPend?' style="background:#FFFBF2"':''}>
+      <td data-label="Ism">${esc(r.name||((r.firstName||'')+' '+(r.lastName||'')).trim()||'')}</td><td data-label="Aloqa">${contact(r)}</td>
       <td data-label="Rol">${roleChip(r.role||'')}</td>
       <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
-      <td data-label="Holat">${r.verified?'<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>':'<span class="muted">—</span>'}</td>
-      <td class="td-actions"><div class="row-actions"><button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
-    </tr>`).join('');
-    $('#usr-card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+      <td data-label="Holat">${statusCell(r)}</td>
+      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="O‘qituvchini tasdiqlash — faollashtiradi">✓ Tasdiqlash</button>`:''}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+    </tr>`; }).join('');
+    $('#usr-card').innerHTML = banner + `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Aloqa</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts); }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
+    $('#usr-card').querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click',async()=>{
+      const u=rows.find(x=>x._id===b.dataset.approve); if(!u) return;
+      if(!confirm(`«${u.name||u.firstName||u._id}»ni tasdiqlaysizmi? Hisob faollashadi va u tizimga kira oladi.`)) return;
+      b.disabled=true; b.textContent='…';
+      try{ await setDoc(doc(db,'users',u._id),{verified:true,status:'active'},{merge:true}); toast('Tasdiqlandi ✓'); cache.users=null; renderUsers(); }
+      catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='✓ Tasdiqlash'; }
+    }));
   };
   draw(fmemApply('usr-search'));
   const si=$('#usr-search'); if(si) si.addEventListener('input',()=>draw(si.value));
@@ -3188,7 +3315,7 @@ function openUserEditor(u, CLS, roleOpts){
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
   ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
-      <div><h3 style="font-size:18px;margin:0">${esc(u.name||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.email||'')}</div></div>
+      <div><h3 style="font-size:18px;margin:0">${esc(u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.phone?('+'+String(u.phone).replace(/\D/g,'')):(u.email||''))}${String(u.status||'')==='pending'?' · <b style="color:#B45309">⏳ tasdiqlanmagan</b>':''}</div></div>
       <button id="u-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);line-height:1">×</button>
     </div>
     <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
@@ -3220,7 +3347,9 @@ function openUserEditor(u, CLS, roleOpts){
     const assignedClasses = needsCls ? [...ov.querySelectorAll('[data-cls]:checked')].map(c=>c.value) : [];
     const assignedSubjects = (role==='teacher') ? [...ov.querySelectorAll('[data-subj]:checked')].map(c=>c.value) : [];
     const b=ov.querySelector('#u-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
-    try{ await setDoc(doc(db,'users',u._id),{role,verified:ver,assignedClasses,assignedSubjects},{merge:true}); toast('Saqlandi ✓'); close(); renderUsers(); }
+    // Tasdiqlansa (verified) -> status 'active' (pending holatdan chiqadi). Aks holda eski status saqlanadi.
+    const newStatus = ver ? 'active' : (String(u.status||'')||'active');
+    try{ await setDoc(doc(db,'users',u._id),{role,verified:ver,status:newStatus,assignedClasses,assignedSubjects},{merge:true}); toast('Saqlandi ✓'); cache.users=null; close(); renderUsers(); }
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
   };
 }
