@@ -390,15 +390,15 @@
         <span><b>IQROR</b><small>ADMIN PANEL</small></span>
       </a>
       <div>
-        <label for="email">Email</label>
-        <input id="email" type="email" autocomplete="username" required placeholder="admin@email.com">
+        <label for="email">Telefon yoki email</label>
+        <input id="email" type="text" autocomplete="username" required placeholder="+998 90 123 45 67  yoki  admin@email.com">
       </div>
       <div>
         <label for="pass">Parol</label>
         <input id="pass" type="password" autocomplete="current-password" required placeholder="••••••••">
       </div>
       <div class="err" id="login-err" style="display:none"></div>
-      <button class="btn gold" type="submit" id="login-btn" style="justify-content:center">Email bilan kirish</button>
+      <button class="btn gold" type="submit" id="login-btn" style="justify-content:center">Kirish</button>
       <div class="small muted" style="text-align:center;margin:2px 0">— yoki —</div>
       <button class="btn" type="button" id="google-btn" style="justify-content:center">
         <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.4c-.3 2.1-1.6 5.2-4.6 7.3l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.1-5.5c-2 1.4-4.6 2.3-8.4 2.3-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>
@@ -438,6 +438,9 @@ import { getFirestore, initializeFirestore, persistentLocalCache, persistentMult
 const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+// Telefon+parol+OTP (mijoz qatlami). Dinamik import -> yuklanmasa email/Google oqimi ishlayveradi.
+// (deploy.sh SHIM: gstatic URL -> /sb, shu sabab /sb/auth-api.js yuklanadi.)
+let AuthAPI=null; import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js").then(m=>{ AuthAPI=m; }).catch(()=>{});
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 // OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
@@ -948,17 +951,27 @@ $('#login-form').addEventListener('submit', async e=>{
   loginAttempted=true;
   $('#login-err').style.display='none';
   const btn=$('#login-btn'); btn.disabled=true; btn.textContent='Kirilmoqda...';
+  const idRaw=$('#email').value.trim(), pass=$('#pass').value;
+  // Kiritilgan qiymat TELEFONmi (998... / +998...) yoki EMAILmi — shunga qarab yo'naltiramiz.
+  const phone = AuthAPI ? AuthAPI.normPhone(idRaw) : null;
   try{
-    await signInWithEmailAndPassword(auth, $('#email').value.trim(), $('#pass').value);
+    if(phone){
+      if(!AuthAPI){ throw { message:'Biroz kuting va qayta urinib ko‘ring.' }; }
+      const r=await AuthAPI.login(phone, pass);           // seansni o'zi o'rnatadi (setSession)
+      if(!r.ok){ throw { code: r.locked?'too-many':'invalid-cred', message:r.error }; }
+      // muvaffaqiyat -> onAuthStateChanged rolni hal qiladi (STAFF bo'lmasa chiqarib yuboradi)
+    } else {
+      await signInWithEmailAndPassword(auth, idRaw, pass);
+    }
   }catch(err){
-    let m='Kirishda xatolik.';
+    let m=err.message||'Kirishda xatolik.';
     const c=err.code||'';
-    if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found'))m='Email yoki parol noto‘g‘ri.';
-    else if(c.includes('too-many'))m='Juda ko‘p urinish. Birozdan so‘ng qayta urining.';
+    if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found'))m='Telefon/email yoki parol noto‘g‘ri.';
+    else if(c.includes('too-many'))m=err.message||'Juda ko‘p urinish. Birozdan so‘ng qayta urining.';
     else if(c.includes('invalid-email'))m='Email formati noto‘g‘ri.';
     else if(c.includes('network'))m='Tarmoq xatosi. Internetni tekshiring.';
     $('#login-err').textContent=m; $('#login-err').style.display='block';
-  }finally{ btn.disabled=false; btn.textContent='Email bilan kirish'; }
+  }finally{ btn.disabled=false; btn.textContent='Kirish'; }
 });
 // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
 async function googleSignIn(){

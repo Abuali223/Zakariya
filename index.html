@@ -2329,6 +2329,8 @@ addEventListener('hashchange', ()=>route(true));
       // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
       try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
     }catch(e){}
+    // Telefon+parol+OTP auth (mijoz qatlami). Yuklanmasa — email/Google oqimi ishlayveradi.
+    let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=3`); }catch(e){}
 
     // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----
     async function loadPublic(){
@@ -2624,7 +2626,7 @@ addEventListener('hashchange', ()=>route(true));
             <a id="auth-admin" href="./admin.html" style="display:none;align-items:center;gap:6px;background:var(--gold);color:var(--on-gold);padding:8px 12px;border-radius:10px;font-weight:700;text-decoration:none"><svg viewBox="0 -960 960 960" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M520-600v-240h320v240H520ZM120-440v-400h320v400H120Zm400 320v-400h320v400H520Zm-400 0v-240h320v240H120Z"/></svg>Admin panel</a>
             <button id="auth-out" style="background:transparent;color:var(--ink);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer">Chiqish</button></span>`;
         nav.appendChild(w);
-        document.getElementById('auth-login').onclick=openAuthModal;
+        document.getElementById('auth-login').onclick=()=>openPhoneAuth('login');
         document.getElementById('auth-out').onclick=()=>signOut(auth);
         document.getElementById('auth-pickrole').onclick=()=>{ if(currentUser) askRole(currentUser); };
         document.getElementById('auth-kab').onclick=()=>{ location.hash='#kabinet'; };
@@ -2637,6 +2639,127 @@ addEventListener('hashchange', ()=>route(true));
           const r=document.getElementById('auth-role'); const lbl=ROLE_LABELS[u.role]||''; r.textContent=lbl; r.style.display=lbl?'inline-block':'none';
           const pk=document.getElementById('auth-pickrole'); if(pk) pk.style.display = u.role ? 'none' : 'inline-block';
         } else { login.style.display='inline-block'; chip.style.display='none'; }
+      }
+      // ====== TELEFON + PAROL + OTP modal (asosiy oqim). AuthAPI yuklanmasa -> email/Google modal. ======
+      function openPhoneAuth(startMode){
+        if(!AuthAPI){ openAuthModal(); return; }
+        if(document.getElementById('ph-modal')) return;
+        const bg=document.createElement('div'); bg.id='ph-modal';
+        bg.style.cssText='position:fixed;inset:0;background:rgba(9,58,52,.55);display:grid;place-items:center;z-index:100;padding:18px;overflow:auto';
+        bg.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="ph-title" style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:24px;box-shadow:0 12px 32px rgba(13,81,72,.2);font-family:var(--sans)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 id="ph-title" style="font-family:var(--serif);font-size:21px;margin:0;color:var(--ink)">Kirish</h3>
+            <button id="ph-x" aria-label="Yopish" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--muted)">×</button></div>
+          <div id="ph-body"></div></div>`;
+        document.body.appendChild(bg);
+        const $=id=>document.getElementById(id);
+        const prevFocus=document.activeElement; let resendTimer=null;
+        function close(){ if(resendTimer)clearInterval(resendTimer); if(bg.parentNode)bg.remove(); document.removeEventListener('keydown',key); try{prevFocus&&prevFocus.focus&&prevFocus.focus();}catch(e){} }
+        function key(e){ if(e.key==='Escape'){e.preventDefault();close();} }
+        document.addEventListener('keydown',key);
+        $('ph-x').onclick=close; bg.onclick=e=>{ if(e.target===bg) close(); };
+        const INP='width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:var(--sans);margin-top:8px;box-sizing:border-box';
+        const BTN='width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px';
+        const LINK='color:var(--teal);font-weight:600;cursor:pointer';
+        const st={ role:'parent', phone:'', password:'', ticket:'' };
+        const phoneField=id=>`<input id="${id}" type="tel" inputmode="numeric" autocomplete="tel" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">`;
+        const passField=(id,ph)=>`<div style="position:relative"><input id="${id}" type="password" autocomplete="off" placeholder="${ph||'Parol'}" style="${INP};padding-right:44px"><button type="button" data-eye="${id}" aria-label="Ko‘rsatish" style="position:absolute;right:8px;top:19px;border:none;background:transparent;cursor:pointer;font-size:16px">👁</button></div>`;
+        const errBox=`<div id="ph-err" role="alert" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>`;
+        const okBox=m=>`<div style="background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D;border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px">${m}</div>`;
+        const pwChk=`<div id="ph-pwchk" style="font-size:12.5px;color:var(--muted);margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px">
+          <span data-c="len">○ 8+ belgi</span><span data-c="upper">○ Katta harf</span><span data-c="lower">○ Kichik harf</span><span data-c="digit">○ Raqam</span></div>`;
+        const showErr=m=>{ const e=$('ph-err'); if(e){ e.textContent=m; e.style.display='block'; } };
+        const clrErr=()=>{ const e=$('ph-err'); if(e) e.style.display='none'; };
+        function wireEyes(){ bg.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } }); }
+        function wireMask(id){ const i=$(id); if(i) i.oninput=()=>{ i.value=AuthAPI.maskPhone(i.value); }; }
+        function wirePwLive(passId){ const p=$(passId); if(!p) return; const upd=()=>{ const v=AuthAPI.validatePassword(p.value); const box=$('ph-pwchk'); if(box) box.querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); }; p.oninput=upd; upd(); }
+        function startResend(purpose){ let s=60; const a=$('ph-resend'); if(!a) return; a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`; if(resendTimer)clearInterval(resendTimer);
+          resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
+        async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose); startResend(purpose); if(!r.ok) showErr(r.error||'Yuborilmadi.'); }
+        function render(step){
+          clrErr(); st.step=step;
+          const T={login:'Kirish',reg_role:'Ro‘yxatdan o‘tish',reg_form:'Ro‘yxatdan o‘tish',reg_otp:'Tasdiqlash kodi',reg_name:'Ism-familiya',reset_form:'Parolni tiklash',reset_otp:'Tasdiqlash kodi',reset_pass:'Yangi parol'};
+          $('ph-title').textContent=T[step]||'Kirish'; const B=$('ph-body');
+          if(step==='login'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 4px">Telefon raqamingiz va parolingiz bilan kiring.</p>
+              ${phoneField('ph-phone')}${passField('ph-pass')}${errBox}
+              <button id="ph-go" style="${BTN}">Kirish</button>
+              <div style="text-align:center;font-size:13px;margin-top:10px"><a id="ph-forgot" style="${LINK}">Parolni unutdingizmi?</a></div>
+              <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:8px">Hisobingiz yo‘qmi? <a id="ph-toreg" style="${LINK}">Ro‘yxatdan o‘tish</a></div>
+              <div style="text-align:center;font-size:12.5px;margin-top:12px;border-top:1px solid var(--border);padding-top:10px"><a id="ph-email" style="${LINK}">Email yoki Google bilan</a></div>`;
+            wireMask('ph-phone'); wireEyes(); $('ph-toreg').onclick=()=>render('reg_role'); $('ph-forgot').onclick=()=>render('reset_form');
+            $('ph-email').onclick=()=>{ close(); openAuthModal(); }; $('ph-go').onclick=doLogin;
+            setTimeout(()=>{try{$('ph-phone').focus();}catch(e){}},40);
+          } else if(step==='reg_role'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 10px">Kim sifatida ro‘yxatdan o‘tasiz?</p>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <button data-role="teacher" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">👩‍🏫 O‘qituvchi</button>
+                <button data-role="parent" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">👨‍👩‍👧 Ota-ona</button></div>
+              <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:12px">Hisobingiz bormi? <a id="ph-tologin" style="${LINK}">Kirish</a></div>`;
+            bg.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{ st.role=b.dataset.role; render('reg_form'); });
+            $('ph-tologin').onclick=()=>render('login');
+          } else if(step==='reg_form'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 2px">${st.role==='teacher'?'O‘qituvchi':'Ota-ona'} sifatida. Raqamingizga tasdiqlash kodi yuboriladi.</p>
+              ${phoneField('ph-phone')}${passField('ph-pass','Parol')}${pwChk}${passField('ph-pass2','Parolni takrorlang')}${errBox}
+              <button id="ph-go" style="${BTN}">Kod yuborish</button>
+              <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:10px"><a id="ph-back" style="${LINK}">← Orqaga</a></div>`;
+            wireMask('ph-phone'); wireEyes(); wirePwLive('ph-pass'); $('ph-back').onclick=()=>render('reg_role'); $('ph-go').onclick=doRegRequest;
+            setTimeout(()=>{try{$('ph-phone').focus();}catch(e){}},40);
+          } else if(step==='reg_otp'||step==='reset_otp'){
+            const isReg=step==='reg_otp';
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 4px">${AuthAPI.prettyPhone(st.phone)} raqamiga yuborilgan 6 xonali kodni kiriting.</p>
+              <input id="ph-code" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="${INP};letter-spacing:10px;text-align:center;font-size:22px;font-weight:700">${errBox}
+              <button id="ph-go" style="${BTN}">Tasdiqlash</button>
+              <div style="text-align:center;font-size:13px;margin-top:10px"><a id="ph-resend" style="${LINK}">Qayta yuborish (60s)</a></div>
+              <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:6px"><a id="ph-back" style="${LINK}">← Orqaga</a></div>`;
+            $('ph-back').onclick=()=>render(isReg?'reg_form':'reset_form'); $('ph-go').onclick=()=>doVerify(isReg?'register':'reset'); startResend(isReg?'register':'reset');
+            setTimeout(()=>{try{$('ph-code').focus();}catch(e){}},40);
+          } else if(step==='reg_name'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 4px">Telefon tasdiqlandi ✓. Ism va familiyangizni kiriting.</p>
+              <input id="ph-first" placeholder="Ism" autocomplete="given-name" style="${INP}"><input id="ph-last" placeholder="Familiya" autocomplete="family-name" style="${INP}">${errBox}
+              <button id="ph-go" style="${BTN}">Yakunlash</button>`;
+            $('ph-go').onclick=doRegister; setTimeout(()=>{try{$('ph-first').focus();}catch(e){}},40);
+          } else if(step==='reset_form'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 4px">Telefon raqamingizni kiriting — tasdiqlash kodi yuboriladi.</p>
+              ${phoneField('ph-phone')}${errBox}<button id="ph-go" style="${BTN}">Kod yuborish</button>
+              <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:10px"><a id="ph-tologin" style="${LINK}">← Kirishga qaytish</a></div>`;
+            wireMask('ph-phone'); $('ph-tologin').onclick=()=>render('login'); $('ph-go').onclick=doResetRequest;
+            setTimeout(()=>{try{$('ph-phone').focus();}catch(e){}},40);
+          } else if(step==='reset_pass'){
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 4px">Yangi parol kiriting (eskisidan farqli bo‘lsin).</p>
+              ${passField('ph-pass','Yangi parol')}${pwChk}${passField('ph-pass2','Yangi parolni takrorlang')}${errBox}<button id="ph-go" style="${BTN}">Parolni saqlash</button>`;
+            wireEyes(); wirePwLive('ph-pass'); $('ph-go').onclick=doResetConfirm; setTimeout(()=>{try{$('ph-pass').focus();}catch(e){}},40);
+          }
+        }
+        async function doLogin(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), pass=$('ph-pass').value;
+          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } if(!pass){ showErr('Parolni kiriting.'); return; }
+          const b=$('ph-go'); b.disabled=true; b.textContent='Kirilmoqda…'; const r=await AuthAPI.login(phone,pass);
+          if(r.ok) close(); else { b.disabled=false; b.textContent='Kirish'; showErr(r.error||'Kirib bo‘lmadi.'); } }
+        async function doRegRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), p1=$('ph-pass').value, p2=$('ph-pass2').value;
+          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
+          if(p1!==p2){ showErr('Parollar mos emas.'); return; } st.phone=phone; st.password=p1;
+          const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'register'); b.disabled=false; b.textContent='Kod yuborish';
+          if(r.ok) render('reg_otp'); else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
+        async function doVerify(purpose){ clrErr(); const code=($('ph-code').value||'').replace(/\D/g,'');
+          if(code.length!==6){ showErr('6 xonali kodni kiriting.'); return; } const b=$('ph-go'); b.disabled=true; b.textContent='Tekshirilmoqda…';
+          const r=await AuthAPI.verifyOtp(st.phone,purpose,code); b.disabled=false; b.textContent='Tasdiqlash';
+          if(r.ok){ st.ticket=r.ticket; render(purpose==='register'?'reg_name':'reset_pass'); } else showErr(r.error||'Kod noto‘g‘ri.'); }
+        async function doRegister(){ clrErr(); const fn=$('ph-first').value.trim(), ln=$('ph-last').value.trim();
+          if(!fn||!ln){ showErr('Ism va familiyani kiriting.'); return; } const b=$('ph-go'); b.disabled=true; b.textContent='Yakunlanmoqda…';
+          const r=await AuthAPI.register(st.ticket,st.password,fn,ln,st.role);
+          if(!r.ok){ b.disabled=false; b.textContent='Yakunlash'; if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Xatolik.'); return; }
+          if(r.pending){ $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ '+(r.message||'Ro‘yxatdan o‘tdingiz! Administrator tasdig‘ini kuting.'))+`<button id="ph-done" style="${BTN}">Yopish</button>`; $('ph-done').onclick=close; }
+          else { const lr=await AuthAPI.login(st.phone,st.password); if(lr.ok) close(); else { $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ Ro‘yxatdan o‘tdingiz! Endi kiring.')+`<button id="ph-done" style="${BTN}">Kirish</button>`; $('ph-done').onclick=()=>render('login'); } } }
+        async function doResetRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value);
+          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } st.phone=phone;
+          const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'reset'); b.disabled=false; b.textContent='Kod yuborish';
+          if(r.ok) render('reset_otp'); else showErr(r.error||'Kod yuborilmadi.'); }
+        async function doResetConfirm(){ clrErr(); const p1=$('ph-pass').value, p2=$('ph-pass2').value; const pv=AuthAPI.validatePassword(p1);
+          if(!pv.ok){ showErr(pv.errors.join('. ')); return; } if(p1!==p2){ showErr('Parollar mos emas.'); return; }
+          const b=$('ph-go'); b.disabled=true; b.textContent='Saqlanmoqda…'; const r=await AuthAPI.resetConfirm(st.ticket,p1);
+          if(r.ok){ $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ '+(r.message||'Parol yangilandi.'))+`<button id="ph-done" style="${BTN}">Kirish</button>`; $('ph-done').onclick=()=>render('login'); }
+          else { b.disabled=false; b.textContent='Parolni saqlash'; showErr(r.error||'Xatolik.'); } }
+        render(startMode==='register'?'reg_role':(startMode==='reset'?'reset_form':'login'));
       }
       function openAuthModal(){
         if(document.getElementById('auth-modal')) return;
