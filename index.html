@@ -2330,6 +2330,8 @@ addEventListener('hashchange', ()=>route(true));
       try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
     }catch(e){}
     // Telefon+parol+OTP auth (mijoz qatlami). Yuklanmasa — email/Google oqimi ishlayveradi.
+    // Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
+    try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
     let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=3`); }catch(e){}
 
     // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----

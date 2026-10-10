@@ -440,6 +440,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 // Telefon+parol+OTP (mijoz qatlami). Dinamik import -> yuklanmasa email/Google oqimi ishlayveradi.
 // (deploy.sh SHIM: gstatic URL -> /sb, shu sabab /sb/auth-api.js yuklanadi.)
+// Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
+try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
 let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
