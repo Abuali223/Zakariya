@@ -49,4 +49,28 @@ create or replace function app.is_teacher_for_class(ck text) returns boolean lan
     and coalesce("assignedClasses",'[]'::jsonb) ? ck)
 $$;
 
+-- 2c) Qolgan sinf-xodim predikatlari ham FAOL status talab qiladi — BLOKLANGAN (yoki pending)
+--     kurator/sinf rahbari/kassir, seansi tirik bo'lsa ham, davomat/tavsif/baho ko'ra olmasin.
+--     (can_write_general / is_class_staff — shu ikkalasidan tuzilgani uchun avtomatik gated.)
+--     is_admin()/is_zavuch() ATAYLAB gated EMAS (superuser/rahbarni tasodifan qulflab qo'ymaslik uchun).
+create or replace function app.is_homeroom_for(ck text) returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role in ('admin','zavuch','kurator','teacher')
+    and coalesce(nullif(status,''),'active') = 'active'
+    and coalesce("homeroomClasses",'[]'::jsonb) ? ck)
+$$;
+create or replace function app.is_kurator_for(ck text) returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role='kurator'
+    and coalesce(nullif(status,''),'active') = 'active'
+    and coalesce("assignedClasses",'[]'::jsonb) ? ck)
+$$;
+create or replace function app.teacher_has_subject(subj text) returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid()
+    and coalesce(nullif(status,''),'active') = 'active'
+    and coalesce("assignedSubjects",'[]'::jsonb) ? subj)
+$$;
+create or replace function app.is_cashier() returns boolean language sql stable security definer as $$
+  select coalesce((select role = 'kassir' and coalesce(nullif(status,''),'active') = 'active'
+                   from public.users where id = app.uid()), false)
+$$;
+
 notify pgrst, 'reload schema';
