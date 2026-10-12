@@ -3094,6 +3094,11 @@ function openForm(name, row, prefill, afterSaveCb){
       if(s.privateCol && Array.isArray(s.privateFields)){
         s.privateFields.forEach(k=>{ const inForm=(k in data); if(inForm) _renderedPriv.add(k); privData[k] = inForm ? data[k] : ''; if(inForm) delete data[k]; });
       }
+      // Narx/chegirmaga ta'sir qiluvchi OMMAVIY maydon o'zgardimi? (o'zgarsa -> mavjud hisob-fakturalar
+      //   avtomatik yangilanmaydi -> admin «Qayta hisoblash» qilishini eslatamiz; maxfiy maydonlar pastda).
+      let billingChanged=false;
+      if(isEdit && name==='students' && row){ ['grade','direction','language','status','activeFrom','stopFrom'].forEach(k=>{
+        if((k in data) && String(data[k]==null?'':data[k])!==String(row[k]==null?'':row[k])) billingChanged=true; }); }
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
       if(!isEdit && name==='students'){
         const nm=String(data.name||'').trim().toLowerCase();
@@ -3135,6 +3140,9 @@ function openForm(name, row, prefill, afterSaveCb){
               // (PII yo'qolmasin). Shu bilan «Xodim farzandi» chegirmasini o'chirish endi saqlanadi.
               s.privateFields.forEach(k=>{ const trust=_renderedPriv.has(k)&&_loadedPriv.has(k);
                 if(!trust && (privData[k]==null||privData[k]==='') && curPriv[k]!=null && curPriv[k]!=='') privData[k]=curPriv[k]; });
+              // Narx/chegirmaga ta'sir qiluvchi MAXFIY maydon o'zgardimi? (kontrakt/toifa/aka-uka/referral)
+              if(name==='students'){ ['specialCategory','contractAmount','siblingDiscount','referrerId'].forEach(k=>{
+                if(_renderedPriv.has(k) && String(privData[k]==null?'':privData[k])!==String(curPriv[k]==null?'':curPriv[k])) billingChanged=true; }); }
               await setDoc(doc(db,s.privateCol,savedId), privData, {merge:true});
             }
           } else {
@@ -3146,6 +3154,9 @@ function openForm(name, row, prefill, afterSaveCb){
       if(s.afterSave){ try{ await s.afterSave(data, isEdit?row:null, formVals); }catch(err){ toast('Saqlandi, lekin sinf rahbarini biriktirishda xatolik: '+(err.code||err.message), true); } }
       cache[name]=null;   // KESH yangilanadi — tahrirlangan yozuv boshqa bo'limlarda ham (To'lovlar/Moliya…) darhol aks etsin
       toast('Saqlandi ✓'); closeModal();
+      // MUHIM: narx/chegirma o'zgargan bo'lsa — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK
+      //   yangilanmaydi (ular oylik snapshot). Admin shuni unutmasin — ko'rinarli eslatma + ko'rsatma.
+      if(billingChanged) setTimeout(()=>alert('⚠️ Diqqat — narx/chegirma o‘zgardi\n\nBu o‘quvchining narx yoki chegirmasiga ta’sir qiluvchi maydoni (kontrakt / toifa / sinf / holat / aka-uka) o‘zgardi.\n\nMavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi! Yangi narx qo‘llanishi uchun:\n«To‘lovlar» → kerakli oyni tanlang → «↻ Qayta hisoblash».\n\nAks holda eski (noto‘g‘ri) narx qolib ketadi.'), 60);
       if(typeof afterSaveCb==='function') afterSaveCb(savedId, data);   // masalan davomat ekranini yangilash
       else (name==='students'?renderStudents():renderCollection(name));
     }catch(err){ toast('Xatolik: '+(err.code||err.message), true); btn.disabled=false; btn.textContent='Saqlash'; }
