@@ -3645,11 +3645,17 @@ function subCredit(absentPerson, month, rec){
 //   balans = Σ(net + subBonus − haqiqatda berilgan paid). paid belgilanmagan (eski) yozuv -> to'liq
 //   to'langan deb olinadi (qoldiq 0). pays: salary_payments yozuvlari (bir kishining).
 function carryBalance(pays, beforeMonth){
-  let bal=0;
-  (pays||[]).forEach(p=>{ if(beforeMonth && String(p.month||'')>=String(beforeMonth)) return;
-    const net=Number(p.net)||0, sb=Number(p.subBonus)||0;
-    const due=net+sb; const paid=(p.paid==null||p.paid==='')?due:(Number(p.paid)||0);
-    bal += (due - paid); });
+  // OY bo'yicha guruhlaymiz: har oyning «due» (net+subBonus) BIR MARTA hisoblanadi. Bir oyda bir necha
+  //   marta to'lov bo'lsa (bo'lib berish) — to'lovlar YIG'ILADI, lekin oylik qarz takror sanalMAYDI
+  //   (aks holda ikki payout qarzni ikki barobar ko'rsatardi). Eski (paid yo'q) yozuv to'liq to'langan.
+  const byMonth={};
+  (pays||[]).forEach(p=>{ const m=String(p.month||''); if(!m) return; if(beforeMonth && m>=String(beforeMonth)) return;
+    const net=Number(p.net)||0, sb=Number(p.subBonus)||0; const due=net+sb;
+    const paid=(p.paid==null||p.paid==='')?due:(Number(p.paid)||0);
+    const g=byMonth[m]=byMonth[m]||{due:0, paid:0};
+    g.due=Math.max(g.due, due);   // oylik qarz — bir marta (odatda yozuvlar teng; eng kattasini olamiz)
+    g.paid+=paid; });              // naqd to'lovlar — yig'iladi
+  let bal=0; Object.values(byMonth).forEach(g=>{ bal += (g.due - g.paid); });
   return Math.round(bal);
 }
 async function renderStaffAttendance(){
@@ -4450,6 +4456,7 @@ function openAvansList(credits, gmap){
 //   opts: { preselectPayId, month, onDone }
 async function openSalaryPayout(opts){
   opts=opts||{};
+  const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');   // guruhlab (so'm — matnda qo'lda qo'shiladi)
   const payees=await loadPayees();
   if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
   let SALL=[]; try{ SALL=await loadCol('salary_payments'); }catch(e){ SALL=[]; }
@@ -5513,7 +5520,8 @@ function reconcileInvoice(inv, t){
   else if(paidAmount>0) status='partial';
   else status='pending';
   const changed = (Number(iv.amount)||0)!==net || (Number(iv.paidAmount)||0)!==paidAmount
-    || String(iv.status||'')!==status || String(iv.discountInfo||'')!==String(t.info);
+    || String(iv.status||'')!==status || String(iv.discountInfo||'')!==String(t.info)
+    || (!!iv.isGrant)!==(!!t.isGrant) || (iv.provider==='grant' && !t.isGrant);   // eski STALE 'grant' yorlig'ini ham tozalash
   return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant, changed };
 }
 function pmReferralMaps(students, privOf, ledger, month){
@@ -5820,7 +5828,7 @@ async function renderPayments(){
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
         ${paidOf(r)>0?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
         ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
-        ${r.status==='pending'?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
+        ${((SESSION.isAdmin||SESSION.role==='finance_mgr'||SESSION.role==='treasurer') && r.status==='pending')?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
         ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial'))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
       </div></td></tr>`; };

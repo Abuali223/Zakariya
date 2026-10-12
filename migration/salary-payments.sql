@@ -27,10 +27,14 @@ alter table public.salary_payments enable row level security;
 grant select, insert, update, delete on public.salary_payments to authenticated;
 grant select, insert, update, delete on public.salary_payments to service_role;
 
+-- KASSIR ham maosh berib chek chiqaradi (oylik hisobot qatoridan / Buxgalteriyadan) — SELECT/INSERT
+--   kerak. is_cashier() cashier-role.sql'da (run-all'da shundan KEYIN) ta'riflangan. audit-3 keyin yana
+--   tasdiqlaydi; bu yerda ham qamrab, apply-order landmine'ini yopamiz. (DELETE'da kassir YO'Q —
+--   payout jurnali faqat qo'shiladi; xatoni direktor/HR/moliya tuzatadi, audit izi saqlanadi.)
 drop policy if exists salpay_sel on public.salary_payments;
-create policy salpay_sel on public.salary_payments for select using (app.is_admin() or app.is_hr() or app.is_finance());
+create policy salpay_sel on public.salary_payments for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 drop policy if exists salpay_ins on public.salary_payments;
-create policy salpay_ins on public.salary_payments for insert with check (app.is_admin() or app.is_hr() or app.is_finance());
+create policy salpay_ins on public.salary_payments for insert with check (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 drop policy if exists salpay_del on public.salary_payments;
 create policy salpay_del on public.salary_payments for delete using (app.is_admin() or app.is_hr() or app.is_finance());
 

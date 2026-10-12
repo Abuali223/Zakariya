@@ -274,7 +274,11 @@ drop policy if exists config_sel on public.config;
 create policy config_sel on public.config for select using (
       (id = 'salary'   and app.can_see_salary())
    or (id = 'security' and app.is_admin())
-   or (id in ('finance','ltv') and app.is_staff())
+   -- config/finance = davomat jarima stavkalari (loadSaRates): maosh ushlanmasini hisoblovchi HAR KIM
+   --   (admin/hr/moliya/KASSIR) o'qiy olishi shart — aks holda kassir payout'ida DEFOLT jarimalar
+   --   ishlatilib, ushlanma direktornikidan farq qilardi. (can_see_salary kassirni ham qamraydi.)
+   or (id = 'finance' and (app.is_staff() or app.can_see_salary()))
+   or (id = 'ltv'     and app.is_staff())
    or (id not in ('salary','finance','ltv','security'))
 );
 
