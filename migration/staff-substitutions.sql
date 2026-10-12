@@ -20,9 +20,19 @@ create table if not exists public.staff_substitutions (
   "subRefId"      text,
   "subCam"        text,
   "subName"       text,
+  -- Hajmi: to'liq kun yoki ayrim dars(lar). Kredit = kelmaganning kunlik stavkasidan o'tilgan ulush.
+  "coverMode"     text default 'day',            -- 'day' (to'liq kun) | 'lessons' (ayrim dars soat(lar)i)
+  lessons         numeric,                        -- nechta dars o'tib berildi ('lessons' uchun)
+  "lessonMin"     numeric,                        -- bir dars davomiyligi, daqiqa (masalan 45)
+  "coverMin"      numeric,                         -- o'tilgan jami daqiqa (lessons×lessonMin); 0/NULL -> to'liq kun
   "createdBy"     text,
   "createdAt"     timestamptz default now()
 );
+-- Mavjud jadvalga (idempotent) — eski yozuvlar to'liq kun deb qaraladi.
+alter table public.staff_substitutions add column if not exists "coverMode" text default 'day';
+alter table public.staff_substitutions add column if not exists lessons     numeric;
+alter table public.staff_substitutions add column if not exists "lessonMin" numeric;
+alter table public.staff_substitutions add column if not exists "coverMin"  numeric;
 create index if not exists subst_month_idx  on public.staff_substitutions(month);
 create index if not exists subst_day_idx    on public.staff_substitutions(day);
 create index if not exists subst_sub_idx    on public.staff_substitutions("subRefType","subRefId");
