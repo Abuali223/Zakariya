@@ -5456,7 +5456,10 @@ function computeTuition(s, priv, ctx){
   // Kasal kun chegirmasi — prorataDAN KEYIN, FLAT (kunlik qat'iy summa, ulushga ko'paytirilMAYDI).
   if(sickAmt>0){ net=Math.max(0, net-sickAmt); }
   const discount=base-net;
-  if(net===0 && !isGrant){ isGrant=true; }
+  // DIQQAT: net 0 bo'lsa ham AVTOMATIK «grant» deb belgilaMAYMIZ — «grant» FAQAT haqiqiy stipendiya
+  //   (olimpiada / monitoring 100%, yuqorida isGrant=true qilingan). Boshqa sabab (kasal kun, prorata,
+  //   referral) net'ni 0 qilsa — hisob «to'landi» bo'ladi, lekin «Grant» yorlig'i QO'YILMAYDI (provider='').
+  //   Shu bilan chegirmasiz 0-hisob xato «Grant» ko'rinmaydi (oldin net===0 hammasini grant qilardi).
   const status=(net===0)?'paid':'pending';
   return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta };
 }
@@ -5466,7 +5469,7 @@ function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
   t.net-=applied; t.discount+=applied;
   const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':'';
   t.info=base+`Referral −${applied}`;
-  if(t.net===0){ t.isGrant=true; t.status='paid'; }
+  if(t.net===0){ t.status='paid'; }
   return applied; }
 // Referralni BIRLIK (300k) bo'yicha qo'llaydi: ledgerdagi mavjud referrallar (recalcда qayta) + yangi
 // pendinglar FAQAT to'liq 300k sig'sa. Qolgan pending keyingi oyга o'tadi (kredit yo'qolmaydi).
@@ -5481,7 +5484,7 @@ function applyReferralUnits(t, existAmt, pendingIds){
   const usedIds=pendingIds.slice(0, n);
   if(applied>0){ t.net-=applied; t.discount+=applied;
     const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':''; t.info=base+`Referral −${applied}`;
-    if(t.net===0){ t.isGrant=true; t.status='paid'; } }
+    if(t.net===0){ t.status='paid'; } }
   return { applied, usedIds };
 }
 // Mavjud hisob-fakturaga yangi net (chegirmalar bilan) qo'llaydi — QISMAN/to'liq to'langanni ham hisobga oladi.
@@ -5496,7 +5499,7 @@ function reconcileInvoice(inv, t){
   else status='pending';
   const changed = (Number(iv.amount)||0)!==net || (Number(iv.paidAmount)||0)!==paidAmount
     || String(iv.status||'')!==status || String(iv.discountInfo||'')!==String(t.info);
-  return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant||net===0, changed };
+  return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant, changed };
 }
 function pmReferralMaps(students, privOf, ledger, month){
   const knownIds=new Set(students.map(s=>String(s.studentId||s._id)));
