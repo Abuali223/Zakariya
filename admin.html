@@ -5906,7 +5906,7 @@ async function renderPayments(){
   if($('#pm-recalc')) $('#pm-recalc').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    if(!confirm('Bu oydagi KUTILAYOTGAN va QISMAN to‘langan hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nTo‘langan summa saqlanadi — ortiqcha bo‘lsa AVANSga o‘tadi. To‘liq to‘langan / bekor qilingan hisoblar tegilmaydi. Davom etilsinmi?')) return;
+    if(!confirm('Bu oydagi KUTILAYOTGAN, QISMAN to‘langan va «Grant / 0 so‘m» (naqd kelmagan) hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nHAQIQATAN to‘langan (naqd tushgan) hisoblar tegilmaydi — qarz tiklanmaydi. Chegirma/grant olib tashlangan o‘quvchi to‘liq narxga qaytadi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
       const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
@@ -5914,8 +5914,16 @@ async function renderPayments(){
       const newLedger=[]; const creditMap={};
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
-      // Faqat KUTILAYOTGAN va QISMAN to'langan (to'liq to'langan qayta billing qilinmaydi — qarz tiklanmasin).
-      const docs=snap.docs.filter(d=>{ const st=(d.data()||{}).status; return st==='pending' || st==='partial'; });
+      // KUTILAYOTGAN/QISMAN to'langan — qayta hisoblanadi. HAQIQATAN to'langan (paidAmount>0) tegilmaydi
+      //   (qarz tiklanmasin). AMMO «grant/0 so'm» (summa 0 yoki provider='grant', naqd kelmagan:
+      //   paidAmount<=0) hisoblar ham qayta hisoblanadi — chegirma (olimpiada/monitoring) olib
+      //   tashlangan o'quvchi to'liq narxga qaytsin (aks holda eski 0/«Grant» hisob ABADIY qolib ketardi,
+      //   chunki status='paid' bo'lgani uchun recalc uni o'tkazib yuborardi).
+      const docs=snap.docs.filter(d=>{ const x=d.data()||{}; const st=x.status;
+        if(st==='pending' || st==='partial') return true;
+        const noCash=(Number(x.paidAmount)||0)<=0;                                   // haqiqiy naqd tushmagan
+        const grantZero=(!!x.isGrant || x.provider==='grant' || (Number(x.amount)||0)===0);
+        return st==='paid' && noCash && grantZero; });
       let changed=0, skipped=0, avans=0;
       for(let i=0;i<docs.length;i+=400){
         const batch=writeBatch(db); let wrote=false;
@@ -5927,7 +5935,10 @@ async function renderPayments(){
           batch.set(doc(db,'invoices',d.id), { studentName:(s.name||inv.studentName||sid), classKey:classKeyOf(s),   // snapshotni JORIY o'quvchi ma'lumotiga yangilaydi (eksport/kabinet ham to'g'ri chiqsin)
             amount:rc.amount, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:rc.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:rc.status, paidAmount:rc.paidAmount,
-            provider:(rc.isGrant && !(Number(inv.paidAmount)>0))?'grant':(inv.provider||''), paidAt:(rc.status==='paid'?(inv.paidAt||serverTimestamp()):(inv.paidAt||null)) }, {merge:true});
+            // provider: grant (naqd yo'q) -> 'grant'; aks holda eski STALE 'grant'ni tozalaymiz (endi grant emas);
+            //   haqiqiy to'lov usuli (click/naqd...) saqlanadi. paidAt faqat haqiqatan to'langanda qoladi.
+            provider:(rc.isGrant && !(Number(inv.paidAmount)>0))?'grant':((inv.provider==='grant')?'':(inv.provider||'')),
+            paidAt:(rc.status==='paid'?(inv.paidAt||serverTimestamp()):null) }, {merge:true});
           changed++; wrote=true;
           if(rc.creditExcess>0){ creditMap[sid]=(creditMap[sid]||0)+rc.creditExcess; avans++; }
           if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
