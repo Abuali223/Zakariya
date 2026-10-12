@@ -61,6 +61,8 @@
 \ir staff-status.sql
 \ir staff-workhours.sql
 \ir staff-break-marks.sql
+\ir staff-substitutions.sql
+\ir salary-carryover.sql
 \ir reception-guard.sql
 \ir applications-guard.sql
 \ir auth-phone.sql
