@@ -3296,7 +3296,7 @@ async function renderUsers(){
     const tch=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=tch;
     const addRec=(type,r,code,pos)=>{ const rec={type,id:String(r._id),code:code||String(r._id),name:r.name||'',pos:pos||'',phone:r.phone||'',userUid:String(r.userUid||'')};
       linkCtx.recs.push(rec); linkCtx.byRef[type+':'+rec.id]=rec;
-      const cp=pmNormPhone(r.phone); if(cp&&cp.length===9&&!/^(\d)\1{8}$/.test(cp)){ (linkCtx.byPhone[cp]=linkCtx.byPhone[cp]||[]).push(rec); } };
+      const cp=pmCanonPhone(r.phone); if(cp){ (linkCtx.byPhone[cp]=linkCtx.byPhone[cp]||[]).push(rec); } };   // qat'iy kanonik — server bilan izchil
     (stf||[]).forEach(r=>addRec('staff',r,r.staffId,r.position||'Xodim'));
     (tch||[]).forEach(r=>addRec('teacher',r,r.teacherId,'O‘qituvchi'));
   }catch(e){}
@@ -3320,7 +3320,7 @@ async function renderUsers(){
     const linkChip=r=>{ if(r.staffRefId){ const rec=linkCtx.byRef[(r.staffRefType||'')+':'+(r.staffRefId||'')];
         const label=rec?`${rec.code}${(rec.pos||rec.name)?' · '+(rec.pos||rec.name):''}`:(r.staffCode||'bog‘langan');
         return `<div class="small" style="margin-top:3px;color:var(--teal)">🔗 ${esc(label)}</div>`; }
-      const cp=pmNormPhone(r.phone); const free=((cp&&linkCtx.byPhone[cp])||[]).filter(x=>!x.userUid);
+      const cp=pmCanonPhone(r.phone); const free=((cp&&linkCtx.byPhone[cp])||[]).filter(x=>!x.userUid);
       if(free.length===1) return `<div class="small" style="margin-top:3px;color:#B45309">📌 Mos HR yozuvi: ${esc(free[0].code)} — «Tahrirlash»да bog‘lang</div>`;
       if(free.length>1)  return `<div class="small" style="margin-top:3px;color:#B45309">📌 ${free.length} ta mos HR yozuvi — qo‘lда tanlang</div>`;
       return ''; };
@@ -3355,12 +3355,14 @@ function openUserEditor(u, CLS, roleOpts, opts){
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
-  // Davomat/maosh yozuviga BOG'LANISH (staff/teachers). curKey — hozirgi; suggKey — telefon bo'yicha taklif.
+  // Davomat/maosh yozuviga BOG'LANISH (staff/teachers). curKey — hozirgi; suggRec — telefon bo'yicha taklif (faqat ko'rsatiladi).
   const lc = opts.linkCtx || {recs:[],byRef:{},byPhone:{}};
   const curKey = u.staffRefId ? ((u.staffRefType||'')+':'+(u.staffRefId||'')) : '';
-  let suggKey='';
-  if(!curKey){ const cp=pmNormPhone(u.phone); const free=((cp&&lc.byPhone[cp])||[]).filter(x=>!x.userUid); if(free.length===1) suggKey=free[0].type+':'+free[0].id; }
-  const selKey = curKey || suggKey;
+  let suggRec=null;
+  if(!curKey){ const cp=pmCanonPhone(u.phone); const free=((cp&&lc.byPhone[cp])||[]).filter(x=>!x.userUid); if(free.length===1) suggRec=free[0]; }
+  // TAKLIFNI oldindan TANLAMAYMIZ — faqat ko'rsatamiz. Admin ro'yxatdan ongli tanlasin
+  //   (e'tiborsiz «Saqlash» bog'lanish yaratmasin). selKey faqat MAVJUD havolani belgilaydi.
+  const selKey = curKey;
   const recOpt=rec=>{ const k=rec.type+':'+rec.id; const taken=rec.userUid && rec.userUid!==String(u._id);
     return `<option value="${esc(k)}" ${selKey===k?'selected':''}>${esc(rec.code)} · ${esc(rec.name||'—')}${rec.pos?' · '+esc(rec.pos):''}${taken?' (band)':''}</option>`; };
   const staffOpts=lc.recs.filter(r=>r.type==='staff').map(recOpt).join('');
@@ -3371,7 +3373,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
         ${staffOpts?`<optgroup label="Xodimlar">${staffOpts}</optgroup>`:''}
         ${teachOpts?`<optgroup label="O‘qituvchilar">${teachOpts}</optgroup>`:''}
       </select>
-      ${(!curKey&&suggKey)?`<div class="small" style="margin-top:5px;color:#B45309">📌 Telefon bo‘yicha mos yozuv tanlandi — «Saqlash» bilan tasdiqlang.</div>`:''}
+      ${suggRec?`<div class="small" style="margin-top:5px;color:#B45309">📌 Telefon bo‘yicha mos yozuv: <b>${esc(suggRec.code)}${suggRec.name?' · '+esc(suggRec.name):''}</b> — kerak bo‘lsa ro‘yxatdan tanlang.</div>`:''}
       <div class="small muted" style="margin-top:5px">Login hisobini davomat/maosh yozuviga bog‘laydi. Maosh summasiga <b>tegmaydi</b>.</div></div>`;
   ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
@@ -3412,6 +3414,10 @@ function openUserEditor(u, CLS, roleOpts, opts){
     const nParts = lv ? lv.split(':') : ['','']; const nType=nParts[0]||'', nId=nParts[1]||'';
     const oType=u.staffRefType||'', oId=u.staffRefId||'';
     const changedLink = (nType+':'+nId) !== (oType+':'+oId);
+    // MOLIYAVIY GUARD: joriy bog'lanish yozuvi ro'yxatda bo'lmasa (kesh eskirgan / yuklash xato /
+    //   yozuv o'chirilgan), <select> '' ga tushib qoladi. Buni ATAYLAB uzish deb BILMAYMIZ — aks
+    //   holда mavjud (to'g'ri) bog'lanish jim o'chib ketardi. Saqlashni to'xtatamiz.
+    if(changedLink && !nId && curKey && !lc.byRef[curKey]){ alert('Joriy davomat/maosh yozuvi ro‘yxatda topilmadi (yuklanmagan yoki o‘chirilgan).\n\nBog‘lanishni tasodifan uzib yubormaslik uchun saqlash to‘xtatildi. Sahifani yangilang (F5) va qayta urinib ko‘ring.'); return; }
     // MOLIYAVIY GUARD: tanlangan yozuv BOSHQA hisobga band bo'lsa — bloklaymiz (noto'g'ri maosh bog'lanmasin).
     if(nId){ const rec=lc.byRef[nType+':'+nId]; if(rec && rec.userUid && rec.userUid!==String(u._id)){ alert('Bu davomat/maosh yozuvi allaqachon BOSHQA hisobga bog‘langan.\n\nAvval o‘sha hisobдан uzing yoki boshqa yozuv tanlang.'); return; } }
     const needsCls=(role==='kurator'||role==='teacher');
@@ -3426,10 +3432,12 @@ function openUserEditor(u, CLS, roleOpts, opts){
       else { patch.staffRefType=''; patch.staffRefId=''; patch.staffCode=''; }   // uzish (bo'sh satr — RLS/indeks bo'shni e'tiborsiz qoldiradi)
     }
     try{
-      // Izchillik tartibi: ESKI yozuv teskari havolasini tozalash -> users yozish -> YANGI yozuvga userUid.
-      //   (userUid unikal indeksi tufayli — avval eskini bo'shatmasak, dublikat chiqardi.)
-      if(changedLink && oId){ try{ await setDoc(doc(db, oType==='teacher'?'teachers':'staff', oId), {userUid:''}, {merge:true}); }catch(e){} }
+      // Izchillik: FORWARD (users) AVVAL — agar yozuv boshqa hisobда band bo'lsa, uq_users_staffref
+      //   DB darajasida XATO beradi va hech qanday teskari havola o'zgarmasдан to'xtaydi (toza abort —
+      //   stale keshdan o'tган 'band' holatini ham DB tutadi). So'ng teskari havolalar: eski yozuvni
+      //   bo'shatish -> yangi yozuvga userUid (userUid unikal indeksi uchun shu tartib muhim).
       await setDoc(doc(db,'users',u._id), patch, {merge:true});
+      if(changedLink && oId){ try{ await setDoc(doc(db, oType==='teacher'?'teachers':'staff', oId), {userUid:''}, {merge:true}); }catch(e){} }
       if(changedLink && nId){ await setDoc(doc(db, nType==='teacher'?'teachers':'staff', nId), {userUid:String(u._id)}, {merge:true}); }
       toast('Saqlandi ✓'); cache.users=null; cache.staff=null; cache.teachers=null; close(); renderUsers();
     }
@@ -5412,6 +5420,9 @@ async function renderPriceTable(){
  * computeSiblingSet: bir xil telefon + familiya -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
+// Qat'iy KANONIK telefon (server auth/lib.cjs normPhone bilan BIR XIL qoida) — xodim↔login
+//   bog'lanish TAKLIFI uchun. Noto'g'ri/chala -> '' (near-miss taklif qilinmaydi, server bilan izchil).
+function pmCanonPhone(p){ let d=String(p==null?'':p).replace(/\D/g,''); if(d.length===9) d='998'+d; return (d.length===12 && d.startsWith('998') && '235789'.includes(d[3])) ? d : ''; }
 function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
 // Monitoring chegirmasi HISOBLANADIGAN fanlar (sinf bandi + til). O'tgan oyning SHU fanlardagi
 // TASDIQLANGAN monitoring ballari O'RTACHASI -> 90+ = 20%, 100 = 100%. Ro'yxatni shu yerda tahrirlang.

@@ -42,12 +42,23 @@ function normPhone(input) {
 function matchStaffByPhone(canon, rows) {
   const c = normPhone(canon);
   if (!c) return { status: 'none' };
-  const hits = (rows || []).filter(r => r && normPhone(r.phone) === c);   // telefon KANONIK shaklда aniq tengma-teng
-  if (hits.length === 0) return { status: 'none' };
-  if (hits.length > 1) return { status: 'ambiguous', count: hits.length };   // bir nechta moslik -> XAVFSIZ: avtomatik bog'lamaymiz
+  const tail = c.slice(-9);
+  const all = (rows || []).filter(Boolean);
+  const hits = all.filter(r => normPhone(r.phone) === c);          // KANONIK aniq tenglik
+  // "Yaqin" mosliklar: oxirgi 9 raqam bir xil, lekin qat'iy normalizatsiya o'tmagan (chala/trunk/
+  //   xorijiy formatдаги HR telefonlari). Ular YASHIRIN dublikat bo'lishi mumkin -> avtomatik
+  //   bog'lamaymiz (ambiguity). Faqat avtomatik bog'lashni TO'XTATADI (xavfsiz yo'nalish), hech
+  //   qachon NOTO'G'RI bog'lash yaratmaydi. (admin.html pmCanonPhone bilan bir xil asosда.)
+  const near = all.filter(r => {
+    if (normPhone(r.phone) === c) return false;
+    const d = String(r.phone == null ? '' : r.phone).replace(/\D/g, '');
+    return d.length >= 9 && d.slice(-9) === tail;
+  });
+  if (hits.length + near.length === 0) return { status: 'none' };
+  if (hits.length !== 1 || near.length > 0) return { status: 'ambiguous', count: hits.length + near.length };
   const r = hits[0];
   if (r.userUid) return { status: 'taken', match: r };    // yagona moslik, lekin allaqachon boshqa hisobга bog'langan
-  return { status: 'linked', match: r };                  // aniq bitta BO'SH moslik -> bog'laymiz
+  return { status: 'linked', match: r };                  // aniq bitta BO'SH moslik + yaqin nizo yo'q -> bog'laymiz
 }
 
 // Kanonik telefon -> sintetik email. Masalan 998901234567 -> '998901234567@phone.iqroacademy.uz'.

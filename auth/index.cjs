@@ -158,19 +158,26 @@ function makeHandlers(deps) {
   //   service_role bilan ishlaydi (RLS chetlab) — bog'lashni FAQAT server/admin o'rnatadi.
   async function linkStaffAccount(uid, canon) {
     const rows = [];
-    try {
-      const { data: st } = await sb.from('staff').select('*');
-      (st || []).forEach(r => rows.push({ table: 'staff', id: r.id, code: r.staffId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
-      const { data: te } = await sb.from('teachers').select('*');
-      (te || []).forEach(r => rows.push({ table: 'teacher', id: r.id, code: r.teacherId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
-    } catch (e) { console.error('staff link fetch fail', (e && (e.message || String(e)) || '').slice(0, 200)); return { status: 'fetch_fail' }; }
+    // HR yozuvlarini o'qiymiz. supabase-js so'rov XATOSINI (timeout/RLS/schema-cache/reset) THROW
+    //   QILMAYDI — {data:null,error} qaytaradi. Shuning uchun .error'ni ANIQ tekshiramiz va xato
+    //   bo'lsa FAIL-CLOSED (bog'lamaymiz): qisman ro'yxat ambiguity/taken guardни chetlab,
+    //   noto'g'ri (boshqa odamга) bog'lashга olib kelardi — moliyaviy xato.
+    const { data: st, error: stErr } = await sb.from('staff').select('*');
+    if (stErr) { console.error('staff link fetch fail (staff)', stErr.code || '', (stErr.message || '').slice(0, 120)); return { status: 'fetch_fail' }; }
+    (st || []).forEach(r => rows.push({ table: 'staff', id: r.id, code: r.staffId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
+    const { data: te, error: teErr } = await sb.from('teachers').select('*');
+    if (teErr) { console.error('staff link fetch fail (teachers)', teErr.code || '', (teErr.message || '').slice(0, 120)); return { status: 'fetch_fail' }; }
+    (te || []).forEach(r => rows.push({ table: 'teacher', id: r.id, code: r.teacherId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
     const res = L.matchStaffByPhone(canon, rows);
     if (res.status !== 'linked') return { status: res.status };     // none | ambiguous | taken -> bog'lanmaydi
     const m = res.match;
     const tbl = m.table === 'teacher' ? 'teachers' : 'staff';
-    // 1) Teskari havola (unikal indeks poyga/ikki marta bog'lashni bloklaydi) — AVVAL.
-    const { error: be } = await sb.from(tbl).update({ userUid: uid }).eq('id', m.id);
+    // 1) Teskari havola — FAQAT yozuv HALI BO'SH bo'lsa (userUid null yoki ''). Bu SHARTLI yozish
+    //    read->write orasida boshqa admin bog'lab qo'ygan bo'lsa clobber qilmaydi (TOCTOU yopiq).
+    //    Hech qator o'zgarmasa -> konkurrent band qilibdi -> 'taken' (hech narsa yozilmagan, rollback shart emas).
+    const { data: bref, error: be } = await sb.from(tbl).update({ userUid: uid }).eq('id', m.id).or('userUid.is.null,userUid.eq.').select('id');
     if (be) { console.error('staff link backref fail', be.code || '', (be.message || '').slice(0, 120)); return { status: 'backref_fail' }; }
+    if (!bref || !bref.length) return { status: 'taken' };
     // 2) To'g'ri havola (users). Xato bo'lsa — teskari havolani ORQAGA qaytaramiz (izchillik).
     const { error: fe } = await sb.from('users').update({ staffRefType: m.table, staffRefId: m.id, staffCode: m.code, linkedAt: nowISO(), linkedVia: 'auto' }).eq('id', uid);
     if (fe) { try { await sb.from(tbl).update({ userUid: null }).eq('id', m.id); } catch (_) {} console.error('staff link fwd fail', fe.code || '', (fe.message || '').slice(0, 120)); return { status: 'fwd_fail' }; }
