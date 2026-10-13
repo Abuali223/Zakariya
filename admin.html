@@ -3288,6 +3288,18 @@ async function renderUsers(){
   ];
   let CLS={classes:{},keys:[]};
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
+  // HR yozuvlari (staff+teachers) — login hisobini davomat/maosh yozuviga TELEFON bo'yicha
+  //   bog'lanishini ko'rsatish va qo'lда boshqarish uchun.
+  const linkCtx={ recs:[], byRef:{}, byPhone:{} };
+  try{
+    const stf=(cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=stf;
+    const tch=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=tch;
+    const addRec=(type,r,code,pos)=>{ const rec={type,id:String(r._id),code:code||String(r._id),name:r.name||'',pos:pos||'',phone:r.phone||'',userUid:String(r.userUid||'')};
+      linkCtx.recs.push(rec); linkCtx.byRef[type+':'+rec.id]=rec;
+      const cp=pmNormPhone(r.phone); if(cp&&cp.length===9&&!/^(\d)\1{8}$/.test(cp)){ (linkCtx.byPhone[cp]=linkCtx.byPhone[cp]||[]).push(rec); } };
+    (stf||[]).forEach(r=>addRec('staff',r,r.staffId,r.position||'Xodim'));
+    (tch||[]).forEach(r=>addRec('teacher',r,r.teacherId,'O‘qituvchi'));
+  }catch(e){}
   const draw=(q)=>{
     q=(q||'').trim().toLowerCase();
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
@@ -3304,23 +3316,31 @@ async function renderUsers(){
     const statusCell=r=> (String(r.status||'')==='pending') ? '<span style="color:#B45309;font-weight:700">⏳ Kutilmoqda</span>'
       : (String(r.status||'')==='blocked') ? '<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>'
       : (r.verified ? '<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>' : '<span class="muted">—</span>');
+    // HR yozuviga bog'lanish ko'rsatkichi: bog'langan bo'lsa 🔗 kod; aks holda telefon bo'yicha taklif.
+    const linkChip=r=>{ if(r.staffRefId){ const rec=linkCtx.byRef[(r.staffRefType||'')+':'+(r.staffRefId||'')];
+        const label=rec?`${rec.code}${(rec.pos||rec.name)?' · '+(rec.pos||rec.name):''}`:(r.staffCode||'bog‘langan');
+        return `<div class="small" style="margin-top:3px;color:var(--teal)">🔗 ${esc(label)}</div>`; }
+      const cp=pmNormPhone(r.phone); const free=((cp&&linkCtx.byPhone[cp])||[]).filter(x=>!x.userUid);
+      if(free.length===1) return `<div class="small" style="margin-top:3px;color:#B45309">📌 Mos HR yozuvi: ${esc(free[0].code)} — «Tahrirlash»да bog‘lang</div>`;
+      if(free.length>1)  return `<div class="small" style="margin-top:3px;color:#B45309">📌 ${free.length} ta mos HR yozuvi — qo‘lда tanlang</div>`;
+      return ''; };
     // Pending (yangi o'qituvchi) — yuqorida saralansin.
     const pend = filtered.filter(r=>String(r.status||'')==='pending');
     const ordered = pend.concat(filtered.filter(r=>String(r.status||'')!=='pending'));
     const banner = pend.length ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13.5px"><b>${pend.length} ta yangi xodim</b> tasdiqlashni kutmoqda. «✓ Tasdiqlash» tugmasi bilan rolini belgilab faollashtiring.</div>` : '';
     const trs = ordered.map(r=>{ const isPend=String(r.status||'')==='pending'; return `<tr${isPend?' style="background:#FFFBF2"':''}>
-      <td data-label="Ism">${esc(r.name||((r.firstName||'')+' '+(r.lastName||'')).trim()||'')}</td><td data-label="Aloqa">${contact(r)}</td>
+      <td data-label="Ism">${esc(r.name||((r.firstName||'')+' '+(r.lastName||'')).trim()||'')}${linkChip(r)}</td><td data-label="Aloqa">${contact(r)}</td>
       <td data-label="Rol">${roleChip(r.role||'')}</td>
       <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
       <td data-label="Holat">${statusCell(r)}</td>
       <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
     </tr>`; }).join('');
     $('#usr-card').innerHTML = banner + `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Aloqa</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
-    $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts); }));
+    $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts, {linkCtx}); }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
     // Tasdiqlash = rol tayinlash oynasini ochadi (rolsiz «staff» holatida faollashtirib bo'lmaydi).
     $('#usr-card').querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click',()=>{
-      const u=rows.find(x=>x._id===b.dataset.approve); if(u) openUserEditor(u, CLS, roleOpts, {approve:true});
+      const u=rows.find(x=>x._id===b.dataset.approve); if(u) openUserEditor(u, CLS, roleOpts, {approve:true, linkCtx});
     }));
   };
   draw(fmemApply('usr-search'));
@@ -3335,6 +3355,24 @@ function openUserEditor(u, CLS, roleOpts, opts){
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
+  // Davomat/maosh yozuviga BOG'LANISH (staff/teachers). curKey — hozirgi; suggKey — telefon bo'yicha taklif.
+  const lc = opts.linkCtx || {recs:[],byRef:{},byPhone:{}};
+  const curKey = u.staffRefId ? ((u.staffRefType||'')+':'+(u.staffRefId||'')) : '';
+  let suggKey='';
+  if(!curKey){ const cp=pmNormPhone(u.phone); const free=((cp&&lc.byPhone[cp])||[]).filter(x=>!x.userUid); if(free.length===1) suggKey=free[0].type+':'+free[0].id; }
+  const selKey = curKey || suggKey;
+  const recOpt=rec=>{ const k=rec.type+':'+rec.id; const taken=rec.userUid && rec.userUid!==String(u._id);
+    return `<option value="${esc(k)}" ${selKey===k?'selected':''}>${esc(rec.code)} · ${esc(rec.name||'—')}${rec.pos?' · '+esc(rec.pos):''}${taken?' (band)':''}</option>`; };
+  const staffOpts=lc.recs.filter(r=>r.type==='staff').map(recOpt).join('');
+  const teachOpts=lc.recs.filter(r=>r.type==='teacher').map(recOpt).join('');
+  const linkSection=`<div><label class="ulbl">Davomat / maosh yozuvi <span class="small muted" style="font-weight:400">— telefon bo‘yicha bog‘lanish</span></label>
+      <select id="u-link" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff">
+        <option value="">— bog‘lanmagan</option>
+        ${staffOpts?`<optgroup label="Xodimlar">${staffOpts}</optgroup>`:''}
+        ${teachOpts?`<optgroup label="O‘qituvchilar">${teachOpts}</optgroup>`:''}
+      </select>
+      ${(!curKey&&suggKey)?`<div class="small" style="margin-top:5px;color:#B45309">📌 Telefon bo‘yicha mos yozuv tanlandi — «Saqlash» bilan tasdiqlang.</div>`:''}
+      <div class="small muted" style="margin-top:5px">Login hisobini davomat/maosh yozuviga bog‘laydi. Maosh summasiga <b>tegmaydi</b>.</div></div>`;
   ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
       <div><h3 style="font-size:18px;margin:0">${esc(u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.phone?('+'+String(u.phone).replace(/\D/g,'')):(u.email||''))}${String(u.status||'')==='pending'?' · <b style="color:#B45309">⏳ tasdiqlanmagan</b>':''}</div></div>
@@ -3348,6 +3386,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
         <div class="uchk-grid">${clsChecks}</div></div>
       <div id="u-subj-wrap"><label class="ulbl">Biriktirilgan fanlar <span class="small muted" style="font-weight:400">— o‘qituvchi baho kiritadigan fan(lar)</span></label>
         <div class="uchk-grid">${subjChecks}</div></div>
+      ${linkSection}
       <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="u-ver" ${(u.verified||opts.approve)?'checked':''} style="width:auto"> Tasdiqlangan</label>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)">
@@ -3368,13 +3407,32 @@ function openUserEditor(u, CLS, roleOpts, opts){
     const role=roleSel.value, ver=ov.querySelector('#u-ver').checked;
     // Rolsiz («staff» — tayinlanmagan) hisobni faollashtirib bo'lmaydi: u hech qanday bo'limга kira olmaydi.
     if(ver && (!role || role==='staff')){ alert('Avval aniq rol tanlang (o‘qituvchi, kassir, qorovul va h.k.).\n\n«Xodim — rol tayinlanmagan» holatida hisobni faollashtirib bo‘lmaydi (u tizimda hech narsani ko‘ra olmaydi).'); return; }
+    // --- Bog'lanish: yangi tanlov vs eski ---
+    const linkSel=ov.querySelector('#u-link'); const lv=linkSel?linkSel.value:'';
+    const nParts = lv ? lv.split(':') : ['','']; const nType=nParts[0]||'', nId=nParts[1]||'';
+    const oType=u.staffRefType||'', oId=u.staffRefId||'';
+    const changedLink = (nType+':'+nId) !== (oType+':'+oId);
+    // MOLIYAVIY GUARD: tanlangan yozuv BOSHQA hisobga band bo'lsa — bloklaymiz (noto'g'ri maosh bog'lanmasin).
+    if(nId){ const rec=lc.byRef[nType+':'+nId]; if(rec && rec.userUid && rec.userUid!==String(u._id)){ alert('Bu davomat/maosh yozuvi allaqachon BOSHQA hisobga bog‘langan.\n\nAvval o‘sha hisobдан uzing yoki boshqa yozuv tanlang.'); return; } }
     const needsCls=(role==='kurator'||role==='teacher');
     const assignedClasses = needsCls ? [...ov.querySelectorAll('[data-cls]:checked')].map(c=>c.value) : [];
     const assignedSubjects = (role==='teacher') ? [...ov.querySelectorAll('[data-subj]:checked')].map(c=>c.value) : [];
     const b=ov.querySelector('#u-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
     // Tasdiqlansa (verified) -> status 'active' (pending holatdan chiqadi). Aks holda eski status saqlanadi.
     const newStatus = ver ? 'active' : (String(u.status||'')||'active');
-    try{ await setDoc(doc(db,'users',u._id),{role,verified:ver,status:newStatus,assignedClasses,assignedSubjects},{merge:true}); toast('Saqlandi ✓'); cache.users=null; close(); renderUsers(); }
+    const patch={role,verified:ver,status:newStatus,assignedClasses,assignedSubjects};
+    if(changedLink){
+      if(nId){ const rec=lc.byRef[nType+':'+nId]; patch.staffRefType=nType; patch.staffRefId=nId; patch.staffCode=(rec&&rec.code)||''; patch.linkedAt=serverTimestamp(); patch.linkedVia='admin'; }
+      else { patch.staffRefType=''; patch.staffRefId=''; patch.staffCode=''; }   // uzish (bo'sh satr — RLS/indeks bo'shni e'tiborsiz qoldiradi)
+    }
+    try{
+      // Izchillik tartibi: ESKI yozuv teskari havolasini tozalash -> users yozish -> YANGI yozuvga userUid.
+      //   (userUid unikal indeksi tufayli — avval eskini bo'shatmasak, dublikat chiqardi.)
+      if(changedLink && oId){ try{ await setDoc(doc(db, oType==='teacher'?'teachers':'staff', oId), {userUid:''}, {merge:true}); }catch(e){} }
+      await setDoc(doc(db,'users',u._id), patch, {merge:true});
+      if(changedLink && nId){ await setDoc(doc(db, nType==='teacher'?'teachers':'staff', nId), {userUid:String(u._id)}, {merge:true}); }
+      toast('Saqlandi ✓'); cache.users=null; cache.staff=null; cache.teachers=null; close(); renderUsers();
+    }
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
   };
 }

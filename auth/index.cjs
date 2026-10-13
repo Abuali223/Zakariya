@@ -152,6 +152,31 @@ function makeHandlers(deps) {
     return { ok: false, remaining, locked: !!r.locked, error: 'Kod noto‘g‘ri.' + (remaining ? ` Qolgan urinish: ${remaining}.` : ' Kodni qayta yuboring.') };
   }
 
+  // Xodim hisobini bazadagi staff/teachers yozuviga TELEFON bo'yicha AVTOMATIK bog'laydi.
+  //   MOLIYAVIY XAVFSIZLIK: faqat aniq BITTA bo'sh moslik bog'lanadi (konservativ). Noaniqlik/band
+  //   -> bog'lanmaydi (admin qo'lда hal qiladi). Maosh/davomat summalariga TEGMAYDI — faqat havola.
+  //   service_role bilan ishlaydi (RLS chetlab) — bog'lashni FAQAT server/admin o'rnatadi.
+  async function linkStaffAccount(uid, canon) {
+    const rows = [];
+    try {
+      const { data: st } = await sb.from('staff').select('*');
+      (st || []).forEach(r => rows.push({ table: 'staff', id: r.id, code: r.staffId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
+      const { data: te } = await sb.from('teachers').select('*');
+      (te || []).forEach(r => rows.push({ table: 'teacher', id: r.id, code: r.teacherId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
+    } catch (e) { console.error('staff link fetch fail', (e && (e.message || String(e)) || '').slice(0, 200)); return { status: 'fetch_fail' }; }
+    const res = L.matchStaffByPhone(canon, rows);
+    if (res.status !== 'linked') return { status: res.status };     // none | ambiguous | taken -> bog'lanmaydi
+    const m = res.match;
+    const tbl = m.table === 'teacher' ? 'teachers' : 'staff';
+    // 1) Teskari havola (unikal indeks poyga/ikki marta bog'lashni bloklaydi) — AVVAL.
+    const { error: be } = await sb.from(tbl).update({ userUid: uid }).eq('id', m.id);
+    if (be) { console.error('staff link backref fail', be.code || '', (be.message || '').slice(0, 120)); return { status: 'backref_fail' }; }
+    // 2) To'g'ri havola (users). Xato bo'lsa — teskari havolani ORQAGA qaytaramiz (izchillik).
+    const { error: fe } = await sb.from('users').update({ staffRefType: m.table, staffRefId: m.id, staffCode: m.code, linkedAt: nowISO(), linkedVia: 'auto' }).eq('id', uid);
+    if (fe) { try { await sb.from(tbl).update({ userUid: null }).eq('id', m.id); } catch (_) {} console.error('staff link fwd fail', fe.code || '', (fe.message || '').slice(0, 120)); return { status: 'fwd_fail' }; }
+    return { status: 'linked', table: m.table, id: m.id, code: m.code, name: m.name };
+  }
+
   async function register(body) {
     const t = L.verifyTicket(HMAC, body.ticket);
     if (!t || t.purpose !== 'register' || !t.phone) return { ok: false, error: 'Tasdiqlash muddati tugagan. Qaytadan boshlang.' };
@@ -190,8 +215,12 @@ function makeHandlers(deps) {
       firstName, lastName, name: displayName, createdAt: nowISO(), updatedAt: nowISO(),
     });
     if (uErr) { try { await admin.auth.admin.deleteUser(uid); } catch (_) {} return { ok: false, error: 'Ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring.' }; }
+    // Xodim ro'yxatdan o'tganда — HR yozuviga telefon bo'yicha avtomatik bog'lash (registratsiyani BUZMAYDI).
+    let linked = null;
+    if (role === 'staff') { try { linked = await linkStaffAccount(uid, canon); } catch (e) { console.error('staff link exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 200)); } }
     return {
       ok: true, role, verified, email, phone: canon, pending: role === 'staff',
+      linked: (linked && linked.status === 'linked') ? { code: linked.code, name: linked.name } : null,
       message: role === 'staff'
         ? 'Ro‘yxatdan o‘tdingiz! Hisobingiz administrator tasdig‘ini kutmoqda.'
         : 'Ro‘yxatdan o‘tdingiz! Endi kirishingiz mumkin.',

@@ -33,6 +33,23 @@ function normPhone(input) {
   return null;
 }
 
+// Xodim/o'qituvchi HR yozuvini telefon bo'yicha hisobga BOG'LASH uchun MOSLIKNI aniqlaydi.
+//   MOLIYAVIY XAVFSIZLIK — eng konservativ: FAQAT aniq BITTA bo'sh (bog'lanmagan) moslik bo'lsa
+//   bog'laymiz. Noaniqlik (bir nechta yozuvда bir xil telefon) yoki band yozuv -> bog'lamaymiz
+//   (admin qo'lда hal qiladi). Bir xatolik noto'g'ri odamга maosh/davomat bog'lashга olib keladi.
+//   rows: [{ table:'staff'|'teacher', id, code, phone, name, userUid }]
+//   Qaytaradi: { status:'linked'|'none'|'ambiguous'|'taken', match?, count? }
+function matchStaffByPhone(canon, rows) {
+  const c = normPhone(canon);
+  if (!c) return { status: 'none' };
+  const hits = (rows || []).filter(r => r && normPhone(r.phone) === c);   // telefon KANONIK shaklда aniq tengma-teng
+  if (hits.length === 0) return { status: 'none' };
+  if (hits.length > 1) return { status: 'ambiguous', count: hits.length };   // bir nechta moslik -> XAVFSIZ: avtomatik bog'lamaymiz
+  const r = hits[0];
+  if (r.userUid) return { status: 'taken', match: r };    // yagona moslik, lekin allaqachon boshqa hisobга bog'langan
+  return { status: 'linked', match: r };                  // aniq bitta BO'SH moslik -> bog'laymiz
+}
+
 // Kanonik telefon -> sintetik email. Masalan 998901234567 -> '998901234567@phone.iqroacademy.uz'.
 function phoneToEmail(canonicalPhone, domain) {
   const p = String(canonicalPhone || '').replace(/\D/g, '');
@@ -101,5 +118,5 @@ function verifyTicket(secret, token, nowMs) {
 
 module.exports = {
   tseq, normPhone, phoneToEmail, prettyPhone, validatePassword,
-  genCode, hmacCode, signTicket, verifyTicket,
+  genCode, hmacCode, signTicket, verifyTicket, matchStaffByPhone,
 };
