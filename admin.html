@@ -538,7 +538,7 @@ const SCHEMAS = {
       {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
       {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
       {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
-      {k:'siblingDiscount',l:'Aka-uka chegirmasi (10%) — shu farzandga',t:'select',opts:[{v:'',l:'— yo‘q'},{v:'Ha',l:'Ha (10%)'}]},
+      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— yo‘q (avtomatik)'},{v:'Ha',l:'Ha (10%) — majburan'}],note:'Avtomatik: 3+ aka-uka (bir xil familiya + telefon) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Bu yerda «Ha» — faqat qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun).'},
       {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
       {k:'referrerId',l:'Kim tavsiya qilgan (referral) — 300 000 unga',t:'text',placeholder:'tavsiya qilgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
@@ -3273,12 +3273,13 @@ async function delDoc(name,id,label){
 async function renderUsers(){
   $('#view').innerHTML = `<div class="page-head"><h2>Foydalanuvchilar</h2>
     <div class="ph-actions"><input id="usr-search" class="search-inp" placeholder="Qidiruv: ism, email yoki rol…" autocomplete="off"></div></div>
-    <p class="small muted" style="margin:-8px 0 14px">Foydalanuvchi Gmail/email bilan kiradi. Bu yerda <b>«Tahrirlash»</b> tugmasi orqali rol tayinlang. <b>Kurator</b> yoki <b>o‘qituvchi</b> tanlasangiz, ochilgan oynada sinf(lar)ni belgilaysiz (bir nechtasini belgilash mumkin); o‘qituvchi uchun fan(lar)ni ham.</p>
+    <p class="small muted" style="margin:-8px 0 14px">Xodim telefon + parol bilan ro‘yxatdan o‘tadi va <b>«Xodim»</b> (rol tayinlanmagan) holatida keladi. <b>«✓ Tasdiqlash»</b> tugmasi orqali aniq rolni (o‘qituvchi, kassir, qorovul va h.k.) belgilab, hisobni faollashtiring. <b>Kurator</b> yoki <b>o‘qituvchi</b> tanlasangiz, ochilgan oynada sinf(lar)ni belgilaysiz (bir nechtasini belgilash mumkin); o‘qituvchi uchun fan(lar)ni ham.</p>
     <div class="card" id="usr-card"><div class="loading">Yuklanmoqda…</div></div>`;
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
   const roleOpts=[
+    ['staff','Xodim — rol tayinlanmagan (yangi)'],
     ['director','Direktor (superuser)'],['admin','Ma‘muriyat rahbari'],['zavuch','O‘IBDO‘'],
     ['hr','HR'],['finance_mgr','Moliya menejeri'],['kassir','Kassir (faqat to‘lov qabul qiladi)'],['marketing_mgr','Marketing menejeri'],
     ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
@@ -3306,30 +3307,30 @@ async function renderUsers(){
     // Pending (yangi o'qituvchi) — yuqorida saralansin.
     const pend = filtered.filter(r=>String(r.status||'')==='pending');
     const ordered = pend.concat(filtered.filter(r=>String(r.status||'')!=='pending'));
-    const banner = pend.length ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13.5px"><b>${pend.length} ta yangi o‘qituvchi</b> tasdiqlashni kutmoqda. «✓ Tasdiqlash» tugmasi bilan faollashtiring.</div>` : '';
+    const banner = pend.length ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13.5px"><b>${pend.length} ta yangi xodim</b> tasdiqlashni kutmoqda. «✓ Tasdiqlash» tugmasi bilan rolini belgilab faollashtiring.</div>` : '';
     const trs = ordered.map(r=>{ const isPend=String(r.status||'')==='pending'; return `<tr${isPend?' style="background:#FFFBF2"':''}>
       <td data-label="Ism">${esc(r.name||((r.firstName||'')+' '+(r.lastName||'')).trim()||'')}</td><td data-label="Aloqa">${contact(r)}</td>
       <td data-label="Rol">${roleChip(r.role||'')}</td>
       <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
       <td data-label="Holat">${statusCell(r)}</td>
-      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="O‘qituvchini tasdiqlash — faollashtiradi">✓ Tasdiqlash</button>`:''}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
     </tr>`; }).join('');
     $('#usr-card').innerHTML = banner + `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Aloqa</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts); }));
     $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
-    $('#usr-card').querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click',async()=>{
-      const u=rows.find(x=>x._id===b.dataset.approve); if(!u) return;
-      if(!confirm(`«${u.name||u.firstName||u._id}»ni tasdiqlaysizmi? Hisob faollashadi va u tizimga kira oladi.`)) return;
-      b.disabled=true; b.textContent='…';
-      try{ await setDoc(doc(db,'users',u._id),{verified:true,status:'active'},{merge:true}); toast('Tasdiqlandi ✓'); cache.users=null; renderUsers(); }
-      catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='✓ Tasdiqlash'; }
+    // Tasdiqlash = rol tayinlash oynasini ochadi (rolsiz «staff» holatida faollashtirib bo'lmaydi).
+    $('#usr-card').querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click',()=>{
+      const u=rows.find(x=>x._id===b.dataset.approve); if(u) openUserEditor(u, CLS, roleOpts, {approve:true});
     }));
   };
   draw(fmemApply('usr-search'));
   const si=$('#usr-search'); if(si) si.addEventListener('input',()=>draw(si.value));
 }
 // Rol + sinf/fan biriktirish oynasi (checkbox — Ctrl bosish shart emas)
-function openUserEditor(u, CLS, roleOpts){
+//   opts.approve=true -> «Tasdiqlash» tugmasidan ochildi: «Tasdiqlangan» oldindan belgilanadi
+//   va rolsiz («staff») faollashtirishga yo'l qo'yilmaydi (admin aniq rol tanlashi shart).
+function openUserEditor(u, CLS, roleOpts, opts){
+  opts=opts||{};
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
@@ -3340,13 +3341,14 @@ function openUserEditor(u, CLS, roleOpts){
       <button id="u-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);line-height:1">×</button>
     </div>
     <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
+      ${opts.approve?`<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Yangi xodimni faollashtirish uchun <b>aniq rolni</b> (o‘qituvchi, kassir, qorovul va h.k.) tanlang va «Saqlash» bosing.</div>`:''}
       <div><label class="ulbl">Rol</label>
         <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff">${roleOpts.map(o=>`<option value="${o[0]}" ${u.role===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>
       <div id="u-cls-wrap"><label class="ulbl">Biriktirilgan sinflar <span class="small muted" style="font-weight:400">— bir nechtasini belgilang</span></label>
         <div class="uchk-grid">${clsChecks}</div></div>
       <div id="u-subj-wrap"><label class="ulbl">Biriktirilgan fanlar <span class="small muted" style="font-weight:400">— o‘qituvchi baho kiritadigan fan(lar)</span></label>
         <div class="uchk-grid">${subjChecks}</div></div>
-      <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="u-ver" ${u.verified?'checked':''} style="width:auto"> Tasdiqlangan</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="u-ver" ${(u.verified||opts.approve)?'checked':''} style="width:auto"> Tasdiqlangan</label>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)">
       <button class="btn" id="u-cancel">Bekor</button><button class="btn gold" id="u-save">Saqlash</button></div>
@@ -3364,6 +3366,8 @@ function openUserEditor(u, CLS, roleOpts){
   ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
   ov.querySelector('#u-save').onclick=async()=>{
     const role=roleSel.value, ver=ov.querySelector('#u-ver').checked;
+    // Rolsiz («staff» — tayinlanmagan) hisobni faollashtirib bo'lmaydi: u hech qanday bo'limга kira olmaydi.
+    if(ver && (!role || role==='staff')){ alert('Avval aniq rol tanlang (o‘qituvchi, kassir, qorovul va h.k.).\n\n«Xodim — rol tayinlanmagan» holatida hisobni faollashtirib bo‘lmaydi (u tizimda hech narsani ko‘ra olmaydi).'); return; }
     const needsCls=(role==='kurator'||role==='teacher');
     const assignedClasses = needsCls ? [...ov.querySelectorAll('[data-cls]:checked')].map(c=>c.value) : [];
     const assignedSubjects = (role==='teacher') ? [...ov.querySelectorAll('[data-subj]:checked')].map(c=>c.value) : [];
@@ -5347,7 +5351,7 @@ async function renderPriceTable(){
 }
 /* ===== Avtomatik CHEGIRMA dvigateli (test qilingan — 21/21) =====
  * priceKeyOf: narx jadvali kaliti (til-sinf[-yo'nalish]). classLetter EMAS (harf narxga ta'sir qilmaydi).
- * computeSiblingSet: umumiy telefon -> oila; 10% ni bitta MOS farzandga (past ballik) tayinlaydi.
+ * computeSiblingSet: bir xil telefon + familiya -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 function priceKeyOf(s){ const t=String(s.track||'').trim(); return `${s.lang||'uz'}-${Number(s.grade)||0}`+(t?`-${t}`:''); }
@@ -5371,28 +5375,44 @@ function prevMonthStr(m){ const p=String(m||'').split('-'); let y=Number(p[0])||
 const UZ_MONTHS=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
 function fmtMonthUz(m){ const p=String(m||'').split('-'); return (p.length===2 && UZ_MONTHS[Number(p[1])-1])?`${UZ_MONTHS[Number(p[1])-1]} ${p[0]}`:String(m||''); }
 function pmNum(v){ return (typeof v==='number') ? v : (v!=null && v!=='' && !isNaN(Number(v)) ? Number(v) : null); }
-// Aka-uka FAQAT ota-ona telefoni bir xil bo'lsa (familiyaga QARALMAYDI). To'liq 9 xonali
-// mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqamlar guruhlamaydi.
+// Aka-uka = BIR XIL ota-ona telefoni VA bir xil familiya (oila sharti — ikkalasi ham mos kelsin).
+//   To'liq 9 xonali mobil raqam talab qilinadi; chala/qolip (masalan 000000000) raqam guruhlamaydi.
 function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}$/.test(p)) ? p : ''; }
+// Ismdagi familiya/otasining-ismi O'ZAKLARI (jinsga bog'liq qo'shimchalar olib tashlangan — aka
+//   «...ov» va singil «...ova» BIR oilaga tushsin). Ism tartibi (Ism-Familiya yoki Familiya-Ism)
+//   muhim emas: barcha so'z o'zaklari TO'PLAM sifatida taqqoslanadi — umumiy o'zak bo'lsa bir oila.
+function pmSurnameStems(name){
+  return [...new Set(String(name||'').toLowerCase()
+    .replace(/[^a-zа-яёʻʼ'-]+/gi,' ').split(/[\s-]+/)
+    .map(t=>t.replace(/[ʻʼ']/g,''))
+    .filter(t=>t.length>=3)
+    .map(t=>t.replace(/(ovich|ovna|evich|evna|ogli|ogli|ugli|qizi|kizi|yeva|yev|ova|eva|ov|ev|ina|in)$/,''))
+    .filter(t=>t.length>=3))];
+}
 function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const EXCL=['teacher_child','olympiad','contract'];
   const getScore = scoreFn || (s=>pmNum(s.score));   // lag qo'llanganda — o'tgan oy monitoring balli
-  const phoneMap={};
+  // Har o'quvchi: to'g'ri telefon(lar) + familiya o'zaklari.
+  const info={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
-    [...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))]
-      .forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
+    info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))],
+                stems:new Set(pmSurnameStems(s.name)) }; });
+  const shareSurname=(a,b)=>{ const A=info[a].stems; for(const x of info[b].stems){ if(A.has(x)) return true; } return false; };
   const parent={};
   const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
   const union=(a,b)=>{ parent[find(a)]=find(b); };
   students.forEach(s=>{ const sid=s.studentId||s._id; if(!(sid in parent)) parent[sid]=sid; });
-  Object.values(phoneMap).forEach(sids=>{ for(let i=1;i<sids.length;i++) union(sids[0],sids[i]); });
+  // Telefon bo'yicha nomzodlar; FAQAT familiya o'zagi ham mos kelsagina birlashtiramiz (oila sharti).
+  const phoneMap={};
+  students.forEach(s=>{ const sid=s.studentId||s._id; info[sid].phones.forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
+  Object.values(phoneMap).forEach(sids=>{ for(let i=0;i<sids.length;i++) for(let j=i+1;j<sids.length;j++){ if(shareSurname(sids[i],sids[j])) union(sids[i],sids[j]); } });
   const comp={}; students.forEach(s=>{ const sid=s.studentId||s._id; const r=find(sid); (comp[r]=comp[r]||[]).push(s); });
   const CAP=8;
   const meta=s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
     const exclusive=EXCL.includes(pv.specialCategory);
     const score=getScore(s);
     const gets20=!exclusive && score!=null && score>=90;
-    // Fakturasi YARATILMAYDIGAN (narx/kontrakt yo'q -> o'tkaziladigan) bola 10% slotни OLMASIN —
+    // Fakturasi YARATILMAYDIGAN (narx/kontrakt yo'q -> o'tkaziladigan) bola chegirma OLMASIN —
     //   aks holда oila chegirmani yo'qotardi (slot faktura chiqmaydigan bolaga ketardi).
     const billable = canBillFn ? !!canBillFn(s) : true;
     const eligible10=!exclusive && !gets20 && billable;
@@ -5402,18 +5422,21 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const tenHolders=new Set(); const conflicts=[];
   Object.values(comp).forEach(members=>{
     const ms=members.map(meta); const size=members.length;
-    const overrides=ms.filter(m=>m.pv.siblingDiscount==='Ha');
-    if(overrides.length){
-      const overrideEligible=overrides.filter(m=>m.eligible10);
-      overrides.filter(m=>!m.eligible10).forEach(m=>conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':'eksklyuziv'} — e'tiborsiz`));
-      if(overrideEligible.length){
-        overrideEligible.sort(tiebreak); tenHolders.add(overrideEligible[0].sid);
-        if(overrideEligible.length>1) conflicts.push(`Oilada ${overrideEligible.length} ta 'Ha' — faqat ${overrideEligible[0].sid} ga 10% berildi`);
-        return;
-      }
+    const elig=ms.filter(m=>m.eligible10);
+    if(size>CAP){
+      conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon?) — avtomatik chegirma berilmadi`);
+    } else if(size>=3){
+      // 3+ aka-uka -> HAR BIR mos o'quvchiga 10%.
+      elig.forEach(m=>tenHolders.add(m.sid));
+    } else if(size===2 && elig.length){
+      // 2 aka-uka -> bittasiga (past ballik) 10%.
+      const srt=elig.slice().sort(tiebreak); tenHolders.add(srt[0].sid);
     }
-    if(size>=2 && size<=CAP){ const elig=ms.filter(m=>m.eligible10); if(elig.length){ elig.sort(tiebreak); tenHolders.add(elig[0].sid); } }
-    else if(size>CAP){ conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon?) — avtomatik 10% berilmadi`); }
+    // Qo'lda «Aka-uka chegirmasi = Ha» (admin override) — hajmdan qat'i nazar har bir MOS bola 10% oladi.
+    ms.filter(m=>m.pv.siblingDiscount==='Ha').forEach(m=>{
+      if(m.eligible10) tenHolders.add(m.sid);
+      else conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':'eksklyuziv'} — e'tiborsiz`);
+    });
   });
   return { tenHolders, conflicts };
 }

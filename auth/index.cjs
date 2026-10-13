@@ -12,7 +12,7 @@
  * Endpointlar (nginx /authapi/* -> 127.0.0.1:8792):
  *   POST /auth/request-otp        { phone, purpose:'register'|'reset'|'change_phone', jwt? }
  *   POST /auth/verify-otp         { phone, purpose, code }                 -> { ok, ticket }
- *   POST /auth/register           { ticket, password, firstName, lastName, role:'teacher'|'parent' }
+ *   POST /auth/register           { ticket, password, firstName, lastName, role:'staff'|'parent' }
  *   POST /auth/login              { phone, password }                      -> { ok, access_token, refresh_token }
  *   POST /auth/reset-confirm      { ticket, newPassword }
  *   POST /auth/change-phone-confirm { ticket }
@@ -65,7 +65,7 @@ function makeHandlers(deps) {
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
   const OTP_TPL = C.otpTemplate || 'IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.';
   const DRY = !eskiz;
-  const ALLOWED_ROLES = new Set(['teacher', 'parent']);
+  const ALLOWED_ROLES = new Set(['staff', 'parent']);   // 'staff' = umumiy xodim (aniq rol — teacher/kassir/qorovul... — admin tasdiqlashda beriladi)
   const PURPOSES = new Set(['register', 'reset', 'change_phone']);
 
   const nowISO = () => new Date().toISOString();
@@ -183,16 +183,16 @@ function makeHandlers(deps) {
       if (cr.error) return { ok: false, error: 'Bu telefon allaqachon ro‘yxatdan o‘tgan. Kirish sahifasiga o‘ting.', redirect: 'login' };
     }
     const uid = cr.data.user.id;
-    const verified = (role === 'parent');                 // parent darhol faol; teacher admin tasdig'ini kutadi
-    const status = (role === 'teacher') ? 'pending' : 'active';
+    const verified = (role === 'parent');                 // parent darhol faol; xodim admin tasdig'ini kutadi
+    const status = (role === 'staff') ? 'pending' : 'active';
     const { error: uErr } = await sb.from('users').insert({
       id: uid, email, phone: canon, role, verified, status,
       firstName, lastName, name: displayName, createdAt: nowISO(), updatedAt: nowISO(),
     });
     if (uErr) { try { await admin.auth.admin.deleteUser(uid); } catch (_) {} return { ok: false, error: 'Ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring.' }; }
     return {
-      ok: true, role, verified, email, phone: canon, pending: role === 'teacher',
-      message: role === 'teacher'
+      ok: true, role, verified, email, phone: canon, pending: role === 'staff',
+      message: role === 'staff'
         ? 'Ro‘yxatdan o‘tdingiz! Hisobingiz administrator tasdig‘ini kutmoqda.'
         : 'Ro‘yxatdan o‘tdingiz! Endi kirishingiz mumkin.',
     };

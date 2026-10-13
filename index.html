@@ -2695,13 +2695,13 @@ addEventListener('hashchange', ()=>route(true));
           } else if(step==='reg_role'){
             B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 10px">Kim sifatida ro‘yxatdan o‘tasiz?</p>
               <div style="display:flex;flex-direction:column;gap:10px">
-                <button data-role="teacher" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">👩‍🏫 O‘qituvchi</button>
+                <button data-role="staff" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">👤 Xodim</button>
                 <button data-role="parent" style="text-align:left;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;color:var(--ink);cursor:pointer">👨‍👩‍👧 Ota-ona</button></div>
               <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:12px">Hisobingiz bormi? <a id="ph-tologin" style="${LINK}">Kirish</a></div>`;
             bg.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{ st.role=b.dataset.role; render('reg_form'); });
             $('ph-tologin').onclick=()=>render('login');
           } else if(step==='reg_form'){
-            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 2px">${st.role==='teacher'?'O‘qituvchi':'Ota-ona'} sifatida. Raqamingizga tasdiqlash kodi yuboriladi.</p>
+            B.innerHTML=`<p style="color:var(--muted);font-size:13.5px;margin:2px 0 2px">${st.role==='staff'?'Xodim':'Ota-ona'} sifatida. Raqamingizga tasdiqlash kodi yuboriladi.${st.role==='staff'?' Rolingizni (o‘qituvchi, kassir, qorovul va h.k.) administrator tasdiqlashda belgilaydi.':''}</p>
               ${phoneField('ph-phone')}${passField('ph-pass','Parol')}${pwChk}${passField('ph-pass2','Parolni takrorlang')}${errBox}
               <button id="ph-go" style="${BTN}">Kod yuborish</button>
               <div style="text-align:center;font-size:13.5px;color:var(--muted);margin-top:10px"><a id="ph-back" style="${LINK}">← Orqaga</a></div>`;
