@@ -101,7 +101,8 @@ function makeHandlers(deps) {
 
     // (2) Anti-abuse: soatlik limit (telefon + IP) + 60s qayta-yuborish (SMS yuboriladigan yo'lда).
     const hourAgo = new Date(Date.now() - 3600e3).toISOString();
-    const { data: recent } = await sb.from('otp_codes').select('id').eq('phone', canon).gte('createdAt', hourAgo);
+    const { data: recent, error: selErr } = await sb.from('otp_codes').select('id').eq('phone', canon).gte('createdAt', hourAgo);
+    if (selErr) console.error('OTP select fail:', selErr.code || '', selErr.message || selErr, selErr.details || '', selErr.hint || '');
     if ((recent || []).length >= OTP_MAX_HOUR) return { ok: false, error: `Soatiga ${OTP_MAX_HOUR} martadan ortiq kod so‘rab bo‘lmaydi. Keyinroq urinib ko‘ring.` };
     // IP bo'yicha limit — bitta manba ko'p raqamga SMS «pompalamasin» (toll fraud).
     const ip = String(body._ip || '').slice(0, 64);
@@ -121,7 +122,7 @@ function makeHandlers(deps) {
     // Oldingi ishlatilmagan kodlarni bekor qilamiz (faqat oxirgisi amal qilsin).
     await sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false);
     const { error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid, ip });
-    if (insErr) return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' };
+    if (insErr) { console.error('OTP insert fail:', insErr.code || '', insErr.message || insErr, insErr.details || '', insErr.hint || ''); return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' }; }
 
     const msg = String(OTP_TPL).replace('{code}', code);
     if (DRY) console.log('[DRY OTP]', redactPhone(canon), purpose, code);
