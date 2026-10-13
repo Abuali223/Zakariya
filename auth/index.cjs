@@ -126,7 +126,7 @@ function makeHandlers(deps) {
 
     const msg = String(OTP_TPL).replace('{code}', code);
     if (DRY) console.log('[DRY OTP]', redactPhone(canon), purpose, code);
-    else { try { const r = await eskiz.send(canon, msg); if (!r.ok) console.error('OTP SMS fail', redactPhone(canon), r.error); } catch (e) { console.error('OTP SMS exc', redactPhone(canon)); } }
+    else { try { const r = await eskiz.send(canon, msg); if (!r.ok) console.error('OTP SMS fail', redactPhone(canon), r.error, (r.raw || '').slice(0, 300)); } catch (e) { console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); } }
     return { ok: true, resendAfter: OTP_RESEND };
   }
 
