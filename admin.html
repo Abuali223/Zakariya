@@ -3767,6 +3767,16 @@ function dailyWorkMinFor(person){ const R=personRules(person); return Math.max(0
 //   rec.lessons — o'tilgan dars soni; rec.ratePerLesson — yozuvda muhrlangan stavka (yo'q bo'lsa 40 000).
 const SUB_LESSON_RATE_DEFAULT = 40000;
 function subCredit(absentPerson, month, rec){
+  // ESKI FORMAT (deploy'dan OLDIN yozilgan — lessons/ratePerLesson yo'q, lekin coverMode bor):
+  //   jim 0 bo'lib qolmasligi / noto'g'ri qayta baholanmasligi uchun eski mantiq bilan baholaymiz
+  //   (to'liq kun -> kelmaganning kunlik stavkasi; ulush -> coverMin/kunlik daqiqa). Yangi yozuvlar
+  //   esa quyida lessons × ratePerLesson. Eski yozuvlarni YANGI formatда qayta kiritish tavsiya etiladi.
+  if(rec && rec.lessons==null && rec.ratePerLesson==null && rec.coverMode){
+    const dRate=dailyRateFor(absentPerson, month); if(dRate<=0) return 0;
+    const cm=Number(rec.coverMin)||0; if(cm<=0) return dRate;
+    const dMin=dailyWorkMinFor(absentPerson); if(dMin<=0) return dRate;
+    return Math.round(dRate * Math.min(cm, dMin) / dMin);
+  }
   const lessons = Math.max(0, Number(rec && rec.lessons) || 0);
   const rate = Number(rec && rec.ratePerLesson) || SUB_LESSON_RATE_DEFAULT;
   return Math.round(lessons * rate);
@@ -3830,12 +3840,19 @@ async function renderStaffAttendance(){
     const candByKey=k=>cands.find(x=>(x.refType+':'+x.refId)===k)||null;
     const mon=String(day).slice(0,7);
     const fld='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit';
-    // 1 dars haqi (config/finance.lessonRate, standart 40 000).
-    let rate=SUB_LESSON_RATE_DEFAULT; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).lessonRate)>0) rate=Number(c.data().lessonRate); }catch(e){}
+    // 1 dars haqi (config/finance.lessonRate, standart 40 000). O'QISH XATO bo'lsa -> to'xtaymiz
+    //   (noto'g'ri stavkada yozuv muhrlanmasligi uchun). Hujjat yo'q bo'lsa — standart 40 000 to'g'ri.
+    let rate=SUB_LESSON_RATE_DEFAULT, rateRead=false;
+    try{ const c=await getDoc(doc(db,'config','finance')); rateRead=true; if(c.exists()&&Number((c.data()||{}).lessonRate)>0) rate=Number(c.data().lessonRate); }catch(e){}
+    if(!rateRead){ toast('1 dars haqini (sozlama) o‘qib bo‘lmadi — tarmoqni tekshirib qayta oching',true); return; }
     // Mavjud o'rinbosarlar (shu kelmagan odam + kun) — eski bitta-id format ham qamraladi.
-    let existIds=[], initRows=[];
+    //   O'QISH XATO bo'lsa -> TO'XTAYMIZ: bo'sh forma ko'rsatib, saqlashда eski yozuvlarni tozalamay
+    //   qolib (dublikat/ikki marta haq) ketmasligi uchun.
+    let existIds=[], initRows=[], readOk=false;
     try{ const ss=await getDocs(query(collection(db,'staff_substitutions'), where('day','==',day)));
+      readOk=true;
       ss.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.absentRefType)===String(absent.refType) && String(x.absentRefId)===String(absent.refId)){ existIds.push(d.id); if(x.subRefType&&x.subRefId) initRows.push({ key:(x.subRefType||'')+':'+String(x.subRefId||''), lessons:Math.max(1, Number(x.lessons)||1) }); } }); }catch(e){}
+    if(!readOk){ toast('Mavjud o‘rinbosarlarni o‘qib bo‘lmadi — qayta urinib ko‘ring',true); return; }
     let rows = initRows.length ? initRows : [{ key:'', lessons:1 }];
     const optsFor=sel=>`<option value="">— o‘qituvchi tanlang —</option>`+cands.map(x=>`<option value="${esc(x.refType+':'+x.refId)}" ${sel===(x.refType+':'+x.refId)?'selected':''}>${esc(x.name||x.cam)}${x.refType==='teacher'?' — o‘qituvchi':(x.pos?` — ${esc(x.pos)}`:'')}</option>`).join('');
     const updTotal=()=>{ const tl=rows.reduce((s,r)=>s+Math.max(0,Number(r.lessons)||0),0); const box=$('#sub-total'); if(box) box.innerHTML=`Jami: <b>${tl}</b> dars × ${fmtSom(rate)} = <b style="color:#1F7A4D">${fmtSom(tl*rate)}</b> so‘m`; };
@@ -3871,18 +3888,22 @@ async function renderStaffAttendance(){
       const b=$('#sub-save'); if(b){ b.disabled=true; b.textContent='Saqlanmoqda…'; }
       try{
         if(!keys.length){
-          if(existIds.length){ for(const oid of existIds){ try{ await deleteDoc(doc(db,'staff_substitutions',oid)); }catch(e){} } toast('O‘rinbosarlik o‘chirildi'); closeModal(); onDone&&onDone(); return; }
+          // O'rinbosarlikni o'chirish — barcha mavjud yozuvlarni o'chiramiz. Xato bo'lsa TO'XTAYMIZ
+          //   (jim muvaffaqiyat deb ko'rsatmay — aks holда yozuv qolib, haq saqlanib qolardi).
+          if(existIds.length){ for(const oid of existIds){ await deleteDoc(doc(db,'staff_substitutions',oid)); } toast('O‘rinbosarlik o‘chirildi'); closeModal(); onDone&&onDone(); return; }
           if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Kamida bitta o‘qituvchi va dars sonini kiriting',true); return;
         }
-        const keepIds=[];
+        const keepIds=keys.map(k=>{ const p=k.split(':'); return `${absent.refType}_${absent.refId}_${day}_${p[0]}_${p[1]}`; });
+        // IZCHILLIK: 1) AVVAL eski/olib tashlangan yozuvlarni o'chiramiz (eski bitta-id format ham) —
+        //   ikki marta haq (dublikat) oldini olish. deleteDoc XATO bersa — yozishдан OLDIN TO'XTAYMIZ
+        //   (eski holat butun qoladi: dublikat ham, yo'qotish ham yo'q). 2) Keyin yangilarini yozamiz.
+        for(const oid of existIds){ if(keepIds.indexOf(oid)===-1) await deleteDoc(doc(db,'staff_substitutions',oid)); }
         for(const k of keys){ const [srt,srid]=k.split(':'); const subp=candByKey(k)||{};
-          const id=`${absent.refType}_${absent.refId}_${day}_${srt}_${srid}`; keepIds.push(id);
+          const id=`${absent.refType}_${absent.refId}_${day}_${srt}_${srid}`;
           await setDoc(doc(db,'staff_substitutions',id), { day, month:mon, absentRefType:absent.refType, absentRefId:String(absent.refId), absentCam:String(absent.cam||''), absentName:absent.name||'', subRefType:srt, subRefId:String(srid), subCam:String(subp.cam||''), subName:subp.name||'', lessons:map[k], ratePerLesson:rate, coverMode:'lessons', createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }, {merge:true});
         }
-        // Olib tashlangan / eski-format yozuvlarni o'chiramiz (ikki marta sanalmasin).
-        for(const oid of existIds){ if(keepIds.indexOf(oid)===-1){ try{ await deleteDoc(doc(db,'staff_substitutions',oid)); }catch(e){} } }
         toast('O‘rinbosar(lar) saqlandi ✓'); closeModal(); onDone&&onDone();
-      }catch(e){ if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Xatolik: '+(e.code||e.message),true); }
+      }catch(e){ if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Xatolik: '+(e.code||e.message)+' — qayta urinib ko‘ring',true); }
     };
   };
   // ------- KUNLIK -------
@@ -4054,7 +4075,8 @@ async function renderStaffAttendance(){
     const personByRef={}; bodyRows.forEach(o=>{ personByRef[o.r.refType+':'+o.r.refId]=o.r; });
     const subBonusByRef={}, subDaysByRef={}, subForByRef={}, coveredByRef={};
     (subs||[]).forEach(x=>{ const subKey=(x.subRefType||'')+':'+(x.subRefId||''); const absKey=(x.absentRefType||'')+':'+(x.absentRefId||'');
-      const rate=subCredit(null, mon, x);                         // lessons × ratePerLesson (kelmaganга bog'liq EMAS)
+      const ap=personByRef[absKey];                               // eski-format yozuvni to'g'ri baholash uchun (yangisiga ta'sir yo'q)
+      const rate=subCredit(ap, mon, x);                           // yangi: lessons × ratePerLesson; eski: eski mantiq
       const lessons=Math.max(0, Number(x.lessons)||0);
       subBonusByRef[subKey]=(subBonusByRef[subKey]||0)+rate;
       subDaysByRef[subKey]=(subDaysByRef[subKey]||0)+lessons;      // jami o'tilgan dars soni
@@ -4652,7 +4674,7 @@ async function openSalaryPayout(opts){
     const info=$('#sp-ded-info'), inp=$('#sp-ded');
     paidTouched=false;
     const sub=(SUBALL||[]).filter(x=> x.subRefType===p.kind && String(x.subRefId)===String(p.refId) && String(x.month)===String(mm))
-      .reduce((s,x)=>s + subCredit(null, mm, x), 0);   // lessons × ratePerLesson (kelmaganга bog'liq EMAS)
+      .reduce((s,x)=>{ const ap=payeeByRef[(x.absentRefType||'')+':'+String(x.absentRefId||'')]; return s + subCredit(ap, mm, x); }, 0);   // yangi: lessons×rate; eski: eski mantiq
     const prior=carryBalance((SALL||[]).filter(r=>String(r.teacherId)===String(tid)), mm);
     if($('#sp-sub')) $('#sp-sub').value=String(Math.round(sub));
     if($('#sp-prior')) $('#sp-prior').value=String(Math.round(prior));
@@ -5508,12 +5530,16 @@ function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}
 //   «...ov» va singil «...ova» BIR oilaga tushsin). Ism tartibi (Ism-Familiya yoki Familiya-Ism)
 //   muhim emas: barcha so'z o'zaklari TO'PLAM sifatida taqqoslanadi — umumiy o'zak bo'lsa bir oila.
 function pmSurnameStems(name){
-  return [...new Set(String(name||'').toLowerCase()
-    .replace(/[^a-zа-яёʻʼ'-]+/gi,' ').split(/[\s-]+/)
-    .map(t=>t.replace(/[ʻʼ']/g,''))
-    .filter(t=>t.length>=3)
-    .map(t=>t.replace(/(ovich|ovna|evich|evna|ogli|ogli|ugli|qizi|kizi|yeva|yev|ova|eva|ov|ev|ina|in)$/,''))
-    .filter(t=>t.length>=3))];
+  // Avval Kirillchaни lotinchaga o'giramiz — jins qo'shimchalari (ов/ова) o'zakka kelib, ғ/қ/ҳ/ў
+  //   o'chib ketmaydi (aks holда Kirillcha yozuvlar uchun aka/singil mos kelmaydi).
+  const M={'а':'a','б':'b','в':'v','г':'g','ғ':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y','к':'k','қ':'q','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ў':'o','ф':'f','х':'h','ҳ':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'i','ь':'','э':'e','ю':'yu','я':'ya'};
+  const t=String(name||'').toLowerCase().replace(/[а-яёғқҳў]/g,c=>(c in M)?M[c]:c);
+  return [...new Set(t
+    .replace(/[^a-zʻʼ'-]+/gi,' ').split(/[\s-]+/)
+    .map(x=>x.replace(/[ʻʼ']/g,''))
+    .filter(x=>x.length>=3)
+    .map(x=>x.replace(/(ovich|ovna|evich|evna|ogli|ugli|qizi|kizi|yeva|yev|ova|eva|ov|ev|ina|in)$/,''))
+    .filter(x=>x.length>=3))];
 }
 function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const EXCL=['teacher_child','olympiad','contract'];
@@ -5523,7 +5549,11 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   //   jins qo'shimchasi/imlo bo'yicha har xil bo'lishi mumkin, lekin ota-ona bir xil -> ishonchli.
   const info={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
-    const pstems=new Set([...pmSurnameStems(pv.fatherName), ...pmSurnameStems(pv.motherName)]);   // ota + ona
+    let pstems=new Set([...pmSurnameStems(pv.fatherName), ...pmSurnameStems(pv.motherName)]);   // ota + ona
+    // ZAXIRA: ota/ona F.I.Sh umuman to'ldirilmagan bo'lsa (chala import), farzand ismiga qaytamiz —
+    //   aks holда shunday bola oiladan ajralib, 3+ oilani buzardi (faqat BO'SH holatда — noto'g'ri
+    //   guruhlash qo'shmaydi; union-find faqat qirra qo'shadi, to'g'ri guruhlashni buzmaydi).
+    if(!pstems.size) pstems=new Set(pmSurnameStems(s.name));
     info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))], stems:pstems }; });
   const shareSurname=(a,b)=>{ const A=info[a].stems; for(const x of info[b].stems){ if(A.has(x)) return true; } return false; };
   const parent={};
