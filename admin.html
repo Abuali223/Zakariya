@@ -538,7 +538,7 @@ const SCHEMAS = {
       {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
       {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
       {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
-      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— yo‘q (avtomatik)'},{v:'Ha',l:'Ha (10%) — majburan'}],note:'Avtomatik: 3+ aka-uka (bir xil familiya + telefon) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Bu yerda «Ha» — faqat qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun).'},
+      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— yo‘q (avtomatik)'},{v:'Ha',l:'Ha (10%) — majburan'}],note:'Avtomatik: 3+ aka-uka (bir xil ota YOKI ona familiyasi + bir xil ota-ona telefoni) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Farzand ismi/familiyasi har xil bo‘lishi mumkin — OTA/ONA (F.I.Sh) va telefon bir xil bo‘lsa yetarli. Bu yerda «Ha» — faqat qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun).'},
       {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
       {k:'referrerId',l:'Kim tavsiya qilgan (referral) — 300 000 unga',t:'text',placeholder:'tavsiya qilgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
@@ -2980,17 +2980,60 @@ async function renderCollection(name){
         if(c[0]==='salary'||c[0]==='baseSalary'){ const n=salaryNum(v); return `<td data-label="${esc(c[1])}">${n>0?`<b>${fmtSom(n)}</b>`:'—'}</td>`; }
         return `<td data-label="${esc(c[1])}">${esc(v==null?'':v)}</td>`;
       }).join('');
-      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions">${(name==='teachers'||name==='staff')?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>`:''}</tr>`;
+      return `<tr>${tds}${canMng?`<td class="td-actions"><div class="row-actions">${(name==='teachers'||name==='staff')?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${name==='teachers'?`<button class="btn sm ghost2" data-classes="${esc(r._id)}" title="Sinf/fan biriktirish — bog‘langan login hisobiga">📚 Sinflar</button>`:''}<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>`:''}</tr>`;
     }).join('');
     $('#col-card').innerHTML = `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
     if(canMng){
       $('#col-card').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(name, rows.find(r=>r._id===b.dataset.edit))));
       $('#col-card').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc(name, b.dataset.del)));
       if(name==='teachers'||name==='staff') $('#col-card').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status), name, ()=>renderCollection(name))));
+      if(name==='teachers') $('#col-card').querySelectorAll('[data-classes]').forEach(b=>b.addEventListener('click',()=>openTeacherClassPicker(rows.find(r=>r._id===b.dataset.classes), ()=>renderCollection(name))));
     }
   };
   draw(fmemApply('col-search-'+name));
   const si=$('#col-search-'+name); if(si) si.addEventListener('input',()=>draw(si.value));
+}
+
+// O'qituvchi kartasidan SINF/FAN biriktirish — BOG'LANGAN login hisobiga (teachers.userUid) yoziladi.
+//   (Sinf/fan — tizimga kirish huquqi uchun; shuning uchun login hisobiga yoziladi, teachers yozuviga emas.)
+async function openTeacherClassPicker(t, onDone){
+  if(!t){ return; }
+  const uid=String(t.userUid||'');
+  if(!uid){ alert('Bu o‘qituvchi login hisobiga bog‘lanmagan.\n\nSinf/fan biriktirish login hisobiga yoziladi. Avval bog‘lang:\n• O‘qituvchi o‘z telefoni bilan «Xodim» sifatida ro‘yxatdan o‘tsa — AVTOMATIK bog‘lanadi, yoki\n• «Foydalanuvchilar» bo‘limida qo‘lda bog‘lang.'); return; }
+  let u=null; try{ const d=await getDoc(doc(db,'users',uid)); if(d&&d.exists&&d.exists()) u={_id:uid,...(d.data()||{})}; }catch(e){}
+  if(!u){ alert('Bog‘langan login hisobi topilmadi (o‘chirilgan bo‘lishi mumkin). «Foydalanuvchilar» bo‘limida tekshiring.'); return; }
+  let CLS={classes:{},keys:[]};
+  try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
+  const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
+  const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
+  const roleNote = (u.role!=='teacher'&&u.role!=='kurator') ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Diqqat: bog‘langan login roli — <b>${esc(u.role||'—')}</b>. Sinf/fan to‘liq ishlashi (baho/davomat) uchun «Foydalanuvchilar»da rolni <b>O‘qituvchi</b> yoki <b>Kurator</b> qiling.</div>` : '';
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
+      <div><h3 style="font-size:18px;margin:0">${esc(t.name||'O‘qituvchi')} — sinf biriktirish</h3><div class="small muted">Login: ${esc(u.phone?('+'+String(u.phone).replace(/\D/g,'')):(u.email||uid))}</div></div>
+      <button id="tc-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+    </div>
+    <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
+      ${roleNote}
+      <div><label class="ulbl">Biriktirilgan sinflar <span class="small muted" style="font-weight:400">— bir nechtasini belgilang</span></label><div class="uchk-grid">${clsChecks}</div></div>
+      <div><label class="ulbl">Biriktirilgan fanlar <span class="small muted" style="font-weight:400">— baho kiritadigan fan(lar)</span></label><div class="uchk-grid">${subjChecks}</div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)">
+      <button class="btn" id="tc-cancel">Bekor</button><button class="btn gold" id="tc-save">Saqlash</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',onKey);
+  ov.querySelector('#tc-x').onclick=close; ov.querySelector('#tc-cancel').onclick=close; ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
+  ov.querySelector('#tc-save').onclick=async()=>{
+    const assignedClasses=[...ov.querySelectorAll('[data-cls]:checked')].map(c=>c.value);
+    const assignedSubjects=[...ov.querySelectorAll('[data-subj]:checked')].map(c=>c.value);
+    const b=ov.querySelector('#tc-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    try{ await setDoc(doc(db,'users',uid), {assignedClasses, assignedSubjects}, {merge:true}); toast('Sinf/fan saqlandi ✓'); cache.users=null; close(); onDone&&onDone(); }
+    catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
+  };
 }
 
 /* ---- Add/Edit form (modal) ---- */
@@ -3717,14 +3760,16 @@ function dailyRateFor(person, month){
 }
 // Bir kunlik SOF ish daqiqasi (ish vaqti − ruxsat etilgan tanaffus) — attMetrics dailyMin bilan bir xil.
 function dailyWorkMinFor(person){ const R=personRules(person); return Math.max(0,(R.workEndMin-R.workStartMin)-R.allowedBreakMin); }
-// O'rinbosarlik krediti: kelmaganning kunlik maoshidan o'tib berilgan ulush.
-//   rec.coverMin (dars daqiqalari) berilsa -> ulush = dailyRate × coverMin/dailyMin (to'liq kundan oshmaydi);
-//   bo'lmasa (0/NULL) -> to'liq kunlik stavka (kunlik maosh). absentPerson: {salary, workStart/End/Days}.
+// O'rinbosarlik krediti (MAKTAB QOIDASI): har O'TILGAN DARS uchun QAT'IY stavka (standart 40 000 so'm).
+//   Kelmagan o'qituvchining oyligiga BOG'LIQ EMAS — maktab har bir o'tib berilgan dars uchun alohida
+//   haq to'laydi (har darsга alohida o'qituvchi biriktirilgani uchun). Kelmagan o'qituvchining o'sha
+//   kungi oyligi davomat orqali to'liq ushlanadi (bu funksiyaга aloqasi yo'q).
+//   rec.lessons — o'tilgan dars soni; rec.ratePerLesson — yozuvda muhrlangan stavka (yo'q bo'lsa 40 000).
+const SUB_LESSON_RATE_DEFAULT = 40000;
 function subCredit(absentPerson, month, rec){
-  const dRate=dailyRateFor(absentPerson, month); if(dRate<=0) return 0;
-  const cm=Number(rec&&rec.coverMin)||0; if(cm<=0) return dRate;           // to'liq kun
-  const dMin=dailyWorkMinFor(absentPerson); if(dMin<=0) return dRate;
-  return Math.round(dRate * Math.min(cm, dMin) / dMin);                     // dars ulushi (capped)
+  const lessons = Math.max(0, Number(rec && rec.lessons) || 0);
+  const rate = Number(rec && rec.ratePerLesson) || SUB_LESSON_RATE_DEFAULT;
+  return Math.round(lessons * rate);
 }
 // MAOSH QOLDIG'I (carry-over): shu kishiga `beforeMonth`DAN OLDIN qolib ketgan (to'lanmagan) summa.
 //   balans = Σ(net + subBonus − haqiqatda berilgan paid). paid belgilanmagan (eski) yozuv -> to'liq
@@ -3776,55 +3821,69 @@ async function renderStaffAttendance(){
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
   let lastStaff=[], lastTeachers=[];   // tahrirlash uchun eng oxirgi yuklangan to'liq yozuvlar
   // ------- O'RINBOSAR TANLASH (kelmagan xodim o'rniga dars o'tib bergan) -------
-  const openSubstitutePicker=(absent, day, onDone)=>{
-    // absent: {refType, refId, cam, name, curSub ('rt:rid'|''), curSubName}
+  const openSubstitutePicker=async (absent, day, onDone)=>{
+    // absent: {refType, refId, cam, name}. MAKTAB QOIDASI: har o'tilgan dars = qat'iy stavka (40 000).
+    //   Bir kunда bir nechta o'rinbosar bo'lishi mumkin — har biri o'z dars soni uchun.
     const roster=buildRoster(lastStaff,lastTeachers);
     const cands=roster.filter(x=>!(x.refType===absent.refType && String(x.refId)===String(absent.refId)));
     cands.sort((a,b)=>{ const ta=a.refType==='teacher'?0:1, tb=b.refType==='teacher'?0:1; return ta-tb || String(a.name||'').localeCompare(String(b.name||'')); });
-    const opts=cands.map(x=>`<option value="${esc(x.refType+':'+x.refId)}" ${absent.curSub===(x.refType+':'+x.refId)?'selected':''}>${esc(x.name||x.cam)}${x.refType==='teacher'?' — o‘qituvchi':(x.pos?` — ${esc(x.pos)}`:'')}</option>`).join('');
-    const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
+    const candByKey=k=>cands.find(x=>(x.refType+':'+x.refId)===k)||null;
     const mon=String(day).slice(0,7);
-    const ab=roster.find(x=>x.refType===absent.refType && String(x.refId)===String(absent.refId))||{salary:0};
-    const dRate=dailyRateFor(ab, mon), dMin=dailyWorkMinFor(ab);                       // kelmaganning kunlik stavkasi/daqiqasi
-    const curMode=absent.curCoverMode||'day', curLessons=Number(absent.curLessons)||1, curLessonMin=Number(absent.curLessonMin)||45;
-    $('#modal').innerHTML=`<div class="modal-h"><h3>O‘rnini bosgan xodim</h3><button class="x" id="m-x">×</button></div>
+    const fld='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit';
+    // 1 dars haqi (config/finance.lessonRate, standart 40 000).
+    let rate=SUB_LESSON_RATE_DEFAULT; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()&&Number((c.data()||{}).lessonRate)>0) rate=Number(c.data().lessonRate); }catch(e){}
+    // Mavjud o'rinbosarlar (shu kelmagan odam + kun) — eski bitta-id format ham qamraladi.
+    let existIds=[], initRows=[];
+    try{ const ss=await getDocs(query(collection(db,'staff_substitutions'), where('day','==',day)));
+      ss.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.absentRefType)===String(absent.refType) && String(x.absentRefId)===String(absent.refId)){ existIds.push(d.id); if(x.subRefType&&x.subRefId) initRows.push({ key:(x.subRefType||'')+':'+String(x.subRefId||''), lessons:Math.max(1, Number(x.lessons)||1) }); } }); }catch(e){}
+    let rows = initRows.length ? initRows : [{ key:'', lessons:1 }];
+    const optsFor=sel=>`<option value="">— o‘qituvchi tanlang —</option>`+cands.map(x=>`<option value="${esc(x.refType+':'+x.refId)}" ${sel===(x.refType+':'+x.refId)?'selected':''}>${esc(x.name||x.cam)}${x.refType==='teacher'?' — o‘qituvchi':(x.pos?` — ${esc(x.pos)}`:'')}</option>`).join('');
+    const updTotal=()=>{ const tl=rows.reduce((s,r)=>s+Math.max(0,Number(r.lessons)||0),0); const box=$('#sub-total'); if(box) box.innerHTML=`Jami: <b>${tl}</b> dars × ${fmtSom(rate)} = <b style="color:#1F7A4D">${fmtSom(tl*rate)}</b> so‘m`; };
+    const renderRows=()=>{ const box=$('#sub-rows'); if(!box) return;
+      box.innerHTML=rows.map((r,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <select class="sub-pick" data-i="${i}" style="${fld};flex:1;min-width:0;background:#fff">${optsFor(r.key)}</select>
+        <input type="number" class="sub-les" data-i="${i}" min="1" step="1" value="${Math.max(1,Number(r.lessons)||1)}" style="${fld};width:62px;text-align:center" title="Dars soni">
+        <span class="small muted" style="white-space:nowrap">dars</span>
+        <button type="button" class="btn sm" data-rm="${i}" style="color:#B42318" title="O‘chirish">✕</button>
+      </div>`).join('');
+      box.querySelectorAll('.sub-pick').forEach(s=>s.onchange=()=>{ rows[Number(s.dataset.i)].key=s.value; });
+      box.querySelectorAll('.sub-les').forEach(inp=>inp.oninput=()=>{ rows[Number(inp.dataset.i)].lessons=Math.max(0,Math.round(Number(inp.value)||0)); updTotal(); });   // re-render YO'Q (fokus yo'qolmasin)
+      box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ rows.splice(Number(b.dataset.rm),1); if(!rows.length) rows=[{key:'',lessons:1}]; renderRows(); });
+      updTotal();
+    };
+    $('#modal').innerHTML=`<div class="modal-h"><h3>O‘rnini bosgan o‘qituvchi(lar)</h3><button class="x" id="m-x">×</button></div>
       <div class="modal-b">
-        <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px;margin-bottom:10px"><b>${esc(absent.name||absent.cam)}</b> — ${esc(day)} kuni kelmadi. Kim dars o‘tib berdi?<div class="muted" style="font-weight:400;margin-top:3px">Kunlik maosh: <b>${fmtSom(dRate)}</b>${dMin?` · kunlik ${Math.floor(dMin/60)} s ${dMin%60} daq`:''}</div></div>
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Dars o‘tib bergan xodim<select id="sub-pick" style="${fld};background:#fff">${opts}</select></label>
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Hajmi<select id="sub-mode" style="${fld};background:#fff">
-          <option value="day" ${curMode==='day'?'selected':''}>To‘liq kun (kunlik maosh)</option>
-          <option value="lessons" ${curMode==='lessons'?'selected':''}>Ayrim dars(lar) — soatbay</option></select></label>
-        <div id="sub-lsn" class="grid2" style="margin-top:8px;${curMode==='lessons'?'':'display:none'}">
-          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Nechta dars<input type="number" id="sub-lessons" min="1" step="1" value="${curLessons}" style="${fld}"></label>
-          <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Bir dars (daqiqa)<input type="number" id="sub-lmin" min="1" step="1" value="${curLessonMin}" style="${fld}"></label>
-        </div>
-        <div id="sub-prev" class="small" style="margin-top:10px;background:#EAF7F0;border-radius:10px;padding:10px;font-weight:700;color:#1F7A4D"></div>
-        <div class="small muted" style="margin-top:8px">O‘tilgan dars(lar) ulushi kelmaganning soatbay stavkasida hisoblanadi (1 dars ≈ 45 daq). «To‘liq kun» — butun kunlik maosh. Oylik hisobotda o‘rnini bosgan xodimga qo‘shiladi.</div>
+        <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px;margin-bottom:10px"><b>${esc(absent.name||absent.cam)}</b> — ${esc(day)} kuni kelmadi. Qaysi o‘qituvchi(lar) necha dars o‘tib berdi?<div class="muted" style="font-weight:400;margin-top:3px">Har o‘tilgan dars uchun <b>${fmtSom(rate)}</b> so‘m shu o‘qituvchiga qo‘shiladi. Kelmaganning o‘sha kungi oyligi davomat orqali alohida to‘liq ushlanadi.</div></div>
+        <div id="sub-rows"></div>
+        <button type="button" class="btn ghost" id="sub-add" style="margin-top:2px">+ Yana o‘qituvchi</button>
+        <div id="sub-total" class="small" style="margin-top:10px;background:#EAF7F0;border-radius:10px;padding:10px;font-weight:700;color:#1F7A4D"></div>
+        <div class="small muted" style="margin-top:8px">Bir necha o‘qituvchi har xil dars o‘tgan bo‘lsa — «+ Yana o‘qituvchi» bilan qo‘shing. Hammasini «✕» bilan olib tashlab «Saqlash» bossangiz — o‘rinbosarlik o‘chadi.</div>
       </div>
-      <div class="modal-f">${absent.curSub?`<button type="button" class="btn ghost" style="color:#B42318" id="sub-clr">O‘chirish</button>`:'<button type="button" class="btn ghost" id="m-cancel">Bekor</button>'}<button type="button" class="btn gold" id="sub-save">Saqlash</button></div>`;
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sub-save">Saqlash</button></div>`;
     openModal(); $('#m-x').onclick=closeModal; if($('#m-cancel')) $('#m-cancel').onclick=closeModal;
-    const id=`${absent.refType}_${absent.refId}_${day}`;
-    // Joriy kiritmalardan o'tkaziladigan summani hisoblash + ko'rsatish.
-    const readForm=()=>{ const mode=($('#sub-mode')&&$('#sub-mode').value)||'day';
-      const lessons=Math.max(0, Math.round(Number($('#sub-lessons')&&$('#sub-lessons').value)||0));
-      const lessonMin=Math.max(0, Math.round(Number($('#sub-lmin')&&$('#sub-lmin').value)||0));
-      const coverMin=(mode==='lessons')?lessons*lessonMin:0;
-      return { mode, lessons, lessonMin, coverMin, credit:subCredit(ab, mon, {coverMin}) }; };
-    const refresh=()=>{ const f=readForm(); const ls=$('#sub-lsn'); if(ls) ls.style.display=(f.mode==='lessons')?'':'none';
-      const box=$('#sub-prev'); if(box){ if(f.mode==='lessons') box.innerHTML=`O‘tkaziladigan: <b>${fmtSom(f.credit)}</b> so‘m <span class="muted" style="font-weight:400">(${f.lessons} dars × ${f.lessonMin} daq = ${f.coverMin} daq${(dMin&&f.coverMin>dMin)?', to‘liq kundan oshmaydi':''})</span>`; else box.innerHTML=`O‘tkaziladigan: <b>${fmtSom(f.credit)}</b> so‘m <span class="muted" style="font-weight:400">(to‘liq kun)</span>`; } };
-    if($('#sub-mode')) $('#sub-mode').onchange=refresh;
-    if($('#sub-lessons')) $('#sub-lessons').oninput=refresh;
-    if($('#sub-lmin')) $('#sub-lmin').oninput=refresh;
-    refresh();
-    if($('#sub-clr')) $('#sub-clr').onclick=async()=>{ try{ await deleteDoc(doc(db,'staff_substitutions',id)); toast('O‘chirildi'); closeModal(); onDone&&onDone(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+    renderRows();
+    $('#sub-add').onclick=()=>{ rows.push({key:'',lessons:1}); renderRows(); };
     $('#sub-save').onclick=async()=>{
-      const v=($('#sub-pick')&&$('#sub-pick').value)||''; const [srt,srid]=v.split(':'); if(!srt||!srid){ toast('Xodim tanlang',true); return; }
-      const subp=cands.find(x=>x.refType===srt && String(x.refId)===String(srid))||{};
-      const f=readForm();
-      if(f.mode==='lessons' && (!f.lessons || !f.lessonMin)){ toast('Dars soni va davomiyligini kiriting',true); return; }
-      try{ await setDoc(doc(db,'staff_substitutions',id), { day, month:mon, absentRefType:absent.refType, absentRefId:String(absent.refId), absentCam:String(absent.cam||''), absentName:absent.name||'', subRefType:srt, subRefId:String(srid), subCam:String(subp.cam||''), subName:subp.name||'', coverMode:f.mode, lessons:(f.mode==='lessons'?f.lessons:null), lessonMin:(f.mode==='lessons'?f.lessonMin:null), coverMin:f.coverMin, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() });
-        toast('O‘rinbosar belgilandi ✓'); closeModal(); onDone&&onDone();
-      }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
+      // Yaroqli qatorlar: o'qituvchi tanlangan + dars>0. Bir xil o'qituvchi -> darslar yig'iladi.
+      const map={};
+      rows.forEach(r=>{ if(!r.key) return; const les=Math.max(0,Math.round(Number(r.lessons)||0)); if(les>0) map[r.key]=(map[r.key]||0)+les; });
+      const keys=Object.keys(map);
+      const b=$('#sub-save'); if(b){ b.disabled=true; b.textContent='Saqlanmoqda…'; }
+      try{
+        if(!keys.length){
+          if(existIds.length){ for(const oid of existIds){ try{ await deleteDoc(doc(db,'staff_substitutions',oid)); }catch(e){} } toast('O‘rinbosarlik o‘chirildi'); closeModal(); onDone&&onDone(); return; }
+          if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Kamida bitta o‘qituvchi va dars sonini kiriting',true); return;
+        }
+        const keepIds=[];
+        for(const k of keys){ const [srt,srid]=k.split(':'); const subp=candByKey(k)||{};
+          const id=`${absent.refType}_${absent.refId}_${day}_${srt}_${srid}`; keepIds.push(id);
+          await setDoc(doc(db,'staff_substitutions',id), { day, month:mon, absentRefType:absent.refType, absentRefId:String(absent.refId), absentCam:String(absent.cam||''), absentName:absent.name||'', subRefType:srt, subRefId:String(srid), subCam:String(subp.cam||''), subName:subp.name||'', lessons:map[k], ratePerLesson:rate, coverMode:'lessons', createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }, {merge:true});
+        }
+        // Olib tashlangan / eski-format yozuvlarni o'chiramiz (ikki marta sanalmasin).
+        for(const oid of existIds){ if(keepIds.indexOf(oid)===-1){ try{ await deleteDoc(doc(db,'staff_substitutions',oid)); }catch(e){} } }
+        toast('O‘rinbosar(lar) saqlandi ✓'); closeModal(); onDone&&onDone();
+      }catch(e){ if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Xatolik: '+(e.code||e.message),true); }
+    };
   };
   // ------- KUNLIK -------
   const loadDay=async()=>{
@@ -3840,9 +3899,9 @@ async function renderStaffAttendance(){
     // Shu kun uchun chiqib-kelish belgilari (refType:refId -> {type, awayMin}).
     let bmMap={};
     try{ const bs=await getDocs(query(collection(db,'staff_break_marks'), where('day','==',day))); bs.docs.forEach(d=>{ const x=d.data()||{}; if(x.refType&&x.refId) bmMap[String(x.refType)+':'+String(x.refId)]={ type:(x.type==='personal'?'personal':'excused'), awayMin:Math.max(0,Number(x.awayMin)||0) }; }); }catch(e){}
-    // O'rinbosarlik: kelmagan odam (refType:refId) -> {subRefType, subRefId, subName} (dars o'tib bergan).
+    // O'rinbosarlik: kelmagan odam (refType:refId) -> [{subName, lessons}, ...] (bir kunда bir nechta o'rinbosar).
     let subMap={};
-    try{ const ss=await getDocs(query(collection(db,'staff_substitutions'), where('day','==',day))); ss.docs.forEach(d=>{ const x=d.data()||{}; if(x.absentRefType&&x.absentRefId) subMap[String(x.absentRefType)+':'+String(x.absentRefId)]={ subRefType:x.subRefType||'', subRefId:String(x.subRefId||''), subName:x.subName||'', coverMode:x.coverMode||'day', lessons:Number(x.lessons)||0, lessonMin:Number(x.lessonMin)||0, coverMin:Number(x.coverMin)||0 }; }); }catch(e){}
+    try{ const ss=await getDocs(query(collection(db,'staff_substitutions'), where('day','==',day))); ss.docs.forEach(d=>{ const x=d.data()||{}; if(x.absentRefType&&x.absentRefId){ const k=String(x.absentRefType)+':'+String(x.absentRefId); (subMap[k]=subMap[k]||[]).push({ subName:x.subName||'', lessons:Number(x.lessons)||0 }); } }); }catch(e){}
     const byPerson={}; rows.forEach(r=>{ const pid=String(r.personId||''); if(!pid) return; (byPerson[pid]=byPerson[pid]||[]).push(r); });
     Object.values(byPerson).forEach(l=>l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))));
     const seen=new Set(), bodyRows=[];
@@ -3853,12 +3912,12 @@ async function renderStaffAttendance(){
       const isPers=!!bm && bm.type==='personal';              // «O'z hisobidan» (awayMin daqiqa)
       const refAttr=`data-brkref="${esc(r.refType)}:${esc(r.refId)}" data-brkcam="${esc(r.cam)}" data-brkday="${esc(day)}" data-brkname="${esc(r.name||'')}" data-curtype="${bm?esc(bm.type):''}" data-curaway="${isPers?esc(String(bm.awayMin)):'0'}"`;
       // O'rinbosar belgilash — kelmagan + shaxsiy ish kuni + erkin EMAS.
-      const sub=subMap[r.refType+':'+r.refId]||null;
+      const subList=subMap[r.refType+':'+r.refId]||null;
       const dow=new Date(day+'T00:00:00').getDay(); const isWD=personRules(r).workDays.has(dow);
       const showSub = canEdit && !came && !isFlex && isWD;
-      const subAttr=`data-subabs="${esc(r.refType)}:${esc(r.refId)}" data-subcam="${esc(r.cam)}" data-subday="${esc(day)}" data-subname="${esc(r.name||'')}" data-cursub="${sub?esc(sub.subRefType+':'+sub.subRefId):''}" data-curmode="${sub?esc(sub.coverMode||'day'):''}" data-curlessons="${sub?esc(String(sub.lessons||'')):''}" data-curlmin="${sub?esc(String(sub.lessonMin||'')):''}"`;
-      const subHajm = sub?(sub.coverMode==='lessons'?` · ${sub.lessons||0}×${sub.lessonMin||45} daq`:' · to‘liq kun'):'';
-      const subBlock = (showSub||sub)?`<div style="margin-top:4px">${sub?`<span class="chip" style="background:#EAF7F0;color:#1F7A4D;font-size:11px" title="Dars o‘tib bergan — kelmaganning maoshidan o‘tilgan ulush shu xodimga qo‘shiladi">↪ ${esc(sub.subName||'')} o‘tdi${esc(subHajm)}</span>${canEdit?` <button class="btn sm ghost2" data-subset ${subAttr} title="O‘zgartirish">✏️</button> <button class="btn sm" style="color:#B42318" data-subclr ${subAttr} title="O‘chirish">✕</button>`:''}`:(showSub?`<button class="btn sm ghost2" data-subset ${subAttr} title="Kelmagan xodim o‘rniga dars o‘tib bergan xodimni belgilash">↪ O‘rnini bosgan</button>`:'')}</div>`:'';
+      const subAttr=`data-subabs="${esc(r.refType)}:${esc(r.refId)}" data-subcam="${esc(r.cam)}" data-subday="${esc(day)}" data-subname="${esc(r.name||'')}"`;
+      const subSummary = (subList&&subList.length) ? subList.map(s=>`${esc(s.subName||'—')} (${Number(s.lessons)||0} dars)`).join(', ') : '';
+      const subBlock = (showSub||subList)?`<div style="margin-top:4px">${(subList&&subList.length)?`<span class="chip" style="background:#EAF7F0;color:#1F7A4D;font-size:11px" title="Dars o‘tib bergan o‘qituvchi(lar) — har o‘tilgan dars uchun haq qo‘shiladi">↪ ${subSummary}</span>${canEdit?` <button class="btn sm ghost2" data-subset ${subAttr} title="O‘zgartirish / o‘qituvchi qo‘shish">✏️</button>`:''}`:(showSub?`<button class="btn sm ghost2" data-subset ${subAttr} title="Kelmagan o‘qituvchi o‘rniga dars o‘tib berganlarni belgilash">↪ O‘rnini bosgan</button>`:'')}</div>`:'';
       bodyRows.push(`<tr>
         <td data-label="Xodim">${esc(r.name||r.cam)}${isFlex?` <span class="chip" style="background:#EAF4FF;color:#0369A1;font-size:11px" title="Erkin ish soati — davomat avtomatik kesilmaydi">⏱ Erkin</span>`:''}<div class="small muted">${esc(r.pos)}${r.name?` · ID ${esc(r.cam)}`:''}</div></td>
         <td data-label="Kelgan" style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'<span class="muted">—</span>'}</td>
@@ -3912,7 +3971,7 @@ async function renderStaffAttendance(){
       <td class="c">${o.dm.late||'—'}</td>
       <td class="c">${o.dm.early||'—'}</td>
       <td class="r">${o.dm.total?`<span style="color:#B42318">${S(o.dm.total)}</span>`:'—'}</td>
-      <td class="r">${o.subBonus?`<span style="color:#1F7A4D">+${S(o.subBonus)}</span>${o.subDays?`<div class="sub">${o.subDays} marta</div>`:''}`:'—'}</td>
+      <td class="r">${o.subBonus?`<span style="color:#1F7A4D">+${S(o.subBonus)}</span>${o.subDays?`<div class="sub">${o.subDays} dars</div>`:''}`:'—'}</td>
       <td class="r">${o.gross?S(o.gross):'—'}</td>
       <td class="r"><b style="color:#1F7A4D">${(o.gross||o.subBonus||o.priorBalance)?S(o.totalDue):'—'}</b>${o.priorBalance?`<div class="sub">qoldiq ${o.priorBalance>0?'+':'−'}${S(Math.abs(o.priorBalance))}</div>`:''}</td>
     </tr>`).join('');
@@ -3932,7 +3991,7 @@ async function renderStaffAttendance(){
     <div class="hd">${emblem}<div><h1>IQROR ACADEMY — Xodimlar davomati</h1><div class="sub">Oylik hisobot · <b>${fmtMonthUz(mon)}</b> · ${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma) · tuzildi: ${dstr}${who?' · '+esc(who):''}</div></div></div>
     <table><thead><tr><th>№</th><th>Xodim</th><th>Ishlagan<br>kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt.<br>kelish</th><th>Kechikish<br>(kun)</th><th>Erta ketish<br>(kun)</th><th>Ushlanma</th><th>O‘rin-<br>bosarlik</th><th>Nominal<br>oylik</th><th>Oylik<br>(hisob)</th></tr></thead>
     <tbody>${trs}</tbody><tfoot>${tfoot}</tfoot></table>
-    <p class="note"><b>Oylik SOATBAY:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). <b>Ushlanma</b> = yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish. «Sababli» chiqish kesilmaydi. <b>O‘rinbosarlik</b> = kelmagan o‘qituvchi o‘rniga dars o‘tib berilgani uchun kelmaganning maoshidan o‘tilgan ulush (to‘liq kun yoki dars soat(lar)i). <b>Oylik (hisob)</b> = nominal oylik (prorata) − ushlanma + o‘rinbosarlik ± oldingi oylardan qolgan qoldiq (avval kam berilgan maosh keyingi oyga to‘planib boradi; avans alohida).</p>
+    <p class="note"><b>Oylik SOATBAY:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). <b>Ushlanma</b> = yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish. «Sababli» chiqish kesilmaydi. <b>O‘rinbosarlik</b> = kelmagan o‘qituvchi o‘rniga dars o‘tib bergan o‘qituvchi(lar)ga HAR o‘tilgan dars uchun qat'iy haq (standart 40 000 so‘m) qo‘shiladi — kelmaganning maoshiga bog‘liq emas. <b>Oylik (hisob)</b> = nominal oylik (prorata) − ushlanma + o‘rinbosarlik ± oldingi oylardan qolgan qoldiq (avval kam berilgan maosh keyingi oyga to‘planib boradi; avans alohida).</p>
     ${lvSorted&&lvSorted.length?`<h2>Oydagi ruhsat / kasalliklar (${lvSorted.length} ta)</h2>
     <table><thead><tr><th>№</th><th>Xodim</th><th>Tur</th><th>Dan</th><th>Gacha</th><th>Sabab</th></tr></thead><tbody>${lvRows}</tbody></table>`:''}
     <div class="sign"><div>Direktor: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
@@ -3991,15 +4050,15 @@ async function renderStaffAttendance(){
       return { r, present, workMin, brkMin, ruhsat, kasallik, absent, avg, dm, gross, net };
     });
     // ---- O'RINBOSARLIK + QOLDIQ (carry-over) ----
-    // Kelmaganning maoshidan o'tib berilgan ulush (to'liq kun yoki dars daqiqalari) o'rnini bosganga qo'shiladi.
+    // Har o'tilgan dars uchun qat'iy haq (40 000) o'rnini bosgan o'qituvchi(lar)ga qo'shiladi (kelmaganning maoshiga bog'liq EMAS).
     const personByRef={}; bodyRows.forEach(o=>{ personByRef[o.r.refType+':'+o.r.refId]=o.r; });
     const subBonusByRef={}, subDaysByRef={}, subForByRef={}, coveredByRef={};
     (subs||[]).forEach(x=>{ const subKey=(x.subRefType||'')+':'+(x.subRefId||''); const absKey=(x.absentRefType||'')+':'+(x.absentRefId||'');
-      const ap=personByRef[absKey]; const rate=ap?subCredit(ap, mon, x):0;   // roster'da bo'lmasa 0
-      const lbl=(x.coverMode==='lessons')?`${Number(x.lessons)||0}×${Number(x.lessonMin)||45} daq`:'to‘liq kun';
+      const rate=subCredit(null, mon, x);                         // lessons × ratePerLesson (kelmaganга bog'liq EMAS)
+      const lessons=Math.max(0, Number(x.lessons)||0);
       subBonusByRef[subKey]=(subBonusByRef[subKey]||0)+rate;
-      subDaysByRef[subKey]=(subDaysByRef[subKey]||0)+1;
-      (subForByRef[subKey]=subForByRef[subKey]||[]).push({ name:x.absentName||'', day:x.day||'', rate, lbl });
+      subDaysByRef[subKey]=(subDaysByRef[subKey]||0)+lessons;      // jami o'tilgan dars soni
+      (subForByRef[subKey]=subForByRef[subKey]||[]).push({ name:x.absentName||'', day:x.day||'', rate, lbl:`${lessons} dars` });
       (coveredByRef[absKey]=coveredByRef[absKey]||[]).push({ name:x.subName||'', day:x.day||'' }); });
     // Oldingi oylardan qolgan qoldiq — teacherId (payId) bo'yicha.
     const payByTid={}; (salpays||[]).forEach(p=>{ const t=String(p.teacherId||''); if(!t) return; (payByTid[t]=payByTid[t]||[]).push(p); });
@@ -4026,7 +4085,7 @@ async function renderStaffAttendance(){
         <td data-label="Kechikish" style="font-variant-numeric:tabular-nums">${o.dm.late?`<span style="color:#B45309">${o.dm.late}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Erta ketish" style="font-variant-numeric:tabular-nums">${o.dm.early?`<span style="color:#B45309">${o.dm.early}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Ishladi ${Math.floor((o.dm.workedMin||0)/60)}s ${Math.round((o.dm.workedMin||0)%60)}d / ${Math.floor((o.dm.monthlyMin||0)/60)}s norma · soatiga ${fmtSom(o.dm.hourRate||0)} — Yo‘qlama ${o.dm.absent} kun (${fmtSom(o.dm.absenceAmt||0)})${((o.dm.lateMin||0)+(o.dm.earlyMin||0)+(o.dm.breakMin||0))?` + qisman ${fmtSom(o.dm.partialAmt||0)} (${[(o.dm.lateMin?`kech ${o.dm.lateMin}d`:''),(o.dm.earlyMin?`erta ${o.dm.earlyMin}d`:''),(o.dm.breakMin?`o‘z hisobidan ${o.dm.breakMin}d`:'')].filter(Boolean).join(' · ')})`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td>
-        <td data-label="O‘rinbosarlik" style="font-variant-numeric:tabular-nums" title="${o.subBonus?`O‘rnini bosib dars o‘tdi (${o.subDays} marta): ${esc(o.subFor.map(f=>`${f.name||'—'} ${f.day||''} ${f.lbl||''} (+${fmtSom(f.rate)})`).join(', '))}`:(o.coveredBy?`O‘rniga dars o‘tildi: ${esc(o.coveredBy.map(c=>`${c.name||'—'} ${c.day||''}`).join(', '))}`:'')}">${o.subBonus?`<b style="color:#1F7A4D">+${fmtSom(o.subBonus)}</b><div class="small muted">${o.subDays} marta</div>`:(o.coveredBy?`<span class="small muted">${esc((o.coveredBy.map(c=>c.name).filter(Boolean)[0])||'o‘rinbosar')} o‘tdi</span>`:'<span class="muted">—</span>')}</td>
+        <td data-label="O‘rinbosarlik" style="font-variant-numeric:tabular-nums" title="${o.subBonus?`O‘rnini bosib dars o‘tdi (${o.subDays} dars): ${esc(o.subFor.map(f=>`${f.name||'—'} ${f.day||''} ${f.lbl||''} (+${fmtSom(f.rate)})`).join(', '))}`:(o.coveredBy?`O‘rniga dars o‘tildi: ${esc(o.coveredBy.map(c=>`${c.name||'—'} ${c.day||''}`).join(', '))}`:'')}">${o.subBonus?`<b style="color:#1F7A4D">+${fmtSom(o.subBonus)}</b><div class="small muted">${o.subDays} dars</div>`:(o.coveredBy?`<span class="small muted">${esc((o.coveredBy.map(c=>c.name).filter(Boolean)[0])||'o‘rinbosar')} o‘tdi</span>`:'<span class="muted">—</span>')}</td>
         <td data-label="Oylik (hisob)" style="font-variant-numeric:tabular-nums" title="Hisoblangan oylik = nominal ${fmtSom(o.gross)} − ushlanma ${fmtSom(o.dm.total||0)}${o.subBonus?` + o‘rinbosarlik ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} oldingi qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''} (avans alohida)">${(o.gross||o.subBonus||o.priorBalance)?`<b style="color:#1F9982">${fmtSom(o.totalDue)}</b>${(o.subBonus||o.priorBalance)?`<div class="small muted">oylik ${fmtSom(o.baseNet)}${o.subBonus?` + o‘rin. ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''}</div>`:''}`:'<span class="muted">—</span>'}${canPaySalary()&&(o.gross>0||o.totalDue>0)?` <button class="btn sm gold" data-paysal="${esc(o.r.payId)}" title="Oylik berish + chek (shu xodimga)">💵 Oylik</button>`:''}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
     // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
     const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
@@ -4041,7 +4100,7 @@ async function renderStaffAttendance(){
       <div class="cls-card-head"><h3>${esc(mon)}</h3><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)</span>${roster.length?`<button class="btn sm gold" id="sa-pdf" title="Oylik davomat hisobotini PDF/chop etish — kechikish, tanaffus, ushlanma, oylik">🖨 PDF / Hisobot</button>`:''}</div></div>
       ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat</th><th>Kasallik</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th><th>O‘rinbosarlik</th><th>Oylik (hisob)</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
-      <div class="small muted" style="padding:10px 16px"><b>Oylik SOATBAY hisoblanadi:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). Kunlik sof soat = ish vaqti − ruxsat etilgan tanaffus (masalan 08:00–17:00, 1 soat tushlik → 8 soat). Xodim qancha soat ishlasa — shuncha oylik. <b>Ushlanma</b> = ishlamagan vaqt shu soatbay stavkada: yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish (kiritilgan daqiqa). «Sababli» chiqish — kesilmaydi. <b>«O‘rinbosarlik»</b> = kelmagan o‘qituvchi o‘rniga dars o‘tib bergan xodimga kelmaganning maoshidan o‘tilgan ulush qo‘shiladi — <b>to‘liq kun</b> (kunlik maosh) yoki <b>ayrim dars(lar)</b> (soatbay; 1 dars ≈ 45 daq). Kunlik hisobotда, «Kelmadi» qatorida «↪ O‘rnini bosgan» tugmasi bilan belgilanadi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma + o‘rinbosarlik ± <b>oldingi oylardan qolgan qoldiq</b> (avval kam berilgan maosh kelasi oyga to‘planib boradi — «Maosh berish»da haqiqatda berilgan summa kiritiladi). «Ruhsatsiz» = ish kuni bo‘lib kelmagan va ruhsat/kasallik kiritilmagan kunlar. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
+      <div class="small muted" style="padding:10px 16px"><b>Oylik SOATBAY hisoblanadi:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). Kunlik sof soat = ish vaqti − ruxsat etilgan tanaffus (masalan 08:00–17:00, 1 soat tushlik → 8 soat). Xodim qancha soat ishlasa — shuncha oylik. <b>Ushlanma</b> = ishlamagan vaqt shu soatbay stavkada: yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish (kiritilgan daqiqa). «Sababli» chiqish — kesilmaydi. <b>«O‘rinbosarlik»</b> = kelmagan o‘qituvchi o‘rniga dars o‘tib bergan o‘qituvchi(lar)ga HAR o‘tilgan dars uchun qat'iy haq (standart <b>40 000 so‘m</b>, «Narx jadvali»da sozlanadi) qo‘shiladi. Bir kunда bir nechta o‘qituvchi bo‘lishi mumkin — har biri o‘z dars soni uchun. Kelmaganning o‘sha kungi oyligi davomat orqali alohida to‘liq ushlanadi. Kunlik hisobotда, «Kelmadi» qatorida «↪ O‘rnini bosgan» tugmasi bilan belgilanadi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma + o‘rinbosarlik ± <b>oldingi oylardan qolgan qoldiq</b> (avval kam berilgan maosh kelasi oyga to‘planib boradi — «Maosh berish»da haqiqatda berilgan summa kiritiladi). «Ruhsatsiz» = ish kuni bo‘lib kelmagan va ruhsat/kasallik kiritilmagan kunlar. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
     </div>
     <div class="card" style="margin-top:16px">
       <div class="cls-card-head"><h3>Oydagi ruhsat / kasalliklar</h3><span class="cls-count">${lvSorted.length} ta</span></div>
@@ -4090,12 +4149,7 @@ async function renderStaffAttendance(){
     // O'rinbosar belgilash / o'chirish (kelmagan xodim o'rniga dars o'tib bergan).
     const st=e.target.closest('[data-subset]');
     if(st){ const [rt,rid]=String(st.dataset.subabs||'').split(':');
-      openSubstitutePicker({ refType:rt, refId:rid, cam:st.dataset.subcam||'', name:st.dataset.subname||'', curSub:st.dataset.cursub||'', curCoverMode:st.dataset.curmode||'', curLessons:st.dataset.curlessons||'', curLessonMin:st.dataset.curlmin||'' }, st.dataset.subday, ()=>loadDay());
-      return; }
-    const sc=e.target.closest('[data-subclr]');
-    if(sc){ const [rt,rid]=String(sc.dataset.subabs||'').split(':'); const dy=sc.dataset.subday; const id=`${rt}_${rid}_${dy}`;
-      if(!confirm('O‘rinbosar belgisi o‘chirilsinmi?')) return;
-      (async()=>{ try{ await deleteDoc(doc(db,'staff_substitutions',id)); toast('O‘chirildi'); loadDay(); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } })();
+      openSubstitutePicker({ refType:rt, refId:rid, cam:st.dataset.subcam||'', name:st.dataset.subname||'' }, st.dataset.subday, ()=>loadDay());
       return; }
     // «Bog'lanmagan» Kamera ID -> yangi xodim yaratib bog'lash
     const b=e.target.closest('[data-linkcam]');
@@ -4598,7 +4652,7 @@ async function openSalaryPayout(opts){
     const info=$('#sp-ded-info'), inp=$('#sp-ded');
     paidTouched=false;
     const sub=(SUBALL||[]).filter(x=> x.subRefType===p.kind && String(x.subRefId)===String(p.refId) && String(x.month)===String(mm))
-      .reduce((s,x)=>{ const ap=payeeByRef[(x.absentRefType||'')+':'+String(x.absentRefId||'')]; return s + (ap?subCredit(ap, mm, x):0); },0);
+      .reduce((s,x)=>s + subCredit(null, mm, x), 0);   // lessons × ratePerLesson (kelmaganга bog'liq EMAS)
     const prior=carryBalance((SALL||[]).filter(r=>String(r.teacherId)===String(tid)), mm);
     if($('#sp-sub')) $('#sp-sub').value=String(Math.round(sub));
     if($('#sp-prior')) $('#sp-prior').value=String(Math.round(prior));
@@ -5372,9 +5426,10 @@ async function renderPriceTable(){
   // inputlar bilan «Saqlash» narxlarни 0 ga yozib yuborardi. Xato -> ogohlantirib to'xtaymiz.
   const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }
   catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Mavjud narxlarni o‘qib bo‘lmadi: ${esc(e.code||e.message)}. Saqlash bloklandi (narxlar yo‘qolmasligi uchun). Internetni tekshirib qayta oching.</div></div>`; return; }
-  let sickRate=40000, allowBreak=60;
+  let sickRate=40000, allowBreak=60, lessonRate=40000;
   try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
     if(Number(d.sickRate)>0) sickRate=Number(d.sickRate);
+    if(Number(d.lessonRate)>0) lessonRate=Number(d.lessonRate);
     if(d.allowedBreakMin!=null && d.allowedBreakMin!=='' && isFinite(Number(d.allowedBreakMin)) && Number(d.allowedBreakMin)>=0) allowBreak=Number(d.allowedBreakMin);
   } }catch(e){}
   const grp=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
@@ -5387,12 +5442,13 @@ async function renderPriceTable(){
   $('#pt-body').innerHTML = `
     <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Kasal kun stavkasi (so‘m/kun)<input type="text" inputmode="numeric" id="pt-sick" value="${grp(sickRate)}" style="text-align:right"></label>
+      <label>O‘rinbosarlik — 1 dars haqi (so‘m)<input type="text" inputmode="numeric" id="pt-lesson" value="${grp(lessonRate)}" style="text-align:right"></label>
       <label>Tushlik/tanaffus (daq/kun)<input type="text" inputmode="numeric" id="pt-brkmin" value="${grp(allowBreak)}" style="text-align:right"></label>
       <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
     </div><div class="small muted" id="pt-msg" style="margin-top:8px"><b>Kasal kun stavkasi</b> — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Tushlik/tanaffus (daq/kun)</b> — kuniga haq to‘lanmaydigan tanaffus (masalan tushlik, 60 daq); kunlik sof ish soati = (ish vaqti − shu tanaffus). Davomat ushlanmasi SOATBAY hisoblanadi: soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat); kech/erta/«o‘z hisobidan»/yo‘qlama shu stavkada ayiriladi (alohida jarima summasi YO‘Q). Barcha xodim/o‘qituvchilarga amal qiladi; shaxsiy ish vaqti kartochkada belgilanadi.</div></div>
     <div class="card"><div class="cls-card-head"><h3>Oylik narxlar</h3><span class="cls-count">${ordered.length} ta sinf-guruh</span></div>
       ${ordered.length?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Yo‘nalish</th><th>Til</th><th class="c">O‘quvchi</th><th>Oylik narx (so‘m)</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`:'<div class="empty" style="padding:20px">Avval «O‘quvchilar» bo‘limida o‘quvchilarni kiriting — sinflar shu yerda avtomatik chiqadi.</div>'}</div>`;
-  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick, #pt-brkmin').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
+  $('#pt-body').querySelectorAll('.pt-amt, #pt-sick, #pt-lesson, #pt-brkmin').forEach(el=>el.addEventListener('input',()=>{ const d=el.value.replace(/\D/g,''); el.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); }));
   const save=$('#pt-save'); if(save) save.addEventListener('click',async()=>{
     save.disabled=true; save.textContent='Saqlanmoqda…';
     try{
@@ -5405,11 +5461,12 @@ async function renderPriceTable(){
         await batch.commit();
       }
       const sr=Number(($('#pt-sick').value||'').replace(/\D/g,''))||40000;
+      const lr=Number(($('#pt-lesson').value||'').replace(/\D/g,''))||40000;   // o'rinbosarlik 1 dars haqi
       // Tushlik/tanaffus: bo'sh -> 60 daq (kunlik sof ish soati shundan hisoblanadi).
       const abRaw=($('#pt-brkmin').value||'').replace(/\D/g,''), ab=abRaw===''?60:Number(abRaw);
       // Maosh ENDI soatbay hisoblanadi — alohida kech/erta/tanaffus jarima summalari ishlatilmaydi (0 ga tenglashtiriladi).
-      await setDoc(doc(db,'config','finance'), {sickRate:sr, allowedBreakMin:ab, latePenalty:0, earlyPenalty:0, breakPenaltyPerHour:0, updatedAt:serverTimestamp()}, {merge:true});
-      $('#pt-msg').textContent=`✓ ${n} ta narx, kasal kun (${fmtSom(sr)}) va tushlik/tanaffus (${ab} daq/kun) saqlandi. Davomat ushlanmasi soatbay hisoblanadi.`;
+      await setDoc(doc(db,'config','finance'), {sickRate:sr, lessonRate:lr, allowedBreakMin:ab, latePenalty:0, earlyPenalty:0, breakPenaltyPerHour:0, updatedAt:serverTimestamp()}, {merge:true});
+      $('#pt-msg').textContent=`✓ ${n} ta narx, kasal kun (${fmtSom(sr)}), o‘rinbosarlik 1 dars (${fmtSom(lr)}) va tushlik/tanaffus (${ab} daq/kun) saqlandi. Davomat ushlanmasi soatbay hisoblanadi.`;
       toast('Saqlandi ✓');
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     save.disabled=false; save.textContent='Saqlash';
@@ -5417,7 +5474,7 @@ async function renderPriceTable(){
 }
 /* ===== Avtomatik CHEGIRMA dvigateli (test qilingan — 21/21) =====
  * priceKeyOf: narx jadvali kaliti (til-sinf[-yo'nalish]). classLetter EMAS (harf narxga ta'sir qilmaydi).
- * computeSiblingSet: bir xil telefon + familiya -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
+ * computeSiblingSet: bir xil telefon + OTA/ONA familiyasi -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 // Qat'iy KANONIK telefon (server auth/lib.cjs normPhone bilan BIR XIL qoida) — xodim↔login
@@ -5461,17 +5518,19 @@ function pmSurnameStems(name){
 function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const EXCL=['teacher_child','olympiad','contract'];
   const getScore = scoreFn || (s=>pmNum(s.score));   // lag qo'llanganda — o'tgan oy monitoring balli
-  // Har o'quvchi: to'g'ri telefon(lar) + familiya o'zaklari.
+  // Har o'quvchi: to'g'ri telefon(lar) + OTA/ONA familiya o'zaklari.
+  //   DIQQAT: familiya — OTA yoki ONA (F.I.Sh) dan olinadi, FARZAND ismidan EMAS. Aka-uka ismi
+  //   jins qo'shimchasi/imlo bo'yicha har xil bo'lishi mumkin, lekin ota-ona bir xil -> ishonchli.
   const info={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
-    info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))],
-                stems:new Set(pmSurnameStems(s.name)) }; });
+    const pstems=new Set([...pmSurnameStems(pv.fatherName), ...pmSurnameStems(pv.motherName)]);   // ota + ona
+    info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))], stems:pstems }; });
   const shareSurname=(a,b)=>{ const A=info[a].stems; for(const x of info[b].stems){ if(A.has(x)) return true; } return false; };
   const parent={};
   const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
   const union=(a,b)=>{ parent[find(a)]=find(b); };
   students.forEach(s=>{ const sid=s.studentId||s._id; if(!(sid in parent)) parent[sid]=sid; });
-  // Telefon bo'yicha nomzodlar; FAQAT familiya o'zagi ham mos kelsagina birlashtiramiz (oila sharti).
+  // Telefon bo'yicha nomzodlar; FAQAT ota/ona familiya o'zagi ham mos kelsagina birlashtiramiz (oila sharti).
   const phoneMap={};
   students.forEach(s=>{ const sid=s.studentId||s._id; info[sid].phones.forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
   Object.values(phoneMap).forEach(sids=>{ for(let i=0;i<sids.length;i++) for(let j=i+1;j<sids.length;j++){ if(shareSurname(sids[i],sids[j])) union(sids[i],sids[j]); } });

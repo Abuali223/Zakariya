@@ -1,15 +1,17 @@
 -- =====================================================================
 -- XODIM O'RINBOSARLIGI (staff_substitutions) — kelmagan o'qituvchi o'rniga
---   dars o'tib bergan xodim. Oylik hisobotда «O'rinbosarlik» ustuni:
---   kelmagan o'qituvchining o'sha kungi kunlik maoshi (dailyRate) o'rnini
---   bosgan xodimga QO'SHILADI (o'tmagan odam oyligi — o'tib berganga).
---   Bitta (kelmagan odam, kun) = bitta yozuv.
+--   dars o'tib bergan o'qituvchi(lar). MAKTAB QOIDASI: har O'TILGAN DARS uchun
+--   QAT'IY stavka (standart 40 000 so'm) o'rnini bosganga QO'SHILADI. Kelmagan
+--   o'qituvchining oyligiga bog'liq EMAS (uning o'sha kungi oyligi davomat orqali
+--   alohida to'liq ushlanadi). Bir kunда bir nechta o'rinbosar bo'lishi mumkin —
+--   har biri o'z dars soni uchun. Shu sabab id ga o'rinbosar ham qo'shiladi:
+--   '{absentRefType}_{absentRefId}_{YYYY-MM-DD}_{subRefType}_{subRefId}'.
 -- Idempotent. run-all.sql + deploy.sh'da (staff-break-marks.sql kabi).
 --   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-substitutions.sql
 -- =====================================================================
 
 create table if not exists public.staff_substitutions (
-  id              text primary key,            -- '{absentRefType}_{absentRefId}_{YYYY-MM-DD}'
+  id              text primary key,            -- '{absentRefType}_{absentRefId}_{YYYY-MM-DD}[_{subRefType}_{subRefId}]'
   day             text,                          -- 'YYYY-MM-DD'
   month           text,                          -- 'YYYY-MM' (filtr uchun)
   "absentRefType" text,                          -- 'staff' | 'teacher' (kelmagan)
@@ -20,19 +22,21 @@ create table if not exists public.staff_substitutions (
   "subRefId"      text,
   "subCam"        text,
   "subName"       text,
-  -- Hajmi: to'liq kun yoki ayrim dars(lar). Kredit = kelmaganning kunlik stavkasidan o'tilgan ulush.
-  "coverMode"     text default 'day',            -- 'day' (to'liq kun) | 'lessons' (ayrim dars soat(lar)i)
-  lessons         numeric,                        -- nechta dars o'tib berildi ('lessons' uchun)
-  "lessonMin"     numeric,                        -- bir dars davomiyligi, daqiqa (masalan 45)
-  "coverMin"      numeric,                         -- o'tilgan jami daqiqa (lessons×lessonMin); 0/NULL -> to'liq kun
+  -- Kredit = lessons × ratePerLesson (40 000). Kelmaganning maoshiga bog'liq EMAS.
+  lessons         numeric,                        -- nechta dars o'tib berildi (shu o'rinbosar)
+  "ratePerLesson" numeric,                        -- bir dars haqi (so'm) — saqlashда muhrlanadi (std 40 000)
+  "coverMode"     text default 'day',            -- [ESKI — endi ishlatilmaydi] 'day' | 'lessons'
+  "lessonMin"     numeric,                        -- [ESKI — endi ishlatilmaydi] bir dars daqiqasi
+  "coverMin"      numeric,                         -- [ESKI — endi ishlatilmaydi] o'tilgan jami daqiqa
   "createdBy"     text,
   "createdAt"     timestamptz default now()
 );
--- Mavjud jadvalga (idempotent) — eski yozuvlar to'liq kun deb qaraladi.
-alter table public.staff_substitutions add column if not exists "coverMode" text default 'day';
-alter table public.staff_substitutions add column if not exists lessons     numeric;
-alter table public.staff_substitutions add column if not exists "lessonMin" numeric;
-alter table public.staff_substitutions add column if not exists "coverMin"  numeric;
+-- Mavjud jadvalga (idempotent).
+alter table public.staff_substitutions add column if not exists lessons         numeric;
+alter table public.staff_substitutions add column if not exists "ratePerLesson" numeric;
+alter table public.staff_substitutions add column if not exists "coverMode"     text default 'day';
+alter table public.staff_substitutions add column if not exists "lessonMin"     numeric;
+alter table public.staff_substitutions add column if not exists "coverMin"      numeric;
 create index if not exists subst_month_idx  on public.staff_substitutions(month);
 create index if not exists subst_day_idx    on public.staff_substitutions(day);
 create index if not exists subst_sub_idx    on public.staff_substitutions("subRefType","subRefId");
