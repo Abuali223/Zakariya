@@ -5454,7 +5454,7 @@ async function openFinanceAudit(){
       <td style="text-align:right">${fmtN(r.c)}</td>
       <td style="text-align:right;font-weight:800;color:${col}">${r.disc>0?'+':''}${fmtN(r.disc)}</td>
       <td style="color:${col}">${isOver?'⚠️ Ortiqcha':'ℹ️ Qo‘llanmagan'}</td>
-      <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button>${(!isOver && SESSION.isAdmin)?(reattrSrc.has(r.sid)?`<span class="small muted" title="Bu o‘quvchi puli boshqa o‘quvchiga ko‘chirilgan (reattribution). Qayta «Qo‘llash» ikki marta hisoblanadi (double-apply) — shu sabab bloklangan. To‘lov tarixini tekshiring.">↔ ko‘chirilgan</span>`:`<button class="btn sm gold" data-fix="${esc(r.sid)}" data-amt="${Math.abs(r.disc)}" title="Osilib qolgan pulni fakturaga qo‘llash">🔧 Qo‘llash</button>`):''}</div></td>
+      <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-ph="${esc(r.sid)}" title="To‘lov / avans tarixi">📋</button>${(!isOver && SESSION.isAdmin)?(reattrSrc.has(r.sid)?`<span class="small muted" title="Bu o‘quvchi puli boshqa o‘quvchiga ko‘chirilgan (reattribution). Qayta «Qo‘llash» ikki marta hisoblanadi (double-apply) — shu sabab bloklangan. To‘lov tarixini tekshiring.">↔ ko‘chirilgan</span>`:`<button class="btn sm gold" data-fix="${esc(r.sid)}" data-amt="${Math.abs(r.disc)}" data-paid="${Math.round(Number(r.p))||0}" title="Osilib qolgan pulni fakturaga qo‘llash">🔧 Qo‘llash</button>`):''}</div></td>
     </tr>`; }).join('');
   const table = rows.length? `<div class="tablewrap" style="margin-top:10px"><table>
     <thead><tr><th>O‘quvchi</th><th>Real to‘lov</th><th>H-faktura</th><th>Avans</th><th>Farq</th><th>Holat</th><th></th></tr></thead>
@@ -5469,15 +5469,20 @@ async function openFinanceAudit(){
   // YANGI to'lov yozuvi YARATMAYDI — mavjud pulni fakturaga biriktiradi (ikki marta hisoblanmaydi).
   body.querySelectorAll('[data-fix]').forEach(b=>b.onclick=async()=>{
     if(!SESSION.isAdmin) return; const sid=b.getAttribute('data-fix'); const amt=Math.round(Number(b.getAttribute('data-amt'))||0); if(amt<=0) return;
+    const paidTot=Math.round(Number(b.getAttribute('data-paid'))||0);   // o'quvchining JAMI real to'lovi (monoton o'sadi)
     if(!confirm(`${nameMap[sid]||sid}: osilib qolgan ${fmtN(amt)} so‘m eng eski to‘lanmagan fakturaga qo‘llansinmi?\n(Yangi to‘lov yozuvi yaratilmaydi — mavjud pul fakturaga biriktiriladi. Ortiqchasi avansga o‘tadi.)`)) return;
     b.disabled=true; const t0=b.textContent; b.textContent='…';
-    // Audit H6: payId DETERMINISTIK (sid+amt+sana) — ack yo'qolib qayta bosilsa apply_payment IDEMPOTENT
-    //   (applied_payments ON CONFLICT) -> pul IKKI MARTA qo'llanmaydi. Oldin 'fix_'+Date.now()+random edi:
-    //   har bosishda yangi id -> dublikat qo'llash (qarz ikki marta kamayib, soxta avans paydo bo'lardi).
-    //   Sana — oylar keyin aynan shu summa yana osilса (boshqa hodisa) noto'g'ri "dup" bo'lmasligi uchun.
-    const payId='fix_'+String(sid)+'_'+amt+'_'+new Date().toISOString().slice(0,10);
-    try{ await applyPaymentClient(String(sid), amt, 'cash', payId);
-      toast('Fakturaga qo‘llandi ✓'); openFinanceAudit(); }
+    // Audit H6 (+ ko'rik tuzatmasi): payId DETERMINISTIK — ack yo'qolib qayta bosilsa apply_payment IDEMPOTENT
+    //   (applied_payments ON CONFLICT) -> pul IKKI MARTA qo'llanmaydi. Kalitga JAMI real to'lov (data-paid)
+    //   qo'shildi: u har YANGI to'lov bilan o'sadi -> bir xil summali ikkita ALOHIDA to'lov (hatto bir kunda)
+    //   har xil kalit oladi va ikkalasi ham qo'llanadi; faqat AYNAN o'sha hodisaning retry'si to'qnashadi.
+    //   (Oldin sana+summa edi -> belgilangan oylik summada ikkinchi to'lov noto'g'ri "dup" bo'lib qolardi.)
+    const payId='fix_'+String(sid)+'_'+amt+'_'+paidTot;
+    try{ const res=await applyPaymentClient(String(sid), amt, 'cash', payId);
+      // dup -> AYNAN shu hodisa allaqachon qo'llangan: SUCCESS deb ko'rsatmaymiz (admin adashmasin).
+      if(res && res.dup) toast('Bu summa allaqachon qo‘llangan (qayta qo‘llanmadi) — to‘lov tarixини tekshiring',true);
+      else toast('Fakturaga qo‘llandi ✓');
+      openFinanceAudit(); }
     // Xato bo'lsa HAM auditni qayta chizamiz: server qo'llagan-u javob yo'qolgan bo'lsa (lost ack),
     //   qator hal bo'lgan holda ko'rinadi (eski tugma stale summa bilan qayta bosishga chorlamaydi).
     catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+(e.code||e.message),true); openFinanceAudit(); }
