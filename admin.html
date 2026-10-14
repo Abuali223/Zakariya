@@ -2466,6 +2466,42 @@ document.addEventListener('change', _fmemSave, true);
 // Saqlangan qiymatni inputga qaytaradi va shu qiymatni (draw uchun) qaytaradi.
 function fmemApply(id){ const el=document.getElementById(id); const v=FILTER_MEM[id]; if(el&&v!=null) el.value=v; return v!=null?v:''; }
 
+// ===== MA'LUMOT SIFATI tekshiruvi (admin diagnostikasi) =====
+//   O'quvchi ma'lumotidagi JIM xatolarni topadi: noto'g'ri ota-ona telefoni (aka-uka chegirmasi +
+//   ota-ona login bog'lanishini buzadi), «Kontrakt» toifasi lekin summasi yo'q (faktura chiqmaydi),
+//   takroriy JSHSHIR. «Narx jadvalida yo'q» — «To'lovlar»da ko'rsatiladi, orphan invoice — «To'lovlar»da.
+async function openDataQuality(){
+  $('#modal').innerHTML=`<div class="modal-h"><h3>⚠️ Ma'lumot sifati</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b" id="dq-body"><div class="loading">Tekshirilmoqda…</div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  let studs, privs;
+  try{ [studs, privs] = await Promise.all([ loadCol('students','order'), getDocs(collection(db,'student_private')) ]); }
+  catch(e){ const b=$('#dq-body'); if(b) b.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  const pmap={}; privs.docs.forEach(d=>{ pmap[d.id]=d.data()||{}; });
+  const list=studs.map(s=>{ const id=s._id||s.id; return Object.assign({}, pmap[id]||{}, s, {_id:id}); });   // telefon/pinfl/contract -> student_private
+  const badPhone=[], contractNoAmt=[], noPhone=[]; const byPinfl={};
+  list.forEach(s=>{ const sid=s.studentId||s._id; const nm=s.name||sid;
+    const p1=String(s.parentPhone||'').trim(), p2=String(s.parentPhone2||'').trim();
+    const bad=[]; if(p1 && !pmCanonPhone(p1)) bad.push(p1); if(p2 && !pmCanonPhone(p2)) bad.push(p2);
+    if(bad.length) badPhone.push({sid, nm, _id:s._id, v:bad.join(', ')});
+    if(!pmCanonPhone(p1) && !pmCanonPhone(p2)) noPhone.push({sid, nm, _id:s._id});
+    if(s.specialCategory==='contract' && !(Number(s.contractAmount)>0)) contractNoAmt.push({sid, nm, _id:s._id});
+    const pf=String(s.pinfl||'').replace(/\D/g,''); if(pf.length===14){ (byPinfl[pf]=byPinfl[pf]||[]).push({sid, nm}); } });
+  const dupPinfl=Object.entries(byPinfl).filter(([k,a])=>a.length>1);
+  const rowBtns=arr=>arr.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)"><span class="small"><b>${esc(x.sid)}</b> — ${esc(x.nm)}${x.v?` · <span style="color:#B42318">${esc(x.v)}</span>`:''}</span><button class="btn sm" data-dqfix="${esc(x._id)}">✏️ Tuzatish</button></div>`).join('');
+  const sect=(title, color, hint, arr)=> arr.length ? `<div class="card" style="margin-bottom:12px;border-color:${color}"><div style="padding:10px 14px;font-weight:700;color:${color}">${title} — ${arr.length} ta</div><div class="small muted" style="padding:0 14px 6px">${hint}</div><div style="padding:0 14px 10px">${rowBtns(arr)}</div></div>` : '';
+  const allClean = !badPhone.length && !contractNoAmt.length && !dupPinfl.length;
+  const dupHtml = dupPinfl.length ? `<div class="card" style="margin-bottom:12px;border-color:#B54708"><div style="padding:10px 14px;font-weight:700;color:#B54708">Takroriy JSHSHIR — ${dupPinfl.length} ta guruh</div><div class="small muted" style="padding:0 14px 6px">Bir xil JSHSHIR bir necha o‘quvchida — xato kiritilgan yoki dublikat.</div><div style="padding:0 14px 10px">${dupPinfl.map(([pf,a])=>`<div class="small" style="padding:5px 0;border-bottom:1px solid var(--border)"><b>${esc(pf)}</b>: ${a.map(x=>esc(x.sid+' '+x.nm)).join(' · ')}</div>`).join('')}</div></div>` : '';
+  const b=$('#dq-body'); if(!b) return;
+  b.innerHTML = `<div class="small muted" style="margin-bottom:10px">Jami <b>${list.length}</b> o‘quvchi tekshirildi.</div>`
+    + (allClean ? `<div class="card" style="padding:16px;border-color:#1F9982;color:#1F7A4D;font-weight:700">✓ Jiddiy ma'lumot xatosi topilmadi.</div>` : '')
+    + sect('❌ Noto‘g‘ri ota-ona telefoni', '#B42318', 'Raqam 998 XX XXX XX XX ga o‘xshamaydi → aka-uka chegirmasi va ota-ona kabinet bog‘lanishi ishlamaydi.', badPhone)
+    + sect('⚠️ Kontrakt — summa kiritilmagan', '#B54708', '«Kontrakt» toifasi tanlangan, lekin oylik summa yo‘q → fakturaga tushmaydi (o‘tkazib yuboriladi).', contractNoAmt)
+    + dupHtml
+    + (noPhone.length ? `<div class="small muted" style="margin-top:6px">ℹ️ ${noPhone.length} o‘quvchida ota-ona telefoni umuman yo‘q (ixtiyoriy — lekin aka-uka chegirmasi va kabinet uchun kerak).</div>` : '');
+  b.querySelectorAll('[data-dqfix]').forEach(btn=>btn.onclick=()=>{ const id=btn.getAttribute('data-dqfix'); const row=list.find(x=>x._id===id); closeModal(); openForm('students', row); });
+}
 async function renderStudents(){
   const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
   const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
@@ -2482,12 +2518,13 @@ async function renderStudents(){
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
       <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
-      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
+      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn ghost2" id="stu-dq" title="Ma'lumot sifati: noto‘g‘ri ota-ona telefoni, kontrakt summasi yo‘q, takroriy JSHSHIR">⚠️ Sifat</button><button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
     ${canDel?`<div id="stu-bulk" class="card" style="display:none;padding:10px 16px;margin-bottom:12px;background:#fff7e8;border:1px solid #f0d9a8;align-items:center;gap:12px"><b><span id="stu-selc">0</span> ta tanlandi</b><button class="btn sm danger" id="stu-buldel">🗑 Tanlanganlarni o‘chirish</button><button class="btn sm ghost" id="stu-bulclr">Bekor</button></div>`:''}
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   const updateBulk=()=>{ if(!canDel) return; const cg=$('#cls-groups'); const n=cg?cg.querySelectorAll('.stu-sel:checked').length:0;
     const bar=$('#stu-bulk'); if(bar) bar.style.display=n?'flex':'none'; const c=$('#stu-selc'); if(c) c.textContent=n; };
   if(canMng){ const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm('students',null)); }   // qo'shish — reception ham
+  if(canMng){ const dq=$('#stu-dq'); if(dq) dq.addEventListener('click', openDataQuality); }   // Ma'lumot sifati tekshiruvi
   if(canDel){
     $('#stu-bulclr').addEventListener('click',()=>{ $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.checked=false); $('#cls-groups').querySelectorAll('.stu-selall').forEach(c=>c.checked=false); updateBulk(); });
     $('#stu-buldel').addEventListener('click',async()=>{
@@ -3128,6 +3165,18 @@ function openForm(name, row, prefill, afterSaveCb){
         data.otherCerts = parseArr(data.otherCerts);
         data.languages  = parseArr(data.languages).filter(k=>LANG_KEYS.includes(k));
         const sal=computeSalary(data); data.salary = sal.total; data.salaryBonus = sal.bonus; }
+      // MA'LUMOT SIFATI: o'quvchi ota-ona telefonini tekshiramiz. NOTO'G'RI raqam (masalan "99-135-76-95")
+      //   jim saqlanib, keyin aka-uka chegirmasi guruhlashini (pmValidPhone uni tashlaydi) VA ota-ona
+      //   kabinet avtomatik bog'lanishini buzadi. Majburiy EMAS (landline/chet raqam bo'lishi mumkin) —
+      //   ogohlantiramiz, admin baribir saqlashi mumkin.
+      if(name==='students'){
+        for(const pk of ['parentPhone','parentPhone2']){
+          const raw=String(data[pk]==null?'':data[pk]).trim();
+          if(raw && !pmCanonPhone(raw)){
+            if(!confirm(`«${pk==='parentPhone'?'Ota':'Ona'} telefoni» (${raw}) — to'g'ri mobil raqamga o'xshamaydi (998 XX XXX XX XX kutiladi).\n\nNoto'g'ri raqam AKA-UKA CHEGIRMASI va OTA-ONA KABINET bog'lanishini buzadi.\nBaribir shu holda saqlansinmi?`)){ btn.disabled=false; btn.textContent='Saqlash'; return; }
+          }
+        }
+      }
       // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi
       const formVals={};
       (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });
