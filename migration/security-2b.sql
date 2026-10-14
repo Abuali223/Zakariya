@@ -76,4 +76,7 @@ insert into child_claims(id, uid, "studentId", code)
   select u.id || '__' || sid, u.id, sid, ''
   from public.users u, jsonb_array_elements_text(coalesce(u."childIds",'[]'::jsonb)) sid
   where coalesce(u."childIds",'[]'::jsonb) <> '[]'::jsonb
+    -- FAQAT birinchi ko'chirishda (child_claims hali BO'SH). Qayta ishga tushirilganda (deploy har safar
+    --   run-all.sql'ni qo'llaydi) admin UZGAN biriktirishni eski childIds'dan QAYTA tiklab yubormasin.
+    and not exists (select 1 from public.child_claims)
   on conflict (uid, "studentId") do nothing;

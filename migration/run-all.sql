@@ -1,12 +1,19 @@
 -- =====================================================================
--- KANONIK TO'LIQ BAZA QURILISHI (yangi/toza Supabase uchun).
--- Barcha migratsiyalarni TO'G'RI TARTIBDA ishlatadi — schema.sql yolg'iz
--- CHALA baza beradi (feature ustunlari alohida fayllarda). Idempotent.
+-- KANONIK TO'LIQ BAZA ZANJIRI — YAGONA MANBA (toza o'rnatish HAM har bir deploy).
+-- Barcha migratsiyalar TO'G'RI TARTIBDA (bog'liqlik: funksiya avval ta'riflanib, keyin ishlatiladi).
 --
--- Ishlatish (migration papkasidan):
---   cd ~/iqror-repo/migration
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < run-all.sql
--- (\ir = shu fayl joylashgan papkaga nisbatan ulaydi.)
+--   * deploy.sh SHU ro'yxatni (\ir qatorlarini) o'qib, butun zanjirni BITTA tranzaksiyada qo'llaydi —
+--     prod holati = toza o'rnatish holati (drift yo'q). YANGI migratsiya qo'shish: faqat shu yerga \ir.
+--   * Har bir fayl IDEMPOTENT va ma'lumot uchun XAVFSIZ bo'lishi SHART: qayta ishga tushirilganda xato
+--     bermaydi va mavjud ma'lumotni o'zgartirmaydi (policy: drop if exists + create; ustun: add column
+--     if not exists; funksiya: create or replace; bir martalik ma'lumot ko'chirish — guard bilan).
+--   * Tekshiruv: migration/verify-db.sh (vaqtinchalik bazada shu zanjirni quradi va jonli bazaga
+--     solishtiradi; deploy oxirida avtomatik).
+--
+-- Qo'lda ishlatish (odatda SHART EMAS — deploy.sh o'zi qiladi):
+--   bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q
+--   (DIQQAT: `docker exec -i ... psql < run-all.sql` ISHLAMAYDI — \ir konteyner ichida fayl qidiradi.
+--    Konteynersiz, shu papkadan to'g'ridan-to'g'ri psql bilan: psql -f run-all.sql — ishlaydi.)
 -- =====================================================================
 \ir schema.sql
 \ir supabase-grants.sql
@@ -72,5 +79,6 @@
 \ir parent-student-links.sql
 \ir auth-hardening.sql
 \ir staff-user-link.sql
+\ir student-arrivals.sql
 \ir secdef-searchpath.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

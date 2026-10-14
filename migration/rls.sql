@@ -51,9 +51,13 @@ $$;
 -- attendance sizmasin. Ommaviy honor board 'students_public' KO'RINISHINI o'qiydi
 -- (ism/sinf/ball/foto; cameraId/attendance YO'Q). Ko'rinish security-2c.sql'da.
 alter table students enable row level security;
+drop policy if exists students_sel on students;
 create policy students_sel on students for select using (app.uid() is not null);
+drop policy if exists students_ins on students;
 create policy students_ins on students for insert with check (app.is_admin());
+drop policy if exists students_upd on students;
 create policy students_upd on students for update using (app.is_admin() or app.is_zavuch()) with check (app.is_admin() or app.is_zavuch());
+drop policy if exists students_del on students;
 create policy students_del on students for delete using (app.is_admin());
 -- Izoh: 'score-only for zavuch' — ustun-darajali GRANT/trigger bilan (keyingi nafislik).
 
@@ -68,79 +72,116 @@ grant select on public.students_public to service_role;
 
 -- ============ student_private (PII — qulflangan) ============
 alter table student_private enable row level security;
+drop policy if exists priv_sel on student_private;
 create policy priv_sel on student_private for select using (app.is_admin() or app.is_zavuch() or app.owns_child(id));
+drop policy if exists priv_ins on student_private;
 create policy priv_ins on student_private for insert with check (app.is_admin());
+drop policy if exists priv_upd on student_private;
 create policy priv_upd on student_private for update using (app.is_admin()) with check (app.is_admin());
+drop policy if exists priv_del on student_private;
 create policy priv_del on student_private for delete using (app.is_admin());
 
 -- ============ grades ============
 alter table grades enable row level security;
+drop policy if exists grades_sel on grades;
 create policy grades_sel on grades for select using (app.is_admin() or app.owns_child("studentId") or app.is_teacher_for_class("classKey"));
+drop policy if exists grades_ins on grades;
 create policy grades_ins on grades for insert with check (app.is_admin() or app.is_teacher_for_class("classKey"));
+drop policy if exists grades_upd on grades;
 create policy grades_upd on grades for update using (app.is_admin() or app.is_teacher_for_class("classKey")) with check (app.is_admin() or app.is_teacher_for_class("classKey"));
 
 -- ============ attendance ============
 alter table attendance enable row level security;
+drop policy if exists att_sel on attendance;
 create policy att_sel on attendance for select using (app.is_admin() or app.owns_child("studentId") or app.is_kurator_for("classKey") or app.is_homeroom_for("classKey"));
+drop policy if exists att_ins on attendance;
 create policy att_ins on attendance for insert with check (app.is_admin() or app.is_kurator_for("classKey") or app.is_homeroom_for("classKey"));
+drop policy if exists att_upd on attendance;
 create policy att_upd on attendance for update using (app.is_admin() or app.is_kurator_for("classKey") or app.is_homeroom_for("classKey")) with check (app.is_admin() or app.is_kurator_for("classKey") or app.is_homeroom_for("classKey"));
 
 -- ============ monitoring ============
 alter table monitoring enable row level security;
+drop policy if exists mon_sel on monitoring;
 create policy mon_sel on monitoring for select using (app.is_admin() or app.is_zavuch() or app.owns_child("studentId") or app.is_teacher_for_class("classKey"));
+drop policy if exists mon_ins on monitoring;
 create policy mon_ins on monitoring for insert with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject) and status='pending'));
+drop policy if exists mon_upd on monitoring;
 create policy mon_upd on monitoring for update using (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject))) with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject) and status='pending'));
+drop policy if exists mon_del on monitoring;
 create policy mon_del on monitoring for delete using (app.is_admin() or app.is_zavuch());
 
 -- ============ characteristics (umumiy xarakteristika) ============
 alter table characteristics enable row level security;
+drop policy if exists char_sel on characteristics;
 create policy char_sel on characteristics for select using (app.is_class_staff("classKey") or app.owns_child("studentId"));
+drop policy if exists char_ins on characteristics;
 create policy char_ins on characteristics for insert with check (app.can_write_general("classKey"));
+drop policy if exists char_upd on characteristics;
 create policy char_upd on characteristics for update using (app.can_write_general("classKey")) with check (app.can_write_general("classKey"));
+drop policy if exists char_del on characteristics;
 create policy char_del on characteristics for delete using (app.can_write_general("classKey"));
 
 -- ============ subject_notes (fan izohi — o'qituvchi izolyatsiyasi) ============
 alter table subject_notes enable row level security;
+drop policy if exists note_sel on subject_notes;
 create policy note_sel on subject_notes for select using (
   app.can_write_general("classKey")
   or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject))
   or app.owns_child("studentId"));
+drop policy if exists note_ins on subject_notes;
 create policy note_ins on subject_notes for insert with check (
   app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject)));
+drop policy if exists note_upd on subject_notes;
 create policy note_upd on subject_notes for update using (
   app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject)))
   with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject)));
+drop policy if exists note_del on subject_notes;
 create policy note_del on subject_notes for delete using (
   app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject)));
 
 -- ============ student_summaries (oylik xulosa) ============
 alter table student_summaries enable row level security;
+drop policy if exists sum_sel on student_summaries;
 create policy sum_sel on student_summaries for select using (app.is_class_staff("classKey") or app.owns_child("studentId"));
+drop policy if exists sum_ins on student_summaries;
 create policy sum_ins on student_summaries for insert with check (app.can_write_general("classKey"));
+drop policy if exists sum_upd on student_summaries;
 create policy sum_upd on student_summaries for update using (app.can_write_general("classKey")) with check (app.can_write_general("classKey"));
+drop policy if exists sum_del on student_summaries;
 create policy sum_del on student_summaries for delete using (app.can_write_general("classKey"));
 
 -- ============ invoices ============
 alter table invoices enable row level security;
+drop policy if exists inv_sel on invoices;
 create policy inv_sel on invoices for select using (app.is_admin() or app.is_zavuch() or app.owns_child("studentId"));
+drop policy if exists inv_ins on invoices;
 create policy inv_ins on invoices for insert with check (app.is_admin());
+drop policy if exists inv_upd on invoices;
 create policy inv_upd on invoices for update using (app.is_admin()) with check (app.is_admin());
+drop policy if exists inv_del on invoices;
 create policy inv_del on invoices for delete using (app.is_admin());
 
 -- ============ expenses (buxgalteriya — admin/zavuch) ============
 alter table expenses enable row level security;
+drop policy if exists exp_sel on expenses;
 create policy exp_sel on expenses for select using (app.is_admin() or app.is_zavuch());
+drop policy if exists exp_ins on expenses;
 create policy exp_ins on expenses for insert with check (app.is_admin() or app.is_zavuch());
+drop policy if exists exp_upd on expenses;
 create policy exp_upd on expenses for update using (app.is_admin() or app.is_zavuch()) with check (app.is_admin() or app.is_zavuch());
+drop policy if exists exp_del on expenses;
 create policy exp_del on expenses for delete using (app.is_admin());
 
 -- ============ users (o'zi/admin) ============
 alter table users enable row level security;
+drop policy if exists users_sel on users;
 create policy users_sel on users for select using (id = app.uid() or app.is_admin());
 -- admin/direktor istalgan foydalanuvchini/rolni yozadi; o'zini faqat parent/student (verified=false) qilib qo'shadi.
 -- (Shim setDoc = UPSERT -> mavjudni yangilashda ham INSERT with-check tekshiriladi, shuning uchun admin shart.)
+drop policy if exists users_ins on users;
 create policy users_ins on users for insert with check (app.is_admin() or (id = app.uid() and role in ('parent','student') and verified = false));
 -- self-update: rol/verified/biriktirilgan sinflarni O'ZGARTIRA OLMAYDI (eski qiymat bilan solishtiramiz)
+drop policy if exists users_upd on users;
 create policy users_upd on users for update using (app.is_admin() or id = app.uid())
   with check (app.is_admin() or (
      id = app.uid()
@@ -151,31 +192,42 @@ create policy users_upd on users for update using (app.is_admin() or id = app.ui
      and coalesce("assignedClasses", '[]'::jsonb) = coalesce((select u."assignedClasses" from public.users u where u.id = app.uid()), '[]'::jsonb)
      and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((select u."assignedSubjects" from public.users u where u.id = app.uid()), '[]'::jsonb)
   ));
+drop policy if exists users_del on users;
 create policy users_del on users for delete using (app.is_admin());
 
 -- ============ payments / checkins (server yozadi = service_role; mijoz faqat o'qiydi) ============
 alter table payments enable row level security;
+drop policy if exists pay_sel on payments;
 create policy pay_sel on payments for select using (app.is_admin());
 alter table checkins enable row level security;
+drop policy if exists chk_sel on checkins;
 create policy chk_sel on checkins for select using (app.is_admin() or app.is_zavuch());
 
 -- ============ enrollments / applications (ochiq yuboriladi; admin o'qiydi) ============
 alter table enrollments enable row level security;
 -- 2d: ommaviy (admin bo'lmagan) INSERT'da status faqat 'yangi'/null va note bo'sh —
 -- soxta 'qabul' lead yoki note injeksiyasini bloklaydi. Admin cheklanmaydi (voronka).
+drop policy if exists enr_ins on enrollments;
 create policy enr_ins on enrollments for insert with check (
   app.is_admin() or ((status is null or status = 'yangi') and note is null)
 );
+drop policy if exists enr_sel on enrollments;
 create policy enr_sel on enrollments for select using (app.is_admin());
+drop policy if exists enr_upd on enrollments;
 create policy enr_upd on enrollments for update using (app.is_admin());
+drop policy if exists enr_del on enrollments;
 create policy enr_del on enrollments for delete using (app.is_admin());
 alter table applications enable row level security;
 -- Ariza topshirish (ommaviy). Natija/baholash maydonlari (result/gradedAt) oldindan
 -- to'ldirilmasin — bu QAT'IYLASHTIRISH applications-guard.sql'da (u ustunlar qo'shilgach,
 -- run-all oxirida ishlaydi; bu yerda result/gradedAt ustunlari HALI mavjud emas).
+drop policy if exists app_ins on applications;
 create policy app_ins on applications for insert with check (status = 'submitted');
+drop policy if exists app_sel on applications;
 create policy app_sel on applications for select using (app.is_admin() or app.is_zavuch());
+drop policy if exists app_upd on applications;
 create policy app_upd on applications for update using (app.is_admin() or app.is_zavuch());
+drop policy if exists app_del on applications;
 create policy app_del on applications for delete using (app.is_admin() or app.is_zavuch());
 
 -- ============ secrets — MIJOZGA UMUMAN YOPIQ (RLS on, policy yo'q) ============
@@ -192,9 +244,13 @@ begin
     'achievements_school','achievements_students','classes','teachers','settings','config','exam_questions','timetable','homework'
   ] loop
     execute format('alter table %I enable row level security', t);
+    execute format('drop policy if exists %I on %I', t||'_sel', t);
     execute format('create policy %I on %I for select using (true)', t||'_sel', t);
+    execute format('drop policy if exists %I on %I', t||'_ins', t);
     execute format('create policy %I on %I for insert with check (app.is_admin())', t||'_ins', t);
+    execute format('drop policy if exists %I on %I', t||'_upd', t);
     execute format('create policy %I on %I for update using (app.is_admin()) with check (app.is_admin())', t||'_upd', t);
+    execute format('drop policy if exists %I on %I', t||'_del', t);
     execute format('create policy %I on %I for delete using (app.is_admin())', t||'_del', t);
   end loop;
 end $$;

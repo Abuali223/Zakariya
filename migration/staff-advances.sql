@@ -19,10 +19,12 @@ create table if not exists staff_advances (
 );
 alter table staff_advances enable row level security;
 drop policy if exists sa_sel on staff_advances;
--- Audit H2: SELECT'da HR ham bo'lsin (HR maosh payout'da avanslarni o'qiydi). audit-3.sql keyin
---   ishga tushib shu yakuniy shaklni o'rnatadi; bu yerda ham bir xil qilib qo'yamiz — tartibdan
---   qat'i nazar natija bir xil (deploy reordering xavfsiz).
-create policy sa_sel on staff_advances for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
+-- DIQQAT (bog'liqlik tartibi): bu fayl run-all.sql'da roles-rbac.sql (app.is_hr) va cashier-role.sql
+--   (app.is_cashier)'dan OLDIN ishlaydi -> bu yerda faqat MAVJUD funksiyalar (is_admin). YAKUNIY sa_sel
+--   (admin/HR/moliya/kassir) audit-3.sql'da o'rnatiladi; deploy butun zanjirni tartib bilan qo'llaydi.
+--   (Avval bu yerda is_hr() yozilgan edi — toza o'rnatishda "function app.is_hr() does not exist" bilan
+--   butun run-all.sql to'xtardi.)
+create policy sa_sel on staff_advances for select using (app.is_admin());
 drop policy if exists sa_ins on staff_advances;
 create policy sa_ins on staff_advances for insert with check (app.is_admin());
 drop policy if exists sa_upd on staff_advances;
