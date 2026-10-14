@@ -53,6 +53,9 @@ alter table invoices add column if not exists "pctApplied"      numeric;
 alter table invoices add column if not exists "sickDaysApplied" integer;
 alter table invoices add column if not exists "sickAmount"      numeric;
 alter table invoices add column if not exists "priceKey"        text;
+--    referralUsedIds: shu hisob-fakturada ishlatilgan referral(lar) id'lari (massiv) — repair/audit uchun.
+--    BU USTUN bo'lmasa -> invoice yozishда PGRST204 (hisob-faktura yaratilmaydi).
+alter table invoices add column if not exists "referralUsedIds" jsonb;
 
 -- ---------------------------------------------------------------------
 -- 4) price_table: sinf/yo'nalish/til bo'yicha oylik narx (numeric)

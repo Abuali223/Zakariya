@@ -3,7 +3,7 @@
    Firebase/Google so'rovlariga tegmaydi (boshqa origin).
    MUHIM: kod fayllari (HTML/JS/JSON) uchun fetch {cache:'reload'} — brauzer HTTP/CDN
    keshini chetlab, serverdan DOIM yangi oladi (deploy darhol ko'rinadi). */
-const V = 'iqror-v3';
+const V = 'iqror-v4';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
