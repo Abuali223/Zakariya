@@ -17,6 +17,19 @@ alter table config add column if not exists "tenureYears"   numeric;
 alter table config add column if not exists "monthsPerYear" numeric;
 alter table config add column if not exists "sickRate"      numeric;
 alter table config add column if not exists "flatAmount"    numeric;
+-- config/finance: o'rinbosarlik 1 dars haqi + kunlik ruxsat etilgan tanaffus + (eski/soatbay model
+--   uchun 0 yoziladigan) kech/erta/tanaffus jarima stavkalari. «Narx jadvali» saqlashi BITTA atomik
+--   upsert — AGAR shu maydonlardan bittasининг ustuni bo'lmasa, PGRST204 bilan BUTUN config/finance
+--   yozuvi (sickRate ham) yo'qoladi (audit H4). Shuning uchun YOZILADIGAN HAR BIR maydonга ustun kerak.
+--   DIQQAT: latePenalty/earlyPenalty standart 20000 (SA_RULES) — frontend ularni 0 yozib jarimani
+--   o'chiradi (soatbay model). Ustun bo'lmay yozuv tushmasa, loadSaRates 0 ni O'QIMAY, 20000 default
+--   qolib ketardi (jarima qayta yonardi) — shu sabab bu ustunlarni ham qo'shamiz (payload 0 yozadi).
+--   lessonRate standart 40000 (maktab qoidasi: 1 dars = 40 000).
+alter table config add column if not exists "lessonRate"          numeric;
+alter table config add column if not exists "allowedBreakMin"     numeric;
+alter table config add column if not exists "latePenalty"         numeric;
+alter table config add column if not exists "earlyPenalty"        numeric;
+alter table config add column if not exists "breakPenaltyPerHour" numeric;
 
 -- ---------------------------------------------------------------------
 -- 2) student_private: chegirma/imtiyoz maydonlari (MAXFIY — PII bilan birga)

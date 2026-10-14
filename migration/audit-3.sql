@@ -75,7 +75,10 @@ drop policy if exists salpay_del on public.salary_payments;
 create policy salpay_del on public.salary_payments for delete using (app.is_admin() or app.is_hr() or app.is_finance());
 
 drop policy if exists sa_sel on staff_advances;
-create policy sa_sel on staff_advances for select using (app.is_admin() or app.is_finance() or app.is_cashier());
+-- Audit (H2): HR ham o'qiy olishi SHART — HR maosh payout'ni ochganda (openSalaryPayout) avanslarni
+--   o'qiydi; aks holda RLS bo'sh [] qaytaradi -> avans 0 deb hisoblanadi -> oylik avans summasicha
+--   ortiqcha beriladi. HR faqat SELECT (avans YOZISH/O'ZGARTIRISH moliya/kassir ishi — sa_ins/upd/del'da HR yo'q).
+create policy sa_sel on staff_advances for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 drop policy if exists sa_ins on staff_advances;
 create policy sa_ins on staff_advances for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
 drop policy if exists sa_upd on staff_advances;

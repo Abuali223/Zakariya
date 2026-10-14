@@ -73,4 +73,34 @@ create or replace function app.is_cashier() returns boolean language sql stable 
                    from public.users where id = app.uid()), false)
 $$;
 
+-- 2d) OFIS ROLLARI (moliya/HR/qabul/marketing/ma'muriyat rahbari) ham FAOL status talab qiladi.
+--     Audit (H1): auth-hardening is_staff/is_cashier'ga status tekshiruvini qo'shgan, LEKIN bu
+--     predikatlar (roles-rbac.sql / reception-access.sql'da ta'riflangan) gated EMAS edi. Natijada
+--     status='blocked' qilingan finance/HR/reception hisob, GoTrue tokeni tirik bo'lgani uchun,
+--     RLS orqali OYLIK / PII / to'lov (apply_payment) ni O'QIY/YOZA olardi. Bu yerda QAYTA ta'riflaymiz
+--     (auth-hardening roles-rbac/reception-access'DAN KEYIN, secdef-searchpath'DAN OLDIN ishga tushadi,
+--     shuning uchun bu ta'riflar g'olib bo'ladi; search_path keyin secdef-searchpath'da qayta mahkamlanadi).
+--     Rol ro'yxatlari roles-rbac.sql bilan BIR XIL — faqat status sharti qo'shildi (a'zolik o'zgarmadi).
+--     is_admin()/is_zavuch() ATAYLAB gated EMAS (superuser/rahbarni tasodifan qulflamaslik uchun).
+create or replace function app.is_admin_head() returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role in ('director','admin','admin_head')
+    and coalesce(nullif(status,''),'active') = 'active')
+$$;
+create or replace function app.is_hr() returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role in ('director','hr')
+    and coalesce(nullif(status,''),'active') = 'active')
+$$;
+create or replace function app.is_finance() returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role in ('director','finance_mgr','treasurer')
+    and coalesce(nullif(status,''),'active') = 'active')
+$$;
+create or replace function app.is_marketing() returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role in ('director','marketing_mgr')
+    and coalesce(nullif(status,''),'active') = 'active')
+$$;
+create or replace function app.is_reception() returns boolean language sql stable security definer as $$
+  select exists(select 1 from public.users where id = app.uid() and role = 'reception'
+    and coalesce(nullif(status,''),'active') = 'active')
+$$;
+
 notify pgrst, 'reload schema';

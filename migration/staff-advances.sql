@@ -19,7 +19,10 @@ create table if not exists staff_advances (
 );
 alter table staff_advances enable row level security;
 drop policy if exists sa_sel on staff_advances;
-create policy sa_sel on staff_advances for select using (app.is_admin());
+-- Audit H2: SELECT'da HR ham bo'lsin (HR maosh payout'da avanslarni o'qiydi). audit-3.sql keyin
+--   ishga tushib shu yakuniy shaklni o'rnatadi; bu yerda ham bir xil qilib qo'yamiz — tartibdan
+--   qat'i nazar natija bir xil (deploy reordering xavfsiz).
+create policy sa_sel on staff_advances for select using (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 drop policy if exists sa_ins on staff_advances;
 create policy sa_ins on staff_advances for insert with check (app.is_admin());
 drop policy if exists sa_upd on staff_advances;

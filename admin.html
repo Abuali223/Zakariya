@@ -3790,10 +3790,25 @@ function carryBalance(pays, beforeMonth){
   //   (aks holda ikki payout qarzni ikki barobar ko'rsatardi). Eski (paid yo'q) yozuv to'liq to'langan.
   const byMonth={};
   (pays||[]).forEach(p=>{ const m=String(p.month||''); if(!m) return; if(beforeMonth && m>=String(beforeMonth)) return;
-    const net=Number(p.net)||0, sb=Number(p.subBonus)||0; const due=net+sb;
+    const sb=Number(p.subBonus)||0;
+    // Audit M3: oylik haqiqiy majburiyati KOMPONENTLARDAN hisoblanadi — gross − avans − ushlanma +
+    //   o'rinbosarlik — QIRQILMAGAN (manfiy bo'lishi mumkin). Saqlangan `net` = max(0, gross−avans−ushlanma)
+    //   QIRQILGAN edi -> ortiqcha avans (adv+ded > gross) KEYINGI OYGA o'tmay, maktab zarariga yo'qolardi.
+    //   Eski yozuvlarda komponentlar bo'lmasligi mumkin -> net+subBonus ga qaytamiz (regressiyasiz).
+    const hasComp=(p.gross!=null || p.advance!=null || p.deduction!=null);
+    const due = hasComp ? ((Number(p.gross)||0)-(Number(p.advance)||0)-(Number(p.deduction)||0)+sb)
+                        : ((Number(p.net)||0)+sb);
     const paid=(p.paid==null||p.paid==='')?due:(Number(p.paid)||0);
-    const g=byMonth[m]=byMonth[m]||{due:0, paid:0};
-    g.due=Math.max(g.due, due);   // oylik qarz — bir marta (odatda yozuvlar teng; eng kattasini olamiz)
+    const g=byMonth[m]=byMonth[m]||{due:0, paid:0, ord:null};
+    // Oylik qarz BIR MARTA sanaladi (bir necha payout bo'lsa to'lovlar yig'iladi, qarz takror emas).
+    //   Audit L1: bir oyda yozuvlar TURLICHA bo'lsa (payoutlar orasida ushlanma o'zgargan) — eng SO'NGGI
+    //   (date bo'yicha) yozuvning qarzini olamiz (korrektsiya to'g'ri bo'lsin), eski "max" emas. Sana yo'q/
+    //   teng bo'lsa — max (eski xavfsiz xatti-harakatdan past tushmaymiz).
+    const ord=String(p.date||'');
+    if(g.ord===null){ g.due=due; g.ord=ord; }            // oyning birinchi yozuvi
+    else if(ord>g.ord){ g.due=due; g.ord=ord; }          // KECHROQ sana -> shu yozuv qarzni belgilaydi (korrektsiya)
+    else if(ord===g.ord){ g.due=Math.max(g.due, due); }  // bir xil (yoki ikkisi ham sanasiz) -> eski xavfsiz max
+    // aks holda ERTAROQ sana -> mavjud (kechroq) qarz saqlanadi, bu yozuv e'tiborsiz
     g.paid+=paid; });              // naqd to'lovlar — yig'iladi
   let bal=0; Object.values(byMonth).forEach(g=>{ bal += (g.due - g.paid); });
   return Math.round(bal);
@@ -4620,15 +4635,25 @@ async function openSalaryPayout(opts){
   const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');   // guruhlab (so'm — matnda qo'lda qo'shiladi)
   const payees=await loadPayees();
   if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
-  let SALL=[]; try{ SALL=await loadCol('salary_payments'); }catch(e){ SALL=[]; }
-  let SUBALL=[]; try{ SUBALL=await loadCol('staff_substitutions'); }catch(e){ SUBALL=[]; }
-  let ADV=[]; try{ ADV=await loadCol('staff_advances'); }catch(e){ ADV=[]; }
+  // Audit H2: maosh hisobiga kiradigan to'plamlar O'QILMASA (tarmoq/RLS xato) JIM [] bilan davom etsak —
+  //   oldingi qoldiq (SALL), o'rinbosarlik (SUBALL) yoki AVANS (ADV) 0 deb hisoblanib, oylik NOTO'G'RI
+  //   (ko'pincha avans summasicha ORTIQCHA) beriladi. Shuning uchun xato bo'lsa payoutni OCHMAYMIZ.
+  //   DIQQAT: bo'sh [] (haqiqatan yozuv yo'q / RLS mos rolga ruxsat bersa-yu qator bo'lmasa) — normal;
+  //   faqat EXCEPTION (o'qib bo'lmadi) bloklaydi.
+  let SALL, SUBALL, ADV;
+  try{ SALL=await loadCol('salary_payments'); SUBALL=await loadCol('staff_substitutions'); ADV=await loadCol('staff_advances'); }
+  catch(e){ toast('Maosh ma‘lumotlarini (qoldiq / avans / o‘rinbosarlik) o‘qib bo‘lmadi — qayta urinib ko‘ring. Oylik noto‘g‘ri hisoblanmasin.',true); return; }
   const advOfMonth=M=>ADV.filter(a=>String(a.month||String(a.date||'').slice(0,7))===M);
   const MO=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
   const mLabel=k=>{ const p=String(k||'').split('-'); return (MO[(parseInt(p[1],10)||1)-1]||'')+' '+(p[0]||''); };
   const payeeByRef={}; payees.forEach(p=>{ payeeByRef[(p.kind||'')+':'+String(p.refId||'')]=p; });
   let paidTouched=false;   // foydalanuvchi «naqd»ni qo'lda o'zgartirsa — avtomatik qayta yozmaymiz
   const M=opts.month||curMonth();
+  // Audit M6: payout IDEMPOTENT bo'lsin — bitta modal ochilishiga BITTA barqaror id. Javob yo'qolib (ack
+  //   yo'q) qayta bosilsa, SHU modalда setDoc O'SHA id ustiga yozadi (dublikat yozuv YO'Q -> carryBalance
+  //   buzilmaydi). Yangi payout (masalan bo'lib berishning 2-qismi) modalни QAYTA ochadi -> yangi nonce ->
+  //   yangi yozuv. Shunday qilib retry dedup bo'ladi, ataylab ikkinchi qisman to'lov esa saqlanadi.
+  const payNonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
   const presel=opts.preselectPayId?String(opts.preselectPayId):'';
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
@@ -4651,8 +4676,9 @@ async function openSalaryPayout(opts){
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sp-do">Berish + chek</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const dnum=v=>Number(String(v==null?'':v).replace(/\D/g,''))||0;
+  let sameMonthPaidV=0;   // Audit L1: SHU oy uchun ALLAQACHON berilgan naqd (bo'lib berishning oldingi qismi)
   const carryShow=()=>{ const totalDue=Number($('#sp-net').value)||0, paid=dnum($('#sp-paid')&&$('#sp-paid').value);
-    const left=totalDue-paid; const box=$('#sp-carry'); if(!box) return;
+    const left=totalDue-sameMonthPaidV-paid; const box=$('#sp-carry'); if(!box) return;
     if(left>0) box.innerHTML=`<span style="color:#B45309">Keyingi oyga qoldiq: <b>${fmtSum(left)}</b> so‘m</span>`;
     else if(left<0) box.innerHTML=`<span style="color:#B45309">Ortiqcha berildi (keyingi oydan ayiriladi): <b>${fmtSum(-left)}</b> so‘m</span>`;
     else box.innerHTML=`<span style="color:#1F9982">To‘liq berildi — qoldiq yo‘q ✓</span>`; };
@@ -4665,10 +4691,16 @@ async function openSalaryPayout(opts){
     const sub=Number($('#sp-sub').value)||0, prior=Number($('#sp-prior').value)||0;
     const monthRemainder=Math.max(0,gross-adv-ded);
     const totalDue=Math.max(0, monthRemainder+sub+prior);
+    // Audit L1: SHU oy uchun oldin berilgan naqd(lar)ni hisobga olamiz — aks holda ikkinchi marta
+    //   ochganda to'liq oy QAYTA taklif qilinib, xodimga ortiqcha berilardi. Default naqd = QOLGANI.
+    sameMonthPaidV=(SALL||[]).filter(r=>String(r.teacherId)===String(tid) && String(r.month)===String(mm))
+      .reduce((s,r)=>s+((r.paid==null||r.paid==='')?0:(Number(r.paid)||0)),0);
+    const dueNow=Math.max(0, totalDue - sameMonthPaidV);
     $('#sp-gross').value=gross; $('#sp-adv').value=adv; $('#sp-net').value=totalDue;
-    if(!paidTouched && $('#sp-paid')) $('#sp-paid').value=String(totalDue);
+    if(!paidTouched && $('#sp-paid')) $('#sp-paid').value=String(dueNow);
     const proNote=(bi&&bi.skip)?` <span style="color:#B45309">(${esc(bi.reason||'faol emas')}: maosh yo‘q)</span>`:((bi&&bi.partial)?` <span style="color:#B45309">(prorata ${bi.actDays}/${bi.fullDays} ish kuni)</span>`:'');
-    $('#sp-info').innerHTML=`Maosh: <b>${fmtSum(gross)}</b>${proNote} · Avans: <b>${fmtSum(adv)}</b> · Ushlanma: <b>${fmtSum(ded)}</b>${sub?` · <span style="color:#1F7A4D">O‘rinbosarlik: +${fmtSum(sub)}</span>`:''}${prior?` · <span style="color:#B45309">Oldingi qoldiq: ${prior>0?'+':'−'}${fmtSum(Math.abs(prior))}</span>`:''} · <span style="color:#1F9982">To‘lanishi kerak: <b>${fmtSum(totalDue)}</b> so‘m</span>`;
+    const paidNote=sameMonthPaidV>0?` · <span style="color:#B45309">Shu oy berilgan: ${fmtSum(sameMonthPaidV)}</span> · <span style="color:#1F9982">Qolgani: <b>${fmtSum(dueNow)}</b></span>`:'';
+    $('#sp-info').innerHTML=`Maosh: <b>${fmtSum(gross)}</b>${proNote} · Avans: <b>${fmtSum(adv)}</b> · Ushlanma: <b>${fmtSum(ded)}</b>${sub?` · <span style="color:#1F7A4D">O‘rinbosarlik: +${fmtSum(sub)}</span>`:''}${prior?` · <span style="color:#B45309">Oldingi qoldiq: ${prior>0?'+':'−'}${fmtSum(Math.abs(prior))}</span>`:''} · <span style="color:#1F9982">To‘lanishi kerak: <b>${fmtSum(totalDue)}</b> so‘m</span>${paidNote}`;
     carryShow(); };
   const loadDed=async()=>{ const tid=$('#sp-t').value, mm=$('#sp-month').value||M, p=payees.find(x=>x.id===String(tid))||{};
     const info=$('#sp-ded-info'), inp=$('#sp-ded');
@@ -4708,13 +4740,20 @@ async function openSalaryPayout(opts){
     const monthRemainder=Math.max(0,gross-adv-ded);
     const totalDue=Number($('#sp-net').value)||0;
     const paid=dnum($('#sp-paid')&&$('#sp-paid').value);
-    const carryOut=Math.round((monthRemainder+sub+prior)-paid);
+    // Audit L1: SHU oy oldin berilgan naqd (sameMonthPaidV) ni ham hisobga olib keyingi oyga qoldiqni
+    //   hisoblaymiz (aks holda bo'lib berishda qoldiq noto'g'ri ko'rsatilardi).
+    const carryOut=Math.round((monthRemainder+sub+prior)-sameMonthPaidV-paid);
     if(gross<=0 && sub<=0 && prior<=0){ toast('Bu xodimga maosh hisoblanmagan — avval maoshini kiriting',true); return; }
     const btn=$('#sp-do'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
-    try{ const ex=await getDocs(query(collection(db,'salary_payments'), where('teacherId','==',String(tid))));
-      if(ex.docs.some(d=>String((d.data()||{}).month)===String(mm)) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
-    }catch(e){}
-    try{ await addDoc(collection(db,'salary_payments'), { teacherId:String(tid), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() });
+    // Audit M6: takrorlik tekshiruvi O'QILMASA — JIM davom etmaymiz (yutib yuborilgan xato ikki marta
+    //   to'lovga olib kelardi). O'qilmasa bloklaymiz; o'qilsa — ogohlantiramiz.
+    let exDocs;
+    try{ const ex=await getDocs(query(collection(db,'salary_payments'), where('teacherId','==',String(tid)))); exDocs=ex.docs; }
+    catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Oldingi to‘lovlarni tekshirib bo‘lmadi — qayta urinib ko‘ring (takror to‘lov bo‘lmasin)',true); return; }
+    if(exDocs.some(d=>String((d.data()||{}).month)===String(mm)) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
+    // Audit M6: IDEMPOTENT yozuv — bitta modal uchun barqaror id. Ack yo'qolib qayta bosilsa O'SHA id
+    //   ustiga yoziladi (dublikat yo'q). addDoc (har safar yangi hujjat) carryBalance'ni buzardi.
+    try{ await setDoc(doc(db,'salary_payments','sp_'+String(tid)+'_'+mm+'_'+payNonce), { teacherId:String(tid), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }, {merge:true});
       toast('Maosh berildi ✓');
       $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Maosh berildi</h3><button class="x" id="m-x2">×</button></div>
         <div class="modal-b"><div class="small" style="background:#eef3f1;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} · ${esc(mLabel(mm))} — naqd <b>${fmtSum(paid)}</b> so‘m${carryOut>0?`<br><span style="color:#B45309;font-weight:400">Keyingi oyga qoldiq: ${fmtSum(carryOut)} so‘m</span>`:(carryOut<0?`<br><span style="color:#B45309;font-weight:400">Ortiqcha berildi: ${fmtSum(-carryOut)} so‘m (keyingi oydan ayiriladi)</span>`:'')}</div>
@@ -5432,9 +5471,16 @@ async function openFinanceAudit(){
     if(!SESSION.isAdmin) return; const sid=b.getAttribute('data-fix'); const amt=Math.round(Number(b.getAttribute('data-amt'))||0); if(amt<=0) return;
     if(!confirm(`${nameMap[sid]||sid}: osilib qolgan ${fmtN(amt)} so‘m eng eski to‘lanmagan fakturaga qo‘llansinmi?\n(Yangi to‘lov yozuvi yaratilmaydi — mavjud pul fakturaga biriktiriladi. Ortiqchasi avansga o‘tadi.)`)) return;
     b.disabled=true; const t0=b.textContent; b.textContent='…';
-    try{ await applyPaymentClient(String(sid), amt, 'cash', 'fix_'+Date.now()+'_'+Math.random().toString(36).slice(2,6));
+    // Audit H6: payId DETERMINISTIK (sid+amt+sana) — ack yo'qolib qayta bosilsa apply_payment IDEMPOTENT
+    //   (applied_payments ON CONFLICT) -> pul IKKI MARTA qo'llanmaydi. Oldin 'fix_'+Date.now()+random edi:
+    //   har bosishda yangi id -> dublikat qo'llash (qarz ikki marta kamayib, soxta avans paydo bo'lardi).
+    //   Sana — oylar keyin aynan shu summa yana osilса (boshqa hodisa) noto'g'ri "dup" bo'lmasligi uchun.
+    const payId='fix_'+String(sid)+'_'+amt+'_'+new Date().toISOString().slice(0,10);
+    try{ await applyPaymentClient(String(sid), amt, 'cash', payId);
       toast('Fakturaga qo‘llandi ✓'); openFinanceAudit(); }
-    catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+(e.code||e.message),true); }
+    // Xato bo'lsa HAM auditni qayta chizamiz: server qo'llagan-u javob yo'qolgan bo'lsa (lost ack),
+    //   qator hal bo'lgan holda ko'rinadi (eski tugma stale summa bilan qayta bosishga chorlamaydi).
+    catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+(e.code||e.message),true); openFinanceAudit(); }
   });
 }
 async function renderPriceTable(){
@@ -5581,19 +5627,24 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   Object.values(comp).forEach(members=>{
     const ms=members.map(meta); const size=members.length;
     const elig=ms.filter(m=>m.eligible10);
+    // Audit M5: 2-vs-3+ chegaraси FAKTURA CHIQADIGAN (billable) bolalar soni bo'yicha bo'lsin —
+    //   members.length emas. Fakturasiz bola (narx yo'q + zaxira summа yo'q) oila hajmini shishirib,
+    //   2 to'lovchi aka-ukani 3+ bandiga surib, ortiqcha 10% berib yuborardi. CAP esa XOM a'zolar soni
+    //   bo'yicha qoladi (umumiy telefon = begona oila sanity tekshiruvi).
+    const billCount=ms.filter(m=>m.billable).length;
     if(size>CAP){
       conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon?) — avtomatik chegirma berilmadi`);
-    } else if(size>=3){
-      // 3+ aka-uka -> HAR BIR mos o'quvchiga 10%.
+    } else if(billCount>=3){
+      // 3+ (fakturaga tushadigan) aka-uka -> HAR BIR mos o'quvchiga 10%.
       elig.forEach(m=>tenHolders.add(m.sid));
-    } else if(size===2 && elig.length){
+    } else if(billCount===2 && elig.length){
       // 2 aka-uka -> bittasiga (past ballik) 10%.
       const srt=elig.slice().sort(tiebreak); tenHolders.add(srt[0].sid);
     }
     // Qo'lda «Aka-uka chegirmasi = Ha» (admin override) — hajmdan qat'i nazar har bir MOS bola 10% oladi.
     ms.filter(m=>m.pv.siblingDiscount==='Ha').forEach(m=>{
       if(m.eligible10) tenHolders.add(m.sid);
-      else conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':'eksklyuziv'} — e'tiborsiz`);
+      else conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':(!m.billable?'bu oy fakturaga tushmaydi (sinov/muzlatilgan/chiqdi yoki narx yo‘q)':'eksklyuziv')} — e'tiborsiz`);
     });
   });
   return { tenHolders, conflicts };
@@ -5763,9 +5814,18 @@ async function pmLoadCtx(month, students, amount){
   const monScoreFn=sid=>{ const a=monAgg[String(sid)]; return (a&&a.cnt)?(a.sum/a.cnt):null; };
   // Bola fakturaga tushadimi (skip bo'lmaydimi)? — aka-uka slotни faqat billable bolага berish uchun.
   const canBill=(s)=>{ const pv=privOf(s.studentId||s._id)||{};
+    // canBill = «computeTuity BU bolaga faktura chiqaradimi?» — AYNAN mos bo'lishi shart (aks holда
+    //   slot/tier noto'g'ri). computeTuity: (1) status skip bo'lmasa, (2) kontrakt>0 | narx bor | zaxira>0.
+    // Audit H3: billingInterval SKIP (sinov / muzlatilgan|chiqdi stopFrom'siz) -> faktura YO'Q -> billable EMAS.
+    //   Avval tekshirilmasdi -> sinov/muzlatilgan aka-uka (ball yo'q=-∞ tiebreak'da birinchi) 2-lik slotни
+    //   «o'g'irlardi», to'laydigan aka to'liq narx to'lardi.
+    if(billingInterval(s, month).skip) return false;
     if(pv.specialCategory==='contract') return isFinite(Number(pv.contractAmount)) && Number(pv.contractAmount)>0;
     const pAmt=Number(priceMap[priceKeyOf(s)]); if(isFinite(pAmt)&&pAmt>0) return true;
-    return !Object.keys(priceMap).length ? (Number(amount)>0) : false; };   // priceEmpty -> zaxira summа; aks holда skip
+    // Audit M1: computeTuity zaxira summani (flatAmount>0) narx jadvali BO'SH BO'LMASA ham qo'llaydi
+    //   (o'z narxi topilmasa). Avval canBill faqat priceMap butunlay bo'sh bo'lsa billable derdi ->
+    //   qisman to'ldirilган jadvalda zaxira-narxli aka-uka 10% ololmay qolardi. Endi computeTuity bilan bir xil.
+    return (isFinite(Number(amount)) && Number(amount)>0); };
   const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill);
   const ctx={ month, priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
   return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
@@ -6133,7 +6193,6 @@ async function renderPayments(){
     try{
       const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
       const { existRef, pendingRef } = pmReferralMaps(students, privOf, ledger, month);
-      const newLedger=[]; const creditMap={};
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       // KUTILAYOTGAN/QISMAN to'langan — qayta hisoblanadi. HAQIQATAN to'langan (paidAmount>0) tegilmaydi
@@ -6148,7 +6207,7 @@ async function renderPayments(){
         return st==='paid' && noCash && grantZero; });
       let changed=0, skipped=0, avans=0;
       for(let i=0;i<docs.length;i+=400){
-        const batch=writeBatch(db); let wrote=false;
+        const batch=writeBatch(db); let wrote=false; const batchCredits=[];
         docs.slice(i,i+400).forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
           const t=computeTuition(s, privOf(sid), ctx); if(t.skip){ skipped++; return; }
           const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[]);
@@ -6157,20 +6216,24 @@ async function renderPayments(){
           batch.set(doc(db,'invoices',d.id), { studentName:(s.name||inv.studentName||sid), classKey:classKeyOf(s),   // snapshotni JORIY o'quvchi ma'lumotiga yangilaydi (eksport/kabinet ham to'g'ri chiqsin)
             amount:rc.amount, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:rc.isGrant,
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, priceKey:t.priceKey, status:rc.status, paidAmount:rc.paidAmount,
+            referralUsedIds:rRef.usedIds,   // Audit H5: referralUsedIds invoice BILAN birga (generate kabi) — repair/audit uchun
             // provider: grant (naqd yo'q) -> 'grant'; aks holda eski STALE 'grant'ni tozalaymiz (endi grant emas);
             //   haqiqiy to'lov usuli (click/naqd...) saqlanadi. paidAt faqat haqiqatan to'langanda qoladi.
             provider:(rc.isGrant && !(Number(inv.paidAmount)>0))?'grant':((inv.provider==='grant')?'':(inv.provider||'')),
             paidAt:(rc.status==='paid'?(inv.paidAt||serverTimestamp()):null) }, {merge:true});
+          // Audit H5: referral_ledger qatori HAM SHU BATCHDA (invoice bilan birga commit) — avval alohida
+          //   oxirgi batch edi; uzilса referral_ledger yozilmay, referral KEYINGI oyda QAYTA qo'llanardi.
+          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>batch.set(doc(db,'referral_ledger',String(nid)), {referrerId:sid, amount:300000, month, appliedAt:serverTimestamp()}));
           changed++; wrote=true;
-          if(rc.creditExcess>0){ creditMap[sid]=(creditMap[sid]||0)+rc.creditExcess; avans++; }
-          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>newLedger.push({id:nid, referrerId:sid, amount:300000, month})); });
+          // Audit M2/M4: ortiqcha to'lovni avansga — ATOMIK add_credit (lock+idempotent), client getDoc+setDoc EMAS.
+          //   ref = recompute:<invoiceId>:<net> -> uzilib qayta ishga tushsa ikki marta qo'shilmaydi.
+          if(rc.creditExcess>0){ batchCredits.push({ sid:String(sid), amt:rc.creditExcess, ref:'recompute:'+d.id+':'+Math.round(rc.amount) }); avans++; } });
+        // Audit M4: avansni invoice KAMAYTIRILISHIDAN OLDIN (atomik RPC) yozamiz — shunda yozuv uzilса ham
+        //   pul yo'qolmaydi (re-run reconcile hali kamaymagan invoicedan excess'ni qayta hisoblaydi va
+        //   add_credit idempotent ref orqali ikki marta qo'shmaydi), keyin invoice batch commit.
+        for(const c of batchCredits){ await rpc('add_credit', { p_sid:c.sid, p_delta:c.amt, p_reason:'recompute', p_note:'Qayta hisoblash: narx kamaydi, ortiqcha to‘lov avansga', p_ref:c.ref }); }
         if(wrote) await batch.commit();
       }
-      for(let i=0;i<newLedger.length;i+=400){ const b=writeBatch(db); newLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:x.amount, month:x.month, appliedAt:serverTimestamp()}); }); await b.commit(); }
-      // Ortiqcha to'lovlarni avansga (student_credit) qo'shamiz
-      for(const sid of Object.keys(creditMap)){ const amt=creditMap[sid]; if(amt>0){ let cur=0; try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) cur=Number((c.data()||{}).credit)||0; }catch(e){} await setDoc(doc(db,'student_credit',sid), {studentId:sid, credit:cur+amt, updatedAt:serverTimestamp()}, {merge:true});
-        // AVANS jurnali: qayta-hisoblashда narx kamayib, ortiqcha to'lov avansga o'tdi
-        const nm=(byId[sid]||{}).name||''; try{ await addDoc(collection(db,'credit_ledger'),{ studentId:String(sid), studentName:nm, delta:amt, balanceAfter:cur+amt, reason:'recompute', month, note:'Qayta hisoblash: narx kamaydi, ortiqcha to‘lov avansga', at:serverTimestamp() }); }catch(e){} } }
       $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }

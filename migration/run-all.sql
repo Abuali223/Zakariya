@@ -53,6 +53,7 @@
 \ir audit-9.sql
 \ir refund-rpc.sql
 \ir adjust-credit.sql
+\ir add-credit.sql
 \ir reception-access.sql
 \ir split-payment.sql
 \ir staff-attendance.sql
