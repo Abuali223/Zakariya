@@ -381,7 +381,7 @@ async function handleComplete(p){
       } else note = 'pul o‘quvchi balansiga (eng eski qarz / avans) qo‘llangan edi';
       await payRef.set({ status:'canceled', raw: withRaw(pay, note
         ? { needsManualReverse:true, reverseNote:'Click bekor qildi: '+note+' — QO‘LDA tuzating (som='+som+', studentId='+String(pay.studentId||'')+')' }
-        : { reversedApplied:true }) }, { merge:true });
+        : { reversedApplied:true, needsManualReverse:false, reverseNote:'' }) }, { merge:true });   // qayta urinishda avtomatik qaytdi — eski belgi qolmasin
       return clickErr(p, -9, 'Transaction cancelled', true);
     }
     await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true);

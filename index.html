@@ -2434,7 +2434,13 @@ addEventListener('hashchange', ()=>route(true));
         if(!db||!fsMod||!studentId) return null;
         const { collection, getDocs, query, where } = fsMod;
         try{ const snap = await getDocs(query(collection(db,'student_summaries'), where('studentId','==',studentId)));
-          return snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
+          const byMonth={}; snap.docs.forEach(d=>{ const x={id:d.id, ...d.data()}; byMonth[String(x.month||d.id)]=x; });
+          // Avvalgi versiya xulosani o'quvchi HUJJAT id'si bilan yozgan (import qilingan bolada studentId'dan farq qiladi) —
+          //   o'shalar ham (bir oy ikkalasida bo'lsa — kanonigi). Server RLS faqat o'z farzandiga tegishli kalitni ochadi.
+          try{ const q=await getDocs(query(collection(db,'students'), where('studentId','==',studentId)));
+            if(q.docs.length===1 && q.docs[0].id!==studentId){ const old=await getDocs(query(collection(db,'student_summaries'), where('studentId','==',q.docs[0].id)));
+              old.docs.forEach(d=>{ const x={id:d.id, ...d.data()}; const m=String(x.month||d.id); if(!byMonth[m]) byMonth[m]=x; }); } }catch(e){}
+          return Object.values(byMonth).sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')));
         }catch(e){ return null; }
       },
       async getCharacteristics(studentId){
@@ -2454,12 +2460,14 @@ addEventListener('hashchange', ()=>route(true));
       async getStudentPrivate(studentId){
         if(!db||!fsMod||!studentId) return null;
         const { doc, getDoc, collection, getDocs, query, where } = fsMod;
-        // student_private o'quvchi HUJJAT id'si bilan saqlanadi; import qilingan bolada u studentId'dan farq qiladi —
-        //   topilmasa studentId bo'yicha BITTA o'quvchi qatorining doc id'si bilan qayta so'raladi (server RLS
-        //   to'qnash kalitli qatorlarga ruxsat bermaydi — boshqa bolaning ma'lumoti chiqmaydi).
-        try{ let s=await getDoc(doc(db,'student_private',studentId));
-          if(!s.exists()){ const q=await getDocs(query(collection(db,'students'), where('studentId','==',studentId)));
-            if(q.docs.length===1 && q.docs[0].id!==studentId) s=await getDoc(doc(db,'student_private',q.docs[0].id)); }
+        // student_private o'quvchi HUJJAT id'si bilan saqlanadi; import qilingan bolada u studentId'dan farq qiladi.
+        //   Avval studentId bo'yicha AYNAN BITTA o'quvchi qatori topiladi va maxfiy ma'lumot o'sha qatorning doc id'si bilan
+        //   o'qiladi; topilmasa — eski (studentId bilan yozilgan) yozuv. Server RLS to'qnash kalitli qatorlarni ota-onaga
+        //   umuman ochmaydi — boshqa bolaning ma'lumoti chiqmaydi.
+        try{ const q=await getDocs(query(collection(db,'students'), where('studentId','==',studentId)));
+          const pid=(q.docs.length===1) ? q.docs[0].id : studentId;
+          let s=await getDoc(doc(db,'student_private',pid));
+          if(!s.exists() && pid!==studentId) s=await getDoc(doc(db,'student_private',studentId));
           return s.exists()?s.data():{}; }catch(e){ return null; }
       },
       async getPayConfig(){
@@ -2587,9 +2595,10 @@ addEventListener('hashchange', ()=>route(true));
       // farzandi davomatini xom 'students'dan (owns_child ruxsati) olib, ommaviy
       // STUDENTS ro'yxatiga patch qiladi. Xatolik bo'lsa kabinet 0% ko'rsatadi (buzilmaydi).
       async function enrichChildAtt(ids){ try{ for(const cid of (ids||[])){ if(!cid) continue; try{
-            // Hujjat id'si studentId'dan farq qilishi mumkin (import) — topilmasa studentId bo'yicha qidiramiz.
-            let x=null; const sd=await getDoc(doc(db,'students',cid)); if(sd.exists()) x=sd.data()||{};
-            else { const q=await getDocs(query(collection(db,'students'), where('studentId','==',cid))); if(q.docs.length) x=q.docs[0].data()||{}; }
+            // Hujjat id'si studentId'dan farq qilishi mumkin (import): avval studentId bo'yicha AYNAN BITTA qator, topilmasa doc id.
+            let x=null; const q=await getDocs(query(collection(db,'students'), where('studentId','==',cid)));
+            if(q.docs.length===1) x=q.docs[0].data()||{};
+            else if(!q.docs.length){ const sd=await getDoc(doc(db,'students',cid)); if(sd.exists()) x=sd.data()||{}; }
             if(x && window.IqrorPublic && window.IqrorPublic.patchStudentAtt) window.IqrorPublic.patchStudentAtt(cid, x.attendance); }catch(e){} } }catch(e){} }
       window.IqrorAuth = {
         getUser: ()=>currentUser,

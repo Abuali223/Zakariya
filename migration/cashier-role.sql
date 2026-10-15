@@ -19,7 +19,7 @@ $$;
 
 -- students: o'quvchini topib to'lov qabul qilish uchun o'qiydi (PII emas — students jadvali)
 drop policy if exists students_sel on students;
-create policy students_sel on students for select using (app.is_staff() or app.is_cashier() or app.owns_child(id));
+create policy students_sel on students for select using (app.is_staff() or app.is_cashier() or app.owns_student_doc(id));
 
 -- invoices: qarzni ko'rish (sel) + to'lovni belgilash (upd: paidAmount/status)
 drop policy if exists inv_sel on invoices;

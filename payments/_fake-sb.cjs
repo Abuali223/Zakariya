@@ -99,7 +99,7 @@ function makeFake(state, nowFn) {
     if (!inv) return { ok: false, error: 'notfound' };
     const sid = inv.studentId;
     if (p.p_ref) { const gid = 'reverse:' + p.p_ref; const ap = tbl('applied_payments');   // ALOHIDA namespace
-      if (ap[gid]) return { dup: true, ref: p.p_ref };
+      if (ap[gid]) return Object.assign({}, ap[gid].result || {}, { dup: true, ref: p.p_ref });   // birinchi natija ham (SQL kabi)
       ap[gid] = { id: gid, studentId: sid || '', amount: amt, createdAt: now() }; }
     const amount = num(inv.amount), paid = inv.status === 'paid' ? Math.max(num(inv.paidAmount), amount) : num(inv.paidAmount);   // eski 'paid' (paidAmount yo'q) = amount
     const fromInvoice = Math.min(amt, paid), fromCredit = Math.max(0, amt - fromInvoice), newpaid = Math.max(0, paid - fromInvoice);
@@ -110,7 +110,9 @@ function makeFake(state, nowFn) {
     if (fromCredit > 0 && sid) { const sc = tbl('student_credit'); const cr = (sc[sid] && num(sc[sid].credit)) || 0; crHad = cr;
       const nc = Math.max(0, cr - fromCredit); sc[sid] = { id: sid, studentId: sid, credit: nc, updatedAt: now() };
       ledger({ studentId: sid, studentName: (state.students && state.students[sid] && state.students[sid].name) || '', delta: -Math.min(cr, fromCredit), balanceAfter: nc, reason: 'reversed', provider }); }
-    return { ok: true, status, fromInvoice, fromCredit, newPaid: newpaid, studentId: sid || '', unrecovered: Math.max(0, fromCredit - crHad) };
+    const res = { ok: true, status, fromInvoice, fromCredit, newPaid: newpaid, studentId: sid || '', unrecovered: Math.max(0, fromCredit - crHad) };
+    if (p.p_ref) tbl('applied_payments')['reverse:' + p.p_ref].result = res;
+    return res;
   };
 
   const RPCS = { apply_payment, apply_to_invoice, reverse_payment };

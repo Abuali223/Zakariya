@@ -93,7 +93,10 @@ if systemctl is-enabled --quiet iqror-auth 2>/dev/null || systemctl is-active --
 # Xizmat kodi QAYSI papkadan ishlaydi (systemd WorkingDirectory)? Deploy kodni $REPO da yangilaydi; namuna unit'lar
 #   (migration/deploy/*.service) esa /opt/iqror dan ishlaydi. Boshqa papka bo'lsa — server kodi O'SHA papkaga ham
 #   yoziladi (faqat git'dagi fayllar: config.json, node_modules, backups/, supabase/ va boshqalar TEGILMAYDI),
-#   aks holda qayta ishga tushirish ESKI kodni ishlatardi. Egasi papkaning hozirgi egasi bilan bir xil qoladi.
+#   aks holda qayta ishga tushirish ESKI kodni ishlatardi. Fayllar papka EGASI nomidan yoziladi: config.json va boshqa
+#   git'da yo'q fayllarning egasi/ruxsati, mavjud papkalarning egasi/ruxsati O'ZGARMAYDI (avvalgi `chown -R` maxfiy
+#   config.json'ni root'ga o'tkazib, xizmat uni o'qiy olmay qolishi mumkin edi). Egasi yoza olmasa — deploy shu yerda
+#   to'xtaydi (xizmatlar qayta ishga tushirilmaydi, eski kod ishlab turadi).
 REPO_REAL=$(realpath -m "$REPO"); synced=" "
 for svc in $SERVICES; do
   wd=$(systemctl show -p WorkingDirectory --value "$svc" 2>/dev/null || true)
@@ -103,8 +106,9 @@ for svc in $SERVICES; do
   if [ -d "$wd/payments" ] || [ -d "$wd/ai-assistant" ] || [ -d "$wd/auth" ]; then
     echo "    $svc kodi $wd dan ishlaydi — server kodi o'sha yerga ham yozilmoqda (config.json tegilmaydi)"
     ref="$wd/payments"; [ -e "$ref" ] || ref="$wd"
-    git archive FETCH_HEAD ai-assistant payments server sb auth | sudo tar -x --no-same-owner -C "$wd"
-    sudo chown -R --reference="$ref" "$wd/ai-assistant" "$wd/payments" "$wd/server" "$wd/sb" "$wd/auth"
+    own=$(sudo stat -c %u "$ref")
+    git archive FETCH_HEAD ai-assistant payments server sb auth \
+      | sudo -u "#$own" tar -x --no-same-owner --no-same-permissions --no-overwrite-dir -C "$wd"
     synced="$synced$wd "
   else
     echo "⚠️  $svc WorkingDirectory=$wd — server kodi papkasiga o'xshamaydi, yangilanmadi (migration/deploy/README.md, «Xizmat papkasi»)"

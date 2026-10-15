@@ -30,6 +30,7 @@ declare
   v_name text;
   v_provider text;
   v_inserted int := 0;
+  v_res jsonb;
 begin
   -- Ruxsat: pulни QAYTARISH — sezgir money-move. Faqat direktor/moliya yoki server (Uzum/Click webhook).
   -- Kassir EMAS (kassir faqat to'lov QABUL qiladi, qaytarmaydi).
@@ -69,7 +70,12 @@ begin
       values ('reverse:' || p_ref, coalesce(v_sid,''), p_amount, now())
       on conflict (id) do nothing;
     get diagnostics v_inserted = row_count;
-    if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
+    -- Takroriy chaqiruv: BIRINCHI natija ham qaytadi (masalan «unrecovered») — provayder qayta yuborganda yoki javob
+    --   yo'qolganda «qo'lda qaytarish» belgisi tushib qolmasin.
+    if v_inserted = 0 then
+      return coalesce((select ap.result from public.applied_payments ap where ap.id = 'reverse:' || p_ref), '{}'::jsonb)
+             || jsonb_build_object('dup', true, 'ref', p_ref);
+    end if;
   end if;
 
   -- 4) AYNAN shu tranzaksiya summasini ayiramiz (boshqa to'lovlar saqlanadi): paidAmount'dan
@@ -107,9 +113,13 @@ begin
 
   -- unrecovered: avansdan qaytarib olinishi kerak bo'lgan, lekin avans allaqachon sarflangani uchun OLINMAGAN qism
   --   (chaqiruvchi — pay-server — buni «qo'lda qaytarish» navbatiga qo'yadi; jim yo'qolmasin).
-  return jsonb_build_object('ok', true, 'status', v_status, 'fromInvoice', v_from_invoice,
+  v_res := jsonb_build_object('ok', true, 'status', v_status, 'fromInvoice', v_from_invoice,
                             'fromCredit', v_from_credit, 'newPaid', v_newpaid, 'studentId', coalesce(v_sid,''),
                             'unrecovered', greatest(0, v_from_credit - (case when v_sid is not null and v_sid <> '' then v_cr else 0 end)));
+  if p_ref is not null and p_ref <> '' then
+    update public.applied_payments set result = v_res where id = 'reverse:' || p_ref;
+  end if;
+  return v_res;
 end $$;
 revoke all on function public.reverse_payment(text, numeric, text, text) from public;
 grant execute on function public.reverse_payment(text, numeric, text, text) to authenticated, service_role;

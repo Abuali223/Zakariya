@@ -35,7 +35,7 @@ create policy enr_sel on public.enrollments for select
 create or replace view public.student_phones as
   select id, "parentPhone", "parentPhone2"
   from public.student_private
-  where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.is_reception() or app.owns_child(id);
+  where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.is_reception() or app.owns_student_doc(id);
 grant select on public.student_phones to anon, authenticated;
 revoke all on public.student_phones from public;
 grant select on public.student_phones to service_role;
@@ -54,7 +54,7 @@ create policy students_upd on public.students for update using (app.is_admin() o
 --   O'CHIRISH (priv_del) O'ZGARMAYDI — direktorда.
 drop policy if exists priv_sel on public.student_private;
 create policy priv_sel on public.student_private for select
-  using (app.is_admin() or app.is_zavuch() or app.is_reception() or app.owns_child(id));
+  using (app.is_admin() or app.is_zavuch() or app.is_reception() or app.owns_student_doc(id));
 drop policy if exists priv_ins on public.student_private;
 create policy priv_ins on public.student_private for insert with check (app.is_admin() or app.is_reception());
 drop policy if exists priv_upd on public.student_private;

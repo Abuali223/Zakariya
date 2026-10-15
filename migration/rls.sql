@@ -33,6 +33,12 @@ $$;
 create or replace function app.owns_child(sid text) returns boolean language sql stable security definer as $$
   select exists(select 1 from public.child_claims where uid = app.uid() and "studentId" = sid)
 $$;
+-- owns_student_doc(id): HUJJAT ID bilan kalitlangan jadvallar (students, student_private, student_phones) uchun ota-ona
+--   tekshiruvi. Bu yerda vaqtincha owns_child'ga teng; YAKUNIY (qator-aniq, to'qnash kalitga chidamli) ta'rif —
+--   parent-link-canon.sql'da (zanjir oxirida, child_claims.status ustuni qo'shilgandan keyin).
+create or replace function app.owns_student_doc(p_id text) returns boolean language sql stable security definer as $$
+  select app.owns_child(p_id)
+$$;
 create or replace function app.is_homeroom_for(ck text) returns boolean language sql stable security definer as $$
   select exists(select 1 from public.users where id = app.uid() and role in ('admin','zavuch','kurator','teacher') and coalesce("homeroomClasses",'[]'::jsonb) ? ck)
 $$;
@@ -79,7 +85,7 @@ grant select on public.students_public to service_role;
 -- ============ student_private (PII — qulflangan) ============
 alter table student_private enable row level security;
 drop policy if exists priv_sel on student_private;
-create policy priv_sel on student_private for select using (app.is_admin() or app.is_zavuch() or app.owns_child(id));
+create policy priv_sel on student_private for select using (app.is_admin() or app.is_zavuch() or app.owns_student_doc(id));
 drop policy if exists priv_ins on student_private;
 create policy priv_ins on student_private for insert with check (app.is_admin());
 drop policy if exists priv_upd on student_private;

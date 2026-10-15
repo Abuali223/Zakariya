@@ -192,6 +192,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 **O'quvchi davomati**
 - Kurator saqlashi sinf o'zgargan oyda yarmida to'xtab qolardi → o'quvchi sinfi o'zgarsa uning oy qatorlari ham yangi sinf kalitiga ko'chadi (trigger `trg_student_class_rows`); saqlash o'quvchi-bo'yicha, xato bo'lsa kimniki saqlanmagani ko'rsatiladi.
 - «Davomat %» endi server tomonda (trigger `trg_attendance_pct`) har saqlashda qayta hisoblanadi; admin, ota-ona kabineti va AI yordamchi — bitta formula (kasal/sababli maxrajdan chiqariladi).
+- Bir ekrandan ikkinchi marta «Saqlash» bosilganda oraliqda boshqa xodim qo'ygan belgi (masalan «Bemor») endi ustidan yozilmaydi (har saqlashdan keyin ekran asosi yangilanadi; soxta «boshqa xodim o'zgartirgan» ogohlantirishi yo'q).
 - Ro'yxatda chiqgan/muzlatilgan o'quvchilar (to'xtagan kundan keyin) yo'q; kamera (Hikvision) birinchi kirishidan «Keldi/Kechikdi» taklif qilinadi (qo'lda belgilangan holat ustiga yozilmaydi); bayram/yakshanba/kelajak kuni ogohlantiriladi.
 - Sinf nomi/darajasi o'zgarsa o'quvchilari ham ko'chiriladi (kurator davomatni yo'qotmaydi). O'chirilgan o'quvchining ID'si yangi o'quvchiga berilmaydi.
 - Profil (QR)/transkript chorak baholari ('q1'..'q4') to'g'ri o'qiladi; ota-ona kabinetida faqat joriy o'quv yili baholari.
@@ -200,6 +201,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Bayram kunlari (`school_holidays`, «🎉 Bayramlar» tugmasi) — ushlanma hisoblanmaydi; bayramlar o'qilmasa maosh berish bloklanadi (jim noto'g'ri hisob yo'q).
 - Xodim muzlatish -> qaytish: «to'xtatilgan davr» (`teachers/staff.pauses`) — o'sha kunlar maoshga kirmaydi va «yo'q» deb ushlanmaydi; avval qaytgan xodimning O'TGAN oy maoshi keyin hisoblansa 0 chiqardi.
 - Xodim avansi: takroriy ID bloki, qayta bosishda ikkinchi yozuv yaratilmaydi.
+- «Oylik hisobot»: xodimlar yoki o'qituvchilar ro'yxati o'qilmasa — hisobot chiqmaydi (avval butun guruh JAMI va imzoli PDF'dan ogohlantirishsiz tushib qolardi).
 - Oylik hisobot, «Berish + chek» va «Oylik maoshni yozish» — bitta qoida (prorata, o'rinbosarlik, ushlanma, oxirgi yozuv); takroriy xodim ID'si bloklanadi; ma'lumot yuklanayotganda tugma o'chiq.
 - Maosh berishda tarmoq uzilib qayta bosilsa — ikkinchi yozuv yaratilmaydi (yozuv bor bo'lsa «berildi» ko'rsatiladi).
 - Maosh berish/«Oylik maoshni yozish» bonus stavkalarini (til/daraja/toifa) va jarima/tanaffus sozlamalarini HAR SAFAR bazadan o'qiydi; o'qib bo'lmasa — to'xtaydi (eski kesh yoki standart stavka bilan noto'g'ri «gross» yozilmaydi). Oylik hisobot ham yangi o'qiydi, o'qilmasa ogohlantiradi.
@@ -209,32 +211,38 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 
 **Hisob-faktura (billing)**
 - «Qayta hisoblash» endi to'lov qulfi ostida (`reprice_invoice`) — oraliqda kelgan to'lov ustiga yozilmaydi; holat bo'yicha keraksiz faktura faqat ANIQ holatda bekor qilinadi (o'tgan oy uchun shubhali holatlar tegilmaydi, ro'yxatda ko'rsatiladi).
+- Holat o'tishi (muzlatish / chiqarish / qaytarish) faqat ⏯️ «Holat» oynasi orqali — tahrir formasida «To'lov/Ish holati»ni shunday o'zgartirish rad etiladi (forma to'xtatilgan davrni yozmasdi: muzlatilgan oylar hisoblanib, «[holat]» bekorlari qarz bo'lib tiklanardi). «Sinov»dan muzlatish/chiqarishda sinov kunlari hisoblanmaydi (qaytganda shu kundan); allaqachon to'xtatilgan bolani «Chiqdi»/«Muzlatish» qilganda to'lov ERTAROQ sanagacha qoladi; sinovdagi o'quvchini kelajak sana bilan faollashtirish rad etiladi (davomat ro'yxatidan yashirinmasin).
 - Muzlatish → qaytish: `activeFrom` saqlanadi, oradagi kunlar «to'xtatilgan davr» (`students.pauses`) sifatida yoziladi — bir oyda muzlatib-qaytganda ham to'g'ri prorata. Qaytish sanasi kelajakda bo'lmaydi; noto'g'ri yozilgan davrni direktor ⏯️ Holat oynasida tahrirlaydi/o'chiradi.
 - Kasal kun chegirmasi faqat haqiqatan TO'LANGAN kunlar uchun (sinov/muzlatilgan/grant/fakturasiz oy — yo'q).
 - Narx kaliti IT/MED guruhdan ham aniqlanadi; monitoring chegirmasida «Informatika» hisoblanadi; qabulxona qo'shgan o'quvchi ro'yxatga olingan kundan prorata bilan.
 - «Bekor»/«O'chir»/«To'lanmaganlarni o'chirish» — qulf ostida «to'lov yo'q»ligi qayta tekshiriladi. Yetim fakturalarda «Ehtimoliy egasi» ko'rsatiladi va ular o'chirilmaydi.
 - O'quvchi tahrirlanganda/import qilinganda `studentId` endi o'zgarmaydi (avval import qilingan o'quvchilarda hujjat ID'siga almashib, qarz/avans/davomat «yetim» qolardi).
-- Yangi o'quvchi ID'si bazadan tekshiriladi (bir vaqtda qo'shish / boshqa o'quvchining ID'si bloklanadi); Excel importda takroriy / o'chirilgan o'quvchi ID'si yoki boshqa ismga tegishli ID — qator o'tkaziladi, ogohlantiriladi.
+- Yangi o'quvchi ID'si bazadan tekshiriladi (bir vaqtda qo'shish / boshqa o'quvchining ID'si bloklanadi); Excel importda takroriy / o'chirilgan o'quvchi ID'si yoki boshqa ismga tegishli ID — qator o'tkaziladi, ogohlantiriladi. Bir ID bilan ikki xil ismli qator kelsa — IKKALASI ham o'tkaziladi (nusxa ko'chirilgan aka-uka ID'si boshqa bolani jim boshqa sinfga ko'chirmaydi); bazada to'qnash ID bo'lsa — ism bo'yicha aniq bittasi, aks holda o'tkaziladi.
 - «Qayta hisoblash» to'lov qulfi bilan bir tartibda (o'zaro qulflanish yo'q); qaytarish (refund/reverse) qulf ostida qayta tekshiriladi; biriktirilmagan to'lov faqat to'liq qaytariladi.
 
 **To'lovlar (Click/Uzum/kassa)**
 - Uzum/Click: mavjud bo'lmagan ustunga yozish (PGRST204) sabab to'lov «xato» deb qaytmaydi; takroriy so'rov ikki marta qo'llanmaydi; o'quvchi kaliti doim kanonik (`IQ-xxxx`); 12 belgili kod bilan to'lov topiladi.
 - Biriktirilmagan to'lov: biriktirish (`assign_payment`) va qaytarish bir-birini bloklaydi (ikki marta pul yo'q).
 - Avans ko'chirish (reattribute) to'lov yozuvini ham ko'chiradi — Moliya tekshiruvida soxta «Ortiqcha» yo'q.
+- Qaytarishning takroriy so'rovi (javob yo'qolgan) birinchi natijani qaytaradi — «qo'lda qaytarish» belgisi yo'qolmaydi; vaqtinchalik xatodan keyin avtomatik qaytsa, eski belgi tozalanadi.
 - Provayder pul ALLAQACHON qo'llangandan keyin bekor qilsa/qaytarsa (javob yo'qolgan, restart): Click «bekor» va Uzum «reverse» posbonni tekshiradi — aynan shu fakturaga qo'llangan bo'lsa avtomatik qaytariladi (`reverse_payment`), balansga qo'llangan / faktura topilmagan / avans allaqachon sarflangan (`unrecovered`) bo'lsa — «↩️ Qo'lda qaytarilishi kerak» navbatiga (jim yo'qolmaydi).
 
 **Ota-ona kabineti**
 - Farzandni bog'lash import qilingan o'quvchida ham ishlaydi (ID yoki hujjat kaliti); kalitlari to'qnashgan (eski import dublikati) o'quvchida bog'lash rad etiladi va boshqa oilaning ma'lumoti hech qachon ochilmaydi.
+- Server ruxsati (RLS) qator-aniq: `owns_child` (studentId bilan kalitlangan jadvallar) va `owns_student_doc` (students / student_private / student_phones — hujjat ID bilan). Bir ID ikki o'quvchiga tegishli bo'lsa (eski import: takroriy ID yoki biri hujjat ID'si, ikkinchisi o'quvchi ID'si) — shu ID bo'yicha ota-onaga HECH NARSA ochilmaydi (avval aniq-kalit moslash boshqa oila bolasining maxfiy ma'lumotini ko'rsatib qo'yardi). Ro'yxati — «⚠️ Ma'lumot sifati» oynasida («⛔ To'qnash o'quvchi ID'lari»).
 - Davomat % noma'lum bo'lsa «—» (0% emas); sinf o'rtachasi faqat yetarli ma'lumot bo'lsa; faqat joriy o'quv yili baholari; profil/transkript chorak baholari to'g'ri.
 
 **Moliya hisobotlari**
+- Qo'lda to'lov «Sana»si faqat oxirgi 31 kun ichida (kelajak/juda eski sana rad etiladi); darhol chop etiladigan chek, qayta chop etish va kassa — bir xil kun; «📋 To'lov tarixi» ham shu kunni ko'rsatadi (kiritilgan kun — izohda).
 - «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni; qo'lda kiritilganda — chekdagi «Sana»), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi; to'lovlar o'qilmasa «0» emas, xato ko'rsatiladi.
-- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan / Click bekor qilgan, lekin avtomatik to'liq ayirib bo'lmagan to'lovlar (sababi «Izoh»da).
+- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan / Click bekor qilgan, lekin avtomatik to'liq ayirib bo'lmagan to'lovlar (sababi «Izoh»da). «↩ Fakturadan» tugmasi pulni tanlangan fakturadan ayiradi (naqd qaytarish yozilmaydi, Moliya tekshiruvi farqsiz yopiladi); avansdagisi — «✏️ Avansni tuzatish».
 - Bosh sahifadagi «O'rtacha davomat» — faqat davomati ma'lum o'quvchilar bo'yicha (noma'lum «0» deb hisoblanmaydi).
+- Oylik xulosa (ma'lumotnoma) o'quvchining kanonik ID'si bilan yoziladi — import qilingan bolada ham hisobotda va ota-ona kabinetida ko'rinadi (eski yozuvlar ham o'qiladi).
+- «Davomat %» faqat server triggeri yozadi (admin ekrani endi `students/<studentId>` ga yozmaydi — import qilingan bolada jim yo'qolar, to'qnashuvda boshqa bolani buzardi); monitoring tasdiqlanganda «Umumiy ball» o'quvchining hujjat ID'si bilan yoziladi (import qilingan bolada ham yangilanadi).
 
 **Loyiha/deploy chalkashliklari**
 - Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
-- `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi (`config.json` tegilmaydi).
+- `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi — papka egasi nomidan, `config.json`/`node_modules` va papkalarning egasi/ruxsati o'zgarmaydi (avvalgi `chown -R` maxfiy config.json'ni xizmat o'qiy olmaydigan qilib qo'yishi mumkin edi).
 - O'quvchi holati/o'chirish tugmalari — faqat direktor (server qoidasi bilan bir xil); «📚 Sinflar» — faqat direktor.
 
 **Ma'lum cheklovlar / ochiq savollar**
@@ -242,6 +250,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Ma'muriyat rahbari o'quvchi holatini o'zgartira olmaydi (hozircha faqat direktor) — kerak bo'lsa yoqiladi.
 - Hech qachon davomat yozilmagan eski o'quvchilarda «Davomat %» eski qo'lda kiritilgan qiymat (ko'pincha 0) bo'lib qoladi — birinchi davomat saqlanganda avtomatik to'g'rilanadi.
 - Kalitlari almashib ketgan eski import fakturalarini (yetim) egasiga ko'chirish — har holat alohida (SQL); «Ehtimoliy egasi» ustuni yordam beradi.
+- To'qnash o'quvchi ID'larini tuzatish (ID'ni ko'chirish) ham hozircha texnik yordam (SQL) bilan; tuzatilguncha bu bolalarning ota-ona kabineti yopiq. `rekey-students.sql`ni bunday holatda ishga tushirmang — u `child_claims`ni ham ko'chiradi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

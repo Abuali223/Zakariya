@@ -43,19 +43,59 @@ $$;
 revoke all on function app.student_keys_unique(text, text) from public, anon;
 grant execute on function app.student_keys_unique(text, text) to authenticated, service_role;
 
+-- claim_row(kalit, kod): ota-ona bog'lanishi (child_claims: "studentId" — kanonik yoki eski doc id, code — bog'lashda
+--   kiritilgan kod) QAYSI o'quvchi qatoriga (doc id) tegishli. Kalit bitta qatorga mos kelsa — o'sha. Ikki qatorga mos
+--   kelsa (eski import to'qnashuvi: bir xil studentId ikki qatorda, yoki biri doc id'si, ikkinchisi studentId'si) —
+--   bog'lanishdagi KOD shu qatorlardan AYNAN birining hozirgi kodi bo'lsa — o'sha; aks holda NULL (hech narsa ochilmaydi).
+create or replace function app.claim_row(p_key text, p_code text) returns text
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case
+    when (select count(*) from public.students s where s.id = p_key or s."studentId" = p_key) = 1
+      then (select s.id from public.students s where s.id = p_key or s."studentId" = p_key)
+    when coalesce(p_code, '') <> '' then (
+      select min(s.id) from public.students s join public.student_codes sc on sc.id = s.id
+       where (s.id = p_key or s."studentId" = p_key) and upper(sc.code) = upper(p_code)
+      having count(*) = 1)
+  end
+$$;
+revoke all on function app.claim_row(text, text) from public, anon;
+grant execute on function app.claim_row(text, text) to authenticated, service_role;
+-- RLS har qatorda students'ni studentId bo'yicha qidiradi — indeks.
+create index if not exists students_studentid_idx on public.students("studentId");
+
+-- owns_child(k): studentId bilan kalitlangan jadvallar (invoices, attendance, grades, student_credit, credit_ledger...;
+--   eski yozuvlarda kalit doc id bo'lishi mumkin). Rost, agar ota-onaning FAOL bog'lanishi aniq o'quvchi qatoriga
+--   (claim_row) tegishli bo'lsa, k shu qatorning kaliti bo'lsa va k BOSHQA hech qaysi qatorning kaliti bo'lmasa (to'qnash
+--   kalitli yozuvlar kimniki ekani noaniq — hech kimga ochilmaydi; avvalgi aniq-kalit moslash boshqa oila bolasining
+--   fakturasi/davomatini ko'rsatib qo'yardi). O'chirilgan o'quvchi (qatori yo'q) — eski yozuvlari aniq kalit bo'yicha.
 create or replace function app.owns_child(sid text) returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select exists(
+  select coalesce(sid, '') <> '' and exists(
     select 1 from public.child_claims cc
      where cc.uid = app.uid()
        and coalesce(nullif(cc.status, ''), 'active') = 'active'
-       and (cc."studentId" = sid
-            or exists (select 1 from public.students s
-                        where s.id = sid and nullif(s."studentId", '') = cc."studentId"
-                          and app.student_keys_unique(s.id, s."studentId"))
-            or exists (select 1 from public.students s
-                        where s."studentId" = sid and s.id = cc."studentId"
-                          and app.student_keys_unique(s.id, s."studentId"))))
+       and (exists (select 1 from public.students s
+                     where s.id = app.claim_row(cc."studentId", cc.code)
+                       and (s.id = sid or s."studentId" = sid)
+                       and not exists (select 1 from public.students t
+                                        where t.id <> s.id and (t.id = sid or t."studentId" = sid)))
+            or (cc."studentId" = sid
+                and not exists (select 1 from public.students t where t.id = sid or t."studentId" = sid))))
+$$;
+
+-- owns_student_doc(id): HUJJAT ID bilan kalitlangan jadvallar (students, student_private, student_phones). Qator egasi
+--   aniq (students.id = id): ota-onaning faol bog'lanishi aynan shu qatorga (claim_row) tegishli bo'lsa — rost.
+--   students qatori yo'q (eski «phantom» / o'chirilgan o'quvchi qoldig'i) — owns_child qoidasi.
+create or replace function app.owns_student_doc(p_id text) returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case
+    when exists (select 1 from public.students s0 where s0.id = p_id) then exists(
+      select 1 from public.child_claims cc
+       where cc.uid = app.uid()
+         and coalesce(nullif(cc.status, ''), 'active') = 'active'
+         and app.claim_row(cc."studentId", cc.code) = p_id)
+    else app.owns_child(p_id)
+  end
 $$;
 
 create or replace function public.claim_child(p_sid text, p_code text)

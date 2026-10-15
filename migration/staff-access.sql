@@ -38,7 +38,7 @@ $$;
 -- o'quvchi PII (cameraId, attendance)ni o'qiy olardi. Ommaviy honor board
 -- 'students_public' KO'RINISHINI o'qiydi (cameraId/attendance YO'Q, rls.sql'da).
 drop policy if exists students_sel on students;
-create policy students_sel on students for select using (app.is_staff() or app.owns_child(id));
+create policy students_sel on students for select using (app.is_staff() or app.owns_student_doc(id));
 
 -- ---------- PII: teachers xom jadvali (telefon/cameraId) endi FAQAT xodimga ----------
 -- Ilgari generik kontent-loop (rls.sql) 'teachers_sel using(true)' — telefon/cameraId

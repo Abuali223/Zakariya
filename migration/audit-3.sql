@@ -105,7 +105,7 @@ alter table public.staff    add column if not exists email text;
 create or replace view public.student_phones as
   select id, "parentPhone", "parentPhone2"
   from public.student_private
-  where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.owns_child(id);
+  where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.owns_student_doc(id);
 grant select on public.student_phones to anon, authenticated;
 revoke all on public.student_phones from public;
 grant select on public.student_phones to service_role;

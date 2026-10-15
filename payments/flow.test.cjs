@@ -9,7 +9,11 @@ const { makeFake } = require('./_fake-sb.cjs');
 const state = { invoices: {}, payments: {}, students: {}, student_credit: {}, applied_payments: {} };
 // @supabase/supabase-js ni intercept qilamiz (index.cjs require'idan OLDIN)
 const orig = Module._load;
-Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: () => makeFake(state) }; return orig.apply(this, arguments); };
+// state.__failRev = N -> keyingi N ta reverse_payment chaqiruvi vaqtinchalik xato beradi (40P01 kabi) — qayta urinish sinovi.
+const mkClient = () => { const f = makeFake(state); const r0 = f.rpc.bind(f);
+  f.rpc = (fn, p) => (fn === 'reverse_payment' && state.__failRev > 0) ? (state.__failRev--, Promise.resolve({ data: null, error: { code: '40P01', message: 'deadlock detected' } })) : r0(fn, p);
+  return f; };
+Module._load = function (req) { if (req === '@supabase/supabase-js') return { createClient: mkClient }; return orig.apply(this, arguments); };
 
 // ---- vaqtinchalik config (payments/ ichida, backend=supabase) ----
 const CFGFILE = path.join(__dirname, '_flow-config.json');
@@ -147,6 +151,29 @@ function sign(p, isComplete) {
   const pr6 = await handleComplete(pp2);
   ok(pr6.error === -9 && state.invoices[INV5].status === 'pending', 'faktura qaytarildi («pending»)');
   ok(state.payments['click_CT5'].raw.needsManualReverse === true && /200000/.test(String(state.payments['click_CT5'].raw.reverseNote||'')), 'avansdan olinmagan 200 000 -> qo\'lda navbat (izohda summa) ★');
+  // 10b) Shu bekor QAYTA kelsa (javob yo'qolgan): reverse {dup} + BIRINCHI natija (unrecovered) -> belgi saqlanadi
+  const pr7 = await handleComplete(pp2);
+  ok(pr7.error === -9 && state.payments['click_CT5'].raw.needsManualReverse === true && /200000/.test(String(state.payments['click_CT5'].raw.reverseNote||'')), 'qayta bekor -> qo\'lda navbat belgisi YO\'QOLMADI (dup birinchi natijani qaytaradi)');
+  ok(state.invoices[INV5].status === 'pending' && Number(state.invoices[INV5].paidAmount) === 0, 'faktura ikki marta ayirilmadi');
+
+  // 11) Birinchi qaytarish VAQTINCHALIK xato (40P01) -> qo'lda navbat; Click qayta yuboradi -> avtomatik qaytadi, eski belgi tozalanadi
+  const INV9 = 'S9__2026-08';
+  state.students['S9'] = { id: 'S9', studentId: 'S9', name: 'Rustam' };
+  state.invoices[INV9] = { id: INV9, amount: 250000, status: 'unpaid', studentId: 'S9', month: '2026-08' };
+  const g0 = { click_trans_id: 'CT10', service_id: '111', merchant_trans_id: INV9, amount: '250000', action: '0', sign_time: 't10' };
+  g0.sign_string = sign(g0, false);
+  const gr = await handlePrepare(g0);
+  const g1 = { click_trans_id: 'CT10', service_id: '111', merchant_trans_id: INV9, merchant_prepare_id: gr.merchant_prepare_id, amount: '250000', action: '1', sign_time: 't10b', error: '0' };
+  g1.sign_string = sign(g1, true);
+  await handleComplete(g1);
+  state.payments['click_CT10'].status = 'prepared';
+  const g2 = Object.assign({}, g1, { error: '-1', sign_time: 't10c' }); g2.sign_string = sign(g2, true);
+  state.__failRev = 1;
+  const g3 = await handleComplete(g2);
+  ok(g3.error === -9 && state.payments['click_CT10'].raw.needsManualReverse === true && state.invoices[INV9].status === 'paid', 'vaqtinchalik xato -> qo\'lda navbat, faktura hali to\'langan');
+  const g4 = await handleComplete(g2);
+  ok(g4.error === -9 && state.invoices[INV9].status === 'pending' && Number(state.invoices[INV9].paidAmount) === 0, 'qayta bekor -> avtomatik qaytarildi');
+  ok(state.payments['click_CT10'].raw.reversedApplied === true && state.payments['click_CT10'].raw.needsManualReverse === false && !state.payments['click_CT10'].raw.reverseNote, 'eski «qo\'lda qaytarish» belgisi tozalandi ★');
 
   fs.unlinkSync(CFGFILE);
   console.log('\n' + (fails ? ('❌ ' + fails + ' FAILED') : '✅ ALL PASS — to\'lov oqimi Supabase backend ustida ishlaydi'));

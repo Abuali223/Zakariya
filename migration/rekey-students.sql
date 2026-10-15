@@ -33,6 +33,14 @@ begin
       v_skipped := v_skipped + 1;
       continue;
     end if;
+    -- To'qnashuv (2): eski id BOSHQA qatorning studentId'si (masalan A: fbA/IQ-0001, B: IQ-0001/IQ-0002). Eski id bilan
+    --   kalitlangan yozuvlar (ota-ona bog'lanishi, avans, jurnal) qaysi bolaniki ekani NOANIQ — ko'chirsak A'ning puli va
+    --   ota-onasi B'ga o'tib ketardi. Tegmaymiz; admin «Ma'lumot sifati» -> «To'qnash o'quvchi ID'lari»dan qo'lda hal qilinadi.
+    if exists (select 1 from public.students where "studentId" = r.old_id and id <> r.old_id) then
+      raise notice 'SKIP % -> % (eski id boshqa o''quvchining studentId''si — to''qnashuv, qo''lda tuzating)', r.old_id, r.new_id;
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
 
     -- student_private: olimpiada xatosi new_id'да "phantom" qator yaratgan bo'lishi mumkin.
     if exists (select 1 from public.student_private where id = r.new_id)
