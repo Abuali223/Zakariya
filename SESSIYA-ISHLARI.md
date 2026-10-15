@@ -244,6 +244,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
 - `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi — papka egasi nomidan, `config.json`/`node_modules` va papkalarning egasi/ruxsati o'zgarmaydi (avvalgi `chown -R` maxfiy config.json'ni xizmat o'qiy olmaydigan qilib qo'yishi mumkin edi); kod fayllari doim 0644/0755 (tizim umask'iga bog'liq emas); birinchi marta yo'q `auth/`, `sb/` papkalari egasi nomiga yaratiladi.
 - O'quvchi holati/o'chirish tugmalari — faqat direktor (server qoidasi bilan bir xil); «📚 Sinflar» — faqat direktor.
+- Deploy oxiridagi baza tekshiruvi (`migration/verify-db.sh`): kengaytma funksiyalari (pgcrypto — Supabase'da `extensions` sxemasida) va Supabase'ning standart ruxsatlari endi soxta «farq» bermaydi (avval har deployda «36 ta funksiya yo'q / 384 ta obyekt» deb chiqardi). Haqiqiy xavf alohida: 🔴 repo'da yo'q RLS policy, 🔴 RLS o'chiq jadval mijozga ochiq, 🟠 mijozga ochiq ortiqcha view / funksiya / farqli ta'rif.
 
 **Ma'lum cheklovlar / ochiq savollar**
 - 7–9-sinf monitoring chegirmasida «Algebra/Geometriya» alohida fan sifatida hisoblanmaydi (maktab tasdiqlasa qo'shiladi).
