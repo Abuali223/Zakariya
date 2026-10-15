@@ -507,9 +507,14 @@ const CASH_PAY_ST = new Set(['applied','paid','confirmed','unmatched','split']);
 function tkDay(v){ try{ const d=(v&&v.toDate)?v.toDate():new Date(v); if(isNaN(d)) return String(v||'').slice(0,10); return new Date(d.getTime()+5*3600e3).toISOString().slice(0,10); }catch(e){ return String(v||'').slice(0,10); } }
 function isCashPay(p){ return CASH_PAY_ST.has(String(p&&p.status||'')) && String(p.provider||'')!=='reattr' && String(p._id||p.id||'').indexOf(':s:')<0 && (Number(p.amount)||0)>0; }
 // pays — payments qatorlari; [fromDay..toDay] Toshkent sanasi (ichiga oladi). Qaytadi: {byPm:{provider:summa}, total, list}
+// To'lov KUNI (kassa): qo'lda kiritilgan to'lovda kassir tanlagan «Sana» (chekdagi sana bilan bir xil), lekin faqat
+//   kiritilgan kundan 31 kun ichida ORQAGA (kelajak/bema'ni sana -> kiritilgan kun). Onlayn (Click/Uzum) — yaratilgan vaqt.
+function payDay(p){ const c=tkDay(p&&p.createdAt); const r=(p&&p.raw&&p.raw.manual)?String(p.raw.date||''):'';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(r) || !/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
+  const lo=new Date(Date.parse(c+'T00:00:00Z')-31*864e5).toISOString().slice(0,10); return (r<=c && r>=lo) ? r : c; }
 function cashByMethod(pays, fromDay, toDay, method){
   const byPm={}; let total=0; const list=[];
-  (pays||[]).forEach(p=>{ if(!isCashPay(p)) return; const d=tkDay(p.createdAt); if(fromDay && d<fromDay) return; if(toDay && d>toDay) return;
+  (pays||[]).forEach(p=>{ if(!isCashPay(p)) return; const d=payDay(p); if(fromDay && d<fromDay) return; if(toDay && d>toDay) return;
     const k=String(p.provider||''); if(method && k!==method) return; const a=Number(p.amount)||0;
     byPm[k]=(byPm[k]||0)+a; total+=a; list.push(Object.assign({ day:d }, p)); });
   list.sort((a,b)=>String(a.day).localeCompare(String(b.day)));
@@ -1418,7 +1423,7 @@ async function dashFinance(){
   try{ [INV,EXP]=await Promise.all([loadCol('invoices').catch(()=>[]), loadCol('expenses').catch(()=>[])]); }catch(e){}
   try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
   try{ REF=await loadCol('refunds'); }catch(e){ REF=[]; }
-  let PAYS=[]; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; }
+  let PAYS=[], PAYERR=''; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; PAYERR=String((e&&(e.code||e.message))||'xato'); }   // o'qilmasa «0» EMAS — xato ko'rsatiladi
   // Hisob-kitob (renderAccounting bilan bir xil mantiq) — balans-aware.
   const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
   const emonth=e=>e.month||String(e.date||'').slice(0,7);
@@ -1496,8 +1501,8 @@ async function dashFinance(){
         <div class="bars fin-cols" style="margin-top:10px">${catKeys.length?catBars:'<div class="empty">Bu oy xarajat kiritilmagan</div>'}</div>
       </div>
     </div>
-    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha — shu oyda tushgan pul</h3><span class="cls-count" title="Kassa asosida: shu oy (Toshkent vaqti) tushgan haqiqiy to‘lovlar. «Kirim» esa shu oy hisob-fakturalariga to‘langan summa — farq qilishi mumkin (avans, oldingi oy qarzi).">${mLbl(cur)}: ${fmtC(pmTotal)}</span></div>
-      ${pmKeys.length?`<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 20px">
+    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha — shu oyda tushgan pul</h3><span class="cls-count" title="Kassa asosida: shu oy (Toshkent vaqti) tushgan haqiqiy to‘lovlar. «Kirim» esa shu oy hisob-fakturalariga to‘langan summa — farq qilishi mumkin (avans, oldingi oy qarzi).">${mLbl(cur)}: ${PAYERR?'—':fmtC(pmTotal)}</span></div>
+      ${PAYERR?`<div class="small" style="padding:14px 20px;color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — usul bo‘yicha taqsimot ko‘rsatilmadi.</div>`:''}${(!PAYERR && pmKeys.length)?`<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 20px">
         <div style="flex:0 0 auto">${donut()}</div>
         <div class="bars" style="flex:1 1 320px;min-width:260px;padding:0">${pmLegend}</div>
       </div>`:'<div class="empty" style="padding:18px">Bu oy to‘lov yo‘q</div>'}
@@ -4354,7 +4359,7 @@ async function renderStaffAttendance(){
     if(!bodyRows || !bodyRows.length){ toast('Chop etish uchun maʼlumot yoʻq',true); return; }
     const dur=min=>{ if(min==null) return '—'; min=Math.round(min); if(!min) return '—'; const h=Math.floor(min/60),m=min%60; return (h?h+'s ':'')+(m||!h?m+'d':''); };
     const S=n=>fmtSom(n);
-    const dstr=new Date().toISOString().slice(0,10);
+    const dstr=tkDay(new Date());
     const who=(SESSION.email||SESSION.role||'');
     const emblem=`<svg style="width:42px;height:auto" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
     const T={present:0, workMin:0, ushlanma:0, subBonus:0, gross:0, prior:0, totalDue:0};
@@ -4905,7 +4910,7 @@ async function renderFinance(){
   }catch(e){ $('#fin-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   // Avans (student_credit) — o'quvchilar balansidagi oldindan to'lovlar (ortiqcha to'lov keyingi oyga o'tadi).
   let credits=[]; try{ credits=await loadCol('student_credit'); }catch(e){}
-  let PAYS=[]; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; }   // to'lov usuli (kassa asosida)
+  let PAYS=[], PAYERR=''; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; PAYERR=String((e&&(e.code||e.message))||'xato'); }   // to'lov usuli (kassa asosida); o'qilmasa xato ko'rsatiladi
   const avansTotal = credits.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
   const avansCount = credits.filter(c=>Number(c.credit)>0).length;
 
@@ -4980,7 +4985,7 @@ async function renderFinance(){
     const pmLegend=pmKeys.length?pmKeys.map(k=>`<div class="fin-pm-row"><span class="fin-pm-l"><i class="fin-dot" style="background:${PM[k].c}"></i>${esc(PM[k].l)}</span><span class="fin-pm-r">${fmtC(pmGroups[k])}<span class="pc">${pct(pmGroups[k],cashTot)}%</span></span></div>`).join(''):`<div class="empty" style="padding:10px 0">Bu oy hali to‘lov yo‘q</div>`;
     const pmCard=`<div class="card"><div class="cls-card-head"><h3>To‘lov usuli</h3><span class="cls-count" title="Kassa asosida: shu oyda tushgan haqiqiy to‘lovlar (Toshkent vaqti). «Yig‘ilgan» esa shu oy hisob-fakturalariga to‘langan summa — farq qilishi mumkin.">shu oyda tushgan · ${fmtC(cashTot)}</span></div>
       ${cashTot>0?`<div class="fin-stack" style="margin-top:16px">${pmStack}</div>`:'<div style="height:8px"></div>'}
-      <div class="fin-pm">${pmLegend}</div></div>`;
+      <div class="fin-pm">${PAYERR?`<div class="small" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — usul bo‘yicha taqsimot ko‘rsatilmadi.</div>`:pmLegend}</div></div>`;
 
     // ---- Yillik prognoz ----
     const year=String(M).slice(0,4), elapsed=parseInt(String(M).slice(5,7),10)||1;
@@ -5238,14 +5243,14 @@ async function renderAccounting(){
     </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div></div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[];
+  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='';
   const reload=async()=>{
     try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
       try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
       try{ ADV=await loadCol('staff_advances'); }catch(e){ ADV=[]; }
       try{ REF=await loadCol('refunds'); }catch(e){ REF=[]; }
       try{ SAL=await loadCol('salary_payments'); }catch(e){ SAL=[]; }
-      try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; }   // to'lov usuli (kassa asosida) — A4 hisobot
+      PAYERR=''; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; PAYERR=String((e&&(e.code||e.message))||'xato'); }   // to'lov usuli (kassa asosida) — A4 hisobot
       return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
@@ -5263,7 +5268,7 @@ async function renderAccounting(){
   const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
   const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
   // Qaytarilgan (refund) summasi — invoice oyi bo'yicha (Kirim aynan shu oyda kamaygan); payment-refund uchun createdAt.
-  const dtM=v=>{ try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,7); }catch(e){} return String(v||'').slice(0,7); };
+  const dtM=v=>tkDay(v).slice(0,7);   // Toshkent oyi
   const refMonth=r=>String(r.month||'')||dtM(r.createdAt);
   // «Qaytarilgan» KPI — faqat REAL pul qaytarilishi (invoice/payment refund). Avans clawback
   // (target:'credit') Moliya tekshiruvi balansи uchun yoziladi, lekin daromaddan qayta ayirilmaydi
@@ -5287,7 +5292,7 @@ async function renderAccounting(){
     const pmKeys=Object.keys(byPm).sort((a,b)=>byPm[b]-byPm[a]);
     const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; }); INV.forEach(i=>{ const k=String(i.studentId||''); if(k&&!nameC[k]&&i.studentName)nameC[k]=i.studentName; });
     const avList=CREDITS.map(c=>({sid:String(c.studentId||c._id||''),amt:Math.max(0,Number(c.credit)||0)})).filter(x=>x.amt>0).sort((a,b)=>b.amt-a.amt);
-    const S=n=>fmtSum(n)+' so‘m'; const dstr=new Date().toISOString().slice(0,10);
+    const S=n=>fmtSum(n)+' so‘m'; const dstr=tkDay(new Date());
     const who=(auth.currentUser&&(auth.currentUser.displayName||auth.currentUser.email))||'';
     // Qarzdorlar (shu oy)
     const debtors=mInv.map(i=>({sid:String(i.studentId||''), name:i.studentName||nameC[String(i.studentId)]||String(i.studentId),
@@ -5310,7 +5315,8 @@ async function renderAccounting(){
     const emblem=`<svg style="width:46px;height:auto" viewBox="0 0 458.82 522.7"><rect x="0" y="0" width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>`;
     const row=(l,v,c)=>`<tr><td>${l}</td><td style="text-align:right;font-weight:700;${c?`color:${c}`:''}">${v}</td></tr>`;
     const catRows=catKeys.length?catKeys.map(c=>`<tr><td>${esc(c)}</td><td style="text-align:right">${S(byCat[c])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">Xarajat yo‘q</td></tr>`;
-    const pmRows=pmKeys.length?pmKeys.map(k=>`<tr><td>${esc(PMlab[k]||k)}</td><td style="text-align:right">${S(byPm[k])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">—</td></tr>`;
+    const pmRows=PAYERR?`<tr><td colspan="2" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — bu bo‘lim to‘liq emas, qayta yuklang</td></tr>`
+      :(pmKeys.length?pmKeys.map(k=>`<tr><td>${esc(PMlab[k]||k)}</td><td style="text-align:right">${S(byPm[k])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">—</td></tr>`);
     const avRows=avList.length?avList.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.amt)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Avans yo‘q</td></tr>`;
     const debtRows=debtors.length?debtors.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.name)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.d)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Qarzdorlik yo‘q</td></tr>`;
     const salRows=salMonth.length?salMonth.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.teacherName||'—')}${x.n>1?` <span class="muted">(${x.n} marta)</span>`:''}</td><td style="text-align:right">${S(x.gross)}</td><td style="text-align:right">${x.advance?('−'+S(x.advance)):'—'}</td><td style="text-align:right">${x.deduction?('−'+S(x.deduction)):'—'}</td><td style="text-align:right">${x.subBonus?('+'+S(x.subBonus)):'—'}</td><td style="text-align:right;font-weight:700">${S(x.paid)}</td></tr>`).join(''):'';
@@ -5325,7 +5331,7 @@ async function renderAccounting(){
       <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}</div></div></div>
       <h2>Umumiy ko‘rsatkichlar</h2>
       <table class="kpi big">${row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
-      <h2>Shu oyda tushgan to‘lovlar — usul bo‘yicha (${S(cashM.total)})</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
+      <h2>Shu oyda tushgan to‘lovlar — usul bo‘yicha (${PAYERR?'—':S(cashM.total)})</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
       <div class="muted" style="font-size:11px;margin:-2px 0 6px">Kassa asosida (to‘lov vaqti, Toshkent). «Kirim» — shu oy hisob-fakturalariga to‘langan summa; avans/oldingi oy qarzi tufayli farq qilishi mumkin.</div>
       <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
       <h2>Oylik maosh — naqd berilgan ${S(salPaid)}${salMonth.length?` · ${salMonth.length} xodim`:''}${salFromExp>0?` · hisoblangan (xarajat) ${S(salFromExp)}`:''}</h2>
@@ -5436,11 +5442,11 @@ async function renderAccounting(){
     { const rb=$('#ac-report'); if(rb) rb.onclick=()=>printAccountingReport(M); }
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
-      printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||new Date().toISOString().slice(0,10) }); }));
+      printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||tkDay(new Date()) }); }));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
     $('#ac-body').querySelectorAll('[data-arec]').forEach(b=>b.addEventListener('click',()=>{ const a=madv.find(x=>x._id===b.dataset.arec); if(!a) return;
-      printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, period:a.month, date:a.date||new Date().toISOString().slice(0,10) }); }));
+      printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, period:a.month, date:a.date||tkDay(new Date()) }); }));
   };
 
   function openExpenseForm(exp){
@@ -5853,7 +5859,7 @@ async function openPayHistory(sid, name){
   try{ const s=await getDocs(query(collection(db,'payments'), where('studentId','==',sid))); pays=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
   try{ const s=await getDocs(query(collection(db,'credit_ledger'), where('studentId','==',sid))); ledg=s.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
   try{ const c=await getDoc(doc(db,'student_credit',sid)); if(c.exists()) credit=Number((c.data()||{}).credit)||0; }catch(e){}
-  const dstr=v=>{ if(!v) return '—'; try{ if(v&&v.toDate) return v.toDate().toISOString().slice(0,10); }catch(e){} return String(v).slice(0,10); };
+  const dstr=v=>v?tkDay(v):'—';   // Toshkent kuni (chek/kassa hisoboti bilan bir xil; 00:00–05:00 dagi to'lov oldingi kun bo'lib ko'rinmasin)
   const provLbl=PROV_LBL;
   const paySt={applied:'Qo‘llandi',pending:'Kutilmoqda',failed:'Xato (qo‘llanmagan)',canceled:'Bekor',reversed:'Qaytarilgan',refunded:'Qaytarilgan',unmatched:'Biriktirilmagan'};
   const payStCol={applied:'#1F9982',pending:'#B54708',failed:'#B42318',canceled:'#98A2B3',reversed:'#98A2B3',refunded:'#98A2B3',unmatched:'#B54708'};
@@ -6611,7 +6617,10 @@ async function renderPayments(){
     const [mB0,mB1]=monthBounds(month); const cashFrom=_from||mB0, cashTo=_to||mB1;
     let cashPays=[], cashErr='', cashRef=0;
     try{ const lo=new Date(cashFrom+'T00:00:00+05:00').toISOString(), hi=new Date(cashTo+'T23:59:59.999+05:00').toISOString();
-      const ps=await getDocs(query(collection(db,'payments'), where('createdAt','>=',lo), where('createdAt','<=',hi))); cashPays=ps.docs.map(d=>({_id:d.id,...d.data()}));
+      // Qo'lda kiritilgan to'lov «Sana»si kiritilgan kundan 31 kungacha OLDIN bo'lishi mumkin (payDay) — keyinroq kiritilganlar
+      //   ham topilsin deb yuqori chegara 31 kun kengaytiriladi; kun bo'yicha aniq filtr cashByMethod ichida.
+      const hiW=new Date(Date.parse(hi)+31*864e5).toISOString();
+      const ps=await getDocs(query(collection(db,'payments'), where('createdAt','>=',lo), where('createdAt','<=',hiW))); cashPays=ps.docs.map(d=>({_id:d.id,...d.data()}));
       try{ const rs=await getDocs(query(collection(db,'refunds'), where('createdAt','>=',lo), where('createdAt','<=',hi)));
         // Faqat FAKTURA qaytarishlari: biriktirilmagan to'lov qaytarilganda to'lov qatori 'refunded' bo'ladi va «Jami tushgan»ga
         //   umuman kirmaydi (CASH_PAY_ST) — uni yana ayirish ikki marta kamaytirardi (refundOfMonth bilan bir xil qoida).
@@ -6627,10 +6636,15 @@ async function renderPayments(){
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+    // Provayder (Uzum) QAYTARGAN, lekin pul avval o'quvchi BALANSIGA qo'llangan to'lovlar — avtomatik teskari qilinmaydi
+    //   (pay-server raw.needsManualReverse belgilaydi). Ilgari hech qayerda ko'rinmasdi: o'quvchida pul qolib ketardi.
+    let manualRev=[];
+    try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','reversed')));
+      manualRev=ps.docs.map(d=>({_id:d.id,...d.data()})).filter(p=>p.raw && p.raw.needsManualReverse && !p.raw.manualReverseDone); }catch(e){}
     const provLbl=PROV_LBL;
     // Usul bo'yicha — KASSA asosida (haqiqiy to'lovlar, Toshkent sanasi).
     const groups={}; cash.list.forEach(p=>{ const lbl=provLbl[p.provider]||p.provider||'Boshqa'; (groups[lbl]=groups[lbl]||{n:0,sum:0}); groups[lbl].n++; groups[lbl].sum+=Number(p.amount)||0; });
-    const cashLbl=`${cashFrom===mB0&&cashTo===mB1?'shu oy':`${cashFrom}–${cashTo}`}${_fm?' · '+(provLbl[_fm]||_fm):''}`;
+    const cashLbl=`${cashFrom===mB0&&cashTo===mB1?'shu oy':`${cashFrom}–${cashTo}`}${_fm?' · '+(provLbl[_fm]||_fm):''}${anyFilter?' · butun maktab (sinf/til/qidiruv filtri kassaga qo‘llanmaydi)':''}`;
     const repRows=(cashErr?`<tr><td colspan="3" class="small" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(cashErr)}) — kassa hisoboti ko‘rsatilmadi.</td></tr>`:'')
       +Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
       +`<tr><td data-label="Usul"><b>Jami tushgan (${esc(cashLbl)})</b></td><td data-label="Soni">${cash.list.length} ta</td><td data-label="Summa"><b>${fmtSom(cash.total)}</b></td></tr>`
@@ -6640,6 +6654,13 @@ async function renderPayments(){
     const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}${esc(filterLbl)}</h3><span class="cls-count">${repSet.length} ${anyFilter?'hisob':'hisob-faktura'} · yig‘ildi (shu oy fakturalari): ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}${(orphColl||orphDebt)?` · shu jumladan o‘quvchisi topilmagan: ${fmtSom(orphColl)} / ${fmtSom(orphDebt)}`:''}</span></div>
       <div class="small muted" style="padding:0 16px 6px">To‘lov usuli va sana — <b>kassa asosida</b> (haqiqiy to‘lov yozuvlari, Toshkent vaqti; aralash to‘lov usullarga to‘g‘ri bo‘linadi). «Yig‘ildi» — shu oy hisob-fakturalariga to‘langan summa (avans/oldingi oy qarzi tufayli kassadan farq qilishi mumkin).</div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli (kassa)</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
+    const manualRevCard = manualRev.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>↩️ Qo‘lda qaytarilishi kerak</h3><span class="cls-count">${manualRev.length} ta · provayder qaytardi, pul o‘quvchi balansida</span></div>
+      <div style="padding:8px 16px" class="small muted">Bu to‘lovlarni Uzum/Click QAYTARGAN, lekin pul avval o‘quvchi balansiga (eng eski qarzga / avansga) qo‘llangan edi — tizim avtomatik ayira olmaydi. O‘quvchi «📋 To‘lov tarixi»dan avans/fakturani tuzating, so‘ng «✓ Bajarildi».</div>
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Provayder</th><th>Izoh</th>${SESSION.isAdmin?'<th></th>':''}</tr></thead><tbody>${manualRev.map(p=>`<tr>
+        <td data-label="O‘quvchi">${esc((stById[p.studentId]&&stById[p.studentId].name)||p.payerName||p.studentId||'—')} <span class="small muted">${esc(p.studentId||'')}</span></td>
+        <td data-label="Summa"><b>${fmtSom(p.amount)}</b></td><td data-label="Provayder">${esc(PROV_LBL[p.provider]||p.provider||'')}</td>
+        <td data-label="Izoh" class="small">${esc((p.raw&&p.raw.reverseNote)||'')}</td>
+        ${SESSION.isAdmin?`<td class="td-actions"><button class="btn sm ghost2" data-ph="${esc(p.studentId||'')}" title="To‘lov / avans tarixi">📋</button><button class="btn sm" data-mrdone="${esc(p._id)}">✓ Bajarildi</button></td>`:''}</tr>`).join('')}</tbody></table></div></div>` : '';
     const unmatchedCard = unmatched.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--gold)"><div class="cls-card-head"><h3>⚠️ Biriktirilmagan to‘lovlar</h3><span class="cls-count">${unmatched.length} ta · o‘quvchi topilmadi (qo‘lda biriktiring)</span></div>
       <div class="tablewrap"><table><thead><tr><th>To‘lovchi</th><th>Telefon</th><th>Sinf</th><th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
         <td data-label="To‘lovchi">${esc(u.payerName||'—')}</td><td data-label="Telefon">${esc(u.payerPhone||'—')}</td>
@@ -6736,7 +6757,7 @@ async function renderPayments(){
         + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
     const emptyMsg = trs ? '' : (cur.length ? (_fs==='debt'?'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan.':_fs==='partial'?'Qisman to‘lagan o‘quvchi yo‘q.':_fs==='paid'?'To‘liq to‘lagan o‘quvchi yo‘q.':(periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'Ko‘rsatiladigan o‘quvchi yo‘q.')) : 'Bu oy uchun hisob-faktura yo‘q.');
     const stTblLbl = _fs==='debt'?' · qarzdorlar':_fs==='partial'?' · qisman to‘laganlar':_fs==='paid'?' · to‘liq to‘laganlar':' · barchasi';
-    $('#pm-body').innerHTML=reportCard+unmatchedCard+orphanCard+orphanAvCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${stTblLbl}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
+    $('#pm-body').innerHTML=reportCard+manualRevCard+unmatchedCard+orphanCard+orphanAvCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${stTblLbl}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
       <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||`<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">${emptyMsg}</td></tr>`}</tbody></table></div></div>`;
     // Hisobotдаги «Qarzdorlik» qatorига bosilса — davr/usul filtrini tozalab (aks holда kolleksiya
     //   ko'rinardi), FAQAT qarzdorlar ro'yxatига o'tamiz va o'sha jadvalга suramiz.
@@ -6767,6 +6788,14 @@ async function renderPayments(){
       if(!confirm(msg)) return; b.disabled=true;
       try{ let res=null; try{ res=await rpc('delete_unpaid_invoice',{ p_id:r._id }); }catch(e){ if(!rpcMissing(e)) throw e; await deleteDoc(doc(db,'invoices',r._id)); res={ok:true}; }
         if(res&&res.ok) toast('O‘chirildi ✓'); else toast('O‘chirilmadi — shu orada to‘lov tushgan bo‘lishi mumkin',true); load(); }
+      catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } }));
+    // «Qo'lda qaytarilishi kerak» kartasi: to'lov tarixi + «Bajarildi» belgisi (raw ichida — payments'da alohida ustun yo'q).
+    $('#pm-body').querySelectorAll('[data-ph]').forEach(b=>b.addEventListener('click',()=>{ const sid=b.dataset.ph; const st=stById[sid]; openPayHistory(sid, (st&&st.name)||sid); }));
+    $('#pm-body').querySelectorAll('[data-mrdone]').forEach(b=>b.addEventListener('click',async()=>{ const p=manualRev.find(x=>x._id===b.dataset.mrdone); if(!p) return;
+      if(!confirm('Bu qaytarilgan to‘lov bo‘yicha o‘quvchi balansi (avans/faktura) qo‘lda tuzatildimi?\n«OK» — ro‘yxatdan olib tashlanadi.')) return;
+      b.disabled=true;
+      try{ await setDoc(doc(db,'payments',p._id), { raw:Object.assign({}, p.raw||{}, { manualReverseDone:true, manualReverseBy:(auth.currentUser&&auth.currentUser.email)||'', manualReverseAt:new Date().toISOString() }) }, {merge:true});
+        toast('Belgilandi ✓'); load(); }
       catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
       // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
@@ -7212,7 +7241,7 @@ async function openRefund(ctx, reload){
   $('#modal').innerHTML=`<div class="modal-h"><h3>↩ To‘lovni qaytarish</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small" style="font-weight:700;background:#fdecec;color:#B42318;border-radius:10px;padding:10px 12px">${esc(who)} — qaytariladigan: <b>${maxStr}</b> so‘m gacha</div>
-      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}"></label>
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}" ${isInv?'':'readonly'}></label>${isInv?'':`<div class="small muted" style="margin-top:4px">Biriktirilmagan to‘lov faqat TO‘LIQ qaytariladi. Qisman bo‘lsa — avval «Biriktirish» qiling (ortiqchasi avansga o‘tadi), so‘ng avansdan qaytaring.</div>`}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab (majburiy)<input id="rf-reason" type="text" placeholder="masalan: adashib kiritilgan" style="${fld}"></label>
       ${refundPin?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor PIN kodi<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>`:`<div class="small" style="margin-top:8px;color:#B45309">ℹ️ Refund PIN o‘rnatilmagan — Sozlamalar → «🔐 Qaytarish PIN»da o‘rnating (himoya uchun).</div>`}
       ${studCredit>0?`<label class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-clawback" style="margin-top:2px"><span>Bu o‘quvchida <b>${fmtSom(studCredit)}</b> so‘m <b>avans</b> bor. Belgilansa — qaytargach avans ham <b>0</b> ga tushiriladi (o‘quvchi butunlay ketayotган bo‘lsa). Belgilanmasa — avans qoladi.</span></label>`:''}
@@ -7281,10 +7310,10 @@ async function openReceiptPicker(rr, who){
   const prnt=(amount,method,date,period)=>printReceipt({ kind:'income', who, amount, reason:'To‘lov', period:period||rr.month, method, date });
   if(!real.length){   // alohida to'lov yozuvi topilmadi -> invoice umumiy to'langan summasi (eski zaxira)
     const cum = rr.status==='paid'?(Number(rr.amount)||0):(Number(rr.paidAmount)||0);
-    prnt(cum, PROV_LBL[rr.provider]||rr.provider||'', new Date().toISOString().slice(0,10)); return;
+    prnt(cum, PROV_LBL[rr.provider]||rr.provider||'', tkDay(new Date())); return;
   }
   const perOf=p=>(p&&p.raw&&p.raw.forPeriod)||'';
-  const dayOf=p=>(p&&p.raw&&p.raw.date)||dOf(p.createdAt);
+  const dayOf=p=>payDay(p)||dOf(p.createdAt);   // kassa hisoboti bilan AYNAN bir xil kun (payDay)
   if(real.length===1){ const p=real[0]; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dayOf(p), perOf(p)); return; }
   // Bir necha to'lov -> qaysi to'lov cheki kerakligini tanlaymiz (har biri alohida).
   const trs=real.map((p,i)=>`<tr><td>${esc(dayOf(p))}</td><td>${esc(PROV_LBL[p.provider]||p.provider||'—')}</td>
@@ -7310,7 +7339,7 @@ async function printReceipt(r){
     r.period?`<tr><td>Oy</td><td class="r">${esc(perLbl(r.period))}</td></tr>`:'',
     r.reason?`<tr><td>Sabab</td><td class="r">${esc(r.reason)}</td></tr>`:'',
     r.method?`<tr><td>Usul</td><td class="r">${esc(r.method)}</td></tr>`:'',
-    `<tr><td>Sana</td><td class="r">${esc(r.date||new Date().toISOString().slice(0,10))}</td></tr>`
+    `<tr><td>Sana</td><td class="r">${esc(r.date||tkDay(new Date()))}</td></tr>`
   ].join('');
   const html=`<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>Chek</title><style>
     @page{ size:${width}mm auto; margin:0 } *{box-sizing:border-box}

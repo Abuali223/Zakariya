@@ -1578,7 +1578,9 @@ function renderClsResults(){
   if(!rows.length){ box.innerHTML=`<div class="cls-empty">${esc(t.cls_none)}</div>`; return; }
   const avg = Math.round(rows.reduce((s,x)=>s+(Number(x.score)||0),0)/rows.length);
   const attRows = rows.filter(attKnown);
-  const avgAtt = attRows.length ? Math.round(attRows.reduce((s,x)=>s+Number(x.att),0)/attRows.length) : null;
+  // Ommaviy ro'yxatda davomat % yo'q — faqat ota-onaning O'Z farzandiniki ma'lum bo'lishi mumkin. Sinfning ko'pchiligi
+  //   (≥80%, kamida 2 o'quvchi) ma'lum bo'lmasa «o'rtacha» ko'rsatilmaydi (aks holda o'z bolasining % i «sinf o'rtachasi» bo'lib chiqardi).
+  const avgAtt = (attRows.length >= Math.max(2, Math.ceil(rows.length*0.8))) ? Math.round(attRows.reduce((s,x)=>s+Number(x.att),0)/attRows.length) : null;
   const head = `<div class="cls-row hd"><span>#</span><span class="cr-nm">${esc(t.cls_c_name)}</span><span class="cr-score">${esc(t.cls_c_score)}</span><span class="cr-act"></span></div>`;
   const body = rows.map((s,i)=>`<div class="cls-row">
       <div class="cr-rank">${i+1}</div>
