@@ -35,20 +35,16 @@ VPS'da nusxalab ishga tushirasiz.
 
 ## Xizmat papkasi (WorkingDirectory) — deploy yangi server kodini ishga tushirishi uchun
 `deploy.sh` kodni **`~/iqror-repo`** da yangilaydi (git). Namuna unit'lar (`iqror-*.service`) esa
-`WorkingDirectory=/opt/iqror` ni ko'rsatadi. Agar xizmatlaringiz `/opt/iqror` dan ishlasa va u **alohida
-nusxa** bo'lsa (symlink emas), deploy'dan keyin ham **eski server kodi** ishlayveradi — `deploy.sh` buni
-6-bosqichda «⚠️ … YANGI server kodi ISHGA TUSHMAYDI» deb ogohlantiradi. Bir martalik tuzatish (bittasini tanlang):
+`WorkingDirectory=/opt/iqror` dan ishlaydi. Shuning uchun `deploy.sh` (6-bosqich) har xizmatning
+`WorkingDirectory`'sini tekshiradi: u repo bo'lmasa va server kodi papkasiga o'xshasa (`payments/`, `ai-assistant/`
+yoki `auth/` bor) — **server kodini o'sha papkaga ham yozadi** (faqat git'dagi fayllar: `ai-assistant payments server sb auth`).
+`config.json`, `node_modules`, `backups/`, `supabase/` va boshqa fayllar **tegilmaydi**; fayl egasi papka egasi bilan bir xil
+qoladi. Hech narsa qilish shart emas — deploy chiqishida «… kodi /opt/iqror dan ishlaydi — server kodi o'sha yerga ham
+yozilmoqda» qatorini ko'rasiz.
 
-1. **Xizmatlarni repo'dan ishlatish** (tavsiya): har xizmat uchun
-   ```bash
-   sudo systemctl edit iqror-pay      # ochilgan oynaga yozing:
-   # [Service]
-   # WorkingDirectory=/home/<siz>/iqror-repo
-   ```
-   (`iqror-ai`, `iqror-auth` uchun ham). Shart: xizmat foydalanuvchisi (`User=iqror`) shu papkani **o'qiy olsin**
-   va `config.json` fayllari repo ichida bo'lsin (`payments/config.json`, `ai-assistant/config.json`,
-   `auth/config.json` — gitignore, git ularni o'zgartirmaydi). So'ng `sudo systemctl daemon-reload` va `bash deploy.sh`.
-2. **`/opt/iqror` ni repo'ga symlink qilish**: eski papkadagi `config.json` larni repo'ga ko'chirib,
-   `sudo mv /opt/iqror /opt/iqror.old && sudo ln -s /home/<siz>/iqror-repo /opt/iqror` (huquqlar — 1-banddagidek).
+Tekshirish (ixtiyoriy): `systemctl show -p WorkingDirectory iqror-pay` va deploy'dan keyin
+`sudo journalctl -u iqror-pay -n 20 --no-pager` (xatosiz ishga tushganini ko'rish).
 
-Tekshirish: `systemctl show -p WorkingDirectory iqror-pay` va `readlink -f /opt/iqror`.
+> ⚠️ Unit'larni `WorkingDirectory=/home/<siz>/iqror-repo` ga o'zgartirmang va `/opt/iqror` ni ko'chirmang/symlink
+> qilmang: `User=iqror` uy papkangizni o'qiy olmaydi (Ubuntu'da 0750) — xizmatlar ishga tushmay qoladi; `/opt/iqror`
+> ichida esa zaxiralar (`backup.sh`) va Supabase fayllari bo'lishi mumkin.

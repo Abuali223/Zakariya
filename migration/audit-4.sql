@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: audit-4.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -68,9 +69,12 @@ update public.student_codes
  where coalesce(length(code),0) < 12;
 create or replace function app.gen_student_code() returns trigger language plpgsql security definer as $$
 begin
-  insert into public.student_codes(id, code)
-    values (NEW.id, upper(substr(md5(random()::text || NEW.id || clock_timestamp()::text), 1, 12)))
-    on conflict (id) do nothing;
+  -- AFTER INSERT — faqat HAQIQATAN yangi o'quvchi qatori uchun ishlaydi (upsert'ning UPDATE yo'li ishga tushirmaydi).
+  --   Shu id bilan ESKI (o'chirilgan o'quvchidan qolgan) kod bo'lsa — YANGI kod beriladi: aks holda yangi bola eski
+  --   oilaga berilgan kodni meros olib, o'sha oila uni bog'lab olardi.
+  insert into public.student_codes(id, code, "updatedAt")
+    values (NEW.id, upper(substr(md5(random()::text || NEW.id || clock_timestamp()::text), 1, 12)), now())
+    on conflict (id) do update set code = excluded.code, "updatedAt" = now();
   return NEW;
 end $$;
 

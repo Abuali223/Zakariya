@@ -81,7 +81,7 @@ function makeFake(state, nowFn) {
     const sid = inv.studentId;
     if (p.p_pay_id) { const ap = tbl('applied_payments'); if (ap[p.p_pay_id]) return { dup: true };
       ap[p.p_pay_id] = { id: p.p_pay_id, studentId: sid, amount: amt, createdAt: now() }; }
-    const paid = num(inv.paidAmount), amount = num(inv.amount), newpaid = paid + amt;
+    const amount = num(inv.amount), paid = inv.status === 'paid' ? Math.max(num(inv.paidAmount), amount) : num(inv.paidAmount), newpaid = paid + amt;   // eski 'paid' = amount (SQL bilan bir xil)
     const full = newpaid >= amount - 0.5, overflow = Math.max(0, newpaid - amount);
     inv.paidAmount = full ? amount : newpaid;                                   // to'liqda amount'ga qisiladi
     inv.status = full ? 'paid' : 'partial'; inv.provider = provider; if (full) inv.paidAt = now();
@@ -103,7 +103,8 @@ function makeFake(state, nowFn) {
       ap[gid] = { id: gid, studentId: sid || '', amount: amt, createdAt: now() }; }
     const amount = num(inv.amount), paid = inv.status === 'paid' ? Math.max(num(inv.paidAmount), amount) : num(inv.paidAmount);   // eski 'paid' (paidAmount yo'q) = amount
     const fromInvoice = Math.min(amt, paid), fromCredit = Math.max(0, amt - fromInvoice), newpaid = Math.max(0, paid - fromInvoice);
-    const status = newpaid <= 0 ? 'pending' : (newpaid >= amount - 0.5 ? 'paid' : 'partial');   // haqiqiy SQL: to'liq qaytsa QARZ tiriladi ('pending')
+    const status = (inv.status === 'canceled' || inv.status === 'reversed') ? inv.status   // bekor qilingan faktura bekorligicha qoladi
+      : (newpaid <= 0 ? 'pending' : (newpaid >= amount - 0.5 ? 'paid' : 'partial'));   // haqiqiy SQL: to'liq qaytsa QARZ tiriladi ('pending')
     inv.paidAmount = newpaid; inv.status = status; inv.reversedAt = now();      // provider'ga TEGMAYDI
     if (fromCredit > 0 && sid) { const sc = tbl('student_credit'); const cr = (sc[sid] && num(sc[sid].credit)) || 0;
       const nc = Math.max(0, cr - fromCredit); sc[sid] = { id: sid, studentId: sid, credit: nc, updatedAt: now() };

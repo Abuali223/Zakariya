@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: parent-link-canon.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -27,6 +28,21 @@ language sql stable security definer set search_path = public, app, pg_temp as $
        and (sc.id = sid or sc.id in (select s.id from public.students s where s."studentId" = sid)))
 $$;
 
+-- Kalit NOYOBmi: boshqa o'quvchi qatori shu qatorning id/studentId kalitlaridan birini ishlatmaydimi. Eski importdan
+--   qolgan TO'QNASHUVLAR (bir xil studentId ikki qatorda, yoki bir qatorning doc id'si boshqasining studentId'si) —
+--   bunday qatorlar uchun doc id <-> studentId moslash O'CHIQ: aks holda ota-ona BOSHQA oila bolasining maxfiy
+--   ma'lumoti/fakturalarini ko'rib qolardi. To'qnashuv admin tomonidan tuzatilguncha avvalgidek (faqat aniq kalit).
+create or replace function app.student_keys_unique(p_id text, p_sid text) returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select not exists(
+    select 1 from public.students s2
+     where s2.id <> p_id
+       and (s2."studentId" = p_id
+            or (nullif(p_sid, '') is not null and (s2.id = p_sid or s2."studentId" = p_sid))))
+$$;
+revoke all on function app.student_keys_unique(text, text) from public, anon;
+grant execute on function app.student_keys_unique(text, text) to authenticated, service_role;
+
 create or replace function app.owns_child(sid text) returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select exists(
@@ -34,17 +50,22 @@ language sql stable security definer set search_path = public, app, pg_temp as $
      where cc.uid = app.uid()
        and coalesce(nullif(cc.status, ''), 'active') = 'active'
        and (cc."studentId" = sid
-            or cc."studentId" in (select nullif(s."studentId", '') from public.students s where s.id = sid)
-            or cc."studentId" in (select s.id from public.students s where s."studentId" = sid)))
+            or exists (select 1 from public.students s
+                        where s.id = sid and nullif(s."studentId", '') = cc."studentId"
+                          and app.student_keys_unique(s.id, s."studentId"))
+            or exists (select 1 from public.students s
+                        where s."studentId" = sid and s.id = cc."studentId"
+                          and app.student_keys_unique(s.id, s."studentId"))))
 $$;
 
 create or replace function public.claim_child(p_sid text, p_code text)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_fails int; v_ok boolean; v_canon text;
+declare v_uid text := app.uid(); v_fails int; v_ok boolean; v_canon text; v_doc text; v_sidraw text; v_n int;
 begin
   if v_uid is null then
     raise exception 'auth required' using errcode = '42501';
   end if;
+  p_sid := btrim(coalesce(p_sid, ''));
   -- Lockout: oxirgi 15 daqiqada 5+ MUVAFFAQIYATSIZ urinish -> bloklash.
   select count(*) into v_fails
     from public.child_claim_attempts
@@ -54,15 +75,23 @@ begin
     return jsonb_build_object('ok', false, 'locked', true,
       'error', 'Juda ko''p urinish. 15 daqiqadan so''ng qayta urinib ko''ring.');
   end if;
-  v_ok := app.code_ok(p_sid, p_code);
+  -- Kod AYNAN qaysi o'quvchi qatoriga tegishli (kod doc id bilan saqlanadi) — bog'lanish faqat SHU qatorga
+  --   (avval kalit alohida qidirilib, bo'sh/to'qnash ID'da boshqa bolaga bog'lanib qolishi mumkin edi).
+  select count(*), min(s.id) into v_n, v_doc
+    from public.students s join public.student_codes sc on sc.id = s.id
+   where p_sid <> '' and coalesce(p_code, '') <> '' and upper(sc.code) = upper(p_code)
+     and (s.id = p_sid or s."studentId" = p_sid);
+  v_ok := (v_n = 1);
   insert into public.child_claim_attempts(uid, "studentId", ok) values (v_uid, p_sid, v_ok);
   if not v_ok then
     return jsonb_build_object('ok', false, 'error', 'O''quvchi ID yoki kod noto''g''ri.');
   end if;
-  -- KANONIK kalit (invoices/attendance/… shu bilan kalitlangan): studentId, bo'sh bo'lsa doc id.
-  select coalesce(nullif("studentId", ''), id) into v_canon from public.students
-   where id = p_sid or "studentId" = p_sid order by ("studentId" = p_sid) desc limit 1;
-  v_canon := coalesce(v_canon, p_sid);
+  -- KANONIK kalit (invoices/attendance/… shu bilan kalitlangan): studentId, bo'sh bo'lsa doc id — kod tekshirilgan qatordan.
+  select coalesce(nullif(s."studentId", ''), s.id), s."studentId" into v_canon, v_sidraw from public.students s where s.id = v_doc;
+  if not app.student_keys_unique(v_doc, v_sidraw) then
+    return jsonb_build_object('ok', false, 'error',
+      'Bu o''quvchi ID''si boshqa o''quvchi bilan takrorlangan — maktab ma''muriyatiga murojaat qiling.');
+  end if;
   insert into public.child_claims(id, uid, "studentId", code)
     values (v_uid || '__' || v_canon, v_uid, v_canon, p_code)
     on conflict do nothing;

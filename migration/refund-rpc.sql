@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: refund-rpc.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -44,14 +45,22 @@ begin
     -- 1) Invoysни qulflab o'qib, notfound'ни posbonNI OLMASDAN qaytaramiz.
     -- paid: status 'paid' bo'lgan ESKI yozuvlarda paidAmount bo'lmasligi (0) mumkin — admin.html paidOf kabi
     --   to'langan summa = amount deb olinadi (aks holda qisman qaytarish BUTUN qarzni tiriltirib yuborardi).
-    select id, "studentId", coalesce(amount,0) as amount,
+    --    QULF TARTIBI: AVVAL advisory, KEYIN qator (apply_payment / reprice_invoice bilan bir xil — 40P01 bo'lmasin).
+    select "studentId" into v_sid from public.invoices where id = p_id;
+    if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
+    perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
+    select id, "studentId", coalesce(amount,0) as amount, coalesce(status,'') as status,
            case when status = 'paid' then greatest(coalesce("paidAmount",0), coalesce(amount,0)) else coalesce("paidAmount",0) end as paid,
            coalesce("studentName",'') as sname, coalesce(month,'') as month
       into v_inv from public.invoices where id = p_id for update;
     if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
-    v_sid := v_inv."studentId"; v_sname := v_inv.sname; v_month := v_inv.month;
-
-    perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
+    if coalesce(v_inv."studentId",'') <> coalesce(v_sid,'') then return jsonb_build_object('ok', false, 'error', 'retry'); end if;
+    v_sname := v_inv.sname; v_month := v_inv.month;
+    -- QULF OSTIDA qayta tekshiruv: eski oyna/ro'yxatdan (shu orada qaytarilgan / holat bo'yicha bekor qilingan /
+    --   ikkinchi marta) qaytarish pul harakatlanmasa ham jurnalga «naqd qaytarildi» deb yozilmasin.
+    if v_inv.status in ('canceled','reversed') or p_amount > v_inv.paid + 0.5 then
+      return jsonb_build_object('ok', false, 'reason', 'exceeds-paid', 'paid', v_inv.paid, 'status', v_inv.status);
+    end if;
 
     -- 2) IDEMPOTENTLIK POSBONI: aynan shu refund faqat BIR marta pulни harakatlantiradi.
     if p_ref is not null and p_ref <> '' then
@@ -93,11 +102,16 @@ begin
     --   Aks holda (eski ro'yxatdan) allaqachon o'quvchiga biriktirilgan va fakturaga qo'llangan to'lov ham
     --   'refunded' bo'lib — pul ham qaytarilgan, ham o'qish haqi sifatida hisoblangan bo'lib qolardi
     --   (split_payment bilan bir xil qoida: FOR UPDATE + status in ('unmatched','')).
-    declare v_pst text;
+    declare v_pst text; v_pamt numeric;
     begin
-      select coalesce(status,'') into v_pst from public.payments where id = p_id for update;
+      select coalesce(status,''), coalesce(amount,0) into v_pst, v_pamt from public.payments where id = p_id for update;
       if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
       if v_pst not in ('unmatched','') then return jsonb_build_object('ok', false, 'reason', 'not-unmatched', 'status', v_pst); end if;
+      -- Faqat TO'LIQ qaytarish: to'lov butunlay 'refunded' bo'ladi — qisman qaytarishda qolgan pul hech qayerda
+      --   ko'rinmay yo'qolardi. Qisman bo'lsa: avval o'quvchiga biriktiring, ortiqchasini avansdan qaytaring.
+      if abs(p_amount - v_pamt) > 0.5 then
+        return jsonb_build_object('ok', false, 'reason', 'partial-unmatched', 'amount', v_pamt);
+      end if;
     end;
     if p_ref is not null and p_ref <> '' then
       insert into public.applied_payments(id, "studentId", amount, "createdAt")

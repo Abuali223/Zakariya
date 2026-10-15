@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: student-arrivals.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -23,10 +24,10 @@ language sql stable security definer set search_path = public, app, pg_temp as $
          min(c.ts)                                 as "firstIn"
     from public.students s
     join public.staff_checkins c
-      on c."personId" = s."cameraId"
+      on c."personId" = btrim(s."cameraId")
      and c.day = p_day
      and coalesce(nullif(c.status, ''), 'in') in ('in', 'unknown')        -- faqat KIRISH (chiqish/tanaffus emas)
-   where coalesce(nullif(s."cameraId", ''), '') <> ''
+   where btrim(coalesce(s."cameraId", '')) <> ''
      and (coalesce(nullif(s.lang, ''), 'uz') || '-' || coalesce(s.grade, 0)::text || '-'
           || coalesce(nullif(s."classLetter", ''), nullif(s.track, ''), '-')) = p_class   -- = classKeyOf()
      and (app.is_admin() or app.is_zavuch() or app.is_class_staff(p_class))           -- faqat O'Z sinfi

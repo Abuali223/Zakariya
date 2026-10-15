@@ -38,13 +38,14 @@ docker compose ps          # hammasi 'running/healthy' bo'lishi kerak
 ```
 
 ## 3. Sxema + xavfsizlik (RLS)
-`migration/` papkadagi fayllarni VPS'ga ko'chiring, keyin:
+Repo VPS'da (`~/iqror-repo`) bo'lsin, keyin BUTUN kanonik zanjir (`migration/run-all.sql` tartibida, BITTA
+tranzaksiyada; jadvallar + RLS + Storage + barcha pul funksiyalari). Fayllar ALOHIDA ishga tushirilmaydi — har fayl
+boshidagi qo'riqchi buni rad etadi:
 ```bash
 # Postgres'ga ulanish (Supabase ichidagi db)
 export PGURL="postgresql://postgres:PAROL@localhost:5432/postgres"
-psql "$PGURL" -f schema.sql        # 31 jadval
-psql "$PGURL" -f rls.sql           # 112 xavfsizlik siyosati
-psql "$PGURL" -f storage-rls.sql   # Storage: hamma o'qiydi, faqat admin yuklaydi
+bash ~/iqror-repo/migration/chain.sh | psql "$PGURL" -q
+# yoki (docker ichidagi baza):  bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q
 ```
 
 ## 4. Ma'lumotni yuklash (JSON zaxira → Postgres)

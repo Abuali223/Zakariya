@@ -155,6 +155,14 @@ async function codeMatchesAny(idOrSid, code){
        for(const d of (q.docs||[])){ if(String(d.id) !== String(idOrSid) && await codeMatches(String(d.id), code)) return true; } }catch(e){}
   return false;
 }
+// O'quvchi hozir MAVJUDmi (doc id yoki studentId bo'yicha)? O'chirilgan o'quvchining kodi (student_codes qatori) qolib
+//   ketgan bo'lishi mumkin — u bilan kelgan to'lov «arvoh» kalitga avans bo'lib tushib, biriktirilmagan navbatda ham
+//   ko'rinmasdi. Mavjud bo'lmasa kod mos deb hisoblanmaydi (to'lov telefon yo'liga / qo'lda biriktirishga o'tadi).
+async function studentExists(x){
+  x = String(x||'').trim(); if(!x) return false;
+  try{ const d = await db.collection('students').doc(x).get(); if(d.exists) return true; }catch(e){}
+  try{ const q = await db.collection('students').where('studentId','==',x).get(); return (q.docs||[]).length > 0; }catch(e){ return false; }
+}
 // merchant_trans_id (+ Click paramlari) dan o'quvchini aniqlaydi.
 // Qaytadi: { sid, via } — via: 'code' | 'phone' | (topilmasa) 'notfound'/'ambiguous'/'nophone'.
 //   sid — DOIM kanonik (students.studentId).
@@ -162,10 +170,11 @@ async function attributeStudent(mti, params){
   mti = String(mti||'').trim();
   const parts = mti.toUpperCase().split(/[\s*\/+#:.,;|]+/).filter(Boolean);
   if(parts.length >= 2){                                     // ID + kod (har ikki tartib)
-    if(await codeMatchesAny(parts[0], parts[1])) return { sid: await canonSid(parts[0]), via:'code' };
-    if(await codeMatchesAny(parts[1], parts[0])) return { sid: await canonSid(parts[1]), via:'code' };
+    if(await codeMatchesAny(parts[0], parts[1])){ const sid = await canonSid(parts[0]); if(await studentExists(sid)) return { sid, via:'code' }; }
+    if(await codeMatchesAny(parts[1], parts[0])){ const sid = await canonSid(parts[1]); if(await studentExists(sid)) return { sid, via:'code' }; }
   } else if(parts.length === 1 && /^[A-Z0-9]{5,16}$/.test(parts[0])){   // faqat kod (kod-shaklli bo'lsa; hozirgi kodlar 12 belgi — audit-4/gen_student_code; topilmasa telefon bo'yicha davom etadi)
-    const s = await studentIdByCode(parts[0]); if(s) return { sid: await canonSid(s), via:'code' };
+    const s = await studentIdByCode(parts[0]);
+    if(s){ const sid = await canonSid(s); if(await studentExists(sid)) return { sid, via:'code' }; }
   }
   const ph = (params && (params.param3 || params.phone)) || '';   // Click: param3 = telefon
   const r = await findStudentByPhone(ph, mti, params && params.param2);
@@ -468,6 +477,14 @@ async function uzConfirm(b){
   // Yakuniy holat (qaytarilgan/bekor) — confirm qayta to'lamaydi.
   if(pay.status === 'reversed' || pay.status === 'canceled') return uzFail(UZ.CANCELLED);
   if(pay.status !== 'confirmed'){
+    // Idempotentlik (qayta urinish): shu tranzaksiya puli ALLAQACHON qo'llangan (avvalgi urinishda RPC commit bo'lib,
+    //   status yozuvi/javob yo'qolgan) — qayta qo'llamaymiz, holatni yakunlaymiz (Click complete bilan bir xil). Aks holda
+    //   oraliqda faktura bekor bo'lsa, ikkinchi urinish pulni '_cr' kaliti bilan o'quvchi balansiga YANA qo'shardi.
+    const done = await appliedGuard(['uzum_'+b.transId, 'uzum_'+b.transId+'_cr']);
+    if(done){
+      await uzPayRef(b.transId).set({ status:'confirmed', raw: withRaw(pay, { appliedTo: done.endsWith('_cr') ? 'balance' : 'invoice' }) }, { merge:true });
+      return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };
+    }
     // pay.amount endi SO'M da saqlanadi (uzCreate normallashtiradi) — to'g'ridan-to'g'ri qo'llaymiz.
     const ar = await applyToInvoice(pay.invoiceId, Number(pay.amount)||0, 'uzum_'+b.transId, 'uzum');   // inkremental: qisman to'lovni to'g'ri qo'llaydi, ortiqcha -> avans
     // backend[1]: create->confirm orasида invoice bekor/qaytarilgan bo'lsa pulni yo'qotmaymiz -> o'quvchi balansiga.
@@ -509,7 +526,9 @@ async function uzReverse(b){
         // credit_ledger — BITTA tranzaksiya (advisory lock + 'reverse:'+ref posbon). Eski JS yo'li
         // 4 alohida yozuv edi -> crash/parallel'da invoice ikki marta kamayishi mumkin edi.
         // p_ref noyob (transId) -> webhook retry ikki marta pulни qaytarmaydi ({dup:true}).
-        await db.rpc('reverse_payment', { p_invoice: String(pay.invoiceId), p_amount: som, p_provider: 'uzum', p_ref: 'uzum_'+String(b.transId) });
+        const rvArgs = { p_invoice: String(pay.invoiceId), p_amount: som, p_provider: 'uzum', p_ref: 'uzum_'+String(b.transId) };
+        let rv = await db.rpc('reverse_payment', rvArgs);
+        if(rv && rv.error === 'retry') rv = await db.rpc('reverse_payment', rvArgs);   // qulf ostida kalit o'zgargan (juda kam) — bir marta qayta
       } else {
         // ---- Firebase (rollback) — eski, atomik BO'LMAGAN yo'l ----
         const inv = await getInvoice(String(pay.invoiceId));

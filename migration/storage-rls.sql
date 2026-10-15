@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: storage-rls.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -10,8 +11,7 @@ do $iqror_guard$ begin raise exception 'iqror: storage-rls.sql ALOHIDA ishga tus
 --
 -- ⚠️ Bu FAQAT Supabase o'rnatilgach ishlaydi (storage sxemasi Supabase tomonidan
 --    yaratiladi). rls.sql (bare Postgres'da sinaladigan) ichiga QO'SHILMAYDI.
--- Ishga tushirish (VPS'da, rls.sql dan keyin):
---    psql "$PGURL" -f storage-rls.sql
+-- (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 -- Supabase 'public' bucket ni yaratadi (import-auth-storage.cjs ham yaratadi).

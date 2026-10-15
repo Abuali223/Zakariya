@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: attendance-sync.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -54,7 +55,13 @@ declare
 begin
   if v_new = v_old then return new; end if;
   -- Davomat/baho satrlari o'quvchining studentId'si (bo'lmasa doc id) bilan kalitlangan (admin.html: s.studentId||s._id).
-  v_sids := array_remove(array[nullif(new."studentId", ''), nullif(new.id, '')], null);
+  --   Doc id faqat studentId bo'sh bo'lsa yoki boshqa o'quvchining studentId'si bilan TO'QNASHMASA qo'shiladi
+  --   (aks holda boshqa o'quvchining davomat/baho qatorlari shu o'quvchining yangi sinfiga ko'chib ketardi).
+  v_sids := array[coalesce(nullif(new."studentId", ''), new.id)];
+  if coalesce(new."studentId", '') <> '' and new.id <> new."studentId"
+     and not exists (select 1 from public.students s2 where s2."studentId" = new.id and s2.id <> new.id) then
+    v_sids := v_sids || new.id;
+  end if;
   if coalesce(array_length(v_sids, 1), 0) = 0 then return new; end if;
   update public.attendance set "classKey" = v_new
    where "studentId" = any(v_sids) and month >= v_mon and "classKey" is distinct from v_new;
@@ -62,6 +69,13 @@ begin
    where "studentId" = any(v_sids) and period >= v_mon and "classKey" is distinct from v_new;
   update public.grades set "classKey" = v_new
    where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+  -- Tavsifnoma / fan izohlari / oylik xulosa ham sinf kaliti bilan (RLS yangi sinf rahbariga shu kalit bo'yicha ruxsat beradi).
+  update public.characteristics set "classKey" = v_new
+   where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+  update public.subject_notes set "classKey" = v_new
+   where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+  update public.student_summaries set "classKey" = v_new
+   where "studentId" = any(v_sids) and month >= v_mon and "classKey" is distinct from v_new;
   return new;
 end $$;
 revoke all on function app.sync_student_class_rows() from public, anon, authenticated;

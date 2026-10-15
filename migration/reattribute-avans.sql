@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: reattribute-avans.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -56,6 +57,12 @@ begin
 
   -- Manba avansини qulflab tekshiramiz.
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || v_from));
+  -- Shu ref bilan ko'chirish ALLAQACHON bajarilgan bo'lsa (tarmoq qayta urinishi / ikki marta bosish) — validatsiyadan
+  --   OLDIN {dup}: aks holda manba avansi endi yetmagani uchun «insufficient» qaytib, bajarilgan amal xato bo'lib ko'rinardi.
+  --   (Faqat o'qish — muvaffaqiyatsiz urinish ref'ni «yoqmaydi»; posbon pastda, validatsiyadan keyin yoziladi.)
+  if exists (select 1 from public.applied_payments where id = 'reattr:' || p_ref) then
+    return jsonb_build_object('dup', true, 'ref', p_ref);
+  end if;
   select coalesce(credit, 0) into v_from_credit from public.student_credit where id = v_from for update;
   if coalesce(v_from_credit, 0) < p_amount - 0.5 then
     return jsonb_build_object('ok', false, 'reason', 'insufficient', 'have', coalesce(v_from_credit, 0), 'need', p_amount);

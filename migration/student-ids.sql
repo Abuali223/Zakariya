@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: student-ids.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -50,5 +51,22 @@ returns jsonb language sql stable security definer set search_path = public, app
 $$;
 revoke all on function public.student_history(text) from public, anon;
 grant execute on function public.student_history(text) to authenticated, service_role;
+
+-- O'chirilgan o'quvchining KIRISH KODI ham o'chsin. admin.html o'quvchini o'chirganda student_codes qatorini ham
+--   o'chiradi, lekin DELETE policy yo'q edi (faqat sc_sel) -> jim 0 qator: kod qolib, to'lov serveri «faqat kod» bilan
+--   kelgan to'lovni mavjud bo'lmagan («arvoh») kalitga yo'naltirardi, ota-ona esa o'chirilgan o'quvchini «bog'lay» olardi.
+drop policy if exists sc_del on public.student_codes;
+create policy sc_del on public.student_codes for delete using (app.is_admin());
+-- Avval qolib ketgan arvoh kodlar (o'quvchisi yo'q) tozalanadi — keyingi deploylarda 0 qator (idempotent).
+--   Himoya: o'quvchilar jadvali bo'sh yoki arvohlar g'ayrioddiy ko'p bo'lsa (masalan tiklash/import jarayoni) — tegilmaydi.
+do $$ declare n_all int; n_ghost int; begin
+  select count(*) into n_all from public.student_codes;
+  select count(*) into n_ghost from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  if n_ghost > 0 and exists (select 1 from public.students) and n_ghost <= greatest(5, n_all / 5) then
+    delete from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  elsif n_ghost > 0 then
+    raise notice 'student_codes: % ta o''quvchisiz kod (jami %) — g''ayrioddiy ko''p, avtomatik tozalanmadi', n_ghost, n_all;
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';

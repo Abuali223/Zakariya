@@ -86,17 +86,28 @@ grep -q "/sb/firebase-firestore.js" "$WEB/haydovchi.html" || { echo "❌ haydovc
 grep -q "getBusRoutes" "$WEB/index.html" || { echo "❌ index.html eski (avtobus yo'q)"; exit 1; }
 
 echo "==> 6/7 Xizmatlar qayta ishga tushmoqda..."
-# iqror-auth (telefon+parol+OTP) o'rnatilgan bo'lsa — u ham qayta ishga tushadi (avval deploy uni tashlab ketardi).
+# iqror-auth (telefon+parol+OTP) — YOQILGAN yoki ishlayotgan bo'lsa qayta ishga tushadi (avval deploy uni tashlab ketardi).
+#   O'rnatilgan, lekin ataylab o'chirilgan/masklangan auth'ga tegilmaydi (masalan Eskiz shabloni hali tasdiqlanmagan).
 SERVICES="iqror-ai iqror-pay"
-if systemctl cat iqror-auth >/dev/null 2>&1; then SERVICES="$SERVICES iqror-auth"; fi
-# Xizmat kodi QAYSI papkadan ishlaydi (systemd WorkingDirectory)? Deploy faqat $REPO ni yangilaydi. Namuna
-#   unit'lar (migration/deploy/*.service) /opt/iqror ni ko'rsatadi — agar xizmat BOSHQA papkadan ishlasa, yangi
-#   server kodi u yerga YETIB BORMAYDI (qayta ishga tushirish eski kodni ishlatadi). Jim qolmaymiz — ogohlantiramiz.
+if systemctl is-enabled --quiet iqror-auth 2>/dev/null || systemctl is-active --quiet iqror-auth 2>/dev/null; then SERVICES="$SERVICES iqror-auth"; fi
+# Xizmat kodi QAYSI papkadan ishlaydi (systemd WorkingDirectory)? Deploy kodni $REPO da yangilaydi; namuna unit'lar
+#   (migration/deploy/*.service) esa /opt/iqror dan ishlaydi. Boshqa papka bo'lsa — server kodi O'SHA papkaga ham
+#   yoziladi (faqat git'dagi fayllar: config.json, node_modules, backups/, supabase/ va boshqalar TEGILMAYDI),
+#   aks holda qayta ishga tushirish ESKI kodni ishlatardi. Egasi papkaning hozirgi egasi bilan bir xil qoladi.
+REPO_REAL=$(realpath -m "$REPO"); synced=" "
 for svc in $SERVICES; do
   wd=$(systemctl show -p WorkingDirectory --value "$svc" 2>/dev/null || true)
-  if [ -n "$wd" ] && [ "$(realpath -m "$wd")" != "$(realpath -m "$REPO")" ]; then
-    echo "⚠️  $svc kodi $wd papkasidan ishlaydi, deploy esa $REPO ni yangiladi — YANGI server kodi ISHGA TUSHMAYDI."
-    echo "    Bir martalik sozlash: migration/deploy/README.md — «Xizmat papkasi (WorkingDirectory)» bo'limi."
+  [ -n "$wd" ] || continue
+  wd=$(realpath -m "$wd"); [ "$wd" = "$REPO_REAL" ] && continue
+  case "$synced" in *" $wd "*) continue;; esac
+  if [ -d "$wd/payments" ] || [ -d "$wd/ai-assistant" ] || [ -d "$wd/auth" ]; then
+    echo "    $svc kodi $wd dan ishlaydi — server kodi o'sha yerga ham yozilmoqda (config.json tegilmaydi)"
+    ref="$wd/payments"; [ -e "$ref" ] || ref="$wd"
+    git archive FETCH_HEAD ai-assistant payments server sb auth | sudo tar -x --no-same-owner -C "$wd"
+    sudo chown -R --reference="$ref" "$wd/ai-assistant" "$wd/payments" "$wd/server" "$wd/sb" "$wd/auth"
+    synced="$synced$wd "
+  else
+    echo "⚠️  $svc WorkingDirectory=$wd — server kodi papkasiga o'xshamaydi, yangilanmadi (migration/deploy/README.md, «Xizmat papkasi»)"
   fi
 done
 sudo systemctl restart $SERVICES

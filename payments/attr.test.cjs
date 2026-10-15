@@ -96,6 +96,16 @@ async function prep(name, phone, klass, amount) {
   //   (ism yo'q -> 'ambiguous' -> admin qo'lda biriktiradi; avvalgi xatti-harakat bilan bir xil).
   r = await prep('998901112233', '901112233', '');
   ok(r.raw && r.raw.via !== 'code' && r.matched !== true, `T13 12 xonali raqam kod emas -> telefon yo'li (via=${r.raw && r.raw.via}, matched=${r.matched})`);
+  // T14: O'CHIRILGAN o'quvchining kodi qolib ketgan («arvoh») — to'lov o'sha kalitga TUSHMAYDI (qo'lda biriktirish navbatiga)
+  state.student_codes['fbGHOST1'] = { id: 'fbGHOST1', code: '0A1B2C3D4E5F' };
+  r = await prep('0a1b2c3d4e5f', '', '');
+  ok(r.matched !== true && !(r.raw && r.raw.via === 'code') && r.studentId !== 'fbGHOST1', `T14 o'chirilgan o'quvchi kodi -> biriktirilmagan (got ${r.studentId}, via=${r.raw && r.raw.via})`);
+  r = await prep('fbGHOST1 0A1B2C3D4E5F', '', '');
+  ok(r.matched !== true && r.studentId !== 'fbGHOST1', `T14a «arvohID + kod» -> biriktirilmagan (got ${r.studentId})`);
+  // T14b: o'chirilgan doc 'IQ-0042' kodi, lekin tirik o'quvchi (fbX9kQ2) studentId'si 'IQ-0042' -> IQ-0042
+  state.student_codes['IQ-0042'] = { id: 'IQ-0042', code: '9F8E7D6C5B4A' };
+  r = await prep('9f8e7d6c5b4a', '', '');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T14b o'chirilgan dublikat kodi -> tirik IQ-0042 (got ${r.studentId})`);
 
   fs.unlinkSync(CFGFILE);
   console.log(fails ? `\n❌ ${fails} FAILED` : '\n✅ ALL PASS — attribution ismni tekshiradi');

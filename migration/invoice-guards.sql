@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: invoice-guards.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -50,6 +51,9 @@ begin
          coalesce("discountInfo",'') as info, coalesce(provider,'') as provider, coalesce("isGrant",false) as grant_,
          coalesce(month,'') as month
     into v_inv from public.invoices where id = p_id for update;
+  -- Qulf kutilayotganda faktura o'chirilgan bo'lishi mumkin: bo'sh yozuv bilan davom etilsa «paid» qaytib, referral
+  --   jurnaliga oy=NULL qator yozilardi (referral abadiy «sarflangan» bo'lib qolardi).
+  if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
   v_stcancel := (v_inv.status = 'canceled' and v_inv.info like '[holat]%');
   if v_inv.status = 'reversed' or (v_inv.status = 'canceled' and not v_stcancel) then
     return jsonb_build_object('ok', false, 'reason', 'terminal', 'status', v_inv.status);
@@ -120,6 +124,13 @@ begin
           on conflict (id) do update set "referrerId" = excluded."referrerId", amount = excluded.amount, month = excluded.month, "appliedAt" = now();
       end loop;
     end if;
+    -- '[holat]' bilan bekor qilingan faktura QAYTA TIKLANDI: bekor qilinganda uning puli avansga o'tgan edi — shu avans
+    --   (eng eski qarzdan boshlab, odatiy waterfall) DARHOL qo'llanadi. Aks holda faktura «kutilmoqda» qarz bo'lib
+    --   ko'rinib (qarz SMS'i ham ketardi), xuddi shu pul avansda turardi. Bir tranzaksiyada; advisory qulf qayta kiriladi.
+    if v_stcancel and coalesce(v_sid,'') <> '' then
+      perform public.apply_payment(v_sid, 0, 'credit', null);
+      select coalesce("paidAmount",0), coalesce(status,'') into v_newpaid, v_status from public.invoices where id = p_id;
+    end if;
   end if;
   return jsonb_build_object('ok', true, 'status', v_status, 'amount', v_net, 'paidAmount', v_newpaid, 'excess', v_excess);
 end $$;
@@ -139,6 +150,7 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
   select coalesce(status,'') as status, coalesce("paidAmount",0) as paid into v_inv from public.invoices where id = p_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
   if v_inv.status = 'canceled' then return jsonb_build_object('ok', true, 'dup', true); end if;
   if v_inv.paid > 0 or v_inv.status in ('paid','partial','reversed') then
     return jsonb_build_object('ok', false, 'reason', 'has-payment', 'status', v_inv.status, 'paidAmount', v_inv.paid);
@@ -161,6 +173,7 @@ begin
   if not found then return jsonb_build_object('ok', true, 'dup', true); end if;
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
   select coalesce(status,'') as status, coalesce("paidAmount",0) as paid into v_inv from public.invoices where id = p_id for update;
+  if not found then return jsonb_build_object('ok', true, 'dup', true); end if;
   if v_inv.paid > 0 or v_inv.status in ('paid','partial') then
     return jsonb_build_object('ok', false, 'reason', 'has-payment', 'status', v_inv.status, 'paidAmount', v_inv.paid);
   end if;

@@ -78,6 +78,19 @@ const basic = (l, p) => ({ authorization: 'Basic ' + Buffer.from(l + ':' + p).to
   ok(state.invoices[INV].status === 'pending', 'INVOICE «pending» bo\'ldi (to\'liq qaytarildi — qarz tiriladi, haqiqiy SQL kabi)');
   ok(state.payments['uzum_TX1'].status === 'reversed', 'payments "reversed"');
 
+  // 5b) CONFIRM qayta urinish: avvalgi urinishda pul QO'LLANGAN, lekin 'confirmed' yozuvi yo'qolgan; oraliqda faktura
+  //     bekor qilingan -> ikkinchi urinish pulni o'quvchi balansiga YANA qo'shmasligi kerak (applied guard).
+  state.invoices['IQ-0001__2026-12'] = { id:'IQ-0001__2026-12', studentId:'IQ-0001', month:'2026-12', amount: 2900000, paidAmount: 0, status:'pending' };
+  await handleUzum('create', { serviceId: SID, transId: 'TX2', amount: 2900000*100, params: { invoice: 'IQ-0001__2026-12' } });
+  const cfA = await handleUzum('confirm', { serviceId: SID, transId: 'TX2' });
+  const credBefore = Number((state.student_credit && state.student_credit['IQ-0001'] && state.student_credit['IQ-0001'].credit) || 0);
+  state.payments['uzum_TX2'].status = 'created';                 // javob/holat yozuvi yo'qolgan
+  state.invoices['IQ-0001__2026-12'].status = 'canceled';        // oraliqda bekor qilingan
+  const cfB = await handleUzum('confirm', { serviceId: SID, transId: 'TX2' });
+  const credAfter = Number((state.student_credit && state.student_credit['IQ-0001'] && state.student_credit['IQ-0001'].credit) || 0);
+  ok(cfA.status === 'CONFIRMED' && cfB.status === 'CONFIRMED' && credAfter === credBefore && state.payments['uzum_TX2'].status === 'confirmed',
+     `CONFIRM qayta urinish (pul allaqachon qo'llangan) -> ikkinchi marta qo'llanmaydi (avans ${credBefore} -> ${credAfter})`);
+
   // 6) noma'lum operatsiya
   const un = await handleUzum('foo', { serviceId: SID });
   ok(un.errorCode === 10003, 'noma\'lum op -> 10003');

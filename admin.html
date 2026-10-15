@@ -766,13 +766,28 @@ const SCHEMAS = {
             for(const s of studs){ try{ await updateDoc(doc(db,'students',s._id), { grade:Number(data.grade)||0, classLetter:String(data.letter||''), lang:data.lang||'uz' }); ok++; }catch(e){ bad++; } }
             cache.students=null;
             if(bad){ keepOld=true; toast(`${bad} o‘quvchi ko‘chirilmadi (ruxsat/tarmoq) — ularni qo‘lda tahrirlang. Eski sinf rahbari saqlandi.`,true); }
-            const priceMoved=(Number(row.grade)||0)!==(Number(data.grade)||0) || (row.lang||'uz')!==(data.lang||'uz');
+            // Narx kaliti (priceKeyOf: til-sinf-yo'nalish; IT/MED guruh harfidan ham) o'zgardimi — faqat raqam/til emas.
+            const priceMoved=studs.some(s=>priceKeyOf(s)!==priceKeyOf(Object.assign({}, s, { grade:Number(data.grade)||0, classLetter:String(data.letter||''), lang:data.lang||'uz' })));
             if(ok && priceMoved) setTimeout(()=>alert(`✓ ${ok} o‘quvchi yangi sinfga o‘tkazildi.\n\n⚠️ Sinf raqami/tili o‘zgardi — narx boshqacha bo‘lishi mumkin. Mavjud hisob-fakturalar avtomatik yangilanmaydi:\n«To‘lovlar» → oyni tanlang → «↻ Qayta hisoblash».`),60);
             else if(ok) toast(`✓ ${ok} o‘quvchi yangi sinfga o‘tkazildi`);
           } else keepOld=true;
         }
       }
       await reconcileSupervisor(newKey, keepOld?null:oldKey, (formVals && formVals.supervisorUid) || '');
+      // Sinf kaliti o'zgardi va o'quvchilar ko'chdi: FAN o'qituvchilarining biriktiruvi (users.assignedClasses) ham yangi
+      //   kalitga o'tadi — aks holda ular baho/monitoring huquqini yo'qotib, saqlashda RLS 42501 olardi. (users — faqat direktor.)
+      if(!keepOld && oldKey && oldKey!==newKey){
+        if(SESSION.isAdmin){
+          try{ const us=await getDocs(collection(db,'users')); let moved=0, bad=0;
+            for(const d of us.docs){ const u=d.data()||{}; const ac=Array.isArray(u.assignedClasses)?u.assignedClasses:[];
+              if(!ac.includes(oldKey)) continue;
+              try{ await updateDoc(doc(db,'users',d.id), { assignedClasses:[...new Set(ac.map(k=>k===oldKey?newKey:k))] }); moved++; }catch(e){ bad++; } }
+            cache.users=null;
+            if(moved) toast(`✓ ${moved} fan o‘qituvchisining sinf biriktiruvi «${newKey}» ga o‘tkazildi`);
+            if(bad) toast(`${bad} fan o‘qituvchisining biriktiruvi yangilanmadi — «Foydalanuvchilar»da qo‘lda tuzating`,true);
+          }catch(e){ toast('Fan o‘qituvchilari biriktiruvini o‘qib bo‘lmadi — «Foydalanuvchilar»da qo‘lda tuzating',true); }
+        } else toast('Diqqat: fan o‘qituvchilarining sinf biriktiruvini direktor «Foydalanuvchilar»da yangi sinfga o‘tkazishi kerak',true);
+      }
     }
   }
 };
@@ -831,8 +846,8 @@ async function loadPayees(opts){
   let staff=[];    try{ staff=(!fresh&&cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=staff; }catch(e){ if(fresh) throw e; }
   try{ await loadSalaryRates(); }catch(e){}
   // workStart/workEnd/workDays — SHAXSIY ish vaqti/kunlari (soatbay maosh hisobi personRules orqali shulardan oladi).
-  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }));
-  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }));
+  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }));
+  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }));
   return A.concat(B);
 }
 // O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
@@ -1601,13 +1616,18 @@ async function buildAndPreviewImport(rows){
   //   aks holda faylda «IQ-0042» berilgan o'quvchi topilmay, AYNAN shu studentId bilan IKKINCHI o'quvchi yaratilardi.
   const existing=[]; stu.forEach(r=>{ existing.push(String(r._id)); if(r.studentId) existing.push(String(r.studentId)); });
   // O'chirilgan o'quvchilarning ID'si qayta berilmasin (student-ids.sql). RPC yo'q bo'lsa — joriy ro'yxat.
-  try{ const hw=Number(await rpc('student_id_high_water'))||0; if(hw>0) existing.push('IQ-'+String(hw).padStart(4,'0')); }catch(e){}
+  let hwNum=0; try{ hwNum=Number(await rpc('student_id_high_water'))||0; if(hwNum>0) existing.push('IQ-'+String(hwNum).padStart(4,'0')); }catch(e){}
   const byIdMap=new Map(); stu.forEach(r=>{ byIdMap.set(String(r._id).toUpperCase(), r); if(r.studentId && !byIdMap.has(String(r.studentId).toUpperCase())) byIdMap.set(String(r.studentId).toUpperCase(), r); });
   const nkOf=(name,grade,grp)=>normName(name)+'|'+(parseInt(grade,10)||0)+'|'+normGrp(grp);
   const seenNK=new Set(stu.map(r=>nkOf(r.name, r.grade, r.classLetter||r.track)));
   const byName={}; stu.forEach(r=>{ const k=normName(r.name); (byName[k]=byName[k]||[]).push(r); });
   const clsLbl=(g,l)=>gradeName(g)+(l?` «${l}»`:(Number(g)===13?'':' «—»'));
   const acc=[]; const toWrite=[]; const toUpdate=[]; const warnings=[]; const skipped=[]; const nameCount={}; const updatedIds=new Set();
+  // Fayldagi (keyingi qatorlardagi ham) YANGI IQ-ID'lar oldindan band qilinadi: aks holda bo'sh ID'li qatorga avtomatik
+  //   berilgan ID pastdagi qatorning aniq ID'si bilan bir xil chiqib, ikkalasi bitta hujjatga yozilardi (bitta bola
+  //   jim yo'qolar, maxfiy ma'lumotlar aralashardi). Bir xil yangi ID ikki qatorda — ikkinchisi o'tkaziladi.
+  const reservedIds=[]; if(iId>=0) for(let i=1;i<rows.length;i++){ const g=String((rows[i]||[])[iId]||'').trim(); if(/^IQ-\d+$/i.test(g) && !byIdMap.has(g.toUpperCase())) reservedIds.push(g.toUpperCase()); }
+  const newIds=new Set(), updName={};
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
     const givenId=iId>=0?String(r[iId]||'').trim():'';
@@ -1631,14 +1651,21 @@ async function buildAndPreviewImport(rows){
     if(priv.parentPhone && ph.length>0 && ph.length<7) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
     // Mavjudni topamiz: ID → ism+sinf (aynan, o'zgarishsiz) → ism (sinf boshqa = yangilash)
     let ex=null;
-    if(givenId && byIdMap.has(givenId.toUpperCase())) ex=byIdMap.get(givenId.toUpperCase());
+    if(givenId && byIdMap.has(givenId.toUpperCase())){ ex=byIdMap.get(givenId.toUpperCase());
+      // ID bo'yicha topildi, lekin ism UMUMAN mos emas (birorta umumiy so'z yo'q) — ehtimol ID xato yozilgan: boshqa
+      //   bolaning sinfi/telefoni jim almashmasin. Qatorni o'tkazamiz, ogohlantiramiz.
+      const tk=x=>normName(x).split(' ').filter(w=>w.length>=3), a=tk(ex.name), b=tk(name);
+      if(a.length && b.length && !a.some(w=>b.includes(w))){ warnings.push(`«${name}»: ID «${givenId}» bazada «${ex.name||''}» ga tegishli — ism mos emas, o‘tkazildi (ID'ni tekshiring)`); skipped.push(name); continue; } }
     if(!ex && seenNK.has(nk)){ skipped.push(name + (grp?` («${grp}»)`:'')); continue; }   // aynan bor / fayl ichida takror
     if(!ex){ const nm=byName[normName(name)]||[];
       if(nm.length===1) ex=nm[0];
       else if(nm.length>1){ warnings.push(`«${name}» bazada ${nm.length} marta — qo‘lda tuzating`); skipped.push(name); continue; } }
     if(ex){   // YANGILASH nomzodi (sinf/telefon o'zgargan bo'lishi mumkin)
       const exId=String(ex._id);
-      if(updatedIds.has(exId)) continue;
+      if(updatedIds.has(exId)){   // ikkinchi qator AYNAN shu o'quvchiga ishora qiladi
+        if(normName(updName[exId]||'')!==normName(name)){ warnings.push(`«${name}»: ID «${givenId||exId}» faylda boshqa qatorda «${updName[exId]||''}» uchun ham ishlatilgan — o‘tkazildi (ID'ni tuzating)`); skipped.push(name); }
+        continue; }
+      updName[exId]=name;
       const oldLbl=clsLbl(ex.grade, ex.classLetter||ex.track), newLbl=clsLbl(grade, cls.letter);
       const classChanged=oldLbl!==newLbl, hasPriv=Object.keys(priv).length>0;
       if(!classChanged && !hasPriv) continue;   // o'zgarish yo'q
@@ -1651,15 +1678,25 @@ async function buildAndPreviewImport(rows){
     }
     // YANGI o'quvchi
     seenNK.add(nk);
-    let id=givenId || nextId(existing.concat(acc),'IQ-',4);
+    let id=givenId || nextId(existing.concat(acc, reservedIds),'IQ-',4);
+    if(newIds.has(id.toUpperCase())){ warnings.push(`${name}: ID «${id}» faylda boshqa YANGI o‘quvchiga ham berilgan — o‘tkazildi (ID'ni tuzating yoki bo‘shating)`); skipped.push(name); continue; }
+    // Faylda ANIQ berilgan ID avval O'CHIRILGAN o'quvchiga tegishli bo'lsa (davomat/hisob/avans/ota-ona ulanishi qolgan) —
+    //   yangi bola uni meros olmasin (bitta o'quvchi formasidagi tekshiruv bilan bir xil). high-water'dan katta IQ-n — tarixsiz.
+    if(givenId){ const mm=givenId.match(/^IQ-(\d+)$/i); if(!(mm && hwNum>0 && Number(mm[1])>hwNum)){
+      let h=null; try{ h=await rpc('student_history',{ p_sid:givenId }); }catch(_){ h=null; }
+      if(h && (['invoices','payments','attendance','grades','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
+        warnings.push(`${name}: «${givenId}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — qo‘shilmadi. ID katagini bo‘shating (yangi ID beriladi).`); skipped.push(name); continue; } } }
+    newIds.add(id.toUpperCase());
     acc.push(id);
     const rec={ studentId:id, name, lang, grade, classLetter:cls.letter, track,
-      score:iScore>=0?(Number(r[iScore])||0):0, attendance:iAtt>=0?(Number(r[iAtt])||0):0, order:1000+i };
+      score:iScore>=0?(Number(r[iScore])||0):0, order:1000+i };
+    // Davomat % faqat faylda QIYMAT bo'lsa (aks holda bo'sh qoladi — kabinet «—», davomat kiritilgach trigger hisoblaydi).
+    if(iAtt>=0 && String(r[iAtt]==null?'':r[iAtt]).trim()!=='') rec.attendance=Number(r[iAtt])||0;
     toWrite.push({id, data:rec, priv});
     nameCount[name]=(nameCount[name]||0)+1;
   }
   Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta (yangi)`));
-  if(!toWrite.length && !toUpdate.length){
+  if(!toWrite.length && !toUpdate.length && !warnings.length){
     if(skipped.length){ toast(`Barcha ${skipped.length} o‘quvchi allaqachon to‘g‘ri — o‘zgarish yo‘q ✓`); }
     else toast('Import uchun yozuv topilmadi',true);
     return;
@@ -1905,13 +1942,16 @@ async function renderAttendance(){
     //   har kuni yozilib, ota-ona kabinetida soxta «Keldi» va noto'g'ri % chiqardi. Sinov — ro'yxatda.
     const enrolledOn=s=>{ const st=s.payStatus||''; const sf=String(s.stopFrom||'').slice(0,10);
       if(inPause(s, date)) return false;   // o'tgan to'xtatilgan davr (muzlatish->qaytish tarixi) — o'sha kunlari o'qimagan
+      const af=String(s.activeFrom||'').slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(af) && date<af && (st===''||st==='faol')) return false;   // hali qabul qilinmagan (keyingi sanadan boshlaydi)
       return !((st==='chiqdi'||st==='muzlatilgan') && (!sf || date>sf)); };
-    const activeList=cls.list.filter(enrolledOn), hiddenN=cls.list.length-activeList.length;
-    const existing={};
+    // Saqlangan belgilar BUTUN sinf uchun o'qiladi: shu kunga belgi BOR o'quvchi ro'yxat qoidasidan qat'i nazar
+    //   ko'rsatiladi (masalan avvalgi qaytish activeFrom'ni siljitgan bo'lsa ham — mavjud ma'lumot yashirinmasin).
+    const existing={}, hasMark={};
     try{
-      const snaps=await Promise.all(activeList.map(s=>getDoc(doc(db,'attendance',`${s.studentId||s._id}__${ym}`)).catch(()=>null)));
-      snaps.forEach((sn,i)=>{ if(sn&&sn.exists()){ const days=sn.data().days||{}; existing[activeList[i].studentId||activeList[i]._id]=days[dd]||''; } });
+      const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,'attendance',`${s.studentId||s._id}__${ym}`)).catch(()=>null)));
+      snaps.forEach((sn,i)=>{ if(sn&&sn.exists()){ const days=sn.data().days||{}; const k=cls.list[i].studentId||cls.list[i]._id; existing[k]=days[dd]||''; if(days[dd]) hasMark[k]=true; } });
     }catch(e){}
+    const activeList=cls.list.filter(s=>enrolledOn(s) || hasMark[s.studentId||s._id]), hiddenN=cls.list.length-activeList.length;
     // KAMERA (yuz terminali): shu kun o'quvchining BIRINCHI kirishi — class_arrivals RPC (staff_checkins'dan
     //   o'quvchi «Kamera ID»si bo'yicha; student-arrivals.sql). QO'LDA qo'yilgan belgi DOIM ustun.
     //   Belgi yo'q bo'lsa: kamera ko'rgan -> «Keldi» (vaqti ko'rsatiladi; kechikishni kurator o'zi belgilaydi);
@@ -1925,7 +1965,7 @@ async function renderAttendance(){
     const camOf=s=>String(s.cameraId||'').trim();
     const withCam=activeList.filter(s=>camOf(s)), seenN=arrivals?withCam.filter(s=>arrivals[String(s.studentId||s._id)]!=null).length:0;
     const camOk=!!arrivals && withCam.length>0 && seenN>=Math.max(1, Math.ceil(withCam.length*0.3));
-    const state={}, camNote={};
+    const state={}, camNote={}, touched=new Set();   // touched — foydalanuvchi shu ekranda o'zi o'zgartirgan o'quvchilar
     const ordered=activeList.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
     ordered.forEach(s=>{ const sid=String(s.studentId||s._id); const seen=arrivals?arrivals[sid]:undefined;
       if(seen!=null){ const p=tzHMParts(seen); camNote[sid]=`🕗 ${p?String(p.h).padStart(2,'0')+':'+String(p.m).padStart(2,'0'):'kirdi'}`; }
@@ -1949,9 +1989,9 @@ async function renderAttendance(){
       <div id="att-list">${rowsHtml}</div>
       <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;justify-content:flex-end"><button class="btn gold" id="att-save">Saqlash</button></div></div>`;
     $('#att-list').querySelectorAll('.att-row').forEach(row=>{
-      row.querySelectorAll('.att-b').forEach(btn=>btn.addEventListener('click',()=>{ state[row.dataset.sid]=btn.dataset.s; row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b===btn)); }));
+      row.querySelectorAll('.att-b').forEach(btn=>btn.addEventListener('click',()=>{ state[row.dataset.sid]=btn.dataset.s; touched.add(row.dataset.sid); row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b===btn)); }));
     });
-    $('#att-all').addEventListener('click',()=>{ Object.keys(state).forEach(sid=>state[sid]='present'); $('#att-list').querySelectorAll('.att-row').forEach(row=>row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b.dataset.s==='present'))); });
+    $('#att-all').addEventListener('click',()=>{ Object.keys(state).forEach(sid=>{ state[sid]='present'; touched.add(sid); }); $('#att-list').querySelectorAll('.att-row').forEach(row=>row.querySelectorAll('.att-b').forEach(b=>b.classList.toggle('on',b.dataset.s==='present'))); });
     $('#att-save').addEventListener('click',async()=>{
       const btn=$('#att-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{
@@ -1967,17 +2007,21 @@ async function renderAttendance(){
         // Har o'quvchi ALOHIDA yoziladi (8 tadan parallel): bitta satr rad etilsa (masalan RLS) QOLGANLARI
         //   saqlanadi va kimlar saqlanmagani ko'rsatiladi. (Avval writeBatch birinchi xatoda to'xtab,
         //   sinfning qolgan qismi jim yo'qolardi — kurator faqat «Xatolik: 42501»ni ko'rardi.)
-        const failed=[];
-        for(let i=0;i<entries.length;i+=8){
-          await Promise.all(entries.slice(i,i+8).map(async([sid,status])=>{ const merged=Object.assign({}, existDays[sid]||{}, {[dd]:status});
+        // Shu ekran ochilgandan keyin BOSHQA xodim shu kunni o'zgartirgan bo'lsa (masalan «Bemor» qo'ygan) va bu yerda
+        //   o'quvchi belgisiga TEGILMAGAN bo'lsa — eski/standart belgi bilan ustiga yozmaymiz (kasal kun chegirmasi yo'qolmasin).
+        const failed=[], kept=[];
+        const toSave=entries.filter(([sid])=>{ const cur=String(((existDays[sid]||{})[dd])||''), loaded=String(existing[sid]||'');
+          if(!touched.has(sid) && cur!==loaded){ kept.push(sid); return false; } return true; });
+        for(let i=0;i<toSave.length;i+=8){
+          await Promise.all(toSave.slice(i,i+8).map(async([sid,status])=>{ const merged=Object.assign({}, existDays[sid]||{}, {[dd]:status});
             try{ await setDoc(doc(db,'attendance',`${sid}__${ym}`),{studentId:sid,classKey:ck,month:ym,days:merged},{merge:true}); }
             catch(e){ failed.push({ sid, err:(e&&(e.code||e.message))||'xato' }); } }));
         }
-        const okSids=entries.map(e=>e[0]).filter(sid=>!failed.some(f=>f.sid===sid));
+        const okSids=toSave.map(e=>e[0]).filter(sid=>!failed.some(f=>f.sid===sid));
         await recomputeAttendancePct(okSids);  // «Davomat %» (bazada trigger ham yangilaydi — attendance-sync.sql)
         if(failed.length){ const nm=sid=>{ const st=cls.list.find(x=>String(x.studentId||x._id)===String(sid)); return st?(st.name||sid):sid; };
           toast(`Saqlandi: ${okSids.length} ta. SAQLANMADI ${failed.length} ta: ${failed.slice(0,4).map(f=>nm(f.sid)).join(', ')}${failed.length>4?'…':''} (${failed[0].err}). Qayta «Saqlash» bosing; takrorlansa — administratorga.`, true); }
-        else toast('Davomat saqlandi ✓');
+        else toast('Davomat saqlandi ✓'+(kept.length?` · ${kept.length} o‘quvchining belgisini shu orada boshqa xodim o‘zgartirgan — uniki saqlandi (sahifani yangilang)`:''));
       }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
       btn.disabled=false; btn.textContent='Saqlash';
     });
@@ -2821,7 +2865,11 @@ async function openStatusModal(s, collName, onSaved){
   const curLbl=({faol:'Faol',sinov:'Sinov',muzlatilgan:'Muzlatilgan',chiqdi:'Chiqdi'})[cur]||'Faol';
   $('#modal').innerHTML=`<div class="modal-h"><h3>Holat — ${esc(s.name||s._id)}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <div class="small muted" style="margin-bottom:10px">Joriy: <b>${esc(curLbl)}</b>${s.activeFrom?` · faollashtirilgan: ${esc(s.activeFrom)}`:''}${s.stopFrom?` · to‘xtatish: ${esc(s.stopFrom)}`:''}${(isStu&&_pausesOf(s).length)?`<br>To‘xtatilgan davrlar (to‘lanmaydi): ${_pausesOf(s).map(p=>esc(String(p.from||''))+' – '+esc(String(p.to||''))).join(', ')}`:''}</div>
+      <div class="small muted" style="margin-bottom:10px">Joriy: <b>${esc(curLbl)}</b>${s.activeFrom?` · faollashtirilgan: ${esc(s.activeFrom)}`:''}${s.stopFrom?` · to‘xtatish: ${esc(s.stopFrom)}`:''}</div>
+      ${_pausesOf(s).length?`<div id="st-pz" style="margin:-4px 0 12px;padding:8px 10px;border:1px dashed var(--border);border-radius:9px">
+        <div class="small" style="font-weight:700;margin-bottom:4px">To‘xtatilgan davrlar (${isStu?'bu kunlar uchun to‘lov yo‘q, davomat ro‘yxatida ko‘rinmaydi':'bu kunlar uchun maosh yo‘q, davomatda «yo‘q» deb ushlanmaydi'})</div>
+        ${normPauses(_pausesOf(s)).map((p,i)=>`<div class="small" data-pz="${i}" style="display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap"><input type="date" data-pzf value="${esc(p.from)}" style="${FLD};width:auto"> – <input type="date" data-pzt value="${esc(p.to)}" style="${FLD};width:auto"><button type="button" class="btn sm ghost2" data-pzdel title="Davrni o‘chirish">🗑</button></div>`).join('')}
+        <div style="margin-top:6px"><button type="button" class="btn sm" id="st-pz-save">💾 Davrlarni saqlash</button> <span class="small muted">Qaytish sanasi noto‘g‘ri yozilgan bo‘lsa — shu yerda tuzating.</span></div></div>`:''}
       <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Amal
         <select id="st-sel" style="${FLD}">
           <option value="faol">▶️ Faollashtirish (${MW} boshlanadi)</option>
@@ -2840,25 +2888,46 @@ async function openStatusModal(s, collName, onSaved){
   const upd=()=>{ const v=sel.value;
     if(v==='sinov'){ dw.style.display='none'; hint.textContent=`Sinov: ${REC} hisoblanmaydi. Keyin «Faollashtirish» qilsangiz, o‘sha sanadan ${MW} boshlanadi.`; }
     else { dw.style.display='';
-      if(v==='faol'){ dl.textContent=`Faollashtirish sanasi (shu kundan ${MW})`; hint.textContent='Oy o‘rtasi bo‘lsa — shu kundan prorata (ish kunlari) hisoblanadi.'; }
+      if(v==='faol'){ dl.textContent=`Faollashtirish sanasi (shu kundan ${MW})`;
+        const back=(s.payStatus==='muzlatilgan'||s.payStatus==='chiqdi');
+        hint.textContent = back ? `Qaytgan kun (bugun yoki o‘tgan sana). Muzlatishdan oldingi kunlar saqlanadi, oradagi kunlar «to‘xtatilgan davr» bo‘lib yoziladi (${isStu?'to‘lanmaydi':'maosh hisoblanmaydi'}).`
+          : (_pausesOf(s).length ? `Faol ${isStu?'o‘quvchi':'xodim'}: bu BOSHLANISH sanasini o‘zgartiradi. Qaytish sanasini tuzatish uchun yuqoridagi «To‘xtatilgan davrlar»ni tahrirlang.`
+          : 'Oy o‘rtasi bo‘lsa — shu kundan prorata (ish kunlari) hisoblanadi.'); }
       else if(v==='muzlatilgan'){ dl.textContent='To‘xtatish sanasi (shu kungacha to‘lanadi)'; hint.textContent=`Shu kundan keyin ${REC} yo‘q. Qaytganda yana «Faollashtirish» qiling.`; }
       else { dl.textContent='Chiqqan sana (shu kungacha to‘lanadi)'; hint.textContent=isStu?'Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.':'Shu kundan keyin maosh yo‘q.'; } } };
   sel.value = (cur==='faol') ? 'muzlatilgan' : 'faol';   // qulay: joriy holatga teskari amalni taklif qiladi
   upd(); sel.onchange=upd;
+  // To'xtatilgan davrlarni TUZATISH (faqat o'quvchi; direktor): sanani o'zgartirish / davrni o'chirish.
+  if($('#st-pz')){
+    $('#st-pz').querySelectorAll('[data-pzdel]').forEach(b=>b.onclick=()=>{ const row=b.closest('[data-pz]'); if(row) row.remove(); });
+    $('#st-pz-save').onclick=async()=>{
+      const rows=[...$('#st-pz').querySelectorAll('[data-pz]')].map(r=>({ from:((r.querySelector('[data-pzf]')||{}).value||''), to:((r.querySelector('[data-pzt]')||{}).value||'') }));
+      if(rows.some(r=>!r.from||!r.to||r.from>r.to)){ toast('Har davrda boshlanish sanasi tugash sanasidan oldin (yoki teng) bo‘lsin',true); return; }
+      if(rows.some(r=>r.to>=todayStr())){ toast('Davr bugundan OLDIN tugashi kerak (bola hozir ham kelmayotgan bo‘lsa — «Muzlatish» qiling)',true); return; }
+      const pb=$('#st-pz-save'); pb.disabled=true;
+      try{ await setDoc(doc(db,collName,s._id), { pauses:normPauses(rows) }, {merge:true});
+        cache[collName]=null; toast('To‘xtatilgan davrlar saqlandi ✓'); closeModal();
+        if(isStu) setTimeout(()=>alert('⚠️ To‘xtatilgan davrlar o‘zgardi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\n«To‘lovlar» → tegishli oyni tanlang → «↻ Qayta hisoblash».'),60);
+        if(onSaved) onSaved(); else if(isStu) renderStudents();
+      }catch(e){ pb.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } };
+  }
   $('#st-save').onclick=async()=>{
     const v=sel.value, dt=($('#st-date')&&$('#st-date').value)||todayStr();
     const patch={};
     if(v==='faol'){
       patch.payStatus='faol'; patch.stopFrom='';
-      // O'QUVCHI muzlatish/chiqishdan QAYTDI: faol oraliq TARIXI saqlanadi — activeFrom (asl boshlanish) o'zgarmaydi,
-      //   oradagi kunlar «pauses»ga yoziladi (billingInterval ularni chegiradi). Avval activeFrom qaytish kuniga
-      //   o'zgarardi: bir oyda muzlatib-qaytganda muzlatishdan OLDINGI kunlar, o'tgan oy qayta hisoblansa esa butun
-      //   oy fakturasi tushib qolardi. (Sinovdan faollashtirish / xodimlar — avvalgidek: shu kundan.)
+      // Muzlatish/chiqishdan QAYTDI (o'quvchi HAM xodim): faol oraliq TARIXI saqlanadi — activeFrom (asl boshlanish)
+      //   o'zgarmaydi, oradagi kunlar «pauses»ga yoziladi (billingInterval ularni chegiradi, attMetrics ushlamaydi).
+      //   Avval activeFrom qaytish kuniga o'zgarardi: bir oyda muzlatib-qaytganda muzlatishdan OLDINGI kunlar, o'tgan oy
+      //   keyin hisoblansa esa butun oy fakturasi / MAOSHI tushib qolardi. (Sinovdan faollashtirish — avvalgidek: shu kundan.)
       const prevSt=s.payStatus||'', sf=String(s.stopFrom||'').slice(0,10), af=String(s.activeFrom||'').slice(0,10);
-      if(isStu && (prevSt==='muzlatilgan'||prevSt==='chiqdi') && /^\d{4}-\d{2}-\d{2}$/.test(sf) && (!af || af<=sf)){
+      if((prevSt==='muzlatilgan'||prevSt==='chiqdi') && /^\d{4}-\d{2}-\d{2}$/.test(sf) && (!af || af<=sf)){
+        // Qaytish KELAJAKDA bo'lmasin: rejalashtirilgan sana keyin o'zgarsa, noto'g'ri davr qolib ketardi (va bola
+        //   maktabga kelsa ham davomat ro'yxatida ko'rinmasdi). Qaytgan kuni (yoki keyinroq, o'tgan sana bilan) belgilanadi.
+        if(dt>todayStr()){ toast(`Qaytish sanasi kelajakda bo‘lmasin — ${isStu?'bola':'xodim'} qaytgan kuni (yoki keyin, o‘tgan sana bilan) belgilang`,true); return; }
         const pauses=_pausesOf(s).slice();
         if(dt>sf){ const pf=addDaysStr(sf,1), pt=addDaysStr(dt,-1); if(pf && pt && pf<=pt) pauses.push({ from:pf, to:pt }); }
-        patch.pauses=pauses;
+        patch.pauses=normPauses(pauses);
       } else patch.activeFrom=dt;
     }
     else if(v==='sinov'){ patch.payStatus='sinov'; }
@@ -2867,7 +2936,7 @@ async function openStatusModal(s, collName, onSaved){
     try{ await setDoc(doc(db, collName, s._id), patch, {merge:true});
       cache[collName]=null; toast('Holat saqlandi ✓'); closeModal();
       // O'quvchi holati narxga ta'sir qiladi (billingInterval) — mavjud fakturalar avtomatik yangilanmaydi.
-      if(isStu) setTimeout(()=>alert('⚠️ Holat o‘zgardi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\n«To‘lovlar» → tegishli oyni tanlang → «↻ Qayta hisoblash»: prorata qo‘llanadi, holat bo‘yicha keraksiz faktura bekor qilinadi (to‘langan bo‘lsa pul avansga qaytadi).'),60);
+      if(isStu) setTimeout(()=>alert('⚠️ Holat o‘zgardi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\n«To‘lovlar» → tegishli oyni tanlang → «↻ Qayta hisoblash»: prorata qo‘llanadi, holat bo‘yicha ANIQ keraksiz faktura bekor qilinadi (to‘langan bo‘lsa pul avansga qaytadi); shubhalilari (sana yo‘q / o‘tgan oy) tegilmaydi — ro‘yxatda ko‘rsatiladi.'),60);
       if(onSaved) onSaved(); else if(isStu) renderStudents();
     }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
   };
@@ -3288,6 +3357,11 @@ function openForm(name, row, prefill, afterSaveCb){
     try{
       const data={};
       new FormData(e.target).forEach((v,k)=>{ if(k.startsWith('subj_'))return; data[k]= NUM.has(k) ? (v===''?0:Number(v)) : v; });
+      // «Davomat %» — server trigger (attendance-sync.sql) davomatdan hisoblaydi. Forma uni faqat foydalanuvchi
+      //   HAQIQATAN o'zgartirgan bo'lsa yozadi: avval har saqlashda keshdagi eski qiymat (yangi o'quvchida 0) qaytib
+      //   yozilib, kabinet «0%»/eskirgan raqam ko'rsatardi.
+      if(name==='students' && ('attendance' in data)){ const fd=new FormData(e.target); const raw=String(fd.get('attendance')==null?'':fd.get('attendance')).trim();
+        const before=(isEdit&&row&&row.attendance!=null)?String(row.attendance):''; if(raw==='' || raw===before) delete data.attendance; }
       if(s.subjects) data.subjects = gatherSubjects();
       // O'qituvchi: asosiy oylikni toza raqamga aylantiramiz va MAOSHNI avtomatik hisoblab yozamiz.
       if(name==='teachers'){ await loadSalaryRates(); data.baseSalary = salaryNum(data.baseSalary);
@@ -3344,7 +3418,9 @@ function openForm(name, row, prefill, afterSaveCb){
       //   payStatus/activeFrom/stopFrom. (Avval 'direction','language','status' yozilgan edi — bunday maydon YO'Q,
       //   shu sabab yo'nalish/til/holat o'zgarganda «Qayta hisoblash» eslatmasi chiqmasdi.)
       if(isEdit && name==='students' && row){ ['grade','track','lang','payStatus','activeFrom','stopFrom'].forEach(k=>{
-        if((k in data) && String(data[k]==null?'':data[k])!==String(row[k]==null?'':row[k])) billingChanged=true; }); }
+        if((k in data) && String(data[k]==null?'':data[k])!==String(row[k]==null?'':row[k])) billingChanged=true; });
+        // Narx kaliti guruh harfidan ham (IT/MED) olinadi (trackOf) — A->B emas, B->IT o'zgarishida eslatma kerak.
+        if(priceKeyOf(Object.assign({}, row, data))!==priceKeyOf(row)) billingChanged=true; }
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
       if(!isEdit && name==='students'){
         const nm=String(data.name||'').trim().toLowerCase();
@@ -3357,18 +3433,30 @@ function openForm(name, row, prefill, afterSaveCb){
         // Tahrirlashda DOIM asl hujjatga yozamiz (ID qulflangan; hech qachon yangi dublikat yaratilmaydi)
         const id = isEdit ? row._id : (data[s.docId]||'').trim();
         if(!id){toast('ID kiriting',true);btn.disabled=false;btn.textContent='Saqlash';return;}
-        // Yangi qo'shishda mavjud ID ustiga yozib yubormaslik uchun ogohlantiramiz
-        if(!isEdit && (cache[name]||[]).some(r=>String(r._id)===id)){
-          if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
-        }
-        // YANGI o'quvchi uchun avval O'CHIRILGAN o'quvchining ID'si berilmasin (eski davomat/hisob/avans va
-        //   ota-ona kabinet ulanishi yangi bolaga o'tib ketadi). Tekshirib bo'lmasa (eski baza) — o'tkazamiz.
-        if(!isEdit && name==='students' && !(cache[name]||[]).some(r=>String(r._id)===id||String(r.studentId||'')===id)){
+        // YANGI O'QUVCHI: ID noyobligi BAZADAN (kesh emas) tekshiriladi — o'qib bo'lmasa saqlanmaydi. Avval faqat kesh
+        //   tekshirilardi: (1) import qilingan o'quvchining studentId'si yozilsa ikkinchi o'quvchi o'sha kalit bilan
+        //   yaratilardi (fakturalar/davomat aralashardi); (2) ikki xodim bir vaqtda forma ochsa, ikkinchisi birinchi
+        //   bolaning yozuvi ustiga jim yozardi (bola yo'qolardi).
+        if(!isEdit && name==='students'){
+          let d1, q1;
+          try{ [d1,q1]=await Promise.all([ getDoc(doc(db,'students',id)), getDocs(query(collection(db,'students'), where('studentId','==',id))) ]); }
+          catch(e){ toast('O‘quvchilar ro‘yxatini tekshirib bo‘lmadi — qayta urinib ko‘ring (ID takrorlanmasin)',true); btn.disabled=false; btn.textContent='Saqlash'; return; }
+          if((d1&&d1.exists&&d1.exists()) || (q1&&q1.docs&&q1.docs.length)){
+            let nid=''; try{ const fresh=await loadCol('students','order'); cache.students=fresh; const ids=[]; fresh.forEach(r=>{ ids.push(String(r._id)); if(r.studentId) ids.push(String(r.studentId)); });
+              try{ const hw=Number(await rpc('student_id_high_water'))||0; if(hw>0) ids.push('IQ-'+String(hw).padStart(4,'0')); }catch(_){}
+              nid=nextId(ids,'IQ-',4); const inp=e.target.querySelector(`[name="${s.docId}"]`); if(inp && nid) inp.value=nid; }catch(_){}
+            toast(`«${id}» ID allaqachon boshqa o‘quvchida bor (bir vaqtda qo‘shilgan bo‘lishi mumkin) — saqlanmadi.${nid?` Yangi ID qo‘yildi: ${nid} — yana «Saqlash»ni bosing.`:''}`,true);
+            btn.disabled=false; btn.textContent='Saqlash'; return; }
+          // Avval O'CHIRILGAN o'quvchining ID'si berilmasin (eski davomat/hisob/avans va ota-ona kabinet ulanishi yangi bolaga
+          //   o'tib ketadi). Tekshirib bo'lmasa (eski baza) — o'tkazamiz.
           let h=null; try{ h=await rpc('student_history',{ p_sid:id }); }catch(_){ h=null; }
           if(h && (['invoices','payments','attendance','grades','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
             toast(`«${id}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — yangi o‘quvchi buni meros olmasin. Formani yopib qayta oching (yangi ID beriladi) yoki boshqa ID kiriting.`, true);
             btn.disabled=false; btn.textContent='Saqlash'; return;
           }
+        } else if(!isEdit && (cache[name]||[]).some(r=>String(r._id)===id)){
+          // Boshqa (docId'li) kolleksiyalar — avvalgidek: mavjud ID ustiga yozishdan oldin so'raymiz.
+          if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ btn.disabled=false; btn.textContent='Saqlash'; return; }
         }
         // TAHRIRDA o'quvchining MAVJUD studentId'si saqlanadi (qulflangan maydon shuni ko'rsatadi). Avval doc id
         //   yozilardi: import qilingan (id ≠ studentId) o'quvchi bitta tahrirdan keyin studentId'si doc id'ga
@@ -3968,6 +4056,7 @@ function attMetrics(byDay, leaveSet, month, salary, person, breakMarks){
     const w=new Date(y,mo-1,dd).getDay(); if(!R.workDays.has(w)) continue;                                 // faqat SHAXSIY ish kuni
     if(aStart && ds<aStart) continue;                                                                      // hali faol emas (ishga kirmagan/muzlatilgan)
     if(aEnd && ds>aEnd) continue;                                                                          // to'xtatilgandan keyin
+    if(person && inPause(person, ds)) continue;                                                            // to'xtatilgan davr (muzlatish->qaytish) — ushlanma yo'q
     if(leaveSet && leaveSet.has(ds)) continue;                                                             // ruhsat/kasallik -> ushlanma yo'q
     if(SA_HOLIDAYS.has(ds)) continue;                                                                      // MAKTAB bayrami/dam kuni -> ushlanma yo'q (haq to'lanadi)
     scheduledMin += dailyMin;
@@ -4110,8 +4199,8 @@ async function renderStaffAttendance(){
     return { kelgan, ketgan, brkMin, workMin:work };
   };
   const buildRoster=(staff,teachers)=>{ const r=[];
-    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', payId:String(s.staffId||s._id), name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
-    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', payId:String(t.teacherId||t._id), name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }); } });
+    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', payId:String(s.staffId||s._id), name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
+    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', payId:String(t.teacherId||t._id), name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }); } });
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
   let lastStaff=[], lastTeachers=[];   // tahrirlash uchun eng oxirgi yuklangan to'liq yozuvlar
   // ------- O'RINBOSAR TANLASH (kelmagan xodim o'rniga dars o'tib bergan) -------
@@ -5452,6 +5541,10 @@ async function renderAccounting(){
     // Avans ham to'lov kaliti (teacherId) bilan yoziladi — ro'yxat BAZADAN (eskirgan kesh boshqa kishi kalitini bermasin).
     let payees; try{ payees=await loadPayees({fresh:true}); }catch(e){ toast('Xodimlar ro‘yxatini o‘qib bo‘lmadi — qayta urinib ko‘ring',true); return; }
     if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
+    // Bir xil to'lov ID'li ikki xodim — avans (va keyingi maosh hisobi) noto'g'ri odamga yozilmasin (maosh berish bilan bir xil himoya).
+    const advIdCount={}; payees.forEach(p=>{ advIdCount[String(p.id)]=(advIdCount[String(p.id)]||0)+1; });
+    // Barqaror yozuv id'si (shu oyna uchun): javob yo'qolib qayta bosilsa O'SHA yozuv yangilanadi — ikkinchi avans yaratilmaydi.
+    const advNonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
     const M=$('#ac-month').value||curMonth();
     const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
     const dflt = (String(today).slice(0,7)===M) ? today : M+'-15';
@@ -5471,8 +5564,9 @@ async function renderAccounting(){
       const tn=(payees.find(p=>p.id===String(tid))||{}).name||tid;
       if(!date){ toast('Sanani tanlang',true); return; }
       if(amount<=0){ toast('Summani kiriting',true); return; }
+      if((advIdCount[String(tid)]||0)>1){ toast(`«${tid}» ID bir nechta xodimda bor — avval xodim kartochkasida noyob ID bering (avans boshqa odamga yozilmasin)`,true); return; }
       const btn=$('#av-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
-      try{ await addDoc(collection(db,'staff_advances'), { teacherId:String(tid), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() });
+      try{ await setDoc(doc(db,'staff_advances','adv_'+String(tid)+'_'+advNonce), { teacherId:String(tid), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() }, {merge:true});
         toast('Xodim avansi yozildi ✓'); if(await reload()) draw($('#ac-month').value||curMonth());
         $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Xodim avansi yozildi</h3><button class="x" id="m-x2">×</button></div>
           <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} — ${fmtSum(amount)} so‘m</div>
@@ -6125,6 +6219,12 @@ function saWorkdaysFor(a,b,wdSet){ if(!a||!b) return 0; const set=wdSet||new Set
 function _pausesOf(s){ let p=s&&s.pauses; if(typeof p==='string'){ try{ p=JSON.parse(p); }catch(e){ p=[]; } } return Array.isArray(p)?p:[]; }
 // `ds` ('YYYY-MM-DD') o'quvchining to'xtatilgan davrlaridan biriga tushadimi (muzlatish->qaytish tarixi).
 function inPause(s, ds){ return _pausesOf(s).some(p=>p && p.from && p.to && ds>=String(p.from) && ds<=String(p.to)); }
+// Yozishdan oldin: yaroqli (YYYY-MM-DD, from<=to) davrlar, tartiblangan, kesishgan/qo'shni davrlar birlashtirilgan.
+function normPauses(list){ const re=/^\d{4}-\d{2}-\d{2}$/;
+  const a=(list||[]).map(p=>({ from:String((p&&p.from)||'').slice(0,10), to:String((p&&p.to)||'').slice(0,10) })).filter(p=>re.test(p.from)&&re.test(p.to)&&p.from<=p.to)
+    .sort((x,y)=>x.from<y.from?-1:x.from>y.from?1:0);
+  const out=[]; a.forEach(p=>{ const last=out[out.length-1]; if(last && p.from<=addDaysStr(last.to,1)){ if(p.to>last.to) last.to=p.to; } else out.push({ from:p.from, to:p.to }); });
+  return out; }
 function billingInterval(s, month){
   const mm=String(month||'').match(/^(\d{4})-(\d{2})/); if(!mm) return {skip:false, fraction:1};
   const y=+mm[1], mo=+mm[2]; const mStart=new Date(y,mo-1,1), mEnd=new Date(y,mo,0);
@@ -6148,9 +6248,13 @@ function billingInterval(s, month){
   // To'xtatilgan davrlar (muzlatish/chiqish -> qaytish; openStatusModal yozadi) — shu oraliqdagi ish kunlari
   //   chegiriladi. Shu tufayli bir oyda muzlatib-qaytgan o'quvchi muzlatishdan OLDINGI va qaytgandan KEYINGI
   //   kunlar uchun to'laydi (avval faqat qaytgandan keyingisi hisoblanardi).
+  //   Kesishgan davrlar BIR marta sanaladi (birlashma — inPause/ro'yxat/kasal xaritasi bilan bir xil); avval har
+  //   davr alohida qo'shilib, umumiy kunlar ikki marta ayirilardi (qisman oy «butun oy to'xtatilgan»ga aylanardi).
   let pausedDays=0;
-  _pausesOf(s).forEach(p=>{ const pf=_saDate(p&&p.from), pt=_saDate(p&&p.to); if(!pf||!pt) return;
-    const a=pf>start?pf:start, b=pt<end?pt:end; if(a<=b) pausedDays+=saWorkdaysFor(a,b,_wd); });
+  const _ps=_pausesOf(s).map(p=>[_saDate(p&&p.from), _saDate(p&&p.to)]).filter(x=>x[0]&&x[1]&&x[0]<=x[1]&&x[1]>=start&&x[0]<=end);
+  if(_ps.length){ const wds=_wd||new Set(SA_WORKDAYS);
+    for(let d=new Date(start.getFullYear(),start.getMonth(),start.getDate()), g=0; d<=end && g<400; d.setDate(d.getDate()+1), g++){
+      if(wds.has(d.getDay()) && _ps.some(x=>d>=x[0] && d<=x[1])) pausedDays++; } }
   act=Math.max(0, act-pausedDays);
   const fmtD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   if(full<=0) return {skip:false, fraction:1, startStr:fmtD(start), endStr:fmtD(end)};
@@ -6471,10 +6575,15 @@ async function renderPayments(){
     // O'quvchisi ro'yxatda topilmagan (o'chirilgan/ID o'zgargan) invoyslar — alohida (266≠288 sababi).
     const orphan=rows.filter(r=>!stById[r.studentId]);
     // «Ehtimoliy egasi»: yetim faktura ismi joriy BITTA o'quvchi ismiga mos — ko'pincha o'quvchi ID'si (studentId)
-    //   o'zgargan (masalan eski xato: tahrirda studentId doc id bilan almashardi). Bunday qarz HAQIQIY — o'chirilmaydi,
-    //   o'quvchi kartasida eski ID tiklanadi (shunda faktura/avans/davomat yana bog'lanadi).
+    //   o'zgargan (masalan eski xato: tahrirda studentId doc id bilan almashardi). Bunday qarz HAQIQIY bo'lishi mumkin —
+    //   ommaviy o'chirishga tushmaydi; direktor qatordagi 🗑 bilan o'chirib, «Hisob-fakturalar yaratish» bilan JORIY ID
+    //   uchun fakturani yaratadi. Egasining shu oy uchun o'z fakturasi allaqachon bo'lsa — bu DUBLIKAT (o'chirsa bo'ladi).
+    //   Bir nechta bir xil ismli o'quvchi bo'lsa — «noaniq», ommaviy o'chirilmaydi.
     const _byNm={}; students.forEach(s=>{ const k=normName(s.name); if(k) (_byNm[k]=_byNm[k]||[]).push(s); });
-    const likelyOwner=r=>{ const a=_byNm[normName(r.studentName)]||[]; return a.length===1?a[0]:null; };
+    const nmMatches=r=>{ const k=normName(r.studentName); return k?(_byNm[k]||[]):[]; };
+    const likelyOwner=r=>{ const a=nmMatches(r); return a.length===1?a[0]:null; };
+    const dupOf=r=>{ const lo=likelyOwner(r); return !!lo && rows.some(x=>String(x.studentId)===String(lo.studentId||lo._id) && !isCanc(x)); };
+    const protectedOrph=r=>paidOf(r)<=0 && ((!!likelyOwner(r) && !dupOf(r)) || nmMatches(r).length>1);
     const curAll=rows.filter(r=>stById[r.studentId]);                       // joriy o'quvchilar (butun oy)
     // Filtr — o'quvchi bo'limidek: qidiruv + sinf + til (JORIY o'quvchi bo'yicha).
     const _q=(($('#pm-search')&&$('#pm-search').value)||'').trim().toLowerCase(), _qd=_q.replace(/\D/g,'');
@@ -6504,7 +6613,9 @@ async function renderPayments(){
     try{ const lo=new Date(cashFrom+'T00:00:00+05:00').toISOString(), hi=new Date(cashTo+'T23:59:59.999+05:00').toISOString();
       const ps=await getDocs(query(collection(db,'payments'), where('createdAt','>=',lo), where('createdAt','<=',hi))); cashPays=ps.docs.map(d=>({_id:d.id,...d.data()}));
       try{ const rs=await getDocs(query(collection(db,'refunds'), where('createdAt','>=',lo), where('createdAt','<=',hi)));
-        rs.docs.forEach(d=>{ const x=d.data()||{}; if(x.target==='invoice'||x.target==='payment') cashRef+=Number(x.amount)||0; }); }catch(e){} }
+        // Faqat FAKTURA qaytarishlari: biriktirilmagan to'lov qaytarilganda to'lov qatori 'refunded' bo'ladi va «Jami tushgan»ga
+        //   umuman kirmaydi (CASH_PAY_ST) — uni yana ayirish ikki marta kamaytirardi (refundOfMonth bilan bir xil qoida).
+        rs.docs.forEach(d=>{ const x=d.data()||{}; if(x.target==='invoice') cashRef+=Number(x.amount)||0; }); }catch(e){} }
     catch(e){ cashErr=String(e.code||e.message||'xato'); }
     if(_g!==VIEW_GEN) return;
     const cash=cashByMethod(cashPays, cashFrom, cashTo, _fm);
@@ -6537,8 +6648,8 @@ async function renderPayments(){
     // O'quvchisi topilmagan (eski/o'chirilgan / ID o'zgargan) invoyslar — statistika bilan farqni tushuntiradi + tozalash.
     const orphanCard = orphan.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>⚠️ O‘quvchisi topilmagan hisob-fakturalar</h3><span class="cls-count">${orphan.length} ta · o‘quvchi ro‘yxatda yo‘q</span></div>
       <div style="padding:10px 16px" class="small muted">Bu oyda jami <b>${rows.length}</b> hisob-faktura, ro‘yxatda esa <b>${curAll.length}</b> o‘quvchi — farq (${orphan.length} ta) o‘chirilgan yoki ID‘si o‘zgargan o‘quvchilarnikidir.${SESSION.isAdmin?' Tozalash uchun quyidagi tugmani bosing.':''}</div>
-      ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 To‘lovsiz “o‘quvchisiz” hisoblarni o‘chirish (${orphan.filter(r=>paidOf(r)<=0 && !likelyOwner(r)).length} ta)</button>${orphan.some(r=>paidOf(r)>0)?`<div class="small muted" style="margin-top:6px">To‘lov tushganlari (${orphan.filter(r=>paidOf(r)>0).length} ta) saqlanadi — daromad hisobotida qoladi.</div>`:''}${orphan.some(r=>paidOf(r)<=0 && likelyOwner(r))?`<div class="small" style="margin-top:6px;color:#B54708">Ismi joriy o‘quvchiga mos keladiganlari (${orphan.filter(r=>paidOf(r)<=0 && likelyOwner(r)).length} ta) O‘CHIRILMAYDI — o‘quvchi ID‘si o‘zgargan bo‘lishi mumkin: o‘quvchi kartasida eski ID‘ni tiklang.</div>`:''}</div>`:''}
-      <div class="tablewrap"><table><thead><tr><th>O‘quvchi (eski)</th><th>Eski ID</th><th>Sinf (eski)</th><th>Summa</th><th>To‘langan</th><th>Holat</th><th>Ehtimoliy egasi</th></tr></thead><tbody>${orphan.map(r=>{ const lo=likelyOwner(r); return `<tr><td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'—')}</td><td data-label="Eski ID">${esc(r.studentId||'—')}</td><td data-label="Sinf">${esc(r.classKey||'—')}</td><td data-label="Summa">${fmtSom(r.amount)}</td><td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'—'}</td><td data-label="Holat">${esc(r.status||'—')}</td><td data-label="Ehtimoliy egasi">${lo?`<span style="color:#B54708">⚠️ ${esc(lo.name||'')} — hozirgi ID <b>${esc(lo.studentId||lo._id)}</b></span>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : '';
+      ${SESSION.isAdmin?`<div style="padding:0 16px 12px"><button class="btn sm danger" id="pm-orphan-del">🗑 To‘lovsiz “o‘quvchisiz” hisoblarni o‘chirish (${orphan.filter(r=>paidOf(r)<=0 && !protectedOrph(r)).length} ta)</button>${orphan.some(r=>paidOf(r)>0)?`<div class="small muted" style="margin-top:6px">To‘lov tushganlari (${orphan.filter(r=>paidOf(r)>0).length} ta) saqlanadi — daromad hisobotida qoladi.</div>`:''}${orphan.some(protectedOrph)?`<div class="small" style="margin-top:6px;color:#B54708">Ismi joriy o‘quvchiga mos keladiganlari (${orphan.filter(protectedOrph).length} ta) ommaviy O‘CHIRILMAYDI — o‘quvchi ID‘si o‘zgargan bo‘lishi mumkin (qarz haqiqiy). Tekshirib, qatordagi 🗑 bilan o‘chiring va «Hisob-fakturalar yaratish»ni bosing — joriy ID uchun shu oy fakturasi yaratiladi.</div>`:''}</div>`:''}
+      <div class="tablewrap"><table><thead><tr><th>O‘quvchi (eski)</th><th>Eski ID</th><th>Sinf (eski)</th><th>Summa</th><th>To‘langan</th><th>Holat</th><th>Ehtimoliy egasi</th>${SESSION.isAdmin?'<th></th>':''}</tr></thead><tbody>${orphan.map(r=>{ const lo=likelyOwner(r), nm=nmMatches(r); return `<tr><td data-label="O‘quvchi">${esc(r.studentName||r.studentId||'—')}</td><td data-label="Eski ID">${esc(r.studentId||'—')}</td><td data-label="Sinf">${esc(r.classKey||'—')}</td><td data-label="Summa">${fmtSom(r.amount)}</td><td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'—'}</td><td data-label="Holat">${esc(r.status||'—')}</td><td data-label="Ehtimoliy egasi">${lo?`<span style="color:#B54708">⚠️ ${esc(lo.name||'')} — hozirgi ID <b>${esc(lo.studentId||lo._id)}</b>${dupOf(r)?' · shu oy uchun o‘z fakturasi BOR (dublikat)':''}</span>`:(nm.length>1?`<span style="color:#B54708">noaniq: ${nm.length} ta bir xil ismli o‘quvchi</span>`:'—')}</td>${SESSION.isAdmin?`<td class="td-actions">${paidOf(r)<=0?`<button class="btn sm danger" data-orphdel="${esc(r._id)}" title="Bu to‘lovsiz hisob-fakturani o‘chirish">🗑</button>`:''}</td>`:''}</tr>`; }).join('')}</tbody></table></div></div>` : '';
     // 💰 AVANSLAR (fakturasi yo'q): puli tushgan, lekin bu oyга hisob-faktura yaratilmagan o'quvchilar.
     //   Fakturasiz bo'lgani uchun asosiy jadval/qidiruvда (u faqat invoices ustidан ishlaydi) KO'RINMAYDI
     //   -> shu yerда ism/ID bilan topiladi ("to'lov qildim, lekin ro'yxatда yo'q" chalkashligini yopadi).
@@ -6636,9 +6747,10 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-assign]').forEach(b=>b.addEventListener('click',()=>openAssign(unmatched.find(u=>u._id===b.dataset.assign), students, load)));
     { const ob=$('#pm-orphan-del'); if(ob) ob.addEventListener('click',async()=>{
       // MUHIM: to'lov TUSHGAN orphanlarni o'chirmaymiz — ular real daromad (hisobotdan yo'qolib ketmasin).
-      //   Ismi joriy o'quvchiga mos keladiganlari ham o'chirilmaydi (ID o'zgargan — qarz haqiqiy, yuqoriga qarang).
-      const delable=orphan.filter(r=>paidOf(r)<=0 && !likelyOwner(r)), kept=orphan.filter(r=>paidOf(r)>0), owned=orphan.filter(r=>paidOf(r)<=0 && likelyOwner(r));
-      if(!delable.length){ toast('O‘chiriladigan bo‘sh hisob yo‘q'+(kept.length?' — to‘lovlilari saqlanadi':'')+(owned.length?' — ismi mos o‘quvchisi borlari saqlanadi (ID‘ni tiklang)':''),true); return; }
+      //   Ismi joriy o'quvchiga mos / noaniq keladiganlari ham ommaviy o'chirilmaydi (qarz haqiqiy bo'lishi mumkin —
+      //   qatordagi 🗑 bilan, tekshirib). Egasining shu oy fakturasi BOR bo'lsa — dublikat, o'chiriladi.
+      const delable=orphan.filter(r=>paidOf(r)<=0 && !protectedOrph(r)), kept=orphan.filter(r=>paidOf(r)>0), owned=orphan.filter(protectedOrph);
+      if(!delable.length){ toast('O‘chiriladigan bo‘sh hisob yo‘q'+(kept.length?' — to‘lovlilari saqlanadi':'')+(owned.length?' — ismi mos o‘quvchisi borlari saqlanadi (qatordagi 🗑 bilan tekshirib o‘chiring)':''),true); return; }
       if(!confirm(`Bu oydagi ${delable.length} ta “o‘quvchisi topilmagan” TO‘LOVSIZ hisob-faktura o‘chiriladi.`+(kept.length?`\nTo‘lov tushgan ${kept.length} ta hisob SAQLANADI (daromad yo‘qolmasin).`:'')+(owned.length?`\nIsmi joriy o‘quvchiga mos ${owned.length} ta hisob SAQLANADI (ID o‘zgargan bo‘lishi mumkin).`:'')+`\nDavom etilsinmi?`)) return;
       // Qulf ostida «to'lov yo'q»ligi QAYTA tekshiriladi (delete_unpaid_invoice) — sahifa ochilgandan keyin to'langan
       //   faktura o'chib, pul hisobotdan yo'qolmasin. RPC yo'q (eski baza) -> avvalgi yo'l.
@@ -6646,6 +6758,16 @@ async function renderPayments(){
           let res=null; try{ res=await rpc('delete_unpaid_invoice',{ p_id:r._id }); }catch(e){ if(!rpcMissing(e)) throw e; await deleteDoc(doc(db,'invoices',r._id)); res={ok:true}; }
           if(res&&res.ok) done++; else guarded++; }catch(e){ guarded++; } }
       toast(`${done} ta o‘chirildi ✓${kept.length?` · ${kept.length} ta to‘lovli saqlandi`:''}${guarded?` · ${guarded} tasi o‘chirilmadi (shu orada to‘lov tushgan yoki xato)`:''}`, guarded>0); load(); }); }
+    // Bitta yetim (to'lovsiz) fakturani o'chirish — qulf ostida qayta tekshiruv (delete_unpaid_invoice).
+    $('#pm-body').querySelectorAll('[data-orphdel]').forEach(b=>b.addEventListener('click',async()=>{ const r=orphan.find(x=>x._id===b.dataset.orphdel); if(!r) return;
+      const lo=likelyOwner(r);
+      const msg = lo ? (dupOf(r) ? `«${r.studentName||r.studentId}» (eski ID ${r.studentId}) — egasi ${lo.name} (ID ${lo.studentId||lo._id}) uchun shu oy fakturasi BOR: bu dublikat. O‘chirilsinmi?`
+                                 : `«${r.studentName||r.studentId}» qarzi eski ID ${r.studentId} ostida. Ehtimoliy egasi: ${lo.name} (hozirgi ID ${lo.studentId||lo._id}).\n\nO‘chirgach «Hisob-fakturalar yaratish»ni bosing — joriy ID uchun shu oy fakturasi yaratiladi (qarz yo‘qolmaydi).\nO‘chirilsinmi?`)
+                   : `«${r.studentName||r.studentId}» (ID ${r.studentId}) — to‘lovsiz hisob-faktura o‘chirilsinmi?`;
+      if(!confirm(msg)) return; b.disabled=true;
+      try{ let res=null; try{ res=await rpc('delete_unpaid_invoice',{ p_id:r._id }); }catch(e){ if(!rpcMissing(e)) throw e; await deleteDoc(doc(db,'invoices',r._id)); res={ok:true}; }
+        if(res&&res.ok) toast('O‘chirildi ✓'); else toast('O‘chirilmadi — shu orada to‘lov tushgan bo‘lishi mumkin',true); load(); }
+      catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } }));
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;
       // Qatordan to'lov qabul qilish — o'quvchi va qarz oldindan to'ldiriladi (yagona idempotent oqim: payments + waterfall).
       //   «Qaysi oy uchun» OLDINDAN qo'yilmaydi: to'lov eng ESKI qarzga tushadi (apply_payment waterfall) — chekdagi
@@ -6717,9 +6839,15 @@ async function renderPayments(){
       //   lekin oldindan yaratilgan TO'LANMAGAN fakturasi bor o'quvchilar — ularning avansi shu «fantom»
       //   fakturaga yeb qo'yilmasin: avans qo'llash o'tkaziladi, admin «↻ Qayta hisoblash» bilan bekor qiladi.
       const stById={}; students.forEach(s=>{ stById[String(s.studentId||s._id)]=s; });
-      const phantom=[]; const phantomSids=new Set();
+      //   «Aniq» (statusSkipCertain) fakturalarni recalc bekor qiladi; «shubhali» (sana yo'q / o'tgan oy) — TEGMAYDI,
+      //   admin sanani kiritadi yoki qo'lda «Bekor» qiladi. Shubhali holatdagi o'quvchilarning avansi ham (shu oy
+      //   fakturasi bo'lmasa ham) avtomatik ESKI fakturaga sarflanmaydi — holat aniqlanguncha.
+      const curTM=tkDay(new Date()).slice(0,7);
+      const phantom=[], phantomRev=[]; const phantomSids=new Set();
       snap.docs.forEach(d=>{ const x=d.data()||{}; const st=x.status; if(st==='canceled'||st==='reversed'||st==='paid') return;
-        const so=stById[String(x.studentId||'')]; if(so && billingInterval(so, month).skip){ phantomSids.add(String(x.studentId)); phantom.push(so.name||x.studentId); } });
+        const so=stById[String(x.studentId||'')]; const bi=so?billingInterval(so, month):null;
+        if(bi && bi.skip){ phantomSids.add(String(x.studentId)); (statusSkipCertain(bi.code, month, curTM)?phantom:phantomRev).push(so.name||x.studentId); } });
+      students.forEach(so=>{ const bi=billingInterval(so, month); if(bi.skip && (bi.code==='nodate'||bi.code==='empty')) phantomSids.add(String(so.studentId||so._id)); });
       // Avans (student_credit) bor o'quvchilarga yangi hisob-fakturaga avtomatik qo'llaymiz.
       let settled=0;
       try{ const cs=await getDocs(query(collection(db,'student_credit'), where('credit','>',0)));
@@ -6733,6 +6861,7 @@ async function renderPayments(){
       if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
       if(fallbackList.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ ${fallbackList.length} o‘quvchiga zaxira summa qo‘llandi (sinf narxi jadvalда yo‘q):</b><div class="small">${fallbackList.slice(0,25).map(esc).join(' · ')}${fallbackList.length>25?` …yana ${fallbackList.length-25}`:''} — narxni «Narx jadvali»ga qo‘shib «↻ Qayta hisoblash» qiling.</div></div>`;
       if(phantom.length) html+=`<div style="margin-top:8px;color:#B42318"><b>⚠️ ${phantom.length} o‘quvchining holati bo‘yicha bu oy faktura KERAK EMAS, lekin to‘lanmagan fakturasi bor</b> (sinov / chiqgan / muzlatilgan / keyinroq faollashtirilgan) — avansi qo‘llanmadi. «↻ Qayta hisoblash» bosing — bu fakturalar bekor qilinadi.<div class="small">${phantom.slice(0,25).map(esc).join(' · ')}${phantom.length>25?` …yana ${phantom.length-25}`:''}</div></div>`;
+      if(phantomRev.length) html+=`<div style="margin-top:8px;color:#B54708"><b>⚠️ ${phantomRev.length} o‘quvchining holati SHUBHALI (to‘xtatish sanasi yo‘q yoki o‘tgan oy), lekin to‘lanmagan fakturasi bor</b> — avansi qo‘llanmadi. «↻ Qayta hisoblash» ularni BEKOR QILMAYDI: o‘quvchi kartasida (⏯️ Holat) to‘xtatish sanasini kiriting yoki fakturani qatordagi «Bekor» bilan bekor qiling.<div class="small">${phantomRev.slice(0,25).map(esc).join(' · ')}${phantomRev.length>25?` …yana ${phantomRev.length-25}`:''}</div></div>`;
       if(conflicts.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ Aka-uka chegirmasi eslatmalari:</b><div class="small">${conflicts.slice(0,15).map(esc).join(' · ')}</div></div>`;
       $('#pm-genmsg').innerHTML = html;
       toast('Tayyor ✓'); load();
@@ -6869,7 +6998,10 @@ function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return 
 // Bitta navbat elementini serverga yuborish (pending -> apply -> applied). Idempotent.
 async function obFlushOne(it){
   await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
-    payerName:it.nm||'', matched:true, raw:{ manual:true, method:it.method, date:it.date, note:it.note||'', forPeriod:it.period||'' }, createdAt:serverTimestamp() });
+    payerName:it.nm||'', matched:true, raw:{ manual:true, method:it.method, date:it.date, note:it.note||'', forPeriod:it.period||'' },
+    // createdAt = KIRITILGAN vaqt (navbatga qo'shilgan payt), yuborilgan payt EMAS: oflayn kiritilib keyingi kuni/oyda
+    //   yuborilgan to'lov kassa hisobotida boshqa kun/oyga tushib, chek sanasi bilan farq qilardi; qayta urinishlar ham siljitardi.
+    createdAt:(Number(it.ts)>0 ? new Date(Number(it.ts)).toISOString() : serverTimestamp()) });
   await applyPaymentClient(String(it.sid), Number(it.amount)||0, it.method, it.payId);
   await setDoc(doc(db,'payments',it.payId), { status:'applied' }, {merge:true});
 }
@@ -7114,7 +7246,10 @@ async function openRefund(ctx, reload){
         p_id: String(isInv ? (ctx.invoice._id||'') : (ctx.payment._id||'')),
         p_amount: amount, p_reason: reason, p_clawback: doClawback, p_by: email, p_ref: ref
       });
-      if(res && res.ok===false){ throw new Error(res.error||res.reason||'refund-failed'); }
+      if(res && res.ok===false){
+        if(res.reason==='partial-unmatched') throw new Error(`Biriktirilmagan to‘lov faqat TO‘LIQ qaytariladi (${fmtSom(res.amount||0)}). Qisman bo‘lsa — avval o‘quvchiga biriktiring, ortiqchasini avansdan qaytaring.`);
+        if(res.reason==='exceeds-paid') throw new Error(`Qaytarib bo‘lmaydi: hozir bu hisob-fakturada ${fmtSom(res.paid||0)} to‘langan${(res.status==='canceled'||res.status==='reversed')?' (faktura bekor qilingan — puli avansda bo‘lishi mumkin)':''}. Sahifani yangilab qayta tekshiring.`);
+        throw new Error(res.error||res.reason||'refund-failed'); }
       toast((res && res.dup) ? 'Allaqachon qaytarilgan ✓' : 'Qaytarildi ✓'); closeModal(); if(reload) reload();
     }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Xatolik: '+(e.code||e.message),true); }
   };

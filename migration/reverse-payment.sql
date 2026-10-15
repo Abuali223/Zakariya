@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: reverse-payment.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -45,14 +46,20 @@ begin
   --    (apply_to_invoice bilan bir xil xavfsiz tartib). for update -> parallel reverse'lar seriyalanadi.
   --    paid: ESKI 'paid' yozuvlarda paidAmount 0 bo'lishi mumkin -> to'langan = amount (admin.html paidOf kabi);
   --    aks holda butun summa aloqasiz avansdan qaytarib olinardi.
+  --    QULF TARTIBI: AVVAL o'quvchi advisory qulfi, KEYIN qator (apply_payment / reprice_invoice bilan BIR XIL).
+  --    Avval teskari (qator -> advisory) edi: bir vaqtda kelgan apply_payment/qayta hisoblash bilan o'zaro
+  --    qulflanish (40P01) Uzum/Click so'rovini xato bilan uzardi.
+  select "studentId" into v_sid from public.invoices where id = p_invoice;
+  if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
+  -- 2) O'quvchi bo'yicha boshqa to'lovlar bilan seriyalash (apply_payment/apply_to_invoice bilan bir xil advisory lock).
+  perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
   select id, "studentId", coalesce(amount,0) as amount,
          case when status = 'paid' then greatest(coalesce("paidAmount",0), coalesce(amount,0)) else coalesce("paidAmount",0) end as paid, status
     into v_inv from public.invoices where id = p_invoice for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
-  v_sid := v_inv."studentId";
-
-  -- 2) O'quvchi bo'yicha boshqa to'lovlar bilan seriyalash (apply_payment/apply_to_invoice bilan bir xil advisory lock).
-  perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
+  if coalesce(v_inv."studentId",'') <> coalesce(v_sid,'') then   -- oraliqda kalit o'zgargan — chaqiruvchi qayta urinadi
+    return jsonb_build_object('ok', false, 'error', 'retry');
+  end if;
 
   -- 3) IDEMPOTENTLIK POSBONI: aynan shu reverse faqat BIR marta pulни harakatlantiradi. Bir xil
   --    p_ref bilan qayta chaqirilса (webhook retry / crash-recovery) -> {dup:true}, invoice/avans
@@ -73,7 +80,10 @@ begin
   -- To'liq qaytarilsa -> 'pending' (NE 'reversed'): refund_invoice kabi QARZ TIRILADI (ota-ona pulni
   --   qaytarib oldi, lekin o'qish haqi hali qarzda — aks holda moliya hamma joyida qarz=0 ko'rib,
   --   undiruvni to'xtatardi). «reversedAt» belgisi audit sifatida saqlanadi.
-  v_status  := case when v_newpaid <= 0 then 'pending'
+  --   BEKOR QILINGAN faktura (masalan holat bo'yicha '[holat]' bekor — puli avansga o'tgan) bekorligicha qoladi:
+  --   aks holda qaytarishdan keyin to'liq narxli «kutilmoqda» qarz bo'lib tirilardi (pul esa avansdan olingan).
+  v_status  := case when v_inv.status in ('canceled','reversed') then v_inv.status
+                    when v_newpaid <= 0 then 'pending'
                     when v_newpaid >= v_inv.amount - 0.5 then 'paid'
                     else 'partial' end;
   update public.invoices

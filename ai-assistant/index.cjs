@@ -31,7 +31,8 @@ const MODEL = CFG.model || 'claude-opus-4-8';
 const RISK_ATT = Number(CFG.riskAttendance) || 80;   // davomat % — shundan past = xavf
 const RISK_SCORE = Number(CFG.riskScore) || 60;      // umumiy ball — shundan past = xavf
 
-const num = v => { const n = Number(v); return isNaN(n) ? null : n; };
+// null/'' = NOMA'LUM (Number(null) 0 bo'lib, davomati hali yo'q yangi o'quvchi «past davomat (0%)» deb belgilanardi).
+const num = v => { if (v == null || v === '') return null; const n = Number(v); return isNaN(n) ? null : n; };
 const fmtSom = n => (Number(n)||0).toLocaleString('ru-RU').replace(/,/g,' ') + ' so‘m';
 
 /* ---------------- Claude ---------------- */

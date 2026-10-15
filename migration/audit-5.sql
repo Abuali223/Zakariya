@@ -1,5 +1,6 @@
 \if :{?iqror_chain}
 \else
+\set ON_ERROR_STOP on
 do $iqror_guard$ begin raise exception 'iqror: audit-5.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
 \quit
 \endif
@@ -43,14 +44,20 @@ begin
   --    hali OLMASDAN. Aks holda terminal invoysда posbon "yeyilib", chaqiruvchi fallback (o'quvchi
   --    balansiga _cr kalit bilan) ishlashдан oldin jarayon uzilса, qayta urinishда dup bo'lib pul yo'qolardi.
   --    (for update — bir xil invoysга kelgan parallel callbacklar shu yerда seriyalaydi.)
-  select id, "studentId", coalesce(amount,0) as amount, coalesce("paidAmount",0) as paid, status
-    into v_inv from public.invoices where id = p_invoice for update;
+  --    QULF TARTIBI: AVVAL o'quvchi advisory qulfi, KEYIN qator (apply_payment / reprice_invoice bilan BIR XIL).
+  --    Avval teskari (qator -> advisory) edi — bir vaqtda kelgan apply_payment / qayta hisoblash bilan o'zaro
+  --    qulflanish (40P01) Click/Uzum to'lovini xato bilan uzardi.
+  --    paid: ESKI 'paid' yozuvlarda paidAmount 0 bo'lishi mumkin -> to'langan = amount (admin.html paidOf kabi).
+  select "studentId" into v_sid from public.invoices where id = p_invoice;
   if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
-  if v_inv.status in ('reversed','canceled') then return jsonb_build_object('ok', false, 'error', 'terminal'); end if;
-  v_sid := v_inv."studentId";
-
   -- 2) Shu o'quvchi bo'yicha boshqa to'lovlar bilan seriyalash (apply_payment bilan bir xil advisory lock).
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
+  select id, "studentId", coalesce(amount,0) as amount,
+         case when status = 'paid' then greatest(coalesce("paidAmount",0), coalesce(amount,0)) else coalesce("paidAmount",0) end as paid, status
+    into v_inv from public.invoices where id = p_invoice for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
+  if coalesce(v_inv."studentId",'') <> coalesce(v_sid,'') then return jsonb_build_object('ok', false, 'error', 'retry'); end if;
+  if v_inv.status in ('reversed','canceled') then return jsonb_build_object('ok', false, 'error', 'terminal'); end if;
 
   -- 3) Idempotentlik posboni (apply_payment BILAN BIR XIL applied_payments jadvali). Tranzaksiya ichida ->
   --    xato bo'lsa u ham rollback bo'ladi (fantom yo'q); dup bo'lsa QAYTA qo'llanmaydi.

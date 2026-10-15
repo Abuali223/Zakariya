@@ -2451,8 +2451,14 @@ addEventListener('hashchange', ()=>route(true));
       },
       async getStudentPrivate(studentId){
         if(!db||!fsMod||!studentId) return null;
-        const { doc, getDoc } = fsMod;
-        try{ const s=await getDoc(doc(db,'student_private',studentId)); return s.exists()?s.data():{}; }catch(e){ return null; }
+        const { doc, getDoc, collection, getDocs, query, where } = fsMod;
+        // student_private o'quvchi HUJJAT id'si bilan saqlanadi; import qilingan bolada u studentId'dan farq qiladi —
+        //   topilmasa studentId bo'yicha BITTA o'quvchi qatorining doc id'si bilan qayta so'raladi (server RLS
+        //   to'qnash kalitli qatorlarga ruxsat bermaydi — boshqa bolaning ma'lumoti chiqmaydi).
+        try{ let s=await getDoc(doc(db,'student_private',studentId));
+          if(!s.exists()){ const q=await getDocs(query(collection(db,'students'), where('studentId','==',studentId)));
+            if(q.docs.length===1 && q.docs[0].id!==studentId) s=await getDoc(doc(db,'student_private',q.docs[0].id)); }
+          return s.exists()?s.data():{}; }catch(e){ return null; }
       },
       async getPayConfig(){
         if(!db||!fsMod) return null;
@@ -2597,9 +2603,11 @@ addEventListener('hashchange', ()=>route(true));
           catch(e){ return {ok:false, err:'code'}; }
           if(!res || !res.ok){ return {ok:false, err:(res&&res.locked)?'locked':'code', msg:(res&&res.error)||'' }; }
           childIds = await loadChildIds(currentUser.uid);
-          if(!childIds.includes(id)) return {ok:false, err:'code'};
-          await enrichChildAtt([id]);
-          activeChild=id; await persistChildren(); return {ok:true}; },
+          // Bog'lanish KANONIK kalit bilan saqlanadi (claim_child -> studentId) — ota-ona doc id kiritgan bo'lsa ham.
+          const cid=String((res&&res.studentId)||id);
+          if(!childIds.includes(cid)) return {ok:false, err:'code'};
+          await enrichChildAtt([cid]);
+          activeChild=cid; await persistChildren(); return {ok:true}; },
         async removeChild(id){ id=String(id||'').trim();
           try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',currentUser.uid))); for(const dd of snap.docs){ if(String((dd.data()||{}).studentId||'')===id) await deleteDoc(doc(db,'child_claims',dd.id)); } }catch(e){}
           childIds=childIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
