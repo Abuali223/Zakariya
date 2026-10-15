@@ -198,28 +198,37 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 
 **Xodim davomati → maosh**
 - Bayram kunlari (`school_holidays`, «🎉 Bayramlar» tugmasi) — ushlanma hisoblanmaydi; bayramlar o'qilmasa maosh berish bloklanadi (jim noto'g'ri hisob yo'q).
+- Xodim muzlatish -> qaytish: «to'xtatilgan davr» (`teachers/staff.pauses`) — o'sha kunlar maoshga kirmaydi va «yo'q» deb ushlanmaydi; avval qaytgan xodimning O'TGAN oy maoshi keyin hisoblansa 0 chiqardi.
+- Xodim avansi: takroriy ID bloki, qayta bosishda ikkinchi yozuv yaratilmaydi.
 - Oylik hisobot, «Berish + chek» va «Oylik maoshni yozish» — bitta qoida (prorata, o'rinbosarlik, ushlanma, oxirgi yozuv); takroriy xodim ID'si bloklanadi; ma'lumot yuklanayotganda tugma o'chiq.
 - Maosh berishda tarmoq uzilib qayta bosilsa — ikkinchi yozuv yaratilmaydi (yozuv bor bo'lsa «berildi» ko'rsatiladi).
 
 **Hisob-faktura (billing)**
 - «Qayta hisoblash» endi to'lov qulfi ostida (`reprice_invoice`) — oraliqda kelgan to'lov ustiga yozilmaydi; holat bo'yicha keraksiz faktura faqat ANIQ holatda bekor qilinadi (o'tgan oy uchun shubhali holatlar tegilmaydi, ro'yxatda ko'rsatiladi).
-- Muzlatish → qaytish: `activeFrom` saqlanadi, oradagi kunlar «to'xtatilgan davr» (`students.pauses`) sifatida yoziladi — bir oyda muzlatib-qaytganda ham to'g'ri prorata.
+- Muzlatish → qaytish: `activeFrom` saqlanadi, oradagi kunlar «to'xtatilgan davr» (`students.pauses`) sifatida yoziladi — bir oyda muzlatib-qaytganda ham to'g'ri prorata. Qaytish sanasi kelajakda bo'lmaydi; noto'g'ri yozilgan davrni direktor ⏯️ Holat oynasida tahrirlaydi/o'chiradi.
 - Kasal kun chegirmasi faqat haqiqatan TO'LANGAN kunlar uchun (sinov/muzlatilgan/grant/fakturasiz oy — yo'q).
 - Narx kaliti IT/MED guruhdan ham aniqlanadi; monitoring chegirmasida «Informatika» hisoblanadi; qabulxona qo'shgan o'quvchi ro'yxatga olingan kundan prorata bilan.
 - «Bekor»/«O'chir»/«To'lanmaganlarni o'chirish» — qulf ostida «to'lov yo'q»ligi qayta tekshiriladi. Yetim fakturalarda «Ehtimoliy egasi» ko'rsatiladi va ular o'chirilmaydi.
 - O'quvchi tahrirlanganda/import qilinganda `studentId` endi o'zgarmaydi (avval import qilingan o'quvchilarda hujjat ID'siga almashib, qarz/avans/davomat «yetim» qolardi).
+- Yangi o'quvchi ID'si bazadan tekshiriladi (bir vaqtda qo'shish / boshqa o'quvchining ID'si bloklanadi); Excel importda takroriy / o'chirilgan o'quvchi ID'si yoki boshqa ismga tegishli ID — qator o'tkaziladi, ogohlantiriladi.
+- «Qayta hisoblash» to'lov qulfi bilan bir tartibda (o'zaro qulflanish yo'q); qaytarish (refund/reverse) qulf ostida qayta tekshiriladi; biriktirilmagan to'lov faqat to'liq qaytariladi.
 
 **To'lovlar (Click/Uzum/kassa)**
 - Uzum/Click: mavjud bo'lmagan ustunga yozish (PGRST204) sabab to'lov «xato» deb qaytmaydi; takroriy so'rov ikki marta qo'llanmaydi; o'quvchi kaliti doim kanonik (`IQ-xxxx`); 12 belgili kod bilan to'lov topiladi.
 - Biriktirilmagan to'lov: biriktirish (`assign_payment`) va qaytarish bir-birini bloklaydi (ikki marta pul yo'q).
 - Avans ko'chirish (reattribute) to'lov yozuvini ham ko'chiradi — Moliya tekshiruvida soxta «Ortiqcha» yo'q.
 
+**Ota-ona kabineti**
+- Farzandni bog'lash import qilingan o'quvchida ham ishlaydi (ID yoki hujjat kaliti); kalitlari to'qnashgan (eski import dublikati) o'quvchida bog'lash rad etiladi va boshqa oilaning ma'lumoti hech qachon ochilmaydi.
+- Davomat % noma'lum bo'lsa «—» (0% emas); sinf o'rtachasi faqat yetarli ma'lumot bo'lsa; faqat joriy o'quv yili baholari; profil/transkript chorak baholari to'g'ri.
+
 **Moliya hisobotlari**
-- «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi.
+- «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni; qo'lda kiritilganda — chekdagi «Sana»), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi; to'lovlar o'qilmasa «0» emas, xato ko'rsatiladi.
+- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan, puli o'quvchi balansida qolgan to'lovlar.
 
 **Loyiha/deploy chalkashliklari**
 - Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
-- `deploy.sh` auth serverini ham yangilaydi/qayta ishga tushiradi; xizmat boshqa papkadan ishlasa ogohlantiradi.
+- `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi (`config.json` tegilmaydi).
 - O'quvchi holati/o'chirish tugmalari — faqat direktor (server qoidasi bilan bir xil); «📚 Sinflar» — faqat direktor.
 
 **Ma'lum cheklovlar / ochiq savollar**
