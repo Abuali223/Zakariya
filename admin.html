@@ -761,15 +761,15 @@ const SCHEMAS = {
       //   kerak — davomat ro'yxati va RLS sinf kalitini o'quvchidan oladi (classKeyOf). Avval faqat sinf yozuvi
       //   va rahbar o'zgarardi: rahbar bo'sh sinfni ko'rar, o'quvchilar esa hech kimga ko'rinmay qolardi.
       //   (Bazada attendance-sync.sql triggeri joriy davr davomat/baho yozuvlarini ham yangi kalitga o'tkazadi.)
-      let keepOld=false;
+      let keepOld=false, movedN=0;
       if(oldKey && oldKey!==newKey){
         let studs=null; try{ studs=(await loadCol('students','order')).filter(s=>classKeyOf(s)===oldKey); }catch(e){ studs=null; }
         if(studs===null){ keepOld=true; toast('O‘quvchilar ro‘yxati o‘qilmadi — o‘quvchilar ko‘chirilmadi; eski sinf rahbari saqlandi. Qayta urinib ko‘ring.',true); }
         else if(studs.length){
-          if(confirm(`Bu sinfda ${studs.length} o‘quvchi bor («${oldKey}»).\nUlarni ham yangi sinfga («${newKey}») o‘tkazaymi?\n\nHa — o‘quvchilar sinfi yangilanadi (davomat/baholar yangi sinf rahbariga o‘tadi).\nYo‘q — o‘quvchilar eski sinfda qoladi (eski sinf rahbari ham saqlanadi).`)){
+          if(confirm(`Bu sinfda ${studs.length} o‘quvchi bor («${oldKey}»).\nUlarni ham yangi sinfga («${newKey}») o‘tkazaymi?\n\nHa — o‘quvchilar sinfi yangilanadi (davomat/baholar yangi sinf rahbariga, fan o‘qituvchilari biriktiruvi yangi sinfga o‘tadi).\nYo‘q — o‘quvchilar eski sinfda qoladi (eski sinf rahbari ham saqlanadi).`)){
             let ok=0, bad=0;
             for(const s of studs){ try{ await updateDoc(doc(db,'students',s._id), { grade:Number(data.grade)||0, classLetter:String(data.letter||''), lang:data.lang||'uz' }); ok++; }catch(e){ bad++; } }
-            cache.students=null;
+            cache.students=null; movedN=ok;
             if(bad){ keepOld=true; toast(`${bad} o‘quvchi ko‘chirilmadi (ruxsat/tarmoq) — ularni qo‘lda tahrirlang. Eski sinf rahbari saqlandi.`,true); }
             // Narx kaliti (priceKeyOf: til-sinf-yo'nalish; IT/MED guruh harfidan ham) o'zgardimi — faqat raqam/til emas.
             const priceMoved=studs.some(s=>priceKeyOf(s)!==priceKeyOf(Object.assign({}, s, { grade:Number(data.grade)||0, classLetter:String(data.letter||''), lang:data.lang||'uz' })));
@@ -781,12 +781,15 @@ const SCHEMAS = {
       await reconcileSupervisor(newKey, keepOld?null:oldKey, (formVals && formVals.supervisorUid) || '');
       // Sinf kaliti o'zgardi va o'quvchilar ko'chdi: FAN o'qituvchilarining biriktiruvi (users.assignedClasses) ham yangi
       //   kalitga o'tadi — aks holda ular baho/monitoring huquqini yo'qotib, saqlashda RLS 42501 olardi. (users — faqat direktor.)
-      if(!keepOld && oldKey && oldKey!==newKey){
+      //   Qisman ko'chish (ba'zi o'quvchi eski sinfda qoldi): ikkala kalit ham saqlanadi (eski + yangi) — hech kim huquqsiz qolmaydi.
+      const tMode=(oldKey && oldKey!==newKey) ? (!keepOld ? 'replace' : (movedN>0 ? 'add' : '')) : '';
+      if(tMode){
         if(SESSION.isAdmin){
           try{ const us=await getDocs(collection(db,'users')); let moved=0, bad=0;
             for(const d of us.docs){ const u=d.data()||{}; const ac=Array.isArray(u.assignedClasses)?u.assignedClasses:[];
-              if(!ac.includes(oldKey)) continue;
-              try{ await updateDoc(doc(db,'users',d.id), { assignedClasses:[...new Set(ac.map(k=>k===oldKey?newKey:k))] }); moved++; }catch(e){ bad++; } }
+              if(u.role!=='teacher' || !ac.includes(oldKey)) continue;   // kurator — reconcileSupervisor (bitta sinf — bitta rahbar)
+              const next=(tMode==='replace') ? [...new Set(ac.map(k=>k===oldKey?newKey:k))] : [...new Set(ac.concat([newKey]))];
+              try{ await updateDoc(doc(db,'users',d.id), { assignedClasses:next }); moved++; }catch(e){ bad++; } }
             cache.users=null;
             if(moved) toast(`✓ ${moved} fan o‘qituvchisining sinf biriktiruvi «${newKey}» ga o‘tkazildi`);
             if(bad) toast(`${bad} fan o‘qituvchisining biriktiruvi yangilanmadi — «Foydalanuvchilar»da qo‘lda tuzating`,true);
@@ -812,8 +815,12 @@ const SALARY_DEFAULTS = {
   category: { '2':500000, '1':1000000, oliy:1500000 },               // malaka toifasi (2/1/Oliy)
   perYear: 30000, yearsCap: 15                                       // har yillik tajriba (cheklov: 15 yil)
 };
-let SALARY_RATES = null;
-async function loadSalaryRates(force){
+let SALARY_RATES = null, SALARY_RATES_OK = true;
+// force: keshni chetlab bazadan o'qiydi. strict: o'qib bo'lmasa XATO tashlaydi (maosh BERISH/xarajat — eskirgan yoki
+//   standart bonus stavkasi bilan hisoblanib, yozuvga noto'g'ri «gross» tushmasin). strict'siz xato: oldingi kesh
+//   bo'lsa o'sha qoladi (standartga almashtirilmaydi), bo'lmasa standart qaytadi, lekin KESHLANMAYDI (keyingi
+//   chaqiruv qayta o'qiydi); SALARY_RATES_OK=false — hisobot ogohlantiradi.
+async function loadSalaryRates(force, strict){
   if(SALARY_RATES && !force) return SALARY_RATES;
   const r = JSON.parse(JSON.stringify(SALARY_DEFAULTS));
   try{ const c=await getDoc(doc(db,'config','salary')); if(c.exists()){ const d=c.data()||{};
@@ -822,8 +829,8 @@ async function loadSalaryRates(force){
     LANG_KEYS.forEach(k=>{ if(d.languages&&isFinite(Number(d.languages[k]))) r.languages[k]=Number(d.languages[k]); });
     DEG_KEYS.forEach(k=>{ if(d.degree&&isFinite(Number(d.degree[k]))) r.degree[k]=Number(d.degree[k]); });
     CAT_KEYS.forEach(k=>{ if(d.category&&isFinite(Number(d.category[k]))) r.category[k]=Number(d.category[k]); });
-  } }catch(e){}
-  SALARY_RATES = r; return r;
+  } }catch(e){ SALARY_RATES_OK=false; if(strict) throw e; return SALARY_RATES || r; }
+  SALARY_RATES_OK = true; SALARY_RATES = r; return r;
 }
 function salaryNum(v){ return Number(String(v==null?'':v).replace(/\D/g,''))||0; }   // "5 000 000" -> 5000000
 function computeSalary(t, r){
@@ -849,10 +856,13 @@ async function loadPayees(opts){
   const fresh=!!(opts&&opts.fresh);
   let teachers=[]; try{ teachers=(!fresh&&cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){ if(fresh) throw e; }
   let staff=[];    try{ staff=(!fresh&&cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=staff; }catch(e){ if(fresh) throw e; }
-  try{ await loadSalaryRates(); }catch(e){}
+  // fresh: bonus stavkalari ham BAZADAN va qat'iy (o'qilmasa xato -> chaqiruvchi to'xtatadi): boshqa sessiyada
+  //   o'zgargan til/daraja bonusi eski kesh bilan hisoblanib, maosh yozuviga kam/ko'p «gross» tushmasin.
+  if(fresh) await loadSalaryRates(true, true); else { try{ await loadSalaryRates(); }catch(e){} }
   // workStart/workEnd/workDays — SHAXSIY ish vaqti/kunlari (soatbay maosh hisobi personRules orqali shulardan oladi).
-  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||''), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }));
-  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||''), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }));
+  //   cameraId — bo'sh joysiz (skan jadvalidagi personId bilan aniq mos kelishi uchun).
+  const A=teachers.map(t=>({ id:String(t.teacherId||t._id), name:t.name||t.teacherId||t._id, salary:computeSalary(t).total||0, kind:'teacher', cameraId:String(t.cameraId||'').trim(), refId:String(t._id), payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }));
+  const B=staff.map(s=>({ id:String(s.staffId||s._id), name:(s.name||s.staffId||s._id)+(s.position?` (${s.position})`:''), salary:salaryNum(s.salary)||0, kind:'staff', cameraId:String(s.cameraId||'').trim(), refId:String(s._id), payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }));
   return A.concat(B);
 }
 // O'qituvchi formasiga JONLI maosh paneli (dalalar o'zgarganда qayta hisoblanadi) + bonus stavka tahrirlagichi.
@@ -1372,7 +1382,9 @@ async function renderDashboard(){
   catch(e){ $('#dash').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   const n=students.length;
   const avg=n?Math.round(students.reduce((s,x)=>s+(Number(x.score)||0),0)/n):0;
-  const avgAtt=n?Math.round(students.reduce((s,x)=>s+(Number(x.attendance)||0),0)/n):0;
+  // O'rtacha davomat — faqat davomati MA'LUM o'quvchilar bo'yicha (yangi/hali davomat yozilmaganlar «0» deb hisoblanmaydi).
+  const attKnownL=students.filter(x=>x.attendance!=null && x.attendance!=='' && isFinite(Number(x.attendance)));
+  const avgAtt=attKnownL.length?Math.round(attKnownL.reduce((s,x)=>s+Number(x.attendance),0)/attKnownL.length):null;
   const uz=students.filter(s=>(s.lang||'uz')==='uz').length, ru=n-uz;
   const byGrade={}; students.forEach(s=>{const g=Number(s.grade)||0; byGrade[g]=(byGrade[g]||0)+1;});
   const grades=Object.keys(byGrade).map(Number).sort((a,b)=>a-b);
@@ -1397,7 +1409,7 @@ async function renderDashboard(){
   const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
   $('#dash').innerHTML = `
     <div class="stat-grid">
-      ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt+'%','O‘rtacha davomat')}
+      ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt==null?'—':avgAtt+'%','O‘rtacha davomat')}
       ${stat(uz,'O‘zbek sinf')}${stat(ru,'Rus sinf')}${stat(enrollments.length,'Arizalar')}${stat(users.length,'Foydalanuvchi')}
     </div>
     ${canFin?'<div id="dash-fin"><div class="card" style="margin-top:16px;padding:22px"><div class="loading">Moliya ma’lumoti yuklanmoqda…</div></div></div>':''}
@@ -3362,6 +3374,8 @@ function openForm(name, row, prefill, afterSaveCb){
     try{
       const data={};
       new FormData(e.target).forEach((v,k)=>{ if(k.startsWith('subj_'))return; data[k]= NUM.has(k) ? (v===''?0:Number(v)) : v; });
+      // Kamera ID — bo'sh joysiz (nusxa-ko'chirishdagi ' 101 ' skan personId bilan mos kelmay, har kuni «Yo‘q» chiqardi).
+      if(typeof data.cameraId==='string') data.cameraId=data.cameraId.trim();
       // «Davomat %» — server trigger (attendance-sync.sql) davomatdan hisoblaydi. Forma uni faqat foydalanuvchi
       //   HAQIQATAN o'zgartirgan bo'lsa yozadi: avval har saqlashda keshdagi eski qiymat (yangi o'quvchida 0) qaytib
       //   yozilib, kabinet «0%»/eskirgan raqam ko'rsatardi.
@@ -3979,14 +3993,22 @@ async function loadHolidays(){
     if(SA_HOLIDAYS_OK) SA_HOLIDAYS=new Map(); }
   return SA_HOLIDAYS;
 }
+// Qaytaradi: true — jarima/tanaffus sozlamalari o'qildi (yoki hujjat yo'q -> standart); false — O'QIB BO'LMADI
+//   (tarmoq/xato): SA_RULES oldingi qiymatda qoladi, maosh berish buni xato deb to'xtatadi, hisobot ogohlantiradi.
+//   Har muvaffaqiyatli o'qishda avval STANDARTGA qaytariladi — admin maydonni bo'shatsa, eski qiymat sessiyada qolmasin.
+const SA_RULES_DEFAULTS = { latePenalty:SA_RULES.latePenalty, earlyPenalty:SA_RULES.earlyPenalty, allowedBreakMin:SA_RULES.allowedBreakMin, breakPenaltyPerHour:SA_RULES.breakPenaltyPerHour };
+let SA_RATES_OK=true;
 async function loadSaRates(){
   await loadHolidays();
-  try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
+  try{ const c=await getDoc(doc(db,'config','finance')); const d=c.exists()?(c.data()||{}):{};
+    Object.assign(SA_RULES, SA_RULES_DEFAULTS);
     if(d.latePenalty!=null && d.latePenalty!=='' && isFinite(Number(d.latePenalty)) && Number(d.latePenalty)>=0) SA_RULES.latePenalty=Number(d.latePenalty);
     if(d.earlyPenalty!=null && d.earlyPenalty!=='' && isFinite(Number(d.earlyPenalty)) && Number(d.earlyPenalty)>=0) SA_RULES.earlyPenalty=Number(d.earlyPenalty);
     if(d.allowedBreakMin!=null && d.allowedBreakMin!=='' && isFinite(Number(d.allowedBreakMin)) && Number(d.allowedBreakMin)>=0) SA_RULES.allowedBreakMin=Number(d.allowedBreakMin);
     if(d.breakPenaltyPerHour!=null && d.breakPenaltyPerHour!=='' && isFinite(Number(d.breakPenaltyPerHour)) && Number(d.breakPenaltyPerHour)>=0) SA_RULES.breakPenaltyPerHour=Number(d.breakPenaltyPerHour);
-  } }catch(e){}
+    SA_RATES_OK=true;
+  }catch(e){ SA_RATES_OK=false; }
+  return SA_RATES_OK;
 }
 // 'HH:MM' -> kun daqiqasi (bo'lmasa null).
 function hmToMin(s){ const m=String(s||'').match(/^(\d{1,2}):(\d{2})/); if(!m) return null; const h=+m[1], mi=+m[2]; return (h>=0&&h<24&&mi>=0&&mi<60)?h*60+mi:null; }
@@ -4204,8 +4226,8 @@ async function renderStaffAttendance(){
     return { kelgan, ketgan, brkMin, workMin:work };
   };
   const buildRoster=(staff,teachers)=>{ const r=[];
-    (staff||[]).forEach(s=>{ if(s.cameraId) r.push({ cam:String(s.cameraId), refId:String(s._id), refType:'staff', payId:String(s.staffId||s._id), name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
-    (teachers||[]).forEach(t=>{ if(t.cameraId){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam:String(t.cameraId), refId:String(t._id), refType:'teacher', payId:String(t.teacherId||t._id), name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }); } });
+    (staff||[]).forEach(s=>{ const cam=String(s.cameraId||'').trim(); if(cam) r.push({ cam, refId:String(s._id), refType:'staff', payId:String(s.staffId||s._id), name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
+    (teachers||[]).forEach(t=>{ const cam=String(t.cameraId||'').trim(); if(cam){ let sal=0; try{ sal=computeSalary(t).total||0; }catch(e){} r.push({ cam, refId:String(t._id), refType:'teacher', payId:String(t.teacherId||t._id), name:t.name||'', pos:'O‘qituvchi', salary:sal, payStatus:t.payStatus||'', activeFrom:t.activeFrom||'', stopFrom:t.stopFrom||'', pauses:t.pauses||[], workStart:t.workStart||'', workEnd:t.workEnd||'', workDays:t.workDays||'', flexibleHours:t.flexibleHours||'' }); } });
     r.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); return r; };
   let lastStaff=[], lastTeachers=[];   // tahrirlash uchun eng oxirgi yuklangan to'liq yozuvlar
   // ------- O'RINBOSAR TANLASH (kelmagan xodim o'rniga dars o'tib bergan) -------
@@ -4423,8 +4445,11 @@ async function renderStaffAttendance(){
     // Maosh berish jurnali (hammasi) — oldingi oylardan qolgan QOLDIQ (carry-over) uchun.
     let salpays=[]; try{ salpays=await loadCol('salary_payments'); }catch(e){ salpays=[]; readFail.push('maosh berish jurnali (qoldiq)'); }
     if(_g!==VIEW_GEN) return;
-    try{ await loadSalaryRates(); }catch(e){}   // o'qituvchi maoshi (kunlik stavka/jarima uchun)
-    try{ await loadSaRates(); }catch(e){}       // kechikish/erta ketish jarima summalari (sozlanadigan)
+    // Stavkalar ham BAZADAN (maosh berish oynasi bilan bir xil qiymat): o'qilmasa — ogohlantirish (kesh/standart ishlatildi).
+    try{ await loadSalaryRates(true); }catch(e){}   // o'qituvchi maoshi bonus stavkalari (kunlik stavka/jarima uchun)
+    if(!SALARY_RATES_OK) readFail.push('maosh bonus stavkalari');
+    let saOk=true; try{ saOk=(await loadSaRates())!==false; }catch(e){ saOk=false; }   // kechikish/erta ketish/tanaffus jarimalari
+    if(!saOk) readFail.push('jarima/tanaffus sozlamalari');
     if(!SA_HOLIDAYS_OK) readFail.push('bayram kunlari');
     const roster=buildRoster(staff,teachers);
     // Ish kunlari (Dush–Juma), faqat BUGUNGACHA (bugun hali tugamagani uchun hisobga olinmaydi)
@@ -4626,8 +4651,8 @@ async function openCameraIdFromReport(onSaved){
     if(!rpList.length){ $('#cir-preview').innerHTML='<div class="empty">Faylda ma‘lumot topilmadi (HIK «Original Records Report» .xls kutilyapti).</div>'; return; }
     const [staff,teachers]=await Promise.all([loadCol('staff').catch(()=>[]),loadCol('teachers').catch(()=>[])]);
     staffList=staff; teacherList=teachers;
-    const people=[]; staff.forEach(s=>people.push({refType:'staff',refId:String(s._id),name:s.name||'',cur:String(s.cameraId||'')}));
-    teachers.forEach(t=>people.push({refType:'teacher',refId:String(t._id),name:t.name||'',cur:String(t.cameraId||'')}));
+    const people=[]; staff.forEach(s=>people.push({refType:'staff',refId:String(s._id),name:s.name||'',cur:String(s.cameraId||'').trim()}));
+    teachers.forEach(t=>people.push({refType:'teacher',refId:String(t._id),name:t.name||'',cur:String(t.cameraId||'').trim()}));
     // Fuzzy 1:1 moslashtiruv: avval aniq (nameKey teng), so'ng bardoshli (namesMatch).
     const pTok=people.map(p=>({p,t:nameToks(p.name),k:nameKey(p.name)}));
     const rTok=rpList.map(r=>({r,t:nameToks(r.name),k:nameKey(r.name)}));
@@ -5064,7 +5089,7 @@ async function openSalaryPayout(opts){
   //   oylik / Kamera ID / holat bilan hisoblasin (aks holda hisobotdagi va beriladigan summa farq qilardi).
   let payees;
   try{ payees=await loadPayees({fresh:true}); }
-  catch(e){ toast('Xodimlar ro‘yxatini o‘qib bo‘lmadi — qayta urinib ko‘ring (maosh noto‘g‘ri hisoblanmasin)',true); return; }
+  catch(e){ toast('Xodimlar ro‘yxati yoki maosh stavkalarini o‘qib bo‘lmadi — qayta urinib ko‘ring (maosh noto‘g‘ri hisoblanmasin)',true); return; }
   if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
   // Takroriy maosh ID (bir xil teacherId/staffId ikki kishida) — maosh/avans/qoldiq aralashadi -> bloklaymiz.
   const idCount={}; payees.forEach(p=>{ idCount[p.id]=(idCount[p.id]||0)+1; });
@@ -5160,9 +5185,10 @@ async function openSalaryPayout(opts){
     if($('#sp-prior')) $('#sp-prior').value=String(Math.round(prior));
     if(!p.cameraId){ if(inp) inp.value='0'; if(info) info.textContent='(Kamera ID yo‘q — davomat kuzatilmaydi)'; done(); return; }
     if(info) info.textContent='hisoblanmoqda…';
-    try{ await loadSaRates(); }catch(e){}
+    let saOk=true; try{ saOk=(await loadSaRates())!==false; }catch(e){ saOk=false; }
     if(g!==dedGen) return;
     const mS=mm+'-01', mE=mm+'-31'; let cks=[], lvs=[], readErr=SA_HOLIDAYS_OK?'':'bayram kunlari';
+    if(!saOk) readErr=readErr||'jarima/tanaffus sozlamalari';   // eskirgan/standart jarima bilan ushlanma hisoblanmasin
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',String(p.cameraId)), where('day','>=',mS), where('day','<=',mE))); cks=s.docs.map(d=>d.data()||{}); }catch(e){ readErr='kamera skanlari'; }
     try{ const s=await getDocs(query(collection(db,'staff_leaves'), where('refType','==',p.kind), where('refId','==',String(p.refId)))); lvs=s.docs.map(d=>d.data()||{}); }catch(e){ readErr=readErr||'ruhsat/kasallik'; }
     const breakMarks={};
@@ -5507,9 +5533,13 @@ async function renderAccounting(){
     catch(e){ toast('Maosh ma‘lumotlarini o‘qib bo‘lmadi — qayta urinib ko‘ring (noto‘g‘ri summa yozilmasin)',true); return; }
     const payeeByRef={}; payees.forEach(p=>{ payeeByRef[(p.kind||'')+':'+String(p.refId||'')]=p; });
     const latestRec=tid=>SALM.filter(r=>String(r.teacherId)===String(tid)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0]||null;
+    // Takroriy maosh ID (bir xil teacherId/staffId ikki kishida): berilgan yozuv qaysi biriniki ekani noma'lum — uni
+    //   IKKALASIGA qo'llab bir maoshni ikki marta yozmaymiz; har biri o'z holat/sana prorata nominali bilan (ushlanmasiz).
+    const idCount={}; payees.forEach(p=>{ idCount[p.id]=(idCount[p.id]||0)+1; });
+    const dupNames=payees.filter(p=>idCount[p.id]>1).map(p=>`${p.name} (${p.id})`);
     let nInactive=0, nPaid=0, nUnpaid=0, dedSum=0, subSum=0;
     const withSal=payees.map(p=>{
-      const rec=latestRec(p.id);
+      const rec=(idCount[p.id]>1) ? null : latestRec(p.id);
       let gross, sub, ded=0;
       if(rec && (rec.gross!=null || rec.deduction!=null)){   // shu oy maosh BERILGAN — haqiqiy yozuv qiymatlari
         gross=Number(rec.gross)||0; sub=Number(rec.subBonus)||0; ded=Number(rec.deduction)||0; nPaid++;
@@ -5535,7 +5565,8 @@ async function renderAccounting(){
     const breakdown=`\n\nHisob: holat/sana bo‘yicha prorata${subSum>0?` + o‘rinbosarlik ${fmtSum(subSum)}`:''}${dedSum>0?` − davomat ushlanmasi ${fmtSum(dedSum)}`:''}.`
       +(nInactive?`\nFaol emas (sinov/muzlatilgan/chiqdi) — ${nInactive} xodim: 0.`:'')
       +(nPaid?`\nMaoshi berilgan ${nPaid} xodim — berilgan yozuv bo‘yicha (ushlanma bilan).`:'')
-      +(nUnpaid?`\nHali maoshi berilmagan ${nUnpaid} xodim — ushlanmasiz; hammasiga berilgach tugmani QAYTA bosing (summa yangilanadi).`:'');
+      +(nUnpaid?`\nHali maoshi berilmagan ${nUnpaid} xodim — ushlanmasiz; hammasiga berilgach tugmani QAYTA bosing (summa yangilanadi).`:'')
+      +(dupNames.length?`\n\n⛔ Takroriy ID — ${dupNames.length} xodim (${dupNames.join(', ')}): berilgan yozuv emas, nominal (ushlanmasiz) hisoblandi. Avval xodim kartochkasida noyob ID bering va tugmani qayta bosing.`:'');
     if(!confirm(`${mLabel(M)} oyi · ${withSal.length} xodim maoshi — jami ${fmtSum(total)} so‘m «Maosh» xarajati qilib yozilsinmi?${breakdown}${advSum>0?`\n\nShu oyда avans berilgan: ${fmtSum(advSum)} so‘m -> oy oxirida NAQD beriladigan qoldiq: ${fmtSum(Math.max(0,total-advSum))} so‘m. («Maosh» xarajati TO‘LIQ ${fmtSum(total)} yoziladi — avans uning bir qismi.)`:''}${exists?'\n\nBu oy uchun avtomatik maosh allaqachon bor — u YANGILANADI (dublikat bo‘lmaydi).':''}${manual.length?`\n\n⚠️ DIQQAT: bu oyda QO‘LDA kiritilgan ${manual.length} ta «Maosh» xarajati ham bor (${fmtSum(manualSum)} so‘m). Ular alohida qoladi — IKKI MARTA hisoblanmasligi uchun ularni o‘chiring yoki bu tugmani bosmang.`:''}`)) return;
     try{ await setDoc(doc(db,'expenses',id), { date:M+'-01', month:M, category:'Maosh', amount:total, note:`Avtomatik: ${withSal.length} xodim oylik maoshi`, updatedAt:serverTimestamp() }, {merge:true});
       toast('Maosh xarajati yozildi ✓'); if(await reload()) draw(M); }
@@ -5545,7 +5576,7 @@ async function renderAccounting(){
   // qo'shimcha yozilmaydi (payroll TO'LIQ maoshni qamraydi) — faqat qoldiqni bilish uchun.
   $('#ac-adv').addEventListener('click', async ()=>{
     // Avans ham to'lov kaliti (teacherId) bilan yoziladi — ro'yxat BAZADAN (eskirgan kesh boshqa kishi kalitini bermasin).
-    let payees; try{ payees=await loadPayees({fresh:true}); }catch(e){ toast('Xodimlar ro‘yxatini o‘qib bo‘lmadi — qayta urinib ko‘ring',true); return; }
+    let payees; try{ payees=await loadPayees({fresh:true}); }catch(e){ toast('Xodimlar ro‘yxati yoki maosh stavkalarini o‘qib bo‘lmadi — qayta urinib ko‘ring',true); return; }
     if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
     // Bir xil to'lov ID'li ikki xodim — avans (va keyingi maosh hisobi) noto'g'ri odamga yozilmasin (maosh berish bilan bir xil himoya).
     const advIdCount={}; payees.forEach(p=>{ advIdCount[String(p.id)]=(advIdCount[String(p.id)]||0)+1; });
@@ -6636,10 +6667,11 @@ async function renderPayments(){
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
-    // Provayder (Uzum) QAYTARGAN, lekin pul avval o'quvchi BALANSIGA qo'llangan to'lovlar — avtomatik teskari qilinmaydi
-    //   (pay-server raw.needsManualReverse belgilaydi). Ilgari hech qayerda ko'rinmasdi: o'quvchida pul qolib ketardi.
+    // Provayder (Uzum qaytardi / Click bekor qildi), lekin pul avval o'quvchi BALANSIGA qo'llangan, faktura topilmagan yoki
+    //   avans allaqachon sarflangan to'lovlar — avtomatik to'liq teskari qilinmaydi (pay-server raw.needsManualReverse
+    //   belgilaydi). Ilgari hech qayerda ko'rinmasdi: o'quvchida pul qolib ketardi.
     let manualRev=[];
-    try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','reversed')));
+    try{ const ps=await getDocs(query(collection(db,'payments'), where('status','in',['reversed','canceled'])));
       manualRev=ps.docs.map(d=>({_id:d.id,...d.data()})).filter(p=>p.raw && p.raw.needsManualReverse && !p.raw.manualReverseDone); }catch(e){}
     const provLbl=PROV_LBL;
     // Usul bo'yicha — KASSA asosida (haqiqiy to'lovlar, Toshkent sanasi).
@@ -6654,8 +6686,8 @@ async function renderPayments(){
     const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}${esc(filterLbl)}</h3><span class="cls-count">${repSet.length} ${anyFilter?'hisob':'hisob-faktura'} · yig‘ildi (shu oy fakturalari): ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}${(orphColl||orphDebt)?` · shu jumladan o‘quvchisi topilmagan: ${fmtSom(orphColl)} / ${fmtSom(orphDebt)}`:''}</span></div>
       <div class="small muted" style="padding:0 16px 6px">To‘lov usuli va sana — <b>kassa asosida</b> (haqiqiy to‘lov yozuvlari, Toshkent vaqti; aralash to‘lov usullarga to‘g‘ri bo‘linadi). «Yig‘ildi» — shu oy hisob-fakturalariga to‘langan summa (avans/oldingi oy qarzi tufayli kassadan farq qilishi mumkin).</div>
       <div class="tablewrap"><table><thead><tr><th>To‘lov usuli (kassa)</th><th>Soni</th><th>Summa</th></tr></thead><tbody>${repRows}</tbody></table></div></div>`;
-    const manualRevCard = manualRev.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>↩️ Qo‘lda qaytarilishi kerak</h3><span class="cls-count">${manualRev.length} ta · provayder qaytardi, pul o‘quvchi balansida</span></div>
-      <div style="padding:8px 16px" class="small muted">Bu to‘lovlarni Uzum/Click QAYTARGAN, lekin pul avval o‘quvchi balansiga (eng eski qarzga / avansga) qo‘llangan edi — tizim avtomatik ayira olmaydi. O‘quvchi «📋 To‘lov tarixi»dan avans/fakturani tuzating, so‘ng «✓ Bajarildi».</div>
+    const manualRevCard = manualRev.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>↩️ Qo‘lda qaytarilishi kerak</h3><span class="cls-count">${manualRev.length} ta · provayder qaytardi/bekor qildi — avtomatik to‘liq ayirilmadi</span></div>
+      <div style="padding:8px 16px" class="small muted">Bu to‘lovlarni Uzum/Click QAYTARGAN (bekor qilgan), lekin pul avval o‘quvchi balansiga (eng eski qarzga / avansga) qo‘llangan, faktura topilmagan yoki avans allaqachon sarflangan edi — tizim avtomatik to‘liq ayira olmadi («Izoh»da sababi). O‘quvchi «📋 To‘lov tarixi»dan avans/fakturani tuzating, so‘ng «✓ Bajarildi».</div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Provayder</th><th>Izoh</th>${SESSION.isAdmin?'<th></th>':''}</tr></thead><tbody>${manualRev.map(p=>`<tr>
         <td data-label="O‘quvchi">${esc((stById[p.studentId]&&stById[p.studentId].name)||p.payerName||p.studentId||'—')} <span class="small muted">${esc(p.studentId||'')}</span></td>
         <td data-label="Summa"><b>${fmtSom(p.amount)}</b></td><td data-label="Provayder">${esc(PROV_LBL[p.provider]||p.provider||'')}</td>

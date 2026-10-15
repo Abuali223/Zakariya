@@ -105,8 +105,11 @@ begin
               greatest(0, v_cr - v_from_credit), 'reversed', v_provider, now());
   end if;
 
+  -- unrecovered: avansdan qaytarib olinishi kerak bo'lgan, lekin avans allaqachon sarflangani uchun OLINMAGAN qism
+  --   (chaqiruvchi — pay-server — buni «qo'lda qaytarish» navbatiga qo'yadi; jim yo'qolmasin).
   return jsonb_build_object('ok', true, 'status', v_status, 'fromInvoice', v_from_invoice,
-                            'fromCredit', v_from_credit, 'newPaid', v_newpaid, 'studentId', coalesce(v_sid,''));
+                            'fromCredit', v_from_credit, 'newPaid', v_newpaid, 'studentId', coalesce(v_sid,''),
+                            'unrecovered', greatest(0, v_from_credit - (case when v_sid is not null and v_sid <> '' then v_cr else 0 end)));
 end $$;
 revoke all on function public.reverse_payment(text, numeric, text, text) from public;
 grant execute on function public.reverse_payment(text, numeric, text, text) to authenticated, service_role;

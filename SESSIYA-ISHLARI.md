@@ -202,6 +202,10 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Xodim avansi: takroriy ID bloki, qayta bosishda ikkinchi yozuv yaratilmaydi.
 - Oylik hisobot, «Berish + chek» va «Oylik maoshni yozish» — bitta qoida (prorata, o'rinbosarlik, ushlanma, oxirgi yozuv); takroriy xodim ID'si bloklanadi; ma'lumot yuklanayotganda tugma o'chiq.
 - Maosh berishda tarmoq uzilib qayta bosilsa — ikkinchi yozuv yaratilmaydi (yozuv bor bo'lsa «berildi» ko'rsatiladi).
+- Maosh berish/«Oylik maoshni yozish» bonus stavkalarini (til/daraja/toifa) va jarima/tanaffus sozlamalarini HAR SAFAR bazadan o'qiydi; o'qib bo'lmasa — to'xtaydi (eski kesh yoki standart stavka bilan noto'g'ri «gross» yozilmaydi). Oylik hisobot ham yangi o'qiydi, o'qilmasa ogohlantiradi.
+- Kamera ID bo'sh joysiz saqlanadi va solishtiriladi (nusxa-ko'chirishdagi « 101 » skan bilan mos kelmay, har kuni «yo'q» chiqardi).
+- Takroriy maosh ID'li xodimlar «Oylik maoshni yozish»da bir-birining berilgan yozuvini olmaydi (nominal bilan, ogohlantirish bilan).
+- Sinf nomi o'zgarsa fan o'qituvchilarining sinf biriktiruvi ham ko'chadi (qisman ko'chishda eski va yangi sinf ikkalasi saqlanadi; kurator — alohida, bitta sinf — bitta rahbar).
 
 **Hisob-faktura (billing)**
 - «Qayta hisoblash» endi to'lov qulfi ostida (`reprice_invoice`) — oraliqda kelgan to'lov ustiga yozilmaydi; holat bo'yicha keraksiz faktura faqat ANIQ holatda bekor qilinadi (o'tgan oy uchun shubhali holatlar tegilmaydi, ro'yxatda ko'rsatiladi).
@@ -217,6 +221,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Uzum/Click: mavjud bo'lmagan ustunga yozish (PGRST204) sabab to'lov «xato» deb qaytmaydi; takroriy so'rov ikki marta qo'llanmaydi; o'quvchi kaliti doim kanonik (`IQ-xxxx`); 12 belgili kod bilan to'lov topiladi.
 - Biriktirilmagan to'lov: biriktirish (`assign_payment`) va qaytarish bir-birini bloklaydi (ikki marta pul yo'q).
 - Avans ko'chirish (reattribute) to'lov yozuvini ham ko'chiradi — Moliya tekshiruvida soxta «Ortiqcha» yo'q.
+- Provayder pul ALLAQACHON qo'llangandan keyin bekor qilsa/qaytarsa (javob yo'qolgan, restart): Click «bekor» va Uzum «reverse» posbonni tekshiradi — aynan shu fakturaga qo'llangan bo'lsa avtomatik qaytariladi (`reverse_payment`), balansga qo'llangan / faktura topilmagan / avans allaqachon sarflangan (`unrecovered`) bo'lsa — «↩️ Qo'lda qaytarilishi kerak» navbatiga (jim yo'qolmaydi).
 
 **Ota-ona kabineti**
 - Farzandni bog'lash import qilingan o'quvchida ham ishlaydi (ID yoki hujjat kaliti); kalitlari to'qnashgan (eski import dublikati) o'quvchida bog'lash rad etiladi va boshqa oilaning ma'lumoti hech qachon ochilmaydi.
@@ -224,7 +229,8 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 
 **Moliya hisobotlari**
 - «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni; qo'lda kiritilganda — chekdagi «Sana»), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi; to'lovlar o'qilmasa «0» emas, xato ko'rsatiladi.
-- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan, puli o'quvchi balansida qolgan to'lovlar.
+- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan / Click bekor qilgan, lekin avtomatik to'liq ayirib bo'lmagan to'lovlar (sababi «Izoh»da).
+- Bosh sahifadagi «O'rtacha davomat» — faqat davomati ma'lum o'quvchilar bo'yicha (noma'lum «0» deb hisoblanmaydi).
 
 **Loyiha/deploy chalkashliklari**
 - Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
@@ -234,6 +240,8 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 **Ma'lum cheklovlar / ochiq savollar**
 - 7–9-sinf monitoring chegirmasida «Algebra/Geometriya» alohida fan sifatida hisoblanmaydi (maktab tasdiqlasa qo'shiladi).
 - Ma'muriyat rahbari o'quvchi holatini o'zgartira olmaydi (hozircha faqat direktor) — kerak bo'lsa yoqiladi.
+- Hech qachon davomat yozilmagan eski o'quvchilarda «Davomat %» eski qo'lda kiritilgan qiymat (ko'pincha 0) bo'lib qoladi — birinchi davomat saqlanganda avtomatik to'g'rilanadi.
+- Kalitlari almashib ketgan eski import fakturalarini (yetim) egasiga ko'chirish — har holat alohida (SQL); «Ehtimoliy egasi» ustuni yordam beradi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

@@ -110,6 +110,44 @@ function sign(p, isComplete) {
   ok(state.student_credit['S7'] && state.student_credit['S7'].credit === 300000, 'pul o\'quvchi avansida (yo\'qolmadi)');
   ok(state.payments['click_CT7'].raw && state.payments['click_CT7'].raw.note, 'izoh raw ichida saqlandi');
 
+  // 8) BEKOR (error<0) pul ALLAQACHON qo'llangandan keyin: complete #1 fakturani yopdi, status yozuvi yo'qoldi
+  //    ('prepared'), so'ng Click shu tranzaksiyani bekor qildi -> faktura qaytariladi (to'langan bo'lib qolmaydi).
+  const INV8 = 'S8__2026-08';
+  state.students['S8'] = { id: 'S8', studentId: 'S8', name: 'Nodir' };
+  state.invoices[INV8] = { id: INV8, amount: 350000, status: 'unpaid', studentId: 'S8', month: '2026-08' };
+  const e0 = { click_trans_id: 'CT8', service_id: '111', merchant_trans_id: INV8, amount: '350000', action: '0', sign_time: 't8' };
+  e0.sign_string = sign(e0, false);
+  const er = await handlePrepare(e0);
+  const e1 = { click_trans_id: 'CT8', service_id: '111', merchant_trans_id: INV8, merchant_prepare_id: er.merchant_prepare_id, amount: '350000', action: '1', sign_time: 't8b', error: '0' };
+  e1.sign_string = sign(e1, true);
+  await handleComplete(e1);
+  ok(state.invoices[INV8].status === 'paid', 'complete #1 -> faktura paid');
+  state.payments['click_CT8'].status = 'prepared';             // status yozuvi yo'qolgan
+  const e2 = Object.assign({}, e1, { error: '-1', sign_time: 't8c' }); e2.sign_string = sign(e2, true);
+  const e3 = await handleComplete(e2);
+  ok(e3.error === -9, 'bekor -> -9 (Transaction cancelled)');
+  ok(state.invoices[INV8].status === 'pending' && Number(state.invoices[INV8].paidAmount) === 0, 'qo\'llangan pul QAYTARILDI: faktura yana «pending» ★');
+  ok(state.payments['click_CT8'].status === 'canceled' && state.payments['click_CT8'].raw && state.payments['click_CT8'].raw.reversedApplied === true && !state.payments['click_CT8'].raw.needsManualReverse, 'to\'lov «canceled», avtomatik qaytarildi (qo\'lda navbat YO\'Q)');
+  const e4 = await handleComplete(e2);                          // bekor qayta kelsa — ikki marta qaytarilmaydi
+  ok(e4.error === -9 && state.invoices[INV8].status === 'pending' && Number(state.invoices[INV8].paidAmount) === 0, 'bekor qayta kelsa — idempotent');
+
+  // 9) BEKOR, pul BALANSGA qo'llangan edi (CT7: faktura bekor -> '_cr') -> avtomatik EMAS, «qo'lda qaytarish» navbati.
+  const cred7 = state.student_credit['S7'].credit;
+  state.payments['click_CT7'].status = 'prepared';
+  const w3 = Object.assign({}, w1, { error: '-1', sign_time: 't7c' }); w3.sign_string = sign(w3, true);
+  const w4 = await handleComplete(w3);
+  ok(w4.error === -9 && state.payments['click_CT7'].status === 'canceled' && state.payments['click_CT7'].raw.needsManualReverse === true, 'balansga qo\'llangan -> needsManualReverse (admin navbatida)');
+  ok(state.student_credit['S7'].credit === cred7, 'balans avtomatik o\'zgartirilmadi (qo\'lda tuzatiladi)');
+
+  // 10) BEKOR, ortiqcha qism avansga o'tgan va avans ALLAQACHON sarflangan (CT5: 500 000 -> 300 000 faktura + 200 000 avans)
+  //     -> faktura qaytariladi, olinmagan 200 000 «qo'lda qaytarish» navbatiga (jim yo'qolmaydi).
+  state.student_credit['S5'].credit = 0;                       // avans boshqa oyga sarflangan
+  state.payments['click_CT5'].status = 'prepared';
+  const pp2 = Object.assign({}, pp1, { error: '-1', sign_time: 't5c' }); pp2.sign_string = sign(pp2, true);
+  const pr6 = await handleComplete(pp2);
+  ok(pr6.error === -9 && state.invoices[INV5].status === 'pending', 'faktura qaytarildi («pending»)');
+  ok(state.payments['click_CT5'].raw.needsManualReverse === true && /200000/.test(String(state.payments['click_CT5'].raw.reverseNote||'')), 'avansdan olinmagan 200 000 -> qo\'lda navbat (izohda summa) ★');
+
   fs.unlinkSync(CFGFILE);
   console.log('\n' + (fails ? ('❌ ' + fails + ' FAILED') : '✅ ALL PASS — to\'lov oqimi Supabase backend ustida ishlaydi'));
   process.exit(fails ? 1 : 0);

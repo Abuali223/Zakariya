@@ -106,10 +106,11 @@ function makeFake(state, nowFn) {
     const status = (inv.status === 'canceled' || inv.status === 'reversed') ? inv.status   // bekor qilingan faktura bekorligicha qoladi
       : (newpaid <= 0 ? 'pending' : (newpaid >= amount - 0.5 ? 'paid' : 'partial'));   // haqiqiy SQL: to'liq qaytsa QARZ tiriladi ('pending')
     inv.paidAmount = newpaid; inv.status = status; inv.reversedAt = now();      // provider'ga TEGMAYDI
-    if (fromCredit > 0 && sid) { const sc = tbl('student_credit'); const cr = (sc[sid] && num(sc[sid].credit)) || 0;
+    let crHad = 0;
+    if (fromCredit > 0 && sid) { const sc = tbl('student_credit'); const cr = (sc[sid] && num(sc[sid].credit)) || 0; crHad = cr;
       const nc = Math.max(0, cr - fromCredit); sc[sid] = { id: sid, studentId: sid, credit: nc, updatedAt: now() };
-      ledger({ studentId: sid, studentName: (state.students && state.students[sid] && state.students[sid].name) || '', delta: -fromCredit, balanceAfter: nc, reason: 'reversed', provider }); }
-    return { ok: true, status, fromInvoice, fromCredit, newPaid: newpaid, studentId: sid || '' };
+      ledger({ studentId: sid, studentName: (state.students && state.students[sid] && state.students[sid].name) || '', delta: -Math.min(cr, fromCredit), balanceAfter: nc, reason: 'reversed', provider }); }
+    return { ok: true, status, fromInvoice, fromCredit, newPaid: newpaid, studentId: sid || '', unrecovered: Math.max(0, fromCredit - crHad) };
   };
 
   const RPCS = { apply_payment, apply_to_invoice, reverse_payment };

@@ -91,6 +91,27 @@ const basic = (l, p) => ({ authorization: 'Basic ' + Buffer.from(l + ':' + p).to
   ok(cfA.status === 'CONFIRMED' && cfB.status === 'CONFIRMED' && credAfter === credBefore && state.payments['uzum_TX2'].status === 'confirmed',
      `CONFIRM qayta urinish (pul allaqachon qo'llangan) -> ikkinchi marta qo'llanmaydi (avans ${credBefore} -> ${credAfter})`);
 
+  // 5c) REVERSE pul QO'LLANGANDAN keyin, lekin 'confirmed' yozuvi yo'qolgan (status 'created' qolgan) -> faktura
+  //     baribir qaytariladi (avval faqat 'confirmed'da qaytarilardi: faktura «to'langan» qolib, pul esa qaytib ketardi).
+  state.students['S3'] = { id: 'S3', studentId: 'S3', name: 'Sami' };
+  state.invoices['S3__2026-09'] = { id: 'S3__2026-09', amount: 400000, status: 'unpaid', studentId: 'S3', month: '2026-09' };
+  await handleUzum('create', { serviceId: SID, params: { invoice: 'S3__2026-09' }, transId: 'TX3', amount: 40000000 });
+  await handleUzum('confirm', { serviceId: SID, transId: 'TX3' });
+  ok(state.invoices['S3__2026-09'].status === 'paid', 'TX3 confirm -> paid');
+  state.payments['uzum_TX3'].status = 'created';               // holat yozuvi yo'qolgan
+  const rv3 = await handleUzum('reverse', { serviceId: SID, transId: 'TX3' });
+  ok(rv3.status === 'REVERSED' && state.invoices['S3__2026-09'].status === 'pending' && Number(state.invoices['S3__2026-09'].paidAmount) === 0,
+     'REVERSE (status yo\'qolgan, pul qo\'llangan) -> faktura qaytarildi ★');
+  ok(state.payments['uzum_TX3'].status === 'reversed' && !(state.payments['uzum_TX3'].raw && state.payments['uzum_TX3'].raw.needsManualReverse), 'avtomatik — qo\'lda navbat yo\'q');
+  const rv3b = await handleUzum('reverse', { serviceId: SID, transId: 'TX3' });
+  ok(rv3b.status === 'REVERSED' && state.invoices['S3__2026-09'].status === 'pending', 'REVERSE qayta -> idempotent');
+
+  // 5d) REVERSE qo'llanmagan (confirm bo'lmagan) tranzaksiya -> faktura/avansga tegmaydi.
+  state.invoices['S3__2026-10'] = { id: 'S3__2026-10', amount: 400000, status: 'unpaid', studentId: 'S3', month: '2026-10' };
+  await handleUzum('create', { serviceId: SID, params: { invoice: 'S3__2026-10' }, transId: 'TX4', amount: 40000000 });
+  const rv4 = await handleUzum('reverse', { serviceId: SID, transId: 'TX4' });
+  ok(rv4.status === 'REVERSED' && state.invoices['S3__2026-10'].status === 'unpaid' && !state.invoices['S3__2026-10'].reversedAt, 'qo\'llanmagan tranzaksiya REVERSE -> faktura o\'zgarmadi');
+
   // 6) noma'lum operatsiya
   const un = await handleUzum('foo', { serviceId: SID });
   ok(un.errorCode === 10003, 'noma\'lum op -> 10003');

@@ -71,7 +71,7 @@ Uzum **5 ta endpoint** ni chaqiradi (server-to-server, har birida **Basic auth**
 | `POST /uzum/check`   | hisob-faktura bor/to'lanmaganini tekshirish | `status:OK` |
 | `POST /uzum/create`  | tranzaksiya yaratish (rezerv) | `status:CREATED` |
 | `POST /uzum/confirm` | to'lov tasdiqlandi → invoice **«paid»** ★ | `status:CONFIRMED` |
-| `POST /uzum/reverse` | qaytarish (refund) → invoice **«reversed»** | `status:REVERSED` |
+| `POST /uzum/reverse` | qaytarish (refund): shu tranzaksiya summasi fakturadan (ortig'i avansdan) ayiriladi → faktura qarzi tiriladi (**«pending»/«partial»**; bekor qilingan faktura bekorligicha qoladi). Avtomatik to'liq ayirib bo'lmasa (balansga qo'llangan / avans sarflangan) — admin «↩️ Qo'lda qaytarilishi kerak» navbatida | `status:REVERSED` |
 | `POST /uzum/status`  | tranzaksiya holati | joriy status |
 
 Xato javobi: `{ serviceId, timestamp, status:"FAILED", errorCode }`. Kodlar:

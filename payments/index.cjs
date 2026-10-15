@@ -360,7 +360,32 @@ async function handleComplete(p){
   // (kech kelgan error<0 to'langan to'lovni 'canceled' qilib invoice bilan nomuvofiqlik yaratmasin).
   if(pay.status === 'paid' || pay.status === 'applied' || pay.status === 'unmatched')
     return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:String(pay.merchant_confirm_id||confirmId), error:0, error_note:'Success' };
-  if(Number(p.error) < 0){ await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true); }
+  if(Number(p.error) < 0){
+    // Click BEKOR qildi. Avvalgi urinishda pul ALLAQACHON qo'llangan bo'lsa (RPC commit bo'lib, status yozuvi/javob
+    //   yo'qolgan — masalan restart), faktura «to'langan» qolib, pul esa to'lovchiga qaytardi. Shuning uchun posbonni
+    //   tekshiramiz: aynan shu fakturaga (precise) qo'llangan -> reverse_payment (atomik, idempotent 'reverse:click_'+id);
+    //   balansga (waterfall) qo'llangan / faktura topilmadi / avans allaqachon sarflangan -> «qo'lda qaytarish» navbati.
+    const ct = String(p.click_trans_id);
+    const g = await appliedGuard([ct, ct+'_cr']);
+    if(g){
+      const som = Number(pay.amount)||Number(p.amount)||0;
+      let note = '';
+      if(((pay.raw && pay.raw.mode) || 'precise') === 'precise' && g === ct && pay.invoiceId && db.rpc){
+        let rv = null;
+        try{ const a = { p_invoice:String(pay.invoiceId), p_amount:som, p_provider:'click', p_ref:'click_'+ct };
+          rv = await db.rpc('reverse_payment', a); if(rv && rv.error === 'retry') rv = await db.rpc('reverse_payment', a); }
+        catch(e){ rv = { ok:false, error:String((e && (e.code||e.message)) || 'xato') }; }
+        const unrec = Number(rv && rv.unrecovered)||0;
+        if(rv && rv.ok === false) note = 'faktura '+String(pay.invoiceId)+' avtomatik qaytarilmadi ('+String(rv.error||rv.reason||'xato')+')';
+        else if(unrec > 0.5) note = 'avans allaqachon sarflangan — '+unrec+' so‘m qaytarib olinmadi';
+      } else note = 'pul o‘quvchi balansiga (eng eski qarz / avans) qo‘llangan edi';
+      await payRef.set({ status:'canceled', raw: withRaw(pay, note
+        ? { needsManualReverse:true, reverseNote:'Click bekor qildi: '+note+' — QO‘LDA tuzating (som='+som+', studentId='+String(pay.studentId||'')+')' }
+        : { reversedApplied:true }) }, { merge:true });
+      return clickErr(p, -9, 'Transaction cancelled', true);
+    }
+    await payRef.set({ status:'canceled' }, { merge:true }); return clickErr(p, -9, 'Transaction cancelled', true);
+  }
   const mode = (pay.raw && pay.raw.mode) || 'precise';
 
   if(mode === 'precise'){
@@ -507,12 +532,16 @@ async function uzReverse(b){
   const snap = await uzPayRef(b.transId).get(); const pay = snap.exists ? snap.data() : null;
   if(!pay) return uzFail(UZ.NOT_FOUND);
   if(pay.status !== 'reversed'){
-    // FAQAT tasdiqlangan (confirmed) to'lov invoice balansiga ta'sir qilgan. Butun paidAmount'ni
-    // 0 qilmaymiz — AYNAN shu tranzaksiya summasini ayiramiz (boshqa to'lovlar saqlanadi),
-    // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
-    if(pay.status === 'confirmed'){
+    // Pul QO'LLANGAN to'lovgina invoice/avansga ta'sir qilgan. Butun paidAmount'ni 0 qilmaymiz — AYNAN shu
+    // tranzaksiya summasini ayiramiz (boshqa to'lovlar saqlanadi), ortiqcha (avans) qismini student_credit'dan
+    // qaytarib olamiz. confirmed -> qo'llangan (appliedTo bo'yicha). confirmed EMAS bo'lsa ham posbonni tekshiramiz:
+    // confirm'da RPC commit bo'lib, status yozuvi yo'qolgan (restart) bo'lsa pul turibdi — aks holda faktura
+    // «to'langan» qolib, Uzum esa pulni to'lovchiga qaytarardi.
+    let applied = (pay.status === 'confirmed') ? (((pay.raw && pay.raw.appliedTo) || pay.appliedTo) || 'invoice') : null;
+    if(!applied){ const g = await appliedGuard(['uzum_'+b.transId, 'uzum_'+b.transId+'_cr']); if(g) applied = g.endsWith('_cr') ? 'balance' : 'invoice'; }
+    if(applied){
       const som = Number(pay.amount)||0;   // pay.amount SO'M da saqlangan (uzCreate)
-      if(((pay.raw && pay.raw.appliedTo) || pay.appliedTo) === 'balance'){
+      if(applied === 'balance'){
         // Pul invoice'ga EMAS, o'quvchi BALANSIGA qo'llangan edi (confirm paytida invoice terminal bo'lgan).
         // reverse_payment(invoice) bu yerda NOTO'G'RI — u aloqasiz invoice/avansni buzadi. Balansga
         // qo'llangan to'lovni teskari qilish (waterfall'ni ochib) avtomatik qilinmaydi; MA'MURIYATga
@@ -529,6 +558,16 @@ async function uzReverse(b){
         const rvArgs = { p_invoice: String(pay.invoiceId), p_amount: som, p_provider: 'uzum', p_ref: 'uzum_'+String(b.transId) };
         let rv = await db.rpc('reverse_payment', rvArgs);
         if(rv && rv.error === 'retry') rv = await db.rpc('reverse_payment', rvArgs);   // qulf ostida kalit o'zgargan (juda kam) — bir marta qayta
+        // To'liq avtomatik qaytarilmadi: faktura topilmadi (o'chirilgan) yoki ortiqcha qism avansdan olinmadi (avans
+        //   allaqachon sarflangan) — jim yo'qolmasin: «qo'lda qaytarish» navbatiga (admin «↩️ Qo'lda qaytarilishi kerak»).
+        const unrec = Number(rv && rv.unrecovered)||0;
+        if((rv && rv.ok === false) || unrec > 0.5){
+          const why = (rv && rv.ok === false) ? ('faktura '+String(pay.invoiceId)+' avtomatik qaytarilmadi ('+String(rv.error||rv.reason||'xato')+')')
+                                              : ('avans allaqachon sarflangan — '+unrec+' so‘m qaytarib olinmadi');
+          await uzPayRef(b.transId).set({ status:'reversed', raw: withRaw(pay, { needsManualReverse:true,
+            reverseNote:'Uzum qaytardi: '+why+' — QO‘LDA tuzating (som='+som+', studentId='+String(pay.studentId||'')+')' }) }, { merge:true });
+          return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: (UZUM.amountUnit==='som'?som:som*100) };
+        }
       } else {
         // ---- Firebase (rollback) — eski, atomik BO'LMAGAN yo'l ----
         const inv = await getInvoice(String(pay.invoiceId));
