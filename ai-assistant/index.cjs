@@ -126,14 +126,19 @@ ${knowledge}`;
 
 /* ---------------- Ma'lumot yuklash (Firestore) ---------------- */
 async function loadStudentData(sid){
-  const sDoc = await db.collection('students').doc(sid).get();
-  if(!sDoc.exists) return null;
-  const s = sDoc.data();
+  // sid — hujjat id yoki studentId (import qilingan bolada ular farq qiladi). AYNAN BITTA o'quvchi qatoriga mos kelsa — o'sha;
+  //   to'qnash kalit (bir nechta qator — eski import) -> null: boshqa bolaning ma'lumoti aralashmasin (RLS bilan bir xil qoida).
+  sid = String(sid||''); if(!sid) return null;
+  const [byId, bySid] = await Promise.all([ db.collection('students').doc(sid).get(), db.collection('students').where('studentId','==',sid).get() ]);
+  const rows = new Map(); if(byId.exists) rows.set(byId.id, byId.data()); (bySid.docs||[]).forEach(d => rows.set(d.id, d.data()));
+  if(rows.size !== 1) return null;
+  const [docId, s] = [...rows.entries()][0];
+  const key = String((s && s.studentId) || docId);   // davomat/monitoring/faktura/baho — kanonik studentId bilan
   const [attSnap, monSnap, invSnap, grdSnap] = await Promise.all([
-    db.collection('attendance').where('studentId','==',sid).get(),
-    db.collection('monitoring').where('studentId','==',sid).get(),
-    db.collection('invoices').where('studentId','==',sid).get(),
-    db.collection('grades').where('studentId','==',sid).get()
+    db.collection('attendance').where('studentId','==',key).get(),
+    db.collection('monitoring').where('studentId','==',key).get(),
+    db.collection('invoices').where('studentId','==',key).get(),
+    db.collection('grades').where('studentId','==',key).get()
   ]);
   // Davomat % — admin.html recomputeAttendancePct / bazadagi trigger (attendance-sync.sql) bilan BIR XIL formula:
   //   (keldi + kech) / (jami − bemor − sababli). Avval bemor/sababli kunlar ham maxrajga kirib, AI boshqa raqam aytardi.
@@ -196,9 +201,20 @@ async function userRole(uid){
   try{ const d = await db.collection('users').doc(uid).get(); return d.exists ? String((d.data()||{}).role||'') : ''; }
   catch(e){ return ''; }
 }
+// Ota-ona shu bolaga bog'langanmi — bazadagi app.owns_child qoidasi bilan bir xil: faqat FAOL bog'lanish, va sid FAQAT bitta
+//   o'quvchi qatorining kaliti (hujjat id yoki studentId). To'qnash kalit (eski import) — hech narsa ochilmaydi (aks holda
+//   service_role bilan o'qilgani uchun boshqa oila bolasining ma'lumoti AI xulosasiga tushardi).
 async function ownsChild(uid, sid){
   if(!uid || !sid) return false;
-  try{ const snap = await db.collection('child_claims').where('uid','==',uid).where('studentId','==',sid).get(); return (snap.docs||[]).length > 0; }
+  try{
+    const snap = await db.collection('child_claims').where('uid','==',uid).where('studentId','==',sid).get();
+    if(!(snap.docs||[]).some(d => { const st = (d.data()||{}).status; return st == null || st === '' || st === 'active'; })) return false;
+    const [byId, bySid] = await Promise.all([
+      db.collection('students').where('id','==',sid).get(),
+      db.collection('students').where('studentId','==',sid).get()
+    ]);
+    return new Set([...(byId.docs||[]), ...(bySid.docs||[])].map(d => d.id)).size <= 1;
+  }
   catch(e){ return false; }
 }
 // /chat — jamoat endpointi (kirmagan tashrifchilar uchun). Auth emas, lekin

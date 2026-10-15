@@ -40,7 +40,8 @@ VPS'da nusxalab ishga tushirasiz.
 yoki `auth/` bor) — **server kodini o'sha papkaga ham yozadi** (faqat git'dagi fayllar: `ai-assistant payments server sb auth`).
 `config.json`, `node_modules`, `backups/`, `supabase/` va boshqa fayllar **tegilmaydi** (egasi va ruxsatlari ham — maxfiy
 `config.json`'ni 0600 qilib qo'ygan bo'lsangiz, shunday qoladi); yangi/yangilangan kod fayllari `payments/` papkasi egasi nomidan
-yoziladi, mavjud papkalarning egasi/ruxsati o'zgarmaydi. Egasi biror faylga yoza olmasa — deploy shu bosqichda to'xtaydi (xizmatlar
+yoziladi (ruxsatlari 0644/0755 — tizim umask'iga bog'liq emas), mavjud papkalarning egasi/ruxsati o'zgarmaydi; yo'q papkalar
+(birinchi marta `auth/`, `sb/`) shu egasi nomiga yaratiladi. Egasi biror faylga yoza olmasa — deploy shu bosqichda to'xtaydi (xizmatlar
 qayta ishga tushirilmaydi, eski kod ishlab turadi). Hech narsa qilish shart emas — deploy chiqishida «… kodi /opt/iqror dan ishlaydi — server kodi o'sha yerga ham
 yozilmoqda» qatorini ko'rasiz.
 

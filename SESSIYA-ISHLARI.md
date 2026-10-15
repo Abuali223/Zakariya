@@ -217,7 +217,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Narx kaliti IT/MED guruhdan ham aniqlanadi; monitoring chegirmasida «Informatika» hisoblanadi; qabulxona qo'shgan o'quvchi ro'yxatga olingan kundan prorata bilan.
 - «Bekor»/«O'chir»/«To'lanmaganlarni o'chirish» — qulf ostida «to'lov yo'q»ligi qayta tekshiriladi. Yetim fakturalarda «Ehtimoliy egasi» ko'rsatiladi va ular o'chirilmaydi.
 - O'quvchi tahrirlanganda/import qilinganda `studentId` endi o'zgarmaydi (avval import qilingan o'quvchilarda hujjat ID'siga almashib, qarz/avans/davomat «yetim» qolardi).
-- Yangi o'quvchi ID'si bazadan tekshiriladi (bir vaqtda qo'shish / boshqa o'quvchining ID'si bloklanadi); Excel importda takroriy / o'chirilgan o'quvchi ID'si yoki boshqa ismga tegishli ID — qator o'tkaziladi, ogohlantiriladi. Bir ID bilan ikki xil ismli qator kelsa — IKKALASI ham o'tkaziladi (nusxa ko'chirilgan aka-uka ID'si boshqa bolani jim boshqa sinfga ko'chirmaydi); bazada to'qnash ID bo'lsa — ism bo'yicha aniq bittasi, aks holda o'tkaziladi.
+- Yangi o'quvchi ID'si bazadan tekshiriladi (bir vaqtda qo'shish / boshqa o'quvchining ID'si bloklanadi); Excel importda takroriy / o'chirilgan o'quvchi ID'si yoki boshqa ismga tegishli ID — qator o'tkaziladi, ogohlantiriladi. Bir ID bilan ikki xil ismli qator kelsa — IKKALASI ham o'tkaziladi (nusxa ko'chirilgan aka-uka ID'si boshqa bolani jim boshqa sinfga ko'chirmaydi); bazada to'qnash ID bo'lsa — ism AYNAN mos kelgan bittasi (bir xil ismlilar orasida — hujjat ID'si shu ID bo'lgani), aks holda o'tkaziladi.
 - «Qayta hisoblash» to'lov qulfi bilan bir tartibda (o'zaro qulflanish yo'q); qaytarish (refund/reverse) qulf ostida qayta tekshiriladi; biriktirilmagan to'lov faqat to'liq qaytariladi.
 
 **To'lovlar (Click/Uzum/kassa)**
@@ -229,20 +229,20 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 
 **Ota-ona kabineti**
 - Farzandni bog'lash import qilingan o'quvchida ham ishlaydi (ID yoki hujjat kaliti); kalitlari to'qnashgan (eski import dublikati) o'quvchida bog'lash rad etiladi va boshqa oilaning ma'lumoti hech qachon ochilmaydi.
-- Server ruxsati (RLS) qator-aniq: `owns_child` (studentId bilan kalitlangan jadvallar) va `owns_student_doc` (students / student_private / student_phones — hujjat ID bilan). Bir ID ikki o'quvchiga tegishli bo'lsa (eski import: takroriy ID yoki biri hujjat ID'si, ikkinchisi o'quvchi ID'si) — shu ID bo'yicha ota-onaga HECH NARSA ochilmaydi (avval aniq-kalit moslash boshqa oila bolasining maxfiy ma'lumotini ko'rsatib qo'yardi). Ro'yxati — «⚠️ Ma'lumot sifati» oynasida («⛔ To'qnash o'quvchi ID'lari»).
+- Server ruxsati (RLS) qator-aniq: `owns_child` (studentId bilan kalitlangan jadvallar) va `owns_student_doc` (students / student_private / student_phones — hujjat ID bilan). Bir ID ikki o'quvchiga tegishli bo'lsa (eski import: takroriy ID yoki biri hujjat ID'si, ikkinchisi o'quvchi ID'si) — shu ID bo'yicha ota-onaga HECH NARSA ochilmaydi (avval aniq-kalit moslash boshqa oila bolasining maxfiy ma'lumotini ko'rsatib qo'yardi). Ro'yxati — «⚠️ Ma'lumot sifati» oynasida («⛔ To'qnash o'quvchi ID'lari»). AI yordamchining `/student-summary` tekshiruvi ham shu qoida bilan (faqat faol bog'lanish, to'qnash kalit — 403) va import qilingan bolaning ma'lumotini kanonik ID bo'yicha topadi.
 - Davomat % noma'lum bo'lsa «—» (0% emas); sinf o'rtachasi faqat yetarli ma'lumot bo'lsa; faqat joriy o'quv yili baholari; profil/transkript chorak baholari to'g'ri.
 
 **Moliya hisobotlari**
 - Qo'lda to'lov «Sana»si faqat oxirgi 31 kun ichida (kelajak/juda eski sana rad etiladi); darhol chop etiladigan chek, qayta chop etish va kassa — bir xil kun; «📋 To'lov tarixi» ham shu kunni ko'rsatadi (kiritilgan kun — izohda).
 - «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni; qo'lda kiritilganda — chekdagi «Sana»), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi; to'lovlar o'qilmasa «0» emas, xato ko'rsatiladi.
-- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan / Click bekor qilgan, lekin avtomatik to'liq ayirib bo'lmagan to'lovlar (sababi «Izoh»da). «↩ Fakturadan» tugmasi pulni tanlangan fakturadan ayiradi (naqd qaytarish yozilmaydi, Moliya tekshiruvi farqsiz yopiladi); avansdagisi — «✏️ Avansni tuzatish».
+- «↩️ Qo'lda qaytarilishi kerak» kartasi — Uzum qaytargan / Click bekor qilgan, lekin avtomatik to'liq ayirib bo'lmagan to'lovlar (sababi «Izoh»da). «↩ Fakturadan» tugmasi pulni tanlangan fakturadan ayiradi (naqd qaytarish yozilmaydi, Moliya tekshiruvi farqsiz yopiladi) — faqat QOLDIQni: server o'zi qaytarib bo'lgan va avval qo'lda ayirilgan qism hisobga olinadi (bir pul ikki marta ayirilmaydi); avansdagisi — «✏️ Avansni tuzatish».
 - Bosh sahifadagi «O'rtacha davomat» — faqat davomati ma'lum o'quvchilar bo'yicha (noma'lum «0» deb hisoblanmaydi).
 - Oylik xulosa (ma'lumotnoma) o'quvchining kanonik ID'si bilan yoziladi — import qilingan bolada ham hisobotda va ota-ona kabinetida ko'rinadi (eski yozuvlar ham o'qiladi).
 - «Davomat %» faqat server triggeri yozadi (admin ekrani endi `students/<studentId>` ga yozmaydi — import qilingan bolada jim yo'qolar, to'qnashuvda boshqa bolani buzardi); monitoring tasdiqlanganda «Umumiy ball» o'quvchining hujjat ID'si bilan yoziladi (import qilingan bolada ham yangilanadi).
 
 **Loyiha/deploy chalkashliklari**
 - Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
-- `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi — papka egasi nomidan, `config.json`/`node_modules` va papkalarning egasi/ruxsati o'zgarmaydi (avvalgi `chown -R` maxfiy config.json'ni xizmat o'qiy olmaydigan qilib qo'yishi mumkin edi).
+- `deploy.sh` auth serverini ham yangilaydi (yoqilgan bo'lsa qayta ishga tushiradi); xizmat boshqa papkadan (`/opt/iqror`) ishlasa server kodini o'sha yerga ham yozadi — papka egasi nomidan, `config.json`/`node_modules` va papkalarning egasi/ruxsati o'zgarmaydi (avvalgi `chown -R` maxfiy config.json'ni xizmat o'qiy olmaydigan qilib qo'yishi mumkin edi); kod fayllari doim 0644/0755 (tizim umask'iga bog'liq emas); birinchi marta yo'q `auth/`, `sb/` papkalari egasi nomiga yaratiladi.
 - O'quvchi holati/o'chirish tugmalari — faqat direktor (server qoidasi bilan bir xil); «📚 Sinflar» — faqat direktor.
 
 **Ma'lum cheklovlar / ochiq savollar**

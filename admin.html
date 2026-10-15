@@ -1674,7 +1674,7 @@ async function buildAndPreviewImport(rows){
       //   jim yangilanmasin).
       { const G=givenId.toUpperCase(); const cands=stu.filter(x=>String(x._id).toUpperCase()===G || String(x.studentId||'').toUpperCase()===G);
         if(cands.length>1){ let pick=cands.filter(x=>normName(x.name)===normName(name));
-          if(pick.length!==1){ const byDoc=(pick.length?pick:cands).filter(x=>String(x._id).toUpperCase()===G); if(byDoc.length===1 && (pick.length || !cands.some(x=>normName(x.name)===normName(name)))) pick=byDoc; }
+          if(pick.length>1){ const byDoc=pick.filter(x=>String(x._id).toUpperCase()===G); if(byDoc.length===1) pick=byDoc; }   // ism aniq mos kelmasa — o'tkaziladi
           if(pick.length===1) ex=pick[0];
           else { warnings.push(`«${name}»: ID «${givenId}» bazada ${cands.length} o‘quvchida (to‘qnashuv) — o‘tkazildi («⚠️ Ma'lumot sifati»ni ko‘ring)`); skipped.push(name); continue; } } }
       // ID bo'yicha topildi, lekin ism UMUMAN mos emas (birorta umumiy so'z yo'q) — ehtimol ID xato yozilgan: boshqa
@@ -6884,14 +6884,23 @@ async function renderPayments(){
     //   (reverse_payment — qulf ostida, idempotent; refund/kassa chiqimi YOZILMAYDI). Summa fakturaning to'langan qismidan
     //   oshmaydi -> avansga tegmaydi. Har (to'lov, faktura) juftligi uchun bitta ref: qayta bosilsa — «allaqachon».
     $('#pm-body').querySelectorAll('[data-mrrev]').forEach(b=>b.addEventListener('click',async()=>{ const p=manualRev.find(x=>x._id===b.dataset.mrrev); if(!p) return;
-      let invs=[]; try{ const sn=await getDocs(query(collection(db,'invoices'), where('studentId','==',String(p.studentId||'')))); invs=sn.docs.map(d=>({_id:d.id,...d.data()})).filter(i=>!isCanc(i) && paidOf(i)>0); }
+      // QOLDIQ: server o'zi qaytarib bo'lgan qism (reverse_payment natijasi: 'reverse:'+to'lov id -> unrecovered) va shu to'lov
+      //   bo'yicha avvalgi «↩ Fakturadan»lar ayiriladi — aks holda bir xil pul ikki marta ayirilib, oilaning naqd to'lovi
+      //   fakturadan «yo'qolardi». Server reverse_payment chaqirmagan bo'lsa (balansga qo'llangan) — butun summa.
+      let invs=[], left=Number(p.amount)||0;
+      try{ const sn=await getDocs(query(collection(db,'invoices'), where('studentId','==',String(p.studentId||''))));
+        const g=await getDoc(doc(db,'applied_payments','reverse:'+p._id)); const gr=g.exists()?((g.data()||{}).result||null):null;
+        if(gr && gr.ok) left=Number(gr.unrecovered)||0;
+        for(const d of sn.docs){ const m=await getDoc(doc(db,'applied_payments','reverse:mrev:'+p._id+':'+d.id)); if(m.exists()) left-=Number((((m.data()||{}).result)||{}).fromInvoice)||0; }
+        invs=sn.docs.map(d=>({_id:d.id,...d.data()})).filter(i=>!isCanc(i) && paidOf(i)>0); }
       catch(e){ toast('Fakturalarni o‘qib bo‘lmadi: '+(e.code||e.message),true); return; }
+      if(!(left>0.5)){ toast('Bu to‘lov bo‘yicha fakturadan ayiriladigan qoldiq yo‘q — avansni «📋» bilan tekshiring, so‘ng «✓ Bajarildi»',true); return; }
       if(!invs.length){ toast('To‘langan faktura yo‘q — avansni «📋» → «✏️ Avansni tuzatish» bilan tuzating',true); return; }
       invs.sort((x,y)=>String(y.month||'').localeCompare(String(x.month||'')));
       const di=Math.max(0, invs.findIndex(i=>i._id===p.invoiceId));
-      const pick=prompt('Qaysi fakturadan ayirilsin? Raqamini yozing:\n'+invs.map((i,k)=>`${k+1}) ${i.month||i._id} — to‘langan ${fmtSom(paidOf(i))}`).join('\n'), String(di+1)); if(pick==null) return;
+      const pick=prompt(`Qoldiq: ${fmtSom(left)} (to‘lov ${fmtSom(p.amount)}). Qaysi fakturadan ayirilsin? Raqamini yozing:\n`+invs.map((i,k)=>`${k+1}) ${i.month||i._id} — to‘langan ${fmtSom(paidOf(i))}`).join('\n'), String(di+1)); if(pick==null) return;
       const inv=invs[(parseInt(pick,10)||0)-1]; if(!inv){ toast('Noto‘g‘ri raqam',true); return; }
-      const cap=Math.min(Number(p.amount)||0, paidOf(inv)); if(!(cap>0)){ toast('Bu fakturadan ayiriladigan summa yo‘q',true); return; }
+      const cap=Math.min(left, paidOf(inv)); if(!(cap>0)){ toast('Bu fakturadan ayiriladigan summa yo‘q',true); return; }
       const v=prompt(`Ayiriladigan summa (so‘m, ≤ ${fmtSom(cap)})`, String(cap)); if(v==null) return;
       const amt=Number(String(v).replace(/\D/g,''))||0; if(!(amt>0) || amt>cap+0.5){ toast('Noto‘g‘ri summa',true); return; }
       if(!confirm(`${inv.month||inv._id} fakturasidan ${fmtSom(amt)} so‘m ayirilsinmi?\nFaktura qarzi qayta ochiladi; naqd qaytarish (refund) yozilmaydi.`)) return;

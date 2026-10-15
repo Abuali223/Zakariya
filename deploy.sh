@@ -106,9 +106,16 @@ for svc in $SERVICES; do
   if [ -d "$wd/payments" ] || [ -d "$wd/ai-assistant" ] || [ -d "$wd/auth" ]; then
     echo "    $svc kodi $wd dan ishlaydi — server kodi o'sha yerga ham yozilmoqda (config.json tegilmaydi)"
     ref="$wd/payments"; [ -e "$ref" ] || ref="$wd"
-    own=$(sudo stat -c %u "$ref")
-    git archive FETCH_HEAD ai-assistant payments server sb auth \
-      | sudo -u "#$own" tar -x --no-same-owner --no-same-permissions --no-overwrite-dir -C "$wd"
+    own=$(sudo stat -c %u "$ref"); grp=$(sudo stat -c %g "$ref")
+    if ! getent passwd "$own" >/dev/null; then
+      echo "❌ $ref egasi (uid $own) tizimda yo'q — kod yozilmadi. Papka egasini mavjud foydalanuvchiga o'zgartiring: sudo chown -R <user> $wd/{ai-assistant,payments,server,sb,auth}"; exit 1
+    fi
+    # Yo'q yuqori papkalar (birinchi marta: auth/, sb/) — root sifatida, payments/ egasi nomiga yaratiladi (aks holda egasi
+    #   root'ga tegishli /opt/iqror ichida papka yarata olmay deploy yarim yo'lda to'xtardi).
+    for d in ai-assistant payments server sb auth; do [ -d "$wd/$d" ] || sudo install -d -o "$own" -g "$grp" -m 0755 "$wd/$d"; done
+    # Fayl ruxsatlari ARXIVDAGIdek (0644/0755) — tizim umask'iga bog'liq emas (UMASK 027'da 0640 bo'lib, xizmat kodni o'qiy olmasdi).
+    git -c tar.umask=0022 archive FETCH_HEAD ai-assistant payments server sb auth \
+      | sudo -u "#$own" tar -x --no-same-owner --same-permissions --no-overwrite-dir -C "$wd"
     synced="$synced$wd "
   else
     echo "⚠️  $svc WorkingDirectory=$wd — server kodi papkasiga o'xshamaydi, yangilanmadi (migration/deploy/README.md, «Xizmat papkasi»)"
