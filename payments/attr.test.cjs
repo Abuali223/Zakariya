@@ -73,6 +73,30 @@ async function prep(name, phone, klass, amount) {
   r = await prep('Тургунбоева Хадича', '915151777', '6 б');
   ok(r.matched === true && r.studentId === 'IQ-0300', `T8 kiril ism+sinf -> IQ-0300 (via=${r.raw && r.raw.via})`);
 
+  // T9: IMPORT qilingan o'quvchi (doc id != studentId). student_private/student_codes doc id = students.id —
+  //   to'lov yozuvida KANONIK studentId bo'lishi shart (aks holda Moliya tekshiruvi o'quvchini ikkiga bo'lib,
+  //   «Qo'llash» pulni ikki marta qo'llardi; to'lov tarixi/chekda ko'rinmasdi).
+  state.student_private['fbX9kQ2'] = { id: 'fbX9kQ2', parentPhone: '+998901112233' };
+  state.students['fbX9kQ2'] = { id: 'fbX9kQ2', studentId: 'IQ-0042', name: 'Karimov Sardor', grade: 5, classLetter: 'A' };
+  r = await prep('Karimov Sardor', '901112233', '5A');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T9 telefon (doc id fbX9kQ2) -> KANONIK IQ-0042 (got ${r.studentId})`);
+  state.student_codes['fbX9kQ2'] = { id: 'fbX9kQ2', code: 'K7Q2ZP' };
+  r = await prep('IQ-0042 K7Q2ZP', '', '');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T10 «IQ-0042 KOD» (kod doc id bo'yicha) -> IQ-0042 (got ${r.studentId}, via=${r.raw && r.raw.via})`);
+  r = await prep('K7Q2ZP', '', '');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T11 faqat KOD -> KANONIK IQ-0042 (got ${r.studentId})`);
+  // T12: HOZIRGI kod formati — 12 belgi (audit-4.sql / gen_student_code: upper(md5) 1..12). Avval regex {5,8}
+  //   bo'lgani uchun «faqat kod» bilan to'lov topilmay, 'unmatched' bo'lib qolardi.
+  state.student_codes['fbX9kQ2'] = { id: 'fbX9kQ2', code: '3FA9C21B7D0E' };
+  r = await prep('3fa9c21b7d0e', '', '');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T12 faqat 12 belgili KOD -> KANONIK IQ-0042 (got ${r.studentId}, via=${r.raw && r.raw.via})`);
+  r = await prep('IQ-0042 3FA9C21B7D0E', '', '');
+  ok(r.matched === true && r.studentId === 'IQ-0042', `T12b «IQ-0042 + 12 belgili KOD» -> IQ-0042 (got ${r.studentId})`);
+  // T13: 12 xonali telefon raqami «kod» deb adashtirilmaydi — kod topilmasa avvalgidek telefon yo'liga o'tadi
+  //   (ism yo'q -> 'ambiguous' -> admin qo'lda biriktiradi; avvalgi xatti-harakat bilan bir xil).
+  r = await prep('998901112233', '901112233', '');
+  ok(r.raw && r.raw.via !== 'code' && r.matched !== true, `T13 12 xonali raqam kod emas -> telefon yo'li (via=${r.raw && r.raw.via}, matched=${r.matched})`);
+
   fs.unlinkSync(CFGFILE);
   console.log(fails ? `\n❌ ${fails} FAILED` : '\n✅ ALL PASS — attribution ismni tekshiradi');
   process.exit(fails ? 1 : 0);

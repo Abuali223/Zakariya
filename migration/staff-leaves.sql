@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-leaves.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- XODIM RUHSAT / KASALLIK (davomat hisoboti uchun qo'lda kiritiladi).
 --   Kamera faqat YUZNI ko'radi — kelmagan odam haqida hech narsa yubormaydi.
@@ -5,7 +10,7 @@
 --   QO'LDA kiritadi. Oylik hisobot kelmagan kunни ruhsat/kasallik yoki
 --   ruhsatsiz (sababsiz)ga ajratadi.
 -- Idempotent. run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-leaves.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 create table if not exists public.staff_leaves (

@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-attendance.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- XODIMLAR DAVOMATI (keldi-ketdi + tanaffus) — Hikvision FaceID terminalidan.
 --   Kamera (yuz terminali) internet orqali TO'G'RIDAN-TO'G'RI serverga hodisa yuboradi
@@ -6,7 +11,7 @@
 --   Admin «Xodimlar davomati» bo'limi personId<->cameraId bo'yicha xodimга bog'lab,
 --   kelgan/ketgan/tanaffus/ish davomiyligini hisoblaydi.
 -- Idempotent. run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-attendance.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 -- Kamera ID (Hikvision person/employee ID) — xodim/o'qituvchiга bog'lash kaliti.

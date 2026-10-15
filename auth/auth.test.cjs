@@ -69,11 +69,12 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     r = await H.verifyOtp({ phone: ph, purpose: 'register', code: bad }); ok('wrong code rejected', r.ok === false && r.remaining === 4, JSON.stringify(r));
     r = await H.verifyOtp({ phone: ph, purpose: 'register', code }); ok('correct code -> ticket', r.ok === true && !!r.ticket, JSON.stringify(r));
     const ticket = r.ticket;
-    r = await H.register({ ticket, password: 'Passw0rd', firstName: 'Ali', lastName: 'Valiyev', role: 'teacher' });
+    r = await H.register({ ticket, password: 'Passw0rd', firstName: 'Ali', lastName: 'Valiyev', role: 'staff' });
     ok('register ok', r.ok === true, JSON.stringify(r));
-    ok('teacher verified=false', r.verified === false && r.pending === true);
+    ok('staff (xodim) verified=false', r.verified === false && r.pending === true);
     const u = state.users.find(x => x.phone === '998901112233');
-    ok('users row: role=teacher, status=pending', u && u.role === 'teacher' && u.verified === false && u.status === 'pending', JSON.stringify(u));
+    // c29e5b5: ro'yxatdan o'tishda rol — umumiy «staff» (Xodim); aniq rolni (teacher/kassir…) admin tasdiqlashda beradi.
+    ok('users row: role=staff, status=pending', u && u.role === 'staff' && u.verified === false && u.status === 'pending', JSON.stringify(u));
     ok('auth user created (synthetic email)', state.authUsers.some(a => a.email === '998901112233@phone.test'));
     ok('name composed', u && u.name === 'Ali Valiyev' && u.firstName === 'Ali' && u.lastName === 'Valiyev');
   }
@@ -111,7 +112,7 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     const ph = '998901234502';
     await H.requestOtp({ phone: ph, purpose: 'register' });
     const r1 = await H.verifyOtp({ phone: ph, purpose: 'register', code: lastCode() });
-    const r = await H.register({ ticket: r1.ticket, password: 'weak', firstName: 'X', lastName: 'Y', role: 'teacher' });
+    const r = await H.register({ ticket: r1.ticket, password: 'weak', firstName: 'X', lastName: 'Y', role: 'staff' });
     ok('weak pw rejected', r.ok === false && /8 ta belgi|katta harf/.test(r.error || ''), JSON.stringify(r));
   }
 
@@ -201,7 +202,7 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     const ph = '998901237777';
     await H.requestOtp({ phone: ph, purpose: 'register' });
     const r1 = await H.verifyOtp({ phone: ph, purpose: 'register', code: lastCode() });
-    await H.register({ ticket: r1.ticket, password: 'Teach0rd', firstName: 'O', lastName: 'Q', role: 'teacher' });
+    await H.register({ ticket: r1.ticket, password: 'Teach0rd', firstName: 'O', lastName: 'Q', role: 'staff' });
     const r = await H.login({ phone: ph, password: 'Teach0rd' });
     ok('pending teacher refused', r.ok === false && r.status === 'pending' && !r.access_token, JSON.stringify(r));
   }
@@ -258,7 +259,7 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     const ph = '998901112200';
     await H.requestOtp({ phone: ph, purpose: 'register' });
     let r1 = await H.verifyOtp({ phone: ph, purpose: 'register', code: lastCode() });
-    await H.register({ ticket: r1.ticket, password: 'Passw0rd', firstName: 'C', lastName: 'P', role: 'teacher' });
+    await H.register({ ticket: r1.ticket, password: 'Passw0rd', firstName: 'C', lastName: 'P', role: 'staff' });
     const uid = state.users.find(u => u.phone === ph).id;
     const newPh = '998901112299';
     // auth majburiy: jwt'siz -> rad

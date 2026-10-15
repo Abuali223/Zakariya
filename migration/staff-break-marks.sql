@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-break-marks.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- staff_break_marks — ish vaqtidagi chiqib-kelishni belgilash (ikki tugma).
 --   Xodim/o'qituvchi ish vaqtida chiqib-kiradi. Ma'muriyat/HR kunlik davomatda
@@ -9,7 +14,7 @@
 --   Bitta (xodim, kun) = bitta yozuv. Tugma: qo'shish/o'zgartirish/o'chirish.
 --   ORQAGA MOSLIK: eski yozuvlar (type yo'q) -> 'excused' (sababli) deb qaraladi.
 -- Idempotent. run-all.sql + deploy.sh'da (staff-leaves.sql kabi).
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-break-marks.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 create table if not exists public.staff_break_marks (

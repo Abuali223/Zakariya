@@ -1,6 +1,11 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-advances.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- XODIM AVANSI (staff_advances): xodimга oy ichida oldindan berilgan maosh.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-advances.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
 -- Xodim avansi — maktab BERGAN pul (xodimning shu oylik maoshidan). Oy oxirida
 -- «Oylik maoshni yozish»да maosh xarajati TO'LIQ yoziladi (oylik mehnat qiymati),

@@ -32,3 +32,23 @@ VPS'da nusxalab ishga tushirasiz.
 6. nginx + certbot (SSL).
 7. `backup.sh` ni crontab'ga.
 8. `../CUTOVER-CHECKLIST.md` bo'yicha to'liq sinov → cutover.
+
+## Xizmat papkasi (WorkingDirectory) — deploy yangi server kodini ishga tushirishi uchun
+`deploy.sh` kodni **`~/iqror-repo`** da yangilaydi (git). Namuna unit'lar (`iqror-*.service`) esa
+`WorkingDirectory=/opt/iqror` ni ko'rsatadi. Agar xizmatlaringiz `/opt/iqror` dan ishlasa va u **alohida
+nusxa** bo'lsa (symlink emas), deploy'dan keyin ham **eski server kodi** ishlayveradi — `deploy.sh` buni
+6-bosqichda «⚠️ … YANGI server kodi ISHGA TUSHMAYDI» deb ogohlantiradi. Bir martalik tuzatish (bittasini tanlang):
+
+1. **Xizmatlarni repo'dan ishlatish** (tavsiya): har xizmat uchun
+   ```bash
+   sudo systemctl edit iqror-pay      # ochilgan oynaga yozing:
+   # [Service]
+   # WorkingDirectory=/home/<siz>/iqror-repo
+   ```
+   (`iqror-ai`, `iqror-auth` uchun ham). Shart: xizmat foydalanuvchisi (`User=iqror`) shu papkani **o'qiy olsin**
+   va `config.json` fayllari repo ichida bo'lsin (`payments/config.json`, `ai-assistant/config.json`,
+   `auth/config.json` — gitignore, git ularni o'zgartirmaydi). So'ng `sudo systemctl daemon-reload` va `bash deploy.sh`.
+2. **`/opt/iqror` ni repo'ga symlink qilish**: eski papkadagi `config.json` larni repo'ga ko'chirib,
+   `sudo mv /opt/iqror /opt/iqror.old && sudo ln -s /home/<siz>/iqror-repo /opt/iqror` (huquqlar — 1-banddagidek).
+
+Tekshirish: `systemctl show -p WorkingDirectory iqror-pay` va `readlink -f /opt/iqror`.

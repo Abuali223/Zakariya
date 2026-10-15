@@ -76,6 +76,40 @@ function sign(p, isComplete) {
   ok(state.invoices[INV5].status === 'paid', 'ortiqcha to\'lov -> invoice "paid"');
   ok(state.student_credit['S5'] && state.student_credit['S5'].credit === 200000, 'ortig\'i (200000) o\'quvchi avansiga yozildi ★');
 
+  // 6) YO'QOLGAN STATUS YOZUVI (masalan deploy restart): COMPLETE'da pul qo'llandi (posbon bor), lekin payments
+  //    'prepared' qolib ketdi. Click qayta urinadi -> «Allaqachon to'langan» (-4) EMAS, MUVAFFAQIYAT bo'lishi
+  //    shart (aks holda Click to'lovni bekor qilib pulni qaytaradi, faktura esa to'langan bo'lib qoladi).
+  const INV6 = 'S6__2026-08';
+  state.students['S6'] = { id: 'S6', studentId: 'S6', name: 'Gani' };
+  state.invoices[INV6] = { id: INV6, amount: 400000, status: 'unpaid', studentId: 'S6', month: '2026-08' };
+  const q0 = { click_trans_id: 'CT6', service_id: '111', merchant_trans_id: INV6, amount: '400000', action: '0', sign_time: 't6' };
+  q0.sign_string = sign(q0, false);
+  const qr = await handlePrepare(q0);
+  const q1 = { click_trans_id: 'CT6', service_id: '111', merchant_trans_id: INV6, merchant_prepare_id: qr.merchant_prepare_id, amount: '400000', action: '1', sign_time: 't6b', error: '0' };
+  q1.sign_string = sign(q1, true);
+  await handleComplete(q1);
+  state.payments['click_CT6'].status = 'prepared';           // status yozuvi yo'qolgan holatni taqlid qilamiz
+  const q2 = await handleComplete(q1);                        // Click retry
+  ok(q2.error === 0, 'retry (pul allaqachon qo\'llangan) -> error=0, «allaqachon to\'langan» EMAS ★');
+  ok(state.payments['click_CT6'].status === 'paid', 'retry holatni yakunladi (paid)');
+  ok(Number(state.invoices[INV6].paidAmount) === 400000, 'pul IKKI marta qo\'llanmadi');
+
+  // 7) Bekor qilingan faktura (prepare'dan keyin) -> pul o'quvchi balansiga; status yozuvi PGRST204 bermasin
+  //    (avval `note` ustuni yo'q bo'lgani uchun BUTUN yozuv rad etilib 500 qaytardi).
+  const INV7 = 'S7__2026-08';
+  state.students['S7'] = { id: 'S7', studentId: 'S7', name: 'Soli' };
+  state.invoices[INV7] = { id: INV7, amount: 300000, status: 'unpaid', studentId: 'S7', month: '2026-08' };
+  const w0 = { click_trans_id: 'CT7', service_id: '111', merchant_trans_id: INV7, amount: '300000', action: '0', sign_time: 't7' };
+  w0.sign_string = sign(w0, false);
+  const wr = await handlePrepare(w0);
+  state.invoices[INV7].status = 'canceled';                   // admin «Bekor» bosdi
+  const w1 = { click_trans_id: 'CT7', service_id: '111', merchant_trans_id: INV7, merchant_prepare_id: wr.merchant_prepare_id, amount: '300000', action: '1', sign_time: 't7b', error: '0' };
+  w1.sign_string = sign(w1, true);
+  const w2 = await handleComplete(w1);
+  ok(w2.error === 0 && state.payments['click_CT7'].status === 'applied', 'bekor faktura -> balansga qo\'llandi, status «applied» (PGRST204 yo\'q)');
+  ok(state.student_credit['S7'] && state.student_credit['S7'].credit === 300000, 'pul o\'quvchi avansida (yo\'qolmadi)');
+  ok(state.payments['click_CT7'].raw && state.payments['click_CT7'].raw.note, 'izoh raw ichida saqlandi');
+
   fs.unlinkSync(CFGFILE);
   console.log('\n' + (fails ? ('❌ ' + fails + ' FAILED') : '✅ ALL PASS — to\'lov oqimi Supabase backend ustida ishlaydi'));
   process.exit(fails ? 1 : 0);

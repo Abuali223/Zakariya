@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-user-link.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- XODIM HISOBINI HR YOZUVIGA BOG'LASH (staff/teachers <-> users) — telefon bo'yicha.
 --   Maqsad: xodim bazaga kiritilgan TELEFON bilan ro'yxatdan o'tsa, login hisobi
@@ -6,7 +11,7 @@
 --   summalariga TEGMAYDI. Bog'lash FAQAT server (service_role, register) yoki admin
 --   tomonidan o'rnatiladi; foydalanuvchi O'ZINI bog'lay/o'zgartira OLMAYDI (RLS qotiradi).
 --
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-user-link.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- Idempotent. run-all.sql + deploy.sh'da (auth-phone.sql'DAN KEYIN — users_upd'ni qayta yaratadi).
 -- =====================================================================
 

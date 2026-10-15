@@ -1,6 +1,11 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: refunds.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- TO'LOVNI QAYTARISH JURNALI (refunds) — adashib kiritilgan to'lovni qaytarish.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/refunds.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
 -- FAQAT DIREKTOR (app.is_admin) qaytaradi va ko'radi. Har qaytarish: summa + sabab +
 -- direktor paroli (klientda tasdiqlanadi) bilan yoziladi. Biriktirilmagan to'lovlarga ham.

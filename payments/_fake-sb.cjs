@@ -17,6 +17,14 @@
 
 const NOW = '2026-08-01T12:00:00+05:00';   // test uchun qat'iy "hozir" (faqat truthy/ketma-ketlik muhim)
 
+// QAT'IY SXEMA: haqiqiy PostgREST jadvalda YO'Q ustunga yozishni rad etadi (PGRST204) — butun yozuv yo'qoladi.
+//   Avval soxta mijoz HAR QANDAY kalitni qabul qilardi -> payments."appliedTo"/"note" kabi yo'q ustunga yozish
+//   (Uzum confirm / Click complete'da 500) testlarda ko'rinmasdi. Ustunlar: _schema-columns.json (kanonik zanjir).
+const SCHEMA = (() => { try { return require('./_schema-columns.json'); } catch (e) { return null; } })();
+function badCol(table, obj) { const cols = SCHEMA && SCHEMA[table]; if (!Array.isArray(cols)) return null;
+  for (const k of Object.keys(obj || {})) if (!cols.includes(k)) return { code: 'PGRST204', message: `Could not find the '${k}' column of '${table}' in the schema cache` };
+  return null; }
+
 function match(r, filters) { return filters.every(([f, v]) => String(r[f]) === String(v)); }
 
 function makeFake(state, nowFn) {
@@ -93,9 +101,9 @@ function makeFake(state, nowFn) {
     if (p.p_ref) { const gid = 'reverse:' + p.p_ref; const ap = tbl('applied_payments');   // ALOHIDA namespace
       if (ap[gid]) return { dup: true, ref: p.p_ref };
       ap[gid] = { id: gid, studentId: sid || '', amount: amt, createdAt: now() }; }
-    const paid = num(inv.paidAmount), amount = num(inv.amount);
+    const amount = num(inv.amount), paid = inv.status === 'paid' ? Math.max(num(inv.paidAmount), amount) : num(inv.paidAmount);   // eski 'paid' (paidAmount yo'q) = amount
     const fromInvoice = Math.min(amt, paid), fromCredit = Math.max(0, amt - fromInvoice), newpaid = Math.max(0, paid - fromInvoice);
-    const status = newpaid <= 0 ? 'reversed' : (newpaid >= amount - 0.5 ? 'paid' : 'partial');
+    const status = newpaid <= 0 ? 'pending' : (newpaid >= amount - 0.5 ? 'paid' : 'partial');   // haqiqiy SQL: to'liq qaytsa QARZ tiriladi ('pending')
     inv.paidAmount = newpaid; inv.status = status; inv.reversedAt = now();      // provider'ga TEGMAYDI
     if (fromCredit > 0 && sid) { const sc = tbl('student_credit'); const cr = (sc[sid] && num(sc[sid].credit)) || 0;
       const nc = Math.max(0, cr - fromCredit); sc[sid] = { id: sid, studentId: sid, credit: nc, updatedAt: now() };
@@ -112,9 +120,9 @@ function makeFake(state, nowFn) {
         select() { return api; },
         eq(f, v) { filters.push([f, v]); return api; },
         maybeSingle() { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows[0] || null, error: null }); },
-        upsert(obj) { tbl(table)[obj.id] = Object.assign({}, state[table][obj.id], obj); return Promise.resolve({ error: null }); },
-        insert(obj) { if (tbl(table)[obj.id]) return Promise.resolve({ error: { message: 'dup' } }); state[table][obj.id] = obj; return Promise.resolve({ error: null }); },
-        update(obj) { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) Object.assign(state[table][id], obj); return Promise.resolve({ error: null }); } }; },
+        upsert(obj) { const bc = badCol(table, obj); if (bc) return Promise.resolve({ error: bc }); tbl(table)[obj.id] = Object.assign({}, state[table][obj.id], obj); return Promise.resolve({ error: null }); },
+        insert(obj) { const bc = badCol(table, obj); if (bc) return Promise.resolve({ error: bc }); if (tbl(table)[obj.id]) return Promise.resolve({ error: { message: 'dup' } }); state[table][obj.id] = obj; return Promise.resolve({ error: null }); },
+        update(obj) { const bc = badCol(table, obj); return { eq(f, v) { if (bc) return Promise.resolve({ error: bc }); for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) Object.assign(state[table][id], obj); return Promise.resolve({ error: null }); } }; },
         delete() { return { eq(f, v) { for (const id in state[table] || {}) if (String(state[table][id][f]) === String(v)) delete state[table][id]; return Promise.resolve({ error: null }); } }; },
         then(res) { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows, error: null }).then(res); },
       };

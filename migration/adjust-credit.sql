@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: adjust-credit.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- AUDIT (High A) — adjust_credit: avansni QO'LDA tuzatish ATOMIK + JURNAL bilan.
 --   Muammo: admin.html «✏️ Avansni tuzatish» 2 alohida yozuv edi — student_credit.credit=nv,
@@ -6,7 +11,7 @@
 --   Yechim: BITTA tranzaksiya — student_credit yangilash + credit_ledger audit qatori.
 --     advisory lock + p_ref idempotentlik. FAQAT direktor (UI SESSION.isAdmin bilan mos).
 -- Idempotent (CREATE OR REPLACE). run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/adjust-credit.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 create or replace function public.adjust_credit(p_sid text, p_new_credit numeric, p_note text default '', p_ref text default '')
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$

@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: staff-substitutions.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- XODIM O'RINBOSARLIGI (staff_substitutions) — kelmagan o'qituvchi o'rniga
 --   dars o'tib bergan o'qituvchi(lar). MAKTAB QOIDASI: har O'TILGAN DARS uchun
@@ -7,7 +12,7 @@
 --   har biri o'z dars soni uchun. Shu sabab id ga o'rinbosar ham qo'shiladi:
 --   '{absentRefType}_{absentRefId}_{YYYY-MM-DD}_{subRefType}_{subRefId}'.
 -- Idempotent. run-all.sql + deploy.sh'da (staff-break-marks.sql kabi).
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/staff-substitutions.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 create table if not exists public.staff_substitutions (

@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: applications-guard.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- applications-guard.sql — ariza (imtihon) INSERT siyosatini mahkamlash.
 --
@@ -11,7 +16,7 @@
 --   yuboradi — result/gradedAt yubormaydi, shuning uchun bu o'zgarish ARIZA oqimini buzmaydi.
 --
 -- Idempotent — QAYTA ishga tushirishга xavfsiz. run-all.sql + deploy.sh'da.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/applications-guard.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 drop policy if exists app_ins on public.applications;

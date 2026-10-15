@@ -1540,7 +1540,7 @@ function renderSearchResult(){
     <div class="metrics">
       <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
       <div class="m"><b>${s.score}</b><span>${esc(t.res_total)}</span></div>
-      <div class="m"><b>${s.att}%</b><span>${esc(t.res_attendance)}</span></div>
+      <div class="m"><b>${attTxt(s)}</b><span>${esc(t.res_attendance)}</span></div>
     </div>
     <div class="subs-l">${esc(t.res_subjects)}</div>${subs}
   </div>`;
@@ -1567,24 +1567,29 @@ function renderClsControls(){
     grpSel.innerHTML = ph + groups.map(c=>opt(c, c, clsSel.cls)).join("");
   } else { grpSel.disabled=true; grpSel.innerHTML=ph; }
 }
+// Davomat % ma'lum bo'lmasa (ommaviy 'students_public'da ATAYLAB yo'q — security-2c) «—» ko'rsatamiz:
+//   avval 0% chiqib, sinf o'rtachasi ham nollar bilan buzilardi (ota-onaning 96% li farzandi ~4% bo'lib qolardi).
+function attKnown(s){ return s && s.att!=null && s.att!=='' && isFinite(Number(s.att)); }
+function attTxt(s){ return attKnown(s) ? (Number(s.att)+'%') : '—'; }
 function renderClsResults(){
   const t=T[lang], box=$("#class-results"); if(!box) return;
   if(!(clsSel.lng && clsSel.g!=="" && clsSel.cls)){ box.innerHTML=`<div class="cls-empty">${esc(t.cls_prompt)}</div>`; return; }
   const rows = STUDENTS.filter(s=>s.lng===clsSel.lng && String(s.g)===String(clsSel.g) && s.cls===clsSel.cls).sort((a,b)=>b.score-a.score);
   if(!rows.length){ box.innerHTML=`<div class="cls-empty">${esc(t.cls_none)}</div>`; return; }
   const avg = Math.round(rows.reduce((s,x)=>s+(Number(x.score)||0),0)/rows.length);
-  const avgAtt = Math.round(rows.reduce((s,x)=>s+(Number(x.att)||0),0)/rows.length);
+  const attRows = rows.filter(attKnown);
+  const avgAtt = attRows.length ? Math.round(attRows.reduce((s,x)=>s+Number(x.att),0)/attRows.length) : null;
   const head = `<div class="cls-row hd"><span>#</span><span class="cr-nm">${esc(t.cls_c_name)}</span><span class="cr-score">${esc(t.cls_c_score)}</span><span class="cr-act"></span></div>`;
   const body = rows.map((s,i)=>`<div class="cls-row">
       <div class="cr-rank">${i+1}</div>
-      <div class="cr-nm">${esc(s.name)}<small>${esc(s.id)}${s.tr?' · '+esc(s.tr):''} · ${esc(t.cls_att_short)} ${Number(s.att)||0}%</small></div>
+      <div class="cr-nm">${esc(s.name)}<small>${esc(s.id)}${s.tr?' · '+esc(s.tr):''}${attKnown(s)?` · ${esc(t.cls_att_short)} ${attTxt(s)}`:''}</small></div>
       <div class="cr-score"><b class="lb-mini">${Number(s.score)||0}</b><div class="cls-bar"><i style="width:${Number(s.score)||0}%"></i></div></div>
       <div class="cr-act"><button class="cls-detailbtn" data-cid="${esc(s.id)}">${esc(t.cls_detail)}</button></div>
     </div>`).join("");
   box.innerHTML = `<div class="cls-summary">
       <div class="cs"><b>${rows.length}</b><span>${esc(t.cls_sum_count)}</span></div>
       <div class="cs"><b>${avg}</b><span>${esc(t.cls_sum_avg)}</span></div>
-      <div class="cs"><b>${avgAtt}%</b><span>${esc(t.cls_sum_att)}</span></div>
+      ${avgAtt!=null?`<div class="cs"><b>${avgAtt}%</b><span>${esc(t.cls_sum_att)}</span></div>`:''}
     </div>
     <div class="cls-table">${head}${body}</div>
     <div class="cls-detail" id="cls-detail"></div>`;
@@ -1603,7 +1608,7 @@ function renderClsDetail(id){
     <div class="metrics">
       <div class="m"><b>${rank}</b><span>${esc(t.res_rank)}</span></div>
       <div class="m"><b>${Number(s.score)||0}</b><span>${esc(t.res_total)}</span></div>
-      <div class="m"><b>${Number(s.att)||0}%</b><span>${esc(t.res_attendance)}</span></div>
+      <div class="m"><b>${attTxt(s)}</b><span>${esc(t.res_attendance)}</span></div>
     </div>
     <div class="subs-l">${esc(t.res_subjects)}</div>${subs}
     <button class="cls-detailbtn" id="cls-detail-close" style="margin-top:14px">${esc(t.cls_close)}</button>
@@ -1625,7 +1630,7 @@ function studentCardHTML(s){
     <div class="metrics">
       <div class="m"><b>${rank||'-'}</b><span>${esc(t.res_rank)}</span></div>
       <div class="m"><b>${Number(s.score)||0}</b><span>${esc(t.res_total)}</span></div>
-      <div class="m"><b>${Number(s.att)||0}%</b><span>${esc(t.res_attendance)}</span></div>
+      <div class="m"><b>${attTxt(s)}</b><span>${esc(t.res_attendance)}</span></div>
     </div>
     <div class="subs-l">${esc(t.res_subjects)}</div>
     <div id="kab-subjbars">${subs||`<div class="cls-empty" style="margin:0;padding:6px 0;font-size:12px;color:var(--muted)">${esc(t.kab_mon_loading||'Yuklanmoqda…')}</div>`}</div></div>`;
@@ -1883,11 +1888,11 @@ async function downloadParentProfile(s, btn){
     const parentLine=(nm,wk)=>{ const a=[P(nm),P(wk)].filter(Boolean).join(' — '); return a||'—'; };
     const clsName=`${gradeLbl(s.g)}${s.cls?' «'+s.cls+'»':''} · ${s.lng==='ru'?'Rus':'O‘zbek'}`;
     const total=att?(att.total||0):0, present=att?(att.present||0):0, late=att?(att.late||0):0, absent=att?(att.absent||0):0;
-    const attPct=total?Math.round((present+late)/total*100):null;
+    const attPct=total?Math.round(100*(present+late)/total):null;   // avval ko'paytirish (bazadagi trigger bilan bir xil yaxlitlash)
     const monBy={}; (mon||[]).forEach(m=>{ if(m&&typeof m.score==='number'){ (monBy[m.subject||'—']=monBy[m.subject||'—']||[]).push(m.score); } });
     const monRows=Object.keys(monBy).sort().map(sub=>{ const a=monBy[sub]; const avg=Math.round(a.reduce((x,y)=>x+y,0)/a.length); return `<tr><td>${esc(sub)}</td><td style="text-align:center">${avg}</td></tr>`; }).join('');
-    const subs=(grd&&grd.subjects)||{}; const qs=['1','2','3','4'];
-    const gBody=Object.keys(subs).sort().map(sub=>{ const q=subs[sub]||{}; const nums=qs.map(k=>q[k]).filter(v=>typeof v==='number'); const avg=nums.length?(nums.reduce((x,y)=>x+y,0)/nums.length).toFixed(1):'—'; return `<tr><td>${esc(sub)}</td>${qs.map(k=>`<td style="text-align:center">${q[k]==null?'—':esc(String(q[k]))}</td>`).join('')}<td style="text-align:center"><b>${avg}</b></td></tr>`; }).join('');
+    const subs=(grd&&grd.subjects)||{}; const qs=['q1','q2','q3','q4']; const qv=(q,k)=>(q[k]!=null?q[k]:q[k.slice(1)]);   // jurnal 'q1'..'q4' yozadi (eski '1'..'4' ham o'qiladi)
+    const gBody=Object.keys(subs).sort().map(sub=>{ const q=subs[sub]||{}; const nums=qs.map(k=>qv(q,k)).filter(v=>typeof v==='number'); const avg=nums.length?(nums.reduce((x,y)=>x+y,0)/nums.length).toFixed(1):'—'; return `<tr><td>${esc(sub)}</td>${qs.map(k=>`<td style="text-align:center">${qv(q,k)==null?'—':esc(String(qv(q,k)))}</td>`).join('')}<td style="text-align:center"><b>${avg}</b></td></tr>`; }).join('');
     const gradesHtml=gBody?`<table class="rep-t"><thead><tr><th>Fan</th><th>1-ch</th><th>2-ch</th><th>3-ch</th><th>4-ch</th><th>O‘rt.</th></tr></thead><tbody>${gBody}</tbody></table>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
     const QN={q1:'1-chorak',q2:'2-chorak',q3:'3-chorak',q4:'4-chorak'};
     const termLbl=(term)=>{ const p=String(term||'').split('-'); const q=p.pop(); return `${QN[q]||q} · ${p.join('-')}`; };
@@ -2033,7 +2038,7 @@ async function renderKabAttendance(studentId){
   const a=await window.IqrorFB.getAttendance(studentId);
   if($("#kab-att")!==box) return;
   if(!a || !a.total){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_none)}</div></div>`; return; }
-  const rate=Math.round((a.present+a.late)/a.total*100);
+  const rate=Math.round(100*(a.present+a.late)/a.total);   // avval ko'paytirish: 23/40 -> 58 (bazadagi «Davomat %» bilan bir xil)
   const STL={present:'#1F9982',absent:'#C86A3A',late:'#DBB05A',excused:'#8AA0A0'};
   const recent=a.recent.map(r=>{ const c=STL[r.st]||'#ccc'; const p=r.date.split('-'); return `<span class="att-chip"><i style="background:${c}"></i>${esc((p[2]||'')+'.'+(p[1]||''))}</span>`; }).join('');
   box.innerHTML=`<div class="kab-att-card">
@@ -2149,7 +2154,7 @@ window.IqrorPublic = {
   // 2c: ommaviy yuklama 'students_public' (attendance YO'Q). Kabinet uchun
   // ota-ona O'Z farzandining davomatini xom 'students' qatoridan oladi va shu
   // yerda STUDENTS ichiga patch qiladi. Boshqa o'quvchilar davomati yuklanmaydi.
-  patchStudentAtt(id, att){ const s=STUDENTS.find(x=>String(x.id)===String(id)); if(s){ s.att=Number(att)||0; return true; } return false; }
+  patchStudentAtt(id, att){ const s=STUDENTS.find(x=>String(x.id)===String(id)); if(s){ s.att=(att==null||att==='')?null:(Number(att)||0); return true; } return false; }
 };
 function setLang(l){
   lang=l; try{localStorage.setItem("iqror-lang",l);}catch(e){}
@@ -2347,7 +2352,7 @@ addEventListener('hashchange', ()=>route(true));
           getDoc(doc(db,'settings','site'))
         ]);
         const p = {};
-        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:Number(x.attendance)||0,photo:x.photo||"",poster:x.posterImage||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:(x.attendance==null||x.attendance==='')?null:Number(x.attendance),photo:x.photo||"",poster:x.posterImage||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
         if(students.length) p.students = students;
         const teachers = tea.docs.map(d=>{const x=d.data();return {id:d.id,name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
         if(teachers.length) p.teachers = teachers;
@@ -2399,8 +2404,12 @@ addEventListener('hashchange', ()=>route(true));
         const { collection, getDocs, query, where } = fsMod;
         try{
           const snap = await getDocs(query(collection(db,'grades'), where('studentId','==',studentId)));
-          const subjects={}; let year='';
-          snap.forEach(s=>{ const d=s.data(); if(d.year && String(d.year)>year) year=String(d.year); const subs=d.subjects||{}; Object.keys(subs).forEach(name=>{ subjects[name]=Object.assign({},subjects[name]||{},subs[name]); }); });
+          // FAQAT eng so'nggi o'quv yili (jadval sarlavhasi bitta yilni ko'rsatadi; admin ham yil bo'yicha yuritadi).
+          //   Avval barcha yillar birlashtirilib, joriy yilda hali qo'yilmagan choraklar o'tgan yildan to'ldirilardi.
+          const rows=[]; snap.forEach(s=>rows.push(s.data()||{}));
+          const year=rows.map(d=>String(d.year||'')).sort().pop()||'';
+          const subjects={};
+          rows.filter(d=>String(d.year||'')===year).forEach(d=>{ const subs=d.subjects||{}; Object.keys(subs).forEach(name=>{ subjects[name]=Object.assign({},subjects[name]||{},subs[name]); }); });
           return { subjects, year };
         }catch(e){ return null; }
       },
@@ -2569,7 +2578,11 @@ addEventListener('hashchange', ()=>route(true));
       // 2c: ommaviy yuklama 'students_public' (attendance YO'Q). Ota-ona O'Z
       // farzandi davomatini xom 'students'dan (owns_child ruxsati) olib, ommaviy
       // STUDENTS ro'yxatiga patch qiladi. Xatolik bo'lsa kabinet 0% ko'rsatadi (buzilmaydi).
-      async function enrichChildAtt(ids){ try{ for(const cid of (ids||[])){ if(!cid) continue; try{ const sd=await getDoc(doc(db,'students',cid)); if(sd.exists() && window.IqrorPublic && window.IqrorPublic.patchStudentAtt) window.IqrorPublic.patchStudentAtt(cid, (sd.data()||{}).attendance); }catch(e){} } }catch(e){} }
+      async function enrichChildAtt(ids){ try{ for(const cid of (ids||[])){ if(!cid) continue; try{
+            // Hujjat id'si studentId'dan farq qilishi mumkin (import) — topilmasa studentId bo'yicha qidiramiz.
+            let x=null; const sd=await getDoc(doc(db,'students',cid)); if(sd.exists()) x=sd.data()||{};
+            else { const q=await getDocs(query(collection(db,'students'), where('studentId','==',cid))); if(q.docs.length) x=q.docs[0].data()||{}; }
+            if(x && window.IqrorPublic && window.IqrorPublic.patchStudentAtt) window.IqrorPublic.patchStudentAtt(cid, x.attendance); }catch(e){} } }catch(e){} }
       window.IqrorAuth = {
         getUser: ()=>currentUser,
         getRole: ()=>userRole,

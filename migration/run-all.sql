@@ -9,12 +9,18 @@
 --     if not exists; funksiya: create or replace; bir martalik ma'lumot ko'chirish — guard bilan).
 --   * Tekshiruv: migration/verify-db.sh (vaqtinchalik bazada shu zanjirni quradi va jonli bazaga
 --     solishtiradi; deploy oxirida avtomatik).
+--   * Har fayl boshida QO'RIQCHI bor (\if :{?iqror_chain}): faylni ALOHIDA ishga tushirish (`psql < X.sql`,
+--     eski deploy.sh tsikli) xato bilan RAD etiladi va hech narsa o'zgarmaydi — chunki zanjirdagi keyingi fayllar
+--     uni qayta belgilaydi (alohida ishlatilsa RLS/moliya funksiyalari ESKI holatga qaytardi). Zanjir belgisi
+--     `\set iqror_chain 1` — chain.sh va shu fayl o'rnatadi. YANGI fayl qo'shganda boshiga xuddi shu qo'riqchini qo'ying.
 --
 -- Qo'lda ishlatish (odatda SHART EMAS — deploy.sh o'zi qiladi):
 --   bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q
 --   (DIQQAT: `docker exec -i ... psql < run-all.sql` ISHLAMAYDI — \ir konteyner ichida fayl qidiradi.
 --    Konteynersiz, shu papkadan to'g'ridan-to'g'ri psql bilan: psql -f run-all.sql — ishlaydi.)
 -- =====================================================================
+-- Zanjir belgisi (har fayl boshidagi qo'riqchi uchun): psql -f run-all.sql ham ishlaydi.
+\set iqror_chain 1
 \ir schema.sql
 \ir supabase-grants.sql
 \ir rls.sql
@@ -80,5 +86,10 @@
 \ir auth-hardening.sql
 \ir staff-user-link.sql
 \ir student-arrivals.sql
+\ir school-holidays.sql
+\ir attendance-sync.sql
+\ir student-ids.sql
+\ir invoice-guards.sql
+\ir parent-link-canon.sql
 \ir secdef-searchpath.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

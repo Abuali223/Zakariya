@@ -14,6 +14,8 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "\\set ON_ERROR_STOP on"
+# Zanjir belgisi: har bir fayl boshidagi qo'riqchi (\if :{?iqror_chain}) faylni ALOHIDA ishga tushirishni rad etadi.
+echo "\\set iqror_chain 1"
 # Jonli bazada ilova so'rovlari qulfini uzoq kutib qolmasin — tez xato beradi (qayta urinish mumkin).
 [ "${1:-}" = "--no-lock-timeout" ] || echo "set lock_timeout = '20s';"
 echo "begin;"

@@ -31,9 +31,10 @@ belgilanadi (☐ → ☑). Muammo bo'lsa — chiqqan xatoni menga tashlang.
    redirect URL: `https://api.iqror.uz/auth/v1/callback` (+ sayt domeningiz).
 6. ☐ **Auth → Anonymous sign-ins**: YOQILGAN (o'quv-platforma.html anonim kiradi).
 7. ☐ **Storage**: `public` bucket bor va *public* (o'qish ochiq) — rasm/video uchun.
-   Storage RLS (kim yuklaydi) — `rls.sql` dan keyin ishga tushiring:
+   Storage RLS (kim yuklaydi: hamma o'qiydi, faqat admin yozadi) — `storage-rls.sql` kanonik zanjirda
+   (`run-all.sql`), alohida ishga tushirilmaydi; butun zanjir:
    ```bash
-   psql "$PGURL" -f migration/storage-rls.sql     # hamma o'qiydi, faqat admin yozadi
+   bash migration/chain.sh | psql "$PGURL" -q
    ```
 8. ☐ **SMTP**: parol-tiklash/tasdiq emaillari uchun sozlangan.
 9. ☐ URL rewrite (import'dan keyin bir marta):

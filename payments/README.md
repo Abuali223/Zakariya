@@ -151,9 +151,10 @@ node sms-worker.cjs debt             # faqat qarzdorlik (kun tekshiruvisiz, majb
 > rejimи kun tekshiruvisiz majburiy ishlaydi, cron kunini o'zi belgilaydi).
 
 ### 7.5 Migratsiya
-`sms_log` jadvali kerak:
+`sms_log` jadvali kerak — u kanonik zanjirda (`migration/run-all.sql` → `sms-log.sql`), `bash deploy.sh` o'zi qo'llaydi.
+Migratsiya fayllari ALOHIDA ishga tushirilmaydi (har fayl boshidagi qo'riqchi rad etadi); qo'lda kerak bo'lsa — butun zanjir:
 ```bash
-sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/sms-log.sql
+bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q
 ```
 
 ## 8. Xodimlar davomati — Hikvision yuz terminali (`/hik`)

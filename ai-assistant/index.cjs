@@ -134,24 +134,26 @@ async function loadStudentData(sid){
     db.collection('invoices').where('studentId','==',sid).get(),
     db.collection('grades').where('studentId','==',sid).get()
   ]);
-  let present=0,late=0,absent=0,total=0;
-  attSnap.docs.forEach(d=>{ const days=(d.data()||{}).days||{}; Object.values(days).forEach(st=>{ total++; if(st==='present')present++; else if(st==='late')late++; else if(st==='absent')absent++; }); });
-  const attPct = total?Math.round((present+late)/total*100):null;
+  // Davomat % — admin.html recomputeAttendancePct / bazadagi trigger (attendance-sync.sql) bilan BIR XIL formula:
+  //   (keldi + kech) / (jami − bemor − sababli). Avval bemor/sababli kunlar ham maxrajga kirib, AI boshqa raqam aytardi.
+  let present=0,late=0,absent=0,total=0,sick=0,excused=0;
+  attSnap.docs.forEach(d=>{ const days=(d.data()||{}).days||{}; Object.values(days).forEach(st=>{ if(st==='sick'){ sick++; return; } if(st==='excused'){ excused++; return; } total++; if(st==='present')present++; else if(st==='late')late++; else if(st==='absent')absent++; }); });
+  const attPct = total?Math.round(100*(present+late)/total):null;   // avval ko'paytirish (trigger bilan bir xil yaxlitlash)
   const monBySub={}; monSnap.docs.forEach(d=>{ const m=d.data(); if(m && m.status==='approved' && typeof m.score==='number') (monBySub[m.subject||'—']=monBySub[m.subject||'—']||[]).push(m.score); });
   const mon = Object.keys(monBySub).map(k=>({ subject:k, avg: Math.round(monBySub[k].reduce((a,b)=>a+b,0)/monBySub[k].length) }));
   const inv = invSnap.docs.map(d=>d.data());
   // Balans-aware: qisman to'lov (paidAmount) ham hisobga olinadi.
-  const paidAmt = i => i.status==='paid' ? (Number(i.amount)||0) : (i.status==='reversed'?0:(Number(i.paidAmount)||0));
+  const paidAmt = i => i.status==='paid' ? (Number(i.amount)||0) : ((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));   // admin.html paidAmt bilan bir xil
   const paid = inv.reduce((x,i)=>x+paidAmt(i),0);
   const due  = inv.reduce((x,i)=>x+((i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
   const grades = grdSnap.docs.map(d=>d.data());
-  return { s, attPct, present, late, absent, total, mon, paid, due, grades };
+  return { s, attPct, present, late, absent, total, sick, excused, mon, paid, due, grades };
 }
 function studentDataText(d){
   const s=d.s; const g=Number(s.grade)||0;
   const L=[];
   L.push(`O‘quvchi: ${s.name||''} (${g===0?'Tayyorlov':g+'-sinf'} ${s.classLetter||s.track||''}, ${s.lang==='ru'?'rus':'o‘zbek'} sinf).`);
-  L.push(`Davomat: ${d.attPct==null?'ma’lumot yo‘q':d.attPct+'%'} (kelgan ${d.present}, kechikkan ${d.late}, kelmagan ${d.absent}, jami ${d.total} kun).`);
+  L.push(`Davomat: ${d.attPct==null?'ma’lumot yo‘q':d.attPct+'%'} (kelgan ${d.present}, kechikkan ${d.late}, kelmagan ${d.absent}, jami ${d.total} kun${(d.sick||d.excused)?`; bemor ${d.sick||0}, sababli ${d.excused||0} — foizga kirmaydi`:''}).`);
   L.push(`Umumiy ball: ${s.score==null?'—':s.score}.`);
   if(d.mon.length) L.push('Monitoring (fan — ball): ' + d.mon.map(m=>`${m.subject} ${m.avg}`).join(', ') + '.');
   L.push(`To‘lov: to‘langan ${fmtSom(d.paid)}, qarz ${fmtSom(d.due)}.`);

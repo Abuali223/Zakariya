@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- reception-guard.sql — Qabulxona (reception) xodimiga CHEKLOV (DB darajasida).
 --
@@ -19,7 +24,7 @@
 --   INSERT: qabulxona yangi yozuvda bu maydonlarni to'ldirsa -> jim tozalanadi
 --           (o'quvchi oddiy/faol, chegirmasiz yaratiladi).
 -- Idempotent. run-all.sql + deploy.sh'da (student-status.sql va discounts.sql'dan KEYIN).
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/reception-guard.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 -- ---- O'quvchi HOLATI (lifecycle) — faqat Ma'muriyat ----
@@ -33,12 +38,16 @@ begin
   if (app.is_reception() or app.is_zavuch()) and not app.is_admin_head() then
     if tg_op = 'INSERT' then
       new."payStatus"  := '';   -- oddiy (faol) qilib yaratiladi
-      new."activeFrom" := '';
+      -- To'lov RO'YXATGA OLINGAN KUNDAN (Toshkent) hisoblanadi: avval '' yozilib, oy o'rtasida qo'shilgan
+      --   bola butun oy uchun (1-sanadan, prorata'siz) hisoblanardi. Ma'muriyat keyin ⏯️ bilan o'zgartirishi mumkin.
+      new."activeFrom" := to_char((now() at time zone 'Asia/Tashkent')::date, 'YYYY-MM-DD');
       new."stopFrom"   := '';
+      new."pauses"     := '[]'::jsonb;   -- to'xtatilgan davrlar tarixi ham holatning bir qismi
     elsif tg_op = 'UPDATE' then
       if (new."payStatus"  is distinct from old."payStatus")
       or (new."activeFrom" is distinct from old."activeFrom")
-      or (new."stopFrom"   is distinct from old."stopFrom") then
+      or (new."stopFrom"   is distinct from old."stopFrom")
+      or (new."pauses"     is distinct from old."pauses") then
         raise exception 'O''quvchi holatini (faollashtirish/muzlatish/chiqarish) faqat Ma''muriyat o''zgartira oladi'
           using errcode = '42501';
       end if;

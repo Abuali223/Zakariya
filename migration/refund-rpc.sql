@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: refund-rpc.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- AUDIT (High A / Medium #2) — refund_invoice: to'lovni QAYTARISH ATOMIK + IDEMPOTENT.
 --   Muammo: admin.html refund oqimi 2-5 alohida atomik BO'LMAGAN yozuv edi
@@ -8,7 +13,7 @@
 --     ('refund:'+ref applied_payments'да). refunds jurnal qatori DOIM shu tranzaksiyaда yoziladi.
 --   Ruxsat: FAQAT direktor (refunds_ins = is_admin) yoki server — refund sezgir amal.
 -- Idempotent (CREATE OR REPLACE). run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/refund-rpc.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 create or replace function public.refund_invoice(
   p_target text, p_id text, p_amount numeric, p_reason text,
@@ -37,7 +42,10 @@ begin
 
   if p_target = 'invoice' then
     -- 1) Invoysни qulflab o'qib, notfound'ни posbonNI OLMASDAN qaytaramiz.
-    select id, "studentId", coalesce(amount,0) as amount, coalesce("paidAmount",0) as paid,
+    -- paid: status 'paid' bo'lgan ESKI yozuvlarda paidAmount bo'lmasligi (0) mumkin — admin.html paidOf kabi
+    --   to'langan summa = amount deb olinadi (aks holda qisman qaytarish BUTUN qarzni tiriltirib yuborardi).
+    select id, "studentId", coalesce(amount,0) as amount,
+           case when status = 'paid' then greatest(coalesce("paidAmount",0), coalesce(amount,0)) else coalesce("paidAmount",0) end as paid,
            coalesce("studentName",'') as sname, coalesce(month,'') as month
       into v_inv from public.invoices where id = p_id for update;
     if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
@@ -81,6 +89,16 @@ begin
 
   elsif p_target = 'payment' then
     -- Biriktirilmagan to'lov: 'refunded' deb belgilanadi + refunds jurnal. (Invoice/avans TEGILMAYDI.)
+    --   Qatorni QULFLAB holatini tekshiramiz: faqat hali BIRIKTIRILMAGAN ('unmatched'/'') to'lov qaytariladi.
+    --   Aks holda (eski ro'yxatdan) allaqachon o'quvchiga biriktirilgan va fakturaga qo'llangan to'lov ham
+    --   'refunded' bo'lib — pul ham qaytarilgan, ham o'qish haqi sifatida hisoblangan bo'lib qolardi
+    --   (split_payment bilan bir xil qoida: FOR UPDATE + status in ('unmatched','')).
+    declare v_pst text;
+    begin
+      select coalesce(status,'') into v_pst from public.payments where id = p_id for update;
+      if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
+      if v_pst not in ('unmatched','') then return jsonb_build_object('ok', false, 'reason', 'not-unmatched', 'status', v_pst); end if;
+    end;
     if p_ref is not null and p_ref <> '' then
       insert into public.applied_payments(id, "studentId", amount, "createdAt")
         values ('refund:' || p_ref, '', p_amount, now()) on conflict (id) do nothing;

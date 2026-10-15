@@ -1,7 +1,12 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: discounts.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- Avtomatik CHEGIRMA/IMTIYOZ dvigateli + sinf NARX JADVALI poydevori.
 -- Idempotent. Docker orqali:
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/discounts.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
 -- MUHIM: sb shim (sb/firebase-firestore.js) noma'lum ustunga yozganda XATO tashlaydi
 -- (prep() filtrlamaydi). Shu sabab har bir yangi maydon uchun REAL USTUN kerak —
@@ -69,6 +74,11 @@ alter table invoices add column if not exists "priceKey"        text;
 --    referralUsedIds: shu hisob-fakturada ishlatilgan referral(lar) id'lari (massiv) — repair/audit uchun.
 --    BU USTUN bo'lmasa -> invoice yozishда PGRST204 (hisob-faktura yaratilmaydi).
 alter table invoices add column if not exists "referralUsedIds" jsonb;
+--    billedFrom/billedTo: shu faktura HISOBLAGAN kunlar oralig'i ('YYYY-MM-DD', holat/prorata bo'yicha).
+--    Keyingi oy kasallik chegirmasi faqat shu oraliqdagi «Bemor» kunlari uchun beriladi (sinov/muzlatilgan
+--    kunlar uchun to'lanmagan pul qaytarilmasin). BU USTUNLAR bo'lmasa -> invoice yozishda PGRST204.
+alter table invoices add column if not exists "billedFrom"      text;
+alter table invoices add column if not exists "billedTo"        text;
 
 -- ---------------------------------------------------------------------
 -- 4) price_table: sinf/yo'nalish/til bo'yicha oylik narx (numeric)

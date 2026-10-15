@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: split-payment.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- split_payment — BITTA to'lovni bir necha o'quvchiga BO'LIB biriktirish.
 --   Muammo: aka-uka (masalan 8-A, 5-A, 2-A) uchun ota-ona BITTA to'lov (masalan 5 000 000)
@@ -13,7 +18,7 @@
 --   p_allocs = jsonb massiv: [{"sid":"IQ-0001","amount":1666667}, {"sid":"IQ-0002","amount":...}, ...].
 --   Yig'indi = to'lov summasi bo'lishi shart (± 0.5). Ruxsat: kassir/moliya/direktor yoki server.
 -- Idempotent (CREATE OR REPLACE). run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/split-payment.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 create or replace function public.split_payment(p_pay_id text, p_provider text, p_allocs jsonb)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$

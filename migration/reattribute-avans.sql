@@ -1,6 +1,11 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: reattribute-avans.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- reattribute_avans — noto'g'ri o'quvchiga tushgan AVANSNI to'g'risiga ko'chirish.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/reattribute-avans.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- Idempotent (CREATE OR REPLACE) — funksiyani o'rnatadi. run-all.sql + deploy.sh'да.
 --
 -- QACHON KERAK: bir xil telefonли to'lovlar noto'g'ri bir bolага 'applied' bo'lib,
@@ -70,6 +75,14 @@ begin
     values (gen_random_uuid()::text, v_from, coalesce(v_fname, ''), -p_amount, v_from_credit - p_amount,
             'reattribute-out' || case when coalesce(p_note,'') <> '' then ' → ' || p_to || ' (' || p_note || ')' else ' → ' || p_to end,
             'reattr', now());
+
+  -- 1b) TO'LOV YOZUVI ham pul bilan birga ko'chadi (Moliya tekshiruvi: P = I + C har o'quvchida). Ikki imzoli
+  --     qator: manbadan −, qabul qiluvchiga + (provider 'reattr' — kassa/chek hisobotlariga KIRMAYDI). Avval yozuv
+  --     manbada qolib, qabul qiluvchi doimiy «⚠️ Ortiqcha (soxta)», manba «Qo'llanmagan» ko'rinardi.
+  insert into public.payments(id, "studentId", provider, amount, status, matched, "payerName", "createdAt")
+    values ('reattr:' || p_ref || ':out', v_from, 'reattr', -p_amount, 'applied', true, coalesce(v_fname,''), now()),
+           ('reattr:' || p_ref || ':in',  v_to,   'reattr',  p_amount, 'applied', true, coalesce(v_fname,''), now())
+    on conflict (id) do nothing;
 
   -- 2) To'g'ri o'quvchига QO'LLAYMIZ (fakturasi + ortiqcha avans). apply_payment ichki
   --    ravishda kanonik kalitga keltiradi, jurnal ham yozadi.

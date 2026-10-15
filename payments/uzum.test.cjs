@@ -75,7 +75,7 @@ const basic = (l, p) => ({ authorization: 'Basic ' + Buffer.from(l + ':' + p).to
   // 5) REVERSE -> invoice "reversed"
   const rv = await handleUzum('reverse', { serviceId: SID, transId: 'TX1' });
   ok(rv.status === 'REVERSED', 'REVERSE -> REVERSED');
-  ok(state.invoices[INV].status === 'reversed', 'INVOICE "reversed" bo\'ldi');
+  ok(state.invoices[INV].status === 'pending', 'INVOICE «pending» bo\'ldi (to\'liq qaytarildi — qarz tiriladi, haqiqiy SQL kabi)');
   ok(state.payments['uzum_TX1'].status === 'reversed', 'payments "reversed"');
 
   // 6) noma'lum operatsiya

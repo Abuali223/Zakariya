@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: audit-5.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- AUDIT-5 — [P0] Webhook to'lovда ikki marta hisoblash tuzatildi.
 --   Muammo: payments/index.cjs webhook (Click/Uzum) atomik BO'LMAGAN JS waterfall'ni
@@ -7,7 +12,7 @@
 --   student-waterfall EMAS — aynan berilgan invoysга; Uzum/Click aniq oyni to'laydi va
 --   uzReverse ham aynan shu invoysни qaytaradi -> semantika saqlanadi).
 -- Idempotent — QAYTA ishga tushirishga xavfsiz.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/audit-5.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 create or replace function public.apply_to_invoice(p_invoice text, p_amount numeric, p_provider text, p_pay_id text)

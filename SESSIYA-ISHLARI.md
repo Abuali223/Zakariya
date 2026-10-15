@@ -93,7 +93,7 @@
 
 ## 12) Qabulxona (reception) huquqlari cheklandi
 
-- **FAQAT o'quvchi holati cheklandi** (faollashtirish/muzlatish/chiqarish/sinov) — endi faqat **Ma'muriyat/direktor**. Frontend: ⏯️ tugma `canManageStudentStatus()`; o'quvchi formasidan `payStatus/activeFrom/stopFrom` maydonlari qabulxonaga yashirildi (`_recHide`). Backend: `students` BEFORE INS/UPD trigger (`trg_reception_student_lifecycle`) — UPDATE'da 42501 xato, INSERT'da jim tozalanadi. Fayl: `reception-guard.sql`.
+- **FAQAT o'quvchi holati cheklandi** (faollashtirish/muzlatish/chiqarish/sinov) — endi faqat **direktor** (Ma'muriyat rahbarida «O'quvchilar» bo'limi yo'q va server — RLS `students_upd` — unga ruxsat bermaydi; kerak bo'lsa alohida yoqiladi). Frontend: ⏯️ tugma `canManageStudentStatus()`; o'quvchi formasidan `payStatus/activeFrom/stopFrom` maydonlari qabulxonaga yashirildi (`_recHide`). Backend: `students` BEFORE INS/UPD trigger (`trg_reception_student_lifecycle`) — UPDATE'da 42501 xato, INSERT'da jim tozalanadi. Fayl: `reception-guard.sql`.
 - **MOLIYA KO'RISH QABULXONADA QOLDI** (foydalanuvchi aniqligi: bular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun): qarzdorlik ustuni/filtri (`canSeeStudentFinance()=true`, `inv_sel` da `is_reception()`), 📞 to'lov eslatmasi (`canNote` + `pay_notes` pn_sel/ins/upd da `is_reception()`), chegirma/kontrakt/aka-uka/referral maydonlari (`student_private` — moliya triggeri OLIB TASHLANDI). To'lov KIRITISH/qaytarish (apply_payment RPC'lar, invoices YOZISH) baribir faqat moliya/kassirda. Fayl: `reception-access.sql`.
 - **Qabulxona saqlagan imkoniyatlar:** o'quvchi qo'shish/asosiy ma'lumot + hujjat (PII) tahriri, qarzdorlik ko'rish, 📞 eslatma, chegirma maydonlari, arizalarni ko'rish. **Cheklangan:** faqat o'quvchi holati.
 - **Eslatma (reachability):** `ROLE_TABS` bo'yicha `students` tab'i faqat direktor + qabulxona + kassir(ko'rish)da. `admin`/`admin_head`/`zavuch` o'quvchilar ekranini ko'rmaydi, shuning uchun `students`/`student_private` RLS'i `is_admin()` (direktor) bilan qolgan — o'zgartirilmadi.
@@ -182,6 +182,49 @@ rollar (admin/teacher/parent), profil, ota-ona kabineti. Mavjud email/Google + m
 - **6 — testlar + docs**: `migration/test-auth-rls.sql` (cross-rol RLS — parent faqat o'zini/farzandini; pending o'qituvchi o'zini tasdiqlay OLMAYDI; otp/login yopiq); `auth/DEPLOY.md` (fayllar/.env/deploy/ochiq savollar).
 - **Arxitektura qarorlari (foydalanuvchi tasdiqlagan):** Eskiz SMS · o'qituvchi admin tasdig'idan keyin · ota-ona o'quvchi kodi bilan DARHOL (mavjud `claim_child`) · Supabase Auth + sintetik email.
 - **⚠️ Deploy:** migratsiya + `auth/` xizmati (systemd `iqror-auth`, nginx `/authapi/`, port 8792) + Eskiz OTP shabloni moderatsiyasi shart. Batafsil — `auth/DEPLOY.md`.
+
+## 20) Maktab ish oqimi auditi — davomat + moliya + loyiha chalkashliklari (7 yo'nalish)
+
+7 yo'nalishda (o'quvchi davomati, xodim davomati→maosh, hisob-faktura hayot-sikli, to'lov qabul/taqsimlash,
+moliya hisobotlari, ota-ona kabineti, loyiha/deploy) **45 ta** topilma; har biri kod o'qib + test bilan tekshirildi,
+so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
+
+**O'quvchi davomati**
+- Kurator saqlashi sinf o'zgargan oyda yarmida to'xtab qolardi → o'quvchi sinfi o'zgarsa uning oy qatorlari ham yangi sinf kalitiga ko'chadi (trigger `trg_student_class_rows`); saqlash o'quvchi-bo'yicha, xato bo'lsa kimniki saqlanmagani ko'rsatiladi.
+- «Davomat %» endi server tomonda (trigger `trg_attendance_pct`) har saqlashda qayta hisoblanadi; admin, ota-ona kabineti va AI yordamchi — bitta formula (kasal/sababli maxrajdan chiqariladi).
+- Ro'yxatda chiqgan/muzlatilgan o'quvchilar (to'xtagan kundan keyin) yo'q; kamera (Hikvision) birinchi kirishidan «Keldi/Kechikdi» taklif qilinadi (qo'lda belgilangan holat ustiga yozilmaydi); bayram/yakshanba/kelajak kuni ogohlantiriladi.
+- Sinf nomi/darajasi o'zgarsa o'quvchilari ham ko'chiriladi (kurator davomatni yo'qotmaydi). O'chirilgan o'quvchining ID'si yangi o'quvchiga berilmaydi.
+- Profil (QR)/transkript chorak baholari ('q1'..'q4') to'g'ri o'qiladi; ota-ona kabinetida faqat joriy o'quv yili baholari.
+
+**Xodim davomati → maosh**
+- Bayram kunlari (`school_holidays`, «🎉 Bayramlar» tugmasi) — ushlanma hisoblanmaydi; bayramlar o'qilmasa maosh berish bloklanadi (jim noto'g'ri hisob yo'q).
+- Oylik hisobot, «Berish + chek» va «Oylik maoshni yozish» — bitta qoida (prorata, o'rinbosarlik, ushlanma, oxirgi yozuv); takroriy xodim ID'si bloklanadi; ma'lumot yuklanayotganda tugma o'chiq.
+- Maosh berishda tarmoq uzilib qayta bosilsa — ikkinchi yozuv yaratilmaydi (yozuv bor bo'lsa «berildi» ko'rsatiladi).
+
+**Hisob-faktura (billing)**
+- «Qayta hisoblash» endi to'lov qulfi ostida (`reprice_invoice`) — oraliqda kelgan to'lov ustiga yozilmaydi; holat bo'yicha keraksiz faktura faqat ANIQ holatda bekor qilinadi (o'tgan oy uchun shubhali holatlar tegilmaydi, ro'yxatda ko'rsatiladi).
+- Muzlatish → qaytish: `activeFrom` saqlanadi, oradagi kunlar «to'xtatilgan davr» (`students.pauses`) sifatida yoziladi — bir oyda muzlatib-qaytganda ham to'g'ri prorata.
+- Kasal kun chegirmasi faqat haqiqatan TO'LANGAN kunlar uchun (sinov/muzlatilgan/grant/fakturasiz oy — yo'q).
+- Narx kaliti IT/MED guruhdan ham aniqlanadi; monitoring chegirmasida «Informatika» hisoblanadi; qabulxona qo'shgan o'quvchi ro'yxatga olingan kundan prorata bilan.
+- «Bekor»/«O'chir»/«To'lanmaganlarni o'chirish» — qulf ostida «to'lov yo'q»ligi qayta tekshiriladi. Yetim fakturalarda «Ehtimoliy egasi» ko'rsatiladi va ular o'chirilmaydi.
+- O'quvchi tahrirlanganda/import qilinganda `studentId` endi o'zgarmaydi (avval import qilingan o'quvchilarda hujjat ID'siga almashib, qarz/avans/davomat «yetim» qolardi).
+
+**To'lovlar (Click/Uzum/kassa)**
+- Uzum/Click: mavjud bo'lmagan ustunga yozish (PGRST204) sabab to'lov «xato» deb qaytmaydi; takroriy so'rov ikki marta qo'llanmaydi; o'quvchi kaliti doim kanonik (`IQ-xxxx`); 12 belgili kod bilan to'lov topiladi.
+- Biriktirilmagan to'lov: biriktirish (`assign_payment`) va qaytarish bir-birini bloklaydi (ikki marta pul yo'q).
+- Avans ko'chirish (reattribute) to'lov yozuvini ham ko'chiradi — Moliya tekshiruvida soxta «Ortiqcha» yo'q.
+
+**Moliya hisobotlari**
+- «To'lov usuli bo'yicha kirim» va sana bo'yicha yig'im — HAQIQIY to'lovlardan (Toshkent kuni), barcha ekranlarda bir xil; qaytarilgan pul bir marta ayiriladi; maosh ikki marta hisoblanmaydi.
+
+**Loyiha/deploy chalkashliklari**
+- Migratsiya fayllarini ALOHIDA ishga tushirib bo'lmaydi (qo'riqchi) — eski usul xavfsizlik/moliya qoidalarini eski holatga qaytarardi; endi faqat butun zanjir (`deploy.sh`).
+- `deploy.sh` auth serverini ham yangilaydi/qayta ishga tushiradi; xizmat boshqa papkadan ishlasa ogohlantiradi.
+- O'quvchi holati/o'chirish tugmalari — faqat direktor (server qoidasi bilan bir xil); «📚 Sinflar» — faqat direktor.
+
+**Ma'lum cheklovlar / ochiq savollar**
+- 7–9-sinf monitoring chegirmasida «Algebra/Geometriya» alohida fan sifatida hisoblanmaydi (maktab tasdiqlasa qo'shiladi).
+- Ma'muriyat rahbari o'quvchi holatini o'zgartira olmaydi (hozircha faqat direktor) — kerak bo'lsa yoqiladi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

@@ -1,7 +1,12 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: credit-ledger.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- AVANS HARAKATI JURNALI (credit_ledger): student_credit balansidagi HAR bir
 -- o'zgarishни sababi bilan yozadi — "avans qayerdan keldi / qayerga ketdi".
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/credit-ledger.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
 -- delta > 0 -> avans QO'SHILDI (ortiqcha to'lov); delta < 0 -> avans ISHLATILDI
 -- (hisob-fakturaga qo'llandi). reason: manba (to'lov ortiqchasi, qayta-hisoblash, qo'llandi).

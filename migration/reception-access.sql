@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: reception-access.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- reception (Qabulxona xodimi) — panelga kirish ruxsati.
 --   Muammo: 'reception' roli mavjud (tanlab xodim yaratish mumkin, app.is_staff uni tan oladi),
@@ -8,7 +13,7 @@
 --   + o'quvchi ro'yxatини ko'radi (students_sel = is_staff — allaqachon) + ota-ona telefonini (arizada
 --   qo'ng'iroq qilish uchun). PII (JSHSHIR/passport), to'lov, moliya — YO'Q.
 -- Idempotent — QAYTA ishga tushirishга xavfsiz. run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/reception-access.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 -- Rol yordamchisi.

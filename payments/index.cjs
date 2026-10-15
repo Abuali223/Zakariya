@@ -136,20 +136,40 @@ async function findStudentByPhone(phone, name, klass){
   return { status:'ambiguous', candidates: ids };
 }
 
+// KANONIK o'quvchi kaliti: student_codes / student_private hujjat id'si = students.id (doc _id), butun moliya
+//   (invoices / student_credit / to'lov tarixi / Moliya tekshiruvi) esa students.studentId (IQ-xxxx) bilan
+//   ishlaydi. payments.studentId'ga doc _id yozilsa: Moliya tekshiruvi bir o'quvchini IKKIGA bo'lib
+//   ko'rsatardi va «🔧 Qo'llash» o'sha pulni IKKINCHI marta qo'llardi; to'lov tarixi/chekda ko'rinmasdi.
+//   apply_payment (audit-7) bilan bir xil qoida: id YOKI studentId mos -> studentId (bo'sh bo'lsa id).
+async function canonSid(sid){
+  sid = String(sid||'').trim(); if(!sid) return sid;
+  try{ const d = await db.collection('students').doc(sid).get();
+       if(d.exists){ const x = d.data()||{}; return String(x.studentId||'').trim() || sid; } }catch(e){}
+  return sid;   // doc id emas -> allaqachon studentId (yoki noma'lum) — o'zgarishsiz
+}
+// Foydalanuvchi yozgan ID (IQ-xxxx yoki doc id) + kod: kod hujjati students.id bilan kalitlangan, shuning uchun
+//   IQ-xxxx berilsa avval o'quvchining doc id'sini topamiz (import qilinganlarda id != studentId).
+async function codeMatchesAny(idOrSid, code){
+  if(await codeMatches(idOrSid, code)) return true;
+  try{ const q = await db.collection('students').where('studentId','==',String(idOrSid)).get();
+       for(const d of (q.docs||[])){ if(String(d.id) !== String(idOrSid) && await codeMatches(String(d.id), code)) return true; } }catch(e){}
+  return false;
+}
 // merchant_trans_id (+ Click paramlari) dan o'quvchini aniqlaydi.
 // Qaytadi: { sid, via } — via: 'code' | 'phone' | (topilmasa) 'notfound'/'ambiguous'/'nophone'.
+//   sid — DOIM kanonik (students.studentId).
 async function attributeStudent(mti, params){
   mti = String(mti||'').trim();
   const parts = mti.toUpperCase().split(/[\s*\/+#:.,;|]+/).filter(Boolean);
   if(parts.length >= 2){                                     // ID + kod (har ikki tartib)
-    if(await codeMatches(parts[0], parts[1])) return { sid: parts[0], via:'code' };
-    if(await codeMatches(parts[1], parts[0])) return { sid: parts[1], via:'code' };
-  } else if(parts.length === 1 && /^[A-Z0-9]{5,8}$/.test(parts[0])){   // faqat kod (kod-shaklli bo'lsa)
-    const s = await studentIdByCode(parts[0]); if(s) return { sid: s, via:'code' };
+    if(await codeMatchesAny(parts[0], parts[1])) return { sid: await canonSid(parts[0]), via:'code' };
+    if(await codeMatchesAny(parts[1], parts[0])) return { sid: await canonSid(parts[1]), via:'code' };
+  } else if(parts.length === 1 && /^[A-Z0-9]{5,16}$/.test(parts[0])){   // faqat kod (kod-shaklli bo'lsa; hozirgi kodlar 12 belgi — audit-4/gen_student_code; topilmasa telefon bo'yicha davom etadi)
+    const s = await studentIdByCode(parts[0]); if(s) return { sid: await canonSid(s), via:'code' };
   }
   const ph = (params && (params.param3 || params.phone)) || '';   // Click: param3 = telefon
   const r = await findStudentByPhone(ph, mti, params && params.param2);
-  if(r.status === 'ok') return { sid: r.studentId, via:'phone' };
+  if(r.status === 'ok') return { sid: await canonSid(r.studentId), via:'phone' };
   return { sid: null, via: r.status };
 }
 
@@ -311,6 +331,15 @@ async function handlePrepare(p){
     raw:{ mode:'freeform', via: at.via }, createdAt: FieldValue.serverTimestamp() });
   return { click_trans_id:p.click_trans_id, merchant_trans_id:mti, merchant_prepare_id:prepareId, error:0, error_note:'Success' };
 }
+// Shu to'lov tranzaksiyasi allaqachon QO'LLANGANmi? (applied_payments posboni — apply_to_invoice / apply_payment
+//   bir xil jadvalga yozadi). Topilsa — posbon id'si, aks holda null. O'qib bo'lmasa — null (eski xatti-harakat).
+async function appliedGuard(ids){
+  for(const id of ids){ if(!id) continue; try{ const g = await db.collection('applied_payments').doc(String(id)).get(); if(g.exists) return String(id); }catch(e){} }
+  return null;
+}
+// MUHIM: payments jadvalida YO'Q ustunga yozish (masalan note/appliedTo) -> PostgREST PGRST204 -> BUTUN yozuv
+//   rad etiladi (status yangilanmaydi, webhook 500). Qo'shimcha belgilar shu sabab `raw` jsonb ichida saqlanadi.
+const withRaw = (pay, extra) => Object.assign({}, (pay && pay.raw && typeof pay.raw === 'object') ? pay.raw : {}, extra);
 async function handleComplete(p){
   if(!clickReady(p)) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
   if(!tseq(clickSign(p, true), String(p.sign_string||'').toLowerCase())) return clickErr(p, -1, 'SIGN CHECK FAILED', true);
@@ -327,6 +356,16 @@ async function handleComplete(p){
 
   if(mode === 'precise'){
     const inv = await getInvoice(String(pay.invoiceId||''));
+    // Idempotentlik (qayta urinish): SHU tranzaksiya puli allaqachon qo'llangan bo'lsa (avvalgi urinishda RPC
+    //   commit bo'lib, status yozuvi/javob yo'qolgan — masalan deploy paytidagi restart) — «Allaqachon
+    //   to'langan» (-4) DEMAYMIZ: Click bu tranzaksiyani bekor qilib pulni qaytarardi, invoice esa to'langan
+    //   bo'lib qolardi. Holatni yakunlab, MUVAFFAQIYAT qaytaramiz.
+    const done = await appliedGuard([String(p.click_trans_id), String(p.click_trans_id)+'_cr']);
+    if(done){
+      await payRef.set(Object.assign({ status: (inv && !done.endsWith('_cr')) ? 'paid' : 'applied', merchant_confirm_id:confirmId },
+        (inv && inv.studentId) ? { studentId:String(inv.studentId) } : {}), { merge:true });
+      return { click_trans_id:p.click_trans_id, merchant_trans_id:p.merchant_trans_id, merchant_confirm_id:confirmId, error:0, error_note:'Success' };
+    }
     if(inv && inv.status === 'paid') return clickErr(p, -4, 'Allaqachon to\'langan', true);
     if(!inv){
       // Invoice prepare bilan complete orasида o'chirilgan -> pulni YO'QOTMAYMIZ.
@@ -343,7 +382,7 @@ async function handleComplete(p){
       // hech qayerga qo'llanmasdan yo'qolardi).
       const amt2 = Number(p.amount)||Number(pay.amount)||0;
       if(inv.studentId){ await applyPaymentToStudent(String(inv.studentId), amt2, p.click_trans_id+'_cr');
-        await payRef.set({ status:'applied', studentId:String(inv.studentId), amount:amt2, merchant_confirm_id:confirmId, note:'invoice terminal -> student balans' }, { merge:true }); }
+        await payRef.set({ status:'applied', studentId:String(inv.studentId), amount:amt2, merchant_confirm_id:confirmId, raw: withRaw(pay, { note:'invoice terminal -> student balans' }) }, { merge:true }); }
       else { await payRef.set({ status:'unmatched', amount:amt2, merchant_confirm_id:confirmId }, { merge:true }); }
     } else {
       await payRef.set({ status:'paid', studentId:String(inv.studentId||''), merchant_confirm_id:confirmId }, { merge:true });
@@ -434,13 +473,15 @@ async function uzConfirm(b){
     // backend[1]: create->confirm orasида invoice bekor/qaytarilgan bo'lsa pulni yo'qotmaymiz -> o'quvchi balansiga.
     // QAYSI YO'L ishlaganini YOZAMIZ (appliedTo) — reverse paytida to'g'ri target tanlash uchun:
     //   'invoice' -> reverse_payment(invoice); 'balance' -> waterfall (teskarisi qo'lda).
-    let appliedTo = 'invoice';
+    //   (appliedTo/note `raw` ichida — payments jadvalida bunday ustun YO'Q: alohida ustunga yozish PGRST204
+    //   berib, status 'confirmed' bo'lmay qolardi -> Uzum'ga xato, pul esa allaqachon qo'llangan.)
+    let appliedTo = 'invoice', note = '';
     if(ar && ar.error){
       appliedTo = 'balance';
       if(pay.studentId){ await applyPaymentToStudent(String(pay.studentId), Number(pay.amount)||0, 'uzum_'+b.transId+'_cr', 'uzum'); }
-      else { try{ await uzPayRef(b.transId).set({ note:'invoice terminal, studentId yo‘q — qo‘lda biriktiring' }, { merge:true }); }catch(e){} }
+      else { note = 'invoice terminal, studentId yo‘q — qo‘lda biriktiring'; }
     }
-    await uzPayRef(b.transId).set({ status:'confirmed', appliedTo }, { merge:true });
+    await uzPayRef(b.transId).set({ status:'confirmed', raw: withRaw(pay, note ? { appliedTo, note } : { appliedTo }) }, { merge:true });
   }
   return { serviceId: UZUM.serviceId, transId: b.transId, status:'CONFIRMED', confirmTime: uzTs() };
 }
@@ -454,13 +495,13 @@ async function uzReverse(b){
     // ortiqcha (avans) qismini student_credit'dan qaytarib olamiz.
     if(pay.status === 'confirmed'){
       const som = Number(pay.amount)||0;   // pay.amount SO'M da saqlangan (uzCreate)
-      if(pay.appliedTo === 'balance'){
+      if(((pay.raw && pay.raw.appliedTo) || pay.appliedTo) === 'balance'){
         // Pul invoice'ga EMAS, o'quvchi BALANSIGA qo'llangan edi (confirm paytida invoice terminal bo'lgan).
         // reverse_payment(invoice) bu yerda NOTO'G'RI — u aloqasiz invoice/avansni buzadi. Balansga
         // qo'llangan to'lovni teskari qilish (waterfall'ni ochib) avtomatik qilinmaydi; MA'MURIYATga
         // belgilab qo'yamiz (needsManualReverse) va Uzum'ga REVERSED qaytaramiz (webhook xato bermasin).
-        await uzPayRef(b.transId).set({ status:'reversed', needsManualReverse:true,
-          reverseNote:'Pul o‘quvchi balansiga qo‘llangan edi — QO‘LDA qaytaring (som='+som+', studentId='+String(pay.studentId||'')+')' }, { merge:true });
+        await uzPayRef(b.transId).set({ status:'reversed', raw: withRaw(pay, { needsManualReverse:true,
+          reverseNote:'Pul o‘quvchi balansiga qo‘llangan edi — QO‘LDA qaytaring (som='+som+', studentId='+String(pay.studentId||'')+')' }) }, { merge:true });
         return { serviceId: UZUM.serviceId, transId: b.transId, status:'REVERSED', reverseTime: uzTs(), amount: (UZUM.amountUnit==='som'?som:som*100) };
       }
       if(db.rpc){

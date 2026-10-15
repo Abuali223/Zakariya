@@ -71,7 +71,9 @@ Auth bazasi `SUPABASE_URL` originidan olinadi (`<origin>/authapi`); boshqa bo'ls
    bash deploy.sh          # SQL migratsiyalar + /sb (auth-api.js) + admin.html + index.html
    ```
 
-3. **Auth serverni sozlash + ishga tushirish**:
+3. **Auth serverni sozlash + ishga tushirish** (`/opt/iqror` — xizmat papkasi `WorkingDirectory`; u `~/iqror-repo`
+   bilan BIR XIL papka bo'lishi kerak, aks holda deploy yangi kodni ishga tushirmaydi — `migration/deploy/README.md`,
+   «Xizmat papkasi» bo'limi. `deploy.sh` endi `auth/` ni ham yangilaydi va `iqror-auth` ni qayta ishga tushiradi):
    ```bash
    cd /opt/iqror/auth && cp config.example.json config.json   # to'ldiring (yuqoridagi jadval)
    npm install

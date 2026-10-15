@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: reverse-payment.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- AUDIT (High B) — reverse_payment: to'lovni QAYTARISH (Uzum reverse) ATOMIK + IDEMPOTENT.
 --   Muammo: payments/index.cjs uzReverse() atomik BO'LMAGAN JS waterfall edi —
@@ -8,7 +13,7 @@
 --   Yechim: apply_to_invoice / reattribute_avans kabi — BITTA tranzaksiya, invoice qulfi
 --     + advisory lock + p_ref idempotentlik posboni (applied_payments'да 'reverse:'+ref).
 -- Idempotent (CREATE OR REPLACE) — QAYTA ishga tushirishга xavfsiz. run-all.sql + deploy.sh'да.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/reverse-payment.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 create or replace function public.reverse_payment(p_invoice text, p_amount numeric, p_provider text, p_ref text)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -38,7 +43,10 @@ begin
 
   -- 1) Invoysни qulflab o'qib, notfound holatини posbonNI OLMASDAN qaytaramiz
   --    (apply_to_invoice bilan bir xil xavfsiz tartib). for update -> parallel reverse'lar seriyalanadi.
-  select id, "studentId", coalesce(amount,0) as amount, coalesce("paidAmount",0) as paid, status
+  --    paid: ESKI 'paid' yozuvlarda paidAmount 0 bo'lishi mumkin -> to'langan = amount (admin.html paidOf kabi);
+  --    aks holda butun summa aloqasiz avansdan qaytarib olinardi.
+  select id, "studentId", coalesce(amount,0) as amount,
+         case when status = 'paid' then greatest(coalesce("paidAmount",0), coalesce(amount,0)) else coalesce("paidAmount",0) end as paid, status
     into v_inv from public.invoices where id = p_invoice for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'notfound'); end if;
   v_sid := v_inv."studentId";

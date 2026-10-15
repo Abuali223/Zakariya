@@ -1,3 +1,8 @@
+\if :{?iqror_chain}
+\else
+do $iqror_guard$ begin raise exception 'iqror: auth-phone.sql ALOHIDA ishga tushirilmaydi — zanjirdagi keyingi fayllar uni qayta belgilaydi (alohida ishlatilsa xavfsizlik/moliya qoidalari ESKI holatga qaytadi)' using hint = 'Butun zanjir: bash ~/iqror-repo/deploy.sh  (eski deploy.sh bo''lsa avval: cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash deploy.sh). Qo''lda: bash ~/iqror-repo/migration/chain.sh | sudo docker exec -i supabase-db psql -U postgres -d postgres -q'; end $iqror_guard$;
+\quit
+\endif
 -- =====================================================================
 -- TELEFON + PAROL AUTH — users jadvaliga telefon/ism maydonlari + RLS qattiqlashtirish.
 --   Identifikator: telefon (+998XXXXXXXXX) -> sintetik email '998XXXXXXXXX@phone.<domen>'
@@ -5,7 +10,7 @@
 --   phone/status/role/verified — AUTHZ maydonlari: foydalanuvchi O'ZI o'zgartira OLMAYDI
 --     (faqat admin yoki server/service_role). firstName/lastName — o'zi tahrirlashi mumkin.
 -- Idempotent. run-all.sql + deploy.sh'da.
---   sudo docker exec -i supabase-db psql -U postgres -d postgres < migration/auth-phone.sql
+--   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
 -- 1) Yangi ustunlar (barchasi ixtiyoriy — mavjud email-foydalanuvchilar buzilmaydi).

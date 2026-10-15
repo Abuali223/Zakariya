@@ -26,8 +26,10 @@ if [ "${IQROR_DEPLOY_REEXEC:-}" != "1" ] && ! git diff --quiet FETCH_HEAD -- dep
   git checkout FETCH_HEAD -- deploy.sh
   IQROR_DEPLOY_REEXEC=1 exec bash "$REPO/deploy.sh" "$@"
 fi
-# Server/backend + migratsiya + shim kodi (config.json/sb-config.js tegilmaydi — gitignore):
-git checkout FETCH_HEAD -- ai-assistant payments server migration sb
+# Server/backend + migratsiya + shim + AUTH kodi (config.json/sb-config.js tegilmaydi — gitignore).
+#   auth/ ham: avval ro'yxatda yo'q edi — frontend (index.html, sb/auth-api.js) va umumiy modullar (server/,
+#   payments/sms.cjs) yangilanib, auth serveri ESKI kod bilan qolardi.
+git checkout FETCH_HEAD -- ai-assistant payments server migration sb auth
 
 echo "==> 2/7 Paketlar (kerak bo'lsa)..."
 npm install --no-save @supabase/supabase-js @anthropic-ai/sdk ws >/dev/null 2>&1 || echo "   (npm o'tkazib yuborildi — paketlar mavjud)"
@@ -84,13 +86,25 @@ grep -q "/sb/firebase-firestore.js" "$WEB/haydovchi.html" || { echo "❌ haydovc
 grep -q "getBusRoutes" "$WEB/index.html" || { echo "❌ index.html eski (avtobus yo'q)"; exit 1; }
 
 echo "==> 6/7 Xizmatlar qayta ishga tushmoqda..."
-sudo systemctl restart iqror-ai iqror-pay
+# iqror-auth (telefon+parol+OTP) o'rnatilgan bo'lsa — u ham qayta ishga tushadi (avval deploy uni tashlab ketardi).
+SERVICES="iqror-ai iqror-pay"
+if systemctl cat iqror-auth >/dev/null 2>&1; then SERVICES="$SERVICES iqror-auth"; fi
+# Xizmat kodi QAYSI papkadan ishlaydi (systemd WorkingDirectory)? Deploy faqat $REPO ni yangilaydi. Namuna
+#   unit'lar (migration/deploy/*.service) /opt/iqror ni ko'rsatadi — agar xizmat BOSHQA papkadan ishlasa, yangi
+#   server kodi u yerga YETIB BORMAYDI (qayta ishga tushirish eski kodni ishlatadi). Jim qolmaymiz — ogohlantiramiz.
+for svc in $SERVICES; do
+  wd=$(systemctl show -p WorkingDirectory --value "$svc" 2>/dev/null || true)
+  if [ -n "$wd" ] && [ "$(realpath -m "$wd")" != "$(realpath -m "$REPO")" ]; then
+    echo "⚠️  $svc kodi $wd papkasidan ishlaydi, deploy esa $REPO ni yangiladi — YANGI server kodi ISHGA TUSHMAYDI."
+    echo "    Bir martalik sozlash: migration/deploy/README.md — «Xizmat papkasi (WorkingDirectory)» bo'limi."
+  fi
+done
+sudo systemctl restart $SERVICES
 sleep 2
-ai=$(systemctl is-active iqror-ai || true); pay=$(systemctl is-active iqror-pay || true)
-echo "    iqror-ai:  $ai"
-echo "    iqror-pay: $pay"
-if [ "$ai" != "active" ] || [ "$pay" != "active" ]; then
-  echo "❌ Xizmat(lar) ishga tushmadi. Log: sudo journalctl -u iqror-ai -u iqror-pay -n 50 --no-pager"; exit 1
+bad=0
+for svc in $SERVICES; do st=$(systemctl is-active "$svc" || true); echo "    $svc: $st"; [ "$st" = "active" ] || bad=1; done
+if [ "$bad" = "1" ]; then
+  echo "❌ Xizmat(lar) ishga tushmadi. Log: sudo journalctl $(for s in $SERVICES; do printf -- '-u %s ' "$s"; done)-n 50 --no-pager"; exit 1
 fi
 
 echo "==> 7/7 Baza holati tekshiruvi (prod == repo'dagi kanonik holat?)..."

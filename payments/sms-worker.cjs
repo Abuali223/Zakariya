@@ -38,12 +38,20 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const tpl = (k, def) => (SMS.templates && SMS.templates[k]) || def;
 
 // studentId -> { phone } (maxfiy jadvaldan; parentPhone, bo'lmasa parentPhone2).
+//   student_private hujjat id'si = students.id (doc _id), invoices esa students.studentId (IQ-xxxx) bilan
+//   kalitlanadi. Import qilingan o'quvchida id != studentId bo'lsa, telefon topilmay SMS umuman ketmasdi —
+//   shu sabab har telefon studentId kaliti ostida HAM qo'yiladi (admin.html pmLoadCtx'dagi alias bilan bir xil).
 async function phoneMap() {
   const m = {};
   try {
     const snap = await db.collection('student_private').get();
     snap.docs.forEach(d => { const p = d.data() || {}; m[d.id] = { phone: p.parentPhone || p.parentPhone2 || '' }; });
   } catch (e) { log('phoneMap xato:', e.message); }
+  try {
+    const st = await db.collection('students').get();
+    st.docs.forEach(d => { const x = d.data() || {}; const sid = String(x.studentId || '').trim();
+      if (sid && sid !== d.id && m[d.id] && !m[sid]) m[sid] = m[d.id]; });
+  } catch (e) { log('phoneMap (studentId alias) xato:', e.message); }
   return m;
 }
 const MAXTRIES = Number(SMS.maxRetries || 3);   // xato bo'lsa shuncha marta qayta uriniladi, keyin to'xtaydi
