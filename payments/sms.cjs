@@ -6,14 +6,18 @@
  *   2) token          -> Eskiz panelidan olingan tayyor tokenni to'g'ridan-to'g'ri ishlatadi
  *
  * Eskiz API: https://notify.eskiz.uz/api
- *   POST /api/auth/login          (email,password)          -> { data:{ token } }
- *   POST /api/message/sms/send    (mobile_phone,message,from) -> { id, status }
+ *   POST /api/auth/login               (email,password)                              -> { data:{ token } }
+ *   POST /api/message/sms/send         (mobile_phone,message,from)                    -> { id, status }   O'zbekiston
+ *   POST /api/message/sms/send-global  (mobile_phone,message,country_code[,unicode])  -> { id, status }   CHET EL raqami
+ *     (Eskiz kabinetida xalqaro SMS yoqilgan bo'lishi kerak; narxi boshqa). config sms.international=false — o'chiradi.
+ *   Raqam qoidasi — server/phone.cjs (O'zbekiston 998..., chet el FAQAT '+' bilan yozilgan bo'lsa).
  *
  * ⚠️ Eskiz SMS matnini OLDINDAN moderatsiyadan o'tkazishни talab qiladi —
  *    yuborilayotgan matn tasdiqlangan shablonga mos bo'lishi kerak.
  * ⚠️ Maxfiy: eskizEmail/eskizPassword/token faqat config.json'da (serverda).
  */
 const https = require('https');
+const PH = require('../server/phone.cjs');
 
 function httpsRequest(opts, body) {
   return new Promise((resolve, reject) => {
@@ -81,28 +85,36 @@ function makeEskiz(cfg) {
   }
   async function ensureToken() { if (!token) { if (cfg.token) token = cfg.token; else await login(); } return token; }
 
-  // Bitta SMS jo'natadi. Qaytaradi: { ok:true, id, status } | { ok:false, error }
+  // Bitta SMS jo'natadi. Qaytaradi: { ok:true, id, status, intl } | { ok:false, error, intl? }
+  //   O'zbekiston raqami -> /sms/send (from bilan); chet el raqami -> /sms/send-global (country_code bilan).
+  //   Yaroqsiz raqam (yoki chet el raqami, lekin sms.international=false) -> { ok:false, error:'bad_phone:...' } — so'rov YUBORILMAYDI.
   //   Istisno (throw) bo'lsa e.stage: 'login' — SMS so'rovi HALI yuborilmagan (aniq ketmagan);
   //   'send' — SMS so'rovi yuborilayotganda uzildi (e.code ECONNREFUSED/ENOTFOUND... bo'lsa ulanish umuman bo'lmagan).
   async function send(phone, message) {
-    const mobile = normMobile(phone);
-    if (mobile.length !== 12) return { ok: false, error: 'bad_phone:' + mobile };
+    const info = PH.phoneInfo(phone);
+    if (!info) return { ok: false, error: 'bad_phone:' + String(phone == null ? '' : phone).replace(/\D/g, '').slice(0, 20) };
+    if (info.intl && (cfg.international === false || !info.iso)) return { ok: false, intl: true, error: 'bad_phone:intl_disabled' };
+    const mobile = info.canon;
+    const text = String(message || '');
     const stage = (st, fn) => fn().catch(e => { if (e && typeof e === 'object' && !e.stage) e.stage = st; throw e; });
     await stage('login', ensureToken);
     const post = () => stage('send', () => {
-      const body = new URLSearchParams({ mobile_phone: mobile, message: String(message || ''), from }).toString();
-      return httpsRequest({ host: HOST, path: '/api/message/sms/send', method: 'POST',
+      const fields = info.intl
+        ? Object.assign({ mobile_phone: mobile, message: text, country_code: info.iso }, /[^\x00-\x7F]/.test(text) ? { unicode: '1' } : {})
+        : { mobile_phone: mobile, message: text, from };
+      const body = new URLSearchParams(fields).toString();
+      return httpsRequest({ host: HOST, path: info.intl ? '/api/message/sms/send-global' : '/api/message/sms/send', method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body);
     });
     let r = await post();
     if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', login); r = await post(); }   // token eskirsa — qayta kirib urinamiz
     const j = r.json || {};
     if (r.status >= 200 && r.status < 300 && (j.id || j.status === 'waiting' || j.status === 'success'))
-      return { ok: true, id: String(j.id || ''), status: j.status || 'sent' };
+      return { ok: true, id: String(j.id || ''), status: j.status || 'sent', intl: info.intl };
     // ANIQ rad = har qanday 4xx (JSON bo'lmasa ham, masalan 429/403 HTML) — so'rov rad etilgan, SMS ketmagan.
     //   5xx / 3xx / 2xx lekin id yo'q — NOANIQ: Eskiz SMS'ni navbatga qo'ygan bo'lishi mumkin (qayta yuborilmasin).
     const ambiguous = !(r.status >= 400 && r.status < 500);
-    return { ok: false, error: (j.message || ('http_' + r.status)), raw: r.raw, httpStatus: r.status, ambiguous };
+    return { ok: false, error: (typeof j.message === 'string' ? j.message : (j.message ? JSON.stringify(j.message) : ('http_' + r.status))), raw: r.raw, httpStatus: r.status, ambiguous, intl: info.intl };
   }
 
   return { login, send, normMobile };
@@ -127,11 +139,12 @@ function definitelyNotSent(e) {
   const c = String(e.code || '');
   return e.stage === 'login' || e.preconnect === true || e.syscall === 'connect' || PRECONN.has(c) || /^(CERT_|ERR_TLS|UNABLE_TO_|DEPTH_ZERO|SELF_SIGNED)/.test(c);
 }
-// SMS uchun yaroqli O'ZBEKISTON mobil raqami: 998XXXXXXXXX (auth/lib.cjs normPhone bilan bir xil qoida) yoki ''.
-function canonMobile(p) {
-  let d = String(p == null ? '' : p).replace(/\D/g, '');
-  if (d.length === 9) d = '998' + d;
-  return (d.length === 12 && d.startsWith('998') && '235789'.includes(d[3])) ? d : '';
+// SMS uchun yaroqli raqam (KANONIK, auth/lib.cjs normPhone bilan bir xil qoida — server/phone.cjs) yoki ''.
+//   O'zbekiston mobil (998XXXXXXXXX) yoki chet el raqami ('+' bilan yozilgan: +7 903 ... -> 79031571124).
+//   intl=false — faqat O'zbekiston raqami (config sms.international=false).
+function canonMobile(p, intl) {
+  const c = PH.phoneCanon(p);
+  return (c && (intl !== false || c.slice(0, 3) === '998')) ? c : '';
 }
 // SMS uchun ism: tipografik apostroflarni oddiyiga (GSM-7 — SMS qismlari ko'paymasin), bo'shliqlarni yig'ish.
 const smsName = s => String(s || '').replace(/[ʻʼ‘’`´]/g, "'").replace(/\s+/g, ' ').trim().slice(0, 40);

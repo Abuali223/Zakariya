@@ -1,6 +1,7 @@
 // =====================================================================
 // _fake.cjs — auth testlari uchun SOXTA, stateful Supabase mijozi + auth.admin.
-//   Qo'llab-quvvatlaydi: from(t).select/eq/gte/order/limit/insert/update(+eq, +select qaytarish) (thenable),
+//   Qo'llab-quvvatlaydi: from(t).select/eq/gte/in/not('like')/or('c.is.null,c.eq.v')/order/limit/range/insert/
+//   update(+eq, +select qaytarish)/delete (thenable),
 //   rpc('auth_uid_by_email'), auth.admin.createUser/updateUserById/deleteUser,
 //   auth.signInWithPassword.  Hammasi in-memory `state` ustida.
 //   QAT'IY: `id` takrori -> 23505 (PK); payments/_schema-columns.json'dagi jadvallarda yo'q ustunni
@@ -25,15 +26,22 @@ function makeFake(state) {
 
   function from(t) {
     const rows = table(t);
-    const eqs = [], gtes = [], ins = [];
-    let mode = 'select', payload = null, order = null, lim = null, selCols = null, selOpts = null, returning = false;
+    const eqs = [], gtes = [], ins = [], nots = [], ors = [];
+    let mode = 'select', payload = null, order = null, lim = null, rng = null, selCols = null, selOpts = null, returning = false;
+    // PostgREST like: % -> istalgan (faqat shu kerak); not(col,'like',p) — mos KELMAYDIGAN qatorlar (null ham mos kelmaydi).
+    const likeRe = p => new RegExp('^' + String(p).split('%').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+    const orMatch = (r, alts) => alts.some(([f, op, v]) => op === 'is' ? (v === 'null' ? r[f] == null : String(r[f]) === v) : String(r[f] == null ? '' : r[f]) === v && r[f] != null);
     const matchRow = r => eqs.every(([f, v]) => String(r[f]) === String(v)) && gtes.every(([f, v]) => String(r[f] || '') >= String(v))
-      && ins.every(([f, arr]) => arr.map(String).includes(String(r[f])));
+      && ins.every(([f, arr]) => arr.map(String).includes(String(r[f])))
+      && nots.every(([f, op, v]) => op === 'like' ? (r[f] != null && !likeRe(v).test(String(r[f]))) : true)
+      && ors.every(alts => orMatch(r, alts));
     function runSelect() {
       if (selCols && selCols !== '*') { const e = badCols(t, String(selCols).split(',').map(x => x.trim()).filter(Boolean)); if (e) return { data: null, error: { code: '42703', message: e.message } }; }
-      const fe = badCols(t, eqs.map(x => x[0]).concat(gtes.map(x => x[0]), ins.map(x => x[0]))); if (fe) return { data: null, error: { code: '42703', message: fe.message } };
+      const fe = badCols(t, eqs.map(x => x[0]).concat(gtes.map(x => x[0]), ins.map(x => x[0]), nots.map(x => x[0]))); if (fe) return { data: null, error: { code: '42703', message: fe.message } };
+      if (state.__failSelect && state.__failSelect[t]) return { data: null, error: { code: 'XX000', message: 'injected failure' } };
       let out = rows.filter(matchRow);
       if (order) out = out.slice().sort((a, b) => order.asc ? cmp(a[order.f], b[order.f]) : cmp(b[order.f], a[order.f]));
+      if (rng) out = out.slice(rng[0], rng[1] + 1);
       if (lim != null) out = out.slice(0, lim);
       const count = (selOpts && selOpts.count) ? out.length : null;           // select(cols, {count:'exact', head:true})
       return { data: (selOpts && selOpts.head) ? null : out.map(r => ({ ...r })), count, error: null };
@@ -45,7 +53,7 @@ function makeFake(state) {
           const be = badCols(t, Object.keys(obj || {})); if (be) return { data: null, error: be };
           if (obj && obj.id != null && rows.some(r => String(r.id) === String(obj.id))) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
           const row = { ...obj };
-          if (t === 'otp_codes') { row.id = ++state.__otpSeq; if (!row.createdAt) row.createdAt = new Date().toISOString(); }
+          if (t === 'otp_codes') { row.id = ++state.__otpSeq; if (!row.createdAt) row.createdAt = new Date().toISOString(); if (row.consumed == null) row.consumed = false; }   // DB default
           else if (t === 'sms_log') { if (!row.createdAt) row.createdAt = new Date(state.__now ? state.__now() : Date.now()).toISOString(); }   // DB: default now()
           else if (t === 'auth_login_attempts') { row.id = ++state.__attSeq; if (!row.at) row.at = new Date().toISOString(); }
           // users unique phone guard
@@ -70,6 +78,10 @@ function makeFake(state) {
       select(cols, opts) { if (mode === 'update' || mode === 'insert') returning = true; else { mode = 'select'; selCols = cols || null; selOpts = opts || null; } return thenable; },
       eq(f, v) { eqs.push([f, v]); return thenable; },
       in(f, arr) { ins.push([f, Array.isArray(arr) ? arr : []]); return thenable; },
+      not(f, op, v) { nots.push([f, op, v]); return thenable; },
+      // or('userUid.is.null,userUid.eq.') — faqat shu shakllar (c.is.null | c.eq.qiymat).
+      or(expr) { ors.push(String(expr).split(',').map(s => { const m = s.match(/^([^.]+)\.(is|eq)\.(.*)$/); return m ? [m[1], m[2], m[3]] : ['__none', 'eq', '\u0000']; })); return thenable; },
+      range(a, b) { rng = [a, b]; return thenable; },
       delete() { mode = 'delete'; return thenable; },
       gte(f, v) { gtes.push([f, v]); return thenable; },
       order(f, opts) { order = { f, asc: !(opts && opts.ascending === false) }; return thenable; },

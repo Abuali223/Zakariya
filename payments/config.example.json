@@ -27,6 +27,7 @@
     "eskizPassword": "ESKIZ_PAROL — MAXFIY (yoki quyidagi token bilan)",
     "token": "",
     "from": "4546",
+    "international": true,
     "newLookbackDays": 14,
     "reminderDayOfMonth": 10,
     "reminderDays": [1, 4],

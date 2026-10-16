@@ -9,6 +9,7 @@
  * boshqaradi. Bu modul faqat OTP kodini (6 xonali) va ticketni hash/imzolaydi.
  */
 const crypto = require('crypto');
+const P = require('../server/phone.cjs');
 
 // Konstant-vaqtли solishtiruv (timing side-channel'ni kamaytiradi).
 function tseq(a, b) {
@@ -18,19 +19,16 @@ function tseq(a, b) {
   try { return crypto.timingSafeEqual(ab, bb); } catch (_) { return false; }
 }
 
-// Telefonni KANONIK O'zbekiston formatiga keltiradi: '998XXXXXXXXX' (12 raqam).
-//   Qabul qiladi: '+998 90 123 45 67', '998901234567', '901234567' (9 xonali -> 998 qo'shiladi).
-//   Faqat O'zbekiston (998 prefiks, 12 raqam). Aks holda null.
+// Telefonni KANONIK formatga keltiradi (server/phone.cjs phoneCanon — brauzer sb/auth-api.js va admin.html bilan
+//   AYNAN bir xil qoida): O'zbekiston '998XXXXXXXXX' ('+998 90 123 45 67', '998901234567', '901234567'; operator
+//   2x/3x/5x/7x/8x/9x) yoki chet el raqami FAQAT '+' (yoki 00) bilan: '+7 903 157 11 24' -> '79031571124'.
+//   Yaroqsiz -> null.
 function normPhone(input) {
-  let d = String(input == null ? '' : input).replace(/\D/g, '');
-  if (d.length === 9) d = '998' + d;                 // lokal 9 xonali -> 998XXXXXXXXX
-  if (d.length === 12 && d.startsWith('998')) {
-    // O'zbekiston mobil operator kodi (998 dan keyingi 2 raqam). Qo'shimcha ishonch uchun —
-    //   mobil kodlar 2x/3x/5x/7x/8x/9x bilan boshlanadi (shahar/maxsus emas).
-    const op = d[3];
-    if ('235789'.includes(op)) return d;
-  }
-  return null;
+  return P.phoneCanon(input) || null;
+}
+// Allaqachon KANONIK raqam (ticket / users.phone: chet el raqami '+'siz saqlanadi) yoki kiritilgan raqam -> kanonik | null.
+function canonOf(x) {
+  return P.canonOf(x) || null;
 }
 
 // Xodim/o'qituvchi HR yozuvini telefon bo'yicha hisobga BOG'LASH uchun MOSLIKNI aniqlaydi.
@@ -40,7 +38,7 @@ function normPhone(input) {
 //   rows: [{ table:'staff'|'teacher', id, code, phone, name, userUid }]
 //   Qaytaradi: { status:'linked'|'none'|'ambiguous'|'taken', match?, count? }
 function matchStaffByPhone(canon, rows) {
-  const c = normPhone(canon);
+  const c = canonOf(canon);                                         // ticket'dagi kanonik raqam (chet el ham)
   if (!c) return { status: 'none' };
   const tail = c.slice(-9);
   const all = (rows || []).filter(Boolean);
@@ -68,11 +66,9 @@ function phoneToEmail(canonicalPhone, domain) {
   return `${p}@${dom}`;
 }
 
-// Telefonni ko'rsatish uchun chiroyli format: +998 90 123 45 67
+// Telefonni ko'rsatish uchun chiroyli format: +998 90 123 45 67 · +7 903 157 11 24
 function prettyPhone(canonicalPhone) {
-  const d = String(canonicalPhone || '').replace(/\D/g, '');
-  if (d.length !== 12) return canonicalPhone || '';
-  return `+${d.slice(0, 3)} ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8, 10)} ${d.slice(10, 12)}`;
+  return P.phonePretty(canonicalPhone || '');
 }
 
 // Parol qoidalari (server + frontend bir xil ishlatadi). { ok, errors:[...] }.
@@ -128,6 +124,6 @@ function verifyTicket(secret, token, nowMs) {
 }
 
 module.exports = {
-  tseq, normPhone, phoneToEmail, prettyPhone, validatePassword,
+  tseq, normPhone, canonOf, phoneToEmail, prettyPhone, validatePassword,
   genCode, hmacCode, signTicket, verifyTicket, matchStaffByPhone,
 };

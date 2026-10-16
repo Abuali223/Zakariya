@@ -6,7 +6,7 @@
   "main": "index.cjs",
   "scripts": {
     "start": "node index.cjs",
-    "test": "node auth.test.cjs && node sms-remind.test.cjs"
+    "test": "node auth.test.cjs && node sms-remind.test.cjs && node phone.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

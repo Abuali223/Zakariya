@@ -270,6 +270,20 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - `sms-worker` (cron): faqat yaroqli O'zbekiston mobil raqamiga yuboradi (otaniki noto'g'ri bo'lsa onaniki); Eskiz'ga umuman ulanib bo'lmasa claim qaytariladi va run to'xtaydi (xabarlar keyingi cron'da ketadi); ketma-ket 5 ta Eskiz xatosida to'xtaydi; Eskiz aniq rad etganlari (`rejected:`) qayta urinadi, natija noaniq bo'lganlari qayta yuborilmaydi; ID to'qnashuvidagi o'quvchiga SMS yubormaydi; ismlar GSM-7 (SMS qismi ko'paymaydi). README cron: qarz eslatmasi 10:20 + `flock -w` (avvalgi `-n` bilan «new» bilan bir vaqtda jim o'tkazib yuborilardi).
 - Talab: SMS matni Eskiz kabinetida shablon sifatida tasdiqlangan bo'lishi kerak (auth/README.md).
 
+## 22) Ro'yxatdan o'tishda «Noto‘g‘ri rol» + chet el ota-ona telefon raqamlari
+
+**«Noto‘g‘ri rol» (SMS keldi, «Yakunlash» bosilganda xato)**
+- Sabab: brauzerda uzoq ochiq qolgan ESKI sahifa (13-oktyabrgacha «O‘qituvchi» tugmasi) serverga `role:'teacher'` yuboradi, yangi server esa faqat `staff`/`parent` ni qabul qilardi. Server endi `teacher` ni ham «Xodim» (`staff`, tasdiq kutadi) deb qabul qiladi; katta-kichik harf/bo'shliq farq qilmaydi. Boshqa qiymat (admin, director…) — avvalgidek rad, lekin xabar aniq: «Sahifani yangilang (Ctrl+F5)…».
+- Xodim ro'yxatdan o'tganda telefon bo'yicha «Xodimlar»dagi yozuviga (masalan IQX-001) avtomatik bog'lanadi; javob xabarida kod va lavozim ko'rsatiladi. «Foydalanuvchilar» → «✓ Tasdiqlash» oynasida HR lavozimiga mos rol (masalan «Moliya Menejeri» → «Moliya menejeri») OLDINDAN tanlanadi — direktor tekshirib «Saqlash» bosadi (xavfsizlik: avtomatik faollashtirish yo'q; Direktor/Ma'muriyat rahbari roli faqat taklif qilinadi).
+
+**Chet el raqamlari (+7, +48, …)**
+- Yagona telefon qoidasi `server/phone.cjs` (PHONE-CANON bloki `sb/auth-api.js` va `admin.html` da AYNAN bir xil; `auth/phone.test.cjs` bloklar bir xilligini va 30 000+ tasodifiy kirishda natija bir xilligini tekshiradi). O'zbekiston: 998… / 9 xonali (faqat `+`siz). Chet el: FAQAT `+` (yoki `00`) bilan to'liq — `+48 789 706 619` → `48789706619` (bazada `+`siz). `+`siz uzun raqam noaniq (yaroqsiz); chala chet el raqami (`+7 903 157 11`) endi jimgina O'zbekiston raqamiga aylanmaydi. Asosiy davlatlar uchun uzunlik aniq, qolganlari 10–15 raqam.
+- «⚠️ Sifat»: `+` bilan to'g'ri yozilgan chet el raqami endi xato emas; yaroqsiz raqam yonida ehtimoliy to'g'ri yozilishi («79031571124 → +7 903 157 11 24 ?»); «telefon umuman yo'q» endi faqat ikkala maydon bo'sh bo'lsa. O'quvchi formasi ogohlantirishi ham shunga mos (maslahat bilan).
+- Ota-ona kabineti: chet el raqami bilan ro'yxatdan o'tish/kirish/parol tiklash ishlaydi. OTP — Eskiz xalqaro SMS (`send-global`, `country_code`). Himoya: ro'yxat/telefon almashtirishda chet el raqami maktab ma'lumotlarida (o'quvchi kartasidagi ota/ona telefoni yoki xodim telefoni) bo'lishi shart; umumiy soatlik/sutkalik chegara (20/60); ma'lumotda yo'q raqam bilan so'rovlar IP bo'yicha cheklangan; Eskiz aniq rad etsa — foydalanuvchiga aytiladi. O'chirish: `auth.intlOtp:false` yoki `sms.international:false`.
+- SMS: «Eslatma» va avtomatik `sms-worker` chet el raqamiga ham yuboradi (`sms.international`, default true); worker'da chet el raqamini Eskiz aniq rad etsa — yakuniy (qayta urinilmaydi) va O'zbekiston SMS'larini to'xtatmaydi (ketma-ket xato hisobiga kirmaydi). Mijoz serverga raqamni doim `+` bilan yuboradi (kanonik chet el raqami `+`siz serverda yaroqsiz bo'lardi).
+- Aka-uka guruhlash o'zgarmadi (raqamning oxirgi 9 xonasi — chet el raqamlarida ham ishlaydi; 20 000 tasodifiy ssenariyda eski/yangi natija bir xil).
+- ⚠️ Eskiz kabinetida xalqaro SMS yoqilgan bo'lishi kerak (aks holda chet el raqamiga SMS ketmaydi va bu aniq ko'rsatiladi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

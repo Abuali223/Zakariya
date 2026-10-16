@@ -2339,7 +2339,7 @@ addEventListener('hashchange', ()=>route(true));
     // Telefon+parol+OTP auth (mijoz qatlami). Yuklanmasa — email/Google oqimi ishlayveradi.
     // Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
     try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
-    let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=3`); }catch(e){}
+    let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=4`); }catch(e){}
 
     // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----
     async function loadPublic(){
@@ -2696,7 +2696,9 @@ addEventListener('hashchange', ()=>route(true));
         const BTN='width:100%;background:var(--gold);color:var(--on-gold);border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px';
         const LINK='color:var(--teal);font-weight:600;cursor:pointer';
         const st={ role:'parent', phone:'', password:'', ticket:'' };
-        const phoneField=id=>`<input id="${id}" type="tel" inputmode="numeric" autocomplete="tel" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">`;
+        // inputmode="tel": telefon klaviaturasida «+» bor (chet el raqami uchun). Raqam odatda +998; chet el — «+» bilan to'liq.
+        const phoneField=id=>`<input id="${id}" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Chet eldagi raqam: <b>+</b> bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67).</div>`;
         const passField=(id,ph)=>`<div style="position:relative"><input id="${id}" type="password" autocomplete="off" placeholder="${ph||'Parol'}" style="${INP};padding-right:44px"><button type="button" data-eye="${id}" aria-label="Ko‘rsatish" style="position:absolute;right:8px;top:19px;border:none;background:transparent;cursor:pointer;font-size:16px">👁</button></div>`;
         const errBox=`<div id="ph-err" role="alert" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>`;
         const okBox=m=>`<div style="background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D;border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px">${m}</div>`;
@@ -2765,12 +2767,13 @@ addEventListener('hashchange', ()=>route(true));
             wireEyes(); wirePwLive('ph-pass'); $('ph-go').onclick=doResetConfirm; setTimeout(()=>{try{$('ph-pass').focus();}catch(e){}},40);
           }
         }
+        const BAD_PHONE='Telefon raqam noto‘g‘ri. O‘zbekiston: +998 90 123 45 67; chet el: + bilan to‘liq (masalan +7 903 123 45 67).';
         async function doLogin(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), pass=$('ph-pass').value;
-          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } if(!pass){ showErr('Parolni kiriting.'); return; }
+          if(!phone){ showErr(BAD_PHONE); return; } if(!pass){ showErr('Parolni kiriting.'); return; }
           const b=$('ph-go'); b.disabled=true; b.textContent='Kirilmoqda…'; const r=await AuthAPI.login(phone,pass);
           if(r.ok) close(); else { b.disabled=false; b.textContent='Kirish'; showErr(r.error||'Kirib bo‘lmadi.'); } }
         async function doRegRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), p1=$('ph-pass').value, p2=$('ph-pass2').value;
-          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
+          if(!phone){ showErr(BAD_PHONE); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
           if(p1!==p2){ showErr('Parollar mos emas.'); return; } st.phone=phone; st.password=p1;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'register'); b.disabled=false; b.textContent='Kod yuborish';
           if(r.ok) render('reg_otp'); else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
@@ -2785,7 +2788,7 @@ addEventListener('hashchange', ()=>route(true));
           if(r.pending){ $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ '+(r.message||'Ro‘yxatdan o‘tdingiz! Administrator tasdig‘ini kuting.'))+`<button id="ph-done" style="${BTN}">Yopish</button>`; $('ph-done').onclick=close; }
           else { const lr=await AuthAPI.login(st.phone,st.password); if(lr.ok) close(); else { $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ Ro‘yxatdan o‘tdingiz! Endi kiring.')+`<button id="ph-done" style="${BTN}">Kirish</button>`; $('ph-done').onclick=()=>render('login'); } } }
         async function doResetRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value);
-          if(!phone){ showErr('Telefon raqam noto‘g‘ri (+998 ...).'); return; } st.phone=phone;
+          if(!phone){ showErr(BAD_PHONE); return; } st.phone=phone;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'reset'); b.disabled=false; b.textContent='Kod yuborish';
           if(r.ok) render('reset_otp'); else showErr(r.error||'Kod yuborilmadi.'); }
         async function doResetConfirm(){ clrErr(); const p1=$('ph-pass').value, p2=$('ph-pass2').value; const pv=AuthAPI.validatePassword(p1);

@@ -1,7 +1,9 @@
 /**
  * Iqror — AUTH serveri (telefon + parol + OTP).  SERVER tomoni, maxfiy kalitlar faqat shu yerda.
  * -------------------------------------------------------------------
- * Identifikator: telefon (+998XXXXXXXXX) -> sintetik email '998XXXXXXXXX@phone.<domen>'.
+ * Identifikator: telefon (+998XXXXXXXXX yoki chet el +7..., +48...) -> sintetik email '<raqam>@phone.<domen>'.
+ *   Chet el raqamiga OTP — Eskiz xalqaro SMS (send-global); faqat maktab ma'lumotlarida BOR raqamga (SMS-firibgarlik
+ *   himoyasi) va umumiy soatlik/kunlik chegara bilan (README «Chet el raqamlari»).
  * Parol: Supabase Auth (bcrypt) — biz PAROL SAQLAMAYMIZ. OTP: Eskiz SMS, hash holida otp_codes'da.
  * service_role (RLS chetlab) + anon (login/parol-tekshiruv) mijozlari.
  *
@@ -12,7 +14,7 @@
  * Endpointlar (nginx /authapi/* -> 127.0.0.1:8792):
  *   POST /auth/request-otp        { phone, purpose:'register'|'reset'|'change_phone', jwt? }
  *   POST /auth/verify-otp         { phone, purpose, code }                 -> { ok, ticket }
- *   POST /auth/register           { ticket, password, firstName, lastName, role:'staff'|'parent' }
+ *   POST /auth/register           { ticket, password, firstName, lastName, role:'staff'|'parent' }  (eski sahifa: 'teacher' = 'staff')
  *   POST /auth/login              { phone, password }                      -> { ok, access_token, refresh_token }
  *   POST /auth/reset-confirm      { ticket, newPassword }
  *   POST /auth/change-phone-confirm { ticket }
@@ -26,6 +28,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const L = require('./lib.cjs');
+const { definitelyNotSent } = require('../payments/sms.cjs');
 
 const MAX_BODY = 64e3;   // auth payloadlari kichik — 64 KB yetarli
 function readBody(req) {
@@ -42,6 +45,9 @@ function parseBody(raw, ctype) {
 }
 // Logда telefonni qisman yashirish (PII).
 const redactPhone = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(0, 5) + '***' + d.slice(-2) : '***'; };
+
+// Sozlama soni: yaroqsiz/manfiy -> standart (fail-closed). 0 — ruxsat etilgan qiymat (o'chirish).
+function cfgNum(v, def) { if (v === undefined || v === null || v === '') return def; const n = Number(v); return (Number.isFinite(n) && n >= 0) ? Math.floor(n) : def; }
 
 // =====================================================================
 // SOF-ROQ handlerlar fabrikasi — deps inject qilinadi (test uchun soxta sb/anon/admin/eskiz).
@@ -66,8 +72,19 @@ function makeHandlers(deps) {
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
   const OTP_TPL = C.otpTemplate || 'IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.';
   const DRY = !eskiz;
-  const ALLOWED_ROLES = new Set(['staff', 'parent']);   // 'staff' = umumiy xodim (aniq rol — teacher/kassir/qorovul... — admin tasdiqlashda beriladi)
+  // Ro'yxatdagi rol: 'staff' = umumiy xodim (aniq rol — teacher/kassir/qorovul... — admin tasdiqlashda beriladi), 'parent'.
+  //   'teacher' — ESKI sahifa (c29e5b5 gacha «O‘qituvchi» tugmasi; brauzerda uzoq ochiq qolgan / keshlangan sahifa) — u ham
+  //   XODIM sifatida qabul qilinadi («Noto‘g‘ri rol» bilan ro'yxat yarmida to'xtab qolmasin). Boshqa qiymat (admin,
+  //   director...) — rad: mijoz yuqori rolni tanlay olmaydi.
+  const ROLE_ALIAS = new Map([['staff', 'staff'], ['teacher', 'staff'], ['parent', 'parent']]);
   const PURPOSES = new Set(['register', 'reset', 'change_phone']);
+  // Chet el raqamiga OTP (Eskiz xalqaro SMS). auth.intlOtp=false yoki sms.international=false — o'chiq.
+  //   Umumiy chegara (butun tizim, xarajat himoyasi): soatiga / sutkasiga; 0 = chet el raqamiga OTP yo'q.
+  const SMS_CFG = deps.smsCfg || {};
+  const INTL_OTP = C.intlOtp !== false && SMS_CFG.international !== false;
+  const OTP_INTL_HOUR = cfgNum(C.otpIntlMaxPerHour, 20);
+  const OTP_INTL_DAY = cfgNum(C.otpIntlMaxPerDay, 60);
+  const BAD_PHONE = 'Telefon raqam noto‘g‘ri. O‘zbekiston: +998 90 123 45 67; chet el raqami + bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67).';
 
   const nowISO = () => new Date().toISOString();
   async function userByPhone(phone) {
@@ -78,12 +95,53 @@ function makeHandlers(deps) {
     const { data } = await sb.from('otp_codes').select('*').eq('phone', phone).eq('purpose', purpose).order('createdAt', { ascending: false }).limit(1);
     return (data && data[0]) || null;
   }
+  // Chet el raqami maktab ma'lumotlarida BORmi (o'quvchi kartasidagi ota/ona telefoni yoki xodim/o'qituvchi telefoni)?
+  //   SMS-firibgarlik (xalqaro SMS «pumping») himoyasi: chet elga kod FAQAT maktab o'zi yozib qo'ygan raqamga ketadi.
+  //   Ro'yxat sahifalab o'qiladi (PostgREST 1000 qator chegarasi) va KNOWN_TTL soniya xotirada saqlanadi (har so'rovda
+  //   jadvallarni qayta o'qib, bazani band qilmaslik uchun; admin raqam qo'shsa — shu vaqt ichida kuchga kiradi).
+  //   Xato -> null (fail-closed: kod yuborilmaydi).
+  const KNOWN_TTL = cfgNum(C.knownPhoneCacheSec, 60);
+  let knownSet = null, knownAt = 0;
+  async function knownPhone(canon) {
+    if (!knownSet || Date.now() - knownAt >= KNOWN_TTL * 1000) {
+      const SRC = [['student_private', ['parentPhone', 'parentPhone2']], ['staff', ['phone']], ['teachers', ['phone']]];
+      const PAGE = 1000, set = new Set();
+      for (const [t, cols] of SRC) {
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await sb.from(t).select(['id'].concat(cols).join(',')).order('id', { ascending: true }).range(from, from + PAGE - 1);
+          if (error) { console.error('knownPhone fetch fail', t, error.code || '', (error.message || '').slice(0, 120)); return null; }
+          for (const r of data || []) for (const c of cols) { const k = L.normPhone(r[c]); if (k && k.slice(0, 3) !== '998') set.add(k); }
+          if (!data || data.length < PAGE) break;
+        }
+      }
+      knownSet = set; knownAt = Date.now();
+    }
+    return knownSet.has(canon);
+  }
+  // Ma'lumotlarda YO'Q chet el raqami bilan so'rovlar — IP bo'yicha soatiga OTP_MAX_IP_HOUR tadan (xotirada): raqamlarni
+  //   ketma-ket «tekshirib chiqish»ga qarshi (bunday so'rov otp_codes'ga yozilmaydi, shuning uchun IP limiti alohida).
+  const intlMiss = new Map();
+  function intlMissLimited(ip) {
+    const now = Date.now(), key = ip || '-';
+    if (intlMiss.size > 5000) intlMiss.clear();                       // xotira chegarasi (oddiy himoya)
+    const arr = (intlMiss.get(key) || []).filter(t => now - t < 3600e3);
+    arr.push(now); intlMiss.set(key, arr);
+    return arr.length > OTP_MAX_IP_HOUR;
+  }
+  // Oxirgi davrda CHET EL raqamlariga yuborilgan OTP soni (butun tizim). Xato -> null.
+  async function intlOtpCount(sinceISO) {
+    const r = await sb.from('otp_codes').select('id', { count: 'exact', head: true }).not('phone', 'like', '998%').gte('createdAt', sinceISO);
+    if (r.error) { console.error('intl OTP count fail', r.error.code || '', (r.error.message || '').slice(0, 120)); return null; }
+    return typeof r.count === 'number' ? r.count : (r.data || []).length;
+  }
 
   async function requestOtp(body) {
     const canon = L.normPhone(body.phone);
-    if (!canon) return { ok: false, error: 'Telefon raqam noto‘g‘ri. +998 bilan 12 raqam kiriting.' };
+    if (!canon) return { ok: false, error: BAD_PHONE };
     const purpose = String(body.purpose || '');
     if (!PURPOSES.has(purpose)) return { ok: false, error: 'Noto‘g‘ri so‘rov.' };
+    const intl = canon.slice(0, 3) !== '998';
+    if (intl && !INTL_OTP) return { ok: false, error: 'Chet el raqamiga SMS kod yuborish o‘chirilgan. O‘zbekiston raqamidan foydalaning.' };
 
     // (1) Maqsad bo'yicha TERMINAL tekshiruvlar — anti-abuse chegaralaridan OLDIN, foydalanuvchiga
     //     eng aniq xabar berish uchun (masalan «allaqachon ro'yxatdan o'tgan» — 60s throttle yashirmasin).
@@ -98,6 +156,16 @@ function makeHandlers(deps) {
       uid = await verifyJwt(body.jwt);
       if (!uid) return { ok: false, error: 'Avval tizimga kiring.' };
       if (await userByPhone(canon)) return { ok: false, error: 'Bu telefon band.' };
+    }
+    // Chet el raqami: ro'yxat / telefon almashtirishda — raqam maktab ma'lumotlarida bo'lishi shart (reset — foydalanuvchi
+    //   allaqachon mavjud, ya'ni ro'yxatda tekshirilgan).
+    if (intl && purpose !== 'reset') {
+      const known = await knownPhone(canon);
+      if (known === null) return { ok: false, error: 'Server xatosi. Keyinroq urinib ko‘ring.' };
+      if (!known) {
+        if (intlMissLimited(String(body._ip || '').slice(0, 64))) return { ok: false, error: 'Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.' };
+        return { ok: false, error: 'Bu chet el raqami maktab ma’lumotlarida topilmadi. Maktab ma’muriyatidan farzandingiz kartasiga shu raqamni (+ bilan) yozib qo‘yishni so‘rang yoki O‘zbekiston raqamidan foydalaning.' };
+      }
     }
 
     // (2) Anti-abuse: soatlik limit (telefon + IP) + 60s qayta-yuborish (SMS yuboriladigan yo'lда).
@@ -117,6 +185,15 @@ function makeHandlers(deps) {
       if (age < OTP_RESEND) { const wait = Math.ceil(OTP_RESEND - age); return { ok: false, error: `Yangi kodni ${wait} soniyadan so‘ng so‘rang.`, resendAfter: wait }; }
     }
 
+    // Chet el raqamlariga OTP — butun tizim bo'yicha soatlik/sutkalik chegara (xalqaro SMS xarajati himoyasi).
+    if (intl) {
+      if (!OTP_INTL_HOUR || !OTP_INTL_DAY) return { ok: false, error: 'Chet el raqamiga SMS kod yuborish o‘chirilgan. O‘zbekiston raqamidan foydalaning.' };
+      const nH = await intlOtpCount(hourAgo);
+      const nD = nH == null ? null : await intlOtpCount(new Date(Date.now() - 864e5).toISOString());
+      if (nH == null || nD == null) return { ok: false, error: 'Server xatosi. Keyinroq urinib ko‘ring.' };
+      if (nH >= OTP_INTL_HOUR || nD >= OTP_INTL_DAY) return { ok: false, error: 'Chet el raqamlariga kod yuborish vaqtincha cheklangan. Birozdan so‘ng urinib ko‘ring yoki O‘zbekiston raqamidan foydalaning.' };
+    }
+
     const code = L.genCode();
     const codeHash = L.hmacCode(HMAC, canon, purpose, code);
     const expiresAt = new Date(Date.now() + OTP_TTL * 1000).toISOString();
@@ -127,7 +204,18 @@ function makeHandlers(deps) {
 
     const msg = String(OTP_TPL).replace('{code}', code);
     if (DRY) console.log('[DRY OTP]', redactPhone(canon), purpose, code);
-    else { try { const r = await eskiz.send(canon, msg); if (!r.ok) console.error('OTP SMS fail', redactPhone(canon), r.error, (r.raw || '').slice(0, 300)); } catch (e) { console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); } }
+    else {
+      let r = null, thrown = null;
+      try { r = await eskiz.send(canon, msg); if (!r.ok) console.error('OTP SMS fail', redactPhone(canon), r.error, (r.raw || '').slice(0, 300)); }
+      catch (e) { thrown = e || new Error('eskiz'); console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); }
+      // Chet el raqami: Eskiz ANIQ rad etsa (xalqaro SMS yoqilmagan / balans / taqiqlangan yo'nalish) yoki umuman ulanmasa —
+      //   kod KELMAYDI: foydalanuvchiga aytamiz (kod bekor; qayta so'rash 60 soniyadan keyin). Javob noaniq bo'lsa
+      //   (timeout/5xx — SMS ketgan bo'lishi mumkin) — odatdagidek «yuborildi».
+      if (intl && ((r && !r.ok && !r.ambiguous) || (thrown && definitelyNotSent(thrown)))) {
+        try { await sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false); } catch (_) {}
+        return { ok: false, error: 'Chet el raqamiga SMS yuborilmadi (Eskiz’da xalqaro SMS yoqilmagan bo‘lishi mumkin). O‘zbekiston raqamidan foydalaning yoki maktab bilan bog‘laning.' };
+      }
+    }
     return { ok: true, resendAfter: OTP_RESEND };
   }
 
@@ -165,10 +253,10 @@ function makeHandlers(deps) {
     //   noto'g'ri (boshqa odamга) bog'lashга olib kelardi — moliyaviy xato.
     const { data: st, error: stErr } = await sb.from('staff').select('*');
     if (stErr) { console.error('staff link fetch fail (staff)', stErr.code || '', (stErr.message || '').slice(0, 120)); return { status: 'fetch_fail' }; }
-    (st || []).forEach(r => rows.push({ table: 'staff', id: r.id, code: r.staffId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
+    (st || []).forEach(r => rows.push({ table: 'staff', id: r.id, code: r.staffId || '', phone: r.phone, name: r.name || '', pos: r.position || '', userUid: r.userUid || '' }));
     const { data: te, error: teErr } = await sb.from('teachers').select('*');
     if (teErr) { console.error('staff link fetch fail (teachers)', teErr.code || '', (teErr.message || '').slice(0, 120)); return { status: 'fetch_fail' }; }
-    (te || []).forEach(r => rows.push({ table: 'teacher', id: r.id, code: r.teacherId || '', phone: r.phone, name: r.name || '', userUid: r.userUid || '' }));
+    (te || []).forEach(r => rows.push({ table: 'teacher', id: r.id, code: r.teacherId || '', phone: r.phone, name: r.name || '', pos: 'O‘qituvchi', userUid: r.userUid || '' }));
     const res = L.matchStaffByPhone(canon, rows);
     if (res.status !== 'linked') return { status: res.status };     // none | ambiguous | taken -> bog'lanmaydi
     const m = res.match;
@@ -182,15 +270,15 @@ function makeHandlers(deps) {
     // 2) To'g'ri havola (users). Xato bo'lsa — teskari havolani ORQAGA qaytaramiz (izchillik).
     const { error: fe } = await sb.from('users').update({ staffRefType: m.table, staffRefId: m.id, staffCode: m.code, linkedAt: nowISO(), linkedVia: 'auto' }).eq('id', uid);
     if (fe) { try { await sb.from(tbl).update({ userUid: null }).eq('id', m.id); } catch (_) {} console.error('staff link fwd fail', fe.code || '', (fe.message || '').slice(0, 120)); return { status: 'fwd_fail' }; }
-    return { status: 'linked', table: m.table, id: m.id, code: m.code, name: m.name };
+    return { status: 'linked', table: m.table, id: m.id, code: m.code, name: m.name, pos: m.pos || '' };
   }
 
   async function register(body) {
     const t = L.verifyTicket(HMAC, body.ticket);
     if (!t || t.purpose !== 'register' || !t.phone) return { ok: false, error: 'Tasdiqlash muddati tugagan. Qaytadan boshlang.' };
     const canon = t.phone;
-    const role = ALLOWED_ROLES.has(body.role) ? body.role : null;
-    if (!role) return { ok: false, error: 'Noto‘g‘ri rol.' };
+    const role = ROLE_ALIAS.get(String(body.role == null ? '' : body.role).trim().toLowerCase()) || null;
+    if (!role) return { ok: false, error: 'Noto‘g‘ri rol. Sahifani yangilang (Ctrl+F5) va «Xodim» yoki «Ota-ona»ni tanlab qaytadan urinib ko‘ring.' };
     const pv = L.validatePassword(body.password);
     if (!pv.ok) return { ok: false, error: pv.errors.join('. ') };
     const firstName = String(body.firstName || '').trim();
@@ -226,11 +314,14 @@ function makeHandlers(deps) {
     // Xodim ro'yxatdan o'tganда — HR yozuviga telefon bo'yicha avtomatik bog'lash (registratsiyani BUZMAYDI).
     let linked = null;
     if (role === 'staff') { try { linked = await linkStaffAccount(uid, canon); } catch (e) { console.error('staff link exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 200)); } }
+    const isLinked = !!(linked && linked.status === 'linked');
     return {
       ok: true, role, verified, email, phone: canon, pending: role === 'staff',
-      linked: (linked && linked.status === 'linked') ? { code: linked.code, name: linked.name } : null,
+      linked: isLinked ? { code: linked.code, name: linked.name, pos: linked.pos || '' } : null,
       message: role === 'staff'
-        ? 'Ro‘yxatdan o‘tdingiz! Hisobingiz administrator tasdig‘ini kutmoqda.'
+        ? (isLinked
+          ? `Ro‘yxatdan o‘tdingiz! Xodimlar ro‘yxatidagi yozuvingiz topildi (${linked.code}${linked.pos ? ' · ' + linked.pos : ''}). Administrator tasdiqlagach (rolingiz tanlangan holda) tizimga kirasiz.`
+          : 'Ro‘yxatdan o‘tdingiz! Hisobingiz administrator tasdig‘ini kutmoqda.')
         : 'Ro‘yxatdan o‘tdingiz! Endi kirishingiz mumkin.',
     };
   }
@@ -323,7 +414,7 @@ function startServer() {
   const SMS = CFG.sms || {};
   const eskiz = (SMS.enabled === false || SMS.dryRun === true) ? null : makeEskiz(SMS);
   const H = makeHandlers({
-    sb, admin: sb, eskiz, cfg: AUTH,
+    sb, admin: sb, eskiz, cfg: AUTH, smsCfg: SMS,
     anon: () => createClient(supaUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } }),
     verifyJwt: jwt => verifyToken(db, jwt),
   });

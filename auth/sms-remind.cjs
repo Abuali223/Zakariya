@@ -11,7 +11,8 @@
  *   - QARZ SERVERDA hisoblanadi (invoices; mijoz yuborgan summaga ishonilmaydi) — «Qarzdorlar» kartasi
  *     bilan BIR XIL qoida: bekor/qaytarilgan -> 0, to'langan -> 0, aks holda summa − to'langan;
  *     faqat joriy (Toshkent) oygacha bo'lgan oylar (oldindan yaratilgan kelgusi oy qarz emas).
- *   - TELEFON: student_private.parentPhone (yaroqsiz/bo'sh bo'lsa parentPhone2), kanonik 998XXXXXXXXX.
+ *   - TELEFON: student_private.parentPhone (yaroqsiz/bo'sh bo'lsa parentPhone2), kanonik (server/phone.cjs): O'zbekiston
+ *     998XXXXXXXXX yoki chet el raqami ('+' bilan yozilgan; Eskiz xalqaro SMS — sms.international=false bo'lsa o'chiq).
  *   - TAKROR / XARAJAT himoyasi: bitta o'quvchiga KUNIGA 1 ta (Toshkent sanasi) — sms_log id
  *     "remind__<kanonik kalit>__<YYYY-MM-DD>" ATOMIK claim (insert; PK to'qnashuvi = allaqachon yuborilmoqda).
  *     Eskiz ANIQ rad etsa (failed) — shu kuni ko'pi bilan remindMaxRetries marta qayta urinish. Holat NOANIQ bo'lsa
@@ -40,8 +41,10 @@ function debtOf(i) {
   return Math.max(0, (Number(i.amount) || 0) - (Number(i.paidAmount) || 0));
 }
 // Eskiz xatosini admin uchun tushunarli qilish.
-function humanEskizError(e) {
+function humanEskizError(e, intl) {
   const t = String(e || '');
+  if (intl && /intl_disabled/.test(t)) return 'Chet el raqamiga SMS o‘chirilgan (config.json → sms.international).';
+  if (intl) return 'Chet el raqamiga SMS yuborilmadi (Eskiz): ' + t.slice(0, 160) + ' — Eskiz kabinetida xalqaro SMS yoqilganini va balansni tekshiring.';
   if (/модерац|moderat|шаблон|templat/i.test(t)) return 'Eskiz bu matnni rad etdi: SMS matni Eskiz kabinetida SHABLON sifatida tasdiqlanmagan. config.json → sms.templates.remind (yoki debt) dagi matnni Eskiz «Shablonlar» bo‘limiga yuborib tasdiqlating.';
   if (/баланс|balance|средств|insufficient|limit/i.test(t)) return 'Eskiz: balans yoki limit yetarli emas — Eskiz hisobini tekshiring.';
   if (/bad_phone/.test(t)) return 'Telefon raqam noto‘g‘ri.';
@@ -59,6 +62,7 @@ function makeSmsRemind(deps) {
   const MAX_DAY = cfgNum(S.remindMaxPerDay, 500);       // butun maktab kuniga — xarajat chegarasi (0 = o'chirilgan)
   const MAX_TRIES = Math.max(1, cfgNum(S.remindMaxRetries, 3));   // Eskiz ANIQ rad etgandan keyin urinishlar (bir kunda)
   const TPL = (S.templates && (S.templates.remind || S.templates.debt)) || DEF_DEBT;
+  const INTL = S.international !== false;               // chet el raqamiga SMS (Eskiz send-global)
   const now = deps.now || (() => Date.now());
   const DRY = !eskiz;
 
@@ -109,7 +113,11 @@ function makeSmsRemind(deps) {
         if (!p2.error) pv = p2.data && p2.data[0];
       }
     }
-    const phone = (pv && (L.normPhone(pv.parentPhone) || L.normPhone(pv.parentPhone2))) || null;
+    // Birinchi YAROQLI raqam (ota, keyin ona). Chet el raqami — faqat xalqaro SMS yoqilgan bo'lsa (aks holda keyingisi).
+    const pick = v => { const c = L.normPhone(v); return (c && (INTL || c.slice(0, 3) === '998')) ? c : null; };
+    const phone = (pv && (pick(pv.parentPhone) || pick(pv.parentPhone2))) || null;
+    const intlOff = !phone && !!pv && !INTL && !!(L.normPhone(pv.parentPhone) || L.normPhone(pv.parentPhone2));
+    const intl = !!phone && phone.slice(0, 3) !== '998';
 
     // 4) Qarz — serverda (o'quvchining BARCHA kalitlaridagi fakturalar).
     const curMonth = tashkentDay(now()).slice(0, 7);
@@ -137,12 +145,13 @@ function makeSmsRemind(deps) {
     // 6) Yuborish shartlari — ko'rib chiqishda ham AYNAN shular qaytariladi (admin bloklangan holatda tasdiq oynasini ko'rmaydi).
     let block = null;
     if (!(due > 0)) block = { code: 'nodebt', error: 'Bu o‘quvchida joriy oygacha qarz yo‘q — SMS yuborilmadi.' };
-    else if (!phone) block = { code: 'nophone', error: 'Ota-ona telefoni kiritilmagan yoki noto‘g‘ri (o‘quvchi kartasi → «Ota-ona telefoni»).' };
+    else if (!phone) block = intlOff ? { code: 'nophone', error: 'Ota-ona telefoni — chet el raqami, xalqaro SMS esa serverda o‘chirilgan (config.json → sms.international).' }
+      : { code: 'nophone', error: 'Ota-ona telefoni kiritilmagan yoki noto‘g‘ri (o‘quvchi kartasi → «Ota-ona telefoni»; chet el raqami + bilan to‘liq yoziladi).' };
     else if (prev && prev.status === 'sent') block = { code: 'sent', already: 'sent', error: 'Bugun bu o‘quvchining ota-onasiga eslatma allaqachon yuborilgan ✓' };
     else if (prev && prev.status !== 'failed') block = { code: 'uncertain', already: 'sending', error: UNCERTAIN };
-    else if (prev && (Number(prev.attempts) || 0) >= MAX_TRIES) block = { code: 'retries', error: `Bugun ${MAX_TRIES} marta urinildi, SMS ketmadi: ${humanEskizError(prev.error)}` };
+    else if (prev && (Number(prev.attempts) || 0) >= MAX_TRIES) block = { code: 'retries', error: `Bugun ${MAX_TRIES} marta urinildi, SMS ketmadi: ${humanEskizError(prev.error, intl)}` };
     else if (!MAX_HOUR || !MAX_DAY) block = { code: 'disabled', error: 'SMS eslatma serverda o‘chirilgan (limit 0).' };
-    const info = { name, phone: pretty, due, months, message, dry: DRY,
+    const info = { name, phone: pretty, intl, due, months, message, dry: DRY,
       today: prev ? { status: String(prev.status || ''), at: prev.createdAt || null } : null, autoToday,
       blocked: block ? block.code : null, blockedMsg: block ? block.error : '' };
 
@@ -211,7 +220,7 @@ function makeSmsRemind(deps) {
     if (mk.error) console.error('sms-remind log update fail', logId, (mk.error.message || '').slice(0, 120));
     if (!r.ok) {
       console.error('sms-remind fail', redact(phone), status, String(r.error || '').slice(0, 200));
-      return { ok: false, error: uncertain ? 'Eskiz javobi noaniq (aloqa uzildi yoki Eskiz serveri xatosi) — SMS ketgan-ketmagani noma’lum. Ikki marta ketmasligi uchun bugun qayta yuborilmaydi.' : humanEskizError(r.error) };
+      return { ok: false, error: uncertain ? 'Eskiz javobi noaniq (aloqa uzildi yoki Eskiz serveri xatosi) — SMS ketgan-ketmagani noma’lum. Ikki marta ketmasligi uchun bugun qayta yuborilmaydi.' : humanEskizError(r.error, intl) };
     }
     return { ok: true, sent: true, phone: pretty, due, months };
   };

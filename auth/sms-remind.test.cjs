@@ -53,6 +53,9 @@ function setup(opts) {
     { id: 'y820', studentId: 'IQ-0820', name: 'Begona Bola' },
     { id: 'm6', studentId: 'IQ-0606', name: 'Ko‘p Oylik' },
     { id: 'd700', studentId: 'IQ-0700', name: 'Qarzsiz Bola' },          // fakturasi bor, lekin qarzi yo'q
+    { id: 'i380', studentId: 'IQ-0380', name: 'Obidova Mehrinigor' },     // chet el raqami (+48)
+    { id: 'i226', studentId: 'IQ-0226', name: 'Ismoilov Iskandar' },      // '+'siz chet el raqami (noaniq)
+    { id: 'i466', studentId: 'IQ-0466', name: 'Ma\'mirjonov Azizbek' },  // ota chet el, ona O'zbekiston
   ];
   state.student_private = [
     { id: 'd255', parentPhone: '+998 70 014 37 77', parentPhone2: '' },
@@ -67,6 +70,9 @@ function setup(opts) {
     ...[1, 2, 3, 4, 5].map(k => ({ id: 'p' + k, parentPhone: '99890500000' + k })),
     { id: 'IQ-0820', parentPhone: '998935550000' }, { id: 'y820', parentPhone: '998935551111' }, { id: 'm6', parentPhone: '998935552222' },
     { id: 'd700', parentPhone: '998935553333' },
+    { id: 'i380', parentPhone: '+48789706619', parentPhone2: '' },
+    { id: 'i226', parentPhone: '79031571124', parentPhone2: '' },
+    { id: 'i466', parentPhone: '+7 963 768 23 01', parentPhone2: '90 123 45 67' },
   ];
   state.invoices = [
     { id: 'IQ-0255__2026-09', studentId: 'IQ-0255', month: '2026-09', amount: 2610000, paidAmount: 0, status: 'pending' },
@@ -89,6 +95,7 @@ function setup(opts) {
     { id: 'IQ-0821__2026-10', studentId: 'IQ-0821', month: '2026-10', amount: 100000, paidAmount: 0, status: 'pending' },
     { id: 'IQ-0820__2026-10', studentId: 'IQ-0820', month: '2026-10', amount: 555000, paidAmount: 0, status: 'pending' },   // Begona Bola'niki
     ...['2026-05', '2026-06', '2026-08', '2026-09', '2026-10'].map(m => ({ id: 'IQ-0606__' + m, studentId: 'IQ-0606', month: m, amount: 100000, paidAmount: 0, status: 'pending' })),
+    ...['IQ-0380', 'IQ-0226', 'IQ-0466'].map(k => ({ id: k + '__2026-10', studentId: k, month: '2026-10', amount: 300000, paidAmount: 0, status: 'pending' })),
   ];
   state.sms_log = [];
   const R = makeSmsRemind({ sb, eskiz, smsCfg: o.smsCfg || {}, now: () => clock,
@@ -312,6 +319,30 @@ function setup(opts) {
     state.sms_log.push({ id: 'remind__X__2026-10-16', type: 'remind', sentBy: 'uid_dir', status: 'sent', createdAt: new Date(T0 - 60e3).toISOString() });
     const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
     ok('qayta urinish ham soatlik limitga bo\'ysunadi', !r.ok && /Soatiga 1/.test(r.error || '') && sent.length === 0, r); }
+
+
+  sec('chet el raqami (+ bilan) — xalqaro SMS');
+  { const { R, sent, state } = setup();
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', preview: true });
+    ok('preview: chet el raqami chiroyli + intl', p.ok && p.phone === '+48 789 706 619' && p.intl === true && !p.blocked, p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', expect: { message: p.message, phone: p.phone } });
+    ok('yuborildi (Eskiz: kanonik 48789706619)', r.ok && sent.length === 1 && sent[0].phone === '48789706619', { r, sent });
+    const row = state.sms_log.find(x => x.id === 'remind__IQ-0380__2026-10-16');
+    ok('jurnal: kanonik telefon', row && row.phone === '48789706619' && row.status === 'sent', row);
+    const u = await R({ jwt: 'uid_dir', studentId: 'IQ-0226', preview: true });
+    ok("'+'siz chet el raqami -> telefon yo'q (+ bilan yozish maslahati)", u.ok && u.blocked === 'nophone' && /\+ bilan/.test(u.blockedMsg || ''), u);
+    const k = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', preview: true });
+    ok('ota (chet el) birinchi tanlanadi', k.ok && k.phone === '+7 963 768 23 01' && k.intl === true, k); }
+  { const { R, sent } = setup({ smsCfg: { international: false } });
+    const k = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', preview: true });
+    ok('international=false: ona (O\'zbekiston) raqami tanlanadi', k.ok && k.phone === '+998 90 123 45 67' && k.intl === false, k);
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', preview: true });
+    ok('international=false: faqat chet el raqami -> aniq sabab', p.ok && p.blocked === 'nophone' && /xalqaro SMS/.test(p.blockedMsg || ''), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380' });
+    ok('international=false: yuborilmaydi', !r.ok && sent.length === 0, r); }
+  { const { R } = setup({ resultNext: [{ ok: false, error: 'International SMS not enabled', httpStatus: 400, ambiguous: false }] });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380' });
+    ok('Eskiz xalqaro SMS rad -> tushunarli xabar', !r.ok && /Chet el raqamiga SMS yuborilmadi/.test(r.error || '') && /xalqaro SMS/.test(r.error || ''), r); }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
