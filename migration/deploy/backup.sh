@@ -2,8 +2,8 @@
 # =====================================================================
 # backup.sh — zaxira: PostgreSQL (maktab ma'lumotlari: public + app sxemalari) + Supabase Storage fayllari.
 #   Bir martalik (zaxira ~/iqror-backups ga):   bash ~/iqror-repo/migration/deploy/backup.sh
-#   Har kuni (root crontab: sudo crontab -e; zaxira /opt/iqror/backups ga):
-#     30 3 * * *  bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1
+#   Har kuni (root crontab: sudo crontab -e; zaxira /opt/iqror/backups ga; server UTC'da — 22:30 = Toshkent 03:30):
+#     30 22 * * *  bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1
 #   Baza Supabase docker konteyneri ichidagi pg_dump bilan olinadi (DB_CONT, standart supabase-db) — parol
 #   kerak emas. Tashqi baza bo'lsa: PGURL=postgresql://... (unda host'da pg_dump bo'lishi kerak).
 #   Zaxira fayllari faqat egasiga o'qiladi (600): ichida shaxsiy ma'lumot (JSHSHIR, telefon, manzil) bor.

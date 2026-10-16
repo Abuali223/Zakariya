@@ -21,7 +21,7 @@ VPS'da nusxalab ishga tushirasiz.
 | `nginx.conf.example` | iqror.uz (statik) + api.iqror.uz (Supabase+AI+to'lov) reverse-proxy | `/etc/nginx/sites-available/iqror` |
 | `iqror-ai.service` | AI yordamchi doimiy (systemd) | `/etc/systemd/system/` |
 | `iqror-pay.service` | To'lov serveri doimiy (systemd) | `/etc/systemd/system/` |
-| `backup.sh` | Zaxira: maktab ma'lumotlari (`public` + `app`, Supabase konteyneridagi pg_dump — parol kerak emas) + Storage | bir martalik: `bash ~/iqror-repo/migration/deploy/backup.sh` (→ `~/iqror-backups`); har kuni: `sudo crontab -e` → `30 3 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1` (→ `/opt/iqror/backups`) |
+| `backup.sh` | Zaxira: maktab ma'lumotlari (`public` + `app`, Supabase konteyneridagi pg_dump — parol kerak emas) + Storage | bir martalik: `bash ~/iqror-repo/migration/deploy/backup.sh` (→ `~/iqror-backups`); har kuni: `sudo crontab -e` → `30 22 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1` (→ `/opt/iqror/backups`; server UTC'da 22:30 = Toshkent 03:30) |
 
 ## Tartib (qisqacha)
 1. Supabase o'rnatish + schema/rls/import — `../supabase-setup.md`.
