@@ -86,6 +86,7 @@
   "month",
   "phone",
   "providerId",
+  "sentBy",
   "status",
   "studentId",
   "type"

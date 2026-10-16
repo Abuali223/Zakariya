@@ -253,6 +253,21 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Kalitlari almashib ketgan eski import fakturalarini (yetim) egasiga ko'chirish — har holat alohida (SQL); «Ehtimoliy egasi» ustuni yordam beradi.
 - To'qnash o'quvchi ID'larini tuzatish (ID'ni ko'chirish) ham hozircha texnik yordam (SQL) bilan; tuzatilguncha bu bolalarning ota-ona kabineti yopiq. `rekey-students.sql`ni bunday holatda ishga tushirmang — u `child_claims`ni ham ko'chiradi.
 
+## 21) Aka-uka 10% chegirmasi (oktyabr regressiyasi) + «Qarzdorlar» → «Eslatma» SMS
+
+**Aka-uka chegirmasi — 3 farzandli oila oktyabrda faqat bittasiga 10% olgan edi (sentyabrda hammasi olgan)**
+- Sabab: 14-oktyabrdagi o'zgarish oilani FAQAT ota/ona F.I.Sh bo'yicha guruhlardi (farzand ismi faqat ota/ona maydonlari butunlay bo'sh bo'lsa). Kartalarda ota/ona maydonlari har xil to'ldirilgan bo'lsa (birida faqat ota, birida faqat ona — o'z familiyasida) oila «2 + 1» bo'linib, 2 kishilik guruhda faqat bittasi (ID tartibi) 10% olardi. Skrinshotdagi holat (IQ-0255 → 2 610 000, IQ-0268/IQ-0276 → 2 900 000) testda aynan qayta hosil qilindi.
+- Tuzatma: familiya o'zaklari = farzand ismi ∪ ota F.I.Sh ∪ ona F.I.Sh (bir xil telefon sharti o'zgarmadi). Faqat qirra QO'SHADI: sentyabr usulida ham, ota/ona usulida ham topilgan oila guruhlanadi; begona (umumiy o'zaksiz) bolalar bir telefonda bo'lsa ham qo'shilmaydi. 40 000 tasodifiy ssenariyda hech kimning avvalgi 10% i olinmadi. O'quvchi ismi-familiyasi o'zgarsa ham «Qayta hisoblash» eslatmasi chiqadi.
+- Familiya taqqoslash yozuv farqlariga chidamli: apostrof turlari (Gʻ / G' / G‘ / G’ / G`) bir xil; lotin ↔ rus transliteratsiyasi x/h (Xasanov / Hasanov / Хасанов) va q/k (Qodirov / Kodirov / Қодиров) bir xil.
+- O'quvchi kartasida «Aka-uka chegirmasi» → yangi «Yo‘q — oilaga qo‘shilmasin»: bola umumiy telefon tufayli begona oilaga noto'g'ri qo'shilib qolsa, avtomatik guruhdan chiqariladi («Ha» — avvalgidek majburiy 10%).
+- «↻ Qayta hisoblash» endi aka-uka ogohlantirishlarini ham ko'rsatadi (masalan, bitta telefonda 8 tadan ortiq bola — avtomatik chegirma berilmadi).
+- ⚠️ Mavjud oktyabr fakturalari avtomatik o'zgarmaydi: «To'lovlar» → 2026-10 → «↻ Qayta hisoblash» (to'lanmaganlari 2 610 000 ga tushadi). Oktyabrni TO'LIQ to'lab bo'lgan oilalar uchun: qayta hisoblash yangi narxi to'langandan KAM bo'lgan to'langan fakturalarni alohida ro'yxatda ko'rsatadi — tasdiqlansa farq (masalan 290 000) o'quvchi AVANSIGA qaytadi (keyingi oy to'loviga ishlatiladi), faktura «to'langan» qoladi; narx OSHGAN to'langan fakturaga avvalgidek tegilmaydi (qarz tiklanmaydi). Server: `reprice_invoice` — `p_meta.paidDecrease` faqat kamayishga ruxsat beradi (qulf ostida, avans jurnali bilan).
+
+**«Moliya» → «Qarzdorlar» → «Eslatma» — endi haqiqiy SMS (Eskiz, auth-server `/authapi/sms-remind`)**
+- Bosilganda avval ko'rib chiqish: o'quvchi, ota-ona telefoni, qarz (oylar bilan) va SMS matni ko'rsatiladi; tasdiqlansa yuboriladi.
+- Qarz, telefon va matn SERVERDA aniqlanadi (mijoz summasiga ishonilmaydi; o'quvchining barcha kalitlaridagi fakturalar); ruxsat — faqat faol direktor / moliya menejeri; ID to'qnashuvida rad (SMS boshqa oilaga ketmasin); bir o'quvchiga kuniga BITTA (takror bosish / parallel so'rovda ham bitta SMS — baza PK claim); Eskiz aniq rad etsa — qayta urinish mumkin, natija noaniq bo'lsa (tarmoq/timeout) — bugun qayta yuborilmaydi (ikki marta SMS ketmasin); soatlik/kunlik limit parallel so'rovlarda ham oshmaydi; Eskiz xatosi tushunarli ko'rsatiladi (masalan, shablon tasdiqlanmagan); `sms_log`da kim yuborgani (`sentBy`) saqlanadi; avtomatik `sms-worker` shu kuni qo'lda eslatma olgan (yoki olayotgan) o'quvchini o'tkazadi; Eskiz so'rovi 20 s da uziladi (osilib qolmaydi).
+- Talab: SMS matni Eskiz kabinetida shablon sifatida tasdiqlangan bo'lishi kerak (auth/README.md).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

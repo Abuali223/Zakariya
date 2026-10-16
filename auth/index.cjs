@@ -16,6 +16,7 @@
  *   POST /auth/login              { phone, password }                      -> { ok, access_token, refresh_token }
  *   POST /auth/reset-confirm      { ticket, newPassword }
  *   POST /auth/change-phone-confirm { ticket }
+ *   POST /auth/sms-remind         { jwt, studentId, preview? }            -> qarzdor ota-onasiga SMS eslatma (sms-remind.cjs)
  *   GET  /auth/health             -> ok
  *
  * Ishga tushirish:  cp config.example.json config.json (to'ldiring) ; node index.cjs
@@ -326,9 +327,15 @@ function startServer() {
     anon: () => createClient(supaUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } }),
     verifyJwt: jwt => verifyToken(db, jwt),
   });
+  // «Moliya» → «Qarzdorlar» → «Eslatma» (direktor/moliya menejeri JWT bilan; Eskiz — OTP bilan bir xil sozlama).
+  //   Modul yuklanmasa ham auth (login/OTP) ISHLAYVERADI — faqat eslatma xizmati vaqtincha o'chadi.
+  let smsRemind;
+  try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); }
+  catch (e) { console.error('sms-remind yuklanmadi:', e && e.message); smsRemind = async () => ({ ok: false, error: 'SMS eslatma xizmati vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
   const ROUTES = {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,
     'login': H.login, 'reset-confirm': H.resetConfirm, 'change-phone-confirm': H.changePhoneConfirm,
+    'sms-remind': smsRemind,
   };
   // CORS: ruxsat etilgan origin(lar) ro'yxati (vergul bilan yoki massiv). Brauzer api.iqror.uz'ga
   //   cross-origin murojaat qiladi (sayt iqroacademy.uz'да) — shuning uchun mos originни qaytaramiz.
@@ -365,7 +372,7 @@ function startServer() {
       send({ ok: false, error: 'Server xatosi. Keyinroq urinib ko‘ring.' }, 500);
     }
   });
-  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm})`));
+  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind})`));
 }
 
 if (require.main === module) startServer();

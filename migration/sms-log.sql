@@ -8,9 +8,10 @@ do $iqror_guard$ begin raise exception 'iqror: sms-log.sql ALOHIDA ishga tushiri
 -- SMS JURNALI (sms_log) — faktura/qarzdorlik SMS xabarnomalari holati.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
--- Yozadi: SERVER (payments/sms-worker.cjs, service_role — RLS chetlab).
+-- Yozadi: SERVER (payments/sms-worker.cjs va auth/sms-remind.cjs — service_role, RLS chetlab).
 -- O'qiydi: Direktor + Moliya (kelajakda log ko'rish uchun).
--- Takror ketmasligi uchun id:  "<invoiceId>__new"  yoki  "<invoiceId>__debt__<YYYY-MM-DD>".
+-- Takror ketmasligi uchun id:  "<invoiceId>__new",  "<invoiceId>__debt__<YYYY-MM-DD>"  yoki
+--   "remind__<studentId>__<YYYY-MM-DD>" (qo'lda «Eslatma»: o'quvchiga kuniga bitta; sentBy — kim yubordi).
 -- Idempotent.
 -- =====================================================================
 create table if not exists public.sms_log (
@@ -18,9 +19,9 @@ create table if not exists public.sms_log (
   "invoiceId"  text,
   "studentId"  text,
   phone        text,
-  type         text,                          -- 'new' | 'debt'
+  type         text,                          -- 'new' | 'debt' | 'remind'
   message      text,
-  status       text,                          -- 'sent' | 'failed'
+  status       text,                          -- 'sending' | 'sent' | 'failed' | 'unknown' (Eskiz javobi noaniq)
   attempts     integer default 0,             -- yuborishga urinishlar soni (xato bo'lsa qayta uriniladi)
   "providerId" text,                          -- Eskiz xabar id
   error        text,
@@ -28,6 +29,7 @@ create table if not exists public.sms_log (
   "createdAt"  timestamptz default now()
 );
 alter table public.sms_log add column if not exists attempts integer default 0;   -- mavjud jadvalga ham
+alter table public.sms_log add column if not exists "sentBy" text;                -- qo'lda eslatma: yuborgan xodim (users.id)
 create index if not exists sms_log_invoice_idx on public.sms_log("invoiceId");
 create index if not exists sms_log_type_idx    on public.sms_log(type);
 create index if not exists sms_log_created_idx on public.sms_log("createdAt");

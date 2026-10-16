@@ -30,6 +30,7 @@ OTP (6 xonali SMS kod) orqali telefon tasdiqlanadi. **Maxfiy kalitlar faqat shu 
 | POST | `/auth/login` | `{phone, password}` | `{ok, access_token, refresh_token, role, verified}` |
 | POST | `/auth/reset-confirm` | `{ticket, newPassword}` | `{ok, message}` |
 | POST | `/auth/change-phone-confirm` | `{ticket}` | `{ok, message}` |
+| POST | `/auth/sms-remind` | `{jwt, studentId, preview?}` | `{ok, preview?, name, phone, due, months, message}` / `{ok, sent}` / `{ok:false, already?, error}` |
 | GET | `/auth/health` | — | `ok` |
 
 Mijoz `login`/`register`dan keyin `supabase.auth.setSession({access_token, refresh_token})` chaqiradi
@@ -60,6 +61,27 @@ npm test                                  # birlik testlar (tashqi xizmatsiz)
 Eskiz yuborishdan oldin SMS matnini **moderatsiyadan** o‘tkazishni talab qiladi. `auth.otpTemplate`
 (masalan `IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.`) ni Eskiz kabinetida tasdiqlang,
 aks holda kodlar yuborilmaydi. `{code}` — 6 xonali kod bilan almashadi.
+
+## Qarzdorga SMS eslatma («Moliya» → «Qarzdorlar» → «Eslatma») — `sms-remind.cjs`
+
+Admin panelda tugma bosilganda: avval **ko‘rib chiqish** (`preview:true` — hech narsa yuborilmaydi), admin
+oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, keyin yuboriladi.
+- **Ruxsat:** faqat FAOL `director` / `finance_mgr` (`sms.remindRoles` bilan o‘zgartiriladi) — JWT + `users` jadvali.
+- **Qarz serverda** hisoblanadi (`invoices`, joriy Toshkent oyigacha; bekor/qaytarilgan/to‘langan — 0) — «Qarzdorlar»
+  kartasi bilan bir xil qoida. Telefon: `student_private.parentPhone` (yaroqsiz bo‘lsa `parentPhone2`).
+- **O‘quvchi:** bosilgan kalit bitta o‘quvchiga mos bo‘lishi shart (ID to‘qnashuvida — rad, SMS boshqa oilaga ketmasin);
+  qarz o‘quvchining barcha kalitlaridagi (studentId + eski hujjat id) fakturalardan, qulf — kanonik kalit bilan.
+- **Takror yo‘q:** bir o‘quvchiga **kuniga bitta** (`sms_log` id `remind__<kanonik kalit>__<YYYY-MM-DD>`, atomik claim;
+  parallel bosishda ham bitta SMS). Eskiz **aniq rad etsa** shu kuni `remindMaxRetries` (3) martagacha qayta urinish;
+  natija **noaniq** bo‘lsa (tarmoq xatosi/timeout — `unknown`, yoki jarayon uzilgan — `sending`) — bugun qayta
+  yuborilmaydi. Limit: foydalanuvchiga soatiga `remindMaxPerHour` (60), maktabga kuniga `remindMaxPerDay` (500);
+  `0` — eslatma o‘chirilgan; `remindRoles: []` — hech kim. Limit claim’dan keyin ham qayta sanaladi (parallel so‘rovlar
+  oshib keta olmaydi). Avtomatik `sms-worker` shu kuni qo‘lda eslatma olgan (yoki olayotgan) o‘quvchini o‘tkazadi.
+- **Matn:** `sms.templates.remind` → `sms.templates.debt` → standart:
+  `Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy`
+  (`{month}` — qarzdor oylar, masalan `09.2026, 10.2026`). ⚠️ Bu matn ham Eskiz kabinetida **shablon sifatida
+  tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad etadi va admin panel shuni aniq aytadi.
+- `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi).
 
 ## config.json (maxfiy — gitga tushmaydi)
 

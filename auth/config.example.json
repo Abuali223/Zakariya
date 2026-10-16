@@ -24,6 +24,13 @@
     "eskizEmail": "ESKIZ_EMAIL (kabinet emaili)",
     "eskizPassword": "ESKIZ_PAROL — MAXFIY (yoki token bilan)",
     "token": "",
-    "from": "4546"
+    "from": "4546",
+    "remindRoles": ["director", "finance_mgr"],
+    "remindMaxPerHour": 60,
+    "remindMaxPerDay": 500,
+    "remindMaxRetries": 3,
+    "templates": {
+      "remind": "Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy"
+    }
   }
 }

@@ -62,9 +62,14 @@ begin
   v_paid := case when v_inv.status = 'paid' and not v_inv.grant_ and v_inv.provider <> 'grant' and v_inv.amount > 0
                  then greatest(v_inv.paid0, v_inv.amount) else v_inv.paid0 end;
   -- HAQIQATAN to'langan faktura narx o'zgarishida TEGILMAYDI (qarz tiklanmaydi) — snapshotdan KEYIN to'langan
-  --   bo'lsa ham shu yerda (qulf ostida) aniqlanadi. Istisno: holat bo'yicha bekor (pul avansga qaytadi).
+  --   bo'lsa ham shu yerda (qulf ostida) aniqlanadi. Istisnolar: holat bo'yicha bekor (pul avansga qaytadi) va
+  --   admin TASDIQLAGAN narx KAMAYISHI (p_meta.paidDecrease=true, 0 < yangi narx < to'langan) — masalan kechikib qo'llangan
+  --   aka-uka chegirmasi: ortiqcha to'lov avansga qaytadi, faktura «to'langan» qoladi. Narx oshsa — baribir tegilmaydi;
+  --   0 gacha (to'liq grant) tushirilmaydi (keyingi qayta hisoblash uni «naqdsiz grant» deb qarzga aylantirmasin).
   if v_inv.status = 'paid' and v_paid > 0 and not coalesce(p_cancel, false) then
-    return jsonb_build_object('ok', false, 'reason', 'paid');
+    if not (coalesce(v_meta->>'paidDecrease', '') = 'true' and round(coalesce(p_net, 0)) < v_paid and round(coalesce(p_net, 0)) > 0) then
+      return jsonb_build_object('ok', false, 'reason', 'paid');
+    end if;
   end if;
 
   if coalesce(p_cancel, false) then

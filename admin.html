@@ -563,7 +563,7 @@ const SCHEMAS = {
       {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
       {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
       {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
-      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— yo‘q (avtomatik)'},{v:'Ha',l:'Ha (10%) — majburan'}],note:'Avtomatik: 3+ aka-uka (bir xil ota YOKI ona familiyasi + bir xil ota-ona telefoni) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Farzand ismi/familiyasi har xil bo‘lishi mumkin — OTA/ONA (F.I.Sh) va telefon bir xil bo‘lsa yetarli. Bu yerda «Ha» — faqat qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun).'},
+      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— avtomatik'},{v:'Ha',l:'Ha (10%) — majburan'},{v:'Yoq',l:'Yo‘q — oilaga qo‘shilmasin (avtomatik guruhdan chiqarish)'}],note:'Avtomatik: 3+ aka-uka (bir xil ota-ona telefoni + umumiy familiya — farzandning O‘ZI yoki OTA/ONA F.I.Sh bo‘yicha) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Farzandlar familiyasi bir xil bo‘lsa yetarli; har xil bo‘lsa (jins/imlo) — ota yoki ona F.I.Sh mos kelsa ham bo‘ladi. «Ha» — qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun). «Yo‘q» — bola begona oilaga noto‘g‘ri qo‘shilib qolsa (masalan umumiy telefon), uni avtomatik aka-uka guruhidan chiqaradi.'},
       {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
       {k:'referrerId',l:'Kim tavsiya qilgan (referral) — 300 000 unga',t:'text',placeholder:'tavsiya qilgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
@@ -3492,7 +3492,10 @@ function openForm(name, row, prefill, afterSaveCb){
       if(isEdit && name==='students' && row){ ['grade','track','lang','payStatus','activeFrom','stopFrom'].forEach(k=>{
         if((k in data) && String(data[k]==null?'':data[k])!==String(row[k]==null?'':row[k])) billingChanged=true; });
         // Narx kaliti guruh harfidan ham (IT/MED) olinadi (trackOf) — A->B emas, B->IT o'zgarishida eslatma kerak.
-        if(priceKeyOf(Object.assign({}, row, data))!==priceKeyOf(row)) billingChanged=true; }
+        if(priceKeyOf(Object.assign({}, row, data))!==priceKeyOf(row)) billingChanged=true;
+        // Ism-familiya O'ZAKLARI (aka-uka GURUHLASH kirishi) o'zgardimi — faqat bo'shliq/katta-kichik harf o'zgarishi eslatma chiqarmaydi.
+        const stemKey=n=>pmSurnameStems(n).sort().join('|');
+        if(('name' in data) && stemKey(data.name)!==stemKey(row.name)) billingChanged=true; }
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
       if(!isEdit && name==='students'){
         const nm=String(data.name||'').trim().toLowerCase();
@@ -3577,7 +3580,7 @@ function openForm(name, row, prefill, afterSaveCb){
       toast('Saqlandi ✓'); closeModal();
       // MUHIM: narx/chegirma o'zgargan bo'lsa — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK
       //   yangilanmaydi (ular oylik snapshot). Admin shuni unutmasin — ko'rinarli eslatma + ko'rsatma.
-      if(billingChanged) setTimeout(()=>alert('⚠️ Diqqat — narx/chegirma o‘zgardi\n\nBu o‘quvchining narx yoki chegirmasiga ta’sir qiluvchi maydoni (kontrakt / toifa / sinf / yo‘nalish / til / holat / aka-uka yoki ota-ona F.I.Sh / telefon) o‘zgardi.\n\nMavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi! Yangi narx qo‘llanishi uchun:\n«To‘lovlar» → kerakli oyni tanlang → «↻ Qayta hisoblash».\n\nAks holda eski (noto‘g‘ri) narx qolib ketadi.'), 60);
+      if(billingChanged) setTimeout(()=>alert('⚠️ Diqqat — narx/chegirma o‘zgardi\n\nBu o‘quvchining narx yoki chegirmasiga ta’sir qiluvchi maydoni (kontrakt / toifa / sinf / yo‘nalish / til / holat / aka-uka: familiya, ota-ona F.I.Sh yoki telefon) o‘zgardi.\n\nMavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi! Yangi narx qo‘llanishi uchun:\n«To‘lovlar» → kerakli oyni tanlang → «↻ Qayta hisoblash».\n\nAks holda eski (noto‘g‘ri) narx qolib ketadi.'), 60);
       if(typeof afterSaveCb==='function') afterSaveCb(savedId, data);   // masalan davomat ekranini yangilash
       else (name==='students'?renderStudents():renderCollection(name));
     }catch(err){ toast('Xatolik: '+(err.code||err.message), true); btn.disabled=false; btn.textContent='Saqlash'; }
@@ -4968,6 +4971,50 @@ async function openExamQuestions(spec, onSaved){
 /* ---- Oylik to'lovlar (hisob-fakturalar) ---- */
 function curMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function fmtSom(n){ n=Number(n)||0; return n.toLocaleString('ru-RU').replace(/,/g,' ')+' so‘m'; }
+// «Qarzdorlar» → «Eslatma»: ota-onaga SMS (auth-server /authapi/sms-remind, Eskiz). Qarz, telefon va matn SERVERDA
+//   aniqlanadi (mijoz summasiga ishonilmaydi); avval ko'rib chiqish — admin aniq nima ketishini ko'rib tasdiqlaydi.
+//   Ruxsat (direktor/moliya menejeri), kuniga bitta va limitlar — serverda.
+async function smsRemindApi(payload){
+  let jwt=''; try{ const A=AuthAPI||await AuthAPIready; if(A&&A.currentJwt) jwt=await A.currentJwt(); }catch(e){}
+  if(!jwt) return { ok:false, error:'Seans topilmadi — sahifani yangilab, qayta kiring.' };
+  const base=String(window.IQROR_AUTH_BASE||'/authapi').replace(/\/+$/,'');
+  const sending=!payload.preview;
+  let res; try{ res=await fetch(base+'/sms-remind',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({ jwt }, payload)) }); }
+  catch(e){ return { ok:false, error: sending ? 'Server bilan aloqa uzildi — natija noaniq. Bir necha daqiqadan so‘ng «Eslatma»ni qayta bosing: holati ko‘rsatiladi (ikkinchi SMS ketmaydi).' : 'Server bilan aloqa yo‘q — internetni tekshiring.' }; }
+  let j=null; try{ j=await res.json(); }catch(e){}
+  if(j) return j;
+  if(res.status===404) return { ok:false, error:'SMS eslatma xizmati serverda hali yangilanmagan (auth-server) — deploy qiling.' };
+  if(sending && res.status>=500) return { ok:false, error:`Server javob bermadi (HTTP ${res.status}) — natija noaniq. Bir necha daqiqadan so‘ng «Eslatma»ni qayta bosing: holati ko‘rsatiladi (ikkinchi SMS ketmaydi).` };
+  return { ok:false, error:`Server javobi noto‘g‘ri (HTTP ${res.status}).` };
+}
+async function sendDebtReminder(sid, btn){
+  const label=btn.textContent; let keep=false;
+  btn.disabled=true; btn.textContent='…';
+  const markSent=msg=>{ toast(msg); btn.textContent='✓ Yuborilgan'; keep=true; };
+  try{
+    const p=await smsRemindApi({ studentId:sid, preview:true });
+    if(!p.ok){ toast(p.error||'Xatolik',true); return; }
+    // Server bloklash sababini o'zi aytadi (qarz yo'q / telefon yo'q / bugun yuborilgan / natija noaniq / urinishlar tugagan).
+    if(p.blocked==='sent' || (p.today && p.today.status==='sent')){ markSent('Bugun bu ota-onaga eslatma allaqachon yuborilgan ✓'); return; }
+    if(p.blocked){ toast(p.blockedMsg||'SMS yuborib bo‘lmaydi', p.blocked!=='nodebt'); return; }
+    if(!(Number(p.due)>0)){ toast('Bu o‘quvchida joriy oygacha qarz yo‘q — SMS kerak emas'); return; }
+    if(!p.phone){ toast('Ota-ona telefoni kiritilmagan yoki noto‘g‘ri — o‘quvchi kartasida to‘g‘rilang',true); return; }
+    const months=(p.months||[]).map(fmtMonthUz).join(', ');
+    const q=`📱 Ota-onaga SMS eslatma yuborilsinmi?\n\nO‘quvchi: ${p.name}\nTelefon: ${p.phone}\nQarz: ${fmtSom(p.due)}${months?` (${months})`:''}\n\nSMS matni:\n«${p.message}»`
+      +(p.autoToday?'\n\n⚠️ Bugun bu o‘quvchiga avtomatik qarz eslatmasi ham yuborilgan.':'')
+      +(p.dry?'\n\nℹ️ SINOV rejimi (serverda sms.dryRun) — SMS haqiqatan yuborilmaydi.':'')
+      +'\n\nBir o‘quvchiga kuniga faqat bitta eslatma yuboriladi.';
+    if(!confirm(q)) return;
+    btn.textContent='Yuborilmoqda…';
+    // Yuborish AYNAN tasdiqlangan matn va telefon bilan bog'lanadi (oraliqda o'zgarsa server rad etadi).
+    const r=await smsRemindApi({ studentId:sid, expect:{ message:p.message, phone:p.phone } });
+    if(r.ok && r.dry){ toast('SINOV rejimi — SMS yuborilmadi (matn va telefon tekshirildi)'); return; }
+    if(r.ok){ toast('SMS yuborildi ✓ '+(r.phone||'')); btn.textContent='✓ Yuborildi'; keep=true; return; }
+    if(r.already==='sent'){ markSent(r.error||'Bugun allaqachon yuborilgan ✓'); return; }
+    toast(r.error||'SMS yuborilmadi',true);
+  }catch(e){ toast('Xatolik: '+(e.message||e),true); }
+  finally{ if(!keep){ btn.disabled=false; btn.textContent=label; } }
+}
 /* ==================== Moliya (Finance) ====================
    «To‘lovlar»dagi invoices hujjatlaridan avtomatik hisoblanadi:
    yig‘im foizi, kutilayotgan summa, qarzdorlar, daromad grafigi,
@@ -5090,7 +5137,7 @@ async function renderFinance(){
         <td data-label="O‘quvchi"><b>${esc(d.name)}</b><div class="small muted">${esc(cls)}</div></td>
         <td data-label="Oylar">${chips}</td>
         <td data-label="Qarz" class="fin-debt">${fmtC(d.sum)}</td>
-        <td class="td-actions"><button class="btn sm" data-remind="${esc(d.sid)}">Eslatma</button></td></tr>`;
+        <td class="td-actions"><button class="btn sm" data-remind="${esc(d.sid)}" title="Ota-onaga SMS eslatma (qarz serverda hisoblanadi; kuniga bitta)">Eslatma</button></td></tr>`;
     }).join('');
     const debtCard=`<div class="card"><div class="cls-card-head"><h3>Qarzdorlar</h3><span class="cls-count">${debtors.length} o‘quvchi · ${fmtC(debtSum)}${debtors.length>12?' · eng katta 12 tasi':''}</span></div>
       ${debtors.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Oylar</th><th>Qarz</th><th></th></tr></thead><tbody>${debtRows}</tbody></table></div>`:'<div class="empty">Qarzdor yo‘q ✓</div>'}</div>`;
@@ -5103,8 +5150,8 @@ async function renderFinance(){
     const gradeCard=`<div class="card"><div class="cls-card-head"><h3>Sinf bo‘yicha daromad</h3><span class="cls-count">bu oy yig‘ilgan</span></div><div class="bars">${gBars}</div></div>`;
 
     $('#fin-body').innerHTML = kpis + chart + `<div class="fin-cols">${pmCard}${fcCard}</div>` + `<div class="fin-cols">${debtCard}${gradeCard}</div>`;
-    // «Eslatma» — SMS/bildirishnoma Bosqich 3 da ishga tushadi
-    $('#fin-body').querySelectorAll('[data-remind]').forEach(b=>b.addEventListener('click',()=>toast('SMS eslatma — keyingi bosqichda (Bosqich 3) qo‘shiladi')));
+    // «Eslatma» — ota-onaga SMS (Eskiz, auth-server orqali): avval ko'rib chiqish, keyin tasdiqlab yuborish.
+    $('#fin-body').querySelectorAll('[data-remind]').forEach(b=>b.addEventListener('click',()=>sendDebtReminder(b.dataset.remind, b)));
     const avEl=$('#fin-avans'); if(avEl) avEl.addEventListener('click',()=>openAvansList(credits, gmap));
   };
 
@@ -6177,7 +6224,7 @@ async function renderPriceTable(){
 }
 /* ===== Avtomatik CHEGIRMA dvigateli (test qilingan — 21/21) =====
  * priceKeyOf: narx jadvali kaliti (til-sinf[-yo'nalish]). classLetter EMAS (harf narxga ta'sir qilmaydi).
- * computeSiblingSet: bir xil telefon + OTA/ONA familiyasi -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
+ * computeSiblingSet: bir xil telefon + umumiy familiya (farzand / ota / ona) -> oila; 3+ -> HAMMA mos farzandga 10%, 2 -> bittasiga.
  * computeTuition: eksklyuziv (50/100/kontrakt) -> foiz (20/10) -> kasal so'm -> net. */
 function pmNormPhone(p){ return String(p||'').replace(/\D/g,'').slice(-9); }
 // Qat'iy KANONIK telefon (server auth/lib.cjs normPhone bilan BIR XIL qoida) — xodim↔login
@@ -6227,40 +6274,51 @@ function pmValidPhone(p){ p=pmNormPhone(p); return (p.length===9 && !/^(\d)\1{8}
 // Ismdagi familiya/otasining-ismi O'ZAKLARI (jinsga bog'liq qo'shimchalar olib tashlangan — aka
 //   «...ov» va singil «...ova» BIR oilaga tushsin). Ism tartibi (Ism-Familiya yoki Familiya-Ism)
 //   muhim emas: barcha so'z o'zaklari TO'PLAM sifatida taqqoslanadi — umumiy o'zak bo'lsa bir oila.
-function pmSurnameStems(name){
+// strict=true — faqat FAMILIYA shaklidagi so'zlar (…ov/…ova/…ev/…eva), otasining ismi (…ovich/…ovna) va ismlar
+//   EMAS: farzandning o'z ismidagi ism (masalan ikki oilada «Abdulla») begona oilalarni birlashtirmasin.
+function pmSurnameStems(name, strict){
   // Avval Kirillchaни lotinchaga o'giramiz — jins qo'shimchalari (ов/ова) o'zakka kelib, ғ/қ/ҳ/ў
   //   o'chib ketmaydi (aks holда Kirillcha yozuvlar uchun aka/singil mos kelmaydi).
   const M={'а':'a','б':'b','в':'v','г':'g','ғ':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y','к':'k','қ':'q','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ў':'o','ф':'f','х':'h','ҳ':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'i','ь':'','э':'e','ю':'yu','я':'ya'};
-  const t=String(name||'').toLowerCase().replace(/[а-яёғқҳў]/g,c=>(c in M)?M[c]:c);
+  // Barcha apostrof turlari (Gʻ / G' / G‘ / G’ / G` / G´) — bir xil: olib tashlanadi (avval ‘ ’ ` ´ so'zni ikkiga
+  //   bo'lib, «G‘ulomov» va «Gʻulomov» har xil o'zak berardi).
+  const t=String(name||'').toLowerCase().replace(/[ʻʼ'‘’`´ʹ′‛]/g,'').replace(/[а-яёғқҳў]/g,c=>(c in M)?M[c]:c);
   return [...new Set(t
-    .replace(/[^a-zʻʼ'-]+/gi,' ').split(/[\s-]+/)
-    .map(x=>x.replace(/[ʻʼ']/g,''))
+    .replace(/[^a-z-]+/g,' ').split(/[\s-]+/)
     .filter(x=>x.length>=3)
+    .filter(x=>!strict || (/(ov|ova|ev|eva)$/.test(x) && !/(ovich|ovna|evich|evna)$/.test(x)))   // …zoda — EMAS: Ozoda/Shahzoda (qiz ismlari)
     .map(x=>x.replace(/(ovich|ovna|evich|evna|ogli|ugli|qizi|kizi|yeva|yev|ova|eva|ov|ev|ina|in)$/,''))
+    // Lotin ↔ rus transliteratsiyasi: x/h (Xasanov / Hasanov / Хасанов) va q/k (Qodirov / Kodirov / Қодиров) bir xil.
+    .map(x=>x.replace(/x/g,'h').replace(/q/g,'k'))
     .filter(x=>x.length>=3))];
 }
 function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const EXCL=['teacher_child','olympiad','contract'];
   const getScore = scoreFn || (s=>pmNum(s.score));   // lag qo'llanganda — o'tgan oy monitoring balli
-  // Har o'quvchi: to'g'ri telefon(lar) + OTA/ONA familiya o'zaklari.
-  //   DIQQAT: familiya — OTA yoki ONA (F.I.Sh) dan olinadi, FARZAND ismidan EMAS. Aka-uka ismi
-  //   jins qo'shimchasi/imlo bo'yicha har xil bo'lishi mumkin, lekin ota-ona bir xil -> ishonchli.
+  // Har o'quvchi: to'g'ri telefon(lar) + familiya o'zaklari = FARZAND ismi + OTA + ONA (F.I.Sh) — BIRLASHMA.
+  //   Umumiy o'zak QAYERDAN bo'lsa ham (farzand↔farzand, ota↔ota, farzand↔ota ...) + bir xil telefon -> bir oila.
+  //   Sabab (oktyabr xatosi): avval FAQAT ota/ona F.I.Sh olinardi -> aka-ukalar kartasida ota/ona maydonlari
+  //   har xil to'ldirilgan bo'lsa (birida faqat ota, birida faqat ona, ona o'z familiyasida) oila BO'LINIB,
+  //   3 farzandli oila «2 + 1» bo'lib qolardi va faqat bittasi 10% olardi (sentyabrda farzand ismi bilan
+  //   hammasi olgan edi). Birlashma faqat qirra QO'SHADI: ikkala usulda ham topilgan oila guruhlanadi.
   const info={};
   students.forEach(s=>{ const sid=s.studentId||s._id; const pv=privOf(sid)||{};
-    let pstems=new Set([...pmSurnameStems(pv.fatherName), ...pmSurnameStems(pv.motherName)]);   // ota + ona
-    // ZAXIRA: ota/ona F.I.Sh umuman to'ldirilmagan bo'lsa (chala import), farzand ismiga qaytamiz —
-    //   aks holда shunday bola oiladan ajralib, 3+ oilani buzardi (faqat BO'SH holatда — noto'g'ri
-    //   guruhlash qo'shmaydi; union-find faqat qirra qo'shadi, to'g'ri guruhlashni buzmaydi).
-    if(!pstems.size) pstems=new Set(pmSurnameStems(s.name));
-    info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))], stems:pstems }; });
+    // Ota/ona F.I.Sh bor bo'lsa — farzand ismidan faqat FAMILIYA shaklidagi so'zlar (ism/otasining ismi emas: «Abdulla»
+    //   ismli ikki bola begona oilalarni birlashtirib, 8+ bo'lsa hammaning chegirmasini o'chirib qo'ymasin). Ota/ona
+    //   F.I.Sh butunlay bo'sh bo'lsa — farzand ismining barcha so'zlari (sentyabrdagi xatti-harakat).
+    const par=[...pmSurnameStems(pv.fatherName), ...pmSurnameStems(pv.motherName)];
+    const stems=new Set([...par, ...pmSurnameStems(s.name, par.length>0)]);
+    info[sid]={ phones:[...new Set([pv.parentPhone, pv.parentPhone2].map(pmValidPhone).filter(Boolean))], stems }; });
   const shareSurname=(a,b)=>{ const A=info[a].stems; for(const x of info[b].stems){ if(A.has(x)) return true; } return false; };
   const parent={};
   const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
   const union=(a,b)=>{ parent[find(a)]=find(b); };
   students.forEach(s=>{ const sid=s.studentId||s._id; if(!(sid in parent)) parent[sid]=sid; });
-  // Telefon bo'yicha nomzodlar; FAQAT ota/ona familiya o'zagi ham mos kelsagina birlashtiramiz (oila sharti).
+  // Telefon bo'yicha nomzodlar; FAQAT familiya o'zagi ham mos kelsagina birlashtiramiz (oila sharti).
+  //   «Yo‘q» (siblingDiscount='Yoq') — admin bu bolani avtomatik oiladan chiqargan (noto'g'ri birlashish) -> guruhlanmaydi.
   const phoneMap={};
-  students.forEach(s=>{ const sid=s.studentId||s._id; info[sid].phones.forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
+  students.forEach(s=>{ const sid=s.studentId||s._id; if(String((privOf(sid)||{}).siblingDiscount||'')==='Yoq') return;
+    info[sid].phones.forEach(p=>{ (phoneMap[p]=phoneMap[p]||[]).push(sid); }); });
   Object.values(phoneMap).forEach(sids=>{ for(let i=0;i<sids.length;i++) for(let j=i+1;j<sids.length;j++){ if(shareSurname(sids[i],sids[j])) union(sids[i],sids[j]); } });
   const comp={}; students.forEach(s=>{ const sid=s.studentId||s._id; const r=find(sid); (comp[r]=comp[r]||[]).push(s); });
   const CAP=8;
@@ -6276,6 +6334,7 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
   const tiebreak=(a,b)=>{ const sa=a.score==null?-Infinity:a.score, sb=b.score==null?-Infinity:b.score;
     if(sa!==sb) return sa-sb; return String(a.sid).localeCompare(String(b.sid)); };
   const tenHolders=new Set(); const conflicts=[];
+  const famBill={};   // sid -> oiladagi FAKTURAGA TUSHADIGAN bolalar soni (qayta hisoblash: 3+ oilada slot raqobati yo'q)
   Object.values(comp).forEach(members=>{
     const ms=members.map(meta); const size=members.length;
     const elig=ms.filter(m=>m.eligible10);
@@ -6284,8 +6343,13 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
     //   2 to'lovchi aka-ukani 3+ bandiga surib, ortiqcha 10% berib yuborardi. CAP esa XOM a'zolar soni
     //   bo'yicha qoladi (umumiy telefon = begona oila sanity tekshiruvi).
     const billCount=ms.filter(m=>m.billable).length;
+    ms.forEach(m=>{ famBill[m.sid]=(size>CAP)?0:billCount; });
     if(size>CAP){
-      conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon?) — avtomatik chegirma berilmadi`);
+      // Kimligi ko'rinsin — admin begona bolani «Yo‘q» bilan chiqarishi yoki aka-ukaga «Ha» qo'yishi uchun.
+      const phCnt={}; members.forEach(s=>{ (info[s.studentId||s._id].phones||[]).forEach(p=>{ phCnt[p]=(phCnt[p]||0)+1; }); });
+      const ph=Object.keys(phCnt).sort((a,b)=>phCnt[b]-phCnt[a])[0]||'';
+      const who=members.slice(0,12).map(s=>`${s.name||''} (${s.studentId||s._id})`).join(', ')+(size>12?` …yana ${size-12}`:'');
+      conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon …${ph.slice(-4)}): ${who} — avtomatik chegirma berilmadi; begona bolani «Aka-uka chegirmasi: Yo‘q» bilan chiqaring yoki aka-ukaga «Ha» qo‘ying`);
     } else if(billCount>=3){
       // 3+ (fakturaga tushadigan) aka-uka -> HAR BIR mos o'quvchiga 10%.
       elig.forEach(m=>tenHolders.add(m.sid));
@@ -6299,7 +6363,7 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
       else conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':(!m.billable?'bu oy fakturaga tushmaydi (sinov/muzlatilgan/chiqdi yoki narx yo‘q)':'eksklyuziv')} — e'tiborsiz`);
     });
   });
-  return { tenHolders, conflicts };
+  return { tenHolders, conflicts, famBill };
 }
 // ---- Prorata (oy o'rtasida kelgan/ketgan) — ISH KUNLARI (Dush–Juma) bo'yicha ----
 function _saDate(x){ if(!x) return null; const d=new Date(x); return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
@@ -6531,9 +6595,9 @@ async function pmLoadCtx(month, students, amount){
     //   (o'z narxi topilmasa). Avval canBill faqat priceMap butunlay bo'sh bo'lsa billable derdi ->
     //   qisman to'ldirilган jadvalda zaxira-narxli aka-uka 10% ololmay qolardi. Endi computeTuity bilan bir xil.
     return (isFinite(Number(amount)) && Number(amount)>0); };
-  const { tenHolders, conflicts } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill);
+  const { tenHolders, conflicts, famBill } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill);
   const ctx={ month, priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickMap[sid]||0, monScoreFn, monMonth };
-  return { privOf, priceMap, sickRate, tenHolders, conflicts, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
+  return { privOf, priceMap, sickRate, tenHolders, conflicts, famBill, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
 }
 // ==== KASAL BOLALAR — «Bemor» davomatidan avtomatik ro'yxat (Direktor + Ma'muriyat rahbari) ====
 async function renderSick(){
@@ -7018,10 +7082,10 @@ async function renderPayments(){
   if($('#pm-recalc')) $('#pm-recalc').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    if(!confirm('Bu oydagi KUTILAYOTGAN, QISMAN to‘langan va «Grant / 0 so‘m» (naqd kelmagan) hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring…) bo‘yicha qayta hisoblanadi.\nHAQIQATAN to‘langan (naqd tushgan) hisoblar tegilmaydi — qarz tiklanmaydi. Chegirma/grant olib tashlangan o‘quvchi to‘liq narxga qaytadi. Davom etilsinmi?')) return;
+    if(!confirm('Bu oydagi KUTILAYOTGAN, QISMAN to‘langan va «Grant / 0 so‘m» (naqd kelmagan) hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring, aka-uka…) bo‘yicha qayta hisoblanadi.\nHAQIQATAN to‘langan (naqd tushgan) hisoblar narxi oshsa tegilmaydi — qarz tiklanmaydi; narxi KAMAYGANlari alohida so‘raladi (farq avansga). Chegirma/grant olib tashlangan o‘quvchi to‘liq narxga qaytadi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
-      const { privOf, ctx, ledger } = await pmLoadCtx(month, students, amount);
+      const { privOf, ctx, ledger, conflicts, famBill } = await pmLoadCtx(month, students, amount);
       const { existRef, pendingRef } = pmReferralMaps(students, privOf, ledger, month);
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
@@ -7035,15 +7099,20 @@ async function renderPayments(){
       //   qaytadi; avval bunday faktura «kutilmoqda» qarz bo'lib qolar yoki avansni yeb qo'yardi).
       //   '[holat]' bilan bekor qilingan faktura — o'quvchi yana faol bo'lsa qayta tiklanadi.
       const isStCanceled=x=>x.status==='canceled' && String(x.discountInfo||'').indexOf('[holat]')===0;
+      // To'langan (naqd tushgan) faktura summasi — RPC (reprice_invoice v_paid) bilan bir xil qoida.
+      const cashPaidOf=x=>(x.status==='paid' && !x.isGrant && x.provider!=='grant' && (Number(x.amount)||0)>0) ? Math.max(Number(x.paidAmount)||0, Number(x.amount)||0) : (Number(x.paidAmount)||0);
+      const paidDocs=[];   // HAQIQATAN to'langan — faqat narx KAMAYGAN bo'lsa (tasdiq bilan) qayta hisoblanadi
       const docs=snap.docs.filter(d=>{ const x=d.data()||{}; const st=x.status;
         if(st==='pending' || st==='partial') return true;
         if(isStCanceled(x)) return true;
         const so=byId[x.studentId]; if(so && st!=='canceled' && st!=='reversed' && billingInterval(so, month).skip) return true;
         const noCash=(Number(x.paidAmount)||0)<=0;                                   // haqiqiy naqd tushmagan
         const grantZero=(!!x.isGrant || x.provider==='grant' || (Number(x.amount)||0)===0);
-        return st==='paid' && noCash && grantZero; });
-      let changed=0, skipped=0, avans=0, canceledN=0, guardSkip=0, legacy=false;
-      const work=[], toCancel=[], review=[];
+        if(st==='paid' && noCash && grantZero) return true;
+        if(st==='paid' && cashPaidOf(x)>0) paidDocs.push(d);
+        return false; });
+      let changed=0, skipped=0, avans=0, canceledN=0, guardSkip=0, legacy=false, decN=0, decSum=0;
+      const work=[], toCancel=[], review=[], dec=[];
       const curTM=tkDay(new Date()).slice(0,7);   // joriy oy (Toshkent)
       docs.forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
         const t=computeTuition(s, privOf(sid), ctx);
@@ -7055,6 +7124,29 @@ async function renderPayments(){
         const rc=reconcileInvoice(inv, t);
         if(!rc.changed && !isStCanceled(inv)) return;   // o'zgarish yo'q
         work.push({ d, inv, sid, s, t, rRef, rc }); });
+      // TO'LANGAN fakturalar (narx oshsa — avvalgidek tegilmaydi). Narx KAMAYISHI faqat ANIQ «kechikib qo'llangan aka-uka 10%»
+      //   holatida avtomatik avansga taklif qilinadi (alohida tasdiq bilan):
+      //   (1) 3+ farzandli oila — hammasi 10% oladi, «slot» bir bolasidan boshqasiga ko'chmaydi (ikki marta chegirma yo'q);
+      //   (2) YAGONA farq — aka-uka 10%: eski fakturada foizli chegirma yo'q, asosiy narx va kasal kun summasi o'zgarmagan
+      //       (oraliq monitoring/kasal ma'lumoti asosida qaytarib bo'lmaydigan ortiqcha avans berilmasin); farq ≤ narxning 10%;
+      //   (3) yangi summa > 0 (to'liq grantga aylantirilmaydi).
+      //   Boshqa narxi tushgan to'langan fakturalar — faqat ro'yxat (qo'lda tekshirish), avtomatik TEGILMAYDI.
+      //   Referral: faqat shu oy uchun jurnalda bor summasi (yangi referral to'langan fakturaga qo'llanmaydi).
+      const decInfo=[];
+      paidDocs.forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s) return;
+        const t=computeTuition(s, privOf(sid), ctx); if(t.skip) return;
+        const rRef=applyReferralUnits(t, existRef[sid]||0, []);
+        const paid=cashPaidOf(inv), net=Math.round(t.net); if(!(net < paid)) return;
+        const item={ d, inv, sid, s, t, rRef, rc:{ isGrant:!!t.isGrant, amount:net }, paid, net, name:s.name||sid };
+        const oldPct=Number(inv.pctApplied)||0, oldInfo=String(inv.discountInfo||'');
+        const sibOnly = t.pct===0.10 && /Aka-uka/.test(String(t.info||'')) && oldPct===0 && !/Aka-uka|Monitoring|grant|Grant/.test(oldInfo)
+          && (inv.baseAmount==null || inv.baseAmount==='' || Math.round(Number(inv.baseAmount))===Math.round(t.base))
+          && Math.round(Number(inv.sickAmount)||0)===Math.round(Number(t.sickAmt)||0)
+          && (famBill && famBill[sid]||0)>=3 && net>0 && (paid-net)<=Math.round(t.base*0.10)+1;
+        (sibOnly ? dec : decInfo).push(item); });
+      let doDec=false;
+      if(dec.length){ const tot=dec.reduce((a,x)=>a+(x.paid-x.net),0);
+        doDec=confirm(`${dec.length} ta TO‘LANGAN hisob-fakturaga aka-uka 10% chegirmasi kechikib qo‘llandi (3+ farzandli oila):\n${dec.slice(0,12).map(x=>`• ${x.name}: ${fmtSom(x.paid)} → ${fmtSom(x.net)} (+${fmtSom(x.paid-x.net)} avansga)`).join('\n')}${dec.length>12?`\n…yana ${dec.length-12}`:''}\n\nJami ${fmtSom(tot)} o‘quvchilar AVANSIGA qaytarilsinmi? (Faktura «to‘langan» bo‘lib qoladi; avans keyingi oy to‘loviga ishlatiladi.) «Bekor» — bu fakturalarga tegilmaydi.`); }
       // Holat bo'yicha bekor qilinadiganlar — to'lovi borlari alohida tasdiqlanadi (pul avansga qaytadi).
       let doCancel=true;
       if(toCancel.length){ const paidOnes=toCancel.filter(x=>x.paid>0);
@@ -7079,12 +7171,18 @@ async function renderPayments(){
         await legacyWrite(w); };
       for(let i=0;i<work.length;i+=8){ const chunk=work.slice(i,i+8);
         if(legacy){ for(const w of chunk) await runOne(w); } else { await runOne(chunk[0]); await Promise.all(chunk.slice(1).map(runOne)); } }
+      // Tasdiqlangan narx KAMAYISHLARI — reprice_invoice (p_meta.paidDecrease): qulf ostida, farq avansga (jurnal bilan).
+      //   Eski bazada (RPC yo'q) — tegilmaydi (to'langan fakturani atomik bo'lmagan yo'l bilan o'zgartirmaymiz).
+      if(doDec && !legacy) for(const w of dec){
+        try{ const r=await rpc('reprice_invoice', { p_id:w.d.id, p_net:Math.round(w.t.net), p_meta:Object.assign(metaOf(w), { paidDecrease:true }), p_cancel:false });
+          if(r && r.ok){ decN++; decSum+=Number(r.excess)||0; } else guardSkip++; }
+        catch(e){ if(!rpcMissing(e)) throw e; break; } }
       if(doCancel) for(const x of toCancel){
         try{ const r=await rpc('reprice_invoice', { p_id:x.d.id, p_net:0, p_meta:{ statusReason:x.reason }, p_cancel:true }); if(r && r.ok){ canceledN++; if(Number(r.excess)>0) avans++; } }
         catch(e){ if(!rpcMissing(e)) throw e;
           if(x.paid<=0){ await setDoc(doc(db,'invoices',x.d.id), { status:'canceled', discountInfo:`[holat] ${x.reason} — shu oy hisob-faktura talab qilinmaydi` }, {merge:true}); canceledN++; }
           else guardSkip++; } }   // eski bazada to'langan fakturani avansga qaytarish atomik emas — tegmaymiz
-      $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${canceledN?` · ${canceledN} tasi holat bo‘yicha bekor qilindi`:''}${(toCancel.length&&!doCancel)?` · ${toCancel.length} ta holat bo‘yicha bekor qilinmadi (siz rad etdingiz)`:''}${review.length?` · ⚠️ ${review.length} tasiga TEGILMADI — holati shubhali (sana yo‘q yoki o‘tgan oy uchun joriy holat ishonchsiz): ${review.slice(0,6).map(x=>x.name+' — '+x.reason).join('; ')}${review.length>6?' …':''}. Kerak bo‘lsa sanani kiriting yoki qo‘lda bekor qiling`:''}${guardSkip?` · ${guardSkip} tasi o‘tkazildi (shu orada to‘langan/yopilgan — to‘lov saqlandi)`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}.`;
+      $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${canceledN?` · ${canceledN} tasi holat bo‘yicha bekor qilindi`:''}${(toCancel.length&&!doCancel)?` · ${toCancel.length} ta holat bo‘yicha bekor qilinmadi (siz rad etdingiz)`:''}${review.length?` · ⚠️ ${review.length} tasiga TEGILMADI — holati shubhali (sana yo‘q yoki o‘tgan oy uchun joriy holat ishonchsiz): ${review.slice(0,6).map(x=>x.name+' — '+x.reason).join('; ')}${review.length>6?' …':''}. Kerak bo‘lsa sanani kiriting yoki qo‘lda bekor qiling`:''}${guardSkip?` · ${guardSkip} tasi o‘tkazildi (shu orada to‘langan/yopilgan — to‘lov saqlandi)`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}${decN?` · ${decN} ta to‘langan fakturada narx kamaydi — ${fmtSom(decSum)} avansga qaytdi`:''}${(dec.length&&!doDec)?` · ${dec.length} ta to‘langan fakturada narx kamaygan, lekin tegilmadi (siz rad etdingiz)`:''}${decInfo.length?` · ℹ️ ${decInfo.length} ta TO‘LANGAN fakturada yangi narx pastroq, lekin avtomatik qaytarilmadi (2 farzandli oila yoki boshqa chegirma o‘zgargan — qo‘lda tekshiring): ${decInfo.slice(0,6).map(x=>`${x.name} ${fmtSom(x.paid)} → ${fmtSom(x.net)}`).join('; ')}${decInfo.length>6?' …':''}`:''}${(conflicts&&conflicts.length)?` · ℹ️ Aka-uka: ${conflicts.slice(0,8).join(' · ')}${conflicts.length>8?' …':''}`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
     btn.disabled=false; btn.textContent='↻ Qayta hisoblash';

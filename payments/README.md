@@ -108,6 +108,10 @@ Takror ketmasligi uchun har SMS `sms_log` jadvaliga yoziladi
 (id: `<invoiceId>__new` yoki `<invoiceId>__debt__<sana>`). Telefon
 `student_private.parentPhone` (bo'lmasa `parentPhone2`) dan olinadi.
 
+**Qo'lda eslatma** («Moliya» → «Qarzdorlar» → «Eslatma») — cron EMAS, admin tugmasi: auth-server
+`/authapi/sms-remind` orqali darhol yuboriladi (o'sha Eskiz sozlamasi; batafsil — `auth/README.md`).
+Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **yubormaydi** (ota-onaga 2 ta ketmasin).
+
 ### 7.1 Sozlash (`config.json` → `sms`)
 | Maydon | Ma'nosi |
 |---|---|
