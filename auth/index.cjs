@@ -120,12 +120,18 @@ function makeHandlers(deps) {
   }
   // Ma'lumotlarda YO'Q chet el raqami bilan so'rovlar — IP bo'yicha soatiga OTP_MAX_IP_HOUR tadan (xotirada): raqamlarni
   //   ketma-ket «tekshirib chiqish»ga qarshi (bunday so'rov otp_codes'ga yozilmaydi, shuning uchun IP limiti alohida).
+  //   Xotira chegaralangan: IP boshiga ko'pi bilan OTP_MAX_IP_HOUR+1 ta vaqt belgisi; 5000 dan ortiq IP bo'lsa — eskirganlari
+  //   tozalanadi (baribir ko'p bo'lsa — hammasi).
   const intlMiss = new Map();
   function intlMissLimited(ip) {
     const now = Date.now(), key = ip || '-';
-    if (intlMiss.size > 5000) intlMiss.clear();                       // xotira chegarasi (oddiy himoya)
+    if (intlMiss.size > 5000) {
+      for (const [k, v] of intlMiss) if (!v.some(t => now - t < 3600e3)) intlMiss.delete(k);
+      if (intlMiss.size > 5000) intlMiss.clear();
+    }
     const arr = (intlMiss.get(key) || []).filter(t => now - t < 3600e3);
-    arr.push(now); intlMiss.set(key, arr);
+    if (arr.length <= OTP_MAX_IP_HOUR) arr.push(now);
+    intlMiss.set(key, arr);
     return arr.length > OTP_MAX_IP_HOUR;
   }
   // Oxirgi davrda CHET EL raqamlariga yuborilgan OTP soni (butun tizim). Xato -> null.

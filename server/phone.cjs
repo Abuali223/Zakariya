@@ -121,6 +121,7 @@ function phoneMask(raw) {
   var plus = /^[^0-9]*\+/.test(s);
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }
   else if (!plus && d === '0') return '0';         // '00' (xalqaro prefiks) yozilmoqda
+  else if (!plus && !d) return '';                 // maydon tozalandi — bo'sh qoladi ('+998' qaytib «yopishmasin»)
   if (plus || d.length > 9) d = d.replace(/^0+/, '');   // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
   if (d.slice(0, 3) === '998' || (!plus && d.length <= 9)) {
     // '+'siz AYNAN 9 raqam — lokal raqam (998 bilan boshlansa ham: 99 812 34 56), phoneCanon bilan bir xil.

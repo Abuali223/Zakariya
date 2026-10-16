@@ -2698,7 +2698,7 @@ addEventListener('hashchange', ()=>route(true));
         const st={ role:'parent', phone:'', password:'', ticket:'' };
         // inputmode="tel": telefon klaviaturasida «+» bor (chet el raqami uchun). Raqam odatda +998; chet el — «+» bilan to'liq.
         const phoneField=id=>`<input id="${id}" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">Chet eldagi raqam: <b>+</b> bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67).</div>`;
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Chet eldagi raqam: «+998» ni o‘chirib, <b>+</b> bilan davlat kodi bilan to‘liq yozing (masalan +7 903 123 45 67).</div>`;
         const passField=(id,ph)=>`<div style="position:relative"><input id="${id}" type="password" autocomplete="off" placeholder="${ph||'Parol'}" style="${INP};padding-right:44px"><button type="button" data-eye="${id}" aria-label="Ko‘rsatish" style="position:absolute;right:8px;top:19px;border:none;background:transparent;cursor:pointer;font-size:16px">👁</button></div>`;
         const errBox=`<div id="ph-err" role="alert" style="display:none;background:#fdece3;border:1px solid #f0d3c4;color:#C2410C;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:10px"></div>`;
         const okBox=m=>`<div style="background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D;border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px">${m}</div>`;

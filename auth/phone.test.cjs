@@ -87,7 +87,7 @@ ok('lib.prettyPhone chet el', L.prettyPhone('79031571124') === '+7 903 157 11 24
 
 sec('phoneMask');
 const MASK = [
-  ['', '+998'], ['+998 ', '+998'], ['+998 9', '+998 9'], ['+998 90 123 45 67', '+998 90 123 45 67'], ['901234567', '+998 90 123 45 67'],
+  ['', ''], ['   ', ''], ['+998 ', '+998'], ['+998 9', '+998 9'], ['+998 90 123 45 67', '+998 90 123 45 67'], ['901234567', '+998 90 123 45 67'],
   ['+99', '+99'], ['+9', '+9'], ['+', '+'], ['+7', '+7'], ['+79', '+7 9'], ['+79031571124', '+7 903 157 11 24'],
   ['79031571124', '+7 903 157 11 24'], ['0', '0'], ['00', '+'], ['007', '+7'], ['0048789706619', '+48 789 706 619'],
   ['+998 90 123 45 678', '+998 90 123 45 67'],
@@ -114,7 +114,7 @@ let mism = 0, firstMism = null, inv = 0, firstInv = null;
 for (const s of inputs) {
   const c = P.phoneCanon(s);
   const same = BA.phoneCanon(s) === c && AD.pmCanonPhone(s) === c && (W.normPhone(s) || '') === c && (L.normPhone(s) || '') === c
-    && BA.phoneMask(s) === P.phoneMask(s) && W.maskPhone(s) === P.phoneMask(s)
+    && BA.phoneMask(s) === P.phoneMask(s) && W.maskPhone(s) === P.phoneMask(/^\s*\+\s*998\s*\+/.test(String(s == null ? '' : s)) ? String(s).replace(/^\s*\+\s*998\s*/, '') : s)
     && BA.phonePretty(s) === P.phonePretty(s) && W.prettyPhone(s) === P.phonePretty(s || '')
     && AD.pmCanonStored(s) === P.canonOf(s);
   if (!same) { mism++; if (!firstMism) firstMism = s; }
@@ -134,6 +134,12 @@ for (const s of inputs) {
 ok(`${inputs.length} kirish: brauzer nusxalari server bilan bir xil`, mism === 0, { mism, firstMism, srv: firstMism != null && P.phoneCanon(firstMism) });
 ok(`${inputs.length} kirish: invariantlar`, inv === 0, { inv, firstInv, canon: firstInv != null && P.phoneCanon(firstInv), mask: firstInv != null && P.phoneMask(firstInv) });
 ok('fuzz yaroqli chet el raqamlarini ham qamradi', inputs.filter(s => { const c = P.phoneCanon(s); return c && c.slice(0, 3) !== '998'; }).length > 300);
+
+sec('maskPhone: «+998 » ortidan «+» — chet el raqamiga o\'tish');
+ok('+998 + -> +', W.maskPhone('+998 +') === '+', W.maskPhone('+998 +'));
+ok('+998 +7 -> +7', W.maskPhone('+998 +7') === '+7', W.maskPhone('+998 +7'));
+ok('+998 +79031571124 -> +7 903 157 11 24', W.maskPhone('+998 +79031571124') === '+7 903 157 11 24', W.maskPhone('+998 +79031571124'));
+ok('+998 90 (oddiy) o\'zgarmaydi', W.maskPhone('+998 90') === '+998 90');
 
 sec('wirePhone (mijoz -> server)');
 ok('kanonik chet el -> +', W.wirePhone('79031571124') === '+79031571124' && W.wirePhone(W.normPhone('+48 789 706 619')) === '+48789706619');

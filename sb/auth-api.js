@@ -122,6 +122,7 @@ function phoneMask(raw) {
   var plus = /^[^0-9]*\+/.test(s);
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }
   else if (!plus && d === '0') return '0';         // '00' (xalqaro prefiks) yozilmoqda
+  else if (!plus && !d) return '';                 // maydon tozalandi — bo'sh qoladi ('+998' qaytib «yopishmasin»)
   if (plus || d.length > 9) d = d.replace(/^0+/, '');   // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
   if (d.slice(0, 3) === '998' || (!plus && d.length <= 9)) {
     // '+'siz AYNAN 9 raqam — lokal raqam (998 bilan boshlansa ham: 99 812 34 56), phoneCanon bilan bir xil.
@@ -155,8 +156,11 @@ export function prettyPhone(canon) {
 }
 // Input MASKASI: foydalanuvchi yozganда jonli formatlaydi. Odatda '+998 ' (O'zbekiston); '+' (yoki 00) bilan boshlansa —
 //   chet el raqami ('+7 903 157 11 24'). Qaytaradi: ko'rsatiladigan satr. Kanonik uchun normPhone(shu satr).
+//   Maydonda oldindan '+998 ' turadi: foydalanuvchi uning ortidan yana '+' yozsa ('+998 +7…') — chet el raqamini
+//   boshlamoqchi: '+998' olib tashlanadi (aks holda raqam O'zbekiston formatiga «yopishib» buzilardi).
 export function maskPhone(raw) {
-  return phoneMask(raw);
+  const s = String(raw == null ? "" : raw);
+  return phoneMask(/^\s*\+\s*998\s*\+/.test(s) ? s.replace(/^\s*\+\s*998\s*/, "") : s);
 }
 // Parol qoidalari -> { ok, errors:[], checks:{len,upper,lower,digit} } (jonli ko'rsatkichlar uchun).
 export function validatePassword(pw) {
