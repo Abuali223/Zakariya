@@ -6283,10 +6283,12 @@ function pmSurnameStems(name, strict){
   // Barcha apostrof turlari (Gʻ / G' / G‘ / G’ / G` / G´) — bir xil: olib tashlanadi (avval ‘ ’ ` ´ so'zni ikkiga
   //   bo'lib, «G‘ulomov» va «Gʻulomov» har xil o'zak berardi).
   const t=String(name||'').toLowerCase().replace(/[ʻʼ'‘’`´ʹ′‛]/g,'').replace(/[а-яёғқҳў]/g,c=>(c in M)?M[c]:c);
-  return [...new Set(t
-    .replace(/[^a-z-]+/g,' ').split(/[\s-]+/)
+  const toks=t.replace(/[^a-z-]+/g,' ').split(/[\s-]+/).filter(Boolean);
+  // «Ali Anvar o'g'li» / «Oysha Anvar qizi» — o'g'li/qizi OLDIDAGI so'z otaning ismi: aka-ukalarda umumiy (qat'iy rejimda ham olinadi).
+  const patr=new Set(toks.filter((x,i)=>i+1<toks.length && /^(ogli|ugli|qizi|kizi)$/.test(toks[i+1])));
+  return [...new Set(toks
     .filter(x=>x.length>=3)
-    .filter(x=>!strict || (/(ov|ova|ev|eva)$/.test(x) && !/(ovich|ovna|evich|evna)$/.test(x)))   // …zoda — EMAS: Ozoda/Shahzoda (qiz ismlari)
+    .filter(x=>!strict || patr.has(x) || (/(ov|ova|ev|eva)$/.test(x) && !/(ovich|ovna|evich|evna)$/.test(x)))   // …zoda — EMAS: Ozoda/Shahzoda (qiz ismlari)
     .map(x=>x.replace(/(ovich|ovna|evich|evna|ogli|ugli|qizi|kizi|yeva|yev|ova|eva|ov|ev|ina|in)$/,''))
     // Lotin ↔ rus transliteratsiyasi: x/h (Xasanov / Hasanov / Хасанов) va q/k (Qodirov / Kodirov / Қодиров) bir xil.
     .map(x=>x.replace(/x/g,'h').replace(/q/g,'k'))
@@ -6363,6 +6365,16 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn){
       else conflicts.push(`${m.sid}: aka-uka 'Ha' belgilangan lekin ${m.gets20?'≥90 (monitoring chegirmasi oladi)':(!m.billable?'bu oy fakturaga tushmaydi (sinov/muzlatilgan/chiqdi yoki narx yo‘q)':'eksklyuziv')} — e'tiborsiz`);
     });
   });
+  // Ehtimoliy BO'LINISH: bir telefonda, farzand ismlarida umumiy so'z bor, lekin turli guruhlarda qoldi (masalan familiya
+  //   …ov/…ev shaklida emas va ota/ona F.I.Sh har xil to'ldirilgan) — avtomatik birlashtirilmaydi (begona oila xavfi), lekin
+  //   admin ko'rsin: aka-uka bo'lsa ota/ona F.I.Sh ni to'ldiradi yoki «Ha» qo'yadi.
+  const loose={}; const nm={}; students.forEach(s=>{ const sid=s.studentId||s._id; loose[sid]=new Set(pmSurnameStems(s.name)); nm[sid]=s.name||sid; });
+  const hinted=new Set(); let hints=0;
+  Object.values(phoneMap).forEach(sids=>{ for(let i=0;i<sids.length;i++) for(let j=i+1;j<sids.length;j++){
+    const a=sids[i], b=sids[j]; const ra=find(a), rb=find(b); if(ra===rb) continue;
+    const common=[...loose[a]].find(x=>loose[b].has(x)); if(!common) continue;
+    const key=[ra,rb].sort().join('|'); if(hinted.has(key) || hints>=10) continue; hinted.add(key); hints++;
+    conflicts.push(`Ehtimoliy aka-uka guruhlanmadi: ${nm[a]} (${a}) va ${nm[b]} (${b}) — bir telefon, umumiy so‘z «${common}». Aka-uka bo‘lsa ota/ona F.I.Sh ni bir xil to‘ldiring yoki «Aka-uka chegirmasi: Ha» qo‘ying`); } });
   return { tenHolders, conflicts, famBill };
 }
 // ---- Prorata (oy o'rtasida kelgan/ketgan) — ISH KUNLARI (Dush–Juma) bo'yicha ----
@@ -6568,7 +6580,9 @@ async function pmLoadCtx(month, students, amount){
         if(stP && inPause(stP, ds)) return;                                                     // to'xtatilgan davr — to'lanmagan kun
         n++; });
       if(n) sickMap[sid]=(sickMap[sid]||0)+n; }); }
-  let ledger=[]; try{ const l=await getDocs(collection(db,'referral_ledger')); ledger=l.docs.map(d=>({id:d.id,...(d.data()||{})})); }catch(e){}
+  // Referral jurnali — KRITIK (o'qilmasa XATO): bo'sh deb olinsa, ishlatilgan referral yana «yangi» bo'lib ikki marta qo'llanardi,
+  //   mavjudi esa fakturadan tushib qolardi (to'langan fakturani qayta hisoblashda ham noto'g'ri summa).
+  let ledger=[]; { const l=await getDocs(collection(db,'referral_ledger')); ledger=l.docs.map(d=>({id:d.id,...(d.data()||{})})); }
   // MONITORING LAG: shu oy (M) invoysiga O'TGAN OY (M-1) TASDIQLANGAN monitoring balli qo'llanadi.
   // Har o'quvchi uchun o'sha oydagi fanlar bo'yicha o'rtacha (approved) ball; yo'q bo'lsa — chegirma yo'q.
   const monMonth=prevMonthStr(month);
@@ -7139,7 +7153,12 @@ async function renderPayments(){
         const paid=cashPaidOf(inv), net=Math.round(t.net); if(!(net < paid)) return;
         const item={ d, inv, sid, s, t, rRef, rc:{ isGrant:!!t.isGrant, amount:net }, paid, net, name:s.name||sid };
         const oldPct=Number(inv.pctApplied)||0, oldInfo=String(inv.discountInfo||'');
+        // ANIQ tekshiruv: aka-uka chegirmasiz qayta hisoblangan narx (o'sha kasal kun, prorata, referral bilan) to'langan
+        //   summaga TENG bo'lsin — ya'ni farq FAQAT kechikib qo'llangan 10% (holat/prorata/kasal o'zgarishi aralashmasin).
+        const t0=computeTuition(s, privOf(sid), Object.assign({}, ctx, { tenHolders:new Set() }));
+        if(!t0.skip) applyReferralUnits(t0, existRef[sid]||0, []);
         const sibOnly = t.pct===0.10 && /Aka-uka/.test(String(t.info||'')) && oldPct===0 && !/Aka-uka|Monitoring|grant|Grant/.test(oldInfo)
+          && !t0.skip && t0.pct===0 && Math.abs(Math.round(t0.net)-paid)<=1
           && (inv.baseAmount==null || inv.baseAmount==='' || Math.round(Number(inv.baseAmount))===Math.round(t.base))
           && Math.round(Number(inv.sickAmount)||0)===Math.round(Number(t.sickAmt)||0)
           && (famBill && famBill[sid]||0)>=3 && net>0 && (paid-net)<=Math.round(t.base*0.10)+1;

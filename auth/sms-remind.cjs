@@ -25,7 +25,7 @@
  *     ⚠️ Eskiz faqat TASDIQLANGAN shablonga mos matnni yuboradi (README: «Eskiz SMS shabloni»).
  */
 const L = require('./lib.cjs');
-const { DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus } = require('../payments/sms.cjs');
+const { DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName } = require('../payments/sms.cjs');
 
 // Logda telefonni qisman yashirish (PII).
 const redact = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(0, 5) + '***' + d.slice(-2) : '***'; };
@@ -39,8 +39,6 @@ function debtOf(i) {
   if (st === 'canceled' || st === 'reversed' || st === 'paid') return 0;
   return Math.max(0, (Number(i.amount) || 0) - (Number(i.paidAmount) || 0));
 }
-// SMS uchun ism: tipografik apostroflarni oddiyiga (GSM-7 — SMS qismlari ko'paymasin), bo'shliqlarni yig'ish.
-const smsName = s => String(s || '').replace(/[ʻʼ‘’`´]/g, "'").replace(/\s+/g, ' ').trim().slice(0, 40);
 // Eskiz xatosini admin uchun tushunarli qilish.
 function humanEskizError(e) {
   const t = String(e || '');

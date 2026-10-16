@@ -17,7 +17,14 @@ const https = require('https');
 
 function httpsRequest(opts, body) {
   return new Promise((resolve, reject) => {
+    const T = Number(process.env.ESKIZ_TIMEOUT_MS || 20000);
+    // sent: so'rov baytlari Eskiz'ga YETGAN bo'lishi mumkinmi (TLS ulanish o'rnatildi yoki qayta ishlatilgan socket)?
+    //   Ungacha bo'lgan har qanday xato (TCP/TLS ulanmadi, ulanish timeout'i) — e.preconnect: SMS ANIQ ketmagan.
+    let sent = false, ct = null;
+    const done = () => { if (ct) { clearTimeout(ct); ct = null; } };
+    const fail = e => { done(); if (e && typeof e === 'object' && !sent) e.preconnect = true; reject(e); };
     const req = https.request(opts, res => {
+      sent = true; done();
       let d = ''; res.on('data', c => d += c);
       res.on('end', () => { let j = null; try { j = JSON.parse(d); } catch (_) {} resolve({ status: res.statusCode, json: j, raw: d }); });
       // Javob yarmida uzilsa (sarlavhadan keyin ulanish yopildi) — promis osilib qolmasin (so'rov YUBORILGAN -> noaniq).
@@ -25,9 +32,15 @@ function httpsRequest(opts, body) {
       res.on('error', reject);
       res.on('close', () => { if (!res.complete) reject(new Error('eskiz_aborted')); });
     });
+    req.on('socket', sock => {
+      if (req.reusedSocket) { sent = true; done(); return; }
+      if (sock && typeof sock.once === 'function') sock.once('secureConnect', () => { sent = true; done(); });
+    });
+    // Ulanish bosqichi timeout'i (req.setTimeout ulanishni qamramaydi) — Eskiz'ga ulana olmasak, osilib qolmaymiz.
+    ct = setTimeout(() => { if (!sent) req.destroy(new Error('eskiz_connect_timeout')); }, T);   // javob/xato/ulanishda tozalanadi
     // Eskiz javob bermasa — cheksiz osilib qolmasin (so'rov xato bilan tugaydi; chaqiruvchi holatni «noaniq» deb oladi).
-    req.setTimeout(Number(process.env.ESKIZ_TIMEOUT_MS || 20000), () => req.destroy(new Error('eskiz_timeout')));
-    req.on('error', reject);
+    req.setTimeout(T, () => req.destroy(new Error('eskiz_timeout')));
+    req.on('error', fail);
     if (body) req.write(body);
     req.end();
   });
@@ -107,17 +120,25 @@ const tashkentDayStartISO = (day) => new Date(Date.parse(day + 'T00:00:00Z') - 5
 
 // Yuborish natijasi holati (sms_log.status): 'sent' | 'failed' (ANIQ ketmagan — qayta urinish mumkin) | 'unknown' (ketgan
 //   bo'lishi mumkin — qayta YUBORILMAYDI). Istisno: kirish (login) bosqichi yoki ulanish umuman o'rnatilmagan
-//   (ECONNREFUSED/DNS/TLS) -> aniq ketmagan; SMS so'rovi paytida uzilish/timeout -> noaniq.
+//   (ECONNREFUSED/DNS/TLS, ulanish timeout'i — e.preconnect) -> aniq ketmagan; SMS so'rovi paytida uzilish/timeout -> noaniq.
 const PRECONN = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH']);
 function definitelyNotSent(e) {
   if (!e || typeof e !== 'object') return false;
   const c = String(e.code || '');
-  return e.stage === 'login' || PRECONN.has(c) || /^(CERT_|ERR_TLS|UNABLE_TO_|DEPTH_ZERO|SELF_SIGNED)/.test(c);
+  return e.stage === 'login' || e.preconnect === true || e.syscall === 'connect' || PRECONN.has(c) || /^(CERT_|ERR_TLS|UNABLE_TO_|DEPTH_ZERO|SELF_SIGNED)/.test(c);
 }
+// SMS uchun yaroqli O'ZBEKISTON mobil raqami: 998XXXXXXXXX (auth/lib.cjs normPhone bilan bir xil qoida) yoki ''.
+function canonMobile(p) {
+  let d = String(p == null ? '' : p).replace(/\D/g, '');
+  if (d.length === 9) d = '998' + d;
+  return (d.length === 12 && d.startsWith('998') && '235789'.includes(d[3])) ? d : '';
+}
+// SMS uchun ism: tipografik apostroflarni oddiyiga (GSM-7 — SMS qismlari ko'paymasin), bo'shliqlarni yig'ish.
+const smsName = s => String(s || '').replace(/[ʻʼ‘’`´]/g, "'").replace(/\s+/g, ' ').trim().slice(0, 40);
 function sendStatus(r, thrown) {
   if (thrown) return definitelyNotSent(thrown) ? 'failed' : 'unknown';
   if (r && r.ok) return 'sent';
   return (r && r.ambiguous) ? 'unknown' : 'failed';
 }
 
-module.exports = { makeEskiz, normMobile, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus };
+module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus };

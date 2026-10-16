@@ -18,14 +18,22 @@ const fakeHttps = {
     req.write = () => {};
     req.setTimeout = (ms, cb) => { if (step.hang) timer = setTimeout(cb, Math.min(ms, 50)); };
     req.destroy = (err) => { if (done) return; done = true; if (timer) clearTimeout(timer); setImmediate(() => req.emit('error', err || new Error('destroyed'))); };
-    req.end = () => {
+    req.end = () => setImmediate(() => {
+      // Haqiqiy Node kabi: avval 'socket', keyin TLS 'secureConnect' (preconn* — ulanish o'rnatilmaydi).
+      const sock = new EventEmitter(); req.emit('socket', sock);
+      if (step.preconnHang) return;                            // TLS hech qachon ulanmaydi -> ulanish timeout'i
+      if (step.preconnErr) { done = true; const e = new Error(step.preconnErr); e.code = step.preconnErr; return req.emit('error', e); }
+      sock.emit('secureConnect');
+      run();
+    });
+    const run = () => {
       if (step.hang) return;                                   // javob kelmaydi -> setTimeout ishlaydi
       if (step.cut) {                                          // sarlavha keldi, javob yarmida uzildi
         return setImmediate(() => { const res = new EventEmitter(); res.statusCode = 200; res.complete = false; onRes(res);
           res.emit('data', '{"id":'); res.emit('aborted'); res.emit('close'); });
       }
       if (step.error) { done = true; const e = new Error(step.error); e.code = step.error; return setImmediate(() => req.emit('error', e)); }
-      setImmediate(() => { done = true; const res = new EventEmitter(); res.statusCode = step.status; onRes(res); res.emit('data', step.body); res.emit('end'); });
+      setImmediate(() => { done = true; const res = new EventEmitter(); res.statusCode = step.status; res.complete = true; onRes(res); res.emit('data', step.body); res.emit('end'); });
     };
     return req;
   },
@@ -104,6 +112,22 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   plan = [{ cut: true }];
   err = null; const t1 = Date.now(); try { await E.send('901234567', 'x'); } catch (e) { err = e; }
   ok('javob uzildi -> eskiz_aborted, stage=send, unknown', err && /eskiz_aborted/.test(err.message) && err.stage === 'send' && S.sendStatus(null, err) === 'unknown' && Date.now() - t1 < 2000, err && { msg: err.message, stage: err.stage });
+
+  // 7g) TLS ulanish o'rnatilmasdan xato (masalan ETIMEDOUT) -> preconnect -> ANIQ ketmagan (failed, qayta urinish mumkin)
+  plan = [{ preconnErr: 'ETIMEDOUT' }];
+  err = null; try { await E.send('901234567', 'x'); } catch (e) { err = e; }
+  ok('ulanishgacha xato -> preconnect, definitelyNotSent, failed', err && err.preconnect === true && S.definitelyNotSent(err) && S.sendStatus(null, err) === 'failed', err && { code: err.code, pre: err.preconnect });
+  // 7h) TLS umuman ulanmaydi -> ulanish timeout'i (osilib qolmaydi), preconnect
+  plan = [{ preconnHang: true }];
+  err = null; const t2 = Date.now(); try { await E.send('901234567', 'x'); } catch (e) { err = e; }
+  ok('ulanish timeout -> eskiz_connect_timeout, preconnect, tez', err && /eskiz_connect_timeout/.test(err.message) && err.preconnect === true && Date.now() - t2 < 2000, err && { msg: err.message, pre: err.preconnect });
+  // 7i) ulangandan keyin uzilish (ECONNRESET) -> preconnect EMAS -> unknown
+  plan = [{ error: 'ECONNRESET' }];
+  err = null; try { await E.send('901234567', 'x'); } catch (e) { err = e; }
+  ok('ulangandan keyin ECONNRESET -> unknown', err && !err.preconnect && S.sendStatus(null, err) === 'unknown', err && { code: err.code, pre: err.preconnect });
+  // canonMobile / smsName
+  ok('canonMobile: UZ mobil ha, +7/8-xx/landline yo\'q', S.canonMobile('+998 70 014 37 77') === '998700143777' && S.canonMobile('901234567') === '998901234567' && S.canonMobile('+7 916 123 45 67') === '' && S.canonMobile('8 90 123 45 67') === '' && S.canonMobile('998611234567') === '');
+  ok('smsName: GSM-7 apostrof', S.smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova");
 
   // 8) matn yordamchilari
   ok('fmtSom', S.fmtSom(4510000) === '4 510 000' && S.fmtSom(0) === '0');

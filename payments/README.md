@@ -148,9 +148,14 @@ node sms-worker.cjs debt             # faqat qarzdorlik (kun tekshiruvisiz, majb
 ```
 # Yangi faktura xabarlari — har 2 soatda
 0 */2 * * *  cd /home/ubuntu/iqror-repo/payments && flock -n /tmp/iqror-sms.lock node sms-worker.cjs new  >> /var/log/iqror-sms.log 2>&1
-# Qarzdorlik eslatmasi — Dush va Pay, 10:00 (10-sanadan keyingilar avtomat filtrlanadi)
-0 10 * * 1,4 cd /home/ubuntu/iqror-repo/payments && flock -n /tmp/iqror-sms.lock node sms-worker.cjs debt >> /var/log/iqror-sms.log 2>&1
+# Qarzdorlik eslatmasi — Dush va Pay, 10:20 (10-sanadan keyingilar avtomat filtrlanadi).
+#   «new» bilan bir vaqtga to'g'ri kelmasin: 20 daqiqa keyin + `flock -w` (qulf bo'shashini 30 daq kutadi) —
+#   `-n` bo'lsa, o'sha paytda «new» ishlab tursa, kunlik qarz eslatmasi jim o'tkazib yuborilardi.
+20 10 * * 1,4 cd /home/ubuntu/iqror-repo/payments && flock -w 1800 /tmp/iqror-sms.lock node sms-worker.cjs debt >> /var/log/iqror-sms.log 2>&1
 ```
+> Run «TO'XTATILDI» bilan tugasa (Eskiz'ga ulanib bo'lmadi yoki ketma-ket 5 ta Eskiz xatosi — `maxConsecutiveFailures`),
+> claim qilinmagan xabarlar keyingi cron'da yuboriladi; Eskiz aniq rad etganlari (`rejected:`) `maxRetries` gacha qayta
+> urinadi. Noto'g'ri ota-ona telefoni bo'lgan o'quvchi o'tkaziladi (Eskiz xatosi sanalmaydi) — kartada telefonni to'g'rilang.
 > `reminderDays` `config.json`da ham bor — cron kuni bilan mos bo'lsin (yoki `debt`
 > rejimи kun tekshiruvisiz majburiy ishlaydi, cron kunini o'zi belgilaydi).
 

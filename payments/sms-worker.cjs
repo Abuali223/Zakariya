@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
-const { makeEskiz, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, sendStatus, definitelyNotSent } = require('./sms.cjs');
+const { makeEskiz, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
 
 const SMS = CFG.sms || {};
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -36,13 +36,15 @@ const tpl = (k, def) => (SMS.templates && SMS.templates[k]) || def;
 //   Bir nechta o'quvchiga mos kalit (bir bolaning hujjat id'si boshqasining studentId'si / studentId takrori) — NOANIQ:
 //   SMS yuborilmaydi (bir bolaning qarzi boshqa oilaga ketmasin; «⚠️ Sifat»da ko'rinadi).
 //   Telefon: o'quvchining o'z maxfiy yozuvi (hujjat id); yo'q bo'lsa — studentId kalitli yozuv (boshqa bolaning hujjati bo'lmasa).
+//   Telefon — parentPhone / parentPhone2 dan BIRINCHI YAROQLI O'zbekiston mobil raqami (auth/sms-remind bilan bir xil);
+//   yaroqlisi bo'lmasa — telefon yo'q (SMS claim ham qilinmaydi: noto'g'ri raqam Eskiz xatosi deb sanalmasin).
 //   KANONIK kalit (studentId || id) — qo'lda eslatma qulfi (remind__<kanonik>__<sana>) shu bilan tekshiriladi.
 const CANON = {}; const AMBIG = new Set();
 async function phoneMap() {
   const priv = {}, m = {};
   try {
     const snap = await db.collection('student_private').get();
-    snap.docs.forEach(d => { const p = d.data() || {}; priv[d.id] = p.parentPhone || p.parentPhone2 || ''; });
+    snap.docs.forEach(d => { const p = d.data() || {}; priv[d.id] = canonMobile(p.parentPhone) || canonMobile(p.parentPhone2) || ''; });
   } catch (e) { log('phoneMap xato:', e.message); }
   try {
     const rows = (await db.collection('students').get()).docs.map(d => ({ id: d.id, sid: String((d.data() || {}).studentId || '').trim() }));
@@ -67,14 +69,18 @@ async function logSms(id, rec) { try { await db.collection('sms_log').doc(id).se
 // TAKROR YUBORISHDAN HIMOYA: yuborishдан OLDIN sms_log'ni ATOMIK CLAIM qilamiz (create -> id konfliktida
 // xato -> false). Shunda jarayon send bilan log orasида uzilса YOKI javob no-aniq bo'lса, keyingi cron
 // QAYTA yubormaydi (SMS puli behuda ketmaydi). Parallel cron nusxalari ham bittasi claim oladi.
+// ANIQ rad etilgan (Eskiz'ning o'zi 4xx bilan rad etgan / umuman ulanmagan) urinish shu prefiks bilan yoziladi — faqat
+//   shular qayta yuboriladi. Eski worker 'failed' ni noaniq holatlar (5xx/id'siz javob) uchun ham yozgan — prefikssiz
+//   eski qatorlar QAYTA YUBORILMAYDI (ikki marta SMS ketmasin).
+const REJ = 'rejected: ';
 async function claimSms(id, rec) {
   try { await db.collection('sms_log').doc(id).create({ ...rec, status: 'sending', attempts: 1, createdAt: FieldValue.serverTimestamp() }); return true; }
   catch (e) {
-    // Avvalgi urinish ANIQ muvaffaqiyatsiz ('failed') bo'lsa — SHARTLI qayta claim (holat/urinish o'zgarmagan bo'lsa),
-    //   MAXTRIES gacha. 'sending'/'unknown'/'sent' — hech qachon qayta yuborilmaydi (ikki marta SMS ketmasin).
+    // Avvalgi urinish ANIQ rad etilgan ('failed' + REJ prefiksi) bo'lsa — SHARTLI qayta claim (holat/urinish o'zgarmagan
+    //   bo'lsa), MAXTRIES gacha. 'sending'/'unknown'/'sent'/eski 'failed' — qayta yuborilmaydi (ikki marta SMS ketmasin).
     const sb = db._sb; if (!sb) return false;
     const p = await getSms(id); const n = Number(p && p.attempts) || 0;
-    if (!p || p.status !== 'failed' || n >= MAXTRIES) return false;
+    if (!p || p.status !== 'failed' || n >= MAXTRIES || String(p.error || '').indexOf(REJ) !== 0) return false;
     try { const { data, error } = await sb.from('sms_log').update({ ...rec, status: 'sending', attempts: n + 1, error: '' }).eq('id', id).eq('status', 'failed').eq('attempts', n).select('id');
       return !error && (data || []).length === 1; } catch (e2) { return false; }
   }
@@ -95,7 +101,12 @@ async function sendOne(eskiz, id, phone, msg) {
     STOP = `Eskiz bilan bog'lanib bo'lmadi (${r.error}) — run to'xtatildi; xabarlar keyingi cron'da yuboriladi.`;
     return Object.assign({}, r, { status: 'failed' });
   }
-  await markSms(id, { status, providerId: r.id || '', error: r.ok ? '' : String(r.error || '') });
+  // Mahalliy tekshiruv (noto'g'ri raqam — Eskiz'ga so'rov ketmagan): yakuniy, qayta urinilmaydi, Eskiz xatosi sanalmaydi.
+  if (!r.ok && /^bad_phone/.test(String(r.error || ''))) {
+    await markSms(id, { status: 'failed', attempts: MAXTRIES, error: String(r.error || '') });
+    return Object.assign({}, r, { status: 'failed' });
+  }
+  await markSms(id, { status, providerId: r.id || '', error: r.ok ? '' : ((status === 'failed' ? REJ : '') + String(r.error || '')) });
   if (r.ok) consecFail = 0;
   else if (++consecFail >= CB_MAX) STOP = `${CB_MAX} ta ketma-ket SMS xatosi — run to'xtatildi (Eskiz holati / shablonni tekshiring).`;
   return Object.assign({}, r, { status });
@@ -121,8 +132,8 @@ async function runNew(eskiz, phones, dry) {
     if (dn.skip) { skip++; continue; }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
-    const msg = fillTpl(tpl('new', DEF_NEW), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) });
-    if (dry) { log('[DRY new]', phone, '::', msg); sent++; continue; }
+    const msg = fillTpl(tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) });
+    if (dry) { log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
     const r = await sendOne(eskiz, id, phone, msg);
@@ -159,8 +170,8 @@ async function runDebt(eskiz, phones, dry, force) {
       if (man && ['sent', 'sending', 'unknown'].includes(man.status)) { skip++; continue; }
       const phone = (phones[inv.studentId] || {}).phone;
       if (!phone) { skip++; continue; }
-      const msg = fillTpl(tpl('debt', DEF_DEBT), { name: inv.studentName || '', month: fmtMonth(inv.month), amount: fmtSom(inv.amount), due: fmtSom(due) });
-      if (dry) { log('[DRY debt]', phone, '::', msg); sent++; continue; }
+      const msg = fillTpl(tpl('debt', DEF_DEBT), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: fmtSom(inv.amount), due: fmtSom(due) });
+      if (dry) { log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
       if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: inv.month || '' }))) { skip++; continue; }
       const r = await sendOne(eskiz, id, phone, msg);
       if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', redactPhone(phone), r.status, r.error); }
