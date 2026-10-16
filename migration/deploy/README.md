@@ -21,7 +21,7 @@ VPS'da nusxalab ishga tushirasiz.
 | `nginx.conf.example` | iqror.uz (statik) + api.iqror.uz (Supabase+AI+to'lov) reverse-proxy | `/etc/nginx/sites-available/iqror` |
 | `iqror-ai.service` | AI yordamchi doimiy (systemd) | `/etc/systemd/system/` |
 | `iqror-pay.service` | To'lov serveri doimiy (systemd) | `/etc/systemd/system/` |
-| `backup.sh` | Kunlik pg_dump + Storage zaxira (cron) | `/opt/iqror/...` + crontab |
+| `backup.sh` | Zaxira: maktab ma'lumotlari (`public` + `app`, Supabase konteyneridagi pg_dump — parol kerak emas) + Storage | bir martalik: `bash ~/iqror-repo/migration/deploy/backup.sh` (→ `~/iqror-backups`); har kuni: `sudo crontab -e` → `30 3 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1` (→ `/opt/iqror/backups`) |
 
 ## Tartib (qisqacha)
 1. Supabase o'rnatish + schema/rls/import — `../supabase-setup.md`.
@@ -30,7 +30,7 @@ VPS'da nusxalab ishga tushirasiz.
 4. Server config'lar (`ai-assistant/config.json`, `payments/config.json`) — `backend:"supabase"`.
 5. systemd: `iqror-ai`, `iqror-pay` — enable --now.
 6. nginx + certbot (SSL).
-7. `backup.sh` ni crontab'ga.
+7. `backup.sh` ni root crontab'ga (yuqoridagi qator). Zaxira fayllari faqat egasiga o'qiladi (600); ularni vaqti-vaqti bilan serverdan TASHQARIGA ham ko'chiring.
 8. `../CUTOVER-CHECKLIST.md` bo'yicha to'liq sinov → cutover.
 
 ## Xizmat papkasi (WorkingDirectory) — deploy yangi server kodini ishga tushirishi uchun
