@@ -452,7 +452,7 @@ let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasej
 //   Xato bo'lsa keyingi chaqiruv YANGI manzil bilan qayta urinadi (brauzer muvaffaqiyatsiz import()ni shu URL uchun
 //   eslab qoladi — bir martalik tarmoq uzilishi takliflarni sahifa qayta yuklanguncha o'chirib qo'ymasin).
 let _nmP=null, _nmTry=0;
-function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=3${_nmTry?'&r='+_nmTry:''}`)
+function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=4${_nmTry?'&r='+_nmTry:''}`)
   .then(()=>{ const N=globalThis.IqrorNameMatch||null; if(!N){ _nmP=null; _nmTry++; } return N; })
   .catch(()=>{ _nmP=null; _nmTry++; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
@@ -5980,17 +5980,19 @@ async function openAssign(payment, students, reload){
 
   // ⚠️ Ism to'liq mos kelmasa (taklif foizi, ro'yxatdan tanlansa — ism o'xshashligi < 75%) — tasdiqlash oynasida ogohlantirish:
   //   kassir o'xshash ismli yoki qo'shni qatordagi BOSHQA o'quvchini tanlab qo'ymasin. Taklifdan tanlansa — doim ko'rsatilgan
-  //   foiz bo'yicha; ro'yxatdan — to'lovchi shu o'quvchi uchun ism yozmagan bo'lsa (faqat izoh/raqam) ogohlantirish yo'q.
+  //   foiz bo'yicha; ro'yxatdan — to'lovchi ism yozmagan bo'lsa (faqat izoh/raqam) ogohlantirish yo'q («Ли», «Ж К» — ism).
   const weakMatch=(sid)=>{ const NM=globalThis.IqrorNameMatch, st=sById[String(sid)], raw=String(payment.payerName||'');
     if(!NM || typeof NM.nameSimilarity!=='function' || !st) return '';
     const sg=sugs.find(x=>String(x.item.studentId||x.item._id)===String(sid));
-    if(!sg && !NM.nameTokens(raw, st.name).length) return '';
+    if(!sg && !(typeof NM.wroteName==='function' ? NM.wroteName(raw, st.name) : NM.nameTokens(raw, st.name).length)) return '';
     const pct=sg ? sg.percent : Math.round(NM.nameSimilarity(raw, st.name)*100);
     if(pct>=75) return '';
-    // To'lovchi matni (Click'da to'lovchi o'zi yozadi) — ko'rsatishdan oldin: qator ko'chishi, boshqaruv va yo'nalish
-    //   belgilari bitta bo'shliqqa (oynada soxta «o'quvchi — summa» qatori yasalmasin); 80 belgi — kod nuqtasi bo'yicha (emoji bo'linmasin).
-    const cp=Array.from(raw.replace(/[\s\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu,' ').trim());
-    return `⚠️ Ism to‘liq mos emas (${pct}% mos) — to‘lovchi yozgan ism: «${cp.slice(0,80).join('')}${cp.length>80?'…':''}»\n\n`; };
+    // To'lovchi matni (Click'da to'lovchi o'zi yozadi) — oynada faqat undagi SO'ZLAR (harf, apostrof, bosh harf nuqtasi): raqam,
+    //   qavs, tire, belgi, emoji, ko'rinmas va «bo'sh» harflar tashlanadi — soxta «o'quvchi (ID) — summa» qatori yasab bo'lmaydi.
+    //   80 belgi — grafema bo'yicha (harf + diakritika bo'linmaydi).
+    const words=(raw.normalize('NFC').replace(/[\u115F\u1160\u3164\uFFA0]/g,'').match(/\p{L}\p{M}{0,2}(?:[\p{L}\p{Sk}'‘’‚‛′″‵＇ꞌ՚“”]\p{M}{0,2})*\.?/gu)||[]).join(' ');
+    const g=(typeof Intl!=='undefined' && Intl.Segmenter) ? Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(words), x=>x.segment) : Array.from(words);
+    return `⚠️ Ism to‘liq mos emas (${pct}% mos) — to‘lovchi yozgan ism: «${g.slice(0,80).join('').trimEnd()}${g.length>80?'…':''}»\n\n`; };
 
   // ---- Bitta o'quvchiga (butun summani) ----
   const assignOne=async(sid)=>{ if(busy) return; const st=sById[String(sid)];

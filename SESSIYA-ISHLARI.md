@@ -477,6 +477,50 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   R9 kodida 10 tasi yiqiladi) + chiqarish 37/37; PG16 51/51 + poyga 2/2; to'liq zanjir + RLS 12/12; haqiqiy stek e2e 36/36.
   Topshiriqdagi 4 holat o'zgarmadi: 100% / 100% / 91% / 0% (taklif qilinmaydi).
 
+## 33) Raqib ko'rigi (R11) — R10 tuzatmalari ustidan
+
+- To'rtinchi tekshiruv: R10 ning 9 tuzatmasidan 7 tasi to'liq yopilgan, 2 tasining yaqin varianti qolgan edi; uch yo'nalishdagi
+  yangi qidiruv (algoritm regressiyalari, qoidalar izchilligi, tasdiqlash oynasi) 14 topilmani tasdiqladi. Hammasi tuzatildi.
+- **Yuqori:** yopishgan bosh harflar («Karimov J.O.», «Иванова М.А.») — ikkinchisi tushib qolardi va boshqa otaning farzandi
+  (amakivachcha, qarzi summaga teng) 78% bilan ogohlantirishsiz BIRINCHI taklif qilinardi. Endi bosh harflar so'z tartibi bilan
+  aniqlanadi va rolga ega: boshqa bosh harfdan keyingisi («J.R.») yoki ikki to'liq so'zdan keyingisi («Karimov Jasur R.») —
+  otasining ismi bosh harfi: 3 so'zli yozuvda faqat otasining ismi bilan solishtiriladi (Javohir Olimovich 68%, amakivachcha
+  Jasur Bahodirovich 8%; «Karimov Jasur R.» — Rustamovich 95%, Bahodirovich 10%), 2 so'zli yozuvda hisobga olinmaydi.
+  Ism bosh harfi esa otasining ismiga juftlanmaydi: R9/R10 da «Usmonov A.» → «Usmonov Nur Anvarovich» 78% (A — Anvarovich
+  orqali), «Karimov Z.» → aka-ukasi «… Zafarovich» chiqardi — endi chiqmaydi.
+- **O'rta:** «Y.» Ye-ismlarga (Yelena, Yegor, Yevgeniy) zid edi — endi mos; «Yo.» / «Ё.» — Yo'ldosh bilan ham. Nuqtali sinf
+  harfi («5-sinf A.», «5 класс А.», «5 кл. А») bosh harf deb o'qilib, ukasini 78% ogohlantirishsiz taklif qilardi — endi sinf
+  so'zi yonidagi yakka harf olib tashlanadi. «N.» bosh harfi raqamdan oldin ham bosh harf («No 5», «Nr. 12» — raqam belgisi).
+- **O'rta:** otasining ismi bilan yozilgan (3 so'zli) o'quvchida to'lovchining ortiqcha so'zi («tel.», «12 okt», «5 кл.»,
+  «тыс.», «10 kun», «питание», «Toshkent») otasining ismiga majburan juftlanib, to'g'ri o'quvchini 10% ga tushirardi
+  (taklif yo'q, ro'yxatdan tanlansa soxta ⚠️). Endi to'lovchi otasining ismini yozmagan (yoki faqat mos bosh harfini yozgan)
+  bo'lsa, yozuv otasining ismisiz ham solishtiriladi (×0.95); aka-uka (boshqa ism) baribir rad etiladi. Izoh so'zlari
+  kengaytirildi (tel, okt, kun, chi, chorak, so'mlik, кл, тыс, питание, ребенка, на/по/до…, shahar va tuman nomlari, manzil
+  so'zlari, «F.I.O.» yorlig'i); «сына» / «сынок» qaytarildi (R10 da «сын» bilan birga tasodifan olib tashlangan edi). Manzil
+  qisqartmasi («Toshkent sh.», «Chilonzor t.», «Karimov Jasur t. Chilonzor», «г. Ташкент») — bosh harf emas
+  («Karimov Sh. Toshkent» — bosh harf).
+- **Past:** koreyscha qisqa familiya + otasining ismi («Ли Виктория Сергеевна») boshqa oiladagi «Kim Viktoriya Sergeyevna» ni
+  95–100% ko'rsatardi — endi hisobga olinmagan 2 harfli so'z (yoki «O») bo'lsa va ismda juftsiz yoki faqat bosh harf bilan
+  juftlangan so'z qolsa, ball ≤ 64% (bonus bilan ham ⚠️). Ruscha «на/до/по» — koreyscha «Na», «Do» bilan adashmaydi.
+  ⚠️ endi «Ли», «Ж К» kabi qisqa ism yozilganda ham chiqadi (`wroteName`). Apostrof turlari (′ ＇ ‛ ‚ ՚ ‵ ^ ¨) hamma
+  qoidalarda bir xil; « » doim so'zlarni ajratadi; ID / telefonga yopishgan ism («IQ-0042-Ali», «998901112233Ali») kesilmaydi.
+- **Past (oyna):** R10 dagi «soxta qator yasab bo'lmaydi» to'liq to'g'ri emas edi (Braille bo'sh belgisi U+2800 bilan
+  mumkin edi). Endi ⚠️ qatorida to'lovchi matnidan faqat SO'ZLAR ko'rsatiladi: raqam, qavs, tire, emoji, ko'rinmas va «bo'sh»
+  harflar (Braille bo'sh belgisi, Hangul to'ldiruvchilari) tashlanadi, diakritika uyumi 2 tagacha; 80 belgi — grafema
+  bo'yicha. Modul manzili `?v=4`.
+- Tekshiruv: `name-match.test` 159 (R10 kodida yangi testlarning 14 tasi yiqiladi, keyin `wroteName` yo'qligi sabab to'xtaydi);
+  Chromium «Biriktirish» 77/77 (R10 kodida 11 tasi yiqiladi) + chiqarish 37/37. Differensial skaner (R8/R9/R10/R11 yonma-yon,
+  admin.html dagi kabi taklif zanjiri): tasodifiy 60 000 to'lovchi matnida (ikki xil urug') to'g'ri o'quvchi bali R10 ga
+  nisbatan 6 054 / 6 059 holatda > 5 ball oshdi, 0 holatda tushdi; maktab darajasida (354 o'quvchi × 92 shablon × 3 qarz holati,
+  har biriga 4 aka-uka, 2 adash va 300 boshqa o'quvchi; 2 va 3 so'zli yozuv) to'g'ri o'quvchi birorta holatda yo'qolmadi, R10
+  topa olmagan 18 426 holatda endi topiladi, 40 ta keng tarqalgan shablonda bayroq yo'q. Qolgan bayroqlar — faqat bosh harfli
+  matnlarda bir xil bosh harfli aka-ukalar tengligi (quyida). Topshiriqdagi 4 holat o'zgarmadi: 100% / 100% / 91% / 0%.
+- Ongli qoldirilganlar (hammasi ⚠️ bilan yoki teng ko'rsatiladi, ishonchli noto'g'ri taklif yo'q): bir xil bosh harfli aka-uka
+  teng chiqadi («Petrova Y.» → Yelena va Yana 82%; «Qodirov B.B.» → Bekzod va Bahodir Bahodirovich); qisqa ismdagi bir harf
+  farqi (Ali / Vali 72%); oy nomi + yil («Avgust 2026» → Karimov Avgust 67% ⚠️); koreyscha «O» familiyasi raqamdan keyin
+  («IQ-0042 O Viktoriya»); noma'lum joy nomi + qisqartma («Em Nikita Gazalkent sh.» — to'g'ri o'quvchi ham topilmaydi);
+  kichik harfli so'zlar ko'rinmas belgi bilan yopishgani.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
