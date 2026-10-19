@@ -23,10 +23,13 @@
  *   - preview:true — hech narsa yubormaydi/yozmaydi: matn, telefon, qarz va bugungi holatni qaytaradi
  *     (admin tasdiqlash oynasida ANIQ nima ketishini ko'radi).
  *   - Matn: sms.templates.remind -> sms.templates.debt -> standart (sms-worker bilan bir xil).
- *     ⚠️ Eskiz faqat TASDIQLANGAN shablonga mos matnni yuboradi (README: «Eskiz SMS shabloni»).
+ *     ⚠️ Eskiz SMS'ni TASDIQLANGAN shablon NAQSHI bilan solishtiradi ({name} -> %w / %w{1,3}, {due} -> %d ...):
+ *     o'zgaruvchilar imkon qadar bitta «so'z» qilib yoziladi (summa 5800000, oylar 09.2026,10.2026), ism esa Eskiz'dagi
+ *     naqshga sig'adigan shaklda (payments/eskiz-template.cjs composeSms). Naqshlar Eskiz'dan o'qiladi (10 daqiqa kesh).
  */
 const L = require('./lib.cjs');
-const { DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName } = require('../payments/sms.cjs');
+const { DEF_DEBT, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName } = require('../payments/sms.cjs');
+const { composeSms, smsSom, smsMonths } = require('../payments/eskiz-template.cjs');
 
 // Logda telefonni qisman yashirish (PII).
 const redact = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(0, 5) + '***' + d.slice(-2) : '***'; };
@@ -44,7 +47,7 @@ function debtOf(i) {
 function humanEskizError(e) {
   const t = String(e || '');
   if (/bad_phone:intl/.test(t)) return 'Chet el raqamiga SMS yuborilmaydi (SMS faqat O‘zbekiston raqamlariga).';
-  if (/модерац|moderat|шаблон|templat/i.test(t)) return 'Eskiz bu matnni rad etdi: SMS matni Eskiz kabinetida SHABLON sifatida tasdiqlanmagan. config.json → sms.templates.remind (yoki debt) dagi matnni Eskiz «Shablonlar» bo‘limiga yuborib tasdiqlating.';
+  if (/модерац|moderat|шаблон|templat/i.test(t)) return 'Eskiz bu SMSni rad etdi: matn Eskiz’dagi TASDIQLANGAN shablon naqshiga mos kelmadi (yoki shablon hali moderatsiyada). Eskiz matndagi o‘zgaruvchi joylarni (ism, oy, summa) moderator yozgan naqsh bilan solishtiradi. Aniq sababi: serverda «cd ~/iqror-repo/payments && node eskiz-shablon.cjs».';
   if (/баланс|balance|средств|insufficient|limit/i.test(t)) return 'Eskiz: balans yoki limit yetarli emas — Eskiz hisobini tekshiring.';
   if (/bad_phone/.test(t)) return 'Telefon raqam noto‘g‘ri.';
   return 'SMS yuborilmadi (Eskiz): ' + t.slice(0, 200);
@@ -63,6 +66,29 @@ function makeSmsRemind(deps) {
   const TPL = (S.templates && (S.templates.remind || S.templates.debt)) || DEF_DEBT;
   const now = deps.now || (() => Date.now());
   const DRY = !eskiz;
+  // Eskiz'dagi shablon naqshlari (matnni moslash uchun): muvaffaqiyatli o'qilsa 10 daqiqa, o'qib bo'lmasa 1 daqiqa keshlanadi;
+  //   o'qib bo'lmasa — null (matn oddiy usulda yig'iladi, Eskiz o'zi hal qiladi). Admin oynasi uzoq kutib qolmasin:
+  //   Eskiz TPL_WAIT ichida javob bermasa — naqshlarsiz davom etamiz (so'rov fonda tugab, keshni to'ldiradi).
+  //   Parallel so'rovlar bitta Eskiz so'rovini kutadi (tplPending).
+  const TPL_WAIT = Math.max(0, cfgNum(deps.tplWaitMs, 5000));
+  let tplList = null, tplAt = null, tplPending = null;
+  function approvedTemplates() {
+    if (!eskiz || typeof eskiz.templates !== 'function') return Promise.resolve(null);
+    const t = now();
+    if (tplAt != null && t - tplAt >= 0 && t - tplAt < (tplList ? 600e3 : 60e3)) return Promise.resolve(tplList);
+    if (!tplPending) {
+      tplPending = (async () => {
+        try { const r = await eskiz.templates(); tplList = (r && r.ok && Array.isArray(r.list)) ? r.list : null; if (!tplList) console.error('Eskiz shablonlari o‘qilmadi:', String((r && r.error) || '').slice(0, 120)); }
+        catch (e) { tplList = null; console.error('Eskiz shablonlari xato:', String((e && e.message) || e).slice(0, 120)); }
+        tplAt = now();
+        return tplList;
+      })();
+      tplPending.then(() => { tplPending = null; });          // keyingi mikrotaskda (tayinlashdan keyin) — sinxron xatoda ham
+    }
+    let timer = null;
+    const late = new Promise(res => { timer = setTimeout(() => res(null), TPL_WAIT); if (timer.unref) timer.unref(); });
+    return Promise.race([tplPending, late]).finally(() => clearTimeout(timer));
+  }
 
   return async function smsRemind(body) {
     body = body || {};
@@ -127,8 +153,9 @@ function makeSmsRemind(deps) {
     const months = [...new Set(debts.map(x => x.month))];
     const name = smsName(st.name || (debts[0] && debts[0].nm) || canon);
     // Faqat ASCII (GSM-7): tire/boshqa belgi butun SMS'ni UCS-2 ga o'tkazib, qismlar sonini (narxini) oshiradi.
-    const monthTxt = months.length > 4 ? `${months.slice(0, 3).map(fmtMonth).join(', ')} va yana ${months.length - 3} oy` : months.map(fmtMonth).join(', ');
-    const message = fillTpl(TPL, { name, month: monthTxt, due: fmtSom(due), amount: fmtSom(due) });
+    //   O'zgaruvchilar Eskiz naqshiga sig'adigan shaklda: oylar bitta so'z (09.2026,10.2026 / 05.2026-10.2026), summa 5800000.
+    const cm = composeSms(TPL, { name, month: smsMonths(months), due: smsSom(due), amount: smsSom(due) }, await approvedTemplates());
+    const message = cm.message;
 
     // 5) Bugungi holat (qo'lda + avtomatik).
     const day = tashkentDay(now());
@@ -148,7 +175,7 @@ function makeSmsRemind(deps) {
     else if (prev && prev.status !== 'failed') block = { code: 'uncertain', already: 'sending', error: UNCERTAIN };
     else if (prev && (Number(prev.attempts) || 0) >= MAX_TRIES) block = { code: 'retries', error: `Bugun ${MAX_TRIES} marta urinildi, SMS ketmadi: ${humanEskizError(prev.error)}` };
     else if (!MAX_HOUR || !MAX_DAY) block = { code: 'disabled', error: 'SMS eslatma serverda o‘chirilgan (limit 0).' };
-    const info = { name, phone: pretty, due, months, message, dry: DRY,
+    const info = { name, phone: pretty, due, months, message, dry: DRY, tplFit: cm.fit, nameShort: cm.shortened,
       today: prev ? { status: String(prev.status || ''), at: prev.createdAt || null } : null, autoToday,
       blocked: block ? block.code : null, blockedMsg: block ? block.error : '' };
 

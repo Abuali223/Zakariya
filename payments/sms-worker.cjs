@@ -23,7 +23,8 @@ const fs = require('fs');
 const path = require('path');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
-const { makeEskiz, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
+const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
+const { composeSms, smsSom } = require('./eskiz-template.cjs');
 
 const SMS = CFG.sms || {};
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -112,6 +113,14 @@ async function sendOne(eskiz, id, phone, msg) {
   else if (++consecFail >= CB_MAX) STOP = `${CB_MAX} ta ketma-ket SMS xatosi — run to'xtatildi (Eskiz holati / shablonni tekshiring).`;
   return Object.assign({}, r, { status });
 }
+// Eskiz'dagi tasdiqlangan shablon naqshlari (run boshida bir marta o'qiladi; o'qib bo'lmasa — null: matn oddiy yig'iladi).
+//   SMS matni naqshga sig'adigan shaklda yig'iladi (eskiz-template.cjs composeSms) — Eskiz «moderatsiyadan o'tmagan» deb rad etmasin.
+let APPROVED = null, warnedFit = false;
+function smsText(tplStr, vals) {
+  const cm = composeSms(tplStr, vals, APPROVED);
+  if (cm.fit === false && !warnedFit) { warnedFit = true; log('⚠️ SMS matni Eskiz’dagi tasdiqlangan shablon naqshiga mos kelmayapti — Eskiz rad etishi mumkin. Tekshiruv: node eskiz-shablon.cjs'); }
+  return cm.message;
+}
 const redactPhone = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(0, 5) + '***' + d.slice(-2) : '***'; };
 
 // (1) YANGI FAKTURA xabarlari — oxirgi N kunda yaratilgan, to'lanmagan, amount>0.
@@ -133,7 +142,7 @@ async function runNew(eskiz, phones, dry) {
     if (dn.skip) { skip++; continue; }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
-    const msg = fillTpl(tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) });
+    const msg = smsText(tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
     if (dry) { log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
@@ -171,7 +180,7 @@ async function runDebt(eskiz, phones, dry, force) {
       if (man && ['sent', 'sending', 'unknown'].includes(man.status)) { skip++; continue; }
       const phone = (phones[inv.studentId] || {}).phone;
       if (!phone) { skip++; continue; }
-      const msg = fillTpl(tpl('debt', DEF_DEBT), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: fmtSom(inv.amount), due: fmtSom(due) });
+      const msg = smsText(tpl('debt', DEF_DEBT), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(inv.amount), due: smsSom(due) });
       if (dry) { log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
       if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: inv.month || '' }))) { skip++; continue; }
       const r = await sendOne(eskiz, id, phone, msg);
@@ -187,6 +196,12 @@ async function runDebt(eskiz, phones, dry, force) {
   const dry = SMS.dryRun === true || args.includes('--dry');
   const mode = (args.find(a => !a.startsWith('--')) || 'both').toLowerCase();   // new | debt | both
   const eskiz = dry ? null : makeEskiz(SMS);
+  // Naqshlar faqat O'QILADI (GET) — sinov (--dry) rejimida ham, kalit bo'lsa: logdagi matn haqiqatda ketadigan bilan bir xil.
+  const reader = eskiz || ((SMS.eskizEmail || SMS.email || SMS.token) ? makeEskiz(SMS) : null);
+  if (reader && typeof reader.templates === 'function') {
+    try { const r = await reader.templates(); if (r && r.ok) APPROVED = r.list; else log('Eskiz shablonlari o\'qilmadi:', (r && r.error) || ''); }
+    catch (e) { log('Eskiz shablonlari xato:', (e && e.message) || e); }
+  }
   const phones = await phoneMap();
   if (mode === 'new' || mode === 'both') await runNew(eskiz, phones, dry);
   if ((mode === 'debt' || mode === 'both') && !STOP) await runDebt(eskiz, phones, dry, mode === 'debt');

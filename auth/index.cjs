@@ -28,6 +28,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const L = require('./lib.cjs');
+const { DEF_OTP } = require('../payments/sms.cjs');
 
 const MAX_BODY = 64e3;   // auth payloadlari kichik — 64 KB yetarli
 function readBody(req) {
@@ -66,7 +67,7 @@ function makeHandlers(deps) {
   const TICKET_TTL = Number(C.ticketTtlSec || 600);
   const LOGIN_MAX_FAILS = Number(C.loginMaxFails || 10);
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
-  const OTP_TPL = C.otpTemplate || 'IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.';
+  const OTP_TPL = C.otpTemplate || DEF_OTP;
   const DRY = !eskiz;
   // Ro'yxatdagi rol: 'staff' = umumiy xodim (aniq rol — teacher/kassir/qorovul... — admin tasdiqlashda beriladi), 'parent'.
   //   'teacher' — ESKI sahifa (c29e5b5 gacha «O‘qituvchi» tugmasi; brauzerda uzoq ochiq qolgan / keshlangan sahifa) — u ham

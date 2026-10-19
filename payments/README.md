@@ -133,11 +133,15 @@ Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **y
 > Eskiz panelida **oldindan tasdiqlangan shablonga** mos bo'lishi kerak.
 > `templates.new`/`templates.debt` matnini Eskiz'da tasdiqlang (yoki tasdiqlangan
 > matnni shu yerga qo'ying). `from` (nickname) ham tasdiqlangan bo'lsin.
+> Eskiz SMS'ni moderator yozgan **naqsh** bilan solishtiradi (`{name}` → `%w` = 1 so'z, `{amount}` → `%d` = 1 son …):
+> shuning uchun SMS'da summa `5800000`, oy `10.2026` (bitta «so'z»), ism esa Eskiz'dagi naqshga sig'adigan shaklda
+> yoziladi (worker run boshida naqshlarni o'qiydi — `eskiz-template.cjs`). Batafsil — `auth/README.md` «Eskiz SMS shabloni».
 
 ### 7.2 Sinov (hech narsa yubormaydi)
 ```bash
 cd payments
-node sms-worker.cjs --dry            # kimga qanday SMS ketishini ko'rsatadi
+node eskiz-shablon.cjs               # Eskiz'dagi matnlar holati + har SMS turi naqshga mosmi (sababi bilan)
+node sms-worker.cjs --dry            # kimga qanday SMS ketishini ko'rsatadi (matn — Eskiz naqshiga moslangan)
 ```
 
 ### 7.3 Ishga tushirish

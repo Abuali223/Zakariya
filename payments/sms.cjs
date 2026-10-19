@@ -8,6 +8,8 @@
  * Eskiz API: https://notify.eskiz.uz/api
  *   POST /api/auth/login          (email,password)          -> { data:{ token } }
  *   POST /api/message/sms/send    (mobile_phone,message,from) -> { id, status }
+ *   GET  /api/user/templates      -> { result:[{ id, template, original_text, status }] }  (tasdiqlangan naqshlar —
+ *        SMS shu NAQSH bilan solishtiriladi; payments/eskiz-template.cjs, diagnostika: node eskiz-shablon.cjs)
  *
  * ⚠️ SMS FAQAT O'ZBEKISTON raqamlariga (998XXXXXXXXX) yuboriladi — maktab qoidasi. Chet el raqami (ma'lumot sifatida
  *    to'g'ri bo'lsa ham, server/phone.cjs) -> { ok:false, error:'bad_phone:intl' }, Eskiz'ga so'rov YUBORILMAYDI.
@@ -84,6 +86,23 @@ function makeEskiz(cfg) {
     token = t; return token;
   }
   async function ensureToken() { if (!token) { if (cfg.token) token = cfg.token; else await login(); } return token; }
+  const stage = (st, fn) => fn().catch(e => { if (e && typeof e === 'object' && !e.stage) e.stage = st; throw e; });
+
+  // Eskiz'dagi SMS matnlari (shablonlar): [{ id, template (moderator naqshi: %w/%d), original (asl matn), status }].
+  //   status: service/reklama — tasdiqlangan; moderation/inproccess — kutilmoqda; rejected — rad etilgan.
+  async function templates() {
+    await stage('login', ensureToken);
+    const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/templates', method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }));
+    let r = await get();
+    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', login); r = await get(); }
+    const j = r.json || {};
+    const list = Array.isArray(j.result) ? j.result : (Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : null));
+    if (r.status >= 200 && r.status < 300 && list) {
+      return { ok: true, list: list.map(t => ({ id: t && t.id, template: String((t && t.template) || ''), original: String((t && t.original_text) || ''), status: String((t && t.status) || '') })) };
+    }
+    return { ok: false, error: (typeof j.message === 'string' ? j.message : ('http_' + r.status)) };
+  }
 
   // Bitta SMS jo'natadi. Qaytaradi: { ok:true, id, status } | { ok:false, error }
   //   Kirish — kanonik raqam (998901234567) yoki kiritilgan raqam. Yaroqsiz raqam -> 'bad_phone:…'; chet el raqami ->
@@ -95,7 +114,6 @@ function makeEskiz(cfg) {
     if (!canon) return { ok: false, error: 'bad_phone:' + String(phone == null ? '' : phone).replace(/\D/g, '').slice(0, 20) };
     if (!PH.isUzPhone(canon)) return { ok: false, intl: true, error: 'bad_phone:intl' };
     const mobile = canon;
-    const stage = (st, fn) => fn().catch(e => { if (e && typeof e === 'object' && !e.stage) e.stage = st; throw e; });
     await stage('login', ensureToken);
     const post = () => stage('send', () => {
       const body = new URLSearchParams({ mobile_phone: mobile, message: String(message || ''), from }).toString();
@@ -113,12 +131,13 @@ function makeEskiz(cfg) {
     return { ok: false, error: (typeof j.message === 'string' ? j.message : (j.message ? JSON.stringify(j.message) : ('http_' + r.status))), raw: r.raw, httpStatus: r.status, ambiguous };
   }
 
-  return { login, send, normMobile };
+  return { login, send, templates, normMobile };
 }
 
 // ---- SMS matni yordamchilari (sms-worker.cjs va auth/sms-remind.cjs UMUMIY ishlatadi — matn bir xil bo'lsin) ----
 const DEF_NEW  = "Hurmatli ota-ona! {name} uchun {month} oy to'lovi shakllantirildi: {amount} so'm. Batafsil: iqroacademy.uz. IQROR Academy";
 const DEF_DEBT = "Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+const DEF_OTP  = 'IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.';   // auth serveri (auth.otpTemplate bo'lmasa)
 const fmtSom = n => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const fmtMonth = m => { const p = String(m || '').split('-'); return p.length === 2 ? `${p[1]}.${p[0]}` : String(m || ''); };
 const fillTpl = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] != null ? String(v[k]) : ''));
@@ -149,4 +168,4 @@ function sendStatus(r, thrown) {
   return (r && r.ambiguous) ? 'unknown' : 'failed';
 }
 
-module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus };
+module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus };

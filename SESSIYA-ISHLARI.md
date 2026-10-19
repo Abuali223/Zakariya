@@ -285,6 +285,14 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Tasdiqlash oynasi: telefon bo'yicha (bog'lanmagan) taklifda oddiy rol «yuqori huquqli» deb atalmaydi — «yozuv hali bog'lanmagan» deyiladi.
 - Aka-uka guruhlash o'zgarmadi (raqamning oxirgi 9 xonasi; 20 000 tasodifiy ssenariyda eski/yangi natija bir xil).
 
+## 23) «Eslatma» SMS'ini Eskiz rad etdi — shablon NAQSHI bilan moslash
+
+- Sabab: Eskiz SMS'ni kabinetga yuborilgan ASL matn (`Eslatma: {name} uchun {month} …`) bilan emas, moderator tasdiqlagan NAQSH (`GET /api/user/templates` → `template`) bilan solishtiradi; naqshda o'zgaruvchi joylar `%w` (1 so'z), `%d` (1 son), `%w{1,4}` (1–4 so'z). Tizim esa ism («Familiya Ism» — 2 so'z), oylar («09.2026, 10.2026» — 2 bo'lak) va summani («5 800 000» — 3 bo'lak) bo'shliq bilan yozardi — bitta so'zli naqshga sig'masdi. Matn hali moderatsiyada bo'lsa ham Eskiz xuddi shu «Этот смс текст еще не прошел модерацию» xatosini beradi.
+- Endi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `05.2026-10.2026` (har doim bitta so'z); Eskiz naqshlari o'qiladi («Eslatma» — 10 daqiqa kesh, Eskiz 5 soniyada javob bermasa naqshsiz davom etadi; `sms-worker` — run boshida, `--dry` da ham) va ism naqshga sig'adigan shaklda olinadi (to'liq → «Familiya Ism» → «Ism» → «Familiya»). Admin tasdiq oynasida aynan yuboriladigan matn, ism qisqartirilgan bo'lsa — izoh, hech bir tasdiqlangan naqshga mos kelmasa — ⚠️ ogohlantirish. Eskiz rad etsa xabar sababini va tekshiruv buyrug'ini aytadi. Yangi modul: `payments/eskiz-template.cjs` (sof funksiyalar).
+- Diagnostika (hech narsa yubormaydi): `cd ~/iqror-repo/payments && node eskiz-shablon.cjs` — Eskiz'dagi har bir matn holati/naqshi va tizimning har SMS turi (Eslatma, avtomatik qarz, yangi faktura, OTP) mosligi; mos bo'lmasa — aniq sabab (moderatsiyada / rad etilgan / `{name}` o'zgaruvchi qilinmagan / qaysi o'zgaruvchi necha so'z / qaysi belgi farq qiladi, masalan `'` U+0027 va `‘` U+2018) va nima qilish kerakligi. OTP qatori ✅ bo'lishi — tekshiruvning o'zi to'g'riligining belgisi (ro'yxat kodi SMS'i ishlayapti).
+- Eskiz'ga matnni `{name}` bilan emas, HAQIQIY misol bilan yuborish tavsiya etiladi (izohda: ism 1–4 so'z, oy 1 so'z, summa 1 son).
+- Testlar: `payments/eskiz-template.test.cjs` (22), `payments/eskiz-shablon.test.cjs` (24, soxta Eskiz bilan alohida jarayonda), `payments/sms.test.cjs` (+templates(): 41), `auth/sms-remind.test.cjs` (108: moslash, kesh, sekin Eskiz, parallel so'rovlar, sinxron xato); PG16 + PostgREST e2e (naqsh bilan yuborish, `sms_log` matni); Chromium (admin/index).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

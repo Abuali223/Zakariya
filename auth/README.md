@@ -62,8 +62,40 @@ npm test                                  # birlik testlar (tashqi xizmatsiz)
 ## Eskiz SMS shabloni — MUHIM
 
 Eskiz yuborishdan oldin SMS matnini **moderatsiyadan** o‘tkazishni talab qiladi. `auth.otpTemplate`
-(masalan `IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.`) ni Eskiz kabinetida tasdiqlang,
+(standart `IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.`) ni Eskiz kabinetida tasdiqlang,
 aks holda kodlar yuborilmaydi. `{code}` — 6 xonali kod bilan almashadi.
+
+**Eskiz nimani solishtiradi.** Har bir SMS siz kabinetga yuborgan **asl matn** bilan emas, moderator tasdiqlagan
+**naqsh** (`template`) bilan solishtiriladi. Naqshda o‘zgaruvchi joylar: `%w` — 1 so‘z, `%d` — 1 son (`5800000`,
+`09.2026`), `%w{1,4}` — 1–4 so‘z. Masalan asl matn `Eslatma: {name} uchun {month} oy to'lovi …` bo‘lsa, naqsh
+`Eslatma: %w uchun %w oy to'lovi …` bo‘lishi mumkin — unda `Aliyeva Malika` (2 so‘z), `09.2026, 10.2026` (2 bo‘lak),
+`5 800 000` (3 bo‘lak) sig‘maydi va Eskiz «Этот смс текст еще не прошел модерацию» deb rad etadi (matn hali
+moderatsiyada bo‘lsa ham xuddi shu xato). O‘zgarmas qism esa harfma-harf bir xil bo‘lishi kerak (`'` va `‘` — har xil belgi).
+
+**Tizim buni o‘zi hal qiladi:**
+- o‘zgaruvchilar BITTA so‘z qilib yoziladi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `05.2026-10.2026`;
+- Eskiz’dagi naqshlar o‘qiladi (`GET /api/user/templates`; «Eslatma» — 10 daqiqa kesh, Eskiz 5 soniyada javob bermasa
+  naqshsiz davom etadi) va ism naqshga sig‘adigan shaklda olinadi: to‘liq → «Familiya Ism» → «Ism» → «Familiya»;
+- admin tasdiq oynasida aynan yuboriladigan matn ko‘rinadi; ism qisqartirilgan bo‘lsa — izoh; matn hech bir tasdiqlangan
+  naqshga mos kelmasa — ⚠️ ogohlantirish (SMS baribir urinib ko‘riladi — yakuniy hakam Eskiz’ning o‘zi).
+
+**Tekshiruv (hech narsa yubormaydi):**
+```bash
+cd ~/iqror-repo/payments && node eskiz-shablon.cjs                 # config.json'ni o'zi topadi
+node eskiz-shablon.cjs --config ../auth/config.json                # «Eslatma» va OTP matni auth sozlamasidan
+node eskiz-shablon.cjs --name "Aliyeva Malika" --months 2026-09,2026-10 --due 5800000
+```
+Natija: Eskiz’dagi har bir matn holati (Servis / Moderatsiyada / Rad etilgan) va naqshi; tizimning har SMS turi
+(«Eslatma», avtomatik qarz, yangi faktura, OTP) mos-mos emasligi, mos bo‘lmasa — aniq sababi (qaysi o‘zgaruvchi necha
+so‘z, qaysi belgi farq qiladi) va nima qilish kerakligi. OTP qatori ✅ bo‘lishi kerak (ro‘yxat kodi SMS’i yetib
+borayotgan bo‘lsa) — bu tekshiruvning o‘zi to‘g‘ri ishlayotganini ko‘rsatadi. Chiqish kodi: 0 — hammasi mos, 2 — mos
+emas, 1 — sozlama/ulanish xatosi.
+
+**Eskiz’ga matn yuborish:** `{name}` kabi belgilar bilan EMAS, HAQIQIY misol bilan yuboring (moderator o‘zgaruvchi
+joylarni misoldan aniqlaydi) va izohda yozing: ism — 1–4 so‘z, oy — 1 so‘z, summa — 1 son. Masalan:
+```
+Eslatma: Aliyeva Malika uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 5800000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy
+```
 
 ## Qarzdorga SMS eslatma («Moliya» → «Qarzdorlar» → «Eslatma») — `sms-remind.cjs`
 
@@ -82,8 +114,9 @@ oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, key
   oshib keta olmaydi). Avtomatik `sms-worker` shu kuni qo‘lda eslatma olgan (yoki olayotgan) o‘quvchini o‘tkazadi.
 - **Matn:** `sms.templates.remind` → `sms.templates.debt` → standart:
   `Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy`
-  (`{month}` — qarzdor oylar, masalan `09.2026, 10.2026`). ⚠️ Bu matn ham Eskiz kabinetida **shablon sifatida
-  tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad etadi va admin panel shuni aniq aytadi.
+  (`{month}` — qarzdor oylar bitta so‘z: `09.2026,10.2026`, 3 va undan ko‘p bo‘lsa `05.2026-10.2026`; `{due}` —
+  `5800000`). ⚠️ Bu matn ham Eskiz kabinetida **shablon sifatida tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad
+  etadi va admin panel shuni aniq aytadi (yuqoridagi «Eskiz SMS shabloni»: naqsh, ism moslash, `node eskiz-shablon.cjs`).
 - `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi).
 
 ## Telefon raqamlari: SMS faqat O‘zbekiston raqamlariga

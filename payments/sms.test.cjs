@@ -12,7 +12,7 @@ const calls = [];
 const fakeHttps = {
   request(opts, onRes) {
     const step = plan.shift() || { status: 500, body: '{}' };
-    const call = { path: opts.path, auth: (opts.headers || {}).Authorization || '', body: '' };
+    const call = { path: opts.path, method: opts.method, auth: (opts.headers || {}).Authorization || '', body: '' };
     calls.push(call);
     const req = new EventEmitter();
     let timer = null, done = false;
@@ -149,6 +149,39 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   r = await E.send('+998 90 123 45 67', 'x');
   ok('rad javobidagi obyekt xabar -> matn (aniq rad)', !r.ok && /mobile_phone/.test(r.error) && r.ambiguous === false, r);
   ok('smsName: GSM-7 apostrof', S.smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova");
+
+  // 7k) templates(): GET /api/user/templates — Eskiz'dagi matnlar (naqsh, asl matn, holat); hech narsa yuborilmaydi
+  const TPLS = { success: true, result: [{ id: 5, template: "Eslatma: %w uchun %w oy to'lovi", original_text: "Eslatma: {name} uchun {month} oy to'lovi", status: 'service' },
+    { id: 6, template: '', original_text: 'Boshqa {name}', status: 'moderation' }] };
+  plan = [LOGIN_OK, { status: 200, body: JSON.stringify(TPLS) }]; calls.length = 0;
+  E = S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'p' });
+  r = await E.templates();
+  ok('templates: ro\'yxat (id, naqsh, asl matn, holat)', r.ok && r.list.length === 2 && r.list[0].id === 5 && r.list[0].template === TPLS.result[0].template
+    && r.list[0].original === TPLS.result[0].original_text && r.list[0].status === 'service' && r.list[1].template === '' && r.list[1].status === 'moderation', r);
+  ok('templates: login + GET /api/user/templates (Bearer), SMS so\'rovi YO\'Q', calls.length === 2 && calls[1].path === '/api/user/templates' && calls[1].method === 'GET'
+    && calls[1].auth === 'Bearer T1' && !calls.some(c => /sms\/send/.test(c.path)), calls);
+  plan = [{ status: 401, body: '{}' }, { status: 200, body: JSON.stringify({ data: { token: 'T9' } }) }, { status: 200, body: JSON.stringify(TPLS) }]; calls.length = 0;
+  r = await E.templates();
+  ok('templates: 401 -> qayta login -> ro\'yxat', r.ok && r.list.length === 2 && calls.length === 3 && calls[2].auth === 'Bearer T9', calls);
+  plan = [{ status: 500, body: '<html>err</html>' }];
+  r = await E.templates();
+  ok('templates: 500 -> ok:false http_500 (istisno emas)', !r.ok && r.error === 'http_500', r);
+  plan = [{ status: 403, body: JSON.stringify({ message: 'Forbidden' }) }];
+  r = await E.templates();
+  ok('templates: rad xabari matni', !r.ok && r.error === 'Forbidden', r);
+  plan = [{ status: 200, body: JSON.stringify({ data: [{ id: 1, template: 'A %w', original_text: 'A {x}', status: 'reklama' }] }) }];
+  r = await E.templates();
+  ok('templates: {data:[...]} shakli ham', r.ok && r.list.length === 1 && r.list[0].status === 'reklama', r);
+  plan = [{ status: 200, body: JSON.stringify({ success: true, result: [null, { id: 2 }] }) }];
+  r = await E.templates();
+  ok('templates: chala yozuvlar xatosiz (bo\'sh satrlar)', r.ok && r.list.length === 2 && r.list[0].template === '' && r.list[1].status === '', r);
+  plan = [{ error: 'ECONNREFUSED' }];
+  err = null; try { await E.templates(); } catch (e) { err = e; }
+  ok('templates: ulanish xatosi -> istisno (stage=send) — chaqiruvchi ushlaydi', err && err.code === 'ECONNREFUSED' && err.stage === 'send', err && { code: err.code, stage: err.stage });
+  plan = [{ status: 200, body: JSON.stringify(TPLS) }]; calls.length = 0;
+  r = await S.makeEskiz({ token: 'TOK' }).templates();
+  ok('templates: faqat token bilan — login yo\'q', r.ok && calls.length === 1 && calls[0].auth === 'Bearer TOK', calls);
+  ok('DEF_OTP ASCII (GSM-7) va {code} bor', /^[\x00-\x7F]*$/.test(S.DEF_OTP) && /\{code\}/.test(S.DEF_OTP));
 
   // 8) matn yordamchilari
   ok('fmtSom', S.fmtSom(4510000) === '4 510 000' && S.fmtSom(0) === '0');

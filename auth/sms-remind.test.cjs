@@ -21,7 +21,11 @@ function setup(opts) {
   let failNext = o.failNext || 0;
   let throwNext = o.throwNext || 0, resultNext = o.resultNext ? o.resultNext.slice() : [];
   const mkErr = o.throwErr || (() => { const e = new Error('eskiz_timeout'); e.stage = 'send'; return e; });
-  const eskiz = o.dry ? null : { send: async (phone, msg) => {
+  let tplCalls = 0;
+  const eskiz = o.dry ? null : { tplCalls: () => tplCalls,
+    // Sinxron (async EMAS) — funksiya sinxron xato otsa, u ham sinxron chiqadi (haqiqiy chaqiruvchi shuni ko'tarishi kerak).
+    templates: o.templates ? () => { tplCalls++; return typeof o.templates === 'function' ? o.templates() : Promise.resolve(o.templates); } : undefined,
+    send: async (phone, msg) => {
     if (throwNext > 0) { throwNext--; throw mkErr(); }
     if (resultNext.length) return resultNext.shift();
     if (failNext > 0) { failNext--; return { ok: false, error: 'Этот смс текст еще не прошел модерацию' }; }
@@ -98,9 +102,9 @@ function setup(opts) {
     ...['IQ-0380', 'IQ-0226', 'IQ-0466'].map(k => ({ id: k + '__2026-10', studentId: k, month: '2026-10', amount: 300000, paidAmount: 0, status: 'pending' })),
   ];
   state.sms_log = [];
-  const R = makeSmsRemind({ sb, eskiz, smsCfg: o.smsCfg || {}, now: () => clock,
+  const R = makeSmsRemind({ sb, eskiz, smsCfg: o.smsCfg || {}, now: () => clock, tplWaitMs: o.tplWaitMs,
     verifyJwt: async jwt => (jwt && String(jwt).startsWith('uid_')) ? jwt : null });
-  return { state, R, sent, setClock: t => { clock = t; } };
+  return { state, R, sent, eskiz, setClock: t => { clock = t; } };
 }
 
 (async () => {
@@ -108,7 +112,7 @@ function setup(opts) {
   ok('debtOf partial', debtOf({ amount: 2900000, paidAmount: 1000000, status: 'partial' }) === 1900000);
   ok('debtOf paid/canceled/reversed = 0', [ 'paid', 'canceled', 'reversed' ].every(s => debtOf({ amount: 5, paidAmount: 0, status: s }) === 0));
   ok('smsName apostrof + bo\'shliq', smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova", smsName('Oʻgʻiloy  Qobiljonova'));
-  ok('Eskiz moderatsiya xatosi tushunarli', /SHABLON/.test(humanEskizError('Этот смс текст еще не прошел модерацию')));
+  ok('Eskiz moderatsiya xatosi tushunarli (naqsh + tekshiruv buyrug\'i)', /TASDIQLANGAN shablon naqshiga/.test(humanEskizError('Этот смс текст еще не прошел модерацию')) && /eskiz-shablon\.cjs/.test(humanEskizError('Этот смс текст еще не прошел модерацию')));
 
   sec('kim yubora oladi');
   { const { R, sent } = setup();
@@ -130,7 +134,8 @@ function setup(opts) {
     ok('qarz = 2 610 000 + 1 900 000 (to\'langan/bekor/qaytarilgan/kelgusi oy hisobga olinmaydi)', p.due === 4510000, p.due);
     ok('oylar: 2026-09, 2026-10', JSON.stringify(p.months) === JSON.stringify(['2026-09', '2026-10']), p.months);
     ok('telefon chiroyli', p.phone === '+998 70 014 37 77', p.phone);
-    ok('matn: ism + oylar + summa', p.message === "Eslatma: Qobiljonov Muhammadiy uchun 09.2026, 10.2026 oy to'lovi hali yopilmagan (qarz: 4 510 000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", p.message);
+    // Eskiz naqshiga sig'adigan shakl: oylar bitta so'z (09.2026,10.2026), summa bo'shliqsiz (4510000).
+    ok('matn: ism + oylar + summa', p.message === "Eslatma: Qobiljonov Muhammadiy uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 4510000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", p.message);
     ok('bugun hali yuborilmagan', p.today === null);
     ok('SMS ketmadi', sent.length === 0);
     ok('jurnalga yozilmadi', state.sms_log.length === 0); }
@@ -159,7 +164,7 @@ function setup(opts) {
   sec('Eskiz xatosi -> failed, qayta urinish, maks. urinish');
   { const { R, sent, state } = setup({ failNext: 1 });
     const r1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
-    ok('1-urinish xato (moderatsiya — tushunarli xabar)', !r1.ok && /SHABLON/.test(r1.error || ''), r1);
+    ok('1-urinish xato (moderatsiya — tushunarli xabar)', !r1.ok && /shablon naqshiga/.test(r1.error || ''), r1);
     const row = () => state.sms_log.find(x => x.id === 'remind__IQ-0268__2026-10-16');
     ok('jurnal: failed, attempts=1', row().status === 'failed' && row().attempts === 1, row());
     const r2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
@@ -221,10 +226,10 @@ function setup(opts) {
     ok('DRY: ok+dry, jurnal yozilmaydi', r.ok && r.dry && state.sms_log.length === 0, r); }
   { const { R, sent } = setup({ smsCfg: { templates: { remind: 'IQROR: {name} — qarz {due} so\'m ({month}).' } } });
     await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    ok('templates.remind ishlatiladi', sent[0].msg === "IQROR: Qobiljonov Muhammadiy — qarz 4 510 000 so'm (09.2026, 10.2026).", sent[0].msg); }
+    ok('templates.remind ishlatiladi', sent[0].msg === "IQROR: Qobiljonov Muhammadiy — qarz 4510000 so'm (09.2026,10.2026).", sent[0].msg); }
   { const { R, sent } = setup({ smsCfg: { templates: { debt: 'D {name} {due}' } } });
     await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    ok('remind yo\'q -> templates.debt', sent[0].msg === 'D Qobiljonov Muhammadiy 4 510 000', sent[0].msg); }
+    ok('remind yo\'q -> templates.debt', sent[0].msg === 'D Qobiljonov Muhammadiy 4510000', sent[0].msg); }
   { const { R, state } = setup();
     state.sms_log.push({ id: 'IQ-0255__2026-10__debt__2026-10-16', studentId: 'IQ-0255', type: 'debt', status: 'sent', createdAt: '2026-10-16T04:30:00.000Z' });
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
@@ -277,7 +282,7 @@ function setup(opts) {
     ok('ECONNRESET yuborish paytida -> unknown', state.sms_log[0].status === 'unknown', state.sms_log[0]); }
   { const { R } = setup();
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0606', preview: true });
-    ok('5 oy -> «… va yana 2 oy», faqat ASCII', /05\.2026, 06\.2026, 08\.2026 va yana 2 oy/.test(p.message) && /^[\x00-\x7F]*$/.test(p.message), p.message); }
+    ok('5 oy -> bitta so\'z oraliq «05.2026-10.2026», faqat ASCII', /uchun 05\.2026-10\.2026 oy/.test(p.message) && /^[\x00-\x7F]*$/.test(p.message), p.message); }
   { const { definitelyNotSent } = require('./sms-remind.cjs');
     ok('definitelyNotSent', definitelyNotSent({ stage: 'login' }) && definitelyNotSent({ code: 'ENOTFOUND' }) && definitelyNotSent({ code: 'CERT_HAS_EXPIRED' }) && !definitelyNotSent({ code: 'ECONNRESET', stage: 'send' }) && !definitelyNotSent(new Error('eskiz_timeout')) && !definitelyNotSent(null)); }
 
@@ -285,7 +290,7 @@ function setup(opts) {
   { const { R, sent, state } = setup();
     const p0 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
     ok('preview: bloklanmagan', p0.blocked === null && p0.blockedMsg === '', p0);
-    const bad = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message.replace('4 510 000', '9 999 999'), phone: p0.phone } });
+    const bad = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message.replace('4510000', '9999999'), phone: p0.phone } });
     ok('tasdiqlangan matn farq qiladi -> changed, SMS yo\'q', !bad.ok && bad.changed && sent.length === 0 && state.sms_log.length === 0, bad);
     const bad2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message, phone: '+998 90 000 00 00' } });
     ok('tasdiqlangan telefon farq qiladi -> changed', !bad2.ok && bad2.changed && sent.length === 0, bad2);
@@ -334,6 +339,48 @@ function setup(opts) {
     const s2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', expect: { message: k.message, phone: k.phone } });
     ok('yuborildi O\'zbekiston raqamiga', s2.ok && sent.length === 1 && sent[0].phone === '998901234567', { s2, sent });
     ok('preview javobida intl maydoni yo\'q', !('intl' in k), k); }
+  sec('Eskiz shablon NAQSHIGA moslash (ism/oy/summa)');
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const { R, sent, eskiz } = setup({ templates: { ok: true, list: [{ id: 7, status: 'service', template: P1, original: '' }] } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('naqsh ismga 1 so\'z ruxsat beradi -> ism qisqartirildi (Muhammadiy), mos', p.ok && p.tplFit === true && p.nameShort === true && /^Eslatma: Muhammadiy uchun 09\.2026,10\.2026 oy/.test(p.message) && /qarz: 4510000 so'm/.test(p.message), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    ok('yuborildi aynan ko\'rsatilgan matn bilan', r.ok && sent.length === 1 && sent[0].msg === p.message, { r, sent });
+    ok('naqshlar keshlanadi (preview+yuborish = 1 so\'rov)', eskiz.tplCalls() === 1, eskiz.tplCalls()); }
+  { const P2 = "Eslatma: %w{1,4} uchun %w oy to'lovi hali yopilmagan (qarz: %d{1,3} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const { R } = setup({ templates: { ok: true, list: [{ id: 8, status: 'service', template: P2 }] } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('naqsh 1–4 so\'z -> to\'liq ism', p.ok && p.tplFit === true && p.nameShort === false && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p.message); }
+  { const { R } = setup({ templates: { ok: true, list: [{ id: 9, status: 'moderation', template: "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy" }] } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('faqat moderatsiyadagi shablon -> tplFit=false (ogohlantirish), matn to\'liq', p.ok && p.tplFit === false && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p); }
+  { const { R } = setup({ templates: { ok: false, error: 'http_500' } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('naqshlar o\'qilmadi -> tplFit=null, oddiy matn', p.ok && p.tplFit === null && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p); }
+  { const { R } = setup({ templates: () => { throw new Error('net'); } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('naqsh o\'qishda istisno -> eslatma baribir ishlaydi', p.ok && p.tplFit === null, p); }
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const slow = ms => () => new Promise(res => setTimeout(() => res({ ok: true, list: [{ id: 7, status: 'service', template: P1 }] }), ms));
+    const { R, eskiz } = setup({ templates: slow(200), tplWaitMs: 30 });
+    const t0 = Date.now();
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('Eskiz sekin -> admin kutib qolmaydi (naqshsiz, tplFit=null)', p1.ok && p1.tplFit === null && Date.now() - t0 < 150 && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p1.message), { ms: Date.now() - t0, p1 });
+    await new Promise(r => setTimeout(r, 260));
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('fondagi so\'rov keshni to\'ldirdi -> keyingi oynada mos matn, Eskiz\'ga 1 so\'rov', p2.tplFit === true && /^Eslatma: Muhammadiy uchun/.test(p2.message) && eskiz.tplCalls() === 1, { p2, calls: eskiz.tplCalls() });
+    const s = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p1.message, phone: p1.phone } });
+    ok('eski (naqshsiz) oynadagi matn bilan tasdiq -> changed (yangi matnni qayta tasdiqlash)', !s.ok && s.changed && s.message === p2.message, s); }
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const { R, eskiz } = setup({ templates: () => new Promise(res => setTimeout(() => res({ ok: true, list: [{ id: 7, status: 'service', template: P1 }] }), 40)), tplWaitMs: 2000 });
+    const [a, b] = await Promise.all([R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true }), R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true })]);
+    ok('parallel oynalar bitta Eskiz so\'rovini kutadi', a.tplFit === true && b.tplFit === true && eskiz.tplCalls() === 1, { a: a.tplFit, b: b.tplFit, calls: eskiz.tplCalls() }); }
+  { let n = 0;
+    const { R, eskiz, setClock } = setup({ templates: () => { n++; if (n === 1) throw new Error('sinxron xato'); return { ok: true, list: [] }; } });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    setClock(Date.parse('2026-10-16T05:02:00.000Z'));                 // 1 daqiqadan keyin (xato keshi tugadi)
+    await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('xatodan keyin naqshlar QAYTA so\'raladi (osilib qolgan va\'da yo\'q)', eskiz.tplCalls() === 2, eskiz.tplCalls()); }
   ok('humanEskizError bad_phone:intl', /faqat O‘zbekiston/.test(humanEskizError('bad_phone:intl')));
 
   console.log(`\n${pass} passed, ${fail} failed`);
