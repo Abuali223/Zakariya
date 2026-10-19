@@ -347,6 +347,53 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Rad etildi: `smsMonths` uzilishli oylarda SMS uzunligi oshishi — ataylab (to'g'rilik muhimroq, §25).
 - Testlar: `phone.test` 186 (tuzatmasiz yangi testlar yiqiladi), `eskiz-shablon.test` 48; Chromium 53 + 43 + 19 + 10 + 14.
 
+## 27) Qabulxona — o'quvchini «⏹️ Chiqarish»
+
+- «O'quvchilar» ro'yxatida qabulxonaga (`reception`) har o'quvchi qatorida **⏹️** tugmasi (chiqib ketganlarda yo'q).
+  Oyna faqat bitta amal — «Chiqarish (butunlay ketdi)» va sana. Faollashtirish/muzlatish/sinov, sanani tuzatish,
+  «to'xtatilgan davrlar» — avvalgidek faqat direktor (⏯️). O'IBDO'/kassir/ma'muriyat rahbarida tugma yo'q.
+- Chiqqan sana — **o'tgan oyning 1-sanasidan oldin emas** (eski oylar to'lovi orqaga qarab o'zgarmasin); undan
+  oldingisi — direktor orqali. Saqlangach: «Direktorga ayting: To'lovlar → tegishli oy → ↻ Qayta hisoblash».
+- Yozuv qoidasi direktornikidek (`payStatus='chiqdi'`, `stopFrom`; muzlatilgan bo'lsa eski to'xtatish sanasi
+  saqlanadi; sinovdan chiqsa `activeFrom = stopFrom + 1`).
+- **Baza himoyasi** (`migration/reception-guard.sql`, `trg_reception_student_lifecycle`): qabulxonaga FAQAT shu o'tish
+  ruxsat — `payStatus` → `chiqdi` (avval chiqdi emas), `pauses` o'zgarmaydi, `stopFrom` — `YYYY-MM-DD` va
+  (o'zgarmagan yoki ≥ o'tgan oyning 1-sanasi, Toshkent vaqti), `activeFrom` — o'zgarmagan yoki (sinovdan) `stopFrom+1`.
+  Boshqa har qanday holat o'zgarishi — 42501 (O'IBDO' — avvalgidek hammasi taqiqlangan).
+- Testlar: PG16 (kanonik zanjir) 17/17 — ruxsat etilgan 4 holat va 9 ta taqiqlangan urinish (muzlatish, qayta
+  faollashtirish, 100 kun oldingi sana, noto'g'ri `activeFrom`, `pauses`, sanani tuzatish, bo'sh sana, O'IBDO');
+  Chromium 28/28 (tugma qaysi rolga chiqadi, oyna, sana chegarasi, DOM orqali soxta amal, direktor oynasi o'zgarmagan).
+
+## 28) Biriktirilmagan to'lov — «💡 Ehtimol shu o'quvchi» takliflari
+
+- «To'lovlar» → «⚠️ Biriktirilmagan to'lovlar» → **Biriktirish**: o'quvchilar ro'yxati tepasida to'lovchi yozgan ism
+  bo'yicha **3 tagacha** taklif: to'liq ism, ID · sinf, joriy qarz, «NN% mos» (va «qarz = summa ✓» belgisi).
+  Moslik 60% dan past bo'lsa — bo'lim chiqmaydi (oddiy ro'yxat). Taklifni bosish = ro'yxatdan tanlash: bitta
+  o'quvchi rejimida tasdiqlash oynasi (endi kimga va qancha — «Ism (ID) — summa» ham yoziladi), bo'lib rejimida
+  «+ Qo'shish». **Tizim hech qachon o'zi biriktirmaydi.**
+- Yagona modul **`sb/name-match.js`** (brauzer: `import()` → `globalThis.IqrorNameMatch`; server: `require('../sb/name-match.js')`
+  — keyingi avtomatik biriktirish uchun; tashqi kutubxona yo'q). `normalizeName`: kirill → lotin (ғ→g', қ→q, ў→o', ҳ→h,
+  ё→yo, ю→yu, я→ya, ш→sh, ч→ch, ц→ts; «е» so'z boshida/unlidan keyin → ye), kichik harf, bo'shliqlar, barcha apostroflar
+  → `'`, h→x (kh→x; sh/ch tegilmaydi), yeva/yev/yevich → eva/ev/evich, o'→u, takror harflar → bitta, «qizi/o'g'li/
+  kizi/ugli» va undan oldingi so'z (otasining ismi) tashlanadi.
+- Solishtirish: so'zlar tartibi muhim emas (eng yaxshi juftlash); har juft — o'zimiz yozgan Levenshtein (o↔u yarim
+  narx; «Jasur = Jasurbek», «Malika = Malikaxon» — qisqa shakl). Begona ismlar ham umumiy harflar (-ov, -eva) tufayli
+  ~30% «o'xshaydi» — shu daraja hisobga olinmaydi. Umumiy ball — juftlar geometrik o'rtachasi: faqat ism yoki faqat
+  familiya mos (aka-uka, adash) — 50% dan past; bitta so'zli ism ×0.6; ortiqcha so'z −5%.
+- Bonus: joriy qarz = to'lov summasi → +10%, oylik to'lov = summa → +5% (eng kattasi, qo'shilmaydi); ism bo'yicha
+  50% dan past nomzodni bonus 60% ga yetkaza olmaydi (≤ 59%). Qarz — «Qarzdorlar» qoidasi (≤ joriy oy, bekor/
+  qaytarilgan hisobga olinmaydi); oylik — so'nggi amaldagi faktura summasi.
+- Faqat o'qishni tark etmaganlar (chiqdi + to'xtatish sanasi o'tgan — tashqari; muzlatilgan/sinov — kiradi).
+  O'quvchilar ro'yxati xotiradan (baza qayta o'qilmaydi); qarz uchun faqat ism bo'yicha mos ≤ 8 nomzodning
+  fakturalari bitta `in` so'rovi bilan o'qiladi. Takliflar aniqlanguncha (odatda bir zumda, ko'pi bilan 2.5 s) ro'yxat
+  chizilmaydi — keyin tepasiga blok qo'shilib, kassir boshqa qatorni bosib qo'ymasin; kechikkan natija tashlanadi.
+  Modul yuklanmasa (eski deploy) — oyna avvalgidek. `deploy.sh` `/sb` ga `name-match.js` ni ham joylaydi.
+- Topshiriqdagi holatlar (`payments/name-match.test.cjs` konsolga chiqaradi): «Turg'unboyeva Hadicha» → 100%,
+  «Турғунбоева Хадича» → 100%, «Xadicha Turgunboeva» → 91% (yuqori moslik); «Aliyev Jasur» → 0% (taklif qilinmaydi,
+  qarz = summa bo'lsa ham). Testlar: `name-match.test` 64; Chromium 38/38 (haqiqiy `admin.html` + deploy SHIM bilan
+  `/sb/name-match.js`: takliflar, tasdiqlash matni, avtomatik biriktirish yo'qligi, bo'lib rejimi, so'rovlar soni, faktura
+  xatosi, sekin tarmoq, yopilgan oyna, XSS, telefon ekrani).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

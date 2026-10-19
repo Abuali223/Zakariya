@@ -447,6 +447,11 @@ const auth = getAuth(app);
 // Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
 try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
 let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js?v=7").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
+// Ism solishtirish (sb/name-match.js — server ham shu faylni ishlatadi): faqat kerak bo'lganda yuklanadi.
+//   Yuklanmasa (eski deploy/tarmoq) — null: «Biriktirish» oynasi takliflarsiz, avvalgidek ishlaydi.
+let _nmP=null;
+function nameMatchLib(){ return _nmP || (_nmP = import("https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=1")
+  .then(()=>globalThis.IqrorNameMatch||null).catch(()=>{ _nmP=null; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 // OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
@@ -1007,6 +1012,12 @@ function canDeleteStudents(){ return SESSION.isAdmin; }
 //   Qabulxona/O'IBDO' BUNDA yo'q (DB trigger trg_reception_student_lifecycle bloklaydi). Ma'muriyat rahbarida
 //   «O'quvchilar» bo'limi yo'q va RLS students_upd unga ruxsat bermaydi — shu sabab bu yerda ham sanalmaydi.
 function canManageStudentStatus(){ return SESSION.isAdmin; }
+// O'quvchini CHIQARISH (butunlay ketdi) — direktor + QABULXONA (foydalanuvchi talabi). Qabulxonaga FAQAT shu amal:
+//   faollashtirish/muzlatish/sinov, sanani tuzatish, «to'xtatilgan davrlar» — faqat direktor. DB trigger
+//   (reception-guard.sql) ham qabulxonaga faqat «chiqdi» o'tishini (o'tgan oyning 1-sanasidan oldin emas) ruxsat beradi.
+function canWithdrawStudent(){ return SESSION.isAdmin || SESSION.role==='reception'; }
+// Qabulxona chiqarish sanasi — o'tgan oyning 1-sanasidan oldin emas (eski oylar to'lovini orqaga qarab o'zgartirmasin).
+function withdrawMinDate(){ const d=new Date(); const p=new Date(d.getFullYear(), d.getMonth()-1, 1); return `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-01`; }
 // Qarzdorlik KO'RISH (ustun/filtr) — qabulxonaga ham BERILADI (pulga ta'sir qilmaydi,
 //   faqat ota-onaga xabar berish/undiruv uchun). FAQAT o'quvchi HOLATI cheklangan (yuqorida).
 function canSeeStudentFinance(){ return true; }
@@ -2688,6 +2699,7 @@ async function renderStudents(){
   const canMng=canManageStudents();   // qo'shish + tahrir (direktor/O'IBDO'/reception). kassir -> faqat ko'rish
   const canDel=canDeleteStudents();   // o'chirish/bulk-o'chirish/import — reception BUNDA yo'q
   const canLife=canManageStudentStatus();   // ⏯️ holat (faollashtirish/muzlatish/chiqarish) — faqat direktor
+  const canWd=!canLife && canWithdrawStudent();   // ⏹️ faqat «Chiqarish» — qabulxona
   const canFin=canSeeStudentFinance();      // qarzdorlik ustuni/filtri — qabulxonaga HAM (ota-onaga xabar uchun)
   const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer' || SESSION.role==='reception';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar + qabulxona (ota-onaga xabar uchun)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
@@ -2796,7 +2808,7 @@ async function renderStudents(){
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code>${r._linkCode?` <button class="btn sm ghost2" data-copycode="${esc(String(r.studentId||r._id))}|${esc(r._linkCode)}" title="O‘quvchi ID va kodni nusxalash — ota-ona kabinetда «Farzand qo‘shish» uchun">📋</button>`:''}</td>
         ${canFin?`<td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>`:''}
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${(canWd && (r.payStatus||'')!=='chiqdi')?`<button class="btn sm ghost2" data-withdraw="${esc(r._id)}" title="O‘quvchini chiqarish (butunlay ketdi)">⏹️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
       return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th>${canFin?`<th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th>`:''}<th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
@@ -2805,6 +2817,9 @@ async function renderStudents(){
     }
     if(canLife){   // holat o'zgartirish faqat Ma'muriyat
       $('#cls-groups').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status))));
+    }
+    if(canWd){     // qabulxona — faqat «Chiqarish»
+      $('#cls-groups').querySelectorAll('[data-withdraw]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.withdraw), 'students', null, { withdrawOnly:true })));
     }
     if(canDel){
       $('#cls-groups').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('students', b.dataset.del, (rows.find(r=>r._id===b.dataset.del)||{}).name)));
@@ -2890,35 +2905,38 @@ async function openPayNote(key, name){
 }
 // ⏯️ TEZKOR HOLAT (Faollashtirish / Muzlatish / Chiqarish / Sinov) — bir oynada, sana bilan.
 //   Public students hujjatiga payStatus + activeFrom/stopFrom yozadi (prorata shundan hisoblanadi).
-async function openStatusModal(s, collName, onSaved){
+async function openStatusModal(s, collName, onSaved, opts){
   const _coll = collName || 'students';
-  // Himoya: o'quvchi holatini faqat Ma'muriyat o'zgartiradi (qabulxona/boshqalar emas). DB'da trigger ham bor.
-  if(_coll==='students' && !canManageStudentStatus()){ toast('O‘quvchi holatini faqat direktor o‘zgartira oladi',true); return; }
+  // Himoya: o'quvchi holatini faqat Ma'muriyat o'zgartiradi; qabulxona — FAQAT «Chiqarish» (withdrawOnly). DB'da trigger ham bor.
+  const WD = _coll==='students' && !canManageStudentStatus() && !!(opts&&opts.withdrawOnly) && canWithdrawStudent();
+  if(_coll==='students' && !canManageStudentStatus() && !WD){ toast('O‘quvchi holatini faqat direktor o‘zgartira oladi',true); return; }
   collName = collName || 'students';
   if(!s){ toast('Topilmadi',true); return; }
+  if(WD && (s.payStatus||'')==='chiqdi'){ toast('Bu o‘quvchi allaqachon chiqarilgan',true); return; }
   const isStu = (collName==='students');
   const MW = isStu ? 'to‘lov' : 'maosh';      // pul so'zi (o'quvchi: to'lov; xodim: maosh)
   const REC = isStu ? 'faktura' : 'maosh';
   const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
   const cur=s.payStatus||'faol';
   const curLbl=({faol:'Faol',sinov:'Sinov',muzlatilgan:'Muzlatilgan',chiqdi:'Chiqdi'})[cur]||'Faol';
-  $('#modal').innerHTML=`<div class="modal-h"><h3>Holat — ${esc(s.name||s._id)}</h3><button class="x" id="m-x">×</button></div>
+  $('#modal').innerHTML=`<div class="modal-h"><h3>${WD?'Chiqarish':'Holat'} — ${esc(s.name||s._id)}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small muted" style="margin-bottom:10px">Joriy: <b>${esc(curLbl)}</b>${s.activeFrom?` · faollashtirilgan: ${esc(s.activeFrom)}`:''}${s.stopFrom?` · to‘xtatish: ${esc(s.stopFrom)}`:''}</div>
-      ${_pausesOf(s).length?`<div id="st-pz" style="margin:-4px 0 12px;padding:8px 10px;border:1px dashed var(--border);border-radius:9px">
+      ${(!WD && _pausesOf(s).length)?`<div id="st-pz" style="margin:-4px 0 12px;padding:8px 10px;border:1px dashed var(--border);border-radius:9px">
         <div class="small" style="font-weight:700;margin-bottom:4px">To‘xtatilgan davrlar (${isStu?'bu kunlar uchun to‘lov yo‘q, davomat ro‘yxatida ko‘rinmaydi':'bu kunlar uchun maosh yo‘q, davomatda «yo‘q» deb ushlanmaydi'})</div>
         ${normPauses(_pausesOf(s)).map((p,i)=>`<div class="small" data-pz="${i}" style="display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap"><input type="date" data-pzf value="${esc(p.from)}" style="${FLD};width:auto"> – <input type="date" data-pzt value="${esc(p.to)}" style="${FLD};width:auto"><button type="button" class="btn sm ghost2" data-pzdel title="Davrni o‘chirish">🗑</button></div>`).join('')}
         <div style="margin-top:6px"><button type="button" class="btn sm" id="st-pz-save">💾 Davrlarni saqlash</button> <span class="small muted">Qaytish sanasi noto‘g‘ri yozilgan bo‘lsa — shu yerda tuzating.</span></div></div>`:''}
       <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">Amal
-        <select id="st-sel" style="${FLD}">
+        <select id="st-sel" style="${FLD}">${WD?`
+          <option value="chiqdi">⏹️ Chiqarish (butunlay ketdi)</option>`:`
           <option value="faol">▶️ Faollashtirish (${MW} boshlanadi)</option>
           <option value="muzlatilgan">❄️ Muzlatish (vaqtincha to‘xtatish)</option>
           <option value="chiqdi">⏹️ Chiqarish (butunlay ketdi)</option>
-          <option value="sinov">🧪 Sinovga (${MW}siz)</option>
+          <option value="sinov">🧪 Sinovga (${MW}siz)</option>`}
         </select></label>
       <label class="small" id="st-date-wrap" style="display:flex;flex-direction:column;gap:4px">
         <span id="st-date-lbl">Faollashtirish sanasi</span>
-        <input type="date" id="st-date" value="${todayStr()}" style="${FLD}"></label>
+        <input type="date" id="st-date" value="${todayStr()}"${WD?` min="${withdrawMinDate()}"`:''} style="${FLD}"></label>
       <div class="small muted" id="st-hint" style="margin-top:8px"></div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="st-save">💾 Saqlash</button></div>`;
@@ -2935,8 +2953,9 @@ async function openStatusModal(s, collName, onSaved){
       else if(v==='muzlatilgan'){ dl.textContent='To‘xtatish sanasi (shu kungacha to‘lanadi)'; hint.textContent=`Shu kundan keyin ${REC} yo‘q. Qaytganda yana «Faollashtirish» qiling.`; }
       else { dl.textContent='Chiqqan sana (shu kungacha to‘lanadi)'; hint.textContent=isStu?'Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.':'Shu kundan keyin maosh yo‘q.'; }
       if((v==='muzlatilgan'||v==='chiqdi') && (cur==='muzlatilgan'||cur==='chiqdi') && s.stopFrom) hint.textContent+=` (Allaqachon to‘xtatilgan: ${MW} ${String(s.stopFrom).slice(0,10)} gacha qoladi — kechroq sana muzlatilgan kunlarni qaytarmaydi.)`;
-      if((v==='muzlatilgan'||v==='chiqdi') && cur==='sinov') hint.textContent+=` (Sinovda edi — ${MW} hali boshlanmagan; qaytganda shu kundan boshlanadi.)`; } };
-  sel.value = (cur==='faol') ? 'muzlatilgan' : 'faol';   // qulay: joriy holatga teskari amalni taklif qiladi
+      if((v==='muzlatilgan'||v==='chiqdi') && cur==='sinov') hint.textContent+=` (Sinovda edi — ${MW} hali boshlanmagan; qaytganda shu kundan boshlanadi.)`;
+      if(WD) hint.textContent+=` Eng erta sana — ${withdrawMinDate()} (undan oldingisi va qayta faollashtirish — direktor orqali).`; } };
+  sel.value = WD ? 'chiqdi' : ((cur==='faol') ? 'muzlatilgan' : 'faol');   // qulay: joriy holatga teskari amalni taklif qiladi
   upd(); sel.onchange=upd;
   // To'xtatilgan davrlarni TUZATISH (faqat o'quvchi; direktor): sanani o'zgartirish / davrni o'chirish.
   if($('#st-pz')){
@@ -2954,6 +2973,10 @@ async function openStatusModal(s, collName, onSaved){
   }
   $('#st-save').onclick=async()=>{
     const v=sel.value, dt=($('#st-date')&&$('#st-date').value)||todayStr();
+    if(WD){   // qabulxona: faqat «Chiqarish», o'tgan oyning 1-sanasidan oldin emas (DB trigger ham shuni tekshiradi)
+      if(v!=='chiqdi') return;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dt) || dt<withdrawMinDate()){ toast(`Chiqqan sana ${withdrawMinDate()} dan oldin bo‘lsa — direktorga murojaat qiling (eski oylar to‘lovi o‘zgaradi)`,true); return; }
+    }
     const patch={};
     if(v==='faol'){
       patch.payStatus='faol'; patch.stopFrom='';
@@ -2991,7 +3014,9 @@ async function openStatusModal(s, collName, onSaved){
     try{ await setDoc(doc(db, collName, s._id), patch, {merge:true});
       cache[collName]=null; toast('Holat saqlandi ✓'); closeModal();
       // O'quvchi holati narxga ta'sir qiladi (billingInterval) — mavjud fakturalar avtomatik yangilanmaydi.
-      if(isStu) setTimeout(()=>alert('⚠️ Holat o‘zgardi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\n«To‘lovlar» → tegishli oyni tanlang → «↻ Qayta hisoblash»: prorata qo‘llanadi, holat bo‘yicha ANIQ keraksiz faktura bekor qilinadi (to‘langan bo‘lsa pul avansga qaytadi); shubhalilari (sana yo‘q / o‘tgan oy) tegilmaydi — ro‘yxatda ko‘rsatiladi.'),60);
+      if(isStu) setTimeout(()=>alert(WD
+        ? '⚠️ O‘quvchi chiqarildi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\nDirektorga ayting: «To‘lovlar» → tegishli oy → «↻ Qayta hisoblash» (chiqqan sanadan keyingi qism bekor qilinadi).'
+        : '⚠️ Holat o‘zgardi — mavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi.\n\n«To‘lovlar» → tegishli oyni tanlang → «↻ Qayta hisoblash»: prorata qo‘llanadi, holat bo‘yicha ANIQ keraksiz faktura bekor qilinadi (to‘langan bo‘lsa pul avansga qaytadi); shubhalilari (sana yo‘q / o‘tgan oy) tegilmaydi — ro‘yxatda ko‘rsatiladi.'),60);
       if(onSaved) onSaved(); else if(isStu) renderStudents();
     }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
   };
@@ -5919,15 +5944,18 @@ async function openAssign(payment, students, reload){
         <button type="button" class="btn sm ghost2" id="as-mode-2">👥 Bir nechaga bo‘lib</button>
       </div>
       <div id="as-picked"></div>
+      <div id="as-sug"></div>
       <input id="as-search" type="text" placeholder="O‘quvchi ismi yoki ID…" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:8px">
       <div id="as-list" style="max-height:280px;overflow:auto"></div>
     </div>
     <div class="modal-f" id="as-foot" style="display:flex;align-items:center;gap:8px"><button type="button" class="btn ghost" id="m-cancel">Bekor</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   let mode=1, busy=false; const picked={};   // sid -> summa (bo'lib rejimi)
+  let sugs=[], ready=false;                  // «Ehtimol shu o'quvchi» takliflari; ready — ro'yxat chizilishi mumkin
 
   // ---- Bitta o'quvchiga (butun summani) ----
-  const assignOne=async(sid)=>{ if(busy) return; if(!confirm('Shu o‘quvchiga biriktirilsinmi?')) return;
+  const assignOne=async(sid)=>{ if(busy) return; const st=sById[String(sid)];
+    if(!confirm(`${st&&st.name?`${st.name} (${sid})`:sid} — ${fmtSom(total)}\n\nShu o‘quvchiga biriktirilsinmi?`)) return;
     busy=true;
     try{
       // ATOMIK (assign_payment, invoice-guards.sql): to'lov qatori qulflanadi, FAQAT hali biriktirilmagan
@@ -5982,20 +6010,80 @@ async function openAssign(payment, students, reload){
     $('#as-picked').querySelectorAll('.as-rm').forEach(b=>b.onclick=()=>{ delete picked[b.dataset.sid]; drawPicked(); updateFoot(); });
     const eq=$('#as-equal'); if(eq) eq.onclick=()=>{ const ks=Object.keys(picked); if(!ks.length) return; const base=Math.floor(total/ks.length); ks.forEach(sid=>picked[sid]=base); picked[ks[ks.length-1]]=total-base*(ks.length-1); drawPicked(); updateFoot(); };
   };
+  // Ro'yxatdan YOKI taklifdan tanlash — BIR XIL yo'l (bitta o'quvchi: tasdiqlash oynasi; bo'lib: tanlanganlarga qo'shiladi).
+  const pickSid=(sid)=>{ sid=String(sid);
+    if(mode===2){ if(!(sid in picked)) picked[sid]=0; drawPicked(); updateFoot(); }
+    else assignOne(sid); };
   const draw=(q)=>{ q=String(q||'').trim().toLowerCase();
+    // Takliflar aniqlanguncha ro'yxat chizilmaydi: keyin tepasiga taklif qo'shilib, ro'yxat siljib ketsa — kassir
+    //   bosmoqchi bo'lgan qator o'rniga boshqasini bosib qo'yishi mumkin edi (ko'pi bilan ~2.5 s, odatda bir zumda).
+    if(!ready){ $('#as-list').innerHTML='<div class="small muted" style="padding:8px 2px">Mos o‘quvchilar aniqlanmoqda…</div>'; return; }
     const f=list.filter(s=>!q||String(s.name||'').toLowerCase().includes(q)||String(s.studentId||s._id||'').toLowerCase().includes(q)).slice(0,50);
     $('#as-list').innerHTML=f.map(s=>{ const sid=s.studentId||s._id; return `<div data-sid="${esc(sid)}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer">
       <span><b>${esc(s.name||'')}</b> <span class="small muted">${esc(sub(s))}</span></span>
       <span class="btn sm gold">${mode===2?'+ Qo‘shish':'Tanlash'}</span></div>`; }).join('')||'<div class="empty">Topilmadi.</div>';
-    $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>{ const sid=el.dataset.sid;
-      if(mode===2){ if(!(sid in picked)) picked[sid]=0; drawPicked(); updateFoot(); }
-      else assignOne(sid); }); };
+    $('#as-list').querySelectorAll('[data-sid]').forEach(el=>el.onclick=()=>pickSid(el.dataset.sid)); };
+
+  // ---- «Ehtimol shu o'quvchi»: to'lovchi yozgan ism bo'yicha 3 tagacha taklif (sb/name-match.js) ----
+  //   Faqat TAKLIF: bosilsa ro'yxatdan tanlash bilan bir xil (pickSid -> tasdiqlash). HECH QACHON o'zi biriktirmaydi.
+  //   Nomzodlar — xotiradagi o'quvchilar ro'yxatidan (baza qayta o'qilmaydi), faqat o'qishni tark etmaganlar
+  //   («Chiqdi» va to'xtatish sanasi o'tgan — tashqari). Joriy qarz / oylik summa uchun FAQAT ism bo'yicha mos
+  //   kelgan (≤8) nomzodlarning hisob-fakturalari o'qiladi. Moslik < 60% — taklif ko'rsatilmaydi.
+  const loadSug=async()=>{
+    const NM=await nameMatchLib(); if(!NM) return [];
+    const today=todayStr(), cm=curMonth();
+    const left=s=>{ const sf=String(s.stopFrom||'').slice(0,10); return (s.payStatus||'')==='chiqdi' && !(/^\d{4}-\d{2}-\d{2}$/.test(sf) && sf>=today); };
+    const cands=NM.rankByName(payment.payerName, list.filter(s=>s && s.name && !left(s)), { minName:0.5, limit:8 });
+    if(!cands.length) return [];
+    // Qarz — «Moliya → Qarzdorlar» bilan bir xil qoida: shu oygacha (≤ joriy oy) fakturalarning qolgan qismi.
+    const isCanc=i=>i.status==='canceled'||i.status==='reversed';
+    const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(isCanc(i)?0:(Number(i.paidAmount)||0));
+    const debtAmt=i=>isCanc(i)?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i));
+    const own={}, info=new Map();
+    cands.forEach(c=>{ info.set(c.item,{debt:0, monthly:null, pm:'', fm:''});
+      [c.item.studentId, c.item._id].forEach(k=>{ k=k==null?'':String(k); if(k && !own[k]) own[k]=c.item; }); });
+    const keys=Object.keys(own); let ok=true;
+    try{
+      for(let i=0;i<keys.length;i+=10){
+        const snap=await getDocs(query(collection(db,'invoices'), where('studentId','in',keys.slice(i,i+10))));
+        snap.docs.forEach(d=>{ const v=d.data()||{}, st=own[String(v.studentId)], m=String(v.month||''); if(!st || !/^\d{4}-\d{2}$/.test(m)) return;
+          const o=info.get(st); if(m<=cm) o.debt+=debtAmt(v);
+          // Oylik to'lov — eng so'nggi (joriy oygacha) amaldagi faktura summasi; bo'lmasa eng yaqin keyingi oyniki.
+          if(isCanc(v) || !((Number(v.amount)||0)>0)) return;
+          if(m<=cm){ if(m>o.pm){ o.pm=m; o.pAmt=Number(v.amount); } }
+          else if(!o.fm || m<o.fm){ o.fm=m; o.fAmt=Number(v.amount); } });
+      }
+    }catch(e){ ok=false; }
+    info.forEach(o=>{ o.monthly = o.pm ? o.pAmt : (o.fm ? o.fAmt : null); });
+    return NM.pickSuggestions(cands, total, it=>ok?info.get(it):{debt:null, monthly:null}, { min:0.6, limit:3 });
+  };
+  const drawSug=()=>{ const el=$('#as-sug'); if(!el) return;
+    if(!sugs.length){ el.innerHTML=''; return; }
+    const pc=p=>p>=90?['#E3F4EC','#1F7A55']:p>=75?['#EAF3F0','#236B5D']:['#FFF1DE','#B54708'];
+    el.innerHTML=`<div style="border:1px solid var(--gold);border-radius:10px;padding:8px 10px 4px;margin-bottom:10px;background:#FFFBF2">
+      <div class="small" style="font-weight:700;margin-bottom:6px">💡 Ehtimol shu o‘quvchi:</div>
+      ${sugs.map(x=>{ const s=x.item, sid=String(s.studentId||s._id), c=pc(x.percent);
+        const debt = x.debt==null ? '<span class="muted">qarz: —</span>'
+          : (x.debt>0 ? `qarz: <b style="color:#B42318">${fmtSom(x.debt)}</b>` : '<span style="color:#1F9982">qarz yo‘q</span>');
+        const why = x.bonus>=0.1 ? ' · <span class="muted" title="Joriy qarzi to‘lov summasiga teng">qarz = summa ✓</span>'
+          : (x.bonus>0 ? ' · <span class="muted" title="Oylik to‘lovi to‘lov summasiga teng">oylik = summa ✓</span>' : '');
+        return `<div data-sug="${esc(sid)}" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--border-2);border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff">
+          <span style="flex:1 1 200px;min-width:0;overflow-wrap:break-word"><b>${esc(s.name||'')}</b> <span class="small muted" style="white-space:nowrap">${esc(sub(s))}</span><div class="small">${debt}${why}</div></span>
+          <span style="display:flex;align-items:center;gap:8px;margin-left:auto"><span class="chip" style="background:${c[0]};color:${c[1]};font-weight:700;white-space:nowrap">${x.percent}% mos</span><span class="btn sm gold">${mode===2?'+ Qo‘shish':'Tanlash'}</span></span></div>`; }).join('')}
+    </div>`;
+    el.querySelectorAll('[data-sug]').forEach(r=>r.onclick=()=>pickSid(r.dataset.sug));
+  };
   const setMode=(m)=>{ mode=m;
     $('#as-mode-1').className='btn sm '+(m===1?'gold':'ghost2'); $('#as-mode-2').className='btn sm '+(m===2?'gold':'ghost2');
-    drawPicked(); updateFoot(); draw($('#as-search').value); };
+    drawPicked(); updateFoot(); drawSug(); draw($('#as-search').value); };
   $('#as-mode-1').onclick=()=>setMode(1); $('#as-mode-2').onclick=()=>setMode(2);
   $('#as-search').addEventListener('input',e=>draw(e.target.value));
   setMode(1); draw('');
+  // Takliflar (ko'pi bilan ~2.5 s kutiladi; kechikkan natija tashlanadi). Oyna yopilgan/almashgan bo'lsa — tegilmaydi.
+  { const sugEl=$('#as-sug');
+    Promise.race([ loadSug().catch(()=>[]), new Promise(r=>setTimeout(()=>r(null), 2500)) ]).then(r=>{
+      if($('#as-sug')!==sugEl) return;
+      sugs=r||[]; ready=true; drawSug(); draw($('#as-search').value); }); }
 }
 // Summani o'quvchi balansiga qo'llaydi (waterfall) — to'lov serveri bilan bir xil mantiq.
 // payId berilса — IDEMPOTENT: applied_payments posboni bir to'lovni ikki marta qo'llatmaydi.
@@ -6980,6 +7068,7 @@ async function renderPayments(){
     // Biriktirilmagan Click to'lovlari (telefon topilmadi) — global ro'yxat.
     let unmatched=[];
     try{ const ps=await getDocs(query(collection(db,'payments'), where('status','==','unmatched'))); unmatched=ps.docs.map(d=>({_id:d.id,...d.data()})); }catch(e){}
+    if(unmatched.length) nameMatchLib();   // «Biriktirish» oynasidagi takliflar uchun oldindan yuklab qo'yamiz
     // Provayder (Uzum qaytardi / Click bekor qildi), lekin pul avval o'quvchi BALANSIGA qo'llangan, faktura topilmagan yoki
     //   avans allaqachon sarflangan to'lovlar — avtomatik to'liq teskari qilinmaydi (pay-server raw.needsManualReverse
     //   belgilaydi). Ilgari hech qayerda ko'rinmasdi: o'quvchida pul qolib ketardi.

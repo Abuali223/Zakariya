@@ -8,9 +8,13 @@ do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga
 -- reception-guard.sql — Qabulxona (reception) xodimiga CHEKLOV (DB darajasida).
 --
 --   MAQSAD: qabulxona xodimi o'quvchi QO'SHADI va asosiy ma'lumotini TAHRIRLAYDI,
---   LEKIN o'quvchi HOLATINI (faollashtirish/muzlatish/chiqarish/sinov =
---     payStatus/activeFrom/stopFrom) O'ZGARTIRA OLMAYDI — bu faqat Ma'muriyat
+--   LEKIN o'quvchi HOLATINI (faollashtirish/muzlatish/sinov, sanalarni tuzatish =
+--     payStatus/activeFrom/stopFrom/pauses) O'ZGARTIRA OLMAYDI — bu faqat Ma'muriyat
 --     (direktor/ma'muriyat rahbari = app.is_admin_head()) huquqi.
+--   ISTISNO (foydalanuvchi talabi): qabulxona o'quvchini CHIQARA OLADI — FAQAT «chiqdi» ga o'tish:
+--     payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan), stopFrom — o'tgan oyning 1-sanasidan (Toshkent) oldin
+--     emas YOKI o'zgarmagan (muzlatilganning eski, ertaroq sanasi saqlanadi), pauses o'zgarmaydi, activeFrom
+--     o'zgarmaydi (faqat «sinov»dan chiqarilsa = stopFrom + 1 kun — admin.html bilan bir xil). O'IBDO' — hech biri.
 --
 --   MOLIYAVIY maydonlar (chegirma/kontrakt/aka-uka/referral) qabulxonaga QOLDIRILADI —
 --     ular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun kerak
@@ -49,8 +53,20 @@ begin
       or (new."activeFrom" is distinct from old."activeFrom")
       or (new."stopFrom"   is distinct from old."stopFrom")
       or (new."pauses"     is distinct from old."pauses") then
-        raise exception 'O''quvchi holatini (faollashtirish/muzlatish/chiqarish) faqat Ma''muriyat o''zgartira oladi'
-          using errcode = '42501';
+        -- Qabulxona: FAQAT «Chiqarish» (yuqoridagi shartlar). Boshqa har qanday holat o'zgarishi — rad.
+        if not ( app.is_reception()
+             and new."payStatus" = 'chiqdi'
+             and coalesce(old."payStatus", '') <> 'chiqdi'
+             and new."pauses" is not distinct from old."pauses"
+             and coalesce(new."stopFrom", '') ~ '^\d{4}-\d{2}-\d{2}$'
+             and ( new."stopFrom" is not distinct from old."stopFrom"
+                   or new."stopFrom" >= to_char(date_trunc('month', (now() at time zone 'Asia/Tashkent')::date - interval '1 month'), 'YYYY-MM-DD') )
+             and ( new."activeFrom" is not distinct from old."activeFrom"
+                   or ( coalesce(old."payStatus", '') = 'sinov'
+                        and new."activeFrom" = to_char(new."stopFrom"::date + 1, 'YYYY-MM-DD') ) ) ) then
+          raise exception 'O''quvchi holatini (faollashtirish/muzlatish/sinov, sanani tuzatish) faqat Ma''muriyat o''zgartira oladi; qabulxona faqat «Chiqarish» qila oladi (o''tgan oyning 1-sanasidan oldin emas)'
+            using errcode = '42501';
+        end if;
       end if;
     end if;
   end if;
