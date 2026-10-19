@@ -417,6 +417,20 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   kesish, ID to'qnashuvida begona qarz, sekin tarmoqda takliflar yo'qolishi, modul xatosidan keyin qayta urinmaslik,
   qo'shimcha apostrof turlari, «сҳ».
 
+## 30) «Eng landavur odam ham xato qilmasin» — ikki qo'shimcha himoya
+
+- **Qabulxona «⏹️ Chiqarish» — ikkinchi tasdiq.** «Saqlash» bosilgach (sana tekshiruvidan keyin) yana so'raladi:
+  «Turg'unboyeva Xadicha» (5-sinf «A» · O‘zbek, ID IQ-0101) chiqarilsinmi? — chiqqan sana va «⚠️ Qaytarish (qayta
+  faollashtirish) — faqat direktor orqali». «Bekor» — hech narsa yozilmaydi, oyna ochiq qoladi. Direktor oynasida
+  qo'shimcha tasdiq yo'q (u o'zi qaytara oladi).
+- **«Biriktirish» — past moslikda ogohlantirish.** Tanlangan o'quvchining moslik foizi 75% dan past bo'lsa (taklifdan —
+  ko'rsatilgan foiz; ro'yxatdan — ism o'xshashligi, taklifda bo'lsa o'sha foiz), tasdiqlash oynasi boshida:
+  «⚠️ Ism to‘liq mos emas (67% mos) — to‘lovchi yozgan ism: «Xadicha»», keyin avvalgi «Ism (ID) — summa / Shu
+  o‘quvchiga biriktirilsinmi?». To'lovchi ism yozmagan bo'lsa (masalan faqat telefon raqami) — ogohlantirish yo'q.
+  Bo'lib biriktirishda (aka-uka) — yo'q: u yerda ismlar ataylab farq qiladi.
+- Testlar: Chromium 35/35 (chiqarish oynasi) va 54/54 («Biriktirish»); haqiqiy stek (PG16 + PostgREST + shim) 31/31 —
+  2-tasdiq matni, «Bekor» bosilsa bazada o'zgarish yo'qligi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

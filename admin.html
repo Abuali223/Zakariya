@@ -3016,6 +3016,9 @@ async function openStatusModal(s, collName, onSaved, opts){
       //   kun. Aks holda [activeFrom, stopFrom] to'lanadigan oraliqqa aylanardi; endi qaytishda «Faollashtirish» shu kundan boshlaydi.
       if(cur==='sinov') patch.activeFrom=addDaysStr(patch.stopFrom,1);
     }
+    // Qabulxona: IKKINCHI tasdiq — chiqarishni qabulxona o'zi qaytara olmaydi (faqat direktor), shuning uchun noto'g'ri
+    //   qatorda «Saqlash» bosilib ketmasin: KIM (ism, sinf, ID) va QAYSI sanadan — aniq yoziladi; «Bekor» — hech narsa yozilmaydi.
+    if(WD && !confirm(`«${s.name||s._id}» (${classLabelOf(s)}${s.studentId?`, ID ${s.studentId}`:''}) chiqarilsinmi?\n\nChiqqan sana: ${patch.stopFrom} — shu kundan keyin to‘lov hisoblanmaydi.\n⚠️ Qaytarish (qayta faollashtirish) — faqat direktor orqali.`)) return;
     const btn=$('#st-save'); btn.disabled=true;
     try{
       if(WD){
@@ -5967,9 +5970,17 @@ async function openAssign(payment, students, reload){
   let mode=1, busy=false; const picked={};   // sid -> summa (bo'lib rejimi)
   let sugs=[], ready=false;                  // «Ehtimol shu o'quvchi» takliflari; ready — ro'yxat chizilishi mumkin
 
+  // ⚠️ Ism to'liq mos kelmasa (taklif foizi, ro'yxatdan tanlansa — ism o'xshashligi < 75%) — tasdiqlash oynasida ogohlantirish:
+  //   kassir o'xshash ismli yoki qo'shni qatordagi BOSHQA o'quvchini tanlab qo'ymasin. To'lovchi ism yozmagan bo'lsa — yo'q.
+  const weakMatch=(sid)=>{ const NM=globalThis.IqrorNameMatch, st=sById[String(sid)], pn=String(payment.payerName||'').trim();
+    if(!NM || typeof NM.nameTokens!=='function' || !st || !NM.nameTokens(pn).length) return '';
+    const sg=sugs.find(x=>String(x.item.studentId||x.item._id)===String(sid));
+    const pct=sg ? sg.percent : Math.round(NM.nameSimilarity(pn, st.name)*100);
+    return pct<75 ? `⚠️ Ism to‘liq mos emas (${pct}% mos) — to‘lovchi yozgan ism: «${pn.length>80?pn.slice(0,80)+'…':pn}»\n\n` : ''; };
+
   // ---- Bitta o'quvchiga (butun summani) ----
   const assignOne=async(sid)=>{ if(busy) return; const st=sById[String(sid)];
-    if(!confirm(`${st&&st.name?`${st.name} (${sid})`:sid} — ${fmtSom(total)}\n\nShu o‘quvchiga biriktirilsinmi?`)) return;
+    if(!confirm(`${weakMatch(sid)}${st&&st.name?`${st.name} (${sid})`:sid} — ${fmtSom(total)}\n\nShu o‘quvchiga biriktirilsinmi?`)) return;
     busy=true;
     try{
       // ATOMIK (assign_payment, invoice-guards.sql): to'lov qatori qulflanadi, FAQAT hali biriktirilmagan
