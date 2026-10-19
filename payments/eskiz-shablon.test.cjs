@@ -24,11 +24,12 @@ fs.readFileSync = function (p, ...rest) { const k = typeof p === 'string' ? path
     if (typeof v === 'string') return v; const e = new Error(v.code + ': ' + k); e.code = v.code; throw e; }
   return origRead.call(this, p, ...rest); };
 const fake = { request(opts, onRes) {
-  const req = new EventEmitter(); req.write = () => {}; req.setTimeout = () => {}; req.destroy = () => {};
+  const req = new EventEmitter(); let body = ''; req.write = b => { body += String(b); }; req.setTimeout = () => {}; req.destroy = () => {};
   req.end = () => setImmediate(() => {
     const s = new EventEmitter(); req.emit('socket', s); s.emit('secureConnect');
     const res = new EventEmitter(); res.complete = true; let st = 200, out;
-    if (opts.path === '/api/auth/login' && opts.method === 'POST') out = { data: { token: 'T' } };
+    if (opts.path === '/api/auth/login' && opts.method === 'POST') {
+      if (process.env.FAKE_BADPASS && body.includes(process.env.FAKE_BADPASS)) { st = 401; out = { message: 'Invalid credentials' }; } else out = { data: { token: 'T' } }; }
     else if (opts.path === '/api/user/templates' && opts.method === 'GET') {
       if (MODE === 'http500') { st = 500; out = { message: 'Server Error' }; } else out = { success: true, result: LIST };
     } else { st = 500; out = {}; process.stderr.write('UNEXPECTED ' + opts.method + ' ' + opts.path + '\\n'); }
@@ -71,7 +72,7 @@ let r = run(ALL_OK);
 ok('hammasi mos -> chiqish 0', r.code === 0 && /✅ Hamma SMS turlari/.test(r.out), r.out);
 ok('«Eslatma»: ism naqshga sig\'adigan shaklda (Malika), 09.2026,10.2026, 5800000', r.out.includes("Yuboriladigan SMS: Eslatma: Malika uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 5800000 so'm)"), r.out);
 ok('OTP qatori ham tekshiriladi va mos', /Ro‘yxat \/ parol kodi \(OTP\)[\s\S]*?✅ MOS — Eskiz shablon #3/.test(r.out), r.out);
-ok('har qator 4 xil qiymatlar bilan tekshiriladi', (r.out.match(/4 xil ism\/oy\/summa/g) || []).length === 4, r.out);
+ok('har qator 5 xil qiymatlar bilan tekshiriladi (1 so\'zli ism ham)', (r.out.match(/5 xil ism\/oy\/summa/g) || []).length === 4, r.out);
 ok('uzunlik ko\'rsatiladi (GSM-7, 1 SMS)', /Uzunligi: \d+ belgi, 1 SMS\n/.test(r.out), r.out);
 ok('Eskiz\'ga faqat login + GET (hech narsa yuborilmaydi)', !/UNEXPECTED/.test(r.out), r.out);
 ok('ikkala sozlama ko\'rsatiladi', r.out.includes('Sozlama (auth serveri): ' + AUTH0) && r.out.includes('Sozlama (payments / sms-worker): ' + PAY), r.out);
@@ -172,6 +173,22 @@ r = run([{ id: 1, template: DEF_DEBT, original_text: DEF_DEBT, status: 'service'
 ok('eski {name} tasdig\'i + yangi misol moderatsiyada -> ikkalasi, faqat kutish', /Eskiz #1 [^\n]*O'ZGARUVCHI qilinmagan/.test(r.out) && /Eskiz #11 \(… Moderatsiyada\): ⏳/.test(r.out)
   && /«Servis»/.test(advice(r)) && !/HAQIQIY misol bilan yuboring/.test(r.out), r.out);
 
+// 14d) Moderator faqat ismni o'zgaruvchi qilgan (oy/summa misoldagidek so'zma-so'z) -> qayta yuborish, «Tuzatish» EMAS
+r = run([{ id: 21, template: "Eslatma: %w{1,4} uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 5800000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", original_text: LIT_DEBT, status: 'service' },
+  { id: 2, template: SINGLE_NEW, original_text: LIT_NEW, status: 'service' }, { id: 3, template: OTP_PAT, original_text: LIT_OTP, status: 'service' }]);
+ok('qisman o\'zgaruvchi naqsh -> «faqat 1 ta joyni o\'zgaruvchi qilgan», qayta yuborish, Tuzatish yo\'q', r.code === 2 && /#21 [^\n]*faqat 1 ta joyni o'zgaruvchi qilgan/.test(r.out)
+  && /HAQIQIY misol bilan yuboring/.test(r.out) && !/Tuzatish:/.test(r.out), r.out);
+// 14e) Ism uchun «%w %w» (aniq 2 so'z) -> 1 so'zli ism bilan rad etiladi: ✅ EMAS
+r = run([{ id: 22, template: "Eslatma: %w %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", original_text: LIT_DEBT, status: 'service' },
+  { id: 2, template: SINGLE_NEW, original_text: LIT_NEW, status: 'service' }, { id: 3, template: OTP_PAT, original_text: LIT_OTP, status: 'service' }]);
+ok('«%w %w» ism naqshi -> 1 so\'zli ism bilan MOS EMAS, «o\'zgaruvchilar ko\'p»', r.code === 2 && /Misol mos keladi, lekin boshqa qiymatlar bilan MOS EMAS: Eslatma: Sardor uchun/.test(r.out)
+  && /#22 [^\n]*naqshda o'zgaruvchilar ko'p/.test(r.out), r.out);
+// 14f) Ikkala sozlamada bir xil email, lekin payments'dagi parol noto'g'ri -> u ham tekshiriladi (login xatosi, qaysi fayl)
+const PAY_BAD = cfg('pay_bad.json', { sms: { eskizEmail: 'a@b', eskizPassword: 'NOTOGRI-PAROL' } });
+r = run(ALL_OK, ['--config', AUTH0, '--config', PAY_BAD], { FAKE_BADPASS: 'NOTOGRI-PAROL' });
+ok('bir xil email, boshqa parol -> payments ham alohida tekshiriladi (login xatosi + fayl), parol CHIQMAYDI', r.code === 1 && r.out.includes(`payments / sms-worker sozlamasi (${PAY_BAD}): Eskiz'ga ulanib bo'lmadi`)
+  && !/NOTOGRI-PAROL/.test(r.out), r.out);
+
 // 15) Har SMS turi o'z sozlamasidan: auth'dagi «Eslatma» matni (') ❌, payments'dagi debt (tuzatilgan ‘) ✅ -> chiqish 2
 const FIXED = DEF_DEBT.replace("to'lovi", 'to‘lovi');
 const PAY_F = cfg('pay_f.json', { sms: { eskizEmail: 'a@b', eskizPassword: 'p', templates: { debt: FIXED } } });
@@ -207,6 +224,12 @@ ok('avtomatik: /opt/iqror/auth va /opt/iqror/payments topiladi -> chiqish 0', r.
 r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAYC, '/opt/iqror/auth/config.json': { code: 'EACCES' }, [REPO_AUTH]: AUTHC }) });
 ok('avtomatik: jonli auth sozlamasi o\'qilmasa — boshqasiga O\'TMAYDI, TEKSHIRILMADI + sudo', r.code === 2 && /Sozlama \(auth serveri\): — topilmadi \(\/opt\/iqror\/auth\/config\.json: o‘qishga ruxsat yo‘q — sudo/.test(r.out)
   && !r.out.includes('Sozlama (auth serveri): ' + REPO_AUTH) && /⚪ TEKSHIRILMADI/.test(r.out), r.out);
+// Ko'rik (R7): sms-worker'ning o'z config.json'ida kalit to'ldirilmagan — /opt'dagi boshqa faylga O'TMAYDI (noto'g'ri ✅ yo'q)
+const PAYX = JSON.stringify({ sms: { eskizEmail: 'ESKIZ_EMAIL (kabinet emaili)', eskizPassword: 'ESKIZ_PAROL — MAXFIY (yoki token bilan)' } });
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAYX, '/opt/iqror/payments/config.json': PAYC, '/opt/iqror/auth/config.json': AUTHC, [REPO_AUTH]: { code: 'ENOENT' } }) });
+ok('avtomatik: o\'z config.json kaliti to\'ldirilmagan -> TEKSHIRILMADI (boshqa faylga o\'tmaydi), chiqish 2', r.code === 2
+  && r.out.includes(`Sozlama (payments / sms-worker): — topilmadi (${REPO_PAY}: sms.eskizEmail`) && /bu jarayon SMS yubora olmaydi/.test(r.out)
+  && !r.out.includes('Sozlama (payments / sms-worker): /opt/iqror/payments/config.json') && !/✅ Hamma SMS/.test(r.out), r.out);
 r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: { code: 'ENOENT' }, '/opt/iqror/payments/config.json': { code: 'ENOENT' }, '/opt/iqror/auth/config.json': { code: 'ENOENT' }, [REPO_AUTH]: { code: 'ENOENT' } }) });
 ok('avtomatik: hech narsa yo\'q -> chiqish 1, «Sozlama topilmadi»', r.code === 1 && /Sozlama topilmadi/.test(r.out), r.out);
 

@@ -90,14 +90,17 @@ node eskiz-shablon.cjs --name "Aliyeva Malika" --months 2026-09,2026-10 --due 58
 ```
 Har SMS turi o‘zini **yuboradigan** jarayon sozlamasidan tekshiriladi: «Eslatma» va OTP — auth serveri
 (`/opt/iqror/auth/config.json`, bo‘lmasa `../auth/config.json`), avtomatik qarz va yangi faktura — `sms-worker`
-(`./config.json`, bo‘lmasa `/opt/iqror/payments/config.json`). `/opt/iqror/auth/config.json` faqat egasiga o‘qilsa
+(`./config.json`, bo‘lmasa `/opt/iqror/payments/config.json`). Har tur uchun BIRINCHI mavjud fayl jonli hisoblanadi:
+unda Eskiz kaliti yo‘q / to‘ldirilmagan bo‘lsa — boshqa faylga o‘tilmaydi, qator «⚪ TEKSHIRILMADI» (bu jarayon SMS yubora
+olmaydi). Ikkala sozlama alohida login qilinadi (email bir xil, parol boshqa bo‘lsa ham). `/opt/iqror/auth/config.json` faqat egasiga o‘qilsa
 (0600) — `sudo` bilan ishga tushiring (aks holda «Eslatma»/OTP qatori «⚪ TEKSHIRILMADI» bo‘ladi). `--config`
 (`--config=YO‘L`, bir necha marta) berilsa — faqat o‘sha fayllar (turi ichidan aniqlanadi: `auth` bo‘limi bor — auth
 serveri); nisbiy yo‘l joriy papkaga nisbatan.
 
 Natija: Eskiz’dagi har bir matn holati (Servis / Moderatsiyada / Rad etilgan) va naqshi; tizimning har SMS turi
-(«Eslatma», avtomatik qarz, yangi faktura, OTP) mos-mos emasligi — **4 xil** ism/oy/summa/kod bilan (moderator misolni
-so‘zma-so‘z, o‘zgaruvchisiz tasdiqlagan bo‘lsa ham ushlanadi: faqat o‘sha misol o‘tib, haqiqiy SMS’lar rad etilardi);
+(«Eslatma», avtomatik qarz, yangi faktura, OTP) mos-mos emasligi — **5 xil** ism/oy/summa/kod bilan, jumladan 1 so‘zli
+ism (moderator misolni so‘zma-so‘z tasdiqlagan, faqat ba’zi joylarni o‘zgaruvchi qilgan yoki ism uchun «%w %w» — aniq
+2 so‘z — yozgan bo‘lsa ham ushlanadi: aks holda faqat o‘sha misol o‘tib, haqiqiy SMS’lar rad etilardi);
 mos bo‘lmasa — aniq sababi (moderatsiyada / rad etilgan / so‘zma-so‘z tasdiqlangan / qaysi o‘zgaruvchi necha so‘z /
 qaysi belgi farq qiladi va qaysi FAYLda tuzatish kerak) va nima qilish kerakligi. HAQIQIY misol bilan yuborilgan,
 hali moderatsiyadagi matn ham taniladi (maslahat — kutish, qayta yuborish emas). OTP qatori ✅ bo‘lishi kerak (ro‘yxat

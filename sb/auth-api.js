@@ -217,7 +217,9 @@ export function bindPhoneInput(el) {
     // 1) Boshidagi '+' ga tegadigan qisman tahrir — bekor (butun maydonni almashtirish va tozalash — ruxsat). Faqat
     //    foydalanuvchi tahririda (avtoto'ldirish / dastur o'zgartirishi — inputType yo'q yoki 'insertReplacementText').
     const user = /^(insert|delete)/.test(t) && t !== "insertReplacementText";
-    if (user && prev.charAt(0) === "+" && v.charAt(0) !== "+" && digits(v) !== "" && !(ps === 0 && pe >= prev.length)) { restore(); return; }
+    //    Belgilash eski raqamning HAMMA raqamlarini qamrasa (masalan ko'rinib turgan '+998' ni belgilab yozish) — yangi raqam, ruxsat.
+    const whole = digits(prev.slice(0, ps)) === "" && digits(prev.slice(pe)) === "";
+    if (user && prev.charAt(0) === "+" && v.charAt(0) !== "+" && digits(v) !== "" && !whole) { restore(); return; }
     const del = /^delete/.test(t);
     if (del && v.length < prev.length && digits(v) === digits(prev)) {
       if (maskPhone(v) === prev && (t === "deleteContentBackward" || t === "deleteContentForward")) {
@@ -238,16 +240,25 @@ export function bindPhoneInput(el) {
     if (m !== el.value) put(m, after);
     prev = el.value; [ps, pe] = sel();
   }
+  // Kompozitsiya compositionend'siz tugagan bo'lsa (masalan o'rtada nusxa qo'yildi / fokus ketdi) — bayroq osilib qolmasin
+  const endCompose = () => { composing = false; if (cPrev) { [prev, ps, pe] = cPrev; cPrev = null; } };
   el.addEventListener("input", e => {
+    if (composing && e && e.isComposing === false && e.inputType !== "insertCompositionText") endCompose();
     if (composing || (e && e.isComposing)) return;                    // IME: kompozitsiya tugaguncha tegmaymiz
     run((e && e.inputType) || "");
   });
+  el.addEventListener("blur", () => { if (composing) { endCompose(); run("insertText"); } });
   el.addEventListener("paste", e => {
     const cd = e.clipboardData || (typeof window !== "undefined" && window.clipboardData);
     const txt = cd && typeof cd.getData === "function" ? String(cd.getData("text") || "") : "";
     const clean = txt.replace(INVIS, "").trim();
     if (!clean || !phoneCanon(clean)) return;          // to'liq raqam emas — brauzer odatdagidek qo'yadi
+    // Almashtirish faqat maydonda (belgilangan qismdan tashqari) foydalanuvchi yozgan narsa bo'lmasa: bo'sh yoki faqat
+    //   «+998». Aks holda («+48 » yoki «+» yozilgan) — brauzer odatdagidek qo'yadi: 9 raqam jimgina +998 raqamga aylanmasin.
+    const [s0, s1] = sel(), cur = el.value;
+    if (!/^\s*(\+\s*9\s*9\s*8|9\s*9\s*8)?\s*$/.test(cur.slice(0, s0) + cur.slice(s1))) return;
     e.preventDefault();
+    composing = false; cPrev = null;
     put(maskPhone(clean), 0);
     prev = el.value; [ps, pe] = sel();
     try { el.dispatchEvent(new Event("input", { bubbles: true })); } catch (_) {}

@@ -111,9 +111,11 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
         const r = readCfg(full);
         if (r.missing) { notes[role].push(`${full}: fayl yo‘q`); continue; }
         if (r.err) { notes[role].push(`${full}: ${r.err}`); break; }            // bor, lekin o'qilmadi — keyingisiga o'tmaymiz
-        if (roleOf(r.cfg) !== role) { notes[role].push(`${full}: ${ROLE_UZ[role]} sozlamasi emas`); continue; }
+        if (roleOf(r.cfg) !== role) { notes[role].push(`${full}: ${ROLE_UZ[role]} sozlamasi emas`); break; }
+        // Birinchi MAVJUD fayl — shu jarayonning jonli sozlamasi: kaliti yo'q/to'ldirilmagan bo'lsa ham boshqa faylga
+        //   o'tilmaydi (aks holda boshqa fayl bilan noto'g'ri ✅ chiqardi — jarayon esa SMS yubora olmaydi).
         const prob = credsProblem(r.cfg);
-        if (prob) { notes[role].push(`${full}: ${prob}`); if (role === 'auth') break; continue; }
+        if (prob) { notes[role].push(`${full}: ${prob} — bu jarayon SMS yubora olmaydi`); break; }
         cfgs[role] = { path: full, cfg: r.cfg }; break;
       }
     }
@@ -125,16 +127,18 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
   for (const role of ['auth', 'pay']) console.log(`Sozlama (${ROLE_UZ[role]}): ${cfgs[role] ? cfgs[role].path : '— topilmadi (' + notes[role].join('; ') + ')'}`);
 
   // 1) Eskiz'dagi matnlar — har Eskiz hisobi uchun bir marta (odatda ikkala sozlamada bitta hisob)
-  const keyOf = c => { const s = c.sms || {}; return JSON.stringify([s.host || '', s.eskizEmail || s.email || '', (s.eskizEmail || s.email) ? '' : (s.token || '')]); };
+  // Kalit parol/token bilan (faqat xotirada, hech qayerga chiqarilmaydi): bir xil email, lekin boshqa parol — alohida tekshiriladi
+  const keyOf = c => { const s = c.sms || {}; return JSON.stringify([s.host || '', s.eskizEmail || s.email || '', s.eskizPassword || s.password || '', (s.eskizEmail || s.email) ? '' : (s.token || '')]); };
   const lists = new Map();
   for (const role of ['auth', 'pay']) {
     if (!cfgs[role]) continue;
     const k = keyOf(cfgs[role].cfg);
     if (!lists.has(k)) {
       let res;
+      const src = `${ROLE_UZ[role]} sozlamasi (${cfgs[role].path})`;
       try { res = await makeEskiz(cfgs[role].cfg.sms).templates(); }
-      catch (e) { console.error(`❌ Eskiz'ga ulanib bo'lmadi (${e.stage || ''}): ${e.message}`); process.exit(1); }
-      if (!res.ok) { console.error(`❌ Eskiz shablonlar ro'yxatini bermadi: ${res.error}`); process.exit(1); }
+      catch (e) { console.error(`❌ ${src}: Eskiz'ga ulanib bo'lmadi (${e.stage || ''}): ${e.message}`); process.exit(1); }
+      if (!res.ok) { console.error(`❌ ${src}: Eskiz shablonlar ro'yxatini bermadi: ${res.error}`); process.exit(1); }
       lists.set(k, { list: res.list || [], roles: [] });
     }
     lists.get(k).roles.push(role);
@@ -157,7 +161,8 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
   const PROBES = [SHOW,
     { name: 'Karimov Jasur', months: ['2026-10'], due: 1200000, code: '482913' },
     { name: smsName("Qobiljonov Muhammadiy Akmal o'g'li"), months: ['2026-08', '2026-09', '2026-10'], due: 14500000, code: '000731' },
-    { name: 'Rahimova Dilnoza', months: ['2026-05', '2026-07'], due: 450000, code: '905518' }];
+    { name: 'Rahimova Dilnoza', months: ['2026-05', '2026-07'], due: 450000, code: '905518' },
+    { name: 'Sardor', months: ['2026-09'], due: 300000, code: '271828' }];                 // 1 so'zli ism (bazada uchraydi)
   const lastM = p => fmtMonth(p.months[p.months.length - 1] || '');
   const tplOf = (c, k) => ((c && c.sms && c.sms.templates) || {})[k];
   const ROWS = [
@@ -232,6 +237,15 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
       }
       if (!/%[wd]/.test(pat) && /\{\w+\}/.test(tpl)) {
         console.log(`${head}: ⚠️ misol matn SO'ZMA-SO'Z tasdiqlangan (naqshda %w/%d yo'q) — faqat aynan «${pat}» o'tadi, boshqa ism/summa${row.key === 'otp' ? '/kod' : ''} bilan Eskiz rad etadi. Qayta yuboring va izohda o'zgaruvchi joylarni yozing (pastga qarang).`);
+        rowResubmit = true; continue;
+      }
+      const nOurs = (tpl.match(/\{\w+\}/g) || []).length, nTheirs = (pat.match(/%[wd](?:\{\d+,\d+\})?/g) || []).length;
+      if (!al.ok && nTheirs < nOurs) {
+        console.log(`${head}: ⚠️ moderator faqat ${nTheirs} ta joyni o'zgaruvchi qilgan (bizda ${nOurs} ta: ${(tpl.match(/\{\w+\}/g) || []).join(', ')}) — qolganlari misoldagi qiymat bilan so'zma-so'z qolgan, boshqa oy/summa bilan Eskiz rad etadi. Matnni qayta yuboring va izohda HAMMA o'zgaruvchi joylarni yozing (pastga qarang).`);
+        rowResubmit = true; continue;
+      }
+      if (!al.ok && nTheirs > nOurs) {
+        console.log(`${head}: ⚠️ naqshda o'zgaruvchilar ko'p (${nTheirs} ta, bizda ${nOurs} ta) — masalan ism uchun «%w %w» (aniq 2 so'z): 1 so'zli yoki 3 so'zli ism bilan Eskiz rad etadi. Qayta yuboring, izohda «ism — 1–4 so'z» deb yozing (pastga qarang).`);
         rowResubmit = true; continue;
       }
       if (!al.ok) {

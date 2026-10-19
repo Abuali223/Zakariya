@@ -325,6 +325,24 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   `config.example.json`dagi to'ldirilmagan kalitlar rad etiladi. Testlar: `eskiz-shablon.test.cjs` 44, `eskiz-template` 25,
   `sms-remind` 114.
 
+## 26) Raqib ko'rigi (R7) — R6 tuzatmalari ustidan
+
+- **Telefon maydoni (yuqori):** chet el kodi yozilgandan keyin (`+48 `, `+`, `+7`) 9 xonali milliy raqam nusxa qilib
+  qo'yilsa, u yaroqli O'zbekiston raqami deb topilib butun maydon jimgina `+998 …` ga almashardi (OTP begonaga). Endi
+  to'liq raqam bilan almashtirish faqat maydonda (belgilangan qismdan tashqari) foydalanuvchi narsasi bo'lmasa: bo'sh
+  yoki faqat «+998»; aks holda brauzer odatdagidek qo'yadi (`+48 789 706 619`). To'ldirilgan raqam ustiga belgilamasdan
+  qo'yish ham jimgina almashtirmaydi.
+- **IME:** kompozitsiya `compositionend`siz tugasa (o'rtada nusxa qo'yish, fokus ketishi, oddiy kiritish kelishi) —
+  bayroq tiklanadi, maska o'chib qolmaydi. Ko'rinib turgan «+998» ni belgilab yozish endi ishlaydi (tugmalar yutilmaydi);
+  ortida raqamlar bo'lsa — tahrir bekor (begona raqam yo'q). `auth-api.js?v=6`.
+- **`eskiz-shablon.cjs`:** avtomatik qidiruvda har tur uchun birinchi MAVJUD fayl jonli (o'z `config.json`ida kalit
+  to'ldirilmagan bo'lsa `/opt`dagi boshqa faylga o'tib noto'g'ri ✅ bermaydi — «TEKSHIRILMADI»); bir xil email, boshqa
+  parol — ikkala sozlama alohida login qilinadi (xato qaysi faylda ekani aytiladi, parol chiqmaydi); moderator faqat
+  ba'zi joylarni o'zgaruvchi qilgan yoki ism uchun «%w %w» yozgan bo'lsa — «Tuzatish» emas, qayta yuborish maslahati;
+  sinov qiymatlarida 1 so'zli ism ham bor (5 to'plam).
+- Rad etildi: `smsMonths` uzilishli oylarda SMS uzunligi oshishi — ataylab (to'g'rilik muhimroq, §25).
+- Testlar: `phone.test` 180 (tuzatmasiz 8 tasi yiqiladi), `eskiz-shablon.test` 48; Chromium 43 + 43 + 19 + 10 + 14.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
