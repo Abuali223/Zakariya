@@ -120,11 +120,14 @@ Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **y
 | `eskizEmail` / `eskizPassword` | Eskiz kabinet emaili/paroli — **MAXFIY** (token o'zi yangilanadi) |
 | `token` | (Muqobil) Eskiz panelidan olingan tayyor token — email/parol o'rniga |
 | `from` | Jo'natuvchi nomi (nickname). Eskiz'da tasdiqlangan bo'lishi shart (test: `4546`) |
-| `international` | Chet el raqamlariga SMS (Eskiz `send-global`, default `true`; `false` — faqat O'zbekiston). Ota-ona telefoni `+` bilan to'liq yozilgan bo'lishi kerak (`+7 903 157 11 24`); Eskiz kabinetida xalqaro SMS yoqilgan bo'lsin. Eskiz chet el raqamini aniq rad etsa — o'sha xabar yakuniy, ketma-ket xato hisobiga kirmaydi |
 | `newLookbackDays` | Yangi faktura xabarlari uchun necha kun orqaga qaraladi (default 14) |
 | `reminderDayOfMonth` | Shu sanadan **keyin** qarzdorlik eslatiladi (default 10) |
 | `reminderDays` | Hafta kunlari (0=Yak … 6=Shan). Default `[1,4]` = Dush+Pay |
 | `templates.new` / `templates.debt` | SMS matni. O'rinbosarlar: `{name} {month} {amount} {due}` |
+
+> ⚠️ **SMS faqat O'zbekiston raqamlariga** (998XXXXXXXXX) yuboriladi. Ota-ona telefoni chet el raqami bo'lsa (`+7 …`,
+> `+48 …` — ma'lumot sifatida to'g'ri), SMS ikkinchi (O'zbekiston) raqamga ketadi; O'zbekiston raqami umuman bo'lmasa —
+> o'sha oilaga SMS yuborilmaydi («⚠️ Sifat» → «🌍 Faqat chet el raqami» ro'yxati).
 
 > ⚠️ **Eskiz moderatsiyasi:** Eskiz ixtiyoriy matn yubormaydi — SMS matni
 > Eskiz panelida **oldindan tasdiqlangan shablonga** mos bo'lishi kerak.

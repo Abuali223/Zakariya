@@ -1195,12 +1195,13 @@ async function openProfile(){
   if(curPhone && $p('pf-ph-start')){
     $p('pf-ph-start').onclick=()=>{
       if(!AuthAPI){ msg('Telefon o‘zgartirish hozir mavjud emas.'); return; }
-      $p('pf-ph-area').innerHTML=`<input id="pf-newph" type="tel" inputmode="tel" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
-        <div class="small muted" style="margin-top:4px">Chet el raqami: <b>+</b> bilan to‘liq (masalan +7 903 123 45 67).</div>
+      $p('pf-ph-area').innerHTML=`<input id="pf-newph" type="tel" inputmode="numeric" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
+        <div class="small muted" style="margin-top:4px">SMS kod faqat O‘zbekiston raqamiga (+998) yuboriladi.</div>
         <button class="btn gold sm" id="pf-ph-otp" style="margin-top:8px">Kod yuborish</button>`;
       const nph=$p('pf-newph'); nph.oninput=()=>{ nph.value=AuthAPI.maskPhone(nph.value); };
       $p('pf-ph-otp').onclick=async()=>{
-        const phone=AuthAPI.normPhone(nph.value); if(!phone){ msg('Telefon raqam noto‘g‘ri. O‘zbekiston: +998 90 123 45 67; chet el: + bilan to‘liq (+7 903 123 45 67).'); return; }
+        const phone=AuthAPI.normPhone(nph.value); if(!phone){ msg('Telefon raqam noto‘g‘ri. O‘zbekiston raqamini kiriting: +998 90 123 45 67.'); return; }
+        if(phone.slice(0,3)!=='998'){ msg('SMS kod faqat O‘zbekiston raqamlariga yuboriladi — O‘zbekistondagi raqamingizni kiriting.'); return; }
         const jwt=await AuthAPI.currentJwt(); const b=$p('pf-ph-otp'); b.disabled=true; b.textContent='…';
         const r=await AuthAPI.requestOtp(phone,'change_phone',{jwt}); b.disabled=false; b.textContent='Kod yuborish';
         if(!r.ok){ msg(r.error||'Kod yuborilmadi.'); return; }
@@ -2649,13 +2650,16 @@ async function openDataQuality(){
   catch(e){ const b=$('#dq-body'); if(b) b.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
   const pmap={}; privs.docs.forEach(d=>{ pmap[d.id]=d.data()||{}; });
   const list=studs.map(s=>{ const id=s._id||s.id; return Object.assign({}, pmap[id]||{}, s, {_id:id}); });   // telefon/pinfl/contract -> student_private
-  const badPhone=[], contractNoAmt=[], noPhone=[]; const byPinfl={};
+  const badPhone=[], contractNoAmt=[], noPhone=[], intlOnly=[]; const byPinfl={};
   list.forEach(s=>{ const sid=s.studentId||s._id; const nm=s.name||sid;
     const p1=String(s.parentPhone||'').trim(), p2=String(s.parentPhone2||'').trim();
     // Yaroqsiz raqam yonida ehtimoliy to'g'ri yozilishi (masalan '+'siz chet el raqami -> «→ +7 903 157 11 24 ?»).
     const bad=[]; [p1,p2].forEach(v=>{ if(v && !pmCanonPhone(v)){ const h=pmPhoneHint(v); bad.push(v+(h?` → ${h} ?`:'')); } });
     if(bad.length) badPhone.push({sid, nm, _id:s._id, v:bad.join(', ')});
     if(!p1 && !p2) noPhone.push({sid, nm, _id:s._id});   // umuman kiritilmagan (yaroqsizlari yuqorida alohida)
+    // To'g'ri, lekin faqat CHET EL raqami (O'zbekiston raqami yo'q) — SMS faqat O'zbekistonga, shu oilaga SMS ketmaydi.
+    const vals=[p1,p2].map(pmCanonPhone).filter(Boolean);
+    if(vals.length && !vals.some(c=>c.slice(0,3)==='998')) intlOnly.push({sid, nm, _id:s._id, v:vals.map(phonePretty).join(', ')});
     if(s.specialCategory==='contract' && !(Number(s.contractAmount)>0)) contractNoAmt.push({sid, nm, _id:s._id});
     const pf=String(s.pinfl||'').replace(/\D/g,''); if(pf.length===14){ (byPinfl[pf]=byPinfl[pf]||[]).push({sid, nm}); } });
   const dupPinfl=Object.entries(byPinfl).filter(([k,a])=>a.length>1);
@@ -2672,7 +2676,8 @@ async function openDataQuality(){
   const b=$('#dq-body'); if(!b) return;
   b.innerHTML = `<div class="small muted" style="margin-bottom:10px">Jami <b>${list.length}</b> o‘quvchi tekshirildi.</div>`
     + (allClean ? `<div class="card" style="padding:16px;border-color:#1F9982;color:#1F7A4D;font-weight:700">✓ Jiddiy ma'lumot xatosi topilmadi.</div>` : '')
-    + sect('❌ Noto‘g‘ri ota-ona telefoni', '#B42318', 'To‘g‘ri yozilishi: O‘zbekiston — 998 XX XXX XX XX (yoki 9 xonali); chet el — <b>+</b> bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67, +48 789 706 619). Noto‘g‘ri raqamga SMS eslatma ketmaydi, aka-uka chegirmasi (oila guruhlash) va ota-onaning telefon bilan kabinetga kirishi ishlamasligi mumkin.', badPhone)
+    + sect('❌ Noto‘g‘ri ota-ona telefoni', '#B42318', 'To‘g‘ri yozilishi: O‘zbekiston — 998 XX XXX XX XX (yoki 9 xonali); chet el — <b>+</b> bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67, +48 789 706 619). Noto‘g‘ri raqam bilan aka-uka chegirmasi (oila guruhlash) va SMS eslatma ishlamasligi mumkin.', badPhone)
+    + sect('🌍 Faqat chet el raqami — SMS ketmaydi', '#1F6F8B', 'Raqam to‘g‘ri, lekin SMS (qarz eslatmasi, faktura xabari, kabinet kodi) faqat O‘zbekiston raqamlariga yuboriladi. Mumkin bo‘lsa ikkinchi maydonga O‘zbekistondagi raqamni ham yozing.', intlOnly)
     + sect('⚠️ Kontrakt — summa kiritilmagan', '#B54708', '«Kontrakt» toifasi tanlangan, lekin oylik summa yo‘q → fakturaga tushmaydi (o‘tkazib yuboriladi).', contractNoAmt)
     + collHtml
     + dupHtml
@@ -3816,8 +3821,9 @@ function openUserEditor(u, CLS, roleOpts, opts){
   const sugRole = roleHintRec ? (roleHintRec.type==='teacher' ? 'teacher' : posToRole(roleHintRec.pos)) : '';
   const sugName = sugRole ? ((roleOpts.find(o=>o[0]===sugRole)||[])[1]||sugRole) : '';
   const preRole = (opts.approve && (!u.role || u.role==='staff') && hrRec && sugRole && sugRole!=='director' && sugRole!=='admin') ? sugRole : '';
+  const highRole = sugRole==='director' || sugRole==='admin';
   const roleHint = (opts.approve && roleHintRec && (!u.role || u.role==='staff'))
-    ? (sugRole ? `<div class="small" style="margin-top:6px;color:var(--teal)">📋 HR yozuvi: <b>${esc(roleHintRec.code)}${roleHintRec.pos?' · '+esc(roleHintRec.pos):''}</b> → ${preRole?'rol oldindan tanlandi':'taklif'}: <b>${esc(sugName)}</b>.${preRole?'':' Yuqori huquqli rol — o‘zingiz tanlang.'}${hrRec?'':' (Yozuv hali bog‘lanmagan — pastda tanlang.)'} Tekshirib «Saqlash» bosing.</div>`
+    ? (sugRole ? `<div class="small" style="margin-top:6px;color:var(--teal)">📋 HR yozuvi: <b>${esc(roleHintRec.code)}${roleHintRec.pos?' · '+esc(roleHintRec.pos):''}</b> → ${preRole?'rol oldindan tanlandi':'taklif'}: <b>${esc(sugName)}</b>.${preRole?'':(hrRec?(highRole?' Yuqori huquqli rol — o‘zingiz tanlang.':''):' Yozuv hali bog‘lanmagan (telefon bo‘yicha mos keldi) — pastda bog‘lang va rolni o‘zingiz tanlang.')} Tekshirib «Saqlash» bosing.</div>`
       : `<div class="small muted" style="margin-top:6px">📋 HR yozuvi: <b>${esc(roleHintRec.code)}${roleHintRec.pos?' · '+esc(roleHintRec.pos):''}</b> — bu lavozim uchun tizim roli yo‘q, ro‘yxatdan tanlang.</div>`)
     : '';
   const recOpt=rec=>{ const k=rec.type+':'+rec.id; const taken=rec.userUid && rec.userUid!==String(u._id);
@@ -5024,7 +5030,6 @@ async function sendDebtReminder(sid, btn){
     if(!p.phone){ toast('Ota-ona telefoni kiritilmagan yoki noto‘g‘ri — o‘quvchi kartasida to‘g‘rilang',true); return; }
     const months=(p.months||[]).map(fmtMonthUz).join(', ');
     const q=`📱 Ota-onaga SMS eslatma yuborilsinmi?\n\nO‘quvchi: ${p.name}\nTelefon: ${p.phone}\nQarz: ${fmtSom(p.due)}${months?` (${months})`:''}\n\nSMS matni:\n«${p.message}»`
-      +(p.intl?'\n\n🌍 Chet el raqami — xalqaro SMS (Eskiz’da xalqaro SMS yoqilgan bo‘lishi kerak; narxi qimmatroq).':'')
       +(p.autoToday?'\n\n⚠️ Bugun bu o‘quvchiga avtomatik qarz eslatmasi ham yuborilgan.':'')
       +(p.dry?'\n\nℹ️ SINOV rejimi (serverda sms.dryRun) — SMS haqiqatan yuborilmaydi.':'')
       +'\n\nBir o‘quvchiga kuniga faqat bitta eslatma yuboriladi.';
@@ -6309,6 +6314,7 @@ function phoneCanon(input) {
   var d = s.replace(/\D/g, '');
   var plus = /^[^0-9]*\+/.test(s);                 // '+' birinchi raqamdan OLDIN (masalan '+7 ...', '(+7) ...')
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }   // 00 — xalqaro chiqish prefiksi (0048 ... = +48 ...)
+  if (plus) d = d.replace(/^0+/, '');              // '+0…' — davlat kodi 0 bilan boshlanmaydi (phoneMask bilan bir xil)
   // Lokal O'zbekiston raqami — FAQAT '+'siz: '+7 903 157 11' (chala xorijiy, 9 raqam) jimgina O'zbekiston
   //   raqamiga (998790315711) aylanib, SMS begonaga ketmasin.
   if (!plus && d.length === 9) d = '998' + d;
@@ -6351,23 +6357,26 @@ function phonePretty(canon) {
 // Kiritish MASKASI (brauzer, jonli): '+'siz qisqa raqam — O'zbekiston ('+998 90 123 45 67');
 //   '+' (yoki 00) bilan, yoki '+'siz 10+ raqam 998 bilan boshlanmasa — xorijiy ('+7 903 157 11 24').
 //   Idempotent: maska natijasini qayta maskalash o'zgartirmaydi; yaroqli raqamni (phoneCanon) o'zgartirmaydi.
+//   Raqamlar HECH QACHON tashlab yuborilmaydi: ortiqcha raqam ko'rinib turadi va raqam yaroqsiz bo'ladi (aks holda
+//   '+998 ' ortidan yozilgan chet el raqami 9 xonaga kesilib, BOSHQA odamning O'zbekiston raqamiga aylanardi).
 function phoneMask(raw) {
   var s = String(raw == null ? '' : raw);
   var d = s.replace(/\D/g, '');
   var plus = /^[^0-9]*\+/.test(s);
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }
-  else if (!plus && d === '0') return '0';         // '00' (xalqaro prefiks) yozilmoqda
+  else if (!plus && d.charAt(0) === '0') return d.slice(0, 15);   // '0…' — '00' yozilmoqda yoki noaniq: o'zgarishsiz
   else if (!plus && !d) return '';                 // maydon tozalandi — bo'sh qoladi ('+998' qaytib «yopishmasin»)
-  if (plus || d.length > 9) d = d.replace(/^0+/, '');   // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
+  if (plus) d = d.replace(/^0+/, '');              // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
   if (d.slice(0, 3) === '998' || (!plus && d.length <= 9)) {
     // '+'siz AYNAN 9 raqam — lokal raqam (998 bilan boshlansa ham: 99 812 34 56), phoneCanon bilan bir xil.
     if (d.slice(0, 3) === '998' && (plus || d.length !== 9)) d = d.slice(3);
-    d = d.slice(0, 9);                             // operator(2) + raqam(7)
+    var rest = d.slice(9, 15); d = d.slice(0, 9);  // operator(2) + raqam(7); ortig'i — alohida, ko'rinadi
     var out = '+998';
     if (d.length) out += ' ' + d.slice(0, 2);
     if (d.length > 2) out += ' ' + d.slice(2, 5);
     if (d.length > 5) out += ' ' + d.slice(5, 7);
     if (d.length > 7) out += ' ' + d.slice(7, 9);
+    if (rest) out += ' ' + rest;
     return out;
   }
   d = d.slice(0, 15);
@@ -6383,15 +6392,19 @@ function pmCanonPhone(p){ return phoneCanon(p); }
 function pmCanonStored(p){ const s=String(p==null?'':p).trim(); return phoneCanon(s) || (/^\d{10,15}$/.test(s) ? phoneCanon('+'+s) : ''); }
 // Ko'rsatish: kanonik bo'lsa '+998 90 123 45 67' / '+7 903 157 11 24', aks holda o'zgarishsiz.
 function pmPrettyPhone(p){ const c=phoneCanon(p); return c ? phonePretty(c) : String(p==null?'':p); }
-// Yaroqsiz raqam uchun ehtimoliy TO'G'RI yozilishi («⚠️ Sifat»/forma maslahati): '+'siz chet el raqami (79031571124 ->
-//   +7 903 157 11 24), Rossiya ichki formati (8 903 ... -> +7 903 ...), '+' bilan 9 xonali (+90 123 45 67 -> +998 90 ...).
+// Yaroqsiz raqam uchun ehtimoliy TO'G'RI yozilishi («⚠️ Sifat»/forma maslahati) — faqat ISHONCHLI holatlar:
+//   '+'siz yozilgan chet el mobil raqami, davlat uzunligi ANIQ tekshiriladigan (PHONE_LEN) mamlakatda (79031571124 ->
+//   +7 903 157 11 24) va Rossiya/Qozog'iston ichki formati (8 9xx …/8 7xx … -> +7 …). O'zbekiston raqamini HECH QACHON
+//   taklif qilmaydi (chala chet el raqami begona odamning O'zbekiston raqamiga aylanmasin) va O'zbekiston operator kodi
+//   bilan boshlangan (xato terilgan O'zbekiston raqamiga o'xshash) raqamga chet el raqamini taklif qilmaydi.
 function pmPhoneHint(raw){
   const s=String(raw==null?'':raw).trim(); if(!s || phoneCanon(s)) return '';
   const d=s.replace(/\D/g,''); const cands=[];
-  if(d.length===9) cands.push('998'+d);
-  if(d.length>=10) cands.push('+'+d);
-  if(d.length===11 && d[0]==='8') cands.push('+7'+d.slice(1));
-  for(const c of cands){ const k=phoneCanon(c); if(k) return phonePretty(k); }
+  if(/^(998|989|899|20|33|50|55|77|88|9[0-9])/.test(d) && d.length<=12) return '';   // xato terilgan O'zbekiston raqamiga o'xshaydi
+  if(!/^[^0-9]*\+/.test(s) && d.length>=10) cands.push('+'+d);
+  if(d.length===11 && /^8[79]/.test(d)) cands.push('+7'+d.slice(1));
+  for(const c of cands){ const k=phoneCanon(c);
+    if(k && k.slice(0,3)!=='998' && Object.prototype.hasOwnProperty.call(PHONE_LEN, phoneCc(k))) return phonePretty(k); }
   return ''; }
 // Narx kaliti: lang-grade[-YO'NALISH]. Yo'nalish = track; track bo'sh bo'lsa, «Guruh» IT/MED bo'lsa — o'sha
 //   (forma «Guruh (A/B yoki IT/MED)», «Sinflar» ham IT/MED ni guruhga yozishni aytadi): avval bunday bola

@@ -1,12 +1,12 @@
 # Iqror — AUTH serveri (telefon + parol + OTP)
 
-Telefon raqam (+998XXXXXXXXX yoki chet el raqami: +7…, +48… — «Chet el raqamlari» bo‘limi) + parol bilan ro‘yxatdan
-o‘tish / kirish / parol tiklash. OTP (6 xonali SMS kod) orqali telefon tasdiqlanadi. **Maxfiy kalitlar faqat shu serverda.**
+Telefon raqam (+998XXXXXXXXX) + parol bilan ro‘yxatdan o‘tish / kirish / parol tiklash. OTP (6 xonali SMS kod) orqali
+telefon tasdiqlanadi. **SMS faqat O‘zbekiston raqamlariga** yuboriladi. **Maxfiy kalitlar faqat shu serverda.**
 
 ## Arxitektura (nega shunday)
 
 - **Parol — Supabase Auth (bcrypt).** Biz parolni HECH QAYERDA saqlamaymiz/hash qilmaymiz.
-  Har telefon uchun **sintetik email** yasaymiz: `998XXXXXXXXX@phone.iqroacademy.uz` (chet el: `79031571124@…`) va Supabase
+  Har telefon uchun **sintetik email** yasaymiz: `998XXXXXXXXX@phone.iqroacademy.uz` va Supabase
   Auth’ga shu email + parol bilan yoziladi. Shunday qilib mavjud `sb/firebase-auth.js` shimi
   (signInWithPassword) qayta ishlatiladi — kam yangi kod, kam xato.
 - **OTP — alohida qatlam (Eskiz SMS).** 6 xonali kod `otp_codes` jadvalida **HMAC hash** holida
@@ -86,27 +86,20 @@ oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, key
   tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad etadi va admin panel shuni aniq aytadi.
 - `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi).
 
-## Chet el raqamlari (xalqaro OTP / SMS)
+## Telefon raqamlari: SMS faqat O‘zbekiston raqamlariga
 
 Raqam qoidasi — `server/phone.cjs` (brauzer `sb/auth-api.js` va `admin.html` da AYNAN shu blok; `phone.test.cjs` tekshiradi):
 - O‘zbekiston: `+998 90 123 45 67`, `998901234567`, `901234567` (9 xonali — faqat `+`siz) → kanonik `998901234567`.
-- Chet el: **faqat `+` (yoki `00`) bilan** to‘liq: `+7 903 157 11 24` → kanonik `79031571124` (bazada `+`siz saqlanadi).
-  `+`siz uzun raqam (`79031571124`, `8 903 …`) — noaniq, yaroqsiz («⚠️ Sifat» `+` qo‘shishni taklif qiladi).
-  Asosiy davlatlar uchun uzunlik aniq tekshiriladi; chala raqam (`+7 903 157 11`) hech qachon O‘zbekiston raqamiga aylanmaydi.
-- Mijoz serverga raqamni doim `+` bilan yuboradi (`wirePhone`).
-
-OTP chet el raqamiga **Eskiz xalqaro SMS** (`/api/message/sms/send-global`, `country_code` bilan) orqali ketadi.
-⚠️ Eskiz kabinetida xalqaro SMS yoqilgan va balans yetarli bo‘lishi kerak. Firibgarlik (xalqaro SMS «pumping») himoyasi:
-- `register` / `change_phone`: chet el raqami **maktab ma’lumotlarida bo‘lishi shart** — o‘quvchi kartasidagi ota/ona
-  telefoni (`student_private.parentPhone/parentPhone2`) yoki xodim/o‘qituvchi telefoni. Aks holda: «maktab ma’lumotlarida
-  topilmadi — farzandingiz kartasiga shu raqamni (+ bilan) yozdiring». Ro‘yxat `knownPhoneCacheSec` (60) soniya keshlanadi;
-  bunday rad javoblari IP bo‘yicha soatiga `otpMaxPerIpHour` tadan.
-- Butun tizim bo‘yicha chegara: `otpIntlMaxPerHour` (20) / `otpIntlMaxPerDay` (60) ta chet el OTP; `0` — o‘chirilgan.
-- Eskiz chet el raqamini ANIQ rad etsa (xalqaro SMS yoqilmagan va h.k.) — foydalanuvchiga aytiladi (kod bekor qilinadi).
-- O‘chirish: `auth.intlOtp: false` yoki `sms.international: false` (ikkinchisi qo‘lda/avtomatik SMS’ni ham o‘chiradi).
-
-«Eslatma» (sms-remind) va avtomatik `sms-worker` ham chet el raqamiga yuboradi (`sms.international` ≠ false). Worker’da
-chet el raqamini Eskiz aniq rad etsa — o‘sha xabar yakuniy (qayta urinilmaydi) va ketma-ket xato hisobiga kirmaydi.
+- Chet el raqami (`+7 903 157 11 24`, `+48 789 706 619` — faqat `+` yoki `00` bilan) — **ma’lumot sifatida to‘g‘ri**
+  (o‘quvchi kartasi, «⚠️ Sifat» xato demaydi), lekin unga **SMS yuborilmaydi** (maktab qoidasi):
+  - OTP (`request-otp`: ro‘yxat / parol tiklash / telefon almashtirish) chet el raqami uchun darhol rad etiladi:
+    «SMS kod faqat O‘zbekiston raqamlariga yuboriladi… yoki «Email yoki Google bilan» kiring» (bazaga qaralmaydi —
+    enumeration yo‘q); brauzer ham shu xabarni ko‘rsatadi;
+  - «Eslatma» (`sms-remind`) va avtomatik `sms-worker` faqat O‘zbekiston raqamini oladi (ota chet el raqami bo‘lsa —
+    onaning O‘zbekiston raqami); O‘zbekiston raqami umuman bo‘lmasa — SMS yo‘q, sababi aytiladi;
+  - `payments/sms.cjs` `send()` chet el raqamiga Eskiz’ga so‘rov yubormaydi (`bad_phone:intl`).
+- Kiritish maskasi raqamlarni hech qachon tashlab yubormaydi (ortiqcha raqam ko‘rinadi, raqam yaroqsiz bo‘ladi) —
+  `+998 ` ortidan yozilgan boshqa raqam begona odamning O‘zbekiston raqamiga aylanib, kod unga ketmaydi.
 
 ## config.json (maxfiy — gitga tushmaydi)
 

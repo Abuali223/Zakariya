@@ -74,6 +74,7 @@ function phoneCanon(input) {
   var d = s.replace(/\D/g, '');
   var plus = /^[^0-9]*\+/.test(s);                 // '+' birinchi raqamdan OLDIN (masalan '+7 ...', '(+7) ...')
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }   // 00 — xalqaro chiqish prefiksi (0048 ... = +48 ...)
+  if (plus) d = d.replace(/^0+/, '');              // '+0…' — davlat kodi 0 bilan boshlanmaydi (phoneMask bilan bir xil)
   // Lokal O'zbekiston raqami — FAQAT '+'siz: '+7 903 157 11' (chala xorijiy, 9 raqam) jimgina O'zbekiston
   //   raqamiga (998790315711) aylanib, SMS begonaga ketmasin.
   if (!plus && d.length === 9) d = '998' + d;
@@ -116,23 +117,26 @@ function phonePretty(canon) {
 // Kiritish MASKASI (brauzer, jonli): '+'siz qisqa raqam — O'zbekiston ('+998 90 123 45 67');
 //   '+' (yoki 00) bilan, yoki '+'siz 10+ raqam 998 bilan boshlanmasa — xorijiy ('+7 903 157 11 24').
 //   Idempotent: maska natijasini qayta maskalash o'zgartirmaydi; yaroqli raqamni (phoneCanon) o'zgartirmaydi.
+//   Raqamlar HECH QACHON tashlab yuborilmaydi: ortiqcha raqam ko'rinib turadi va raqam yaroqsiz bo'ladi (aks holda
+//   '+998 ' ortidan yozilgan chet el raqami 9 xonaga kesilib, BOSHQA odamning O'zbekiston raqamiga aylanardi).
 function phoneMask(raw) {
   var s = String(raw == null ? '' : raw);
   var d = s.replace(/\D/g, '');
   var plus = /^[^0-9]*\+/.test(s);
   if (d.slice(0, 2) === '00') { plus = true; d = d.slice(2); }
-  else if (!plus && d === '0') return '0';         // '00' (xalqaro prefiks) yozilmoqda
+  else if (!plus && d.charAt(0) === '0') return d.slice(0, 15);   // '0…' — '00' yozilmoqda yoki noaniq: o'zgarishsiz
   else if (!plus && !d) return '';                 // maydon tozalandi — bo'sh qoladi ('+998' qaytib «yopishmasin»)
-  if (plus || d.length > 9) d = d.replace(/^0+/, '');   // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
+  if (plus) d = d.replace(/^0+/, '');              // xalqaro raqam: davlat kodi 0 bilan boshlanmaydi
   if (d.slice(0, 3) === '998' || (!plus && d.length <= 9)) {
     // '+'siz AYNAN 9 raqam — lokal raqam (998 bilan boshlansa ham: 99 812 34 56), phoneCanon bilan bir xil.
     if (d.slice(0, 3) === '998' && (plus || d.length !== 9)) d = d.slice(3);
-    d = d.slice(0, 9);                             // operator(2) + raqam(7)
+    var rest = d.slice(9, 15); d = d.slice(0, 9);  // operator(2) + raqam(7); ortig'i — alohida, ko'rinadi
     var out = '+998';
     if (d.length) out += ' ' + d.slice(0, 2);
     if (d.length > 2) out += ' ' + d.slice(2, 5);
     if (d.length > 5) out += ' ' + d.slice(5, 7);
     if (d.length > 7) out += ' ' + d.slice(7, 9);
+    if (rest) out += ' ' + rest;
     return out;
   }
   d = d.slice(0, 15);

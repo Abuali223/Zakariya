@@ -90,7 +90,9 @@ const MASK = [
   ['', ''], ['   ', ''], ['+998 ', '+998'], ['+998 9', '+998 9'], ['+998 90 123 45 67', '+998 90 123 45 67'], ['901234567', '+998 90 123 45 67'],
   ['+99', '+99'], ['+9', '+9'], ['+', '+'], ['+7', '+7'], ['+79', '+7 9'], ['+79031571124', '+7 903 157 11 24'],
   ['79031571124', '+7 903 157 11 24'], ['0', '0'], ['00', '+'], ['007', '+7'], ['0048789706619', '+48 789 706 619'],
-  ['+998 90 123 45 678', '+998 90 123 45 67'],
+  // Raqam TASHLANMAYDI: ortiqcha raqam ko'rinadi (raqam yaroqsiz bo'ladi, begona O'zbekiston raqamiga aylanmaydi)
+  ['+998 90 123 45 678', '+998 90 123 45 67 8'], ['+998 77012345678', '+998 77 012 34 56 78'], ['+998 998901234567', '+998 99 890 12 34 567'],
+  ['0901234567', '0901234567'], ['+0998901234567', '+998 90 123 45 67'],
 ];
 for (const [inp, exp] of MASK) ok(`phoneMask(${JSON.stringify(inp)}) = ${JSON.stringify(exp)}`, P.phoneMask(inp) === exp, P.phoneMask(inp));
 
@@ -129,6 +131,8 @@ for (const s of inputs) {
       && (c.slice(0, 3) === '998' ? c.length === 12 : P.phoneIso(c) !== '');
   }
   good = good && P.phoneMask(P.phoneMask(s)) === P.phoneMask(s);          // maska idempotent
+  // XAVFSIZLIK: yaroqsiz kiritma maska orqali hech qachon YAROQLI O'ZBEKISTON raqamiga aylanmaydi (SMS begonaga ketmasin)
+  if (!c) { const m1 = P.phoneCanon(P.phoneMask(s)), m2 = P.phoneCanon(W.maskPhone(s)); good = good && !/^998/.test(m1) && !/^998/.test(m2); }
   if (!good) { inv++; if (!firstInv) firstInv = s; }
 }
 ok(`${inputs.length} kirish: brauzer nusxalari server bilan bir xil`, mism === 0, { mism, firstMism, srv: firstMism != null && P.phoneCanon(firstMism) });
@@ -141,6 +145,21 @@ ok('+998 +7 -> +7', W.maskPhone('+998 +7') === '+7', W.maskPhone('+998 +7'));
 ok('+998 +79031571124 -> +7 903 157 11 24', W.maskPhone('+998 +79031571124') === '+7 903 157 11 24', W.maskPhone('+998 +79031571124'));
 ok('+998 90 (oddiy) o\'zgarmaydi', W.maskPhone('+998 90') === '+998 90');
 
+sec('klaviatura simulyatsiyasi: «+998 » ortidan yozish (maydon maskasi har tugmada)');
+{
+  const typeAfterPrefix = (txt) => { let v = '+998 '; for (const ch of txt) v = W.maskPhone(v + ch); return v; };
+  let stranger = 0, ex = null, okUz = 0;
+  const FOREIGN = ['+77012345678', '+79031571124', '+48789706619', '+996555123456', '+992935123456', '+99365123456', '+994501234567',
+    '+995555123456', '+905321234567', '+971501234567', '+821012345678', '+8613812345678', '+12025550123', '+447700900123',
+    '77012345678', '79031571124', '996555123456', '998901234567', '00 7 903 157 11 24'];
+  for (const f of FOREIGN) { const v = typeAfterPrefix(f); const c = W.normPhone(v); if (c && c.slice(0, 3) === '998' && c !== '998' + f.replace(/\D/g, '').slice(-9) ) { stranger++; if (!ex) ex = [f, v, c]; } }
+  ok('chet el raqami «+998 » ortidan yozilsa — begona O\'zbekiston raqami chiqmaydi', stranger === 0, { stranger, ex });
+  for (const nat of ['901234567', '936301111', '770143777', '331234567']) { const v = typeAfterPrefix(nat); if (W.normPhone(v) === '998' + nat) okUz++; }
+  ok('O\'zbekiston raqami odatdagidek yoziladi', okUz === 4);
+  ok('«+998 » + «+7…» -> chet el ko\'rinishi (rad etiladi, begonaga ketmaydi)', typeAfterPrefix('+79031571124') === '+7 903 157 11 24');
+  ok('«+998 » + 998901234567 (takror 998) -> yaroqsiz, ko\'rinadi', W.normPhone(typeAfterPrefix('998901234567')) === null);
+}
+
 sec('wirePhone (mijoz -> server)');
 ok('kanonik chet el -> +', W.wirePhone('79031571124') === '+79031571124' && W.wirePhone(W.normPhone('+48 789 706 619')) === '+48789706619');
 ok('kanonik UZ -> +998', W.wirePhone('998901234567') === '+998901234567');
@@ -149,7 +168,17 @@ ok('xom 9 xonali -> +998', W.wirePhone('901234567') === '+998901234567');
 sec('admin.html: maslahat (pmPhoneHint) va lavozim -> rol (posToRole)');
 ok('+ siz chet el -> +7', AD.pmPhoneHint('79031571124') === '+7 903 157 11 24', AD.pmPhoneHint('79031571124'));
 ok('Rossiya 8 ... -> +7', AD.pmPhoneHint('8 903 157 11 24') === '+7 903 157 11 24', AD.pmPhoneHint('8 903 157 11 24'));
-ok('+ bilan 9 xonali -> +998', AD.pmPhoneHint('+90 123 45 67') === '+998 90 123 45 67', AD.pmPhoneHint('+90 123 45 67'));
+ok('+ bilan 9 xonali -> maslahat YO\'Q (O\'zbekiston raqami taklif qilinmaydi)', AD.pmPhoneHint('+90 123 45 67') === '', AD.pmPhoneHint('+90 123 45 67'));
+ok('PL +siz -> +48', AD.pmPhoneHint('48789706619') === '+48 789 706 619', AD.pmPhoneHint('48789706619'));
+for (const v of ['+7 903 157 11', '+996 555 123', '+7 701 234 56', '98 123 45 678', '93 123 45 678', '98 90 123 45 67', '8 371 234 56 78',
+  '93 630 11 11 1', '989 90 123 45 67', '77 123 45 67 89', '33 123 45 67 89', '94 123 45 678', '95 123 45 678', '55 123 45 678', '50 123 45 678', '97 312 34 567', '89901234567'])
+  ok(`xavfli/noaniq maslahat yo'q: ${v}`, AD.pmPhoneHint(v) === '', AD.pmPhoneHint(v));
+{ // 20 000 ta tasodifiy «bitta raqam qo'shilgan» O'zbekiston raqami — hech biriga chet el maslahati berilmaydi
+  let s0 = 777, bad = 0, ex = null; const r = n => { s0 = (Math.imul(s0, 1103515245) + 12345) >>> 0; return s0 % n; };
+  const OPS = ['90', '91', '93', '94', '95', '97', '98', '99', '33', '50', '55', '77', '88', '20'];
+  for (let i = 0; i < 20000; i++) { let n = OPS[r(OPS.length)]; while (n.length < 9) n += String(r(10)); const pos = r(10); const typo = n.slice(0, pos) + String(r(10)) + n.slice(pos);
+    for (const v of [typo, '998' + typo]) { const h = AD.pmPhoneHint(v); if (h) { bad++; if (!ex) ex = [v, h]; } } }
+  ok('UZ typo -> foreign hint: 0', bad === 0, { bad, ex }); }
 ok('to\'g\'ri raqam -> maslahat yo\'q', AD.pmPhoneHint('+48789706619') === '' && AD.pmPhoneHint('901234567') === '');
 ok('tuzatib bo\'lmaydigan -> bo\'sh', AD.pmPhoneHint('12345') === '' && AD.pmPhoneHint('') === '');
 ok('pmPrettyPhone', AD.pmPrettyPhone('+79031571124') === '+7 903 157 11 24' && AD.pmPrettyPhone('abc') === 'abc');

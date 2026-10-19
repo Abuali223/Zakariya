@@ -26,7 +26,6 @@ const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __di
 const { makeEskiz, DEF_NEW, DEF_DEBT, fmtSom, fmtMonth, fillTpl, tashkentDay, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
 
 const SMS = CFG.sms || {};
-const INTL = SMS.international !== false;       // chet el raqamlariga SMS (Eskiz send-global)
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -37,16 +36,16 @@ const tpl = (k, def) => (SMS.templates && SMS.templates[k]) || def;
 //   Bir nechta o'quvchiga mos kalit (bir bolaning hujjat id'si boshqasining studentId'si / studentId takrori) — NOANIQ:
 //   SMS yuborilmaydi (bir bolaning qarzi boshqa oilaga ketmasin; «⚠️ Sifat»da ko'rinadi).
 //   Telefon: o'quvchining o'z maxfiy yozuvi (hujjat id); yo'q bo'lsa — studentId kalitli yozuv (boshqa bolaning hujjati bo'lmasa).
-//   Telefon — parentPhone / parentPhone2 dan BIRINCHI YAROQLI raqam (auth/sms-remind bilan bir xil): O'zbekiston mobil
-//   yoki chet el raqami ('+' bilan; Eskiz xalqaro SMS — sms.international=false bo'lsa faqat O'zbekiston);
-//   yaroqlisi bo'lmasa — telefon yo'q (SMS claim ham qilinmaydi: noto'g'ri raqam Eskiz xatosi deb sanalmasin).
+//   Telefon — parentPhone / parentPhone2 dan BIRINCHI O'ZBEKISTON mobil raqami (auth/sms-remind bilan bir xil). SMS FAQAT
+//   O'zbekiston raqamlariga: otaniki chet el raqami bo'lsa — onaniki (O'zbekiston) olinadi; O'zbekiston raqami umuman
+//   bo'lmasa — telefon yo'q (SMS claim ham qilinmaydi: noto'g'ri/chet el raqami Eskiz xatosi deb sanalmasin).
 //   KANONIK kalit (studentId || id) — qo'lda eslatma qulfi (remind__<kanonik>__<sana>) shu bilan tekshiriladi.
 const CANON = {}; const AMBIG = new Set();
 async function phoneMap() {
   const priv = {}, m = {};
   try {
     const snap = await db.collection('student_private').get();
-    snap.docs.forEach(d => { const p = d.data() || {}; priv[d.id] = canonMobile(p.parentPhone, INTL) || canonMobile(p.parentPhone2, INTL) || ''; });
+    snap.docs.forEach(d => { const p = d.data() || {}; priv[d.id] = canonMobile(p.parentPhone) || canonMobile(p.parentPhone2) || ''; });
   } catch (e) { log('phoneMap xato:', e.message); }
   try {
     const rows = (await db.collection('students').get()).docs.map(d => ({ id: d.id, sid: String((d.data() || {}).studentId || '').trim() }));
@@ -106,12 +105,6 @@ async function sendOne(eskiz, id, phone, msg) {
   // Mahalliy tekshiruv (noto'g'ri raqam — Eskiz'ga so'rov ketmagan): yakuniy, qayta urinilmaydi, Eskiz xatosi sanalmaydi.
   if (!r.ok && /^bad_phone/.test(String(r.error || ''))) {
     await markSms(id, { status: 'failed', attempts: MAXTRIES, error: String(r.error || '') });
-    return Object.assign({}, r, { status: 'failed' });
-  }
-  // Chet el raqami ANIQ rad etildi (xalqaro SMS yoqilmagan / yo'nalish yopiq / balans) — bu raqamga xos: yakuniy (qayta
-  //   urinilmaydi — xalqaro SMS puli/limiti behuda ketmasin) va ketma-ket xato hisobiga KIRMAYDI (O'zbekiston SMS'lari to'xtamasin).
-  if (!r.ok && status === 'failed' && String(phone || '').slice(0, 3) !== '998') {
-    await markSms(id, { status: 'failed', attempts: MAXTRIES, providerId: '', error: REJ + 'intl: ' + String(r.error || '') });
     return Object.assign({}, r, { status: 'failed' });
   }
   await markSms(id, { status, providerId: r.id || '', error: r.ok ? '' : ((status === 'failed' ? REJ : '') + String(r.error || '')) });

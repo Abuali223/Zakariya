@@ -327,119 +327,56 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     ok('staff back link', state.staff[0].userUid === u.id, JSON.stringify(state.staff[0]));
   }
   {
-    const { H, lastCode } = setup(null, { state: { staff: [{ id: 's9', staffId: 'IQX-009', name: 'Chet', position: 'Kassir', phone: '+7 903 157 11 24', userUid: '' }], teachers: [], student_private: [] } });
-    const r0 = await H.requestOtp({ phone: '+7 903 157 11 24', purpose: 'register' });
-    ok('intl staff phone known (HR) -> otp ok', r0.ok === true, JSON.stringify(r0));
-    const r1 = await H.verifyOtp({ phone: '+79031571124', purpose: 'register', code: lastCode() });
-    const r = await H.register({ ticket: r1.ticket, password: 'Passw0rd', firstName: 'C', lastName: 'H', role: 'staff' });
-    ok('intl staff linked by phone', r.ok === true && r.linked && r.linked.code === 'IQX-009', JSON.stringify(r));
+    // HR maydonlarida HTML (admin/HR qo'lda yozadi) — xabarga faqat zararsiz matn (eski sahifalar innerHTML ishlatadi).
+    const { H, lastCode } = setup(null, { state: { staff: [{ id: 'sx', staffId: 'IQX-<b>7</b>', name: 'X', position: 'Kassir<img src=x onerror=alert(1)>', phone: '+998901239000', userUid: '' }], teachers: [] } });
+    await H.requestOtp({ phone: '998901239000', purpose: 'register' });
+    const r1 = await H.verifyOtp({ phone: '+998901239000', purpose: 'register', code: lastCode() });
+    const r = await H.register({ ticket: r1.ticket, password: 'Passw0rd', firstName: 'X', lastName: 'Y', role: 'staff' });
+    ok('HR HTML stripped from message/linked', r.ok === true && !/[<>&]/.test(r.message) && !/[<>&]/.test(JSON.stringify(r.linked)) && /Kassir/.test(r.message), JSON.stringify(r));
   }
+  sec('lib: staff match by stored canonical foreign phone (data rule)');
+  ok('matchStaffByPhone canonical foreign -> linked', L.matchStaffByPhone('79031571124', [{ table: 'staff', id: 's9', code: 'IQX-009', phone: '+7 903 157 11 24', userUid: '' }]).status === 'linked');
 
-  // ---------------- chet el raqami: ota-ona ro'yxati (maktab ma'lumotida bor) ----------------
-  sec('intl parent: known number -> OTP via eskiz (canonical), register, login');
+  // ---------------- SMS faqat O'zbekiston raqamlariga ----------------
+  sec('UZ-only SMS: foreign number -> OTP refused for every purpose (no SMS, no otp row, no enumeration)');
   {
-    const SP = [{ id: 'S380', parentPhone: '+48789706619', parentPhone2: '' }, { id: 'S466', parentPhone: '', parentPhone2: '+7 963 768 23 01' }];
-    const { H, state, captured, lastCode } = setup(null, { state: { student_private: SP, staff: [], teachers: [] } });
+    const SP = { student_private: [{ id: 'S380', parentPhone: '+48789706619' }], staff: [{ id: 's9', staffId: 'IQX-009', phone: '+7 903 157 11 24', userUid: '' }], teachers: [] };
+    const { H, state, captured, lastCode } = setup(null, { state: SP });
     let r = await H.requestOtp({ phone: '+48 789 706 619', purpose: 'register', _ip: '1.2.3.4' });
-    ok('known intl -> ok', r.ok === true, JSON.stringify(r));
-    ok('sms to canonical intl number', captured.length === 1 && captured[0].phone === '48789706619', JSON.stringify(captured));
-    ok('otp row canonical', state.otp_codes.some(o => o.phone === '48789706619' && o.purpose === 'register'));
-    const r1 = await H.verifyOtp({ phone: '+48789706619', purpose: 'register', code: lastCode() });
-    ok('verify with +E164', r1.ok === true && !!r1.ticket, JSON.stringify(r1));
-    r = await H.register({ ticket: r1.ticket, password: 'Parol123', firstName: 'Mehrinigor', lastName: 'Obidova', role: 'parent' });
-    ok('parent registered', r.ok === true && r.verified === true && r.phone === '48789706619', JSON.stringify(r));
-    ok('synthetic email', state.authUsers.some(x => x.email === '48789706619@phone.test'));
-    r = await H.login({ phone: '+48 789 706 619', password: 'Parol123' });
-    ok('login with formatted intl', r.ok === true && !!r.access_token, JSON.stringify(r));
-    r = await H.login({ phone: '48789706619', password: 'Parol123' });
-    ok('login with bare digits (ambiguous) rejected generically', r.ok === false && /noto‘g‘ri/.test(r.error || ''), JSON.stringify(r));
-    // parentPhone2 (ona) ham ma'lum
-    r = await H.requestOtp({ phone: '+79637682301', purpose: 'register', _ip: '1.2.3.5' });
-    ok('parentPhone2 intl known -> ok', r.ok === true, JSON.stringify(r));
-    // reset (foydalanuvchi bor) — ma'lumot tekshiruvisiz, SMS ketadi
-    r = await H.requestOtp({ phone: '+48789706619', purpose: 'reset', _ip: '1.2.3.6' });
-    ok('intl reset ok + sms', r.ok === true && captured.some(c => c.phone === '48789706619' && captured.indexOf(c) > 0), JSON.stringify(r));
-  }
-
-  sec('intl: unknown number refused (no SMS, no otp row), probes limited per IP');
-  {
-    const { H, state, captured } = setup({ otpMaxPerIpHour: 3 }, { state: { student_private: [{ id: 'S1', parentPhone: '+48789706619' }], staff: [], teachers: [] } });
-    let r = await H.requestOtp({ phone: '+7 916 123 45 67', purpose: 'register', _ip: '9.9.9.9' });
-    ok('unknown intl refused with guidance', r.ok === false && /maktab ma’lumotlarida topilmadi/.test(r.error || ''), JSON.stringify(r));
-    ok('no sms, no otp row', captured.length === 0 && !state.otp_codes.some(o => o.phone === '79161234567'));
-    for (let i = 0; i < 3; i++) r = await H.requestOtp({ phone: '+7 916 123 45 6' + i, purpose: 'register', _ip: '9.9.9.9' });
-    ok('4th probe from same IP -> too many', r.ok === false && /Juda ko‘p/.test(r.error || ''), JSON.stringify(r));
-    r = await H.requestOtp({ phone: '+7 916 123 45 69', purpose: 'register', _ip: '8.8.8.8' });
-    ok('other IP still gets guidance', r.ok === false && /topilmadi/.test(r.error || ''), JSON.stringify(r));
-    r = await H.requestOtp({ phone: '+90 123 45 67', purpose: 'register' });
-    ok('+ with 9 digits (partial) -> bad phone', r.ok === false && /noto‘g‘ri/.test(r.error || ''), JSON.stringify(r));
-    r = await H.requestOtp({ phone: '79161234567', purpose: 'register' });
-    ok('intl without + -> bad phone hint', r.ok === false && /\+ bilan/.test(r.error || ''), JSON.stringify(r));
-  }
-
-  sec('intl: change_phone needs known number; disabled switches; DB error fail-closed');
-  {
-    const { H, state, lastCode } = setup({ knownPhoneCacheSec: 0 }, { state: { student_private: [], staff: [], teachers: [] } });
+    ok('register foreign (even in school records) -> UZ-only message', r.ok === false && /faqat O‘zbekiston/.test(r.error || '') && /Email yoki Google/.test(r.error || ''), JSON.stringify(r));
+    r = await H.requestOtp({ phone: '+7 903 157 11 24', purpose: 'register' });
+    ok('register foreign staff phone -> refused', r.ok === false && /faqat O‘zbekiston/.test(r.error || ''), JSON.stringify(r));
+    r = await H.requestOtp({ phone: '+7 916 123 45 67', purpose: 'reset' });
+    ok('reset foreign (unknown) -> same UZ-only message (no enumeration)', r.ok === false && /faqat O‘zbekiston/.test(r.error || ''), JSON.stringify(r));
+    ok('no SMS, no otp rows for foreign', captured.length === 0 && state.otp_codes.length === 0, JSON.stringify({ captured, otp: state.otp_codes }));
+    // change_phone (authed) — ham rad
     await H.requestOtp({ phone: '998901112201', purpose: 'register' });
     const r1 = await H.verifyOtp({ phone: '998901112201', purpose: 'register', code: lastCode() });
     await H.register({ ticket: r1.ticket, password: 'Passw0rd', firstName: 'C', lastName: 'P', role: 'parent' });
     const uid = state.users.find(u => u.phone === '998901112201').id;
-    let r = await H.requestOtp({ phone: '+7 903 157 11 24', purpose: 'change_phone', jwt: uid });
-    ok('change_phone to unknown intl refused', r.ok === false && /topilmadi/.test(r.error || ''), JSON.stringify(r));
-    state.student_private.push({ id: 'SX', parentPhone: '+7 903 157 11 24' });   // maktab raqamni yozdi (kesh 0 s)
+    const n0 = captured.length;
     r = await H.requestOtp({ phone: '+7 903 157 11 24', purpose: 'change_phone', jwt: uid });
-    ok('after school records it -> ok', r.ok === true, JSON.stringify(r));
-    const r2 = await H.verifyOtp({ phone: '+79031571124', purpose: 'change_phone', code: lastCode() });
-    r = await H.changePhoneConfirm({ ticket: r2.ticket });
-    ok('phone changed to intl', r.ok === true && state.users.find(u => u.id === uid).phone === '79031571124', JSON.stringify(r));
+    ok('change_phone to foreign -> refused, no SMS', r.ok === false && /faqat O‘zbekiston/.test(r.error || '') && captured.length === n0, JSON.stringify(r));
+    // verify for foreign (no code ever issued) -> no ticket
+    r = await H.verifyOtp({ phone: '+48789706619', purpose: 'register', code: '123456' });
+    ok('verify foreign -> no ticket', r.ok === false && !r.ticket, JSON.stringify(r));
+    // login with foreign number (no such account) -> generic error
+    r = await H.login({ phone: '+48 789 706 619', password: 'Parol123' });
+    ok('login foreign (no account) -> generic error', r.ok === false && /noto‘g‘ri/.test(r.error || ''), JSON.stringify(r));
+  }
+  sec('UZ-only SMS: malformed inputs');
+  {
+    const { H, captured } = setup();
+    let r = await H.requestOtp({ phone: '+90 123 45 67', purpose: 'register' });
+    ok('+ with 9 digits (partial foreign) -> bad phone, no SMS', r.ok === false && /noto‘g‘ri/.test(r.error || '') && captured.length === 0, JSON.stringify(r));
+    r = await H.requestOtp({ phone: '79161234567', purpose: 'register' });
+    ok('foreign without + -> bad phone (UZ hint)', r.ok === false && /\+998/.test(r.error || ''), JSON.stringify(r));
+    r = await H.requestOtp({ phone: '+998 90 123 45 67 8', purpose: 'register' });
+    ok('UZ with extra digit (mask shows it) -> bad phone', r.ok === false && /noto‘g‘ri/.test(r.error || ''), JSON.stringify(r));
   }
   {
-    const SP = { student_private: [{ id: 'S1', parentPhone: '+48789706619' }], staff: [], teachers: [] };
-    let s = setup({ intlOtp: false }, { state: SP });
-    let r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('auth.intlOtp=false -> refused', r.ok === false && /o‘chirilgan/.test(r.error || '') && s.captured.length === 0, JSON.stringify(r));
-    s = setup(null, { state: SP, smsCfg: { international: false } });
-    r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('sms.international=false -> refused', r.ok === false && /o‘chirilgan/.test(r.error || ''), JSON.stringify(r));
-    r = await s.H.requestOtp({ phone: '998901112202', purpose: 'register' });
-    ok('UZ unaffected when intl off', r.ok === true, JSON.stringify(r));
-    s = setup(null, { state: Object.assign({ __failSelect: { student_private: true } }, SP) });
-    r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('records read error -> fail-closed', r.ok === false && /Server xatosi/.test(r.error || '') && s.captured.length === 0, JSON.stringify(r));
-  }
-
-  sec('intl: global hourly/daily cap; Eskiz rejection reported; ambiguous = ok');
-  {
-    const SP = { student_private: [{ id: 'S1', parentPhone: '+48789706619' }, { id: 'S2', parentPhone: '+79637682301' }], staff: [], teachers: [] };
-    const s = setup({ otpIntlMaxPerHour: 2 }, { state: SP });
-    const recent = new Date(Date.now() - 60e3).toISOString();
-    s.state.otp_codes.push({ id: 901, phone: '79991112233', purpose: 'register', codeHash: 'x', expiresAt: recent, attempts: 0, consumed: true, createdAt: recent });
-    s.state.otp_codes.push({ id: 902, phone: '4855511122', purpose: 'register', codeHash: 'x', expiresAt: recent, attempts: 0, consumed: true, createdAt: recent });
-    s.state.otp_codes.push({ id: 903, phone: '998901234567', purpose: 'register', codeHash: 'x', expiresAt: recent, attempts: 0, consumed: true, createdAt: recent });
-    let r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('hourly intl cap reached -> refused', r.ok === false && /vaqtincha cheklangan/.test(r.error || '') && s.captured.length === 0, JSON.stringify(r));
-    r = await s.H.requestOtp({ phone: '998907770001', purpose: 'register' });
-    ok('UZ not counted / not blocked', r.ok === true, JSON.stringify(r));
-  }
-  {
-    const SP = { student_private: [{ id: 'S1', parentPhone: '+48789706619' }], staff: [], teachers: [] };
-    const s = setup({ otpIntlMaxPerHour: 0 }, { state: SP });
-    const r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('cap 0 -> intl OTP off', r.ok === false && /o‘chirilgan/.test(r.error || ''), JSON.stringify(r));
-  }
-  {
-    const SP = { student_private: [{ id: 'S1', parentPhone: '+48789706619' }], staff: [], teachers: [] };
-    const s = setup(null, { state: SP, sendImpl: async () => ({ ok: false, error: 'International SMS is not enabled', httpStatus: 400, ambiguous: false }) });
-    let r = await s.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('eskiz rejects intl -> user told, code voided', r.ok === false && /SMS yuborilmadi/.test(r.error || '') && s.state.otp_codes.every(o => o.consumed === true), JSON.stringify(r));
-    const s2 = setup(null, { state: SP, sendImpl: async () => ({ ok: false, error: 'http_502', httpStatus: 502, ambiguous: true }) });
-    r = await s2.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('ambiguous (5xx) -> ok (code may arrive)', r.ok === true, JSON.stringify(r));
-    const s3 = setup(null, { state: SP, sendImpl: async () => { const e = new Error('connect ECONNREFUSED'); e.code = 'ECONNREFUSED'; e.stage = 'send'; throw e; } });
-    r = await s3.H.requestOtp({ phone: '+48789706619', purpose: 'register' });
-    ok('connection refused (definitely not sent) -> told', r.ok === false && /SMS yuborilmadi/.test(r.error || ''), JSON.stringify(r));
     const s4 = setup(null, { sendImpl: async () => ({ ok: false, error: 'x', httpStatus: 400, ambiguous: false }) });
-    r = await s4.H.requestOtp({ phone: '998901230555', purpose: 'register' });
+    const r = await s4.H.requestOtp({ phone: '998901230555', purpose: 'register' });
     ok('UZ behaviour unchanged (always ok)', r.ok === true, JSON.stringify(r));
   }
 

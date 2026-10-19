@@ -16,10 +16,6 @@
     "loginMaxFails": 10,
     "loginLockMin": 15,
     "otpTemplate": "IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.",
-    "intlOtp": true,
-    "otpIntlMaxPerHour": 20,
-    "otpIntlMaxPerDay": 60,
-    "knownPhoneCacheSec": 60,
     "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz"
   },
   "sms": {
@@ -29,7 +25,6 @@
     "eskizPassword": "ESKIZ_PAROL — MAXFIY (yoki token bilan)",
     "token": "",
     "from": "4546",
-    "international": true,
     "remindRoles": ["director", "finance_mgr"],
     "remindMaxPerHour": 60,
     "remindMaxPerDay": 500,

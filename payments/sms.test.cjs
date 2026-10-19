@@ -128,33 +128,26 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   ok('ulangandan keyin ECONNRESET -> unknown', err && !err.preconnect && S.sendStatus(null, err) === 'unknown', err && { code: err.code, pre: err.preconnect });
   // canonMobile / smsName
   ok('canonMobile: UZ mobil ha, 8-xx/landline/+siz chet el yo\'q', S.canonMobile('+998 70 014 37 77') === '998700143777' && S.canonMobile('901234567') === '998901234567' && S.canonMobile('8 90 123 45 67') === '' && S.canonMobile('998611234567') === '' && S.canonMobile('79161234567') === '');
-  ok('canonMobile: chet el + bilan ha; intl=false -> yo\'q', S.canonMobile('+7 916 123 45 67') === '79161234567' && S.canonMobile('+7 916 123 45 67', false) === '' && S.canonMobile('+998 90 123 45 67', false) === '998901234567');
+  ok('canonMobile: chet el raqami (+ bilan, ma\'lumot sifatida to\'g\'ri) — SMS uchun yo\'q', S.canonMobile('+7 916 123 45 67') === '' && S.canonMobile('+48 789 706 619') === '');
 
-  // 7j) CHET EL raqami -> /sms/send-global (country_code; 'from' yo'q), kanonik raqam ham qabul qilinadi
+  // 7j) SMS FAQAT O'zbekiston raqamlariga: chet el raqami -> bad_phone:intl, Eskiz'ga so'rov YO'Q (kanonik yoki + bilan)
   plan = [SEND_OK]; calls.length = 0;
   r = await E.send('+7 903 157 11 24', 'Salom');
-  { const q = new URLSearchParams(calls[0] && calls[0].body);
-    ok('chet el: send-global + RU + kanonik raqam, from yo\'q', r.ok && r.intl === true && calls[0].path === '/api/message/sms/send-global' && q.get('mobile_phone') === '79031571124' && q.get('country_code') === 'RU' && !q.has('from') && !q.has('unicode'), { r, calls }); }
-  plan = [SEND_OK]; calls.length = 0;
-  r = await E.send('77012345678', 'Привет');          // bazadagi KANONIK (+siz) raqam; kirill -> unicode=1
-  { const q = new URLSearchParams(calls[0] && calls[0].body);
-    ok('kanonik chet el (KZ) + kirill -> unicode=1', r.ok && calls[0].path === '/api/message/sms/send-global' && q.get('country_code') === 'KZ' && q.get('unicode') === '1', calls); }
+  ok('chet el (+7) -> bad_phone:intl, so\'rov yo\'q', !r.ok && r.error === 'bad_phone:intl' && r.intl === true && calls.length === 0, { r, calls });
+  r = await E.send('48789706619', 'Salom');          // bazadagi kanonik (+siz) chet el raqami
+  ok('kanonik chet el -> bad_phone:intl, so\'rov yo\'q', !r.ok && r.error === 'bad_phone:intl' && calls.length === 0, { r, calls });
   plan = [SEND_OK]; calls.length = 0;
   r = await E.send('+998 90 123 45 67', 'x');
   { const q = new URLSearchParams(calls[0] && calls[0].body);
-    ok('O\'zbekiston: /sms/send + from', r.ok && r.intl === false && calls[0].path === '/api/message/sms/send' && q.get('mobile_phone') === '998901234567' && q.get('from') === '4546', calls); }
+    ok('O\'zbekiston: /sms/send + from', r.ok && calls[0].path === '/api/message/sms/send' && q.get('mobile_phone') === '998901234567' && q.get('from') === '4546', calls); }
   plan = []; calls.length = 0;
   r = await E.send('8 903 157 11 24', 'x');
   ok('noaniq (+siz) chet el -> bad_phone, so\'rov yo\'q', !r.ok && /^bad_phone/.test(r.error) && calls.length === 0, r);
   r = await E.send('+7 903 157 11', 'x');
   ok('chala chet el (+, 9 raqam) -> bad_phone (O\'zbekistonga aylanmaydi)', !r.ok && /^bad_phone/.test(r.error) && calls.length === 0, r);
-  { const E2 = S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'p', international: false });
-    plan = []; calls.length = 0;
-    const r2 = await E2.send('+48 789 706 619', 'x');
-    ok('international=false -> bad_phone:intl_disabled, so\'rov yo\'q', !r2.ok && r2.error === 'bad_phone:intl_disabled' && r2.intl === true && calls.length === 0, r2); }
   plan = [{ status: 400, body: JSON.stringify({ message: { mobile_phone: ['invalid'] } }) }]; calls.length = 0;
-  r = await E.send('+48 789 706 619', 'x');
-  ok('rad javobidagi obyekt xabar -> matn (aniq rad)', !r.ok && /mobile_phone/.test(r.error) && r.ambiguous === false && r.intl === true, r);
+  r = await E.send('+998 90 123 45 67', 'x');
+  ok('rad javobidagi obyekt xabar -> matn (aniq rad)', !r.ok && /mobile_phone/.test(r.error) && r.ambiguous === false, r);
   ok('smsName: GSM-7 apostrof', S.smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova");
 
   // 8) matn yordamchilari

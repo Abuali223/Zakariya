@@ -321,28 +321,20 @@ function setup(opts) {
     ok('qayta urinish ham soatlik limitga bo\'ysunadi', !r.ok && /Soatiga 1/.test(r.error || '') && sent.length === 0, r); }
 
 
-  sec('chet el raqami (+ bilan) — xalqaro SMS');
+  sec('SMS faqat O\'zbekiston raqamlariga');
   { const { R, sent, state } = setup();
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', preview: true });
-    ok('preview: chet el raqami chiroyli + intl', p.ok && p.phone === '+48 789 706 619' && p.intl === true && !p.blocked, p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', expect: { message: p.message, phone: p.phone } });
-    ok('yuborildi (Eskiz: kanonik 48789706619)', r.ok && sent.length === 1 && sent[0].phone === '48789706619', { r, sent });
-    const row = state.sms_log.find(x => x.id === 'remind__IQ-0380__2026-10-16');
-    ok('jurnal: kanonik telefon', row && row.phone === '48789706619' && row.status === 'sent', row);
+    ok('faqat chet el raqami -> blok (sababi: SMS faqat O\'zbekiston)', p.ok && p.blocked === 'nophone' && /faqat O‘zbekiston/.test(p.blockedMsg || ''), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380' });
+    ok('yuborilmaydi, jurnal yo\'q', !r.ok && sent.length === 0 && !state.sms_log.some(x => /IQ-0380/.test(x.id)), { r, sent });
     const u = await R({ jwt: 'uid_dir', studentId: 'IQ-0226', preview: true });
-    ok("'+'siz chet el raqami -> telefon yo'q (+ bilan yozish maslahati)", u.ok && u.blocked === 'nophone' && /\+ bilan/.test(u.blockedMsg || ''), u);
+    ok("'+'siz chet el raqami (yaroqsiz) -> telefon yo'q", u.ok && u.blocked === 'nophone' && !/faqat O‘zbekiston/.test(u.blockedMsg || ''), u);
     const k = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', preview: true });
-    ok('ota (chet el) birinchi tanlanadi', k.ok && k.phone === '+7 963 768 23 01' && k.intl === true, k); }
-  { const { R, sent } = setup({ smsCfg: { international: false } });
-    const k = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', preview: true });
-    ok('international=false: ona (O\'zbekiston) raqami tanlanadi', k.ok && k.phone === '+998 90 123 45 67' && k.intl === false, k);
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0380', preview: true });
-    ok('international=false: faqat chet el raqami -> aniq sabab', p.ok && p.blocked === 'nophone' && /xalqaro SMS/.test(p.blockedMsg || ''), p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380' });
-    ok('international=false: yuborilmaydi', !r.ok && sent.length === 0, r); }
-  { const { R } = setup({ resultNext: [{ ok: false, error: 'International SMS not enabled', httpStatus: 400, ambiguous: false }] });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0380' });
-    ok('Eskiz xalqaro SMS rad -> tushunarli xabar', !r.ok && /Chet el raqamiga SMS yuborilmadi/.test(r.error || '') && /xalqaro SMS/.test(r.error || ''), r); }
+    ok('ota chet el, ona O\'zbekiston -> ona raqami tanlanadi', k.ok && k.phone === '+998 90 123 45 67' && !k.blocked, k);
+    const s2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0466', expect: { message: k.message, phone: k.phone } });
+    ok('yuborildi O\'zbekiston raqamiga', s2.ok && sent.length === 1 && sent[0].phone === '998901234567', { s2, sent });
+    ok('preview javobida intl maydoni yo\'q', !('intl' in k), k); }
+  ok('humanEskizError bad_phone:intl', /faqat O‘zbekiston/.test(humanEskizError('bad_phone:intl')));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
