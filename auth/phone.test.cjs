@@ -35,7 +35,7 @@ const BA = ctxBlock.__api;
 // sb/auth-api.js o'ramlari (normPhone/prettyPhone/maskPhone/wirePhone): import/export olib tashlanadi, tarmoq chaqirilmaydi.
 const apiSrc = API.replace(/^import .*$/mg, '').replace(/^export default\s*\{[\s\S]*?\};?\s*$/m, '').replace(/^export (async )?function/mg, (m, a) => (a || '') + 'function');
 const ctxApi = vm.createContext({ console });
-vm.runInContext(apiSrc + '\n;this.__w = { normPhone, prettyPhone, maskPhone, wirePhone };', ctxApi);
+vm.runInContext(apiSrc + '\n;this.__w = { normPhone, prettyPhone, maskPhone, wirePhone, phoneHint, bindPhoneInput };', ctxApi);
 const W = ctxApi.__w;
 // admin.html: blok + pmCanonPhone/pmCanonStored/pmPrettyPhone/pmPhoneHint (blokdan «// Narx kaliti:» gacha) va posToRole.
 const admStart = ADM.indexOf(bD), admEnd = ADM.indexOf('// Narx kaliti:', admStart);
@@ -111,12 +111,14 @@ for (const cc of Object.keys(P.PHONE_CC)) {
   const lens = P.PHONE_LEN[cc] || [cc.length + 6, Math.min(15, cc.length + 9)];
   for (const L0 of lens) { let n = ''; for (let k = cc.length; k < L0; k++) n += String(rnd(10)); fuzz.push('+' + cc + n); fuzz.push('+' + cc + ' ' + n); fuzz.push(cc + n); }
 }
+const INVIS = /[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
+const wrapMask = s0 => { const s = String(s0 == null ? '' : s0).replace(INVIS, ''); return /^\s*\+\s*998\s*\+/.test(s) ? s.replace(/^\s*\+\s*998\s*/, '') : s; };
 const inputs = CANON.map(x => x[0]).concat(MASK.map(x => x[0]), fuzz);
 let mism = 0, firstMism = null, inv = 0, firstInv = null;
 for (const s of inputs) {
   const c = P.phoneCanon(s);
   const same = BA.phoneCanon(s) === c && AD.pmCanonPhone(s) === c && (W.normPhone(s) || '') === c && (L.normPhone(s) || '') === c
-    && BA.phoneMask(s) === P.phoneMask(s) && W.maskPhone(s) === P.phoneMask(/^\s*\+\s*998\s*\+/.test(String(s == null ? '' : s)) ? String(s).replace(/^\s*\+\s*998\s*/, '') : s)
+    && BA.phoneMask(s) === P.phoneMask(s) && W.maskPhone(s) === P.phoneMask(wrapMask(s))
     && BA.phonePretty(s) === P.phonePretty(s) && W.prettyPhone(s) === P.phonePretty(s || '')
     && AD.pmCanonStored(s) === P.canonOf(s);
   if (!same) { mism++; if (!firstMism) firstMism = s; }
@@ -185,6 +187,111 @@ ok('pmPrettyPhone', AD.pmPrettyPhone('+79031571124') === '+7 903 157 11 24' && A
 ok('posToRole: «Moliya Menejeri» -> finance_mgr', AD.posToRole('Moliya Menejeri') === 'finance_mgr' && AD.posToRole('  moliya   menejeri ') === 'finance_mgr');
 ok('posToRole: apostroflar', AD.posToRole('O‘qituvchi') === 'teacher' && AD.posToRole("O'IBDO'") === 'zavuch' && AD.posToRole('Ma‘muriyat rahbari') === 'admin' && AD.posToRole('G‘aznachi') === 'treasurer');
 ok('posToRole: mos rol yo\'q / prototip', AD.posToRole('Hamshira') === '' && AD.posToRole('constructor') === '' && AD.posToRole('') === '' && AD.posToRole(null) === '');
+
+sec('maskPhone: ko\'rinmas belgilar (kontaktlardan nusxa) + phoneHint (998 ikki marta)');
+ok('yo\'nalish belgilari olib tashlanadi', W.maskPhone('\u202D+998 90 123 45 67\u202C') === '+998 90 123 45 67' && W.maskPhone('+998 \u202D+998 90 123 45 67\u202C') === '+998 90 123 45 67'
+  && W.maskPhone('\u200E+7 903 157 11 24') === '+7 903 157 11 24', [W.maskPhone('\u202D+998 90 123 45 67\u202C'), W.maskPhone('+998 \u202D+998 90 123 45 67\u202C')]);
+ok('phoneHint: «+998 » + 998901234567 -> maslahat (raqam bilan), avtomatik o\'zgartirilmaydi', /ikki marta/.test(W.phoneHint('+998 998901234567')) && W.phoneHint('+998 998901234567').includes('+998 90 123 45 67')
+  && W.normPhone('+998 998901234567') === null, W.phoneHint('+998 998901234567'));
+ok('phoneHint: oddiy holatlarda bo\'sh', W.phoneHint('+998 99 890 12 34') === '' && W.phoneHint('+998 99 890 12 34 5') === '' && W.phoneHint('') === '' && W.phoneHint(null) === ''
+  && W.phoneHint('+998 998 12 345 67 89') === '');
+
+sec('bindPhoneInput: kursor tahrir joyida qoladi (brauzer simulyatsiyasi)');
+// Brauzer semantikasi: value BOSHQA satrga o'zgarsa kursor oxirga o'tadi; o'sha satr bo'lsa — joyida.
+class FakeInput {
+  constructor(v) { this._v = v; this.selectionStart = this.selectionEnd = v.length; this.L = {}; }
+  get value() { return this._v; }
+  set value(x) { x = String(x); if (x !== this._v) { this._v = x; this.selectionStart = this.selectionEnd = x.length; } }
+  setSelectionRange(a, b) { this.selectionStart = Math.min(a, this._v.length); this.selectionEnd = Math.min(b, this._v.length); }
+  addEventListener(t, f) { (this.L[t] = this.L[t] || []).push(f); }
+  dispatchEvent(e) { (this.L[e.type] || []).forEach(f => f(e)); return !e.defaultPrevented; }
+  edit(text, inputType, dir) {
+    let a = this.selectionStart, b = this.selectionEnd; const v = this._v;
+    if (a === b && text === '') { if (dir < 0) { if (a === 0) return; a--; } else { if (b >= v.length) return; b++; } }
+    this.dispatchEvent({ type: 'beforeinput', inputType });
+    this._v = v.slice(0, a) + text + v.slice(b); this.selectionStart = this.selectionEnd = a + text.length;
+    this.dispatchEvent({ type: 'input', inputType });
+  }
+  type(str) { for (const ch of str) this.edit(ch, 'insertText', 0); }
+  back() { this.edit('', 'deleteContentBackward', -1); }
+  del() { this.edit('', 'deleteContentForward', 1); }
+  caret(k) { this.setSelectionRange(k, k); }
+  sel(a, b) { this.setSelectionRange(a, b); }
+  paste(txt) { const e = { type: 'paste', defaultPrevented: false, clipboardData: { getData: () => txt }, preventDefault() { this.defaultPrevented = true; } };
+    this.dispatchEvent(e); if (!e.defaultPrevented) this.edit(txt, 'insertFromPaste', 0); }
+}
+const field = () => { const f = new FakeInput('+998 '); W.bindPhoneInput(f); return f; };
+const typed = d => { const f = field(); f.type(d); return f; };
+// Ko'rib chiqish (wf) ssenariylari: avval kursor oxirga sakrab, tuzatish BOSHQA yaroqli raqam berardi.
+const SC = [
+  ['(a) «91» dan keyin Backspace + 0', '911234567', f => { f.caret(7); f.back(); f.type('0'); }],
+  ['(b) «124» belgilab 123', '901244567', f => { f.sel(8, 11); f.type('123'); }],
+  ['(c) o\'rtada ortiqcha 5, keyin Backspace', '901234567', f => { f.caret(9); f.type('5'); f.back(); }],
+  ['(d) bo\'shliqdan keyin Backspace (bo\'shliq o\'rniga oldingi raqam), keyin 0', '911234567', f => { f.caret(8); f.back(); f.type('0'); f.caret(f.value.indexOf('123')); }],
+  ['(e) o\'rtada Delete, keyin to\'g\'ri raqam', '901284567', f => { f.caret(10); f.del(); f.type('3'); }],
+  ['(e2) bo\'shliq oldida Delete (keyingi raqam o\'chadi), keyin 1', '901234567', f => { f.caret(7); f.del(); f.type('1'); }],
+  ['(f) 54 -> 45 (2 ta Backspace + 45)', '901235467', f => { f.caret(14); f.back(); f.back(); f.type('45'); }],
+  ['(g) 2-guruh: «128» dan keyin Backspace + 3', '901284567', f => { f.caret(11); f.back(); f.type('3'); }],
+  ['(h) bitta raqamni belgilab almashtirish', '901284567', f => { f.sel(10, 11); f.type('3'); }],
+];
+for (const [nm, start, act] of SC) {
+  const f = typed(start); act(f);
+  ok(`${nm}: ${f.value}`, W.normPhone(f.value) === '998901234567', { v: f.value, c: W.normPhone(f.value) });
+}
+{ const f = typed('911234567'); f.caret(7); f.back();
+  ok('Backspace keyin kursor o\'sha joyda («+998 9|1…»)', f.value === '+998 91 234 56 7' && f.selectionEnd === 6, { v: f.value, c: f.selectionEnd }); }
+{ const f = typed('901234567'); f.caret(8); f.back();
+  ok('bo\'shliqdan keyin Backspace -> oldingi RAQAM o\'chadi (tugma «ishlamay» qolmaydi)', W.normPhone(f.value) === null && f.value === '+998 91 234 56 7' && f.selectionEnd === 6, { v: f.value, c: f.selectionEnd }); }
+{ const f = typed('901234567'); f.caret(7); f.del();
+  ok('bo\'shliq oldida Delete -> keyingi RAQAM o\'chadi', f.value === '+998 90 234 56 7' && f.selectionEnd === 7, { v: f.value, c: f.selectionEnd }); }
+{ const f = field(); f.back();
+  ok('«+998 » da Backspace -> faqat bo\'shliq (avvalgidek)', f.value === '+998', f.value); }
+{ const f = typed('901234567'); f.caret(5); f.back();
+  ok('«+998 |90…» da Backspace -> prefiks raqami o\'chmaydi, kursor 5 da', f.value === '+998 90 123 45 67' && f.selectionEnd === 5, { v: f.value, c: f.selectionEnd }); }
+{ const f = typed('901234567'); f.caret(4); f.del();
+  ok('«+998| 90…» da Delete -> birinchi milliy raqam o\'chadi (fail-safe: yaroqsiz)', f.value === '+998 01 234 56 7' && W.normPhone(f.value) === null, { v: f.value, c: f.selectionEnd }); }
+{ const f = typed('901234567'); f.caret(6); f.back();
+  ok('birinchi milliy raqamni o\'chirish -> kursor prefiksdan keyin (5)', f.value === '+998 01 234 56 7' && f.selectionEnd === 5, { v: f.value, c: f.selectionEnd }); }
+{ const f = field(); f.type('+79031571124');
+  ok('«+998 » + «+» -> chet el rejimi', f.value === '+7 903 157 11 24', f.value); }
+{ const f = typed('9x0 1'); ok('raqam bo\'lmagan belgi yozilmaydi', f.value === '+998 90 1', f.value); }
+// Nusxa qo'yish (paste)
+for (const [txt, want] of [['998901234567', '+998 90 123 45 67'], ['\u202D+998 90 123 45 67\u202C', '+998 90 123 45 67'], ['901234567', '+998 90 123 45 67'],
+  ['+998 (90) 123-45-67', '+998 90 123 45 67'], ['+7 903 157 11 24', '+7 903 157 11 24']]) {
+  const f = field(); f.paste(txt);
+  ok(`paste «${txt.replace(/[\u202A-\u202E]/g, '·')}» -> ${want}`, f.value === want && f.selectionEnd === f.value.length, { v: f.value, c: f.selectionEnd });
+}
+{ const f = typed('901234567'); f.sel(0, f.value.length); f.paste('+998 93 630 11 11');
+  ok('butun maydon belgilab paste -> yangi raqam', f.value === '+998 93 630 11 11', f.value); }
+{ const f = typed('90123'); f.caret(f.value.length); f.paste('4567');
+  ok('to\'liq bo\'lmagan matn odatdagidek qo\'yiladi', f.value === '+998 90 123 45 67', f.value); }
+{ const f = typed('9045'); f.caret(7); f.paste('123');
+  ok('o\'rtaga qo\'yish -> kursor qo\'yilgan matndan keyin', f.value === '+998 90 123 45' && f.selectionEnd === 11, { v: f.value, c: f.selectionEnd }); }
+// FUZZ: tasodifiy tahrirlar (yozish/Backspace/Delete/belgilab yozish, kursor raqamlar ORASIDA yoki bo'shliq yonida) —
+//   maydondagi raqamlar va kursor o'rni «foydalanuvchi niyati» (raqamlar ketma-ketligi) bilan doim bir xil.
+{
+  const dig = s => s.replace(/\D/g, '');
+  const posOf = (v, c, late) => { if (c === 0) return 0; let n = 0, k = 0; for (; k < v.length; k++) { if (/\d/.test(v[k])) { n++; if (n === c) { k++; break; } } }
+    if (late) while (k < v.length && v[k] === ' ') k++; return k; };          // c ta raqamdan keyin (yoki keyingi bo'shliqdan ham keyin)
+  let bad = 0, ex = null, ops = 0;
+  for (let run = 0; run < 3000 && !bad; run++) {
+    const f = field(); let D = '998', c = 3;
+    for (let step = 0; step < 25 && !bad; step++) {
+      const op = rnd(5), late = rnd(2) === 1;
+      if (op === 0 || D.length <= 4) { if (D.length >= 15) continue; const cc = 3 + rnd(D.length - 2); f.caret(posOf(f.value, cc, late)); const x = String(rnd(10)); f.type(x); D = D.slice(0, cc) + x + D.slice(cc); c = cc + 1; }
+      else if (op === 1) { const cc = 4 + rnd(D.length - 3); f.caret(posOf(f.value, cc, late)); f.back(); D = D.slice(0, cc - 1) + D.slice(cc); c = cc - 1; }
+      else if (op === 2) { const cc = 3 + rnd(D.length - 3); f.caret(posOf(f.value, cc, late)); f.del(); D = D.slice(0, cc) + D.slice(cc + 1); c = cc; }
+      else if (op === 3) { const a = 3 + rnd(D.length - 3), b = a + 1 + rnd(Math.min(3, D.length - a)); if (b > D.length) continue;
+        const pa = posOf(f.value, a, false); const pb = posOf(f.value, b, false); f.sel(pa === 0 ? 0 : pa, pb); const x = String(rnd(10)); f.type(x); D = D.slice(0, a) + x + D.slice(b); c = a + 1; }
+      else { const cc = 3 + rnd(D.length - 2); f.caret(posOf(f.value, cc, late)); f.paste(String(rnd(10)) + String(rnd(10))); if (D.length + 2 > 15) { bad = 0; break; }
+        D = D.slice(0, cc) + f.value.replace(/\D/g, '').slice(cc, cc + 2) + D.slice(cc); c = cc + 2; }
+      ops++;
+      const got = dig(f.value), gc = dig(f.value.slice(0, f.selectionEnd)).length;
+      if (got !== D || gc !== c) { bad++; ex = { run, step, op, value: f.value, got, want: D, caret: gc, wantCaret: c }; }
+    }
+  }
+  ok(`fuzz: ${ops} ta tahrir — raqamlar ketma-ketligi va kursor doim niyatdagidek`, bad === 0 && ops > 30000, ex || ops);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

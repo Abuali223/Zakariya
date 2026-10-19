@@ -162,9 +162,72 @@ export function prettyPhone(canon) {
 //   chet el raqami ('+7 903 157 11 24'). Qaytaradi: ko'rsatiladigan satr. Kanonik uchun normPhone(shu satr).
 //   Maydonda oldindan '+998 ' turadi: foydalanuvchi uning ortidan yana '+' yozsa ('+998 +7…') — chet el raqamini
 //   boshlamoqchi: '+998' olib tashlanadi (aks holda raqam O'zbekiston formatiga «yopishib» buzilardi).
+//   Ko'rinmas belgilar (kontaktlardan nusxa olinganda: yo'nalish belgilari U+200E/U+202D…, BOM) avval olib tashlanadi.
+const INVIS = /[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
 export function maskPhone(raw) {
-  const s = String(raw == null ? "" : raw);
+  const s = String(raw == null ? "" : raw).replace(INVIS, "");
   return phoneMask(/^\s*\+\s*998\s*\+/.test(s) ? s.replace(/^\s*\+\s*998\s*/, "") : s);
+}
+// Yaroqsiz raqam uchun aniqroq sabab (bo'lmasa ''): «+998 » ortidan yana to'liq 998… yozilgan (998 998 90 123 45 67).
+//   Faqat MASLAHAT — raqam avtomatik o'zgartirilmaydi (foydalanuvchi o'zi tekshirib tuzatadi).
+export function phoneHint(raw) {
+  const d = String(raw == null ? "" : raw).replace(INVIS, "").replace(/\D/g, "");
+  if (d.length === 15 && d.slice(0, 6) === "998998" && phoneCanon(d.slice(3)))
+    return `Raqam boshida «998» ikki marta yozilgan. Raqamingiz ${phonePretty(d.slice(3))} bo‘lsa — boshidagi ortiqcha «998» ni o‘chiring.`;
+  return "";
+}
+// Telefon maydonini maskaga ulash. Har kiritishda maska qo'llanadi, lekin KURSOR TAHRIR JOYIDA qoladi (o'ngidagi raqamlar
+//   soni saqlanadi): value qayta yozilganda brauzer kursorni oxirga sakratadi va o'rtadagi tuzatishdan keyingi raqamlar
+//   oxirga tushib, tartib buzilardi — boshqa YAROQLI +998 raqam chiqib, kod begona odamga ketishi mumkin edi.
+//   - faqat bo'shliq/ajratgich o'chirilsa (maska uni qaytarib, tugma «ishlamay» qolardi) — yonidagi raqam o'chadi;
+//   - to'liq raqam qo'yilsa (paste: '998901234567', '+998 90 …', ko'rinmas belgilar bilan ham) — maydon shu raqam bilan
+//     almashtiriladi ('+998 ' ortiga yopishib '998998…' bo'lib qolmaydi). To'liq bo'lmagan matn odatdagidek qo'yiladi.
+export function bindPhoneInput(el) {
+  if (!el || el.__iqPhone) return;
+  el.__iqPhone = true;
+  const digits = s => String(s).replace(/\D/g, "");
+  const uz = s => /^\+998( |$)/.test(s);                            // O'zbekiston ko'rinishi: '+998 …'
+  let prev = el.value;
+  el.addEventListener("beforeinput", () => { prev = el.value; });     // tahrirdan OLDINGI qiymat (dastur o'zgartirgan bo'lsa ham)
+  const put = (m, after) => {           // m — maskalangan qiymat; kursor o'ngida `after` ta raqam qoladi
+    el.value = m;
+    let k = m.length, n = 0;
+    while (k > 0 && n < after) { k--; if (/\d/.test(m.charAt(k))) n++; }
+    const lo = uz(m) ? Math.min(5, m.length) : 0;                    // '+998 ' ichiga qadam qo'ymaymiz
+    if (after > 0) while (k > lo && m.charAt(k - 1) === " ") k--;
+    try { el.setSelectionRange(k, k); } catch (_) {}
+  };
+  el.addEventListener("input", e => {
+    let v = el.value;
+    let pos = typeof el.selectionEnd === "number" ? el.selectionEnd : v.length;
+    const t = (e && e.inputType) || "";
+    if ((t === "deleteContentBackward" || t === "deleteContentForward") && v.length < prev.length && maskPhone(v) === prev) {
+      // Faqat ajratgich o'chirildi: o'chirish yo'nalishidagi eng yaqin RAQAMni o'chiramiz ('+998' prefiksi raqamlaridan
+      //   tashqari — u yerda tugma avvalgidek hech narsa qilmaydi).
+      const lo = uz(prev) ? 4 : 0;
+      if (t === "deleteContentForward") {
+        let k = pos; while (k < v.length && !/\d/.test(v.charAt(k))) k++;
+        if (k < v.length && k >= lo) v = v.slice(0, k) + v.slice(k + 1);
+      } else {
+        let k = pos; while (k > 0 && !/\d/.test(v.charAt(k - 1))) k--;
+        if (k > 0 && k - 1 >= lo) { v = v.slice(0, k - 1) + v.slice(k); pos = k - 1; }
+      }
+    }
+    const after = digits(v.slice(pos)).length;
+    const m = maskPhone(v);
+    if (m !== el.value) put(m, after);
+    prev = el.value;
+  });
+  el.addEventListener("paste", e => {
+    const cd = e.clipboardData || (typeof window !== "undefined" && window.clipboardData);
+    const txt = cd && typeof cd.getData === "function" ? String(cd.getData("text") || "") : "";
+    const clean = txt.replace(INVIS, "").trim();
+    if (!clean || !phoneCanon(clean)) return;          // to'liq raqam emas — brauzer odatdagidek qo'yadi
+    e.preventDefault();
+    put(maskPhone(clean), 0);
+    prev = el.value;
+    try { el.dispatchEvent(new Event("input", { bubbles: true })); } catch (_) {}
+  });
 }
 // Parol qoidalari -> { ok, errors:[], checks:{len,upper,lower,digit} } (jonli ko'rsatkichlar uchun).
 export function validatePassword(pw) {
@@ -237,6 +300,6 @@ export async function currentJwt() {
 }
 
 export default {
-  normPhone, phoneToEmail, prettyPhone, maskPhone, validatePassword,
+  normPhone, phoneToEmail, prettyPhone, maskPhone, phoneHint, bindPhoneInput, validatePassword,
   requestOtp, verifyOtp, register, login, resetConfirm, changePhoneConfirm, currentJwt,
 };

@@ -2339,7 +2339,7 @@ addEventListener('hashchange', ()=>route(true));
     // Telefon+parol+OTP auth (mijoz qatlami). Yuklanmasa — email/Google oqimi ishlayveradi.
     // Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
     try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
-    let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=4`); }catch(e){}
+    let AuthAPI=null; try{ AuthAPI = await import(`${V}/auth-api.js?v=5`); }catch(e){}
 
     // ---- Ommaviy ma'lumotni Firestore'dan yuklash ----
     async function loadPublic(){
@@ -2711,7 +2711,9 @@ addEventListener('hashchange', ()=>route(true));
         const showErr=m=>{ const e=$('ph-err'); if(e){ e.textContent=m; e.style.display='block'; } };
         const clrErr=()=>{ const e=$('ph-err'); if(e) e.style.display='none'; };
         function wireEyes(){ bg.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } }); }
-        function wireMask(id){ const i=$(id); if(i) i.oninput=()=>{ i.value=AuthAPI.maskPhone(i.value); }; }
+        // Maska + kursor tahrir joyida qoladi (sb/auth-api.js bindPhoneInput): o'rtadagi tuzatish raqamlarni almashtirib, kod
+        //   begona raqamga ketmasin. Eski (keshlangan) auth-api.js bo'lsa — oddiy maska.
+        function wireMask(id){ const i=$(id); if(!i) return; if(AuthAPI.bindPhoneInput) AuthAPI.bindPhoneInput(i); else i.oninput=()=>{ i.value=AuthAPI.maskPhone(i.value); }; }
         function wirePwLive(passId){ const p=$(passId); if(!p) return; const upd=()=>{ const v=AuthAPI.validatePassword(p.value); const box=$('ph-pwchk'); if(box) box.querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); }; p.oninput=upd; upd(); }
         function startResend(purpose){ let s=60; const a=$('ph-resend'); if(!a) return; a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`; if(resendTimer)clearInterval(resendTimer);
           resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
@@ -2773,13 +2775,14 @@ addEventListener('hashchange', ()=>route(true));
         }
         const BAD_PHONE='Telefon raqam noto‘g‘ri. O‘zbekiston raqamini kiriting: +998 90 123 45 67.';
         // SMS kod faqat O'zbekiston raqamlariga (server ham tekshiradi) — chet el raqami bilan kod so'rash mumkin emas.
+        const badPhone=v=>(AuthAPI.phoneHint&&AuthAPI.phoneHint(v))||BAD_PHONE;
         const UZ_ONLY='SMS kod faqat O‘zbekiston raqamlariga yuboriladi. O‘zbekistondagi raqamingizni kiriting yoki «Email yoki Google bilan» kiring.';
         async function doLogin(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), pass=$('ph-pass').value;
-          if(!phone){ showErr(BAD_PHONE); return; } if(!pass){ showErr('Parolni kiriting.'); return; }
+          if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(!pass){ showErr('Parolni kiriting.'); return; }
           const b=$('ph-go'); b.disabled=true; b.textContent='Kirilmoqda…'; const r=await AuthAPI.login(phone,pass);
           if(r.ok) close(); else { b.disabled=false; b.textContent='Kirish'; showErr(r.error||'Kirib bo‘lmadi.'); } }
         async function doRegRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value), p1=$('ph-pass').value, p2=$('ph-pass2').value;
-          if(!phone){ showErr(BAD_PHONE); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
+          if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
           if(p1!==p2){ showErr('Parollar mos emas.'); return; } st.phone=phone; st.password=p1;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'register'); b.disabled=false; b.textContent='Kod yuborish';
           if(r.ok) render('reg_otp'); else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
@@ -2794,7 +2797,7 @@ addEventListener('hashchange', ()=>route(true));
           if(r.pending){ $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ '+(r.message||'Ro‘yxatdan o‘tdingiz! Administrator tasdig‘ini kuting.'))+`<button id="ph-done" style="${BTN}">Yopish</button>`; $('ph-done').onclick=close; }
           else { const lr=await AuthAPI.login(st.phone,st.password); if(lr.ok) close(); else { $('ph-title').textContent='Tayyor'; $('ph-body').innerHTML=okBox('✓ Ro‘yxatdan o‘tdingiz! Endi kiring.')+`<button id="ph-done" style="${BTN}">Kirish</button>`; $('ph-done').onclick=()=>render('login'); } } }
         async function doResetRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value);
-          if(!phone){ showErr(BAD_PHONE); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } st.phone=phone;
+          if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } st.phone=phone;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'reset'); b.disabled=false; b.textContent='Kod yuborish';
           if(r.ok) render('reset_otp'); else showErr(r.error||'Kod yuborilmadi.'); }
         async function doResetConfirm(){ clrErr(); const p1=$('ph-pass').value, p2=$('ph-pass2').value; const pv=AuthAPI.validatePassword(p1);

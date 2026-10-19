@@ -133,6 +133,9 @@ Raqam qoidasi — `server/phone.cjs` (brauzer `sb/auth-api.js` va `admin.html` d
   - `payments/sms.cjs` `send()` chet el raqamiga Eskiz’ga so‘rov yubormaydi (`bad_phone:intl`).
 - Kiritish maskasi raqamlarni hech qachon tashlab yubormaydi (ortiqcha raqam ko‘rinadi, raqam yaroqsiz bo‘ladi) —
   `+998 ` ortidan yozilgan boshqa raqam begona odamning O‘zbekiston raqamiga aylanib, kod unga ketmaydi.
+- Maydon `sb/auth-api.js` → `bindPhoneInput` bilan ulanadi: o‘rtadagi tuzatishda kursor joyida qoladi (raqamlar tartibi
+  buzilib, boshqa yaroqli raqamga kod ketmaydi); to‘liq raqam nusxa qilib qo‘yilsa (ko‘rinmas belgilar bilan ham) — maydon
+  shu raqam bilan almashtiriladi; `+998 ` ortidan yana `998…` yozilsa — aniq maslahat (`phoneHint`).
 
 ## config.json (maxfiy — gitga tushmaydi)
 

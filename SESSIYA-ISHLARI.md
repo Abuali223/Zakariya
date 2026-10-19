@@ -293,6 +293,13 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Eskiz'ga matnni `{name}` bilan emas, HAQIQIY misol bilan yuborish tavsiya etiladi (izohda: ism 1–4 so'z, oy 1 so'z, summa 1 son).
 - Testlar: `payments/eskiz-template.test.cjs` (22), `payments/eskiz-shablon.test.cjs` (24, soxta Eskiz bilan alohida jarayonda), `payments/sms.test.cjs` (+templates(): 41), `auth/sms-remind.test.cjs` (108: moslash, kesh, sekin Eskiz, parallel so'rovlar, sinxron xato); PG16 + PostgREST e2e (naqsh bilan yuborish, `sms_log` matni); Chromium (admin/index).
 
+## 24) Telefon maydoni: kursor tahrir joyida qoladi, nusxa qo'yish (ko'rik topilmalari)
+
+- Topilma (raqib ko'rigi, Chromium'da tasdiqlangan, o'rta): maska har kiritishda maydon qiymatini qayta yozardi — brauzer bunda kursorni OXIRGA sakratadi. Raqamning o'rtasini tuzatganda (masalan «91» ni «90» ga) keyingi raqamlar oxirga tushib, tartib buzilardi va ko'pincha BOSHQA yaroqli +998 raqam chiqardi — ro'yxat / parol tiklash / telefon almashtirish kodi begona odamga ketishi mumkin edi.
+- Tuzatish: `sb/auth-api.js` → `bindPhoneInput` (index.html: kirish/ro'yxat/parol tiklash; admin.html: «Profil → Telefonni o'zgartirish»). Kursor tahrir joyida qoladi (o'ngidagi raqamlar soni saqlanadi); faqat bo'shliq o'chirilsa — yonidagi raqam o'chadi (tugma «ishlamay» qolmaydi), `+998` prefiksi raqamlari esa bu yo'l bilan o'chmaydi; to'liq raqam nusxa qilib qo'yilsa (`998901234567`, `+998 90 …`, kontaktlardagi ko'rinmas yo'nalish belgilari bilan) — maydon shu raqam bilan almashtiriladi (avval `+998 ` ortiga yopishib yaroqsiz bo'lardi). `+998 ` ortidan yana `998…` yozilsa — aniq maslahat (raqam avtomatik o'zgartirilmaydi). `auth-api.js?v=5` (kesh yangilanadi).
+- Prefiksni tahrirlash mumkinligi (uchinchi topilma) — tekshiruvda rad etildi: xavfsiz (hech qachon begona raqam/SMS yo'q) va ataylab (kirish maydonida chet el raqami uchun) — o'zgartirilmadi.
+- Testlar: `auth/phone.test.cjs` (157: brauzer semantikasini taqlid qiluvchi maydon, ko'rikdagi barcha ssenariylar, 30 000+ tasodifiy tahrir fuzz — raqamlar ketma-ketligi va kursor doim niyatdagidek; eski maska bilan aynan ko'rikdagi begona raqamlar chiqadi); Chromium: haqiqiy index.html/admin.html/auth-api.js + haqiqiy `request-otp` — tuzatilgan raqamga SMS, ssenariylar haqiqiy klaviaturada, 1500+ tahrir fuzz, mobil (Pixel 7) — 43/43.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

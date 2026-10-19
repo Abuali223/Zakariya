@@ -446,7 +446,7 @@ const auth = getAuth(app);
 // (deploy.sh SHIM: gstatic URL -> /sb, shu sabab /sb/auth-api.js yuklanadi.)
 // Auth-server SAME-ORIGIN /authapi orqali (sayt bilan bir domenda; nginx /authapi/ -> 8792).
 try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
-let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js?v=4").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
+let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js?v=5").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 // OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
@@ -1198,9 +1198,9 @@ async function openProfile(){
       $p('pf-ph-area').innerHTML=`<input id="pf-newph" type="tel" inputmode="numeric" placeholder="+998 90 123 45 67" value="+998 " style="${INP}">
         <div class="small muted" style="margin-top:4px">SMS kod faqat O‘zbekiston raqamiga (+998) yuboriladi.</div>
         <button class="btn gold sm" id="pf-ph-otp" style="margin-top:8px">Kod yuborish</button>`;
-      const nph=$p('pf-newph'); nph.oninput=()=>{ nph.value=AuthAPI.maskPhone(nph.value); };
+      const nph=$p('pf-newph'); if(AuthAPI.bindPhoneInput) AuthAPI.bindPhoneInput(nph); else nph.oninput=()=>{ nph.value=AuthAPI.maskPhone(nph.value); };   // kursor tahrir joyida qoladi
       $p('pf-ph-otp').onclick=async()=>{
-        const phone=AuthAPI.normPhone(nph.value); if(!phone){ msg('Telefon raqam noto‘g‘ri. O‘zbekiston raqamini kiriting: +998 90 123 45 67.'); return; }
+        const phone=AuthAPI.normPhone(nph.value); if(!phone){ msg((AuthAPI.phoneHint&&AuthAPI.phoneHint(nph.value))||'Telefon raqam noto‘g‘ri. O‘zbekiston raqamini kiriting: +998 90 123 45 67.'); return; }
         if(phone.slice(0,3)!=='998'){ msg('SMS kod faqat O‘zbekiston raqamlariga yuboriladi — O‘zbekistondagi raqamingizni kiriting.'); return; }
         const jwt=await AuthAPI.currentJwt(); const b=$p('pf-ph-otp'); b.disabled=true; b.textContent='…';
         const r=await AuthAPI.requestOtp(phone,'change_phone',{jwt}); b.disabled=false; b.textContent='Kod yuborish';
