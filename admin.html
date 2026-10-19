@@ -449,9 +449,12 @@ try{ window.IQROR_AUTH_BASE = '/authapi'; }catch(e){}
 let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasejs/10.12.5/auth-api.js?v=7").then(m=>{ AuthAPI=m; return m; }).catch(()=>null);
 // Ism solishtirish (sb/name-match.js — server ham shu faylni ishlatadi): faqat kerak bo'lganda yuklanadi.
 //   Yuklanmasa (eski deploy/tarmoq) — null: «Biriktirish» oynasi takliflarsiz, avvalgidek ishlaydi.
-let _nmP=null;
-function nameMatchLib(){ return _nmP || (_nmP = import("https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=1")
-  .then(()=>globalThis.IqrorNameMatch||null).catch(()=>{ _nmP=null; return null; })); }
+//   Xato bo'lsa keyingi chaqiruv YANGI manzil bilan qayta urinadi (brauzer muvaffaqiyatsiz import()ni shu URL uchun
+//   eslab qoladi — bir martalik tarmoq uzilishi takliflarni sahifa qayta yuklanguncha o'chirib qo'ymasin).
+let _nmP=null, _nmTry=0;
+function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=2${_nmTry?'&r='+_nmTry:''}`)
+  .then(()=>{ const N=globalThis.IqrorNameMatch||null; if(!N){ _nmP=null; _nmTry++; } return N; })
+  .catch(()=>{ _nmP=null; _nmTry++; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 // OFFLINE PERSISTENCE — offline kiritilgan baho/davomat brauzer bazasida (IndexedDB)
@@ -1017,7 +1020,10 @@ function canManageStudentStatus(){ return SESSION.isAdmin; }
 //   (reception-guard.sql) ham qabulxonaga faqat «chiqdi» o'tishini (o'tgan oyning 1-sanasidan oldin emas) ruxsat beradi.
 function canWithdrawStudent(){ return SESSION.isAdmin || SESSION.role==='reception'; }
 // Qabulxona chiqarish sanasi — o'tgan oyning 1-sanasidan oldin emas (eski oylar to'lovini orqaga qarab o'zgartirmasin).
-function withdrawMinDate(){ const d=new Date(); const p=new Date(d.getFullYear(), d.getMonth()-1, 1); return `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-01`; }
+//   TOSHKENT sanasi bo'yicha (DB trigger ham shunday): kompyuter soat mintaqasi boshqa bo'lsa ham oy chegarasida
+//   UI ruxsat bergan sanani baza rad etmasin.
+function withdrawMinDate(){ const t=tkDay(new Date()), y=+t.slice(0,4), m=+t.slice(5,7);
+  return m===1 ? `${y-1}-12-01` : `${y}-${String(m-1).padStart(2,'0')}-01`; }
 // Qarzdorlik KO'RISH (ustun/filtr) — qabulxonaga ham BERILADI (pulga ta'sir qilmaydi,
 //   faqat ota-onaga xabar berish/undiruv uchun). FAQAT o'quvchi HOLATI cheklangan (yuqorida).
 function canSeeStudentFinance(){ return true; }
@@ -2936,7 +2942,7 @@ async function openStatusModal(s, collName, onSaved, opts){
         </select></label>
       <label class="small" id="st-date-wrap" style="display:flex;flex-direction:column;gap:4px">
         <span id="st-date-lbl">Faollashtirish sanasi</span>
-        <input type="date" id="st-date" value="${todayStr()}"${WD?` min="${withdrawMinDate()}"`:''} style="${FLD}"></label>
+        <input type="date" id="st-date" value="${WD?tkDay(new Date()):todayStr()}"${WD?` min="${withdrawMinDate()}"`:''} style="${FLD}"></label>
       <div class="small muted" id="st-hint" style="margin-top:8px"></div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="st-save">💾 Saqlash</button></div>`;
@@ -3011,7 +3017,15 @@ async function openStatusModal(s, collName, onSaved, opts){
       if(cur==='sinov') patch.activeFrom=addDaysStr(patch.stopFrom,1);
     }
     const btn=$('#st-save'); btn.disabled=true;
-    try{ await setDoc(doc(db, collName, s._id), patch, {merge:true});
+    try{
+      if(WD){
+        // Qabulxona: sof UPDATE (updateDoc). setDoc — UPSERT: DB triggerining yangi-qator tozalashi uni jimgina
+        //   bo'shatib yuborardi (eski baza) — «saqlandi» deyilib, o'quvchi faol qolardi. Shuning uchun natija
+        //   bazadan QAYTA o'qib tekshiriladi: chiqdi bo'lmagan bo'lsa — xato (jim «muvaffaqiyat» yo'q).
+        await updateDoc(doc(db, collName, s._id), patch);
+        const chk=await getDoc(doc(db, collName, s._id)), row=chk.exists()?(chk.data()||{}):null;
+        if(!row || row.payStatus!=='chiqdi'){ btn.disabled=false; toast('Saqlanmadi: o‘quvchi topilmadi yoki ruxsat yo‘q — direktorga murojaat qiling',true); return; }
+      } else await setDoc(doc(db, collName, s._id), patch, {merge:true});
       cache[collName]=null; toast('Holat saqlandi ✓'); closeModal();
       // O'quvchi holati narxga ta'sir qiladi (billingInterval) — mavjud fakturalar avtomatik yangilanmaydi.
       if(isStu) setTimeout(()=>alert(WD
@@ -6029,23 +6043,28 @@ async function openAssign(payment, students, reload){
   //   Nomzodlar — xotiradagi o'quvchilar ro'yxatidan (baza qayta o'qilmaydi), faqat o'qishni tark etmaganlar
   //   («Chiqdi» va to'xtatish sanasi o'tgan — tashqari). Joriy qarz / oylik summa uchun FAQAT ism bo'yicha mos
   //   kelgan (≤8) nomzodlarning hisob-fakturalari o'qiladi. Moslik < 60% — taklif ko'rsatilmaydi.
+  const SUG_WAIT=2500, t0=Date.now(), sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const loadSug=async()=>{
-    const NM=await nameMatchLib(); if(!NM) return [];
+    const NM=await Promise.race([ nameMatchLib(), sleep(SUG_WAIT).then(()=>null) ]); if(!NM) return [];
     const today=todayStr(), cm=curMonth();
     const left=s=>{ const sf=String(s.stopFrom||'').slice(0,10); return (s.payStatus||'')==='chiqdi' && !(/^\d{4}-\d{2}-\d{2}$/.test(sf) && sf>=today); };
-    const cands=NM.rankByName(payment.payerName, list.filter(s=>s && s.name && !left(s)), { minName:0.5, limit:8 });
+    // Ism bo'yicha HAMMA nomzodlar (>= 50%), keyin summa bonusi (ko'pi bilan +10%) bilan top-3 ga kira oladiganlari —
+    //   «birinchi 8 ta» kesish ro'yxat tartibiga bog'liq bo'lib, qarzi summaga teng o'quvchini tashlab yuborardi.
+    const ranked=NM.rankByName(payment.payerName, list.filter(s=>s && s.name && !left(s)), { minName:0.5, limit:1000 });
+    const cands=NM.shortlist(ranked, { keep:3, maxBonus:0.10, cap:40 });
     if(!cands.length) return [];
     // Qarz — «Moliya → Qarzdorlar» bilan bir xil qoida: shu oygacha (≤ joriy oy) fakturalarning qolgan qismi.
     const isCanc=i=>i.status==='canceled'||i.status==='reversed';
     const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):(isCanc(i)?0:(Number(i.paidAmount)||0));
     const debtAmt=i=>isCanc(i)?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i));
+    // Faktura KALITI — butun ilovadagidek FAQAT studentId||_id (faktura yaratish, Qarzdorlar, sById): qo'shimcha _id
+    //   kaliti ID to'qnashuvida (A ning studentId = B ning _id) boshqa o'quvchining qarzini «qarz = summa» qilib berardi.
     const own={}, info=new Map();
-    cands.forEach(c=>{ info.set(c.item,{debt:0, monthly:null, pm:'', fm:''});
-      [c.item.studentId, c.item._id].forEach(k=>{ k=k==null?'':String(k); if(k && !own[k]) own[k]=c.item; }); });
-    const keys=Object.keys(own); let ok=true;
-    try{
-      for(let i=0;i<keys.length;i+=10){
-        const snap=await getDocs(query(collection(db,'invoices'), where('studentId','in',keys.slice(i,i+10))));
+    cands.forEach(c=>{ info.set(c.item,{debt:0, monthly:null, pm:'', fm:''}); const k=String(c.item.studentId||c.item._id); if(!own[k]) own[k]=c.item; });
+    const keys=Object.keys(own);
+    const fetchInv=async()=>{
+      for(let i=0;i<keys.length;i+=20){
+        const snap=await getDocs(query(collection(db,'invoices'), where('studentId','in',keys.slice(i,i+20))));
         snap.docs.forEach(d=>{ const v=d.data()||{}, st=own[String(v.studentId)], m=String(v.month||''); if(!st || !/^\d{4}-\d{2}$/.test(m)) return;
           const o=info.get(st); if(m<=cm) o.debt+=debtAmt(v);
           // Oylik to'lov — eng so'nggi (joriy oygacha) amaldagi faktura summasi; bo'lmasa eng yaqin keyingi oyniki.
@@ -6053,8 +6072,10 @@ async function openAssign(payment, students, reload){
           if(m<=cm){ if(m>o.pm){ o.pm=m; o.pAmt=Number(v.amount); } }
           else if(!o.fm || m<o.fm){ o.fm=m; o.fAmt=Number(v.amount); } });
       }
-    }catch(e){ ok=false; }
-    info.forEach(o=>{ o.monthly = o.pm ? o.pAmt : (o.fm ? o.fAmt : null); });
+      return true; };
+    // Qarz so'rovi xato bersa yoki sekin bo'lsa — ism bo'yicha takliflar baribir ko'rsatiladi («qarz: —», bonussiz).
+    const ok=await Promise.race([ fetchInv().catch(()=>false), sleep(Math.max(600, SUG_WAIT-(Date.now()-t0))).then(()=>false) ]);
+    if(ok) info.forEach(o=>{ o.monthly = o.pm ? o.pAmt : (o.fm ? o.fAmt : null); });
     return NM.pickSuggestions(cands, total, it=>ok?info.get(it):{debt:null, monthly:null}, { min:0.6, limit:3 });
   };
   const drawSug=()=>{ const el=$('#as-sug'); if(!el) return;
@@ -6079,9 +6100,10 @@ async function openAssign(payment, students, reload){
   $('#as-mode-1').onclick=()=>setMode(1); $('#as-mode-2').onclick=()=>setMode(2);
   $('#as-search').addEventListener('input',e=>draw(e.target.value));
   setMode(1); draw('');
-  // Takliflar (ko'pi bilan ~2.5 s kutiladi; kechikkan natija tashlanadi). Oyna yopilgan/almashgan bo'lsa — tegilmaydi.
+  // Takliflar (odatda bir zumda; modul ko'pi bilan ~2.5 s, qarz so'rovi qolgan vaqt kutiladi — kechikkan qarz natijasi
+  //   tashlanadi, ism bo'yicha takliflar «qarz: —» bilan qoladi). Oyna yopilgan/almashgan bo'lsa — tegilmaydi.
   { const sugEl=$('#as-sug');
-    Promise.race([ loadSug().catch(()=>[]), new Promise(r=>setTimeout(()=>r(null), 2500)) ]).then(r=>{
+    loadSug().catch(()=>[]).then(r=>{
       if($('#as-sug')!==sugEl) return;
       sugs=r||[]; ready=true; drawSug(); draw($('#as-search').value); }); }
 }

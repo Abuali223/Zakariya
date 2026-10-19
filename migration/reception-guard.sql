@@ -12,9 +12,10 @@ do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga
 --     payStatus/activeFrom/stopFrom/pauses) O'ZGARTIRA OLMAYDI — bu faqat Ma'muriyat
 --     (direktor/ma'muriyat rahbari = app.is_admin_head()) huquqi.
 --   ISTISNO (foydalanuvchi talabi): qabulxona o'quvchini CHIQARA OLADI — FAQAT «chiqdi» ga o'tish:
---     payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan), stopFrom — o'tgan oyning 1-sanasidan (Toshkent) oldin
---     emas YOKI o'zgarmagan (muzlatilganning eski, ertaroq sanasi saqlanadi), pauses o'zgarmaydi, activeFrom
---     o'zgarmaydi (faqat «sinov»dan chiqarilsa = stopFrom + 1 kun — admin.html bilan bir xil). O'IBDO' — hech biri.
+--     payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan), stopFrom — haqiqiy sana, o'tgan oyning 1-sanasidan
+--     (Toshkent) oldin emas YOKI o'zgarmagan; muzlatilganda faqat eski sanadan ERTAROQ (eski, ertaroq sana
+--     saqlanadi), pauses o'zgarmaydi, activeFrom o'zgarmaydi («sinov»dan chiqarilsa — AYNAN stopFrom + 1 kun,
+--     admin.html bilan bir xil). NULL qiymatlar bilan chetlab o'tib bo'lmaydi. O'IBDO' — hech biri.
 --
 --   MOLIYAVIY maydonlar (chegirma/kontrakt/aka-uka/referral) qabulxonaga QOLDIRILADI —
 --     ular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun kerak
@@ -26,8 +27,9 @@ do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga
 --   darajasidagi asl himoya, API orqali chetlab o'tishning oldini oladi).
 --
 --   UPDATE: qabulxona himoyalangan maydonni O'ZGARTIRSA -> xato (42501).
---   INSERT: qabulxona yangi yozuvda bu maydonlarni to'ldirsa -> jim tozalanadi
---           (o'quvchi oddiy/faol, chegirmasiz yaratiladi).
+--   INSERT: qabulxona YANGI yozuvda bu maydonlarni to'ldirsa -> jim tozalanadi
+--           (o'quvchi oddiy/faol, chegirmasiz yaratiladi). MAVJUD qatorga upsert (shim setDoc) —
+--           UPDATE qoidalari bilan tekshiriladi (tozalanmaydi).
 -- Idempotent. run-all.sql + deploy.sh'da (student-status.sql va discounts.sql'dan KEYIN).
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
@@ -36,34 +38,72 @@ do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga
 create or replace function app.guard_reception_student_lifecycle()
   returns trigger language plpgsql
   set search_path = public, app, pg_temp as $$
+declare
+  v_stop  date;   -- yangi stopFrom — HAQIQIY kalendar sanasi (yaroqsiz bo'lsa null)
+  v_old   date;   -- eski stopFrom (xuddi shunday)
+  v_min   date;   -- qabulxona uchun eng erta chiqish sanasi: o'tgan oyning 1-sanasi (Toshkent)
+  v_prev  text;   -- eski holat ('' = faol)
+  v_ok    boolean;
 begin
   -- O'quvchi HOLATI = faqat Ma'muriyat (app.is_admin_head()) huquqi. students'ga yoza oladigan boshqa
   --    roller (qabulxona VA O'IBDO'/zavuch) buni o'zgartira olmaydi. Superuser/service_role (seed/backend)
   --   tegilmaydi (ular reception/zavuch emas).
   if (app.is_reception() or app.is_zavuch()) and not app.is_admin_head() then
     if tg_op = 'INSERT' then
-      new."payStatus"  := '';   -- oddiy (faol) qilib yaratiladi
-      -- To'lov RO'YXATGA OLINGAN KUNDAN (Toshkent) hisoblanadi: avval '' yozilib, oy o'rtasida qo'shilgan
-      --   bola butun oy uchun (1-sanadan, prorata'siz) hisoblanardi. Ma'muriyat keyin ⏯️ bilan o'zgartirishi mumkin.
-      new."activeFrom" := to_char((now() at time zone 'Asia/Tashkent')::date, 'YYYY-MM-DD');
-      new."stopFrom"   := '';
-      new."pauses"     := '[]'::jsonb;   -- to'xtatilgan davrlar tarixi ham holatning bir qismi
+      -- MUHIM: shim'ning setDoc'i — UPSERT (INSERT ... ON CONFLICT (id) DO UPDATE SET col = EXCLUDED.col).
+      --   BEFORE INSERT shu yerda MAVJUD qator uchun ham ishlaydi va o'zgartirgan qiymatlari EXCLUDED'ga
+      --   o'tadi: ilgari bu yerda tozalash qabulxonaning «Chiqarish» yozuvini jimgina '' ga aylantirardi
+      --   (yoki 42501). Shuning uchun tozalash FAQAT haqiqatan YANGI qator uchun; mavjud qatorga upsert esa
+      --   pastdagi UPDATE tekshiruvidan o'tadi.
+      if not exists (select 1 from public.students x where x.id = new.id) then
+        new."payStatus"  := '';   -- oddiy (faol) qilib yaratiladi
+        -- To'lov RO'YXATGA OLINGAN KUNDAN (Toshkent) hisoblanadi: avval '' yozilib, oy o'rtasida qo'shilgan
+        --   bola butun oy uchun (1-sanadan, prorata'siz) hisoblanardi. Ma'muriyat keyin ⏯️ bilan o'zgartirishi mumkin.
+        new."activeFrom" := to_char((now() at time zone 'Asia/Tashkent')::date, 'YYYY-MM-DD');
+        new."stopFrom"   := '';
+        new."pauses"     := '[]'::jsonb;   -- to'xtatilgan davrlar tarixi ham holatning bir qismi
+      end if;
     elsif tg_op = 'UPDATE' then
       if (new."payStatus"  is distinct from old."payStatus")
       or (new."activeFrom" is distinct from old."activeFrom")
       or (new."stopFrom"   is distinct from old."stopFrom")
       or (new."pauses"     is distinct from old."pauses") then
-        -- Qabulxona: FAQAT «Chiqarish» (yuqoridagi shartlar). Boshqa har qanday holat o'zgarishi — rad.
-        if not ( app.is_reception()
-             and new."payStatus" = 'chiqdi'
-             and coalesce(old."payStatus", '') <> 'chiqdi'
-             and new."pauses" is not distinct from old."pauses"
-             and coalesce(new."stopFrom", '') ~ '^\d{4}-\d{2}-\d{2}$'
-             and ( new."stopFrom" is not distinct from old."stopFrom"
-                   or new."stopFrom" >= to_char(date_trunc('month', (now() at time zone 'Asia/Tashkent')::date - interval '1 month'), 'YYYY-MM-DD') )
-             and ( new."activeFrom" is not distinct from old."activeFrom"
-                   or ( coalesce(old."payStatus", '') = 'sinov'
-                        and new."activeFrom" = to_char(new."stopFrom"::date + 1, 'YYYY-MM-DD') ) ) ) then
+        -- Qabulxona: FAQAT «Chiqarish». Shartlar (hammasi bajarilishi SHART; NULL — «yo'q» deb hisoblanadi):
+        --   * payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan); NULL/'' ga o'tkazish (= faollashtirish) — rad;
+        --   * stopFrom — haqiqiy sana (YYYY-MM-DD; '2026-99-99' kabi qolipga mos yaroqsiz qiymat — rad);
+        --   * stopFrom o'zgarmagan YOKI >= o'tgan oyning 1-sanasi; muzlatilgan o'quvchida faqat ERTAROQ sana
+        --     (kechroq sana muzlatilgan oylarni qayta to'lanadigan qilardi — bu «sanani tuzatish», direktor ishi);
+        --   * pauses o'zgarmaydi;
+        --   * activeFrom o'zgarmaydi; «sinov»dan chiqarilsa — AYNAN stopFrom + 1 kun (sinov kunlari to'lanmaydi).
+        v_prev := coalesce(old."payStatus", '');
+        v_stop := null; v_old := null;
+        if coalesce(new."stopFrom", '') ~ '^\d{4}-\d{2}-\d{2}$' then
+          begin
+            v_stop := new."stopFrom"::date;
+            if to_char(v_stop, 'YYYY-MM-DD') <> new."stopFrom" then v_stop := null; end if;
+          exception when others then v_stop := null;
+          end;
+        end if;
+        if coalesce(old."stopFrom", '') ~ '^\d{4}-\d{2}-\d{2}$' then
+          begin
+            v_old := old."stopFrom"::date;
+            if to_char(v_old, 'YYYY-MM-DD') <> old."stopFrom" then v_old := null; end if;
+          exception when others then v_old := null;
+          end;
+        end if;
+        v_min := date_trunc('month', (now() at time zone 'Asia/Tashkent')::date - interval '1 month')::date;
+        v_ok := app.is_reception()
+            and coalesce(new."payStatus", '') = 'chiqdi'
+            and v_prev <> 'chiqdi'
+            and new."pauses" is not distinct from old."pauses"
+            and v_stop is not null
+            and ( new."stopFrom" is not distinct from old."stopFrom"
+                  or ( v_stop >= v_min
+                       and not (v_prev = 'muzlatilgan' and v_old is not null and v_stop > v_old) ) )
+            and ( case when v_prev = 'sinov'
+                       then new."activeFrom" is not distinct from to_char(v_stop + 1, 'YYYY-MM-DD')
+                       else new."activeFrom" is not distinct from old."activeFrom" end );
+        if not coalesce(v_ok, false) then
           raise exception 'O''quvchi holatini (faollashtirish/muzlatish/sinov, sanani tuzatish) faqat Ma''muriyat o''zgartira oladi; qabulxona faqat «Chiqarish» qila oladi (o''tgan oyning 1-sanasidan oldin emas)'
             using errcode = '42501';
         end if;

@@ -19,8 +19,8 @@
   var YE_AFTER = 'аеёиоуўэюяъьыі';
   // Eski lotin / turkcha harflar (ba'zan shunday yoziladi)
   var LAT = { 'ş': 'sh', 'ç': 'ch', 'ğ': "g'", 'ö': "o'", 'ü': 'u', 'ı': 'i', 'â': 'a', 'é': 'e' };
-  // Barcha apostrof turlari -> '  (' ʻ ʼ ‘ ’ ` ´ ′)
-  var APOS = /[\u2018\u2019\u02BB\u02BC`\u00B4\u2032']/g;
+  // Barcha apostrof turlari -> '  (' ʻ ʼ ‘ ’ ‛ ` ´ ′ ʹ ʽ ʾ ʿ ˈ ꞌ ＇ ՚)
+  var APOS = /[\u2018\u2019\u201B\u02BB\u02BC\u02B9\u02BD\u02BE\u02BF\u02C8\uA78C\uFF07\u055A`\u00B4\u2032']/g;
   // Otasining ismi qo'shimchasi — u va undan OLDINGI so'z hisobga olinmaydi (... Rustam qizi / o'g'li)
   var PATRON = /^(qizi|kizi|o'g'li|og'li|o'gli|ogli|ug'li|ugli|o'gil|o'g'il)$/;
 
@@ -28,7 +28,9 @@
     var out = '';
     for (var i = 0; i < s.length; i++) {
       var c = s.charAt(i);
-      if (c === 'е') { var p = i ? s.charAt(i - 1) : ''; out += (!p || !/[a-zа-яёғқўҳі]/.test(p) || YE_AFTER.indexOf(p) >= 0) ? 'ye' : 'e'; }
+      var p = i ? s.charAt(i - 1) : '';
+      if (c === 'е') out += (!p || !/[a-zа-яёғқўҳі]/.test(p) || YE_AFTER.indexOf(p) >= 0) ? 'ye' : 'e';
+      else if (c === 'ҳ' && (p === 'с' || p === 'ц')) out += "'h";   // сҳ = s'h (Исҳоқ = Is'hoq), «ш» emas
       else if (Object.prototype.hasOwnProperty.call(CYR, c)) out += CYR[c];
       else if (Object.prototype.hasOwnProperty.call(LAT, c)) out += LAT[c];
       else out += c;
@@ -38,6 +40,7 @@
 
   function normWord(w) {
     w = w.replace(/kh/g, 'x');                                              // kh (pasportdagi yozuv: Khadicha) = x
+    w = w.replace(/([cs])'h/g, '$1x');                                      // s'h / c'h — alohida harflar (Is'hoq = Isxoq)
     w = w.replace(/([cs]?)h/g, function (m, p) { return p ? m : 'x'; });   // h -> x (Hadicha = Xadicha); ch/sh tegilmaydi
     w = w.replace(/yev/g, 'ev');                                            // yeva/yev/yevich -> eva/ev/evich
     w = w.replace(/o'/g, 'u');                                              // o' = u (O'dil / Udil)
@@ -63,6 +66,22 @@
       kept.push(toks[i]);
     }
     return kept.map(normWord).filter(Boolean).join(' ');
+  }
+
+  // Solishtirishda hisobga olinmaydigan so'zlar: bitta harf (bosh harf «X.», sinf harfi «5-A») va to'lov izohidagi
+  //   umumiy so'zlar («uchun», «to'lov», «sinf», oy nomlari…). Aks holda ular haqiqiy ism so'ziga majburan juftlanib,
+  //   to'g'ri o'quvchining balini ~3% ga yiqitardi («Xadicha uchun» — «Xadicha» dan past chiqardi).
+  var FILLER = {};
+  ("uchun to'lov tolov to'lovi tolovi to'lovni oy oyi oyga oylik oyligi sinf sinfi sinfda sinfidan klass klassa maktab maktabi "
+    + "shkola o'quvchi oquvchi o'quvchisi oquvchisi farzand farzandi farzandim bola bolam bolasi kontrakt kontrakti shartnoma "
+    + "shartnomasi summa summasi pul puli dars darsi kurs kursi id raqam raqami kod kodi ism ismi familiya familiyasi fio ota ona "
+    + "otasi onasi va bilan ham yanvar fevral mart aprel may iyun iyul avgust sentabr sentyabr oktabr oktyabr noyabr dekabr "
+    + "oplata za uchenik uchenika uchenitsa mesyats obuchenie click payme uzum iqror iqro akademiya academy")
+    .split(' ').forEach(function (w) { FILLER[normalizeName(w)] = 1; });
+  // Solishtirish uchun so'zlar: normalizeName + bitta harfli va to'ldiruvchi so'zlarsiz; ko'pi bilan 5 ta (tozalashdan KEYIN —
+  //   «5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha» da ism tushib qolmasin).
+  function nameTokens(name) {
+    return normalizeName(name).split(' ').filter(function (t) { return t.length > 1 && !FILLER[t]; }).slice(0, 5);
   }
 
   // Levenshtein masofasi (qo'shish/o'chirish/almashtirish = 1), ikki qatorli dinamik dasturlash.
@@ -107,8 +126,7 @@
   //   ham uni 60% ga yetkaza olmaydi; oddiy imlo xatolari (so'zda 1 harf) esa ~80–90% da qoladi. Faqat bitta so'zli
   //   ism — dalil kuchsiz (×0.6). Bir tomonda ortiqcha so'z (masalan otasining ismi -ovna) — yengil jarima.
   function nameSimilarity(a, b) {
-    var A = normalizeName(a).split(' ').filter(Boolean).slice(0, 5);
-    var B = normalizeName(b).split(' ').filter(Boolean).slice(0, 5);
+    var A = nameTokens(a), B = nameTokens(b);
     if (!A.length || !B.length) return 0;
     var S = A.length <= B.length ? A : B, L = S === A ? B : A, k = S.length;
     var best = -Infinity, used = [];
@@ -144,7 +162,7 @@
     opts = opts || {};
     var minName = opts.minName == null ? 0.5 : opts.minName, limit = opts.limit || 8;
     var getName = opts.getName || function (x) { return x && x.name; };
-    if (!normalizeName(payerName)) return [];
+    if (!nameTokens(payerName).length) return [];
     var out = [];
     (items || []).forEach(function (it) {
       var sc = nameSimilarity(payerName, getName(it));
@@ -152,6 +170,18 @@
     });
     out.sort(function (x, y) { return y.nameScore - x.nameScore; });
     return out.slice(0, limit);
+  }
+
+  // Bonusdan OLDIN qisqartirish: summa bonusi (ko'pi bilan maxBonus = +10%) bilan eng yaxshi «keep» (3) talikka kira
+  //   OLADIGAN har bir nomzod qoladi (chegaradagi teng ballilar ham). Oddiy «birinchi N ta» kesish ro'yxat tartibiga
+  //   bog'liq bo'lib, qarzi summaga teng (eng mos) o'quvchini tashlab yuborishi mumkin edi. cap — so'rov hajmi chegarasi.
+  function shortlist(ranked, opts) {
+    opts = opts || {};
+    var keep = opts.keep || 3, room = opts.maxBonus == null ? 0.10 : opts.maxBonus, cap = opts.cap || 40;
+    var list = (ranked || []).slice().sort(function (x, y) { return y.nameScore - x.nameScore; });
+    if (list.length <= keep) return list;
+    var cut = list[keep - 1].nameScore - room - 1e-9;
+    return list.filter(function (c) { return c.nameScore >= cut; }).slice(0, cap);
   }
 
   // Yakuniy takliflar: bonus qo'shilgan ball >= min (60%), ko'pi bilan limit (3) ta. HECH QACHON avtomatik biriktirmaydi.
@@ -168,6 +198,7 @@
       .slice(0, limit);
   }
 
-  return { toLatin: toLatin, normalizeName: normalizeName, levenshtein: levenshtein, wordSim: wordSim, nameSimilarity: nameSimilarity,
-    scoreCandidate: scoreCandidate, rankByName: rankByName, pickSuggestions: pickSuggestions };
+  return { toLatin: toLatin, normalizeName: normalizeName, nameTokens: nameTokens, levenshtein: levenshtein, wordSim: wordSim,
+    nameSimilarity: nameSimilarity, scoreCandidate: scoreCandidate, rankByName: rankByName, shortlist: shortlist,
+    pickSuggestions: pickSuggestions };
 });

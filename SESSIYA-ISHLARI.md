@@ -355,14 +355,17 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Chiqqan sana — **o'tgan oyning 1-sanasidan oldin emas** (eski oylar to'lovi orqaga qarab o'zgarmasin); undan
   oldingisi — direktor orqali. Saqlangach: «Direktorga ayting: To'lovlar → tegishli oy → ↻ Qayta hisoblash».
 - Yozuv qoidasi direktornikidek (`payStatus='chiqdi'`, `stopFrom`; muzlatilgan bo'lsa eski to'xtatish sanasi
-  saqlanadi; sinovdan chiqsa `activeFrom = stopFrom + 1`).
+  saqlanadi; sinovdan chiqsa `activeFrom = stopFrom + 1`). Qabulxona yozuvi — sof UPDATE (`updateDoc`), keyin bazadan
+  qayta o'qib tekshiriladi: o'zgarmagan bo'lsa «Saqlanmadi…» (jim «muvaffaqiyat» yo'q). Sanalar Toshkent vaqti bo'yicha.
 - **Baza himoyasi** (`migration/reception-guard.sql`, `trg_reception_student_lifecycle`): qabulxonaga FAQAT shu o'tish
-  ruxsat — `payStatus` → `chiqdi` (avval chiqdi emas), `pauses` o'zgarmaydi, `stopFrom` — `YYYY-MM-DD` va
-  (o'zgarmagan yoki ≥ o'tgan oyning 1-sanasi, Toshkent vaqti), `activeFrom` — o'zgarmagan yoki (sinovdan) `stopFrom+1`.
-  Boshqa har qanday holat o'zgarishi — 42501 (O'IBDO' — avvalgidek hammasi taqiqlangan).
-- Testlar: PG16 (kanonik zanjir) 17/17 — ruxsat etilgan 4 holat va 9 ta taqiqlangan urinish (muzlatish, qayta
-  faollashtirish, 100 kun oldingi sana, noto'g'ri `activeFrom`, `pauses`, sanani tuzatish, bo'sh sana, O'IBDO');
-  Chromium 28/28 (tugma qaysi rolga chiqadi, oyna, sana chegarasi, DOM orqali soxta amal, direktor oynasi o'zgarmagan).
+  ruxsat — `payStatus` → `chiqdi` (avval chiqdi emas; NULL/'' ga o'tkazish — rad), `pauses` o'zgarmaydi, `stopFrom` —
+  HAQIQIY sana (`2026-99-99` — rad) va (o'zgarmagan yoki ≥ o'tgan oyning 1-sanasi, Toshkent vaqti; muzlatilganda faqat
+  eski sanadan ERTAROQ), `activeFrom` — o'zgarmagan, sinovdan chiqsa AYNAN `stopFrom+1`. Tekshiruv NULL-xavfsiz.
+  Boshqa har qanday holat o'zgarishi — 42501 (O'IBDO' — avvalgidek hammasi taqiqlangan). Yangi qator tozalanishi
+  (INSERT) endi FAQAT haqiqatan yangi qatorga: shim `setDoc`i — UPSERT, mavjud qatorga upsert UPDATE qoidasidan o'tadi.
+- Testlar: PG16 40/40 (oddiy UPDATE + shim'ning upsert shakli `INSERT … ON CONFLICT DO UPDATE SET col = EXCLUDED.col`,
+  NULL hujumlari, muzlatilgan/sinov qoidalari, yaroqsiz sanalar); haqiqiy stek e2e (PG16 to'liq zanjir + PostgREST 12 +
+  supabase-js + haqiqiy shim + haqiqiy `openStatusModal`) 24/24 — eski kodda (c082e4c) 16 tasi yiqiladi; Chromium 30/30.
 
 ## 28) Biriktirilmagan to'lov — «💡 Ehtimol shu o'quvchi» takliflari
 
@@ -379,20 +382,40 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Solishtirish: so'zlar tartibi muhim emas (eng yaxshi juftlash); har juft — o'zimiz yozgan Levenshtein (o↔u yarim
   narx; «Jasur = Jasurbek», «Malika = Malikaxon» — qisqa shakl). Begona ismlar ham umumiy harflar (-ov, -eva) tufayli
   ~30% «o'xshaydi» — shu daraja hisobga olinmaydi. Umumiy ball — juftlar geometrik o'rtachasi: faqat ism yoki faqat
-  familiya mos (aka-uka, adash) — 50% dan past; bitta so'zli ism ×0.6; ortiqcha so'z −5%.
+  familiya mos (aka-uka, adash) — 50% dan past; bitta so'zli ism ×0.6; ortiqcha so'z −5%. Solishtirishda bitta harfli
+  so'zlar (bosh harf «X.», sinf «5-A») va to'lov izohi so'zlari («uchun», «to'lov», «sinf», oy nomlari…) hisobga olinmaydi
+  — «Xadicha uchun», «Turg'unboyeva X.» endi yalang ism bilan bir xil ball oladi. Kirill «сҳ» = `s'h` (Исҳоқов = Isxoqov).
 - Bonus: joriy qarz = to'lov summasi → +10%, oylik to'lov = summa → +5% (eng kattasi, qo'shilmaydi); ism bo'yicha
   50% dan past nomzodni bonus 60% ga yetkaza olmaydi (≤ 59%). Qarz — «Qarzdorlar» qoidasi (≤ joriy oy, bekor/
   qaytarilgan hisobga olinmaydi); oylik — so'nggi amaldagi faktura summasi.
 - Faqat o'qishni tark etmaganlar (chiqdi + to'xtatish sanasi o'tgan — tashqari; muzlatilgan/sinov — kiradi).
-  O'quvchilar ro'yxati xotiradan (baza qayta o'qilmaydi); qarz uchun faqat ism bo'yicha mos ≤ 8 nomzodning
-  fakturalari bitta `in` so'rovi bilan o'qiladi. Takliflar aniqlanguncha (odatda bir zumda, ko'pi bilan 2.5 s) ro'yxat
-  chizilmaydi — keyin tepasiga blok qo'shilib, kassir boshqa qatorni bosib qo'ymasin; kechikkan natija tashlanadi.
-  Modul yuklanmasa (eski deploy) — oyna avvalgidek. `deploy.sh` `/sb` ga `name-match.js` ni ham joylaydi.
+  O'quvchilar ro'yxati xotiradan (baza qayta o'qilmaydi); qarz uchun faqat nomzodlar fakturalari `in` so'rovi bilan
+  (kalit — butun ilovadagidek `studentId||_id`) o'qiladi. Nomzodlar bonusdan OLDIN «birinchi N ta» bilan kesilmaydi:
+  summa bonusi (+10%) bilan top-3 ga kira oladigan hammasi qoladi (`shortlist`, ko'pi bilan 40). Takliflar
+  aniqlanguncha (odatda bir zumda, ko'pi bilan ~2.5 s) ro'yxat chizilmaydi — keyin tepasiga blok qo'shilib, kassir
+  boshqa qatorni bosib qo'ymasin; qarz so'rovi sekin/xato bo'lsa — ism bo'yicha takliflar «qarz: —» bilan chiqadi.
+  Modul yuklanmasa — oyna avvalgidek, keyingi ochishda yangi manzil bilan qayta uriniladi (`?v=2&r=N`).
+  `deploy.sh` `/sb` ga `name-match.js` ni ham joylaydi.
 - Topshiriqdagi holatlar (`payments/name-match.test.cjs` konsolga chiqaradi): «Turg'unboyeva Hadicha» → 100%,
   «Турғунбоева Хадича» → 100%, «Xadicha Turgunboeva» → 91% (yuqori moslik); «Aliyev Jasur» → 0% (taklif qilinmaydi,
-  qarz = summa bo'lsa ham). Testlar: `name-match.test` 64; Chromium 38/38 (haqiqiy `admin.html` + deploy SHIM bilan
+  qarz = summa bo'lsa ham). Testlar: `name-match.test` 84; Chromium 47/47 (haqiqiy `admin.html` + deploy SHIM bilan
   `/sb/name-match.js`: takliflar, tasdiqlash matni, avtomatik biriktirish yo'qligi, bo'lib rejimi, so'rovlar soni, faktura
-  xatosi, sekin tarmoq, yopilgan oyna, XSS, telefon ekrani).
+  xatosi, sekin tarmoq, yopilgan oyna, XSS, telefon ekrani, ID to'qnashuvi, 9 ta adash, bosh harf/izoh so'zlari,
+  modulni qayta yuklash).
+
+## 29) Raqib ko'rigi (R8) — §27–28 ustidan
+
+- 16 topilmadan 15 tasi tasdiqlandi, hammasi tuzatildi (biri — aka-uka qofiyali ismlari — rad etildi: talab qilingan
+  Levenshtein bilan imlo variantidan farqlab bo'lmaydi; to'g'ri o'quvchi ro'yxatda bo'lsa doim birinchi chiqadi).
+- **Yuqori:** qabulxona «⏹️ Chiqarish» haqiqiy yozish yo'lida ISHLAMASDI — shim `setDoc`i UPSERT, triggerning
+  yangi-qator tozalashi EXCLUDED'ni bo'shatardi: faol/sinov/muzlatilgan — «42501», bo'sh holatli o'quvchida esa jim
+  «Holat saqlandi ✓», lekin o'quvchi faol qolardi. Endi: UI `updateDoc` + qayta o'qib tekshiradi; trigger faqat haqiqiy
+  yangi qatorni tozalaydi. **Yuqori:** NULL bilan chetlab o'tish (qabulxona `payStatus=null` qilib muzlatilganni
+  faollashtira olardi) — tekshiruv NULL-xavfsiz. **O'rta:** muzlatilgan o'quvchining sanasini kechroqqa surish (eski
+  oylar qayta to'lanadigan bo'lardi) va sinovdan chiqarishda `activeFrom` o'zgarmasa sinov kunlari to'lanadigan bo'lishi
+  — yopildi. **Past:** yaroqsiz sanalar, UI/baza sana mintaqasi, takliflar: bosh harf/izoh so'zlari, «birinchi 8 ta»
+  kesish, ID to'qnashuvida begona qarz, sekin tarmoqda takliflar yo'qolishi, modul xatosidan keyin qayta urinmaslik,
+  qo'shimcha apostrof turlari, «сҳ».
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

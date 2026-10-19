@@ -117,6 +117,39 @@ ok('kirish ma\'lumoti o\'zgartirilmaydi', JSON.stringify(SCHOOL[0]) === JSON.str
   const t0 = Date.now(); N.rankByName("Turg'unboyeva Hadicha", big); const ms = Date.now() - t0;
   ok('3000 o\'quvchi — tez (< 1.5 s)', ms < 1500, ms); }
 
+// ---- Ko'rik (R8) holatlari ----
+// Bosh harf, sinf harfi va to'lov izohidagi so'zlar ism balini yiqitmaydi (ilgari majburiy juftlanib ~3% bo'lardi)
+const T3 = "Turg'unboyeva Xadicha Rustamovna";
+ok('bosh harf / sinf / «uchun» — yalang ism bilan bir xil', ["Turg'unboyeva X.", "X. Turg'unboyeva", 'Xadicha 5-A', 'Xadicha uchun', 'Xadicha T.', "Xadicha uchun to'lov"]
+  .every(p => Math.abs(sim(p, T) - sim(p.split(/[ .]/).filter(w => w.length > 2 && !/uchun|to'lov/.test(w))[0], T)) < 1e-9),
+  ["Turg'unboyeva X.", 'Xadicha 5-A', 'Xadicha uchun'].map(p => sim(p, T)));
+ok('izohdagi so\'zlar (sinf, oy nomi) — ism oxirida bo\'lsa ham topiladi', sim("5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha", T) === 1
+  && sim('Октябрь ойи учун Турғунбоева Хадича', T) === 1, sim("5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha", T));
+ok('3 so\'zli yozuv + to\'liq ism + ortiqcha so\'z — yuqori', ["Turg'unboyeva Xadicha", "Turg'unboyeva Xadicha R.", "Turg'unboyeva Xadicha 5-A", "Turg'unboyeva Xadicha uchun"]
+  .every(p => sim(p, T3) >= 0.9), ["Turg'unboyeva Xadicha uchun", "Turg'unboyeva Xadicha 5-A"].map(p => sim(p, T3)));
+ok('nameTokens: bitta harf va izoh so\'zlari tashlanadi; normalizeName esa o\'zgarmaydi', JSON.stringify(N.nameTokens('Xadicha 5-A uchun T.')) === '["xadicha"]'
+  && N.normalizeName('Xadicha uchun') === 'xadicha uchun' && N.nameTokens('Oktyabr uchun to\'lov').length === 0);
+ok('faqat izoh so\'zlari — nomzod yo\'q', N.rankByName("Oktyabr oyi uchun to'lov", SCHOOL).length === 0);
+// Barcha apostrof turlari (‛ ʹ ʽ ʾ ʿ ˈ ꞌ ＇ ՚ ham)
+['‛', 'ʹ', 'ʽ', 'ʾ', 'ʿ', 'ˈ', 'ꞌ', '＇', '՚'].forEach(a => ok(`apostrof ${JSON.stringify(a)} -> '`, N.normalizeName(`Turg${a}unboyeva Xadicha`) === "turg'unboeva xadicha" && sim(`O${a}tkir Karimov`, "O'tkir Karimov") === 1,
+  N.normalizeName(`Turg${a}unboyeva Xadicha`)));
+// Kirill «сҳ» = s'h (Исҳоқ = Is'hoq), «ш» emas
+ok('сҳ -> s\'h (toLatin), h->x bilan Isxoqov ga teng', N.toLatin('Исҳоқов') === "is'hoqov" && N.normalizeName('Исҳоқов') === 'isxoqov' && N.normalizeName("Is'hoqov") === 'isxoqov'
+  && N.normalizeName('Исхоқов') === 'isxoqov' && N.normalizeName('Isxoqov') === 'isxoqov' && N.normalizeName('Шерзод') === 'sherzod', [N.toLatin('Исҳоқов'), N.normalizeName('Исҳоқов')]);
+ok('сҳ: to\'liq ism 100%, norasmiy «Ishoqov» ham taklifga yetadi', sim('Исҳоқов Жасур', 'Isxoqov Jasur') === 1 && sim('Исҳоқова Мадина', "Is'hoqova Madina") === 1
+  && sim('Ishoqov Jasur', 'Isxoqov Jasur') >= 0.8, sim('Ishoqov Jasur', 'Isxoqov Jasur'));
+// shortlist: bonus (+10%) bilan top-3 ga kira oladigan barcha nomzodlar qoladi — ro'yxat tartibiga bog'liq emas
+{ const many = []; ['Aliyeva', 'Karimova', 'Yusupova', 'Rahimova', 'Nazarova', 'Saidova', 'Ergasheva', 'Qodirova', 'Toshmatova', 'Sobirova', 'Olimova', 'Umarova']
+    .forEach((f, i) => many.push({ id: 'm' + i, name: f + ' Xadicha', debt: i === 11 ? 1500000 : 0, monthly: 1500000 }));
+  const ranked = N.rankByName('Xadicha', many, { limit: 1000 }), sl = N.shortlist(ranked, { keep: 3, maxBonus: 0.10 });
+  ok('shortlist: 12 teng adash — hammasi qoladi (12-si ham)', ranked.length === 12 && sl.length === 12 && sl.some(c => c.item.id === 'm11'), [ranked.length, sl.length]);
+  const pick = N.pickSuggestions(sl, 1500000, it => it, { min: 0.6, limit: 3 });
+  ok('shortlist + bonus: qarzi summaga teng 12-o\'quvchi birinchi (67%)', pick[0].item.id === 'm11' && pick[0].percent === 67, pick.map(x => [x.item.id, x.percent]));
+  const mixed = N.rankByName("Turg'unboyeva Hadicha", [{ name: "Turg'unboyeva Xadicha" }, { name: 'Turgunboyeva Xadicha' }, { name: "Turg'unboyeva Xadicha Rustamovna" }, { name: 'Aliyeva Xadicha' }, { name: 'Xadicha Turgunova' }], { limit: 1000 });
+  const ms = N.shortlist(mixed, { keep: 3, maxBonus: 0.10 });
+  ok('shortlist: 3-o\'rindan 10% dan ko\'p past nomzodlar tashlanadi', ms.length === 3 && ms.every(c => c.nameScore >= mixed[2].nameScore - 0.10 - 1e-9), [mixed.map(c => Math.round(c.nameScore * 100)), ms.length]);
+  ok('shortlist: cap', N.shortlist(ranked, { keep: 3, cap: 5 }).length === 5 && N.shortlist([], {}).length === 0); }
+
 // ---- Brauzer yo'li (UMD): module yo'q -> globalThis.IqrorNameMatch ----
 { const src = fs.readFileSync(path.join(__dirname, '..', 'sb', 'name-match.js'), 'utf8'); const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);
   ok('brauzerda globalThis.IqrorNameMatch', !!ctx.IqrorNameMatch && ctx.IqrorNameMatch.nameSimilarity("Turg'unboyeva Hadicha", T) === 1);
