@@ -431,6 +431,25 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Testlar: Chromium 35/35 (chiqarish oynasi) va 54/54 («Biriktirish»); haqiqiy stek (PG16 + PostgREST + shim) 31/31 —
   2-tasdiq matni, «Bekor» bosilsa bazada o'zgarish yo'qligi.
 
+## 31) Raqib ko'rigi (R9) — R8 tuzatmalari ustidan
+
+- Ikkinchi tekshiruv (asl repro skriptlar + variantlar + regressiya qidiruvi): R8 tuzatmalari asosan to'g'ri; 21 topilmadan
+  14 tasi tasdiqlandi va tuzatildi (7 tasi rad etildi).
+- **Yuqori (tuzatmaning o'zi kiritgan):** triggerning «qator bormi?» tekshiruvi qulfsiz edi — parallel ravishda shu `id`
+  o'zgartirilsa/o'chirilsa, qabulxona qo'shgan yangi qator TOZALANMAGAN (masalan «sinov», kelajak `activeFrom`) qolardi.
+  Endi tekshiruv qatorni qulflaydi (`FOR UPDATE` — parallel tranzaksiya tugashini kutadi); qabulxona/O'IBDO' qator kaliti
+  `id` ni umuman o'zgartira olmaydi (ilovada bunday amal yo'q). Ikki sessiyali poyga testi: eski triggerda yiqiladi, yangisida o'tadi.
+- **O'rta:** sanasiz muzlatilgan o'quvchini chiqarishda bugungi sana qo'yilardi → muzlatilgan oylar to'lanadigan bo'lib
+  qolardi. Endi: sana o'zgarmaydi («chiqdi», sanasiz — to'lov hisoblanmaydi), oynada sana maydoni yashirin, izoh va
+  tasdiqda «sanasiz»; bazada ham sanasiz muzlatilganga yangi sana qo'yish — rad. **O'rta:** «sana o'zgarmagan» istisnosi
+  faol o'quvchidagi qolib ketgan eski sana bilan chiqishni orqaga surishga imkon berardi — endi bu istisno faqat muzlatilgan/sinov uchun.
+- **Takliflar (past):** bosh harflar endi TEKSHIRILADI («Karimov J.» → faqat Jasur ~72%; zid bosh harf — rad; «Sh.»,
+  «Ш.», «Ю.», «Ya.», «Ё.» ham); o'quvchi yozuvi tozalanmaydi (koreyscha «O», «Avgust» ismi saqlanadi), izoh so'zlari faqat
+  to'lovchi matnidan va faqat ismda yo'q bo'lsa tashlanadi; raqamga yopishgan bo'laklar (`IQ-0042`, `5-A`, `11B`, hex kod,
+  `2026-yil`, «so'm») olib tashlanadi; izoh so'zlari kirill yozuvi bilan ham («оплата за обучение», «сўм», «қизим»…);
+  apostroflar Unicode toifasi bo'yicha (ˊ ˋ ‵ “ ” " ham), ko'rinmas belgilar o'chiriladi; qarz so'rovlari parallel.
+- Testlar: `name-match.test` 103; PG16 51/51 + poyga 2/2; haqiqiy stek e2e 36/36; Chromium 37/37 + 56/56.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

@@ -2960,7 +2960,9 @@ async function openStatusModal(s, collName, onSaved, opts){
       else { dl.textContent='Chiqqan sana (shu kungacha to‘lanadi)'; hint.textContent=isStu?'Shu kundan keyin faktura yo‘q. Eski qarz to‘lanmaguncha ro‘yxatda ko‘rinadi.':'Shu kundan keyin maosh yo‘q.'; }
       if((v==='muzlatilgan'||v==='chiqdi') && (cur==='muzlatilgan'||cur==='chiqdi') && s.stopFrom) hint.textContent+=` (Allaqachon to‘xtatilgan: ${MW} ${String(s.stopFrom).slice(0,10)} gacha qoladi — kechroq sana muzlatilgan kunlarni qaytarmaydi.)`;
       if((v==='muzlatilgan'||v==='chiqdi') && cur==='sinov') hint.textContent+=` (Sinovda edi — ${MW} hali boshlanmagan; qaytganda shu kundan boshlanadi.)`;
-      if(WD) hint.textContent+=` Eng erta sana — ${withdrawMinDate()} (undan oldingisi va qayta faollashtirish — direktor orqali).`; } };
+      if(WD) hint.textContent+=` Eng erta sana — ${withdrawMinDate()} (undan oldingisi va qayta faollashtirish — direktor orqali).`;
+      if(WD && cur==='muzlatilgan' && !/^\d{4}-\d{2}-\d{2}$/.test(String(s.stopFrom||'').slice(0,10))){ dw.style.display='none';
+        hint.textContent='Muzlatilgan, to‘xtatish sanasi yo‘q: chiqarilganda ham to‘lov hisoblanmaydi (muzlatilgandagidek). Aniq sana kerak bo‘lsa — direktor kiritadi.'; } } };
   sel.value = WD ? 'chiqdi' : ((cur==='faol') ? 'muzlatilgan' : 'faol');   // qulay: joriy holatga teskari amalni taklif qiladi
   upd(); sel.onchange=upd;
   // To'xtatilgan davrlarni TUZATISH (faqat o'quvchi; direktor): sanani o'zgartirish / davrni o'chirish.
@@ -3012,13 +3014,19 @@ async function openStatusModal(s, collName, onSaved, opts){
       //   yangi sana muzlatilgan kunlarni to'lanadigan oraliqqa qaytarardi (masalan muzlatilgan bola keyin «Chiqdi» qilinsa).
       const sf0=String(s.stopFrom||'').slice(0,10);
       patch.stopFrom = ((cur==='muzlatilgan'||cur==='chiqdi') && /^\d{4}-\d{2}-\d{2}$/.test(sf0) && sf0<dt) ? sf0 : dt;
+      // Qabulxona + muzlatilgan: to'xtatish sanasi FAQAT ertaroqqa (kelajakdagi muzlatish sanasidan oldin chiqsa) o'zgaradi,
+      //   aks holda yozilmaydi (o'zgarmaydi) — sanasiz muzlatilgan ham «chiqdi» bo'ladi, lekin to'lov holati o'zgarmaydi
+      //   (sana qo'yilsa muzlatilgan oylar to'lanadigan bo'lib qolardi — bu «sanani tuzatish», direktor ishi; DB ham shunday).
+      if(WD && cur==='muzlatilgan'){ if(/^\d{4}-\d{2}-\d{2}$/.test(sf0) && dt<sf0) patch.stopFrom=dt; else delete patch.stopFrom; }
       // «Sinov»dan to'xtatildi: to'lov/maosh hali BOSHLANMAGAN (sinov kunlari to'lanmaydi) — activeFrom = to'xtatishdan keyingi
       //   kun. Aks holda [activeFrom, stopFrom] to'lanadigan oraliqqa aylanardi; endi qaytishda «Faollashtirish» shu kundan boshlaydi.
       if(cur==='sinov') patch.activeFrom=addDaysStr(patch.stopFrom,1);
     }
     // Qabulxona: IKKINCHI tasdiq — chiqarishni qabulxona o'zi qaytara olmaydi (faqat direktor), shuning uchun noto'g'ri
     //   qatorda «Saqlash» bosilib ketmasin: KIM (ism, sinf, ID) va QAYSI sanadan — aniq yoziladi; «Bekor» — hech narsa yozilmaydi.
-    if(WD && !confirm(`«${s.name||s._id}» (${classLabelOf(s)}${s.studentId?`, ID ${s.studentId}`:''}) chiqarilsinmi?\n\nChiqqan sana: ${patch.stopFrom} — shu kundan keyin to‘lov hisoblanmaydi.\n⚠️ Qaytarish (qayta faollashtirish) — faqat direktor orqali.`)) return;
+    const _sfKeep=String(s.stopFrom||'').slice(0,10), _sfTxt = patch.stopFrom ? `${patch.stopFrom} — shu kundan keyin to‘lov hisoblanmaydi`
+      : (/^\d{4}-\d{2}-\d{2}$/.test(_sfKeep) ? `${_sfKeep} (muzlatilgan sana saqlanadi)` : '— (muzlatilgan, sanasiz: to‘lov hisoblanmaydi)');
+    if(WD && !confirm(`«${s.name||s._id}» (${classLabelOf(s)}${s.studentId?`, ID ${s.studentId}`:''}) chiqarilsinmi?\n\nChiqqan sana: ${_sfTxt}.\n⚠️ Qaytarish (qayta faollashtirish) — faqat direktor orqali.`)) return;
     const btn=$('#st-save'); btn.disabled=true;
     try{
       if(WD){
@@ -6074,8 +6082,10 @@ async function openAssign(payment, students, reload){
     cands.forEach(c=>{ info.set(c.item,{debt:0, monthly:null, pm:'', fm:''}); const k=String(c.item.studentId||c.item._id); if(!own[k]) own[k]=c.item; });
     const keys=Object.keys(own);
     const fetchInv=async()=>{
-      for(let i=0;i<keys.length;i+=20){
-        const snap=await getDocs(query(collection(db,'invoices'), where('studentId','in',keys.slice(i,i+20))));
+      // Bo'laklar PARALLEL (ketma-ket emas): nomzod ko'p bo'lsa ham kutish vaqti bitta so'rovnikidek qoladi.
+      const chunks=[]; for(let i=0;i<keys.length;i+=20) chunks.push(keys.slice(i,i+20));
+      const snaps=await Promise.all(chunks.map(ch=>getDocs(query(collection(db,'invoices'), where('studentId','in',ch)))));
+      for(const snap of snaps){
         snap.docs.forEach(d=>{ const v=d.data()||{}, st=own[String(v.studentId)], m=String(v.month||''); if(!st || !/^\d{4}-\d{2}$/.test(m)) return;
           const o=info.get(st); if(m<=cm) o.debt+=debtAmt(v);
           // Oylik to'lov — eng so'nggi (joriy oygacha) amaldagi faktura summasi; bo'lmasa eng yaqin keyingi oyniki.

@@ -19,8 +19,11 @@
   var YE_AFTER = 'аеёиоуўэюяъьыі';
   // Eski lotin / turkcha harflar (ba'zan shunday yoziladi)
   var LAT = { 'ş': 'sh', 'ç': 'ch', 'ğ': "g'", 'ö': "o'", 'ü': 'u', 'ı': 'i', 'â': 'a', 'é': 'e' };
-  // Barcha apostrof turlari -> '  (' ʻ ʼ ‘ ’ ‛ ` ´ ′ ʹ ʽ ʾ ʿ ˈ ꞌ ＇ ՚)
-  var APOS = /[\u2018\u2019\u201B\u02BB\u02BC\u02B9\u02BD\u02BE\u02BF\u02C8\uA78C\uFF07\u055A`\u00B4\u2032']/g;
+  // Barcha apostrof turlari -> '  — ro'yxat bilan emas, Unicode toifasi bilan: modifikator harf/belgilar (ʻ ʼ ʹ ˊ ˋ ´ ` …),
+  //   ochuvchi/yopuvchi tirnoqlar (‘ ’ ‛ “ ” « »), ASCII ' " va o'xshashlari (′ ″ ‵ ＇ ꞌ ՚). Ko'rinmas belgilar (yumshoq
+  //   tire, nol kenglikdagi bo'shliq…) — butunlay o'chiriladi (so'zni ikkiga bo'lib yubormasin).
+  var APOS = /[\p{Lm}\p{Sk}\p{Pi}\p{Pf}'"\u2032\u2033\u2035\uFF07\uA78C\u055A]/gu;
+  var INVISIBLE = /\p{Cf}/gu;
   // Otasining ismi qo'shimchasi — u va undan OLDINGI so'z hisobga olinmaydi (... Rustam qizi / o'g'li)
   var PATRON = /^(qizi|kizi|o'g'li|og'li|o'gli|ogli|ug'li|ugli|o'gil|o'g'il)$/;
 
@@ -51,7 +54,7 @@
   // 1-qadam: kichik harf, kirill -> lotin, apostroflar bitta (') belgiga, ortiqcha bo'shliqlar olib tashlangan.
   //   Турғунбоева Хадича -> turg'unboyeva xadicha. (Lotin harflaridagi diakritika — é, ñ, İ… — asos harfga.)
   function toLatin(name) {
-    var s = translit(String(name == null ? '' : name).normalize('NFC').toLowerCase());
+    var s = translit(String(name == null ? '' : name).normalize('NFC').toLowerCase().replace(INVISIBLE, ''));
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(APOS, "'").replace(/\s+/g, ' ').trim();
   }
 
@@ -68,21 +71,43 @@
     return kept.map(normWord).filter(Boolean).join(' ');
   }
 
-  // Solishtirishda hisobga olinmaydigan so'zlar: bitta harf (bosh harf «X.», sinf harfi «5-A») va to'lov izohidagi
-  //   umumiy so'zlar («uchun», «to'lov», «sinf», oy nomlari…). Aks holda ular haqiqiy ism so'ziga majburan juftlanib,
-  //   to'g'ri o'quvchining balini ~3% ga yiqitardi («Xadicha uchun» — «Xadicha» dan past chiqardi).
-  var FILLER = {};
-  ("uchun to'lov tolov to'lovi tolovi to'lovni oy oyi oyga oylik oyligi sinf sinfi sinfda sinfidan klass klassa maktab maktabi "
-    + "shkola o'quvchi oquvchi o'quvchisi oquvchisi farzand farzandi farzandim bola bolam bolasi kontrakt kontrakti shartnoma "
-    + "shartnomasi summa summasi pul puli dars darsi kurs kursi id raqam raqami kod kodi ism ismi familiya familiyasi fio ota ona "
-    + "otasi onasi va bilan ham yanvar fevral mart aprel may iyun iyul avgust sentabr sentyabr oktabr oktyabr noyabr dekabr "
-    + "oplata za uchenik uchenika uchenitsa mesyats obuchenie click payme uzum iqror iqro akademiya academy")
-    .split(' ').forEach(function (w) { FILLER[normalizeName(w)] = 1; });
-  // Solishtirish uchun so'zlar: normalizeName + bitta harfli va to'ldiruvchi so'zlarsiz; ko'pi bilan 5 ta (tozalashdan KEYIN —
-  //   «5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha» da ism tushib qolmasin).
-  function nameTokens(name) {
-    return normalizeName(name).split(' ').filter(function (t) { return t.length > 1 && !FILLER[t]; }).slice(0, 5);
+  // ---- To'lovchi matni («shovqinli») va o'quvchi ismi (toza yozuv) — ALOHIDA ishlanadi ----
+  // To'lovchi matnidagi raqamga yopishgan qisqa bo'laklar ism emas: maktab ID'si «IQ-0042», sinf «5-A» / «11B» / «5 «A»»,
+  //   «2026-yil», «1 500 000 so'm», hex o'quvchi kodi. Ular (va raqamlar) olib tashlanadi; uzun so'z raqamga yopishsa ham qoladi.
+  var WCH = "[\\p{L}\\p{M}'\\u2018\\u2019\\u02BB\\u02BC`\\u00B4]";
+  var NEAR_DIGIT_BEFORE = new RegExp('(^|[^\\p{L}\\p{M}])' + WCH + '{1,4}(?=[-\\u2013.]?\\d)', 'gu');
+  var NEAR_DIGIT_AFTER = new RegExp('(\\d\\s*[-\\u2013\\u2014.]?\\s*["\\u00AB\\u201C]?)' + WCH + '{1,4}(?![\\p{L}\\p{M}])', 'gu');
+  function payerClean(text) {
+    return String(text == null ? '' : text).normalize('NFC').toLowerCase().replace(INVISIBLE, '')
+      .replace(NEAR_DIGIT_BEFORE, '$1 ').replace(NEAR_DIGIT_AFTER, '$1 ');
   }
+
+  // To'lov izohidagi umumiy so'zlar (lotin VA kirill yozuvi — normalizeName orqali bir xil ko'rinishga keltiriladi).
+  //   Ular to'lovchi matnidan faqat o'quvchi ismida YO'Q bo'lsa tashlanadi («Avgust», «May» — haqiqiy ism ham bo'lishi mumkin).
+  var FILLER = {};
+  ("uchun to'lov tolov to'lovi tolovi to'lovni to'lash oy oyi oyga oyiga oylik oyligi sinf sinfi sinfda sinfidan klass klassa "
+    + "maktab maktabi shkola o'quvchi oquvchi o'quvchisi oquvchisi farzand farzandi farzandim farzandimiz farzandingiz bola bolam "
+    + "bolasi bolamiz bolangiz qizim qizimiz qizingiz o'g'lim og'lim o'g'limiz o'g'lingiz kontrakt kontrakti shartnoma shartnomasi "
+    + "summa summasi pul puli dars darsi kurs kursi id raqam raqami kod kodi ism ismi familiya familiyasi fio ota ona otasi onasi "
+    + "dadasi oyisi akasi opasi ukasi singlisi va bilan ham yanvar fevral mart aprel may iyun iyul avgust sentabr sentyabr oktabr "
+    + "oktyabr noyabr dekabr yil yili yilgi o'qish oqish o'qishi haqi ta'lim talim qarz qarzi qarzlar avans ovqat so'm som sum ming "
+    + "mln mlrd uzs oplata za uchenik uchenika uchenitsa mesyats obuchenie click payme uzum iqror iqro akademiya academy "
+    + "учун тўлов тулов тўлови ой ойи ойлик синф синфи мактаб ўқувчи ўқувчиси фарзанд фарзандим бола болам қизим ўғлим контракт "
+    + "шартнома сумма пул дарс курс ота она отаси онаси ва билан январь февраль март апрель май июнь июль август сентябрь октябрь "
+    + "ноябрь декабрь йил йили ўқиш ҳақи таълим қарз аванс овқат сўм сум минг млн оплата за обучение обучения учеба учёба учебу "
+    + "ученик ученика ученица ученицы школа школы класс класса месяц месяца дочь дочка доча дочери сын сынок сына")
+    .split(' ').forEach(function (w) { var n = normalizeName(w); if (n) FILLER[n] = 1; });
+
+  function payerAll(text) { return normalizeName(payerClean(text)).split(' ').filter(Boolean); }
+  // To'lovchi so'zlari: izoh so'zlari (FILLER) — faqat o'quvchi ismida ham bo'lsa qoladi; ko'pi bilan 5 ta (tozalashdan KEYIN —
+  //   «5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha» da ism tushib qolmasin). recTok berilmasa — barcha FILLER tashlanadi.
+  function payerTokens(all, recTok) {
+    return all.filter(function (w) { return !FILLER[w] || (recTok && recTok.indexOf(w) >= 0); }).slice(0, 5);
+  }
+  // O'quvchi ismi — toza yozuv: hech narsa tashlanmaydi (bitta harfli koreyscha familiya «O», «Avgust» ismi ham so'z).
+  function recordTokens(name) { return normalizeName(name).split(' ').filter(Boolean).slice(0, 5); }
+  // To'lovchi matnidagi ism so'zlari (izoh so'zlari va raqamli bo'laklarsiz) — «to'lovchi ism yozganmi?» tekshiruvi uchun.
+  function nameTokens(text) { return payerTokens(payerAll(text), null); }
 
   // Levenshtein masofasi (qo'shish/o'chirish/almashtirish = 1), ikki qatorli dinamik dasturlash.
   //   subCost(x, y) — ixtiyoriy: almashtirish narxi 0..1 (berilmasa — klassik Levenshtein).
@@ -115,6 +140,15 @@
     if (sh.length >= 3 && lg.indexOf(sh) === 0 && SHORT_SUFFIX.test(lg.slice(sh.length))) s = Math.max(s, 0.9);
     return s;
   }
+  // To'lovchi yozgan QISQA so'z (1–2 harf: «X.», «J.», «Sh.», «Ш.» → sh, «Ю.» → yu) — BOSH HARF sifatida tekshiriladi:
+  //   o'quvchi so'zi shu harf(lar) bilan boshlansa — o'rtacha dalil (0.75), boshqa harf bilan boshlansa — ZID (0): «Karimov J.»
+  //   Karimov Jasur'ga mos, Karimov Bekzod'ga emas. Aynan teng qisqa so'z (koreyscha «Li», «O») — to'liq mos.
+  var INITIAL = 0.75;
+  function pairSim(p, r) {   // p — to'lovchi so'zi, r — o'quvchi ismidagi so'z
+    if (p === r) return 1;
+    if (p.length <= 2) return r.indexOf(p) === 0 ? INITIAL : 0;
+    return wordSim(p, r);
+  }
   // Tasodifiy o'xshashlik chegarasi: begona ismlar ham umumiy harflar (-ov, -eva, -bek…) tufayli ~30% «o'xshaydi»
   //   (Karimov / Sobirov). Shu darajagacha o'xshashlik hisobga olinmaydi, yuqorisi 0..1 ga cho'ziladi.
   var CHANCE = 0.3;
@@ -122,25 +156,31 @@
 
   // Ikki ism o'xshashligi 0..1. So'zlar tartibi muhim emas: kichik to'plamdagi har so'z kattasidagi BITTA so'zga
   //   juftlanadi (eng yaxshi juftlash). Ball — juftlar balining (pairScore) GEOMETRIK o'rtachasi, 1.5-darajada: bitta
-  //   so'z mos kelmasa (faqat ism yoki faqat familiya mos — aka-uka, adash) ball 50% dan past bo'ladi va summa bonusi
-  //   ham uni 60% ga yetkaza olmaydi; oddiy imlo xatolari (so'zda 1 harf) esa ~80–90% da qoladi. Faqat bitta so'zli
-  //   ism — dalil kuchsiz (×0.6). Bir tomonda ortiqcha so'z (masalan otasining ismi -ovna) — yengil jarima.
-  function nameSimilarity(a, b) {
-    var A = nameTokens(a), B = nameTokens(b);
-    if (!A.length || !B.length) return 0;
-    var S = A.length <= B.length ? A : B, L = S === A ? B : A, k = S.length;
+  //   so'z mos kelmasa (faqat ism yoki faqat familiya mos — aka-uka, adash; zid bosh harf) ball 50% dan past bo'ladi va
+  //   summa bonusi ham uni 60% ga yetkaza olmaydi; oddiy imlo xatolari (so'zda 1 harf) esa ~80–90% da qoladi. Faqat bitta
+  //   so'z mos — dalil kuchsiz (×0.6). Bir tomonda ortiqcha so'z (masalan otasining ismi -ovna) — yengil jarima (−5%).
+  function simTokens(P, R) {
+    if (!P.length || !R.length) return 0;
+    var pSmall = P.length <= R.length, S = pSmall ? P : R, L = pSmall ? R : P, k = S.length;
     var best = -Infinity, used = [];
     (function rec(i, acc) {               // kichik to'plam -> katta to'plam injektiv juftlash (<= 5×5)
       if (i === k) { if (acc > best) best = acc; return; }
       for (var j = 0; j < L.length; j++) {
         if (used[j]) continue;
-        used[j] = true; rec(i + 1, acc + Math.log(pairScore(wordSim(S[i], L[j])))); used[j] = false;
+        var ps = pSmall ? pairSim(S[i], L[j]) : pairSim(L[j], S[i]);
+        used[j] = true; rec(i + 1, acc + Math.log(pairScore(ps))); used[j] = false;
       }
     })(0, 0);
     var g = Math.pow(Math.exp(best / k), 1.5);
     if (k === 1) g *= 0.6;
     g *= Math.max(0, 1 - 0.05 * (L.length - k));
     return Math.max(0, Math.min(1, g));
+  }
+  // nameSimilarity(to'lovchi matni, o'quvchi ismi) — tartib MUHIM: birinchisi «shovqinli» matn (raqamli bo'laklar, izoh
+  //   so'zlari tozalanadi, qisqa so'zlar — bosh harf), ikkinchisi — o'quvchi yozuvi (o'zgarishsiz).
+  function nameSimilarity(payer, record) {
+    var R = recordTokens(record);
+    return simTokens(payerTokens(payerAll(payer), R), R);
   }
 
   // Summa mosligi bonusi: joriy qarz = to'lov summasi -> +10%, oylik to'lov = summa -> +5% (eng kattasi, qo'shilmaydi).
@@ -162,10 +202,11 @@
     opts = opts || {};
     var minName = opts.minName == null ? 0.5 : opts.minName, limit = opts.limit || 8;
     var getName = opts.getName || function (x) { return x && x.name; };
-    if (!nameTokens(payerName).length) return [];
+    var all = payerAll(payerName);
+    if (!all.length) return [];
     var out = [];
     (items || []).forEach(function (it) {
-      var sc = nameSimilarity(payerName, getName(it));
+      var R = recordTokens(getName(it)), sc = simTokens(payerTokens(all, R), R);
       if (sc >= minName) out.push({ item: it, nameScore: sc });
     });
     out.sort(function (x, y) { return y.nameScore - x.nameScore; });

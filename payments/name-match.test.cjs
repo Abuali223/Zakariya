@@ -117,22 +117,41 @@ ok('kirish ma\'lumoti o\'zgartirilmaydi', JSON.stringify(SCHOOL[0]) === JSON.str
   const t0 = Date.now(); N.rankByName("Turg'unboyeva Hadicha", big); const ms = Date.now() - t0;
   ok('3000 o\'quvchi — tez (< 1.5 s)', ms < 1500, ms); }
 
-// ---- Ko'rik (R8) holatlari ----
-// Bosh harf, sinf harfi va to'lov izohidagi so'zlar ism balini yiqitmaydi (ilgari majburiy juftlanib ~3% bo'lardi)
+// ---- Ko'rik (R8/R9) holatlari ----
+// To'lovchi matnidagi izoh so'zlari, sinf/ID/raqamli bo'laklar ism balini yiqitmaydi (ilgari majburiy juftlanib ~3% bo'lardi)
 const T3 = "Turg'unboyeva Xadicha Rustamovna";
-ok('bosh harf / sinf / «uchun» — yalang ism bilan bir xil', ["Turg'unboyeva X.", "X. Turg'unboyeva", 'Xadicha 5-A', 'Xadicha uchun', 'Xadicha T.', "Xadicha uchun to'lov"]
-  .every(p => Math.abs(sim(p, T) - sim(p.split(/[ .]/).filter(w => w.length > 2 && !/uchun|to'lov/.test(w))[0], T)) < 1e-9),
-  ["Turg'unboyeva X.", 'Xadicha 5-A', 'Xadicha uchun'].map(p => sim(p, T)));
+ok('sinf / «uchun» / ID / so\'m — yalang ism bilan bir xil', ['Xadicha 5-A', 'Xadicha 5 «A»', 'Xadicha 11B', 'Xadicha uchun', "Xadicha uchun to'lov", 'IQ-0042 Xadicha',
+  "Xadicha 1 500 000 so'm", 'Хадича 1 500 000 сўм', 'Xadicha qizim uchun', 'Хадича оплата за обучение', 'Xadicha 2026-yil'].every(p => Math.abs(sim(p, T) - sim('Xadicha', T)) < 1e-9),
+  ['Xadicha 5-A', 'IQ-0042 Xadicha', 'Хадича оплата за обучение'].map(p => sim(p, T)));
 ok('izohdagi so\'zlar (sinf, oy nomi) — ism oxirida bo\'lsa ham topiladi', sim("5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha", T) === 1
   && sim('Октябрь ойи учун Турғунбоева Хадича', T) === 1, sim("5-A sinf oktyabr oyi uchun Turg'unboyeva Xadicha", T));
-ok('3 so\'zli yozuv + to\'liq ism + ortiqcha so\'z — yuqori', ["Turg'unboyeva Xadicha", "Turg'unboyeva Xadicha R.", "Turg'unboyeva Xadicha 5-A", "Turg'unboyeva Xadicha uchun"]
-  .every(p => sim(p, T3) >= 0.9), ["Turg'unboyeva Xadicha uchun", "Turg'unboyeva Xadicha 5-A"].map(p => sim(p, T3)));
-ok('nameTokens: bitta harf va izoh so\'zlari tashlanadi; normalizeName esa o\'zgarmaydi', JSON.stringify(N.nameTokens('Xadicha 5-A uchun T.')) === '["xadicha"]'
-  && N.normalizeName('Xadicha uchun') === 'xadicha uchun' && N.nameTokens('Oktyabr uchun to\'lov').length === 0);
+ok('3 so\'zli yozuv + to\'liq ism + ortiqcha so\'z / ID / hex kod — yuqori (95%)', ["Turg'unboyeva Xadicha", "Turg'unboyeva Xadicha 5-A", "Turg'unboyeva Xadicha uchun",
+  "Turg'unboyeva Xadicha IQ-0042", "Turg'unboyeva Xadicha 3FA9C0B21DE7", "Турғунбоева Хадича оплата за обучение"].every(p => sim(p, T3) >= 0.9),
+  ["Turg'unboyeva Xadicha 3FA9C0B21DE7", "Турғунбоева Хадича оплата за обучение"].map(p => sim(p, T3)));
+ok('nameTokens: raqamli bo\'laklar va izoh so\'zlari tashlanadi, bosh harf qoladi; normalizeName o\'zgarmaydi', JSON.stringify(N.nameTokens('Xadicha 5-A uchun T.')) === '["xadicha","t"]'
+  && N.normalizeName('Xadicha uchun') === 'xadicha uchun' && N.nameTokens('Oktyabr uchun to\'lov').length === 0, N.nameTokens('Xadicha 5-A uchun T.'));
 ok('faqat izoh so\'zlari — nomzod yo\'q', N.rankByName("Oktyabr oyi uchun to'lov", SCHOOL).length === 0);
+// Bosh harf (1–2 harf: X., J., Sh., Ш., Ю., Я., Ё.) — TEKSHIRILADI: mos — o'rtacha dalil (~72%), zid — rad (~3%)
+ok('mos bosh harf: familiya + bosh harf ~72% (yalang familiyadan yuqori)', ["Turg'unboyeva X.", "X. Turg'unboyeva", 'Xadicha T.', 'Xadicha T. uchun'].every(p => sim(p, T) > 0.7 && sim(p, T) < 0.75)
+  && sim("Turg'unboyeva X.", T) > sim("Turg'unboyeva", T), ["Turg'unboyeva X.", 'Xadicha T.'].map(p => sim(p, T)));
+ok('zid bosh harf: aka-uka/adash rad', sim('Karimov J.', 'Karimov Bekzod') < 0.1 && sim('Xadicha R.', T) < 0.1 && sim('Xadicha T. uchun', 'Aliyeva Xadicha') < 0.1,
+  [sim('Karimov J.', 'Karimov Bekzod'), sim('Xadicha R.', T)]);
+ok('ikki harfli bosh harflar (Sh., Ш., Ю., Ya., Ё.)', sim('Karimov Sh.', 'Karimov Shohruh') > 0.7 && sim('Каримов Ш.', 'Karimov Sherzod') > 0.7 && sim('Юсупова Ю.', 'Yusupova Yulduz') > 0.7
+  && sim('Yusupova Ya.', 'Yusupova Yasmina') > 0.7 && sim('Турсунов Ё.', 'Tursunov Yoqub') > 0.7 && sim('Karimov Sh.', 'Karimov Jasur') < 0.1);
+ok('3 so\'zli yozuv: otasining ismi bosh harfi ham mos keladi', sim("Turg'unboyeva Xadicha R.", T3) >= 0.75, sim("Turg'unboyeva Xadicha R.", T3));
+{ const K = [{ id: 'a', name: 'Karimov Aziz' }, { id: 'b', name: 'Karimov Bobur' }, { id: 'd', name: 'Karimov Doniyor' }, { id: 'j', name: 'Karimov Jasur' }];
+  const r = N.pickSuggestions(N.rankByName('Karimov J.', K, { limit: 1000 }), 1500000, () => ({ debt: 1500000 }));
+  ok('«Karimov J.»: faqat Jasur taklif qilinadi (qarz = summa bo\'lgan aka-ukalar emas)', r.length === 1 && r[0].item.id === 'j', r.map(x => [x.item.id, x.percent])); }
+// O'quvchi yozuvi tozalanmaydi: koreyscha «O», «Avgust» ismi — so'z; to'lovchi matnida esa izoh so'zi faqat ismda yo'q bo'lsa tashlanadi
+ok('koreyscha «O»: to\'liq mos, boshqa familiya bilan adashmaydi', sim('O Viktoriya', 'O Viktoriya Sergeyevna') >= 0.9 && sim('О Виктория', 'O Viktoriya') === 1
+  && sim('O Viktoriya', 'Kim Viktoriya') < 0.1 && sim('Viktoriya', 'O Viktoriya') < 0.6, [sim('O Viktoriya', 'Kim Viktoriya'), sim('Viktoriya', 'O Viktoriya')]);
+ok('«Avgust» — ism bo\'lsa saqlanadi, izoh bo\'lsa tashlanadi', sim('Karimov Avgust', 'Karimov Avgust') === 1 && sim('Karimov R. uchun', 'Karimov Avgust') < 0.1
+  && Math.abs(sim('Xadicha avgust uchun', T) - sim('Xadicha', T)) < 1e-9);
+ok('asimmetriya hujjatlangan: (to\'lovchi, yozuv) — yozuvdagi bitta harf tashlanmaydi', sim('Viktoriya', 'O Viktoriya') < sim('O Viktoriya', 'O Viktoriya'));
 // Barcha apostrof turlari (‛ ʹ ʽ ʾ ʿ ˈ ꞌ ＇ ՚ ham)
-['‛', 'ʹ', 'ʽ', 'ʾ', 'ʿ', 'ˈ', 'ꞌ', '＇', '՚'].forEach(a => ok(`apostrof ${JSON.stringify(a)} -> '`, N.normalizeName(`Turg${a}unboyeva Xadicha`) === "turg'unboeva xadicha" && sim(`O${a}tkir Karimov`, "O'tkir Karimov") === 1,
-  N.normalizeName(`Turg${a}unboyeva Xadicha`)));
+['‛', 'ʹ', 'ʽ', 'ʾ', 'ʿ', 'ˈ', 'ꞌ', '＇', '՚', 'ˊ', 'ˋ', '‵', '“', '”', '"', 'ˮ', '΄', '˝', '″'].forEach(a => ok(`apostrof ${JSON.stringify(a)} -> '`,
+  N.normalizeName(`Turg${a}unboyeva Xadicha`) === "turg'unboeva xadicha" && sim(`O${a}tkir Karimov`, "O'tkir Karimov") === 1, N.normalizeName(`Turg${a}unboyeva Xadicha`)));
+ok('ko\'rinmas belgilar (yumshoq tire, ZWSP…) so\'zni bo\'lmaydi', ['\u00AD', '\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF'].every(c => N.normalizeName(`Turg${c}unboyeva`) === 'turgunboeva'));
 // Kirill «сҳ» = s'h (Исҳоқ = Is'hoq), «ш» emas
 ok('сҳ -> s\'h (toLatin), h->x bilan Isxoqov ga teng', N.toLatin('Исҳоқов') === "is'hoqov" && N.normalizeName('Исҳоқов') === 'isxoqov' && N.normalizeName("Is'hoqov") === 'isxoqov'
   && N.normalizeName('Исхоқов') === 'isxoqov' && N.normalizeName('Isxoqov') === 'isxoqov' && N.normalizeName('Шерзод') === 'sherzod', [N.toLatin('Исҳоқов'), N.normalizeName('Исҳоқов')]);

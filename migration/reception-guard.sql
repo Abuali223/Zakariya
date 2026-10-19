@@ -13,9 +13,9 @@ do $iqror_guard$ begin raise exception 'iqror: reception-guard.sql ALOHIDA ishga
 --     (direktor/ma'muriyat rahbari = app.is_admin_head()) huquqi.
 --   ISTISNO (foydalanuvchi talabi): qabulxona o'quvchini CHIQARA OLADI — FAQAT «chiqdi» ga o'tish:
 --     payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan), stopFrom — haqiqiy sana, o'tgan oyning 1-sanasidan
---     (Toshkent) oldin emas YOKI o'zgarmagan; muzlatilganda faqat eski sanadan ERTAROQ (eski, ertaroq sana
---     saqlanadi), pauses o'zgarmaydi, activeFrom o'zgarmaydi («sinov»dan chiqarilsa — AYNAN stopFrom + 1 kun,
---     admin.html bilan bir xil). NULL qiymatlar bilan chetlab o'tib bo'lmaydi. O'IBDO' — hech biri.
+--     (Toshkent) oldin emas; muzlatilganda — o'zgarmaydi (sanasiz ham) yoki faqat ERTAROQ; pauses o'zgarmaydi,
+--     activeFrom o'zgarmaydi («sinov»dan chiqarilsa — AYNAN stopFrom + 1 kun, admin.html bilan bir xil). NULL
+--     qiymatlar bilan chetlab o'tib bo'lmaydi; qator kaliti (id) o'zgarmaydi. O'IBDO' — hech biri.
 --
 --   MOLIYAVIY maydonlar (chegirma/kontrakt/aka-uka/referral) qabulxonaga QOLDIRILADI —
 --     ular pulga ta'sir qilmaydi, faqat ota-onaga xabar berish/undiruv uchun kerak
@@ -55,7 +55,11 @@ begin
       --   o'tadi: ilgari bu yerda tozalash qabulxonaning «Chiqarish» yozuvini jimgina '' ga aylantirardi
       --   (yoki 42501). Shuning uchun tozalash FAQAT haqiqatan YANGI qator uchun; mavjud qatorga upsert esa
       --   pastdagi UPDATE tekshiruvidan o'tadi.
-      if not exists (select 1 from public.students x where x.id = new.id) then
+      --   Tekshiruv QATORNI QULFLAB bajariladi (FOR UPDATE): parallel tranzaksiya shu id'ni o'zgartirayotgan/o'chirayotgan
+      --   bo'lsa, u tugashini kutadi va qatorni qayta baholaydi — aks holda «hali bor» deb tozalash o'tkazib yuborilib,
+      --   o'sha tranzaksiya tugagach qator TOZALANMAGAN holda qo'shilardi (TOCTOU poygasi).
+      perform 1 from public.students x where x.id = new.id for update;
+      if not found then
         new."payStatus"  := '';   -- oddiy (faol) qilib yaratiladi
         -- To'lov RO'YXATGA OLINGAN KUNDAN (Toshkent) hisoblanadi: avval '' yozilib, oy o'rtasida qo'shilgan
         --   bola butun oy uchun (1-sanadan, prorata'siz) hisoblanardi. Ma'muriyat keyin ⏯️ bilan o'zgartirishi mumkin.
@@ -64,16 +68,23 @@ begin
         new."pauses"     := '[]'::jsonb;   -- to'xtatilgan davrlar tarixi ham holatning bir qismi
       end if;
     elsif tg_op = 'UPDATE' then
+      -- Qator kalitini (id) qabulxona/O'IBDO' o'zgartira olmaydi: ilovada bunday amal yo'q (ID tahrirda qulflangan; qayta
+      --   kalitlash — faqat migratsiya), u esa parallel INSERT bilan poyga uchun vosita bo'lardi.
+      if new.id is distinct from old.id then
+        raise exception 'O''quvchi yozuvi kalitini (id) faqat Ma''muriyat o''zgartira oladi' using errcode = '42501';
+      end if;
       if (new."payStatus"  is distinct from old."payStatus")
       or (new."activeFrom" is distinct from old."activeFrom")
       or (new."stopFrom"   is distinct from old."stopFrom")
       or (new."pauses"     is distinct from old."pauses") then
         -- Qabulxona: FAQAT «Chiqarish». Shartlar (hammasi bajarilishi SHART; NULL — «yo'q» deb hisoblanadi):
         --   * payStatus -> 'chiqdi' (avval 'chiqdi' bo'lmagan); NULL/'' ga o'tkazish (= faollashtirish) — rad;
-        --   * stopFrom — haqiqiy sana (YYYY-MM-DD; '2026-99-99' kabi qolipga mos yaroqsiz qiymat — rad);
-        --   * stopFrom o'zgarmagan YOKI >= o'tgan oyning 1-sanasi; muzlatilgan o'quvchida faqat ERTAROQ sana
-        --     (kechroq sana muzlatilgan oylarni qayta to'lanadigan qilardi — bu «sanani tuzatish», direktor ishi);
         --   * pauses o'zgarmaydi;
+        --   * stopFrom: muzlatilganda — o'zgarmaydi (sanasiz bo'lsa ham: to'lov holati muzlatilgandagidek qoladi) YOKI faqat
+        --     ERTAROQ haqiqiy sana (>= o'tgan oyning 1-sanasi); sinovda — haqiqiy sana (o'zgarmagan yoki >= o'tgan oyning
+        --     1-sanasi); boshqalarda (faol/bo'sh/NULL) — DOIM haqiqiy sana >= o'tgan oyning 1-sanasi (qolib ketgan eski
+        --     sana bilan ham orqaga surib bo'lmaydi). Kechroq/yangi sana muzlatilgan oylarni to'lanadigan qilardi — bu
+        --     «sanani tuzatish», direktor ishi. Haqiqiy sana: YYYY-MM-DD va kalendarda bor ('2026-99-99' — rad);
         --   * activeFrom o'zgarmaydi; «sinov»dan chiqarilsa — AYNAN stopFrom + 1 kun (sinov kunlari to'lanmaydi).
         v_prev := coalesce(old."payStatus", '');
         v_stop := null; v_old := null;
@@ -96,10 +107,14 @@ begin
             and coalesce(new."payStatus", '') = 'chiqdi'
             and v_prev <> 'chiqdi'
             and new."pauses" is not distinct from old."pauses"
-            and v_stop is not null
-            and ( new."stopFrom" is not distinct from old."stopFrom"
-                  or ( v_stop >= v_min
-                       and not (v_prev = 'muzlatilgan' and v_old is not null and v_stop > v_old) ) )
+            and ( case
+                    when v_prev = 'muzlatilgan' then
+                         new."stopFrom" is not distinct from old."stopFrom"
+                         or (v_old is not null and v_stop is not null and v_stop >= v_min and v_stop <= v_old)
+                    when v_prev = 'sinov' then
+                         v_stop is not null and (new."stopFrom" is not distinct from old."stopFrom" or v_stop >= v_min)
+                    else v_stop is not null and v_stop >= v_min
+                  end )
             and ( case when v_prev = 'sinov'
                        then new."activeFrom" is not distinct from to_char(v_stop + 1, 'YYYY-MM-DD')
                        else new."activeFrom" is not distinct from old."activeFrom" end );
