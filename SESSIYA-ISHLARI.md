@@ -334,14 +334,18 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   qo'yish ham jimgina almashtirmaydi.
 - **IME:** kompozitsiya `compositionend`siz tugasa (o'rtada nusxa qo'yish, fokus ketishi, oddiy kiritish kelishi) —
   bayroq tiklanadi, maska o'chib qolmaydi. Ko'rinib turgan «+998» ni belgilab yozish endi ishlaydi (tugmalar yutilmaydi);
-  ortida raqamlar bo'lsa — tahrir bekor (begona raqam yo'q). `auth-api.js?v=6`.
+  ortida raqamlar bo'lsa — tahrir bekor (begona raqam yo'q).
 - **`eskiz-shablon.cjs`:** avtomatik qidiruvda har tur uchun birinchi MAVJUD fayl jonli (o'z `config.json`ida kalit
   to'ldirilmagan bo'lsa `/opt`dagi boshqa faylga o'tib noto'g'ri ✅ bermaydi — «TEKSHIRILMADI»); bir xil email, boshqa
   parol — ikkala sozlama alohida login qilinadi (xato qaysi faylda ekani aytiladi, parol chiqmaydi); moderator faqat
   ba'zi joylarni o'zgaruvchi qilgan yoki ism uchun «%w %w» yozgan bo'lsa — «Tuzatish» emas, qayta yuborish maslahati;
   sinov qiymatlarida 1 so'zli ism ham bor (5 to'plam).
+- Ko'rik yakuni (4 tasdiqlangan — hammasi tuzatilgan) bo'yicha aniqlashtirish: nusxaning o'zi to'liq xalqaro raqam bo'lsa
+  (`+`/`00` bilan yoki `998` + 9 raqam) — u maydonni almashtiradi (natija aynan nusxadagi raqam); 9 xonali milliy qism esa
+  foydalanuvchi yozgan narsa ustiga hech qachon almashtirmaydi. Tashlab ketilgan kompozitsiya `beforeinput`da ham
+  aniqlanadi — «oldingi qiymat» hozirgi qiymatdan olinadi (eskirgan qiymatga tiklash yo'q). `auth-api.js?v=7`.
 - Rad etildi: `smsMonths` uzilishli oylarda SMS uzunligi oshishi — ataylab (to'g'rilik muhimroq, §25).
-- Testlar: `phone.test` 180 (tuzatmasiz 8 tasi yiqiladi), `eskiz-shablon.test` 48; Chromium 43 + 43 + 19 + 10 + 14.
+- Testlar: `phone.test` 186 (tuzatmasiz yangi testlar yiqiladi), `eskiz-shablon.test` 48; Chromium 53 + 43 + 19 + 10 + 14.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

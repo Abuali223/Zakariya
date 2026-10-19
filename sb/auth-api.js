@@ -194,7 +194,13 @@ export function bindPhoneInput(el) {
   let prev = el.value, ps = 0, pe = 0, composing = false, cPrev = null;
   const sel = () => [typeof el.selectionStart === "number" ? el.selectionStart : el.value.length, typeof el.selectionEnd === "number" ? el.selectionEnd : el.value.length];
   // Tahrirdan OLDINGI qiymat va belgilash (dastur o'zgartirgan bo'lsa ham). Kompozitsiya davomida — boshidagisi saqlanadi.
-  el.addEventListener("beforeinput", () => { if (composing) return; prev = el.value; [ps, pe] = sel(); });
+  // Kompozitsiya compositionend'siz tashlab ketilgan bo'lsa (masalan skript qiymatni o'zgartirdi) — keyingi oddiy tahrir
+  //   uni yakunlaydi; «oldingi qiymat» esa HOZIRGI qiymatdan olinadi (eskirgan qiymatga «tiklash» bo'lmasin).
+  const abandoned = e => composing && e && e.isComposing === false && e.inputType !== "insertCompositionText";
+  el.addEventListener("beforeinput", e => {
+    if (abandoned(e)) { composing = false; cPrev = null; }
+    if (composing) return; prev = el.value; [ps, pe] = sel();
+  });
   el.addEventListener("compositionstart", () => { composing = true; cPrev = [el.value, ...sel()]; });
   el.addEventListener("compositionend", () => {
     composing = false;
@@ -240,23 +246,25 @@ export function bindPhoneInput(el) {
     if (m !== el.value) put(m, after);
     prev = el.value; [ps, pe] = sel();
   }
-  // Kompozitsiya compositionend'siz tugagan bo'lsa (masalan o'rtada nusxa qo'yildi / fokus ketdi) — bayroq osilib qolmasin
-  const endCompose = () => { composing = false; if (cPrev) { [prev, ps, pe] = cPrev; cPrev = null; } };
+  // beforeinput'siz brauzerda tashlab ketilgan kompozitsiya — faqat maskalaymiz (oldingi qiymat noma'lum: tiklash yo'q)
   el.addEventListener("input", e => {
-    if (composing && e && e.isComposing === false && e.inputType !== "insertCompositionText") endCompose();
+    if (abandoned(e)) { composing = false; cPrev = null; run(""); return; }
     if (composing || (e && e.isComposing)) return;                    // IME: kompozitsiya tugaguncha tegmaymiz
     run((e && e.inputType) || "");
   });
+  const endCompose = () => { composing = false; if (cPrev) { [prev, ps, pe] = cPrev; cPrev = null; } };
   el.addEventListener("blur", () => { if (composing) { endCompose(); run("insertText"); } });
   el.addEventListener("paste", e => {
     const cd = e.clipboardData || (typeof window !== "undefined" && window.clipboardData);
     const txt = cd && typeof cd.getData === "function" ? String(cd.getData("text") || "") : "";
     const clean = txt.replace(INVIS, "").trim();
     if (!clean || !phoneCanon(clean)) return;          // to'liq raqam emas — brauzer odatdagidek qo'yadi
-    // Almashtirish faqat maydonda (belgilangan qismdan tashqari) foydalanuvchi yozgan narsa bo'lmasa: bo'sh yoki faqat
-    //   «+998». Aks holda («+48 » yoki «+» yozilgan) — brauzer odatdagidek qo'yadi: 9 raqam jimgina +998 raqamga aylanmasin.
+    // Almashtirish faqat natija bir ma'noli bo'lsa: nusxa o'zi to'liq xalqaro raqam ('+'/'00' bilan yoki 998 + 9 raqam) YOKI
+    //   maydonda (belgilangan qismdan tashqari) foydalanuvchi narsasi yo'q (bo'sh yoki faqat «+998»). Aks holda («+48 » yoki
+    //   «+» yozilgan, nusxa — 9 xonali milliy qism) brauzer odatdagidek qo'yadi: raqam jimgina +998 raqamga aylanmasin.
     const [s0, s1] = sel(), cur = el.value;
-    if (!/^\s*(\+\s*9\s*9\s*8|9\s*9\s*8)?\s*$/.test(cur.slice(0, s0) + cur.slice(s1))) return;
+    const full = /^[^0-9]*(\+|00)/.test(clean) || /^998\d{9}$/.test(digits(clean));
+    if (!full && !/^\s*(\+\s*9\s*9\s*8|9\s*9\s*8)?\s*$/.test(cur.slice(0, s0) + cur.slice(s1))) return;
     e.preventDefault();
     composing = false; cPrev = null;
     put(maskPhone(clean), 0);

@@ -208,9 +208,9 @@ class FakeInput {
   edit(text, inputType, dir) {
     let a = this.selectionStart, b = this.selectionEnd; const v = this._v;
     if (a === b && text === '') { if (dir < 0) { if (a === 0) return; a--; } else { if (b >= v.length) return; b++; } }
-    this.dispatchEvent({ type: 'beforeinput', inputType });
+    this.dispatchEvent({ type: 'beforeinput', inputType, isComposing: false });     // brauzerdagidek: oddiy tahrir — isComposing:false
     this._v = v.slice(0, a) + text + v.slice(b); this.selectionStart = this.selectionEnd = a + text.length;
-    this.dispatchEvent({ type: 'input', inputType });
+    this.dispatchEvent({ type: 'input', inputType, isComposing: false });
   }
   type(str) { for (const ch of str) this.edit(ch, 'insertText', 0); }
   back() { this.edit('', 'deleteContentBackward', -1); }
@@ -283,7 +283,15 @@ for (const [txt, want] of [['998901234567', '+998 90 123 45 67'], ['\u202D+998 9
 { const f = field(); f.type('+7'); f.paste('901234567');
   ok('«+7» + paste 901234567 -> +998 90… EMAS', W.normPhone(f.value) !== '998901234567', f.value); }
 { const f = typed('901234567'); f.caret(f.value.length); f.paste('+998 93 630 11 11');
-  ok('to\'liq raqam ustiga (belgilamasdan) paste -> jimgina almashtirilmaydi', f.value !== '+998 93 630 11 11' && W.normPhone(f.value) === null, f.value); }
+  ok('to\'liq raqam ustiga to\'liq XALQARO raqam paste -> aynan nusxadagi raqam', f.value === '+998 93 630 11 11', f.value); }
+{ const f = typed('901234567'); f.caret(f.value.length); f.paste('931234567');
+  ok('to\'liq raqam ustiga 9 xonali milliy qism paste -> jimgina almashtirilmaydi', f.value !== '+998 93 123 45 67' && W.normPhone(f.value) === null, f.value); }
+{ const f = field(); f.type('+48 '); f.paste('+998 93 630 11 11');
+  ok('«+48 » ustiga to\'liq +998 raqam paste -> nusxadagi raqam', f.value === '+998 93 630 11 11', f.value); }
+{ const f = field(); f.type('+992'); f.paste('998931234567');
+  ok('«+992» ustiga 998… (12 raqam) paste -> nusxadagi O\'zbekiston raqami', f.value === '+998 93 123 45 67', f.value); }
+{ const f = field(); f.type('+992'); f.paste('93 123 45 67');
+  ok('«+992» + paste «93 123 45 67» -> +992 raqam (O\'zbekiston raqamiga aylanmaydi)', W.normPhone(f.value) === '992931234567', { v: f.value, n: W.normPhone(f.value) }); }
 { const f = typed('901234567'); f.sel(5, f.value.length); f.paste('+998 93 630 11 11');
   ok('raqam qismini belgilab paste («+998 » qoladi) -> yangi raqam', f.value === '+998 93 630 11 11', f.value); }
 { const f = field(); f.value = ''; f.caret(0); f.paste('901234567');
@@ -329,6 +337,15 @@ for (const [txt, want] of [['998901234567', '+998 90 123 45 67'], ['\u202D+998 9
   f._v = '+998 901234567'; f.selectionStart = f.selectionEnd = 14; f.dispatchEvent({ type: 'input', inputType: 'insertCompositionText', isComposing: true });
   f.dispatchEvent({ type: 'blur' });
   ok('kompozitsiya paytida fokus ketdi -> maskalanadi', f.value === '+998 90 123 45 67', f.value); }
+{ const f = typed('9012'); f.dispatchEvent({ type: 'compositionstart' });   // kompozitsiya '3' qo'shdi, so'ng compositionend'siz tashlab ketildi
+  f.dispatchEvent({ type: 'beforeinput', inputType: 'insertCompositionText', isComposing: true }); f._v = '+998 90 123'; f.selectionStart = f.selectionEnd = 11;
+  f.dispatchEvent({ type: 'input', inputType: 'insertCompositionText', isComposing: true });
+  f.caret(8); f.back();                                                   // bo'shliqdan keyin Backspace: HOZIRGI qiymatga nisbatan
+  ok('tashlab ketilgan kompozitsiyadan keyin tahrir hozirgi qiymat bo\'yicha (eski qiymatga «tiklash» yo\'q)', f.value === '+998 91 23', f.value); }
+{ const f = field(); f.type('+4791234567'); const v0 = f.value; f.dispatchEvent({ type: 'compositionstart' });
+  f.dispatchEvent({ type: 'input', inputType: 'insertCompositionText', isComposing: true });
+  f.caret(0); f.del();
+  ok('tashlab ketilgan kompozitsiya + «+» oldida Delete (chet el) -> o\'zgarmaydi', f.value === v0, { v0, v: f.value }); }
 { const f = field(); f.sel(0, 4); f.type('9');
   ok('ko\'rinib turgan «+998» ni belgilab yozish -> +998 9 (tugma yutilmaydi)', f.value === '+998 9', f.value); }
 { const f = typed('901'); const v0 = f.value; f.sel(0, 4); f.type('7');
