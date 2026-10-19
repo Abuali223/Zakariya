@@ -142,9 +142,15 @@ ok('3 so\'zli yozuv: otasining ismi bosh harfi ham mos keladi', sim("Turg'unboye
 { const K = [{ id: 'a', name: 'Karimov Aziz' }, { id: 'b', name: 'Karimov Bobur' }, { id: 'd', name: 'Karimov Doniyor' }, { id: 'j', name: 'Karimov Jasur' }];
   const r = N.pickSuggestions(N.rankByName('Karimov J.', K, { limit: 1000 }), 1500000, () => ({ debt: 1500000 }));
   ok('«Karimov J.»: faqat Jasur taklif qilinadi (qarz = summa bo\'lgan aka-ukalar emas)', r.length === 1 && r[0].item.id === 'j', r.map(x => [x.item.id, x.percent])); }
-// O'quvchi yozuvi tozalanmaydi: koreyscha «O», «Avgust» ismi — so'z; to'lovchi matnida esa izoh so'zi faqat ismda yo'q bo'lsa tashlanadi
-ok('koreyscha «O»: to\'liq mos, boshqa familiya bilan adashmaydi', sim('O Viktoriya', 'O Viktoriya Sergeyevna') >= 0.9 && sim('О Виктория', 'O Viktoriya') === 1
-  && sim('O Viktoriya', 'Kim Viktoriya') < 0.1 && sim('Viktoriya', 'O Viktoriya') < 0.6, [sim('O Viktoriya', 'Kim Viktoriya'), sim('Viktoriya', 'O Viktoriya')]);
+// O'quvchi yozuvi tozalanmaydi: koreyscha «O», «Avgust» ismi — so'z; to'lovchi matnida esa izoh so'zi faqat ismda yo'q bo'lsa tashlanadi.
+//   Nuqtasiz yakka harf («O», «5-sinf B», «в») — ismdagi so'zga aynan teng bo'lsagina hisobga olinadi: «O Viktoriya» ↔ «Kim Viktoriya»
+//   = faqat ism mos (yalang «Viktoriya» bilan bir xil, < 60%) — sinf harfi 3 so'zli yozuvni yiqitmasligi uchun (R10).
+ok('koreyscha «O»: to\'liq mos; boshqa familiya — faqat ism mos darajasida (< 60%)', sim('O Viktoriya', 'O Viktoriya Sergeyevna') >= 0.9 && sim('О Виктория', 'O Viktoriya') === 1
+  && sim('O Viktoriya', 'Kim Viktoriya') < 0.6 && Math.abs(sim('O Viktoriya', 'Kim Viktoriya') - sim('Viktoriya', 'Kim Viktoriya')) < 1e-9 && sim('Viktoriya', 'O Viktoriya') < 0.6,
+  [sim('O Viktoriya', 'Kim Viktoriya'), sim('Viktoriya', 'O Viktoriya')]);
+{ const r = N.pickSuggestions(N.rankByName('O Viktoriya', [{ id: 'k', name: 'Kim Viktoriya' }, { id: 'o', name: 'O Viktoriya Sergeyevna' }], { limit: 1000 }), 1500000, it => ({ debt: it.id === 'k' ? 1500000 : 0 }));
+  ok('«O Viktoriya»: O Viktoriya birinchi (qarzi summaga teng Kim Viktoriya emas)', r.length >= 1 && r[0].item.id === 'o' && r[0].percent >= 90 && r.every(x => x.item.id === 'o' || x.percent < 75),
+    r.map(x => [x.item.id, x.percent])); }
 ok('«Avgust» — ism bo\'lsa saqlanadi, izoh bo\'lsa tashlanadi', sim('Karimov Avgust', 'Karimov Avgust') === 1 && sim('Karimov R. uchun', 'Karimov Avgust') < 0.1
   && Math.abs(sim('Xadicha avgust uchun', T) - sim('Xadicha', T)) < 1e-9);
 ok('asimmetriya hujjatlangan: (to\'lovchi, yozuv) — yozuvdagi bitta harf tashlanmaydi', sim('Viktoriya', 'O Viktoriya') < sim('O Viktoriya', 'O Viktoriya'));
@@ -168,6 +174,60 @@ ok('сҳ: to\'liq ism 100%, norasmiy «Ishoqov» ham taklifga yetadi', sim('Ис
   const ms = N.shortlist(mixed, { keep: 3, maxBonus: 0.10 });
   ok('shortlist: 3-o\'rindan 10% dan ko\'p past nomzodlar tashlanadi', ms.length === 3 && ms.every(c => c.nameScore >= mixed[2].nameScore - 0.10 - 1e-9), [mixed.map(c => Math.round(c.nameScore * 100)), ms.length]);
   ok('shortlist: cap', N.shortlist(ranked, { keep: 3, cap: 5 }).length === 5 && N.shortlist([], {}).length === 0); }
+
+// ---- Ko'rik (R10) holatlari ----
+// Raqamdan (ID, telefon, summa) keyin yozilgan ism kesilmaydi: apostrofli ism (Ra'no, Jo'ra, G'ayrat, O'tkir) va qisqa ism (Ali, Lola)
+['\'', '’', '‘', '`', '´', 'ʻ', 'ʼ'].forEach(a => ok(`raqamdan keyin apostrofli ism (${JSON.stringify(a)}) kesilmaydi`, sim(`IQ-0042 Ra${a}no Karimova`, "Karimova Ra'no") === 1
+  && sim(`IQ-0042 Ra${a}no Karimova`, 'Karimova Nodira') < 0.1, [sim(`IQ-0042 Ra${a}no Karimova`, "Karimova Ra'no"), sim(`IQ-0042 Ra${a}no Karimova`, 'Karimova Nodira')]));
+ok('ID / telefon / summa + apostrofli ism — 100%', sim("998901112233 Jo'ra Karimov", "Karimov Jo'ra") === 1 && sim("998901112233 Jo'ra Karimov", 'Karimov Ravshan') < 0.1
+  && sim("IQ-0042 Turg'unboyeva Xadicha", T) === 1 && sim("1 500 000 Ra'no Karimova", "Karimova Ra'no") === 1 && sim("IQ-0042 G'ayrat Karimov", "Karimov G'ayrat") === 1
+  && sim("IQ-0042 O'tkir Karimov", "Karimov O'tkir") === 1 && sim("IQ-0042 Mas'ud Karimov", "Karimov Mas'ud") === 1, sim("IQ-0042 Turg'unboyeva Xadicha", T));
+ok('raqamdan keyin bo\'shliq bilan yozilgan qisqa ism — ism (kesilmaydi)', ['IQ-0042 Ali Karimov', '998901112233 Ali Karimov', '1 500 000 Ali Karimov', 'Karimov Ali-5', 'Karimov Ali5',
+  'No 5 Ali Karimov'].every(p => sim(p, 'Karimov Ali') === 1) && sim('IQ-0042 Lola Karimova', 'Karimova Lola') === 1 && sim('IQ-0042 Lola Karimova', 'Karimova Malika') < 0.15
+  && sim('No 5 Ali Karimov', 'Karimov Nodir') < 0.1 && sim('5 Юлия Ким', 'Ким Юлия') === 1 && sim('IQ-0042 Li Viktoriya', 'Li Viktoriya') === 1,
+  ['IQ-0042 Ali Karimov', 'No 5 Ali Karimov'].map(p => sim(p, 'Karimov Ali')));
+ok('nameTokens: raqamdan keyingi ism qoladi', JSON.stringify(N.nameTokens('998901112233 Ali')) === '["ali"]' && JSON.stringify(N.nameTokens('IQ-0042 Lola')) === '["lola"]'
+  && JSON.stringify(N.nameTokens("IQ-0042 Ra'no")) === '["ra\'no"]', [N.nameTokens('998901112233 Ali'), N.nameTokens('IQ-0042 Lola')]);
+{ const fam = [{ id: 'n', name: 'Karimova Nodira' }, { id: 'r', name: "Karimova Ra'no" }], debt = () => ({ debt: 1500000 });
+  const r = N.pickSuggestions(N.rankByName("IQ-0042 Ra'no Karimova", fam, { limit: 1000 }), 1500000, debt);
+  ok('opa-singil (ikkalasining qarzi = summa): faqat Ra\'no taklif qilinadi', r.length === 1 && r[0].item.id === 'r' && r[0].percent === 100, r.map(x => [x.item.id, x.percent]));
+  const v = N.pickSuggestions(N.rankByName('998901112233 Ali Karimov', [{ id: 'v', name: 'Karimov Vali' }, { id: 'a', name: 'Karimov Ali' }], { limit: 1000 }), 1500000, debt);
+  ok('aka-uka Ali / Vali: Ali birinchi (100%)', v.length >= 1 && v[0].item.id === 'a' && v[0].percent === 100 && v.every((x, i) => !i || x.percent < 100), v.map(x => [x.item.id, x.percent])); }
+// Bosh harf «O'.» / «Ў.» = u (o' = u qoidasi), «O.» — O yoki O' bilan; «E.» / «Е.» — e yoki ye bilan (Yelena, Yevgeniy)
+ok("bosh harf O'. / O‘. / Ў. / U. — O'tkir (Ўткир) ga mos, Otabek/Ойбек ga zid", ["Karimov O'.", 'Karimov O‘.', 'Karimov Oʻ.', 'Karimov U.'].every(p => sim(p, "Karimov O'tkir") > 0.7)
+  && sim('Каримов Ў.', 'Каримов Ўткир') > 0.7 && sim('Ахмедова Ў.', 'Ахмедова Ўғилой') > 0.7 && sim("Karimov O'.", 'Karimov Otabek') < 0.1 && sim('Каримов Ў.', 'Каримов Ойбек') < 0.1,
+  [sim("Karimov O'.", "Karimov O'tkir"), sim('Каримов Ў.', 'Каримов Ўткир'), sim("Karimov O'.", 'Karimov Otabek')]);
+ok('bosh harf O. (apostrofsiz) — O va O\' ga mos', sim('Karimov O.', "Karimov O'tkir") > 0.7 && sim('Karimov O.', 'Karimov Otabek') > 0.7 && sim('Karimov O.', 'Karimov Jasur') < 0.1);
+ok('bosh harf E. / Е. / Ye. — Yelena, Elmira, Евгений (yev -> ev)', sim('Karimova E.', 'Karimova Yelena') > 0.7 && sim('Karimova E.', 'Karimova Elmira') > 0.7 && sim('Иванов Е.', 'Иванов Евгений') > 0.7
+  && sim('Иванов Е.', 'Ivanov Yevgeniy') > 0.7 && sim('Ivanov Ye.', 'Ivanov Yevgeniy') > 0.7 && sim('Karimova E.', 'Karimova Malika') < 0.1,
+  [sim('Karimova E.', 'Karimova Yelena'), sim('Иванов Е.', 'Иванов Евгений')]);
+{ const r = N.pickSuggestions(N.rankByName("Karimov O'.", [{ id: 'ot', name: 'Karimov Otabek' }, { id: 'ut', name: "Karimov O'tkir" }], { limit: 1000 }), 1500000, () => ({ debt: 1500000 }));
+  const c = N.pickSuggestions(N.rankByName('Каримов Ў.', [{ id: 'oy', name: 'Каримов Ойбек' }, { id: 'ut', name: 'Каримов Ўткир' }], { limit: 1000 }), 1500000, () => ({ debt: 1500000 }));
+  ok("«Karimov O'.» / «Каримов Ў.»: faqat O'tkir taklif qilinadi", r.length === 1 && r[0].item.id === 'ut' && c.length === 1 && c[0].item.id === 'ut', [r.map(x => x.item.id), c.map(x => x.item.id)]); }
+// Nuqtasiz yakka harf (sinf harfi «6-sinf B», «5 класс А», ruscha «и», xato «X adicha») — bosh harf EMAS: 3 so'zli yozuvni yiqitmaydi
+ok('sinf harfi / yakka harf 3 so\'zli yozuvni yiqitmaydi (95%)', ["Turg'unboyeva Xadicha 6-sinf B", 'Турғунбоева Хадича 5 класс А', "Turg'unboyeva Xadicha (A sinf)",
+  "Turg'unboyeva Xadicha 6 sinf «B»", "Turg'unboyeva Xadicha A-sinf"].every(p => sim(p, T3) >= 0.9) && sim('Oybekov Abdulloh 3-sinf B', 'Oybekov Abdulloh Xojiakbar') >= 0.9
+  && sim('Karimov Ali 5-sinf A', 'Karimov Ali Valiyevich') >= 0.9 && sim("Turg'unboyeva X adicha", T3) >= 0.75,
+  ["Turg'unboyeva Xadicha 6-sinf B", 'Турғунбоева Хадича 5 класс А', "Turg'unboyeva X adicha"].map(p => sim(p, T3)));
+ok('sinf harfi B — Bobojonova bilan bosh harf sifatida mos kelmaydi', Math.abs(sim('Xadicha 6-sinf B', 'Bobojonova Xadicha') - sim('Xadicha 6-sinf B', T)) < 1e-9
+  && Math.abs(sim('Xadicha 6-sinf B', T) - sim('Xadicha', T)) < 1e-9, [sim('Xadicha 6-sinf B', 'Bobojonova Xadicha'), sim('Xadicha 6-sinf B', T)]);
+ok('nameTokens: nuqtasiz yakka harf tashlanadi, aniq bosh harf qoladi', JSON.stringify(N.nameTokens('Karimov Ali 5-sinf A')) === '["karimov","ali"]'
+  && JSON.stringify(N.nameTokens('Karimov A.')) === '["karimov","a"]' && JSON.stringify(N.nameTokens('Karimov A')) === '["karimov"]', [N.nameTokens('Karimov Ali 5-sinf A'), N.nameTokens('Karimov A')]);
+// Faqat izoh (2+ izoh so'zi: «Avgust oyi uchun to'lov») — oy nomi ism emas; yakka «Avgust» — shu ismli o'quvchi uchun ism
+ok('faqat izoh matni — Avgust/May ismli o\'quvchi taklif qilinmaydi', sim("Avgust oyi uchun to'lov", 'Karimov Avgust') === 0 && sim("May oyi uchun to'lov", 'Kim May') === 0
+  && sim('Оплата за август', 'Karimov Avgust') === 0 && N.rankByName("Avgust oyi uchun to'lov", [{ name: 'Karimov Avgust' }, { name: 'Kim May' }]).length === 0);
+ok('«Karimov Jasur avgust uchun»: Jasur 100%, ukasi Avgust emas', sim('Karimov Jasur avgust uchun', 'Karimov Jasur') === 1 && sim('Karimov Jasur avgust uchun', 'Karimov Avgust') < 0.1,
+  sim('Karimov Jasur avgust uchun', 'Karimov Avgust'));
+ok('nameTokens(matn, ism) — solishtirish bilan bir xil qoida', JSON.stringify(N.nameTokens('Avgust')) === '[]' && JSON.stringify(N.nameTokens('Avgust', 'Karimov Avgust')) === '["avgust"]'
+  && JSON.stringify(N.nameTokens('Avgust', 'Saidova Kamola')) === '[]' && JSON.stringify(N.nameTokens("Avgust oyi uchun to'lov", 'Karimov Avgust')) === '[]'
+  && JSON.stringify(N.nameTokens('O Viktoriya', 'O Viktoriya Sergeyevna')) === '["o","viktoriya"]' && Math.abs(sim('Avgust', 'Karimov Avgust') - sim('Xadicha', T)) < 1e-9);
+// Qo'shtirnoq / ko'rinmas belgi so'zlar ORASIDA (bo'shliqsiz) — ajratadi; so'z ICHIDA — apostrof / o'chiriladi
+ok('qo\'shtirnoq / ZWSP / LRM so\'zlar orasida — so\'zlar ajraladi (100%)', ["Turg'unboyeva«Xadicha»", "«Turg'unboyeva»Xadicha", 'Turg\'unboyeva"Xadicha"', "Xadicha​Turg'unboyeva",
+  "Xadicha‎Turg'unboyeva", "Xadicha⁣Turg'unboyeva"].every(p => sim(p, T) === 1) && sim('Turg”unboyeva Xadicha', T) === 1,
+  ["Turg'unboyeva«Xadicha»", "Xadicha​Turg'unboyeva"].map(p => sim(p, T)));
+// Kirill «сын» izoh so'zi EMAS (koreyscha familiya Син / Sin bilan to'qnashadi)
+ok('«Син Виктория»: Shin/Sin ga mos, Kim Viktoriya ga emas', sim('Син Виктория', 'Shin Viktoriya') > 0.7 && sim('Син Виктория', 'Kim Viktoriya') < 0.15 && sim('Sin Viktoriya', 'Kim Viktoriya') < 0.15
+  && sim('Sin Viktoriya', 'Sin Viktoriya') === 1 && JSON.stringify(N.nameTokens('Син')) === '["sin"]', [sim('Син Виктория', 'Shin Viktoriya'), sim('Син Виктория', 'Kim Viktoriya')]);
 
 // ---- Brauzer yo'li (UMD): module yo'q -> globalThis.IqrorNameMatch ----
 { const src = fs.readFileSync(path.join(__dirname, '..', 'sb', 'name-match.js'), 'utf8'); const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);

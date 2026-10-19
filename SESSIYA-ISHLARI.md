@@ -450,6 +450,33 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   apostroflar Unicode toifasi bo'yicha (ˊ ˋ ‵ “ ” " ham), ko'rinmas belgilar o'chiriladi; qarz so'rovlari parallel.
 - Testlar: `name-match.test` 103; PG16 51/51 + poyga 2/2; haqiqiy stek e2e 36/36; Chromium 37/37 + 56/56.
 
+## 32) Raqib ko'rigi (R10) — R9 tuzatmalari ustidan
+
+- Uchinchi tekshiruv: baza himoyasi (trigger, RLS, poygalar, 816 o'tish × 5 oy to'lov tekshiruvi) — topilma yo'q. Takliflarda
+  9 topilma tasdiqlandi, hammasi tuzatildi.
+- **Yuqori:** raqamdan (ID, telefon, summa) keyin yozilgan apostrofli ism kesilardi: «IQ-0042 Ra'no Karimova» → «no» qolib,
+  bosh harf deb o'qilardi — yagona taklif opa-singil «Karimova Nodira 82%» (ogohlantirishsiz) edi. Endi apostrof — so'z
+  harfi; Ra'no / Jo'ra / G'ayrat / O'tkir / Turg'unboyeva 100%. **O'rta:** raqamdan keyin bo'shliq bilan yozilgan qisqa ism
+  (Ali, Lola, Umid) ham o'chirilardi — endi faqat raqamga YOPISHGAN bo'lak («5-A», «11B», «2026-yil») va raqamdan keyingi
+  yakka harf («5 A») olib tashlanadi.
+- **O'rta:** bosh harf «O'.» / «Ў.» o'quvchi ismidagi «O'tkir» (= utkir) bilan mos kelmasdi (3%), «E.» / «Е.» — Yelena /
+  Евгений bilan ham; aka-uka bo'lsa noto'g'ri bola (Otabek / Ойбек) 82% taklif qilinardi. Endi o' = u, «O.» — O va O',
+  «E.» — e va ye bilan mos. **O'rta:** nuqtasiz yakka harf (sinf harfi «6-sinf B», «5 класс А», ruscha «и», «X adicha»
+  xatosi) zid bosh harf deb hisoblanib, 3 so'zli yozuvni (otasining ismi bilan) 10% ga tushirardi. Endi bosh harf —
+  faqat NUQTA bilan («X.», «J.», «Sh.»); boshqa yakka harf ismdagi so'zga aynan teng bo'lsagina hisobga olinadi (koreyscha
+  «O Viktoriya» ↔ «O Viktoriya Sergeyevna» 95%; boshqa familiyali «Kim Viktoriya» — faqat ism mos darajasida, 57%).
+- **Past:** faqat izoh matni («Avgust oyi uchun to'lov», «Оплата за август») «Karimov Avgust»ni taklif qilardi — endi 2+ izoh
+  so'zi bo'lsa matn izoh hisoblanadi (oy nomi ism emas); «Karimov Jasur avgust uchun» → Jasur 100%, ukasi Avgust 3%.
+  Kirill «сын» izoh so'zlaridan olib tashlandi (koreyscha familiya Син / Sin: «Син Виктория» → Shin 72%, Kim 10%).
+  Qo'shtirnoq / ko'rinmas belgi so'zlar ORASIDA (bo'shliqsiz, «Turg'unboyeva«Xadicha»») so'zlarni yopishtirib qo'ymaydi.
+- **Past (oyna):** taklifdan tanlanganda ⚠️ endi DOIM ko'rsatilgan foiz bo'yicha (67% «Avgust» taklifi ogohlantirishsiz
+  edi); ro'yxatdan tanlanganda «ism yozganmi?» — o'sha o'quvchi ismi bilan solishtirish qoidasi bo'yicha. To'lovchi matni
+  ⚠️ qatorida bitta qatorga keltiriladi (qator ko'chishi / boshqaruv / yo'nalish belgilari — bo'shliq: soxta «o'quvchi —
+  summa» qatori yasab bo'lmaydi), 80 belgi — emoji bo'linmaydi. Modul manzili `?v=3` (brauzer eski nusxani ishlatmasin).
+- Testlar: `name-match.test` 128 (25 tasi yangi; R9 kodida 23 tasi yiqiladi); Chromium «Biriktirish» 68/68 (12 tasi yangi;
+  R9 kodida 10 tasi yiqiladi) + chiqarish 37/37; PG16 51/51 + poyga 2/2; to'liq zanjir + RLS 12/12; haqiqiy stek e2e 36/36.
+  Topshiriqdagi 4 holat o'zgarmadi: 100% / 100% / 91% / 0% (taklif qilinmaydi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
