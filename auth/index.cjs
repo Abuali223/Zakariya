@@ -348,7 +348,9 @@ function startServer() {
   // «Moliya» → «Qarzdorlar» → «Eslatma» (direktor/moliya menejeri JWT bilan; Eskiz — OTP bilan bir xil sozlama).
   //   Modul yuklanmasa ham auth (login/OTP) ISHLAYVERADI — faqat eslatma xizmati vaqtincha o'chadi.
   let smsRemind;
-  try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); }
+  //   Sinov rejimida (dryRun) yuborilmaydi, lekin Eskiz naqshlari baribir o'qiladi (faqat GET) — sinov matni = haqiqiy matn.
+  const tplReader = (!eskiz && SMS.enabled !== false && (SMS.token || /@/.test(String(SMS.eskizEmail || SMS.email || '')))) ? makeEskiz(SMS) : null;
+  try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, tplReader, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); }
   catch (e) { console.error('sms-remind yuklanmadi:', e && e.message); smsRemind = async () => ({ ok: false, error: 'SMS eslatma xizmati vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
   const ROUTES = {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,

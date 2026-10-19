@@ -182,13 +182,26 @@ export function phoneHint(raw) {
 //   - faqat bo'shliq/ajratgich o'chirilsa (maska uni qaytarib, tugma «ishlamay» qolardi) — yonidagi raqam o'chadi;
 //   - to'liq raqam qo'yilsa (paste: '998901234567', '+998 90 …', ko'rinmas belgilar bilan ham) — maydon shu raqam bilan
 //     almashtiriladi ('+998 ' ortiga yopishib '998998…' bo'lib qolmaydi). To'liq bo'lmagan matn odatdagidek qo'yiladi.
+//   - boshidagi '+' ga tegadigan QISMAN tahrir (uni o'chirish yoki oldiga yozish) bekor qilinadi: '+'siz qolgan raqamlar
+//     boshqa qoida bilan (9 xonali — O'zbekiston) qayta o'qilib, BEGONA yaroqli raqamga aylanardi; butun maydonni
+//     almashtirish (hammasini belgilab yozish/o'chirish) — odatdagidek;
+//   - IME (kompozitsiya) paytida maydonga tegilmaydi — tugagach bir marta maskalanadi; maydon ichida sudrab ko'chirish o'chiq.
 export function bindPhoneInput(el) {
   if (!el || el.__iqPhone) return;
   el.__iqPhone = true;
   const digits = s => String(s).replace(/\D/g, "");
   const uz = s => /^\+998( |$)/.test(s);                            // O'zbekiston ko'rinishi: '+998 …'
-  let prev = el.value;
-  el.addEventListener("beforeinput", () => { prev = el.value; });     // tahrirdan OLDINGI qiymat (dastur o'zgartirgan bo'lsa ham)
+  let prev = el.value, ps = 0, pe = 0, composing = false, cPrev = null;
+  const sel = () => [typeof el.selectionStart === "number" ? el.selectionStart : el.value.length, typeof el.selectionEnd === "number" ? el.selectionEnd : el.value.length];
+  // Tahrirdan OLDINGI qiymat va belgilash (dastur o'zgartirgan bo'lsa ham). Kompozitsiya davomida — boshidagisi saqlanadi.
+  el.addEventListener("beforeinput", () => { if (composing) return; prev = el.value; [ps, pe] = sel(); });
+  el.addEventListener("compositionstart", () => { composing = true; cPrev = [el.value, ...sel()]; });
+  el.addEventListener("compositionend", () => {
+    composing = false;
+    if (cPrev) { [prev, ps, pe] = cPrev; cPrev = null; }
+    run("insertText");
+  });
+  el.addEventListener("dragstart", e => e.preventDefault());         // raqamlarni sudrab ko'chirish — o'chiq
   const put = (m, after) => {           // m — maskalangan qiymat; kursor o'ngida `after` ta raqam qoladi
     el.value = m;
     let k = m.length, n = 0;
@@ -197,26 +210,37 @@ export function bindPhoneInput(el) {
     if (after > 0) while (k > lo && m.charAt(k - 1) === " ") k--;
     try { el.setSelectionRange(k, k); } catch (_) {}
   };
-  el.addEventListener("input", e => {
+  const restore = () => { el.value = prev; try { el.setSelectionRange(ps, pe); } catch (_) {} };
+  function run(t) {
     let v = el.value;
-    let pos = typeof el.selectionEnd === "number" ? el.selectionEnd : v.length;
-    const t = (e && e.inputType) || "";
-    if ((t === "deleteContentBackward" || t === "deleteContentForward") && v.length < prev.length && maskPhone(v) === prev) {
-      // Faqat ajratgich o'chirildi: o'chirish yo'nalishidagi eng yaqin RAQAMni o'chiramiz ('+998' prefiksi raqamlaridan
-      //   tashqari — u yerda tugma avvalgidek hech narsa qilmaydi).
-      const lo = uz(prev) ? 4 : 0;
-      if (t === "deleteContentForward") {
-        let k = pos; while (k < v.length && !/\d/.test(v.charAt(k))) k++;
-        if (k < v.length && k >= lo) v = v.slice(0, k) + v.slice(k + 1);
-      } else {
-        let k = pos; while (k > 0 && !/\d/.test(v.charAt(k - 1))) k--;
-        if (k > 0 && k - 1 >= lo) { v = v.slice(0, k - 1) + v.slice(k); pos = k - 1; }
-      }
+    let pos = sel()[1];
+    // 1) Boshidagi '+' ga tegadigan qisman tahrir — bekor (butun maydonni almashtirish va tozalash — ruxsat). Faqat
+    //    foydalanuvchi tahririda (avtoto'ldirish / dastur o'zgartirishi — inputType yo'q yoki 'insertReplacementText').
+    const user = /^(insert|delete)/.test(t) && t !== "insertReplacementText";
+    if (user && prev.charAt(0) === "+" && v.charAt(0) !== "+" && digits(v) !== "" && !(ps === 0 && pe >= prev.length)) { restore(); return; }
+    const del = /^delete/.test(t);
+    if (del && v.length < prev.length && digits(v) === digits(prev)) {
+      if (maskPhone(v) === prev && (t === "deleteContentBackward" || t === "deleteContentForward")) {
+        // 2) Faqat ajratgich o'chirildi: o'chirish yo'nalishidagi eng yaqin RAQAMni o'chiramiz ('+998' prefiksi raqamlaridan
+        //    tashqari — u yerda tugma avvalgidek hech narsa qilmaydi).
+        const lo = uz(prev) ? 4 : 0;
+        if (t === "deleteContentForward") {
+          let k = pos; while (k < v.length && !/\d/.test(v.charAt(k))) k++;
+          if (k < v.length && k >= lo) v = v.slice(0, k) + v.slice(k + 1);
+        } else {
+          let k = pos; while (k > 0 && !/\d/.test(v.charAt(k - 1))) k--;
+          if (k > 0 && k - 1 >= lo) { v = v.slice(0, k - 1) + v.slice(k); pos = k - 1; }
+        }
+      } else if (digits(maskPhone(v)) !== digits(prev)) { restore(); return; }   // 3) talqin o'zgarardi — bekor
     }
     const after = digits(v.slice(pos)).length;
     const m = maskPhone(v);
     if (m !== el.value) put(m, after);
-    prev = el.value;
+    prev = el.value; [ps, pe] = sel();
+  }
+  el.addEventListener("input", e => {
+    if (composing || (e && e.isComposing)) return;                    // IME: kompozitsiya tugaguncha tegmaymiz
+    run((e && e.inputType) || "");
   });
   el.addEventListener("paste", e => {
     const cd = e.clipboardData || (typeof window !== "undefined" && window.clipboardData);
@@ -225,7 +249,7 @@ export function bindPhoneInput(el) {
     if (!clean || !phoneCanon(clean)) return;          // to'liq raqam emas — brauzer odatdagidek qo'yadi
     e.preventDefault();
     put(maskPhone(clean), 0);
-    prev = el.value;
+    prev = el.value; [ps, pe] = sel();
     try { el.dispatchEvent(new Event("input", { bubbles: true })); } catch (_) {}
   });
 }

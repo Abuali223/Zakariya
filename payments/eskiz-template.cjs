@@ -11,7 +11,8 @@
  *    yig'iladi, qolgani harfma-harf). Shuning uchun u faqat TANLASH/OGOHLANTIRISH uchun: yakuniy hakam — Eskiz'ning o'zi.
  *
  * SMS o'zgaruvchilari imkon qadar BITTA «so'z» qilib yoziladi (har qanday naqshga sig'adi):
- *   summa — 5800000 (bo'shliqsiz), oylar — 09.2026 / 09.2026,10.2026 / 05.2026-10.2026, ism — to'liq; naqsh ismga
+ *   summa — 5800000 (bo'shliqsiz), oylar — 09.2026 / 09.2026,10.2026 / 08.2026-10.2026 (faqat ketma-ket oylar oralig'i),
+ *   ism — to'liq; naqsh ismga
  *   kamroq so'z ruxsat bersa — avval qisqartirilgan shakli tanlanadi (composeSms).
  */
 // Tasdiqlangan holatlar: service (servis) va reklama. moderation / inproccess / rejected — hali/endi yuborib bo'lmaydi.
@@ -78,11 +79,21 @@ function valueFits(value, v) {
 // ---- SMS o'zgaruvchilari (bitta «so'z» shaklida) ----
 const smsSom = n => String(Math.max(0, Math.round(Number(n) || 0)));          // 5800000
 const fmtMonth = m => { const p = String(m || '').split('-'); return p.length === 2 ? `${p[1]}.${p[0]}` : String(m || ''); };
-// Oylar: 1 ta -> 09.2026; 2 ta -> 09.2026,10.2026; 3+ -> birinchi-oxirgi (05.2026-10.2026). Har doim BITTA so'z.
+// Oylar: 1 ta -> 09.2026; ketma-ket 3+ oy -> oraliq (08.2026-10.2026); qolganlari vergul bilan:
+//   05,06,08,09,10 -> 05.2026,06.2026,08.2026-10.2026 (oraliq faqat UZILISHSIZ oylar uchun — to'langan oy qarzdek ko'rinmasin).
+//   Har doim BITTA so'z.
 function smsMonths(months) {
-  const m = [...new Set((months || []).map(String).filter(Boolean))].sort().map(fmtMonth);
-  if (!m.length) return '';
-  return m.length <= 2 ? m.join(',') : `${m[0]}-${m[m.length - 1]}`;
+  const m = [...new Set((months || []).map(String).filter(Boolean))].sort();
+  const idx = s => { const p = /^(\d{4})-(\d{2})$/.exec(s); return p ? Number(p[1]) * 12 + Number(p[2]) - 1 : null; };
+  const out = [];
+  for (let i = 0; i < m.length;) {
+    let j = i; const a = idx(m[i]);
+    if (a != null) while (j + 1 < m.length && idx(m[j + 1]) === a + (j + 1 - i)) j++;
+    if (j - i >= 2) out.push(`${fmtMonth(m[i])}-${fmtMonth(m[j])}`);
+    else for (let k = i; k <= j; k++) out.push(fmtMonth(m[k]));
+    i = j + 1;
+  }
+  return out.join(',');
 }
 // Ism variantlari (to'liqdan qisqaga): «Familiya Ism Sharif» -> [to'liq, «Familiya Ism», «Ism», «Familiya»].
 function nameVariants(name) {

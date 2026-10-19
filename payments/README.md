@@ -140,7 +140,8 @@ Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **y
 ### 7.2 Sinov (hech narsa yubormaydi)
 ```bash
 cd payments
-node eskiz-shablon.cjs               # Eskiz'dagi matnlar holati + har SMS turi naqshga mosmi (sababi bilan)
+sudo $(which node) eskiz-shablon.cjs   # Eskiz'dagi matnlar holati + har SMS turi naqshga mosmi (sababi bilan);
+                                       #   «Eslatma»/OTP — /opt/iqror/auth/config.json'dan (sudo — u faqat egasiga o'qilsa)
 node sms-worker.cjs --dry            # kimga qanday SMS ketishini ko'rsatadi (matn — Eskiz naqshiga moslangan)
 ```
 

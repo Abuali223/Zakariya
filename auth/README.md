@@ -73,26 +73,41 @@ aks holda kodlar yuborilmaydi. `{code}` — 6 xonali kod bilan almashadi.
 moderatsiyada bo‘lsa ham xuddi shu xato). O‘zgarmas qism esa harfma-harf bir xil bo‘lishi kerak (`'` va `‘` — har xil belgi).
 
 **Tizim buni o‘zi hal qiladi:**
-- o‘zgaruvchilar BITTA so‘z qilib yoziladi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `05.2026-10.2026`;
-- Eskiz’dagi naqshlar o‘qiladi (`GET /api/user/templates`; «Eslatma» — 10 daqiqa kesh, Eskiz 5 soniyada javob bermasa
-  naqshsiz davom etadi) va ism naqshga sig‘adigan shaklda olinadi: to‘liq → «Familiya Ism» → «Ism» → «Familiya»;
+- o‘zgaruvchilar BITTA so‘z qilib yoziladi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `08.2026-10.2026`
+  (oraliq — faqat KETMA-KET oylar uchun; uzilish bo‘lsa vergul bilan: `05.2026,06.2026,08.2026-10.2026` — to‘langan oy qarzdek
+  ko‘rinmaydi);
+- Eskiz’dagi naqshlar o‘qiladi (`GET /api/user/templates`; «Eslatma» — 10 daqiqa kesh; yangilab bo‘lmasa yoki Eskiz
+  5 soniyada javob bermasa — oxirgi muvaffaqiyatli ro‘yxat bilan davom etadi; `sms.dryRun` sinov rejimida ham o‘qiladi —
+  sinov matni haqiqiy matn bilan bir xil) va ism naqshga sig‘adigan shaklda olinadi: to‘liq → «Familiya Ism» → «Ism» → «Familiya»;
 - admin tasdiq oynasida aynan yuboriladigan matn ko‘rinadi; ism qisqartirilgan bo‘lsa — izoh; matn hech bir tasdiqlangan
   naqshga mos kelmasa — ⚠️ ogohlantirish (SMS baribir urinib ko‘riladi — yakuniy hakam Eskiz’ning o‘zi).
 
 **Tekshiruv (hech narsa yubormaydi):**
 ```bash
-cd ~/iqror-repo/payments && node eskiz-shablon.cjs                 # config.json'ni o'zi topadi
-node eskiz-shablon.cjs --config ../auth/config.json                # «Eslatma» va OTP matni auth sozlamasidan
+cd ~/iqror-repo/payments && sudo $(which node) eskiz-shablon.cjs   # ikkala sozlamani o'zi topadi (sudo — pastga qarang)
+sudo $(which node) eskiz-shablon.cjs --config /opt/iqror/auth/config.json --config ./config.json   # aniq fayllar
 node eskiz-shablon.cjs --name "Aliyeva Malika" --months 2026-09,2026-10 --due 5800000
 ```
+Har SMS turi o‘zini **yuboradigan** jarayon sozlamasidan tekshiriladi: «Eslatma» va OTP — auth serveri
+(`/opt/iqror/auth/config.json`, bo‘lmasa `../auth/config.json`), avtomatik qarz va yangi faktura — `sms-worker`
+(`./config.json`, bo‘lmasa `/opt/iqror/payments/config.json`). `/opt/iqror/auth/config.json` faqat egasiga o‘qilsa
+(0600) — `sudo` bilan ishga tushiring (aks holda «Eslatma»/OTP qatori «⚪ TEKSHIRILMADI» bo‘ladi). `--config`
+(`--config=YO‘L`, bir necha marta) berilsa — faqat o‘sha fayllar (turi ichidan aniqlanadi: `auth` bo‘limi bor — auth
+serveri); nisbiy yo‘l joriy papkaga nisbatan.
+
 Natija: Eskiz’dagi har bir matn holati (Servis / Moderatsiyada / Rad etilgan) va naqshi; tizimning har SMS turi
-(«Eslatma», avtomatik qarz, yangi faktura, OTP) mos-mos emasligi, mos bo‘lmasa — aniq sababi (qaysi o‘zgaruvchi necha
-so‘z, qaysi belgi farq qiladi) va nima qilish kerakligi. OTP qatori ✅ bo‘lishi kerak (ro‘yxat kodi SMS’i yetib
-borayotgan bo‘lsa) — bu tekshiruvning o‘zi to‘g‘ri ishlayotganini ko‘rsatadi. Chiqish kodi: 0 — hammasi mos, 2 — mos
-emas, 1 — sozlama/ulanish xatosi.
+(«Eslatma», avtomatik qarz, yangi faktura, OTP) mos-mos emasligi — **4 xil** ism/oy/summa/kod bilan (moderator misolni
+so‘zma-so‘z, o‘zgaruvchisiz tasdiqlagan bo‘lsa ham ushlanadi: faqat o‘sha misol o‘tib, haqiqiy SMS’lar rad etilardi);
+mos bo‘lmasa — aniq sababi (moderatsiyada / rad etilgan / so‘zma-so‘z tasdiqlangan / qaysi o‘zgaruvchi necha so‘z /
+qaysi belgi farq qiladi va qaysi FAYLda tuzatish kerak) va nima qilish kerakligi. HAQIQIY misol bilan yuborilgan,
+hali moderatsiyadagi matn ham taniladi (maslahat — kutish, qayta yuborish emas). OTP qatori ✅ bo‘lishi kerak (ro‘yxat
+kodi SMS’i yetib borayotgan bo‘lsa) — bu tekshiruvning o‘zi to‘g‘ri ishlayotganini ko‘rsatadi. Chiqish kodi: 0 — hammasi
+mos, 2 — mos emas yoki tekshirilmagan tur bor, 1 — sozlama/ulanish xatosi (sozlama fayli matni, jumladan buzilgan
+JSON xabari, hech qachon chiqarilmaydi; `config.example.json`dagi to‘ldirilmagan kalitlar qabul qilinmaydi).
 
 **Eskiz’ga matn yuborish:** `{name}` kabi belgilar bilan EMAS, HAQIQIY misol bilan yuboring (moderator o‘zgaruvchi
-joylarni misoldan aniqlaydi) va izohda yozing: ism — 1–4 so‘z, oy — 1 so‘z, summa — 1 son. Masalan:
+joylarni misoldan aniqlaydi) va izohda yozing: ism — 1–4 so‘z, oy — 1 so‘z, summa — 1 son (bu joylar har SMS’da
+o‘zgaradi). Masalan:
 ```
 Eslatma: Aliyeva Malika uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 5800000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy
 ```
@@ -114,10 +129,11 @@ oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, key
   oshib keta olmaydi). Avtomatik `sms-worker` shu kuni qo‘lda eslatma olgan (yoki olayotgan) o‘quvchini o‘tkazadi.
 - **Matn:** `sms.templates.remind` → `sms.templates.debt` → standart:
   `Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy`
-  (`{month}` — qarzdor oylar bitta so‘z: `09.2026,10.2026`, 3 va undan ko‘p bo‘lsa `05.2026-10.2026`; `{due}` —
-  `5800000`). ⚠️ Bu matn ham Eskiz kabinetida **shablon sifatida tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad
+  (`{month}` — qarzdor oylar bitta so‘z: `09.2026,10.2026`, ketma-ket 3+ oy `08.2026-10.2026`, uzilish bilan
+  `05.2026,06.2026,08.2026-10.2026`; `{due}` — `5800000`). ⚠️ Bu matn ham Eskiz kabinetida **shablon sifatida tasdiqlangan** bo‘lishi shart — aks holda Eskiz rad
   etadi va admin panel shuni aniq aytadi (yuqoridagi «Eskiz SMS shabloni»: naqsh, ism moslash, `node eskiz-shablon.cjs`).
-- `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi).
+- `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi); Eskiz naqshlari
+  baribir o‘qiladi (faqat GET) — sinovdagi matn va ⚠️ ogohlantirish haqiqiy yuborishdagidek.
 
 ## Telefon raqamlari: SMS faqat O‘zbekiston raqamlariga
 

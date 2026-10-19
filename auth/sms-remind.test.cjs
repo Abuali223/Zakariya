@@ -102,7 +102,7 @@ function setup(opts) {
     ...['IQ-0380', 'IQ-0226', 'IQ-0466'].map(k => ({ id: k + '__2026-10', studentId: k, month: '2026-10', amount: 300000, paidAmount: 0, status: 'pending' })),
   ];
   state.sms_log = [];
-  const R = makeSmsRemind({ sb, eskiz, smsCfg: o.smsCfg || {}, now: () => clock, tplWaitMs: o.tplWaitMs,
+  const R = makeSmsRemind({ sb, eskiz, tplReader: o.tplReader, smsCfg: o.smsCfg || {}, now: () => clock, tplWaitMs: o.tplWaitMs,
     verifyJwt: async jwt => (jwt && String(jwt).startsWith('uid_')) ? jwt : null });
   return { state, R, sent, eskiz, setClock: t => { clock = t; } };
 }
@@ -282,7 +282,7 @@ function setup(opts) {
     ok('ECONNRESET yuborish paytida -> unknown', state.sms_log[0].status === 'unknown', state.sms_log[0]); }
   { const { R } = setup();
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0606', preview: true });
-    ok('5 oy -> bitta so\'z oraliq «05.2026-10.2026», faqat ASCII', /uchun 05\.2026-10\.2026 oy/.test(p.message) && /^[\x00-\x7F]*$/.test(p.message), p.message); }
+    ok('5 oy (07 to\'langan) -> bitta so\'z «05.2026,06.2026,08.2026-10.2026», faqat ASCII', /uchun 05\.2026,06\.2026,08\.2026-10\.2026 oy/.test(p.message) && /^[\x00-\x7F]*$/.test(p.message), p.message); }
   { const { definitelyNotSent } = require('./sms-remind.cjs');
     ok('definitelyNotSent', definitelyNotSent({ stage: 'login' }) && definitelyNotSent({ code: 'ENOTFOUND' }) && definitelyNotSent({ code: 'CERT_HAS_EXPIRED' }) && !definitelyNotSent({ code: 'ECONNRESET', stage: 'send' }) && !definitelyNotSent(new Error('eskiz_timeout')) && !definitelyNotSent(null)); }
 
@@ -381,6 +381,36 @@ function setup(opts) {
     setClock(Date.parse('2026-10-16T05:02:00.000Z'));                 // 1 daqiqadan keyin (xato keshi tugadi)
     await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
     ok('xatodan keyin naqshlar QAYTA so\'raladi (osilib qolgan va\'da yo\'q)', eskiz.tplCalls() === 2, eskiz.tplCalls()); }
+  // Ko'rik (R6): yangilash xato/sekin bo'lsa — oxirgi YAXSHI ro'yxat ishlatiladi (mos matn yo'qolmasin)
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const LIST = { ok: true, list: [{ id: 7, status: 'service', template: P1 }] };
+    let n = 0;
+    const { R, eskiz, setClock } = setup({ templates: () => { n++; return Promise.resolve(n === 1 ? LIST : { ok: false, error: 'http_502' }); } });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    setClock(T0 + 601e3);                                                       // 10 daqiqa o'tdi -> yangilash, Eskiz 502
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('yangilash xato -> oxirgi yaxshi ro\'yxat: mos matn saqlanadi (Muhammadiy, tplFit=true)', p1.tplFit === true && p2.tplFit === true && p2.message === p1.message && eskiz.tplCalls() === 2, { p1: p1.message, p2: p2.message, fit: p2.tplFit, calls: eskiz.tplCalls() });
+    setClock(T0 + 601e3 + 30e3); await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('xatodan keyin 1 daqiqa ichida qayta so\'ralmaydi', eskiz.tplCalls() === 2, eskiz.tplCalls());
+    setClock(T0 + 601e3 + 61e3); const p3 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('1 daqiqadan keyin yana urinadi, eski ro\'yxat bilan ishlayveradi', eskiz.tplCalls() === 3 && p3.tplFit === true, { calls: eskiz.tplCalls(), fit: p3.tplFit }); }
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const LIST = { ok: true, list: [{ id: 7, status: 'service', template: P1 }] };
+    let n = 0;
+    const { R, setClock } = setup({ tplWaitMs: 30, templates: () => { n++; return n === 1 ? Promise.resolve(LIST) : new Promise(res => setTimeout(() => res(LIST), 200)); } });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    setClock(T0 + 601e3);
+    const t0 = Date.now(); const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('yangilash sekin -> admin kutmaydi, eski ro\'yxat bilan mos matn', p2.tplFit === true && p2.message === p1.message && Date.now() - t0 < 150, { ms: Date.now() - t0, fit: p2.tplFit });
+    await new Promise(r => setTimeout(r, 260)); }
+  // Ko'rik (R6): sinov rejimi (yuborish o'chiq) — naqshlar tplReader orqali o'qiladi: sinov matni = haqiqiy matn
+  { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
+    const reader = { n: 0, templates: async () => { reader.n++; return { ok: true, list: [{ id: 7, status: 'service', template: P1 }] }; } };
+    const { R, sent } = setup({ dry: true, tplReader: reader });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('sinov rejimi: naqshlar o\'qiladi -> haqiqiy matn (Muhammadiy), tplFit=true', p.ok && p.dry === true && p.tplFit === true && p.nameShort === true && /^Eslatma: Muhammadiy uchun/.test(p.message), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    ok('sinov rejimi: tasdiq -> dry, hech narsa yuborilmadi, naqshlar keshdan', r.ok && r.dry === true && sent.length === 0 && reader.n === 1, { r, n: reader.n }); }
   ok('humanEskizError bad_phone:intl', /faqat O‘zbekiston/.test(humanEskizError('bad_phone:intl')));
 
   console.log(`\n${pass} passed, ${fail} failed`);

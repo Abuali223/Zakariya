@@ -25,8 +25,14 @@ ok('teskari oraliq {3,1} ham ishlaydi', T.tplRegex('%w{3,1}').test('a b'));
 
 // SMS o'zgaruvchilari — bitta «so'z»
 ok('smsSom bo\'shliqsiz', T.smsSom(5800000) === '5800000' && T.smsSom(0) === '0' && T.smsSom(-5) === '0' && T.smsSom('1234.6') === '1235');
-ok('smsMonths: 1 / 2 / 3+ / takror / tartib', T.smsMonths(['2026-10']) === '10.2026' && T.smsMonths(['2026-10', '2026-09']) === '09.2026,10.2026'
-  && T.smsMonths(['2026-05', '2026-06', '2026-08', '2026-10']) === '05.2026-10.2026' && T.smsMonths(['2026-09', '2026-09']) === '09.2026' && T.smsMonths([]) === '');
+ok('smsMonths: 1 / 2 / takror / tartib', T.smsMonths(['2026-10']) === '10.2026' && T.smsMonths(['2026-10', '2026-09']) === '09.2026,10.2026'
+  && T.smsMonths(['2026-09', '2026-09']) === '09.2026' && T.smsMonths([]) === '');
+ok('smsMonths: ketma-ket 3+ oy -> oraliq', T.smsMonths(['2026-08', '2026-10', '2026-09']) === '08.2026-10.2026');
+ok('smsMonths: uzilish — oraliqqa to\'langan oy kirmaydi', T.smsMonths(['2026-05', '2026-06', '2026-08', '2026-10']) === '05.2026,06.2026,08.2026,10.2026'
+  && T.smsMonths(['2026-05', '2026-06', '2026-08', '2026-09', '2026-10']) === '05.2026,06.2026,08.2026-10.2026'
+  && T.smsMonths(['2026-01', '2026-02', '2026-03', '2026-05', '2026-06', '2026-07']) === '01.2026-03.2026,05.2026-07.2026');
+ok('smsMonths: yil chegarasi (dekabr -> yanvar) ketma-ket', T.smsMonths(['2025-11', '2025-12', '2026-01']) === '11.2025-01.2026'
+  && T.smsMonths(['2025-12', '2026-01']) === '12.2025,01.2026');
 ok('smsMonths har doim bitta so\'z', ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'].every((_, i, arr) => !/\s/.test(T.smsMonths(arr.slice(0, i + 1)))));
 ok('nameVariants', JSON.stringify(T.nameVariants('Aliyeva  Malika')) === JSON.stringify(['Aliyeva Malika', 'Malika', 'Aliyeva'])
   && JSON.stringify(T.nameVariants("Qobiljonov Muhammadiy Akmal o'g'li")) === JSON.stringify(["Qobiljonov Muhammadiy Akmal o'g'li", 'Qobiljonov Muhammadiy', 'Muhammadiy', 'Qobiljonov'])

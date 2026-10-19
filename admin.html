@@ -5030,7 +5030,7 @@ async function sendDebtReminder(sid, btn){
     if(!p.phone){ toast('Ota-ona telefoni kiritilmagan yoki noto‘g‘ri — o‘quvchi kartasida to‘g‘rilang',true); return; }
     const months=(p.months||[]).map(fmtMonthUz).join(', ');
     const q=`📱 Ota-onaga SMS eslatma yuborilsinmi?\n\nO‘quvchi: ${p.name}\nTelefon: ${p.phone}\nQarz: ${fmtSom(p.due)}${months?` (${months})`:''}\n\nSMS matni:\n«${p.message}»`
-      +(p.tplFit===false?'\n\n⚠️ Bu matn Eskiz’dagi TASDIQLANGAN shablon naqshiga mos kelmayapti (yoki shablon hali moderatsiyada) — Eskiz rad etishi mumkin. Tekshiruv: serverda «cd ~/iqror-repo/payments && node eskiz-shablon.cjs».':'')
+      +(p.tplFit===false?'\n\n⚠️ Bu matn Eskiz’dagi TASDIQLANGAN shablon naqshiga mos kelmayapti (yoki shablon hali moderatsiyada) — Eskiz rad etishi mumkin. Tekshiruv: serverda «cd ~/iqror-repo/payments && sudo $(which node) eskiz-shablon.cjs».':'')
       +(p.nameShort?'\n\nℹ️ Ism Eskiz’dagi tasdiqlangan shablonga sig‘ishi uchun qisqartirildi.':'')
       +(p.autoToday?'\n\n⚠️ Bugun bu o‘quvchiga avtomatik qarz eslatmasi ham yuborilgan.':'')
       +(p.dry?'\n\nℹ️ SINOV rejimi (serverda sms.dryRun) — SMS haqiqatan yuborilmaydi.':'')

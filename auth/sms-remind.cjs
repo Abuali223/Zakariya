@@ -47,7 +47,7 @@ function debtOf(i) {
 function humanEskizError(e) {
   const t = String(e || '');
   if (/bad_phone:intl/.test(t)) return 'Chet el raqamiga SMS yuborilmaydi (SMS faqat O‘zbekiston raqamlariga).';
-  if (/модерац|moderat|шаблон|templat/i.test(t)) return 'Eskiz bu SMSni rad etdi: matn Eskiz’dagi TASDIQLANGAN shablon naqshiga mos kelmadi (yoki shablon hali moderatsiyada). Eskiz matndagi o‘zgaruvchi joylarni (ism, oy, summa) moderator yozgan naqsh bilan solishtiradi. Aniq sababi: serverda «cd ~/iqror-repo/payments && node eskiz-shablon.cjs».';
+  if (/модерац|moderat|шаблон|templat/i.test(t)) return 'Eskiz bu SMSni rad etdi: matn Eskiz’dagi TASDIQLANGAN shablon naqshiga mos kelmadi (yoki shablon hali moderatsiyada). Eskiz matndagi o‘zgaruvchi joylarni (ism, oy, summa) moderator yozgan naqsh bilan solishtiradi. Aniq sababi: serverda «cd ~/iqror-repo/payments && sudo $(which node) eskiz-shablon.cjs».';
   if (/баланс|balance|средств|insufficient|limit/i.test(t)) return 'Eskiz: balans yoki limit yetarli emas — Eskiz hisobini tekshiring.';
   if (/bad_phone/.test(t)) return 'Telefon raqam noto‘g‘ri.';
   return 'SMS yuborilmadi (Eskiz): ' + t.slice(0, 200);
@@ -66,27 +66,32 @@ function makeSmsRemind(deps) {
   const TPL = (S.templates && (S.templates.remind || S.templates.debt)) || DEF_DEBT;
   const now = deps.now || (() => Date.now());
   const DRY = !eskiz;
-  // Eskiz'dagi shablon naqshlari (matnni moslash uchun): muvaffaqiyatli o'qilsa 10 daqiqa, o'qib bo'lmasa 1 daqiqa keshlanadi;
-  //   o'qib bo'lmasa — null (matn oddiy usulda yig'iladi, Eskiz o'zi hal qiladi). Admin oynasi uzoq kutib qolmasin:
-  //   Eskiz TPL_WAIT ichida javob bermasa — naqshlarsiz davom etamiz (so'rov fonda tugab, keshni to'ldiradi).
-  //   Parallel so'rovlar bitta Eskiz so'rovini kutadi (tplPending).
+  // Eskiz'dagi shablon naqshlari (matnni moslash uchun): muvaffaqiyatli o'qilsa 10 daqiqa keshlanadi. Yangilab bo'lmasa
+  //   (xato / Eskiz sekin) — OXIRGI MUVAFFAQIYATLI ro'yxat ishlatilaveradi (1 daqiqadan keyin yana urinamiz); hech qachon
+  //   o'qilmagan bo'lsa — null (matn oddiy usulda yig'iladi, Eskiz o'zi hal qiladi). Admin oynasi uzoq kutib qolmasin:
+  //   Eskiz TPL_WAIT ichida javob bermasa — eski ro'yxat (yoki null) bilan davom etamiz, so'rov fonda tugab keshni to'ldiradi.
+  //   Parallel so'rovlar bitta Eskiz so'rovini kutadi (tplPending). Sinov rejimida (yuborish o'chiq) ham naqshlar
+  //   o'qiladi — deps.tplReader (faqat GET) orqali: sinovdagi matn haqiqiy yuboriladigan matn bilan bir xil bo'lsin.
   const TPL_WAIT = Math.max(0, cfgNum(deps.tplWaitMs, 5000));
-  let tplList = null, tplAt = null, tplPending = null;
+  const tplSrc = eskiz || deps.tplReader || null;
+  let tplList = null, tplAt = null, tplOk = false, tplPending = null;
   function approvedTemplates() {
-    if (!eskiz || typeof eskiz.templates !== 'function') return Promise.resolve(null);
+    if (!tplSrc || typeof tplSrc.templates !== 'function') return Promise.resolve(null);
     const t = now();
-    if (tplAt != null && t - tplAt >= 0 && t - tplAt < (tplList ? 600e3 : 60e3)) return Promise.resolve(tplList);
+    if (tplAt != null && t - tplAt >= 0 && t - tplAt < (tplOk ? 600e3 : 60e3)) return Promise.resolve(tplList);
     if (!tplPending) {
       tplPending = (async () => {
-        try { const r = await eskiz.templates(); tplList = (r && r.ok && Array.isArray(r.list)) ? r.list : null; if (!tplList) console.error('Eskiz shablonlari o‘qilmadi:', String((r && r.error) || '').slice(0, 120)); }
-        catch (e) { tplList = null; console.error('Eskiz shablonlari xato:', String((e && e.message) || e).slice(0, 120)); }
+        let list = null;
+        try { const r = await tplSrc.templates(); list = (r && r.ok && Array.isArray(r.list)) ? r.list : null; if (!list) console.error('Eskiz shablonlari o‘qilmadi:', String((r && r.error) || '').slice(0, 120)); }
+        catch (e) { console.error('Eskiz shablonlari xato:', String((e && e.message) || e).slice(0, 120)); }
+        tplOk = !!list; if (list) tplList = list;          // xato — oxirgi yaxshi ro'yxat qoladi
         tplAt = now();
         return tplList;
       })();
       tplPending.then(() => { tplPending = null; });          // keyingi mikrotaskda (tayinlashdan keyin) — sinxron xatoda ham
     }
     let timer = null;
-    const late = new Promise(res => { timer = setTimeout(() => res(null), TPL_WAIT); if (timer.unref) timer.unref(); });
+    const late = new Promise(res => { timer = setTimeout(() => res(tplList), TPL_WAIT); if (timer.unref) timer.unref(); });
     return Promise.race([tplPending, late]).finally(() => clearTimeout(timer));
   }
 
@@ -153,7 +158,7 @@ function makeSmsRemind(deps) {
     const months = [...new Set(debts.map(x => x.month))];
     const name = smsName(st.name || (debts[0] && debts[0].nm) || canon);
     // Faqat ASCII (GSM-7): tire/boshqa belgi butun SMS'ni UCS-2 ga o'tkazib, qismlar sonini (narxini) oshiradi.
-    //   O'zgaruvchilar Eskiz naqshiga sig'adigan shaklda: oylar bitta so'z (09.2026,10.2026 / 05.2026-10.2026), summa 5800000.
+    //   O'zgaruvchilar Eskiz naqshiga sig'adigan shaklda: oylar bitta so'z (09.2026,10.2026 / 08.2026-10.2026), summa 5800000.
     const cm = composeSms(TPL, { name, month: smsMonths(months), due: smsSom(due), amount: smsSom(due) }, await approvedTemplates());
     const message = cm.message;
 

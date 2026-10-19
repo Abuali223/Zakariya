@@ -288,7 +288,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 ## 23) «Eslatma» SMS'ini Eskiz rad etdi — shablon NAQSHI bilan moslash
 
 - Sabab: Eskiz SMS'ni kabinetga yuborilgan ASL matn (`Eslatma: {name} uchun {month} …`) bilan emas, moderator tasdiqlagan NAQSH (`GET /api/user/templates` → `template`) bilan solishtiradi; naqshda o'zgaruvchi joylar `%w` (1 so'z), `%d` (1 son), `%w{1,4}` (1–4 so'z). Tizim esa ism («Familiya Ism» — 2 so'z), oylar («09.2026, 10.2026» — 2 bo'lak) va summani («5 800 000» — 3 bo'lak) bo'shliq bilan yozardi — bitta so'zli naqshga sig'masdi. Matn hali moderatsiyada bo'lsa ham Eskiz xuddi shu «Этот смс текст еще не прошел модерацию» xatosini beradi.
-- Endi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `05.2026-10.2026` (har doim bitta so'z); Eskiz naqshlari o'qiladi («Eslatma» — 10 daqiqa kesh, Eskiz 5 soniyada javob bermasa naqshsiz davom etadi; `sms-worker` — run boshida, `--dry` da ham) va ism naqshga sig'adigan shaklda olinadi (to'liq → «Familiya Ism» → «Ism» → «Familiya»). Admin tasdiq oynasida aynan yuboriladigan matn, ism qisqartirilgan bo'lsa — izoh, hech bir tasdiqlangan naqshga mos kelmasa — ⚠️ ogohlantirish. Eskiz rad etsa xabar sababini va tekshiruv buyrug'ini aytadi. Yangi modul: `payments/eskiz-template.cjs` (sof funksiyalar).
+- Endi: summa `5800000`, oylar `09.2026` / `09.2026,10.2026` / `08.2026-10.2026` (har doim bitta so'z; oraliq faqat ketma-ket oylar — §25); Eskiz naqshlari o'qiladi («Eslatma» — 10 daqiqa kesh, Eskiz 5 soniyada javob bermasa naqshsiz davom etadi; `sms-worker` — run boshida, `--dry` da ham) va ism naqshga sig'adigan shaklda olinadi (to'liq → «Familiya Ism» → «Ism» → «Familiya»). Admin tasdiq oynasida aynan yuboriladigan matn, ism qisqartirilgan bo'lsa — izoh, hech bir tasdiqlangan naqshga mos kelmasa — ⚠️ ogohlantirish. Eskiz rad etsa xabar sababini va tekshiruv buyrug'ini aytadi. Yangi modul: `payments/eskiz-template.cjs` (sof funksiyalar).
 - Diagnostika (hech narsa yubormaydi): `cd ~/iqror-repo/payments && node eskiz-shablon.cjs` — Eskiz'dagi har bir matn holati/naqshi va tizimning har SMS turi (Eslatma, avtomatik qarz, yangi faktura, OTP) mosligi; mos bo'lmasa — aniq sabab (moderatsiyada / rad etilgan / `{name}` o'zgaruvchi qilinmagan / qaysi o'zgaruvchi necha so'z / qaysi belgi farq qiladi, masalan `'` U+0027 va `‘` U+2018) va nima qilish kerakligi. OTP qatori ✅ bo'lishi — tekshiruvning o'zi to'g'riligining belgisi (ro'yxat kodi SMS'i ishlayapti).
 - Eskiz'ga matnni `{name}` bilan emas, HAQIQIY misol bilan yuborish tavsiya etiladi (izohda: ism 1–4 so'z, oy 1 so'z, summa 1 son).
 - Testlar: `payments/eskiz-template.test.cjs` (22), `payments/eskiz-shablon.test.cjs` (24, soxta Eskiz bilan alohida jarayonda), `payments/sms.test.cjs` (+templates(): 41), `auth/sms-remind.test.cjs` (108: moslash, kesh, sekin Eskiz, parallel so'rovlar, sinxron xato); PG16 + PostgREST e2e (naqsh bilan yuborish, `sms_log` matni); Chromium (admin/index).
@@ -299,6 +299,31 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - Tuzatish: `sb/auth-api.js` → `bindPhoneInput` (index.html: kirish/ro'yxat/parol tiklash; admin.html: «Profil → Telefonni o'zgartirish»). Kursor tahrir joyida qoladi (o'ngidagi raqamlar soni saqlanadi); faqat bo'shliq o'chirilsa — yonidagi raqam o'chadi (tugma «ishlamay» qolmaydi), `+998` prefiksi raqamlari esa bu yo'l bilan o'chmaydi; to'liq raqam nusxa qilib qo'yilsa (`998901234567`, `+998 90 …`, kontaktlardagi ko'rinmas yo'nalish belgilari bilan) — maydon shu raqam bilan almashtiriladi (avval `+998 ` ortiga yopishib yaroqsiz bo'lardi). `+998 ` ortidan yana `998…` yozilsa — aniq maslahat (raqam avtomatik o'zgartirilmaydi). `auth-api.js?v=5` (kesh yangilanadi).
 - Prefiksni tahrirlash mumkinligi (uchinchi topilma) — tekshiruvda rad etildi: xavfsiz (hech qachon begona raqam/SMS yo'q) va ataylab (kirish maydonida chet el raqami uchun) — o'zgartirilmadi.
 - Testlar: `auth/phone.test.cjs` (157: brauzer semantikasini taqlid qiluvchi maydon, ko'rikdagi barcha ssenariylar, 30 000+ tasodifiy tahrir fuzz — raqamlar ketma-ketligi va kursor doim niyatdagidek; eski maska bilan aynan ko'rikdagi begona raqamlar chiqadi); Chromium: haqiqiy index.html/admin.html/auth-api.js + haqiqiy `request-otp` — tuzatilgan raqamga SMS, ssenariylar haqiqiy klaviaturada, 1500+ tahrir fuzz, mobil (Pixel 7) — 43/43.
+
+## 25) Raqib ko'rigi (R6) tuzatmalari — telefon maydoni, Eskiz oylar/kesh, diagnostika buyrug'i
+
+- **Telefon maydoni (yuqori, oldingi tuzatmaning regressiyasi):** chet el raqamida (`+47 912 345 67`) «+» oldida Delete
+  bosilsa «+» o'chib, raqamlar 9 xonali O'zbekiston qoidasi bilan qayta o'qilib BEGONA `+998 …` raqamga aylanardi (OTP
+  kodi o'shanga ketishi mumkin edi). Endi boshidagi «+» ga tegadigan qisman tahrir (Delete/Backspace/belgilab o'chirish/
+  oldiga yozish) bekor qilinadi (qiymat va kursor joyida qoladi); butun maydonni belgilab yozish/o'chirish — odatdagidek.
+  O'chirishdan keyin raqam talqini o'zgarsa (O'zbekiston ↔ chet el) — tahrir bekor. IME (kompozitsiya) paytida maska
+  ishlamaydi — tugagach bir marta (raqamlar takrorlanmaydi); maydon ichida sudrab ko'chirish o'chiq; avtoto'ldirish
+  (inputType yo'q) bloklanmaydi. Testlar: `auth/phone.test.cjs` 169; Chromium (haqiqiy klaviatura, CDP IME) 37 + avvalgi 86.
+- **«Eslatma» oylari (o'rta):** 3+ oy har doim «birinchi-oxirgi» oraliq qilib yozilardi — oradagi TO'LANGAN oy ham
+  qarzdek ko'rinardi (05,06,08,10 → `05.2026-10.2026`). Endi oraliq faqat ketma-ket oylar uchun:
+  `05.2026,06.2026,08.2026,10.2026`, `05.2026,06.2026,08.2026-10.2026` (dekabr→yanvar ham ketma-ket). Bitta so'z bo'lib qoladi.
+- **Naqshlar keshi:** yangilash xato bersa yoki Eskiz 5 soniyada javob bermasa — oxirgi MUVAFFAQIYATLI ro'yxat bilan
+  davom etadi (avval ro'yxat tashlab yuborilib, mos matn o'rniga rad etiladigan matn ketardi va kunlik 3 urinish kuyardi).
+- **Sinov rejimi (`sms.dryRun`):** naqshlar endi o'qiladi (faqat GET, `tplReader`) — sinovdagi matn haqiqiy matn bilan bir xil.
+- **`eskiz-shablon.cjs`:** (1) har SMS turi o'zini yuboradigan jarayon sozlamasidan: «Eslatma»/OTP — auth
+  (`/opt/iqror/auth/config.json` → `../auth/config.json`), debt/new — sms-worker (`./config.json` →
+  `/opt/iqror/payments/config.json`); o'qilmagani «⚪ TEKSHIRILMADI» (✅ emas, chiqish 2); (2) tekshiruv 4 xil
+  ism/oy/summa/kod bilan — moderator misolni so'zma-so'z tasdiqlagan bo'lsa ✅ emas, «SO'ZMA-SO'Z tasdiqlangan» deyiladi;
+  (3) HAQIQIY misol bilan yuborilgan yozuvlar taniladi (moderatsiyada → ⏳ + kutish, rad etilgan → RAD ETGAN, apostrof
+  farqi → U+2018 + «Tuzatish» aynan o'qilgan fayl bilan); (4) `--config=YO'L`, bir necha `--config`, nisbiy yo'l joriy
+  papkaga nisbatan; sudo maslahati buyruq argumentlari bilan; buzilgan JSON xabari fayl bo'lagini (parolni) chiqarmaydi;
+  `config.example.json`dagi to'ldirilmagan kalitlar rad etiladi. Testlar: `eskiz-shablon.test.cjs` 44, `eskiz-template` 25,
+  `sms-remind` 114.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

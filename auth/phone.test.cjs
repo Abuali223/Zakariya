@@ -219,6 +219,16 @@ class FakeInput {
   sel(a, b) { this.setSelectionRange(a, b); }
   paste(txt) { const e = { type: 'paste', defaultPrevented: false, clipboardData: { getData: () => txt }, preventDefault() { this.defaultPrevented = true; } };
     this.dispatchEvent(e); if (!e.defaultPrevented) this.edit(txt, 'insertFromPaste', 0); }
+  // IME: matnni kompozitsiya bilan (har yangilanish oldingi kompozitsiya matnini almashtiradi), so'ng yakunlash
+  compose(text) {
+    this.dispatchEvent({ type: 'compositionstart' }); const a = this.selectionStart;
+    for (let i = 1; i <= text.length; i++) {
+      this.dispatchEvent({ type: 'beforeinput', inputType: 'insertCompositionText', isComposing: true });
+      this._v = this._v.slice(0, a) + text.slice(0, i) + this._v.slice(a + i - 1); this.selectionStart = this.selectionEnd = a + i;
+      this.dispatchEvent({ type: 'input', inputType: 'insertCompositionText', isComposing: true });
+    }
+    this.dispatchEvent({ type: 'compositionend' });
+  }
 }
 const field = () => { const f = new FakeInput('+998 '); W.bindPhoneInput(f); return f; };
 const typed = d => { const f = field(); f.type(d); return f; };
@@ -267,6 +277,31 @@ for (const [txt, want] of [['998901234567', '+998 90 123 45 67'], ['\u202D+998 9
   ok('to\'liq bo\'lmagan matn odatdagidek qo\'yiladi', f.value === '+998 90 123 45 67', f.value); }
 { const f = typed('9045'); f.caret(7); f.paste('123');
   ok('o\'rtaga qo\'yish -> kursor qo\'yilgan matndan keyin', f.value === '+998 90 123 45' && f.selectionEnd === 11, { v: f.value, c: f.selectionEnd }); }
+// Ko'rik (R6): boshidagi '+' ga tegadigan qisman tahrir begona raqam bermasligi kerak
+{ const f = field(); f.type('+4791234567'); const v0 = f.value; f.caret(0); f.del();
+  ok('chet el raqami: «+» oldida Delete -> o\'zgarmaydi (begona +998 raqam YO\'Q)', f.value === v0 && v0 === '+47 912 345 67', { v0, v: f.value }); }
+{ const f = field(); f.type('+4791234567'); const v0 = f.value; f.sel(0, 1); f.del();
+  ok('«+» ni belgilab Delete -> o\'zgarmaydi', f.value === v0, f.value); }
+{ const f = field(); f.type('+7903157112'); const v0 = f.value; f.caret(0); f.del();
+  ok('chala RU raqam: «+» oldida Delete -> o\'zgarmaydi', f.value === v0 && W.normPhone(f.value) === null, { v0, v: f.value }); }
+{ const f = typed('901234'); const v0 = f.value; f.caret(1); f.back();
+  ok('«+998 90 123 4» da «+» ni Backspace -> o\'zgarmaydi (998998… emas)', f.value === v0, { v0, v: f.value }); }
+{ const f = typed('53698'); const v0 = f.value; f.caret(0); f.type('9');
+  ok('«+» OLDIGA raqam yozish -> e\'tiborsiz (begona raqam yo\'q)', f.value === v0, { v0, v: f.value }); }
+{ const f = field(); f.type('+33612345'); const v0 = f.value; f.caret(0); f.del();
+  ok('9 xonali chet el: «+» oldida Delete -> o\'zgarmaydi', f.value === v0, { v0, v: f.value }); }
+{ const f = typed('901234567'); f.sel(0, f.value.length); f.type('9');
+  ok('hammasini belgilab yozish — ruxsat (+998 9)', f.value === '+998 9', f.value); }
+{ const f = typed('901234567'); f.sel(0, f.value.length); f.back();
+  ok('hammasini belgilab o\'chirish — bo\'sh', f.value === '', f.value); }
+{ const f = field(); f.compose('901234567');
+  ok('IME (kompozitsiya) -> tugagach bir marta maskalanadi, raqam takrorlanmaydi', f.value === '+998 90 123 45 67', f.value); }
+{ const f = typed('9011'); f.compose('89');
+  ok('IME o\'rtada davom etadi -> to\'g\'ri ketma-ketlik', W.normPhone(f.value) === null && f.value.replace(/\D/g, '') === '998901189', f.value); }
+{ const f = field(); f._v = '901234567'; f.selectionStart = f.selectionEnd = 9; f.dispatchEvent({ type: 'input' });
+  ok('avtoto\'ldirish (inputType yo\'q) -> maskalanadi, bloklanmaydi', f.value === '+998 90 123 45 67', f.value); }
+{ const f = field(); let prevented = false; f.dispatchEvent({ type: 'dragstart', preventDefault() { prevented = true; } });
+  ok('maydon ichida sudrab ko\'chirish o\'chiq', prevented); }
 // FUZZ: tasodifiy tahrirlar (yozish/Backspace/Delete/belgilab yozish, kursor raqamlar ORASIDA yoki bo'shliq yonida) —
 //   maydondagi raqamlar va kursor o'rni «foydalanuvchi niyati» (raqamlar ketma-ketligi) bilan doim bir xil.
 {
