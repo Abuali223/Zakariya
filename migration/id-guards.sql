@@ -22,8 +22,15 @@ do $iqror_guard$ begin raise exception 'iqror: id-guards.sql ALOHIDA ishga tushi
 --   4) rekey_payroll_id(...) — o'qituvchi/xodim ID'sini o'zgartirish VA uning maosh/avans tarixi, «xodim
 --      farzandi» bog'lanishi va foydalanuvchi yorlig'ini (users.staffCode) yangi ID'ga BITTA tranzaksiyada
 --      ko'chirish. Eski ID boshqa xodimda ham bo'lsa (takroriy ID) — tarix kimniki ekani noma'lum: ko'chirilmaydi.
---      Yozuv o'chirilgan / ID boshqa joyda o'zgargan / yangi ID band yoki o'chirilgan xodim tarixi bilan — rad.
--- Faqat direktor/admin/HR (app.is_admin() / app.is_hr()). Idempotent (run-all.sql zanjirida).
+--      Yozuv o'chirilgan / ID boshqa joyda o'zgargan / yangi ID band yoki o'chirilgan xodim tarixi (maosh, avans,
+--      «xodim farzandi» bog'lanishi) bilan — rad.
+--   5) Maosh/avans yozuvi kaliti (salary_payments / staff_advances.teacherId): ilovadan faqat MAVJUD o'qituvchi/xodim
+--      kaliti bilan yoziladi va ID o'zgartirish (4) bilan bir kalitda navbatma-navbat (advisory lock): ID o'zgartirilayotgan
+--      paytda berilgan maosh eski kalitda «yetim» qolmaydi — kutadi va xato bilan qaytadi («sahifani yangilang»).
+--   6) camera_owners(cam) / camera_has_scans(cam) — Kamera ID kimda va eski skan tarixi bormi: qabulxona o'qituvchi/xodim
+--      jadvallarini va skanlarni ko'rmaydi (RLS), shuning uchun tekshiruv serverda (faqat ism va tur qaytadi).
+--   7) teacherId/staffId ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi yoki o'zgargan ID boshqa xodimnikiga teng emas.
+-- 1–4 — faqat direktor/admin/HR (app.is_admin() / app.is_hr()); 6 — faol xodim (app.is_staff()). Idempotent (run-all.sql).
 -- =====================================================================
 
 -- ---- 1) Kalit himoyasi ----
@@ -63,33 +70,45 @@ create trigger trg_staff_row_id before update on public.staff
   for each row execute function app.guard_row_id();
 
 -- ---- 2) Yangi o'qituvchi/xodim ID'si uchun yuqori chegara ----
+--   plpgsql: ruxsat va prefiks shakli regex'dan OLDIN tekshiriladi (sql CASE ichidagi max() agregati shartdan oldin
+--   hisoblanardi — istalgan foydalanuvchi o'z naqshini barcha maosh kalitlariga qo'llab, kalit borligini bilib olardi).
 create or replace function public.payroll_id_high_water(p_prefix text)
-returns int language sql stable security definer set search_path = public, app, pg_temp as $$
-  select case when (app.is_admin() or app.is_hr()) and coalesce(p_prefix, '') ~ '^[A-Z]{1,6}-$'
-    then coalesce(max((regexp_match(upper(btrim(x)), '^' || p_prefix || '(\d{1,9})$'))[1]::int), 0) else 0 end
+returns int language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v int;
+begin
+  if not (app.is_admin() or app.is_hr()) or coalesce(p_prefix, '') !~ '^[A-Z]{1,6}-$' then
+    return 0;
+  end if;
+  select coalesce(max((regexp_match(upper(btrim(x)), '^' || p_prefix || '(\d{1,9})$'))[1]::int), 0) into v
     from (select "teacherId" as x from public.teachers
           union all select "staffId" from public.staff
           union all select "teacherId" from public.salary_payments
           union all select "teacherId" from public.staff_advances
           union all select "teacherId" from public.student_private) t
-   where coalesce(x, '') <> ''
-$$;
+   where coalesce(x, '') <> '';
+  return v;
+end $$;
 revoke all on function public.payroll_id_high_water(text) from public, anon;
 grant execute on function public.payroll_id_high_water(text) to authenticated, service_role;
 
 -- ---- 3) Maosh kaliti tarixi ----
-create or replace function public.payroll_key_info(p_key text)
+--   p_row — o'qituvchi qator id'si (ixtiyoriy): «xodim farzandi» soni rekey_payroll_id ko'chiradigan bilan BIR XIL —
+--   kalit bilan VA qator id'si bilan saqlangan (ID berilishidan oldingi) bog'lanishlar (boshqa o'qituvchining ID'si bo'lmasa).
+drop function if exists public.payroll_key_info(text);
+create or replace function public.payroll_key_info(p_key text, p_row text default null)
 returns jsonb language sql stable security definer set search_path = public, app, pg_temp as $$
   select case when (app.is_admin() or app.is_hr()) and coalesce(p_key, '') <> '' then jsonb_build_object(
     'salary',   (select count(*) from public.salary_payments where "teacherId" = p_key),
     'advances', (select count(*) from public.staff_advances  where "teacherId" = p_key),
-    'children', (select count(*) from public.student_private where "teacherId" = p_key),
+    'children', (select count(*) from public.student_private sp where sp."teacherId" = p_key
+                   or (coalesce(p_row, '') <> '' and sp."teacherId" = p_row
+                       and not exists (select 1 from public.teachers t2 where t2."teacherId" = p_row))),
     'owners',   (select count(*) from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = p_key)
               + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = p_key)
   ) end
 $$;
-revoke all on function public.payroll_key_info(text) from public, anon;
-grant execute on function public.payroll_key_info(text) to authenticated, service_role;
+revoke all on function public.payroll_key_info(text, text) from public, anon;
+grant execute on function public.payroll_key_info(text, text) to authenticated, service_role;
 
 -- ---- 4) ID o'zgartirish + tarixni ko'chirish (atomik) ----
 create or replace function public.rekey_payroll_id(p_coll text, p_row text, p_old text, p_new text)
@@ -131,26 +150,35 @@ begin
   if v_key = p_new then
     return jsonb_build_object('moved', false, 'same', true, 'oldKey', v_key);
   end if;
+  -- Eski va yangi kalit bo'yicha navbat (5-band triggeri bilan): shu paytda berilayotgan maosh/avans kutadi.
+  --   Tartib bilan (kichigi oldin) — ikki parallel ID o'zgartirish bir-birini kutib qolmasin.
+  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || least(v_key, p_new)));
+  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || greatest(v_key, p_new)));
   -- Yangi ID boshqa o'qituvchi/xodimning kaliti emas (o'qituvchi va xodim maosh kalitlari BITTA nomlar fazosida).
   if exists (select 1 from public.teachers t where btrim(coalesce(nullif(t."teacherId", ''), t.id)) = p_new and not (p_coll = 'teachers' and t.id = p_row))
      or exists (select 1 from public.staff s where btrim(coalesce(nullif(s."staffId", ''), s.id)) = p_new and not (p_coll = 'staff' and s.id = p_row)) then
     raise exception 'ID «%» boshqa xodim/o''qituvchida bor — takroriy ID maosh/avansni aralashtiradi', p_new using errcode = '23505';
   end if;
-  -- Yangi ID ostida egasiz (o'chirilgan xodimning) maosh/avans tarixi — meros olinmasin.
+  -- Yangi ID ostida egasiz (o'chirilgan xodimning) maosh/avans tarixi yoki «xodim farzandi» bog'lanishi — meros olinmasin
+  --   (bog'lanish o'qituvchiga ko'chsa, o'sha bolalar yangi o'qituvchiniki bo'lib ko'rinardi).
   if exists (select 1 from public.salary_payments where "teacherId" = p_new)
-     or exists (select 1 from public.staff_advances where "teacherId" = p_new) then
-    raise exception 'ID «%» ostida avvalgi (o''chirilgan) xodimning maosh/avans tarixi bor — boshqa ID tanlang', p_new using errcode = '23505';
+     or exists (select 1 from public.staff_advances where "teacherId" = p_new)
+     or (p_coll = 'teachers' and exists (select 1 from public.student_private where "teacherId" = p_new)) then
+    raise exception 'ID «%» ostida avvalgi (o''chirilgan) xodimning maosh/avans tarixi yoki «xodim farzandi» bog''lanishi bor — boshqa ID tanlang', p_new
+      using errcode = '23505';
   end if;
   -- Eski kalit boshqa yozuvda ham bo'lsa (takroriy ID) — tarix kimniki ekani noma'lum: KO'CHIRILMAYDI.
   select (select count(*) from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = v_key and not (p_coll = 'teachers' and t.id = p_row))
        + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = v_key and not (p_coll = 'staff' and s.id = p_row))
     into v_shared;
   v_move := (v_shared = 0);
+  perform set_config('iqror.rekey', '1', true);   -- 7-band triggeri: ID shu funksiya ichida (tarix bilan) o'zgaradi
   if p_coll = 'teachers' then
     update public.teachers set "teacherId" = p_new where id = p_row;
   else
     update public.staff set "staffId" = p_new where id = p_row;
   end if;
+  perform set_config('iqror.rekey', '', true);
   if v_move then
     update public.salary_payments set "teacherId" = p_new where "teacherId" = v_key;
     get diagnostics n_sal = row_count;
@@ -173,5 +201,94 @@ begin
 end $$;
 revoke all on function public.rekey_payroll_id(text, text, text, text) from public, anon;
 grant execute on function public.rekey_payroll_id(text, text, text, text) to authenticated, service_role;
+
+-- ---- 5) Maosh/avans yozuvi kaliti: faqat mavjud o'qituvchi/xodim kaliti; ID o'zgartirish bilan navbat ----
+--   Kalit — admin.html dagi kabi String(teacherId||_id) (xom). Ilova foydalanuvchisi (app.uid()) yozganda tekshiriladi;
+--   SQL / service_role (import, tuzatish) — faqat navbat. Kalit o'zgarmagan yangilanish va mavjud yozuvni xuddi shu kalit
+--   bilan qayta yozish (upsert) — tekshirilmaydi (o'chirilgan xodim tarixi ham saqlanadi).
+create or replace function app.guard_payroll_key()
+  returns trigger language plpgsql security definer
+  set search_path = public, app, pg_temp as $$
+declare v_same boolean := false;
+begin
+  if coalesce(new."teacherId", '') = '' then return new; end if;
+  if tg_op = 'UPDATE' and new."teacherId" is not distinct from old."teacherId" then return new; end if;
+  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || new."teacherId"));
+  if app.uid() is null then return new; end if;
+  if tg_op = 'INSERT' then
+    execute format('select exists (select 1 from public.%I where id = $1 and "teacherId" = $2)', tg_table_name)
+      into v_same using new.id, new."teacherId";
+  end if;
+  if not v_same
+     and not exists (select 1 from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = new."teacherId")
+     and not exists (select 1 from public.staff s where coalesce(nullif(s."staffId", ''), s.id) = new."teacherId") then
+    raise exception 'Maosh kaliti «%» hech bir o''qituvchi/xodimda yo''q (ID o''zgartirilgan yoki o''chirilgan) — sahifani yangilab, qayta urinib ko''ring', new."teacherId"
+      using errcode = '23503';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_salpay_key on public.salary_payments;
+create trigger trg_salpay_key before insert or update of "teacherId" on public.salary_payments
+  for each row execute function app.guard_payroll_key();
+drop trigger if exists trg_staffadv_key on public.staff_advances;
+create trigger trg_staffadv_key before insert or update of "teacherId" on public.staff_advances
+  for each row execute function app.guard_payroll_key();
+
+-- ---- 7) O'qituvchi/xodim ID'si (maosh kaliti): ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi ID takroriy emas ----
+--   API orqali to'g'ridan-to'g'ri PATCH teacherId/staffId (maosh/avans eski kalitda «yetim» qolardi) va boshqa xodimning ID'si
+--   bilan yozuv — rad. Mavjud (eski) takroriy ID'lar tegilmaydi: tekshiruv faqat ID yozilganda. SQL / service_role — tegilmaydi.
+create or replace function app.guard_payroll_id()
+  returns trigger language plpgsql security definer
+  set search_path = public, app, pg_temp as $$
+declare v_new text; v_old text;
+begin
+  if app.uid() is null then return new; end if;
+  if tg_table_name = 'teachers' then
+    v_new := new."teacherId"; if tg_op = 'UPDATE' then v_old := old."teacherId"; end if;
+  else
+    v_new := new."staffId"; if tg_op = 'UPDATE' then v_old := old."staffId"; end if;
+  end if;
+  if tg_op = 'UPDATE' then
+    if v_new is not distinct from v_old then return new; end if;
+    if coalesce(current_setting('iqror.rekey', true), '') <> '1' then
+      raise exception 'O''qituvchi/xodim ID''si faqat «ID o''zgartirish» orqali (maosh/avans tarixi bilan birga) o''zgaradi — kartochkani forma orqali saqlang'
+        using errcode = '42501';
+    end if;
+  end if;
+  if btrim(coalesce(v_new, '')) <> ''
+     and (exists (select 1 from public.teachers t where btrim(coalesce(nullif(t."teacherId", ''), t.id)) = btrim(v_new) and not (tg_table_name = 'teachers' and t.id = new.id))
+       or exists (select 1 from public.staff s where btrim(coalesce(nullif(s."staffId", ''), s.id)) = btrim(v_new) and not (tg_table_name = 'staff' and s.id = new.id))) then
+    raise exception 'ID «%» boshqa xodim/o''qituvchida bor — takroriy ID maosh/avansni aralashtiradi', v_new using errcode = '23505';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_teacher_payroll_id on public.teachers;
+create trigger trg_teacher_payroll_id before insert or update of "teacherId" on public.teachers
+  for each row execute function app.guard_payroll_id();
+drop trigger if exists trg_staff_payroll_id on public.staff;
+create trigger trg_staff_payroll_id before insert or update of "staffId" on public.staff
+  for each row execute function app.guard_payroll_id();
+
+-- ---- 6) Kamera ID egalari va skan tarixi (qabulxona uchun ham) ----
+--   Faqat tur, qator id'si va ism qaytadi (maosh / PII yo'q). Kamera ID chetidagi bo'sh joy hisobga olinmaydi.
+create or replace function public.camera_owners(p_cam text)
+returns jsonb language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when app.is_staff() and btrim(coalesce(p_cam, '')) <> '' then coalesce((
+    select jsonb_agg(jsonb_build_object('coll', coll, 'id', id, 'name', name) order by coll, id) from (
+      select 'students' as coll, s.id, s.name from public.students s where btrim(coalesce(s."cameraId", '')) = btrim(p_cam)
+      union all select 'teachers', t.id, t.name from public.teachers t where btrim(coalesce(t."cameraId", '')) = btrim(p_cam)
+      union all select 'staff', x.id, x.name from public.staff x where btrim(coalesce(x."cameraId", '')) = btrim(p_cam)) o
+  ), '[]'::jsonb) end
+$$;
+revoke all on function public.camera_owners(text) from public, anon;
+grant execute on function public.camera_owners(text) to authenticated, service_role;
+
+create or replace function public.camera_has_scans(p_cam text)
+returns boolean language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when app.is_staff() and btrim(coalesce(p_cam, '')) <> ''
+    then exists (select 1 from public.staff_checkins c where c."personId" = btrim(p_cam)) end
+$$;
+revoke all on function public.camera_has_scans(text) from public, anon;
+grant execute on function public.camera_has_scans(text) to authenticated, service_role;
 
 notify pgrst, 'reload schema';

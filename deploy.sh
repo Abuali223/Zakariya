@@ -61,6 +61,7 @@ for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebas
   git show "FETCH_HEAD:sb/$f" | sudo tee "$WEB/sb/$f" >/dev/null
 done
 if ! grep -q "function rpc" "$WEB/sb/firebase-firestore.js"; then echo "❌ /sb shim eski (rpc yo'q)"; exit 1; fi
+if ! grep -q "function createDoc" "$WEB/sb/firebase-firestore.js"; then echo "❌ /sb shim eski (createDoc yo'q — admin.html yuklanmaydi)"; exit 1; fi
 
 echo "==> 5/7 admin.html + sw.js + index.html (shim bilan) joylanmoqda..."
 sudo cp "$WEB/admin.html" "$WEB/admin.html.bak" 2>/dev/null || true   # zaxira (rollback uchun)

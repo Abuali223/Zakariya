@@ -617,6 +617,51 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   74% — ⚠️; R11 da boshqa adash 75% ⚠️ siz edi); «… Bahodir o'g'li» yozuvi o'zbekcha bo'lsa otasining ismi yozuvda saqlanmaydi
   (normalizeName) — adash teng; ruscha kelishik shakllari («Петровой Анны» — 44%); bir xil bosh harfli aka-uka tengligi.
 
+## 36) ID tuzatmalari ustidan raqib ko'rigi (§34 ustidan) — topilmalar va tuzatmalar
+
+- Beshta yo'nalish (forma, SQL, oqimlar, shim, auditni qayta tekshirish) haqiqiy stekda (PG16 + PostgREST 12 + to'liq admin.html
+  Chromium'da, rollar JWT bilan). Xulosa: asos mustahkam (jim ID o'zgarishi yoki arvoh yozuv topilmadi), lekin 30 dan ortiq yaqin
+  bo'shliq topildi — hammasi tuzatildi:
+- **Kamera ID va qabulxona (o'rta):** qabulxona o'qituvchi/xodim jadvallarini va skanlarni ko'rmaydi (RLS) — o'qituvchining Kamera
+  ID'si o'quvchiga jim saqlanardi (o'qituvchi skani bolani «keldi» qilardi), eski skanlar haqidagi ogohlantirish ham chiqmasdi.
+  Endi `camera_owners` / `camera_has_scans` (id-guards.sql, faqat ism va tur, chetidagi bo'sh joysiz) — forma, HIK importi va
+  bog'lash oynasi shular orqali tekshiradi.
+- **O'qituvchi maoshi (o'rta):** forma maosh paneli yuklanishidan oldin saqlansa — tillar va sertifikatlar bo'sh yozilib, oylik
+  1 500 000 so'mga tushardi. Endi panel yo'q bo'lsa ular yozilmaydi; hisoblangan maosh ziddiyat deb so'ralmaydi va bazadagi
+  (boshqa admin o'zgartirgan staj/til bilan) qiymatlardan qayta hisoblanadi.
+- **Sinf rahbari (o'rta):** «Sinf rahbari» ro'yxati yuklanmagan holda saqlansa kurator jim olib tashlanardi — endi ro'yxat
+  yuklanmaguncha (yoki o'qilmasa) saqlanmaydi.
+- **Excel import va yangi o'quvchi (o'rta):** oldindan ko'rish ochiq turganda boshqa admin shu ID bilan o'quvchi qo'shsa, import
+  uning ustiga yozardi (ota-ona kodi va maxfiy ma'lumoti yangi bolaga o'tardi). Endi shim'da `createDoc` (sof INSERT, 23505): import
+  avtomatik ID'ni qayta beradi, fayldagi aniq ID'ni o'tkazadi; qisman yozilgandan keyin qayta «Saqlash» yozilganlarni qayta
+  yaratmaydi; yangi o'quvchi formasi ham faqat INSERT.
+- **HIK importi (o'rta):** umumiy belgilash «o'zgaradi» qatorlarini ham belgilab, skan tarixi bor Kamera ID'ni ogohlantirishsiz
+  almashtirardi (oylik «yo'qlama» ushlanmasi). Endi «o'zgaradi» faqat qo'lda, tarix bo'lsa aniq tasdiq; oldindan ko'rishdan beri
+  odamning Kamera ID'si o'zgargan bo'lsa yozilmaydi.
+- **Bir xil ism (o'rta):** yangi xodim/o'qituvchi tekshiruvi so'z tartibini hisobga olmasdi («Sobirov Jamshid» = «Jamshid Sobirov»)
+  — endi tartibdan va kichik imlodan mustaqil; bog'lash oynasida «ism mos» faqat haqiqiy moslikda, qidiruv so'zlar bo'yicha;
+  skan o'quvchiniki bo'lishi mumkin bo'lsa (Kamera ID'si yo'q, ismi mos) — ogohlantirish.
+- **Baza (past):** `payroll_id_high_water` ruxsatni regex'dan OLDIN tekshiradi (oldin istalgan foydalanuvchi kalit borligini bilib
+  olishi mumkin edi); yangi ID ostidagi yetim «xodim farzandi» bog'lanishi ham band; ko'chiriladigan bog'lanishlar soni tasdiqda
+  aniq; maosh berish va ID o'zgartirish bir kalitda navbat bilan (advisory lock) — o'zgartirish paytida berilgan maosh eski kalitda
+  yetim qolmay xato bilan qaytadi; maosh/avans faqat mavjud xodim kaliti bilan; `teacherId`/`staffId` ilovadan faqat
+  `rekey_payroll_id` orqali o'zgaradi (API orqali to'g'ridan-to'g'ri o'zgartirish va takroriy yangi ID — rad).
+- **Forma (past):** maxfiy maydonlar ro'yxat fonida hali yuklanmagan bo'lsa forma ochilishidan oldin o'qiladi («Qaysi xodim»ni
+  bo'shatish endi yoziladi, soxta «boshqa joyda o'zgartirilgan» savoli yo'q); eski sana/vaqt formati («01.09.2025», «9:00»),
+  NULL til, «85» ball, «500000» summa, eski til kaliti — o'zgartirilmagan «Saqlash»da yozilmaydi; tahrirda takroriy / o'chirilgan
+  xodim ID'si yozilsa asl ID qaytariladi; ID o'zgarib qolgan maydonlar yozilmasa — aniq xabar va qayta «Saqlash» ishlaydi;
+  foydalanuvchini qayta bog'lashda yangi yozuv o'chirilgan bo'lsa — avvalgi bog'lanish tiklanadi; o'chirish ogohlantirishi ichki
+  kalit va «xodim farzandi»ni ham aytadi.
+- **Shim (past):** «undefined»/«null»/bo'shliq kalit rad (getDoc so'rovsiz «yo'q»), writeBatch kalitni navbatga qo'shishda
+  tekshiradi, bo'sh payload bilan `mustExist` bor qatorni «topilmadi» demaydi; admin.html shim'ni `?v=2` bilan yuklaydi (keshdagi
+  eski shim + yangi sahifa = oq ekran bo'lmasin), deploy.sh `createDoc` borligini tekshiradi; xato xabarida bazaning izohi.
+- Tekshiruv: SQL — rekey 28/28, xodim 11/11, yangi tuzatmalar 60/60 (regex oracle, yetim bog'lanish, sanoq, maosh/ID poygasi ikki
+  tartibda, kalit triggeri, kamera RPC 7 rol, ID triggeri), zanjir 3 marta qayta qo'llandi (xato yo'q); forma — 101 maydon tahririda
+  94 (qolgan 7 — test artefaktlari), o'zgartirilmagan saqlash 27/27 (hech narsa yozilmaydi), kamera / maosh paneli / rahbar /
+  maxfiy ma'lumot / parallel tahrir stsenariylari; oqimlar — bog'lash 21/21, HIK 23/24 (qolgani ataylab o'zgargan xatti-harakat),
+  ID o'zgarishi 13/13, o'chirish/olimpiada/import 20/20, poygalar 3/3, qisman xato 2/2; shim selftest PASS; Chromium «Biriktirish»
+  110/110, chiqarish 37/37; to'lov/SMS/auth/server testlari yashil.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

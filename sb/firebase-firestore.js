@@ -7,7 +7,7 @@
 //
 // Qoplaydi: getFirestore, initializeFirestore, persistentLocalCache,
 // persistentMultipleTabManager, collection, doc, query, where, orderBy, limit,
-// getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, deleteField,
+// getDoc, getDocs, setDoc, addDoc, createDoc, updateDoc, deleteDoc, deleteField,
 // serverTimestamp, writeBatch, onSnapshot.
 // =====================================================================
 import { supabase } from "./_core.js";
@@ -50,9 +50,15 @@ function prep(data) {
 // Bo'sh/aniqlanmagan qator kaliti bilan yozish — XATO (jim emas): staff.id DEFAULT gen_random_uuid() tufayli
 //   setDoc(doc(db,'staff',undefined), ...) JSON'da id'siz ketib, YANGI (takroriy) xodim yaratardi; updateDoc esa
 //   ?id=eq.undefined bilan jim 0 qator yangilardi.
+//   Satr ko'rinishidagi «undefined» / «null» va faqat bo'shliq ham (String(x._id) — x._id yo'q bo'lsa) — kalit EMAS.
+function badId(id) {
+  if (id === undefined || id === null) return true;
+  const s = String(id);
+  return s.trim() === "" || s === "undefined" || s === "null";
+}
 function needId(ref) {
   const id = ref ? ref._id : undefined;
-  if (id === undefined || id === null || String(id) === "") {
+  if (badId(id)) {
     const e = new Error("Yozuv kaliti (id) bo'sh — " + ((ref && ref._t) || "?") + " ga yozilmadi");
     e.code = "invalid-argument";
     throw e;
@@ -85,6 +91,8 @@ function applyCons(q, cons) {
 
 // ---- reads ----
 export async function getDoc(ref) {
+  // Yaroqsiz kalit — so'rov yuborilmaydi (?id=eq.undefined «arvoh» qatorni topib, «bor» deb qaytarardi).
+  if (!ref || badId(ref._id)) return { id: ref ? ref._id : undefined, exists: () => false, data: () => undefined };
   const { data, error } = await supabase().from(ref._t).select("*").eq("id", ref._id).maybeSingle();
   if (error && error.code !== "PGRST116") throw error;
   return { id: ref._id, exists: () => !!data, data: () => wrapRow(data) };
@@ -129,6 +137,13 @@ export async function setDoc(ref, data, opts) {
   const { error } = await supabase().from(ref._t).upsert({ ...prep(data), id: ref._id }, { onConflict: "id" });
   if (error) throw error;
 }
+// createDoc — sof INSERT berilgan kalit bilan: qator allaqachon bo'lsa XATO (23505), ustiga YOZILMAYDI (setDoc upsert'idan
+//   farqi). Yangi yozuv uchun (masalan import: oldindan ko'rishdan beri shu ID bilan boshqa o'quvchi qo'shilgan bo'lishi mumkin).
+export async function createDoc(ref, data) {
+  needId(ref);
+  const { error } = await supabase().from(ref._t).insert({ ...prep(data), id: ref._id });
+  if (error) throw error;
+}
 export async function addDoc(collRef, data) {
   const id = (globalThis.crypto?.randomUUID?.() || Date.now() + Math.random().toString(36).slice(2));
   const { error } = await supabase().from(collRef._t).insert({ ...prep(data), id });
@@ -144,6 +159,17 @@ export async function updateDoc(ref, data, opts) {
   needId(ref);
   const row = prep(data);
   delete row.id;
+  Object.keys(row).forEach(k => { if (row[k] === undefined) delete row[k]; });
+  // Yoziladigan ustun qolmadi: bo'sh PATCH yuborilmaydi (PostgREST 200 [] qaytarib, BOR qatorni «topilmadi» deb ko'rsatardi);
+  //   mustExist bo'lsa — faqat borligi tekshiriladi.
+  if (!Object.keys(row).length) {
+    if (opts && opts.mustExist) {
+      const { data: got, error } = await supabase().from(ref._t).select("id").eq("id", ref._id).maybeSingle();
+      if (error && error.code !== "PGRST116") throw error;
+      if (!got) { const e = new Error("Yozuv topilmadi (o'chirilgan) yoki uni ko'rishga ruxsat yo'q: " + ref._t + "/" + ref._id); e.code = "not-found"; throw e; }
+    }
+    return;
+  }
   const q = supabase().from(ref._t).update(row).eq("id", ref._id);
   if (opts && opts.mustExist) {
     const { data: got, error } = await q.select("id");
@@ -166,9 +192,10 @@ export async function deleteDoc(ref) {
 export function writeBatch(_db) {
   const ops = [];
   return {
-    set(ref, data, opts) { ops.push(["set", ref, data, opts]); return this; },
-    update(ref, data) { ops.push(["update", ref, data]); return this; },
-    delete(ref) { ops.push(["delete", ref]); return this; },
+    // Kalit navbatga qo'shishda tekshiriladi: yaroqsiz kalit commit O'RTASIDA (oldingilari yozilib bo'lgach) xato bermasin.
+    set(ref, data, opts) { needId(ref); ops.push(["set", ref, data, opts]); return this; },
+    update(ref, data) { needId(ref); ops.push(["update", ref, data]); return this; },
+    delete(ref) { needId(ref); ops.push(["delete", ref]); return this; },
     async commit() {
       for (const [k, ref, data, opts] of ops) {
         if (k === "set") await setDoc(ref, data, opts);

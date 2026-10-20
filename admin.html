@@ -436,7 +436,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, updateProfile, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, limit, doc, setDoc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, limit, doc, setDoc, updateDoc, addDoc, createDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js?v=2";   // ?v — yangi shim (createDoc) keshdan emas
 
 // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
 const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
@@ -1055,6 +1055,15 @@ function cmpVal(v){
 //   o'zi ({coll,id}, hisobga olinmaydi). Tarmoq xatosida — null (chaqiruvchi saqlamaydi).
 async function cameraOwners(cam, self){
   cam=String(cam==null?'':cam).trim(); if(!cam) return [];
+  // Server (id-guards.sql camera_owners): uchala jadvalni ham ko'radi — qabulxona o'qituvchi/xodim jadvallarini RLS tufayli
+  //   ko'rmaydi (mijoz so'rovi jim [] qaytarib, o'qituvchining Kamera ID'si o'quvchiga saqlanardi). RPC yo'q (eski baza) — pastdagi yo'l.
+  const KIND={ students:'o‘quvchi', teachers:'o‘qituvchi', staff:'xodim' };
+  try{
+    const r=await rpc('camera_owners',{ p_cam:cam });
+    if(!Array.isArray(r)) return null;   // ruxsat yo'q — tekshirib bo'lmadi
+    return r.filter(o=>!(self && self.coll===o.coll && String(self.id)===String(o.id)))
+      .map(o=>({ coll:o.coll, kind:KIND[o.coll]||o.coll, id:String(o.id), name:o.name||String(o.id) }));
+  }catch(e){ if(!rpcMissing(e)) return null; }
   const out=[], seen=new Set();
   const add=(coll,kind,id,x)=>{ const key=coll+':'+id; if(seen.has(key)) return; if(self && self.coll===coll && String(self.id)===String(id)) return;
     seen.add(key); out.push({ coll, kind, id:String(id), name:(x&&x.name)||String(id) }); };
@@ -1791,7 +1800,7 @@ async function buildAndPreviewImport(rows){
       score:iScore>=0?(Number(r[iScore])||0):0, order:1000+i };
     // Davomat % faqat faylda QIYMAT bo'lsa (aks holda bo'sh qoladi — kabinet «—», davomat kiritilgach trigger hisoblaydi).
     if(iAtt>=0 && String(r[iAtt]==null?'':r[iAtt]).trim()!=='') rec.attendance=Number(r[iAtt])||0;
-    toWrite.push({id, data:rec, priv});
+    toWrite.push({id, data:rec, priv, given:!!givenId});
     nameCount[name]=(nameCount[name]||0)+1;
   }
   Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta (yangi)`));
@@ -1837,14 +1846,30 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
     if(!all.length){ toast('Saqlash uchun yozuv yo‘q',true); return; }
     const btn=$('#imp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
     try{
-      // YANGI o'quvchilar — partiyalab (upsert). MAVJUDlarni yangilash — sof UPDATE (o'chirilgan o'quvchi qayta yaratilmaydi,
-      //   uning maxfiy ma'lumoti ham yozilmaydi): bazada topilmaganlar alohida sanaladi.
-      for(let i=0;i<toWrite.length;i+=450){
-        const batch=writeBatch(db);
-        toWrite.slice(i,i+450).forEach(x=>{ batch.set(doc(db,'students',x.id), x.data, {merge:true});
-          if(x.priv && Object.keys(x.priv).length) batch.set(doc(db,'student_private',x.id), x.priv, {merge:true}); });
-        await batch.commit();
+      // YANGI o'quvchilar — faqat INSERT (createDoc): oldindan ko'rishdan beri shu ID bilan boshqa o'quvchi qo'shilgan bo'lsa,
+      //   uning yozuvi (va maxfiy ma'lumoti, ota-ona kodi) ustiga YOZILMAYDI — avtomatik ID qayta beriladi, fayldagi ANIQ ID esa
+      //   o'tkaziladi. MAVJUDlarni yangilash — sof UPDATE (o'chirilgan o'quvchi qayta yaratilmaydi): topilmaganlar sanaladi.
+      //   Qisman yozilgandan keyin (tarmoq uzildi) qayta «Saqlash»: yozilgan qatorlar (x.done / x.privDone) QAYTA yaratilmaydi —
+      //   aks holda ID band deb yangi ID bilan ikkinchi nusxa paydo bo'lardi.
+      let newOk=toWrite.filter(x=>x.done).length, reId=toWrite.filter(x=>x.done && x.reId).length, idSkip=0, idPool=null;
+      const isDup=e=>!!e && (String(e.code)==='23505' || /duplicate key|already exists/i.test(String(e.message||'')));
+      const freshIds=async()=>{ if(idPool) return idPool; const ids=[];
+        (await loadCol('students','order')).forEach(r=>{ ids.push(String(r._id)); if(r.studentId) ids.push(String(r.studentId)); });
+        try{ const hw=Number(await rpc('student_id_high_water'))||0; if(hw>0) ids.push('IQ-'+String(hw).padStart(4,'0')); }catch(_){}
+        toWrite.forEach(x=>ids.push(String(x.id))); return (idPool=ids); };
+      for(const x of toWrite){
+        if(x.done || x.skip){ if(x.done && x.priv && Object.keys(x.priv).length && !x.privDone){ await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true}); x.privDone=true; } continue; }
+        let id=x.id, done=false;
+        for(let k=0;k<4 && !done;k++){
+          try{ await createDoc(doc(db,'students',id), Object.assign({}, x.data, { studentId:id })); done=true; }
+          catch(e2){ if(!isDup(e2)) throw e2; if(x.given){ break; } const ids=await freshIds(); id=nextId(ids,'IQ-',4); ids.push(id); }
+        }
+        if(!done){ x.skip=true; idSkip++; warnings.push(`${x.data.name}: «${x.id}» ID shu orada boshqa o‘quvchiga berildi — qo‘shilmadi`); continue; }
+        if(id!==x.id){ reId++; x.reId=true; }
+        x.id=id; x.done=true; newOk++;
+        if(x.priv && Object.keys(x.priv).length){ await setDoc(doc(db,'student_private',id), x.priv, {merge:true}); x.privDone=true; }
       }
+      idSkip=toWrite.filter(x=>x.skip).length;
       let updOk=0, gone=0;
       if(doUpd) for(const x of toUpdate){
         try{ await updateDoc(doc(db,'students',x.id), x.data, {mustExist:true}); }
@@ -1852,7 +1877,7 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
         if(x.priv && Object.keys(x.priv).length) await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true});
         updOk++;
       }
-      toast(`${toWrite.length} yangi${doUpd?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!gone); closeModal(); renderStudents();
+      toast(`${newOk} yangi${reId?` (${reId} tasiga yangi ID berildi — shu orada band bo‘lgan)`:''}${idSkip?` · ${idSkip} tasi o‘tkazildi (fayldagi ID shu orada band bo‘ldi)`:''}${doUpd?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!(gone||idSkip)); closeModal(); renderStudents();
     }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
   };
 }
@@ -2608,7 +2633,7 @@ async function renderOlympiads(){
       // ko'rinmaydi + boshqa maxfiy maydonlarни (referrerId/contractAmount) niqoblaydi. _id ni topib yozamiz.
       //   O'quvchi aniq BITTA bo'lishi shart: ID takrorlangan (ikki bolada) yoki o'quvchi topilmasa — grant yozilmaydi.
       const _cnt=(stByKey[String(o.studentId)]||[]).length, _st=stOf(o);
-      if(!_st){ toast(_cnt>1?`«${o.studentId}» ID ${_cnt} ta o‘quvchida (takroriy) — grant kimga ekani noaniq. Avval «⚠️ Ma'lumot sifati»da ID’ni tuzating.`:`«${o.studentId}» ID’li o‘quvchi topilmadi (o‘chirilgan bo‘lishi mumkin) — grant yozilmadi.`, true); return; }
+      if(!_st){ toast(_cnt>1?`«${o.studentId}» ID ${_cnt} ta o‘quvchida (takroriy) — grant kimga ekani noaniq. Takroriy ID’ni texnik yordam tuzatadi (ID bazada SQL bilan ko‘chiriladi) — ularga murojaat qiling.`:`«${o.studentId}» ID’li o‘quvchi topilmadi (o‘chirilgan bo‘lishi mumkin) — grant yozilmadi.`, true); return; }
       if(o.studentName && normName(o.studentName)!==normName(_st.name||'') && !confirm(`DIQQAT: olimpiada yozuvidagi ism «${o.studentName}», bazadagi o‘quvchi esa «${_st.name||''}» (${o.studentId}).\n\nGrant «${_st.name||''}» ga yozilsinmi?`)) return;
       if(!confirm(`«${_st.name||o.studentId}» (${classLabelOf(_st)}, ID ${o.studentId}) — 100% grant (olimpiada) chegirmasi belgilanadi. Keyingi hisob-fakturalar 0 so‘m bo‘ladi. Davom etilsinmi?`)) return;
       const _pid=String(_st._id);
@@ -2645,7 +2670,7 @@ async function renderOlympiads(){
       if(!subject){ toast('Fanni kiriting',true); return; }
       const s=students.find(x=>String(x._id)===String(sid)); if(!s){ toast('O‘quvchi topilmadi — sahifani yangilang',true); return; }
       const skey=String(s.studentId||s._id);
-      if((stByKey[skey]||[]).length>1 && !confirm(`DIQQAT: «${skey}» ID ${(stByKey[skey]||[]).length} ta o‘quvchida (takroriy) — olimpiada yozuvi kimniki ekani keyin noaniq bo‘ladi (grant berib bo‘lmaydi). Avval «⚠️ Ma'lumot sifati»da ID’ni tuzatish tavsiya etiladi.\n\nBaribir saqlansinmi?`)) return;
+      if((stByKey[skey]||[]).length>1 && !confirm(`DIQQAT: «${skey}» ID ${(stByKey[skey]||[]).length} ta o‘quvchida (takroriy) — olimpiada yozuvi kimniki ekani keyin noaniq bo‘ladi (grant berib bo‘lmaydi). Takroriy ID’ni texnik yordam tuzatadi (ID bazada SQL bilan ko‘chiriladi) — avval ularga murojaat qilish tavsiya etiladi.\n\nBaribir saqlansinmi?`)) return;
       const btn=$('#ol-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{ await addDoc(collection(db,'olympiads'),{ studentId:skey, studentName:s.name||skey, classKey:classKeyOf(s), subject, name, level, result, date:date||'', mentor, note, createdAt:serverTimestamp() });
         toast('Saqlandi ✓'); closeModal(); load(); }
@@ -2930,7 +2955,7 @@ async function renderStudents(){
     ]); }catch(e){ return; }
     if(_g!==VIEW_GEN) return;
     if(ps){ const pmap={}; ps.docs.forEach(d=>{ pmap[d.id]=d.data(); });
-      rows.forEach(r=>{ const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }
+      rows.forEach(r=>{ _privLoaded.add(r); const pd=pmap[r._id]; if(pd){ Object.keys(pd).forEach(k=>{ if(k!=='id' && r[k]==null) r[k]=pd[k]; }); } }); }
     if(fs){ const fmap={}; fs.docs.forEach(d=>{ fmap[d.id]=d.data()||{}; });
       rows.forEach(r=>{ const pd=fmap[r._id]; if(pd){ if(r.parentPhone==null) r.parentPhone=pd.parentPhone; if(r.parentPhone2==null) r.parentPhone2=pd.parentPhone2; } }); }
     if(cs){ const cmap={}; cs.docs.forEach(d=>{ cmap[d.id]=(d.data()||{}).code||''; }); rows.forEach(r=>{ r._linkCode=cmap[r._id]||''; }); }
@@ -3457,7 +3482,22 @@ async function openTeacherClassPicker(t, onDone){
 }
 
 /* ---- Add/Edit form (modal) ---- */
+// Tahrir: o'quvchining maxfiy maydonlari (student_private) ro'yxat fonida hali yuklanmagan bo'lsa — forma OCHILISHIDAN oldin
+//   o'qiladi: aks holda forma ularni bo'sh ko'rsatib (nusxa ham bo'sh), «Qaysi xodim» tanlovini bo'shatish yozilmas, kiritilgan
+//   manzil esa soxta «boshqa joyda o'zgartirilgan» savolini berardi. O'qib bo'lmasa — avvalgidek ochiladi.
+const _privLoaded=new WeakSet();
 function openForm(name, row, prefill, afterSaveCb){
+  const s=SCHEMAS[name];
+  if(row && s && s.privateCol && row._id && !_privLoaded.has(row)){
+    _privLoaded.add(row);
+    getDoc(doc(db, s.privateCol, row._id)).then(d=>{ const pd=(d && d.exists()) ? (d.data()||{}) : null;
+      if(pd) Object.keys(pd).forEach(k=>{ if(k!=='id' && row[k]==null) row[k]=pd[k]; }); })
+      .catch(()=>{}).finally(()=>openFormNow(name, row, prefill, afterSaveCb));
+    return;
+  }
+  return openFormNow(name, row, prefill, afterSaveCb);
+}
+function openFormNow(name, row, prefill, afterSaveCb){
   const s = SCHEMAS[name];
   const isEdit = !!row;
   // Tahrir: forma OCHILGAN paytdagi qiymatlar nusxasi (ro'yxat qatori keyin fonda to'ldirilishi mumkin — masalan maxfiy
@@ -3467,6 +3507,13 @@ function openForm(name, row, prefill, afterSaveCb){
   const _cmpOf=(k,v)=>{ if(_ftype[k]==='checkbox') return (v===true||v==='1'||v===1||v==='true')?'1':'';
     if(k==='payStatus' && String(v==null?'':v)==='faol') return '';   // 'faol' = '' (Faol)
     if(k==='cameraId') return String(v==null?'':v).trim();            // chetidagi bo'sh joy — farq emas (hamma joyda trim qilinadi)
+    // Yozuv shakli farqi — o'zgarish emas (aks holda o'zgartirilmagan «Saqlash» ham yozardi, narx ogohlantirishi chiqardi):
+    //   til NULL = 'uz' (classKeyOf/priceKeyOf kabi); fan bali «85» = 85; sertifikat summasi «500000» = 500000; o'qituvchi tillari —
+    //   tartibsiz, faqat ma'lum kalitlar (noma'lum eski kalit forma tegmagan bo'lsa bazada qoladi).
+    if(k==='lang') return String(v||'uz');
+    if(k==='subjects' && Array.isArray(v)) return cmpVal(v.filter(x=>x&&x.uz).map(x=>({ uz:String(x.uz||'').trim(), ru:String(x.ru||'').trim(), s:Number(x.s)||0 })));
+    if(k==='otherCerts' && Array.isArray(v)) return cmpVal(v.map(c=>({ name:String((c&&c.name)||''), amount:Number(c&&c.amount)||0 })));
+    if(k==='languages' && Array.isArray(v)) return cmpVal(v.filter(x=>LANG_KEYS.includes(x)).slice().sort());
     return cmpVal(v); };
   const _snapRaw = (isEdit && row) ? Object.assign({}, row) : {};
   const _snapN = {}; Object.keys(_snapRaw).forEach(k=>{ _snapN[k]=_cmpOf(k,_snapRaw[k]); });
@@ -3541,6 +3588,13 @@ function openForm(name, row, prefill, afterSaveCb){
     <form id="m-form"><div class="modal-b">${body}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="submit" class="btn gold" id="m-save">Saqlash</button></div></form>`;
   openModal();
+  // Eski (ISO bo'lmagan) sana/vaqt qiymati («01.09.2025», «9:00») type=date/time maydonida ko'rinmaydi (bo'sh): foydalanuvchi
+  //   unga tegmasa — o'zgarmagan hisoblanadi (bo'sh yozilib, boshlanish sanasi / tug'ilgan kun / ish vaqti o'chmasin).
+  const _legacyBlank=new Set();
+  if(isEdit) $('#m-form').querySelectorAll('input[type="date"],input[type="time"],input[type="month"],input[type="datetime-local"]').forEach(inp=>{
+    const k=inp.name, v=val(k); if(!k || String(v==null?'':v)==='' || inp.value!=='') return;
+    _legacyBlank.add(k); inp.title='Bazadagi qiymat: '+String(v)+' (eski yozuv — o‘zgartirmasangiz saqlanib qoladi)';
+    const touch=()=>_legacyBlank.delete(k); inp.addEventListener('input',touch); inp.addEventListener('change',touch); });
   // Yangi qo'shishda ID ni avtomatik (bazada yo'q) qilib qo'yamiz.
   //   Ro'yxat keshi BO'SH bo'lsa (masalan «Xodimlar davomati»dan qo'shishda) — avval BAZADAN yuklaymiz:
   //   aks holda nextId([]) har doim 'IQX-001' berardi -> takroriy ID -> maosh/avans BOSHQA xodimga yozilardi
@@ -3573,6 +3627,7 @@ function openForm(name, row, prefill, afterSaveCb){
     try{
       const data={}, rawEmpty=new Set();   // rawEmpty: raqamli maydon formada BO'SH qoldirilgan (0 ga aylanadi)
       new FormData(e.target).forEach((v,k)=>{ if(k.startsWith('subj_'))return; if(NUM.has(k)){ if(v==='') rawEmpty.add(k); else rawEmpty.delete(k); } data[k]= NUM.has(k) ? (v===''?0:Number(v)) : v; });
+      _legacyBlank.forEach(k=>{ if(data[k]==='') delete data[k]; });
       // Kamera ID — bo'sh joysiz (nusxa-ko'chirishdagi ' 101 ' skan personId bilan mos kelmay, har kuni «Yo‘q» chiqardi).
       if(typeof data.cameraId==='string') data.cameraId=data.cameraId.trim();
       // «Davomat %» — server trigger (attendance-sync.sql) davomatdan hisoblaydi. Forma uni faqat foydalanuvchi
@@ -3595,11 +3650,15 @@ function openForm(name, row, prefill, afterSaveCb){
           stop(); return; }
       }
       // O'qituvchi: asosiy oylikni toza raqamga aylantiramiz va MAOSHNI avtomatik hisoblab yozamiz.
+      //   Maosh paneli (tillar, sertifikatlar, ma'lumot, toifa — yashirin maydonlar) hali chizilmagan bo'lsa (tariflar o'qilmoqda) —
+      //   ular formada YO'Q: bo'sh ro'yxat deb yozilmaydi (til/sertifikat ustamasi o'chib, maosh tushardi), maosh esa bazadagi
+      //   (oyna ochilgandagi) til/sertifikat bilan hisoblanadi.
       if(name==='teachers'){ await loadSalaryRates(); data.baseSalary = salaryNum(data.baseSalary);
+        const panel=Object.prototype.hasOwnProperty.call(data,'languages');   // FormData o'qilgan paytda panel bormidi
         const parseArr=v=>{ try{ return (typeof v==='string') ? (JSON.parse(v||'[]')||[]) : (Array.isArray(v)?v:[]); }catch(e){ return []; } };
-        data.otherCerts = parseArr(data.otherCerts);
-        data.languages  = parseArr(data.languages).filter(k=>LANG_KEYS.includes(k));
-        const sal=computeSalary(data); data.salary = sal.total; data.salaryBonus = sal.bonus; }
+        if(panel){ data.otherCerts = parseArr(data.otherCerts); data.languages = parseArr(data.languages).filter(k=>LANG_KEYS.includes(k)); }
+        else ['languages','otherCerts','degree','category'].forEach(k=>delete data[k]);
+        const sal=computeSalary(panel ? data : Object.assign({}, _snapRaw, data)); data.salary = sal.total; data.salaryBonus = sal.bonus; }
       // MA'LUMOT SIFATI: o'quvchi ota-ona telefonini tekshiramiz. NOTO'G'RI raqam (masalan "99-135-76") jim saqlanib,
       //   keyin SMS eslatma, aka-uka chegirmasi guruhlashi (pmValidPhone) va ota-onaning telefon bilan kirishini buzadi.
       //   Chet el raqami '+' bilan to'liq yozilsa — TO'G'RI (ogohlantirish yo'q). Majburiy EMAS — ogohlantiramiz,
@@ -3627,7 +3686,9 @@ function openForm(name, row, prefill, afterSaveCb){
           if(owners.length){ toast(`«${camNew}» Kamera ID allaqachon ${owners.slice(0,3).map(o=>`«${o.name}» (${o.kind})`).join(', ')}ga tegishli — bitta ID ikki kishida bo‘lsa skanlar (davomat) aralashadi. To‘g‘ri ID kiriting yoki avval o‘sha yozuvdan olib tashlang.`, true); stop(); return; }
         }
         if(isEdit && camOld && camNew!==camOld){
-          let hasHist=false; try{ const q=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',camOld), limit(1))); hasHist=!!(q.docs&&q.docs.length); }catch(_){ hasHist=false; }
+          let hasHist=false;
+          try{ hasHist=(await rpc('camera_has_scans',{ p_cam:camOld }))===true; }
+          catch(e6){ if(rpcMissing(e6)){ try{ const q=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',camOld), limit(1))); hasHist=!!(q.docs&&q.docs.length); }catch(_){ hasHist=false; } } }
           if(hasHist && !confirm(`Kamera ID o‘zgartirilmoqda: «${camOld}» → «${camNew||'(bo‘sh)'}».\n\nDIQQAT: eski ID bilan yozilgan kelish-ketish (skan) tarixi yangi ID’ga O‘TMAYDI — o‘tgan kunlar davomati ${name==='students'?'bu o‘quvchida':'bu xodimda'} ko‘rinmay qoladi${name==='students'?'':' (maoshi hali berilmagan oylarda «yo‘qlama» bo‘lib ushlanishi mumkin)'}.\n\nFaqat terminalda yuz qayta ro‘yxatdan o‘tkazilib, yangi Person ID berilgan bo‘lsa o‘zgartiring. Davom etilsinmi?`)){ stop(); return; }
         }
       }
@@ -3659,21 +3720,27 @@ function openForm(name, row, prefill, afterSaveCb){
           const dup = want ? others.find(x=>x.k===want) : null;
           // Yangi ID ostida o'CHIRILGAN xodimning maosh/avans tarixi bo'lsa — yangi odam uni meros olmasin.
           let wantInfo=null; if(want && !dup){ try{ wantInfo=await rpc('payroll_key_info',{ p_key:want }); }catch(_){ wantInfo=null; } }
-          const orphanHist = !!(wantInfo && (Number(wantInfo.salary)>0 || Number(wantInfo.advances)>0) && !(Number(wantInfo.owners)>0));
+          const orphanHist = !!(wantInfo && (Number(wantInfo.salary)>0 || Number(wantInfo.advances)>0 || (name==='teachers' && Number(wantInfo.children)>0)) && !(Number(wantInfo.owners)>0));
+          if(isEdit && want && (dup || orphanHist)){
+            const idInp=$('#m-form [name="'+f+'"]'); if(idInp){ idInp.value=idBeforeRaw; idInp.dataset.touched='1'; }
+            toast(dup?`«${want}» ID allaqachon «${dup.r.name||dup.r._id}» (${dup.kind})da bor — takroriy ID maosh/avansni aralashtiradi. Asl ID qaytarildi${before?` («${before}»)`:''}; boshqa (bo‘sh) ID kiriting yoki shundayligicha saqlang.`
+              : `«${want}» ID ostida avval O‘CHIRILGAN xodimning maosh/avans tarixi yoki «xodim farzandi» bog‘lanishi bor — bu ID berilmaydi. Asl ID qaytarildi${before?` («${before}»)`:''}; boshqa ID kiriting yoki shundayligicha saqlang.`, true);
+            stop(); return;
+          }
           if(!want || dup || orphanHist){
             let hw=0; try{ hw=Number(await rpc('payroll_id_high_water',{ p_prefix:s.autoId.prefix }))||0; }catch(_){ hw=0; }
             const ids=(name==='teachers'?fT:fS).map(r=>r[f]); if(hw>0) ids.push(s.autoId.prefix+String(hw).padStart(s.autoId.pad,'0'));
             const sug=nextId(ids, s.autoId.prefix, s.autoId.pad);
             const idInp=$('#m-form [name="'+f+'"]'); if(idInp){ idInp.value=sug; idInp.dataset.touched='1'; }
             toast(dup?`«${want}» ID allaqachon «${dup.r.name||dup.r._id}» (${dup.kind})da bor (takroriy ID maosh/avansni aralashtiradi). Yangi ID qo‘yildi: ${sug} — qayta «Saqlash» bosing.`
-              : (orphanHist?`«${want}» ID avval O‘CHIRILGAN xodimga tegishli bo‘lgan (maosh/avans tarixi bor) — yangi odam uni meros olmasin. Yangi ID qo‘yildi: ${sug} — qayta «Saqlash» bosing.`
+              : (orphanHist?`«${want}» ID avval O‘CHIRILGAN xodimga tegishli bo‘lgan (maosh/avans tarixi yoki «xodim farzandi» bog‘lanishi bor) — yangi odam uni meros olmasin. Yangi ID qo‘yildi: ${sug} — qayta «Saqlash» bosing.`
               : `ID bo‘sh bo‘lmasin — ${sug} qo‘yildi. Qayta «Saqlash» bosing.`), true);
             stop(); return;
           }
           if(isEdit){
             // Haqiqiy maosh kaliti (admin: String(teacherId||_id)) — bo'sh ID'da pul qator id'si ostida turadi.
             const oldKey=idBeforeRaw || String(row._id);
-            let info=null, infoErr=null; try{ info=await rpc('payroll_key_info',{ p_key:oldKey }); }catch(e3){ infoErr=e3; }
+            let info=null, infoErr=null; try{ info=await rpc('payroll_key_info', name==='teachers' ? { p_key:oldKey, p_row:String(row._id) } : { p_key:oldKey }); }catch(e3){ infoErr=e3; }
             rekeyOK=!!info && !infoErr;
             const oldLbl=before ? `«${before}»` : `(ID yo‘q — ichki kalit «${row._id}»)`;
             const shared=rekeyOK && Number(info.owners)>1;
@@ -3687,7 +3754,10 @@ function openForm(name, row, prefill, afterSaveCb){
           }
         }
       }
-      // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi
+      // Faqat-forma maydonlari (masalan «Sinf rahbari») hujjatga yozilmaydi — afterSave hal qiladi.
+      //   Ro'yxati hali yuklanmagan (yoki o'qilmagan) tanlov «— tanlanmagan —» ko'rinadi: shunday saqlansa rahbar JIM olib tashlanardi.
+      { const pend=(s.fields||[]).filter(f=>f.formOnly && f.t==='dynselect').find(f=>{ const el=e.target.querySelector(`select[name="${f.k}"]`); return el && el.dataset.loaded!=='1'; });
+        if(pend){ toast(`«${String(pend.l).split(' (')[0]}» ro‘yxati hali yuklanmadi (yoki o‘qilmadi) — bir oz kutib, qayta «Saqlash»ni bosing. Takrorlansa oynani yopib, qayta oching.`, true); stop(); return; } }
       const formVals={};
       (s.fields||[]).forEach(f=>{ if(f.formOnly && (f.k in data)){ formVals[f.k]=data[f.k]; delete data[f.k]; } });
       // Maxfiy maydonlarni ommaviy hujjatdan ajratamiz (alohida kolleksiyaga yoziladi)
@@ -3719,10 +3789,12 @@ function openForm(name, row, prefill, afterSaveCb){
       // Yangi o'qituvchi/xodim: shu ismli odam allaqachon bormi (masalan davomat ekranidan Kamera ID «bog'lash» o'rniga
       //   yangi yozuv yaratilib, bitta odamning ikki maosh/davomat yozuvi paydo bo'lardi).
       if(!isEdit && (name==='teachers'||name==='staff')){
-        const nm=normName(data.name||'');
+        //   Solishtirish so'z tartibidan va kichik imlo farqidan mustaqil (terminal «Sobirov Jamshid», bizda «Jamshid Sobirov»).
+        const nk=nameKey(data.name||''), nt=nameToks(data.name||'');
         const L=freshLists || (await Promise.all([loadCol('teachers','order').catch(()=>null), loadCol('staff','order').catch(()=>null)]).then(([a,b])=>({teachers:a||[], staff:b||[]})));
-        const same=nm ? [...(L.teachers||[]).map(r=>({r,kind:'o‘qituvchi'})), ...(L.staff||[]).map(r=>({r,kind:'xodim'}))].filter(x=>normName(x.r.name||'')===nm) : [];
-        if(same.length && !confirm(`«${String(data.name).trim()}» ismli ${same.map(x=>`${x.kind}${String(x.r.cameraId||'').trim()?` (Kamera ID ${String(x.r.cameraId).trim()})`:' (Kamera ID yo‘q)'}`).join(', ')} allaqachon bor.\n\nBu YANGI (boshqa) odammi? Mavjud odamga Kamera ID bog‘lash uchun uni «Tahrir» qiling (yoki davomat ekranida «🔗 Mavjud xodimga bog‘lash»). Ikkinchi yozuv bir odamga ikki marta maosh/davomat beradi.`)){ stop(); return; }
+        const same=nk ? [...(L.teachers||[]).map(r=>({r,kind:'o‘qituvchi'})), ...(L.staff||[]).map(r=>({r,kind:'xodim'}))]
+          .filter(x=>nameKey(x.r.name||'')===nk || namesMatch(nt, nameToks(x.r.name||''))) : [];
+        if(same.length && !confirm(`Shu ismli odam allaqachon bor: ${same.slice(0,4).map(x=>`«${String(x.r.name||'').trim()}» (${x.kind}${String(x.r.cameraId||'').trim()?`, Kamera ID ${String(x.r.cameraId).trim()}`:', Kamera ID yo‘q'})`).join(', ')}.\n\nBu YANGI (boshqa) odammi? Mavjud odamga Kamera ID bog‘lash uchun uni «Tahrir» qiling (yoki davomat ekranida «🔗 Xodimga bog‘lash»). Ikkinchi yozuv bir odamga ikki marta maosh/davomat beradi.`)){ stop(); return; }
       }
       // TAHRIR: faqat O'ZGARGAN maydonlar yoziladi (forma ochilgandagi qiymatga nisbatan) va avval yozuv BAZADAN qayta
       //   o'qiladi. Sabab: (1) eskirgan ro'yxat/oynadan to'liq yozish boshqa admin bergan ID/Kamera ID/sinf/holatni jim
@@ -3746,11 +3818,19 @@ function openForm(name, row, prefill, afterSaveCb){
         const conflicts=[], critical=[];
         const chk=(obj, src)=>{ Object.keys(obj).forEach(k=>{
           if(s.autoId && !s.docId && k===s.autoId.field) return;
+          if(name==='teachers' && (k==='salary'||k==='salaryBonus')) return;   // hisoblangan — pastda qayta hisoblanadi
           const fv=_cmpOf(k, src[k]), nv=_cmpOf(k, obj[k]);
           if(fv===nv || (rawEmpty.has(k) && fv==='')){ delete obj[k]; return; }   // bazada allaqachon shu qiymat
           if(fv!==_snapCmp(k)){ conflicts.push(k); if(['cameraId','payStatus','activeFrom','stopFrom','pauses','grade','classLetter','lang','track'].includes(k)) critical.push(k); } }); };
         chk(patch, fresh);
         if(privPatch && curPriv) chk(privPatch, curPriv);
+        // O'qituvchi maoshi (salary/salaryBonus) — kiritilgan maydonlardan hisoblanadi: faqat ular o'zgarganda, BAZADAGI (boshqa
+        //   joyda o'zgargan staj/til ham) qiymatlar + shu o'zgarish bilan qayta hisoblab yoziladi (eskirgan oyna qiymatidan emas).
+        if(name==='teachers'){ delete patch.salary; delete patch.salaryBonus;
+          if(['baseSalary','years','languages','otherCerts','degree','category'].some(k=>k in patch)){
+            const sal=computeSalary(Object.assign({}, fresh, patch));
+            if(Number(fresh.salary)!==sal.total) patch.salary=sal.total;
+            if(Number(fresh.salaryBonus)!==sal.bonus) patch.salaryBonus=sal.bonus; } }
         const lblOf=k=>{ const fd=(s.fields||[]).find(x=>x.k===k); return fd ? String(fd.l).split(' (')[0] : k; };
         if(critical.length){ toast(`Siz tahrirlayotgan paytda bu yozuv boshqa joyda o‘zgartirildi (${critical.map(lblOf).join(', ')}). Ustiga yozilmadi — oynani yopib, qayta oching.`, true); stop(); return; }
         if(conflicts.length && !confirm(`Bazadagi qiymat siz oyna ochgandagidan farq qiladi (boshqa joyda o‘zgartirilgan bo‘lishi mumkin):\n• ${conflicts.map(lblOf).join('\n• ')}\n\nSiz kiritgan qiymat ustiga yozilsinmi? («Bekor» — hech narsa yozilmaydi; oynani qayta oching.)`)){ stop(); return; }
@@ -3785,7 +3865,11 @@ function openForm(name, row, prefill, afterSaveCb){
           // Boshqa (docId'li) kolleksiyalar — avvalgidek: mavjud ID ustiga yozishdan oldin so'raymiz.
           if(!confirm('“'+id+'” IDsi allaqachon mavjud. Ustiga yozib, eski yozuvni almashtirasizmi?')){ stop(); return; }
         }
-        if(!isEdit){ data[s.docId] = id; await setDoc(doc(db,name,id), data, {merge:true}); }
+        if(!isEdit){ data[s.docId] = id;
+          if(name==='students'){
+            try{ await createDoc(doc(db,name,id), data); }
+            catch(e8){ if(String(e8 && e8.code)==='23505' || /duplicate key/i.test(String(e8 && e8.message || ''))){ toast(`«${id}» ID shu soniyada boshqa o‘quvchiga berildi — saqlanmadi. Oynani yopib qayta oching (yangi ID beriladi).`, true); stop(); return; } throw e8; }
+          } else await setDoc(doc(db,name,id), data, {merge:true}); }
         savedId=id;
       } else if(!isEdit){
         const ref=await addDoc(collection(db,name), data); savedId=ref.id;
@@ -3799,7 +3883,11 @@ function openForm(name, row, prefill, afterSaveCb){
         }
         if(Object.keys(patch).length){
           try{ await updateDoc(doc(db,name,row._id), patch, {mustExist:true}); }
-          catch(e5){ if(e5 && e5.code==='not-found'){ toast((rekeyRes?'ID o‘zgardi, lekin boshqa maydonlar saqlanmadi: ':'')+'yozuv bazada topilmadi (o‘chirilgan) yoki unga yozishga ruxsat yo‘q. Sahifani yangilang.',true); stop(); return; } throw e5; }
+          catch(e5){
+            if(rekeyRes && s.autoId && e5 && e5.code!=='not-found'){   // ID va tarix ALLAQACHON ko'chdi — oyna nusxasi shunga moslanadi
+              _snapRaw[s.autoId.field]=idWant; _snapN[s.autoId.field]=_cmpOf(s.autoId.field, idWant); cache[name]=null;
+              toast(`ID «${idWant}» ga o‘zgardi (tarix ko‘chdi), lekin boshqa maydonlar saqlanmadi: ${e5.message||e5.code||'xato'}. Qayta «Saqlash» bosing.`, true); stop(); return; }
+            if(e5 && e5.code==='not-found'){ toast((rekeyRes?'ID o‘zgardi, lekin boshqa maydonlar saqlanmadi: ':'')+'yozuv bazada topilmadi (o‘chirilgan) yoki unga yozishga ruxsat yo‘q. Sahifani yangilang.',true); stop(); return; } throw e5; }
         }
       }
       // Maxfiy ma'lumotni alohida (himoyalangan) kolleksiyaga yozamiz
@@ -3834,7 +3922,7 @@ function openForm(name, row, prefill, afterSaveCb){
       if(billingChanged) setTimeout(()=>alert('⚠️ Diqqat — narx/chegirma o‘zgardi\n\nBu o‘quvchining narx yoki chegirmasiga ta’sir qiluvchi maydoni (kontrakt / toifa / sinf / yo‘nalish / til / holat / aka-uka: familiya, ota-ona F.I.Sh yoki telefon) o‘zgardi.\n\nMavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi! Yangi narx qo‘llanishi uchun:\n«To‘lovlar» → kerakli oyni tanlang → «↻ Qayta hisoblash».\n\nAks holda eski (noto‘g‘ri) narx qolib ketadi.'), 60);
       if(typeof afterSaveCb==='function') afterSaveCb(savedId, data);   // masalan davomat ekranini yangilash
       else (name==='students'?renderStudents():renderCollection(name));
-    }catch(err){ toast('Xatolik: '+(err.code||err.message), true); stop(); }
+    }catch(err){ toast('Xatolik: '+((err.code && err.message && err.message!==err.code) ? err.code+' — '+err.message : (err.code||err.message)), true); stop(); }
   });
 }
 
@@ -3892,7 +3980,7 @@ async function populateDynselects(name, row){
   const sels = [...document.querySelectorAll('#m-form select[data-dyn]')];
   if(!sels.length) return;
   const need = s => sels.some(sel=>sel.getAttribute('data-dyn')===s);
-  let users=[]; if(need('rahbarlar')){ try{ users = await loadCol('users', null); cache.users=users; }catch(e){} }
+  let users=[], usersOk=false; if(need('rahbarlar')){ try{ users = await loadCol('users', null); cache.users=users; usersOk=true; }catch(e){} }
   let teachers=[]; if(need('oqituvchilar')){ try{ teachers = (cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=teachers; }catch(e){} }
   const roleTag = r => r==='kurator'?'Kurator':(r==='teacher'?'O‘qituvchi':r);
   for(const sel of sels){
@@ -3909,7 +3997,9 @@ async function populateDynselects(name, row){
     //   («Xodim farzandi» qaysi xodimniki, sinf rahbari) jim o'chib ketardi.
     const curMissing = String(cur)!=='' && !opts.some(o=>String(o.v)===String(cur));
     sel.innerHTML = `<option value="">— tanlanmagan —</option>` + (curMissing?`<option value="${esc(cur)}" selected>${esc(String(cur))} (joriy qiymat — ro‘yxatda topilmadi)</option>`:'') + opts.map(o=>`<option value="${esc(o.v)}" ${String(o.v)===String(cur)?'selected':''}>${esc(o.l)}</option>`).join('');
-    if(!opts.length && src==='rahbarlar') sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» yoki «O‘qituvchi» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida rol tayinlang.</p>`);
+    sel.dataset.loaded = (src!=='rahbarlar' || usersOk) ? '1' : '';
+    if(src==='rahbarlar' && !usersOk) sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:#b91c1c">Foydalanuvchilar ro‘yxatini o‘qib bo‘lmadi — sinf rahbari o‘zgartirilmaydi (oynani qayta oching).</p>`);
+    else if(!opts.length && src==='rahbarlar') sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">Hozircha «Kurator» yoki «O‘qituvchi» roli berilgan foydalanuvchi yo‘q. Avval «Foydalanuvchilar» bo‘limida rol tayinlang.</p>`);
     else if(!opts.length && src==='oqituvchilar') sel.insertAdjacentHTML('afterend', `<p class="small muted" style="margin:6px 0 0;color:var(--med-fg,#b45309)">O‘qituvchilar ro‘yxati bo‘sh. Avval «O‘qituvchilar» bo‘limida qo‘shing.</p>`);
   }
 }
@@ -3944,8 +4034,10 @@ async function delDoc(name,id,label){
   if(name==='teachers'||name==='staff'){
     const row=(cache[name]||[]).find(r=>String(r._id)===String(id))||null;
     const key=row ? String((name==='teachers'?row.teacherId:row.staffId)||row._id) : String(id);
-    let info=null; try{ info=await rpc('payroll_key_info',{ p_key:key }); }catch(e){ info=null; }
-    if(info && (Number(info.salary)>0 || Number(info.advances)>0) && !confirm(`⚠️ Bu ${name==='teachers'?'o‘qituvchida':'xodimda'} MAOSH TARIXI bor (ID «${key}»): ${Number(info.salary)||0} ta maosh berish, ${Number(info.advances)||0} ta avans.\n\nO‘chirsangiz bu yozuvlar egasiz qoladi. Ishdan ketgan xodim uchun o‘chirish O‘RNIGA «⏯️ Holat → Ishdan chiqqan» tavsiya etiladi (tarix saqlanadi, maosh hisoblanmaydi).\n\nBaribir BUTUNLAY o‘chirilsinmi?`)) return;
+    let info=null; try{ info=await rpc('payroll_key_info', name==='teachers' ? { p_key:key, p_row:String(id) } : { p_key:key }); }catch(e){ info=null; }
+    const kids=name==='teachers' ? (Number(info&&info.children)||0) : 0;
+    const keyLbl=(row && String((name==='teachers'?row.teacherId:row.staffId)||'').trim()) ? `ID «${key}»` : `ID yo‘q — ichki kalit «${key}»`;
+    if(info && (Number(info.salary)>0 || Number(info.advances)>0 || kids>0) && !confirm(`⚠️ Bu ${name==='teachers'?'o‘qituvchida':'xodimda'} ${(Number(info.salary)>0||Number(info.advances)>0)?'MAOSH TARIXI':'TARIX'} bor (${keyLbl}): ${Number(info.salary)||0} ta maosh berish, ${Number(info.advances)||0} ta avans${kids?`, ${kids} ta «xodim farzandi» bog‘lanishi`:''}.\n\nO‘chirsangiz bu yozuvlar egasiz qoladi. Ishdan ketgan xodim uchun o‘chirish O‘RNIGA «⏯️ Holat → Ishdan chiqqan» tavsiya etiladi (tarix saqlanadi, maosh hisoblanmaydi).\n\nBaribir BUTUNLAY o‘chirilsinmi?`)) return;
   }
   // O'quvchida TARIX (hisob-faktura / to'lov / avans / davomat / ota-ona ulanishi) bo'lsa — o'chirish o'rniga
   //   «Chiqarish» (holat: chiqdi) tavsiya etiladi: tarix o'quvchisiz «yetim» qoladi (qarz/hisobot nomsiz).
@@ -4162,7 +4254,18 @@ function openUserEditor(u, CLS, roleOpts, opts){
       //   {id, userUid:''} «arvoh» qator qilib qayta yaratardi — u ro'yxat, maosh va ochiq saytda nomsiz chiqardi).
       await setDoc(doc(db,'users',u._id), patch, {merge:true});
       if(changedLink && oId){ try{ await updateDoc(doc(db, oType==='teacher'?'teachers':'staff', oId), {userUid:''}); }catch(e){} }
-      if(changedLink && nId){ await updateDoc(doc(db, nType==='teacher'?'teachers':'staff', nId), {userUid:String(u._id)}, {mustExist:true}); }
+      if(changedLink && nId){
+        try{ await updateDoc(doc(db, nType==='teacher'?'teachers':'staff', nId), {userUid:String(u._id)}, {mustExist:true}); }
+        catch(e9){
+          // Tanlangan yozuv shu orada o'chirilgan (yoki yozib bo'lmadi): hisob o'chirilgan yozuvga bog'lanib, eski bog'lanish uzilib
+          //   qolmasin — ikkalasi avvalgi holiga qaytariladi.
+          try{ await setDoc(doc(db,'users',u._id), { staffRefType:u.staffRefType||'', staffRefId:u.staffRefId||'', staffCode:u.staffCode||'' }, {merge:true}); }catch(_){}
+          if(oId){ try{ await updateDoc(doc(db, oType==='teacher'?'teachers':'staff', oId), {userUid:String(u._id)}); }catch(_){} }
+          cache.users=null; cache.staff=null; cache.teachers=null;
+          toast((e9 && e9.code==='not-found') ? 'Tanlangan davomat/maosh yozuvi shu orada o‘chirildi — bog‘lanish o‘zgartirilmadi (avvalgisi tiklandi). Sahifani yangilang.'
+            : 'Bog‘lab bo‘lmadi: '+((e9 && (e9.message||e9.code))||'xato')+' — avvalgi bog‘lanish tiklandi.', true);
+          b.disabled=false; b.textContent='Saqlash'; return; }
+      }
       toast('Saqlandi ✓'); cache.users=null; cache.staff=null; cache.teachers=null; close(); renderUsers();
     }
     catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
@@ -4977,27 +5080,36 @@ async function openCamLinkPicker(cam, scanName, onDone){
     <div class="modal-b" id="clp-body"><div class="loading">Yuklanmoqda…</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn" id="clp-new">➕ Yangi xodim yaratish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  $('#clp-new').onclick=()=>{ closeModal(); openForm('staff', null, { cameraId:cam, name:scanName||'' }, onDone); };
+  let studWarnTxt='';
+  $('#clp-new').onclick=()=>{ if(studWarnTxt && !confirm(studWarnTxt+'\n\nBaribir YANGI XODIM yaratilsinmi?')) return; closeModal(); openForm('staff', null, { cameraId:cam, name:scanName||'' }, onDone); };
   let staff, teachers;
   try{ [staff,teachers]=await Promise.all([loadCol('staff','order'), loadCol('teachers','order')]); }
   catch(e){ const b0=$('#clp-body'); if(b0) b0.innerHTML=`<div class="empty">Ro‘yxatni o‘qib bo‘lmadi: ${esc(e.code||e.message)}</div>`; $('#clp-new').style.display='none'; return; }
   const owners=await cameraOwners(cam, null);
+  // Terminaldan o'quvchilar ham o'tadi: Kamera ID'si hali kiritilmagan, ismi mos o'quvchi bo'lsa — bu skan uning bo'lishi mumkin.
+  let studs=[]; try{ studs=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); }catch(_){ studs=[]; }
+  const stTok=nameToks(scanName||'');
+  const studMatch=stTok.length ? studs.filter(x=>!String(x.cameraId==null?'':x.cameraId).trim() && (nameKey(x.name||'')===nameKey(scanName||'') || namesMatch(stTok, nameToks(x.name||'')))).slice(0,5) : [];
+  const studWarn=studMatch.length ? `Bu skan O‘QUVCHINIKI bo‘lishi mumkin: ${studMatch.map(x=>`«${x.name}» (${x.studentId||x._id})`).join(', ')} — Kamera ID’si hali kiritilmagan. O‘quvchi bo‘lsa, Kamera ID’ni o‘quvchi kartochkasida kiriting (xodimga bog‘lamang).` : '';
   const body=$('#clp-body'); if(!body) return;
   if(owners===null){ body.innerHTML='<div class="empty">Kamera ID’ni tekshirib bo‘lmadi (tarmoq) — qayta urinib ko‘ring.</div>'; $('#clp-new').style.display='none'; return; }
   if(owners.length){ body.innerHTML=`<div class="empty">Bu Kamera ID allaqachon ${owners.map(o=>`«${esc(o.name)}» (${esc(o.kind)})`).join(', ')}ga bog‘langan — sahifani yangilang.</div>`; $('#clp-new').style.display='none'; return; }
   const st=nameToks(scanName||'');
   const score=n=>{ const t=nameToks(n||''); if(!st.length||!t.length) return 0; const used=new Set(); let c=0;
     st.forEach(a=>{ for(let i=0;i<t.length;i++){ if(!used.has(i)&&tokEq(a,t[i])){ used.add(i); c++; break; } } }); return c/Math.max(st.length,t.length); };
+  // «ism mos» belgisi — faqat ikki va undan ko'p so'z mos kelsa (namesMatch; bitta umumiy ism yoki Karimov/Karimova emas).
+  const sure=n=>namesMatch(st, nameToks(n||''));
   const cands=[...staff.map(x=>({x,coll:'staff',kind:'Xodim',idf:'staffId'})), ...teachers.map(x=>({x,coll:'teachers',kind:'O‘qituvchi',idf:'teacherId'}))]
     .filter(c=>!String(c.x.cameraId==null?'':c.x.cameraId).trim())
-    .map(c=>Object.assign(c,{ sc:score(c.x.name) }))
-    .sort((a,b)=>(b.sc-a.sc) || String(a.x.name||'').localeCompare(String(b.x.name||'')));
-  body.innerHTML=`<p class="small muted" style="margin:0 0 10px">Terminaldagi ism: <b>${esc(scanName||'(yo‘q)')}</b> · Kamera ID <b>${esc(cam)}</b>. Bu odam bizda allaqachon bo‘lsa — uni topib <b>«🔗 Bog‘lash»</b> bosing (maosh/avans tarixi o‘zida qoladi). Faqat haqiqatan YANGI xodim bo‘lsa — «➕ Yangi xodim yaratish».</p>
+    .map(c=>Object.assign(c,{ sc:score(c.x.name), ok:sure(c.x.name) }))
+    .sort((a,b)=>((b.ok?1:0)-(a.ok?1:0)) || (b.sc-a.sc) || String(a.x.name||'').localeCompare(String(b.x.name||'')));
+  studWarnTxt=studWarn;
+  body.innerHTML=(studWarn?`<div class="small" style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#FEF3E2;color:#92400E">⚠️ ${esc(studWarn)}</div>`:'')+`<p class="small muted" style="margin:0 0 10px">Terminaldagi ism: <b>${esc(scanName||'(yo‘q)')}</b> · Kamera ID <b>${esc(cam)}</b>. Bu odam bizda allaqachon bo‘lsa — uni topib <b>«🔗 Bog‘lash»</b> bosing (maosh/avans tarixi o‘zida qoladi). Faqat haqiqatan YANGI xodim bo‘lsa — «➕ Yangi xodim yaratish».</p>
     ${cands.length?`<input id="clp-q" class="search-inp" placeholder="Qidiruv: ism…" autocomplete="off" style="width:100%;margin-bottom:8px">
       <div class="tablewrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>Ism (Kamera ID’siz)</th><th>Turi</th><th></th></tr></thead><tbody id="clp-list"></tbody></table></div>`
       :'<div class="empty">Kamera ID’si yo‘q xodim yoki o‘qituvchi yo‘q.</div>'}`;
   const link=async(c, bt)=>{
-    if(!confirm(`Kamera ID ${cam} → «${c.x.name||c.x._id}» (${c.kind}) ga bog‘lansinmi?\n\nShu ID bilan yozilgan kelish-ketish (skanlar) endi shu odamniki bo‘ladi.`)) return;
+    if(!confirm(`${studWarnTxt?'⚠️ '+studWarnTxt+'\n\n':''}Kamera ID ${cam} → «${c.x.name||c.x._id}» (${c.kind}) ga bog‘lansinmi?\n\nShu ID bilan yozilgan kelish-ketish (skanlar) endi shu odamniki bo‘ladi.`)) return;
     bt.disabled=true;
     try{
       // Bazadan qayta tekshiruv: ID hali hech kimga bog'lanmagan va tanlangan odamning Kamera ID'si hali bo'sh.
@@ -5012,9 +5124,11 @@ async function openCamLinkPicker(cam, scanName, onDone){
       toast(`Bog‘landi ✓ — ${c.x.name||c.x._id}`); closeModal(); if(onDone) onDone();
     }catch(err){ bt.disabled=false; toast('Xatolik: '+(err.code||err.message),true); }
   };
-  const draw=()=>{ const list=$('#clp-list'); if(!list) return; const q=normName(($('#clp-q')&&$('#clp-q').value)||'');
-    const shown=cands.filter(c=>!q || normName(c.x.name||'').includes(q)).slice(0,200);
-    list.innerHTML=shown.map((c,i)=>`<tr><td>${esc(c.x.name||c.x._id)}${c.sc>=0.5?' <span class="chip it" style="background:var(--it-bg);color:var(--teal)">ism mos</span>':''}<div class="small muted">${esc(String(c.x[c.idf]||''))}${c.x.position?` · ${esc(c.x.position)}`:''}${c.x.subject_uz?` · ${esc(c.x.subject_uz)}`:''}</div></td><td>${esc(c.kind)}</td><td><button class="btn sm gold" data-clp="${i}">🔗 Bog‘lash</button></td></tr>`).join('');
+  const draw=()=>{ const list=$('#clp-list'); if(!list) return; const qt=nameToks(($('#clp-q')&&$('#clp-q').value)||'');
+    // Qidiruv so'zlari tartibdan mustaqil: «Sobirov J» — «Jamshid Sobirov» ni topadi (har so'z biror so'z boshiga mos).
+    const hit=c=>{ const t=nameToks(c.x.name||''); return qt.every(q=>t.some(w=>w.startsWith(q))); };
+    const shown=cands.filter(c=>!qt.length || hit(c)).slice(0,200);
+    list.innerHTML=shown.map((c,i)=>`<tr><td>${esc(c.x.name||c.x._id)}${c.ok?' <span class="chip it" style="background:var(--it-bg);color:var(--teal)">ism mos</span>':''}<div class="small muted">${esc(String(c.x[c.idf]||''))}${c.x.position?` · ${esc(c.x.position)}`:''}${c.x.subject_uz?` · ${esc(c.x.subject_uz)}`:''}</div></td><td>${esc(c.kind)}</td><td><button class="btn sm gold" data-clp="${i}">🔗 Bog‘lash</button></td></tr>`).join('');
     list.querySelectorAll('[data-clp]').forEach(bt=>bt.onclick=()=>{ const c=shown[+bt.dataset.clp]; if(c) link(c, bt); }); };
   draw(); { const qi=$('#clp-q'); if(qi) qi.addEventListener('input', draw); }
 }
@@ -5098,7 +5212,8 @@ async function openCameraIdFromReport(onSaved){
         <div class="small muted" style="margin-top:4px">Yangi yozuv faqat ism + Kamera ID bilan yaratiladi — keyin «O‘qituvchilar»/«Xodimlar»da maosh, fan/lavozim va h.k.ni to‘ldirasiz.</div></div>`:''}
       ${unmatchedP.length?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer">Bizda bor, faylда yo‘q (${unmatchedP.length})</summary><div class="small muted" style="margin-top:6px;max-height:140px;overflow:auto">${unmatchedP.map(p=>esc(p.name||'(nomsiz)')).join('<br>')}</div></details>`:''}`;
     $('#cir-apply').style.display = (matches.length||unmatchedRp.length)?'':'none';
-    const allck=$('#cir-all'); if(allck) allck.onchange=()=>$('#cir-preview').querySelectorAll('.cir-ck:not([disabled])').forEach(c=>c.checked=allck.checked);
+    // Umumiy belgilash «o‘zgaradi» qatorlarini (Kamera ID almashadi — eski skanlar yangi ID’ga o‘tmaydi) belgilamaydi: ularni faqat qo'lda.
+    const allck=$('#cir-all'); if(allck) allck.onchange=()=>$('#cir-preview').querySelectorAll('.cir-ck:not([disabled])').forEach(c=>{ const m=matches[+c.dataset.i]; if(m && m.status==='ozgaradi') return; c.checked=allck.checked; });
   };
   $('#cir-apply').onclick=async()=>{
     const picks=[...$('#cir-preview').querySelectorAll('.cir-ck')].filter(c=>c.checked && !c.disabled).map(c=>matches[+c.dataset.i]).filter(m=>m && m.status!=='band');
@@ -5111,9 +5226,19 @@ async function openCameraIdFromReport(onSaved){
     try{ [fS,fT,fSt]=await Promise.all([loadCol('staff'), loadCol('teachers'), loadCol('students','order')]); }
     catch(e){ btn.disabled=false; btn.textContent='💾 Tanlanganlarni saqlash'; toast('Ro‘yxatni qayta o‘qib bo‘lmadi — hech narsa yozilmadi, qayta urinib ko‘ring',true); return; }
     const own=camOwnersMap(fS, fT, fSt);
-    let ok=0, err=0, added=0, busy=0;
+    let ok=0, err=0, added=0, busy=0, moved=0;
+    // Oldindan ko'rishdan beri tanlangan odamning o'z Kamera ID'si o'zgargan bo'lsa (boshqa admin bog'lagan) — ustiga yozilmaydi.
+    const curOf=m=>{ const L=m.refType==='teacher'?fT:fS, x=(L||[]).find(r=>String(r._id)===String(m.refId)); return x ? String(x.cameraId==null?'':x.cameraId).trim() : null; };
+    const pk=[]; for(const m of picks){ const c=curOf(m); if(c===null){ err++; continue; } if(c!==String(m.cur||'').trim()){ moved++; continue; } pk.push(Object.assign({}, m, {cur:c})); }
+    // Almashtiriladigan Kamera ID ostida skan tarixi bor odamlar — aniq tasdiq (forma bilan bir xil ogohlantirish).
+    const hist=[];
+    for(const m of pk){ if(!m.cur || m.cur===String(m.rid)) continue; let h=false;
+      try{ h=(await rpc('camera_has_scans',{ p_cam:m.cur }))===true; }
+      catch(e7){ if(rpcMissing(e7)){ try{ const q=await getDocs(query(collection(db,'staff_checkins'), where('personId','==',m.cur), limit(1))); h=!!(q.docs&&q.docs.length); }catch(_){ h=false; } } }
+      if(h) hist.push(m); }
+    if(hist.length && !confirm(`Kamera ID almashtiriladi, eski ID bilan skan (kelish-ketish) tarixi bor:\n${hist.slice(0,10).map(m=>`• ${m.name}: «${m.cur}» → «${m.rid}»`).join('\n')}${hist.length>10?`\n… va yana ${hist.length-10} ta`:''}\n\nEski skanlar yangi ID’ga O‘TMAYDI — o‘tgan kunlar davomati ko‘rinmay qoladi (maoshi hali berilmagan oylarda «yo‘qlama» bo‘lib ushlanishi mumkin). Faqat terminalda yangi Person ID berilgan bo‘lsa davom eting.\n\nDavom etilsinmi? («Bekor» — hech narsa yozilmaydi)`)){ btn.disabled=false; btn.textContent='💾 Tanlanganlarni saqlash'; return; }
     // 1) mavjudlarga Kamera ID — sof UPDATE (o'chirilgan yozuv nomsiz «arvoh» bo'lib qayta yaratilmaydi)
-    for(const m of picks){ const coll=m.refType==='teacher'?'teachers':'staff'; const rid=String(m.rid);
+    for(const m of pk){ const coll=m.refType==='teacher'?'teachers':'staff'; const rid=String(m.rid);
       if((own[rid]||[]).some(o=>!(o.coll===coll && o.id===String(m.refId)))){ busy++; continue; }
       try{ await updateDoc(doc(db, coll, m.refId), {cameraId:rid}, {mustExist:true}); ok++;
         Object.keys(own).forEach(k=>{ own[k]=own[k].filter(o=>!(o.coll===coll && o.id===String(m.refId))); }); own[rid]=[{coll, kind:'', id:String(m.refId), name:m.name}]; }

@@ -100,6 +100,11 @@ _setClient(fake);
   ok(REC.ops.find(x => x[0] === "upsert")[1].id === "S9", "setDoc: payload id ref'ni bosib o'tmaydi");
   await FS.addDoc(FS.collection(null, "logs"), { id: "EVIL", m: 1 });
   { const ins = REC.ops.find(x => x[0] === "insert"); ok(ins[1].id && ins[1].id !== "EVIL", "addDoc: yaratilgan id g'olib (payload id emas)"); }
+  // createDoc — sof INSERT (upsert emas): kalit ref'dan, payload id tashlanadi; bo'sh kalit rad
+  await FS.createDoc(FS.doc(FS.collection(null, "students"), "N1"), { id: "EVIL", name: "Yangi" });
+  { const ins = REC.ops.find(x => x[0] === "insert"); ok(ins && ins[1].id === "N1" && ins[1].name === "Yangi" && !REC.ops.some(x => x[0] === "upsert"), "createDoc -> insert (upsert emas), kalit ref'dan"); }
+  { let er = null; try { await FS.createDoc(FS.doc(FS.collection(null, "students"), ""), { n: 1 }); } catch (e) { er = e; }
+    ok(er && er.code === "invalid-argument", "createDoc bo'sh kalit rad etiladi"); }
   await FS.updateDoc(FS.doc(FS.collection(null, "students"), "S9"), { id: "EVIL", grade: 11 });
   eq(REC.ops, [["update", { grade: 11 }], ["eq", "id", "S9"]], "updateDoc: payload id tashlanadi (kalit o'zgarmaydi)");
   // mustExist: 0 qator -> 'not-found' (o'chirilgan yozuv jim «saqlandi» bo'lmasin), 1 qator -> xatosiz
@@ -116,6 +121,26 @@ _setClient(fake);
     ok(er && er.code === "invalid-argument", "setDoc bo'sh kalit rad etiladi: " + JSON.stringify(bad));
     let eu = null; try { await FS.updateDoc(FS.doc(FS.collection(null, "staff"), bad), { n: 1 }); } catch (e) { eu = e; }
     ok(eu && eu.code === "invalid-argument", "updateDoc bo'sh kalit rad etiladi: " + JSON.stringify(bad)); }
+  CANNED = [];
+  // 3 argumentli doc(db, name, id) — ilova ishlatadigan shakl; «undefined»/«null»/bo'shliq kalit — rad; getDoc so'rov yubormaydi
+  for (const bad of ["undefined", "null", "  "]) {
+    let er = null; try { await FS.setDoc(FS.doc(null, "staff", bad), { n: 1 }); } catch (e) { er = e; }
+    ok(er && er.code === "invalid-argument", "setDoc(doc(db,name,id)) yaroqsiz kalit rad: " + JSON.stringify(bad));
+    let ed = null; try { await FS.deleteDoc(FS.doc(null, "staff", bad)); } catch (e) { ed = e; }
+    ok(ed && ed.code === "invalid-argument", "deleteDoc yaroqsiz kalit rad: " + JSON.stringify(bad));
+    REC.ops = []; const g = await FS.getDoc(FS.doc(null, "staff", bad));
+    ok(g.exists() === false && REC.ops.length === 0, "getDoc yaroqsiz kalit — so'rovsiz «yo'q»: " + JSON.stringify(bad)); }
+  await FS.setDoc(FS.doc(null, "staff", "X1"), { n: 1 });
+  ok(REC.ops.find(x => x[0] === "upsert")[1].id === "X1", "doc(db, name, id) — 3 argumentli shakl");
+  // writeBatch: yaroqsiz kalit NAVBATGA qo'shishda rad (commit o'rtasida emas — oldingilari yozilib qolmasin)
+  { let er = null; const bb = FS.writeBatch(); try { bb.set(FS.doc(null, "students", "OK1"), { n: 1 }); bb.update(FS.doc(null, "students", undefined), { n: 2 }); } catch (e) { er = e; }
+    ok(er && er.code === "invalid-argument", "writeBatch: yaroqsiz kalit navbatda rad etiladi"); }
+  // updateDoc: bo'sh payload — PATCH yuborilmaydi; mustExist bilan faqat borligi tekshiriladi
+  REC.ops = []; await FS.updateDoc(FS.doc(null, "students", "S9"), { id: "S9", u: undefined });
+  ok(!REC.ops.some(x => x[0] === "update"), "updateDoc bo'sh payload — PATCH yuborilmaydi");
+  CANNED = [{ id: "S9" }];
+  { let er = null; try { await FS.updateDoc(FS.doc(null, "students", "S9"), {}, { mustExist: true }); } catch (e) { er = e; }
+    ok(!er && !REC.ops.some(x => x[0] === "update"), "updateDoc bo'sh payload + mustExist: bor qator — xatosiz (PATCHsiz)"); }
   CANNED = [];
 
   const b = FS.writeBatch();
