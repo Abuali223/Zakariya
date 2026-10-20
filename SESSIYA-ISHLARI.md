@@ -570,6 +570,53 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   `select id,"staffId" from staff where "staffId"<>btrim("staffId");` — bo'lsa, ular endi tahrirda o'zgarmaydi (bog'liq yozuvlar
   bilan mos qoladi); tozalash kerak bo'lsa — bog'liq jadvallar bilan birga, alohida skript bilan.
 
+## 35) Raqib ko'rigi (R12) — R11 tuzatmalari ustidan (ism solishtirish)
+
+- Beshinchi tekshiruv (algoritm regressiyalari, qoidalar izchilligi, tasdiqlash oynasi; R8–R11 bilan yonma-yon, haqiqiy Chromium):
+  16 topilma tasdiqlandi — hammasi tuzatildi.
+- **Ism bo'la oladigan izoh so'zlari** («мая» = Майя, «марта» = Марта, «августа»; koreyscha «На / До / Со»): R11 ularni izoh
+  so'zi qilgani uchun «Petrova Mayya uchun», «Оплата за обучение Петрова Майя» 57% ga tushib, opa-singil bilan teng chiqardi
+  (ruscha otasining ismli yozuvda qarzi summaga teng opa-singil 100% ⚠️ siz birinchi). Endi ular izoh sanog'iga kirmaydi; ismda
+  bo'lsa va ism o'rni bo'sh bo'lsa (to'lovchining boshqa ism so'zlari yozuvdagidan kam) — ism (izoh matnida — boshqa so'z ham shu
+  ismga mos kelsa); ismda yo'q, lekin ism o'rnida — boshqa bola: ball ≤ 45% (bonus bilan ham taklif yo'q), «На Виктория …» ↔
+  boshqa oila ≤ 64% (⚠️). «до 1 мая», «Оплата на …», «… на октябрь», «за сына» — izoh. Shu qoida «Avgust» / «May»ga ham:
+  «Karimov Jasur avgust» endi ukasi Karimov Avgust'ni 95% ko'rsatmaydi.
+- **Otasining ismisiz solishtirish (R')** adash / amakivachchani ko'tarardi: «Karimov Jasur Bahodir», «(dadasi Bahodir)», «otasi
+  Bahodir, …», «Bahodirov», «Bah.», «Bahodirovic», «Rustamovch», «Rustamova», «Li Viktoriya S.», «Umid R. Xolmatov» — boshqa
+  otaning farzandi 90–100% (qarz = summa bilan birinchi, ⚠️ siz). Endi R' DALIL bilan: to'lovchining juftlanmagan so'zi,
+  tashlangan bosh harfi va «otasi …» / «… o'g'li» dagi ism yozuvdagi otasining ismi bilan solishtiriladi: mos (o'zagi,
+  qisqartma, xato yozuv) — R' to'liq; zid (boshqa bosh harf, otasining ismi shaklidagi so'z, boshqa ota ismi, to'liq ism ICHIDAGI
+  so'z — «Karimov Jasur Rustam» ↔ Karimov Rustam …) — R' yo'q (amakivachcha ~10–40%); noma'lum so'z («Guliston») — R' ≤ 64% (⚠️).
+  Boshqa bo'lakdagi aka-uka («Karimova Malika va Karimov Ali», «…, Karimov Ali») — dalil emas (95% saqlanadi).
+- **Sinf so'zi yonidagi yopishgan bosh harflar** («5 класс Ж.Р. Каримов», «5-A sinf J.R. Karimov», «5-sinf A.S. Usmonov»):
+  birinchisi sinf harfi deb kesilib, aka 82% ⚠️ siz chiqardi — endi sinf harfi faqat yakka harf bo'lsa va sinfda harf hali
+  yozilmagan bo'lsa olinadi; «5-sinf O Viktoriya» — koreyscha «O» saqlanadi.
+- **«Familiya I.» oldidagi ortiqcha so'z** (Guliston, Сын, Iqro akademiyasi…) bosh harfni otasining ismi deb o'qitardi (to'g'ri
+  o'quvchi 3%). Endi bosh harf roli yozuvga qarab: oldingi so'z yozuvdagi FAMILIYAGA mos, undan oldingisi hech biriga mos emas —
+  ism bosh harfi («Usmonov Bekzod A.» ↔ Aliyev Bekzod — yo'q); vergul / «;» / «/» — bo'lak chegarasi; «Li Viktoriya S.» — 2 harfli
+  familiya ham ism so'zi. To'lov / karta / qarindosh so'zlari (Платеж, Перевод, Payment, Humo, Uzcard, мама, папа, buvisi, talaba,
+  student…), manzil / yorliq bo'laklari (kv, uy, ga, da, bn, IT, MED, л/с, д/с, ИНН, S/N, No:, Nº) — izoh; «Ни» (koreyscha
+  familiya) — izoh emas; «Popov N. 5 класс» — «N.» bosh harf.
+- **Kichiklar:** qo'sh ism (otasining ismisiz 3 so'zli «Karimov Muhammad Ali») + «Karimov M.R.» — 8% → 64% (⚠️); manzil
+  qisqartmasi bosh harfdan keyin («Каримов Ж. г. Ташкент», «Karimov J. t. Chilonzor») — 8% → 68% (teskari tartib bilan bir xil);
+  oxirgi nuqtasiz yopishgan bosh harflar («Иванова М.А», «J.R Karimov», «Тошматов Э.О») — tekshiriladi (zid otasining ismi < 30%).
+- **⚠️ oynasi:** «o'quvchi (ID) — summa» qatori endi BIRINCHI, ⚠️ undan keyin — to'lovchi matni (Hangul jamo, ﾞ, teri rangi
+  belgilari bilan minglab belgi) uni ko'rinishdan siqib chiqara olmaydi; to'lovchi matnidan faqat lotin (asosiy, Latin-1,
+  Extended-A) va o'zbek/rus kirill harflari, o'zbekcha apostroflar va bosh harf nuqtasi ko'rsatiladi, ko'pi bilan 80 harf —
+  o'xshash harflar (ʗ, ↄ, ˗, ー, Ƽ, 𝐗) bilan soxta «(IQ-…) — summa» qatori yasab bo'lmaydi. Faqat izoh / yorliq / ruscha «и»
+  («Оплата за сентябрь и октябрь», «IT kursi uchun», «5-«A»», «л/с 0042», «Оплата до 1 мая») — ⚠️ yo'q; «Майя», «Ж К», «О»,
+  «Ли» — ⚠️ bor. Modul manzili `?v=5`.
+- Tekshiruv: `name-match.test` 173 (14 yangi); R12 ko'rigining 114 holati (probe) 114/114 (R11 kodida 22/114); Chromium
+  «Biriktirish» 110/110 (33 yangi holat; R11 kodida 34 tasi yiqiladi), chiqarish 37/37. Differensial skanerda tasodifiy son
+  generatorining xatosi topildi (siklga tushib, 60 000 «namuna» aslida ~1 500 xil matn edi) — tuzatildi; endi 60 000 haqiqiy
+  tasodifiy matnda (ikki urug') to'g'ri o'quvchi bali R11 ga nisbatan 29 / 32 holatda > 5 ball oshdi (koreyscha «O» raqamdan
+  keyin), 0 holatda tushdi; maktab darajasida (354 o'quvchi × 92 shablon × 3 qarz holati, 4 yozuv formati) to'g'ri o'quvchi
+  birorta holatda yo'qolmadi va boshqa bola undan oldinga o'tmadi, R11 ko'rsatmagan noto'g'ri taklif faqat «Familiya Ism P.»
+  shablonida qoldi (koreyscha «O» familiyasi, ≤ 74% — ⚠️ bilan).
+- Ongli qoldirilganlar: koreyscha «O» familiyasi + boshqa familiyali adash («O Ivan A.» → «Ten Ivan Andreyevich» 64%, bonus bilan
+  74% — ⚠️; R11 da boshqa adash 75% ⚠️ siz edi); «… Bahodir o'g'li» yozuvi o'zbekcha bo'lsa otasining ismi yozuvda saqlanmaydi
+  (normalizeName) — adash teng; ruscha kelishik shakllari («Петровой Анны» — 44%); bir xil bosh harfli aka-uka tengligi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

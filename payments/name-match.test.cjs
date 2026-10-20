@@ -313,6 +313,64 @@ ok('« » doim ajratadi (kichik harf bilan ham); ″ va yumshoq tire so\'zlar or
   && sim("Turg'unboyeva″Xadicha", T) === 1 && sim("Xadicha\u00ADTurg'unboyeva", T) === 1 && sim('G″ayrat Karimov', "Karimov G'ayrat") === 1
   && N.normalizeName('Turg\u200B\u200Bunboyeva') === 'turgunboeva', [sim("turg'unboyeva«xadicha»", T), N.normalizeName('Turg\u200B\u200Bunboyeva')]);
 
+// ---- Ko'rik (R12) holatlari ----
+// Ism bo'la oladigan izoh so'zlari (Майя / Марта, koreyscha На / До / Со): izoh matnida ham ism sifatida qoladi, opa-singil esa ko'tarilmaydi
+ok('«Petrova Mayya uchun», «Оплата за обучение Петрова Майя» — Mayya 100%, opa-singli Anna < 50%', ['Petrova Mayya uchun', 'Оплата за обучение Петрова Майя', 'Petrova Mayya oktyabr uchun',
+  'Петрова Майя 5 класс'].every(p => sim(p, 'Petrova Mayya') === 1 && sim(p, 'Petrova Anna') < 0.5) && sim('Lebedeva Marta 5-A sinf', 'Lebedeva Marta') === 1
+  && sim('Петрова Майя оплата за октябрь', 'Петрова Майя Ивановна') >= 0.9 && sim('Петрова Майя оплата за октябрь', 'Петрова Анна Ивановна') < 0.5,
+  ['Petrova Mayya uchun', 'Оплата за обучение Петрова Майя'].map(p => [sim(p, 'Petrova Mayya'), sim(p, 'Petrova Anna')]));
+ok('... oy nomi / predlog sifatida — izoh so\'zi («до 1 мая», «may oyi», «Оплата на …», «за сына …»)', sim('Петрова Анна оплата до 1 мая', 'Petrova Anna') === 1
+  && sim('Petrova Anna may oyi uchun', 'Petrova Mayya') < 0.5 && sim('за сына Каримов Жасур', 'Karimov Jasur Rustamovich') >= 0.9 && sim('Karimov Jasur avgust uchun', 'Karimov Avgust') < 0.1
+  && sim('Karimov Jasur avgust', 'Karimov Avgust') < 0.1, [sim('Petrova Anna may oyi uchun', 'Petrova Mayya'), sim('Karimov Jasur avgust', 'Karimov Avgust')]);
+ok('koreyscha «На» / «So» familiyasi: o\'z oilasi 100%, boshqa oila ≤ 64% (⚠️)', sim('На Виктория Сергеевна', 'Na Viktoriya Sergeyevna') === 1 && sim('На Виктория Сергеевна', 'Kim Viktoriya Sergeyevna') <= 0.64
+  && sim('So Viktoriya oktyabr uchun', 'So Viktoriya') === 1 && sim('So Viktoriya oktyabr uchun', 'Kim Viktoriya') <= 0.64, sim('На Виктория Сергеевна', 'Kim Viktoriya Sergeyevna'));
+// Otasining ismi boshqa shaklda yozilgan (Bahodir, Bahodirov, Bah., Bahodirovic, «dadasi Bahodir», «Bahodir o'g'li») — adash/amakivachcha ko'tarilmaydi
+{ const G = 'Karimov Jasur Bahodirovich', W = 'Karimov Jasur Rustamovich';
+  const RP = ['Karimov Jasur Bahodir', 'Karimov Jasur (dadasi Bahodir)', 'otasi Bahodir, Karimov Jasur', 'Bahodir Karimov Jasur', 'Karimov Jasur Bahodirov', 'Karimov Jasur Bah.',
+    'Karimov Jasur Bahodirovic', 'Каримов Жасур Баходир', "Karimov Jasur Bahodir o'g'li"];
+  ok('otasining ismi (Bahodir…) — to\'g\'ri o\'quvchi ≥ 75%, adash (… Rustamovich) < 65% (bonus bilan ham ⚠️)', RP.every(p => sim(p, G) >= 0.75 && sim(p, W) < 0.65),
+    RP.filter(p => !(sim(p, G) >= 0.75 && sim(p, W) < 0.65)).map(p => [p, sim(p, G), sim(p, W)]));
+  const F1 = ['Karimov Jasur Rustamovch', 'Karimov Jasur Rustamovic', 'Karimov Jasur Rustamovitch', 'Karimov Jasur Rustamov', 'Karimov Jasur (otasi Rustam)'];
+  ok('xato / yalang otasining ismi (Rustamovch, Rustamov, «otasi Rustam») — amakivachcha < 50%', F1.every(p => sim(p, W) >= 0.75 && sim(p, G) < 0.5)
+    && ['Karimova Malika Rustamova', 'Karimova Malika Rustamovn', 'Karimova Malika Rustamovana'].every(p => sim(p, 'Karimova Malika Rustamovna') >= 0.75 && sim(p, 'Karimova Malika Bahodirovna') < 0.5),
+    F1.map(p => [p, sim(p, W), sim(p, G)]));
+  ok('«Karimov Jasur Rustam» — ota ismi bilan bir xil ismli aka-uka (Karimov Rustam …) ko\'tarilmaydi', sim('Karimov Jasur Rustam', 'Karimov Rustam Akmalovich') < 0.3 && sim('Karimov Jasur Rustam', W) >= 0.9,
+    [sim('Karimov Jasur Rustam', 'Karimov Rustam Akmalovich')]);
+  ok('... ortiqcha izoh / noma\'lum so\'z va ikki bola — R\' saqlanadi', ['Каримов Жасур питание', 'Karimov Jasur Toshkent', 'Karimov Jasur 5-A', 'Karimov Jasur oktyabr uchun'].every(p => sim(p, W) >= 0.9)
+    && sim('Karimov Jasur Guliston', W) >= 0.6 && sim('Karimova Malika va Karimov Ali uchun', 'Karimova Malika Bahodirovna') >= 0.8 && sim('Karimov Jasur, Karimov Ali', W) >= 0.8,
+    [sim('Karimov Jasur Guliston', W), sim('Karimov Jasur, Karimov Ali', W)]); }
+// Otasining ismi bosh harfi: «Li Viktoriya S.», «Umid R. Xolmatov» — R' faqat mos bosh harf bilan
+ok('«Li Viktoriya S.» / «O Viktoriya S.» / «Umid R. Xolmatov» — adash (boshqa otasining ismi) < 50%', sim('Li Viktoriya S.', 'Li Viktoriya Sergeyevna') >= 0.6 && sim('Li Viktoriya S.', 'Li Viktoriya Pavlovna') < 0.5
+  && sim('O Viktoriya S.', 'O Viktoriya Pavlovna') < 0.5 && sim('Umid R. Xolmatov', 'Xolmatov Umid Rustamovich') >= 0.6 && sim('Umid R. Xolmatov', "Xolmatov Umid Ulug'bekovich") < 0.5
+  && sim('Umid R. Xolmatov', "Ro'ziyev Umid Oybekovich") < 0.5, [sim('Li Viktoriya S.', 'Li Viktoriya Pavlovna'), sim('Umid R. Xolmatov', "Ro'ziyev Umid Oybekovich")]);
+// Yopishgan bosh harflar oxirgi nuqtasiz («М.А», «J.R», «Э.О») va bo'shliq bilan bo'lak oxirida («М. А»)
+ok('«Иванова М.А», «Karimov J. R», «J.R Karimov» — 2-bosh harf tekshiriladi (zid otasining ismi < 30%)', ['Иванова М.А', 'Ivanova M.A', 'Иванова М. А'].every(p => sim(p, 'Ivanova Mariya Aleksandrovna') > 0.6
+  && sim(p, 'Ivanova Milana Sergeyevna') < 0.3) && ['Karimov J.R', 'Karimov J. R', 'J.R Karimov', 'Каримов Ж.Р'].every(p => sim(p, R3) > 0.6 && sim(p, 'Karimov Javohir Anvarovich') < 0.3)
+  && sim('Karimov J. в 5 классе', 'Karimov Jasur Rustamovich') > 0.6, [sim('Иванова М.А', 'Ivanova Milana Sergeyevna'), sim('Karimov J. в 5 классе', 'Karimov Jasur Rustamovich')]);
+// Sinf so'zi yonidagi yopishgan bosh harflar, koreyscha «O»; sinf harfi esa baribir tashlanadi
+ok('«5 класс Ж.Р. Каримов», «5-sinf A.S. Usmonov», «5-sinf O Viktoriya» — bosh harflar / familiya saqlanadi', sim('5 класс Ж.Р. Каримов', 'Karimov Jasur') > 0.6 && sim('5 класс Ж.Р. Каримов', 'Karimov Rustam') < 0.1
+  && sim('5-A sinf J.R. Karimov', 'Karimov Ravshan') < 0.1 && sim('5-sinf A.S. Usmonov', 'Usmonov Anvar') > 0.6 && sim('5-sinf A.S. Usmonov', 'Usmonov Sardor') < 0.1
+  && sim('5-sinf O Viktoriya', 'O Viktoriya') === 1 && sim('5-sinf O Viktoriya', 'Kim Viktoriya') < 0.6 && sim("6-sinf B. Turg'unboyeva Xadicha", T) === 1 && sim('5 кл. А Каримов Жасур', 'Karimov Jasur') === 1,
+  [sim('5-sinf A.S. Usmonov', 'Usmonov Anvar'), sim('5-sinf O Viktoriya', 'O Viktoriya')]);
+// Bosh harf roli yozuvga qarab: oldingi so'z — familiya, undan oldingisi ismga mos emas (izoh, joy nomi, «Сын») — familiya/ism bosh harfi
+ok('«Guliston Karimov J.», «Сын Каримов Ж.», «Otasi Rustam, Karimov J.», «Karimova Malika, Karimov J.» — Jasur ≥ 60%, Bekzod < 10%', ['Guliston Karimov J.', 'Платеж Каримов Ж.',
+  'мама Каримов Ж.', 'Student Karimov J.', 'Сын Каримов Ж.', 'Iqro akademiyasi Karimov J.', 'Otasi Rustam, Karimov J.', 'Karimova Malika, Karimov J.', 'Humo Karimov J.']
+  .every(p => sim(p, 'Karimov Jasur') >= 0.6 && sim(p, 'Karimov Bekzod') < 0.1) && sim('Karimov Jasur R.', 'Karimov Rustam') < 0.1,
+  ['Guliston Karimov J.', 'Сын Каримов Ж.'].map(p => sim(p, 'Karimov Jasur')));
+// Qo'sh ism (otasining ismisiz 3 so'zli yozuv): 2-bosh harf ixtiyoriy (≤ 64%, ⚠️)
+ok('«Karimov M.R.» ↔ Karimov Muhammad Ali — 60–64% (avval 8%)', sim('Karimov M.R.', 'Karimov Muhammad Ali') >= 0.6 && sim('Karimov M.R.', 'Karimov Muhammad Ali') <= 0.64
+  && sim('M.R. Karimov', 'Karimov Muhammad Ali') >= 0.6 && sim('Karimov M.A.', 'Karimov Muhammad Ali Rustamovich') >= 0.6, sim('Karimov M.R.', 'Karimov Muhammad Ali'));
+// Manzil qisqartmasi bosh harfdan keyin («Каримов Ж. г. Ташкент») va qisqa manzil / yorliq so'zlari (kv, uy, ga, No:42)
+ok('«Каримов Ж. г. Ташкент» = «Каримов Ж. Ташкент ш.»; «kv 5», «uy 12», «ga», «No:42» ball tushirmaydi', ['Каримов Ж. г. Ташкент', 'Karimov J. t. Chilonzor', 'Karimov J. sh. Toshkent']
+  .every(p => Math.abs(sim(p, R3) - sim('Каримов Ж. Ташкент ш.', R3)) < 1e-9 && sim(p, R3) > 0.6) && ['Karimov J. kv 5', 'Karimov J. uy 12', 'Karimov J. ga', 'Karimov J. No:42']
+  .every(p => Math.abs(sim(p, 'Karimov Jasur') - sim('Karimov J.', 'Karimov Jasur')) < 1e-9) && sim('Oybekov Abdulloh No:42', 'Oybekov Abdulloh Xojiakbar') >= 0.9,
+  [sim('Каримов Ж. г. Ташкент', R3), sim('Karimov J. kv 5', 'Karimov Jasur')]);
+// wroteName: yorliq / izoh — ism emas; «Майя», «Ж К», «О» — ism
+ok('wroteName: «л/с 0042», «ИНН …», «Nº 0042», «Оплата за сентябрь и октябрь», «IT kursi uchun», «5-«A»» — yo\'q; «Майя», «Mayya 5-A», «О» — ism',
+  ['л/с 0042', 'д/с 12', 'ИНН 123456789', 'Nº 0042', 'No:0042', 'S/N 0042', 'Оплата за сентябрь и октябрь', 'За обучение и питание', "IT kursi uchun to'lov", '5-«A»', '5-"A"', 'Оплата до 1 мая']
+    .every(p => !N.wroteName(p, 'Ivanova Anna')) && ['Майя', 'Марта', 'Mayya 5-A', 'О', 'Ли', 'Ж К', 'Ni 5-A'].every(p => N.wroteName(p, 'Ivanova Anna')),
+  ['л/с 0042', 'Оплата за сентябрь и октябрь', 'Майя'].map(p => N.wroteName(p, 'Ivanova Anna')));
+
 // ---- Brauzer yo'li (UMD): module yo'q -> globalThis.IqrorNameMatch ----
 { const src = fs.readFileSync(path.join(__dirname, '..', 'sb', 'name-match.js'), 'utf8'); const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);
   ok('brauzerda globalThis.IqrorNameMatch', !!ctx.IqrorNameMatch && ctx.IqrorNameMatch.nameSimilarity("Turg'unboyeva Hadicha", T) === 1);

@@ -452,7 +452,7 @@ let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasej
 //   Xato bo'lsa keyingi chaqiruv YANGI manzil bilan qayta urinadi (brauzer muvaffaqiyatsiz import()ni shu URL uchun
 //   eslab qoladi — bir martalik tarmoq uzilishi takliflarni sahifa qayta yuklanguncha o'chirib qo'ymasin).
 let _nmP=null, _nmTry=0;
-function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=4${_nmTry?'&r='+_nmTry:''}`)
+function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=5${_nmTry?'&r='+_nmTry:''}`)
   .then(()=>{ const N=globalThis.IqrorNameMatch||null; if(!N){ _nmP=null; _nmTry++; } return N; })
   .catch(()=>{ _nmP=null; _nmTry++; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
@@ -6280,16 +6280,17 @@ async function openAssign(payment, students, reload){
     if(!sg && !(typeof NM.wroteName==='function' ? NM.wroteName(raw, st.name) : NM.nameTokens(raw, st.name).length)) return '';
     const pct=sg ? sg.percent : Math.round(NM.nameSimilarity(raw, st.name)*100);
     if(pct>=75) return '';
-    // To'lovchi matni (Click'da to'lovchi o'zi yozadi) — oynada faqat undagi SO'ZLAR (harf, apostrof, bosh harf nuqtasi): raqam,
-    //   qavs, tire, belgi, emoji, ko'rinmas va «bo'sh» harflar tashlanadi — soxta «o'quvchi (ID) — summa» qatori yasab bo'lmaydi.
-    //   80 belgi — grafema bo'yicha (harf + diakritika bo'linmaydi).
-    const words=(raw.normalize('NFC').replace(/[\u115F\u1160\u3164\uFFA0]/g,'').match(/\p{L}\p{M}{0,2}(?:[\p{L}\p{Sk}'‘’‚‛′″‵＇ꞌ՚“”]\p{M}{0,2})*\.?/gu)||[]).join(' ');
-    const g=(typeof Intl!=='undefined' && Intl.Segmenter) ? Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(words), x=>x.segment) : Array.from(words);
-    return `⚠️ Ism to‘liq mos emas (${pct}% mos) — to‘lovchi yozgan ism: «${g.slice(0,80).join('').trimEnd()}${g.length>80?'…':''}»\n\n`; };
+    // To'lovchi matni (Click'da to'lovchi o'zi yozadi) — oynada faqat undagi SO'ZLAR: lotin (asosiy, Latin-1, Extended-A) va
+    //   o'zbek/rus kirill harflari, o'zbekcha apostroflar, bosh harf nuqtasi. Raqam, qavs, tire, belgi, emoji, diakritika va boshqa
+    //   yozuv harflari (o'xshash «ʗ», «Ƽ», «ー») tashlanadi; ko'pi bilan 80 harf. Ogohlantirish «o'quvchi (ID) — summa» qatoridan
+    //   KEYIN keladi (assignOne) — uni ko'rinishdan siqib chiqara olmaydi, soxta «o'quvchi (ID) — summa» qatori yasab bo'lmaydi.
+    const L='A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\u0400-\u045F\u0492\u0493\u049A\u049B\u04B2\u04B3';
+    const words=(raw.normalize('NFC').match(new RegExp(`[${L}][${L}'‘’ʻʼ\`´]*\\.?`,'g'))||[]).join(' '), ch=Array.from(words);
+    return `⚠️ Ism to‘liq mos emas (${pct}% mos) — to‘lovchi yozgan ism: «${ch.slice(0,80).join('').trimEnd()}${ch.length>80?'…':''}»\n\n`; };
 
   // ---- Bitta o'quvchiga (butun summani) ----
   const assignOne=async(sid)=>{ if(busy) return; const st=sById[String(sid)];
-    if(!confirm(`${weakMatch(sid)}${st&&st.name?`${st.name} (${sid})`:sid} — ${fmtSom(total)}\n\nShu o‘quvchiga biriktirilsinmi?`)) return;
+    if(!confirm(`${st&&st.name?`${st.name} (${sid})`:sid} — ${fmtSom(total)}\n\n${weakMatch(sid)}Shu o‘quvchiga biriktirilsinmi?`)) return;
     busy=true;
     try{
       // ATOMIK (assign_payment, invoice-guards.sql): to'lov qatori qulflanadi, FAQAT hali biriktirilmagan
