@@ -27,6 +27,13 @@ begin
       from public.students
      where "studentId" is not null and "studentId" <> '' and id <> "studentId"
   loop
+    -- Kalit chetida bo'sh joy ('IQ-0005 ', ' IQ-0006'): hujjat kaliti (id) ham AYNAN shu bo'sh joyli qiymat bo'lib qolardi.
+    --   Tegmaymiz — avval studentId'ni (va unga bog'liq jadvallarni) bo'sh joysiz qilib, keyin qayta ishga tushiring.
+    if r.new_id <> btrim(r.new_id) then
+      raise notice 'SKIP % -> [%] (studentId chetida bo''sh joy — avval tozalang)', r.old_id, r.new_id;
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
     -- To'qnashuv: boshqa students qatori allaqachon new_id bilan bo'lsa — tegmaymiz (studentId noyob bo'lishi kerak).
     if exists (select 1 from public.students where id = r.new_id) then
       raise notice 'SKIP % -> % (nishon students id band)', r.old_id, r.new_id;

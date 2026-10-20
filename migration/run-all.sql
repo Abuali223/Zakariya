@@ -91,5 +91,6 @@
 \ir student-ids.sql
 \ir invoice-guards.sql
 \ir parent-link-canon.sql
+\ir id-guards.sql
 \ir secdef-searchpath.sql
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

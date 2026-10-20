@@ -47,6 +47,18 @@ function prep(data) {
   return o;
 }
 
+// Bo'sh/aniqlanmagan qator kaliti bilan yozish — XATO (jim emas): staff.id DEFAULT gen_random_uuid() tufayli
+//   setDoc(doc(db,'staff',undefined), ...) JSON'da id'siz ketib, YANGI (takroriy) xodim yaratardi; updateDoc esa
+//   ?id=eq.undefined bilan jim 0 qator yangilardi.
+function needId(ref) {
+  const id = ref ? ref._id : undefined;
+  if (id === undefined || id === null || String(id) === "") {
+    const e = new Error("Yozuv kaliti (id) bo'sh — " + ((ref && ref._t) || "?") + " ga yozilmadi");
+    e.code = "invalid-argument";
+    throw e;
+  }
+}
+
 // ---- refs ----
 export function collection(_db, name) { return { _kind: "coll", _t: name }; }
 export function doc(a, b, c) {
@@ -111,20 +123,43 @@ export async function setDoc(ref, data, opts) {
   //   bo'lsa — uni ochiq `null` qilib bering. Shuning uchun opts.merge qiymatidan qat'i nazar
   //   (true, false yoki berilmаган) xatti-harakat bir xil: xavfsiz merge-upsert.
   void opts;   // merge semantikasi upsert orqali ta'minlanadi (yuqoridagi izohga qarang)
-  const { error } = await supabase().from(ref._t).upsert({ id: ref._id, ...prep(data) }, { onConflict: "id" });
+  needId(ref);
+  // Qator kaliti FAQAT ref'dan: payload'dagi `id` (masalan keshdagi qatorni yoyib yuborish) boshqa qatorga yozib
+  //   yubormasin — avval {id, ...data} edi va data.id g'olib chiqardi.
+  const { error } = await supabase().from(ref._t).upsert({ ...prep(data), id: ref._id }, { onConflict: "id" });
   if (error) throw error;
 }
 export async function addDoc(collRef, data) {
   const id = (globalThis.crypto?.randomUUID?.() || Date.now() + Math.random().toString(36).slice(2));
-  const { error } = await supabase().from(collRef._t).insert({ id, ...prep(data) });
+  const { error } = await supabase().from(collRef._t).insert({ ...prep(data), id });
   if (error) throw error;
   return { id };
 }
-export async function updateDoc(ref, data) {
-  const { error } = await supabase().from(ref._t).update(prep(data)).eq("id", ref._id);
+// updateDoc — sof UPDATE (PATCH): qator yo'q bo'lsa HECH NARSA yaratmaydi (setDoc'dan farqi — upsert o'chirilgan
+//   yozuvni qayta tiklab yuborardi). Payload'dagi `id` tashlanadi (qator kaliti o'zgartirilmaydi).
+//   opts.mustExist — yangilangan qator QAYTARILADI va 0 qator bo'lsa xato (code 'not-found'): yozuv o'chirilgan yoki
+//   unga yozishga ruxsat yo'q. (Firestore'ning updateDoc'i ham yo'q hujjatda 'not-found' beradi.) Eski chaqiruvlar
+//   (opts'siz) avvalgidek: 0 qator — jim.
+export async function updateDoc(ref, data, opts) {
+  needId(ref);
+  const row = prep(data);
+  delete row.id;
+  const q = supabase().from(ref._t).update(row).eq("id", ref._id);
+  if (opts && opts.mustExist) {
+    const { data: got, error } = await q.select("id");
+    if (error) throw error;
+    if (!got || !got.length) {
+      const e = new Error("Yozuv topilmadi (o'chirilgan) yoki unga yozishga ruxsat yo'q: " + ref._t + "/" + ref._id);
+      e.code = "not-found";
+      throw e;
+    }
+    return;
+  }
+  const { error } = await q;
   if (error) throw error;
 }
 export async function deleteDoc(ref) {
+  needId(ref);
   const { error } = await supabase().from(ref._t).delete().eq("id", ref._id);
   if (error) throw error;
 }

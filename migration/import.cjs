@@ -19,6 +19,16 @@ function convVal(v, type){
 (async () => {
   const c = new Client({ connectionString: DB });
   await c.connect();
+  // ISHLAYOTGAN bazaga qayta ishga tushirilsa — zaxiradagi ESKI qiymatlar (studentId/teacherId/staffId, holat, telefon) joriy
+  //   ma'lumot ustiga yoziladi va o'chirilgan yozuvlar qayta tiklanadi. Shuning uchun bazada o'quvchi/xodim bo'lsa — to'xtaydi;
+  //   ataylab (masalan bo'sh bazaga qayta urinish) — FORCE_IMPORT=1.
+  if (process.env.FORCE_IMPORT !== '1') {
+    const chk = await c.query("select (select count(*) from public.students) + (select count(*) from public.teachers) as n");
+    if (Number(chk.rows[0].n) > 0) {
+      console.error('STOP: bazada allaqachon o\'quvchi/o\'qituvchi bor (' + chk.rows[0].n + ' ta). Zaxira joriy ma\'lumot ustiga yozilmasin. Ataylab bo\'lsa: FORCE_IMPORT=1');
+      await c.end(); process.exit(2);
+    }
+  }
   // har jadval uchun ustun turlari
   const meta = {};
   const r = await c.query("select table_name, column_name, data_type from information_schema.columns where table_schema='public'");

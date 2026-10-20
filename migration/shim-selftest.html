@@ -35,6 +35,7 @@ function makeBuilder() {
     contains(f, v) { rec.ops.push(["contains", f, v]); return b; },
     order(f, o) { rec.ops.push(["order", f, o]); return b; },
     limit(n) { rec.ops.push(["limit", n]); return b; },
+    range(f, t) { rec.ops.push(["range", f, t]); return b; },
     upsert(obj, o) { rec.ops.push(["upsert", obj, o]); return b; },
     insert(obj) { rec.ops.push(["insert", obj]); return b; },
     update(obj) { rec.ops.push(["update", obj]); return b; },
@@ -56,10 +57,11 @@ _setClient(fake);
   eq(REC.ops, [["select", "*"], ["eq", "grade", 9], ["order", "name", { ascending: true }], ["limit", 5]],
     "where('=='), orderBy(asc), limit tarjimasi");
 
+  // limit'siz so'rov — sahifalab o'qiladi (barqaror tartib: id, 1000 talik oraliq)
   await FS.getDocs(FS.query(FS.collection(null, "grades"), FS.where("id", "in", ["a", "b"])));
-  eq(REC.ops, [["select", "*"], ["in", "id", ["a", "b"]]], "where('in') -> .in()");
+  eq(REC.ops, [["select", "*"], ["in", "id", ["a", "b"]], ["order", "id", { ascending: true }], ["range", 0, 999]], "where('in') -> .in() (+ sahifalash)");
   await FS.getDocs(FS.query(FS.collection(null, "users"), FS.where("childIds", "array-contains", "K1")));
-  eq(REC.ops, [["select", "*"], ["contains", "childIds", '["K1"]']], "array-contains -> .contains(JSON)");
+  eq(REC.ops, [["select", "*"], ["contains", "childIds", '["K1"]'], ["order", "id", { ascending: true }], ["range", 0, 999]], "array-contains -> .contains(JSON) (+ sahifalash)");
 
   await FS.getDocs(FS.query(FS.collection(null, "news"), FS.orderBy("date", "desc")));
   ok(JSON.stringify(REC.ops).includes('["order","date",{"ascending":false}]'), "orderBy('desc') -> ascending:false");
@@ -92,6 +94,29 @@ _setClient(fake);
 
   await FS.deleteDoc(FS.doc(FS.collection(null, "students"), "S9"));
   eq(REC.ops, [["delete"], ["eq", "id", "S9"]], "deleteDoc -> delete().eq(id)");
+
+  // Qator kaliti FAQAT ref'dan (payload'dagi id boshqa qatorga yozib yubormasin)
+  await FS.setDoc(FS.doc(FS.collection(null, "students"), "S9"), { id: "EVIL", name: "Z" });
+  ok(REC.ops.find(x => x[0] === "upsert")[1].id === "S9", "setDoc: payload id ref'ni bosib o'tmaydi");
+  await FS.addDoc(FS.collection(null, "logs"), { id: "EVIL", m: 1 });
+  { const ins = REC.ops.find(x => x[0] === "insert"); ok(ins[1].id && ins[1].id !== "EVIL", "addDoc: yaratilgan id g'olib (payload id emas)"); }
+  await FS.updateDoc(FS.doc(FS.collection(null, "students"), "S9"), { id: "EVIL", grade: 11 });
+  eq(REC.ops, [["update", { grade: 11 }], ["eq", "id", "S9"]], "updateDoc: payload id tashlanadi (kalit o'zgarmaydi)");
+  // mustExist: 0 qator -> 'not-found' (o'chirilgan yozuv jim «saqlandi» bo'lmasin), 1 qator -> xatosiz
+  CANNED = [];
+  { let er = null; try { await FS.updateDoc(FS.doc(FS.collection(null, "students"), "S9"), { grade: 1 }, { mustExist: true }); } catch (e) { er = e; }
+    ok(er && er.code === "not-found", "updateDoc mustExist: 0 qator -> not-found");
+    ok(JSON.stringify(REC.ops).includes('["select","id"]'), "updateDoc mustExist: yangilangan qator qaytariladi (select id)"); }
+  CANNED = [{ id: "S9" }];
+  { let er = null; try { await FS.updateDoc(FS.doc(FS.collection(null, "students"), "S9"), { grade: 1 }, { mustExist: true }); } catch (e) { er = e; }
+    ok(!er, "updateDoc mustExist: 1 qator -> xatosiz"); }
+  // Bo'sh/aniqlanmagan kalit bilan yozish — xato (staff.id DEFAULT yangi takroriy qator yaratmasin)
+  for (const bad of [undefined, null, ""]) {
+    let er = null; try { await FS.setDoc(FS.doc(FS.collection(null, "staff"), bad), { n: 1 }); } catch (e) { er = e; }
+    ok(er && er.code === "invalid-argument", "setDoc bo'sh kalit rad etiladi: " + JSON.stringify(bad));
+    let eu = null; try { await FS.updateDoc(FS.doc(FS.collection(null, "staff"), bad), { n: 1 }); } catch (e) { eu = e; }
+    ok(eu && eu.code === "invalid-argument", "updateDoc bo'sh kalit rad etiladi: " + JSON.stringify(bad)); }
+  CANNED = [];
 
   const b = FS.writeBatch();
   b.set(FS.doc(FS.collection(null, "students"), "B1"), { n: 1 });

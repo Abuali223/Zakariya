@@ -521,6 +521,55 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   («IQ-0042 O Viktoriya»); noma'lum joy nomi + qisqartma («Em Nikita Gazalkent sh.» — to'g'ri o'quvchi ham topilmaydi);
   kichik harfli so'zlar ko'rinmas belgi bilan yopishgani.
 
+## 34) Tahrirda ID o'zgarmasin — o'quvchi / o'qituvchi / xodim (audit va tuzatmalar)
+
+- Savol: «o'quvchi, o'qituvchi yoki xodim tahrir qilinsa ID o'zgarib ketmayaptimi?» To'rt yo'nalishda (o'quvchi, o'qituvchi, xodim,
+  shim/baza/server) haqiqiy stekda (PG16 + PostgREST 12 + to'liq admin.html + shim, rollar JWT bilan) tekshirildi, har topilma
+  mustaqil tekshiruvchi tomonidan qayta takrorlandi: 39 topilmadan 37 tasi tasdiqlandi (TCH-8 — ataylab, INF-7 — yo'l yo'q).
+- **Javob:** oddiy tahrirda yozuvning ichki kaliti (`_id`) hech qachon o'zgarmasdi. Lekin biznes ID / bog'lovchi kalitlar quyidagi
+  holatlarda JIM o'zgarardi yoki dublikat paydo bo'lardi — hammasi tuzatildi:
+  - eski ID chetida bo'sh joy (`'IQ-0005 '`, `' IQT-005'`, `'IQX-004 '`) har «Saqlash»da kesilardi → hisob-faktura, avans, davomat,
+    ota-ona ulanishi, maosh/avans/qoldiq «yetim» bo'lib, keyingi generatsiya ikkinchi faktura yaratardi;
+  - eskirgan ro'yxat/oynadan saqlash boshqa admin bergan ID / Kamera ID / sinf / muzlatishni qaytarib yuborardi;
+  - setDoc (upsert) o'chirilgan yozuvni qayta tiklardi (yangi ota-ona kodi bilan) yoki nomsiz «arvoh» yozuv yaratardi (Holat,
+    foydalanuvchini qayta bog'lash, Kamera ID importi, Excel import);
+  - davomatdagi «➕ Xodim qilib bog'lash» MAVJUD xodimni bog'lash o'rniga ikkinchi nusxasini yaratardi (davomat yangisiga,
+    maosh/avans eskisiga — ushlanmasiz to'liq maosh);
+  - o'chirilgan o'qituvchi/xodimning ID'si yangi odamga berilardi (uning qoldig'i/avansini meros olardi);
+  - Kamera ID noyobligi tekshirilmasdi; Kamera ID o'zgarsa eski skanlar jim uzilardi; HIK importi «o'zgaradi»ni avtomatik belgilardi;
+  - qabulxona tahriri (o'qituvchilar ro'yxatini ko'rmaydi) «Xodim farzandi» bog'lanishini (student_private.teacherId) o'chirardi;
+  - olimpiada granti takroriy ID'da boshqa bolaga yozilardi; ro'yxat yuklanmagan holda Excel import mavjudlarni YANGI deb yaratardi;
+  - ID o'zgartirish tasdig'ida «(bo'sh)» deyilardi, pul esa ichki kalit ostida turardi.
+- **Tuzatma (admin.html):** tahrir formasi endi faqat O'ZGARGAN maydonlarni yozadi (oyna ochilgandagi qiymatga nisbatan), saqlashdan
+  oldin yozuvni bazadan qayta o'qiydi (o'chirilgan → saqlanmaydi; ID/Kamera ID/holat/sinf boshqa joyda o'zgargan → «qayta oching»)
+  va sof UPDATE qiladi (`updateDoc(..., {mustExist:true})`). O'quvchi `studentId`si tahrirda hech qachon yozilmaydi (faqat bo'sh
+  bo'lsa hujjat kaliti bilan to'ldiriladi); o'qituvchi/xodim ID'si o'zgarmasa (bo'sh joy farqi ham) — yozilmaydi. ID ataylab
+  o'zgartirilsa — `rekey_payroll_id` maosh berish / avans / «xodim farzandi» bog'lanishi va foydalanuvchi yorlig'ini BITTA
+  tranzaksiyada yangi ID'ga ko'chiradi (eski ID boshqa xodimda ham bo'lsa — ko'chirmaydi va shuni aytadi); tasdiq oynasi haqiqiy
+  kalitni va yozuvlar sonini ko'rsatadi. ID o'chirib yuborilsa — asl ID qaytariladi. Takroriy ID o'qituvchi + xodim ro'yxatlari
+  bo'yicha tekshiriladi; yangi ID o'chirilgan xodimlar tarixidan ham katta (`payroll_id_high_water`), egasiz tarixli ID rad etiladi.
+  Kamera ID: boshqa odamda bo'lsa saqlanmaydi; o'zgarsa va eski skanlar bo'lsa ogohlantiriladi. Holat oynasi joriy holatni bazadan
+  o'qiydi va oyna ochilgandan beri o'zgargan bo'lsa yozmaydi. Davomatdagi tugma endi «🔗 Xodimga bog'lash»: Kamera ID'si yo'q
+  mavjud xodim/o'qituvchilar (ism mosi yuqorida) ro'yxati, yangi xodim — faqat ikkinchi tugma bilan va bir xil ismda tasdiq bilan.
+  HIK importi: ro'yxat o'qilmasa to'xtaydi, band ID — «band», «o'zgaradi» belgilanmaydi, yozishdan oldin ro'yxat qayta o'qiladi.
+  Tanlov (select/dynselect) bazadagi qiymat variantlarda bo'lmasa uni «joriy qiymat» sifatida saqlaydi. Olimpiada granti — faqat
+  aniq bitta o'quvchiga. Import — ro'yxat bazadan, ID'lar bo'sh joysiz solishtiriladi, mavjud o'quvchiga sof UPDATE.
+  O'qituvchi/xodimni o'chirishda maosh tarixi bo'lsa ogohlantiriladi.
+- **Baza (migration/id-guards.sql):** ilova foydalanuvchisi (direktor ham) `students.id` va mavjud `studentId`ni o'zgartira olmaydi
+  (bo'sh studentId'ni to'ldirish mumkin; SQL/service_role — tegilmaydi); teachers/staff qator kaliti ham. `payroll_id_high_water`,
+  `payroll_key_info`, `rekey_payroll_id` (faqat direktor/HR). **Shim:** payload'dagi `id` qator kalitini bosib o'tmaydi;
+  bo'sh/aniqlanmagan kalit bilan yozish — xato; `updateDoc` `mustExist` bilan 0 qatorda `not-found` beradi.
+  `rekey-students.sql` chetida bo'sh joyli ID'ni o'tkazib yuboradi; `import.cjs` to'la bazaga `FORCE_IMPORT=1`siz yozmaydi.
+- **Tekshiruv:** audit stsenariylari tuzatilgan kodda qayta ishga tushirildi — o'quvchi (forma 60 saqlash, eskirgan sahifa,
+  kesish, import, Holat, o'chirish poygasi, API), o'qituvchi (28 holat + 2), xodim (8 skript + yangi 13 tekshiruv), infra
+  (shim/baza/server/qayta deploy): ID'lar o'zgarmaydi, arvoh/dublikat yaratilmaydi, tarix ko'chadi. Shim selftest 29/29
+  (sahifalash uchun soxta mijoz tuzatildi), Chromium «Biriktirish» 77/77, chiqarish 37/37, to'lov/SMS/auth/server testlari yashil.
+- **Ma'lumot tekshiruvi (prod, faqat o'qish):** bo'sh joyli kalitlar bormi —
+  `select id,"studentId" from students where "studentId"<>btrim("studentId");`
+  `select id,"teacherId" from teachers where "teacherId"<>btrim("teacherId");`
+  `select id,"staffId" from staff where "staffId"<>btrim("staffId");` — bo'lsa, ular endi tahrirda o'zgarmaydi (bog'liq yozuvlar
+  bilan mos qoladi); tozalash kerak bo'lsa — bog'liq jadvallar bilan birga, alohida skript bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
