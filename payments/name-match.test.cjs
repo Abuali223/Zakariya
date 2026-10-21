@@ -447,6 +447,45 @@ ok('«Karimov Jasur Bahodirov Guliston / matematika» — amakivachcha baribir z
   N.rankByName('A.B.C.D.E. '.repeat(45), studs); const dt = Date.now() - t0;
   ok('bosh harflar bilan to\'la 500 belgili matn × 1000 o\'quvchi — tez (< 1.5 s)', dt < 1500, dt); }
 
+// ---- R15 ko'rigi ----
+// Raqamga yopishgan sinf / ID / yil qoldig'i («5-A», «IQ-0601», «2026-yil») — bo'lak chegarasi emas: otasining ismi dalil
+ok('«… 5-A Sherzod», «… IQ-0601 Sherzod», «… 2026-yil Sherzodov» — otasining ismi baribir dalil; «Karimov 5-A Jasur R.» — R. otasining ismi',
+  ["Yo'ldoshev Jasur 5-A Sherzod", "Yo'ldoshev Jasur 5-sinf Sherzod", "Yo'ldoshev Jasur IQ-0601 Sherzod", "Yo'ldoshev Jasur 2026-yil Sherzod", 'Йўлдошев Жасур 5-А Шерзод']
+    .every(p => sim(p, "Yo'ldoshev Jasur Rustamovich") <= 0.64 && sim(p, "Yo'ldoshev Jasur Sherzodovich") >= 0.9)
+    && ['Karimov Jasur 5-A Bahodirov', 'Karimov Jasur 11-B Bahodirov', 'Karimov Jasur IQ-0042 Bahodirov'].every(p => sim(p, R3) < 0.3)
+    && sim('Karimova Malika 5-B Bahodirova', 'Karimova Malika Rustamovna') < 0.3 && sim('Karimov 5-A Jasur R.', 'Karimov Rustam') < 0.1
+    && sim('Karimov 5-A Jasur R.', 'Karimov Jasur') === 1 && sim('Karimov Jasur - Rahimova Dilnoza', R3) >= 0.85,
+  ["Yo'ldoshev Jasur 5-A Sherzod", 'Karimov Jasur 5-A Bahodirov'].map(p => sim(p, p.startsWith('Y') ? "Yo'ldoshev Jasur Rustamovich" : R3)));
+// Sinf raqami bo'la olmaydigan son / sana / matn boshidagi «1.» dan keyingi nuqtali harf — bosh harf («J. R.» bo'shliq bilan)
+ok('«1. J. R. Karimov», «15.10. J. R.», «№ 42 - J. R.», «Oktyabr 15. J. R.», «1. Ж. Р.» — J. ism bosh harfi; «5 - A. J. Karimov» — A sinf',
+  ['1. J. R. Karimov', '15.10. J. R. Karimov', '№ 42 - J. R. Karimov', 'Oktyabr 15. J. R. Karimov', '1. Ж. Р. Каримов']
+    .every(p => sim(p, 'Karimov Jasur') > 0.7 && sim(p, 'Karimov Rustam') < 0.1 && sim(p, 'Karimov Jasur Rustamovich') > 0.6)
+    && sim('5 - A. J. Karimov', 'Karimov Jasur') > 0.7 && sim('5 - A. J. Karimov', 'Karimov Akmal') < 0.1
+    && sim('5. A. Karimov Jasur', R3) >= 0.9 && sim('Karimov Jasur 5 - A.', 'Karimov Akmal') < 0.1,
+  ['1. J. R. Karimov', '15.10. J. R. Karimov', '№ 42 - J. R. Karimov'].map(p => sim(p, 'Karimov Jasur')));
+// Otasining ismi: -ov shaklida o'zagi bir xil yoki y bilan ham boshi bir; y tashlanib qisqargan boshqa ism emas
+ok('«Ahadov» ≠ Yahyoyevich, «Fozilov» ≠ Fayziyevich, «Aubakirov» ≠ Ayubovich; «G\'ulomov» = Gulyamovich, «Hayitov» = Khaitovich, «Qodirov» = Kadyrovich',
+  [['Karimov Jasur Ahadov', 'Karimov Jasur Yahyoyevich'], ['Karimov Jasur Fozilov', 'Karimov Jasur Fayziyevich'], ['Karimov Jasur Aubakirov', 'Karimov Jasur Ayubovich'],
+    ['Karimova Malika Fozilova', 'Karimova Malika Fayziyevna'], ['Karimova Malika Ahadova', 'Karimova Malika Yahyoyevna']].every(([p, r]) => sim(p, r) < 0.5)
+    && [["Karimov Jasur G'ulomov", 'Karimov Jasur Gulyamovich'], ['Karimov Jasur Hayitov', 'Karimov Jasur Khaitovich'], ['Karimov Jasur Qodirov', 'Karimov Jasur Kadyrovich'],
+      ['Karimov Jasur Ahadov', 'Karimov Jasur Ahadovich'], ['Karimov Jasur Fozilov', 'Karimov Jasur Fozilovich']].every(([p, r]) => sim(p, r) >= 0.9),
+  [sim('Karimov Jasur Ahadov', 'Karimov Jasur Yahyoyevich'), sim("Karimov Jasur G'ulomov", 'Karimov Jasur Gulyamovich')]);
+// Otasining ismi shaklidagi so'z + onasining familiyasi («Bahodirov Rahimova») — boshqa ayolning to'liq ismi emas: amakivachcha zid
+ok('«Karimov Jasur Bahodirov Rahimova (Dilnoza)» — amakivachcha zid, to\'g\'ri bola ≥ 80%; «… Rahimova Dilnoza» — onasi (dalil emas)',
+  ['Karimov Jasur Bahodirov Rahimova', 'Karimov Jasur Bahodirov Rahimova Dilnoza', 'Karimov Jasur Bahodirov Saidova'].every(p => sim(p, R3) < 0.3 && sim(p, 'Karimov Jasur Bahodirovich') >= 0.8)
+    && sim('Karimov Jasur Rahimova Dilnoza', R3) >= 0.85,
+  ['Karimov Jasur Bahodirov Rahimova', 'Karimov Jasur Bahodirov Rahimova Dilnoza'].map(p => sim(p, R3)));
+// «J.» = ruscha Дж / Dzh / Ж (bir harf) — otasining ismi va ism bosh harfida; Q./K., O./A. — betaraf (≤ 64%) qoladi
+ok('«J.» ↔ Джамалович / Dzhamalovich / Джураевна, «J. Karimov» ↔ Каримов Джамшид; Q. ↔ Kadyrovich, O. ↔ Akmalovich — ≤ 64%',
+  [['Karimov Muhammad J.', 'Каримов Мухаммад Джамалович'], ['Karimov Muhammad J.', 'Karimov Muhammad Dzhamalovich'], ['Karimova Malika J.', 'Каримова Малика Джураевна'],
+    ['Каримов Мухаммад Ж.', 'Каримов Мухаммад Джамалович']].every(([p, r]) => sim(p, r) >= 0.9)
+    && sim('J. Karimov', 'Каримов Джамшид') > 0.7 && sim('J. Karimov', 'Karimov Davron') < 0.1 && sim('Karimov Muhammad J.', 'Каримов Мухаммад Касымович') < 0.3
+    && sim('Karimov Muhammad Q.', 'Karimov Muhammad Kadyrovich') <= 0.64 && sim('Karimov Muhammad O.', 'Karimov Muhammad Akmalovich') <= 0.64,
+  [sim('Karimov Muhammad J.', 'Каримов Мухаммад Джамалович'), sim('J. Karimov', 'Каримов Джамшид')]);
+ok('«HUMO|UZCARD», «Humo | Uzcard» — karta (Humo ism emas)',
+  ['Karimov Jasur HUMO|UZCARD', 'Karimov Jasur Humo | Uzcard', 'Karimov Jasur Uzcard|Humo'].every(p => sim(p, R3) >= 0.9 && sim(p, 'Karimova Humo') < 0.5),
+  ['Karimov Jasur HUMO|UZCARD', 'Karimov Jasur Humo | Uzcard'].map(p => sim(p, R3)));
+
 // ---- Brauzer yo'li (UMD): module yo'q -> globalThis.IqrorNameMatch ----
 { const src = fs.readFileSync(path.join(__dirname, '..', 'sb', 'name-match.js'), 'utf8'); const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);
   ok('brauzerda globalThis.IqrorNameMatch', !!ctx.IqrorNameMatch && ctx.IqrorNameMatch.nameSimilarity("Turg'unboyeva Hadicha", T) === 1);

@@ -286,6 +286,9 @@ create or replace function app.guard_payroll_id()
 declare v_new text; v_old text;
 begin
   if app.uid() is null then return new; end if;
+  -- O'qituvchi/xodimni faqat direktor/HR yozadi (teachers_ins/upd, staff_ins/upd): boshqa rolga takror tekshiruvi qilinmaydi —
+  --   RLS xabarsiz rad etadi (42501), «ID … bor» (23505) javobidan kalit bor-yo'qligi bilinmaydi.
+  if not (app.is_admin() or app.is_hr()) then return new; end if;
   if tg_table_name = 'teachers' then
     v_new := new."teacherId"; if tg_op = 'UPDATE' then v_old := old."teacherId"; end if;
   else

@@ -720,6 +720,59 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
     R14 ko'rigining barcha juftlari; 120 000 tasodifiy matnda R12 ga nisbatan 0 farq, R11 ga nisbatan 29 oshdi, 0 tushdi;
     maktab darajasida (366 kishi × 22 shablon × 5 yozuv shakli × 3 qarz holati) R11 ga nisbatan yo'qolgan to'g'ri bola faqat
     ongli qoldirilganlarda; Chromium «Biriktirish» 110/110, «Chiqarish» 37/37. Modul manzili `?v=7`.
+- **Ism solishtirish — R15 (R14 tuzatmalari ustidan ko'rik): 6 topilma (ikkitasi bitta xato) — hammasi tuzatildi:**
+  - **Raqamga yopishgan sinf / ID / yildan keyingi so'z boshqa bo'lak bo'lib qolardi (o'rta):** «Yo'ldoshev Jasur 5-A Sherzod»,
+    «… 5-sinf …», «… IQ-0601 …», «… 2026-yil …» — «5-A» dagi tire bo'shliqli tire deb olinib, otasining ismi dalil bo'lmay
+    qolardi: otasi boshqa amakivachcha 64% ⚠️ → 90%, qarzi bo'lsa 100% ⚠️ siz birinchi; uchta amakivachcha qarzdor bo'lsa to'g'ri
+    bola umuman taklif qilinmasdi. «Karimov 5-A Jasur R.» — ukasi Karimov Rustam 78% ⚠️ siz. Endi raqamga yopishgan tire
+    chegara emas (bo'shliqli tire — avvalgidek chegara).
+  - **Sana / katta son / matn boshidagi «1.» dan keyingi bosh harf o'chirilardi (past):** «1. J. R. Karimov», «15.10. J. R.
+    Karimov», «№ 42 - J. R. Karimov», «1. Ж. Р. Каримов» — J. sinf harfi deb kesilib, R. ism bosh harfi bo'lib qolardi: ukasi
+    Rustam 82% ⚠️ siz yagona taklif. Endi sinf raqami bo'la olmaydigan son (12 va undan katta, ID), sana va matn boshidagi
+    «1.» (ketidan yana bosh harf va ism kelsa) dan keyingi nuqtali harf — bosh harf.
+  - **Otasining ismida «y» tashlanib qisqargan o'zak (past):** «Karimov Jasur Ahadov» ↔ …Yahyoyevich, «Fozilov» ↔
+    Fayziyevich, «Aubakirov» ↔ Ayubovich — boshqa otalar bir ism deb olinib, amakivachcha 10% → 90% (qarzi bo'lsa 100%
+    birinchi). Endi -ov shaklida o'zagi aynan teng yoki «y» bilan ham boshi bir bo'lishi kerak («G'ulomov» = Gulyamovich,
+    «Hayitov» = Khaitovich, «Qodirov» = Kadyrovich — avvalgidek).
+  - **Otasining ismi + onasining familiyasi (past):** «Karimov Jasur Bahodirov Rahimova (Dilnoza)» — «Bahodirov Rahimova»
+    boshqa ayolning ismi deb, amakivachcha 29% → 86–96% bo'lardi. Endi ayolning to'liq ismi — familiya + otasining ismi
+    shaklida bo'lmagan ism («Rahimova Dilnoza»).
+  - **«HUMO|UZCARD» (past):** «|» bo'lakni ajratib, Humo qiz ismi deb o'qilardi (soxta ⚠️ 64–74%) — endi «/» kabi karta konteksti.
+  - **«J.» ↔ Дж / Dzh / Ж (qo'shimcha, skanerda topildi):** R14 dan beri «Karimov Muhammad J.» ↔ Каримов Мухаммад Джамалович
+    betaraf (64% ⚠️) edi, «J. Karimov» ↔ Каримов Джамшид esa hamma versiyada zid (3%). O'zbekcha J ruscha Дж / Ж bilan
+    bir harf (Q/K, O/A kabi ikki xil o'qilmaydi) — endi bosh harf sifatida mos (95% / 72%); Q. ↔ Kadyrovich, O. ↔ Akmalovich —
+    avvalgidek betaraf.
+  - Ongli qoldirilganlar (R15): sinf raqami (1–11) + tire / nuqta + bo'shliqli ikki bosh harf («5- J. R. Karimov») — birinchi
+    harf sinf harfi deb o'qiladi; bu yozuv «5 - A. J. Karimov» (A sinf, J. ism) bilan bir xil va ularni ajratib bo'lmaydi;
+    «1. J. Karimov» (yakka bosh harf) — 57%, R12 bilan bir xil; «Humo, Uzcard», «Humo (karta)» — vergul / qavs bo'lak chegarasi;
+    bo'shliqli tireli sinf («… 5 - A Sherzod») — R13 dagi kabi chegara.
+  - Tekshiruv (R15): `name-match.test` 191 (6 yangi to'plam — eski modulda 6 tasi ham yiqiladi); R12 ko'rigining 114 holati
+    114/114; R13/R14 ko'riklarining 169 jufti R14 bilan aynan bir xil; ko'ruvchilarning barcha R15 juftlari va Chromium
+    ssenariylari (12 ta) tuzalgan; 1200 o'quvchili maktabda tire / sinf / ID / yil skaneri (4 yozuv shakli × 30 shablon × 4 qarz
+    holati) — R13 va R12 dan yomon holat faqat ongli qoldirilganlarda; maktab darajasidagi skaner (R11 / R12 ga nisbatan)
+    9dda871 bilan bir xil; Chromium «Biriktirish» 110/110, «Chiqarish» 37/37. Modul manzili `?v=8`.
+- **Maosh / formalar — R15 (9dda871 ustida haqiqiy stekda ko'rik): 4 xato (6 topilma) — hammasi tuzatildi:**
+  - **Javobi yo'qolgan maosh + shu orada ID o'zgarsa — «yozilmadi» (past, 2e8911c regressiyasi):** kassir «Berish»ni bosgan,
+    yozuv bazaga tushgan, javob yo'qolgan; HR shu orada xodim ID'sini o'zgartirgan (yozuv yangi kalitga ko'chgan). Qayta bosishda
+    «maosh hech kimga yozilmadi» chiqardi — kassir ikkinchi marta berishi mumkin edi. Endi «eskirgan» xabaridan oldin shu
+    oynaning yozuvi id bo'yicha o'qiladi: bor bo'lsa — «✓ Maosh berildi» (takror yozilmaydi); o'qib bo'lmasa — «tekshirib
+    bo'lmadi, qayta urinib ko'ring» («yozilmadi» deyilmaydi).
+  - **Yangi o'quvchi: bir xil ism tekshiruvi (past):** javobi yo'qolgan qator bazada, oyna yopilib bola qayta qo'shilsa — ism
+    oxiridagi bo'shliq, katta-kichik harf yoki apostrof turi («O‘g‘iloy» / «O'g'iloy») farq qilsa tekshiruv uni topmasdi
+    (ikkita o'quvchi, ikkala fakturasi). Endi ism saqlashdan oldin qirqiladi, bazadan katta-kichik harfsiz so'raladi
+    (shim'da `ilike`) va bo'shliq / apostrof farqisiz solishtiriladi; shu oynada ID o'zgartirilsa — o'z qatori ham «bor» deb
+    ko'rsatiladi.
+  - **Stavka tarixi standart stavkalarni yozmasdi (past):** `config/salary` hali bo'lmagan maktabda birinchi «Stavkalarni
+    saqlash» `ratesPrev = []` yozardi — boshqa sessiyalar stavka o'zgargani uchun eskirgan maoshni yangilamasdi (ro'yxat / CSV).
+    Endi avvalgi stavka sifatida standart stavkalar yoziladi.
+  - **Maosh kaliti «oracle»si (past, 512a649 dan beri):** `app.guard_payroll_id` har qanday foydalanuvchiga (ota-ona, o'quvchi,
+    qabulxona…) POST /teachers yoki /staff javobidagi 23505 / 42501 farqi bilan taxmin qilingan ID bor-yo'qligini bildirardi.
+    Endi trigger faqat direktor / HR uchun ishlaydi (ularning RLS'i bilan bir xil), qolganlarga RLS xabarsiz rad etadi (42501).
+  - Tekshiruv (R15): o'z portlarimdagi PG16 + PostgREST + Chromium stekida ko'ruvchilarning skriptlari: ism tekshiruvi 8/8
+    variant (qabulxona va direktor), shu oynada qayta bosish / ID o'zgarishi / yangi o'quvchi (t6, t9) o'tdi; stavka tarixi
+    qatorsiz va qator bilan 7/7; javobi yo'qolgan maosh + ID o'zgarishi 2/2; ID «oracle» — hamma rol uchun 42501; SQL
+    to'plamlari t7_review 60/60, t3_rekey 28/28, t6_staff 11/11, f1 23/23, f3 11/11, F3 poygasi 12/12 (qolgan eski
+    kutilmalar 9dda871 da ham xuddi shunday); shim selftest'ga `ilike` qo'shildi.
 - **Maosh / avans kaliti:**
   - **Eski oynadan berilgan maosh ID'ning yangi egasiga yozilardi (o'rta→past):** kassir «Maosh berish»ni ochgan, shu orada HR
     Anvarning ID'sini IQT-001 → IQT-050 qilib, bo'shagan IQT-001 ni Nodiraga bergan bo'lsa — «Maosh berildi — Aliyev Anvar», yozuv

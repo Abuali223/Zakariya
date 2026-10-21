@@ -76,7 +76,8 @@ export function where(field, op, value) { return { _c: "where", field, op, value
 export function orderBy(field, dir) { return { _c: "order", field, dir: dir || "asc" }; }
 export function limit(n) { return { _c: "limit", n }; }
 
-const OPS = { "==": "eq", "!=": "neq", ">": "gt", ">=": "gte", "<": "lt", "<=": "lte" };
+// «ilike» — Firestore'da yo'q, faqat shu shim uchun: katta-kichik harfsiz qidiruv («*» — istalgan matn), masalan bir xil ism.
+const OPS = { "==": "eq", "!=": "neq", ">": "gt", ">=": "gte", "<": "lt", "<=": "lte", "ilike": "ilike" };
 function applyCons(q, cons) {
   for (const c of cons || []) {
     if (c._c === "where") {

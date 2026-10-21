@@ -452,7 +452,7 @@ let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasej
 //   Xato bo'lsa keyingi chaqiruv YANGI manzil bilan qayta urinadi (brauzer muvaffaqiyatsiz import()ni shu URL uchun
 //   eslab qoladi — bir martalik tarmoq uzilishi takliflarni sahifa qayta yuklanguncha o'chirib qo'ymasin).
 let _nmP=null, _nmTry=0;
-function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=7${_nmTry?'&r='+_nmTry:''}`)
+function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=8${_nmTry?'&r='+_nmTry:''}`)
   .then(()=>{ const N=globalThis.IqrorNameMatch||null; if(!N){ _nmP=null; _nmTry++; } return N; })
   .catch(()=>{ _nmP=null; _nmTry++; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
@@ -975,10 +975,12 @@ async function wireSalaryPanel(row){
         updatedAt: serverTimestamp() };
       try{
         // Avvalgi stavkalar tarixi (ratesPrev, oxirgi 6 ta): boshqa sessiyada (yangi ochilgan sahifada) ham «faqat stavka o'zgargani
-        //   uchun eskirgan» saqlangan maosh taniladi va o'qituvchini saqlashda yangilanadi. O'qib bo'lmasa — tarixga tegilmaydi.
+        //   uchun eskirgan» saqlangan maosh taniladi va o'qituvchini saqlashda yangilanadi. config/salary hali yo'q bo'lsa — avvalgi
+        //   stavkalar standart stavkalar (salaryRatesFrom(null)): hamma saqlangan maosh shular bilan hisoblangan. O'qib bo'lmasa —
+        //   tarixga tegilmaydi.
         let prev=null; try{ const c0=await getDoc(doc(db,'config','salary')); const d0=c0.exists()?(c0.data()||{}):null;
           prev=(d0 && Array.isArray(d0.ratesPrev)) ? d0.ratesPrev.filter(x=>x&&typeof x==='object') : [];
-          if(d0){ const old=salaryRatesFrom(d0); if(_stableJson(old)!==_stableJson(salaryRatesFrom(cfg))) prev=[old].concat(prev); } }catch(_){ prev=null; }
+          const old=salaryRatesFrom(d0); if(_stableJson(old)!==_stableJson(salaryRatesFrom(cfg))) prev=[old].concat(prev); }catch(_){ prev=null; }
         if(prev) cfg.ratesPrev=prev.slice(0,6);
         await setDoc(doc(db,'config','salary'), cfg, {merge:true}); rates=await loadSalaryRates(true);
         const m=document.getElementById('sr-msg'); if(m) m.textContent='✓ saqlandi'; toast('Bonus stavkalari saqlandi ✓'); renderControls(); }
@@ -3833,13 +3835,18 @@ function openFormNow(name, row, prefill, afterSaveCb){
       // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz (javobi yo'qolgan avvalgi urinishimiz
       //   yozgan qator — «boshqa o'quvchi» emas, pastda tekshiriladi)
       if(!isEdit && name==='students'){
-        const nm=String(data.name||'').trim().toLowerCase();
+        if(typeof data.name==='string') data.name=data.name.trim();   // «Ali Valiyev » (oxirida bo'shliq) ham yozilmasin — qayta qo'shishda topilmasdi
+        const nk=v=>String(v==null?'':v).trim().replace(/\s+/g,' ').replace(/[‘’ʻʼ`´]/g,"'").toLowerCase(), nm=nk(data.name);
+        //   O'zimizning (javobi yo'qolgan) qatorimiz — faqat shu ID bilan saqlanayotgan bo'lsa (ID shu oynada o'zgartirilsa — u ham «bor»)
+        const idNow=String(data[s.docId]||'').trim(), mine=x=>!!(_ins && _ins.id===idNow && String(x)===_ins.id);
         //   Ro'yxat keshi eskirgan bo'lishi mumkin (avvalgi oynaning INSERT javobi yo'qolgan, qator esa yozilgan; oyna yopilib, bola
-        //   qayta qo'shilmoqda) — aynan shu ism bazadan ham so'raladi (o'qib bo'lmasa — keshdagi tekshiruv qoladi).
+        //   qayta qo'shilmoqda) — shu ism bazadan ham so'raladi: katta-kichik harf va bo'shliqlardan qat'i nazar (o'qib bo'lmasa —
+        //   keshdagi tekshiruv qoladi).
         let dbSame=false;
-        if(nm){ try{ const qn=await getDocs(query(collection(db,'students'), where('name','==',String(data.name).trim())));
-          dbSame=(qn&&qn.docs||[]).some(d=>!(_ins && String(d.id)===_ins.id)); }catch(_){} }
-        if(nm && (dbSame || (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm && !(_ins && String(r._id)===_ins.id)))){
+        if(nm){ try{ const w=String(data.name).split(/\s+/).map(x=>x.replace(/[%_\\]/g,'*').replace(/[‘’ʻʼ`´']/g,'*')).filter(Boolean);   // «*» — istalgan matn (apostrof turlari ham)
+          const qn=await getDocs(query(collection(db,'students'), where('name','ilike','*'+w.join('*')+'*')));
+          dbSame=(qn&&qn.docs||[]).some(d=>nk((d.data()||{}).name)===nm && !mine(d.id)); }catch(_){} }
+        if(nm && (dbSame || (cache['students']||[]).some(r=>nk(r.name)===nm && !mine(r._id)))){
           if(!confirm('“'+String(data.name).trim()+'” ismli o‘quvchi allaqachon bor. Bu YANGI (boshqa) o‘quvchimi? Tahrirlash uchun jadvaldagi «Tahrir» tugmasidan foydalaning.')){ stop(); return; }
         }
       }
@@ -5953,7 +5960,13 @@ async function openSalaryPayout(opts){
     let curKey=null;
     try{ const pr=await getDoc(doc(db, p.kind==='teacher'?'teachers':'staff', String(p.refId))); if(pr&&pr.exists()){ const x=pr.data()||{}; curKey=String((p.kind==='teacher'?x.teacherId:x.staffId)||pr.id); } }
     catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Xodim ma’lumotini tekshirib bo‘lmadi — qayta urinib ko‘ring',true); return; }
-    if(curKey!==String(tid)){ showStale({ message: curKey==null ? 'Xodim o‘chirilgan.' : `Xodimning hozirgi ID’si: «${curKey}».` }); return; }
+    if(curKey!==String(tid)){
+      //   Shu oynaning oldingi bosishdagi yozuvi (javobi yo'qolgan) bo'lsa — u ID bilan birga yangi kalitga ko'chgan, eski kalit
+      //   bo'yicha topilmaydi: «yozilmadi» emas, «berildi» (takror yozilmaydi).
+      let saved=null; try{ const g=await getDoc(doc(db,'salary_payments',spId)); if(g&&g.exists()) saved=g.data()||{}; }
+      catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Oldingi bosish yozilgan-yozilmaganini tekshirib bo‘lmadi (tarmoq) — qayta urinib ko‘ring',true); return; }
+      if(saved){ showDone(saved); return; }
+      showStale({ message: curKey==null ? 'Xodim o‘chirilgan.' : `Xodimning hozirgi ID’si: «${curKey}».` }); return; }
     const myRef=(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId);
     if(exDocs.some(d=>{ const x=d.data()||{}; return String(x.month)===String(mm) && (x.payeeRef==null || String(x.payeeRef)===myRef); }) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
     // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa

@@ -33,6 +33,7 @@ function makeBuilder() {
     lte(f, v) { rec.ops.push(["lte", f, v]); return b; },
     in(f, v) { rec.ops.push(["in", f, v]); return b; },
     contains(f, v) { rec.ops.push(["contains", f, v]); return b; },
+    ilike(f, v) { rec.ops.push(["ilike", f, v]); return b; },
     order(f, o) { rec.ops.push(["order", f, o]); return b; },
     limit(n) { rec.ops.push(["limit", n]); return b; },
     range(f, t) { rec.ops.push(["range", f, t]); return b; },
@@ -62,6 +63,8 @@ _setClient(fake);
   eq(REC.ops, [["select", "*"], ["in", "id", ["a", "b"]], ["order", "id", { ascending: true }], ["range", 0, 999]], "where('in') -> .in() (+ sahifalash)");
   await FS.getDocs(FS.query(FS.collection(null, "users"), FS.where("childIds", "array-contains", "K1")));
   eq(REC.ops, [["select", "*"], ["contains", "childIds", '["K1"]'], ["order", "id", { ascending: true }], ["range", 0, 999]], "array-contains -> .contains(JSON) (+ sahifalash)");
+  await FS.getDocs(FS.query(FS.collection(null, "students"), FS.where("name", "ilike", "*Ali*Valiyev*")));
+  eq(REC.ops, [["select", "*"], ["ilike", "name", "*Ali*Valiyev*"], ["order", "id", { ascending: true }], ["range", 0, 999]], "where('ilike') -> .ilike() (+ sahifalash)");
 
   await FS.getDocs(FS.query(FS.collection(null, "news"), FS.orderBy("date", "desc")));
   ok(JSON.stringify(REC.ops).includes('["order","date",{"ascending":false}]'), "orderBy('desc') -> ascending:false");
