@@ -119,9 +119,13 @@ create trigger trg_attendance_pct after insert or update of days on public.atten
 
 -- Bir martalik (va har deployda xavfsiz) tenglash: davomat yozuvi bor o'quvchilarning «Davomat %»i
 --   haqiqiy davomatdan hisoblanadi (faqat farq qilsa yoziladi).
+--   MATERIALIZED: aks holda planner `x.pct is not null` ni skanga tushirib, funksiyani har davomat QATORI uchun
+--   chaqirardi (3000 o'quvchi / 35k qator: ~4.9 s qulf ostida); endi har o'quvchi uchun bir marta.
+with x as materialized (
+  select d.sid, app.student_attendance_pct(d.sid) as pct
+    from (select distinct a."studentId" as sid from public.attendance a where coalesce(a."studentId", '') <> '') d)
 update public.students s set attendance = x.pct
-  from (select a."studentId" as sid, app.student_attendance_pct(a."studentId") as pct
-          from public.attendance a where coalesce(a."studentId", '') <> '' group by a."studentId") x
+  from x
  where x.pct is not null
    and (s."studentId" = x.sid or (coalesce(s."studentId", '') = '' and s.id = x.sid))
    and s.attendance is distinct from x.pct;

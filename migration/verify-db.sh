@@ -61,8 +61,12 @@ alter table storage.objects enable row level security;
 SQL
 )
 
+# Vaqtinchalik fayllar — har ishga tushishda YANGI shaxsiy papkada (avval qat'iy /tmp/iqror-verify.log, /tmp/iqror-fp-*.txt
+#   edi: avvalgi `sudo` ishga tushirishdan qolgan root egali fayllarga yozib bo'lmay, ESKI natija bilan soxta «BIR XIL» chiqardi).
+TMPD=$(mktemp -d "${TMPDIR:-/tmp}/iqror-verify.XXXXXX") || { echo "❌ verify: vaqtinchalik papka yaratilmadi"; exit 1; }
+VLOG="$TMPD/verify.log"; FP_CANON="$TMPD/fp-canon.txt"; FP_LIVE="$TMPD/fp-live.txt"; KEEP=0
 cleanup(){ echo "drop database if exists $VDB;" | psqlq "$LIVE_DB" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
+trap 'cleanup; [ "$KEEP" = 1 ] || rm -rf "$TMPD"' EXIT
 cleanup
 echo "create database $VDB;" | psqlq "$LIVE_DB" || { echo "❌ verify: vaqtinchalik baza yaratilmadi"; exit 1; }
 echo "$STUBS" | psqlq "$VDB" >/dev/null || { echo "❌ verify: stub xato"; exit 1; }
@@ -81,15 +85,17 @@ select coalesce(string_agg(format('alter default privileges%s grant %s on %s to 
 SQL
 )
 [ -n "$DEFACL" ] && { echo "$DEFACL" | psqlq "$VDB" >/dev/null 2>&1 || true; }
-if ! chain_sql | psqlq "$VDB" >/tmp/iqror-verify.log 2>&1; then
-  echo "❌ verify: kanonik zanjir toza bazada qurilmadi — $(grep -E '^-> ' /tmp/iqror-verify.log | tail -1)"; grep -m3 ERROR /tmp/iqror-verify.log; exit 1
+if ! chain_sql | psqlq "$VDB" >"$VLOG" 2>&1; then
+  KEEP=1; echo "❌ verify: kanonik zanjir toza bazada qurilmadi — $(grep -E '^-> ' "$VLOG" | tail -1)"; grep -m3 ERROR "$VLOG"; echo "   Log: $VLOG"; exit 1
 fi
-echo "$FP_SQL" | psqlq "$VDB"     | sort > /tmp/iqror-fp-canon.txt
-echo "$FP_SQL" | psqlq "$LIVE_DB" | sort > /tmp/iqror-fp-live.txt
+# Ikkala barmoq izi ham MUVAFFAQIYATLI olinishi shart (aks holda bo'sh/yarim fayllar soxta natija berardi).
+echo "$FP_SQL" | psqlq "$VDB"     | sort > "$FP_CANON" || { echo "❌ verify: kanonik barmoq izi olinmadi"; exit 1; }
+echo "$FP_SQL" | psqlq "$LIVE_DB" | sort > "$FP_LIVE"  || { echo "❌ verify: jonli baza barmoq izi olinmadi"; exit 1; }
+[ -s "$FP_CANON" ] && [ -s "$FP_LIVE" ] || { echo "❌ verify: barmoq izi bo'sh"; exit 1; }
 
-extra=$(comm -13 <(cut -d'|' -f1,2 /tmp/iqror-fp-canon.txt | sort -u) <(cut -d'|' -f1,2 /tmp/iqror-fp-live.txt | sort -u))
-missing=$(comm -23 <(cut -d'|' -f1,2 /tmp/iqror-fp-canon.txt | sort -u) <(cut -d'|' -f1,2 /tmp/iqror-fp-live.txt | sort -u))
-changed=$(join -t'|' -j1 <(awk -F'|' '{print $1"#"$2"|"$3}' /tmp/iqror-fp-canon.txt | sort -t'|' -k1,1) <(awk -F'|' '{print $1"#"$2"|"$3}' /tmp/iqror-fp-live.txt | sort -t'|' -k1,1) | awk -F'|' '$2!=$3{print $1}' | tr '#' '|')
+extra=$(comm -13 <(cut -d'|' -f1,2 "$FP_CANON" | sort -u) <(cut -d'|' -f1,2 "$FP_LIVE" | sort -u))
+missing=$(comm -23 <(cut -d'|' -f1,2 "$FP_CANON" | sort -u) <(cut -d'|' -f1,2 "$FP_LIVE" | sort -u))
+changed=$(join -t'|' -j1 <(awk -F'|' '{print $1"#"$2"|"$3}' "$FP_CANON" | sort -t'|' -k1,1) <(awk -F'|' '{print $1"#"$2"|"$3}' "$FP_LIVE" | sort -t'|' -k1,1) | awk -F'|' '$2!=$3{print $1}' | tr '#' '|')
 
 xp=$(echo "$extra" | grep -c '^policy|' || true); xf=$(echo "$extra" | grep -c '^func|' || true)
 nm=$(echo "$missing" | grep -c . || true); nc=$(echo "$changed" | grep -c . || true)
@@ -97,14 +103,14 @@ info=$(echo "$extra" | grep -vE '^(policy|func)\|' | grep . || true)
 # Repo'da yo'q obyektlar orasida HAQIQIY xavf: RLS o'chiq jadval mijozga (anon/authenticated) SELECT berilgan bo'lsa — ma'lumot
 #   ochiq; view mijozga berilgan bo'lsa — egasi huquqi bilan RLS'ni chetlab o'tishi mumkin. Qolgani (eski ustunlar, RLS
 #   yoqilgan jadvalga ruxsatlar) — zararsiz qoldiq.
-cli_sel(){ grep -qF "grant|anon@$1:SELECT|" /tmp/iqror-fp-live.txt || grep -qF "grant|authenticated@$1:SELECT|" /tmp/iqror-fp-live.txt; }
+cli_sel(){ grep -qF "grant|anon@$1:SELECT|" "$FP_LIVE" || grep -qF "grant|authenticated@$1:SELECT|" "$FP_LIVE"; }
 open_t=""; open_v=""
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   k=${line%%|*}; n=${line#*|}
   case "$k" in
-    rls)   grep -qxF "rls|$n|false" /tmp/iqror-fp-live.txt && cli_sel "$n" && open_t="$open_t$n"$'\n' ;;
-    grant) t=${n#*@}; t=${t%%:*}; grep -qxF "rls|$t|false" /tmp/iqror-fp-live.txt && case "$n" in anon@*:SELECT|authenticated@*:SELECT) open_t="$open_t$t"$'\n';; esac ;;
+    rls)   grep -qxF "rls|$n|false" "$FP_LIVE" && cli_sel "$n" && open_t="$open_t$n"$'\n' ;;
+    grant) t=${n#*@}; t=${t%%:*}; grep -qxF "rls|$t|false" "$FP_LIVE" && case "$n" in anon@*:SELECT|authenticated@*:SELECT) open_t="$open_t$t"$'\n';; esac ;;
     view)  cli_sel "$n" && open_v="$open_v$n"$'\n' ;;
   esac
 done <<< "$info"
@@ -113,7 +119,7 @@ nt=$(echo "$info" | grep -c '^rls|' || true); ncl=$(echo "$info" | grep -c '^col
 ng=$(echo "$info" | grep -c '^grant|' || true); nv=$(echo "$info" | grep -c '^view|' || true)
 infoline="prod'da repo'da yo'q qo'shimcha obyektlar: jadval $nt, ustun $ncl, ruxsat $ng, view $nv (eski qoldiq — zararsiz)"
 if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ]; then
-  echo "    ✓ Prod bazasi repo'dagi kanonik holat bilan BIR XIL ($(wc -l < /tmp/iqror-fp-canon.txt) obyekt)."
+  echo "    ✓ Prod bazasi repo'dagi kanonik holat bilan BIR XIL ($(wc -l < "$FP_CANON") obyekt)."
   [ -n "$info" ] && echo "      ℹ️ $infoline"
   exit 0
 fi
