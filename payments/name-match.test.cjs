@@ -482,6 +482,13 @@ ok('«J.» ↔ Джамалович / Dzhamalovich / Джураевна, «J. Ka
     && sim('J. Karimov', 'Каримов Джамшид') > 0.7 && sim('J. Karimov', 'Karimov Davron') < 0.1 && sim('Karimov Muhammad J.', 'Каримов Мухаммад Касымович') < 0.3
     && sim('Karimov Muhammad Q.', 'Karimov Muhammad Kadyrovich') <= 0.64 && sim('Karimov Muhammad O.', 'Karimov Muhammad Akmalovich') <= 0.64,
   [sim('Karimov Muhammad J.', 'Каримов Мухаммад Джамалович'), sim('J. Karimov', 'Каримов Джамшид')]);
+// ---- R16 ko'rigi ----
+// Onasining to'liq ismi — ismi otasining ismi shakliga o'xshasa ham (Lyubov / Любовь, Eva, Zeba, Sevi): dalil emas
+ok('«Ivanova Lyubov Petrov Mark», «Petrova Anna Ivanova Eva», «… Rahimova Zeba / Sevi» — onasi; «Bahodirov Rahimova» — baribir zid',
+  [['Ivanova Lyubov Petrov Mark', 'Petrov Mark Sergeyevich'], ['Иванова Любовь Петров Марк', 'Petrov Mark Sergeyevich'], ['Petrov Mark Ivanova Lyubov', 'Petrov Mark Sergeyevich'],
+    ['Petrova Anna Ivanova Lyubov', 'Petrova Anna Sergeyevna'], ['Petrova Anna Ivanova Eva', 'Petrova Anna Sergeyevna'], ['Karimov Jasur Rahimova Zeba', R3], ['Karimov Jasur Rahimova Sevi', R3]]
+    .every(([p, r]) => sim(p, r) >= 0.85) && sim('Karimov Jasur Bahodirov Rahimova', R3) < 0.3 && sim('Karimov Jasur Bahodirov Rahimova', 'Karimov Jasur Bahodirovich') >= 0.8,
+  [sim('Ivanova Lyubov Petrov Mark', 'Petrov Mark Sergeyevich'), sim('Petrova Anna Ivanova Lyubov', 'Petrova Anna Sergeyevna')]);
 ok('«HUMO|UZCARD», «Humo | Uzcard» — karta (Humo ism emas)',
   ['Karimov Jasur HUMO|UZCARD', 'Karimov Jasur Humo | Uzcard', 'Karimov Jasur Uzcard|Humo'].every(p => sim(p, R3) >= 0.9 && sim(p, 'Karimova Humo') < 0.5),
   ['Karimov Jasur HUMO|UZCARD', 'Karimov Jasur Humo | Uzcard'].map(p => sim(p, R3)));

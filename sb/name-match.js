@@ -527,6 +527,10 @@
   function iniFold(w, pat) { return w.length <= 2 && !iniMatch(w, pat) && iniMatch(fold(w), fold(pat)); }
   // Otasining ismi shaklidagi so'z: -ov / -ev / -ova / -ovna / -ovn / -ovana / -ovch / -ovic / -ovitch / -ovish / -obich / -ovchi…
   var PATR_FORM = /[oe][vb](?:itch|ich|icn|ic|ix|ish|chi|ch|ana|an|na|n|a|i)?$/;
+  // Ayolning to'liq ismidagi ism otasining ismi shaklida emas: o'zagi 3+ harf bo'lsin («Eva», «Zeba», «Sevi» — ism), shakli
+  //   o'xshash ayol ismlari (Lyubov / Любовь, Ruboba) ham ism.
+  var FEM_GIVEN = { lyubov: 1, ruboba: 1 };
+  function fatherForm(w) { return PATR_FORM.test(w) && w.replace(PATR_FORM, '').length >= 3 && !FEM_GIVEN[w]; }
   // Otasining ismisiz (R') solishtirish DALILI: to'lovchining R' ga juftlanmagan so'zlari, 2 so'zli R' da tashlangan otasining ismi
   //   bosh harfi va to'lovchi yozgan otasining ismi yozuvdagi otasining ismi (pat) bilan solishtiriladi. Mos («Bahodir», «Bah.»,
   //   «R.» ↔ Bahodirovich / Rustamovich) — 'for' (R' to'liq); zid — bosh harf, otasining ismi, otasining ismi shaklidagi so'z
@@ -554,7 +558,7 @@
     var other = function (x) {
       return [x - 1, x + 1].some(function (y) {
         return same(x, y) && !isP[y] && t.fate[y] === 'P' && !toks[y].ini && toks[y].w.length > 2 && bestSim(toks[y].w, R2) < 0.8
-          && ((femSur(x) && !PATR_FORM.test(toks[y].w)) || (femSur(y) && !PATR_FORM.test(toks[x].w)));
+          && ((femSur(x) && !fatherForm(toks[y].w)) || (femSur(y) && !fatherForm(toks[x].w)));
       });
     };
     for (q = 0; q < P.length; q++) {

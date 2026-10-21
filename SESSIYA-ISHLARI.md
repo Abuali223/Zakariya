@@ -751,6 +751,20 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
     ssenariylari (12 ta) tuzalgan; 1200 o'quvchili maktabda tire / sinf / ID / yil skaneri (4 yozuv shakli × 30 shablon × 4 qarz
     holati) — R13 va R12 dan yomon holat faqat ongli qoldirilganlarda; maktab darajasidagi skaner (R11 / R12 ga nisbatan)
     9dda871 bilan bir xil; Chromium «Biriktirish» 110/110, «Chiqarish» 37/37. Modul manzili `?v=8`.
+- **R16 (fef23af ustida mustaqil ko'rik): 3 topilma (hammasi past) — 2 tasi tuzatildi, 1 tasi ongli qoldirildi:**
+  - **Onasining ismi otasining ismi shakliga o'xshasa (R15 regressiyasi):** «Ivanova Lyubov Petrov Mark», «Petrova Anna Ivanova
+    Eva», «… Rahimova Zeba / Sevi» — R15 dagi «otasining ismi + onasining familiyasi» qoidasi Lyubov / Eva / Zeba / Sevi ni ham
+    otasining ismi deb olib, to'g'ri bolani 85% → 10–64% ga tushirardi. Endi ayolning to'liq ismidagi ism otasining ismi shaklida
+    deb faqat o'zagi 3+ harf bo'lsa olinadi (Lyubov / Любовь, Ruboba — ism ro'yxatida); «Bahodirov Rahimova» — baribir zid.
+  - **Yangi shim keshdan eski olinardi:** `sb/firebase-firestore.js` o'zgardi (`ilike`), lekin `admin.html` uni avvalgidek
+    `?v=2` bilan import qilardi — deploydan keyin ochiq qolgan oyna (yoki service worker'siz brauzer) eski shimni ishlatib, yangi
+    bir xil ism tekshiruvi jim ishlamasdi. Endi `?v=4` (`?v=3` ni index.html eski shim uchun ishlatadi).
+  - Ongli qoldirilgan: apostrofsiz o' + ruscha yozuv («Qochqor» ↔ Kuchkarovich, «Tolqin» ↔ Tulkinovich) — 48–64% (⚠️, to'g'ri
+    bola qo'lda tanlanadi; boshqa bola chiqmaydi). Apostrof bilan («Qo'chqor», «To'lqin») — 90%+. Yakka «o» ni «u» deb ham o'qish
+    Olmos ↔ O'lmas, Qozi ↔ Qo'zi kabi boshqa otalarni bir xil qilardi.
+  - Tekshiruv (R16): `name-match.test` 192 (yangi to'plam fef23af modulida yiqiladi); probe12 114/114; avval tuzatilgan 271 juft
+    o'zgarmadi; Chromium «Biriktirish» 110/110, «Chiqarish» 37/37; haqiqiy stekda bir xil ism (x3 10/10, x6 — shim `?v=4`),
+    rollar 9/9, hisobot kalitlari 9/9; shim selftest; to'lov testlari to'liq. Maosh / formalar bo'yicha R16 ko'rigi xato topmadi.
 - **Maosh / formalar — R15 (9dda871 ustida haqiqiy stekda ko'rik): 4 xato (6 topilma) — hammasi tuzatildi:**
   - **Javobi yo'qolgan maosh + shu orada ID o'zgarsa — «yozilmadi» (past, 2e8911c regressiyasi):** kassir «Berish»ni bosgan,
     yozuv bazaga tushgan, javob yo'qolgan; HR shu orada xodim ID'sini o'zgartirgan (yozuv yangi kalitga ko'chgan). Qayta bosishda
