@@ -452,7 +452,7 @@ let AuthAPI=null; const AuthAPIready = import("https://www.gstatic.com/firebasej
 //   Xato bo'lsa keyingi chaqiruv YANGI manzil bilan qayta urinadi (brauzer muvaffaqiyatsiz import()ni shu URL uchun
 //   eslab qoladi — bir martalik tarmoq uzilishi takliflarni sahifa qayta yuklanguncha o'chirib qo'ymasin).
 let _nmP=null, _nmTry=0;
-function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=5${_nmTry?'&r='+_nmTry:''}`)
+function nameMatchLib(){ return _nmP || (_nmP = import(`https://www.gstatic.com/firebasejs/10.12.5/name-match.js?v=6${_nmTry?'&r='+_nmTry:''}`)
   .then(()=>{ const N=globalThis.IqrorNameMatch||null; if(!N){ _nmP=null; _nmTry++; } return N; })
   .catch(()=>{ _nmP=null; _nmTry++; return null; })); }
 // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
