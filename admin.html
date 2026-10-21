@@ -831,17 +831,27 @@ const SALARY_RATES_PREV = [];
 //   standart bonus stavkasi bilan hisoblanib, yozuvga noto'g'ri «gross» tushmasin). strict'siz xato: oldingi kesh
 //   bo'lsa o'sha qoladi (standartga almashtirilmaydi), bo'lmasa standart qaytadi, lekin KESHLANMAYDI (keyingi
 //   chaqiruv qayta o'qiydi); SALARY_RATES_OK=false — hisobot ogohlantiradi.
-async function loadSalaryRates(force, strict){
-  if(SALARY_RATES && !force) return SALARY_RATES;
+// config/salary qatoridan (yoki uning ratesPrev tarixidagi yozuvdan) stavkalar — standart qiymatlar ustiga.
+function salaryRatesFrom(d){
   const r = JSON.parse(JSON.stringify(SALARY_DEFAULTS));
-  try{ const c=await getDoc(doc(db,'config','salary')); if(c.exists()){ const d=c.data()||{};
+  if(d){
     if(isFinite(Number(d.perYear))) r.perYear=Number(d.perYear);
     if(isFinite(Number(d.yearsCap))) r.yearsCap=Number(d.yearsCap);
     LANG_KEYS.forEach(k=>{ if(d.languages&&isFinite(Number(d.languages[k]))) r.languages[k]=Number(d.languages[k]); });
     DEG_KEYS.forEach(k=>{ if(d.degree&&isFinite(Number(d.degree[k]))) r.degree[k]=Number(d.degree[k]); });
     CAT_KEYS.forEach(k=>{ if(d.category&&isFinite(Number(d.category[k]))) r.category[k]=Number(d.category[k]); });
-  } }catch(e){ SALARY_RATES_OK=false; if(strict) throw e; return SALARY_RATES || r; }
-  if(SALARY_RATES && _stableJson(SALARY_RATES)!==_stableJson(r)) SALARY_RATES_PREV.push(SALARY_RATES);
+  }
+  return r;
+}
+async function loadSalaryRates(force, strict){
+  if(SALARY_RATES && !force) return SALARY_RATES;
+  let r, hist=[];
+  try{ const c=await getDoc(doc(db,'config','salary')); const d=c.exists()?(c.data()||{}):null; r=salaryRatesFrom(d);
+    if(d && Array.isArray(d.ratesPrev)) hist=d.ratesPrev.filter(x=>x&&typeof x==='object').map(salaryRatesFrom);
+  }catch(e){ SALARY_RATES_OK=false; if(strict) throw e; return SALARY_RATES || salaryRatesFrom(null); }
+  // Avvalgi stavkalar: shu sessiyada amal qilgani va bazadagi tarix (boshqa admin / boshqa kun o'zgartirgan) — SALARY_RATES_PREV
+  if(SALARY_RATES) hist.unshift(SALARY_RATES);
+  hist.forEach(x=>{ const k=_stableJson(x); if(k!==_stableJson(r) && !SALARY_RATES_PREV.some(y=>_stableJson(y)===k)) SALARY_RATES_PREV.push(x); });
   SALARY_RATES_OK = true; SALARY_RATES = r; return r;
 }
 function salaryNum(v){ return Number(String(v==null?'':v).replace(/\D/g,''))||0; }   // "5 000 000" -> 5000000
@@ -963,7 +973,14 @@ async function wireSalaryPanel(row){
         degree:{ bakalavr:0, magistr:gn('sr-magistr'), phd:gn('sr-phd') },
         category:{ '2':gn('sr-cat2'), '1':gn('sr-cat1'), oliy:gn('sr-catoliy') },
         updatedAt: serverTimestamp() };
-      try{ await setDoc(doc(db,'config','salary'), cfg, {merge:true}); rates=await loadSalaryRates(true);
+      try{
+        // Avvalgi stavkalar tarixi (ratesPrev, oxirgi 6 ta): boshqa sessiyada (yangi ochilgan sahifada) ham «faqat stavka o'zgargani
+        //   uchun eskirgan» saqlangan maosh taniladi va o'qituvchini saqlashda yangilanadi. O'qib bo'lmasa — tarixga tegilmaydi.
+        let prev=null; try{ const c0=await getDoc(doc(db,'config','salary')); const d0=c0.exists()?(c0.data()||{}):null;
+          prev=(d0 && Array.isArray(d0.ratesPrev)) ? d0.ratesPrev.filter(x=>x&&typeof x==='object') : [];
+          if(d0){ const old=salaryRatesFrom(d0); if(_stableJson(old)!==_stableJson(salaryRatesFrom(cfg))) prev=[old].concat(prev); } }catch(_){ prev=null; }
+        if(prev) cfg.ratesPrev=prev.slice(0,6);
+        await setDoc(doc(db,'config','salary'), cfg, {merge:true}); rates=await loadSalaryRates(true);
         const m=document.getElementById('sr-msg'); if(m) m.textContent='✓ saqlandi'; toast('Bonus stavkalari saqlandi ✓'); renderControls(); }
       catch(e){ toast('Xatolik: '+(e.code||e.message),true); } };
   };
@@ -3817,7 +3834,12 @@ function openFormNow(name, row, prefill, afterSaveCb){
       //   yozgan qator — «boshqa o'quvchi» emas, pastda tekshiriladi)
       if(!isEdit && name==='students'){
         const nm=String(data.name||'').trim().toLowerCase();
-        if(nm && (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm && !(_ins && String(r._id)===_ins.id))){
+        //   Ro'yxat keshi eskirgan bo'lishi mumkin (avvalgi oynaning INSERT javobi yo'qolgan, qator esa yozilgan; oyna yopilib, bola
+        //   qayta qo'shilmoqda) — aynan shu ism bazadan ham so'raladi (o'qib bo'lmasa — keshdagi tekshiruv qoladi).
+        let dbSame=false;
+        if(nm){ try{ const qn=await getDocs(query(collection(db,'students'), where('name','==',String(data.name).trim())));
+          dbSame=(qn&&qn.docs||[]).some(d=>!(_ins && String(d.id)===_ins.id)); }catch(_){} }
+        if(nm && (dbSame || (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm && !(_ins && String(r._id)===_ins.id)))){
           if(!confirm('“'+String(data.name).trim()+'” ismli o‘quvchi allaqachon bor. Bu YANGI (boshqa) o‘quvchimi? Tahrirlash uchun jadvaldagi «Tahrir» tugmasidan foydalaning.')){ stop(); return; }
         }
       }
@@ -3976,7 +3998,12 @@ function openFormNow(name, row, prefill, afterSaveCb){
       if(billingChanged) setTimeout(()=>alert('⚠️ Diqqat — narx/chegirma o‘zgardi\n\nBu o‘quvchining narx yoki chegirmasiga ta’sir qiluvchi maydoni (kontrakt / toifa / sinf / yo‘nalish / til / holat / aka-uka: familiya, ota-ona F.I.Sh yoki telefon) o‘zgardi.\n\nMavjud (kutilayotgan) hisob-fakturalar AVTOMATIK yangilanmaydi! Yangi narx qo‘llanishi uchun:\n«To‘lovlar» → kerakli oyni tanlang → «↻ Qayta hisoblash».\n\nAks holda eski (noto‘g‘ri) narx qolib ketadi.'), 60);
       if(typeof afterSaveCb==='function') afterSaveCb(savedId, data);   // masalan davomat ekranini yangilash
       else (name==='students'?renderStudents():renderCollection(name));
-    }catch(err){ toast('Xatolik: '+((err.code && err.message && err.message!==err.code) ? err.code+' — '+err.message : (err.code||err.message)), true); stop(); }
+    }catch(err){
+      // Yangi o'quvchi INSERT'i yuborilgan, javob esa kelmagan bo'lishi mumkin (tarmoq / 504 — qator yozilgan bo'lishi mumkin): shu
+      //   oynada qayta «Saqlash» xavfsiz (o'z qatori taniladi), oynani yopib qayta qo'shish esa ikkinchi nusxa yaratardi.
+      const lost=!!_ins && !(err && /^(23|42|22|P0|PGRST)/.test(String(err.code||'')));
+      toast('Xatolik: '+((err.code && err.message && err.message!==err.code) ? err.code+' — '+err.message : (err.code||err.message))
+        +(lost?' — javob kelmadi: shu oynada «Saqlash»ni qayta bosing (yozilgan bo‘lsa takror yaratilmaydi); oynani yopib qayta qo‘shmang':''), true); stop(); }
   });
 }
 
@@ -5034,7 +5061,7 @@ async function renderStaffAttendance(){
         <td data-label="Erta ketish" style="font-variant-numeric:tabular-nums">${o.dm.early?`<span style="color:#B45309">${o.dm.early}</span>`:'<span class="muted">—</span>'}</td>
         <td data-label="Ushlanma" style="font-variant-numeric:tabular-nums" title="Ishladi ${Math.floor((o.dm.workedMin||0)/60)}s ${Math.round((o.dm.workedMin||0)%60)}d / ${Math.floor((o.dm.monthlyMin||0)/60)}s norma · soatiga ${fmtSom(o.dm.hourRate||0)} — Yo‘qlama ${o.dm.absent} kun (${fmtSom(o.dm.absenceAmt||0)})${((o.dm.lateMin||0)+(o.dm.earlyMin||0)+(o.dm.breakMin||0))?` + qisman ${fmtSom(o.dm.partialAmt||0)} (${[(o.dm.lateMin?`kech ${o.dm.lateMin}d`:''),(o.dm.earlyMin?`erta ${o.dm.earlyMin}d`:''),(o.dm.breakMin?`o‘z hisobidan ${o.dm.breakMin}d`:'')].filter(Boolean).join(' · ')})`:''}">${o.dm.total?`<b style="color:#B42318">${fmtSom(o.dm.total)}</b>`:'<span class="muted">—</span>'}</td>
         <td data-label="O‘rinbosarlik" style="font-variant-numeric:tabular-nums" title="${o.subBonus?`O‘rnini bosib dars o‘tdi (${o.subDays} dars): ${esc(o.subFor.map(f=>`${f.name||'—'} ${f.day||''} ${f.lbl||''} (+${fmtSom(f.rate)})`).join(', '))}`:(o.coveredBy?`O‘rniga dars o‘tildi: ${esc(o.coveredBy.map(c=>`${c.name||'—'} ${c.day||''}`).join(', '))}`:'')}">${o.subBonus?`<b style="color:#1F7A4D">+${fmtSom(o.subBonus)}</b><div class="small muted">${o.subDays} dars</div>`:(o.coveredBy?`<span class="small muted">${esc((o.coveredBy.map(c=>c.name).filter(Boolean)[0])||'o‘rinbosar')} o‘tdi</span>`:'<span class="muted">—</span>')}</td>
-        <td data-label="Oylik (hisob)" style="font-variant-numeric:tabular-nums" title="Hisoblangan oylik = nominal ${fmtSom(o.gross)} − ushlanma ${fmtSom(o.dm.total||0)}${o.subBonus?` + o‘rinbosarlik ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} oldingi qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''} (avans alohida)">${(o.gross||o.subBonus||o.priorBalance)?`<b style="color:#1F9982">${fmtSom(o.totalDue)}</b>${(o.subBonus||o.priorBalance)?`<div class="small muted">oylik ${fmtSom(o.baseNet)}${o.subBonus?` + o‘rin. ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''}</div>`:''}`:'<span class="muted">—</span>'}${canPaySalary()&&(o.gross>0||o.totalDue>0)?` <button class="btn sm gold" data-paysal="${esc(o.r.payId)}" title="Oylik berish + chek (shu xodimga)">💵 Oylik</button>`:''}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
+        <td data-label="Oylik (hisob)" style="font-variant-numeric:tabular-nums" title="Hisoblangan oylik = nominal ${fmtSom(o.gross)} − ushlanma ${fmtSom(o.dm.total||0)}${o.subBonus?` + o‘rinbosarlik ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} oldingi qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''} (avans alohida)">${(o.gross||o.subBonus||o.priorBalance)?`<b style="color:#1F9982">${fmtSom(o.totalDue)}</b>${(o.subBonus||o.priorBalance)?`<div class="small muted">oylik ${fmtSom(o.baseNet)}${o.subBonus?` + o‘rin. ${fmtSom(o.subBonus)}`:''}${o.priorBalance?` ${o.priorBalance>0?'+':'−'} qoldiq ${fmtSom(Math.abs(o.priorBalance))}`:''}</div>`:''}`:'<span class="muted">—</span>'}${canPaySalary()&&(o.gross>0||o.totalDue>0)?` <button class="btn sm gold" data-paysal="${esc(o.r.payId)}" data-payref="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Oylik berish + chek (shu xodimga)">💵 Oylik</button>`:''}${canEdit?` <button class="btn sm" data-editperson="${esc(o.r.refType)}:${esc(o.r.refId)}" title="Xodimni tahrirlash">✏️</button>`:''}</td></tr>`).join('');
     // Oydagi ruhsat/kasallik ro'yxati (ko'rish + o'chirish)
     const lvSorted=leaves.slice().sort((a,b)=>String(a.startDay||'').localeCompare(String(b.startDay||'')));
     const lvRows=lvSorted.map(l=>`<tr>
@@ -5120,7 +5147,7 @@ async function renderStaffAttendance(){
   //   Oylik SUMMASINI bu yerda o'zgartirib bo'lmaydi (faqat ushlanma/naqd) — tahrir faqat direktor/HR.
   if(canPaySalary()) $('#sa-body').addEventListener('click', e=>{
     const pb=e.target.closest('[data-paysal]'); if(!pb) return;
-    openSalaryPayout({ preselectPayId:pb.dataset.paysal, month:($('#sa-month')&&$('#sa-month').value)||curMonth(), onDone:()=>{ if($('#sa-mode')&&$('#sa-mode').value==='month') loadMonth(); } });
+    openSalaryPayout({ preselectPayId:pb.dataset.paysal, preselectRef:pb.dataset.payref||'', month:($('#sa-month')&&$('#sa-month').value)||curMonth(), onDone:()=>{ if($('#sa-mode')&&$('#sa-mode').value==='month') loadMonth(); } });
   });
   route();
 }
@@ -5738,7 +5765,7 @@ function openAvansList(credits, gmap){
 //   har qatordagi «💵 Oylik berish» tugmasi ham shu funksiyani chaqiradi. Kassir ham ishlata oladi
 //   (RLS salpay_ins: admin/hr/moliya/kassir) — lekin maosh SUMMASINI bu yerda o'zgartira olmaydi
 //   (faqat ushlanma va naqd berilayotgan summani; oylik summasi xodim kartochkasida — direktor/HR).
-//   opts: { preselectPayId, month, onDone }
+//   opts: { preselectPayId, preselectRef ('teacher:<qator id>' — hisobot qatoridagi xodim), month, onDone }
 async function openSalaryPayout(opts){
   opts=opts||{};
   const fmtSum=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');   // guruhlab (so'm — matnda qo'lda qo'shiladi)
@@ -5751,6 +5778,14 @@ async function openSalaryPayout(opts){
   // Takroriy maosh ID (bir xil teacherId/staffId ikki kishida) — maosh/avans/qoldiq aralashadi -> bloklaymiz.
   const idCount={}; payees.forEach(p=>{ idCount[p.id]=(idCount[p.id]||0)+1; });
   const isDupId=id=>(idCount[String(id)]||0)>1;
+  // Hisobot qatoridan ochilganda xodim QATOR id'si bo'yicha topiladi: hisobot chizilgandan keyin ID o'zgargan bo'lsa (ID
+  //   almashtirish, bo'shagan ID boshqa odamga berilgan) eski kalit boshqa odamni yoki ro'yxatdagi birinchisini tanlab, maosh
+  //   o'shanga berilardi — endi ogohlantirib, hisobot yangilanadi.
+  if(opts.preselectRef){ const pr=payees.find(p=>(p.kind+':'+String(p.refId))===String(opts.preselectRef));
+    if(!pr || String(pr.id)!==String(opts.preselectPayId||'')){
+      toast(pr ? `Oylik hisobot eskirgan: ${pr.name}ning ID’si o‘zgargan (hozir «${pr.id}») — hisobot yangilandi, «💵 Oylik»ni qayta bosing` : 'Oylik hisobot eskirgan: xodim o‘chirilgan — hisobot yangilandi', true);
+      if(typeof opts.onDone==='function') try{ opts.onDone(); }catch(_){}
+      return; } }
   // Audit H2: maosh hisobiga kiradigan to'plamlar O'QILMASA (tarmoq/RLS xato) JIM [] bilan davom etsak —
   //   oldingi qoldiq (SALL), o'rinbosarlik (SUBALL) yoki AVANS (ADV) 0 deb hisoblanib, oylik NOTO'G'RI
   //   (ko'pincha avans summasicha ORTIQCHA) beriladi. Shuning uchun xato bo'lsa payoutni OCHMAYMIZ.
@@ -5913,7 +5948,14 @@ async function openSalaryPayout(opts){
     };
     const own=exDocs.find(d=>String(d.id)===spId);
     if(own){ showDone(own.data()||{}); return; }   // shu oynaning yozuvi oldingi bosishda saqlangan — takror yozilmaydi
-    if(exDocs.some(d=>String((d.data()||{}).month)===String(mm)) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
+    // Oyna ochilgandan keyin xodimning ID'si o'zgargan bo'lsa — eski kalit bo'yicha topilgan to'lov BOSHQA odamniki («ALLAQACHON
+    //   berilgan» savoli yolg'on bo'lardi, «Bekor» esa hech narsa tushuntirmasdi): xodim qatori qayta o'qiladi.
+    let curKey=null;
+    try{ const pr=await getDoc(doc(db, p.kind==='teacher'?'teachers':'staff', String(p.refId))); if(pr&&pr.exists()){ const x=pr.data()||{}; curKey=String((p.kind==='teacher'?x.teacherId:x.staffId)||pr.id); } }
+    catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Xodim ma’lumotini tekshirib bo‘lmadi — qayta urinib ko‘ring',true); return; }
+    if(curKey!==String(tid)){ showStale({ message: curKey==null ? 'Xodim o‘chirilgan.' : `Xodimning hozirgi ID’si: «${curKey}».` }); return; }
+    const myRef=(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId);
+    if(exDocs.some(d=>{ const x=d.data()||{}; return String(x.month)===String(mm) && (x.payeeRef==null || String(x.payeeRef)===myRef); }) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
     // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
     //   baza rad etadi (id-guards.sql 5-band) — maosh eski ID'ning YANGI egasiga jim yozilmaydi.
     try{ await setDoc(doc(db,'salary_payments',spId), { teacherId:String(tid), payeeRef:(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }, {merge:true});

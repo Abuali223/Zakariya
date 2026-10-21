@@ -231,6 +231,10 @@ begin
      and new."payeeRef" is not distinct from old."payeeRef" then return new; end if;
   perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || new."teacherId"));
   if app.uid() is null then return new; end if;
+  -- Maosh ko'ra olmaydigan foydalanuvchi (ota-ona, o'qituvchi, qabulxona…) — tekshiruv xabarisiz RLS rad etadi (42501): aks holda
+  --   xato matni («hozir «IQT-001»») yoki 23503/42501 farqi xodimning maosh kalitini ko'rsatib qo'yardi. Yozish huquqi borlar
+  --   (salpay_ins / sa_ins) hammasi can_see_salary ichida.
+  if not app.can_see_salary() then return new; end if;
   if tg_op = 'UPDATE' and coalesce(current_setting('iqror.rekey', true), '') = '1' then return new; end if;
   if new."payeeRef" is not null then
     -- Navbat ichida o'qiladi: shu kalitni o'zgartirayotgan rekey_payroll_id tugagach, uning natijasi ko'rinadi.

@@ -32,5 +32,7 @@ alter table config add column if not exists degree      jsonb;     -- {bakalavr,
 alter table config add column if not exists category    jsonb;     -- {'2','1','oliy'} malaka toifasi bonuslari
 alter table config add column if not exists russian     numeric;   -- eski (ishlatilmaydi)
 alter table config add column if not exists "langLevel" jsonb;     -- eski (ishlatilmaydi)
+alter table config add column if not exists "ratesPrev" jsonb;     -- avvalgi stavkalar (oxirgi 6 ta): faqat stavka o'zgargani uchun
+                                                                   --   eskirgan saqlangan maosh boshqa sessiyada ham taniladi
 
 notify pgrst, 'reload schema';
