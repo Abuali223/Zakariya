@@ -824,6 +824,9 @@ const SALARY_DEFAULTS = {
   perYear: 30000, yearsCap: 15                                       // har yillik tajriba (cheklov: 15 yil)
 };
 let SALARY_RATES = null, SALARY_RATES_OK = true;
+// Shu sessiyada avval amal qilgan (keyin o'zgargan) stavkalar: o'qituvchi saqlanganda maoshi shulardan biri bilan hisoblangan bo'lsa
+//   (faqat stavka o'zgargani uchun eskirgan) — joriy stavka bilan yangilanadi.
+const SALARY_RATES_PREV = [];
 // force: keshni chetlab bazadan o'qiydi. strict: o'qib bo'lmasa XATO tashlaydi (maosh BERISH/xarajat — eskirgan yoki
 //   standart bonus stavkasi bilan hisoblanib, yozuvga noto'g'ri «gross» tushmasin). strict'siz xato: oldingi kesh
 //   bo'lsa o'sha qoladi (standartga almashtirilmaydi), bo'lmasa standart qaytadi, lekin KESHLANMAYDI (keyingi
@@ -838,6 +841,7 @@ async function loadSalaryRates(force, strict){
     DEG_KEYS.forEach(k=>{ if(d.degree&&isFinite(Number(d.degree[k]))) r.degree[k]=Number(d.degree[k]); });
     CAT_KEYS.forEach(k=>{ if(d.category&&isFinite(Number(d.category[k]))) r.category[k]=Number(d.category[k]); });
   } }catch(e){ SALARY_RATES_OK=false; if(strict) throw e; return SALARY_RATES || r; }
+  if(SALARY_RATES && _stableJson(SALARY_RATES)!==_stableJson(r)) SALARY_RATES_PREV.push(SALARY_RATES);
   SALARY_RATES_OK = true; SALARY_RATES = r; return r;
 }
 function salaryNum(v){ return Number(String(v==null?'':v).replace(/\D/g,''))||0; }   // "5 000 000" -> 5000000
@@ -1648,6 +1652,13 @@ async function importFromSheet(){
 // Ism/guruh normalizatsiyasi — dublikatni aniqlash uchun (apostrof turlari, ortiqcha bo'shliq)
 function normName(s){ return String(s||'').toLowerCase().replace(/[''ʼ`‘’ʻ]/g,'').replace(/\s+/g,' ').trim(); }
 function normGrp(s){ return String(s||'').toLowerCase().replace(/[''ʼ`‘’ʻ\s]/g,'').trim(); }
+// Bazadagi o'quvchi qatori SHU yozuvning o'zimi? INSERT javobi yo'qolsa (tarmoq uzildi / 504 — qator esa yozilgan; brauzer POST'ni
+//   o'zi qayta yuborishi ham mumkin) qayta urinish o'z qatoriga urilib 23505 oladi — bu «ID boshqa o'quvchida» EMAS.
+//   ID, ism, sinf, guruh, yo'nalish, til va tartib raqami (importda 1000+qator) mos bo'lsa — o'zimiz yozgan qator.
+function sameStuRow(cur, d){ const t=v=>String(v==null?'':v).trim();
+  return !!cur && !!d && t(cur.studentId).toUpperCase()===t(d.studentId).toUpperCase() && normName(cur.name)===normName(d.name)
+    && (Number(cur.grade)||0)===(Number(d.grade)||0) && t(cur.classLetter).toUpperCase()===t(d.classLetter).toUpperCase()
+    && t(cur.track)===t(d.track) && t(cur.lang||'uz')===t(d.lang||'uz') && (Number(cur.order)||0)===(Number(d.order)||0); }
 // Kirill -> lotin (yengil, ism solishtirish uchun)
 function translitLat(s){ const m={'а':'a','б':'b','в':'v','г':'g','ғ':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y','к':'k','қ':'q','л':'l','м':'m','н':'n','о':'o','ў':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'x','ҳ':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'i','ь':'','э':'e','ю':'yu','я':'ya'}; return String(s||'').toLowerCase().replace(/[а-яёўғқҳъыьэюя]/g,c=>m[c]!=null?m[c]:c); }
 // Ism kaliti — tartibdan mustaqil (Familiya Ism = Ism Familiya), apostrof/registr farqsiz
@@ -1849,8 +1860,11 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
       // YANGI o'quvchilar — faqat INSERT (createDoc): oldindan ko'rishdan beri shu ID bilan boshqa o'quvchi qo'shilgan bo'lsa,
       //   uning yozuvi (va maxfiy ma'lumoti, ota-ona kodi) ustiga YOZILMAYDI — avtomatik ID qayta beriladi, fayldagi ANIQ ID esa
       //   o'tkaziladi. MAVJUDlarni yangilash — sof UPDATE (o'chirilgan o'quvchi qayta yaratilmaydi): topilmaganlar sanaladi.
-      //   Qisman yozilgandan keyin (tarmoq uzildi) qayta «Saqlash»: yozilgan qatorlar (x.done / x.privDone) QAYTA yaratilmaydi —
-      //   aks holda ID band deb yangi ID bilan ikkinchi nusxa paydo bo'lardi.
+      //   INSERT javobi yo'qolishi mumkin (tarmoq uzildi / 504 — qator esa YOZILGAN; brauzer POST'ni o'zi qayta yuborib, birinchi
+      //   bosishdayoq 23505 olishi ham mumkin): 23505 da bazadagi qator o'qiladi — SHU qatorning o'zi bo'lsa (sameStuRow) yozilgan deb
+      //   hisoblanadi (maxfiy ma'lumoti yoziladi, yangi ID berilmaydi); o'qib bo'lmasa — to'xtaymiz (taxmin qilinmaydi). Qator ID'si
+      //   (x.id) xatoda ham saqlanadi: qayta «Saqlash» AYNAN shu ID bilan urinadi (yangi ID bilan ikkinchi nusxa yaratilmaydi);
+      //   yozilganlar (x.done / x.privDone) qayta yozilmaydi.
       let newOk=toWrite.filter(x=>x.done).length, reId=toWrite.filter(x=>x.done && x.reId).length, idSkip=0, idPool=null;
       const isDup=e=>!!e && (String(e.code)==='23505' || /duplicate key|already exists/i.test(String(e.message||'')));
       const freshIds=async()=>{ if(idPool) return idPool; const ids=[];
@@ -1859,15 +1873,23 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
         toWrite.forEach(x=>ids.push(String(x.id))); return (idPool=ids); };
       for(const x of toWrite){
         if(x.done || x.skip){ if(x.done && x.priv && Object.keys(x.priv).length && !x.privDone){ await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true}); x.privDone=true; } continue; }
-        let id=x.id, done=false;
+        let done=false;
         for(let k=0;k<4 && !done;k++){
-          try{ await createDoc(doc(db,'students',id), Object.assign({}, x.data, { studentId:id })); done=true; }
-          catch(e2){ if(!isDup(e2)) throw e2; if(x.given){ break; } const ids=await freshIds(); id=nextId(ids,'IQ-',4); ids.push(id); }
+          const rec=Object.assign({}, x.data, { studentId:x.id });
+          try{ await createDoc(doc(db,'students',x.id), rec); done=true; }
+          catch(e2){ if(!isDup(e2)) throw e2;   // tarmoq xatosi: x.id o'zgarmaydi — qayta «Saqlash» shu ID bilan urinadi
+            let cur;
+            try{ const d=await getDoc(doc(db,'students',x.id)); cur=d.exists()?(d.data()||{}):null; }
+            catch(e3){ throw new Error(`«${x.data.name}» (${x.id}) bazada yozilgan-yozilmaganini tekshirib bo‘lmadi: ${e3.code||e3.message}`); }
+            if(sameStuRow(cur, rec)){ done=true; break; }   // o'zimiz yozgan qator (javobi yo'qolgan)
+            if(!cur) continue;                               // shu orada o'chirilgan — shu ID bilan qayta
+            if(x.given){ break; }
+            const ids=await freshIds(); x.id=nextId(ids,'IQ-',4); ids.push(x.id); x.reId=true; }
         }
         if(!done){ x.skip=true; idSkip++; warnings.push(`${x.data.name}: «${x.id}» ID shu orada boshqa o‘quvchiga berildi — qo‘shilmadi`); continue; }
-        if(id!==x.id){ reId++; x.reId=true; }
-        x.id=id; x.done=true; newOk++;
-        if(x.priv && Object.keys(x.priv).length){ await setDoc(doc(db,'student_private',id), x.priv, {merge:true}); x.privDone=true; }
+        if(x.reId) reId++;
+        x.done=true; newOk++;
+        if(x.priv && Object.keys(x.priv).length){ await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true}); x.privDone=true; }
       }
       idSkip=toWrite.filter(x=>x.skip).length;
       let updOk=0, gone=0;
@@ -1877,8 +1899,9 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
         if(x.priv && Object.keys(x.priv).length) await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true});
         updOk++;
       }
-      toast(`${newOk} yangi${reId?` (${reId} tasiga yangi ID berildi — shu orada band bo‘lgan)`:''}${idSkip?` · ${idSkip} tasi o‘tkazildi (fayldagi ID shu orada band bo‘ldi)`:''}${doUpd?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!(gone||idSkip)); closeModal(); renderStudents();
-    }catch(e){ toast('Import xatosi: '+(e.code||e.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+      const nmL=L=>L.slice(0,3).map(x=>`${x.data.name} — ${x.id}`).join(', ')+(L.length>3?` va yana ${L.length-3} ta`:'');
+      toast(`${newOk} yangi${reId?` (${reId} tasiga yangi ID berildi — eski ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.done && x.reId))})`:''}${idSkip?` · ${idSkip} tasi o‘tkazildi (fayldagi ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.skip))})`:''}${doUpd?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!(gone||idSkip)); closeModal(); renderStudents();
+    }catch(e){ toast('Import xatosi: '+(e.code||e.message)+' — qayta «Saqlash» xavfsiz (yozilganlari takror yaratilmaydi)',true); btn.disabled=false; btn.textContent='Saqlash'; }
   };
 }
 /* ---- Chiroyli PDF (chop etish orqali) ---- */
@@ -3484,15 +3507,25 @@ async function openTeacherClassPicker(t, onDone){
 /* ---- Add/Edit form (modal) ---- */
 // Tahrir: o'quvchining maxfiy maydonlari (student_private) ro'yxat fonida hali yuklanmagan bo'lsa — forma OCHILISHIDAN oldin
 //   o'qiladi: aks holda forma ularni bo'sh ko'rsatib (nusxa ham bo'sh), «Qaysi xodim» tanlovini bo'shatish yozilmas, kiritilgan
-//   manzil esa soxta «boshqa joyda o'zgartirilgan» savolini berardi. O'qib bo'lmasa — avvalgidek ochiladi.
+//   manzil esa soxta «boshqa joyda o'zgartirilgan» savolini berardi. O'qish paytida «yuklanmoqda…» oynasi ro'yxatni yopadi (boshqa
+//   qatorni bosib bo'lmaydi); forma faqat SHU chaqiruv eng oxirgisi va shu oyna hali ochiq bo'lsa chiziladi — kech kelgan o'qish
+//   boshqa o'quvchi formasini (kiritilgani bilan) almashtirmaydi. Qator faqat MUVAFFAQIYATLI o'qishdan keyin «yuklangan» sanaladi.
+//   O'qib bo'lmasa — forma OCHILMAYDI (bo'sh ko'ringan maxfiy maydonlar soxta savol berardi): xato va «Qayta urinish».
 const _privLoaded=new WeakSet();
+let _openGen=0;
 function openForm(name, row, prefill, afterSaveCb){
-  const s=SCHEMAS[name];
+  const s=SCHEMAS[name], g=++_openGen;
   if(row && s && s.privateCol && row._id && !_privLoaded.has(row)){
-    _privLoaded.add(row);
+    $('#modal').innerHTML=`<div class="modal-h"><h3>Tahrirlash — ${esc(s.title)}</h3><button class="x" id="m-x">×</button></div><div class="modal-b" id="m-loading" data-gen="${g}"><div class="loading">${esc(row.name||row._id)} — yuklanmoqda…</div></div>`;
+    openModal(); $('#m-x').onclick=closeModal;
+    const live=()=>{ const el=document.getElementById('m-loading'); return g===_openGen && !!el && el.dataset.gen===String(g); };
     getDoc(doc(db, s.privateCol, row._id)).then(d=>{ const pd=(d && d.exists()) ? (d.data()||{}) : null;
-      if(pd) Object.keys(pd).forEach(k=>{ if(k!=='id' && row[k]==null) row[k]=pd[k]; }); })
-      .catch(()=>{}).finally(()=>openFormNow(name, row, prefill, afterSaveCb));
+      if(pd) Object.keys(pd).forEach(k=>{ if(k!=='id' && row[k]==null) row[k]=pd[k]; });
+      _privLoaded.add(row); return true; }, e=>{
+      if(live()){ $('#m-loading').innerHTML=`<div class="empty">⚠️ Maxfiy ma’lumotlarni (telefon, manzil, JSHSHIR…) o‘qib bo‘lmadi${e&&(e.code||e.message)?` (${esc(e.code||e.message)})`:''} — forma ochilmadi.</div><div style="display:flex;gap:8px;justify-content:center"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="m-retry">Qayta urinish</button></div>`;
+        $('#m-cancel').onclick=closeModal; $('#m-retry').onclick=()=>openForm(name, row, prefill, afterSaveCb); }
+      return false; })
+      .then(ok=>{ if(ok && live()) openFormNow(name, row, prefill, afterSaveCb); });
     return;
   }
   return openFormNow(name, row, prefill, afterSaveCb);
@@ -3620,6 +3653,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
   if(s.subjects) wireSubjects();
   wireImages(name); wireVideos(name); populateDynselects(name, row); wireWeekdays();
   if(name==='teachers') wireSalaryPanel(row);
+  let _ins=null;   // yangi o'quvchi: yuborilgan INSERT {id, data} — javobi yo'qolsa keyingi «Saqlash» qatorni o'zimizniki deb taniydi
   $('#m-form').addEventListener('submit', async e=>{
     e.preventDefault();
     const btn=$('#m-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
@@ -3653,7 +3687,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
       //   Maosh paneli (tillar, sertifikatlar, ma'lumot, toifa — yashirin maydonlar) hali chizilmagan bo'lsa (tariflar o'qilmoqda) —
       //   ular formada YO'Q: bo'sh ro'yxat deb yozilmaydi (til/sertifikat ustamasi o'chib, maosh tushardi), maosh esa bazadagi
       //   (oyna ochilgandagi) til/sertifikat bilan hisoblanadi.
-      if(name==='teachers'){ await loadSalaryRates(); data.baseSalary = salaryNum(data.baseSalary);
+      if(name==='teachers'){ await loadSalaryRates(true); data.baseSalary = salaryNum(data.baseSalary);   // stavkalar — bazadan (boshqa joyda o'zgargan bo'lishi mumkin)
         const panel=Object.prototype.hasOwnProperty.call(data,'languages');   // FormData o'qilgan paytda panel bormidi
         const parseArr=v=>{ try{ return (typeof v==='string') ? (JSON.parse(v||'[]')||[]) : (Array.isArray(v)?v:[]); }catch(e){ return []; } };
         if(panel){ data.otherCerts = parseArr(data.otherCerts); data.languages = parseArr(data.languages).filter(k=>LANG_KEYS.includes(k)); }
@@ -3779,10 +3813,11 @@ function openFormNow(name, row, prefill, afterSaveCb){
         // Ism-familiya O'ZAKLARI (aka-uka GURUHLASH kirishi) o'zgardimi — faqat bo'shliq/katta-kichik harf o'zgarishi eslatma chiqarmaydi.
         const stemKey=n=>pmSurnameStems(n).sort().join('|');
         if(('name' in data) && stemKey(data.name)!==stemKey(_snapRaw.name)) billingChanged=true; }
-      // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz
+      // Bir xil ismli o'quvchini tasodifan takror qo'shib yubormaslik uchun ogohlantiramiz (javobi yo'qolgan avvalgi urinishimiz
+      //   yozgan qator — «boshqa o'quvchi» emas, pastda tekshiriladi)
       if(!isEdit && name==='students'){
         const nm=String(data.name||'').trim().toLowerCase();
-        if(nm && (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm)){
+        if(nm && (cache['students']||[]).some(r=>String(r.name||'').trim().toLowerCase()===nm && !(_ins && String(r._id)===_ins.id))){
           if(!confirm('“'+String(data.name).trim()+'” ismli o‘quvchi allaqachon bor. Bu YANGI (boshqa) o‘quvchimi? Tahrirlash uchun jadvaldagi «Tahrir» tugmasidan foydalaning.')){ stop(); return; }
         }
       }
@@ -3824,10 +3859,14 @@ function openFormNow(name, row, prefill, afterSaveCb){
           if(fv!==_snapCmp(k)){ conflicts.push(k); if(['cameraId','payStatus','activeFrom','stopFrom','pauses','grade','classLetter','lang','track'].includes(k)) critical.push(k); } }); };
         chk(patch, fresh);
         if(privPatch && curPriv) chk(privPatch, curPriv);
-        // O'qituvchi maoshi (salary/salaryBonus) — kiritilgan maydonlardan hisoblanadi: faqat ular o'zgarganda, BAZADAGI (boshqa
-        //   joyda o'zgargan staj/til ham) qiymatlar + shu o'zgarish bilan qayta hisoblab yoziladi (eskirgan oyna qiymatidan emas).
+        // O'qituvchi maoshi (salary/salaryBonus) — hisoblangan qiymat (ziddiyat deb so'ralmaydi): BAZADAGI (boshqa joyda o'zgargan
+        //   staj/til ham) qiymatlar + shu o'zgarish va JORIY stavkalar bilan qayta hisoblab yoziladi (eskirgan oyna qiymatidan emas):
+        //   (1) maosh maydonlari o'zgarganda; (2) saqlangan maosh shu sessiyada AVVALGI bonus stavkalari bilan hisoblangan bo'lsa —
+        //   faqat stavka o'zgargani uchun eskirgan (ro'yxat «Maosh» / CSV yangilanadi). Boshqa sababdan mos kelmaydigan eski qiymat
+        //   (qo'lda yozilgan, asosiy oyliksiz) o'zgartirilmagan «Saqlash»da tegilmaydi.
         if(name==='teachers'){ delete patch.salary; delete patch.salaryBonus;
-          if(['baseSalary','years','languages','otherCerts','degree','category'].some(k=>k in patch)){
+          if(['baseSalary','years','languages','otherCerts','degree','category'].some(k=>k in patch)
+            || SALARY_RATES_PREV.some(r=>computeSalary(fresh, r).total===Number(fresh.salary))){
             const sal=computeSalary(Object.assign({}, fresh, patch));
             if(Number(fresh.salary)!==sal.total) patch.salary=sal.total;
             if(Number(fresh.salaryBonus)!==sal.bonus) patch.salaryBonus=sal.bonus; } }
@@ -3840,6 +3879,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
         // Tahrirlashda DOIM asl hujjatga yozamiz (ID qulflangan; hech qachon yangi dublikat yaratilmaydi)
         const id = isEdit ? row._id : (data[s.docId]||'').trim();
         if(!id){toast('ID kiriting',true);stop();return;}
+        let ownIns=false;   // yangi o'quvchi qatori avvalgi (javobi yo'qolgan) urinishda allaqachon yozilgan
         // YANGI O'QUVCHI: ID noyobligi BAZADAN (kesh emas) tekshiriladi — o'qib bo'lmasa saqlanmaydi. Avval faqat kesh
         //   tekshirilardi: (1) import qilingan o'quvchining studentId'si yozilsa ikkinchi o'quvchi o'sha kalit bilan
         //   yaratilardi (fakturalar/davomat aralashardi); (2) ikki xodim bir vaqtda forma ochsa, ikkinchisi birinchi
@@ -3848,7 +3888,11 @@ function openFormNow(name, row, prefill, afterSaveCb){
           let d1, q1;
           try{ [d1,q1]=await Promise.all([ getDoc(doc(db,'students',id)), getDocs(query(collection(db,'students'), where('studentId','==',id))) ]); }
           catch(e){ toast('O‘quvchilar ro‘yxatini tekshirib bo‘lmadi — qayta urinib ko‘ring (ID takrorlanmasin)',true); stop(); return; }
-          if((d1&&d1.exists&&d1.exists()) || (q1&&q1.docs&&q1.docs.length)){
+          // Avvalgi «Saqlash»ning INSERT javobi yo'qolgan bo'lsa (tarmoq uzildi / 504) qator bazada BOR — u o'zimiz yozgan qator
+          //   (sameStuRow): «ID band» deb yangi ID bilan IKKINCHI nusxa yaratilmaydi, maxfiy ma'lumoti yoziladi.
+          const cur1=(d1&&d1.exists&&d1.exists())?(d1.data()||{}):null;
+          ownIns=!!(_ins && _ins.id===id && (sameStuRow(cur1,_ins.data) || sameStuRow(cur1,data)));
+          if(!ownIns && ((d1&&d1.exists&&d1.exists()) || (q1&&q1.docs&&q1.docs.length))){
             let nid=''; try{ const fresh2=await loadCol('students','order'); cache.students=fresh2; const ids=[]; fresh2.forEach(r=>{ ids.push(String(r._id)); if(r.studentId) ids.push(String(r.studentId)); });
               try{ const hw=Number(await rpc('student_id_high_water'))||0; if(hw>0) ids.push('IQ-'+String(hw).padStart(4,'0')); }catch(_){}
               nid=nextId(ids,'IQ-',4); const inp=e.target.querySelector(`[name="${s.docId}"]`); if(inp && nid) inp.value=nid; }catch(_){}
@@ -3856,7 +3900,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
             stop(); return; }
           // Avval O'CHIRILGAN o'quvchining ID'si berilmasin (eski davomat/hisob/avans va ota-ona kabinet ulanishi yangi bolaga
           //   o'tib ketadi). Tekshirib bo'lmasa (eski baza) — o'tkazamiz.
-          let h=null; try{ h=await rpc('student_history',{ p_sid:id }); }catch(_){ h=null; }
+          let h=null; if(!ownIns){ try{ h=await rpc('student_history',{ p_sid:id }); }catch(_){ h=null; } }
           if(h && (['invoices','payments','attendance','grades','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
             toast(`«${id}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — yangi o‘quvchi buni meros olmasin. Formani yopib qayta oching (yangi ID beriladi) yoki boshqa ID kiriting.`, true);
             stop(); return;
@@ -3867,8 +3911,18 @@ function openFormNow(name, row, prefill, afterSaveCb){
         }
         if(!isEdit){ data[s.docId] = id;
           if(name==='students'){
-            try{ await createDoc(doc(db,name,id), data); }
-            catch(e8){ if(String(e8 && e8.code)==='23505' || /duplicate key/i.test(String(e8 && e8.message || ''))){ toast(`«${id}» ID shu soniyada boshqa o‘quvchiga berildi — saqlanmadi. Oynani yopib qayta oching (yangi ID beriladi).`, true); stop(); return; } throw e8; }
+            if(ownIns){   // qator avvalgi urinishda yozilgan — forma shundan beri o'zgargan bo'lsa, faqat farqlar (sof UPDATE)
+              const upd={}; Object.keys(data).forEach(k=>{ if(cmpVal(data[k])!==cmpVal(_ins.data[k])) upd[k]=data[k]; });
+              if(Object.keys(upd).length) await updateDoc(doc(db,name,id), upd, {mustExist:true});
+            } else {
+              _ins={ id, data:Object.assign({}, data) };   // javobi kelmasa (tarmoq) — keyingi «Saqlash» shu qatorni taniydi
+              try{ await createDoc(doc(db,name,id), data); }
+              catch(e8){ if(!(String(e8 && e8.code)==='23505' || /duplicate key/i.test(String(e8 && e8.message || '')))) throw e8;
+                // 23505: brauzer javobi yo'qolgan POST'ni o'zi qayta yuborgan bo'lishi mumkin — bazadagi qator o'zimiznikimi?
+                let cur=null; try{ const d9=await getDoc(doc(db,name,id)); cur=d9.exists()?(d9.data()||{}):null; }
+                catch(e9){ toast(`«${id}» ID'li o‘quvchi yozilgan-yozilmaganini tekshirib bo‘lmadi (tarmoq) — qayta «Saqlash» bosing`, true); stop(); return; }
+                if(!sameStuRow(cur, data)){ _ins=null; toast(`«${id}» ID shu soniyada boshqa o‘quvchiga berildi — saqlanmadi. Oynani yopib qayta oching (yangi ID beriladi).`, true); stop(); return; } }
+            }
           } else await setDoc(doc(db,name,id), data, {merge:true}); }
         savedId=id;
       } else if(!isEdit){
@@ -5226,10 +5280,11 @@ async function openCameraIdFromReport(onSaved){
     try{ [fS,fT,fSt]=await Promise.all([loadCol('staff'), loadCol('teachers'), loadCol('students','order')]); }
     catch(e){ btn.disabled=false; btn.textContent='💾 Tanlanganlarni saqlash'; toast('Ro‘yxatni qayta o‘qib bo‘lmadi — hech narsa yozilmadi, qayta urinib ko‘ring',true); return; }
     const own=camOwnersMap(fS, fT, fSt);
-    let ok=0, err=0, added=0, busy=0, moved=0;
-    // Oldindan ko'rishdan beri tanlangan odamning o'z Kamera ID'si o'zgargan bo'lsa (boshqa admin bog'lagan) — ustiga yozilmaydi.
+    let ok=0, err=0, added=0, busy=0, moved=0; const mvd=[];
+    // Oldindan ko'rishdan beri tanlangan odamning o'z Kamera ID'si o'zgargan bo'lsa (boshqa admin bog'lagan) — ustiga yozilmaydi
+    //   va yakuniy xabarda ISMI bilan aytiladi (o'sha ID xato bo'lsa skanlar mos kelmaydi — HR tekshirsin).
     const curOf=m=>{ const L=m.refType==='teacher'?fT:fS, x=(L||[]).find(r=>String(r._id)===String(m.refId)); return x ? String(x.cameraId==null?'':x.cameraId).trim() : null; };
-    const pk=[]; for(const m of picks){ const c=curOf(m); if(c===null){ err++; continue; } if(c!==String(m.cur||'').trim()){ moved++; continue; } pk.push(Object.assign({}, m, {cur:c})); }
+    const pk=[]; for(const m of picks){ const c=curOf(m); if(c===null){ err++; continue; } if(c!==String(m.cur||'').trim()){ moved++; mvd.push(`${m.name}: hozir ${c||'—'}, reportda ${m.rid}`); continue; } pk.push(Object.assign({}, m, {cur:c})); }
     // Almashtiriladigan Kamera ID ostida skan tarixi bor odamlar — aniq tasdiq (forma bilan bir xil ogohlantirish).
     const hist=[];
     for(const m of pk){ if(!m.cur || m.cur===String(m.rid)) continue; let h=false;
@@ -5259,7 +5314,7 @@ async function openCameraIdFromReport(onSaved){
     }
     cache.teachers=null; cache.staff=null;
     btn.disabled=false; btn.textContent='💾 Tanlanganlarni saqlash';
-    toast(`Kamera ID: ${ok}${added?(' · yangi qo‘shildi: '+added):''}${busy?(' · boshqa odamda band — o‘tkazildi: '+busy):''}${err?(' · xato: '+err):''} ✓`, !!(busy||err)); closeModal(); if(onSaved) onSaved();
+    toast(`Kamera ID: ${ok}${added?(' · yangi qo‘shildi: '+added):''}${busy?(' · boshqa odamda band — o‘tkazildi: '+busy):''}${moved?(` · shu orada Kamera ID'si o‘zgargan — o‘tkazildi: ${moved} (${mvd.slice(0,3).join('; ')}${mvd.length>3?` va yana ${mvd.length-3} ta`:''})`):''}${err?(' · xato: '+err):''} ✓`, !!(busy||err||moved)); closeModal(); if(onSaved) onSaved();
   };
 }
 // MAKTAB BAYRAM / DAM OLISH KUNLARI (direktor/HR). Bayram kuni xodim davomatida O'TKAZIB yuboriladi:
