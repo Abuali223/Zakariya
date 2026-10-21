@@ -27,9 +27,12 @@ do $iqror_guard$ begin raise exception 'iqror: id-guards.sql ALOHIDA ishga tushi
 --   5) Maosh/avans yozuvi kaliti (salary_payments / staff_advances.teacherId): ilovadan faqat MAVJUD o'qituvchi/xodim
 --      kaliti bilan yoziladi va ID o'zgartirish (4) bilan bir kalitda navbatma-navbat (advisory lock): ID o'zgartirilayotgan
 --      paytda berilgan maosh eski kalitda «yetim» qolmaydi — kutadi va xato bilan qaytadi («sahifani yangilang»).
+--      payeeRef ('teachers:<qator id>' / 'staff:<qator id>') — yozuv KIM uchun: kalit shu odamning HOZIRGI kaliti bo'lishi shart —
+--      eski oynadan berilgan maosh/avans bo'shab boshqa odamga berilgan ID'ga (uning yangi egasiga) yozilmaydi.
 --   6) camera_owners(cam) / camera_has_scans(cam) — Kamera ID kimda va eski skan tarixi bormi: qabulxona o'qituvchi/xodim
 --      jadvallarini va skanlarni ko'rmaydi (RLS), shuning uchun tekshiruv serverda (faqat ism va tur qaytadi).
---   7) teacherId/staffId ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi yoki o'zgargan ID boshqa xodimnikiga teng emas.
+--   7) teacherId/staffId ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi yoki o'zgargan ID boshqa xodimnikiga teng emas
+--      (shu ID'ni bir vaqtda yozayotgan ikki yozuvchi ham — 4 bilan bir kalitda navbat).
 -- 1–4 — faqat direktor/admin/HR (app.is_admin() / app.is_hr()); 6 — faol xodim (app.is_staff()). Idempotent (run-all.sql).
 -- =====================================================================
 
@@ -172,13 +175,14 @@ begin
        + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = v_key and not (p_coll = 'staff' and s.id = p_row))
     into v_shared;
   v_move := (v_shared = 0);
-  perform set_config('iqror.rekey', '1', true);   -- 7-band triggeri: ID shu funksiya ichida (tarix bilan) o'zgaradi
+  -- 7-band triggeri: ID shu funksiya ichida (tarix bilan) o'zgaradi; 5-band triggeri: tarixni shu funksiya (kalitlarni
+  --   qulflab) ko'chiradi — payeeRef'i boshqa (o'chirilgan) odamniki bo'lgan eski yozuv ID o'zgartirishni to'xtatmasin.
+  perform set_config('iqror.rekey', '1', true);
   if p_coll = 'teachers' then
     update public.teachers set "teacherId" = p_new where id = p_row;
   else
     update public.staff set "staffId" = p_new where id = p_row;
   end if;
-  perform set_config('iqror.rekey', '', true);
   if v_move then
     update public.salary_payments set "teacherId" = p_new where "teacherId" = v_key;
     get diagnostics n_sal = row_count;
@@ -193,6 +197,7 @@ begin
       get diagnostics n_ch = row_count;
     end if;
   end if;
+  perform set_config('iqror.rekey', '', true);
   -- Foydalanuvchi yorlig'i (faqat ko'rinish uchun nusxa) ham yangilanadi.
   update public.users set "staffCode" = p_new
    where "staffRefId" = p_row and "staffRefType" = (case when p_coll = 'teachers' then 'teacher' else 'staff' end);
@@ -202,19 +207,50 @@ end $$;
 revoke all on function public.rekey_payroll_id(text, text, text, text) from public, anon;
 grant execute on function public.rekey_payroll_id(text, text, text, text) to authenticated, service_role;
 
--- ---- 5) Maosh/avans yozuvi kaliti: faqat mavjud o'qituvchi/xodim kaliti; ID o'zgartirish bilan navbat ----
---   Kalit — admin.html dagi kabi String(teacherId||_id) (xom). Ilova foydalanuvchisi (app.uid()) yozganda tekshiriladi;
---   SQL / service_role (import, tuzatish) — faqat navbat. Kalit o'zgarmagan yangilanish va mavjud yozuvni xuddi shu kalit
---   bilan qayta yozish (upsert) — tekshirilmaydi (o'chirilgan xodim tarixi ham saqlanadi).
+-- ---- 5) Maosh/avans yozuvi kaliti: faqat SHU odamning hozirgi kaliti; ID o'zgartirish bilan navbat ----
+--   Kalit — admin.html dagi kabi String(teacherId||_id) (xom). payeeRef — '<jadval>:<qator id>' ('teachers:t1' / 'staff:s1'):
+--   yozuv kim uchun (o'qituvchi va xodim kalitlari BITTA nomlar fazosida — jadval ham kerak); admin.html uni oyna ochilganda
+--   o'qilgan ro'yxatdagi xodimdan yuboradi. Ilova foydalanuvchisi (app.uid()) yozganda, navbat (advisory lock) ichida:
+--   • payeeRef bor — o'sha qatorning HOZIRGI kaliti new."teacherId" ga teng bo'lishi shart. Oyna ochilgandan keyin ID o'zgargan,
+--     bo'shagan ID boshqa odamga berilgan yoki xodim o'chirilgan — rad (23503): aks holda maosh/avans kalitning YANGI egasiga jim
+--     yozilardi (biri kam oladi, boshqasiga ikki marta beriladi). Mavjud yozuvni qayta yozish (upsert) ham tekshiriladi.
+--     Buzuq payeeRef — 22023.
+--   • payeeRef yo'q (eski mijoz / eski yozuv) — avvalgidek: kalit biror o'qituvchi/xodimda bo'lsin; mavjud yozuvni xuddi shu
+--     kalit bilan qayta yozish (upsert) — tekshirilmaydi (o'chirilgan xodim tarixi ham saqlanadi).
+--   Kalit va payeeRef o'zgarmagan yangilanish — tekshirilmaydi. SQL / service_role (import, tuzatish) — faqat navbat.
+--   rekey_payroll_id tarixni ko'chirganda (iqror.rekey) — faqat navbat: qaysi yozuv ko'chishini u kalitlarni qulflab o'zi hal qiladi.
+alter table public.salary_payments add column if not exists "payeeRef" text;
+alter table public.staff_advances  add column if not exists "payeeRef" text;
 create or replace function app.guard_payroll_key()
   returns trigger language plpgsql security definer
   set search_path = public, app, pg_temp as $$
-declare v_same boolean := false;
+declare v_same boolean := false; v_coll text; v_row text; v_cur text;
 begin
   if coalesce(new."teacherId", '') = '' then return new; end if;
-  if tg_op = 'UPDATE' and new."teacherId" is not distinct from old."teacherId" then return new; end if;
+  if tg_op = 'UPDATE' and new."teacherId" is not distinct from old."teacherId"
+     and new."payeeRef" is not distinct from old."payeeRef" then return new; end if;
   perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || new."teacherId"));
   if app.uid() is null then return new; end if;
+  if tg_op = 'UPDATE' and coalesce(current_setting('iqror.rekey', true), '') = '1' then return new; end if;
+  if new."payeeRef" is not null then
+    -- Navbat ichida o'qiladi: shu kalitni o'zgartirayotgan rekey_payroll_id tugagach, uning natijasi ko'rinadi.
+    v_coll := split_part(new."payeeRef", ':', 1);
+    v_row := substr(new."payeeRef", length(v_coll) + 2);
+    if v_coll not in ('teachers', 'staff') or v_row = '' then
+      raise exception 'Noto''g''ri payeeRef «%» (kutilgan: teachers:<qator id> yoki staff:<qator id>)', new."payeeRef"
+        using errcode = '22023';
+    end if;
+    if v_coll = 'teachers' then
+      select coalesce(nullif(t."teacherId", ''), t.id) into v_cur from public.teachers t where t.id = v_row;
+    else
+      select coalesce(nullif(s."staffId", ''), s.id) into v_cur from public.staff s where s.id = v_row;
+    end if;
+    if v_cur is distinct from new."teacherId" then
+      raise exception 'Maosh/avans yozilmadi: xodimning ID''si oyna ochilgandan keyin o''zgartirilgan yoki xodim o''chirilgan (oynada «%», hozir «%») — oynani yopib, qayta oching',
+        new."teacherId", coalesce(v_cur, 'o''chirilgan') using errcode = '23503';
+    end if;
+    return new;
+  end if;
   if tg_op = 'INSERT' then
     execute format('select exists (select 1 from public.%I where id = $1 and "teacherId" = $2)', tg_table_name)
       into v_same using new.id, new."teacherId";
@@ -228,15 +264,18 @@ begin
   return new;
 end $$;
 drop trigger if exists trg_salpay_key on public.salary_payments;
-create trigger trg_salpay_key before insert or update of "teacherId" on public.salary_payments
+create trigger trg_salpay_key before insert or update of "teacherId", "payeeRef" on public.salary_payments
   for each row execute function app.guard_payroll_key();
 drop trigger if exists trg_staffadv_key on public.staff_advances;
-create trigger trg_staffadv_key before insert or update of "teacherId" on public.staff_advances
+create trigger trg_staffadv_key before insert or update of "teacherId", "payeeRef" on public.staff_advances
   for each row execute function app.guard_payroll_key();
 
 -- ---- 7) O'qituvchi/xodim ID'si (maosh kaliti): ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi ID takroriy emas ----
 --   API orqali to'g'ridan-to'g'ri PATCH teacherId/staffId (maosh/avans eski kalitda «yetim» qolardi) va boshqa xodimning ID'si
 --   bilan yozuv — rad. Mavjud (eski) takroriy ID'lar tegilmaydi: tekshiruv faqat ID yozilganda. SQL / service_role — tegilmaydi.
+--   Takror tekshiruvi ID bo'yicha navbatda (rekey_payroll_id p_new uchun oladigan AYNAN shu qulf; p_new doim kesilgan): bir vaqtda
+--   shu ID'ni yozayotgan ikki INSERT yoki INSERT va ID o'zgartirish bir-birining tranzaksiyasini kutadi — ikkalasi ham tekshiruvdan
+--   o'tib, bitta ID ikki kishida (biriga ko'chirilgan maosh/avans tarixi bilan) qolmaydi. rekey ichida qulf allaqachon olingan.
 create or replace function app.guard_payroll_id()
   returns trigger language plpgsql security definer
   set search_path = public, app, pg_temp as $$
@@ -254,6 +293,9 @@ begin
       raise exception 'O''qituvchi/xodim ID''si faqat «ID o''zgartirish» orqali (maosh/avans tarixi bilan birga) o''zgaradi — kartochkani forma orqali saqlang'
         using errcode = '42501';
     end if;
+  end if;
+  if btrim(coalesce(v_new, '')) <> '' then
+    perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || btrim(v_new)));
   end if;
   if btrim(coalesce(v_new, '')) <> ''
      and (exists (select 1 from public.teachers t where btrim(coalesce(nullif(t."teacherId", ''), t.id)) = btrim(v_new) and not (tg_table_name = 'teachers' and t.id = new.id))

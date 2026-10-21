@@ -5846,15 +5846,30 @@ async function openSalaryPayout(opts){
       $('#m-x2').onclick=closeModal; $('#sp-close').onclick=()=>{ closeModal(); if(typeof opts.onDone==='function') try{ opts.onDone(); }catch(e){} };
       $('#sp-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount:pd, reason:'Oylik maosh', period:mm, date:(rec&&rec.date)||dt });
     };
+    const showStale=(e)=>{   // baza rad etdi (23503): eski forma qayta yuborilmasin — aniq ko'rsatma
+      toast('Maosh yozilmadi — xodimning ID’si o‘zgargan yoki u o‘chirilgan: oynani yopib, qayta oching',true);
+      $('#modal').innerHTML=`<div class="modal-h"><h3>⚠️ Maosh yozilmadi</h3><button class="x" id="m-x2">×</button></div>
+        <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)}: shu oyna ochilgandan keyin xodimning ID’si o‘zgartirilgan (yoki u ID boshqa xodimga berilgan / xodim o‘chirilgan) — maosh hech kimga yozilmadi.</div>
+        <div class="small muted" style="margin-top:8px">Xodimlar ro‘yxati oyna ochilganda o‘qiladi. Oynani yopib, qayta oching — ID, qoldiq va summalar yangidan olinadi.<br>${esc((e&&e.message)||'')}</div></div>
+        <div class="modal-f"><button type="button" class="btn gold" id="sp-close">Yopish</button></div>`;
+      $('#m-x2').onclick=closeModal; $('#sp-close').onclick=closeModal;
+      // Ostidagi ro'yxat (oylik hisobot) DARHOL yangilanadi — oyna qanday yopilmasin (Esc ham), qatordagi «💵 Oylik» yangi ID bilan ochiladi.
+      if(typeof opts.onDone==='function') try{ opts.onDone(); }catch(_){}
+    };
     const own=exDocs.find(d=>String(d.id)===spId);
     if(own){ showDone(own.data()||{}); return; }   // shu oynaning yozuvi oldingi bosishda saqlangan — takror yozilmaydi
     if(exDocs.some(d=>String((d.data()||{}).month)===String(mm)) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
-    try{ await setDoc(doc(db,'salary_payments',spId), { teacherId:String(tid), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }, {merge:true});
+    // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
+    //   baza rad etadi (id-guards.sql 5-band) — maosh eski ID'ning YANGI egasiga jim yozilmaydi.
+    try{ await setDoc(doc(db,'salary_payments',spId), { teacherId:String(tid), payeeRef:(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }, {merge:true});
       showDone();
     }catch(e){
       let saved=null; try{ const g=await getDoc(doc(db,'salary_payments',spId)); if(g&&g.exists()) saved=g.data()||{}; }catch(_){}
       if(saved){ showDone(saved); return; }
-      btn.disabled=false; btn.textContent='Berish + chek'; toast('Xatolik: '+(e.code||e.message),true); }
+      // 23503 — xodimning ID'si oyna ochilgandan keyin o'zgargan / xodim o'chirilgan: ro'yxat faqat oyna ochilganda o'qiladi,
+      //   shu oynada qayta bosish har safar rad etiladi — eski forma o'rniga aniq ko'rsatma; yopilganda ro'yxat yangilanadi.
+      if(e&&e.code==='23503'){ showStale(e); return; }
+      btn.disabled=false; btn.textContent='Berish + chek'; toast('Xatolik: '+((e.code && e.message && e.message!==e.code) ? e.code+' — '+e.message : (e.code||e.message)),true); }
   };
 }
 async function renderAccounting(){
@@ -6200,20 +6215,37 @@ async function renderAccounting(){
     const amt=$('#av-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
     $('#av-save').onclick=async()=>{
       const tid=$('#av-t').value, date=$('#av-date').value, amount=Number(($('#av-amt').value||'').replace(/\D/g,''))||0, note=$('#av-note').value.trim();
-      const tn=(payees.find(p=>p.id===String(tid))||{}).name||tid;
+      const pp=payees.find(p=>p.id===String(tid))||{}, tn=pp.name||tid;
       if(!date){ toast('Sanani tanlang',true); return; }
       if(amount<=0){ toast('Summani kiriting',true); return; }
       if((advIdCount[String(tid)]||0)>1){ toast(`«${tid}» ID bir nechta xodimda bor — avval xodim kartochkasida noyob ID bering (avans boshqa odamga yozilmasin)`,true); return; }
       const btn=$('#av-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
-      try{ await setDoc(doc(db,'staff_advances','adv_'+String(tid)+'_'+advNonce), { teacherId:String(tid), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() }, {merge:true});
-        toast('Xodim avansi yozildi ✓'); if(await reload()) draw($('#ac-month').value||curMonth());
+      const advId='adv_'+String(tid)+'_'+advNonce;
+      const done=async(rec)=>{   // rec — bazada ALLAQACHON bor yozuv (oldingi bosish javobi yo'qolgan): ekranda o'shaning summasi
+        const am=rec?(Number(rec.amount)||0):amount, nt=rec?String(rec.note||''):note, dd=rec?String(rec.date||date):date;
+        toast('Xodim avansi yozildi ✓'); try{ if(await reload()) draw($('#ac-month').value||curMonth()); }catch(_){}
         $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Xodim avansi yozildi</h3><button class="x" id="m-x2">×</button></div>
-          <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} — ${fmtSum(amount)} so‘m</div>
+          <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} — ${fmtSum(am)} so‘m</div>
           <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
           <div class="modal-f"><button type="button" class="btn ghost" id="av-close">Yopish</button><button type="button" class="btn gold" id="av-print">🧾 Chek chiqarish</button></div>`;
         $('#m-x2').onclick=closeModal; $('#av-close').onclick=closeModal;
-        $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount, reason:`Xodim avansi${note?' · '+note:''}`, period:date.slice(0,7), date }); }
-      catch(err){ toast('Xatolik: '+(err.code||err.message),true); btn.disabled=false; btn.textContent='Saqlash'; }
+        $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount:am, reason:`Xodim avansi${nt?' · '+nt:''}`, period:dd.slice(0,7), date:dd }); };
+      // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
+      //   baza rad etadi (id-guards.sql 5-band) — avans eski ID'ning YANGI egasiga jim yozilmaydi.
+      try{ await setDoc(doc(db,'staff_advances',advId), { teacherId:String(tid), payeeRef:(pp.kind==='teacher'?'teachers':'staff')+':'+String(pp.refId), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() }, {merge:true});
+        await done(); }
+      catch(err){
+        let saved=null; try{ const g=await getDoc(doc(db,'staff_advances',advId)); if(g&&g.exists()) saved=g.data()||{}; }catch(_){}
+        if(saved){ await done(saved); return; }   // oldingi bosishda yozilgan — «yozilmadi» deyilmaydi (ikkinchi avans berilmasin)
+        // 23503 — xodimning ID'si oyna ochilgandan keyin o'zgargan / xodim o'chirilgan: ro'yxat faqat oyna ochilganda o'qiladi,
+        //   shu oynada qayta bosish har safar rad etiladi — eski forma o'rniga aniq ko'rsatma.
+        if(err&&err.code==='23503'){ toast('Avans yozilmadi — xodimning ID’si o‘zgargan yoki u o‘chirilgan: oynani yopib, qayta oching',true);
+          $('#modal').innerHTML=`<div class="modal-h"><h3>⚠️ Xodim avansi yozilmadi</h3><button class="x" id="m-x2">×</button></div>
+            <div class="modal-b"><div class="small" style="background:#fdecec;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(tn)}: shu oyna ochilgandan keyin xodimning ID’si o‘zgartirilgan (yoki u ID boshqa xodimga berilgan / xodim o‘chirilgan) — avans hech kimga yozilmadi.</div>
+            <div class="small muted" style="margin-top:8px">Xodimlar ro‘yxati oyna ochilganda o‘qiladi. Oynani yopib, «👤 Xodim avansi»ni qayta oching.<br>${esc(err.message||'')}</div></div>
+            <div class="modal-f"><button type="button" class="btn gold" id="av-close">Yopish</button></div>`;
+          $('#m-x2').onclick=closeModal; $('#av-close').onclick=closeModal; return; }
+        toast('Xatolik: '+((err.code && err.message && err.message!==err.code) ? err.code+' — '+err.message : (err.code||err.message)),true); btn.disabled=false; btn.textContent='Saqlash'; }
     };
   });
   // Maosh berish (har xodimni tanlab) — payout jurnali (salary_payments) + chek. XARAJATga qo'shilmaydi.
