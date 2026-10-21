@@ -681,7 +681,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
     otasining ismi shaklidagi so'z faqat o'quvchi ismi YONIDA va jinsi mos bo'lsa zid («Karimov Jasur Bahodirov» — amakivachcha).
   - **O'zbekcha ↔ ruscha yozuvdagi bir ota (o'rta):** «Qodir o'g'li» ↔ Kadyrovich, «Qosim qizi» ↔ Kasymovna, Ortiq ↔ Artyk,
     G'ulom ↔ Gulyam, Botir ↔ Batyr, Qo'chqor ↔ Kuchkar, Jamol ↔ Djamal — 95% → 38–72%, amakivachcha yagona taklif edi. Endi
-    otasining ismi solishtirishda q→k, o→a, undoshlar orasidagi y→i, dj/dzh→j, apostrofsiz («Q.» ↔ Kadyrovich ham).
+    otasining ismi solishtirishda q→k, o→a, undoshlar orasidagi y→i, dj/dzh→j, apostrofsiz (R14 da aniqlashtirildi — pastga qarang).
   - **«Humo» (qiz ismi) izoh so'zi qilingan edi (o'rta):** «Valiyeva Humo R.» ↔ Valiyeva Humo 3% (opa-singli Rano 82% ⚠️ siz),
     «Humo» yozilgan to'lovni boshqa bolaga biriktirishda ⚠️ yo'q edi. Endi Humo — ism; faqat karta so'zi yonida («Humo karta»,
     «karta Humo», «Перевод с карты HUMO») — izoh.
@@ -697,6 +697,29 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   - Ongli qoldirilganlar: sinf so'zidan keyingi bo'shliqli bosh harflar («5-sinf A. S. Usmonov») — A sinf harfi (R11 bilan bir
     xil); boshqa familiyali ota («Karimov Jasur Rahimov» ↔ … Rustamovich) — otasining ismi shaklidagi so'z, zid; onasi bilan bir
     xil ismli qiz, onasining ismi oldin («Nazarova Nodira Hamidova Nodira») — juftlash noaniq.
+- **Ism solishtirish — R14 (R13 tuzatmalari ustidan yana bir ko'rik): 6 topilma — hammasi tuzatildi:**
+  - **Bosh harf ham «buklanardi» (o'rta):** «O.» har qanday A- bilan boshlanadigan otasining ismiga, «A.» esa O- ga mos kelardi —
+    otasi boshqa amakivachcha 10% → 95–100% ⚠️ siz, qarzi bo'lsa birinchi. To'liq ismlarda ham Komil/Kamol, Nodir/Kadyr,
+    Sarvar/Sardor bir ism deb olinardi. Endi bosh harf faqat aynan mos bo'lsa dalil; faqat ruscha yozuvda mos bosh harf
+    («Q.» ↔ Kadyrovich) — dalil ham, zid ham emas (60–64%, ⚠️ bilan); to'liq ism faqat yozilish farqi bo'lsa bir ism (Qodir =
+    Kadyr, G'ulom = Gulyam, Jo'ra = Dzhura), o'xshash boshqa ism emas.
+  - **Bosh harflardan keyingi oy nomi aka-ukaning ismi bo'lardi (o'rta):** «J.R. Karimov avgust uchun» — ukasi Karimov Avgust
+    95–100% ⚠️ siz birinchi; «Оплата Н.С. Петрова 15 мая» — Petrova Mayya. Endi bosh harfli familiya yonidagi oy nomi (yozuvdagi
+    birinchi so'z bo'lmasa) ism deb tiklanmaydi.
+  - **«5 - A.» sinf harfi bosh harf bo'lib qolardi (past):** endi tire / nuqtadan keyingi nuqtali harf faqat ID'dan keyin
+    («IQ-0042. J.») yoki raqamli ro'yxatda («1. J. Karimov 2. A. Karimova») bosh harf; «5 - A.», «5- A.», «11 - B.» — sinf.
+  - **So'z ichidagi tire (past):** «Abdul-Aziz», «Karimov-Bahodirovich» bo'lak chegarasi bo'lib, otasining ismi bosh harfi dalil
+    bo'lmay qolardi — endi faqat bo'shliqli tire chegara.
+  - **«Humo/Uzcard» (past):** «/» bo'lakni ajratib, Humo qiz ismi deb o'qilardi (soxta ⚠️ 74%) — endi karta konteksti.
+  - **«Boshqa odamning to'liq ismi» juda keng edi (past):** «Bahodirov Guliston», «Bahodirov matematika», «Bahodir aka» —
+    amakivachcha zidligini bekor qilardi. Endi faqat ayol familiyasi shaklidagi so'z bo'lsa («… Rahimova Dilnoza»).
+  - Ongli qoldirilganlar (R14): Qobil ↔ Kabulovich (Kabul — Qobul, boshqa ism) — zid, taklif yo'q (R12 bilan bir xil);
+    Ibrohim ↔ Ibragimovich, Abdulloh ↔ Abdullayevich — 77% (⚠️ siz, R12 bilan bir xil); Xo'ja ↔ Khodzhayevich — past (R12 dan
+    beri); «Karimova Malika Bahodirova Guliston» — «Bahodirova Guliston» boshqa ayol deb o'qiladi.
+  - Tekshiruv (R14): `name-match.test` 185 (5 yangi to'plam, 500 belgili matn < 1,5 s); R12 ko'rigining 114 holati 114/114;
+    R14 ko'rigining barcha juftlari; 120 000 tasodifiy matnda R12 ga nisbatan 0 farq, R11 ga nisbatan 29 oshdi, 0 tushdi;
+    maktab darajasida (366 kishi × 22 shablon × 5 yozuv shakli × 3 qarz holati) R11 ga nisbatan yo'qolgan to'g'ri bola faqat
+    ongli qoldirilganlarda; Chromium «Biriktirish» 110/110, «Chiqarish» 37/37. Modul manzili `?v=7`.
 - **Maosh / avans kaliti:**
   - **Eski oynadan berilgan maosh ID'ning yangi egasiga yozilardi (o'rta→past):** kassir «Maosh berish»ni ochgan, shu orada HR
     Anvarning ID'sini IQT-001 → IQT-050 qilib, bo'shagan IQT-001 ni Nodiraga bergan bo'lsa — «Maosh berildi — Aliyev Anvar», yozuv
