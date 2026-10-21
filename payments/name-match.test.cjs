@@ -396,8 +396,13 @@ ok('«Qodir o\'g\'li» ↔ Kadyrovich, «Qosim qizi» ↔ Kasymovna, «otasi Bot
   [["Karimov Jasur Qodir o'g'li", 'Karimov Jasur Kadyrovich'], ['Karimov Jasur, otasi Qodir', 'Karimov Jasur Kadyrovich'], ['Karimova Malika Qosim qizi', 'Karimova Malika Kasymovna'],
     ["Karimov Jasur Ortiq o'g'li", 'Karimov Jasur Artykovich'], ["Karimov Jasur G'ulom o'g'li", 'Karimov Jasur Gulyamovich'], ['Karimov Jasur, otasi Botir', 'Karimov Jasur Batyrovich'],
     ["Karimov Jasur Qo'chqor o'g'li", 'Karimov Jasur Kuchkarovich'], ["Karimov Jasur Jamol o'g'li", 'Karimov Jasur Djamalovich'], ['Karimov Jasur Qodirov', 'Karimov Jasur Kadyrovich'],
-    ['Karimov Jasur Q.', 'Karimov Jasur Kadyrovich'], ["Karimov Jasur Yoqub o'g'li", 'Karimov Jasur Yakubovich'], ['Karimov Jasur Qodirovich', 'Karimov Jasur Kadyrovich']]
-    .every(([p, r]) => sim(p, r) >= 0.85) && sim("Karimov Jasur Qodir o'g'li", 'Karimov Jasur Bahodirovich') < 0.65 && sim('Karimov Jasur, otasi Qodir', 'Karimov Jasur Abduqodirovich') < 0.65,
+    ["Karimov Jasur Yoqub o'g'li", 'Karimov Jasur Yakubovich'], ['Karimov Jasur Qodirovich', 'Karimov Jasur Kadyrovich'], ["Karimov Jasur Jamol o'g'li", 'Karimov Jasur Dzhamalovich'],
+    ["Karimov Jasur Valijon o'g'li", 'Karimov Jasur Validzhanovich']]
+    .every(([p, r]) => sim(p, r) >= 0.85) && sim("Karimov Jasur Qodir o'g'li", 'Karimov Jasur Bahodirovich') < 0.65 && sim('Karimov Jasur, otasi Qodir', 'Karimov Jasur Abduqodirovich') < 0.65
+    // faqat AYNAN bir ism (Sarvar ≠ Sardor, Komil ≠ Kamol); bosh harf faqat aynan — ruscha yozuvdagi («Q.» ↔ Kadyrovich, «O.» ↔ Anvarovich) ≤ 64% ⚠️
+    && [["Karimov Jasur Sarvar o'g'li", 'Karimov Jasur Sardorovich'], ["Karimov Jasur Komil o'g'li", 'Karimov Jasur Kamolovich'], ["Karimov Jasur Nodir o'g'li", 'Karimov Jasur Kadyrovich']]
+      .every(([p, r]) => sim(p, r) < 0.75) && [['Karimov Jasur Q.', 'Karimov Jasur Kadyrovich'], ['Karimov Jasur O.', 'Karimov Jasur Anvarovich'], ['Karimov Jasur K.', 'Karimov Jasur Qodirovich'],
+      ['Karimova Malika A.', 'Karimova Malika Olimovna']].every(([p, r]) => sim(p, r) >= 0.6 && sim(p, r) <= 0.64) && sim('Karimov Jasur O.', 'Karimov Jasur Odilovich') >= 0.9,
   [["Karimov Jasur Qodir o'g'li", 'Karimov Jasur Kadyrovich'], ['Karimov Jasur Qodirovich', 'Karimov Jasur Kadyrovich'], ["Karimov Jasur Qodir o'g'li", 'Karimov Jasur Bahodirovich']].map(([p, r]) => sim(p, r)));
 // «Humo» — qiz ismi; karta so'zi yonida — izoh
 ok('«Humo» — qiz ismi (⚠️, opa-singil ko\'tarilmaydi), «Humo karta orqali» — izoh', N.wroteName('Humo', 'Karimova Dilnoza') && N.wroteName('Хумо', 'Karimova Dilnoza')
@@ -419,6 +424,28 @@ ok('«Jasur Karimov R.» ↔ Karimov Rustam, «Malika Karimova S.» ↔ Karimova
   sim('Jasur Karimov R.', 'Karimov Rustam') <= 0.64 && sim('Malika Karimova S.', 'Karimova Sevara') <= 0.64 && sim('Jasur Karimov R.', 'Karimov Jasur') === 1
     && sim('Malika Karimova S.', 'Karimova Malika') === 1 && sim('Guliston Karimov J.', 'Karimov Jasur') >= 0.6 && sim('Guliston Karimov J.', 'Karimov Jasur') <= 0.64,
   [sim('Jasur Karimov R.', 'Karimov Rustam'), sim('Guliston Karimov J.', 'Karimov Jasur')]);
+
+// ---- R14 ko'rigi ----
+ok('«J.R. Karimov avgust uchun», «Оплата Н.С. Петрова 15 мая», «Ли Мария до 15 октября» — oy / predlog ism bo\'lib qolmaydi',
+  sim('J.R. Karimov avgust uchun', 'Karimov Avgust') < 0.1 && sim('Оплата Н.С. Петрова 15 мая', 'Petrova Mayya') < 0.1 && sim('Ким Анна, Ли Мария до 15 октября', 'Do Mariya') < 0.5
+    && sim('J.R. Karimov avgust uchun', 'Karimov Jasur') > 0.7 && sim('Petrova Mayya I.', 'Petrova Mayya Ivanovna') >= 0.85,
+  [sim('J.R. Karimov avgust uchun', 'Karimov Avgust'), sim('Оплата Н.С. Петрова 15 мая', 'Petrova Mayya')]);
+ok('«5 - A. Karimov Jasur», «5- A.», «5. A.» — A sinf harfi; «IQ-0042. J.», «0042 - J.», «1. J. … 2. B. …» — bosh harf',
+  ['5 - A. Karimov Jasur', '5- A. Karimov Jasur', '5. A. Karimov Jasur', '5 – A. Karimov Jasur', '11 - B. Karimov Jasur'].every(p => sim(p, R3) >= 0.9)
+    && sim('Karimov Jasur 5 - A.', 'Karimov Akmal') < 0.1 && ['IQ-0042. J. Karimov', 'IQ-0042 - J. Karimov'].every(p => sim(p, 'Karimov Jasur') > 0.7)
+    && sim('1. J. Karimov 2. B. Karimov', 'Karimov Jasur') > 0.6,
+  ['5 - A. Karimov Jasur', '5. A. Karimov Jasur'].map(p => sim(p, R3)));
+ok('yopishgan / bosh harf oldidagi tire chegara emas («Jasur-R.», «Jasur - R.»); «Humo/Uzcard», «Humo-karta» — karta',
+  ['Karimov Jasur-R.', 'Karimov Jasur - R.'].every(p => sim(p, 'Karimov Jasur Bahodirovich') < 0.5 && sim(p, R3) >= 0.9 && sim(p, 'Karimov Rustam') < 0.1)
+    && ['Karimov Jasur Humo/Uzcard', 'Karimov Jasur Humo-karta'].every(p => sim(p, R3) >= 0.9),
+  [sim('Karimov Jasur-R.', 'Karimov Jasur Bahodirovich'), sim('Karimov Jasur Humo/Uzcard', R3)]);
+ok('«Karimov Jasur Bahodirov Guliston / matematika» — amakivachcha baribir zid; onasining to\'liq ismi (o\'g\'il va qiz) — dalil emas',
+  ['Karimov Jasur Bahodirov Guliston', 'Karimov Jasur Bahodirov matematika'].every(p => sim(p, R3) < 0.5)
+    && sim('Karimova Malika Rahimova Dilnoza', 'Karimova Malika Rustamovna') >= 0.85 && sim('Karimov Jasur Rahimova Dilnoza', R3) >= 0.85,
+  [sim('Karimov Jasur Bahodirov Guliston', R3), sim('Karimova Malika Rahimova Dilnoza', 'Karimova Malika Rustamovna')]);
+{ const t0 = Date.now(); const studs = []; for (let i = 0; i < 1000; i++) studs.push({ name: 'Karimov Jasur' + (i % 7 ? '' : ' Rustamovich') + ' ' + i });
+  N.rankByName('A.B.C.D.E. '.repeat(45), studs); const dt = Date.now() - t0;
+  ok('bosh harflar bilan to\'la 500 belgili matn × 1000 o\'quvchi — tez (< 1.5 s)', dt < 1500, dt); }
 
 // ---- Brauzer yo'li (UMD): module yo'q -> globalThis.IqrorNameMatch ----
 { const src = fs.readFileSync(path.join(__dirname, '..', 'sb', 'name-match.js'), 'utf8'); const ctx = {}; vm.createContext(ctx); vm.runInContext(src, ctx);

@@ -117,13 +117,16 @@
   var NEAR_DIGIT_BEFORE = new RegExp('(^|[^' + W + '])[\\p{L}\\p{M}]{1,2}(?=[-\\u2013.]?\\d)', 'gu');
   var NEAR_DIGIT_AFTER = new RegExp('(\\d+[-\\u2013\\u2014.]?["\\u00AB\\u201C]?)([' + W + ']{1,4})(?![' + W + '])', 'gu');
   var DIGIT_SPACE_LETTER = new RegExp('(\\d[-\\u2013\\u2014.]?\\s+[-\\u2013\\u2014.]?\\s*)(\\p{L})(?![' + W + '])', 'gu');   // «5 A», «5- A» («5-«A»» qo'shtirnoqdan keyin)
-  // ... LEKIN koreyscha «O» familiyasi («5 O Viktoriya») va YOPISHGAN bosh harflar («5 A.S. Usmonov») — tegilmaydi; tire / nuqtadan
-  //   keyingi NUQTALI harf — bosh harf («5- J. Karimov», «IQ-0042. J. Karimov», «1. J. Karimov 2. B. Karimov»; sinf harfi bunda
-  //   nuqtasiz: «5- A»). Yil qisqartmasi («2026 y.», «2026 г.», «2026 й.») — doim olib tashlanadi (ketidan bosh harf kelsa ham).
+  // ... LEKIN koreyscha «O» familiyasi («5 O Viktoriya») va YOPISHGAN bosh harflar («5 A.S. Usmonov») — tegilmaydi; ID / uzun raqamdan
+  //   («IQ-0042. J. Karimov», «0042 - J.») yoki raqamlangan ro'yxatdan («1. J. Karimov 2. B. Karimov») keyingi NUQTALI harf — bosh
+  //   harf; sinf raqamidan (1–2 raqam) keyin tire / nuqta bilan («5 - A.», «5- A.», «5. A. Karimov») — sinf harfi. Yil qisqartmasi
+  //   («2026 y.», «2026 г.», «2026 й.») — doim olib tashlanadi (ketidan bosh harf kelsa ham).
   function digitSpaceLetter(m, pre, letter, off, str) {
-    var after = str.slice(off + m.length);
+    var after = str.slice(off + m.length), num = (str.slice(0, off + 1).match(/\d+$/) || [''])[0];
     if (/^[yгй]$/.test(letter) && /(^|\D)(19|20)\d\d$/.test(str.slice(0, off + 1))) return pre + ' ';
-    return letter === 'o' || letter === 'о' || /^\.\p{L}\./u.test(after) || (/[-–—.]/.test(pre) && after.charAt(0) === '.') ? m : pre + ' ';
+    var list = (str.match(/(^|[^\d])\d{1,2}\.\s/g) || []).length >= 2;
+    var dotted = after.charAt(0) === '.' && /[-–—.]/.test(pre) && (num.length >= 3 || (list && /^\d\.\s/.test(pre)));
+    return letter === 'o' || letter === 'о' || /^\.\p{L}\./u.test(after) || dotted ? m : pre + ' ';
   }
   // Uzun raqamga (ID, telefon: 3+ raqam) yopishgan 3+ harfli so'z izoh so'zi bo'lmasa — ism («IQ-0042-Ali», «998901112233Ali»);
   //   qisqa raqamdan keyingisi (sinf «5-A», «11B») va izoh so'zi («2026-yil», «1500000so'm») — olib tashlanadi.
@@ -205,7 +208,7 @@
   // «Humo» — qiz ismi (Хумо) ham, karta tizimi ham: karta so'zi yonida (shu bo'lakda: «Humo karta», «karta Humo», «Humo/Uzcard»,
   //   «Перевод с карты HUMO») — izoh; boshqa joyda — ism («Karimova Humo», «Humo uchun», «Valiyeva Humo R.», «Karimova Humo click
   //   orqali» — click / orqali yonida ham).
-  var CARD = { xumo: 1 }, CARDCTX = {};
+  var CARD = { xumo: 1 }, CARDCTX = {}, CARD_SEP = /[,;|()\[\]{}\r\n]/;   // «Humo/Uzcard», «Humo-karta» — yonma-yon
   ("karta kartadan kartasi kartaga kartaning card uzcard visa mastercard перевод перевода карта карты карте картой карту")
     .split(' ').forEach(function (w) { var n = normalizeName(w); if (n) CARDCTX[n] = 1; });
   // Manzil: shahar / tuman nomlari va manzil so'zlari — izoh so'zi (ism ham bo'la oladigan nomlar — Navoiy, Bektemir, Guliston,
@@ -232,9 +235,9 @@
   //   oyi uchun»: bunday matnda oy nomi ism emas; ism bo'la oladigan «мая», «на» sanalmaydi). patr — to'lovchi otasining ismini
   //   (-ovich/-ovna) yozgan; fathers — «… Bahodir o'g'li», «otasi Bahodir», «(dadasi Bahodir)» dagi otasining ismi (ism so'zlari
   //   qatoriga kirmaydi). Bo'lak (seg) — vergul, «;», «/», «|», qavs, bo'shliqli tire («Karimov Jasur - Rahimova Dilnoza»; so'z
-  //   ichidagi «Abdul-Aziz» emas) yoki bog'lovchi («va», «и», «bilan») bilan ajralgan qism.
+  //   ichidagi «Abdul-Aziz» va bosh harf oldidagi «Jasur - R.» emas) yoki bog'lovchi («va», «и», «bilan») bilan ajralgan qism.
   //   one — bo'shliq bilan yozilgan nuqtasiz yakka harflar soni («Ж К»).
-  var BND = /[,;\/|()\[\]{}\r\n]|(^|\s)[-–—](?=\s|$)/;
+  var BND = /[,;\/|()\[\]{}\r\n]/, DASH = /\s[-–—]|[-–—]\s/;
   function payerInfo(text) {
     var lat = toLatin(payerClean(text)), re = /[a-z']+/g, m, raw = [], pop = [], gap = '', end = 0, i, t;
     while ((m = re.exec(lat))) {
@@ -254,7 +257,7 @@
     var isNameW = function (k) { return k >= 0 && !FILLER[ws[k].w] && ws[k].w.length > 2; };
     for (i = 0; i < ws.length; i++) {
       var w = ws[i].w, g = ws[i].gap, pv = toks[i - 1], nx = ws[i + 1], after = nx ? nx.gap : tail;
-      var f = !!FILLER[w] || (!!CARD[w] && ((i > 0 && !!CARDCTX[ws[i - 1].w] && !BND.test(g)) || (!!nx && !!CARDCTX[nx.w] && !BND.test(nx.gap))))
+      var f = !!FILLER[w] || (!!CARD[w] && ((i > 0 && !!CARDCTX[ws[i - 1].w] && !CARD_SEP.test(g)) || (!!nx && !!CARDCTX[nx.w] && !CARD_SEP.test(nx.gap))))
         || (!!ADDR[w] && ((i > 0 && !!TOPO[ws[i - 1].w]) || (!!nx && !!TOPO[nx.w]
         && (i === 0 || !!FILLER[ws[i - 1].w] || ((isNameW(i - 1) || (!!pv && !!pv.ini)) && isNameW(i - 2))))));
       var dot = ws[i].dot || (!f && w.length <= 2 && !!pv && !!pv.ini && /^\.\s*$/.test(g)
@@ -263,7 +266,7 @@
       if (f && !soft) nf++;
       else if (!f && w.length > 2 && PATRONYMIC.test(w)) patr = true;
       if (!f && !ini && w.length === 1 && w !== 'o' && /^\s*$/.test(g)) one++;
-      toks.push({ w: w, f: f, soft: soft, ini: ini, bnd: BND.test(g), dig: /\d/.test(g), date: /(^|\D)\d{1,2}[-–—.]?\s*$/.test(g) });
+      toks.push({ w: w, f: f, soft: soft, ini: ini, bnd: BND.test(g) || (DASH.test(g) && !ini), dig: /\d/.test(g), date: /(^|\D)\d{1,2}[-–—.]?\s*$/.test(g) });
     }
     // Bosh harf roli: otasining ismi bosh harfi (2) — shu bo'lakda boshqa bosh harfdan keyin («J.R.», «J. R.») yoki ketma-ket ikki
     //   ism so'zidan keyin («Karimov Jasur R.», «Li Viktoriya S.»; byW — yozuvga qarab 1 bo'lishi mumkin, payerTokens);
@@ -343,17 +346,21 @@
     };
     var slotFree = function (k) {
       var j = R.indexOf(toks[k].w);
+      if (toks[k].soft && !toks[k].np) return false;   // «до 15 октября», «Оплата на …» — ism o'rnida emas
       for (var d = -1; d <= 1; d += 2) {
-        var a = k + d, y = toks[a + d], z = toks[a + 2 * d], mt = false, q;
+        var a = k + d, b = a + d, y = toks[b], z = toks[b + d], mt = false, q;
         if (a < 0 || a >= n || fate[a] !== 'P' || toks[a].seg !== toks[k].seg) continue;
         for (q = 0; q < R.length; q++) if (q !== j && R[q] !== toks[k].w && (toks[a].w === R[q] || (toks[a].w.length > 2 && R[q].length > 2 && wordSim(toks[a].w, R[q]) >= 0.8))) mt = true;
         if (!mt) continue;
-        //   Familiyadan OLDINGI so'z o'zi boshqa to'liq ismning oxiri bo'lsa («Nazarova Zulfiya Lebedev Avgust», «Karimova Malika
-        //   Karimov Avgust») — u ism o'rnini band qilmaydi.
-        if (y && y.seg === toks[a].seg && fate[a + d] === 'P'
-          && (y.ini ? j > 0 && role(a + d) === 1 && !iniMatch(y.w, R[j])
-            : y.w.length > 2 && !PATRONYMIC.test(y.w) && bestSim(y.w, R) < 0.8
-              && !(d < 0 && z && z.seg === y.seg && fate[a + 2 * d] === 'P' && !z.ini && z.w.length > 2 && !PATRONYMIC.test(z.w)))) continue;
+        //   Ism o'rni band: ism o'rniga — har qanday bosh harf («J.R. Karimov avgust», «May Karimov J.») yoki yozuvga mos kelmaydigan
+        //   ism so'zi («Avgust Karimov Jasur»; familiyadan OLDINGI so'z o'zi boshqa to'liq ismning oxiri bo'lsa — yo'q: «Nazarova
+        //   Zulfiya Lebedev Avgust»); familiya o'rniga — yozuvda yo'q 2 harfli so'z («Li Mariya до …» ↔ Do Mariya).
+        if (y && y.seg === toks[a].seg) {
+          if (y.ini) { if (j > 0) continue; }
+          else if (fate[b] === 'P' && y.w.length > 2 && !PATRONYMIC.test(y.w) && bestSim(y.w, R) < 0.8
+            && !(d < 0 && z && z.seg === y.seg && fate[b + d] === 'P' && !z.ini && z.w.length > 2 && !PATRONYMIC.test(z.w))) continue;
+          else if (j === 0 && (fate[b] === 'P' || fate[b] === 'l') && y.w.length <= 2 && R.indexOf(y.w) < 0) continue;
+        }
         return true;
       }
       return false;
@@ -438,15 +445,17 @@
     if (ini === 3) return !rp ? 0 : p.length <= 2 ? (iniMatch(p, r) ? INITIAL : 0) : Math.max(wordSim(p, r), wordSim(p, patRoot(r)));
     if (p === r) return 1;
     if (p.length <= 2) return (ini && (rp == null || (ini === 2) === rp) && iniMatch(p, r)) ? INITIAL : 0;
-    if (rp && PATRONYMIC.test(p)) return Math.max(wordSim(p, r), wordSim(fold(p), fold(r)));   // «Qodirovich» ↔ «Kadyrovich»
+    if (rp && PATRONYMIC.test(p) && foldKey(p) === foldKey(r)) return 1;   // «Qodirovich» = «Kadyrovich»
     return wordSim(p, r);
   }
-  // O'zbekcha ↔ ruscha yozuvdagi BIR ism (Qodir ↔ Kadyr, Qo'chqor ↔ Kuchkar, G'ulom ↔ Gulyam, Jamol ↔ Djamal, Botir ↔ Batyr,
-  //   Valijon ↔ Validzhan) — faqat otasining ismini solishtirishda: apostrofsiz, dzh / dj / zh → j, q → k, o → a, undoshlar
-  //   orasidagi / oxiridagi y → i.
+  // O'zbekcha ↔ ruscha yozuvdagi BIR ism (Qodir ↔ Kadyr, Qo'chqor ↔ Kuchkar, G'ulom ↔ Gulyam, Jamol ↔ Djamal / Dzhamal, Botir ↔
+  //   Batyr, Valijon ↔ Validzhan) — faqat otasining ismini solishtirishda: apostrofsiz, dzh / dj / zh (normWord'dan keyin «dzx»,
+  //   «zx») → j, q → k, o → a, undoshlar orasidagi / oxiridagi y → i. foldKey — qolgan y'larsiz (Gulyam = G'ulom); ikki ism faqat
+  //   AYNAN teng foldKey bilan bir ism (Sarvar ≠ Sardor, Komil ≠ Kamol).
   function fold(w) {
-    return w.replace(/'/g, '').replace(/dzh|dj|zh/g, 'j').replace(/q/g, 'k').replace(/o/g, 'a').replace(/([^aeiu])y(?![aeiu])/g, '$1i');
+    return w.replace(/'/g, '').replace(/dzx|dzh|dj|zx|zh/g, 'j').replace(/q/g, 'k').replace(/o/g, 'a').replace(/([^aeiu])y(?![aeiu])/g, '$1i');
   }
+  function foldKey(w) { return fold(w).replace(/y/g, ''); }
   // Tasodifiy o'xshashlik chegarasi: begona ismlar ham umumiy harflar (-ov, -eva, -bek…) tufayli ~30% «o'xshaydi»
   //   (Karimov / Sobirov). Shu darajagacha o'xshashlik hisobga olinmaydi, yuqorisi 0..1 ga cho'ziladi.
   var CHANCE = 0.3;
@@ -496,13 +505,17 @@
     return r;
   }
   // To'lovchi yozgan so'z / bosh harf yozuvdagi otasining ismiga (pat) mosmi: «R.» ↔ Rustamovich; «Rustamovch», «Rustamova» (≥ 0.6);
-  //   o'zagi bilan — «Bahodir», «Bahodirov», «Bahodirjon», qisqartma «Bah.» ↔ Bahodirovich; ruscha yozuv bilan ham (fold:
-  //   «Qodir o'g'li», «Q.» ↔ Kadyrovich).
+  //   o'zagi bilan — «Bahodir», «Bahodirov», «Bahodirjon», qisqartma «Bah.» ↔ Bahodirovich; ruscha yozuvdagi AYNAN shu ism ham
+  //   («Qodir o'g'li», «Qodirov» ↔ Kadyrovich — foldKey teng). Bosh harf faqat aynan (O. ≠ Anvarovich); faqat ruscha yozuvda mos
+  //   bosh harf («Q.» ↔ Kadyrovich, «K.» ↔ Qodirovich) — iniFold: dalil emas, zid ham emas (R' ≤ 64%, ⚠️).
   function compat(w, pat) {
-    if (w.length <= 2) return iniMatch(w, pat) || iniMatch(fold(w), fold(pat));
-    var root = fold(patRoot(pat)), fw = fold(w);
-    return wordSim(fw, fold(pat)) >= 0.6 || (root.length >= 3 && (wordSim(fw, root) >= 0.75 || root.indexOf(fw) === 0 || fw.indexOf(root) === 0));
+    if (w.length <= 2) return iniMatch(w, pat);
+    var root = patRoot(pat);
+    if (wordSim(w, pat) >= 0.6 || (root.length >= 3 && (wordSim(w, root) >= 0.75 || root.indexOf(w) === 0 || w.indexOf(root) === 0))) return true;
+    var fw = foldKey(w), fr = foldKey(root);
+    return fr.length >= 3 && (fw === fr || (fw.indexOf(fr) === 0 && PATR_FORM.test(w)));
   }
+  function iniFold(w, pat) { return w.length <= 2 && !iniMatch(w, pat) && iniMatch(fold(w), fold(pat)); }
   // Otasining ismi shaklidagi so'z: -ov / -ev / -ova / -ovna / -ovn / -ovana / -ovch / -ovic / -ovitch / -ovish / -obich / -ovchi…
   var PATR_FORM = /[oe][vb](?:itch|ich|icn|ic|ix|ish|chi|ch|ana|an|na|n|a|i)?$/;
   // Otasining ismisiz (R') solishtirish DALILI: to'lovchining R' ga juftlanmagan so'zlari, 2 so'zli R' da tashlangan otasining ismi
@@ -522,9 +535,14 @@
       return false;
     };
     var same = function (x, y) { return y >= 0 && y < toks.length && toks[y].seg === toks[x].seg; };
-    var mom = function (x) { for (var y = x - 1; same(x, y) && !isP[y]; y--) if (MOTHER[toks[y].w]) return true; return false; };
+    //   ona so'zidan keyin (shu bo'lakda, orada o'quvchi ismi yo'q) — bir o'tishda
+    var momAt = [], mf = false;
+    for (k = 0; k < toks.length; k++) { if (k && toks[k].seg !== toks[k - 1].seg) mf = false; momAt[k] = mf; if (MOTHER[toks[k].w]) mf = true; else if (isP[k]) mf = false; }
+    var mom = function (x) { return !!momAt[x]; };
+    //   ayol kishining to'liq ismi (familiyasi -ova / -eva + ism): «Rahimova Dilnoza» — onasi / to'lovchi; «Bahodirov Guliston» — emas
+    var femSur = function (y) { var v = toks[y].w; return /[oe][vb]a$/.test(v) && v.replace(PATR_FORM, '').length >= 3; };
     var other = function (x) {
-      return [x - 1, x + 1].some(function (y) { return same(x, y) && !isP[y] && t.fate[y] === 'P' && !toks[y].ini && toks[y].w.length > 2 && bestSim(toks[y].w, R2) < 0.8; });
+      return [x - 1, x + 1].some(function (y) { return same(x, y) && !isP[y] && t.fate[y] === 'P' && !toks[y].ini && toks[y].w.length > 2 && bestSim(toks[y].w, R2) < 0.8 && (femSur(x) || femSur(y)); });
     };
     for (q = 0; q < P.length; q++) {
       var x = t.PX[q], w = P[q];
@@ -535,9 +553,9 @@
       if (w.length > 2 && PATR_FORM.test(w) && w.replace(PATR_FORM, '').length >= 3 && bestSim(w, R2) < 0.8) {   // «Eva» — ism
         if (/[oe][vb](?:a|n|na|an|ana)$/.test(w) !== female) continue;
         vs.push((isP[x - 1] && same(x, x - 1)) || (isP[x + 1] && same(x, x + 1)) ? -1 : 0);
-      } else vs.push(w.length <= 2 && !!toks[x].ini ? -1 : 0);
+      } else vs.push(w.length <= 2 && !!toks[x].ini && !iniFold(w, pat) ? -1 : 0);
     }
-    for (k = 0; k < toks.length; k++) if (t.fate[k] === 'd' && near(k, -1, Infinity) && !mom(k)) vs.push(compat(toks[k].w, pat) ? 1 : -1);
+    for (k = 0; k < toks.length; k++) if (t.fate[k] === 'd' && near(k, -1, Infinity) && !mom(k)) vs.push(compat(toks[k].w, pat) ? 1 : iniFold(toks[k].w, pat) ? 0 : -1);
     info.fathers.forEach(function (w) { vs.push(compat(w, pat) ? 1 : -1); });
     return vs.indexOf(-1) >= 0 ? '' : vs.indexOf(1) >= 0 ? 'for' : vs.length ? 'generic' : 'none';
   }
