@@ -662,6 +662,71 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   ID o'zgarishi 13/13, o'chirish/olimpiada/import 20/20, poygalar 3/3, qisman xato 2/2; shim selftest PASS; Chromium «Biriktirish»
   110/110, chiqarish 37/37; to'lov/SMS/auth/server testlari yashil.
 
+## 37) Yakuniy raqib ko'rigi (R13) — R12 ism solishtirish va §36 ID tuzatmalari ustidan
+
+- To'rt yo'nalish (ism solishtirish algoritmi, SQL, formalar, shim) haqiqiy stekda, har topilma alohida tekshiruvchi bilan qayta
+  tasdiqlandi: 15 topilma (ikkitasi bitta xato) — hammasi tuzatildi.
+- **Ism solishtirish — R12 qoidalarining yon ta'siri:**
+  - **Yil qisqartmasi / bo'shliqli nuqtali sinf harfi bosh harf bo'lib qolardi (yuqori):** «oktyabr 2026 y. J. Karimov uchun»,
+    «2026 г. Ж. Каримов», «5-sinf A. J. Karimov», «5 класс А. Ж. Каримов» — «y.» / «г.» / sinf harfi ism bosh harfi deb olinib,
+    to'g'ri bola 3% ga tushar, ismi shu harf bilan boshlanadigan aka-ukasi 82% ⚠️ siz yagona taklif edi. Endi faqat YOPISHGAN bosh
+    harflar («5-sinf A.S. Usmonov», «5 класс Ж.Р.») saqlanadi; yil qisqartmasi («2026 y.», «2026 г.», «2026 й.») doim olib tashlanadi.
+  - **«5-A J. Karimov» — bosh harf o'chardi (o'rta):** sinf harfi kesilgandan keyin «J.» raqamdan keyingi harfga o'xshab qolardi
+    (to'g'ri bola 57%, aka-ukasi bilan teng). Endi raqamdan keyingi yakka harf sinf harfi kesilishidan OLDIN qidiriladi; tire /
+    nuqtadan keyingi NUQTALI harf («5- J.», «IQ-0042. J.», «1. J. Karimov 2. B. Karimov», «2026-y. J.») — bosh harf. «5A J.
+    Karimov» (R11 dan beri 57%) ham endi 72%.
+  - **Onasining / to'lovchining familiyasi otasining ismi deb o'qilardi (o'rta):** «Karimov Jasur - Rahimova Dilnoza», «… onasi
+    Rahimova», «Rahimova Dilnoza Karimov Jasur» ↔ Karimov Jasur Rustamovich 85–96% → 29% (taklif yo'q, soxta ⚠️). Endi bo'shliqli
+    tire — bo'lak chegarasi; ona so'zidan keyingi so'zlar, boshqa odamning to'liq ismi va o'g'il ismi yonidagi «-ova» — dalil emas;
+    otasining ismi shaklidagi so'z faqat o'quvchi ismi YONIDA va jinsi mos bo'lsa zid («Karimov Jasur Bahodirov» — amakivachcha).
+  - **O'zbekcha ↔ ruscha yozuvdagi bir ota (o'rta):** «Qodir o'g'li» ↔ Kadyrovich, «Qosim qizi» ↔ Kasymovna, Ortiq ↔ Artyk,
+    G'ulom ↔ Gulyam, Botir ↔ Batyr, Qo'chqor ↔ Kuchkar, Jamol ↔ Djamal — 95% → 38–72%, amakivachcha yagona taklif edi. Endi
+    otasining ismi solishtirishda q→k, o→a, undoshlar orasidagi y→i, dj/dzh→j, apostrofsiz («Q.» ↔ Kadyrovich ham).
+  - **«Humo» (qiz ismi) izoh so'zi qilingan edi (o'rta):** «Valiyeva Humo R.» ↔ Valiyeva Humo 3% (opa-singli Rano 82% ⚠️ siz),
+    «Humo» yozilgan to'lovni boshqa bolaga biriktirishda ⚠️ yo'q edi. Endi Humo — ism; faqat karta so'zi yonida («Humo karta»,
+    «karta Humo», «Перевод с карты HUMO») — izoh.
+  - **Ism bo'la oladigan izoh so'zlari ismda (o'rta):** «Petrova Mayya I.», «Na Viktoriya S.», «Petrova Mayya Guliston»,
+    «Karimova Mayya va Karimov Ali», «Karimov Avgust R.» — 90–95% → 3% (boshqa bo'lak, bosh harf, noma'lum so'z «ism o'rni band»
+    deb sanalardi). Endi so'z yozuvdagi boshqa so'zga mos so'z yonida (shu bo'lakda) bo'lsa va uning narigi yonida boshqa ism so'zi
+    / boshqa harfli ism bosh harfi bo'lmasa — ism; «Karimov Jasur avgust», «Avgust Karimov Jasur», «May Karimov J.» — baribir izoh.
+  - **Bosh harf roli yozuvga qarab o'zgarganda (past):** «Jasur Karimov R.» ↔ ukasi Karimov Rustam 68% (bonus bilan 78% ⚠️ siz).
+    Endi bunday (noaniq) holatda ball ≤ 64% — bonus bilan ham ⚠️; «Guliston Karimov J.» ↔ Karimov Jasur — 64% (taklif, ⚠️ bilan).
+  - Tekshiruv: `name-match.test` 180 (7 yangi to'plam); R12 ko'rigining 114 holati 114/114; R13 ko'rigining hamma juftlari R11
+    qiymatiga qaytdi yoki yaxshilandi; 120 000 tasodifiy matnda R12 ga nisbatan 0 farq, R11 ga nisbatan 29 / 32 oshdi, 0 tushdi;
+    Chromium «Biriktirish» 110/110 va R13 holatlari (to'g'ri bola taklif qilinadi, noto'g'ri tanlashda ⚠️). Modul manzili `?v=6`.
+  - Ongli qoldirilganlar: sinf so'zidan keyingi bo'shliqli bosh harflar («5-sinf A. S. Usmonov») — A sinf harfi (R11 bilan bir
+    xil); boshqa familiyali ota («Karimov Jasur Rahimov» ↔ … Rustamovich) — otasining ismi shaklidagi so'z, zid; onasi bilan bir
+    xil ismli qiz, onasining ismi oldin («Nazarova Nodira Hamidova Nodira») — juftlash noaniq.
+- **Maosh / avans kaliti:**
+  - **Eski oynadan berilgan maosh ID'ning yangi egasiga yozilardi (o'rta→past):** kassir «Maosh berish»ni ochgan, shu orada HR
+    Anvarning ID'sini IQT-001 → IQT-050 qilib, bo'shagan IQT-001 ni Nodiraga bergan bo'lsa — «Maosh berildi — Aliyev Anvar», yozuv
+    esa Nodira kaliti ostida (Nodira kam oladi, Anvarga ikki marta beriladi). Endi maosh/avans yozuvida `payeeRef` (jadval:qator
+    id) — baza yozuvni shu odamning HOZIRGI kaliti bilan solishtiradi, teng bo'lmasa rad etadi; «ALLAQACHON berilgan» savolidan
+    oldin ham xodim qatori qayta o'qiladi; oylik hisobotdagi «💵 Oylik» xodimni qator id'si bilan ochadi (hisobot eskirgan bo'lsa
+    — ogohlantirish va yangilash, boshqa odam yoki ro'yxatdagi birinchisi tanlanmaydi).
+  - **Xato xabari (past):** kassir faqat «Xatolik: 23503» ko'rardi va shu oynada qayta bosardi — endi «Maosh yozilmadi — oynani
+    yopib, qayta oching» (server izohi bilan), hisobot darhol yangilanadi; avansda javobi yo'qolgan bosish «yozildi» deb ko'rsatiladi.
+  - **Bir vaqtdagi ikki yangi ID (past):** ikki HR bir soniyada bir xil ID bilan xodim qo'shsa yoki ID o'zgartirish bilan to'qnashsa —
+    ikkalasi ham o'tib, bitta kalit ikki kishida qolardi. Endi takror tekshiruvi `rekey_payroll_id` bilan bir xil qulfda (300 juft
+    parallel yozuvda 0 dublikat).
+  - **Kalit «oracle»si yopildi:** maosh ko'ra olmaydigan foydalanuvchi (ota-ona, o'qituvchi, qabulxona) xato matnidan xodimning
+    maosh kalitini bilib olardi — endi u holda tekshiruv xabarisiz RLS rad etadi.
+- **Formalar:**
+  - **Excel import / yangi o'quvchi — javob yo'qolsa dublikat (o'rta):** INSERT bazada yozilgan, javobi esa yo'qolgan bo'lsa (tarmoq,
+    504; Chromium POST'ni o'zi qayta yuborishi ham mumkin) qayta «Saqlash» o'z qatoriga urilib, «ID band» deb ikkinchi nusxani
+    yaratardi (ikkalasiga faktura) yoki fayldagi ID bilan maxfiy ma'lumotni tashlab ketardi. Endi 23505 da bazadagi qator o'qiladi
+    — o'zimiz yozgan qator (ID, ism, sinf, guruh, yo'nalish, til, tartib) bo'lsa yozilgan deb hisoblanadi; qator ID'si xatoda
+    saqlanadi; yangi o'quvchi formasida javob kelmasa «shu oynada qayta Saqlash» xabari, bir xil ism bazadan ham tekshiriladi.
+  - **Forma ochilishi poygasi (past):** maxfiy maydonlar o'qilayotganda boshqa qatorni bosish mumkin edi — kech kelgan o'qish B
+    formasini A bilan almashtirib, kiritilgan narsa A ga yozilardi. Endi «yuklanmoqda…» oynasi ro'yxatni yopadi, faqat oxirgi
+    chaqiruv chiziladi, o'qib bo'lmasa forma ochilmaydi («Qayta urinish»).
+  - **Maosh stavkasi o'zgargach saqlangan maosh (past):** faqat bonus stavkasi o'zgarganda «Saqlash» ro'yxatdagi «Maosh»ni
+    yangilamasdi. Endi saqlangan maosh avvalgi stavkalardan biri bilan hisoblangan bo'lsa (shu sessiya va bazadagi tarix
+    `config.ratesPrev`, oxirgi 6 ta) — joriy stavka bilan yangilanadi; boshqa sababdan mos kelmaydigan eski qiymat tegilmaydi.
+  - **HIK report (past):** shu orada Kamera ID'si o'zgargan odam o'tkazib yuborilsa — endi xabarda ismi bilan aytiladi.
+  - Ongli qoldirilgan: import oynasi yopilib, fayl qayta import qilinsa — javobi yo'qolgan qator «o'zgarishsiz» deb o'tkaziladi
+    (maxfiy ma'lumoti yozilmaydi); 504 da nginx HTML matni toastda ko'rinadi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
