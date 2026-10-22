@@ -51,12 +51,15 @@ Har bir xizmatning maxfiy sozlamalari (`config.json`, kalitlar) va `sb/sb-config
 
 ## 🚀 Deploy
 
-Bitta buyruq (kod yangilash + paketlar + SQL migratsiya + frontend + shim):
+To‘liq deploy (tavsiya) — oldindan tekshiruv + zaxiralar + deploy + keyingi tekshiruvlar, bitta buyruq
+(serverda, sudo‘siz):
 
 ```bash
-bash deploy.sh
+cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash migration/deploy/full-deploy.sh
 ```
 
-`deploy.sh` git'dan kodni oladi, idempotent SQL migratsiyalarni (`migration/`)
-qo‘llaydi, `/sb` shimlarni va sahifalarni `/var/www/iqror` ga joylaydi.
-`config.json` va `sb/sb-config.js` ga tegmaydi.
+Faqat deploy (zaxirasiz): `bash deploy.sh` — git'dan kodni oladi, idempotent SQL migratsiyalarni (`migration/`,
+bitta tranzaksiyada) qo‘llaydi, `/sb` shimlarni va sahifalarni `/var/www/iqror` ga, server kodini xizmatlar papkasiga
+(`/opt/iqror`) joylaydi, xizmatlarni qayta ishga tushiradi va bazani kanonik holat bilan solishtiradi.
+`config.json` va `sb/sb-config.js` ga tegmaydi. Batafsil (xato bo‘lsa nima qilish, orqaga qaytarish):
+`migration/deploy/README.md` → «To'liq deploy».

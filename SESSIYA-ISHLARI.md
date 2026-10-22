@@ -817,6 +817,39 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   - Ongli qoldirilgan: import oynasi yopilib, fayl qayta import qilinsa — javobi yo'qolgan qator «o'zgarishsiz» deb o'tkaziladi
     (maxfiy ma'lumoti yozilmaydi); 504 da nginx HTML matni toastda ko'rinadi.
 
+## 38) Deploy tayyorligi — to'liq deploy buyrug'i (`full-deploy.sh`) va `deploy.sh` mustahkamlash
+Oxirgi deploy'dan beri katta o'zgarishlar bo'lgani uchun deploy alohida tekshirildi (4 yo'nalish, wf_6d1980f9): `deploy.sh`
+qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlari + PostgREST), brauzer keshi / service worker
+(Chromium) va to'liq simulyatsiya qilingan server (namespace, systemd/docker o'rinbosarlari, haqiqiy PG16) — 5 ta eski holatdan
+(69d33af, 815becd, 9d76057, c66d0b3, 9dda871).
+- **Natija:** `deploy.sh` o'zgargan barcha ish fayllarini qamraydi; deploy'ga kirmaydigan statik fayllar (vendor/, ikonlar,
+  manifest) hech qaysi holatdan beri o'zgarmagan; har holatdan yangilanish o'tdi, 7/7 «BIR XIL (2270)», ikkinchi ishga tushirish
+  ma'lumotni o'zgartirmaydi. Brauzerda eski shim keshi muammosi 77eca17 da (`?v=4`) tuzatilgan; SW versiyasini oshirish
+  oflayn rejimni buzishi aniqlandi (oshirilmadi); faqat admin.html'ni nusxalash ishlamaydi (shimlarsiz) — doim to'liq deploy.
+- **Tuzatildi (kod):**
+  - **To'lov kanonlashi to'qnashuvda (o'rta, 69d33af/815becd'dan):** `invoice-guards.sql` doc-id bilan qolgan to'lov/qaytarishni
+    o'quvchining studentId'siga ko'chirardi — import to'qnashuvida (studentId boshqa o'quvchining id/studentId'siga teng) pul jim
+    BOSHQA bolaga o'tardi. Endi bunday qatorlar doc id'da qoladi va deploy `⚠️ OGOHLANTIRISH` ko'rsatadi.
+  - **`/opt/iqror` 0750 (o'rta):** sinxronlash `sudo`siz `[ -d ]` bilan tekshirilgani uchun jim o'tkazilib, xizmatlar ESKI kod bilan
+    qayta ishga tushardi, deploy esa ✅ derdi. Endi `sudo test`.
+  - **Root egali kod papkasi (o'rta):** `tar` yarim yo'lda (baza va sayt yangilangandan keyin) xato berib, `/opt` aralash qolardi.
+    Endi yozish huquqi bazaga tegishdan OLDIN tekshiriladi — deploy boshlanmaydi va `chown`/`chmod` buyrug'ini ko'rsatadi; server
+    kodiga o'xshamaydigan WorkingDirectory ham shu yerda to'xtatadi (`IQROR_ALLOW_UNSYNCED=1` — ongli o'tkazish).
+  - **Qat'iy /tmp fayllari (past):** avvalgi `sudo` ishga tushirishdan qolgan root egali `/tmp/iqror-*` soxta «migratsiya xato» va
+    7/7'da ESKI natija bilan soxta «BIR XIL» berardi. Endi har ishga tushishda `mktemp`; barmoq izi olinmasa — xato.
+  - **Kichiklar:** lock timeout'da sabab va kim band qilgani; muhim NOTICE'lar (to'qnashuv, arvoh kodlar) chiqishda; o'rnatilmagan
+    unit o'tkaziladi (avval deploy'ni oxirida uzardi); `*.bak` faqat sahifa o'zgarganda (qayta ishga tushirish eski nusxani
+    yo'qotmaydi); xizmat holati 5 s + NRestarts (keyinroq yiqiladigani ham ushlanadi); 7/7 farqida yakuniy xabar ⚠️;
+    `DB_CONT` o'zgartirilishi mumkin; `sudo bash deploy.sh` — aniq xabar; «Davomat %» tenglashi MATERIALIZED (3000 o'quvchida
+    ~4.9 s → ~0.4 s qulf ostida, natija aynan bir xil).
+- **Yangi:** `migration/deploy/full-deploy.sh` (oldindan tekshiruv → zaxiralar → deploy → fayl-ma-fayl keyingi tekshiruv) va
+  `migration/deploy/predeploy-checks.sql` (faqat o'qiydi). Buyruq: `migration/deploy/README.md` → «To'liq deploy».
+- **Ongli qoldirilgan / qo'lda:** eski 69d33af `deploy.sh` o'zini yangilay olmaydi — buyruq avval `git checkout FETCH_HEAD -- deploy.sh
+  migration` qiladi; deploy tinch paytda (lock_timeout 20 s; to'lov RPC'lari bilan deadlock ehtimoli — provayderlar qayta urinadi);
+  deploy'dan keyin ochiq admin oynalarini yangilash; takroriy maosh kalitlari va chetida bo'sh joyli o'quvchi kalitlari — faqat
+  SQL bilan (predeploy 2–3-band); 7/7 barmoq izi trigger/indeks/grant'larni solishtirmaydi (bugun yashirin farq topilmadi);
+  `npm` faqat repo'da; bazani zaxiradan tiklash oddiy emas (avval kod bo'yicha orqaga qaytarish).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
