@@ -15,7 +15,11 @@ REPO="$HOME/iqror-repo"
 WEB="/var/www/iqror"
 DB_CONT="${DB_CONT:-supabase-db}"
 SHIM='s#https://www.gstatic.com/firebasejs/10.12.5#/sb#g'   # Firebase importlari -> /sb shim
-# `sudo bash deploy.sh` HOME=/root qiladi va repo topilmaydi — shuning uchun oddiy foydalanuvchi sifatida.
+# sudo bilan EMAS: `sudo bash deploy.sh` HOME=/root qiladi (repo topilmaydi), `sudo -E` esa butun deploy'ni root qilib, repo'da
+#   root egali fayllar qoldiradi. (Serverga to'g'ridan-to'g'ri root bo'lib kirilgan bo'lsa — SUDO_USER yo'q — mumkin.)
+if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+  echo "❌ deploy.sh'ni sudo'SIZ ishga tushiring: bash ~/iqror-repo/deploy.sh   (kerakli joylarda o'zi sudo so'raydi)"; exit 1
+fi
 cd "$REPO" 2>/dev/null || { echo "❌ $REPO topilmadi. deploy.sh'ni sudo'SIZ ishga tushiring: bash ~/iqror-repo/deploy.sh"; exit 1; }
 
 echo "==> 1/7 Kod yangilanmoqda (git)..."
@@ -33,10 +37,11 @@ fi
 #   payments/sms.cjs) yangilanib, auth serveri ESKI kod bilan qolardi.
 git checkout FETCH_HEAD -- ai-assistant payments server migration sb auth
 # Vaqtinchalik fayllar — har ishga tushishda YANGI shaxsiy papkada. (Avval qat'iy /tmp/iqror-sql.log edi: avvalgi
-#   `sudo` ishga tushirishdan qolgan root egali fayl soxta «migratsiya xato» ko'rsatardi.) Muvaffaqiyatda o'chiriladi.
+#   `sudo` ishga tushirishdan qolgan root egali fayl soxta «migratsiya xato» ko'rsatardi.) Faqat yo'li chiqishda
+#   aytilganda (SQL xatosi — KEEP=1) qoldiriladi, aks holda o'chiriladi.
 TMPD=$(mktemp -d "${TMPDIR:-/tmp}/iqror-deploy.XXXXXX")
-SQL_LOG="$TMPD/sql.log"
-trap 'rc=$?; { [ "$rc" = 0 ] || [ ! -s "$SQL_LOG" ]; } && rm -rf "$TMPD"; exit $rc' EXIT
+SQL_LOG="$TMPD/sql.log"; KEEP=0
+trap 'rc=$?; [ "$KEEP" = 1 ] || rm -rf "$TMPD"; exit $rc' EXIT
 
 echo "==> 2/7 Paketlar (kerak bo'lsa) + oldindan tekshiruv (xizmatlar, kod papkasi)..."
 npm install --no-save @supabase/supabase-js @anthropic-ai/sdk ws >/dev/null 2>&1 || echo "   (npm o'tkazib yuborildi — paketlar mavjud)"
@@ -62,9 +67,31 @@ SERVICES="${SERVICES# }"
 #   o'tkazib yuborilib, xizmatlar ESKI kod bilan qayta ishga tushardi).
 REPO_REAL=$(realpath -m "$REPO"); SYNC=""   # SYNC: "papka:uid:gid" qatorlari (6-bosqich uchun)
 CODE_DIRS=$(git ls-tree -r -t FETCH_HEAD ai-assistant payments server sb auth | awk '$2=="tree"{print $4}')
+# WorkingDirectory yo'q unit (masalan ExecStart=/usr/bin/node /srv/x/payments/index.cjs) — kod papkasi ExecStart'dagi
+#   absolyut yo'llardan yuqoriga qarab topiladi (payments/, ai-assistant/ yoki auth/ bor papka). Avval jim o'tkazilardi.
+exec_code_dir(){
+  local a d
+  for a in $(systemctl show -p ExecStart --value "$1" 2>/dev/null | sed -n 's/.*argv\[\]=\([^;]*\).*/\1/p;t;p' | head -1); do
+    case "$a" in /*) ;; *) continue;; esac
+    d=$(dirname "$a")
+    while [ "$d" != / ] && [ -n "$d" ]; do
+      if sudo test -d "$d/payments" || sudo test -d "$d/ai-assistant" || sudo test -d "$d/auth"; then echo "$d"; return 0; fi
+      d=$(dirname "$d")
+    done
+  done
+  return 0
+}
 for svc in $SERVICES; do
   wd=$(systemctl show -p WorkingDirectory --value "$svc" 2>/dev/null || true)
-  [ -n "$wd" ] || continue
+  if [ -z "$wd" ]; then
+    wd=$(exec_code_dir "$svc")
+    if [ -z "$wd" ]; then
+      if [ "${IQROR_ALLOW_UNSYNCED:-}" = "1" ]; then echo "⚠️  $svc: WorkingDirectory yo'q, kod papkasi topilmadi — YANGILANMAYDI (IQROR_ALLOW_UNSYNCED=1)"; continue; fi
+      echo "❌ $svc: WorkingDirectory yo'q va ExecStart'dan server kodi papkasi topilmadi — kod qayerdan ishlashi noma'lum."
+      echo "   Deploy BOSHLANMADI (baza va sayt o'zgarmadi). Unit'ga WorkingDirectory=/opt/iqror qo'shing (migration/deploy/*.service),"
+      echo "   yoki shu xizmatni eski kod bilan qoldirib davom eting: IQROR_ALLOW_UNSYNCED=1 bash ~/iqror-repo/deploy.sh"; exit 1
+    fi
+  fi
   wd=$(realpath -m "$wd")
   case "$wd/" in "$REPO_REAL/"*) continue;; esac   # repo (yoki uning ichi) — git checkout allaqachon yangiladi
   case $'\n'"$SYNC" in *$'\n'"$wd:"*) continue;; esac
@@ -83,8 +110,11 @@ for svc in $SERVICES; do
   fi
   oname=$(getent passwd "$own" | cut -d: -f1); gname=$(getent group "$grp" | cut -d: -f1 || true)
   # Mavjud kod papkalari (root ko'radi) — egasi ularga yoza olishi SHART; yo'qlari 6-bosqichda egasi nomiga yaratiladi.
-  have=$(cd / && sudo bash -c 'for d; do [ -d "$d" ] && printf "%s\n" "$d"; done; true' _ $(for d in $CODE_DIRS; do printf '%s ' "$wd/$d"; done))
-  nowrite=$(cd / && sudo -u "#$own" bash -c 'cd "$1" 2>/dev/null || { printf "%s\n" "$1"; exit 0; }; shift; for d; do { [ -w "$d" ] && [ -x "$d" ]; } || printf "%s\n" "$d"; done; true' _ "$wd" $have)
+  have=$(cd / && sudo bash -c 'for d; do [ -d "$d" ] && printf "%s\n" "$d"; done; true' _ $(for d in $CODE_DIRS; do printf '%s ' "$wd/$d"; done)) \
+    || { echo "❌ $wd kod papkalarini tekshirib bo'lmadi (sudo) — deploy BOSHLANMADI"; exit 1; }
+  # Egasi nomidan AYNAN 6-bosqichdagi amal: papkaga kirish (cd — x) va kod papkalariga yozish (w+x).
+  nowrite=$(cd / && sudo -u "#$own" bash -c 'cd "$1" 2>/dev/null || { printf "%s\n" "$1"; exit 0; }; shift; for d; do { [ -w "$d" ] && [ -x "$d" ]; } || printf "%s\n" "$d"; done; true' _ "$wd" $have) \
+    || { echo "❌ «sudo -u $oname» ishlamadi — kod $oname nomidan yoziladi, sudoers'da (ALL:ALL) ruxsati kerak. Deploy BOSHLANMADI"; exit 1; }
   if [ -n "$nowrite" ]; then
     echo "❌ Xizmat kodi papkasiga «$oname» (${ref#"$wd"/} egasi) yoza olmaydi — deploy BOSHLANMADI (baza va sayt o'zgarmadi):"
     printf '%s\n' "$nowrite" | sed 's/^/     /'
@@ -109,8 +139,11 @@ echo "==> 3/7 SQL migratsiyalar (kanonik run-all.sql zanjiri — BITTA tranzaksi
 if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
   # migration/chain.sh — run-all.sql tartibidagi fayllarni bitta tranzaksiyali oqimga ulaydi (\ir stdin'da ishlamaydi).
   if ! bash "$REPO/migration/chain.sh" | sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -q >"$SQL_LOG" 2>&1; then
+    KEEP=1
     echo "❌ SQL migratsiya xato — tranzaksiya BEKOR qilindi, baza O'ZGARMADI."
-    echo "   Fayl: $(grep -E '^-> ' "$SQL_LOG" | tail -1 | sed 's/^-> //')"; grep -E 'ERROR' "$SQL_LOG" | tail -5
+    last=$(grep -E '^-> ' "$SQL_LOG" | tail -1 | sed 's/^-> //' || true)
+    echo "   Fayl: ${last:-(birinchi fayldan oldin — baza ulanishi/konteyner xatosi)}"
+    { grep -E 'ERROR|FATAL|could not|connection|Error response' "$SQL_LOG" || tail -n 3 "$SQL_LOG"; } | tail -5 || true
     if grep -q 'lock timeout' "$SQL_LOG"; then
       echo "   Sabab: bazada boshqa ulanish jadvalni 20 soniyadan ko'p band qildi (uzoq tranzaksiya). Baza O'ZGARMADI —"
       echo "   bir ozdan so'ng shu buyruqni qayta ishga tushiring. Kim band qilgan:"
@@ -169,8 +202,10 @@ while IFS=: read -r wd own grp; do
   #   root'ga tegishli /opt/iqror ichida papka yarata olmay deploy yarim yo'lda to'xtardi).
   for d in ai-assistant payments server sb auth; do sudo test -d "$wd/$d" || sudo install -d -o "$own" -g "$grp" -m 0755 "$wd/$d"; done
   # Fayl ruxsatlari ARXIVDAGIdek (0644/0755) — tizim umask'iga bog'liq emas (UMASK 027'da 0640 bo'lib, xizmat kodni o'qiy olmasdi).
+  #   `tar -C` papkani ochadi (o'qish huquqi kerak) — 0751 root:root /opt/iqror'da 2-bosqich o'tib, shu yerda yiqilardi.
+  #   cd bilan faqat kirish (x) kerak — 2-bosqichdagi tekshiruv bilan AYNAN bir xil.
   if ! git -c tar.umask=0022 archive FETCH_HEAD ai-assistant payments server sb auth \
-      | sudo -u "#$own" tar -x --no-same-owner --same-permissions --no-overwrite-dir -C "$wd"; then
+      | sudo -u "#$own" sh -c 'cd "$1" && exec tar -x --no-same-owner --same-permissions --no-overwrite-dir' _ "$wd"; then
     echo "❌ $wd ga kod yozishda xato (yuqoridagi tar xabarlari). Baza va sayt allaqachon YANGI; xizmatlar qayta"
     echo "   ishga tushirilMADI (eski kod ishlab turibdi). Sababni tuzatib, deploy'ni qayta ishga tushiring."; exit 1
   fi
