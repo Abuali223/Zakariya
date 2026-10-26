@@ -45,15 +45,20 @@ trap 'rc=$?; [ "$KEEP" = 1 ] || rm -rf "$TMPD"; exit $rc' EXIT
 
 echo "==> 2/7 Paketlar (kerak bo'lsa) + oldindan tekshiruv (xizmatlar, kod papkasi)..."
 npm install --no-save @supabase/supabase-js @anthropic-ai/sdk ws >/dev/null 2>&1 || echo "   (npm o'tkazib yuborildi — paketlar mavjud)"
-# iqror-auth (telefon+parol+OTP) — YOQILGAN yoki ishlayotgan bo'lsa qayta ishga tushadi (avval deploy uni tashlab ketardi).
-#   O'rnatilgan, lekin ataylab o'chirilgan/masklangan auth'ga tegilmaydi (masalan Eskiz shabloni hali tasdiqlanmagan).
+# Xizmat YOQILGAN yoki ishlayotgan bo'lsa qayta ishga tushadi (iqror-auth: telefon+parol+OTP — avval deploy uni tashlab
+#   ketardi). Ataylab o'chirilgan (disabled va to'xtagan) yoki masklangan xizmatga tegilmaydi (masalan Eskiz shabloni hali
+#   tasdiqlanmagan auth; avval masklangan iqror-ai/iqror-pay deployni soxta «BOSHLANMADI» yoki restart xatosi bilan to'xtatardi).
 #   O'rnatilmagan unit (masalan iqror-ai yo'q) — ogohlantirib o'tkaziladi (avval `systemctl restart` xatosi deployni
 #   baza va sayt yangilangandan KEYIN uzib qo'yardi).
 SERVICES=""
-for s in iqror-ai iqror-pay; do
-  if systemctl cat "$s" >/dev/null 2>&1; then SERVICES="$SERVICES $s"; else echo "⚠️  $s xizmati o'rnatilmagan — qayta ishga tushirilmaydi"; fi
+for s in iqror-ai iqror-pay iqror-auth; do
+  if ! systemctl cat "$s" >/dev/null 2>&1; then
+    [ "$s" = iqror-auth ] || echo "⚠️  $s xizmati o'rnatilmagan — qayta ishga tushirilmaydi"; continue
+  fi
+  if [ "$(systemctl is-enabled "$s" 2>/dev/null || true)" = masked ]; then echo "⚠️  $s xizmati masklangan — tegilmaydi"; continue; fi
+  if systemctl is-enabled --quiet "$s" 2>/dev/null || systemctl is-active --quiet "$s" 2>/dev/null; then SERVICES="$SERVICES $s"
+  else echo "⚠️  $s xizmati o'chirilgan (disabled, ishlamayapti) — qayta ishga tushirilmaydi"; fi
 done
-if systemctl is-enabled --quiet iqror-auth 2>/dev/null || systemctl is-active --quiet iqror-auth 2>/dev/null; then SERVICES="$SERVICES iqror-auth"; fi
 SERVICES="${SERVICES# }"
 # Xizmat kodi QAYSI papkadan ishlaydi (systemd WorkingDirectory)? Deploy kodni $REPO da yangilaydi; namuna unit'lar
 #   (migration/deploy/*.service) esa /opt/iqror dan ishlaydi. Boshqa papka bo'lsa — server kodi O'SHA papkaga ham
@@ -83,6 +88,13 @@ exec_code_dir(){
 }
 for svc in $SERVICES; do
   wd=$(systemctl show -p WorkingDirectory --value "$svc" 2>/dev/null || true)
+  # «WorkingDirectory=-/opt/iqror» systemctl show'da «!/opt/iqror», «WorkingDirectory=~» — «~» (unit User'ining uyi).
+  wd=${wd#!}
+  if [ "$wd" = "~" ]; then wd=$(getent passwd "$(systemctl show -p User --value "$svc" 2>/dev/null || true)" | cut -d: -f6 || true); fi
+  case "$wd" in ''|/*) ;; *)
+    echo "❌ $svc: WorkingDirectory=«$wd» — absolyut yo'l emas, kod papkasini aniqlab bo'lmadi. Deploy BOSHLANMADI (baza va sayt o'zgarmadi)."
+    echo "   Unit'da WorkingDirectory=/opt/iqror bo'lsin (migration/deploy/*.service)."; exit 1 ;;
+  esac
   if [ -z "$wd" ]; then
     wd=$(exec_code_dir "$svc")
     if [ -z "$wd" ]; then
@@ -112,11 +124,13 @@ for svc in $SERVICES; do
   # Mavjud kod papkalari (root ko'radi) — egasi ularga yoza olishi SHART; yo'qlari 6-bosqichda egasi nomiga yaratiladi.
   have=$(cd / && sudo bash -c 'for d; do [ -d "$d" ] && printf "%s\n" "$d"; done; true' _ $(for d in $CODE_DIRS; do printf '%s ' "$wd/$d"; done)) \
     || { echo "❌ $wd kod papkalarini tekshirib bo'lmadi (sudo) — deploy BOSHLANMADI"; exit 1; }
-  # Egasi nomidan AYNAN 6-bosqichdagi amal: papkaga kirish (cd — x) va kod papkalariga yozish (w+x).
-  nowrite=$(cd / && sudo -u "#$own" bash -c 'cd "$1" 2>/dev/null || { printf "%s\n" "$1"; exit 0; }; shift; for d; do { [ -w "$d" ] && [ -x "$d" ]; } || printf "%s\n" "$d"; done; true' _ "$wd" $have) \
+  # Egasi nomidan 6-bosqichdagi amal sharti: papkaga kirish (cd — x), kod papkalariga yozish (w+x) va ularning EGASI bo'lish —
+  #   `tar --no-overwrite-dir` (2026-07 Ubuntu tuzatmasisiz tar 1.34/1.35) mavjud papkani vaqtincha chmod qiladi: egasi
+  #   bo'lmasa (guruh/boshqalarga yozish ruxsati bilan ham) 6-bosqichda baza va sayt yangilangandan keyin yiqilardi.
+  nowrite=$(cd / && sudo -u "#$own" bash -c 'cd "$1" 2>/dev/null || { printf "%s\n" "$1"; exit 0; }; shift; for d; do { [ -w "$d" ] && [ -x "$d" ] && [ -O "$d" ]; } || printf "%s\n" "$d"; done; true' _ "$wd" $have) \
     || { echo "❌ «sudo -u $oname» ishlamadi — kod $oname nomidan yoziladi, sudoers'da (ALL:ALL) ruxsati kerak. Deploy BOSHLANMADI"; exit 1; }
   if [ -n "$nowrite" ]; then
-    echo "❌ Xizmat kodi papkasiga «$oname» (${ref#"$wd"/} egasi) yoza olmaydi — deploy BOSHLANMADI (baza va sayt o'zgarmadi):"
+    echo "❌ Xizmat kodi papkasiga «$oname» (${ref#"$wd"/} egasi) yoza olmaydi yoki uning egasi emas — deploy BOSHLANMADI (baza va sayt o'zgarmadi):"
     printf '%s\n' "$nowrite" | sed 's/^/     /'
     if printf '%s\n' "$nowrite" | grep -qx "$wd"; then
       echo "   Tuzatish: sudo chmod o+x $wd   (yoki egasini: sudo chown $oname $wd)"
@@ -162,9 +176,10 @@ else
 fi
 
 echo "==> 4/7 /sb shimlar joylanmoqda (sb-config.js TEGILMAYDI)..."
-sudo mkdir -p "$WEB/sb"
+# Fayllar ANIQ ruxsat bilan (0644): sudo UMASK 027 bilan yangi faylni 0640 qilib, nginx o'qiy olmasdi (403).
+sudo test -d "$WEB/sb" || sudo install -d -m 0755 "$WEB/sb"
 for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebase-storage.js firebase-analytics.js auth-api.js name-match.js; do
-  git show "FETCH_HEAD:sb/$f" | sudo tee "$WEB/sb/$f" >/dev/null
+  git show "FETCH_HEAD:sb/$f" > "$TMPD/sbf" && sudo install -m 0644 "$TMPD/sbf" "$WEB/sb/$f"
 done
 if ! grep -q "function rpc" "$WEB/sb/firebase-firestore.js"; then echo "❌ /sb shim eski (rpc yo'q)"; exit 1; fi
 if ! grep -q "function createDoc" "$WEB/sb/firebase-firestore.js"; then echo "❌ /sb shim eski (createDoc yo'q — admin.html yuklanmaydi)"; exit 1; fi
@@ -176,7 +191,7 @@ put_page(){   # $1 = fayl, $2 = "shim" (Firebase importlari -> /sb)
   local f=$1 new="$TMPD/page"
   if [ "${2:-}" = shim ]; then git show "FETCH_HEAD:$f" | sed "$SHIM" > "$new"; else git show "FETCH_HEAD:$f" > "$new"; fi
   if sudo test -f "$WEB/$f" && ! sudo cmp -s "$new" "$WEB/$f"; then sudo cp "$WEB/$f" "$WEB/$f.bak"; fi
-  sudo tee "$WEB/$f" < "$new" >/dev/null
+  sudo install -m 0644 "$new" "$WEB/$f"
 }
 put_page admin.html shim
 put_page sw.js

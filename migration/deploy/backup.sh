@@ -47,7 +47,9 @@ if [ -d "$STORAGE_VOL" ]; then
   mv -fT "$ST.part" "$ST"
 fi
 
-# 3) Eski zaxiralarni tozalash
-find "$BACKUP_DIR" -name '*.gz' -mtime +"$KEEP_DAYS" -delete
+# 3) Eski zaxiralarni tozalash — FAQAT shu skriptlar yaratganlari (db_/storage_/auth_), papkaning o'zida. Qo'lda qo'yilgan
+#   boshqa fayllar (masalan cutover oldidan olingan dump) va ichki papkalar TEGILMAYDI (avval har qanday *.gz o'chirilardi).
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.sql.gz' -o -name 'storage_*.tar.gz' -o -name 'auth_*.sql.gz' \) -mtime +"$KEEP_DAYS" -print -delete \
+  | sed 's/^/   o‘chirildi (eski): /'
 
 echo "[$(date)] backup OK -> $OUT ($(du -h "$OUT" | cut -f1)); eski >$KEEP_DAYS kun o'chirildi"

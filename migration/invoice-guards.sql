@@ -215,6 +215,9 @@ revoke all on function public.assign_payment(text, text) from public, anon;
 grant execute on function public.assign_payment(text, text) to authenticated, service_role;
 
 -- ---------- 4) Kanonlash (har deployda xavfsiz: faqat doc id bilan qolganlarni studentId'ga) ----------
+--   Indeks AVVAL (parent-link-canon.sql'dagi bilan aynan bir xil; u yerda keyin no-op): 69d33af/815becd'dan birinchi deployda
+--   indekssiz quyidagi UPDATE o'quvchi × to'lov bo'lib, qulflar ostida soniyalab davom etardi.
+create index if not exists students_studentid_idx on public.students("studentId");
 --   To'qnashuv himoyasi: o'quvchining studentId'si BOSHQA o'quvchining id/studentId'siga teng bo'lsa, yoki uning doc id'si
 --   BOSHQA o'quvchining studentId'si bo'lsa (import to'qnashuvi; o'sha qiymat — boshqa bolaning kanonik kaliti), to'lov
 --   joyida qoladi — aks holda pul jim BOSHQA bolaga o'tib ketardi. (student_keys_unique() zanjirda keyinroq.)

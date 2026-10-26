@@ -42,7 +42,10 @@ code_dirs(){
   local s wd seen=" "
   for s in iqror-ai iqror-pay iqror-auth; do
     systemctl cat "$s" >/dev/null 2>&1 || continue
-    wd=$(systemctl show -p WorkingDirectory --value "$s" 2>/dev/null); [ -n "$wd" ] || wd=$(exec_code_dir "$s"); [ -n "$wd" ] || continue
+    [ "$(systemctl is-enabled "$s" 2>/dev/null || true)" = masked ] && continue
+    wd=$(systemctl show -p WorkingDirectory --value "$s" 2>/dev/null); wd=${wd#!}
+    [ "$wd" = "~" ] && wd=$(getent passwd "$(systemctl show -p User --value "$s" 2>/dev/null)" | cut -d: -f6)
+    [ -n "$wd" ] || wd=$(exec_code_dir "$s"); case "$wd" in /*) ;; *) continue;; esac
     wd=$(realpath -m "$wd"); case "$wd/" in "$(realpath -m "$REPO")/"*) continue;; esac
     case "$seen" in *" $wd "*) continue;; esac; seen="$seen$wd "
     { sudo test -d "$wd/payments" || sudo test -d "$wd/ai-assistant" || sudo test -d "$wd/auth"; } && echo "$wd"
@@ -137,6 +140,9 @@ git show FETCH_HEAD:sw.js | sudo cmp -s - "$WEB/sw.js" || { echo "    !! $WEB/sw
 for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebase-storage.js firebase-analytics.js auth-api.js name-match.js; do
   git show "FETCH_HEAD:sb/$f" | sudo cmp -s - "$WEB/sb/$f" || { echo "    !! $WEB/sb/$f yangilanmagan"; bad=1; }
 done
+# nginx o'qiy oladimi (hamma o'qishi mumkin bo'lishi shart; *.bak — shart emas)?
+unread=$(sudo find "$WEB" -maxdepth 2 -type f ! -name '*.bak' \( -name '*.html' -o -name '*.js' -o -name '*.json' -o -name '*.css' \) ! -perm -o=r -print 2>/dev/null)
+[ -z "$unread" ] || { printf '    !! nginx o‘qiy olmaydi (403): %s — tuzatish: sudo chmod a+r <fayl>\n' $unread; bad=1; }
 [ "$bad" = 0 ] && echo "    ✓ sayt fayllari (sahifalar + /sb shimlar) yangi versiyada"
 # Server kodi (xizmatlar ishlaydigan papka) aynan shu versiyadami?
 for wd in $(code_dirs); do
@@ -164,8 +170,8 @@ for p in "iqror-pay 8790" "iqror-ai 8791" "iqror-auth 8792"; do
   hl=$(curl -s -m 5 "http://127.0.0.1:$2/health" 2>/dev/null | head -c 80 || true)
   if [ "$st" = active ] && [ "$nr" = 0 ]; then
     echo "    $1: active  /health: $hl"
-  elif ! systemctl is-enabled --quiet "$1" 2>/dev/null && [ "$st" != active ] && [ "$1" = iqror-auth ]; then
-    echo "    $1: $st (o'chirilgan — deploy unga tegmaydi)"
+  elif ! systemctl is-enabled --quiet "$1" 2>/dev/null && [ "$st" != active ]; then
+    echo "    $1: $st (o'chirilgan/masklangan — deploy unga tegmaydi)"
   else
     echo "    !! $1: $st (NRestarts $n0 -> $nr) — yiqilmoqda: sudo journalctl -u $1 -n 50 --no-pager"; bad=1
   fi
