@@ -91,12 +91,12 @@ sudo env BACKUP_DIR="$BK" DB_CONT="$DB_CONT" bash "$REPO/migration/deploy/backup
 #   ustidan yozib yubormaydi (zaxira papkasi xizmat foydalanuvchisi egaligidagi /opt/iqror ichida).
 bk_write(){   # $1 = nishon fayl, $2 = stdout'ga arxiv chiqaradigan buyruq (root sifatida)
   sudo rm -f "$1.part"   # avvalgi uzilgan urinish qoldig'i (symlink bo'lsa — faqat o'zi o'chadi, nishoni emas)
-  sudo sh -c "set -C; umask 077; $2 > '$1.part'" && sudo mv -f "$1.part" "$1" || { sudo rm -f "$1.part"; return 1; }
+  sudo sh -c "set -C; umask 077; $2 > '$1.part'" && sudo mv -fT "$1.part" "$1" || { sudo rm -f "$1.part"; return 1; }
 }
 A="$BK/auth_$T.sql.gz"; sudo rm -f "$A.part"
 if sudo sh -c "set -C; umask 077; docker exec '$DB_CONT' pg_dump -U postgres -d postgres -n auth | gzip > '$A.part'" 2>/dev/null \
    && sudo sh -c "gzip -dc '$A.part' | tail -n 20 | grep -q 'PostgreSQL database dump complete'"; then
-  sudo mv -f "$A.part" "$A"; echo "    auth sxemasi: $A"
+  sudo mv -fT "$A.part" "$A"; echo "    auth sxemasi: $A"
 else
   sudo rm -f "$A.part"; echo "    ⚠️ auth sxemasi zaxirasi olinmadi (deploy auth ma'lumotiga tegmaydi — davom etiladi)"
 fi
