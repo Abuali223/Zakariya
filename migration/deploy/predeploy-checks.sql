@@ -5,16 +5,17 @@
 --   (migration/deploy/full-deploy.sh buni o'zi ishga tushiradi.) Bo'sh jadval = muammo yo'q.
 --   Eski sxemada (masalan child_claims.status hali yo'q) ayrim band ERROR berishi mumkin — keyingi bandlar baribir ishlaydi.
 -- =====================================================================
+\set QUIET on
 set default_transaction_read_only = on;
 \pset footer off
-\echo '== 1) Import to''qnashuvi: o''quvchining studentId''si BOSHQA o''quvchining id/studentId''siga teng (deploy bunday o''quvchining doc-id to''lovlarini KO''CHIRMAYDI — qo''lda hal qiling: kalitni noyob qiling yoki ataylab birlashtiring)'
+\echo '== 1) Import to''qnashuvi: o''quvchining studentId''si BOSHQA o''quvchining id/studentId''siga teng (yoki doc id''si boshqa o''quvchining studentId''si) (deploy bunday o''quvchining doc-id to''lovlarini KO''CHIRMAYDI — qo''lda hal qiling: kalitni noyob qiling yoki ataylab birlashtiring)'
 select s.id, s."studentId", s.name,
        (select string_agg(t.id || ' (' || coalesce(t.name, '') || ')', ', ') from public.students t
-         where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId")) as toqnashadi,
+         where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id)) as toqnashadi,
        (select count(*) from public.payments p where p."studentId" = s.id) as doc_id_tolovlar
   from public.students s
  where coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-   and exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"));
+   and exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id));
 \echo '== 2) Chetida bo''sh joy bor kalitlar (deploy''dan keyin o''quvchi studentId''sini ilovada tuzatib bo''lmaydi — faqat SQL bilan)'
 select 'students' as jadval, id, quote_literal("studentId") as kalit from public.students where "studentId" <> btrim("studentId")
 union all select 'teachers', id, quote_literal("teacherId") from public.teachers where "teacherId" <> btrim("teacherId")
@@ -46,11 +47,11 @@ select coalesce(nullif(status, ''), '(bo''sh = active)') as holat, count(*) from
 \echo '== 7) Deploy qayta yozadigan ma''lumot (rejali tenglashlar)'
 select 'to''lovlar: doc id -> studentId' as nima, count(*) from public.payments p join public.students s on p."studentId" = s.id
  where coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"))
+   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id))
 union all
 select 'qaytarishlar: doc id -> studentId', count(*) from public.refunds r join public.students s on r."studentId" = s.id
  where coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"))
+   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id))
 union all
 select '«Davomat %» qayta hisoblanadigan o''quvchilar', count(*) from public.students s
   join (select a."studentId" sid,

@@ -21,9 +21,12 @@ KEEP_DAYS="${KEEP_DAYS:-14}"
 DOCKER="docker"; if [ "$(id -u)" != 0 ] && ! docker ps >/dev/null 2>&1; then DOCKER="sudo docker"; fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$BACKUP_DIR"; chmod 700 "$BACKUP_DIR" 2>/dev/null || true
-OUT="$BACKUP_DIR/db_$STAMP.sql.gz"
-trap 'rm -f "$OUT.part"' EXIT
+mkdir -p "$BACKUP_DIR"; [ -L "$BACKUP_DIR" ] || chmod 700 "$BACKUP_DIR" 2>/dev/null || true   # symlink bo'lsa nishoni o'zgartirilmaydi
+OUT="$BACKUP_DIR/db_$STAMP.sql.gz"; ST="$BACKUP_DIR/storage_$STAMP.tar.gz"
+# Yangi fayllar noclobber (O_EXCL) bilan: oldindan qo'yilgan symlink orqali root boshqa faylni ustidan yozmaydi
+#   (zaxira papkasi xizmat foydalanuvchisi egaligidagi /opt/iqror ichida). Tayyor fayl mv -T bilan (symlink kuzatilmaydi).
+rm -f "$OUT.part" "$ST.part"; set -C
+trap 'rm -f "$OUT.part" "$ST.part"' EXIT
 
 # 1) Baza (maktab jadvallari va funksiyalari)
 if [ -n "$PGURL" ]; then
@@ -36,11 +39,12 @@ fi
 # To'liq yozilganini tekshiramiz (pg_dump oxirida «dump complete» yozadi) — chala fayl zaxira bo'lib qolmasin.
 gzip -dc "$OUT.part" | tail -n 20 | grep -q 'PostgreSQL database dump complete' \
   || { echo "❌ [$(date)] baza zaxirasi chala chiqdi — saqlanmadi"; exit 1; }
-mv "$OUT.part" "$OUT"
+mv -fT "$OUT.part" "$OUT"
 
 # 2) Storage fayllar (rasm/video) — papka bor bo'lsa
 if [ -d "$STORAGE_VOL" ]; then
-  tar czf "$BACKUP_DIR/storage_$STAMP.tar.gz" -C "$STORAGE_VOL" .
+  tar czf - -C "$STORAGE_VOL" . > "$ST.part"
+  mv -fT "$ST.part" "$ST"
 fi
 
 # 3) Eski zaxiralarni tozalash

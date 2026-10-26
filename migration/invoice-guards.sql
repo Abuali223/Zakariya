@@ -215,20 +215,21 @@ revoke all on function public.assign_payment(text, text) from public, anon;
 grant execute on function public.assign_payment(text, text) to authenticated, service_role;
 
 -- ---------- 4) Kanonlash (har deployda xavfsiz: faqat doc id bilan qolganlarni studentId'ga) ----------
---   To'qnashuv himoyasi: o'quvchining studentId'si BOSHQA o'quvchining id/studentId'siga teng bo'lsa (import to'qnashuvi),
---   to'lov doc id'da qoladi — aks holda pul jim BOSHQA bolaga o'tib ketardi. (student_keys_unique() zanjirda keyinroq.)
+--   To'qnashuv himoyasi: o'quvchining studentId'si BOSHQA o'quvchining id/studentId'siga teng bo'lsa, yoki uning doc id'si
+--   BOSHQA o'quvchining studentId'si bo'lsa (import to'qnashuvi; o'sha qiymat — boshqa bolaning kanonik kaliti), to'lov
+--   joyida qoladi — aks holda pul jim BOSHQA bolaga o'tib ketardi. (student_keys_unique() zanjirda keyinroq.)
 update public.payments p set "studentId" = s."studentId"
   from public.students s
  where p."studentId" = s.id and coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"));
+   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id));
 update public.refunds r set "studentId" = s."studentId"
   from public.students s
  where r."studentId" = s.id and coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"));
+   and not exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id));
 do $$ declare n int; begin
   select count(*) into n from public.students s
    where coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
-     and exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId"));
+     and exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id));
   if n > 0 then raise notice 'OGOHLANTIRISH: % ta o''quvchi kaliti boshqa o''quvchi bilan to''qnashadi — ularning to''lovlari doc id''da qoldirildi (migration/deploy/predeploy-checks.sql, 1-band)', n; end if;
 end $$;
 
