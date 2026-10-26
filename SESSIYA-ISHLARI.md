@@ -844,6 +844,14 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
     ~4.9 s → ~0.4 s qulf ostida, natija aynan bir xil).
 - **Yangi:** `migration/deploy/full-deploy.sh` (oldindan tekshiruv → zaxiralar → deploy → fayl-ma-fayl keyingi tekshiruv) va
   `migration/deploy/predeploy-checks.sql` (faqat o'qiydi). Buyruq: `migration/deploy/README.md` → «To'liq deploy».
+- **Simulyator ko'rigi, 2-raund (14e0baf ustida; 10 nosozlik + 11 yangilanish yo'li, 69d33af..9dda871):** yangilanish yo'llari
+  hammasi o'tdi (`.bak` eski nusxada qoladi, to'qnashuv himoyasi ishlaydi, «Davomat %» funksiya bilan bir xil). Topilgan va
+  tuzatilganlar: 0751 root:root `/opt/iqror`da oldindan tekshiruv o'tib, 6-bosqichdagi `tar -C` o'qish huquqi yo'qligidan yiqilardi
+  (baza va sayt yangilangandan keyin) — endi `cd` bilan, tekshiruv bilan aynan bir xil; `full-deploy.sh` yiqilib qayta ko'tarilayotgan
+  xizmatni ✅ derdi — endi «!!» va kod 2; SQL FATAL/ulanish uzilganda xato hisoboti `set -e` bilan uzilib, log yo'li aytilmasdi;
+  WorkingDirectory'siz unit jim o'tkazilardi (eski kod qayta ishga tushardi) — endi ExecStart'dan topiladi, topilmasa boshlanmaydi;
+  `sudo -E bash deploy.sh` butun deployni root qilardi; uzoq tranzaksiya kutishida eskirgan ogohlantirish; `web_/srv_` arxivlari
+  tozalanmasdi; zaxira fayllari noclobber bilan (symlink orqali ustidan yozilmaydi). Qayta sinov (c4cbbfe): hammasi kutilganidek.
 - **Ongli qoldirilgan / qo'lda:** eski 69d33af `deploy.sh` o'zini yangilay olmaydi — buyruq avval `git checkout FETCH_HEAD -- deploy.sh
   migration` qiladi; deploy tinch paytda (lock_timeout 20 s; to'lov RPC'lari bilan deadlock ehtimoli — provayderlar qayta urinadi);
   deploy'dan keyin ochiq admin oynalarini yangilash; takroriy maosh kalitlari va chetida bo'sh joyli o'quvchi kalitlari — faqat
