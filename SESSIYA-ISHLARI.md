@@ -852,6 +852,10 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
   WorkingDirectory'siz unit jim o'tkazilardi (eski kod qayta ishga tushardi) — endi ExecStart'dan topiladi, topilmasa boshlanmaydi;
   `sudo -E bash deploy.sh` butun deployni root qilardi; uzoq tranzaksiya kutishida eskirgan ogohlantirish; `web_/srv_` arxivlari
   tozalanmasdi; zaxira fayllari noclobber bilan (symlink orqali ustidan yozilmaydi). Qayta sinov (c4cbbfe): hammasi kutilganidek.
+- **Yakuniy tayyorlik (fe34e00, ef3cdb5):** to'lov kanonlashida 2-shakl to'qnashuv — o'quvchining doc id'si BOSHQA o'quvchining
+  studentId'si bo'lsa (A2: id fbA2, kalit IQ-0921; B2: id IQ-0921, kalit IQ-0922), A2'ning IQ-0921 bilan yozilgan to'lovi B2'ga
+  (IQ-0922) ko'chib ketardi (simulyator: 1 100 000) — endi joyida qoladi, predeploy 1-band ham ko'rsatadi; `backup.sh` va
+  `full-deploy.sh` zaxira fayllari noclobber + `mv -T` (2169 ta oldindan qo'yilgan symlink bilan sinaldi — nishon fayl buzilmadi).
 - **Ongli qoldirilgan / qo'lda:** eski 69d33af `deploy.sh` o'zini yangilay olmaydi — buyruq avval `git checkout FETCH_HEAD -- deploy.sh
   migration` qiladi; deploy tinch paytda (lock_timeout 20 s; to'lov RPC'lari bilan deadlock ehtimoli — provayderlar qayta urinadi);
   deploy'dan keyin ochiq admin oynalarini yangilash; takroriy maosh kalitlari va chetida bo'sh joyli o'quvchi kalitlari — faqat
