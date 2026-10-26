@@ -863,6 +863,14 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
   masklangan iqror-ai/pay soxta «BOSHLANMADI» berardi — endi masklangan/o'chirilgan xizmatga tegilmaydi; `WorkingDirectory=-/opt/iqror`
   yoki `~` repo ichi deb o'qilib /opt jim o'tkazilardi; sudo UMASK 027'da yangi sayt fayli 0640 (nginx 403) — endi 0644;
   69d33af/815becd'dan birinchi deployda kanonlash indekssiz ~14 s qulf ostida — endi indeks oldin (0,5 s).
+- **Yakuniy tekshiruv (84336cc; kod 32aad0e bilan bir xil) — TAYYOR:** simulyatorda 9d76057 bazadan bitta buyruq: sudo UMASK 027'da
+  ✅ (sayt fayllari 0644, zaxiralar 600; faqat eski `db_*` o'chdi — `manual/` va qo'lda qo'yilgan dump'lar qoldi), qayta ishga
+  tushirish ✅; egasi boshqa kod papkasi (root:iqror 0775) — bazaga tegmasdan BOSHLANMADI (barmoq izi 2258→2258, ma'lumot, sayt,
+  `config.json` bir xil, xizmatlar qayta ishga tushmadi), «Tuzatish:» buyrug'idan keyin ✅; masklangan iqror-ai va o'chirilgan
+  iqror-pay'ga tegilmadi ✅; `WorkingDirectory=-/opt/iqror` — /opt yangilandi ✅; nisbiy yo'l — BOSHLANMADI ✅; zaxira nomlaridagi
+  symlink'lar — nishon o'zgarmadi ✅. (Bir marta ko'ringan «xizmat failed» simulyator stub'ining o'zida edi: holat fayllari
+  chaqiruvchining umask'ini olardi; haqiqiy systemd'da bunday emas — stub tuzatildi, qayta sinov ✅.) Testlar: 11 to'plam
+  (sms 41, eskiz 25+48, name-match 192, auth 94, sms-remind 114, phone 186, attr/uzum/flow/sb-admin) — hammasi o'tdi.
 - **Ongli qoldirilgan / qo'lda:** eski 69d33af `deploy.sh` o'zini yangilay olmaydi — buyruq avval `git checkout FETCH_HEAD -- deploy.sh
   migration` qiladi; deploy tinch paytda (lock_timeout 20 s; to'lov RPC'lari bilan deadlock ehtimoli — provayderlar qayta urinadi);
   deploy'dan keyin ochiq admin oynalarini yangilash; takroriy maosh kalitlari va chetida bo'sh joyli o'quvchi kalitlari — faqat
