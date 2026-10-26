@@ -31,6 +31,8 @@ VPS'da nusxalab ishga tushirasiz.
 5. systemd: `iqror-ai`, `iqror-pay` — enable --now.
 6. nginx + certbot (SSL).
 7. `backup.sh` ni root crontab'ga (yuqoridagi qator). Zaxira fayllari faqat egasiga o'qiladi (600); ularni vaqti-vaqti bilan serverdan TASHQARIGA ham ko'chiring.
+   14 kundan eskisi o'chiriladi — faqat skriptlarning o'z fayllari (`db_*`, `storage_*`, `auth_*`, `web_*`, `srv_*`) papkaning o'zida;
+   qo'lda qo'yilgan boshqa fayllar va ichki papkalar tegilmaydi.
 8. `../CUTOVER-CHECKLIST.md` bo'yicha to'liq sinov → cutover.
 
 ## To'liq deploy — tavsiya etilgan BITTA buyruq (`full-deploy.sh`)

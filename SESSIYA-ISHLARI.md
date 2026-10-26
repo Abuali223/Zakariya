@@ -856,6 +856,13 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
   studentId'si bo'lsa (A2: id fbA2, kalit IQ-0921; B2: id IQ-0921, kalit IQ-0922), A2'ning IQ-0921 bilan yozilgan to'lovi B2'ga
   (IQ-0922) ko'chib ketardi (simulyator: 1 100 000) — endi joyida qoladi, predeploy 1-band ham ko'rsatadi; `backup.sh` va
   `full-deploy.sh` zaxira fayllari noclobber + `mv -T` (2169 ta oldindan qo'yilgan symlink bilan sinaldi — nishon fayl buzilmadi).
+- **Yakuniy raqib ko'rigi (ef3cdb5; standart server — tayyor, 69d33af/c66d0b3/9dda871/77eca17 matritsasi o'tdi) topilmalari,
+  32aad0e da tuzatildi:** `backup.sh` /opt/iqror/backups ichidagi HAR QANDAY 14 kundan eski `*.gz`ni (qo'lda qo'yilgan dump'larni,
+  ichki papkalarda ham) o'chirardi — endi faqat o'z fayllari; guruhga yoziladigan, lekin egasi boshqa kod papkasi oldindan
+  tekshiruvdan o'tib, tuzatmasiz tar'da 6-bosqichda (baza va sayt yangilangandan keyin) yiqilardi — endi egalik ham tekshiriladi;
+  masklangan iqror-ai/pay soxta «BOSHLANMADI» berardi — endi masklangan/o'chirilgan xizmatga tegilmaydi; `WorkingDirectory=-/opt/iqror`
+  yoki `~` repo ichi deb o'qilib /opt jim o'tkazilardi; sudo UMASK 027'da yangi sayt fayli 0640 (nginx 403) — endi 0644;
+  69d33af/815becd'dan birinchi deployda kanonlash indekssiz ~14 s qulf ostida — endi indeks oldin (0,5 s).
 - **Ongli qoldirilgan / qo'lda:** eski 69d33af `deploy.sh` o'zini yangilay olmaydi — buyruq avval `git checkout FETCH_HEAD -- deploy.sh
   migration` qiladi; deploy tinch paytda (lock_timeout 20 s; to'lov RPC'lari bilan deadlock ehtimoli — provayderlar qayta urinadi);
   deploy'dan keyin ochiq admin oynalarini yangilash; takroriy maosh kalitlari va chetida bo'sh joyli o'quvchi kalitlari — faqat
