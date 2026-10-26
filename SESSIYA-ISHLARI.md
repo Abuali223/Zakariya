@@ -858,6 +858,18 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
   SQL bilan (predeploy 2–3-band); 7/7 barmoq izi trigger/indeks/grant'larni solishtirmaydi (bugun yashirin farq topilmadi);
   `npm` faqat repo'da; bazani zaxiradan tiklash oddiy emas (avval kod bo'yicha orqaga qaytarish).
 
+## 39) Kirim-chiqim: Google Sheet («IQRO_Financial_Tracker_2026_2027») va tizim — tahlil
+Buxgalteriya hozir Google Sheet'da (Dashboard + har oy «tushum»/«chiqim»). 4 agentli tahlil (tizim inventarizatsiyasi, Sheet
+semantikasi, farqlar + taklif, raqib-tekshiruv) — to'liq hisobot: `KIRIM-CHIQIM-TAHLIL.md`.
+- **Sheet'dagi muammolar:** «Noyabr tushum» buzilgan (hamma «Active», 11 yangi o'quvchi yo'q — 16,4 mln qoldiq yo'qoladi);
+  takroriy ID (IQ-0474/0250/0021 — 5,8–9,99 mln ortiqcha qarz); ID'siz to'lovlar 12 + 5,8 mln; chiqib ketganlarda −16,6 mln
+  avans (4 tasi chiqimda qaytarilgan — ikki marta) va 11,81 mln qarz; bankka topshirilgan 50 mln «xarajat» (foyda kam).
+- **Tizim bilan:** to'lov usullari, qarz o'tishi, avans, qaytarish, biriktirish — bor (yaxshiroq); xarajatda tasdiqlovchi /
+  Р/О / usul / kimga — yo'q; oylik o'quvchi reyestri, Kutilgan (qoldiq bilan), Yig'im %, sinflar va 12 oylik jadval, eksport —
+  yo'q; chegirma/prorata/referral/reward qoidalari farq qiladi (D1–D10); «Kirim» faktura asosida, Sheet kassa asosida.
+- **Qarorlar (2026-10-26):** hozircha faqat tahlil (kod o'zgarmaydi); import yo'q — noyabrdan tizim asosiy manba; pul
+  hisoblash qoidalari tizimdagidek qoladi. Keyingi bosqichlar taklifi — hisobotda, 8-bo'lim.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
