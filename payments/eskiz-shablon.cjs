@@ -74,7 +74,7 @@ function readCfg(full) {
   try { return { cfg: JSON.parse(fs.readFileSync(full, 'utf8')) }; }
   catch (e) {
     if (e && e.code === 'ENOENT') return { err: 'fayl yo‘q', missing: true };
-    if (e && (e.code === 'EACCES' || e.code === 'EPERM')) return { err: `o‘qishga ruxsat yo‘q — sudo bilan ishga tushiring: ${RERUN}` };
+    if (e && (e.code === 'EACCES' || e.code === 'EPERM')) return { err: `o‘qishga ruxsat yo‘q — sudo bilan ishga tushiring: ${RERUN}`, perm: true };
     if (e && e.code === 'EISDIR') return { err: 'bu papka, fayl emas' };
     if (e instanceof SyntaxError) { const lc = /line (\d+) column (\d+)/.exec(e.message);
       return { err: `JSON xato — fayl buzilgan${lc ? ` (${lc[1]}-qator, ${lc[2]}-ustun atrofi)` : ''}; tahrirlagichda tekshiring` }; }
@@ -88,6 +88,9 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
 (async () => {
   const cfgs = {};                     // role -> { path, cfg }
   const notes = { pay: [], auth: [] }; // topilmagan sozlama sabablari
+  // Sozlama nega ishlatilmadi (maslahat sababga qarab): 'creds' — fayl o'qildi, lekin Eskiz kaliti yo'q (sudo ham, --config ham
+  //   yordam bermaydi — kalitni qo'shish kerak); 'perm' — o'qishga ruxsat yo'q (sudo); 'missing' / 'other' / 'notgiven' — --config.
+  const why = {}, credsAt = {};
   const explicitArgs = argAll('config');
   const explicit = explicitArgs.length ? explicitArgs.map(p => path.resolve(process.cwd(), p))
     : process.env.IQROR_CONFIG ? [path.resolve(__dirname, process.env.IQROR_CONFIG)] : [];
@@ -101,7 +104,7 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
       if (cfgs[role]) { console.log(`⚠️ ${full}: ikkinchi ${ROLE_UZ[role]} sozlamasi — e'tiborsiz (${cfgs[role].path} ishlatiladi).`); continue; }
       cfgs[role] = { path: full, cfg: r.cfg };
     }
-    for (const role of ['auth', 'pay']) if (!cfgs[role]) notes[role].push(`--config bilan berilmadi`);
+    for (const role of ['auth', 'pay']) if (!cfgs[role]) { notes[role].push(`--config bilan berilmadi`); why[role] = 'notgiven'; }
   } else {
     for (const role of ['pay', 'auth']) {
       const seen = new Set();
@@ -110,14 +113,15 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
         if (seen.has(full)) continue; seen.add(full);
         const r = readCfg(full);
         if (r.missing) { notes[role].push(`${full}: fayl yo‘q`); continue; }
-        if (r.err) { notes[role].push(`${full}: ${r.err}`); break; }            // bor, lekin o'qilmadi — keyingisiga o'tmaymiz
-        if (roleOf(r.cfg) !== role) { notes[role].push(`${full}: ${ROLE_UZ[role]} sozlamasi emas`); break; }
+        if (r.err) { notes[role].push(`${full}: ${r.err}`); why[role] = r.perm ? 'perm' : 'other'; break; }   // bor, lekin o'qilmadi — keyingisiga o'tmaymiz
+        if (roleOf(r.cfg) !== role) { notes[role].push(`${full}: ${ROLE_UZ[role]} sozlamasi emas`); why[role] = 'other'; break; }
         // Birinchi MAVJUD fayl — shu jarayonning jonli sozlamasi: kaliti yo'q/to'ldirilmagan bo'lsa ham boshqa faylga
         //   o'tilmaydi (aks holda boshqa fayl bilan noto'g'ri ✅ chiqardi — jarayon esa SMS yubora olmaydi).
         const prob = credsProblem(r.cfg);
-        if (prob) { notes[role].push(`${full}: ${prob} — bu jarayon SMS yubora olmaydi`); break; }
+        if (prob) { notes[role].push(`${full}: ${prob} — bu jarayon SMS yubora olmaydi`); why[role] = 'creds'; credsAt[role] = full; break; }
         cfgs[role] = { path: full, cfg: r.cfg }; break;
       }
+      if (!cfgs[role] && !why[role]) why[role] = 'missing';
     }
     if (!cfgs.pay && !cfgs.auth) {
       console.error('❌ Sozlama topilmadi:\n   ' + [...notes.pay, ...notes.auth].join('\n   ') + '\n   (aniq fayl: --config /yo‘l/config.json)');
@@ -199,7 +203,7 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
     const C = cfgs[row.role];
     const tpl = row.text(C && C.cfg);
     const list = C ? C.list : anyList;
-    console.log(`\n=== ${row.label}\n  Tizimdagi matn: ${tpl}${C ? '' : '  (standart — sozlama o‘qilmadi)'}`);
+    console.log(`\n=== ${row.label}\n  Tizimdagi matn: ${tpl}${C ? '' : '  (standart — sozlamadan foydalanib bo‘lmadi)'}`);
     const showVals = row.vals(SHOW);
     const res = PROBES.map(p => ({ p, vals: row.vals(p), cm: T.composeSms(tpl, row.vals(p), list) }));
     const cm = res[0].cm;
@@ -209,7 +213,7 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
     const failed = res.filter(x => x.cm.fit !== true);
     if (!C) {
       unverified++;
-      console.log(`  ⚪ TEKSHIRILMADI — ${ROLE_UZ[row.role]} sozlamasi o‘qilmadi (${notes[row.role].join('; ')}).`
+      console.log(`  ⚪ TEKSHIRILMADI — ${ROLE_UZ[row.role]} sozlamasidan foydalanib bo‘lmadi (${notes[row.role].join('; ')}).`
         + ` Standart matn bilan sinov: ${failed.length ? '❌ mos emas (pastga qarang)' : '✅ mos'} — lekin server o‘z sozlamasidagi matnni yuboradi.`);
       if (!failed.length) continue;
     } else if (!failed.length) { console.log(`  ✅ MOS — Eskiz shablon #${cm.templateId} ga to'g'ri keladi (${PROBES.length} xil ism/oy/summa${row.key === 'otp' ? '/kod' : ''} bilan tekshirildi).`); continue; }
@@ -270,11 +274,20 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
   }
   const sum = [];
   if (bad) sum.push(`❌ ${bad} ta SMS turi Eskiz naqshiga mos emas.`);
-  if (unverified) sum.push(`⚪ ${unverified} ta SMS turi tekshirilmadi — sozlamasi o‘qilmadi (yuqoridagi «Sozlama» qatorlari).`);
+  if (unverified) sum.push(`⚪ ${unverified} ta SMS turi tekshirilmadi — sozlamasidan foydalanib bo‘lmadi (yuqoridagi «Sozlama» qatorlari).`);
   console.log('\n' + (sum.length ? sum.join('\n') : '✅ Hamma SMS turlari tasdiqlangan naqshlarga mos.'));
   if (bad || unverified) {
     const tips = [];
-    if (unverified) tips.push(`Tekshirilmagan SMS turlari sozlamasini ham bering: ${explicit.length ? 'yana --config /yo‘l/config.json' : `sudo bilan qayta ishga tushiring (${RERUN}) yoki --config bilan ikkala faylni ko‘rsating`}.`);
+    // Maslahat — sababga qarab. Kalit yo'q (fayl o'qildi): sudo ham, --config ham yordam bermaydi — jarayon SMS yubora olmaydi.
+    const unv = ['auth', 'pay'].filter(r => !cfgs[r]);
+    if (unv.includes('auth') && why.auth === 'creds')
+      tips.push(`${credsAt.auth} da Eskiz kaliti yo‘q — «Eslatma» tugmasi va ro‘yxat/parol kodi (OTP) SMS’lari YUBORILMAYDI: shu faylga sms.eskizEmail va sms.eskizPassword qo‘shing, so‘ng auth serverini qayta ishga tushiring (sudo systemctl restart iqror-auth).`);
+    if (unv.includes('pay') && why.pay === 'creds')
+      tips.push(`${credsAt.pay} da Eskiz kaliti yo‘q — avtomatik qarz eslatmasi va yangi faktura SMS’lari (sms-worker) yuborilmaydi. Ular kerak bo‘lsa: shu faylga sms.eskizEmail va sms.eskizPassword qo‘shing (auth serveri sozlamasidagi kabi) va SMS cron’ini qo‘ying (payments/README.md §7.4). Kerak bo‘lmasa — bu ⚪ qatorlarga e’tibor bermang.`);
+    const rest = unv.filter(r => why[r] !== 'creds');
+    if (rest.length) tips.push(`Tekshirilmagan SMS turlari sozlamasini ham bering: ${explicit.length ? 'yana --config /yo‘l/config.json'
+      : rest.some(r => why[r] === 'perm') ? `sudo bilan qayta ishga tushiring (${RERUN})${rest.some(r => why[r] !== 'perm') ? ' yoki --config bilan ikkala faylni ko‘rsating' : ''}`
+      : '--config bilan ikkala faylni ko‘rsating (masalan --config /opt/iqror/auth/config.json --config ./config.json)'}.`);
     if (pending) tips.push(`Eskiz kabinetida (my.eskiz.uz → SMS → Mening matnlarim) matn holati «Servis» (tasdiqlangan) bo'lishini kuting.`);
     if (resubmit.size) {
       const ex = [...resubmit.values()], nts = [];
@@ -285,7 +298,10 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
         + `\n     Izohda yozing: ${nts.join('; ')} — bu joylar har SMS'da o'zgaradi.${ex.some(e => e.key !== 'otp') ? ' (Naqsh ismga 1 so‘z bersa ham tizim ismni o‘zi qisqartiradi.)' : ''}`);
     }
     if (fixText) tips.push(`Yuqoridagi «Tuzatish» qatorini bajaring — SMS matnining o'zgarmas qismi Eskiz naqshi bilan harfma-harf bir xil bo'lishi kerak.`);
-    tips.push(`So'ng shu buyruqni qayta ishga tushiring — hamma qator ✅ bo'lishi kerak.`);
+    // Yagona kamchilik — ixtiyoriy sms-worker kaliti: «hamma qator ✅» faqat kalit qo'shilganda (aks holda shu holat — normal).
+    const onlyOptional = !bad && !pending && !resubmit.size && !fixText && unv.length > 0 && unv.every(r => r === 'pay' && why.pay === 'creds');
+    tips.push(onlyOptional ? `Kalitni qo‘shgan bo‘lsangiz — shu buyruqni qayta ishga tushiring: hamma qator ✅ bo‘lishi kerak.`
+      : `So'ng shu buyruqni qayta ishga tushiring — hamma qator ✅ bo'lishi kerak.`);
     console.log('\nNima qilish kerak:\n' + tips.map((s, i) => `  ${i + 1}) ${s}`).join('\n'));
   }
   process.exit(bad || unverified ? 2 : 0);

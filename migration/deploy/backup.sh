@@ -12,6 +12,8 @@
 # =====================================================================
 set -euo pipefail
 umask 077
+# cron'da PATH faqat /usr/bin:/bin — docker (snap'da /snap/bin) va boshqa buyruqlar shunda ham topilsin (oxiriga: mavjud tartib o'zgarmaydi).
+export PATH="${PATH:+$PATH:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
 if [ "$(id -u)" = 0 ]; then BACKUP_DIR="${BACKUP_DIR:-/opt/iqror/backups}"; else BACKUP_DIR="${BACKUP_DIR:-$HOME/iqror-backups}"; fi
 DB_CONT="${DB_CONT:-supabase-db}"

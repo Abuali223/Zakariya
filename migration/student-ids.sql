@@ -65,7 +65,7 @@ do $$ declare n_all int; n_ghost int; begin
   if n_ghost > 0 and exists (select 1 from public.students) and n_ghost <= greatest(5, n_all / 5) then
     delete from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
   elsif n_ghost > 0 then
-    raise notice 'student_codes: % ta o''quvchisiz kod (jami %) — g''ayrioddiy ko''p, avtomatik tozalanmadi', n_ghost, n_all;
+    raise notice 'student_codes: % ta o''quvchisiz kod (jami %) — g''ayrioddiy ko''p, avtomatik tozalanmadi. Zararsiz (to''lov va ota-ona bog''lanishida ishlatilmaydi); o''quvchilar ataylab o''chirilgan bo''lsa — qo''lda tozalash: migration/deploy/README.md «Arvoh kodlar»', n_ghost, n_all;
   end if;
 end $$;
 

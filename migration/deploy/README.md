@@ -70,6 +70,35 @@ server kodi — `full-deploy.sh` oxirida chiqqan `sudo tar -xzf …/srv_… -C /
 Bazani zaxiradan tiklash oddiy emas (sxemalarni o'chirib tiklash, storage policy'larini qayta yaratish, deploy'dan keyingi yozuvlar
 yo'qoladi) — faqat maslahatlashib.
 
+### Deploy'dan keyingi ⚠️ / ℹ️ qatorlar — nima qilish
+- **`⚠️ kunlik zaxira cron yo'q`** — bir marta (root crontab'ning boshqa qatorlari saqlanadi, qayta ishlatsa ham takrorlanmaydi):
+  ```bash
+  sudo -v && { sudo crontab -l 2>/dev/null | grep -v "migration/deploy/backup\.sh"; echo "30 22 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1"; } | sudo crontab - && sudo crontab -l
+  ```
+  Cron muhitida ishlashini hozir tekshirish (cron'dagi kabi tor PATH bilan; oxirgi qator `backup OK`):
+  `sudo env -i PATH=/usr/bin:/bin HOME=/root bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh`
+- **Oldindan tekshiruv 3-band (takroriy maosh kalitlari)** — ikki xodim/o'qituvchida bir xil ID: birinchi maosh/avans berilganda
+  ikkalasiniki aralashadi. Tuzatish (admin panel, Ctrl+Shift+R dan keyin): «+ Qo'shish» oynasi ID maydonida taklif qilgan
+  keyingi bo'sh ID'ni eslab, oynani yoping → takroriy juftlikning BIRINING kartasini oching → ID maydoniga shu ID → «Saqlash» →
+  tasdiqda «eski ID boshqa xodimda ham bor (takroriy) … ESKI ID'da qoladi» — shu kutilgan (maosh/avans tarixi bo'lsa, u eski
+  ID egasida qoladi). O'qituvchi bilan xodimda bir xil `IQT-` ID bo'lsa — xodimnikini `IQX-` ga o'zgartiring («xodim farzandi»
+  bog'lanishi faqat o'qituvchiga bo'ladi). Qayta tekshirish: yuqoridagi `predeploy-checks.sql` — 3-band bo'sh.
+- **`⚠️ student_codes: N ta o'quvchisiz kod … avtomatik tozalanmadi` («Arvoh kodlar»)** — o'chirilgan o'quvchilardan qolgan
+  ota-ona kodlari: zararsiz (to'lov serveri ham, ota-ona bog'lanishi ham faqat MAVJUD o'quvchi qatori orqali ishlaydi). O'quvchilar
+  ataylab o'chirilgan bo'lsa (zaxiradan tiklash rejalashtirilmagan bo'lsa) — deploy'ning o'zi qiladigan tozalash, chegarasiz:
+  ```bash
+  sudo docker exec -i supabase-db psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 <<'SQL'
+  begin;
+  select count(*) as "arvoh kodlar (oldin)" from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  delete from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  select count(*) as "arvoh kodlar (keyin)" from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  commit;
+  SQL
+  ```
+- **SMS: `payments / sms-worker` sozlamasida Eskiz kaliti yo'q** — faqat avtomatik qarz/yangi faktura SMS'lari (sms-worker cron)
+  uchun kerak; «Eslatma» tugmasi va OTP auth serveri sozlamasidan ketadi. Kerak bo'lsa — `payments/config.json` ga
+  `sms.eskizEmail`/`sms.eskizPassword` va cron (`payments/README.md` §7.4).
+
 Faqat deploy (zaxira va tekshiruvlarsiz): `bash ~/iqror-repo/deploy.sh` — kod (o'zini ham) + paketlar + oldindan tekshiruv (xizmat
 kodi papkasi — bazaga tegishdan OLDIN) + SQL (bitta tranzaksiya) + `/sb` + sahifalar + server kodi + xizmatlar + 7/7 baza tekshiruvi.
 

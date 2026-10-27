@@ -889,6 +889,28 @@ semantikasi, farqlar + taklif, raqib-tekshiruv) — to'liq hisobot: `KIRIM-CHIQI
 - **Qarorlar (2026-10-26):** hozircha faqat tahlil (kod o'zgarmaydi); import yo'q — noyabrdan tizim asosiy manba; pul
   hisoblash qoidalari tizimdagidek qoladi. Keyingi bosqichlar taklifi — hisobotda, 8-bo'lim.
 
+## 40) Prod deploy (2026-10-27, c66d0b3 → 38f6554) — natija va keyingi qadamlar
+`✅ TO'LIQ DEPLOY MUVAFFAQIYATLI`: 72 fayl bitta tranzaksiyada, 7/7 «BIR XIL» (2270 obyekt), xizmatlar active + `/health` ok,
+yangi obyektlar 5/1/7, sayt fayllari yangi. Xizmatlar repo'dan ishlaydi (`papka=/home/ubuntu/iqror-repo`) — /opt sinxroni va `srv_*`
+zaxirasi kerak bo'lmadi (kod git'da; `config.json` git'ga tegmaydi). Chiqishdagi ⚠️/ℹ️ qatorlar — tahlil (sxemada sinab ko'rildi):
+- **Zaxira cron yo'q** (eng muhimi) — `migration/deploy/README.md` «Deploy'dan keyingi ⚠️» dagi bitta buyruq (root crontab'ning
+  boshqa qatorlari saqlanadi, takrorlanmaydi; soxta crontab bilan 3 holatda sinaldi). `backup.sh`: cron'ning tor PATH'ida
+  (`/usr/bin:/bin`) ham docker topilsin — standart papkalar (`/snap/bin` bilan) PATH OXIRIGA qo'shiladi (mavjud tartib o'zgarmaydi).
+- **Takroriy maosh kalitlari** IQT-016 (xodim + o'qituvchi), IQX-001 (2 xodim), tarixi 0 — birinchi oylikdan OLDIN tuzatish kerak
+  (aks holda «shu oy berilgan»/avans aralashadi). Ilova yo'li to'g'ri ishlaydi (PG16 + direktor JWT bilan sinaldi): yangi admin.html
+  takroriy kartani sof UPDATE bilan saqlaydi (eski oynaning upsert'i 23505 bilan rad — shuning uchun Ctrl+Shift+R); «ID o'zgartirish»
+  (`rekey_payroll_id`) yangi ID bilan `shared=true, moved=false`; o'chirilgan xodim tarixi bor ID — rad; keyin 3-band bo'sh.
+  «Xodim farzandi» tanlovida faqat o'qituvchilar — IQT-016 juftligida xodimnikini `IQX-` ga o'zgartirish o'qituvchiga tegmaydi.
+- **169 arvoh kod** (546 dan) — `sc_del` policy'sidan (bd62eb8) OLDIN o'chirilgan o'quvchilar qoldig'i. Zararsiz: to'lov serveri
+  `studentExists()`, `claim_child`/`claim_row` faqat mavjud qator bilan, `cc_ins` = false, ID qayta berilsa `gen_student_code`
+  yangi kod beradi. Ixtiyoriy tozalash buyrug'i README'da (deploy'ning o'z predikati, chegarasiz; sinaldi: faqat arvohlar o'chdi).
+  Deploy NOTICE'i endi shuni aytadi (deploy.sh `g'ayrioddiy` bo'yicha ushlaydi — sinaldi).
+- **Eskiz:** auth serveri sozlamasi ✅ (OTP #94502, «Eslatma» #94504 MOS); `payments/config.json` da kalit yo'q va SMS cron yo'q —
+  avtomatik qarz/yangi faktura SMS ishlatilmayapti. `eskiz-shablon.cjs` maslahati endi sababga qarab: kalit yo'q — «shu faylga kalit
+  qo'shing (kerak bo'lmasa — e'tibor bermang)» (avval noto'g'ri «sudo bilan qayta ishga tushiring»); ruxsat yo'q — sudo; fayl yo'q —
+  `--config` (+5 test, 53/53).
+- **AI:** `/health` → `claude-opus-4-8` — amaldagi model (o'zgartirish shart emas).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

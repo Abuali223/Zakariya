@@ -233,6 +233,30 @@ ok('avtomatik: o\'z config.json kaliti to\'ldirilmagan -> TEKSHIRILMADI (boshqa 
 r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: { code: 'ENOENT' }, '/opt/iqror/payments/config.json': { code: 'ENOENT' }, '/opt/iqror/auth/config.json': { code: 'ENOENT' }, [REPO_AUTH]: { code: 'ENOENT' } }) });
 ok('avtomatik: hech narsa yo\'q -> chiqish 1, «Sozlama topilmadi»', r.code === 1 && /Sozlama topilmadi/.test(r.out), r.out);
 
+// 21) Maslahat SABABGA qarab (prod 38f6554: payments/config.json bor, lekin Eskiz kaliti yo'q — «sudo bilan qayta» yordam bermasdi)
+const PAY_NOKEY = JSON.stringify({ sms: {} });
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAY_NOKEY, '/opt/iqror/payments/config.json': PAYC, '/opt/iqror/auth/config.json': AUTHC, [REPO_AUTH]: { code: 'ENOENT' } }) });
+ok('payments kaliti yo\'q -> maslahat: shu faylga kalit (ixtiyoriy), sudo/--config EMAS; auth qatorlari ✅', r.code === 2
+  && advice(r).includes(`${REPO_PAY} da Eskiz kaliti yo‘q — avtomatik qarz eslatmasi va yangi faktura SMS’lari (sms-worker) yuborilmaydi`)
+  && /Kerak bo‘lmasa — bu ⚪ qatorlarga e’tibor bermang/.test(advice(r)) && /§7\.4/.test(advice(r))
+  && !/sudo bilan qayta/.test(advice(r)) && !/--config bilan ikkala/.test(advice(r)) && !/Tekshirilmagan SMS turlari sozlamasini/.test(advice(r))
+  && /OTP\)[\s\S]*?✅ MOS/.test(r.out) && /2 ta SMS turi tekshirilmadi — sozlamasidan foydalanib bo‘lmadi/.test(r.out)
+  && /Kalitni qo‘shgan bo‘lsangiz — shu buyruqni qayta ishga tushiring/.test(advice(r)) && !/So'ng shu buyruqni/.test(advice(r)), r.out);
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAYC, '/opt/iqror/auth/config.json': JSON.stringify({ auth: { hmacSecret: 'x' }, sms: {} }), [REPO_AUTH]: AUTHC }) });
+ok('auth kaliti yo\'q -> maslahat: OTP/«Eslatma» YUBORILMAYDI, kalit + restart; sudo EMAS', r.code === 2
+  && advice(r).includes('/opt/iqror/auth/config.json da Eskiz kaliti yo‘q — «Eslatma» tugmasi va ro‘yxat/parol kodi (OTP) SMS’lari YUBORILMAYDI')
+  && /systemctl restart iqror-auth/.test(advice(r)) && !/sudo bilan qayta/.test(advice(r)) && !r.out.includes('Sozlama (auth serveri): ' + REPO_AUTH), r.out);
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAYC, '/opt/iqror/auth/config.json': { code: 'EACCES' }, [REPO_AUTH]: AUTHC }) });
+ok('auth o\'qishga ruxsat yo\'q -> maslahat: sudo bilan qayta (buyruq bilan), kalit maslahati YO\'Q', r.code === 2
+  && /Tekshirilmagan SMS turlari sozlamasini ham bering: sudo bilan qayta ishga tushiring \(sudo \$\(which node\) /.test(advice(r))
+  && !/--config bilan ikkala/.test(advice(r)) && !/Eskiz kaliti yo‘q/.test(advice(r)), r.out);
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAYC, '/opt/iqror/auth/config.json': { code: 'ENOENT' }, [REPO_AUTH]: { code: 'ENOENT' } }) });
+ok('auth fayli topilmadi -> maslahat: --config bilan (sudo EMAS)', r.code === 2
+  && /Tekshirilmagan SMS turlari sozlamasini ham bering: --config bilan ikkala faylni ko‘rsating/.test(advice(r)) && !/sudo bilan qayta/.test(advice(r)), r.out);
+r = run(ALL_OK, [], { FAKE_FS: JSON.stringify({ [REPO_PAY]: PAY_NOKEY, '/opt/iqror/auth/config.json': { code: 'EACCES' }, [REPO_AUTH]: AUTHC }) });
+ok('ikkalasi ishlatib bo\'lmaydi (kalit yo\'q + ruxsat yo\'q) -> chiqish 1, «Sozlama topilmadi», har fayl o\'z sababi bilan', r.code === 1
+  && /Sozlama topilmadi/.test(r.out) && r.out.includes(`${REPO_PAY}: sms.eskizEmail/eskizPassword (yoki token) yo'q`) && /auth\/config\.json: o‘qishga ruxsat yo‘q — sudo/.test(r.out), r.out);
+
 try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
