@@ -15,6 +15,9 @@ do $iqror_guard$ begin raise exception 'iqror: student-ids.sql ALOHIDA ishga tus
 --   Yechim: ID «yuqori chegarasi» o'quvchilar + barcha tarixiy jadvallardan olinadi (o'chirilgan
 --   o'quvchining izi qolgan joylardan ham) — admin.html yangi ID'ni shundan katta qilib beradi.
 --   student_history — o'chirishdan oldin «bu o'quvchida tarix bor» ogohlantirishi uchun.
+--   Manbalar — ota-ona owns_child / owns_student_doc orqali O'QIY OLADIGAN barcha o'quvchi jadvallari (tavsifnoma, fan izohi,
+--   oylik xulosa, olimpiada, avans jurnali, qaytarish, maxfiy ma'lumot ham): ulardan biri tushib qolsa, o'chirilgan bolaning
+--   ID'si (masalan qolgan kodi o'chirilgach) yangi bolaga berilib, YANGI ota-ona eski bolaning yozuvini ko'rardi.
 -- Faqat FAOL xodim chaqira oladi (is_staff). Idempotent (run-all.sql zanjirida).
 -- =====================================================================
 
@@ -30,7 +33,15 @@ returns int language sql stable security definer set search_path = public, app, 
           union all select "studentId" from public.monitoring
           union all select "studentId" from public.child_claims
           union all select id from public.student_codes
-          union all select id from public.student_credit) t
+          union all select id from public.student_credit
+          union all select "studentId" from public.student_credit
+          union all select "studentId" from public.credit_ledger
+          union all select "studentId" from public.refunds
+          union all select "studentId" from public.characteristics
+          union all select "studentId" from public.subject_notes
+          union all select "studentId" from public.student_summaries
+          union all select "studentId" from public.olympiads
+          union all select id from public.student_private) t
    where x ~ '^IQ-\d+$'
 $$;
 revoke all on function public.student_id_high_water() from public, anon;
@@ -46,7 +57,16 @@ returns jsonb language sql stable security definer set search_path = public, app
     'credit',     (select coalesce(sum(credit), 0) from public.student_credit where id = p_sid or "studentId" = p_sid),
     'attendance', (select count(*) from public.attendance where "studentId" = p_sid),
     'grades',     (select count(*) from public.grades     where "studentId" = p_sid),
-    'claims',     (select count(*) from public.child_claims where "studentId" = p_sid)
+    'claims',     (select count(*) from public.child_claims where "studentId" = p_sid),
+    -- ota-ona ko'radigan boshqa yozuvlar (tavsifnoma, fan izohi, oylik xulosa, olimpiada, avans jurnali, qaytarish)
+    'other',      (select count(*) from public.characteristics where "studentId" = p_sid)
+                + (select count(*) from public.subject_notes where "studentId" = p_sid)
+                + (select count(*) from public.student_summaries where "studentId" = p_sid)
+                + (select count(*) from public.olympiads where "studentId" = p_sid)
+                + (select count(*) from public.credit_ledger where "studentId" = p_sid)
+                + (select count(*) from public.refunds where "studentId" = p_sid),
+    -- maxfiy ma'lumot qatori (tirik o'quvchida doim bor — faqat YANGI ID tekshiruvi uchun: o'chirilgan bolaniki qolgan bo'lsa)
+    'private',    (select count(*) from public.student_private where id = p_sid)
   ) end
 $$;
 revoke all on function public.student_history(text) from public, anon;
@@ -58,14 +78,19 @@ grant execute on function public.student_history(text) to authenticated, service
 drop policy if exists sc_del on public.student_codes;
 create policy sc_del on public.student_codes for delete using (app.is_admin());
 -- Avval qolib ketgan arvoh kodlar (o'quvchisi yo'q) tozalanadi — keyingi deploylarda 0 qator (idempotent).
+--   Arvoh = kalit HECH QAYSI o'quvchining id'si ham, studentId'si ham emas. Kalit tirik o'quvchining studentId'siga teng kod
+--   (import: o'chirilgan dublikat IQ-0042 + tirik fbX9/IQ-0042) arvoh EMAS: to'lov serveri «IQ-0042 KOD» to'lovini u bilan
+--   tirik bolaga biriktiradi (payments/index.cjs codeMatchesAny + studentExists; attr.test T14b) — o'chirilsa o'sha oilaning
+--   to'lovlari «Biriktirilmagan»ga tushardi.
 --   Himoya: o'quvchilar jadvali bo'sh yoki arvohlar g'ayrioddiy ko'p bo'lsa (masalan tiklash/import jarayoni) — tegilmaydi.
 do $$ declare n_all int; n_ghost int; begin
   select count(*) into n_all from public.student_codes;
-  select count(*) into n_ghost from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+  select count(*) into n_ghost from public.student_codes sc
+   where not exists (select 1 from public.students s where s.id = sc.id or s."studentId" = sc.id);
   if n_ghost > 0 and exists (select 1 from public.students) and n_ghost <= greatest(5, n_all / 5) then
-    delete from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id);
+    delete from public.student_codes sc where not exists (select 1 from public.students s where s.id = sc.id or s."studentId" = sc.id);
   elsif n_ghost > 0 then
-    raise notice 'student_codes: % ta o''quvchisiz kod (jami %) — g''ayrioddiy ko''p, avtomatik tozalanmadi. Zararsiz (to''lov va ota-ona bog''lanishida ishlatilmaydi); o''quvchilar ataylab o''chirilgan bo''lsa — qo''lda tozalash: migration/deploy/README.md «Arvoh kodlar»', n_ghost, n_all;
+    raise notice 'student_codes: % ta o''quvchisiz kod (jami %) — g''ayrioddiy ko''p, avtomatik tozalanmadi. Zararsiz (hech qaysi o''quvchiga tegishli emas — to''lov va ota-ona bog''lanishida ishlatilmaydi); o''quvchilar ataylab o''chirilgan bo''lsa — qo''lda tozalash: migration/deploy/README.md «Arvoh kodlar»', n_ghost, n_all;
   end if;
 end $$;
 

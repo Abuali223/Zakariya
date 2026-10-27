@@ -75,9 +75,9 @@ function readCfg(full) {
   catch (e) {
     if (e && e.code === 'ENOENT') return { err: 'fayl yo‘q', missing: true };
     if (e && (e.code === 'EACCES' || e.code === 'EPERM')) return { err: `o‘qishga ruxsat yo‘q — sudo bilan ishga tushiring: ${RERUN}`, perm: true };
-    if (e && e.code === 'EISDIR') return { err: 'bu papka, fayl emas' };
+    if (e && e.code === 'EISDIR') return { err: 'bu papka, fayl emas', broken: true };
     if (e instanceof SyntaxError) { const lc = /line (\d+) column (\d+)/.exec(e.message);
-      return { err: `JSON xato — fayl buzilgan${lc ? ` (${lc[1]}-qator, ${lc[2]}-ustun atrofi)` : ''}; tahrirlagichda tekshiring` }; }
+      return { err: `JSON xato — fayl buzilgan${lc ? ` (${lc[1]}-qator, ${lc[2]}-ustun atrofi)` : ''}; tahrirlagichda tekshiring`, broken: true }; }
     return { err: `o‘qib bo‘lmadi (${(e && e.code) || 'xato'})` };
   }
 }
@@ -88,23 +88,44 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
 (async () => {
   const cfgs = {};                     // role -> { path, cfg }
   const notes = { pay: [], auth: [] }; // topilmagan sozlama sabablari
-  // Sozlama nega ishlatilmadi (maslahat sababga qarab): 'creds' — fayl o'qildi, lekin Eskiz kaliti yo'q (sudo ham, --config ham
-  //   yordam bermaydi — kalitni qo'shish kerak); 'perm' — o'qishga ruxsat yo'q (sudo); 'missing' / 'other' / 'notgiven' — --config.
-  const why = {}, credsAt = {};
+  // Sozlama nega ishlatilmadi (maslahat sababga qarab): 'creds' — fayl o'qildi, lekin Eskiz kaliti yo'q/to'ldirilmagan (sudo ham,
+  //   --config ham yordam bermaydi — kalitni yozish kerak); 'broken' — JSON buzilgan / papka (SHU faylni tuzatish); 'perm' —
+  //   o'qishga ruxsat yo'q (sudo); 'missing' / 'other' / 'notgiven' — aniq faylni --config bilan.
+  const why = {}, credsAt = {}, brokenAt = {};
   const explicitArgs = argAll('config');
   const explicit = explicitArgs.length ? explicitArgs.map(p => path.resolve(process.cwd(), p))
     : process.env.IQROR_CONFIG ? [path.resolve(__dirname, process.env.IQROR_CONFIG)] : [];
+  // JSON tekshiruvi — faqat OK / «JSON xato» chiqaradi (Node'ning o'z xatosi fayl qatorini — parol bilan — ekranga chiqarardi).
+  const jsonCheck = f => `sudo $(which node) -e 'try{JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log("OK")}catch(e){console.log("JSON xato — fayl buzilgan (yoki o‘qilmadi)");process.exit(1)}' ${shq(f)}`;
+  function roleTip(r) {
+    const proc = r === 'auth' ? 'auth serveri («Eslatma» tugmasi, OTP)' : 'sms-worker (avtomatik qarz / yangi faktura SMS)';
+    if (why[r] === 'creds' && r === 'auth')
+      return `${credsAt.auth} da Eskiz kaliti yo‘q yoki to‘ldirilmagan — «Eslatma» tugmasi va ro‘yxat/parol kodi (OTP) SMS’lari YUBORILMAYDI. `
+        + `Avval nusxa oling (sudo cp ${shq(credsAt.auth)} ${shq(credsAt.auth + '.bak')}), sms.eskizEmail va sms.eskizPassword ni yozing, so‘ng tekshirib auth serverini qayta ishga tushiring: ${jsonCheck(credsAt.auth)} && sudo systemctl restart iqror-auth`;
+    if (why[r] === 'creds')
+      return `${credsAt.pay} da Eskiz kaliti yo‘q yoki to‘ldirilmagan — avtomatik qarz eslatmasi va yangi faktura SMS’lari (sms-worker) yuborilmaydi. `
+        + `Ular kerak bo‘lsa: avval nusxa oling (sudo cp ${shq(credsAt.pay)} ${shq(credsAt.pay + '.bak')}), sms.eskizEmail va sms.eskizPassword ni auth serveri sozlamasidagi qiymatlar bilan yozing (sms.from ham bir xil; sms.enabled false bo‘lmasin), `
+        + `JSON’ni tekshiring (${jsonCheck(credsAt.pay)}) va SMS cron’ini qo‘ying (payments/README.md §7.4). Kerak bo‘lmasa — bu ⚪ qatorlarga e’tibor bermang.`;
+    if (why[r] === 'broken')
+      return `${brokenAt[r]} buzilgan (yuqoridagi «Sozlama» qatori) — sudo ham, --config ham yordam bermaydi: SHU faylni tuzating. `
+        + `${r === 'auth' ? 'Auth serveri' : 'To‘lov serveri (iqror-pay) va sms-worker'} aynan shu faylni o‘qiydi — buzilgan holda qayta ishga tushsa ISHLAMAYDI. Tekshirish: ${jsonCheck(brokenAt[r])}`;
+    if (why[r] === 'perm') return `${proc} sozlamasini o‘qishga ruxsat yo‘q — sudo bilan qayta ishga tushiring: ${RERUN}`;
+    if (why[r] === 'notgiven') return `${proc} sozlamasini ham bering: yana --config /yo‘l/config.json`;
+    return `${proc} sozlamasi topilmadi yoki ishlatib bo‘lmadi (yuqoridagi «Sozlama» qatori) — aniq faylni ko‘rsating: --config <xizmat papkasi>/${r === 'auth' ? 'auth' : 'payments'}/config.json`
+      + ` (papka: systemctl show -p WorkingDirectory --value ${r === 'auth' ? 'iqror-auth' : 'iqror-pay'})`;
+  }
   if (explicit.length) {
     for (const full of explicit) {
       const r = readCfg(full);
       if (r.err) { console.error(`❌ Sozlama: ${full}: ${r.err}`); process.exit(1); }
       const role = roleOf(r.cfg);
       const prob = credsProblem(r.cfg);
-      if (prob) { console.error(`❌ ${full}: ${prob}.`); process.exit(1); }
+      // Kalit yo'q/to'ldirilmagan — shu jarayon ⚪ (boshqa berilgan fayl baribir tekshiriladi; hech biri yaroqsiz bo'lsa — pastda chiqish 1)
+      if (prob) { notes[role].push(`${full}: ${prob} — bu jarayon SMS yubora olmaydi`); if (!cfgs[role] && !why[role]) { why[role] = 'creds'; credsAt[role] = full; } continue; }
       if (cfgs[role]) { console.log(`⚠️ ${full}: ikkinchi ${ROLE_UZ[role]} sozlamasi — e'tiborsiz (${cfgs[role].path} ishlatiladi).`); continue; }
       cfgs[role] = { path: full, cfg: r.cfg };
     }
-    for (const role of ['auth', 'pay']) if (!cfgs[role]) { notes[role].push(`--config bilan berilmadi`); why[role] = 'notgiven'; }
+    for (const role of ['auth', 'pay']) if (!cfgs[role] && !why[role]) { notes[role].push(`--config bilan berilmadi`); why[role] = 'notgiven'; }
   } else {
     for (const role of ['pay', 'auth']) {
       const seen = new Set();
@@ -113,7 +134,8 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
         if (seen.has(full)) continue; seen.add(full);
         const r = readCfg(full);
         if (r.missing) { notes[role].push(`${full}: fayl yo‘q`); continue; }
-        if (r.err) { notes[role].push(`${full}: ${r.err}`); why[role] = r.perm ? 'perm' : 'other'; break; }   // bor, lekin o'qilmadi — keyingisiga o'tmaymiz
+        if (r.err) {                                                             // bor, lekin o'qilmadi — keyingisiga o'tmaymiz
+          notes[role].push(`${full}: ${r.err}`); why[role] = r.perm ? 'perm' : r.broken ? 'broken' : 'other'; if (r.broken) brokenAt[role] = full; break; }
         if (roleOf(r.cfg) !== role) { notes[role].push(`${full}: ${ROLE_UZ[role]} sozlamasi emas`); why[role] = 'other'; break; }
         // Birinchi MAVJUD fayl — shu jarayonning jonli sozlamasi: kaliti yo'q/to'ldirilmagan bo'lsa ham boshqa faylga
         //   o'tilmaydi (aks holda boshqa fayl bilan noto'g'ri ✅ chiqardi — jarayon esa SMS yubora olmaydi).
@@ -123,12 +145,14 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
       }
       if (!cfgs[role] && !why[role]) why[role] = 'missing';
     }
-    if (!cfgs.pay && !cfgs.auth) {
-      console.error('❌ Sozlama topilmadi:\n   ' + [...notes.pay, ...notes.auth].join('\n   ') + '\n   (aniq fayl: --config /yo‘l/config.json)');
-      process.exit(1);
-    }
   }
-  for (const role of ['auth', 'pay']) console.log(`Sozlama (${ROLE_UZ[role]}): ${cfgs[role] ? cfgs[role].path : '— topilmadi (' + notes[role].join('; ') + ')'}`);
+  const absent = r => why[r] === 'missing' || why[r] === 'notgiven';   // fayl umuman yo'q / berilmagan (bor, lekin yaroqsiz — emas)
+  if (!cfgs.pay && !cfgs.auth) {
+    console.error(`❌ ${['pay', 'auth'].every(absent) ? 'Sozlama topilmadi' : 'Sozlamadan foydalanib bo‘lmadi'}:\n   ` + [...notes.pay, ...notes.auth].join('\n   ')
+      + '\n\nNima qilish kerak:\n' + ['auth', 'pay'].map((r, i) => `  ${i + 1}) ${roleTip(r)}`).join('\n'));
+    process.exit(1);
+  }
+  for (const role of ['auth', 'pay']) console.log(`Sozlama (${ROLE_UZ[role]}): ${cfgs[role] ? cfgs[role].path : `— ${absent(role) ? 'topilmadi' : 'ishlatib bo‘lmadi'} (` + notes[role].join('; ') + ')'}`);
 
   // 1) Eskiz'dagi matnlar — har Eskiz hisobi uchun bir marta (odatda ikkala sozlamada bitta hisob)
   // Kalit parol/token bilan (faqat xotirada, hech qayerga chiqarilmaydi): bir xil email, lekin boshqa parol — alohida tekshiriladi
@@ -278,16 +302,10 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
   console.log('\n' + (sum.length ? sum.join('\n') : '✅ Hamma SMS turlari tasdiqlangan naqshlarga mos.'));
   if (bad || unverified) {
     const tips = [];
-    // Maslahat — sababga qarab. Kalit yo'q (fayl o'qildi): sudo ham, --config ham yordam bermaydi — jarayon SMS yubora olmaydi.
+    // Maslahat — sababga qarab (roleTip): kalit yo'q — kalitni yozish (sms-worker uchun ixtiyoriy); buzilgan — shu faylni tuzatish;
+    //   ruxsat yo'q — sudo; topilmadi — aniq fayl --config bilan.
     const unv = ['auth', 'pay'].filter(r => !cfgs[r]);
-    if (unv.includes('auth') && why.auth === 'creds')
-      tips.push(`${credsAt.auth} da Eskiz kaliti yo‘q — «Eslatma» tugmasi va ro‘yxat/parol kodi (OTP) SMS’lari YUBORILMAYDI: shu faylga sms.eskizEmail va sms.eskizPassword qo‘shing, so‘ng auth serverini qayta ishga tushiring (sudo systemctl restart iqror-auth).`);
-    if (unv.includes('pay') && why.pay === 'creds')
-      tips.push(`${credsAt.pay} da Eskiz kaliti yo‘q — avtomatik qarz eslatmasi va yangi faktura SMS’lari (sms-worker) yuborilmaydi. Ular kerak bo‘lsa: shu faylga sms.eskizEmail va sms.eskizPassword qo‘shing (auth serveri sozlamasidagi kabi) va SMS cron’ini qo‘ying (payments/README.md §7.4). Kerak bo‘lmasa — bu ⚪ qatorlarga e’tibor bermang.`);
-    const rest = unv.filter(r => why[r] !== 'creds');
-    if (rest.length) tips.push(`Tekshirilmagan SMS turlari sozlamasini ham bering: ${explicit.length ? 'yana --config /yo‘l/config.json'
-      : rest.some(r => why[r] === 'perm') ? `sudo bilan qayta ishga tushiring (${RERUN})${rest.some(r => why[r] !== 'perm') ? ' yoki --config bilan ikkala faylni ko‘rsating' : ''}`
-      : '--config bilan ikkala faylni ko‘rsating (masalan --config /opt/iqror/auth/config.json --config ./config.json)'}.`);
+    for (const r of unv) tips.push(roleTip(r));
     if (pending) tips.push(`Eskiz kabinetida (my.eskiz.uz → SMS → Mening matnlarim) matn holati «Servis» (tasdiqlangan) bo'lishini kuting.`);
     if (resubmit.size) {
       const ex = [...resubmit.values()], nts = [];
@@ -298,10 +316,11 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
         + `\n     Izohda yozing: ${nts.join('; ')} — bu joylar har SMS'da o'zgaradi.${ex.some(e => e.key !== 'otp') ? ' (Naqsh ismga 1 so‘z bersa ham tizim ismni o‘zi qisqartiradi.)' : ''}`);
     }
     if (fixText) tips.push(`Yuqoridagi «Tuzatish» qatorini bajaring — SMS matnining o'zgarmas qismi Eskiz naqshi bilan harfma-harf bir xil bo'lishi kerak.`);
-    // Yagona kamchilik — ixtiyoriy sms-worker kaliti: «hamma qator ✅» faqat kalit qo'shilganda (aks holda shu holat — normal).
-    const onlyOptional = !bad && !pending && !resubmit.size && !fixText && unv.length > 0 && unv.every(r => r === 'pay' && why.pay === 'creds');
+    // Ixtiyoriy sms-worker kaliti yo'q: «hamma qator ✅» faqat kalit yozilganda (aks holda uning ⚪ qatorlari — normal).
+    const optPay = unv.includes('pay') && why.pay === 'creds';
+    const onlyOptional = !bad && !pending && !resubmit.size && !fixText && unv.length === 1 && optPay;
     tips.push(onlyOptional ? `Kalitni qo‘shgan bo‘lsangiz — shu buyruqni qayta ishga tushiring: hamma qator ✅ bo‘lishi kerak.`
-      : `So'ng shu buyruqni qayta ishga tushiring — hamma qator ✅ bo'lishi kerak.`);
+      : `So'ng shu buyruqni qayta ishga tushiring — hamma qator ✅ bo'lishi kerak${optPay ? ' (sms-worker kaliti yozilmagan bo‘lsa — uning ⚪ qatorlaridan tashqari)' : ''}.`);
     console.log('\nNima qilish kerak:\n' + tips.map((s, i) => `  ${i + 1}) ${s}`).join('\n'));
   }
   process.exit(bad || unverified ? 2 : 0);

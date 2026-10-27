@@ -153,14 +153,20 @@ node sms-worker.cjs debt             # faqat qarzdorlik (kun tekshiruvisiz, majb
 ```
 
 ### 7.4 CRON (tavsiya)
+Avval bir marta: log fayli sizga (cron'ni o'rnatadigan foydalanuvchiga) yoziladigan bo'lsin — aks holda `>> /var/log/…` yozolmay,
+cron buyrug'i UMUMAN ishlamaydi; va `node`ning to'liq yo'lini bilib oling (cron'da PATH faqat `/usr/bin:/bin`):
+```bash
+sudo touch /var/log/iqror-sms.log && sudo chown "$USER": /var/log/iqror-sms.log
+command -v node        # masalan /usr/bin/node — pastdagi qatorlarda shu yo'l turishi kerak
+```
 `crontab -e` (yo'llarni o'zingizniki bilan almashtiring; ustma-ust tushmasin — `flock`):
 ```
 # Yangi faktura xabarlari — har 2 soatda
-0 */2 * * *  cd /home/ubuntu/iqror-repo/payments && flock -n /tmp/iqror-sms.lock node sms-worker.cjs new  >> /var/log/iqror-sms.log 2>&1
+0 */2 * * *  cd /home/ubuntu/iqror-repo/payments && flock -n /tmp/iqror-sms.lock /usr/bin/node sms-worker.cjs new  >> /var/log/iqror-sms.log 2>&1
 # Qarzdorlik eslatmasi — Dush va Pay, 10:20 (10-sanadan keyingilar avtomat filtrlanadi).
 #   «new» bilan bir vaqtga to'g'ri kelmasin: 20 daqiqa keyin + `flock -w` (qulf bo'shashini 30 daq kutadi) —
 #   `-n` bo'lsa, o'sha paytda «new» ishlab tursa, kunlik qarz eslatmasi jim o'tkazib yuborilardi.
-20 10 * * 1,4 cd /home/ubuntu/iqror-repo/payments && flock -w 1800 /tmp/iqror-sms.lock node sms-worker.cjs debt >> /var/log/iqror-sms.log 2>&1
+20 10 * * 1,4 cd /home/ubuntu/iqror-repo/payments && flock -w 1800 /tmp/iqror-sms.lock /usr/bin/node sms-worker.cjs debt >> /var/log/iqror-sms.log 2>&1
 ```
 > Run «TO'XTATILDI» bilan tugasa (Eskiz'ga ulanib bo'lmadi yoki ketma-ket 5 ta Eskiz xatosi — `maxConsecutiveFailures`),
 > claim qilinmagan xabarlar keyingi cron'da yuboriladi; Eskiz aniq rad etganlari (`rejected:`) `maxRetries` gacha qayta

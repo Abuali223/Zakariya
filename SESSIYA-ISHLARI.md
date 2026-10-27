@@ -892,23 +892,35 @@ semantikasi, farqlar + taklif, raqib-tekshiruv) — to'liq hisobot: `KIRIM-CHIQI
 ## 40) Prod deploy (2026-10-27, c66d0b3 → 38f6554) — natija va keyingi qadamlar
 `✅ TO'LIQ DEPLOY MUVAFFAQIYATLI`: 72 fayl bitta tranzaksiyada, 7/7 «BIR XIL» (2270 obyekt), xizmatlar active + `/health` ok,
 yangi obyektlar 5/1/7, sayt fayllari yangi. Xizmatlar repo'dan ishlaydi (`papka=/home/ubuntu/iqror-repo`) — /opt sinxroni va `srv_*`
-zaxirasi kerak bo'lmadi (kod git'da; `config.json` git'ga tegmaydi). Chiqishdagi ⚠️/ℹ️ qatorlar — tahlil (sxemada sinab ko'rildi):
-- **Zaxira cron yo'q** (eng muhimi) — `migration/deploy/README.md` «Deploy'dan keyingi ⚠️» dagi bitta buyruq (root crontab'ning
-  boshqa qatorlari saqlanadi, takrorlanmaydi; soxta crontab bilan 3 holatda sinaldi). `backup.sh`: cron'ning tor PATH'ida
-  (`/usr/bin:/bin`) ham docker topilsin — standart papkalar (`/snap/bin` bilan) PATH OXIRIGA qo'shiladi (mavjud tartib o'zgarmaydi).
-- **Takroriy maosh kalitlari** IQT-016 (xodim + o'qituvchi), IQX-001 (2 xodim), tarixi 0 — birinchi oylikdan OLDIN tuzatish kerak
-  (aks holda «shu oy berilgan»/avans aralashadi). Ilova yo'li to'g'ri ishlaydi (PG16 + direktor JWT bilan sinaldi): yangi admin.html
-  takroriy kartani sof UPDATE bilan saqlaydi (eski oynaning upsert'i 23505 bilan rad — shuning uchun Ctrl+Shift+R); «ID o'zgartirish»
-  (`rekey_payroll_id`) yangi ID bilan `shared=true, moved=false`; o'chirilgan xodim tarixi bor ID — rad; keyin 3-band bo'sh.
-  «Xodim farzandi» tanlovida faqat o'qituvchilar — IQT-016 juftligida xodimnikini `IQX-` ga o'zgartirish o'qituvchiga tegmaydi.
-- **169 arvoh kod** (546 dan) — `sc_del` policy'sidan (bd62eb8) OLDIN o'chirilgan o'quvchilar qoldig'i. Zararsiz: to'lov serveri
-  `studentExists()`, `claim_child`/`claim_row` faqat mavjud qator bilan, `cc_ins` = false, ID qayta berilsa `gen_student_code`
-  yangi kod beradi. Ixtiyoriy tozalash buyrug'i README'da (deploy'ning o'z predikati, chegarasiz; sinaldi: faqat arvohlar o'chdi).
-  Deploy NOTICE'i endi shuni aytadi (deploy.sh `g'ayrioddiy` bo'yicha ushlaydi — sinaldi).
-- **Eskiz:** auth serveri sozlamasi ✅ (OTP #94502, «Eslatma» #94504 MOS); `payments/config.json` da kalit yo'q va SMS cron yo'q —
-  avtomatik qarz/yangi faktura SMS ishlatilmayapti. `eskiz-shablon.cjs` maslahati endi sababga qarab: kalit yo'q — «shu faylga kalit
-  qo'shing (kerak bo'lmasa — e'tibor bermang)» (avval noto'g'ri «sudo bilan qayta ishga tushiring»); ruxsat yo'q — sudo; fayl yo'q —
-  `--config` (+5 test, 53/53).
+zaxirasi kerak bo'lmadi (kod git'da; `config.json` git'ga tegmaydi). Chiqishdagi ⚠️/ℹ️ qatorlar tahlili (PG16'da sinaldi) +
+4 ko'zli raqib-tekshiruv (har topilma ikkinchi skeptik bilan) — tuzatilganlari:
+- **Zaxira cron yo'q** (eng muhimi). Buyruq: BITTA `sudo sh -c '…crontab -l | grep -av … | crontab -'` — `sudo -v` bilan avvalgi
+  shakl Ubuntu cloud image'da (NOPASSWD + %sudo, qulflangan parol; verifypw=all) parol so'rab to'xtardi, pipeline'dagi ikki sudo
+  esa noto'g'ri parolda root'ning boshqa cron qatorlarini JIM o'chirardi; `grep -a` — UTF-8 bo'lmagan qatorlar ham saqlanadi
+  (soxta crontab bilan 4 holat). `backup.sh`: cron'ning tor PATH'ida docker topilsin (standart papkalar + `/snap/bin` PATH
+  OXIRIGA) va docker umuman topilmasa — «konteyner ishlamayapti» o'rniga aniq «docker buyrug'i topilmadi». Cron muhitida sinov:
+  `sudo env -i PATH=/usr/bin:/bin HOME=/root bash …/backup.sh`. Hajm: kuniga ~4 MB (baza), fayllar 0 MB — 14 kunda ~60 MB.
+- **Takroriy maosh kalitlari** IQT-016 (xodim + o'qituvchi), IQX-001 (2 xodim), tarixi 0. Aralashuv emas — maosh/avans berish
+  BLOKLANGAN (isDupId, «⛔ Takroriy ID» kartasi) — birinchi oylikdan OLDIN tuzatish. Ilova yo'li to'g'ri (PG16 + direktor JWT):
+  yangi admin.html takroriy kartani sof UPDATE bilan saqlaydi (eski oynaning upsert'i 23505 — shuning uchun Ctrl+Shift+R);
+  «ID o'zgartirish» yangi ID bilan `shared=true, moved=false`; keyin 3-band bo'sh. FAQAT xodim kartasi: o'qituvchi (Nodirov)
+  o'zgartirilsa «xodim farzandi» bog'lanishi IQT-016'da xodimga qolardi — tasdiqda «xodim farzandi» so'zi = o'qituvchi kartasi.
+- **169 arvoh kod.** Raqib topdi: kaliti TIRIK o'quvchining studentId'siga teng kod (import: o'chirilgan dublikat IQ-0042 + tirik
+  fbX9/IQ-0042) arvoh EMAS — to'lov serveri «IQ-0042 KOD» to'lovini u bilan tirik bolaga biriktiradi (codeMatchesAny + studentExists;
+  attr.test T14b). Deploy'ning avto-tozalashi (student-ids.sql), predeploy 5-band va README buyrug'i endi faqat `s.id = sc.id OR
+  s."studentId" = sc.id` mos kelmaydiganlarni oladi (sinaldi: IQ-0921 qoldi). Ikkinchi topilma: `student_id_high_water` ota-ona
+  ko'radigan jadvallarning bir qismini olmasdi (characteristics, subject_notes, student_summaries, olympiads, credit_ledger,
+  refunds, student_private) — kod o'chirilgach o'chirilgan bolaning IQ raqami yangi bolaga berilib, YANGI ota-ona eski bolaning
+  tavsifnomasini ko'rardi (raqib PG16'da ko'rsatdi). Endi union to'liq; `student_history` → `other`/`private` (admin.html: yangi
+  o'quvchi formasi va import ham tekshiradi; o'chirish ogohlantirishlari o'zgarmadi). README tozalash buyrug'i heredoc'siz
+  (`psql -1 -c … -c …`; chekinish/«SQL» terminator xatosi yo'q; xatoda to'liq orqaga — sinaldi).
+- **Eskiz:** auth serveri ✅ (OTP #94502, «Eslatma» #94504 MOS); `payments/config.json` da kalit yo'q va SMS cron yo'q — avtomatik
+  qarz/yangi faktura SMS ishlatilmayapti (ixtiyoriy). `eskiz-shablon.cjs` maslahati sababga qarab (`roleTip`): kalit yo'q/
+  to'ldirilmagan — shu faylga yozish (nusxa + JSON tekshiruvi; auth uchun keyin restart; sms-worker uchun ixtiyoriy); JSON buzilgan /
+  papka — «SHU faylni tuzating» (xizmat buzilgan fayl bilan yiqiladi); ruxsat yo'q — sudo; topilmadi — `--config <xizmat papkasi>/…`
+  (`systemctl show -p WorkingDirectory`). Erta chiqishda ham maslahat; explicit rejimda kalitsiz fayl — ⚪ (chiqish 1 emas). JSON
+  tekshiruv buyrug'i faqat OK/«JSON xato» chiqaradi (Node'ning o'z xatosi fayl qatorini — parol bilan — chiqarardi). 58/58 test.
+  `payments/README.md` §7.4: log fayli foydalanuvchiga yoziladigan (aks holda cron qatori umuman ishlamaydi) + `node` to'liq yo'li.
 - **AI:** `/health` → `claude-opus-4-8` — amaldagi model (o'zgartirish shart emas).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)

@@ -33,6 +33,8 @@ trap 'rm -f "$OUT.part" "$ST.part"' EXIT
 # 1) Baza (maktab jadvallari va funksiyalari)
 if [ -n "$PGURL" ]; then
   pg_dump "$PGURL" -n public -n app | gzip > "$OUT.part"
+elif ! command -v docker >/dev/null 2>&1; then
+  echo "❌ [$(date)] docker buyrug'i topilmadi (PATH=$PATH) — zaxira olinmadi"; exit 1
 elif $DOCKER ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
   $DOCKER exec "$DB_CONT" pg_dump -U postgres -d postgres -n public -n app | gzip > "$OUT.part"
 else

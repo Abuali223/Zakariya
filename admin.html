@@ -1822,7 +1822,7 @@ async function buildAndPreviewImport(rows){
     //   yangi bola uni meros olmasin (bitta o'quvchi formasidagi tekshiruv bilan bir xil). high-water'dan katta IQ-n — tarixsiz.
     if(givenId){ const mm=givenId.match(/^IQ-(\d+)$/i); if(!(mm && hwNum>0 && Number(mm[1])>hwNum)){
       let h=null; try{ h=await rpc('student_history',{ p_sid:givenId }); }catch(_){ h=null; }
-      if(h && (['invoices','payments','attendance','grades','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
+      if(h && (['invoices','payments','attendance','grades','claims','other','private'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
         warnings.push(`${name}: «${givenId}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — qo‘shilmadi. ID katagini bo‘shating (yangi ID beriladi).`); skipped.push(name); continue; } } }
     newIds.add(id.toUpperCase());
     acc.push(id);
@@ -3929,8 +3929,9 @@ function openFormNow(name, row, prefill, afterSaveCb){
             stop(); return; }
           // Avval O'CHIRILGAN o'quvchining ID'si berilmasin (eski davomat/hisob/avans va ota-ona kabinet ulanishi yangi bolaga
           //   o'tib ketadi). Tekshirib bo'lmasa (eski baza) — o'tkazamiz.
+          //   other/private — ota-ona ko'radigan boshqa yozuvlar (tavsifnoma, izoh…) va qolib ketgan maxfiy ma'lumot (student-ids.sql).
           let h=null; if(!ownIns){ try{ h=await rpc('student_history',{ p_sid:id }); }catch(_){ h=null; } }
-          if(h && (['invoices','payments','attendance','grades','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
+          if(h && (['invoices','payments','attendance','grades','claims','other','private'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
             toast(`«${id}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — yangi o‘quvchi buni meros olmasin. Formani yopib qayta oching (yangi ID beriladi) yoki boshqa ID kiriting.`, true);
             stop(); return;
           }

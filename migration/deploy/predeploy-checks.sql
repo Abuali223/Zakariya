@@ -36,12 +36,12 @@ select 'salary_payments' jadval, quote_literal("teacherId") kalit, count(*) from
 union all
 select 'staff_advances', quote_literal("teacherId"), count(*) from public.staff_advances where coalesce("teacherId", '') <> '' and "teacherId" not in (select k from keys) group by 2
 order by 1, 2;
-\echo '== 5) O''quvchisiz («arvoh») kodlar: deploy faqat <= max(5, 20%) bo''lsa o''chiradi; ko''p bo''lsa — deploy chiqishida ⚠️ qatori'
-select count(*) filter (where not exists (select 1 from public.students s where s.id = sc.id)) as arvohlar, count(*) as jami_kodlar,
-       case when count(*) filter (where not exists (select 1 from public.students s where s.id = sc.id)) = 0 then 'hech narsa'
-            when count(*) filter (where not exists (select 1 from public.students s where s.id = sc.id)) <= greatest(5, count(*) / 5) then 'deploy O''CHIRADI'
+\echo '== 5) O''quvchisiz («arvoh») kodlar — kalit hech qaysi o''quvchining id/studentId''si emas (zararsiz): deploy faqat <= max(5, 20%) bo''lsa o''chiradi; ko''p bo''lsa — deploy chiqishida ⚠️ qatori (qo''lda tozalash: migration/deploy/README.md «Arvoh kodlar»)'
+select count(*) filter (where g) as arvohlar, count(*) as jami_kodlar,
+       case when count(*) filter (where g) = 0 then 'hech narsa'
+            when count(*) filter (where g) <= greatest(5, count(*) / 5) then 'deploy O''CHIRADI'
             else 'avtomatik o''chirilMAYDI (deploy ⚠️ ko''rsatadi)' end as deploy_amali
-  from public.student_codes sc;
+  from (select not exists (select 1 from public.students s where s.id = sc.id or s."studentId" = sc.id) as g from public.student_codes sc) x;
 \echo '== 6) Ota-ona bog''lanishlari holati: «active» bo''lmaganlari deploy''dan keyin farzand ma''lumotini KO''RMAYDI'
 select coalesce(nullif(status, ''), '(bo''sh = active)') as holat, count(*) from public.child_claims group by 1 order by 1;
 \echo '== 7) Deploy qayta yozadigan ma''lumot (rejali tenglashlar)'
