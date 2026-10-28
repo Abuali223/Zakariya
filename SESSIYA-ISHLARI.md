@@ -973,6 +973,23 @@ Talab: «ID'ni pasport singari o'zgarmas qil — tahrirlasa ham; o'qituvchi/xodi
     (boshqa admin shu orada tuzatgan) — «fix» rejimi asl ID'ga qaytadi, ikkinchi «Saqlash» boshqa maydonlarni saqlaydi; taklif
     hali kelmagan «Saqlash» rad etiladi; Oylik kartasi matni prefiks bo'yicha (IQX- juftligida tugma o'qituvchi kartasida).
   - Qayta sinov (UTF8 klaster): SQL T00–T30, C1–C6, verify-db BIR XIL (1900 / 2095 obyekt), brauzer 74 + 11 + 23 (tuzatmalar).
+- **Ikkinchi raqib ko'rigi** (fa7cdd3 tuzatmalari ustidan; 6 topilma, 5 tasdiqlangan — hammasi tuzatildi):
+  - «Xodim farzandi» ro'yxati eskirgan keshdan olinardi: boshqa sessiyada ID'si tuzatilgan/o'chirilgan o'qituvchi tanlansa,
+    9-band trigger butun maxfiy blokni (JSHSHIR, telefon, 50% toifa) rad etar, forma esa «Saqlandi ✓» deb yopilardi. Endi
+    ro'yxat doim bazadan; maxfiy blok yozilmasa oyna OCHIQ qoladi (bazaning izohi bilan), 23503'da ro'yxat yangilanadi; qayta
+    «Saqlash» o'quvchini takror yaratmaydi.
+  - 9-band trigger yozish huquqi yo'q rollarga (ota-ona, o'qituvchi, moliya) 23503/42501 farqi orqali ID borligini va yashirin
+    bog'lanishni oshkor qilardi — endi faqat priv_ins/priv_upd egalari (direktor, qabulxona) tekshiriladi, qolganlarni RLS rad etadi.
+  - Kanonik ID: ko'rinmas format belgilari (U+200B, bidi, soft hyphen …) HAMMA joydan olinadi; bo'shliq — JS trim() to'plamining
+    aniq ro'yxati (locale'ga bog'liq \s emas); katta harf — faqat a–z (translate / replace). JS pidCanon va SQL app.pid_key
+    4 448 252 satrda (har kod nuqtasi oldida/oxirida/ichida) AYNAN bir xil va idempotent. Avvalgi deploy reyestri yangi shaklga
+    keltiriladi (sinaldi: CHECK keyin validatsiyadan o'tadi).
+  - O'quvchi formasi: javobi yo'qolgan INSERT'dan keyin o'z Kamera ID'si qayta «Saqlash»ni to'sardi (eski muammo) — `_ins` ham «o'zimiz».
+  - Saqlash ishlovchisi faqat O'Z formasiga tegadi (`e.target`): oyna yopilib boshqa karta ochilsa, kech 23505/42501 unga «fix» rejimini
+    qo'ymaydi, kech «Saqlandi» uni yopmaydi; «Bekor»dan keyin kelgan eski taklif qo'llanmaydi (gen hisoblagichi).
+  - Faqat bo'shliqdan iborat turli ID'lar endi bir-biriga «takroriy» hisoblanmaydi (pidKey xom qiymatga qaytadi).
+  - Sinov: SQL T00–T32 + reyestr qayta-kanoniklash, C1–C6, verify-db BIR XIL, autocommit run-all rc=0, predeploy eski/yangi bazada
+    xatosiz; brauzer 74 + 11 + 23 + 19; unit 192/186/✓.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

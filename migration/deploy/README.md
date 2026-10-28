@@ -92,7 +92,8 @@ qiymat «Saqlash»da bazadan qayta hisoblanadi), keyin u o'zgarmaydi — tahrird
 42501). Har berilgan ID `payroll_ids` reyestriga yoziladi va HECH QACHON qayta berilmaydi: o'qituvchi/xodim o'chirilsa (yoki
 ishdan chiqsa, o'rniga boshqa odam kelsa) ham, yangi odam doim yangi raqam oladi (o'chirilganlarning maosh/avans tarixi, «xodim
 farzandi» bog'lanishi va xodimga bog'langan login yorlig'idagi raqamlar ham hisobga olinadi). ID'lar katta-kichik harf va chetidagi
-bo'shliqlardan (tab, NBSP ham) qat'i nazar solishtiriladi: «IQX-001» va «iqx-001 » — bitta ID (takroriy). Deploy reyestrni har
+bo'shliqlardan (tab, NBSP ham) va ko'rinmas belgilardan (zero-width, bidi — nusxa-ko'chirishda qo'shiladi) qat'i nazar
+solishtiriladi: «IQX-001» va «iqx-001 » — bitta ID (takroriy). Deploy reyestrni har
 safar joriy ro'yxat + tarix bilan to'ldiradi (chiqishda «ID reyestri (payroll_ids): N ta ID …», «reyestrda yo'q joriy ID: 0»).
 O'qituvchi xodimga aylansa (yoki aksincha) — yangi kartochka (yangi ID) ochiladi, eskisi «⏯️ Holat → Ishdan chiqqan» qilinadi;
 eski ID unda qoladi va boshqa hech kimga berilmaydi.

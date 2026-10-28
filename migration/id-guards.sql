@@ -33,15 +33,19 @@ do $iqror_guard$ begin raise exception 'iqror: id-guards.sql ALOHIDA ishga tushi
 -- =====================================================================
 
 -- ---- 0) Berilgan ID'lar reyestri ----
--- Kanonik ID: chetidagi bo'shliqlar olinadi — JavaScript String.trim() bilan AYNAN bir xil to'plam (oddiy bo'shliq, tab,
---   qator oxiri, NBSP, BOM, U+2000–200A …; admin.html ham trim().toUpperCase() bilan solishtiradi) — va katta harf.
---   btrim faqat oddiy bo'shliqni olardi: nusxa-ko'chirishdagi «IQX-004<NBSP>» alohida ID hisoblanib, baza o'zi ko'rinishi
---   bir xil «IQX-004» ni berib yuborardi (ikkisi ham «noyob», tuzatib bo'lmasdi).
+-- Kanonik ID (admin.html pidCanon bilan AYNAN bir xil): (1) ko'rinmas format belgilari (zero-width, bidi, soft hyphen, BOM …
+--   — veb/Telegram'dan nusxa-ko'chirishda qo'shiladi) HAMMA joydan olinadi; (2) chetidagi bo'shliqlar — JavaScript String.trim()
+--   to'plami (bo'shliq, tab, qator oxiri, NBSP, U+2000–200A …; locale'ga bog'liq \s emas — aniq ro'yxat); (3) katta harf — faqat
+--   a–z (translate: locale'ga bog'liq emas — prod/zaxira serveri locale'i boshqa bo'lsa ham CHECK va solishtiruv bir xil).
+--   btrim faqat oddiy bo'shliqni olardi: nusxa-ko'chirishdagi «IQX-004<NBSP>» / «IQX-009<ZWSP>» alohida ID hisoblanib, baza o'zi
+--   ko'rinishi bir xil «IQX-004» ni berib yuborardi (ikkisi ham «noyob», tuzatib bo'lmasdi). Avval o'chirish, keyin trim —
+--   idempotent (pid_key(pid_key(x)) = pid_key(x)).
 create or replace function app.pid_key(p text)
 returns text language sql immutable parallel safe as $$
-  select upper(regexp_replace(coalesce(p, ''),
-    '^[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
-    '', 'g'))
+  select translate(regexp_replace(regexp_replace(coalesce(p, ''),
+    '[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]', '', 'g'),
+    '^[ \t\n\v\f\r\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[ \t\n\v\f\r\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$', '', 'g'),
+    'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 $$;
 create table if not exists public.payroll_ids (
   id          text primary key check (id <> '' and id = app.pid_key(id)),     -- kanonik ID (app.pid_key)
@@ -57,6 +61,13 @@ alter table public.payroll_ids enable row level security;
 --   deployda barcha jadvallarga qayta grant beradi — shuning uchun bu yerda HAR SAFAR qayta olinadi (bitta tranzaksiya).
 revoke all on table public.payroll_ids from public, anon, authenticated, service_role;
 grant select on table public.payroll_ids to service_role;
+-- Kanonik shakl o'zgargan bo'lsa (avvalgi deploy'dagi pid_key): yozuv yangi shaklda qayta yoziladi — ID band qoladi, CHECK
+--   (id = app.pid_key(id)) keyingi yangilanishda (bo'shatish) yiqilmaydi. Odatda 0 qator.
+insert into public.payroll_ids (id, coll, row_id, raw, source, created_at, released_at)
+select app.pid_key(id), coll, row_id, raw, source, created_at, released_at
+  from public.payroll_ids where id <> app.pid_key(id) and app.pid_key(id) <> ''
+on conflict (id) do nothing;
+delete from public.payroll_ids where id <> app.pid_key(id);
 
 -- To'ldirish (har deployda; mavjud yozuv tegilmaydi). Jadvallar zanjirning oldingi fayllarida (ALTER/POLICY) allaqachon
 --   qulflangan — parallel yozuv bu o'qish va triggerlar orasiga tushmaydi; aniq bo'lishi uchun yana (DO ichida: zanjirsiz
@@ -532,6 +543,10 @@ create or replace function app.guard_private_teacher_link()
 declare v_old text;
 begin
   if app.uid() is null or coalesce(new."teacherId", '') = '' then return new; end if;
+  -- Yozish huquqi yo'q foydalanuvchi (ota-ona, o'qituvchi, moliya …) — tekshiruvsiz: uni RLS (priv_ins/priv_upd — xuddi shu shart)
+  --   xabarsiz rad etadi (42501); aks holda 23503/42501 farqi qaysi o'qituvchi/xodim ID'si borligini va o'quvchining yashirin
+  --   bog'lanishini oshkor qilardi (guard_payroll_key / guard_payroll_id kabi).
+  if not (app.is_admin() or app.is_reception()) then return new; end if;
   if tg_op = 'UPDATE' then v_old := old."teacherId";
   else select sp."teacherId" into v_old from public.student_private sp where sp.id = new.id; end if;   -- upsert: mavjud qator
   if new."teacherId" is not distinct from v_old then return new; end if;
