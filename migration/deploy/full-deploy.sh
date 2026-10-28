@@ -152,10 +152,13 @@ for wd in $(code_dirs); do
   done < <(git ls-tree -r --name-only FETCH_HEAD ai-assistant payments server sb auth)
   if [ "$nb" = 0 ]; then echo "    ✓ server kodi $wd da yangi versiyada"; else bad=1; fi
 done
-# Bazada yangi obyektlar (kutilgan: 5 / 1 / 7):
-psql_at -c "select '    yangi funksiyalar: ' || count(*) || ' (kutilgan 5)' from pg_proc where proname in ('camera_owners','camera_has_scans','payroll_key_info','rekey_payroll_id','payroll_id_high_water')" \
+# Bazada yangi obyektlar (kutilgan: 10 / 1 / 10) + o'qituvchi/xodim ID reyestri (pasport ID: payroll_ids):
+psql_at -c "select '    yangi funksiyalar: ' || count(*) || ' (kutilgan 10)' from pg_proc where proname in ('camera_owners','camera_has_scans','payroll_key_info','rekey_payroll_id','payroll_id_high_water','payroll_id_state','payroll_hw','record_payroll_id','pid_key','guard_private_teacher_link')" \
         -c "select '    config.ratesPrev ustuni: ' || count(*) || ' (kutilgan 1)' from information_schema.columns where table_schema = 'public' and table_name = 'config' and column_name = 'ratesPrev'" \
-        -c "select '    ID qo''riqchi triggerlar: ' || count(*) || ' (kutilgan 7)' from pg_trigger where tgname in ('trg_student_keys','trg_teacher_row_id','trg_staff_row_id','trg_salpay_key','trg_staffadv_key','trg_teacher_payroll_id','trg_staff_payroll_id')"
+        -c "select '    ID qo''riqchi triggerlar: ' || count(*) || ' (kutilgan 10, yoqilgan: ' || count(*) filter (where tgenabled <> 'D') || ')' from pg_trigger where tgname in ('trg_student_keys','trg_teacher_row_id','trg_staff_row_id','trg_salpay_key','trg_staffadv_key','trg_teacher_payroll_id','trg_staff_payroll_id','trg_teacher_payroll_reg','trg_staff_payroll_reg','trg_private_teacher_link')" \
+        -c "select '    ID reyestri (payroll_ids): ' || count(*) || ' ta ID, ' || count(*) filter (where released_at is not null) || ' tasi bo''shatilgan (qayta berilmaydi); RLS ' || coalesce((select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.payroll_ids')), '?') from public.payroll_ids" \
+        -c "select '    reyestrda yo''q joriy ID: ' || count(*) || ' (kutilgan 0)' from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' and not exists (select 1 from public.payroll_ids p where p.id = x.k)" \
+        -c "select '    takroriy o''qituvchi/xodim ID''lari: ' || count(*) || case when count(*) > 0 then ' — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating (migration/deploy/README.md)' else ' ✓' end from (select k from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' group by k having count(*) > 1) d"
 grep -q "BIR XIL" "$DOUT" || { echo "    !! 7/7 baza tekshiruvi «BIR XIL» emas — yuqoridagi 🔴/🟠 qatorlarni ko'rib chiqing"; bad=1; }
 rm -f "$DOUT"
 # Xizmatlar: ishlayaptimi va deploy'dan keyin YIQILIB qayta ishga tushmadimi. deploy.sh har xizmatni qo'lda qayta ishga

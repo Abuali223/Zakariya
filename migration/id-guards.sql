@@ -8,33 +8,122 @@ do $iqror_guard$ begin raise exception 'iqror: id-guards.sql ALOHIDA ishga tushi
 -- id-guards.sql — tahrirda ID'lar (kalitlar) jim o'zgarmasin / qayta ishlatilmasin.
 --
 --   1) O'quvchi kalitlari (DB himoyasi): ilova foydalanuvchisi (JWT bilan — direktor ham) students.id ni va
---      MAVJUD (bo'sh bo'lmagan) studentId'ni o'zgartira olmaydi. studentId — hisob-faktura, to'lov, avans,
---      davomat, baho va ota-ona ulanishi kaliti: o'zgarsa hammasi «yetim» qoladi. Bo'sh studentId'ni to'ldirish
---      (NULL/'' -> qiymat) mumkin. Texnik tuzatish (SQL, service_role) — tegilmaydi (app.uid() bo'sh).
---      O'qituvchi/xodim qatori kaliti (teachers.id / staff.id) ham ilovadan o'zgarmaydi (ta'til, tanaffus,
---      o'rinbosarlik, foydalanuvchi bog'lanishi shu kalit bilan).
---   2) payroll_id_high_water(prefix) — o'qituvchi (IQT-) / xodim (IQX-) ID'sining eng katta raqami: joriy
---      ro'yxat + maosh berish / avans tarixidan (o'chirilgan xodimning ham). Yangi xodimga O'CHIRILGAN xodimning
---      ID'si berilmaydi — aks holda u eski qoldiq/avans/«shu oy berilgan»ni meros olardi.
---   3) payroll_key_info(key) — shu maosh kaliti ostidagi tarix (maosh, avans, «xodim farzandi» bog'lanishi) va
---      egalari soni: ID o'zgartirish tasdig'ida ANIQ ko'rsatish uchun (avval «(bo'sh)» deyilardi, pul esa _id
---      kalitida turardi).
---   4) rekey_payroll_id(...) — o'qituvchi/xodim ID'sini o'zgartirish VA uning maosh/avans tarixi, «xodim
---      farzandi» bog'lanishi va foydalanuvchi yorlig'ini (users.staffCode) yangi ID'ga BITTA tranzaksiyada
---      ko'chirish. Eski ID boshqa xodimda ham bo'lsa (takroriy ID) — tarix kimniki ekani noma'lum: ko'chirilmaydi.
---      Yozuv o'chirilgan / ID boshqa joyda o'zgargan / yangi ID band yoki o'chirilgan xodim tarixi (maosh, avans,
---      «xodim farzandi» bog'lanishi) bilan — rad.
---   5) Maosh/avans yozuvi kaliti (salary_payments / staff_advances.teacherId): ilovadan faqat MAVJUD o'qituvchi/xodim
---      kaliti bilan yoziladi va ID o'zgartirish (4) bilan bir kalitda navbatma-navbat (advisory lock): ID o'zgartirilayotgan
---      paytda berilgan maosh eski kalitda «yetim» qolmaydi — kutadi va xato bilan qaytadi («sahifani yangilang»).
---      payeeRef ('teachers:<qator id>' / 'staff:<qator id>') — yozuv KIM uchun: kalit shu odamning HOZIRGI kaliti bo'lishi shart —
---      eski oynadan berilgan maosh/avans bo'shab boshqa odamga berilgan ID'ga (uning yangi egasiga) yozilmaydi.
---   6) camera_owners(cam) / camera_has_scans(cam) — Kamera ID kimda va eski skan tarixi bormi: qabulxona o'qituvchi/xodim
---      jadvallarini va skanlarni ko'rmaydi (RLS), shuning uchun tekshiruv serverda (faqat ism va tur qaytadi).
---   7) teacherId/staffId ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi yoki o'zgargan ID boshqa xodimnikiga teng emas
---      (shu ID'ni bir vaqtda yozayotgan ikki yozuvchi ham — 4 bilan bir kalitda navbat).
--- 1–4 — faqat direktor/admin/HR (app.is_admin() / app.is_hr()); 6 — faol xodim (app.is_staff()). Idempotent (run-all.sql).
+--      MAVJUD (bo'sh bo'lmagan) studentId'ni o'zgartira olmaydi. (o'zgarishsiz)
+--   0/8) O'QITUVCHI/XODIM ID'si — PASPORT KABI: public.payroll_ids — HAR BIR berilgan teacherId/staffId (kanonik:
+--      app.pid_key — chetidagi bo'shliqlarsiz, katta harf) reyestri. Bir marta yoziladi, HECH QACHON o'chirilmaydi:
+--      o'qituvchi/xodim o'chirilsa ham, ID'si o'zgarsa ham (bir martalik tuzatish) — ID qayta BERILMAYDI. Har deployda
+--      joriy ro'yxat + tarix (maosh, avans, «xodim farzandi», xodimga BOG'LANGAN login yorlig'i users.staffCode) bilan
+--      to'ldiriladi (idempotent). Manbalar — faqat tekshirib yoziladiganlar: ixtiyoriy matn (IQT-999999999) yangi ID
+--      chegarasini abadiy ko'tarib, ID berishni to'xtatib qo'yardi — shuning uchun «xodim farzandi» 9-band bilan tekshiriladi,
+--      staffCode'ni o'z-o'zini ro'yxatdan o'tkazgan hisob yoza olmaydi (staff-user-link.sql users_ins). Mijozga yopiq
+--      (RLS, grant yo'q) — faqat SECURITY DEFINER funksiyalar/triggerlar yozadi va o'qiydi.
+--   2) payroll_id_high_water(prefix) — IQT-/IQX- eng katta raqami: reyestr + joriy ro'yxat + tarix.
+--   3) payroll_key_info(key) — kalit ostidagi tarix (+ issued/released — reyestrda bormi, bo'shatilganmi).
+--   4) rekey_payroll_id(...) — FAQAT bir martalik tuzatish: eski ID BO'SH yoki TAKRORIY (boshqa joriy xodimda ham bor)
+--      bo'lsa; yangi ID — shu jadval prefiksi (o'qituvchi IQT-, xodim IQX-) va hech qachon berilmagan raqam (> high-water).
+--      Takroriy ID'da prefiksi jadvaliga mos egasi ID'ni SAQLAYDI (masalan IQT-016: o'qituvchi qoladi, xodim tuzatiladi).
+--   5) Maosh/avans yozuvi kaliti (o'zgarishsiz).
+--   6) camera_owners / camera_has_scans (o'zgarishsiz).
+--   7) teacherId/staffId: ilovadan faqat rekey_payroll_id orqali (bir martalik); YANGI yozuv ID'si — prefiks + hech qachon
+--      berilmagan raqam. payroll_id_state(coll, row) — forma uchun: ID tuzatilishi mumkinmi va keyingi noyob ID.
+--   9) student_private."teacherId" («xodim farzandi» bog'lanishi; ID chegarasi manbalaridan biri): ilovadan faqat MAVJUD
+--      o'qituvchi/xodim kaliti (o'zgarmagan eski qiymat — tegilmaydi).
+-- 1–4, 7 — faqat direktor/HR (app.is_admin() / app.is_hr()); 6 — faol xodim; 9 — har qanday ilova foydalanuvchisi.
+--   SQL / service_role (app.uid() bo'sh) — tekshiruvsiz (texnik tuzatish), lekin reyestr baribir yuritiladi. Idempotent (run-all.sql).
 -- =====================================================================
+
+-- ---- 0) Berilgan ID'lar reyestri ----
+-- Kanonik ID: chetidagi bo'shliqlar olinadi — JavaScript String.trim() bilan AYNAN bir xil to'plam (oddiy bo'shliq, tab,
+--   qator oxiri, NBSP, BOM, U+2000–200A …; admin.html ham trim().toUpperCase() bilan solishtiradi) — va katta harf.
+--   btrim faqat oddiy bo'shliqni olardi: nusxa-ko'chirishdagi «IQX-004<NBSP>» alohida ID hisoblanib, baza o'zi ko'rinishi
+--   bir xil «IQX-004» ni berib yuborardi (ikkisi ham «noyob», tuzatib bo'lmasdi).
+create or replace function app.pid_key(p text)
+returns text language sql immutable parallel safe as $$
+  select upper(regexp_replace(coalesce(p, ''),
+    '^[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
+    '', 'g'))
+$$;
+create table if not exists public.payroll_ids (
+  id          text primary key check (id <> '' and id = app.pid_key(id)),     -- kanonik ID (app.pid_key)
+  coll        text check (coll is null or coll in ('teachers', 'staff')),    -- birinchi ma'lum egasi (null — faqat tarixdan)
+  row_id      text,                                                          -- teachers.id / staff.id
+  raw         text,                                                          -- birinchi ko'rilgan xom qiymat (ma'lumot)
+  source      text not null default 'trigger',                               -- backfill:* | insert | rekey | sql:* | release:*
+  created_at  timestamptz not null default now(),
+  released_at timestamptz                                                    -- joriy egasi qolmagan (o'chirilgan/almashtirilgan)
+);
+alter table public.payroll_ids enable row level security;
+-- Mijoz (anon/authenticated) umuman ko'rmaydi/yozmaydi; service_role — faqat o'qish (diagnostika). supabase-grants.sql har
+--   deployda barcha jadvallarga qayta grant beradi — shuning uchun bu yerda HAR SAFAR qayta olinadi (bitta tranzaksiya).
+revoke all on table public.payroll_ids from public, anon, authenticated, service_role;
+grant select on table public.payroll_ids to service_role;
+
+-- To'ldirish (har deployda; mavjud yozuv tegilmaydi). Jadvallar zanjirning oldingi fayllarida (ALTER/POLICY) allaqachon
+--   qulflangan — parallel yozuv bu o'qish va triggerlar orasiga tushmaydi; aniq bo'lishi uchun yana (DO ichida: zanjirsiz
+--   `psql -f run-all.sql` — autocommit — ham yiqilmasin; chain.sh'ning BEGIN…COMMIT ichida qulf COMMIT'gacha turadi).
+do $$ begin lock table public.teachers, public.staff in share row exclusive mode; end $$;
+insert into public.payroll_ids (id, coll, row_id, raw, source, released_at)
+select distinct on (k) k, coll, row_id, raw, source, released_at
+  from (
+    select app.pid_key(t."teacherId") k, 'teachers' coll, t.id row_id, t."teacherId" raw, 'backfill:teachers' source,
+           null::timestamptz released_at, case when app.pid_key(t."teacherId") like 'IQT-%' then 0 else 1 end pri
+      from public.teachers t where app.pid_key(t."teacherId") <> ''
+    union all
+    select app.pid_key(s."staffId"), 'staff', s.id, s."staffId", 'backfill:staff', null,
+           case when app.pid_key(s."staffId") like 'IQX-%' then 0 else 1 end
+      from public.staff s where app.pid_key(s."staffId") <> ''
+    union all
+    -- Tarix: o'chirilgan xodimlarning kalitlari ham (joriy qator id'si — bo'sh ID'li odamning ichki kaliti — emas).
+    --   Maosh/avans kaliti yozilishida tekshiriladi (guard_payroll_key), «xodim farzandi» — 9-band, login yorlig'i — faqat
+    --   xodim yozuviga bog'langan hisobniki (bog'lashni faqat admin/server o'rnatadi).
+    select app.pid_key(h.k), null, null, h.k, 'backfill:' || h.src, now(), 2
+      from (select "teacherId" k, 'salary_payments' src from public.salary_payments
+            union all select "teacherId", 'staff_advances' from public.staff_advances
+            union all select "teacherId", 'student_private' from public.student_private
+            union all select "staffCode", 'users' from public.users
+             where "staffRefType" in ('teacher', 'staff') and coalesce("staffRefId", '') <> '') h
+     where app.pid_key(h.k) <> ''
+       and not exists (select 1 from public.teachers t where t.id = h.k)
+       and not exists (select 1 from public.staff s where s.id = h.k)
+  ) x
+ order by k, pri, coll nulls last, row_id
+on conflict (id) do nothing;
+
+-- Takroriy ID'lar (eski ma'lumot) — deploy chiqishida ko'rinadi (deploy.sh «OGOHLANTIRISH» qatorlarini chiqaradi).
+do $$
+declare r record;
+begin
+  for r in
+    select k, count(*) n, string_agg(coll || ':' || id || ' «' || coalesce(name, '') || '»', ', ' order by coll, id) who
+      from (select app.pid_key("teacherId") k, 'teachers' coll, id, name from public.teachers where app.pid_key("teacherId") <> ''
+            union all select app.pid_key("staffId"), 'staff', id, name from public.staff where app.pid_key("staffId") <> '') x
+     group by k having count(*) > 1 order by k
+  loop
+    raise notice 'OGOHLANTIRISH: takroriy o''qituvchi/xodim ID «%» (% ta: %) — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating', r.k, r.n, r.who;
+  end loop;
+end $$;
+
+-- Ichki yordamchi: IQT-/IQX- eng katta berilgan raqam (reyestr + joriy + tarix). SECURITY INVOKER: faqat definer
+--   funksiyalar/triggerlar ichidan (egasi huquqi bilan) ishlaydi; mijoz to'g'ridan chaqirsa — reyestrni o'qiy olmaydi.
+--   Manbalar — faqat tekshirib yoziladiganlar (yuqoridagi izoh; login yorlig'i — faqat bog'langan hisobniki).
+create or replace function app.payroll_hw(p_prefix text)
+returns int language plpgsql stable set search_path = public, app, pg_temp as $$
+declare v int;
+begin
+  if p_prefix is null or p_prefix not in ('IQT-', 'IQX-') then return 0; end if;
+  select coalesce(max((regexp_match(app.pid_key(x), '^' || p_prefix || '([0-9]{1,9})$'))[1]::int), 0) into v
+    from (select id as x from public.payroll_ids
+          union all select "teacherId" from public.teachers
+          union all select "staffId" from public.staff
+          union all select "teacherId" from public.salary_payments
+          union all select "teacherId" from public.staff_advances
+          union all select "teacherId" from public.student_private
+          union all select "staffCode" from public.users
+           where "staffRefType" in ('teacher', 'staff') and coalesce("staffRefId", '') <> '') t
+   where coalesce(x, '') <> '';
+  return v;
+end $$;
+revoke all on function app.payroll_hw(text) from public, anon, authenticated;
 
 -- ---- 1) Kalit himoyasi ----
 create or replace function app.guard_student_keys()
@@ -72,31 +161,19 @@ drop trigger if exists trg_staff_row_id on public.staff;
 create trigger trg_staff_row_id before update on public.staff
   for each row execute function app.guard_row_id();
 
--- ---- 2) Yangi o'qituvchi/xodim ID'si uchun yuqori chegara ----
---   plpgsql: ruxsat va prefiks shakli regex'dan OLDIN tekshiriladi (sql CASE ichidagi max() agregati shartdan oldin
---   hisoblanardi — istalgan foydalanuvchi o'z naqshini barcha maosh kalitlariga qo'llab, kalit borligini bilib olardi).
+-- ---- 2) Yangi o'qituvchi/xodim ID'si uchun yuqori chegara (reyestr ham) ----
 create or replace function public.payroll_id_high_water(p_prefix text)
 returns int language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v int;
 begin
-  if not (app.is_admin() or app.is_hr()) or coalesce(p_prefix, '') !~ '^[A-Z]{1,6}-$' then
+  if not (app.is_admin() or app.is_hr()) or coalesce(p_prefix, '') not in ('IQT-', 'IQX-') then
     return 0;
   end if;
-  select coalesce(max((regexp_match(upper(btrim(x)), '^' || p_prefix || '(\d{1,9})$'))[1]::int), 0) into v
-    from (select "teacherId" as x from public.teachers
-          union all select "staffId" from public.staff
-          union all select "teacherId" from public.salary_payments
-          union all select "teacherId" from public.staff_advances
-          union all select "teacherId" from public.student_private) t
-   where coalesce(x, '') <> '';
-  return v;
+  return app.payroll_hw(p_prefix);
 end $$;
 revoke all on function public.payroll_id_high_water(text) from public, anon;
 grant execute on function public.payroll_id_high_water(text) to authenticated, service_role;
 
--- ---- 3) Maosh kaliti tarixi ----
---   p_row — o'qituvchi qator id'si (ixtiyoriy): «xodim farzandi» soni rekey_payroll_id ko'chiradigan bilan BIR XIL —
---   kalit bilan VA qator id'si bilan saqlangan (ID berilishidan oldingi) bog'lanishlar (boshqa o'qituvchining ID'si bo'lmasa).
+-- ---- 3) Maosh kaliti tarixi (+ reyestr holati) ----
 drop function if exists public.payroll_key_info(text);
 create or replace function public.payroll_key_info(p_key text, p_row text default null)
 returns jsonb language sql stable security definer set search_path = public, app, pg_temp as $$
@@ -107,13 +184,47 @@ returns jsonb language sql stable security definer set search_path = public, app
                    or (coalesce(p_row, '') <> '' and sp."teacherId" = p_row
                        and not exists (select 1 from public.teachers t2 where t2."teacherId" = p_row))),
     'owners',   (select count(*) from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = p_key)
-              + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = p_key)
+              + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = p_key),
+    'issued',   exists (select 1 from public.payroll_ids p where p.id = app.pid_key(p_key)),
+    'released', exists (select 1 from public.payroll_ids p where p.id = app.pid_key(p_key) and p.released_at is not null)
   ) end
 $$;
 revoke all on function public.payroll_key_info(text, text) from public, anon;
 grant execute on function public.payroll_key_info(text, text) to authenticated, service_role;
 
--- ---- 4) ID o'zgartirish + tarixni ko'chirish (atomik) ----
+-- ---- 7a) Forma uchun: shu qatorning ID'si bir martalik tuzatilishi mumkinmi + keyingi noyob ID ----
+--   fixable: ID bo'sh YOKI takroriy (kanonik — app.pid_key); takroriyda prefiksi jadvaliga mos (IQT- o'qituvchi /
+--   IQX- xodim) egasi, mos KELMAYDIGAN boshqa egasi bo'lsa — ID'ni saqlaydi ('keep'): tuzatish o'sha boshqa kartochkada.
+create or replace function public.payroll_id_state(p_coll text, p_row text)
+returns jsonb language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_raw text; v_k text; v_pc text; v_pfx text; n_other int := 0; n_mis int := 0; v_fix boolean; v_hw int;
+begin
+  if not (app.is_admin() or app.is_hr()) or p_coll is null or p_coll not in ('teachers', 'staff') then return null; end if;
+  if p_coll = 'teachers' then select "teacherId" into v_raw from public.teachers where id = p_row;
+  else select "staffId" into v_raw from public.staff where id = p_row; end if;
+  if not found then return null; end if;
+  v_pfx := case p_coll when 'teachers' then 'IQT-' else 'IQX-' end;
+  v_k := app.pid_key(v_raw);
+  if v_k <> '' then
+    v_pc := case when v_k like 'IQT-%' then 'teachers' when v_k like 'IQX-%' then 'staff' end;
+    select count(*), count(*) filter (where o.coll is distinct from v_pc) into n_other, n_mis
+      from (select 'teachers'::text coll from public.teachers t
+             where app.pid_key(t."teacherId") = v_k and not (p_coll = 'teachers' and t.id = p_row)
+            union all
+            select 'staff' from public.staff s
+             where app.pid_key(s."staffId") = v_k and not (p_coll = 'staff' and s.id = p_row)) o;
+  end if;
+  v_fix := v_k = '' or (n_other > 0 and not (coalesce(v_pc = p_coll, false) and n_mis > 0));
+  v_hw := app.payroll_hw(v_pfx) + 1;
+  return jsonb_build_object(
+    'id', v_raw, 'fixable', v_fix, 'others', n_other,
+    'reason', case when v_k = '' then 'empty' when n_other = 0 then 'unique' when v_fix then 'duplicate' else 'keep' end,
+    'next', v_pfx || lpad(v_hw::text, greatest(3, length(v_hw::text)), '0'));
+end $$;
+revoke all on function public.payroll_id_state(text, text) from public, anon;
+grant execute on function public.payroll_id_state(text, text) to authenticated, service_role;
+
+-- ---- 4) ID bir martalik tuzatish + tarixni ko'chirish (atomik) ----
 create or replace function public.rekey_payroll_id(p_coll text, p_row text, p_old text, p_new text)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
@@ -121,20 +232,33 @@ declare
   v_key    text;
   v_shared int;
   v_move   boolean;
+  v_pfx    text;
+  v_num    int;
+  v_hw     int;
+  v_state  jsonb;
+  k        text;
   n_sal    int := 0;
   n_adv    int := 0;
   n_ch     int := 0;
 begin
   if not (app.is_admin() or app.is_hr()) then
-    raise exception 'O''qituvchi/xodim ID''sini faqat direktor yoki HR o''zgartiradi' using errcode = '42501';
+    raise exception 'O''qituvchi/xodim ID''sini faqat direktor yoki HR tuzatadi' using errcode = '42501';
   end if;
   if p_coll is null or p_coll not in ('teachers', 'staff') then
     raise exception 'Noto''g''ri jadval: %', p_coll using errcode = '22023';
   end if;
-  if coalesce(p_new, '') = '' or p_new <> btrim(p_new) then
-    raise exception 'Yangi ID bo''sh yoki chetida bo''sh joy bor' using errcode = '22023';
+  v_pfx := case p_coll when 'teachers' then 'IQT-' else 'IQX-' end;
+  -- Yangi ID: faqat shu jadval prefiksi + raqam (kanonik: kamida 3 xona, ortiqcha nolsiz) — «yangi noyob ID» beradi.
+  if coalesce(p_new, '') !~ ('^' || v_pfx || '[0-9]{3,9}$') then
+    raise exception 'Yangi ID «%» noto''g''ri — % uchun faqat %NNN («Yangi noyob ID berish» tugmasi)', coalesce(p_new, ''),
+      case p_coll when 'teachers' then 'o''qituvchi' else 'xodim' end, v_pfx using errcode = '22023';
   end if;
-  -- Qator qulflanadi: parallel tahrir/ID o'zgartirish tugashini kutadi.
+  v_num := substr(p_new, length(v_pfx) + 1)::int;
+  if p_new <> v_pfx || lpad(v_num::text, greatest(3, length(v_num::text)), '0') then
+    raise exception 'Yangi ID «%» kanonik emas (kutilgan %)', p_new, v_pfx || lpad(v_num::text, greatest(3, length(v_num::text)), '0')
+      using errcode = '22023';
+  end if;
+  -- Qator qulflanadi: parallel tahrir/ID tuzatish tugashini kutadi.
   if p_coll = 'teachers' then
     select "teacherId" into v_cur from public.teachers where id = p_row for update;
   else
@@ -143,27 +267,40 @@ begin
   if not found then
     raise exception 'Yozuv topilmadi (o''chirilgan bo''lishi mumkin) — sahifani yangilang' using errcode = 'P0002';
   end if;
-  -- Optimistik tekshiruv: oyna ochilgandan beri ID boshqa joyda o'zgarmagan bo'lsin.
   if coalesce(v_cur, '') is distinct from coalesce(p_old, '') then
     raise exception 'ID boshqa joyda o''zgartirilgan (bazada hozir «%») — oynani yopib, qayta oching', coalesce(v_cur, '')
       using errcode = 'P0001';
   end if;
-  -- Maosh kaliti — admin.html bilan bir xil: String(teacherId||_id) (bo'sh bo'lsa qator id'si; xom, kesilmagan).
   v_key := case when coalesce(v_cur, '') = '' then p_row else v_cur end;
   if v_key = p_new then
     return jsonb_build_object('moved', false, 'same', true, 'oldKey', v_key);
   end if;
-  -- Eski va yangi kalit bo'yicha navbat (5-band triggeri bilan): shu paytda berilayotgan maosh/avans kutadi.
-  --   Tartib bilan (kichigi oldin) — ikki parallel ID o'zgartirish bir-birini kutib qolmasin.
-  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || least(v_key, p_new)));
-  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || greatest(v_key, p_new)));
-  -- Yangi ID boshqa o'qituvchi/xodimning kaliti emas (o'qituvchi va xodim maosh kalitlari BITTA nomlar fazosida).
-  if exists (select 1 from public.teachers t where btrim(coalesce(nullif(t."teacherId", ''), t.id)) = p_new and not (p_coll = 'teachers' and t.id = p_row))
-     or exists (select 1 from public.staff s where btrim(coalesce(nullif(s."staffId", ''), s.id)) = p_new and not (p_coll = 'staff' and s.id = p_row)) then
+  -- Navbat (kichigi oldin — o'zaro kutib qolmasin): eski xom kalit, eski KANONIK ID (bo'shliq/harf varianti bo'lgan ikki
+  --   takroriy egasi bir vaqtda tuzatmasin) va yangi ID.
+  for k in select distinct x from unnest(array[v_key, nullif(app.pid_key(v_cur), ''), p_new]) x
+            where x is not null order by x loop
+    perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || k));
+  end loop;
+  -- PASPORT: faqat bo'sh yoki takroriy ID bir marta tuzatiladi (navbat ichida — boshqa egasi shu paytda tuzatgan bo'lsa ko'rinadi).
+  v_state := public.payroll_id_state(p_coll, p_row);
+  if not coalesce((v_state ->> 'fixable')::boolean, false) then
+    raise exception '%', case v_state ->> 'reason'
+        when 'keep' then format('ID «%s» shu %s ID''si (prefiksi mos) — takroriylikni boshqa (prefiksi mos kelmaydigan) kartochkada tuzating',
+                                v_cur, case p_coll when 'teachers' then 'o''qituvchining' else 'xodimning' end)
+        else format('ID «%s» pasport kabi o''zgarmaydi — faqat bo''sh yoki takroriy ID bir marta tuzatiladi (eski oyna bo''lsa — sahifani yangilang: Ctrl+Shift+R)', v_cur) end
+      using errcode = '42501';
+  end if;
+  -- Yangi ID hech qachon berilmagan bo'lsin (o'chirilgan / almashtirilgan xodimniki ham — reyestr va tarix).
+  v_hw := app.payroll_hw(v_pfx);
+  if v_num <= v_hw or exists (select 1 from public.payroll_ids where id = p_new) then
+    raise exception 'ID «%» avval berilgan (o''chirilgan xodimniki ham qayta berilmaydi) — yangi ID: %', p_new,
+      v_pfx || lpad((v_hw + 1)::text, greatest(3, length((v_hw + 1)::text)), '0') using errcode = '23505';
+  end if;
+  -- (Quyidagi ikki tekshiruv yuqoridagi «> high-water» bilan qoplangan — himoya chuqurligi uchun qoldirildi.)
+  if exists (select 1 from public.teachers t where app.pid_key(coalesce(nullif(t."teacherId", ''), t.id)) = p_new and not (p_coll = 'teachers' and t.id = p_row))
+     or exists (select 1 from public.staff s where app.pid_key(coalesce(nullif(s."staffId", ''), s.id)) = p_new and not (p_coll = 'staff' and s.id = p_row)) then
     raise exception 'ID «%» boshqa xodim/o''qituvchida bor — takroriy ID maosh/avansni aralashtiradi', p_new using errcode = '23505';
   end if;
-  -- Yangi ID ostida egasiz (o'chirilgan xodimning) maosh/avans tarixi yoki «xodim farzandi» bog'lanishi — meros olinmasin
-  --   (bog'lanish o'qituvchiga ko'chsa, o'sha bolalar yangi o'qituvchiniki bo'lib ko'rinardi).
   if exists (select 1 from public.salary_payments where "teacherId" = p_new)
      or exists (select 1 from public.staff_advances where "teacherId" = p_new)
      or (p_coll = 'teachers' and exists (select 1 from public.student_private where "teacherId" = p_new)) then
@@ -175,8 +312,6 @@ begin
        + (select count(*) from public.staff s    where coalesce(nullif(s."staffId", ''), s.id) = v_key and not (p_coll = 'staff' and s.id = p_row))
     into v_shared;
   v_move := (v_shared = 0);
-  -- 7-band triggeri: ID shu funksiya ichida (tarix bilan) o'zgaradi; 5-band triggeri: tarixni shu funksiya (kalitlarni
-  --   qulflab) ko'chiradi — payeeRef'i boshqa (o'chirilgan) odamniki bo'lgan eski yozuv ID o'zgartirishni to'xtatmasin.
   perform set_config('iqror.rekey', '1', true);
   if p_coll = 'teachers' then
     update public.teachers set "teacherId" = p_new where id = p_row;
@@ -189,8 +324,6 @@ begin
     update public.staff_advances set "teacherId" = p_new where "teacherId" = v_key;
     get diagnostics n_adv = row_count;
     if p_coll = 'teachers' then
-      -- «Xodim farzandi» bog'lanishi: kalit (teacherId||_id) bilan; o'qituvchiga ID berilishidan OLDIN bog'langanlar
-      --   qator id'si bilan saqlangan bo'lishi mumkin — ular ham (boshqa o'qituvchining ID'si bo'lmasa).
       update public.student_private sp set "teacherId" = p_new
        where sp."teacherId" = v_key
           or (sp."teacherId" = p_row and not exists (select 1 from public.teachers t2 where t2."teacherId" = p_row));
@@ -198,10 +331,9 @@ begin
     end if;
   end if;
   perform set_config('iqror.rekey', '', true);
-  -- Foydalanuvchi yorlig'i (faqat ko'rinish uchun nusxa) ham yangilanadi.
   update public.users set "staffCode" = p_new
    where "staffRefId" = p_row and "staffRefType" = (case when p_coll = 'teachers' then 'teacher' else 'staff' end);
-  return jsonb_build_object('moved', v_move, 'shared', not v_move, 'oldKey', v_key,
+  return jsonb_build_object('moved', v_move, 'shared', not v_move, 'oldKey', v_key, 'newKey', p_new,
                             'salary', n_sal, 'advances', n_adv, 'children', n_ch);
 end $$;
 revoke all on function public.rekey_payroll_id(text, text, text, text) from public, anon;
@@ -274,40 +406,52 @@ drop trigger if exists trg_staffadv_key on public.staff_advances;
 create trigger trg_staffadv_key before insert or update of "teacherId", "payeeRef" on public.staff_advances
   for each row execute function app.guard_payroll_key();
 
--- ---- 7) O'qituvchi/xodim ID'si (maosh kaliti): ilovadan faqat rekey_payroll_id orqali o'zgaradi; yangi ID takroriy emas ----
---   API orqali to'g'ridan-to'g'ri PATCH teacherId/staffId (maosh/avans eski kalitda «yetim» qolardi) va boshqa xodimning ID'si
---   bilan yozuv — rad. Mavjud (eski) takroriy ID'lar tegilmaydi: tekshiruv faqat ID yozilganda. SQL / service_role — tegilmaydi.
---   Takror tekshiruvi ID bo'yicha navbatda (rekey_payroll_id p_new uchun oladigan AYNAN shu qulf; p_new doim kesilgan): bir vaqtda
---   shu ID'ni yozayotgan ikki INSERT yoki INSERT va ID o'zgartirish bir-birining tranzaksiyasini kutadi — ikkalasi ham tekshiruvdan
---   o'tib, bitta ID ikki kishida (biriga ko'chirilgan maosh/avans tarixi bilan) qolmaydi. rekey ichida qulf allaqachon olingan.
+-- ---- 7) O'qituvchi/xodim ID'si: BEFORE — ilova qoidalari ----
+--   UPDATE: ID faqat rekey_payroll_id ichida (u bir martalik tuzatish shartlarini navbat ichida tekshirgan).
+--   INSERT: setDoc (INSERT … ON CONFLICT (id) DO UPDATE) MAVJUD qatorda ham avval shu yerdan o'tadi — mavjud qator: o'tkaziladi
+--     (ID o'zgarishini UPDATE yo'li ushlaydi; sof INSERT esa PK 23505 bilan yiqiladi). YANGI qator: ID shu jadval prefiksi + raqam
+--     (kanonik) va raqam hech qachon berilmagan (> high-water: reyestr + tarix) — shu ID bo'yicha navbatda (ikki parallel INSERT
+--     yoki INSERT va ID tuzatish bir xil ID'ni ikki kishiga bera olmaydi).
 create or replace function app.guard_payroll_id()
   returns trigger language plpgsql security definer
   set search_path = public, app, pg_temp as $$
-declare v_new text; v_old text;
+declare v_new text; v_old text; v_pfx text; v_num int; v_hw int; v_exists boolean;
 begin
   if app.uid() is null then return new; end if;
-  -- O'qituvchi/xodimni faqat direktor/HR yozadi (teachers_ins/upd, staff_ins/upd): boshqa rolga takror tekshiruvi qilinmaydi —
-  --   RLS xabarsiz rad etadi (42501), «ID … bor» (23505) javobidan kalit bor-yo'qligi bilinmaydi.
-  if not (app.is_admin() or app.is_hr()) then return new; end if;
   if tg_table_name = 'teachers' then
-    v_new := new."teacherId"; if tg_op = 'UPDATE' then v_old := old."teacherId"; end if;
+    v_new := new."teacherId"; v_pfx := 'IQT-'; if tg_op = 'UPDATE' then v_old := old."teacherId"; end if;
   else
-    v_new := new."staffId"; if tg_op = 'UPDATE' then v_old := old."staffId"; end if;
+    v_new := new."staffId"; v_pfx := 'IQX-'; if tg_op = 'UPDATE' then v_old := old."staffId"; end if;
   end if;
+  -- PASPORT: mavjud yozuvning ID'si HAR QANDAY ilova foydalanuvchisi (rol va SECURITY DEFINER yo'lidan qat'i nazar) uchun
+  --   o'zgarmaydi — faqat rekey_payroll_id ichida (bo'sh/takroriy ID'ni bir martalik tuzatish; iqror.rekey).
   if tg_op = 'UPDATE' then
     if v_new is not distinct from v_old then return new; end if;
     if coalesce(current_setting('iqror.rekey', true), '') <> '1' then
-      raise exception 'O''qituvchi/xodim ID''si faqat «ID o''zgartirish» orqali (maosh/avans tarixi bilan birga) o''zgaradi — kartochkani forma orqali saqlang'
+      raise exception 'O''qituvchi/xodim ID''si pasport kabi o''zgarmaydi — bo''sh yoki takroriy ID faqat «Yangi noyob ID berish» orqali bir marta tuzatiladi (eski oyna bo''lsa — sahifani yangilang: Ctrl+Shift+R)'
         using errcode = '42501';
     end if;
+    return new;
   end if;
-  if btrim(coalesce(v_new, '')) <> '' then
-    perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || btrim(v_new)));
+  -- INSERT: faqat direktor/HR yozadi (teachers_ins, staff_ins): boshqa rolga tekshiruv yo'q — RLS xabarsiz rad etadi (42501);
+  --   23505/22023 javobi ID bor-yo'qligini oshkor qilmasin.
+  if not (app.is_admin() or app.is_hr()) then return new; end if;
+  execute format('select exists (select 1 from public.%I where id = $1)', tg_table_name) into v_exists using new.id;
+  if v_exists then return new; end if;
+  if coalesce(v_new, '') !~ ('^' || v_pfx || '[0-9]{3,9}$') then
+    raise exception 'Yangi % ID''si «%» noto''g''ri — kutilgan %NNN (avtomatik beriladi)',
+      case tg_table_name when 'teachers' then 'o''qituvchi' else 'xodim' end, coalesce(v_new, ''), v_pfx using errcode = '22023';
   end if;
-  if btrim(coalesce(v_new, '')) <> ''
-     and (exists (select 1 from public.teachers t where btrim(coalesce(nullif(t."teacherId", ''), t.id)) = btrim(v_new) and not (tg_table_name = 'teachers' and t.id = new.id))
-       or exists (select 1 from public.staff s where btrim(coalesce(nullif(s."staffId", ''), s.id)) = btrim(v_new) and not (tg_table_name = 'staff' and s.id = new.id))) then
-    raise exception 'ID «%» boshqa xodim/o''qituvchida bor — takroriy ID maosh/avansni aralashtiradi', v_new using errcode = '23505';
+  v_num := substr(v_new, length(v_pfx) + 1)::int;
+  if v_new <> v_pfx || lpad(v_num::text, greatest(3, length(v_num::text)), '0') then
+    raise exception 'Yangi ID «%» kanonik emas (kutilgan %)', v_new, v_pfx || lpad(v_num::text, greatest(3, length(v_num::text)), '0')
+      using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || v_new));
+  v_hw := app.payroll_hw(v_pfx);
+  if v_num <= v_hw or exists (select 1 from public.payroll_ids where id = v_new) then
+    raise exception 'ID «%» avval berilgan (o''chirilgan xodimniki ham qayta berilmaydi) — yangi ID: %', v_new,
+      v_pfx || lpad((v_hw + 1)::text, greatest(3, length((v_hw + 1)::text)), '0') using errcode = '23505';
   end if;
   return new;
 end $$;
@@ -318,8 +462,91 @@ drop trigger if exists trg_staff_payroll_id on public.staff;
 create trigger trg_staff_payroll_id before insert or update of "staffId" on public.staff
   for each row execute function app.guard_payroll_id();
 
+-- ---- 8) O'qituvchi/xodim ID'si: AFTER — reyestrni yuritish (hamma yo'l uchun, SQL ham) ----
+--   AFTER — faqat HAQIQATAN yozilgan qatorlar, yakuniy qiymat bilan (upsert'ning UPDATE yo'li, ON CONFLICT DO NOTHING o'tkazgan
+--   qator yozilmaydi). Yangi ID reyestrga; band bo'lsa — ilova: rad (23505, PK — har qanday izolyatsiyada oxirgi to'siq);
+--   SQL: egasi qolmagan bo'lsa shu qatorga qayta bog'lanadi, aks holda ogohlantirish (takroriy). Eski ID: boshqa joriy egasi
+--   qolmasa «bo'shatilgan» (yozuv O'CHMAYDI — ID qayta berilmaydi). TRUNCATE / o'chirilgan trigger — keyingi deploy to'ldiradi.
+create or replace function app.record_payroll_id()
+  returns trigger language plpgsql security definer
+  set search_path = public, app, pg_temp as $$
+declare v_new text; v_old text; k_new text; k_old text; v_n int; v_live boolean;
+begin
+  if tg_table_name = 'teachers' then
+    if tg_op <> 'DELETE' then v_new := new."teacherId"; end if;
+    if tg_op <> 'INSERT' then v_old := old."teacherId"; end if;
+  else
+    if tg_op <> 'DELETE' then v_new := new."staffId"; end if;
+    if tg_op <> 'INSERT' then v_old := old."staffId"; end if;
+  end if;
+  k_new := app.pid_key(v_new);
+  k_old := app.pid_key(v_old);
+  if k_new <> '' and k_new is distinct from k_old then
+    insert into public.payroll_ids (id, coll, row_id, raw, source)
+    values (k_new, tg_table_name, new.id, v_new,
+            case when coalesce(current_setting('iqror.rekey', true), '') = '1' then 'rekey'
+                 when app.uid() is null then 'sql:' || lower(tg_op) else lower(tg_op) end)
+    on conflict (id) do nothing;
+    get diagnostics v_n = row_count;
+    if v_n = 0 then
+      if app.uid() is not null then
+        raise exception 'ID «%» avval berilgan — qayta berilmaydi (pasport kabi)', k_new using errcode = '23505';
+      end if;
+      v_live := exists (select 1 from public.teachers t where app.pid_key(t."teacherId") = k_new and not (tg_table_name = 'teachers' and t.id = new.id))
+             or exists (select 1 from public.staff s where app.pid_key(s."staffId") = k_new and not (tg_table_name = 'staff' and s.id = new.id));
+      if v_live then
+        raise notice 'OGOHLANTIRISH: ID «%» boshqa joriy xodimda ham bor — SQL bilan TAKRORIY ID yozildi (%:%)', k_new, tg_table_name, new.id;
+      else
+        update public.payroll_ids set coll = tg_table_name, row_id = new.id, released_at = null, source = 'sql:rebind'
+         where id = k_new and (coll is distinct from tg_table_name or row_id is distinct from new.id or released_at is not null);
+        if found then raise notice 'Reyestr: ID «%» SQL bilan %:% ga (qayta) bog''landi', k_new, tg_table_name, new.id; end if;
+      end if;
+    end if;
+  end if;
+  if k_old <> '' and k_old is distinct from k_new
+     and not exists (select 1 from public.teachers t where app.pid_key(t."teacherId") = k_old)
+     and not exists (select 1 from public.staff s where app.pid_key(s."staffId") = k_old) then
+    insert into public.payroll_ids (id, coll, row_id, raw, source, released_at)
+    values (k_old, tg_table_name, old.id, v_old, 'release:' || lower(tg_op), now())
+    on conflict (id) do update set released_at = coalesce(public.payroll_ids.released_at, now());
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_teacher_payroll_reg on public.teachers;
+create trigger trg_teacher_payroll_reg after insert or update of "teacherId" or delete on public.teachers
+  for each row execute function app.record_payroll_id();
+drop trigger if exists trg_staff_payroll_reg on public.staff;
+create trigger trg_staff_payroll_reg after insert or update of "staffId" or delete on public.staff
+  for each row execute function app.record_payroll_id();
+
+-- ---- 9) «Xodim farzandi» bog'lanishi: faqat MAVJUD o'qituvchi/xodim kaliti ----
+--   student_private."teacherId" yangi ID chegarasiga (payroll_hw) va deploy reyestriga kiradi (o'chirilgan o'qituvchining
+--   bog'lanishi bo'lgan raqam yangi odamga berilmasin). Shu sabab ilova foydalanuvchisi (qabulxona ham yozadi) bu yerga
+--   faqat hozirgi kalitni — String(teacherId||id), forma ro'yxatidagi kabi — yoza oladi: ixtiyoriy matn (IQT-999999999)
+--   yangi o'qituvchi/xodim ID berishni to'xtatib qo'yardi. O'zgarmagan qiymat (o'chirilgan xodim bog'lanishi ham, upsert
+--   bilan qayta yuborilsa ham) va bo'sh qiymat — tekshirilmaydi. SQL / service_role — tekshiruvsiz. SECURITY DEFINER:
+--   qabulxona o'qituvchilar ro'yxatini ko'rmaydi (RLS), tekshiruv esa ko'rishi kerak.
+create or replace function app.guard_private_teacher_link()
+  returns trigger language plpgsql security definer
+  set search_path = public, app, pg_temp as $$
+declare v_old text;
+begin
+  if app.uid() is null or coalesce(new."teacherId", '') = '' then return new; end if;
+  if tg_op = 'UPDATE' then v_old := old."teacherId";
+  else select sp."teacherId" into v_old from public.student_private sp where sp.id = new.id; end if;   -- upsert: mavjud qator
+  if new."teacherId" is not distinct from v_old then return new; end if;
+  if exists (select 1 from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = new."teacherId")
+     or exists (select 1 from public.staff s where coalesce(nullif(s."staffId", ''), s.id) = new."teacherId") then
+    return new;
+  end if;
+  raise exception '«Xodim farzandi»: «%» hech bir o''qituvchi/xodim ID''si emas — ro''yxatdan tanlang (o''chirilgan bo''lishi mumkin)', new."teacherId"
+    using errcode = '23503';
+end $$;
+drop trigger if exists trg_private_teacher_link on public.student_private;
+create trigger trg_private_teacher_link before insert or update of "teacherId" on public.student_private
+  for each row execute function app.guard_private_teacher_link();
+
 -- ---- 6) Kamera ID egalari va skan tarixi (qabulxona uchun ham) ----
---   Faqat tur, qator id'si va ism qaytadi (maosh / PII yo'q). Kamera ID chetidagi bo'sh joy hisobga olinmaydi.
 create or replace function public.camera_owners(p_cam text)
 returns jsonb language sql stable security definer set search_path = public, app, pg_temp as $$
   select case when app.is_staff() and btrim(coalesce(p_cam, '')) <> '' then coalesce((

@@ -923,6 +923,57 @@ zaxirasi kerak bo'lmadi (kod git'da; `config.json` git'ga tegmaydi). Chiqishdagi
   `payments/README.md` §7.4: log fayli foydalanuvchiga yoziladigan (aks holda cron qatori umuman ishlamaydi) + `node` to'liq yo'li.
 - **AI:** `/health` → `claude-opus-4-8` — amaldagi model (o'zgartirish shart emas).
 
+## 41) O'qituvchi/xodim ID'si — PASPORT kabi (o'zgarmas, hech qachon qayta berilmaydi)
+Talab: «ID'ni pasport singari o'zgarmas qil — tahrirlasa ham; o'qituvchi/xodim o'zgarsa ham takrorlanib qolmasin».
+- **Reyestr `public.payroll_ids`** (id = kanonik `upper(btrim)`, coll/row_id, source, released_at): har berilgan teacherId/staffId.
+  Hech qachon o'chirilmaydi (egasi o'chirilsa/almashsa — faqat `released_at`). RLS yoqilgan, mijozga grant yo'q (service_role —
+  faqat o'qish); faqat SECURITY DEFINER funksiya/triggerlar yozadi. Har deploy'da to'ldiriladi (idempotent): joriy ro'yxat
+  (takroriyda prefiksi jadvaliga mos egasi birinchi) + tarix — maosh, avans, «xodim farzandi», `users.staffCode` (o'chirilgan
+  odamning login yorlig'i ham). Takroriy ID'lar deploy chiqishida `OGOHLANTIRISH` bilan.
+- **BEFORE trigger** (`guard_payroll_id`): ilova foydalanuvchisi (har qanday rol) mavjud ID'ni o'zgartira olmaydi — faqat
+  `rekey_payroll_id` ichida (`iqror.rekey`), aks holda 42501 (eski oyna / API / upsert). YANGI qator (direktor/HR): faqat shu
+  jadval prefiksi + kanonik raqam (22023), raqam > high-water va reyestrda yo'q (23505), shu ID bo'yicha navbatda (advisory lock).
+  Mavjud qatorga upsert (setDoc) — o'tkaziladi (ID o'zgarishini UPDATE yo'li ushlaydi). BEFORE INSERT'da ID avtomatik
+  BERILMAYDI (upsert'ning EXCLUDED qiymatiga oqib ketardi) — ID'ni mijoz hisoblaydi, baza tekshiradi.
+- **AFTER trigger** (`record_payroll_id`): yakuniy qiymat reyestrga (band bo'lsa ilova — 23505, har izolyatsiyada PK to'siq; SQL —
+  qayta bog'lash yoki NOTICE); eski ID — boshqa joriy egasi qolmasa «bo'shatilgan». SQL/service_role tekshiruvsiz, lekin yoziladi.
+- **`payroll_id_state(coll,row)`** → `{reason: empty|unique|duplicate|keep, fixable, next}`: takroriyda prefiksi mos egasi
+  ID'ni SAQLAYDI (IQT-016: o'qituvchi Nodirov qoladi, xodim Abdullayeva tuzatiladi; IQX-001 — ikkala xodimda tugma, birini
+  tuzatish kifoya). **`rekey_payroll_id`** — faqat bo'sh/takroriy ID, BIR MARTA; yangi ID shu prefiks + kanonik + > high-water
+  (navbat ichida qayta tekshiriladi); tarix (maosh/avans/farzand) faqat egasi yagona bo'lsa ko'chadi.
+- **admin.html:** ID maydoni doim qulf; tahrirda ID umuman yozilmaydi (DOM o'zgartirilsa ham); bo'sh/takroriy ID'da
+  «Yangi noyob ID berish» (+ «Bekor»), tasdiq «Bir martalik ID tuzatish …»; 23505 bo'lsa yangi taklif. Yangi kartada ID
+  «Saqlash»da bazadan hisoblanadi (`payrollNextId`: ikkala ro'yxat + `payroll_id_high_water`; RPC xatosi — saqlanmaydi);
+  barqaror qator id'si (`_pidRow`) — javobi yo'qolgan INSERT'dan keyin qayta «Saqlash» ikkinchi odam yaratmaydi; ID band
+  bo'lsa keyingi raqam bilan qayta (2 marta). HIK kamera importi ham shu qoida bilan (3 urinish; high-water o'qilmasa —
+  qo'shmaydi). O'chirish tasdig'ida ID va «qayta berilmaydi». Eski «qo'lda ID yozish» va eski baza PATCH fallback'i olib tashlandi.
+- **Deploy:** `full-deploy.sh` yakuniy tekshiruvi — 8 funksiya, 9 trigger (yoqilgan), reyestr soni/RLS, «reyestrda yo'q joriy
+  ID: 0», takroriy ID'lar soni; `predeploy-checks.sql` 3-band (upper(btrim) bo'yicha), 9-band (abadiy band bo'ladigan
+  o'chirilganlar ID'lari), 10-band (reyestrda yo'q joriy ID). README «O'qituvchi/xodim ID'si — PASPORT kabi» + 3-band yangi tartib.
+- **Sinov:** PG16 (HEAD zanjir → prod'ga o'xshash ma'lumot → yangi zanjir ×2): funksional T00–T25, parallel C1–C6 (bir xil ID
+  ikki INSERT — ikkinchisi 23505; ikki tuzatish — 42501; REPEATABLE READ — serializatsiya xatosi, takror yo'q); verify-db «BIR
+  XIL» (+ trigger/constraint/index barmoq izi bilan ham). HAQIQIY admin.html + shim + PostgREST 12 + Chromium: 74/74 (yangi
+  o'qituvchi/xodim, DOM/API soxtalashtirish, IQT-016/IQX-001/bo'sh ID tuzatish, o'chirilgan ID qayta berilmasligi, HR, ikki
+  admin poygasi, javob yo'qolishi, eskirgan taklif) + kamera importi 11/11. Unit: payments 192, auth 186, sb-admin ✓.
+- **Raqib ko'rigi** (3 yo'nalish × skeptik tekshiruv; 8 topilma, hammasi tuzatildi):
+  - (yuqori) Ochiq ro'yxatdan o'tgan hisob (users qatori hali yo'q) `users_ins` orqali o'ziga `staffCode='IQT-999999999'` yozib,
+    yangi ID chegarasini abadiy ko'tarardi (9 xonadan oshgach yangi o'qituvchi/xodim qo'shib bo'lmasdi); qabulxona —
+    `student_private."teacherId"` orqali. Tuzatish: `staff-user-link.sql` users_ins — self-insert'da staffRefType/staffRefId/
+    staffCode bo'sh bo'lishi shart (users_upd kabi; bog'lashni faqat admin/server); id-guards 9-band — «xodim farzandi»ga
+    ilovadan faqat mavjud kalit (o'zgarmagan eski qiymat tegilmaydi; 23503); login yorlig'i manba — faqat xodimga bog'langan
+    hisobniki. README: 9-band g'alati raqamlari va reyestrdan xato raqamni olib tashlash buyrug'i (sinaldi: chegara 999999999 → 20,
+    qayta deploy'dan keyin ham).
+  - Kanonik ID `app.pid_key` (JavaScript trim() to'plami — NBSP/tab/BOM ham — + katta harf) hamma joyda: btrim bilan
+    «IQX-004<NBSP>» alohida hisoblanib, baza o'zi ko'rinishi bir xil «IQX-004» ni berardi. predeploy 2-band ASCII bo'lmagan
+    belgilarni ham ko'rsatadi; 3/9/10-bandlar kanonik.
+  - UI takror tekshiruvlari (Oylik kartasi, maosh, avans, «Maosh xarajati») ham kanonik (`pidKey`): «IQX-002»/«iqx-002 » juftligi
+    endi haqiqatan bloklanadi (avval karta «bloklangan» der, maosh esa o'tardi).
+  - `lock table` DO ichida: zanjirsiz `psql -f run-all.sql` (autocommit) yarim yo'lda to'xtamaydi (rc=0).
+  - Forma: javobi yo'qolgan INSERT'dan keyin Kamera ID tekshiruvi o'z qatorini (`_pidRow`) «boshqa odam» demaydi; 42501
+    (boshqa admin shu orada tuzatgan) — «fix» rejimi asl ID'ga qaytadi, ikkinchi «Saqlash» boshqa maydonlarni saqlaydi; taklif
+    hali kelmagan «Saqlash» rad etiladi; Oylik kartasi matni prefiks bo'yicha (IQX- juftligida tugma o'qituvchi kartasida).
+  - Qayta sinov (UTF8 klaster): SQL T00–T30, C1–C6, verify-db BIR XIL (1900 / 2095 obyekt), brauzer 74 + 11 + 23 (tuzatmalar).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

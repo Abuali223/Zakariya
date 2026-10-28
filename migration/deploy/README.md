@@ -87,14 +87,37 @@ sudo env -i PATH=/usr/bin:/bin HOME=/root bash /home/ubuntu/iqror-repo/migration
 3. `systemctl is-active cron` — `active`; `date` — UTC (22:30 UTC = Toshkent 03:30; server Toshkent vaqtida bo'lsa — `30 3 * * *`).
    Ertasi kuni: `tail -n 3 /var/log/iqror-backup.log` — bugungi sana va `backup OK`. Zaxiralarni vaqti-vaqti bilan serverdan TASHQARIGA ham ko'chiring.
 
-**Oldindan tekshiruv 3-band — takroriy maosh kalitlari** (ikki xodim/o'qituvchida bir xil ID): bu odamlarga maosh va avans
-berish BLOKLANGAN («Xodimlar davomati → Oylik»da qizil «⛔ Takroriy ID» kartasi) — birinchi oylikdan OLDIN tuzating. Admin panelda
-(Ctrl+Shift+R dan keyin), direktor yoki HR:
-1. «Xodimlar» → «+ Qo'shish»: ID maydonida taklif qilingan keyingi bo'sh ID'ni (`IQX-…`) eslab, oynani yoping.
-2. Juftlikning BIRINING kartasini oching va ID maydoniga shu ID'ni yozing → «Saqlash». Tasdiq oynasida «eski ID boshqa xodimda ham
-   bor (takroriy) … ESKI ID'da qoladi» — kutilgan (tarix 0). Keyingi juftlik uchun — yana 1-qadam (taklif bitta oshadi).
-3. O'qituvchi + xodim juftligida (`IQT-…` ikkalasida) — FAQAT xodimnikini («Xodimlar» bo'limida) o'zgartiring: «xodim farzandi»
-   bog'lanishi faqat o'qituvchiga bo'ladi. Tasdiq oynasida «xodim farzandi» so'zi chiqsa — siz o'qituvchi kartasidasiz: «Bekor».
+**O'qituvchi/xodim ID'si — PASPORT kabi.** ID'ni tizim beradi (`IQT-…` o'qituvchi, `IQX-…` xodim; yangi kartada maydon qulf,
+qiymat «Saqlash»da bazadan qayta hisoblanadi), keyin u o'zgarmaydi — tahrirda ham, eski oyna / to'g'ridan API orqali ham (baza:
+42501). Har berilgan ID `payroll_ids` reyestriga yoziladi va HECH QACHON qayta berilmaydi: o'qituvchi/xodim o'chirilsa (yoki
+ishdan chiqsa, o'rniga boshqa odam kelsa) ham, yangi odam doim yangi raqam oladi (o'chirilganlarning maosh/avans tarixi, «xodim
+farzandi» bog'lanishi va xodimga bog'langan login yorlig'idagi raqamlar ham hisobga olinadi). ID'lar katta-kichik harf va chetidagi
+bo'shliqlardan (tab, NBSP ham) qat'i nazar solishtiriladi: «IQX-001» va «iqx-001 » — bitta ID (takroriy). Deploy reyestrni har
+safar joriy ro'yxat + tarix bilan to'ldiradi (chiqishda «ID reyestri (payroll_ids): N ta ID …», «reyestrda yo'q joriy ID: 0»).
+O'qituvchi xodimga aylansa (yoki aksincha) — yangi kartochka (yangi ID) ochiladi, eskisi «⏯️ Holat → Ishdan chiqqan» qilinadi;
+eski ID unda qoladi va boshqa hech kimga berilmaydi.
+
+**Oldindan tekshiruv 9-band — abadiy band bo'ladigan ID'lar.** Ro'yxatdagi raqamlar deploy'da reyestrga yoziladi va keyingi yangi
+ID shulardan katta bo'ladi. G'alati (juda katta, masalan `IQT-999999999`) raqam chiqsa — deploy'dan OLDIN manbasini tuzating
+(«qayerdan» ustuni): aks holda u yangi ID chegarasini abadiy ko'taradi (9 xonadan oshsa yangi ID berib bo'lmaydi). Reyestrga
+allaqachon tushgan bo'lsa (faqat hech kimga BERILMAGAN, egasi ham, maosh/avans tarixi ham yo'q xato raqam uchun) — bitta
+tranzaksiyada manba va reyestr yozuvi (raqamni o'zingiznikiga almashtiring):
+```bash
+sudo docker exec supabase-db psql -U postgres -d postgres -X -1 -v ON_ERROR_STOP=1 -c "update public.users set \"staffCode\" = null where \"staffCode\" = 'IQT-999999999'" -c "update public.student_private set \"teacherId\" = null where \"teacherId\" = 'IQT-999999999'" -c "delete from public.payroll_ids where id = 'IQT-999999999' and released_at is not null and row_id is null"
+```
+
+**Oldindan tekshiruv 3-band — takroriy o'qituvchi/xodim ID'lari** (ikki kishida bir xil ID; deploy chiqishida
+`OGOHLANTIRISH: takroriy o'qituvchi/xodim ID «…»`): bu odamlarga maosh va avans berish BLOKLANGAN («Xodimlar davomati → Oylik»da
+qizil «⛔ Takroriy ID» kartasi) — birinchi oylikdan OLDIN tuzating. Bu — BIR MARTALIK tuzatish (faqat bo'sh yoki takroriy ID
+uchun; keyin yangi ID ham pasport kabi o'zgarmaydi). Admin panelda (deploy'dan keyin Ctrl+Shift+R), direktor yoki HR:
+1. Juftlikdagi kartani «Tahrir» bilan oching: ID maydoni ostida qizil izoh va **«Yangi noyob ID berish»** tugmasi chiqadi → bosing
+   (hech qachon berilmagan keyingi ID qo'yiladi; «Bekor» — qaytarish) → «Saqlash» → tasdiq oynasi «Bir martalik ID tuzatish:
+   «IQX-001» → «IQX-0…» … Eski ID boshqa xodimda ham bor (takroriy) … o'sha ID'da qoladi» → OK.
+2. O'qituvchi + xodim juftligida tugma prefiksi jadvaliga mos KELMAYDIGAN kartada chiqadi: `IQT-…` ikkalasida (masalan IQT-016)
+   — xodim kartasida («Xodimlar» bo'limi), `IQX-…` ikkalasida — o'qituvchi kartasida. Prefiksi mos karta (IQT- — o'qituvchi, IQX- —
+   xodim) ID'ni SAQLAYDI, unda sariq izoh shuni aytadi. Ikki xodim (yoki ikki o'qituvchi) juftligida (IQX-001) tugma ikkalasida
+   bor — BIRINI tuzating, ikkinchisining kartasi o'zidan toza bo'ladi (ID'si qoladi).
+3. Kimdir shu paytda shu ID'ni olgan bo'lsa — «… avval berilgan» xabari va yangi taklif qo'yiladi: yana «Saqlash».
 4. Qayta tekshirish (faqat o'qiydi) — chiqishdagi «== 3)» jadvali bo'sh bo'lishi kerak (yoki «Oylik»dagi qizil karta yo'qoladi):
 ```bash
 sudo docker exec -i supabase-db psql -U postgres -d postgres -X -P pager=off < ~/iqror-repo/migration/deploy/predeploy-checks.sql

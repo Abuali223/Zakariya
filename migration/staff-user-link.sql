@@ -59,4 +59,15 @@ create policy users_upd on users for update using (app.is_admin() or id = app.ui
      and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((select u."assignedSubjects" from public.users u where u.id = app.uid()), '[]'::jsonb)
   ));
 
+-- 5) [CRITICAL] RLS: self-INSERT'da ham bog'lanish havolasi BO'SH bo'lsin (users_upd kabi). auth-phone.sql'dagi users_ins
+--    faqat id/rol/verified'ni tekshirardi: users qatori hali yo'q hisob (ochiq ro'yxatdan o'tish) birinchi yozuvidayoq o'zini
+--    istalgan xodim yozuviga bog'lab (staffRefType/staffRefId — tasdiqlash oynasi shu lavozimga mos rolni oldindan tanlaydi;
+--    haqiqiy xodim hisobini bog'lashni noyob indeks bilan to'sib) yoki soxta staffCode yozib qo'ya olardi. Bog'lashni FAQAT
+--    admin yoki server (service_role) o'rnatadi. (Ustunlar shu faylda qo'shiladi — siyosat shu yerda qayta yaratiladi.)
+drop policy if exists users_ins on users;
+create policy users_ins on users for insert with check (
+  app.is_admin() or (id = app.uid() and role in ('parent','student') and verified = false
+    and coalesce("staffRefType", '') = '' and coalesce("staffRefId", '') = '' and coalesce("staffCode", '') = '')
+);
+
 notify pgrst, 'reload schema';

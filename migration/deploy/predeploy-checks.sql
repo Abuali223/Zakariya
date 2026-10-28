@@ -8,6 +8,9 @@
 \set QUIET on
 set default_transaction_read_only = on;
 \pset footer off
+-- Kanonik o'qituvchi/xodim ID'si (deploy'dagi app.pid_key bilan AYNAN bir xil — eski bazada funksiya hali yo'q): chetidagi
+--   bo'shliqlar (JavaScript trim() to'plami: tab, NBSP, BOM …) olinadi, katta harf — upper(regexp_replace(x, :'pidws', '', 'g')).
+\set pidws '^[\\s\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+|[\\s\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+$'
 \echo '== 1) Import to''qnashuvi: o''quvchining studentId''si BOSHQA o''quvchining id/studentId''siga teng (yoki doc id''si boshqa o''quvchining studentId''si) (deploy bunday o''quvchining doc-id to''lovlarini KO''CHIRMAYDI — qo''lda hal qiling: kalitni noyob qiling yoki ataylab birlashtiring)'
 select s.id, s."studentId", s.name,
        (select string_agg(t.id || ' (' || coalesce(t.name, '') || ')', ', ') from public.students t
@@ -16,19 +19,19 @@ select s.id, s."studentId", s.name,
   from public.students s
  where coalesce(s."studentId", '') <> '' and s."studentId" <> s.id
    and exists (select 1 from public.students t where t.id <> s.id and (t.id = s."studentId" or t."studentId" = s."studentId" or t."studentId" = s.id));
-\echo '== 2) Chetida bo''sh joy bor kalitlar (deploy''dan keyin o''quvchi studentId''sini ilovada tuzatib bo''lmaydi — faqat SQL bilan)'
-select 'students' as jadval, id, quote_literal("studentId") as kalit from public.students where "studentId" <> btrim("studentId")
-union all select 'teachers', id, quote_literal("teacherId") from public.teachers where "teacherId" <> btrim("teacherId")
-union all select 'staff', id, quote_literal("staffId") from public.staff where "staffId" <> btrim("staffId")
+\echo '== 2) Chetida bo''sh joy yoki ko''rinmas / ASCII bo''lmagan belgi (tab, NBSP …) bor kalitlar (o''quvchi studentId''sini deploy''dan keyin ilovada tuzatib bo''lmaydi — faqat SQL; o''qituvchi/xodim ID''si chetidagi bo''shliqlarsiz, katta harf bilan solishtiriladi)'
+select 'students' as jadval, id, quote_literal("studentId") as kalit from public.students where "studentId" <> btrim("studentId") or "studentId" !~ '^[ -~]*$'
+union all select 'teachers', id, quote_literal("teacherId") from public.teachers where "teacherId" <> btrim("teacherId") or "teacherId" !~ '^[ -~]*$'
+union all select 'staff', id, quote_literal("staffId") from public.staff where "staffId" <> btrim("staffId") or "staffId" !~ '^[ -~]*$'
 order by 1, 2;
-\echo '== 3) Takroriy maosh kalitlari (o''qituvchi+xodim BITTA nom maydonida, btrim bilan): «ID o''zgartirish» umumiy tarixni ko''chirmaydi; eski ochiq admin oynasi bu kartalarni saqlay olmaydi'
+\echo '== 3) Takroriy o''qituvchi/xodim ID''lari (o''qituvchi+xodim BITTA nomlar fazosida; kanonik — bo''shliqsiz, katta harf — bo''yicha): bu odamlarga maosh/avans berish BLOKLANGAN — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating (prefiksi jadvalga mos egasi — IQT- o''qituvchi / IQX- xodim — ID''ni saqlaydi; ID''lar pasport kabi o''zgarmaydi)'
 with k as (select 'teachers' coll, id, name, coalesce(nullif("teacherId", ''), id) as raw from public.teachers
            union all select 'staff', id, name, coalesce(nullif("staffId", ''), id) from public.staff),
-     g as (select btrim(raw) as maosh_kaliti, count(*) as egalari,
+     g as (select upper(regexp_replace(raw, :'pidws', '', 'g')) as maosh_kaliti, count(*) as egalari,
                   string_agg(coll || ':' || id || ' «' || coalesce(name, '') || '» raw=' || quote_literal(raw), '; ' order by coll, id) as kimlar
              from k group by 1 having count(*) > 1)
-select g.*, (select count(*) from public.salary_payments sp where btrim(sp."teacherId") = g.maosh_kaliti) as maosh_qatorlari,
-            (select count(*) from public.staff_advances sa where btrim(sa."teacherId") = g.maosh_kaliti) as avans_qatorlari
+select g.*, (select count(*) from public.salary_payments sp where upper(regexp_replace(sp."teacherId", :'pidws', '', 'g')) = g.maosh_kaliti) as maosh_qatorlari,
+            (select count(*) from public.staff_advances sa where upper(regexp_replace(sa."teacherId", :'pidws', '', 'g')) = g.maosh_kaliti) as avans_qatorlari
   from g order by 1;
 \echo '== 4) Hozirgi o''qituvchi/xodimga tegishli bo''lmagan kalitdagi maosh tarixi (o''chirilganlar; kichik harf/bo''sh joy variantlari) — ma''lumot uchun'
 with keys as (select coalesce(nullif("teacherId", ''), id) k from public.teachers union all select coalesce(nullif("staffId", ''), id) from public.staff)
@@ -66,3 +69,23 @@ select pid, usename, application_name, state, now() - xact_start as yoshi, left(
   from pg_stat_activity
  where datname = current_database() and pid <> pg_backend_pid() and xact_start is not null and now() - xact_start > interval '5 seconds'
  order by xact_start;
+\echo '== 9) O''qituvchi/xodim ID reyestri (payroll_ids): deploy shu ID''larni «hech qachon qayta berilmaydi» deb yozadi — o''chirilgan xodimlarniki (tarix / bog''langan login yorlig''i). Juda katta yoki g''alati raqam (masalan IQT-999999999) bo''lsa — deploy''dan OLDIN manbasini tekshiring: u yangi ID chegarasini abadiy ko''taradi'
+select upper(regexp_replace(h.k, :'pidws', '', 'g')) as id, string_agg(distinct h.src, ', ') as qayerdan
+  from (select "teacherId" k, 'maosh' src from public.salary_payments
+        union all select "teacherId", 'avans' from public.staff_advances
+        union all select "teacherId", 'xodim farzandi' from public.student_private
+        union all select "staffCode", 'login yorlig''i (users.staffCode)' from public.users
+         where "staffRefType" in ('teacher', 'staff') and coalesce("staffRefId", '') <> '') h
+ where upper(regexp_replace(coalesce(h.k, ''), :'pidws', '', 'g')) <> ''
+   and not exists (select 1 from public.teachers t where t.id = h.k or upper(regexp_replace(t."teacherId", :'pidws', '', 'g')) = upper(regexp_replace(h.k, :'pidws', '', 'g')))
+   and not exists (select 1 from public.staff s where s.id = h.k or upper(regexp_replace(s."staffId", :'pidws', '', 'g')) = upper(regexp_replace(h.k, :'pidws', '', 'g')))
+ group by 1 order by 1;
+select coalesce(to_regclass('public.payroll_ids') is not null, false) as has_reg \gset
+\if :has_reg
+\echo '== 10) Reyestrda YO''Q joriy ID (trigger o''chirilgan / SQL bilan chetlab o''tilgan) — deploy to''ldiradi'
+select coll, id, quote_literal(k) as kalit
+  from (select 'teachers' coll, id, "teacherId" k from public.teachers union all select 'staff', id, "staffId" from public.staff) x
+ where upper(regexp_replace(coalesce(k, ''), :'pidws', '', 'g')) <> ''
+   and not exists (select 1 from public.payroll_ids p where p.id = upper(regexp_replace(x.k, :'pidws', '', 'g')))
+ order by 1, 2;
+\endif
