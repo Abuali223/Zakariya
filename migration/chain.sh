@@ -19,6 +19,8 @@ echo "\\set iqror_chain 1"
 # Jonli bazada ilova so'rovlari qulfini uzoq kutib qolmasin — tez xato beradi (qayta urinish mumkin).
 [ "${1:-}" = "--no-lock-timeout" ] || echo "set lock_timeout = '20s';"
 echo "begin;"
+# Migratsiya paytidagi ma'lumot tuzatishlari o'zgarishlar tarixiga (change_log) yozilmasin — faqat shu tranzaksiyada.
+echo "set local iqror.migrating = '1';"
 for f in $(grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | awk '{print $2}'); do
   [ -f "$HERE/$f" ] || { echo "chain.sh: '$f' topilmadi (run-all.sql'da bor, papkada yo'q)" >&2; exit 1; }
   echo "\\echo '-> $f'"

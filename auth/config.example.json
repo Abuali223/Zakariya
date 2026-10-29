@@ -29,6 +29,7 @@
     "remindMaxPerHour": 60,
     "remindMaxPerDay": 500,
     "remindMaxRetries": 3,
+    "sendHours": [9, 20],
     "templates": {
       "remind": "Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy"
     }

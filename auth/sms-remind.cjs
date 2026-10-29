@@ -28,7 +28,7 @@
  *     naqshga sig'adigan shaklda (payments/eskiz-template.cjs composeSms). Naqshlar Eskiz'dan o'qiladi (10 daqiqa kesh).
  */
 const L = require('./lib.cjs');
-const { DEF_DEBT, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName } = require('../payments/sms.cjs');
+const { DEF_DEBT, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName, sendWindow, inSendWindow } = require('../payments/sms.cjs');
 const { composeSms, smsSom, smsMonths } = require('../payments/eskiz-template.cjs');
 
 // Logda telefonni qisman yashirish (PII).
@@ -170,6 +170,11 @@ function makeSmsRemind(deps) {
     const prev = ex.data && ex.data[0];
     const dayStart = tashkentDayStartISO(day);
     const autoToday = (await countRows(sb.from('sms_log').select('id', { count: 'exact', head: true }).in('studentId', keys).eq('type', 'debt').eq('status', 'sent').gte('createdAt', dayStart))) || 0;
+    // Bugun SHU RAQAMGA boshqa SMS (yangi faktura, aka-uka qarzi, boshqa bolaga qo'lda eslatma) ketganmi — bloklamaydi, admin
+    //   ogohlantiriladi (avtomatik SMS'da «telefonga kuniga 1 ta» qoidasi bor; qo'lda tugma — admin qarori).
+    const ownToday = (prev && ['sent', 'sending', 'unknown'].includes(prev.status)) ? 1 : 0;   // o'quvchining o'z bugungi eslatmasi sanalmaydi
+    const phoneToday = phone ? Math.max(0, ((await countRows(sb.from('sms_log').select('id', { count: 'exact', head: true }).eq('phone', phone)
+      .in('status', ['sent', 'sending', 'unknown']).gte('createdAt', dayStart))) || 0) - ownToday) : 0;
     const pretty = phone ? L.prettyPhone(phone) : '';
     // 6) Yuborish shartlari — ko'rib chiqishda ham AYNAN shular qaytariladi (admin bloklangan holatda tasdiq oynasini ko'rmaydi).
     let block = null;
@@ -180,8 +185,9 @@ function makeSmsRemind(deps) {
     else if (prev && prev.status !== 'failed') block = { code: 'uncertain', already: 'sending', error: UNCERTAIN };
     else if (prev && (Number(prev.attempts) || 0) >= MAX_TRIES) block = { code: 'retries', error: `Bugun ${MAX_TRIES} marta urinildi, SMS ketmadi: ${humanEskizError(prev.error)}` };
     else if (!MAX_HOUR || !MAX_DAY) block = { code: 'disabled', error: 'SMS eslatma serverda o‘chirilgan (limit 0).' };
+    else if (!inSendWindow(S, now())) { const w = sendWindow(S); block = { code: 'quiet', error: `Tinch soat: SMS faqat Toshkent vaqti bilan ${w[0]}:00–${w[1]}:00 oralig‘ida yuboriladi (ota-onani kechasi bezovta qilmaslik uchun). Ertalab qayta urinib ko‘ring.` }; }
     const info = { name, phone: pretty, due, months, message, dry: DRY, tplFit: cm.fit, nameShort: cm.shortened,
-      today: prev ? { status: String(prev.status || ''), at: prev.createdAt || null } : null, autoToday,
+      today: prev ? { status: String(prev.status || ''), at: prev.createdAt || null } : null, autoToday, phoneToday,
       blocked: block ? block.code : null, blockedMsg: block ? block.error : '' };
 
     if (body.preview) return Object.assign({ ok: true, preview: true }, info);

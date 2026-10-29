@@ -323,20 +323,21 @@ function serve(){
           out = await handleChat(body);
         }
         else if(req.url.startsWith('/student-summary')){
-          // Maxfiy: o'quvchi bahosi/davomati/qarzi. Faqat admin/zavuch YOKI shu farzand egasi.
+          // Maxfiy: o'quvchi bahosi/davomati/QARZI. Faqat DIREKTOR (rollar yangilangach 'admin' = ma'muriyat rahbari — moliyani
+          //   ko'rmaydi; zavuch ham qarzni ko'rmaydi) YOKI shu farzand egasi (ota-ona).
           const uid = await verifyToken(bearer(req));
           if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
           const role = await userRole(uid);
-          const allowed = role==='admin' || role==='zavuch' || await ownsChild(uid, String(body.studentId||''));
+          const allowed = role==='director' || await ownsChild(uid, String(body.studentId||''));
           if(!allowed){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
           out = await handleStudentSummary(body);
         }
         else if(req.url.startsWith('/risk')){
-          // Maxfiy: barcha xavf ostidagi o'quvchilar ro'yxati. Faqat admin/zavuch.
+          // Maxfiy: barcha xavf ostidagi o'quvchilar ro'yxati (davomat + ball). Faqat direktor / O'IBDO' (zavuch).
           const uid = await verifyToken(bearer(req));
           if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
           const role = await userRole(uid);
-          if(!(role==='admin' || role==='zavuch')){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
+          if(!(role==='director' || role==='zavuch')){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
           out = await handleRisk(body);
         }
         else if(req.url.startsWith('/sheet')){

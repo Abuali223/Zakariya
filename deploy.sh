@@ -199,12 +199,16 @@ put_page index.html shim
 # Legacy sahifalar ham Supabase shim bilan (Firebase -> /sb): imtihon (o'qituvchi tanlovi),
 # verify (hujjat tekshiruvi), oquv-platforma (o'quv platforma cloud-sync).
 for f in imtihon.html verify.html oquv-platforma.html haydovchi.html; do put_page "$f" shim; done
+# Eski QR havolalari (/verify?id=...): /verify/ papkasidagi kichik sahifa /verify.html ga yo'naltiradi (nginx o'zgarmaydi).
+sudo test -d "$WEB/verify" || sudo install -d -m 0755 "$WEB/verify"
+put_page verify/index.html
 # Markerlar (deploy landdi-mi?):
 grep -q iqror_pay_outbox "$WEB/admin.html" || { echo "❌ admin.html deploy landmadi"; exit 1; }
 grep -q "apply_payment"  "$WEB/admin.html" || { echo "❌ admin.html eski (apply_payment yo'q)"; exit 1; }
 grep -q kab-subjbars     "$WEB/index.html" || { echo "❌ index.html deploy landmadi"; exit 1; }
 grep -q "/sb/firebase-firestore.js" "$WEB/verify.html" || { echo "❌ verify.html shim landmadi"; exit 1; }
 grep -q "students_public" "$WEB/verify.html" || { echo "❌ verify.html eski (students_public yo'q)"; exit 1; }
+grep -q "verify.html" "$WEB/verify/index.html" || { echo "❌ verify/index.html (eski QR yo'naltirish) landmadi"; exit 1; }
 grep -q "update_bus_position" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html deploy landmadi"; exit 1; }
 grep -q "/sb/firebase-firestore.js" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html shim landmadi"; exit 1; }
 grep -q "getBusRoutes" "$WEB/index.html" || { echo "❌ index.html eski (avtobus yo'q)"; exit 1; }

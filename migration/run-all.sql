@@ -21,6 +21,12 @@
 -- =====================================================================
 -- Zanjir belgisi (har fayl boshidagi qo'riqchi uchun): psql -f run-all.sql ham ishlaydi.
 \set iqror_chain 1
+-- chain.sh bilan BIR XIL: butun zanjir BITTA tranzaksiyada (xato bo'lsa hech narsa o'zgarmaydi) va migratsiya paytidagi
+--   ma'lumot tuzatishlari o'zgarishlar tarixiga (change_log) yozilmaydi — belgi faqat shu tranzaksiyada (set local), zanjir
+--   o'rtada to'xtasa ham sessiyada qolib ketmaydi (keyingi qo'lda tuzatishlar tarixga yoziladi).
+\set ON_ERROR_STOP on
+begin;
+set local iqror.migrating = '1';
 \ir schema.sql
 \ir supabase-grants.sql
 \ir rls.sql
@@ -92,5 +98,8 @@
 \ir invoice-guards.sql
 \ir parent-link-canon.sql
 \ir id-guards.sql
+\ir camera-days.sql
+\ir change-log.sql
 \ir secdef-searchpath.sql
+commit;
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'

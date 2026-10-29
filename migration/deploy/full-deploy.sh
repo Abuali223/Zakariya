@@ -89,20 +89,13 @@ sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -X -P pager=off < "$
 echo "######## 1/4 Zaxiralar -> $BK"
 sudo env BACKUP_DIR="$BK" DB_CONT="$DB_CONT" bash "$REPO/migration/deploy/backup.sh" \
   || { echo "❌ Baza zaxirasi olinmadi — deploy BOSHLANMADI (hech narsa o'zgarmadi)."; exit 1; }
-# auth sxemasi (foydalanuvchilar/parollar) — backup.sh'da yo'q. Deploy auth ma'lumotiga tegmaydi; olinmasa faqat ogohlantiradi.
-#   Zaxira fayllari: noclobber (O_EXCL) bilan YANGI fayl, so'ng mv — oldindan qo'yilgan symlink orqali root boshqa faylni
-#   ustidan yozib yubormaydi (zaxira papkasi xizmat foydalanuvchisi egaligidagi /opt/iqror ichida).
+# auth sxemasi (foydalanuvchilar/parol xeshlari) — backup.sh o'zi oladi (sessiya/token ma'lumotisiz, auth_*). Zaxira fayllari:
+#   noclobber (O_EXCL) bilan YANGI fayl, so'ng mv — oldindan qo'yilgan symlink orqali root boshqa faylni ustidan yozib yubormaydi
+#   (zaxira papkasi xizmat foydalanuvchisi egaligidagi /opt/iqror ichida).
 bk_write(){   # $1 = nishon fayl, $2 = stdout'ga arxiv chiqaradigan buyruq (root sifatida)
   sudo rm -f "$1.part"   # avvalgi uzilgan urinish qoldig'i (symlink bo'lsa — faqat o'zi o'chadi, nishoni emas)
   sudo sh -c "set -C; umask 077; $2 > '$1.part'" && sudo mv -fT "$1.part" "$1" || { sudo rm -f "$1.part"; return 1; }
 }
-A="$BK/auth_$T.sql.gz"; sudo rm -f "$A.part"
-if sudo sh -c "set -C; umask 077; docker exec '$DB_CONT' pg_dump -U postgres -d postgres -n auth | gzip > '$A.part'" 2>/dev/null \
-   && sudo sh -c "gzip -dc '$A.part' | tail -n 20 | grep -q 'PostgreSQL database dump complete'"; then
-  sudo mv -fT "$A.part" "$A"; echo "    auth sxemasi: $A"
-else
-  sudo rm -f "$A.part"; echo "    ⚠️ auth sxemasi zaxirasi olinmadi (deploy auth ma'lumotiga tegmaydi — davom etiladi)"
-fi
 bk_write "$BK/web_$T.tgz" "tar -czf - -C /var/www iqror" || { echo "❌ Sayt zaxirasi olinmadi — deploy BOSHLANMADI."; exit 1; }
 RB=""   # orqaga qaytarish buyruqlari (server kodi)
 for wd in $(code_dirs); do
@@ -158,7 +151,9 @@ psql_at -c "select '    yangi funksiyalar: ' || count(*) || ' (kutilgan 10)' fro
         -c "select '    ID qo''riqchi triggerlar: ' || count(*) || ' (kutilgan 10, yoqilgan: ' || count(*) filter (where tgenabled <> 'D') || ')' from pg_trigger where tgname in ('trg_student_keys','trg_teacher_row_id','trg_staff_row_id','trg_salpay_key','trg_staffadv_key','trg_teacher_payroll_id','trg_staff_payroll_id','trg_teacher_payroll_reg','trg_staff_payroll_reg','trg_private_teacher_link')" \
         -c "select '    ID reyestri (payroll_ids): ' || count(*) || ' ta ID, ' || count(*) filter (where released_at is not null) || ' tasi bo''shatilgan (qayta berilmaydi); RLS ' || coalesce((select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.payroll_ids')), '?') from public.payroll_ids" \
         -c "select '    reyestrda yo''q joriy ID: ' || count(*) || ' (kutilgan 0)' from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' and not exists (select 1 from public.payroll_ids p where p.id = x.k)" \
-        -c "select '    takroriy o''qituvchi/xodim ID''lari: ' || count(*) || case when count(*) > 0 then ' — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating (migration/deploy/README.md)' else ' ✓' end from (select k from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' group by k having count(*) > 1) d"
+        -c "select '    takroriy o''qituvchi/xodim ID''lari: ' || count(*) || case when count(*) > 0 then ' — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating (migration/deploy/README.md)' else ' ✓' end from (select k from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' group by k having count(*) > 1) d" \
+        -c "select '    o''zgarishlar tarixi (change_log): ' || case when to_regclass('public.change_log') is null then 'YO''Q!' else 'bor, RLS ' || (select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.change_log')) end || '; triggerlar: ' || (select count(*) from pg_trigger where tgname in ('trg_change_log','trg_change_log_sick') and tgenabled <> 'D') || ' (kutilgan 24)'" \
+        -c "select '    kamera kunlari funksiyasi (camera_days): ' || count(*) || ' (kutilgan 1)' from pg_proc where proname = 'camera_days'"
 grep -q "BIR XIL" "$DOUT" || { echo "    !! 7/7 baza tekshiruvi «BIR XIL» emas — yuqoridagi 🔴/🟠 qatorlarni ko'rib chiqing"; bad=1; }
 rm -f "$DOUT"
 # Xizmatlar: ishlayaptimi va deploy'dan keyin YIQILIB qayta ishga tushmadimi. deploy.sh har xizmatni qo'lda qayta ishga
@@ -180,15 +175,47 @@ for p in "iqror-pay 8790" "iqror-ai 8791" "iqror-auth 8792"; do
   fi
 done
 
-echo "######## 4/4 SMS va cron (ma'lumot uchun)"
+echo "######## 4/4 SMS va kunlik zaxira cron"
 if [ -f "$REPO/payments/eskiz-shablon.cjs" ] && command -v node >/dev/null 2>&1; then
   echo "---- Eskiz shablonlari (hech narsa YUBORMAYDI — faqat tekshiradi)"
   (cd "$REPO/payments" && timeout 90 sudo "$(command -v node)" eskiz-shablon.cjs 2>&1 | sed 's/^/    /') || true
 fi
 if crontab -l 2>/dev/null | grep -q 'sms-worker.cjs'; then echo "    ✓ SMS cron (sms-worker) bor"
 else echo "    ℹ️ SMS cron yo'q (avtomatik faktura/qarz SMS kerak bo'lsa — payments/README.md §7.4, crontab -e)"; fi
-if sudo crontab -l 2>/dev/null | grep -q 'backup.sh'; then echo "    ✓ kunlik zaxira cron (root) bor"
-else echo "    ⚠️ kunlik zaxira cron yo'q: sudo crontab -e  ->  30 22 * * * bash $REPO/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1"; fi
+# KUNLIK ZAXIRA CRON'i (root). Yo'q bo'lsa — deploy o'zi o'rnatadi: BITTA sudo, root crontab'ning boshqa qatorlari saqlanadi
+#   (grep -a — UTF-8 bo'lmagan qatorlar ham), eski/boshqa yo'ldagi backup.sh qatorlari almashtiriladi, takrorlanmaydi. 22:30 server
+#   vaqti (UTC bo'lsa Toshkent 03:30). DB_CONT / BACKUP_DIR standart bo'lmasa — qatorga yoziladi (tunda ham shu baza/papka).
+#   Izohga olingan (#) qator bo'lsa — atayin o'chirilgan deb olinadi: QAYTA YOQILMAYDI (faqat ogohlantirish). O'rnatmaslik:
+#   IQROR_NO_BACKUP_CRON=1 bash migration/deploy/full-deploy.sh
+BKCMD="bash $REPO/migration/deploy/backup.sh"
+[ "$BK" = /opt/iqror/backups ] || BKCMD="BACKUP_DIR=$BK $BKCMD"
+[ "$DB_CONT" = supabase-db ] || BKCMD="DB_CONT=$DB_CONT $BKCMD"
+BKLINE="30 22 * * * $BKCMD >> /var/log/iqror-backup.log 2>&1"
+CUR="$(sudo crontab -l 2>/dev/null || true)"   # o'zgaruvchiga — pipefail + grep -q erta chiqishi (SIGPIPE) soxta «yo'q» bermasin
+ACTIVE="$(printf '%s\n' "$CUR" | grep -av '^[[:space:]]*#' | grep -aF "$REPO/migration/deploy/backup.sh" || true)"
+if [ -n "$ACTIVE" ]; then
+  echo "    ✓ kunlik zaxira cron (root) bor: $(printf '%s' "$ACTIVE" | head -n 1 | cut -c1-140)"
+  if sudo test -f /var/log/iqror-backup.log && [ -n "$(sudo find /var/log/iqror-backup.log -mmin +1560 2>/dev/null)" ]; then
+    echo "    ⚠️ oxirgi tungi zaxira log'i 26 soatdan eski — tekshiring: sudo tail -n 5 /var/log/iqror-backup.log"
+  elif sudo test -f /var/log/iqror-backup.log && sudo tail -n 3 /var/log/iqror-backup.log 2>/dev/null | grep -q '❌'; then
+    echo "    !! oxirgi tungi zaxira XATO bilan tugagan: sudo tail -n 5 /var/log/iqror-backup.log"; bad=1
+  fi
+elif printf '%s\n' "$CUR" | grep -a '^[[:space:]]*#' | grep -aq 'migration/deploy/backup\.sh'; then
+  echo "    ⚠️ kunlik zaxira cron izohga olingan (o'chirilgan) — qayta yoqilmadi. Yoqish: sudo crontab -e (qator boshidagi # ni olib tashlang)"
+elif [ "${IQROR_NO_BACKUP_CRON:-}" = 1 ]; then
+  echo "    ⚠️ kunlik zaxira cron yo'q (IQROR_NO_BACKUP_CRON=1 — o'rnatilmadi)"
+elif ! sudo sh -c 'command -v crontab' >/dev/null 2>&1; then
+  echo "    !! kunlik zaxira cron o'rnatib bo'lmadi: cron o'rnatilmagan — sudo apt install -y cron && sudo systemctl enable --now cron, so'ng deployni qayta ishga tushiring"; bad=1
+elif { printf '%s\n' "$CUR" | grep -av 'migration/deploy/backup\.sh' || true; printf '%s\n' "$BKLINE"; } | sudo crontab - 2>/dev/null \
+     && sudo crontab -l 2>/dev/null | grep -aF "$REPO/migration/deploy/backup.sh" >/dev/null; then
+  echo "    ✓ kunlik zaxira cron (root) O'RNATILDI — har kuni 22:30 (server vaqti): $BKLINE"
+  echo "      Ertaga tekshiring: sudo tail -n 3 /var/log/iqror-backup.log"
+else echo "    !! kunlik zaxira cron yo'q va o'rnatib bo'lmadi — migration/deploy/README.md «kunlik zaxira cron yo'q» bandini bajaring"; bad=1; fi
+# cron xizmatining o'zi ishlayaptimi (qator bor, lekin xizmat to'xtagan bo'lsa — zaxira hech qachon olinmaydi).
+if sudo crontab -l 2>/dev/null | grep -av '^[[:space:]]*#' | grep -aF 'migration/deploy/backup.sh' >/dev/null && command -v pgrep >/dev/null 2>&1 \
+   && ! pgrep -x cron >/dev/null 2>&1 && ! pgrep -x crond >/dev/null 2>&1; then
+  echo "    !! cron xizmati ishlamayapti — tungi zaxira olinmaydi: sudo systemctl enable --now cron"; bad=1
+fi
 
 echo ""
 if [ "$bad" = 0 ]; then echo "✅ TO'LIQ DEPLOY MUVAFFAQIYATLI ($(date '+%F %T'))."

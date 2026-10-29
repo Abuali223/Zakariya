@@ -144,6 +144,28 @@ const fillTpl = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] 
 // Toshkent (UTC+5, yozgi vaqt yo'q) sanasi 'YYYY-MM-DD' va shu kun boshining UTC ISO vaqti.
 const tashkentDay = (ms) => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).toISOString().slice(0, 10);
 const tashkentDayStartISO = (day) => new Date(Date.parse(day + 'T00:00:00Z') - 5 * 3600e3).toISOString();
+const tashkentHour = (ms) => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUTCHours();
+// Hafta kuni (0=Yak … 6=Shan) — Toshkent sanasi bo'yicha (server soati UTC bo'lsa ham).
+const tashkentDow = (ms) => new Date(tashkentDay(ms) + 'T12:00:00Z').getUTCDay();
+// TINCH SOATLAR: avtomatik SMS faqat Toshkent vaqti bilan [dan, gacha) soatlarda ketadi (config: sms.sendHours, standart
+//   [9, 20] = 09:00–19:59). Oyna tashqarisida worker hech narsa yubormaydi va claim ham qilmaydi — xabarlar keyingi
+//   ish vaqtidagi cron'da ketadi. sendHours: false — cheklov o'chiriladi. Noto'g'ri qiymat — standart oyna.
+function sendWindow(cfg) {
+  const h = cfg && cfg.sendHours;
+  if (h === false) return null;
+  const a = Array.isArray(h) && h.length === 2 ? h.map(Number) : null;
+  return (a && Number.isInteger(a[0]) && Number.isInteger(a[1]) && a[0] >= 0 && a[1] <= 24 && a[0] < a[1]) ? a : [9, 20];
+}
+function inSendWindow(cfg, ms) { const w = sendWindow(cfg); if (!w) return true; const hr = tashkentHour(ms); return hr >= w[0] && hr < w[1]; }
+// Qarz eslatmasi navbati (har nomzod = bitta o'quvchi, barcha qarz oylari bilan). Bir telefonga kuniga BITTA SMS bo'lgani
+//   uchun: oxirgi qarz SMS'i ENG ESKI (yoki hech bo'lmagan) o'quvchi birinchi — aka-uka eslatma kunlarida navbatma-navbat
+//   oladi (har doim bitta bolaning qarzi takrorlanmaydi); teng bo'lsa — eng eski oy, kattaroq qarz, keyin id.
+//   lastSent: { o'quvchi kaliti (c.key) -> ISO vaqt } (ixtiyoriy).
+function orderDebtCandidates(list, lastSent) {
+  const ls = lastSent || {};
+  return (list || []).slice().sort((a, b) => String(ls[a.key] || '').localeCompare(String(ls[b.key] || ''))
+    || String(a.month || '').localeCompare(String(b.month || '')) || ((Number(b.due) || 0) - (Number(a.due) || 0)) || String(a.id || '').localeCompare(String(b.id || '')));
+}
 
 // Yuborish natijasi holati (sms_log.status): 'sent' | 'failed' (ANIQ ketmagan — qayta urinish mumkin) | 'unknown' (ketgan
 //   bo'lishi mumkin — qayta YUBORILMAYDI). Istisno: kirish (login) bosqichi yoki ulanish umuman o'rnatilmagan
@@ -168,4 +190,4 @@ function sendStatus(r, thrown) {
   return (r && r.ambiguous) ? 'unknown' : 'failed';
 }
 
-module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus };
+module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, tashkentHour, tashkentDow, sendWindow, inSendWindow, orderDebtCandidates, definitelyNotSent, sendStatus };

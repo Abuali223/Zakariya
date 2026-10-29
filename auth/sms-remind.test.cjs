@@ -154,7 +154,7 @@ function setup(opts) {
     ok('preview: bugun yuborilgan', p.today && p.today.status === 'sent', p.today); }
 
   sec('Toshkent sanasi (UTC 20:00 = ertasi kun)');
-  { const { R, state } = setup({ now: Date.parse('2026-10-15T20:30:00Z') });
+  { const { R, state } = setup({ now: Date.parse('2026-10-15T20:30:00Z'), smsCfg: { sendHours: false } });   // tunda — tinch soat o'chirilgan
     await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
     ok('id Toshkent sanasi bilan', !!state.sms_log.find(x => x.id === 'remind__IQ-0268__2026-10-16'), state.sms_log.map(x => x.id)); }
   { const { R } = setup({ now: Date.parse('2026-10-31T19:30:00Z') });   // Toshkent: 2026-11-01 00:30
@@ -412,6 +412,38 @@ function setup(opts) {
     const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
     ok('sinov rejimi: tasdiq -> dry, hech narsa yuborilmadi, naqshlar keshdan', r.ok && r.dry === true && sent.length === 0 && reader.n === 1, { r, n: reader.n }); }
   ok('humanEskizError bad_phone:intl', /faqat O‘zbekiston/.test(humanEskizError('bad_phone:intl')));
+
+  sec('Bugun shu raqamga boshqa SMS ketgan — ogohlantirish (bloklamaydi)');
+  { const { R, sent, state } = setup();
+    state.sms_log.push({ id: 'INV_X__new', phone: '998700143777', type: 'new', status: 'sent', createdAt: '2026-10-16T04:30:00.000Z' });
+    state.sms_log.push({ id: 'INV_Y__new', phone: '998700143777', type: 'new', status: 'failed', createdAt: '2026-10-16T04:31:00.000Z' });
+    state.sms_log.push({ id: 'INV_Z__new', phone: '998700143777', type: 'new', status: 'sent', createdAt: '2026-10-15T10:00:00.000Z' });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('preview: phoneToday=1 (bugungi sent; failed va kechagi sanalmaydi), bloklanmagan', p.phoneToday === 1 && p.blocked === null, p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    ok('yuborish bloklanmaydi (admin qarori)', r.ok && sent.length === 1, r);
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('o‘z eslatmasi phoneToday ga qo‘shilmaydi', p2.phoneToday === 1 && p2.blocked === 'sent', p2); }
+
+  sec('Tinch soat (Toshkent 09:00–20:00): ota-onani kechasi bezovta qilmaslik');
+  { const { R, sent, state } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });   // Toshkent 21:30
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    ok('preview tunda ishlaydi: matn bor, blocked=quiet, sababi yozilgan', p.ok && p.preview && !!p.message && p.blocked === 'quiet' && /Tinch soat/.test(p.blockedMsg) && /9:00–20:00/.test(p.blockedMsg), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    ok('tunda yuborish rad: SMS yo\'q, jurnal yo\'q', !r.ok && /Tinch soat/.test(r.error) && sent.length === 0 && state.sms_log.length === 0, r); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T03:59:00Z') });   // Toshkent 08:59
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    ok('08:59 — hali tinch soat', !r.ok && /Tinch soat/.test(r.error) && sent.length === 0, r); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T04:00:00Z') });   // Toshkent 09:00
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    ok('09:00 — yuboriladi', r.ok && sent.length === 1, r); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T14:59:00Z') });   // Toshkent 19:59
+    ok('19:59 — yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-0255' })).ok && sent.length === 1); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T16:30:00Z'), smsCfg: { sendHours: [8, 22] } });   // 21:30, oyna 8–22
+    ok('sozlangan oyna [8,22] — 21:30 da yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-0255' })).ok && sent.length === 1); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0700', preview: true });
+    ok('qarz yo\'q bo\'lsa — avvalgi sabab (nodebt) ustun', p.blocked === 'nodebt' && sent.length === 0, p); }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

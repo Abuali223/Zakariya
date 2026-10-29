@@ -108,6 +108,22 @@ Takror ketmasligi uchun har SMS `sms_log` jadvaliga yoziladi
 (id: `<invoiceId>__new` yoki `<invoiceId>__debt__<sana>`). Telefon
 `student_private.parentPhone` (bo'lmasa `parentPhone2`) dan olinadi.
 
+**Ota-onani bezovta qilmaslik qoidalari:**
+- **Tinch soatlar:** SMS faqat Toshkent vaqti bilan `sendHours` oralig'ida ketadi (standart `[9, 20]` = 09:00–19:59).
+  Yangi faktura xabari tunda «band» qilinmaydi — ertalabki birinchi run'da ketadi. **Qarz eslatmasi** esa faqat eslatma
+  kunidagi run'larda ketadi (id'da sana bor): qarz cron'ini `sendHours` ICHIGA qo'ying (server UTC bo'lsa 04:00–15:00 UTC).
+  `debt` rejimi tinch soatda ishga tushsa — ogohlantirish yozadi va 2 kodi bilan chiqadi; run o'rtasida 20:00 bo'lib qolsa —
+  qolgan o'quvchilar keyingi eslatma kunida oladi (log'da soni yoziladi). `"sendHours": false` — cheklovni o'chiradi (tavsiya etilmaydi).
+  Qo'lda «Eslatma» ham tinch soatda rad etiladi — u **auth serveri** sozlamasidan (`auth/config.json` → `sms.sendHours`)
+  o'qiydi: ikkala faylda bir xil qo'ying.
+- **Bir telefonga kuniga bitta avtomatik SMS:** yangi faktura va qarz eslatmasi birga sanaladi (shu kuni qo'lda «Eslatma»
+  ketgan raqam ham). Qarz eslatmasi — har o'quvchi uchun BITTA SMS: barcha qarz oylari va jami qarz bilan (qo'lda «Eslatma»
+  bilan bir xil matn). Aka-uka bitta telefonda bo'lsa — eslatma kunlarida navbatma-navbat (oxirgi eslatmasi eng eski bola
+  birinchi). Yangi faktura xabari keyingi run'larda (`newLookbackDays` ichida) ketadi.
+- Qo'lda «Eslatma» tugmasi bu cheklov bilan **bloklanmaydi** (admin qarori), lekin bugun shu raqamga SMS ketgan bo'lsa
+  tasdiq oynasida ogohlantiradi.
+- Kun va hafta kuni — Toshkent sanasi bo'yicha (server soati UTC bo'lsa ham).
+
 **Qo'lda eslatma** («Moliya» → «Qarzdorlar» → «Eslatma») — cron EMAS, admin tugmasi: auth-server
 `/authapi/sms-remind` orqali darhol yuboriladi (o'sha Eskiz sozlamasi; batafsil — `auth/README.md`).
 Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **yubormaydi** (ota-onaga 2 ta ketmasin).
@@ -123,6 +139,7 @@ Shu kuni qo'lda eslatma olgan o'quvchiga `sms-worker` avtomatik qarz SMS'ini **y
 | `newLookbackDays` | Yangi faktura xabarlari uchun necha kun orqaga qaraladi (default 14) |
 | `reminderDayOfMonth` | Shu sanadan **keyin** qarzdorlik eslatiladi (default 10) |
 | `reminderDays` | Hafta kunlari (0=Yak … 6=Shan). Default `[1,4]` = Dush+Pay |
+| `sendHours` | SMS yuboriladigan soatlar, Toshkent vaqti `[dan, gacha)`. Default `[9, 20]`; `false` — cheklovsiz |
 | `templates.new` / `templates.debt` | SMS matni. O'rinbosarlar: `{name} {month} {amount} {due}` |
 
 > ⚠️ **SMS faqat O'zbekiston raqamlariga** (998XXXXXXXXX) yuboriladi. Ota-ona telefoni chet el raqami bo'lsa (`+7 …`,

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Hujjatni tekshirish — Iqror Academy</title>
+<!-- Eski QR havolalari (/verify?id=...) uchun: nginx «try_files $uri $uri/» bilan /verify papkasi ochiladi va shu sahifa
+     so'rovni (id bilan) /verify.html ga o'tkazadi. Ilgari chop etilgan ota-ona profillaridagi QR 404 bermasin. -->
+<script>location.replace('/verify.html' + location.search + location.hash);</script>
+</head>
+<body style="font-family:system-ui,sans-serif;padding:24px">
+<p>Yo‘naltirilmoqda… Agar sahifa ochilmasa: <a id="go" href="/verify.html">hujjatni tekshirish</a>.</p>
+<script>document.getElementById('go').href = '/verify.html' + location.search;</script>
+</body>
+</html>

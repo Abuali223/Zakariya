@@ -31,7 +31,7 @@
       <div class="org">IQROR ACADEMY<small>Hujjat haqiqiyligini tekshirish</small></div>
     </div>
     <div id="out"><div class="state"><span class="badge wait">⏳ Tekshirilmoqda…</span></div></div>
-    <div class="note">Ushbu sahifa Iqror Academy rasmiy o‘quvchi profilining haqiqiyligini tasdiqlaydi.<br><a href="/">iqroacademy.uz</a></div>
+    <div class="note">Ushbu sahifa hujjatdagi o‘quvchi Iqror Academy ro‘yxatida borligini tekshiradi.<br><a href="/">iqroacademy.uz</a></div>
   </div>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -56,13 +56,13 @@
       if(!d){ const snap=await getDocs(query(collection(db,'students_public'), where('studentId','==',id), limit(1))); snap.forEach(x=>{ if(!d) d={id:x.id,...x.data()}; }); }
       if(!d){ bad('Bunday ID bilan o‘quvchi topilmadi. Hujjat haqiqiy bo‘lmasligi mumkin.'); return; }
       const cls=`${gradeLbl(d.grade)} «${esc(d.classLetter||d.track||'-')}» · ${d.lang==='ru'?'Rus':'O‘zbek'}`;
-      show(`<div class="state"><div class="big">✅</div><span class="badge ok">Tasdiqlandi — Iqror Academy o‘quvchisi</span></div>
+      show(`<div class="state"><div class="big">✅</div><span class="badge ok">Ro‘yxatda bor — Iqror Academy o‘quvchisi</span></div>
         <table><tbody>
           <tr><td class="k">O‘quvchi ID</td><td><b>${esc(d.studentId||d.id)}</b></td></tr>
           <tr><td class="k">Familiya, ism</td><td><b>${esc(d.name||'—')}</b></td></tr>
           <tr><td class="k">Sinf</td><td>${cls}</td></tr>
         </tbody></table>
-        <p class="note" style="margin-top:14px">Ushbu o‘quvchi Iqror Academy axborot tizimida ro‘yxatdan o‘tgan. Profil ma’lumotlari (baholar, xarakteristika) maktab tomonidan rasmiy tasdiqlangan.</p>`);
+        <p class="note" style="margin-top:14px">Bu ID bilan o‘quvchi Iqror Academy ro‘yxatida bor yoki ilgari bo‘lgan. Sahifa faqat shuni tasdiqlaydi: hujjat raqami, sanasi, baholar va boshqa ma’lumotlar bu yerda tekshirilmaydi. Ularni tasdiqlash uchun maktabga murojaat qiling.</p>`);
     }catch(e){ bad('Tekshirishda xatolik: '+(e.code||e.message||'')); }
   })();
 </script>

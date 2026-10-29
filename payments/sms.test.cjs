@@ -191,6 +191,26 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   ok('tashkentDayStartISO', S.tashkentDayStartISO('2026-10-16') === '2026-10-15T19:00:00.000Z');
   ok('DEF_DEBT ASCII (GSM-7)', /^[\x00-\x7F]*$/.test(S.DEF_DEBT) && /^[\x00-\x7F]*$/.test(S.DEF_NEW));
 
+  // 9) tinch soatlar va kuniga 1 SMS navbati
+  const T = iso => Date.parse(iso);
+  ok('tashkentHour (UTC+5)', S.tashkentHour(T('2026-10-30T03:59:00Z')) === 8 && S.tashkentHour(T('2026-10-30T04:00:00Z')) === 9 && S.tashkentHour(T('2026-10-30T19:30:00Z')) === 0);
+  ok('tashkentDow: UTC shanba kechasi = Toshkent yakshanba', S.tashkentDow(T('2026-10-31T12:00:00Z')) === 6 && S.tashkentDow(T('2026-10-31T20:00:00Z')) === 0);
+  ok('sendWindow: standart [9,20]', JSON.stringify(S.sendWindow({})) === '[9,20]' && JSON.stringify(S.sendWindow(null)) === '[9,20]');
+  ok('sendWindow: false -> cheklovsiz (null)', S.sendWindow({ sendHours: false }) === null);
+  ok('sendWindow: to\'g\'ri oraliq (satr raqamlar ham)', JSON.stringify(S.sendWindow({ sendHours: [8, 21] })) === '[8,21]' && JSON.stringify(S.sendWindow({ sendHours: ['8', '21'] })) === '[8,21]' && JSON.stringify(S.sendWindow({ sendHours: [0, 24] })) === '[0,24]');
+  ok('sendWindow: noto\'g\'ri -> standart', [[20, 9], [9, 9], [-1, 5], [8.5, 20], [9, 25], [9], 'x'].every(h => JSON.stringify(S.sendWindow({ sendHours: h })) === '[9,20]'));
+  ok('inSendWindow: 09:00 ichida, 08:59 / 20:00 tashqarida', S.inSendWindow({}, T('2026-10-30T04:00:00Z')) && S.inSendWindow({}, T('2026-10-30T14:59:00Z'))
+    && !S.inSendWindow({}, T('2026-10-30T03:59:00Z')) && !S.inSendWindow({}, T('2026-10-30T15:00:00Z')));
+  ok('inSendWindow: sendHours=false -> doim ruxsat', S.inSendWindow({ sendHours: false }, T('2026-10-30T22:00:00Z')));
+  const cands = [{ id: 'b', month: '2026-10', due: 100 }, { id: 'a', month: '2026-09', due: 50 }, { id: 'c', month: '2026-10', due: 300 }, { id: 'd', month: '2026-10', due: 300 }];
+  const ord = S.orderDebtCandidates(cands).map(x => x.id).join('');
+  ok('orderDebtCandidates: eng eski oy, keyin katta qarz, keyin id', ord === 'acdb', ord);
+  ok('orderDebtCandidates: asl ro\'yxat o\'zgarmaydi', cands.map(x => x.id).join('') === 'bacd' && S.orderDebtCandidates(null).length === 0);
+  const sib = [{ key: 'A', id: 'a', month: '2026-09', due: 900 }, { key: 'B', id: 'b', month: '2026-10', due: 100 }];
+  ok('orderDebtCandidates: hech yuborilmagan bola birinchi (aka-uka navbati)', S.orderDebtCandidates(sib, { A: '2026-11-02T05:00:00Z' }).map(x => x.key).join('') === 'BA'
+    && S.orderDebtCandidates(sib, { A: '2026-11-02T05:00:00Z', B: '2026-11-05T05:00:00Z' }).map(x => x.key).join('') === 'AB'
+    && S.orderDebtCandidates(sib, {}).map(x => x.key).join('') === 'AB');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

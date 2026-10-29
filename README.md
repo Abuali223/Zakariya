@@ -42,9 +42,8 @@ Supabase/PostgreSQL'ga ko‘chirilgan):
 |-------|--------|
 | `server/` | Supabase Admin SDK shimi (`sb-admin.js`) + backend yordamchilari — Node servislari shu orqali bazaga ulanadi. |
 | `ai-assistant/` | AI yordamchi serveri — Claude API orqali chatbot, oylik xulosa, xavf tahlili. |
-| `ai-grader/` | Imtihon javoblarini AI bilan baholovchi xizmat. |
 | `payments/index.cjs` (`/hik`) | Yuz-terminal (Hikvision) hodisalari → `staff_checkins` (xodim + o‘quvchi). O‘quvchi davomati: kurator «Davomat»da kamera ko‘rganlar avtomatik «Keldi» bo‘lib turadi (`class_arrivals`). (Eski `camera-bridge/` olib tashlangan.) |
-| `payments/` | To‘lov provayderlari (Click / Uzum / Payme) webhook serveri + SMS xabarnoma ishchisi (`sms-worker.cjs`). |
+| `payments/` | To‘lov provayderlari (Click; Uzum — kelishuv tayyor bo‘lguncha qo‘lda kiritiladi) webhook serveri + SMS xabarnoma ishchisi (`sms-worker.cjs`). |
 
 Har bir xizmatning maxfiy sozlamalari (`config.json`, kalitlar) va `sb/sb-config.js`
 `.gitignore` bilan himoyalangan — repozitoriyaga qo‘shilmaydi.

@@ -991,6 +991,44 @@ Talab: «ID'ni pasport singari o'zgarmas qil — tahrirlasa ham; o'qituvchi/xodi
   - Sinov: SQL T00–T32 + reyestr qayta-kanoniklash, C1–C6, verify-db BIR XIL, autocommit run-all rc=0, predeploy eski/yangi bazada
     xatosiz; brauzer 74 + 11 + 23 + 19; unit 192/186/✓.
 
+## 42) Raqib (Schoolify) tahlilidan keyin: 3 ta tez xato + ochiq muammolar (2026-10-29)
+Talab: «uchala xatoni tuzat va aniqlangan ochiq muammolarni to‘g‘rila … drektor sifatida kirib real holatda tekshir».
+- **Tez xatolar:** bosma hujjatlardagi QR/manzil `iroacademy.uz` (mavjud bo'lmagan domen) → bitta manba `SITE_HOST/SITE_URL`
+  = `iqroacademy.uz`; ota-ona profilidagi QR `/verify.html?id=`; eski QR havolalari (`/verify?id=` — prod'da 404) uchun
+  `verify/index.html` yo'naltirish sahifasi (deploy.sh joylaydi, nginx o'zgarmaydi). Imtihon sahifasi va savollar muharririda
+  «AI baholaydi» matni olib tashlandi — **qo'lda baholash** (daraja, 0–100 ball, tavsiya, izoh; kim/qachon). Eski AI natijasi
+  `result.ai`'da «AI (eski)» deb alohida ko'rsatiladi. Payme filtri/yozuvlari olib tashlandi (Click + Uzum).
+- **SMS (ota-onani bezovta qilmaslik):** tinch soat `sendHours` (standart Toshkent 9–20; worker va qo'lda «Eslatma»); bir telefonga
+  kuniga bitta avtomatik SMS (bazadagi `sms_log`dan, qo'lda eslatma ham sanaladi). Qarz eslatmasi — har o'quvchiga BITTA SMS
+  (barcha oylar + jami qarz, qo'lda «Eslatma» bilan bir xil matn), aka-uka eslatma kunlarida navbatma-navbat; qayta urinishda
+  `createdAt` yangilanadi; `debt` cron'i tinch soatda ishlasa — ogohlantirish + kod 2. Qo'lda «Eslatma»: bugun shu raqamga SMS
+  ketgan bo'lsa — ogohlantirish (bloklamaydi).
+- **Kamera uzilishi (xodim davomati/maosh):** shu kuni ishlashi kerak bo'lganlarning (ruhsatdagilarsiz) 30% dan kami ko'rinsa —
+  kun «kamera ishlamagan»: skani yo'qqa yo'qlama yozilmaydi, skanli kunda kech/erta/tanaffus avtomatik kesilmaydi; o'rinbosar
+  yozilgan kelmagan — baribir yo'qlama. Oylik hisobot, maosh oynasi (`camera_days` RPC — kunlik Kamera ID ro'yxati), PDF va kunlik
+  ko'rinish BIR XIL qoida. Tungi / 0 soatlik smena (bo'sh maydon standartga tushganda ham) — saqlashda ogohlantirish.
+- **O'zgarishlar tarixi (`change_log`, faqat direktor):** 24 trigger — faktura, to'lov, avans (`student_credit`, `credit_ledger`), tavsiya bonusi,
+  qaytarish, xarajat, narx, sozlamalar, maosh/avans/o'rinbosarlik/ruhsat, o'qituvchi/xodim, foydalanuvchi (rol, biriktirishlar,
+  login telefon/email — qiymatsiz), ota-ona↔farzand bog'lanishi, «Bemor» kunlari. Maxfiy qiymatlar `***`. Deploy paytidagi tuzatishlar
+  yozilmaydi (`set local iqror.migrating`, run-all.sql ham endi bitta tranzaksiya). Yozuv xatosi asosiy amalni to'xtatmaydi.
+  Admin'da «O'zgarishlar tarixi» bo'limi: Toshkent sanasi/vaqti, bo'lim filtri, ism/rol/ID qidiruvi, 1000+ ogohlantirish.
+- **Pul UX:** qarzdorlar — hammasi (12 tadan keyin «Barchasini ko'rsatish») + CSV (formula himoyasi, oy yili bilan); «Bank»
+  xarajati tasdiqi; o'tgan oyni qayta hisoblash — alohida ogohlantirish. Tavsiya bonusi — bola haqiqatan o'qigan bo'lsa (oldingi
+  oylar ham hisobga olinadi, bonus yo'qolmaydi). Yozda (iyul–avgust) sinf o'zgarsa — tugagan yil baholari eski sinfda qoladi.
+- **Zaxira:** `full-deploy.sh` kunlik cron'ni o'zi o'rnatadi (DB_CONT/BACKUP_DIR bilan, izohli qatorni qayta yoqmaydi,
+  `IQROR_NO_BACKUP_CRON=1`, cron xizmati va oxirgi log tekshiruvi); `backup.sh` — auth (token jadvallari ma'lumotisiz), storage
+  papkasini konteynerdan topadi (topilmasa — ogohlantirish), bir vaqtda bitta nusxa (flock).
+- **Ommaviy sayt:** haqiqiy saytda namuna (to'qima) ism/ball/narx/raqam birinchi chizishda ham ko'rsatilmaydi (`?demo=1` — dizayn);
+  bo'sh bo'lim — «Tez orada qo'shiladi», raqam — «—». verify.html — «faqat ro'yxatda borligi» tasdiqlanadi. Taqdimotdagi eskirgan
+  da'volar (Firebase, 3 provayder, AI baholash) to'g'rilandi. AI yordamchi: o'quvchi xulosasi — direktor/ota-ona, xavf — direktor/zavuch.
+- **Raqib ko'rigi (5 tekshiruvchi + 2 tasdiqlovchi):** SQL, pul/davomat, UI, SMS, deploy — 39 topilma; ichida 3 ta regressiyam
+  (qarz SMS'i aka-ukaga hech qachon bormasligi, tavsiya bonusi yo'qolishi, `fmtSum` — tarix sahifasi qotishi) — hammasi tuzatildi.
+- **Sinov:** PG16 deploy yo'li (38f6554 → yangi ×2, xatosiz, change_log bo'sh) va noldan qurish — barmoq izi BIR XIL; SQL: audit 29,
+  camera_days 10, yozgi qoida 8; brauzer (haqiqiy admin.html/index.html + PostgREST + RLS) 70 + 9; SMS worker (haqiqiy baza) 21;
+  backup 8, cron 9, deploy sahifa nusxasi; npm: payments 52/25/58/192 (+attr/uzum/flow), auth 94/124/186; ESLint no-undef — yangi nom yo'q.
+- **Deploydan keyin (foydalanuvchi):** 2 ta takroriy maosh ID — «Yangi noyob ID berish»; Eskiz kaliti + SMS cron (tasdiqdan keyin);
+  `/var/log/iqror-backup.log` va storage zaxirasi («storage YO'Q» chiqsa — `STORAGE_VOL`); direktor kirishi — jonli tekshiruv uchun.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

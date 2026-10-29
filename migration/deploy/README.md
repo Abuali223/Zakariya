@@ -45,11 +45,15 @@ Avval yangi `deploy.sh` va `migration/` olinadi — shuning uchun juda eski serv
 1. **Oldindan tekshiruv (faqat o'qiydi):** baza konteyneri, xizmatlar (papka / yoqilgan / holat), diskdagi joy, uzoq
    tranzaksiyalar (60 s gacha kutadi), `predeploy-checks.sql` (to'qnashuvchi o'quvchi kalitlari, chetida bo'sh joyli kalitlar,
    takroriy maosh kalitlari, arvoh kodlar, ota-ona bog'lanishi holati, deploy qayta yozadigan qatorlar soni).
-2. **Zaxiralar** → `/opt/iqror/backups` (root, 600): `db_*` (public+app) + `storage_*` (`backup.sh`), `auth_*` (auth sxemasi —
-   olinmasa faqat ogohlantiradi), `web_*` (`/var/www/iqror`), `srv_*` (xizmatlar kodi papkasi, `config.json`'lar bilan, `node_modules`'siz).
+2. **Zaxiralar** → `/opt/iqror/backups` (root, 600): `backup.sh` — `db_*` (public+app) + `auth_*` (hisoblar va parol xeshlari;
+   sessiya/token jadvallarining ma'lumotisiz; olinmasa faqat ogohlantiradi) + `storage_*` (rasm/video — papka topilmasa
+   `⚠️ storage papkasi topilmadi` va xulosada «storage YO'Q»), `web_*` (`/var/www/iqror`), `srv_*` (xizmatlar kodi papkasi,
+   `config.json`'lar bilan, `node_modules`'siz).
    Zaxira olinmasa — deploy **boshlanmaydi**.
 3. **`deploy.sh`** (pastda). 4. **Keyingi tekshiruvlar:** sayt fayllari va server kodi fayl-ma-fayl shu versiya bilan solishtiriladi,
-   bazadagi yangi obyektlar (5 / 1 / 7), 7/7 «BIR XIL», xizmatlar va `/health`, Eskiz shablonlari (hech narsa yubormaydi), cron'lar.
+   bazadagi yangi obyektlar (har qatordagi «kutilgan N» bilan solishtiring: funksiyalar, ID qo'riqchilari, `change_log`
+   triggerlari — 24, `camera_days` — 1), 7/7 «BIR XIL», xizmatlar va `/health`, Eskiz shablonlari (hech narsa yubormaydi),
+   SMS cron va kunlik zaxira cron (yo'q bo'lsa o'zi o'rnatadi; cron xizmati va oxirgi tungi zaxira log'i tekshiriladi).
 
 Natija: oxirgi qator `✅ TO'LIQ DEPLOY MUVAFFAQIYATLI` (chiqish kodi 0). `⚠️ … «!!» qatorlari bor` (kod 2) — deploy bajarilgan,
 lekin `!!` bilan boshlangan qatorlarni ko'rib chiqing. `❌` (kod 1 yoki boshqa) — xabarni o'qing. Butun chiqish `~/iqror-deploy-<vaqt>.log`
@@ -74,6 +78,12 @@ yo'qoladi) — faqat maslahatlashib.
 Buyruqlar oddiy foydalanuvchidan (ubuntu); `sudo` o'zi kerakli joyda. Kod bloklarini GitHub sahifasidan yoki shu fayldan nusxalang.
 
 **`⚠️ kunlik zaxira cron yo'q`** — eng muhimi (zaxirasiz kun = yo'qolishi mumkin bo'lgan kun):
+   *Endi `full-deploy.sh` cron yo'q bo'lsa uni O'ZI o'rnatadi* («✓ kunlik zaxira cron (root) O'RNATILDI»; `DB_CONT` /
+   `BACKUP_DIR` standart bo'lmasa — qatorga yoziladi). Izohga olingan (`#`) qator — atayin o'chirilgan deb olinadi va qayta
+   yoqilmaydi; umuman o'rnatmaslik: `IQROR_NO_BACKUP_CRON=1 bash migration/deploy/full-deploy.sh`. Kunlik zaxiraga kirish
+   hisoblari (`auth_*.sql.gz` — xodim/ota-ona hisoblari, parol xeshlari; kirish tokenlari OLINMAYDI) ham kiradi. Quyidagi qo'lda
+   yo'l — faqat deploy o'rnata olmagan bo'lsa (`!! … o'rnatib bo'lmadi`; `cron o'rnatilmagan` bo'lsa avval
+   `sudo apt install -y cron && sudo systemctl enable --now cron`):
 1. Bir marta, BITTA `sudo` bilan (root crontab'ning boshqa qatorlari saqlanadi; qayta ishlatsa ham takrorlanmaydi):
 ```bash
 sudo sh -c '{ crontab -l 2>/dev/null | grep -av "migration/deploy/backup\.sh"; echo "30 22 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1"; } | crontab - && crontab -l'

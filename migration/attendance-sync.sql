@@ -41,12 +41,15 @@ returns text language sql immutable set search_path = pg_catalog as $$
 $$;
 
 -- ---- 1) Sinf o'zgarsa: joriy davr satrlarini yangi kalitga o'tkazish ----
+-- Toshkent vaqti (UTC+5) — sinf ko'chirish qoidasi shundan oladi (sinovda vaqtni almashtirib tekshirish mumkin).
+create or replace function app.tashkent_now() returns timestamp language sql stable as $$ select now() at time zone 'Asia/Tashkent' $$;
+
 create or replace function app.sync_student_class_rows()
 returns trigger language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_new  text := app.student_class_key(new.lang, new.grade, new."classLetter", new.track);
   v_old  text := app.student_class_key(old.lang, old.grade, old."classLetter", old.track);
-  v_now  timestamp := now() at time zone 'Asia/Tashkent';
+  v_now  timestamp := app.tashkent_now();
   v_mon  text := to_char(v_now, 'YYYY-MM');
   v_y    int  := extract(year from v_now)::int;
   v_ay   text := case when extract(month from v_now) >= 9 then v_y::text || '-' || (v_y + 1)::text
@@ -67,13 +70,19 @@ begin
    where "studentId" = any(v_sids) and month >= v_mon and "classKey" is distinct from v_new;
   update public.monitoring set "classKey" = v_new
    where "studentId" = any(v_sids) and period >= v_mon and "classKey" is distinct from v_new;
-  update public.grades set "classKey" = v_new
-   where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
-  -- Tavsifnoma / fan izohlari / oylik xulosa ham sinf kaliti bilan (RLS yangi sinf rahbariga shu kalit bo'yicha ruxsat beradi).
-  update public.characteristics set "classKey" = v_new
-   where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
-  update public.subject_notes set "classKey" = v_new
-   where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+  -- O'quv yili yozuvlari (choraklik baho, tavsifnoma, fan izohlari) faqat O'QUV YILI ICHIDA (sentyabr–iyun) ko'chiriladi —
+  --   o'quvchi yil o'rtasida boshqa sinfga o'tsa, shu yilning yozuvlari u bilan ketadi. IYUL–AVGUSTda sinf o'zgarishi =
+  --   yangi o'quv yiliga o'tkazish (5-A -> 6-A): v_ay hali TUGAGAN yil, uning yozuvlari eski sinfda qolishi kerak
+  --   (ilgari tugagan yilning baholari va tavsifnomalari yangi sinf nomiga o'tib ketardi).
+  if extract(month from v_now) not in (7, 8) then
+    update public.grades set "classKey" = v_new
+     where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+    -- Tavsifnoma / fan izohlari ham sinf kaliti bilan (RLS yangi sinf rahbariga shu kalit bo'yicha ruxsat beradi).
+    update public.characteristics set "classKey" = v_new
+     where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+    update public.subject_notes set "classKey" = v_new
+     where "studentId" = any(v_sids) and year = v_ay and "classKey" is distinct from v_new;
+  end if;
   update public.student_summaries set "classKey" = v_new
    where "studentId" = any(v_sids) and month >= v_mon and "classKey" is distinct from v_new;
   return new;

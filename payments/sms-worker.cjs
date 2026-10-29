@@ -8,7 +8,16 @@
  *
  * Takror ketmasligi uchun har SMS `sms_log` jadvaliga yoziladi:
  *   yangi:  id = "<invoiceId>__new"
- *   qarz:   id = "<invoiceId>__debt__<YYYY-MM-DD>"   (kuniga bittadan -> haftada 2)
+ *   qarz:   id = "<invoiceId>__debt__<YYYY-MM-DD>"   (kuniga bittadan -> haftada 2; sana — Toshkent)
+ *
+ * Ota-onani bezovta qilmaslik:
+ *   - TINCH SOATLAR: faqat Toshkent vaqti bilan sms.sendHours oralig'ida (standart 09:00–20:00) yuboriladi; tunda cron
+ *     ishlasa ham hech narsa ketmaydi (claim ham qilinmaydi) — xabar ertalabki birinchi run'da ketadi.
+ *   - BIR TELEFONGA KUNIGA BITTA SMS (yangi faktura, qarz va qo'lda «Eslatma» birga sanaladi). Qarz eslatmasi — har o'quvchi
+ *     uchun BITTA SMS: barcha qarz oylari va jami qarz bilan (qo'lda «Eslatma» bilan bir xil matn). Aka-uka bitta telefonda
+ *     bo'lsa — eslatma kunlarida navbatma-navbat (oxirgi eslatmasi eng eski bola birinchi). Yangi faktura xabari keyingi
+ *     run'larda (newLookbackDays ichida) ketadi.
+ *   - Qarz cron'i sendHours ICHIDA ishlashi kerak: tinch soatda qarz eslatmasi o'sha kuni umuman ketmaydi (id'da sana bor).
  *
  * Ishga tushirish (cron, masalan har 2 soatda):
  *   cd .../payments && node sms-worker.cjs           # ikkalasi (debt faqat reminderDays'da)
@@ -23,14 +32,45 @@ const fs = require('fs');
 const path = require('path');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
-const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
-const { composeSms, smsSom } = require('./eskiz-template.cjs');
+const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, tashkentDayStartISO, tashkentDow, sendWindow, inSendWindow, orderDebtCandidates, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
+const { composeSms, smsSom, smsMonths } = require('./eskiz-template.cjs');
 
 const SMS = CFG.sms || {};
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
 const tpl = (k, def) => (SMS.templates && SMS.templates[k]) || def;
+
+// Bugun (Toshkent) SMS ketgan yoki ketishi mumkin bo'lgan telefonlar (sent/sending/unknown — qo'lda «Eslatma» ham).
+//   Run boshida bir marta o'qiladi va har claim'dan keyin to'ldiriladi. O'qib bo'lmasa — cheklov faqat shu run ichida.
+const SENT_TODAY = new Set();
+async function loadSentToday() {
+  const sb = db._sb; if (!sb) return;
+  try {
+    const { data, error } = await sb.from('sms_log').select('phone,status').gte('createdAt', tashkentDayStartISO(tashkentDay())).in('status', ['sent', 'sending', 'unknown']);
+    if (error) throw error;
+    (data || []).forEach(r => { const p = canonMobile(r.phone); if (p) SENT_TODAY.add(p); });
+  } catch (e) { log('⚠️ Bugungi SMS ro\'yxati o\'qilmadi (' + ((e && e.message) || e) + ') — «telefonga kuniga 1 ta» cheklovi faqat shu run ichida ishlaydi.'); }
+}
+// Oxirgi qarz eslatmasi (avtomatik yoki qo'lda) — o'quvchi kanonik kaliti -> ISO vaqt (45 kun). Aka-uka navbati uchun.
+//   O'qib bo'lmasa — bo'sh (navbat eng eski oy bo'yicha; cheklov baribir ishlaydi).
+async function loadLastDebtSms() {
+  const out = {}; const sb = db._sb; if (!sb) return out;
+  const since = new Date(Date.now() - 45 * 864e5).toISOString();
+  try {
+    for (let from = 0, page = 0; page < 20; page++, from += 1000) {
+      const { data, error } = await sb.from('sms_log').select('studentId,createdAt').in('type', ['debt', 'remind']).in('status', ['sent', 'sending', 'unknown'])
+        .gte('createdAt', since).order('createdAt', { ascending: true }).range(from, from + 999);
+      if (error) throw error;
+      (data || []).forEach(r => { const k = CANON[r.studentId] || r.studentId; if (k && String(r.createdAt || '') > String(out[k] || '')) out[k] = String(r.createdAt); });
+      if (!data || data.length < 1000) break;
+    }
+  } catch (e) { log('⚠️ Oxirgi qarz SMS\'lari o\'qilmadi (' + ((e && e.message) || e) + ') — aka-uka navbati bugun eng eski oy bo\'yicha.'); }
+  return out;
+}
+// Tinch soat: haqiqiy rejimda oyna tashqarisida yuborish to'xtaydi (xato emas). DRY — faqat ogohlantiradi.
+let QUIET = false;
+const utcH = h => String((((h - 5) % 24) + 24) % 24).padStart(2, '0');   // Toshkent soati -> UTC soati (cron uchun maslahat)
+const quietNow = dry => !dry && !inSendWindow(SMS);
 
 // Faktura kaliti (invoices.studentId: o'quvchining studentId'si YOKI eski hujjat id'si) -> { phone } va KANONIK kalit.
 //   auth/sms-remind.cjs bilan BIR XIL qoida: kalit BITTA o'quvchiga mos bo'lishi shart (studentId yoki hujjat id bo'yicha).
@@ -83,7 +123,8 @@ async function claimSms(id, rec) {
     const sb = db._sb; if (!sb) return false;
     const p = await getSms(id); const n = Number(p && p.attempts) || 0;
     if (!p || p.status !== 'failed' || n >= MAXTRIES || String(p.error || '').indexOf(REJ) !== 0) return false;
-    try { const { data, error } = await sb.from('sms_log').update({ ...rec, status: 'sending', attempts: n + 1, error: '' }).eq('id', id).eq('status', 'failed').eq('attempts', n).select('id');
+    // createdAt — oxirgi urinish vaqti: «bugun shu raqamga SMS ketgan» cheklovi (loadSentToday) qayta yuborilganni ham ko'rsin.
+    try { const { data, error } = await sb.from('sms_log').update({ ...rec, status: 'sending', attempts: n + 1, error: '', createdAt: new Date().toISOString() }).eq('id', id).eq('status', 'failed').eq('attempts', n).select('id');
       return !error && (data || []).length === 1; } catch (e2) { return false; }
   }
 }
@@ -130,9 +171,10 @@ async function runNew(eskiz, phones, dry) {
   let invs = [];
   try { invs = (await db.collection('invoices').where('createdAt', '>=', since).get()).docs.map(d => d.data()); }
   catch (e) { log('invoices(new) so\'rov xato:', e.message); return; }
-  let sent = 0, skip = 0, fail = 0;
+  let sent = 0, skip = 0, fail = 0, later = 0;
   for (const inv of invs) {
     if (STOP) break;
+    if (quietNow(dry)) { QUIET = true; break; }
     const amt = Number(inv.amount) || 0;
     if (amt <= 0) continue;                                          // grant/0 so'mlik — xabar yo'q
     if (['paid', 'canceled', 'reversed'].includes(inv.status)) continue;
@@ -142,52 +184,73 @@ async function runNew(eskiz, phones, dry) {
     if (dn.skip) { skip++; continue; }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
+    if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan — ertaga (lookback ichida)
     const msg = smsText(tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
-    if (dry) { log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
+    if (dry) { SENT_TODAY.add(phone); log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
+    SENT_TODAY.add(phone);
     const r = await sendOne(eskiz, id, phone, msg);
     if (r.ok) sent++; else { fail++; log('SMS(new) xato:', redactPhone(phone), r.status, r.error); }
   }
-  log(`YANGI: ${sent} yuborildi · ${skip} o'tkazildi · ${fail} xato`);
+  log(`YANGI: ${sent} yuborildi · ${skip} o'tkazildi · ${later} keyingi kunga (bugun shu raqamga SMS ketgan) · ${fail} xato`);
 }
 
 // (2) QARZDORLIK eslatmasi — 10-sanadan keyin to'lanmagan; faqat reminderDays kunlari.
+//   Har O'QUVCHI uchun bitta SMS: barcha qarz oylari (smsMonths) + jami qarz (qo'lda «Eslatma» bilan bir xil). sms_log id —
+//   eng eski qarz fakturasi: "<invoiceId>__debt__<sana>" (kuniga bitta; takror yo'q).
 async function runDebt(eskiz, phones, dry, force) {
   const days = Array.isArray(SMS.reminderDays) ? SMS.reminderDays : [1, 4];   // 0=Yak,1=Dush..6=Shan
-  const dow = new Date().getDay();
+  const dow = tashkentDow();                                        // Toshkent kuni (server UTC bo'lsa ham)
   if (!force && !days.includes(dow)) { log(`QARZ: bugun (dow=${dow}) eslatma kuni emas — o'tkazildi.`); return; }
   const dom = String(Number(SMS.reminderDayOfMonth || 10)).padStart(2, '0');
-  const today = todayStr();
-  let sent = 0, skip = 0, fail = 0;
+  const today = tashkentDay();
+  let sent = 0, skip = 0, fail = 0, later = 0, quietLeft = 0;
+  const byStu = new Map();
   for (const st of ['pending', 'partial']) {
-    if (STOP) break;
     let invs = [];
     try { invs = (await db.collection('invoices').where('status', '==', st).get()).docs.map(d => d.data()); }
     catch (e) { log('invoices(debt) so\'rov xato:', e.message); continue; }
     for (const inv of invs) {
-      if (STOP) break;
       const due = (Number(inv.amount) || 0) - (Number(inv.paidAmount) || 0);
       if (due <= 0 || !inv.month) continue;
       if (AMBIG.has(inv.studentId)) { skip++; log('SMS(debt) o\'tkazildi — ID to\'qnashuvi:', inv.studentId); continue; }
       if (!(today > `${inv.month}-${dom}`)) continue;                // faqat 10-sanadan keyin
-      const id = `${inv.id}__debt__${today}`;
-      const dn = await smsDone(id);
-      if (dn.skip) { skip++; continue; }
-      // Bugun shu o'quvchi ota-onasiga QO'LDA eslatma («Moliya» → «Qarzdorlar» → «Eslatma») ketgan yoki ketayotgan
-      //   bo'lsa (holati noaniq ham) — takrorlamaymiz (ota-onaga bir kunda 2 ta SMS ketmasin).
-      const man = await getSms(`remind__${CANON[inv.studentId] || inv.studentId}__${tashkentDay()}`);
-      if (man && ['sent', 'sending', 'unknown'].includes(man.status)) { skip++; continue; }
-      const phone = (phones[inv.studentId] || {}).phone;
-      if (!phone) { skip++; continue; }
-      const msg = smsText(tpl('debt', DEF_DEBT), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(inv.amount), due: smsSom(due) });
-      if (dry) { log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
-      if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: inv.month || '' }))) { skip++; continue; }
-      const r = await sendOne(eskiz, id, phone, msg);
-      if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', redactPhone(phone), r.status, r.error); }
+      const key = CANON[inv.studentId] || inv.studentId;
+      const g = byStu.get(key) || { key, sid: inv.studentId, name: inv.studentName, items: [] };
+      g.items.push({ inv, due }); if (!g.name && inv.studentName) g.name = inv.studentName; byStu.set(key, g);
     }
   }
-  log(`QARZ: ${sent} yuborildi · ${skip} o'tkazildi · ${fail} xato`);
+  const cands = [...byStu.values()].map(g => {
+    g.items.sort((a, b) => String(a.inv.month).localeCompare(String(b.inv.month)) || String(a.inv.id).localeCompare(String(b.inv.id)));
+    const first = g.items[0].inv;
+    return { key: g.key, name: g.name, inv: first, id: first.id, month: first.month, due: g.items.reduce((s, x) => s + x.due, 0), months: [...new Set(g.items.map(x => String(x.inv.month)))] };
+  });
+  const lastSent = await loadLastDebtSms();
+  const ordered = orderDebtCandidates(cands, lastSent);
+  for (let i = 0; i < ordered.length; i++) {
+    const c = ordered[i], inv = c.inv;
+    if (STOP) break;
+    if (quietNow(dry)) { QUIET = true; quietLeft = ordered.length - i; break; }
+    const id = `${inv.id}__debt__${today}`;
+    const dn = await smsDone(id);
+    if (dn.skip) { skip++; continue; }
+    // Bugun shu o'quvchi ota-onasiga QO'LDA eslatma («Moliya» → «Qarzdorlar» → «Eslatma») ketgan yoki ketayotgan
+    //   bo'lsa (holati noaniq ham) — takrorlamaymiz (ota-onaga bir kunda 2 ta SMS ketmasin).
+    const man = await getSms(`remind__${c.key}__${today}`);
+    if (man && ['sent', 'sending', 'unknown'].includes(man.status)) { skip++; continue; }
+    const phone = (phones[inv.studentId] || {}).phone;
+    if (!phone) { skip++; continue; }
+    if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan (aka-uka / yangi faktura)
+    const msg = smsText(tpl('debt', DEF_DEBT), { name: smsName(c.name || inv.studentName), month: smsMonths(c.months), amount: smsSom(c.due), due: smsSom(c.due) });
+    if (dry) { SENT_TODAY.add(phone); log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
+    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: c.months[c.months.length - 1] || inv.month || '' }))) { skip++; continue; }
+    SENT_TODAY.add(phone);
+    const r = await sendOne(eskiz, id, phone, msg);
+    if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', redactPhone(phone), r.status, r.error); }
+  }
+  log(`QARZ: ${sent} yuborildi · ${skip} o'tkazildi · ${later} bitta raqamga kuniga 1 ta qoidasi bilan qoldirildi (aka-uka — keyingi eslatma kunida) · ${fail} xato`);
+  if (quietLeft) log(`⚠️ QARZ: tinch soat boshlandi — qolgan ${quietLeft} ta o'quvchiga BUGUNGI qarz eslatmasi yuborilmaydi (keyingi eslatma kunida ketadi). Qarz cron'ini ertaroq (sendHours ichida) qo'ying.`);
 }
 
 (async () => {
@@ -202,9 +265,19 @@ async function runDebt(eskiz, phones, dry, force) {
     try { const r = await reader.templates(); if (r && r.ok) APPROVED = r.list; else log('Eskiz shablonlari o\'qilmadi:', (r && r.error) || ''); }
     catch (e) { log('Eskiz shablonlari xato:', (e && e.message) || e); }
   }
+  const w = sendWindow(SMS);
+  if (quietNow(dry)) {
+    log(`TINCH SOAT: Toshkent vaqti ${w[0]}:00–${w[1]}:00 oralig'idan tashqarida — SMS yuborilmadi (yangi faktura xabarlari keyingi ish vaqtidagi run'da ketadi).`);
+    // Qarz eslatmasi id'sida sana bor: tinch soatdagi qarz run'i shu kungi eslatmalarni YO'QOTADI (keyin «yetib olinmaydi»).
+    if (mode === 'debt') { log(`⚠️ QARZ eslatmalari bugun YUBORILMAYDI: qarz cron'i tinch soatga to'g'ri kelgan. Cron vaqtini sendHours ichiga qo'ying (server UTC bo'lsa ${utcH(w[0])}:00–${utcH(w[1])}:00 UTC oralig'i).`); process.exitCode = 2; }
+    return;
+  }
+  if (dry && w && !inSendWindow(SMS)) log(`(DRY) Hozir tinch soat — haqiqiy rejimda hech narsa yuborilmasdi (${w[0]}:00–${w[1]}:00).`);
+  await loadSentToday();
   const phones = await phoneMap();
   if (mode === 'new' || mode === 'both') await runNew(eskiz, phones, dry);
-  if ((mode === 'debt' || mode === 'both') && !STOP) await runDebt(eskiz, phones, dry, mode === 'debt');
+  if ((mode === 'debt' || mode === 'both') && !STOP && !QUIET) await runDebt(eskiz, phones, dry, mode === 'debt');
   if (STOP) { log('TO\'XTATILDI: ' + STOP); process.exitCode = 1; return; }
+  if (QUIET) { log('TINCH SOAT boshlandi — qolgan xabarlar keyingi ish vaqtidagi run\'da ketadi.'); return; }
   log('Tugadi.' + (dry ? ' (DRY — hech narsa yuborilmadi)' : ''));
 })().catch(e => { console.error('sms-worker xato:', e && e.message || e); process.exit(1); });

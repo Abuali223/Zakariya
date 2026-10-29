@@ -913,6 +913,7 @@ const T = {
     res_kicker:"A‘lochilar",res_title:"90+ ball olgan o‘quvchilar",
     res_sub:"Har oy monitoring, davomat va faollik asosida yangilanadigan a‘lochilar ro‘yxati.",
     honor_empty:"A‘lochilar ro‘yxati tez orada e‘lon qilinadi.",
+    data_empty:"Tez orada qo‘shiladi.",
     honor_ball:"ball",
     honor_foot:"To‘liq natijalar, baholar va davomatni ota-onalar shaxsiy kabinetida (tizimga kirgach) ko‘radi.",
     lb_title:"TOP reyting",
@@ -1034,6 +1035,7 @@ const T = {
     res_kicker:"Отличники",res_title:"Ученики с баллом 90+",
     res_sub:"Список отличников, обновляется ежемесячно на основе мониторинга, посещаемости и активности.",
     honor_empty:"Список отличников скоро будет опубликован.",
+    data_empty:"Скоро будет добавлено.",
     honor_ball:"балл",
     honor_foot:"Полные результаты, оценки и посещаемость родители видят в личном кабинете (после входа).",
     lb_title:"TOP рейтинг",
@@ -1281,6 +1283,7 @@ function renderLeaderboard(){
   const t=T[lang];
   const tracked = STUDENTS.filter(s=>s.tr);
   const rows = (tracked.length?tracked:STUDENTS).slice().sort((a,b)=>b.score-a.score).slice(0,10);
+  if(!rows.length){ $("#leaderboard").innerHTML=`<div class="cls-empty">${esc(t.data_empty)}</div>`; return; }
   $("#leaderboard").innerHTML = rows.map((s,i)=>{
     const rk = RANK_STYLE[i+1] || {bg:"#ECE7D9",fg:"#5B7370"};
     const chip = s.tr ? `<span class="trk ${s.tr==="IT"?"it":"med"}">${esc(s.tr)}</span>`
@@ -1318,6 +1321,7 @@ function renderHonorRoll(){
 }
 function renderTeachers(){
   const t=T[lang];
+  if(!TEACHERS.length){ $("#teachers").innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.data_empty)}</div>`; return; }
   $("#teachers").innerHTML = TEACHERS.map(tc=>{
     const full=Math.round(Number(tc.rating)||0);
     const stars="★".repeat(full)+"☆".repeat(5-full);
@@ -1340,11 +1344,14 @@ function renderTeachers(){
   }).join("");
 }
 function renderAchievements(){
+  const emptyT=`<div class="cls-empty">${esc(T[lang].data_empty)}</div>`;
+  if(!SCHOOL_ACH.length) $("#school-ach").innerHTML = emptyT; else
   $("#school-ach").innerHTML = SCHOOL_ACH.map(a=>`
     <div class="tl-item"><span class="dot"></span>
       <span class="yr">${esc(a.year)}</span>
       <span class="tx">${esc(lang==="uz"?a.uz:a.ru)}</span>
     </div>`).join("");
+  if(!STUDENT_ACH.length) $("#student-ach").innerHTML = emptyT; else
   $("#student-ach").innerHTML = STUDENT_ACH.map(a=>`
     <div class="sa">
       <div class="st" aria-hidden="true">★</div>
@@ -1372,6 +1379,7 @@ function openVideo(url){
 function renderNews(){
   const emblem = `<svg viewBox="0 0 458.82 522.7" fill="none" aria-hidden="true"><rect x="0" y="0" width="458.82" height="115.76" fill="#FFFFFF"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#FFFFFF"/></svg>`;
   const play=`<span class="play-btn" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>`;
+  if(!NEWS.length){ $("#news").innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(T[lang].data_empty)}</div>`; return; }
   $("#news").innerHTML = NEWS.map((n,i)=>{
     const yt=ytId(n.video), hasVideo=!!n.video;
     const thumbImg = n.img || (yt?`https://img.youtube.com/vi/${yt}/hqdefault.jpg`:"");
@@ -1483,6 +1491,7 @@ function renderAdmission(){
 }
 function renderPlans(){
   const t=T[lang], box=$("#plans"); if(!box) return;
+  if(!PLANS.length){ box.innerHTML=`<div class="cls-empty" style="grid-column:1/-1">${esc(t.data_empty)}</div>`; return; }
   box.innerHTML = PLANS.map(p=>{
     const feats=(lang==="uz"?p.fuz:p.fru)||[];
     return `<div class="price-card${p.featured?" featured":""}">
@@ -1914,7 +1923,7 @@ async function downloadParentProfile(s, btn){
     const achHTML=ach.length?`<ul style="margin:4px 0;padding-left:20px">${ach.map(a=>`<li style="margin:3px 0">${a.year?`<b>${esc(String(a.year))}:</b> `:''}${esc((lang==='ru'?a.ru:a.uz)||a.uz||'')}</li>`).join('')}</ul>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
     const today=new Date(), pad=n=>String(n).padStart(2,'0');
     const docNo=`IQR-${sid}-${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
-    const verifyURL=`${location.origin}/verify?id=${encodeURIComponent(sid)}`;
+    const verifyURL=`${location.origin}/verify.html?id=${encodeURIComponent(sid)}`;   // «/verify» (.html'siz) prod nginx'da 404 beradi
     let qrURL=''; try{ if(typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(verifyURL); q.make(); qrURL=q.createDataURL(4,10); } }catch(e){}
     const bio=[
       ['O‘quvchi ID',sid],['Familiya, ism, sharif',s.name||'—'],['Tug‘ilgan sana',fmtBD(P('birthDate'))],['JSHSHIR',P('pinfl')||'—'],['Metrika seriyasi',P('metrika')||'—'],
@@ -2298,6 +2307,11 @@ addEventListener('hashchange', ()=>route(true));
 })();
 
 /* init */
+// Haqiqiy saytda (http/https, ?demo=1 yo'q) NAMUNA ma'lumot (to'qima ism, ball, narx, raqam, savol-javob) birinchi chizishda
+//   ham ko'rsatilmaydi: bazadan kelguncha (yoki baza ochilmasa) bo'limlar «Tez orada qo'shiladi», raqamlar «—». Namuna faqat
+//   faylni diskdan ochganda (dizayn) yoki ?demo=1 bilan. Qabul bosqichlari (umumiy tartib) namunasi qoladi.
+const PUB_DEMO = location.protocol==='file:' || /[?&]demo=1(&|$)/.test(location.search);
+if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; PLANS=[]; FAQ=[]; HERO_STATS.forEach(x=>{ x.v='—'; }); }
 (function init(){
   try{const s=localStorage.getItem("iqror-lang");if(s==="uz"||s==="ru")lang=s;}catch(e){}
   renderAll();
@@ -2346,43 +2360,42 @@ addEventListener('hashchange', ()=>route(true));
       if(!db||!fsMod) return;
       const { collection, getDocs, query, orderBy, doc, getDoc } = fsMod;
       const ord = (name) => getDocs(query(collection(db,name), orderBy('order'))).catch(()=>getDocs(collection(db,name)));
+      // Har so'rov ALOHIDA: bittasi yiqilsa qolganlari baribir qo'llanadi (null = o'qilmadi).
+      const safe = pr => pr.then(r=>r, ()=>null);
+      const rows = snap => (snap && snap.docs) ? snap.docs : [];
+      // Haqiqiy baza ulangan saytda NAMUNA (to'qima) o'quvchi, o'qituvchi, baho, medal, narx, sharh, yangilik va tadbir
+      //   KO'RSATILMAYDI: bazadagi ro'yxat qo'llanadi — BO'SH bo'lsa ham (bo'lim «hozircha yo'q» deb chiqadi), o'qib bo'lmasa
+      //   ham bo'sh. Ilgari jadval bo'sh yoki so'rov xato bo'lsa namunalar qolib, saytda to'qima ism va medallar ko'rinardi.
+      //   Namuna faqat bazasiz (lokal/dizayn) rejimda qoladi. Umumiy matn (qabul bosqichlari) bazada yo'q bo'lsa namuna qoladi.
       try{
         const [stu,tea,nw,asch,astu,gal,rev,plansS,admS,faqS,evS,setSnap] = await Promise.all([
-          getDocs(collection(db,'students_public')), ord('teachers_public'), ord('news'), ord('achievements_school'), ord('achievements_students'),
-          ord('gallery'), ord('testimonials'),
-          ord('plans'), ord('admission_steps'), ord('faq'), ord('events'),
-          getDoc(doc(db,'settings','site'))
+          safe(getDocs(collection(db,'students_public'))), safe(ord('teachers_public')), safe(ord('news')), safe(ord('achievements_school')), safe(ord('achievements_students')),
+          safe(ord('gallery')), safe(ord('testimonials')),
+          safe(ord('plans')), safe(ord('admission_steps')), safe(ord('faq')), safe(ord('events')),
+          safe(getDoc(doc(db,'settings','site')))
         ]);
         const p = {};
-        const students = stu.docs.map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:(x.attendance==null||x.attendance==='')?null:Number(x.attendance),photo:x.photo||"",poster:x.posterImage||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
-        if(students.length) p.students = students;
-        const teachers = tea.docs.map(d=>{const x=d.data();return {id:d.id,name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
-        if(teachers.length) p.teachers = teachers;
-        const news = nw.docs.map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,buz:x.body_uz||"",bru:x.body_ru||x.body_uz||"",img:x.image||"",video:x.video||""};});
-        if(news.length) p.news = news;
-        const sa = asch.docs.map(d=>{const x=d.data();return {year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
-        if(sa.length) p.schoolAch = sa;
-        const sta = astu.docs.map(d=>{const x=d.data();return {name:x.name,year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
-        if(sta.length) p.studentAch = sta;
-        const gallery = gal.docs.map(d=>{const x=d.data();return {img:x.image||"",video:x.video||"",cap_uz:x.caption_uz||"",cap_ru:x.caption_ru||x.caption_uz||""};});
-        if(gallery.length) p.gallery = gallery;
-        const testimonials = rev.docs.map(d=>{const x=d.data();return {name:x.name,role_uz:x.role_uz||"",role_ru:x.role_ru||x.role_uz||"",photo:x.photo||"",text_uz:x.text_uz||"",text_ru:x.text_ru||x.text_uz||"",rating:Number(x.rating)||5};});
-        if(testimonials.length) p.testimonials = testimonials;
+        p.students = rows(stu).map(d=>{const x=d.data();const tr=x.track||"";return {id:x.studentId||d.id,name:x.name,g:Number(x.grade)||0,tr:tr,lng:x.lang||"uz",cls:x.classLetter||tr||"",score:Number(x.score)||0,att:(x.attendance==null||x.attendance==='')?null:Number(x.attendance),photo:x.photo||"",poster:x.posterImage||"",subjects:Array.isArray(x.subjects)?x.subjects:[]};});
+        p.teachers = rows(tea).map(d=>{const x=d.data();return {id:d.id,name:x.name,suz:x.subject_uz,sru:x.subject_ru||x.subject_uz,rating:Number(x.rating)||0,years:Number(x.years)||0,certs:Number(x.certs)||0,avg:Number(x.avg)||0,votes:Number(x.votes)||0,photo:x.photo||""};});
+        p.news = rows(nw).map(d=>{const x=d.data();return {d:x.date,tuz:x.tag_uz,tru:x.tag_ru||x.tag_uz,uz:x.title_uz,ru:x.title_ru||x.title_uz,buz:x.body_uz||"",bru:x.body_ru||x.body_uz||"",img:x.image||"",video:x.video||""};});
+        p.schoolAch = rows(asch).map(d=>{const x=d.data();return {year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
+        p.studentAch = rows(astu).map(d=>{const x=d.data();return {name:x.name,year:x.year,uz:x.text_uz,ru:x.text_ru||x.text_uz};});
+        p.gallery = rows(gal).map(d=>{const x=d.data();return {img:x.image||"",video:x.video||"",cap_uz:x.caption_uz||"",cap_ru:x.caption_ru||x.caption_uz||""};});
+        p.testimonials = rows(rev).map(d=>{const x=d.data();return {name:x.name,role_uz:x.role_uz||"",role_ru:x.role_ru||x.role_uz||"",photo:x.photo||"",text_uz:x.text_uz||"",text_ru:x.text_ru||x.text_uz||"",rating:Number(x.rating)||5};});
         const splitLines = s => String(s||"").split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
         const truthy = v => v===true||v==="true"||v==="Ha"||v==="Да"||v==="1"||v===1;
-        const plans = plansS.docs.map(d=>{const x=d.data();return {uz:x.name_uz||"",ru:x.name_ru||x.name_uz||"",price:x.price||"",featured:truthy(x.featured),fuz:splitLines(x.features_uz),fru:splitLines(x.features_ru||x.features_uz)};});
-        if(plans.length) p.plans = plans;
-        const admissionSteps = admS.docs.map((d,i)=>{const x=d.data();return {n:x.num||i+1,uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",tuz:x.text_uz||"",tru:x.text_ru||x.text_uz||""};});
+        p.plans = rows(plansS).map(d=>{const x=d.data();return {uz:x.name_uz||"",ru:x.name_ru||x.name_uz||"",price:x.price||"",featured:truthy(x.featured),fuz:splitLines(x.features_uz),fru:splitLines(x.features_ru||x.features_uz)};});
+        const admissionSteps = rows(admS).map((d,i)=>{const x=d.data();return {n:x.num||i+1,uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",tuz:x.text_uz||"",tru:x.text_ru||x.text_uz||""};});
         if(admissionSteps.length) p.admissionSteps = admissionSteps;
-        const faq = faqS.docs.map(d=>{const x=d.data();return {uz:x.q_uz||"",ru:x.q_ru||x.q_uz||"",auz:x.a_uz||"",aru:x.a_ru||x.a_uz||""};});
-        if(faq.length) p.faq = faq;
-        const events = evS.docs.map(d=>{const x=d.data();return {date:x.date||"",uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",duz:x.desc_uz||"",dru:x.desc_ru||x.desc_uz||""};});
-        if(events.length) p.events = events;
-        const setd = setSnap.exists()?setSnap.data():{};
-        if(setd.stats) p.stats = setd.stats;
+        p.faq = rows(faqS).map(d=>{const x=d.data();return {uz:x.q_uz||"",ru:x.q_ru||x.q_uz||"",auz:x.a_uz||"",aru:x.a_ru||x.a_uz||""};});
+        p.events = rows(evS).map(d=>{const x=d.data();return {date:x.date||"",uz:x.title_uz||"",ru:x.title_ru||x.title_uz||"",duz:x.desc_uz||"",dru:x.desc_ru||x.desc_uz||""};});
+        const setd = (setSnap && setSnap.exists()) ? (setSnap.data()||{}) : {};
+        // Bosh sahifa raqamlari faqat «Sozlamalar»dan; kiritilmagan bo'lsa namuna raqam (480+, 96% …) emas — «—».
+        const sv = setd.stats||{}, sval = x => String(x==null?'':x).trim() || '—';   // bo'sh saqlangan qiymat ham «—»
+        p.stats = { students:sval(sv.students), teachers:sval(sv.teachers), uni:sval(sv.uni), awards:sval(sv.awards) };
         if(setd.contact) p.contact = setd.contact;
-        if(window.IqrorPublic && Object.keys(p).length) window.IqrorPublic.apply(p);
-      }catch(e){ /* qoidalar hali e'lon qilinmagan bo'lishi mumkin — fallback qoladi */ }
+        if(window.IqrorPublic) window.IqrorPublic.apply(p);
+      }catch(e){ /* kutilmagan xato — sahifa avvalgi holatda qoladi */ }
     }
     loadPublic();
 

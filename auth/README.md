@@ -120,6 +120,11 @@ Eslatma: Aliyeva Malika uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 
 Admin panelda tugma bosilganda: avval **ko‘rib chiqish** (`preview:true` — hech narsa yuborilmaydi), admin
 oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, keyin yuboriladi.
 - **Ruxsat:** faqat FAOL `director` / `finance_mgr` (`sms.remindRoles` bilan o‘zgartiriladi) — JWT + `users` jadvali.
+- **Tinch soat:** `sms.sendHours` (shu `auth/config.json`da; standart `[9, 20]` — Toshkent 09:00–19:59). Oraliqdan tashqarida
+  «Eslatma» rad etiladi (sababi oynada yoziladi). Avtomatik SMS (`payments/config.json` → `sms.sendHours`) alohida
+  o‘qiladi — ikkalasini bir xil qo‘ying. `false` — cheklovsiz (tavsiya etilmaydi).
+- **Bugun shu raqamga boshqa SMS ketgan bo‘lsa** (yangi faktura, aka-uka eslatmasi) — bloklanmaydi, tasdiq oynasida
+  ogohlantiriladi (`phoneToday`).
 - **Qarz serverda** hisoblanadi (`invoices`, joriy Toshkent oyigacha; bekor/qaytarilgan/to‘langan — 0) — «Qarzdorlar»
   kartasi bilan bir xil qoida. Telefon: `student_private.parentPhone` (yaroqsiz bo‘lsa `parentPhone2`).
 - **O‘quvchi:** bosilgan kalit bitta o‘quvchiga mos bo‘lishi shart (ID to‘qnashuvida — rad, SMS boshqa oilaga ketmasin);

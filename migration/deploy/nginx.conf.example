@@ -13,7 +13,7 @@ server {
     # /sb/ shim modullari to'g'ri MIME bilan berilishi (ES modul)
     location ~* \.(js|mjs)$ { default_type text/javascript; }
 
-    location / { try_files $uri $uri/ =404; }
+    location / { try_files $uri $uri.html $uri/ =404; }   # $uri.html: /verify -> verify.html (eski QR havolalari)
 
     # (certbot 443 blokini o'zi qo'shadi)
 }
