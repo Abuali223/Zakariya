@@ -1050,7 +1050,8 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   eski (almashtirilgan) ko'rinish renderining xatosini jim o'tkazadi, joriy bo'lim xatosi avvalgidek konsolda.
 - **Direktor paneli (37 bo'lim):** hammasi ochildi; ochilishda ilova hech narsa yozishga urinmadi; xato javob 0; konsol xatosi 0
   (3-topilmadan tashqari). Amaliy ish (To'lovlar bo'limi): 3 ta to'lov biriktirilmagan («o'quvchi topilmadi — qo'lda biriktiring»),
-  4 ta hisob-fakturaning o'quvchisi ro'yxatda yo'q (o'chirilgan yoki ID o'zgargan). Eng sekin so'rovlar ~1,3 s (asosan tarmoq).
+  4 ta hisob-fakturaning o'quvchisi ro'yxatda yo'q (o'chirilgan yoki ID o'zgargan); 2 ta takroriy xodim ID'si hali bor (4 kartochka —
+  «Yangi noyob ID berish»). Eng sekin so'rovlar ~1,3 s (asosan tarmoq).
 - **Sinov:** noldan qurish 76 fayl xatosiz; policy matni o'ram olib tashlansa HEAD bilan bayt-bayt bir xil (faqat bp_sel farq);
   deploy yo'li (HEAD -> yangi ×2) va noldan qurish — policy va verify-db barmoq izi BIR XIL, ikki marta o'ralish yo'q; RLS
   matritsasi 18 foydalanuvchi (anon, har rol, bloklangan direktor, faol/bekor/yo'q bog'lanishli ota-ona) × har jadval ×

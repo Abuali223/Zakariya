@@ -80,6 +80,9 @@ begin
       from pg_policy p join pg_class c on c.oid = p.polrelid
      where c.relnamespace = 'public'::regnamespace
        and c.relname::text <> all(v_skip)
+       -- ALTER POLICY jadval egasini talab qiladi: boshqa rolga tegishli jadval (masalan, Studio'da qo'lda yaratilgan)
+       --   tegilmaydi — aks holda butun deploy tranzaksiyasi «must be owner» bilan to'xtardi.
+       and pg_has_role(c.relowner, 'USAGE')
      order by c.relname, p.polname
   loop
     v_qual := regexp_replace(r.qual, v_re, '(SELECT app.\1())', 'g');
@@ -88,7 +91,13 @@ begin
     v_sql := format('alter policy %I on public.%I', r.polname, r.relname);
     if r.qual is not null then v_sql := v_sql || format(' using (%s)', v_qual); end if;
     if r.chk  is not null then v_sql := v_sql || format(' with check (%s)', v_chk); end if;
-    execute v_sql;
+    -- Bu fayl faqat TEZLIK uchun: o'rab bo'lmasa policy avvalgi (to'g'ri, sekinroq) ko'rinishda qoladi, deploy davom etadi.
+    begin
+      execute v_sql;
+    exception when others then
+      raise warning 'rls-initplan: %.% o''ralmadi (%) — avvalgi ko''rinishda qoldi (xavfsizlik o''zgarmaydi, faqat sekinroq)',
+        r.relname, r.polname, sqlerrm;
+    end;
   end loop;
   perform set_config('search_path', v_sp, true);
 end $$;
