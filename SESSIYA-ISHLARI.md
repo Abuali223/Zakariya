@@ -1116,6 +1116,13 @@ ochiq savollar, «Bu hafta». Texnik ro'yxat: `JORIY-ETISH-REJA.md` (har ish, ha
   telefoni) 1858f40 da olib tashlandi/psevdonimlandi (testlar o'zgarishsiz o'tdi); git tarixida qoladi — private kerak.
 - **Asosiy xulosa:** xavf odamlar va tartibda; pulga ta'sir qiluvchi qarorlarda ikkinchi tasdiq yo'q va bazada
   majburlanmaydi (moliya fakturani to'g'ridan-to'g'ri yozadi); bitta server, zaxira/tiklash sinalmagan, ogohlantirish yo'q.
+- **Raqib ko'rigi (3 tekshiruvchi: ish tartibi, faktlar/xavfsizlik/qonun, indikatorlar + tasdiqlovchi):** 54 topilma
+  (25 tasdiqlangan, 29 qisman, rad etilgani yo'q) va 33 ta tushib qolgan narsa. Asosiylari kiritildi: xodimlar uchun D6
+  o'qituvchi hisoblaridan oldin (hozir har xodim, o'qituvchi hisobi ochilsa u ham, barcha o'quvchini ko'radi); D2
+  noyabrdan qo'lda tartib; ulanmagan sinflarda monitoring chegirmasi tushib qolishi — O'IBDO' vaqtincha kiritadi;
+  Telegram faqat o'quvchi kartasidagi raqam bilan va faqat shaxsiy chatda; 24 soat faqat 100 ball uchun; darvozalar
+  o'lchanadigan; «Bu hafta» tartibi (deploy key → keyin private; Firebase Storage ham yopiladi, loyiha hozircha
+  o'chirilmaydi); 3-bosqich 16-aprelgacha (bayramlar); eski «7 bosqich» bo'limiga «eskirdi» izohi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

@@ -5,7 +5,8 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 
 - **Manba:** direktorning 9 qarori (D1–D9, pastda), 6 ta tahlil (kod bo'yicha, `fayl:qator` bilan) va jonli saytdagi
   umumiy o'lchovlar (faqat sonlar; ism/telefon olinmagan).
-- **Hajm:** S — 1 kundan kam, M — 1–3 kun, L — 3 kundan ko'p (bitta dasturchi, testlar bilan). Jami ≈ 200 kun.
+- **Hajm:** S — 1 kundan kam, M — 1–3 kun, L — 3 kundan ko'p (bitta dasturchi, testlar bilan). Jami ≈ 210 kun
+  (0: ~30, 1: ~80, 2: ~40, 3: ~35, 4: ~25). Bu muddat emas — tezlikni maktab tomonidagi sinov, deploy va o'qitish belgilaydi.
 - **Qoidalar:** yangi migratsiya `run-all.sql`da `rls-initplan.sql`dan YUQORIGA, zanjir himoya sarlavhasi bilan; yangi
   `SECURITY DEFINER` funksiya `search_path`ni o'zi belgilaydi; har tasdiq roli **aniq rol** bilan tekshiriladi
   (`is_finance()` g'aznachi va direktorni ham o'z ichiga oladi — ikki kishilik tasdiq bitta odamga aylanib qolmasin).
@@ -37,6 +38,21 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
   repozitoriy ochiq va GitHub Pages eski Firebase saytini ko'rsatadi (`abuali223.github.io/Zakariya`, 200).
   Repodagi shaxsiy ma'lumotlar 1858f40 da olib tashlandi, lekin git tarixida qoladi — repozitoriy private qilinishi kerak.
 
+## Ko'rikdan keyingi tartib (2026-10-30, 54 topilma — hammasi tasdiqlangan yoki qisman)
+- **Darvoza** odamlar bilan ishni to'xtatadi (hisob ochish, o'qitish, ulash); dasturlash oldinroq boshlanishi mumkin.
+- **D6 faqat sayt emas:** `students_sel` = `is_staff() OR is_cashier() OR owner` (cashier-role.sql:22) — o'qituvchi hisobi
+  ochilishi bilan u ham 380 o'quvchini ko'radi. Shuning uchun xodimlar uchun D6 **1-bosqichda, o'qituvchi hisoblaridan oldin**
+  (HR va marketing — 0-bosqichda, HR hisobi ochilishidan oldin).
+- **D2 vaqtinchalik tartib noyabrdan:** Moliya oylik hisobotni tayyorlaydi, HR imzolaydi, keyin «Maosh berish» (canPaySalary
+  admin.html:1032 hozir tasdiqsiz to'laydi). Tizimdagi darvoza (payroll_runs) — 2-bosqich.
+- **Monitoring vaqtincha:** ulanmagan sinflarda M-1 monitoringi yo'q → 90+/100 chegirmasi tushib qoladi (admin.html:7811-7822);
+  O'IBDO' kiritadi (hisobi 0-bosqichda). «Bemor» — D1 bo'yicha faqat tasdiqlangan kun; oqim tayyor bo'lguncha bunday kun yo'q.
+- **Telegram:** raqam faqat o'quvchi kartasidagi ota/ona raqami bilan solishtiriladi (kabinet kodi — ID + 12 belgi, tasdiqsiz,
+  parent-link-canon.sql:101-139); faqat shaxsiy chat (`chat.type === 'private'`), bot guruhga qo'shilmaydi; `parentPhone`
+  o'zgarishi change_log'ga yoziladi (hozir yozilmaydi — change-log.sql:126).
+- **24 soat** faqat 100 ball uchun (O'IBDO' + Direktor); kalendar soati, dam olish/bayram sanalmaydi. Boshqa oqimlar: «faktura
+  chiqarilgan kuni tasdiqlanmagan» = muddati o'tgan; maosh — to'lov kunigacha.
+
 ## 0-bosqich — Tozalash va xavfsizlik (2–20-noyabr, ≈30 kun)
 
 ### Ommaviy saytni yopish (D6) — birinchi navbatda
@@ -44,7 +60,9 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [S] `students_public` anon/authenticated'dan olinadi va o'chiriladi; RLS matritsa + verify-db; deploy.sh:222-224 markeri — security-2c.sql:23-30, rls.sql:77-83
 - [S] «A'lochilar» bo'limi, menyu havolasi, hero tugmasi va ishlatilmaydigan reyting/qidiruv kodi olib tashlanadi — index.html:605, 633, 735-745, 1282-1321, 1538-1629; admin.html:562 (posterImage)
 - [S] Ismli yutuqlar/sharhlar: ismsiz («7-sinf o'quvchisi») yoki direktor belgilagan rozilik bayrog'i; 4 namuna qatori o'chiriladi — index.html:1346-1361, 1455-1470; admin.html:666-675
-- [M] Hujjatni tekshirish: `issued_documents` + `issue_doc_token(sid, kind)` + anon `verify_doc(token)` (faqat «haqiqiy, berilgan sana, turi»); QR token URL'ga — verify.html:43-65; admin.html:3369-3375; index.html:1925-1927
+- [M] Hujjatni tekshirish: `issued_documents` + `issue_doc_token(sid, kind)` + anon `verify_doc(token)` (faqat «haqiqiy, berilgan sana, turi»); kod hujjatga bitta, ko'p marta tekshiriladi, taxmin qilib bo'lmaydi (128 bit); eski `?id=` QR → «maktabga murojaat qiling»; QR token URL'ga — verify.html:43-65; admin.html:3369-3375; index.html:1925-1927
+- [S] D6 (xodimlar, birinchi qadam): HR va marketing_mgr `students_sel`dan chiqariladi; HR uchun `camera_id_owner(cam)` RPC (faqat «band/bo'sh», ismsiz) — cashier-role.sql:22; auth-hardening.sql:43-48; admin.html:5003-5005, 5345-5347, 5426-5428, 5481-5483
+- [S] AI'ning `/student-summary` va `/risk` yo'llari huquqshunos javobigacha o'chiriladi (sahifalar chaqirmaydi, lekin server yo'li ochiq) — ai-assistant/index.cjs:114-189, 325-341
 - [S] «Ochiq natijalar» va'dalari matndan olinadi — index.html:7, 901, 913-918 (RU 1023, 1035-1040); taqdimot.html:191, 210, 224, 241-247, 331; prezentatsiya.html:173, 235
 - [M] O'quvchi rasm/posterlari yopiq papkaga + signed URL; eski URL'lar ko'chiriladi — storage-rls.sql:27-28; admin.html:468-476, 4107
 - [S] (ixtiyoriy) Bosh sahifa raqamlari `public_counts()` RPC'dan — index.html:2392-2395
@@ -60,16 +78,20 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [S] `staff_leaves.paid` (backfill `paid = type <> 'ruhsat'`, CHECK, change_log) — staff-leaves.sql:17-29; change-log.sql:138
 - [M] `attMetrics`: haqsiz ta'til kuni ish kunida `dailyRate` ushlaydi (erkin soatlilar va kamera uzilishi kunida ham) — admin.html:4753-4815 (4775)
 - [S] Uch joyga ulash (oylik hisobot, maosh oynasi, kunlik ko'rinish) + «Ruhsat (haqsiz)» ustuni, PDF, yorliqlar — admin.html:5141-5200, 6215-6242, 5022, 5578, 5245
+- [S] D2 uchun: finance_mgr'ga «Xodimlar davomati» (staffatt) tabi — ROLE_TABS admin.html:1013; vaqtinchalik tartib: Moliya hisobot → HR imzo → «Maosh berish»
+- [S] 9-qaror: bazadagi FAQ qatorini direktor admin panelda o'chiradi (kod uni olib tashlamaydi; chatbot ham o'qiydi)
 
 ### Zaxira, kuzatuv, kirish huquqlari
 - [S] Serverda tekshirish: root crontab, cron xizmati, `/var/log/iqror-backup.log`da bugungi «backup OK» (+ auth + storage)
 - [S] Sirlar zaxirasi: Supabase docker `.env`, har `config.json`, `sb/sb-config.js`, nginx va systemd fayllari — backup.sh
-- [M] Shifrlangan nusxa boshqa joyga (restic/rclone), O'zbekistondagi joy (huquqshunos javobidan keyin)
+- [M] Shifrlangan nusxa O'zbekistondagi boshqa joyga (boshqa provayder yoki maktab diski; restic/rclone); xorijga faqat huquqshunos ruxsati bilan
 - [M] Tiklash yo'riqnomasi + to'liq tiklash mashqi (DB + auth + storage + xizmatlar), RTO yoziladi; har chorakda
 - [S] Tashqi kuzatuv (sayt, `/authapi/health`, `/pay/health`, `/ai/health`) + ikki kishiga Telegram ogohlantirish
 - [S] Chuqur health: `select 1`, GoTrue, Eskiz tokeni va balansi, oxirgi muvaffaqiyatli webhook vaqti
 - [S] `otp_gc` / `login_attempts_gc`ni rejalashtirish, journald hajmi
-- [S] Sinov hisobini o'chirish: `child_claims`, `users`, `auth.users`, refresh tokenlar
+- [S] Sinov hisobini o'chirish: `child_claims`, `users`, `auth.users`, refresh tokenlar (paneldagi «O'chirish» faqat `users` qatorini o'chiradi — admin.html:4330); SQL buyrug'ini direktorga beriladi
+- [S] GitHub: Pages'ni o'chirish va `main`dan `.github/workflows/pages.yml`ni olib tashlash; deploy key (faqat o'qish) → sinov deploy → keyin repo private (deploy.sh:26 `git fetch` ochiq URL'dan oladi)
+- [S] Eski Firebase (alilazer-cd582): Firestore **va Storage** qoidalari «hammasi yopiq» (main: storage.rules `read: if true`); loyihani o'chirish — eksport saqlangani tasdiqlangandan keyin
 - [M] Ishdan bo'shatish tartibi: auth serverda «bloklash» (rolni olish + status + GoTrue sessiyalari), Foydalanuvchilar bo'limida tugma
 - [S] Qaror: `is_admin`/`is_zavuch` statusni tekshirsinmi (rls.sql:28-30; auth-hardening.sql:58-61) yoki faqat rolni olish kirishni yopadi deb hujjatlash
 - [S] Ikkinchi texnik mas'ul; kalit va parollar ro'yxati xavfsiz joyda
@@ -82,7 +104,21 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [S] Telefonlar sifati (noto'g'ri / yo'q / faqat xorijiy)
 - [S] Oylik ish taqvimi (kim, nima, qachon) va rollar jadvali — direktor imzolaydi
 
-## 1-bosqich — Pul qarorlari tasdig'i, D1 (16-noyabr – 25-dekabr, ≈75 kun)
+## 1-bosqich — Pul qarorlari tasdig'i, D1 (16-noyabr – 25-dekabr, ≈80 kun)
+
+### Xodimlar uchun D6 — o'qituvchi hisoblaridan OLDIN
+- [M] `app.student_class_key()` (classKeyOf bilan bir xil — admin.html:2032) + yangi `students_sel`: director/zavuch/reception/egasi + teacher/kurator/homeroom faqat o'z sinflari; `is_staff()` o'zgarmaydi (boshqa policy'lar ishlatadi)
+- [M] Kassa/moliya uchun `students_billing` ko'rinishi (ism, sinf, holat, sanalar); kassaga ota-ona telefoni (D7: ko'radi, yuklab olmaydi); ball/davomat/rasm yo'q — admin.html:7951, 5938, 7147, 7244, 2927
+- [S] admin/admin_head: «Kasal bolalar» va fikrlar bo'yicha qaror; olimpiada, reyting, `inv_sel` (marketing'siz, `marketing_fee_stats()` RPC) toraytiriladi — sick-panel.sql:15-18; reception-access.sql:75-77
+- [M] 18 foydalanuvchilik RLS matritsasi D6 qoidasi bilan qayta; har rol bo'yicha brauzer sinovi
+
+### Ota-onalarni ulashga tayyorlik (pilotdan oldin)
+- [M] Rozilik matni ro'yxatdan o'tishda (huquqshunos ko'rgan) + `users.consentAt`
+- [S] OTP: Eskiz xatosida aniq xato, muvaffaqiyatsiz yuborish limitga sanalmaydi, ~8 s timeout — auth/index.cjs:135-142
+- [S] Maktab IP'si uchun OTP limiti (otpMaxPerIpHour 20 — auth/config.example.json:14) va nginx `limit_req`
+- [S] Eskiz'da maktab nomi bilan jo'natuvchi (koddagi standart «4546» — payments/sms.cjs:75; serverdagi sozlama tekshiriladi)
+- [S] nginx gzip/brotli; [S] KaTeX/SheetJS/QR faqat kerakli bo'limda (admin.html:19-22); [S] «yangi versiya» banneri
+- [M] «Haftalik hisobot» sahifasi (direktor, 8 ko'rsatkich) — hozir hech qayerda yo'q
 
 ### Umumiy asos
 - [S] `app.my_role()` / `app.has_role(text)`: aniq rol + `users.status='active'`; `app.approval_actor()` (chlog_actor kabi — change-log.sql:43-51)
@@ -110,6 +146,8 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [M] `monitoring` audit ustunlari (enteredAt/approvedAt/approvedBy, trigger bilan) + `monitoring_rounds` (T0 = sinf raundini yopish; qayta ochish faqat direktor, sabab bilan); yopiq raundda ballni o'zgartirish bloklanadi — schema.sql:79-88; admin.html:2413-2420
 - [M] Chegirma fanlari ro'yxati konfiguratsiyaga + `app.monitoring_avg(sid, period)` (o'rtacha va qamrov n/N) — admin.html:7472-7483
 - [M] `monitoring_bonus` + `bonus_propose` (zavuch, muddat ichida, o'rtacha ≥100, to'liq qamrov) / `bonus_decide` (direktor, muddat ichida); muddat o'tsa — direktorga «muddati o'tgan» (qaror savollarga bog'liq)
+- [S] T0 = fan o'qituvchilari kiritish muddati tugagan payt (sozlama), O'IBDO''ning o'z tugmasi emas; to'liq qamrov sharti 90+ (20%) uchun ham
+- [S] Davomat kiritilgan vaqtni saqlash (indikator «o'sha kuni 10:00 gacha» uchun) — attendance-sync.sql
 - [M] UI: O'IBDO' — «Raundni yakunlash», nomzodlar va hisoblagich; Direktor navbati — admin.html:2361-2436
 - [M] Billing: 100% faqat tasdiqlangan bonus bilan; aka-uka hisobida ham shu — admin.html:7548, 7682-7684, 7811-7822
 - [M] To'langan fakturaga kech tasdiq → avans (credit_ledger sababi bilan); chegirma tasdig'ida ham ishlatiladi — invoice-guards.sql:64-73
@@ -122,6 +160,8 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [M] Navbatlar: pul ta'siri (keyingi oy oldin/keyin) va hujjat bilan
 - [M] Billing: amal qilish muddati; generatsiyada kutilayotgan so'rovlar ro'yxati — admin.html:7770-7840, 8248-8437
 - [S] Hozirgi chegirmalar: bir martalik ro'yxat → «meros» sifatida tasdiqlash yoki qayta tasdiqlash (direktor qarori)
+- [M] Aka-uka 10% YANGI paydo bo'lsa (yangi o'quvchi, telefon yoki familiya o'zgarishi) — so'rov sifatida ikki tasdiqqa tushadi — admin.html:7515-7597
+- [S] (direktor rozi bo'lsa) narx jadvali va `sickRate` o'zgarishi Direktor tasdig'i bilan — staff-access.sql:91-96; audit-4.sql:272-278
 - [M] PG16 rol matritsasi + brauzer e2e
 
 ### Tavsiya bonusi — to'lovdan keyin, Moliya menejeri
@@ -162,8 +202,9 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [S] Har sinf uchun kod varaqalari (ID + kod + QR + o'zbek/rus yo'riqnoma) — admin.html:3013-3018
 - [M] Bog'lanishlar paneli: o'quvchiga ulangan hisoblar, bekor qilish, kodni yangilash — security-2b.sql:70-71
 - [M] D7 to'liq: `app.mask_phone()`, qabulxona uchun niqoblangan ko'rinish, `reveal_parent_phone(sid, which, reason)` (kunlik limit), `pii_access_log`, direktor audit ekrani — reception-access.sql:35-62
-- [M] D6 to'liq: `students_sel` sinflar bo'yicha (o'qituvchi/kurator — o'z sinflari), kassa va moliya uchun `students_billing` ko'rinishi, `camera_id_owner` RPC, `staff_checkins`da o'quvchi skanlari ajratiladi, olimpiada/reyting/fakturalar toraytiriladi; 18 foydalanuvchilik RLS matritsasi qayta — cashier-role.sql:22; auth-hardening.sql:43-48; staff-attendance.sql:43
-- [S] AI xulosalarida ism yuborilmaydi (psevdonim) yoki huquqshunos javobigacha o'chiriladi — ai-assistant/index.cjs:114-189
+- [S] `staff_checkins`: HR/moliya/kassa faqat xodim kamera ID'larini ko'radi, o'quvchi skanlari faqat `class_arrivals` orqali — staff-attendance.sql:43; camera-days.sql:33-46
+- [S] Pilot sinflari: kamida bitta 5–9-sinf, bitta kichik sinf, bitta rus sinfi; pilot o'qituvchilari qog'ozni ham yuritadi — pilot qisqa
+- [S] AI xulosalari qaytadan yoqilsa — faqat psevdonim bilan (huquqshunos javobidan keyin) — ai-assistant/index.cjs:114-189
 - [M] Pilot sinflar ma'lumotida o'qituvchi/kurator/ota-ona policy'lari uchun EXPLAIN va indekslar
 
 ## 3-bosqich — Butun maktab (8-fevral – 2-aprel, ≈35 kun)
@@ -188,13 +229,15 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [L] Kanal marshruti: Telegram birinchi, yetkazilmasa — SMS (+998); kanallar bo'yicha takror himoyasi; sekundiga ~20 xabar
 - [M] Qo'lda «Eslatma» kanalni ko'rsatadi; `/stop`, `/sozlamalar`; `my_chat_member` (bloklash); «To'lov qabul qilindi» xabari; direktor ko'rinishi
 
-### Telefonlar uchun tezlik va kirish
-- [S] nginx gzip/brotli; [S] KaTeX/SheetJS/QR faqat kerakli bo'limda — admin.html:19-22
+### To'lqinlar uchun
+- [L] O'qituvchi/kurator ekranlarining rus tilidagi varianti — rus sinflari to'lqinidan oldin
+- [S] `student_private.parentPhone/parentPhone2` o'zgarishi change_log'ga (Telegram tekshiruvining asosi) — change-log.sql:126
+- [S] D3 birinchi yoqishda `newLookbackDays` o'tgan fakturalar uchun xabar ketmasligi — payments/sms-worker.cjs:169-180
 - [M] supabase-js'ni o'zimizda va versiyasini qotirish; service worker versiyalangan — sb/_core.js:4; sw.js:22-31
-- [S] «Yangi versiya — qayta yuklang» banneri; qurilmalar ro'yxati bo'yicha sinov; pinch-zoom
-- [S] OTP: Eskiz xatosida aniq xato, muvaffaqiyatsiz yuborish limitga sanalmaydi, ~8 s timeout — auth/index.cjs:135-142
-- [S] Maktab IP'si uchun ro'yxatdan o'tish oynasida limit; nginx `limit_req`; SMTP (xorijiy raqamlilar uchun)
+- [S] Qurilmalar ro'yxati bo'yicha sinov; pinch-zoom
+- [S] SMTP (xorijiy raqamli ota-onalar email bilan kiradi — Telegram uchun ham shart)
 - [M] SMS ishlamasa: direktor/HR beradigan bir martalik tiklash kodi
+- [S] Server ishlamasa — qog'oz davomat va kassa kvitansiyasi tartibi; ish vaqtidan keyin navbatchi
 
 ## 4-bosqich — Barqaror ish (apreldan, ≈25 kun)
 - [M] CI: `npm test` (payments, auth, server) + PG16 zanjir + verify-db — deploydan oldin
@@ -206,7 +249,7 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 - [L] Issiq zaxira server (O'zbekistonda) yoki replika + DNS almashtirish tartibi
 - [M] TOTP ikki bosqichli kirish (direktor, moliya, HR)
 - [S] Ma'lumot oqimlari ro'yxati (huquqshunos uchun), [M] huquqshunos ko'rigi, [M] rozilik matni va qabul, [S] saqlash muddatlari
-- [L] O'qituvchi/kurator ekranlari rus tilida; [L] admin.html'ni rol/modullarga bo'lish
+- [L] admin.html'ni rol/modullarga bo'lish
 - [M] Arxitektura va ekspluatatsiya qo'llanmasi (SESSIYA-ISHLARI.md dan)
 
 ## Indikatorlar qayerdan hisoblanadi
