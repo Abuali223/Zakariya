@@ -17,7 +17,14 @@ do $iqror_guard$ begin raise exception 'iqror: bus-access.sql ALOHIDA ishga tush
 --   «Bog'langan» = child_claims'da FAOL yozuv. U faqat claim_child RPC orqali, maktab bergan maxfiy
 --   kod bilan yoziladi (to'g'ridan-to'g'ri INSERT yopiq — cc_ins = false; UPDATE siyosati yo'q).
 --   Kelajakdagi 'pending'/'revoked' holatlari kirish bermaydi (app.owns_child bilan bir xil qoida).
+--   Bog'lanish bola HAQIQATAN ro'yxatda bo'lsa va maktabdan KETMAGAN bo'lsa hisoblanadi: child_claims
+--   o'chirilmaydi (ID qayta berilmasligi uchun belgi), shuning uchun o'chirilgan yoki «chiqdi» (ketish sanasi
+--   kelgan) bolaning sobiq oilasi avtobusni ko'rmaydi. Muzlatilgan bola oilasi — ko'radi (maktabda qoladi).
 --   Xodimlar (app.is_staff — direktor ham shu ichida) avvalgidek ko'radi.
+--
+--   O'CHIRISH (eski xato): bus_positions'da DELETE siyosati yo'q edi — direktor yo'nalishni o'chirganda
+--   admin.html joylashuv qatorini ham o'chirmoqchi bo'lardi, RLS esa 0 qatorni jim «o'chirardi»: oxirgi
+--   joylashuv va haydovchi ismi qolib ketardi. Endi direktor o'chira oladi; avvalgi yetim qatorlar tozalanadi.
 --
 --   Joyi: parent-student-links.sql (child_claims.status) va auth-hardening.sql (is_staff) DAN KEYIN —
 --   bus.sql zanjirda ulardan oldin turadi, shuning uchun yakuniy qoida shu yerda.
@@ -31,13 +38,22 @@ create or replace function app.has_active_child() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select app.uid() is not null and exists(
     select 1 from public.child_claims cc
+      join public.students s on s.id = app.claim_row(cc."studentId", cc.code)   -- bola ro'yxatda (aniq bitta)
      where cc.uid = app.uid()
-       and coalesce(nullif(cc.status, ''), 'active') = 'active')
+       and coalesce(nullif(cc.status, ''), 'active') = 'active'
+       and not (coalesce(s."payStatus", '') = 'chiqdi'
+                and coalesce(nullif(s."stopFrom", ''), '0000-01-01') <= to_char(app.tashkent_now(), 'YYYY-MM-DD')))
 $$;
 grant execute on function app.has_active_child() to anon, authenticated, service_role;
 
 drop policy if exists bp_sel on public.bus_positions;
 create policy bp_sel on public.bus_positions for select
   using (app.is_staff() or app.has_active_child());
+
+drop policy if exists bp_del on public.bus_positions;
+create policy bp_del on public.bus_positions for delete
+  using (app.is_admin());
+-- O'chirilgan yo'nalishlardan qolgan (yetim) joylashuvlar — keraksiz va maxfiy (haydovchi ismi).
+delete from public.bus_positions p where not exists (select 1 from public.bus_routes r where r.id = p.id);
 
 notify pgrst, 'reload schema';

@@ -1045,7 +1045,10 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
 - **Topilma 2 — avtobusning jonli joylashuvi har kirgan hisobga ochiq edi** (`bp_sel`: `app.uid() is not null`) — ro'yxatdan o'tish
   ochiq, ya'ni begona odam ham GPS/tezlik/haydovchi ismini ko'rardi (farzandsiz sinov hisobi bilan tasdiqlandi). **Tuzatma
   `migration/bus-access.sql`:** faqat xodim (`is_staff`) yoki FAOL bog'langan farzandi bor ota-ona (`app.has_active_child()` —
-  claim_child kod bilan yozgan `child_claims`). Kabinet avtobusni avvaldan shunday ko'rsatardi — endi baza ham.
+  claim_child kod bilan yozgan `child_claims`; bola ro'yxatda bo'lishi va «chiqdi» (ketish sanasi kelgan) bo'lmasligi shart —
+  child_claims o'chirilmaydi, aks holda sobiq oila ham ko'rardi). Kabinet avtobusni avvaldan shunday ko'rsatardi — endi baza ham.
+  Eski xato ham yopildi: bus_positions'da DELETE siyosati yo'q edi — yo'nalish o'chirilganda oxirgi joylashuv va haydovchi ismi
+  qolib ketardi (RLS 0 qatorni jim «o'chirardi»); endi direktor o'chiradi (`bp_del`), avvalgi yetim qatorlar deployda tozalanadi.
 - **Topilma 3 — tez bo'lim almashtirishda eski render xatosi** («Imtihonlar»: `Cannot set properties of null`): `openTab` endi
   eski (almashtirilgan) ko'rinish renderining xatosini jim o'tkazadi, joriy bo'lim xatosi avvalgidek konsolda.
 - **Direktor paneli (37 bo'lim):** hammasi ochildi; ochilishda ilova hech narsa yozishga urinmadi; xato javob 0; konsol xatosi 0
