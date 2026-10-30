@@ -67,6 +67,7 @@ declare
   v_ok text[]; v_re text; v_sp text := current_setting('search_path');
   v_skip text[]; r record; v_qual text; v_chk text; v_sql text;
   v_done text[] := '{}'; v_orig jsonb := '{}'; v_probe boolean; t text; c1 text; p jsonb;
+  v_cur text; v_cur_ok boolean;
 begin
   -- Faqat haqiqatan argumentsiz va VOLATILE bo'lmagan funksiyalar (volatile'ni bir marta hisoblash ma'noni o'zgartirardi).
   select array_agg(p.proname order by p.proname) into v_ok
@@ -107,6 +108,20 @@ begin
        and pg_has_role(c.relowner, 'USAGE')
      order by c.relname, p.polname
   loop
+    -- Jadval qulfi KUTILMAYDI: zanjir boshqaradigan jadvallar shu tranzaksiyada allaqachon qulflangan (bir zumda o'tadi);
+    --   qo'lda yaratilgan jadvalni boshqa ulanish band qilgan bo'lsa — kutmasdan o'tkazib yuboriladi (aks holda har
+    --   policy 20 s kutib, shu vaqt davomida zanjir qulflagan asosiy jadvallar — butun sayt — to'xtab turardi).
+    if r.relname::text is distinct from v_cur then
+      v_cur := r.relname::text;
+      begin
+        execute format('lock table public.%I in access exclusive mode nowait', r.relname);
+        v_cur_ok := true;
+      exception when others then
+        v_cur_ok := false;
+        raise warning 'OGOHLANTIRISH: rls-initplan: % band (%) — policy''lari bu safar o''ralmadi (keyingi deployda o''raladi)', r.relname, sqlerrm;
+      end;
+    end if;
+    continue when not v_cur_ok;
     v_qual := pg_temp.iqror_wrap_calls(r.qual, v_re);
     v_chk  := pg_temp.iqror_wrap_calls(r.chk,  v_re);
     continue when v_qual is not distinct from r.qual and v_chk is not distinct from r.chk;

@@ -1044,8 +1044,10 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   ushladi: profilni saqlash buzilardi). PG16, 300 ming qator: anon 6,5 s -> 26 ms; HR oylik 537 -> 7 ms; direktor 186 -> 7 ms.
   Himoyalar (raqib ko'rigidan keyin): matndan ko'rinmaydigan halqa (security_invoker view, boshqa sxema) uchun o'ralgan har
   jadval `authenticated` nomidan EXPLAIN qilinadi — 42P17 bo'lsa asl policy qaytariladi (OGOHLANTIRISH); '...' satr ichidagi
-  matn o'ralmaydi; boshqa rol egasi bo'lgan jadval tegilmaydi; ALTER xatosi (lock timeout) deployni to'xtatmaydi; `chain.sh`
-  rls-initplan.sql zanjirda OXIRGI ekanini majburlaydi (undan keyin qo'shilgan fayl — xato, baza o'zgarmaydi).
+  matn o'ralmaydi; boshqa rol egasi bo'lgan jadval tegilmaydi; jadval qulfi KUTILMAYDI (`lock … nowait`: zanjir jadvallari
+  allaqachon qulflangan — bir zumda; qo'lda yaratilgan band jadval — o'tkazib yuboriladi, aks holda har policy 20 s kutib butun
+  sayt to'xtab turardi); ALTER xatosi deployni to'xtatmaydi; `chain.sh` rls-initplan.sql zanjirda OXIRGI ekanini majburlaydi
+  (undan keyin qo'shilgan fayl — xato, baza o'zgarmaydi).
 - **Topilma 2 — avtobusning jonli joylashuvi har kirgan hisobga ochiq edi** (`bp_sel`: `app.uid() is not null`) — ro'yxatdan o'tish
   ochiq, ya'ni begona odam ham GPS/tezlik/haydovchi ismini ko'rardi (farzandsiz sinov hisobi bilan tasdiqlandi). **Tuzatma
   `migration/bus-access.sql`:** faqat xodim (`is_staff`) yoki FAOL bog'langan farzandi bor ota-ona (`app.has_active_child()` —
@@ -1069,7 +1071,8 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   superuser bo'lmagan deploy roli va qulf kutishi — deploy to'xtamaydi.
 - **Raqib ko'rigi (3 tekshiruvchi: ma'no, xavfsizlik, deploy + tasdiqlovchilar):** xavfsizlik — 2 (ketgan/o'chirilgan bola oilasi
   avtobusni ko'rardi; yo'nalish o'chirilganda joylashuv qolardi) — tuzatildi; ma'no — 2 (matndan ko'rinmaydigan halqa; «oxirgi
-  bo'lishi shart» majburlanmagan) — tuzatildi.
+  bo'lishi shart» majburlanmagan) — tuzatildi; deploy — 1 (zanjirdan tashqari band jadval policy'lari K×20 s qulf kutishi) —
+  tuzatildi (band jadval bilan sinov: zanjir 0,4 s, 1 ogohlantirish; keyingi deployda o'raldi).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
