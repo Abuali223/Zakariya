@@ -203,6 +203,18 @@ for f in imtihon.html verify.html oquv-platforma.html haydovchi.html; do put_pag
 # Eski QR havolalari (/verify?id=...): /verify/ papkasidagi kichik sahifa /verify.html ga yo'naltiradi (nginx o'zgarmaydi).
 sudo test -d "$WEB/verify" || sudo install -d -m 0755 "$WEB/verify"
 put_page verify/index.html
+# Taqdimot sahifalari (Firebase'siz — shim kerak emas). Avval bu ro'yxatda YO'Q edi: saytda iyul (a3009d3/3b30158)
+#   versiyasi qolib, keyingi tuzatishlar (eski Firebase havolalari, taqdimotdagi eskirgan da'volar) hech qachon chiqmagan.
+put_page taqdimot.html
+put_page prezentatsiya.html
+# Statik fayllar (vendor/ kutubxonalar — KaTeX, SheetJS, QR; assets/, uploads/, manifest, ikonalar) — repo ro'yxati bo'yicha;
+#   faqat O'ZGARGANI yoziladi (keraksiz Last-Modified o'zgarishi va kesh tozalanishi bo'lmasin). Avval deploy qilinmasdi.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  git show "FETCH_HEAD:$f" | sudo cmp -s - "$WEB/$f" 2>/dev/null && continue
+  sudo test -d "$WEB/$(dirname "$f")" || sudo install -d -m 0755 "$WEB/$(dirname "$f")"
+  put_page "$f"
+done < <(git ls-tree -r --name-only FETCH_HEAD -- vendor assets uploads manifest.json icon-192.png icon-512.png)
 # Markerlar (deploy landdi-mi?):
 grep -q iqror_pay_outbox "$WEB/admin.html" || { echo "❌ admin.html deploy landmadi"; exit 1; }
 grep -q "apply_payment"  "$WEB/admin.html" || { echo "❌ admin.html eski (apply_payment yo'q)"; exit 1; }

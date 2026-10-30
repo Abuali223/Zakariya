@@ -1073,16 +1073,31 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   avtobusni ko'rardi; yo'nalish o'chirilganda joylashuv qolardi) — tuzatildi; ma'no — 2 (matndan ko'rinmaydigan halqa; «oxirgi
   bo'lishi shart» majburlanmagan) — tuzatildi; deploy — 1 (zanjirdan tashqari band jadval policy'lari K×20 s qulf kutishi) —
   tuzatildi (band jadval bilan sinov: zanjir 0,4 s, 1 ogohlantirish; keyingi deployda o'raldi).
-- **Deploydan keyin (a600573) jonli qayta tekshiruv:** anon — 14 katta jadval 200/0 qator, 0,27–0,36 s (asosan tarmoq; kamera
-  jadvali deploydan oldin 3,3 s'da 500/57014 edi); direktor — staff_checkins 75 111 qatorni 0,3 s'da sanaydi, oylik so'rov (3 252)
-  0,28 s, camera_days ishlaydi; «0 qatorli» PATCH (id = mavjud bo'lmagan qiymat; statement trigger yo'q — hech narsa o'zgarmaydi)
-  14 jadvalda (users ham) — 42P17 yo'q; change_log — deploy hech narsa yozmagan (2 soatdagi 17 yozuv — oddiy to'lov/faktura
-  amallari); admin 37 bo'lim — yozuv urinishi, xato so'rov, konsol xatosi 0; «Imtihonlar» tez almashtirish (5 marta) — xato yo'q;
-  verify.html ishlaydi. Avtobusning «kirgan, lekin xodim emas» holati jonli tekshirilmadi (bunday hisob kerak) — PG16 sinovlari bor.
+- **Deploydan keyin (a600573) jonli qayta tekshiruv:** jonli admin.html — yangi (c1c594c+) versiya; anon — 13 jadval 200/0 qator,
+  0,27–0,36 s (asosan tarmoq), change_log — 401 (ruxsat yo'q, avvalgidek); kamera jadvali (yagona katta jadval, 75 111 qator) deploydan
+  oldingi o'lchovda 3,3 s'da 500/57014 edi. Direktor — sanash so'rovlari (butun jadval / oktyabr 3 252) ~0,3 s, camera_days ishlaydi;
+  admin sahifalari tarmoq tufayli sezilarli tezlashmadi. «0 qatorli» PATCH (id = mavjud bo'lmagan qiymat; statement trigger yo'q —
+  hech narsa o'zgarmaydi) 14 jadvalda (users ham) — rejalashtirishda 42P17/42501 yo'q (haqiqiy saqlash jonli sinalmadi).
+  change_log — oxirgi 2 soatda 17 yozuv, hammasi oddiy to'lov/faktura/avans amallari (deploy yozuvlari ataylab yozilmaydi, shuning
+  uchun tarix ularni ko'rsatmaydi). Admin 37 bo'lim — yozuv urinishi, xato so'rov, konsol xatosi 0; «Imtihonlar» tez almashtirish
+  (5 marta, 120 ms) — xato yo'q; verify.html eski QR havolasidan ochiladi, noma'lum ID rad etiladi. Avtobus: anon 0 / xodim 2 —
+  bular deploydan oldin ham shunday edi; «kirgan, lekin xodim emas» holati jonli tekshirilmadi (bunday hisob kerak), PG16 sinovlari bor.
 - **Yangi topilma — bazadagi NAMUNA yozuvlar** (kod tuzatmasi PUB_DEMO faqat koddagi namunalarni yashiradi; bazaga ko'chirilganlari
   haqiqiy ma'lumot bo'lib ko'rinadi — 1 s'da yo'q, 10 s'da «Aziza Karimova» va b. chiqadi): maktab yutuqlari 5/5, o'quvchilar
   yutuqlari 4/6, yangiliklar 4/7, tadbirlar 2/5, savol-javob 5/9, qabul bosqichlari 4/4, rejalar 0/3 (index.html namuna massivlari
   bilan matn bo'yicha solishtirildi). Direktor ko'rib chiqadi (hujjatda ro'yxat); bosh sahifa raqamlari (440/32/100%) — Sozlamalarda.
+- **Mustaqil ko'rik (skeptik + to'liqlik) bo'yicha qo'shimcha jonli tekshiruv:** anon 62 jadval — 29-oktyabr asosi bilan BIR XIL
+  (faqat kamera jadvali endi xato bermaydi); direktor GET 61×200 + payroll_ids 403 (ruxsat yo'q, avvalgidek); «0 qatorli»
+  PATCH/DELETE/INSERT/UPSERT 56 jadvalda — 42P17 yo'q (nazorat: payroll_ids 403 — bo'sh INSERT ham bazaga yetib boradi; 4 ta
+  butun-sonli ID jadvalda sinov tahlilda to'xtaydi — ular server yozadigan jadvallar); auth/pay/ai xizmatlari 200 (AI modeli
+  claude-opus-4-8 — amaldagi model, adaptive thinking, sampling parametrlari yo'q); change_log maxfiy maydonlari yashirin
+  (3/3); yetim avtobus joylashuvi 0; sms_log tinch soat va «kuniga bitta» buzilmagan. Avtobus qoidasi: 3 faol bog'lanishdan 2 tasi
+  o'tadi, 1 tasi ro'yxatda yo'q o'quvchiga (u ota-ona kabinetda «topilmadi» ko'radi — kod qayta beriladi).
+- **Deploy kamchiligi (tuzatildi): `taqdimot.html` va `prezentatsiya.html` deploy.sh ro'yxatida YO'Q edi** — saytda iyul
+  versiyalari (a3009d3 / 3b30158) qolgan, 1bcabdd (eski Firebase havolalari) va 7ba8190 (taqdimotdagi eskirgan da'volar) chiqmagan.
+  Endi deploy.sh ularni joylaydi; statik fayllar (vendor/ — KaTeX, SheetJS, QR; assets/, uploads/, manifest, ikonalar) ham —
+  faqat o'zgargani yoziladi (hozircha 31/31 saytda repo bilan bir xil); full-deploy.sh tekshiruvi hammasini solishtiradi.
+  Sinov: qum quti — 1-ishga tushirish 49 o'rnatish, 2 .bak; 2-ishga tushirish 0 statik qayta yozish; buzilgan fayl «!!» bilan ushlandi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

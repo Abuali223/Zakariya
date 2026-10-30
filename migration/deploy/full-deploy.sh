@@ -129,7 +129,14 @@ git log -1 --format='    joylangan versiya: %h %s' FETCH_HEAD
 for f in admin.html index.html imtihon.html verify.html oquv-platforma.html haydovchi.html; do
   git show "FETCH_HEAD:$f" | sed "$SHIM" | sudo cmp -s - "$WEB/$f" || { echo "    !! $WEB/$f yangilanmagan"; bad=1; }
 done
-git show FETCH_HEAD:sw.js | sudo cmp -s - "$WEB/sw.js" || { echo "    !! $WEB/sw.js yangilanmagan"; bad=1; }
+for f in sw.js verify/index.html taqdimot.html prezentatsiya.html; do   # shimsiz sahifalar
+  git show "FETCH_HEAD:$f" | sudo cmp -s - "$WEB/$f" || { echo "    !! $WEB/$f yangilanmagan"; bad=1; }
+done
+# Statik fayllar (vendor/, assets/, uploads/, manifest, ikonalar) — deploy.sh ro'yxati bilan bir xil.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  git show "FETCH_HEAD:$f" | sudo cmp -s - "$WEB/$f" 2>/dev/null || { echo "    !! $WEB/$f yangilanmagan"; bad=1; }
+done < <(git ls-tree -r --name-only FETCH_HEAD -- vendor assets uploads manifest.json icon-192.png icon-512.png)
 for f in _core.js firebase-app.js firebase-auth.js firebase-firestore.js firebase-storage.js firebase-analytics.js auth-api.js name-match.js; do
   git show "FETCH_HEAD:sb/$f" | sudo cmp -s - "$WEB/sb/$f" || { echo "    !! $WEB/sb/$f yangilanmagan"; bad=1; }
 done
