@@ -20,7 +20,7 @@ do $iqror_guard$ begin raise exception 'iqror: reattribute-avans.sql ALOHIDA ish
 --   Ishlatish (admin TASDIQLAGACH, har biriга alohida). 5-argument p_ref — TAKRORLANISH
 --   himoyasi: bir xil ref bilan ikki marta ishga tushirilса, 2-marta {dup:true} qaytadi
 --   (pul ikki marta KO'CHMAYDI). Har ko'chirishga NOYOB ref bering:
---     select public.reattribute_avans('IQ-0259','IQ-0256', 2610000, 'Oybekov Muhammadulloh 2B', 'move-2026-09-01');
+--     select public.reattribute_avans('IQ-9259','IQ-9256', 2610000, 'Familiya Ism 2B', 'move-2026-09-01');
 -- =====================================================================
 -- Eski 4-argli imzoni olib tashlaymiz (yangi 5-argli, p_ref bilan almashtiramiz) — aks holда
 -- 4-argli chaqiruv ikkala imzoga mos kelib "function is not unique" xatosini berardi.

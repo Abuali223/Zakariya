@@ -39,8 +39,8 @@ function setup(opts) {
     { id: 'uid_kas', role: 'kassir', status: 'active' },
   ];
   state.students = [
-    { id: 'd255', studentId: 'IQ-0255', name: 'Qobiljonov Muhammadiy' },
-    { id: 'd268', studentId: 'IQ-0268', name: 'Oʻgʻiloy  Qobiljonova' },
+    { id: 'd255', studentId: 'IQ-9255', name: 'Qobuljonov Muhammadiy' },
+    { id: 'd268', studentId: 'IQ-9268', name: 'Oʻgʻiloy  Qobuljonova' },
     { id: 'IQ-0300', studentId: '', name: 'Hujjat Kalitli' },            // studentId bo'sh -> kalit = id
     { id: 'c1', studentId: 'IQ-0400', name: 'Birinchi' },               // to'qnashuv
     { id: 'c2', studentId: 'IQ-0400', name: 'Ikkinchi' },
@@ -79,13 +79,13 @@ function setup(opts) {
     { id: 'i466', parentPhone: '+7 963 768 23 01', parentPhone2: '90 123 45 67' },
   ];
   state.invoices = [
-    { id: 'IQ-0255__2026-09', studentId: 'IQ-0255', month: '2026-09', amount: 2610000, paidAmount: 0, status: 'pending' },
-    { id: 'IQ-0255__2026-10', studentId: 'IQ-0255', month: '2026-10', amount: 2900000, paidAmount: 1000000, status: 'partial' },
-    { id: 'IQ-0255__2026-08', studentId: 'IQ-0255', month: '2026-08', amount: 2900000, paidAmount: 0, status: 'paid' },
-    { id: 'IQ-0255__2026-07', studentId: 'IQ-0255', month: '2026-07', amount: 2900000, paidAmount: 0, status: 'canceled' },
-    { id: 'IQ-0255__2026-06', studentId: 'IQ-0255', month: '2026-06', amount: 2900000, paidAmount: 0, status: 'reversed' },
-    { id: 'IQ-0255__2026-11', studentId: 'IQ-0255', month: '2026-11', amount: 2900000, paidAmount: 0, status: 'pending' },   // kelgusi oy — qarz emas
-    { id: 'IQ-0268__2026-10', studentId: 'IQ-0268', month: '2026-10', amount: 2900000, paidAmount: 0, status: 'pending' },
+    { id: 'IQ-9255__2026-09', studentId: 'IQ-9255', month: '2026-09', amount: 2610000, paidAmount: 0, status: 'pending' },
+    { id: 'IQ-9255__2026-10', studentId: 'IQ-9255', month: '2026-10', amount: 2900000, paidAmount: 1000000, status: 'partial' },
+    { id: 'IQ-9255__2026-08', studentId: 'IQ-9255', month: '2026-08', amount: 2900000, paidAmount: 0, status: 'paid' },
+    { id: 'IQ-9255__2026-07', studentId: 'IQ-9255', month: '2026-07', amount: 2900000, paidAmount: 0, status: 'canceled' },
+    { id: 'IQ-9255__2026-06', studentId: 'IQ-9255', month: '2026-06', amount: 2900000, paidAmount: 0, status: 'reversed' },
+    { id: 'IQ-9255__2026-11', studentId: 'IQ-9255', month: '2026-11', amount: 2900000, paidAmount: 0, status: 'pending' },   // kelgusi oy — qarz emas
+    { id: 'IQ-9268__2026-10', studentId: 'IQ-9268', month: '2026-10', amount: 2900000, paidAmount: 0, status: 'pending' },
     { id: 'IQ-0300__2026-10', studentId: 'IQ-0300', month: '2026-10', amount: 100000, paidAmount: 0, status: 'pending' },
     { id: 'IQ-0400__2026-10', studentId: 'IQ-0400', month: '2026-10', amount: 100000, paidAmount: 0, status: 'pending' },
     { id: 'IQ-0500__2026-10', studentId: 'IQ-0500', month: '2026-10', amount: 100000, paidAmount: 0, status: 'pending' },
@@ -111,80 +111,80 @@ function setup(opts) {
   sec('yordamchilar');
   ok('debtOf partial', debtOf({ amount: 2900000, paidAmount: 1000000, status: 'partial' }) === 1900000);
   ok('debtOf paid/canceled/reversed = 0', [ 'paid', 'canceled', 'reversed' ].every(s => debtOf({ amount: 5, paidAmount: 0, status: s }) === 0));
-  ok('smsName apostrof + bo\'shliq', smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova", smsName('Oʻgʻiloy  Qobiljonova'));
+  ok('smsName apostrof + bo\'shliq', smsName('Oʻgʻiloy  Qobuljonova') === "O'g'iloy Qobuljonova", smsName('Oʻgʻiloy  Qobuljonova'));
   ok('Eskiz moderatsiya xatosi tushunarli (naqsh + tekshiruv buyrug\'i)', /TASDIQLANGAN shablon naqshiga/.test(humanEskizError('Этот смс текст еще не прошел модерацию')) && /eskiz-shablon\.cjs/.test(humanEskizError('Этот смс текст еще не прошел модерацию')));
 
   sec('kim yubora oladi');
   { const { R, sent } = setup();
-    ok('JWT yo\'q -> rad', /Seans/.test((await R({ studentId: 'IQ-0255' })).error || ''));
-    ok('o\'qituvchi -> rad', /Ruxsat/.test((await R({ jwt: 'uid_tch', studentId: 'IQ-0255' })).error || ''));
-    ok('kassir (standart) -> rad', /Ruxsat/.test((await R({ jwt: 'uid_kas', studentId: 'IQ-0255' })).error || ''));
-    ok('bloklangan direktor -> rad', /Ruxsat/.test((await R({ jwt: 'uid_blk', studentId: 'IQ-0255' })).error || ''));
-    ok('noma\'lum foydalanuvchi -> rad', /Ruxsat/.test((await R({ jwt: 'uid_xxx', studentId: 'IQ-0255' })).error || ''));
+    ok('JWT yo\'q -> rad', /Seans/.test((await R({ studentId: 'IQ-9255' })).error || ''));
+    ok('o\'qituvchi -> rad', /Ruxsat/.test((await R({ jwt: 'uid_tch', studentId: 'IQ-9255' })).error || ''));
+    ok('kassir (standart) -> rad', /Ruxsat/.test((await R({ jwt: 'uid_kas', studentId: 'IQ-9255' })).error || ''));
+    ok('bloklangan direktor -> rad', /Ruxsat/.test((await R({ jwt: 'uid_blk', studentId: 'IQ-9255' })).error || ''));
+    ok('noma\'lum foydalanuvchi -> rad', /Ruxsat/.test((await R({ jwt: 'uid_xxx', studentId: 'IQ-9255' })).error || ''));
     ok('hech narsa yuborilmadi', sent.length === 0);
-    const f = await R({ jwt: 'uid_fin', studentId: 'IQ-0255', preview: true });
+    const f = await R({ jwt: 'uid_fin', studentId: 'IQ-9255', preview: true });
     ok('moliya menejeri (status bo\'sh = faol) -> ruxsat', f.ok === true, f); }
   { const { R } = setup({ smsCfg: { remindRoles: ['director', 'finance_mgr', 'kassir'] } });
-    ok('config remindRoles: kassir qo\'shilsa -> ruxsat', (await R({ jwt: 'uid_kas', studentId: 'IQ-0255', preview: true })).ok === true); }
+    ok('config remindRoles: kassir qo\'shilsa -> ruxsat', (await R({ jwt: 'uid_kas', studentId: 'IQ-9255', preview: true })).ok === true); }
 
   sec('preview — qarz SERVERDA, hech narsa yuborilmaydi/yozilmaydi');
   { const { R, sent, state } = setup();
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('ok + preview', p.ok && p.preview, p);
     ok('qarz = 2 610 000 + 1 900 000 (to\'langan/bekor/qaytarilgan/kelgusi oy hisobga olinmaydi)', p.due === 4510000, p.due);
     ok('oylar: 2026-09, 2026-10', JSON.stringify(p.months) === JSON.stringify(['2026-09', '2026-10']), p.months);
     ok('telefon chiroyli', p.phone === '+998 70 014 37 77', p.phone);
     // Eskiz naqshiga sig'adigan shakl: oylar bitta so'z (09.2026,10.2026), summa bo'shliqsiz (4510000).
-    ok('matn: ism + oylar + summa', p.message === "Eslatma: Qobiljonov Muhammadiy uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 4510000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", p.message);
+    ok('matn: ism + oylar + summa', p.message === "Eslatma: Qobuljonov Muhammadiy uchun 09.2026,10.2026 oy to'lovi hali yopilmagan (qarz: 4510000 so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy", p.message);
     ok('bugun hali yuborilmagan', p.today === null);
     ok('SMS ketmadi', sent.length === 0);
     ok('jurnalga yozilmadi', state.sms_log.length === 0); }
 
   sec('yuborish — kuniga bitta, jurnal');
   { const { R, sent, state } = setup();
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('yuborildi', r.ok && r.sent, r);
     ok('Eskiz: kanonik telefon', sent.length === 1 && sent[0].phone === '998700143777', sent);
-    const row = state.sms_log.find(x => x.id === 'remind__IQ-0255__2026-10-16');
+    const row = state.sms_log.find(x => x.id === 'remind__IQ-9255__2026-10-16');
     ok('jurnal: sent, remind, sentBy, attempts=1', row && row.status === 'sent' && row.type === 'remind' && row.sentBy === 'uid_dir' && row.attempts === 1 && row.providerId === 'esk1', row);
-    ok('jurnal: oxirgi qarz fakturasi + oy', row && row.invoiceId === 'IQ-0255__2026-10' && row.month === '2026-10', row);
-    const r2 = await R({ jwt: 'uid_fin', studentId: 'IQ-0255' });
+    ok('jurnal: oxirgi qarz fakturasi + oy', row && row.invoiceId === 'IQ-9255__2026-10' && row.month === '2026-10', row);
+    const r2 = await R({ jwt: 'uid_fin', studentId: 'IQ-9255' });
     ok('shu kuni 2-marta -> already=sent, SMS yo\'q', !r2.ok && r2.already === 'sent' && sent.length === 1, r2);
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview: bugun yuborilgan', p.today && p.today.status === 'sent', p.today); }
 
   sec('Toshkent sanasi (UTC 20:00 = ertasi kun)');
   { const { R, state } = setup({ now: Date.parse('2026-10-15T20:30:00Z'), smsCfg: { sendHours: false } });   // tunda — tinch soat o'chirilgan
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
-    ok('id Toshkent sanasi bilan', !!state.sms_log.find(x => x.id === 'remind__IQ-0268__2026-10-16'), state.sms_log.map(x => x.id)); }
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
+    ok('id Toshkent sanasi bilan', !!state.sms_log.find(x => x.id === 'remind__IQ-9268__2026-10-16'), state.sms_log.map(x => x.id)); }
   { const { R } = setup({ now: Date.parse('2026-10-31T19:30:00Z') });   // Toshkent: 2026-11-01 00:30
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('oy chegarasi: Toshkentda noyabr boshlandi -> noyabr fakturasi ham qarz', p.months.includes('2026-11') && p.due === 4510000 + 2900000, p); }
 
   sec('Eskiz xatosi -> failed, qayta urinish, maks. urinish');
   { const { R, sent, state } = setup({ failNext: 1 });
-    const r1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const r1 = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('1-urinish xato (moderatsiya — tushunarli xabar)', !r1.ok && /shablon naqshiga/.test(r1.error || ''), r1);
-    const row = () => state.sms_log.find(x => x.id === 'remind__IQ-0268__2026-10-16');
+    const row = () => state.sms_log.find(x => x.id === 'remind__IQ-9268__2026-10-16');
     ok('jurnal: failed, attempts=1', row().status === 'failed' && row().attempts === 1, row());
-    const r2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const r2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('2-urinish yuborildi', r2.ok && sent.length === 1, r2);
     ok('jurnal: sent, attempts=2', row().status === 'sent' && row().attempts === 2, row());
     ok('2-raqam ishlatildi (1-raqam yaroqsiz)', sent[0].phone === '998901234567', sent[0]);
-    ok('ism SMS uchun tozalandi', /O'g'iloy Qobiljonova uchun 10\.2026/.test(sent[0].msg), sent[0].msg); }
+    ok('ism SMS uchun tozalandi', /O'g'iloy Qobuljonova uchun 10\.2026/.test(sent[0].msg), sent[0].msg); }
   { const { R, sent, state } = setup({ failNext: 10, smsCfg: { remindMaxRetries: 2 } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' }); await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
-    const r3 = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' }); await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
+    const r3 = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('maks. urinishdan keyin rad (Eskiz chaqirilmaydi)', !r3.ok && /2 marta urinildi/.test(r3.error || '') && sent.length === 0, r3);
     ok('attempts=2 da qoldi', state.sms_log[0].attempts === 2, state.sms_log[0]); }
   { const { R, sent, state } = setup();
-    state.sms_log.push({ id: 'remind__IQ-0268__2026-10-16', status: 'sending', attempts: 1, createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    state.sms_log.push({ id: 'remind__IQ-9268__2026-10-16', status: 'sending', attempts: 1, createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('noaniq (sending) holat -> qayta YUBORILMAYDI', !r.ok && r.already === 'sending' && sent.length === 0, r); }
 
   sec('parallel bosish — faqat BITTA SMS');
   { const { R, sent } = setup();
-    const rs = await Promise.all([1, 2, 3].map(() => R({ jwt: 'uid_dir', studentId: 'IQ-0255' })));
+    const rs = await Promise.all([1, 2, 3].map(() => R({ jwt: 'uid_dir', studentId: 'IQ-9255' })));
     ok('3 parallel so\'rov -> 1 SMS', sent.length === 1, sent.length);
     ok('qolganlari already=sending', rs.filter(x => x.ok).length === 1 && rs.filter(x => x.already === 'sending').length === 2, rs); }
 
@@ -212,27 +212,27 @@ function setup(opts) {
 
   sec('limitlar, DRY, shablon, avtomatik eslatma');
   { const { R, sent } = setup({ smsCfg: { remindMaxPerHour: 1 } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('soatlik limit (foydalanuvchi)', !r.ok && /Soatiga 1/.test(r.error || '') && sent.length === 1, r);
-    const r2 = await R({ jwt: 'uid_fin', studentId: 'IQ-0268' });
+    const r2 = await R({ jwt: 'uid_fin', studentId: 'IQ-9268' });
     ok('boshqa foydalanuvchining limiti alohida', r2.ok && sent.length === 2, r2); }
   { const { R, sent } = setup({ smsCfg: { remindMaxPerDay: 1 } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    const r = await R({ jwt: 'uid_fin', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    const r = await R({ jwt: 'uid_fin', studentId: 'IQ-9268' });
     ok('kunlik umumiy limit', !r.ok && /chegarasi/.test(r.error || '') && sent.length === 1, r); }
   { const { R, state } = setup({ dry: true });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('DRY: ok+dry, jurnal yozilmaydi', r.ok && r.dry && state.sms_log.length === 0, r); }
   { const { R, sent } = setup({ smsCfg: { templates: { remind: 'IQROR: {name} — qarz {due} so\'m ({month}).' } } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    ok('templates.remind ishlatiladi', sent[0].msg === "IQROR: Qobiljonov Muhammadiy — qarz 4510000 so'm (09.2026,10.2026).", sent[0].msg); }
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    ok('templates.remind ishlatiladi', sent[0].msg === "IQROR: Qobuljonov Muhammadiy — qarz 4510000 so'm (09.2026,10.2026).", sent[0].msg); }
   { const { R, sent } = setup({ smsCfg: { templates: { debt: 'D {name} {due}' } } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
-    ok('remind yo\'q -> templates.debt', sent[0].msg === 'D Qobiljonov Muhammadiy 4510000', sent[0].msg); }
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    ok('remind yo\'q -> templates.debt', sent[0].msg === 'D Qobuljonov Muhammadiy 4510000', sent[0].msg); }
   { const { R, state } = setup();
-    state.sms_log.push({ id: 'IQ-0255__2026-10__debt__2026-10-16', studentId: 'IQ-0255', type: 'debt', status: 'sent', createdAt: '2026-10-16T04:30:00.000Z' });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    state.sms_log.push({ id: 'IQ-9255__2026-10__debt__2026-10-16', studentId: 'IQ-9255', type: 'debt', status: 'sent', createdAt: '2026-10-16T04:30:00.000Z' });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview: bugun avtomatik eslatma ham ketgan', p.autoToday === 1, p.autoToday); }
 
   sec('ko\'rik tuzatmalari: atomik limit, noaniq holat, kanonik qulf, fail-closed sozlama');
@@ -244,10 +244,10 @@ function setup(opts) {
     const more = await R({ jwt: 'uid_dir', studentId: 'IQ-1005' });
     ok('ketma-ket: limitga yetgach rad', !more.ok || sent.length <= 2, more); }
   { const { R, sent, state } = setup({ throwNext: 1 });
-    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('Eskiz istisno (timeout) -> noaniq xabar', !a.ok && /noaniq/.test(a.error || ''), a);
     ok('jurnal: unknown', state.sms_log[0] && state.sms_log[0].status === 'unknown', state.sms_log[0]);
-    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('noaniq holatdan keyin bugun qayta YUBORILMAYDI', !b.ok && b.already === 'sending' && sent.length === 0, b); }
   { const { R, sent } = setup();
     const a = await R({ jwt: 'uid_dir', studentId: 'dOld' });
@@ -255,12 +255,12 @@ function setup(opts) {
     const b = await R({ jwt: 'uid_dir', studentId: 'IQ-0900' });
     ok('kanonik kalit bilan 2-marta -> already (bitta qulf)', !b.ok && b.already === 'sent' && sent.length === 1, b); }
   { const { R } = setup({ smsCfg: { remindRoles: [] } });
-    ok('remindRoles: [] -> hech kim', /Ruxsat/.test((await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true })).error || '')); }
+    ok('remindRoles: [] -> hech kim', /Ruxsat/.test((await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true })).error || '')); }
   { const { R, sent } = setup({ smsCfg: { remindMaxPerHour: 0 } });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('remindMaxPerHour: 0 -> o\'chirilgan', !r.ok && /o‘chirilgan/.test(r.error || '') && sent.length === 0, r); }
   { const { R, sent } = setup({ smsCfg: { remindMaxPerHour: 'abc', remindMaxPerDay: -5, remindMaxRetries: 'x' } });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('yaroqsiz sozlama -> standart (NaN cheksiz emas), yuboriladi', r.ok && sent.length === 1, r); }
   { const { cfgNum } = require('./sms-remind.cjs');
     ok('cfgNum', cfgNum('abc', 60) === 60 && cfgNum(-1, 5) === 5 && cfgNum(0, 5) === 0 && cfgNum('7', 5) === 7 && cfgNum(undefined, 3) === 3 && cfgNum(null, 3) === 3); }
@@ -270,15 +270,15 @@ function setup(opts) {
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0821', preview: true });
     ok('hujjat id boshqa bolaning studentId\'si -> uning fakturasi QO\'SHILMAYDI', p.ok && p.due === 100000 && JSON.stringify(p.months) === '["2026-10"]', p); }
   { const { R, sent, state } = setup({ throwNext: 1, throwErr: () => { const e = new Error('Eskiz login muvaffaqiyatsiz: 401'); e.stage = 'login'; return e; } });
-    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('login xatosi -> failed (aniq ketmagan)', !a.ok && state.sms_log[0].status === 'failed', state.sms_log[0]);
-    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('login xatosidan keyin qayta urinish yuborildi', b.ok && sent.length === 1, b); }
   { const { R, state } = setup({ throwNext: 1, throwErr: () => { const e = new Error('connect ECONNREFUSED'); e.code = 'ECONNREFUSED'; e.stage = 'send'; return e; } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('ECONNREFUSED -> failed (ulanish bo\'lmagan)', state.sms_log[0].status === 'failed', state.sms_log[0]); }
   { const { R, state } = setup({ throwNext: 1, throwErr: () => { const e = new Error('socket hang up'); e.code = 'ECONNRESET'; e.stage = 'send'; return e; } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('ECONNRESET yuborish paytida -> unknown', state.sms_log[0].status === 'unknown', state.sms_log[0]); }
   { const { R } = setup();
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0606', preview: true });
@@ -288,23 +288,23 @@ function setup(opts) {
 
   sec('UI ko\'rigi tuzatmalari: preview bloklash sababi, tasdiq bilan bog\'lash');
   { const { R, sent, state } = setup();
-    const p0 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p0 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview: bloklanmagan', p0.blocked === null && p0.blockedMsg === '', p0);
-    const bad = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message.replace('4510000', '9999999'), phone: p0.phone } });
+    const bad = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p0.message.replace('4510000', '9999999'), phone: p0.phone } });
     ok('tasdiqlangan matn farq qiladi -> changed, SMS yo\'q', !bad.ok && bad.changed && sent.length === 0 && state.sms_log.length === 0, bad);
-    const bad2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message, phone: '+998 90 000 00 00' } });
+    const bad2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p0.message, phone: '+998 90 000 00 00' } });
     ok('tasdiqlangan telefon farq qiladi -> changed', !bad2.ok && bad2.changed && sent.length === 0, bad2);
-    const good = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p0.message, phone: p0.phone } });
+    const good = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p0.message, phone: p0.phone } });
     ok('mos -> yuborildi', good.ok && sent.length === 1, good);
-    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview: blocked=sent', p1.blocked === 'sent' && /allaqachon/.test(p1.blockedMsg), p1); }
   { const { R, state } = setup();
-    state.sms_log.push({ id: 'remind__IQ-0268__2026-10-16', status: 'unknown', attempts: 1, createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0268', preview: true });
+    state.sms_log.push({ id: 'remind__IQ-9268__2026-10-16', status: 'unknown', attempts: 1, createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9268', preview: true });
     ok('preview: noaniq -> blocked=uncertain', p.blocked === 'uncertain', p); }
   { const { R, state } = setup({ smsCfg: { remindMaxRetries: 1 } });
-    state.sms_log.push({ id: 'remind__IQ-0268__2026-10-16', status: 'failed', attempts: 1, error: 'x', createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0268', preview: true });
+    state.sms_log.push({ id: 'remind__IQ-9268__2026-10-16', status: 'failed', attempts: 1, error: 'x', createdAt: '2026-10-16T04:00:00.000Z', type: 'remind' });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9268', preview: true });
     ok('preview: urinishlar tugagan -> blocked=retries', p.blocked === 'retries', p); }
   { const { R } = setup();
     ok('preview: qarz yo\'q -> nodebt', (await R({ jwt: 'uid_dir', studentId: 'IQ-0700', preview: true })).blocked === 'nodebt');
@@ -312,17 +312,17 @@ function setup(opts) {
 
   sec('deploy ko\'rigi tuzatmalari: Eskiz 5xx/noaniq javob, qayta urinish limiti');
   { const { R, sent, state } = setup({ resultNext: [{ ok: false, error: 'http_502', httpStatus: 502, ambiguous: true }] });
-    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const a = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('Eskiz 502 -> unknown (noaniq)', !a.ok && /noaniq/.test(a.error || '') && state.sms_log[0].status === 'unknown', { a, row: state.sms_log[0] });
-    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const b = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('noaniq 502 dan keyin qayta YUBORILMAYDI', !b.ok && b.already === 'sending' && sent.length === 0, b); }
   { const { R, state } = setup({ resultNext: [{ ok: false, error: 'Этот смс текст еще не прошел модерацию', httpStatus: 400, ambiguous: false }] });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('Eskiz 400 JSON rad -> failed (aniq)', state.sms_log[0].status === 'failed', state.sms_log[0]); }
   { const { R, sent, state } = setup({ smsCfg: { remindMaxPerHour: 1 }, failNext: 1 });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });                                   // failed (1 qator)
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });                                   // failed (1 qator)
     state.sms_log.push({ id: 'remind__X__2026-10-16', type: 'remind', sentBy: 'uid_dir', status: 'sent', createdAt: new Date(T0 - 60e3).toISOString() });
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0268' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9268' });
     ok('qayta urinish ham soatlik limitga bo\'ysunadi', !r.ok && /Soatiga 1/.test(r.error || '') && sent.length === 0, r); }
 
 
@@ -342,74 +342,74 @@ function setup(opts) {
   sec('Eskiz shablon NAQSHIGA moslash (ism/oy/summa)');
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const { R, sent, eskiz } = setup({ templates: { ok: true, list: [{ id: 7, status: 'service', template: P1, original: '' }] } });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('naqsh ismga 1 so\'z ruxsat beradi -> ism qisqartirildi (Muhammadiy), mos', p.ok && p.tplFit === true && p.nameShort === true && /^Eslatma: Muhammadiy uchun 09\.2026,10\.2026 oy/.test(p.message) && /qarz: 4510000 so'm/.test(p.message), p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p.message, phone: p.phone } });
     ok('yuborildi aynan ko\'rsatilgan matn bilan', r.ok && sent.length === 1 && sent[0].msg === p.message, { r, sent });
     ok('naqshlar keshlanadi (preview+yuborish = 1 so\'rov)', eskiz.tplCalls() === 1, eskiz.tplCalls()); }
   { const P2 = "Eslatma: %w{1,4} uchun %w oy to'lovi hali yopilmagan (qarz: %d{1,3} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const { R } = setup({ templates: { ok: true, list: [{ id: 8, status: 'service', template: P2 }] } });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
-    ok('naqsh 1–4 so\'z -> to\'liq ism', p.ok && p.tplFit === true && p.nameShort === false && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p.message); }
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('naqsh 1–4 so\'z -> to\'liq ism', p.ok && p.tplFit === true && p.nameShort === false && /^Eslatma: Qobuljonov Muhammadiy uchun/.test(p.message), p.message); }
   { const { R } = setup({ templates: { ok: true, list: [{ id: 9, status: 'moderation', template: "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy" }] } });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
-    ok('faqat moderatsiyadagi shablon -> tplFit=false (ogohlantirish), matn to\'liq', p.ok && p.tplFit === false && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p); }
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('faqat moderatsiyadagi shablon -> tplFit=false (ogohlantirish), matn to\'liq', p.ok && p.tplFit === false && /^Eslatma: Qobuljonov Muhammadiy uchun/.test(p.message), p); }
   { const { R } = setup({ templates: { ok: false, error: 'http_500' } });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
-    ok('naqshlar o\'qilmadi -> tplFit=null, oddiy matn', p.ok && p.tplFit === null && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p.message), p); }
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('naqshlar o\'qilmadi -> tplFit=null, oddiy matn', p.ok && p.tplFit === null && /^Eslatma: Qobuljonov Muhammadiy uchun/.test(p.message), p); }
   { const { R } = setup({ templates: () => { throw new Error('net'); } });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('naqsh o\'qishda istisno -> eslatma baribir ishlaydi', p.ok && p.tplFit === null, p); }
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const slow = ms => () => new Promise(res => setTimeout(() => res({ ok: true, list: [{ id: 7, status: 'service', template: P1 }] }), ms));
     const { R, eskiz } = setup({ templates: slow(200), tplWaitMs: 30 });
     const t0 = Date.now();
-    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
-    ok('Eskiz sekin -> admin kutib qolmaydi (naqshsiz, tplFit=null)', p1.ok && p1.tplFit === null && Date.now() - t0 < 150 && /^Eslatma: Qobiljonov Muhammadiy uchun/.test(p1.message), { ms: Date.now() - t0, p1 });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('Eskiz sekin -> admin kutib qolmaydi (naqshsiz, tplFit=null)', p1.ok && p1.tplFit === null && Date.now() - t0 < 150 && /^Eslatma: Qobuljonov Muhammadiy uchun/.test(p1.message), { ms: Date.now() - t0, p1 });
     await new Promise(r => setTimeout(r, 260));
-    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('fondagi so\'rov keshni to\'ldirdi -> keyingi oynada mos matn, Eskiz\'ga 1 so\'rov', p2.tplFit === true && /^Eslatma: Muhammadiy uchun/.test(p2.message) && eskiz.tplCalls() === 1, { p2, calls: eskiz.tplCalls() });
-    const s = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p1.message, phone: p1.phone } });
+    const s = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p1.message, phone: p1.phone } });
     ok('eski (naqshsiz) oynadagi matn bilan tasdiq -> changed (yangi matnni qayta tasdiqlash)', !s.ok && s.changed && s.message === p2.message, s); }
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const { R, eskiz } = setup({ templates: () => new Promise(res => setTimeout(() => res({ ok: true, list: [{ id: 7, status: 'service', template: P1 }] }), 40)), tplWaitMs: 2000 });
-    const [a, b] = await Promise.all([R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true }), R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true })]);
+    const [a, b] = await Promise.all([R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true }), R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true })]);
     ok('parallel oynalar bitta Eskiz so\'rovini kutadi', a.tplFit === true && b.tplFit === true && eskiz.tplCalls() === 1, { a: a.tplFit, b: b.tplFit, calls: eskiz.tplCalls() }); }
   { let n = 0;
     const { R, eskiz, setClock } = setup({ templates: () => { n++; if (n === 1) throw new Error('sinxron xato'); return { ok: true, list: [] }; } });
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     setClock(Date.parse('2026-10-16T05:02:00.000Z'));                 // 1 daqiqadan keyin (xato keshi tugadi)
-    await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('xatodan keyin naqshlar QAYTA so\'raladi (osilib qolgan va\'da yo\'q)', eskiz.tplCalls() === 2, eskiz.tplCalls()); }
   // Ko'rik (R6): yangilash xato/sekin bo'lsa — oxirgi YAXSHI ro'yxat ishlatiladi (mos matn yo'qolmasin)
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const LIST = { ok: true, list: [{ id: 7, status: 'service', template: P1 }] };
     let n = 0;
     const { R, eskiz, setClock } = setup({ templates: () => { n++; return Promise.resolve(n === 1 ? LIST : { ok: false, error: 'http_502' }); } });
-    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     setClock(T0 + 601e3);                                                       // 10 daqiqa o'tdi -> yangilash, Eskiz 502
-    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('yangilash xato -> oxirgi yaxshi ro\'yxat: mos matn saqlanadi (Muhammadiy, tplFit=true)', p1.tplFit === true && p2.tplFit === true && p2.message === p1.message && eskiz.tplCalls() === 2, { p1: p1.message, p2: p2.message, fit: p2.tplFit, calls: eskiz.tplCalls() });
-    setClock(T0 + 601e3 + 30e3); await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    setClock(T0 + 601e3 + 30e3); await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('xatodan keyin 1 daqiqa ichida qayta so\'ralmaydi', eskiz.tplCalls() === 2, eskiz.tplCalls());
-    setClock(T0 + 601e3 + 61e3); const p3 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    setClock(T0 + 601e3 + 61e3); const p3 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('1 daqiqadan keyin yana urinadi, eski ro\'yxat bilan ishlayveradi', eskiz.tplCalls() === 3 && p3.tplFit === true, { calls: eskiz.tplCalls(), fit: p3.tplFit }); }
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const LIST = { ok: true, list: [{ id: 7, status: 'service', template: P1 }] };
     let n = 0;
     const { R, setClock } = setup({ tplWaitMs: 30, templates: () => { n++; return n === 1 ? Promise.resolve(LIST) : new Promise(res => setTimeout(() => res(LIST), 200)); } });
-    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p1 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     setClock(T0 + 601e3);
-    const t0 = Date.now(); const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const t0 = Date.now(); const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('yangilash sekin -> admin kutmaydi, eski ro\'yxat bilan mos matn', p2.tplFit === true && p2.message === p1.message && Date.now() - t0 < 150, { ms: Date.now() - t0, fit: p2.tplFit });
     await new Promise(r => setTimeout(r, 260)); }
   // Ko'rik (R6): sinov rejimi (yuborish o'chiq) — naqshlar tplReader orqali o'qiladi: sinov matni = haqiqiy matn
   { const P1 = "Eslatma: %w uchun %w oy to'lovi hali yopilmagan (qarz: %d so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
     const reader = { n: 0, templates: async () => { reader.n++; return { ok: true, list: [{ id: 7, status: 'service', template: P1 }] }; } };
     const { R, sent } = setup({ dry: true, tplReader: reader });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('sinov rejimi: naqshlar o\'qiladi -> haqiqiy matn (Muhammadiy), tplFit=true', p.ok && p.dry === true && p.tplFit === true && p.nameShort === true && /^Eslatma: Muhammadiy uchun/.test(p.message), p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p.message, phone: p.phone } });
     ok('sinov rejimi: tasdiq -> dry, hech narsa yuborilmadi, naqshlar keshdan', r.ok && r.dry === true && sent.length === 0 && reader.n === 1, { r, n: reader.n }); }
   ok('humanEskizError bad_phone:intl', /faqat O‘zbekiston/.test(humanEskizError('bad_phone:intl')));
 
@@ -418,29 +418,29 @@ function setup(opts) {
     state.sms_log.push({ id: 'INV_X__new', phone: '998700143777', type: 'new', status: 'sent', createdAt: '2026-10-16T04:30:00.000Z' });
     state.sms_log.push({ id: 'INV_Y__new', phone: '998700143777', type: 'new', status: 'failed', createdAt: '2026-10-16T04:31:00.000Z' });
     state.sms_log.push({ id: 'INV_Z__new', phone: '998700143777', type: 'new', status: 'sent', createdAt: '2026-10-15T10:00:00.000Z' });
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview: phoneToday=1 (bugungi sent; failed va kechagi sanalmaydi), bloklanmagan', p.phoneToday === 1 && p.blocked === null, p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p.message, phone: p.phone } });
     ok('yuborish bloklanmaydi (admin qarori)', r.ok && sent.length === 1, r);
-    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p2 = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('o‘z eslatmasi phoneToday ga qo‘shilmaydi', p2.phoneToday === 1 && p2.blocked === 'sent', p2); }
 
   sec('Tinch soat (Toshkent 09:00–20:00): ota-onani kechasi bezovta qilmaslik');
   { const { R, sent, state } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });   // Toshkent 21:30
-    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', preview: true });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
     ok('preview tunda ishlaydi: matn bor, blocked=quiet, sababi yozilgan', p.ok && p.preview && !!p.message && p.blocked === 'quiet' && /Tinch soat/.test(p.blockedMsg) && /9:00–20:00/.test(p.blockedMsg), p);
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255', expect: { message: p.message, phone: p.phone } });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p.message, phone: p.phone } });
     ok('tunda yuborish rad: SMS yo\'q, jurnal yo\'q', !r.ok && /Tinch soat/.test(r.error) && sent.length === 0 && state.sms_log.length === 0, r); }
   { const { R, sent } = setup({ now: Date.parse('2026-10-16T03:59:00Z') });   // Toshkent 08:59
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('08:59 — hali tinch soat', !r.ok && /Tinch soat/.test(r.error) && sent.length === 0, r); }
   { const { R, sent } = setup({ now: Date.parse('2026-10-16T04:00:00Z') });   // Toshkent 09:00
-    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-0255' });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
     ok('09:00 — yuboriladi', r.ok && sent.length === 1, r); }
   { const { R, sent } = setup({ now: Date.parse('2026-10-16T14:59:00Z') });   // Toshkent 19:59
-    ok('19:59 — yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-0255' })).ok && sent.length === 1); }
+    ok('19:59 — yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-9255' })).ok && sent.length === 1); }
   { const { R, sent } = setup({ now: Date.parse('2026-10-16T16:30:00Z'), smsCfg: { sendHours: [8, 22] } });   // 21:30, oyna 8–22
-    ok('sozlangan oyna [8,22] — 21:30 da yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-0255' })).ok && sent.length === 1); }
+    ok('sozlangan oyna [8,22] — 21:30 da yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-9255' })).ok && sent.length === 1); }
   { const { R, sent } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0700', preview: true });
     ok('qarz yo\'q bo\'lsa — avvalgi sabab (nodebt) ustun', p.blocked === 'nodebt' && sent.length === 0, p); }

@@ -35,7 +35,7 @@ ok('smsMonths: yil chegarasi (dekabr -> yanvar) ketma-ket', T.smsMonths(['2025-1
   && T.smsMonths(['2025-12', '2026-01']) === '12.2025,01.2026');
 ok('smsMonths har doim bitta so\'z', ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'].every((_, i, arr) => !/\s/.test(T.smsMonths(arr.slice(0, i + 1)))));
 ok('nameVariants', JSON.stringify(T.nameVariants('Aliyeva  Malika')) === JSON.stringify(['Aliyeva Malika', 'Malika', 'Aliyeva'])
-  && JSON.stringify(T.nameVariants("Qobiljonov Muhammadiy Akmal o'g'li")) === JSON.stringify(["Qobiljonov Muhammadiy Akmal o'g'li", 'Qobiljonov Muhammadiy', 'Muhammadiy', 'Qobiljonov'])
+  && JSON.stringify(T.nameVariants("Qobuljonov Muhammadiy Akmal o'g'li")) === JSON.stringify(["Qobuljonov Muhammadiy Akmal o'g'li", 'Qobuljonov Muhammadiy', 'Muhammadiy', 'Qobuljonov'])
   && JSON.stringify(T.nameVariants('Ali')) === JSON.stringify(['Ali']) && JSON.stringify(T.nameVariants('')) === '[]');
 
 // composeSms

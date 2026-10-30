@@ -11,7 +11,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // ---- O'zbek kirill -> lotin. 'е' so'z boshida, unli yoki ъ/ь dan keyin -> 'ye' (Турғунбоева -> turg'unboyeva) ----
+  // ---- O'zbek kirill -> lotin. 'е' so'z boshida, unli yoki ъ/ь dan keyin -> 'ye' (Тирғунбоева -> tirg'unboyeva) ----
   var CYR = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ё': 'yo', 'ж': 'j', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k',
     'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'x', 'ц': 'ts',
     'ч': 'ch', 'ш': 'sh', 'щ': 'sh', 'ъ': "'", 'ы': 'i', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ғ': "g'", 'қ': 'q',
@@ -25,8 +25,8 @@
   var APC = "\\p{Lm}\\p{Sk}'\\u2018\\u2019\\u201A\\u201B\\u2032\\u2035\\uFF07\\uA78C\\u055A";
   var APOS = new RegExp('[' + APC + ']', 'gu');
   // « » ‹ › — doim so'zlarni ajratadi. “ ” „ ‟ " ＂ ″ va ko'rinmas belgi (\p{Cf}: ZWSP, yo'nalish belgilari, yumshoq tire…):
-  //   so'z ICHIDA (harflar orasida) — apostrof / o'chiriladi («Turg”unboyeva», «Turg\u200Bunboyeva»); so'zlar ORASIDA (kichik
-  //   harfdan keyin Katta harf, yoki so'z chetida) — bo'shliq («Turg'unboyeva“Xadicha”», «Xadicha\u200BTurg'unboyeva»).
+  //   so'z ICHIDA (harflar orasida) — apostrof / o'chiriladi («Tirg”unboyeva», «Tirg\u200Bunboyeva»); so'zlar ORASIDA (kichik
+  //   harfdan keyin Katta harf, yoki so'z chetida) — bo'shliq («Tirg'unboyeva“Xadicha”», «Xadicha\u200BTirg'unboyeva»).
   //   Ketma-ket ko'rinmas belgilar — bitta deb qaraladi. (Katta-kichik harf kerak: kichik harfga o'tkazishdan OLDIN ishlaydi.)
   var GUIL = '\u00AB\u00BB\u2039\u203A';
   var DQ = '\u201C\u201D\u201E\u201F"\uFF02\u2033';
@@ -76,7 +76,7 @@
   }
 
   // 1-qadam: kichik harf, kirill -> lotin, apostroflar bitta (') belgiga, ortiqcha bo'shliqlar olib tashlangan.
-  //   Турғунбоева Хадича -> turg'unboyeva xadicha. (Lotin harflaridagi diakritika — é, ñ, İ… — asos harfga.)
+  //   Тирғунбоева Хадича -> tirg'unboyeva xadicha. (Lotin harflaridagi diakritika — é, ñ, İ… — asos harfga.)
   function toLatin(name) {
     var s = translit(fixSeparators(String(name == null ? '' : name).slice(0, 500).normalize('NFC')).toLowerCase());
     return s.normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(APOS, "'").replace(/\s+/g, ' ').trim();

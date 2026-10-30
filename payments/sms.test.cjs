@@ -148,7 +148,7 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   plan = [{ status: 400, body: JSON.stringify({ message: { mobile_phone: ['invalid'] } }) }]; calls.length = 0;
   r = await E.send('+998 90 123 45 67', 'x');
   ok('rad javobidagi obyekt xabar -> matn (aniq rad)', !r.ok && /mobile_phone/.test(r.error) && r.ambiguous === false, r);
-  ok('smsName: GSM-7 apostrof', S.smsName('Oʻgʻiloy  Qobiljonova') === "O'g'iloy Qobiljonova");
+  ok('smsName: GSM-7 apostrof', S.smsName('Oʻgʻiloy  Qobuljonova') === "O'g'iloy Qobuljonova");
 
   // 7k) templates(): GET /api/user/templates — Eskiz'dagi matnlar (naqsh, asl matn, holat); hech narsa yuborilmaydi
   const TPLS = { success: true, result: [{ id: 5, template: "Eslatma: %w uchun %w oy to'lovi", original_text: "Eslatma: {name} uchun {month} oy to'lovi", status: 'service' },

@@ -25,52 +25,52 @@ async function prep(name, phone, klass, amount) {
 }
 
 (async () => {
-  // Seed: IQ-0259 (Oybekov Abdulloh) parent phone 979980808. Siblings do NOT have this phone.
-  state.student_private['IQ-0259'] = { id: 'IQ-0259', parentPhone: '+998979980808' };
-  state.students['IQ-0259'] = { id: 'IQ-0259', studentId: 'IQ-0259', name: 'Oybekov Abdulloh Xojiakbar', grade: 3, classLetter: 'B' };
+  // Seed: IQ-9259 (Oyzekov Abdulloh) parent phone 970000008. Siblings do NOT have this phone.
+  state.student_private['IQ-9259'] = { id: 'IQ-9259', parentPhone: '+998970000008' };
+  state.students['IQ-9259'] = { id: 'IQ-9259', studentId: 'IQ-9259', name: 'Oyzekov Abdulloh Xojiakbar', grade: 3, classLetter: 'B' };
 
-  // T1: correct child name -> matched to IQ-0259
-  let r = await prep('Oybekov Abdulloh Xojiakbar', '979980808', '3B');
-  ok(r.matched === true && r.studentId === 'IQ-0259', `T1 to'g'ri ism -> IQ-0259 (via=${r.raw && r.raw.via})`);
+  // T1: correct child name -> matched to IQ-9259
+  let r = await prep('Oyzekov Abdulloh Xojiakbar', '970000008', '3B');
+  ok(r.matched === true && r.studentId === 'IQ-9259', `T1 to'g'ri ism -> IQ-9259 (via=${r.raw && r.raw.via})`);
 
-  // T2: DIFFERENT child (Qobiljonov), same phone -> name mismatch -> NOT credited (unmatched)
-  r = await prep('Qobiljonov Abdurrohman', '979980808', '5A');
-  ok(r.matched === false && !r.studentId, `T2 boshqa ism (Qobiljonov) -> biriktirilmagan (via=${r.raw && r.raw.via})`);
+  // T2: DIFFERENT child (Qobuljonov), same phone -> name mismatch -> NOT credited (unmatched)
+  r = await prep('Qobuljonov Abdurrohman', '970000008', '5A');
+  ok(r.matched === false && !r.studentId, `T2 boshqa ism (Qobuljonov) -> biriktirilmagan (via=${r.raw && r.raw.via})`);
 
   // T3: no name provided -> DON'T blindly trust phone -> unmatched (admin qo'lda biriktiradi)
-  r = await prep('', '979980808', '');
+  r = await prep('', '970000008', '');
   ok(r.matched === false && !r.studentId, `T3 ism yo'q -> biriktirilmagan (via=${r.raw && r.raw.via})`);
 
   // T4: two siblings share phone -> disambiguate by name
-  state.student_private['IQ-0256'] = { id: 'IQ-0256', parentPhone: '+998910000000' };
-  state.students['IQ-0256'] = { id: 'IQ-0256', studentId: 'IQ-0256', name: 'Oybekov Muhammadulloh', grade: 2, classLetter: 'B' };
-  state.student_private['IQ-0259'].parentPhone2 = '910000000';   // both now share 910000000
-  state.student_private['IQ-0256'].parentPhone = '910000000';
-  r = await prep('Oybekov Muhammadulloh', '910000000', '2B');
-  ok(r.matched === true && r.studentId === 'IQ-0256', `T4 aka-uka -> ism bilan Muhammadulloh=IQ-0256 (via=${r.raw && r.raw.via})`);
-  r = await prep('Oybekov Abdulloh Xojiakbar', '910000000', '3B');
-  ok(r.matched === true && r.studentId === 'IQ-0259', 'T4b aka-uka -> ism bilan Abdulloh=IQ-0259');
+  state.student_private['IQ-9256'] = { id: 'IQ-9256', parentPhone: '+998910000000' };
+  state.students['IQ-9256'] = { id: 'IQ-9256', studentId: 'IQ-9256', name: 'Oyzekov Muhammadulloh', grade: 2, classLetter: 'B' };
+  state.student_private['IQ-9259'].parentPhone2 = '910000000';   // both now share 910000000
+  state.student_private['IQ-9256'].parentPhone = '910000000';
+  r = await prep('Oyzekov Muhammadulloh', '910000000', '2B');
+  ok(r.matched === true && r.studentId === 'IQ-9256', `T4 aka-uka -> ism bilan Muhammadulloh=IQ-9256 (via=${r.raw && r.raw.via})`);
+  r = await prep('Oyzekov Abdulloh Xojiakbar', '910000000', '3B');
+  ok(r.matched === true && r.studentId === 'IQ-9259', 'T4b aka-uka -> ism bilan Abdulloh=IQ-9259');
 
   // T5: siblings share phone, name matches NEITHER -> ambiguous -> unmatched
   r = await prep('Butunlay Boshqa Odam', '910000000', 'ZZ');
   ok(r.matched === false && !r.studentId, 'T5 aka-uka, ism hech kimга mos emas -> biriktirilmagan');
 
   // T6: KIRIL alifbosida ism (baza LOTINда) -> translit bilan mos -> AYNAN o'sha o'quvchiga.
-  //   IQ-0259 = "Oybekov Abdulloh Xojiakbar" (lotin). Ota-ona kirilда yozadi (979980808 -> yolg'iz IQ-0259).
-  state.student_private['IQ-0259'].parentPhone2 = '';   // 979980808 yana yolg'iz IQ-0259 bo'lsin
-  r = await prep('Ойбеков Абдуллоҳ Хожиакбар', '979980808', '3 б');
-  ok(r.matched === true && r.studentId === 'IQ-0259', `T6 kiril ism (lotin baza) -> IQ-0259 (via=${r.raw && r.raw.via})`);
+  //   IQ-9259 = "Oyzekov Abdulloh Xojiakbar" (lotin). Ota-ona kirilда yozadi (970000008 -> yolg'iz IQ-9259).
+  state.student_private['IQ-9259'].parentPhone2 = '';   // 970000008 yana yolg'iz IQ-9259 bo'lsin
+  r = await prep('Ойзеков Абдуллоҳ Хожиакбар', '970000008', '3 б');
+  ok(r.matched === true && r.studentId === 'IQ-9259', `T6 kiril ism (lotin baza) -> IQ-9259 (via=${r.raw && r.raw.via})`);
 
-  // T7: aka-uka (bir telefon), KIRIL ism bilan to'g'ri bolага -> IQ-0256 (Muhammadulloh).
-  state.student_private['IQ-0259'].parentPhone2 = '910000000';   // yana ikkalasi 910000000
-  r = await prep('Ойбеков Муҳаммадуллоҳ', '910000000', '2 б');
-  ok(r.matched === true && r.studentId === 'IQ-0256', `T7 aka-uka kiril ism -> Muhammadulloh=IQ-0256 (via=${r.raw && r.raw.via})`);
+  // T7: aka-uka (bir telefon), KIRIL ism bilan to'g'ri bolага -> IQ-9256 (Muhammadulloh).
+  state.student_private['IQ-9259'].parentPhone2 = '910000000';   // yana ikkalasi 910000000
+  r = await prep('Ойзеков Муҳаммадуллоҳ', '910000000', '2 б');
+  ok(r.matched === true && r.studentId === 'IQ-9256', `T7 aka-uka kiril ism -> Muhammadulloh=IQ-9256 (via=${r.raw && r.raw.via})`);
 
   // T8: LOTIN ism, sinf KIRILда ("6 б") — translit sinf mosligини ta'minlaydi (nomlar farq qilса ham).
   //   Bu yerда ism aniq (Xadicha) bo'lgani uchun ism bo'yicha mos keladi; sinf kirilда ham buzmaydi.
   state.student_private['IQ-0300'] = { id: 'IQ-0300', parentPhone: '+998915151777' };
-  state.students['IQ-0300'] = { id: 'IQ-0300', studentId: 'IQ-0300', name: 'Turgunboyeva Xadicha', grade: 6, classLetter: 'b' };
-  r = await prep('Тургунбоева Хадича', '915151777', '6 б');
+  state.students['IQ-0300'] = { id: 'IQ-0300', studentId: 'IQ-0300', name: 'Tirgunboyeva Xadicha', grade: 6, classLetter: 'b' };
+  r = await prep('Тиргунбоева Хадича', '915151777', '6 б');
   ok(r.matched === true && r.studentId === 'IQ-0300', `T8 kiril ism+sinf -> IQ-0300 (via=${r.raw && r.raw.via})`);
 
   // T9: IMPORT qilingan o'quvchi (doc id != studentId). student_private/student_codes doc id = students.id —

@@ -80,7 +80,7 @@ const normPhone = p => String(p||'').replace(/\D/g,'').slice(-9);
 // Kiril <-> Lotin: ota-ona to'lovда ismни/sinfни ISTALGAN alifboда yozса ham to'lov AYNAN
 //   o'sha o'quvchiga tushsin. Ikkala tomon ham UMUMIY "translit kalit"га keltiriladi
 //   (kiril->lotin + iotli unlilar folding), so'ng solishtiriladi.
-//   Misol: "Хадичахон 6 б" == "Xadichaxon 6b",  "Тургунбоева" == "Turgunboyeva".
+//   Misol: "Хадичахон 6 б" == "Xadichaxon 6b",  "Тиргунбоева" == "Tirgunboyeva".
 const CYR2LAT = {
   'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y',
   'к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f',
@@ -99,7 +99,7 @@ const translit = s => {
 const normTxt = s => translit(s).replace(/\s+/g,' ').trim();
 const normClass = s => translit(s).replace(/\s+/g,'');
 // Ism "mos"mi? Kamida bitta ma'noli so'z (>=3 harf) ustma-ust tushsin. Bir xil telefonli
-// BOSHQA bolaning to'lovi shu o'quvchiga noto'g'ri tushmasin (masalan "Qobiljonov" vs "Oybekov").
+// BOSHQA bolaning to'lovi shu o'quvchiga noto'g'ri tushmasin (masalan "Qobuljonov" vs "Oyzekov").
 const nameOverlap = (a, b) => {
   const ta = new Set(normTxt(a).split(' ').filter(w => w.length >= 3));
   return normTxt(b).split(' ').filter(w => w.length >= 3).some(w => ta.has(w));

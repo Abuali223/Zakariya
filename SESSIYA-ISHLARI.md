@@ -256,7 +256,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 ## 21) Aka-uka 10% chegirmasi (oktyabr regressiyasi) + «Qarzdorlar» → «Eslatma» SMS
 
 **Aka-uka chegirmasi — 3 farzandli oila oktyabrda faqat bittasiga 10% olgan edi (sentyabrda hammasi olgan)**
-- Sabab: 14-oktyabrdagi o'zgarish oilani FAQAT ota/ona F.I.Sh bo'yicha guruhlardi (farzand ismi faqat ota/ona maydonlari butunlay bo'sh bo'lsa). Kartalarda ota/ona maydonlari har xil to'ldirilgan bo'lsa (birida faqat ota, birida faqat ona — o'z familiyasida) oila «2 + 1» bo'linib, 2 kishilik guruhda faqat bittasi (ID tartibi) 10% olardi. Skrinshotdagi holat (IQ-0255 → 2 610 000, IQ-0268/IQ-0276 → 2 900 000) testda aynan qayta hosil qilindi.
+- Sabab: 14-oktyabrdagi o'zgarish oilani FAQAT ota/ona F.I.Sh bo'yicha guruhlardi (farzand ismi faqat ota/ona maydonlari butunlay bo'sh bo'lsa). Kartalarda ota/ona maydonlari har xil to'ldirilgan bo'lsa (birida faqat ota, birida faqat ona — o'z familiyasida) oila «2 + 1» bo'linib, 2 kishilik guruhda faqat bittasi (ID tartibi) 10% olardi. Skrinshotdagi holat (bir bola chegirmali, ikki aka-ukasi to'liq narxda) testda aynan qayta hosil qilindi.
 - Tuzatma: familiya o'zaklari = farzand ismi ∪ ota F.I.Sh ∪ ona F.I.Sh (bir xil telefon sharti o'zgarmadi). Faqat qirra QO'SHADI: sentyabr usulida ham, ota/ona usulida ham topilgan oila guruhlanadi; begona (umumiy o'zaksiz) bolalar bir telefonda bo'lsa ham qo'shilmaydi. 40 000 tasodifiy ssenariyda hech kimning avvalgi 10% i olinmadi. O'quvchi ismi-familiyasi o'zgarsa ham «Qayta hisoblash» eslatmasi chiqadi.
 - Familiya taqqoslash yozuv farqlariga chidamli: apostrof turlari (Gʻ / G' / G‘ / G’ / G`) bir xil; lotin ↔ rus transliteratsiyasi x/h (Xasanov / Hasanov / Хасанов) va q/k (Qodirov / Kodirov / Қодиров) bir xil.
 - O'quvchi kartasida «Aka-uka chegirmasi» → yangi «Yo‘q — oilaga qo‘shilmasin»: bola umumiy telefon tufayli begona oilaga noto'g'ri qo'shilib qolsa, avtomatik guruhdan chiqariladi («Ha» — avvalgidek majburiy 10%).
@@ -384,7 +384,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   ~30% «o'xshaydi» — shu daraja hisobga olinmaydi. Umumiy ball — juftlar geometrik o'rtachasi: faqat ism yoki faqat
   familiya mos (aka-uka, adash) — 50% dan past; bitta so'zli ism ×0.6; ortiqcha so'z −5%. Solishtirishda bitta harfli
   so'zlar (bosh harf «X.», sinf «5-A») va to'lov izohi so'zlari («uchun», «to'lov», «sinf», oy nomlari…) hisobga olinmaydi
-  — «Xadicha uchun», «Turg'unboyeva X.» endi yalang ism bilan bir xil ball oladi. Kirill «сҳ» = `s'h` (Исҳоқов = Isxoqov).
+  — «Xadicha uchun», «Tirg'unboyeva X.» endi yalang ism bilan bir xil ball oladi. Kirill «сҳ» = `s'h` (Исҳоқов = Isxoqov).
 - Bonus: joriy qarz = to'lov summasi → +10%, oylik to'lov = summa → +5% (eng kattasi, qo'shilmaydi); ism bo'yicha
   50% dan past nomzodni bonus 60% ga yetkaza olmaydi (≤ 59%). Qarz — «Qarzdorlar» qoidasi (≤ joriy oy, bekor/
   qaytarilgan hisobga olinmaydi); oylik — so'nggi amaldagi faktura summasi.
@@ -396,8 +396,8 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   boshqa qatorni bosib qo'ymasin; qarz so'rovi sekin/xato bo'lsa — ism bo'yicha takliflar «qarz: —» bilan chiqadi.
   Modul yuklanmasa — oyna avvalgidek, keyingi ochishda yangi manzil bilan qayta uriniladi (`?v=2&r=N`).
   `deploy.sh` `/sb` ga `name-match.js` ni ham joylaydi.
-- Topshiriqdagi holatlar (`payments/name-match.test.cjs` konsolga chiqaradi): «Turg'unboyeva Hadicha» → 100%,
-  «Турғунбоева Хадича» → 100%, «Xadicha Turgunboeva» → 91% (yuqori moslik); «Aliyev Jasur» → 0% (taklif qilinmaydi,
+- Topshiriqdagi holatlar (`payments/name-match.test.cjs` konsolga chiqaradi): «Tirg'unboyeva Hadicha» → 100%,
+  «Тирғунбоева Хадича» → 100%, «Xadicha Tirgunboeva» → 91% (yuqori moslik); «Aliyev Jasur» → 0% (taklif qilinmaydi,
   qarz = summa bo'lsa ham). Testlar: `name-match.test` 84; Chromium 47/47 (haqiqiy `admin.html` + deploy SHIM bilan
   `/sb/name-match.js`: takliflar, tasdiqlash matni, avtomatik biriktirish yo'qligi, bo'lib rejimi, so'rovlar soni, faktura
   xatosi, sekin tarmoq, yopilgan oyna, XSS, telefon ekrani, ID to'qnashuvi, 9 ta adash, bosh harf/izoh so'zlari,
@@ -420,7 +420,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 ## 30) «Eng landavur odam ham xato qilmasin» — ikki qo'shimcha himoya
 
 - **Qabulxona «⏹️ Chiqarish» — ikkinchi tasdiq.** «Saqlash» bosilgach (sana tekshiruvidan keyin) yana so'raladi:
-  «Turg'unboyeva Xadicha» (5-sinf «A» · O‘zbek, ID IQ-0101) chiqarilsinmi? — chiqqan sana va «⚠️ Qaytarish (qayta
+  «Familiya Ism» (5-sinf «A» · O‘zbek, ID IQ-NNNN) chiqarilsinmi? — chiqqan sana va «⚠️ Qaytarish (qayta
   faollashtirish) — faqat direktor orqali». «Bekor» — hech narsa yozilmaydi, oyna ochiq qoladi. Direktor oynasida
   qo'shimcha tasdiq yo'q (u o'zi qaytara oladi).
 - **«Biriktirish» — past moslikda ogohlantirish.** Tanlangan o'quvchining moslik foizi 75% dan past bo'lsa (taklifdan —
@@ -456,7 +456,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
   9 topilma tasdiqlandi, hammasi tuzatildi.
 - **Yuqori:** raqamdan (ID, telefon, summa) keyin yozilgan apostrofli ism kesilardi: «IQ-0042 Ra'no Karimova» → «no» qolib,
   bosh harf deb o'qilardi — yagona taklif opa-singil «Karimova Nodira 82%» (ogohlantirishsiz) edi. Endi apostrof — so'z
-  harfi; Ra'no / Jo'ra / G'ayrat / O'tkir / Turg'unboyeva 100%. **O'rta:** raqamdan keyin bo'shliq bilan yozilgan qisqa ism
+  harfi; Ra'no / Jo'ra / G'ayrat / O'tkir / Tirg'unboyeva 100%. **O'rta:** raqamdan keyin bo'shliq bilan yozilgan qisqa ism
   (Ali, Lola, Umid) ham o'chirilardi — endi faqat raqamga YOPISHGAN bo'lak («5-A», «11B», «2026-yil») va raqamdan keyingi
   yakka harf («5 A») olib tashlanadi.
 - **O'rta:** bosh harf «O'.» / «Ў.» o'quvchi ismidagi «O'tkir» (= utkir) bilan mos kelmasdi (3%), «E.» / «Е.» — Yelena /
@@ -468,7 +468,7 @@ so'ng butun o'zgarishlar to'plami mustaqil «raqib» ko'rigidan o'tkazildi.
 - **Past:** faqat izoh matni («Avgust oyi uchun to'lov», «Оплата за август») «Karimov Avgust»ni taklif qilardi — endi 2+ izoh
   so'zi bo'lsa matn izoh hisoblanadi (oy nomi ism emas); «Karimov Jasur avgust uchun» → Jasur 100%, ukasi Avgust 3%.
   Kirill «сын» izoh so'zlaridan olib tashlandi (koreyscha familiya Син / Sin: «Син Виктория» → Shin 72%, Kim 10%).
-  Qo'shtirnoq / ko'rinmas belgi so'zlar ORASIDA (bo'shliqsiz, «Turg'unboyeva«Xadicha»») so'zlarni yopishtirib qo'ymaydi.
+  Qo'shtirnoq / ko'rinmas belgi so'zlar ORASIDA (bo'shliqsiz, «Tirg'unboyeva«Xadicha»») so'zlarni yopishtirib qo'ymaydi.
 - **Past (oyna):** taklifdan tanlanganda ⚠️ endi DOIM ko'rsatilgan foiz bo'yicha (67% «Avgust» taklifi ogohlantirishsiz
   edi); ro'yxatdan tanlanganda «ism yozganmi?» — o'sha o'quvchi ismi bilan solishtirish qoidasi bo'yicha. To'lovchi matni
   ⚠️ qatorida bitta qatorga keltiriladi (qator ko'chishi / boshqaruv / yo'nalish belgilari — bo'shliq: soxta «o'quvchi —
@@ -880,9 +880,9 @@ qamrovi, eski prod holatlaridan baza yangilanishi (PG16 + Supabase o'rinbosarlar
 ## 39) Kirim-chiqim: Google Sheet («IQRO_Financial_Tracker_2026_2027») va tizim — tahlil
 Buxgalteriya hozir Google Sheet'da (Dashboard + har oy «tushum»/«chiqim»). 4 agentli tahlil (tizim inventarizatsiyasi, Sheet
 semantikasi, farqlar + taklif, raqib-tekshiruv) — to'liq hisobot: `KIRIM-CHIQIM-TAHLIL.md`.
-- **Sheet'dagi muammolar:** «Noyabr tushum» buzilgan (hamma «Active», 11 yangi o'quvchi yo'q — 16,4 mln qoldiq yo'qoladi);
-  takroriy ID (IQ-0474/0250/0021 — 5,8–9,99 mln ortiqcha qarz); ID'siz to'lovlar 12 + 5,8 mln; chiqib ketganlarda −16,6 mln
-  avans (4 tasi chiqimda qaytarilgan — ikki marta) va 11,81 mln qarz; bankka topshirilgan 50 mln «xarajat» (foyda kam).
+- **Sheet'dagi muammolar:** «Noyabr tushum» buzilgan (hamma «Active», 11 yangi o'quvchi yo'q — ularning qoldig'i yo'qoladi);
+  3 ta takroriy ID (ortiqcha qarz); ID'siz to'lovlar; chiqib ketganlarda «osilgan» avans (4 tasi chiqimda qaytarilgan — ikki
+  marta) va qarz; bankka topshirilgan tushum «xarajat» deb yozilgan (foyda kam). (ID va summalar 2026-10-30 da olib tashlandi.)
 - **Tizim bilan:** to'lov usullari, qarz o'tishi, avans, qaytarish, biriktirish — bor (yaxshiroq); xarajatda tasdiqlovchi /
   Р/О / usul / kimga — yo'q; oylik o'quvchi reyestri, Kutilgan (qoldiq bilan), Yig'im %, sinflar va 12 oylik jadval, eksport —
   yo'q; chegirma/prorata/referral/reward qoidalari farq qiladi (D1–D10); «Kirim» faktura asosida, Sheet kassa asosida.

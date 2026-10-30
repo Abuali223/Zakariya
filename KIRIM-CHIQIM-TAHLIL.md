@@ -27,36 +27,28 @@ farqlar jadvali + taklif, raqib-tekshiruv (har raqam qayta hisoblangan).
   chegirmalar tahlili (`ΣG·H`, `ΣJ`, `ΣL`, `ΣN`); xarajat toifalari; 12 oylik jadval; sinflar kesimida jadval.
 
 ## 3. Sheet'ning o'zida topilgan muammolar (buxgalter tekshirsin)
-1. **«Noyabr tushum» buzilgan.** 347 qatorning hammasi «Active» (53 ta chiqib ketgan ham); oktyabrda qo'shilgan 11 o'quvchi
-   varaqda yo'q — ularning qoldiqlari yo'qoladi: qarz 19 322 273 (IQ-0512 1 795 000; IQ-1019 527 273; IQ-0465, IQ-1018,
-   IQ-1022, IQ-0497, IQ-0509 — 2 900 000 dan; IQ-1016 2 500 000) va avans −2 901 182 (IQ-0535 −2 900 000; IQ-1025 −818;
-   IQ-0533 −364); sof 16 421 091. Dashboard'da Noyabr «Kutilgan» 1,33 mlrd bo'lib ko'rinishi shundan.
-2. **Takroriy ID.** IQ-0474 — 1A da (`H = 0,1`) va 1B da (`H = 0`), ikkalasida ham to'lov bor; IQ-0250 («Saidov MuhammadAli»
-   1V va «Saidov Muhammadali» 1A); IQ-0021 («Murodov MuhammadUmar» 1B va 1A). Bir bola bo'lsa — oktyabr Kutilgan/Qarzdorlik
-   5 800 000 (IQ-0474 ning 4 190 000 qarzi bilan 9 990 000 gacha) ortiqcha.
-3. **ID'siz to'lovlar** (hech kimning balansiga tushmagan, lekin «usullar» plitkasida bor): sentyabr 12 000 000
-   (29-qator 1 200 000; «Sharahmedov Imronbek» 2 900 000 Uzum — keyin IQ-1015 bo'lgan, lekin Q = 0; «Хамидова Марзия»
-   2 900 000; 601–608-qatorlar avgust tushumi 5 000 000); oktyabr 5 800 000 («Хамидова Марзия», hali ham ID'siz).
-4. **Chiqib ketganlar.** 10 tasida avans −16 600 000 abadiy «osilib» qolgan; 4 tasiga pul chiqimda qaytarilgan (IQ-0212
-   2 900 000; IQ-0196, IQ-0234, IQ-0366 — 1 000 000 dan) — avans ham turadi, chiqim ham: ikki marta hisob. 6 tasida
-   qarz 11 810 000 (IQ-0007, IQ-0246, IQ-0331 — 2 900 000 dan; IQ-0027 1 900 000; IQ-0029 610 000; IQ-0039 600 000)
-   «Kutilgan tushum»da turadi. IQ-0366 ga 11.09 da 1 000 000 qaytarilgan, lekin oktyabrda «Active», `Q = −1 000 000` —
-   oktyabr Kutilgan 1 000 000 kam.
-5. **Chegirma o'zgarishlari tasdiqlovchisiz** (sentyabr → oktyabr): IQ-0310, IQ-0273 — 100 % yo'qolgan; IQ-0256, IQ-0406,
-   IQ-0491, IQ-0382, IQ-0300 — 10 % yo'qolgan; IQ-0204 — 10 % paydo bo'lgan. Oktyabrda `O` (tasdiqlovchi) hech qayerda yo'q.
-6. **Narxsiz o'quvchilar:** IQ-0527 (3A), IQ-1017 (7A) — `F` bo'sh, 0 so'mga hisoblangan.
-7. **Chiqim:** Хабибжонов 1 450 000 qaytarish sentyabr va oktyabrda ikki marta; 8.10 da izohsiz 94 802 305 «Oylik» summasi
-   (sana `8.102026`); 40-qator 400 000 izohsiz; `Р/О` raqamlari takrorlangan (78, 79, 80, 89, 108, 143 — 133 raqamli
-   qatordan 127 noyob), sentyabrda 171 qatordan faqat 45 tasi raqamlangan; sanalar 40 ga yaqin ko'rinishda
-   (`16.09.206`, `14.09.2020`, `21.09.2025`).
-8. **Bankka topshirilgan tushum xarajat deb yozilgan** (30 000 000 — 11.09; 20 000 000 — 14.10) — foyda shuncha kam
-   ko'rinadi: haqiqiy sof foyda sentyabr 280 563 700 (Sheet: 250 563 700), oktyabr 163 899 130 (Sheet: 143 899 130).
-   Shuningdek «Boshqa»da ijara (14 800 000 + 1 500 000; 13 218 000) va O'qituvchilar kuni (12 210 000); «Oylik»da
-   «Irodaopa marketing» 19 100 000; «Soliqlar»da tadbir oldindan to'lovi 1 030 000; 100 000 «камзур пули кайтди» —
-   bu forma qaytarishi, o'quvchi to'lovi emas.
-9. **Kelgusi oylar shabloni (Iyul)** iyundan farq qiladi: 5 qatorda ID boshqa o'quvchiga o'tgan (18, 73, 265, 320, 421-qatorlar),
-   4 qator boshqa o'quvchining qoldig'ini ko'chiradi (Σ 98 600 000) — `Q` qator o'rniga bog'langani uchun. Dashboard'da
-   Iyul Kutilgan (7,53 mlrd) < Iyun (7,89 mlrd).
+> 2026-10-30: repozitoriy ochiq bo'lgani uchun bu bo'limdan o'quvchi ID'lari, ismlar va pul summalari olib tashlandi.
+> Aniq qatorlarni buxgalter Sheet'ning o'zidan quyidagi belgilar bo'yicha topadi.
+1. **«Noyabr tushum» buzilgan.** Hamma qator «Active» (chiqib ketganlar ham); oktyabrda qo'shilgan 11 o'quvchi varaqda
+   yo'q — ularning qarz va avans qoldiqlari yo'qoladi. Dashboard'dagi Noyabr «Kutilgan» shuning uchun noto'g'ri.
+2. **Takroriy ID.** 3 ta ID ikki sinfda takrorlangan (ikkalasida ham to'lov bor). Bitta bola bo'lsa, oktyabr
+   «Kutilgan/Qarzdorlik» ortiqcha ko'rinadi.
+3. **ID'siz to'lovlar** (hech kimning balansiga tushmagan, lekin «usullar» plitkasida bor): sentyabrda bir necha qator
+   (avgust tushumi ham), oktyabrda — 2 ta to'lov hali ham ID'siz.
+4. **Chiqib ketganlar.** 10 tasida avans abadiy «osilib» qolgan; 4 tasiga pul chiqimda qaytarilgan — avans ham turadi,
+   chiqim ham (ikki marta hisob); 6 tasining qarzi «Kutilgan tushum»da turadi; 1 tasi pul qaytarilgandan keyin oktyabrda
+   yana «Active».
+5. **Chegirma o'zgarishlari tasdiqlovchisiz** (sentyabr → oktyabr): 2 o'quvchida 100 %, 5 tasida 10 % yo'qolgan, 1 tasida
+   10 % paydo bo'lgan. Oktyabrda `O` (tasdiqlovchi) hech qayerda yo'q.
+6. **Narxsiz o'quvchilar:** 2 o'quvchida `F` bo'sh — 0 so'mga hisoblangan.
+7. **Chiqim:** bitta qaytarish sentyabr va oktyabrda ikki marta yozilgan; 8.10 da izohsiz katta «Oylik» summasi
+   (sana `8.102026`); 40-qator izohsiz; `Р/О` raqamlari takrorlangan (133 raqamli qatordan 127 noyob), sentyabrda
+   171 qatordan faqat 45 tasi raqamlangan; sanalar 40 ga yaqin ko'rinishda (`16.09.206`, `14.09.2020`, `21.09.2025`).
+8. **Bankka topshirilgan tushum xarajat deb yozilgan** (11.09 va 14.10) — sof foyda shuncha kam ko'rinadi. Shuningdek
+   «Boshqa»da ijara va O'qituvchilar kuni, «Oylik»da marketing to'lovi, «Soliqlar»da tadbir oldindan to'lovi; forma
+   qaytarishi o'quvchi to'lovi qatorida.
+9. **Kelgusi oylar shabloni (Iyul)** iyundan farq qiladi: 5 qatorda ID boshqa o'quvchiga o'tgan (18, 73, 265, 320,
+   421-qatorlar), 4 qator boshqa o'quvchining qoldig'ini ko'chiradi — `Q` qator o'rniga bog'langani uchun.
 
 ## 4. Raqamlar (Sheet bo'yicha, qayta hisoblangan)
 | | Sentyabr | Oktyabr |
@@ -127,11 +119,11 @@ Dashboard'ning 17 blokidan 5 bor, 8 qisman, 4 yo'q.
 | № | Mavzu | Sheet | Tizim | Oqibat |
 |---|---|---|---|---|
 | D1 | Prorata bo'luvchisi | doim 22 kun | haqiqiy Du–Ju ish kunlari: 2026-09 **22**, 10 **22**, 11 21, 12 23, 2027-01 21, 02 20, 03 23, 04 22, 05 21, 06 22 | sentyabr–oktyabr bir xil; noyabrdan farq: 10 kun × 2 900 000 → Sheet 1 318 182, tizim noyabr 1 380 952 |
-| D2 | «Active», lekin E < 22 (IQ-0455: 17 kun, to'liq hisoblangan) | mumkin | sanalar hal qiladi | — |
+| D2 | «Active», lekin E < 22 (masalan, 17 kun — to'liq hisoblangan) | mumkin | sanalar hal qiladi | — |
 | D3 | Doimiy 10 / 50 / 100 % | qo'lda (oktyabr: 26 / 12 / 13 o'quvchi = 62 350 000) | avtomatik; qo'lda faqat «Kontrakt» | 51 o'quvchi kartasida belgilanishi kerak: «Aka-uka chegirmasi — Ha», «Xodim farzandi», «Olimpiada»; aka-uka avtomatikasi Sheet bermagan oilalarga ham 10 % qo'shishi mumkin |
 | D4 | 5 % darajasi | bor, ishlatilmagan | yo'q | — |
 | D5 | Reward 20 / 100 | qo'lda (7 o'quvchi × 580 000) | o'tgan oy tasdiqlangan monitoring ≥ 90 / ≥ 100 | monitoring tizimda tasdiqlanmasa — 0 % |
-| D6 | Yig'ilish | 10 % + Reward 20 = 30 % (IQ-0312: 870 000) | eng yuqori daraja (580 000) | IQ-0312 ga oyiga −290 000 |
+| D6 | Yig'ilish | 10 % + Reward 20 = 30 % (bitta o'quvchida) | eng yuqori daraja (20 %) | o'sha o'quvchiga oyiga 10 % kam chegirma |
 | D7 | Kasal kun | o'sha oy, qo'lda | o'tgan oy davomati, keyingi faktura | bir oy kechikish; davomatda «kasal» belgilanishi shart |
 | D8 | Referral | 20 % × G × soni, har oy | 300 000 bir marta | 10 oyda 5 800 000 vs 300 000 (Sheet'da ishlatilmagan) |
 | D9 | Yaxlitlash | kasr (2 240 909,09) | butun so'm | ahamiyatsiz |
@@ -140,9 +132,9 @@ Dashboard'ning 17 blokidan 5 bor, 8 qisman, 4 yo'q.
 ## 7. KPI asosi: kassa va faktura
 Sheet **kassa asosida** ishlaydi (shu oy tushgan pul), tizimdagi «Kirim» **faktura asosida** (shu oy fakturasiga to'langan;
 eng eski qarz birinchi to'lanadi). Sheet raqamlari tizimga kirgan taqdirda ko'rinadigan manzara: sentyabr fakturalariga
-536 846 545 (72,60 %; 64 061 455 avansga), oktyabr fakturalariga 440 044 364 / 818 743 636 (**53,75 %**; oktyabr naqdining
-128 197 545 so'mi sentyabr qarziga ketadi) — Sheet'dagi 562 260 000 / 56,45 % emas. Sof qoldiq ikkalasida bir xil:
-395 074 727. Ikkala asos ham ko'rsatilishi kerak: «tushum» — kassa, «qarz» — faktura.
+72,60 % (bir qismi avansga), oktyabr fakturalariga **53,75 %** (oktyabr naqdining bir qismi sentyabr qarziga ketadi) —
+Sheet'dagi 56,45 % emas. Sof qoldiq ikkalasida bir xil. Ikkala asos ham ko'rsatilishi kerak: «tushum» — kassa,
+«qarz» — faktura.
 
 ## 8. Keyinroq qilinsa — taklif (hajm bo'yicha tartibda)
 1. **Hisobotlar (baza o'zgarmaydi):** Kutilgan (qoldiq bilan), Yig'im % ikki asosda, Sof balans; sinflar jadvali

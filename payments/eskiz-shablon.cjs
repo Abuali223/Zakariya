@@ -188,7 +188,7 @@ const AUTO = { pay: ['config.json', '/opt/iqror/payments/config.json'], auth: ['
     due: Number(arg('due', 5800000)) || 0, code: '123456' };
   const PROBES = [SHOW,
     { name: 'Karimov Jasur', months: ['2026-10'], due: 1200000, code: '482913' },
-    { name: smsName("Qobiljonov Muhammadiy Akmal o'g'li"), months: ['2026-08', '2026-09', '2026-10'], due: 14500000, code: '000731' },
+    { name: smsName("Qobuljonov Muhammadiy Akmal o'g'li"), months: ['2026-08', '2026-09', '2026-10'], due: 14500000, code: '000731' },
     { name: 'Rahimova Dilnoza', months: ['2026-05', '2026-07'], due: 450000, code: '905518' },
     { name: 'Sardor', months: ['2026-09'], due: 300000, code: '271828' }];                 // 1 so'zli ism (bazada uchraydi)
   const lastM = p => fmtMonth(p.months[p.months.length - 1] || '');
