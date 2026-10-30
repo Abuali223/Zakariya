@@ -1029,6 +1029,35 @@ Talab: «uchala xatoni tuzat va aniqlangan ochiq muammolarni to‘g‘rila … d
 - **Deploydan keyin (foydalanuvchi):** 2 ta takroriy maosh ID — «Yangi noyob ID berish»; Eskiz kaliti + SMS cron (tasdiqdan keyin);
   `/var/log/iqror-backup.log` va storage zaxirasi («storage YO'Q» chiqsa — `STORAGE_VOL`); direktor kirishi — jonli tekshiruv uchun.
 
+## 43) Jonli saytni real holatda tekshirish (2026-10-30): RLS tezligi, avtobus maxfiyligi, tez almashtirish xatosi
+Vaqtinchalik sinov hisobi (email, avval «Ota-ona», keyin direktor bergan «Direktor» roli). Faqat o'qish: brauzer har qanday yozuv
+so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon, ID chiqarilmadi.
+- **Ochiqlik (anon + tasdiqlanmagan ota-ona, 62 jadval + 9 RPC):** maxfiy jadvallar yopiq (users — faqat o'z qatori, payroll_ids —
+  ruxsat yo'q, change_log — anon'ga ruxsat yo'q / ota-onaga 0 qator, qolganlari 0 qator); RPC'lar anon'ga 401, ota-onaga 403 yoki bo'sh. Hammaga ochiq qatorlar faqat mo'ljallangan
+  maydonlar: `config/ai` (manzil, holat, «kalit bor» belgisi — kalitning o'zi `secrets`da), `config/payments` (Click ID'lari),
+  `settings/site`, `exam_questions` (savol matni, javob kaliti YO'Q).
+- **Topilma 1 — `staff_checkins` 500 (57014, vaqt chegarasi):** kamera hodisalari jadvali (barcha o'quvchi+xodim) katta; policy'dagi
+  `app.is_admin() or app.is_hr() or …` HAR QATOR uchun chaqiriladi -> mehmon/ota-ona so'rovi 3 s'da uziladi (istalgan odam bazani
+  soniyalab band qila oladi), direktor sahifalari ham sekin. **Tuzatma `migration/rls-initplan.sql`** (zanjir oxirida): public'dagi
+  barcha policy'larda argumentsiz rol yordamchilari `(SELECT app.f())` ga o'raladi (Supabase linter 0003) — so'rovga BIR MARTA.
+  O'zini subso'rovda o'qiydigan jadval (users) avtomatik chetlanadi — aks holda 42P17 «infinite recursion» (sinov matritsasi
+  ushladi: profilni saqlash buzilardi). PG16, 300 ming qator: anon 6,5 s -> 26 ms; HR oylik 537 -> 7 ms; direktor 186 -> 7 ms.
+- **Topilma 2 — avtobusning jonli joylashuvi har kirgan hisobga ochiq edi** (`bp_sel`: `app.uid() is not null`) — ro'yxatdan o'tish
+  ochiq, ya'ni begona odam ham GPS/tezlik/haydovchi ismini ko'rardi (farzandsiz sinov hisobi bilan tasdiqlandi). **Tuzatma
+  `migration/bus-access.sql`:** faqat xodim (`is_staff`) yoki FAOL bog'langan farzandi bor ota-ona (`app.has_active_child()` —
+  claim_child kod bilan yozgan `child_claims`). Kabinet avtobusni avvaldan shunday ko'rsatardi — endi baza ham.
+- **Topilma 3 — tez bo'lim almashtirishda eski render xatosi** («Imtihonlar»: `Cannot set properties of null`): `openTab` endi
+  eski (almashtirilgan) ko'rinish renderining xatosini jim o'tkazadi, joriy bo'lim xatosi avvalgidek konsolda.
+- **Direktor paneli (37 bo'lim):** hammasi ochildi; ochilishda ilova hech narsa yozishga urinmadi; xato javob 0; konsol xatosi 0
+  (3-topilmadan tashqari). Amaliy ish (To'lovlar bo'limi): 3 ta to'lov biriktirilmagan («o'quvchi topilmadi — qo'lda biriktiring»),
+  4 ta hisob-fakturaning o'quvchisi ro'yxatda yo'q (o'chirilgan yoki ID o'zgargan). Eng sekin so'rovlar ~1,3 s (asosan tarmoq).
+- **Sinov:** noldan qurish 76 fayl xatosiz; policy matni o'ram olib tashlansa HEAD bilan bayt-bayt bir xil (faqat bp_sel farq);
+  deploy yo'li (HEAD -> yangi ×2) va noldan qurish — policy va verify-db barmoq izi BIR XIL, ikki marta o'ralish yo'q; RLS
+  matritsasi 18 foydalanuvchi (anon, har rol, bloklangan direktor, faol/bekor/yo'q bog'lanishli ota-ona) × har jadval ×
+  ko'rish/yangilash/o'chirish/qo'shish = 4446 tekshiruv — farq faqat bus_positions ko'rishda; SQL: audit 29, camera 10, yoz 8,
+  maosh ID testlari (eski/yangi chiqish bir xil); brauzer: 70 + 9, pasport ID 74/11/23/19, tez almashtirish 3 (HEAD'da xato
+  chiqishi nazorati bilan); ESLint no-undef — yangi nom yo'q.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

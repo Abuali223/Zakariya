@@ -14,7 +14,8 @@ do $iqror_guard$ begin raise exception 'iqror: bus.sql ALOHIDA ishga tushirilmay
 -- Xavfsizlik:
 --   * bus_routes — maxfiy driver_key bilan; FAQAT direktor (app.is_admin) o'qiydi/yozadi.
 --   * bus_routes_public — (id,name,active) view — ota-ona/haydovchi driver_key'siz o'qiydi.
---   * bus_positions — kirgan foydalanuvchi o'qiydi; YOZISH faqat update_bus_position RPC orqali
+--   * bus_positions — xodim va farzandi bog'langan ota-ona o'qiydi (yakuniy qoida: bus-access.sql);
+--     YOZISH faqat update_bus_position RPC orqali
 --     (security definer, driver_key bilan tekshiradi) — to'g'ridan-to'g'ri yozib bo'lmaydi.
 -- =====================================================================
 
@@ -60,8 +61,9 @@ drop policy if exists br_admin_all on public.bus_routes;
 create policy br_admin_all on public.bus_routes for all
   using (app.is_admin()) with check (app.is_admin());
 
--- Joylashuvlar — kirgan foydalanuvchi (ota-ona) o'qiydi. Yozish siyosati YO'Q
--- (faqat security-definer RPC yozadi -> to'g'ridan-to'g'ri INSERT/UPDATE bloklangan).
+-- Joylashuvlar — yozish siyosati YO'Q (faqat security-definer RPC yozadi -> to'g'ridan-to'g'ri
+-- INSERT/UPDATE bloklangan). O'QISH qoidasi bu yerda vaqtinchalik: zanjir oxiridagi bus-access.sql
+-- uni «xodim yoki farzandi bog'langan ota-ona» bilan almashtiradi (child_claims.status shundan keyin paydo bo'ladi).
 drop policy if exists bp_sel on public.bus_positions;
 create policy bp_sel on public.bus_positions for select
   using (app.uid() is not null or app.is_admin());

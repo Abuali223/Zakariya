@@ -1379,6 +1379,13 @@ function openTab(tab){
   currentTab=tab; VIEW_GEN++;   // yangi ko'rinish — eski renderlarning kech yozuvi bekor bo'ladi
   $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
+  // Tez almashganda ESKI bo'limning kech tugagan renderi endi yo'q elementga yozib TypeError otardi (jonli tekshiruvda
+  //   «Imtihonlar»da ko'rindi) — eski ko'rinish xatosi jim o'tadi; JORIY bo'lim xatosi avvalgidek konsolda ko'rinadi.
+  const g=VIEW_GEN, p=renderTab(tab);
+  if(p && typeof p.catch==='function') p.catch(e=>{ if(g===VIEW_GEN) console.error(e); });
+  return p;
+}
+function renderTab(tab){
   if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
   if(tab==='attendance') return renderAttendance();
@@ -1404,7 +1411,7 @@ function openTab(tab){
   if(tab==='sick') return renderSick();
   if(tab==='exams') return renderExams();
   if(tab==='olympiads') return renderOlympiads();
-  renderCollection(tab);
+  return renderCollection(tab);
 }
 
 /* ---- Bildirishnoma belgilari (yangi arizalar) — real vaqt ---- */

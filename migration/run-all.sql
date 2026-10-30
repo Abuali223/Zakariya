@@ -101,5 +101,7 @@ set local iqror.migrating = '1';
 \ir camera-days.sql
 \ir change-log.sql
 \ir secdef-searchpath.sql
+\ir bus-access.sql
+\ir rls-initplan.sql
 commit;
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
