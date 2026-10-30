@@ -13,6 +13,10 @@
 # =====================================================================
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# rls-initplan.sql zanjirda OXIRGI bo'lishi shart: u barcha policy'larni o'raydi (tezlik) va 42P17 halqasini sinaydi —
+#   undan keyin qo'shilgan migratsiya policy'lari o'ralmay qolardi yoki yangi halqa profil/kartochka saqlashni buzardi.
+LAST=$(grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | tail -1 | awk '{print $2}')
+[ "$LAST" = "rls-initplan.sql" ] || { echo "chain.sh: run-all.sql'dagi OXIRGI fayl rls-initplan.sql bo'lishi shart (hozir: ${LAST:-topilmadi}) — yangi migratsiyani undan OLDIN qo'shing" >&2; exit 1; }
 echo "\\set ON_ERROR_STOP on"
 # Zanjir belgisi: har bir fayl boshidagi qo'riqchi (\if :{?iqror_chain}) faylni ALOHIDA ishga tushirishni rad etadi.
 echo "\\set iqror_chain 1"

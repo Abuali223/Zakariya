@@ -1042,6 +1042,10 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   barcha policy'larda argumentsiz rol yordamchilari `(SELECT app.f())` ga o'raladi (Supabase linter 0003) — so'rovga BIR MARTA.
   O'zini subso'rovda o'qiydigan jadval (users) avtomatik chetlanadi — aks holda 42P17 «infinite recursion» (sinov matritsasi
   ushladi: profilni saqlash buzilardi). PG16, 300 ming qator: anon 6,5 s -> 26 ms; HR oylik 537 -> 7 ms; direktor 186 -> 7 ms.
+  Himoyalar (raqib ko'rigidan keyin): matndan ko'rinmaydigan halqa (security_invoker view, boshqa sxema) uchun o'ralgan har
+  jadval `authenticated` nomidan EXPLAIN qilinadi — 42P17 bo'lsa asl policy qaytariladi (OGOHLANTIRISH); '...' satr ichidagi
+  matn o'ralmaydi; boshqa rol egasi bo'lgan jadval tegilmaydi; ALTER xatosi (lock timeout) deployni to'xtatmaydi; `chain.sh`
+  rls-initplan.sql zanjirda OXIRGI ekanini majburlaydi (undan keyin qo'shilgan fayl — xato, baza o'zgarmaydi).
 - **Topilma 2 — avtobusning jonli joylashuvi har kirgan hisobga ochiq edi** (`bp_sel`: `app.uid() is not null`) — ro'yxatdan o'tish
   ochiq, ya'ni begona odam ham GPS/tezlik/haydovchi ismini ko'rardi (farzandsiz sinov hisobi bilan tasdiqlandi). **Tuzatma
   `migration/bus-access.sql`:** faqat xodim (`is_staff`) yoki FAOL bog'langan farzandi bor ota-ona (`app.has_active_child()` —
@@ -1059,8 +1063,13 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   deploy yo'li (HEAD -> yangi ×2) va noldan qurish — policy va verify-db barmoq izi BIR XIL, ikki marta o'ralish yo'q; RLS
   matritsasi 18 foydalanuvchi (anon, har rol, bloklangan direktor, faol/bekor/yo'q bog'lanishli ota-ona) × har jadval ×
   ko'rish/yangilash/o'chirish/qo'shish = 4446 tekshiruv — farq faqat bus_positions ko'rishda; SQL: audit 29, camera 10, yoz 8,
-  maosh ID testlari (eski/yangi chiqish bir xil); brauzer: 70 + 9, pasport ID 74/11/23/19, tez almashtirish 3 (HEAD'da xato
-  chiqishi nazorati bilan); ESLint no-undef — yangi nom yo'q.
+  maosh ID testlari (eski/yangi chiqish bir xil); brauzer: 70 + 9, pasport ID 74/11/23/19, tez almashtirish 3 (7ba8190'da xato
+  chiqishi nazorati bilan); ESLint no-undef — yangi nom yo'q. Avtobus 11 holat; ko'rib chiquvchining qiyin policy shakllari
+  (view/boshqa sxema/qo'shtirnoqli nom/ikki jadvalli halqa, RESTRICTIVE, satr ichida `app.is_admin()`) — hammasida UPDATE ishlaydi;
+  superuser bo'lmagan deploy roli va qulf kutishi — deploy to'xtamaydi.
+- **Raqib ko'rigi (3 tekshiruvchi: ma'no, xavfsizlik, deploy + tasdiqlovchilar):** xavfsizlik — 2 (ketgan/o'chirilgan bola oilasi
+  avtobusni ko'rardi; yo'nalish o'chirilganda joylashuv qolardi) — tuzatildi; ma'no — 2 (matndan ko'rinmaydigan halqa; «oxirgi
+  bo'lishi shart» majburlanmagan) — tuzatildi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
