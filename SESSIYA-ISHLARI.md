@@ -1073,6 +1073,16 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   avtobusni ko'rardi; yo'nalish o'chirilganda joylashuv qolardi) — tuzatildi; ma'no — 2 (matndan ko'rinmaydigan halqa; «oxirgi
   bo'lishi shart» majburlanmagan) — tuzatildi; deploy — 1 (zanjirdan tashqari band jadval policy'lari K×20 s qulf kutishi) —
   tuzatildi (band jadval bilan sinov: zanjir 0,4 s, 1 ogohlantirish; keyingi deployda o'raldi).
+- **Deploydan keyin (a600573) jonli qayta tekshiruv:** anon — 14 katta jadval 200/0 qator, 0,27–0,36 s (asosan tarmoq; kamera
+  jadvali deploydan oldin 3,3 s'da 500/57014 edi); direktor — staff_checkins 75 111 qatorni 0,3 s'da sanaydi, oylik so'rov (3 252)
+  0,28 s, camera_days ishlaydi; «0 qatorli» PATCH (id = mavjud bo'lmagan qiymat; statement trigger yo'q — hech narsa o'zgarmaydi)
+  14 jadvalda (users ham) — 42P17 yo'q; change_log — deploy hech narsa yozmagan (2 soatdagi 17 yozuv — oddiy to'lov/faktura
+  amallari); admin 37 bo'lim — yozuv urinishi, xato so'rov, konsol xatosi 0; «Imtihonlar» tez almashtirish (5 marta) — xato yo'q;
+  verify.html ishlaydi. Avtobusning «kirgan, lekin xodim emas» holati jonli tekshirilmadi (bunday hisob kerak) — PG16 sinovlari bor.
+- **Yangi topilma — bazadagi NAMUNA yozuvlar** (kod tuzatmasi PUB_DEMO faqat koddagi namunalarni yashiradi; bazaga ko'chirilganlari
+  haqiqiy ma'lumot bo'lib ko'rinadi — 1 s'da yo'q, 10 s'da «Aziza Karimova» va b. chiqadi): maktab yutuqlari 5/5, o'quvchilar
+  yutuqlari 4/6, yangiliklar 4/7, tadbirlar 2/5, savol-javob 5/9, qabul bosqichlari 4/4, rejalar 0/3 (index.html namuna massivlari
+  bilan matn bo'yicha solishtirildi). Direktor ko'rib chiqadi (hujjatda ro'yxat); bosh sahifa raqamlari (440/32/100%) — Sozlamalarda.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
