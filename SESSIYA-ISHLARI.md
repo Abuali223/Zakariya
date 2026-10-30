@@ -1099,6 +1099,24 @@ so'rovini o'zi to'xtatadi; natijada faqat sonlar/holat kodlari — ism, telefon,
   faqat o'zgargani yoziladi (hozircha 31/31 saytda repo bilan bir xil); full-deploy.sh tekshiruvi hammasini solishtiradi.
   Sinov: qum quti — 1-ishga tushirish 49 o'rnatish, 2 .bak; 2-ishga tushirish 0 statik qayta yozish; buzilgan fayl «!!» bilan ushlandi.
 
+## 44) Direktor qarorlari va joriy etish yo'l xaritasi (2026-10-30)
+Direktor hujjatdagi 9 savolga javob berdi (D1–D9: ikki kishilik tasdiqlar, Moliya → HR maosh, SMS sozlamalari,
+Telegram, haqsiz ta'til, o'quvchi ma'lumoti yopiq, telefonni ko'rish mumkin — yuklab olish yo'q, hujjatda sog'liq yo'q,
+yillik to'lov yo'q) va keng joriy etish rejasini so'radi. Javoblar hujjatning «Qaror» ustuniga yozildi; yangi
+«Yo'l xaritasi» varag'i: kamchiliklar, 5 bosqich va darvozalar (vaqt chizig'i), indikatorlar, Telegram tasdiqlash,
+ochiq savollar, «Bu hafta». Texnik ro'yxat: `JORIY-ETISH-REJA.md` (har ish, hajmi, `fayl:qator`).
+- **Tahlil:** 6 yo'nalish (tasdiqlar, «Bemor»/hamshira, xabarnoma/Telegram, maxfiylik, xavflar, indikatorlar) —
+  kod bo'yicha, `fayl:qator` bilan; Telegram faktlari core.telegram.org'dan tekshirildi (request_contact, Contact.user_id,
+  deep link ≤64 belgi, ~30 xabar/s, Gateway $0.01/kod).
+- **Jonli o'lchov (faqat sonlar):** 10 hisob, hammasi ma'muriyat (o'qituvchi/ota-ona 0); 30 kunda 346 to'lov;
+  sentyabr ~77% yig'ilgan; oktyabr davomati 0; 2099-09 sinov qatorlari 14; maosh to'lovi 0.
+- **Yangi topilmalar (maxfiylik):** anonim so'rov `students_public`dan 380 o'quvchi (ism, sinf, ball) oladi — D6 ga zid;
+  eski Firebase (alilazer-cd582) jonli, `students` 46 / `teachers` 6 hujjat hammaga o'qiladi (faqat son sanaldi);
+  GitHub repozitoriy OCHIQ va GitHub Pages eski saytni ko'rsatadi. Repodagi shaxsiy ma'lumot (ism + ID + qarz, ota-ona
+  telefoni) 1858f40 da olib tashlandi/psevdonimlandi (testlar o'zgarishsiz o'tdi); git tarixida qoladi — private kerak.
+- **Asosiy xulosa:** xavf odamlar va tartibda; pulga ta'sir qiluvchi qarorlarda ikkinchi tasdiq yo'q va bazada
+  majburlanmaydi (moliya fakturani to'g'ridan-to'g'ri yozadi); bitta server, zaxira/tiklash sinalmagan, ogohlantirish yo'q.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
