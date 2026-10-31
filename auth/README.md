@@ -34,10 +34,86 @@ telefon tasdiqlanadi. **SMS faqat O‘zbekiston raqamlariga** yuboriladi. **Maxf
 | POST | `/auth/reset-confirm` | `{ticket, newPassword}` | `{ok, message}` |
 | POST | `/auth/change-phone-confirm` | `{ticket}` | `{ok, message}` |
 | POST | `/auth/sms-remind` | `{jwt, studentId, preview?}` | `{ok, preview?, name, phone, due, months, message}` / `{ok, sent}` / `{ok:false, already?, error}` |
-| GET | `/auth/health` | — | `ok` |
+| POST | `/auth/block-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, prevRole, claims, sessions, message}` / `{ok:false, error}` + HTTP 401/403/400/404/409/502 |
+| POST | `/auth/unblock-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, role, status, claims, message}` / `{ok:false, error}` |
+| GET | `/auth/health` | — | `ok` (ommaviy, hech qanday ma'lumotsiz — tashqi kuzatuv uchun) |
+| GET | `/auth/health/deep` | `Authorization: Bearer <direktor JWT>` | `{ok, at, checks:[{key, name, ok, info, at?, ms}]}`; anon 401, boshqa rol 403 |
 
 Mijoz `login`/`register`dan keyin `supabase.auth.setSession({access_token, refresh_token})` chaqiradi
 (seansni brauzerda o‘rnatadi).
+
+## SMS kod yetib bormasa — aniq xato
+
+Eskiz SMS'ni rad etsa (masalan shablon moderatsiyada, balans tugagan) yoki ~8 soniyada javob bermasa (`auth.otpSmsTimeoutMs`,
+standart 8000) — `request-otp` `{ok:false, smsFailed:true, error:'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki
+maktabga murojaat qiling.'}` qaytaradi (avval `{ok:true}` qaytib, odam kelmaydigan kodni kutardi). Kod avval «yuborilmoqda»
+holida yoziladi (tekshirib bo‘lmaydi) va faqat Eskiz qabul qilgach faollashadi; SMS ketmasa — yozuv o‘chiriladi: bu urinish
+soatlik (telefon/IP) limitga va 60 s «qayta yuborish» kutishiga **sanalmaydi**, oldin yetib borgan kod amal qilaveradi; sayt
+«Qayta yuborish»ni darhol bosiladigan qiladi. Sinov rejimi (`sms.dryRun`) o‘zgarmagan. Javob baribir muddat + ≤2 s ichida
+qaytadi (Eskiz javobni juda sekin bersa ham); muddat o‘tgach kech yetib kelgan SMS'dagi kod ishlamaydi — odam «Qayta
+yuborish»ni bosadi. ⚠️ Parol tiklashda Eskiz ishlamay turgan paytda mavjud raqam «SMS yuborilmadi», ro‘yxatda yo‘q raqam esa
+«kod yuborildi» oladi — faqat nosozlik paytida.
+
+## Maktab Wi‑Fi'si — ishonchli IP (`auth.otpTrustedIps`)
+
+Bir IP soatiga `otpMaxPerIpHour` (20) ta kod so‘ray oladi (SMS «pompalash»dan himoya). Maktabda ota-onalar bitta Wi‑Fi'dan
+(bitta tashqi IP) ro‘yxatdan o‘tsa — 20 tadan keyin «Juda ko‘p so‘rov» chiqadi. Maktabning tashqi IP'sini ishonchli qiling:
+```json
+"auth": { "otpTrustedIps": ["203.0.113.7"], "otpMaxPerTrustedIpHour": 300 }
+```
+- Aniq IP yoki CIDR (`"203.0.113.0/28"`, IPv6 ham). Juda keng tarmoq (IPv4 /16 dan, IPv6 /32 dan keng) va yaroqsiz yozuv
+  qabul qilinmaydi (serverni ishga tushirishda ogohlantirish). Telefon bo‘yicha limit (`otpMaxPerHour`, 5) O‘ZGARMAYDI.
+- **Maktab IP'sini aniqlash:** maktab Wi‑Fi'siga ulangan telefon/kompyuterda `https://ifconfig.me` ni oching (yoki
+  `curl -s https://ifconfig.me`) — chiqqan raqam. Yoki maktabda bir nechta ota-ona ro‘yxatdan o‘tgan soatdan keyin serverda:
+  `sudo docker exec supabase-db psql -U postgres -d postgres -c "select ip, count(*) from public.otp_codes where \"createdAt\" > now() - interval '2 hours' group by ip order by 2 desc limit 5"`
+  — eng ko‘p takrorlangan IP. Provayder IP'ni o‘zgartirsa (statik bo‘lmasa) — yangisini yozing; provayderdan statik IP so‘rash tavsiya etiladi.
+- O‘zgartirgach: `sudo systemctl restart iqror-auth` (jurnalda: «ishonchli (maktab) IP yozuvlari: N ta»).
+- Mijoz IP'si: so‘rov nginx'dan (127.0.0.1) kelsa — `X-Real-IP` (nginx `$remote_addr`) yoki `X-Forwarded-For`ning OXIRGI qiymati;
+  to‘g‘ridan-to‘g‘ri ulanishda — soket manzili. Mijoz yozgan sarlavha limitni chetlab o‘tmaydi (`net.cjs`, `net.test.cjs`).
+  nginx'da `proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $remote_addr;` bo‘lishi shart
+  (`migration/deploy/nginx.conf.example`) — aks holda hamma so‘rov bitta IP (127.0.0.1) bo‘lib ko‘rinadi.
+- Login limiti telefon bo‘yicha (15 daqiqada 10 xato) — IP bo‘yicha login limiti yo‘q, shuning uchun bu sozlama faqat OTP'ga ta’sir qiladi.
+
+## Hisobni bloklash (ishdan bo‘shatish) — «Foydalanuvchilar» → «🚫 Bloklash»
+
+«O‘chirish» faqat `users` qatorini o‘chiradi — kirish hisobi (auth) qoladi, odam telefon/parol bilan qayta kiradi. Ishdan ketgan
+xodim yoki muammoli hisob uchun **Bloklash** (faqat FAOL direktor; tasdiq oynasi bilan):
+1. GoTrue taqig‘i (`ban_duration: 876000h`) — yangi kirish va token yangilash yopiladi;
+2. bazada (atomik, `public.user_block`): `users.role` olinadi (avvalgisi `blockedRole`ga), `status='blocked'`, `blockedAt/blockedBy`;
+   RLS rol funksiyalari statusni tekshirmaydi — rol olinishi ochiq seansni ham DARHOL yopadi; kirish seanslari
+   (`auth.sessions`, `auth.refresh_tokens`) o‘chiriladi; ota-ona bo‘lsa — FAOL `child_claims` → `revoked`;
+3. o‘zini va oxirgi FAOL direktorni bloklash — rad; 2-bosqich bajarilmasa 1-bosqich orqaga qaytariladi (hech narsa o‘zgarmaydi).
+«Blokdan chiqarish» — taqiq olinadi, rol `blockedRole`dan qaytadi (bloklangan paytda qo‘lda rol berilgan bo‘lsa — o‘sha),
+shu bloklashda to‘xtatilgan farzand bog‘lanishlari qaytadi; rol tayinlanmagan yangi xodim — yana «kutmoqda». Hammasi
+o‘zgarishlar tarixiga (change_log) direktor nomi bilan yoziladi. Bloklangan hisobni «Tahrirlash» oynasida saqlab bo‘lmaydi.
+
+**To‘liq o‘chirish** (masalan hisob egasining talabi bilan; qaytarib bo‘lmaydi) — serverda, email bo‘yicha (telefon hisobida
+email — `998XXXXXXXXX@phone.iqroacademy.uz`). Avval kimligini tekshiring, so‘ng bitta tranzaksiyada:
+```bash
+E='998XXXXXXXXX@phone.iqroacademy.uz'   # o‘chiriladigan hisob (X — raqamlar; o‘zgartirilmasa hech narsa o‘chmaydi)
+sudo docker exec -i supabase-db psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 -v e="$E" <<'SQL'
+select u.id, u.name, u.role, u.status from public.users u join auth.users a on a.id::text = u.id where lower(a.email) = lower(:'e');
+begin;
+create temp table del_uid on commit drop as select id::text as uid from auth.users where lower(email) = lower(:'e');
+do $$ begin if (select count(*) from del_uid) <> 1 then raise exception 'Aniq bitta hisob topilmadi — hech narsa o''chirilmadi'; end if; end $$;
+delete from public.child_claims where uid in (select uid from del_uid);
+update public.staff    set "userUid" = '' where "userUid" in (select uid from del_uid);
+update public.teachers set "userUid" = '' where "userUid" in (select uid from del_uid);
+delete from public.users where id in (select uid from del_uid);
+delete from auth.users  where id::text in (select uid from del_uid);
+commit;
+SQL
+```
+(Davomat, maosh, to‘lov tarixi o‘chirilmaydi — ular HR/moliya yozuvlari; o‘zgarishlar tarixida o‘chirish qayd etiladi.)
+
+## «🩺 Tizim holati» — `GET /authapi/health/deep`
+
+Faqat FAOL direktor JWT bilan (admin panel → Sozlamalar). Har tekshiruv ≤ 3 s, parallel: baza (`config` jadvalidan yengil
+so‘rov), GoTrue (`/auth/v1/health`), Eskiz (kalit bormi; balans — faqat `auth.health.eskizBalance: true` bo‘lsa,
+`GET /api/user/get-limit`), to‘lov va AI serverlari (`127.0.0.1:8790/8791/health`), oxirgi muvaffaqiyatli onlayn to‘lov
+(Click/Uzum — `payments` jadvalidan), oxirgi zaxira (`/var/log/iqror-backup.log` dagi oxirgi «backup OK»; 26 soatdan eski yoki
+oxirgi urinish xato — qizil). Javobda kalit, token, parol, manzil, email, telefon YO‘Q. Sozlama (`auth.health`, ixtiyoriy):
+`backupLog` (false — o‘chiq), `backupMaxAgeHours`, `payPort`/`aiPort` (0 — o‘chiq), `eskizBalance`.
 
 ## Xavfsizlik eslatmalari
 
@@ -48,6 +124,7 @@ Mijoz `login`/`register`dan keyin `supabase.auth.setSession({access_token, refre
 - **Yetim (squat) hisob**: kimdir sintetik email bilan to‘g‘ridan-to‘g‘ri hisob ochib qo‘ysa (users
   qatorisiz), haqiqiy egasi ro‘yxatdan o‘tganда server uni **o‘chirib qayta yaratadi** (`auth_uid_by_email`).
 - OTP kodi va parol **hech qachon** logga yozilmaydi (faqat DRY rejimда kod ko‘rinadi).
+- Tarmoq darajasida: nginx `limit_req` `/authapi/` uchun (10 so‘rov/s, burst 20) — `migration/deploy/nginx.conf.example`.
 
 ## Ishga tushirish
 

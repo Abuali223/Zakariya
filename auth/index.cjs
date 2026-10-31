@@ -19,7 +19,11 @@
  *   POST /auth/reset-confirm      { ticket, newPassword }
  *   POST /auth/change-phone-confirm { ticket }
  *   POST /auth/sms-remind         { jwt, studentId, preview? }            -> qarzdor ota-onasiga SMS eslatma (sms-remind.cjs)
- *   GET  /auth/health             -> ok
+ *   POST /auth/block-user         { jwt, uid }   POST /auth/unblock-user { jwt, uid }  -> hisobni bloklash (user-admin.cjs)
+ *   GET  /auth/health             -> ok   (ommaviy, hech qanday ma'lumotsiz)
+ *   GET  /auth/health/deep        Authorization: Bearer <direktor JWT> -> xizmatlar holati (health.cjs)
+ *   SMS yuborilmasa (Eskiz xatosi / ~8 s javobsiz) request-otp -> { ok:false, smsFailed:true, error } — urinish limitga
+ *   sanalmaydi. Ishonchli (maktab) IP'lar — auth.otpTrustedIps (net.cjs).
  *
  * Ishga tushirish:  cp config.example.json config.json (to'ldiring) ; node index.cjs
  * Batafsil: README.md
@@ -28,6 +32,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const L = require('./lib.cjs');
+const N = require('./net.cjs');
 const { DEF_OTP } = require('../payments/sms.cjs');
 
 const MAX_BODY = 64e3;   // auth payloadlari kichik — 64 KB yetarli
@@ -64,6 +69,12 @@ function makeHandlers(deps) {
   const OTP_RESEND = Number(C.otpResendSec || 60);
   const OTP_MAX_HOUR = Number(C.otpMaxPerHour || 5);
   const OTP_MAX_IP_HOUR = Number(C.otpMaxPerIpHour || 20);   // bitta IP soatiga qancha OTP so'rovi (SMS flood)
+  // Maktab Wi‑Fi'si: ko'p ota-ona/xodim BITTA tashqi IP'dan ro'yxatdan o'tadi — ishonchli IP (otpTrustedIps: aniq IP yoki
+  //   CIDR) uchun IP limiti otpMaxPerTrustedIpHour (standart 300). Telefon bo'yicha limit (otpMaxPerHour) O'ZGARMAYDI.
+  const OTP_MAX_TRUSTED_IP_HOUR = Number(C.otpMaxPerTrustedIpHour || 300);
+  const TRUSTED = N.ipMatcher(C.otpTrustedIps);
+  const SMS_TIMEOUT = Number(C.otpSmsTimeoutMs || 8000);   // Eskiz javob bermasa — ~8 s dan keyin «SMS yuborilmadi»
+  const SMS_FAILED = 'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki maktabga murojaat qiling.';
   const TICKET_TTL = Number(C.ticketTtlSec || 600);
   const LOGIN_MAX_FAILS = Number(C.loginMaxFails || 10);
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
@@ -116,11 +127,12 @@ function makeHandlers(deps) {
     const { data: recent, error: selErr } = await sb.from('otp_codes').select('id').eq('phone', canon).gte('createdAt', hourAgo);
     if (selErr) console.error('OTP select fail:', selErr.code || '', selErr.message || selErr, selErr.details || '', selErr.hint || '');
     if ((recent || []).length >= OTP_MAX_HOUR) return { ok: false, error: `Soatiga ${OTP_MAX_HOUR} martadan ortiq kod so‘rab bo‘lmaydi. Keyinroq urinib ko‘ring.` };
-    // IP bo'yicha limit — bitta manba ko'p raqamga SMS «pompalamasin» (toll fraud).
+    // IP bo'yicha limit — bitta manba ko'p raqamga SMS «pompalamasin» (toll fraud). Maktabning ishonchli IP'si — kattaroq limit.
     const ip = String(body._ip || '').slice(0, 64);
     if (ip) {
+      const ipMax = TRUSTED.has(ip) ? OTP_MAX_TRUSTED_IP_HOUR : OTP_MAX_IP_HOUR;
       const { data: byIp } = await sb.from('otp_codes').select('id').eq('ip', ip).gte('createdAt', hourAgo);
-      if ((byIp || []).length >= OTP_MAX_IP_HOUR) return { ok: false, error: 'Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.' };
+      if ((byIp || []).length >= ipMax) return { ok: false, error: 'Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.' };
     }
     const last = await lastOtp(canon, purpose);
     if (last && last.createdAt) {
@@ -131,14 +143,41 @@ function makeHandlers(deps) {
     const code = L.genCode();
     const codeHash = L.hmacCode(HMAC, canon, purpose, code);
     const expiresAt = new Date(Date.now() + OTP_TTL * 1000).toISOString();
-    // Oldingi ishlatilmagan kodlarni bekor qilamiz (faqat oxirgisi amal qilsin).
-    await sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false);
-    const { error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid, ip });
+    // Yangi kod avval «yuborilmoqda» holida yoziladi (consumed=true — tekshirib BO'LMAYDI): SMS Eskiz'ga yetib borgandagina
+    //   faollashadi. Qator limitlarga va «qayta yuborish» kutishiga SMS yuborilayotgan paytda ham sanaladi (parallel so'rov
+    //   ikkinchi SMS yubormasin). SMS yuborilmasa — qator O'CHIRILADI: bu urinish soatlik/IP limitiga va 60 s kutishga
+    //   SANALMAYDI, oldingi (yetib borgan) kod esa amal qilaveradi.
+    const { data: insRows, error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid, ip, consumed: true }).select('id');
     if (insErr) { console.error('OTP insert fail:', insErr.code || '', insErr.message || insErr, insErr.details || '', insErr.hint || ''); return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' }; }
+    // Shu so'rovning qatori — id bo'yicha (id qaytmasa: telefon + maqsad + kod xeshi bo'yicha).
+    const rowId = (insRows && insRows[0] && insRows[0].id != null) ? insRows[0].id : null;
+    const mine = q => (rowId != null ? q.eq('id', rowId) : q.eq('phone', canon).eq('purpose', purpose).eq('codeHash', codeHash));
 
     const msg = String(OTP_TPL).replace('{code}', code);
+    let sent = true;
     if (DRY) console.log('[DRY OTP]', redactPhone(canon), purpose, code);
-    else { try { const r = await eskiz.send(canon, msg); if (!r.ok) console.error('OTP SMS fail', redactPhone(canon), r.error, (r.raw || '').slice(0, 300)); } catch (e) { console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); } }
+    else {
+      try {
+        // Umumiy qat'iy chegara: Eskiz javobni juda sekin «tomchilatib» bersa ham foydalanuvchi ~SMS_TIMEOUT (+≤2 s) ichida
+        //   javob oladi (sms.cjs muddati — ulanish/sukut bo'yicha). Kech qaytgan natija/xato e'tiborsiz (jurnalga yozilmaydi).
+        let cap = null;
+        const sendP = Promise.resolve().then(() => eskiz.send(canon, msg, { timeoutMs: SMS_TIMEOUT }));
+        sendP.catch(() => {});
+        const r = await Promise.race([sendP, new Promise(res => { cap = setTimeout(() => res({ ok: false, error: 'otp_timeout' }), SMS_TIMEOUT + Math.min(2000, Math.ceil(SMS_TIMEOUT / 4))); })])
+          .finally(() => clearTimeout(cap));
+        if (!r || !r.ok) { sent = false; console.error('OTP SMS fail', redactPhone(canon), r && r.error, ((r && r.raw) || '').slice(0, 300)); }
+      } catch (e) { sent = false; console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); }
+    }
+    if (!sent) {
+      const { error: delErr } = await mine(sb.from('otp_codes').delete());
+      if (delErr) console.error('OTP cleanup fail:', delErr.code || '', delErr.message || delErr);
+      return { ok: false, smsFailed: true, error: SMS_FAILED };
+    }
+    // Faollashtirish: yangi kod — tekshirishga tayyor; oldingi ishlatilmagan kodlar bekor (faqat oxirgisi amal qilsin).
+    const { error: actErr } = await mine(sb.from('otp_codes').update({ consumed: false }));
+    if (actErr) { console.error('OTP activate fail:', actErr.code || '', actErr.message || actErr); return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' }; }
+    const older = sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false);
+    await (rowId != null ? older.neq('id', rowId) : older.neq('codeHash', codeHash));
     return { ok: true, resendAfter: OTP_RESEND };
   }
 
@@ -323,6 +362,59 @@ function makeHandlers(deps) {
   return { requestOtp, verifyOtp, register, login, resetConfirm, changePhoneConfirm };
 }
 
+// Authorization: Bearer <jwt> (GET /health/deep — GET so'rovda tana yo'q).
+function bearer(req) {
+  const m = /^Bearer\s+(\S+)$/i.exec(String((req.headers && req.headers.authorization) || '').trim());
+  return m ? m[1] : '';
+}
+
+// =====================================================================
+// HTTP marshrutlash — SOF (sinovda soxta handlerlar bilan ishga tushiriladi; startServer shuni ishlatadi).
+//   o.routes: { 'request-otp': fn(body), ... } (POST, yo'lning OXIRGI bo'lagi bo'yicha);
+//   o.deepHealth(jwt) -> { httpStatus, body } (GET .../health/deep); o.corsFor(req) -> sarlavhalar;
+//   o.clientIp(req) -> mijoz IP (standart: net.cjs — X-Forwarded-For/X-Real-IP faqat loopback'dan kelganda).
+//   Handler javobidagi httpStatus — HTTP kodi sifatida ishlatiladi (javob tanasidan olib tashlanadi).
+// =====================================================================
+function makeRouter(o) {
+  const routes = o.routes || {};
+  const corsFor = o.corsFor || (() => ({}));
+  const ipOf = o.clientIp || N.clientIp;
+  return async (req, res) => {
+    const parts = (req.url || '').split('?')[0].replace(/\/+$/, '').split('/');
+    const seg = parts[parts.length - 1] || '', prev = parts[parts.length - 2] || '';
+    const cors = corsFor(req);
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+    // «🩺 Tizim holati» — faqat direktor JWT bilan (ommaviy /health'dan alohida; javob keshlanmaydi).
+    if (req.method === 'GET' && seg === 'deep' && prev === 'health') {
+      let r;
+      try { r = o.deepHealth ? await o.deepHealth(bearer(req)) : { httpStatus: 404, body: { ok: false, error: 'not found' } }; }
+      catch (e) { console.error('health/deep xato:', e && e.message); r = { httpStatus: 500, body: { ok: false, error: 'Server xatosi.' } }; }
+      res.writeHead(r.httpStatus || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...cors });
+      return res.end(JSON.stringify(r.body || {}));
+    }
+    if (req.method === 'GET' && (seg === 'health' || req.url === '/health')) { res.writeHead(200, cors); return res.end('ok'); }
+    if (req.method !== 'POST') { res.writeHead(405, cors); return res.end('POST kutiladi'); }
+    const fn = Object.prototype.hasOwnProperty.call(routes, seg) ? routes[seg] : null;
+    if (!fn) { res.writeHead(404, cors); return res.end('not found'); }
+    const { raw, tooLarge } = await readBody(req);
+    if (tooLarge) { res.writeHead(413, cors); return res.end('payload too large'); }
+    const send = (obj, code) => { res.writeHead(code || 200, { 'Content-Type': 'application/json', ...cors }); res.end(JSON.stringify(obj)); };
+    try {
+      const body = parseBody(raw, req.headers['content-type']);
+      // Mijoz IP: nginx (loopback) qo'ygan X-Real-IP / X-Forwarded-For'ning OXIRGI qiymati; to'g'ridan-to'g'ri ulanishda —
+      //   soket manzili (mijoz yozgan sarlavha limitni chetlab o'tmaydi). Batafsil: net.cjs.
+      body._ip = ipOf(req);
+      const out = await fn(body);
+      let code = out && out.ok === false && (out.locked ? 429 : 200);
+      if (out && out.httpStatus) { code = out.httpStatus; delete out.httpStatus; }
+      send(out, code);
+    } catch (e) {
+      console.error('auth xato:', seg, e && e.message);
+      send({ ok: false, error: 'Server xatosi. Keyinroq urinib ko‘ring.' }, 500);
+    }
+  };
+}
+
 // =====================================================================
 // HTTP server (faqat `node index.cjs` bilan ishga tushganда).
 // =====================================================================
@@ -352,10 +444,26 @@ function startServer() {
   const tplReader = (!eskiz && SMS.enabled !== false && (SMS.token || /@/.test(String(SMS.eskizEmail || SMS.email || '')))) ? makeEskiz(SMS) : null;
   try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, tplReader, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); }
   catch (e) { console.error('sms-remind yuklanmadi:', e && e.message); smsRemind = async () => ({ ok: false, error: 'SMS eslatma xizmati vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
+  // JWT -> { uid } | { invalid } | { unavailable } (GoTrue javob bermasa — «seans eskirgan» deb aytmaymiz).
+  const verifyUser = async jwt => {
+    try {
+      const { data, error } = await sb.auth.getUser(String(jwt || ''));
+      if (data && data.user && data.user.id) return { uid: data.user.id };
+      const st = Number((error && error.status) || 0);
+      return (st >= 400 && st < 500) ? { invalid: true } : { unavailable: true };
+    } catch (_) { return { unavailable: true }; }
+  };
+  const { makeUserAdmin } = require('./user-admin.cjs');
+  const UA = makeUserAdmin({ sb, admin: sb, verifyUser });
+  const { makeDeepHealth } = require('./health.cjs');
+  const DH = makeDeepHealth({ sb, verifyUser, eskiz, smsCfg: SMS, cfg: AUTH, supabaseUrl: supaUrl, anonKey });
+  const tm = N.ipMatcher(AUTH.otpTrustedIps);
+  if (tm.bad.length) console.error('⚠️ auth.otpTrustedIps: yaroqsiz yoki juda keng yozuv(lar) e’tiborsiz qoldirildi:', tm.bad.join(', '));
+  if (tm.size) console.log(`auth: ishonchli (maktab) IP yozuvlari: ${tm.size} ta — IP limiti ${Number(AUTH.otpMaxPerTrustedIpHour || 300)}/soat`);
   const ROUTES = {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,
     'login': H.login, 'reset-confirm': H.resetConfirm, 'change-phone-confirm': H.changePhoneConfirm,
-    'sms-remind': smsRemind,
+    'sms-remind': smsRemind, 'block-user': UA.blockUser, 'unblock-user': UA.unblockUser,
   };
   // CORS: ruxsat etilgan origin(lar) ro'yxati (vergul bilan yoki massiv). Brauzer api.iqror.uz'ga
   //   cross-origin murojaat qiladi (sayt iqroacademy.uz'да) — shuning uchun mos originни qaytaramiz.
@@ -366,34 +474,13 @@ function startServer() {
     const origin = req.headers.origin || '';
     const allow = CORS_LIST.includes('*') ? '*' : (CORS_LIST.includes(origin) ? origin : '');
     if (!allow) return {};
-    return { 'Access-Control-Allow-Origin': allow, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+    return { 'Access-Control-Allow-Origin': allow, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
   };
   const PORT = Number(AUTH.port || CFG.authPort || 8792);   // 8790=to'lov, 8791=AI — band
 
-  const server = http.createServer(async (req, res) => {
-    const seg = (req.url || '').split('?')[0].replace(/\/+$/, '').split('/').pop();
-    const cors = corsFor(req);
-    if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
-    if (req.method === 'GET' && (seg === 'health' || req.url === '/health')) { res.writeHead(200, cors); return res.end('ok'); }
-    if (req.method !== 'POST') { res.writeHead(405, cors); return res.end('POST kutiladi'); }
-    const fn = ROUTES[seg];
-    if (!fn) { res.writeHead(404, cors); return res.end('not found'); }
-    const { raw, tooLarge } = await readBody(req);
-    if (tooLarge) { res.writeHead(413, cors); return res.end('payload too large'); }
-    const send = (obj, code) => { res.writeHead(code || 200, { 'Content-Type': 'application/json', ...cors }); res.end(JSON.stringify(obj)); };
-    try {
-      const body = parseBody(raw, req.headers['content-type']);
-      // Mijoz IP (nginx X-Forwarded-For'ni $remote_addr'ga o'rnatadi — mijoz spoof qila olmaydi).
-      body._ip = (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || (req.socket && req.socket.remoteAddress) || '';
-      const out = await fn(body);
-      send(out, out && out.ok === false && (out.locked ? 429 : 200));
-    } catch (e) {
-      console.error('auth xato:', seg, e && e.message);
-      send({ ok: false, error: 'Server xatosi. Keyinroq urinib ko‘ring.' }, 500);
-    }
-  });
-  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind})`));
+  const server = http.createServer(makeRouter({ routes: ROUTES, corsFor, deepHealth: DH.handle }));
+  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind,block-user,unblock-user,health,health/deep})`));
 }
 
 if (require.main === module) startServer();
-module.exports = { makeHandlers, readBody, redactPhone, startServer };
+module.exports = { makeHandlers, makeRouter, readBody, redactPhone, startServer };

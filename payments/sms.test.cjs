@@ -17,7 +17,7 @@ const fakeHttps = {
     const req = new EventEmitter();
     let timer = null, done = false;
     req.write = (b) => { call.body += String(b); };
-    req.setTimeout = (ms, cb) => { if (step.hang) timer = setTimeout(cb, Math.min(ms, 50)); };
+    req.setTimeout = (ms, cb) => { call.tmo = ms; if (step.hang) timer = setTimeout(cb, Math.min(ms, 50)); };
     req.destroy = (err) => { if (done) return; done = true; if (timer) clearTimeout(timer); setImmediate(() => req.emit('error', err || new Error('destroyed'))); };
     req.end = () => setImmediate(() => {
       // Haqiqiy Node kabi: avval 'socket', keyin TLS 'secureConnect' (preconn* — ulanish o'rnatilmaydi).
@@ -182,6 +182,42 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   r = await S.makeEskiz({ token: 'TOK' }).templates();
   ok('templates: faqat token bilan — login yo\'q', r.ok && calls.length === 1 && calls[0].auth === 'Bearer TOK', calls);
   ok('DEF_OTP ASCII (GSM-7) va {code} bor', /^[\x00-\x7F]*$/.test(S.DEF_OTP) && /\{code\}/.test(S.DEF_OTP));
+
+  // 7l) ixtiyoriy timeoutMs (OTP ~8 s): BITTA umumiy muddat — login + yuborish; berilmasa avvalgidek (ESKIZ_TIMEOUT_MS)
+  plan = [LOGIN_OK, SEND_OK]; calls.length = 0;
+  E = S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'p' });
+  r = await E.send('901234567', 'x', { timeoutMs: 8000 });
+  ok('timeoutMs: login va yuborish so‘rovlari ≤ 8000 ms (umumiy muddat)', r.ok && calls.length === 2 && calls.every(c => c.tmo > 7000 && c.tmo <= 8000) && calls[1].tmo <= calls[0].tmo, calls.map(c => c.tmo));
+  plan = [SEND_OK]; calls.length = 0;
+  r = await E.send('901234567', 'x');
+  ok('timeoutMs berilmasa — avvalgidek (ESKIZ_TIMEOUT_MS=30)', r.ok && calls.length === 1 && calls[0].tmo === 30, calls.map(c => c.tmo));
+  plan = [{ hang: true }]; calls.length = 0;
+  err = null; const t3 = Date.now(); try { await E.send('901234567', 'x', { timeoutMs: 40 }); } catch (e) { err = e; }
+  ok('timeoutMs: javob kelmasa — eskiz_timeout (osilib qolmaydi), stage=send', err && /eskiz_timeout/.test(err.message) && err.stage === 'send' && calls[0].tmo <= 40 && Date.now() - t3 < 2000, err && { msg: err.message, tmo: calls[0] && calls[0].tmo });
+  plan = [{ status: 401, body: '{}' }, { status: 200, body: JSON.stringify({ data: { token: 'T3' } }) }, SEND_OK]; calls.length = 0;
+  r = await E.send('901234567', 'x', { timeoutMs: 8000 });
+  ok('timeoutMs: 401 -> qayta login ham shu muddat ichida', r.ok && calls.length === 3 && calls.every(c => c.tmo <= 8000), calls.map(c => c.tmo));
+  plan = [{ status: 200, body: JSON.stringify({ data: [] }) }]; calls.length = 0;
+  r = await E.templates();
+  ok('templates() muddati o‘zgarmagan (30)', r.ok && calls[0].tmo === 30, calls.map(c => c.tmo));
+
+  // 7m) balance(): GET /api/user/get-limit (tizim holati) — SMS yuborilmaydi
+  plan = [LOGIN_OK, { status: 200, body: JSON.stringify({ status: 'success', data: { balance: 125000 } }) }]; calls.length = 0;
+  E = S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'p' });
+  r = await E.balance({ timeoutMs: 3000 });
+  ok('balance: {data:{balance}} -> ok, GET get-limit (Bearer), ≤ 3000 ms', r.ok && r.balance === 125000 && calls[1].path === '/api/user/get-limit' && calls[1].method === 'GET' && calls[1].auth === 'Bearer T1' && calls.every(c => c.tmo <= 3000) && !calls.some(c => /sms\/send/.test(c.path)), { r, calls });
+  plan = [{ status: 401, body: '{}' }, { status: 200, body: JSON.stringify({ data: { token: 'T4' } }) }, { status: 200, body: JSON.stringify({ data: { balance: 0 } }) }]; calls.length = 0;
+  r = await E.balance();
+  ok('balance: 401 -> qayta login -> 0 so‘m ham ok', r.ok && r.balance === 0 && calls.length === 3 && calls[2].auth === 'Bearer T4', { r, calls });
+  plan = [{ status: 403, body: JSON.stringify({ message: 'Forbidden' }) }];
+  r = await E.balance();
+  ok('balance: rad -> ok:false + httpStatus', !r.ok && r.httpStatus === 403 && r.error === 'Forbidden', r);
+  plan = [{ status: 200, body: JSON.stringify({ data: {} }) }];
+  r = await E.balance();
+  ok('balance: balans yo‘q javob -> ok:false', !r.ok && r.httpStatus === 200, r);
+  plan = [{ error: 'ECONNREFUSED' }];
+  err = null; try { await E.balance(); } catch (e) { err = e; }
+  ok('balance: ulanish xatosi -> istisno (stage=send)', err && err.code === 'ECONNREFUSED' && err.stage === 'send', err && { code: err.code, stage: err.stage });
 
   // 8) matn yordamchilari
   ok('fmtSom', S.fmtSom(4510000) === '4 510 000' && S.fmtSom(0) === '0');

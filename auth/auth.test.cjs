@@ -17,7 +17,7 @@ function setup(cfgOverride, opt) {
   const state = Object.assign({}, opt.state || {});
   const sb = makeFake(state);
   const captured = [];
-  const eskiz = { send: async (phone, msg) => { captured.push({ phone, msg }); if (opt.sendImpl) return opt.sendImpl(phone, msg); return { ok: true, id: 'x' }; } };
+  const eskiz = { send: async (phone, msg, sopts) => { captured.push({ phone, msg, opts: sopts }); if (opt.sendImpl) return opt.sendImpl(phone, msg, sopts); return { ok: true, id: 'x' }; } };
   const cfg = Object.assign({
     hmacSecret: 'testsecret', phoneEmailDomain: 'phone.test', otpTtlSec: 180, otpMaxAttempts: 5,
     otpResendSec: 60, otpMaxPerHour: 5, ticketTtlSec: 600, loginMaxFails: 10, loginLockMin: 15,
@@ -375,9 +375,154 @@ const otpOf = (state, phone, purpose) => state.otp_codes.filter(o => o.phone ===
     ok('UZ with extra digit (mask shows it) -> bad phone', r.ok === false && /noto‘g‘ri/.test(r.error || ''), JSON.stringify(r));
   }
   {
+    // Avval Eskiz rad etsa ham {ok:true} qaytardi (kelmaydigan kodni kutish). Endi — aniq xato (pastda batafsil).
     const s4 = setup(null, { sendImpl: async () => ({ ok: false, error: 'x', httpStatus: 400, ambiguous: false }) });
     const r = await s4.H.requestOtp({ phone: '998901230555', purpose: 'register' });
-    ok('UZ behaviour unchanged (always ok)', r.ok === true, JSON.stringify(r));
+    ok('UZ: Eskiz rad etdi -> ok:false, smsFailed (endi «ok» emas)', r.ok === false && r.smsFailed === true, JSON.stringify(r));
+  }
+
+  // ---------------- OTP yetib bormasa — aniq xato, limitga sanalmaydi ----------------
+  const SMS_FAILED = 'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki maktabga murojaat qiling.';
+  sec('OTP: Eskiz xatosi -> {ok:false, smsFailed, aniq matn}; qator o‘chadi; qayta yuborish DARHOL');
+  {
+    let failNow = true;
+    const s = setup(null, { sendImpl: async () => failNow ? { ok: false, error: 'Этот смс текст еще не прошел модерацию', httpStatus: 400, ambiguous: false } : { ok: true, id: 'y' } });
+    const ph = '998901230777';
+    let r = await s.H.requestOtp({ phone: ph, purpose: 'register', _ip: '5.5.5.5' });
+    ok('ok:false + smsFailed + spec matni', r.ok === false && r.smsFailed === true && r.error === SMS_FAILED && r.resendAfter === undefined, JSON.stringify(r));
+    ok('yaratilgan otp_codes qatori o‘chirildi', !s.state.otp_codes.some(o => o.phone === ph), JSON.stringify(s.state.otp_codes));
+    failNow = false;
+    r = await s.H.requestOtp({ phone: ph, purpose: 'register', _ip: '5.5.5.5' });
+    ok('darhol qayta urinish — 60 s kutish YO‘Q, SMS ketdi', r.ok === true && s.captured.length === 2, JSON.stringify(r));
+    const v = await s.H.verifyOtp({ phone: ph, purpose: 'register', code: s.lastCode() });
+    ok('ikkinchi (yetib borgan) kod ishlaydi', v.ok === true && !!v.ticket, JSON.stringify(v));
+  }
+  {
+    const s = setup(null, { sendImpl: async () => { const e = new Error('eskiz_timeout'); e.stage = 'send'; throw e; } });
+    const r = await s.H.requestOtp({ phone: '998901230778', purpose: 'register' });
+    ok('istisno (timeout/uzilish) -> smsFailed', r.ok === false && r.smsFailed === true && r.error === SMS_FAILED, JSON.stringify(r));
+    ok('Eskiz so‘roviga ~8 s muddat uzatiladi (timeoutMs=8000)', s.captured[0] && s.captured[0].opts && s.captured[0].opts.timeoutMs === 8000, JSON.stringify(s.captured[0]));
+    ok('istisnoda ham qator qolmaydi', s.state.otp_codes.length === 0, JSON.stringify(s.state.otp_codes));
+    const s2 = setup({ otpSmsTimeoutMs: 5000 });
+    await s2.H.requestOtp({ phone: '998901230779', purpose: 'register' });
+    ok('otpSmsTimeoutMs sozlamasi ishlaydi', s2.captured[0].opts.timeoutMs === 5000, JSON.stringify(s2.captured[0]));
+    // Eskiz umuman javob bermaydi (sms.cjs muddati ishlamagan holat) — qat'iy chegara: muddat + ≤2 s ichida smsFailed.
+    const s3 = setup({ otpSmsTimeoutMs: 200 }, { sendImpl: () => new Promise(() => {}) });
+    const t0 = Date.now();
+    const r3 = await s3.H.requestOtp({ phone: '998901230780', purpose: 'register' });
+    const ms = Date.now() - t0;
+    ok('osilib qolgan Eskiz -> ~200+50 ms da smsFailed, qator yo‘q', r3.ok === false && r3.smsFailed === true && ms >= 200 && ms < 1500 && s3.state.otp_codes.length === 0, JSON.stringify({ r3, ms }));
+  }
+  sec('OTP: muvaffaqiyatsiz urinishlar soatlik/IP limitiga va 60 s kutishga SANALMAYDI');
+  {
+    let failNow = true;
+    const s = setup({ otpMaxPerIpHour: 3 }, { sendImpl: async () => failNow ? { ok: false, error: 'x', httpStatus: 503, ambiguous: true } : { ok: true } });
+    const ph = '998901230780';
+    let all = true;
+    for (let i = 0; i < 8; i++) { const r = await s.H.requestOtp({ phone: ph, purpose: 'register', _ip: '6.6.6.6' }); if (!(r.ok === false && r.smsFailed === true)) all = false; }
+    ok('8 marta ketma-ket xato — hech biri «Soatiga…» / «…soniyadan so‘ng» / «Juda ko‘p so‘rov» emas', all);
+    for (let i = 0; i < 5; i++) await s.H.requestOtp({ phone: '99890123079' + i, purpose: 'register', _ip: '6.6.6.6' });
+    ok('IP bo‘yicha ham sanalmadi (5 boshqa raqam, limit 3)', s.state.otp_codes.length === 0, s.state.otp_codes.length);
+    failNow = false;
+    const r = await s.H.requestOtp({ phone: ph, purpose: 'register', _ip: '6.6.6.6' });
+    ok('Eskiz tiklangach — darhol yuboriladi', r.ok === true, JSON.stringify(r));
+  }
+  {
+    // Muvaffaqiyatli kod (1) -> 60 s o'tdi -> qayta yuborish xato -> (1)-kod hali amal qiladi (bekor qilinmadi).
+    let failNow = false;
+    const s = setup(null, { sendImpl: async () => failNow ? { ok: false, error: 'x', httpStatus: 400 } : { ok: true } });
+    const ph = '998901230781';
+    await s.H.requestOtp({ phone: ph, purpose: 'register' });
+    const code1 = s.lastCode();
+    s.state.otp_codes.forEach(o => { o.createdAt = new Date(Date.now() - 61e3).toISOString(); });
+    failNow = true;
+    const r = await s.H.requestOtp({ phone: ph, purpose: 'register' });
+    ok('qayta yuborish xato -> smsFailed', r.ok === false && r.smsFailed === true, JSON.stringify(r));
+    const v = await s.H.verifyOtp({ phone: ph, purpose: 'register', code: code1 });
+    ok('avvalgi (yetib borgan) kod amal qilaveradi', v.ok === true, JSON.stringify(v));
+  }
+  {
+    // Kamyob holat: yangi kod tasodifan oldingisi bilan BIR XIL (xesh bir xil). SMS yuborilmasa — faqat yangi qator
+    //   (id bo'yicha) o'chadi, oldingi faol kod qoladi; yuborilsa — eski qator bekor, yangisi faol.
+    const realGen = L.genCode;
+    let failNow = false;
+    const s = setup(null, { sendImpl: async () => failNow ? { ok: false, error: 'x' } : { ok: true } });
+    const ph = '998901230783';
+    try {
+      L.genCode = () => '424242';
+      await s.H.requestOtp({ phone: ph, purpose: 'register' });
+      s.state.otp_codes.forEach(o => { o.createdAt = new Date(Date.now() - 61e3).toISOString(); });
+      failNow = true;
+      const r = await s.H.requestOtp({ phone: ph, purpose: 'register' });
+      const rows = s.state.otp_codes.filter(o => o.phone === ph);
+      ok('bir xil kod + SMS xato: faqat yangi qator o‘chdi, oldingisi faol', r.smsFailed === true && rows.length === 1 && rows[0].consumed === false, JSON.stringify(rows));
+      s.state.otp_codes.forEach(o => { o.createdAt = new Date(Date.now() - 61e3).toISOString(); });
+      failNow = false;
+      const r2 = await s.H.requestOtp({ phone: ph, purpose: 'register' });
+      const rows2 = s.state.otp_codes.filter(o => o.phone === ph).sort((a, b) => a.id - b.id);
+      ok('bir xil kod + SMS yuborildi: eski bekor, yangisi faol (bitta faol qator)', r2.ok === true && rows2.length === 2 && rows2[0].consumed === true && rows2[1].consumed === false, JSON.stringify(rows2));
+      const v = await s.H.verifyOtp({ phone: ph, purpose: 'register', code: '424242' });
+      ok('kod tasdiqlanadi', v.ok === true, JSON.stringify(v));
+    } finally { L.genCode = realGen; }
+  }
+  {
+    // SMS yuborilayotganda: yangi kod hali tekshirilmaydi; parallel ikkinchi so'rov ikkinchi SMS yubormaydi.
+    let release; const gate = new Promise(res => { release = res; });
+    const s = setup(null, { sendImpl: async () => { await gate; return { ok: true }; } });
+    const ph = '998901230782';
+    const p1 = s.H.requestOtp({ phone: ph, purpose: 'register' });
+    await new Promise(res => setTimeout(res, 20));
+    const pending = await s.H.verifyOtp({ phone: ph, purpose: 'register', code: s.lastCode() });
+    ok('yuborilayotgan kod hali tekshirilmaydi (nocode)', pending.ok === false && /topilmadi/.test(pending.error || ''), JSON.stringify(pending));
+    const r2 = await s.H.requestOtp({ phone: ph, purpose: 'register' });
+    ok('parallel so‘rov — 60 s kutish (ikkinchi SMS yo‘q)', r2.ok === false && r2.resendAfter > 0 && s.captured.length === 1, JSON.stringify(r2));
+    release();
+    const r1 = await p1;
+    ok('birinchi so‘rov — ok', r1.ok === true, JSON.stringify(r1));
+    const v = await s.H.verifyOtp({ phone: ph, purpose: 'register', code: s.lastCode() });
+    ok('yetib borgan kod — ishlaydi', v.ok === true, JSON.stringify(v));
+  }
+  {
+    // DRY (sinov) rejimi: o'zgarmagan — SMS yo'q, ok:true, kod tekshiriladi.
+    const state = {};
+    const sb = makeFake(state);
+    const H = makeHandlers({ sb, admin: sb, eskiz: null, cfg: { hmacSecret: 's', otpResendSec: 60 }, anon: () => sb, verifyJwt: async () => null });
+    const logs = []; const ol = console.log; console.log = (...a) => logs.push(a.join(' '));
+    let r; try { r = await H.requestOtp({ phone: '998901230783', purpose: 'register' }); } finally { console.log = ol; }
+    const m = (logs.find(l => l.includes('[DRY OTP]')) || '').match(/(\d{6})\s*$/);
+    ok('DRY: ok:true, resendAfter=60', r.ok === true && r.resendAfter === 60, JSON.stringify(r));
+    const v = await H.verifyOtp({ phone: '998901230783', purpose: 'register', code: m && m[1] });
+    ok('DRY: kod faol (tekshiriladi)', v.ok === true, JSON.stringify(v));
+  }
+  sec('OTP: ishonchli (maktab) IP — IP limiti otpMaxPerTrustedIpHour; telefon limiti o‘zgarmaydi');
+  {
+    const seedIp = (state, ip, n) => { for (let i = 0; i < n; i++) state.otp_codes.push({ id: ++state.__otpSeq, phone: '9989' + String(10000000 + i), purpose: 'register', codeHash: 'h' + i, expiresAt: new Date(Date.now() + 1e5).toISOString(), attempts: 0, consumed: true, ip, createdAt: new Date(Date.now() - 5000).toISOString() }); };
+    const s = setup({ otpTrustedIps: ['203.0.113.0/28', '198.51.100.7'], otpMaxPerTrustedIpHour: 30 });
+    seedIp(s.state, '203.0.113.5', 25);
+    let r = await s.H.requestOtp({ phone: '998901230790', purpose: 'register', _ip: '203.0.113.5' });
+    ok('maktab IP (CIDR): 25 ta so‘rovdan keyin ham ok (limit 30)', r.ok === true, JSON.stringify(r));
+    seedIp(s.state, '203.0.113.99', 25);
+    r = await s.H.requestOtp({ phone: '998901230791', purpose: 'register', _ip: '203.0.113.99' });
+    ok('CIDR tashqarisidagi IP — oddiy limit (20) -> rad', r.ok === false && /Juda ko‘p/.test(r.error || ''), JSON.stringify(r));
+    seedIp(s.state, '198.51.100.7', 29);
+    r = await s.H.requestOtp({ phone: '998901230792', purpose: 'register', _ip: '198.51.100.7' });
+    ok('aniq IP: 29 dan keyin ok', r.ok === true, JSON.stringify(r));
+    r = await s.H.requestOtp({ phone: '998901230793', purpose: 'register', _ip: '198.51.100.7' });
+    ok('aniq IP: 30 ga yetganda — rad', r.ok === false && /Juda ko‘p/.test(r.error || ''), JSON.stringify(r));
+    const ph = '998901230794';
+    for (let i = 0; i < 5; i++) s.state.otp_codes.push({ id: ++s.state.__otpSeq, phone: ph, purpose: 'register', codeHash: 'p' + i, expiresAt: new Date(Date.now() + 1e5).toISOString(), attempts: 0, consumed: true, ip: '203.0.113.1', createdAt: new Date(Date.now() - (i + 2) * 1000).toISOString() });
+    r = await s.H.requestOtp({ phone: ph, purpose: 'register', _ip: '203.0.113.1' });
+    ok('maktab IP’da ham telefon limiti (5/soat) o‘zgarmaydi', r.ok === false && /Soatiga 5/.test(r.error || ''), JSON.stringify(r));
+    const s2 = setup({ otpTrustedIps: '192.0.2.10' });
+    seedIp(s2.state, '192.0.2.10', 299);
+    r = await s2.H.requestOtp({ phone: '998901230795', purpose: 'register', _ip: '192.0.2.10' });
+    ok('standart ishonchli limit — 300 (299 dan keyin ok)', r.ok === true, JSON.stringify(r));
+    r = await s2.H.requestOtp({ phone: '998901230796', purpose: 'register', _ip: '192.0.2.10' });
+    ok('standart ishonchli limit — 300 ga yetganda rad', r.ok === false && /Juda ko‘p/.test(r.error || ''), JSON.stringify(r));
+    const s3 = setup({ otpTrustedIps: ['0.0.0.0/0'] });
+    seedIp(s3.state, '7.7.7.7', 20);
+    r = await s3.H.requestOtp({ phone: '998901230797', purpose: 'register', _ip: '7.7.7.7' });
+    ok('juda keng tarmoq (0.0.0.0/0) qabul qilinmaydi — oddiy limit', r.ok === false && /Juda ko‘p/.test(r.error || ''), JSON.stringify(r));
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -12,11 +12,15 @@
     "otpResendSec": 60,
     "otpMaxPerHour": 5,
     "otpMaxPerIpHour": 20,
+    "otpTrustedIps": [],
+    "otpMaxPerTrustedIpHour": 300,
+    "otpSmsTimeoutMs": 8000,
     "ticketTtlSec": 600,
     "loginMaxFails": 10,
     "loginLockMin": 15,
     "otpTemplate": "IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.",
-    "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz"
+    "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz",
+    "health": { "backupLog": "/var/log/iqror-backup.log", "backupMaxAgeHours": 26, "payPort": 8790, "aiPort": 8791, "eskizBalance": false }
   },
   "sms": {
     "enabled": true,

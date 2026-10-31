@@ -103,6 +103,7 @@ set local iqror.migrating = '1';
 \ir change-log.sql
 \ir secdef-searchpath.sql
 \ir bus-access.sql
+\ir user-block.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

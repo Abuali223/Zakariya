@@ -2,7 +2,8 @@
 // _fake.cjs — auth testlari uchun SOXTA, stateful Supabase mijozi + auth.admin.
 //   Qo'llab-quvvatlaydi: from(t).select/eq/gte/in/not('like')/or('c.is.null,c.eq.v')/order/limit/range/insert/
 //   update(+eq, +select qaytarish)/delete (thenable),
-//   rpc('auth_uid_by_email'), auth.admin.createUser/updateUserById/deleteUser,
+//   rpc('auth_uid_by_email' | 'otp_consume' | 'user_block' | 'user_unblock'), neq(), auth.admin.createUser/updateUserById
+//   (ban_duration ham)/deleteUser,
 //   auth.signInWithPassword.  Hammasi in-memory `state` ustida.
 //   QAT'IY: `id` takrori -> 23505 (PK); payments/_schema-columns.json'dagi jadvallarda yo'q ustunni
 //   o'qish/yozish -> xato (haqiqiy PostgREST kabi), shunда ustun nomi xatosi testда ko'rinadi.
@@ -26,12 +27,12 @@ function makeFake(state) {
 
   function from(t) {
     const rows = table(t);
-    const eqs = [], gtes = [], ins = [], nots = [], ors = [];
+    const eqs = [], gtes = [], ins = [], nots = [], ors = [], neqs = [];
     let mode = 'select', payload = null, order = null, lim = null, rng = null, selCols = null, selOpts = null, returning = false;
     // PostgREST like: % -> istalgan (faqat shu kerak); not(col,'like',p) — mos KELMAYDIGAN qatorlar (null ham mos kelmaydi).
     const likeRe = p => new RegExp('^' + String(p).split('%').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
     const orMatch = (r, alts) => alts.some(([f, op, v]) => op === 'is' ? (v === 'null' ? r[f] == null : String(r[f]) === v) : String(r[f] == null ? '' : r[f]) === v && r[f] != null);
-    const matchRow = r => eqs.every(([f, v]) => String(r[f]) === String(v)) && gtes.every(([f, v]) => String(r[f] || '') >= String(v))
+    const matchRow = r => eqs.every(([f, v]) => String(r[f]) === String(v)) && neqs.every(([f, v]) => String(r[f]) !== String(v)) && gtes.every(([f, v]) => String(r[f] || '') >= String(v))
       && ins.every(([f, arr]) => arr.map(String).includes(String(r[f])))
       && nots.every(([f, op, v]) => op === 'like' ? (r[f] != null && !likeRe(v).test(String(r[f]))) : true)
       && ors.every(alts => orMatch(r, alts));
@@ -49,6 +50,7 @@ function makeFake(state) {
     function runWrite() {
       if (mode === 'insert') {
         const arr = Array.isArray(payload) ? payload : [payload];
+        const added = [];
         for (const obj of arr) {
           const be = badCols(t, Object.keys(obj || {})); if (be) return { data: null, error: be };
           if (obj && obj.id != null && rows.some(r => String(r.id) === String(obj.id))) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
@@ -58,9 +60,9 @@ function makeFake(state) {
           else if (t === 'auth_login_attempts') { row.id = ++state.__attSeq; if (!row.at) row.at = new Date().toISOString(); }
           // users unique phone guard
           if (t === 'users' && row.phone) { if (rows.some(r => r.phone === row.phone)) return { data: null, error: { message: 'duplicate phone' } }; }
-          rows.push(row);
+          rows.push(row); added.push(row);
         }
-        return { data: null, error: null };
+        return { data: returning ? added.map(r => ({ ...r })) : null, error: null };   // insert(...).select() — yozilgan qatorlar
       }
       if (mode === 'delete') {
         const be = badCols(t, eqs.map(x => x[0])); if (be) return { data: null, error: be };
@@ -77,6 +79,7 @@ function makeFake(state) {
     const thenable = {
       select(cols, opts) { if (mode === 'update' || mode === 'insert') returning = true; else { mode = 'select'; selCols = cols || null; selOpts = opts || null; } return thenable; },
       eq(f, v) { eqs.push([f, v]); return thenable; },
+      neq(f, v) { neqs.push([f, v]); return thenable; },
       in(f, arr) { ins.push([f, Array.isArray(arr) ? arr : []]); return thenable; },
       not(f, op, v) { nots.push([f, op, v]); return thenable; },
       // or('userUid.is.null,userUid.eq.') — faqat shu shakllar (c.is.null | c.eq.qiymat).
@@ -111,6 +114,39 @@ function makeFake(state) {
       r.attempts = (r.attempts || 0) + 1;
       return { data: { ok: false, remaining: Math.max(0, p.p_max - r.attempts), locked: r.attempts >= p.p_max }, error: null };
     }
+    if (fn === 'user_block' || fn === 'user_unblock') {
+      // migration/user-block.sql bilan bir xil mantiq (test uchun — ketma-ket). state.__failRpc[fn] — soxta baza xatosi.
+      if (state.__failRpc && state.__failRpc[fn]) return { data: null, error: { code: 'XX000', message: 'injected failure' } };
+      const uid = String(p.p_uid == null ? '' : p.p_uid).trim(), act = String(p.p_actor == null ? '' : p.p_actor).trim();
+      if (!uid || !act) return { data: { ok: false, code: 'bad_request' }, error: null };
+      const active = u => { const s = String(u.status || ''); return s === '' || s === 'active'; };
+      const a = state.users.find(u => u.id === act);
+      if (!a || a.role !== 'director' || !active(a)) return { data: { ok: false, code: 'forbidden' }, error: null };
+      if (fn === 'user_block' && uid === act) return { data: { ok: false, code: 'self' }, error: null };
+      const t = state.users.find(u => u.id === uid);
+      if (!t) return { data: { ok: false, code: 'not_found' }, error: null };
+      const now = new Date().toISOString();
+      const was = String(t.status || '') === 'blocked';
+      if (fn === 'user_block') {
+        if (!was) {
+          if (t.role === 'director' && !state.users.some(u => u.id !== uid && u.role === 'director' && active(u))) return { data: { ok: false, code: 'last_director' }, error: null };
+          Object.assign(t, { blockedRole: t.role ? t.role : null, role: null, status: 'blocked', blockedAt: now, blockedBy: act, updatedAt: now });
+        }
+        let claims = 0;
+        (state.child_claims || []).forEach(c => { if (c.uid === uid && (c.status == null || c.status === '' || c.status === 'active')) { c.status = 'revoked'; c.updatedAt = now; claims++; } });
+        const before = (state.sessions || []).length;
+        state.sessions = (state.sessions || []).filter(s => s.user_id !== uid);
+        return { data: { ok: true, already: was, prevRole: t.blockedRole || null, claims, sessions: before - state.sessions.length, tokens: 0, sessionsError: null }, error: null };
+      }
+      if (!was) return { data: { ok: true, already: true, role: t.role, status: t.status, claims: 0 }, error: null };
+      const role = t.role || t.blockedRole || null;
+      const status = ((role || 'staff') === 'staff' && !t.verified) ? 'pending' : 'active';
+      const at = t.blockedAt;
+      Object.assign(t, { role, status, blockedRole: null, blockedAt: null, blockedBy: null, updatedAt: now });
+      let claims = 0;
+      if (at) (state.child_claims || []).forEach(c => { if (c.uid === uid && c.status === 'revoked' && c.updatedAt === at) { c.status = 'active'; c.updatedAt = now; claims++; } });
+      return { data: { ok: true, already: false, role, status, claims }, error: null };
+    }
     return { data: null, error: { message: 'unknown rpc ' + fn } };
   }
 
@@ -124,10 +160,12 @@ function makeFake(state) {
         return { data: { user: { id, email } }, error: null };
       },
       async updateUserById(id, patch) {
+        if (state.__failBan && patch.ban_duration != null) return { data: null, error: { status: 500, message: 'injected ban failure' } };
         const u = state.authUsers.find(a => a.id === id);
-        if (!u) return { data: null, error: { message: 'not found' } };
+        if (!u) return { data: null, error: { status: 404, code: 'user_not_found', message: 'User not found' } };
         if (patch.password != null) u.password = patch.password;
         if (patch.email != null) u.email = patch.email;
+        if (patch.ban_duration != null) { u.banned = patch.ban_duration !== 'none'; u.banDuration = patch.ban_duration; (state.__banLog = state.__banLog || []).push([id, patch.ban_duration]); }
         return { data: { user: { id } }, error: null };
       },
       async deleteUser(id) {
