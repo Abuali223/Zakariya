@@ -220,7 +220,10 @@ grep -q iqror_pay_outbox "$WEB/admin.html" || { echo "❌ admin.html deploy land
 grep -q "apply_payment"  "$WEB/admin.html" || { echo "❌ admin.html eski (apply_payment yo'q)"; exit 1; }
 grep -q kab-subjbars     "$WEB/index.html" || { echo "❌ index.html deploy landmadi"; exit 1; }
 grep -q "/sb/firebase-firestore.js" "$WEB/verify.html" || { echo "❌ verify.html shim landmadi"; exit 1; }
-grep -q "students_public" "$WEB/verify.html" || { echo "❌ verify.html eski (students_public yo'q)"; exit 1; }
+grep -q "verify_doc" "$WEB/verify.html" || { echo "❌ verify.html eski (verify_doc — token bilan tekshiruv yo'q)"; exit 1; }
+grep -q "child_card" "$WEB/index.html" || { echo "❌ index.html eski (child_card — kabinet o'rni yo'q)"; exit 1; }
+# D6: ommaviy o'quvchi ro'yxati (students_public) sahifalarda qolmasin — u bazada endi yo'q (public-close.sql).
+if grep -q "students_public" "$WEB/index.html" "$WEB/verify.html"; then echo "❌ index.html/verify.html hali ommaviy o'quvchi ro'yxatini o'qiydi (students_public)"; exit 1; fi
 grep -q "verify.html" "$WEB/verify/index.html" || { echo "❌ verify/index.html (eski QR yo'naltirish) landmadi"; exit 1; }
 grep -q "update_bus_position" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html deploy landmadi"; exit 1; }
 grep -q "/sb/firebase-firestore.js" "$WEB/haydovchi.html" || { echo "❌ haydovchi.html shim landmadi"; exit 1; }

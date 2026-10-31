@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>Hujjatni tekshirish — Iqror Academy</title>
 <link rel="icon" href="/icon-192.png">
 <style>
@@ -11,12 +12,16 @@
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:#20302B;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
   .card{background:#fff;border:1px solid var(--line);border-radius:18px;max-width:460px;width:100%;padding:28px 26px;box-shadow:0 10px 40px rgba(21,90,78,.10)}
   .head{display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--teal);padding-bottom:14px;margin-bottom:18px}
-  .org{font-family:Georgia,serif;font-size:20px;font-weight:700;color:var(--ink)}
+  .org{font-family:Georgia,serif;font-size:20px;font-weight:700;color:var(--ink);flex:1}
   .org small{display:block;font-family:system-ui;font-size:12px;color:var(--muted);font-weight:400}
+  .lang{display:flex;gap:4px}
+  .lang button{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;cursor:pointer}
+  .lang button.on{background:var(--teal);border-color:var(--teal);color:#fff}
   .state{text-align:center;padding:10px 0}
   .badge{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;padding:9px 16px;border-radius:999px}
-  .ok{background:#e6f4ef;color:#137a5f}.bad{background:#fdeaea;color:#c0392b}.wait{background:#eef2f5;color:#5a6b76}
+  .ok{background:#e6f4ef;color:#137a5f}.bad{background:#fdeaea;color:#c0392b}.wait{background:#eef2f5;color:#5a6b76}.old{background:#fef3e2;color:#a15c07}
   .big{font-size:30px;line-height:1;margin-bottom:8px}
+  .msg{color:var(--muted);font-size:14px;margin-top:12px;line-height:1.5}
   table{width:100%;border-collapse:collapse;margin-top:16px}
   td{border:1px solid var(--line);padding:9px 11px;font-size:14px;vertical-align:top}
   td.k{color:var(--muted);width:42%}
@@ -28,42 +33,93 @@
   <div class="card">
     <div class="head">
       <svg width="42" viewBox="0 0 458.82 522.7" aria-hidden="true"><rect width="458.82" height="115.76" fill="#1F9982"/><polygon points="118.69,411.72 0,288.91 0,175.52 458.82,175.52 458.82,289.07 341.08,410.90 230.28,296.26" fill="#F6C05E"/><polygon points="159.91,451.95 230.65,381.21 301.40,451.95 230.65,522.70" fill="#1F9982"/></svg>
-      <div class="org">IQROR ACADEMY<small>Hujjat haqiqiyligini tekshirish</small></div>
+      <div class="org">IQROR ACADEMY<small id="sub"></small></div>
+      <div class="lang" role="group" aria-label="Til / Язык"><button id="l-uz" type="button">UZ</button><button id="l-ru" type="button">RU</button></div>
     </div>
-    <div id="out"><div class="state"><span class="badge wait">⏳ Tekshirilmoqda…</span></div></div>
-    <div class="note">Ushbu sahifa hujjatdagi o‘quvchi Iqror Academy ro‘yxatida borligini tekshiradi.<br><a href="/">iqroacademy.uz</a></div>
+    <div id="out"><div class="state"><span class="badge wait">⏳ …</span></div></div>
+    <div class="note"><span id="foot"></span><br><a href="/">iqroacademy.uz</a></div>
   </div>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getFirestore, collection, getDocs, getDoc, doc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-  const cfg={apiKey:"x",authDomain:"x",projectId:"x"};   // /sb shim buni e'tiborsiz qoldiradi (sb-config.js ishlatadi)
+  // Hujjatni tekshirish (D6): QR'dagi kod (?t=, 32 belgi) verify_doc orqali tekshiriladi. Sahifa FAQAT: haqiqiy/emas, hujjat
+  //   turi, berilgan sana, o'quvchining qisqa ismi (Aziza K.) va sinf raqamini ko'rsatadi — ID, JSHSHIR, ball, telefon yo'q.
+  //   Eski QR'lar (?id=<o'quvchi ID>) endi tekshirilmaydi — maktabga murojaat qilish tavsiya etiladi.
+  const T={
+    uz:{ sub:'Hujjat haqiqiyligini tekshirish', wait:'Tekshirilmoqda…',
+      ok:'Haqiqiy hujjat — Iqror Academy tomonidan berilgan', bad:'Tasdiqlanmadi',
+      nocode:'Hujjat kodi ko‘rsatilmagan.', badfmt:'Kod noto‘g‘ri. QR kodni qayta skaner qiling yoki havolani to‘liq kiriting.',
+      notfound:'Bunday hujjat topilmadi yoki u bekor qilingan. Hujjat haqiqiy bo‘lmasligi mumkin.',
+      err:'Tekshirishda xatolik. Internetni tekshirib, qayta urinib ko‘ring.',
+      old:'Eski turdagi QR kod', oldmsg:'Bu hujjat eski turdagi QR kodga ega. Haqiqiyligini tekshirish uchun maktabga murojaat qiling.',
+      phone:'Maktab telefoni', kind:'Hujjat turi', date:'Berilgan sana', name:'O‘quvchi', grade:'Sinf', none:'—',
+      kinds:{profile:'O‘quvchi profili — rasmiy ma’lumotnoma',certificate:'Ma’lumotnoma'},
+      gr:g=>Number(g)===0?'Tayyorlov':(Number(g)===13?'Variativ':g+'-sinf'),
+      okmsg:'Qog‘ozdagi hujjatdagi ism va sinfni shu yerdagisi bilan solishtiring. Sana — shu hujjat o‘quvchiga birinchi marta berilgan kun (keyin yangilangan holda qayta chop etilishi mumkin). Baholar va boshqa ma’lumotlar bu sahifada ko‘rsatilmaydi — kerak bo‘lsa maktabdan so‘rang.',
+      foot:'Bu sahifa hujjat Iqror Academy tomonidan berilganini tekshiradi.' },
+    ru:{ sub:'Проверка подлинности документа', wait:'Проверяется…',
+      ok:'Подлинный документ — выдан Iqror Academy', bad:'Не подтверждено',
+      nocode:'Код документа не указан.', badfmt:'Неверный код. Отсканируйте QR-код ещё раз или введите ссылку полностью.',
+      notfound:'Такой документ не найден или он аннулирован. Документ может быть недействительным.',
+      err:'Ошибка проверки. Проверьте интернет и попробуйте ещё раз.',
+      old:'QR-код старого образца', oldmsg:'Этот документ содержит QR-код старого образца. Чтобы проверить его подлинность, обратитесь в школу.',
+      phone:'Телефон школы', kind:'Тип документа', date:'Дата выдачи', name:'Ученик', grade:'Класс', none:'—',
+      kinds:{profile:'Профиль ученика — официальная справка',certificate:'Справка'},
+      gr:g=>Number(g)===0?'Подготовка':(Number(g)===13?'Вариатив':g+' класс'),
+      okmsg:'Сравните имя и класс с данными в бумажном документе. Дата — день, когда этот документ впервые выдан ученику (позже он может быть распечатан повторно с обновлёнными данными). Оценки и другие данные на этой странице не показываются — при необходимости обратитесь в школу.',
+      foot:'Эта страница проверяет, что документ выдан Iqror Academy.' }
+  };
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const out=document.getElementById('out');
-  const gradeLbl=g=>{g=Number(g)||0;return g===0?'Tayyorlov':g+'-sinf';};
-  const id=(new URLSearchParams(location.search).get('id')||'').trim();
-  function show(html){ out.innerHTML=html; }
-  function bad(msg){ show(`<div class="state"><div class="big">❌</div><span class="badge bad">Tasdiqlanmadi</span><p style="color:var(--muted);font-size:14px;margin-top:12px">${esc(msg)}</p></div>`); }
-  (async()=>{
-    if(!id){ bad('Hujjat ID ko‘rsatilmagan.'); return; }
-    try{
-      const app=initializeApp(cfg); const db=getFirestore(app);
-      let d=null;
-      // Supabase: anon FAQAT students_public KO'RINISHINI o'qiydi (xom 'students' RLS bilan yopiq,
-      // cameraId/attendance sizmaydi). students_public'да id/studentId/name/grade/classLetter/track/lang bor.
-      // 1) hujjat id = studentId (yoki hujjat id) bo'lsa
-      try{ const s=await getDoc(doc(db,'students_public',id)); if(s.exists()) d={id:s.id,...s.data()}; }catch(e){}
-      // 2) aks holda studentId maydoni bo'yicha qidiramiz
-      if(!d){ const snap=await getDocs(query(collection(db,'students_public'), where('studentId','==',id), limit(1))); snap.forEach(x=>{ if(!d) d={id:x.id,...x.data()}; }); }
-      if(!d){ bad('Bunday ID bilan o‘quvchi topilmadi. Hujjat haqiqiy bo‘lmasligi mumkin.'); return; }
-      const cls=`${gradeLbl(d.grade)} «${esc(d.classLetter||d.track||'-')}» · ${d.lang==='ru'?'Rus':'O‘zbek'}`;
-      show(`<div class="state"><div class="big">✅</div><span class="badge ok">Ro‘yxatda bor — Iqror Academy o‘quvchisi</span></div>
+  const qs=new URLSearchParams(location.search);
+  const tok=String(qs.get('t')||'').trim().toLowerCase();
+  const legacyId=String(qs.get('id')||'').trim();
+  let lang='uz'; try{ const s=localStorage.getItem('iqror-lang'); if(s==='uz'||s==='ru') lang=s; else if(/^ru/i.test(navigator.language||'')) lang='ru'; }catch(e){}
+  let view={k:'wait'};
+  const fmtDate=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||'')); return m?`${m[3]}.${m[2]}.${m[1]}`:''; };
+  function draw(){
+    const t=T[lang]; document.documentElement.lang=lang;
+    document.getElementById('sub').textContent=t.sub; document.getElementById('foot').textContent=t.foot;
+    document.getElementById('l-uz').classList.toggle('on',lang==='uz'); document.getElementById('l-ru').classList.toggle('on',lang==='ru');
+    const bad=msg=>`<div class="state"><div class="big">❌</div><span class="badge bad">${esc(t.bad)}</span><p class="msg">${esc(msg)}</p></div>`;
+    if(view.k==='wait'){ out.innerHTML=`<div class="state"><span class="badge wait">⏳ ${esc(t.wait)}</span></div>`; return; }
+    if(view.k==='ok'){ const r=view.r;
+      out.innerHTML=`<div class="state"><div class="big">✅</div><span class="badge ok">${esc(t.ok)}</span></div>
         <table><tbody>
-          <tr><td class="k">O‘quvchi ID</td><td><b>${esc(d.studentId||d.id)}</b></td></tr>
-          <tr><td class="k">Familiya, ism</td><td><b>${esc(d.name||'—')}</b></td></tr>
-          <tr><td class="k">Sinf</td><td>${cls}</td></tr>
-        </tbody></table>
-        <p class="note" style="margin-top:14px">Bu ID bilan o‘quvchi Iqror Academy ro‘yxatida bor yoki ilgari bo‘lgan. Sahifa faqat shuni tasdiqlaydi: hujjat raqami, sanasi, baholar va boshqa ma’lumotlar bu yerda tekshirilmaydi. Ularni tasdiqlash uchun maktabga murojaat qiling.</p>`);
-    }catch(e){ bad('Tekshirishda xatolik: '+(e.code||e.message||'')); }
+          <tr><td class="k">${esc(t.kind)}</td><td><b>${esc(t.kinds[r.kind]||r.kind||t.none)}</b></td></tr>
+          <tr><td class="k">${esc(t.date)}</td><td><b>${esc(fmtDate(r.issuedAt)||t.none)}</b></td></tr>
+          <tr><td class="k">${esc(t.name)}</td><td><b>${esc(r.name||t.none)}</b></td></tr>
+          <tr><td class="k">${esc(t.grade)}</td><td>${esc(r.grade==null?t.none:t.gr(r.grade))}</td></tr>
+        </tbody></table><p class="msg" style="text-align:center">${esc(t.okmsg)}</p>`; return; }
+    if(view.k==='old'){ const ph=String(view.phone||'').trim();
+      out.innerHTML=`<div class="state"><div class="big">ℹ️</div><span class="badge old">${esc(t.old)}</span><p class="msg">${esc(t.oldmsg)}</p>
+        ${ph?`<p style="margin:10px 0 0;font-size:15px">${esc(t.phone)}: <a href="tel:${esc(ph.replace(/[^+\d]/g,''))}"><b>${esc(ph)}</b></a></p>`:''}</div>`; return; }
+    out.innerHTML=bad(t[view.k]||t.err);
+  }
+  function setLang(l){ lang=l; try{ localStorage.setItem('iqror-lang',l); }catch(e){} draw(); }
+  document.getElementById('l-uz').onclick=()=>setLang('uz'); document.getElementById('l-ru').onclick=()=>setLang('ru');
+  draw();
+  const cfg={apiKey:"x",authDomain:"x",projectId:"x"};   // /sb shim buni e'tiborsiz qoldiradi (sb-config.js ishlatadi)
+  async function db(){
+    const app=await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+    const fs=await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js");
+    app.initializeApp(cfg); return fs;
+  }
+  (async()=>{
+    if(tok){
+      // Kod formati (32 ta 0-9/a-f) — noto'g'ri bo'lsa bazaga so'rov ham yuborilmaydi (taxmin qilib topishga qarshi).
+      if(!/^[0-9a-f]{32}$/.test(tok)){ view={k:'badfmt'}; draw(); return; }
+      try{ const fs=await db(); const r=await fs.rpc('verify_doc', { p_token:tok });
+        view=(r && r.valid===true) ? {k:'ok', r} : {k:'notfound'}; }
+      catch(e){ view={k:'err'}; }
+      draw(); return;
+    }
+    if(legacyId){
+      // Eski QR (o'quvchi ID bilan): o'quvchi haqida hech narsa so'ralmaydi — faqat maktab aloqasi (Sozlamalar).
+      view={k:'old', phone:''}; draw();
+      try{ const fs=await db(); const s=await fs.getDoc(fs.doc(fs.getFirestore(),'settings','site'));
+        const c=(s.exists() && (s.data()||{}).contact) || {}; if(c.phone){ view={k:'old', phone:String(c.phone)}; draw(); } }catch(e){}
+      return;
+    }
+    view={k:'nocode'}; draw();
   })();
 </script>
 </body>
