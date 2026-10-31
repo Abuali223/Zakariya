@@ -1,7 +1,15 @@
 # =====================================================================
 # nginx.conf (NAMUNA) — Iqror: statik sayt + Supabase API + AI/to'lov xizmatlari.
 # certbot bilan SSL: certbot --nginx -d iqror.uz -d www.iqror.uz -d api.iqror.uz
+# Bu fayl /etc/nginx/sites-available/ ga qo'yiladi — u nginx'ning http{} bloki ichida o'qiladi.
+# O'zgartirgach: sudo nginx -t && sudo systemctl reload nginx
 # =====================================================================
+
+# 0) /authapi/ (kirish, OTP kod) uchun so'rov chegarasi — http{} darajasida (shu fayl boshida). Bitta IP soniyasiga 10 so'rov,
+#    20 tagacha navbat (burst); oshsa — 429. OTP/login «bombardimon» va parol tanlashni tarmoq darajasida sekinlashtiradi —
+#    auth-server'ning o'z limitlariga (telefon 5/soat, IP 20/soat, maktab IP'si — otpTrustedIps) QO'SHIMCHA.
+#    Maktab Wi‑Fi'si (bir tashqi IP ortida o'nlab ota-ona) uchun ham yetarli: odam soniyasiga 10 marta bosmaydi.
+limit_req_zone $binary_remote_addr zone=iqror_authapi:10m rate=10r/s;
 
 # 1) Statik frontend  (iqror.uz)  — index.html, admin.html, /sb/, vendor/, uploads/
 server {
@@ -10,8 +18,30 @@ server {
     root /var/www/iqror;          # bu yerga frontend fayllar qo'yiladi
     index index.html;
 
+    # gzip: sahifalar (admin.html ~900 KB), JS/CSS/JSON/SVG siqib yuboriladi — sekin internetda bir necha barobar tez.
+    #   text/html doim siqiladi (gzip_types'ga yozilmaydi). server{} ichida — Ubuntu'ning nginx.conf'idagi «gzip on;» bilan
+    #   «duplicate» xatosi bermaydi.
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types text/css text/javascript application/javascript application/json image/svg+xml;
+
     # /sb/ shim modullari to'g'ri MIME bilan berilishi (ES modul)
     location ~* \.(js|mjs)$ { default_type text/javascript; }
+
+    # AUTH (telefon+parol+OTP, bloklash, tizim holati) — sayt bilan BIR domenda (admin.html / index.html «/authapi» ga
+    #   murojaat qiladi). X-Real-IP va X-Forwarded-For'ni nginx O'ZI qo'yadi ($remote_addr) — mijoz yozgan qiymat
+    #   almashtiriladi; auth-server ularga faqat 127.0.0.1 dan kelgan so'rovda ishonadi (auth/net.cjs).
+    location /authapi/ {
+        limit_req zone=iqror_authapi burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8792/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
 
     location / { try_files $uri $uri.html $uri/ =404; }   # $uri.html: /verify -> verify.html (eski QR havolalari)
 
@@ -27,7 +57,7 @@ server {
 #   * Docker portlarini FAQAT localhost'ga bog'lang (ufw Docker'ni chetlab o'tadi!):
 #     docker-compose'да "127.0.0.1:8000:8000", "127.0.0.1:54321:54321" va h.k.
 #     (kong 8000/8443, pooler 5432/6543, studio 3000 — hech biri 0.0.0.0'да bo'lmasin).
-#   * X-Forwarded-For'ni nginx O'ZI $remote_addr'га o'rnatadi (mijoz spoof qila olmaydi);
+#   * X-Forwarded-For / X-Real-IP'ni nginx O'ZI $remote_addr'га o'rnatadi (mijoz spoof qila olmaydi);
 #     backend rate-limit shu sarlavhaga ishonadi -> backend 127.0.0.1'да tinglashi shart.
 server {
     listen 80;
@@ -35,22 +65,35 @@ server {
 
     client_max_body_size 20m;     # rasm/video yuklash uchun
 
+    # gzip — REST javoblari (JSON) katta bo'lishi mumkin (o'quvchilar ro'yxati, to'lovlar).
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types application/json text/css text/javascript application/javascript image/svg+xml;
+
     # AI yordamchi
     location /ai/ {
         proxy_pass http://127.0.0.1:8791/;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
     # To'lov (Click/Uzum webhooklari)
     location /pay/ {
         proxy_pass http://127.0.0.1:8790/;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
     # AUTH (telefon+parol+OTP). ⚠️ «/auth/» BAND (GoTrue, pastда) — shu sabab «/authapi/».
     location /authapi/ {
+        limit_req zone=iqror_authapi burst=20 nodelay;
+        limit_req_status 429;
         proxy_pass http://127.0.0.1:8792/;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
     # Supabase API — FAQAT shu yo'llar kong'ga (Studio/pg-meta/Kong-admin OCHILMAYDI).

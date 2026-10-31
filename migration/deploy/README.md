@@ -21,7 +21,8 @@ VPS'da nusxalab ishga tushirasiz.
 | `nginx.conf.example` | iqror.uz (statik) + api.iqror.uz (Supabase+AI+to'lov) reverse-proxy | `/etc/nginx/sites-available/iqror` |
 | `iqror-ai.service` | AI yordamchi doimiy (systemd) | `/etc/systemd/system/` |
 | `iqror-pay.service` | To'lov serveri doimiy (systemd) | `/etc/systemd/system/` |
-| `backup.sh` | Zaxira: maktab ma'lumotlari (`public` + `app`, Supabase konteyneridagi pg_dump — parol kerak emas) + Storage | bir martalik: `bash ~/iqror-repo/migration/deploy/backup.sh` (→ `~/iqror-backups`); har kuni: `sudo crontab -e` → `30 22 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1` (→ `/opt/iqror/backups`; server UTC'da 22:30 = Toshkent 03:30) |
+| `backup.sh` | Zaxira: maktab ma'lumotlari (`public` + `app`, Supabase konteyneridagi pg_dump — parol kerak emas) + kirish hisoblari (`auth`) + Storage fayllari va metama'lumoti + **sirlar** (`.env`, `config.json`'lar, nginx, unit'lar); 60 kun saqlanadi | bir martalik: `bash ~/iqror-repo/migration/deploy/backup.sh` (→ `~/iqror-backups`); har kuni: `sudo crontab -e` → `30 22 * * * bash /home/ubuntu/iqror-repo/migration/deploy/backup.sh >> /var/log/iqror-backup.log 2>&1` (→ `/opt/iqror/backups`; server UTC'da 22:30 = Toshkent 03:30) |
+| `RESTORE.md` | Zaxiradan tiklash (yangi serverda): sirlar, baza, auth, storage, xizmatlar, tekshirish ro'yxati, RTO jurnali, har chorak mashq | — |
 
 ## Tartib (qisqacha)
 1. Supabase o'rnatish + schema/rls/import — `../supabase-setup.md`.
@@ -30,9 +31,10 @@ VPS'da nusxalab ishga tushirasiz.
 4. Server config'lar (`ai-assistant/config.json`, `payments/config.json`) — `backend:"supabase"`.
 5. systemd: `iqror-ai`, `iqror-pay` — enable --now.
 6. nginx + certbot (SSL).
-7. `backup.sh` ni root crontab'ga (yuqoridagi qator). Zaxira fayllari faqat egasiga o'qiladi (600); ularni vaqti-vaqti bilan serverdan TASHQARIGA ham ko'chiring.
-   14 kundan eskisi o'chiriladi — faqat skriptlarning o'z fayllari (`db_*`, `storage_*`, `auth_*`, `web_*`, `srv_*`) papkaning o'zida;
-   qo'lda qo'yilgan boshqa fayllar va ichki papkalar tegilmaydi.
+7. `backup.sh` ni root crontab'ga (yuqoridagi qator). Zaxira fayllari faqat egasiga o'qiladi (600); ularni serverdan TASHQARIGA ham
+   ko'chiring (`RCLONE_REMOTE`, pastda «Zaxira: 60 kun, sirlar, tashqi nusxa»). `backup.sh` fayllari (`db_*`, `auth_*`, `storage_*`,
+   `storage_meta_*`, `secrets_*`) — 60 kundan (`KEEP_DAYS`), deploy arxivlari (`web_*`, `srv_*`) — 14 kundan eskisi o'chiriladi,
+   faqat papkaning o'zida; qo'lda qo'yilgan boshqa fayllar va ichki papkalar tegilmaydi. Tiklash — `RESTORE.md`.
 8. `../CUTOVER-CHECKLIST.md` bo'yicha to'liq sinov → cutover.
 
 ## To'liq deploy — tavsiya etilgan BITTA buyruq (`full-deploy.sh`)
@@ -151,6 +153,73 @@ ko'rsatgan JSON tekshiruvidan o'tkazing va cron qo'ying (`payments/README.md` §
 
 Faqat deploy (zaxira va tekshiruvlarsiz): `bash ~/iqror-repo/deploy.sh` — kod (o'zini ham) + paketlar + oldindan tekshiruv (xizmat
 kodi papkasi — bazaga tegishdan OLDIN) + SQL (bitta tranzaksiya) + `/sb` + sahifalar + server kodi + xizmatlar + 7/7 baza tekshiruvi.
+
+## Zaxira: 60 kun, sirlar, shifrlash, tashqi nusxa (`backup.sh`)
+Har tungi zaxira (`/opt/iqror/backups`, root, 600): `db_*` (public+app), `auth_*` (hisoblar, parol xeshlari; seans/token
+ma'lumotisiz), `storage_*` (rasm/video fayllari), `storage_meta_*` (fayllar yozuvi — busiz rasmlarni tiklab bo'lmaydi),
+`secrets_*` (Supabase `/opt/iqror/supabase/docker/.env`, `/opt/iqror/{auth,payments,ai-assistant}/config.json`, `sb-config.js`,
+`/etc/nginx/sites-available/iqror`, `/etc/systemd/system/iqror-*.service`). Topilmagan fayl NOMI logga yoziladi
+(`sirlar: topilmadi …`) — ichidagi qiymatlar hech qachon logga chiqmaydi. Oxirgi qator: `backup OK -> … + auth + storage +
+storage metama’lumoti + sirlar (N fayl…)`. Sozlash (cron qatorida `O'ZGARUVCHI=qiymat bash …/backup.sh` ko'rinishida):
+
+| O'zgaruvchi | Standart | Nima |
+|---|---|---|
+| `KEEP_DAYS` | `60` | necha kun saqlanadi |
+| `SUPA_ENV` / `SRV_DIR` / `WEB_DIR` / `NGINX_SITE` / `UNIT_DIR` | `/opt/iqror/supabase/docker/.env` / `/opt/iqror` / `/var/www/iqror` / `/etc/nginx/sites-available/iqror` / `/etc/systemd/system` | sirlar yo'llari (server tuzilishi boshqacha bo'lsa) |
+| `SECRETS_EXTRA` | — | qo'shimcha fayllar (bo'shliq bilan) |
+| `BACKUP_GPG_RECIPIENT` | — | sirlar faylini gpg ochiq kaliti bilan shifrlash (`secrets_*.tar.gz.gpg`; yopiq kalit serverda EMAS — direktor kompyuterida) |
+| `BACKUP_PASSFILE` | — | yoki parol fayli (600) bilan openssl aes-256 (`secrets_*.tar.gz.enc`; parolni server tashqarisida ham saqlang) |
+| `RCLONE_REMOTE` | — | tashqi nusxa: `rclone copy` (shifrlangan «crypt» remote tavsiya etiladi; xato bo'lsa — ogohlantirish, lokal zaxira saqlanadi) |
+
+Shifrlash so'ralgan-u, bajarilmasa (kalit/parol fayli yo'q) — sirlar fayli ochiq holda SAQLANMAYDI (ogohlantirish). Tashqi nusxa
+sozlash: `sudo apt install -y rclone && sudo rclone config` (masalan Google Drive yoki S3 + ustidan «crypt»), so'ng cron qatorida
+`RCLONE_REMOTE=iqrorcrypt:zaxira`. Har chorak tiklash mashqi — `RESTORE.md` §11.
+
+## Tashqi kuzatuv (UptimeRobot) va Telegram ogohlantirish
+Server o'zini o'zi kuzatolmaydi (o'chib qolsa — xabar ham yubormaydi). Bepul tashqi xizmat (UptimeRobot yoki shunga o'xshash —
+Better Stack, Freshping) har 5 daqiqada 4 manzilni tekshiradi:
+
+| Manzil | Kutilgan javob |
+|---|---|
+| `https://<sayt>/` | 200 (sahifa) |
+| `https://<sayt>/authapi/health` | 200 `ok` (kirish, SMS kod) |
+| `https://api.<sayt>/pay/health` | 200 `ok` (Click/Uzum to'lovlari) |
+| `https://api.<sayt>/ai/health` | 200 `{"ok":true…}` (AI yordamchi; o'rnatilmagan bo'lsa — qo'shmang) |
+
+1. uptimerobot.com'da hisob oching (maktab emaili bilan) → «Add New Monitor» → turi **HTTP(s)**, manzil, interval **5 daqiqa**;
+   ikkinchi manzil uchun «Keyword» turi (`ok` so'zi) ham mumkin. To'rtala manzilni qo'shing.
+2. **Telegram — ikki kishiga** (masalan direktor va texnik xodim): kuzatuv xizmatining «Alert contacts / Integrations» bo'limida
+   Telegram'ni tanlang — u bot havolasini beradi; HAR BIR odam o'z Telegram'ida shu havolani ochib «Start» bosadi (har biri alohida
+   kontakt bo'lib qo'shiladi). Har monitorga ikkala kontaktni biriktiring. Sinov: monitorni bir daqiqaga «Pause»/noto'g'ri manzil
+   qilib xabar kelishini tekshiring, so'ng qaytaring.
+3. Xabar kelsa: admin panel → Sozlamalar → **🩺 Tizim holati** (qaysi xizmat qizil), serverda `systemctl status iqror-auth iqror-pay iqror-ai`,
+   `sudo journalctl -u <xizmat> -n 50 --no-pager`. Ommaviy `/health` faqat «ok» qaytaradi — hech qanday ma'lumot ochilmaydi.
+
+## Tozalash ishlari (OTP / login urinishlari) va jurnal (journald) hajmi
+- `otp_codes` va `auth_login_attempts` jadvallari har ro'yxat/kirishda o'sadi; `app.otp_gc()` va `app.login_attempts_gc()` (bazada bor)
+  1 kundan eski yozuvlarni o'chiradi. `full-deploy.sh` root crontab'ga kunlik qatorni O'ZI qo'shadi (22:50 server vaqti; marker
+  `# iqror-auth-gc` — bor bo'lsa, izohga olingan bo'lsa ham, qayta qo'shilmaydi; o'rnatmaslik: `IQROR_NO_GC_CRON=1`). Qo'lda:
+```bash
+sudo sh -c '{ crontab -l 2>/dev/null | grep -av "iqror-auth-gc"; echo "50 22 * * * PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin docker exec supabase-db psql -U postgres -d postgres -X -q -c '"'"'select app.otp_gc()'"'"' -c '"'"'select app.login_attempts_gc()'"'"' >/dev/null 2>&1 # iqror-auth-gc (OTP/login tozalash — full-deploy.sh)"; } | crontab - && crontab -l | grep iqror-auth-gc'
+```
+  Hozir bir marta tekshirish: `sudo docker exec supabase-db psql -U postgres -d postgres -c 'select app.otp_gc()' -c 'select app.login_attempts_gc()'`.
+- **journald** (xizmatlar jurnali) diskni to'ldirmasin — 500 MB chegara:
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]
+SystemMaxUse=500M
+' | sudo tee /etc/systemd/journald.conf.d/iqror.conf
+sudo systemctl restart systemd-journald && journalctl --disk-usage
+```
+  Zaxira log'i (`/var/log/iqror-backup.log`) kichik — kuniga bir necha qator.
+
+## nginx: mijoz IP'si, /authapi/ so'rov chegarasi, gzip (`nginx.conf.example`)
+- `/authapi/`, `/pay/`, `/ai/` uchun `proxy_set_header X-Real-IP $remote_addr;` (va `X-Forwarded-For $remote_addr`) — auth-server
+  OTP limitini HAQIQIY mijoz IP'si bo'yicha hisoblaydi (maktab IP'si — `auth/README.md`, `otpTrustedIps`).
+- `limit_req_zone … zone=iqror_authapi rate=10r/s` (fayl boshida, http darajasi) + `/authapi/` ichida `limit_req … burst=20 nodelay` —
+  OTP/login «bombardimon»ini tarmoq darajasida sekinlashtiradi (oshsa 429).
+- `gzip on` (server{} ichida — Ubuntu nginx.conf'idagi `gzip on;` bilan «duplicate» xatosi bermaydi): HTML, CSS, JS, JSON, SVG.
+- Sayt `/authapi/` ga O'Z domenidan murojaat qiladi — `location /authapi/` sayt server{} blokida ham bo'lishi kerak (namunada bor).
+- Qo'llash: namunadan kerakli qatorlarni `/etc/nginx/sites-available/iqror` ga ko'chiring → `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Xizmat papkasi (WorkingDirectory) — deploy yangi server kodini ishga tushirishi uchun
 `deploy.sh` kodni **`~/iqror-repo`** da yangilaydi (git). Namuna unit'lar (`iqror-*.service`) esa
