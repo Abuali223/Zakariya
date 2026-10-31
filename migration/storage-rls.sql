@@ -6,8 +6,9 @@ do $iqror_guard$ begin raise exception 'iqror: storage-rls.sql ALOHIDA ishga tus
 \endif
 -- =====================================================================
 -- storage-rls.sql — Supabase Storage (storage.objects) uchun RLS.
--- Eski Firebase Storage qoidasi bilan bir xil: HAMMA o'qiydi (public bucket),
--- faqat ADMIN yuklaydi/o'chiradi (admin panelidan rasm/video).
+-- Faqat ADMIN yuklaydi/o'chiradi (admin panelidan rasm/video). O'qish (papka ro'yxati)
+-- siyosati public-close.sql'da — faqat xodimlarga (D6; app.is_staff bu yerda hali yo'q).
+-- Ommaviy havolalar (/storage/v1/object/public/...) Supabase'da RLS'siz beriladi.
 --
 -- ⚠️ Bu FAQAT Supabase o'rnatilgach ishlaydi (storage sxemasi Supabase tomonidan
 --    yaratiladi). rls.sql (bare Postgres'da sinaladigan) ichiga QO'SHILMAYDI.
@@ -23,9 +24,8 @@ drop policy if exists iqror_admin_insert  on storage.objects;
 drop policy if exists iqror_admin_update  on storage.objects;
 drop policy if exists iqror_admin_delete  on storage.objects;
 
--- Hamma o'qiydi (rasm/video ommaviy ko'rinadi)
-create policy iqror_public_read on storage.objects
-  for select using ( bucket_id = 'public' );
+-- iqror_public_read (hamma, anon ham papkani ro'yxatlardi) endi YARATILMAYDI: o'rniga iqror_staff_read
+--   (public-close.sql). Rasm/video ommaviy havola orqali ko'rinishda davom etadi.
 
 -- Faqat admin yozadi (Firebase'dagi 'admin claim' talabining ekvivalenti)
 create policy iqror_admin_insert on storage.objects

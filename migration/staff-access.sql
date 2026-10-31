@@ -35,8 +35,8 @@ $$;
 
 -- ---------- PII: xom students jadvali endi FAQAT xodim yoki O'Z farzandiga ----------
 -- Ilgari 'app.uid() is not null' edi -> istalgan tizimга kirgan ota-ona BARCHA
--- o'quvchi PII (cameraId, attendance)ni o'qiy olardi. Ommaviy honor board
--- 'students_public' KO'RINISHINI o'qiydi (cameraId/attendance YO'Q, rls.sql'da).
+-- o'quvchi PII (cameraId, attendance)ni o'qiy olardi. Ommaviy sayt o'quvchi
+-- ma'lumotini umuman o'qimaydi (D6 — public-close.sql).
 drop policy if exists students_sel on students;
 create policy students_sel on students for select using (app.is_staff() or app.owns_student_doc(id));
 

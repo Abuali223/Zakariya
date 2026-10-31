@@ -91,3 +91,14 @@ select coll, id, quote_literal(k) as kalit
    and not exists (select 1 from public.payroll_ids p where p.id = translate(regexp_replace(regexp_replace(x.k, :'pidcf', '', 'g'), :'pidws', '', 'g'), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
  order by 1, 2;
 \endif
+\echo '== 11) D6 — ommaviy saytni yopish (ma''lumot uchun): deploy ommaviy o''quvchi ro''yxatini (students_public) O''CHIRADI; saytdagi ismli yutuqlar va rozilik belgisiz sharhlardagi ismlar avval faqat direktor ko''radigan zaxiraga (public_names_backup) olinib, keyin tozalanadi. Deploydan keyin students_public 0 bo''lishi kerak'
+select exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'testimonials' and column_name = 'nameConsent') as has_consent \gset
+select 'students_public ko''rinishi (bor = 1)' as nima, count(*) as soni from pg_views where schemaname = 'public' and viewname = 'students_public'
+union all
+select 'ismli o''quvchi yutuqlari (ism tozalanadi)', count(*) from public.achievements_students where coalesce(btrim(name), '') <> ''
+union all
+\if :has_consent
+select 'rozilik belgisiz ismli sharhlar (ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> '' and not "nameConsent";
+\else
+select 'ismli sharhlar (rozilik belgisi hali yo''q — ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> '';
+\endif

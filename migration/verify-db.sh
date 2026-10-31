@@ -118,12 +118,16 @@ open_t=$(printf '%s' "$open_t" | grep . | sort -u || true); open_v=$(printf '%s'
 nt=$(echo "$info" | grep -c '^rls|' || true); ncl=$(echo "$info" | grep -c '^col|' || true)
 ng=$(echo "$info" | grep -c '^grant|' || true); nv=$(echo "$info" | grep -c '^view|' || true)
 infoline="prod'da repo'da yo'q qo'shimcha obyektlar: jadval $nt, ustun $ncl, ruxsat $ng, view $nv (eski qoldiq — zararsiz)"
-if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ]; then
+# D6: ommaviy o'quvchi ro'yxati (students_public) prodda YO'Q bo'lishi shart (public-close.sql o'chiradi) — bo'lsa anon barcha
+#   o'quvchi ismi/bali/rasmini oladi. Kanonikda u yo'q, shuning uchun bor bo'lsa — alohida 🔴.
+sp_live=$(grep -c '^view|public\.students_public|' "$FP_LIVE" || true)
+if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ] && [ "${sp_live:-0}" = 0 ]; then
   echo "    ✓ Prod bazasi repo'dagi kanonik holat bilan BIR XIL ($(wc -l < "$FP_CANON") obyekt)."
   [ -n "$info" ] && echo "      ℹ️ $infoline"
   exit 0
 fi
 echo "    ⚠️ Prod bazasi kanonik holatdan farq qiladi:"
+[ "${sp_live:-0}" != 0 ] && echo "      🔴 students_public ko'rinishi prodda BOR — o'quvchi ma'lumoti ommaga (anon) ochiq bo'lishi mumkin: kanonik zanjirni qayta qo'llang (bash ~/iqror-repo/deploy.sh)"
 [ "$xp" != 0 ] && { echo "      🔴 Repo'da YO'Q ortiqcha RLS policy ($xp) — ruxsatni kengaytirishi mumkin, tekshiring:"; echo "$extra" | grep '^policy|' | sed 's/^/         /'; }
 [ -n "$open_t" ] && { echo "      🔴 RLS O'CHIQ jadval mijozga (anon/authenticated) ochiq — ma'lumot himoyasiz, tekshiring:"; echo "$open_t" | sed 's/^/         /'; }
 [ -n "$open_v" ] && { echo "      🟠 Repo'da YO'Q view mijozga ochiq (RLS'ni chetlab o'tishi mumkin):"; echo "$open_v" | sed 's/^/         /'; }

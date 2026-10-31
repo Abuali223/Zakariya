@@ -60,8 +60,8 @@ $$;
 
 -- ============ students (PII ustunlari YO'Q -> tuzilmaviy himoya) ============
 -- 2c: xom jadval endi FAQAT kirgan foydalanuvchilarga (anon emas) — cameraId/
--- attendance sizmasin. Ommaviy honor board 'students_public' KO'RINISHINI o'qiydi
--- (ism/sinf/ball/foto; cameraId/attendance YO'Q). Ko'rinish security-2c.sql'da.
+-- attendance sizmasin. Ommaviy o'quvchi ko'rinishi (ilgari «A'lochilar» uchun) YO'Q —
+-- D6: anon o'quvchi ma'lumotini umuman olmaydi (public-close.sql uni o'chiradi).
 alter table students enable row level security;
 drop policy if exists students_sel on students;
 create policy students_sel on students for select using (app.uid() is not null);
@@ -72,15 +72,7 @@ create policy students_upd on students for update using (app.is_admin() or app.i
 drop policy if exists students_del on students;
 create policy students_del on students for delete using (app.is_admin());
 -- Izoh: 'score-only for zavuch' — ustun-darajali GRANT/trigger bilan (keyingi nafislik).
-
--- 2c: ommaviy (anon) honor board uchun xavfsiz ko'rinish — cameraId/attendance YO'Q.
-create or replace view public.students_public as
-  select id, "studentId", name, grade, "classLetter", track, lang, score,
-         photo, "posterImage", subjects, "order", "updatedAt"
-  from public.students;
-grant select on public.students_public to anon, authenticated;
-revoke all on public.students_public from public;
-grant select on public.students_public to service_role;
+-- (Ommaviy o'quvchi ko'rinishi bu yerda endi yaratilmaydi — D6, public-close.sql.)
 
 -- ============ student_private (PII — qulflangan) ============
 alter table student_private enable row level security;
