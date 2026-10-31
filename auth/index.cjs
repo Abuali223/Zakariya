@@ -22,8 +22,12 @@
  *   POST /auth/block-user         { jwt, uid }   POST /auth/unblock-user { jwt, uid }  -> hisobni bloklash (user-admin.cjs)
  *   GET  /auth/health             -> ok   (ommaviy, hech qanday ma'lumotsiz)
  *   GET  /auth/health/deep        Authorization: Bearer <direktor JWT> -> xizmatlar holati (health.cjs)
- *   SMS yuborilmasa (Eskiz xatosi / ~8 s javobsiz) request-otp -> { ok:false, smsFailed:true, error } — urinish limitga
- *   sanalmaydi. Ishonchli (maktab) IP'lar — auth.otpTrustedIps (net.cjs).
+ *   SMS ANIQ yuborilmasa (Eskiz rad etdi 4xx, ulanib/kirib bo'lmadi) request-otp -> { ok:false, smsFailed:true, error } —
+ *   urinish limitga sanalmaydi, «Qayta yuborish» darhol. Natija NOANIQ bo'lsa (Eskiz 5xx, ~8 s javobsiz, so'rov yetgandan
+ *   keyin uzilish — SMS kechikib kelishi mumkin) -> { ok:true, smsUncertain:true, warning, resendAfter } — kod faol (kech
+ *   kelgan SMS ishlaydi), urinish limitga va 60 s kutishga SANALADI. Ishonchli (maktab) IP'lar — auth.otpTrustedIps (net.cjs).
+ *   Bloklangan hisob (users.status='blocked'): login -> { ok:false, status:'blocked' } (urinish sanalmaydi); parolni
+ *   tiklash — SMS yuborilmaydi (noma'lum raqam kabi javob); telefon almashtirish — rad.
  *
  * Ishga tushirish:  cp config.example.json config.json (to'ldiring) ; node index.cjs
  * Batafsil: README.md
@@ -33,7 +37,7 @@ const http = require('http');
 const path = require('path');
 const L = require('./lib.cjs');
 const N = require('./net.cjs');
-const { DEF_OTP } = require('../payments/sms.cjs');
+const { DEF_OTP, definitelyNotSent } = require('../payments/sms.cjs');
 
 const MAX_BODY = 64e3;   // auth payloadlari kichik — 64 KB yetarli
 function readBody(req) {
@@ -75,6 +79,9 @@ function makeHandlers(deps) {
   const TRUSTED = N.ipMatcher(C.otpTrustedIps);
   const SMS_TIMEOUT = Number(C.otpSmsTimeoutMs || 8000);   // Eskiz javob bermasa — ~8 s dan keyin «SMS yuborilmadi»
   const SMS_FAILED = 'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki maktabga murojaat qiling.';
+  // Eskiz javobi noaniq (SMS navbatga qo'yilgan bo'lishi mumkin) — kod faol, foydalanuvchi kodni kiritish bosqichiga o'tadi.
+  const SMS_UNCERTAIN = `SMS kechikishi mumkin: kod bir necha daqiqada kelmasa, ${OTP_RESEND} soniyadan so‘ng «Qayta yuborish»ni bosing yoki maktabga murojaat qiling.`;
+  const BLOCKED_MSG = 'Hisobingiz bloklangan. Administratorga murojaat qiling.';
   const TICKET_TTL = Number(C.ticketTtlSec || 600);
   const LOGIN_MAX_FAILS = Number(C.loginMaxFails || 10);
   const LOGIN_LOCK_MIN = Number(C.loginLockMin || 15);
@@ -95,6 +102,13 @@ function makeHandlers(deps) {
     const { data } = await sb.from('users').select('*').eq('phone', phone).limit(1);
     return (data && data[0]) || null;
   }
+  // Hisob bloklanganmi (user-block.sql: status='blocked') — uid bo'yicha.
+  async function isBlockedUid(uid) {
+    const { data } = await sb.from('users').select('id,status').eq('id', String(uid)).limit(1);
+    return !!(data && data[0] && String(data[0].status || '') === 'blocked');
+  }
+  // GoTrue taqig'i (POST /block-user — ban_duration): parol bilan kirishda error.code 'user_banned' («User is banned»).
+  const isBanned = e => !!e && (String(e.code || e.error_code || '') === 'user_banned' || /\buser is banned\b/i.test(String(e.message || e.msg || '')));
   async function lastOtp(phone, purpose) {
     const { data } = await sb.from('otp_codes').select('*').eq('phone', phone).eq('purpose', purpose).order('createdAt', { ascending: false }).limit(1);
     return (data && data[0]) || null;
@@ -114,11 +128,14 @@ function makeHandlers(deps) {
       // Spec: telefon band bo'lsa ANIQ ayt + login'ga yo'naltir (bu yerda enumeration ATAYLAB).
       if (await userByPhone(canon)) return { ok: false, error: 'Bu telefon allaqachon ro‘yxatdan o‘tgan. Kirish sahifasiga o‘ting.', redirect: 'login' };
     } else if (purpose === 'reset') {
-      // Enumeration'ni oldini olish: user bo'lmasa ham ok (SMS yubormaymiz, otp yozmaymiz).
-      if (!(await userByPhone(canon))) return { ok: true, resendAfter: OTP_RESEND };
+      // Enumeration'ni oldini olish: user bo'lmasa ham ok (SMS yubormaymiz, otp yozmaymiz). Bloklangan hisob — xuddi shunday:
+      //   parolni tiklash uni ochmaydi (pulli SMS behuda ketmasin); kirishga urinsa — «Hisobingiz bloklangan» deyiladi.
+      const u = await userByPhone(canon);
+      if (!u || String(u.status || '') === 'blocked') return { ok: true, resendAfter: OTP_RESEND };
     } else if (purpose === 'change_phone') {
       uid = await verifyJwt(body.jwt);
       if (!uid) return { ok: false, error: 'Avval tizimga kiring.' };
+      if (await isBlockedUid(uid)) return { ok: false, status: 'blocked', error: BLOCKED_MSG };   // muddati tugamagan JWT bilan ham
       if (await userByPhone(canon)) return { ok: false, error: 'Bu telefon band.' };
     }
 
@@ -145,8 +162,10 @@ function makeHandlers(deps) {
     const expiresAt = new Date(Date.now() + OTP_TTL * 1000).toISOString();
     // Yangi kod avval «yuborilmoqda» holida yoziladi (consumed=true — tekshirib BO'LMAYDI): SMS Eskiz'ga yetib borgandagina
     //   faollashadi. Qator limitlarga va «qayta yuborish» kutishiga SMS yuborilayotgan paytda ham sanaladi (parallel so'rov
-    //   ikkinchi SMS yubormasin). SMS yuborilmasa — qator O'CHIRILADI: bu urinish soatlik/IP limitiga va 60 s kutishga
-    //   SANALMAYDI, oldingi (yetib borgan) kod esa amal qilaveradi.
+    //   ikkinchi SMS yubormasin). SMS ANIQ yuborilmasa — qator O'CHIRILADI: bu urinish soatlik/IP limitiga va 60 s kutishga
+    //   SANALMAYDI, oldingi (yetib borgan) kod esa amal qilaveradi. Natija NOANIQ bo'lsa (SMS ketgan bo'lishi mumkin) — kod
+    //   yuborilgandek faollashadi va SANALADI: aks holda Eskiz sekinlashganda (yoki 5xx qaytarib baribir yuborsa) har so'rov
+    //   limitsiz haqiqiy SMS yuborardi, kech kelgan kod esa hech qachon ishlamasdi.
     const { data: insRows, error: insErr } = await sb.from('otp_codes').insert({ phone: canon, codeHash, purpose, expiresAt, attempts: 0, uid, ip, consumed: true }).select('id');
     if (insErr) { console.error('OTP insert fail:', insErr.code || '', insErr.message || insErr, insErr.details || '', insErr.hint || ''); return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' }; }
     // Shu so'rovning qatori — id bo'yicha (id qaytmasa: telefon + maqsad + kod xeshi bo'yicha).
@@ -154,7 +173,10 @@ function makeHandlers(deps) {
     const mine = q => (rowId != null ? q.eq('id', rowId) : q.eq('phone', canon).eq('purpose', purpose).eq('codeHash', codeHash));
 
     const msg = String(OTP_TPL).replace('{code}', code);
-    let sent = true;
+    // SMS natijasi: 'sent' | 'failed' — Eskiz'ga ANIQ yetmagan (4xx rad, chet el/yaroqsiz raqam, kirish/ulanish xatosi —
+    //   payments/sms.cjs definitelyNotSent) | 'unknown' — yetgan bo'lishi mumkin (5xx / id'siz javob — r.ambiguous; so'rov
+    //   yuborilgandan keyingi uzilish yoki muddat; umumiy qat'iy chegara). sms_log'dagi 'failed' / 'unknown' bilan bir xil qoida.
+    let outcome = 'sent';
     if (DRY) console.log('[DRY OTP]', redactPhone(canon), purpose, code);
     else {
       try {
@@ -163,12 +185,12 @@ function makeHandlers(deps) {
         let cap = null;
         const sendP = Promise.resolve().then(() => eskiz.send(canon, msg, { timeoutMs: SMS_TIMEOUT }));
         sendP.catch(() => {});
-        const r = await Promise.race([sendP, new Promise(res => { cap = setTimeout(() => res({ ok: false, error: 'otp_timeout' }), SMS_TIMEOUT + Math.min(2000, Math.ceil(SMS_TIMEOUT / 4))); })])
+        const r = await Promise.race([sendP, new Promise(res => { cap = setTimeout(() => res({ ok: false, error: 'otp_timeout', ambiguous: true }), SMS_TIMEOUT + Math.min(2000, Math.ceil(SMS_TIMEOUT / 4))); })])
           .finally(() => clearTimeout(cap));
-        if (!r || !r.ok) { sent = false; console.error('OTP SMS fail', redactPhone(canon), r && r.error, ((r && r.raw) || '').slice(0, 300)); }
-      } catch (e) { sent = false; console.error('OTP SMS exc', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); }
+        if (!r || !r.ok) { outcome = (r && r.ambiguous) ? 'unknown' : 'failed'; console.error('OTP SMS', outcome === 'unknown' ? 'noaniq' : 'fail', redactPhone(canon), r && r.error, ((r && r.raw) || '').slice(0, 300)); }
+      } catch (e) { outcome = definitelyNotSent(e) ? 'failed' : 'unknown'; console.error('OTP SMS exc', outcome === 'unknown' ? '(noaniq)' : '(yuborilmadi)', redactPhone(canon), (e && (e.message || String(e)) || '').slice(0, 300)); }
     }
-    if (!sent) {
+    if (outcome === 'failed') {
       const { error: delErr } = await mine(sb.from('otp_codes').delete());
       if (delErr) console.error('OTP cleanup fail:', delErr.code || '', delErr.message || delErr);
       return { ok: false, smsFailed: true, error: SMS_FAILED };
@@ -178,6 +200,8 @@ function makeHandlers(deps) {
     if (actErr) { console.error('OTP activate fail:', actErr.code || '', actErr.message || actErr); return { ok: false, error: 'Kod yuborishda xatolik. Qayta urinib ko‘ring.' }; }
     const older = sb.from('otp_codes').update({ consumed: true }).eq('phone', canon).eq('purpose', purpose).eq('consumed', false);
     await (rowId != null ? older.neq('id', rowId) : older.neq('codeHash', codeHash));
+    // Noaniq natija: kodni kiritish bosqichiga o'tiladi (SMS kelsa — ishlaydi), «Qayta yuborish» — odatdagi kutish bilan.
+    if (outcome === 'unknown') return { ok: true, smsUncertain: true, warning: SMS_UNCERTAIN, resendAfter: OTP_RESEND };
     return { ok: true, resendAfter: OTP_RESEND };
   }
 
@@ -301,6 +325,10 @@ function makeHandlers(deps) {
     const email = L.phoneToEmail(canon, DOMAIN);
     const { data, error } = await anon().auth.signInWithPassword({ email, password: String(body.password || '') });
     if (error || !data || !data.session) {
+      // GoTrue taqig'i (hisob bloklangan — POST /block-user): «parol noto'g'ri» DEMAYMIZ (odam «Parolni unutdingizmi?»ga o'tib
+      //   behuda urinardi) va urinish sanalmaydi. Yangi ma'lumot ochilmaydi — GoTrue (/auth/v1/token, ommaviy anon kalit bilan)
+      //   o'zi «User is banned» deb javob beradi; biz faqat shuni o'zbekchalaymiz.
+      if (isBanned(error)) return { ok: false, status: 'blocked', error: BLOCKED_MSG };
       await sb.from('auth_login_attempts').insert({ phone: canon, ok: false, ip: String(body._ip||'').slice(0,64) });
       return { ok: false, error: 'Telefon yoki parol noto‘g‘ri.' };
     }
@@ -311,7 +339,7 @@ function makeHandlers(deps) {
     const us = String((urow && urow.status) || 'active');
     if (us === 'pending' || us === 'blocked') {
       return { ok: false, status: us, error: (us === 'blocked')
-        ? 'Hisobingiz bloklangan. Administratorga murojaat qiling.'
+        ? BLOCKED_MSG
         : 'Hisobingiz administrator tasdig‘ini kutmoqda. Tasdiqlangach kiring.' };
     }
     return {
@@ -325,6 +353,8 @@ function makeHandlers(deps) {
     if (!t || t.purpose !== 'reset' || !t.phone) return { ok: false, error: 'Tasdiqlash muddati tugagan. Qaytadan boshlang.' };
     const urow = await userByPhone(t.phone);
     if (!urow) return { ok: false, error: 'Foydalanuvchi topilmadi.' };
+    // Bloklangan hisob (kod bloklashdan oldin olingan bo'lsa ham) — parol o'zgartirilmaydi.
+    if (String(urow.status || '') === 'blocked') return { ok: false, status: 'blocked', error: BLOCKED_MSG };
     const pv = L.validatePassword(body.newPassword);
     if (!pv.ok) return { ok: false, error: pv.errors.join('. ') };
     // DIQQAT: «yangi parol eskisidan farqli» tekshiruvi BU YERDA QILINMAYDI. Avval eski parol bilan
@@ -346,7 +376,8 @@ function makeHandlers(deps) {
     const email = L.phoneToEmail(t.newPhone, DOMAIN);
     // Avval public.users (service_role), KEYIN auth email. Auth xato bo'lsa users'ni ORQAGA qaytaramiz
     //   -> auth va profil hech qachon desync bo'lmaydi (register orphan-reclaim xavfi yo'q).
-    const { data: cur } = await sb.from('users').select('phone,email').eq('id', t.uid).limit(1);
+    const { data: cur } = await sb.from('users').select('phone,email,status').eq('id', t.uid).limit(1);
+    if (cur && cur[0] && String(cur[0].status || '') === 'blocked') return { ok: false, status: 'blocked', error: BLOCKED_MSG };
     const oldPhone = (cur && cur[0] && cur[0].phone) || null;
     const oldEmail = (cur && cur[0] && cur[0].email) || null;
     const { error: uErr } = await sb.from('users').update({ phone: t.newPhone, email, updatedAt: nowISO() }).eq('id', t.uid);

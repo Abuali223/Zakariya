@@ -53,7 +53,7 @@ Bu ikki Node xizmati Firebase Admin SDK o'rniga **Supabase service_role** ishlat
     ```bash
     cp ai-assistant/config.example.json ai-assistant/config.json
     # to'ldiring: backend="supabase", supabaseUrl, serviceRoleKey, anthropicKey, allowOrigin
-    node ai-assistant/index.cjs serve      # :8791 (/chat, /student-summary, /risk)
+    node ai-assistant/index.cjs serve      # :8791 (/chat; /student-summary va /risk — 410, allowStudentData:false)
     ```
     Frontend `config/ai.url` ni shu xizmat manziliga (masalan `https://api.iqror.uz/ai`) yo'naltiring.
 12. ☐ **To'lov** (`payments/`):
@@ -100,8 +100,9 @@ Bu ikki Node xizmati Firebase Admin SDK o'rniga **Supabase service_role** ishlat
 26. ☐ Real-time yangilanish (onSnapshot → Supabase Realtime) — ikki oynada sinang
 
 ### Server xizmatlari (AI + to'lov)
-26b. ☐ AI chat javob beradi (`/chat`); ota-onaga oylik xulosa (`/student-summary`);
-   xavf ro'yxati (`/risk`) — ma'lumot Supabase'dan o'qiladi
+26b. ☐ AI chat javob beradi (`/chat`, faqat ommaviy maktab ma'lumoti — «faqat oylik to'lov» qoidasi bilan).
+   `/student-summary` va `/risk` — **410 «Bu xizmat vaqtincha o‘chirilgan»** qaytarishi KERAK (o'quvchi ma'lumoti
+   tashqi AI'ga ketmaydi; `allowStudentData: false` — huquqshunos ruxsatisiz `true` qilmang)
 26c. ☐ Click test to'lovi: prepare → complete → invoice "paid" bo'ladi (sandbox)
 
 ### Ommaviy sayt (login shart emas)

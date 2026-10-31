@@ -4,13 +4,14 @@
  *   Ommaviy GET /authapi/health O'ZGARMAGAN («ok», hech qanday ma'lumotsiz — tashqi kuzatuv uchun).
  * -------------------------------------------------------------------
  * Tekshiruvlar (har biri ko'pi bilan 3 s; biri osilib qolsa boshqalari kutmaydi):
- *   auth (shu server), db (supabase-js orqali yengil so'rov), gotrue (/auth/v1/health), eskiz (kalit bormi; balans —
- *   faqat auth.health.eskizBalance: true bo'lsa), pay / ai (127.0.0.1 dagi /health), payments (oxirgi muvaffaqiyatli
+ *   auth (shu server), db (supabase-js orqali yengil so'rov), gotrue (/auth/v1/health), eskiz (kalit bormi va AMAL
+ *   QILADIMI — Eskiz'ga kirib shablonlar ro'yxati so'raladi, SMS yuborilmaydi; auth.health.eskizCheck: false — faqat kalit
+ *   borligi; balans — faqat auth.health.eskizBalance: true bo'lsa), pay / ai (127.0.0.1 dagi /health), payments (oxirgi muvaffaqiyatli
  *   onlayn to'lov — payments jadvalidan), backup (oxirgi «backup OK» — zaxira log faylidan).
  * Javob: { ok, at, checks:[{ key, name, ok:true|false|null, info, at?, ms }] } — ok:null = tekshirilmadi/sozlanmagan.
  *   Javobda SIR YO'Q: kalit, token, parol, ulanish manzili, email, telefon chiqmaydi — faqat holat, vaqt va qisqa sabab.
  * Sozlama (auth/config.json → auth.health, hammasi ixtiyoriy): backupLog (standart /var/log/iqror-backup.log; false — o'chiq),
- *   backupMaxAgeHours (26), payPort (8790; 0 — o'chiq), aiPort (8791; 0 — o'chiq), eskizBalance (false).
+ *   backupMaxAgeHours (26), payPort (8790; 0 — o'chiq), aiPort (8791; 0 — o'chiq), eskizCheck (true), eskizBalance (false).
  */
 const fs = require('fs');
 
@@ -98,10 +99,17 @@ function makeDeepHealth(deps) {
     if (S.enabled === false) return { ok: null, info: 'o‘chirilgan (sms.enabled = false)' };
     if (S.dryRun === true) return { ok: null, info: 'SINOV rejimi (dryRun) — SMS yuborilmaydi' };
     if (!eskizCreds(S) || !eskiz) return { ok: false, info: 'Eskiz kaliti kiritilmagan' };
-    if (H.eskizBalance !== true || typeof eskiz.balance !== 'function') return { ok: true, info: 'sozlangan (balans tekshiruvi o‘chiq)' };
-    const r = await eskiz.balance({ timeoutMs: T });
-    if (r && r.ok) return { ok: true, info: 'balans: ' + fmtNum(r.balance) };
-    return { ok: false, info: (r && r.httpStatus === 401) ? 'token yaroqsiz' : `Eskiz rad etdi (HTTP ${(r && r.httpStatus) || '?'})` };
+    const rejected = r => ({ ok: false, info: (r && r.httpStatus === 401) ? 'token yaroqsiz' : `Eskiz rad etdi (HTTP ${(r && r.httpStatus) || '?'})` });
+    // Balans (sozlamada yoqilgan bo'lsa) — kalitni ham tekshiradi.
+    if (H.eskizBalance === true && typeof eskiz.balance === 'function') {
+      const r = await eskiz.balance({ timeoutMs: T });
+      return (r && r.ok) ? { ok: true, info: 'balans: ' + fmtNum(r.balance) } : rejected(r);
+    }
+    // Kalit AMAL QILADIMI: Eskiz'ga kirib tasdiqlangan matnlar ro'yxati so'raladi (faqat o'qish — SMS yuborilmaydi; shu so'rov
+    //   SMS eslatma va sms-worker'da ham ishlatiladi). Parol/token xato -> login bosqichi istisnosi yoki 401 -> qizil.
+    if (H.eskizCheck === false || typeof eskiz.templates !== 'function') return { ok: true, info: 'kalit kiritilgan (amal qilishi tekshirilmadi)' };
+    const r = await eskiz.templates({ timeoutMs: T });
+    return (r && r.ok) ? { ok: true, info: 'kalit amal qiladi (balans tekshiruvi o‘chiq)' } : rejected(r);
   }
   async function checkLocal(p) {
     if (!p) return { ok: null, info: 'tekshirilmaydi' };

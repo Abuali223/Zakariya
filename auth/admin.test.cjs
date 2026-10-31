@@ -132,6 +132,30 @@ const A = (state, id) => state.authUsers.find(u => u.id === id) || {};
     ok('dir2 qaytdi (director)', r.ok === true && r.role === 'director' && U(state, 'dir2').status === 'active', J(r));
   }
 
+  sec('block-user: ESKI usulda bloklangan (status blocked, rol saqlangan, taqiqsiz) — «🚫 Bloklash» to‘liq bloklaydi');
+  {
+    const { state, UA } = world();
+    U(state, 't1').status = 'blocked';   // eski usul: rol 'teacher' qoldi, GoTrue taqig'i yo'q, seanslar tirik
+    let r = await UA.blockUser({ jwt: 'jwt_dir1', uid: 't1' });
+    ok('to‘liq bloklandi (already emas), prevRole teacher', r.ok === true && r.already === false && r.prevRole === 'teacher', J(r));
+    const t = U(state, 't1');
+    ok('rol olindi -> blockedRole, blockedAt/By', t.role === null && t.blockedRole === 'teacher' && t.blockedBy === 'dir1' && !!t.blockedAt && t.status === 'blocked', J(t));
+    ok('GoTrue taqig‘i qo‘yildi, seanslar o‘chdi', A(state, 't1').banned === true && !state.sessions.some(s => s.user_id === 't1'), J(A(state, 't1')));
+    r = await UA.blockUser({ jwt: 'jwt_dir1', uid: 't1' });
+    ok('endi qayta bloklash — already', r.ok === true && r.already === true && U(state, 't1').blockedRole === 'teacher', J(r));
+    r = await UA.unblockUser({ jwt: 'jwt_dir1', uid: 't1' });
+    ok('unblock -> teacher/active', r.ok === true && r.role === 'teacher' && r.status === 'active', J(r));
+    // Eski usulda bloklangan DIREKTOR faol direktorlar sanog'iga kirmaydi — uni to'liq bloklash «oxirgi direktor» emas.
+    U(state, 'dir2').status = 'blocked';
+    r = await UA.blockUser({ jwt: 'jwt_dir1', uid: 'dir2' });
+    ok('eski usulda bloklangan direktor — to‘liq bloklanadi, dir1 faol qoladi', r.ok === true && U(state, 'dir2').role === null && U(state, 'dir2').blockedRole === 'director' && U(state, 'dir1').role === 'director', J(r));
+    // RPC xatosi: eski usulda bloklangan hisobga qo'yilgan taqiq orqaga olinadi (avval taqiq yo'q edi).
+    U(state, 'hr1').status = 'blocked'; state.__failRpc = { user_block: true }; state.__banLog = [];
+    r = await quiet(() => UA.blockUser({ jwt: 'jwt_dir1', uid: 'hr1' }));
+    ok('RPC xato -> taqiq orqaga olindi, rol joyida', r.ok === false && J(state.__banLog) === J([['hr1', '876000h'], ['hr1', 'none']]) && U(state, 'hr1').role === 'hr', J(state.__banLog));
+    state.__failRpc = null;
+  }
+
   sec('block-user: GoTrue xatosi -> 502, baza o‘zgarmaydi; baza xatosi -> taqiq orqaga qaytariladi');
   {
     const { state, UA } = world();
@@ -173,11 +197,13 @@ const A = (state, id) => state.authUsers.find(u => u.id === id) || {};
     });
     const log = opt.log != null ? opt.log : '[Fri Oct 30 22:30:01 UTC 2026] backup OK -> /opt/iqror/backups/db_1.sql.gz (1M) + auth + storage\n[Sat Oct 31 08:30:01 UTC 2026] backup OK -> /opt/iqror/backups/db_2.sql.gz (1M) + auth + storage + sirlar; eski >60 kun o\'chirildi\n';
     const readTail = async file => { if (file !== '/var/log/iqror-backup.log') { const e = new Error('no'); e.code = 'ENOENT'; throw e; } return { text: log, mtimeMs: opt.mtimeMs }; };
-    const eskiz = { balance: opt.balance || (async o => ({ ok: true, balance: 125000, _t: o && o.timeoutMs })) };
+    const tplCalls = [];
+    const eskiz = { balance: opt.balance || (async o => ({ ok: true, balance: 125000, _t: o && o.timeoutMs })),
+      templates: opt.templates || (async o => { tplCalls.push(o); return { ok: true, list: [] }; }) };
     const smsCfg = Object.assign({ enabled: true, dryRun: false, eskizEmail: SECRETS.email, eskizPassword: SECRETS.eskizPw }, opt.sms || {});
     const DH = makeDeepHealth({ sb, verifyUser, eskiz, smsCfg, cfg: { health: Object.assign({ eskizBalance: true }, opt.health || {}) },
       supabaseUrl: 'https://api.example.test', anonKey: SECRETS.anon, httpGet, readTail, now: () => now, timeoutMs: opt.timeoutMs || 3000 });
-    return { state, DH };
+    return { state, DH, tplCalls };
   }
   sec('health/deep: anon 401, yaroqsiz 401, GoTrue ishlamasa 503, boshqa rol 403, bloklangan direktor 403');
   {
@@ -223,8 +249,26 @@ const A = (state, id) => state.authUsers.find(u => u.id === id) || {};
     ok('eskiz dryRun — kulrang (null), balans so‘ralmaydi', r.body.checks.find(x => x.key === 'eskiz').ok === null, J(r.body.checks.find(x => x.key === 'eskiz')));
     r = await healthWorld({ sms: { eskizEmail: 'ESKIZ_EMAIL (kabinet emaili)', eskizPassword: 'x' } }).DH.handle('jwt_dir1');
     ok('eskiz namunaviy (to‘ldirilmagan) kalit — qizil', r.body.checks.find(x => x.key === 'eskiz').ok === false, J(r.body.checks.find(x => x.key === 'eskiz')));
-    r = await healthWorld({ health: { eskizBalance: false } }).DH.handle('jwt_dir1');
-    ok('balans tekshiruvi o‘chiq — yashil, Eskiz’ga so‘rov yo‘q', r.body.checks.find(x => x.key === 'eskiz').ok === true && /o‘chiq/.test(r.body.checks.find(x => x.key === 'eskiz').info));
+    // Balans o'chiq (standart): kalit AMAL QILISHI baribir tekshiriladi — shablonlar ro'yxati (SMS yuborilmaydi), 3 s muddat.
+    let hw = healthWorld({ health: { eskizBalance: false } });
+    r = await hw.DH.handle('jwt_dir1');
+    let ce = r.body.checks.find(x => x.key === 'eskiz');
+    ok('balans o‘chiq — kalit amal qiladi: yashil, shablonlar so‘raldi (3 s), balans so‘ralmadi', ce.ok === true && ce.info === 'kalit amal qiladi (balans tekshiruvi o‘chiq)' && hw.tplCalls.length === 1 && hw.tplCalls[0].timeoutMs === 3000, J({ ce, calls: hw.tplCalls }));
+    r = await healthWorld({ health: { eskizBalance: false }, templates: async () => ({ ok: false, httpStatus: 401, error: 'Unauthorized' }) }).DH.handle('jwt_dir1');
+    ce = r.body.checks.find(x => x.key === 'eskiz');
+    ok('balans o‘chiq, token/parol yaroqsiz (401) — qizil «token yaroqsiz»', ce.ok === false && ce.info === 'token yaroqsiz', J(ce));
+    r = await healthWorld({ health: { eskizBalance: false }, templates: async () => { const e = new Error('Eskiz login muvaffaqiyatsiz: {"message":"Неверный пароль"}'); e.stage = 'login'; throw e; } }).DH.handle('jwt_dir1');
+    ce = r.body.checks.find(x => x.key === 'eskiz');
+    ok('balans o‘chiq, Eskiz parol xato (login) — qizil, xabar matni chiqmaydi', ce.ok === false && ce.info === 'Eskiz login xato (parol yoki token)' && !/Неверный/.test(J(r.body)), J(ce));
+    r = await healthWorld({ health: { eskizBalance: false }, templates: async () => ({ ok: false, httpStatus: 500 }) }).DH.handle('jwt_dir1');
+    ok('balans o‘chiq, Eskiz 500 — qizil «Eskiz rad etdi (HTTP 500)»', r.body.checks.find(x => x.key === 'eskiz').info === 'Eskiz rad etdi (HTTP 500)', J(r.body.checks.find(x => x.key === 'eskiz')));
+    hw = healthWorld({ health: { eskizBalance: false, eskizCheck: false } });
+    r = await hw.DH.handle('jwt_dir1');
+    ce = r.body.checks.find(x => x.key === 'eskiz');
+    ok('eskizCheck: false — Eskiz’ga so‘rov yo‘q, «amal qilishi tekshirilmadi»', ce.ok === true && /tekshirilmadi/.test(ce.info) && hw.tplCalls.length === 0, J(ce));
+    hw = healthWorld({ timeoutMs: 120, health: { eskizBalance: false }, templates: () => new Promise(() => {}) });
+    r = await hw.DH.handle('jwt_dir1');
+    ok('balans o‘chiq, Eskiz osildi — «javob bermadi»', /javob bermadi/.test(r.body.checks.find(x => x.key === 'eskiz').info), J(r.body.checks.find(x => x.key === 'eskiz')));
     r = await healthWorld({ balance: async () => ({ ok: false, httpStatus: 401 }) }).DH.handle('jwt_dir1');
     ok('Eskiz token yaroqsiz — qizil', r.body.checks.find(x => x.key === 'eskiz').info === 'token yaroqsiz');
     r = await healthWorld({ log: '[Sat Oct 31 08:30:01 UTC 2026] backup OK -> x\n❌ [Sat Oct 31 10:30:01 UTC 2026] baza zaxirasi chala chiqdi — saqlanmadi\n' }).DH.handle('jwt_dir1');

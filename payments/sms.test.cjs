@@ -200,6 +200,17 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
   plan = [{ status: 200, body: JSON.stringify({ data: [] }) }]; calls.length = 0;
   r = await E.templates();
   ok('templates() muddati o‘zgarmagan (30)', r.ok && calls[0].tmo === 30, calls.map(c => c.tmo));
+  // templates({timeoutMs}) — tizim holati (kalit amal qiladimi, 3 s): login + GET bitta umumiy muddat ichida; rad — httpStatus
+  plan = [LOGIN_OK, { status: 200, body: JSON.stringify({ data: [] }) }]; calls.length = 0;
+  E = S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'p' });
+  r = await E.templates({ timeoutMs: 3000 });
+  ok('templates({timeoutMs:3000}): login + GET ≤ 3000 ms (umumiy muddat)', r.ok && calls.length === 2 && calls.every(c => c.tmo > 2000 && c.tmo <= 3000) && calls[1].tmo <= calls[0].tmo, calls.map(c => c.tmo));
+  plan = [{ status: 401, body: '{}' }]; calls.length = 0;
+  r = await S.makeEskiz({ token: 'ESKI-TOKEN' }).templates({ timeoutMs: 3000 });
+  ok('templates: token rejimida 401 -> ok:false + httpStatus 401 (qayta login yo‘q)', !r.ok && r.httpStatus === 401 && calls.length === 1, { r, n: calls.length });
+  plan = [{ status: 200, body: JSON.stringify({ message: 'Неверный пароль' }) }]; calls.length = 0;
+  err = null; try { await S.makeEskiz({ eskizEmail: 'a@b', eskizPassword: 'xato' }).templates({ timeoutMs: 3000 }); } catch (e) { err = e; }
+  ok('templates: parol xato -> istisno stage=login (SMS so‘rovi yo‘q)', err && err.stage === 'login' && calls.length === 1 && calls[0].path === '/api/auth/login', err && { stage: err.stage, calls });
 
   // 7m) balance(): GET /api/user/get-limit (tizim holati) — SMS yuborilmaydi
   plan = [LOGIN_OK, { status: 200, body: JSON.stringify({ status: 'success', data: { balance: 125000 } }) }]; calls.length = 0;

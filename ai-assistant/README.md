@@ -41,9 +41,9 @@ cp config.example.json config.json      # to'ldiring
 npm test                            # birlik testlari (tarmoqsiz: 410, /chat konteksti, to'lov qoidasi)
 node index.cjs test                 # kalit ishlaydimi (Anthropic'ga haqiqiy so'rov; npm run check-key)
 node index.cjs chat "narx qancha?"  # chatbotni sinash
-node index.cjs summary IQ-0002      # bitta o'quvchi xulosasi
-node index.cjs risk                 # xavf ostidagilar
-node index.cjs serve                 # HTTP server (/chat, /student-summary, /risk)
+node index.cjs summary IQ-0002      # bitta o'quvchi xulosasi (faqat allowStudentData: true bo'lsa)
+node index.cjs risk                 # xavf ostidagilar (AI qismi — faqat allowStudentData: true)
+node index.cjs serve                 # HTTP server (/chat; /student-summary, /risk — 410, allowStudentData: true bo'lmasa)
 ```
 Doimiy ishlashi uchun `pm2`/`systemd`. Sayt bilan gaplashishi uchun **HTTPS** manzil kerak
 (domen yoki statik IP + reverse-proxy). CORS `allowOrigin` orqali sizning saytga ruxsat beriladi.

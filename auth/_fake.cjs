@@ -4,7 +4,8 @@
 //   update(+eq, +select qaytarish)/delete (thenable),
 //   rpc('auth_uid_by_email' | 'otp_consume' | 'user_block' | 'user_unblock'), neq(), auth.admin.createUser/updateUserById
 //   (ban_duration ham)/deleteUser,
-//   auth.signInWithPassword.  Hammasi in-memory `state` ustida.
+//   auth.signInWithPassword (taqiqlangan — banned — hisobga GoTrue kabi seans bermaydi: code 'user_banned').
+//   Hammasi in-memory `state` ustida.
 //   QAT'IY: `id` takrori -> 23505 (PK); payments/_schema-columns.json'dagi jadvallarda yo'q ustunni
 //   o'qish/yozish -> xato (haqiqiy PostgREST kabi), shunда ustun nomi xatosi testда ko'rinadi.
 // =====================================================================
@@ -128,15 +129,17 @@ function makeFake(state) {
       const now = new Date().toISOString();
       const was = String(t.status || '') === 'blocked';
       if (fn === 'user_block') {
-        if (!was) {
-          if (t.role === 'director' && !state.users.some(u => u.id !== uid && u.role === 'director' && active(u))) return { data: { ok: false, code: 'last_director' }, error: null };
-          Object.assign(t, { blockedRole: t.role ? t.role : null, role: null, status: 'blocked', blockedAt: now, blockedBy: act, updatedAt: now });
+        // To'liq bloklangan = status 'blocked' VA rol olingan; eski usulda bloklangan (rol saqlangan) — to'liq bloklanadi.
+        const full = was && !t.role;
+        if (!full) {
+          if (t.role === 'director' && active(t) && !state.users.some(u => u.id !== uid && u.role === 'director' && active(u))) return { data: { ok: false, code: 'last_director' }, error: null };
+          Object.assign(t, { blockedRole: t.role ? t.role : (t.blockedRole || null), role: null, status: 'blocked', blockedAt: now, blockedBy: act, updatedAt: now });
         }
         let claims = 0;
         (state.child_claims || []).forEach(c => { if (c.uid === uid && (c.status == null || c.status === '' || c.status === 'active')) { c.status = 'revoked'; c.updatedAt = now; claims++; } });
         const before = (state.sessions || []).length;
         state.sessions = (state.sessions || []).filter(s => s.user_id !== uid);
-        return { data: { ok: true, already: was, prevRole: t.blockedRole || null, claims, sessions: before - state.sessions.length, tokens: 0, sessionsError: null }, error: null };
+        return { data: { ok: true, already: full, prevRole: t.blockedRole || null, claims, sessions: before - state.sessions.length, tokens: 0, sessionsError: null }, error: null };
       }
       if (!was) return { data: { ok: true, already: true, role: t.role, status: t.status, claims: 0 }, error: null };
       const role = t.role || t.blockedRole || null;
@@ -175,6 +178,9 @@ function makeFake(state) {
       },
     },
     async signInWithPassword({ email, password }) {
+      // GoTrue: taqiqlangan hisob — parol tekshiruvidan oldin «User is banned» (400, user_banned).
+      const b = state.authUsers.find(a => String(a.email).toLowerCase() === String(email).toLowerCase());
+      if (b && b.banned) return { data: { session: null, user: null }, error: { status: 400, code: 'user_banned', message: 'User is banned' } };
       const u = state.authUsers.find(a => String(a.email).toLowerCase() === String(email).toLowerCase() && a.password === password);
       if (!u) return { data: null, error: { message: 'Invalid login credentials' } };
       return { data: { session: { access_token: 'at_' + u.id, refresh_token: 'rt_' + u.id, user: { id: u.id } } }, error: null };

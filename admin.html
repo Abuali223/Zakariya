@@ -1161,7 +1161,8 @@ $('#login-form').addEventListener('submit', async e=>{
   try{
     if(phone){
       const r=await AuthAPI.login(phone, pass);           // seansni o'zi o'rnatadi (setSession)
-      if(!r.ok){ throw { code: r.locked?'too-many':'invalid-cred', message:r.error }; }
+      // Hisob holati (bloklangan / tasdiq kutmoqda) — serverning aniq matni; qolgani — umumiy «noto'g'ri».
+      if(!r.ok){ throw { code: r.locked?'too-many':(r.status?'acct-status':'invalid-cred'), message:r.error }; }
       // muvaffaqiyat -> onAuthStateChanged rolni hal qiladi (STAFF bo'lmasa chiqarib yuboradi)
     } else {
       await signInWithEmailAndPassword(auth, idRaw, pass);
@@ -1170,6 +1171,9 @@ $('#login-form').addEventListener('submit', async e=>{
     let m=err.message||'Kirishda xatolik.';
     const c=err.code||'';
     if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found'))m='Telefon/email yoki parol noto‘g‘ri.';
+    else if(c==='acct-status')m=err.message||'Kirib bo‘lmadi. Administratorga murojaat qiling.';
+    // Email bilan kirish: GoTrue taqig'i («🚫 Bloklash») — xom inglizcha «User is banned» o'rniga.
+    else if(c.includes('banned')||/user is banned/i.test(String(err.message||'')))m='Hisobingiz bloklangan. Administratorga murojaat qiling.';
     else if(c.includes('too-many'))m=err.message||'Juda ko‘p urinish. Birozdan so‘ng qayta urining.';
     else if(c.includes('invalid-email'))m='Email formati noto‘g‘ri.';
     else if(c.includes('network'))m='Tarmoq xatosi. Internetni tekshiring.';
@@ -1322,7 +1326,7 @@ async function openProfile(){
         const jwt=await AuthAPI.currentJwt(); const b=$p('pf-ph-otp'); b.disabled=true; b.textContent='…';
         const r=await AuthAPI.requestOtp(phone,'change_phone',{jwt}); b.disabled=false; b.textContent='Kod yuborish';
         if(!r.ok){ msg(r.error||'Kod yuborilmadi.'); return; }
-        $p('pf-ph-area').innerHTML=`<div class="small muted">${pretty(phone)} raqamiga kod yuborildi.</div>
+        $p('pf-ph-area').innerHTML=`${r.smsUncertain?`<div class="small" style="color:#B45309">${esc(r.warning||'SMS kechikishi mumkin.')}</div>`:`<div class="small muted">${pretty(phone)} raqamiga kod yuborildi.</div>`}
           <input id="pf-phcode" type="tel" inputmode="numeric" maxlength="6" placeholder="6 xonali kod" style="${INP};letter-spacing:6px;text-align:center">
           <button class="btn gold sm" id="pf-ph-confirm" style="margin-top:8px">Tasdiqlash</button>`;
         $p('pf-ph-confirm').onclick=async()=>{
@@ -4277,9 +4281,11 @@ async function authServerPost(path, payload){
 async function toggleUserBlock(u, block, btn, roleName){
   const nm=u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||u.email||'Foydalanuvchi';
   const rl=r=> r ? roleName(r) : '—';
+  // Eski usulda bloklangan (status 'blocked', rol SAQLANGAN, kirish taqiqlanmagan) — «🚫 To‘liq bloklash» uni to'liq bloklaydi.
+  const legacy=String(u.status||'')==='blocked' && !!u.role;
   const q = block
-    ? `🚫 «${nm}» hisobi bloklansinmi?\n\n• Tizimga kira olmaydi — ochiq seanslari ham darhol yopiladi.\n• Rol olib qo‘yiladi (hozirgi rol: ${rl(u.role)} — saqlanadi, «Blokdan chiqarish» bilan qaytadi).\n• Ota-ona bo‘lsa — farzandlariga bog‘lanishi to‘xtatiladi.\n\nIshdan ketgan xodim uchun «O‘chirish» emas, shu amal tavsiya etiladi (tarix saqlanadi).`
-    : `«${nm}» blokdan chiqarilsinmi?\n\nKirish qayta ochiladi, rol qaytariladi: ${rl(u.blockedRole)}.`;
+    ? `🚫 «${nm}» hisobi ${legacy?'to‘liq ':''}bloklansinmi?\n\n${legacy?'• Hozir faqat «bloklangan» belgisi bor: rol saqlangan, ochiq seans bilan kirish mumkin.\n':''}• Tizimga kira olmaydi — ochiq seanslari ham darhol yopiladi.\n• Rol olib qo‘yiladi (hozirgi rol: ${rl(u.role)} — saqlanadi, «Blokdan chiqarish» bilan qaytadi).\n• Ota-ona bo‘lsa — farzandlariga bog‘lanishi to‘xtatiladi.\n\nIshdan ketgan xodim uchun «O‘chirish» emas, shu amal tavsiya etiladi (tarix saqlanadi).`
+    : `«${nm}» blokdan chiqarilsinmi?\n\nKirish qayta ochiladi, rol qaytariladi: ${rl(u.blockedRole||u.role)}.`;
   if(!confirm(q)) return;
   const label=btn.textContent; btn.disabled=true; btn.textContent='…';
   const r=await authServerPost(block?'/block-user':'/unblock-user', { uid:u._id });
@@ -4333,13 +4339,15 @@ async function renderUsers(){
     const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
     // Telefon (kanonik: 998... yoki chet el 7..., 48...) -> chiroyli ko'rinish; aloqa ustunida telefon (bo'lsa) yoki email.
     const contact=r=> r.phone ? `<a href="tel:+${esc(String(r.phone).replace(/\D/g,''))}">${esc(pmPrettyPhone('+'+String(r.phone).replace(/\D/g,'')))}</a>` : esc(r.email||'—');
+    // Eski usulda bloklangan (status 'blocked', rol saqlangan — rol funksiyalari statusni tekshirmaydi, ochiq seans ishlaydi).
+    const legacyBlk=r=> String(r.status||'')==='blocked' && !!r.role;
     const statusCell=r=> (String(r.status||'')==='pending') ? '<span style="color:#B45309;font-weight:700">⏳ Kutilmoqda</span>'
-      : (String(r.status||'')==='blocked') ? `<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>${fmtWhen(r.blockedAt)?`<div class="small muted">${esc(fmtWhen(r.blockedAt))}</div>`:''}`
+      : (String(r.status||'')==='blocked') ? `<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>${fmtWhen(r.blockedAt)?`<div class="small muted">${esc(fmtWhen(r.blockedAt))}</div>`:''}${legacyBlk(r)?'<div class="small" style="color:#B45309">eski usulda: rol saqlangan — «🚫 To‘liq bloklash»ni bosing</div>':''}`
       : (r.verified ? '<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>' : '<span class="muted">—</span>');
     // Bloklash (faqat direktor; o'zini emas) — kirishni darhol yopadi, avvalgi rol saqlanadi (auth-server /authapi/block-user).
     const myUid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
     const blockBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid) ? '' : (String(r.status||'')==='blocked'
-      ? `<button class="btn sm" data-unblk="${esc(r._id)}" title="Kirishni qayta ochadi — avvalgi rol qaytariladi">Blokdan chiqarish</button>`
+      ? `${legacyBlk(r)?`<button class="btn sm" style="color:#B42318;border-color:#F3C1BC" data-blk="${esc(r._id)}" title="Eski usulda bloklangan: rol saqlangan, kirish taqiqlanmagan — to‘liq bloklash (rol olinadi, seanslar yopiladi)">🚫 To‘liq bloklash</button>`:''}<button class="btn sm" data-unblk="${esc(r._id)}" title="Kirishni qayta ochadi — avvalgi rol qaytariladi">Blokdan chiqarish</button>`
       : `<button class="btn sm" style="color:#B42318;border-color:#F3C1BC" data-blk="${esc(r._id)}" title="Ishdan ketgan xodim / muammoli hisob: kirish darhol yopiladi (rol olinadi, seanslar yopiladi)">🚫 Bloklash</button>`);
     const roleCell=r=> roleChip(r.role||'') + ((String(r.status||'')==='blocked' && r.blockedRole) ? `<div class="small muted" style="margin-top:3px">avvalgi rol: ${esc(roleName(r.blockedRole))}</div>` : '');
     // HR yozuviga bog'lanish ko'rsatkichi: bog'langan bo'lsa 🔗 kod; aks holda telefon bo'yicha taklif.
@@ -4487,6 +4495,11 @@ function openUserEditor(u, CLS, roleOpts, opts){
       else { patch.staffRefType=''; patch.staffRefId=''; patch.staffCode=''; }   // uzish (bo'sh satr — RLS/indeks bo'shni e'tiborsiz qoldiradi)
     }
     try{
+      // Ro'yxat ochilgandan beri hisob BLOKLANGAN bo'lishi mumkin (boshqa direktor yoki boshqa oyna): bazadan qayta o'qiymiz —
+      //   eskirgan oyna rol/holatni qaytarib qo'ymasin (baza ham rad etadi — user-block.sql himoya trigger'i).
+      let fresh=null; try{ fresh=await getDoc(doc(db,'users',u._id)); }catch(e){ fresh=null; }
+      if(fresh && fresh.exists() && String((fresh.data()||{}).status||'')==='blocked'){
+        toast('Bu hisob shu orada bloklangan — o‘zgarish saqlanmadi. Ro‘yxat yangilandi.',true); cache.users=null; close(); renderUsers(); return; }
       // Tanlangan davomat/maosh yozuvi bazada HALI BORMI (ro'yxat ochilgandan beri o'chirilgan bo'lishi mumkin)? Aks holda
       //   setDoc (upsert) nomsiz «arvoh» xodim yaratib, hisobni unga bog'lab qo'yardi.
       if(changedLink && nId){ let ex=null; try{ ex=await getDoc(doc(db, nType==='teacher'?'teachers':'staff', nId)); }catch(e){ ex=null; }
@@ -4513,7 +4526,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
       }
       toast('Saqlandi ✓'); cache.users=null; cache.staff=null; cache.teachers=null; close(); renderUsers();
     }
-    catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
+    catch(e){ toast('Xatolik: '+errText(e),true); b.disabled=false; b.textContent='Saqlash'; }
   };
 }
 
@@ -5709,7 +5722,8 @@ const CHLOG_FLD={ specialCategory:'Toifa', contractAmount:'Kontrakt summasi', si
   absentRefType:'Kelmagan (tur)', absentRefId:'Kelmagan', subRefType:'O‘rinbosar (tur)', subRefId:'O‘rinbosar', sick_added:'«Bemor» qo‘shildi', sick_removed:'«Bemor» olib tashlandi',
   clickServiceId:'Click service ID', clickMerchantId:'Click merchant ID', uzumUrlTemplate:'Uzum havolasi',
   credit:'Avans', delta:'O‘zgarish', balanceAfter:'Qoldiq', assignedClasses:'Biriktirilgan sinflar', assignedSubjects:'Biriktirilgan fanlar',
-  homeroomClasses:'Sinf rahbarligi', childIds:'Farzandlar', childId:'Farzand', phone:'Telefon (login)', email:'Email (login)', uid:'Foydalanuvchi', code:'Kod' };
+  homeroomClasses:'Sinf rahbarligi', childIds:'Farzandlar', childId:'Farzand', phone:'Telefon (login)', email:'Email (login)', uid:'Foydalanuvchi', code:'Kod',
+  blockedRole:'Bloklashdan oldingi rol', blockedAt:'Bloklangan vaqt', blockedBy:'Kim bloklagan' };
 const CHLOG_OP={ INSERT:'qo‘shildi', UPDATE:'o‘zgardi', DELETE:'o‘chirildi' };
 function chlogVal(v){
   if(v===null||v===undefined||v==='') return '—';
@@ -5752,13 +5766,21 @@ async function renderChangeLog(){
   const who=r=>r.actor_uid?`${esc(r.actor_name||r.actor_uid)}<div class="small muted">${esc(ROLE_LABEL[r.actor_role]||r.actor_role||'')}</div>`:'<span class="muted">Tizim</span>';
   const rowLbl=r=>{ const id=String(r.row_id||''); const k=rowKey(r), nm=k&&names[k];
     return nm?`<b>${esc(nm)}</b><div class="small muted">${esc(id)}</div>`:`<span class="small">${esc(id)}</span>`; };
+  // Maydonga xos ko'rinish: rol — nomi bilan, vaqt — Toshkent vaqti, «kim bloklagan» — foydalanuvchi ismi (xom id emas).
+  const tkTime=a=>{ const x=new Date(a); if(isNaN(x)) return String(a||''); const z=new Date(x.getTime()+5*3600e3);
+    return `${z.toISOString().slice(0,10)} ${String(z.getUTCHours()).padStart(2,'0')}:${String(z.getUTCMinutes()).padStart(2,'0')}`; };
+  const fv=(k,v)=>{ if(v===null||v===undefined||v==='') return chlogVal(v);
+    if(k==='role'||k==='blockedRole') return ROLE_LABEL[v]||String(v);
+    if(k==='blockedAt') return tkTime(v);
+    if(k==='blockedBy') return names[String(v)]||chlogVal(v);
+    return chlogVal(v); };
   const chg=r=>{ const c=r.changes||{};
     if(r.tbl==='attendance'){ const add=(c.sick_added||[]), rem=(c.sick_removed||[]); return [add.length?`«Bemor» qo‘shildi: ${esc(add.join(', '))}-kunlar`:'', rem.length?`«Bemor» olib tashlandi: ${esc(rem.join(', '))}-kunlar`:''].filter(Boolean).join('<br>')+(c.month?` <span class="small muted">(${esc(c.month)})</span>`:''); }
     return Object.keys(c).map(k=>{ const v=c[k]; const lbl=esc(CHLOG_FLD[k]||k);
-      if(!Array.isArray(v)||v.length!==2) return `${lbl}: ${esc(chlogVal(v))}`;
-      if(r.op==='INSERT') return `${lbl}: ${esc(chlogVal(v[1]))}`;
-      if(r.op==='DELETE') return `${lbl}: <s>${esc(chlogVal(v[0]))}</s>`;
-      return `${lbl}: ${esc(chlogVal(v[0]))} → <b>${esc(chlogVal(v[1]))}</b>`; }).join('<br>'); };
+      if(!Array.isArray(v)||v.length!==2) return `${lbl}: ${esc(fv(k,v))}`;
+      if(r.op==='INSERT') return `${lbl}: ${esc(fv(k,v[1]))}`;
+      if(r.op==='DELETE') return `${lbl}: <s>${esc(fv(k,v[0]))}</s>`;
+      return `${lbl}: ${esc(fv(k,v[0]))} → <b>${esc(fv(k,v[1]))}</b>`; }).join('<br>'); };
   let gen=0;   // tez ketma-ket tanlovda eski (kech kelgan) javob yangisining ustiga yozilmasin
   const load=async()=>{
     const g=++gen;

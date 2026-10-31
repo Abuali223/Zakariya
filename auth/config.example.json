@@ -20,7 +20,7 @@
     "loginLockMin": 15,
     "otpTemplate": "IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.",
     "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz",
-    "health": { "backupLog": "/var/log/iqror-backup.log", "backupMaxAgeHours": 26, "payPort": 8790, "aiPort": 8791, "eskizBalance": false }
+    "health": { "backupLog": "/var/log/iqror-backup.log", "backupMaxAgeHours": 26, "payPort": 8790, "aiPort": 8791, "eskizCheck": true, "eskizBalance": false }
   },
   "sms": {
     "enabled": true,

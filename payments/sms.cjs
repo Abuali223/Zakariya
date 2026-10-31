@@ -94,18 +94,21 @@ function makeEskiz(cfg) {
 
   // Eskiz'dagi SMS matnlari (shablonlar): [{ id, template (moderator naqshi: %w/%d), original (asl matn), status }].
   //   status: service/reklama — tasdiqlangan; moderation/inproccess — kutilmoqda; rejected — rad etilgan.
-  async function templates() {
-    await stage('login', ensureToken);
+  //   opts.timeoutMs (ixtiyoriy) — butun chaqiruv uchun umumiy muddat (tizim holati: kalit amal qiladimi — 3 s);
+  //   rad javobida httpStatus ham qaytadi (401 — token/parol yaroqsiz). Boshqa chaqiruvlar avvalgidek.
+  async function templates(opts) {
+    const left = budget(opts && opts.timeoutMs);
+    await stage('login', () => ensureToken(left));
     const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/templates', method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }));
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }, null, left()));
     let r = await get();
-    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', login); r = await get(); }
+    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await get(); }
     const j = r.json || {};
     const list = Array.isArray(j.result) ? j.result : (Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : null));
     if (r.status >= 200 && r.status < 300 && list) {
       return { ok: true, list: list.map(t => ({ id: t && t.id, template: String((t && t.template) || ''), original: String((t && t.original_text) || ''), status: String((t && t.status) || '') })) };
     }
-    return { ok: false, error: (typeof j.message === 'string' ? j.message : ('http_' + r.status)) };
+    return { ok: false, httpStatus: r.status, error: (typeof j.message === 'string' ? j.message : ('http_' + r.status)) };
   }
 
   // Eskiz balansi (GET /api/user/get-limit -> { data:{ balance } }) — tizim holati tekshiruvi (auth-server, faqat sozlamada

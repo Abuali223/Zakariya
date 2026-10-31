@@ -936,7 +936,7 @@ const T = {
     ev_kicker:"O‘quv taqvimi",ev_title:"Yaqin tadbirlar",ev_sub:"Ochiq eshiklar kuni, imtihonlar va bayramlar — muhim sanalarni belgilab qo‘ying.",ev_empty:"Yaqin tadbirlar tez orada e'lon qilinadi.",
     qab_kicker:"Qabul 2026/27",qab_title:"Qabul va narxlar",qab_sub:"Ariza berishdan o‘qishni boshlashgacha — bosqichlar, narxlar va kerakli hujjatlar bir sahifada.",
     adm_kicker:"Qanday qabul qilamiz",adm_title:"Qabul bosqichlari",adm_sub:"To‘rt oddiy qadam — aloqadan o‘quv shartnomasigacha.",
-    price_kicker:"Narxlar",price_title:"O‘quv to‘lovi rejalari",price_sub:"Har bir reja to‘liq kunlik ta'lim, ovqatlanish va to‘garaklarni o‘z ichiga oladi. Yillik to‘lovda chegirma mavjud.",
+    price_kicker:"Narxlar",price_title:"O‘quv to‘lovi rejalari",price_sub:"Har bir reja to‘liq kunlik ta'lim, ovqatlanish va to‘garaklarni o‘z ichiga oladi. To‘lov har oy amalga oshiriladi.",
     price_cur:"so‘m",price_month:"/oy",price_popular:"Ommabop",price_cta:"Ariza qoldirish",
     doc_kicker:"Hujjatlar",doc_title:"Qabul uchun kerakli hujjatlar",
     docs:["Bola tug‘ilganlik guvohnomasi (nusxa)","Ota-ona pasporti (nusxa)","3×4 o‘lchamdagi 4 dona rasm","Oldingi maktabdan ma'lumotnoma (ko‘chib o‘tishda)","Tibbiy karta (086/U yoki 026/U)","To‘ldirilgan qabul arizasi"],
@@ -1056,7 +1056,7 @@ const T = {
     ev_kicker:"Учебный календарь",ev_title:"Ближайшие события",ev_sub:"День открытых дверей, экзамены и праздники — отметьте важные даты.",ev_empty:"Ближайшие события скоро будут объявлены.",
     qab_kicker:"Приём 2026/27",qab_title:"Приём и цены",qab_sub:"От подачи заявки до начала учёбы — этапы, цены и необходимые документы на одной странице.",
     adm_kicker:"Как проходит приём",adm_title:"Этапы приёма",adm_sub:"Четыре простых шага — от обращения до договора об обучении.",
-    price_kicker:"Цены",price_title:"Тарифы обучения",price_sub:"Каждый тариф включает обучение полного дня, питание и кружки. При годовой оплате действует скидка.",
+    price_kicker:"Цены",price_title:"Тарифы обучения",price_sub:"Каждый тариф включает обучение полного дня, питание и кружки. Оплата вносится ежемесячно.",
     price_cur:"сум",price_month:"/мес",price_popular:"Популярный",price_cta:"Оставить заявку",
     doc_kicker:"Документы",doc_title:"Документы для приёма",
     docs:["Свидетельство о рождении ребёнка (копия)","Паспорт родителя (копия)","4 фото размером 3×4","Справка из прежней школы (при переводе)","Медицинская карта (086/У или 026/У)","Заполненное заявление о приёме"],
@@ -1237,7 +1237,7 @@ let FAQ = [
   {uz:"O‘qish qaysi tilda olib boriladi?",ru:"На каком языке ведётся обучение?",
    auz:"Ta'lim o‘zbek va rus tillarida — oila o‘ziga qulay tilni tanlaydi.",aru:"Обучение на узбекском и русском — семья выбирает удобный язык."},
   {uz:"To‘lovni bo‘lib to‘lash mumkinmi?",ru:"Можно ли оплачивать частями?",
-   auz:"Ha, oylik va choraklik to‘lov imkoniyati bor. Yillik to‘lovda chegirma beriladi.",aru:"Да, есть помесячная и поквартальная оплата. При годовой оплате действует скидка."},
+   auz:"To‘lov har oy amalga oshiriladi (oylik to‘lov). Yillik, choraklik yoki oldindan to‘lov uchun alohida chegirma yo‘q.",aru:"Оплата вносится ежемесячно. Отдельных скидок за годовую, квартальную или предварительную оплату нет."},
   {uz:"Maktab avtobusi xizmati bormi?",ru:"Есть ли услуга школьного автобуса?",
    auz:"Ha, maktab avtobuslari bolani uyidan olib keladi va darsdan so‘ng qaytaradi.",aru:"Да, школьные автобусы забирают ребёнка из дома и отвозят после уроков."},
   {uz:"Test sinovidan o‘tolmasa-chi?",ru:"А если ребёнок не пройдёт тест?",
@@ -2721,7 +2721,11 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
         const focusEnd=id=>setTimeout(()=>{ try{ const i=$(id); i.focus(); const n=i.value.length; i.setSelectionRange(n,n); }catch(e){} },40);
         const pwChk=`<div id="ph-pwchk" style="font-size:12.5px;color:var(--muted);margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px">
           <span data-c="len">○ 8+ belgi</span><span data-c="upper">○ Katta harf</span><span data-c="lower">○ Kichik harf</span><span data-c="digit">○ Raqam</span></div>`;
-        const showErr=m=>{ const e=$('ph-err'); if(e){ e.textContent=m; e.style.display='block'; } };
+        const ERR_CSS={background:'#fdece3',borderColor:'#f0d3c4',color:'#C2410C'}, WARN_CSS={background:'#FEF3E2',borderColor:'#F6C77E',color:'#92500E'};
+        const showMsg=(m,css)=>{ const e=$('ph-err'); if(e){ e.textContent=m; Object.assign(e.style,css); e.style.display='block'; } };
+        const showErr=m=>showMsg(m,ERR_CSS);
+        // Ogohlantirish (xato emas) — masalan server «SMS kechikishi mumkin» desa (kod faol, kodni kiritish bosqichida).
+        const showWarn=m=>showMsg(m,WARN_CSS);
         const clrErr=()=>{ const e=$('ph-err'); if(e) e.style.display='none'; };
         function wireEyes(){ bg.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } }); }
         // Maska + kursor tahrir joyida qoladi (sb/auth-api.js bindPhoneInput): o'rtadagi tuzatish raqamlarni almashtirib, kod
@@ -2736,7 +2740,7 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
           resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); ready(); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
         // SMS yetib bormasa (smsFailed) — server aniq xato aytadi va bu urinish sanalmaydi: «Qayta yuborish» DARHOL bosiladi.
         async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose);
-          startResend(purpose, (r&&r.smsFailed) ? 0 : (r&&r.resendAfter)); if(!r.ok) showErr(r.error||'Yuborilmadi.'); }
+          startResend(purpose, (r&&r.smsFailed) ? 0 : (r&&r.resendAfter)); if(!r.ok) showErr(r.error||'Yuborilmadi.'); else if(r.warning) showWarn(r.warning); }
         function render(step){
           clrErr(); st.step=step;
           const T={login:'Kirish',reg_role:'Ro‘yxatdan o‘tish',reg_form:'Ro‘yxatdan o‘tish',reg_otp:'Tasdiqlash kodi',reg_name:'Ism-familiya',reset_form:'Parolni tiklash',reset_otp:'Tasdiqlash kodi',reset_pass:'Yangi parol'};
@@ -2804,7 +2808,7 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
           if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
           if(p1!==p2){ showErr('Parollar mos emas.'); return; } st.phone=phone; st.password=p1;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'register'); b.disabled=false; b.textContent='Kod yuborish';
-          if(r.ok) render('reg_otp'); else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
+          if(r.ok){ render('reg_otp'); if(r.warning) showWarn(r.warning); } else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
         async function doVerify(purpose){ clrErr(); const code=($('ph-code').value||'').replace(/\D/g,'');
           if(code.length!==6){ showErr('6 xonali kodni kiriting.'); return; } const b=$('ph-go'); b.disabled=true; b.textContent='Tekshirilmoqda…';
           const r=await AuthAPI.verifyOtp(st.phone,purpose,code); b.disabled=false; b.textContent='Tasdiqlash';
@@ -2818,7 +2822,7 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
         async function doResetRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value);
           if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } st.phone=phone;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'reset'); b.disabled=false; b.textContent='Kod yuborish';
-          if(r.ok) render('reset_otp'); else showErr(r.error||'Kod yuborilmadi.'); }
+          if(r.ok){ render('reset_otp'); if(r.warning) showWarn(r.warning); } else showErr(r.error||'Kod yuborilmadi.'); }
         async function doResetConfirm(){ clrErr(); const p1=$('ph-pass').value, p2=$('ph-pass2').value; const pv=AuthAPI.validatePassword(p1);
           if(!pv.ok){ showErr(pv.errors.join('. ')); return; } if(p1!==p2){ showErr('Parollar mos emas.'); return; }
           const b=$('ph-go'); b.disabled=true; b.textContent='Saqlanmoqda…'; const r=await AuthAPI.resetConfirm(st.ticket,p1);
@@ -2909,6 +2913,7 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
             const c=e.code||''; let m='Xatolik: '+c;
             if(c.includes('email-already-in-use')) m='Bu email allaqachon ro‘yxatdan o‘tgan — “Kirish”ni tanlang.';
             else if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found')) m='Email yoki parol noto‘g‘ri.';
+            else if(c.includes('banned')||/user is banned/i.test(String(e.message||''))) m='Hisobingiz bloklangan. Administratorga murojaat qiling.';
             else if(c.includes('weak-password')) m='Parol juda kuchsiz (kamida 6 belgi).';
             else if(c.includes('invalid-email')) m='Email formati noto‘g‘ri.';
             showErr(m);

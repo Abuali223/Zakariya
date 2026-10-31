@@ -101,7 +101,7 @@ Bu ikki Node xizmati Firebase Admin o'rniga Supabase service_role ishlatadi
 cd server && npm install                       # @supabase/supabase-js
 cp ai-assistant/config.example.json ai-assistant/config.json   # to'ldiring (serviceRoleKey, anthropicKey)
 cp payments/config.example.json     payments/config.json       # to'ldiring (serviceRoleKey, click.secretKey)
-node ai-assistant/index.cjs serve              # :8791  /chat /student-summary /risk
+node ai-assistant/index.cjs serve              # :8791  /chat (/student-summary, /risk — 410: allowStudentData:false)
 node payments/index.cjs                        # :8790  /click/prepare /click/complete /uzum
 ```
 `ai-grader/` **kerak emas**. `functions/` — faqat Firebase (Supabase'da `storage-rls.sql`

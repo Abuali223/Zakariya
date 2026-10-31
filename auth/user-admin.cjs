@@ -15,6 +15,8 @@
  *   Baza qoidalari (o'zini / oxirgi faol direktor / chaqiruvchi faol direktor) RPC ichida QULF bilan qayta tekshiriladi
  *   (parallel so'rovlar). Bu yerdagi oldindan tekshiruv — ruxsatsiz so'rov GoTrue'ga umuman tegmasin.
  *   Hisobning auth.users yozuvi yo'q bo'lsa (GoTrue 404) — taqiq bosqichi o'tkaziladi (baza baribir bloklaydi).
+ *   Eski usulda bloklangan hisob (status 'blocked', rol SAQLANGAN, taqiqsiz) — «🚫 Bloklash» uni TO'LIQ bloklaydi (rol olinadi,
+ *   taqiq, seanslar); to'liq bloklangan (rol olingan) hisobni qayta bloklash — already (taqiq qayta qo'yiladi).
  */
 const BAN = '876000h';   // ~100 yil — «muddatsiz»
 
@@ -77,8 +79,9 @@ function makeUserAdmin(deps) {
       if (uid === c.actor) return RPC_ERR.self();
       const t = await userRow(uid);
       if (!t) return RPC_ERR.not_found();
-      const was = String(t.status || '') === 'blocked';
-      if (!was && t.role === 'director' && !(await activeDirectors()).some(id => id !== uid)) return RPC_ERR.last_director();
+      // To'liq bloklangan = status 'blocked' VA rol olingan (user-block.sql bilan bir xil qoida).
+      const full = String(t.status || '') === 'blocked' && !String(t.role || '');
+      if (!full && t.role === 'director' && isActive(t) && !(await activeDirectors()).some(id => id !== uid)) return RPC_ERR.last_director();
       // 1) GoTrue taqig'i
       const ban = await setBan(uid, BAN);
       if (!ban.ok) return fail(502, 'Kirish tizimida (GoTrue) taqiq qo‘yilmadi — hech narsa o‘zgarmadi. Birozdan so‘ng qayta urinib ko‘ring.');
@@ -86,7 +89,7 @@ function makeUserAdmin(deps) {
       const { data, error } = await sb.rpc('user_block', { p_uid: uid, p_actor: c.actor });
       const r = data || {};
       if (error || !r.ok) {
-        if (!was && !ban.missing) await setBan(uid, 'none');   // orqaga: taqiq olinadi (hech narsa o'zgarmagan bo'lsin)
+        if (!full && !ban.missing) await setBan(uid, 'none');   // orqaga: taqiq olinadi (hech narsa o'zgarmagan bo'lsin)
         if (error) { console.error('user_block xato:', error.code || '', String(error.message || '').slice(0, 160)); return dbFail(); }
         return (RPC_ERR[r.code] || dbFail)();
       }

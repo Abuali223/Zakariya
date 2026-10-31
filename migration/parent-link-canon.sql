@@ -68,12 +68,15 @@ create index if not exists students_studentid_idx on public.students("studentId"
 --   (claim_row) tegishli bo'lsa, k shu qatorning kaliti bo'lsa va k BOSHQA hech qaysi qatorning kaliti bo'lmasa (to'qnash
 --   kalitli yozuvlar kimniki ekani noaniq — hech kimga ochilmaydi; avvalgi aniq-kalit moslash boshqa oila bolasining
 --   fakturasi/davomatini ko'rsatib qo'yardi). O'chirilgan o'quvchi (qatori yo'q) — eski yozuvlari aniq kalit bo'yicha.
+--   BLOKLANGAN hisob (users.status = 'blocked', user-block.sql) — bog'lanish faol bo'lsa ham hech narsa ochilmaydi: muddati
+--   tugamagan JWT bilan bog'lanishni qayta yaratib (o'chirib + claim_child) ham farzand ma'lumotiga kira olmaydi.
 create or replace function app.owns_child(sid text) returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select coalesce(sid, '') <> '' and exists(
     select 1 from public.child_claims cc
      where cc.uid = app.uid()
        and coalesce(nullif(cc.status, ''), 'active') = 'active'
+       and not exists (select 1 from public.users u where u.id = cc.uid and u.status = 'blocked')
        and (exists (select 1 from public.students s
                      where s.id = app.claim_row(cc."studentId", cc.code)
                        and (s.id = sid or s."studentId" = sid)
@@ -93,6 +96,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
       select 1 from public.child_claims cc
        where cc.uid = app.uid()
          and coalesce(nullif(cc.status, ''), 'active') = 'active'
+         and not exists (select 1 from public.users u where u.id = cc.uid and u.status = 'blocked')
          and app.claim_row(cc."studentId", cc.code) = p_id)
     else app.owns_child(p_id)
   end
@@ -104,6 +108,11 @@ declare v_uid text := app.uid(); v_fails int; v_ok boolean; v_canon text; v_doc 
 begin
   if v_uid is null then
     raise exception 'auth required' using errcode = '42501';
+  end if;
+  -- Bloklangan hisob (user-block.sql) farzand biriktira olmaydi — muddati tugamagan JWT bilan ham (urinish sanalmaydi).
+  if exists (select 1 from public.users u where u.id = v_uid and u.status = 'blocked') then
+    return jsonb_build_object('ok', false, 'blocked', true,
+      'error', 'Hisobingiz bloklangan. Maktab ma''muriyatiga murojaat qiling.');
   end if;
   p_sid := btrim(coalesce(p_sid, ''));
   -- Lockout: oxirgi 15 daqiqada 5+ MUVAFFAQIYATSIZ urinish -> bloklash.

@@ -27,10 +27,10 @@ telefon tasdiqlanadi. **SMS faqat O‘zbekiston raqamlariga** yuboriladi. **Maxf
 
 | Metod | Yo‘l | Tana | Javob |
 |---|---|---|---|
-| POST | `/auth/request-otp` | `{phone, purpose:'register'|'reset'|'change_phone', jwt?}` | `{ok, resendAfter}` yoki `{ok:false, redirect?}` |
+| POST | `/auth/request-otp` | `{phone, purpose:'register'|'reset'|'change_phone', jwt?}` | `{ok, resendAfter, smsUncertain?, warning?}` yoki `{ok:false, smsFailed?, redirect?, error}` |
 | POST | `/auth/verify-otp` | `{phone, purpose, code}` | `{ok, ticket}` |
 | POST | `/auth/register` | `{ticket, password, firstName, lastName, role}` | `{ok, verified, pending, message}` |
-| POST | `/auth/login` | `{phone, password}` | `{ok, access_token, refresh_token, role, verified}` |
+| POST | `/auth/login` | `{phone, password}` | `{ok, access_token, refresh_token, role, verified}` yoki `{ok:false, status?:'blocked'|'pending', error}` |
 | POST | `/auth/reset-confirm` | `{ticket, newPassword}` | `{ok, message}` |
 | POST | `/auth/change-phone-confirm` | `{ticket}` | `{ok, message}` |
 | POST | `/auth/sms-remind` | `{jwt, studentId, preview?}` | `{ok, preview?, name, phone, due, months, message}` / `{ok, sent}` / `{ok:false, already?, error}` |
@@ -44,15 +44,25 @@ Mijoz `login`/`register`dan keyin `supabase.auth.setSession({access_token, refre
 
 ## SMS kod yetib bormasa — aniq xato
 
-Eskiz SMS'ni rad etsa (masalan shablon moderatsiyada, balans tugagan) yoki ~8 soniyada javob bermasa (`auth.otpSmsTimeoutMs`,
-standart 8000) — `request-otp` `{ok:false, smsFailed:true, error:'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki
-maktabga murojaat qiling.'}` qaytaradi (avval `{ok:true}` qaytib, odam kelmaydigan kodni kutardi). Kod avval «yuborilmoqda»
-holida yoziladi (tekshirib bo‘lmaydi) va faqat Eskiz qabul qilgach faollashadi; SMS ketmasa — yozuv o‘chiriladi: bu urinish
-soatlik (telefon/IP) limitga va 60 s «qayta yuborish» kutishiga **sanalmaydi**, oldin yetib borgan kod amal qilaveradi; sayt
-«Qayta yuborish»ni darhol bosiladigan qiladi. Sinov rejimi (`sms.dryRun`) o‘zgarmagan. Javob baribir muddat + ≤2 s ichida
-qaytadi (Eskiz javobni juda sekin bersa ham); muddat o‘tgach kech yetib kelgan SMS'dagi kod ishlamaydi — odam «Qayta
-yuborish»ni bosadi. ⚠️ Parol tiklashda Eskiz ishlamay turgan paytda mavjud raqam «SMS yuborilmadi», ro‘yxatda yo‘q raqam esa
+Eskiz'ga so‘rov (~8 soniya muddat — `auth.otpSmsTimeoutMs`, standart 8000; javob baribir muddat + ≤2 s ichida qaytadi) natijasi
+ikki xil bo‘ladi (`payments/sms.cjs`: `ambiguous` / `definitelyNotSent` — `sms_log`dagi `failed`/`unknown` bilan bir xil qoida):
+- **SMS ANIQ ketmadi** — Eskiz rad etdi (4xx: shablon moderatsiyada, balans tugagan...), Eskiz'ga kirib/ulanib bo‘lmadi:
+  `request-otp` → `{ok:false, smsFailed:true, error:'SMS yuborilmadi. Birozdan so‘ng qayta urinib ko‘ring yoki maktabga
+  murojaat qiling.'}` (avval `{ok:true}` qaytib, odam kelmaydigan kodni kutardi). Kod yozuvi o‘chiriladi: bu urinish soatlik
+  (telefon/IP) limitga va 60 s «qayta yuborish» kutishiga **sanalmaydi**, oldin yetib borgan kod amal qilaveradi; sayt «Qayta
+  yuborish»ni darhol bosiladigan qiladi.
+- **Natija NOANIQ** — Eskiz 5xx yoki id'siz javob berdi, so‘rov yetib borgandan keyin uzildi yoki muddat o‘tdi (SMS navbatga
+  qo‘yilgan bo‘lishi mumkin): `{ok:true, smsUncertain:true, warning:'SMS kechikishi mumkin: …', resendAfter:60}` — kod FAOL
+  (kechikib kelgan SMS'dagi kod ishlaydi), sayt kodni kiritish bosqichiga o‘tib sariq ogohlantirish ko‘rsatadi; urinish limitga
+  va 60 s kutishga **sanaladi** — aks holda Eskiz sekinlashganda har so‘rov limitsiz haqiqiy SMS yuborardi (SMS-bombing, xarajat).
+Kod avval «yuborilmoqda» holida yoziladi (tekshirib bo‘lmaydi) va Eskiz javobidan keyin faollashadi. Sinov rejimi (`sms.dryRun`)
+o‘zgarmagan. ⚠️ Parol tiklashda Eskiz aniq rad etib turgan paytda mavjud raqam «SMS yuborilmadi», ro‘yxatda yo‘q raqam esa
 «kod yuborildi» oladi — faqat nosozlik paytida.
+
+**Bloklangan hisob** (`users.status='blocked'`): telefon+parol bilan kirishda GoTrue taqig‘i (`user_banned`) — «Hisobingiz
+bloklangan. Administratorga murojaat qiling.» (urinish lockout'ga sanalmaydi; admin panelda email bilan kirishda ham shu matn);
+parolni tiklash — SMS YUBORILMAYDI (ro‘yxatda yo‘q raqam kabi javob, pulli SMS behuda ketmaydi), oldin olingan tiklash kodi
+bilan ham parol o‘zgarmaydi; telefon almashtirish — rad.
 
 ## Maktab Wi‑Fi'si — ishonchli IP (`auth.otpTrustedIps`)
 
@@ -85,7 +95,14 @@ xodim yoki muammoli hisob uchun **Bloklash** (faqat FAOL direktor; tasdiq oynasi
 3. o‘zini va oxirgi FAOL direktorni bloklash — rad; 2-bosqich bajarilmasa 1-bosqich orqaga qaytariladi (hech narsa o‘zgarmaydi).
 «Blokdan chiqarish» — taqiq olinadi, rol `blockedRole`dan qaytadi (bloklangan paytda qo‘lda rol berilgan bo‘lsa — o‘sha),
 shu bloklashda to‘xtatilgan farzand bog‘lanishlari qaytadi; rol tayinlanmagan yangi xodim — yana «kutmoqda». Hammasi
-o‘zgarishlar tarixiga (change_log) direktor nomi bilan yoziladi. Bloklangan hisobni «Tahrirlash» oynasida saqlab bo‘lmaydi.
+o‘zgarishlar tarixiga (change_log) direktor nomi bilan yoziladi.
+- Bloklangan hisobning roli/holati FAQAT «Blokdan chiqarish» bilan o‘zgaradi: «Tahrirlash» oynasida saqlab bo‘lmaydi, eskirgan
+  oyna (ro‘yxat bloklashdan oldin ochilgan) ham saqlay olmaydi — baza rad etadi (`trg_users_block_cols`, 42501).
+  `blockedRole/blockedAt/blockedBy` va `status='blocked'` — faqat shu ikki RPC orqali.
+- Bloklangan ota-ona muddati tugamagan seans (JWT, ≤1 soat) bilan ham farzand ma’lumotini ko‘rmaydi, farzand biriktira olmaydi
+  (`claim_child` rad) va o‘z bog‘lanishini o‘chira olmaydi (`owns_child`/`owns_student_doc`/`has_active_child` statusni tekshiradi).
+- **Eski usulda bloklangan** hisob (`status='blocked'`, lekin rol SAQLANGAN, taqiqsiz — oldingi versiyalardan) ro‘yxatda
+  «eski usulda: rol saqlangan» deb ko‘rinadi: «🚫 To‘liq bloklash» uni to‘liq bloklaydi (rol → `blockedRole`, taqiq, seanslar).
 
 **To‘liq o‘chirish** (masalan hisob egasining talabi bilan; qaytarib bo‘lmaydi) — serverda, email bo‘yicha (telefon hisobida
 email — `998XXXXXXXXX@phone.iqroacademy.uz`). Avval kimligini tekshiring, so‘ng bitta tranzaksiyada:
@@ -109,11 +126,12 @@ SQL
 ## «🩺 Tizim holati» — `GET /authapi/health/deep`
 
 Faqat FAOL direktor JWT bilan (admin panel → Sozlamalar). Har tekshiruv ≤ 3 s, parallel: baza (`config` jadvalidan yengil
-so‘rov), GoTrue (`/auth/v1/health`), Eskiz (kalit bormi; balans — faqat `auth.health.eskizBalance: true` bo‘lsa,
-`GET /api/user/get-limit`), to‘lov va AI serverlari (`127.0.0.1:8790/8791/health`), oxirgi muvaffaqiyatli onlayn to‘lov
+so‘rov), GoTrue (`/auth/v1/health`), Eskiz (kalit bormi va AMAL QILADIMI — Eskiz’ga kirib tasdiqlangan matnlar ro‘yxati
+so‘raladi, `GET /api/user/templates`, SMS yuborilmaydi; `auth.health.eskizCheck: false` — faqat kalit borligi; balans — faqat
+`auth.health.eskizBalance: true` bo‘lsa, `GET /api/user/get-limit`), to‘lov va AI serverlari (`127.0.0.1:8790/8791/health`), oxirgi muvaffaqiyatli onlayn to‘lov
 (Click/Uzum — `payments` jadvalidan), oxirgi zaxira (`/var/log/iqror-backup.log` dagi oxirgi «backup OK»; 26 soatdan eski yoki
 oxirgi urinish xato — qizil). Javobda kalit, token, parol, manzil, email, telefon YO‘Q. Sozlama (`auth.health`, ixtiyoriy):
-`backupLog` (false — o‘chiq), `backupMaxAgeHours`, `payPort`/`aiPort` (0 — o‘chiq), `eskizBalance`.
+`backupLog` (false — o‘chiq), `backupMaxAgeHours`, `payPort`/`aiPort` (0 — o‘chiq), `eskizCheck` (standart true), `eskizBalance`.
 
 ## Xavfsizlik eslatmalari
 
