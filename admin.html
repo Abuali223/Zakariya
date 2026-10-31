@@ -690,13 +690,13 @@ const SCHEMAS = {
   },
   testimonials: {
     title:'Ota-onalar fikri', icon:mi('M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Z'), order:'order',
-    // D6: ism (va rasm) saytda faqat yozma rozilik bilan; rozilik belgilanmasa ism bazaga ham saqlanmaydi (trigger).
-    hint:'Ism faqat «Ismni saytda ko‘rsatish» belgilansa (yozma rozilik olingan) saqlanadi va ko‘rinadi; aks holda saytda faqat «Kim» chiqadi.',
+    // D6: ism va rasm saytda faqat yozma rozilik bilan; rozilik belgilanmasa ikkalasi bazaga ham saqlanmaydi (trigger).
+    hint:'Ism va rasm faqat «Ismni saytda ko‘rsatish» belgilansa (yozma rozilik olingan) saqlanadi va ko‘rinadi; aks holda saytda faqat «Kim» chiqadi.',
     cols:[['name','Ism'],['role_uz','Kim'],['nameConsent','Rozilik'],['rating','Baho']],
     fields:[
-      {k:'nameConsent',l:'Ismni saytda ko‘rsatish (yozma rozilik olingan)',t:'checkbox',bool:true,note:'Belgilanmasa — ism (va rasm) saytda ko‘rsatilmaydi va ism bazaga saqlanmaydi.'},
+      {k:'nameConsent',l:'Ismni saytda ko‘rsatish (yozma rozilik olingan)',t:'checkbox',bool:true,note:'Belgilanmasa — ism va rasm saytda ko‘rsatilmaydi va bazaga saqlanmaydi.'},
       {k:'name',l:'Ism-familiya (faqat rozilik bo‘lsa)',t:'text'},
-      {k:'photo',l:'Rasm (foto — faqat rozilik bo‘lsa ko‘rinadi)',t:'image'},
+      {k:'photo',l:'Rasm (foto — faqat rozilik bo‘lsa saqlanadi va ko‘rinadi)',t:'image'},
       {k:'role_uz',l:'Kim (UZ) — masalan: 5-sinf o‘quvchisining onasi',t:'text'},
       {k:'role_ru',l:'Kim (RU)',t:'text'},
       {k:'text_uz',l:'Fikr (UZ)',t:'textarea',req:true},
@@ -3365,23 +3365,31 @@ async function openStudentReport(sid, row){
     // Ma'lumotnoma ostida: «Yopish» o'rniga «💵 To'lov qilish» (× header'да qoladi). To'lov shu yerда
     // qabul qilinsa — apply_payment RPC orqali ketadi -> To'lovlar bo'limida VA ma'lumotnomada aks etadi.
     const canPay = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
+    // 🎓 Rasmiy profil (universitetga, tekshirish QR kodi bilan) — faqat kod bera oladiganlarga (issue_doc_token bilan BIR XIL:
+    //   direktor, O'IBDO', qabulxona). Kassir va boshqalar uni ko'rmaydi (D6: o'quvchi ma'lumoti ularga emas; ilgari kassir
+    //   QR'siz va «Yutuqlar»siz «rasmiy» hujjat olardi).
+    const canProf = SESSION.isAdmin || SESSION.role==='zavuch' || SESSION.role==='reception';
     // 📞 To'lov eslatmasi endi ma'lumotnoma ICHIDA emas — «O'quvchilar» ro'yxatidа alohida 📞 tugma
     //   (openPayNote). Bu yerда ko'rsatilmaydi (chop/hisobotга aralashmasin).
-    $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button><button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
+    $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button>${canProf?`<button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button>`:''}<button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
     if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
     // reload=renderStudents -> to'lovдан keyin «O'quvchilar» ro'yxatидаги «To'langan» ustuni DARHOL yangilanadi
     //   (bo'lim uzilishi yopiladi: bu yerда qilingan to'lov ro'yxatда ham, To'lovlar bo'limида ham aks etadi).
     if($('#rep-pay')) $('#rep-pay').onclick=()=>openRecordPayment(cache.students||[], renderStudents, { sid:String(s.studentId||s._id), name:s.name||'', amount:dueSum, onDone:()=>openStudentReport(sid, row) });
     $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
     // 🎓 RASMIY PROFIL — universitetga beriladigan to'liq, muhr/imzo o'rni va QR bilan (to'lov ma'lumoti YO'Q)
-    $('#rep-prof').onclick=async()=>{
+    if($('#rep-prof')) $('#rep-prof').onclick=async()=>{
       const pb=$('#rep-prof'); if(pb && pb.disabled) return; if(pb) pb.disabled=true;
-      // QR — o'quvchi ID emas, hujjat tekshirish kodi (issue_doc_token: bir o'quvchi+tur uchun bitta, ko'p marta tekshiriladi).
-      //   Kod olinmasa — hujjat QR'siz chiqadi va ogohlantirish ko'rsatiladi (chop etish to'xtamaydi).
-      let tok=null; try{ tok=await rpc('issue_doc_token', { p_sid:String(s.studentId||s._id), p_kind:'profile' }); }catch(e){ tok=null; }
+      // QR — o'quvchi ID emas, hujjat tekshirish kodi (issue_doc_token: bir hujjat uchun bitta, ko'p marta tekshiriladi).
+      //   Kalit — hujjat id (_id, o'zgarmas): eski importdagi to'qnash studentId boshqa bolaga tushmasin. Kod olinmasa —
+      //   hujjat QR'siz chiqadi va SABABI aytiladi (chop etish to'xtamaydi): ruxsat yo'q / ID takrorlangan / internet.
+      let tok=null, terr=null; try{ tok=await rpc('issue_doc_token', { p_sid:String(s._id||s.studentId), p_kind:'profile' }); }catch(e){ tok=null; terr=e; }
       if(pb) pb.disabled=false;
       const okTok=/^[0-9a-f]{32}$/.test(String(tok||''));
-      if(!okTok) toast('Tekshirish kodi (QR) olinmadi — rasmiy profil QR\'siz chiqdi. Internetni tekshirib, qayta chop eting.', true);
+      if(!okTok){ const ec=String((terr&&terr.code)||'');
+        toast(ec==='42501' ? 'Tekshirish kodi (QR) berish huquqingiz yo‘q — rasmiy profil QR’siz chiqdi. Direktorga murojaat qiling.'
+            : ec==='P0002' ? 'Tekshirish kodi (QR) berilmadi: bu o‘quvchi ID’si boshqa o‘quvchi bilan takrorlangan — rasmiy profil QR’siz chiqdi. ID’ni tuzatish uchun texnik yordamga murojaat qiling.'
+            : 'Tekshirish kodi (QR) olinmadi — rasmiy profil QR’siz chiqdi. Internetni tekshirib, qayta chop eting.', true); }
       const LV={maktab:'Maktab',tuman:'Tuman/shahar',viloyat:'Viloyat',respublika:'Respublika',xalqaro:'Xalqaro'};
       const RS={ishtirokchi:'Ishtirokchi','1':'1-o‘rin','2':'2-o‘rin','3':'3-o‘rin',golib:'G‘olib',laureat:'Laureat'};
       const ach=achSnap.docs.map(d=>d.data()||{}).filter(o=>o.name||o.subject).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));

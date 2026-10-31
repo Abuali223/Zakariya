@@ -1,7 +1,7 @@
 {
   "name": "Iqror Academy",
   "short_name": "Iqror",
-  "description": "Iqror Academy — natijaga yo'naltirilgan zamonaviy maktab: IT va MED yo'nalishlari, ochiq natijalar.",
+  "description": "Iqror Academy — natijaga yo'naltirilgan zamonaviy maktab: IT va MED yo'nalishlari, ota-onalar uchun shaxsiy kabinet.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

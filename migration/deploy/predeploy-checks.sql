@@ -91,14 +91,45 @@ select coll, id, quote_literal(k) as kalit
    and not exists (select 1 from public.payroll_ids p where p.id = translate(regexp_replace(regexp_replace(x.k, :'pidcf', '', 'g'), :'pidws', '', 'g'), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
  order by 1, 2;
 \endif
-\echo '== 11) D6 — ommaviy saytni yopish (ma''lumot uchun): deploy ommaviy o''quvchi ro''yxatini (students_public) O''CHIRADI; saytdagi ismli yutuqlar va rozilik belgisiz sharhlardagi ismlar avval faqat direktor ko''radigan zaxiraga (public_names_backup) olinib, keyin tozalanadi. Deploydan keyin students_public 0 bo''lishi kerak'
+\echo '== 11) D6 — ommaviy saytni yopish (ma''lumot uchun): deploy ommaviy o''quvchi ro''yxatini (students_public) O''CHIRADI; saytdagi ismli yutuqlar va rozilik belgisiz sharhlardagi ismlar hamda ota-ona rasmlari (havola) avval faqat direktor ko''radigan zaxiraga (public_names_backup) olinib, keyin tozalanadi. Deploydan keyin students_public 0 bo''lishi kerak'
 select exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'testimonials' and column_name = 'nameConsent') as has_consent \gset
+select exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'achievements_students' and column_name = 'label') as has_label \gset
 select 'students_public ko''rinishi (bor = 1)' as nima, count(*) as soni from pg_views where schemaname = 'public' and viewname = 'students_public'
 union all
 select 'ismli o''quvchi yutuqlari (ism tozalanadi)', count(*) from public.achievements_students where coalesce(btrim(name), '') <> ''
 union all
 \if :has_consent
-select 'rozilik belgisiz ismli sharhlar (ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> '' and not "nameConsent";
+select 'rozilik belgisiz ismli sharhlar (ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> '' and not "nameConsent"
+union all
+select 'rozilik belgisiz rasmli sharhlar (ota-ona rasmi havolasi tozalanadi)', count(*) from public.testimonials where coalesce(btrim(photo), '') <> '' and not "nameConsent";
 \else
-select 'ismli sharhlar (rozilik belgisi hali yo''q — ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> '';
+select 'ismli sharhlar (rozilik belgisi hali yo''q — ism tozalanadi)', count(*) from public.testimonials where coalesce(btrim(name), '') <> ''
+union all
+select 'rasmli sharhlar (rozilik belgisi hali yo''q — ota-ona rasmi havolasi tozalanadi)', count(*) from public.testimonials where coalesce(btrim(photo), '') <> '';
 \endif
+-- D9 (faqat oylik to'lov): bazadagi FAQ / narx rejalarini deploy O'ZGARTIRMAYDI — direktor admin panelda tahrirlaydi
+--   yoki o'chiradi (JORIY-ETISH-REJA.md, 9-qaror). Sayt va AI yordamchi shu jadvallarni o'qiydi.
+\set d9uz 'chorak[a-z]* +to.lov|yillik +to.lov|yarim +yillik|oldindan +to.l|to.lovda +chegirma'
+\set d9ru 'поквартальн|годов[а-я]* +оплат|полугодов|предоплат'
+\echo '== 12) D9 — bazadagi FAQ va narx rejalarida faqat oylik to''lovga ZID matn (choraklik / yillik / yarim yillik / oldindan to''lov, yillik chegirma): direktor admin panelda («Savol-javob (FAQ)» / «Narxlar (tariflar)» bo''limi) tahrirlaydi yoki o''chiradi — deploy bu matnni o''zgartirmaydi. Bo''sh jadval = yo''q'
+select 'faq' as jadval, id, left(coalesce(nullif(q_uz, ''), q_ru, ''), 90) as savol_yoki_reja
+  from public.faq where concat_ws(' ', q_uz, a_uz) ~* :'d9uz' or concat_ws(' ', q_ru, a_ru) ~* :'d9ru'
+union all
+select 'plans', id, left(coalesce(nullif(name_uz, ''), name_ru, ''), 90)
+  from public.plans where concat_ws(' ', name_uz, features_uz, price) ~* :'d9uz' or concat_ws(' ', name_ru, features_ru) ~* :'d9ru'
+order by 1, 2;
+-- Saytdagi «O'quvchi yutuqlari»: koddagi namuna matnidan ko'chib qolgan (to'qima) yozuvlar va deploydan keyin «Kim»siz
+--   chiqadigan yozuvlar (ism tozalanadi — «Kim»: masalan «7-sinf o'quvchisi»).
+\echo '== 13) D6 — o''quvchi yutuqlari: koddagi namunadan ko''chgan (to''qima) yozuvlar — o''chiring; qolganlariga «Kim»ni (ismsiz, masalan «7-sinf o''quvchisi») to''ldiring (admin panel → «O''quvchi yutuqlari» bo''limi). Bo''sh jadval = yo''q'
+with namuna(t) as (values ('Respublika informatika olimpiadasi — oltin medal'), ('Biologiya fan olimpiadasi — kumush medal'),
+                          ('IELTS — 8.0 ball'), ('Xalqaro robototexnika musobaqasi — 1-o‘rin'))
+select a.id, a.year, left(coalesce(a.text_uz, ''), 70) as matn,
+       case when n.t is not null then 'namuna (koddan ko''chgan) — o''chiring' else '«Kim»ni to''ldiring' end as nima
+  from public.achievements_students a left join namuna n on n.t = a.text_uz
+ where n.t is not null
+\if :has_label
+    or coalesce(btrim(a.label), '') = ''
+\else
+    or true
+\endif
+ order by (n.t is null), a.id;

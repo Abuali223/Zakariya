@@ -17,19 +17,24 @@ do $iqror_guard$ begin raise exception 'iqror: public-close.sql ALOHIDA ishga tu
 --      oladi; sinfdagi o'rni va o'quvchilar soni — child_card(sid) RPC (faqat yig'ma sonlar, boshqa bolaning ismi/bali yo'q).
 --   2) Hujjatni tekshirish TOKEN bilan: issued_documents + issue_doc_token(sid, kind) + verify_doc(token) (anon). QR'da
 --      endi o'quvchi ID emas, 128 bitli tasodifiy kod; tekshiruv sahifasi faqat «haqiqiy/emas, turi, berilgan sana, qisqa
---      ism (Aziza K.), sinf raqami»ni ko'rsatadi.
+--      ism (Aziza K.), sinf raqami»ni ko'rsatadi. Kod o'quvchi QATORIGA (students.id — o'zgarmas) bog'lanadi va qisqa ism
+--      bilan sinf BERILGAN PAYTDAGIDEK saqlanadi: to'qnash eski ID'li ikki bola bitta kodni bo'lishmaydi, sinfdan sinfga
+--      o'tgandan yoki o'quvchi bazadan o'chirilgandan keyin ham eski qog'oz o'zidagi ism/sinf bilan tekshiriladi.
 --   3) Ismli yutuqlar/sharhlar: achievements_students.name saytda HECH QACHON chiqmaydi (yangi «label» — «7-sinf
---      o'quvchisi»); testimonials.name faqat «nameConsent» (yozma rozilik) bo'lsa saqlanadi. Mavjud ismlar avval faqat
---      direktor o'qiy oladigan public_names_backup jadvaliga olinadi, keyin tozalanadi; BEFORE trigger REST orqali
---      yozilgan ismni ham tozalaydi.
+--      o'quvchisi»); testimonials.name va photo (ota-ona rasmi) faqat «nameConsent» (yozma rozilik) bo'lsa saqlanadi.
+--      Mavjud ism/rasm havolalari avval faqat direktor o'qiy oladigan public_names_backup jadvaliga olinadi, keyin
+--      tozalanadi; BEFORE trigger REST orqali yozilganini ham tozalaydi.
 --   4) Storage: storage.objects SELECT faqat xodimlarga (ro'yxat olish). Ommaviy URL'lar (/storage/v1/object/public/...)
 --      Supabase'da RLS'siz beriladi — saytdagi rasmlar ko'rinishda davom etadi, lekin anon papka ro'yxatini ololmaydi.
 --
 -- Joyi: zanjirda change-log.sql (chlog_attach), parent-link-canon.sql (owns_student_doc), auth-hardening.sql (is_staff,
 --   is_reception) va attendance-sync.sql (tashkent_now) DAN KEYIN; rls-initplan.sql (oxirgi) bu yerdagi public
 --   policy'larni o'zi o'raydi.
--- Idempotent — QAYTA ishga tushirishga xavfsiz: zaxiraga ikkinchi marta yozilmaydi (tbl, row_id kaliti; bo'sh ism
+-- Idempotent — QAYTA ishga tushirishga xavfsiz: zaxiraga ikkinchi marta yozilmaydi (tbl, row_id kaliti; bo'sh ism/rasm
 --   zaxiralanmaydi), tozalangan ism qayta tozalanmaydi.
+-- Bazadagi FAQ / narx rejalaridagi D9 ga zid matnni (choraklik, yillik chegirma) va koddan ko'chgan namuna yutuqlarni bu
+--   fayl O'ZGARTIRMAYDI — direktor admin panelda tahrirlaydi/o'chiradi (JORIY-ETISH-REJA.md, 9-qaror); deploy oldidan
+--   ro'yxati: migration/deploy/predeploy-checks.sql, 12- va 13-bandlar.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
@@ -41,9 +46,11 @@ drop view if exists public.students_public;
 create table if not exists public.public_names_backup (
   tbl       text not null,                         -- qaysi jadvaldan (achievements_students | testimonials)
   row_id    text not null,                         -- o'sha jadvaldagi yozuv id
-  name      text not null,                         -- tozalangan ism (saytda endi ko'rinmaydi)
+  name      text,                                  -- tozalangan ism (saytda endi ko'rinmaydi)
+  photo     text,                                  -- tozalangan rasm havolasi (rozilik belgisiz sharh — ota-ona rasmi)
   saved_at  timestamptz not null default now(),
-  primary key (tbl, row_id)                        -- bir yozuv ismi bir marta zaxiralanadi
+  primary key (tbl, row_id),                       -- bir yozuv bir marta zaxiralanadi
+  constraint public_names_backup_nonempty check (name is not null or photo is not null)
 );
 alter table public.public_names_backup enable row level security;
 revoke all on public.public_names_backup from anon, authenticated;
@@ -65,24 +72,29 @@ begin
   return new;
 end $$;
 
--- ---------- 4) Ota-ona sharhlari — ism faqat yozma rozilik bilan ----------
+-- ---------- 4) Ota-ona sharhlari — ism va rasm faqat yozma rozilik bilan ----------
 alter table public.testimonials add column if not exists "nameConsent" boolean not null default false;
 
+-- Rasm (photo — ota-onaning o'z rasmi) ham shaxsni tanitadi: ommaviy REST o'qishida (testimonials anon uchun ochiq) havolasi
+--   chiqmasin — rozilik yo'q bo'lsa ism bilan birga bazaga ham saqlanmaydi.
 create or replace function app.testimonials_name_consent() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
 begin
-  if not coalesce(new."nameConsent", false) then new.name := null; end if;
+  if not coalesce(new."nameConsent", false) then new.name := null; new.photo := null; end if;
   return new;
 end $$;
 
--- Mavjud ismlar: AVVAL zaxira (bo'sh ism — yo'q; allaqachon zaxiralangan — qayta yozilmaydi), KEYIN tozalash.
+-- Mavjud ismlar/rasmlar: AVVAL zaxira (bo'sh — yo'q; allaqachon zaxiralangan — qayta yozilmaydi), KEYIN tozalash.
 insert into public.public_names_backup (tbl, row_id, name)
 select 'achievements_students', a.id, a.name from public.achievements_students a
  where coalesce(btrim(a.name), '') <> ''
 on conflict (tbl, row_id) do nothing;
-insert into public.public_names_backup (tbl, row_id, name)
-select 'testimonials', t.id, t.name from public.testimonials t
- where coalesce(btrim(t.name), '') <> '' and not t."nameConsent"
+insert into public.public_names_backup (tbl, row_id, name, photo)
+select 'testimonials', t.id,
+       case when coalesce(btrim(t.name), '') <> '' then t.name end,
+       case when coalesce(btrim(t.photo), '') <> '' then t.photo end
+  from public.testimonials t
+ where (coalesce(btrim(t.name), '') <> '' or coalesce(btrim(t.photo), '') <> '') and not t."nameConsent"
 on conflict (tbl, row_id) do nothing;
 
 drop trigger if exists trg_ach_students_noname on public.achievements_students;
@@ -93,7 +105,7 @@ create trigger trg_testimonials_name_consent before insert or update on public.t
   for each row execute function app.testimonials_name_consent();
 
 update public.achievements_students set name = null where name is not null;
-update public.testimonials set name = null where name is not null and not "nameConsent";
+update public.testimonials set name = null, photo = null where (name is not null or photo is not null) and not "nameConsent";
 
 -- ---------- 5) Storage: papka ro'yxati faqat xodimlarga ----------
 -- storage-rls.sql endi ommaviy o'qish siyosatini yaratmaydi (is_staff u yerda hali yo'q). Yuklash (shim upsert:true ->
@@ -107,24 +119,34 @@ create policy iqror_staff_read on storage.objects
   for select using ( bucket_id = 'public' and ((select app.is_staff()) or (select app.is_admin()) or (select app.is_zavuch())) );
 
 -- ---------- 6) Hujjat tokenlari ----------
+--   Kod o'quvchi QATORIGA ("studentDoc" = students.id — o'zgarmas birlamchi kalit) bog'lanadi, kanonik kalitga emas: eski
+--   importdan qolgan to'qnash ID'larda (bir bolaning doc id'si boshqasining studentId'si) ikki bola bitta kodni bo'lishib,
+--   biri o'chirilgach ikkinchisining qog'ozi BOSHQA bola ismi bilan tasdiqlanardi. Qisqa ism va sinf — berilgan paytdagi
+--   holat (qog'ozda shu yozilgan): verify_doc shularni qaytaradi, o'quvchi qatoriga qaramaydi (sinfdan sinfga o'tgan, ketgan
+--   yoki o'chirilgan bitiruvchining hujjati ham o'z ma'lumoti bilan tekshiriladi; bekor qilish — "revokedAt").
 create table if not exists public.issued_documents (
-  id          text primary key default gen_random_uuid()::text,
-  token       text not null unique,                -- 32 hex (128 bit tasodifiy) — QR ichida
-  sid         text not null,                       -- o'quvchi KANONIK kaliti (studentId, bo'sh bo'lsa doc id)
-  kind        text not null,                       -- profile | certificate
-  "issuedAt"  timestamptz not null default now(),
-  "issuedBy"  text,                                -- users.id
-  "revokedAt" timestamptz,
-  "revokedBy" text
+  id           text primary key default gen_random_uuid()::text,
+  token        text not null unique,               -- 32 hex (128 bit tasodifiy) — QR ichida
+  "studentDoc" text not null,                      -- o'quvchi qatori (students.id) — kod shu qatorniki
+  sid          text not null,                      -- berilgan paytdagi kanonik kalit (studentId, bo'sh bo'lsa doc id) — hujjatdagi «O'quvchi ID»
+  kind         text not null,                      -- profile | certificate
+  grade        int,                                -- berilgan paytdagi sinf raqami (qog'oz bilan solishtirish uchun)
+  "shortName"  text,                               -- berilgan paytdagi qisqa ism («Aziza K.»)
+  "issuedAt"   timestamptz not null default now(),
+  "issuedBy"   text,                               -- users.id
+  "revokedAt"  timestamptz,
+  "revokedBy"  text
 );
--- Bir (o'quvchi, hujjat turi) uchun bitta amaldagi kod: hujjat qayta chop etilsa ham QR o'zgarmaydi.
-create unique index if not exists issued_documents_active_uq on public.issued_documents (sid, kind) where "revokedAt" is null;
+-- Bitta HUJJAT (o'quvchi qatori + tur + qog'ozdagi qisqa ism va sinf) uchun bitta amaldagi kod: xuddi shu ma'lumot bilan
+--   qayta chop etilsa QR o'zgarmaydi; sinf (yoki ism) o'zgargach chop etilgani — yangi kod, eski qog'ozniki amalda qoladi.
+create unique index if not exists issued_documents_active_uq on public.issued_documents
+  ("studentDoc", kind, (coalesce(grade, -1)), (coalesce("shortName", ''))) where "revokedAt" is null;
 alter table public.issued_documents enable row level security;
 revoke all on public.issued_documents from anon, authenticated;
 grant all on public.issued_documents to service_role;
 -- Siyosat YO'Q: mijoz to'g'ridan-to'g'ri o'qiy/yoza olmaydi — faqat issue_doc_token / verify_doc orqali.
--- Kim, qachon, kimga hujjat bergani — o'zgarishlar tarixida (kod qiymati yozilmaydi).
-select app.chlog_attach('issued_documents', 'sid,kind,issuedBy,revokedAt,revokedBy,!token');
+-- Kim, qachon, kimga hujjat bergani — o'zgarishlar tarixida (kod qiymati va qisqa ism yozilmaydi).
+select app.chlog_attach('issued_documents', 'studentDoc,sid,kind,grade,issuedBy,revokedAt,revokedBy,!token');
 
 -- Qisqa ism: «Aziza Karimova» -> «Aziza K.». Birinchi so'z familiyaga o'xshasa («Karimova Aziza») — ikkinchisi ism.
 create or replace function app.short_name(p text) returns text
@@ -144,10 +166,12 @@ end $$;
 
 -- Hujjat kodi berish: direktor, O'IBDO', qabulxona (rasmiy profilni chop etadiganlar) — istalgan o'quvchiga;
 --   o'quvchining FAOL egasi (ota-ona / o'quvchi o'zi — child_claims) — faqat o'z farzandiga va faqat 'profile'.
---   Amaldagi kod bo'lsa — o'shani qaytaradi (hujjatga bitta kod, ko'p marta tekshiriladi).
+--   Kalit (doc id yoki studentId) AYNAN bitta qatorga mos kelishi shart (xodim uchun to'qnash ID — P0002; egasi uchun
+--   claim_row qatorni o'zi aniqlaydi). Shu hujjat (qator + tur + hozirgi qisqa ism va sinf) uchun amaldagi kod bo'lsa —
+--   o'shani qaytaradi (hujjatga bitta kod, ko'p marta tekshiriladi), yo'q bo'lsa yangisini yaratadi.
 create or replace function public.issue_doc_token(p_sid text, p_kind text)
 returns text language plpgsql volatile security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_staff boolean; v_n int; v_doc text; v_canon text; v_tok text;
+declare v_uid text := app.uid(); v_staff boolean; v_n int; v_doc text; v_s public.students%rowtype; v_short text; v_tok text;
 begin
   if v_uid is null then raise exception 'auth required' using errcode = '42501'; end if;
   p_sid := btrim(coalesce(p_sid, '')); p_kind := btrim(coalesce(p_kind, ''));
@@ -164,40 +188,41 @@ begin
      where p_sid <> '' and (t.id = p_sid or t."studentId" = p_sid) and app.owns_student_doc(t.id);
     if v_n <> 1 then raise exception 'ruxsat yo''q' using errcode = '42501'; end if;
   end if;
-  select coalesce(nullif(btrim(t."studentId"), ''), t.id) into v_canon from public.students t where t.id = v_doc;
+  select * into v_s from public.students t where t.id = v_doc;
+  v_short := app.short_name(v_s.name);
   select d.token into v_tok from public.issued_documents d
-   where d.sid = v_canon and d.kind = p_kind and d."revokedAt" is null;
+   where d."studentDoc" = v_doc and d.kind = p_kind and d."revokedAt" is null
+     and coalesce(d.grade, -1) = coalesce(v_s.grade, -1) and coalesce(d."shortName", '') = coalesce(v_short, '');
   if v_tok is not null then return v_tok; end if;
-  insert into public.issued_documents (token, sid, kind, "issuedBy")
+  insert into public.issued_documents (token, "studentDoc", sid, kind, grade, "shortName", "issuedBy")
   values (left(encode(sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8')), 'hex'), 32),
-          v_canon, p_kind, v_uid)
-  on conflict (sid, kind) where "revokedAt" is null do nothing
+          v_doc, coalesce(nullif(btrim(v_s."studentId"), ''), v_s.id), p_kind, v_s.grade, v_short, v_uid)
+  on conflict do nothing
   returning token into v_tok;
   if v_tok is null then   -- parallel chaqiruv birinchi yozdi — o'shaniki
     select d.token into v_tok from public.issued_documents d
-     where d.sid = v_canon and d.kind = p_kind and d."revokedAt" is null;
+     where d."studentDoc" = v_doc and d.kind = p_kind and d."revokedAt" is null
+       and coalesce(d.grade, -1) = coalesce(v_s.grade, -1) and coalesce(d."shortName", '') = coalesce(v_short, '');
   end if;
   return v_tok;
 end $$;
 revoke all on function public.issue_doc_token(text, text) from public, anon;
 grant execute on function public.issue_doc_token(text, text) to authenticated, service_role;
 
--- Hujjatni tekshirish (anon ham): FAQAT valid, kind, issuedAt (sana), qisqa ism, sinf raqami. ID, JSHSHIR, ball,
---   telefon — yo'q. Noto'g'ri formatdagi kod bazaga so'rov qilmaydi; noto'g'ri / bekor qilingan kod — valid=false.
+-- Hujjatni tekshirish (anon ham): FAQAT valid, kind, issuedAt (sana), qisqa ism, sinf raqami — kod BERILGAN PAYTDAGI
+--   holat (o'quvchi qatoridan qayta o'qilmaydi). ID, JSHSHIR, ball, telefon — yo'q. Noto'g'ri formatdagi kod bazaga so'rov
+--   qilmaydi; noto'g'ri / bekor qilingan kod — valid=false.
 create or replace function public.verify_doc(p_token text)
 returns jsonb language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare d public.issued_documents%rowtype; v_n int; v_name text; v_grade int;
+declare d public.issued_documents%rowtype;
 begin
   p_token := lower(btrim(coalesce(p_token, '')));
   if p_token !~ '^[0-9a-f]{32}$' then return jsonb_build_object('valid', false); end if;
   select * into d from public.issued_documents x where x.token = p_token;
   if not found or d."revokedAt" is not null then return jsonb_build_object('valid', false); end if;
-  select count(*), min(s.name), min(s.grade) into v_n, v_name, v_grade
-    from public.students s where s.id = d.sid or s."studentId" = d.sid;
   return jsonb_build_object('valid', true, 'kind', d.kind,
     'issuedAt', to_char(d."issuedAt" at time zone 'Asia/Tashkent', 'YYYY-MM-DD'),
-    'name', case when v_n = 1 then app.short_name(v_name) end,
-    'grade', case when v_n = 1 then v_grade end);
+    'name', d."shortName", 'grade', d.grade);
 end $$;
 revoke all on function public.verify_doc(text) from public;
 grant execute on function public.verify_doc(text) to anon, authenticated, service_role;

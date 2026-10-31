@@ -1,6 +1,7 @@
 -- =====================================================================
--- test-public-close.sql — public-close.sql (D6/D8/D9, PKG-1) sinovi: child_card, issue_doc_token, verify_doc,
---   ism triggerlari (yutuq/sharh), ism zaxirasi RLS, students_public yo'qligi, storage papka ro'yxati.
+-- test-public-close.sql — public-close.sql (D6/D8/D9, PKG-1) sinovi: child_card, issue_doc_token, verify_doc (kod
+--   o'quvchi qatoriga bog'langan, to'qnash eski ID'lar, berilgan paytdagi ism/sinf), ism/rasm triggerlari (yutuq/sharh),
+--   ism zaxirasi RLS, students_public yo'qligi, storage papka ro'yxati.
 --   Har chaqiruv haqiqiy rol bilan (anon yoki authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-public-close.sql
@@ -22,7 +23,7 @@ insert into public.users (id, email, role, status) values
   ('U_RECB','rb@x','reception','blocked'), ('U_TEA','t@x','teacher','active'), ('U_KAS','k@x','kassir','active'),
   ('U_HR','h@x','hr','active'), ('U_FIN','f@x','finance_mgr','active'),
   ('U_PA','pa@x','parent','active'), ('U_PB','pb@x','parent','active'), ('U_STU','s@x','student','active'),
-  ('U_NOCH','n@x','parent','active'), ('U_PREV','pv@x','parent','active')
+  ('U_NOCH','n@x','parent','active'), ('U_PREV','pv@x','parent','active'), ('U_PK','pk@x','parent','active')
 on conflict (id) do update set role = excluded.role, status = excluded.status;
 update public.users set "assignedClasses" = '["uz-7-A"]'::jsonb, "homeroomClasses" = '["uz-7-A"]'::jsonb where id = 'U_TEA';
 -- 7-A (uz): S1 90, S2 95, S3 85, S4 99 (ketgan — sanalmaydi), S5 97 (kelajakda ketadi — sanaladi), S8 ball yo'q.
@@ -34,13 +35,20 @@ insert into public.students (id, "studentId", name, grade, "classLetter", lang, 
   ('IQ-0105','IQ-0105','Keyin Ketadi',7,'A','uz',97,'chiqdi','2099-01-01'),
   ('IQ-0106','IQ-0106','Boshqa Sinf',7,'B','uz',100,'',''),
   ('IQ-0107','IQ-0107','Rus Sinf',7,'A','ru',100,'',''),
-  ('IQ-0108','IQ-0108','Balsiz Bola',7,'A',null,null,'','')
+  ('IQ-0108','IQ-0108','Balsiz Bola',7,'A',null,null,'',''),
+  ('IQ-0109','IQ-0109','Sardor Valiyev',9,'A','uz',75,'',''),
+  -- Eski import to'qnashuvi: docK1.studentId = boshqa bolaning doc id'si (IQ-0900), u bolaning studentId'si bo'sh —
+  --   ikkalasining kanonik kaliti 'IQ-0900'. Kod har birining O'Z qatoriga bog'lanishi shart.
+  ('docK1','IQ-0900','Aziza Karimova',11,'A','uz',90,'',''),
+  ('IQ-0900','','Bobur Toshev',8,'B','uz',80,'','')
 on conflict (id) do nothing;
+insert into public.student_codes (id, code) values ('IQ-0900','KKKK11112222') on conflict (id) do update set code = excluded.code;
 insert into public.student_private (id, pinfl, health, "parentPhone") values ('docS1','12345678901234','Sog''lom','998900000001')
 on conflict (id) do nothing;
 insert into public.child_claims (id, uid, "studentId", code, status) values
   ('cc_pa','U_PA','IQ-0101','X','active'), ('cc_pb','U_PB','IQ-0103','X','active'),
-  ('cc_stu','U_STU','IQ-0102','X','active'), ('cc_prev','U_PREV','IQ-0101','X','revoked')
+  ('cc_stu','U_STU','IQ-0102','X','active'), ('cc_prev','U_PREV','IQ-0101','X','revoked'),
+  ('cc_pk','U_PK','IQ-0900','KKKK11112222','active')
 on conflict (id) do nothing;
 -- storage: Supabase'dagi kabi grantlar va (bucket_id, name) noyobligi (upsert uchun)
 grant usage on schema storage to anon, authenticated;
@@ -66,6 +74,15 @@ begin
 end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 truncate zz.res;
+create table if not exists zz.tok (k text primary key, v text);   -- sinov orasida olingan kodlar
+truncate zz.tok;
+-- zz.try: so'rovni joriy (postgres) huquqida bajaradi; xato bo'lsa 'ERR <sqlstate>' qaytaradi.
+create or replace function zz.try(p_q text) returns text language plpgsql as $$
+declare r text;
+begin
+  begin execute p_q into r; exception when others then r := 'ERR ' || sqlstate || ' ' || sqlerrm; end;
+  return coalesce(r, '<null>');
+end $$;
 create or replace function zz.chk(p_name text, p_got text, p_pat text) returns void language plpgsql as $$
 begin insert into zz.res (name, got, pat, ok) values (p_name, p_got, p_pat, p_got ~ p_pat); end $$;
 
@@ -98,7 +115,7 @@ select zz.chk('I07 kassir', zz.as('U_KAS', $q$select public.issue_doc_token('IQ-
 select zz.chk('I08 HR', zz.as('U_HR', $q$select public.issue_doc_token('IQ-0103','profile')$q$), '^ERR 42501');
 select zz.chk('I09 moliya', zz.as('U_FIN', $q$select public.issue_doc_token('IQ-0103','profile')$q$), '^ERR 42501');
 select zz.chk('I10 ota-ona o''z farzandi (doc id bilan) profile', zz.as('U_PA', $q$select public.issue_doc_token('docS1','profile')$q$), '^[0-9a-f]{32}$');
-select zz.chk('I11 ota-ona kanonik kalit bilan saqlandi (IQ-0101)', (select string_agg(sid, ',') from public.issued_documents where "issuedBy" = 'U_PA'), '^IQ-0101$');
+select zz.chk('I11 ota-ona kodi: o''quvchi qatori (docS1), kanonik ID (IQ-0101), berilgan paytdagi sinf va qisqa ism', (select string_agg("studentDoc" || '|' || sid || '|' || grade || '|' || "shortName", ',') from public.issued_documents where "issuedBy" = 'U_PA'), '^docS1\|IQ-0101\|7\|Aziza K\.$');
 select zz.chk('I12 ota-ona o''z farzandi certificate -> rad', zz.as('U_PA', $q$select public.issue_doc_token('IQ-0101','certificate')$q$), '^ERR 42501');
 select zz.chk('I13 ota-ona begona bola', zz.as('U_PA', $q$select public.issue_doc_token('IQ-0103','profile')$q$), '^ERR 42501');
 select zz.chk('I14 ota-ona yo''q ID (mavjudligi bilinmasin -> 42501)', zz.as('U_PA', $q$select public.issue_doc_token('IQ-9999','profile')$q$), '^ERR 42501');
@@ -110,6 +127,33 @@ select zz.chk('I19 direktor yo''q o''quvchi', zz.as('U_DIR', $q$select public.is
 select zz.chk('I20 jadvalga to''g''ridan-to''g''ri o''qish (direktor)', zz.as('U_DIR', $q$select count(*)::text from public.issued_documents$q$), '^ERR 42501');
 select zz.chk('I21 jadvalga to''g''ridan-to''g''ri yozish (direktor)', zz.as('U_DIR', $q$insert into public.issued_documents (token, sid, kind) values ('00000000000000000000000000000000','IQ-0103','profile') returning 'x'$q$), '^ERR 42501');
 select zz.chk('I22 change_log: berilgan hujjat yozildi, kod yashirin', (select string_agg(actor_uid || ':' || (changes->'token'->>0), ',' order by id) from public.change_log where tbl = 'issued_documents'), '^U_DIR:\*\*\*,U_REC:\*\*\*,U_PA:\*\*\*,U_STU:\*\*\*$');
+select zz.chk('I23 change_log: qator va sinf yozildi, qisqa ism yozilmadi', (select count(*) filter (where changes ? 'studentDoc' and changes ? 'grade' and not changes ? 'shortName')::text || '/' || count(*)::text from public.change_log where tbl = 'issued_documents'), '^4/4$');
+
+-- ===== To'qnash eski ID'lar (docK1.studentId = IQ-0900 = boshqa bolaning doc id'si): kod O'Z qatoriga =====
+select zz.chk('K00 egasi (Bobur ota-onasi) child_card — o''z sinfi (8-B: 1/1)', zz.as('U_PK', $q$select public.child_card('IQ-0900')::text$q$), '^\{"rank": 1, "size": 1\}$');
+insert into zz.tok values ('K01', zz.as('U_DIR', $q$select public.issue_doc_token('docK1','profile')$q$));
+select zz.chk('K01 direktor Aziza uchun (doc id bilan) -> kod', (select v from zz.tok where k = 'K01'), '^[0-9a-f]{32}$');
+select zz.chk('K02 direktor to''qnash kalit bilan (IQ-0900 — ikki qator) -> rad P0002', zz.as('U_DIR', $q$select public.issue_doc_token('IQ-0900','profile')$q$), '^ERR P0002');
+insert into zz.tok values ('K03', zz.as('U_PK', $q$select public.issue_doc_token('IQ-0900','profile')$q$));
+select zz.chk('K03 Bobur ota-onasi -> BOSHQA kod (bitta kod bo''lishilmaydi)', (select case when b.v ~ '^[0-9a-f]{32}$' and b.v <> a.v then 'ok' else b.v end from zz.tok a, zz.tok b where a.k = 'K01' and b.k = 'K03'), '^ok$');
+select zz.chk('K04 kodlar o''z qatoriga bog''langan (docK1 / IQ-0900), ikkalasining ID''si IQ-0900', (select string_agg("studentDoc" || '|' || sid, ',' order by "studentDoc" collate "C") from public.issued_documents where token in (select v from zz.tok where k in ('K01','K03'))), '^IQ-0900\|IQ-0900,docK1\|IQ-0900$');
+select zz.chk('K05 Aziza qog''ozi -> Aziza K., 11-sinf', zz.as(null, format($q$select (public.verify_doc(%L)->>'name') || '|' || (public.verify_doc(%L)->>'grade')$q$, (select v from zz.tok where k = 'K01'), (select v from zz.tok where k = 'K01'))), '^Aziza K\.\|11$');
+select zz.chk('K06 Bobur qog''ozi -> Bobur T., 8-sinf', zz.as(null, format($q$select (public.verify_doc(%L)->>'name') || '|' || (public.verify_doc(%L)->>'grade')$q$, (select v from zz.tok where k = 'K03'), (select v from zz.tok where k = 'K03'))), '^Bobur T\.\|8$');
+delete from public.students where id = 'IQ-0900';
+select zz.chk('K07 Bobur o''chirilgach ham Aziza qog''ozi Aziza''niki (boshqa bola ismi chiqmaydi)', zz.as(null, format($q$select (public.verify_doc(%L)->>'name') || '|' || (public.verify_doc(%L)->>'grade')$q$, (select v from zz.tok where k = 'K01'), (select v from zz.tok where k = 'K01'))), '^Aziza K\.\|11$');
+select zz.chk('K08 o''chirilgan Bobur qog''ozi — o''z ma''lumoti bilan haqiqiy', zz.as(null, format($q$select public.verify_doc(%L)::text$q$, (select v from zz.tok where k = 'K03'))), '^\{"kind": "profile", "name": "Bobur T\.", "grade": 8, "valid": true');
+
+-- ===== Berilgan paytdagi holat: sinfdan sinfga o'tish =====
+insert into zz.tok values ('G1', zz.as('U_REC', $q$select public.issue_doc_token('IQ-0109','profile')$q$));
+select zz.chk('G01 qabulxona 9-sinfda kod oldi -> Sardor V., 9', zz.as(null, format($q$select (public.verify_doc(%L)->>'name') || '|' || (public.verify_doc(%L)->>'grade')$q$, (select v from zz.tok where k = 'G1'), (select v from zz.tok where k = 'G1'))), '^Sardor V\.\|9$');
+update public.students set grade = 10 where id = 'IQ-0109';
+select zz.chk('G02 10-sinfga o''tgach eski qog''oz hali 9-sinf (o''quvchi qatoridan qayta o''qilmaydi)', zz.as(null, format($q$select public.verify_doc(%L)->>'grade'$q$, (select v from zz.tok where k = 'G1'))), '^9$');
+insert into zz.tok values ('G2', zz.as('U_REC', $q$select public.issue_doc_token('IQ-0109','profile')$q$));
+select zz.chk('G03 yangi sinfda chop etish -> yangi kod, 10-sinf', (select case when b.v <> a.v then (select public.verify_doc(b.v)->>'grade') else 'same' end from zz.tok a, zz.tok b where a.k = 'G1' and b.k = 'G2'), '^10$');
+select zz.chk('G04 shu ma''lumot bilan qayta (direktor) -> AYNAN o''sha yangi kod', (select case when zz.as('U_DIR', $q$select public.issue_doc_token('IQ-0109','profile')$q$) = v then 'same' else 'diff' end from zz.tok where k = 'G2'), '^same$');
+select zz.chk('G05 eski (9-sinf) qog''oz amalda qoladi; amaldagi kodlar 2 ta', (select (public.verify_doc(v)->>'valid') || '|' || (select count(*) from public.issued_documents where "studentDoc" = 'IQ-0109' and "revokedAt" is null) from zz.tok where k = 'G1'), '^true\|2$');
+delete from public.students where id = 'IQ-0109';
+select zz.chk('G06 bitiruvchi o''chirilgach ham hujjat o''z ma''lumoti bilan tekshiriladi', zz.as(null, format($q$select public.verify_doc(%L)::text$q$, (select v from zz.tok where k = 'G2'))), '^\{"kind": "profile", "name": "Sardor V\.", "grade": 10, "valid": true');
 
 -- ===== verify_doc =====
 select zz.chk('V01 anon haqiqiy kod -> faqat ruxsat etilgan maydonlar', zz.as(null, format($q$select public.verify_doc(%L)::text$q$, (select token from public.issued_documents where sid='IQ-0103' and kind='profile'))), '^\{"kind": "profile", "name": "Bekzod R\.", "grade": 7, "valid": true, "issuedAt": "\d{4}-\d{2}-\d{2}"\}$');
@@ -125,7 +169,7 @@ select zz.chk('V09 bekor qilingan kod -> valid false', zz.as(null, format($q$sel
 select zz.chk('V10 bekor qilingandan keyin yangi kod (eskisidan farqli)', (select case when zz.as('U_DIR', $q$select public.issue_doc_token('IQ-0103','profile')$q$) <> (select token from public.issued_documents where sid='IQ-0103' and kind='profile' and "revokedAt" is not null) then 'new' else 'same' end), '^new$');
 select zz.chk('V11a direktor IQ-0106 uchun kod', zz.as('U_DIR', $q$select public.issue_doc_token('IQ-0106','profile')$q$), '^[0-9a-f]{32}$');
 delete from public.students where id = 'IQ-0106';
-select zz.chk('V11 o''chirilgan o''quvchi: valid, ism/sinf yo''q', zz.as(null, format($q$select public.verify_doc(%L)::text$q$, (select token from public.issued_documents where sid='IQ-0106'))), '^\{"kind": "profile", "name": null, "grade": null, "valid": true');
+select zz.chk('V11 o''chirilgan o''quvchi: valid, berilgan paytdagi ism/sinf bilan', zz.as(null, format($q$select public.verify_doc(%L)::text$q$, (select token from public.issued_documents where sid='IQ-0106'))), '^\{"kind": "profile", "name": "Boshqa S\.", "grade": 7, "valid": true');
 
 -- ===== Ism triggerlari =====
 select zz.chk('N01 direktor yutuq ismi bilan yozsa -> ism saqlanmaydi', zz.as('U_DIR', $q$insert into public.achievements_students (id, name, label, year, text_uz) values ('a_t1','To''qima Ism','7-sinf o''quvchisi',2026,'x') returning coalesce(name,'<null>') || '|' || label$q$), '^<null>\|7-sinf o''quvchisi$');
@@ -135,6 +179,10 @@ select zz.chk('N04 sharh rozilik bilan -> ism qoladi', zz.as('U_DIR', $q$insert 
 select zz.chk('N05 rozilik olib tashlansa -> ism tozalanadi', zz.as('U_DIR', $q$update public.testimonials set "nameConsent" = false where id = 't_t2' returning coalesce(name,'<null>')$q$), '^<null>$');
 select zz.chk('N06 anon yozolmaydi', zz.as(null, $q$insert into public.testimonials (id, name, text_uz) values ('t_t3','x','y') returning 'x'$q$), '^ERR 42501');
 select zz.chk('N07 anon sharhlarni o''qiydi (sayt), ism faqat roziliklisida', zz.as(null, $q$select count(*) filter (where name is not null)::text || '/' || count(*)::text from public.testimonials where id in ('t_t1','t_t2')$q$), '^0/2$');
+select zz.chk('N08 rozilik belgisiz sharh rasmi bazaga saqlanmaydi', zz.as('U_DIR', $q$insert into public.testimonials (id, name, photo, role_uz, text_uz) values ('t_p1','Ota Ismi','https://example.invalid/storage/v1/object/public/public/images/testimonials/1_ota.jpg','otasi','zo''r') returning coalesce(name,'<null>') || '|' || coalesce(photo,'<null>')$q$), '^<null>\|<null>$');
+select zz.chk('N09 rozilik bilan — ism va rasm qoladi', zz.as('U_DIR', $q$insert into public.testimonials (id, name, photo, "nameConsent", role_uz, text_uz) values ('t_p2','Ona Ismi','https://example.invalid/storage/v1/object/public/public/images/testimonials/2_ona.jpg',true,'onasi','yaxshi') returning name || '|' || (photo like '%2_ona.jpg')$q$), '^Ona Ismi\|true$');
+select zz.chk('N10 rozilik olib tashlansa — rasm ham tozalanadi', zz.as('U_DIR', $q$update public.testimonials set "nameConsent" = false where id = 't_p2' returning coalesce(name,'<null>') || '|' || coalesce(photo,'<null>')$q$), '^<null>\|<null>$');
+select zz.chk('N11 anon REST o''qishida rozilik belgisiz sharh rasmi yo''q', zz.as(null, $q$select count(*) filter (where photo is not null)::text || '/' || count(*)::text from public.testimonials where not "nameConsent"$q$), '^0/[1-9]');
 
 -- ===== Ism zaxirasi RLS =====
 select zz.chk('B01 direktor zaxirani o''qiydi', zz.as('U_DIR', $q$select count(*)::text from public.public_names_backup$q$), '^\d+$');
@@ -142,6 +190,7 @@ select zz.chk('B02 O''IBDO'' — 0 qator', zz.as('U_ZAV', $q$select count(*)::te
 select zz.chk('B03 ota-ona — 0 qator', zz.as('U_PA', $q$select count(*)::text from public.public_names_backup$q$), '^0$');
 select zz.chk('B04 anon — ruxsat yo''q', zz.as(null, $q$select count(*)::text from public.public_names_backup$q$), '^ERR 42501');
 select zz.chk('B05 direktor yozolmaydi', zz.as('U_DIR', $q$insert into public.public_names_backup (tbl, row_id, name) values ('x','y','z') returning 'x'$q$), '^ERR 42501');
+select zz.chk('B06 zaxirada bo''sh qator bo''lmaydi (ism ham, rasm ham yo''q — rad)', zz.try($q$insert into public.public_names_backup (tbl, row_id) values ('x','y') returning 'x'$q$), '^ERR 23514');
 
 -- ===== students_public / storage =====
 select zz.chk('P01 anon ommaviy o''quvchi ko''rinishi — yo''q', zz.as(null, $q$select count(*)::text from public.students_public$q$), '^ERR 42P01');

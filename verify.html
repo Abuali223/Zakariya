@@ -41,7 +41,8 @@
   </div>
 <script type="module">
   // Hujjatni tekshirish (D6): QR'dagi kod (?t=, 32 belgi) verify_doc orqali tekshiriladi. Sahifa FAQAT: haqiqiy/emas, hujjat
-  //   turi, berilgan sana, o'quvchining qisqa ismi (Aziza K.) va sinf raqamini ko'rsatadi — ID, JSHSHIR, ball, telefon yo'q.
+  //   turi, berilgan sana, o'quvchining qisqa ismi (Aziza K.) va sinf raqamini (hujjat berilgan paytdagi holat) ko'rsatadi —
+  //   ID, JSHSHIR, ball, telefon yo'q.
   //   Eski QR'lar (?id=<o'quvchi ID>) endi tekshirilmaydi — maktabga murojaat qilish tavsiya etiladi.
   const T={
     uz:{ sub:'Hujjat haqiqiyligini tekshirish', wait:'Tekshirilmoqda…',
@@ -53,7 +54,7 @@
       phone:'Maktab telefoni', kind:'Hujjat turi', date:'Berilgan sana', name:'O‘quvchi', grade:'Sinf', none:'—',
       kinds:{profile:'O‘quvchi profili — rasmiy ma’lumotnoma',certificate:'Ma’lumotnoma'},
       gr:g=>Number(g)===0?'Tayyorlov':(Number(g)===13?'Variativ':g+'-sinf'),
-      okmsg:'Qog‘ozdagi hujjatdagi ism va sinfni shu yerdagisi bilan solishtiring. Sana — shu hujjat o‘quvchiga birinchi marta berilgan kun (keyin yangilangan holda qayta chop etilishi mumkin). Baholar va boshqa ma’lumotlar bu sahifada ko‘rsatilmaydi — kerak bo‘lsa maktabdan so‘rang.',
+      okmsg:'Qog‘ozdagi ism va sinfni shu yerdagisi bilan solishtiring — ular hujjat berilgan paytdagi holat. Sana — shu kod birinchi marta berilgan kun: xuddi shu ma’lumot bilan qayta chop etilgan nusxada kod o‘zgarmaydi, sinf o‘zgargandan keyin chop etilgan hujjatda esa boshqa kod bo‘ladi. Baholar va boshqa ma’lumotlar bu sahifada ko‘rsatilmaydi — kerak bo‘lsa maktabdan so‘rang.',
       foot:'Bu sahifa hujjat Iqror Academy tomonidan berilganini tekshiradi.' },
     ru:{ sub:'Проверка подлинности документа', wait:'Проверяется…',
       ok:'Подлинный документ — выдан Iqror Academy', bad:'Не подтверждено',
@@ -64,7 +65,7 @@
       phone:'Телефон школы', kind:'Тип документа', date:'Дата выдачи', name:'Ученик', grade:'Класс', none:'—',
       kinds:{profile:'Профиль ученика — официальная справка',certificate:'Справка'},
       gr:g=>Number(g)===0?'Подготовка':(Number(g)===13?'Вариатив':g+' класс'),
-      okmsg:'Сравните имя и класс с данными в бумажном документе. Дата — день, когда этот документ впервые выдан ученику (позже он может быть распечатан повторно с обновлёнными данными). Оценки и другие данные на этой странице не показываются — при необходимости обратитесь в школу.',
+      okmsg:'Сравните имя и класс с бумажным документом — это данные на момент выдачи. Дата — день, когда этот код выдан впервые: при повторной печати с теми же данными код не меняется, а у документа, распечатанного после перехода в другой класс, будет другой код. Оценки и другие данные на этой странице не показываются — при необходимости обратитесь в школу.',
       foot:'Эта страница проверяет, что документ выдан Iqror Academy.' }
   };
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

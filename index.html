@@ -344,7 +344,7 @@
   .feat p{font-size:14.5px;line-height:1.6;color:var(--muted);margin:0}
   .feat .fnote{margin-top:auto;font-size:13px;font-weight:600;color:var(--teal-2);padding-top:6px}
 
-  /* ---- SINF NATIJALARI (Class results) ---- */
+  /* ---- Bo'sh holat (umumiy) va kabinet kartalari ---- */
   .cls-empty{background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:26px;text-align:center;color:var(--muted);font-size:14.5px;margin-top:20px}
   /* Kabinet — davomat */
   .kab-att-card{margin-top:16px;background:var(--white);border:1px solid var(--border);border-radius:16px;padding:22px}
@@ -460,8 +460,6 @@
   @media(max-width:1000px){
     .hero-grid{grid-template-columns:1fr;gap:36px;padding-top:56px}
     .hero h1{font-size:42px}
-    .results-grid{grid-template-columns:1fr}
-    .search-card{position:static}
     .ach-grid{grid-template-columns:1fr;gap:40px}
     .contact-grid{grid-template-columns:1fr;gap:40px}
     .cards-3{grid-template-columns:1fr 1fr}
@@ -476,21 +474,7 @@
     .hero h1{font-size:34px}
     .hero p.sub{font-size:17px}
     .cards-2,.cards-3,.cards-4,.feat-grid{grid-template-columns:1fr}
-    .cp-selects{grid-template-columns:1fr}
-    .cls-row{grid-template-columns:32px 1fr 66px;gap:10px;padding:11px 14px}
-    .cls-row .cr-act{display:none}
     .hero-stats{grid-template-columns:1fr 1fr;gap:24px}
-    .lb,.search-card,.results-grid>*{min-width:0}
-    .lb-row{display:flex;align-items:center;gap:11px;padding:12px 16px}
-    .lb-row .rank{flex:0 0 auto;width:34px;height:34px}
-    .lb-row>div:not(.lb-score){flex:1 1 auto;min-width:0}
-    .lb-row .nm{white-space:normal;overflow-wrap:anywhere}
-    .lb-row .sub{white-space:normal}
-    .lb-row .trk{flex:0 0 auto}
-    .lb-row .lb-score{flex:0 0 auto;gap:0}
-    .lb-row .lb-score .lb-bar{display:none}
-    .lb-row .lb-score b{font-size:16px;width:auto}
-    .search-card{padding:24px 22px}
     .search-form input{min-width:0}
     .found .metrics{gap:8px}
     .foot-inner{gap:20px}
@@ -901,7 +885,6 @@ const T = {
     kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",
     kab_children:"Farzandlaringiz",kab_remove:"Olib tashlash",kab_remove_q:"Bu farzand ro‘yxatdan olib tashlansinmi?",
     kab_dup:"Bu ID allaqachon qo‘shilgan.",
-    kab_notfound:"Bunday ID topilmadi. Tekshirib qayta kiriting.",
     kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
     kab_missing:"Saqlangan ID bo‘yicha ma’lumot topilmadi:",
     kab_att_title:"Davomat",kab_att_loading:"Davomat yuklanmoqda…",kab_att_none:"Hozircha davomat kiritilmagan.",
@@ -1006,7 +989,6 @@ const T = {
     kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",
     kab_children:"Ваши дети",kab_remove:"Убрать",kab_remove_q:"Убрать этого ребёнка из списка?",
     kab_dup:"Этот ID уже добавлен.",
-    kab_notfound:"Такой ID не найден. Проверьте и введите снова.",
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
     kab_missing:"По сохранённому ID данные не найдены:",
     kab_att_title:"Посещаемость",kab_att_loading:"Загрузка посещаемости…",kab_att_none:"Посещаемость пока не внесена.",
@@ -1623,7 +1605,8 @@ async function downloadParentProfile(s, btn){
   const old=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent=t.kab_dl_wait; }
   try{
     const sid=s.id;
-    // QR — o'quvchi ID emas, hujjat tekshirish kodi (issue_doc_token; bir o'quvchi+tur uchun bitta, ko'p marta tekshiriladi).
+    // QR — o'quvchi ID emas, hujjat tekshirish kodi (issue_doc_token; bitta hujjat — shu ism va sinf bilan — uchun bitta kod,
+    //   ko'p marta tekshiriladi; sinf o'zgargach chop etilgani yangi kod oladi).
     //   Kod olinmasa — hujjat QR'siz chiqadi va ogohlantirish ko'rsatiladi (yuklab olish to'xtamaydi).
     const [priv, att, mon, grd, chars, notes, olys, tok] = await Promise.all([
       FB.getStudentPrivate(sid), FB.getAttendance(sid), FB.getMonitoring(sid), FB.getGrades(sid), FB.getCharacteristics(sid), FB.getSubjectNotes(sid),
@@ -2371,7 +2354,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
       // D6: farzand kartasi faqat O'Z farzandi qatoridan (xom 'students' — owns_student_doc RLS; boshqa bolalar ko'rinmaydi).
       //   Hujjat id'si studentId'dan farq qilishi mumkin (import): avval studentId bo'yicha AYNAN BITTA qator, topilmasa doc id.
       //   Karta kaliti (id) — kanonik studentId (davomat/baho/faktura shu bilan); bog'lanish kaliti (cid) xaritada.
-      const toChild=(x,did)=>{ const tr=x.track||""; return { id:String(x.studentId||did), docId:did, name:x.name||"", g:Number(x.grade)||0, tr, lng:x.lang||"uz", cls:x.classLetter||tr||"",
+      const toChild=(x,did)=>{ const tr=x.track||""; return { id:String(x.studentId||did), name:x.name||"", g:Number(x.grade)||0, tr, lng:x.lang||"uz", cls:x.classLetter||tr||"",
         score:Number(x.score)||0, att:(x.attendance==null||x.attendance==='')?null:Number(x.attendance), photo:x.photo||"", subjects:Array.isArray(x.subjects)?x.subjects:[] }; };
       async function loadChildren(ids){ const map={};
         for(const cid of (ids||[])){ if(!cid) continue; try{
