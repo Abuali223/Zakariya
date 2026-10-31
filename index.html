@@ -2728,9 +2728,15 @@ if(!PUB_DEMO){ STUDENTS=[]; TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[];
         //   begona raqamga ketmasin. Eski (keshlangan) auth-api.js bo'lsa — oddiy maska.
         function wireMask(id){ const i=$(id); if(!i) return; if(AuthAPI.bindPhoneInput) AuthAPI.bindPhoneInput(i); else i.oninput=()=>{ i.value=AuthAPI.maskPhone(i.value); }; }
         function wirePwLive(passId){ const p=$(passId); if(!p) return; const upd=()=>{ const v=AuthAPI.validatePassword(p.value); const box=$('ph-pwchk'); if(box) box.querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); }; p.oninput=upd; upd(); }
-        function startResend(purpose){ let s=60; const a=$('ph-resend'); if(!a) return; a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`; if(resendTimer)clearInterval(resendTimer);
-          resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
-        async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose); startResend(purpose); if(!r.ok) showErr(r.error||'Yuborilmadi.'); }
+        // Qayta yuborish tugmasi: secs soniyadan keyin bosiladi (server aytgan kutish; 0 — darhol).
+        function startResend(purpose, secs){ let s=(secs==null?60:Math.max(0,Math.ceil(Number(secs)||0))); const a=$('ph-resend'); if(!a) return; if(resendTimer)clearInterval(resendTimer);
+          const ready=()=>{ a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); };
+          if(s<=0){ ready(); return; }
+          a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`;
+          resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); ready(); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
+        // SMS yetib bormasa (smsFailed) — server aniq xato aytadi va bu urinish sanalmaydi: «Qayta yuborish» DARHOL bosiladi.
+        async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose);
+          startResend(purpose, (r&&r.smsFailed) ? 0 : (r&&r.resendAfter)); if(!r.ok) showErr(r.error||'Yuborilmadi.'); }
         function render(step){
           clrErr(); st.step=step;
           const T={login:'Kirish',reg_role:'Ro‘yxatdan o‘tish',reg_form:'Ro‘yxatdan o‘tish',reg_otp:'Tasdiqlash kodi',reg_name:'Ism-familiya',reset_form:'Parolni tiklash',reset_otp:'Tasdiqlash kodi',reset_pass:'Yangi parol'};
