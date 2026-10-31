@@ -30,6 +30,10 @@ const { db, verifyToken } = require('../server/backend.js')({ ...CFG, __dir: __d
 const MODEL = CFG.model || 'claude-opus-4-8';
 const RISK_ATT = Number(CFG.riskAttendance) || 80;   // davomat % — shundan past = xavf
 const RISK_SCORE = Number(CFG.riskScore) || 60;      // umumiy ball — shundan past = xavf
+// O'quvchi ma'lumoti (ism, davomat, baho, qarz) TASHQI AI xizmatiga ketadigan yo'llar (/student-summary, /risk) STANDART
+//   holda O'CHIQ — huquqshunos ruxsatidan keyin config.json'da "allowStudentData": true qilinadi. Kod saqlanadi.
+const ALLOW_STUDENT_DATA = CFG.allowStudentData === true;
+const DISABLED_MSG = 'Bu xizmat vaqtincha o‘chirilgan';
 
 // null/'' = NOMA'LUM (Number(null) 0 bo'lib, davomati hali yo'q yangi o'quvchi «past davomat (0%)» deb belgilanardi).
 const num = v => { if (v == null || v === '') return null; const n = Number(v); return isNaN(n) ? null : n; };
@@ -65,7 +69,20 @@ async function askText(system, messages, maxTokens, effort){
   return ((block && block.text) || '').trim();
 }
 
-/* ---------------- Maktab bilimi (chatbot uchun kontekst) ---------------- */
+/* ---------------- Maktab bilimi (chatbot uchun kontekst) ----------------
+ * Faqat ommaviy maktab ma'lumoti (sayt kontakti, tariflar, yo'nalishlar, qabul, FAQ) — o'quvchi/ota-ona ma'lumoti
+ *   (students, student_private, users ...) bu yerda O'QILMAYDI va /chat orqali tashqi AI'ga ketmaydi.
+ * To'lov qoidasi: maktabda FAQAT OYLIK to'lov — yillik / yarim yillik / choraklik reja va oldindan to'lov chegirmasi YO'Q.
+ *   Bazadagi eski FAQ/tarif matnida shunday jumla bo'lsa — u AI'ga berilmaydi (tizim matnidagi qoida bilan birga). */
+const NON_MONTHLY = [
+  /(yillik|yarim\s*yillik|choraklik|oldindan)\s+to[‘'ʻ’`]?lov/i,
+  /(yillik|choraklik|oldindan)[^.!?\n]{0,40}chegirma|chegirma[^.!?\n]{0,40}(yillik|choraklik|oldindan)/i,
+  /(годов|полугодов|квартальн|поквартальн)[а-яё]*\s+оплат|предоплат/i,
+  /(годов|полугодов|квартал|предоплат)[^.!?\n]{0,40}скидк|скидк[^.!?\n]{0,40}(годов|полугодов|квартал|предоплат)/i,
+];
+function dropNonMonthly(text){
+  return String(text==null?'':text).split(/(?<=[.!?\n])/).filter(s => !NON_MONTHLY.some(re => re.test(s))).join('').trim();
+}
 let _kb = null, _kbAt = 0;
 async function loadKnowledge(force){
   if(!force && _kb && (Date.now() - _kbAt) < 5*60*1000) return _kb;   // 5 daqiqa kesh
@@ -84,10 +101,13 @@ async function loadKnowledge(force){
   if(c.telegram)lines.push('Telegram: ' + c.telegram);
   if(c.hours)   lines.push('Ish vaqti: ' + c.hours);
   if(plans.length){ lines.push('\nNARXLAR (tariflar):');
-    plans.forEach(p=>{ lines.push(`- ${p.name_uz||p.name_ru||''}: ${p.price||''} (oyiga). ${(p.features_uz||'').replace(/\n/g,', ')}`); }); }
-  if(courses.length){ lines.push('\nYO‘NALISHLAR:'); courses.forEach(d=>lines.push(`- ${d.title_uz||d.name_uz||d.title||''}: ${d.desc_uz||d.text_uz||''}`)); }
-  if(adm.length){ lines.push('\nQABUL BOSQICHLARI:'); adm.forEach((a,i)=>lines.push(`${a.num||i+1}. ${a.title_uz||''} — ${a.text_uz||''}`)); }
-  if(faq.length){ lines.push('\nTEZ-TEZ BERILADIGAN SAVOLLAR:'); faq.forEach(f=>lines.push(`S: ${f.q_uz||''}\nJ: ${f.a_uz||''}`)); }
+    plans.forEach(p=>{ lines.push(`- ${p.name_uz||p.name_ru||''}: ${p.price||''} (oyiga). ${dropNonMonthly((p.features_uz||'').replace(/\n/g,', '))}`); }); }
+  if(courses.length){ lines.push('\nYO‘NALISHLAR:'); courses.forEach(d=>lines.push(`- ${d.title_uz||d.name_uz||d.title||''}: ${dropNonMonthly(d.desc_uz||d.text_uz||'')}`)); }
+  if(adm.length){ lines.push('\nQABUL BOSQICHLARI:'); adm.forEach((a,i)=>lines.push(`${a.num||i+1}. ${a.title_uz||''} — ${dropNonMonthly(a.text_uz||'')}`)); }
+  // FAQ: savoli yillik/choraklik/oldindan to'lov haqida bo'lsa yoki javobidan faqat shunday jumlalar qolsa — umuman olinadi
+  //   (bunday savolga AI tizim matnidagi qoida bo'yicha «faqat oylik» deb javob beradi).
+  const faqOk = faq.map(f=>({ q:String(f.q_uz||''), a:dropNonMonthly(f.a_uz||'') })).filter(f=>f.a && !NON_MONTHLY.some(re=>re.test(f.q)));
+  if(faqOk.length){ lines.push('\nTEZ-TEZ BERILADIGAN SAVOLLAR:'); faqOk.forEach(f=>lines.push(`S: ${f.q}\nJ: ${f.a}`)); }
   _kb = lines.join('\n'); _kbAt = Date.now();
   return _kb;
 }
@@ -102,6 +122,7 @@ QAT'IY QOIDALAR:
 - Foydalanuvchi qaysi tilda yozsa (o'zbek yoki rus), o'sha tilda javob bering.
 - Siyosat, din, maktabga aloqasiz mavzularга kirmang — muloyim rad eting.
 - Javob 1-4 jumla, aniq. Kerak bo'lsa qabul (ariza) qoldirishni taklif qiling.
+- TO'LOV: maktabda to'lov FAQAT OYLIK. Yillik, yarim yillik yoki choraklik to'lov rejasi va oldindan to'lov uchun chegirma YO'Q — quyidagi ma'lumotda (yoki suhbatda) boshqacha aytilgan bo'lsa ham. So'rashsa: "To'lov oylik amalga oshiriladi; yillik, choraklik yoki oldindan to'lov chegirmasi yo'q" deb ayting.
 - KO'RINISH: javobni ODDIY MATN bilan yozing. Markdown ishlatmang — ** yoki * (qalin/kursiv), # (sarlavha) va boshidagi - / * (ro'yxat) belgilarini QO'YMANG. Ro'yxat kerak bo'lsa, har bandni yangi qatordan « • » belgisi bilan boshlang. Narxlarni « • Nomi: 1 900 000 so'm/oy » ko'rinishida yozing.
 
 MAKTAB MA'LUMOTI:
@@ -302,10 +323,10 @@ async function handleSheet(body){
 }
 
 /* ---------------- Server ---------------- */
-function serve(){
+// So'rov ishlovchisi (serve() va sinov — ai.test.cjs — shuni ishlatadi).
+function makeRequestHandler(){
   const ORIGIN = CFG.allowOrigin || '*';
-  const PORT = Number(CFG.port) || 8791;
-  const server = http.createServer((req,res)=>{
+  return (req,res)=>{
     res.setHeader('Access-Control-Allow-Origin', ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -321,6 +342,11 @@ function serve(){
         if(req.url.startsWith('/chat')){
           if(!chatAllowed(req)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
           out = await handleChat(body);
+        }
+        else if((req.url.startsWith('/student-summary') || req.url.startsWith('/risk')) && !ALLOW_STUDENT_DATA){
+          // O'quvchi ma'lumoti tashqi AI'ga ketmasin: sozlamada allowStudentData: true bo'lmaguncha yopiq (410, bazaga tegmaydi).
+          res.writeHead(410, {'Content-Type':'application/json; charset=utf-8'});
+          return res.end(JSON.stringify({ error:'disabled', message: DISABLED_MSG }));
         }
         else if(req.url.startsWith('/student-summary')){
           // Maxfiy: o'quvchi bahosi/davomati/QARZI. Faqat DIREKTOR (rollar yangilangach 'admin' = ma'muriyat rahbari — moliyani
@@ -350,9 +376,13 @@ function serve(){
         res.end(JSON.stringify(out));
       }catch(e){ console.error('ERR', e.message); res.writeHead(500); res.end(JSON.stringify({error:'server', detail:e.message})); }
     });
-  });
+  };
+}
+function serve(){
+  const PORT = Number(CFG.port) || 8791;
+  const server = http.createServer(makeRequestHandler());
   // FAQAT localhost — nginx (TLS) shu portga proxy qiladi. Tashqaridan to'g'ridan-to'g'ri kirish yopiladi.
-  server.listen(PORT, '127.0.0.1', ()=>console.log(`Iqror AI yordamchi tinglayapti 127.0.0.1:${PORT}  (/chat, /student-summary, /risk, /sheet) · model ${MODEL}`));
+  server.listen(PORT, '127.0.0.1', ()=>console.log(`Iqror AI yordamchi tinglayapti 127.0.0.1:${PORT}  (/chat, /sheet${ALLOW_STUDENT_DATA ? ', /student-summary, /risk' : '; /student-summary, /risk — o‘chiq (allowStudentData)'}) · model ${MODEL}`));
 }
 
 /* ---------------- CLI ---------------- */
@@ -367,6 +397,10 @@ if(require.main === module){
     } else if(mode === 'chat'){
       const kb = await loadKnowledge(); const msg = process.argv.slice(3).join(' ') || 'Narxlar qancha?';
       console.log('SAVOL:', msg); console.log('JAVOB:', await makeAI().chat([], msg, kb));
+    } else if((mode === 'summary' || (mode === 'risk' && process.argv[3]!=='norec')) && !ALLOW_STUDENT_DATA){
+      // HTTP yo'llari bilan bir xil qoida: o'quvchi ma'lumoti tashqi AI'ga faqat allowStudentData: true bo'lsa ketadi.
+      console.error(`${DISABLED_MSG} (o‘quvchi ma’lumoti tashqi AI’ga yuborilmaydi; config.json: "allowStudentData": true). Faqat qoida bo‘yicha ro‘yxat: node index.cjs risk norec`);
+      process.exit(1);
     } else if(mode === 'summary'){
       const sid = process.argv[3]; if(!sid){ console.error('node index.cjs summary IQ-0002'); process.exit(1); }
       const d = await loadStudentData(sid); if(!d){ console.error('topilmadi'); process.exit(1); }
@@ -383,4 +417,4 @@ if(require.main === module){
   })().catch(e=>{ console.error('Xatolik:', e.stack||e.message); process.exit(1); });
 }
 
-module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, riskScan, handleChat, handleStudentSummary, handleRisk, handleSheet, parseSheetRef };
+module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, riskScan, handleChat, handleStudentSummary, handleRisk, handleSheet, parseSheetRef, makeRequestHandler, dropNonMonthly };

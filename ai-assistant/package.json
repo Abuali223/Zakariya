@@ -4,6 +4,6 @@
   "private": true,
   "description": "Iqror — AI yordamchi: sayt chatboti, ota-onaga oylik xulosa, o'quvchi xavf tahlili",
   "main": "index.cjs",
-  "scripts": { "start": "node index.cjs serve", "test": "node index.cjs test" },
+  "scripts": { "start": "node index.cjs serve", "test": "node ai.test.cjs", "check-key": "node index.cjs test" },
   "dependencies": { "@anthropic-ai/sdk": "^0.68.0", "@supabase/supabase-js": "^2.45.0", "ws": "^8.18.0" }
 }

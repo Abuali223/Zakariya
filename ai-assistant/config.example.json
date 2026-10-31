@@ -8,5 +8,6 @@
   "port": 8791,
   "allowOrigin": "https://iqror.uz",
   "riskAttendance": 80,
-  "riskScore": 60
+  "riskScore": 60,
+  "allowStudentData": false
 }
