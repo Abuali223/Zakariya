@@ -1364,7 +1364,7 @@ function buildTabs(){
     {k:'olympiads', icon:mi('M480-320q83 0 141.5-58.5T680-520v-200H280v200q0 83 58.5 141.5T480-320Zm0 80q-117 0-198.5-81.5T200-520v-280h560v280q0 117-81.5 198.5T480-240Zm-160 160v-80h320v80H320ZM160-620v-120h80q-17 0-28.5 11.5T200-700v80h-40Zm640 0v-80q0-17-11.5-28.5T760-740h80v120h-80ZM480-540Z'), t:'Olimpiada'},
     {k:'settings', icon:mi('m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm110-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z'), t:'Sozlamalar'},
     {k:'users', icon:mi('M287-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM80-160v-112q0-33 17-62t47-44q51-26 115-44t141-18h14q6 0 12 2-8 18-13.5 37.5T404-360h-4q-71 0-127.5 18T180-306q-9 5-14.5 14t-5.5 20v32h252q6 21 16 41.5t22 38.5H80Zm560 40-12-60q-12-5-22.5-10.5T584-204l-58 18-40-68 46-40q-2-14-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T628-460l12-60h80l12 60q12 5 22.5 11t21.5 15l58-20 40 70-46 40q2 12 2 25t-2 25l46 40-40 68-58-18q-11 8-21.5 13.5T732-180l-12 60h-80Zm40-120q33 0 56.5-23.5T760-320q0-33-23.5-56.5T680-400q-33 0-56.5 23.5T600-320q0 33 23.5 56.5T680-240ZM400-560q33 0 56.5-23.5T480-640q0-33-23.5-56.5T400-720q-33 0-56.5 23.5T320-640q0 33 23.5 56.5T400-560Z'), t:'Foydalanuvchilar'},
-    {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Arizalar'},
+    {k:'enrollments', icon:mi('M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-120H640q-30 38-71.5 59T480-240q-47 0-88.5-21T320-320H200v120Zm349-142q31-22 43-58h168v-360H200v360h168q12 36 43 58t69 22q38 0 69-22Z'), t:'Qabul'},
     {k:'feedback', icon:mi('M240-400h480v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z'), t:'Arz-shikoyat'},
     {k:'sick', icon:mi('M420-360h120v-90h90v-120h-90v-90H420v90h-90v120h90v90Zm60 264q-9 0-17.5-1.5T446-102q-149-63-237.5-192.5T120-580v-206q0-25 14.5-45t37.5-29l280-105q14-5 28-5t28 5l280 105q23 9 37.5 29t14.5 45v206q0 156-88.5 285.5T514-102q-8 4-16.5 5.5T480-96Z'), t:'Kasal bolalar'},
     {k:'checkins', icon:mi('M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Z'), t:'Kirish nazorati'},
@@ -2904,13 +2904,15 @@ async function renderStudents(){
       <button class="btn ghost2" id="stu-export">⬇ CSV</button>
       ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
       <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
-      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn ghost2" id="stu-dq" title="Ma'lumot sifati: noto‘g‘ri ota-ona telefoni, kontrakt summasi yo‘q, takroriy JSHSHIR">⚠️ Sifat</button><button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
+      <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn ghost2" id="stu-dq" title="Ma'lumot sifati: noto‘g‘ri ota-ona telefoni, kontrakt summasi yo‘q, takroriy JSHSHIR">⚠️ Sifat</button><button class="btn gold" id="add">+ Qo‘shish</button>`:''}${(SESSION.isAdmin||SESSION.role==='zavuch'||SESSION.role==='reception')?'<button class="btn ghost2" id="stu-left" title="Chiqarilgan o‘quvchilar va ketish sabablari">📤 Ketganlar</button>':''}${SESSION.isAdmin?'<button class="btn ghost2" id="stu-trash" title="O‘chirilgan o‘quvchilarni tiklash">🗑 O‘chirilganlar</button>':''}</div></div>
     ${canDel?`<div id="stu-bulk" class="card" style="display:none;padding:10px 16px;margin-bottom:12px;background:#fff7e8;border:1px solid #f0d9a8;align-items:center;gap:12px"><b><span id="stu-selc">0</span> ta tanlandi</b><button class="btn sm danger" id="stu-buldel">🗑 Tanlanganlarni o‘chirish</button><button class="btn sm ghost" id="stu-bulclr">Bekor</button></div>`:''}
     <div id="cls-groups"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   const updateBulk=()=>{ if(!canDel) return; const cg=$('#cls-groups'); const n=cg?cg.querySelectorAll('.stu-sel:checked').length:0;
     const bar=$('#stu-bulk'); if(bar) bar.style.display=n?'flex':'none'; const c=$('#stu-selc'); if(c) c.textContent=n; };
   if(canMng){ const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm('students',null)); }   // qo'shish — reception ham
   if(canMng){ const dq=$('#stu-dq'); if(dq) dq.addEventListener('click', openDataQuality); }   // Ma'lumot sifati tekshiruvi
+  if($('#stu-left')) $('#stu-left').addEventListener('click', ()=>openLeavers(cache['students']||[]));
+  if($('#stu-trash')) $('#stu-trash').addEventListener('click', openDeletedStudents);
   if(canDel){
     $('#stu-bulclr').addEventListener('click',()=>{ $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.checked=false); $('#cls-groups').querySelectorAll('.stu-selall').forEach(c=>c.checked=false); updateBulk(); });
     $('#stu-buldel').addEventListener('click',async()=>{
@@ -3139,11 +3141,14 @@ async function openStatusModal(s, collName, onSaved, opts){
         <span id="st-date-lbl">Faollashtirish sanasi</span>
         <input type="date" id="st-date" value="${WD?tkDay(new Date()):todayStr()}"${WD?` min="${withdrawMinDate()}"`:''} style="${FLD}"></label>
       <div class="small muted" id="st-hint" style="margin-top:8px"></div>
+      ${isStu?`<div id="st-exit" style="display:none;margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:9px">
+        <label class="small" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">Ketish sababi (majburiy)<select id="st-exit-r" style="${FLD}"><option value="">— tanlang —</option>${EXIT_REASONS.map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join('')}</select></label>
+        <label class="small" style="display:flex;flex-direction:column;gap:4px">Izoh (ixtiyoriy)<input id="st-exit-n" maxlength="300" placeholder="masalan: boshqa shaharga ko‘chdi" style="${FLD}"></label></div>`:''}
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="st-save">💾 Saqlash</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const sel=$('#st-sel'), dw=$('#st-date-wrap'), dl=$('#st-date-lbl'), hint=$('#st-hint');
-  const upd=()=>{ const v=sel.value;
+  const upd=()=>{ const v=sel.value; if($('#st-exit')) $('#st-exit').style.display=(v==='chiqdi')?'':'none';
     if(v==='sinov'){ dw.style.display='none'; hint.textContent=`Sinov: ${REC} hisoblanmaydi. Keyin «Faollashtirish» qilsangiz, o‘sha sanadan ${MW} boshlanadi.`; }
     else { dw.style.display='';
       if(v==='faol'){ dl.textContent=`Faollashtirish sanasi (shu kundan ${MW})`;
@@ -3182,6 +3187,11 @@ async function openStatusModal(s, collName, onSaved, opts){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(dt) || dt<withdrawMinDate()){ toast(`Chiqqan sana ${withdrawMinDate()} dan oldin bo‘lsa — direktorga murojaat qiling (eski oylar to‘lovi o‘zgaradi)`,true); return; }
     }
     const patch={};
+    // Ketish sababi (o'quvchi, «Chiqarish»): majburiy — «Ketganlar» ro'yxati va indikator uchun.
+    if(isStu && v==='chiqdi'){ const er=(($('#st-exit-r')||{}).value||'').trim();
+      if(!er){ toast('Ketish sababini tanlang',true); return; }
+      patch.exitReason=er; patch.exitNote=(($('#st-exit-n')||{}).value||'').trim()||null; patch.exitAt=dt; patch.exitBy=SESSION.email||SESSION.role||''; }
+    if(isStu && v==='faol' && (s.payStatus==='chiqdi') && s.exitReason){ patch.exitReason=null; patch.exitNote=null; patch.exitAt=null; patch.exitBy=null; }   // qaytdi — sabab tarixda (change_log)
     if(v==='faol'){
       patch.payStatus='faol'; patch.stopFrom='';
       // Muzlatish/chiqishdan QAYTDI (o'quvchi HAM xodim): faol oraliq TARIXI saqlanadi — activeFrom (asl boshlanish)
@@ -4265,7 +4275,7 @@ async function delDoc(name,id,label){
     what=`“${label||id}”${pid?` (ID ${pid})`:''}`; }
   if(!confirm(`${what} — o‘chirilsinmi?\n\n⚠️ Bu amalni ortga qaytarib bo‘lmaydi.${isPay?'\nID pasport kabi — o‘chirilgandan keyin ham hech kimga qayta berilmaydi.':''}${name==='users'?'\n\n⚠️ Bu faqat ro‘yxatdan olib tashlaydi (kirish hisobi qoladi — telefon/parol bilan qayta kira oladi); ishdan ketgan xodim uchun «🚫 Bloklash»ni ishlating.':''}`)) return;
   // O'quvchi kabi muhim yozuvlar uchun ikkinchi tasdiq
-  if(name==='students' && !confirm('O‘quvchi va uning maxfiy ma’lumoti (JSHSHIR, telefon) butunlay o‘chadi.\nDavom etamizmi?')) return;
+  if(name==='students' && !confirm('O‘quvchi va uning maxfiy ma’lumoti (JSHSHIR, telefon) ro‘yxatdan o‘chadi.\nNusxasi arxivda qoladi: direktor «🗑 O‘chirilganlar» orqali tiklashi mumkin (fakturalar va to‘lovlar o‘chmaydi).\nDavom etamizmi?')) return;
   // O'qituvchi/xodimda MAOSH TARIXI (maosh berish / avans) bo'lsa — o'chirish o'rniga «Holat → Ishdan chiqqan» tavsiya etiladi:
   //   yozuvlar egasiz qoladi (va ID qayta ishlatilmasa ham hisobotlarda nomsiz chiqadi).
   if(name==='teachers'||name==='staff'){
@@ -4687,19 +4697,236 @@ function renderSysHealth(box, j, err){
 }
 
 /* ---- Enrollments inbox ---- */
+/* ==================== QABUL (murojaatlar voronkasi) ====================
+   Murojaat (enrollments): sayt formasi yoki xodim qo'lda (telefon / kelgan oila). Bosqichlar Marketing bo'limi bilan BIR XIL
+   (yangi | boglanildi | sinov | qabul | rad). Tarix — enrollment_events (faqat qo'shiladi). Bo'sh o'rinlar — class_seat_stats()
+   (ismsiz sonlar) + class_seats (sig'im: director / admin_head). Eksport — faqat direktor (D7). */
+const EXIT_REASONS=[['kochdi','Ko‘chib ketdi'],['boshqa_maktab','Boshqa maktabga o‘tdi'],['moliya','Moliyaviy sabab'],['sifat','Ta’lim sifatidan norozi'],['transport','Masofa / transport'],['soglik','Sog‘liq'],['oila','Oilaviy sabab'],['boshqa','Boshqa']];
+const ADM_STAGES=[['yangi','Yangi','#EEF2FF','#3730A3'],['boglanildi','Bog‘lanildi','#E0F2FE','#0369A1'],['sinov','Sinov darsi','#FEF3C7','#B45309'],['qabul','Qabul qilindi','#DCFCE7','#15803D'],['rad','Rad etildi','#FDECEC','#B42318']];
+const ADM_SOURCES=[['sayt','Sayt (ariza)'],['qongiroq','Qo‘ng‘iroq'],['keldi','O‘zi keldi'],['tavsiya','Tanish / tavsiya'],['ijtimoiy','Ijtimoiy tarmoq'],['reklama','Ko‘cha reklamasi'],['boshqa','Boshqa']];
+const ADM_REJECT=[['narx','Narx qimmat'],['joy','Joy yo‘q'],['masofa','Masofa uzoq'],['boshqa_maktab','Boshqa maktabni tanladi'],['javob_yoq','Javob bermadi'],['sinov','Sinovdan o‘tmadi'],['boshqa','Boshqa sabab']];
+const ADM_CALL=[['javob','Javob berdi'],['javob_yoq','Javob bermadi'],['qayta','Qayta qo‘ng‘iroq qilish kerak'],['keladi','Kelishga kelishildi']];
+const admStage=k=>ADM_STAGES.find(x=>x[0]===(k||'yangi'))||ADM_STAGES[0];
+const admChip=k=>{ const s=admStage(k); return `<span class="chip" style="background:${s[2]};color:${s[3]}">${esc(s[1])}</span>`; };
+const admLbl=(list,k)=>{ const r=list.find(x=>x[0]===k); return r?r[1]:(k||'—'); };
+const admDT=v=>{ if(!v) return ''; const d=new Date(v); if(isNaN(d)) return String(v).slice(0,16); return tkDay(d)+' '+d.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tashkent'}); };
+const admName=r=>r.childName||r.name||'—';
+function canAdmSeats(){ return SESSION.isAdmin || SESSION.role==='admin_head'; }
+function canAdmWrite(){ return SESSION.isAdmin || ['admin_head','reception','marketing_mgr'].includes(SESSION.role); }
+function admClassLabel(ck){ const m=String(ck||'').match(/^(uz|ru)-(\d+)-(.+)$/); if(!m) return esc(ck||'—'); return `${gradeName(Number(m[2]))} «${esc(m[3]==='-'?'—':m[3])}» · ${m[1]==='ru'?'Rus':'O‘zbek'}`; }
+async function admEvent(enrollmentId, type, payload){ try{ await addDoc(collection(db,'enrollment_events'), { enrollmentId:String(enrollmentId), type, payload:payload||{} }); return true; }catch(e){ return false; } }
+
+// «Ketganlar»: chiqarilgan o'quvchilar — sana oralig'i, sabab, sinf, qolgan qarz; sabablar bo'yicha yig'ma (direktor, O'IBDO', qabulxona).
+async function openLeavers(students){
+  const F='padding:7px 9px;border:1px solid var(--border);border-radius:8px;font:inherit';
+  const y=new Date().getFullYear(), from0=(new Date().getMonth()>=8?y:y-1)+'-09-01';
+  $('#modal').innerHTML=`<div class="modal-h"><h3>Ketganlar</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+      <label class="small">Dan<input type="date" id="lv-f" value="${from0}" style="${F}"></label><label class="small">Gacha<input type="date" id="lv-t" value="${todayStr()}" style="${F}"></label></div>
+      <div id="lv-sum" style="margin-bottom:10px"></div><div id="lv-list"><div class="loading">Yuklanmoqda…</div></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  let studs=(students&&students.length)?students:[]; if(!studs.length){ try{ studs=await loadCol('students','order'); }catch(e){ studs=[]; } }
+  let debt={}; try{ const iv=await loadCol('invoices'); iv.forEach(x=>{ if(['canceled','reversed'].includes(x.status)) return; const d=Math.max(0,(Number(x.amount)||0)-(Number(x.paidAmount)||0)); if(d>0){ const k=String(x.studentId||''); debt[k]=(debt[k]||0)+d; } }); }catch(e){ debt=null; }
+  const rlbl=k=>k?((EXIT_REASONS.find(r=>r[0]===k)||[k,k])[1]):'Sabab yozilmagan';
+  const draw=()=>{ if(!document.getElementById('lv-f')) return; const f=$('#lv-f').value||'0000', t=$('#lv-t').value||'9999';
+    const left=studs.filter(s=>s.payStatus==='chiqdi').map(s=>({ s, day:String(s.exitAt||s.stopFrom||'').slice(0,10) })).filter(x=>x.day && x.day>=f && x.day<=t).sort((a,b)=>b.day.localeCompare(a.day));
+    const by={}; left.forEach(x=>{ const k=x.s.exitReason||''; by[k]=(by[k]||0)+1; });
+    $('#lv-sum').innerHTML=left.length?`<b>${left.length} ta o‘quvchi ketgan.</b> ${Object.keys(by).sort((a,b)=>by[b]-by[a]).map(k=>`<span class="chip" style="margin:2px">${esc(rlbl(k))}: ${by[k]} (${Math.round(by[k]*100/left.length)}%)</span>`).join(' ')}`:'';
+    const dOf=s=>debt==null?null:(debt[String(s.studentId||s._id)]||0);
+    $('#lv-list').innerHTML=left.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>O‘quvchi</th><th>Sinf</th><th>Sabab</th><th>Izoh</th><th>Qarz</th></tr></thead><tbody>${left.map(x=>`<tr>
+      <td data-label="Sana">${esc(x.day)}</td><td data-label="O‘quvchi">${esc(x.s.name||x.s._id)}<div class="small muted">${esc(x.s.studentId||'')}</div></td><td data-label="Sinf">${esc(classLabelOf(x.s))}</td>
+      <td data-label="Sabab">${esc(rlbl(x.s.exitReason))}</td><td data-label="Izoh">${esc(x.s.exitNote||'')}</td>
+      <td data-label="Qarz">${dOf(x.s)==null?'—':(dOf(x.s)?`<b style="color:#B42318">${fmtSom(dOf(x.s))}</b>`:'0')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Bu davrda ketgan o‘quvchi yo‘q.</div>';
+    labelTable(); };
+  $('#lv-f').onchange=draw; $('#lv-t').onchange=draw; draw();
+}
+// «O'chirilganlar» (faqat direktor): arxivdagi o'quvchilar va tiklash (restore_deleted_student).
+async function openDeletedStudents(){
+  $('#modal').innerHTML=`<div class="modal-h"><h3>O‘chirilgan o‘quvchilar</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><p class="small muted" style="margin-top:0">O‘chirilgan o‘quvchining to‘liq nusxasi arxivda saqlanadi. Tiklanganda karta (va maxfiy ma’lumoti) qaytadi, fakturalar va to‘lovlar ID orqali yana bog‘lanadi, ota-ona kodi o‘zgarmaydi.</p><div id="ds-list"><div class="loading">Yuklanmoqda…</div></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const load=async()=>{ let rows=[]; try{ const s=await getDocs(query(collection(db,'deleted_records'), where('tbl','==','students'))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
+    catch(e){ if(document.getElementById('ds-list')) $('#ds-list').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+    if(!document.getElementById('ds-list')) return;
+    rows.sort((a,b)=>String(b.deletedAt||'').localeCompare(String(a.deletedAt||'')));
+    $('#ds-list').innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Sinf</th><th>O‘chirilgan</th><th></th></tr></thead><tbody>${rows.map(r=>{ const x=r.row||{};
+      return `<tr><td data-label="O‘quvchi">${esc(x.name||r.rowId)}<div class="small muted">${esc(x.studentId||'')}</div></td><td data-label="Sinf">${esc(classLabelOf(x))}</td>
+        <td data-label="O‘chirilgan">${esc(String(r.deletedAt||'').slice(0,10))}</td>
+        <td>${r.restoredAt?`<span class="chip" style="background:#DCFCE7;color:#15803D">Tiklangan ${esc(String(r.restoredAt).slice(0,10))}</span>`:`<button class="btn sm gold" data-dsres="${esc(r._id)}">↩️ Tiklash</button>`}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="empty">Arxiv bo‘sh.</div>';
+    labelTable();
+    $('#ds-list').querySelectorAll('[data-dsres]').forEach(b=>b.onclick=async()=>{ if(!confirm('O‘quvchi tiklansinmi?')) return; b.disabled=true;
+      try{ const r=await rpc('restore_deleted_student',{ p_id:b.dataset.dsres }); if(r && r.ok){ toast('O‘quvchi tiklandi ✓'); cache['students']=null; load(); } else { b.disabled=false; toast((r&&r.error)||'Tiklab bo‘lmadi',true); } }
+      catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } }); };
+  load();
+}
 async function renderEnrollments(){
   markEnrollSeen();   // bo'lim ochildi -> yangi arizalar "ko'rilgan", bell tozalanadi
-  const _g=VIEW_GEN;  // boshqa tabга o'tilса, kech qaytgan render begona tabга yozmasin
-  $('#view').innerHTML = `<div class="page-head"><h2>Arizalar</h2></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
-  let rows;
-  try{ rows = await loadCol('enrollments', null); rows.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
-  catch(e){ if(_g!==VIEW_GEN) return; $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
-  if(_g!==VIEW_GEN) return;
-  if(!rows.length){ $('#view .card').innerHTML=`<div class="empty">Hozircha ariza yo‘q.</div>`; return; }
-  const trs = rows.map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.direction||'')}</td><td>${esc(String(r.ts||r.created||'').slice(0,10))}</td><td>${SESSION.isAdmin?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:'<span class="muted">—</span>'}</td></tr>`).join('');   // enr_del faqat direktor (roles[2])
-  $('#view .card').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Telefon</th><th>Sinf</th><th>Sinf tili</th><th>Sana</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
-  labelTable();
-  $('#view').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>delDoc('enrollments', b.dataset.del)));
+  const _g=VIEW_GEN;  // boshqa tabga o'tilsa, kech qaytgan render begona tabga yozmasin
+  const W=canAdmWrite();
+  $('#view').innerHTML = `<div class="page-head"><h2>Qabul</h2><div style="display:flex;gap:8px;flex-wrap:wrap">${W?'<button class="btn gold" id="adm-new">+ Yangi murojaat</button>':''}${SESSION.isAdmin?'<button class="btn" id="adm-export">⬇️ Eksport (CSV)</button>':''}</div></div>
+    <p class="small muted" style="margin:-8px 0 14px">Qiziqqan oilalar: saytdagi ariza yoki qo‘ng‘iroq → bog‘lanish → sinov darsi → qabul (o‘quvchi kartasi) yoki rad (sabab bilan). Har amal murojaat tarixiga yoziladi.</p>
+    <div class="card" id="adm-seats" style="margin-bottom:14px"><div class="loading">Bo‘sh o‘rinlar yuklanmoqda…</div></div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px"><div id="adm-chips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+      <input id="adm-q" type="search" placeholder="Ism yoki telefon bo‘yicha qidirish" style="margin-top:10px;width:100%;max-width:420px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit"></div>
+    <div class="card" id="adm-list"><div class="loading">Yuklanmoqda…</div></div>`;
+  let rows=[], filter='open', q='';
+  const reload=async()=>{
+    try{ rows = await loadCol('enrollments', null); }
+    catch(e){ if(_g!==VIEW_GEN) return false; $('#adm-list').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return false; }
+    rows.sort((a,b)=>String(b.created||b.ts||'').localeCompare(String(a.created||a.ts||''))); return true; };
+  const loadSeats=async()=>{
+    let st=[]; try{ st=await rpc('class_seat_stats'); }catch(e){ if(_g!==VIEW_GEN) return; $('#adm-seats').innerHTML=`<div class="small muted">Bo‘sh o‘rinlar hisoblanmadi${e&&(e.code||e.message)?` (${esc(e.code||e.message)})`:''}.</div>`; return; }
+    if(_g!==VIEW_GEN) return;
+    st=(Array.isArray(st)?st:[]).filter(x=>x && x.classKey);
+    const gr=k=>{ const m=String(k).match(/^(uz|ru)-(\d+)-/); return m?Number(m[2]):0; };
+    const inProc=ck=>{ const g=gr(ck); return rows.filter(r=>['boglanildi','sinov'].includes(r.status||'') && Number(r.grade)===g).length; };
+    const trs=st.sort((a,b)=>gr(a.classKey)-gr(b.classKey)||String(a.classKey).localeCompare(String(b.classKey))).map(x=>{ const cap=x.capacity==null?null:Number(x.capacity); const free=cap==null?null:Math.max(0,cap-Number(x.active||0));
+      return `<tr><td data-label="Sinf">${admClassLabel(x.classKey)}</td>
+        <td data-label="Sig‘im">${canAdmSeats()?`<input type="number" min="0" max="500" data-capk="${esc(x.classKey)}" value="${cap==null?'':cap}" placeholder="—" style="width:76px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;font:inherit">`:(cap==null?'<span class="muted">—</span>':cap)}</td>
+        <td data-label="Band">${Number(x.active||0)}</td>
+        <td data-label="Bo‘sh">${free==null?'<span class="muted">sig‘im kiritilmagan</span>':(free>0?`<b style="color:#15803D">${free}</b>`:'<b style="color:#B42318">0</b>')}</td>
+        <td data-label="Jarayonda (shu sinf darajasi)">${inProc(x.classKey)||'<span class="muted">0</span>'}</td></tr>`; }).join('');
+    $('#adm-seats').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>Bo‘sh o‘rinlar</b>${canAdmSeats()?'<button class="btn sm" id="adm-cap-save">💾 Sig‘imni saqlash</button>':''}</div>
+      ${trs?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Sig‘im</th><th>Band</th><th>Bo‘sh</th><th>Jarayonda</th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="small muted">Sinflar topilmadi.</div>'}`;
+    labelTable();
+    if($('#adm-cap-save')) $('#adm-cap-save').onclick=async()=>{ const ins=[...document.querySelectorAll('[data-capk]')]; let ok=0, bad=0;
+      for(const i of ins){ const v=String(i.value||'').trim(); if(v==='') continue; const n=Number(v); if(!Number.isInteger(n)||n<0||n>500){ bad++; continue; }
+        try{ await setDoc(doc(db,'class_seats',i.dataset.capk), { capacity:n }, {merge:true}); ok++; }catch(e){ bad++; } }
+      toast(bad?`Saqlandi: ${ok}, xato: ${bad} (0–500 butun son)`:`Sig‘im saqlandi ✓ (${ok})`, !!bad); loadSeats(); };
+  };
+  const today=todayStr();
+  const isTrialToday=r=>!!r.trialAt && tkDay(new Date(r.trialAt))===today;
+  const isOverdue=r=>!!r.nextActionAt && !['qabul','rad'].includes(r.status||'') && new Date(r.nextActionAt).getTime()<Date.now();
+  const draw=()=>{
+    if(_g!==VIEW_GEN) return;
+    const cnt=k=>rows.filter(r=>(r.status||'yangi')===k).length;
+    const open=rows.filter(r=>!['qabul','rad'].includes(r.status||'yangi'));
+    const chips=[['open','Ochiq',open.length],...ADM_STAGES.map(s=>[s[0],s[1],cnt(s[0])]),['trial','🧪 Bugungi sinov',rows.filter(isTrialToday).length],['overdue','⏰ Qayta aloqa o‘tgan',rows.filter(isOverdue).length],['all','Hammasi',rows.length]];
+    $('#adm-chips').innerHTML=chips.map(c=>`<button type="button" class="btn sm${filter===c[0]?' gold':''}" data-admf="${c[0]}">${esc(c[1])} <b>${c[2]}</b></button>`).join('');
+    $('#adm-chips').querySelectorAll('[data-admf]').forEach(b=>b.onclick=()=>{ filter=b.dataset.admf; draw(); });
+    const qq=q.trim().toLowerCase(), qd=qq.replace(/\D/g,'');
+    let list=rows.filter(r=> filter==='all' ? true : filter==='open' ? !['qabul','rad'].includes(r.status||'yangi') : filter==='trial' ? isTrialToday(r) : filter==='overdue' ? isOverdue(r) : (r.status||'yangi')===filter);
+    if(qq) list=list.filter(r=>[r.name,r.childName,r.parentName].some(x=>String(x||'').toLowerCase().includes(qq)) || (qd.length>=3 && String(r.phone||'').replace(/\D/g,'').includes(qd)));
+    if(!list.length){ $('#adm-list').innerHTML=`<div class="empty">${rows.length?'Bu filtr bo‘yicha murojaat yo‘q.':'Hozircha murojaat yo‘q.'}</div>`; return; }
+    const trs=list.map(r=>`<tr data-admopen="${esc(r._id)}" style="cursor:pointer">
+      <td data-label="Sana">${esc(String(r.created||r.ts||'').slice(0,10))}</td>
+      <td data-label="Murojaat"><b>${esc(admName(r))}</b>${r.parentName?`<div class="small muted">${esc(r.parentName)}</div>`:''}</td>
+      <td data-label="Telefon">${esc(r.phone||'')}</td>
+      <td data-label="Sinf">${esc(r.grade||'—')}${r.direction?` · ${r.direction==='ru'?'rus':'o‘zbek'}`:''}</td>
+      <td data-label="Manba">${esc(admLbl(ADM_SOURCES, r.source||'sayt'))}</td>
+      <td data-label="Bosqich">${admChip(r.status)}${r.status==='rad'&&r.rejectReason?`<div class="small muted">${esc(admLbl(ADM_REJECT,r.rejectReason))}</div>`:''}</td>
+      <td data-label="Keyingi qadam">${r.status==='sinov'&&r.trialAt?`🧪 ${esc(admDT(r.trialAt))}`:(r.nextActionAt?`<span${isOverdue(r)?' style="color:#B42318;font-weight:700"':''}>📞 ${esc(admDT(r.nextActionAt))}</span>`:'<span class="muted">—</span>')}</td></tr>`).join('');
+    $('#adm-list').innerHTML=`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Murojaat</th><th>Telefon</th><th>Sinf</th><th>Manba</th><th>Bosqich</th><th>Keyingi qadam</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    labelTable();
+    $('#adm-list').querySelectorAll('[data-admopen]').forEach(tr=>tr.onclick=()=>{ const r=rows.find(x=>String(x._id)===tr.dataset.admopen); if(r) openLead(r, refresh); });
+  };
+  const refresh=async()=>{ if(await reload()) { draw(); loadSeats(); } };
+  $('#adm-q').oninput=e=>{ q=e.target.value||''; draw(); };
+  if($('#adm-new')) $('#adm-new').onclick=()=>openLeadNew(refresh);
+  if($('#adm-export')) $('#adm-export').onclick=()=>{ const head=['Sana','Murojaat','Ota-ona','Telefon','Sinf','Til','Manba','Bosqich','Rad sababi','Sinov darsi','O‘quvchi ID'];
+    const csv=[head].concat(rows.map(r=>[String(r.created||r.ts||'').slice(0,10),admName(r),r.parentName||'',r.phone||'',r.grade||'',r.direction||'',admLbl(ADM_SOURCES,r.source||'sayt'),admStage(r.status)[1],r.rejectReason?admLbl(ADM_REJECT,r.rejectReason):'',r.trialAt?admDT(r.trialAt):'',r.studentId||'']))
+      .map(a=>a.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=`qabul_${todayStr()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+  if(!(await reload())) return; draw(); loadSeats();
+}
+
+// Yangi murojaat (xodim: telefon yoki kelgan oila)
+function openLeadNew(onDone){
+  const F='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
+  $('#modal').innerHTML=`<div class="modal-h"><h3>Yangi murojaat</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="grid2">
+      <div><label>Ota-ona ismi</label><input id="ln-parent" style="${F}"></div>
+      <div><label>Bola ismi</label><input id="ln-child" style="${F}"></div>
+      <div><label>Telefon</label><input id="ln-phone" inputmode="tel" placeholder="+998 90 123 45 67" style="${F}"></div>
+      <div><label>Sinf</label><input id="ln-grade" type="number" min="0" max="11" style="${F}"></div>
+      <div><label>Ta’lim tili</label><select id="ln-dir" style="${F}"><option value="uz">O‘zbek</option><option value="ru">Rus</option></select></div>
+      <div><label>Manba (majburiy)</label><select id="ln-src" style="${F}"><option value="">— tanlang —</option>${ADM_SOURCES.filter(s=>s[0]!=='sayt').map(s=>`<option value="${s[0]}">${esc(s[1])}</option>`).join('')}</select></div>
+    </div><label style="margin-top:8px;display:block">Izoh</label><input id="ln-note" style="${F}"></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="ln-save">💾 Saqlash</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#ln-save').onclick=async()=>{
+    const v=id=>($('#'+id).value||'').trim(); const phone=v('ln-phone'), src=v('ln-src');
+    if(!v('ln-child') && !v('ln-parent')){ toast('Ota-ona yoki bola ismini kiriting',true); return; }
+    if(phone.replace(/\D/g,'').length<9){ toast('Telefon raqamini to‘liq kiriting',true); return; }
+    if(!src){ toast('Manbani tanlang',true); return; }
+    const btn=$('#ln-save'); btn.disabled=true;
+    try{ const ref=await addDoc(collection(db,'enrollments'), { parentName:v('ln-parent'), childName:v('ln-child'), name:v('ln-child')||v('ln-parent'), phone, grade:v('ln-grade'), direction:v('ln-dir'), source:src, status:'yangi', note:v('ln-note')||null, ts:new Date().toISOString(), created:serverTimestamp() });
+      await admEvent(ref && ref.id, 'stage', { to:'yangi', source:src, note:v('ln-note')||'' });
+      toast('Murojaat qo‘shildi ✓'); closeModal(); if(onDone) onDone();
+    }catch(e){ btn.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
+  };
+}
+
+// Murojaat oynasi: ma'lumot, tarix va amallar
+async function openLead(r, onDone){
+  const W=canAdmWrite(), F='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
+  const closed=['qabul','rad'].includes(r.status||'');
+  $('#modal').innerHTML=`<div class="modal-h"><h3>${esc(admName(r))} ${admChip(r.status)}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px 14px;margin-bottom:12px">
+        <div><span class="muted">Ota-ona:</span> ${esc(r.parentName||'—')}</div><div><span class="muted">Bola:</span> ${esc(r.childName||r.name||'—')}</div>
+        <div><span class="muted">Telefon:</span> ${esc(r.phone||'—')}</div><div><span class="muted">Sinf:</span> ${esc(r.grade||'—')} · ${r.direction==='ru'?'rus':'o‘zbek'}</div>
+        <div><span class="muted">Manba:</span> ${esc(admLbl(ADM_SOURCES,r.source||'sayt'))}</div><div><span class="muted">Kelgan:</span> ${esc(String(r.created||r.ts||'').slice(0,10))}</div>
+        ${r.trialAt?`<div><span class="muted">Sinov darsi:</span> ${esc(admDT(r.trialAt))}${r.trialTeacher?` · ${esc(r.trialTeacher)}`:''}</div>`:''}
+        ${r.trialResult?`<div><span class="muted">Sinov natijasi:</span> ${esc(r.trialResult)}</div>`:''}
+        ${r.status==='rad'?`<div><span class="muted">Rad sababi:</span> ${esc(admLbl(ADM_REJECT,r.rejectReason))}${r.rejectNote?` — ${esc(r.rejectNote)}`:''}</div>`:''}
+        ${r.studentId?`<div><span class="muted">O‘quvchi ID:</span> <b>${esc(r.studentId)}</b></div>`:''}
+        ${r.note?`<div style="grid-column:1/-1"><span class="muted">Izoh:</span> ${esc(r.note)}</div>`:''}
+      </div>
+      ${W&&!closed?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn sm" data-lact="call">📞 Qo‘ng‘iroq qilindi</button><button class="btn sm" data-lact="note">📝 Izoh</button>
+        <button class="btn sm" data-lact="trial">🧪 Sinov darsiga yozish</button>${r.trialAt?'<button class="btn sm" data-lact="trialres">Sinov natijasi</button>':''}
+        <button class="btn sm gold" data-lact="accept">✅ Qabul qilish</button><button class="btn sm danger" data-lact="reject">❌ Rad etish</button></div>`:''}
+      ${W&&closed&&r.status==='rad'?'<div style="margin-bottom:12px"><button class="btn sm" data-lact="reopen">↩️ Qayta ochish</button></div>':''}
+      <div id="ld-act"></div>
+      <b>Tarix</b><div id="ld-hist" class="small" style="margin-top:6px"><div class="loading">Yuklanmoqda…</div></div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const evLbl={call:'📞 Qo‘ng‘iroq',note:'📝 Izoh',stage:'🔀 Bosqich',trial:'🧪 Sinov',convert:'✅ Qabul'};
+  getDocs(query(collection(db,'enrollment_events'), where('enrollmentId','==',String(r._id)))).then(s=>{
+    const ev=s.docs.map(d=>d.data()||{}).sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+    const el=document.getElementById('ld-hist'); if(!el) return;
+    el.innerHTML=ev.length?ev.map(e=>{ const p=e.payload||{}; const txt=[p.to?admStage(p.to)[1]:'',p.result?admLbl(ADM_CALL,p.result):'',p.at?admDT(p.at):'',p.teacher||'',p.reason?admLbl(ADM_REJECT,p.reason):'',p.studentId||'',p.note||''].filter(Boolean).join(' · ');
+      return `<div style="padding:6px 0;border-bottom:1px dashed var(--border)"><b>${esc(evLbl[e.type]||e.type)}</b> <span class="muted">${esc(admDT(e.at))}</span>${txt?`<div>${esc(txt)}</div>`:''}</div>`; }).join(''):'<div class="muted">Hali yozuv yo‘q.</div>';
+  }).catch(()=>{ const el=document.getElementById('ld-hist'); if(el) el.innerHTML='<div class="muted">Tarixni o‘qib bo‘lmadi.</div>'; });
+  const upd=async(patch, ev)=>{ try{ await updateDoc(doc(db,'enrollments',r._id), patch, {mustExist:true}); if(ev) await admEvent(r._id, ev.type, ev.payload); toast('Saqlandi ✓'); closeModal(); if(onDone) onDone(); return true; }
+    catch(e){ toast(/sababini/.test(String(e&&e.message))?'Rad etish sababini tanlang':('Xatolik: '+(e.code||e.message)),true); return false; } };
+  const act=$('#ld-act');
+  const form=(html, onSave)=>{ act.innerHTML=`<div class="card" style="padding:12px;margin-bottom:12px;background:#FAFAF7">${html}<div style="margin-top:8px;display:flex;gap:6px"><button class="btn sm gold" id="la-save">💾 Saqlash</button><button class="btn sm ghost" id="la-cancel">Bekor</button></div></div>`;
+    $('#la-cancel').onclick=()=>{ act.innerHTML=''; }; $('#la-save').onclick=async()=>{ const b=$('#la-save'); b.disabled=true; if(!(await onSave())) b.disabled=false; }; };
+  const v=id=>(($('#'+id)||{}).value||'').trim();
+  const toIso=(d,t)=>{ if(!d) return null; const x=new Date(`${d}T${t||'09:00'}:00+05:00`); return isNaN(x)?null:x.toISOString(); };
+  document.querySelectorAll('[data-lact]').forEach(b=>b.onclick=async()=>{ const a=b.dataset.lact;
+    if(a==='call') form(`<div class="grid2"><div><label>Natija</label><select id="la-res" style="${F}">${ADM_CALL.map(c=>`<option value="${c[0]}">${esc(c[1])}</option>`).join('')}</select></div>
+        <div><label>Keyingi aloqa (ixtiyoriy)</label><input id="la-next" type="date" style="${F}"></div></div><label style="display:block;margin-top:6px">Izoh</label><input id="la-note" style="${F}">`,
+      ()=>{ const patch={ nextActionAt: toIso(v('la-next'),'10:00') }; if((r.status||'yangi')==='yangi') patch.status='boglanildi';
+        return upd(patch, { type:'call', payload:{ result:v('la-res'), note:v('la-note'), to:patch.status||undefined } }); });
+    else if(a==='note') form(`<label>Izoh</label><input id="la-note" style="${F}">`, ()=>{ if(!v('la-note')){ toast('Izoh yozing',true); return false; } return upd({ note:v('la-note') }, { type:'note', payload:{ note:v('la-note') } }); });
+    else if(a==='trial'){ let teachers=[]; try{ teachers=await loadCol('teachers'); }catch(e){}
+      form(`<div class="grid2"><div><label>Sana</label><input id="la-d" type="date" min="${todayStr()}" style="${F}"></div><div><label>Vaqt</label><input id="la-t" type="time" value="09:00" style="${F}"></div>
+        <div style="grid-column:1/-1"><label>O‘qituvchi (ixtiyoriy)</label><select id="la-tch" style="${F}"><option value="">—</option>${teachers.filter(t=>t&&t.name).sort((x,y)=>String(x.name).localeCompare(String(y.name))).map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></div></div>`,
+        ()=>{ const at=toIso(v('la-d'), v('la-t')); if(!at){ toast('Sinov darsi sanasini tanlang',true); return false; }
+          return upd({ status:'sinov', trialAt:at, trialTeacher:v('la-tch')||null, trialResult:null }, { type:'trial', payload:{ at, teacher:v('la-tch'), to:'sinov' } }); }); }
+    else if(a==='trialres') form(`<label>Natija</label><select id="la-tr" style="${F}"><option value="keldi">Keldi</option><option value="kelmadi">Kelmadi</option></select><label style="display:block;margin-top:6px">Izoh (o‘qituvchi fikri)</label><input id="la-note" style="${F}">`,
+      ()=>upd({ trialResult:(v('la-tr')==='keldi'?'Keldi':'Kelmadi')+(v('la-note')?' — '+v('la-note'):'') }, { type:'trial', payload:{ result:v('la-tr'), note:v('la-note') } }));
+    else if(a==='reject') form(`<label>Sabab (majburiy)</label><select id="la-rr" style="${F}"><option value="">— tanlang —</option>${ADM_REJECT.map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join('')}</select><label style="display:block;margin-top:6px">Izoh</label><input id="la-note" style="${F}">`,
+      ()=>{ if(!v('la-rr')){ toast('Rad etish sababini tanlang',true); return false; } return upd({ status:'rad', rejectReason:v('la-rr'), rejectNote:v('la-note')||null, nextActionAt:null }, { type:'stage', payload:{ to:'rad', reason:v('la-rr'), note:v('la-note') } }); });
+    else if(a==='reopen') upd({ status:'boglanildi', rejectReason:null, rejectNote:null }, { type:'stage', payload:{ to:'boglanildi', note:'qayta ochildi' } });
+    else if(a==='accept'){
+      if(!canManageStudents()){ toast('O‘quvchi kartasini qabulxona, O‘IBDO‘ yoki direktor ochadi',true); return; }
+      closeModal();
+      const prefill={ name:r.childName||r.name||'', grade:r.grade?String(Number(r.grade)||''):'', lang:(r.direction==='ru'?'ru':'uz'), parentPhone:r.phone||'' };
+      openForm('students', null, prefill, async(savedId, data)=>{
+        const sid=String((data&&data.studentId)||savedId||'');
+        try{ await updateDoc(doc(db,'enrollments',r._id), { status:'qabul', studentId:sid, nextActionAt:null }, {mustExist:true});
+          await admEvent(r._id, 'convert', { studentId:sid, to:'qabul' }); toast('Murojaat «Qabul qilindi» ✓'); }
+        catch(e){ toast('O‘quvchi saqlandi, lekin murojaat yangilanmadi: '+(e.code||e.message),true); }
+        if(onDone) onDone(); });
+    }
+  });
 }
 
 /* ---- Kirish nazorati (yuz terminali → checkins) ---- */

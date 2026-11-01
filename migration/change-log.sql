@@ -124,7 +124,7 @@ begin
 end $$;
 
 select app.chlog_attach('student_private', 'specialCategory,contractAmount,siblingDiscount,referrerId,teacherId');
-select app.chlog_attach('students',        'payStatus,activeFrom,stopFrom,pauses,grade,classLetter,track,lang,studentId');
+select app.chlog_attach('students',        'payStatus,activeFrom,stopFrom,pauses,grade,classLetter,track,lang,studentId,exitReason,exitAt');   -- exit*: admission-crm.sql
 select app.chlog_attach('invoices',        'studentId,month,amount,paidAmount,status,baseAmount,discount,pctApplied,isGrant,sickAmount,sickDaysApplied,billedFrom,billedTo');
 select app.chlog_attach('payments',        'studentId,invoiceId,provider,amount,status,matched');
 select app.chlog_attach('refunds',         'target,targetId,studentId,amount,reason,month');
