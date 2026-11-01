@@ -136,13 +136,18 @@ function makeDeepHealth(deps) {
     // Qatordagi [sana]ni ajratib bo'lmasa (noodatiy vaqt zonasi qisqartmasi, masalan «MSK») va «backup OK» — log'ning OXIRGI
     //   qatori bo'lsa: faylning o'zgartirilgan vaqti (aynan shu qator yozilgan payt).
     if (okIdx >= 0 && !at && okIdx === lastIdx && Number.isFinite(mtimeMs)) at = new Date(mtimeMs).toISOString();
-    if (okIdx < 0) return { ok: false, info: errIdx >= 0 ? 'zaxira xato bilan tugagan (muvaffaqiyatlisi yo‘q)' : 'logda muvaffaqiyatli zaxira yo‘q' };
-    if (errIdx > okIdx) return { ok: false, at, info: 'oxirgi urinish xato bilan tugagan' };
-    if (!at) return { ok: false, info: 'vaqtini aniqlab bo‘lmadi' };
+    // «Haftalik hisobot» (PKG-11): oxirgi 7 sutkada muvaffaqiyatli zaxira bo'lgan kechalar soni (Toshkent sanasi bo'yicha, ≤ 7).
+    const WEEK = 7 * 24 * 3600e3, nights = new Set(), now = clock();
+    const addNight = t => { const ms = t ? Date.parse(t) : NaN; if (Number.isFinite(ms) && now - ms <= WEEK && ms <= now + 3600e3) nights.add(new Date(ms + 5 * 3600e3).toISOString().slice(0, 10)); };
+    lines.forEach((ln, i) => { if (/backup OK/.test(ln)) addNight(i === okIdx ? at : tOf(ln)); });
+    const nights7 = Math.min(7, nights.size);
+    if (okIdx < 0) return { ok: false, nights7, info: errIdx >= 0 ? 'zaxira xato bilan tugagan (muvaffaqiyatlisi yo‘q)' : 'logda muvaffaqiyatli zaxira yo‘q' };
+    if (errIdx > okIdx) return { ok: false, at, nights7, info: 'oxirgi urinish xato bilan tugagan' };
+    if (!at) return { ok: false, nights7, info: 'vaqtini aniqlab bo‘lmadi' };
     const ageH = (clock() - Date.parse(at)) / 3600e3;
     const miss = [/auth YO/.test(lines[okIdx]) ? 'auth' : '', /storage YO/.test(lines[okIdx]) ? 'storage' : '', /metama.lumoti YO/.test(lines[okIdx]) ? 'storage metama’lumoti' : '', /sirlar YO/.test(lines[okIdx]) ? 'sirlar' : ''].filter(Boolean);
-    if (ageH > MAXH) return { ok: false, at, info: `${Math.floor(ageH)} soatdan beri yangi zaxira yo‘q` };
-    return { ok: true, at, info: 'muvaffaqiyatli' + (miss.length ? ` (${miss.join(', ')} YO‘Q)` : '') };
+    if (ageH > MAXH) return { ok: false, at, nights7, info: `${Math.floor(ageH)} soatdan beri yangi zaxira yo‘q` };
+    return { ok: true, at, nights7, info: 'muvaffaqiyatli' + (miss.length ? ` (${miss.join(', ')} YO‘Q)` : '') };
   }
 
   const LIST = [
