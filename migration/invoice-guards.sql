@@ -33,11 +33,14 @@ do $iqror_guard$ begin raise exception 'iqror: invoice-guards.sql ALOHIDA ishga 
 -- ---------- 1) reprice_invoice ----------
 create or replace function public.reprice_invoice(p_id text, p_net numeric, p_meta jsonb default '{}'::jsonb,
                                                   p_cancel boolean default false)
-returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
+returns jsonb language plpgsql security definer set search_path = public, app, pg_temp
+-- Faktura summasi/chegirmasini Direktordan boshqasi faqat shu RPC orqali o'zgartiradi (discount-approval.sql himoyasi).
+--   Funksiya darajasidagi SET: bayroq faqat shu funksiya ichida amal qiladi (tranzaksiyaning qolgan qismiga o'tmaydi).
+set iqror.inv_reprice = '1' as $$
 declare
   v_claims jsonb; v_sid text; v_inv record; v_paid numeric; v_net numeric; v_newpaid numeric;
   v_excess numeric := 0; v_status text; v_cr numeric := 0; v_name text; v_stcancel boolean;
-  v_meta jsonb := coalesce(p_meta, '{}'::jsonb); v_grant boolean; v_nid text;
+  v_meta jsonb := coalesce(p_meta, '{}'::jsonb); v_grant boolean; v_nid text; v_refamt numeric := 300000;
 begin
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
   if not (app.is_admin() or app.is_finance() or coalesce(v_claims->>'role','') = 'service_role') then
@@ -117,6 +120,7 @@ begin
            "sickAmount"      = coalesce((v_meta->>'sickAmount')::numeric, "sickAmount"),
            "sickNoteRefs"    = coalesce(v_meta->'sickNoteRefs', "sickNoteRefs"),   -- ma'lumotnoma kunlari (nurse-sick.sql)
            "bonusRef"        = case when v_meta ? 'bonusRef' then nullif(v_meta->>'bonusRef', '') else "bonusRef" end,   -- 100 ball bonusi (bonus-100.sql)
+           "approvalRefs"    = coalesce(v_meta->'approvalRefs', "approvalRefs"),   -- chegirma tasdiqlari (discount-approval.sql)
            "priceKey"        = coalesce(v_meta->>'priceKey', "priceKey"),
            "billedFrom"      = coalesce(v_meta->>'billedFrom', "billedFrom"),
            "billedTo"        = coalesce(v_meta->>'billedTo', "billedTo"),
@@ -124,10 +128,13 @@ begin
      where id = p_id;
     -- Referral jurnali — faktura bilan BIRGA (faktura yangilanmasa referral «sarflanmaydi»).
     if jsonb_typeof(v_meta->'referralUsedIds') = 'array' then
+      -- Tavsiya bonusi summasi — config/finance."referralAmount" (discount-approval.sql; standart 300 000).
+      select coalesce(to_jsonb(c)->>'referralAmount', '')::text into v_nid from public.config c where c.id = 'finance';
+      if coalesce(v_nid, '') ~ '^\d+(\.\d+)?$' then v_refamt := v_nid::numeric; end if;
       for v_nid in select value from jsonb_array_elements_text(v_meta->'referralUsedIds') loop
         if coalesce(v_nid,'') = '' then continue; end if;
         insert into public.referral_ledger(id, "referrerId", amount, month, "appliedAt")
-          values (v_nid, v_sid, 300000, v_inv.month, now())
+          values (v_nid, v_sid, v_refamt, v_inv.month, now())
           on conflict (id) do update set "referrerId" = excluded."referrerId", amount = excluded.amount, month = excluded.month, "appliedAt" = now();
       end loop;
     end if;

@@ -241,7 +241,10 @@ begin
    where tbl = 'student_private' and "rowId" = a."rowId" and "restoredAt" is null
    order by "deletedAt" desc limit 1 for update;
   if found and not exists (select 1 from public.student_private sp where sp.id = a."rowId") then
+    -- Chegirma maydonlari faqat RPC orqali (discount-approval.sql qulfi): tiklash — avvalgi (tasdiqlangan) holatni qaytaradi.
+    perform set_config('iqror.discount_rpc', '1', true);
     insert into public.student_private select * from jsonb_populate_record(null::public.student_private, p.row);
+    perform set_config('iqror.discount_rpc', '', true);
     update public.deleted_records set "restoredAt" = now(), "restoredBy" = app.uid() where id = p.id;
     v_priv := true;
   end if;

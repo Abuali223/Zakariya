@@ -570,18 +570,22 @@ const SCHEMAS = {
       {k:'activeFrom',l:'Faollashtirish sanasi (shu kundan to‘lov; oy o‘rtasi bo‘lsa shu kundan hisoblanadi)',t:'date'},
       {k:'stopFrom',l:'To‘xtatish sanasi (Muzlatilgan/Chiqdi — shu kungacha to‘lanadi)',t:'date'},
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — «Davomat»da kamera ko‘rganlar avtomatik «Keldi», kirmaganlar «Yo‘q» bo‘lib turadi)',t:'text'},
-      {k:'specialCategory',l:'Chegirma toifasi (imtiyoz)',t:'select',opts:[{v:'',l:'— yo‘q (oddiy)'},{v:'teacher_child',l:'Xodim farzandi (50%)'},{v:'olympiad',l:'100% grant (olimpiada / ijtimoiy himoya)'},{v:'contract',l:'Kontrakt (belgilangan summa)'}]},
-      {k:'teacherId',l:'Qaysi xodim/o‘qituvchi (ixtiyoriy)',t:'dynselect',src:'oqituvchilar',note:'«Xodim farzandi» bo‘lsa — qaysi xodim (ixtiyoriy).'},
-      {k:'contractAmount',l:'Kontrakt oylik summa (so‘m)',t:'number',placeholder:'faqat «Kontrakt» toifasi uchun'},
-      {k:'siblingDiscount',l:'Aka-uka chegirmasi — qo‘lda (10%)',t:'select',opts:[{v:'',l:'— avtomatik'},{v:'Ha',l:'Ha (10%) — majburan'},{v:'Yoq',l:'Yo‘q — oilaga qo‘shilmasin (avtomatik guruhdan chiqarish)'}],note:'Avtomatik: 3+ aka-uka (bir xil ota-ona telefoni + umumiy familiya — farzandning O‘ZI yoki OTA/ONA F.I.Sh bo‘yicha) bo‘lsa HAMMASIGA 10%, 2 ta bo‘lsa bittasiga. Farzandlar familiyasi bir xil bo‘lsa yetarli; har xil bo‘lsa (jins/imlo) — ota yoki ona F.I.Sh mos kelsa ham bo‘ladi. «Ha» — qo‘lda majburiy chegirma (masalan 2 tadan ikkalasiga ham berish uchun). «Yo‘q» — bola begona oilaga noto‘g‘ri qo‘shilib qolsa (masalan umumiy telefon), uni avtomatik aka-uka guruhidan chiqaradi.'},
+      // D1: chegirma / grant / kontrakt / aka-uka belgisi / tavsiya — formada faqat ko'rinadi; o'zgartirish «💸 Chegirma so'rash»
+      //   orqali (Direktor + Moliya menejeri tasdig'i, discount-approval.sql). Yangi o'quvchida — «kim tavsiya qilgan» (referral_register).
+      {k:'_disc',l:'Chegirma, grant va tavsiya',t:'discinfo',formOnly:true},
       {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
-      {k:'referrerId',l:'Kim tavsiya qilgan (referral) — 300 000 unga',t:'text',placeholder:'tavsiya qilgan o‘quvchi ID (IQ-...)'},
       {k:'order',l:'Tartib',t:'number'}
     ],
     // Maxfiy maydonlar ommaviy student hujjatida EMAS, alohida student_private
     // kolleksiyasida saqlanadi (JSHSHIR, telefon — voyaga yetmaganning shaxsiy ma'lumoti)
-    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2','specialCategory','teacherId','contractAmount','siblingDiscount','referrerId','hearAbout'],
-    subjects:true
+    privateCol:'student_private', privateFields:['pinfl','birthDate','metrika','prevSchool','address','livesWith','health','interests','clubs','guardian','fatherName','fatherWork','motherName','motherWork','parentPhone','parentPhone2','hearAbout'],
+    subjects:true,
+    // Yangi o'quvchi: «kim tavsiya qilgan» — referral_register (bonus birinchi to'lovdan keyin Moliya menejeri tasdig'i bilan).
+    afterSave: async (data, row, formVals)=>{ const ref=String((formVals && formVals._disc)||'').trim(); if(row || !ref) return;
+      try{ const r=await rpc('referral_register',{ p_new_sid:String(data.studentId||''), p_referrer_sid:ref });
+        if(r && r.ok) toast('Tavsiya qayd etildi ✓ — bonus birinchi to‘lovdan keyin Moliya menejeri tasdig‘i bilan');
+        else toast('O‘quvchi saqlandi, lekin tavsiya qayd etilmadi: '+(({not_found:'bunday o‘quvchi ID topilmadi', self:'o‘zini tavsiya qilib bo‘lmaydi', already:'tavsiya allaqachon tasdiqlangan'})[r&&r.reason]||'xato')+' — o‘quvchi kartasidan qayta qayd eting', true); }
+      catch(e){ toast('O‘quvchi saqlandi, lekin tavsiya qayd etilmadi: '+(e.code||e.message)+' — o‘quvchi kartasidan qayta qayd eting', true); } }
   },
   teachers: {
     title:'O‘qituvchilar', icon:mi('M0-240v-63q0-43 44-70t116-27q13 0 25 .5t23 2.5q-14 21-21 44t-7 48v65H0Zm240 0v-65q0-32 17.5-58.5T307-410q32-20 76.5-30t96.5-10q53 0 97.5 10t76.5 30q32 20 49 46.5t17 58.5v65H240Zm540 0v-65q0-26-6.5-49T754-397q11-2 22.5-2.5t23.5-.5q72 0 116 26.5t44 70.5v63H780Zm-455-80h311q-10-20-55.5-35T480-370q-55 0-100.5 15T325-320ZM160-440q-33 0-56.5-23.5T80-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T160-440Zm640 0q-33 0-56.5-23.5T720-520q0-34 23.5-57t56.5-23q34 0 57 23t23 57q0 33-23 56.5T800-440Zm-320-40q-50 0-85-35t-35-85q0-51 35-85.5t85-34.5q51 0 85.5 34.5T600-600q0 50-34.5 85T480-480Zm0-80q17 0 28.5-11.5T520-600q0-17-11.5-28.5T480-640q-17 0-28.5 11.5T440-600q0 17 11.5 28.5T480-560Z'), order:'order',
@@ -2594,6 +2598,285 @@ APPROVAL_QUEUES.push({ key:'bonus_prop', title:'100 ball nomzodlari (taklif)', r
         else { toast(r&&r.reason==='not_eligible'?'Nomzod emas (ballar o‘zgargan)':(r&&r.reason==='already'?'Allaqachon taklif qilingan':'Bo‘lmadi'),true); b.disabled=false; } }
       catch(e){ toast('Xatolik: '+(e.message||e.code),true); b.disabled=false; } }));
   } });
+// ==== CHEGIRMA / GRANT / TAVSIYA — Direktor VA Moliya menejeri tasdig'i (D1, discount-approval.sql) ====
+//   student_private chegirma maydonlarini endi faqat baza RPC'lari yozadi: so'rov (discount_request_create) → ikki slot
+//   (discount_decide: Direktor + Moliya menejeri; bitta odam ikkalasiga emas) → ikkinchi tasdiqda yoziladi. Tavsiya —
+//   referral_register → yangi o'quvchining birinchi haqiqiy to'lovi → referral_decide (faqat Moliya menejeri).
+//   Billing (pmLoadCtx) chegirmani SO'ROVLARDAN oladi: shu oyda amal qiladigan (fromMonth..toMonth) eng so'nggi tasdiqlangani.
+const DISC_KINDS=[['teacher_child','Xodim farzandi — 50%'],['olympiad','100% grant — olimpiada'],['social','100% grant — ijtimoiy himoya'],
+  ['contract','Kontrakt — belgilangan oylik summa'],['none','Chegirmani olib tashlash (oddiy narx)'],
+  ['sibling_force','Aka-uka 10% — majburan berish'],['sibling_exclude','Aka-uka — oiladan chiqarish (10% berilmasin)'],['sibling_auto','Aka-uka — avtomatik (qo‘lda belgini olib tashlash)']];
+const DISC_KIND_LBL=Object.fromEntries(DISC_KINDS);
+const DISC_ST={ pending:['Kutilmoqda','#B45309','#FFF7E6'], approved:['Tasdiqlangan','#1F7A4D','#E8F6EE'], rejected:['Rad etilgan','#B42318','#FDECEC'], canceled:['Bekor qilingan','#667085','#F2F4F7'] };
+const REF_ST={ pending_payment:['To‘lov kutilmoqda','#B45309','#FFF7E6'], approved:['Tasdiqlangan (keyingi fakturada)','#1F7A4D','#E8F6EE'], applied:['Qo‘llangan','#1F7A4D','#E8F6EE'],
+  rejected:['Rad etilgan','#B42318','#FDECEC'], revoked:['Bekor (to‘lov qaytarildi)','#667085','#F2F4F7'] };
+function stChip(map, st){ const x=map[st]||[st||'—','#475467','#F2F4F7']; return `<span class="chip" style="background:${x[2]};color:${x[1]};border-color:transparent">${esc(x[0])}</span>`; }
+// So'rov yaratish: Direktor, Moliya menejeri, O'IBDO', qabulxona (baza ham shuni tekshiradi).
+function canReqDiscount(){ return SESSION.isAdmin || ['reception','zavuch','finance_mgr'].includes(SESSION.role); }
+function discGroup(kind){ return String(kind||'').indexOf('sibling_')===0?'sib':'cat'; }
+function discKindText(r){ const k=String((r&&r.kind)||''), p=(r&&r.params)||{}; let t=DISC_KIND_LBL[k]||k;
+  if(k==='contract' && Number(p.contractAmount)>0) t+=` · ${fmtSom(p.contractAmount)}`;
+  if(k==='teacher_child' && p.teacherId){ const tc=(cache.teachers||[]).find(x=>String(x.teacherId||x._id)===String(p.teacherId)); t+=` · ${tc&&tc.name?tc.name:p.teacherId}`; }
+  return t; }
+function discMonths(r){ const f=r&&r.fromMonth, t=r&&r.toMonth; if(r&&r.legacy && !f && !t) return 'avvaldan bor (meros)';
+  return (f?`${f} oydan`:'boshlanishi belgilanmagan')+(t?` ${t} gacha`:' · muddatsiz'); }
+function discSlots(r){ if(r && r.legacy) return 'meros — avvaldan bor';
+  const sl=(ok,at,lbl)=> ok===true?`✓ ${lbl} (${fmtDT(at)})`:(ok===false?`✖ ${lbl} rad etdi (${fmtDT(at)})`:`⏳ ${lbl}`);
+  return `${sl(r.directorOk, r.directorAt, 'Direktor')} · ${sl(r.financeOk, r.financeAt, 'Moliya menejeri')}`; }
+// Shu oyda amal qiladigan tasdiqlangan so'rovlar: guruh (toifa «cat» | aka-uka «sib») bo'yicha eng so'nggi tasdiqlangani.
+//   catSids/sibSids — shu guruhda BIRORTA tasdiqlangan so'rovi bor o'quvchilar (eski qoidada so'rovsizlar — student_private).
+function discountEffective(reqs, month){
+  const bySid={}, catSids=new Set(), sibSids=new Set(), m=String(month||'');
+  const ts=r=>{ const v=r.appliedAt||r.financeAt||r.directorAt||r.requestedAt; const t=v?new Date(v).getTime():0; return isFinite(t)?t:0; };
+  (reqs||[]).forEach(r=>{ if(!r || r.status!=='approved') return; const sid=String(r.studentId||''); if(!sid) return;
+    const g=discGroup(r.kind); (g==='sib'?sibSids:catSids).add(sid);
+    if(r.fromMonth && m<String(r.fromMonth)) return; if(r.toMonth && m>String(r.toMonth)) return;
+    const o=(bySid[sid]=bySid[sid]||{}), cur=o[g];
+    if(!cur || ts(r)>ts(cur) || (ts(r)===ts(cur) && String(r.id)>String(cur.id))) o[g]=r; });
+  return { bySid, catSids, sibSids };
+}
+// Billing uchun samarali maxfiy maydonlar: toifa / kontrakt summasi / aka-uka belgisi — so'rovlardan; _approvalRefs — fakturaga.
+//   Yangi qoidada (newRule) — faqat so'rov; eski qoidada so'rovi yo'q guruh — student_private (avvalgi xulq).
+//   teacherId tegilmaydi (billingga ta'sir qilmaydi; ID tuzatilganda rekey uni student_private'da ko'chiradi).
+function discApplyEff(pv, eff, sid, newRule){
+  const o=Object.assign({}, pv||{}); const refs=[]; if(!eff){ o._approvalRefs=refs; return o; }
+  const e=eff.bySid[String(sid)]||{};
+  if(newRule || eff.catSids.has(String(sid))){ const c=e.cat||null;
+    o.specialCategory=c ? (c.kind==='social'?'olympiad':(c.kind==='none'?'':c.kind)) : '';
+    o.contractAmount=(c && c.kind==='contract') ? (Number((c.params||{}).contractAmount)||0) : '';
+    if(c && c.kind!=='none') refs.push(String(c.id)); }
+  if(newRule || eff.sibSids.has(String(sid))){ const b=e.sib||null;
+    o.siblingDiscount=b ? (b.kind==='sibling_force'?'Ha':(b.kind==='sibling_exclude'?'Yoq':'')) : '';
+    if(b && b.kind!=='sibling_auto') refs.push(String(b.id)); }
+  o._approvalRefs=refs; return o; }
+// So'rov formasi (inline): alohida oynada ham, o'quvchi formasi ichida ham. name atributlari YO'Q — o'quvchi formasining
+//   FormData'siga tushmaydi (forma saqlashda chegirma maydonlari yozilmaydi).
+function discReqBlockHtml(p, opts){ const o=opts||{}; const fld='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%;background:#fff';
+  return `<div class="dr-block" id="${p}-blk" style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:8px;background:#FBFCFA">
+    <div class="grid2">
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Turi<select id="${p}-kind" style="${fld}">${DISC_KINDS.map(([v,l])=>`<option value="${v}" ${o.kind===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="small" id="${p}-tw" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi xodim/o‘qituvchi farzandi (ixtiyoriy)<select id="${p}-teacher" style="${fld}"><option value="">— tanlanmagan —</option></select></label>
+      <label class="small" id="${p}-cw" style="font-weight:700;display:none;flex-direction:column;gap:6px">Kontrakt oylik summasi (so‘m)<input id="${p}-camt" type="text" inputmode="numeric" placeholder="masalan 1 500 000" style="${fld}"></label>
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi oy fakturasidan<input id="${p}-from" type="month" value="${esc(o.from||curMonth())}" style="${fld}"></label>
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi oygacha (bo‘sh — muddatsiz)<input id="${p}-to" type="month" value="" style="${fld}"></label>
+    </div>
+    <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab / asos (majburiy)<textarea id="${p}-reason" rows="2" style="${fld}" placeholder="masalan: Respublika olimpiadasi 1-o‘rin (2026-10), buyruq №…">${esc(o.reason||'')}</textarea></label>
+    <div class="small muted" style="margin-top:6px">So‘rov Direktor VA Moliya menejeriga boradi; ikkalasi tasdiqlagach tanlangan oy fakturasidan qo‘llanadi. Bitta odam ikkala tasdiqni bera olmaydi.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn gold" id="${p}-send">💸 So‘rovni yuborish</button></div>
+  </div>`; }
+async function wireDiscReqBlock(root, p, sid, onDone){
+  const g=id=>root.querySelector('#'+p+'-'+id);
+  const blk=g('blk'), kind=g('kind'), tw=g('tw'), cw=g('cw'), camt=g('camt'), tsel=g('teacher'), send=g('send'); if(!blk||!kind||!send) return;
+  // O'quvchi formasi ichida Enter forma «Saqlash»ini bosib yubormasin.
+  blk.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target && e.target.tagName!=='TEXTAREA') e.preventDefault(); });
+  const sync=()=>{ const k=kind.value; tw.style.display=k==='teacher_child'?'flex':'none'; cw.style.display=k==='contract'?'flex':'none'; };
+  kind.addEventListener('change', sync); sync();
+  camt.addEventListener('input',()=>{ const d=camt.value.replace(/\D/g,''); camt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
+  send.addEventListener('click', async()=>{
+    const k=kind.value, from=g('from').value||'', to=g('to').value||'', reason=String(g('reason').value||'').trim();
+    if(!reason){ toast('Sabab / asos yozilishi shart',true); return; }
+    if(to && from && to<from){ toast('Tugash oyi boshlanishdan oldin bo‘lmasin',true); return; }
+    const params={}; if(k==='teacher_child' && tsel.value) params.teacherId=tsel.value;
+    if(k==='contract'){ const a=Number(String(camt.value||'').replace(/\D/g,''))||0; if(!(a>0)){ toast('Kontrakt oylik summasini kiriting',true); return; } params.contractAmount=a; }
+    send.disabled=true;
+    try{ const r=await rpc('discount_request_create',{ p_sid:String(sid), p_kind:k, p_params:params, p_from:from||null, p_to:to||null, p_reason:reason });
+      if(r && r.ok){ toast('So‘rov yuborildi ✓ — Direktor va Moliya menejeri tasdiqlaydi'); if(onDone) onDone(r); }
+      else { toast(({not_found:'O‘quvchi topilmadi', reason_required:'Sabab yozilishi shart', amount_required:'Kontrakt summasi kerak'})[r&&r.reason]||'Yuborilmadi',true); send.disabled=false; } }
+    catch(e){ toast((String(e.code)==='42501'||String(e.code)==='22023')?String(e.message):('Xatolik: '+(e.code||e.message)),true); send.disabled=false; } });
+  // O'qituvchi/xodim ro'yxati (ruxsat bo'lmasa bo'sh qoladi — so'rov xodim ko'rsatilmasdan ham yuboriladi).
+  try{ const [T,S]=await Promise.all([ (cache.teachers&&cache.teachers.length)?Promise.resolve(cache.teachers):loadCol('teachers','order').catch(()=>[]), loadCol('staff','order').catch(()=>[]) ]);
+    if(T && T.length) cache.teachers=T;
+    const opts=[...(T||[]).map(t=>({v:String(t.teacherId||t._id), l:(t.name||'—')+' · o‘qituvchi'})), ...(S||[]).map(x=>({v:String(x.staffId||x._id), l:(x.name||'—')+' · xodim'}))].sort((a,b)=>a.l.localeCompare(b.l));
+    if(document.body.contains(tsel)) tsel.innerHTML='<option value="">— tanlanmagan —</option>'+opts.map(o=>`<option value="${esc(o.v)}">${esc(o.l)}</option>`).join(''); }catch(e){}
+}
+// O'quvchining so'rovlari va tavsiya holati.
+async function discStudentInfo(sid){
+  sid=String(sid);
+  const [reqs, ref, given]=await Promise.all([
+    getDocs(query(collection(db,'discount_requests'), where('studentId','==',sid))).then(s=>s.docs.map(d=>({ id:d.id, ...(d.data()||{}) }))),
+    getDoc(doc(db,'referral_requests',sid)).then(d=>d.exists()?({ id:d.id, ...(d.data()||{}) }):null).catch(()=>null),
+    getDocs(query(collection(db,'referral_requests'), where('referrerId','==',sid))).then(s=>s.docs.map(d=>({ id:d.id, ...(d.data()||{}) }))).catch(()=>[]) ]);
+  return { reqs, ref, given };
+}
+function discInfoHtml(info, sid, p){
+  const m=curMonth(), eff=discountEffective(info.reqs, m), e=eff.bySid[String(sid)]||{};
+  const myUid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
+  const cur=(lbl, r, dflt)=>`<div style="margin:2px 0"><b>${esc(lbl)}:</b> ${r && r.kind!=='none' && r.kind!=='sibling_auto' ? `${esc(discKindText(r))} <span class="muted">· ${esc(discMonths(r))} · ${esc(discSlots(r))}</span>` : `<span class="muted">${esc(dflt)}</span>`}</div>`;
+  const pend=info.reqs.filter(r=>r.status==='pending').sort((a,b)=>String(a.requestedAt||'').localeCompare(String(b.requestedAt||'')));
+  const hist=info.reqs.filter(r=>r.status!=='pending' && !r.legacy).sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||''))).slice(0,5);
+  const future=info.reqs.filter(r=>r.status==='approved' && r.fromMonth && String(r.fromMonth)>m);
+  const nmOf=x=>{ const s=(cache.students||[]).find(y=>String(y.studentId||y._id)===String(x)); return s?`${s.name||x} (${x})`:String(x); };
+  const refLine = info.ref ? `<div style="margin:2px 0"><b>Tavsiya qilgan:</b> ${esc(nmOf(info.ref.referrerId))} ${stChip(REF_ST, info.ref.status)}</div>`
+    : `<div style="margin:2px 0"><b>Tavsiya qilgan:</b> <span class="muted">yo‘q</span>${canReqDiscount()?` · <input id="${p}-refid" placeholder="o‘quvchi ID (IQ-…)" style="width:150px;padding:5px 8px;border:1px solid var(--border);border-radius:8px"> <button type="button" class="btn sm ghost2" id="${p}-refgo">Qayd etish</button>`:''}</div>`;
+  const givenLine = (info.given||[]).length ? `<div style="margin:2px 0"><b>U tavsiya qilganlar:</b> ${(info.given||[]).map(x=>`${esc(nmOf(x.id))} ${stChip(REF_ST, x.status)}`).join(' · ')}</div>` : '';
+  return `${cur('Amaldagi chegirma ('+m+')', e.cat, 'yo‘q — oddiy narx (monitoring / kasal kun avtomatik)')}${cur('Aka-uka', e.sib, 'avtomatik (oila bo‘yicha)')}
+    ${future.length?`<div style="margin:2px 0"><b>Keyingi oylardan:</b> ${future.map(r=>`${esc(discKindText(r))} <span class="muted">(${esc(discMonths(r))})</span>`).join(' · ')}</div>`:''}
+    ${refLine}${givenLine}
+    ${pend.length?`<div style="margin-top:8px"><b>Tasdiq kutilmoqda:</b>${pend.map(r=>`<div style="padding:4px 0;border-bottom:1px solid var(--border)">${esc(discKindText(r))} <span class="muted">· ${esc(discMonths(r))} · ${esc(discSlots(r))}</span>${(r.requestedBy===myUid||SESSION.isAdmin)?` <button type="button" class="btn sm ghost" data-drcancel="${esc(r.id)}">Bekor qilish</button>`:''}</div>`).join('')}</div>`:''}
+    ${hist.length?`<details style="margin-top:6px"><summary style="cursor:pointer" class="muted">So‘rovlar tarixi (${hist.length})</summary>${hist.map(r=>`<div style="padding:3px 0">${stChip(DISC_ST, r.status)} ${esc(discKindText(r))} <span class="muted">· ${esc(discMonths(r))}${r.directorNote?' · Direktor: '+esc(r.directorNote):''}${r.financeNote?' · Moliya: '+esc(r.financeNote):''}</span></div>`).join('')}</details>`:''}`;
+}
+function wireDiscBody(box, sid, p, reload){
+  box.querySelectorAll('[data-drcancel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('So‘rov bekor qilinsinmi?')) return; b.disabled=true;
+    try{ const r=await rpc('cancel_discount_request',{ p_id:b.dataset.drcancel }); if(r&&r.ok){ toast('So‘rov bekor qilindi'); reload(); } else { toast(r&&r.reason==='not_pending'?'So‘rov allaqachon ko‘rib chiqilgan':'Bo‘lmadi',true); b.disabled=false; } }
+    catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+(e.code||e.message)),true); b.disabled=false; } }));
+  const go=box.querySelector('#'+p+'-refgo'); if(go) go.addEventListener('click',async()=>{ const inp=box.querySelector('#'+p+'-refid'); const ref=String((inp&&inp.value)||'').trim();
+    if(!ref){ toast('Tavsiya qilgan o‘quvchi ID’sini yozing',true); return; } go.disabled=true;
+    try{ const r=await rpc('referral_register',{ p_new_sid:String(sid), p_referrer_sid:ref });
+      if(r&&r.ok){ toast('Tavsiya qayd etildi ✓ — bonus birinchi to‘lovdan keyin Moliya menejeri tasdig‘i bilan'); reload(); }
+      else { toast(({not_found:'Bunday o‘quvchi ID topilmadi', self:'O‘zini tavsiya qilib bo‘lmaydi', already:'Tavsiya allaqachon tasdiqlangan'})[r&&r.reason]||'Bo‘lmadi',true); go.disabled=false; } }
+    catch(e){ toast(String(e.code)==='42501'?'Ruxsat yo‘q':('Xatolik: '+(e.code||e.message)),true); go.disabled=false; } });
+}
+// O'quvchi formasidagi panel (faqat o'qish + so'rov tugmasi).
+function discPanelHtml(f, isEdit, row){
+  if(!isEdit) return `<div style="grid-column:1/-1" class="disc-panel"><label>${esc(f.l)}</label>
+    <input name="${f.k}" placeholder="Kim tavsiya qilgan — o‘quvchi ID (ixtiyoriy, masalan IQ-0012)" autocomplete="off">
+    <p class="small muted" style="margin:6px 0 0">Chegirma / grant — o‘quvchi saqlangandan keyin «💸 Chegirma so‘rash» orqali (Direktor va Moliya menejeri tasdiqlaydi). Tavsiya bonusi yangi o‘quvchi birinchi to‘lovni qilgach Moliya menejeri tasdig‘i bilan beriladi.</p></div>`;
+  return `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:12px;padding:10px 14px" class="disc-panel"><label>${esc(f.l)} 🔒</label>
+    <div class="disc-body small"><span class="muted">⏳ Yuklanmoqda…</span></div>
+    ${canReqDiscount()?`<div style="margin-top:8px"><button type="button" class="btn sm" data-dreq>💸 Chegirma so‘rash</button></div>`:''}
+    <div class="disc-new"></div>
+    <p class="small muted" style="margin:6px 0 0">Chegirma maydonlari bu formada o‘zgartirilmaydi — faqat so‘rov orqali (ikki tasdiq: Direktor + Moliya menejeri).</p></div>`; }
+function wireDiscPanel(row){
+  const panel=document.querySelector('#m-form .disc-panel'); if(!panel || !row) return;
+  const body=panel.querySelector('.disc-body'); if(!body) return;
+  const sid=String(row.studentId||row._id);
+  const load=async()=>{ try{ const info=await discStudentInfo(sid); if(!document.body.contains(body)) return; body.innerHTML=discInfoHtml(info, sid, 'dpi'); wireDiscBody(body, sid, 'dpi', load); }
+    catch(e){ if(document.body.contains(body)) body.innerHTML=`<span class="muted">Chegirma ma’lumotini o‘qib bo‘lmadi: ${esc(e.code||e.message)}</span>`; } };
+  load();
+  const btn=panel.querySelector('[data-dreq]'); if(btn) btn.addEventListener('click',()=>{ const box=panel.querySelector('.disc-new'); if(!box) return;
+    if(box.innerHTML){ box.innerHTML=''; return; }
+    box.innerHTML=discReqBlockHtml('dpf'); wireDiscReqBlock(box, 'dpf', sid, ()=>{ box.innerHTML=''; load(); }); });
+}
+// Alohida oyna: ro'yxatdagi «💸», olimpiada «🎓 Grant», «Tasdiqlash» → «+ Yangi so'rov».
+function openDiscountModal(st, opts){
+  const o=opts||{}; const sid=String(st.studentId||st._id);
+  $('#modal').innerHTML=`<div class="modal-h"><h3>💸 Chegirma — ${esc(st.name||sid)}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted" style="margin-bottom:8px">${esc(classLabelOf(st))} · ID ${esc(sid)}</div>
+      <div id="dm-info" class="small"><div class="loading">Yuklanmoqda…</div></div>
+      ${canReqDiscount()?`<h4 style="margin:14px 0 4px">Yangi so‘rov</h4>${discReqBlockHtml('dm', o)}`:''}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const info=$('#dm-info');
+  const load=async()=>{ try{ const d=await discStudentInfo(sid); if(!document.body.contains(info)) return; info.innerHTML=discInfoHtml(d, sid, 'dmi'); wireDiscBody(info, sid, 'dmi', load); }
+    catch(e){ if(document.body.contains(info)) info.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; } };
+  load();
+  if(canReqDiscount()) wireDiscReqBlock($('#modal'), 'dm', sid, ()=>{ load(); if(o.onDone) o.onDone();
+    const rs=document.getElementById('dm-reason'); if(rs) rs.value=''; const sb=document.getElementById('dm-send'); if(sb) sb.disabled=false; });
+}
+function openDiscountPicker(students){
+  const sopts=(students||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(s=>`<option value="${esc(String(s.studentId||s._id))}">${esc(s.name||'')} · ${esc(classLabelOf(s))}</option>`).join('');
+  $('#modal').innerHTML=`<div class="modal-h"><h3>💸 Yangi chegirma so‘rovi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">O‘quvchi<select id="dp-st" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;font:inherit"><option value="">— tanlang —</option>${sopts}</select></label></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="dp-go">Davom etish</button></div>`;
+  openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  $('#dp-go').onclick=()=>{ const v=$('#dp-st').value; const st=(students||[]).find(s=>String(s.studentId||s._id)===v); if(!st){ toast('O‘quvchini tanlang',true); return; } openDiscountModal(st); };
+}
+// «✅ Tasdiqlash» → «Chegirma va grant so'rovlari»: Direktor sloti va Moliya menejeri sloti.
+function discMySlot(){ return SESSION.isAdmin?'director':(SESSION.role==='finance_mgr'?'finance':''); }
+function discNeedsMe(r, slot, uid){ if(!r || r.status!=='pending') return false;
+  if(slot==='director') return r.directorOk==null && !(r.financeBy && String(r.financeBy)===uid);
+  if(slot==='finance') return r.financeOk==null && !(r.directorBy && String(r.directorBy)===uid);
+  return false; }
+// Pul ta'siri (taxminiy): asosiy narx bo'yicha, shu so'rov boshlanadigan oy fakturasi — oldin → keyin.
+function discImpactTxt(r, s, priceMap, appr){
+  if(!s) return '—'; const m=r.fromMonth||curMonth(); const base=priceOf(priceMap, s), okBase=isFinite(base)&&base>0;
+  const eff=discountEffective(appr, m); const cur=(eff.bySid[String(r.studentId)]||{})[discGroup(r.kind)]||null;
+  const priceBy=(k,p)=>{ if(k==='teacher_child') return okBase?Math.round(base*0.5):NaN; if(k==='olympiad'||k==='social') return 0; if(k==='contract') return Number((p||{}).contractAmount)||0; return okBase?base:NaN; };
+  if(discGroup(r.kind)==='cat'){ const before=cur?priceBy(cur.kind, cur.params):(okBase?base:NaN), after=priceBy(r.kind, r.params);
+    if(!isFinite(before)||!isFinite(after)) return r.kind==='contract'?`kontrakt: ${fmtSom(after)}/oy (sinf narxi jadvalda yo‘q)`:'sinf narxi jadvalda yo‘q';
+    const d=after-before; return `${esc(m)} fakturasi: ${fmtSom(before)} → <b>${fmtSom(after)}</b>${d<0?` (−${fmtSom(-d)}/oy)`:(d>0?` (+${fmtSom(d)}/oy)`:' (o‘zgarmaydi)')} <span class="muted">· asosiy narx bo‘yicha; monitoring/aka-uka/kasal kun alohida</span>`; }
+  if(!okBase) return 'aka-uka 10% — sinf narxi jadvalda yo‘q';
+  if(r.kind==='sibling_force') return `aka-uka 10%: ≈ −${fmtSom(Math.round(base*0.1))}/oy <span class="muted">(boshqa chegirma bo‘lmasa)</span>`;
+  if(r.kind==='sibling_exclude') return `aka-uka 10% berilmaydi: ≈ +${fmtSom(Math.round(base*0.1))}/oy <span class="muted">(avtomatik olayotgan bo‘lsa)</span>`;
+  return 'aka-uka chegirmasi oila bo‘yicha avtomatik hisoblanadi';
+}
+APPROVAL_QUEUES.push({ key:'discount', title:'Chegirma va grant so‘rovlari', roles:['director','finance_mgr'],
+  count: async()=>{ const s=await getDocs(query(collection(db,'discount_requests'), where('status','==','pending'))); const slot=discMySlot(), uid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
+    return s.docs.map(d=>d.data()||{}).filter(r=>discNeedsMe(r, slot, uid)).length; },
+  render: renderDiscountQueue });
+async function renderDiscountQueue(el){
+  const slot=discMySlot(), uid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
+  const [ps, students]=await Promise.all([ getDocs(query(collection(db,'discount_requests'), where('status','==','pending'))), (cache.students&&cache.students.length)?Promise.resolve(cache.students):loadCol('students','order') ]);
+  cache.students=students;
+  const byId={}; students.forEach(s=>{ byId[String(s.studentId||s._id)]=s; });
+  const pend=ps.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).sort((a,b)=>String(a.requestedAt||'').localeCompare(String(b.requestedAt||'')));
+  let priceMap={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }catch(e){}
+  let appr=[]; try{ const as=await getDocs(query(collection(db,'discount_requests'), where('status','==','approved'))); appr=as.docs.map(d=>({ id:d.id, ...(d.data()||{}) })); }catch(e){}
+  let cfgFrom=''; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()) cfgFrom=String((c.data()||{}).discountApprovalFrom||'').trim(); }catch(e){}
+  const nm=sid=>{ const s=byId[String(sid)]; return s?`<b>${esc(s.name||sid)}</b> <span class="small muted">· ${esc(classLabelOf(s))}</span>`:`<b>${esc(sid)}</b>`; };
+  const head = cfgFrom ? `<div class="small muted" style="margin-bottom:8px">Ikki tasdiq qoidasi <b>${esc(cfgFrom)}</b> oy fakturasidan boshlab bazada majburiy: grant, 50% va kontrakt faqat amaldagi tasdiqlangan so‘rov bilan.</div>`
+    : `<div class="small" style="margin-bottom:8px;padding:8px 12px;border-radius:10px;background:#FFFBF2;color:#B45309">⚠ O‘tish oyi belgilanmagan («Narx jadvali» → «Tasdiq qoidalari»): chegirma maydonlari baribir faqat so‘rov orqali o‘zgaradi, lekin baza fakturani hali tekshirmaydi.</div>`;
+  const legacy=appr.filter(r=>r.legacy);
+  const legacyHtml = (SESSION.isAdmin && legacy.length) ? `<details style="margin-top:10px"><summary class="small" style="cursor:pointer"><b>Avvaldan bor (meros) chegirmalar — ${legacy.length} ta</b> · bir marta ko‘rib chiqing</summary>
+    <div class="small" style="margin-top:6px">${legacy.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><span>${nm(r.studentId)} — ${esc(discKindText(r))}</span><button class="btn sm ghost2" data-dqopen="${esc(r.studentId)}">O‘zgartirish</button></div>`).join('')}</div>
+    <div class="small muted" style="margin-top:6px">Meros chegirmani o‘zgartirish yoki olib tashlash — «O‘zgartirish» → yangi so‘rov (masalan «Chegirmani olib tashlash»); ikkala tasdiqdan keyin amal qiladi.</div></details>` : '';
+  const card=r=>{ const s=byId[String(r.studentId)]; const need=discNeedsMe(r, slot, uid);
+    const mine = slot==='director' ? r.directorOk!=null : (slot==='finance' ? r.financeOk!=null : false);
+    const selfOther = slot==='director' ? (r.financeBy && String(r.financeBy)===uid) : (slot==='finance' ? (r.directorBy && String(r.directorBy)===uid) : false);
+    const st = need ? `<button class="btn sm gold" data-dok="${esc(r.id)}">✅ Tasdiqlash</button><button class="btn sm ghost" data-dno="${esc(r.id)}">✖ Rad etish</button>`
+      : (mine ? `<span class="small muted">Siz qaror qilgansiz — ${slot==='director'?'Moliya menejeri':'Direktor'} tasdig‘i kutilmoqda</span>`
+        : (selfOther ? '<span class="small muted">Siz boshqa slotda tasdiqlagansiz — ikkinchi tasdiqni boshqa odam beradi</span>' : ''));
+    return `<div class="card" style="padding:12px 16px;margin-bottom:10px" data-dreq-card="${esc(r.id)}">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div>${nm(r.studentId)}</div><div>${stChip(DISC_ST, r.status)}</div></div>
+      <div class="small" style="margin-top:6px"><b>${esc(discKindText(r))}</b> · ${esc(discMonths(r))}</div>
+      <div class="small muted">Sabab: ${esc(r.reason||'—')} · so‘ralgan: ${esc(fmtDT(r.requestedAt))}</div>
+      <div class="small" style="margin-top:4px">Tasdiqlar: ${esc(discSlots(r))}</div>
+      <div class="small" style="margin-top:4px">Pul ta’siri: ${discImpactTxt(r, s, priceMap, appr)}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">${st}</div></div>`; };
+  el.innerHTML=head+`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" id="dq-new">+ Yangi so‘rov</button></div>`
+    +(pend.length?pend.map(card).join(''):'<div class="empty">Kutilayotgan chegirma so‘rovi yo‘q ✓</div>')+legacyHtml;
+  const nb=el.querySelector('#dq-new'); if(nb) nb.addEventListener('click',()=>openDiscountPicker(students));
+  el.querySelectorAll('[data-dqopen]').forEach(b=>b.addEventListener('click',()=>{ const s=byId[String(b.dataset.dqopen)]; if(s) openDiscountModal(s, { onDone:()=>{} }); else toast('O‘quvchi topilmadi',true); }));
+  const decide=async(b, id, ok, note)=>{ b.disabled=true;
+    try{ const r=await rpc('discount_decide',{ p_id:id, p_approve:ok, p_note:note||null });
+      if(r && r.ok){ toast(r.status==='approved'?'Tasdiqlandi ✓ — chegirma kuchga kirdi (yaratilgan faktura bo‘lsa — «↻ Qayta hisoblash»)':(r.status==='rejected'?'Rad etildi':'Tasdiqlandi ✓ — ikkinchi tasdiq kutilmoqda')); renderApprovals(); }
+      else { toast(({self:'Bitta odam ikkala tasdiqni bera olmaydi — boshqa tasdiqlovchi ko‘rib chiqadi', slot_done:'Siz allaqachon qaror qilgansiz', not_pending:'So‘rov allaqachon ko‘rib chiqilgan', note_required:'Rad etish sababi yozilishi shart', not_found:'So‘rov topilmadi'})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
+    catch(e){ toast((String(e.code)==='42501'||String(e.code)==='23503')?String(e.message):('Xatolik: '+(e.code||e.message)),true); b.disabled=false; } };
+  el.querySelectorAll('[data-dok]').forEach(b=>b.addEventListener('click',()=>decide(b, b.dataset.dok, true)));
+  el.querySelectorAll('[data-dno]').forEach(b=>b.addEventListener('click',()=>{ const n=prompt('Rad etish sababi (so‘rovchiga ko‘rinadi):',''); if(n==null) return;
+    if(!n.trim()){ toast('Sabab yozilishi shart',true); return; } decide(b, b.dataset.dno, false, n.trim()); }));
+}
+// «✅ Tasdiqlash» → «Tavsiya bonuslari» (faqat Moliya menejeri): yangi o'quvchining birinchi haqiqiy to'lovidan keyin.
+APPROVAL_QUEUES.push({ key:'referral', title:'Tavsiya bonuslari (birinchi to‘lovdan keyin)', roles:['finance_mgr'],
+  count: async()=>{ const r=await rpc('referral_queue'); return (Array.isArray(r)?r:[]).filter(x=>x && x.payment).length; },
+  render: renderReferralQueue });
+async function renderReferralQueue(el){
+  const [list, students]=await Promise.all([ rpc('referral_queue'), (cache.students&&cache.students.length)?Promise.resolve(cache.students):loadCol('students','order') ]);
+  cache.students=students; const arr=Array.isArray(list)?list:[];
+  const byId={}; students.forEach(s=>{ byId[String(s.studentId||s._id)]=s; });
+  let refAmt=300000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const v=(c.data()||{}).referralAmount; if(v!=null && v!=='' && isFinite(Number(v))) refAmt=Number(v); } }catch(e){}
+  let warn=[]; try{ const w=await getDocs(query(collection(db,'referral_requests'), where('revokeWarn','==',true))); warn=w.docs.map(d=>({ id:d.id, ...(d.data()||{}) })); }catch(e){}
+  const nm=sid=>{ const s=byId[String(sid)]; return s?`<b>${esc(s.name||sid)}</b> <span class="small muted">· ${esc(classLabelOf(s))}</span>`:`<b>${esc(sid)}</b>`; };
+  const nmT=sid=>{ const s=byId[String(sid)]; return s?(s.name||sid):sid; };
+  const card=x=>{ const p=x.payment; return `<div class="card" style="padding:12px 16px;margin-bottom:10px" data-ref-card="${esc(x.id)}">
+    <div>Yangi o‘quvchi: ${nm(x.id)}${x.legacy?' <span class="chip">meros</span>':''}</div>
+    <div class="small" style="margin-top:4px">Tavsiya qilgan: ${nm(x.referrerId)}</div>
+    <div class="small" style="margin-top:4px">${p?`Birinchi to‘lov: <b>${fmtSom(p.amount)}</b> · ${esc(fmtDT(p.at))}${p.provider?' · '+esc(p.provider):''}`:'<span style="color:#B45309">Hali haqiqiy to‘lov yo‘q — tasdiqlab bo‘lmaydi</span>'}</div>
+    <div class="small" style="margin-top:4px">Bonus: tavsiya qilganning keyingi hisob-fakturasidan −${fmtSom(refAmt)}</div>
+    <div style="display:flex;gap:8px;margin-top:8px">${p?`<button class="btn sm gold" data-rok="${esc(x.id)}">✅ Tasdiqlash</button>`:''}<button class="btn sm ghost" data-rno="${esc(x.id)}">✖ Rad etish</button></div></div>`; };
+  el.innerHTML=(warn.length?`<div class="small" style="padding:8px 12px;border-radius:10px;background:#FDECEC;color:#B42318;margin-bottom:8px">⚠ ${warn.length} ta tavsiya bonusi allaqachon qo‘llangan, lekin yangi o‘quvchining birinchi to‘lovi bekor/qaytarilgan: ${warn.map(w=>esc(nmT(w.id))).join(', ')} — Direktor bilan qo‘lda hal qiling.</div>`:'')
+    +(arr.length?arr.map(card).join(''):'<div class="empty">Tasdiq kutayotgan tavsiya yo‘q ✓</div>');
+  const run=async(b, id, ok, note)=>{ b.disabled=true;
+    try{ const r=await rpc('referral_decide',{ p_id:id, p_approve:ok, p_note:note||null });
+      if(r && r.ok){ toast(r.status==='approved'?'Tasdiqlandi ✓ — bonus tavsiya qilganning keyingi fakturasida':'Rad etildi'); renderApprovals(); }
+      else { toast(({no_payment:'Yangi o‘quvchining haqiqiy to‘lovi hali yo‘q', not_pending:'Allaqachon ko‘rib chiqilgan', note_required:'Rad etish sababi yozilishi shart', not_found:'Topilmadi'})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
+    catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+(e.code||e.message)),true); b.disabled=false; } };
+  el.querySelectorAll('[data-rok]').forEach(b=>b.addEventListener('click',()=>run(b, b.dataset.rok, true)));
+  el.querySelectorAll('[data-rno]').forEach(b=>b.addEventListener('click',()=>{ const n=prompt('Rad etish sababi:',''); if(n==null) return; if(!n.trim()){ toast('Sabab yozilishi shart',true); return; } run(b, b.dataset.rno, false, n.trim()); }));
+}
+// Faktura yaratish oldidan: shu oyga ta'sir qilishi mumkin bo'lgan TASDIQLANMAGAN so'rovlar (chegirma, to'langan tavsiya).
+async function billingPendingWarn(month, students){
+  const byId={}; (students||[]).forEach(s=>{ byId[String(s.studentId||s._id)]=s; });
+  let pend=[]; try{ const ps=await getDocs(query(collection(db,'discount_requests'), where('status','==','pending')));
+    pend=ps.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).filter(r=>(!r.fromMonth || String(r.fromMonth)<=month) && (!r.toMonth || String(r.toMonth)>=month)); }catch(e){}
+  let refs=[]; try{ const q=await rpc('referral_queue'); refs=(Array.isArray(q)?q:[]).filter(x=>x && x.payment); }catch(e){}
+  if(!pend.length && !refs.length) return '';
+  const nm=sid=>{ const s=byId[String(sid)]; return s?(s.name||sid):sid; };
+  return `${month} hisob-fakturalari yaratilmoqda, lekin hali TASDIQLANMAGAN so‘rovlar bor:\n`
+    +(pend.length?`\n• ${pend.length} ta chegirma/grant so‘rovi:\n${pend.slice(0,10).map(r=>`   – ${nm(r.studentId)}: ${discKindText(r)}`).join('\n')}${pend.length>10?`\n   …yana ${pend.length-10}`:''}\n`:'')
+    +(refs.length?`\n• ${refs.length} ta tavsiya bonusi (to‘lov qilingan, Moliya menejeri tasdig‘i kutilmoqda)\n`:'')
+    +`\nHozir yaratilsa ular qo‘llanmaydi; tasdiqlangandan keyin «↻ Qayta hisoblash» qiling. Davom etilsinmi?`;
+}
 /* Firestore Timestamp → o'qiladigan sana-vaqt (izoh kiritilgan payt) */
 function fmtWhen(ts){ try{ const d = ts&&ts.toDate? ts.toDate() : (ts instanceof Date? ts : null); if(!d) return ''; return d.toLocaleDateString('ru-RU')+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 /* ---- Xarakteristika (o'quvchi profili) — choraklik ----
@@ -2861,7 +3144,7 @@ async function renderOlympiads(){
       <td data-label="Sana">${esc(o.date||'')}</td>
       <td data-label="Murabbiy" class="small muted">${esc(o.mentor||'')}</td>
       <td class="td-actions"><div class="row-actions">
-        ${SESSION.isAdmin?`<button class="btn sm ghost2" data-grant="${esc(o._id)}" title="Shu o‘quvchiga 100% grant (olimpiada) chegirmasini belgilash">🎓 Grant</button>`:''}
+        ${(SESSION.isAdmin||SESSION.role==='zavuch')?`<button class="btn sm ghost2" data-grant="${esc(o._id)}" title="Shu o‘quvchiga 100% grant (olimpiada) so‘rovi — Direktor va Moliya menejeri tasdiqlaydi">🎓 Grant</button>`:''}
         <button class="btn sm danger" data-del="${esc(o._id)}">O‘chir</button></div></td></tr>`).join('');
     $('#ol-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>Natijalar</h3><span class="cls-count">Jami ${ALL.length} · g‘oliblar ${winners}</span></div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Fan / Olimpiada</th><th>Daraja</th><th>Natija</th><th>Sana</th><th>Murabbiy</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
@@ -2874,10 +3157,9 @@ async function renderOlympiads(){
       const _cnt=(stByKey[String(o.studentId)]||[]).length, _st=stOf(o);
       if(!_st){ toast(_cnt>1?`«${o.studentId}» ID ${_cnt} ta o‘quvchida (takroriy) — grant kimga ekani noaniq. Takroriy ID’ni texnik yordam tuzatadi (ID bazada SQL bilan ko‘chiriladi) — ularga murojaat qiling.`:`«${o.studentId}» ID’li o‘quvchi topilmadi (o‘chirilgan bo‘lishi mumkin) — grant yozilmadi.`, true); return; }
       if(o.studentName && normName(o.studentName)!==normName(_st.name||'') && !confirm(`DIQQAT: olimpiada yozuvidagi ism «${o.studentName}», bazadagi o‘quvchi esa «${_st.name||''}» (${o.studentId}).\n\nGrant «${_st.name||''}» ga yozilsinmi?`)) return;
-      if(!confirm(`«${_st.name||o.studentId}» (${classLabelOf(_st)}, ID ${o.studentId}) — 100% grant (olimpiada) chegirmasi belgilanadi. Keyingi hisob-fakturalar 0 so‘m bo‘ladi. Davom etilsinmi?`)) return;
-      const _pid=String(_st._id);
-      try{ await setDoc(doc(db,'student_private',_pid),{specialCategory:'olympiad'},{merge:true}); toast('100% grant belgilandi ✓ («To‘lovlar»да qayta hisoblang)'); }
-      catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+      // D1: grant endi to'g'ridan-to'g'ri yozilmaydi — so'rov (Direktor + Moliya menejeri tasdig'i, discount-approval.sql).
+      const _why=`Olimpiada: ${o.subject||''}${o.name?' — '+o.name:''} · ${LVL[o.level]||o.level||''} · ${RES[o.result]||o.result||''}${o.date?' ('+o.date+')':''}`.replace(/\s+/g,' ').trim();
+      openDiscountModal(_st, { kind:'olympiad', reason:_why }); });
   };
   const openOlyForm=()=>{
     // Variant qiymati — hujjat _id (noyob); yozuvga o'quvchi kaliti (studentId||_id) saqlanadi.
@@ -3031,7 +3313,7 @@ async function openDataQuality(){
     + (allClean ? `<div class="card" style="padding:16px;border-color:#1F9982;color:#1F7A4D;font-weight:700">✓ Jiddiy ma'lumot xatosi topilmadi.</div>` : '')
     + sect('❌ Noto‘g‘ri ota-ona telefoni', '#B42318', 'To‘g‘ri yozilishi: O‘zbekiston — 998 XX XXX XX XX (yoki 9 xonali); chet el — <b>+</b> bilan, davlat kodi bilan to‘liq (masalan +7 903 123 45 67, +48 789 706 619). Noto‘g‘ri raqam bilan aka-uka chegirmasi (oila guruhlash) va SMS eslatma ishlamasligi mumkin.', badPhone)
     + sect('🌍 Faqat chet el raqami — SMS ketmaydi', '#1F6F8B', 'Raqam to‘g‘ri, lekin SMS (qarz eslatmasi, faktura xabari, kabinet kodi) faqat O‘zbekiston raqamlariga yuboriladi. Mumkin bo‘lsa ikkinchi maydonga O‘zbekistondagi raqamni ham yozing.', intlOnly)
-    + sect('⚠️ Kontrakt — summa kiritilmagan', '#B54708', '«Kontrakt» toifasi tanlangan, lekin oylik summa yo‘q → fakturaga tushmaydi (o‘tkazib yuboriladi).', contractNoAmt)
+    + sect('⚠️ Kontrakt — summa kiritilmagan', '#B54708', '«Kontrakt» toifasi tanlangan, lekin oylik summa yo‘q → fakturaga tushmaydi (o‘tkazib yuboriladi). Tuzatish: «💸 Chegirma so‘rash» → «Kontrakt» (summa bilan; Direktor va Moliya menejeri tasdiqlaydi).', contractNoAmt)
     + collHtml
     + dupHtml
     + (noPhone.length ? `<div class="small muted" style="margin-top:6px">ℹ️ ${noPhone.length} o‘quvchida ota-ona telefoni umuman yo‘q (ixtiyoriy — lekin aka-uka chegirmasi va kabinet uchun kerak).</div>` : '');
@@ -3044,6 +3326,7 @@ async function renderStudents(){
   const canWd=!canLife && canWithdrawStudent();   // ⏹️ faqat «Chiqarish» — qabulxona
   const canFin=canSeeStudentFinance();      // qarzdorlik ustuni/filtri — qabulxonaga HAM (ota-onaga xabar uchun)
   const canNote = SESSION.isAdmin || SESSION.role==='kassir' || SESSION.role==='finance_mgr' || SESSION.role==='treasurer' || SESSION.role==='reception';   // 📞 to'lov eslatmasi — to'lov bilan ishlovchilar + qabulxona (ota-onaga xabar uchun)
+  const canDisc = canReqDiscount();   // 💸 chegirma / grant / tavsiya — holat va so'rov (Direktor + Moliya menejeri tasdiqlaydi)
   $('#view').innerHTML = `<div class="page-head"><h2>O‘quvchilar <span id="stu-total" class="chip it" style="font-size:13px;vertical-align:middle">…</span></h2>
     <div class="ph-actions"><input id="stu-search" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off">
       <select id="stu-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
@@ -3152,12 +3435,15 @@ async function renderStudents(){
         <td data-label="Davomat %">${esc(r.attendance==null?'':r.attendance)}</td>
         <td data-label="Kod (ota-onaga)"><code style="font-weight:700;letter-spacing:1px">${esc(r._linkCode||'—')}</code>${r._linkCode?` <button class="btn sm ghost2" data-copycode="${esc(String(r.studentId||r._id))}|${esc(r._linkCode)}" title="O‘quvchi ID va kodni nusxalash — ota-ona kabinetда «Farzand qo‘shish» uchun">📋</button>`:''}</td>
         ${canFin?`<td data-label="To‘langan">${payCell(r.studentId||r._id)}</td>`:''}
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${(canWd && (r.payStatus||'')!=='chiqdi')?`<button class="btn sm ghost2" data-withdraw="${esc(r._id)}" title="O‘quvchini chiqarish (butunlay ketdi)">⏹️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
+        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-report="${esc(r._id)}" title="To‘liq ma’lumotnoma / hisobot">📄</button>${canNote?`<button class="btn sm ghost2" data-note="${esc(r.studentId||r._id)}" data-nm="${esc(r.name||'')}" title="📞 To‘lov eslatmasi (qarzdorga qo‘ng‘iroq)">📞</button>`:''}${canDisc?`<button class="btn sm ghost2" data-disc="${esc(r._id)}" title="Chegirma / grant / tavsiya — holati va so‘rov">💸</button>`:''}${canLife?`<button class="btn sm ghost2" data-status="${esc(r._id)}" title="Holat — Faollashtirish / Muzlatish / Chiqarish / Sinov">⏯️</button>`:''}${(canWd && (r.payStatus||'')!=='chiqdi')?`<button class="btn sm ghost2" data-withdraw="${esc(r._id)}" title="O‘quvchini chiqarish (butunlay ketdi)">⏹️</button>`:''}${canMng?`<button class="btn sm" data-edit="${esc(r._id)}">Tahrir</button>`:''}${canDel?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}</div></td>
       </tr>`).join('');
       return `<div class="card cls-card"><div class="cls-card-head"><h3>${esc(gradeName(g))}${grp&&grp!=='—'?` «${esc(grp)}»`:''}</h3><span class="chip ${lang==='ru'?'med':'it'}">${esc(langLbl(lang))}</span><span class="cls-count">${list.length} o‘quvchi</span></div><div class="tablewrap"><table><thead><tr>${canDel?`<th class="c" style="width:34px"><input type="checkbox" class="stu-selall" title="Guruhni belgilash"></th>`:''}<th>ID</th><th>Ism</th><th>Ota-ona tel.</th><th>Ball</th><th>Davomat %</th><th>Kod</th>${canFin?`<th>To‘langan${_payMonth?` <span style="font-weight:400;opacity:.65">(${esc(_payMonth)})</span>`:''}</th>`:''}<th></th></tr></thead><tbody>${trs}</tbody></table></div></div>`;
     }).join('');
     if(canMng){
       $('#cls-groups').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm('students', rows.find(r=>r._id===b.dataset.edit))));
+    }
+    if(canDisc){
+      $('#cls-groups').querySelectorAll('[data-disc]').forEach(b=>b.addEventListener('click',()=>{ const r=rows.find(x=>x._id===b.dataset.disc); if(r) openDiscountModal(r); }));
     }
     if(canLife){   // holat o'zgartirish faqat Ma'muriyat
       $('#cls-groups').querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>openStatusModal(rows.find(r=>r._id===b.dataset.status))));
@@ -3819,6 +4105,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
       return `<div><label>${esc(f.l)} 🔒</label><input name="${f.k}" type="text" value="${esc(cur)}" readonly ${isEdit?'':'placeholder="⏳ ID hisoblanmoqda…"'} style="background:#eef0ec;color:#667;cursor:not-allowed">
         <div class="pid-fix" data-k="${f.k}" style="display:none;margin-top:6px"></div>
         <p class="small muted" style="margin:6px 0 0">${isEdit?'ID pasport raqami kabi — o‘zgartirilmaydi (maosh, avans, qoldiq shu ID bilan bog‘langan).':'ID avtomatik beriladi; keyin o‘zgarmaydi va o‘chirilgandan keyin ham boshqa odamga qayta berilmaydi.'}</p></div>`; }
+    if(f.t==='discinfo') return discPanelHtml(f, isEdit, row);
     if(f.t==='select'){
       // Bazadagi qiymat variantlar ichida bo'lmasa (eski/qo'lda yozilgan) — u «joriy qiymat» sifatida tanlangan qoladi:
       //   aks holda brauzer birinchi variantni tanlab, boshqa maydon tahririda bu qiymat JIM almashib ketardi.
@@ -3910,6 +4197,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
   wireImages(name); wireVideos(name); populateDynselects(name, row); wireWeekdays();
+  if(name==='students' && isEdit) wireDiscPanel(row);
   if(name==='teachers') wireSalaryPanel(row);
   if(isEdit && row && (name==='teachers'||name==='staff')) wirePayrollIdFix(name, row);
   let _ins=null;   // yangi o'quvchi: yuborilgan INSERT {id, data} — javobi yo'qolsa keyingi «Saqlash» qatorni o'zimizniki deb taniydi
@@ -6142,7 +6430,8 @@ const CHLOG_TBL={ student_private:'O‘quvchi: chegirma/toifa', students:'O‘qu
   expenses:'Xarajat', price_table:'Narx jadvali', config:'Sozlamalar', monitoring:'Monitoring bali', salary_payments:'Maosh berish', staff_advances:'Xodim avansi',
   staff_substitutions:'O‘rinbosarlik', staff_leaves:'Ta’til / ruhsat / kasallik', staff_break_marks:'Sababli / o‘z hisobidan', school_holidays:'Bayram kunlari',
   teachers:'O‘qituvchi', staff:'Xodim', users:'Foydalanuvchi (rol)', attendance:'Davomat («Bemor»)',
-  student_credit:'Avans (balans)', credit_ledger:'Avans jurnali', referral_ledger:'Tavsiya bonusi', child_claims:'Ota-ona — farzand bog‘lanishi', student_codes:'Farzand kodi', sick_notes:'Ma’lumotnoma (bemor kuni)', student_health:'Sog‘liq kartasi', monitoring_bonus:'100 ball bonusi', monitoring_rounds:'Monitoring raundi' };
+  student_credit:'Avans (balans)', credit_ledger:'Avans jurnali', referral_ledger:'Tavsiya bonusi', child_claims:'Ota-ona — farzand bog‘lanishi', student_codes:'Farzand kodi', sick_notes:'Ma’lumotnoma (bemor kuni)', student_health:'Sog‘liq kartasi', monitoring_bonus:'100 ball bonusi', monitoring_rounds:'Monitoring raundi',
+  discount_requests:'Chegirma / grant so‘rovi', referral_requests:'Tavsiya so‘rovi' };
 const CHLOG_FLD={ paid:'Haqli (ta’til)', specialCategory:'Toifa', contractAmount:'Kontrakt summasi', siblingDiscount:'Aka-uka chegirmasi', referrerId:'Tavsiya qilgan', teacherId:'O‘qituvchi ID',
   payStatus:'Holat', activeFrom:'Faollashtirish sanasi', stopFrom:'To‘xtatish sanasi', pauses:'To‘xtatilgan davrlar', grade:'Sinf', classLetter:'Sinf harfi', track:'Yo‘nalish',
   lang:'Til', studentId:'O‘quvchi ID', month:'Oy', amount:'Summa', paidAmount:'To‘langan', status:'Holat', baseAmount:'Asosiy narx', discount:'Chegirma (so‘m)',
@@ -6158,7 +6447,11 @@ const CHLOG_FLD={ paid:'Haqli (ta’til)', specialCategory:'Toifa', contractAmou
   clickServiceId:'Click service ID', clickMerchantId:'Click merchant ID', uzumUrlTemplate:'Uzum havolasi',
   credit:'Avans', delta:'O‘zgarish', balanceAfter:'Qoldiq', assignedClasses:'Biriktirilgan sinflar', assignedSubjects:'Biriktirilgan fanlar',
   homeroomClasses:'Sinf rahbarligi', childIds:'Farzandlar', childId:'Farzand', phone:'Telefon (login)', email:'Email (login)', uid:'Foydalanuvchi', code:'Kod',
-  blockedRole:'Bloklashdan oldingi rol', blockedAt:'Bloklangan vaqt', blockedBy:'Kim bloklagan' };
+  blockedRole:'Bloklashdan oldingi rol', blockedAt:'Bloklangan vaqt', blockedBy:'Kim bloklagan',
+  kind:'Chegirma turi', params:'Parametrlar', fromMonth:'Boshlanish oyi', toMonth:'Tugash oyi', directorOk:'Direktor qarori', directorNote:'Direktor izohi',
+  financeOk:'Moliya menejeri qarori', financeNote:'Moliya menejeri izohi', firstPaymentId:'Birinchi to‘lov', revokeWarn:'To‘lov qaytarilgan (ogohlantirish)',
+  approvalRefs:'Chegirma tasdiqlari', referralUsedIds:'Qo‘llangan tavsiyalar', discountInfo:'Chegirma izohi', discountApprovalFrom:'Chegirma ikki tasdiq bilan (o‘tish oyi)',
+  invoiceCreators:'Hisob-faktura yaratuvchi', referralAmount:'Tavsiya bonusi summasi' };
 const CHLOG_OP={ INSERT:'qo‘shildi', UPDATE:'o‘zgardi', DELETE:'o‘chirildi' };
 function chlogVal(v){
   if(v===null||v===undefined||v==='') return '—';
@@ -7797,10 +8090,11 @@ async function renderPriceTable(){
   // inputlar bilan «Saqlash» narxlarни 0 ga yozib yuborardi. Xato -> ogohlantirib to'xtaymiz.
   const existing={}; try{ const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ existing[d.id]=d.data()||{}; }); }
   catch(e){ $('#pt-body').innerHTML=`<div class="card"><div class="empty">Mavjud narxlarni o‘qib bo‘lmadi: ${esc(e.code||e.message)}. Saqlash bloklandi (narxlar yo‘qolmasligi uchun). Internetni tekshirib qayta oching.</div></div>`; return; }
-  let sickRate=40000, allowBreak=60, lessonRate=40000, sickFrom='', bonusFrom='', monDay='';
+  let sickRate=40000, allowBreak=60, lessonRate=40000, sickFrom='', bonusFrom='', monDay='', discFrom='', refAmt=300000;
   try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const d=c.data()||{};
     if(Number(d.sickRate)>0) sickRate=Number(d.sickRate);
     sickFrom=String(d.sickApprovalFrom||'').trim(); bonusFrom=String(d.bonusApprovalFrom||'').trim();
+    discFrom=String(d.discountApprovalFrom||'').trim(); if(d.referralAmount!=null && d.referralAmount!=='' && isFinite(Number(d.referralAmount))) refAmt=Number(d.referralAmount);
     if(Number(d.lessonRate)>0) lessonRate=Number(d.lessonRate);
     if(d.allowedBreakMin!=null && d.allowedBreakMin!=='' && isFinite(Number(d.allowedBreakMin)) && Number(d.allowedBreakMin)>=0) allowBreak=Number(d.allowedBreakMin);
   } }catch(e){}
@@ -7819,6 +8113,12 @@ async function renderPriceTable(){
       <label>Tushlik/tanaffus (daq/kun)<input type="text" inputmode="numeric" id="pt-brkmin" value="${grp(allowBreak)}" style="text-align:right"></label>
       <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
     </div><div class="small muted" id="pt-msg" style="margin-top:8px"><b>Kasal kun stavkasi</b> — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Tushlik/tanaffus (daq/kun)</b> — kuniga haq to‘lanmaydigan tanaffus (masalan tushlik, 60 daq); kunlik sof ish soati = (ish vaqti − shu tanaffus). Davomat ushlanmasi SOATBAY hisoblanadi: soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat); kech/erta/«o‘z hisobidan»/yo‘qlama shu stavkada ayiriladi (alohida jarima summasi YO‘Q). Barcha xodim/o‘qituvchilarga amal qiladi; shaxsiy ish vaqti kartochkada belgilanadi.</div></div>
+    ${SESSION.isAdmin?`<div class="small" style="font-weight:800;letter-spacing:.3px;margin:6px 0 8px;color:#475467">TASDIQ QOIDALARI — faqat Direktor o‘zgartiradi (o‘tish oyidan boshlab baza fakturani tekshiradi)</div>
+    <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
+      <label>Chegirma va grant — Direktor + Moliya menejeri tasdig‘i bilan, qaysi oy fakturasidan<input type="month" id="pt-discfrom" value="${esc(discFrom)}"></label>
+      <label>Tavsiya bonusi (so‘m, bir martalik)<input type="text" inputmode="numeric" id="pt-refamt" value="${grp(refAmt)}" style="text-align:right"></label>
+      <label>&nbsp;<button class="btn" id="pt-disc-save" style="width:100%">Saqlash</button></label>
+    </div><div class="small muted" style="margin-top:8px">${discFrom?`Hozir: <b>${esc(discFrom)}</b> oy fakturasidan boshlab 100% grant, xodim farzandi 50% va kontrakt summasi faqat amaldagi (oylari mos) tasdiqlangan so‘rov bilan; tavsiya bonusi — faqat Moliya menejeri tasdiqlagani bilan. Oldingi oylar — eski qoida. Fakturalari yaratilgan oy uchun o‘zgartirib bo‘lmaydi.`:'<span style="color:#B45309">⚠ Hali belgilanmagan: chegirma maydonlari baribir faqat «💸 Chegirma so‘rash» orqali o‘zgaradi, lekin baza fakturani hali tekshirmaydi.</span> Hali faktura yaratilmagan oyni tanlang.'} Mavjud chegirmalar «avvaldan bor (meros)» deb belgilangan — «Tasdiqlash» bo‘limida bir marta ko‘rib chiqing. Hisob-faktura yaratish — faqat Direktor. Aka-uka 10% avtomatik qoladi.</div></div>`:''}
     ${SESSION.isAdmin?`<div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>«Bemor» kuni ma’lumotnoma bilan — qaysi oy fakturasidan<input type="month" id="pt-sickfrom" value="${esc(sickFrom)}"></label>
       <label>&nbsp;<button class="btn" id="pt-sickfrom-save" style="width:100%">O‘tish oyini saqlash</button></label>
@@ -7838,6 +8138,16 @@ async function renderPriceTable(){
     sfb.disabled=true;
     try{ await setDoc(doc(db,'config','finance'), {sickApprovalFrom:v, updatedAt:serverTimestamp()}, {merge:true}); toast('O‘tish oyi saqlandi ✓'); renderPriceTable(); }
     catch(e){ toast(String(e.code)==='23514'||String(e.code)==='22023'?String(e.message):('Xatolik: '+(e.code||e.message)),true); sfb.disabled=false; } });
+  const dsb=$('#pt-disc-save'); if(dsb) dsb.addEventListener('click',async()=>{ const v=String($('#pt-discfrom').value||'').trim(), ra=Number(String($('#pt-refamt').value||'').replace(/\D/g,''));
+    if(v && !/^\d{4}-\d{2}$/.test(v)){ toast('Oyni tanlang',true); return; }
+    if(!(isFinite(ra) && ra>=0 && ra<=100000000)){ toast('Tavsiya bonusi summasi noto‘g‘ri',true); return; }
+    const patch={};
+    if(v && v!==discFrom){ if(!confirm(`Chegirma va grant ${v} oy fakturasidan boshlab FAQAT Direktor va Moliya menejeri tasdiqlagan so‘rov bilan qo‘llanadi (tavsiya bonusi — Moliya menejeri tasdig‘i bilan). Bu oy va keyingi oylar fakturalari hali yaratilmagan bo‘lishi kerak. Davom etilsinmi?`)) return; patch.discountApprovalFrom=v; }
+    if(ra!==refAmt){ if(!confirm(`Tavsiya bonusi ${fmtSom(refAmt)} → ${fmtSom(ra)}. Yangi summa keyingi qo‘llanadigan bonuslarga amal qiladi (qo‘llanganlari o‘zgarmaydi). Davom etilsinmi?`)) return; patch.referralAmount=ra; }
+    if(!Object.keys(patch).length){ toast('O‘zgarish yo‘q'); return; }
+    dsb.disabled=true;
+    try{ await setDoc(doc(db,'config','finance'), Object.assign(patch, {updatedAt:serverTimestamp()}), {merge:true}); toast('Saqlandi ✓'); renderPriceTable(); }
+    catch(e){ toast(['23514','22023','42501'].includes(String(e.code))?String(e.message):('Xatolik: '+(e.code||e.message)),true); dsb.disabled=false; } });
   const bsb=$('#pt-bonus-save'); if(bsb) bsb.addEventListener('click',async()=>{ const v=String($('#pt-bonusfrom').value||'').trim(), dl=Number($('#pt-mondl').value);
     if(!(dl>=1 && dl<=28)){ toast('Kiritish muddati: 1–28',true); return; }
     if(v && !/^\d{4}-\d{2}$/.test(v)){ toast('Oyni tanlang',true); return; }
@@ -8147,7 +8457,7 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn, monPctFn){
       const phCnt={}; members.forEach(s=>{ (info[s.studentId||s._id].phones||[]).forEach(p=>{ phCnt[p]=(phCnt[p]||0)+1; }); });
       const ph=Object.keys(phCnt).sort((a,b)=>phCnt[b]-phCnt[a])[0]||'';
       const who=members.slice(0,12).map(s=>`${s.name||''} (${s.studentId||s._id})`).join(', ')+(size>12?` …yana ${size-12}`:'');
-      conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon …${ph.slice(-4)}): ${who} — avtomatik chegirma berilmadi; begona bolani «Aka-uka chegirmasi: Yo‘q» bilan chiqaring yoki aka-ukaga «Ha» qo‘ying`);
+      conflicts.push(`Oila hajmi ${size} > ${CAP} (umumiy telefon …${ph.slice(-4)}): ${who} — avtomatik chegirma berilmadi; begona bolani «💸 Chegirma so‘rash» → «Aka-uka — oiladan chiqarish» bilan chiqaring yoki aka-ukaga «Aka-uka 10% — majburan» so‘rang`);
     } else if(billCount>=3){
       // 3+ (fakturaga tushadigan) aka-uka -> HAR BIR mos o'quvchiga 10%.
       elig.forEach(m=>tenHolders.add(m.sid));
@@ -8170,7 +8480,7 @@ function computeSiblingSet(students, privOf, scoreFn, canBillFn, monPctFn){
     const a=sids[i], b=sids[j]; const ra=find(a), rb=find(b); if(ra===rb) continue;
     const common=[...loose[a]].find(x=>loose[b].has(x)); if(!common) continue;
     const key=[ra,rb].sort().join('|'); if(hinted.has(key) || hints>=10) continue; hinted.add(key); hints++;
-    conflicts.push(`Ehtimoliy aka-uka guruhlanmadi: ${nm[a]} (${a}) va ${nm[b]} (${b}) — bir telefon, umumiy so‘z «${common}». Aka-uka bo‘lsa ota/ona F.I.Sh ni bir xil to‘ldiring yoki «Aka-uka chegirmasi: Ha» qo‘ying`); } });
+    conflicts.push(`Ehtimoliy aka-uka guruhlanmadi: ${nm[a]} (${a}) va ${nm[b]} (${b}) — bir telefon, umumiy so‘z «${common}». Aka-uka bo‘lsa ota/ona F.I.Sh ni bir xil to‘ldiring yoki «💸 Chegirma so‘rash» → «Aka-uka 10% — majburan» so‘rang`); } });
   return { tenHolders, conflicts, famBill };
 }
 // ---- Prorata (oy o'rtasida kelgan/ketgan) — ISH KUNLARI (Dush–Juma) bo'yicha ----
@@ -8297,7 +8607,9 @@ function computeTuition(s, priv, ctx){
   //   referral) net'ni 0 qilsa — hisob «to'landi» bo'ladi, lekin «Grant» yorlig'i QO'YILMAYDI (provider='').
   //   Shu bilan chegirmasiz 0-hisob xato «Grant» ko'rinmaydi (oldin net===0 hammasini grant qilardi).
   const status=(net===0)?'paid':'pending';
-  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, sickRefs, bonusRef, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
+  // approvalRefs — chegirma tasdiqlari (discount-approval.sql): pmLoadCtx samarali maxfiy maydonlarga qo'shadi (_approvalRefs).
+  const approvalRefs=Array.isArray(pv._approvalRefs)?pv._approvalRefs.slice():[];
+  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, sickRefs, bonusRef, approvalRefs, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
 }
 // Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
@@ -8310,12 +8622,13 @@ function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
 // Referralni BIRLIK (300k) bo'yicha qo'llaydi: ledgerdagi mavjud referrallar (recalcда qayta) + yangi
 // pendinglar FAQAT to'liq 300k sig'sa. Qolgan pending keyingi oyга o'tadi (kredit yo'qolmaydi).
 // Qaytaradi: {applied, usedIds} — usedIds ledgerga yoziladigan (haqiqatan qo'llangan) yangi referrallar.
-function applyReferralUnits(t, existAmt, pendingIds){
+function applyReferralUnits(t, existAmt, pendingIds, unit){
   existAmt=Number(existAmt)||0; pendingIds=pendingIds||[];
   if(t.skip || t.net<=0) return { applied:0, usedIds:[] };
   let applied=Math.min(existAmt, t.net);          // mavjud (ledgerdagi) referrallar — net fresh bo'lgani uchun qayta qo'llanadi
-  const UNIT=300000, room=t.net-applied;
-  const n=Math.max(0, Math.min(pendingIds.length, Math.floor(room/UNIT)));   // faqat to'liq sig'gan yangi referrallar
+  // Birlik — config/finance."referralAmount" (standart 300 000; 0 — yangi bonus berilmaydi).
+  const UNIT=(unit==null||unit==='')?300000:Number(unit), room=t.net-applied;
+  const n=(UNIT>0 && isFinite(UNIT)) ? Math.max(0, Math.min(pendingIds.length, Math.floor(room/UNIT))) : 0;   // faqat to'liq sig'gan yangi referrallar
   applied += n*UNIT;
   const usedIds=pendingIds.slice(0, n);
   if(applied>0){ t.net-=applied; t.discount+=applied;
@@ -8338,7 +8651,10 @@ function reconcileInvoice(inv, t){
     || (!!iv.isGrant)!==(!!t.isGrant) || (iv.provider==='grant' && !t.isGrant);   // eski STALE 'grant' yorlig'ini ham tozalash
   return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant, changed };
 }
-function pmReferralMaps(students, privOf, ledger, month){
+// opts (D1, discount-approval.sql): { newRule — o'tish oyidan faqat Moliya menejeri TASDIQLAGAN tavsiya (referral_requests
+//   status 'approved' → approved {yangiId: tavsiyaQilganId}); unit — bonus summasi (config/finance."referralAmount") }.
+function pmReferralMaps(students, privOf, ledger, month, opts){
+  const o=opts||{}; const UNIT=(o.unit==null||o.unit==='')?300000:Number(o.unit);
   const knownIds=new Set(students.map(s=>String(s.studentId||s._id)));
   const ledgerIds=new Set((ledger||[]).map(l=>l.id));
   const existRef={}; (ledger||[]).forEach(l=>{ if(l.month===month && l.referrerId) existRef[l.referrerId]=(existRef[l.referrerId]||0)+(Number(l.amount)||0); });
@@ -8349,10 +8665,11 @@ function pmReferralMaps(students, privOf, ledger, month){
   const prevMonth=m=>{ const y=+m.slice(0,4), mo=+m.slice(5,7); return mo===1?`${y-1}-12`:`${y}-${String(mo-1).padStart(2,'0')}`; };
   const studying=s=>{ let m=String(month||''); if(!/^\d{4}-\d{2}$/.test(m)) return false;
     for(let i=0;i<24;i++){ const bi=billingInterval(s, m); if(!(bi && bi.skip)) return true; m=prevMonth(m); } return false; };
-  const pendingRef={}; students.forEach(s=>{ const nid=String(s.studentId||s._id); const rid=String((privOf(nid)||{}).referrerId||'').trim();
+  const pendingRef={}; students.forEach(s=>{ const nid=String(s.studentId||s._id);
+    const rid=o.newRule ? String(((o.approved||{})[nid])||'').trim() : String((privOf(nid)||{}).referrerId||'').trim();
     if(rid && rid!==nid && knownIds.has(rid) && !ledgerIds.has(nid) && studying(s)) (pendingRef[rid]=pendingRef[rid]||[]).push(nid); });
-  const refAmtOf=sid=>(existRef[sid]||0)+((pendingRef[sid]||[]).length*300000);
-  return { existRef, pendingRef, refAmtOf };
+  const refAmtOf=sid=>(existRef[sid]||0)+((pendingRef[sid]||[]).length*(UNIT>0?UNIT:0));
+  return { existRef, pendingRef, refAmtOf, unit:UNIT };
 }
 // Generatsiya/qayta-hisoblash uchun umumiy kontekst: narx jadvali, maxfiy maydonlar, kasal kun, aka-uka, referral ledger.
 // BEMOR KUNI (o'tish oyidan boshlab, nurse-sick.sql): month fakturasiga tushadigan MA'LUMOTNOMA kunlari. notes — TASDIQLANGAN
@@ -8392,11 +8709,28 @@ async function pmLoadCtx(month, students, amount){
   // bilan topilishi uchun studentId'ni _id ning maxfiy ma'lumotiga taxallus (alias) qilamiz.
   students.forEach(s=>{ const sid=String(s.studentId||''), _id=String(s._id||'');
     if(sid && _id && sid!==_id && privMap[_id] && !privMap[sid]) privMap[sid]=privMap[_id]; });
-  const privOf=sid=>privMap[sid]||{};
+  const privRawOf=sid=>privMap[sid]||{};
   const priceMap={}; { const pt=await getDocs(collection(db,'price_table')); pt.docs.forEach(d=>{ priceMap[d.id]=Number((d.data()||{}).amount)||0; }); }
   // Ikkilamchi — xato bo'lsa xavfsiz default (kasal=0, referral yo'q).
-  let sickRate=40000, sickFrom='', bonusFrom=''; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const cd=c.data()||{};
-    if(Number(cd.sickRate)>0) sickRate=Number(cd.sickRate); sickFrom=String(cd.sickApprovalFrom||'').trim(); bonusFrom=String(cd.bonusApprovalFrom||'').trim(); } }catch(e){}
+  let sickRate=40000, sickFrom='', bonusFrom='', discFrom='', refUnit=300000; try{ const c=await getDoc(doc(db,'config','finance')); if(c.exists()){ const cd=c.data()||{};
+    if(Number(cd.sickRate)>0) sickRate=Number(cd.sickRate); sickFrom=String(cd.sickApprovalFrom||'').trim(); bonusFrom=String(cd.bonusApprovalFrom||'').trim();
+    discFrom=String(cd.discountApprovalFrom||'').trim();
+    if(cd.referralAmount!=null && cd.referralAmount!=='' && isFinite(Number(cd.referralAmount)) && Number(cd.referralAmount)>=0) refUnit=Number(cd.referralAmount); } }catch(e){}
+  // CHEGIRMA TASDIG'I (D1, discount-approval.sql): toifa / kontrakt summasi / aka-uka belgisi — shu oyda amal qiladigan TASDIQLANGAN
+  //   so'rovdan (eng so'nggisi; muddati tugagan yoki hali boshlanmagani — qo'llanmaydi). O'tish oyidan (config/finance.
+  //   discountApprovalFrom) — KRITIK (o'qilmasa XATO) va faqat so'rov; oldingi oylar — so'rovi yo'q o'quvchi uchun student_private.
+  //   approvalRefs (fakturaga) — baza shu ishoralarni tekshiradi (grant / 50% / kontrakt).
+  const discNewRule=!!discFrom && String(month)>=discFrom;
+  let discEff=null;
+  try{ const ds=await getDocs(query(collection(db,'discount_requests'), where('status','==','approved')));
+    discEff=discountEffective(ds.docs.map(d=>({ id:d.id, ...(d.data()||{}) })), month); }
+  catch(e){ if(discNewRule) throw e; discEff=null; }
+  const _effPriv={};
+  const privOf=sid=>{ const k=String(sid); if(!discEff) return privRawOf(k); return _effPriv[k]||(_effPriv[k]=discApplyEff(privRawOf(k), discEff, k, discNewRule)); };
+  // Tavsiya (yangi qoida): faqat Moliya menejeri TASDIQLAGAN (hali qo'llanmagan) tavsiyalar — KRITIK.
+  let refApproved=null; if(discNewRule){ const rs=await getDocs(query(collection(db,'referral_requests'), where('status','==','approved')));
+    refApproved={}; rs.docs.forEach(d=>{ const x=d.data()||{}; refApproved[d.id]=String(x.referrerId||''); }); }
+  const refOpts={ newRule:discNewRule, approved:refApproved, unit:refUnit };
   // O'tish oyi (D1): shu oydan boshlab fakturadagi kasal kunlari FAQAT tasdiqlangan ma'lumotnomadan; oldingi oylar — eski qoida
   //   (davomatdagi «Bemor»). Sozlama o'qilmasa — eski qoida; o'tish oyidan keyingi faktura bo'lsa baza uni rad etadi (jim xato yo'q).
   const sickNewRule=!!sickFrom && String(month)>=sickFrom;
@@ -8487,7 +8821,7 @@ async function pmLoadCtx(month, students, amount){
   const { tenHolders, conflicts, famBill } = computeSiblingSet(students, privOf, s=>monScoreFn(s.studentId||s._id), canBill, s=>monPctOf(s.studentId||s._id));
   const ctx={ month, priceMap, flatAmount:amount, priceEmpty:!Object.keys(priceMap).length, sickRate, tenHolders, sickDaysFn:sid=>sickNewRule?((sickNote[sid]||{}).n||0):(sickMap[sid]||0),
     sickRefsFn:sid=>sickNewRule?((sickNote[sid]||{}).refs||{}):{}, sickNewRule, monScoreFn, monMonth, bonusNewRule, monFullFn, bonusFn };
-  return { privOf, priceMap, sickRate, tenHolders, conflicts, famBill, ctx, ledger, monMonth, priceEmpty:!Object.keys(priceMap).length };
+  return { privOf, priceMap, sickRate, tenHolders, conflicts, famBill, ctx, ledger, monMonth, refOpts, discNewRule, priceEmpty:!Object.keys(priceMap).length };
 }
 // ==== TIBBIYOT (hamshira + direktor) — D1: «Bemor» kuni ma'lumotnoma bilan, jurnal, sog'liq kartasi (nurse-sick.sql) ====
 //   Ma'lumotnoma nusxasi YOPIQ «medical» bucket'da (notes/<studentId>/<uuid>.<ext>, ustiga yozilmaydi, o'chirilmaydi);
@@ -9156,9 +9490,11 @@ async function renderPayments(){
     const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
     try{
       // --- Chegirma dvigateli konteksti (narx, maxfiy maydonlar, kasal kun, aka-uka, referral) ---
-      const { privOf, conflicts, ctx, ledger, priceEmpty } = await pmLoadCtx(month, students, amount);
+      const { privOf, conflicts, ctx, ledger, priceEmpty, refOpts } = await pmLoadCtx(month, students, amount);
       if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; }
-      const { existRef, pendingRef } = pmReferralMaps(students, privOf, ledger, month);
+      // Hali tasdiqlanmagan chegirma so'rovlari / to'langan tavsiyalar shu oy fakturasiga ta'sir qilishi mumkin (D1) — ogohlantiramiz.
+      { const warn=await billingPendingWarn(month, students); if(warn && !confirm(warn)){ btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; } }
+      const { existRef, pendingRef, unit:refUnit } = pmReferralMaps(students, privOf, ledger, month, refOpts);
       // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       const existing=new Set(snap.docs.map(d=>d.id));
@@ -9176,21 +9512,21 @@ async function renderPayments(){
           const t=computeTuition(s, privOf(sid), ctx);
           if(t.skip){ if(!t.statusSkip) skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }   // sinov/muzlatilgan/chiqdi -> jim o'tkaziladi
           if(t.fallback) fallbackList.push(`${s.name||sid} [${t.priceKey}]`);   // narx jadvalidа yo'q -> zaxira summа qo'llandi (tekshirilsin)
-          const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[]);
+          const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[], refUnit);
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
-            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, sickNoteRefs:t.sickRefs||{}, bonusRef:t.bonusRef||'', priceKey:t.priceKey,
+            pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, sickNoteRefs:t.sickRefs||{}, bonusRef:t.bonusRef||'', approvalRefs:t.approvalRefs||[], priceKey:t.priceKey,
             billedFrom:t.billedFrom||'', billedTo:t.billedTo||'',   // hisoblangan kunlar oralig'i (discounts.sql ustunlari)
             referralUsedIds:rRef.usedIds,   // qaysi referrallar BU invoice'da ishlatilgani (repair/audit uchun)
             status:t.status, provider:t.isGrant?'grant':'', paidAmount:0, createdAt:serverTimestamp() };
           if(t.status==='paid') inv.paidAt=serverTimestamp();
           batch.set(doc(db,'invoices',id), inv); created++; wrote=true; if(t.discount>0) discounted++;
           // Referral ledgeri SHU BATCHDA (invoice bilan birga commit bo'ladi) — alohida oxirgi batch desync bermasin.
-          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>{ batch.set(doc(db,'referral_ledger',String(nid)), {referrerId:sid, amount:300000, month, appliedAt:serverTimestamp()}); referrals++; }); });
+          if(rRef.usedIds.length) rRef.usedIds.forEach(nid=>{ batch.set(doc(db,'referral_ledger',String(nid)), {referrerId:sid, amount:refUnit, month, appliedAt:serverTimestamp()}); referrals++; }); });
         if(wrote) await batch.commit();
       }
       // Yetishmayotgan ledger qatorlarini tiklaymiz (REPAIR — mavjud invoice'lar uchun).
-      for(let i=0;i<repairLedger.length;i+=400){ const b=writeBatch(db); repairLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:300000, month, appliedAt:serverTimestamp()}); referrals++; }); await b.commit(); }
+      for(let i=0;i<repairLedger.length;i+=400){ const b=writeBatch(db); repairLedger.slice(i,i+400).forEach(x=>{ b.set(doc(db,'referral_ledger',x.id), {referrerId:x.referrerId, amount:refUnit, month, appliedAt:serverTimestamp()}); referrals++; }); await b.commit(); }
       // HOLATI bo'yicha shu oy faktura talab qilmaydigan (sinov/chiqgan/muzlatilgan/keyinroq faollashtirilgan),
       //   lekin oldindan yaratilgan TO'LANMAGAN fakturasi bor o'quvchilar — ularning avansi shu «fantom»
       //   fakturaga yeb qo'yilmasin: avans qo'llash o'tkaziladi, admin «↻ Qayta hisoblash» bilan bekor qiladi.
@@ -9211,7 +9547,7 @@ async function renderPayments(){
       // --- Hisobot ---
       const parts=[];
       parts.push(created?`${created} ta hisob-faktura yaratildi${discounted?` (${discounted} tasida chegirma)`:''}.`:'Yangi hisob-faktura yaratilmadi (barchasi mavjud yoki o‘tkazildi).');
-      if(referrals) parts.push(`${referrals} referral × 300 000 chegirma qo‘llandi.`);
+      if(referrals) parts.push(`${referrals} tavsiya bonusi × ${fmtSom(refUnit)} chegirma qo‘llandi.`);
       if(settled) parts.push(`${settled} o‘quvchida avans qo‘llandi.`);
       let html=esc(parts.join(' '));
       if(skipped.length) html+=`<div style="margin-top:8px;color:#B45309"><b>⚠️ ${skipped.length} o‘quvchi o‘tkazib yuborildi (narx/kontrakt yo‘q):</b><div class="small">${skipped.slice(0,25).map(esc).join(' · ')}${skipped.length>25?` …yana ${skipped.length-25}`:''}</div></div>`;
@@ -9233,8 +9569,8 @@ async function renderPayments(){
     if(!confirm('Bu oydagi KUTILAYOTGAN, QISMAN to‘langan va «Grant / 0 so‘m» (naqd kelmagan) hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring, aka-uka…) bo‘yicha qayta hisoblanadi.\nHAQIQATAN to‘langan (naqd tushgan) hisoblar narxi oshsa tegilmaydi — qarz tiklanmaydi; narxi KAMAYGANlari alohida so‘raladi (farq avansga). Chegirma/grant olib tashlangan o‘quvchi to‘liq narxga qaytadi. Davom etilsinmi?')) return;
     const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
     try{
-      const { privOf, ctx, ledger, conflicts, famBill } = await pmLoadCtx(month, students, amount);
-      const { existRef, pendingRef } = pmReferralMaps(students, privOf, ledger, month);
+      const { privOf, ctx, ledger, conflicts, famBill, refOpts } = await pmLoadCtx(month, students, amount);
+      const { existRef, pendingRef, unit:refUnit } = pmReferralMaps(students, privOf, ledger, month, refOpts);
       const byId={}; students.forEach(s=>{ byId[s.studentId||s._id]=s; });
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
       // KUTILAYOTGAN/QISMAN to'langan — qayta hisoblanadi. HAQIQATAN to'langan (paidAmount>0) tegilmaydi
@@ -9268,7 +9604,7 @@ async function renderPayments(){
           const item={ d, inv, sid, name:s.name||sid, reason:t.statusReason||'faol emas', paid:(inv.status==='paid'?Math.max(Number(inv.paidAmount)||0, (inv.isGrant||inv.provider==='grant')?0:(Number(inv.amount)||0)):(Number(inv.paidAmount)||0)) };
           (statusSkipCertain(t.statusCode, month, curTM) ? toCancel : review).push(item); return; }
         if(t.skip){ skipped++; return; }
-        const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[]);
+        const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[], refUnit);
         const rc=reconcileInvoice(inv, t);
         if(!rc.changed && !isStCanceled(inv)) return;   // o'zgarish yo'q
         work.push({ d, inv, sid, s, t, rRef, rc }); });
@@ -9283,14 +9619,14 @@ async function renderPayments(){
       const decInfo=[];
       paidDocs.forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s) return;
         const t=computeTuition(s, privOf(sid), ctx); if(t.skip) return;
-        const rRef=applyReferralUnits(t, existRef[sid]||0, []);
+        const rRef=applyReferralUnits(t, existRef[sid]||0, [], refUnit);
         const paid=cashPaidOf(inv), net=Math.round(t.net); if(!(net < paid)) return;
         const item={ d, inv, sid, s, t, rRef, rc:{ isGrant:!!t.isGrant, amount:net }, paid, net, name:s.name||sid };
         const oldPct=Number(inv.pctApplied)||0, oldInfo=String(inv.discountInfo||'');
         // ANIQ tekshiruv: aka-uka chegirmasiz qayta hisoblangan narx (o'sha kasal kun, prorata, referral bilan) to'langan
         //   summaga TENG bo'lsin — ya'ni farq FAQAT kechikib qo'llangan 10% (holat/prorata/kasal o'zgarishi aralashmasin).
         const t0=computeTuition(s, privOf(sid), Object.assign({}, ctx, { tenHolders:new Set() }));
-        if(!t0.skip) applyReferralUnits(t0, existRef[sid]||0, []);
+        if(!t0.skip) applyReferralUnits(t0, existRef[sid]||0, [], refUnit);
         const sibOnly = t.pct===0.10 && /Aka-uka/.test(String(t.info||'')) && oldPct===0 && !/Aka-uka|Monitoring|grant|Grant/.test(oldInfo)
           && !t0.skip && t0.pct===0 && Math.abs(Math.round(t0.net)-paid)<=1
           && (inv.baseAmount==null || inv.baseAmount==='' || Math.round(Number(inv.baseAmount))===Math.round(t.base))
@@ -9307,14 +9643,14 @@ async function renderPayments(){
       // Har faktura — qulflangan RPC (reprice_invoice): JORIY (qulf ostidagi) to'lov bilan qayta hisoblanadi,
       //   oraliqda kelgan to'lov ustiga YOZILMAYDI. RPC yo'q (eski baza) -> avvalgi (snapshot) yo'l.
       const metaOf=w=>({ studentName:(w.s.name||w.inv.studentName||w.sid), classKey:classKeyOf(w.s), baseAmount:w.t.base, discount:w.t.discount,
-        discountInfo:w.t.info, isGrant:!!w.rc.isGrant, pctApplied:w.t.pct, sickDaysApplied:w.t.sickN, sickAmount:w.t.sickAmt, sickNoteRefs:w.t.sickRefs||{}, bonusRef:w.t.bonusRef||'', priceKey:w.t.priceKey,
+        discountInfo:w.t.info, isGrant:!!w.rc.isGrant, pctApplied:w.t.pct, sickDaysApplied:w.t.sickN, sickAmount:w.t.sickAmt, sickNoteRefs:w.t.sickRefs||{}, bonusRef:w.t.bonusRef||'', approvalRefs:w.t.approvalRefs||[], priceKey:w.t.priceKey,
         billedFrom:w.t.billedFrom||'', billedTo:w.t.billedTo||'', referralUsedIds:w.rRef.usedIds });
       const legacyWrite=async w=>{   // eski baza: avvalgi xatti-harakat (avans add_credit bilan AVVAL, keyin faktura)
         if(w.rc.creditExcess>0){ await rpc('add_credit', { p_sid:String(w.sid), p_delta:w.rc.creditExcess, p_reason:'recompute', p_note:'Qayta hisoblash: narx kamaydi, ortiqcha to‘lov avansga', p_ref:'recompute:'+w.d.id+':'+Math.round(w.rc.amount) }); avans++; }
         await setDoc(doc(db,'invoices',w.d.id), Object.assign({ amount:w.rc.amount, status:w.rc.status, paidAmount:w.rc.paidAmount,
           provider:(w.rc.isGrant && !(Number(w.inv.paidAmount)>0))?'grant':((w.inv.provider==='grant')?'':(w.inv.provider||'')),
           paidAt:(w.rc.status==='paid'?(w.inv.paidAt||serverTimestamp()):null) }, metaOf(w)), {merge:true});
-        for(const nid of (w.rRef.usedIds||[])) await setDoc(doc(db,'referral_ledger',String(nid)), {referrerId:w.sid, amount:300000, month, appliedAt:serverTimestamp()});
+        for(const nid of (w.rRef.usedIds||[])) await setDoc(doc(db,'referral_ledger',String(nid)), {referrerId:w.sid, amount:refUnit, month, appliedAt:serverTimestamp()});
         changed++; };
       const runOne=async w=>{
         if(!legacy){ try{ const r=await rpc('reprice_invoice', { p_id:w.d.id, p_net:w.rc.amount, p_meta:metaOf(w), p_cancel:false });
