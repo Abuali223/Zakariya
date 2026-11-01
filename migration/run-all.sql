@@ -111,6 +111,7 @@ set local iqror.migrating = '1';
 \ir nurse-sick.sql
 \ir bonus-100.sql
 \ir discount-approval.sql
+\ir payroll-approval.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

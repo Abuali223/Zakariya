@@ -498,6 +498,6 @@ create trigger trg_invoice_discount_guard before insert or update on public.invo
 select app.chlog_attach('discount_requests', 'studentId,kind,params,fromMonth,toMonth,status,directorOk,directorNote,financeOk,financeNote');
 select app.chlog_attach('referral_requests', 'referrerId,status,firstPaymentId,decisionNote,revokeWarn');
 select app.chlog_attach('invoices',          'studentId,month,amount,paidAmount,status,baseAmount,discount,discountInfo,pctApplied,isGrant,sickAmount,sickDaysApplied,sickNoteRefs,bonusRef,approvalRefs,referralUsedIds,billedFrom,billedTo');
-select app.chlog_attach('config',            '!refundPin,sickRate,sickApprovalFrom,bonusApprovalFrom,discountApprovalFrom,invoiceCreators,referralAmount,entryDeadlineDay,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
+select app.chlog_attach('config',            '!refundPin,sickRate,sickApprovalFrom,bonusApprovalFrom,discountApprovalFrom,invoiceCreators,referralAmount,payrollApprovalFrom,entryDeadlineDay,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
 
 notify pgrst, 'reload schema';

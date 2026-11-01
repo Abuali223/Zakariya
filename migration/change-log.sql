@@ -130,7 +130,7 @@ select app.chlog_attach('payments',        'studentId,invoiceId,provider,amount,
 select app.chlog_attach('refunds',         'target,targetId,studentId,amount,reason,month');
 select app.chlog_attach('expenses',        'date,month,category,amount,note');
 select app.chlog_attach('price_table',     'grade,track,lang,amount');
-select app.chlog_attach('config',          '!refundPin,sickRate,sickApprovalFrom,bonusApprovalFrom,discountApprovalFrom,invoiceCreators,referralAmount,entryDeadlineDay,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
+select app.chlog_attach('config',          '!refundPin,sickRate,sickApprovalFrom,bonusApprovalFrom,discountApprovalFrom,invoiceCreators,referralAmount,payrollApprovalFrom,entryDeadlineDay,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
 select app.chlog_attach('monitoring',      'studentId,subject,period,score,status');
 select app.chlog_attach('salary_payments', 'teacherId,payeeRef,month,gross,advance,deduction,subBonus,net,paid,carryIn,carryOut');
 select app.chlog_attach('staff_advances',  'teacherId,payeeRef,amount,month');
