@@ -46,11 +46,8 @@ update public.users
    set "blockedRole" = coalesce(nullif(role, ''), nullif("blockedRole", '')), role = null
  where coalesce(status, '') = 'blocked' and coalesce(role, '') <> '';
 
--- 2) Sinf kaliti — admin.html classKeyOf bilan AYNAN bir xil: ${lang||'uz'}-${Number(grade)||0}-${classLetter||track||'-'}
-create or replace function app.student_class_key(p_lang text, p_grade int, p_letter text, p_track text) returns text
-language sql immutable as $$
-  select coalesce(nullif(p_lang, ''), 'uz') || '-' || coalesce(p_grade, 0)::text || '-' || coalesce(nullif(p_letter, ''), nullif(p_track, ''), '-')
-$$;
+-- 2) Sinf kaliti — app.student_class_key(lang, grade, classLetter, track): attendance-sync.sql'da (admin.html classKeyOf
+--    bilan AYNAN bir xil, search_path qat'iy) — bu yerda QAYTA belgilanmaydi.
 
 -- 3) O'quvchilar ro'yxati
 drop policy if exists students_sel on public.students;

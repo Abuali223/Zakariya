@@ -1389,7 +1389,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1400,7 +1400,7 @@ function renderKabinet(){
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
-    renderKabRank(s); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+    renderKabRank(s); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabHealth(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
 }
 
 // 🚌 Maktab avtobusi — kabinetда jonli xarita (Leaflet + OpenStreetMap).
@@ -1750,14 +1750,40 @@ async function renderKabInvoices(studentId){
     if(paid){ actions=`<div class="inv-paidbox">${chk}<span>${isRu?'Оплачено':'To‘landi'}${inv.provider?` · ${esc(String(inv.provider))}`:''}</span></div>`; }
     else if(cu||uu){ actions=`<div class="inv-actions">${cu?`<a class="inv-pay click" href="${esc(cu)}" target="_blank" rel="noopener">${clickLogo}Click</a>`:''}${uu?`<a class="inv-pay uzum" href="${esc(uu)}" target="_blank" rel="noopener">${uzumLogo}Uzum</a>`:''}</div>`; }
     else { actions=`<div class="inv-soon">${esc(t.kab_pay_soon)}</div>`; }
+    // Kasal kunlar (D1): fakturada ayirilgan bemor kunlari — N × stavka = −summa.
+    const sickN=Number(inv.sickDaysApplied)||0, sickA=Number(inv.sickAmount)||0;
+    const sickNote = (sickN>0 && sickA>0) ? `<div class="small" style="margin-top:3px;color:#475467">${isRu?'Дни болезни':'Kasal kunlar'}: ${sickN} × ${fmt(Math.round(sickA/sickN))} = −${fmt(sickA)} ${esc(t.som)}</div>` : '';
     const paidNote = partial ? `<div class="small" style="margin-top:3px;color:#92400E">${isRu?'Оплачено':'To‘langan'}: ${fmt(paidA)} / ${fmt(amt)} ${esc(t.som)}</div>` : '';
     return `<div class="inv-card${paid?' paid':''}">
       <div class="inv-top"><div class="inv-period"><span class="inv-cal">${cal}</span><div><div class="inv-mo">${esc(moLabel(inv.month))}</div><div class="inv-sub">${isRu?'Ежемесячный платёж':'Oylik to‘lov'}</div></div></div>${badge}</div>
-      <div class="inv-body"><div class="inv-amt-l">${paid?(isRu?'Сумма':'Summa'):partial?(isRu?'Осталось оплатить':'To‘lovga qoldi'):(isRu?'Сумма к оплате':'To‘lov summasi')}</div><div class="inv-amt">${fmt(paid?amt:rem)} <small>${esc(t.som)}</small></div>${paidNote}${actions}</div>
+      <div class="inv-body"><div class="inv-amt-l">${paid?(isRu?'Сумма':'Summa'):partial?(isRu?'Осталось оплатить':'To‘lovga qoldi'):(isRu?'Сумма к оплате':'To‘lov summasi')}</div><div class="inv-amt">${fmt(paid?amt:rem)} <small>${esc(t.som)}</small></div>${paidNote}${sickNote}${actions}</div>
     </div>`;
   }).join('');
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_pay_title)}</div><div class="inv-list">${avansHtml}${cards}</div>
     <p class="small muted" style="margin:14px 0 0;padding:0 2px">${esc(t.kab_pay_note)}</p></div>`;
+}
+// Kasal kunlar va hamshira (D1): ma'lumotnoma holati (kutilmoqda / tasdiqlandi / rad etildi + sabab), hamshiraga murojaatlar
+//   (sana, shikoyat, chora) va sog'liq kartasi (allergiya, dori). Ma'lumot bo'lmasa — bo'lim ko'rsatilmaydi.
+async function renderKabHealth(studentId){
+  const box=$("#kab-health"); if(!box || !(window.IqrorFB&&window.IqrorFB.getSickNotes)) return;
+  const isRu=lang==='ru';
+  const [notes, visits, h]=await Promise.all([ window.IqrorFB.getSickNotes(studentId), window.IqrorFB.getNurseVisits(studentId), window.IqrorFB.getHealth(studentId) ]);
+  if($("#kab-health")!==box) return;
+  const ds=d=>{ const x=String(d||''); return /^\d{4}-\d{2}-\d{2}/.test(x)?`${x.slice(8,10)}.${x.slice(5,7)}.${x.slice(0,4)}`:x; };
+  const ST={ pending:[isRu?'На проверке':'Tekshirilmoqda','#B45309'], approved:[isRu?'Подтверждено':'Tasdiqlandi','#1F7A4D'], rejected:[isRu?'Отклонено':'Rad etildi','#B42318'] };
+  const ACT={ rest:isRu?'Отдых':'Dam oldirildi', home:isRu?'Отправлен домой':'Uyga yuborildi', parent_call:isRu?'Звонок родителям':'Ota-onaga qo‘ng‘iroq', ambulance:isRu?'Скорая помощь':'Tez yordam', other:isRu?'Другое':'Boshqa' };
+  const ns=(notes||[]).slice().sort((a,b)=>String(b.fromDay||'').localeCompare(String(a.fromDay||''))).slice(0,6);
+  const vs=(visits||[]).slice().sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).slice(0,6);
+  const hl=h&&[h.allergies?`${isRu?'Аллергия':'Allergiya'}: ${h.allergies}`:'', h.chronic?`${isRu?'Хроническое':'Surunkali'}: ${h.chronic}`:'', h.medications?`${isRu?'Лекарства':'Dori'}: ${h.medications}`:''].filter(Boolean);
+  if(!ns.length && !vs.length && !(hl&&hl.length)){ box.innerHTML=''; return; }
+  const nRows=ns.map(n=>{ const st=ST[n.status]||[n.status||'—','#475467']; const k=Array.isArray(n.schoolDays)?n.schoolDays.length:0;
+    return `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line,#eee)"><div><b>${esc(ds(n.fromDay))} – ${esc(ds(n.toDay))}</b> <span class="small" style="color:var(--muted)">· ${k} ${isRu?'учебн. дн.':'maktab kuni'}</span>${n.institution?`<div class="small" style="color:var(--muted)">${esc(n.institution)}</div>`:''}${n.status==='rejected'&&n.reviewNote?`<div class="small" style="color:#B42318">${isRu?'Причина':'Sabab'}: ${esc(n.reviewNote)}</div>`:''}</div><span class="small" style="font-weight:700;color:${st[1]};white-space:nowrap">${esc(st[0])}</span></div>`; }).join('');
+  const vRows=vs.map(v=>`<div style="padding:8px 0;border-top:1px solid var(--line,#eee)"><b>${esc(ds(String(v.at||'').slice(0,10)))}</b> — ${esc(v.complaint||'—')}${v.temperature!=null&&v.temperature!==''?` · ${esc(String(v.temperature))}°`:''}<div class="small" style="color:var(--muted)">${esc(ACT[v.action]||v.action||'')}${v.parentNotified?(isRu?' · родителям сообщили':' · ota-onaga xabar berildi'):''}</div></div>`).join('');
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${isRu?'Здоровье и дни болезни':'Sog‘liq va kasal kunlar'}</div>
+    ${hl&&hl.length?`<div class="small" style="margin:6px 0 10px">${hl.map(x=>esc(x)).join('<br>')}</div>`:''}
+    ${ns.length?`<div class="small" style="font-weight:700;margin-top:6px">${isRu?'Медицинские справки':'Ma’lumotnomalar'}</div>${nRows}`:''}
+    ${vs.length?`<div class="small" style="font-weight:700;margin-top:12px">${isRu?'Обращения к медсестре':'Hamshiraga murojaatlar'}</div>${vRows}`:''}
+    <p class="small" style="margin:12px 0 0;color:var(--muted)">${isRu?'Скидка за дни болезни применяется только по подтверждённой справке — в счёте следующего месяца.':'Kasal kun chegirmasi faqat tasdiqlangan ma’lumotnoma bo‘yicha — keyingi oy hisob-fakturasida qo‘llanadi.'}</p></div>`;
 }
 async function renderKabMonitoring(studentId){
   const t=T[lang], box=$("#kab-monitoring"); if(!box || !(window.IqrorFB&&window.IqrorFB.getMonitoring)) return;
@@ -2166,6 +2192,25 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           const snap = await getDocs(query(collection(db,'monitoring'), where('studentId','==',studentId)));
           return snap.docs.map(d=>d.data()).filter(m=>m.status==='approved'); // faqat tasdiqlangan
         }catch(e){ return null; }
+      },
+      // Kasal kunlar (D1): ma'lumotnoma holati (fayl yo'li va kirituvchi ko'rinmaydi), hamshira jurnali xulosasi, sog'liq kartasi.
+      async getSickNotes(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'my_sick_notes'), where('studentId','==',studentId))); return snap.docs.map(d=>({id:d.id, ...d.data()})); }
+        catch(e){ return null; }
+      },
+      async getNurseVisits(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { collection, getDocs, query, where } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'my_nurse_visits'), where('studentId','==',studentId))); return snap.docs.map(d=>({id:d.id, ...d.data()})); }
+        catch(e){ return null; }
+      },
+      async getHealth(studentId){
+        if(!db||!fsMod||!studentId) return null;
+        const { doc, getDoc } = fsMod;
+        try{ const d = await getDoc(doc(db,'student_health',studentId)); return d.exists() ? (d.data()||{}) : {}; }
+        catch(e){ return null; }
       },
       async getInvoices(studentId){
         if(!db||!fsMod||!studentId) return null;

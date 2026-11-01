@@ -42,6 +42,15 @@ do $$ begin
 end $$;
 
 -- 3) Trigger: "paid" turdan; tur bo'sh bo'lsa — 'ruhsat'; «Gacha» bo'sh — «Dan»; ustma-ust ta'til — rad.
+-- Bazaning o'zi (psql / migratsiya — JWT va SET ROLE yo'q) yoki server (service_role). Anonim va oddiy foydalanuvchi — EMAS.
+--   BEFORE trigger'lar RLS'dan OLDIN ishlaydi: «app.uid() is null» anonimni ham o'z ichiga olardi (anonim INSERT urinib
+--   23P01 / 23503 kabi xatolardan boshqa yozuvlar borligini bilib olardi) — shuning uchun alohida tekshiruv.
+create or replace function app.is_system() returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select app.uid() is null
+     and coalesce(nullif(current_setting('role', true), ''), 'none') not in ('anon', 'authenticated')
+     and coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', '') not in ('anon', 'authenticated')
+$$;
 create or replace function app.staff_leave_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_other text;
@@ -51,7 +60,7 @@ begin
   new.paid := (new.type <> 'ruhsat');
   -- Ustma-ust tekshiruvi faqat yozish huquqi borlarga (director/HR, server): aks holda ruxsatsiz foydalanuvchi INSERT urinib
   --   23P01 / 42501 farqidan boshqa xodimning ta'tili borligini bilib olardi (trigger RLS tekshiruvidan OLDIN ishlaydi).
-  if (app.uid() is null or app.is_admin() or app.is_hr())
+  if (app.is_system() or app.is_admin() or app.is_hr())
      and coalesce(new."refType", '') <> '' and coalesce(new."refId", '') <> ''
      and coalesce(new."startDay", '') <> '' and coalesce(new."endDay", '') <> '' then
     select l.id into v_other from public.staff_leaves l

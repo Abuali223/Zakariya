@@ -186,7 +186,8 @@ ok('tuzatib bo\'lmaydigan -> bo\'sh', AD.pmPhoneHint('12345') === '' && AD.pmPho
 ok('pmPrettyPhone', AD.pmPrettyPhone('+79031571124') === '+7 903 157 11 24' && AD.pmPrettyPhone('abc') === 'abc');
 ok('posToRole: «Moliya Menejeri» -> finance_mgr', AD.posToRole('Moliya Menejeri') === 'finance_mgr' && AD.posToRole('  moliya   menejeri ') === 'finance_mgr');
 ok('posToRole: apostroflar', AD.posToRole('O‘qituvchi') === 'teacher' && AD.posToRole("O'IBDO'") === 'zavuch' && AD.posToRole('Ma‘muriyat rahbari') === 'admin' && AD.posToRole('G‘aznachi') === 'treasurer');
-ok('posToRole: mos rol yo\'q / prototip', AD.posToRole('Hamshira') === '' && AD.posToRole('constructor') === '' && AD.posToRole('') === '' && AD.posToRole(null) === '');
+ok('posToRole: Hamshira -> nurse', AD.posToRole('Hamshira') === 'nurse' && AD.posToRole('  hamshira ') === 'nurse');
+ok('posToRole: mos rol yo\'q / prototip', AD.posToRole('Laborant') === '' && AD.posToRole('constructor') === '' && AD.posToRole('') === '' && AD.posToRole(null) === '');
 
 sec('maskPhone: ko\'rinmas belgilar (kontaktlardan nusxa) + phoneHint (998 ikki marta)');
 ok('yo\'nalish belgilari olib tashlanadi', W.maskPhone('\u202D+998 90 123 45 67\u202C') === '+998 90 123 45 67' && W.maskPhone('+998 \u202D+998 90 123 45 67\u202C') === '+998 90 123 45 67'

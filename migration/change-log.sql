@@ -125,12 +125,12 @@ end $$;
 
 select app.chlog_attach('student_private', 'specialCategory,contractAmount,siblingDiscount,referrerId,teacherId,!parentPhone,!parentPhone2');   -- telefonlar: staff-d6.sql
 select app.chlog_attach('students',        'payStatus,activeFrom,stopFrom,pauses,grade,classLetter,track,lang,studentId,exitReason,exitAt');   -- exit*: admission-crm.sql
-select app.chlog_attach('invoices',        'studentId,month,amount,paidAmount,status,baseAmount,discount,pctApplied,isGrant,sickAmount,sickDaysApplied,billedFrom,billedTo');
+select app.chlog_attach('invoices',        'studentId,month,amount,paidAmount,status,baseAmount,discount,pctApplied,isGrant,sickAmount,sickDaysApplied,sickNoteRefs,billedFrom,billedTo');
 select app.chlog_attach('payments',        'studentId,invoiceId,provider,amount,status,matched');
 select app.chlog_attach('refunds',         'target,targetId,studentId,amount,reason,month');
 select app.chlog_attach('expenses',        'date,month,category,amount,note');
 select app.chlog_attach('price_table',     'grade,track,lang,amount');
-select app.chlog_attach('config',          '!refundPin,sickRate,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
+select app.chlog_attach('config',          '!refundPin,sickRate,sickApprovalFrom,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
 select app.chlog_attach('monitoring',      'studentId,subject,period,score,status');
 select app.chlog_attach('salary_payments', 'teacherId,payeeRef,month,gross,advance,deduction,subBonus,net,paid,carryIn,carryOut');
 select app.chlog_attach('staff_advances',  'teacherId,payeeRef,amount,month');

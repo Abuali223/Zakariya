@@ -115,6 +115,7 @@ begin
            "pctApplied"      = coalesce((v_meta->>'pctApplied')::numeric, "pctApplied"),
            "sickDaysApplied" = coalesce((v_meta->>'sickDaysApplied')::int, "sickDaysApplied"),
            "sickAmount"      = coalesce((v_meta->>'sickAmount')::numeric, "sickAmount"),
+           "sickNoteRefs"    = coalesce(v_meta->'sickNoteRefs', "sickNoteRefs"),   -- ma'lumotnoma kunlari (nurse-sick.sql)
            "priceKey"        = coalesce(v_meta->>'priceKey', "priceKey"),
            "billedFrom"      = coalesce(v_meta->>'billedFrom', "billedFrom"),
            "billedTo"        = coalesce(v_meta->>'billedTo', "billedTo"),
