@@ -53,40 +53,43 @@ grant select on public.students_billing to authenticated, service_role;
 drop policy if exists hol_sel on public.school_holidays;
 create policy hol_sel on public.school_holidays for select using (app.is_staff() or app.is_cashier() or app.is_nurse());
 
--- 3) O'tish oyi (config/finance). Fakturasi bor oy (va undan keyingi) uchun o'zgartirilmaydi: aks holda qayta hisoblashda
---    o'sha oy fakturalaridagi kasal kun chegirmasi boshqa qoida bilan qayta hisoblanib, summa o'zgarib ketardi.
+-- 3) O'tish oylari (config/finance): bu oydan boshlab yangi (tasdiqli) qoida — "sickApprovalFrom" (bemor kuni, shu fayl),
+--    "bonusApprovalFrom" (100 ball, bonus-100.sql), "discountApprovalFrom" (chegirma/grant). Fakturasi bor oy (va undan
+--    keyingi) uchun o'zgartirilmaydi: aks holda qayta hisoblashda o'sha oy fakturalari boshqa qoida bilan qayta hisoblanib,
+--    summa o'zgarib ketardi. Bitta umumiy trigger (ustun hali yo'q bo'lsa — o'tkazib yuboriladi).
 alter table public.config add column if not exists "sickApprovalFrom" text;
-create or replace function app.config_sick_cutover_guard() returns trigger
+create or replace function app.config_cutover_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_old text; v_new text; v_min text;
+declare c text; v_old text; v_new text; v_raw text; v_min text; jn jsonb; jo jsonb; v_lbl text;
 begin
   if new.id is distinct from 'finance' then return new; end if;
-  if tg_op = 'INSERT' then
-    -- Upsert (setDoc merge): qator BOR bo'lsa haqiqiy o'zgarish ON CONFLICT DO UPDATE'dagi BEFORE UPDATE'da tekshiriladi
-    --   (bu yerdagi taklif qatorida yuborilmagan ustun NULL — «tozalandi» deb noto'g'ri tushunilmasin).
-    if exists (select 1 from public.config c where c.id = new.id) then return new; end if;
-    v_old := null;
-  else
-    v_old := nullif(btrim(coalesce(old."sickApprovalFrom", '')), '');
-  end if;
-  v_new := nullif(btrim(coalesce(new."sickApprovalFrom", '')), '');
-  if v_old is not distinct from v_new then new."sickApprovalFrom" := v_new; return new; end if;
-  if v_new is not null and v_new !~ '^\d{4}-(0[1-9]|1[0-2])$' then
-    raise exception 'O''tish oyi YYYY-MM ko''rinishida bo''lsin (masalan 2026-12)' using errcode = '22023';
-  end if;
-  v_min := least(coalesce(v_old, '9999-99'), coalesce(v_new, '9999-99'));
-  if exists (select 1 from public.invoices i
-              where i.month >= v_min and coalesce(i.status, '') not in ('canceled', 'reversed')) then
-    raise exception 'Bemor kuni qoidasining o''tish oyini o''zgartirib bo''lmaydi: % yoki undan keyingi oy uchun hisob-fakturalar allaqachon yaratilgan. Hali faktura yaratilmagan oyni tanlang.', v_min
-      using errcode = '23514';
-  end if;
-  new."sickApprovalFrom" := v_new;
+  -- Upsert (setDoc merge): qator BOR bo'lsa haqiqiy o'zgarish ON CONFLICT DO UPDATE'dagi BEFORE UPDATE'da tekshiriladi
+  --   (bu yerdagi taklif qatorida yuborilmagan ustun NULL — «tozalandi» deb noto'g'ri tushunilmasin).
+  if tg_op = 'INSERT' and exists (select 1 from public.config x where x.id = new.id) then return new; end if;
+  jn := to_jsonb(new); jo := case when tg_op = 'UPDATE' then to_jsonb(old) else '{}'::jsonb end;
+  foreach c in array array['sickApprovalFrom', 'bonusApprovalFrom', 'discountApprovalFrom'] loop
+    if not (jn ? c) then continue; end if;
+    v_raw := jn->>c;
+    v_old := nullif(btrim(coalesce(jo->>c, '')), '');
+    v_new := nullif(btrim(coalesce(v_raw, '')), '');
+    if v_old is not distinct from v_new then continue; end if;
+    v_lbl := case c when 'sickApprovalFrom' then 'Bemor kuni' when 'bonusApprovalFrom' then '100 ball' else 'Chegirma / grant' end;
+    if v_new is not null and v_raw !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+      raise exception '% qoidasi: o''tish oyi YYYY-MM ko''rinishida bo''lsin (masalan 2026-12)', v_lbl using errcode = '22023';
+    end if;
+    v_min := least(coalesce(v_old, '9999-99'), coalesce(v_new, '9999-99'));
+    if exists (select 1 from public.invoices i
+                where i.month >= v_min and coalesce(i.status, '') not in ('canceled', 'reversed')) then
+      raise exception '% qoidasining o''tish oyini o''zgartirib bo''lmaydi: % yoki undan keyingi oy uchun hisob-fakturalar allaqachon yaratilgan. Hali faktura yaratilmagan oyni tanlang.', v_lbl, v_min
+        using errcode = '23514';
+    end if;
+  end loop;
   return new;
 end $$;
-revoke all on function app.config_sick_cutover_guard() from public, anon, authenticated;
-drop trigger if exists trg_config_sick_cutover on public.config;
-create trigger trg_config_sick_cutover before insert or update on public.config
-  for each row execute function app.config_sick_cutover_guard();
+revoke all on function app.config_cutover_guard() from public, anon, authenticated;
+drop trigger if exists trg_config_cutover on public.config;
+create trigger trg_config_cutover before insert or update on public.config
+  for each row execute function app.config_cutover_guard();
 
 -- 4) Maktab ish kunlari (dushanba–juma, school_holidays'siz) — admin.html billingInterval (SA_WORKDAYS) bilan bir xil.
 create or replace function app.school_days(p_from date, p_to date) returns jsonb

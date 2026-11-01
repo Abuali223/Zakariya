@@ -116,6 +116,7 @@ begin
            "sickDaysApplied" = coalesce((v_meta->>'sickDaysApplied')::int, "sickDaysApplied"),
            "sickAmount"      = coalesce((v_meta->>'sickAmount')::numeric, "sickAmount"),
            "sickNoteRefs"    = coalesce(v_meta->'sickNoteRefs', "sickNoteRefs"),   -- ma'lumotnoma kunlari (nurse-sick.sql)
+           "bonusRef"        = case when v_meta ? 'bonusRef' then nullif(v_meta->>'bonusRef', '') else "bonusRef" end,   -- 100 ball bonusi (bonus-100.sql)
            "priceKey"        = coalesce(v_meta->>'priceKey', "priceKey"),
            "billedFrom"      = coalesce(v_meta->>'billedFrom', "billedFrom"),
            "billedTo"        = coalesce(v_meta->>'billedTo', "billedTo"),
