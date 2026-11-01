@@ -135,7 +135,7 @@ select app.chlog_attach('monitoring',      'studentId,subject,period,score,statu
 select app.chlog_attach('salary_payments', 'teacherId,payeeRef,month,gross,advance,deduction,subBonus,net,paid,carryIn,carryOut');
 select app.chlog_attach('staff_advances',  'teacherId,payeeRef,amount,month');
 select app.chlog_attach('staff_substitutions', 'day,absentRefType,absentRefId,subRefType,subRefId,lessons,ratePerLesson');
-select app.chlog_attach('staff_leaves',    'refType,refId,type,startDay,endDay');
+select app.chlog_attach('staff_leaves',    'refType,refId,type,paid,startDay,endDay');   -- paid: leave-paid.sql (D5)
 select app.chlog_attach('staff_break_marks', 'refType,refId,day,type,awayMin');
 select app.chlog_attach('school_holidays', 'day,name');
 select app.chlog_attach('teachers',        'teacherId,salary,baseSalary,salaryBonus,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours,degree,category,languages,russian,langLevel');

@@ -105,6 +105,7 @@ set local iqror.migrating = '1';
 \ir bus-access.sql
 \ir public-close.sql
 \ir user-block.sql
+\ir leave-paid.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;
