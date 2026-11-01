@@ -1124,6 +1124,30 @@ ochiq savollar, «Bu hafta». Texnik ro'yxat: `JORIY-ETISH-REJA.md` (har ish, ha
   o'lchanadigan; «Bu hafta» tartibi (deploy key → keyin private; Firebase Storage ham yopiladi, loyiha hozircha
   o'chirilmaydi); 3-bosqich 16-aprelgacha (bayramlar); eski «7 bosqich» bo'limiga «eskirdi» izohi.
 
+## 45) Yo'l xaritasi paketlari (PKG-1 … PKG-12) — 2026-10-31 … 2026-11-01
+Direktor qarorlari (D1–D9) bo'yicha 12 paket; har biri PG16'da noldan va deploy yo'lida (barmoq izi teng), RLS matritsasi,
+SQL ssenariylari va haqiqiy sahifalar bilan brauzerda sinaldi; har paketdan keyin avvalgi paketlarning sinovlari qayta o'tdi.
+| Paket | Commit | Asosiy |
+|---|---|---|
+| 1 — ommaviy saytni yopish (D6/D8/D9) | a0b129a, 36690a0 | `students_public` yo'q; hujjat tekshiruvida sog'liq yo'q |
+| 12 — texnik ishlar | e5e486b … 069676f, 6594c26 | OTP xatosi aniq, maktab IP limiti, «🩺 Tizim holati», hisobni bloklash, zaxira 60 kun |
+| 3 — ta'til turlari (D5) | 065d1fb | o'z arizasi — haqsiz; kasallik va mehnat ta'tili — haqli |
+| 8 — qabul bo'limi | 1c0c063 | murojaat → qo'ng'iroq → sinov darsi → qabul/rad; ketish sababi; tiklash |
+| 2 — xodimlar ruxsatlari (D6/D7) | e1b9bfc | o'qituvchi faqat o'z sinfini ko'radi; kassa/moliya — qisqa ro'yxat; eksport faqat Direktorda |
+| 4 — «Bemor» kuni (D1) | 3814424 | hamshira ma'lumotnoma bilan kiritadi → Moliya menejeri tasdiqlaydi |
+| 5 — 100 ball (D1) | b0840d2 | O'IBDO' 24 ish soati → Direktor 24 ish soati |
+| 6 — chegirma/grant, tavsiya (D1) | 05424e7 | Direktor + Moliya menejeri; tavsiya — birinchi to'lovdan keyin |
+| 7 — maosh (D2) | 3c7bba6 | Moliya menejeri tayyorlaydi → HR tasdiqlaydi → to'lanadi |
+| 9 — xabarnomalar (D3) | 4e7e6f8 | SMS vaqti/matni sozlamada; SMS jurnali; sinf e'lonlari; ommaviy eslatma; `install-sms-cron.sh` |
+| 11 — hisobot va qulayliklar | 5a8bc8b | ikkinchi lavozim (`extraRoles`, `app.role_set`), 🔍 qidiruv, reja va tushum, haftalik hisobot, oshxona menyusi |
+| 10 — Telegram (D4) | 37ac6f8 | kartadagi raqam bilan tasdiqlash; avval Telegram, keyin SMS; to'lov va e'lon navbati; Direktorga kunlik hisobot |
+- **Deploydan keyin bir marta:** `migration/deploy/README.md` → «Bu versiyadan keyin BIR MARTA» (o'tish oylari, SMS cron,
+  Telegram, ixtiyoriy bo'limlar). `change_log` triggerlari — 39.
+- **Ochiq qolganlar (atayin):** davomatning «10:00 gacha» ulushi (kiritish vaqti saqlanmaydi); oshxona menyusi ommaviy saytda
+  (sayt yopiq); qisman to'lovlarning vaqti saqlanmaydi (kesimlar to'liq to'langan fakturalar bo'yicha); cheklovchi rol
+  triggerlari qo'shimcha lavozimda kesishma sifatida ishlaydi; Moliya menejerida faktura yaratish tugmasi yo'q (yopiq
+  ma'lumot faqat Direktorda); xodim oylik summasini o'zgartirish qulflanmagan (tasdiqlangan summa vedomostda saqlanadi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

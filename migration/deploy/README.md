@@ -54,8 +54,9 @@ Avval yangi `deploy.sh` va `migration/` olinadi — shuning uchun juda eski serv
    Zaxira olinmasa — deploy **boshlanmaydi**.
 3. **`deploy.sh`** (pastda). 4. **Keyingi tekshiruvlar:** sayt fayllari va server kodi fayl-ma-fayl shu versiya bilan solishtiriladi,
    bazadagi yangi obyektlar (har qatordagi «kutilgan N» bilan solishtiring: funksiyalar, ID qo'riqchilari, `change_log`
-   triggerlari — 24, `camera_days` — 1), 7/7 «BIR XIL», xizmatlar va `/health`, Eskiz shablonlari (hech narsa yubormaydi),
-   SMS cron va kunlik zaxira cron (yo'q bo'lsa o'zi o'rnatadi; cron xizmati va oxirgi tungi zaxira log'i tekshiriladi).
+   triggerlari — 39, `camera_days` — 1), 7/7 «BIR XIL», xizmatlar va `/health`, Eskiz shablonlari (hech narsa yubormaydi),
+   SMS cron, Telegram bot kaliti bormi (qiymati chiqarilmaydi) va kunlik hisobot cron'i, kunlik zaxira cron (yo'q bo'lsa o'zi
+   o'rnatadi; cron xizmati va oxirgi tungi zaxira log'i tekshiriladi).
 
 Natija: oxirgi qator `✅ TO'LIQ DEPLOY MUVAFFAQIYATLI` (chiqish kodi 0). `⚠️ … «!!» qatorlari bor` (kod 2) — deploy bajarilgan,
 lekin `!!` bilan boshlangan qatorlarni ko'rib chiqing. `❌` (kod 1 yoki boshqa) — xabarni o'qing. Butun chiqish `~/iqror-deploy-<vaqt>.log`
@@ -75,6 +76,21 @@ Orqaga qaytarish — avval faqat KOD (yangi baza eski sahifalarni ham qabul qila
 server kodi — `full-deploy.sh` oxirida chiqqan `sudo tar -xzf …/srv_… -C /opt/iqror` buyrug'i, so'ng `sudo systemctl restart iqror-pay iqror-ai iqror-auth`.
 Bazani zaxiradan tiklash oddiy emas (sxemalarni o'chirib tiklash, storage policy'larini qayta yaratish, deploy'dan keyingi yozuvlar
 yo'qoladi) — faqat maslahatlashib.
+
+### Bu versiyadan keyin BIR MARTA (PKG-1 … PKG-12: tasdiqlar, xabarnomalar, Telegram, hisobotlar)
+Hammasi xavfsiz tartibda: belgilanmaguncha yoki yoqilmaguncha eski tartib ishlaydi / hech narsa yuborilmaydi.
+1. Barcha ochiq admin oynalarini yangilang (Ctrl+Shift+R).
+2. **«Narx jadvali» → «Tasdiq qoidalari» — o'tish oylari** (shu oy fakturasidan boshlab yangi qoida; eski oylar qayta
+   hisoblanmaydi): «Bemor» kuni ma'lumotnoma bilan; 100 ball — Direktor tasdig'i bilan; Chegirma va grant — Direktor + Moliya
+   menejeri tasdig'i bilan (tavsiya bonusi ham); Maosh — Moliya menejeri tayyorlaydi, HR tasdiqlaydi — masalan keyingi oy.
+   So'ng «✅ Tasdiqlash» → «Chegirma va grant so'rovlari» → «Avvaldan bor (meros) chegirmalar»ni bir marta ko'rib chiqing.
+3. **Avtomatik SMS:** `bash ~/iqror-repo/payments/install-sms-cron.sh` (bitta cron qatori, har 15 daqiqada) → admin
+   «Xabarnomalar»da kerakli turni yoqing (faol matn Eskiz tasdiqlagan bo'lsin — «🔍 Eskiz shabloniga mosligini tekshirish»).
+4. **Telegram (ixtiyoriy):** `auth/README.md` → «Telegram bot»: @BotFather'da bot (`/setjoingroups` → Disable), kalitni FAQAT
+   serverdagi `auth/config.json` → `telegram` blokiga yozing (hech kimga yubormang), `sudo systemctl restart iqror-auth`,
+   `cd /opt/iqror/auth && sudo -u $(stat -c %U config.json) node tg-setup.cjs --set` (papka boshqa bo'lsa — o'sha xizmat papkasi),
+   `bash ~/iqror-repo/auth/install-tg-cron.sh` → «Xabarnomalar» → «📨 Telegram»da turlarni yoqing.
+5. **Ixtiyoriy:** «Foydalanuvchilar» → «➕ Lavozim» (xodimga ikkinchi lavozim), «Oshxona menyusi», «Haftalik hisobot».
 
 ### Deploy'dan keyingi ⚠️ / ℹ️ qatorlar — nima qilish
 Buyruqlar oddiy foydalanuvchidan (ubuntu); `sudo` o'zi kerakli joyda. Kod bloklarini GitHub sahifasidan yoki shu fayldan nusxalang.
