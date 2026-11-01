@@ -123,7 +123,7 @@ begin
   execute format('create trigger trg_change_log after insert or update or delete on public.%I for each row execute function app.log_change(%L)', p_tbl, p_cols);
 end $$;
 
-select app.chlog_attach('student_private', 'specialCategory,contractAmount,siblingDiscount,referrerId,teacherId');
+select app.chlog_attach('student_private', 'specialCategory,contractAmount,siblingDiscount,referrerId,teacherId,!parentPhone,!parentPhone2');   -- telefonlar: staff-d6.sql
 select app.chlog_attach('students',        'payStatus,activeFrom,stopFrom,pauses,grade,classLetter,track,lang,studentId,exitReason,exitAt');   -- exit*: admission-crm.sql
 select app.chlog_attach('invoices',        'studentId,month,amount,paidAmount,status,baseAmount,discount,pctApplied,isGrant,sickAmount,sickDaysApplied,billedFrom,billedTo');
 select app.chlog_attach('payments',        'studentId,invoiceId,provider,amount,status,matched');

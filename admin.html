@@ -1014,7 +1014,7 @@ const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_he
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
-  hr:['teachers','staff','staffatt'], admin:['enrollments','feedback','sick'], admin_head:['enrollments','feedback','sick'],
+  hr:['teachers','staff','staffatt'], admin:['enrollments','feedback'], admin_head:['enrollments','feedback'],
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
   finance_mgr:['payments','finance','accounting','pricetable','staffatt'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
@@ -1023,7 +1023,23 @@ function allowedTabs(){
   if((SESSION.homeroomClasses||[]).length && !base.includes('attendance')) base.unshift('attendance');
   // Kassir — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
   if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
+  if(approvalQueuesForMe().length && !base.includes('approvals')) base.unshift('approvals');   // tasdiqlovchi — navbat birinchi
   return base;
+}
+// «✅ Tasdiqlash» bo'limi: tasdiq oqimlari (bemor kuni, 100 ball, chegirma, maosh ...) shu ro'yxatga navbat qo'shadi:
+//   APPROVAL_QUEUES.push({ key, title, roles:['director','finance_mgr',...], count:async()=>n, render:async(el)=>{} }).
+//   Bo'lim faqat roliga mos kamida bitta navbat bo'lgan foydalanuvchiga ko'rinadi.
+const APPROVAL_QUEUES=[];
+function approvalQueuesForMe(){ const r=SESSION.isAdmin?'director':SESSION.role; return APPROVAL_QUEUES.filter(q=>(q.roles||[]).includes(r)); }
+async function renderApprovals(){
+  const qs=approvalQueuesForMe(), _g=VIEW_GEN;
+  $('#view').innerHTML=`<div class="page-head"><h2>Tasdiqlash</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Sizning tasdig‘ingizni kutayotgan so‘rovlar. Har qaror kim va qachon qilgani bilan «O‘zgarishlar tarixi»ga yoziladi.</p>
+    ${qs.length?qs.map((q,i)=>`<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><b>${esc(q.title)}</b><span class="chip it" id="apq-n-${i}">…</span></div><div id="apq-${i}"><div class="loading">Yuklanmoqda…</div></div></div>`).join(''):'<div class="card"><div class="empty">Tasdiq kutayotgan so‘rov yo‘q.</div></div>'}`;
+  for(let i=0;i<qs.length;i++){ const q=qs[i];
+    try{ const n=await q.count(); if(_g!==VIEW_GEN) return; const el=document.getElementById('apq-n-'+i); if(el) el.textContent=String(n||0); }catch(e){}
+    try{ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) await q.render(el); }
+    catch(e){ const el=document.getElementById('apq-'+i); if(el) el.innerHTML=`<div class="empty">Xatolik: ${esc(e&&(e.code||e.message)||'')}</div>`; } }
 }
 // Maoshni ko'ra oladimi: direktor/HR/moliya/kassir. Boshqalar yo'q. RLS ham shu qoidани majburlaydi.
 function canSeeSalary(){
@@ -1093,7 +1109,7 @@ async function cameraOwners(cam, self){
     const r=await rpc('camera_owners',{ p_cam:cam });
     if(!Array.isArray(r)) return null;   // ruxsat yo'q — tekshirib bo'lmadi
     return r.filter(o=>!(self && self.coll===o.coll && String(self.id)===String(o.id)))
-      .map(o=>({ coll:o.coll, kind:KIND[o.coll]||o.coll, id:String(o.id), name:o.name||String(o.id) }));
+      .map(o=>({ coll:o.coll, kind:KIND[o.coll]||o.coll, id:String(o.id), name:o.name||(o.coll==='students'?'o‘quvchi (ism yashirin)':String(o.id)) }));
   }catch(e){ if(!rpcMissing(e)) return null; }
   const out=[], seen=new Set();
   const add=(coll,kind,id,x)=>{ const key=coll+':'+id; if(seen.has(key)) return; if(self && self.coll===coll && String(self.id)===String(id)) return;
@@ -1380,6 +1396,7 @@ function buildTabs(){
   ];
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
+  if(approvalQueuesForMe().length) items.unshift({k:'approvals', icon:mi('m424-312 282-282-56-56-226 226-114-114-56 56 170 170ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Z'), t:'Tasdiqlash'});
   const visible = SESSION.isAdmin ? items : items.filter(it=>allowTabs.includes(it.k));
   $('#tabs').innerHTML = visible.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
   $('#tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
@@ -1396,6 +1413,7 @@ function openTab(tab){
   return p;
 }
 function renderTab(tab){
+  if(tab==='approvals') return renderApprovals();
   if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
   if(tab==='attendance') return renderAttendance();
@@ -1459,8 +1477,11 @@ function watchBadges(){
    orderBy'dan foydalanmaymiz: Firestore o'sha maydoni yo'q hujjatlarni
    chetlab o'tadi (yozuv ko'rinmay qolishi mumkin). Barchasini yuklab,
    mijoz tomonida tartiblaymiz. */
+// D6: kassa va moliya (finance_mgr, treasurer, kassir) o'quvchini FAQAT ism, ID, sinf, holat va sanalar bilan ko'radi —
+//   xom 'students' jadvali ularga yopiq (staff-d6.sql), ro'yxat 'students_billing' ko'rinishidan keladi.
+function billingOnlyRole(){ return ['finance_mgr','treasurer','kassir'].includes(SESSION.role); }
 async function loadCol(name, orderField){
-  const snap = await getDocs(collection(db,name));
+  const snap = await getDocs(collection(db, (name==='students' && billingOnlyRole()) ? 'students_billing' : name));
   const arr = snap.docs.map(d=>({ _id:d.id, ...d.data() }));
   if(orderField) arr.sort((a,b)=>(Number(a[orderField])||0)-(Number(b[orderField])||0));
   return arr;
@@ -1663,6 +1684,7 @@ async function dashFinance(){
 
 /* ---- O'quvchilar eksport/import ---- */
 function exportStudents(rows){
+  if(!SESSION.isAdmin){ toast('Ro‘yxatni yuklab olish faqat direktorga ruxsat etilgan',true); return; }   // D7
   if(!rows||!rows.length){ toast('Eksport uchun ma’lumot yo‘q',true); return; }
   const headers=['ID','Ism','Ota-ona tel.','Til','Sinf','Guruh','Yo‘nalish','Ball','Davomat'];
   const data=rows.map(r=>[r.studentId||r._id, r.name||'', r.parentPhone||'', (r.lang==='ru'?'Rus':'O‘zbek'), (Number(r.grade)||0), r.classLetter||'', r.track||'', r.score==null?'':r.score, r.attendance==null?'':r.attendance]);
@@ -1985,6 +2007,7 @@ function printHTML(html){
   setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} setTimeout(()=>f.remove(),60000); }, 450);
 }
 function exportStudentsPDF(rows){
+  if(!SESSION.isAdmin){ toast('Ro‘yxatni yuklab olish faqat direktorga ruxsat etilgan',true); return; }   // D7
   if(!rows||!rows.length){ toast('Chop etish uchun ma’lumot yo‘q',true); return; }
   const now=new Date(); const p2=x=>String(x).padStart(2,'0');
   const dateStr=`${p2(now.getDate())}.${p2(now.getMonth()+1)}.${now.getFullYear()}`;
@@ -2858,11 +2881,12 @@ async function openDataQuality(){
     const p1=String(s.parentPhone||'').trim(), p2=String(s.parentPhone2||'').trim();
     // Yaroqsiz raqam yonida ehtimoliy to'g'ri yozilishi (masalan '+'siz chet el raqami -> «→ +7 903 157 11 24 ?»).
     const bad=[]; [p1,p2].forEach(v=>{ if(v && !pmCanonPhone(v)){ const h=pmPhoneHint(v); bad.push(v+(h?` → ${h} ?`:'')); } });
-    if(bad.length) badPhone.push({sid, nm, _id:s._id, v:bad.join(', ')});
+    // D7: raqamning o'zi faqat direktorga; qabulxona «noto'g'ri» belgisini ko'radi va kartani ochib tuzatadi.
+    if(bad.length) badPhone.push({sid, nm, _id:s._id, v:SESSION.isAdmin?bad.join(', '):(bad.length>1?bad.length+' ta noto‘g‘ri raqam':'noto‘g‘ri raqam')});
     if(!p1 && !p2) noPhone.push({sid, nm, _id:s._id});   // umuman kiritilmagan (yaroqsizlari yuqorida alohida)
     // To'g'ri, lekin faqat CHET EL raqami (O'zbekiston raqami yo'q) — SMS faqat O'zbekistonga, shu oilaga SMS ketmaydi.
     const vals=[p1,p2].map(pmCanonPhone).filter(Boolean);
-    if(vals.length && !vals.some(c=>c.slice(0,3)==='998')) intlOnly.push({sid, nm, _id:s._id, v:vals.map(phonePretty).join(', ')});
+    if(vals.length && !vals.some(c=>c.slice(0,3)==='998')) intlOnly.push({sid, nm, _id:s._id, v:SESSION.isAdmin?vals.map(phonePretty).join(', '):'chet el raqami'});
     if(s.specialCategory==='contract' && !(Number(s.contractAmount)>0)) contractNoAmt.push({sid, nm, _id:s._id});
     const pf=String(s.pinfl||'').replace(/\D/g,''); if(pf.length===14){ (byPinfl[pf]=byPinfl[pf]||[]).push({sid, nm}); } });
   const dupPinfl=Object.entries(byPinfl).filter(([k,a])=>a.length>1);
@@ -2900,8 +2924,8 @@ async function renderStudents(){
       <select id="stu-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       ${canFin?`<input type="month" id="stu-fmonth" class="search-inp" style="max-width:150px" title="Qarzdorlik oyi — eski oylarni ham tanlash mumkin" value="${curMonth()}">
       <select id="stu-fdebt" class="search-inp" style="max-width:160px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Faqat qarzdorlar</option><option value="paid">Faqat to‘langan</option></select>`:''}
-      <button class="btn gold2" id="stu-pdf">📄 PDF</button>
-      <button class="btn ghost2" id="stu-export">⬇ CSV</button>
+      ${SESSION.isAdmin?`<button class="btn gold2" id="stu-pdf">📄 PDF</button>
+      <button class="btn ghost2" id="stu-export">⬇ CSV</button>`:''}
       ${canDel?`<button class="btn ghost2" id="stu-import">⬆ Import (Excel/CSV)</button>
       <button class="btn ghost2" id="stu-sheet">📊 Google Sheets</button>
       <input type="file" id="stu-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">`:''}${canMng?`<button class="btn ghost2" id="stu-dq" title="Ma'lumot sifati: noto‘g‘ri ota-ona telefoni, kontrakt summasi yo‘q, takroriy JSHSHIR">⚠️ Sifat</button><button class="btn gold" id="add">+ Qo‘shish</button>`:''}${(SESSION.isAdmin||SESSION.role==='zavuch'||SESSION.role==='reception')?'<button class="btn ghost2" id="stu-left" title="Chiqarilgan o‘quvchilar va ketish sabablari">📤 Ketganlar</button>':''}${SESSION.isAdmin?'<button class="btn ghost2" id="stu-trash" title="O‘chirilgan o‘quvchilarni tiklash">🗑 O‘chirilganlar</button>':''}</div></div>
@@ -2933,8 +2957,8 @@ async function renderStudents(){
     $('#stu-file').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.target.value=''; if(f) importStudents(f); });
     $('#stu-sheet').addEventListener('click',importFromSheet);
   }
-  $('#stu-pdf').addEventListener('click',()=>exportStudentsPDF(cache['students']||[]));
-  $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
+  if($('#stu-pdf')) $('#stu-pdf').addEventListener('click',()=>exportStudentsPDF(cache['students']||[]));
+  if($('#stu-export')) $('#stu-export').addEventListener('click',()=>exportStudents(cache['students']||[]));
   let rows; const _g=VIEW_GEN;
   try{ rows = await loadCol('students','order'); cache['students']=rows; }
   catch(e){ if(_g!==VIEW_GEN) return; $('#cls-groups').innerHTML=`<div class="card"><div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}</div></div>`; return; }
@@ -3516,11 +3540,11 @@ async function renderCollection(name){
   // lekin o'chira olmaydi -> tugma HR'да ko'rinmasin (42501 chiqmasin) (roles[3]).
   const canDel = (name==='teachers'||name==='staff') ? SESSION.isAdmin : canMng;
   $('#view').innerHTML = `<div class="page-head"><h2>${esc(s.title)}</h2>
-    <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off"><button class="btn ghost2" id="col-export">⬇ Eksport</button>${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
+    <div class="ph-actions"><input id="col-search-${name}" class="search-inp" placeholder="Qidiruv…" autocomplete="off">${(SESSION.isAdmin || (SESSION.role==='hr' && (name==='teachers'||name==='staff')))?'<button class="btn ghost2" id="col-export">⬇ Eksport</button>':''}${canMng?`<button class="btn gold" id="add">+ Qo‘shish</button>`:''}</div></div>
     ${s.hint?`<p class="small muted" style="margin:-8px 0 14px">${esc(s.hint)}</p>`:''}
     <div class="card" id="col-card"><div class="loading">Yuklanmoqda…</div></div>`;
   { const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm(name,null)); }
-  $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', cols.map(c=>c[1]), rr.map(r=>cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
+  if($('#col-export')) $('#col-export').addEventListener('click',()=>{ const rr=cache[name]||[]; if(!rr.length){toast('Eksport uchun ma’lumot yo‘q',true);return;} downloadCSV(name+'.csv', cols.map(c=>c[1]), rr.map(r=>cols.map(c=>r[c[0]]==null?'':r[c[0]]))); toast(rr.length+' ta yozuv eksport qilindi ✓'); });
   let rows; const _g=VIEW_GEN;
   try{ rows = await loadCol(name, s.order); if(s.sortFn) rows.sort(s.sortFn); cache[name]=rows; }
   catch(e){ if(_g!==VIEW_GEN) return; $('#col-card').innerHTML=`<div class="empty">Ma’lumotni yuklab bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalari e’lon qilinganini tekshiring.</span></div>`; return; }
@@ -7117,7 +7141,9 @@ async function renderMarketing(){
   let LEADS=[], EXP=[], INV=[];
   let LTVC={ tenureYears:4, monthsPerYear:10 };   // LTV taxminlari (config/ltv'dan yuklanadi, admin tahrirlaydi)
   const reload=async()=>{
-    try{ [LEADS,EXP,INV]=await Promise.all([loadCol('enrollments'),loadCol('expenses'),loadCol('invoices')]); return true; }
+    // D6: marketing fakturalarni ko'rmaydi — faqat to'langan fakturalar o'rtachasi (marketing_fee_stats).
+    try{ let fs=null; [LEADS,EXP,fs]=await Promise.all([loadCol('enrollments'),loadCol('expenses'),rpc('marketing_fee_stats').catch(()=>null)]);
+      INV=(fs && Number(fs.paidCount)>0) ? [{ status:'paid', amount:Number(fs.avgPaid)||0 }] : []; return true; }
     catch(e){ $('#mk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return false; }
   };
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];

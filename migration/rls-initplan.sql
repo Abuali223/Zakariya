@@ -63,7 +63,7 @@ declare
   -- Argumentsiz, qatorga bog'liq bo'lmagan rol yordamchilari (app sxemasi).
   v_fns constant text[] := array['uid','is_admin','is_admin_head','is_cashier','is_finance','is_hr',
                                  'is_marketing','is_reception','is_staff','is_zavuch','can_see_salary',
-                                 'has_active_child'];
+                                 'has_active_child','my_role'];
   v_ok text[]; v_re text; v_sp text := current_setting('search_path');
   v_skip text[]; r record; v_qual text; v_chk text; v_sql text;
   v_done text[] := '{}'; v_orig jsonb := '{}'; v_probe boolean; t text; c1 text; p jsonb;
