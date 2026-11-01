@@ -4,9 +4,10 @@
 #   Ishlatish (sudo'SIZ, oddiy foydalanuvchi sifatida). Eski serverda ham ishlashi uchun avval yangi skriptlar olinadi:
 #     cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash migration/deploy/full-deploy.sh
 #   Butun chiqish ~/iqror-deploy-<vaqt>.log ga ham yoziladi (600).
-#   Zaxiralar (root, 600) -> /opt/iqror/backups: db_* (public+app, backup.sh) + storage_* (fayllar) + auth_* (auth sxemasi),
+#   Zaxiralar (root, 600) -> /opt/iqror/backups: db_* (public+app, backup.sh) + storage_* (fayllar) + auth_* (auth sxemasi)
+#     + secrets_* (kalitlar: .env, config.json'lar, nginx, unit'lar — backup.sh; KEEP_DAYS, standart 60 kun),
 #     web_* (/var/www/iqror), srv_* (xizmatlar kodi papkasi, masalan /opt/iqror: server kodi va config.json'lar, node_modules'siz).
-#     web_*/srv_* 14 kundan eskisi o'chiriladi (backup.sh'dagi *.gz qoidasi bilan bir xil).
+#     web_*/srv_* (deploy'dan oldingi orqaga qaytarish arxivlari) — 14 kundan eskisi o'chiriladi.
 #   Tartib: oldindan tekshiruv yoki zaxira muvaffaqiyatsiz bo'lsa — deploy BOSHLANMAYDI (hech narsa o'zgarmaydi).
 #   Chiqish kodi: 0 — hammasi joyida; 1 — boshlanmadi (oldindan tekshiruv/zaxira); deploy.sh xatosi — uning kodi;
 #     2 — deploy bajarildi, lekin keyingi tekshiruvda «!!» bor (yuqoriga qarang).
@@ -226,6 +227,23 @@ if sudo crontab -l 2>/dev/null | grep -av '^[[:space:]]*#' | grep -aF 'migration
    && ! pgrep -x cron >/dev/null 2>&1 && ! pgrep -x crond >/dev/null 2>&1; then
   echo "    !! cron xizmati ishlamayapti — tungi zaxira olinmaydi: sudo systemctl enable --now cron"; bad=1
 fi
+# OTP kodlari va login urinishlarini TOZALASH (app.otp_gc, app.login_attempts_gc — 1 kundan eski yozuvlar; auth-server
+#   jadvallari aks holda cheksiz o'sadi) — kunlik root cron, 22:50 server vaqti. Marker «iqror-auth-gc» crontab'da bo'lsa
+#   (izohga olingan qator ham) — QAYTA QO'SHILMAYDI: ikki marta yozilmaydi, atayin o'chirilgani yoqilmaydi. Root crontab'ning
+#   boshqa qatorlari saqlanadi. O'rnatmaslik: IQROR_NO_GC_CRON=1. O'rnatilmasa — faqat ogohlantirish (deploy xatosi emas).
+GCMARK='iqror-auth-gc'
+GCLINE="50 22 * * * PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin docker exec $DB_CONT psql -U postgres -d postgres -X -q -c 'select app.otp_gc()' -c 'select app.login_attempts_gc()' >/dev/null 2>&1 # $GCMARK (OTP/login tozalash — full-deploy.sh)"
+CUR="$(sudo crontab -l 2>/dev/null || true)"   # zaxira cron'i yuqorida o'zgargan bo'lishi mumkin — qayta o'qiladi
+if printf '%s\n' "$CUR" | grep -aqF "$GCMARK"; then
+  echo "    ✓ OTP/login tozalash cron (root) bor$(printf '%s\n' "$CUR" | grep -aF "$GCMARK" | grep -aq '^[[:space:]]*#' && echo ' (izohga olingan — o‘chirilgan)')"
+elif [ "${IQROR_NO_GC_CRON:-}" = 1 ]; then
+  echo "    ⚠️ OTP/login tozalash cron yo'q (IQROR_NO_GC_CRON=1 — o'rnatilmadi)"
+elif ! sudo sh -c 'command -v crontab' >/dev/null 2>&1; then
+  echo "    ⚠️ OTP/login tozalash cron o'rnatilmadi: cron o'rnatilmagan (sudo apt install -y cron)"
+elif { [ -n "$CUR" ] && printf '%s\n' "$CUR"; printf '%s\n' "$GCLINE"; } | sudo crontab - 2>/dev/null \
+     && sudo crontab -l 2>/dev/null | grep -aF "$GCMARK" >/dev/null; then
+  echo "    ✓ OTP/login tozalash cron (root) O'RNATILDI — har kuni 22:50 (server vaqti)"
+else echo "    ⚠️ OTP/login tozalash cron o'rnatib bo'lmadi — migration/deploy/README.md «Tozalash ishlari» bandini qo'lda bajaring"; fi
 
 echo ""
 if [ "$bad" = 0 ]; then echo "✅ TO'LIQ DEPLOY MUVAFFAQIYATLI ($(date '+%F %T'))."

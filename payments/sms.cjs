@@ -21,9 +21,10 @@
 const https = require('https');
 const PH = require('../server/phone.cjs');
 
-function httpsRequest(opts, body) {
+// timeoutMs (ixtiyoriy) — shu so'rov uchun muddat; berilmasa ESKIZ_TIMEOUT_MS yoki 20 s (avvalgidek).
+function httpsRequest(opts, body, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const T = Number(process.env.ESKIZ_TIMEOUT_MS || 20000);
+    const T = Number(timeoutMs) > 0 ? Number(timeoutMs) : Number(process.env.ESKIZ_TIMEOUT_MS || 20000);
     // sent: so'rov baytlari Eskiz'ga YETGAN bo'lishi mumkinmi (TLS ulanish o'rnatildi yoki qayta ishlatilgan socket)?
     //   Ungacha bo'lgan har qanday xato (TCP/TLS ulanmadi, ulanish timeout'i) — e.preconnect: SMS ANIQ ketmagan.
     let sent = false, ct = null;
@@ -74,34 +75,56 @@ function makeEskiz(cfg) {
   const HOST = cfg.host || 'notify.eskiz.uz';
   const from = cfg.from || '4546';            // jo'natuvchi (nickname) — Eskiz'da tasdiqlangan bo'lishi kerak
   let token = null;
+  // Chaqiruv muddati (ixtiyoriy, ms): shu chaqiruvdagi BARCHA so'rovlar (kerak bo'lsa login + asosiy so'rov) uchun BITTA
+  //   umumiy muddat. Berilmasa — har so'rov avvalgidek o'z muddati bilan (left() -> undefined).
+  const budget = ms => { const n = Number(ms); if (!(n > 0)) return () => undefined; const end = Date.now() + n; return () => Math.max(1, end - Date.now()); };
 
-  async function login() {
+  async function login(left) {
     // Faqat token berilgan bo'lsa — o'shani ishlatamiz (avtomatik yangilanmaydi).
     if (!cfg.eskizEmail && !cfg.email && cfg.token) { token = cfg.token; return token; }
     const { boundary, body } = multipart({ email: cfg.eskizEmail || cfg.email || '', password: cfg.eskizPassword || cfg.password || '' });
     const r = await httpsRequest({ host: HOST, path: '/api/auth/login', method: 'POST',
-      headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary, 'Content-Length': body.length } }, body);
+      headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary, 'Content-Length': body.length } }, body, typeof left === 'function' ? left() : undefined);
     const t = r.json && r.json.data && r.json.data.token;
     if (!t) throw new Error('Eskiz login muvaffaqiyatsiz: ' + (r.raw || ('HTTP ' + r.status)));
     token = t; return token;
   }
-  async function ensureToken() { if (!token) { if (cfg.token) token = cfg.token; else await login(); } return token; }
+  async function ensureToken(left) { if (!token) { if (cfg.token) token = cfg.token; else await login(left); } return token; }
   const stage = (st, fn) => fn().catch(e => { if (e && typeof e === 'object' && !e.stage) e.stage = st; throw e; });
 
   // Eskiz'dagi SMS matnlari (shablonlar): [{ id, template (moderator naqshi: %w/%d), original (asl matn), status }].
   //   status: service/reklama — tasdiqlangan; moderation/inproccess — kutilmoqda; rejected — rad etilgan.
-  async function templates() {
-    await stage('login', ensureToken);
+  //   opts.timeoutMs (ixtiyoriy) — butun chaqiruv uchun umumiy muddat (tizim holati: kalit amal qiladimi — 3 s);
+  //   rad javobida httpStatus ham qaytadi (401 — token/parol yaroqsiz). Boshqa chaqiruvlar avvalgidek.
+  async function templates(opts) {
+    const left = budget(opts && opts.timeoutMs);
+    await stage('login', () => ensureToken(left));
     const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/templates', method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }));
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }, null, left()));
     let r = await get();
-    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', login); r = await get(); }
+    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await get(); }
     const j = r.json || {};
     const list = Array.isArray(j.result) ? j.result : (Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : null));
     if (r.status >= 200 && r.status < 300 && list) {
       return { ok: true, list: list.map(t => ({ id: t && t.id, template: String((t && t.template) || ''), original: String((t && t.original_text) || ''), status: String((t && t.status) || '') })) };
     }
-    return { ok: false, error: (typeof j.message === 'string' ? j.message : ('http_' + r.status)) };
+    return { ok: false, httpStatus: r.status, error: (typeof j.message === 'string' ? j.message : ('http_' + r.status)) };
+  }
+
+  // Eskiz balansi (GET /api/user/get-limit -> { data:{ balance } }) — tizim holati tekshiruvi (auth-server, faqat sozlamada
+  //   yoqilganda). Qaytaradi: { ok:true, balance } | { ok:false, error, httpStatus }; tarmoq/login xatosi — istisno (e.stage).
+  async function balance(opts) {
+    const left = budget(opts && opts.timeoutMs);
+    await stage('login', () => ensureToken(left));
+    const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/get-limit', method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }, null, left()));
+    let r = await get();
+    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await get(); }
+    const j = r.json || {};
+    const d = (j.data && typeof j.data === 'object') ? j.data : j;
+    const b = (d.balance === null || d.balance === undefined || d.balance === '') ? NaN : Number(d.balance);
+    if (r.status >= 200 && r.status < 300 && Number.isFinite(b)) return { ok: true, balance: b };
+    return { ok: false, httpStatus: r.status, error: (typeof j.message === 'string' ? j.message.slice(0, 120) : ('http_' + r.status)) };
   }
 
   // Bitta SMS jo'natadi. Qaytaradi: { ok:true, id, status } | { ok:false, error }
@@ -109,19 +132,21 @@ function makeEskiz(cfg) {
   //   'bad_phone:intl' (SMS faqat O'zbekistonga) — ikkalasida ham Eskiz'ga so'rov YUBORILMAYDI.
   //   Istisno (throw) bo'lsa e.stage: 'login' — SMS so'rovi HALI yuborilmagan (aniq ketmagan);
   //   'send' — SMS so'rovi yuborilayotganda uzildi (e.code ECONNREFUSED/ENOTFOUND... bo'lsa ulanish umuman bo'lmagan).
-  async function send(phone, message) {
+  //   opts.timeoutMs (ixtiyoriy) — butun chaqiruv uchun umumiy muddat (OTP: ~8 s); boshqa chaqiruvlar avvalgidek.
+  async function send(phone, message, opts) {
     const canon = PH.canonOf(phone);
     if (!canon) return { ok: false, error: 'bad_phone:' + String(phone == null ? '' : phone).replace(/\D/g, '').slice(0, 20) };
     if (!PH.isUzPhone(canon)) return { ok: false, intl: true, error: 'bad_phone:intl' };
     const mobile = canon;
-    await stage('login', ensureToken);
+    const left = budget(opts && opts.timeoutMs);
+    await stage('login', () => ensureToken(left));
     const post = () => stage('send', () => {
       const body = new URLSearchParams({ mobile_phone: mobile, message: String(message || ''), from }).toString();
       return httpsRequest({ host: HOST, path: '/api/message/sms/send', method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body);
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body, left());
     });
     let r = await post();
-    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', login); r = await post(); }   // token eskirsa — qayta kirib urinamiz
+    if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await post(); }   // token eskirsa — qayta kirib urinamiz
     const j = r.json || {};
     if (r.status >= 200 && r.status < 300 && (j.id || j.status === 'waiting' || j.status === 'success'))
       return { ok: true, id: String(j.id || ''), status: j.status || 'sent' };
@@ -131,7 +156,7 @@ function makeEskiz(cfg) {
     return { ok: false, error: (typeof j.message === 'string' ? j.message : (j.message ? JSON.stringify(j.message) : ('http_' + r.status))), raw: r.raw, httpStatus: r.status, ambiguous };
   }
 
-  return { login, send, templates, normMobile };
+  return { login, send, templates, balance, normMobile };
 }
 
 // ---- SMS matni yordamchilari (sms-worker.cjs va auth/sms-remind.cjs UMUMIY ishlatadi — matn bir xil bo'lsin) ----

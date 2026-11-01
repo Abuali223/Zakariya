@@ -141,8 +141,8 @@ select app.chlog_attach('school_holidays', 'day,name');
 select app.chlog_attach('teachers',        'teacherId,salary,baseSalary,salaryBonus,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours,degree,category,languages,russian,langLevel');
 select app.chlog_attach('staff',           'staffId,position,salary,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours');
 -- users: rol/holat + RLS tekshiradigan biriktirishlar (sinf/fan/sinf rahbarligi/farzandlar) + login (telefon/email — qiymati
---   yozilmaydi, faqat «o'zgardi»: hisobni boshqa telefonga o'tkazish = hisobni egallash xavfi).
-select app.chlog_attach('users',           'role,status,verified,staffRefType,staffRefId,staffCode,assignedClasses,assignedSubjects,homeroomClasses,childIds,childId,!phone,!email');
+--   yozilmaydi, faqat «o'zgardi»: hisobni boshqa telefonga o'tkazish = hisobni egallash xavfi) + bloklash (user-block.sql).
+select app.chlog_attach('users',           'role,status,verified,staffRefType,staffRefId,staffCode,assignedClasses,assignedSubjects,homeroomClasses,childIds,childId,!phone,!email,blockedRole,blockedAt,blockedBy');
 -- Avans: balans (to'g'ridan-to'g'ri yozish RLS'da direktor/moliyaga ochiq — keyingi faktura avtomatik yopiladi) va jurnali.
 select app.chlog_attach('student_credit',  'studentId,credit');
 select app.chlog_attach('credit_ledger',   'studentId,delta,balanceAfter,reason,provider,month');

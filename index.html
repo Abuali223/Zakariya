@@ -2471,16 +2471,26 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         const focusEnd=id=>setTimeout(()=>{ try{ const i=$(id); i.focus(); const n=i.value.length; i.setSelectionRange(n,n); }catch(e){} },40);
         const pwChk=`<div id="ph-pwchk" style="font-size:12.5px;color:var(--muted);margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px">
           <span data-c="len">○ 8+ belgi</span><span data-c="upper">○ Katta harf</span><span data-c="lower">○ Kichik harf</span><span data-c="digit">○ Raqam</span></div>`;
-        const showErr=m=>{ const e=$('ph-err'); if(e){ e.textContent=m; e.style.display='block'; } };
+        const ERR_CSS={background:'#fdece3',borderColor:'#f0d3c4',color:'#C2410C'}, WARN_CSS={background:'#FEF3E2',borderColor:'#F6C77E',color:'#92500E'};
+        const showMsg=(m,css)=>{ const e=$('ph-err'); if(e){ e.textContent=m; Object.assign(e.style,css); e.style.display='block'; } };
+        const showErr=m=>showMsg(m,ERR_CSS);
+        // Ogohlantirish (xato emas) — masalan server «SMS kechikishi mumkin» desa (kod faol, kodni kiritish bosqichida).
+        const showWarn=m=>showMsg(m,WARN_CSS);
         const clrErr=()=>{ const e=$('ph-err'); if(e) e.style.display='none'; };
         function wireEyes(){ bg.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } }); }
         // Maska + kursor tahrir joyida qoladi (sb/auth-api.js bindPhoneInput): o'rtadagi tuzatish raqamlarni almashtirib, kod
         //   begona raqamga ketmasin. Eski (keshlangan) auth-api.js bo'lsa — oddiy maska.
         function wireMask(id){ const i=$(id); if(!i) return; if(AuthAPI.bindPhoneInput) AuthAPI.bindPhoneInput(i); else i.oninput=()=>{ i.value=AuthAPI.maskPhone(i.value); }; }
         function wirePwLive(passId){ const p=$(passId); if(!p) return; const upd=()=>{ const v=AuthAPI.validatePassword(p.value); const box=$('ph-pwchk'); if(box) box.querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); }; p.oninput=upd; upd(); }
-        function startResend(purpose){ let s=60; const a=$('ph-resend'); if(!a) return; a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`; if(resendTimer)clearInterval(resendTimer);
-          resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
-        async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose); startResend(purpose); if(!r.ok) showErr(r.error||'Yuborilmadi.'); }
+        // Qayta yuborish tugmasi: secs soniyadan keyin bosiladi (server aytgan kutish; 0 — darhol).
+        function startResend(purpose, secs){ let s=(secs==null?60:Math.max(0,Math.ceil(Number(secs)||0))); const a=$('ph-resend'); if(!a) return; if(resendTimer)clearInterval(resendTimer);
+          const ready=()=>{ a.textContent='Qayta yuborish'; a.style.opacity='1'; a.style.pointerEvents='auto'; a.onclick=()=>doResend(purpose); };
+          if(s<=0){ ready(); return; }
+          a.style.opacity='.5'; a.style.pointerEvents='none'; a.textContent=`Qayta yuborish (${s}s)`;
+          resendTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(resendTimer); ready(); } else a.textContent=`Qayta yuborish (${s}s)`; },1000); }
+        // SMS yetib bormasa (smsFailed) — server aniq xato aytadi va bu urinish sanalmaydi: «Qayta yuborish» DARHOL bosiladi.
+        async function doResend(purpose){ clrErr(); const a=$('ph-resend'); if(a){a.style.pointerEvents='none';a.style.opacity='.5';} const r=await AuthAPI.requestOtp(st.phone,purpose);
+          startResend(purpose, (r&&r.smsFailed) ? 0 : (r&&r.resendAfter)); if(!r.ok) showErr(r.error||'Yuborilmadi.'); else if(r.warning) showWarn(r.warning); }
         function render(step){
           clrErr(); st.step=step;
           const T={login:'Kirish',reg_role:'Ro‘yxatdan o‘tish',reg_form:'Ro‘yxatdan o‘tish',reg_otp:'Tasdiqlash kodi',reg_name:'Ism-familiya',reset_form:'Parolni tiklash',reset_otp:'Tasdiqlash kodi',reset_pass:'Yangi parol'};
@@ -2548,7 +2558,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } const pv=AuthAPI.validatePassword(p1); if(!pv.ok){ showErr(pv.errors.join('. ')); return; }
           if(p1!==p2){ showErr('Parollar mos emas.'); return; } st.phone=phone; st.password=p1;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'register'); b.disabled=false; b.textContent='Kod yuborish';
-          if(r.ok) render('reg_otp'); else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
+          if(r.ok){ render('reg_otp'); if(r.warning) showWarn(r.warning); } else if(r.redirect==='login'){ showErr(r.error); setTimeout(()=>render('login'),1600); } else showErr(r.error||'Kod yuborilmadi.'); }
         async function doVerify(purpose){ clrErr(); const code=($('ph-code').value||'').replace(/\D/g,'');
           if(code.length!==6){ showErr('6 xonali kodni kiriting.'); return; } const b=$('ph-go'); b.disabled=true; b.textContent='Tekshirilmoqda…';
           const r=await AuthAPI.verifyOtp(st.phone,purpose,code); b.disabled=false; b.textContent='Tasdiqlash';
@@ -2562,7 +2572,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         async function doResetRequest(){ clrErr(); const phone=AuthAPI.normPhone($('ph-phone').value);
           if(!phone){ showErr(badPhone($('ph-phone').value)); return; } if(phone.slice(0,3)!=='998'){ showErr(UZ_ONLY); return; } st.phone=phone;
           const b=$('ph-go'); b.disabled=true; b.textContent='Yuborilmoqda…'; const r=await AuthAPI.requestOtp(phone,'reset'); b.disabled=false; b.textContent='Kod yuborish';
-          if(r.ok) render('reset_otp'); else showErr(r.error||'Kod yuborilmadi.'); }
+          if(r.ok){ render('reset_otp'); if(r.warning) showWarn(r.warning); } else showErr(r.error||'Kod yuborilmadi.'); }
         async function doResetConfirm(){ clrErr(); const p1=$('ph-pass').value, p2=$('ph-pass2').value; const pv=AuthAPI.validatePassword(p1);
           if(!pv.ok){ showErr(pv.errors.join('. ')); return; } if(p1!==p2){ showErr('Parollar mos emas.'); return; }
           const b=$('ph-go'); b.disabled=true; b.textContent='Saqlanmoqda…'; const r=await AuthAPI.resetConfirm(st.ticket,p1);
@@ -2653,6 +2663,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
             const c=e.code||''; let m='Xatolik: '+c;
             if(c.includes('email-already-in-use')) m='Bu email allaqachon ro‘yxatdan o‘tgan — “Kirish”ni tanlang.';
             else if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found')) m='Email yoki parol noto‘g‘ri.';
+            else if(c.includes('banned')||/user is banned/i.test(String(e.message||''))) m='Hisobingiz bloklangan. Administratorga murojaat qiling.';
             else if(c.includes('weak-password')) m='Parol juda kuchsiz (kamida 6 belgi).';
             else if(c.includes('invalid-email')) m='Email formati noto‘g‘ri.';
             showErr(m);

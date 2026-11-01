@@ -33,7 +33,7 @@ do $iqror_guard$ begin raise exception 'iqror: bus-access.sql ALOHIDA ishga tush
 -- =====================================================================
 
 -- Joriy foydalanuvchida kamida bitta FAOL bog'langan farzand bormi (argumentsiz — rls-initplan.sql uni
---   so'rov boshida bir marta hisoblanadigan qilib o'raydi).
+--   so'rov boshida bir marta hisoblanadigan qilib o'raydi). Bloklangan hisob (user-block.sql) — yo'q.
 create or replace function app.has_active_child() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select app.uid() is not null and exists(
@@ -41,6 +41,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
       join public.students s on s.id = app.claim_row(cc."studentId", cc.code)   -- bola ro'yxatda (aniq bitta)
      where cc.uid = app.uid()
        and coalesce(nullif(cc.status, ''), 'active') = 'active'
+       and not exists (select 1 from public.users u where u.id = cc.uid and u.status = 'blocked')
        and not (coalesce(s."payStatus", '') = 'chiqdi'
                 and coalesce(nullif(s."stopFrom", ''), '0000-01-01') <= to_char(app.tashkent_now(), 'YYYY-MM-DD')))
 $$;

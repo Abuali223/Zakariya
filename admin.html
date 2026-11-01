@@ -1167,7 +1167,8 @@ $('#login-form').addEventListener('submit', async e=>{
   try{
     if(phone){
       const r=await AuthAPI.login(phone, pass);           // seansni o'zi o'rnatadi (setSession)
-      if(!r.ok){ throw { code: r.locked?'too-many':'invalid-cred', message:r.error }; }
+      // Hisob holati (bloklangan / tasdiq kutmoqda) — serverning aniq matni; qolgani — umumiy «noto'g'ri».
+      if(!r.ok){ throw { code: r.locked?'too-many':(r.status?'acct-status':'invalid-cred'), message:r.error }; }
       // muvaffaqiyat -> onAuthStateChanged rolni hal qiladi (STAFF bo'lmasa chiqarib yuboradi)
     } else {
       await signInWithEmailAndPassword(auth, idRaw, pass);
@@ -1176,6 +1177,9 @@ $('#login-form').addEventListener('submit', async e=>{
     let m=err.message||'Kirishda xatolik.';
     const c=err.code||'';
     if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found'))m='Telefon/email yoki parol noto‘g‘ri.';
+    else if(c==='acct-status')m=err.message||'Kirib bo‘lmadi. Administratorga murojaat qiling.';
+    // Email bilan kirish: GoTrue taqig'i («🚫 Bloklash») — xom inglizcha «User is banned» o'rniga.
+    else if(c.includes('banned')||/user is banned/i.test(String(err.message||'')))m='Hisobingiz bloklangan. Administratorga murojaat qiling.';
     else if(c.includes('too-many'))m=err.message||'Juda ko‘p urinish. Birozdan so‘ng qayta urining.';
     else if(c.includes('invalid-email'))m='Email formati noto‘g‘ri.';
     else if(c.includes('network'))m='Tarmoq xatosi. Internetni tekshiring.';
@@ -1328,7 +1332,7 @@ async function openProfile(){
         const jwt=await AuthAPI.currentJwt(); const b=$p('pf-ph-otp'); b.disabled=true; b.textContent='…';
         const r=await AuthAPI.requestOtp(phone,'change_phone',{jwt}); b.disabled=false; b.textContent='Kod yuborish';
         if(!r.ok){ msg(r.error||'Kod yuborilmadi.'); return; }
-        $p('pf-ph-area').innerHTML=`<div class="small muted">${pretty(phone)} raqamiga kod yuborildi.</div>
+        $p('pf-ph-area').innerHTML=`${r.smsUncertain?`<div class="small" style="color:#B45309">${esc(r.warning||'SMS kechikishi mumkin.')}</div>`:`<div class="small muted">${pretty(phone)} raqamiga kod yuborildi.</div>`}
           <input id="pf-phcode" type="tel" inputmode="numeric" maxlength="6" placeholder="6 xonali kod" style="${INP};letter-spacing:6px;text-align:center">
           <button class="btn gold sm" id="pf-ph-confirm" style="margin-top:8px">Tasdiqlash</button>`;
         $p('pf-ph-confirm').onclick=async()=>{
@@ -4259,7 +4263,7 @@ async function delDoc(name,id,label){
   const isPay=(name==='teachers'||name==='staff');
   if(isPay){ const r=(cache[name]||[]).find(x=>String(x._id)===String(id)); const pid=r ? String((name==='teachers'?r.teacherId:r.staffId)||'').trim() : '';
     what=`“${label||id}”${pid?` (ID ${pid})`:''}`; }
-  if(!confirm(`${what} — o‘chirilsinmi?\n\n⚠️ Bu amalni ortga qaytarib bo‘lmaydi.${isPay?'\nID pasport kabi — o‘chirilgandan keyin ham hech kimga qayta berilmaydi.':''}`)) return;
+  if(!confirm(`${what} — o‘chirilsinmi?\n\n⚠️ Bu amalni ortga qaytarib bo‘lmaydi.${isPay?'\nID pasport kabi — o‘chirilgandan keyin ham hech kimga qayta berilmaydi.':''}${name==='users'?'\n\n⚠️ Bu faqat ro‘yxatdan olib tashlaydi (kirish hisobi qoladi — telefon/parol bilan qayta kira oladi); ishdan ketgan xodim uchun «🚫 Bloklash»ni ishlating.':''}`)) return;
   // O'quvchi kabi muhim yozuvlar uchun ikkinchi tasdiq
   if(name==='students' && !confirm('O‘quvchi va uning maxfiy ma’lumoti (JSHSHIR, telefon) butunlay o‘chadi.\nDavom etamizmi?')) return;
   // O'qituvchi/xodimda MAOSH TARIXI (maosh berish / avans) bo'lsa — o'chirish o'rniga «Holat → Ishdan chiqqan» tavsiya etiladi:
@@ -4289,6 +4293,38 @@ async function delDoc(name,id,label){
     toast('O‘chirildi');
     if(name==='enrollments') renderEnrollments(); else if(name==='users') renderUsers(); else if(name==='students') renderStudents(); else renderCollection(name);
   }catch(e){ toast('Xatolik: '+errText(e),true); }
+}
+
+/* ---- Auth-server (/authapi): hisobni bloklash, tizim holati — joriy seans JWT'si bilan ---- */
+async function authJwt(){ try{ const A=AuthAPI||await AuthAPIready; if(A&&A.currentJwt) return (await A.currentJwt())||''; }catch(e){} return ''; }
+const authBase=()=>String(window.IQROR_AUTH_BASE||'/authapi').replace(/\/+$/,'');
+async function authServerPost(path, payload){
+  const jwt=await authJwt(); if(!jwt) return { ok:false, error:'Seans topilmadi — sahifani yangilab, qayta kiring.' };
+  let res; try{ res=await fetch(authBase()+path,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({ jwt }, payload||{})) }); }
+  catch(e){ return { ok:false, error:'Auth-server bilan aloqa yo‘q — internetni tekshiring.' }; }
+  let j=null; try{ j=await res.json(); }catch(e){}
+  if(j && typeof j==='object') return j;
+  if(res.status===404) return { ok:false, error:'Bu xizmat serverda hali yangilanmagan (auth-server) — deploy qiling.' };
+  return { ok:false, error:`Server javobi noto‘g‘ri (HTTP ${res.status}).` };
+}
+// «🚫 Bloklash» / «Blokdan chiqarish» — tasdiq oynasi bilan. Server: rol olinadi (avvalgisi saqlanadi), seanslar yopiladi,
+//   GoTrue taqig'i, ota-ona farzand bog'lanishlari to'xtatiladi; o'zini va oxirgi faol direktorni bloklash — rad.
+async function toggleUserBlock(u, block, btn, roleName){
+  const nm=u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||u.email||'Foydalanuvchi';
+  const rl=r=> r ? roleName(r) : '—';
+  // Eski usulda bloklangan (status 'blocked', rol SAQLANGAN, kirish taqiqlanmagan) — «🚫 To‘liq bloklash» uni to'liq bloklaydi.
+  const legacy=String(u.status||'')==='blocked' && !!u.role;
+  const q = block
+    ? `🚫 «${nm}» hisobi ${legacy?'to‘liq ':''}bloklansinmi?\n\n${legacy?'• Hozir faqat «bloklangan» belgisi bor: rol saqlangan, ochiq seans bilan kirish mumkin.\n':''}• Tizimga kira olmaydi — ochiq seanslari ham darhol yopiladi.\n• Rol olib qo‘yiladi (hozirgi rol: ${rl(u.role)} — saqlanadi, «Blokdan chiqarish» bilan qaytadi).\n• Ota-ona bo‘lsa — farzandlariga bog‘lanishi to‘xtatiladi.\n\nIshdan ketgan xodim uchun «O‘chirish» emas, shu amal tavsiya etiladi (tarix saqlanadi).`
+    : `«${nm}» blokdan chiqarilsinmi?\n\nKirish qayta ochiladi, rol qaytariladi: ${rl(u.blockedRole||u.role)}.`;
+  if(!confirm(q)) return;
+  const label=btn.textContent; btn.disabled=true; btn.textContent='…';
+  const r=await authServerPost(block?'/block-user':'/unblock-user', { uid:u._id });
+  if(r && r.ok){
+    toast(r.message || (block?'Hisob bloklandi':'Blokdan chiqarildi'));
+    if(r.sessionsError) toast('Diqqat: kirish seanslari bazada o‘chirilmadi (server jurnalini tekshiring) — hisob baribir bloklangan.', true);
+    cache.users=null; renderUsers();
+  } else { toast((r&&r.error)||'Xatolik', true); btn.disabled=false; btn.textContent=label; }
 }
 
 /* ---- Users / roles ---- */
@@ -4334,9 +4370,17 @@ async function renderUsers(){
     const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
     // Telefon (kanonik: 998... yoki chet el 7..., 48...) -> chiroyli ko'rinish; aloqa ustunida telefon (bo'lsa) yoki email.
     const contact=r=> r.phone ? `<a href="tel:+${esc(String(r.phone).replace(/\D/g,''))}">${esc(pmPrettyPhone('+'+String(r.phone).replace(/\D/g,'')))}</a>` : esc(r.email||'—');
+    // Eski usulda bloklangan (status 'blocked', rol saqlangan — rol funksiyalari statusni tekshirmaydi, ochiq seans ishlaydi).
+    const legacyBlk=r=> String(r.status||'')==='blocked' && !!r.role;
     const statusCell=r=> (String(r.status||'')==='pending') ? '<span style="color:#B45309;font-weight:700">⏳ Kutilmoqda</span>'
-      : (String(r.status||'')==='blocked') ? '<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>'
+      : (String(r.status||'')==='blocked') ? `<span style="color:#B42318;font-weight:700">🚫 Bloklangan</span>${fmtWhen(r.blockedAt)?`<div class="small muted">${esc(fmtWhen(r.blockedAt))}</div>`:''}${legacyBlk(r)?'<div class="small" style="color:#B45309">eski usulda: rol saqlangan — «🚫 To‘liq bloklash»ni bosing</div>':''}`
       : (r.verified ? '<span style="color:var(--teal);font-weight:600">✓ Tasdiqlangan</span>' : '<span class="muted">—</span>');
+    // Bloklash (faqat direktor; o'zini emas) — kirishni darhol yopadi, avvalgi rol saqlanadi (auth-server /authapi/block-user).
+    const myUid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
+    const blockBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid) ? '' : (String(r.status||'')==='blocked'
+      ? `${legacyBlk(r)?`<button class="btn sm" style="color:#B42318;border-color:#F3C1BC" data-blk="${esc(r._id)}" title="Eski usulda bloklangan: rol saqlangan, kirish taqiqlanmagan — to‘liq bloklash (rol olinadi, seanslar yopiladi)">🚫 To‘liq bloklash</button>`:''}<button class="btn sm" data-unblk="${esc(r._id)}" title="Kirishni qayta ochadi — avvalgi rol qaytariladi">Blokdan chiqarish</button>`
+      : `<button class="btn sm" style="color:#B42318;border-color:#F3C1BC" data-blk="${esc(r._id)}" title="Ishdan ketgan xodim / muammoli hisob: kirish darhol yopiladi (rol olinadi, seanslar yopiladi)">🚫 Bloklash</button>`);
+    const roleCell=r=> roleChip(r.role||'') + ((String(r.status||'')==='blocked' && r.blockedRole) ? `<div class="small muted" style="margin-top:3px">avvalgi rol: ${esc(roleName(r.blockedRole))}</div>` : '');
     // HR yozuviga bog'lanish ko'rsatkichi: bog'langan bo'lsa 🔗 kod; aks holda telefon bo'yicha taklif.
     const linkChip=r=>{ if(r.staffRefId){ const rec=linkCtx.byRef[(r.staffRefType||'')+':'+(r.staffRefId||'')];
         const label=rec?`${rec.code}${(rec.pos||rec.name)?' · '+(rec.pos||rec.name):''}`:(r.staffCode||'bog‘langan');
@@ -4351,14 +4395,17 @@ async function renderUsers(){
     const banner = pend.length ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13.5px"><b>${pend.length} ta yangi xodim</b> tasdiqlashni kutmoqda. «✓ Tasdiqlash» tugmasi bilan rolini belgilab faollashtiring.</div>` : '';
     const trs = ordered.map(r=>{ const isPend=String(r.status||'')==='pending'; return `<tr${isPend?' style="background:#FFFBF2"':''}>
       <td data-label="Ism">${esc(r.name||((r.firstName||'')+' '+(r.lastName||'')).trim()||'')}${linkChip(r)}</td><td data-label="Aloqa">${contact(r)}</td>
-      <td data-label="Rol">${roleChip(r.role||'')}</td>
+      <td data-label="Rol">${roleCell(r)}</td>
       <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
       <td data-label="Holat">${statusCell(r)}</td>
-      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}${blockBtn(r)}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
     </tr>`; }).join('');
     $('#usr-card').innerHTML = banner + `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Aloqa</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts, {linkCtx}); }));
-    $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>delDoc('users',b.dataset.delu)));
+    $('#usr-card').querySelectorAll('[data-delu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.delu)||{}; delDoc('users',b.dataset.delu,(u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||u.email||'')||undefined); }));
+    $('#usr-card').querySelectorAll('[data-blk],[data-unblk]').forEach(b=>b.addEventListener('click',()=>{
+      const id=b.dataset.blk||b.dataset.unblk; const u=rows.find(x=>x._id===id); if(u) toggleUserBlock(u, !!b.dataset.blk, b, roleName);
+    }));
     // Tasdiqlash = rol tayinlash oynasini ochadi (rolsiz «staff» holatida faollashtirib bo'lmaydi).
     $('#usr-card').querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click',()=>{
       const u=rows.find(x=>x._id===b.dataset.approve); if(u) openUserEditor(u, CLS, roleOpts, {approve:true, linkCtx});
@@ -4380,6 +4427,8 @@ function posToRole(pos){ const k=String(pos==null?'':pos).toLowerCase().replace(
 //   va rolsiz («staff») faollashtirishga yo'l qo'yilmaydi (admin aniq rol tanlashi shart).
 function openUserEditor(u, CLS, roleOpts, opts){
   opts=opts||{};
+  // Bloklangan hisob: bu oynada rol/holat saqlanmaydi (aks holda GoTrue taqig'i olinmay, rol qo'lda qaytib qolardi).
+  const isBlocked=String(u.status||'')==='blocked';
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
@@ -4420,10 +4469,11 @@ function openUserEditor(u, CLS, roleOpts, opts){
       <div class="small muted" style="margin-top:5px">Login hisobini davomat/maosh yozuviga bog‘laydi. Maosh summasiga <b>tegmaydi</b>.</div></div>`;
   ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;border-bottom:1px solid var(--border)">
-      <div><h3 style="font-size:18px;margin:0">${esc(u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.phone?('+'+String(u.phone).replace(/\D/g,'')):(u.email||''))}${String(u.status||'')==='pending'?' · <b style="color:#B45309">⏳ tasdiqlanmagan</b>':''}</div></div>
+      <div><h3 style="font-size:18px;margin:0">${esc(u.name||((u.firstName||'')+' '+(u.lastName||'')).trim()||'Foydalanuvchi')}</h3><div class="small muted">${esc(u.phone?('+'+String(u.phone).replace(/\D/g,'')):(u.email||''))}${String(u.status||'')==='pending'?' · <b style="color:#B45309">⏳ tasdiqlanmagan</b>':''}${isBlocked?' · <b style="color:#B42318">🚫 bloklangan</b>':''}</div></div>
       <button id="u-x" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);line-height:1">×</button>
     </div>
     <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
+      ${isBlocked?`<div style="background:#FDECEC;border:1px solid #F3C1BC;color:#8F1D14;border-radius:10px;padding:10px 12px;font-size:13px">🚫 Bu hisob <b>bloklangan</b>${u.blockedRole?` (avvalgi rol: <b>${esc((roleOpts.find(o=>o[0]===u.blockedRole)||[])[1]||u.blockedRole)}</b>)`:''}. Rol va holatni bu yerda o‘zgartirib bo‘lmaydi — avval ro‘yxatdagi «Blokdan chiqarish» tugmasini bosing (kirish taqig‘i ham shu tugma bilan olinadi).</div>`:''}
       ${opts.approve?`<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Yangi xodimni faollashtirish uchun <b>aniq rolni</b> (o‘qituvchi, kassir, qorovul va h.k.) tanlang va «Saqlash» bosing.</div>`:''}
       <div><label class="ulbl">Rol</label>
         <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff">${roleOpts.map(o=>`<option value="${o[0]}" ${(preRole?preRole===o[0]:u.role===o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}</select>${roleHint}</div>
@@ -4435,7 +4485,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
       <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="u-ver" ${(u.verified||opts.approve)?'checked':''} style="width:auto"> Tasdiqlangan</label>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)">
-      <button class="btn" id="u-cancel">Bekor</button><button class="btn gold" id="u-save">Saqlash</button></div>
+      <button class="btn" id="u-cancel">Bekor</button><button class="btn gold" id="u-save"${isBlocked?' disabled title="Bloklangan hisob — avval «Blokdan chiqarish»"':''}>Saqlash</button></div>
   </div>`;
   document.body.appendChild(ov);
   const roleSel=ov.querySelector('#u-role');
@@ -4449,6 +4499,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
   ov.querySelector('#u-x').onclick=close; ov.querySelector('#u-cancel').onclick=close;
   ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
   ov.querySelector('#u-save').onclick=async()=>{
+    if(isBlocked){ alert('Bu hisob bloklangan. Avval «Foydalanuvchilar» ro‘yxatidagi «Blokdan chiqarish» tugmasini bosing.'); return; }
     const role=roleSel.value, ver=ov.querySelector('#u-ver').checked;
     // Rolsiz («staff» — tayinlanmagan) hisobni faollashtirib bo'lmaydi: u hech qanday bo'limга kira olmaydi.
     if(ver && (!role || role==='staff')){ alert('Avval aniq rol tanlang (o‘qituvchi, kassir, qorovul va h.k.).\n\n«Xodim — rol tayinlanmagan» holatida hisobni faollashtirib bo‘lmaydi (u tizimda hech narsani ko‘ra olmaydi).'); return; }
@@ -4475,6 +4526,11 @@ function openUserEditor(u, CLS, roleOpts, opts){
       else { patch.staffRefType=''; patch.staffRefId=''; patch.staffCode=''; }   // uzish (bo'sh satr — RLS/indeks bo'shni e'tiborsiz qoldiradi)
     }
     try{
+      // Ro'yxat ochilgandan beri hisob BLOKLANGAN bo'lishi mumkin (boshqa direktor yoki boshqa oyna): bazadan qayta o'qiymiz —
+      //   eskirgan oyna rol/holatni qaytarib qo'ymasin (baza ham rad etadi — user-block.sql himoya trigger'i).
+      let fresh=null; try{ fresh=await getDoc(doc(db,'users',u._id)); }catch(e){ fresh=null; }
+      if(fresh && fresh.exists() && String((fresh.data()||{}).status||'')==='blocked'){
+        toast('Bu hisob shu orada bloklangan — o‘zgarish saqlanmadi. Ro‘yxat yangilandi.',true); cache.users=null; close(); renderUsers(); return; }
       // Tanlangan davomat/maosh yozuvi bazada HALI BORMI (ro'yxat ochilgandan beri o'chirilgan bo'lishi mumkin)? Aks holda
       //   setDoc (upsert) nomsiz «arvoh» xodim yaratib, hisobni unga bog'lab qo'yardi.
       if(changedLink && nId){ let ex=null; try{ ex=await getDoc(doc(db, nType==='teacher'?'teachers':'staff', nId)); }catch(e){ ex=null; }
@@ -4501,13 +4557,16 @@ function openUserEditor(u, CLS, roleOpts, opts){
       }
       toast('Saqlandi ✓'); cache.users=null; cache.staff=null; cache.teachers=null; close(); renderUsers();
     }
-    catch(e){ toast('Xatolik: '+(e.code||e.message),true); b.disabled=false; b.textContent='Saqlash'; }
+    catch(e){ toast('Xatolik: '+errText(e),true); b.disabled=false; b.textContent='Saqlash'; }
   };
 }
 
 /* ---- Settings ---- */
 async function renderSettings(){
   $('#view').innerHTML = `<div class="page-head"><h2>Sozlamalar</h2></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
+  // «🩺 Tizim holati» (faqat direktor) — baza o'qilmasa ham ko'rinsin: darhol qo'shiladi, sozlamalar chiqqach oxiriga ko'chadi.
+  const healthCard = SESSION.isAdmin ? sysHealthCard() : null;
+  if(healthCard) $('#view').appendChild(healthCard);
   let d={};
   try{ const snap=await getDocs(collection(db,'settings')); const site=snap.docs.find(x=>x.id==='site'); d = site?site.data():{}; }
   catch(e){ $('#view .card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
@@ -4581,6 +4640,50 @@ async function renderSettings(){
       toast('AI sozlamalari saqlandi ✓'); renderSettings();
     }catch(err){ toast('Xatolik: '+(err.code||err.message),true); b.disabled=false; b.textContent='AI sozlamalarini saqlash'; }
   });
+  if(healthCard && healthCard.isConnected) $('#view').appendChild(healthCard);   // eng pastga
+}
+
+/* ---- 🩺 Tizim holati: auth-server GET /authapi/health/deep (faqat direktor JWT) — har xizmat yashil/qizil, vaqt, sabab ---- */
+function sysHealthCard(){
+  const card=document.createElement('div'); card.className='card'; card.id='sys-health'; card.style.cssText='margin-top:16px;padding:22px';
+  card.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>🩺 Tizim holati</h3><button class="btn sm" type="button" data-sh-refresh>Yangilash</button></div>
+    <p class="small muted" style="margin:0 0 12px">Server xizmatlari: baza, kirish tizimi, SMS (Eskiz), to‘lov va AI serverlari, oxirgi onlayn to‘lov va oxirgi zaxira. Har tekshiruv ko‘pi bilan 3 soniya.</p>
+    <div data-sh-body><div class="loading">Tekshirilmoqda…</div></div>`;
+  card.querySelector('[data-sh-refresh]').onclick=()=>loadSysHealth(card);
+  loadSysHealth(card);
+  return card;
+}
+async function loadSysHealth(card){
+  const box=card.querySelector('[data-sh-body]'), btn=card.querySelector('[data-sh-refresh]');
+  if(btn){ btn.disabled=true; btn.textContent='Tekshirilmoqda…'; }
+  let j=null, err='';
+  try{
+    const jwt=await authJwt();
+    if(!jwt) err='Seans topilmadi — sahifani yangilab, qayta kiring.';
+    else {
+      const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(), 15000);
+      let res; try{ res=await fetch(authBase()+'/health/deep',{ headers:{ Authorization:'Bearer '+jwt }, cache:'no-store', signal:ctl.signal }); } finally{ clearTimeout(tm); }
+      try{ j=await res.json(); }catch(e){ j=null; }
+      if(!res.ok || !j || !Array.isArray(j.checks)){
+        err = (j && j.error) ? String(j.error) : res.status===404 ? 'Auth-server eski (tizim holati yo‘q) — deploy qiling.' : `Auth-server javob bermadi (HTTP ${res.status}).`;
+        j=null;
+      }
+    }
+  }catch(e){ err='Auth-server bilan aloqa yo‘q (ishlamayapti yoki tarmoq xatosi).'; j=null; }
+  try{ renderSysHealth(box, j, err); }catch(e){ box.innerHTML=`<div class="empty">Ko‘rsatib bo‘lmadi: ${esc(e.message||'xato')}</div>`; }
+  if(btn){ btn.disabled=false; btn.textContent='Yangilash'; }
+}
+function renderSysHealth(box, j, err){
+  const ico=ok=> ok===true?'🟢':(ok===false?'🔴':'⚪');
+  const ago=iso=>{ const t=Date.parse(iso||''); if(!isFinite(t)) return ''; const m=Math.round((Date.now()-t)/60000);
+    if(m<1) return 'hozir'; if(m<60) return m+' daqiqa oldin'; const h=Math.floor(m/60); return h<48 ? h+' soat oldin' : Math.floor(h/24)+' kun oldin'; };
+  const when=iso=>{ const t=Date.parse(iso||''); return isFinite(t) ? fmtWhen(new Date(t)) : ''; };
+  if(!j){ box.innerHTML=`<div style="background:#FDECEC;border:1px solid #F3C1BC;color:#8F1D14;border-radius:10px;padding:10px 12px;font-size:13.5px">🔴 <b>Auth-server</b> — ${esc(err||'javob yo‘q')}</div>`; return; }
+  const trs=j.checks.map(c=>`<tr><td data-label="" style="width:28px">${ico(c.ok)}</td><td data-label="Xizmat"><b>${esc(c.name||c.key||'')}</b></td>
+    <td data-label="Holat">${esc(c.info||'')}${c.at?`<div class="small muted">${esc(when(c.at))}${ago(c.at)?' · '+esc(ago(c.at)):''}</div>`:''}</td>
+    <td data-label="Vaqt" class="small muted">${Number(c.ms)>=0?esc(String(c.ms))+' ms':''}</td></tr>`).join('');
+  box.innerHTML=`<div class="small" style="margin-bottom:8px;font-weight:600;color:${j.ok?'var(--teal)':'#B42318'}">${j.ok?'🟢 Hammasi ishlayapti':'🔴 Muammo bor — qizil qatorlarni ko‘ring'}<span class="muted" style="font-weight:400"> · tekshirildi: ${esc(when(j.at))}</span></div>
+    <div class="tablewrap"><table><thead><tr><th></th><th>Xizmat</th><th>Holat</th><th>Vaqt</th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 /* ---- Enrollments inbox ---- */
@@ -5650,7 +5753,8 @@ const CHLOG_FLD={ specialCategory:'Toifa', contractAmount:'Kontrakt summasi', si
   absentRefType:'Kelmagan (tur)', absentRefId:'Kelmagan', subRefType:'O‘rinbosar (tur)', subRefId:'O‘rinbosar', sick_added:'«Bemor» qo‘shildi', sick_removed:'«Bemor» olib tashlandi',
   clickServiceId:'Click service ID', clickMerchantId:'Click merchant ID', uzumUrlTemplate:'Uzum havolasi',
   credit:'Avans', delta:'O‘zgarish', balanceAfter:'Qoldiq', assignedClasses:'Biriktirilgan sinflar', assignedSubjects:'Biriktirilgan fanlar',
-  homeroomClasses:'Sinf rahbarligi', childIds:'Farzandlar', childId:'Farzand', phone:'Telefon (login)', email:'Email (login)', uid:'Foydalanuvchi', code:'Kod' };
+  homeroomClasses:'Sinf rahbarligi', childIds:'Farzandlar', childId:'Farzand', phone:'Telefon (login)', email:'Email (login)', uid:'Foydalanuvchi', code:'Kod',
+  blockedRole:'Bloklashdan oldingi rol', blockedAt:'Bloklangan vaqt', blockedBy:'Kim bloklagan' };
 const CHLOG_OP={ INSERT:'qo‘shildi', UPDATE:'o‘zgardi', DELETE:'o‘chirildi' };
 function chlogVal(v){
   if(v===null||v===undefined||v==='') return '—';
@@ -5693,13 +5797,21 @@ async function renderChangeLog(){
   const who=r=>r.actor_uid?`${esc(r.actor_name||r.actor_uid)}<div class="small muted">${esc(ROLE_LABEL[r.actor_role]||r.actor_role||'')}</div>`:'<span class="muted">Tizim</span>';
   const rowLbl=r=>{ const id=String(r.row_id||''); const k=rowKey(r), nm=k&&names[k];
     return nm?`<b>${esc(nm)}</b><div class="small muted">${esc(id)}</div>`:`<span class="small">${esc(id)}</span>`; };
+  // Maydonga xos ko'rinish: rol — nomi bilan, vaqt — Toshkent vaqti, «kim bloklagan» — foydalanuvchi ismi (xom id emas).
+  const tkTime=a=>{ const x=new Date(a); if(isNaN(x)) return String(a||''); const z=new Date(x.getTime()+5*3600e3);
+    return `${z.toISOString().slice(0,10)} ${String(z.getUTCHours()).padStart(2,'0')}:${String(z.getUTCMinutes()).padStart(2,'0')}`; };
+  const fv=(k,v)=>{ if(v===null||v===undefined||v==='') return chlogVal(v);
+    if(k==='role'||k==='blockedRole') return ROLE_LABEL[v]||String(v);
+    if(k==='blockedAt') return tkTime(v);
+    if(k==='blockedBy') return names[String(v)]||chlogVal(v);
+    return chlogVal(v); };
   const chg=r=>{ const c=r.changes||{};
     if(r.tbl==='attendance'){ const add=(c.sick_added||[]), rem=(c.sick_removed||[]); return [add.length?`«Bemor» qo‘shildi: ${esc(add.join(', '))}-kunlar`:'', rem.length?`«Bemor» olib tashlandi: ${esc(rem.join(', '))}-kunlar`:''].filter(Boolean).join('<br>')+(c.month?` <span class="small muted">(${esc(c.month)})</span>`:''); }
     return Object.keys(c).map(k=>{ const v=c[k]; const lbl=esc(CHLOG_FLD[k]||k);
-      if(!Array.isArray(v)||v.length!==2) return `${lbl}: ${esc(chlogVal(v))}`;
-      if(r.op==='INSERT') return `${lbl}: ${esc(chlogVal(v[1]))}`;
-      if(r.op==='DELETE') return `${lbl}: <s>${esc(chlogVal(v[0]))}</s>`;
-      return `${lbl}: ${esc(chlogVal(v[0]))} → <b>${esc(chlogVal(v[1]))}</b>`; }).join('<br>'); };
+      if(!Array.isArray(v)||v.length!==2) return `${lbl}: ${esc(fv(k,v))}`;
+      if(r.op==='INSERT') return `${lbl}: ${esc(fv(k,v[1]))}`;
+      if(r.op==='DELETE') return `${lbl}: <s>${esc(fv(k,v[0]))}</s>`;
+      return `${lbl}: ${esc(fv(k,v[0]))} → <b>${esc(fv(k,v[1]))}</b>`; }).join('<br>'); };
   let gen=0;   // tez ketma-ket tanlovda eski (kech kelgan) javob yangisining ustiga yozilmasin
   const load=async()=>{
     const g=++gen;
