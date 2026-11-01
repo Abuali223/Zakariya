@@ -185,7 +185,9 @@ function makeDeepHealth(deps) {
     checks.unshift({ key: 'auth', name: 'Auth-server (kirish, SMS kod)', ok: true, info: 'ishlayapti', ms: 0 });
     return { httpStatus: 200, body: { ok: checks.every(c => c.ok !== false), at: new Date(clock()).toISOString(), ms: Math.max(0, clock() - t0), checks } };
   }
-  return { handle };
+  // Kunlik hisobot (tg-daily.cjs) — JWT'siz, server o'zi: barcha tekshiruvlar (auth-server holati — tekshirilmaydi).
+  async function runChecks() { return Promise.all(LIST.map(([k, n, f]) => run(k, n, f))); }
+  return { handle, runChecks };
 }
 
 module.exports = { makeDeepHealth, httpGet, readTail, withTimeout, reason };

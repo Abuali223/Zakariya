@@ -23,6 +23,10 @@
  *   POST /auth/sms-tpl-check      { jwt, texts:{ new_invoice?, debt_reminder?, manual_remind? } } -> Eskiz shabloniga
  *                                 mosligi (faqat Direktor / xabarnoma muharriri; HECH NARSA yubormaydi — sms-tpl-check.cjs)
  *   POST /auth/block-user         { jwt, uid }   POST /auth/unblock-user { jwt, uid }  -> hisobni bloklash (user-admin.cjs)
+ *   POST /auth/tg-webhook         Telegram update (X-Telegram-Bot-Api-Secret-Token sarlavhasi — config.telegram.webhookSecret)
+ *   POST /auth/tg-link-start      { jwt, kind?:'parent'|'staff' } -> bir martalik havola t.me/<bot>?start=<token> (10 daqiqa)
+ *   POST /auth/tg-link-status     { jwt } -> o'z Telegram bog'lanishlari holati      POST /auth/tg-unlink { jwt, linkId? }
+ *                                 (telegram-bot.cjs; config.telegram.botToken bo'lmasa — «Telegram sozlanmagan»)
  *   GET  /auth/health             -> ok   (ommaviy, hech qanday ma'lumotsiz)
  *   GET  /auth/health/deep        Authorization: Bearer <direktor JWT> -> xizmatlar holati (health.cjs)
  *   SMS ANIQ yuborilmasa (Eskiz rad etdi 4xx, ulanib/kirib bo'lmadi) request-otp -> { ok:false, smsFailed:true, error } —
@@ -438,6 +442,8 @@ function makeRouter(o) {
       // Mijoz IP: nginx (loopback) qo'ygan X-Real-IP / X-Forwarded-For'ning OXIRGI qiymati; to'g'ridan-to'g'ri ulanishda —
       //   soket manzili (mijoz yozgan sarlavha limitni chetlab o'tmaydi). Batafsil: net.cjs.
       body._ip = ipOf(req);
+      // Telegram webhook maxfiy sarlavhasi (setWebhook secret_token) — faqat shu marshrutga.
+      if (seg === 'tg-webhook') body._tgSecret = String((req.headers && req.headers['x-telegram-bot-api-secret-token']) || '');
       const out = await fn(body);
       let code = out && out.ok === false && (out.locked ? 429 : 200);
       if (out && out.httpStatus) { code = out.httpStatus; delete out.httpStatus; }
@@ -496,11 +502,31 @@ function startServer() {
   const tm = N.ipMatcher(AUTH.otpTrustedIps);
   if (tm.bad.length) console.error('⚠️ auth.otpTrustedIps: yaroqsiz yoki juda keng yozuv(lar) e’tiborsiz qoldirildi:', tm.bad.join(', '));
   if (tm.size) console.log(`auth: ishonchli (maktab) IP yozuvlari: ${tm.size} ta — IP limiti ${Number(AUTH.otpMaxPerTrustedIpHour || 300)}/soat`);
+  // Telegram bot (D4): kalit FAQAT config.json'da (telegram.botToken, webhookSecret, botUsername). Yo'q bo'lsa — bot o'chiq,
+  //   qolgan auth ishlayveradi. Bot nomi config'da bo'lmasa — getMe'dan.
+  const TGC = CFG.telegram || {};
+  let tgBot = null;
+  if (TGC.botToken) {
+    try {
+      const { makeTelegram } = require('../server/telegram.cjs');
+      const tg = makeTelegram({ token: TGC.botToken, timeoutMs: TGC.timeoutMs });
+      const tgCfg = { botUsername: TGC.botUsername || '', webhookSecret: TGC.webhookSecret || '', linkTtlSec: TGC.linkTtlSec, hmacSecret: AUTH.hmacSecret };
+      if (!tgCfg.webhookSecret) console.error('⚠️ config.telegram.webhookSecret yo‘q — webhook so‘rovlari rad etiladi (401).');
+      const { makeTgBot } = require('./telegram-bot.cjs');
+      tgBot = makeTgBot({ sb, tg, cfg: tgCfg, verifyJwt: jwt => verifyToken(db, jwt) });
+      if (!tgCfg.botUsername) tg.getMe().then(r => { if (r && r.ok && r.result && r.result.username) { tgCfg.botUsername = r.result.username; console.log('telegram: bot @' + tgCfg.botUsername); } else console.error('⚠️ telegram getMe:', (r && r.error) || 'javob yo‘q'); });
+    } catch (e) { console.error('telegram-bot yuklanmadi:', e && e.message); tgBot = null; }
+  }
+  const tgOff = async () => ({ ok: false, error: 'Telegram hali ulanmagan (server sozlamasi).' });
   const ROUTES = {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,
     'login': H.login, 'reset-confirm': H.resetConfirm, 'change-phone-confirm': H.changePhoneConfirm,
     'sms-remind': smsRemind, 'sms-remind-batch': smsRemindBatch, 'sms-tpl-check': smsTplCheck,
     'block-user': UA.blockUser, 'unblock-user': UA.unblockUser,
+    'tg-webhook': tgBot ? tgBot.webhook : async () => ({ ok: false, httpStatus: 404 }),
+    'tg-link-start': tgBot ? tgBot.linkStart : tgOff,
+    'tg-link-status': tgBot ? tgBot.linkStatus : async () => ({ ok: true, configured: false, links: [] }),
+    'tg-unlink': tgBot ? tgBot.unlink : tgOff,
   };
   // CORS: ruxsat etilgan origin(lar) ro'yxati (vergul bilan yoki massiv). Brauzer api.iqror.uz'ga
   //   cross-origin murojaat qiladi (sayt iqroacademy.uz'да) — shuning uchun mos originни qaytaramiz.
@@ -516,7 +542,7 @@ function startServer() {
   const PORT = Number(AUTH.port || CFG.authPort || 8792);   // 8790=to'lov, 8791=AI — band
 
   const server = http.createServer(makeRouter({ routes: ROUTES, corsFor, deepHealth: DH.handle }));
-  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind,sms-remind-batch,sms-tpl-check,block-user,unblock-user,health,health/deep})`));
+  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind,sms-remind-batch,sms-tpl-check,block-user,unblock-user,tg-webhook,tg-link-start,tg-link-status,tg-unlink,health,health/deep})${tgBot ? ' · telegram: yoqilgan' : ''}`));
 }
 
 if (require.main === module) startServer();

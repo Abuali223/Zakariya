@@ -31,18 +31,50 @@
  * Sozlash: config.json -> "sms" bloki (Eskiz ulanishi; config.example.json'ga qarang). auto rejimida yoqish/o'chirish, kunlar,
  *   soatlar va matn — notify_settings'dan; config.json'dagi templates/sendHours/reminderDays — faqat sozlama bo'sh bo'lsa.
  * ⚠️ CRON yozuvlari ustma-ust tushmasin (bir vaqtda 2 nusxa ishlamasin) — flock ishlating.
+ *
+ * TELEGRAM (PKG-10, D4): ota-ona botga ulangan va raqami kartadagi raqam bilan tasdiqlangan bo'lsa (tg_recipients_bulk) —
+ *   xabar AVVAL Telegram orqali; yetkazilmasa (bloklagan/xato) — SMS (faqat +998, tinch soat, kuniga 1 SMS — avvalgi qoidalar).
+ *   Bitta xabar id (sms_log) — qaysi kanal bilan ketsa ham bitta qator (kanal: channel). Ota-ona botdagi /sozlamalar'da turni
+ *   o'chirgan bo'lsa — o'sha tur Telegram'da kelmaydi (SMS qoidasi avvalgidek).
+ *   Navbat (notify_queue — baza trigger yozadi): «To'lov qabul qilindi» (Telegram; SMS faqat «Xabarnomalar»da faol SMS matni
+ *   bo'lsa) va sinf e'loni (faqat Telegram). Tur o'chiq bo'lsa — navbatdagilar o'tkaziladi (keyin yoqilganda eski xabar ketmaydi).
+ *   Bot kaliti: shu config.json'dagi «telegram» bloki yoki ../auth/config.json'dagisi; yo'q bo'lsa — faqat SMS.
  */
 const fs = require('fs');
 const path = require('path');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
-const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, tashkentDayStartISO, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, sendStatus, definitelyNotSent, canonMobile, smsName, resolveAutoPlan } = require('./sms.cjs');
+const { makeEskiz, DEF_NEW, DEF_DEBT, DEF_TG, fillTpl, fmtSom, fmtMonth, tashkentDay, tashkentDayStartISO, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, sendStatus, definitelyNotSent, canonMobile, smsName, resolveAutoPlan } = require('./sms.cjs');
+const { makeTelegram } = require('../server/telegram.cjs');
 const { composeSms, smsSom, smsMonths } = require('./eskiz-template.cjs');
 
 const SMS = CFG.sms || {};
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 const tpl = (k, def) => (SMS.templates && SMS.templates[k]) || def;
+
+// ---- Telegram (PKG-10) ----
+function tgConfig() {
+  if (CFG.telegram && CFG.telegram.botToken) return CFG.telegram;
+  try { const a = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'auth', 'config.json'), 'utf8')); if (a && a.telegram && a.telegram.botToken) return a.telegram; } catch (_) {}
+  return null;
+}
+const TGC = tgConfig();
+const TG = (TGC && TGC.enabled !== false) ? makeTelegram({ token: TGC.botToken, apiBase: TGC.apiBase, timeoutMs: TGC.timeoutMs, perSecond: TGC.perSecond }) : null;
+const TGMAP = new Map(), TGBLOCK = new Set();     // o'quvchi kaliti (studentId / hujjat id) -> [{ chat, link, prefs, lang }]
+async function loadTg() {
+  const sb = db._sb; if (!TG || !sb) return;
+  try {
+    const { data, error } = await sb.rpc('tg_recipients_bulk'); if (error) throw error;
+    (data || []).forEach(r => { [r.student_key, r.student_doc].filter(Boolean).forEach(k => { const a = TGMAP.get(k) || [];
+      if (!a.some(x => x.chat === r.chat_id)) a.push({ chat: r.chat_id, link: r.link_id, prefs: r.prefs || {}, lang: r.lang === 'ru' ? 'ru' : 'uz' }); TGMAP.set(k, a); }); });
+    log(`Telegram: ${new Set((data || []).map(r => r.chat_id)).size} ta tasdiqlangan chat`);
+  } catch (e) { log('⚠️ Telegram qabul qiluvchilari o\'qilmadi (' + String((e && e.message) || e).slice(0, 150) + ') — bu run\'da faqat SMS.'); }
+}
+const tgFor = (key, pref) => (TGMAP.get(key) || []).filter(x => !TGBLOCK.has(x.chat) && !(x.prefs && x.prefs[pref] === false));
+const tgText = (custom, type, lang, vals) => fillTpl(custom || DEF_TG[lang === 'ru' ? 'ru' : 'uz'][type], vals);
+async function tgBlocked(chat) { TGBLOCK.add(chat); try { const { error } = await db._sb.rpc('tg_blocked', { p_chat: chat }); if (error) throw error; } catch (e) { log('tg_blocked xato:', (e && e.message) || e); } }
+let TGN = 0;
 
 // Bugun (Toshkent) SMS ketgan yoki ketishi mumkin bo'lgan telefonlar (sent/sending/unknown — qo'lda «Eslatma» ham).
 //   Run boshida bir marta o'qiladi va har claim'dan keyin to'ldiriladi. O'qib bo'lmasa — cheklov faqat shu run ichida.
@@ -87,7 +119,7 @@ const quietNow = dry => !dry && !inWindow(WIN);
 //   O'zbekiston raqamlariga: otaniki chet el raqami bo'lsa — onaniki (O'zbekiston) olinadi; O'zbekiston raqami umuman
 //   bo'lmasa — telefon yo'q (SMS claim ham qilinmaydi: noto'g'ri/chet el raqami Eskiz xatosi deb sanalmasin).
 //   KANONIK kalit (studentId || id) — qo'lda eslatma qulfi (remind__<kanonik>__<sana>) shu bilan tekshiriladi.
-const CANON = {}; const AMBIG = new Set();
+const CANON = {}; const AMBIG = new Set(); const NAMES = {};
 async function phoneMap() {
   const priv = {}, m = {};
   try {
@@ -95,13 +127,13 @@ async function phoneMap() {
     snap.docs.forEach(d => { const p = d.data() || {}; priv[d.id] = canonMobile(p.parentPhone) || canonMobile(p.parentPhone2) || ''; });
   } catch (e) { log('phoneMap xato:', e.message); }
   try {
-    const rows = (await db.collection('students').get()).docs.map(d => ({ id: d.id, sid: String((d.data() || {}).studentId || '').trim() }));
+    const rows = (await db.collection('students').get()).docs.map(d => ({ id: d.id, sid: String((d.data() || {}).studentId || '').trim(), name: String((d.data() || {}).name || '').trim() }));
     const idSet = new Set(rows.map(r => r.id)), byId = {}, byKey = {};
     rows.forEach(r => { byId[r.id] = r; [r.sid, r.id].filter(Boolean).forEach(k => { (byKey[k] = byKey[k] || new Set()).add(r.id); }); });
     Object.entries(byKey).forEach(([k, ids]) => {
       if (ids.size > 1) { AMBIG.add(k); return; }
       const r = byId[[...ids][0]];
-      CANON[k] = r.sid || r.id;
+      CANON[k] = r.sid || r.id; NAMES[k] = r.name;
       let phone = priv[r.id] || '';
       if (!phone && r.sid && r.sid !== r.id && !idSet.has(r.sid)) phone = priv[r.sid] || '';
       m[k] = { phone };
@@ -160,6 +192,23 @@ async function sendOne(eskiz, id, phone, msg) {
   else if (++consecFail >= CB_MAX) STOP = `${CB_MAX} ta ketma-ket SMS xatosi — run to'xtatildi (Eskiz holati / shablonni tekshiring).`;
   return Object.assign({}, r, { status });
 }
+// Telegram orqali yuborish — xabar id (sms_log) bitta: avval claim (kanal 'telegram'), kamida bitta chatga yetsa — 'sent'.
+//   Hech biriga yetmasa — qator 'failed' (REJ — aniq ketmagan) bo'ladi va chaqiruvchi SMS'ga o'tadi: claimSms o'sha qatorni
+//   qayta oladi (urinishlar ikki kanal bo'yicha birga sanaladi, MAXTRIES gacha). -> 'sent' | 'skip' | 'fallback'
+async function deliverTg(id, rec, recips, textOf, dry) {
+  if (dry) { recips.forEach(r => log(`[DRY tg ${rec.type}]`, 'chat …' + String(r.chat).slice(-3), '::', textOf(r.lang))); TGN++; return 'sent'; }
+  if (!(await claimSms(id, Object.assign({}, rec, { phone: '', message: textOf('uz'), channel: 'telegram' })))) return 'skip';
+  let ok = 0; const errs = [];
+  for (const r of recips) {
+    const res = await TG.sendMessage(r.chat, textOf(r.lang));
+    if (res.ok) ok++; else { errs.push(String(res.error || 'xato').slice(0, 120)); if (res.blocked) await tgBlocked(r.chat); }
+  }
+  if (ok) { await markSms(id, { status: 'sent', providerId: `tg:${ok}/${recips.length}`, error: errs.join('; ').slice(0, 300) }); TGN++; return 'sent'; }
+  await markSms(id, { status: 'failed', error: REJ + 'telegram: ' + errs.join('; ').slice(0, 250) });
+  log(`Telegram yetkazilmadi (${rec.type}) — SMS'ga o'tiladi:`, errs.join('; ').slice(0, 200));
+  return 'fallback';
+}
+
 // Eskiz'dagi tasdiqlangan shablon naqshlari (run boshida bir marta o'qiladi; o'qib bo'lmasa — null: matn oddiy yig'iladi).
 //   SMS matni naqshga sig'adigan shaklda yig'iladi (eskiz-template.cjs composeSms) — Eskiz «moderatsiyadan o'tmagan» deb rad etmasin.
 let APPROVED = null, warnedFit = false;
@@ -190,13 +239,20 @@ async function runNew(eskiz, phones, dry, o) {
     const id = `${inv.id}__new`;
     const dn = await smsDone(id);
     if (dn.skip) { skip++; continue; }
+    const tgr = TG ? tgFor(inv.studentId, 'invoice') : [];
+    if (tgr.length) {
+      const v = { name: String(inv.studentName || '').trim() || 'o‘quvchi', month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) };
+      const out = await deliverTg(id, { invoiceId: inv.id, studentId: inv.studentId || '', type: 'new', month: inv.month || '' }, tgr, lang => tgText(o.tgTemplate, 'new', lang, v), dry);
+      if (out === 'sent') { sent++; continue; }
+      if (out === 'skip') { skip++; continue; }
+    }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan — ertaga (lookback ichida)
     const msg = smsText(o.template || tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
     if (dry) { SENT_TODAY.add(phone); log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
-    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
+    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '', channel: 'sms' }))) { skip++; continue; }
     SENT_TODAY.add(phone);
     const r = await sendOne(eskiz, id, phone, msg);
     if (r.ok) sent++; else { fail++; log('SMS(new) xato:', redactPhone(phone), r.status, r.error); }
@@ -249,18 +305,87 @@ async function runDebt(eskiz, phones, dry, force, o) {
     //   bo'lsa (holati noaniq ham) — takrorlamaymiz (ota-onaga bir kunda 2 ta SMS ketmasin).
     const man = await getSms(`remind__${c.key}__${today}`);
     if (man && ['sent', 'sending', 'unknown'].includes(man.status)) { skip++; continue; }
+    const tgr = TG ? tgFor(inv.studentId, 'debt') : [];
+    if (tgr.length) {
+      const v = { name: String(c.name || inv.studentName || '').trim() || 'o‘quvchi', month: c.months.map(fmtMonth).join(', '), amount: fmtSom(c.due), due: fmtSom(c.due) };
+      const out = await deliverTg(id, { invoiceId: inv.id, studentId: inv.studentId || '', type: 'debt', month: c.months[c.months.length - 1] || inv.month || '' }, tgr, lang => tgText(o.tgTemplate, 'debt', lang, v), dry);
+      if (out === 'sent') { sent++; continue; }
+      if (out === 'skip') { skip++; continue; }
+    }
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan (aka-uka / yangi faktura)
     const msg = smsText(o.template || tpl('debt', DEF_DEBT), { name: smsName(c.name || inv.studentName), month: smsMonths(c.months), amount: smsSom(c.due), due: smsSom(c.due) });
     if (dry) { SENT_TODAY.add(phone); log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
-    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: c.months[c.months.length - 1] || inv.month || '' }))) { skip++; continue; }
+    if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: c.months[c.months.length - 1] || inv.month || '', channel: 'sms' }))) { skip++; continue; }
     SENT_TODAY.add(phone);
     const r = await sendOne(eskiz, id, phone, msg);
     if (r.ok) sent++; else { fail++; log('SMS(debt) xato:', redactPhone(phone), r.status, r.error); }
   }
   log(`QARZ: ${sent} yuborildi · ${skip} o'tkazildi · ${later} bitta raqamga kuniga 1 ta qoidasi bilan qoldirildi (aka-uka — keyingi eslatma kunida) · ${fail} xato`);
   if (quietLeft) log(`⚠️ QARZ: tinch soat boshlandi — qolgan ${quietLeft} ta o'quvchiga BUGUNGI qarz eslatmasi yuborilmaydi (keyingi eslatma kunida ketadi). Qarz cron'ini ertaroq (sendHours ichida) qo'ying.`);
+}
+
+// (3) NAVBAT (notify_queue): «To'lov qabul qilindi» va sinf e'loni. Tur o'chiq — 'skipped' (keyin yoqilganda eski xabar
+//   ketmaydi); tinch soat — navbatda qoladi; 3 kundan eskisi — 'skipped'. To'lov: Telegram, yetmasa — SMS faqat faol SMS matni
+//   bo'lsa (+998, kuniga 1 SMS). E'lon — faqat Telegram (SMS'ga emas).
+const tkDate = v => { const d = new Date(v || Date.now()); return isNaN(d) ? '' : new Date(d.getTime() + 5 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('.'); };
+async function queuePending() {
+  const sb = db._sb; if (!sb) return [];
+  try { const { data, error } = await sb.from('notify_queue').select('*').eq('status', 'pending').order('createdAt', { ascending: true }).limit(300); if (error) throw error; return data || []; }
+  catch (e) { log('⚠️ Xabar navbati (notify_queue) o\'qilmadi:', String((e && e.message) || e).slice(0, 150)); return []; }
+}
+async function markQueue(q, status, note) {
+  try { const { error } = await db._sb.from('notify_queue').update({ status, error: String(note || '').slice(0, 300), attempts: (Number(q.attempts) || 0) + 1, processedAt: new Date().toISOString() }).eq('id', q.id).eq('status', 'pending'); if (error) throw error; }
+  catch (e) { log('notify_queue yangilanmadi:', (e && e.message) || e); }
+}
+async function runQueue(eskiz, phones, dry, plan, rows) {
+  let tg = 0, sms = 0, skipN = 0, laterN = 0, failN = 0;
+  for (const q of rows) {
+    if (STOP) break;
+    const P = q.type === 'payment' ? plan.payment : plan.announce;
+    if (!P || !P.enabled) { if (!dry) await markQueue(q, 'skipped', 'tur o‘chirilgan'); skipN++; continue; }
+    if (!P.inWindow && !dry) { laterN++; continue; }                       // tinch soat — keyingi run
+    if (Date.now() - Date.parse(q.createdAt || 0) > 3 * 864e5) { if (!dry) await markQueue(q, 'skipped', 'eskirgan (3 kundan oshgan)'); skipN++; continue; }
+    const pl = q.payload || {};
+    if (q.type === 'announce') {
+      if (!TG) { if (!dry) await markQueue(q, 'skipped', 'Telegram sozlanmagan'); skipN++; continue; }
+      let rec = [];
+      try { const { data, error } = await db._sb.rpc('tg_announce_recipients', { p_keys: pl.classKeys || [] }); if (error) throw error; rec = data || []; }
+      catch (e) { if ((Number(q.attempts) || 0) >= 2) { if (!dry) await markQueue(q, 'failed', String((e && e.message) || e)); failN++; } laterN++; continue; }
+      rec = rec.filter(r => !TGBLOCK.has(r.chat_id) && !(r.prefs && r.prefs.announce === false));
+      const text = `📢 ${String(pl.title || '').trim()}${pl.body ? '\n' + String(pl.body).trim() : ''}`.slice(0, 3800);
+      if (dry) { log(`[DRY tg announce] ${rec.length} ta chat ::`, text.split('\n')[0]); tg += rec.length; continue; }
+      let ok = 0;
+      for (const r of rec) { const res = await TG.sendMessage(r.chat_id, text); if (res.ok) ok++; else if (res.blocked) await tgBlocked(r.chat_id); }
+      await markQueue(q, 'done', `${ok}/${rec.length} ta chatga yuborildi`); tg += ok; continue;
+    }
+    // payment
+    const sid = String(pl.studentId || ''), amt = Number(pl.amount) || 0;
+    if (!sid || amt <= 0 || AMBIG.has(sid)) { if (!dry) await markQueue(q, 'skipped', AMBIG.has(sid) ? 'ID to‘qnashuvi' : 'o‘quvchi/summa yo‘q'); skipN++; continue; }
+    const id = `pay__${q.ref || q.id}`;
+    const dn = await smsDone(id);
+    if (dn.skip) { if (!dry) await markQueue(q, 'done', 'avval yuborilgan'); continue; }
+    const v = { name: NAMES[sid] || NAMES[CANON[sid]] || 'o‘quvchi', amount: fmtSom(amt), due: fmtSom(amt), date: tkDate(pl.at || q.createdAt), month: '' };
+    const vs = Object.assign({}, v, { name: smsName(v.name), amount: smsSom(amt), due: smsSom(amt) });   // SMS (Eskiz shabloni) uchun
+    const tgr = TG ? tgFor(sid, 'payment') : [];
+    let out = '';
+    if (tgr.length) {
+      out = await deliverTg(id, { studentId: sid, type: 'payment', month: '' }, tgr, lang => tgText(P.tgTemplate, 'payment', lang, v), dry);
+      if (out === 'sent') { tg++; if (!dry) await markQueue(q, 'done', 'Telegram'); continue; }
+      if (out === 'skip') { if (!dry) await markQueue(q, 'done', 'avval yuborilgan'); continue; }
+    }
+    const phone = (phones[sid] || {}).phone;
+    if (!P.smsTemplate || !phone || !eskiz && !dry) { if (!dry) await markQueue(q, out === 'fallback' ? 'failed' : 'skipped', out === 'fallback' ? 'Telegram yetkazilmadi; SMS matni/raqami yo‘q' : (!P.smsTemplate ? 'Telegram ulanmagan; SMS matni yo‘q' : 'O‘zbekiston raqami yo‘q')); skipN++; continue; }
+    if (SENT_TODAY.has(phone)) { if (!dry) await markQueue(q, 'skipped', 'bugun shu raqamga SMS ketgan'); skipN++; continue; }
+    const msg = smsText(P.smsTemplate, vs);
+    if (dry) { SENT_TODAY.add(phone); log('[DRY payment]', redactPhone(phone), '::', msg); sms++; continue; }
+    if (!(await claimSms(id, { studentId: sid, phone, type: 'payment', message: msg, month: '', channel: 'sms' }))) { await markQueue(q, 'done', 'avval yuborilgan'); continue; }
+    SENT_TODAY.add(phone);
+    const r = await sendOne(eskiz, id, phone, msg);
+    if (r.ok) { sms++; await markQueue(q, 'done', 'SMS'); } else { failN++; await markQueue(q, 'failed', 'SMS: ' + (r.error || r.status)); }
+  }
+  log(`NAVBAT: Telegram ${tg} · SMS ${sms} · ${skipN} o'tkazildi · ${laterN} keyinga · ${failN} xato`);
 }
 
 // auto rejim: notify_settings (service_role) -> reja. O'qib bo'lmasa — null (chaqiruvchi HECH NARSA yubormaydi, kod 3).
@@ -273,7 +398,8 @@ async function loadAutoPlan(dry) {
   const plan = resolveAutoPlan(rows, Date.now(), SMS, { ignoreWindow: dry });
   if (!plan.ok) { log('❌ ' + plan.error + ' — HECH NARSA yuborilmadi.'); return null; }
   const st = (p, nm) => p.run ? `${nm}: HA (matn: ${p.tplSource === 'settings' ? 'Sozlamalar' : p.tplSource === 'config' ? 'config.json' : 'standart'})` : `${nm}: yo'q — ${p.reason}`;
-  log('AUTO: ' + st(plan.new, 'yangi faktura') + ' · ' + st(plan.debt, 'qarz eslatmasi'));
+  log('AUTO: ' + st(plan.new, 'yangi faktura') + ' · ' + st(plan.debt, 'qarz eslatmasi')
+    + (plan.payment && plan.payment.enabled ? ' · to‘lov xabari: HA' : '') + (plan.announce && plan.announce.enabled ? ' · sinf e’loni (Telegram): HA' : '') + (TG ? ' · Telegram: ulangan' : ''));
   return plan;
 }
 
@@ -283,11 +409,17 @@ async function loadAutoPlan(dry) {
   const dry = SMS.dryRun === true || args.includes('--dry');
   const mode = (args.find(a => !a.startsWith('--')) || 'both').toLowerCase();   // auto | new | debt | both
   // auto: avval sozlama (arzon) — bu run'da yuboriladigan tur bo'lmasa Eskiz'ga ham murojaat qilinmaydi.
-  let plan = null;
+  let plan = null, queue = [];
   if (mode === 'auto') {
     plan = await loadAutoPlan(dry);
     if (!plan) { process.exitCode = 3; return; }
-    if (!plan.new.run && !plan.debt.run) { log('Tugadi (bu run’da yuboriladigan xabar turi yo‘q).'); return; }
+    queue = await queuePending();
+    // Navbatda faqat o'chiq turlar bo'lsa — ular 'skipped' qilinadi (sinovda — tegilmaydi) va boshqa ish bo'lmasa chiqiladi.
+    const qOn = q => !!((q.type === 'payment' ? plan.payment : plan.announce) || {}).enabled;
+    if (!plan.new.run && !plan.debt.run && !queue.some(qOn)) {
+      if (!dry) for (const q of queue) await markQueue(q, 'skipped', 'tur o‘chirilgan');
+      log('Tugadi (bu run’da yuboriladigan xabar turi yo‘q).'); return;
+    }
   }
   const eskiz = dry ? null : makeEskiz(SMS);
   // Naqshlar faqat O'QILADI (GET) — sinov (--dry) rejimida ham, kalit bo'lsa: logdagi matn haqiqatda ketadigan bilan bir xil.
@@ -299,16 +431,19 @@ async function loadAutoPlan(dry) {
   if (plan) {
     await loadSentToday();
     const phones = await phoneMap();
+    await loadTg();
     if (plan.new.run) {
       WIN = plan.new.window;
       if (dry && !inWindow(WIN)) log(`(DRY) yangi faktura: hozir tinch soat — haqiqiy rejimda yuborilmasdi.`);
-      await runNew(eskiz, phones, dry, { since: plan.new.since, template: plan.new.template });
+      await runNew(eskiz, phones, dry, { since: plan.new.since, template: plan.new.template, tgTemplate: plan.new.tgTemplate });
     }
     if (plan.debt.run && !STOP) {
       QUIET = false; WIN = plan.debt.window;
       if (dry && !inWindow(WIN)) log(`(DRY) qarz eslatmasi: hozir tinch soat — haqiqiy rejimda yuborilmasdi.`);
-      await runDebt(eskiz, phones, dry, false, { days: plan.debt.days, dayOfMonth: plan.debt.dayOfMonth, template: plan.debt.template });
+      await runDebt(eskiz, phones, dry, false, { days: plan.debt.days, dayOfMonth: plan.debt.dayOfMonth, template: plan.debt.template, tgTemplate: plan.debt.tgTemplate });
     }
+    if (queue.length && !STOP) { QUIET = false; await runQueue(eskiz, phones, dry, plan, queue); }
+    if (TG && TGN) log(`Telegram orqali: ${TGN} ta xabar`);
     if (STOP) { log('TO\'XTATILDI: ' + STOP); process.exitCode = 1; return; }
     if (QUIET) { log('TINCH SOAT boshlandi — qolgan xabarlar keyingi ish vaqtidagi run\'da ketadi.'); return; }
     log('Tugadi.' + (dry ? ' (DRY — hech narsa yuborilmadi)' : ''));

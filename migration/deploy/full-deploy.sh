@@ -160,7 +160,7 @@ psql_at -c "select '    yangi funksiyalar: ' || count(*) || ' (kutilgan 10)' fro
         -c "select '    ID reyestri (payroll_ids): ' || count(*) || ' ta ID, ' || count(*) filter (where released_at is not null) || ' tasi bo''shatilgan (qayta berilmaydi); RLS ' || coalesce((select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.payroll_ids')), '?') from public.payroll_ids" \
         -c "select '    reyestrda yo''q joriy ID: ' || count(*) || ' (kutilgan 0)' from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' and not exists (select 1 from public.payroll_ids p where p.id = x.k)" \
         -c "select '    takroriy o''qituvchi/xodim ID''lari: ' || count(*) || case when count(*) > 0 then ' — kartochkada «Yangi noyob ID berish» bilan bir martalik tuzating (migration/deploy/README.md)' else ' ✓' end from (select k from (select app.pid_key(\"teacherId\") k from public.teachers union all select app.pid_key(\"staffId\") from public.staff) x where k <> '' group by k having count(*) > 1) d" \
-        -c "select '    o''zgarishlar tarixi (change_log): ' || case when to_regclass('public.change_log') is null then 'YO''Q!' else 'bor, RLS ' || (select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.change_log')) end || '; triggerlar: ' || (select count(*) from pg_trigger where tgname in ('trg_change_log','trg_change_log_sick') and tgenabled <> 'D') || ' (kutilgan 38)'" \
+        -c "select '    o''zgarishlar tarixi (change_log): ' || case when to_regclass('public.change_log') is null then 'YO''Q!' else 'bor, RLS ' || (select case when relrowsecurity then 'yoqilgan' else 'O''CHIQ!' end from pg_class where oid = to_regclass('public.change_log')) end || '; triggerlar: ' || (select count(*) from pg_trigger where tgname in ('trg_change_log','trg_change_log_sick') and tgenabled <> 'D') || ' (kutilgan 39)'" \
         -c "select '    kamera kunlari funksiyasi (camera_days): ' || count(*) || ' (kutilgan 1)' from pg_proc where proname = 'camera_days'" \
         -c "select '    ommaviy o''quvchi ro''yxati (students_public): ' || count(*) || ' (kutilgan 0 — D6: anon o''quvchi ma''lumotini olmaydi)' from pg_views where schemaname = 'public' and viewname = 'students_public'" \
         -c "select '    hujjat tekshiruvi / kabinet funksiyalari (issue_doc_token, verify_doc, child_card): ' || count(*) || ' (kutilgan 3)' from pg_proc where pronamespace = 'public'::regnamespace and proname in ('issue_doc_token','verify_doc','child_card')" \
@@ -197,6 +197,15 @@ SMSCRON="$( { crontab -l 2>/dev/null; sudo sh -c 'cat /var/spool/cron/crontabs/*
 if printf '%s\n' "$SMSCRON" | grep -q 'sms-worker\.cjs[[:space:]]*auto'; then echo "    ✓ Avtomatik SMS cron'i (sms-worker auto) bor"
 elif [ -n "$SMSCRON" ]; then echo "    ⚠️ ESKI SMS cron (sms-worker new/debt) — admin «Xabarnomalar» sozlamasiga bo'ysunmaydi. Almashtiring: bash $REPO/payments/install-sms-cron.sh"
 else echo "    ℹ️ Avtomatik SMS cron'i yo'q. O'rnatish (xavfsiz — «Xabarnomalar»da yoqilmaguncha hech narsa yubormaydi): bash $REPO/payments/install-sms-cron.sh"; fi
+# Telegram (PKG-10): bot kaliti auth config'da bormi (QIYMATI chiqarilmaydi) va kunlik hisobot cron'i (faqat o'qiladi).
+TGWD=$(systemctl show -p WorkingDirectory --value iqror-auth 2>/dev/null || true); TGWD=${TGWD#!}
+TGCF=""; for d in "$TGWD/auth" "$TGWD" "$REPO/auth"; do [ -n "$d" ] && sudo test -f "$d/config.json" && { TGCF="$d/config.json"; break; }; done
+if [ -n "$TGCF" ] && sudo grep -qE '"botToken"[[:space:]]*:[[:space:]]*"[0-9]{5,}:' "$TGCF"; then
+  echo "    ✓ Telegram bot kaliti sozlangan (auth config). Webhook holati: cd $(dirname "$TGCF") && sudo -u \$(stat -c %U "$TGCF") node tg-setup.cjs"
+  TGCRON="$( { crontab -l 2>/dev/null; sudo sh -c 'cat /var/spool/cron/crontabs/* 2>/dev/null'; } | grep -a 'tg-daily.cjs' | grep -av '^[[:space:]]*#' || true)"
+  if [ -n "$TGCRON" ]; then echo "    ✓ Direktorga kunlik hisobot cron'i (tg-daily) bor"
+  else echo "    ℹ️ Kunlik hisobot cron'i yo'q. O'rnatish (xavfsiz — «Xabarnomalar» → «Kunlik hisobot» yoqilmaguncha yubormaydi): bash $REPO/auth/install-tg-cron.sh"; fi
+else echo "    ℹ️ Telegram bot sozlanmagan (auth config → «telegram» bloki) — xabarlar faqat SMS orqali. Yo'riqnoma: auth/README.md «Telegram bot»"; fi
 # KUNLIK ZAXIRA CRON'i (root). Yo'q bo'lsa — deploy o'zi o'rnatadi: BITTA sudo, root crontab'ning boshqa qatorlari saqlanadi
 #   (grep -a — UTF-8 bo'lmagan qatorlar ham), eski/boshqa yo'ldagi backup.sh qatorlari almashtiriladi, takrorlanmaydi. 22:30 server
 #   vaqti (UTC bo'lsa Toshkent 03:30). DB_CONT / BACKUP_DIR standart bo'lmasa — qatorga yoziladi (tunda ham shu baza/papka).

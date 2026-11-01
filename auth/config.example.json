@@ -22,6 +22,13 @@
     "corsOrigin": "https://iqroacademy.uz, https://www.iqroacademy.uz",
     "health": { "backupLog": "/var/log/iqror-backup.log", "backupMaxAgeHours": 26, "payPort": 8790, "aiPort": 8791, "eskizCheck": true, "eskizBalance": false }
   },
+  "telegram": {
+    "botToken": "BOT_TOKEN — @BotFather beradi (MAXFIY, repoga yozilmaydi)",
+    "botUsername": "IqrorAcademyBot (havola uchun; bo'sh bo'lsa — getMe'dan)",
+    "webhookSecret": "UZUN_TASODIFIY_SATR — setWebhook secret_token (MAXFIY, masalan: openssl rand -hex 24)",
+    "publicUrl": "https://iqroacademy.uz/authapi/tg-webhook",
+    "linkTtlSec": 600
+  },
   "sms": {
     "enabled": true,
     "dryRun": false,

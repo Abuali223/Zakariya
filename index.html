@@ -1389,7 +1389,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-ann"></div><div id="kab-menu"></div><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-ann"></div><div id="kab-menu"></div><div id="kab-tg"></div><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1400,7 +1400,7 @@ function renderKabinet(){
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
-    renderKabRank(s); renderKabAnnouncements(s); renderKabMenu(); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabHealth(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+    renderKabRank(s); renderKabAnnouncements(s); renderKabMenu(); renderKabTelegram(); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabHealth(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
 }
 
 // 🚌 Maktab avtobusi — kabinetда jonli xarita (Leaflet + OpenStreetMap).
@@ -1830,6 +1830,39 @@ async function renderKabMenu(){
     const mo=$("#kab-menu-more"); if(mo) mo.onclick=()=>{ open=!open; draw(); };
   };
   draw();
+}
+// 📨 Telegram (PKG-10): ota-ona botga bir martalik havola bilan ulanadi; raqami maktabdagi o'quvchi kartasidagi raqam bilan
+//   mos bo'lishi shart (botda «📱 Raqamni ulashish»). Bot serverda sozlanmagan bo'lsa — karta ko'rinmaydi.
+async function renderKabTelegram(){
+  const box=$("#kab-tg"); if(!box || !(window.IqrorFB&&window.IqrorFB.tgCall)) return;
+  const isRu=lang==='ru';
+  const L=isRu?{ title:'Telegram', off:'Получайте сообщения школы в Telegram (счета, напоминания, оплаты, объявления класса) — бесплатно, вместо SMS.',
+      connect:'Подключить Telegram', open:'Открыть бота ↗', hint:'В боте нажмите «✅ Согласен», затем «📱 Поделиться номером». Номер должен совпадать с номером в карточке ученика в школе. Ссылка одноразовая, действует 10 минут.',
+      refresh:'Обновить статус', on:'✅ Подключено', blocked:'⛔ Бот заблокирован — разблокируйте бота в Telegram или подключитесь заново.', reverify:'⚠️ Нужно подтвердить заново (изменился номер в карточке или прошёл год).', mismatch:'Номер в карточке изменился:',
+      unlink:'Отключить', relink:'Подключить заново', confirmOff:'Отключить сообщения в Telegram?', err:'Ошибка' }
+    : { title:'Telegram', off:'Maktab xabarlarini Telegram orqali oling (to‘lov hisobi, eslatma, to‘lov qabul qilindi, sinf e’lonlari) — bepul, SMS o‘rniga.',
+      connect:'Telegramni ulash', open:'Botni ochish ↗', hint:'Botda «✅ Roziman», so‘ng «📱 Raqamni ulashish»ni bosing. Raqamingiz maktabdagi o‘quvchi kartasidagi raqam bilan mos bo‘lishi kerak. Havola bir martalik, 10 daqiqa amal qiladi.',
+      refresh:'Holatni yangilash', on:'✅ Ulangan', blocked:'⛔ Bot bloklangan — Telegramda botni qayta yoqing yoki qaytadan ulang.', reverify:'⚠️ Qayta tasdiqlash kerak (kartadagi raqam o‘zgargan yoki bir yil o‘tgan).', mismatch:'Kartadagi raqami o‘zgargan:',
+      unlink:'Uzish', relink:'Qaytadan ulash', confirmOff:'Telegram xabarlari to‘xtatilsinmi?', err:'Xatolik' };
+  const st=await window.IqrorFB.tgCall('tg-link-status', {});
+  if($("#kab-tg")!==box) return;
+  if(!st || !st.ok || !st.configured){ box.innerHTML=''; return; }
+  const links=(st.links||[]).filter(l=>l.kind==='parent');
+  const act=links.find(l=>l.status==='active'), other=links.find(l=>l.status!=='active');
+  const btn=(id,txt,primary)=>`<button type="button" id="${id}" class="small" style="border:${primary?'none':'1px solid var(--line,#d7ddd4)'};background:${primary?'var(--brand,#1F9982)':'transparent'};color:${primary?'#fff':'inherit'};border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600">${esc(txt)}</button>`;
+  let body;
+  if(act) body=`<div class="small" style="margin-top:6px">${L.on}: <b>${esc((act.students||[]).join(', ')||'—')}</b>${(act.mismatch||[]).length?`<div style="color:#B45309;margin-top:4px">${L.mismatch} ${esc(act.mismatch.join(', '))} — ${L.reverify}</div>`:''}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${(act.mismatch||[]).length?btn('kab-tg-go',L.relink,true):''}${btn('kab-tg-off',L.unlink,false)}</div>`;
+  else if(other) body=`<div class="small" style="margin-top:6px;color:#B45309">${other.status==='blocked'?L.blocked:((other.mismatch||[]).length?`${L.mismatch} ${esc(other.mismatch.join(', '))} — ${L.reverify}`:L.reverify)}</div><div style="margin-top:8px">${btn('kab-tg-go',L.relink,true)}</div>`;
+  else body=`<div class="small" style="color:var(--muted);margin-top:6px">${L.off}</div><div style="margin-top:8px">${btn('kab-tg-go',L.connect,true)}</div>`;
+  box.innerHTML=`<div class="kab-att-card"><div class="subs-l" style="margin:0">📨 ${L.title}</div>${body}<div id="kab-tg-out" class="small" style="margin-top:8px"></div></div>`;
+  const go=$("#kab-tg-go"); if(go) go.onclick=async()=>{ go.disabled=true; const r=await window.IqrorFB.tgCall('tg-link-start', {}); go.disabled=false;
+    const out=$("#kab-tg-out"); if(!out) return;
+    out.innerHTML=(r&&r.ok&&r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="display:inline-block;background:#229ED9;color:#fff;border-radius:8px;padding:7px 12px;font-weight:600;text-decoration:none">${L.open}</a>
+        <div style="color:var(--muted);margin-top:6px">${L.hint}</div><button type="button" id="kab-tg-ref" class="small" style="margin-top:6px;border:none;background:transparent;color:var(--teal,#1F9982);cursor:pointer;font-weight:600;padding:0">${L.refresh}</button>`
+      :`<span style="color:#B42318">${L.err}: ${esc((r&&r.error)||'')}</span>`;
+    const rf=$("#kab-tg-ref"); if(rf) rf.onclick=()=>renderKabTelegram(); };
+  const off=$("#kab-tg-off"); if(off) off.onclick=async()=>{ if(!confirm(L.confirmOff)) return; const r=await window.IqrorFB.tgCall('tg-unlink', {}); if(!(r&&r.ok)){ const out=$("#kab-tg-out"); if(out) out.innerHTML=`<span style="color:#B42318">${L.err}: ${esc((r&&r.error)||'')}</span>`; return; } renderKabTelegram(); };
 }
 async function renderKabHealth(studentId){
   const box=$("#kab-health"); if(!box || !(window.IqrorFB&&window.IqrorFB.getSickNotes)) return;
@@ -2267,6 +2300,14 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         const { collection, getDocs, query, orderBy, limit } = fsMod;
         try{ const snap = await getDocs(query(collection(db,'class_announcements'), orderBy('createdAt','desc'), limit(60))); return snap.docs.map(d=>({id:d.id, ...d.data()})); }
         catch(e){ return null; }
+      },
+      // Telegram (PKG-10): auth-server /authapi/tg-* (JWT bilan) — holat, bir martalik havola, uzish.
+      async tgCall(path, payload){
+        let jwt=''; try{ jwt = (AuthAPI && AuthAPI.currentJwt) ? await AuthAPI.currentJwt() : ''; }catch(e){ jwt=''; }
+        if(!jwt) return { ok:false, error:'auth' };
+        try{ const res = await fetch(String(window.IQROR_AUTH_BASE||'/authapi').replace(/\/+$/,'')+'/'+path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(Object.assign({ jwt }, payload||{})) });
+          let j=null; try{ j=await res.json(); }catch(e){} return j || { ok:false, error:'HTTP '+res.status }; }
+        catch(e){ return { ok:false, error:'net' }; }
       },
       // Oshxona menyusi (PKG-11): kun bo'yicha (id = 'YYYY-MM-DD'); o'qish — har qanday faol hisob (RLS cm_sel).
       async getCanteen(from, to){

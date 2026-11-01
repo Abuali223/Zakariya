@@ -73,6 +73,7 @@ function normMobile(p) {
 function makeEskiz(cfg) {
   cfg = cfg || {};
   const HOST = cfg.host || 'notify.eskiz.uz';
+  const PORT = Number(cfg.port) > 0 ? Number(cfg.port) : undefined;   // standart 443 (faqat lokal sinov serveri uchun)
   const from = cfg.from || '4546';            // jo'natuvchi (nickname) — Eskiz'da tasdiqlangan bo'lishi kerak
   let token = null;
   // Chaqiruv muddati (ixtiyoriy, ms): shu chaqiruvdagi BARCHA so'rovlar (kerak bo'lsa login + asosiy so'rov) uchun BITTA
@@ -83,7 +84,7 @@ function makeEskiz(cfg) {
     // Faqat token berilgan bo'lsa — o'shani ishlatamiz (avtomatik yangilanmaydi).
     if (!cfg.eskizEmail && !cfg.email && cfg.token) { token = cfg.token; return token; }
     const { boundary, body } = multipart({ email: cfg.eskizEmail || cfg.email || '', password: cfg.eskizPassword || cfg.password || '' });
-    const r = await httpsRequest({ host: HOST, path: '/api/auth/login', method: 'POST',
+    const r = await httpsRequest({ host: HOST, port: PORT, path: '/api/auth/login', method: 'POST',
       headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary, 'Content-Length': body.length } }, body, typeof left === 'function' ? left() : undefined);
     const t = r.json && r.json.data && r.json.data.token;
     if (!t) throw new Error('Eskiz login muvaffaqiyatsiz: ' + (r.raw || ('HTTP ' + r.status)));
@@ -99,7 +100,7 @@ function makeEskiz(cfg) {
   async function templates(opts) {
     const left = budget(opts && opts.timeoutMs);
     await stage('login', () => ensureToken(left));
-    const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/templates', method: 'GET',
+    const get = () => stage('send', () => httpsRequest({ host: HOST, port: PORT, path: '/api/user/templates', method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }, null, left()));
     let r = await get();
     if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await get(); }
@@ -116,7 +117,7 @@ function makeEskiz(cfg) {
   async function balance(opts) {
     const left = budget(opts && opts.timeoutMs);
     await stage('login', () => ensureToken(left));
-    const get = () => stage('send', () => httpsRequest({ host: HOST, path: '/api/user/get-limit', method: 'GET',
+    const get = () => stage('send', () => httpsRequest({ host: HOST, port: PORT, path: '/api/user/get-limit', method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }, null, left()));
     let r = await get();
     if (r.status === 401 && (cfg.eskizEmail || cfg.email)) { await stage('login', () => login(left)); r = await get(); }
@@ -142,7 +143,7 @@ function makeEskiz(cfg) {
     await stage('login', () => ensureToken(left));
     const post = () => stage('send', () => {
       const body = new URLSearchParams({ mobile_phone: mobile, message: String(message || ''), from }).toString();
-      return httpsRequest({ host: HOST, path: '/api/message/sms/send', method: 'POST',
+      return httpsRequest({ host: HOST, port: PORT, path: '/api/message/sms/send', method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body, left());
     });
     let r = await post();
@@ -163,6 +164,16 @@ function makeEskiz(cfg) {
 const DEF_NEW  = "Hurmatli ota-ona! {name} uchun {month} oy to'lovi shakllantirildi: {amount} so'm. Batafsil: iqroacademy.uz. IQROR Academy";
 const DEF_DEBT = "Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy";
 const DEF_OTP  = 'IQROR Academy tasdiqlash kodi: {code}. Hech kimga bermang.';   // auth serveri (auth.otpTemplate bo'lmasa)
+// Telegram matnlari (PKG-10) — Eskiz shabloniga bog'liq emas; «Xabarnomalar»dagi Telegram matni (tgText) bo'lmasa shular.
+//   Bog'lanish tili (bot: uz/ru) bo'yicha. {name} — o'quvchi ismi (to'liq), {month}, {amount}, {due}, {date}.
+const DEF_TG = {
+  uz: { new: "IQROR Academy: {name} uchun {month} oy to'lov hisobi tayyor — {amount} so'm. To'lash: kabinetda yoki maktab kassasida.",
+        debt: "IQROR Academy eslatmasi: {name} uchun {month} oy to'lovi hali yopilmagan — qarz {due} so'm. Iltimos, to'lovni amalga oshiring.",
+        payment: "✅ IQROR Academy: {name} uchun {amount} so'm to'lov qabul qilindi ({date}). Rahmat!" },
+  ru: { new: "IQROR Academy: счёт за {month} для {name} — {amount} сум. Оплатить можно в кабинете или в кассе школы.",
+        debt: "IQROR Academy напоминает: оплата за {month} для {name} ещё не поступила — долг {due} сум. Пожалуйста, оплатите.",
+        payment: "✅ IQROR Academy: получена оплата {amount} сум для {name} ({date}). Спасибо!" },
+};
 const fmtSom = n => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const fmtMonth = m => { const p = String(m || '').split('-'); return p.length === 2 ? `${p[1]}.${p[0]}` : String(m || ''); };
 const fillTpl = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] != null ? String(v[k]) : ''));
@@ -231,7 +242,7 @@ function inWindow(win, ms) { if (!win) return true; const hr = tashkentHour(ms);
 //   Soat oralig'i: turning o'zi -> general -> config.json sms.sendHours. Matn: turning FAOL matni (Eskiz tasdiqlagan) ->
 //   config.json sms.templates -> kod ichidagi standart. Kunlar/oyning kuni/necha kun orqaga — turning o'zidan, bo'sh
 //   bo'lsa config.json (reminderDays / reminderDayOfMonth / newLookbackDays).
-const NOTIFY_IDS = ['general', 'new_invoice', 'debt_reminder', 'manual_remind'];
+const NOTIFY_IDS = ['general', 'new_invoice', 'debt_reminder', 'manual_remind', 'payment_received', 'announce', 'daily_report'];
 function nsWindow(r) {
   const a = r ? Number(r.hourFrom) : NaN, b = r ? Number(r.hourTo) : NaN;
   return (r && r.hourFrom != null && r.hourTo != null && Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= 24 && a < b) ? [a, b] : null;
@@ -242,6 +253,7 @@ function nsDays(r, def) {
   return [...new Set(r.days.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
 }
 const nsText = r => String((r && r.smsActive) || '').trim();
+const nsTg = r => String((r && r.tgText) || '').trim();
 const DOW_UZ = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
 // Avtomatik SMS rejasi (sms-worker.cjs auto). rows — notify_settings qatorlari; o'qilmagan bo'lsa (null) -> { ok:false }:
 //   worker HECH NARSA yubormaydi. opts.ignoreWindow — sinov (--dry): tinch soat rejani to'xtatmaydi (faqat belgilanadi).
@@ -279,6 +291,7 @@ function resolveAutoPlan(rows, nowMs, smsCfg, opts) {
     else { pn.since = new Date(Math.max(now - pn.lookbackDays * 864e5, en)).toISOString(); pn.run = true; }
   }
   pn.days = daysN;
+  pn.tgTemplate = nsTg(rn);
   const rd = by.debt_reminder || null;
   const pd = base(rd, 'debt', DEF_DEBT);
   pd.days = nsDays(rd, Array.isArray(S.reminderDays) ? S.reminderDays.map(Number) : [1, 4]);
@@ -289,8 +302,14 @@ function resolveAutoPlan(rows, nowMs, smsCfg, opts) {
     if (!pd.dayOk) pd.reason = pd.days.length ? `bugun (${DOW_UZ[dow]}) eslatma kuni emas` : 'hech qaysi kun tanlanmagan';
     else pd.run = true;
   }
-  return { ok: true, new: pn, debt: pd };
+  pd.tgTemplate = nsTg(rd);
+  // PKG-10: «To'lov qabul qilindi» va sinf e'loni (navbatdan) — yoqilgan bo'lsa, soat oralig'ida. To'lov xabari SMS bilan
+  //   FAQAT faol (Eskiz tasdiqlagan) matn bo'lsa (standart SMS matni yo'q); e'lon — faqat Telegram.
+  const queuePlan = (r) => { const p = base(r, '', ''); p.enabled = !!(r && r.enabled === true); p.run = p.enabled && !p.reason;
+    p.smsTemplate = nsText(r); p.tgTemplate = nsTg(r); delete p.template; delete p.tplSource; return p; };
+  const pp = queuePlan(by.payment_received || null), pa = queuePlan(by.announce || null);
+  return { ok: true, new: pn, debt: pd, payment: pp, announce: pa };
 }
 
-module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, tashkentHour, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, definitelyNotSent, sendStatus,
+module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, DEF_TG, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, tashkentHour, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, definitelyNotSent, sendStatus,
   smsParts, NOTIFY_IDS, nsWindow, nsDays, resolveAutoPlan };

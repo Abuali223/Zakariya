@@ -212,6 +212,14 @@ command -v node        # masalan /usr/bin/node — pastdagi qatorlarda shu yo'l 
 > `reminderDays` `config.json`da ham bor — cron kuni bilan mos bo'lsin (yoki `debt`
 > rejimи kun tekshiruvisiz majburiy ishlaydi, cron kunini o'zi belgilaydi).
 
+### 7.4.1 Telegram (PKG-10) — avval Telegram, keyin SMS
+Ota-ona botga ulangan va raqami kartadagi raqam bilan tasdiqlangan bo‘lsa (`auth/README.md` → «Telegram bot»), `auto` rejimi
+xabarni AVVAL Telegram orqali yuboradi; yetkazilmasa (bot bloklangan, xato) — odatdagi SMS qoidalari bilan SMS. `sms_log` —
+bitta xabar uchun bitta qator (`channel`: `telegram` | `sms`; urinishlar ikki kanal bo‘yicha birga sanaladi). Navbat
+(`notify_queue`): «To‘lov qabul qilindi» (Telegram; SMS — faqat «Xabarnomalar»da faol SMS matni bo‘lsa) va sinf e’lonlari
+(faqat Telegram). Bot kaliti: shu `config.json`dagi `telegram` bloki yoki `../auth/config.json`dagisi; yo‘q bo‘lsa — faqat SMS.
+Telegram matnlari Eskiz shabloniga bog‘liq emas («Xabarnomalar» → «📨 Telegram»; bo‘sh — standart).
+
 ### 7.5 Migratsiya
 `sms_log` jadvali kerak — u kanonik zanjirda (`migration/run-all.sql` → `sms-log.sql`), `bash deploy.sh` o'zi qo'llaydi.
 Migratsiya fayllari ALOHIDA ishga tushirilmaydi (har fayl boshidagi qo'riqchi rad etadi); qo'lda kerak bo'lsa — butun zanjir:

@@ -38,6 +38,10 @@ telefon tasdiqlanadi. **SMS faqat O‘zbekiston raqamlariga** yuboriladi. **Maxf
 | POST | `/auth/sms-tpl-check` | `{jwt, texts:{new_invoice?, debt_reminder?, manual_remind?}}` | `{ok, eskiz:{ok,count,approved}, checks:{<tur>:{fit:true\|'partial'\|false\|null, templateIds, parts, unknownVars}}, templates}` — HECH NARSA yubormaydi |
 | POST | `/auth/block-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, prevRole, claims, sessions, message}` / `{ok:false, error}` + HTTP 401/403/400/404/409/502 |
 | POST | `/auth/unblock-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, role, status, claims, message}` / `{ok:false, error}` |
+| POST | `/auth/tg-webhook` | Telegram update; sarlavha `X-Telegram-Bot-Api-Secret-Token` = `telegram.webhookSecret` | `{ok}`; sarlavha noto‘g‘ri — 401; takror `update_id` — `{ok, duplicate}` |
+| POST | `/auth/tg-link-start` | `{jwt, kind?:'parent'\|'staff'}` (staff — faqat faol Direktor) | `{ok, url:'https://t.me/<bot>?start=<token>', expiresInSec}` — bir martalik, 10 daqiqa |
+| POST | `/auth/tg-link-status` | `{jwt}` | `{ok, configured, bot, links:[{id, kind, status:'active'\|'blocked'\|'reverify', students, mismatch, verifiedAt}]}` |
+| POST | `/auth/tg-unlink` | `{jwt, linkId?}` | `{ok, unlinked}` |
 | GET | `/auth/health` | — | `ok` (ommaviy, hech qanday ma'lumotsiz — tashqi kuzatuv uchun) |
 | GET | `/auth/health/deep` | `Authorization: Bearer <direktor JWT>` | `{ok, at, checks:[{key, name, ok, info, at?, ms}]}`; anon 401, boshqa rol 403 |
 
@@ -253,6 +257,35 @@ oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, key
   `.editors`). Eskiz shablonlari ro‘yxati (60 s kesh) bilan har matn bir nechta har xil namuna qiymat bilan solishtiriladi
   (`payments/eskiz-template.cjs` — worker va «Eslatma» shu qoida bilan yig‘adi). Eskiz kaliti yo‘q / o‘qilmasa — `fit:null`.
 
+## Telegram bot (D4) — `telegram-bot.cjs`, `tg-daily.cjs`, `tg-setup.cjs`
+Ota-onaga xabar Telegram orqali — **raqami maktabdagi o‘quvchi kartasidagi raqam bilan bir xilligi tasdiqlangandan keyin**.
+- **Ulanish:** kabinet «📨 Telegram» → «Telegramni ulash» → bir martalik havola (`t.me/<bot>?start=<token>`, 10 daqiqa; bazada
+  faqat HMAC xeshi) → botda rozilik matni («✅ Roziman») → «📱 Raqamni ulashish» (o‘z kontakti: `contact.user_id === from.id`,
+  forward/boshqaning kontakti rad etiladi; faqat shaxsiy chat) → raqam farzand kartasidagi `parentPhone` / `parentPhone2` bilan
+  mos bo‘lsa — «✅ Ulandi: <ism>»; mos bo‘lmasa — «maktabga murojaat qiling» (token ishlatilgan bo‘ladi). Bot guruhga qo‘shilsa —
+  darhol chiqib ketadi; botni bloklagan ota-ona — `blocked` (xabarlar SMS’ga qaytadi). `/stop` — uzish, `/sozlamalar` — xabar turlari.
+- **Kimga yuboriladi** — bitta qoida bazada (`app.tg_recipients`, `migration/telegram.sql`): faol bog‘lanish, 365 kun ichida
+  tasdiqlangan, kabinet hisobi faol, farzand bog‘lanishi faol va bog‘lanishdagi raqam **hozirgi** karta raqami. Karta raqami
+  o‘zgarsa — o‘sha farzand bo‘yicha xabar darhol to‘xtaydi (kabinetda «Qayta tasdiqlash kerak»); bir yilda bir marta ham.
+- **Kanal:** `payments/sms-worker.cjs` avval Telegram, yetkazilmasa SMS (faqat +998, tinch soat, kuniga 1 SMS). Bitta xabar —
+  `sms_log`da bitta qator (`channel`: `telegram` / `sms`). «To‘lov qabul qilindi» va sinf e’lonlari — `notify_queue` (baza trigger
+  yozadi) orqali; tur «Xabarnomalar» → «📨 Telegram»da yoqiladi (standart O‘CHIQ).
+- **Direktorga kunlik hisobot** (`tg-daily.cjs`): Direktor admin «Xabarnomalar» → «📨 Telegram» → «Telegramni ulash (kunlik
+  hisobot)» bilan o‘z hisobidan ulanadi (raqami hisobidagi telefon bilan mos bo‘lishi kerak, hisobda telefon bo‘lsa).
+  Kunlar va soat — o‘sha yerda; bir kunda bir marta.
+
+**O‘rnatish (bir marta, deploydan keyin):**
+1. Telegram’da @BotFather → `/newbot` (nom, masalan *IQROR Academy*), so‘ng `/setjoingroups` → **Disable** (guruhga qo‘shib
+   bo‘lmasin). Bot kalitini (token) **hech kimga yubormang** — faqat serverdagi `config.json`ga yozing.
+2. `auth/config.json` (xizmat papkasi, masalan `/opt/iqror/auth/config.json`) → `telegram` bloki (`config.example.json`ga qarang):
+   `botToken`, `botUsername` (bo‘sh bo‘lsa — avtomatik), `webhookSecret` (`openssl rand -hex 24`), `publicUrl`
+   (`https://iqroacademy.uz/authapi/tg-webhook` — nginx’dagi mavjud `/authapi/` yo‘li yetarli). So‘ng: `sudo systemctl restart iqror-auth`.
+3. Webhook: `cd /opt/iqror/auth && sudo -u <xizmat foydalanuvchisi> node tg-setup.cjs --set` (holat: `node tg-setup.cjs`).
+4. Kunlik hisobot cron’i: `bash ~/iqror-repo/auth/install-tg-cron.sh` (xavfsiz — «Kunlik hisobot» yoqilmaguncha yubormaydi).
+5. SMS ishchisi bot kalitini o‘z `payments/config.json`dagi `telegram` blokidan, bo‘lmasa `../auth/config.json`dan oladi
+   (xizmat foydalanuvchisi o‘qiy olsa). O‘qiy olmasa — `telegram` blokini `payments/config.json`ga ham qo‘shing.
+6. Admin «Xabarnomalar» → «📨 Telegram»: kerakli turlarni yoqing; ota-onalarga kabinetdagi «Telegramni ulash»ni ayting.
+
 ## Telefon raqamlari: SMS faqat O‘zbekiston raqamlariga
 
 Raqam qoidasi — `server/phone.cjs` (brauzer `sb/auth-api.js` va `admin.html` da AYNAN shu blok; `phone.test.cjs` tekshiradi):
@@ -273,5 +306,6 @@ Raqam qoidasi — `server/phone.cjs` (brauzer `sb/auth-api.js` va `admin.html` d
 
 ## config.json (maxfiy — gitga tushmaydi)
 
-`serviceRoleKey`, `anonKey`, `auth.hmacSecret`, `sms.eskizEmail/eskizPassword` — barchasi MAXFIY.
+`serviceRoleKey`, `anonKey`, `auth.hmacSecret`, `sms.eskizEmail/eskizPassword`, `telegram.botToken`, `telegram.webhookSecret` —
+barchasi MAXFIY (repoga, chatga, skrinshotga tushmasin).
 `hmacSecret` ni yangilash eski ticketlar/OTP’larni bekor qiladi (xavfsiz, lekin faol oqimlar uziladi).

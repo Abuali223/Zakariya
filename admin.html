@@ -5234,9 +5234,11 @@ async function renderNotify(){
   $('#view').innerHTML=`<div class="page-head"><h2>Xabarnomalar</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Ota-onalarga SMS: qaysi xabar, qaysi kunlari, soat nechadan nechagacha va qaysi matn bilan ketadi. ⚠️ SMS faqat O‘zbekiston (+998) raqamlariga yuboriladi; bitta raqamga kuniga ko‘pi bilan bitta avtomatik SMS.</p>
     ${canEdit?'<div class="card" id="ntf-set" style="padding:20px;margin-bottom:16px"><div class="loading">Yuklanmoqda…</div></div>':''}
+    ${canEdit?'<div class="card" id="ntf-tg" style="padding:20px;margin-bottom:16px"><div class="loading">Yuklanmoqda…</div></div>':''}
     ${canLog?'<div class="card" id="ntf-log" style="padding:20px"><div class="loading">Yuklanmoqda…</div></div>':''}
     ${!canEdit&&!canLog?'<div class="card"><div class="empty">Bu bo‘lim sizga ochiq emas.</div></div>':''}`;
   if(canEdit) await ntfSettingsCard($('#ntf-set'), _g);
+  if(canEdit && _g===VIEW_GEN && $('#ntf-tg')) await ntfTgCard($('#ntf-tg'), _g);
   if(canLog && _g===VIEW_GEN && $('#ntf-log')) await smsLogCard($('#ntf-log'), _g);
 }
 async function ntfSettingsCard(el, _g){
@@ -5356,11 +5358,100 @@ async function ntfEditors(box, G, _g){
     $('#ntf-ed-btn').addEventListener('click',()=>{ const v=$('#ntf-ed-add').value; if(!v){ toast('Xodimni tanlang',true); return; } const n=new Set(ed); n.add(v); save(n,'Muharrir qo‘shildi ✓'); }); };
   draw();
 }
-const SMS_TYPE_UZ={ new:'Yangi faktura', debt:'Qarz eslatmasi', remind:'Qo‘lda eslatma' };
+/* ---- 📨 Telegram (PKG-10): ulanish statistikasi, matnlar, to'lov / e'lon xabarlari, Direktorga kunlik hisobot ---- */
+const TG_VARS=['name','month','amount','due','date'];
+const TG_DEF={ new_invoice:"IQROR Academy: {name} uchun {month} oy to'lov hisobi tayyor — {amount} so'm. To'lash: kabinetda yoki maktab kassasida.",
+  debt_reminder:"IQROR Academy eslatmasi: {name} uchun {month} oy to'lovi hali yopilmagan — qarz {due} so'm. Iltimos, to'lovni amalga oshiring.",
+  payment_received:"✅ IQROR Academy: {name} uchun {amount} so'm to'lov qabul qilindi ({date}). Rahmat!" };
+async function ntfTgCard(el, _g){
+  const isDir=SESSION.isAdmin;
+  let rows={};
+  try{ const snap=await getDocs(collection(db,'notify_settings')); snap.docs.forEach(d=>{ rows[d.id]=Object.assign({ id:d.id }, d.data()); }); }
+  catch(e){ el.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  if(_g!==VIEW_GEN) return;
+  if(!rows.payment_received||!rows.daily_report){ el.innerHTML='<div class="empty">📨 Telegram sozlamalari bazada yo‘q — <b>bash deploy.sh</b> (baza yangilanmagan).</div>'; return; }
+  const P=rows.payment_received, A=rows.announce||{}, D=rows.daily_report, N=rows.new_invoice||{}, Q=rows.debt_reminder||{};
+  const dd=Array.isArray(D.days)?D.days.map(Number):[1,2,3,4,5,6];
+  const hourOpts=(sel)=>Array.from({length:24},(_,h)=>`<option value="${h}" ${Number(sel)===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
+  const tgArea=(id,val)=>`<textarea data-tgt="${id}" rows="2" maxlength="2000" placeholder="${esc(TG_DEF[id]||'')}" style="width:100%;box-sizing:border-box">${esc(val||'')}</textarea>`;
+  const sw=(id,on)=>`<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" data-tgon="${id}" ${on?'checked':''}> <span>${on?'Yoqilgan':'O‘chiq'}</span></label>`;
+  el.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>📨 Telegram</h3><span class="small muted" id="tg-bot"></span></div>
+    <p class="small muted" style="margin:0 0 10px">Ota-ona kabinetdagi «Telegramni ulash» orqali botga ulanadi: raqami maktabdagi o‘quvchi kartasidagi raqam bilan mos bo‘lishi shart (o‘z kontaktini yuboradi). Ulangan ota-onaga xabarlar AVVAL Telegram orqali ketadi, yetmasa — SMS (yuqoridagi qoidalar). Karta raqami o‘zgarsa — o‘sha farzand bo‘yicha xabar to‘xtaydi va ota-ona qayta tasdiqlaydi; bir yilda bir marta ham.</p>
+    ${isDir?'<div id="tg-stats" style="margin-bottom:12px"><div class="loading">Yuklanmoqda…</div></div>':''}
+    <div class="ntf-type" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px"><b>✍️ Telegram matnlari</b> <span class="small muted">— bo‘sh qolsa standart matn (Eskiz shabloniga bog‘liq emas). O‘zgaruvchilar: ${TG_VARS.map(v=>'<code>{'+v+'}</code>').join(' ')}</span>
+      <div style="margin-top:8px"><label>🧾 Yangi faktura</label>${tgArea('new_invoice',N.tgText)}</div>
+      <div style="margin-top:8px"><label>⏰ Qarz eslatmasi</label>${tgArea('debt_reminder',Q.tgText)}</div></div>
+    <div class="ntf-type" data-tg="payment_received" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>✅ «To‘lov qabul qilindi» xabari</b>${sw('payment_received',P.enabled)}</div>
+      <div class="small muted" style="margin:4px 0 8px">To‘lov o‘quvchiga qo‘llanganda (kassa, Click, Uzum…) — Telegram orqali. SMS bilan faqat pastdagi faol SMS matni (Eskiz tasdiqlagan) bo‘lsa va bugun shu raqamga SMS ketmagan bo‘lsa.</div>
+      <label>Telegram matni</label>${tgArea('payment_received',P.tgText)}
+      <div style="margin-top:8px"><label>SMS faol matni <span class="small muted">(ixtiyoriy; bo‘sh — SMS yuborilmaydi)</span></label><textarea data-tgsms="payment_received" rows="2" maxlength="600" style="width:100%;box-sizing:border-box">${esc(P.smsActive||'')}</textarea></div></div>
+    <div class="ntf-type" data-tg="announce" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>📢 Sinf e’lonlari Telegram’da</b>${sw('announce',A.enabled)}</div>
+      <div class="small muted" style="margin-top:4px">«E’lonlar» bo‘limida yangi e’lon yozilganda — o‘sha sinf(lar)dagi ulangan ota-onalarga (SMS bilan emas).</div></div>
+    <div class="ntf-type" data-tg="daily_report" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>📊 Direktorga kunlik hisobot</b>${sw('daily_report',D.enabled)}</div>
+      <div class="small muted" style="margin:4px 0 8px">To‘lovlar (soni, summa, usul bo‘yicha), qarzdorlar, davomat kiritilishi, kutilayotgan tasdiqlar va tizim holati — tanlangan kunlarda, soat nechadan keyin bir marta.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="small">Kunlar:</span>${NTF_DOW.map(([n,l])=>`<label class="chip" style="cursor:pointer;margin:0;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-tgdow="${n}" ${dd.includes(n)?'checked':''}>${l}</label>`).join('')}
+        <span class="small" style="margin-left:8px">Soat:</span><select id="tg-dh">${hourOpts(D.hourFrom??19)}</select></div>
+      ${isDir?'<div id="tg-me" style="margin-top:10px"><div class="loading">Yuklanmoqda…</div></div>':'<div class="small muted" style="margin-top:8px">Telegramga faqat Direktor ulanadi (o‘z hisobidan).</div>'}</div>
+    <div style="margin-top:14px"><button class="btn gold" id="tg-save" type="button">Saqlash</button></div>`;
+  el.querySelectorAll('[data-tgon]').forEach(c=>c.addEventListener('change',()=>{ c.nextElementSibling.textContent=c.checked?'Yoqilgan':'O‘chiq'; }));
+  $('#tg-save').addEventListener('click', async()=>{
+    const v=id=>{ const t=el.querySelector(`[data-tgt="${id}"]`); return t?(t.value.trim()||null):null; };
+    const unk=t=>[...new Set((String(t||'').match(/\{(\w+)\}/g)||[]).map(x=>x.slice(1,-1)).filter(k=>!TG_VARS.includes(k)))];
+    const on=id=>el.querySelector(`[data-tgon="${id}"]`).checked;
+    const days=[...el.querySelectorAll('[data-tgdow]')].filter(c=>c.checked).map(c=>Number(c.dataset.tgdow)).sort((a,b)=>a-b);
+    const sms=el.querySelector('[data-tgsms="payment_received"]').value.trim()||null;
+    const bad=['new_invoice','debt_reminder','payment_received'].map(id=>unk(v(id)).length?`Telegram matnida noma’lum o‘zgaruvchi {${unk(v(id))[0]}}`:'').find(Boolean) || (ntfUnknown(sms).length?`SMS matnida noma’lum o‘zgaruvchi {${ntfUnknown(sms)[0]}}`:'') || (on('daily_report')&&!days.length?'Kunlik hisobot: kamida bitta kun tanlang':'');
+    if(bad){ toast(bad,true); return; }
+    const turn=[['payment_received','«To‘lov qabul qilindi»'],['announce','Sinf e’lonlari'],['daily_report','Kunlik hisobot']].filter(([id])=>on(id)&&!(rows[id]||{}).enabled).map(x=>x[1]);
+    if(turn.length && !confirm(`Yoqilmoqda: ${turn.join(', ')}.\n\nSaqlangandan keyin server Telegram orqali xabar yubora boshlaydi (soat oralig‘ida). Davom etilsinmi?`)) return;
+    const b=$('#tg-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    try{
+      await updateDoc(doc(db,'notify_settings','new_invoice'),{ tgText:v('new_invoice') },{ mustExist:true });
+      await updateDoc(doc(db,'notify_settings','debt_reminder'),{ tgText:v('debt_reminder') },{ mustExist:true });
+      await updateDoc(doc(db,'notify_settings','payment_received'),{ enabled:on('payment_received'), tgText:v('payment_received'), smsActive:sms },{ mustExist:true });
+      await updateDoc(doc(db,'notify_settings','announce'),{ enabled:on('announce') },{ mustExist:true });
+      await updateDoc(doc(db,'notify_settings','daily_report'),{ enabled:on('daily_report'), days, hourFrom:Number($('#tg-dh').value) },{ mustExist:true });
+      toast('Telegram sozlamalari saqlandi ✓'); if(_g===VIEW_GEN) await ntfTgCard(el, _g);
+    }catch(e){ toast('Xatolik: '+(e.message||e.code||e),true); b.disabled=false; b.textContent='Saqlash'; }
+  });
+  if(!isDir) return;
+  // statistika (faqat Direktor)
+  (async()=>{ const box=$('#tg-stats'); let r;
+    try{ r=await rpc('tg_stats',{}); }catch(e){ if(box) box.innerHTML=`<div class="small muted">Statistika: ${rpcMissing(e)?'baza yangilanmagan — bash deploy.sh':esc(e.message||e.code)}</div>`; return; }
+    if(_g!==VIEW_GEN||!$('#tg-stats')) return;
+    const cls={}; try{ (cache.students&&cache.students.length?cache.students:await loadCol('students')).forEach(s=>{ cls[classKeyOf(s)]=classLabelOf(s); }); }catch(e){}
+    $('#tg-stats').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip" style="background:#E0F2FE;color:#0369A1">Ulangan o‘quvchilar: <b>${esc(r.connected)}</b> / ${esc(r.students)}${r.rate!=null?` (${esc(r.rate)}%)`:''}</span>
+        <span class="chip">Faol bog‘lanishlar: ${esc(r.links)}</span><span class="chip" style="${Number(r.blocked)?'background:#FDECEC;color:#B42318':''}">Botni bloklaganlar: ${esc(r.blocked)}</span>
+        <span class="chip" style="${Number(r.reverify)?'background:#FEF3C7;color:#B45309':''}">Qayta tasdiqlash kerak: ${esc(r.reverify)}</span><span class="chip">Ulangan Direktorlar: ${esc(r.directors)}</span></div>
+      ${(r.byClass||[]).length?`<details style="margin-top:8px"><summary class="small">Sinflar bo‘yicha</summary><div class="tablewrap"><table><thead><tr><th>Sinf</th><th>O‘quvchi</th><th>Ulangan</th><th>%</th></tr></thead><tbody>${r.byClass.map(x=>`<tr><td data-label="Sinf">${esc(cls[x.classKey]||x.classKey)}</td><td data-label="O‘quvchi">${esc(x.students)}</td><td data-label="Ulangan">${esc(x.connected)}</td><td data-label="%">${x.rate==null?'—':esc(x.rate)+'%'}</td></tr>`).join('')}</tbody></table></div></details>`:''}`;
+  })();
+  // Direktorning o'z Telegrami (kunlik hisobot)
+  const me=async()=>{ const box=$('#tg-me'); if(!box) return;
+    const st=await ntfAuthPost('tg-link-status',{});
+    if(_g!==VIEW_GEN||!$('#tg-me')) return;
+    const bot=$('#tg-bot'); if(bot) bot.textContent=st.ok?(st.configured?`bot: @${st.bot}`:'bot hali sozlanmagan (server)'):'';
+    if(!st.ok){ box.innerHTML=`<div class="small" style="color:#B45309">⚠️ ${esc(st.error||'Holat o‘qilmadi')}</div>`; return; }
+    const mine=(st.links||[]).filter(l=>l.kind==='staff');
+    const lbl={ active:'✅ Ulangan', blocked:'⛔ Bot bloklangan', reverify:'⚠️ Qayta tasdiqlash kerak' };
+    box.innerHTML=`${mine.map(l=>`<div class="small" style="margin-bottom:6px">${esc(lbl[l.status]||l.status)} · ${esc(admDT(l.verifiedAt))} <button type="button" class="btn sm ghost" data-tgun="${esc(l.id)}">Uzish</button></div>`).join('')}
+      ${st.configured?`<button type="button" class="btn sm" id="tg-link">📱 ${mine.some(l=>l.status==='active')?'Boshqa Telegramni ulash':'Telegramni ulash (kunlik hisobot)'}</button><div id="tg-link-out" class="small" style="margin-top:6px"></div>`:'<div class="small muted">Bot kaliti server sozlamasida (auth/config.json → telegram) bo‘lmaguncha ulanib bo‘lmaydi.</div>'}`;
+    box.querySelectorAll('[data-tgun]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Telegram uzilsinmi? Kunlik hisobot kelmay qoladi.')) return; const r=await ntfAuthPost('tg-unlink',{ linkId:b.dataset.tgun }); toast(r.ok?'Uzildi ✓':('Xatolik: '+(r.error||'')),!r.ok); me(); }));
+    const lb=$('#tg-link'); if(lb) lb.addEventListener('click',async()=>{ lb.disabled=true; const r=await ntfAuthPost('tg-link-start',{ kind:'staff' }); lb.disabled=false;
+      const out=$('#tg-link-out'); if(!out) return;
+      out.innerHTML=r.ok?`<a class="btn sm gold" href="${esc(r.url)}" target="_blank" rel="noopener">Botni ochish ↗</a> <span class="muted">Botda «✅ Roziman», so‘ng «📱 Raqamni ulashish»ni bosing. Havola ${Math.round((r.expiresInSec||600)/60)} daqiqa amal qiladi, bir marta.</span> <button type="button" class="btn sm ghost" id="tg-refresh">Holatni yangilash</button>`
+        :`<span style="color:#B42318">❌ ${esc(r.error||'Havola olinmadi')}</span>`;
+      const rf=$('#tg-refresh'); if(rf) rf.addEventListener('click',me); });
+  };
+  me();
+}
+const SMS_TYPE_UZ={ new:'Yangi faktura', debt:'Qarz eslatmasi', remind:'Qo‘lda eslatma', payment:'To‘lov qabul qilindi', daily:'Kunlik hisobot' };
 const SMS_ST_UZ={ sent:['✓ Yuborildi','var(--it-bg)','var(--teal)'], failed:['✗ Xato','#FDECEC','#B42318'], unknown:['? Noaniq','#FEF3C7','#B45309'], sending:['⏳ Yuborilmoqda','#E0F2FE','#0369A1'] };
 async function smsLogCard(el, _g){
   const cm=curMonth();
-  el.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>🧾 SMS jurnali</h3><span class="small muted">raqamlar niqoblangan · eksport yo‘q</span></div>
+  el.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>🧾 Xabarlar jurnali (SMS va Telegram)</h3><span class="small muted">raqamlar niqoblangan · eksport yo‘q</span></div>
     <div class="att-controls" style="margin-bottom:10px"><label>Oy<input type="month" id="sl-month" value="${cm}"></label>
       <label>Tur<select id="sl-type"><option value="">Hammasi</option>${Object.entries(SMS_TYPE_UZ).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
       <label>Holat<select id="sl-st"><option value="">Hammasi</option>${Object.entries(SMS_ST_UZ).map(([k,v])=>`<option value="${k}">${esc(v[0])}</option>`).join('')}</select></label></div>
@@ -5383,10 +5474,11 @@ async function smsLogCard(el, _g){
     const MAX=300;
     body.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
         <span class="chip">Jami: <b>${rows.length}</b></span>${Object.entries(SMS_ST_UZ).map(([k,v])=>bySt[k]?`<span class="chip" style="background:${v[1]};color:${v[2]}">${esc(v[0])}: <b>${bySt[k]}</b></span>`:'').join('')}
-        ${Object.entries(SMS_TYPE_UZ).map(([k,v])=>byTy[k]?`<span class="chip">${esc(v)}: ${byTy[k]}</span>`:'').join('')}</div>
+        ${Object.entries(SMS_TYPE_UZ).map(([k,v])=>byTy[k]?`<span class="chip">${esc(v)}: ${byTy[k]}</span>`:'').join('')}
+        ${rows.some(r=>r.channel==='telegram')?`<span class="chip" style="background:#E0F2FE;color:#0369A1">✈️ Telegram: <b>${rows.filter(r=>r.channel==='telegram').length}</b></span>`:''}</div>
       <div class="small muted" style="margin-bottom:8px">Tinch soatda (tunda) to‘xtatilgan xabarlar jurnalga yozilmaydi — ular keyingi ish vaqtida yuboriladi. «Noaniq» — Eskiz javobi kelmagan (SMS ketgan bo‘lishi mumkin; qayta yuborilmaydi).</div>
       ${shown.length?`<div class="tablewrap"><table><thead><tr><th>Vaqt</th><th>Tur</th><th>O‘quvchi</th><th>Oy</th><th>Raqam</th><th>Holat</th><th>Izoh</th></tr></thead><tbody>${shown.slice(0,MAX).map(r=>{ const s=SMS_ST_UZ[r.status]||[r.status||'?','#EEE','#333'];
-          return `<tr><td data-label="Vaqt" class="small">${esc(admDT(r.createdAt))}</td><td data-label="Tur">${esc(SMS_TYPE_UZ[r.type]||r.type||'')}${r.type==='remind'?'<div class="small muted">qo‘lda</div>':''}</td>
+          return `<tr><td data-label="Vaqt" class="small">${esc(admDT(r.createdAt))}</td><td data-label="Tur">${esc(SMS_TYPE_UZ[r.type]||r.type||'')}${r.type==='remind'?'<div class="small muted">qo‘lda</div>':''}<div class="small" style="color:${r.channel==='telegram'?'#0369A1':'var(--muted)'}">${r.channel==='telegram'?'✈️ Telegram':'📱 SMS'}</div></td>
             <td data-label="O‘quvchi">${esc(nameOf[r.studentId]||r.studentId||'—')}</td><td data-label="Oy" class="small">${esc(r.month||'')}</td>
             <td data-label="Raqam" class="small" style="white-space:nowrap">${esc(ntfMask(r.phone))}</td>
             <td data-label="Holat"><span class="chip" style="background:${s[1]};color:${s[2]}">${esc(s[0])}</span>${Number(r.attempts)>1?`<div class="small muted">${esc(r.attempts)} urinish</div>`:''}</td>

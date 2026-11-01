@@ -58,6 +58,17 @@
   "studentId",
   "studentName"
  ],
+ "notify_queue": [
+  "attempts",
+  "createdAt",
+  "error",
+  "id",
+  "payload",
+  "processedAt",
+  "ref",
+  "status",
+  "type"
+ ],
  "notify_settings": [
   "dayOfMonth",
   "days",
@@ -107,6 +118,7 @@
  ],
  "sms_log": [
   "attempts",
+  "channel",
   "createdAt",
   "error",
   "id",
@@ -191,5 +203,22 @@
   "subjects",
   "track",
   "updatedAt"
+ ],
+ "telegram_links": [
+  "blockedAt",
+  "chatId",
+  "createdAt",
+  "id",
+  "kind",
+  "lang",
+  "lastReverifyAt",
+  "phone",
+  "prefs",
+  "status",
+  "studentIds",
+  "tgUserId",
+  "uid",
+  "updatedAt",
+  "verifiedAt"
  ]
 }
