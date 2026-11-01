@@ -445,6 +445,90 @@ function setup(opts) {
     const p = await R({ jwt: 'uid_dir', studentId: 'IQ-0700', preview: true });
     ok('qarz yo\'q bo\'lsa — avvalgi sabab (nodebt) ustun', p.blocked === 'nodebt' && sent.length === 0, p); }
 
+  // ---- PKG-9: Sozlamalar → «📱 Xabarnomalar» (notify_settings) ----
+  sec('Xabarnoma sozlamalari: o‘chirish, faol matn, soatlar, o‘qilmasa — config.json');
+  const NSROWS = extra => [
+    { id: 'general', enabled: true, smsActive: null, hourFrom: 9, hourTo: 20 },
+    { id: 'debt_reminder', enabled: false, smsActive: null, hourFrom: null, hourTo: null },
+    { id: 'manual_remind', enabled: true, smsActive: null, hourFrom: null, hourTo: null },
+  ].map(r => Object.assign(r, (extra || {})[r.id] || {}));
+  { const { R, sent, state } = setup(); state.notify_settings = NSROWS({ manual_remind: { enabled: false } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('qo‘lda eslatma o‘chirilgan -> preview blocked=off (sababi Sozlamalar)', p.ok && p.blocked === 'off' && /Xabarnomalar/.test(p.blockedMsg), p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    ok('o‘chirilgan -> yuborilmaydi, jurnal yo‘q', !r.ok && r.code === 'off' && sent.length === 0 && state.sms_log.length === 0, r); }
+  { const { R, sent, state } = setup(); state.notify_settings = NSROWS({ manual_remind: { smsActive: 'Hurmatli ota-ona, {name} qarzi {due} som ({month}). IQROR' } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', preview: true });
+    ok('faol matn Sozlamalardan (qo‘lda eslatma)', p.message === 'Hurmatli ota-ona, Qobuljonov Muhammadiy qarzi 4510000 som (09.2026,10.2026). IQROR' && p.tplSource === 'settings', p);
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255', expect: { message: p.message, phone: p.phone } });
+    ok('shu matn yuboriladi', r.ok && sent.length === 1 && sent[0].msg === p.message, { r, sent }); }
+  { const { R, state } = setup({ smsCfg: { templates: { remind: 'CFG {name} {due}' } } }); state.notify_settings = NSROWS({ debt_reminder: { smsActive: 'QARZ {name} {due}' } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9268', preview: true });
+    ok('qo‘lda matn bo‘sh -> «Qarz eslatmasi» faol matni (config.json’dan ustun)', p.message === "QARZ O'g'iloy Qobuljonova 2900000" && p.tplSource === 'settings-debt', p); }
+  { const { R, state } = setup({ smsCfg: { templates: { remind: 'CFG {name} {due}' } } }); state.notify_settings = NSROWS({ manual_remind: { smsActive: '   ' } });
+    const p = await R({ jwt: 'uid_dir', studentId: 'IQ-9268', preview: true });
+    ok('Sozlamalarda matn yo‘q (bo‘shliq) -> config.json matni', p.message === "CFG O'g'iloy Qobuljonova 2900000" && p.tplSource === 'config', p); }
+  { const { R, sent, state } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });   // Toshkent 21:30
+    state.notify_settings = NSROWS({ general: { hourFrom: 8, hourTo: 22 } });
+    ok('umumiy soat 8–22 (Sozlamalar) -> 21:30 da yuboriladi', (await R({ jwt: 'uid_dir', studentId: 'IQ-9255' })).ok && sent.length === 1); }
+  { const { R, sent, state } = setup({ now: Date.parse('2026-10-16T09:30:00Z') });   // Toshkent 14:30
+    state.notify_settings = NSROWS({ manual_remind: { hourFrom: 9, hourTo: 13 } });
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    ok('qo‘lda eslatma soati 9–13 -> 14:30 da tinch soat (umumiydan ustun)', !r.ok && r.code === 'quiet' && /9:00–13:00/.test(r.error) && sent.length === 0, r); }
+  { const { R, sent, state } = setup({ now: Date.parse('2026-10-16T16:30:00Z'), smsCfg: { sendHours: [8, 22] } });
+    state.notify_settings = NSROWS({ manual_remind: { enabled: false } }); state.__failSelect = { notify_settings: true };
+    const r = await R({ jwt: 'uid_dir', studentId: 'IQ-9255' });
+    ok('sozlama o‘qilmadi -> config.json (sendHours 8–22, o‘chirish e’tiborsiz) — avvalgidek', r.ok && sent.length === 1, r); }
+
+  sec('Ommaviy eslatma (sms-remind-batch): belgilanganlarga, har biriga bir xil qoidalar');
+  { const { R } = setup();
+    ok('batch funksiyasi bor', typeof R.batch === 'function');
+    ok('JWT yo‘q -> rad', (await R.batch({ studentIds: ['IQ-9255'] })).code === 'auth');
+    ok('kassir -> rad', (await R.batch({ jwt: 'uid_kas', studentIds: ['IQ-9255'] })).code === 'forbidden');
+    ok('ro‘yxat yo‘q -> xato', /tanlanmagan/.test((await R.batch({ jwt: 'uid_dir' })).error || ''));
+    ok('bo‘sh qiymatlar -> xato', /tanlanmagan/.test((await R.batch({ jwt: 'uid_dir', studentIds: ['', ' ', null] })).error || ''));
+    const many = Array.from({ length: 51 }, (_, i) => 'X' + i);
+    ok('51 ta -> rad (ko‘pi bilan 50)', /50/.test((await R.batch({ jwt: 'uid_dir', studentIds: many })).error || '')); }
+  { const { R, sent, state } = setup();
+    const ids = ['IQ-9255', 'IQ-9255', 'IQ-9268', 'IQ-0700', 'IQ-0380', 'IQ-0400', 'NOPE'];
+    const p = await R.batch({ jwt: 'uid_dir', studentIds: ids, preview: true });
+    const st = Object.fromEntries((p.results || []).map(x => [x.studentId, x]));
+    ok('preview: takror olib tashlandi (6 ta), hech narsa yuborilmadi/yozilmadi', p.ok && p.preview && p.results.length === 6 && sent.length === 0 && state.sms_log.length === 0, p);
+    ok('preview: tayyor 2 ta (matn, niqoblangan raqam)', st['IQ-9255'].status === 'ready' && st['IQ-9268'].status === 'ready' && st['IQ-9255'].phone === '+998 70 *** ** 77' && /Qobuljonov/.test(st['IQ-9255'].message), st);
+    ok('preview: qarzsiz / chet el raqami / to‘qnashuv / topilmadi -> o‘tkaziladi (sabab bilan)', st['IQ-0700'].code === 'nodebt' && st['IQ-0380'].code === 'nophone' && st['IQ-0400'].code === 'student' && st['NOPE'].code === 'student' && ['IQ-0700', 'IQ-0380', 'IQ-0400', 'NOPE'].every(k => st[k].status === 'skipped' && st[k].error), st);
+    ok('preview: yig‘ma', p.summary.ready === 2 && p.summary.skipped === 4 && p.summary.total === 6, p.summary);
+    const r = await R.batch({ jwt: 'uid_fin', studentIds: ids });
+    const rs = Object.fromEntries(r.results.map(x => [x.studentId, x]));
+    ok('yuborish: 2 ta yuborildi, 4 ta o‘tkazildi', r.ok && r.summary.sent === 2 && r.summary.skipped === 4 && r.summary.failed === 0 && sent.length === 2, r.summary);
+    ok('jurnal: ikkalasi remind, sentBy = moliya menejeri', ['remind__IQ-9255__2026-10-16', 'remind__IQ-9268__2026-10-16'].every(id => { const x = state.sms_log.find(y => y.id === id); return x && x.status === 'sent' && x.sentBy === 'uid_fin'; }), state.sms_log);
+    ok('natijada raqam niqoblangan (to‘liq raqam yo‘q)', r.results.every(x => x.phone === '' || /^\+998 \d\d \*\*\* \*\* \d\d$/.test(x.phone)) && !JSON.stringify(r).includes('700143777') && !JSON.stringify(r).includes('014 37'), r.results);
+    const r2 = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-9255', 'IQ-9268'] });
+    ok('takror ommaviy -> bugun yuborilgan (o‘tkazildi), ikkinchi SMS yo‘q', r2.summary.sent === 0 && r2.results.every(x => x.status === 'skipped' && x.code === 'sent') && sent.length === 2, r2); }
+  { const { R, sent } = setup({ now: Date.parse('2026-10-16T16:30:00Z') });   // tinch soat
+    const r = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-0700', 'IQ-9255', 'IQ-9268', 'IQ-0300'] });
+    ok('tinch soat: birinchi to‘siqdan keyin qolganlari o‘sha sabab bilan o‘tkaziladi, SMS yo‘q', r.ok && sent.length === 0 && r.results[0].code === 'nodebt' && r.results.slice(1).every(x => x.status === 'skipped' && x.code === 'quiet'), r.results); }
+  { const { R, sent, state } = setup({ smsCfg: { remindMaxPerHour: 2 } });
+    const r = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-9255', 'IQ-9268', 'IQ-0300', 'IQ-0500'] });
+    ok('soatlik limit 2: 2 ta yuborildi, keyingilari limit sababi bilan', r.summary.sent === 2 && sent.length === 2 && r.results.slice(2).every(x => x.status === 'skipped' && x.code === 'limit') && state.sms_log.length === 2, r.results); }
+  { const { R, sent, state } = setup({ failNext: 1 });
+    const r = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-9268', 'IQ-9255'] });
+    ok('Eskiz rad etdi (1-chisi) -> xato, keyingisi baribir yuboriladi', r.results[0].status === 'failed' && r.results[0].code === 'eskiz' && r.results[1].status === 'sent' && sent.length === 1, r.results); }
+  { const { R, state } = setup(); state.notify_settings = NSROWS({ manual_remind: { enabled: false } });
+    const r = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-9255', 'IQ-9268'] });
+    ok('qo‘lda eslatma o‘chirilgan -> hammasi off', r.results.every(x => x.status === 'skipped' && x.code === 'off'), r.results); }
+  { let t = T0; const st = {}; st.__now = () => t;
+    const sb = makeFake(st);
+    st.users = [{ id: 'uid_dir', role: 'director', status: 'active' }];
+    st.students = [1, 2, 3].map(k => ({ id: 'b' + k, studentId: 'IQ-B' + k, name: 'Bola' + k }));
+    st.student_private = [1, 2, 3].map(k => ({ id: 'b' + k, parentPhone: '99890700000' + k }));
+    st.invoices = [1, 2, 3].map(k => ({ id: 'IQ-B' + k + '__2026-10', studentId: 'IQ-B' + k, month: '2026-10', amount: 100, paidAmount: 0, status: 'pending' }));
+    st.sms_log = [];
+    const sent = [];
+    const eskiz = { send: async (ph, m) => { sent.push(ph); t += 25e3; return { ok: true, id: 'e' + sent.length }; } };   // har SMS 25 s
+    const R = makeSmsRemind({ sb, eskiz, smsCfg: {}, now: () => t, verifyJwt: async j => j });
+    const r = await R.batch({ jwt: 'uid_dir', studentIds: ['IQ-B1', 'IQ-B2', 'IQ-B3'] });
+    ok('vaqt chegarasi (40 s): 2 ta yuborildi, 3-chisi «vaqt tugadi» (qayta yuborish xavfsiz)', sent.length === 2 && r.results[2].status === 'skipped' && r.results[2].code === 'time' && /qayta/.test(r.results[2].error), r.results); }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -98,7 +98,12 @@ Sinov:  `node payments/uzum.test.cjs`  (soxta Supabase ustida to'liq oqim).
 
 ## 7. SMS xabarnomalari (Eskiz.uz) — faktura + qarzdorlik eslatmasi
 
-`sms-worker.cjs` **cron** bilan ishlaydigan alohida jarayon. Ikki vazifa:
+`sms-worker.cjs` **cron** bilan ishlaydigan alohida jarayon. **Qachon, qaysi kunlari, soat nechadan nechagacha va qaysi matn
+bilan** ketishini Direktor (va u tayinlagan muharrirlar) admin panelning **«Xabarnomalar»** bo'limida boshqaradi (D3,
+`notify_settings` jadvali): har tur alohida yoqiladi/o'chiriladi, «faol» matn (Eskiz tasdiqlagan — shu yuboriladi) va
+«qoralama» (moderatsiyaga — hech qachon yuborilmaydi), «🔍 Eskiz shabloniga mosligini tekshirish», SMS jurnali (niqoblangan
+raqamlar). Yangi o'rnatishda avtomatik turlar **o'chiq** — yoqilmaguncha hech narsa ketmaydi; birinchi yoqishda undan oldingi
+fakturalarga «yangi faktura» xabari yuborilmaydi. Cron — **bitta qator**, `sms-worker.cjs auto` (§7.4). Ikki vazifa:
 1. **Yangi faktura:** oxirgi `newLookbackDays` (default 14) kunda yaratilgan,
    to'lanmagan (`amount>0`) fakturalar uchun ota-ona telefoniga bir marta SMS.
 2. **Qarzdorlik:** oyning **10-sanasidan keyin** (`reminderDayOfMonth`) to'lanmagan
@@ -164,12 +169,28 @@ node sms-worker.cjs --dry            # kimga qanday SMS ketishini ko'rsatadi (ma
 
 ### 7.3 Ishga tushirish
 ```bash
+node sms-worker.cjs auto             # TAVSIYA: hammasi «Xabarnomalar» sozlamasidan (sozlamani o'qiy olmasa — hech narsa, kod 3)
+node sms-worker.cjs auto --dry       # sinov: kimga qanday SMS ketishini ko'rsatadi, hech narsa yubormaydi
+# eski rejimlar (config.json bo'yicha; Sozlamalarga BO'YSUNMAYDI — faqat favqulodda qo'lda):
 node sms-worker.cjs                  # ikkalasi (qarzdorlik faqat reminderDays kunlari)
 node sms-worker.cjs new              # faqat yangi faktura xabarlari
 node sms-worker.cjs debt             # faqat qarzdorlik (kun tekshiruvisiz, majburiy)
 ```
+`auto` rejimida yoqish/o'chirish, hafta kunlari, soatlar (tur bo'yicha yoki umumiy), qarz uchun oyning kuni, yangi faktura uchun
+necha kun orqaga va faol matn — `notify_settings`dan; `config.json` → `sms` dan faqat Eskiz ulanishi (`eskizEmail`/`token`,
+`from`), `maxRetries`, `maxConsecutiveFailures` olinadi; Sozlamadagi matn bo'sh bo'lsa — `templates.*`, u ham bo'lmasa standart.
 
-### 7.4 CRON (tavsiya)
+### 7.4 CRON — bitta qator (tavsiya)
+```bash
+bash ~/iqror-repo/payments/install-sms-cron.sh            # o'rnatish / yangilash (IDEMPOTENT)
+bash ~/iqror-repo/payments/install-sms-cron.sh --remove   # olib tashlash
+```
+Skript `iqror-pay` xizmatining kod papkasidan (config.json va node_modules o'sha yerda) va o'sha xizmat foydalanuvchisi nomidan
+har 15 daqiqada `flock -n /tmp/iqror-sms.lock node sms-worker.cjs auto` qatorini qo'yadi (log: `/var/log/iqror-sms.log`);
+eski `sms-worker.cjs new/debt` qatorlarini izohga oladi (ular Sozlamalarga bo'ysunmaydi). `full-deploy.sh` har deployda cron
+holatini ko'rsatadi (✓ / ⚠️ eski / ℹ️ yo'q). Qo'lda o'rnatmoqchi bo'lsangiz — quyidagi eski yo'riqnoma (faqat ma'lumot uchun).
+
+#### Eski usul (ikki qator, config.json bo'yicha)
 Avval bir marta: log fayli sizga (cron'ni o'rnatadigan foydalanuvchiga) yoziladigan bo'lsin — aks holda `>> /var/log/…` yozolmay,
 cron buyrug'i UMUMAN ishlamaydi; va `node`ning to'liq yo'lini bilib oling (cron'da PATH faqat `/usr/bin:/bin`):
 ```bash

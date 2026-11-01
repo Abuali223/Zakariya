@@ -214,5 +214,83 @@ function sendStatus(r, thrown) {
   if (r && r.ok) return 'sent';
   return (r && r.ambiguous) ? 'unknown' : 'failed';
 }
+// Taxminiy SMS uzunligi: faqat ASCII -> GSM-7 (160 / qismi 153; ^{}\[]~| — 2 belgi), aks holda UCS-2 (70 / 67) — narx
+//   qismlar soniga bog'liq. admin.html «📱 Xabarnomalar» kartasi va eskiz-shablon.cjs bilan bir xil qoida.
+function smsParts(s) {
+  s = String(s == null ? '' : s);
+  const gsm = /^[\n\r\x20-\x7e]*$/.test(s);
+  const n = s.length + (gsm ? (s.match(/[\^{}\\[\]~|]/g) || []).length : 0);
+  const [one, many] = gsm ? [160, 153] : [70, 67];
+  return { n, parts: n <= one ? 1 : Math.ceil(n / many), gsm };
+}
+// Oyna tekshiruvi: win = [dan, gacha) Toshkent soati yoki null (cheklovsiz).
+function inWindow(win, ms) { if (!win) return true; const hr = tashkentHour(ms); return hr >= win[0] && hr < win[1]; }
 
-module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, tashkentHour, tashkentDow, sendWindow, inSendWindow, orderDebtCandidates, definitelyNotSent, sendStatus };
+// ---- XABARNOMA SOZLAMALARI (notify_settings — admin «Sozlamalar → 📱 Xabarnomalar», D3) ----
+//   Qatorlar: general (umumiy tinch soat), new_invoice, debt_reminder, manual_remind (migration/notify-settings.sql).
+//   Soat oralig'i: turning o'zi -> general -> config.json sms.sendHours. Matn: turning FAOL matni (Eskiz tasdiqlagan) ->
+//   config.json sms.templates -> kod ichidagi standart. Kunlar/oyning kuni/necha kun orqaga — turning o'zidan, bo'sh
+//   bo'lsa config.json (reminderDays / reminderDayOfMonth / newLookbackDays).
+const NOTIFY_IDS = ['general', 'new_invoice', 'debt_reminder', 'manual_remind'];
+function nsWindow(r) {
+  const a = r ? Number(r.hourFrom) : NaN, b = r ? Number(r.hourTo) : NaN;
+  return (r && r.hourFrom != null && r.hourTo != null && Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= 24 && a < b) ? [a, b] : null;
+}
+// Hafta kunlari: ro'yxat (0=Yak..6=Shan, takrorsiz) yoki def (sozlanmagan). [] — «hech qaysi kun» (haqiqiy tanlov).
+function nsDays(r, def) {
+  if (!r || !Array.isArray(r.days)) return def;
+  return [...new Set(r.days.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
+}
+const nsText = r => String((r && r.smsActive) || '').trim();
+const DOW_UZ = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+// Avtomatik SMS rejasi (sms-worker.cjs auto). rows — notify_settings qatorlari; o'qilmagan bo'lsa (null) -> { ok:false }:
+//   worker HECH NARSA yubormaydi. opts.ignoreWindow — sinov (--dry): tinch soat rejani to'xtatmaydi (faqat belgilanadi).
+//   -> { ok, error?, new:{ run, reason, window, inWindow, template, tplSource, since, lookbackDays },
+//                    debt:{ run, reason, window, inWindow, template, tplSource, days, dayOfMonth, dayOk } }
+function resolveAutoPlan(rows, nowMs, smsCfg, opts) {
+  if (!Array.isArray(rows)) return { ok: false, error: 'Xabarnoma sozlamalari (notify_settings) o‘qilmadi' };
+  const S = smsCfg || {}, o = opts || {};
+  const now = nowMs == null ? Date.now() : nowMs;
+  const by = {}; rows.forEach(r => { if (r && r.id) by[String(r.id)] = r; });
+  const g = by.general || null;
+  const baseWin = nsWindow(g) || sendWindow(S);
+  const cfgTpl = k => (S.templates && String(S.templates[k] || '').trim()) || '';
+  const pickTpl = (r, k, def) => nsText(r) ? { template: nsText(r), tplSource: 'settings' } : (cfgTpl(k) ? { template: cfgTpl(k), tplSource: 'config' } : { template: def, tplSource: 'default' });
+  const dow = tashkentDow(now);
+  function base(r, key, def) {
+    const window = nsWindow(r) || baseWin;
+    const inWin = inWindow(window, now);
+    const p = Object.assign({ run: false, reason: '', window, inWindow: inWin }, pickTpl(r, key, def));
+    if (!r) p.reason = 'sozlama qatori yo‘q';
+    else if (r.enabled !== true) p.reason = 'o‘chirilgan';
+    else if (!inWin && !o.ignoreWindow) p.reason = window ? `tinch soat (faqat ${window[0]}:00–${window[1]}:00)` : 'tinch soat';
+    return p;
+  }
+  const rn = by.new_invoice || null;
+  const pn = base(rn, 'new', DEF_NEW);
+  const lb = Number((rn && rn.lookbackDays) || S.newLookbackDays || 14);
+  pn.lookbackDays = (Number.isFinite(lb) && lb > 0) ? Math.min(60, Math.floor(lb)) : 14;
+  const daysN = nsDays(rn, [0, 1, 2, 3, 4, 5, 6]);
+  const en = Date.parse(String((rn && rn.enabledAt) || ''));
+  pn.since = null;
+  if (!pn.reason) {
+    if (!daysN.includes(dow)) pn.reason = daysN.length ? `bugun (${DOW_UZ[dow]}) yuborish kuni emas` : 'hech qaysi kun tanlanmagan';
+    else if (!Number.isFinite(en)) pn.reason = 'yoqilgan vaqti noma’lum — Sozlamalarda o‘chirib, qayta yoqing';
+    else { pn.since = new Date(Math.max(now - pn.lookbackDays * 864e5, en)).toISOString(); pn.run = true; }
+  }
+  pn.days = daysN;
+  const rd = by.debt_reminder || null;
+  const pd = base(rd, 'debt', DEF_DEBT);
+  pd.days = nsDays(rd, Array.isArray(S.reminderDays) ? S.reminderDays.map(Number) : [1, 4]);
+  const dm = Number((rd && rd.dayOfMonth) || S.reminderDayOfMonth || 10);
+  pd.dayOfMonth = (Number.isInteger(dm) && dm >= 1 && dm <= 28) ? dm : 10;
+  pd.dayOk = pd.days.includes(dow);
+  if (!pd.reason) {
+    if (!pd.dayOk) pd.reason = pd.days.length ? `bugun (${DOW_UZ[dow]}) eslatma kuni emas` : 'hech qaysi kun tanlanmagan';
+    else pd.run = true;
+  }
+  return { ok: true, new: pn, debt: pd };
+}
+
+module.exports = { makeEskiz, normMobile, canonMobile, smsName, DEF_NEW, DEF_DEBT, DEF_OTP, fmtSom, fmtMonth, fillTpl, tashkentDay, tashkentDayStartISO, tashkentHour, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, definitelyNotSent, sendStatus,
+  smsParts, NOTIFY_IDS, nsWindow, nsDays, resolveAutoPlan };

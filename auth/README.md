@@ -34,6 +34,8 @@ telefon tasdiqlanadi. **SMS faqat O‘zbekiston raqamlariga** yuboriladi. **Maxf
 | POST | `/auth/reset-confirm` | `{ticket, newPassword}` | `{ok, message}` |
 | POST | `/auth/change-phone-confirm` | `{ticket}` | `{ok, message}` |
 | POST | `/auth/sms-remind` | `{jwt, studentId, preview?}` | `{ok, preview?, name, phone, due, months, message}` / `{ok, sent}` / `{ok:false, already?, error}` |
+| POST | `/auth/sms-remind-batch` | `{jwt, studentIds:[≤50], preview?}` | `{ok, results:[{studentId, status:'ready'\|'sent'\|'skipped'\|'failed', code, error, phone (niqoblangan)}], summary}` — «Qarzdorlar»da belgilanganlarga |
+| POST | `/auth/sms-tpl-check` | `{jwt, texts:{new_invoice?, debt_reminder?, manual_remind?}}` | `{ok, eskiz:{ok,count,approved}, checks:{<tur>:{fit:true\|'partial'\|false\|null, templateIds, parts, unknownVars}}, templates}` — HECH NARSA yubormaydi |
 | POST | `/auth/block-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, prevRole, claims, sessions, message}` / `{ok:false, error}` + HTTP 401/403/400/404/409/502 |
 | POST | `/auth/unblock-user` | `{jwt, uid}` (faqat FAOL direktor) | `{ok, already, role, status, claims, message}` / `{ok:false, error}` |
 | GET | `/auth/health` | — | `ok` (ommaviy, hech qanday ma'lumotsiz — tashqi kuzatuv uchun) |
@@ -237,6 +239,19 @@ oynada o‘quvchi, telefon, qarz, oylar va SMS matnini ko‘rib tasdiqlaydi, key
   etadi va admin panel shuni aniq aytadi (yuqoridagi «Eskiz SMS shabloni»: naqsh, ism moslash, `node eskiz-shablon.cjs`).
 - `sms.dryRun: true` bo‘lsa — SMS ketmaydi, admin «SINOV rejimi» xabarini ko‘radi (jurnalga yozilmaydi); Eskiz naqshlari
   baribir o‘qiladi (faqat GET) — sinovdagi matn va ⚠️ ogohlantirish haqiqiy yuborishdagidek.
+
+## «Xabarnomalar» sozlamasi (D3) — `notify_settings`
+- **Qo‘lda «Eslatma»** (`sms-remind`, `sms-remind-batch`) har so‘rovda `notify_settings`ni o‘qiydi: «Qo‘lda eslatma» o‘chirilgan
+  bo‘lsa — yuborilmaydi (`code:'off'`); matn — «Qo‘lda eslatma» faol matni → «Qarz eslatmasi» faol matni → `sms.templates.remind`
+  → `sms.templates.debt` → standart; tinch soat — «Qo‘lda eslatma» soatlari → umumiy soatlar → `sms.sendHours`. Sozlamani o‘qib
+  bo‘lmasa (jadval hali yo‘q / baza xatosi) — `config.json` bilan ishlaydi (avvalgidek).
+- **Ommaviy eslatma** (`sms-remind-batch`): ko‘pi bilan 50 ta o‘quvchi, navbatma-navbat, har biriga `sms-remind`ning AYNAN o‘sha
+  qoidalari (kuniga 1, soatlik/kunlik limit, tinch soat, faqat +998). Umumiy to‘siq (tinch soat, o‘chirilgan, limit) — birinchisidan
+  keyin qolganlari shu sabab bilan o‘tkaziladi. Vaqt chegarasi `sms.remindBatchBudgetMs` (standart 40 000 ms) — oshsa qolganlari
+  «vaqt tugadi» (qayta yuborish xavfsiz). Natijada telefon niqoblangan (`+998 90 *** ** 67`).
+- **Shablon tekshiruvi** (`sms-tpl-check`): faqat FAOL Direktor yoki Direktor tayinlagan muharrir (`notify_settings` 'general'
+  `.editors`). Eskiz shablonlari ro‘yxati (60 s kesh) bilan har matn bir nechta har xil namuna qiymat bilan solishtiriladi
+  (`payments/eskiz-template.cjs` — worker va «Eslatma» shu qoida bilan yig‘adi). Eskiz kaliti yo‘q / o‘qilmasa — `fit:null`.
 
 ## Telefon raqamlari: SMS faqat O‘zbekiston raqamlariga
 

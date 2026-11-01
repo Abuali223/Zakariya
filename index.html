@@ -1389,7 +1389,7 @@ function renderKabinet(){
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
   }).join('');
   const s = findStudent(active);
-  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
+  const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-ann"></div><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button></div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
       <div class="kab-chips">${chips}</div>${addForm}</div>
@@ -1400,7 +1400,7 @@ function renderKabinet(){
   host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
   wireAdd();
   if(s){ const dl=$("#kab-dl-btn"); if(dl) dl.onclick=()=>downloadParentProfile(s, dl);
-    renderKabRank(s); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabHealth(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
+    renderKabRank(s); renderKabAnnouncements(s); renderKabProfile(s.id); renderKabTeacherSummary(s.id); renderKabInvoices(s.id); renderKabHealth(s.id); renderKabAttendance(s.id); renderKabGrades(s.id); renderKabMonitoring(s.id); renderKabTimetable(s); renderKabExams(s); renderKabHomework(s); renderKabRating(s); renderKabFeedback(s); }
 }
 
 // 🚌 Maktab avtobusi — kabinetда jonli xarita (Leaflet + OpenStreetMap).
@@ -1764,6 +1764,39 @@ async function renderKabInvoices(studentId){
 }
 // Kasal kunlar va hamshira (D1): ma'lumotnoma holati (kutilmoqda / tasdiqlandi / rad etildi + sabab), hamshiraga murojaatlar
 //   (sana, shikoyat, chora) va sog'liq kartasi (allergiya, dori). Ma'lumot bo'lmasa — bo'lim ko'rsatilmaydi.
+// 📢 Sinf e'lonlari (PKG-9): server (RLS) faqat ota-onaning farzandlari sinflari va butun maktab e'lonlarini, muddati
+//   o'tmaganlarini qaytaradi; bu yerda — shu farzand sinfiniki. O'qilganlar — shu brauzerda (localStorage, id ro'yxati).
+const ANN_SEEN_KEY='iqror_ann_seen';
+function annSeen(){ try{ const a=JSON.parse(localStorage.getItem(ANN_SEEN_KEY)||'[]'); return new Set(Array.isArray(a)?a.map(String):[]); }catch(e){ return new Set(); } }
+function annMarkSeen(ids){ try{ const s=annSeen(); ids.forEach(i=>s.add(String(i))); localStorage.setItem(ANN_SEEN_KEY, JSON.stringify([...s].slice(-300))); }catch(e){} }
+const kidClassKey=s=>`${s.lng||'uz'}-${Number(s.g)||0}-${s.cls||'-'}`;
+async function renderKabAnnouncements(s){
+  const box=$("#kab-ann"); if(!box || !(window.IqrorFB&&window.IqrorFB.getAnnouncements)) return;
+  const isRu=lang==='ru';
+  const all=await window.IqrorFB.getAnnouncements();
+  if($("#kab-ann")!==box) return;
+  const key=kidClassKey(s), now=Date.now();
+  const list=(all||[]).filter(a=>{ const k=Array.isArray(a.classKeys)?a.classKeys:[]; const exp=a.expiresAt?Date.parse(String(a.expiresAt)):NaN;
+      return (k.includes('all')||k.includes(key)) && !(isFinite(exp)&&exp<now); })
+    .sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0)) || String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(!list.length){ box.innerHTML=''; return; }
+  const ds=v=>{ const d=new Date(String(v||'')); return isNaN(d)?'':d.toLocaleDateString(isRu?'ru-RU':'uz-UZ',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Asia/Tashkent'}); };
+  const SHOW=4; let open=false;
+  const draw=()=>{ const seen2=annSeen(); const rows=(open?list:list.slice(0,SHOW)).map(a=>{ const isNew=!seen2.has(String(a.id));
+      return `<div class="kab-ann-item" data-ann="${esc(a.id)}" style="padding:10px 0;border-top:1px solid var(--line,#eee);cursor:pointer">
+        <div style="display:flex;justify-content:space-between;gap:8px"><b>${a.pinned?'📌 ':''}${esc(a.title)}</b>${isNew?`<span style="background:#B42318;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;height:fit-content;white-space:nowrap">${isRu?'Новое':'Yangi'}</span>`:''}</div>
+        ${a.body?`<div class="small" style="white-space:pre-wrap;margin-top:4px">${esc(a.body)}</div>`:''}
+        <div class="small" style="color:var(--muted);margin-top:4px">${esc(ds(a.createdAt))}${(Array.isArray(a.classKeys)&&a.classKeys.includes('all'))?(isRu?' · вся школа':' · butun maktab'):''}</div></div>`; }).join('');
+    const nNew=list.filter(a=>!seen2.has(String(a.id))).length;
+    box.innerHTML=`<div class="kab-att-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div class="subs-l" style="margin:0">📢 ${isRu?'Объявления класса':'Sinf e‘lonlari'}${nNew?` <span id="kab-ann-badge" style="background:#B42318;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;letter-spacing:0">${nNew}</span>`:''}</div>
+        ${nNew?`<button type="button" id="kab-ann-read" class="small" style="border:1px solid var(--line,#d7ddd4);background:transparent;border-radius:8px;padding:4px 10px;cursor:pointer">✓ ${isRu?'Прочитано':'O‘qildi'}</button>`:''}</div>
+      ${rows}${list.length>SHOW?`<button type="button" id="kab-ann-more" class="small" style="border:none;background:transparent;color:var(--teal,#1F9982);cursor:pointer;padding:8px 0 0;font-weight:600">${open?(isRu?'Свернуть':'Yig‘ish'):((isRu?'Все объявления':'Barcha e‘lonlar')+` (${list.length})`)}</button>`:''}</div>`;
+    box.querySelectorAll('[data-ann]').forEach(el=>el.onclick=()=>{ annMarkSeen([el.dataset.ann]); draw(); });
+    const rd=$("#kab-ann-read"); if(rd) rd.onclick=()=>{ annMarkSeen(list.map(a=>a.id)); draw(); };
+    const mo=$("#kab-ann-more"); if(mo) mo.onclick=()=>{ open=!open; draw(); };
+  };
+  draw();
+}
 async function renderKabHealth(studentId){
   const box=$("#kab-health"); if(!box || !(window.IqrorFB&&window.IqrorFB.getSickNotes)) return;
   const isRu=lang==='ru';
@@ -2194,6 +2227,13 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         }catch(e){ return null; }
       },
       // Kasal kunlar (D1): ma'lumotnoma holati (fayl yo'li va kirituvchi ko'rinmaydi), hamshira jurnali xulosasi, sog'liq kartasi.
+      // Sinf e'lonlari (PKG-9): RLS — ota-onaning farzandlari sinfi + butun maktab, muddati o'tmaganlar.
+      async getAnnouncements(){
+        if(!db||!fsMod) return null;
+        const { collection, getDocs, query, orderBy, limit } = fsMod;
+        try{ const snap = await getDocs(query(collection(db,'class_announcements'), orderBy('createdAt','desc'), limit(60))); return snap.docs.map(d=>({id:d.id, ...d.data()})); }
+        catch(e){ return null; }
+      },
       async getSickNotes(studentId){
         if(!db||!fsMod||!studentId) return null;
         const { collection, getDocs, query, where } = fsMod;

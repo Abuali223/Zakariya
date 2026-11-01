@@ -19,20 +19,24 @@
  *     run'larda (newLookbackDays ichida) ketadi.
  *   - Qarz cron'i sendHours ICHIDA ishlashi kerak: tinch soatda qarz eslatmasi o'sha kuni umuman ketmaydi (id'da sana bor).
  *
- * Ishga tushirish (cron, masalan har 2 soatda):
- *   cd .../payments && node sms-worker.cjs           # ikkalasi (debt faqat reminderDays'da)
- *   node sms-worker.cjs new                          # faqat yangi faktura xabarlari
- *   node sms-worker.cjs debt                         # faqat qarzdorlik (kun tekshiruvisiz majburiy)
- *   node sms-worker.cjs --dry                        # sinov: yubormaydi, faqat log qiladi
+ * Ishga tushirish:
+ *   cd .../payments && node sms-worker.cjs auto      # TAVSIYA (cron har 15 daqiqada, flock bilan): qaysi tur, qaysi kun/soat
+ *                                                    #   va qaysi matn — admin «Sozlamalar → 📱 Xabarnomalar»dan (notify_settings).
+ *                                                    #   Sozlamani o'qib bo'lmasa — HECH NARSA yubormaydi (chiqish kodi 3).
+ *   node sms-worker.cjs                              # (eski) ikkalasi config.json bo'yicha (debt faqat reminderDays'da)
+ *   node sms-worker.cjs new                          # (eski) faqat yangi faktura xabarlari
+ *   node sms-worker.cjs debt                         # (eski) faqat qarzdorlik (kun tekshiruvisiz majburiy)
+ *   node sms-worker.cjs auto --dry                   # sinov: yubormaydi, faqat log qiladi
  *
- * Sozlash: config.json -> "sms" bloki (config.example.json'ga qarang).
+ * Sozlash: config.json -> "sms" bloki (Eskiz ulanishi; config.example.json'ga qarang). auto rejimida yoqish/o'chirish, kunlar,
+ *   soatlar va matn — notify_settings'dan; config.json'dagi templates/sendHours/reminderDays — faqat sozlama bo'sh bo'lsa.
  * ⚠️ CRON yozuvlari ustma-ust tushmasin (bir vaqtda 2 nusxa ishlamasin) — flock ishlating.
  */
 const fs = require('fs');
 const path = require('path');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.IQROR_CONFIG || 'config.json'), 'utf8'));
 const { db, FieldValue } = require('../server/backend.js')({ ...CFG, __dir: __dirname });
-const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, tashkentDayStartISO, tashkentDow, sendWindow, inSendWindow, orderDebtCandidates, sendStatus, definitelyNotSent, canonMobile, smsName } = require('./sms.cjs');
+const { makeEskiz, DEF_NEW, DEF_DEBT, fmtMonth, tashkentDay, tashkentDayStartISO, tashkentDow, sendWindow, inSendWindow, inWindow, orderDebtCandidates, sendStatus, definitelyNotSent, canonMobile, smsName, resolveAutoPlan } = require('./sms.cjs');
 const { composeSms, smsSom, smsMonths } = require('./eskiz-template.cjs');
 
 const SMS = CFG.sms || {};
@@ -68,9 +72,11 @@ async function loadLastDebtSms() {
   return out;
 }
 // Tinch soat: haqiqiy rejimda oyna tashqarisida yuborish to'xtaydi (xato emas). DRY — faqat ogohlantiradi.
+//   WIN — joriy yuborish oynasi: eski rejimlarda config.json sendHours; auto rejimda har tur uchun notify_settings'dan.
 let QUIET = false;
+let WIN = sendWindow(SMS);
 const utcH = h => String((((h - 5) % 24) + 24) % 24).padStart(2, '0');   // Toshkent soati -> UTC soati (cron uchun maslahat)
-const quietNow = dry => !dry && !inSendWindow(SMS);
+const quietNow = dry => !dry && !inWindow(WIN);
 
 // Faktura kaliti (invoices.studentId: o'quvchining studentId'si YOKI eski hujjat id'si) -> { phone } va KANONIK kalit.
 //   auth/sms-remind.cjs bilan BIR XIL qoida: kalit BITTA o'quvchiga mos bo'lishi shart (studentId yoki hujjat id bo'yicha).
@@ -165,9 +171,11 @@ function smsText(tplStr, vals) {
 const redactPhone = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(0, 5) + '***' + d.slice(-2) : '***'; };
 
 // (1) YANGI FAKTURA xabarlari — oxirgi N kunda yaratilgan, to'lanmagan, amount>0.
-async function runNew(eskiz, phones, dry) {
+//   o (auto rejim): { since — shu vaqtdan keyin yaratilganlar (yoqilgan vaqtdan oldingisi emas), template — faol matn }.
+async function runNew(eskiz, phones, dry, o) {
+  o = o || {};
   const lookback = Number(SMS.newLookbackDays || 14);
-  const since = new Date(Date.now() - lookback * 864e5).toISOString();
+  const since = o.since || new Date(Date.now() - lookback * 864e5).toISOString();
   let invs = [];
   try { invs = (await db.collection('invoices').where('createdAt', '>=', since).get()).docs.map(d => d.data()); }
   catch (e) { log('invoices(new) so\'rov xato:', e.message); return; }
@@ -185,7 +193,7 @@ async function runNew(eskiz, phones, dry) {
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan — ertaga (lookback ichida)
-    const msg = smsText(tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
+    const msg = smsText(o.template || tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
     if (dry) { SENT_TODAY.add(phone); log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '' }))) { skip++; continue; }
@@ -199,11 +207,13 @@ async function runNew(eskiz, phones, dry) {
 // (2) QARZDORLIK eslatmasi — 10-sanadan keyin to'lanmagan; faqat reminderDays kunlari.
 //   Har O'QUVCHI uchun bitta SMS: barcha qarz oylari (smsMonths) + jami qarz (qo'lda «Eslatma» bilan bir xil). sms_log id —
 //   eng eski qarz fakturasi: "<invoiceId>__debt__<sana>" (kuniga bitta; takror yo'q).
-async function runDebt(eskiz, phones, dry, force) {
-  const days = Array.isArray(SMS.reminderDays) ? SMS.reminderDays : [1, 4];   // 0=Yak,1=Dush..6=Shan
+//   o (auto rejim): { days, dayOfMonth, template } — notify_settings'dan.
+async function runDebt(eskiz, phones, dry, force, o) {
+  o = o || {};
+  const days = Array.isArray(o.days) ? o.days : (Array.isArray(SMS.reminderDays) ? SMS.reminderDays : [1, 4]);   // 0=Yak,1=Dush..6=Shan
   const dow = tashkentDow();                                        // Toshkent kuni (server UTC bo'lsa ham)
   if (!force && !days.includes(dow)) { log(`QARZ: bugun (dow=${dow}) eslatma kuni emas — o'tkazildi.`); return; }
-  const dom = String(Number(SMS.reminderDayOfMonth || 10)).padStart(2, '0');
+  const dom = String(Number(o.dayOfMonth || SMS.reminderDayOfMonth || 10)).padStart(2, '0');
   const today = tashkentDay();
   let sent = 0, skip = 0, fail = 0, later = 0, quietLeft = 0;
   const byStu = new Map();
@@ -242,7 +252,7 @@ async function runDebt(eskiz, phones, dry, force) {
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan (aka-uka / yangi faktura)
-    const msg = smsText(tpl('debt', DEF_DEBT), { name: smsName(c.name || inv.studentName), month: smsMonths(c.months), amount: smsSom(c.due), due: smsSom(c.due) });
+    const msg = smsText(o.template || tpl('debt', DEF_DEBT), { name: smsName(c.name || inv.studentName), month: smsMonths(c.months), amount: smsSom(c.due), due: smsSom(c.due) });
     if (dry) { SENT_TODAY.add(phone); log('[DRY debt]', redactPhone(phone), '::', msg); sent++; continue; }
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'debt', message: msg, month: c.months[c.months.length - 1] || inv.month || '' }))) { skip++; continue; }
     SENT_TODAY.add(phone);
@@ -253,17 +263,56 @@ async function runDebt(eskiz, phones, dry, force) {
   if (quietLeft) log(`⚠️ QARZ: tinch soat boshlandi — qolgan ${quietLeft} ta o'quvchiga BUGUNGI qarz eslatmasi yuborilmaydi (keyingi eslatma kunida ketadi). Qarz cron'ini ertaroq (sendHours ichida) qo'ying.`);
 }
 
+// auto rejim: notify_settings (service_role) -> reja. O'qib bo'lmasa — null (chaqiruvchi HECH NARSA yubormaydi, kod 3).
+async function loadAutoPlan(dry) {
+  const sb = db._sb;
+  if (!sb) { log('❌ auto rejimi Supabase (service_role) ulanishini talab qiladi — HECH NARSA yuborilmadi.'); return null; }
+  let rows = null;
+  try { const { data, error } = await sb.from('notify_settings').select('*'); if (error) throw error; rows = data; }
+  catch (e) { log('❌ Xabarnoma sozlamalari (notify_settings) o\'qilmadi: ' + String((e && e.message) || e).slice(0, 200) + ' — HECH NARSA yuborilmadi (migratsiya: bash deploy.sh).'); return null; }
+  const plan = resolveAutoPlan(rows, Date.now(), SMS, { ignoreWindow: dry });
+  if (!plan.ok) { log('❌ ' + plan.error + ' — HECH NARSA yuborilmadi.'); return null; }
+  const st = (p, nm) => p.run ? `${nm}: HA (matn: ${p.tplSource === 'settings' ? 'Sozlamalar' : p.tplSource === 'config' ? 'config.json' : 'standart'})` : `${nm}: yo'q — ${p.reason}`;
+  log('AUTO: ' + st(plan.new, 'yangi faktura') + ' · ' + st(plan.debt, 'qarz eslatmasi'));
+  return plan;
+}
+
 (async () => {
   if (SMS.enabled === false) { log('SMS o\'chirilgan (config.sms.enabled=false). Chiqildi.'); return; }
   const args = process.argv.slice(2);
   const dry = SMS.dryRun === true || args.includes('--dry');
-  const mode = (args.find(a => !a.startsWith('--')) || 'both').toLowerCase();   // new | debt | both
+  const mode = (args.find(a => !a.startsWith('--')) || 'both').toLowerCase();   // auto | new | debt | both
+  // auto: avval sozlama (arzon) — bu run'da yuboriladigan tur bo'lmasa Eskiz'ga ham murojaat qilinmaydi.
+  let plan = null;
+  if (mode === 'auto') {
+    plan = await loadAutoPlan(dry);
+    if (!plan) { process.exitCode = 3; return; }
+    if (!plan.new.run && !plan.debt.run) { log('Tugadi (bu run’da yuboriladigan xabar turi yo‘q).'); return; }
+  }
   const eskiz = dry ? null : makeEskiz(SMS);
   // Naqshlar faqat O'QILADI (GET) — sinov (--dry) rejimida ham, kalit bo'lsa: logdagi matn haqiqatda ketadigan bilan bir xil.
   const reader = eskiz || ((SMS.eskizEmail || SMS.email || SMS.token) ? makeEskiz(SMS) : null);
   if (reader && typeof reader.templates === 'function') {
     try { const r = await reader.templates(); if (r && r.ok) APPROVED = r.list; else log('Eskiz shablonlari o\'qilmadi:', (r && r.error) || ''); }
     catch (e) { log('Eskiz shablonlari xato:', (e && e.message) || e); }
+  }
+  if (plan) {
+    await loadSentToday();
+    const phones = await phoneMap();
+    if (plan.new.run) {
+      WIN = plan.new.window;
+      if (dry && !inWindow(WIN)) log(`(DRY) yangi faktura: hozir tinch soat — haqiqiy rejimda yuborilmasdi.`);
+      await runNew(eskiz, phones, dry, { since: plan.new.since, template: plan.new.template });
+    }
+    if (plan.debt.run && !STOP) {
+      QUIET = false; WIN = plan.debt.window;
+      if (dry && !inWindow(WIN)) log(`(DRY) qarz eslatmasi: hozir tinch soat — haqiqiy rejimda yuborilmasdi.`);
+      await runDebt(eskiz, phones, dry, false, { days: plan.debt.days, dayOfMonth: plan.debt.dayOfMonth, template: plan.debt.template });
+    }
+    if (STOP) { log('TO\'XTATILDI: ' + STOP); process.exitCode = 1; return; }
+    if (QUIET) { log('TINCH SOAT boshlandi — qolgan xabarlar keyingi ish vaqtidagi run\'da ketadi.'); return; }
+    log('Tugadi.' + (dry ? ' (DRY — hech narsa yuborilmadi)' : ''));
+    return;
   }
   const w = sendWindow(SMS);
   if (quietNow(dry)) {

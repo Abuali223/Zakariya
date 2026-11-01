@@ -1017,14 +1017,16 @@ let SESSION = { role:'', isAdmin:false, assignedClasses:[], assignedSubjects:[],
 const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
-const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','profile'],
+const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','announce','profile'],
   hr:['teachers','staff','staffatt'], admin:['enrollments','feedback'], admin_head:['enrollments','feedback'],
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
-  finance_mgr:['payments','finance','accounting','pricetable','staffatt'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'] };
+  finance_mgr:['payments','finance','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'] };
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
   if((SESSION.homeroomClasses||[]).length && !base.includes('attendance')) base.unshift('attendance');
+  if((SESSION.homeroomClasses||[]).length && !base.includes('announce')) base.push('announce');   // sinf rahbari — o'z sinfiga e'lon
+  if(SESSION.notifyEditor && !base.includes('notify')) base.push('notify');                       // Direktor tayinlagan xabarnoma muharriri
   // Kassir — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
   if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
   if(approvalQueuesForMe().length && !base.includes('approvals')) base.unshift('approvals');   // tasdiqlovchi — navbat birinchi
@@ -1256,7 +1258,11 @@ onAuthStateChanged(auth, async user=>{
   }
   // Superuser = FAQAT Direktor. 'admin'/'admin_head' endi ma'muriyat rahbari (cheklangan).
   //   email — audit uchun (yozuvlarda «kim» qildi: createdBy/by maydonlari SESSION.email||role oladi).
-  SESSION = { role, isAdmin: (role==='director'), email:(user.email||user.displayName||''), assignedClasses, assignedSubjects, homeroomClasses };
+  // Xabarnoma muharriri (Direktor tayinlagan, notify_settings 'general'.editors): RLS faqat muharrirga qatorni ko'rsatadi.
+  //   SESSION'dan OLDIN aniqlanadi — seans bir martada to'liq o'rnatilsin (tablar shu qiymat bilan quriladi).
+  let notifyEditor=false;
+  if(role!=='director'){ try{ const ns=await getDoc(doc(db,'notify_settings','general')); notifyEditor=ns.exists(); }catch(e){ notifyEditor=false; } }
+  SESSION = { role, isAdmin: (role==='director'), email:(user.email||user.displayName||''), assignedClasses, assignedSubjects, homeroomClasses, notifyEditor };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + (SESSION.isAdmin ? '' : ' · ' + (ROLE_LABEL[role]||role));
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
@@ -1395,6 +1401,8 @@ function buildTabs(){
     {k:'payments', icon:mi('M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm0 160q-100 0-170-70T0-480q0-100 70-170t170-70h480q100 0 170 70t70 170q0 100-70 170t-170 70H240Zm0-80h480q66 0 113-47t47-113q0-66-47-113t-113-47H240q-66 0-113 47t-47 113q0 66 47 113t113 47Zm240-160Z'), t:'To‘lovlar'},
     {k:'finance', icon:mi('M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v80h-80v-80H240v480h480v-80h80v80q0 33-23.5 56.5T720-160H240Zm320-160q-33 0-56.5-23.5T480-400v-160q0-33 23.5-56.5T560-640h240q33 0 56.5 23.5T880-560v160q0 33-23.5 56.5T800-320H560Zm240-80v-160H560v160h240Zm-120-40q17 0 28.5-11.5T700-480q0-17-11.5-28.5T660-520q-17 0-28.5 11.5T620-480q0 17 11.5 28.5T660-440Z'), t:'Moliya'},
     {k:'accounting', icon:mi('M200-120v-80h560v80H200Zm40-120v-280h80v280h-80Zm200 0v-280h80v280h-80Zm200 0v-280h80v280h-80ZM80-600v-80l400-200 400 200v80H80Zm178-80h444-444Zm0 0h444L480-782 258-680Z'), t:'Buxgalteriya'},
+    {k:'notify', icon:mi('M160-200v-80h80v-280q0-83 50-147.5T420-792v-28q0-25 17.5-42.5T480-880q25 0 42.5 17.5T540-820v28q80 20 130 84.5T720-560v280h80v80H160Zm320-300Zm0 420q-33 0-56.5-23.5T400-160h160q0 33-23.5 56.5T480-80ZM320-280h320v-280q0-66-47-113t-113-47q-66 0-113 47t-47 113v280Z'), t:'Xabarnomalar'},
+    {k:'announce', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Z'), t:'E‘lonlar'},
     {k:'changelog', icon:mi('M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z'), t:'O‘zgarishlar tarixi'},
     {k:'marketing', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T667-480q0 43-19.5 78T560-346Z'), t:'Marketing'},
     {k:'bus', icon:mi('M240-80q-17 0-28.5-11.5T200-120v-72q-18-11-29-28.5T160-260v-380q0-83 77-111.5T480-780q172 0 246 28t74 112v380q0 21-11 38.5T760-192v72q0 17-11.5 28.5T720-80h-40q-17 0-28.5-11.5T640-120v-40H320v40q0 17-11.5 28.5T280-80h-40Zm0-440h480v-120H240v120Zm90 240q21 0 35.5-14.5T380-330q0-21-14.5-35.5T330-380q-21 0-35.5 14.5T280-330q0 21 14.5 35.5T330-280Zm300 0q21 0 35.5-14.5T680-330q0-21-14.5-35.5T630-380q-21 0-35.5 14.5T580-330q0 21 14.5 35.5T630-280Z'), t:'Avtobus'}
@@ -1445,6 +1453,8 @@ function renderTab(tab){
   if(tab==='medical') return renderMedical();
   if(tab==='exams') return renderExams();
   if(tab==='olympiads') return renderOlympiads();
+  if(tab==='notify') return renderNotify();
+  if(tab==='announce') return renderAnnouncements();
   return renderCollection(tab);
 }
 
@@ -2224,6 +2234,7 @@ async function renderAttendance(){
       (date>todayStr())?'Kelajakdagi sana tanlangan.':'' ].filter(Boolean);
     const camLine = arrivals===null ? '<span class="muted">Kamera ma’lumoti olinmadi</span>'
       : (withCam.length ? `📷 Kamera: <b>${seenN}</b>/${withCam.length} kirdi${camOk?'':' <span class="muted">(kamera bu kun deyarli ishlamagan — «Yo‘q» avtomatik qo‘yilmadi)</span>'}` : '<span class="muted">Bu sinf o‘quvchilarida «Kamera ID» yo‘q — kamera ishlatilmaydi</span>');
+    if(!$('#att-body')) return;   // boshqa bo'limga o'tilgan (tez almashganda eski render yo'q elementga yozmasin)
     $('#att-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${activeList.length} o‘quvchi · ${esc(date)}${hiddenN?` · <span title="«Chiqdi»/«Muzlatilgan» (to‘xtatilgan sanadan keyin) — ro‘yxatda ko‘rsatilmaydi">${hiddenN} ta faol emas</span>`:''}</span></div>
       ${warn.length?`<div class="small" style="margin:0 20px 8px;padding:8px 12px;border-radius:10px;background:#FFFBF2;color:#B45309">${warn.join('<br>')}</div>`:''}
       <div class="small" style="margin:0 20px 6px">${camLine}</div>
@@ -5041,6 +5052,11 @@ async function renderSettings(){
     catch(err){ toast('Xatolik: '+(err.code||err.message),true); }
     b.disabled=false; b.textContent='Saqlash';
   });
+  // ---- 📱 Xabarnomalar — SMS vaqti va matni «Xabarnomalar» bo'limida (D3; muharrirlar ham o'sha yerda tayinlanadi) ----
+  const ntfCard=document.createElement('div'); ntfCard.className='card'; ntfCard.style.cssText='margin-top:16px;padding:22px';
+  ntfCard.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>📱 Xabarnomalar (SMS)</h3><button class="btn sm" type="button" id="set-ntf-open">Ochish →</button></div>
+    <p class="small muted" style="margin:0">Avtomatik SMS (yangi faktura, qarz eslatmasi) va qo‘lda «Eslatma»: yoqish/o‘chirish, kunlar, soatlar, matn (faol va qoralama), Eskiz shabloniga moslik, SMS jurnali va muharrirlar.</p>`;
+  $('#view').appendChild(ntfCard); $('#set-ntf-open').addEventListener('click',()=>openTab('notify'));
   // ---- Xavfsizlik: Qaytarish (refund) PIN — direktor to'lovni qaytarganda so'raladi ----
   let sec={}; try{ const s2=await getDoc(doc(db,'config','security')); sec = s2.exists()?s2.data():{}; }catch(e){}
   const secCard=document.createElement('div'); secCard.className='card'; secCard.style.cssText='margin-top:16px;padding:22px';
@@ -5132,6 +5148,287 @@ function renderSysHealth(box, j, err){
     <td data-label="Vaqt" class="small muted">${Number(c.ms)>=0?esc(String(c.ms))+' ms':''}</td></tr>`).join('');
   box.innerHTML=`<div class="small" style="margin-bottom:8px;font-weight:600;color:${j.ok?'var(--teal)':'#B42318'}">${j.ok?'🟢 Hammasi ishlayapti':'🔴 Muammo bor — qizil qatorlarni ko‘ring'}<span class="muted" style="font-weight:400"> · tekshirildi: ${esc(when(j.at))}</span></div>
     <div class="tablewrap"><table><thead><tr><th></th><th>Xizmat</th><th>Holat</th><th>Vaqt</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+/* ==================== 📱 XABARNOMALAR (PKG-9, D3) ====================
+   Avtomatik SMS (yangi faktura, qarz eslatmasi) va qo'lda «Eslatma» QACHON va QAYSI matn bilan ketishini Direktor (va u
+   tayinlagan muharrirlar) shu yerda boshqaradi — server (sms-worker «auto», auth-server) har safar notify_settings'ni o'qiydi.
+   «Faol» matn — Eskiz'da TASDIQLANGAN shablonga mos matn (faqat shu yuboriladi); «Qoralama» — Eskiz moderatsiyasiga yuborish
+   uchun (hech qachon yuborilmaydi). Bo'sh faol matn — serverdagi (config.json) yoki standart matn.
+   SMS jurnali — Direktor va Moliya menejeri: raqamlar NIQOBLANGAN, eksport yo'q (D7). ⚠️ SMS faqat +998 raqamlarga. */
+const NTF_TYPES=[
+  {id:'new_invoice', t:'🧾 Yangi faktura xabari', auto:true, vars:['name','month','amount'],
+    def:"Hurmatli ota-ona! {name} uchun {month} oy to'lovi shakllantirildi: {amount} so'm. Batafsil: iqroacademy.uz. IQROR Academy",
+    note:'Oylik faktura yaratilganda ota-onaga bir marta. Yoqilgan vaqtdan OLDINGI fakturalarga yuborilmaydi.'},
+  {id:'debt_reminder', t:'⏰ Qarz eslatmasi (avtomatik)', auto:true, vars:['name','month','due'],
+    def:"Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy",
+    note:'Tanlangan hafta kunlarida, oyning belgilangan kunidan keyin to‘lanmagan qarz uchun — har o‘quvchiga bitta SMS (barcha qarz oylari bilan).'},
+  {id:'manual_remind', t:'📱 Qo‘lda eslatma («Moliya» → «Qarzdorlar» → «Eslatma»)', auto:false, vars:['name','month','due'], def:'',
+    note:'Faol matn bo‘sh bo‘lsa — «Qarz eslatmasi» faol matni ishlatiladi. O‘chirilsa — «Eslatma» tugmasi SMS yubormaydi.'},
+];
+const NTF_VARS={ name:'o‘quvchi ism-familiyasi', month:'oy(lar): 10.2026 yoki 09.2026,10.2026', amount:'faktura summasi (5800000)', due:'qarz summasi (5800000)' };
+const NTF_SAMPLE={ name:'Aliyeva Malika', month:'09.2026,10.2026', amount:'2900000', due:'5800000' };
+const NTF_DOW=[[1,'Du'],[2,'Se'],[3,'Ch'],[4,'Pa'],[5,'Ju'],[6,'Sh'],[0,'Ya']];
+// SMS bo'laklari (server payments/sms.cjs smsParts bilan bir xil): faqat ASCII — GSM-7 160/153, aks holda UCS-2 70/67.
+function smsPartsUi(s){ s=String(s==null?'':s); const gsm=/^[\n\r\x20-\x7e]*$/.test(s); const n=s.length+(gsm?(s.match(/[\^{}\\[\]~|]/g)||[]).length:0);
+  const one=gsm?160:70, many=gsm?153:67; return { n, parts:n<=one?1:Math.ceil(n/many), gsm }; }
+const ntfFill=(t,v)=>String(t||'').replace(/\{(\w+)\}/g,(_,k)=>(v[k]!=null?String(v[k]):`{${k}}`));
+const ntfUnknown=t=>[...new Set((String(t||'').match(/\{(\w+)\}/g)||[]).map(x=>x.slice(1,-1)).filter(k=>!NTF_VARS[k]))];
+function ntfPreviewHtml(txt, fallback){
+  const src=String(txt||'').trim()?txt:fallback;
+  if(!String(src||'').trim()) return '<span class="muted">Matn yo‘q — server sozlamasidagi matn ishlatiladi.</span>';
+  const msg=ntfFill(src, NTF_SAMPLE), p=smsPartsUi(msg), unk=ntfUnknown(src);
+  return `<div style="white-space:pre-wrap;background:#F8FAF9;border:1px dashed var(--border);border-radius:8px;padding:8px 10px;font-size:13px">${esc(msg)}</div>
+    <div class="small" style="margin-top:4px;color:${p.parts>1||!p.gsm?'#B45309':'var(--muted)'}">${p.n} belgi · <b>${p.parts} SMS</b>${p.gsm?' (lotin, 160 belgigacha 1 SMS)':' — ⚠️ lotin bo‘lmagan belgi bor (masalan ‘ ’ “ ” yoki kirill): 70 belgigacha 1 SMS, narx oshadi'}${!String(txt||'').trim()?' · <i>standart matn</i>':''}</div>
+    ${unk.length?`<div class="small" style="color:#B42318">⚠️ Noma’lum o‘zgaruvchi: ${unk.map(u=>'{'+esc(u)+'}').join(', ')} — SMS’da o‘zgarmay qoladi.</div>`:''}`;
+}
+const ntfMask=p=>{ const d=String(p||'').replace(/\D/g,''); return d.length===12?`+${d.slice(0,3)} ${d.slice(3,5)} *** ** ${d.slice(-2)}`:(d?'***':'—'); };
+async function ntfAuthPost(path, payload){
+  const jwt=await authJwt(); if(!jwt) return { ok:false, error:'Seans topilmadi — sahifani yangilab, qayta kiring.' };
+  let res; try{ res=await fetch(authBase()+'/'+path,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({ jwt }, payload)) }); }
+  catch(e){ return { ok:false, net:true, error:'Server bilan aloqa yo‘q — internetni tekshiring.' }; }
+  let j=null; try{ j=await res.json(); }catch(e){}
+  if(j) return j;
+  if(res.status===404) return { ok:false, error:'Bu xizmat serverda hali yangilanmagan (auth-server) — deploy qiling.' };
+  return { ok:false, error:`Server javobi noto‘g‘ri (HTTP ${res.status}).` };
+}
+async function renderNotify(){
+  const canEdit=SESSION.isAdmin || !!SESSION.notifyEditor;
+  const canLog=SESSION.isAdmin || SESSION.role==='finance_mgr';
+  const _g=VIEW_GEN;
+  $('#view').innerHTML=`<div class="page-head"><h2>Xabarnomalar</h2></div>
+    <p class="small muted" style="margin:-8px 0 14px">Ota-onalarga SMS: qaysi xabar, qaysi kunlari, soat nechadan nechagacha va qaysi matn bilan ketadi. ⚠️ SMS faqat O‘zbekiston (+998) raqamlariga yuboriladi; bitta raqamga kuniga ko‘pi bilan bitta avtomatik SMS.</p>
+    ${canEdit?'<div class="card" id="ntf-set" style="padding:20px;margin-bottom:16px"><div class="loading">Yuklanmoqda…</div></div>':''}
+    ${canLog?'<div class="card" id="ntf-log" style="padding:20px"><div class="loading">Yuklanmoqda…</div></div>':''}
+    ${!canEdit&&!canLog?'<div class="card"><div class="empty">Bu bo‘lim sizga ochiq emas.</div></div>':''}`;
+  if(canEdit) await ntfSettingsCard($('#ntf-set'), _g);
+  if(canLog && _g===VIEW_GEN && $('#ntf-log')) await smsLogCard($('#ntf-log'), _g);
+}
+async function ntfSettingsCard(el, _g){
+  let rows;
+  try{ const snap=await getDocs(collection(db,'notify_settings')); rows={}; snap.docs.forEach(d=>{ rows[d.id]=Object.assign({ id:d.id }, d.data()); }); }
+  catch(e){ el.innerHTML=`<div class="empty">Sozlamalar o‘qilmadi: ${esc(e.code||e.message)}${/PGRST205|42P01|notify_settings/.test(String(e.code||'')+String(e.message||''))?'<br><span class="small">Baza yangilanmagan — <b>bash deploy.sh</b>.</span>':''}</div>`; return; }
+  if(_g!==VIEW_GEN) return;
+  if(!rows.general){ el.innerHTML='<div class="empty">Sozlamalar topilmadi (sizga ruxsat berilmagan yoki baza yangilanmagan).</div>'; return; }
+  const G=rows.general;
+  const hourOpts=(sel,from,to)=>Array.from({length:to-from+1},(_,i)=>from+i).map(h=>`<option value="${h}" ${Number(sel)===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
+  const when=v=>{ if(!v) return ''; const d=new Date(v); return isNaN(d)?'':tkDay(d)+' '+d.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tashkent'}); };
+  const typeHtml=T=>{ const r=rows[T.id]||{}; const own=r.hourFrom!=null&&r.hourTo!=null; const days=Array.isArray(r.days)?r.days.map(Number):(T.id==='debt_reminder'?[1,4]:[0,1,2,3,4,5,6]);
+    return `<div class="ntf-type" data-ntf="${T.id}" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>${T.t}</b>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" data-f="enabled" ${r.enabled?'checked':''}> <span>${r.enabled?'Yoqilgan':'O‘chiq'}</span></label></div>
+      <div class="small muted" style="margin:4px 0 10px">${esc(T.note)}${r.enabled&&r.enabledAt&&T.auto?` · yoqilgan: ${esc(when(r.enabledAt))}`:''}</div>
+      ${T.auto?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="small">Kunlar:</span>${NTF_DOW.map(([n,l])=>`<label class="chip" style="cursor:pointer;margin:0;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-dow="${n}" ${days.includes(n)?'checked':''}>${l}</label>`).join('')}</div>`:''}
+      <div class="grid2" style="gap:10px">
+        <div><label>Soat</label><select data-f="hours"><option value="" ${own?'':'selected'}>Umumiy (${String(G.hourFrom??9).padStart(2,'0')}:00–${String(G.hourTo??20).padStart(2,'0')}:00)</option><option value="own" ${own?'selected':''}>Alohida…</option></select>
+          <div data-own style="display:${own?'flex':'none'};gap:6px;margin-top:6px"><select data-f="hourFrom">${hourOpts(own?r.hourFrom:9,0,23)}</select><select data-f="hourTo">${hourOpts(own?r.hourTo:20,1,24)}</select></div></div>
+        ${T.id==='new_invoice'?`<div><label>Necha kun ichidagi fakturalar (1–60)</label><input type="number" min="1" max="60" data-f="lookbackDays" value="${esc(r.lookbackDays??14)}"></div>`:''}
+        ${T.id==='debt_reminder'?`<div><label>Oyning qaysi kunidan keyin (1–28)</label><input type="number" min="1" max="28" data-f="dayOfMonth" value="${esc(r.dayOfMonth??10)}"></div>`:''}
+      </div>
+      <div style="margin-top:10px"><label>Faol matn <span class="small muted">(Eskiz tasdiqlagan — shu yuboriladi)</span></label>
+        <textarea data-f="smsActive" rows="3" maxlength="600" placeholder="${esc(T.def||'Bo‘sh — «Qarz eslatmasi» faol matni')}" style="width:100%;box-sizing:border-box">${esc(r.smsActive||'')}</textarea>
+        <div data-prev="smsActive" style="margin-top:6px"></div><div data-fit="smsActive" class="small" style="margin-top:4px"></div></div>
+      <div style="margin-top:10px"><label>Qoralama <span class="small muted">(Eskiz moderatsiyasiga yuborish uchun — hech qachon SMS bo‘lib ketmaydi)</span></label>
+        <textarea data-f="smsDraft" rows="2" maxlength="600" style="width:100%;box-sizing:border-box">${esc(r.smsDraft||'')}</textarea>
+        <div data-prev="smsDraft" style="margin-top:6px"></div><div data-fit="smsDraft" class="small" style="margin-top:4px"></div>
+        <button type="button" class="btn sm ghost" data-promote style="margin-top:6px">⬆ Qoralamani faol matnga ko‘chirish</button></div>
+    </div>`; };
+  const isDir=SESSION.isAdmin;
+  el.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>📱 SMS sozlamalari</h3><span class="small muted">${G.updatedAt?'oxirgi o‘zgarish: '+esc(when(G.updatedAt)):''}</span></div>
+    <p class="small muted" style="margin:0 0 10px">Avtomatik xabarlar server jadvali bo‘yicha (har 15 daqiqada) shu sozlamani o‘qib yuboriladi. Har o‘zgarish «O‘zgarishlar tarixi»ga yoziladi.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end"><div><label>Umumiy SMS vaqti (Toshkent)</label><div style="display:flex;gap:6px"><select id="ntf-gf">${hourOpts(G.hourFrom??9,0,23)}</select><select id="ntf-gt">${hourOpts(G.hourTo??20,1,24)}</select></div></div>
+      <div class="small muted" style="flex:1;min-width:220px">Shu vaqtdan tashqarida (tunda) hech qanday SMS ketmaydi — xabar keyingi ish vaqtida yuboriladi.</div></div>
+    <div class="small" style="margin-top:10px;background:#F4F7F6;border-radius:10px;padding:8px 10px">O‘zgaruvchilar: ${Object.entries(NTF_VARS).map(([k,v])=>`<code>{${k}}</code> — ${esc(v)}`).join(' · ')}. Namuna: ${esc(NTF_SAMPLE.name)}, ${esc(NTF_SAMPLE.month)}.</div>
+    ${NTF_TYPES.map(typeHtml).join('')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn gold" id="ntf-save" type="button">Saqlash</button>
+      <button class="btn ghost" id="ntf-check" type="button" title="Eskiz’dagi tasdiqlangan shablonlar bilan solishtiradi — hech narsa yuborilmaydi">🔍 Eskiz shabloniga mosligini tekshirish</button></div>
+    <div id="ntf-eskiz" style="margin-top:10px"></div>
+    ${isDir?`<div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px"><b>👥 Muharrirlar</b> <span class="small muted">— Direktordan tashqari shu sozlamalarni o‘zgartira oladigan xodimlar (masalan, sayt administratori).</span>
+      <div id="ntf-eds" style="margin-top:8px"><div class="loading">Yuklanmoqda…</div></div></div>`:''}`;
+  const typeEl=id=>el.querySelector(`[data-ntf="${id}"]`);
+  const refreshPrev=box=>{ const T=NTF_TYPES.find(x=>x.id===box.dataset.ntf); const fb=T.id==='manual_remind'?(typeEl('debt_reminder').querySelector('[data-f="smsActive"]').value||NTF_TYPES[1].def):T.def;
+    box.querySelector('[data-prev="smsActive"]').innerHTML=ntfPreviewHtml(box.querySelector('[data-f="smsActive"]').value, fb);
+    const dv=box.querySelector('[data-f="smsDraft"]').value; box.querySelector('[data-prev="smsDraft"]').innerHTML=dv.trim()?ntfPreviewHtml(dv,''):''; };
+  el.querySelectorAll('.ntf-type').forEach(box=>{
+    box.querySelectorAll('textarea').forEach(t=>t.addEventListener('input',()=>{ refreshPrev(box); if(box.dataset.ntf==='debt_reminder') refreshPrev(typeEl('manual_remind')); }));
+    const hs=box.querySelector('[data-f="hours"]'); hs.addEventListener('change',()=>{ box.querySelector('[data-own]').style.display=hs.value==='own'?'flex':'none'; });
+    const en=box.querySelector('[data-f="enabled"]'); en.addEventListener('change',()=>{ en.nextElementSibling.textContent=en.checked?'Yoqilgan':'O‘chiq'; });
+    box.querySelector('[data-promote]').addEventListener('click',()=>{ const d=box.querySelector('[data-f="smsDraft"]').value.trim(); if(!d){ toast('Qoralama bo‘sh',true); return; }
+      if(!confirm('Qoralama FAOL matnga ko‘chirilsinmi?\n\nFaqat Eskiz bu matnni TASDIQLAGAN bo‘lsa (yoki «Eskiz shabloniga mosligini tekshirish» ✅ desa) ko‘chiring — aks holda Eskiz SMS’ni rad etadi. «Saqlash»ni bosing.')) return;
+      box.querySelector('[data-f="smsActive"]').value=d; refreshPrev(box); });
+    refreshPrev(box);
+  });
+  $('#ntf-save').addEventListener('click', async()=>{
+    const gf=Number($('#ntf-gf').value), gt=Number($('#ntf-gt').value);
+    if(!(gf<gt)){ toast('Umumiy SMS vaqti noto‘g‘ri: boshlanish tugashdan oldin bo‘lsin',true); return; }
+    const patches={ general:{ hourFrom:gf, hourTo:gt } }; let bad=null; const turnOn=[];
+    NTF_TYPES.forEach(T=>{ const box=typeEl(T.id), r=rows[T.id]||{}; const p={};
+      p.enabled=box.querySelector('[data-f="enabled"]').checked;
+      if(p.enabled && !r.enabled && T.auto) turnOn.push(T.t);
+      p.smsActive=box.querySelector('[data-f="smsActive"]').value.trim()||null;
+      p.smsDraft=box.querySelector('[data-f="smsDraft"]').value.trim()||null;
+      if(box.querySelector('[data-f="hours"]').value==='own'){ p.hourFrom=Number(box.querySelector('[data-f="hourFrom"]').value); p.hourTo=Number(box.querySelector('[data-f="hourTo"]').value);
+        if(!(p.hourFrom<p.hourTo)) bad=`${T.t}: soat oralig‘i noto‘g‘ri`; }
+      else { p.hourFrom=null; p.hourTo=null; }
+      if(T.auto){ p.days=[...box.querySelectorAll('[data-dow]')].filter(c=>c.checked).map(c=>Number(c.dataset.dow)).sort((a,b)=>a-b);
+        if(p.enabled && !p.days.length) bad=`${T.t}: kamida bitta kun tanlang`; }
+      if(T.id==='new_invoice'){ const n=Number(box.querySelector('[data-f="lookbackDays"]').value); if(!(Number.isInteger(n)&&n>=1&&n<=60)) bad='Yangi faktura: necha kun — 1 dan 60 gacha'; p.lookbackDays=n; }
+      if(T.id==='debt_reminder'){ const n=Number(box.querySelector('[data-f="dayOfMonth"]').value); if(!(Number.isInteger(n)&&n>=1&&n<=28)) bad='Qarz eslatmasi: oyning kuni — 1 dan 28 gacha'; p.dayOfMonth=n; }
+      const unk=ntfUnknown(p.smsActive); if(unk.length) bad=`${T.t}: faol matnda noma’lum o‘zgaruvchi {${unk[0]}}`;
+      patches[T.id]=p; });
+    if(bad){ toast(bad,true); return; }
+    if(turnOn.length && !confirm(`Avtomatik SMS yoqilmoqda: ${turnOn.join(', ')}.\n\nSaqlangandan keyin server ota-onalarga SMS yubora boshlaydi (tanlangan kun va soatlarda). Faol matn Eskiz’da tasdiqlanganiga ishonch hosil qiling («🔍 tekshirish»).\n\nDavom etilsinmi?`)) return;
+    const b=$('#ntf-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
+    try{ for(const [id,p] of Object.entries(patches)) await updateDoc(doc(db,'notify_settings',id), p, { mustExist:true });
+      toast('Xabarnoma sozlamalari saqlandi ✓'); if(_g===VIEW_GEN) await ntfSettingsCard(el, _g); }
+    catch(e){ toast('Xatolik: '+(e.message||e.code||e),true); b.disabled=false; b.textContent='Saqlash'; }
+  });
+  $('#ntf-check').addEventListener('click', async()=>{
+    const b=$('#ntf-check'), out=$('#ntf-eskiz'); b.disabled=true; b.textContent='Tekshirilmoqda…';
+    const act={}, dr={};
+    NTF_TYPES.forEach(T=>{ const box=typeEl(T.id); const a=box.querySelector('[data-f="smsActive"]').value.trim(); const d=box.querySelector('[data-f="smsDraft"]').value.trim();
+      const fb=T.id==='manual_remind'?(typeEl('debt_reminder').querySelector('[data-f="smsActive"]').value.trim()||NTF_TYPES[1].def):T.def;
+      act[T.id]=a||fb; if(d) dr[T.id]=d; });
+    try{
+      const r1=await ntfAuthPost('sms-tpl-check',{ texts:act }); const r2=Object.keys(dr).length?await ntfAuthPost('sms-tpl-check',{ texts:dr }):null;
+      if(!r1.ok){ out.innerHTML=`<div class="small" style="color:#B42318">❌ ${esc(r1.error||'Tekshirib bo‘lmadi')}</div>`; return; }
+      const badge=c=>!c?'':c.fit===true?`<span style="color:var(--teal)">✅ Eskiz shabloniga mos${c.templateIds&&c.templateIds.length?' (#'+esc(c.templateIds.join(', #'))+')':''}</span>`
+        :c.fit==='partial'?'<span style="color:#B45309">⚠️ Faqat ba’zi ism/summa bilan mos — moderator misol matnni so‘zma-so‘z tasdiqlagan; o‘zgaruvchili shablon yuboring</span>'
+        :c.fit===false?`<span style="color:#B42318">❌ Tasdiqlangan shablonga mos emas — Eskiz rad etadi${c.hint?' ('+esc(c.hint.reason)+')':''}</span>`:'<span class="muted">⚪ Eskiz ro‘yxati o‘qilmadi — moslik noma’lum</span>';
+      NTF_TYPES.forEach(T=>{ const box=typeEl(T.id); box.querySelector('[data-fit="smsActive"]').innerHTML=badge(r1.checks&&r1.checks[T.id]);
+        box.querySelector('[data-fit="smsDraft"]').innerHTML=r2&&r2.ok?badge(r2.checks&&r2.checks[T.id]):''; });
+      const E=r1.eskiz||{};
+      out.innerHTML=E.ok?`<details><summary class="small">Eskiz’dagi shablonlar: ${esc(E.count)} ta (${esc(E.approved)} tasi tasdiqlangan)</summary>
+          <div class="tablewrap" style="margin-top:6px"><table><thead><tr><th>#</th><th>Holati</th><th>Matn (naqsh)</th></tr></thead><tbody>${(r1.templates||[]).map(t=>`<tr><td>${esc(t.id)}</td><td>${esc(t.statusUz)}</td><td class="small" style="white-space:pre-wrap">${esc(t.pattern||t.original)}</td></tr>`).join('')}</tbody></table></div></details>`
+        :`<div class="small" style="color:#B45309">⚠️ ${esc(E.error||'Eskiz ro‘yxati o‘qilmadi')}</div>`;
+    }finally{ b.disabled=false; b.textContent='🔍 Eskiz shabloniga mosligini tekshirish'; }
+  });
+  if(isDir) ntfEditors($('#ntf-eds'), G, _g);
+}
+async function ntfEditors(box, G, _g){
+  let users=[]; try{ users=await loadCol('users', null); }catch(e){ box.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+  if(_g!==VIEW_GEN) return;
+  const NO=new Set(['parent','student','director','']);
+  const staff=users.filter(u=>!NO.has(String(u.role||'')) && String(u.status||'active')==='active');
+  const ed=new Set((Array.isArray(G.editors)?G.editors:[]).map(String));
+  const nm=u=>u?(u.name||u.email||u.phone||u.id):'';
+  const draw=()=>{ box.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap">${[...ed].map(id=>{ const u=users.find(x=>x.id===id);
+      return `<span class="chip it" style="display:inline-flex;gap:6px;align-items:center">${esc(u?nm(u):id)}${u?` · ${esc(ROLE_LABEL[u.role]||u.role||'')}`:' · (topilmadi)'}<button type="button" class="btn sm ghost" data-rm="${esc(id)}" title="Olib tashlash" style="padding:0 6px">✕</button></span>`; }).join('')||'<span class="small muted">Muharrir tayinlanmagan — faqat Direktor.</span>'}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><select id="ntf-ed-add" style="max-width:320px"><option value="">— xodimni tanlang —</option>${staff.filter(u=>!ed.has(u.id)).sort((a,b)=>nm(a).localeCompare(nm(b))).map(u=>`<option value="${esc(u.id)}">${esc(nm(u))} · ${esc(ROLE_LABEL[u.role]||u.role||'')}</option>`).join('')}</select>
+      <button type="button" class="btn sm" id="ntf-ed-btn">+ Qo‘shish</button></div>`;
+    const save=async(next,msg)=>{ try{ await updateDoc(doc(db,'notify_settings','general'),{ editors:[...next] },{ mustExist:true }); ed.clear(); next.forEach(x=>ed.add(x)); toast(msg); draw(); }catch(e){ toast('Xatolik: '+(e.message||e.code),true); } };
+    box.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{ const n=new Set(ed); n.delete(b.dataset.rm); save(n,'Muharrir olib tashlandi ✓'); }));
+    $('#ntf-ed-btn').addEventListener('click',()=>{ const v=$('#ntf-ed-add').value; if(!v){ toast('Xodimni tanlang',true); return; } const n=new Set(ed); n.add(v); save(n,'Muharrir qo‘shildi ✓'); }); };
+  draw();
+}
+const SMS_TYPE_UZ={ new:'Yangi faktura', debt:'Qarz eslatmasi', remind:'Qo‘lda eslatma' };
+const SMS_ST_UZ={ sent:['✓ Yuborildi','var(--it-bg)','var(--teal)'], failed:['✗ Xato','#FDECEC','#B42318'], unknown:['? Noaniq','#FEF3C7','#B45309'], sending:['⏳ Yuborilmoqda','#E0F2FE','#0369A1'] };
+async function smsLogCard(el, _g){
+  const cm=curMonth();
+  el.innerHTML=`<div class="cls-card-head" style="margin-bottom:6px"><h3>🧾 SMS jurnali</h3><span class="small muted">raqamlar niqoblangan · eksport yo‘q</span></div>
+    <div class="att-controls" style="margin-bottom:10px"><label>Oy<input type="month" id="sl-month" value="${cm}"></label>
+      <label>Tur<select id="sl-type"><option value="">Hammasi</option>${Object.entries(SMS_TYPE_UZ).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
+      <label>Holat<select id="sl-st"><option value="">Hammasi</option>${Object.entries(SMS_ST_UZ).map(([k,v])=>`<option value="${k}">${esc(v[0])}</option>`).join('')}</select></label></div>
+    <div id="sl-body"><div class="loading">Yuklanmoqda…</div></div>`;
+  let students=[]; try{ students=await loadCol('students'); }catch(e){}
+  const nameOf={}; students.forEach(s=>{ const n=s.name||s.fullName||''; if(s.studentId) nameOf[s.studentId]=n; nameOf[s._id||s.id]=nameOf[s._id||s.id]||n; });
+  const load=async()=>{
+    const mon=$('#sl-month').value||cm, ty=$('#sl-type').value, st=$('#sl-st').value, body=$('#sl-body');
+    const [y,m]=mon.split('-').map(Number); const start=`${mon}-01T00:00:00+05:00`, nx=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`, end=`${nx}-01T00:00:00+05:00`;
+    body.innerHTML='<div class="loading">Yuklanmoqda…</div>';
+    let rows=[];
+    try{ const snap=await getDocs(query(collection(db,'sms_log'), where('createdAt','>=',start), where('createdAt','<',end), orderBy('createdAt','desc'), limit(3000)));
+      rows=snap.docs.map(d=>Object.assign({ id:d.id }, d.data())); }
+    catch(e){ body.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+    if(_g!==VIEW_GEN) return;
+    const cnt=(arr,f)=>arr.reduce((o,r)=>{ const k=f(r); o[k]=(o[k]||0)+1; return o; },{});
+    const bySt=cnt(rows,r=>r.status||'?'), byTy=cnt(rows,r=>r.type||'?');
+    const shown=rows.filter(r=>(!ty||r.type===ty)&&(!st||r.status===st));
+    const errTxt=e=>{ const t=String(e||'').replace(/^rejected: /,''); if(!t) return ''; if(/moderat|модерац|шаблон/i.test(t)) return 'Eskiz: matn tasdiqlangan shablonga mos emas'; if(/bad_phone:intl/.test(t)) return 'Chet el raqami (SMS faqat +998)'; if(/bad_phone/.test(t)) return 'Telefon noto‘g‘ri'; if(/balance|баланс|limit/i.test(t)) return 'Eskiz: balans/limit'; return t.slice(0,80); };
+    const MAX=300;
+    body.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <span class="chip">Jami: <b>${rows.length}</b></span>${Object.entries(SMS_ST_UZ).map(([k,v])=>bySt[k]?`<span class="chip" style="background:${v[1]};color:${v[2]}">${esc(v[0])}: <b>${bySt[k]}</b></span>`:'').join('')}
+        ${Object.entries(SMS_TYPE_UZ).map(([k,v])=>byTy[k]?`<span class="chip">${esc(v)}: ${byTy[k]}</span>`:'').join('')}</div>
+      <div class="small muted" style="margin-bottom:8px">Tinch soatda (tunda) to‘xtatilgan xabarlar jurnalga yozilmaydi — ular keyingi ish vaqtida yuboriladi. «Noaniq» — Eskiz javobi kelmagan (SMS ketgan bo‘lishi mumkin; qayta yuborilmaydi).</div>
+      ${shown.length?`<div class="tablewrap"><table><thead><tr><th>Vaqt</th><th>Tur</th><th>O‘quvchi</th><th>Oy</th><th>Raqam</th><th>Holat</th><th>Izoh</th></tr></thead><tbody>${shown.slice(0,MAX).map(r=>{ const s=SMS_ST_UZ[r.status]||[r.status||'?','#EEE','#333'];
+          return `<tr><td data-label="Vaqt" class="small">${esc(admDT(r.createdAt))}</td><td data-label="Tur">${esc(SMS_TYPE_UZ[r.type]||r.type||'')}${r.type==='remind'?'<div class="small muted">qo‘lda</div>':''}</td>
+            <td data-label="O‘quvchi">${esc(nameOf[r.studentId]||r.studentId||'—')}</td><td data-label="Oy" class="small">${esc(r.month||'')}</td>
+            <td data-label="Raqam" class="small" style="white-space:nowrap">${esc(ntfMask(r.phone))}</td>
+            <td data-label="Holat"><span class="chip" style="background:${s[1]};color:${s[2]}">${esc(s[0])}</span>${Number(r.attempts)>1?`<div class="small muted">${esc(r.attempts)} urinish</div>`:''}</td>
+            <td data-label="Izoh" class="small">${esc(errTxt(r.error))}</td></tr>`; }).join('')}</tbody></table></div>
+        ${shown.length>MAX?`<div class="small muted" style="margin-top:6px">Eng oxirgi ${MAX} tasi ko‘rsatildi (jami ${shown.length}) — filtrdan foydalaning.</div>`:''}`:'<div class="empty">Bu oyda SMS yo‘q.</div>'}`;
+  };
+  ['sl-month','sl-type','sl-st'].forEach(id=>$('#'+id).addEventListener('change',load));
+  await load();
+}
+
+/* ==================== 📢 SINF E'LONLARI (PKG-9) ====================
+   Direktor / O'IBDO' — istalgan sinf(lar)ga yoki butun maktabga; sinf rahbari — faqat o'z sinf(lar)iga (RLS: ann_can_write).
+   Ota-ona kabinetida (index.html) farzandining sinfi e'lonlari ko'rinadi (muddati o'tganlari — yo'q). SMS/Telegram'ga
+   yuborilmaydi (PKG-10). Har o'zgarish «O'zgarishlar tarixi»da. */
+function canAnnounceAll(){ return SESSION.isAdmin || SESSION.role==='zavuch'; }
+function canAnnounce(){ return canAnnounceAll() || (SESSION.homeroomClasses||[]).length>0; }
+async function renderAnnouncements(){
+  const _g=VIEW_GEN, me=auth.currentUser?auth.currentUser.uid:'';
+  $('#view').innerHTML=`<div class="page-head"><h2>E‘lonlar</h2>${canAnnounce()?'<div class="ph-actions"><button class="btn gold" id="ann-new">+ Yangi e‘lon</button></div>':''}</div>
+    <p class="small muted" style="margin:-8px 0 14px">E‘lon ota-ona kabinetida farzandining sinfi bo‘yicha ko‘rinadi. ${canAnnounceAll()?'Siz istalgan sinfga yoki butun maktabga yozasiz.':'Siz faqat o‘zingiz rahbar bo‘lgan sinf(lar)ga yozasiz.'}</p>
+    <div id="ann-form"></div><div class="card" id="ann-list"><div class="loading">Yuklanmoqda…</div></div>`;
+  let students=[]; try{ students=await loadCol('students'); }catch(e){}
+  const label={}; students.forEach(s=>{ label[classKeyOf(s)]=classLabelOf(s); });
+  const clsLbl=k=>k==='all'?'Butun maktab':(label[k]||k);
+  const myKeys=canAnnounceAll()?[...new Set(students.filter(s=>s.payStatus!=='chiqdi').map(classKeyOf))].sort((a,b)=>clsLbl(a).localeCompare(clsLbl(b),'uz',{numeric:true})):(SESSION.homeroomClasses||[]).slice();
+  const load=async()=>{
+    let rows=[];
+    try{ const snap=await getDocs(query(collection(db,'class_announcements'), orderBy('createdAt','desc'), limit(300))); rows=snap.docs.map(d=>Object.assign({ id:d.id }, d.data())); }
+    catch(e){ $('#ann-list').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
+    if(_g!==VIEW_GEN) return;
+    rows.sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
+    const now=Date.now();
+    $('#ann-list').innerHTML=rows.length?rows.map(r=>{ const exp=r.expiresAt?new Date(r.expiresAt):null, past=exp&&exp.getTime()<now;
+        const mine=r.createdBy===me, can=mine||canAnnounceAll();
+        return `<div style="border-bottom:1px solid var(--border);padding:12px 4px${past?';opacity:.6':''}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div><b>${r.pinned?'📌 ':''}${esc(r.title)}</b>
+            <div class="small muted">${esc(admDT(r.createdAt))}${mine?' · siz':''}${exp?` · ${past?'muddati o‘tgan':'ko‘rinadi'}: ${esc(tkDay(exp))} gacha`:''}</div></div>
+            ${can?`<div style="display:flex;gap:6px"><button class="btn sm ghost" data-ann-ed="${esc(r.id)}">✏️</button><button class="btn sm ghost" data-ann-del="${esc(r.id)}">🗑</button></div>`:''}</div>
+          ${r.body?`<div style="white-space:pre-wrap;margin-top:6px">${esc(r.body)}</div>`:''}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${(Array.isArray(r.classKeys)?r.classKeys:[]).map(k=>`<span class="chip">${esc(clsLbl(k))}</span>`).join('')}</div></div>`; }).join('')
+      :'<div class="empty">Hozircha e‘lon yo‘q.</div>';
+    $('#ann-list').querySelectorAll('[data-ann-ed]').forEach(b=>b.addEventListener('click',()=>form(rows.find(x=>x.id===b.dataset.annEd))));
+    $('#ann-list').querySelectorAll('[data-ann-del]').forEach(b=>b.addEventListener('click',async()=>{ const r=rows.find(x=>x.id===b.dataset.annDel); if(!r||!confirm(`«${r.title}» e‘loni o‘chirilsinmi?`)) return;
+      try{ await deleteDoc(doc(db,'class_announcements',r.id)); toast('E‘lon o‘chirildi'); load(); }catch(e){ toast('Xatolik: '+(e.message||e.code),true); } }));
+  };
+  const form=r=>{
+    const box=$('#ann-form'); const sel=new Set(r&&Array.isArray(r.classKeys)?r.classKeys:[]);
+    const expV=r&&r.expiresAt?tkDay(new Date(r.expiresAt)):'';
+    box.innerHTML=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 10px">${r?'E‘lonni tahrirlash':'Yangi e‘lon'}</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label>Sarlavha</label><input id="ann-title" maxlength="200" value="${esc(r?r.title:'')}" placeholder="Masalan: Ota-onalar majlisi — 15-noyabr, 17:00"></div>
+        <div><label>Matn</label><textarea id="ann-body" rows="4" maxlength="4000" style="width:100%;box-sizing:border-box">${esc(r?r.body||'':'')}</textarea></div>
+        <div><label>Kimga</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          ${canAnnounceAll()?`<label class="chip" style="cursor:pointer;margin:0;display:inline-flex;gap:4px"><input type="checkbox" data-ck="all" ${sel.has('all')?'checked':''}>Butun maktab</label>`:''}
+          ${myKeys.map(k=>`<label class="chip" style="cursor:pointer;margin:0;display:inline-flex;gap:4px"><input type="checkbox" data-ck="${esc(k)}" ${sel.has(k)?'checked':''}>${esc(clsLbl(k))}</label>`).join('')||'<span class="small muted">Sizga sinf biriktirilmagan.</span>'}</div></div>
+        <div class="grid2"><div><label>Ota-onaga ko‘rinadi (shu kungacha, ixtiyoriy)</label><input type="date" id="ann-exp" value="${esc(expV)}"></div>
+          <div><label style="display:flex;gap:6px;align-items:center;margin-top:24px"><input type="checkbox" id="ann-pin" ${r&&r.pinned?'checked':''}> 📌 Muhim (yuqorida turadi)</label></div></div>
+        <div style="display:flex;gap:8px"><button class="btn gold" id="ann-save">${r?'Saqlash':'E‘lon qilish'}</button><button class="btn ghost" id="ann-cancel">Bekor</button></div></div></div>`;
+    $('#ann-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
+    $('#ann-save').addEventListener('click',async()=>{
+      const title=$('#ann-title').value.trim(), body=$('#ann-body').value.trim();
+      const keys=[...box.querySelectorAll('[data-ck]')].filter(c=>c.checked).map(c=>c.dataset.ck);
+      if(!title){ toast('Sarlavha yozing',true); return; }
+      if(!keys.length){ toast('Kamida bitta sinf (yoki «Butun maktab») tanlang',true); return; }
+      const ck=keys.includes('all')?['all']:keys;
+      const ev=$('#ann-exp').value; if(ev && ev<tkDay(new Date())){ toast('Ko‘rinish muddati o‘tgan kun bo‘lmasin',true); return; }
+      const data={ title, body:body||null, classKeys:ck, pinned:$('#ann-pin').checked, expiresAt:ev?`${ev}T23:59:59+05:00`:null };
+      const b=$('#ann-save'); b.disabled=true;
+      try{ if(r) await updateDoc(doc(db,'class_announcements',r.id), data, { mustExist:true });
+        else await addDoc(collection(db,'class_announcements'), Object.assign({ createdBy:me }, data));
+        toast(r?'E‘lon yangilandi ✓':'E‘lon qilindi ✓ — ota-onalar kabinetida ko‘rinadi'); box.innerHTML=''; load(); }
+      catch(e){ toast('Xatolik: '+(/row-level|42501|permission/i.test(String(e.message||e.code))?'bu sinf(lar)ga e‘lon yozishga ruxsatingiz yo‘q':(e.message||e.code)),true); b.disabled=false; }
+    });
+    box.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+  const nb=$('#ann-new'); if(nb) nb.addEventListener('click',()=>form(null));
+  await load();
 }
 
 /* ---- Enrollments inbox ---- */
@@ -6928,6 +7225,40 @@ async function sendDebtReminder(sid, btn){
   }catch(e){ toast('Xatolik: '+(e.message||e),true); }
   finally{ if(!keep){ btn.disabled=false; btn.textContent=label; } }
 }
+// «Qarzdorlar» → «📱 Tanlanganlarga eslatma»: avval ko'rib chiqish (server: kimga ketadi / kim nima sababdan o'tkaziladi),
+//   tasdiqdan keyin bitta so'rovda yuboriladi (navbatma-navbat, har biriga kuniga-1, limit, tinch soat, faqat +998).
+async function bulkDebtReminder(ids, btn, gmap){
+  ids=[...new Set(ids||[])]; if(!ids.length) return;
+  const label=btn.textContent; btn.disabled=true; btn.textContent='Tekshirilmoqda…';
+  const nm=r=>r.name||((gmap&&gmap[r.studentId]&&gmap[r.studentId].name)||r.studentId);
+  try{
+    const p=await ntfAuthPost('sms-remind-batch',{ studentIds:ids, preview:true });
+    if(!p.ok){ toast(p.error||'Tekshirib bo‘lmadi',true); return; }
+    const ready=p.results.filter(x=>x.status==='ready'), skip=p.results.filter(x=>x.status!=='ready');
+    const reasons=skip.slice(0,12).map(x=>`• ${nm(x)} — ${x.error||x.code}`).join('\n')+(skip.length>12?`\n… yana ${skip.length-12} ta`:'');
+    if(!ready.length){ alert(`SMS yuboriladigan o‘quvchi yo‘q (${skip.length} tasi o‘tkaziladi):\n\n${reasons}`); return; }
+    const warn=ready.filter(x=>x.tplFit===false).length?'\n\n⚠️ Matn Eskiz’dagi tasdiqlangan shablonga mos kelmayapti — Eskiz rad etishi mumkin («Xabarnomalar» → «🔍 tekshirish»).':'';
+    const q=`📱 ${ready.length} ta ota-onaga SMS eslatma yuborilsinmi?\n\n${ready.slice(0,12).map(x=>`• ${nm(x)} — ${fmtSom(x.due)} · ${x.phone}`).join('\n')}${ready.length>12?`\n… yana ${ready.length-12} ta`:''}`
+      +(skip.length?`\n\nO‘tkaziladi (${skip.length}):\n${reasons}`:'')+warn+(p.dry?'\n\nℹ️ SINOV rejimi (serverda sms.dryRun) — SMS haqiqatan yuborilmaydi.':'')
+      +`\n\nNamuna matn:\n«${ready[0].message||''}»\n\nHar o‘quvchiga kuniga faqat bitta eslatma yuboriladi.`;
+    if(!confirm(q)) return;
+    btn.textContent=`Yuborilmoqda (${ready.length})…`;
+    const r=await ntfAuthPost('sms-remind-batch',{ studentIds:ready.map(x=>x.studentId) });
+    if(!r.ok){ toast(r.net?'Server bilan aloqa uzildi — natija noaniq. «Xabarnomalar» → «SMS jurnali»da tekshiring; qayta yuborsangiz, yuborilganlarga ikkinchi SMS ketmaydi.':(r.error||'Yuborilmadi'),true); return; }
+    // Ko'rib chiqishda o'tkazilganlar ham natijada (to'liq manzara): jami = belgilanganlar.
+    r.results=(r.results||[]).concat(skip);
+    const S=Object.assign({}, r.summary||{}); S.skipped=(Number(S.skipped)||0)+skip.length;
+    const ic={ sent:'✓', skipped:'⏭', failed:'✗' }, col={ sent:'var(--teal)', skipped:'#B45309', failed:'#B42318' };
+    $('#modal').innerHTML=`<div class="modal-h"><h3>📱 Eslatma natijasi</h3><button class="x" id="m-x">×</button></div>
+      <div class="modal-b"><p style="margin:0 0 10px"><b style="color:var(--teal)">✓ ${esc(S.sent||0)} yuborildi</b> · <b style="color:#B45309">⏭ ${esc(S.skipped||0)} o‘tkazildi</b> · <b style="color:#B42318">✗ ${esc(S.failed||0)} xato</b>${r.dry?' · <i>SINOV rejimi — hech narsa yuborilmadi</i>':''}</p>
+        <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Holat</th><th>Izoh</th></tr></thead><tbody>${r.results.map(x=>`<tr><td>${esc(nm(x))}<div class="small muted">${esc(x.phone||'')}</div></td>
+          <td style="color:${col[x.status]||'inherit'};white-space:nowrap">${ic[x.status]||''} ${esc({ sent:'Yuborildi', skipped:'O‘tkazildi', failed:'Xato' }[x.status]||x.status)}</td><td class="small">${esc(x.error||'')}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="modal-f"><button type="button" class="btn gold" id="m-cancel">Yopish</button></div>`;
+    openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    toast(`Eslatma: ${S.sent||0} yuborildi, ${S.skipped||0} o‘tkazildi, ${S.failed||0} xato`, !!S.failed);
+  }catch(e){ toast('Xatolik: '+(e.message||e),true); }
+  finally{ btn.disabled=false; btn.textContent=label; }
+}
 /* ==================== Moliya (Finance) ====================
    «To‘lovlar»dagi invoices hujjatlaridan avtomatik hisoblanadi:
    yig‘im foizi, kutilayotgan summa, qarzdorlar, daromad grafigi,
@@ -7050,14 +7381,15 @@ async function renderFinance(){
     const debtRows=debtors.map((d,i)=>{ const cls=debtCls(d);
       const chips=[...new Set(d.months)].sort().slice(-4).map(m=>`<span class="fin-mo">${mLabel(m)}</span>`).join('');
       return `<tr${i>=TOPN?' class="fin-more" style="display:none"':''}>
+        <td class="td-check" style="width:28px"><input type="checkbox" data-rsel="${esc(d.sid)}" aria-label="Eslatma uchun tanlash"></td>
         <td data-label="O‘quvchi"><b>${esc(d.name)}</b><div class="small muted">${esc(cls)}</div></td>
         <td data-label="Oylar">${chips}</td>
         <td data-label="Qarz" class="fin-debt">${fmtC(d.sum)}</td>
         <td class="td-actions"><button class="btn sm" data-remind="${esc(d.sid)}" title="Ota-onaga SMS eslatma (qarz serverda hisoblanadi; kuniga bitta)">Eslatma</button></td></tr>`;
     }).join('');
     const debtCard=`<div class="card"><div class="cls-card-head"><h3>Qarzdorlar</h3><span class="cls-count">${debtors.length} o‘quvchi · ${fmtC(debtSum)}${debtors.length>TOPN?` · <span id="fin-debt-shown">eng katta ${TOPN} tasi ko‘rinmoqda</span>`:''}</span></div>
-      ${debtors.length?`<div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Oylar</th><th>Qarz</th><th></th></tr></thead><tbody>${debtRows}</tbody></table></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${debtors.length>TOPN?`<button type="button" class="btn sm ghost" id="fin-debt-all">Barchasini ko‘rsatish (${debtors.length})</button>`:''}<button type="button" class="btn sm ghost" id="fin-debt-csv" title="Qarzdorlar ro‘yxati (CSV/Excel): o‘quvchi, sinf, oylar, qarz">⬇ CSV</button></div>`:'<div class="empty">Qarzdor yo‘q ✓</div>'}</div>`;
+      ${debtors.length?`<div class="tablewrap"><table><thead><tr><th><input type="checkbox" id="fin-rsel-all" title="Ko‘rinayotganlarning hammasini belgilash (ko‘pi bilan 50)"></th><th>O‘quvchi</th><th>Oylar</th><th>Qarz</th><th></th></tr></thead><tbody>${debtRows}</tbody></table></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn sm" id="fin-remind-bulk" disabled title="Belgilangan o‘quvchilar ota-onalariga SMS eslatma (har biriga kuniga bitta; qarz serverda hisoblanadi)">📱 Tanlanganlarga eslatma (0)</button>${debtors.length>TOPN?`<button type="button" class="btn sm ghost" id="fin-debt-all">Barchasini ko‘rsatish (${debtors.length})</button>`:''}<button type="button" class="btn sm ghost" id="fin-debt-csv" title="Qarzdorlar ro‘yxati (CSV/Excel): o‘quvchi, sinf, oylar, qarz">⬇ CSV</button></div>`:'<div class="empty">Qarzdor yo‘q ✓</div>'}</div>`;
 
     // ---- Sinf (daraja) bo'yicha daromad ----
     const byGrade={}; mInv.forEach(i=>{ const a=paidAmt(i); if(a<=0)return; const g=gradeOf(i); byGrade[g]=(byGrade[g]||0)+a; });
@@ -7069,6 +7401,16 @@ async function renderFinance(){
     $('#fin-body').innerHTML = kpis + chart + `<div class="fin-cols">${pmCard}${fcCard}</div>` + `<div class="fin-cols">${debtCard}${gradeCard}</div>`;
     // «Eslatma» — ota-onaga SMS (Eskiz, auth-server orqali): avval ko'rib chiqish, keyin tasdiqlab yuborish.
     $('#fin-body').querySelectorAll('[data-remind]').forEach(b=>b.addEventListener('click',()=>sendDebtReminder(b.dataset.remind, b)));
+    // Ommaviy eslatma: belgilanganlar (ko'pi bilan 50) -> auth-server /sms-remind-batch (har biriga AYNAN «Eslatma» qoidalari).
+    const bulkBtn=$('#fin-remind-bulk');
+    if(bulkBtn){
+      const boxes=()=>[...$('#fin-body').querySelectorAll('[data-rsel]')];
+      const upd=()=>{ const n=boxes().filter(c=>c.checked).length; bulkBtn.textContent=`📱 Tanlanganlarga eslatma (${n})`; bulkBtn.disabled=!n; };
+      boxes().forEach(c=>c.addEventListener('change',()=>{ if(c.checked && boxes().filter(x=>x.checked).length>50){ c.checked=false; toast('Bir martada ko‘pi bilan 50 ta o‘quvchi',true); } upd(); }));
+      const all=$('#fin-rsel-all'); if(all) all.addEventListener('change',()=>{ const vis=boxes().filter(c=>c.closest('tr').style.display!=='none');
+        let k=0; vis.forEach(c=>{ c.checked=all.checked && k<50; if(c.checked) k++; }); if(all.checked && vis.length>50) toast('Ko‘rinayotganlardan birinchi 50 tasi belgilandi (ko‘pi bilan 50)'); upd(); });
+      bulkBtn.addEventListener('click',()=>bulkDebtReminder(boxes().filter(c=>c.checked).map(c=>c.dataset.rsel), bulkBtn, gmap));
+    }
     const allBtn=$('#fin-debt-all'); if(allBtn) allBtn.addEventListener('click',()=>{ $('#fin-body').querySelectorAll('tr.fin-more').forEach(tr=>{ tr.style.display=''; }); allBtn.remove(); const s=$('#fin-debt-shown'); if(s) s.textContent='hammasi ko‘rinmoqda'; });
     const csvBtn=$('#fin-debt-csv'); if(csvBtn) csvBtn.addEventListener('click',()=>downloadCSV(`qarzdorlar-${M}.csv`, ['O‘quvchi','Sinf','Qarz oylari','Qarz (so‘m)'],
       debtors.map(d=>[d.name, debtCls(d), [...new Set(d.months)].sort().map(m=>mLabel(m)+' '+String(m).slice(0,4)).join(', '), Math.round(d.sum)])));   // oylar yili bilan (Okt 2025, Okt 2026)

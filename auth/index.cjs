@@ -19,6 +19,9 @@
  *   POST /auth/reset-confirm      { ticket, newPassword }
  *   POST /auth/change-phone-confirm { ticket }
  *   POST /auth/sms-remind         { jwt, studentId, preview? }            -> qarzdor ota-onasiga SMS eslatma (sms-remind.cjs)
+ *   POST /auth/sms-remind-batch   { jwt, studentIds:[≤50], preview? }    -> «Qarzdorlar»da belgilanganlarga (sms-remind.cjs)
+ *   POST /auth/sms-tpl-check      { jwt, texts:{ new_invoice?, debt_reminder?, manual_remind? } } -> Eskiz shabloniga
+ *                                 mosligi (faqat Direktor / xabarnoma muharriri; HECH NARSA yubormaydi — sms-tpl-check.cjs)
  *   POST /auth/block-user         { jwt, uid }   POST /auth/unblock-user { jwt, uid }  -> hisobni bloklash (user-admin.cjs)
  *   GET  /auth/health             -> ok   (ommaviy, hech qanday ma'lumotsiz)
  *   GET  /auth/health/deep        Authorization: Bearer <direktor JWT> -> xizmatlar holati (health.cjs)
@@ -470,11 +473,13 @@ function startServer() {
   });
   // «Moliya» → «Qarzdorlar» → «Eslatma» (direktor/moliya menejeri JWT bilan; Eskiz — OTP bilan bir xil sozlama).
   //   Modul yuklanmasa ham auth (login/OTP) ISHLAYVERADI — faqat eslatma xizmati vaqtincha o'chadi.
-  let smsRemind;
+  let smsRemind, smsRemindBatch, smsTplCheck;
   //   Sinov rejimida (dryRun) yuborilmaydi, lekin Eskiz naqshlari baribir o'qiladi (faqat GET) — sinov matni = haqiqiy matn.
   const tplReader = (!eskiz && SMS.enabled !== false && (SMS.token || /@/.test(String(SMS.eskizEmail || SMS.email || '')))) ? makeEskiz(SMS) : null;
-  try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, tplReader, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); }
-  catch (e) { console.error('sms-remind yuklanmadi:', e && e.message); smsRemind = async () => ({ ok: false, error: 'SMS eslatma xizmati vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
+  try { const { makeSmsRemind } = require('./sms-remind.cjs'); smsRemind = makeSmsRemind({ sb, eskiz, tplReader, smsCfg: SMS, verifyJwt: jwt => verifyToken(db, jwt) }); smsRemindBatch = smsRemind.batch; }
+  catch (e) { console.error('sms-remind yuklanmadi:', e && e.message); smsRemind = smsRemindBatch = async () => ({ ok: false, error: 'SMS eslatma xizmati vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
+  try { const { makeSmsTplCheck } = require('./sms-tpl-check.cjs'); smsTplCheck = makeSmsTplCheck({ sb, eskiz, tplReader, verifyJwt: jwt => verifyToken(db, jwt) }); }
+  catch (e) { console.error('sms-tpl-check yuklanmadi:', e && e.message); smsTplCheck = async () => ({ ok: false, error: 'Shablon tekshiruvi vaqtincha ishlamaydi (server jurnalini tekshiring).' }); }
   // JWT -> { uid } | { invalid } | { unavailable } (GoTrue javob bermasa — «seans eskirgan» deb aytmaymiz).
   const verifyUser = async jwt => {
     try {
@@ -494,7 +499,8 @@ function startServer() {
   const ROUTES = {
     'request-otp': H.requestOtp, 'verify-otp': H.verifyOtp, 'register': H.register,
     'login': H.login, 'reset-confirm': H.resetConfirm, 'change-phone-confirm': H.changePhoneConfirm,
-    'sms-remind': smsRemind, 'block-user': UA.blockUser, 'unblock-user': UA.unblockUser,
+    'sms-remind': smsRemind, 'sms-remind-batch': smsRemindBatch, 'sms-tpl-check': smsTplCheck,
+    'block-user': UA.blockUser, 'unblock-user': UA.unblockUser,
   };
   // CORS: ruxsat etilgan origin(lar) ro'yxati (vergul bilan yoki massiv). Brauzer api.iqror.uz'ga
   //   cross-origin murojaat qiladi (sayt iqroacademy.uz'да) — shuning uchun mos originни qaytaramiz.
@@ -510,7 +516,7 @@ function startServer() {
   const PORT = Number(AUTH.port || CFG.authPort || 8792);   // 8790=to'lov, 8791=AI — band
 
   const server = http.createServer(makeRouter({ routes: ROUTES, corsFor, deepHealth: DH.handle }));
-  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind,block-user,unblock-user,health,health/deep})`));
+  server.listen(PORT, '127.0.0.1', () => console.log(`Iqror AUTH serveri 127.0.0.1:${PORT} (nginx: /authapi/{request-otp,verify-otp,register,login,reset-confirm,change-phone-confirm,sms-remind,sms-remind-batch,sms-tpl-check,block-user,unblock-user,health,health/deep})`));
 }
 
 if (require.main === module) startServer();

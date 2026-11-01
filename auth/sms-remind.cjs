@@ -22,13 +22,19 @@
  *     Limit claim'dan KEYIN ham qayta sanaladi (parallel so'rovlar limitdan oshib keta olmaydi).
  *   - preview:true — hech narsa yubormaydi/yozmaydi: matn, telefon, qarz va bugungi holatni qaytaradi
  *     (admin tasdiqlash oynasida ANIQ nima ketishini ko'radi).
- *   - Matn: sms.templates.remind -> sms.templates.debt -> standart (sms-worker bilan bir xil).
+ *   - Matn: Sozlamalar → «📱 Xabarnomalar» (notify_settings): «Qo'lda eslatma» faol matni -> «Qarz eslatmasi» faol matni ->
+ *     config.json sms.templates.remind -> sms.templates.debt -> standart. Tinch soat: «Qo'lda eslatma» soatlari -> umumiy
+ *     soatlar -> sms.sendHours. Direktor «Qo'lda eslatma»ni o'chirsa — yuborilmaydi. Sozlamani o'qib bo'lmasa — config.json
+ *     (avvalgidek).
+ *   POST /authapi/sms-remind-batch { jwt, studentIds:[…≤50], preview? } — «Qarzdorlar»da belgilanganlarga (ommaviy):
+ *     har o'quvchi uchun AYNAN shu qoidalar (kuniga 1, limitlar, tinch soat, faqat +998), navbatma-navbat; natija —
+ *     har biri: yuborildi / o'tkazildi (sabab) / xato. Umumiy to'siq (tinch soat, o'chirilgan, limit) — qolganlari o'tkaziladi.
  *     ⚠️ Eskiz SMS'ni TASDIQLANGAN shablon NAQSHI bilan solishtiradi ({name} -> %w / %w{1,3}, {due} -> %d ...):
  *     o'zgaruvchilar imkon qadar bitta «so'z» qilib yoziladi (summa 5800000, oylar 09.2026,10.2026), ism esa Eskiz'dagi
  *     naqshga sig'adigan shaklda (payments/eskiz-template.cjs composeSms). Naqshlar Eskiz'dan o'qiladi (10 daqiqa kesh).
  */
 const L = require('./lib.cjs');
-const { DEF_DEBT, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName, sendWindow, inSendWindow } = require('../payments/sms.cjs');
+const { DEF_DEBT, tashkentDay, tashkentDayStartISO, definitelyNotSent, sendStatus, smsName, sendWindow, inWindow, nsWindow } = require('../payments/sms.cjs');
 const { composeSms, smsSom, smsMonths } = require('../payments/eskiz-template.cjs');
 
 // Logda telefonni qisman yashirish (PII).
@@ -53,6 +59,10 @@ function humanEskizError(e) {
   return 'SMS yuborilmadi (Eskiz): ' + t.slice(0, 200);
 }
 const UNCERTAIN = 'Bugun eslatma yuborish boshlangan, lekin natijasi noaniq (SMS ketgan bo‘lishi mumkin) — ota-onaga ikki marta SMS ketmasligi uchun bugun qayta yuborilmaydi.';
+// Ommaviy eslatmada natija ko'rinishi uchun niqoblangan raqam: 998901234567 -> +998 90 *** ** 67.
+const maskPhone = c => { const d = String(c || '').replace(/\D/g, ''); return d.length === 12 ? `+${d.slice(0, 3)} ${d.slice(3, 5)} *** ** ${d.slice(-2)}` : (d ? '***' : ''); };
+// Butun so'rovga taalluqli to'siqlar — ommaviy eslatmada birinchisidan keyin qolganlari o'tkaziladi (har biriga urinilmaydi).
+const GLOBAL_BLOCK = new Set(['auth', 'forbidden', 'off', 'disabled', 'quiet', 'limit']);
 
 
 function makeSmsRemind(deps) {
@@ -95,30 +105,58 @@ function makeSmsRemind(deps) {
     return Promise.race([tplPending, late]).finally(() => clearTimeout(timer));
   }
 
-  return async function smsRemind(body) {
-    body = body || {};
-    // 1) Kim? — JWT + FAOL rol (serverda).
-    const uid = await verifyJwt(body.jwt);
-    if (!uid) return { ok: false, error: 'Seans tugagan — qaytadan kiring.' };
+  // Xabarnoma sozlamalari (notify_settings): qo'lda eslatma yoqilganmi, faol matn, soatlar. O'qib bo'lmasa (jadval hali
+  //   yo'q / baza xatosi) — null: config.json bilan ishlanadi (avvalgidek).
+  async function notifySettings() {
+    try {
+      const { data, error } = await sb.from('notify_settings').select('id,enabled,smsActive,hourFrom,hourTo').in('id', ['general', 'debt_reminder', 'manual_remind']);
+      if (error || !Array.isArray(data)) { if (error) console.error('notify_settings o‘qilmadi (config.json ishlatiladi):', String(error.message || '').slice(0, 120)); return null; }
+      const by = {}; data.forEach(r => { if (r && r.id) by[r.id] = r; }); return by;
+    } catch (e) { console.error('notify_settings xato (config.json ishlatiladi):', String((e && e.message) || e).slice(0, 120)); return null; }
+  }
+  function effective(NS) {
+    const man = NS && NS.manual_remind, debt = NS && NS.debt_reminder, gen = NS && NS.general;
+    const t1 = String((man && man.smsActive) || '').trim(), t2 = String((debt && debt.smsActive) || '').trim();
+    return { tpl: t1 || t2 || TPL, tplSource: t1 ? 'settings' : t2 ? 'settings-debt' : (TPL === DEF_DEBT ? 'default' : 'config'),
+      win: nsWindow(man) || nsWindow(gen) || sendWindow(S), off: !!(man && man.enabled === false) };
+  }
+
+  // 1) Kim? — JWT + FAOL rol (serverda).
+  async function caller(jwt) {
+    const uid = await verifyJwt(jwt);
+    if (!uid) return { err: { ok: false, code: 'auth', error: 'Seans tugagan — qaytadan kiring.' } };
     const { data: urows, error: uErr } = await sb.from('users').select('id,role,status').eq('id', uid).limit(1);
-    if (uErr) return { ok: false, error: 'Server xatosi (foydalanuvchi). Keyinroq urinib ko‘ring.' };
+    if (uErr) return { err: { ok: false, code: 'server', error: 'Server xatosi (foydalanuvchi). Keyinroq urinib ko‘ring.' } };
     const u = urows && urows[0];
     const ust = String((u && u.status) || '');
-    if (!u || !ROLES.has(String(u.role || '')) || !(ust === '' || ust === 'active')) return { ok: false, error: 'Ruxsat yo‘q: SMS eslatmani faqat direktor / moliya menejeri yuboradi.' };
+    if (!u || !ROLES.has(String(u.role || '')) || !(ust === '' || ust === 'active')) return { err: { ok: false, code: 'forbidden', error: 'Ruxsat yo‘q: SMS eslatmani faqat direktor / moliya menejeri yuboradi.' } };
+    return { uid };
+  }
 
+  async function smsRemind(body) {
+    body = body || {};
+    const c = await caller(body.jwt);
+    if (c.err) return c.err;
+    return remindOne(c.uid, body, null);
+  }
+
+  // Bitta o'quvchi (caller tekshirilgan). ctx.NS — ommaviy so'rovda bir marta o'qilgan sozlama.
+  async function remindOne(uid, body, ctx) {
+    const NS = (ctx && 'NS' in ctx) ? ctx.NS : await notifySettings();
+    const EFF = effective(NS);
     // 2) Qaysi o'quvchi? Kalit BIRDAN ORTIQ o'quvchiga to'g'ri kelsa (bir bolaning hujjat id'si boshqasining
     //    studentId'si / studentId takrori) — RAD (ota-ona kabineti qoidasi bilan bir xil).
     const sid = String(body.studentId || '').trim();
-    if (!sid || sid.length > 80 || /[\u0000-\u001f]/.test(sid)) return { ok: false, error: 'O‘quvchi ko‘rsatilmagan.' };
+    if (!sid || sid.length > 80 || /[\u0000-\u001f]/.test(sid)) return { ok: false, code: 'student', error: 'O‘quvchi ko‘rsatilmagan.' };
     const cols = 'id,studentId,name';
     const r1 = await sb.from('students').select(cols).eq('studentId', sid);
     const r2 = await sb.from('students').select(cols).eq('id', sid);
-    if (r1.error || r2.error) return { ok: false, error: 'Server xatosi (o‘quvchi). Keyinroq urinib ko‘ring.' };
+    if (r1.error || r2.error) return { ok: false, code: 'server', error: 'Server xatosi (o‘quvchi). Keyinroq urinib ko‘ring.' };
     const cand = new Map();
     [...(r1.data || []), ...(r2.data || [])].forEach(r => cand.set(r.id, r));
-    if (cand.size > 1) return { ok: false, error: 'Bu ID bir nechta o‘quvchiga to‘g‘ri keldi — «O‘quvchilar» → «⚠️ Sifat»dagi ID to‘qnashuvini hal qiling (SMS boshqa oilaga ketmasin).' };
+    if (cand.size > 1) return { ok: false, code: 'student', error: 'Bu ID bir nechta o‘quvchiga to‘g‘ri keldi — «O‘quvchilar» → «⚠️ Sifat»dagi ID to‘qnashuvini hal qiling (SMS boshqa oilaga ketmasin).' };
     const st = cand.size === 1 ? [...cand.values()][0] : null;
-    if (!st) return { ok: false, error: 'O‘quvchi topilmadi (o‘chirilgan yoki ID o‘zgargan).' };
+    if (!st) return { ok: false, code: 'student', error: 'O‘quvchi topilmadi (o‘chirilgan yoki ID o‘zgargan).' };
     const code = String(st.studentId || '').trim();
     const canon = code || st.id;                                    // kanonik kalit (billing bilan bir xil)
     // Fakturalar kanonik kalit bilan; eski fakturalar hujjat id bilan bo'lishi mumkin — lekin hujjat id BOSHQA bolaning
@@ -126,14 +164,14 @@ function makeSmsRemind(deps) {
     const keys = [canon];
     if (st.id !== canon) {
       const o = await sb.from('students').select('id').eq('studentId', st.id).limit(1);
-      if (o.error) return { ok: false, error: 'Server xatosi (o‘quvchi). Keyinroq urinib ko‘ring.' };
+      if (o.error) return { ok: false, code: 'server', error: 'Server xatosi (o‘quvchi). Keyinroq urinib ko‘ring.' };
       if (!(o.data || []).length) keys.push(st.id);
     }
 
     // 3) Telefon — maxfiy jadval (hujjat id = students.id). Faqat shu bola uchun aniq bo'lsa studentId taxallusi.
     const pcols = 'id,parentPhone,parentPhone2';
     const p1 = await sb.from('student_private').select(pcols).eq('id', st.id).limit(1);
-    if (p1.error) return { ok: false, error: 'Server xatosi (telefon). Keyinroq urinib ko‘ring.' };
+    if (p1.error) return { ok: false, code: 'server', error: 'Server xatosi (telefon). Keyinroq urinib ko‘ring.' };
     let pv = p1.data && p1.data[0];
     if (!pv && code && code !== st.id) {
       const other = await sb.from('students').select('id').eq('id', code).limit(1);   // boshqa o'quvchining hujjati emasmi?
@@ -150,7 +188,7 @@ function makeSmsRemind(deps) {
     // 4) Qarz — serverda (o'quvchining BARCHA kalitlaridagi fakturalar).
     const curMonth = tashkentDay(now()).slice(0, 7);
     const ir = await sb.from('invoices').select('id,month,amount,paidAmount,status,studentName').in('studentId', keys);
-    if (ir.error) return { ok: false, error: 'Server xatosi (fakturalar). Keyinroq urinib ko‘ring.' };
+    if (ir.error) return { ok: false, code: 'server', error: 'Server xatosi (fakturalar). Keyinroq urinib ko‘ring.' };
     const debts = (ir.data || []).filter(i => i.month && String(i.month) <= curMonth)
       .map(i => ({ id: i.id, month: String(i.month), due: debtOf(i), nm: i.studentName }))
       .filter(x => x.due > 0).sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
@@ -159,14 +197,14 @@ function makeSmsRemind(deps) {
     const name = smsName(st.name || (debts[0] && debts[0].nm) || canon);
     // Faqat ASCII (GSM-7): tire/boshqa belgi butun SMS'ni UCS-2 ga o'tkazib, qismlar sonini (narxini) oshiradi.
     //   O'zgaruvchilar Eskiz naqshiga sig'adigan shaklda: oylar bitta so'z (09.2026,10.2026 / 08.2026-10.2026), summa 5800000.
-    const cm = composeSms(TPL, { name, month: smsMonths(months), due: smsSom(due), amount: smsSom(due) }, await approvedTemplates());
+    const cm = composeSms(EFF.tpl, { name, month: smsMonths(months), due: smsSom(due), amount: smsSom(due) }, await approvedTemplates());
     const message = cm.message;
 
     // 5) Bugungi holat (qo'lda + avtomatik).
     const day = tashkentDay(now());
     const logId = `remind__${canon}__${day}`;
     const ex = await sb.from('sms_log').select('id,status,attempts,error,createdAt').eq('id', logId).limit(1);
-    if (ex.error) return { ok: false, error: 'Server xatosi (SMS jurnali). Keyinroq urinib ko‘ring.' };
+    if (ex.error) return { ok: false, code: 'server', error: 'Server xatosi (SMS jurnali). Keyinroq urinib ko‘ring.' };
     const prev = ex.data && ex.data[0];
     const dayStart = tashkentDayStartISO(day);
     const autoToday = (await countRows(sb.from('sms_log').select('id', { count: 'exact', head: true }).in('studentId', keys).eq('type', 'debt').eq('status', 'sent').gte('createdAt', dayStart))) || 0;
@@ -184,19 +222,20 @@ function makeSmsRemind(deps) {
     else if (prev && prev.status === 'sent') block = { code: 'sent', already: 'sent', error: 'Bugun bu o‘quvchining ota-onasiga eslatma allaqachon yuborilgan ✓' };
     else if (prev && prev.status !== 'failed') block = { code: 'uncertain', already: 'sending', error: UNCERTAIN };
     else if (prev && (Number(prev.attempts) || 0) >= MAX_TRIES) block = { code: 'retries', error: `Bugun ${MAX_TRIES} marta urinildi, SMS ketmadi: ${humanEskizError(prev.error)}` };
+    else if (EFF.off) block = { code: 'off', error: 'Qo‘lda SMS eslatma o‘chirilgan (Sozlamalar → «📱 Xabarnomalar» → «Qo‘lda eslatma»).' };
     else if (!MAX_HOUR || !MAX_DAY) block = { code: 'disabled', error: 'SMS eslatma serverda o‘chirilgan (limit 0).' };
-    else if (!inSendWindow(S, now())) { const w = sendWindow(S); block = { code: 'quiet', error: `Tinch soat: SMS faqat Toshkent vaqti bilan ${w[0]}:00–${w[1]}:00 oralig‘ida yuboriladi (ota-onani kechasi bezovta qilmaslik uchun). Ertalab qayta urinib ko‘ring.` }; }
-    const info = { name, phone: pretty, due, months, message, dry: DRY, tplFit: cm.fit, nameShort: cm.shortened,
+    else if (!inWindow(EFF.win, now())) { const w = EFF.win; block = { code: 'quiet', error: `Tinch soat: SMS faqat Toshkent vaqti bilan ${w[0]}:00–${w[1]}:00 oralig‘ida yuboriladi (ota-onani kechasi bezovta qilmaslik uchun). Keyinroq qayta urinib ko‘ring.` }; }
+    const info = { name, phone: pretty, phoneMasked: maskPhone(phone), due, months, message, dry: DRY, tplFit: cm.fit, nameShort: cm.shortened, tplSource: EFF.tplSource,
       today: prev ? { status: String(prev.status || ''), at: prev.createdAt || null } : null, autoToday, phoneToday,
       blocked: block ? block.code : null, blockedMsg: block ? block.error : '' };
 
     if (body.preview) return Object.assign({ ok: true, preview: true }, info);
 
-    if (block) return block.already ? { ok: false, already: block.already, error: block.error } : { ok: false, error: block.error };
+    if (block) return block.already ? { ok: false, code: block.code, already: block.already, error: block.error } : { ok: false, code: block.code, error: block.error };
     // Tasdiq bilan BOG'LASH: admin ko'rib tasdiqlagan matn va telefon (body.expect) hozirgisidan farq qilsa (oraliqda to'lov
     //   kelgan / telefon tahrirlangan) — yubormaymiz, qayta ko'rib chiqishni so'raymiz.
     if (body.expect && (String(body.expect.message || '') !== message || String(body.expect.phone || '') !== pretty)) {
-      return Object.assign({ ok: false, changed: true, error: 'Ma’lumot o‘zgardi (qarz yoki telefon) — «Eslatma»ni qayta bosib, yangi matnni tasdiqlang.' }, info);
+      return Object.assign({ ok: false, code: 'changed', changed: true, error: 'Ma’lumot o‘zgardi (qarz yoki telefon) — «Eslatma»ni qayta bosib, yangi matnni tasdiqlang.' }, info);
     }
     const hourAgo = new Date(now() - 3600e3).toISOString();
     const overLimit = async () => {
@@ -210,11 +249,11 @@ function makeSmsRemind(deps) {
     // Oldindan tekshiruv (yangi qator hali yo'q -> «+1» bilan): limit to'lgan bo'lsa claim ham qilinmaydi.
     if (!prev) {
       const nHour0 = await countRows(sb.from('sms_log').select('id', { count: 'exact', head: true }).eq('type', 'remind').eq('sentBy', uid).gte('createdAt', hourAgo));
-      if (nHour0 == null) return { ok: false, error: 'Server xatosi (limit). Keyinroq urinib ko‘ring.' };
-      if (nHour0 >= MAX_HOUR) return { ok: false, error: `Soatiga ${MAX_HOUR} tadan ortiq eslatma yuborib bo‘lmaydi. Keyinroq urinib ko‘ring.` };
+      if (nHour0 == null) return { ok: false, code: 'server', error: 'Server xatosi (limit). Keyinroq urinib ko‘ring.' };
+      if (nHour0 >= MAX_HOUR) return { ok: false, code: 'limit', error: `Soatiga ${MAX_HOUR} tadan ortiq eslatma yuborib bo‘lmaydi. Keyinroq urinib ko‘ring.` };
       const nDay0 = await countRows(sb.from('sms_log').select('id', { count: 'exact', head: true }).eq('type', 'remind').gte('createdAt', dayStart));
-      if (nDay0 == null) return { ok: false, error: 'Server xatosi (limit). Keyinroq urinib ko‘ring.' };
-      if (nDay0 >= MAX_DAY) return { ok: false, error: `Bugungi umumiy SMS eslatma chegarasi (${MAX_DAY}) tugadi.` };
+      if (nDay0 == null) return { ok: false, code: 'server', error: 'Server xatosi (limit). Keyinroq urinib ko‘ring.' };
+      if (nDay0 >= MAX_DAY) return { ok: false, code: 'limit', error: `Bugungi umumiy SMS eslatma chegarasi (${MAX_DAY}) tugadi.` };
     }
     if (DRY) { console.log('[DRY remind]', redact(phone), '::', message); return Object.assign({ ok: true, dry: true }, info); }
 
@@ -224,8 +263,8 @@ function makeSmsRemind(deps) {
     if (!prev) {
       const ins = await sb.from('sms_log').insert(Object.assign({ id: logId, attempts: 1 }, rec));
       if (ins.error) {
-        if (String(ins.error.code || '') === '23505' || /duplicate|unique/i.test(String(ins.error.message || ''))) return { ok: false, already: 'sending', error: 'Bu eslatma hozirgina yuborilmoqda (takror bosildi).' };
-        return { ok: false, error: 'Server xatosi (SMS jurnali yozilmadi).' };
+        if (String(ins.error.code || '') === '23505' || /duplicate|unique/i.test(String(ins.error.message || ''))) return { ok: false, code: 'uncertain', already: 'sending', error: 'Bu eslatma hozirgina yuborilmoqda (takror bosildi).' };
+        return { ok: false, code: 'server', error: 'Server xatosi (SMS jurnali yozilmadi).' };
       }
       // Limit claim'dan KEYIN qayta sanaladi (o'z qatori ham ichida): parallel so'rovlar oldindan tekshiruvdan birga
       //   o'tib ketgan bo'lsa ham, limitdan oshganlari o'z claim'ini o'chirib rad etiladi (SMS ketmaydi).
@@ -233,16 +272,16 @@ function makeSmsRemind(deps) {
       if (over) {
         const del = await sb.from('sms_log').delete().eq('id', logId).eq('status', 'sending');
         if (del.error) console.error('sms-remind claim delete fail', logId, (del.error.message || '').slice(0, 120));
-        return { ok: false, error: over };
+        return { ok: false, code: /Server xatosi/.test(over) ? 'server' : 'limit', error: over };
       }
     } else {
       // Qayta urinish ham limitga bo'ysunadi (bu qator — o'z vaqtida sanalgan; oyna ichida bo'lsa ham «>» bilan).
       const over = await overLimit();
-      if (over) return { ok: false, error: over };
+      if (over) return { ok: false, code: /Server xatosi/.test(over) ? 'server' : 'limit', error: over };
       const n0 = Number(prev.attempts) || 0;
       const up = await sb.from('sms_log').update(Object.assign({}, rec, { attempts: n0 + 1 })).eq('id', logId).eq('status', 'failed').eq('attempts', n0).select('id');
-      if (up.error) return { ok: false, error: 'Server xatosi (SMS jurnali yozilmadi).' };
-      if (!(up.data || []).length) return { ok: false, already: 'sending', error: 'Bu eslatma hozirgina yuborilmoqda (takror bosildi).' };
+      if (up.error) return { ok: false, code: 'server', error: 'Server xatosi (SMS jurnali yozilmadi).' };
+      if (!(up.data || []).length) return { ok: false, code: 'uncertain', already: 'sending', error: 'Bu eslatma hozirgina yuborilmoqda (takror bosildi).' };
     }
     // Eskiz natijasi (payments/sms.cjs sendStatus): ok -> sent; Eskiz'ning o'zi 4xx JSON bilan rad etdi yoki kirish (login)/
     //   ulanish umuman bo'lmadi (ECONNREFUSED/DNS/TLS) -> failed (aniq ketmagan, qayta urinish mumkin); 5xx / JSON emas /
@@ -255,10 +294,54 @@ function makeSmsRemind(deps) {
     if (mk.error) console.error('sms-remind log update fail', logId, (mk.error.message || '').slice(0, 120));
     if (!r.ok) {
       console.error('sms-remind fail', redact(phone), status, String(r.error || '').slice(0, 200));
-      return { ok: false, error: uncertain ? 'Eskiz javobi noaniq (aloqa uzildi yoki Eskiz serveri xatosi) — SMS ketgan-ketmagani noma’lum. Ikki marta ketmasligi uchun bugun qayta yuborilmaydi.' : humanEskizError(r.error) };
+      return { ok: false, code: uncertain ? 'unknown' : 'eskiz', error: uncertain ? 'Eskiz javobi noaniq (aloqa uzildi yoki Eskiz serveri xatosi) — SMS ketgan-ketmagani noma’lum. Ikki marta ketmasligi uchun bugun qayta yuborilmaydi.' : humanEskizError(r.error) };
     }
-    return { ok: true, sent: true, phone: pretty, due, months };
+    return { ok: true, sent: true, phone: pretty, phoneMasked: maskPhone(phone), name, due, months };
+  }
+
+  // «Qarzdorlar» → belgilanganlarga eslatma (ommaviy). Har o'quvchi — remindOne (bir xil qoidalar), navbatma-navbat.
+  //   Vaqt chegarasi (remindBatchBudgetMs, standart 40 s): undan oshsa qolganlari «vaqt tugadi» (qayta yuborish xavfsiz —
+  //   yuborilganlarga kuniga-1 qulfi ikkinchi SMS yubormaydi). Natijada telefon NIQOBLANGAN.
+  const BATCH_MAX = 50;
+  const BATCH_BUDGET = Math.max(1000, cfgNum(S.remindBatchBudgetMs, 40000));
+  smsRemind.batch = async function smsRemindBatch(body) {
+    body = body || {};
+    const c = await caller(body.jwt);
+    if (c.err) return c.err;
+    if (!Array.isArray(body.studentIds) || !body.studentIds.length) return { ok: false, error: 'O‘quvchilar tanlanmagan.' };
+    const ids = [...new Set(body.studentIds.map(x => String(x == null ? '' : x).trim()).filter(Boolean))];
+    if (!ids.length) return { ok: false, error: 'O‘quvchilar tanlanmagan.' };
+    if (ids.length > BATCH_MAX) return { ok: false, error: `Bir martada ko‘pi bilan ${BATCH_MAX} ta o‘quvchiga eslatma yuboriladi.` };
+    const preview = !!body.preview;
+    const t0 = now();
+    const NS = await notifySettings();
+    const results = []; let stop = null;
+    for (const sid of ids) {
+      if (!stop && !preview && now() - t0 > BATCH_BUDGET) stop = { code: 'time', error: 'Vaqt tugadi — qolganlarini qayta belgilab yuboring (yuborilganlarga ikkinchi SMS ketmaydi).' };
+      if (stop) { results.push({ studentId: sid, status: 'skipped', code: stop.code, error: stop.error }); continue; }
+      let r;
+      try { r = await remindOne(c.uid, { studentId: sid, preview }, { NS }); }
+      catch (e) { console.error('sms-remind-batch xato', String((e && e.message) || e).slice(0, 120)); r = { ok: false, code: 'server', error: 'Server xatosi. Keyinroq urinib ko‘ring.' }; }
+      const base = { studentId: sid, name: r.name || '', phone: r.phoneMasked || '', due: Number(r.due) || 0 };
+      if (preview) {
+        if (!r.ok) results.push(Object.assign(base, { status: 'skipped', code: r.code || 'error', error: r.error || '' }));
+        else if (r.blocked) results.push(Object.assign(base, { status: 'skipped', code: r.blocked, error: r.blockedMsg || '' }));
+        else results.push(Object.assign(base, { status: 'ready', message: r.message, tplFit: r.tplFit, phoneToday: r.phoneToday || 0, autoToday: r.autoToday || 0 }));
+        const bc = !r.ok ? r.code : r.blocked;
+        if (GLOBAL_BLOCK.has(bc)) stop = { code: bc, error: (!r.ok ? r.error : r.blockedMsg) || '' };
+        continue;
+      }
+      if (r.ok) results.push(Object.assign(base, { status: 'sent', dry: !!r.dry }));
+      else {
+        const failed = ['eskiz', 'unknown', 'server', 'retries'].includes(r.code) || !r.code;
+        results.push(Object.assign(base, { status: failed ? 'failed' : 'skipped', code: r.code || 'error', error: r.error || '' }));
+        if (GLOBAL_BLOCK.has(r.code)) stop = { code: r.code, error: r.error || '' };
+      }
+    }
+    const n = k => results.filter(x => x.status === k).length;
+    return { ok: true, preview, dry: DRY, results, summary: { total: results.length, sent: n('sent'), ready: n('ready'), skipped: n('skipped'), failed: n('failed') } };
   };
+  return smsRemind;
 }
 
-module.exports = { makeSmsRemind, debtOf, smsName, humanEskizError, cfgNum, definitelyNotSent };
+module.exports = { makeSmsRemind, debtOf, smsName, humanEskizError, cfgNum, definitelyNotSent, maskPhone };

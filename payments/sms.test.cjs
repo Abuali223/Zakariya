@@ -258,6 +258,60 @@ const SEND_OK = { status: 200, body: JSON.stringify({ id: 'abc', status: 'waitin
     && S.orderDebtCandidates(sib, { A: '2026-11-02T05:00:00Z', B: '2026-11-05T05:00:00Z' }).map(x => x.key).join('') === 'AB'
     && S.orderDebtCandidates(sib, {}).map(x => x.key).join('') === 'AB');
 
+  // ---- PKG-9: notify_settings -> avtomatik SMS rejasi (sms-worker auto) ----
+  const NS = extra => [
+    { id: 'general', enabled: true, hourFrom: 9, hourTo: 20 },
+    { id: 'new_invoice', enabled: false, days: [0, 1, 2, 3, 4, 5, 6], lookbackDays: 14, enabledAt: null },
+    { id: 'debt_reminder', enabled: false, days: [1, 4], dayOfMonth: 10 },
+    { id: 'manual_remind', enabled: true },
+  ].map(r => Object.assign({}, r, (extra || {})[r.id] || {}));
+  const MON = T('2026-11-02T06:00:00Z');   // Dushanba, Toshkent 11:00
+  { const p = S.resolveAutoPlan(null, MON, {});
+    ok('auto: sozlama o‘qilmadi (null) -> ok=false (HECH NARSA yuborilmaydi)', p.ok === false && /o‘qilmadi/.test(p.error)); }
+  { const p = S.resolveAutoPlan(NS(), MON, {});
+    ok('auto: standart (ikkala tur o‘chiq) -> hech narsa', p.ok && !p.new.run && !p.debt.run && p.new.reason === 'o‘chirilgan' && p.debt.reason === 'o‘chirilgan', p); }
+  { const p = S.resolveAutoPlan([], MON, {});
+    ok('auto: qatorlar yo‘q -> hech narsa (sabab: qator yo‘q)', p.ok && !p.new.run && !p.debt.run && /qatori yo‘q/.test(p.new.reason), p); }
+  { const en = '2026-11-01T10:00:00Z';
+    const p = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: en } }), MON, {});
+    ok('auto: yangi faktura yoqilgan -> since = max(hozir−14 kun, yoqilgan vaqt) = yoqilgan vaqt', p.new.run && p.new.since === new Date(en).toISOString(), p.new);
+    const p2 = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: '2026-09-01T00:00:00Z', lookbackDays: 3 } }), MON, {});
+    ok('auto: uzoq vaqt oldin yoqilgan -> since = hozir − 3 kun', p2.new.run && p2.new.since === new Date(MON - 3 * 864e5).toISOString(), p2.new);
+    const p3 = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: null } }), MON, {});
+    ok('auto: yoqilgan, lekin vaqti yo‘q -> yuborilmaydi (eski fakturalarga xabar ketmasin)', !p3.new.run && /yoqilgan vaqti/.test(p3.new.reason), p3.new);
+    const p4 = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: en, days: [2, 3] } }), MON, {});
+    ok('auto: yangi faktura faqat Sesh/Chor -> dushanba yo‘q', !p4.new.run && /Dush/.test(p4.new.reason), p4.new);
+    const p5 = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: en, days: [] } }), MON, {});
+    ok('auto: hech qaysi kun tanlanmagan -> yo‘q', !p5.new.run && /hech qaysi kun/.test(p5.new.reason), p5.new); }
+  { const p = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true } }), MON, {});
+    ok('auto: qarz eslatmasi Dushanba (1,4) -> HA, 10-sanadan', p.debt.run && p.debt.dayOfMonth === 10 && JSON.stringify(p.debt.days) === '[1,4]', p.debt);
+    const tue = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true } }), T('2026-11-03T06:00:00Z'), {});
+    ok('auto: seshanba -> qarz eslatmasi kuni emas', !tue.debt.run && /Sesh/.test(tue.debt.reason), tue.debt);
+    const dm = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true, dayOfMonth: 5, days: [1] } }), MON, {});
+    ok('auto: oyning kuni sozlamadan (5)', dm.debt.run && dm.debt.dayOfMonth === 5, dm.debt); }
+  { const night = T('2026-11-02T16:30:00Z');   // Toshkent 21:30
+    const p = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true } }), night, {});
+    ok('auto: tinch soat (umumiy 9–20) -> 21:30 da yo‘q', !p.debt.run && /tinch soat/.test(p.debt.reason) && p.debt.inWindow === false, p.debt);
+    const p2 = S.resolveAutoPlan(NS({ general: { hourFrom: 8, hourTo: 22 }, debt_reminder: { enabled: true } }), night, {});
+    ok('auto: umumiy soat 8–22 -> 21:30 da HA', p2.debt.run && JSON.stringify(p2.debt.window) === '[8,22]', p2.debt);
+    const p3 = S.resolveAutoPlan(NS({ general: { hourFrom: 8, hourTo: 22 }, debt_reminder: { enabled: true, hourFrom: 10, hourTo: 12 } }), night, {});
+    ok('auto: turning o‘z soati (10–12) umumiydan ustun', !p3.debt.run && JSON.stringify(p3.debt.window) === '[10,12]', p3.debt);
+    const p4 = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true } }), night, {}, { ignoreWindow: true });
+    ok('auto: sinov (ignoreWindow) -> tinch soat to‘xtatmaydi, lekin belgilanadi', p4.debt.run && p4.debt.inWindow === false, p4.debt);
+    const p5 = S.resolveAutoPlan(NS({ general: { hourFrom: null, hourTo: null }, debt_reminder: { enabled: true } }), night, { sendHours: [8, 23] });
+    ok('auto: sozlamada soat yo‘q -> config.json sendHours', p5.debt.run && JSON.stringify(p5.debt.window) === '[8,23]', p5.debt); }
+  { const p = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true, smsActive: '  Qarz {name} {due}  ' } }), MON, { templates: { debt: 'CFG {name}' } });
+    ok('auto: faol matn Sozlamalardan (bo‘shliqsiz)', p.debt.template === 'Qarz {name} {due}' && p.debt.tplSource === 'settings', p.debt);
+    const p2 = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true, smsActive: '' } }), MON, { templates: { debt: 'CFG {name}' } });
+    ok('auto: matn bo‘sh -> config.json', p2.debt.template === 'CFG {name}' && p2.debt.tplSource === 'config', p2.debt);
+    const p3 = S.resolveAutoPlan(NS({ debt_reminder: { enabled: true } }), MON, {});
+    ok('auto: hech qayerda yo‘q -> standart matn', p3.debt.template === S.DEF_DEBT && p3.debt.tplSource === 'default', p3.debt);
+    const p4 = S.resolveAutoPlan(NS({ new_invoice: { enabled: true, enabledAt: '2026-11-01T00:00:00Z', smsDraft: 'QORALAMA' } }), MON, {});
+    ok('auto: qoralama matn HECH QACHON yuborilmaydi (faqat faol)', p4.new.template === S.DEF_NEW, p4.new); }
+  ok('smsParts: 160 GSM = 1, 161 = 2; UCS-2 70 = 1, 71 = 2; ^ — 2 belgi', S.smsParts('a'.repeat(160)).parts === 1 && S.smsParts('a'.repeat(161)).parts === 2
+    && S.smsParts('ў'.repeat(70)).parts === 1 && S.smsParts('ў'.repeat(71)).parts === 2 && S.smsParts('^').n === 2);
+  ok('nsWindow: noto‘g‘ri soat -> null', S.nsWindow({ hourFrom: 20, hourTo: 9 }) === null && S.nsWindow({ hourFrom: 9 }) === null && JSON.stringify(S.nsWindow({ hourFrom: 0, hourTo: 24 })) === '[0,24]');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

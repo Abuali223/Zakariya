@@ -7,6 +7,16 @@
   "result",
   "studentId"
  ],
+ "class_announcements": [
+  "body",
+  "classKeys",
+  "createdAt",
+  "createdBy",
+  "expiresAt",
+  "id",
+  "pinned",
+  "title"
+ ],
  "credit_ledger": [
   "at",
   "balanceAfter",
@@ -21,9 +31,11 @@
  ],
  "invoices": [
   "amount",
+  "approvalRefs",
   "baseAmount",
   "billedFrom",
   "billedTo",
+  "bonusRef",
   "classKey",
   "createdAt",
   "discount",
@@ -41,9 +53,26 @@
   "reversedAt",
   "sickAmount",
   "sickDaysApplied",
+  "sickNoteRefs",
   "status",
   "studentId",
   "studentName"
+ ],
+ "notify_settings": [
+  "dayOfMonth",
+  "days",
+  "editors",
+  "enabled",
+  "enabledAt",
+  "hourFrom",
+  "hourTo",
+  "id",
+  "lookbackDays",
+  "smsActive",
+  "smsDraft",
+  "tgText",
+  "updatedAt",
+  "updatedBy"
  ],
  "payments": [
   "amount",
@@ -143,6 +172,10 @@
   "attendance",
   "cameraId",
   "classLetter",
+  "exitAt",
+  "exitBy",
+  "exitNote",
+  "exitReason",
   "grade",
   "id",
   "lang",
