@@ -1197,6 +1197,31 @@ Jonli sozlamalar (faqat o'qildi): GoTrue'da e-mail tasdig'i yoqilgan (`mailer_au
 ota-ona havolasiz kira olmaydi; ilova ishlatmaydigan GoTrue telefon ro'yxati ochiq va avto-tasdiqli (`ENABLE_PHONE_SIGNUP=false`
 tavsiya). Ochiq savollar: HR'da xodimlar «⬇ Eksport» (kodda ataylab), maosh to'lovini bekor qilish UI'si yo'q.
 
+## 47) Jonli audit natijalari — production (2887f4d), «SINOV» hisoblari bilan — 2026-11-06 kechqurun
+Tayyorgarlik: o'tish oylari (chegirma/grant, maosh, «Bemor» kuni, 100 ball) egasining qarori bilan **2026-12** ga qo'yildi
+(«Narx jadvali» → «TASDIQ QOIDALARI», to'rtta alohida «Saqlash»; monitoring muddati standart 5-kun yozildi). Barcha qadamlar
+himoyalangan brauzer skripti orqali (faqat SINOV obyektlariga yozish; SMS/xabar yo'q; haqiqiy qatorlar bloklanadi).
+- **0-bosqich** 11/11 — deploy jonli, sozlamalar, SINOV yo'qligi, boshlang'ich ko'rsatkichlar, MOL «kutilmoqda» bilan kira olmasligi.
+- **O'quvchi** 42/42 — murojaat → sinov darsi → rad/qayta ochish → qabul (`SINOV-A`) → kontrakt chegirmasi (Direktor + Moliya) →
+  ota-ona kodi → davomat → hamshira ma'lumotnomasi → «Bemor» → 100 ball → O'IBDO' taklifi → Direktor tasdig'i → grant →
+  2098-01 test fakturasi → naqd 1 000 → chek → PIN'siz qaytarish → rasmiy hujjat + QR → e'lonlar → muzlatish / chiqarish /
+  o'chirish-tiklash. S1-11 va S1-31 faqat sekin yuklanish sabab — qayta tekshiruvda to'g'ri.
+- **O'qituvchi** 8/8 — karta IQT-037 (≈2 daqiqa ommaviy ro'yxatda, keyin o'chirildi), hisobga bog'lash, sinf/fan, 14 jadval yopiq,
+  salbiy yozuv 42501, baho, monitoring faqat o'qish.
+- **Xodim** 16/16 — karta IQX-018, kamera ID, «O'z hisobidan» 60 daq, ruhsat (haqsiz) + kasallik (haqli), ushlanma 1 125 so'm
+  (kutilgandek), ikkinchi lavozim HR (4 salbiy holat rad etildi), 2099-12 vedomost: Moliya → HR tasdig'i → Direktor tasdig'i →
+  1 000 so'm berish (oshirib berish 23514) → qayta ochish → REST bilan bekor.
+- **Rollar** 6/6 — 9 rol × 22 jadval matritsaga to'liq mos (ortiqcha kirish yo'q), ommaviy tugmalar faqat Direktorda, kassir /
+  qabulxona / hamshira taqiqlari 42501, Moliya menejeri va ota-ona ustunlari, ikkinchi lavozim darhol yoqilib-o'chadi.
+- **Brauzer tomonidagi tozalash** 3/3; lokal to'liq zanjir P0→P4 83/83, snapshot: SINOV bo'lmagan qatorlar — 0 o'zgarish;
+  tozalash SQL v4 lokal oxirgi holatda: dry run → commit → «VERIFIED: 0».
+- **Topilmalar:** (1) MUHIM — takroriy maosh ID (IQT-016, IQX-001) «📤 HR'ga yuborish»ni bloklaydi («Takroriy maosh ID bor») →
+  2026-12 maoshidan oldin kartochkada «Yangi noyob ID berish» bilan tuzatish shart. (2) Kichik, TUZATILDI — «Xodimlar
+  davomati»da oy/kun tez almashtirilsa sekin kelgan eski yuklash yangisining ustiga yozilardi (boshqa oyning vedomost kartasi
+  ko'rinardi) → `saGen` hisoblagichi. (3) Kuzatuv: qaytarish PIN'i o'rnatilmagan; maosh berishni bekor qilish UI'si yo'q (F6);
+  kassirga maosh ko'rish huquqi bo'lsa «O'qituvchilar/Xodimlar» ochiladi (ataylab); haqiqiy qoida buzilishlari 0.
+- **Egasi uchun:** `migration/sinov-audit/` (README + v4 SQL + ID fayli) — dry run → tibbiy fayl (Storage API) → zaxira → commit.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

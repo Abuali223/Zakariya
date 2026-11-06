@@ -1,0 +1,44 @@
+-- sinov-ids.psql — the IDs recorded during the SINOV audit (runbook Appendix C + amendments C/D/F). Contains no secrets.
+-- Fill in every value from the record sheet, keep the single quotes, separate several IDs with commas (no spaces).
+-- Leave a line out (or set it to '') only if that item was never created. A placeholder left in fails the format check (ABORT).
+-- NEVER put a trailing comment on a \set line (psql would glue it to the value): comments go on their own lines, like these.
+-- Used as:  cat sinov-ids.psql sinov-cleanup.sql | sudo docker exec -i supabase-db psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 …
+--
+-- S1-04 student card (and S1-41 restore keeps the same ID)
+\set student_ids 'SINOV-A'
+-- S1-01 LID1, S1-03 LID2 (enrollments.id)
+\set lead_ids '97f49bc0-0a2c-4703-9cec-500c1d66a2a7,d9c36ca2-ad0e-43ac-87c1-685f87b20425'
+-- S1-36 ANN (DIR), S1-38 ANN2 (TCH) — class_announcements.id (rows deleted in the UI are fine: their ann__ queue rows are found by the id)
+\set ann_ids '28d45064-15e2-427a-aada-ff24bddd9c0e,3bd4b4a9-bcd0-4500-b003-6fcf27ae171d'
+-- S1-30 PAY (payments.id, man_<ms>_<rnd>)
+\set pay_ids 'man_1793983981959_lvlrn'
+-- amendments C: auth uids of sinov.dir / sinov.mol / sinov.tch / sinov.par @example.com
+\set user_ids '6b0a75e5-16ae-4b9b-97d1-5c7a18df044b,7fa2defb-7a72-4c1c-b337-9313090b767c,b0a9bef8-9134-49b3-8e31-7d6de2ef5fea,925130f7-c006-411e-a3dc-0ac488f63e24'
+-- T2-01 teacher card row id (teachers.id) and S3-01 staff card row id (staff.id)
+\set teacher_rows 'a3c24316-d717-4c67-8a8f-4301afb0e70a'
+\set staff_rows '958ed667-5200-42ed-a524-6777001a4139'
+-- T2-01 / S3-01 numbers (IQT-0nn, IQX-0nn)
+\set pk_keys 'IQT-037,IQX-018'
+-- S1-34 TOKEN (32 hex), S1-13 NID (sick_notes.id), S1-06 REQ (discount_requests.id)
+\set doc_tokens 'd281612204aa7b57cca881c5dd7b011f'
+\set sick_note_ids '061075db-15ee-48fe-b900-1b83cd2105ce'
+\set discount_req_ids 'eceb9bc8-f651-4776-9602-45110b7c7ff8'
+-- PAYM, the fake payroll test month
+\set pay_month '2099-12'
+-- optional: only if the SINOV class is not uz-4-SINOV (P0-02 picked another grade)
+-- \set class_keys 'uz-4-SINOV'
+-- optional: +44 7700 900xxx phones used in phone-login tries (C5-07), digits only
+-- \set test_phones '447700900111,447700900112,447700900113'
+-- optional, ONLY after reviewing the dry run's CROSS-CHECK: SINOV-tied rows (strength key) to keep, each as <table>:<id>
+--   exactly as printed (allow_unlisted=1 never keeps them). Usually not needed.
+--   v4: rows printed «possibly REAL» (a real account wrote them on a SINOV key — e.g. a real nurse's visit or sick note on
+--   SINOV-A, real money) are kept the same way and stay exactly as they are; NEVER add such an id to a list above.
+--   The dry run prints the full value to use («use: -v keep=…»), one value for all of them.
+-- \set keep '<table>:<id>'
+-- optional, ONLY after reviewing the dry run's REAL-DATA CHECK with DIRH: history-only findings accepted as they are, each
+--   token exactly as printed next to it (change_log:<id> — every id of that row — or <table>:<id> for a stamp finding).
+--   It never deletes or edits anything. Usually not needed.
+-- \set reviewed 'change_log:<id>'
+-- keep and reviewed are pinned in the PLAN HASH: the commit must use exactly the same values as the reviewed dry run.
+-- Do NOT put plan_hash or commit in this file: pass them on the command line of the commit only
+--   (-v commit=1 -v plan_hash=<PLAN HASH printed by the dry run with exactly the same file and flags>).

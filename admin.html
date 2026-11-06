@@ -6768,9 +6768,13 @@ async function renderStaffAttendance(){
       }catch(e){ if(b){ b.disabled=false; b.textContent='Saqlash'; } toast('Xatolik: '+(e.code||e.message)+' — qayta urinib ko‘ring',true); }
     };
   };
+  // Har yangi yuklash (kun / oy / ko'rinish almashsa) oldingisini bekor qiladi: oy tez almashtirilsa (masalan «Oylik hisobot»ga
+  //   o'tilganda joriy oy yuklanayotganda boshqa oy tanlansa) sekin kelgan ESKI javob yangisining ustiga yozilmasin — aks holda
+  //   tanlangan oyda boshqa oyning hisoboti va «📤 HR’ga yuborish» / «↩ Qayta ochish» kartasi ko'rinardi (jonli audit S3-14).
+  let saGen=0;
   // ------- KUNLIK -------
   const loadDay=async()=>{
-    const day=$('#sa-date').value; if(!day) return; const _g=VIEW_GEN;
+    const day=$('#sa-date').value; if(!day) return; const _g=VIEW_GEN, _s=++saGen;
     $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let staff=[], teachers=[], rows=[], studs=[];
     try{ [staff, teachers, , studs] = await Promise.all([ loadCol('staff').catch(()=>[]), loadCol('teachers').catch(()=>[]), loadHolidays(),
@@ -6778,8 +6782,8 @@ async function renderStaffAttendance(){
     lastStaff=staff; lastTeachers=teachers;
     const hol=SA_HOLIDAYS.get(day)||'';   // maktab bayrami/dam kuni (bo'lsa — «Kelmadi» emas, ushlanma yo'q)
     try{ const s=await getDocs(query(collection(db,'staff_checkins'), where('day','==',day))); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
-    catch(e){ if(_g!==VIEW_GEN) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
-    if(_g!==VIEW_GEN) return;
+    catch(e){ if(_g!==VIEW_GEN || _s!==saGen) return; $('#sa-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Terminal/ko‘prik hali ulanmagan bo‘lishi mumkin.</span></div></div>`; return; }
+    if(_g!==VIEW_GEN || _s!==saGen) return;
     const roster=buildRoster(staff,teachers);
     // Shu kun uchun chiqib-kelish belgilari (refType:refId -> {type, awayMin}).
     let bmMap={};
@@ -6793,7 +6797,7 @@ async function renderStaffAttendance(){
     //   bo'lsa skani yo'qlarga «Kelmadi» emas, «Skan yo'q · kamera» (yo'qlama yozilmaydi). Bugun hali tugamagan — baholanmaydi.
     let dayLv={}, dayLvType={}; try{ const ls=await getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',day), where('endDay','>=',day))); ls.docs.forEach(d=>{ const x=d.data()||{}; if(x.refType&&x.refId){ const k=x.refType+':'+String(x.refId); dayLv[k]=new Set([day]);
       if(!dayLvType[k] || leavePaidOf(x)===false) dayLvType[k]=String(x.type||'ruhsat'); } }); }catch(e){}
-    if(_g!==VIEW_GEN) return;
+    if(_g!==VIEW_GEN || _s!==saGen) return;
     const camOffDay=!hol && camDownDays(day.slice(0,7), roster, new Map([[day, new Set(rows.map(x=>String(x.personId||'').trim()).filter(Boolean))]]), dayLv).has(day);
     const seen=new Set(), bodyRows=[];
     roster.forEach(r=>{ seen.add(r.cam); const a=agg(byPerson[r.cam]||[]); const came=!!a.kelgan;
@@ -6898,10 +6902,10 @@ async function renderStaffAttendance(){
     printHTML(html);
   };
   const loadMonth=async()=>{
-    const mon=$('#sa-month').value; if(!mon) return; const _g=VIEW_GEN;
+    const mon=$('#sa-month').value; if(!mon) return; const _g=VIEW_GEN, _s=++saGen;
     $('#sa-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     const C=await payrollComputeMonth(mon);
-    if(_g!==VIEW_GEN) return;
+    if(_g!==VIEW_GEN || _s!==saGen) return;
     if(C.staff){ lastStaff=C.staff; lastTeachers=C.teachers; }
     if(!C.ok){ $('#sa-body').innerHTML = C.stage==='roster'
         ? `<div class="card"><div class="empty">Xodimlar / o‘qituvchilar ro‘yxatini o‘qib bo‘lmadi (${esc(C.error&&(C.error.code||C.error.message))}) — hisobot to‘liq chiqmaydi, sahifani yangilang.</div></div>`
