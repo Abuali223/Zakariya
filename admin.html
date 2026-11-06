@@ -809,7 +809,7 @@ const SCHEMAS = {
         if(SESSION.isAdmin){
           try{ const us=await getDocs(collection(db,'users')); let moved=0, bad=0;
             for(const d of us.docs){ const u=d.data()||{}; const ac=Array.isArray(u.assignedClasses)?u.assignedClasses:[];
-              if(u.role!=='teacher' || !ac.includes(oldKey)) continue;   // kurator — reconcileSupervisor (bitta sinf — bitta rahbar)
+              if(!uHas(u,'teacher') || !ac.includes(oldKey)) continue;   // kurator — reconcileSupervisor (bitta sinf — bitta rahbar); qo'shimcha lavozimli o'qituvchi ham
               const next=(tMode==='replace') ? [...new Set(ac.map(k=>k===oldKey?newKey:k))] : [...new Set(ac.concat([newKey]))];
               try{ await updateDoc(doc(db,'users',d.id), { assignedClasses:next }); moved++; }catch(e){ bad++; } }
             cache.users=null;
@@ -1026,6 +1026,11 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
 // PKG-11: qo'shimcha (ikkinchi) lavozim bo'la oladigan rollar — bazadagi app.extra_roles_allowed() bilan bir xil.
 //   Direktor, Moliya menejeri, G'aznachi — yo'q (superuser va pul roli faqat asosiy rol bo'ladi).
 const EXTRA_ROLES_OK=['teacher','kurator','reception','hr','kassir','nurse','marketing_mgr','admin_head','zavuch'];
+// Bazadagi app.u_has bilan bir xil: foydalanuvchi qatori r lavozimidami — asosiy rol r, yoki qo'shimcha olish mumkin bo'lgan
+//   asosiy rolda (Direktor/ota-ona/o'quvchi/rolsiz — yo'q) users."extraRoles" ichida r. Sinf/fan biriktirishda shu bilan qaraladi.
+function uHas(u, r){ if(!u) return false; const p=String(u.role||''); if(p===r) return true;
+  if(['director','parent','student',''].includes(p) || !EXTRA_ROLES_OK.includes(r)) return false;
+  return Array.isArray(u.extraRoles) && u.extraRoles.includes(r); }
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
@@ -2137,7 +2142,7 @@ function classDocKey(c){ return `${c.lang||'uz'}-${Number(c.grade)||0}-${c.lette
    biriktirilgan bo'lishi mumkin (backward-compat), shuni ham tekshiramiz. */
 function supervisorOf(users, key){
   return users.find(u=>Array.isArray(u.homeroomClasses)&&u.homeroomClasses.includes(key))
-      || users.find(u=>u.role==='kurator'&&Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(key))
+      || users.find(u=>(u.role==='kurator'||(uHas(u,'kurator')&&!uHas(u,'teacher')))&&Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(key))
       || null;
 }
 /* «Sinf rahbari» tanlanganda RBAC bilan moslashtiradi. Davomat huquqi endi
@@ -2151,12 +2156,14 @@ async function reconcileSupervisor(newKey, oldKey, newUid){
   const users = await loadCol('users', null);
   const batch = writeBatch(db); let n=0;
   users.forEach(u=>{
-    if(u.role!=='kurator' && u.role!=='teacher') return;
+    // Asosiy YOKI qo'shimcha lavozim (uHas): aks holda qo'shimcha lavozimli rahbar sinf boshqaga berilganda ham rahbar bo'lib qolardi.
+    const isK=uHas(u,'kurator'), isT=uHas(u,'teacher'), hadHome=Array.isArray(u.homeroomClasses)&&u.homeroomClasses.length>0;
+    if(!isK && !isT && !hadHome) return;
     let home = Array.isArray(u.homeroomClasses) ? u.homeroomClasses.slice() : [];
     let assigned = Array.isArray(u.assignedClasses) ? u.assignedClasses.slice() : [];
     let hChanged=false, aChanged=false;
     const rm = k => { if(home.includes(k)){ home=home.filter(x=>x!==k); hChanged=true; }
-                      if(u.role==='kurator' && assigned.includes(k)){ assigned=assigned.filter(x=>x!==k); aChanged=true; } };
+                      if((u.role==='kurator' || (isK && !isT)) && assigned.includes(k)){ assigned=assigned.filter(x=>x!==k); aChanged=true; } };   // o'qituvchining assignedClasses'i — dars beradigan sinflar
     // Sinf nomi o'zgargan bo'lsa — eski kalit endi hech qaysi sinfga tegishli emas
     if(oldKey && oldKey!==newKey) rm(oldKey);
     if(u._id===newUid){ if(!home.includes(newKey)){ home.push(newKey); hChanged=true; } }
@@ -4053,7 +4060,7 @@ async function openTeacherClassPicker(t, onDone){
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
   const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
-  const roleNote = (u.role!=='teacher'&&u.role!=='kurator') ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Diqqat: bog‘langan login roli — <b>${esc(u.role||'—')}</b>. Sinf/fan to‘liq ishlashi (baho/davomat) uchun «Foydalanuvchilar»da rolni <b>O‘qituvchi</b> yoki <b>Kurator</b> qiling.</div>` : '';
+  const roleNote = (!uHas(u,'teacher')&&!uHas(u,'kurator')) ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Diqqat: bog‘langan login roli — <b>${esc(u.role||'—')}</b>. Sinf/fan to‘liq ishlashi (baho/davomat) uchun «Foydalanuvchilar»da rolni <b>O‘qituvchi</b> yoki <b>Kurator</b> qiling yoki shu lavozimni «➕ Lavozim» orqali qo‘shimcha bering.</div>` : '';
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:620px;width:100%;box-shadow:0 18px 44px rgba(9,40,30,.28);max-height:92vh;overflow:auto">
@@ -4671,8 +4678,8 @@ async function populateDynselects(name, row){
   for(const sel of sels){
     const src = sel.getAttribute('data-dyn');
     let opts=[];
-    if(src==='rahbarlar') opts = users.filter(u=>u.role==='kurator'||u.role==='teacher')
-      .map(u=>({v:u._id, l:(u.name||u.email||'—') + ` · ${roleTag(u.role)}` + (u.name&&u.email?` · ${u.email}`:'')}));
+    if(src==='rahbarlar') opts = users.filter(u=>uHas(u,'kurator')||uHas(u,'teacher'))
+      .map(u=>({v:u._id, l:(u.name||u.email||'—') + ` · ${roleTag((u.role==='kurator'||u.role==='teacher')?u.role:(uHas(u,'kurator')?'kurator':'teacher'))}` + ((u.role==='kurator'||u.role==='teacher')?'':' (qo‘shimcha lavozim)') + (u.name&&u.email?` · ${u.email}`:'')}));
     else if(src==='oqituvchilar') opts = teachers.map(t=>({v:t.teacherId||t._id, l:(t.name||'—')+(t.subject_uz?` · ${t.subject_uz}`:'')}));
     // Tahrirlashda joriy qiymatni oldindan tanlaymiz (sinf uchun — biriktirilgan rahbar)
     let cur = row ? (row[sel.name]||'') : '';
@@ -4855,9 +4862,9 @@ async function renderUsers(){
     if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
     const roleName=rl=>(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
     const homeroomN=r=>(r.homeroomClasses||[]).length;
-    const summaryOf=r=> r.role==='kurator' ? `${(r.assignedClasses||[]).length||homeroomN(r)} ta sinf${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
-      : r.role==='teacher' ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
-      : '—';
+    const summaryOf=r=> uHas(r,'teacher') ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
+      : uHas(r,'kurator') ? `${(r.assignedClasses||[]).length||homeroomN(r)} ta sinf${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
+      : (homeroomN(r) ? `rahbar: ${homeroomN(r)}` : '—');
     const roleChip=rl=>`<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:${rl==='admin'?'var(--med-bg)':(rl==='zavuch'?'#EAE1F2':'var(--it-bg)')};color:${rl==='admin'?'var(--med-fg)':(rl==='zavuch'?'#5b3d8a':'var(--teal)')}">${esc(roleName(rl))}</span>`;
     // Telefon (kanonik: 998... yoki chet el 7..., 48...) -> chiroyli ko'rinish; aloqa ustunida telefon (bo'lsa) yoki email.
     const contact=r=> r.phone ? `<a href="tel:+${esc(String(r.phone).replace(/\D/g,''))}">${esc(pmPrettyPhone('+'+String(r.phone).replace(/\D/g,'')))}</a>` : esc(r.email||'—');
@@ -5594,7 +5601,8 @@ function openExtraRolesEditor(u, onDone){
     const next=[...$('#modal').querySelectorAll('[data-xr]')].filter(c=>c.checked).map(c=>c.dataset.xr);
     const b=$('#xr-save'); b.disabled=true;
     try{ await updateDoc(doc(db,'users',u._id),{ extraRoles:next },{ mustExist:true }); u.extraRoles=next; closeModal();
-      const clsRole=['teacher','kurator'].find(r=>next.includes(r) && !cur.has(r)) && !(Array.isArray(u.assignedClasses)&&u.assignedClasses.length);
+      const added=['teacher','kurator'].filter(r=>next.includes(r) && !cur.has(r));
+      const clsRole=added.length>0 && (!(Array.isArray(u.assignedClasses)&&u.assignedClasses.length) || (added.includes('teacher') && !(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.length)));
       toast(next.length?(clsRole?'Qo‘shimcha lavozim saqlandi ✓ — sinf (va fan)ni shu qatordagi «Tahrirlash» oynasida belgilang':'Qo‘shimcha lavozim saqlandi ✓'):'Qo‘shimcha lavozim olib tashlandi ✓'); if(onDone) onDone(); }
     catch(e){ const m=String(e.message||e.code||e); $('#xr-msg').textContent='Xatolik: '+(/42501|row-level/.test(m)?'ruxsat yo‘q (faqat Direktor)':m); $('#xr-msg').style.color='#B42318'; b.disabled=false; }
   };
@@ -9306,15 +9314,16 @@ const MON_DISC_SUBJECTS = {
   '7-9-ru': ['Rus tili','Matematika','Ingliz tili','Informatika','IT','Biologiya','Kimyo'],
 };
 // Fan slug'ining kanonik shakli (bazadagi app.mon_canon bilan bir xil): 'it' — «Informatika»ning taxallusi, ALOHIDA fan emas.
-//   Qamrov (to'liqmi) va o'rtacha kanonik fanlar bo'yicha: avval «IT» ham alohida talab qilinardi — uni hech kim kirita
-//   olmaydi (SUBJECTS'da yo'q), shuning uchun yangi qoidada 5–9-sinfda 20% / 100% chegirma hech qachon berilmasdi.
+//   YANGI qoida oylarida (config/finance.bonusApprovalFrom) qamrov va o'rtacha kanonik fanlar bo'yicha: avval «IT» ham alohida
+//   talab qilinardi — o'qituvchi uni tanlay olmaydi (SUBJECTS'da yo'q; faqat «Boshqa fan…» bilan qo'lda), shuning uchun 5–9-sinfda
+//   20% / 100% chegirma hech qachon berilmasdi. ESKI qoida oylari avvalgidek (raw=true: «IT» alohida) — ularning hisobi o'zgarmaydi.
 const MON_SLUG_ALIAS={ it:'informatika' };
 function monCanon(slug){ return MON_SLUG_ALIAS[slug]||slug; }
-function monDiscountSlugs(grade, lang){
+function monDiscountSlugs(grade, lang, raw){
   const g=Number(grade)||0, l=(lang==='ru'?'ru':'uz');
   let band=null; if(g>=5&&g<=6) band='5-6'; else if(g>=7&&g<=9) band='7-9';
   if(!band) return null;   // 1-4 / 10-11 / variativ -> cheklov yo'q
-  return new Set((MON_DISC_SUBJECTS[band+'-'+l]||[]).map(s=>monCanon(monSlug(s))));
+  return new Set((MON_DISC_SUBJECTS[band+'-'+l]||[]).map(s=>raw?monSlug(s):monCanon(monSlug(s))));
 }
 // Oy yordamchilari: "2026-10" -> oldingi oy "2026-09"; o'zbekcha oy nomi.
 function prevMonthStr(m){ const p=String(m||'').split('-'); let y=Number(p[0])||0, mo=(Number(p[1])||0)-1; if(mo<1){ mo=12; y--; } return y+'-'+String(mo).padStart(2,'0'); }
@@ -9734,11 +9743,15 @@ async function pmLoadCtx(month, students, amount){
   const monAgg={}, monAppr={}, clsSlugs={};
   { const ms=await getDocs(query(collection(db,'monitoring'), where('period','==',monMonth)));
     ms.docs.forEach(d=>{ const x=d.data()||{}; const sid=String(x.studentId||''); if(!sid) return;
-      const pre=`${sid}__${monMonth}__`, raw=String(d.id).startsWith(pre)?String(d.id).slice(pre.length):monSlug(x.subject||'');
-      const slug=monCanon(raw), alias=(slug!==raw);   // «IT» -> «informatika» (bitta fan)
+      const pre=`${sid}__${monMonth}__`, pfx=String(d.id).startsWith(pre);
+      // Yangi qoida — bazadagi app.monitoring_avg bilan AYNAN bir xil: faqat {sid}__{oy}__{fan} kalitli yozuvlar, «IT» = «Informatika».
+      //   Eski qoida oylari — avvalgidek (kalitsiz yozuv fan nomidan, «IT» alohida), ularning chegirmasi o'zgarmasin.
+      if(bonusNewRule && !pfx) return;
+      const raw=pfx?String(d.id).slice(pre.length):monSlug(x.subject||'');
+      const slug=bonusNewRule?monCanon(raw):raw, alias=(slug!==raw);
       if(x.classKey) (clsSlugs[x.classKey]=clsSlugs[x.classKey]||new Set()).add(slug);
       if(x.status!=='approved') return; const sc=Number(x.score); if(x.score==null||x.score===''||!isFinite(sc)) return;
-      const m=stMeta[sid]; const allow=m?monDiscountSlugs(m.grade,m.lang):null;
+      const m=stMeta[sid]; const allow=m?monDiscountSlugs(m.grade,m.lang,!bonusNewRule):null;
       if(allow && !allow.has(slug)) return;   // belgilangan fanlar tashqarisi -> chegirmaga kirmaydi
       const ap=(monAppr[sid]=monAppr[sid]||new Map()), ag=(monAgg[sid]=monAgg[sid]||{sum:0,cnt:0});
       if(ap.has(slug)){ const o=ap.get(slug); if(alias || !o.alias) return; ag.sum-=o.sc; ag.cnt--; }   // «Informatika» yozuvi taxallusdan ustun (app.monitoring_avg bilan bir xil)

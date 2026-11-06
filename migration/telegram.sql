@@ -447,7 +447,8 @@ begin
       'bonus', (select count(*) from public.monitoring_bonus b where b.status = 'proposed'),
       'discount', (select count(*) from public.discount_requests q where q.status = 'pending'),
       'sick', (select count(*) from public.sick_notes n where n.status = 'pending'),
-      'referral', (select count(*) from public.referral_requests q where q.status = 'pending_payment' and q."firstPaymentId" is not null),
+      'referral', (select count(*) from public.referral_requests q where q.status = 'pending_payment'
+                     and exists (select 1 from app.first_real_payment(q.id))),   -- to'lovi bor, tasdiq kutilmoqda
       'payroll', (select count(*) from public.payroll_runs pr where pr.status = 'submitted')),
     'overdue', app.kpi_overdue_approvals())
   into r;

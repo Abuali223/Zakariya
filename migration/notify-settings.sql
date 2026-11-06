@@ -149,9 +149,10 @@ language sql stable security definer set search_path = public, app, pg_temp as $
     when jsonb_typeof(p_keys) is distinct from 'array' or jsonb_array_length(p_keys) = 0 then false
     when app.is_admin() or app.is_zavuch() then true
     when p_keys ? 'all' then false
-    else not exists (select 1 from jsonb_array_elements_text(p_keys) k
-                      where not coalesce((select coalesce(u."homeroomClasses", '[]'::jsonb) from public.users u
-                                           where u.id = app.uid() and coalesce(nullif(u.status, ''), 'active') = 'active'), '[]'::jsonb) ? k)
+    -- Sinf rahbari — har kalit bo'yicha app.is_homeroom_for (faol hisob + admin / O'IBDO' / kurator / o'qituvchi lavozimi, asosiy
+    --   yoki qo'shimcha + homeroomClasses). Avval faqat homeroomClasses qaralardi: roli o'zgargan sobiq rahbar (masalan, HR) API
+    --   orqali sinfga e'lon yoza olardi (Telegram'da ota-onalarga ham ketardi), panelda esa bo'lim yopiq.
+    else not exists (select 1 from jsonb_array_elements_text(p_keys) k where not app.is_homeroom_for(k))
   end
 $$;
 do $$ declare f text; begin

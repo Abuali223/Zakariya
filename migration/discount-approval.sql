@@ -303,14 +303,29 @@ select x.nid, x.rid, case when exists (select 1 from public.referral_ledger l wh
  where x.nid <> x.rid
 on conflict (id) do nothing;
 
--- Birinchi haqiqiy to'lov (summa > 0; status 'paid' — faktura to'g'ridan-to'g'ri to'langan, yoki 'applied' — balansga /
---   fakturalarga qo'llangan: naqd, bank, terminal va Click'ning ko'p to'lovlari shu holatda tugaydi). Avval faqat 'paid'
+-- O'quvchining SOF haqiqiy puli: haqiqiy holatli to'lovlar (avans ko'chirmalari 'reattr' ± bilan) − faktura qaytarishlari.
+--   (To'lov qaytarilsa — refund_invoice('payment') to'lovni 'refunded' qiladi, u yig'indiga kirmaydi; faktura qaytarishi
+--    to'lov holatini o'zgartirmaydi, shuning uchun refunds jurnalidan ayiriladi.)
+create or replace function app.student_real_net(p_sid text) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select sum(coalesce(p.amount, 0)) from public.payments p
+                    where p."studentId" = p_sid and coalesce(p.status, '') in ('paid', 'applied', 'confirmed')), 0)
+       - coalesce((select sum(coalesce(r.amount, 0)) from public.refunds r
+                    where r."studentId" = p_sid and coalesce(r.target, '') = 'invoice'), 0)
+$$;
+revoke all on function app.student_real_net(text) from public, anon, authenticated;
+-- Birinchi haqiqiy to'lov (summa > 0): 'paid' (faktura to'g'ridan-to'g'ri to'langan), 'applied' (balansga / fakturalarga
+--   qo'llangan — naqd, bank, terminal, Click'ning ko'p to'lovlari) yoki 'confirmed' (Uzum — asosiy usul). Avval faqat 'paid'
 --   olinardi -> bunday to'lovli yangi o'quvchining tavsiya bonusini hech qachon tasdiqlab bo'lmasdi.
---   Qaytarilgan / bekor / kutilayotgan / bo'lingan (split — pul bolalarida) to'lovlar hisoblanmaydi.
+--   Hisoblanmaydi: qaytarilgan / bekor / kutilayotgan / bo'lingan (split — pul bolalarida) to'lovlar, avans ko'chirmasi
+--   ('reattr' — oilaning boshqa farzandidan o'tkazilgan pul, yangi to'lov emas) va sof puli 0 bo'lgan o'quvchi (masalan,
+--   adashib shu o'quvchiga qo'llangan to'lov boshqasiga ko'chirilgan yoki to'liq qaytarilgan).
 create or replace function app.first_real_payment(p_sid text) returns table(pid text, pat timestamptz)
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select p.id, p."createdAt" from public.payments p
-   where p."studentId" = p_sid and coalesce(p.status, '') in ('paid', 'applied') and coalesce(p.amount, 0) > 0
+   where p."studentId" = p_sid and coalesce(p.status, '') in ('paid', 'applied', 'confirmed') and coalesce(p.amount, 0) > 0
+     and coalesce(p.provider, '') <> 'reattr'
+     and app.student_real_net(p_sid) > 0
    order by p."createdAt" nulls last, p.id limit 1
 $$;
 revoke all on function app.first_real_payment(text) from public, anon, authenticated;
@@ -387,8 +402,8 @@ grant execute on function public.referral_queue() to authenticated, service_role
 create or replace function app.referral_payment_revoke() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 begin
-  -- 'applied' ham birinchi to'lov bo'la oladi (app.first_real_payment); 'refunded' — pul qaytarilgan.
-  if coalesce(old.status, '') in ('paid', 'applied') and coalesce(new.status, '') in ('canceled', 'reversed', 'refunded') then
+  -- 'applied' / 'confirmed' (Uzum) ham birinchi to'lov bo'la oladi (app.first_real_payment); 'refunded' — pul qaytarilgan.
+  if coalesce(old.status, '') in ('paid', 'applied', 'confirmed') and coalesce(new.status, '') in ('canceled', 'reversed', 'refunded') then
     begin
       update public.referral_requests set status = 'revoked', "decisionNote" = coalesce("decisionNote", '') || ' [birinchi to''lov bekor/qaytarildi]'
        where "firstPaymentId" = new.id and status = 'approved';
@@ -404,6 +419,30 @@ revoke all on function app.referral_payment_revoke() from public, anon, authenti
 drop trigger if exists trg_referral_payment_revoke on public.payments;
 create trigger trg_referral_payment_revoke after update of status on public.payments
   for each row execute function app.referral_payment_revoke();
+
+-- Faktura qaytarishi (refund_invoice('invoice')) to'lov holatini o'zgartirmaydi -> yuqoridagi trigger sezmaydi. Qaytarishdan keyin
+--   yangi o'quvchining SOF puli 0 yoki kam bo'lsa: hali qo'llanmagan tasdiqlangan tavsiya bekor, qo'llangani — Direktorga ogohlantirish.
+create or replace function app.referral_refund_revoke() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(new."studentId", '') <> '' then
+    begin
+      if app.student_real_net(new."studentId") <= 0 then
+        update public.referral_requests set status = 'revoked', "decisionNote" = coalesce("decisionNote", '') || ' [to''lov qaytarildi — sof to''lov 0]'
+         where id = new."studentId" and status = 'approved';
+        update public.referral_requests set "revokeWarn" = true
+         where id = new."studentId" and status = 'applied';
+      end if;
+    exception when others then
+      raise warning 'referral_refund_revoke: %', sqlerrm;   -- qaytarish HECH QACHON shu sababli to'xtamasin
+    end;
+  end if;
+  return new;
+end $$;
+revoke all on function app.referral_refund_revoke() from public, anon, authenticated;
+drop trigger if exists trg_referral_refund_revoke on public.refunds;
+create trigger trg_referral_refund_revoke after insert on public.refunds
+  for each row execute function app.referral_refund_revoke();
 
 -- Ledger: o'tish oyidan boshlab faqat tasdiqlangan tavsiya; yozilgach — applied.
 create or replace function app.referral_ledger_guard() returns trigger

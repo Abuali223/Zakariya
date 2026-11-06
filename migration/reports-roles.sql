@@ -379,16 +379,24 @@ begin
   select count(*), coalesce((select jsonb_agg(id) from (select id from bad order by month desc, id limit 10) q), '[]'::jsonb) into n, ids from bad;
   v_rules := v_rules || jsonb_build_object('key', 'bonus', 'title', 'Direktor tasdig‘isiz 100 ball granti', 'from', v_bonus, 'count', n, 'ids', ids);
   -- (c) «Bemor» kuni — tasdiqlangan ma'lumotnomasiz
+  -- "sickNoteRefs" — obyekt {ma'lumotnoma id: [kunlar]} (nurse-sick.sql, yozish paytidagi app.invoice_sick_guard bilan bir xil
+  --   shartlar). Avval massiv deb tekshirilardi -> har bir to'g'ri (tasdiqlangan ma'lumotnomali) chegirma ham «buzilish» edi.
+  --   Buzilish: kasal kun yoki summa bor, lekin obyekt yo'q / bo'sh; kalit — shu o'quvchining tasdiqlangan ma'lumotnomasi emas;
+  --   qiymat ro'yxat emas; kun ma'lumotnomada yo'q; kunlar soni "sickDaysApplied" ga teng emas. (Summa × stavka tekshirilmaydi:
+  --   stavka keyin o'zgargan bo'lishi mumkin.) jsonb_each faqat obyektga (r0.refs — boshqa turda null).
   with bad as (
     select i.id, i.month from public.invoices i
+     cross join lateral (select case when jsonb_typeof(i."sickNoteRefs") = 'object' then i."sickNoteRefs" end as refs) r0
      where v_sick is not null and i.month >= v_sick and coalesce(i.status, '') not in ('canceled', 'reversed')
-       and coalesce(i."sickDaysApplied", 0) > 0
-       -- "sickNoteRefs" — obyekt {ma'lumotnoma id: [kunlar]} (nurse-sick.sql). Avval massiv deb tekshirilardi -> har bir to'g'ri
-       --   (tasdiqlangan ma'lumotnomali) chegirma ham «qoida buzilishi» bo'lib chiqardi. Obyekt bo'lmasa / bo'sh bo'lsa /
-       --   biror kaliti tasdiqlangan shu o'quvchi ma'lumotnomasi bo'lmasa — buzilish (jsonb_object_keys faqat obyektga).
-       and (jsonb_typeof(i."sickNoteRefs") is distinct from 'object' or i."sickNoteRefs" = '{}'::jsonb
-            or exists (select 1 from jsonb_object_keys(case when jsonb_typeof(i."sickNoteRefs") = 'object' then i."sickNoteRefs" else '{}'::jsonb end) r
-                        where not exists (select 1 from public.sick_notes s where s.id = r and s.status = 'approved' and s."studentId" = i."studentId"))))
+       and (coalesce(i."sickDaysApplied", 0) > 0 or coalesce(i."sickAmount", 0) > 0)
+       and (r0.refs is null or r0.refs = '{}'::jsonb
+            or coalesce(i."sickDaysApplied", 0) <> (select coalesce(sum(case when jsonb_typeof(e.value) = 'array' then jsonb_array_length(e.value) else 0 end), 0)
+                                                       from jsonb_each(r0.refs) e)
+            or exists (select 1 from jsonb_each(r0.refs) e
+                         left join public.sick_notes s on s.id = e.key and s.status = 'approved' and s."studentId" = i."studentId"
+                        where s.id is null or jsonb_typeof(e.value) <> 'array'
+                           or exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(e.value) = 'array' then e.value else '[]'::jsonb end) d
+                                       where not (coalesce(s."schoolDays", '[]'::jsonb) ? d)))))
   select count(*), coalesce((select jsonb_agg(id) from (select id from bad order by month desc, id limit 10) q), '[]'::jsonb) into n, ids from bad;
   v_rules := v_rules || jsonb_build_object('key', 'sick', 'title', 'Tasdiqsiz «Bemor» kuni chegirmasi', 'from', v_sick, 'count', n, 'ids', ids);
   -- (d) tavsiya bonusi — tasdiqlanmagan tavsiya bilan
@@ -520,8 +528,12 @@ language sql stable security definer set search_path = public, app, pg_temp as $
     'sick', (select count(*) from public.sick_notes n where n.status = 'pending' and exists (
                select 1 from public.invoices i where i."studentId" = n."studentId" and coalesce(i.status, '') not in ('canceled', 'reversed')
                   and i.month >= substr(n."fromDay", 1, 7) and i."createdAt" > n."enteredAt")),
-    'referral', (select count(*) from public.referral_requests q where q.status = 'pending_payment' and q."firstPaymentId" is not null
-                   and exists (select 1 from public.invoices i where i."studentId" = q."referrerId" and i."createdAt" > q."firstPaymentAt")),
+    -- "firstPaymentId" faqat tasdiqlanganda yoziladi -> kutilayotgan tavsiyaning to'lovi app.first_real_payment'dan olinadi
+    --   (avval shu ustun bo'yicha sanalardi va hisoblagich doim 0 edi).
+    'referral', (select count(*) from public.referral_requests q
+                  cross join lateral (select f.pat from app.first_real_payment(q.id) f) fp
+                  where q.status = 'pending_payment'
+                    and exists (select 1 from public.invoices i where i."studentId" = q."referrerId" and i."createdAt" > fp.pat)),
     'payroll', (select count(*) from public.payroll_runs p where p.status = 'submitted' and p."submittedAt" < now() - interval '3 days'))
 $$;
 do $$ declare f text; begin

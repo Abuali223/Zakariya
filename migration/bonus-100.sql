@@ -50,8 +50,9 @@ grant execute on function app.add_business_hours(timestamptz, numeric) to authen
 
 -- 3) Chegirma fanlari (admin.html MON_DISC_SUBJECTS + monSlug + monCanon bilan AYNAN bir xil; 1–4, 10–11 — cheklov yo'q -> null).
 --    Ro'yxat KANONIK fanlar: 'it' — «Informatika»ning eski qo'lda yozilgan taxallusi (app.mon_canon), alohida fan EMAS.
---    Avval ikkalasi ham talab qilinardi: 'IT' fanini hech kim kirita olmaydi (SUBJECTS'da yo'q) -> 5–9-sinfda to'liq qamrov
---    hech qachon bo'lmas, yangi qoidada 20% / 100% chegirma butunlay yo'qolardi.
+--    Avval ikkalasi ham talab qilinardi: 'IT'ni o'qituvchi tanlay olmaydi (SUBJECTS'da yo'q; faqat «Boshqa fan…» bilan qo'lda) ->
+--    5–9-sinfda to'liq qamrov amalda bo'lmas, yangi qoidada 20% / 100% chegirma yo'qolardi. Bu funksiyalar faqat yangi qoidada
+--    (bonus taklifi/tasdig'i) ishlatiladi; eski qoida oylari hisobi admin.html'da avvalgidek («IT» alohida).
 create or replace function app.mon_disc_slugs(p_grade int, p_lang text) returns text[]
 language sql immutable set search_path = pg_catalog as $$
   select case

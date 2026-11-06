@@ -992,7 +992,7 @@ const T = {
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
     kab_missing:"По сохранённому ID данные не найдены:",
     kab_att_title:"Посещаемость",kab_att_loading:"Загрузка посещаемости…",kab_att_none:"Посещаемость пока не внесена.",
-    kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",kab_att_sick:"Болел",
+    kab_att_rate:"Посещаемость",kab_att_present:"Присут.",kab_att_absent:"Пропуск",kab_att_late:"Опоздал",kab_att_excused:"Уваж.",kab_att_sick:"Болезнь",
     kab_gr_title:"Оценки",kab_gr_loading:"Загрузка оценок…",kab_gr_none:"Оценки пока не внесены.",
     kab_mon_title:"Мониторинг",kab_mon_loading:"Загрузка мониторинга…",kab_mon_none:"Пока нет подтверждённых оценок мониторинга.",
     kab_ts_title:"Отзыв учителя",kab_ts_loading:"Загрузка…",kab_ts_note:"Написано классным руководителем / учителем.",
@@ -1908,18 +1908,19 @@ async function renderKabAttendance(studentId){
   box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_loading)}</div></div>`;
   const a=await window.IqrorFB.getAttendance(studentId);
   if($("#kab-att")!==box) return;
-  if(!a || !a.total){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_none)}</div></div>`; return; }
-  const rate=Math.round(100*(a.present+a.late)/a.total);   // avval ko'paytirish: 23/40 -> 58 (bazadagi «Davomat %» bilan bir xil)
-  const STL={present:'#1F9982',absent:'#C86A3A',late:'#DBB05A',excused:'#8AA0A0',sick:'#7C8FD6'};   // «Bemor» — o'z rangi (avval kulrang, izohsiz)
+  // Faqat «Sababli» / «Bemor» kunlari bo'lgan oy ham ko'rsatiladi (ular davomat foiziga kirmaydi) — avval «kiritilmagan» deb chiqardi.
+  if(!a || (!a.total && !(a.recent||[]).length)){ box.innerHTML=`<div class="kab-att-card"><div class="subs-l">${esc(t.kab_att_title)}</div><div class="cls-empty" style="margin:0;padding:16px">${esc(t.kab_att_none)}</div></div>`; return; }
+  const rate=a.total?Math.round(100*(a.present+a.late)/a.total):null;   // avval ko'paytirish: 23/40 -> 58 (bazadagi «Davomat %» bilan bir xil)
+  const STL={present:'#1F9982',absent:'#C86A3A',late:'#DBB05A',excused:'#8AA0A0',sick:'#8B6DB3'};   // «Bemor» — o'z rangi (admin paneldagi bilan bir xil; avval kulrang, izohsiz)
   const recent=a.recent.map(r=>{ const c=STL[r.st]||'#ccc'; const p=r.date.split('-'); return `<span class="att-chip"><i style="background:${c}"></i>${esc((p[2]||'')+'.'+(p[1]||''))}</span>`; }).join('');
   box.innerHTML=`<div class="kab-att-card">
     <div class="subs-l">${esc(t.kab_att_title)}</div>
     <div class="metrics">
-      <div class="m"><b>${rate}%</b><span>${esc(t.kab_att_rate)}</span></div>
+      <div class="m"><b>${rate==null?'—':rate+'%'}</b><span>${esc(t.kab_att_rate)}</span></div>
       <div class="m"><b>${a.present}</b><span>${esc(t.kab_att_present)}</span></div>
       <div class="m"><b>${a.absent}</b><span>${esc(t.kab_att_absent)}</span></div>
     </div>
-    ${recent?`<div class="att-legend"><span><i style="background:#1F9982"></i>${esc(t.kab_att_present)}</span><span><i style="background:#C86A3A"></i>${esc(t.kab_att_absent)}</span><span><i style="background:#DBB05A"></i>${esc(t.kab_att_late)}</span><span><i style="background:#8AA0A0"></i>${esc(t.kab_att_excused)}</span>${a.recent.some(r=>r.st==='sick')?`<span><i style="background:#7C8FD6"></i>${esc(t.kab_att_sick)}</span>`:''}</div><div class="att-recent">${recent}</div>`:''}
+    ${recent?`<div class="att-legend"><span><i style="background:#1F9982"></i>${esc(t.kab_att_present)}</span><span><i style="background:#C86A3A"></i>${esc(t.kab_att_absent)}</span><span><i style="background:#DBB05A"></i>${esc(t.kab_att_late)}</span><span><i style="background:#8AA0A0"></i>${esc(t.kab_att_excused)}</span>${a.recent.some(r=>r.st==='sick')?`<span><i style="background:#8B6DB3"></i>${esc(t.kab_att_sick)}</span>`:''}</div><div class="att-recent">${recent}</div>`:''}
   </div>`;
 }
 function growthChart(qAvg, t){

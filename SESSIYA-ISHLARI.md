@@ -1155,17 +1155,26 @@ xaritalandi va ikki mustaqil ko'rikdan o'tdi. Topilgan xatolar (deploydan OLDIN 
   kirita olmaydi -> yangi qoidada to'liq qamrov hech qachon bo'lmas, 20% / 100% chegirma yo'qolardi. Endi `it` — «Informatika»ning
   taxallusi: `admin.html` `monCanon` (hisob-faktura yig'ish bloki) va bazada `app.mon_canon` / `app.mon_disc_slugs` /
   `app.monitoring_avg` bir xil (ikkalasi bo'lsa — «Informatika» yozuvi olinadi).
-- **Tavsiya bonusi (pul):** `app.first_real_payment` faqat `paid` holatli to'lovni olardi; naqd, bank, terminal va Click'ning ko'p
-  to'lovlari `applied` bilan tugaydi -> bonusni tasdiqlab bo'lmasdi. Endi `paid` yoki `applied`; qaytarilsa (`refunded`) — tasdiqlangan
-  tavsiya bekor bo'ladi.
+  Faqat YANGI qoida oylarida (eski qoida oylarining o'rtachasi avvalgidek — «IT» alohida, kalitsiz yozuv fan nomidan) va yangi qoidada
+  kalitsiz (`{sid}__{oy}__{fan}` bo'lmagan) yozuvlar bazadagidek sanalmaydi.
+- **Tavsiya bonusi (pul):** `app.first_real_payment` faqat `paid` holatli to'lovni olardi; naqd, bank, terminal, Click (`applied`) va
+  Uzum (`confirmed`) to'lovlari hisoblanmasdi -> bonusni tasdiqlab bo'lmasdi. Endi `paid` / `applied` / `confirmed`; avans ko'chirmasi
+  (`reattr`) va sof puli (`app.student_real_net`: to'lovlar − faktura qaytarishlari) 0 bo'lgan o'quvchi hisoblanmaydi. Birinchi to'lov
+  bekor/qaytarilsa yoki faktura to'liq qaytarilsa (`trg_referral_refund_revoke`) — tasdiqlangan tavsiya bekor, qo'llangani —
+  ogohlantirish. Kutilayotgan tavsiyalar hisoblagichi (Direktor kunlik hisoboti, muddati o'tgan tasdiqlar) doim 0 edi — tuzatildi.
+  Deploydan keyin «Tavsiya bonuslari» navbatida eski (naqd to'lovli) tavsiyalar paydo bo'ladi — bu kutilgan.
 - **«Reja va tushum» ogohlantirishi:** «Bemor» qoidasi `sickNoteRefs`ni massiv deb tekshirardi (aslida obyekt) -> har to'g'ri chegirma
-  ham buzilish bo'lib chiqardi.
+  ham buzilish bo'lib chiqardi. Endi yozish paytidagi qo'riqchi bilan bir xil shartlar (kun ma'lumotnomada, kunlar soni, summa bor-kun yo'q).
 - **Ikkinchi lavozim:** asosiy roli boshqa xodimga «O‘qituvchi»/«Kurator» qo'shimcha lavozimi berilsa, «Tahrirlash» oynasida sinf/fan
-  bo'limi ko'rinmas va har saqlashda biriktirilgan sinflar o'chardi; sinf rahbari bo'limlari endi faqat bazadagi
-  `app.is_homeroom_for` ruxsat beradigan lavozimlarda ochiladi.
-- **Kabinet:** davomatda «Bemor» kuni o'z rangi va izohi bilan.
-Sinov: lokal PG16 zanjiri + SQL ssenariylari 14/14, `admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 9/9, `auth` va
-`payments` npm testlari yashil, sahifa skriptlari sintaksisi toza.
+  bo'limi ko'rinmas va har saqlashda biriktirilgan sinflar o'chardi. Shu xil kamchilik yana 5 joyda tuzatildi (`uHas` — bazadagi
+  `app.u_has` bilan bir xil): sinf nomi o'zgarganda biriktiruv ko'chishi, sinf rahbarini almashtirish (bitta sinf — bitta rahbar),
+  «Sinf rahbari» ro'yxati, foydalanuvchilar jadvalidagi «Biriktirilgan», «📚 Sinflar» ogohlantirishi. Sinf rahbari bo'limlari va
+  sinfga e'lon yozish (`app.ann_can_write`) — faqat `app.is_homeroom_for` ruxsat beradigan lavozimlarda.
+- **Kabinet:** davomatda «Bemor» kuni o'z rangi va izohi bilan; faqat «Sababli»/«Bemor» kunlari bo'lgan oy ham ko'rinadi.
+Sinov: `migration/test-audit-fixes.sql` (yangi, repoda) 22/22; `test-public-close.sql` 92/92; `test-auth-rls.sql` — d388324 bilan
+aynan bir xil; deploy yo'li (d388324 ustiga) barmoq izi = noldan qurilgan; o'zgarganlar — faqat 8 funksiya + 3 yangi funksiya.
+`admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 13/13; brauzerda (lokal PostgREST + haqiqiy sahifalar) 45/45, avvalgi
+versiyada xuddi shu joylarda yiqiladi; `auth` va `payments` npm testlari yashil.
 Jonli sozlamalar (faqat o'qildi): GoTrue'da e-mail tasdig'i yoqilgan (`mailer_autoconfirm=false`) — e-mail bilan ro'yxatdan o'tgan
 ota-ona havolasiz kira olmaydi; ilova ishlatmaydigan GoTrue telefon ro'yxati ochiq va avto-tasdiqli (`ENABLE_PHONE_SIGNUP=false`
 tavsiya). Ochiq savollar: HR'da xodimlar «⬇ Eksport» (kodda ataylab), maosh to'lovini bekor qilish UI'si yo'q.
