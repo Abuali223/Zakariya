@@ -1054,7 +1054,7 @@ async function renderApprovals(){
   const qs=approvalQueuesForMe(), _g=VIEW_GEN;
   $('#view').innerHTML=`<div class="page-head"><h2>Tasdiqlash</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Sizning tasdig‘ingizni kutayotgan so‘rovlar. Har qaror kim va qachon qilgani bilan «O‘zgarishlar tarixi»ga yoziladi.</p>
-    ${qs.length?qs.map((q,i)=>`<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><b>${esc(q.title)}</b><span class="chip it" id="apq-n-${i}">…</span></div><div id="apq-${i}"><div class="loading">Yuklanmoqda…</div></div></div>`).join(''):'<div class="card"><div class="empty">Tasdiq kutayotgan so‘rov yo‘q.</div></div>'}`;
+    ${qs.length?qs.map((q,i)=>`<div class="card" style="margin-bottom:14px;padding:14px 18px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><b>${esc(q.title)}</b><span class="chip it" id="apq-n-${i}">…</span></div><div id="apq-${i}"><div class="loading">Yuklanmoqda…</div></div></div>`).join(''):'<div class="card"><div class="empty">Tasdiq kutayotgan so‘rov yo‘q.</div></div>'}`;
   for(let i=0;i<qs.length;i++){ const q=qs[i];
     try{ const n=await q.count(); if(_g!==VIEW_GEN) return; const el=document.getElementById('apq-n-'+i); if(el) el.textContent=String(n||0); }catch(e){}
     try{ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) await q.render(el); }
@@ -2609,12 +2609,12 @@ APPROVAL_QUEUES.push({ key:'bonus', title:'100 ball bonuslari', roles:['director
     if(!props.length && !cands.length){ el.innerHTML='<div class="empty">Kutilayotgan bonus yo‘q ✓</div>'; return; }
     const pc=b=>{ const over=b.decideDeadline && new Date(b.decideDeadline).getTime()<Date.now();
       return `<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div>${who(b.studentId)}</div><div>${b.late?'<span class="chip" title="O‘IBDO‘ muddatidan kech taklif qilgan">kech taklif</span>':''}</div></div>
-        <div class="small" style="margin-top:6px">${esc(b.period)} monitoringi · o‘rtacha <b>${esc(String(b.avg))}</b> · qamrov ${Number(b.n)||0}/${Number(b.required)||0}</div>
+        <div class="small" style="margin-top:6px">${esc(b.period)} monitoringi · o‘rtacha <b>${b.avg==null?'—':esc(String(b.avg))}</b> · qamrov ${Number(b.n)||0}/${Number(b.required)||0}</div>
         <div class="small muted">Taklif: ${esc(fmtDT(b.proposedAt))} · qaror muddati: <span style="${over?'color:#B42318;font-weight:700':''}">${esc(fmtDT(b.decideDeadline))}</span> ${over?'':('— '+leftTxt(b.decideDeadline))}</div>
         <div class="small" style="margin-top:4px">Pul ta’siri: ${money(b.studentId)}</div>
         <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm gold" data-bok="${esc(b._id)}" data-need="${(b.late||over)?1:0}">✅ Tasdiqlash</button><button class="btn sm ghost" data-bno="${esc(b._id)}">✖ Rad etish</button></div></div>`; };
     const cc=x=>`<div class="card" style="padding:12px 16px;margin-bottom:10px;border-color:#F4C7C3"><div>${who(x.studentId)}</div>
-        <div class="small" style="margin-top:4px">${esc(x.period)} · o‘rtacha <b>${esc(String((x.mon||{}).avg))}</b> · qamrov ${Number((x.mon||{}).n)||0}/${Number((x.mon||{}).required)||0} · O‘IBDO‘ taklif muddati o‘tgan (${esc(fmtDT(x.round.proposeDeadline))})</div>
+        <div class="small" style="margin-top:4px">${esc(x.period)} · o‘rtacha <b>${(x.mon||{}).avg==null?'—':esc(String((x.mon||{}).avg))}</b> · qamrov ${Number((x.mon||{}).n)||0}/${Number((x.mon||{}).required)||0} · O‘IBDO‘ taklif muddati o‘tgan (${esc(fmtDT(x.round.proposeDeadline))})</div>
         <div class="small" style="margin-top:4px">Pul ta’siri: ${money(x.studentId)}</div>
         <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm gold" data-xok="${esc(x.studentId)}" data-per="${esc(x.period)}">Tasdiqlash (sabab bilan)</button><button class="btn sm ghost" data-xno="${esc(x.studentId)}" data-per="${esc(x.period)}">Rad etish</button></div></div>`;
     el.innerHTML=(props.length?props.map(pc).join(''):'')+(cands.length?`<h4 style="margin:12px 0 6px">Muddati o‘tgan nomzodlar (taklif qilinmagan)</h4>${cands.map(cc).join('')}`:'');
@@ -2640,7 +2640,7 @@ APPROVAL_QUEUES.push({ key:'bonus_prop', title:'100 ball nomzodlari (taklif)', r
     el.innerHTML=list.map(x=>{ const s=byId[String(x.studentId)]; const m=x.mon||{}; const rd=x.round||{};
       return `<div class="card" style="padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
         <div><b>${esc((s&&s.name)||x.studentId)}</b> <span class="small muted">· ${esc(s?classLabelOf(s):x.classKey)}</span>
-          <div class="small">${esc(x.period)} · o‘rtacha <b>${esc(String(m.avg))}</b> · qamrov ${Number(m.n)||0}/${Number(m.required)||0} · muddat: ${esc(fmtDT(rd.proposeDeadline))} — ${leftTxt(rd.proposeDeadline)}</div></div>
+          <div class="small">${esc(x.period)} · o‘rtacha <b>${m.avg==null?'—':esc(String(m.avg))}</b> · qamrov ${Number(m.n)||0}/${Number(m.required)||0} · muddat: ${esc(fmtDT(rd.proposeDeadline))} — ${leftTxt(rd.proposeDeadline)}</div></div>
         <button class="btn sm gold" data-prop="${esc(x.studentId)}" data-per="${esc(x.period)}">Bonusga taklif qilish</button></div>`; }).join('');
     el.querySelectorAll('[data-prop]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;
       try{ const r=await rpc('bonus_propose',{ p_sid:b.dataset.prop, p_period:b.dataset.per });
@@ -5910,7 +5910,7 @@ async function renderEnrollments(){
     catch(e){ if(_g!==VIEW_GEN) return false; $('#adm-list').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return false; }
     rows.sort((a,b)=>String(b.created||b.ts||'').localeCompare(String(a.created||a.ts||''))); return true; };
   const loadSeats=async()=>{
-    let st=[]; try{ st=await rpc('class_seat_stats'); }catch(e){ if(_g!==VIEW_GEN) return; $('#adm-seats').innerHTML=`<div class="small muted">Bo‘sh o‘rinlar hisoblanmadi${e&&(e.code||e.message)?` (${esc(e.code||e.message)})`:''}.</div>`; return; }
+    let st=[]; try{ st=await rpc('class_seat_stats'); }catch(e){ if(_g!==VIEW_GEN) return; $('#adm-seats').innerHTML=`<div class="small muted" style="padding:12px 16px">Bo‘sh o‘rinlar hisoblanmadi${e&&(e.code||e.message)?` (${esc(e.code||e.message)})`:''}.</div>`; return; }
     if(_g!==VIEW_GEN) return;
     st=(Array.isArray(st)?st:[]).filter(x=>x && x.classKey);
     const gr=k=>{ const m=String(k).match(/^(uz|ru)-(\d+)-/); return m?Number(m[2]):0; };
@@ -5921,7 +5921,7 @@ async function renderEnrollments(){
         <td data-label="Band">${Number(x.active||0)}</td>
         <td data-label="Bo‘sh">${free==null?'<span class="muted">sig‘im kiritilmagan</span>':(free>0?`<b style="color:#15803D">${free}</b>`:'<b style="color:#B42318">0</b>')}</td>
         <td data-label="Jarayonda (shu sinf darajasi)">${inProc(x.classKey)||'<span class="muted">0</span>'}</td></tr>`; }).join('');
-    $('#adm-seats').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>Bo‘sh o‘rinlar</b>${canAdmSeats()?'<button class="btn sm" id="adm-cap-save">💾 Sig‘imni saqlash</button>':''}</div>
+    $('#adm-seats').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:12px 16px 0"><b>Bo‘sh o‘rinlar</b>${canAdmSeats()?'<button class="btn sm" id="adm-cap-save">💾 Sig‘imni saqlash</button>':''}</div>
       ${trs?`<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Sig‘im</th><th>Band</th><th>Bo‘sh</th><th>Jarayonda</th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="small muted">Sinflar topilmadi.</div>'}`;
     labelTable();
     if($('#adm-cap-save')) $('#adm-cap-save').onclick=async()=>{ const ins=[...document.querySelectorAll('[data-capk]')]; let ok=0, bad=0;
@@ -7390,11 +7390,11 @@ async function renderChangeLog(){
     if(g!==gen || vg!==VIEW_GEN || !card.isConnected) return;
     const total=rows.length, truncated=total>=LIM;   // qidiruvdan OLDIN — kesilgan bo'lsa doim aytiladi
     if(q) rows=rows.filter(r=>[r.actor_name,r.actor_role,ROLE_LABEL[r.actor_role],r.row_id,names[rowKey(r)]].some(x=>String(x||'').toLowerCase().includes(q)));
-    const warn=truncated?`<div class="small" style="color:#B45309;margin-bottom:8px">⚠️ Oraliqda ${LIM} tadan ko‘p yozuv bor — faqat eng so‘nggi ${LIM} tasi ${q?'qidirildi':'ko‘rsatildi'}. Oraliqni toraytiring yoki bo‘limni tanlang.</div>`:'';
+    const warn=truncated?`<div class="small" style="color:#B45309;margin-bottom:8px;padding:10px 16px 0">⚠️ Oraliqda ${LIM} tadan ko‘p yozuv bor — faqat eng so‘nggi ${LIM} tasi ${q?'qidirildi':'ko‘rsatildi'}. Oraliqni toraytiring yoki bo‘limni tanlang.</div>`:'';
     if(!rows.length){ card.innerHTML=warn+`<div class="empty">${q?'Qidiruvga mos yozuv topilmadi.':'Bu oraliqda o‘zgarish yo‘q.'}</div>`; return; }
     const tm=a=>{ const x=new Date(a); if(isNaN(x)) return esc(String(a||'')); const z=new Date(x.getTime()+5*3600e3);   // Toshkent vaqti (UTC+5)
       return `${z.toISOString().slice(0,10)} ${String(z.getUTCHours()).padStart(2,'0')}:${String(z.getUTCMinutes()).padStart(2,'0')}`; };
-    card.innerHTML=`${warn}<div class="small muted" style="margin-bottom:8px">${rows.length} ta yozuv${q?` (${total} tadan)`:''}</div>
+    card.innerHTML=`${warn}<div class="small muted" style="margin-bottom:8px;padding:10px 16px 0">${rows.length} ta yozuv${q?` (${total} tadan)`:''}</div>
       <div class="tablewrap"><table><thead><tr><th>Vaqt</th><th>Kim</th><th>Bo‘lim</th><th>Yozuv</th><th>O‘zgarish</th></tr></thead><tbody>${rows.map(r=>`<tr>
         <td data-label="Vaqt" style="white-space:nowrap">${tm(r.at)}</td>
         <td data-label="Kim">${who(r)}</td>
