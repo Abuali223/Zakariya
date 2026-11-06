@@ -1177,7 +1177,16 @@ xaritalandi va ikki mustaqil ko'rikdan o'tdi. Topilgan xatolar (deploydan OLDIN 
   «E'lonlar» yoqilgach adashib yozilib o'chirilgan e'lon ham ota-onalarga ketardi.
 - **Mayda:** qaytarish tasdig'ida «so‘m so‘m»; chek QR kodi endi sahifadagi mahalliy kutubxonadan (avval CDN'dan — u yopiq bo'lsa
   chekda QR chiqmasdi).
-Sinov: `migration/test-audit-fixes.sql` (yangi, repoda) 30/30; `test-public-close.sql` 92/92; `test-auth-rls.sql` — d388324 bilan
+- **Deploy to'xtadi (2026-11-06, a3e2dec): `permission denied to set parameter "iqror.inv_reprice"`** (`invoice-guards.sql`, baza
+  o'zgarmadi). Sabab: `reprice_invoice`dagi funksiya darajasidagi `SET iqror.inv_reprice = '1'` bandi (PKG-6) — Supabase'da migratsiya
+  roli `postgres` superuser emas, maxsus (placeholder) parametr uchun bunday bandga ruxsat yo'q; lokal sinovlar superuser bilan
+  bo'lgani uchun ko'rinmagan. Tuzatma: `public.reprice_invoice` — o'ram (`set_config(..., true)` bilan bayroq qo'yadi, chiqishda va
+  xatoda olib tashlaydi), ish — `app.reprice_invoice_core`. Endi zanjir superuser BO'LMAGAN rol bilan ham sinaladi (Supabase'ga
+  yaqin muhit): eski zanjir aynan shu xatoni beradi, yangisi — 0 xato, c1c594c (server holati) ustidan deploy yo'li ham 0 xato.
+- **Zaxira (backup.sh):** xizmatlar `/home/ubuntu/iqror-repo`dan ishlaydi — `config.json` fayllari va Supabase `.env` sirlar
+  zaxirasiga tushmasdi («sirlar: topilmadi»). Endi yo'l berilmagan bo'lsa — xizmat unit'ining WorkingDirectory'si va supabase-db
+  konteynerining docker compose papkasidan avto-aniqlanadi.
+Sinov: `migration/test-audit-fixes.sql` (yangi, repoda) 36/36; `test-public-close.sql` 92/92; `test-auth-rls.sql` — d388324 bilan
 aynan bir xil; deploy yo'li (d388324 ustiga) barmoq izi = noldan qurilgan; o'zgarganlar — faqat 8 funksiya + 4 yangi funksiya.
 `admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 13/13; brauzerda (lokal PostgREST + haqiqiy sahifalar) 46/46 + ko'p
 farzandli ota-ona tanlovi, avvalgi versiyada xuddi shu joylarda yiqiladi; `auth` va `payments` npm testlari yashil.

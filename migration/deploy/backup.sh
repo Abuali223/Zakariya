@@ -17,6 +17,8 @@
 #     hech qachon logga chiqmaydi). Yo'llar o'zgaruvchi bilan (standartlari — server tuzilishi, migration/deploy/README.md):
 #       SUPA_ENV=/opt/iqror/supabase/docker/.env  SRV_DIR=/opt/iqror  WEB_DIR=/var/www/iqror
 #       NGINX_SITE=/etc/nginx/sites-available/iqror  UNIT_DIR=/etc/systemd/system  SECRETS_EXTRA="yo'l1 yo'l2" (qo'shimcha)
+#     SRV_DIR / SUPA_ENV berilmasa va standart joyda fayl bo'lmasa — avto-aniqlanadi: xizmat unit'ining WorkingDirectory'si
+#       (iqror-auth / iqror-pay / iqror-ai) va supabase-db konteynerining docker compose papkasidagi .env.
 #     Ixtiyoriy shifrlash (faqat sirlar fayli): BACKUP_GPG_RECIPIENT=<gpg kalit id/email> -> secrets_*.tar.gz.gpg
 #       yoki BACKUP_PASSFILE=<parol fayli, 600> -> secrets_*.tar.gz.enc (openssl aes-256-cbc, pbkdf2). Shifrlash xato bo'lsa —
 #       sirlar fayli ochiq holda SAQLANMAYDI (ogohlantirish; asosiy zaxira saqlanadi).
@@ -34,6 +36,7 @@ PGURL="${PGURL:-}"
 STORAGE_VOL="${STORAGE_VOL:-/opt/iqror/supabase/docker/volumes/storage}"  # Supabase storage hajmi (bo'lmasa o'tkaziladi)
 KEEP_DAYS="${KEEP_DAYS:-60}"
 case "$KEEP_DAYS" in ''|*[!0-9]*) echo "❌ [$(date)] KEEP_DAYS butun son bo'lishi kerak (hozir: '$KEEP_DAYS') — zaxira olinmadi"; exit 1;; esac
+SUPA_ENV_GIVEN="${SUPA_ENV:-}"; SRV_DIR_GIVEN="${SRV_DIR:-}"   # aniq berilganmi (berilmagan bo'lsa — pastda avto-aniqlash)
 SUPA_ENV="${SUPA_ENV:-/opt/iqror/supabase/docker/.env}"
 SRV_DIR="${SRV_DIR:-/opt/iqror}"
 WEB_DIR="${WEB_DIR:-/var/www/iqror}"
@@ -44,6 +47,20 @@ BACKUP_GPG_RECIPIENT="${BACKUP_GPG_RECIPIENT:-}"
 BACKUP_PASSFILE="${BACKUP_PASSFILE:-}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 DOCKER="docker"; if [ "$(id -u)" != 0 ] && ! docker ps >/dev/null 2>&1; then DOCKER="sudo docker"; fi
+# Sirlar joyini avto-aniqlash (yo'l aniq berilmagan va standart joyda fayl yo'q bo'lsa): xizmatlar boshqa papkadan ishlasa
+#   (masalan WorkingDirectory=/home/ubuntu/iqror-repo) config.json fayllari va Supabase .env zaxiraga TUSHMASDI.
+#   Server kodi papkasi — iqror-auth / iqror-pay / iqror-ai unit'ining WorkingDirectory'si; .env — supabase-db konteynerining
+#   docker compose papkasi (com.docker.compose.project.working_dir).
+if [ -z "$SRV_DIR_GIVEN" ] && [ ! -f "$SRV_DIR/auth/config.json" ] && command -v systemctl >/dev/null 2>&1; then
+  for s in iqror-auth iqror-pay iqror-ai; do
+    wd="$(systemctl show -p WorkingDirectory --value "$s" 2>/dev/null || true)"; wd="${wd#!}"; wd="${wd#-}"
+    if [ -n "$wd" ] && [ -d "$wd" ] && { [ -f "$wd/auth/config.json" ] || [ -f "$wd/payments/config.json" ] || [ -f "$wd/ai-assistant/config.json" ]; }; then SRV_DIR="$wd"; break; fi
+  done
+fi
+if [ -z "$SUPA_ENV_GIVEN" ] && [ ! -f "$SUPA_ENV" ] && [ -z "$PGURL" ] && command -v docker >/dev/null 2>&1; then
+  cwd="$($DOCKER inspect "$DB_CONT" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+  if [ -n "$cwd" ] && [ -f "$cwd/.env" ]; then SUPA_ENV="$cwd/.env"; fi
+fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"; [ -L "$BACKUP_DIR" ] || chmod 700 "$BACKUP_DIR" 2>/dev/null || true   # symlink bo'lsa nishoni o'zgartirilmaydi

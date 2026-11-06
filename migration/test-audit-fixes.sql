@@ -7,7 +7,9 @@
 --   (3) money_rule_violations «Bemor» qoidasi — sickNoteRefs obyekt (yozish paytidagi qo'riqchi bilan bir xil shartlar);
 --   (4) sinfga e'lon yozish huquqi (app.ann_can_write) — app.is_homeroom_for bilan bir xil (lavozim ham kerak);
 --   (5) o'chirilgan e'lonning yuborilmagan navbat yozuvi bekor ('skipped');
---   (6) ota-ona o'z users qatorida tanlangan farzandni PATCH bilan saqlay oladi (upsert esa RLS insert tekshiruvidan o'tmaydi).
+--   (6) ota-ona o'z users qatorida tanlangan farzandni PATCH bilan saqlay oladi (upsert esa RLS insert tekshiruvidan o'tmaydi);
+--   (7) reprice_invoice: bayroq (iqror.inv_reprice) faqat RPC ichida — Moliya menejeri RPC orqali narxni o'zgartira oladi,
+--       to'g'ridan-to'g'ri o'zgartira olmaydi, va RPC'dan keyin tranzaksiyada bayroq qolmaydi (funksiya darajasidagi SET'siz).
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-audit-fixes.sql
@@ -93,6 +95,8 @@ insert into public.payments (id, "studentId", amount, status, provider, "created
   ('reattr:rv-1:in','T-2',700000,'applied','reattr', now() - interval '1 day'),
   ('click_W7','T-3',1000000,'applied','click', now() - interval '2 day'),
   ('reattr:rv-2:out','T-3',-1000000,'applied','reattr', now() - interval '1 day');
+insert into public.invoices (id, "studentId", month, status, amount, "baseAmount", "paidAmount") values
+  ('T-12__2098-01','T-12','2098-01','pending',1000000,1000000,0);
 set local session_replication_role = origin;
 
 -- ===== (1) 100 ball qamrovi =====
@@ -147,6 +151,14 @@ select zz.chk('Q03 allaqachon yuborilgan («done») yozuv o''zgarmaydi', (select
 select zz.chk('U01 ota-ona o''z qatorini PATCH qiladi (activeChildId/childId) -> 1 qator', zz.as('U_PA', $q$with u as (update public.users set "activeChildId" = 'T-1', "childId" = 'T-1' where id = 'U_PA' returning 1) select count(*)::text from u$q$), '^1$');
 select zz.chk('U02 upsert (avvalgi usul) — RLS insert tekshiruvi rad etadi', zz.as('U_PA', $q$insert into public.users (id, "activeChildId", "childId") values ('U_PA', 'T-2', 'T-2') on conflict (id) do update set "activeChildId" = excluded."activeChildId" returning 'ok'$q$), '^ERR 42501');
 select zz.chk('U03 ota-ona o''z rolini o''zgartira olmaydi', zz.as('U_PA', $q$with u as (update public.users set role = 'director' where id = 'U_PA' returning 1) select count(*)::text from u$q$), '^(ERR 42501|0$)');
+
+-- ===== (7) reprice_invoice bayrog'i =====
+select zz.chk('P01 Moliya menejeri faktura summasini to''g''ridan-to''g''ri o''zgartira olmaydi', zz.as('U_FM', $q$with u as (update public.invoices set amount = 900000 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^ERR 42501');
+select zz.chk('P02 Moliya menejeri reprice_invoice RPC orqali o''zgartiradi', zz.as('U_FM', $q$select public.reprice_invoice('T-12__2098-01', 800000, '{}'::jsonb, false)->>'ok'$q$), '^true$');
+select zz.chk('P02b summa 800 000 bo''ldi', (select amount::bigint::text from public.invoices where id = 'T-12__2098-01'), '^800000$');
+select zz.chk('P03 RPC''dan keyin tranzaksiyada bayroq qolmadi', (select coalesce(current_setting('iqror.inv_reprice', true), '')), '^$');
+select zz.chk('P04 bayroq qolmagani uchun keyingi to''g''ridan-to''g''ri o''zgartirish yana rad etiladi', zz.as('U_FM', $q$with u as (update public.invoices set amount = 1 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^ERR 42501');
+select zz.chk('P05 xato bo''lsa ham bayroq qolmaydi (ruxsatsiz rol: ota-ona)', zz.as('U_PA', $q$select public.reprice_invoice('T-12__2098-01', 1, '{}'::jsonb, false)->>'ok'$q$) || '|' || coalesce(current_setting('iqror.inv_reprice', true), ''), '^ERR 42501.*\|$');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL' from zz.res;

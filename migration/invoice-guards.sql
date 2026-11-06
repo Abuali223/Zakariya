@@ -31,12 +31,12 @@ do $iqror_guard$ begin raise exception 'iqror: invoice-guards.sql ALOHIDA ishga 
 -- =====================================================================
 
 -- ---------- 1) reprice_invoice ----------
-create or replace function public.reprice_invoice(p_id text, p_net numeric, p_meta jsonb default '{}'::jsonb,
-                                                  p_cancel boolean default false)
-returns jsonb language plpgsql security definer set search_path = public, app, pg_temp
--- Faktura summasi/chegirmasini Direktordan boshqasi faqat shu RPC orqali o'zgartiradi (discount-approval.sql himoyasi).
---   Funksiya darajasidagi SET: bayroq faqat shu funksiya ichida amal qiladi (tranzaksiyaning qolgan qismiga o'tmaydi).
-set iqror.inv_reprice = '1' as $$
+-- Faktura summasi/chegirmasini Direktordan boshqasi faqat shu RPC orqali o'zgartiradi (discount-approval.sql himoyasi:
+--   bayroq iqror.inv_reprice = '1'). Bayroq FAQAT public.reprice_invoice o'rami ichida qo'yiladi va chiqishda (xato bo'lsa ham)
+--   olib tashlanadi. Avval funksiya darajasidagi «SET iqror.inv_reprice» bandi edi — Supabase'da migratsiya roli (postgres)
+--   superuser emas va maxsus (placeholder) parametr uchun bunday bandga ruxsat yo'q: deploy shu yerda to'xtardi.
+create or replace function app.reprice_invoice_core(p_id text, p_net numeric, p_meta jsonb, p_cancel boolean)
+returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_claims jsonb; v_sid text; v_inv record; v_paid numeric; v_net numeric; v_newpaid numeric;
   v_excess numeric := 0; v_status text; v_cr numeric := 0; v_name text; v_stcancel boolean;
@@ -147,6 +147,20 @@ begin
     end if;
   end if;
   return jsonb_build_object('ok', true, 'status', v_status, 'amount', v_net, 'paidAmount', v_newpaid, 'excess', v_excess);
+end $$;
+revoke all on function app.reprice_invoice_core(text, numeric, jsonb, boolean) from public, anon, authenticated;
+create or replace function public.reprice_invoice(p_id text, p_net numeric, p_meta jsonb default '{}'::jsonb,
+                                                  p_cancel boolean default false)
+returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare r jsonb;
+begin
+  perform set_config('iqror.inv_reprice', '1', true);
+  r := app.reprice_invoice_core(p_id, p_net, p_meta, p_cancel);
+  perform set_config('iqror.inv_reprice', '', true);
+  return r;
+exception when others then
+  perform set_config('iqror.inv_reprice', '', true);
+  raise;
 end $$;
 revoke all on function public.reprice_invoice(text, numeric, jsonb, boolean) from public, anon;
 grant execute on function public.reprice_invoice(text, numeric, jsonb, boolean) to authenticated, service_role;
