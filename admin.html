@@ -10942,7 +10942,7 @@ async function openRefund(ctx, reload){
     if(amount>maxAmt+0.5){ toast('Summa qaytariladigandan ko‘p',true); return; }
     if(!reason){ toast('Sababni yozing',true); return; }
     if(refundPin && pass!==refundPin){ toast('PIN noto‘g‘ri',true); return; }
-    if(!confirm(`${fmtSom(amount)} so‘m qaytarilsinmi?\nSabab: ${reason}`)) return;
+    if(!confirm(`${fmtSom(amount)} qaytarilsinmi?\nSabab: ${reason}`)) return;   // fmtSom «so‘m»ni o'zi qo'shadi
     busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent='Qaytarilmoqda…';
     const email=(auth.currentUser&&auth.currentUser.email)||'';
     try{
@@ -10971,7 +10971,10 @@ async function openRefund(ctx, reload){
 let _qrP=null;
 function loadQR(){ if(window.QRCode) return Promise.resolve(); if(_qrP) return _qrP;
   _qrP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=res; s.onerror=(e)=>{ _qrP=null; rej(e); }; document.head.appendChild(s); }); return _qrP; }
-async function qrDataUrl(text){ try{ await loadQR(); const d=document.createElement('div');
+async function qrDataUrl(text){
+  // Avval sahifaga ulangan mahalliy kutubxona (/vendor/qr/qrcode.js — hujjatlardagi QR bilan bir xil): CDN'siz, oflayn ham ishlaydi.
+  try{ if(typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(String(text||'')); q.make(); return q.createDataURL(4,10); } }catch(e){}
+  try{ await loadQR(); const d=document.createElement('div');
   new window.QRCode(d,{text:String(text||''),width:180,height:180,correctLevel:window.QRCode.CorrectLevel.M});
   const cv=d.querySelector('canvas'), img=d.querySelector('img');
   return (cv&&cv.toDataURL('image/png'))||(img&&img.src)||''; }catch(e){ return ''; } }

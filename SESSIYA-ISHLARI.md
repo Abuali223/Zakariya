@@ -1171,10 +1171,19 @@ xaritalandi va ikki mustaqil ko'rikdan o'tdi. Topilgan xatolar (deploydan OLDIN 
   «Sinf rahbari» ro'yxati, foydalanuvchilar jadvalidagi «Biriktirilgan», «📚 Sinflar» ogohlantirishi. Sinf rahbari bo'limlari va
   sinfga e'lon yozish (`app.ann_can_write`) — faqat `app.is_homeroom_for` ruxsat beradigan lavozimlarda.
 - **Kabinet:** davomatda «Bemor» kuni o'z rangi va izohi bilan; faqat «Sababli»/«Bemor» kunlari bo'lgan oy ham ko'rinadi.
-Sinov: `migration/test-audit-fixes.sql` (yangi, repoda) 22/22; `test-public-close.sql` 92/92; `test-auth-rls.sql` — d388324 bilan
-aynan bir xil; deploy yo'li (d388324 ustiga) barmoq izi = noldan qurilgan; o'zgarganlar — faqat 8 funksiya + 3 yangi funksiya.
-`admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 13/13; brauzerda (lokal PostgREST + haqiqiy sahifalar) 45/45, avvalgi
-versiyada xuddi shu joylarda yiqiladi; `auth` va `payments` npm testlari yashil.
+  Bir nechta farzandli ota-onaning tanlagan farzandi saqlanmasdi (o'z `users` qatoriga upsert — RLS insert tekshiruvi 403, xato
+  jim yutilardi) — endi PATCH (`updateDoc`).
+- **E'lon navbati:** o'chirilgan e'lonning yuborilmagan `ann__` yozuvi endi `skipped` (`trg_tg_unqueue_announce`) — aks holda
+  «E'lonlar» yoqilgach adashib yozilib o'chirilgan e'lon ham ota-onalarga ketardi.
+- **Mayda:** qaytarish tasdig'ida «so‘m so‘m»; chek QR kodi endi sahifadagi mahalliy kutubxonadan (avval CDN'dan — u yopiq bo'lsa
+  chekda QR chiqmasdi).
+Sinov: `migration/test-audit-fixes.sql` (yangi, repoda) 30/30; `test-public-close.sql` 92/92; `test-auth-rls.sql` — d388324 bilan
+aynan bir xil; deploy yo'li (d388324 ustiga) barmoq izi = noldan qurilgan; o'zgarganlar — faqat 8 funksiya + 4 yangi funksiya.
+`admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 13/13; brauzerda (lokal PostgREST + haqiqiy sahifalar) 46/46 + ko'p
+farzandli ota-ona tanlovi, avvalgi versiyada xuddi shu joylarda yiqiladi; `auth` va `payments` npm testlari yashil.
+Jonli audit mashqi (lokal nusxada, haqiqiy sahifalar, haqiqiy kirish formasi bilan): Phase 0 11/11, o'quvchi jarayoni 42/42;
+yozuvlarni «SINOV»dan boshqasiga o'tkazmaydigan himoyali brauzer skripti va faqat yozib olingan ID'lar bo'yicha ishlaydigan tozalash
+SQL'i (scratchpad; repoga kirmaydi) raqib ko'rigidan o'tkazilmoqda.
 Jonli sozlamalar (faqat o'qildi): GoTrue'da e-mail tasdig'i yoqilgan (`mailer_autoconfirm=false`) — e-mail bilan ro'yxatdan o'tgan
 ota-ona havolasiz kira olmaydi; ilova ishlatmaydigan GoTrue telefon ro'yxati ochiq va avto-tasdiqli (`ENABLE_PHONE_SIGNUP=false`
 tavsiya). Ochiq savollar: HR'da xodimlar «⬇ Eksport» (kodda ataylab), maosh to'lovini bekor qilish UI'si yo'q.

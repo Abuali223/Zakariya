@@ -2498,7 +2498,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
       const { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut,
               createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification,
               sendPasswordResetEmail, updatePassword } = authMod;
-      const { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, getDocs, query, where, deleteDoc } = fsMod;
+      const { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, addDoc, getDocs, query, where, deleteDoc } = fsMod;
       let justLoggedIn = false, currentUser = null, childIds = [], activeChild = '', userRole = null;
       // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
       async function googleSignIn(){
@@ -2516,7 +2516,9 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
       }).catch(()=>{});
       const kabRefresh=()=>{ if(location.hash==='#kabinet' && window.IqrorPublic && window.IqrorPublic.renderKabinet) window.IqrorPublic.renderKabinet(); };
       // Bir oiladan bir nechta farzand: childIds — barcha farzand ID lari, activeChild — hozir ko'rilayotgani.
-      async function persistChildren(){ if(currentUser){ try{ await setDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild},{merge:true}); }catch(e){} } }
+      // Tanlangan farzand — o'z users qatoriga PATCH (updateDoc). Avval setDoc (upsert = INSERT … ON CONFLICT) edi: RLS'ning insert
+      //   tekshiruvi (users_ins: role/verified maydonlari) taklif qilingan qatorda yo'q -> 403, xato jim yutilardi va tanlov saqlanmasdi.
+      async function persistChildren(){ if(currentUser){ try{ await updateDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild}); }catch(e){} } }
       // Farzandlar endi child_claims jadvalidan (maxfiy kod bilan biriktirilgan) yuklanadi.
       async function loadChildIds(uid){ try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',uid))); return snap.docs.map(d=>String((d.data()||{}).studentId||'')).filter(Boolean); }catch(e){ return []; } }
       // D6: farzand kartasi faqat O'Z farzandi qatoridan (xom 'students' — owns_student_doc RLS; boshqa bolalar ko'rinmaydi).
@@ -2553,7 +2555,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         async removeChild(id){ id=String(id||'').trim();
           try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',currentUser.uid))); for(const dd of snap.docs){ if(String((dd.data()||{}).studentId||'')===id) await deleteDoc(doc(db,'child_claims',dd.id)); } }catch(e){}
           childIds=childIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
-        async setActiveChild(id){ id=String(id||'').trim(); if(childIds.includes(id)){ activeChild=id; if(currentUser){ await setDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild},{merge:true}); } } },
+        async setActiveChild(id){ id=String(id||'').trim(); if(childIds.includes(id)){ activeChild=id; if(currentUser){ try{ await updateDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild}); }catch(e){} } } },
         async saveChild(id){ id=String(id||'').trim(); if(id){ if(!childIds.includes(id)) childIds.push(id); activeChild=id; } else { childIds=[]; activeChild=''; } await persistChildren(); }
       };
 

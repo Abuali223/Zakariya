@@ -5,7 +5,9 @@
 --       0 bo'lgan o'quvchi hisoblanmaydi; to'lov bekor/qaytarilsa yoki faktura to'liq qaytarilsa — tavsiya bekor / ogohlantirish;
 --       kutilayotgan tavsiyalar hisoblagichi (Direktor kunlik hisoboti);
 --   (3) money_rule_violations «Bemor» qoidasi — sickNoteRefs obyekt (yozish paytidagi qo'riqchi bilan bir xil shartlar);
---   (4) sinfga e'lon yozish huquqi (app.ann_can_write) — app.is_homeroom_for bilan bir xil (lavozim ham kerak).
+--   (4) sinfga e'lon yozish huquqi (app.ann_can_write) — app.is_homeroom_for bilan bir xil (lavozim ham kerak);
+--   (5) o'chirilgan e'lonning yuborilmagan navbat yozuvi bekor ('skipped');
+--   (6) ota-ona o'z users qatorida tanlangan farzandni PATCH bilan saqlay oladi (upsert esa RLS insert tekshiruvidan o'tmaydi).
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-audit-fixes.sql
@@ -45,7 +47,7 @@ set local session_replication_role = replica;
 insert into public.users (id, email, role, status, "homeroomClasses", "extraRoles") values
   ('U_DIR','d@x','director','active','[]','[]'), ('U_FM','f@x','finance_mgr','active','[]','[]'),
   ('U_TEA','t@x','teacher','active','["uz-5-A"]','[]'), ('U_HR','h@x','hr','active','["uz-5-A"]','[]'),
-  ('U_RECT','rt@x','reception','active','["uz-5-A"]','["teacher"]')
+  ('U_RECT','rt@x','reception','active','["uz-5-A"]','["teacher"]'), ('U_PA','pa@x','parent','active','[]','[]')
 on conflict (id) do update set role = excluded.role, status = excluded.status, "homeroomClasses" = excluded."homeroomClasses", "extraRoles" = excluded."extraRoles";
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',5,'A','uz','',2,'[]'), ('s3','T-3','Sinov C',5,'A','uz','',3,'[]'),
@@ -130,6 +132,21 @@ select zz.chk('A01 o''qituvchi — o''z sinfiga e''lon yoza oladi', zz.as('U_TEA
 select zz.chk('A02 HR (homeroomClasses qolib ketgan) — yoza olmaydi', zz.as('U_HR', $q$select app.ann_can_write('["uz-5-A"]')::text$q$), '^false$');
 select zz.chk('A03 qabulxona + qo''shimcha «O''qituvchi» lavozimi — yoza oladi', zz.as('U_RECT', $q$select app.ann_can_write('["uz-5-A"]')::text$q$), '^true$');
 select zz.chk('A04 o''qituvchi — boshqa sinfga yoza olmaydi', zz.as('U_TEA', $q$select app.ann_can_write('["uz-6-B"]')::text$q$), '^false$');
+
+-- ===== (5) o'chirilgan e'lon navbatdan chiqadi =====
+select zz.chk('Q01 o''qituvchi o''z sinfiga e''lon yozadi', zz.as('U_TEA', $q$insert into public.class_announcements (id, "classKeys", title, body, "createdBy") values ('ANN_T1', '["uz-5-A"]', 'Sinov e''lon', 'matn', 'U_TEA') returning id$q$), '^ANN_T1$');
+select zz.chk('Q01b navbatda «pending» yozuv paydo bo''ldi', (select status from public.notify_queue where id = 'ann__ANN_T1'), '^pending$');
+select zz.chk('Q02 o''qituvchi o''z e''lonini o''chiradi', zz.as('U_TEA', $q$with d as (delete from public.class_announcements where id = 'ANN_T1' returning 1) select count(*)::text from d$q$), '^1$');
+select zz.chk('Q02b navbat yozuvi endi «skipped»', (select status from public.notify_queue where id = 'ann__ANN_T1'), '^skipped$');
+insert into public.class_announcements (id, "classKeys", title, "createdBy") values ('ANN_T2', '["uz-5-A"]', 'Yuborilgan', 'U_DIR');
+update public.notify_queue set status = 'done' where id = 'ann__ANN_T2';
+delete from public.class_announcements where id = 'ANN_T2';
+select zz.chk('Q03 allaqachon yuborilgan («done») yozuv o''zgarmaydi', (select status from public.notify_queue where id = 'ann__ANN_T2'), '^done$');
+
+-- ===== (6) ota-ona tanlagan farzand =====
+select zz.chk('U01 ota-ona o''z qatorini PATCH qiladi (activeChildId/childId) -> 1 qator', zz.as('U_PA', $q$with u as (update public.users set "activeChildId" = 'T-1', "childId" = 'T-1' where id = 'U_PA' returning 1) select count(*)::text from u$q$), '^1$');
+select zz.chk('U02 upsert (avvalgi usul) — RLS insert tekshiruvi rad etadi', zz.as('U_PA', $q$insert into public.users (id, "activeChildId", "childId") values ('U_PA', 'T-2', 'T-2') on conflict (id) do update set "activeChildId" = excluded."activeChildId" returning 'ok'$q$), '^ERR 42501');
+select zz.chk('U03 ota-ona o''z rolini o''zgartira olmaydi', zz.as('U_PA', $q$with u as (update public.users set role = 'director' where id = 'U_PA' returning 1) select count(*)::text from u$q$), '^(ERR 42501|0$)');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL' from zz.res;

@@ -382,6 +382,22 @@ revoke all on function app.tg_queue_announce() from public, anon, authenticated;
 drop trigger if exists trg_tg_queue_announce on public.class_announcements;
 create trigger trg_tg_queue_announce after insert on public.class_announcements
   for each row execute function app.tg_queue_announce();
+-- E'lon o'chirilsa — hali yuborilmagan navbat yozuvi bekor ('skipped'). Aks holda ishchi navbatdagi nusxani (payload) yuborardi:
+--   adashib yozilib darhol o'chirilgan e'lon ham (masalan, «E'lonlar» yoqilgach) ota-onalarga ketardi.
+create or replace function app.tg_unqueue_announce() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  begin
+    update public.notify_queue set status = 'skipped', error = 'e''lon o''chirildi', "processedAt" = now()
+     where id = 'ann__' || old.id and status = 'pending';
+  exception when others then null;   -- e'lonni o'chirish HECH QACHON shu sababli to'xtamasin
+  end;
+  return null;
+end $$;
+revoke all on function app.tg_unqueue_announce() from public, anon, authenticated;
+drop trigger if exists trg_tg_unqueue_announce on public.class_announcements;
+create trigger trg_tg_unqueue_announce after delete on public.class_announcements
+  for each row execute function app.tg_unqueue_announce();
 -- Sinf e'loni uchun qabul qiluvchilar (navbat ishlovchisi): e'lon sinflaridagi o'quvchilarning yaroqli bog'lanishlari.
 create or replace function public.tg_announce_recipients(p_keys jsonb) returns table(chat_id bigint, link_id text, prefs jsonb, lang text)
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
