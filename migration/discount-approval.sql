@@ -303,11 +303,14 @@ select x.nid, x.rid, case when exists (select 1 from public.referral_ledger l wh
  where x.nid <> x.rid
 on conflict (id) do nothing;
 
--- Birinchi haqiqiy to'lov (status 'paid', summa > 0).
+-- Birinchi haqiqiy to'lov (summa > 0; status 'paid' — faktura to'g'ridan-to'g'ri to'langan, yoki 'applied' — balansga /
+--   fakturalarga qo'llangan: naqd, bank, terminal va Click'ning ko'p to'lovlari shu holatda tugaydi). Avval faqat 'paid'
+--   olinardi -> bunday to'lovli yangi o'quvchining tavsiya bonusini hech qachon tasdiqlab bo'lmasdi.
+--   Qaytarilgan / bekor / kutilayotgan / bo'lingan (split — pul bolalarida) to'lovlar hisoblanmaydi.
 create or replace function app.first_real_payment(p_sid text) returns table(pid text, pat timestamptz)
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select p.id, p."createdAt" from public.payments p
-   where p."studentId" = p_sid and coalesce(p.status, '') = 'paid' and coalesce(p.amount, 0) > 0
+   where p."studentId" = p_sid and coalesce(p.status, '') in ('paid', 'applied') and coalesce(p.amount, 0) > 0
    order by p."createdAt" nulls last, p.id limit 1
 $$;
 revoke all on function app.first_real_payment(text) from public, anon, authenticated;
@@ -384,7 +387,8 @@ grant execute on function public.referral_queue() to authenticated, service_role
 create or replace function app.referral_payment_revoke() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 begin
-  if coalesce(old.status, '') = 'paid' and coalesce(new.status, '') in ('canceled', 'reversed') then
+  -- 'applied' ham birinchi to'lov bo'la oladi (app.first_real_payment); 'refunded' — pul qaytarilgan.
+  if coalesce(old.status, '') in ('paid', 'applied') and coalesce(new.status, '') in ('canceled', 'reversed', 'refunded') then
     begin
       update public.referral_requests set status = 'revoked', "decisionNote" = coalesce("decisionNote", '') || ' [birinchi to''lov bekor/qaytarildi]'
        where "firstPaymentId" = new.id and status = 'approved';

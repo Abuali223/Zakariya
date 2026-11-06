@@ -1148,6 +1148,28 @@ SQL ssenariylari va haqiqiy sahifalar bilan brauzerda sinaldi; har paketdan keyi
   triggerlari qo'shimcha lavozimda kesishma sifatida ishlaydi; Moliya menejerida faktura yaratish tugmasi yo'q (yopiq
   ma'lumot faqat Direktorda); xodim oylik summasini o'zgartirish qulflanmagan (tasdiqlangan summa vedomostda saqlanadi).
 
+## 46) Jonli audit tayyorgarligi: kod bo'yicha topilmalar va tuzatmalar — 2026-11-05 … 2026-11-06
+Jonli auditdan oldin har jarayon (qabul, kabinet, davomat/«Bemor»/100 ball, billing, xodim/maosh, hisoblar/tozalash) kod bo'yicha
+xaritalandi va ikki mustaqil ko'rikdan o'tdi. Topilgan xatolar (deploydan OLDIN tuzatildi):
+- **100 ball qamrovi (pul):** 5–9-sinf chegirma fanlari ro'yxatida «IT» ham alohida fan edi (`informatika` + `it`), uni hech kim
+  kirita olmaydi -> yangi qoidada to'liq qamrov hech qachon bo'lmas, 20% / 100% chegirma yo'qolardi. Endi `it` — «Informatika»ning
+  taxallusi: `admin.html` `monCanon` (hisob-faktura yig'ish bloki) va bazada `app.mon_canon` / `app.mon_disc_slugs` /
+  `app.monitoring_avg` bir xil (ikkalasi bo'lsa — «Informatika» yozuvi olinadi).
+- **Tavsiya bonusi (pul):** `app.first_real_payment` faqat `paid` holatli to'lovni olardi; naqd, bank, terminal va Click'ning ko'p
+  to'lovlari `applied` bilan tugaydi -> bonusni tasdiqlab bo'lmasdi. Endi `paid` yoki `applied`; qaytarilsa (`refunded`) — tasdiqlangan
+  tavsiya bekor bo'ladi.
+- **«Reja va tushum» ogohlantirishi:** «Bemor» qoidasi `sickNoteRefs`ni massiv deb tekshirardi (aslida obyekt) -> har to'g'ri chegirma
+  ham buzilish bo'lib chiqardi.
+- **Ikkinchi lavozim:** asosiy roli boshqa xodimga «O‘qituvchi»/«Kurator» qo'shimcha lavozimi berilsa, «Tahrirlash» oynasida sinf/fan
+  bo'limi ko'rinmas va har saqlashda biriktirilgan sinflar o'chardi; sinf rahbari bo'limlari endi faqat bazadagi
+  `app.is_homeroom_for` ruxsat beradigan lavozimlarda ochiladi.
+- **Kabinet:** davomatda «Bemor» kuni o'z rangi va izohi bilan.
+Sinov: lokal PG16 zanjiri + SQL ssenariylari 14/14, `admin.html`dan ajratilgan haqiqiy kod bilan birlik testlari 9/9, `auth` va
+`payments` npm testlari yashil, sahifa skriptlari sintaksisi toza.
+Jonli sozlamalar (faqat o'qildi): GoTrue'da e-mail tasdig'i yoqilgan (`mailer_autoconfirm=false`) — e-mail bilan ro'yxatdan o'tgan
+ota-ona havolasiz kira olmaydi; ilova ishlatmaydigan GoTrue telefon ro'yxati ochiq va avto-tasdiqli (`ENABLE_PHONE_SIGNUP=false`
+tavsiya). Ochiq savollar: HR'da xodimlar «⬇ Eksport» (kodda ataylab), maosh to'lovini bekor qilish UI'si yo'q.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

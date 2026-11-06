@@ -48,17 +48,25 @@ end $$;
 revoke all on function app.add_business_hours(timestamptz, numeric) from public, anon;
 grant execute on function app.add_business_hours(timestamptz, numeric) to authenticated, service_role;
 
--- 3) Chegirma fanlari (admin.html MON_DISC_SUBJECTS + monSlug bilan AYNAN bir xil; 1–4, 10–11 — cheklov yo'q -> null).
+-- 3) Chegirma fanlari (admin.html MON_DISC_SUBJECTS + monSlug + monCanon bilan AYNAN bir xil; 1–4, 10–11 — cheklov yo'q -> null).
+--    Ro'yxat KANONIK fanlar: 'it' — «Informatika»ning eski qo'lda yozilgan taxallusi (app.mon_canon), alohida fan EMAS.
+--    Avval ikkalasi ham talab qilinardi: 'IT' fanini hech kim kirita olmaydi (SUBJECTS'da yo'q) -> 5–9-sinfda to'liq qamrov
+--    hech qachon bo'lmas, yangi qoidada 20% / 100% chegirma butunlay yo'qolardi.
 create or replace function app.mon_disc_slugs(p_grade int, p_lang text) returns text[]
 language sql immutable set search_path = pg_catalog as $$
   select case
     when p_grade between 5 and 6 then case when p_lang = 'ru'
-      then array['rus_tili','matematika','ingliz_tili','informatika','it','biologiya']
-      else array['ona_tili','matematika','ingliz_tili','informatika','it','biologiya'] end
+      then array['rus_tili','matematika','ingliz_tili','informatika','biologiya']
+      else array['ona_tili','matematika','ingliz_tili','informatika','biologiya'] end
     when p_grade between 7 and 9 then case when p_lang = 'ru'
-      then array['rus_tili','matematika','ingliz_tili','informatika','it','biologiya','kimyo']
-      else array['ona_tili','matematika','ingliz_tili','informatika','it','biologiya','kimyo'] end
+      then array['rus_tili','matematika','ingliz_tili','informatika','biologiya','kimyo']
+      else array['ona_tili','matematika','ingliz_tili','informatika','biologiya','kimyo'] end
     else null end
+$$;
+-- Fan slug'ining kanonik shakli (admin.html monCanon bilan bir xil): taxallus -> asosiy fan.
+create or replace function app.mon_canon(p_slug text) returns text
+language sql immutable set search_path = pg_catalog as $$
+  select case when p_slug = 'it' then 'informatika' else p_slug end
 $$;
 -- Monitoring qatori kaliti {studentId}__{period}__{slug} -> fan slug'i (admin.html monSlug natijasi).
 create or replace function app.mon_slug_of(p_id text, p_sid text, p_period text) returns text
@@ -80,16 +88,20 @@ begin
   v_req := app.mon_disc_slugs(s.grade, s.lang);
   if v_req is null then
     v_ck := app.student_class_key(s.lang, s.grade, s."classLetter", s.track);
-    select array_agg(distinct app.mon_slug_of(m.id, m."studentId", m.period)) into v_req
+    select array_agg(distinct app.mon_canon(app.mon_slug_of(m.id, m."studentId", m.period))) into v_req
       from public.monitoring m where m."classKey" = v_ck and m.period = p_period
        and app.mon_slug_of(m.id, m."studentId", m.period) is not null;
   end if;
   v_r := coalesce(array_length(v_req, 1), 0);
+  -- Har kanonik fan bir marta: ham «IT», ham «Informatika» bo'lsa — «Informatika» yozuvi (admin.html bilan bir xil tanlov).
   select avg(x.score), count(*) into v_avg, v_n
-    from (select distinct on (app.mon_slug_of(m.id, m."studentId", m.period)) m.score
-            from public.monitoring m
-           where m."studentId" = p_sid and m.period = p_period and m.status = 'approved' and m.score is not null
-             and app.mon_slug_of(m.id, m."studentId", m.period) = any(coalesce(v_req, '{}'::text[]))) x;
+    from (select distinct on (y.c) y.score
+            from (select app.mon_canon(app.mon_slug_of(m.id, m."studentId", m.period)) as c,
+                         app.mon_slug_of(m.id, m."studentId", m.period) as sl, m.score, m.id
+                    from public.monitoring m
+                   where m."studentId" = p_sid and m.period = p_period and m.status = 'approved' and m.score is not null) y
+           where y.c = any(coalesce(v_req, '{}'::text[]))
+           order by y.c, (y.sl = y.c) desc, y.id) x;
   return jsonb_build_object('avg', round(v_avg, 2), 'n', coalesce(v_n, 0), 'required', v_r, 'full', v_r > 0 and coalesce(v_n, 0) >= v_r);
 end $$;
 revoke all on function app.monitoring_avg(text, text) from public, anon, authenticated;

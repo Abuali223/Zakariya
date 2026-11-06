@@ -383,8 +383,11 @@ begin
     select i.id, i.month from public.invoices i
      where v_sick is not null and i.month >= v_sick and coalesce(i.status, '') not in ('canceled', 'reversed')
        and coalesce(i."sickDaysApplied", 0) > 0
-       and (jsonb_typeof(i."sickNoteRefs") is distinct from 'array' or jsonb_array_length(i."sickNoteRefs") = 0
-            or exists (select 1 from jsonb_array_elements_text(i."sickNoteRefs") r
+       -- "sickNoteRefs" — obyekt {ma'lumotnoma id: [kunlar]} (nurse-sick.sql). Avval massiv deb tekshirilardi -> har bir to'g'ri
+       --   (tasdiqlangan ma'lumotnomali) chegirma ham «qoida buzilishi» bo'lib chiqardi. Obyekt bo'lmasa / bo'sh bo'lsa /
+       --   biror kaliti tasdiqlangan shu o'quvchi ma'lumotnomasi bo'lmasa — buzilish (jsonb_object_keys faqat obyektga).
+       and (jsonb_typeof(i."sickNoteRefs") is distinct from 'object' or i."sickNoteRefs" = '{}'::jsonb
+            or exists (select 1 from jsonb_object_keys(case when jsonb_typeof(i."sickNoteRefs") = 'object' then i."sickNoteRefs" else '{}'::jsonb end) r
                         where not exists (select 1 from public.sick_notes s where s.id = r and s.status = 'approved' and s."studentId" = i."studentId"))))
   select count(*), coalesce((select jsonb_agg(id) from (select id from bad order by month desc, id limit 10) q), '[]'::jsonb) into n, ids from bad;
   v_rules := v_rules || jsonb_build_object('key', 'sick', 'title', 'Tasdiqsiz «Bemor» kuni chegirmasi', 'from', v_sick, 'count', n, 'ids', ids);
