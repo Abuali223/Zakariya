@@ -12,7 +12,10 @@ Qolganini (arxivlar, to‘lov/qaytarish izlari, vedomost 2099-12, xodim kartasi 
 
 Chiqish kodi: **0** = muvaffaqiyat, **3** = ABORT (bazada hech narsa o‘zgarmagan, sababi yozilgan).
 
-## Qadamlar (serverda, repo papkasida: `cd ~/iqror-repo && git pull`)
+## Qadamlar (serverda, `~/iqror-repo` papkasida)
+
+Bu fayllar `full-deploy.sh` bilan serverga o‘zi tushadi (`migration/` yangilanadi) — `git pull` kerak emas. Deploy qilmasdan
+olish kerak bo‘lsa: `cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- migration`.
 
 Oxirgi SINOV harakatidan kamida 2 daqiqa o‘tgan bo‘lsin.
 
