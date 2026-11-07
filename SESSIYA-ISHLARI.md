@@ -1222,6 +1222,16 @@ himoyalangan brauzer skripti orqali (faqat SINOV obyektlariga yozish; SMS/xabar 
   kassirga maosh ko'rish huquqi bo'lsa «O'qituvchilar/Xodimlar» ochiladi (ataylab); haqiqiy qoida buzilishlari 0.
 - **Egasi uchun:** `migration/sinov-audit/` (README + v4 SQL + ID fayli) — dry run → tibbiy fayl (Storage API) → zaxira → commit.
 
+## 48) Admin menyusi guruhlarga ajratildi (raqobatchi saytlar kabi) — 2026-11-07
+Deploy (77afde0) tekshirildi: productiondagi `admin.html`, `index.html`, `sw.js`, `/sb` shimlar repo bilan bayt-bayt bir xil; Direktor
+paneli 44 bo'lim bilan xatosiz ochiladi. Keyin chap menyu yig'iladigan guruhlarga bo'lindi (`admin.html` → `NAV_GROUPS`):
+«Tasdiqlash» (doim yuqorida) · Boshqaruv · O'quvchilar · O'quv jarayoni · Xodimlar · Moliya · Xizmatlar · Veb-sayt · Tizim.
+Guruh sarlavhasi bosilsa — ichidagi bo'limlar ochiladi (bir vaqtda bitta guruh), faol bo'lim guruhi doim ochiq, yopiq guruh
+sarlavhasida ichidagi belgilar yig'indisi (masalan yangi arizalar), rolga bitta bo'lim qolgan guruh — guruhsiz. 8 tadan kam
+bo'limli rollar (o'qituvchi, Moliya menejeri, kassir…) — avvalgidek tekis ro'yxat. Telefonda: bitta gorizontal qator, guruh
+nomlari ko'rinadi, ochiq guruh bo'limlari yonida. Lokal brauzer sinovi (kompyuter + telefon, Direktor / Moliya / O'qituvchi)
+5/5, 0-bosqich regressiyasi 11/11, sahifa xatosi yo'q.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

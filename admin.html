@@ -80,6 +80,18 @@
   nav.side button .lbl{flex:1 1 auto}
   .tab-badge{flex:0 0 auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#e03131;color:#fff;font-size:11.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;line-height:1}
   nav.side button.on .tab-badge{background:#fff;color:#e03131}
+  /* Menyu guruhlari: sarlavha tugmasi bosilsa — ichidagi bo'limlar ochiladi (akkordeon: bir vaqtda bitta guruh ochiq). */
+  nav.side .nav-grp{display:flex;flex-direction:column;gap:2px}
+  nav.side .nav-gh .chev{flex:0 0 auto;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;opacity:.65;transition:transform .18s ease}
+  nav.side .nav-gh .chev svg{width:18px;height:18px;fill:currentColor}
+  nav.side .nav-grp.open>.nav-gh .chev{transform:rotate(90deg)}
+  nav.side .nav-grp.has-on>.nav-gh{color:var(--teal)}
+  nav.side .nav-grp.open>.nav-gh{color:var(--ink)}
+  nav.side .nav-gb[hidden]{display:none}
+  nav.side .nav-grp.open>.nav-gh .nav-gb{display:none}
+  nav.side .nav-items{display:none;flex-direction:column;gap:2px;margin:0 0 6px 19px;padding-left:9px;border-left:2px solid var(--border)}
+  nav.side .nav-grp.open>.nav-items{display:flex}
+  nav.side .nav-items button{padding:9px 11px;font-size:14.5px}
   .bell{position:relative;border:1px solid var(--border);background:#fff;color:var(--teal);width:38px;height:38px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
   .bell:hover{background:var(--bg)}
   .bell.has-new{animation:bellRing 1.4s ease-in-out infinite}
@@ -95,6 +107,12 @@
     nav.side{flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);position:sticky;top:56px;z-index:20;gap:6px}
     nav.side button{white-space:nowrap;flex:0 0 auto;width:auto;padding:10px 14px}
     nav.side button .lbl{display:none}
+    /* Guruhli menyu (mobil): bitta gorizontal qator — guruh nomlari ko'rinadi, ochiq guruhning bo'limlari darhol yonida */
+    nav.side.grouped{align-items:center}
+    nav.side.grouped button .lbl{display:inline}
+    nav.side .nav-grp{flex-direction:row;flex:0 0 auto;align-items:center;gap:6px}
+    nav.side .nav-items{margin:0;padding:0 0 0 6px;flex-direction:row;gap:6px;border-left:2px solid var(--border)}
+    nav.side .nav-items button{padding:9px 12px;font-size:14px}
     main.content{padding:16px;max-width:100%;overflow-x:hidden}
   }
   @media(max-width:520px){
@@ -1445,13 +1463,81 @@ function buildTabs(){
   const allowTabs = allowedTabs();
   if(approvalQueuesForMe().length) items.unshift({k:'approvals', icon:mi('m424-312 282-282-56-56-226 226-114-114-56 56 170 170ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Z'), t:'Tasdiqlash'});
   const visible = SESSION.isAdmin ? items : items.filter(it=>allowTabs.includes(it.k));
-  $('#tabs').innerHTML = visible.map(it=>`<button data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`).join('');
-  $('#tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
+  const btn = it=>`<button type="button" data-tab="${it.k}"><span class="ic">${it.icon}</span><span class="lbl">${esc(it.t)}</span></button>`;
+  const nav=$('#tabs');
+  // Ko'p bo'limli menyu (Direktor ~44 ta) — yo'nalish bo'yicha guruhlarga (NAV_GROUPS); kam bo'limli rol (≤ NAV_FLAT_MAX) — avvalgidek
+  //   tekis ro'yxat. Guruhda rolga bitta bo'lim qolsa — guruhsiz o'zi chiqadi; ro'yxatda yo'q (yangi) bo'lim — oxirida guruhsiz.
+  const grouped = visible.length > NAV_FLAT_MAX;
+  nav.classList.toggle('grouped', grouped);
+  if(!grouped) nav.innerHTML = visible.map(btn).join('');
+  else {
+    const byKey={}; visible.forEach(it=>{ byKey[it.k]=it; });
+    const iconOf=k=>{ const it=items.find(x=>x.k===k); return it?it.icon:''; };
+    const used=new Set(), parts=[];
+    NAV_TOP.forEach(k=>{ if(byKey[k]){ parts.push(btn(byKey[k])); used.add(k); } });
+    NAV_GROUPS.forEach(G=>{
+      const its=G.keys.filter(k=>byKey[k] && !used.has(k)).map(k=>byKey[k]);
+      its.forEach(it=>used.add(it.k));
+      if(!its.length) return;
+      if(its.length===1){ parts.push(btn(its[0])); return; }
+      parts.push(`<div class="nav-grp" data-grp="${G.g}"><button type="button" class="nav-gh" data-grp-toggle="${G.g}" aria-expanded="false" aria-controls="nav-items-${G.g}"><span class="ic">${iconOf(G.icon)||its[0].icon}</span><span class="lbl">${esc(G.t)}</span><span class="tab-badge nav-gb" hidden></span><span class="chev">${NAV_CHEVRON}</span></button><div class="nav-items" id="nav-items-${G.g}" role="group" aria-label="${esc(G.t)}">${its.map(btn).join('')}</div></div>`);
+    });
+    visible.filter(it=>!used.has(it.k)).forEach(it=>parts.push(btn(it)));
+    nav.innerHTML = parts.join('');
+    nav.querySelectorAll('[data-grp-toggle]').forEach(h=>h.addEventListener('click',()=>navToggleGroup(h.dataset.grpToggle, undefined, true)));
+  }
+  nav.querySelectorAll('button[data-tab]').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
+  navGroupBadges();
+}
+// Menyu guruhlari (tartib — menyudagi tartib). Kalitlar buildTabs'dagi bo'lim kalitlari; rolga ko'rinmaydiganlari o'zi tushib qoladi.
+const NAV_FLAT_MAX = 8;
+const NAV_TOP = ['approvals'];   // doim eng yuqorida, guruhsiz (navbatda kutayotganlar)
+const NAV_GROUPS = [
+  { g:'boshqaruv', t:'Boshqaruv',            icon:'dashboard',  keys:['dashboard','weekly','changelog'] },
+  { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','classes','marketing','feedback'] },
+  { g:'talim',     t:'O‘quv jarayoni',       icon:'grades',     keys:['attendance','grades','monitoring','profile','timetable','homework','exams','olympiads','announce'] },
+  { g:'xodimlar',  t:'Xodimlar',             icon:'staff',      keys:['teachers','staff','staffatt','applications'] },
+  { g:'moliya',    t:'Moliya',               icon:'finance',    keys:['payments','finance','accounting','planfact','pricetable'] },
+  { g:'xizmat',    t:'Xizmatlar',            icon:'medical',    keys:['medical','sick','canteen','bus','checkins'] },
+  { g:'sayt',      t:'Veb-sayt',             icon:'news',       keys:['news','achievements_school','achievements_students','gallery','testimonials','plans','admission_steps','faq','events'] },
+  { g:'tizim',     t:'Tizim',                icon:'settings',   keys:['users','notify','settings'] },
+];
+const NAV_CHEVRON = mi('M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z');
+// Guruhni ochish/yopish. Akkordeon: bittasi ochilsa qolganlari yopiladi. open === true/false — majburiy holat. byUser — sarlavha bosildi.
+function navToggleGroup(g, open, byUser){
+  const nav=$('#tabs'); if(!nav) return;
+  let opened=null;
+  nav.querySelectorAll('.nav-grp').forEach(el=>{
+    const want = el.dataset.grp===g ? (open==null ? !el.classList.contains('open') : !!open) : false;
+    el.classList.toggle('open', want);
+    const h=el.querySelector('.nav-gh'); if(h) h.setAttribute('aria-expanded', want?'true':'false');
+    if(want) opened=el;
+  });
+  // Mobil (gorizontal qator): ochilgan guruh ko'rinmay qolgan bo'lsagina uni ko'rinadigan joyga suramiz (sahifa vertikal
+  //   siljimaydi; ko'rinib turgan bo'lsa qator joyida qoladi — chapdagi «Tasdiqlash» yashirinmasin).
+  if(opened && nav.scrollWidth>nav.clientWidth+4){
+    const gh=opened.querySelector('.nav-gh'), first=opened.querySelector('.nav-items button');
+    const L=opened.offsetLeft, hR=L+(gh?gh.offsetWidth:0), fL=first?first.offsetLeft:hR, vL=nav.scrollLeft, vR=vL+nav.clientWidth;
+    // sarlavha ko'rinmasa — yoki foydalanuvchi bosganda birinchi bo'lim deyarli ko'rinmasa — guruh boshini chap chetga olib kelamiz
+    //   (kirishda / kod orqali ochilganda qator joyida qoladi: chapdagi «Tasdiqlash» yashirinmasin)
+    if(L<vL || hR>vR || (byUser && fL>vR-48)){ try{ nav.scrollTo({ left:Math.max(0, L-8), behavior:'smooth' }); }catch(e){} }
+  }
+}
+// Yopiq guruh sarlavhasida — ichidagi bo'limlar belgilarining (yangi arizalar va h.k.) yig'indisi.
+function navGroupBadges(){
+  document.querySelectorAll('#tabs .nav-grp').forEach(gr=>{
+    const n=[...gr.querySelectorAll('.nav-items .tab-badge')].reduce((s,el)=>s+(parseInt(el.textContent,10)||0),0);
+    const gb=gr.querySelector('.nav-gb'); if(!gb) return;
+    if(n>0){ gb.textContent = n>99?'99+':String(n); gb.hidden=false; } else { gb.textContent=''; gb.hidden=true; }
+  });
 }
 function openTab(tab){
   if(!SESSION.isAdmin){ const allow=allowedTabs(); if(!allow.includes(tab)) tab=allow[0]; }
   currentTab=tab; VIEW_GEN++;   // yangi ko'rinish — eski renderlarning kech yozuvi bekor bo'ladi
-  $('#tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  $('#tabs').querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi ochiq turadi
+    $('#tabs').querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
+    if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true); }
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   // Tez almashganda ESKI bo'limning kech tugagan renderi endi yo'q elementga yozib TypeError otardi (jonli tekshiruvda
   //   «Imtihonlar»da ko'rindi) — eski ko'rinish xatosi jim o'tadi; JORIY bo'lim xatosi avvalgidek konsolda ko'rinadi.
@@ -1504,6 +1590,7 @@ function setTabBadge(tabKey, n){
     if(n>0){ if(!el){ el=document.createElement('span'); el.className='tab-badge'; b.appendChild(el); } el.textContent = n>99?'99+':String(n); }
     else if(el){ el.remove(); }
   });
+  navGroupBadges();
 }
 function updateBell(){
   const total = (BADGES.enrollments||0) + (BADGES.applications||0);
