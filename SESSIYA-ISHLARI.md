@@ -1232,6 +1232,24 @@ bo'limli rollar (o'qituvchi, Moliya menejeri, kassir…) — avvalgidek tekis ro
 nomlari ko'rinadi, ochiq guruh bo'limlari yonida. Lokal brauzer sinovi (kompyuter + telefon, Direktor / Moliya / O'qituvchi)
 5/5, 0-bosqich regressiyasi 11/11, sahifa xatosi yo'q.
 
+## 49) Chorak ta'tili — o'qituvchi va xodimlarning oyligi kesilmaydi — 2026-11-07
+Deploy (64d9fbd) tekshirildi: guruhlangan menyu productionda ishlaydi. Savol: «choraklar orasidagi dam olish kunlarida oylik
+kesilmasin; bayram kunlarini belgilash yetarlimi?» — **Ha.** «Xodimlar davomati» → «🎉 Bayram / ta'til kunlari»ga kiritilgan
+kun (`school_holidays`) hisobda shunday ishlaydi (avvaldan bor mantiq, o'zgarmadi): yo'qlama ushlanmaydi va «Ruhsatsiz»ga
+sanalmaydi, kunlik stavka o'zgarmaydi (oydagi jami ish kunlari bayramni ham o'z ichiga oladi — haq to'lanadigan dam kuni),
+o'quvchilar uchun ham dars kuni emas (kasallik kunlari, monitoring/bonus muddatlari). Yangi (`admin.html` → `openHolidays`):
+- **«Dan — Gacha» oralig'i**: ta'tilni bir martada kiritish (oraliqdagi har kun, shanba-yakshanba ham — ba'zi xodimlar shanba
+  ishlaydi); ko'pi bilan 120 kun; oraliq ichida oldin kiritilgan bayram nomi o'zgarmaydi; tasdiqlash oynasida nechta kun va
+  nechtasi dushanba–juma ekani yoziladi. Nomlar ro'yxati (Kuzgi/Qishki/Bahorgi/Yozgi ta'til + rasmiy bayramlar).
+- Ro'yxatda ketma-ket bir xil nomli kunlar **bitta qator** («2026-10-26 — 2026-11-01 (7 kun)»), «O'chir» butun guruhni o'chiradi.
+- Vedomosti **tasdiqlangan oy** — tasdiqlashdan oldin aniq xabar, hech narsa yozilmaydi (bazadagi qulf avvalgidek himoya qiladi).
+- Oylik hisobot sarlavhasi «🎉 bayram / ta'til: 26–31 Kuzgi ta'til», kunlik ko'rinishda «🏖 Ta'til» belgisi; tugma nomi
+  «🎉 Bayram / ta'til kunlari».
+Lokal brauzer sinovi 15/15 (soxta baza): 3 500 000 so'mlik xodim oktyabrda kelmagan — oraliq kiritilgach «Ruhsatsiz» 21 → 16,
+ushlanma 3 340 911 → 2 545 456 (5 ta ta'til ish kuni to'liq to'landi), kelgan xodim oyligi o'zgarmadi; tasdiqlangan oy rad
+etildi; guruhni o'chirish, telefon ko'rinishi, sahifa xatosi yo'q. **Eslatma:** ta'til kunlarini o'sha oy vedomosti
+tasdiqlanishidan (va maosh berilishidan) OLDIN kiriting; kiritish huquqi — Direktor va HR.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

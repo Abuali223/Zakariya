@@ -6216,6 +6216,12 @@ const SA_RULES = { workStartMin: 8*60, workEndMin: 17*60, lateGraceMin: 10, earl
 let SA_HOLIDAYS=new Map(), SA_HOLIDAYS_OK=true;
 //   O'qib bo'lmasa (tarmoq) — SA_HOLIDAYS_OK=false: maosh berish/hisobot buni XATO deb ko'rsatadi (kassir bayramsiz,
 //   HR bayram bilan hisoblab, turli summa chiqmasin). Jadval umuman yo'q (eski baza) — xato emas, bo'sh.
+// Chorak ta'tili (nomida «ta'til») — ko'rinishda «🏖 Ta'til»; hisobda bayram bilan bir xil (dam kuni, ushlanma yo'q).
+function holIsBreak(name){ return /ta[’'‘`ʼ]?til/i.test(String(name||'')); }
+// [['YYYY-MM-DD', nom], …] (tartiblangan) -> ketma-ket, bir xil nomli kunlar bitta guruh: [{from,to,name,days:[…]}].
+function holNextDay(ds){ const [y,m,d]=String(ds).split('-').map(Number); const t=new Date(y,m-1,d+1); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; }
+function holRuns(entries){ const out=[]; (entries||[]).forEach(([d,nm])=>{ const g=out[out.length-1];
+  if(g && g.name===nm && holNextDay(g.to)===d){ g.to=d; g.days.push(d); } else out.push({ from:d, to:d, name:nm, days:[d] }); }); return out; }
 async function loadHolidays(){
   try{ const s=await getDocs(collection(db,'school_holidays')); const m=new Map();
     s.docs.forEach(d=>{ const x=d.data()||{}; const day=String(x.day||d.id||''); if(/^\d{4}-\d{2}-\d{2}$/.test(day)) m.set(day, String(x.name||'Bayram')); });
@@ -6771,7 +6777,7 @@ async function renderStaffAttendance(){
       ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn gold" id="sa-staff-add" style="width:100%" title="Yangi xodim qo‘shish — lavozim/rol, ish vaqti va Kamera ID bilan">+ Xodim qo‘shish</button></label>`:''}
       ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn gold" id="sa-leave-add" style="width:100%">+ Ruhsat / Kasallik</button></label>`:''}
       ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn ghost" id="sa-cam-import" style="width:100%" title="HIK report (.xls) faylidagi ismlarga qarab Kamera ID'larni avtomatik to‘ldirish">⇪ Kamera ID (report)</button></label>`:''}
-      ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn ghost" id="sa-hol" style="width:100%" title="Maktab bayram / dam olish kunlari — shu kunlarda hech kimdan yo‘qlama ushlanmaydi">🎉 Bayram kunlari</button></label>`:''}
+      ${canEdit?`<label style="align-self:flex-end">&nbsp;<button class="btn ghost" id="sa-hol" style="width:100%" title="Bayramlar va choraklar orasidagi ta’til — shu kunlarda o‘qituvchi va xodimlardan yo‘qlama ushlanmaydi (oylik to‘liq)">🎉 Bayram / ta’til kunlari</button></label>`:''}
     </div></div>
     <div id="sa-body"><div class="loading">Yuklanmoqda…</div></div>`;
   const hhmm=iso=>{ const p=tzHMParts(iso); return p?String(p.h).padStart(2,'0')+':'+String(p.m).padStart(2,'0'):'—'; };
@@ -6909,7 +6915,7 @@ async function renderStaffAttendance(){
           <button class="btn sm" style="${isPers?'background:#FDECEC;color:#B42318;border-color:#F3B4B4':''}" data-brkset="personal" ${refAttr} title="O‘z hisobidan — ketgan vaqt oylikdan soatbay kesiladi (soatlik stavka = oylik ÷ oylik ish soati)">${isPers?`✓ O‘z hisobidan · ${esc(fmtDur(bm.awayMin))}`:'O‘z hisobidan'}</button>
         </div>`:''}</td>
         <td data-label="Ish vaqti">${fmtDur(a.workMin)}</td>
-        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':(dayLvType[r.refType+':'+r.refId]?leaveTypeChip(dayLvType[r.refType+':'+r.refId]):(isFlex?'<span class="chip" style="background:#EAF4FF;color:#0369A1">Erkin (belgilanmagan)</span>':(hol?'<span class="chip" style="background:#EAF7F0;color:#1F7A4D" title="Maktab bayrami/dam kuni — ushlanmaydi">🎉 Bayram</span>':(isExc?'<span class="chip" style="background:#EAF7F0;color:#1F7A4D" title="«Sababli» belgilangan — bu kun ushlanmaydi">Kelmadi · sababli</span>':((camOffDay&&!(subList&&subList.length))?'<span class="chip" style="background:#FFF4E5;color:#B45309" title="Kamera bu kuni deyarli ishlamagan — skani yo‘q xodimga yo‘qlama yozilmaydi">Skan yo‘q · kamera</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>')))))}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}${subBlock}</td></tr>`); });
+        <td data-label="Holat">${came?'<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Keldi</span>':(dayLvType[r.refType+':'+r.refId]?leaveTypeChip(dayLvType[r.refType+':'+r.refId]):(isFlex?'<span class="chip" style="background:#EAF4FF;color:#0369A1">Erkin (belgilanmagan)</span>':(hol?`<span class="chip" style="background:#EAF7F0;color:#1F7A4D" title="${esc(hol)} — maktab dam kuni, ushlanmaydi">${holIsBreak(hol)?'🏖 Ta’til':'🎉 Bayram'}</span>`:(isExc?'<span class="chip" style="background:#EAF7F0;color:#1F7A4D" title="«Sababli» belgilangan — bu kun ushlanmaydi">Kelmadi · sababli</span>':((camOffDay&&!(subList&&subList.length))?'<span class="chip" style="background:#FFF4E5;color:#B45309" title="Kamera bu kuni deyarli ishlamagan — skani yo‘q xodimga yo‘qlama yozilmaydi">Skan yo‘q · kamera</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">Kelmadi</span>')))))}${canEdit?` <button class="btn sm" data-editperson="${esc(r.refType)}:${esc(r.refId)}" title="Xodimni tahrirlash (ism, lavozim, ish vaqti, Kamera ID...)">✏️</button>`:''}${subBlock}</td></tr>`); });
     // O'quvchilar ham shu terminaldan o'tadi (hodisa staff_checkins'ga tushadi) — ular XODIM EMAS: «Bog'lanmagan»
     //   ro'yxatida «Xodim qilib bog'lash» taklif qilinmaydi (avval har o'quvchi skani shu yerda chiqib, xodim
     //   sifatida yaratib yuborish xavfi bor edi). O'quvchi davomati — «Davomat» bo'limida (kamera bilan).
@@ -6927,7 +6933,7 @@ async function renderStaffAttendance(){
     const flexAbsent=roster.filter(r=>personRules(r).flexible && !(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
     const notCame=Math.max(0, roster.length-came-flexAbsent);
     $('#sa-body').innerHTML=`<div class="card">
-      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${hol?`🎉 ${esc(hol)} (bayram — ushlanma yo‘q) · `:''}${roster.length} xodim · ${came} keldi · ${notCame} ${hol?'dam oldi':(camOffDay?'skani yo‘q':'kelmadi')}${flexAbsent?` · ${flexAbsent} erkin`:''}${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}${studSeen?` · <span title="Kamera ID o‘quvchiga tegishli — o‘quvchi davomati «Davomat» bo‘limida">${studSeen} o‘quvchi kirdi</span>`:''}</span></div>
+      <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${hol?`${holIsBreak(hol)?'🏖':'🎉'} ${esc(hol)} (dam kuni — ushlanma yo‘q) · `:''}${roster.length} xodim · ${came} keldi · ${notCame} ${hol?'dam oldi':(camOffDay?'skani yo‘q':'kelmadi')}${flexAbsent?` · ${flexAbsent} erkin`:''}${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}${studSeen?` · <span title="Kamera ID o‘quvchiga tegishli — o‘quvchi davomati «Davomat» bo‘limida">${studSeen} o‘quvchi kirdi</span>`:''}</span></div>
       ${camOffDay?`<div class="small" style="margin:6px 0 10px;padding:8px 12px;border-left:4px solid #B45309;background:#FFFBEB;border-radius:6px">📷 <b>Kamera bu kuni deyarli ishlamagan</b>: ishlashi kerak bo‘lganlarning 30% dan kami kamerada ko‘ringan (kamera yoki internet uzilgan bo‘lishi mumkin). Skani yo‘q xodimga yo‘qlama yozilmaydi va maoshidan ushlanmaydi. Kimdir haqiqatan kelmagan bo‘lsa — ruhsat, «O‘z hisobidan» yoki «↪ O‘rnini bosgan» bilan belgilang (o‘rinbosar yozilgan kelmagan — yo‘qlama).</div>`:''}
       ${(!roster.length && !unmatched.length)?`<div class="empty" style="padding:20px">Bu kunda hodisa yo‘q. Terminal ulanganini va xodimlarning «Kamera ID»si to‘g‘riligini tekshiring.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Kelgan</th><th>Ketgan</th><th>Tanaffus</th><th>Ish vaqti</th><th>Holat</th></tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`}</div>`;
@@ -7025,7 +7031,7 @@ async function renderStaffAttendance(){
         ${canEdit?`<td><button class="btn sm danger" data-lvdel="${esc(l._id)}">O‘chir</button></td>`:''}</tr>`).join('');
     const failCard=readFail.length?`<div class="card" style="margin-bottom:12px;border-left:4px solid #B45309;background:#FFFBF2;padding:12px 16px"><b style="color:#B45309">⚠️ O‘qilmadi: ${readFail.map(x=>esc(x)).join(', ')}</b> — quyidagi ushlanma/qoldiq raqamlari TO‘LIQ EMAS. Sahifani yangilang.</div>`:'';
     $('#sa-body').innerHTML='<div id="pr-card"></div>'+failCard+dupCard+camDownCard+`<div class="card">
-      <div class="cls-card-head"><h3>${esc(mon)}</h3><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)${monHol.length?` · 🎉 bayram: ${monHol.map(([d,n])=>esc(d.slice(8)+' '+n)).join(', ')}`:''}</span>${roster.length?`<button class="btn sm gold" id="sa-pdf" title="Oylik davomat hisobotini PDF/chop etish — kechikish, tanaffus, ushlanma, oylik">🖨 PDF / Hisobot</button>`:''}</div></div>
+      <div class="cls-card-head"><h3>${esc(mon)}</h3><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="cls-count">${roster.length} xodim · ish kunlari (shu kungacha): ${workSet.size} (Dush–Juma)${monHol.length?` · 🎉 bayram / ta’til: ${holRuns(monHol).map(g=>esc((g.from===g.to?g.from.slice(8):g.from.slice(8)+'–'+g.to.slice(8))+' '+g.name)).join(', ')}`:''}</span>${roster.length?`<button class="btn sm gold" id="sa-pdf" title="Oylik davomat hisobotini PDF/chop etish — kechikish, tanaffus, ushlanma, oylik">🖨 PDF / Hisobot</button>`:''}</div></div>
       ${!roster.length?`<div class="empty" style="padding:20px">Xodimlarga «Kamera ID» kiriting — hisobot shundan keyin chiqadi.</div>`:
       `<div class="tablewrap"><table><thead><tr><th>Xodim</th><th>Ishlagan kun</th><th>Ish vaqti</th><th>Tanaffus</th><th>Ruhsat (haqsiz)</th><th>Haqli ta’til</th><th>Ruhsatsiz</th><th>O‘rt. kelish</th><th>Kechikish</th><th>Erta ketish</th><th>Ushlanma</th><th>O‘rinbosarlik</th><th>Oylik (hisob)</th></tr></thead><tbody>${bodyHtml}</tbody></table></div>
       <div class="small muted" style="padding:10px 16px"><b>Oylik SOATBAY hisoblanadi:</b> soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat). Kunlik sof soat = ish vaqti − ruxsat etilgan tanaffus (masalan 08:00–17:00, 1 soat tushlik → 8 soat). Xodim qancha soat ishlasa — shuncha oylik. <b>Ushlanma</b> = ishlamagan vaqt shu soatbay stavkada: yo‘qlama (to‘liq kun) + kech kelish (${SA_RULES.lateGraceMin} daq grace keyin) + erta ketish (${SA_RULES.earlyGraceMin} daq grace keyin) + «O‘z hisobidan» chiqish (kiritilgan daqiqa). «Sababli» chiqish — kesilmaydi. <b>«O‘rinbosarlik»</b> = kelmagan o‘qituvchi o‘rniga dars o‘tib bergan o‘qituvchi(lar)ga HAR o‘tilgan dars uchun qat'iy haq (standart <b>40 000 so‘m</b>, «Narx jadvali»da sozlanadi) qo‘shiladi. Bir kunда bir nechta o‘qituvchi bo‘lishi mumkin — har biri o‘z dars soni uchun. Kelmaganning o‘sha kungi oyligi davomat orqali alohida to‘liq ushlanadi. Kunlik hisobotда, «Kelmadi» qatorida «↪ O‘rnini bosgan» tugmasi bilan belgilanadi. <b>Oylik (hisob)</b> = nominal oylik (holat/sana bo‘yicha prorata) − ushlanma + o‘rinbosarlik ± <b>oldingi oylardan qolgan qoldiq</b> (avval kam berilgan maosh kelasi oyga to‘planib boradi — «Maosh berish»da haqiqatda berilgan summa kiritiladi). «Ruhsatsiz» = ish kuni bo‘lib kelmagan va ruhsat/kasallik kiritilmagan kunlar. <b>Xodimga shaxsiy ish vaqti/ish kunlari belgilansa — o‘shalar qo‘llanadi</b> (xodim kartochkasida). Maosh berishda avtomatik ayiriladi (tahrirlasa bo‘ladi).</div>`}
@@ -7311,14 +7317,17 @@ async function openCameraIdFromReport(onSaved){
 //   yo'qlama/ushlanma yo'q (haq to'lanadigan dam kuni). Har kuni bitta yozuv (id = 'YYYY-MM-DD').
 async function openHolidays(onSaved){
   const FLD='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
-  $('#modal').innerHTML=`<div class="modal-h"><h3>🎉 Bayram / dam olish kunlari</h3><button class="x" id="m-x">×</button></div>
+  const NAMES=['Kuzgi ta’til','Qishki ta’til','Bahorgi ta’til','Yozgi ta’til','Yangi yil','Xalqaro xotin-qizlar kuni','Navro‘z','Xotira va qadrlash kuni','Mustaqillik kuni','O‘qituvchi va murabbiylar kuni','Konstitutsiya kuni','Ramazon hayiti','Qurbon hayiti'];
+  $('#modal').innerHTML=`<div class="modal-h"><h3>🎉 Bayram va ta’til kunlari</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <p class="small muted" style="margin:0 0 10px">Maktab yopiq bo‘lgan kunlar (Mustaqillik kuni, Navro‘z, hayitlar…). Shu kunlarda <b>hech kimdan yo‘qlama ushlanmaydi</b> va «Ruhsatsiz»ga sanalmaydi (oylik to‘liq — haq to‘lanadigan dam kuni). Har xodimga alohida «Ruhsat» kiritish shart emas.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-        <label class="small" style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">Sana<input type="date" id="hol-day" value="${todayStr()}" style="${FLD}"></label>
-        <label class="small" style="flex:2;min-width:180px;display:flex;flex-direction:column;gap:4px">Nomi<input type="text" id="hol-name" placeholder="Masalan: Mustaqillik kuni" style="${FLD}"></label>
+      <p class="small muted" style="margin:0 0 10px">Maktab yopiq bo‘lgan kunlar: bayramlar (Mustaqillik kuni, Navro‘z, hayitlar…) va <b>choraklar orasidagi ta’til</b> (kuzgi, qishki, bahorgi). Shu kunlarda o‘qituvchi va xodimlardan <b>yo‘qlama ushlanmaydi</b> va «Ruhsatsiz»ga sanalmaydi — oylik to‘liq (haq to‘lanadigan dam kuni; kunlik stavka o‘zgarmaydi). Har xodimga alohida «Ruhsat» kiritish shart emas. O‘quvchilar uchun ham bu kunlar dars kuni hisoblanmaydi.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px">
+        <label class="small" style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">Dan (sana)<input type="date" id="hol-day" value="${todayStr()}" style="${FLD}"></label>
+        <label class="small" style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">Gacha (ta’til uchun)<input type="date" id="hol-to" style="${FLD}"></label>
+        <label class="small" style="flex:2;min-width:180px;display:flex;flex-direction:column;gap:4px">Nomi<input type="text" id="hol-name" list="hol-names" placeholder="Masalan: Kuzgi ta’til" style="${FLD}"><datalist id="hol-names">${NAMES.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist></label>
         <button type="button" class="btn gold" id="hol-add">+ Qo‘shish</button>
       </div>
+      <div class="small muted" style="margin:0 0 12px">Bitta bayram — faqat «Dan». Chorak ta’tili — «Dan» va «Gacha»: oraliqdagi har kun (shanba-yakshanba ham) bir martada belgilanadi. Oylik vedomosti tasdiqlangan oyga qo‘shib / o‘chirib bo‘lmaydi — avval Direktor oyni qayta ochadi.</div>
       <div id="hol-list"><div class="loading">Yuklanmoqda…</div></div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
@@ -7326,24 +7335,68 @@ async function openHolidays(onSaved){
   let changed=false;
   const close=()=>{ closeModal(); if(changed && onSaved) onSaved(); };
   $('#m-x').onclick=close; $('#m-cancel').onclick=close;
+  const isDay=x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x||''));
+  // Mahalliy sana arifmetikasi (holNextDay): brauzer mintaqasidan qat'i nazar bir xil.
+  const daysBetween=(a,b)=>{ const out=[]; for(let d=a, g=0; d<=b && g<400; d=holNextDay(d), g++) out.push(d); return out; };
+  const isWorkday=ds=>{ const [y,m,d]=ds.split('-').map(Number); const w=new Date(y,m-1,d).getDay(); return w>=1 && w<=5; };
+  let have=new Map();   // kun -> nom (oxirgi o'qilgan ro'yxat)
   const draw=async()=>{
     let rows=[];
     try{ const s=await getDocs(collection(db,'school_holidays')); rows=s.docs.map(d=>({_id:d.id,...d.data()})); }
     catch(e){ $('#hol-list').innerHTML=`<div class="empty">O‘qib bo‘lmadi: ${esc(e.code||e.message)}<br><span class="small">Bazada «school_holidays» jadvali yo‘q bo‘lishi mumkin — deploy (migration/school-holidays.sql) qiling.</span></div>`; return; }
-    rows.sort((a,b)=>String(b.day||b._id).localeCompare(String(a.day||a._id)));
-    $('#hol-list').innerHTML=rows.length?`<div class="tablewrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Sana</th><th>Nomi</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-variant-numeric:tabular-nums">${esc(r.day||r._id)}</td><td>${esc(r.name||'')}</td><td><button class="btn sm danger" data-holdel="${esc(r._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty" style="padding:14px">Hali bayram kuni kiritilmagan.</div>';
-    $('#hol-list').querySelectorAll('[data-holdel]').forEach(b=>b.onclick=async()=>{ if(!confirm(`${b.dataset.holdel} bayram ro‘yxatidan o‘chirilsinmi? (O‘sha kuni kelmaganlar yana yo‘qlama sifatida hisoblanadi.)`)) return;
-      try{ await deleteDoc(doc(db,'school_holidays',b.dataset.holdel)); changed=true; await loadHolidays(); toast('O‘chirildi'); draw(); }catch(e){ toast('Xatolik: '+(e.code||e.message),true); } });
+    have=new Map(rows.filter(r=>isDay(r.day||r._id)).map(r=>[String(r.day||r._id), String(r.name||'')]));
+    // Ketma-ket kunlar bir xil nom bilan — bitta qator (masalan «Kuzgi ta’til: 2026-11-02 — 2026-11-08, 7 kun»); eng yangisi tepada.
+    const groups=holRuns([...have.entries()].sort((a,b)=>a[0].localeCompare(b[0]))).reverse();
+    const odd=rows.filter(r=>!isDay(r.day||r._id));   // eski / noto'g'ri kalitli yozuv — alohida
+    const span=g=>g.from===g.to?esc(g.from):`${esc(g.from)} — ${esc(g.to)} <span class="small muted">(${g.days.length} kun)</span>`;
+    $('#hol-list').innerHTML=(groups.length||odd.length)?`<div class="tablewrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Sana</th><th>Nomi</th><th></th></tr></thead><tbody>${
+      groups.map((g,i)=>`<tr><td style="font-variant-numeric:tabular-nums;white-space:normal">${span(g)}</td><td style="white-space:normal;overflow-wrap:anywhere">${esc(g.name)}</td><td style="text-align:right"><button class="btn sm danger" data-holgrp="${i}">O‘chir</button></td></tr>`).join('')
+      +odd.map(r=>`<tr><td style="white-space:normal;overflow-wrap:anywhere">${esc(r.day||r._id)}</td><td style="white-space:normal;overflow-wrap:anywhere">${esc(r.name||'')}</td><td style="text-align:right"><button class="btn sm danger" data-holdel="${esc(r._id)}">O‘chir</button></td></tr>`).join('')
+    }</tbody></table></div>`:'<div class="empty" style="padding:14px">Hali bayram yoki ta’til kuni kiritilmagan.</div>';
+    const delDays=async(list)=>{ let ok=0, err=null;
+      for(const id of list){ try{ await deleteDoc(doc(db,'school_holidays',id)); ok++; }catch(e){ err={ id, e }; break; } }
+      if(ok) changed=true; await loadHolidays();
+      if(err) toast(`${ok} kun o‘chirildi; ${err.id} da to‘xtadi: ${String(err.e.code)==='42501'?String(err.e.message):(err.e.code||err.e.message)}`,true);
+      else toast(list.length>1?`O‘chirildi — ${ok} kun`:'O‘chirildi');
+      draw(); };
+    $('#hol-list').querySelectorAll('[data-holgrp]').forEach(b=>b.onclick=async()=>{ const g=groups[Number(b.dataset.holgrp)]; if(!g) return;
+      if(!confirm(`${g.from===g.to?g.from:`${g.from} — ${g.to} (${g.days.length} kun)`} «${g.name}» ro‘yxatdan o‘chirilsinmi?\n\n(O‘sha kunlari kelmagan o‘qituvchi va xodimlar yana yo‘qlama sifatida hisoblanadi.)`)) return;
+      b.disabled=true; await delDays(g.days); });
+    $('#hol-list').querySelectorAll('[data-holdel]').forEach(b=>b.onclick=async()=>{ if(!confirm(`${b.dataset.holdel} ro‘yxatdan o‘chirilsinmi? (O‘sha kuni kelmaganlar yana yo‘qlama sifatida hisoblanadi.)`)) return;
+      b.disabled=true; await delDays([b.dataset.holdel]); });
   };
   $('#hol-add').onclick=async()=>{
-    const day=($('#hol-day').value||'').trim(), name=($('#hol-name').value||'').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){ toast('Sanani tanlang',true); return; }
-    if(!name){ toast('Bayram nomini kiriting',true); return; }
-    const b=$('#hol-add'); b.disabled=true;
-    try{ await setDoc(doc(db,'school_holidays',day), { day, name, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }, {merge:true});
-      changed=true; await loadHolidays(); toast('Saqlandi ✓'); $('#hol-name').value=''; draw(); }
-    catch(e){ toast('Xatolik: '+(e.code||e.message),true); }
-    b.disabled=false;
+    const from=($('#hol-day').value||'').trim(), to=(($('#hol-to').value||'').trim())||from, name=($('#hol-name').value||'').trim();
+    if(!isDay(from)){ toast('Sanani tanlang',true); return; }
+    if(!isDay(to)){ toast('«Gacha» sanasini to‘g‘ri tanlang',true); return; }
+    if(to<from){ toast('«Gacha» sanasi «Dan»dan oldin bo‘lmasin',true); return; }
+    if(!name){ toast('Nomini kiriting (masalan: Kuzgi ta’til)',true); return; }
+    const days=daysBetween(from, to);
+    if(days.length>120){ toast('Bir martada ko‘pi bilan 120 kun',true); return; }
+    const isRange=days.length>1;
+    // Oraliqda allaqachon belgilangan kun (masalan ta'til ichidagi bayram) — nomi o'zgarmaydi; bitta kun — nomi yangilanadi.
+    const todo=isRange?days.filter(d=>!have.has(d)):days, kept=days.length-todo.length;
+    if(!todo.length){ toast('Bu kunlarning hammasi allaqachon belgilangan'); return; }
+    const b=$('#hol-add'); if(b.disabled) return; b.disabled=true;
+    try{
+      // Vedomosti tasdiqlangan oy — bazada qulflangan (trigger rad etadi): tasdiqlashdan OLDIN aniq xabar, hech narsa yozilmaydi.
+      const months=[...new Set(todo.map(d=>d.slice(0,7)))];
+      try{ const s=await getDocs(query(collection(db,'payroll_runs'), where('status','==','approved')));
+        const locked=s.docs.map(x=>x.id).filter(m=>months.includes(m));
+        if(locked.length){ toast(`${locked.join(', ')} — oylik vedomost tasdiqlangan: bu oyga bayram / ta’til qo‘shib bo‘lmaydi (avval Direktor oyni qayta ochadi)`,true); return; } }
+      catch(e){ /* o'qib bo'lmasa — bazadagi qulf baribir himoya qiladi */ }
+      if(isRange && !confirm(`«${name}»: ${from} — ${to}\n${todo.length} kun belgilanadi (shundan ${todo.filter(isWorkday).length} tasi dushanba–juma)${kept?`; ${kept} kun allaqachon bor — o‘zgarmaydi`:''}.\n\nBu kunlarda o‘qituvchi va xodimlardan yo‘qlama ushlanmaydi (oylik to‘liq), o‘quvchilar uchun ham dars kuni hisoblanmaydi. Davom etilsinmi?`)) return;
+      let ok=0, err=null;
+      for(const d of todo){
+        try{ await setDoc(doc(db,'school_holidays',d), { day:d, name, createdBy:(SESSION.email||SESSION.role||''), createdAt:serverTimestamp() }, {merge:true}); ok++; }
+        catch(e){ err={ d, e }; break; }
+      }
+      if(ok) changed=true;
+      await loadHolidays();
+      if(err) toast(`${ok} kun saqlandi; ${err.d} da to‘xtadi: ${String(err.e.code)==='42501'?String(err.e.message):(err.e.code||err.e.message)}`,true);
+      else { toast(isRange?`Saqlandi ✓ — ${ok} kun («${name}»)`:'Saqlandi ✓'); $('#hol-name').value=''; $('#hol-to').value=''; }
+      draw();
+    } finally { b.disabled=false; }
   };
   draw();
 }
