@@ -1250,6 +1250,19 @@ ushlanma 3 340 911 → 2 545 456 (5 ta ta'til ish kuni to'liq to'landi), kelgan 
 etildi; guruhni o'chirish, telefon ko'rinishi, sahifa xatosi yo'q. **Eslatma:** ta'til kunlarini o'sha oy vedomosti
 tasdiqlanishidan (va maosh berilishidan) OLDIN kiriting; kiritish huquqi — Direktor va HR.
 
+## 50) Yangi dizayn yo'nalishi — videodan tahlil va maket — 2026-11-08
+Egasi «Dashboard V22» videosini yuborib, «dizaynini ko'chirsak bo'ladimi?» deb so'radi. Tahlil: bu uchinchi tomonning
+dizayn namoyishi (React/Tailwind), raqobatchi maktab sayti emas. 1:1 nusxa olinmaydi (logotip, 3D rasmlar, suratlar,
+matnlar — boshqa birovning ijodi), lekin uslubi (yalpiz → iliq fon, to'q yashil panel/banner, yumaloq oq kartalar,
+katta raqamlar, pill diagrammalar, hafta kalendari, yengil animatsiya) bizning yashil-oltin ranglarimizga juda mos.
+Mustaqil maket yasaldi: `docs/dizayn/iqror-boshqaruv-maket.html` (Direktor bosh sahifasi, soxta ma'lumot). Ichida:
+«Bugun e'tibor talab qiladi» bloki, 4 ta haqiqiy tasdiqlash navbati, davomat, o'rtacha ball, to'lovlar va reja, qarzdorlik,
+moliya, to'lov tushumi (Haftalik/Oylik), xodimlar bugun, xavf ostidagi o'quvchilar, haftalik hisobot, sinflar bo'yicha
+o'rinlar, ta'til/bayram belgili hafta kalendari. Kompyuterda ikonali yon panel (8 guruh, ochiladigan ro'yxat — 44 bo'lim),
+telefonda pastki menyu va «Menyu» oynasi. Shrift tanlash (Roboto Condensed / Manrope). 7 ta agentli tahlil + 2 tomonlama
+ko'rib chiqish (23 topilma tuzatildi); tekshiruv 54/54. Saytga hali tatbiq etilmagan — egasining qarori kutilmoqda
+(`docs/dizayn/admin-inventar.en.md` §5: bosqichma-bosqich joriy etish, ~7–11 ish kuni).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
