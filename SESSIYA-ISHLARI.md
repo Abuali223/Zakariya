@@ -1278,6 +1278,16 @@ Egasi tasdiqladi: shrift va logotiplar o'zgarmaydi, ruxsatlar o'zgarmaydi, ish f
   v1 nazorat rasmlari bir xil; bosh sahifa 11/11 (14 raqam paritet); menyu 5/5; bayram/ta'til 15/15; kontrast ≥ 5,2:1.
   Batafsil: `docs/dizayn/v2-joriy-etish.md`.
 
+## 52) v2 deploy tekshiruvi va haqiqiy ma'lumot bo'yicha tuzatishlar — 2026-11-09
+Deploy (8792a8b) productionda bayt-bayt bir xil. «Faqat o'qish» sinovi (SINOV Direktor; yozuvlar bloklangan, rasm/shaxsiy
+ma'lumot yig'ilmagan): 44 bo'lim × kompyuter/telefon — xato 0, siljish yo'q; «Tasdiqlash» ~7 s. Maket bilan farq: chap menyu
+(ikonali panel — 2-bosqich, so'ralmagan), yuqori sarlavha (logo qoidasi), maketdagi namunaviy ma'lumotlar. Haqiqiy
+ma'lumotda chalg'ituvchi raqamlar (4 % davomat, 0/100 ball, ismsiz salomlashuv, 100 % marja, shu oy fakturalari qarzga
+qo'shilgani) — bosh sahifa mantiqi tuzatildi: davomat jurnaldan (bugun / shu oy), ball baholanganlar bo'yicha yoki «—»,
+ism zaxirasi, xarajat yo'qligi belgisi, muddati o'tgan qarz alohida, «bugun tushdi», kalendarda «O'quv taqvimi» tadbirlari.
+«Tasdiqlash» navbatlari parallel yuklanadi. Lokal: production sharoiti (baho/xarajat/ism yo'q, jurnal bor) bilan sinaldi;
+bosh sahifa 11/11, barcha rollar × bo'limlar xato 0, menyu 5/5, bayram/ta'til 15/15, v1 o'zgarmagan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

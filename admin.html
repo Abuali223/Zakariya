@@ -606,6 +606,7 @@
   html[data-ui="v2"] .dv2-fin3>div{display:flex;flex-direction:column;gap:6px;padding-right:8px;border-right:1px solid var(--v2-line);min-width:0}
   html[data-ui="v2"] .dv2-fin3>div:last-child{border-right:none}
   html[data-ui="v2"] .dv2-fin3>div>span{font-size:12.5px;color:var(--muted)}
+  html[data-ui="v2"] .dv2-hint{font-style:normal;font-size:11px;font-weight:700;color:var(--v2-warm-ink);background:var(--v2-warm-t);padding:1px 7px;border-radius:999px;align-self:flex-start}
   html[data-ui="v2"] .dv2-fin3 .dv2-big{font-size:30px}
   html[data-ui="v2"] .dv2-fin3 .pos .dv2-big{color:var(--v2-pos)}
   html[data-ui="v2"] .dv2-fin3 .neg .dv2-big{color:var(--v2-danger)}
@@ -644,6 +645,10 @@
   html[data-ui="v2"] .dv2-day.today.sel{box-shadow:inset 0 0 0 2px var(--v2-mint)}
   html[data-ui="v2"] .dv2-wk-note{font-size:13px;color:var(--muted);padding:10px 12px;border-radius:12px;background:var(--v2-tile);margin-bottom:6px}
   html[data-ui="v2"] .dv2-wk-note b{color:var(--ink)}
+  html[data-ui="v2"] .dv2-evd{font-style:normal;color:var(--teal-2);letter-spacing:1px;font-size:14px;line-height:10px}
+  html[data-ui="v2"] .dv2-day.today .dv2-evd{color:var(--v2-mint)}
+  html[data-ui="v2"] .dv2-evl{margin:8px 0 0;padding-left:18px;color:var(--ink)}
+  html[data-ui="v2"] .dv2-evl li{margin:2px 0}
   html[data-ui="v2"] .dv2-anim .dv2-card,html[data-ui="v2"] .dv2-anim .dv2-hero,html[data-ui="v2"] .dv2-anim .dv2-kpis{animation:v2up .45s var(--v2-ease) both}
   html[data-ui="v2"] .dv2-anim .dv2-o1{animation-delay:.04s} html[data-ui="v2"] .dv2-anim .dv2-o2{animation-delay:.08s}
   html[data-ui="v2"] .dv2-anim .dv2-o3{animation-delay:.12s} html[data-ui="v2"] .dv2-anim .dv2-o4{animation-delay:.16s}
@@ -1369,10 +1374,11 @@ async function renderApprovals(){
   $('#view').innerHTML=`<div class="page-head"><h2>Tasdiqlash</h2></div>
     <p class="small muted" style="margin:-8px 0 14px">Sizning tasdig‘ingizni kutayotgan so‘rovlar. Har qaror kim va qachon qilgani bilan «O‘zgarishlar tarixi»ga yoziladi.</p>
     ${qs.length?qs.map((q,i)=>`<div class="card" style="margin-bottom:14px;padding:14px 18px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><b>${esc(q.title)}</b><span class="chip it" id="apq-n-${i}">…</span></div><div id="apq-${i}"><div class="loading">Yuklanmoqda…</div></div></div>`).join(''):'<div class="card"><div class="empty">Tasdiq kutayotgan so‘rov yo‘q.</div></div>'}`;
-  for(let i=0;i<qs.length;i++){ const q=qs[i];
+  // Navbatlar PARALLEL yuklanadi (har biri o'z kartasini to'ldiradi) — ketma-ket kutish productionda ~7 s edi.
+  await Promise.all(qs.map(async(q,i)=>{
     try{ const n=await q.count(); if(_g!==VIEW_GEN) return; const el=document.getElementById('apq-n-'+i); if(el) el.textContent=String(n||0); }catch(e){}
     try{ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) await q.render(el); }
-    catch(e){ const el=document.getElementById('apq-'+i); if(el) el.innerHTML=`<div class="empty">Xatolik: ${esc(e&&(e.code||e.message)||'')}</div>`; } }
+    catch(e){ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) el.innerHTML=`<div class="empty">Xatolik: ${esc(e&&(e.code||e.message)||'')}</div>`; } }));
 }
 // Maoshni ko'ra oladimi: direktor/HR/moliya/kassir. Boshqalar yo'q. RLS ham shu qoidани majburlaydi.
 function canSeeSalary(){
@@ -2192,13 +2198,19 @@ const DV2_IC={
   next:'<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"/></svg>',
 };
 // Bugungi o'quvchilar davomati — «Davomat» bo'limi bilan bir xil manba (attendance: `${sid}__${YYYY-MM}`, days[DD]).
+//   Foiz — bazadagi «Davomat %» (app.student_attendance_pct) formulasi: (keldi + kech) / (jami − bemor − sababli).
+//   O'quvchi kartochkasidagi «Davomat %» — BUTUN davr (va eski import) bo'yicha; bosh sahifada esa jurnalning BUGUNGI va SHU OYDAGI holati.
 function dv2AttToday(docs, studying, dd){
-  const cnt={ present:0, late:0, absent:0, excused:0, sick:0 }, entered=new Set();
-  (docs||[]).forEach(x=>{ const st=(x.days||{})[dd]; if(!st) return; if(cnt[st]!=null) cnt[st]++; if(x.classKey) entered.add(String(x.classKey)); });
+  const cnt={ present:0, late:0, absent:0, excused:0, sick:0 }, mon={ present:0, late:0, absent:0, excused:0, sick:0 }, monDays=new Set(), entered=new Set();
+  (docs||[]).forEach(x=>{ const ds=x.days||{}, st=ds[dd];
+    if(st){ if(cnt[st]!=null) cnt[st]++; if(x.classKey) entered.add(String(x.classKey)); }
+    Object.keys(ds).forEach(k=>{ if(k>dd) return; const v=ds[k]; if(mon[v]!=null){ mon[v]++; monDays.add(k); } }); });
   const classes={}; studying.forEach(s=>{ const k=classKeyOf(s); (classes[k]=classes[k]||{ k, label:classLabelOf(s), short:`${Number(s.grade)||0}-${s.classLetter||s.track||'—'}${(s.lang||'uz')==='ru'?' (rus)':''}`, n:0 }).n++; });
   const keys=Object.keys(classes), missing=keys.filter(k=>!entered.has(k)).map(k=>classes[k]);
   const marked=cnt.present+cnt.late+cnt.absent+cnt.excused+cnt.sick;
-  return { cnt, marked, nClasses:keys.length, entered:keys.length-missing.length, missing };
+  const den=cnt.present+cnt.late+cnt.absent, monDen=mon.present+mon.late+mon.absent;
+  return { cnt, marked, nClasses:keys.length, entered:keys.length-missing.length, missing,
+    rate:den?(cnt.present+cnt.late)/den*100:null, mon, monDays:monDays.size, monRate:monDen?(mon.present+mon.late)/monDen*100:null };
 }
 // Bugun xodimlar — «Xodimlar davomati» kunlik ko'rinishi bilan bir xil manba va qoidalar (Kamera ID, ish kunlari, kechikish chegarasi).
 function dv2StaffToday(staff, teachers, checkins, leaves, today){
@@ -2290,6 +2302,7 @@ async function renderDashboardV2(){
   const pFin=settle(dv2Once('fin', ()=>dashFinData()));
   const pAppr=Promise.all(qs.map(q=>settle(dv2Once('appr:'+q.key, ()=>q.count()))));
   const pHol=settle(dv2Once('hol', ()=>loadHolidays()));
+  const pEv=dv2Once('events', ()=>loadCol('events').catch(()=>[]));   // «O'quv taqvimi (tadbirlar)» — kalendar uchun
   const pAtt=settle(dv2Once('att:'+ym, ()=>getDocs(query(collection(db,'attendance'), where('month','==',ym))).then(s=>s.docs.map(d=>d.data()||{}))));
   const pStaffX=settle(dv2Once('stx:'+today, ()=>Promise.all([ loadCol('staff').catch(()=>[]),
     getDocs(query(collection(db,'staff_checkins'), where('day','==',today))).then(s=>s.docs.map(d=>d.data()||{})),
@@ -2302,7 +2315,8 @@ async function renderDashboardV2(){
   const C=dashCoreStats(students, users);
   const studying=students.filter(s=>dv2StudyingOn(s, today));
   const me=(auth&&auth.currentUser)?users.find(u=>u._id===auth.currentUser.uid):null;
-  const firstName=String((me&&me.firstName)||'').trim();
+  const nameTok=v=>{ const t=String(v||'').trim().split(/\s+/)[0]||''; return (t && !/[@\d]/.test(t))?t:''; };
+  const firstName=nameTok(me&&me.firstName) || nameTok(me&&me.name) || nameTok(me&&me.displayName) || nameTok(auth&&auth.currentUser&&auth.currentUser.displayName);
   const enrOpen=enrollments.filter(e=>{ const st=String(e.status||'yangi'); return st!=='qabul' && st!=='rad'; }).length;
   const wkFrom=dv2AddDays(today,-6), enrNew=enrollments.filter(e=>{ const d=tkDay(e.created||e.ts||e.createdAt||''); return d && d>=wkFrom && d<=today; }).length;
 
@@ -2314,10 +2328,12 @@ async function renderDashboardV2(){
     <div class="dv2-foot">O‘qituvchi: <b>${dv2N(teachers.length)}</b> · bugun o‘qiydi: <b>${dv2N(studying.length)}</b></div>`;
   const sc=students.map(s=>Number(s.score)).filter(v=>isFinite(v)&&v>0);
   const dist=[{v:sc.filter(v=>v>=85).length,c:DV2_C.teal,t:'85+'},{v:sc.filter(v=>v>=60&&v<85).length,c:DV2_C.teal2,t:'60–84'},{v:sc.filter(v=>v<60).length,c:DV2_C.warm,t:'60 dan past'}];
+  // O'rtacha — faqat bahosi bor o'quvchilar bo'yicha (baho yo'qlar «0» deb hisoblanmaydi); umuman yo'q bo'lsa «—».
+  const scAvg=sc.length?Math.round(sc.reduce((a,b)=>a+b,0)/sc.length):null;
   const kScore=`<div class="dv2-h"><h3>O‘rtacha ball</h3>${go('grades','Baholar')}</div>
-    <div class="dv2-num">${dv2Big(C.avg)}<small>/ 100</small></div>
+    <div class="dv2-num">${scAvg==null?'<b class="dv2-big">—</b>':dv2Big(scAvg)}<small>/ 100</small></div>
     ${dv2Seg(dist,10)}${dv2Leg(dist)}
-    <div class="dv2-foot">${sc.length?`${dv2N(sc.length)} o‘quvchi baholangan`:'Hali baho kiritilmagan'}</div>`;
+    <div class="dv2-foot">${sc.length?`<b>${dv2N(sc.length)}</b> / ${dv2N(C.n)} o‘quvchi baholangan`:'Hali baho kiritilmagan — ball «Monitoring» tasdiqlanganda yoziladi'}</div>`;
   const kpiEl=put('dv2-kpis', `<div class="card dv2-card" id="dv2-k-att">${dv2Skel(118)}</div><div class="card dv2-card">${kScore}</div><div class="card dv2-card" id="dv2-k-pay">${dv2Skel(118)}</div><div class="card dv2-card">${kStu}</div>`);
   if(!kpiEl) return;
 
@@ -2376,7 +2392,7 @@ async function renderDashboardV2(){
     if(apprTotal) row(DV2_IC.check,'red',`${dv2N(apprTotal)} ta so‘rov tasdiqlashni kutmoqda`, esc(apprRows.filter(r=>r.n).map(r=>`${DV2_QSHORT[r.q.key]||r.q.title}: ${r.n}`).join(' · ')), go('approvals','Ko‘rish'));
     if(isWorkDay && A && A.missing.length) row(DV2_IC.att,'warm',`Davomat: ${dv2N(A.missing.length)} sinf hali kiritmagan`, esc(A.missing.slice(0,6).map(c=>c.short).join(', ')+(A.missing.length>6?` va yana ${A.missing.length-6} ta`:'')+` · ${A.entered} / ${A.nClasses} sinf kiritdi`), go('attendance','Ochish'));
     if(isWorkDay && ST && ST.notYet) row(DV2_IC.staff,'warm',`${dv2N(ST.notYet)} xodim hali kelmagan`, esc(`keldi ${ST.came}${ST.late?` · kechikdi ${ST.late}`:''}${ST.leave?` · ruxsatda ${ST.leave}`:''} · Kamera ID bo‘yicha`), go('staffatt','Ochish'));
-    if(AG && AG.old2n) row(DV2_IC.money,'red',`Qarz 2+ oy: ${dv2N(AG.old2n)} o‘quvchi`, esc(`${F.fmtC(AG.old2sum)} so‘m · jami qarz ${F.fmtC(AG.total)}`), go('finance','Ro‘yxat'));
+    if(AG && AG.old2n) row(DV2_IC.money,'red',`Qarz 2+ oy: ${dv2N(AG.old2n)} o‘quvchi`, esc(`${F.fmtC(AG.old2sum)} so‘m · muddati o‘tgan jami: ${F.fmtC(AG.b.m1.sum+AG.b.m2.sum+AG.b.m3.sum)}`), go('finance','Ro‘yxat'));
     if(enrNew) row(DV2_IC.inbox,'teal',`Yangi arizalar: ${dv2N(enrNew)} (so‘nggi 7 kun)`, esc(`ochiq arizalar: ${enrOpen}`), go('enrollments','Ochish'));
     const errs=[apprFail?'tasdiqlash navbatlari':'', att.ok?'':'davomat', stx.ok?'':'xodimlar kelishi', fin.ok?'':'moliya'].filter(Boolean);
     put('dv2-todo', `<div class="dv2-h"><h3>Bugun e’tibor talab qiladi</h3>${rows.length?`<span class="dv2-chip dark">${rows.length}</span>`:''}<span class="dv2-asof">${esc(new Date(Date.now()+5*3600e3).toISOString().slice(11,16))} holatiga</span></div>
@@ -2390,16 +2406,20 @@ async function renderDashboardV2(){
       ${go('approvals','Hammasini ochish')}`
     :`<div class="dv2-h"><h3>Tasdiqlash kutmoqda</h3></div><div class="dv2-ok">Sizga tegishli tasdiqlash navbati yo‘q</div>`);
 
-  // KPI: Bugungi davomat
+  // KPI: Davomat — jurnal bo'yicha: bugun belgilangan bo'lsa bugungi foiz, aks holda shu oydagi foiz
   { let body;
-    if(!att.ok) body=dv2Err('Bugungi davomat', att.e);
-    else { const c=A.cnt, came=c.present+c.late, rate=A.marked?came/A.marked*100:null;
-      const parts=[{v:c.present,c:DV2_C.teal,t:'Keldi'},{v:c.late,c:DV2_C.gold,t:'Kech'},{v:c.absent,c:DV2_C.red,t:'Yo‘q'},{v:c.excused+c.sick,c:DV2_C.violet,t:'Sababli / bemor'}];
-      body=`<div class="dv2-h"><h3>Bugungi davomat</h3>${go('attendance','Davomat')}</div>
-        ${rate!=null?`<div class="dv2-num">${dv2Big(rate,{dec:1})}<small>%</small></div>${dv2Seg(parts,10)}${dv2Leg(parts)}
-          <div class="dv2-foot"><b>${dv2N(A.marked)}</b> o‘quvchi belgilandi (${dv2N(A.entered)} / ${dv2N(A.nClasses)} sinf) · o‘rtacha davomat: <b>${C.avgAtt==null?'—':C.avgAtt+'%'}</b></div>`
-        :`<div class="dv2-num">${C.avgAtt==null?'<b class="dv2-big">—</b>':dv2Big(C.avgAtt)}<small>% o‘rtacha</small></div>
-          <div class="dv2-foot">${isWorkDay?'Bugun hali davomat kiritilmagan':'Bugun dars yo‘q'} · o‘rtacha — o‘quvchi kartochkalaridagi davomat bo‘yicha</div>`}`; }
+    if(!att.ok) body=dv2Err('Davomat', att.e);
+    else { const pp=o=>[{v:o.present,c:DV2_C.teal,t:'Keldi'},{v:o.late,c:DV2_C.gold,t:'Kech'},{v:o.absent,c:DV2_C.red,t:'Yo‘q'},{v:o.excused+o.sick,c:DV2_C.violet,t:'Sababli / bemor'}];
+      const monLine=A.monRate!=null?`bu oy: <b>${dv2N(A.monRate,1)}%</b> (${dv2N(A.monDays)} kun belgilangan)`:'bu oy hali belgilanmagan';
+      if(A.rate!=null) body=`<div class="dv2-h"><h3>Bugungi davomat</h3>${go('attendance','Davomat')}</div>
+          <div class="dv2-num">${dv2Big(A.rate,{dec:1})}<small>%</small></div>${dv2Seg(pp(A.cnt),10)}${dv2Leg(pp(A.cnt))}
+          <div class="dv2-foot"><b>${dv2N(A.marked)}</b> o‘quvchi belgilandi (${dv2N(A.entered)} / ${dv2N(A.nClasses)} sinf) · ${monLine}</div>`;
+      else if(A.monRate!=null) body=`<div class="dv2-h"><h3>Davomat — bu oy</h3>${go('attendance','Davomat')}</div>
+          <div class="dv2-num">${dv2Big(A.monRate,{dec:1})}<small>%</small></div>${dv2Seg(pp(A.mon),10)}${dv2Leg(pp(A.mon))}
+          <div class="dv2-foot">${isWorkDay?'<b>Bugun hali davomat kiritilmagan</b>':'Bugun dars yo‘q'} · bu oy ${dv2N(A.monDays)} kun belgilangan (davomat jurnali)</div>`;
+      else body=`<div class="dv2-h"><h3>Davomat</h3>${go('attendance','Davomat')}</div>
+          <div class="dv2-num"><b class="dv2-big">—</b></div>
+          <div class="dv2-foot">Bu oy davomat jurnaliga hali belgi qo‘yilmagan — sinf rahbarlari «Davomat» bo‘limida kiritadi.</div>`; }
     put('dv2-k-att', body); }
 
   // KPI: To'lovlar — joriy oy (kirim va hisoblangan summa)
@@ -2410,18 +2430,20 @@ async function renderDashboardV2(){
       body=`<div class="dv2-h"><h3>To‘lovlar — ${esc(DV2_MON[Number(F.cur.slice(5,7))-1]||F.cur)}</h3>${go('payments','To‘lovlar')}</div>
         <div class="dv2-num">${dv2Big(F.kirim,{money:true})}<small>so‘m</small></div>
         <div class="dv2-stripes" role="img" aria-label="Yig‘ilish ${rate==null?'—':rate+'%'}">${Array.from({length:segs},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div>
-        <div class="dv2-foot"><b>${rate==null?'—':rate+'%'}</b> · hisoblangan ${esc(F.fmtC(billed))} · qoldi <b>${esc(F.fmtC(F.debt))}</b></div>`; }
+        <div class="dv2-foot"><b>${rate==null?'—':rate+'%'}</b> · hisoblangan ${esc(F.fmtC(billed))} · qoldi <b>${esc(F.fmtC(F.debt))}</b>${F.PAYERR?'':` · bugun tushdi: <b>${esc(F.fmtC(cashByMethod(F.PAYS, today, today).total))}</b>`}</div>`; }
     put('dv2-k-pay', body); }
 
   // Qarzdorlik (yoshi bo'yicha)
   { let body;
     if(!fin.ok) body=dv2Err('Qarzdorlik', fin.e);
-    else { const B=AG.b, parts=[{v:B.m0.sum,c:DV2_C.gold,t:'Shu oy',lbl:F.fmtC(B.m0.sum)},{v:B.m1.sum,c:DV2_C.warm,t:'1 oy',lbl:F.fmtC(B.m1.sum)},{v:B.m2.sum,c:DV2_C.red,t:'2 oy',lbl:F.fmtC(B.m2.sum)},{v:B.m3.sum,c:DV2_C.red2,t:'3+ oy',lbl:F.fmtC(B.m3.sum)}];
+    else { const B=AG.b, over=B.m1.sum+B.m2.sum+B.m3.sum, overN=new Set([...B.m1.ids,...B.m2.ids,...B.m3.ids]).size;
+      const parts=[{v:B.m1.sum,c:DV2_C.warm,t:'1 oy',lbl:F.fmtC(B.m1.sum)},{v:B.m2.sum,c:DV2_C.red,t:'2 oy',lbl:F.fmtC(B.m2.sum)},{v:B.m3.sum,c:DV2_C.red2,t:'3+ oy',lbl:F.fmtC(B.m3.sum)}];
       body=`<div class="dv2-h"><h3>Qarzdorlik</h3>${go('finance','Qarzdorlar')}</div>
-        <div class="dv2-num">${dv2Big(AG.total,{money:true})}<small>so‘m</small></div>
+        <div class="dv2-sub">Muddati o‘tgan — o‘tgan oylar fakturalari bo‘yicha</div>
+        <div class="dv2-num">${dv2Big(over,{money:true})}<small>so‘m</small><small>· ${dv2N(overN)} o‘quvchi</small></div>
         ${dv2Seg(parts,12)}
-        <div class="dv2-cols4">${parts.map((p,i)=>`<div><span><i style="background:${p.c}"></i>${esc(p.t)}</span><b>${esc(p.lbl)}</b><em>${dv2N([B.m0,B.m1,B.m2,B.m3][i].ids.size)} o‘quvchi</em></div>`).join('')}</div>
-        <div class="dv2-foot"><b>${dv2N(AG.students)}</b> o‘quvchida qarz · shu oy: <b>${esc(F.fmtC(F.debt))}</b> · avans: <b>${esc(F.fmtC(F.avans))}</b></div>`; }
+        <div class="dv2-cols4" style="grid-template-columns:repeat(3,minmax(0,1fr))">${parts.map((p,i)=>`<div><span><i style="background:${p.c}"></i>${esc(p.t)}</span><b>${esc(p.lbl)}</b><em>${dv2N([B.m1,B.m2,B.m3][i].ids.size)} o‘quvchi</em></div>`).join('')}</div>
+        <div class="dv2-foot">Shu oy hali to‘lanmagan: <b>${esc(F.fmtC(B.m0.sum))}</b> (${dv2N(B.m0.ids.size)} o‘quvchi) · jami: <b>${esc(F.fmtC(AG.total))}</b> — «Moliya → Qarzdorlar» bilan bir xil · avans: <b>${esc(F.fmtC(F.avans))}</b></div>`; }
     put('dv2-debt', body); }
 
   // Moliya — joriy oy (klassik moliya KPI'lari + xarajat va to'lov usuli taqsimoti)
@@ -2432,10 +2454,10 @@ async function renderDashboardV2(){
       body=`<div class="dv2-h"><h3>Moliya — ${esc(F.mLbl(F.cur))} ${esc(F.cur.slice(0,4))}</h3>${go('accounting','Buxgalteriya')}</div>
         <div class="dv2-fin3">
           <div><span>Kirim</span>${dv2Big(F.kirim,{money:true})}</div>
-          <div><span>Chiqim</span>${dv2Big(F.chiqim,{money:true})}</div>
+          <div><span>Chiqim</span>${dv2Big(F.chiqim,{money:true})}${!F.catKeys.length?'<em class="dv2-hint">kiritilmagan</em>':''}</div>
           <div class="${F.foyda>=0?'pos':'neg'}"><span>${F.foyda>=0?'Sof foyda':'Sof zarar'}</span>${dv2Big(F.foyda,{money:true})}</div>
         </div>
-        <div class="dv2-foot">Foyda marjasi: <b>${dv2N(F.marja)}%</b> · avans: <b>${esc(F.fmtC(F.avans))}</b> · qarzdorlik (shu oy): <b>${esc(F.fmtC(F.debt))}</b></div>
+        <div class="dv2-foot">Foyda marjasi: <b>${F.catKeys.length?dv2N(F.marja)+'%':'— (xarajat kiritilmagan)'}</b> · avans: <b>${esc(F.fmtC(F.avans))}</b> · qarzdorlik (shu oy): <b>${esc(F.fmtC(F.debt))}</b></div>
         <div class="dv2-subh">Xarajat taqsimoti</div>
         ${cats.length?`${dv2Seg(cats,10)}${dv2Leg(cats)}`:'<div class="dv2-sub">Bu oy xarajat kiritilmagan</div>'}
         <div class="dv2-subh">To‘lov usuli bo‘yicha (shu oyda tushgan)</div>
@@ -2464,9 +2486,11 @@ async function renderDashboardV2(){
         <div class="dv2-foot">${ST.flex?`Erkin ish soatida: <b>${dv2N(ST.flex)}</b> · `:''}Kamera ID bo‘yicha (yuz terminali)</div>`
       :'<div class="dv2-sub">Xodimlarga hali «Kamera ID» kiritilmagan</div>'}`); }
 
-  // Hafta kalendari (bayram/ta'til belgilari bilan)
+  // Hafta kalendari (bayram/ta'til belgilari + «O'quv taqvimi» tadbirlari)
   { let start=dv2AddDays(today, -((dow+6)%7)), sel=today;
     const el=document.getElementById('dv2-week');
+    const EV=await pEv.catch(()=>[]); if(!alive()) return;
+    const evOf=ds=>(EV||[]).filter(e=>String(e.date||'').slice(0,10)===ds);
     const draw=()=>{ if(!alive()||!el) return;
       const days=Array.from({length:7},(_,i)=>dv2AddDays(start,i)), d0=days[0], d6=days[6];
       const [y0,m0]=d0.split('-').map(Number), [y6,m6]=d6.split('-').map(Number);
@@ -2474,9 +2498,10 @@ async function renderDashboardV2(){
       const hn=ds=>SA_HOLIDAYS.get(ds)||'';
       const selH=hn(sel), selDow=dv2Dow(sel);
       const selNote=selH?`${holIsBreak(selH)?'🏖':'🎉'} <b>${esc(selH)}</b> — dam kuni: o‘qituvchi va xodimlardan yo‘qlama ushlanmaydi`:(SA_WORKDAYS.includes(selDow)?'Ish kuni':'Dam olish kuni');
+      const selEv=evOf(sel);
       el.innerHTML=`<div class="dv2-h"><h3>${esc(title)}</h3><div class="dv2-wk-nav"><button type="button" class="dv2-round" data-wk="-7" aria-label="Oldingi hafta">${DV2_IC.prev}</button><button type="button" class="dv2-today-b" data-wk="0" aria-label="Bugungi haftaga qaytish">Bugun</button><button type="button" class="dv2-round" data-wk="7" aria-label="Keyingi hafta">${DV2_IC.next}</button></div></div>
-        <div class="dv2-days">${days.map(ds=>{ const h=hn(ds), w=dv2Dow(ds); return `<button type="button" class="dv2-day${ds===today?' today':''}${ds===sel?' sel':''}${h?' hol':''}${SA_WORKDAYS.includes(w)?'':' off'}" data-day="${ds}" aria-pressed="${ds===sel}" aria-label="${esc(dv2DayLabel(ds))}${h?' — '+esc(h):''}"><span>${DV2_WD2[w]}</span><b>${Number(ds.slice(8))}</b><i>${h?(holIsBreak(h)?'🏖':'🎉'):''}</i></button>`; }).join('')}</div>
-        <div class="dv2-wk-note"><b>${esc(dv2DayLabel(sel))}</b> · ${selNote}</div>
+        <div class="dv2-days">${days.map(ds=>{ const h=hn(ds), w=dv2Dow(ds); return `<button type="button" class="dv2-day${ds===today?' today':''}${ds===sel?' sel':''}${h?' hol':''}${SA_WORKDAYS.includes(w)?'':' off'}" data-day="${ds}" aria-pressed="${ds===sel}" aria-label="${esc(dv2DayLabel(ds))}${h?' — '+esc(h):''}"><span>${DV2_WD2[w]}</span><b>${Number(ds.slice(8))}</b><i>${h?(holIsBreak(h)?'🏖':'🎉'):''}${evOf(ds).length?`<em class="dv2-evd">${'•'.repeat(Math.min(3,evOf(ds).length))}</em>`:''}</i></button>`; }).join('')}</div>
+        <div class="dv2-wk-note"><b>${esc(dv2DayLabel(sel))}</b> · ${selNote}${selEv.length?`<ul class="dv2-evl">${selEv.slice(0,4).map(e=>`<li>${esc(e.title_uz||e.title_ru||'Tadbir')}</li>`).join('')}${selEv.length>4?`<li>va yana ${selEv.length-4} ta</li>`:''}</ul>`:''}</div>
         ${go('staffatt','Bayram / ta’til kunlari')}`;
       el.querySelectorAll('[data-wk]').forEach(b=>b.addEventListener('click',()=>{ const k=Number(b.dataset.wk); if(k===0){ start=dv2AddDays(today,-((dow+6)%7)); sel=today; } else { start=dv2AddDays(start,k); sel=SA_WORKDAYS.includes(dv2Dow(sel))?dv2AddDays(sel,k):start; } draw(); }));
       el.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{ sel=b.dataset.day; draw(); }));

@@ -33,14 +33,15 @@ Sahifa **faqat o‘qiydi**: yozuv, SMS yoki holat o‘zgarishi yo‘q; tugmalar 
 |---|---|
 | Salomlashuv, sana, bayram/ta’til belgisi | `users` (ism), `school_holidays` (`loadHolidays`, `holIsBreak`) |
 | Bugun e’tibor talab qiladi | «Tasdiqlash» navbatlari `count()`; bugungi davomat; xodimlar kelishi; 2+ oy qarz; so‘nggi 7 kun arizalari |
-| Bugungi davomat | `attendance` (oy hujjatlari, `days[DD]`), «Davomat» bo‘limi bilan bir xil; o‘rtacha — o‘quvchi kartochkasidan (klassik bilan bir xil) |
-| O‘rtacha ball, O‘quvchilar, Sinflar, Foydalanuvchilar | klassik sahifa bilan **bir xil hisob** — `dashCoreStats()` |
-| To‘lovlar — joriy oy | `dashFinData()` (klassik moliya bilan bir xil): kirim, hisoblangan, qolgan |
-| Qarzdorlik (shu oy / 1 / 2 / 3+ oy) | hisob-fakturalar; «Moliya → Qarzdorlar» bilan bir xil qoida (joriy oygacha qolgan qism) |
+| Davomat | `attendance` jurnali (oy hujjatlari, `days[DD]`): bugun belgilangan bo‘lsa — bugungi foiz, aks holda — shu oydagi foiz. Formula bazadagi «Davomat %» bilan bir xil: (keldi + kech) / (jami − bemor − sababli). O‘quvchi kartochkasidagi «Davomat %» (butun davr) bosh sahifada ishlatilmaydi |
+| O‘quvchilar, Sinflar, Foydalanuvchilar | klassik sahifa bilan **bir xil hisob** — `dashCoreStats()` |
+| O‘rtacha ball | faqat bahosi bor o‘quvchilar bo‘yicha (baho yo‘qlar «0» deb hisoblanmaydi); umuman yo‘q bo‘lsa «—» |
+| To‘lovlar — joriy oy | `dashFinData()` (klassik moliya bilan bir xil): kirim, hisoblangan, qolgan; «bugun tushdi» — kassa asosida (`cashByMethod`) |
+| Qarzdorlik | katta raqam — **muddati o‘tgan** qarz (o‘tgan oylar: 1 / 2 / 3+ oy); shu oy hali to‘lanmagani va jami alohida. Jami — «Moliya → Qarzdorlar» bilan bir xil qoida (joriy oygacha qolgan qism) |
 | Moliya, Moliyaviy oqim (6 oy) | `dashFinData()`: kirim, chiqim, sof foyda, marja, avans, xarajat va to‘lov usuli taqsimoti |
 | Xodimlar bugun | `staff`, `teachers`, `staff_checkins`, `staff_leaves` — «Xodimlar davomati» qoidalari (Kamera ID, ish kunlari, kechikish chegarasi) |
 | Tasdiqlash kutmoqda | `approvalQueuesForMe()` — Direktor navbatlari |
-| Hafta kalendari | `school_holidays` (🎉 bayram, 🏖 ta’til) |
+| Hafta kalendari | `school_holidays` (🎉 bayram, 🏖 ta’til) + «O‘quv taqvimi (tadbirlar)» (`events`: sana, nomi) — nuqta va tanlangan kun ro‘yxati |
 | Xavf ostidagi o‘quvchilar | klassik ro‘yxat (eng past 60 tasi; tepada 4 tasi, «Hammasi» — to‘liq jadval) |
 
 Kirishda ilova bo‘limni bir necha marta chizadi (eski xatti-harakat) — v2 bir necha soniya ichidagi takroriy so‘rovlarni
@@ -56,3 +57,12 @@ paydo bo‘lishi) faqat birinchi ochilishda; `prefers-reduced-motion` yoqilgan b
   almashtirgichi; reduced-motion — 11/11.
 - Avvalgi avtomatik sinovlar: guruhlangan menyu 5/5, bayram/ta’til 15/15.
 - Matn kontrasti (WCAG): eng pasti 5,2:1.
+
+## 2026-11-09 — productiondagi haqiqiy ma'lumot bo'yicha tuzatishlar
+
+Deploydan keyin Direktor sahifasida chalg'ituvchi raqamlar ko'rindi — sabab dizayn emas, ma'lumot bo'shliqlari:
+«4 %» (o'quvchi kartochkalaridagi «Davomat %» o'rtachasi — klassik sahifada ham aynan shu), «0 / 100» (baho kiritilmagan),
+ismsiz salomlashuv (profilda ism yo'q), «100 % marja» (shu oy xarajat kiritilmagan), «1,14 mlrd qarz» (shu oyning muddati
+kelmagan fakturalari ham qo'shilgan). Tuzatildi: davomat jurnaldan; ball — baholanganlar bo'yicha yoki «—»; ism — `firstName`
+bo'lmasa `name`/`displayName`; xarajat yo'q bo'lsa «kiritilmagan» va marja «—»; qarz — muddati o'tgani alohida;
+«bugun tushdi»; kalendarda tadbirlar. «Tasdiqlash» bo'limi navbatlari endi PARALLEL yuklanadi (productionda ~7 s edi).
