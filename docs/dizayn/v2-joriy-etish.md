@@ -97,3 +97,9 @@ ismsiz salomlashuv (profilda ism yo'q), «100 % marja» (shu oy xarajat kiritilm
 kelmagan fakturalari ham qo'shilgan). Tuzatildi: davomat jurnaldan; ball — baholanganlar bo'yicha yoki «—»; ism — `firstName`
 bo'lmasa `name`/`displayName`; xarajat yo'q bo'lsa «kiritilmagan» va marja «—»; qarz — muddati o'tgani alohida;
 «bugun tushdi»; kalendarda tadbirlar. «Tasdiqlash» bo'limi navbatlari endi PARALLEL yuklanadi (productionda ~7 s edi).
+
+## Holat: to‘xtatilgan (2026-11-09)
+Egasining qarori: dizayn ishlari vaqtincha to‘xtatildi, ustuvorlik — moliya (`docs/moliya/buxgalteriya-ish-reja.md`).
+1-, 2- va 3-bosqichlar bajarilgan (2-bosqich — 6446f57, deployni egasi qiladi). Ota-ona kabinetini (`index.html`) shu
+uslubga o‘tkazish boshlanmagan — egasi so‘raganda davom etadi. Yangi moliya ekranlari faqat mavjud komponentlardan
+quriladi va ikkala ko‘rinishda (v1, v2) ishlaydi.

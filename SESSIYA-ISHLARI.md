@@ -1301,6 +1301,24 @@ Deploy (47b31a8) productionda bayt-bayt bir xil; «faqat o'qish» sinovi: 44 bo'
   1440/390 (Direktor — 1024 va 1280×560 ham) — xato 0, siljish yo'q; v1 nazorat rasmlari oldingi commit bilan bir xil sharoitda: 22/27 bir xil, 5 tasida
   faqat vaqt / sinov skripti farqi. Batafsil: `docs/dizayn/v2-joriy-etish.md` («2-bosqich»).
 
+## 54) Moliya: kassa va buxgalteriyani 1C uslubida yuritish — ish rejasi — 2026-11-09
+Egasining so'rovi: kassir kunlik kirim, chiqim, qoldiq, hujjat raqami, kun boshi/oxiri, «kimga / kimdan qancha»
+hisobotini avtomatik bersin; har xarajat balans uchun statiyaga bo'linsin; dizayn ishlari to'xtatilsin (parkovka).
+- **O'rganildi (8 ta tahlil):** kassir ish kitobi (17 varaq: kunlik kassa, kirim orderlari, bank, zavxoz, qarzdorlar),
+  Financial Tracker (ikki nusxa mazmunan bir xil, ma'lumot 9-noyabrgacha), KO-1 va KO-4 fotosuratlari; tizimning
+  to'lov/xarajat/maosh/qaytarish kodi va bazasi (RLS, RPC); BHMS 21 (2025) hisob rejasi, provodkalar, kassa va fiskal
+  chek qonunchiligi, 1C:Бухгалтерия для Узбекистана imkoniyatlari.
+- **Asosiy topilmalar:** kunlik kassa — kuniga bitta qo'lda yozilgan qator, hujjatlarga bog'lanmagan; zanjir qo'lda
+  tuzatilgan; bankdan olish/bankka topshirish kirim-chiqim deb yozilgan; order raqamlarida takror va bo'shliqlar; zavxoz
+  puli berilganda xarajat; komissiyalar yozilmagan; yopilgan oy tahrirlangan; tizimda kassa hujjati, raqamlash, kun yopish,
+  statiya va bosh kitob yo'q; ayrim moliya huquqlari ortiqcha keng. Aniq qator va summalar — egasiga alohida yopiq ilova
+  (repozitoriyda emas).
+- **Reja:** `docs/moliya/buxgalteriya-ish-reja.md` — 0 (qarorlar, 9–28-noyabr) → 1a kassa MVP (rasmiy boshlanish
+  2027-01-04, 31.12 sanash bilan) → 1b → 2 statiyalar → 3 bank → 4 bosh kitob (2027-01-01 dan) → 5 hisobotlar → 6
+  muvofiqlik; 75 statiya, 64 provodka qoidasi, 46 qaror (FD), 6 darvoza (fiskal chek, hisob siyosati, maosh, qabul
+  sinovi, buyruqlar, yil yakuni). Uch mustaqil ko'rik (buxgalteriya, kod, to'liqlik) — 59 topilma kiritildi.
+- **Dizayn:** 2-bosqich (6446f57) push qilingan; keyingi dizayn ishlari (ota-ona kabineti) egasi so'raguncha to'xtatilgan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
