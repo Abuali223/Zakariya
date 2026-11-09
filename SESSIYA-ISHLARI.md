@@ -1288,6 +1288,19 @@ ism zaxirasi, xarajat yo'qligi belgisi, muddati o'tgan qarz alohida, «bugun tus
 «Tasdiqlash» navbatlari parallel yuklanadi. Lokal: production sharoiti (baho/xarajat/ism yo'q, jurnal bor) bilan sinaldi;
 bosh sahifa 11/11, barcha rollar × bo'limlar xato 0, menyu 5/5, bayram/ta'til 15/15, v1 o'zgarmagan.
 
+## 53) v2, 2-bosqich: yangi menyu (kompyuterda ikonali panel, telefonda pastki menyu) — 2026-11-09
+Deploy (47b31a8) productionda bayt-bayt bir xil; «faqat o'qish» sinovi: 44 bo'lim × kompyuter/telefon — xato 0,
+«Tasdiqlash» endi tez, bosh sahifa raqamlari to'g'ri (davomat jurnaldan, ball «—», muddati o'tgan qarz alohida, marja «—»).
+- **Kompyuter (≥821px):** 80px to'q yashil ikonali panel (fixed); guruh bosilsa yonida oq ro'yxat (flyout), Esc /
+  tashqariga bosish bilan yopiladi; faol guruh — yalpiz «pill»; past ekranlar uchun ixcham rejim (≤700 / ≤540px).
+- **Telefon (≤820px):** pastki menyu — «Asosiy» + 3 guruh + «Menyu»; pastdan ochiladigan oyna (guruh yoki «Barcha
+  bo'limlar»), × / fon / Esc bilan yopiladi; toast va kontent menyu ostida qolmaydi. Guruhsiz rollar: ≤5 bo'lim — hammasi.
+- **O'zgarmagan:** `#tabs` tuzilmasi, guruhlar, belgilar, ruxsatlar (har rolda bo'limlar soni v1 bilan teng), shrift,
+  logotip; `?ui=v1` — eski guruhlangan menyu. Barcha yangi CSS `html[data-ui="v2"]` bilan (352 selektor tekshirildi).
+- **Tekshiruv (lokal):** menyu 19/19, bosh sahifa 11/11, bayram/ta'til 15/15, v1 menyu 5/5; barcha rollar × bo'limlar ×
+  1440/390 (Direktor — 1024 va 1280×560 ham) — xato 0, siljish yo'q; v1 nazorat rasmlari oldingi commit bilan bir xil sharoitda: 22/27 bir xil, 5 tasida
+  faqat vaqt / sinov skripti farqi. Batafsil: `docs/dizayn/v2-joriy-etish.md` («2-bosqich»).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

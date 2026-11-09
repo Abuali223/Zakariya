@@ -424,23 +424,94 @@
   html[data-ui="v2"] .bell{border-radius:999px;border-color:var(--v2-line);background:#fff;color:var(--teal-d)}
   html[data-ui="v2"] .bell-badge{border-color:#ECF3EF}
 
-  /* Chap menyu — to'q yashil panel (guruhlar, akkordeon, belgilar — avvalgidek; faqat ko'rinish) */
-  html[data-ui="v2"] nav.side{margin:16px 0 18px 16px;align-self:start;border:none;border-radius:24px;padding:14px 10px;gap:3px;
-    background:linear-gradient(180deg,var(--v2-rail-a),var(--v2-rail-b));box-shadow:0 22px 44px -22px rgba(3,32,28,.55)}
-  html[data-ui="v2"] nav.side button{color:rgba(255,255,255,.80);border-radius:14px;padding:10px 12px;border:none;transition:background .15s,color .15s,box-shadow .15s}
-  html[data-ui="v2"] nav.side button:hover{background:rgba(255,255,255,.08);color:#fff}
-  html[data-ui="v2"] nav.side button.on{background:var(--v2-mint);color:var(--v2-mint-ink);box-shadow:0 0 0 1px rgba(166,222,207,.35),0 8px 22px -8px rgba(166,222,207,.75)}
-  html[data-ui="v2"] nav.side button:focus-visible{outline:2px solid var(--v2-mint);outline-offset:1px}
+  /* Menyu (2-bosqich): kompyuterda ikonali tor panel + guruh ro'yxati (flyout); telefonda pastki menyu + «Menyu» oynasi.
+     Tuzilma (#tabs, guruhlar, tugmalar, belgilar) — avvalgidek; faqat joylashuv va ko'rinish. */
   html[data-ui="v2"] .tab-badge{background:#E5484D;color:#fff}
-  html[data-ui="v2"] nav.side button.on .tab-badge{background:var(--v2-mint-ink);color:#fff}
-  html[data-ui="v2"] nav.side .nav-grp.has-on>.nav-gh{color:#fff}
-  html[data-ui="v2"] nav.side .nav-grp.has-on>.nav-gh .ic{color:var(--v2-mint)}
-  html[data-ui="v2"] nav.side .nav-grp.open>.nav-gh{color:#fff;background:rgba(255,255,255,.06)}
-  html[data-ui="v2"] nav.side .nav-items{border-left:2px solid rgba(255,255,255,.14);margin:2px 0 6px 21px;padding-left:8px}
-  html[data-ui="v2"] nav.side .nav-items button{padding:8px 11px;font-size:14.5px}
-  html[data-ui="v2"] nav.side .nav-gh .chev{opacity:.75}
-  html[data-ui="v2"] nav.side::-webkit-scrollbar{height:6px;width:6px}
-  html[data-ui="v2"] nav.side::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:6px}
+  html[data-ui="v2"] nav.side .nav-gh .chev{display:none}
+  @keyframes v2fly{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+  @keyframes v2sheet{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+  html[data-ui="v2"] .v2-sh-h,html[data-ui="v2"] .v2-tabbar,html[data-ui="v2"] #v2-sheet-bg{display:none}
+  @media(min-width:821px){
+    html[data-ui="v2"] .app{grid-template-columns:112px minmax(0,1fr)}
+    html[data-ui="v2"] main.content{grid-column:2;grid-row:2}   /* panel «fixed» — oqimdan chiqadi; kontent aniq 2-ustunda */
+    html[data-ui="v2"] nav.side{position:fixed;top:76px;left:16px;bottom:16px;z-index:25;width:80px;margin:0;padding:10px 4px;gap:2px;align-items:center;
+      overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border:none;border-radius:28px;
+      background:linear-gradient(180deg,var(--v2-rail-a),var(--v2-rail-b));box-shadow:0 22px 44px -22px rgba(3,32,28,.55)}
+    html[data-ui="v2"] nav.side::-webkit-scrollbar{display:none}
+    html[data-ui="v2"] nav.side .nav-grp{align-items:center;gap:0}
+    html[data-ui="v2"] nav.side>button,html[data-ui="v2"] nav.side .nav-gh{position:relative;flex:0 0 auto;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;width:72px;min-height:56px;padding:5px 2px 6px;border:none;border-radius:14px;background:transparent;color:rgba(231,245,239,.82);font-size:10.5px;font-weight:500;line-height:1.15;text-align:center;box-shadow:none}
+    html[data-ui="v2"] nav.side>button .ic,html[data-ui="v2"] nav.side .nav-gh .ic{width:44px;height:30px;border-radius:15px;display:grid;place-items:center;transition:background .2s,box-shadow .25s,color .2s}
+    html[data-ui="v2"] nav.side>button .lbl,html[data-ui="v2"] nav.side .nav-gh .lbl{flex:0 0 auto;max-width:72px;overflow-wrap:break-word}
+    html[data-ui="v2"] nav.side>button:hover,html[data-ui="v2"] nav.side .nav-gh:hover{background:transparent;color:#fff}
+    html[data-ui="v2"] nav.side>button:hover .ic,html[data-ui="v2"] nav.side .nav-gh:hover .ic{background:rgba(255,255,255,.09)}
+    html[data-ui="v2"] nav.side .nav-grp.open>.nav-gh{background:transparent;color:#fff}
+    html[data-ui="v2"] nav.side .nav-grp.open>.nav-gh .ic{background:rgba(255,255,255,.16);color:#fff}
+    html[data-ui="v2"] nav.side>button.on,html[data-ui="v2"] nav.side .nav-grp.has-on>.nav-gh{background:transparent;box-shadow:none;color:#BFF6EB;font-weight:600}
+    html[data-ui="v2"] nav.side>button.on .ic,html[data-ui="v2"] nav.side .nav-grp.has-on>.nav-gh .ic{color:#0B2C25;background:radial-gradient(circle at 35% 30%,#C8F8EC 0%,#9FEDD9 55%,#8ADBC5 100%);box-shadow:0 0 0 5px rgba(159,237,217,.10),0 0 24px 2px rgba(159,237,217,.42)}
+    html[data-ui="v2"] nav.side>button .tab-badge,html[data-ui="v2"] nav.side .nav-gh .tab-badge{position:absolute;top:1px;right:5px;min-width:18px;height:18px;padding:0 5px;font-size:10.5px;border:2px solid var(--v2-rail-a)}
+    html[data-ui="v2"] nav.side>button.on .tab-badge{background:#E5484D;color:#fff}
+    html[data-ui="v2"] nav.side button:focus-visible{outline:2px solid var(--v2-mint);outline-offset:1px}
+    html[data-ui="v2"] nav.side .nav-items{display:none}
+    html[data-ui="v2"] nav.side .nav-grp.open>.nav-items{display:flex;position:fixed;z-index:50;width:300px;max-height:calc(100vh - 24px);overflow-y:auto;flex-direction:column;gap:2px;margin:0;padding:10px;border:1px solid rgba(16,52,44,.08);border-radius:20px;background:#fff;box-shadow:0 2px 6px rgba(10,30,25,.08),0 28px 60px -16px rgba(10,30,25,.38);animation:v2fly .16s var(--v2-ease)}
+    html[data-ui="v2"] nav.side .nav-items::before{content:attr(aria-label);display:block;padding:6px 10px 10px;margin-bottom:4px;border-bottom:1px solid var(--v2-line);font-size:16px;font-weight:600;color:var(--ink)}
+    html[data-ui="v2"] nav.side .nav-items button{position:relative;flex-direction:row;justify-content:flex-start;align-items:center;gap:12px;width:100%;min-height:44px;padding:8px 10px;border:none;border-radius:12px;background:transparent;color:var(--ink);font-size:14.5px;font-weight:500;text-align:left;box-shadow:none}
+    html[data-ui="v2"] nav.side .nav-items button .ic{width:22px;height:22px;color:var(--teal)}
+    html[data-ui="v2"] nav.side .nav-items button:hover{background:var(--v2-tile);color:var(--ink)}
+    html[data-ui="v2"] nav.side .nav-items button.on{background:var(--v2-mint-2);color:#0E3F34;font-weight:600;box-shadow:none}
+    html[data-ui="v2"] nav.side .nav-items button .tab-badge{margin-left:auto}
+    html[data-ui="v2"] nav.side .nav-items button:focus-visible{outline-color:var(--v2-focus)}
+  }
+  /* Past ekranlar (kichik noutbuk, brauzer kattalashtirilgan): panel ixchamlashadi — hamma ikonka sig'sin */
+  @media(min-width:821px) and (max-height:700px){
+    html[data-ui="v2"] nav.side{padding:6px 4px;gap:0}
+    html[data-ui="v2"] nav.side>button,html[data-ui="v2"] nav.side .nav-gh{min-height:48px;padding:3px 2px 4px;gap:2px}
+    html[data-ui="v2"] nav.side>button .ic,html[data-ui="v2"] nav.side .nav-gh .ic{height:26px}
+  }
+  @media(min-width:821px) and (max-height:540px){
+    html[data-ui="v2"] nav.side{bottom:10px;padding:4px}
+    html[data-ui="v2"] nav.side>button,html[data-ui="v2"] nav.side .nav-gh{min-height:40px;padding:2px 2px 3px;gap:1px;font-size:10px}
+    html[data-ui="v2"] nav.side>button .ic,html[data-ui="v2"] nav.side .nav-gh .ic{width:40px;height:24px}
+    html[data-ui="v2"] nav.side>button .tab-badge,html[data-ui="v2"] nav.side .nav-gh .tab-badge{top:0}
+  }
+  @media(max-width:820px){
+    html[data-ui="v2"] nav.side{display:none}
+    html[data-ui="v2"].v2-sheet-open nav.side{display:block;position:fixed;left:0;right:0;bottom:0;top:auto;z-index:61;max-height:86vh;overflow-y:auto;overscroll-behavior:contain;margin:0;padding:0 16px calc(20px + env(safe-area-inset-bottom));border:none;border-radius:24px 24px 0 0;background:#F5F8F6;box-shadow:0 -20px 50px -20px rgba(6,24,20,.4);animation:v2sheet .22s var(--v2-ease)}
+    html[data-ui="v2"].v2-sheet-open #v2-sheet-bg{display:block;position:fixed;inset:0;z-index:60;background:rgba(6,24,20,.45)}
+    html[data-ui="v2"].v2-sheet-open .v2-sh-h{display:flex;position:sticky;top:0;z-index:1;align-items:center;gap:8px;padding:16px 0 12px;background:#F5F8F6}
+    html[data-ui="v2"] .v2-sh-h b{flex:1;font-size:20px;font-weight:600;color:var(--ink)}
+    html[data-ui="v2"] .v2-sh-x{width:44px;height:44px;border-radius:50%;border:1px solid var(--v2-line);background:#fff;color:var(--ink);font-size:24px;line-height:1;cursor:pointer;flex:0 0 auto;padding:0}
+    html[data-ui="v2"] nav.side .v2-hide{display:none!important}
+    html[data-ui="v2"] nav.side button{white-space:normal;flex:0 0 auto}
+    html[data-ui="v2"] nav.side button .lbl{display:inline}
+    html[data-ui="v2"] nav.side.grouped>button[data-tab]{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0 0 14px;padding:8px 14px;border:none;border-radius:16px;background:var(--v2-rail-a);color:#fff;font-size:15px;font-weight:600}
+    html[data-ui="v2"] nav.side.grouped>button[data-tab] .ic{color:var(--v2-mint)}
+    html[data-ui="v2"] nav.side.grouped>button[data-tab].on{background:var(--v2-rail-a);color:#fff;box-shadow:inset 0 0 0 2px var(--v2-mint)}
+    html[data-ui="v2"] nav.side .nav-grp{display:block;margin:0 0 16px}
+    html[data-ui="v2"] nav.side .nav-gh{display:flex;align-items:center;gap:8px;width:100%;min-height:0;margin:0 2px 8px;padding:0;border:none;background:none;color:var(--muted);font-size:14px;font-weight:600;pointer-events:none}
+    html[data-ui="v2"] nav.side .nav-gh .ic,html[data-ui="v2"] nav.side .nav-gh .ic svg{width:18px;height:18px;color:var(--teal)}
+    html[data-ui="v2"] nav.side .nav-gh .nav-gb{display:none}
+    html[data-ui="v2"] nav.side.v2-one .nav-gh{display:none}
+    html[data-ui="v2"] nav.side .nav-items,html[data-ui="v2"] nav.side .nav-grp.open>.nav-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:0;border-left:none;position:static}
+    html[data-ui="v2"] nav.side .nav-items button,html[data-ui="v2"] nav.side:not(.grouped)>button[data-tab]{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px;border:0;border-radius:14px;background:#fff;color:var(--ink);font-size:14px;font-weight:500;line-height:1.25;text-align:left;box-shadow:0 1px 2px rgba(12,38,33,.06)}
+    html[data-ui="v2"] nav.side .nav-items button .ic,html[data-ui="v2"] nav.side:not(.grouped)>button[data-tab] .ic{color:var(--teal)}
+    html[data-ui="v2"] nav.side .nav-items button.on,html[data-ui="v2"] nav.side:not(.grouped)>button[data-tab].on{background:var(--v2-mint-2);color:#0E3F34;font-weight:600;box-shadow:none}
+    html[data-ui="v2"].v2-sheet-open nav.side:not(.grouped){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}
+    html[data-ui="v2"].v2-sheet-open nav.side:not(.grouped) .v2-sh-h{grid-column:1/-1}
+    html[data-ui="v2"] nav.side .tab-badge{margin-left:auto}
+    html[data-ui="v2"] .v2-tabbar{display:flex;position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));z-index:40;height:66px;padding:6px;border-radius:24px;background:#08241F;box-shadow:0 14px 34px -12px rgba(6,24,20,.55)}
+    html[data-ui="v2"] .v2-tb{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex:1 1 0;min-width:0;padding:0 2px;border:0;border-radius:18px;background:transparent;color:rgba(236,246,242,.86);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+    html[data-ui="v2"] .v2-tb .tb-ic{position:relative;display:grid;place-items:center;width:44px;height:30px;border-radius:999px;transition:background .2s}
+    html[data-ui="v2"] .v2-tb .tb-ic svg{width:22px;height:22px;fill:currentColor}
+    html[data-ui="v2"] .v2-tb .tb-l{max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    html[data-ui="v2"] .v2-tb.on{color:#BFF6EB}
+    html[data-ui="v2"] .v2-tb.on .tb-ic{color:#0B2C25;background:radial-gradient(circle at 35% 30%,#C8F8EC 0%,#9FEDD9 55%,#8ADBC5 100%);box-shadow:0 0 16px rgba(159,237,217,.45)}
+    html[data-ui="v2"] .v2-tb .tab-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;font-size:10.5px;border:2px solid #08241F}
+    html[data-ui="v2"] .v2-tb:focus-visible{outline:2px solid var(--v2-mint);outline-offset:-2px}
+    html[data-ui="v2"] #toasts{bottom:calc(90px + env(safe-area-inset-bottom))}
+  }
+  @media(prefers-reduced-motion:reduce){
+    html[data-ui="v2"] nav.side .nav-grp.open>.nav-items,html[data-ui="v2"].v2-sheet-open nav.side{animation:none}
+  }
 
   /* Kontent */
   html[data-ui="v2"] main.content{padding:24px 30px 32px}
@@ -503,11 +574,7 @@
 
   /* Telefon / planshet */
   @media(max-width:820px){
-    html[data-ui="v2"] nav.side{margin:8px 12px 4px;border-radius:20px;padding:6px;gap:6px;box-shadow:0 14px 30px -18px rgba(3,32,28,.6)}
-    html[data-ui="v2"] nav.side button{padding:10px 14px;min-height:44px}
-    html[data-ui="v2"] nav.side .nav-items{margin:0;padding:0 0 0 6px;border-left:2px solid rgba(255,255,255,.18)}
-    html[data-ui="v2"] nav.side .nav-items button{padding:9px 12px}
-    html[data-ui="v2"] main.content{padding:14px 14px 24px}
+    html[data-ui="v2"] main.content{padding:14px 14px calc(100px + env(safe-area-inset-bottom))}   /* pastki menyu ostida kontent qolmasin */
     html[data-ui="v2"] .page-head h2{font-size:24px}
   }
   @media(max-width:640px){
@@ -1802,6 +1869,7 @@ function buildTabs(){
   }
   nav.querySelectorAll('button[data-tab]').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
   navGroupBadges();
+  if(uiV2()) v2NavSetup(nav, grouped);   // yangi dizayn: ikonali panel / pastki menyu (shu #tabs ustida)
 }
 // Menyu guruhlari (tartib — menyudagi tartib). Kalitlar buildTabs'dagi bo'lim kalitlari; rolga ko'rinmaydiganlari o'zi tushib qoladi.
 const NAV_FLAT_MAX = 8;
@@ -1836,6 +1904,7 @@ function navToggleGroup(g, open, byUser){
     //   (kirishda / kod orqali ochilganda qator joyida qoladi: chapdagi «Tasdiqlash» yashirinmasin)
     if(L<vL || hR>vR || (byUser && fL>vR-48)){ try{ nav.scrollTo({ left:Math.max(0, L-8), behavior:'smooth' }); }catch(e){} }
   }
+  if(opened && v2Desk()) v2FlyPlace(opened);
 }
 // Yopiq guruh sarlavhasida — ichidagi bo'limlar belgilarining (yangi arizalar va h.k.) yig'indisi.
 function navGroupBadges(){
@@ -1844,6 +1913,103 @@ function navGroupBadges(){
     const gb=gr.querySelector('.nav-gb'); if(!gb) return;
     if(n>0){ gb.textContent = n>99?'99+':String(n); gb.hidden=false; } else { gb.textContent=''; gb.hidden=true; }
   });
+  if(uiV2()) v2TabbarBadges();
+}
+// ===== YANGI DIZAYN (v2), 2-bosqich — MENYU =====
+//   Kompyuter (≥821px): to'q yashil ikonali tor panel; guruh bosilsa yonida bo'limlar ro'yxati (flyout) ochiladi.
+//   Telefon (≤820px): pastki menyu (Asosiy + 3 guruh + «Menyu») va «Menyu» oynasi (barcha bo'limlar).
+//   Hammasi MAVJUD #tabs tuzilmasi ustida: tugmalar, guruhlar, belgilar (badge) va ruxsatlar (allowedTabs) o'zgarmaydi —
+//   faqat joylashuv va ko'rinish. Eski ko'rinish (v1) — avvalgi guruhlangan menyu.
+const V2_DESK_MQ='(min-width:821px)';
+function v2Desk(){ return uiV2() && !!(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
+function v2Mob(){ return uiV2() && !(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
+const V2_GSHORT={ boshqaruv:'Boshqaruv', qabul:'O‘quvchilar', talim:'Ta’lim', xodimlar:'Xodimlar', moliya:'Moliya', xizmat:'Xizmatlar', sayt:'Sayt', tizim:'Tizim' };
+let V2_NAV_WIRED=false, V2_SHEET_OPENER=null;
+// Ochilgan guruh ro'yxatini (flyout) panel yoniga, sarlavhasi ro'parasiga joylaydi (ekrandan chiqmasin).
+function v2FlyPlace(gr){
+  const nav=$('#tabs'), h=gr&&gr.querySelector('.nav-gh'), f=gr&&gr.querySelector('.nav-items'); if(!nav||!h||!f) return;
+  const nr=nav.getBoundingClientRect(), hr=h.getBoundingClientRect(), vh=window.innerHeight||800;
+  f.style.left=Math.round(nr.right+12)+'px';
+  const fh=Math.min(f.scrollHeight||f.offsetHeight||320, vh-24);
+  f.style.top=Math.round(Math.max(12, Math.min(hr.top-8, vh-fh-12)))+'px';
+}
+function v2FlyCloseAll(){ const nav=$('#tabs'); if(nav && nav.querySelector('.nav-grp.open')) navToggleGroup('', false); }
+function v2SheetOpen(g, opener){
+  const nav=$('#tabs'); if(!nav) return;
+  [...nav.children].forEach(c=>c.classList.toggle('v2-hide', !!g && !c.classList.contains('v2-sh-h') && c.dataset.grp!==g));
+  nav.classList.toggle('v2-one', !!g);   // bitta guruh ochilganda uning nomi sarlavhada — ichki takror yashiriladi
+  const t=nav.querySelector('.v2-sh-h b'); if(t){ const gh=g&&nav.querySelector(`.nav-grp[data-grp="${g}"] .nav-gh .lbl`); t.textContent=gh?gh.textContent:(nav.classList.contains('grouped')?'Barcha bo‘limlar':'Bo‘limlar'); }
+  document.documentElement.classList.add('v2-sheet-open'); V2_SHEET_OPENER=opener||null;
+  nav.scrollTop=0; const x=nav.querySelector('.v2-sh-x'); if(x) try{ x.focus({ preventScroll:true }); }catch(e){}
+}
+function v2SheetClose(){
+  if(!document.documentElement.classList.contains('v2-sheet-open')) return;
+  document.documentElement.classList.remove('v2-sheet-open');
+  const nav=$('#tabs'); if(nav){ [...nav.children].forEach(c=>c.classList.remove('v2-hide')); nav.classList.remove('v2-one'); }
+  const o=V2_SHEET_OPENER; V2_SHEET_OPENER=null; if(o && document.body.contains(o)) try{ o.focus({ preventScroll:true }); }catch(e){}
+}
+function v2NavAfterOpen(tab){
+  v2FlyCloseAll(); v2SheetClose();
+  const bar=document.getElementById('v2-tabbar'), nav=$('#tabs'); if(!bar||!nav) return;
+  const ab=nav.querySelector(`button[data-tab="${tab}"]`), g=ab&&ab.closest('.nav-grp')?ab.closest('.nav-grp').dataset.grp:'';
+  let hit=bar.querySelector(`[data-tb-tab="${tab}"]`)||(g?bar.querySelector(`[data-tb-grp="${g}"]`):null)||bar.querySelector('[data-tb-menu]');
+  bar.querySelectorAll('.v2-tb').forEach(b=>{ const on=b===hit; b.classList.toggle('on',on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+}
+function v2TabbarBadges(){
+  const bar=document.getElementById('v2-tabbar'), nav=$('#tabs'); if(!bar||!nav) return;
+  const num=el=>el&&!el.hidden?(parseInt(el.textContent,10)||0):0;
+  let shown=0;
+  bar.querySelectorAll('.v2-tb').forEach(b=>{ let n=0;
+    if(b.dataset.tbTab) n=num(nav.querySelector(`button[data-tab="${b.dataset.tbTab}"] .tab-badge`));
+    else if(b.dataset.tbGrp) n=[...nav.querySelectorAll(`.nav-grp[data-grp="${b.dataset.tbGrp}"] .nav-items .tab-badge`)].reduce((s,el)=>s+num(el),0);
+    else return;
+    shown+=n; v2SetBadge(b, n); });
+  const menu=bar.querySelector('[data-tb-menu]');
+  if(menu){ const all=[...nav.querySelectorAll('button[data-tab] .tab-badge')].reduce((s,el)=>s+num(el),0); v2SetBadge(menu, Math.max(0, all-shown)); }
+}
+function v2SetBadge(b, n){ let el=b.querySelector('.tab-badge'); if(n>0){ if(!el){ el=document.createElement('span'); el.className='tab-badge'; b.querySelector('.tb-ic').appendChild(el); } el.textContent=n>99?'99+':String(n); } else if(el) el.remove(); }
+function v2NavSetup(nav, grouped){
+  // «Menyu» oynasi sarlavhasi (telefonda) — #tabs ichida, data-tab'siz (bo'lim ro'yxatiga qo'shilmaydi)
+  const hd=document.createElement('div'); hd.className='v2-sh-h';
+  hd.innerHTML=`<b>${grouped?'Barcha bo‘limlar':'Bo‘limlar'}</b><button type="button" class="v2-sh-x" aria-label="Menyuni yopish">×</button>`;
+  nav.insertBefore(hd, nav.firstChild);
+  hd.querySelector('.v2-sh-x').addEventListener('click', v2SheetClose);
+  // Pastki menyu (telefon) — mavjud bo'limlardan quriladi
+  const tabs=[...nav.querySelectorAll('button[data-tab]')];
+  const icOf=b=>{ const i=b&&b.querySelector('.ic'); return i?i.innerHTML:''; };
+  const lblOf=b=>{ const l=b&&b.querySelector('.lbl'); return l?l.textContent:''; };
+  const items=[];
+  if(grouped){
+    const home=nav.querySelector('button[data-tab="dashboard"]')||tabs[0];
+    if(home) items.push({ tab:home.dataset.tab, l:home.dataset.tab==='dashboard'?'Asosiy':lblOf(home), ic:icOf(home) });
+    const have=[...nav.querySelectorAll('.nav-grp')].map(g=>g.dataset.grp);
+    ['qabul','moliya','xodimlar','talim','xizmat','sayt','tizim','boshqaruv'].filter(g=>have.includes(g)).slice(0,3).forEach(g=>{
+      const h=nav.querySelector(`.nav-grp[data-grp="${g}"] .nav-gh`); items.push({ grp:g, l:V2_GSHORT[g]||lblOf(h), ic:icOf(h) }); });
+    items.push({ menu:1 });
+  } else if(tabs.length<=5) tabs.forEach(b=>items.push({ tab:b.dataset.tab, l:lblOf(b), ic:icOf(b) }));
+  else { tabs.slice(0,4).forEach(b=>items.push({ tab:b.dataset.tab, l:lblOf(b), ic:icOf(b) })); items.push({ menu:1 }); }
+  const MENU_IC='<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M120-240v-80h720v80H120Zm0-200v-80h720v80H120Zm0-200v-80h720v80H120Z"/></svg>';
+  let bar=document.getElementById('v2-tabbar');
+  if(!bar){ bar=document.createElement('nav'); bar.id='v2-tabbar'; bar.className='v2-tabbar'; bar.setAttribute('aria-label','Pastki menyu'); document.body.appendChild(bar); }
+  bar.innerHTML=items.map(it=>it.menu
+      ? `<button type="button" class="v2-tb" data-tb-menu="1" aria-label="Barcha bo‘limlar"><span class="tb-ic">${MENU_IC}</span><span class="tb-l">Menyu</span></button>`
+      : `<button type="button" class="v2-tb" ${it.tab?`data-tb-tab="${esc(it.tab)}"`:`data-tb-grp="${esc(it.grp)}"`} aria-label="${esc(it.l)}"><span class="tb-ic">${it.ic}</span><span class="tb-l">${esc(it.l)}</span></button>`).join('');
+  bar.querySelectorAll('.v2-tb').forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.tbTab) openTab(b.dataset.tbTab);
+    else if(b.dataset.tbGrp) v2SheetOpen(b.dataset.tbGrp, b);
+    else v2SheetOpen('', b); }));
+  let bg=document.getElementById('v2-sheet-bg');
+  if(!bg){ bg=document.createElement('div'); bg.id='v2-sheet-bg'; bg.addEventListener('click', v2SheetClose); document.body.appendChild(bg); }
+  if(!V2_NAV_WIRED){ V2_NAV_WIRED=true;
+    // Panel tashqarisiga bosilsa ochiq guruh ro'yxati yopiladi (boshqa guruh sarlavhasi bosilsa — o'sha ochiladi)
+    document.addEventListener('click', e=>{ if(!v2Desk()) return; const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && !op.contains(e.target)) v2FlyCloseAll(); }, true);
+    document.addEventListener('keydown', e=>{ if(e.key!=='Escape' || !uiV2()) return;
+      if(document.documentElement.classList.contains('v2-sheet-open')){ v2SheetClose(); return; }
+      const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && v2Desk()){ const h=op.querySelector('.nav-gh'); v2FlyCloseAll(); if(h) try{ h.focus(); }catch(_){} } });
+    window.addEventListener('resize', ()=>{ if(!uiV2()) return; if(v2Desk()) v2SheetClose(); else v2FlyCloseAll(); const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && v2Desk()) v2FlyPlace(op); });
+  }
+  v2TabbarBadges();
+  if(typeof currentTab==='string' && currentTab) v2NavAfterOpen(currentTab);
 }
 function openTab(tab){
   if(!SESSION.isAdmin){ const allow=allowedTabs(); if(!allow.includes(tab)) tab=allow[0]; }
@@ -1851,7 +2017,8 @@ function openTab(tab){
   $('#tabs').querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi ochiq turadi
     $('#tabs').querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
-    if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true); }
+    if(uiV2()) v2NavAfterOpen(tab);
+    else if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true); }
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   // Tez almashganda ESKI bo'limning kech tugagan renderi endi yo'q elementga yozib TypeError otardi (jonli tekshiruvda
   //   «Imtihonlar»da ko'rindi) — eski ko'rinish xatosi jim o'tadi; JORIY bo'lim xatosi avvalgidek konsolda ko'rinadi.

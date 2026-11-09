@@ -1,9 +1,9 @@
 # Yangi dizayn (v2) — joriy etish eslatmasi
 
 Egasining qarori (2026-11-09): yangi dizayn tasdiqlandi; **shrift (Roboto Condensed) va logotiplar o‘zgarmaydi**;
-**ruxsatlar o‘zgarmaydi** — ish faqat dizayn. Bajarildi: 1-bosqich (umumiy ko‘rinish) va 3-bosqich (Direktor bosh
-sahifasi). 2-bosqich (ikonali menyu / telefonda pastki menyu) so‘ralmagan — guruhlangan menyu tuzilishi o‘zgarmagan,
-faqat ko‘rinishi yangilangan.
+**ruxsatlar o‘zgarmaydi** — ish faqat dizayn. Bajarildi: 1-bosqich (umumiy ko‘rinish), 3-bosqich (Direktor bosh
+sahifasi) va egasining keyingi so‘rovi bilan 2-bosqich (kompyuterda ikonali menyu, telefonda pastki menyu). Menyu
+tuzilishi (guruhlar, bo‘limlar, ruxsatlar) o‘zgarmagan — faqat joylashuvi va ko‘rinishi.
 
 ## Qanday ishlaydi
 
@@ -22,6 +22,37 @@ soya. Tugmalar va chiplar: «pill» shakli; asosiy tugma (`.btn.gold`) iliq rang
 halqasi. Oyna (modal): 24 px burchak. Xabarlar (toast): to‘q grafit. Jadvallar zichligi o‘zgarmagan (katak oralig‘i
 avvalgidek); telefonda jadval-kartochka ko‘rinishi saqlangan. Moliya / Buxgalteriya / Marketing bloklarida faqat
 burchak va soya yangilangan (tuzilish o‘zgarmagan).
+
+## 2-bosqich — menyu (barcha rollar)
+
+Yangi menyu **mavjud** `#tabs` tuzilmasi ustiga quriladi (`buildTabs` oxirida `v2NavSetup()`): tugmalar, guruhlar
+(`NAV_GROUPS`), belgilar (badge) va har rolning bo‘limlari (`allowedTabs`) avvalgidek — faqat joylashuv va ko‘rinish
+o‘zgaradi. Har bir rolda bo‘limlar soni v1 bilan bir xil (Direktor 44, Moliya menejeri 8, o‘qituvchi 5, hamshira 2 …).
+
+**Kompyuter (kengligi ≥ 821 px).** Chapda to‘q yashil, 80 px li ikonali panel (sahifa aylantirilganda joyida turadi).
+Har bir guruh — bitta ikonka va qisqa nom; bosilganda yonida oq ro‘yxat (flyout) ochiladi: sarlavhasi — guruh nomi,
+ichida shu guruh bo‘limlari. Ro‘yxat bo‘lim tanlanganda, tashqariga bosilganda yoki Esc bilan yopiladi; ekrandan
+chiqmaydi. Faol bo‘lim guruhi yalpiz rangli «pill» bilan belgilanadi; yopiq guruhda ichidagi belgilar yig‘indisi
+ko‘rinadi (avvalgidek). Past ekranlarda (balandligi ≤ 700 / ≤ 540 px — kichik noutbuk yoki brauzer kattalashtirilgan)
+panel ixchamlashadi, hamma ikonka sig‘adi.
+
+**Telefon / planshet (≤ 820 px).** Chap menyu yashiriladi; pastda doimiy menyu: «Asosiy» (Statistika) + rolda bor
+guruhlardan uchtasi (tartib: O‘quvchilar, Moliya, Xodimlar, O‘quv jarayoni, Xizmatlar, Sayt, Tizim, Boshqaruv) +
+«Menyu». Guruh bosilsa — pastdan shu guruh bo‘limlari oynasi; «Menyu» — «Barcha bo‘limlar» (guruhlar bo‘yicha, ikki
+ustunli kartalar, «Tasdiqlash» eng tepada). Oyna × tugmasi, fon, Esc yoki bo‘lim tanlash bilan yopiladi. Xabarlar
+(toast) va sahifa pasti menyu ostida qolmaydi. Guruhsiz rollar (≤ 8 bo‘lim): ≤ 5 bo‘lim — hammasi pastki menyuda,
+aks holda 4 tasi + «Menyu».
+
+**Qulaylik.** Guruh tugmalarida `aria-expanded`, pastki menyuda `aria-current`; oyna ochilganda fokus × ga o‘tadi,
+yopilganda bosilgan tugmaga qaytadi; bosiladigan joylar ≥ 44 px; `prefers-reduced-motion` da animatsiya yo‘q.
+
+**Tekshiruv (lokal, soxta ma’lumot):** menyu sinovi 19/19 (panel, 8 guruh ro‘yxatining har biri ekran ichida, Esc /
+tashqariga bosish, klaviatura, pastki menyu, «Barcha bo‘limlar» — 44 bo‘lim, guruh oynasi, fon bilan yopish, toast
+joyi, guruhsiz rollar, `?ui=v1` tegilmagan); barcha rollar × barcha bo‘limlar × 1440/390 (Direktor — 1024 va past
+1280×560 ham) — sahifa xatosi 0, gorizontal siljish yo‘q; bosh sahifa 11/11, bayram/ta’til 15/15, eski menyu sinovi (v1) 5/5. `?ui=v1` nazorat rasmlari
+(27 ta) bir xil sharoitda 2-bosqichdan oldingi commit bilan solishtirildi: 22 tasi piksel-piksel bir xil, qolganlarida
+farq faqat vaqtda (sanoq soat) va sinov skriptining menyu siljish tezligida (asl v1 rasmlari ham shunday). Past
+ekranlar: 1366×625, 1280×560, 1024×600, 1093×500 — panel to‘liq sig‘adi.
 
 ## 3-bosqich — Direktor bosh sahifasi («Statistika»)
 
