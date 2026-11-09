@@ -1263,6 +1263,21 @@ telefonda pastki menyu va «Menyu» oynasi. Shrift tanlash (Roboto Condensed / M
 ko'rib chiqish (23 topilma tuzatildi); tekshiruv 54/54. Saytga hali tatbiq etilmagan — egasining qarori kutilmoqda
 (`docs/dizayn/admin-inventar.en.md` §5: bosqichma-bosqich joriy etish, ~7–11 ish kuni).
 
+## 51) Yangi dizayn (v2) joriy etildi: umumiy ko'rinish + Direktor bosh sahifasi — 2026-11-09
+Egasi tasdiqladi: shrift va logotiplar o'zgarmaydi, ruxsatlar o'zgarmaydi, ish faqat dizayn; 1- va 3-bosqich.
+- **Bayroq:** `<html data-ui="v2">` (standart). Eski ko'rinish: `?ui=v1` yoki «Profil» → «Ko'rinish» (qurilmada eslab
+  qolinadi). Barcha yangi CSS `<style id="ui-v2">` da, har qoida `html[data-ui="v2"]` bilan — v1 piksel-piksel avvalgidek.
+- **1-bosqich:** kanvas fon, to'q yashil menyu paneli (guruhlar/akkordeon o'zgarmagan), oq kartalar r20 + yumshoq soya,
+  pill tugmalar (asosiy — iliq rang), maydonlar, modal, toast; jadval zichligi va PDF uslublari tegilmagan.
+- **3-bosqich:** `renderDashboardV2()` — salomlashuv + bugungi holat, «Bugun e'tibor talab qiladi», davomat, ball, to'lovlar,
+  qarz yoshi, moliya, 6 oylik oqim (Kirim/Chiqim/Sof foyda), xodimlar bugun, tasdiqlash navbatlari, bayram/ta'til belgili
+  hafta kalendari, xavf ostidagilar, sinflar, foydalanuvchilar. Faqat o'qiydi; tugmalar faqat bo'lim ochadi. Klassik
+  sahifa bilan umumiy hisob: `dashCoreStats()`, `dashFinData()` (ikkinchisida so'rovlar parallel, ishlatilmaydigan
+  `refunds` o'qilmaydi). Kirishdagi takroriy render so'rovlari birlashtirildi (`dv2Once`).
+- **Tekshiruv (lokal):** barcha rollar × barcha bo'limlar × 1440/390 — xato 0, siljish yo'q, bo'lim soni v1 bilan teng;
+  v1 nazorat rasmlari bir xil; bosh sahifa 11/11 (14 raqam paritet); menyu 5/5; bayram/ta'til 15/15; kontrast ≥ 5,2:1.
+  Batafsil: `docs/dizayn/v2-joriy-etish.md`.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
