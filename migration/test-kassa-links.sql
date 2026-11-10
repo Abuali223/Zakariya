@@ -89,14 +89,18 @@ insert into public.payroll_lines (id, "runId", "personType", "personId", "refId"
   ('2026-12__teacher__IQT-T1', '2026-12', 'teacher', 'IQT-T1', 'tch1', 'Sinov O''qituvchi', 3000000, 3000000),
   ('2026-12__staff__IQX-T1', '2026-12', 'staff', 'IQX-T1', 'st1', 'Sinov Xodim', 2000000, 2000000);
 set local session_replication_role = origin;
-select zz.clock('2027-01-04 10:00+05');
+select zz.clock('2027-01-03 16:00+05');   -- ishga tushirishdan bir kun oldin
 
 -- ---------- Kassa ishga tushguncha: avvalgidek ----------
 select zz.chk('K0 kassa ishga tushmagan: maosh avvalgidek to''g''ridan-to''g''ri yoziladi',
-  zz.as('U_KAS', $q$with x as (insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, paid, date) values ('sp_old_1','IQT-T1','teachers:tch1','Sinov','2026-12',100000,'2027-01-04') returning id) select id from x$q$), '^sp_old_1$');
+  zz.as('U_KAS', $q$with x as (insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, paid, date) values ('sp_old_1','IQT-T1','teachers:tch1','Sinov','2026-12',100000,'2027-01-03') returning id) select id from x$q$), '^sp_old_1$');
 select zz.chk('K0b kassa ishga tushmagan: naqd maosh funksiyasi rad', zz.rpc('U_KAS', 'kassa_salary_pay', zz.sal('sp_k0_0001', 'cash', 'IQT-T1', 'teachers:tch1', '2026-12', 1000)), '^ERR P0001 \[kassa:not_live\]');
 select zz.chk('K0c kassa ishga tushmagan: naqd qaytarish so''rovi rad',
   zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"invoice","id":"ia","amount":1000,"reason":"sinov","payee":"Sinov Ota Onaevich","clientRef":"rf_k0_000001"}'), '^ERR P0001 \[kassa:not_live\]');
+select zz.chk('K0d ishga tushadigan kun kassa orderisiz naqd maosh berilgan kunga qo''yilmaydi; sozlama o''zgarmaydi',
+  zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-03"}')::text$q$) || ' | ' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh'),
+  '^ERR P0001 \[kassa:live_gap\].*maosh / avans: 1.* \| bo''sh$');
+select zz.clock('2027-01-04 10:00+05');
 select zz.chk('K1 ishga tushirish va boshlang''ich qoldiq 5 000 000',
   left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000}')::text$q$), 0)
   || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":5000000,"startDay":"2027-01-04"}')::text$q$), '"ok": true');

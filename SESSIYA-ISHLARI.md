@@ -1595,6 +1595,10 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   - *Ruxsat tartibi:* `kassa_salary_pay` avval ruxsatni, keyin ma'lumotni tekshiradi (ilgari begona rol «kassa ishga
     tushirilmagan» javobini olardi). Yangi doimiy sinov (`test-kassa.sql` H9, 225): har bir ochiq moliya funksiyasi bo'sh ma'lumot
     bilan chaqirilganda begona rol va bloklangan hisobga (roli moliya menejeri + kassir bo'lsa ham) faqat 42501 qaytaradi.
+  - *Ishga tushirish sanasi:* `fin_org_set` — «Kassa ishga tushadigan kun» bugungi yoki o'tgan kunga qo'yilganda shu kundan beri
+    kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat, maosh, avans, qaytarish) bo'lsa rad etadi (`kassa:live_gap`) — aks holda
+    ular moslik tekshiruvida abadiy «ordersiz naqd harakat» bo'lib qolardi. `test-kassa-pay.sql` 51 (+1), `test-kassa-links.sql`
+    92 (+1); bu ikki to'plamda kassa endi ordersiz naqd yozuvdan keyingi kuni ishga tushiriladi.
   - *Tekshirildi, o'zgarish talab qilmadi:* so'rovga soxta maydon qo'shish (holat, raqam, sana, tasdiqlar, «tizim hujjati»),
     qatorda mijoz bergan hisobvaraqlar, manfiy qator, juda uzun matn, kalit (`clientRef`) shakli, sanash summasi va nominallar,
     yo'q kassa — hammasi serverda rad etiladi yoki e'tiborga olinmaydi; dinamik SQL faqat migratsiya DDL'ida; sahifada foydalanuvchi

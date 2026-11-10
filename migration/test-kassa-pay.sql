@@ -67,13 +67,17 @@ insert into public.invoices (id, "studentId", "studentName", month, amount, "pai
   ('ia','T-1','Sinov A','2026-12',1000000,0,'pending'), ('ib','T-1','Sinov A','2027-01',1000000,0,'pending'),
   ('ic','T-1','Sinov A','2027-02',1000000,0,'pending');
 set local session_replication_role = origin;
-select zz.clock('2027-01-04 10:00+05');
+select zz.clock('2027-01-03 16:00+05');   -- ishga tushirishdan bir kun oldin
 
 -- ---------- Kassa ishga tushguncha: avvalgidek ----------
 select zz.put('J1', zz.pay('U_KAS', 'man_j1_0001', 'T-1', 100000, 'cash', 'Sinov Ota', null, null));
 select zz.chk('J1 kassa ishga tushmagan: naqd to''lov avvalgidek, KO-1 siz', zz.get('J1'), '"ok": true.*"kassa": null|"kassa": null.*"ok": true');
 select zz.chk('J1b to''lov qo''llandi, kassa hujjati yo''q',
   (select status || ':' || coalesce("cashDocId", '-') from public.payments where id = 'man_j1_0001') || ':' || (select count(*) from public.cash_docs), '^applied:-:0$');
+select zz.chk('J1c ishga tushadigan kun kassa orderisiz naqd to''lov yozilgan kunga qo''yilmaydi; sozlama o''zgarmaydi',
+  zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-03"}')::text$q$) || ' | ' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh'),
+  '^ERR P0001 \[kassa:live_gap\].*o''quv to''lovi: 1.* \| bo''sh$');
+select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- Ishga tushirish ----------
 select zz.chk('J2 Direktor kassani 04.01.2027 dan ishga tushirdi', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04"}')::text$q$), '"kassaGoLive": "2027-01-04"');

@@ -828,7 +828,7 @@ shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni y
 parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 50, `test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 32,
+`test-kassa-pay.sql` 51, `test-kassa-links.sql` 92, `test-kassa-report.sql` 52, `test-fin-period.sql` 32,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
 39; brauzerda olti to‘liq stsenariy (173 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa

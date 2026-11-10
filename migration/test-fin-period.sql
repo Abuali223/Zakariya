@@ -165,8 +165,7 @@ select zz.chk('L7 kassa holatida davr qulfi ko''rinadi (shakllarda eng erta sana
   left(zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-31')::text$q$), 0) || zz.as('U_KAS', $q$select (public.kassa_state('main') ->> 'lockedThrough')$q$), '^2026-12-31$');
 
 -- ---------- (K) davr qulfi va kassa kunlari ----------
-select zz.put('K1', left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-02"}')::text$q$), 0)
-  || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2026-12-31"}')::text$q$));
+select zz.put('K1', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2026-12-31"}')::text$q$));
 select zz.chk('K1 birinchi kassa kuni yopilgan davrga qo''yilmaydi', zz.get('K1'), '^ERR 42501 \[fin:locked\] Birinchi kassa kuni');
 select zz.put('K2', left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2027-01-02"}')::text$q$), 0)
   || zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":10000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 02.01.2027","note":"Sinov","clientRef":"p-k2-0001"}'::jsonb)::text$q$));

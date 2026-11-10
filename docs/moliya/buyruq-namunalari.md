@@ -51,6 +51,11 @@ F.I.Sh. va imzolar — har birida bor):
 5. Kassani sanash va topshirish-qabul dalolatnomalari.
 6. Avans hisoboti (hisobdor shaxslar).
 7. Ish haqi va o‘qish to‘lovi o‘zaro hisobi dalolatnomasi.
+8. Qog‘ozda yuritiladigan shakllar: tizim ishlamagan paytdagi ichki «Қ» blankasi va jurnali, boshlang‘ich qoldiq uchun kassani
+   sanash dalolatnomasi, qog‘oz order daftarlarini yopish dalolatnomasi.
+
+Shakllar ro‘yxati (kim imzolaydi, necha nusxa, qayerda saqlanadi) va qog‘oz shablonlari — `docs/moliya/shakllar.md`. KO-3 jurnali
+va tizimdagi avans hisoboti keyingi bosqichlarda chiqadi — ungacha avans hisoboti qog‘oz shaklda (Sh-1).
 
 Kassa hujjatlarida **tuzatish taqiqlanadi**: xato hujjat bekor qilinadi va yangisi yoziladi (buzilgan blanka saqlanadi).
 

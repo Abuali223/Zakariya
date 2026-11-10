@@ -160,7 +160,7 @@ end $$;
 -- Tashkilot sozlamalari — FAQAT Direktor (T1, L1, limit, kassaGoLive va rekvizitlar). Faqat berilgan maydonlar o'zgaradi.
 create or replace function public.fin_org_set(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare k text; v_num numeric; r public.fin_org%rowtype;
+declare k text; v_num numeric; r public.fin_org%rowtype; v_live date; v_rec jsonb;
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'fin_org_set: obyekt kerak' using errcode = '22023'; end if;
@@ -191,6 +191,23 @@ begin
     "kassaGoLive" = case when p ? 'kassaGoLive' then nullif(p ->> 'kassaGoLive', '')::date else "kassaGoLive" end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';
+  -- Ishga tushadigan kun bugungi yoki o'tgan kunga qo'yilsa: shu kundan beri kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat,
+  --   maosh, avans, qaytarish) bo'lmasligi kerak — aks holda ular abadiy «kassa hujjatisiz naqd harakat» bo'lib qoladi (moslik
+  --   P1 / P4 / P5 / P8). Bunday yozuv bo'lsa sana ulardan keyingi kunga qo'yiladi (ular boshlang'ich qoldiq sanashiga kiradi).
+  --   Tekshiruv kassa-links.sql dagi app.kassa_reconcile bilan (modulning shu qismi o'rnatilgan bo'lsa).
+  if p ? 'kassaGoLive' then
+    select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
+    if v_live is not null and v_live is distinct from r."kassaGoLive" and v_live <= app.fin_today()
+       and to_regprocedure('app.kassa_reconcile(date,date)') is not null then
+      execute 'select app.kassa_reconcile($1, $2)' into v_rec using v_live, app.fin_today();
+      if coalesce((v_rec ->> 'total')::int, 0) > 0 then
+        raise exception 'Kassani % dan ishga tushirib bo''lmaydi: shu kundan beri kassa orderisiz naqd yozuvlar bor (o''quv to''lovi: %, xarajat: %, maosh / avans: %, qaytarish: %). Ishga tushadigan kunni shu yozuvlardan keyingi kunga qo''ying',
+          to_char(v_live, 'DD.MM.YYYY'), coalesce(v_rec #>> '{p1,pay}', '0'), coalesce(v_rec #>> '{p4,row}', '0'),
+          coalesce(v_rec #>> '{p5,row}', '0'), coalesce(v_rec #>> '{p8,row}', '0')
+          using errcode = 'P0001', hint = 'kassa:live_gap';
+      end if;
+    end if;
+  end if;
   return (select to_jsonb(o) from public.fin_org o where o.id = 'main');
 end $$;
 revoke all on function public.fin_org_set(jsonb) from public, anon;
