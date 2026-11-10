@@ -448,15 +448,19 @@ declare d date := coalesce(p_day, (now() at time zone 'Asia/Tashkent')::date); v
 begin
   if not (app.is_admin() or app.is_system()) then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   v_from := (d::timestamp) at time zone 'Asia/Tashkent'; v_to := ((d + 1)::timestamp) at time zone 'Asia/Tashkent';
+  -- To'lovlar — admin ilovasidagi kassa hisoboti bilan AYNAN bir xil ta'rif (fin-prereq.sql: app.fin_receipts —
+  --   admin.html isCashPay/payDay): bo'lingan to'lov bolalari (':s:') va avans ko'chirmasi ('reattr') hisoblanmaydi, kun —
+  --   kassa kuni (qo'lda to'lovda kassir tanlagan «Sana»). 'late' — bugun kiritilgan, lekin oldingi kun(lar) uchun yozilgan.
   select jsonb_build_object(
     'day', to_char(d, 'YYYY-MM-DD'),
-    'payments', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(p.amount), 0),
-                   'byProvider', coalesce((select jsonb_object_agg(pv, s) from (select coalesce(nullif(p2.provider, ''), 'boshqa') as pv, sum(p2.amount) as s
-                       from public.payments p2 where p2."createdAt" >= v_from and p2."createdAt" < v_to
-                        and coalesce(p2.status, '') in ('applied', 'paid', 'confirmed', 'split', 'unmatched') group by 1) z), '{}'::jsonb))
-                   from public.payments p where p."createdAt" >= v_from and p."createdAt" < v_to
-                    and coalesce(p.status, '') in ('applied', 'paid', 'confirmed', 'split', 'unmatched')),
-    'unmatched', (select count(*) from public.payments p where p."createdAt" >= v_from and p."createdAt" < v_to and coalesce(p.status, '') = 'unmatched'),
+    'payments', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(r.amount), 0),
+                   'byProvider', coalesce((select jsonb_object_agg(z.pv, z.s) from (select r2.provider as pv, sum(r2.amount) as s
+                       from app.fin_receipts(d, d) r2 group by 1) z), '{}'::jsonb))
+                   from app.fin_receipts(d, d) r),
+    'late', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(p.amount), 0))
+               from public.payments p where p."createdAt" >= v_from and p."createdAt" < v_to
+                and app.counts_as_receipt(p.id, p.status, p.provider, p.amount) and app.pay_day(p."createdAt", p.raw) < d),
+    'unmatched', (select count(*) from app.fin_receipts(d, d) r where coalesce(r.status, '') = 'unmatched'),
     'debt', app.kpi_debt_aging(least(v_to, now())),
     'attendance', app.kpi_attendance(d, d) - 'byClass',
     'pending', jsonb_build_object(

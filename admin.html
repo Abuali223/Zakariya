@@ -11691,8 +11691,18 @@ function obRecentDup(sid, amount){ const now=Date.now(); return obPending().some
 // Tarmoq xatosimi (qayta urinamiz) yoki haqiqiy xatomi (masalan ustun yo'q — qayta urinmaymiz)?
 function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return false; /* server javob berdi (PGRST/Postgres) -> qattiq */
   const m=String((e&&(e.message||e))||'').toLowerCase(); return /failed to fetch|networkerror|load failed|timeout|connection|err_|abort|fetch/.test(m); }   /* mos kelmasa -> qattiq (cheksiz retry emas) */
-// Bitta navbat elementini serverga yuborish (pending -> apply -> applied). Idempotent.
+// Bitta navbat elementini serverga yuborish. Idempotent.
+//   Moliya rejasi F0.15: BITTA server tranzaksiyasi — payments qatori + balansga qo'llash + holat 'applied'
+//   (record_manual_payment, migration/fin-prereq.sql). Avvalgi 3 ta alohida so'rov yarim yo'lda uzilsa «pending» yetim
+//   qator qolib, kassa hisobotidan tushib qolardi. Eski yo'l (pastda) — faqat server hali yangilanmagan bo'lsa (funksiya yo'q).
 async function obFlushOne(it){
+  try{
+    const r=await rpc('record_manual_payment', { p_pay_id:it.payId, p_sid:String(it.sid), p_amount:Number(it.amount)||0, p_method:it.method,
+      p_date:it.date||null, p_note:it.note||'', p_period:it.period||'', p_payer_name:it.nm||'',
+      p_captured:(Number(it.ts)>0 ? new Date(Number(it.ts)).toISOString() : null) });
+    if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa/o‘quvchi bilan yozilgan' : ('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); throw e; }
+    return r;
+  }catch(e){ if(!rpcMissing(e)) throw e; }
   await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
     payerName:it.nm||'', matched:true, raw:{ manual:true, method:it.method, date:it.date, note:it.note||'', forPeriod:it.period||'' },
     // createdAt = KIRITILGAN vaqt (navbatga qo'shilgan payt), yuborilgan payt EMAS: oflayn kiritilib keyingi kuni/oyda

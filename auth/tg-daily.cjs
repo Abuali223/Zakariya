@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const PROV = { cash: 'naqd', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'o‘tkazma', bank: 'bank', boshqa: 'boshqa' };
+const PROV = { cash: 'naqd', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'o‘tkazma', bank: 'bank', terminal: 'terminal', boshqa: 'boshqa' };
 const fmtNum = n => Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/[\s,]/g, ' ');
 const tkDay = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).toISOString().slice(0, 10);
 const tkHour = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUTCHours();
@@ -30,6 +30,10 @@ function composeDaily(d, checks) {
   const prov = Object.entries(p.byProvider || {}).sort((a, b) => Number(b[1]) - Number(a[1])).map(([k, v]) => `${PROV[k] || k} ${fmtNum(v)}`).join(' · ');
   const L = [`📊 IQROR Academy — kunlik hisobot (${day})`, ''];
   L.push(`💰 To‘lovlar: ${Number(p.count) || 0} ta · ${fmtNum(p.sum)} so‘m${prov ? ` (${prov})` : ''}`);
+  // To'lovlar kassa kuni bo'yicha (admin «To‘lovlar → Hisobot» bilan bir xil): bugun kiritilib, oldingi kun sanasi bilan
+  //   yozilganlari o'sha kunga tushadi — direktor ularni ko'rishi uchun alohida qator.
+  const late = d.late || {};
+  if (Number(late.count) > 0) L.push(`   ↩ Bugun kiritilgan, oldingi kunlar sanasi bilan: ${Number(late.count)} ta · ${fmtNum(late.sum)} so‘m`);
   if (Number(d.unmatched) > 0) L.push(`   ⚠️ O‘quvchiga biriktirilmagan: ${d.unmatched} ta — «To‘lovlar»da biriktiring`);
   L.push(`🧾 Qarzdorlar: 1 oy — ${Number(db.m1) || 0}, 2 oy — ${Number(db.m2) || 0}, 3+ oy — ${Number(db.m3) || 0}`);
   L.push(`📋 Davomat kiritilishi: ${at.rate == null ? '— (bugun dars kuni emas)' : `${String(at.rate).replace('.', ',')}% (${at.marked}/${at.required})`}`);

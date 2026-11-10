@@ -727,6 +727,15 @@ qoldiq — yanvar oxiridagi sanash).
 ### 0-bosqich — Qarorlar, tayyorgarlik, oraliq qoidalar (9–28-noyabr)
 Maqsad: 1a uchun qarorlar va siyosat, qarorga bog‘liq bo‘lmagan kod tuzatmalari, oraliq qoidalar, maosh va stend tayyorligi.
 
+**Holat (2026-11-10, A relizi):** F0.1 bajarildi (egasi qarorlarni topshirdi, §6). Kodda bajarildi va lokal sinovdan
+o‘tdi: F0.10 (`verify-db.sh` — trigger, cheklov, indeks), F0.11 (sinov to‘plami: `test-fin-prereq.sql`,
+`test-fin-race.sh`, `test-fin-parity.cjs`; superuser bo‘lmagan zanjir egasi bilan to‘liq qurish lokalda mumkin emas —
+Supabase event trigger’ni supautils orqali ruxsat beradi; deploy bitta tranzaksiyada bo‘lgani uchun xavfsiz), F0.12
+(`app.counts_as_receipt`, `app.pay_day`, `app.fin_receipts`; `director_daily` + «kechikib kiritilgan» qatori), F0.13,
+F0.14, F0.15 (`record_manual_payment`, admin outbox), F0.16 (RF-01, 02, 03, 05, 06, 07). F0.19 — `docs/moliya/oraliq-qoidalar.md`.
+Keyingi relizda: F0.17 (RF-04, A relizi prod’da ishlagandan keyin), F0.18 (maosh tayyorligi — faqat o‘qish tekshiruvi),
+F0.20 (sinov stendi), F0.3 buyruq namunalari.
+
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|
 | F0.1 | S | 0,5 | Qarorlar yig‘ilishi (egasi, MM, buxgalter, kassirlar); [BUX] vaqtincha qabul; kassa modeli | — | 14-noyabrda imzolangan |
@@ -899,6 +908,11 @@ model, sverka o‘zgarmasligi, boshlang‘ich qoldiq. Chiqish: uchta toza yopili
 ---
 
 ## 6. Qarorlar
+**2026-11-10 — egasining qarori:** barcha qarorlar ijrochiga topshirildi — quyidagi jadvaldagi **tavsiyalar qabul
+qilindi** (FD-01…FD-46; [BUX] bandlar buxgalter ko‘rib chiqquncha vaqtincha amalda). Faqat maktabning o‘zi beradigan
+ma’lumotlar ochiq qoladi: fiskal kassa holati (G1), buxgalter va imzo ro‘yxatlari (G2, G5), bank kassa limiti (F0.4),
+ishga tushirish rekvizitlari (F0.6), hisobdorlar qoldig‘i (F0.7), bank ko‘chirmasi namunasi (F0.8).
+
 Dastur tavsiyalar bo‘yicha quriladi; imzolarni faqat ishga tushirish kutadi. Ta’sir: K — kod, D — ma’lumot, S — sozlama,
 J — ish jarayoni.
 

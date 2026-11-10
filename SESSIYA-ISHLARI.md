@@ -1319,6 +1319,26 @@ hisobotini avtomatik bersin; har xarajat balans uchun statiyaga bo'linsin; dizay
   sinovi, buyruqlar, yil yakuni). Uch mustaqil ko'rik (buxgalteriya, kod, to'liqlik) — 59 topilma kiritildi.
 - **Dizayn:** 2-bosqich (6446f57) push qilingan; keyingi dizayn ishlari (ota-ona kabineti) egasi so'raguncha to'xtatilgan.
 
+## 55) Moliya, 0-bosqich (A relizi): server vaqti, atomar qo'lda to'lov, huquqlar I, yagona tushum — 2026-11-10
+Egasi barcha qarorlarni ijrochiga topshirdi (reja §6 tavsiyalari qabul qilindi).
+- **`migration/fin-prereq.sql`** (zanjirda `telegram.sql` dan keyin): `app.counts_as_receipt` / `app.pay_day` /
+  `app.fin_receipts` — admin.html isCashPay/payDay bilan aynan bir xil; indekslar (payments createdAt/status/studentId,
+  staff_advances month, expenses date); `app.fin_server_ts` triggeri — payments/expenses/salary_payments/staff_advances/
+  refunds da createdAt (va payments.statusAt, expenses.updatedAt) serverdan, qaytarish va maoshda byUid/byEmail serverdan
+  (tizim yozuvlari tegilmaydi); `record_manual_payment` — qo'lda to'lov bitta tranzaksiyada, idempotent; RF-01/02/05
+  (kassir va O'IBDO' xarajat va avans yozmaydi), RF-07 (credit_ledger o'chirilmaydi).
+- `add-credit.sql` — avansni ko'paytirish faqat Direktor/server (RF-03). `telegram.sql` director_daily — kassa kuni bo'yicha,
+  `:s:` bolalari va `reattr` siz, yangi «late» (bugun kiritilgan, oldingi kun sanasi bilan); `auth/tg-daily.cjs` qatori.
+- admin.html outbox — `record_manual_payment` (yangi funksiya bo'lmasa eski 3 bosqichli yo'l). `verify-db.sh` — trigger,
+  cheklov, indeks ham solishtiriladi.
+- **Sinov (lokal):** test-fin-prereq 69/69; test-fin-race 9/9 (8 parallel bir xil payId — bir marta); JS↔SQL moslik 605/605;
+  test-audit-fixes 36/36; test-public-close 92/92; test-auth-rls bazaviy bilan bir xil; payments npm test 192/0; auth npm test
+  yashil; brauzer (kassir): onlayn + oflayn navbat 11/11, eski yo'l ishlaydi; barcha rollar bo'limlari xatosiz; zanjir bo'sh va
+  ma'lumotli bazada qayta-qayta ishlaydi; verify-db: yangi zanjirga «BIR XIL», eski bazaga barcha farqlar ko'rsatildi.
+- **Prod (faqat o'qish):** vedomost tasdig'i 2026-12 dan yoqilgan; takroriy maosh ID 2 ta (tuzatish kerak); noyabr vedomosti
+  tizimda yo'q; SINOV Direktor hisobi va «2099-12» sinov vedomosti hali turibdi (tozalash kerak).
+- Hujjatlar: `docs/moliya/oraliq-qoidalar.md` (16-noyabrdan), `docs/moliya/buyruq-namunalari.md` (G5).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

@@ -115,6 +115,7 @@ set local iqror.migrating = '1';
 \ir notify-settings.sql
 \ir reports-roles.sql
 \ir telegram.sql
+\ir fin-prereq.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

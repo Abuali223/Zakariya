@@ -40,6 +40,11 @@ begin
   end if;
   p_delta := coalesce(p_delta, 0);
   if abs(p_delta) < 0.5 then return jsonb_build_object('ok', false, 'reason', 'zero'); end if;
+  -- RF-03 (moliya ish rejasi, 0-bosqich): avansni KO'PAYTIRISH (to'lovsiz pul paydo bo'lishi) — faqat Direktor yoki server.
+  --   Admin ilovasida yagona chaqiruv — Direktorning «↻ Qayta hisoblash» (narx kamayganda ortiqcha to'lov avansga).
+  if p_delta > 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role') then
+    raise exception 'forbidden: avansni ko''paytirish faqat Direktor' using errcode = '42501';
+  end if;
 
   -- Idempotentlik: bir xil ref bilan qayta chaqirilsa -> {dup:true} (avans ikki marta qo'shilmaydi).
   --   Uzilgan recalc qayta ishga tushganda invoice hali kamaytirilmagan bo'lsa -> excess qayta

@@ -51,6 +51,12 @@ function world(o) {
   ok('tizim: faqat ishlamayotgan xizmat', /🩺 Tizim: ❌ AI yordamchi — ulanib bo‘lmadi/.test(txt) && !/Baza/.test(txt.split('🩺')[1]), txt);
   ok('hammasi ishlasa', /hammasi ishlayapti/.test(composeDaily(DAILY, [{ name: 'x', ok: true }, { name: 'y', ok: null }])));
   ok('dars kuni emas (davomat null)', /— \(bugun dars kuni emas\)/.test(composeDaily(Object.assign({}, DAILY, { attendance: { rate: null } }), null)));
+  ok('kechikib kiritilgan yo‘q — qator yo‘q', !/oldingi kunlar sanasi/.test(txt), txt);
+  {
+    const t2 = composeDaily(Object.assign({}, DAILY, { late: { count: 2, sum: 1500000 }, payments: { count: 1, sum: 300000, byProvider: { terminal: 300000 } } }), null);
+    ok('kechikib kiritilgan to‘lovlar alohida qator', /↩ Bugun kiritilgan, oldingi kunlar sanasi bilan: 2 ta · 1 500 000 so‘m/.test(t2), t2);
+    ok('terminal nomi', /\(terminal 300 000\)/.test(t2), t2);
+  }
 
   console.log('\n— yuborish: faqat faol Direktor, /sozlamalar, bir kunda bir marta');
   {

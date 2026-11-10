@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Prod bazasi repo'dagi KANONIK holat bilan bir xilmi? (RLS policy / funksiya / ustun / grant / view)
+# Prod bazasi repo'dagi KANONIK holat bilan bir xilmi? (RLS policy / funksiya / ustun / grant / view / trigger / cheklov / indeks)
 #   Vaqtinchalik «iqror_verify» bazasida migration/run-all.sql zanjirini noldan quradi va jonli
 #   bazaga solishtiradi. Jonli bazaga HECH NARSA yozmaydi (faqat o'qiydi); vaqtinchalik baza o'chiriladi.
 #   Ishlatish:  bash ~/iqror-repo/migration/verify-db.sh      (deploy.sh oxirida avtomatik chaqiriladi)
@@ -31,7 +31,7 @@ select kind||'|'||name||'|'||h from (
      -- kengaytma funksiyalari (pgcrypto va h.k.) solishtirilmaydi: Supabase ularni `extensions` sxemasida saqlaydi
      and not exists (select 1 from pg_depend dp where dp.classid='pg_proc'::regclass and dp.objid=p.oid and dp.deptype='e')
   union all
-  select 'col', table_schema||'.'||table_name||'.'||column_name, md5(data_type||'#'||coalesce(column_default,''))
+  select 'col', table_schema||'.'||table_name||'.'||column_name, md5(data_type||'#'||coalesce(column_default,'')||'#'||is_nullable)
     from information_schema.columns where table_schema='public'
   union all
   select 'rls', n.nspname||'.'||c.relname, c.relrowsecurity::text
@@ -39,6 +39,17 @@ select kind||'|'||name||'|'||h from (
   union all
   select 'grant', grantee||'@'||table_schema||'.'||table_name||':'||privilege_type, 'g'
     from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated','service_role')
+  union all
+  -- Trigger / cheklov / indeks (moliya rejasi F0.10): himoya va server vaqti triggerlari, CHECK/UNIQUE cheklovlar jim yo'qolmasin.
+  select 'trigger', n.nspname||'.'||c.relname||'.'||t.tgname, md5(pg_get_triggerdef(t.oid))
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+   where not t.tgisinternal and n.nspname='public'
+  union all
+  select 'constraint', n.nspname||'.'||c.relname||'.'||k.conname, md5(k.contype::text||'#'||pg_get_constraintdef(k.oid))
+    from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace
+   where n.nspname='public' and c.relkind in ('r','p')
+  union all
+  select 'index', schemaname||'.'||indexname, md5(indexdef) from pg_indexes where schemaname='public'
   union all
   select 'view', schemaname||'.'||viewname, md5(definition) from pg_views v where schemaname='public'
      and not exists (select 1 from pg_depend dp join pg_class c on c.oid=dp.objid
@@ -98,8 +109,10 @@ missing=$(comm -23 <(cut -d'|' -f1,2 "$FP_CANON" | sort -u) <(cut -d'|' -f1,2 "$
 changed=$(join -t'|' -j1 <(awk -F'|' '{print $1"#"$2"|"$3}' "$FP_CANON" | sort -t'|' -k1,1) <(awk -F'|' '{print $1"#"$2"|"$3}' "$FP_LIVE" | sort -t'|' -k1,1) | awk -F'|' '$2!=$3{print $1}' | tr '#' '|')
 
 xp=$(echo "$extra" | grep -c '^policy|' || true); xf=$(echo "$extra" | grep -c '^func|' || true)
+# Repo'da YO'Q trigger yoki cheklov — ma'lumotni o'zgartirishi / yozishni to'sishi mumkin (indeks esa zararsiz — ℹ️).
+xt=$(echo "$extra" | grep -c '^trigger|' || true); xk=$(echo "$extra" | grep -c '^constraint|' || true)
 nm=$(echo "$missing" | grep -c . || true); nc=$(echo "$changed" | grep -c . || true)
-info=$(echo "$extra" | grep -vE '^(policy|func)\|' | grep . || true)
+info=$(echo "$extra" | grep -vE '^(policy|func|trigger|constraint)\|' | grep . || true)
 # Repo'da yo'q obyektlar orasida HAQIQIY xavf: RLS o'chiq jadval mijozga (anon/authenticated) SELECT berilgan bo'lsa — ma'lumot
 #   ochiq; view mijozga berilgan bo'lsa — egasi huquqi bilan RLS'ni chetlab o'tishi mumkin. Qolgani (eski ustunlar, RLS
 #   yoqilgan jadvalga ruxsatlar) — zararsiz qoldiq.
@@ -116,12 +129,12 @@ while IFS= read -r line; do
 done <<< "$info"
 open_t=$(printf '%s' "$open_t" | grep . | sort -u || true); open_v=$(printf '%s' "$open_v" | grep . | sort -u || true)
 nt=$(echo "$info" | grep -c '^rls|' || true); ncl=$(echo "$info" | grep -c '^col|' || true)
-ng=$(echo "$info" | grep -c '^grant|' || true); nv=$(echo "$info" | grep -c '^view|' || true)
-infoline="prod'da repo'da yo'q qo'shimcha obyektlar: jadval $nt, ustun $ncl, ruxsat $ng, view $nv (eski qoldiq — zararsiz)"
+ng=$(echo "$info" | grep -c '^grant|' || true); nv=$(echo "$info" | grep -c '^view|' || true); ni=$(echo "$info" | grep -c '^index|' || true)
+infoline="prod'da repo'da yo'q qo'shimcha obyektlar: jadval $nt, ustun $ncl, ruxsat $ng, view $nv, indeks $ni (eski qoldiq — zararsiz)"
 # D6: ommaviy o'quvchi ro'yxati (students_public) prodda YO'Q bo'lishi shart (public-close.sql o'chiradi) — bo'lsa anon barcha
 #   o'quvchi ismi/bali/rasmini oladi. Kanonikda u yo'q, shuning uchun bor bo'lsa — alohida 🔴.
 sp_live=$(grep -c '^view|public\.students_public|' "$FP_LIVE" || true)
-if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ] && [ "${sp_live:-0}" = 0 ]; then
+if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$xt" = 0 ] && [ "$xk" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ] && [ "${sp_live:-0}" = 0 ]; then
   echo "    ✓ Prod bazasi repo'dagi kanonik holat bilan BIR XIL ($(wc -l < "$FP_CANON") obyekt)."
   [ -n "$info" ] && echo "      ℹ️ $infoline"
   exit 0
@@ -132,6 +145,8 @@ echo "    ⚠️ Prod bazasi kanonik holatdan farq qiladi:"
 [ -n "$open_t" ] && { echo "      🔴 RLS O'CHIQ jadval mijozga (anon/authenticated) ochiq — ma'lumot himoyasiz, tekshiring:"; echo "$open_t" | sed 's/^/         /'; }
 [ -n "$open_v" ] && { echo "      🟠 Repo'da YO'Q view mijozga ochiq (RLS'ni chetlab o'tishi mumkin):"; echo "$open_v" | sed 's/^/         /'; }
 [ "$xf" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha funksiya ($xf):"; echo "$extra" | grep '^func|' | sed 's/^/         /'; }
+[ "$xt" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha trigger ($xt) — ma'lumotni o'zgartirishi yoki yozishni to'sishi mumkin:"; echo "$extra" | grep '^trigger|' | sed 's/^/         /'; }
+[ "$xk" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha cheklov ($xk) — yozishni to'sishi mumkin:"; echo "$extra" | grep '^constraint|' | sed 's/^/         /'; }
 [ "$nm" != 0 ] && { echo "      🟠 Kanonikda bor, prod'da YO'Q ($nm):"; echo "$missing" | head -20 | sed 's/^/         /'; }
 [ "$nc" != 0 ] && { echo "      🟠 Ta'rifi FARQLI ($nc):"; echo "$changed" | head -20 | sed 's/^/         /'; }
 [ -n "$info" ] && echo "      ℹ️ $infoline"

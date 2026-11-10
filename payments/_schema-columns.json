@@ -101,12 +101,14 @@
   "provider",
   "raw",
   "status",
+  "statusAt",
   "studentId",
   "transId"
  ],
  "refunds": [
   "amount",
   "byEmail",
+  "byUid",
   "createdAt",
   "id",
   "month",
