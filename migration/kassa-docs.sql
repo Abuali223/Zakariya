@@ -110,6 +110,11 @@ begin
   if v_ref !~ '^[A-Za-z0-9_.:-]{6,80}$' then
     raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
+  -- Tizim hujjatlari kalitlari (sanash farqi, boshlang'ich qoldiq, kamomad qarori, o'quv to'lovi / maosh / avans / qaytarish
+  --   orderlari) mijozga band qilib qo'yilmaydi.
+  if not p_internal and v_ref ~* '^(sys|opening_|shdec_|pay_|sal_|adv_|ref_)' then
+    raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
   v_op := btrim(coalesce(p ->> 'op', ''));
   v_desk := coalesce(nullif(btrim(coalesce(p ->> 'desk', '')), ''), 'main');
   v_amount := app.kassa_amount(p -> 'amount', 'Hujjat');
@@ -159,7 +164,9 @@ begin
     v_lines := jsonb_build_array(jsonb_build_object('articleId', p ->> 'articleId', 'amount', v_amount));
   end if;
   v_n := jsonb_array_length(v_lines);
-  if v_n > 20 then raise exception 'Bitta hujjatda 20 tadan ortiq qator bo''lmaydi' using errcode = '22023', hint = 'kassa:lines'; end if;
+  if v_n > (case when p_internal then 80 else 20 end) then
+    raise exception 'Bitta hujjatda 20 tadan ortiq qator bo''lmaydi' using errcode = '22023', hint = 'kassa:lines';
+  end if;
   if v_n > 1 and not p_internal and v_op <> 'out_expense' then
     raise exception 'Bu operatsiyada bitta qator bo''ladi' using errcode = '22023', hint = 'kassa:lines';
   end if;

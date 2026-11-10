@@ -409,6 +409,9 @@ begin
          "reopenCount" = "reopenCount" + 1, "reopenedBy" = v_uid, "reopenedAt" = now(), "reopenReason" = v_reason
    where id = v_d.id;
   if v_d."diffDocId" is not null then
+    -- Kamomad bo'yicha qaror qabul qilingan bo'lsa — qaror dalolatnomasi ham bekor bo'ladi (kun qayta sanaladi, qaror yangidan).
+    update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = 'Kun qayta ochildi: ' || v_reason
+     where id = (select c."decisionDocId" from public.cash_docs c where c.id = v_d."diffDocId") and status = 'posted';
     update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = 'Kun qayta ochildi: ' || v_reason
      where id = v_d."diffDocId" and status = 'posted';
   end if;

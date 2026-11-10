@@ -16,19 +16,7 @@ do $iqror_guard$ begin raise exception 'iqror: fin-core.sql ALOHIDA ishga tushir
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi (chain.sh --dev faqat lokal sinovda).
 -- =====================================================================
 
--- ---------- Soat (faqat sinov bazasi va o'quv stendi uchun siljitiladi; prod'da jadval bo'sh — now()) ----------
-create table if not exists app.fin_clock (id int primary key check (id = 1), t timestamptz);
-revoke all on table app.fin_clock from public, anon, authenticated;
-create or replace function app.fin_now() returns timestamptz
-language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select c.t from app.fin_clock c where c.id = 1), now())
-$$;
-create or replace function app.fin_today() returns date
-language sql stable security definer set search_path = public, app, pg_temp as $$
-  select (app.fin_now() at time zone 'Asia/Tashkent')::date
-$$;
-revoke all on function app.fin_now() from public, anon, authenticated;
-revoke all on function app.fin_today() from public, anon, authenticated;
+-- (Moliya soati — app.fin_now() / app.fin_today() — fin-prereq.sql da: jonli bazada doim now().)
 
 -- ---------- Rol yordamchilari (rls-initplan.sql v_fns ro'yxatida ham bor) ----------
 -- Buxgalter — faqat ASOSIY rol (qo'shimcha lavozim bo'lmaydi; is_staff / is_finance tarkibiga kirmaydi — D6).

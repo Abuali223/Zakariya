@@ -88,21 +88,54 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.fin_receipts(date, date) from public, anon, authenticated;
 
+-- ---------- Moliya soati ----------
+-- Jonli bazada DOIM now(). Faqat sinov bazalari va o'quv stendida (baza nomi «fx_…», «…sinov…», «…test…») app.fin_clock qatori
+--   orqali siljitiladi (kun almashishini mashq qilish, yil chegarasi sinovlari). Jonli bazada bu jadvalga yozib bo'lmaydi va
+--   yozilgan bo'lsa ham e'tiborga olinmaydi.
+create table if not exists app.fin_clock (id int primary key check (id = 1), t timestamptz);
+revoke all on table app.fin_clock from public, anon, authenticated;
+create or replace function app.fin_clock_allowed() returns boolean
+language sql stable set search_path = public, app, pg_temp as $$
+  select current_database() ~ '(^fx_|sinov|test)'
+$$;
+create or replace function app.fin_clock_guard() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if not app.fin_clock_allowed() then
+    raise exception 'Test soati faqat sinov bazasida ishlatiladi (jonli bazada emas)' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_fin_clock_guard on app.fin_clock;
+create trigger trg_fin_clock_guard before insert or update on app.fin_clock for each row execute function app.fin_clock_guard();
+create or replace function app.fin_now() returns timestamptz
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when app.fin_clock_allowed() then coalesce((select c.t from app.fin_clock c where c.id = 1), now()) else now() end
+$$;
+create or replace function app.fin_today() returns date
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select (app.fin_now() at time zone 'Asia/Tashkent')::date
+$$;
+revoke all on function app.fin_clock_allowed() from public, anon, authenticated;
+revoke all on function app.fin_clock_guard() from public, anon, authenticated;
+revoke all on function app.fin_now() from public, anon, authenticated;
+revoke all on function app.fin_today() from public, anon, authenticated;
+
 -- ---------- F0.14 server vaqti + RF-06 «kim» ----------
 create or replace function app.fin_server_ts() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_sys boolean := app.is_system(); v_uid text; v_email text;
 begin
   if tg_op = 'INSERT' then
-    if not v_sys or new."createdAt" is null then new."createdAt" := now(); end if;
+    if not v_sys or new."createdAt" is null then new."createdAt" := app.fin_now(); end if;
   elsif not v_sys then
     new."createdAt" := old."createdAt";
   end if;
   if tg_table_name = 'payments' then
-    if tg_op = 'INSERT' or new.status is distinct from old.status then new."statusAt" := now();
+    if tg_op = 'INSERT' or new.status is distinct from old.status then new."statusAt" := app.fin_now();
     else new."statusAt" := old."statusAt"; end if;
   elsif tg_table_name = 'expenses' then
-    if not v_sys or new."updatedAt" is null then new."updatedAt" := now(); end if;
+    if not v_sys or new."updatedAt" is null then new."updatedAt" := app.fin_now(); end if;
   elsif tg_table_name in ('refunds', 'salary_payments') then
     if tg_op = 'INSERT' then
       if not v_sys then
@@ -131,18 +164,26 @@ end $$;
 --                kiritilgan kun bo'ladi (payDay bilan bir xil) — javobda dateAdjusted = true.
 --   p_captured — to'lov kiritilgan payt (brauzer, oflayn navbatga qo'yilgan vaqt) — faqat ma'lumot uchun raw.capturedAt
 --                (kelajakdagi vaqt saqlanmaydi). Kassa hujjatlari (1a) uni tekshiradi.
+--   p_extra    — qo'shimcha maydonlar: {"fiscalNo": "...", "fiscalExempt": true} (kassa ishga tushgach naqd to'lovda fiskal chek №).
+--   KASSA (moliya rejasi 1a, kassa-pay.sql): kassa ishga tushgan bo'lsa (fin_org.kassaGoLive) NAQD to'lov shu tranzaksiyaning
+--     o'zida kassa kirim orderi (KO-1) bilan yoziladi — order o'tmasa (kecha yopilmagan, fiskal chek № yo'q …) to'lov ham yozilmaydi.
+--     Kassa funksiyalari hali o'rnatilmagan bo'lsa (kassa-pay.sql zanjirda yo'q) — avvalgidek, KO-1 siz.
+drop function if exists public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz);
 create or replace function public.record_manual_payment(
   p_pay_id text, p_sid text, p_amount numeric, p_method text, p_date text default null,
-  p_note text default '', p_period text default '', p_payer_name text default '', p_captured timestamptz default null)
+  p_note text default '', p_period text default '', p_payer_name text default '', p_captured timestamptz default null,
+  p_extra jsonb default null)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
-  v_today date := (now() at time zone 'Asia/Tashkent')::date;
+  v_today date := app.fin_today();
   v_date text := nullif(trim(coalesce(p_date, '')), '');
   v_adj boolean := false;
   v_cap timestamptz := p_captured;
   v_row record;
   v_res jsonb;
   v_raw jsonb;
+  v_before jsonb;   -- kassa: to'lovdan oldingi holat (fakturalar, avans); NULL — kassa ishga tushmagan yoki naqd emas
+  v_k jsonb;        -- kassa: yozilgan KO-1 (raqam, kun)
 begin
   if not (app.is_admin() or app.is_finance() or app.is_cashier()) then
     raise exception 'Ruxsat yo''q: to''lov faqat kassir, Moliya yoki Direktor tomonidan kiritiladi' using errcode = '42501';
@@ -167,7 +208,7 @@ begin
       begin perform v_date::date; exception when others then v_date := null; v_adj := true; end;
     end if;
   end if;
-  if v_cap is not null and v_cap > now() + interval '5 minutes' then v_cap := null; end if;
+  if v_cap is not null and v_cap > app.fin_now() + interval '5 minutes' then v_cap := null; end if;
   -- «Sana» bo'sh kelsa (eski mijoz yoki oflayn navbat) — kassa kuni to'lov KIRITILGAN kun (p_captured), yuborilgan kun emas:
   --   chek o'sha kun bilan chop etilgan. Faqat [bugun − 31, bugun] ichida.
   if v_date is null and not v_adj and v_cap is not null
@@ -177,6 +218,10 @@ begin
   if not exists (select 1 from public.students s where s.id = p_sid or s."studentId" = p_sid) then
     raise exception 'record_manual_payment: o''quvchi topilmadi (%)', p_sid using errcode = '22023';
   end if;
+  -- Kassa (1a): naqd to'lov — kassa ishga tushgan bo'lsa to'lovdan OLDINGI holat olinadi (o'quvchi bo'yicha navbat qulfi ichida).
+  if p_method = 'cash' and to_regprocedure('app.kassa_tuition_before(text)') is not null then
+    execute 'select app.kassa_tuition_before($1)' into v_before using p_sid;
+  end if;
 
   -- Yangi qator; shu payId allaqachon bo'lsa (qayta yuborish, ikkinchi tab, eski 3 bosqichli mijoz yarim yo'lda qolgan) —
   --   ON CONFLICT parallel chaqiruvni birinchisi tugaguncha kutadi, keyin mavjud qator holatiga qaraladi.
@@ -184,6 +229,10 @@ begin
                               'note', left(coalesce(p_note, ''), 500), 'forPeriod', left(coalesce(p_period, ''), 500),
                               'byUid', app.uid());
   if v_cap is not null then v_raw := v_raw || jsonb_build_object('capturedAt', v_cap); end if;
+  -- Fiskal chek raqami (naqd va terminal to'lovlarida kassir kiritadi) — har qanday usulda saqlanadi.
+  if p_extra is not null and jsonb_typeof(p_extra) = 'object' and nullif(btrim(coalesce(p_extra ->> 'fiscalNo', '')), '') is not null then
+    v_raw := v_raw || jsonb_build_object('fiscalNo', left(btrim(p_extra ->> 'fiscalNo'), 40));
+  end if;
   if v_adj then v_raw := v_raw || jsonb_build_object('dateRequested', left(coalesce(p_date, ''), 20)); end if;
   insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched, raw)
     values (p_pay_id, p_sid, p_method, p_amount, 'pending', left(coalesce(p_payer_name, ''), 200), true, v_raw)
@@ -191,7 +240,8 @@ begin
   if not found then
     select id, status, "studentId", amount into v_row from public.payments where id = p_pay_id for update;
     if coalesce(v_row.status, '') = 'applied' then
-      return jsonb_build_object('ok', true, 'dup', true, 'payId', p_pay_id, 'status', 'applied');
+      if v_before is not null then execute 'select app.kassa_tuition_info($1)' into v_k using p_pay_id; end if;
+      return jsonb_build_object('ok', true, 'dup', true, 'payId', p_pay_id, 'status', 'applied', 'kassa', v_k);
     end if;
     if coalesce(v_row.status, '') <> 'pending' then
       return jsonb_build_object('ok', false, 'reason', 'exists', 'payId', p_pay_id, 'status', v_row.status);
@@ -209,12 +259,17 @@ begin
     raise exception 'record_manual_payment: to''lov qo''llanmadi (%)', coalesce(v_res::text, 'null') using errcode = 'P0001';
   end if;
   update public.payments set status = 'applied' where id = p_pay_id;
+  -- Kassa (1a): kassa kirim orderi (KO-1) — shu tranzaksiyada. Kassa kuni server belgilaydi (kassir tanlagan «Sana» emas).
+  if v_before is not null then
+    execute 'select app.kassa_tuition_post($1, $2, $3, $4, $5, $6, $7)' into v_k
+      using p_pay_id, p_amount, p_payer_name, v_cap, p_extra, v_before, coalesce((v_res ->> 'dup')::boolean, false);
+  end if;
   return jsonb_build_object('ok', true, 'dup', coalesce((v_res ->> 'dup')::boolean, false), 'payId', p_pay_id, 'status', 'applied',
-                            'sid', v_res ->> 'sid', 'credit', v_res -> 'credit', 'dateAdjusted', v_adj,
-                            'day', coalesce(v_date, to_char(v_today, 'YYYY-MM-DD')));
+                            'sid', v_res ->> 'sid', 'credit', v_res -> 'credit', 'dateAdjusted', v_adj and v_k is null,
+                            'day', coalesce(v_k ->> 'day', v_date, to_char(v_today, 'YYYY-MM-DD')), 'kassa', v_k);
 end $$;
-revoke all on function public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz) from public, anon;
-grant execute on function public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz) to authenticated;
+revoke all on function public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz, jsonb) from public, anon;
+grant execute on function public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz, jsonb) to authenticated;
 
 -- ---------- F0.16 huquqlar I ----------
 -- RF-01 + RF-05: xarajatni faqat Direktor va moliya (Moliya menejeri / G'aznachi) yozadi va o'chiradi.

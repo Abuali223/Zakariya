@@ -122,6 +122,7 @@ create index if not exists cash_docs_day_idx on public.cash_docs ("dayId");
 create index if not exists cash_docs_status_idx on public.cash_docs (status) where status in ('draft', 'approved');
 create index if not exists cash_docs_source_idx on public.cash_docs ("sourceTable", "sourceId") where "sourceId" is not null;
 create index if not exists cash_docs_party_idx on public.cash_docs ("partyType", "partyId");
+create index if not exists cash_docs_fiscal_idx on public.cash_docs ("fiscalNo") where "fiscalNo" is not null;
 
 create table if not exists public.cash_doc_lines (
   id          text primary key,

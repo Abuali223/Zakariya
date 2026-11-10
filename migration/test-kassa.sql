@@ -479,6 +479,23 @@ select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamla
   zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":777,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"h6-000001"}', zz.id('cp_bank'))), '"no": 1[,}].*"desk": "sinov"|"desk": "sinov".*"no": 1[,}]');
 select zz.chk('H7 o''zgarishlar tarixi yoziladi (hujjat holati)', (select (count(*) > 0)::text from public.change_log where tbl = 'cash_docs'), '^true$');
 
+-- ---------- (I) qo'shimcha: qarordan keyin qayta ochish; band kalitlar (sinov kassasida) ----------
+select zz.put('I1', zz.close('U_KAS', '{"desk":"sinov","day":"2028-01-03","counted":700}'));
+select zz.chk('I1 sinov kassasi: kamomad −77', (select trim_scale(diff)::text from public.cash_days where desk = 'sinov'), '^-77$');
+select zz.put('I2', zz.as('U_DIR', format('select public.kassa_shortage_decide(%L, %L, %L)::text', (select "diffDocId" from public.cash_days where desk = 'sinov'), 'writeoff', 'Aybdor aniqlanmadi')));
+select zz.chk('I2 qaror: hisobdan chiqarish — dalolatnoma Dt 9430 Kt 5910',
+  (select c.decision || ':' || a.status || ':' || l.debit || '>' || l.credit || '@' || l."articleId"
+     from public.cash_docs c join public.cash_docs a on a.id = c."decisionDocId" join public.cash_doc_lines l on l."docId" = a.id
+    where c.id = (select d."diffDocId" from public.cash_days d where d.desk = 'sinov')), '^writeoff:posted:9430>5910@EX-45$');
+select zz.put('I3', zz.as('U_DIR', $q$select public.kassa_day_reopen('sinov', '2028-01-03', 'Qayta sanash (sinov)')::text$q$));
+select zz.chk('I3 qarordan keyin qayta ochilsa: kamomad hujjati ham, qaror dalolatnomasi ham bekor',
+  (select string_agg(op || ':' || status, ',' order by op) from public.cash_docs where desk = 'sinov' and op in ('out_shortage', 'nc_shortage_dec')),
+  '^nc_shortage_dec:void,out_shortage:void$');
+select zz.chk('I4 tizim kaliti bilan boshlanadigan clientRef — rad',
+  zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":1,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"shdec_x12345"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:bad_input\]');
+select zz.chk('I5 sinov kassasi asosiy kassa raqamlariga ta''sir qilmadi',
+  (select string_agg(desk || ':' || series || ':' || "lastNo", ',' order by desk, series, year) from public.doc_counters where desk = 'sinov'), '^sinov:ACT:1,sinov:KO1:1,sinov:KO2:1$');
+
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end
   from zz.res order by n;
