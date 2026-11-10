@@ -1610,6 +1610,27 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
     matni hamma joyda ekranlanadi.
 - **Qilinmagan:** jonli zanjirga o'tkazish; mustaqil (boshqa agentlar bilan) ko'rik; F1.20 — 1b-bosqich.
 
+## 63) Moliya, 1a-bosqich: «Buxgalter» roli (minimal qism, F1.21 dan oldinga tortildi) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN** (rol faqat kassa moduli o'rnatilgan tizimda beriladi va ishlaydi). SQL zanjiri o'zgarmadi —
+`app.is_accountant()`, `app.fin_list2()`, `app.kassa_reader()` avvaldan bor (`fin-core.sql`).
+
+- **Sabab:** buxgalter — maktab xodimi; dekabrdagi qabul sinovida va ishga tushgach 2-ro'yxat vazifasini (so'rovni tasdiqlash, kunni
+  tekshirish) o'z hisobi bilan bajarishi kerak. Server tomoni tayyor edi, sahifada rol umuman yo'q edi.
+- **Sahifa (`admin.html`):** rol nomi «Buxgalter»; bo'limlari — «Tasdiqlash» (kassa so'rovlari navbati) va «Kassa»; pul amallari
+  (kirim, chiqim so'rovi, pul berish, kunni yopish, sozlamalar) yo'q — server ham rad etadi. «Foydalanuvchilar»da rol tanlovda faqat
+  kassa moduli o'rnatilgan bo'lsa ko'rinadi. Bo'limsiz qolgan rol uchun bo'sh holat: kassa holati kelguncha «Bo'limlar yuklanmoqda…»,
+  modul yo'q tizimda — «rol uchun bo'limlar hali yoqilmagan» (xatosiz). D6 saqlanadi: buxgalter `is_staff` / `is_finance` ga
+  kirmaydi, o'quvchi va xodim ma'lumotini ko'rmaydi. To'lovlar, xarajatlar, vedomost va eksportni o'qish — 1b (F1.21 ning qolgani).
+- **Kichik tuzatish:** yopilgan kun tekshirilgan bo'lsa, «Kassa» sahifasidagi eslatma endi «tekshirilgan kun qayta ochilmaydi» deydi
+  (ilgari «Direktor qayta ochishi kerak» deb chalg'itardi).
+- **Sinov stendi:** `sinov/seed.cjs` — 10-hisob «Buxgalter» (kassa bo'limi bilan o'rnatilgan stendda ishlaydi).
+- **Hujjatlar:** `yoriqnomalar.md` (buxgalter roli, kim nimani kiritadi), `shakllar.md`, `ishga-tushirish.md`, ish reja.
+- **Sinovlar:** yangi brauzer ssenariysi `e2e-kassa7` 17 (v1 va v2: bo'limlar, navbat, tasdiqlash, kunni tekshirish, «Davr» faqat
+  ko'rish, server rad etishlari, foydalanuvchi tahriri, telefon); eski oqimlar ssenariysida buxgalter — kassa moduli yo'q zanjirda
+  bo'limsiz va xatosiz (11), modul bor — «Kassa» bilan (13). Server qoidalari `test-kassa.sql` da avvaldan (tasdiqlaydi, tekshiradi;
+  kirim va so'rov yoza olmaydi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

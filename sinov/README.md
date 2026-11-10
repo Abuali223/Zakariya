@@ -36,7 +36,9 @@ bash ~/iqror-repo/sinov/install.sh                # o‘rnatadi (qayta ishga tus
 
 ## Sinov hisoblari
 
-O‘rnatishda 9 ta hisob yaratiladi: Direktor, Moliya menejeri, 2 ta Kassir, G‘aznachi, HR, O‘IBDO‘, O‘qituvchi, Qabulxona.
+O‘rnatishda 10 ta hisob yaratiladi: Direktor, Moliya menejeri, Buxgalter, 2 ta Kassir, G‘aznachi, HR, O‘IBDO‘, O‘qituvchi,
+Qabulxona. Buxgalter hisobi kassa bo‘limi bilan (`--dev`) o‘rnatilgan stendda ishlaydi (so‘rovlarni tasdiqlash, kunni tekshirish).
+Avval o‘rnatilgan stendda yangi hisob `update.sh` dan keyin `reset.sh` bilan paydo bo‘ladi (paroli `accounts.txt` ga qo‘shiladi).
 Loginlar ekranda ko‘rsatiladi, **parollar ko‘rsatilmaydi** — ularni faqat serverda ko‘rasiz:
 
 ```bash

@@ -1405,13 +1405,16 @@ let cache = {};
 // qatorini o'qib SESSION'ни qayta o'rnatadi; agar biror kod undan oldin o'qisa — admin bo'lib
 // qolmasin (frontend[20], defense-in-depth). Panelga kirish baribir STAFF tekshiruvидан o'tadi.
 let SESSION = { role:'', isAdmin:false, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
-const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
+const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', accountant:'Buxgalter', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','announce','profile'],
   hr:['teachers','staff','staffatt'], admin:['enrollments','feedback','canteen'], admin_head:['enrollments','feedback','canteen'],
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
-  finance_mgr:['payments','finance','planfact','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'] };
+  finance_mgr:['payments','finance','planfact','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'],
+  // Buxgalter (2-ro'yxat): o'z bo'limi yo'q — «Kassa» (tasdiq, kunni tekshirish, nazorat ro'yxati) va «Tasdiqlash» navbati pastda
+  //   qo'shiladi (faqat serverda kassa moduli bo'lsa). O'quvchi va xodim ma'lumotlarini ko'rmaydi (D6); to'liq o'qish huquqlari — 1b.
+  accountant:[] };
 // PKG-11: qo'shimcha (ikkinchi) lavozim bo'la oladigan rollar — bazadagi app.extra_roles_allowed() bilan bir xil.
 //   Direktor, Moliya menejeri, G'aznachi — yo'q (superuser va pul roli faqat asosiy rol bo'ladi).
 const EXTRA_ROLES_OK=['teacher','kurator','reception','hr','kassir','nurse','marketing_mgr','admin_head','zavuch'];
@@ -1466,8 +1469,8 @@ const KASSA_BLOCK={ prev_open:'Oldingi kassa kuni yopilmagan — avval «Kassa»
   clock:'Server sanasi kassa kunidan orqada — administratorga xabar bering.' };
 let KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
 const finMod=name=>import('./assets/js/'+name+'.js');
-function kassaRole(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).some(r=>['finance_mgr','treasurer','kassir'].includes(r)); }
-function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','treasurer','kassir'].includes(SESSION.role)); }
+function kassaRole(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).some(r=>['finance_mgr','treasurer','kassir','accountant'].includes(r)); }
+function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','treasurer','kassir','accountant'].includes(SESSION.role)); }
 function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
 // Naqd pulni shu foydalanuvchi qabul qila oladimi (kassa ishga tushgach): kassir / g'aznachi (qo'shimcha lavozim ham) yoki Direktor.
 function kassaCashOk(){ return !KASSA.live || !!(KASSA.me && (KASSA.me.operator || KASSA.me.director)); }
@@ -1478,7 +1481,7 @@ function finLockMin(){ const l=KASSA.state&&KASSA.state.lockedThrough; if(!l||!/
 const finLockAttr=()=>{ const m=finLockMin(); return m?` min="${esc(m)}"`:''; };
 function kassaQueue(){
   if(APPROVAL_QUEUES.some(q=>q.key==='kassa')) return;
-  APPROVAL_QUEUES.push({ key:'kassa', title:'Kassa: chiqim va kirim so‘rovlari', roles:['director','finance_mgr'],
+  APPROVAL_QUEUES.push({ key:'kassa', title:'Kassa: chiqim va kirim so‘rovlari', roles:['director','finance_mgr','accountant'],
     count:async()=>{ const m=await finMod('fin-kassa'); return m.approvalCount(finCtx()); },
     render:async el=>{ const m=await finMod('fin-kassa'); await m.approvalRender(finCtx(), el); } });
 }
@@ -1505,7 +1508,10 @@ async function kassaProbe(){
     KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
     try{ localStorage.removeItem(KASSA_LS); }catch(_){}
   }
+  KASSA_PROBED=true;
   if(was!==kassaTabOk()) navRebuild();
+  // Joriy bo'lim endi yo'q (yoki hali ochilmagan edi) — rolning birinchi bo'limi ochiladi; umuman bo'lmasa — tushuntirish.
+  if(!SESSION.isAdmin && !allowedTabs().includes(currentTab)) openTab(allowedTabs()[0]);
   return KASSA;
 }
 // Menyuni qayta qurish (bo'lim paydo bo'ldi / yo'qoldi): joriy bo'lim belgisi va bildirishnoma sonlari saqlanadi.
@@ -1730,7 +1736,7 @@ onAuthStateChanged(auth, async user=>{
     loginAttempted=false; show('login'); return;
   }
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
-  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse'];
+  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse','accountant'];
   // PKG-11: ikkinchi lavozim (users."extraRoles", faqat Direktor beradi). Direktor/ota-ona/o'quvchi — qo'shimchasiz (bazada ham).
   //   Panelga kirish: asosiy YOKI qo'shimcha lavozimlardan biri panel roli bo'lsa (masalan, qorovul + kassir).
   const roles = [role].concat(['director','parent','student',''].includes(role) ? [] : extraRoles.filter(r=>EXTRA_ROLES_OK.includes(r) && r!==role))
@@ -2104,6 +2110,7 @@ function v2NavSetup(nav, grouped){
 }
 function openTab(tab){
   if(!SESSION.isAdmin){ const allow=allowedTabs(); if(!allow.includes(tab)) tab=allow[0]; }
+  if(!tab){ currentTab=''; VIEW_GEN++; noTabsView(); return; }   // rolga hozircha bo'lim yo'q (masalan Buxgalter — kassa holati kelguncha)
   currentTab=tab; VIEW_GEN++;   // yangi ko'rinish — eski renderlarning kech yozuvi bekor bo'ladi
   $('#tabs').querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi ochiq turadi
@@ -2116,6 +2123,15 @@ function openTab(tab){
   const g=VIEW_GEN, p=renderTab(tab);
   if(p && typeof p.catch==='function') p.catch(e=>{ if(g===VIEW_GEN) console.error(e); });
   return p;
+}
+// Rolga bironta bo'lim ochilmagan holat: kassa holati hali kelmagan (kutilmoqda) yoki bu tizimda modul yoqilmagan.
+let KASSA_PROBED=false;
+function noTabsView(){
+  const v=$('#view'); if(!v) return;
+  const rl=ROLE_LABEL[SESSION.role]||SESSION.role||'';
+  v.innerHTML=`<div class="page-head"><h2>${esc(rl)}</h2></div><div class="card"><div class="empty">${(kassaRole() && !KASSA_PROBED)
+    ? 'Bo‘limlar yuklanmoqda…'
+    : `«${esc(rl)}» roli uchun bo‘limlar bu tizimda hali yoqilmagan.<br><span class="small muted">Administratorga murojaat qiling.</span>`}</div></div>`;
 }
 function renderTab(tab){
   if(tab==='approvals') return renderApprovals();
@@ -5876,6 +5892,8 @@ async function renderUsers(){
     ['reception','Qabulxona xodimi'],['nurse','Hamshira (tibbiyot)'],['treasurer','G‘aznachi'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
     ['parent','Ota-ona'],['student','O‘quvchi']
   ];
+  // Buxgalter roli — faqat serverda kassa moduli bo'lsa beriladi (yoki allaqachon shu rolda hisob bo'lsa — ro'yxatda ko'rinsin).
+  if(KASSA.on || rows.some(u=>u.role==='accountant')){ const i=roleOpts.findIndex(o=>o[0]==='finance_mgr'); roleOpts.splice(i+1, 0, ['accountant','Buxgalter (kassa: tasdiq va tekshiruv)']); }
   let CLS={classes:{},keys:[]};
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
   // HR yozuvlari (staff+teachers) — login hisobini davomat/maosh yozuviga TELEFON bo'yicha

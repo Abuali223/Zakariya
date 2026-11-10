@@ -825,14 +825,16 @@ ogohlantiradi), `full-deploy.sh` va sinov stendining yakuniy tekshiruviga ulanga
 (`docs/moliya/ishga-tushirish.md` — taqvim, shartlar, texnik tartib, 31-dekabr, birinchi kunlar, favqulodda holatlar,
 orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar; `shakllar.md` — shakllar ro‘yxati va qog‘oz
 shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
-parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom. Sinov kassasi (CT-20)
+parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom; «Buxgalter» roli (F1.21 dan
+oldinga tortilgan minimal qism: «Tasdiqlash» va «Kassa» — so‘rovni tasdiqlash, kunni tekshirish, nazorat ro‘yxati; pul
+amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b). Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
 `test-kassa-pay.sql` 51, `test-kassa-links.sql` 92, `test-kassa-report.sql` 52, `test-fin-period.sql` 32,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
-39; brauzerda olti to‘liq stsenariy (173 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
-o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34 tekshiruv). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+39; brauzerda yetti to‘liq stsenariy (190 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
 kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil ko‘rik; F1.20 (RLS relizi)
 — 1b-bosqichda.
 

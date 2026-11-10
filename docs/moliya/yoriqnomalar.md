@@ -57,6 +57,11 @@ yopish». Farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi y
 
 ## 2. Moliya menejeri va buxgalter (2-ro‘yxat)
 
+Buxgalterning o‘z hisobi va roli bor — **«Buxgalter»** (Direktor «Foydalanuvchilar»da beradi). Unda ikki bo‘lim ochiladi: «Tasdiqlash»
+va «Kassa» (so‘rovlarni tasdiqlash, kunni tekshirish, nazorat ro‘yxati, chop etish, «Davr»ni ko‘rish). Pul qabul qilish, berish va
+so‘rov yuborish buxgalterda yo‘q; «Buxgalteriya», «To‘lovlar» va maosh bo‘limlari hozircha moliya menejerida (buxgalterga o‘qish
+huquqi keyingi bosqichda ochiladi).
+
 **Har kuni**
 1. **Chiqim so‘rovlarini tasdiqlash:** «Kassa» → «So‘rovlar» → «Ko‘rish»: oluvchi, statiya, asos hujjati to‘g‘rimi → «Tasdiqlash»
    yoki «Rad etish» (sababi). O‘zingiz yuborgan so‘rovni o‘zingiz tasdiqlay olmaysiz.
@@ -65,16 +70,16 @@ yopish». Farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi y
    yoki kunni yopgan shaxs tekshira olmaydi. Tekshirilgan kun endi o‘zgarmaydi.
 3. **«Nazorat ro‘yxati»** (shu sahifada): qizil — bugun hal qilinadi (raqamlashda bo‘shliq, yopilmagan kecha, qarorsiz kamomad,
    kechikkan qaytarish, «Moslik» mos emas); sariq — shu hafta; «Moslik» qatori doim «hammasi mos» bo‘lishi kerak.
-4. **Bank orqali to‘langan xarajatlar** — «Buxgalteriya» → «+ Xarajat qo‘shish»: to‘lov usuli (bank o‘tkazmasi, korporativ karta yoki
-   hisobdor shaxs orqali), statiya, kontragent.
+4. **Bank orqali to‘langan xarajatlar** (moliya menejeri) — «Buxgalteriya» → «+ Xarajat qo‘shish»: to‘lov usuli (bank o‘tkazmasi,
+   korporativ karta yoki hisobdor shaxs orqali), statiya, kontragent.
    Naqd xarajat bu yerda yozilmaydi — u kassa chiqim orderidan o‘zi ko‘chadi.
 
 **Maosh.** Vedomostni moliya menejeri tayyorlaydi, HR tasdiqlaydi. Karta orqali to‘lovni moliya menejeri «Maosh berish» → «Karta»
 bilan yozadi (kassa orderisiz); naqd — faqat kassir.
 
 **Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
-`shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter hisobot bo‘yicha xarajatni
-«Buxgalteriya»ga kiritadi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
+`shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter hisobotni tekshiradi, moliya
+menejeri tasdiqlangan xarajatlarni «Buxgalteriya»ga kiritadi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
 
 **Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → Direktor «Davr»da surat oladi va
 davrni yopadi. «Davr» oynasida suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq.

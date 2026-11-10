@@ -61,7 +61,7 @@ Tasdiqlangan summa: [___] so‘m ([summa so‘z bilan]).
 
 *Qoidalar:* muddat — 3 ish kuni (korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; cheksiz xarajat qabul
 qilinmaydi (istisno — rahbar ruxsati bilan tushuntirish xati); hisobot topshirilmaguncha yangi avans berilmaydi; buxgalter
-tasdiqlangan qatorlarni «Buxgalteriya»ga xarajat qilib kiritadi (to‘lov usuli — «Hisobdor shaxs orqali (avans hisoboti)»); yanvar
+tekshirgan qatorlarni moliya menejeri «Buxgalteriya»ga xarajat qilib kiritadi (to‘lov usuli — «Hisobdor shaxs orqali (avans hisoboti)»); yanvar
 hisobotlari — yanvar yopilishidan oldin.
 
 ## Sh-2. «Қ» blankasi (ichki vaqtinchalik kvitansiya) va jurnali

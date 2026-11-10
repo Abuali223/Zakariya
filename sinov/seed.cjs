@@ -8,7 +8,7 @@
 //   Hammasi TO'QIMA: «Sinov O‘quvchi 01», «Sinov Ota 01», +998 22 000 00 01 kabi mavjud bo'lmagan raqamlar. Haqiqiy
 //   o'quvchi, ota-ona, xodim, telefon yoki summa YO'Q. Bir xil sana uchun natija har doim bir xil (tasodif — urug'li).
 //
-//   Nima yuklanadi: 9 ta sinov hisobi (Direktor, Moliya menejeri, 2 ta Kassir, G‘aznachi, HR, O‘IBDO‘, O‘qituvchi,
+//   Nima yuklanadi: 10 ta sinov hisobi (Direktor, Moliya menejeri, Buxgalter, 2 ta Kassir, G‘aznachi, HR, O‘IBDO‘, O‘qituvchi,
 //   Qabulxona), 6 sinf, 60 o'quvchi, o'qituvchi va xodimlar (IQT-/IQX- ID bilan), narx jadvali va sozlamalar, joriy va
 //   o'tgan oy hisob-fakturalari (to'langan / qisman / to'lanmagan), to'lovlar (naqd / Click / bank / terminal), avans,
 //   biriktirilmagan Click to'lovi, xarajatlar, xodim avansi, davomat, baho, monitoring, arizalar va boshqa bo'limlar uchun
@@ -27,6 +27,7 @@ const DOMAIN = 'sinov.test';   // .test — hech qachon haqiqiy domen bo'lmaydi 
 const ACCOUNTS = [
   { key: 'direktor', label: 'Direktor', role: 'director', first: 'Sinov', last: 'Direktor' },
   { key: 'moliya', label: 'Moliya menejeri', role: 'finance_mgr', first: 'Sinov', last: 'Moliya-Menejer' },
+  { key: 'buxgalter', label: 'Buxgalter', role: 'accountant', first: 'Sinov', last: 'Buxgalter' },   // kassa bo'limi (--dev) bilan: tasdiq va kunni tekshirish
   { key: 'kassir1', label: 'Kassir 1', role: 'kassir', first: 'Sinov', last: 'Kassir-Bir' },
   { key: 'kassir2', label: 'Kassir 2', role: 'kassir', first: 'Sinov', last: 'Kassir-Ikki' },
   { key: 'gaznachi', label: 'G‘aznachi', role: 'treasurer', first: 'Sinov', last: 'G‘aznachi' },
