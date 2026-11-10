@@ -919,5 +919,15 @@ step_health(){
     if printf '%s' "$h" | grep_q '"ok":true'; then ok "nginx orqali (https://$PUBLIC_HOST:$PUBLIC_PORT): ishlayapti"
     else warn "nginx orqali tekshiruv o'tmadi: $(printf '%s' "$h" | tail -1 | cut -c1-200)"; bad=1; fi
   fi
+  # «Kassa» / moliya moduli tekshiruvi (shu versiyada migration/kassa-checks.sql bo'lsa; FAQAT O'QIYDI). Modul o'rnatilmagan
+  #   stendda ham ishlaydi (bitta qator). Muammo topilsa — to'liq chiqish uchun buyruq ko'rsatiladi.
+  local kc; kc="$(chain_dir)/kassa-checks.sql"
+  if [ -f "$kc" ]; then
+    r=$(sdb < "$kc" 2>&1 | grep -E 'Kassa tekshiruvi:' | tail -n 1 | sed 's/^ *//' || true)
+    case "$r" in
+      '✅'*) ok "${r#✅ }" ;;
+      *) r=${r#!! }; warn "${r:-kassa tekshiruvi natija bermadi} — to'liq chiqish: $(psql_cmd) -d $SINOV_DB -X -P pager=off < $kc"; bad=1 ;;
+    esac
+  fi
   HEALTH_BAD=$bad
 }

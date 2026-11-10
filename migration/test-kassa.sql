@@ -480,6 +480,10 @@ select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamla
 select zz.chk('H8 ma''lumotnomalar: 20 qoida, 75 statiya, tashkilot, kassirlar',
   zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^20:75:main:[3-9]$');
 select zz.chk('H8b ma''lumotnomalar: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_refs()::text$q$), '^ERR 42501');
+select zz.chk('H8c imzo egasi sifatida bog''lanadigan hisoblar ro''yxati — faqat Direktorga (kassirga bo''sh)',
+  zz.as('U_DIR', $q$select (select count(*) from jsonb_array_elements(r -> 'signers') x where x ->> 'uid' in ('U_DIR', 'U_FM'))::text || ':' ||
+                          (select count(*) from jsonb_array_elements(r -> 'signers') x where x ->> 'uid' in ('U_KAS', 'U_TCH'))::text from public.kassa_refs() r$q$) || ' | ' ||
+  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'signers')::text from public.kassa_refs() r$q$), '^2:0 \| 0$');
 select zz.chk('H9 xodimlar ro''yxati: faqat kalit, ism, lavozim', zz.as('U_KAS', $q$select string_agg((x ->> 'ref') || '=' || (x ->> 'name'), ',' order by x ->> 'ref') from jsonb_array_elements(public.kassa_people()) x$q$),
   '^staff:st1=Sinov Xodim,teachers:tch1=Sinov O''qituvchi$');
 select zz.chk('H9b xodimlar ro''yxati: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_people()::text$q$), '^ERR 42501');

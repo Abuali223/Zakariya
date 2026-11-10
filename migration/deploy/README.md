@@ -170,6 +170,20 @@ ko'rsatgan JSON tekshiruvidan o'tkazing va cron qo'ying (`payments/README.md` §
 Faqat deploy (zaxira va tekshiruvlarsiz): `bash ~/iqror-repo/deploy.sh` — kod (o'zini ham) + paketlar + oldindan tekshiruv (xizmat
 kodi papkasi — bazaga tegishdan OLDIN) + SQL (bitta tranzaksiya) + `/sb` + sahifalar + server kodi + xizmatlar + 7/7 baza tekshiruvi.
 
+**`Kassa tekshiruvi` qatori (`migration/kassa-checks.sql`)** — «Kassa» / moliya modulining o'rnatishdan keyingi tekshiruvi; bazaga
+hech narsa YOZMAYDI, chiqishida ism, telefon va pul summalari yo'q (ko'chirib yuborish xavfsiz). Deploy uni o'zi ishga tushiradi:
+- `✓ Kassa tekshiruvi: muammo topilmadi (kassa moduli o'rnatilmagan)` — modul hali jonli zanjirda emas; bu kutilgan holat.
+- `✓ … (modul relizi N)` — modul o'rnatilgan, tuzilma, huquqlar va ma'lumot yaxlitligi joyida.
+- `⚠️ …` (modul o'rnatilmagan bazada) — umumiy band topilmasi: `search_path` belgilanmagan SECURITY DEFINER funksiya (nomi ostida
+  chiqadi). Odatda repo'da yo'q eski funksiya — «7/7 baza tekshiruvi» ham uni ko'rsatadi.
+- `!! «Kassa» moduli tekshiruvida muammo bor` — to'liq chiqish yuqorida; «!!» bilan boshlangan qatorlarni yuboring. Bandlar:
+  1–10 — tuzilma va huquqlar (reliz, funksiya va jadval huquqlari, himoya triggerlari, indekslar); 11–22 — ma'lumot (kunlar
+  zanjiri, kun jamlari va izi, raqamlash, hujjat qatorlari, taqsimot, bog'lanishlar, moslik P1/P4/P5/P8, davr suratlari).
+Istalgan payt qo'lda (masalan har oy oxirida, davrni yopishdan oldin):
+```bash
+sudo docker exec -i supabase-db psql -U postgres -d postgres -X -P pager=off < ~/iqror-repo/migration/kassa-checks.sql
+```
+
 ## Zaxira: 60 kun, sirlar, shifrlash, tashqi nusxa (`backup.sh`)
 Har tungi zaxira (`/opt/iqror/backups`, root, 600): `db_*` (public+app), `auth_*` (hisoblar, parol xeshlari; seans/token
 ma'lumotisiz), `storage_*` (rasm/video fayllari), `storage_meta_*` (fayllar yozuvi — busiz rasmlarni tiklab bo'lmaydi),

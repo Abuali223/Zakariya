@@ -127,6 +127,7 @@ set local iqror.migrating = '1';
 --dev \ir kassa-pay.sql
 --dev \ir kassa-links.sql
 --dev \ir fin-period.sql
+--dev \ir fin-version.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

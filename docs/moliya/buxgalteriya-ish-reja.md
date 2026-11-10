@@ -811,14 +811,26 @@ davr qulfi (`fin_period_lock`: shu sanagacha to‘lov, xarajat, maosh to‘lovi 
 42501; server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida); «Kassa» sahifasida «Davr»
 oynasi (Direktor — surat va qulf; 2-ro‘yxat — ko‘rish, xeshni tekshirish, JSON yuklab olish), sana maydonlarida eng erta
 sana = qulfdan keyingi kun; F1.11 — kassa ishga tushgach «Maosh berish»ni faqat kassa operatori (naqd) va Moliya
-menejeri (karta) ochadi, HR menejer pul bermaydi (server ham rad etadi). Sinov kassasi (CT-20) hujjatlari «Buxgalteriya»
-va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish
-kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50,
-`test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 27, `test-kassa-race.sh` 22 (8 × 200
+menejeri (karta) ochadi, HR menejer pul bermaydi (server ham rad etadi); F1.18 — `migration/kassa-checks.sql`
+(o‘rnatishdan keyingi, faqat o‘qiydigan tekshiruv: 1–10-bandlar tuzilma va huquqlar — `search_path`, ichki `app.*`
+funksiyalarning EXECUTE huquqi, RLS va yozish huquqlari, himoya triggerlari, indekslar; 11–22-bandlar ma’lumot
+yaxlitligi — kunlar zanjiri, kun jamlari va xeshi, raqamlash, varaqlar, hujjat qatorlari, taqsimot, bog‘lanishlar, moslik
+P1 / P4 / P5 / P8, surat xeshlari; chiqishida shaxsiy ma’lumot va summa yo‘q), deploy markeri `app.kassa_version()`
+(`fin-version.sql`; sahifa o‘zi kutgan reliz bilan solishtirib «sahifani yangilang» / «server yangilanmagan» deb
+ogohlantiradi), `full-deploy.sh` va sinov stendining yakuniy tekshiruviga ulangan; F1.19 — ishga tushirish to‘plami
+(`docs/moliya/ishga-tushirish.md` — taqvim, shartlar, texnik tartib, 31-dekabr, birinchi kunlar, favqulodda holatlar,
+orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar; `shakllar.md` — shakllar ro‘yxati va qog‘oz
+shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
+parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom. Sinov kassasi (CT-20)
+hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
+ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 224,
+`test-kassa-pay.sql` 50, `test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 27,
+`test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
-39; brauzerda olti to‘liq stsenariy (163 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
-o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34 tekshiruv). Qoldi: F1.18–F1.19 (o‘rnatishdan keyingi
-tekshiruvlar, ishga tushirish to‘plami), jonli zanjirga o‘tkazish, mustaqil ko‘rik; F1.20 (RLS relizi) — 1b-bosqichda.
+39; brauzerda olti to‘liq stsenariy (173 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34 tekshiruv). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil ko‘rik; F1.20 (RLS relizi)
+— 1b-bosqichda.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

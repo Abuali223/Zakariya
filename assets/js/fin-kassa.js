@@ -11,6 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
+const SERVER_VER = 1;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -104,6 +105,9 @@ function draw() {
 
   // ---- ogohlantirishlar
   const warn = [];
+  if (s.version != null && Number(s.version) !== SERVER_VER) warn.push(['#B42318', '#FDECEC', Number(s.version) > SERVER_VER
+    ? 'Tizim yangilangan, bu sahifa esa eski: sahifani yangilang (Ctrl+Shift+R; telefonda — sahifani yopib qayta oching).'
+    : 'Serverdagi kassa moduli bu sahifadan eski relizda — administratorga xabar bering (o‘rnatish to‘liq bajarilmagan).']);
   if (s.blockReason) warn.push(['#B42318', '#FDECEC', BLOCK_TXT[s.blockReason] || s.blockReason]);
   if (s.desk && s.desk.isTest) warn.push(['#175CD3', '#E8F1FD', 'Bu — SINOV kassasi: hujjatlari va raqamlari asosiy kassadan alohida, hisobotlarga kirmaydi.']);
   if (!s.kassaGoLive) warn.push(['#B54708', '#FEF3E2', 'Kassa hali «ishga tushirilgan» deb belgilanmagan: naqd o‘quv to‘lovlari kassa orderisiz yozilmoqda' + (m.director ? ' («⚙ Sozlamalar» → ishga tushirish sanasi).' : '.')]);
@@ -479,6 +483,14 @@ function openOpeningForm() {
     if (!$('#ko-day').value) { C.toast('Birinchi kassa kunini tanlang', true); return; }
     $('#ko-save').disabled = true; await act('kassa_opening_set', { p: { desk: ST.desk, amount: num(a), startDay: $('#ko-day').value, note: $('#ko-note').value.trim(), commission: commissionRead() } }, 'Boshlang‘ich qoldiq saqlandi'); const b = $('#ko-save'); if (b) b.disabled = false; };
 }
+// Imzo egalari (chop etiladigan hujjatlardagi «Rahbar» / «Bosh buxgalter» F.I.Sh.): 1-ro'yxat — rahbariyat, 2-ro'yxat — buxgalteriya / moliya.
+function sigRows() {
+  const a = (ST.refs && ST.refs.signatories) || [];
+  if (!a.length) return '<div class="small muted" style="margin-top:6px">Hali kiritilmagan — hujjatlarda F.I.Sh. qo‘lda yoziladi.</div>';
+  return a.map(x => `<div class="small" style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px;padding:8px 10px;border:1px solid var(--border);border-radius:10px">
+    <span><b>${esc(x.fullName || '')}</b>${x.title ? ' — ' + esc(x.title) : ''} <span class="muted">· ${Number(x.list) === 1 ? '1-ro‘yxat' : '2-ro‘yxat'}${x.uid ? ' · hisobi bog‘langan' : ''}</span></span>
+    <button type="button" class="btn ghost2" data-sdel="${esc(x.id)}" style="flex:none">O‘chirish</button></div>`).join('');
+}
 function openSettings() {
   const o = ST.refs.org || {};
   const v = k => esc(o[k] == null ? '' : String(o[k]));
@@ -486,19 +498,48 @@ function openSettings() {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa sozlamalari</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       ${lbl('Tashkilot nomi (hujjatlarda)', `<input id="kx-name" type="text" maxlength="300" value="${v('nameUz')}" style="${FLD}">`, ';margin-top:0')}
+      ${lbl('Tashkilot nomi ruscha hujjatlarda <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<input id="kx-name-ru" type="text" maxlength="300" value="${v('nameRu')}" style="${FLD}">`)}
       <div class="grid2">${lbl('STIR', `<input id="kx-stir" type="text" inputmode="numeric" maxlength="14" value="${v('stir')}" style="${FLD}">`)}${lbl('Joy (shahar / tuman)', `<input id="kx-place" type="text" maxlength="200" value="${v('place')}" style="${FLD}">`)}</div>
       ${lbl('Chop etish tili', `<select id="kx-lang" style="${FLD}">${[['uz-cyrl', 'O‘zbek (kirill)'], ['uz-latn', 'O‘zbek (lotin)'], ['ru', 'Rus']].map(x => `<option value="${x[0]}"${o.printLang === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>`)}
       <div class="grid2">${lbl('T1 — shundan katta chiqimga Direktor tasdig‘i (0 — har doim)', `<input id="kx-t1" type="text" inputmode="numeric" value="${nv('t1')}" placeholder="0" style="${FLD}">`)}${lbl('L1 — asos hujjatisiz naqd xarid chegarasi (0 — mumkin emas)', `<input id="kx-l1" type="text" inputmode="numeric" value="${nv('l1')}" placeholder="0" style="${FLD}">`)}</div>
       <div class="grid2">${lbl('Kassa limiti (0 — belgilanmagan)', `<input id="kx-limit" type="text" inputmode="numeric" value="${nv('cashLimit')}" placeholder="0" style="${FLD}">`)}${lbl('Kassa ishga tushadigan kun', `<input id="kx-live" type="date" value="${v('kassaGoLive')}" style="${FLD}">`)}</div>
-      <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek.</div></div>
+      <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek.</div>
+      <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
+      <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs (hisobi bog‘langan bo‘lsa — shu yerdagi to‘liq F.I.Sh. bilan). Qo‘shish va o‘chirish darhol saqlanadi.</div>
+      <div id="kx-sigs">${sigRows()}</div>
+      <div class="grid2">${lbl('Ro‘yxat', `<select id="kx-slist" style="${FLD}"><option value="1">1-ro‘yxat — rahbar</option><option value="2">2-ro‘yxat — bosh buxgalter / moliya</option></select>`)}${lbl('Lavozimi', `<input id="kx-stitle" type="text" maxlength="200" placeholder="masalan: Direktor" style="${FLD}">`)}</div>
+      <div class="grid2">${lbl('F.I.Sh. (to‘liq)', `<input id="kx-sname" type="text" maxlength="200" style="${FLD}">`)}${lbl('Tizimdagi hisobi <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<select id="kx-suid" style="${FLD}"><option value="">—</option>${((ST.refs && ST.refs.signers) || []).map(u => `<option value="${esc(u.uid)}">${esc(u.name)}</option>`).join('')}</select>`)}</div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kx-sadd">+ Imzo egasini qo‘shish</button></div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kx-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   ['#kx-t1', '#kx-l1', '#kx-limit'].forEach(s => fmtInput($(s)));
+  const sigSave = (x, active) => call('fin_signatory_save', { p_id: x.id || null, p_list: Number(x.list), p_uid: x.uid || null, p_title: x.title || '', p_full_name: x.fullName, p_active: active });
+  const drawSigs = () => {
+    const box = $('#kx-sigs'); if (!box) return;
+    box.innerHTML = sigRows();
+    box.querySelectorAll('[data-sdel]').forEach(b => b.onclick = async () => {
+      const x = ((ST.refs && ST.refs.signatories) || []).find(y => y.id === b.dataset.sdel);
+      if (!x || !confirm(`${x.fullName} imzo egalari ro‘yxatidan olib tashlansinmi?`)) return;
+      b.disabled = true;
+      try { await sigSave(x, false); await loadRefs(true); drawSigs(); C.toast('Ro‘yxatdan olib tashlandi ✓'); }
+      catch (e) { b.disabled = false; C.toast(errText(e), true); }
+    });
+  };
+  drawSigs();
+  $('#kx-sadd').onclick = async () => {
+    const x = { list: $('#kx-slist').value, title: $('#kx-stitle').value.trim(), fullName: $('#kx-sname').value.trim(), uid: $('#kx-suid').value || null };
+    if (x.fullName.length < 5) { C.toast('F.I.Sh. ni to‘liq yozing', true); $('#kx-sname').focus(); return; }
+    if (((ST.refs && ST.refs.signatories) || []).some(y => Number(y.list) === Number(x.list) && String(y.fullName || '').toLowerCase() === x.fullName.toLowerCase())) { C.toast('Bu shaxs shu ro‘yxatda bor', true); return; }
+    $('#kx-sadd').disabled = true;
+    try { await sigSave(x, true); await loadRefs(true); drawSigs(); $('#kx-stitle').value = ''; $('#kx-sname').value = ''; $('#kx-suid').value = ''; C.toast('Imzo egasi qo‘shildi ✓'); }
+    catch (e) { C.toast(errText(e), true); }
+    $('#kx-sadd').disabled = false;
+  };
   $('#kx-save').onclick = async () => {
     const live = $('#kx-live').value || null;
     if (live && live !== (o.kassaGoLive || '') && !confirm(`Kassa ${dmy(live)} dan ishga tushsinmi?\n\nShu kundan naqd o‘quv to‘lovlari faqat kassa orderi va fiskal chek raqami bilan qabul qilinadi.`)) return;
     $('#kx-save').disabled = true;
-    try { await call('fin_org_set', { p: { nameUz: $('#kx-name').value.trim(), stir: digits($('#kx-stir').value), place: $('#kx-place').value.trim(), printLang: $('#kx-lang').value,
+    try { await call('fin_org_set', { p: { nameUz: $('#kx-name').value.trim(), nameRu: $('#kx-name-ru').value.trim(), stir: digits($('#kx-stir').value), place: $('#kx-place').value.trim(), printLang: $('#kx-lang').value,
         t1: num(digits($('#kx-t1').value)), l1: num(digits($('#kx-l1').value)), cashLimit: num(digits($('#kx-limit').value)), kassaGoLive: live } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }

@@ -1555,6 +1555,40 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   v2) va qolgan barcha stsenariylar qayta o'tkazildi (16 ta ishga tushirish, hammasi yashil).
 - **Qilinmagan:** F1.18–F1.19, jonli zanjirga o'tkazish; mustaqil (boshqa agentlar bilan) ko'rik.
 
+## 62) Moliya, 1a-bosqich: o'rnatishdan keyingi tekshiruv, reliz belgisi (F1.18) va ishga tushirish to'plami (F1.19) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN.** Kassa fayllari hamon `--dev` zanjirida. Jonli zanjirda faqat skriptlar o'zgardi
+(`migration/deploy/full-deploy.sh`, `sinov/lib-preflight.sh` — yangi, faqat o'qiydigan tekshiruv qadami); SQL zanjiri o'zgarmagan.
+
+- **`migration/kassa-checks.sql`** — faqat o'qiydi (`default_transaction_read_only`), istalgan payt ishga tushiriladi; chiqishida ism,
+  telefon va summalar yo'q (identifikator, sana, son, farq). Modul o'rnatilmagan bazada faqat 1-band ishlaydi. Bandlar:
+  1 — `search_path` belgilanmagan SECURITY DEFINER funksiyalar (butun `app` / `public`); 2 — reliz belgisi; 3 — obyektlar soni;
+  4 — moliya funksiyalarida `search_path`; 5 — ichki `app.*` funksiyalarni mijoz rollari chaqira olmasligi (RLS ishlatadigan uchtasidan
+  tashqari); 6 — ochiq funksiyalar: anon — yo'q, authenticated — ha; 7 — jadvallar: RLS, yozish huquqi va siyosati yo'q; 8 — himoya
+  triggerlari; 9 — noyoblik indekslari; 10 — overload yo'q; 11 — kunlar zanjiri va boshlang'ich qoldiq dalolatnomasi; 12 — kun jamlari
+  hujjatlardan; 13 — kun xeshi; 14 — raqamlash; 15 — KO-4 varaqlari; 16 — hujjat qatorlari; 17 — hujjat ↔ kun; 18 — o'quv to'lovi
+  taqsimoti; 19 — bog'lanishlar (yo'q hujjat, sinov kassasi); 20 — moslik P1 / P4 / P5 / P8 (ishga tushgan kundan); 21 — surat xeshlari;
+  22 — sozlamalar ziddiyati; 23 — holat (ma'lumot). Yakuniy qator: «✅ … muammo topilmadi» yoki «!! … N ta muammo qatori».
+- **Reliz belgisi:** `migration/fin-version.sql` → `app.kassa_version()` (hozir 1); `kassa_state` javobida `version`. Sahifa
+  (`fin-kassa.js`: `SERVER_VER`) farqni ko'rsa ogohlantiradi: server yangiroq — «sahifani yangilang», server eskiroq — «administratorga
+  xabar bering». Server shartnomasi o'zgarganda uchalasi (SQL, JS, `kassa-checks.sql`) birga oshiriladi.
+- **Ulanish:** `full-deploy.sh` «Keyingi tekshiruvlar»da (modul yo'q — bitta qator; modulda muammo — to'liq chiqish va «!!», chiqish
+  kodi 2); sinov stendining yakuniy tekshiruvida; `migration/deploy/README.md` da izoh va qo'lda ishga tushirish buyrug'i.
+- **Sozlamalar:** «⚙ Sozlamalar»da imzo egalari (1-ro'yxat — rahbar, 2-ro'yxat — bosh buxgalter / moliya; lavozim, to'liq F.I.Sh.,
+  ixtiyoriy — tizimdagi hisobi; qo'shish va ro'yxatdan olish darhol saqlanadi) va tashkilotning ruscha nomi. Ilgari imzo egalarini
+  kiritadigan ekran yo'q edi (funksiya bor edi) — yo'riqnoma yozishda aniqlandi. `kassa_refs` → `signers` (faqat Direktorga).
+- **Ishga tushirish to'plami (hujjatlar):** `docs/moliya/ishga-tushirish.md`, `docs/moliya/yoriqnomalar.md`, `docs/moliya/shakllar.md`.
+- **Qaror (jonli zanjirga o'tkazish):** hozir o'tkazilmadi — rejadagi yashirin o'rnatish kuni (≈ 21-dekabr), qabul sinovi va
+  buxgalter ko'rigidan keyin, bir martalik commit bilan (`--dev ` belgilari olinadi). Bayroq bilan qisman o'tkazish rad etildi:
+  zanjir har deployda `app.*` funksiyalariga EXECUTE ni qayta beradi, kassa fayllari qaytarib oladi — kassa fayllarisiz deploy
+  ichki funksiyalarni ochiq qoldirardi.
+- **Sinovlar:** yangi `test-kassa-checks.sql` 32/32 (bo'sh modul va uch kunlik haqiqiy ssenariy — toza; 23 xil ataylab buzilish —
+  har biri aynan o'z bandida; qaytarilgach — toza; modulsiz baza). Tekshiruv fayli olti brauzer ssenariysidan keyingi bazalarda va
+  parallel sinov bazasida (1 500 ga yaqin hujjat) ham toza. `test-kassa.sql` 224 (+1), qolgan SQL to'plamlari, `test-kassa-race.sh` 22,
+  JS 28, `tg-daily` 39 — yashil; jonli zanjirda `test-fin-prereq` 87, `test-audit-fixes` 36, `test-public-close` 92. Brauzer: 16 ta
+  ishga tushirish, hammasi yashil (`e2e-kassa6` 30: reliz ogohlantirishi, imzo egalari, telefon).
+- **Qilinmagan:** jonli zanjirga o'tkazish; mustaqil (boshqa agentlar bilan) ko'rik; F1.20 — 1b-bosqich.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

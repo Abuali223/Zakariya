@@ -545,7 +545,8 @@ begin
     't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang", 'lockedThrough', v_o."lockedThrough",
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
                   where k.desk = v_desk and k.year = extract(year from v_today)::int),
-    'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir));
+    'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir),
+    'version', app.kassa_version());   -- modul relizi (fin-version.sql): sahifa o'zi kutgani bilan solishtiradi
 end $$;
 revoke all on function public.kassa_state(text) from public, anon;
 grant execute on function public.kassa_state(text) to authenticated;
@@ -807,7 +808,16 @@ begin
                              from public.users u
                             where coalesce(nullif(u.status, ''), 'active') = 'active'
                               and (u.role in ('kassir', 'treasurer')
-                                   or (jsonb_typeof(u."extraRoles") = 'array' and u."extraRoles" ? 'kassir' and u.role not in ('director', 'parent', 'student')))), '[]'::jsonb));
+                                   or (jsonb_typeof(u."extraRoles") = 'array' and u."extraRoles" ? 'kassir' and u.role not in ('director', 'parent', 'student')))), '[]'::jsonb),
+    -- imzo huquqi bo'lishi mumkin bo'lgan hisoblar («⚙ Sozlamalar» → «Imzo egalari» da hisobni bog'lash uchun) — faqat Direktorga
+    'signers', case when app.is_admin() then
+                 coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id), 'role', u.role) order by u.name)
+                             from public.users u
+                            where coalesce(nullif(u.status, ''), 'active') = 'active'
+                              and (u.role in ('director', 'finance_mgr', 'accountant')
+                                   or (jsonb_typeof(u."extraRoles") = 'array' and (u."extraRoles" ? 'finance_mgr' or u."extraRoles" ? 'accountant')
+                                       and u.role not in ('parent', 'student')))), '[]'::jsonb)
+               else '[]'::jsonb end);
 end $$;
 revoke all on function public.kassa_refs() from public, anon;
 grant execute on function public.kassa_refs() to authenticated;

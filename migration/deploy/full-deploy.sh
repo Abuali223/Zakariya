@@ -167,6 +167,23 @@ psql_at -c "select '    yangi funksiyalar: ' || count(*) || ' (kutilgan 10)' fro
         -c "select '    storage papka ro''yxati: ' || coalesce(string_agg(policyname, ', '), 'siyosat YO''Q') || ' (kutilgan: iqror_staff_read; iqror_public_read — YO''Q)' from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT' and policyname like 'iqror\_%'"
 grep -q "BIR XIL" "$DOUT" || { echo "    !! 7/7 baza tekshiruvi «BIR XIL» emas — yuqoridagi 🔴/🟠 qatorlarni ko'rib chiqing"; bad=1; }
 rm -f "$DOUT"
+# «Kassa» / moliya moduli tekshiruvi (migration/kassa-checks.sql — FAQAT O'QIYDI). Modul o'rnatilmagan bazada bitta qator
+#   (umumiy band topilmasi — faqat ogohlantirish); o'rnatilgan bazada muammo bo'lsa — to'liq chiqish va «!!».
+if [ -f "$REPO/migration/kassa-checks.sql" ]; then
+  KOUT=$(sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -X -P pager=off < "$REPO/migration/kassa-checks.sql" 2>&1 || true)
+  KSUM=$(printf '%s\n' "$KOUT" | grep -E 'Kassa tekshiruvi:' | tail -n 1 | sed 's/^ *//' || true)
+  case "$KSUM" in
+    '✅'*) echo "    ✓ ${KSUM#✅ }" ;;
+    *)
+      if printf '%s\n' "$KOUT" | grep -q 'moduli bu bazada o.rnatilmagan'; then
+        echo "    ⚠️ ${KSUM#!! }"
+        printf '%s\n' "$KOUT" | grep -E '^ !!    ' | head -n 20 | sed 's/^ !!    | /       /' || true
+      else
+        printf '%s\n' "$KOUT" | sed 's/^/    /'
+        echo "    !! «Kassa» moduli tekshiruvida muammo bor (yuqoridagi «!!» qatorlar). Qayta tekshirish — migration/kassa-checks.sql boshidagi buyruq"; bad=1
+      fi ;;
+  esac
+fi
 # Xizmatlar: ishlayaptimi va deploy'dan keyin YIQILIB qayta ishga tushmadimi. deploy.sh har xizmatni qo'lda qayta ishga
 #   tushiradi — systemd bunda NRestarts'ni 0 qiladi; shundan keyin 0 dan katta qiymat = xizmat yiqilib, o'zi qayta
 #   ko'tarilgan (3 s kutib yana qaraladi). /health — port config.json'da boshqacha bo'lsa javob bo'lmasligi mumkin, bu xato emas.
