@@ -1599,6 +1599,11 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
     kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat, maosh, avans, qaytarish) bo'lsa rad etadi (`kassa:live_gap`) — aks holda
     ular moslik tekshiruvida abadiy «ordersiz naqd harakat» bo'lib qolardi. `test-kassa-pay.sql` 51 (+1), `test-kassa-links.sql`
     92 (+1); bu ikki to'plamda kassa endi ordersiz naqd yozuvdan keyingi kuni ishga tushiriladi.
+  - *Sinov stendi:* `sinov/update.sh --dry-run` (va o'rnatilgan stendda `install.sh --dry-run`) ba'zan soxta «❌ O'rinbosar sxemalar
+    tekshiruvi xato» bilan to'xtardi — quruq rejimda o'qilmaydigan quvurga yozuvchi SIGPIPE olardi (`pipefail`). Tuzatildi
+    (`lib-preflight.sh`). Stend lokal soxta server muhitida joriy versiya bilan sinaldi: o'rnatish va yangilash (`--dev`) — yakuniy
+    tekshiruvda «Kassa tekshiruvi: muammo topilmadi (modul relizi 1)»; ssenariylar to'plami 105/107 (ikkitasi — sinov muhitining
+    eskirgan sharti, skriptga bog'liq emas).
   - *Tekshirildi, o'zgarish talab qilmadi:* so'rovga soxta maydon qo'shish (holat, raqam, sana, tasdiqlar, «tizim hujjati»),
     qatorda mijoz bergan hisobvaraqlar, manfiy qator, juda uzun matn, kalit (`clientRef`) shakli, sanash summasi va nominallar,
     yo'q kassa — hammasi serverda rad etiladi yoki e'tiborga olinmaydi; dinamik SQL faqat migratsiya DDL'ida; sahifada foydalanuvchi

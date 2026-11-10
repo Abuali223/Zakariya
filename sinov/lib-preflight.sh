@@ -646,7 +646,8 @@ step_db(){   # $1 = install | update | reset
     [ "$mode" = update ] && die "«$SINOV_DB» bazasi yo'q — avval install.sh ni ishga tushiring."
     db_create; db_prepare; db_chain fresh; db_seed
   else
-    db_stubs_sql | { dry "o'rinbosar sxemalar (bor bo'lsa o'zgarmaydi)" || sdb >/dev/null; } || die "O'rinbosar sxemalar tekshiruvi xato."
+    # (dry-run'da quvur ochilmaydi: o'qilmaydigan quvurga yozuvchi SIGPIPE oladi va pipefail soxta xato berardi)
+    if ! dry "o'rinbosar sxemalar (bor bo'lsa o'zgarmaydi)"; then db_stubs_sql | sdb >/dev/null || die "O'rinbosar sxemalar tekshiruvi xato."; fi
     db_chain live
     if [ "$DRY" = 1 ]; then dry "ma'lumot bo'sh bo'lsa — seed yuklanadi; aks holda saqlanadi"
     elif db_is_seeded; then note "stend ma'lumotlari saqlandi (yangidan boshlash: bash reset.sh)"
