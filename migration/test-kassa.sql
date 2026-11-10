@@ -80,7 +80,7 @@ insert into public.users (id, email, role, status, "extraRoles", "staffRefType",
   ('U_KAS','k@x','kassir','active','[]','staff','st1'), ('U_KAS2','k2@x','kassir','active','[]','teacher','tch1'),
   ('U_ACC','a@x','accountant','active','[]',null,null), ('U_TRE','g@x','treasurer','active','[]',null,null),
   ('U_ZAV','z@x','zavuch','active','[]',null,null), ('U_TCH','t@x','teacher','active','[]',null,null),
-  ('U_HRK','h@x','hr','active','["kassir"]',null,null)
+  ('U_HRK','h@x','hr','active','["kassir"]',null,null), ('U_BLK','b@x','finance_mgr','blocked','["kassir"]',null,null)
 on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]');
@@ -480,6 +480,15 @@ select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamla
 select zz.chk('H8 ma''lumotnomalar: 20 qoida, 75 statiya, tashkilot, kassirlar',
   zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^20:75:main:[3-9]$');
 select zz.chk('H8b ma''lumotnomalar: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_refs()::text$q$), '^ERR 42501');
+-- Har bir ochiq moliya funksiyasi (public.kassa_* / fin_*) bo'sh ma'lumot bilan chaqirilganda ham AVVAL ruxsatni tekshiradi:
+--   begona rol (o'qituvchi, zavuch) va bloklangan hisob (roli moliya menejeri + kassir bo'lsa ham) faqat «ruxsat yo'q» (42501) oladi.
+select zz.chk('H9 barcha ochiq moliya funksiyalari begona rol va bloklangan hisobga avval «ruxsat yo''q» deydi (ma''lumot tekshiruvidan oldin)',
+  (select count(*) filter (where q.r !~ '^ERR 42501') || '/' || (count(*) >= 96)::text from (
+     select zz.as(u.id, 'select public.' || quote_ident(p.proname) || '(' ||
+              coalesce((select string_agg(case when format_type(a.oid, null) = 'jsonb' then $x$'{}'::jsonb$x$ else 'null::' || format_type(a.oid, null) end, ', ' order by a.ord)
+                          from unnest(p.proargtypes::oid[]) with ordinality as a(oid, ord)), '') || ')::text') as r
+       from pg_proc p cross join (values ('U_TCH'), ('U_ZAV'), ('U_BLK')) u(id)
+      where p.pronamespace = 'public'::regnamespace and p.proname ~ '^(kassa|fin_)') q), '^0/true$');
 select zz.chk('H8c imzo egasi sifatida bog''lanadigan hisoblar ro''yxati — faqat Direktorga (kassirga bo''sh)',
   zz.as('U_DIR', $q$select (select count(*) from jsonb_array_elements(r -> 'signers') x where x ->> 'uid' in ('U_DIR', 'U_FM'))::text || ':' ||
                           (select count(*) from jsonb_array_elements(r -> 'signers') x where x ->> 'uid' in ('U_KAS', 'U_TCH'))::text from public.kassa_refs() r$q$) || ' | ' ||

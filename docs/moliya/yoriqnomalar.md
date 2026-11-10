@@ -99,7 +99,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |
-| Davr surati va davrni yopish / qayta ochish | «Davr» | qayta ochish — sababi bilan, tarixda qoladi |
+| Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi |
 | Sozlamalar, imzo egalari, boshlang‘ich qoldiq | «⚙ Sozlamalar» | chegaralarni faqat Direktor o‘zgartiradi |
 
 Kassir yo‘qligida kunni Direktor yoki moliya menejeri yopishi mumkin — kamida 2 kishilik komissiya bilan.

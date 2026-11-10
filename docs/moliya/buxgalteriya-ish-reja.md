@@ -31,10 +31,13 @@ v1 va v2 ko‘rinishlarida. Jami mehnat ≈ 161 dasturchi-kun.
 | 5 — Hisobotlar | may–iyun | balans (1-shakl), moliyaviy natijalar (2-shakl), pul oqimi, ota-onalar uchun to‘lov ma’lumotnomasi |
 | 6 — Muvofiqlik | iyundan (kerak bo‘lsa oldinroq) | fiskal chek integratsiyasi, elektron imzo (ERI), maosh soliqlari moduli |
 
-**Hozir egasidan kerak:** (1) 14-noyabrgacha §6 dagi asosiy qarorlar (ishga tushirish sanasi, kim tasdiqlaydi, chop
-etish tili va boshqalar); (2) buxgalterni jalb qilish — kassa qismidagi hisob qoidalarini 21-noyabrgacha tasdiqlaydi;
-(3) maktabda naqd va terminal to‘lovlari uchun onlayn yoki virtual kassa (fiskal chek) bormi — 12-dekabrgacha yozma
-javob (G1 darvozasi).
+**Hozir egasidan kerak (2026-11-10 holati; qarorlar dasturchiga topshirilgan, fiskal kassa va buxgalter — bor):**
+(1) 0-bosqich tuzatmalarini jonli tizimga o‘rnatish (`migration/deploy/README.md`, «To‘liq deploy»); (2) sinov stendini
+o‘rnatish (`sinov/README.md`; kassa bilan — `update.sh --dev`) — qabul sinovi va o‘qitish shu yerda; (3) buxgalter
+21-noyabrgacha hisob qismini (hisobvaraqlar, statiyalar, operatsiyalar — §4.2–4.6), `docs/moliya/shakllar.md` va buyruq
+namunalarini ko‘rib chiqadi; (4) bank bilan kassa limiti bormi — javob; (5) 12-dekabrgacha: buyruqlar imzolanadi va
+fiskal kassa bo‘yicha yozma tasdiq (G1, G5); (6) 14–26-dekabr: har rol stendda qabul sinovini o‘tkazib imzolaydi (G4).
+Ishga tushirish tartibi va tekshiruv ro‘yxatlari — `docs/moliya/ishga-tushirish.md`.
 
 **Belgilar.** `F<bosqich>.<n>` — vazifa; `FD-nn` — qaror; `IN-` / `EX-` / `OP-` — statiya (daromad / foyda-zararga
 kiradigan xarajat / kirmaydigan operatsiya); `PR` — provodka qoidasi; `MC` — oy yopish qadami; `RP` — hisobot; `CT` —
@@ -808,7 +811,8 @@ bo‘lmasa yoki ishlatilmasa — blok yo‘q); F1.16 `fin-period.sql` — davr s
 qarz va avanslar, aniqlanmagan tushumlar, kassa qoldig‘i, hisoblagichlar, to‘lanmagan ish haqi, berilmagan qaytarishlar;
 o‘zgarmaydi, SHA-256 xeshi qayta hisoblab tekshiriladi; yillik / oylik / qo‘lda, bir kun uchun bir necha versiya) va
 davr qulfi (`fin_period_lock`: shu sanagacha to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi, o‘zgartirilmaydi —
-42501; server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida); «Kassa» sahifasida «Davr»
+42501; server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida; davr faqat shu sanagacha
+bo‘lgan kassa kunlari yopilgan bo‘lsa yopiladi, yopilgan davrdagi kassa kuni qayta ochilmaydi); «Kassa» sahifasida «Davr»
 oynasi (Direktor — surat va qulf; 2-ro‘yxat — ko‘rish, xeshni tekshirish, JSON yuklab olish), sana maydonlarida eng erta
 sana = qulfdan keyingi kun; F1.11 — kassa ishga tushgach «Maosh berish»ni faqat kassa operatori (naqd) va Moliya
 menejeri (karta) ochadi, HR menejer pul bermaydi (server ham rad etadi); F1.18 — `migration/kassa-checks.sql`
@@ -823,8 +827,8 @@ orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar
 shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
 parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
-ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 224,
-`test-kassa-pay.sql` 50, `test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 27,
+ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
+`test-kassa-pay.sql` 50, `test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 32,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
 39; brauzerda olti to‘liq stsenariy (173 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa

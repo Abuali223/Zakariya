@@ -1584,9 +1584,21 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   ichki funksiyalarni ochiq qoldirardi.
 - **Sinovlar:** yangi `test-kassa-checks.sql` 32/32 (bo'sh modul va uch kunlik haqiqiy ssenariy — toza; 23 xil ataylab buzilish —
   har biri aynan o'z bandida; qaytarilgach — toza; modulsiz baza). Tekshiruv fayli olti brauzer ssenariysidan keyingi bazalarda va
-  parallel sinov bazasida (1 500 ga yaqin hujjat) ham toza. `test-kassa.sql` 224 (+1), qolgan SQL to'plamlari, `test-kassa-race.sh` 22,
+  parallel sinov bazasida (1 500 ga yaqin hujjat) ham toza. `test-kassa.sql` 225 (+2), qolgan SQL to'plamlari, `test-kassa-race.sh` 22,
   JS 28, `tg-daily` 39 — yashil; jonli zanjirda `test-fin-prereq` 87, `test-audit-fixes` 36, `test-public-close` 92. Brauzer: 16 ta
   ishga tushirish, hammasi yashil (`e2e-kassa6` 30: reliz ogohlantirishi, imzo egalari, telefon).
+- **Yakka ko'rik (mustaqil ko'rik o'rniga) va tuzatishlar:**
+  - *Davr qulfi ↔ kassa kunlari:* davr endi faqat shu sanagacha bo'lgan kassa kunlari yopilgan bo'lsa yopiladi
+    (`app.fin_lock_ready`, `fin:open_day` — qulf ham, qulfli surat ham; sinov kassasi hisobga olinmaydi); yopilgan davrdagi kassa
+    kuni qayta ochilmaydi; birinchi kassa kuni yopilgan davrga qo'yilmaydi. Ilgari ochiq kun turganda davrni yopish mumkin edi —
+    kun keyin yopilganda farq hujjati yopilgan davrga yozilardi. `test-fin-period.sql` 32 (+5).
+  - *Ruxsat tartibi:* `kassa_salary_pay` avval ruxsatni, keyin ma'lumotni tekshiradi (ilgari begona rol «kassa ishga
+    tushirilmagan» javobini olardi). Yangi doimiy sinov (`test-kassa.sql` H9, 225): har bir ochiq moliya funksiyasi bo'sh ma'lumot
+    bilan chaqirilganda begona rol va bloklangan hisobga (roli moliya menejeri + kassir bo'lsa ham) faqat 42501 qaytaradi.
+  - *Tekshirildi, o'zgarish talab qilmadi:* so'rovga soxta maydon qo'shish (holat, raqam, sana, tasdiqlar, «tizim hujjati»),
+    qatorda mijoz bergan hisobvaraqlar, manfiy qator, juda uzun matn, kalit (`clientRef`) shakli, sanash summasi va nominallar,
+    yo'q kassa — hammasi serverda rad etiladi yoki e'tiborga olinmaydi; dinamik SQL faqat migratsiya DDL'ida; sahifada foydalanuvchi
+    matni hamma joyda ekranlanadi.
 - **Qilinmagan:** jonli zanjirga o'tkazish; mustaqil (boshqa agentlar bilan) ko'rik; F1.20 — 1b-bosqich.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)

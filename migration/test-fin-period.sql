@@ -164,6 +164,27 @@ select zz.chk('L6 qulf o''zgarishlari «O''zgarishlar tarixi»ga yozilgan',
 select zz.chk('L7 kassa holatida davr qulfi ko''rinadi (shakllarda eng erta sana shundan)',
   left(zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-31')::text$q$), 0) || zz.as('U_KAS', $q$select (public.kassa_state('main') ->> 'lockedThrough')$q$), '^2026-12-31$');
 
+-- ---------- (K) davr qulfi va kassa kunlari ----------
+select zz.put('K1', left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-02"}')::text$q$), 0)
+  || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2026-12-31"}')::text$q$));
+select zz.chk('K1 birinchi kassa kuni yopilgan davrga qo''yilmaydi', zz.get('K1'), '^ERR 42501 \[fin:locked\] Birinchi kassa kuni');
+select zz.put('K2', left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2027-01-02"}')::text$q$), 0)
+  || zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":10000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 02.01.2027","note":"Sinov","clientRef":"p-k2-0001"}'::jsonb)::text$q$));
+select zz.chk('K2 kassa ishga tushdi: 02.01.2027 kuni ochiq', (select status from public.cash_days where desk = 'main' and day = '2027-01-02'), '^open$');
+select zz.clock('2027-01-03 10:00+05');   -- ertasi kun: kechagi kassa kuni hali sanalmagan
+select zz.put('K3n', (select count(*)::text from public.fin_snapshots));
+select zz.chk('K3 ochiq kassa kuni bor — davr yopilmaydi (qulf ham, qulfli surat ham); surat yozilmaydi',
+  zz.as('U_DIR', $q$select public.fin_period_lock('2027-01-02')::text$q$) || ' | ' || zz.as('U_DIR', $q$select public.fin_snapshot_take('{"asOf":"2027-01-02","lock":true}')::text$q$)
+  || ' | ' || ((select count(*)::text from public.fin_snapshots) = zz.get('K3n'))::text, '^ERR P0001 \[fin:open_day\].*02\.01\.2027.* \| ERR P0001 \[fin:open_day\].* \| true$');
+select zz.put('K4', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-02","counted":510000}')::text$q$));
+select zz.chk('K4 kun sanab yopilgach davr 02.01.2027 gacha yopiladi',
+  (zz.get('K4')::jsonb -> 'day' ->> 'status') || ' | ' || zz.as('U_DIR', $q$select (public.fin_period_lock('2027-01-02') ->> 'lockedThrough')$q$), '^closed \| 2027-01-02$');
+select zz.put('K5', zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-01-02', 'Sanash xatosi')::text$q$));
+select zz.put('K5b', left(zz.as('U_DIR', $q$select public.fin_period_lock('2027-01-01', 'Kassa kunini tuzatish')::text$q$), 0)
+  || zz.as('U_DIR', $q$select (public.kassa_day_reopen('main', '2027-01-02', 'Sanash xatosi') -> 'day' ->> 'status')$q$));
+select zz.chk('K5 yopilgan davrdagi kassa kuni qayta ochilmaydi; davr sabab bilan qayta ochilgach — ochiladi',
+  zz.get('K5') || ' | ' || zz.get('K5b'), '^ERR 42501 \[fin:locked\] Kassa kuni.* \| open$');
+
 -- ---------- (G) rollar ----------
 select zz.chk('G1 kassir va o''qituvchi suratlarni ko''ra olmaydi; anon — hech narsa',
   zz.as('U_KAS', $q$select public.fin_snapshots_list()::text$q$) || ' | ' || zz.as('U_TCH', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$) || ' | ' || zz.as(null, $q$select public.fin_snapshots_list()::text$q$)

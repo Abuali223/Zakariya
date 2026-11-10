@@ -139,6 +139,10 @@ declare
   v_uid text := app.uid(); v_id text; v_method text; v_tid text; v_ref text; v_month text; v_paid numeric; v_from text; v_gate_off boolean;
   v_ex public.salary_payments%rowtype; v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_date text; v_key text;
 begin
+  -- Avval ruxsat (begona rolga holat haqida hech narsa oshkor qilinmaydi), keyin ma'lumot tekshiruvi.
+  if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
+    raise exception 'Ruxsat yo''q: maosh to''lovini kassir (naqd) yoki Moliya menejeri (karta) yozadi' using errcode = '42501', hint = 'kassa:cash_role';
+  end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
   v_method := coalesce(p ->> 'method', '');
   if v_method = 'cash' then

@@ -54,7 +54,10 @@ bash ~/iqror-repo/sinov/reset.sh      # yangidan boshlash: baza qaytadan qurilad
 bash ~/iqror-repo/sinov/remove.sh     # o‘chirish (baza va parollar qoladi);  --yes bilan — baza va papka ham o‘chadi
 ```
 
-Har birida `--dry-run` bor.
+Har birida `--dry-run` bor. Kassa bo‘limi bilan o‘rnatilgan stendni yangilashda ham `--dev` qo‘shiladi
+(`bash ~/iqror-repo/sinov/update.sh --dev`). Yakuniy tekshiruvda «Kassa tekshiruvi: muammo topilmadi» qatori chiqadi —
+kassa hujjatlari yaxlitligi tekshiruvi (faqat o‘qiydi); «⚠️» bo‘lsa — ko‘rsatilgan buyruq chiqishini yuboring (unda ism,
+telefon va summalar yo‘q).
 
 ## Xavfsizlik
 

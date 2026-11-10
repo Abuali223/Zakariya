@@ -103,7 +103,9 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    yopish» belgisi bugungi sana uchun o‘zi o‘chadi — bugungi kun yopilmaydi). Suratda: o‘quvchilar qarzi va avanslari, biriktirilmagan tushumlar, kassa
    qoldig‘i, to‘lanmagan ish haqi, berilmagan qaytarishlar. «⬇ JSON» bilan yuklab, arxivga qo‘yiladi.
 9. **Davrni yopish** — keyingi ish kuni: «Davr» → «Shu sanagacha yopiq» = 31-dekabr → «Qulfni saqlash». Shundan keyin 31-dekabrgacha
-   sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno).
+   sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno). Keyingi
+   oylarda: davr faqat shu sanagacha bo‘lgan barcha kassa kunlari sanab yopilgan bo‘lsa yopiladi; yopilgan davrdagi kassa kuni
+   qayta ochilmaydi (avval Direktor davrni sababi bilan qayta ochadi).
 10. Hujjat raqamlari (K-, Ch-, D-) yangi yilda 1 dan boshlanadi — bu avtomatik.
 
 ## 5. Birinchi kassa kuni
@@ -125,7 +127,7 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
    komissiya a’zolari kiritiladi — kamida 2 kishi), sanash dalolatnomasi chop etilib imzolanadi.
 2. Barcha kunlar «Tekshirilgan»; nazorat ro‘yxatida qizil qator yo‘q; `kassa-checks.sql` — «muammo topilmadi».
 3. Yanvar avans hisobotlari (qog‘oz, Sh-1) buxgalterga topshirilgan va xarajatlar «Buxgalteriya»ga kiritilgan.
-4. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf.
+4. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi).
 
 ## 8. Favqulodda holatlar
 | Holat | Nima qilinadi |

@@ -15,7 +15,9 @@ do $iqror_guard$ begin raise exception 'iqror: fin-period.sql ALOHIDA ishga tush
 --   fin_period_lock(date, note) — davr qulfi: shu sanagacha (shu kun ham) pul yozuvlari kiritilmaydi va o'zgartirilmaydi
 --                                 (42501; server — webhook'lar — mustasno). Orqaga surish — faqat sabab bilan.
 --   Qulf qamrovi (1a): to'lovlar (yangi yozuvning kassa kuni), «Buxgalteriya» xarajatlari, maosh to'lovlari, xodim avanslari
---   (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas.
+--   (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas; lekin:
+--   davr faqat shu sanagacha bo'lgan kassa kunlari yopilgan bo'lsa yopiladi (app.fin_lock_ready), yopilgan davrdagi kassa kuni
+--   qayta ochilmaydi va birinchi kassa kuni yopilgan davrga qo'yilmaydi (kassa-day.sql: kassa_day_reopen, kassa_opening_set).
 --   Barcha pul jadvallari uchun oy qulfi — 2-bosqich (F2.8).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
@@ -151,6 +153,22 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
+-- Davrni yopishdan oldin: shu sanagacha bo'lgan kassa kunlari YOPILGAN bo'lishi kerak. Ochiq kun — hali sanalmagan pul: uni
+--   yopishda farq hujjati yozilishi mumkin, bu esa yopilgan davrga yozuv bo'lardi. Sinov kassasi hisobga olinmaydi.
+create or replace function app.fin_lock_ready(p_through date) returns void
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_day date;
+begin
+  if p_through is null then return; end if;
+  select min(d.day) into v_day from public.cash_days d join public.cash_desks k on k.id = d.desk
+   where d.status = 'open' and d.day <= p_through and not k."isTest";
+  if v_day is not null then
+    raise exception 'Davrni yopib bo''lmaydi: % kassa kuni hali yopilmagan — avval kunni sanab yoping', to_char(v_day, 'DD.MM.YYYY')
+      using errcode = 'P0001', hint = 'fin:open_day';
+  end if;
+end $$;
+revoke all on function app.fin_lock_ready(date) from public, anon, authenticated;
+
 -- Qulfni o'rnatish: FAQAT Direktor. Oldinga (yangi davrni yopish) — erkin; orqaga yoki olib tashlash (yopilgan davrni qayta ochish)
 --   — faqat sabab bilan (o'zgarishlar tarixida qoladi). Bugungi va kelajakdagi kun yopilmaydi.
 create or replace function public.fin_period_lock(p_through date, p_note text default '') returns jsonb
@@ -165,6 +183,7 @@ begin
   if v_old is not null and (p_through is null or p_through < v_old) and length(v_note) < 5 then
     raise exception 'Yopilgan davrni qayta ochish uchun sababni yozing' using errcode = '22023', hint = 'fin:lock_reason';
   end if;
+  if p_through is not null and (v_old is null or p_through > v_old) then perform app.fin_lock_ready(p_through); end if;
   update public.fin_org
      set "lockedThrough" = p_through, "updatedAt" = now(), "updatedBy" = app.uid(),
          extra = coalesce(extra, '{}'::jsonb) || jsonb_build_object('lockNote', v_note, 'lockPrev', v_old)
@@ -192,6 +211,7 @@ begin
   if v_lock and v_as >= v_today then
     raise exception 'Bugungi kun yopilmaydi: suratni qulfsiz oling yoki ertaga yoping' using errcode = '22023', hint = 'fin:lock_day';
   end if;
+  if v_lock then perform app.fin_lock_ready(v_as); end if;   -- yopib bo'lmasa — surat ham olinmaydi (bitta amal)
   perform pg_advisory_xact_lock(hashtext('iqror_fin_snapshot'));
   v_kind := case when to_char(v_as, 'MM-DD') = '12-31' then 'year_end'
                  when (v_as + 1) = date_trunc('month', v_as + 1)::date then 'month_end' else 'manual' end;
