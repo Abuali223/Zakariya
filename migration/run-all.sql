@@ -116,6 +116,14 @@ set local iqror.migrating = '1';
 \ir reports-roles.sql
 \ir telegram.sql
 \ir fin-prereq.sql
+-- «--dev» bilan boshlangan qatorlar — ISHLAB CHIQILAYOTGAN migratsiyalar (moliya rejasi, 1a-bosqich «Kassa»). Oddiy zanjir
+--   (deploy.sh, verify-db.sh, psql -f run-all.sql) ularni IZOH deb o'tkazib yuboradi — prod'ga chiqmaydi. Faqat lokal sinov:
+--   bash migration/chain.sh --dev | psql …   Tayyor bo'lganda qator boshidagi «--dev » olib tashlanadi.
+--dev \ir fin-core.sql
+--dev \ir fin-seed.sql
+--dev \ir kassa.sql
+--dev \ir kassa-docs.sql
+--dev \ir kassa-day.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

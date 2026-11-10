@@ -15,17 +15,26 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # rls-initplan.sql zanjirda OXIRGI bo'lishi shart: u barcha policy'larni o'raydi (tezlik) va 42P17 halqasini sinaydi —
 #   undan keyin qo'shilgan migratsiya policy'lari o'ralmay qolardi yoki yangi halqa profil/kartochka saqlashni buzardi.
-LAST=$(grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | tail -1 | awk '{print $2}')
+# --dev : run-all.sql'dagi «--dev \ir fayl.sql» qatorlari ham (o'z o'rnida) qo'shiladi — hali ishga tushirilmagan, ishlab
+#   chiqilayotgan migratsiyalar (masalan «Kassa» 1a bosqichi). FAQAT lokal sinov bazalari uchun: deploy.sh va verify-db.sh bu
+#   bayroqni ishlatmaydi, shuning uchun prod'ga tayyor bo'lmagan sxema chiqmaydi. Tayyor bo'lganda qatordan «--dev » olinadi.
+DEV=0; NOLOCK=0
+for a in "$@"; do case "$a" in --dev) DEV=1 ;; --no-lock-timeout) NOLOCK=1 ;; esac; done
+chain_files(){
+  if [ "$DEV" = 1 ]; then grep -oE '^(--dev )?\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | sed 's/^--dev //' | awk '{print $2}'
+  else grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | awk '{print $2}'; fi
+}
+LAST=$(chain_files | tail -1)
 [ "$LAST" = "rls-initplan.sql" ] || { echo "chain.sh: run-all.sql'dagi OXIRGI fayl rls-initplan.sql bo'lishi shart (hozir: ${LAST:-topilmadi}) — yangi migratsiyani undan OLDIN qo'shing" >&2; exit 1; }
 echo "\\set ON_ERROR_STOP on"
 # Zanjir belgisi: har bir fayl boshidagi qo'riqchi (\if :{?iqror_chain}) faylni ALOHIDA ishga tushirishni rad etadi.
 echo "\\set iqror_chain 1"
 # Jonli bazada ilova so'rovlari qulfini uzoq kutib qolmasin — tez xato beradi (qayta urinish mumkin).
-[ "${1:-}" = "--no-lock-timeout" ] || echo "set lock_timeout = '20s';"
+[ "$NOLOCK" = 1 ] || echo "set lock_timeout = '20s';"
 echo "begin;"
 # Migratsiya paytidagi ma'lumot tuzatishlari o'zgarishlar tarixiga (change_log) yozilmasin — faqat shu tranzaksiyada.
 echo "set local iqror.migrating = '1';"
-for f in $(grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | awk '{print $2}'); do
+for f in $(chain_files); do
   [ -f "$HERE/$f" ] || { echo "chain.sh: '$f' topilmadi (run-all.sql'da bor, papkada yo'q)" >&2; exit 1; }
   echo "\\echo '-> $f'"
   cat "$HERE/$f"; echo
