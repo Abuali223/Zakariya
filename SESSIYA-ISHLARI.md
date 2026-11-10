@@ -1394,6 +1394,44 @@ bo'lganda qator boshidagi «--dev » olib tashlanadi.
 - **Qilinmagan:** kassa yadrosining mustaqil (boshqa agentlar bilan) ko'rigi — ishga tushirish rad etildi; o'rniga muallifning
   o'z qayta ko'rigi (3 tuzatma: band kalitlar, qarordan keyin qayta ochish, fiskal № indeksi).
 
+## 57) Moliya, 1a-bosqich: «Kassa» bo'limi va chop etish shakllari (faqat lokal sinov zanjirida) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN** (kassa fayllari hamon «--dev \ir»). admin.html dagi o'zgarishlar xavfsiz: bo'lim va «To'lov»
+shaklidagi yangi qoidalar faqat serverda `kassa_state` funksiyasi bo'lsa (va Direktor «ishga tushirish kuni»ni belgilagan
+bo'lsa) yoqiladi; kassasiz serverda sahifa avvalgidek ishlaydi (brauzer sinovi 12/12).
+
+- **`assets/js/fin-kassa.js`** (yangi, kerak bo'lganda `import()` bilan yuklanadi; yangi CSS yo'q — mavjud `.page-head`,
+  `.acc-kpis`, `.card`, `.tablewrap`, `.btn`, `.chip`, `#modal`): kun kartasi (kun boshi, kirim, chiqim, qoldiq),
+  ogohlantirishlar (kecha yopilmagan, tasdiq kutayotgan / to'lanadigan so'rovlar, tekshirilmagan kunlar, qarorsiz kamomad,
+  limit), ochiq kun hujjatlari (chop etish, shu kunda bekor qilish), so'rovlar (tasdiqlash, rad etish, bekor qilish, pulni
+  berish), «+ Kirim» / «+ Chiqim so'rovi» shakllari (operatsiya qoidasiga qarab tomon tanlash: o'quvchi, xodim, kontragent
+  — joyida qo'shish, «boshqa»; statiya; ko'p qatorli xarajat; asos hujjatisiz xarid; fiskal chek №), sanab yopish
+  (nominallar, navbatdagi yozuvlar, komissiya), smena topshirish, tekshirish, qayta ochish, kamomad qarori, boshlang'ich
+  qoldiq, sozlamalar (rekvizitlar, til, T1, L1, limit, ishga tushirish kuni), kun varag'i oynasi (hujjatlar, sanashlar,
+  jurnal), «✅ Tasdiqlash» bo'limida kassa navbati.
+- **`assets/js/fin-print.js`** (yangi) — KO-1 + «ПАТТА», KO-2, KO-4 (kassa kitobi varag'i + «Kassir hisoboti», varaqda
+  qatorlar soni qat'iy va kun bilan birga saqlanadi — qayta chop etish aynan bir xil), sanash / topshirish-qabul
+  dalolatnomasi. O'zbek kirill (standart), rus, lotin. Belgilar: «НУСХА», «БЕКОР ҚИЛИНГАН», «АЛМАШТИРИЛДИ», «СИНОВ»,
+  «ҚОРАЛАМА». Tizim tuzgan matnlar (o'quv to'lovi asosi, sanash farqi) chop etish tilida qayta tuziladi.
+  `fin-print.test.mjs` — 11 sinov (matn suratlari).
+- **Chop etish jurnali** (`kassa.sql`: `cash_prints`; `kassa-day.sql`: `kassa_print_mark`, `kassa_doc_get`): birinchi chop
+  etish — asl nusxa, keyingilari — «НУСХА»; «avvalgisi qog'ozga chiqmadi» deb asl nusxa qayta chiqarilsa — nazorat
+  ro'yxatida (`kassa_checks.reissues30`) ko'rinadi; qayta ochib yopilgan kun varag'i — yangi asl nusxa («АЛМАШТИРИЛДИ»).
+- **admin.html:** `KASSA` holati (`kassaInit` — saqlangan holat, `kassaProbe` — serverdan), menyuda «Kassa» («Moliya»
+  guruhi; Direktor, Moliya menejeri, G'aznachi, Kassir), `renderKassa`, `finCtx`; «💵 To'lov» shakli — kassa ishga
+  tushgach: naqd faqat kassa rollarida, fiskal chek № majburiy (Direktorga — istisno belgisi), sana — kassa kuni, natijada
+  KO-1 raqami va «🖨 Kirim orderi va patta», to'lovchiga termal chek yo'q; kassa hujjat qabul qilmayotgan bo'lsa (kecha
+  yopilmagan va h.k.) to'lov navbatga ham qo'yilmaydi; server rad etgan navbat yozuvi sababi bilan ko'rsatiladi; kassa
+  yozuvi eski (kassasiz) yo'lga hech qachon tushmaydi. Ichki xarajat varaqasida «Fiskal chek emas — ichki hujjat».
+  Tuzatildi: «To'lovlar» sahifasining kech tugagan yuklanishi boshqa bo'lim ochilgach xato berardi.
+- **Sinovlar:** `test-kassa.sql` 223/223, `test-kassa-pay.sql` 50/50, `test-kassa-race.sh` 22/22; brauzerda (lokal stend,
+  sintetik ma'lumot) ikki stsenariy — 36 va 35 tekshiruv — eski va yangi dizaynda: boshlang'ich qoldiq → kirim → chiqim
+  so'rovi → tasdiq → to'lash → naqd o'quv to'lovi → bekor qilish → yopish → tekshirish → qayta chop etish; T1 dan katta
+  chiqim, rad etish, smena topshirish, navbatdagi to'lov, kamomad va Direktor qarori, ertasi kun, qayta ochish, komissiya
+  bilan yopish; 390 px da gorizontal siljish yo'q.
+- **Qilinmagan:** mustaqil (boshqa agentlar bilan) ko'rik; F1.5 (naqd maosh / avans KO-2 orqali), F1.6 (qaytarish), F1.15
+  (kunlik hisobot, Telegram), F1.16–F1.19.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

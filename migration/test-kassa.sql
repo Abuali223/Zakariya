@@ -6,7 +6,7 @@
 --   (E) shu kunda bekor qilish; (F) bazadagi himoya (o'zgarmaslik, I1–I6) — RPC'ni chetlab o'tib ham buzib bo'lmaydi;
 --   (G) kun sikli: sanab yopish, farq hujjati (kamomad / ortiqcha), tekshirish (≠ yopuvchi / o'tkazuvchi), qayta ochish,
 --       kamomad qarori, oflayn va kech kiritish, smena topshirish, yil chegarasi, raqam bo'shlig'i va xesh nazorati;
---   (H) o'qish funksiyalari.
+--   (H) o'qish funksiyalari; (I) qarordan keyin qayta ochish, band kalitlar; (J) chop etish jurnali («НУСХА»), varaq qatorlari.
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub). Sana — test soati (app.fin_clock) bilan boshqariladi.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa.sql
@@ -477,6 +477,16 @@ select zz.chk('H5 holat: g''aznachi — kassa operatori', zz.as('U_TRE', $q$sele
 select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamlari',
   left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"sinov","amount":0,"startDay":"2028-01-03"}')::text$q$), 0) ||
   zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":777,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"h6-000001"}', zz.id('cp_bank'))), '"no": 1[,}].*"desk": "sinov"|"desk": "sinov".*"no": 1[,}]');
+select zz.chk('H8 ma''lumotnomalar: 20 qoida, 75 statiya, tashkilot, kassirlar',
+  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^20:75:main:[3-9]$');
+select zz.chk('H8b ma''lumotnomalar: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_refs()::text$q$), '^ERR 42501');
+select zz.chk('H9 xodimlar ro''yxati: faqat kalit, ism, lavozim', zz.as('U_KAS', $q$select string_agg((x ->> 'ref') || '=' || (x ->> 'name'), ',' order by x ->> 'ref') from jsonb_array_elements(public.kassa_people()) x$q$),
+  '^staff:st1=Sinov Xodim,teachers:tch1=Sinov O''qituvchi$');
+select zz.chk('H9b xodimlar ro''yxati: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_people()::text$q$), '^ERR 42501');
+select zz.chk('H10 sahifa ma''lumoti bir chaqiruvda: holat, kunlar, so''rovlar, ismlar',
+  zz.as('U_FM', $q$select (o -> 'state' ->> 'today') || ':' || jsonb_array_length(o -> 'days') || ':' || jsonb_array_length(o -> 'requests') || ':' || (jsonb_typeof(o -> 'names')) from public.kassa_overview('main') o$q$),
+  '^2028-01-03:6:1:object$');
+select zz.chk('H10b sahifa ma''lumoti: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_overview('main')::text$q$), '^ERR 42501');
 select zz.chk('H7 o''zgarishlar tarixi yoziladi (hujjat holati)', (select (count(*) > 0)::text from public.change_log where tbl = 'cash_docs'), '^true$');
 
 -- ---------- (I) qo'shimcha: qarordan keyin qayta ochish; band kalitlar (sinov kassasida) ----------
@@ -495,6 +505,51 @@ select zz.chk('I4 tizim kaliti bilan boshlanadigan clientRef — rad',
   zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":1,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"shdec_x12345"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:bad_input\]');
 select zz.chk('I5 sinov kassasi asosiy kassa raqamlariga ta''sir qilmadi',
   (select string_agg(desk || ':' || series || ':' || "lastNo", ',' order by desk, series, year) from public.doc_counters where desk = 'sinov'), '^sinov:ACT:1,sinov:KO1:1,sinov:KO2:1$');
+
+-- ---------- (J) chop etish jurnali («НУСХА» belgisi), bitta hujjatni o'qish, varaq qatorlari ----------
+select zz.put('j_doc', (select id from public.cash_docs where desk = 'main' and form = 'KO1' and year = 2027 and no = 1));
+select zz.chk('J1 hujjatni o''qish: qatorlar, ismlar, chop etilmagan',
+  zz.as('U_ACC', format($q$select (g -> 'doc' ->> 'no') || ':' || jsonb_array_length(g -> 'doc' -> 'lines') || ':' || (g -> 'doc' ->> 'prints') || ':' || jsonb_typeof(g -> 'names') || ':' || (g ->> 'isTest') from public.kassa_doc_get(%L) g$q$, (select v from zz.v where k = 'j_doc'))),
+  '^1:[1-9]:0:object:false$');
+select zz.chk('J1b hujjatni o''qish: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', format('select public.kassa_doc_get(%L)::text', (select v from zz.v where k = 'j_doc'))), '^ERR 42501');
+select zz.chk('J1c hujjatni o''qish: yo''q hujjat', zz.as('U_ACC', $q$select public.kassa_doc_get('yoq-hujjat')::text$q$), '^ERR 22023 \[kassa:not_found\]');
+select zz.put('J2', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
+select zz.chk('J2 birinchi chop etish — asl nusxa', (select v from zz.v where k = 'J2'), '"mode": "original".*"prior": 0|"prior": 0.*"mode": "original"');
+select zz.put('J3', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
+select zz.chk('J3 ikkinchi chop etish — «НУСХА»', (select v from zz.v where k = 'J3'), '"mode": "copy".*"prior": 1|"prior": 1.*"mode": "copy"');
+select zz.put('J3b', zz.as('U_FM', format('select public.kassa_print_mark(%L, %L, true)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
+select zz.chk('J3b «avvalgisi chiqmadi» — asl nusxa qayta (jurnalda alohida)', (select v from zz.v where k = 'J3b'), '"mode": "reissue".*"prior": 2|"prior": 2.*"mode": "reissue"');
+select zz.chk('J4 hujjatda chop etishlar soni', zz.as('U_ACC', format($q$select g -> 'doc' ->> 'prints' from public.kassa_doc_get(%L) g$q$, (select v from zz.v where k = 'j_doc'))), '^3$');
+select zz.chk('J5 raqamsiz (so''rov holatidagi) hujjat chop etilmaydi',
+  zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select id from public.cash_docs where desk = 'main' and status in ('draft', 'approved') limit 1))), '^ERR 22023 \[kassa:print\]');
+select zz.chk('J5b o''qituvchi chop etishni qayd qila olmaydi', zz.as('U_TCH', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select v from zz.v where k = 'j_doc'))), '^ERR 42501');
+select zz.chk('J5c noto''g''ri tur', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'varaq', (select v from zz.v where k = 'j_doc'))), '^ERR 22023 \[kassa:bad_input\]');
+select zz.chk('J6 nazorat ro''yxati: asl nusxa qayta chiqarilgani ko''rinadi', zz.as('U_DIR', $q$select c ->> 'reissues30' from public.kassa_checks('main') c$q$), '^1$');
+-- kassa kitobi varag'i: ochiq kunda — faqat qoralama (qayd qilinmaydi); yopilgach — asl nusxa; qayta ochib yopilsa — yangi asl nusxa, «АЛМАШТИРИЛДИ»
+select zz.chk('J7 ochiq kun varag''i qayd qilinmaydi (qoralama)',
+  zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'book', (select id from public.cash_days where desk = 'sinov'))), '^ERR 22023 \[kassa:print\]');
+select zz.put('J8', zz.close('U_KAS', '{"desk":"sinov","day":"2028-01-03","counted":777}'));
+select zz.chk('J8 sinov kuni qayta yopildi (farq yo''q), varaq qatorlari soni saqlandi',
+  (select status || ':' || trim_scale(diff) || ':' || "sheetRows" || ':' || "reopenCount" from public.cash_days where desk = 'sinov'), '^closed:0:30:1$');
+select zz.put('J9', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'book', (select id from public.cash_days where desk = 'sinov'))));
+select zz.chk('J9 yopilgan kun varag''i — asl nusxa (eski nusxasi chop etilmagan)', (select v from zz.v where k = 'J9'), '"mode": "original".*"replaced": false|"replaced": false.*"mode": "original"');
+select zz.put('J10a', zz.as('U_DIR', $q$select public.kassa_day_reopen('sinov', '2028-01-03', 'Qayta sanash (chop etish sinovi)')::text$q$));
+select zz.put('J10b', zz.close('U_KAS', '{"desk":"sinov","day":"2028-01-03","counted":777}'));
+select zz.put('J10', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'book', (select id from public.cash_days where desk = 'sinov'))));
+select zz.chk('J10 qayta ochib yopilgan kun varag''i — yangi asl nusxa, eskisi almashtirildi', (select v from zz.v where k = 'J10'),
+  '"mode": "original".*"prior": 0.*"replaced": true|"replaced": true.*"mode": "original"');
+select zz.put('J11', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'book', (select id from public.cash_days where desk = 'sinov'))));
+select zz.chk('J11 varaqni qayta chop etish — «НУСХА»; kun ma''lumotida sonlar',
+  (select v from zz.v where k = 'J11') || ' / ' || zz.as('U_DIR', $q$select (b -> 'day' ->> 'prints') || ':' || (b -> 'day' ->> 'printsOld') || ':' || (b ->> 'isTest') || ':' || jsonb_typeof(b -> 'names') from public.kassa_day_book('sinov', '2028-01-03') b$q$),
+  '"mode": "copy".* / 2:1:true:object$');
+select zz.chk('J12 chop etish jurnali: o''zgartirish va o''chirish yo''q', zz.try($q$update public.cash_prints set mode = 'original'$q$) || ' | ' || zz.try($q$delete from public.cash_prints$q$),
+  '^ERR 42501 \[kassa:immutable\].* \| ERR 42501 \[kassa:immutable\]');
+select zz.chk('J12b chop etish jurnali: funksiyasiz yozish yo''q',
+  zz.try(format($q$insert into public.cash_prints (id, kind, "docId", desk, mode) values ('x1', 'doc', %L, 'main', 'original')$q$, (select v from zz.v where k = 'j_doc'))) || ' | ' ||
+  zz.as('U_KAS', format($q$insert into public.cash_prints (id, kind, "docId", desk, mode) values ('x2', 'doc', %L, 'main', 'original') returning id$q$, (select v from zz.v where k = 'j_doc'))),
+  '^ERR 42501 \[kassa:rpc_only\].* \| ERR 42501');
+select zz.chk('J13 asosiy kassa: yopilgan kunda varaq qatorlari soni saqlangan (30)',
+  (select string_agg(distinct "sheetRows"::text, ',') from public.cash_days where desk = 'main' and status <> 'open'), '^30$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end

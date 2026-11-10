@@ -54,6 +54,7 @@ create table if not exists public.cash_days (
   "docCount"     int,
   "firstKo1" int, "lastKo1" int, "firstKo2" int, "lastKo2" int,
   "sheetFrom" int, "sheetTo" int,                                        -- KO-4 varaqlari
+  "sheetRows" int,                                                        -- yopilgan paytdagi «varaqdagi qatorlar soni» (qayta chop etish aynan bir xil bo'lsin)
   hash           text,                                                   -- yopilgan kun mazmuni izi (sha256)
   "cashierUid"   text,
   "openedBy"     text,
@@ -70,6 +71,7 @@ create table if not exists public.cash_days (
   constraint cash_days_verifier_ne_closer check ("verifiedBy" is null or "verifiedBy" <> "closedBy")
 );
 create unique index if not exists cash_days_one_open on public.cash_days (desk) where status = 'open';   -- I1
+alter table public.cash_days add column if not exists "sheetRows" int;
 
 -- ---------- Kassa hujjati ----------
 create table if not exists public.cash_docs (
@@ -203,9 +205,27 @@ create table if not exists public.fin_snapshots (
   "createdBy" text
 );
 
+-- Chop etish jurnali (FD-07, «НУСХА» belgisi): har chop etishga yuborish yoziladi. Birinchisi — asl nusxa ('original'),
+--   keyingilari — «НУСХА» ('copy'); «avvalgisi qog'ozga chiqmadi» deb asl nusxa qayta chiqarilsa — 'reissue' (nazorat ro'yxatida).
+--   Kassa kitobi varag'i (KO-4) uchun version = kunning "reopenCount" qiymati: qayta ochib yopilgan kun varag'i — yangi asl nusxa.
+create table if not exists public.cash_prints (
+  id        text primary key,
+  kind      text not null check (kind in ('doc', 'book')),
+  "docId"   text references public.cash_docs(id),
+  "dayId"   text references public.cash_days(id),
+  desk      text not null,
+  mode      text not null check (mode in ('original', 'copy', 'reissue')),
+  version   int not null default 0,
+  "byUid"   text,
+  at        timestamptz not null default now(),
+  constraint cash_prints_target check ((kind = 'doc' and "docId" is not null) or (kind = 'book' and "dayId" is not null and "docId" is null))
+);
+create index if not exists cash_prints_doc_idx on public.cash_prints ("docId") where "docId" is not null;
+create index if not exists cash_prints_day_idx on public.cash_prints ("dayId") where "dayId" is not null;
+
 -- ---------- RLS: faqat o'qish; yozish — kassa funksiyalari ----------
 do $$ declare t text; begin
-  foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots'] loop
+  foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from public, anon, authenticated', t);
     execute format('grant select on table public.%I to authenticated', t);
@@ -461,7 +481,7 @@ drop trigger if exists trg_kassa_line_guard on public.cash_doc_lines;
 create trigger trg_kassa_line_guard before insert or update or delete on public.cash_doc_lines
   for each row execute function app.kassa_line_guard();
 
--- Faqat qo'shiladigan jurnallar: taqsimot, kun hodisalari, sanash dalolatnomalari, suratlar.
+-- Faqat qo'shiladigan jurnallar: taqsimot, kun hodisalari, sanash dalolatnomalari, suratlar, chop etish jurnali.
 create or replace function app.kassa_append_only() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 begin
@@ -474,7 +494,7 @@ begin
   return new;
 end $$;
 do $$ declare t text; begin
-  foreach t in array array['payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots'] loop
+  foreach t in array array['payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints'] loop
     execute format('drop trigger if exists trg_kassa_append_only on public.%I', t);
     execute format('create trigger trg_kassa_append_only before insert or update or delete on public.%I for each row execute function app.kassa_append_only()', t);
   end loop;

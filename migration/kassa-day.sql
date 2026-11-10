@@ -15,7 +15,9 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot ma'lumoti;
---   kassa_checks(desk)          — nazorat ro'yxati (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad …).
+--   kassa_checks(desk)          — nazorat ro'yxati (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad …);
+--   kassa_refs() / kassa_people() / kassa_overview(desk) / kassa_doc_get(id) — «Kassa» ekrani va chop etish uchun o'qish;
+--   kassa_print_mark(kind, id)  — chop etish jurnali: birinchi chop etish — asl nusxa, keyingilari — «НУСХА».
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 
@@ -136,6 +138,14 @@ begin
 end $$;
 revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text) from public, anon, authenticated;
 
+-- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar).
+create or replace function app.kassa_names(p_uids text[]) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id))
+                     from public.users u where u.id = any (coalesce(p_uids, '{}'))), '{}'::jsonb)
+$$;
+revoke all on function app.kassa_names(text[]) from public, anon, authenticated;
+
 -- Kun (javob uchun): ochiq kunda jamlar hujjatlardan hisoblanadi.
 create or replace function app.kassa_day_json(p_day_id text) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
@@ -144,7 +154,10 @@ language sql stable security definer set search_path = public, app, pg_temp as $
            'payoutsLive',  coalesce((select sum(c.amount) from public.cash_docs c where c."dayId" = d.id and c.status = 'posted' and c.form = 'KO2'), 0),
            'balance', app.kassa_day_balance(d.id),
            'docs', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status in ('posted', 'void')),
-           'voids', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status = 'void'))
+           'voids', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status = 'void'),
+           -- kassa kitobi varag'i necha marta chop etishga yuborilgan: hozirgi holati (prints) va qayta ochilishdan oldingisi (printsOld)
+           'prints', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version = d."reopenCount"),
+           'printsOld', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version < d."reopenCount"))
     from public.cash_days d where d.id = p_day_id
 $$;
 revoke all on function app.kassa_day_json(text) from public, anon, authenticated;
@@ -273,7 +286,7 @@ begin
   update public.cash_days
      set status = 'closed', receipts = v_rec, payouts = v_pay, closing = opening + v_rec - v_pay, counted = v_counted, diff = v_diff,
          "diffDocId" = v_doc_id, denoms = v_denoms, "pendingCount" = v_pcount, "pendingSum" = v_pending, "docCount" = v_docs,
-         "firstKo1" = v_f1, "lastKo1" = v_l1, "firstKo2" = v_f2, "lastKo2" = v_l2, "sheetFrom" = v_from, "sheetTo" = v_from + v_sheets - 1,
+         "firstKo1" = v_f1, "lastKo1" = v_l1, "firstKo2" = v_f2, "lastKo2" = v_l2, "sheetFrom" = v_from, "sheetTo" = v_from + v_sheets - 1, "sheetRows" = v_rows,
          hash = app.kassa_day_hash(v_d.id), "closedBy" = v_uid, "closedAt" = now(), "closeNote" = v_note, commission = v_comm
    where id = v_d.id;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
@@ -405,7 +418,7 @@ begin
   update public.cash_days
      set status = 'open', receipts = null, payouts = null, closing = null, counted = null, diff = null, "diffDocId" = null, denoms = null,
          "pendingCount" = 0, "pendingSum" = 0, "docCount" = null, "firstKo1" = null, "lastKo1" = null, "firstKo2" = null, "lastKo2" = null,
-         "sheetFrom" = null, "sheetTo" = null, hash = null, "closedBy" = null, "closedAt" = null, "closeNote" = null, commission = null,
+         "sheetFrom" = null, "sheetTo" = null, "sheetRows" = null, hash = null, "closedBy" = null, "closedAt" = null, "closeNote" = null, commission = null,
          "reopenCount" = "reopenCount" + 1, "reopenedBy" = v_uid, "reopenedAt" = now(), "reopenReason" = v_reason
    where id = v_d.id;
   if v_d."diffDocId" is not null then
@@ -535,12 +548,24 @@ grant execute on function public.kassa_state(text) to authenticated;
 -- ---------- O'qish: kassa kitobi varag'i (KO-4) va kunlik hisobot uchun kun ma'lumoti ----------
 create or replace function public.kassa_day_book(p_desk text, p_day date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_id text;
+declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_id text; v_uids text[];
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   select d.id into v_id from public.cash_days d where d.desk = v_desk and d.day = p_day;
-  if v_id is null then return jsonb_build_object('ok', true, 'day', null, 'docs', '[]'::jsonb, 'counts', '[]'::jsonb, 'events', '[]'::jsonb); end if;
+  if v_id is null then return jsonb_build_object('ok', true, 'day', null, 'docs', '[]'::jsonb, 'counts', '[]'::jsonb, 'events', '[]'::jsonb, 'names', '{}'::jsonb); end if;
+  select array_agg(distinct x) into v_uids from (
+      select unnest(array[c."requestedBy", c."approvedBy", c."dirApprovedBy", c."postedBy", c."voidedBy", c."createdBy", c."decidedBy"]) as x
+        from public.cash_docs c where c."dayId" = v_id
+      union all
+      select unnest(array[d."cashierUid", d."openedBy", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.id = v_id
+      union all
+      select unnest(array[n."byUid", n."fromUid", n."toUid"]) from public.cash_counts n where n."dayId" = v_id
+      union all
+      select e."byUid" from public.cash_day_events e where e."dayId" = v_id) q
+   where x is not null;
   return jsonb_build_object('ok', true,
+    'isTest', coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false),
+    'names', app.kassa_names(v_uids),
     'day', app.kassa_day_json(v_id),
     'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."postedAt", c.form, c.no)
                         from public.cash_docs c where c."dayId" = v_id and c.status in ('posted', 'void')), '[]'::jsonb),
@@ -578,9 +603,137 @@ begin
     'approvedUnpaid', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'approved'),
     'fiscalExempt30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."fiscalExempt" and c.status = 'posted' and c."businessDay" >= v_today - 30),
     'otherParties30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."partyType" = 'other' and c.status = 'posted' and not c."isSystem" and c."businessDay" >= v_today - 30),
-    'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30));
+    'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30),
+    'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'));
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;
+
+-- ---------- O'qish: shakllar uchun ma'lumotnomalar (bitta chaqiruv) ----------
+create or replace function public.kassa_refs() returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  return jsonb_build_object(
+    'rules', coalesce((select jsonb_agg(to_jsonb(r) order by r."sortOrder") from public.fin_op_rules r where r.active), '[]'::jsonb),
+    'articles', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'nameUz', a."nameUz", 'nameRu', a."nameRu", 'accountCode', a."accountCode",
+                                                              'cashOutAllowed', a."cashOutAllowed", 'needsNote', a."needsNote") order by a."sortOrder")
+                            from public.fin_articles a where a.active), '[]'::jsonb),
+    'counterparties', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'name', c.name, 'stir', c.stir) order by c.name)
+                                  from public.fin_counterparties c where c.active), '[]'::jsonb),
+    'org', (select to_jsonb(o) from public.fin_org o where o.id = 'main'),
+    'desks', coalesce((select jsonb_agg(to_jsonb(k) order by k.id) from public.cash_desks k where k.active), '[]'::jsonb),
+    'signatories', coalesce((select jsonb_agg(to_jsonb(s) order by s.list, s."fullName") from public.fin_signatories s where s.active), '[]'::jsonb),
+    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id)) order by u.name)
+                             from public.users u
+                            where coalesce(nullif(u.status, ''), 'active') = 'active'
+                              and (u.role in ('kassir', 'treasurer')
+                                   or (jsonb_typeof(u."extraRoles") = 'array' and u."extraRoles" ? 'kassir' and u.role not in ('director', 'parent', 'student')))), '[]'::jsonb));
+end $$;
+revoke all on function public.kassa_refs() from public, anon;
+grant execute on function public.kassa_refs() to authenticated;
+
+-- Xodimlar ro'yxati (tomon tanlash uchun): faqat kalit, ism, lavozim — maosh va boshqa ma'lumot yo'q.
+create or replace function public.kassa_people() returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+begin
+  if not (app.kassa_operator() or app.fin_list2() or app.is_admin()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  return coalesce((select jsonb_agg(x.j order by x.nm)
+                     from (select jsonb_build_object('ref', 'teachers:' || t.id, 'name', coalesce(t.name, ''), 'pos', 'O‘qituvchi', 'code', coalesce(t."teacherId", '')) as j, coalesce(t.name, '') as nm
+                             from public.teachers t
+                           union all
+                           select jsonb_build_object('ref', 'staff:' || s.id, 'name', coalesce(s.name, ''), 'pos', coalesce(s.position, ''), 'code', coalesce(s."staffId", '')), coalesce(s.name, '')
+                             from public.staff s) x), '[]'::jsonb);
+end $$;
+revoke all on function public.kassa_people() from public, anon;
+grant execute on function public.kassa_people() to authenticated;
+
+-- ---------- O'qish: «Kassa» sahifasi uchun hammasi bir chaqiruvda ----------
+--   holat + ochiq kun hujjatlari + so'rovlar (tasdiq kutayotgan / to'lanishi kerak) + oxirgi kunlar + qarorsiz kamomadlar + ismlar.
+create or replace function public.kassa_overview(p_desk text default 'main') returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_state jsonb; v_day text; v_uids text[];
+begin
+  v_state := public.kassa_state(v_desk);   -- ruxsatni shu tekshiradi
+  select d.id into v_day from public.cash_days d where d.desk = v_desk and d.status = 'open';
+  select array_agg(distinct x) into v_uids from (
+      select unnest(array[c."requestedBy", c."approvedBy", c."dirApprovedBy", c."rejectedBy", c."postedBy", c."voidedBy", c."createdBy"]) as x
+        from public.cash_docs c where c.desk = v_desk and (c."dayId" = v_day or c.status in ('draft', 'approved'))
+      union all
+      select unnest(array[d."cashierUid", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.desk = v_desk and d.day >= app.fin_today() - 62) q
+   where x is not null;
+  return jsonb_build_object('ok', true, 'state', v_state,
+    'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."postedAt" desc, c.form, c.no desc)
+                        from public.cash_docs c where c."dayId" = v_day and c.status in ('posted', 'void')), '[]'::jsonb),
+    'requests', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."createdAt")
+                            from public.cash_docs c where c.desk = v_desk and c.status in ('draft', 'approved')), '[]'::jsonb),
+    'days', coalesce((select jsonb_agg(app.kassa_day_json(d.id) order by d.day desc)
+                        from (select x.id, x.day from public.cash_days x where x.desk = v_desk order by x.day desc limit 31) d), '[]'::jsonb),
+    'shortages', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'no', c.no, 'day', c."businessDay", 'amount', c.amount,
+                                                               'cashierUid', c."sourceSnapshot" ->> 'cashierUid') order by c."businessDay")
+                             from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null), '[]'::jsonb),
+    'names', app.kassa_names(v_uids));
+end $$;
+revoke all on function public.kassa_overview(text) from public, anon;
+grant execute on function public.kassa_overview(text) to authenticated;
+
+-- ---------- O'qish: bitta hujjat (chop etish uchun — ismlar bilan) ----------
+create or replace function public.kassa_doc_get(p_id text) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_c public.cash_docs%rowtype;
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  select * into v_c from public.cash_docs c where c.id = p_id;
+  if not found then raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  return jsonb_build_object('ok', true, 'doc', app.kassa_doc_json(v_c.id),
+    'isTest', coalesce((select k."isTest" from public.cash_desks k where k.id = v_c.desk), false),
+    'names', app.kassa_names(array[v_c."requestedBy", v_c."approvedBy", v_c."dirApprovedBy", v_c."rejectedBy", v_c."postedBy",
+                                   v_c."voidedBy", v_c."createdBy", v_c."decidedBy"]));
+end $$;
+revoke all on function public.kassa_doc_get(text) from public, anon;
+grant execute on function public.kassa_doc_get(text) to authenticated;
+
+-- ---------- Chop etishni qayd qilish (FD-07): «НУСХА» belgisi server jurnaliga tayanadi ----------
+--   p_kind 'doc' (p_id — hujjat) yoki 'book' (p_id — kassa kuni; faqat yopilgan kun). Birinchi chop etish — 'original';
+--   keyingisi — 'copy' («НУСХА» belgisi bilan chiqadi); p_reissue — «avvalgisi qog'ozga chiqmadi»: asl nusxa qayta chiqariladi
+--   va nazorat ro'yxatida ko'rinadi. Qayta ochib yopilgan kun varag'i — yangi asl nusxa, eskisi «АЛМАШТИРИЛДИ».
+create or replace function public.kassa_print_mark(p_kind text, p_id text, p_reissue boolean default false) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_c public.cash_docs%rowtype; v_d public.cash_days%rowtype; v_prior int := 0; v_old int := 0;
+  v_mode text; v_ver int := 0; v_desk text;
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if p_id is null or p_kind is null or p_kind not in ('doc', 'book') then
+    raise exception 'Chop etish turi noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('iqror_print:' || p_id));   -- ikki qurilmadan bir vaqtda ikkita «asl nusxa» chiqmasin
+  if p_kind = 'doc' then
+    select * into v_c from public.cash_docs c where c.id = p_id;
+    if not found or v_c.no is null then
+      raise exception 'Faqat o''tkazilgan (raqam olgan) hujjat chop etiladi' using errcode = '22023', hint = 'kassa:print';
+    end if;
+    v_desk := v_c.desk;
+    select count(*) into v_prior from public.cash_prints x where x."docId" = p_id;
+  else
+    select * into v_d from public.cash_days d where d.id = p_id;
+    if not found or v_d.status = 'open' then
+      raise exception 'Kassa kitobi varag''i yopilgan kun uchun chop etiladi (ochiq kunda — faqat qoralama)' using errcode = '22023', hint = 'kassa:print';
+    end if;
+    v_desk := v_d.desk; v_ver := v_d."reopenCount";
+    select count(*) filter (where x.version = v_ver), count(*) filter (where x.version < v_ver) into v_prior, v_old
+      from public.cash_prints x where x."dayId" = p_id and x.kind = 'book';
+  end if;
+  v_mode := case when v_prior = 0 then 'original' when coalesce(p_reissue, false) then 'reissue' else 'copy' end;
+  perform app.kassa_flag(true);
+  insert into public.cash_prints (id, kind, "docId", "dayId", desk, mode, version, "byUid", at)
+    values ('cp_' || replace(gen_random_uuid()::text, '-', ''), p_kind, case when p_kind = 'doc' then p_id end,
+            case when p_kind = 'doc' then v_c."dayId" else p_id end, v_desk, v_mode, v_ver, v_uid, app.fin_now());
+  perform app.kassa_flag(false);
+  return jsonb_build_object('ok', true, 'mode', v_mode, 'prior', v_prior, 'replaced', p_kind = 'book' and v_old > 0,
+                            'at', app.fin_now(), 'by', v_uid, 'byName', app.kassa_names(array[v_uid]) ->> v_uid);
+end $$;
+revoke all on function public.kassa_print_mark(text, text, boolean) from public, anon;
+grant execute on function public.kassa_print_mark(text, text, boolean) to authenticated;
 
 notify pgrst, 'reload schema';

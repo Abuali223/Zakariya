@@ -411,11 +411,12 @@ begin
 end $$;
 revoke all on function app.kassa_act_post(text, text, date) from public, anon, authenticated;
 
--- Hujjat + qatorlari (javob uchun).
+-- Hujjat + qatorlari + chop etishlar soni (javob uchun).
 create or replace function app.kassa_doc_json(p_id text) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select to_jsonb(c) || jsonb_build_object('lines', coalesce((
-           select jsonb_agg(to_jsonb(l) - 'docId' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id), '[]'::jsonb))
+           select jsonb_agg(to_jsonb(l) - 'docId' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id), '[]'::jsonb),
+           'prints', (select count(*) from public.cash_prints x where x."docId" = c.id))   -- necha marta chop etishga yuborilgan
     from public.cash_docs c where c.id = p_id
 $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;

@@ -1431,6 +1431,7 @@ function allowedTabs(){
   if(SESSION.notifyEditor && !base.includes('notify')) base.push('notify');                       // Direktor tayinlagan xabarnoma muharriri
   // Kassir — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
   if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
+  if(kassaTabOk() && !base.includes('kassa')){ const i=base.indexOf('payments'); base.splice(i<0?base.length:i+1, 0, 'kassa'); }   // «Kassa» — «To‘lovlar»dan keyin
   if(approvalQueuesForMe().length && !base.includes('approvals')) base.unshift('approvals');   // tasdiqlovchi — navbat birinchi
   return base;
 }
@@ -1449,6 +1450,79 @@ async function renderApprovals(){
     try{ const n=await q.count(); if(_g!==VIEW_GEN) return; const el=document.getElementById('apq-n-'+i); if(el) el.textContent=String(n||0); }catch(e){}
     try{ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) await q.render(el); }
     catch(e){ const el=document.getElementById('apq-'+i); if(el && _g===VIEW_GEN) el.innerHTML=`<div class="empty">Xatolik: ${esc(e&&(e.code||e.message)||'')}</div>`; } }));
+}
+// ==== «KASSA» (moliya ish rejasi, 1a-bosqich) =========================================================================
+// Bo'lim va unga bog'liq o'zgarishlar FAQAT serverda kassa funksiyalari bo'lganda paydo bo'ladi (kassa_state javob bersa):
+//   server hali yangilanmagan bo'lsa — menyu ham, «To'lov» shakli ham avvalgidek qoladi.
+//   KASSA.on   — bu foydalanuvchi kassani ko'ra oladi (Direktor, Moliya menejeri, G'aznachi, Kassir);
+//   KASSA.live — Direktor belgilagan «ishga tushirish kuni» keldi: naqd o'quv to'lovi faqat kassa kirim orderi (KO-1) va
+//                fiskal chek raqami bilan; naqd pulni faqat kassir (favqulodda — Direktor) qabul qiladi.
+//   Oxirgi ma'lum holat localStorage'da turadi — internet yo'q paytda ham «To'lov» shakli to'g'ri qoida bilan ishlaydi.
+//   Ekran va chop etish kodi alohida modullarda (assets/js/fin-kassa.js, fin-print.js, fin-words.js) — kerak bo'lganda yuklanadi.
+const KASSA_LS='iqror_kassa_v1';
+const KASSA_BLOCK={ prev_open:'Oldingi kassa kuni yopilmagan — avval «Kassa» bo‘limida pulni sanab, kunni yoping.',
+  day_closed:'Bugungi kassa kuni yopilgan. Yangi naqd to‘lov uchun Direktor kunni qayta ochishi kerak.',
+  not_started:'Kassa hali ishga tushirilmagan: Direktor boshlang‘ich qoldiqni kiritishi kerak.',
+  clock:'Server sanasi kassa kunidan orqada — administratorga xabar bering.' };
+let KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+const finMod=name=>import('./assets/js/'+name+'.js');
+function kassaRole(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).some(r=>['finance_mgr','treasurer','kassir'].includes(r)); }
+function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','treasurer','kassir'].includes(SESSION.role)); }
+function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
+// Naqd pulni shu foydalanuvchi qabul qila oladimi (kassa ishga tushgach): kassir / g'aznachi (qo'shimcha lavozim ham) yoki Direktor.
+function kassaCashOk(){ return !KASSA.live || !!(KASSA.me && (KASSA.me.operator || KASSA.me.director)); }
+function kassaQueue(){
+  if(APPROVAL_QUEUES.some(q=>q.key==='kassa')) return;
+  APPROVAL_QUEUES.push({ key:'kassa', title:'Kassa: chiqim va kirim so‘rovlari', roles:['director','finance_mgr'],
+    count:async()=>{ const m=await finMod('fin-kassa'); return m.approvalCount(finCtx()); },
+    render:async el=>{ const m=await finMod('fin-kassa'); await m.approvalRender(finCtx(), el); } });
+}
+// Kirishda: saqlangan holat (darhol, tarmoqsiz) — keyin kassaProbe() uni serverdan yangilaydi.
+function kassaInit(uid){
+  KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+  if(!kassaRole()) return;
+  try{ const c=JSON.parse(localStorage.getItem(KASSA_LS)||'null');
+    if(c && c.uid===uid && c.on){ KASSA={ on:true, live:kassaLiveOn(c.goLive), me:c.me||{}, state:null, goLive:c.goLive||null }; kassaQueue(); } }catch(e){}
+}
+async function kassaProbe(){
+  if(!kassaRole()) return KASSA;
+  const uid=(auth.currentUser&&auth.currentUser.uid)||'';
+  const was=kassaTabOk();
+  try{
+    const s=await rpc('kassa_state', { p_desk:'main' });
+    KASSA={ on:true, live:kassaLiveOn(s.kassaGoLive, s.today), me:s.me||{}, state:s, goLive:s.kassaGoLive||null };
+    try{ localStorage.setItem(KASSA_LS, JSON.stringify({ uid, on:true, goLive:KASSA.goLive, me:KASSA.me })); }catch(e){}
+    kassaQueue();
+  }catch(e){
+    // Faqat ANIQ javobda o'chadi: funksiya yo'q (server hali yangilanmagan) yoki ruxsat yo'q. Tarmoq uzilishi va vaqtinchalik
+    //   server xatosida oxirgi ma'lum holat qoladi — aks holda naqd to'lov fiskal raqamsiz navbatga tushib, keyin rad etilardi.
+    if(!(rpcMissing(e) || String((e&&e.code)||'')==='42501')) return KASSA;
+    KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+    try{ localStorage.removeItem(KASSA_LS); }catch(_){}
+  }
+  if(was!==kassaTabOk()) navRebuild();
+  return KASSA;
+}
+// Menyuni qayta qurish (bo'lim paydo bo'ldi / yo'qoldi): joriy bo'lim belgisi va bildirishnoma sonlari saqlanadi.
+function navRebuild(){
+  buildTabs();
+  const nav=$('#tabs'), tab=currentTab; if(!nav) return;
+  nav.querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
+  const ab=nav.querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');
+  nav.querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
+  if(uiV2()) v2NavAfterOpen(tab); else if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true);
+  setTabBadge('enrollments', BADGES.enrollments||0); setTabBadge('applications', BADGES.applications||0);
+}
+// Modullarga beriladigan yordamchilar (modul admin.html ichki funksiyalarini shu orqali ishlatadi).
+function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, printHTML, SESSION, finMod,
+  students:async()=>{ const a=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=a; return a; },
+  outboxCash:()=>{ const a=obPending().filter(x=>x.method==='cash'); return { count:a.length, sum:a.reduce((t,x)=>t+(Number(x.amount)||0),0) }; },
+  onChange:()=>{ kassaProbe(); } }; }
+async function renderKassa(){
+  const g=VIEW_GEN;
+  $('#view').innerHTML='<div class="page-head"><h2>Kassa</h2></div><div class="card"><div class="loading">Yuklanmoqda…</div></div>';
+  try{ const m=await finMod('fin-kassa'); if(g!==VIEW_GEN) return; await m.renderKassa(finCtx()); }
+  catch(e){ if(g===VIEW_GEN) $('#view').innerHTML=`<div class="page-head"><h2>Kassa</h2></div><div class="card"><div class="empty">Bo‘limni yuklab bo‘lmadi: ${esc(String((e&&(e.message||e.code))||e||''))}</div></div>`; }
 }
 // Maoshni ko'ra oladimi: direktor/HR/moliya/kassir. Boshqalar yo'q. RLS ham shu qoidани majburlaydi.
 function canSeeSalary(){
@@ -1677,9 +1751,11 @@ onAuthStateChanged(auth, async user=>{
   SESSION = { role:active, primaryRole:role, roles:panelRoles, isAdmin: (role==='director'), email:(user.email||user.displayName||''), assignedClasses, assignedSubjects, homeroomClasses, notifyEditor };
   loginAttempted=false;
   $('#who').textContent = (user.email || user.displayName || '') + ((SESSION.isAdmin || panelRoles.length>1) ? '' : ' · ' + (ROLE_LABEL[active]||active));
+  kassaInit(user.uid);   // «Kassa»: oxirgi ma'lum holat (tarmoqsiz) — pastda kassaProbe() serverdan yangilaydi
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
   show('app'); buildTabs(); setupRoleSwitch(user.uid); openTab(currentTab); watchBadges();
   startOutboxSync();   // offline to'lov navbatini kuzatish + avtomatik yuborish
+  kassaProbe();        // kutilmaydi: javob kelgach menyu (kerak bo'lsa) o'zi yangilanadi
 });
 function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
 
@@ -1843,6 +1919,9 @@ function buildTabs(){
     {k:'marketing', icon:mi('M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T667-480q0 43-19.5 78T560-346Z'), t:'Marketing'},
     {k:'bus', icon:mi('M240-80q-17 0-28.5-11.5T200-120v-72q-18-11-29-28.5T160-260v-380q0-83 77-111.5T480-780q172 0 246 28t74 112v380q0 21-11 38.5T760-192v72q0 17-11.5 28.5T720-80h-40q-17 0-28.5-11.5T640-120v-40H320v40q0 17-11.5 28.5T280-80h-40Zm0-440h480v-120H240v120Zm90 240q21 0 35.5-14.5T380-330q0-21-14.5-35.5T330-380q-21 0-35.5 14.5T280-330q0 21 14.5 35.5T330-280Zm300 0q21 0 35.5-14.5T680-330q0-21-14.5-35.5T630-380q-21 0-35.5 14.5T580-330q0 21 14.5 35.5T630-280Z'), t:'Avtobus'}
   ];
+  // «Kassa» — faqat serverda kassa funksiyalari bo'lsa (KASSA.on); «To‘lovlar»dan keyin turadi.
+  if(kassaTabOk()){ const i=items.findIndex(it=>it.k==='payments');
+    items.splice(i<0?items.length:i+1, 0, {k:'kassa', icon:mi('M120-240q-33 0-56.5-23.5T40-320v-320q0-33 23.5-56.5T120-720h720q33 0 56.5 23.5T920-640v320q0 33-23.5 56.5T840-240H120Zm0-80h720v-320H120v320Zm360-40q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Z'), t:'Kassa'}); }
   // Xodim faqat o'z rolига tegishli tab(lar)ni ko'radi; admin — hammasini.
   const allowTabs = allowedTabs();
   if(approvalQueuesForMe().length) items.unshift({k:'approvals', icon:mi('m424-312 282-282-56-56-226 226-114-114-56 56 170 170ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Z'), t:'Tasdiqlash'});
@@ -1882,7 +1961,7 @@ const NAV_GROUPS = [
   { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','classes','marketing','feedback'] },
   { g:'talim',     t:'O‘quv jarayoni',       icon:'grades',     keys:['attendance','grades','monitoring','profile','timetable','homework','exams','olympiads','announce'] },
   { g:'xodimlar',  t:'Xodimlar',             icon:'staff',      keys:['teachers','staff','staffatt','applications'] },
-  { g:'moliya',    t:'Moliya',               icon:'finance',    keys:['payments','finance','accounting','planfact','pricetable'] },
+  { g:'moliya',    t:'Moliya',               icon:'finance',    keys:['payments','kassa','finance','accounting','planfact','pricetable'] },
   { g:'xizmat',    t:'Xizmatlar',            icon:'medical',    keys:['medical','sick','canteen','bus','checkins'] },
   { g:'sayt',      t:'Veb-sayt',             icon:'news',       keys:['news','achievements_school','achievements_students','gallery','testimonials','plans','admission_steps','faq','events'] },
   { g:'tizim',     t:'Tizim',                icon:'settings',   keys:['users','notify','settings'] },
@@ -2048,6 +2127,7 @@ function renderTab(tab){
   if(tab==='changelog') return renderChangeLog();
   if(tab==='pricetable') return renderPriceTable();
   if(tab==='payments') return renderPayments();
+  if(tab==='kassa') return renderKassa();
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
   if(tab==='marketing') return renderMarketing();
@@ -11354,6 +11434,7 @@ async function renderPayments(){
         + gp.rows.map((r,i)=>rowHtml(r,i+1)).join(''); }).join('');
     const emptyMsg = trs ? '' : (cur.length ? (_fs==='debt'?'🎉 Qarzdor yo‘q — barcha (filtr bo‘yicha) o‘quvchilar to‘lagan.':_fs==='partial'?'Qisman to‘lagan o‘quvchi yo‘q.':_fs==='paid'?'To‘liq to‘lagan o‘quvchi yo‘q.':(periodFilter?'Bu davr/usul bo‘yicha to‘lov yo‘q.':'Ko‘rsatiladigan o‘quvchi yo‘q.')) : 'Bu oy uchun hisob-faktura yo‘q.');
     const stTblLbl = _fs==='debt'?' · qarzdorlar':_fs==='partial'?' · qisman to‘laganlar':_fs==='paid'?' · to‘liq to‘laganlar':' · barchasi';
+    if(_g!==VIEW_GEN || !$('#pm-body')) return;   // shu orada boshqa bo'lim ochilgan (masalan «Kassa») — eski natija yozilmaydi
     $('#pm-body').innerHTML=reportCard+manualRevCard+unmatchedCard+orphanCard+orphanAvCard+avansCard+`<div class="card"><div class="cls-card-head"><h3>${esc(month)}${stTblLbl}${(_q||_fg!==''||_fl)?' · filtr':''}</h3><span class="cls-count">${fullPaid.length} to‘landi · ${partial.length} qisman · ${pend.length} kutilmoqda · qarz: ${fmtSom(curDebt)}</span></div>
       <div class="tablewrap"><table><thead><tr><th style="width:44px">№</th><th>O‘quvchi</th><th>Summa</th><th>To‘langan</th><th>Qarzdorlik</th><th>Holat</th><th></th></tr></thead><tbody>${trs||`<tr><td colspan="7" class="empty" style="padding:20px;text-align:center;color:var(--muted)">${emptyMsg}</td></tr>`}</tbody></table></div></div>`;
     // Hisobotдаги «Qarzdorlik» qatorига bosilса — davr/usul filtrini tozalab (aks holда kolleksiya
@@ -11703,13 +11784,16 @@ const _obResults=new Map();
 async function obFlushOne(it){
   try{
     // Sana bo'sh bo'lsa ham aniq kun yuboriladi — to'lov KIRITILGAN kun (oflayn navbat ertasi kuni yuborilsa ham).
-    const r=await rpc('record_manual_payment', { p_pay_id:it.payId, p_sid:String(it.sid), p_amount:Number(it.amount)||0, p_method:it.method,
+    const args={ p_pay_id:it.payId, p_sid:String(it.sid), p_amount:Number(it.amount)||0, p_method:it.method,
       p_date:(it.date || (Number(it.ts)>0 ? tkDay(Number(it.ts)) : null)), p_note:it.note||'', p_period:it.period||'', p_payer_name:it.nm||'',
-      p_captured:(Number(it.ts)>0 ? new Date(Number(it.ts)).toISOString() : null) });
+      p_captured:(Number(it.ts)>0 ? new Date(Number(it.ts)).toISOString() : null) };
+    // Kassa ishga tushgach naqd to'lov: fiskal chek № (it.extra). Parametr faqat bo'lganda yuboriladi — kassasiz server ham ishlayveradi.
+    if(it.extra) args.p_extra=it.extra;
+    const r=await rpc('record_manual_payment', args);
     if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa yoki o‘quvchi bilan yozilgan' : ('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); e.permanent=true; throw e; }
     if(r) _obResults.set(it.payId, r);
     return r;
-  }catch(e){ if(!rpcMissing(e)) throw e; }
+  }catch(e){ if(!rpcMissing(e) || it.extra) throw e; }   // kassa yozuvi (it.extra) eski, kassasiz yo'lga HECH QACHON tushmaydi
   await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
     payerName:it.nm||'', matched:true, raw:{ manual:true, method:it.method, date:it.date, note:it.note||'', forPeriod:it.period||'' },
     // createdAt = KIRITILGAN vaqt (navbatga qo'shilgan payt), yuborilgan payt EMAS: oflayn kiritilib keyingi kuni/oyda
@@ -11778,7 +11862,7 @@ function openOutboxModal(){
   const items=obLoad();
   const rows=items.map(x=>{ const bad=x.status==='failed';
     return `<tr><td>${esc(x.nm||x.sid)}<div class="small muted">${esc(x.sid)}</div></td><td style="text-align:right">${fmtSom(x.amount)}</td><td>${esc(meth[x.method]||x.method||'')}</td>
-      <td style="color:${bad?'#B42318':'#B54708'};font-weight:600">${bad?`Yuborilmadi${x.lastError?` · ${esc(String(x.lastError).slice(0,40))}`:''}`:'Navbatda'}</td>
+      <td style="color:${bad?'#B42318':'#B54708'};font-weight:600">${bad?`Yuborilmadi${x.lastError?` · ${esc(String(x.lastError).slice(0,140))}`:''}`:`Navbatda${x.lastError?` · ${esc(String(x.lastError).slice(0,140))}`:''}`}</td>
       <td><button class="btn sm danger" data-obdel="${esc(x.payId)}" title="Bu yozuvni navbatdan o‘chirish (pul qo‘llanmaydi)">O‘chir</button></td></tr>`; }).join('')
     || '<tr><td colspan="5" class="muted" style="padding:16px;text-align:center">Navbat bo‘sh — barcha to‘lovlar yuborilgan ✓</td></tr>';
   $('#modal').innerHTML=`<div class="modal-h"><h3>⏳ To‘lov navbati</h3><button class="x" id="m-x">×</button></div>
@@ -11809,7 +11893,11 @@ async function openRecordPayment(students, reload, pre){
   pre = pre||{};   // {sid, name, amount} — qatordan chaqirilganda o'quvchi va qarz oldindan to'ldiriladi.
   // Click AVTOMATIK keladi (server webhook) — kiritilmaydi (ikki marta hisoblanmasin). Uzum VAQTINCHA
   //   qo'lda kiritiladi (integratsiya/kelishuv tayyor bo'lguncha). Webhook ulangach bu optionni olib tashlang.
-  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal'],['uzum','Uzum (qo‘lda)']];
+  // Kassa ishga tushgan bo'lsa (KASSA.live): naqd — faqat kassir / Direktor; naqdda fiskal chek № majburiy, sana — kassa kuni.
+  //   Holat shakl ochilganda serverdan yangilanadi (boshqa qurilmada kun yopilgan / kassa ishga tushirilgan bo'lishi mumkin).
+  if(navigator.onLine && kassaRole()){ try{ await kassaProbe(); }catch(e){} }
+  const kLive=KASSA.live, cashOk=kassaCashOk();
+  const METHODS=[['cash','Naqd'],['bank','Bank o‘tkazmasi'],['terminal','Terminal'],['uzum','Uzum (qo‘lda)']].filter(m=>m[0]!=='cash' || cashOk);
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%';
   const preSid = pre.sid ? String(pre.sid) : '';
@@ -11822,6 +11910,7 @@ async function openRecordPayment(students, reload, pre){
     <div class="modal-b">
       ${studentBlock}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="rp-m" style="${fld};background:#fff">${METHODS.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select></label>
+      <div id="rp-kassa"></div>
       <div class="grid2" style="margin-top:8px">
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input id="rp-amt" type="text" inputmode="numeric" placeholder="2 900 000" value="${esc(preAmtStr)}" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(tkDay(new Date()))}" min="${esc(new Date(Date.parse(tkDay(new Date())+'T00:00:00Z')-31*864e5).toISOString().slice(0,10))}" max="${esc(tkDay(new Date()))}" style="${fld}"></label>
@@ -11834,6 +11923,17 @@ async function openRecordPayment(students, reload, pre){
   // pre.onDone — bu oyna yopilganda chaqiriladi (masalan o'quvchi ma'lumotnomasini qayta ochish).
   const rpDone=()=>{ closeModal(); if(pre&&pre.onDone) try{ pre.onDone(); }catch(e){} };
   openModal(); $('#m-x').onclick=rpDone; $('#m-cancel').onclick=rpDone;
+  // Kassa bloki: naqd tanlanganda fiskal chek № (Direktorga — istisno belgisi), sana — kassa kuni (server belgilaydi).
+  const kassaBox=()=>{ const el=$('#rp-kassa'); if(!el || !kLive) return;
+    const cash=$('#rp-m').value==='cash', dt=$('#rp-date'), st=KASSA.state;
+    if(dt){ dt.disabled=cash; if(cash) dt.value=tkDay(new Date()); }
+    const block = cash && st && st.canPost===false ? `<div class="small" style="margin-top:6px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px;font-weight:600">${esc(KASSA_BLOCK[st.blockReason]||'Kassa hozir hujjat qabul qilmaydi.')}</div>` : '';
+    el.innerHTML = cash
+      ? `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Fiskal chek № <span style="color:#B42318;font-weight:600">— majburiy (onlayn kassa chekidagi raqam)</span><input id="rp-fiscal" type="text" maxlength="40" autocomplete="off" style="${fld}"></label>
+         ${SESSION.isAdmin?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rp-fexempt"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>`:''}
+         <div class="small muted" style="margin-top:6px">Naqd to‘lovga kassa kirim orderi (KO-1) yoziladi: raqam va sana kassa kuni bo‘yicha serverdan beriladi.</div>${block}`
+      : (cashOk?'':`<div class="small muted" style="margin-top:6px">Naqd pulni kassir qabul qiladi («Kassa» ishga tushgan).</div>`); };
+  { const ms=$('#rp-m'); if(ms){ ms.addEventListener('change', kassaBox); kassaBox(); } }
   const amt=$('#rp-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   if(!preSid){
     const draw=q=>{ q=String(q||'').trim().toLowerCase();
@@ -11886,6 +11986,15 @@ async function openRecordPayment(students, reload, pre){
       const over = debt==null ? 0 : Math.round(amount-debt);
       if(over>0 && !confirm(`Ortiqcha ${fmtSom(over)} avans bo‘lib qoladi. Davom etasizmi?\n\n(Qarz: ${fmtSom(debt)} · kiritilgan summa: ${fmtSom(amount)})`)){ unlock(); return; }   // fmtSom «so‘m»ni o'zi qo'shadi
     }
+    // Kassa (ishga tushgan): naqd to'lovga fiskal chek № (yoki Direktor istisnosi); kassa hujjat qabul qilmayotgan bo'lsa — navbatga ham qo'yilmaydi.
+    let extra=null;
+    if(kLive && method==='cash'){
+      const fn=($('#rp-fiscal')?$('#rp-fiscal').value:'').trim(), fx=$('#rp-fexempt');
+      if(fn) extra={ fiscalNo:fn }; else if(fx && fx.checked) extra={ fiscalExempt:true };
+      else { toast('Fiskal chek raqamini kiriting',true); unlock(); return; }
+      if(navigator.onLine){ try{ await kassaProbe(); }catch(e){}
+        const st=KASSA.state; if(st && st.canPost===false){ toast(KASSA_BLOCK[st.blockReason]||'Kassa hozir hujjat qabul qilmaydi', true); kassaBox(); unlock(); return; } }
+    }
     if(btn) btn.textContent='Saqlanmoqda…';
     const methLbl=({cash:'Naqd',bank:'Bank o‘tkazmasi',terminal:'Terminal'})[method]||method;
     // CHEK OYLARI: qo'lда yozilган bo'lsa — o'sha; aks holda AVTOMATIK (to'lov QAYSI oy fakturalarини qoplasa) —
@@ -11894,19 +12003,29 @@ async function openRecordPayment(students, reload, pre){
     if(!receiptPeriod && navigator.onLine){ const cov=await pmCoveredMonths(sid, amount); if(cov.length) receiptPeriod=cov.map(fmtMonthUz).join(', '); }
     // 1) AVVAL outbox'ga (localStorage) DURDMLI yozamiz — brauzer yopilsa/internet uzilsa ham to'lov YO'QOLMAYDI.
     const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period:receiptPeriod||period, nm, ts:Date.now() };
+    if(extra) item.extra=extra;
     // Natija UI — bir joyda (chek tugmasi bilan).
     // Chekdagi sana = kassa/qayta chop etish sanasi (payDay) — uchala joyda bir xil kun.
     // Chek sanasi — server tasdiqlagan kassa kuni (record_manual_payment javobi), bo'lmasa (navbatda / eski server) mijoz hisobi.
     const doReceipt=()=>{ const r=_obResults.get(item.payId); printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date:(r&&r.day) || payDay({ createdAt:new Date(item.ts).toISOString(), raw:{ manual:true, date } }) }); };
+    // Kassa ishga tushgach (kLive) to'lovchiga tizimdan termal chek berilmaydi: naqdda — fiskal chek (onlayn kassa) va
+    //   kirim orderi pattasi; order raqami server javobida (r.kassa) keladi.
     const finishUI=(title, bodyHtml)=>{
+      const r0=_obResults.get(item.payId), k=(r0 && r0.kassa && r0.kassa.docId) ? r0.kassa : null;
+      const kDay=k && /^\d{4}-\d{2}-\d{2}$/.test(String(k.day||'')) ? String(k.day).slice(8,10)+'.'+String(k.day).slice(5,7)+'.'+String(k.day).slice(0,4) : '';
       $('#modal').innerHTML=`<div class="modal-h"><h3>${title}</h3><button class="x" id="m-x2">×</button></div>
-        <div class="modal-b">${bodyHtml}</div>
-        <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button><button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button></div>`;
+        <div class="modal-b">${bodyHtml}${k?`<div class="small" style="margin-top:8px;background:#E8F1FD;color:#175CD3;border-radius:8px;padding:8px 10px;font-weight:600">Kassa kirim orderi № ${esc(String(k.no))}${kDay?` · kassa kuni ${esc(kDay)}`:''}${k.late?' · kechikib yozildi (olingan kuni yopilgan)':''}</div>`:''}</div>
+        <div class="modal-f"><button type="button" class="btn ghost" id="rp-close">Yopish</button>${k?`<button type="button" class="btn gold" id="rp-ko1">🖨 Kirim orderi va patta</button>`:''}${kLive?'':`<button type="button" class="btn gold" id="rp-print">🧾 Chek chiqarish</button>`}</div>`;
       const x2=$('#m-x2'); if(x2) x2.onclick=rpDone; const rc=$('#rp-close'); if(rc) rc.onclick=rpDone;
       const rp=$('#rp-print'); if(rp) rp.onclick=doReceipt;
+      const ko=$('#rp-ko1'); if(ko) ko.onclick=async()=>{ ko.disabled=true;
+        try{ const m=await finMod('fin-kassa'); await m.printDocById(finCtx(), k.docId, ()=>finishUI(title, bodyHtml)); }catch(e){ toast('Chop etib bo‘lmadi: '+String((e&&(e.message||e.code))||''),true); }
+        const b2=$('#rp-ko1'); if(b2) b2.disabled=false; };
     };
-    const okBody=`<div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`;
-    const queuedBody=`<div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich). Chekni hozir ham chiqarishingiz mumkin.</div>`;
+    const okBody=`<div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>`
+      + (kLive ? (method==='cash'?`<div class="small muted" style="margin-top:8px">To‘lovchiga onlayn kassaning fiskal cheki va kirim orderi pattasi beriladi.</div>`:'')
+               : `<div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`);
+    const queuedBody=`<div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich). ${kLive ? (method==='cash'?'To‘lovchiga onlayn kassaning (NKM) cheki beriladi; kassa kirim orderi ulanish tiklangach yoziladi — kunni yopishda bu to‘lov «hali o‘tkazilmagan yozuvlar» qatorida ko‘rsatiladi.':'') : 'Chekni hozir ham chiqarishingiz mumkin.'}</div>`;
     // 1) AVVAL outbox'ga durdmli yozamiz. obAdd=false -> localStorage ishlamadi (Safari private/kvota).
     const saved=obAdd(item);
     if(!saved){
@@ -11936,6 +12055,8 @@ async function openRecordPayment(students, reload, pre){
       else { toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); } }
     else if(cur.status==='failed'){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
       toast('Xatolik: '+(cur.lastError||'server rad etdi')+' — «⏳ navbat»dan ko‘ring',true); obBadge(); }
+    else if(cur.lastError){ obBadge(); toast('To‘lov hali o‘tkazilmadi: '+cur.lastError, true);   // server javob berdi, lekin qabul qilmadi (masalan kassa kuni yopilmagan)
+      finishUI('⚠️ To‘lov o‘tkazilmadi — navbatda', `<div class="small" style="background:#FDECEC;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B42318">${esc(cur.lastError)}</div><div class="small muted" style="margin-top:8px">Yozuv navbatda turibdi (pastda ⏳). Sabab bartaraf etilgach avtomatik yuboriladi; «⏳ navbat» oynasidan qayta yuborish yoki o‘chirish mumkin. Qayta KIRITMANG — ikki marta yoziladi.</div>`); }
     else { obBadge(); toast('⏳ Internet yo‘q — navbatga qo‘yildi, ulanganда avtomatik yuboriladi'); finishUI('⏳ To‘lov navbatga qo‘yildi', queuedBody); }
   };
 }
@@ -12023,26 +12144,36 @@ async function openReceiptPicker(rr, who){
   const real=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','unmatched','split'].indexOf(String(p.status||''))<0 && (Number(p.amount)||0)>0 && String(p.provider||'')!=='reattr')   // avans ko'chirish — chek emas
     .sort((a,b)=>String(dOf(b.createdAt)).localeCompare(String(dOf(a.createdAt))));   // eng yangi birinchi
   //   Chekdagi oy — to'lovning O'Z yozuvidagi oy (qo'lda to'lovda raw.forPeriod), bo'lmasa qator oyi.
-  const prnt=(amount,method,date,period)=>printReceipt({ kind:'income', who, amount, reason:'To‘lov', period:period||rr.month, method, date });
+  // Kassa ishga tushgach (KASSA.live) to'lovchiga tizimdan termal chek berilmaydi: naqd to'lovda — kassa kirim orderi (KO-1 + patta)
+  //   nusxasi chiqadi; naqdsiz to'lovda — bank / terminal / ilova cheki yetarli.
+  const kLive=KASSA.live;
+  const ko1=async p=>{ try{ const m=await finMod('fin-kassa'); await m.printDocById(finCtx(), p.cashDocId); }catch(e){ toast('Chop etib bo‘lmadi: '+String((e&&(e.message||e.code))||''),true); } };
+  const prnt=(amount,method,date,period,p)=>{
+    if(kLive){ if(p && p.cashDocId) return ko1(p);
+      toast('Kassa ishga tushgan: to‘lovchiga tizimdan chek berilmaydi (naqdda — fiskal chek va kirim orderi pattasi; naqdsizda — bank / terminal cheki)', true); return; }
+    return printReceipt({ kind:'income', who, amount, reason:'To‘lov', period:period||rr.month, method, date }); };
   if(!real.length){   // alohida to'lov yozuvi topilmadi -> invoice umumiy to'langan summasi (eski zaxira)
     const cum = rr.status==='paid'?(Number(rr.amount)||0):(Number(rr.paidAmount)||0);
     prnt(cum, PROV_LBL[rr.provider]||rr.provider||'', tkDay(new Date())); return;
   }
   const perOf=p=>(p&&p.raw&&p.raw.forPeriod)||'';
   const dayOf=p=>payDay(p)||dOf(p.createdAt);   // kassa hisoboti bilan AYNAN bir xil kun (payDay)
-  if(real.length===1){ const p=real[0]; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dayOf(p), perOf(p)); return; }
+  if(real.length===1){ const p=real[0]; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dayOf(p), perOf(p), p); return; }
   // Bir necha to'lov -> qaysi to'lov cheki kerakligini tanlaymiz (har biri alohida).
   const trs=real.map((p,i)=>`<tr><td>${esc(dayOf(p))}</td><td>${esc(PROV_LBL[p.provider]||p.provider||'—')}</td>
     <td style="text-align:right;font-weight:700">${fmtSom(p.amount)}</td>
-    <td class="td-actions"><button class="btn sm gold" data-rcpt="${i}">🧾 Chek</button></td></tr>`).join('');
+    <td class="td-actions">${kLive ? (p.cashDocId?`<button class="btn sm gold" data-rcpt="${i}">🖨 Kirim orderi</button>`:'<span class="small muted">chek berilmaydi</span>') : `<button class="btn sm gold" data-rcpt="${i}">🧾 Chek</button>`}</td></tr>`).join('');
   $('#modal').innerHTML=`<div class="modal-h"><h3>🧾 Qaysi to‘lov cheki?</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small muted" style="margin-bottom:8px"><b>${esc(who)}</b> — har to‘lov <b>ALOHIDA</b> chek chiqadi (umumiy emas).</div>
       <div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  $('#modal').querySelectorAll('[data-rcpt]').forEach(b=>b.onclick=()=>{ const p=real[Number(b.dataset.rcpt)]; if(!p) return; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dayOf(p), perOf(p)); });
+  $('#modal').querySelectorAll('[data-rcpt]').forEach(b=>b.onclick=()=>{ const p=real[Number(b.dataset.rcpt)]; if(!p) return; prnt(Number(p.amount)||0, PROV_LBL[p.provider]||p.provider||'', dayOf(p), perOf(p), p); });
 }
 async function printReceipt(r){
+  // Kassa ishga tushgach (moliya rejasi, G1): to'lovchiga tizimdan termal chek berilmaydi — fiskal chek (onlayn kassa) va kirim orderi
+  //   pattasi beriladi. Ichki xarajat varaqasi qoladi, lekin «fiskal chek emas» deb belgilanadi.
+  if(KASSA.live && r.kind!=='expense'){ toast('Kassa ishga tushgan: to‘lovchiga tizimdan chek berilmaydi — onlayn kassaning fiskal cheki va kirim orderi pattasi beriladi', true); return; }
   const cfg=await loadReceiptCfg(); const width=Number(r.width||cfg.width||80);
   const qr=await qrDataUrl(r.social||cfg.socialUrl||'https://taplink.cc/iqror');
   const fs=width>=80?'13px':'11px', big=width>=80?'20px':'16px', qrw=width>=80?'120px':'96px', lg=width>=80?'52px':'40px';
@@ -12070,6 +12201,7 @@ async function printReceipt(r){
     <div class="big">${fmtSom(r.amount)}</div><div class="hr"></div>
     ${qr?`<img class="qr" src="${qr}" alt="QR">`:''}<div class="c sm">Ijtimoiy tarmoqlarimiz — QR ni skanerlang</div>
     <div class="c sm">${esc(new Date().toLocaleString('uz-UZ'))}</div>
+    ${r.kind==='expense'?'<div class="c sm b" style="margin-top:4px">Fiskal chek emas — ichki hujjat</div>':''}
   </body></html>`;
   const w=window.open('','_blank','width=380,height=680'); if(!w){ toast('Pop-up bloklangan — ruxsat bering',true); return; }
   w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
