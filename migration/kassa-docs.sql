@@ -572,18 +572,24 @@ grant execute on function public.kassa_doc_pay(text) to authenticated;
 
 -- ---------- Shu kunning o'zida bekor qilish (raqam saqlanadi) ----------
 --   Kassir — faqat o'zi o'tkazgan hujjatni; Moliya menejeri, buxgalter, Direktor — istalganini. Kun yopilgan bo'lsa — yo'q.
---   Boshqa bo'limdan avtomatik yozilgan hujjat (o'quv to'lovi, maosh, qaytarish) o'z bo'limidan bekor qilinadi.
+--   Naqd o'quv to'lovi orderi (in_tuition) bekor qilinsa — to'lovning o'zi ham teskari qilinadi (kassa-pay.sql:
+--   app.tuition_reverse_core): fakturalar va avans to'lovdan OLDINGI holatga qaytadi, to'lov «bekor qilingan» bo'ladi, ota-onaga
+--   hali yuborilmagan xabarnoma to'xtatiladi. Faqat shu to'lovdan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan bo'lsa.
+--   Boshqa bo'limlardan avtomatik yozilgan hujjatlar (maosh, qaytarish) o'z bo'limidan bekor qilinadi.
 create or replace function public.kassa_doc_void(p_id text, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_day public.cash_days%rowtype;
-        v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_bal numeric;
+        v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_bal numeric; v_op text; v_src text; v_party text; v_tuition boolean;
 begin
   if not (app.kassa_operator() or app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q' using errcode = '42501';
   end if;
   if length(v_reason) < 5 then raise exception 'Bekor qilish sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
-  select c.desk into v_desk from public.cash_docs c where c.id = p_id;
+  select c.desk, c.op, c."sourceTable", c."partyId" into v_desk, v_op, v_src, v_party from public.cash_docs c where c.id = p_id;
   if v_desk is null then raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  v_tuition := (v_op = 'in_tuition' and v_src = 'payments');
+  -- Qulf tartibi: o'quvchi bo'yicha navbat (L1) kassa qulfidan (L4) OLDIN — yangi to'lov bilan o'zaro qulflanish bo'lmasin.
+  if v_tuition then perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_party, ''))); end if;
   perform app.kassa_lock_desk(v_desk);
   select * into v_doc from public.cash_docs c where c.id = p_id for update;
   if v_doc.status = 'void' then return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', true); end if;
@@ -593,7 +599,7 @@ begin
   if v_doc."isSystem" then
     raise exception 'Sanash farqi hujjati alohida bekor qilinmaydi (Direktor kunni qayta ochadi)' using errcode = '42501', hint = 'kassa:system_doc';
   end if;
-  if v_doc."sourceTable" is not null then
+  if v_doc."sourceTable" is not null and not v_tuition then
     raise exception 'Bu hujjat boshqa bo''limdan yozilgan — o''sha bo''limdan bekor qilinadi' using errcode = '42501', hint = 'kassa:linked_doc';
   end if;
   if not (app.fin_list2() or app.is_admin()) and v_doc."postedBy" is distinct from v_uid then
@@ -610,6 +616,7 @@ begin
     end if;
   end if;
   perform app.kassa_flag(true);
+  if v_tuition then perform app.tuition_reverse_core(p_id, v_uid, v_reason); end if;
   update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = v_reason where id = p_id;
   perform app.kassa_flag(false);
   return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', false, 'balance', app.kassa_day_balance(v_day.id));

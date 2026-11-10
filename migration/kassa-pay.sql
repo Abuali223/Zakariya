@@ -49,7 +49,9 @@ begin
   select c.credit into v_credit from public.student_credit c where c.id = v_sid;
   return jsonb_build_object('sid', v_sid, 'credit', coalesce(v_credit, 0),
     'invoices', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'month', coalesce(i.month, ''), 'amount', coalesce(i.amount, 0),
-                                                              'paid', coalesce(i."paidAmount", 0)) order by coalesce(nullif(i.month, ''), i.id))
+                                                              'paid', coalesce(i."paidAmount", 0), 'paidRaw', i."paidAmount", 'status', i.status,
+                                                              'provider', i.provider, 'paidAt', i."paidAt")
+                                           order by coalesce(nullif(i.month, ''), i.id))
                             from public.invoices i
                            where i."studentId" = v_sid and (i.status is null or i.status not in ('paid', 'canceled', 'reversed'))), '[]'::jsonb));
 end $$;
@@ -155,5 +157,70 @@ begin
                             'late', v_doc.late, 'status', v_doc.status, 'desk', v_doc.desk, 'dup', false, 'allocation', v_mode);
 end $$;
 revoke all on function app.kassa_tuition_post(text, numeric, text, timestamptz, jsonb, jsonb, boolean) from public, anon, authenticated;
+
+-- ---------- O'quv to'lovini teskari qilish (F1.7) — kassa_doc_void ichidan, shu kunda ----------
+--   Rol tekshirilmaydi (chaqiruvchi tekshirgan); chaqiruvchi o'quvchi navbati (L1), kassa qulfi (L4) va hujjat qatorini ushlab turadi.
+--   Shart: shu to'lovdan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan (avans va fakturalar aynan to'lovdan keyingi
+--   holatda). Aks holda rad — tuzatish Direktorning «Qaytarish» amali orqali.
+create or replace function app.tuition_reverse_core(p_doc_id text, p_uid text, p_reason text) returns void
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_doc public.cash_docs%rowtype; v_pay public.payments%rowtype; v_sid text; v_c0 numeric; v_c1 numeric; v_cr numeric;
+  a record; b jsonb; v_paid numeric; v_st text; v_name text;
+begin
+  select * into v_doc from public.cash_docs c where c.id = p_doc_id;
+  if not found or v_doc.op <> 'in_tuition' or v_doc."sourceTable" is distinct from 'payments' or v_doc.status <> 'posted' then
+    raise exception 'Bu hujjat — amaldagi o''quv to''lovi orderi emas' using errcode = 'P0001', hint = 'kassa:bad_status';
+  end if;
+  if coalesce(v_doc."sourceSnapshot" ->> 'allocation', '') <> 'exact' then
+    raise exception 'Bu to''lovning taqsimoti aniq emas — avtomatik bekor qilinmaydi (Direktor: «Qaytarish»)' using errcode = 'P0001', hint = 'kassa:not_reversible';
+  end if;
+  select * into v_pay from public.payments p where p.id = v_doc."sourceId" for update;
+  if not found or coalesce(v_pay.status, '') <> 'applied' then
+    raise exception 'To''lov topilmadi yoki holati o''zgargan (%)', coalesce(v_pay.status, 'yo''q') using errcode = 'P0001', hint = 'kassa:pay_status';
+  end if;
+  v_sid := v_doc."partyId";
+  v_c0 := coalesce((v_doc."sourceSnapshot" ->> 'creditBefore')::numeric, 0);
+  v_c1 := coalesce((v_doc."sourceSnapshot" ->> 'creditAfter')::numeric, 0);
+  select c.credit into v_cr from public.student_credit c where c.id = v_sid for update;
+  v_cr := coalesce(v_cr, 0);
+  if abs(v_cr - v_c1) >= 0.01 then
+    raise exception 'Bu to''lovdan keyin o''quvchi avansi o''zgargan — bekor qilib bo''lmaydi (Direktor: «Qaytarish»)' using errcode = 'P0001', hint = 'kassa:later_movement';
+  end if;
+  -- 1) tekshiruv: har faktura aynan shu to'lovdan keyingi holatda
+  for a in select * from public.payment_allocations x where x."paymentId" = v_pay.id and x."invoiceId" is not null loop
+    select x into b from jsonb_array_elements(v_doc."sourceSnapshot" -> 'before') x where x ->> 'id' = a."invoiceId";
+    select coalesce(i."paidAmount", 0), coalesce(i.status, '') into v_paid, v_st from public.invoices i where i.id = a."invoiceId" for update;
+    if not found or b is null or v_st in ('canceled', 'reversed')
+       or abs(v_paid - ((b ->> 'paid')::numeric + a."fromCash" + a."fromCredit")) >= 0.01 then
+      raise exception 'Bu to''lovdan keyin fakturada o''zgarish bo''lgan — bekor qilib bo''lmaydi (Direktor: «Qaytarish»)' using errcode = 'P0001', hint = 'kassa:later_movement';
+    end if;
+  end loop;
+  -- 2) fakturalar to'lovdan oldingi holatga
+  for a in select * from public.payment_allocations x where x."paymentId" = v_pay.id and x."invoiceId" is not null loop
+    select x into b from jsonb_array_elements(v_doc."sourceSnapshot" -> 'before') x where x ->> 'id' = a."invoiceId";
+    update public.invoices
+       set "paidAmount" = (b ->> 'paidRaw')::numeric, status = b ->> 'status', provider = b ->> 'provider', "paidAt" = (b ->> 'paidAt')::timestamptz
+     where id = a."invoiceId";
+  end loop;
+  -- 3) avans to'lovdan oldingi holatga (jurnal bilan)
+  if v_c0 <> v_c1 then
+    select s.name into v_name from public.students s where s.id = v_sid or s."studentId" = v_sid limit 1;
+    insert into public.student_credit (id, "studentId", credit, "updatedAt") values (v_sid, v_sid, v_c0, now())
+      on conflict (id) do update set credit = excluded.credit, "updatedAt" = now();
+    insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, provider, note, "at")
+      values (gen_random_uuid()::text, v_sid, coalesce(v_name, ''), v_c0 - v_c1, v_c0, 'manual', 'cash',
+              'Naqd to‘lov bekor qilindi (KO-1 № ' || v_doc.no || '): ' || left(coalesce(p_reason, ''), 200), now());
+  end if;
+  -- 4) to'lov — bekor qilingan (kirim hisobotlaridan chiqadi); tavsiya bonusi trigger orqali qaytariladi
+  update public.payments
+     set status = 'canceled',
+         raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('voidReason', left(coalesce(p_reason, ''), 500), 'voidedBy', p_uid, 'voidedAt', now())
+   where id = v_pay.id;
+  -- 5) ota-onaga hali yuborilmagan to'lov xabarnomasi to'xtatiladi
+  update public.notify_queue set status = 'skipped', error = 'to''lov bekor qilindi', "processedAt" = now()
+   where id = 'pay__' || v_pay.id and status = 'pending';
+end $$;
+revoke all on function app.tuition_reverse_core(text, text, text) from public, anon, authenticated;
 
 notify pgrst, 'reload schema';

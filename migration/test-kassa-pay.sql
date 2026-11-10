@@ -127,8 +127,10 @@ select zz.chk('J9b Direktor (favqulodda) fiskal istisno bilan: belgilanadi; fakt
   (select "fiscalExempt" || ':' || "postedBy" from public.cash_docs where "sourceId" = 'man_j9_0002') || ' / ' || zz.lines('man_j9_0002'), '^true:U_DIR / 5010>6310=10000#overpay$');
 select zz.chk('J10 ishlatilgan fiskal chek raqami — rad, to''lov yozilmaydi',
   zz.pay('U_KAS', 'man_j10_001', 'T-2', 5000, 'cash', '', null, '{"fiscalNo":"F-1"}') || ' / ' || (select count(*) from public.payments where id = 'man_j10_001'), '^ERR 22023 \[kassa:fiscal_dup\].* / 0$');
-select zz.chk('J11 o''quv to''lovi orderi «Kassa»dan bekor qilinmaydi (o''z bo''limidan)',
-  zz.as('U_FM', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_j3_0001'), 'Sinov uchun bekor')), '^ERR 42501 \[kassa:linked_doc\]');
+select zz.chk('J11 keyin boshqa pul harakati bo''lgan to''lov bekor qilinmaydi (Direktorning «Qaytarish» amali orqali)',
+  zz.as('U_FM', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_j3_0001'), 'Sinov uchun bekor')), '^ERR P0001 \[kassa:later_movement\]');
+select zz.chk('J11b kassir boshqa xodim o''tkazgan to''lov orderini bekor qila olmaydi',
+  zz.as('U_KAS', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_j9_0002'), 'Sinov uchun bekor')), '^ERR 42501 \[kassa:not_own\]');
 select zz.chk('J12 o''qituvchi to''lov kirita olmaydi', zz.pay('U_TCH', 'man_j12_001', 'T-2', 1000, 'cash', '', null, '{"fiscalNo":"F-8"}'), '^ERR 42501');
 select zz.chk('J13 mavjud bo''lmagan o''quvchi', zz.pay('U_KAS', 'man_j13_001', 'T-404', 1000, 'cash', '', null, '{"fiscalNo":"F-8"}'), '^ERR 22023');
 
@@ -147,10 +149,31 @@ select zz.chk('J15 balansga avval qo''llangan to''lov: pul ikki marta qo''llanma
   (zz.get('J15')::jsonb ->> 'dup') || ':' || (zz.get('J15')::jsonb -> 'kassa' ->> 'allocation') || ' / ' || zz.lines('man_legacy_002') || ' / ' ||
   (select trim_scale(credit)::text from public.student_credit where id = 'T-2'), '^true:unknown / 5010>4010=20000 / 110000$');   -- T-2 avansi: 70 000 (bank) + 10 000 + 10 000 + 20 000 — ikki marta qo'shilmagan
 
+-- ---------- Shu kunda bekor qilish (kassir xatosi) ----------
+select zz.put('V1', zz.pay('U_KAS', 'man_v1_0001', 'T-1', 30000, 'cash', '', null, '{"fiscalNo":"F-20"}'));
+select zz.chk('V1 xato kiritilgan to''lov: faktura 180 000 bo''ldi, xabarnoma navbatda',
+  (select trim_scale("paidAmount")::text from public.invoices where id = 'id') || ':' || (zz.get('V1')::jsonb -> 'kassa' ->> 'no') || ':' ||
+  coalesce((select status from public.notify_queue where id = 'pay__man_v1_0001'), '-'), '^180000:7:pending$');
+select zz.put('V2', zz.as('U_KAS', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_v1_0001'), 'Summa xato kiritildi')));
+select zz.chk('V2 kassir shu kunda bekor qildi: order «bekor qilingan», raqami saqlanadi', zz.get('V2'), '"no": 7[,}].*"status": "void"|"status": "void".*"no": 7[,}]');
+select zz.chk('V2b faktura va avans to''lovdan oldingi holatga qaytdi; to''lov bekor; xabarnoma to''xtatildi',
+  (select trim_scale("paidAmount") || ':' || status from public.invoices where id = 'id') || ':' || (select trim_scale(credit)::text from public.student_credit where id = 'T-1')
+  || ':' || (select status from public.payments where id = 'man_v1_0001') || ':' || coalesce((select status from public.notify_queue where id = 'pay__man_v1_0001'), '-'),
+  '^150000:partial:0:canceled:skipped$');
+select zz.chk('V2c bekor qilingan to''lov kirim hisobotiga kirmaydi',
+  (select app.counts_as_receipt(id, status, provider, amount)::text from public.payments where id = 'man_v1_0001'), '^false$');
+select zz.chk('V3 qayta bekor qilish — takror', zz.as('U_KAS', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_v1_0001'), 'Summa xato kiritildi')), '"dup": true');
+select zz.chk('V4 bekor qilingan to''lov qayta yuborilsa qo''llanmaydi', zz.pay('U_KAS', 'man_v1_0001', 'T-1', 30000, 'cash', '', null, '{"fiscalNo":"F-21"}'), '"ok": false.*"reason": "exists"|"reason": "exists".*"ok": false');
+select zz.put('V5', zz.pay('U_KAS', 'man_v5_0001', 'T-2', 7000, 'cash', '', null, '{"fiscalNo":"F-22"}'));
+select zz.put('V5v', zz.as('U_FM', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_v5_0001'), 'Boshqa o''quvchiga yozilgan')));
+select zz.chk('V5 avansga tushgan to''lov ham bekor qilinadi (Moliya menejeri): avans qaytadi, jurnalda teskari yozuv',
+  (select trim_scale(credit)::text from public.student_credit where id = 'T-2') || ':' ||
+  (select trim_scale(delta) || '/' || reason from public.credit_ledger where "studentId" = 'T-2' order by "at" desc, delta limit 1), '^110000:-7000/manual$');
+
 -- ---------- Kun, moslik ----------
 select zz.chk('J16 kassa qoldig''i = naqd to''lovlar yig''indisi (ishga tushgandan beri)',
   zz.as('U_KAS', $q$select (s ->> 'balance') from public.kassa_state('main') s$q$) || '/' ||
-  (select trim_scale(sum(amount))::text from public.payments where "cashDocId" is not null), '^3090000/3090000$');
+  (select trim_scale(sum(amount))::text from public.payments where "cashDocId" is not null and status = 'applied'), '^3090000/3090000$');
 select zz.chk('J17 P1: ishga tushgandan keyingi har naqd to''lovda order bor (yetim yo''q)',
   (select count(*)::text from public.payments p where p.provider = 'cash' and p.status = 'applied' and p."cashDocId" is null and p.id <> 'man_j1_0001'), '^0$');
 select zz.chk('J18 hisobotdagi «tushgan kun» (pay_day) = order kuni',
@@ -158,8 +181,10 @@ select zz.chk('J18 hisobotdagi «tushgan kun» (pay_day) = order kuni',
 select zz.chk('J19 kun yopildi: farq 0', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-01-04","counted":3090000}')::text$q$), '"diff": 0[,}]');
 select zz.clock('2027-01-05 09:00+05');
 select zz.put('J20', zz.pay('U_KAS', 'man_j20_001', 'T-2', 30000, 'cash', '', null, '{"fiscalNo":"F-6"}'));
-select zz.chk('J20 ertasi kun: yangi kun (kun boshi 3 090 000), raqam davom etadi (№ 7)',
-  (zz.get('J20')::jsonb -> 'kassa' ->> 'no') || ':' || (zz.get('J20')::jsonb -> 'kassa' ->> 'day') || ':' || (select trim_scale(opening)::text from public.cash_days where status = 'open'), '^7:2027-01-05:3090000$');
+select zz.chk('J19b yopilgan kun to''lovi bekor qilinmaydi',
+  zz.as('U_FM', format('select public.kassa_doc_void(%L, %L)::text', (select "cashDocId" from public.payments where id = 'man_legacy_001'), 'Sinov: yopilgan kun')), '^ERR P0001 \[kassa:day_closed\]');
+select zz.chk('J20 ertasi kun: yangi kun (kun boshi 3 090 000), raqam davom etadi (№ 9)',
+  (zz.get('J20')::jsonb -> 'kassa' ->> 'no') || ':' || (zz.get('J20')::jsonb -> 'kassa' ->> 'day') || ':' || (select trim_scale(opening)::text from public.cash_days where status = 'open'), '^9:2027-01-05:3090000$');
 select zz.clock('2027-01-06 09:00+05');
 select zz.chk('J21 kecha yopilmagan: naqd to''lov rad, to''lov ham yozilmaydi (CT-04, atomar)',
   zz.pay('U_KAS', 'man_j21_001', 'T-2', 1000, 'cash', '', null, '{"fiscalNo":"F-7"}') || ' / ' || (select count(*) from public.payments where id = 'man_j21_001')
@@ -173,7 +198,7 @@ select zz.chk('J24 olingan kuni yopilgan: bugungi kunga «kech» belgisi bilan; 
 select zz.chk('J25 kunlar bo''yicha: order jami = to''lovlar jami (kassa kitobi = «To''lovlar» hisoboti)',
   (select string_agg(d || '=' || s1 || '/' || s2, ',' order by d) from (
      select c."businessDay" d, trim_scale(sum(c.amount)) s1,
-            (select trim_scale(sum(p.amount)) from public.payments p where p."cashDocId" is not null and app.pay_day(p."createdAt", p.raw) = c."businessDay") s2
+            (select trim_scale(sum(p.amount)) from public.payments p where p."cashDocId" is not null and p.status = 'applied' and app.pay_day(p."createdAt", p.raw) = c."businessDay") s2
        from public.cash_docs c where c.op = 'in_tuition' and c.status = 'posted' group by c."businessDay") x),
   '^2027-01-04=3090000/3090000,2027-01-05=32000/32000,2027-01-06=3000/3000$');
 select zz.chk('J26 raqamlash uzluksiz', (select app.kassa_gap_check('main', 2027)::text), '^\[\]$');
