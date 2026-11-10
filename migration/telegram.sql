@@ -441,10 +441,11 @@ begin
   return r;
 end $$;
 -- Kunlik hisobot ma'lumoti (Toshkent kuni): to'lovlar (soni, summa, usul bo'yicha), qarzdorlar, davomat kiritilishi,
---   kutilayotgan tasdiqlar (navbatlar bo'yicha; muddati o'tganlari alohida). Server (tg-daily.cjs) yoki Direktor.
+--   kutilayotgan tasdiqlar (navbatlar bo'yicha; muddati o'tganlari alohida); kassa moduli ishlatilayotgan bo'lsa — 'kassa'
+--   (kun varag'i jamlari va nazorat qatori). Server (tg-daily.cjs) yoki Direktor.
 create or replace function public.director_daily(p_day date default null) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare d date := coalesce(p_day, (now() at time zone 'Asia/Tashkent')::date); v_from timestamptz; v_to timestamptz; r jsonb;
+declare d date := coalesce(p_day, (now() at time zone 'Asia/Tashkent')::date); v_from timestamptz; v_to timestamptz; r jsonb; v_k jsonb;
 begin
   if not (app.is_admin() or app.is_system()) then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   v_from := (d::timestamp) at time zone 'Asia/Tashkent'; v_to := ((d + 1)::timestamp) at time zone 'Asia/Tashkent';
@@ -472,6 +473,12 @@ begin
       'payroll', (select count(*) from public.payroll_runs pr where pr.status = 'submitted')),
     'overdue', app.kpi_overdue_approvals())
   into r;
+  -- Kassa bloki va nazorat qatori (moliya ish rejasi RP-05): faqat kassa moduli o'rnatilgan va ishlatilayotgan bo'lsa.
+  --   Dinamik chaqiruv — kassa-day.sql zanjirda bo'lmasa (yoki kassa hali ochilmagan bo'lsa) hisobot avvalgidek, 'kassa' kalitisiz.
+  if to_regprocedure('app.kassa_daily(date)') is not null then
+    execute 'select app.kassa_daily($1)' into v_k using d;
+    if v_k is not null then r := r || jsonb_build_object('kassa', v_k); end if;
+  end if;
   return r;
 end $$;
 do $$ declare f text; begin

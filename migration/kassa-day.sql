@@ -14,8 +14,10 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --                                 raqamlarda bo'shliq, xesh yoki jamlar mos kelmasa — rad;
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
---   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot ma'lumoti;
---   kassa_checks(desk)          — nazorat ro'yxati (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad …);
+--   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
+--   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
+--                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit …);
+--   app.kassa_daily(day)        — Direktorning kunlik Telegram hisobotidagi kassa bloki va nazorat qatori (RP-05; director_daily chaqiradi);
 --   kassa_refs() / kassa_people() / kassa_overview(desk) / kassa_doc_get(id) — «Kassa» ekrani va chop etish uchun o'qish;
 --   kassa_print_mark(kind, id)  — chop etish jurnali: birinchi chop etish — asl nusxa, keyingilari — «НУСХА».
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
@@ -548,10 +550,73 @@ end $$;
 revoke all on function public.kassa_state(text) from public, anon;
 grant execute on function public.kassa_state(text) to authenticated;
 
--- ---------- O'qish: kassa kitobi varag'i (KO-4) va kunlik hisobot uchun kun ma'lumoti ----------
+-- ---------- Kunlik hisobot (RP-02) bloklari ----------
+-- Tomonning asosiy nomi — KALIT bo'yicha (CT-22): o'quvchi, xodim, kontragent ma'lumotnomadan. Topilmasa — NULL.
+create or replace function app.kassa_party_label(p_type text, p_id text) returns text
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v text; v_coll text; v_row text;
+begin
+  if p_id is null or p_type is null then return null; end if;
+  if p_type = 'student' then
+    select s.name into v from public.students s where s."studentId" = p_id or s.id = p_id order by (s."studentId" = p_id) desc limit 1;
+  elsif p_type = 'employee' then
+    v_coll := split_part(p_id, ':', 1); v_row := substr(p_id, length(v_coll) + 2);
+    if v_coll = 'teachers' then select t.name into v from public.teachers t where t.id = v_row;
+    elsif v_coll = 'staff' then select x.name into v from public.staff x where x.id = v_row;
+    end if;
+  elsif p_type in ('counterparty', 'bank', 'founder') then
+    select c.name into v from public.fin_counterparties c where c.id = p_id;
+  end if;
+  return nullif(btrim(coalesce(v, '')), '');
+end $$;
+revoke all on function app.kassa_party_label(text, text) from public, anon, authenticated;
+
+-- Kun bo'yicha jamlanmalar (faqat o'tkazilgan hujjatlar, faqat naqd qatorlar):
+--   byParty   — «kimdan / kimga qancha»: tomon KALITI bo'yicha (tur + kod); «boshqa» — yozilgan nom bo'yicha; tizim hujjati — alohida;
+--   byArticle — statiya va korrespondent hisobvaraq bo'yicha; "transfer" — ichki o'tkazma (bank 5110 / yo'ldagi pul 5710):
+--               daromad ham, xarajat ham emas;
+--   transfers — bankdan olingan va bankka topshirilgan naqd pul.
+create or replace function app.kassa_day_blocks(p_day_id text) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select jsonb_build_object(
+    'byParty', coalesce((select jsonb_agg(jsonb_build_object('form', x.form, 'partyType', x.ptype, 'partyId', x.pid, 'name', x.name,
+                                                             'ops', x.ops, 'count', x.n, 'amount', x.amount)
+                                          order by x.form, x.amount desc, x.name, x.pid)
+                           from (select c.form, coalesce(c."partyType", case when c."isSystem" then 'system' else 'none' end) as ptype,
+                                        c."partyId" as pid,
+                                        coalesce(app.kassa_party_label(max(c."partyType"), c."partyId"), max(c."partyName"), '') as name,
+                                        to_jsonb(array_agg(distinct c.op order by c.op)) as ops, count(*) as n, sum(c.amount) as amount
+                                   from public.cash_docs c
+                                  where c."dayId" = p_day_id and c.status = 'posted' and c.form in ('KO1', 'KO2')
+                                  group by c.form, 2, c."partyId",
+                                           case when c."partyId" is null then lower(regexp_replace(btrim(c."partyName"), '\s+', ' ', 'g')) end) x), '[]'::jsonb),
+    'byArticle', coalesce((select jsonb_agg(jsonb_build_object('form', x.form, 'articleId', x."articleId", 'kind', a.kind, 'nameUz', a."nameUz",
+                                                               'nameRu', a."nameRu", 'debit', x.debit, 'credit', x.credit, 'amount', x.amount,
+                                                               'transfer', x.transfer)
+                                            order by x.form, x."articleId", x.debit, x.credit)
+                             from (select c.form, l."articleId", l.debit, l.credit, sum(l.amount) as amount,
+                                          (case when c.form = 'KO1' then l.credit else l.debit end) in ('5110', '5710') as transfer
+                                     from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+                                    where c."dayId" = p_day_id and c.status = 'posted' and c.form in ('KO1', 'KO2') and l.cash
+                                    group by c.form, l."articleId", l.debit, l.credit) x
+                             left join public.fin_articles a on a.id = x."articleId"), '[]'::jsonb),
+    'transfers', (select jsonb_build_object(
+                    'inCount', count(distinct c.id) filter (where c.form = 'KO1'), 'inAmount', coalesce(sum(l.amount) filter (where c.form = 'KO1'), 0),
+                    'outCount', count(distinct c.id) filter (where c.form = 'KO2'), 'outAmount', coalesce(sum(l.amount) filter (where c.form = 'KO2'), 0))
+                    from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+                   where c."dayId" = p_day_id and c.status = 'posted' and c.form in ('KO1', 'KO2') and l.cash
+                     and (case when c.form = 'KO1' then l.credit else l.debit end) in ('5110', '5710')))
+$$;
+revoke all on function app.kassa_day_blocks(text) from public, anon, authenticated;
+
+-- ---------- O'qish: kassa kitobi varag'i (KO-4) va kunlik hisobot (RP-02) uchun kun ma'lumoti ----------
+--   KO-4 ham, kunlik hisobot ham SHU javobdan tuziladi — jamlari bir xil bo'lishi shundan (F1.15 qabul mezoni: RP-02 = KO-4).
+--   channels — shu kunda barcha usullar bo'yicha tushgan o'quv to'lovlari (to'lovlar jadvalidan; MA'LUMOT uchun — naqd bo'lmaganlari
+--   kassa kitobiga kirmaydi); pending / limit — hisobot olingan paytdagi holat.
 create or replace function public.kassa_day_book(p_desk text, p_day date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_id text; v_uids text[];
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_id text; v_uids text[]; v_test boolean; v_limit numeric; v_end numeric;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   select d.id into v_id from public.cash_days d where d.desk = v_desk and d.day = p_day;
@@ -566,31 +631,50 @@ begin
       union all
       select e."byUid" from public.cash_day_events e where e."dayId" = v_id) q
    where x is not null;
+  v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
+  select o."cashLimit" into v_limit from public.fin_org o where o.id = 'main';
+  select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end into v_end from public.cash_days d where d.id = v_id;
   return jsonb_build_object('ok', true,
-    'isTest', coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false),
+    'isTest', v_test,
     'names', app.kassa_names(v_uids),
     'day', app.kassa_day_json(v_id),
     'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."postedAt", c.form, c.no)
                         from public.cash_docs c where c."dayId" = v_id and c.status in ('posted', 'void')), '[]'::jsonb),
-    'byArticle', coalesce((select jsonb_agg(jsonb_build_object('form', x.form, 'articleId', x."articleId", 'debit', x.debit, 'credit', x.credit, 'amount', x.amount)
-                                            order by x.form, x."articleId", x.debit, x.credit)
-                             from (select c.form, l."articleId", l.debit, l.credit, sum(l.amount) as amount
-                                     from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
-                                    where c."dayId" = v_id and c.status = 'posted' and l.cash
-                                    group by c.form, l."articleId", l.debit, l.credit) x), '[]'::jsonb),
     'counts', coalesce((select jsonb_agg(to_jsonb(n) order by n.at) from public.cash_counts n where n."dayId" = v_id), '[]'::jsonb),
-    'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.at) from public.cash_day_events e where e."dayId" = v_id), '[]'::jsonb));
+    'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.at) from public.cash_day_events e where e."dayId" = v_id), '[]'::jsonb))
+    || app.kassa_day_blocks(v_id)
+    || jsonb_build_object(
+    'channels', case when v_test then '[]'::jsonb else
+                  coalesce((select jsonb_agg(jsonb_build_object('provider', z.provider, 'count', z.n, 'amount', z.s) order by z.s desc, z.provider)
+                              from (select r.provider, count(*) as n, sum(r.amount) as s from app.fin_receipts(p_day, p_day) r group by r.provider) z), '[]'::jsonb) end,
+    'pending', (select jsonb_build_object(
+                  'waiting', count(*) filter (where c.status = 'draft'), 'waitingSum', coalesce(sum(c.amount) filter (where c.status = 'draft'), 0),
+                  'toPay', count(*) filter (where c.status = 'approved'), 'toPaySum', coalesce(sum(c.amount) filter (where c.status = 'approved'), 0))
+                  from public.cash_docs c where c.desk = v_desk and c.status in ('draft', 'approved')),
+    'limit', jsonb_build_object('cashLimit', coalesce(v_limit, 0), 'set', coalesce(v_limit, 0) > 0,
+                                'exceeded', coalesce(v_limit, 0) > 0 and coalesce(v_end, 0) > v_limit));
 end $$;
 revoke all on function public.kassa_day_book(text, date) from public, anon;
 grant execute on function public.kassa_day_book(text, date) to authenticated;
 
--- ---------- O'qish: nazorat ro'yxati ----------
+-- ---------- O'qish: nazorat ro'yxati (RP-06) ----------
+--   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,
+--   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
+--   tomonlar, kech (oflayn) yozuvlar, asl nusxani qayta chiqarish, darvozasiz naqd maosh, KO-4 chop etilmagan kunlar, limit,
+--   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati, rahbar / ta'sischiga berilgan pul (4290 / 4890).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today();
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today(); v_limit numeric; v_bal numeric;
+  v_test boolean; v_m0 date := date_trunc('month', app.fin_today())::date;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
-  return jsonb_build_object('ok', true, 'today', v_today,
+  v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
+  select o."cashLimit" into v_limit from public.fin_org o where o.id = 'main';
+  select coalesce((select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = v_desk and d.status = 'open'),
+                  (select d.closing from public.cash_days d where d.desk = v_desk and d.status <> 'open' order by d.day desc limit 1),
+                  (select k."openingAmount" from public.cash_desks k where k.id = v_desk), 0) into v_bal;
+  return jsonb_build_object('ok', true, 'today', v_today, 'isTest', v_test,
     'gaps', (select coalesce(jsonb_agg(jsonb_build_object('year', y.year, 'problems', y.g)), '[]'::jsonb)
                from (select k.year, app.kassa_gap_check(v_desk, k.year) as g from (select distinct year from public.doc_counters where desk = v_desk) k) y
               where jsonb_array_length(y.g) > 0),
@@ -611,10 +695,98 @@ begin
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
     'salaryGateOff30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_salary' and c.status = 'posted'
-                          and c."sourceSnapshot" ->> 'gateOff' = 'true' and c."businessDay" >= v_today - 30));
+                          and c."sourceSnapshot" ->> 'gateOff' = 'true' and c."businessDay" >= v_today - 30),
+    -- yopilgan, lekin kassa kitobi varag'i (KO-4) hali chop etilmagan kunlar (2 nusxa imzolanishi kerak)
+    'unprintedBooks30', coalesce((select jsonb_agg(d.day order by d.day) from public.cash_days d
+                                   where d.desk = v_desk and d.status <> 'open' and d.day >= v_today - 30
+                                     and not exists (select 1 from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version = d."reopenCount")), '[]'::jsonb),
+    -- yopish paytida «hali o'tkazilmagan» (oflayn navbatdagi) yozuv bilan yopilgan kunlar
+    'pendingDays30', (select count(*) from public.cash_days d where d.desk = v_desk and d.status <> 'open' and coalesce(d."pendingCount", 0) > 0 and d.day >= v_today - 30),
+    'limit', jsonb_build_object('cashLimit', coalesce(v_limit, 0), 'set', coalesce(v_limit, 0) > 0, 'balance', v_bal,
+                                'exceeded', coalesce(v_limit, 0) > 0 and v_bal > v_limit,
+                                'days30', case when coalesce(v_limit, 0) > 0 then
+                                            (select count(*) from public.cash_days d where d.desk = v_desk and d.status <> 'open' and d.closing > v_limit and d.day >= v_today - 30)
+                                          else 0 end),
+    -- moslik (kassa-links.sql: app.kassa_reconcile) — faqat asosiy kassa
+    'reconcile', case when v_test then jsonb_build_object('live', false, 'total', 0) else app.kassa_reconcile(v_today - 30, v_today) end,
+    -- hisobdorlardagi pul (4230): berilgan − naqd qaytarilgan; "since" — hali yopilmagan eng eski berilgan sana (FIFO);
+    --   "workDays" — o'shandan beri o'tgan ish kunlari (du–ju); hisobot muddati — 3 ish kuni (§4.9).
+    'accountable', coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
+                                                                 'given', o.given, 'returned', o.ret, 'balance', o.given - o.ret, 'since', o.since,
+                                                                 'workDays', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
+                                                                               where extract(isodow from g) < 6),
+                                                                 'overdue', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
+                                                                              where extract(isodow from g) < 6) > 3)
+                                              order by o.since, o.pid)
+                               from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret,
+                                            min(g.d) filter (where g.cum > coalesce(r.ret, 0)) as since
+                                       from (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
+                                                    sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
+                                               from public.cash_docs c where c.desk = v_desk and c.op = 'out_accountable' and c.status = 'posted') g
+                                       left join (select c."partyId" as pid, sum(c.amount) as ret from public.cash_docs c
+                                                   where c.desk = v_desk and c.op = 'in_acc_return' and c.status = 'posted' group by 1) r on r.pid = g.pid
+                                      group by g.pid) o
+                              where o.given - o.ret > 0), '[]'::jsonb),
+    -- rahbar / ta'sischiga berilgan pul: buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — hech qachon xarajat emas
+    'handover', (select jsonb_build_object(
+                   'monthCount', count(*) filter (where c."businessDay" >= v_m0), 'monthSum', coalesce(sum(c.amount) filter (where c."businessDay" >= v_m0), 0),
+                   'earlierCount', count(*) filter (where c."businessDay" < v_m0), 'earlierSum', coalesce(sum(c.amount) filter (where c."businessDay" < v_m0), 0))
+                   from public.cash_docs c where c.desk = v_desk and c.op = 'out_handover' and c.status = 'posted' and c."businessDay" >= v_today - 92));
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;
+
+-- ---------- Direktorning kunlik Telegram hisoboti uchun kassa bloki va nazorat qatori (RP-05) ----------
+--   director_daily (telegram.sql) shu funksiyani DINAMIK chaqiradi: kassa moduli o'rnatilmagan bo'lsa — blok yo'q.
+--   NULL — kassa hali ishlatilmayapti (ishga tushirish sanasi yo'q va birorta kassa kuni ochilmagan).
+--   day — shu kunning kassa varag'i (jamlari KO-4 va kunlik hisobot bilan AYNAN bir manbadan); control — nazorat qatori.
+create or replace function app.kassa_daily(p_day date) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_day date := coalesce(p_day, app.fin_today()); v_d public.cash_days%rowtype; v_open public.cash_days%rowtype; v_last public.cash_days%rowtype;
+  v_o public.fin_org%rowtype; v_k public.cash_desks%rowtype; v_bal numeric; v_j jsonb; v_closed boolean;
+begin
+  select * into v_k from public.cash_desks k where k.id = 'main';
+  select * into v_o from public.fin_org o where o.id = 'main';
+  if v_k.id is null or (v_o."kassaGoLive" is null and not exists (select 1 from public.cash_days d where d.desk = 'main')) then return null; end if;
+  select * into v_d from public.cash_days d where d.desk = 'main' and d.day = v_day;
+  select * into v_open from public.cash_days d where d.desk = 'main' and d.status = 'open';
+  select * into v_last from public.cash_days d where d.desk = 'main' and d.status <> 'open' order by d.day desc limit 1;
+  v_bal := case when v_open.id is not null then app.kassa_day_balance(v_open.id) else coalesce(v_last.closing, v_k."openingAmount", 0) end;
+  if v_d.id is not null then
+    v_j := app.kassa_day_json(v_d.id); v_closed := v_d.status <> 'open';
+  end if;
+  return jsonb_build_object(
+    'live', v_o."kassaGoLive" is not null and v_day >= v_o."kassaGoLive",
+    'day', case when v_d.id is not null then jsonb_build_object(
+             'day', v_d.day, 'status', v_d.status, 'opening', v_d.opening,
+             'receipts', case when v_closed then v_d.receipts else (v_j ->> 'receiptsLive')::numeric end,
+             'payouts', case when v_closed then v_d.payouts else (v_j ->> 'payoutsLive')::numeric end,
+             'closing', case when v_closed then v_d.closing else (v_j ->> 'balance')::numeric end,
+             'counted', v_d.counted, 'diff', v_d.diff,
+             'n1', (select count(*) from public.cash_docs c where c."dayId" = v_d.id and c.status = 'posted' and c.form = 'KO1'),
+             'n2', (select count(*) from public.cash_docs c where c."dayId" = v_d.id and c.status = 'posted' and c.form = 'KO2'),
+             'voids', (v_j ->> 'voids')::int,
+             'transfers', app.kassa_day_blocks(v_d.id) -> 'transfers') end,
+    'balance', v_bal,
+    'control', jsonb_build_object(
+      'reconcile', (app.kassa_reconcile(v_day - 6, v_day) ->> 'total')::int,
+      'openDay', v_open.day,
+      'staleOpenDay', case when v_open.id is not null and v_open.day < v_day then v_open.day end,
+      'unverifiedDays', (select count(*) from public.cash_days d where d.desk = 'main' and d.status = 'closed'),
+      'voids', coalesce((v_j ->> 'voids')::int, 0),
+      'diff', coalesce(v_d.diff, 0),
+      'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = 'main' and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
+      'waitingApproval', (select count(*) from public.cash_docs c where c.desk = 'main' and c.status = 'draft'),
+      'approvedUnpaid', (select count(*) from public.cash_docs c where c.desk = 'main' and c.status = 'approved'),
+      'staleRefunds', (select count(*) from public.cash_docs c where c.desk = 'main' and c.op = 'out_refund' and c.status = 'approved'
+                         and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
+      'gaps', (select count(*) from (select distinct year from public.doc_counters where desk = 'main') k
+                where jsonb_array_length(app.kassa_gap_check('main', k.year)) > 0),
+      'fiscalExempt', (select count(*) from public.cash_docs c where c.desk = 'main' and c."fiscalExempt" and c.status = 'posted' and c."businessDay" = v_day),
+      'limitExceeded', coalesce(v_o."cashLimit", 0) > 0 and v_bal > v_o."cashLimit"));
+end $$;
+revoke all on function app.kassa_daily(date) from public, anon, authenticated;
 
 -- ---------- O'qish: shakllar uchun ma'lumotnomalar (bitta chaqiruv) ----------
 create or replace function public.kassa_refs() returns jsonb

@@ -795,13 +795,21 @@ kiritish, o‘qish funksiyalari); F1.12 «Kassa» bo‘limi (`assets/js/fin-kass
 fiskal chek №, KO-1; «Maosh berish»: usul; «Xodim avansi» va «Xarajat»: naqd — faqat «Kassa» orqali, naqdsiz — usul +
 statiya (toifadan) + kontragent; «Qaytarish»: usul; kassa xarajati «Buxgalteriya»ga o‘zi ko‘chadi; kassa ishga tushgach
 naqd yozuvni funksiyani chetlab kiritib bo‘lmaydi — `kassa-links.sql`); F1.14 chop etish (`fin-print.js`: KO-1 + patta,
-KO-2, KO-4 2 nusxa, sanash dalolatnomasi — o‘zbek kirill, rus, lotin; «НУСХА» belgisi server jurnaliga tayanadi). Bo‘lim
-faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi.
-Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 68, `test-kassa-race.sh` 22 (8 × 200
-parallel, 10 % ROLLBACK), `fin-print.test.mjs` 12, `fin-words.test.mjs` 7; brauzerda uch to‘liq stsenariy (97 tekshiruv)
+KO-2, KO-4 2 nusxa, sanash dalolatnomasi — o‘zbek kirill, rus, lotin; «НУСХА» belgisi server jurnaliga tayanadi); F1.15
+kunlik hisobot RP-02 (`reportHtml`: kun yakuni, kirim va chiqim orderlari, «kimdan / kimga qancha» — tomon kaliti
+bo‘yicha, statiya bo‘yicha, ichki o‘tkazmalar, kanallar, kutilayotganlar, limit; KO-4 bilan bitta server javobidan
+tuziladi — jamlari bir xil; ichki hisobot bo‘lgani uchun ilova tilida, chop tili rus bo‘lsa — ruscha), nazorat ro‘yxati
+RP-06 («Kassa» sahifasida, 2-ro‘yxat va direktor uchun: 20 tekshiruv, jumladan moslik P1 / P4 / P5 / P8 —
+`app.kassa_reconcile`, hisobdorlardagi pul muddati, rahbarga berilgan pul, limit, chop etilmagan KO-4) va Telegram RP-05
+(`director_daily` → `app.kassa_daily`: kun jamlari, sanash va farq, bank o‘tkazmalari, nazorat qatori; kassa moduli
+bo‘lmasa yoki ishlatilmasa — blok yo‘q). Sinov kassasi (CT-20) hujjatlari «Buxgalteriya» va avans jadvallariga
+ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish kunigacha barcha oynalar
+avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 68,
+`test-kassa-report.sql` 52, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 16,
+`fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs` 39; brauzerda to‘rt to‘liq stsenariy (121 tekshiruv)
 eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34
-tekshiruv). Qoldi: o‘zaro hisob (`nc_offset`), F1.11 (RLS qismi), F1.15–F1.19 (kunlik hisobot, nazorat ro‘yxati ekrani,
-Telegram, 31.12 surati, ishga tushirish to‘plami), mustaqil ko‘rik.
+tekshiruv). Qoldi: o‘zaro hisob (`nc_offset`), F1.11 (RLS qismi), F1.16–F1.19 (31.12 surati, sinov va predeploy
+tekshiruvlari, ishga tushirish to‘plami), mustaqil ko‘rik.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

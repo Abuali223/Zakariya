@@ -1,7 +1,8 @@
 // tg-daily.cjs — Direktorga kunlik hisobot: reja (yoqilgan / kun / soat), qabul qiluvchilar (faqat faol Direktor, /sozlamalar),
-//   bir kunda bir marta, bloklangan chat -> tg_blocked, matn (to'lovlar, qarzdorlar, davomat, tasdiqlar, tizim holati).
+//   bir kunda bir marta, bloklangan chat -> tg_blocked, matn (to'lovlar, qarzdorlar, davomat, tasdiqlar, kassa bloki va nazorat
+//   qatori, tizim holati).
 const { makeFake } = require('./_fake.cjs');
-const { composeDaily, dailyPlan, runDaily } = require('./tg-daily.cjs');
+const { composeDaily, kassaLines, dailyPlan, runDaily } = require('./tg-daily.cjs');
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('  ✗ FAIL:', name, extra != null ? '→ ' + extra : ''); } };
 const J = x => JSON.stringify(x);
@@ -56,6 +57,33 @@ function world(o) {
     const t2 = composeDaily(Object.assign({}, DAILY, { late: { count: 2, sum: 1500000 }, payments: { count: 1, sum: 300000, byProvider: { terminal: 300000 } } }), null);
     ok('kechikib kiritilgan to‘lovlar alohida qator', /↩ Bugun kiritilgan, oldingi kunlar sanasi bilan: 2 ta · 1 500 000 so‘m/.test(t2), t2);
     ok('terminal nomi', /\(terminal 300 000\)/.test(t2), t2);
+  }
+
+  console.log('\n— kassa bloki va nazorat qatori (RP-05)');
+  {
+    ok('kassa moduli yo‘q — blok ham, nazorat qatori ham yo‘q', !/Kassa/.test(txt), txt);
+    const K = { live: true, balance: 2525000,
+      day: { day: '2026-11-02', status: 'closed', opening: 2000000, receipts: 2730000, payouts: 2205000, closing: 2525000, counted: 2525000, diff: -5000, n1: 7, n2: 4, voids: 1,
+             transfers: { inCount: 1, inAmount: 1000000, outCount: 1, outAmount: 1500000 } },
+      control: { reconcile: 0, openDay: null, staleOpenDay: null, unverifiedDays: 1, voids: 1, diff: -5000, undecidedShortages: 1, waitingApproval: 1, approvedUnpaid: 2, staleRefunds: 0, gaps: 0, fiscalExempt: 0, limitExceeded: false } };
+    const tk = composeDaily(Object.assign({}, DAILY, { kassa: K }), null);
+    ok('kassa: kun jamlari (kun boshi + kirim − chiqim = kun oxiri) — kunlik hisobot bilan bir xil raqamlar',
+      /🏦 Kassa \(yopilgan\): kun boshi 2 000 000 \+ kirim 2 730 000 \(7 ta\) − chiqim 2 205 000 \(4 ta\) = 2 525 000 so‘m/.test(tk), tk);
+    ok('kassa: sanash va kamomad', /Sanaldi: 2 525 000 so‘m · ⚠️ KAMOMAD 5 000 so‘m/.test(tk), tk);
+    ok('kassa: bank o‘tkazmalari alohida (kirim / xarajat emas)', /Bank \(ichki o‘tkazma\): olindi 1 000 000 · topshirildi 1 500 000 so‘m/.test(tk), tk);
+    ok('nazorat qatori: moslik, ochiq kun, bekor qilishlar, farq — doim; qolganlari — bor bo‘lsa',
+      /🔎 Kassa nazorati: moslik ✓ · yopilmagan o‘tgan kun yo‘q · bekor qilingan: 1 · ⚠️ farq: −5 000 · ⚠️ qarorsiz kamomad: 1 · tekshirilmagan kun: 1 · tasdiq kutmoqda: 1 · pul berilmagan: 2$/m.test(tk), tk);
+    ok('kassa bloki to‘lovlar va tizim qatorlari orasida, tartib saqlangan', tk.indexOf('✅ Kutilayotgan') < tk.indexOf('🏦 Kassa') && tk.indexOf('🔎 Kassa nazorati') < tk.indexOf('🩺 Tizim'), tk);
+    const K2 = { live: true, balance: 2530000, day: { status: 'open', opening: 2000000, receipts: 2730000, payouts: 2200000, closing: 2530000, counted: null, diff: null, n1: 7, n2: 3, voids: 0, transfers: { inAmount: 0, outAmount: 0 } },
+      control: { reconcile: 3, staleOpenDay: '2026-10-31', voids: 0, diff: 0, gaps: 1, limitExceeded: true, staleRefunds: 2, fiscalExempt: 1 } };
+    const t2 = composeDaily(Object.assign({}, DAILY, { kassa: K2 }), null);
+    ok('ochiq kun: «hali yopilmagan», sanash qatori yo‘q, bank qatori yo‘q', /🏦 Kassa \(ochiq\): .* = 2 530 000 so‘m\n   ⏳ Kun hali yopilmagan — pul sanalmagan\n🔎/.test(t2) && !/Sanaldi|Bank \(ichki/.test(t2), t2);
+    ok('nazorat: moslik buzilgan, eski ochiq kun, kechikkan qaytarish, bo‘shliq, fiskal cheksiz, limit',
+      /⚠️ moslik buzilgan: 3 ta · ⚠️ yopilmagan kun: 31\.10\.2026 · bekor qilingan: 0 · farq yo‘q · ⚠️ kechikkan qaytarish: 2 · ⚠️ raqamlashda bo‘shliq · fiskal cheksiz: 1 · ⚠️ qoldiq limitdan oshgan/.test(t2), t2);
+    const t3 = composeDaily(Object.assign({}, DAILY, { kassa: { live: false, balance: 500000, day: null, control: { reconcile: 0, voids: 0, diff: 0 } } }), null);
+    ok('harakatsiz kun: qoldiq; kassa ishga tushmagan — moslik hisoblanmaydi', /🏦 Kassa: bugun harakat yo‘q · qoldiq 500 000 so‘m\n🔎 Kassa nazorati: moslik — kassa hali ishga tushmagan · yopilmagan o‘tgan kun yo‘q · bekor qilingan: 0 · farq yo‘q/.test(t3), t3);
+    ok('ortiqcha', /⚠️ ortiqcha 1 200 so‘m/.test(kassaLines({ day: { status: 'verified', opening: 0, receipts: 0, payouts: 0, closing: 1200, counted: 1200, diff: 1200 }, control: { diff: 1200 } }).join('\n')));
+    ok('noto‘g‘ri kirish — bo‘sh', kassaLines(null).length === 0 && kassaLines('x').length === 0);
   }
 
   console.log('\n— yuborish: faqat faol Direktor, /sozlamalar, bir kunda bir marta');

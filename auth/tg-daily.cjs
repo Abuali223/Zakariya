@@ -5,7 +5,8 @@
  *   Qabul qiluvchilar — faol Direktorlarning tasdiqlangan Telegram bog'lanishlari (admin «Xabarnomalar»dan bir martalik
  *   havola bilan ulanadi; botdagi /sozlamalar'da o'chirsa — kelmaydi).
  *   Hisobot: bugungi to'lovlar (soni, summa, usul bo'yicha; biriktirilmaganlar), qarzdorlar (1 / 2 / 3+ oy), davomat
- *   kiritilishi, kutilayotgan tasdiqlar (navbatlar bo'yicha, muddati o'tganlari), xizmatlar holati («Tizim holati»).
+ *   kiritilishi, kutilayotgan tasdiqlar (navbatlar bo'yicha, muddati o'tganlari), kassa (kun jamlari, sanash, nazorat qatori —
+ *   kassa moduli ishlatilayotgan bo'lsa), xizmatlar holati («Tizim holati»).
  *
  *   cd ~/iqror-repo/auth && node tg-daily.cjs           # vaqti kelgan bo'lsa yuboradi
  *   node tg-daily.cjs --dry                             # matnni ko'rsatadi, hech narsa yubormaydi
@@ -22,6 +23,39 @@ const tkDay = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).toISOS
 const tkHour = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUTCHours();
 const tkDow = ms => new Date(tkDay(ms) + 'T12:00:00Z').getUTCDay();
 
+const dmy = s => String(s || '').slice(0, 10).split('-').reverse().join('.');
+// Kassa bloki (0–3 qator) va nazorat qatori. k — director_daily().kassa (yo'q bo'lsa — bo'sh ro'yxat).
+function kassaLines(k) {
+  if (!k || typeof k !== 'object') return [];
+  const L = [], kd = k.day, c = k.control || {}, n = v => Number(v) || 0;
+  if (kd) {
+    const st = { open: 'ochiq', closed: 'yopilgan', verified: 'tekshirilgan' }[kd.status] || String(kd.status || '');
+    L.push(`🏦 Kassa (${st}): kun boshi ${fmtNum(kd.opening)} + kirim ${fmtNum(kd.receipts)} (${n(kd.n1)} ta) − chiqim ${fmtNum(kd.payouts)} (${n(kd.n2)} ta) = ${fmtNum(kd.closing)} so‘m`);
+    if (kd.status === 'open') L.push('   ⏳ Kun hali yopilmagan — pul sanalmagan');
+    else {
+      const df = n(kd.diff);
+      L.push(`   Sanaldi: ${fmtNum(kd.counted)} so‘m · ${df === 0 ? 'farq yo‘q' : df < 0 ? `⚠️ KAMOMAD ${fmtNum(-df)} so‘m` : `⚠️ ortiqcha ${fmtNum(df)} so‘m`}`);
+    }
+    const tr = kd.transfers || {};
+    if (n(tr.inAmount) > 0 || n(tr.outAmount) > 0) L.push(`   Bank (ichki o‘tkazma): olindi ${fmtNum(tr.inAmount)} · topshirildi ${fmtNum(tr.outAmount)} so‘m`);
+  } else L.push(`🏦 Kassa: bugun harakat yo‘q · qoldiq ${fmtNum(k.balance)} so‘m`);
+  // nazorat qatori: moslik, ochiq kun, bekor qilishlar va farq — doim; qolganlari — faqat bor bo'lsa
+  const w = [];
+  w.push(n(c.reconcile) > 0 ? `⚠️ moslik buzilgan: ${n(c.reconcile)} ta` : (k.live === false ? 'moslik — kassa hali ishga tushmagan' : 'moslik ✓'));
+  w.push(c.staleOpenDay ? `⚠️ yopilmagan kun: ${dmy(c.staleOpenDay)}` : 'yopilmagan o‘tgan kun yo‘q');
+  w.push(`bekor qilingan: ${n(c.voids)}`);
+  w.push(n(c.diff) === 0 ? 'farq yo‘q' : `⚠️ farq: ${n(c.diff) > 0 ? '+' : '−'}${fmtNum(Math.abs(n(c.diff)))}`);
+  if (n(c.undecidedShortages) > 0) w.push(`⚠️ qarorsiz kamomad: ${n(c.undecidedShortages)}`);
+  if (n(c.unverifiedDays) > 0) w.push(`tekshirilmagan kun: ${n(c.unverifiedDays)}`);
+  if (n(c.waitingApproval) > 0) w.push(`tasdiq kutmoqda: ${n(c.waitingApproval)}`);
+  if (n(c.approvedUnpaid) > 0) w.push(`pul berilmagan: ${n(c.approvedUnpaid)}`);
+  if (n(c.staleRefunds) > 0) w.push(`⚠️ kechikkan qaytarish: ${n(c.staleRefunds)}`);
+  if (n(c.gaps) > 0) w.push('⚠️ raqamlashda bo‘shliq');
+  if (n(c.fiscalExempt) > 0) w.push(`fiskal cheksiz: ${n(c.fiscalExempt)}`);
+  if (c.limitExceeded === true) w.push('⚠️ qoldiq limitdan oshgan');
+  L.push(`🔎 Kassa nazorati: ${w.join(' · ')}`);
+  return L;
+}
 // Hisobot matni (Telegram, oddiy matn). d — director_daily(); checks — health runChecks() yoki null.
 function composeDaily(d, checks) {
   d = d || {};
@@ -41,6 +75,9 @@ function composeDaily(d, checks) {
   const pend = Object.keys(names).filter(k => Number(pe[k]) > 0).map(k => `${names[k]} ${pe[k]}`).join(' · ');
   const overdue = Object.keys(names).reduce((s, k) => s + (Number(od[k]) || 0), 0);
   L.push(`✅ Kutilayotgan tasdiqlar: ${pend || 'yo‘q'}${overdue ? ` (muddati o‘tgan: ${overdue})` : ''}`);
+  // Kassa bloki va nazorat qatori (moliya ish rejasi RP-05) — faqat kassa moduli ishlatilayotgan bo'lsa (d.kassa bor).
+  //   Raqamlar kassirning kunlik hisoboti (RP-02) va kassa kitobi (KO-4) bilan bir manbadan: director_daily → app.kassa_daily.
+  kassaLines(d.kassa).forEach(x => L.push(x));
   if (Array.isArray(checks)) {
     const bad = checks.filter(c => c && c.ok === false);
     L.push(bad.length ? `🩺 Tizim: ${bad.map(c => `❌ ${c.name}${c.info ? ' — ' + c.info : ''}`).join('; ')}` : '🩺 Tizim: hammasi ishlayapti');
@@ -126,4 +163,4 @@ if (require.main === module) {
     if (r.exit) process.exitCode = r.exit;
   })().catch(e => { console.error('tg-daily xato:', (e && e.message) || e); process.exit(1); });
 }
-module.exports = { composeDaily, dailyPlan, runDaily };
+module.exports = { composeDaily, kassaLines, dailyPlan, runDaily };

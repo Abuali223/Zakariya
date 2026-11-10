@@ -20,6 +20,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-links.sql ALOHIDA ishga tus
 --     staff_advances va expenses jadvallariga NAQD (yoki usuli ko'rsatilmagan) yozuvni to'g'ridan-to'g'ri qo'shib bo'lmaydi;
 --     kassa hujjatiga bog'langan qator o'zgartirilmaydi va o'chirilmaydi (faqat «Kassa»dan, hujjatni bekor qilish orqali).
 --   kassa_doc_pay / kassa_doc_void (kassa-docs.sql) shu fayldagi app.kassa_link_* funksiyalarini chaqiradi.
+--   Sinov kassasi (CT-20) hujjatlari bog'lanmaydi: «Buxgalteriya», avans va maosh jadvallariga hech narsa yozilmaydi.
+--   app.kassa_reconcile(from, to) — moslik tekshiruvi (P1, P4, P5, P8): nazorat ro'yxati va Telegram nazorat qatori shundan.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 
@@ -318,6 +320,8 @@ declare
   v_doc public.cash_docs%rowtype; s jsonb; r jsonb; v_before text[]; v_code text; l record; v_cat text;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
+  -- Sinov kassasi (CT-20): hujjatlari va raqamlari alohida — «Buxgalteriya», avans va qaytarish jadvallariga HECH NARSA yozilmaydi.
+  if coalesce((select k."isTest" from public.cash_desks k where k.id = v_doc.desk), false) then return; end if;
   if v_doc.op = 'out_refund' then
     s := v_doc."sourceSnapshot";
     if s is null or v_doc."sourceTable" is distinct from 'refunds' then
@@ -367,6 +371,7 @@ language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_doc public.cash_docs%rowtype;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
+  if coalesce((select k."isTest" from public.cash_desks k where k.id = v_doc.desk), false) then return; end if;   -- sinov kassasi: bog'langan yozuv yo'q
   if v_doc.op = 'out_refund' then
     raise exception 'Qaytarish orderi bekor qilinmaydi — xato bo''lsa, pulni yangi to''lov sifatida qayta qabul qiling' using errcode = '42501', hint = 'kassa:linked_doc';
   elsif v_doc.op = 'out_advance' then
@@ -378,5 +383,70 @@ begin
   end if;
 end $$;
 revoke all on function app.kassa_link_void(text, text, text) from public, anon, authenticated;
+
+-- ---------- Moslik (§8.1: P1, P4, P5, P8) — kassa hujjatlari ↔ pul yozuvlari, kassa ishga tushgan kundan ----------
+--   P1  naqd o'quv to'lovi = KO-1:   pay  — kirim orderisiz (yoki summasi / kuni boshqa) naqd to'lov;
+--                                     doc  — to'lov yozuvi yo'q (yoki summasi boshqa) o'quv to'lovi orderi;
+--   P4  naqd xarajat = KO-2:         row  — chiqim orderisiz naqd (usuli ko'rsatilmagan) «Buxgalteriya» xarajati;
+--                                     doc  — «Buxgalteriya»ga ko'chmagan (summasi mos emas) xarajat orderi;
+--   P5  maosh va avans = KO-2:       row  — chiqim orderisiz naqd (usulsiz) maosh / avans yozuvi; doc — yozuvsiz maosh / avans orderi;
+--   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi.
+--   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
+create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_live date; v_to date := coalesce(p_to, app.fin_today()); v_from date; v_f text; v_t text;
+  v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p5r int; v_p5d int; v_p8r int; v_p8d int;
+begin
+  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
+  if v_live is null or v_live > v_to then return jsonb_build_object('live', false, 'total', 0); end if;
+  v_from := greatest(coalesce(p_from, v_live), v_live);
+  v_f := to_char(v_from, 'YYYY-MM-DD'); v_t := to_char(v_to, 'YYYY-MM-DD');
+  -- P1
+  select count(*), coalesce(sum(r.amount), 0) into v_p1p, v_p1ps
+    from app.fin_receipts(v_from, v_to) r
+   where r.provider = 'cash'
+     and not exists (select 1 from public.payments p join public.cash_docs c on c.id = p."cashDocId"
+                      where p.id = r.id and c.status = 'posted' and c.op = 'in_tuition' and c.amount = r.amount and c."businessDay" = r.day);
+  select count(*) into v_p1d from public.cash_docs c
+   where c.desk = 'main' and c.op = 'in_tuition' and c.status = 'posted' and c."businessDay" between v_from and v_to
+     and not exists (select 1 from public.payments p where p.id = c."sourceId" and p."cashDocId" = c.id and p.amount = c.amount
+                                                       and coalesce(p.status, '') <> 'canceled');
+  -- P4
+  select count(*) into v_p4r from public.expenses e
+   where e.date between v_f and v_t and coalesce(e.id, '') not like 'payroll\_\_%' and coalesce(e.method, '') in ('', 'cash')
+     and not exists (select 1 from public.cash_docs c where c.id = e."cashDocId" and c.status = 'posted' and c.op = 'out_expense');
+  select count(*) into v_p4d from public.cash_docs c
+   where c.desk = 'main' and c.op = 'out_expense' and c.status = 'posted' and c."businessDay" between v_from and v_to
+     and coalesce((select sum(e.amount) from public.expenses e where e."cashDocId" = c.id), 0) <> c.amount;
+  -- P5
+  select (select count(*) from public.salary_payments s
+           where s.date between v_f and v_t and coalesce(s.method, '') in ('', 'cash')
+             and not exists (select 1 from public.cash_docs c where c.id = s."cashDocId" and c.status = 'posted' and c.op = 'out_salary'))
+       + (select count(*) from public.staff_advances a
+           where a.date between v_f and v_t and coalesce(a.method, '') in ('', 'cash')
+             and not exists (select 1 from public.cash_docs c where c.id = a."cashDocId" and c.status = 'posted' and c.op = 'out_advance'))
+    into v_p5r;
+  select count(*) into v_p5d from public.cash_docs c
+   where c.desk = 'main' and c.op in ('out_salary', 'out_advance') and c.status = 'posted' and c."businessDay" between v_from and v_to
+     and not (case when c.op = 'out_salary'
+                   then exists (select 1 from public.salary_payments s where s."cashDocId" = c.id and coalesce(s.paid, 0) = c.amount)
+                   else exists (select 1 from public.staff_advances a where a."cashDocId" = c.id and coalesce(a.amount, 0) = c.amount) end);
+  -- P8
+  select count(*) into v_p8r from public.refunds r
+   where r."createdAt" >= (v_from::timestamp at time zone 'Asia/Tashkent') and r."createdAt" < ((v_to + 1)::timestamp at time zone 'Asia/Tashkent')
+     and coalesce(r.method, '') = 'cash'
+     and not exists (select 1 from public.cash_docs c where c.id = r."cashDocId" and c.status = 'posted' and c.op = 'out_refund');
+  select count(*) into v_p8d from public.cash_docs c
+   where c.desk = 'main' and c.op = 'out_refund' and c.status = 'posted' and c."businessDay" between v_from and v_to
+     and not exists (select 1 from public.refunds r where r."cashDocId" = c.id);
+  return jsonb_build_object('live', true, 'from', v_from, 'to', v_to,
+    'p1', jsonb_build_object('pay', v_p1p, 'paySum', v_p1ps, 'doc', v_p1d),
+    'p4', jsonb_build_object('row', v_p4r, 'doc', v_p4d),
+    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d),
+    'p8', jsonb_build_object('row', v_p8r, 'doc', v_p8d),
+    'total', v_p1p + v_p1d + v_p4r + v_p4d + v_p5r + v_p5d + v_p8r + v_p8d);
+end $$;
+revoke all on function app.kassa_reconcile(date, date) from public, anon, authenticated;
 
 notify pgrst, 'reload schema';

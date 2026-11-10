@@ -2,7 +2,10 @@
 // fin-print.js — kassa hujjatlarining chop etish shakllari (moliya ish rejasi §4.15, F1.14).
 //   docHtml(doc, ctx, W)            — KO-1 kirim orderi + «ПАТТА» yoki KO-2 chiqim orderi (ACT — qisqa dalolatnoma);
 //   bookHtml(book, ctx, W)          — KO-4: kassa kitobi varag'i va «Kassir hisoboti» (2 nusxa; varaqda qatorlar soni qat'iy);
-//   countHtml(count, book, ctx, W)  — kassadagi naqd pulni sanash / smena topshirish-qabul dalolatnomasi.
+//   countHtml(count, book, ctx, W)  — kassadagi naqd pulni sanash / smena topshirish-qabul dalolatnomasi;
+//   reportHtml(book, ctx, W)        — kassirning kunlik hisoboti (RP-02, «kimdan / kimga qancha»): kun yakuni, kirim va chiqim
+//                                     orderlari, tomon va statiya bo'yicha jamlar, ichki o'tkazmalar, kanallar, kutilayotganlar, limit.
+//                                     Ichki hisobot: ilova tilida (o'zbek lotin); chop etish tili rus bo'lsa — ruscha.
 //   ctx: { org, signatories, names, isTest, lang?, mark?: { mode: 'original' | 'copy' | 'reissue', replaced, draft },
 //          printedBy, printedAt }
 //   W — fin-words.js moduli (sumWords, countWords, fmtMoney, fmtDateLong).
@@ -463,4 +466,173 @@ export function countHtml(count, book, ctx, W) {
     ${comm.map(m => sig(m.title || t.member, m.name)).join('')}
     ${count.kind === 'handover' ? sig(t.handFrom, fromName) + sig(t.handTo, toName) : sig(t.cashier, cashier)}
     ${footer({ id: count.id }, ctx, t)}</div>`);
+}
+
+// ---------------------------------------------------------------- RP-02: kassirning kunlik hisoboti («kimdan / kimga qancha»)
+// Ichki boshqaruv hisoboti (qat'iy shakl emas): ilova tilida — o'zbek lotin; chop etish tili rus bo'lsa — ruscha. Ma'lumot —
+//   kassa_day_book javobi: KO-4 bilan AYNAN bir manba, shuning uchun jamlar bir xil. Uzun kunlarda bir necha varaqqa o'tadi.
+const R = {
+  uz: {
+    title: 'KASSIRNING KUNLIK HISOBOTI', state: { open: 'kun ochiq', closed: 'kun yopilgan', verified: 'kun tekshirilgan' },
+    sum: 'Kun yakuni', opening: 'Kun boshiga qoldiq', receipts: 'Kirim', payouts: 'Chiqim', closing: 'Kun oxiriga qoldiq', orders: n => `${n} ta order`,
+    counted: 'Sanab chiqilgan naqd pul', pending: 'Hali o‘tkazilmagan yozuvlar', pcs: 'ta', diff: 'Farq', diffNone: 'yo‘q',
+    shortage: 'kamomad', surplus: 'ortiqcha', notCounted: 'Kun hali yopilmagan — pul sanalmagan.', voids: 'Bekor qilingan hujjatlar',
+    ko1: 'Kirim orderlari', ko2: 'Chiqim orderlari', no: '№', time: 'Vaqt', from: 'Kimdan', to: 'Kimga', what: 'Operatsiya, asos', art: 'Statiya',
+    amount: 'Summa, so‘m', total: 'Jami', none: 'Hujjat yo‘q.', voided: 'bekor qilingan', sys: 'tizim',
+    byFrom: 'Kimdan qancha (kirim — tomon bo‘yicha)', byTo: 'Kimga qancha (chiqim — tomon bo‘yicha)', party: 'Tomon', kind: 'Turi', docs: 'Hujjat',
+    ptype: { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', bank: 'bank', founder: 'ta’sischi', other: 'boshqa (yozilgan)', system: 'tizim hujjati', none: '—' },
+    byArt: 'Statiya bo‘yicha', code: 'Kod', artName: 'Statiya', acct: 'Hisobvaraq', inn: 'Kirim', out: 'Chiqim', transfer: 'ichki o‘tkazma',
+    tr: 'Ichki o‘tkazmalar (daromad ham, xarajat ham emas)', trIn: 'Bankdan naqd olindi', trOut: 'Bankka topshirildi',
+    ch: 'Tushumlar kanallar bo‘yicha (ma’lumot uchun — naqd bo‘lmaganlari kassa kitobiga kirmaydi)', channel: 'Kanal', cnt: 'Soni',
+    prov: { cash: 'naqd', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'o‘tkazma', bank: 'bank', terminal: 'terminal', boshqa: 'boshqa', fix: 'tuzatish', offset: 'o‘zaro hisob' },
+    p1: (a, b) => `Naqd o‘quv to‘lovi: to‘lovlar jadvalida ${a} — kassa kirim orderlarida ${b}`, p1ok: 'mos', p1bad: 'FARQ BOR — tekshiring',
+    pend: 'Kutilayotganlar (hisobot olingan paytda)', waiting: 'Tasdiq kutayotgan so‘rovlar', toPay: 'Tasdiqlangan, pul hali berilmagan / qabul qilinmagan',
+    limit: 'Kassa limiti', limitNone: 'Kassa limiti belgilanmagan.', limitOk: 'kun oxiridagi qoldiq limitdan oshmagan',
+    limitOver: 'KUN OXIRIDAGI QOLDIQ LIMITDAN OSHGAN — ortiqchasi bankka topshiriladi',
+    cashier: 'Kassir', checked: 'Tekshirdi', draft: 'QORALAMA', test: 'SINOV', printed: 'chop etildi', day: 'Kun',
+  },
+  ru: {
+    title: 'ЕЖЕДНЕВНЫЙ ОТЧЁТ КАССИРА', state: { open: 'день открыт', closed: 'день закрыт', verified: 'день проверен' },
+    sum: 'Итоги дня', opening: 'Остаток на начало дня', receipts: 'Приход', payouts: 'Расход', closing: 'Остаток на конец дня', orders: n => `ордеров: ${n}`,
+    counted: 'Пересчитано наличных денег', pending: 'Ещё не проведённые записи', pcs: 'шт.', diff: 'Расхождение', diffNone: 'нет',
+    shortage: 'недостача', surplus: 'излишек', notCounted: 'День ещё не закрыт — деньги не пересчитаны.', voids: 'Аннулированные документы',
+    ko1: 'Приходные ордера', ko2: 'Расходные ордера', no: '№', time: 'Время', from: 'От кого', to: 'Кому', what: 'Операция, основание', art: 'Статья',
+    amount: 'Сумма, сум', total: 'Итого', none: 'Документов нет.', voided: 'аннулирован', sys: 'система',
+    byFrom: 'От кого сколько (приход — по контрагентам)', byTo: 'Кому сколько (расход — по контрагентам)', party: 'Сторона', kind: 'Тип', docs: 'Док.',
+    ptype: { student: 'учащийся', employee: 'сотрудник', counterparty: 'контрагент', bank: 'банк', founder: 'учредитель', other: 'прочее (вписано)', system: 'системный документ', none: '—' },
+    byArt: 'По статьям', code: 'Код', artName: 'Статья', acct: 'Счёт', inn: 'Приход', out: 'Расход', transfer: 'внутреннее перемещение',
+    tr: 'Внутренние перемещения (не доход и не расход)', trIn: 'Получено наличных из банка', trOut: 'Сдано в банк',
+    ch: 'Поступления по каналам (справочно — безналичные в кассовую книгу не входят)', channel: 'Канал', cnt: 'Кол-во',
+    prov: { cash: 'наличные', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'перевод', bank: 'банк', terminal: 'терминал', boshqa: 'прочее', fix: 'корректировка', offset: 'взаимозачёт' },
+    p1: (a, b) => `Наличная оплата за обучение: в таблице платежей ${a} — в приходных ордерах ${b}`, p1ok: 'совпадает', p1bad: 'ЕСТЬ РАСХОЖДЕНИЕ — проверьте',
+    pend: 'Ожидают (на момент отчёта)', waiting: 'Заявки, ожидающие утверждения', toPay: 'Утверждено, деньги ещё не выданы / не приняты',
+    limit: 'Лимит кассы', limitNone: 'Лимит кассы не установлен.', limitOk: 'остаток на конец дня не превышает лимит',
+    limitOver: 'ОСТАТОК НА КОНЕЦ ДНЯ ПРЕВЫШАЕТ ЛИМИТ — излишек сдаётся в банк',
+    cashier: 'Кассир', checked: 'Проверил', draft: 'ЧЕРНОВИК', test: 'ТЕСТ', printed: 'напечатано', day: 'День',
+  },
+};
+const CSS_RP = `
+@page{size:A4 portrait;margin:12mm 10mm 12mm 18mm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Times New Roman','Liberation Serif','Noto Serif','DejaVu Serif',serif;font-size:9.5pt;line-height:1.25;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:3mm}
+.orgb{font-size:10pt}.orgb .sub{font-size:8pt}
+.marks{display:flex;flex-wrap:wrap;gap:1.5mm;justify-content:flex-end}
+.mark{border:1.2pt solid #000;padding:.4mm 2mm;font-weight:bold;font-size:9pt;letter-spacing:.4pt;white-space:nowrap}
+h1{font-size:13pt;text-align:center;margin:3mm 0 0}
+.dt{text-align:center;margin-top:1mm}
+h2{font-size:10pt;margin:4mm 0 1.2mm;break-after:avoid;page-break-after:avoid}
+table{border-collapse:collapse;width:100%}
+th,td{border:.5pt solid #000;padding:.6mm 1.2mm;vertical-align:top;overflow-wrap:anywhere}
+th{font-size:8pt;text-align:center;background:#eee}
+thead{display:table-header-group}
+tr{break-inside:avoid;page-break-inside:avoid}
+.r{text-align:right;white-space:nowrap}.c{text-align:center;white-space:nowrap}.b{font-weight:bold}
+.sm{font-size:8pt}
+.vd td{color:#444}
+p{margin:1.2mm 0 0}
+.warn{font-weight:bold;border:.8pt solid #000;padding:.8mm 1.5mm;margin-top:1.5mm}
+.sigs{display:flex;gap:10mm;margin-top:7mm;break-inside:avoid;page-break-inside:avoid}
+.sig{flex:1;display:flex;align-items:flex-end;gap:2mm}
+.sig .sl{white-space:nowrap}.sig .line{flex:1;min-width:18mm;border-bottom:.4pt solid #000;height:4mm}.sig .sn{white-space:nowrap}
+.ft{font-size:6.5pt;color:#333;margin-top:3mm;overflow-wrap:anywhere}
+`;
+export function reportHtml(book, ctx, W) {
+  ctx = ctx || {}; book = book || {};
+  const ru = langOf(ctx) === 'ru', r = ru ? R.ru : R.uz, lang = ru ? 'ru' : 'uz-latn', t = T[lang], o = ctx.org || {}, d = book.day || {};
+  const closed = !!d.status && d.status !== 'open';
+  const all = (book.docs || []).filter(x => x.form === 'KO1' || x.form === 'KO2');
+  const receipts = closed ? num(d.receipts) : num(d.receiptsLive), payouts = closed ? num(d.payouts) : num(d.payoutsLive);
+  const closing = closed ? num(d.closing) : num(d.balance);
+  const m = v => esc(money(W, v));
+  const rules = {}; (ctx.rules || []).forEach(x => { if (x && x.op) rules[x.op] = x; });
+  const opName = op => { const x = rules[op]; return x ? ((ru && x.nameRu) || x.nameUz || op) : (op || ''); };
+  const hm = ts => { const s = stamp(ts); return s ? s.slice(11) : ''; };
+  const posted = f => all.filter(x => x.form === f && x.status === 'posted');
+  const n1 = posted('KO1').length, n2 = posted('KO2').length, nVoid = all.filter(x => x.status === 'void').length;
+  const diffDoc = d.diffDocId ? all.find(x => x.id === d.diffDocId) : null;
+  const diffTxt = num(d.diff) === 0 ? r.diffNone : `${num(d.diff) < 0 ? r.shortage : r.surplus} ${money(W, Math.abs(num(d.diff)))}${diffDoc ? ' — ' + docNo(diffDoc, t) : ''}`;
+  const kv = (k, v, cls) => `<tr><td>${k}</td><td class="r${cls ? ' ' + cls : ''}" style="width:42mm">${v}</td></tr>`;
+  const marks = []; if (ctx.isTest) marks.push(r.test); if (!closed) marks.push(r.draft);
+
+  // 1) kun yakuni
+  const sum = `<table><tbody>
+    ${kv(esc(r.opening), m(d.opening))}
+    ${kv(`${esc(r.receipts)} (${esc(r.orders(n1))})`, m(receipts))}
+    ${kv(`${esc(r.payouts)} (${esc(r.orders(n2))})`, m(payouts))}
+    ${kv(`<b>${esc(r.closing)}</b>`, m(closing), 'b')}
+    ${closed ? kv(esc(r.counted), m(d.counted)) + (num(d.pendingSum) > 0 ? kv(`${esc(r.pending)} (${esc(String(num(d.pendingCount)))} ${esc(r.pcs)})`, m(d.pendingSum)) : '') + kv(esc(r.diff), `<b>${esc(diffTxt)}</b>`) : ''}
+    ${nVoid ? kv(esc(r.voids), `${esc(String(nVoid))} ${esc(r.pcs)}`) : ''}
+  </tbody></table>${closed ? '' : `<p>${esc(r.notCounted)}</p>`}`;
+
+  // 2–3) orderlar ro'yxati
+  const list = (form, who) => {
+    const xs = all.filter(x => x.form === form);
+    if (!xs.length) return `<p>${esc(r.none)}</p>`;
+    const rows = xs.map(x => {
+      const tx = texts(x, t), v = x.status === 'void';
+      const arts = [...new Set((x.lines || []).filter(l => l.cash !== false).map(l => l.articleId || '').filter(Boolean))].join(', ');
+      const what = [opName(x.op), tx.basis].filter(Boolean).join(' — ');
+      return `<tr${v ? ' class="vd"' : ''}><td class="c">${esc(docNo(x, t))}</td><td class="c">${esc(hm(x.postedAt))}</td><td>${v ? `<s>${esc(tx.party)}</s>` : esc(tx.party)}</td>
+        <td>${esc(what)}${v ? ` <span class="sm">(${esc(r.voided)}${x.voidReason ? ': ' + esc(x.voidReason) : ''})</span>` : ''}</td><td class="c sm">${esc(arts)}</td>
+        <td class="r">${v ? `<s>${m(x.amount)}</s>` : m(x.amount)}</td></tr>`;
+    }).join('');
+    return `<table><thead><tr><th style="width:15mm">${esc(r.no)}</th><th style="width:12mm">${esc(r.time)}</th><th style="width:46mm">${esc(who)}</th><th>${esc(r.what)}</th><th style="width:17mm">${esc(r.art)}</th><th style="width:29mm">${esc(r.amount)}</th></tr></thead>
+      <tbody>${rows}<tr><td colspan="5" class="b">${esc(r.total)}</td><td class="r b">${m(form === 'KO1' ? receipts : payouts)}</td></tr></tbody></table>`;
+  };
+
+  // 4–5) tomon bo'yicha
+  const partyName = x => x.partyType === 'system' ? (x.ops || []).map(op => op === 'in_surplus' ? t.surplus : op === 'out_shortage' ? t.shortage : opName(op)).join(', ') : (x.name || '—');
+  const byParty = form => {
+    const xs = (book.byParty || []).filter(x => x.form === form);
+    if (!xs.length) return '';
+    return `<table><thead><tr><th>${esc(r.party)}</th><th style="width:36mm">${esc(r.kind)}</th><th style="width:15mm">${esc(r.docs)}</th><th style="width:29mm">${esc(r.amount)}</th></tr></thead><tbody>
+      ${xs.map(x => `<tr><td>${esc(partyName(x))}${x.partyType === 'student' && x.partyId ? ` <span class="sm">(${esc(x.partyId)})</span>` : ''}</td><td>${esc(r.ptype[x.partyType] || x.partyType || '')}</td><td class="c">${esc(String(num(x.count)))}</td><td class="r">${m(x.amount)}</td></tr>`).join('')}
+      <tr><td colspan="2" class="b">${esc(r.total)}</td><td class="c b">${esc(String(xs.reduce((s, x) => s + num(x.count), 0)))}</td><td class="r b">${m(xs.reduce((s, x) => s + num(x.amount), 0))}</td></tr></tbody></table>`;
+  };
+
+  // 6) statiya bo'yicha
+  const arts = book.byArticle || [];
+  const artSec = arts.length ? `<table><thead><tr><th style="width:15mm">${esc(r.code)}</th><th>${esc(r.artName)}</th><th style="width:17mm">${esc(r.acct)}</th><th style="width:29mm">${esc(r.inn)}</th><th style="width:29mm">${esc(r.out)}</th></tr></thead><tbody>
+      ${arts.map(x => { const isIn = x.form === 'KO1';
+        return `<tr><td class="c">${esc(x.articleId || '—')}</td><td>${esc((ru && x.nameRu) || x.nameUz || '')}${x.transfer ? ` <span class="sm">(${esc(r.transfer)})</span>` : ''}</td><td class="c">${esc(isIn ? x.credit : x.debit)}</td><td class="r">${isIn ? m(x.amount) : ''}</td><td class="r">${isIn ? '' : m(x.amount)}</td></tr>`; }).join('')}
+      <tr><td colspan="3" class="b">${esc(r.total)}</td><td class="r b">${m(arts.filter(x => x.form === 'KO1').reduce((s, x) => s + num(x.amount), 0))}</td><td class="r b">${m(arts.filter(x => x.form === 'KO2').reduce((s, x) => s + num(x.amount), 0))}</td></tr></tbody></table>` : '';
+
+  // 7) ichki o'tkazmalar
+  const tr = book.transfers || {};
+  const trSec = (num(tr.inCount) || num(tr.outCount)) ? `<table><tbody>
+      ${kv(`${esc(r.trIn)} (${esc(String(num(tr.inCount)))} ${esc(r.pcs)})`, m(tr.inAmount))}
+      ${kv(`${esc(r.trOut)} (${esc(String(num(tr.outCount)))} ${esc(r.pcs)})`, m(tr.outAmount))}</tbody></table>` : '';
+
+  // 8) kanallar (ma'lumot) + naqd o'quv to'lovi mosligi
+  const ch = book.channels || [];
+  const tuitionDocs = all.filter(x => x.op === 'in_tuition' && x.status === 'posted').reduce((s, x) => s + num(x.amount), 0);
+  const cashCh = ch.filter(x => x.provider === 'cash').reduce((s, x) => s + num(x.amount), 0);
+  const chSec = (ch.length || tuitionDocs) && !ctx.isTest ? `${ch.length ? `<table><thead><tr><th>${esc(r.channel)}</th><th style="width:20mm">${esc(r.cnt)}</th><th style="width:29mm">${esc(r.amount)}</th></tr></thead><tbody>
+      ${ch.map(x => `<tr><td>${esc(r.prov[x.provider] || x.provider)}</td><td class="c">${esc(String(num(x.count)))}</td><td class="r">${m(x.amount)}</td></tr>`).join('')}
+      <tr><td class="b">${esc(r.total)}</td><td class="c b">${esc(String(ch.reduce((s, x) => s + num(x.count), 0)))}</td><td class="r b">${m(ch.reduce((s, x) => s + num(x.amount), 0))}</td></tr></tbody></table>` : ''}
+      <p${Math.abs(cashCh - tuitionDocs) >= 0.005 ? ' class="warn"' : ''}>${esc(r.p1(money(W, cashCh), money(W, tuitionDocs)))}: ${esc(Math.abs(cashCh - tuitionDocs) < 0.005 ? r.p1ok : r.p1bad)}.</p>` : '';
+
+  // 9) kutilayotganlar, 10) limit
+  const pe = book.pending || {};
+  const peSec = (num(pe.waiting) || num(pe.toPay)) ? `<table><tbody>
+      ${num(pe.waiting) ? kv(`${esc(r.waiting)} (${esc(String(num(pe.waiting)))} ${esc(r.pcs)})`, m(pe.waitingSum)) : ''}
+      ${num(pe.toPay) ? kv(`${esc(r.toPay)} (${esc(String(num(pe.toPay)))} ${esc(r.pcs)})`, m(pe.toPaySum)) : ''}</tbody></table>` : '';
+  const lim = book.limit || {};
+  const limSec = `${lim.set ? `<p${lim.exceeded ? ' class="warn"' : ''}>${esc(r.limit)}: ${m(lim.cashLimit)} — ${esc(lim.exceeded ? r.limitOver : r.limitOk)}.</p>` : `<p>${esc(r.limitNone)}</p>`}`;
+
+  const cashier = nameOf(ctx, d.cashierUid) || nameOf(ctx, d.closedBy), verifier = d.verifiedBy ? nameOf(ctx, d.verifiedBy) : '';
+  const at = stamp(ctx.printedAt), ft = [`${r.day}: ${d.id || ''}${closed && d.hash ? ' · ' + String(d.hash).slice(0, 16) : ''}`];
+  if (at || ctx.printedBy) ft.push(`${r.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
+  const title = `${r.title} — ${dmy(d.day)}`;
+  // bo'limlar — bo'sh bo'lgani tushib qoladi, raqamlar ketma-ket
+  const secs = [[r.sum, sum], [r.ko1, list('KO1', r.from)], [r.ko2, list('KO2', r.to)], [r.byFrom, byParty('KO1')], [r.byTo, byParty('KO2')],
+    [r.byArt, artSec], [r.tr, trSec], [r.ch, chSec], [r.pend, peSec], [r.limit, limSec]].filter(x => x[1]);
+  const body = `<div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <h1>${esc(r.title)}</h1><div class="dt">${esc(W.fmtDateLong(iso(d.day), lang))} · ${esc(r.state[d.status] || '')}</div>
+    ${secs.map((x, i) => `<h2>${i + 1}. ${esc(x[0])}</h2>${x[1]}`).join('')}
+    <div class="sigs">${sig(r.cashier, cashier)}${sig(r.checked, verifier)}</div>
+    <div class="ft">${esc(ft.join(' · '))}</div>`;
+  return `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS_RP}</style></head><body>${body}</body></html>`;
 }

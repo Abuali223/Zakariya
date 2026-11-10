@@ -1460,6 +1460,40 @@ bo'lsa) yoqiladi; kassasiz serverda sahifa avvalgidek ishlaydi (brauzer sinovi 1
   eski oqimlar — kassa ishga tushmagan holatda 12 va kassasiz jonli zanjirda 10 + 12.
 - **Qilinmagan:** o'zaro hisob (`nc_offset`); mustaqil (boshqa agentlar bilan) ko'rik.
 
+## 59) Moliya, 1a-bosqich: kunlik hisobot, nazorat ro'yxati, Telegram kassa bloki (F1.15; faqat lokal sinov zanjirida) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN** (kassa fayllari «--dev \ir»). Jonli zanjirga tegadigan yagona o'zgarish — `telegram.sql`
+dagi `director_daily`: kassa funksiyasi (`app.kassa_daily`) bazada BO'LSA uni dinamik chaqiradi; bo'lmasa (hozirgi jonli
+holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87, `test-audit-fixes` 36, `test-public-close` 92).
+
+- **Kunlik hisobot — RP-02 («kimdan / kimga qancha»).** `kassa_day_book` javobi kengaydi: `byParty` (tomon KALITI bo'yicha —
+  o'quvchi kodi, xodim, kontragent; «boshqa» — yozilgan nom bo'yicha, harf kattaligi va bo'shliq farqisiz; tizim hujjati
+  alohida; nom — ma'lumotnomadan), `byArticle` (statiya nomi va «ichki o'tkazma» belgisi bilan), `transfers` (bankdan
+  olingan / bankka topshirilgan — daromad ham, xarajat ham emas), `channels` (shu kunda barcha usullar bo'yicha tushum —
+  ma'lumot uchun), `pending`, `limit`. KO-4 ham, hisobot ham shu bitta javobdan tuziladi — jamlari bir xil (qabul mezoni
+  «RP-02 = KO-4»). `fin-print.js: reportHtml` — A4, bir necha varaqqa o'tadi (jadval sarlavhasi takrorlanadi), 10 bo'lim
+  (bo'sh bo'limlar tushib qoladi), ochiq kunda «QORALAMA», sinov kassasida «SINOV»; naqd o'quv to'lovi mosligi qatori
+  («to'lovlar jadvalida X — kirim orderlarida Y: mos / FARQ BOR»). Ichki hisobot — ilova tilida (lotin); chop etish tili
+  rus bo'lsa — ruscha. Chop etish jurnaliga yozilmaydi (raqamli hujjat emas). «Kassa»da: ochiq kun kartasida va kun
+  oynasida «🖨 Kunlik hisobot»; kun oynasida «Kimdan / kimga qancha» jadvali.
+- **Nazorat ro'yxati — RP-06.** `kassa_checks` kengaydi: moslik (`app.kassa_reconcile`, `kassa-links.sql`: P1 naqd o'quv
+  to'lovi = KO-1, P4 naqd xarajat = KO-2, P5 maosh / avans = KO-2, P8 naqd qaytarish = KO-2 — har ikki tomondan, kassa ishga
+  tushgan kundan), chop etilmagan KO-4, oflayn yozuv bilan yopilgan kunlar, limit (hozir va 30 kunda necha marta oshgan),
+  hisobdorlardagi pul (berilgan − naqd qaytarilgan, eng eski ochiq sana, ish kunlari, 3 ish kunidan oshsa — muddati
+  o'tgan), rahbar / ta'sischiga berilgan pul (shu oy / oldingi oylar). `fin-kassa.js: controlRows` — 20 tekshiruv, daraja
+  (muhim / diqqat / ma'lumot / joyida) va matn; karta «Kassa» sahifasida 2-ro'yxat va Direktorga ko'rinadi (kassirga yo'q).
+- **Telegram — RP-05.** `app.kassa_daily(day)`: kun varag'i jamlari (kun boshi + kirim − chiqim = kun oxiri, hujjatlar soni,
+  sanalgan, farq, bank o'tkazmalari) va nazorat qatori (moslik, yopilmagan o'tgan kun, bekor qilishlar, farq — doim;
+  qarorsiz kamomad, tekshirilmagan kun, tasdiq kutayotgan / berilmagan so'rov, kechikkan qaytarish, raqam bo'shlig'i,
+  fiskal cheksiz, limit — bor bo'lsa). `auth/tg-daily.cjs: kassaLines` — matn; `--dry` shu matnni ko'rsatadi.
+- **Tuzatish (CT-20):** sinov kassasidagi xarajat / avans orderi «Buxgalteriya» (`expenses`) va avans jadvaliga yozilmaydi
+  (ilgari yozilib qolar edi — jonli «Buxgalteriya»ni ifloslantirishi mumkin edi); bekor qilish ham bog'langan yozuvsiz.
+- **Sinovlar:** `test-kassa-report.sql` 52/52 (yangi); `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql`
+  68, `test-fin-prereq.sql` 87 (ikkala zanjir), `test-kassa-race.sh` 22; `fin-print.test.mjs` 16, `fin-kassa.test.mjs` 3
+  (yangi), `fin-words.test.mjs` 7, `tg-daily.test.cjs` 39; brauzer: `e2e-kassa4` 24 (v1 va v2; 1440 va 390 px), oldingi
+  stsenariylar va eski oqimlar qayta o'tkazildi.
+- **Qilinmagan:** o'zaro hisob (`nc_offset`); F1.11, F1.16–F1.19; mustaqil (boshqa agentlar bilan) ko'rik.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

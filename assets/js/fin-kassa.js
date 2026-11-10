@@ -3,12 +3,13 @@
 //   Faqat mavjud komponentlar (.page-head, .card, .acc-kpis, .tablewrap, .btn, .chip, #modal) — yangi CSS yo'q; v1 va v2 da bir xil.
 //   Barcha yozish amallari — serverdagi kassa funksiyalari (migration/kassa-docs.sql, kassa-day.sql) orqali; bu fayl faqat
 //   ko'rsatadi va so'rov yuboradi. Raqam, sana, qoldiq va huquqni SERVER belgilaydi.
+//   F1.15: kunlik hisobot (RP-02, «kimdan / kimga qancha» — kun oynasida va chop etishda) va nazorat ro'yxati (RP-06).
 //   Kirish:  renderKassa(ctx)            — sahifa
 //            approvalCount(ctx)          — «Tasdiqlash» bo'limidagi navbat soni
 //            approvalRender(ctx, el)     — «Tasdiqlash» bo'limidagi navbat ro'yxati
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
-const ST = { desk: 'main', ov: null, refs: null, people: null, students: null };
+const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -65,6 +66,24 @@ async function reload() {
   catch (e) { body.innerHTML = `<div class="card"><div class="empty">Kassa ma’lumotini o‘qib bo‘lmadi: ${esc(errText(e))}</div></div>`; return; }
   if (!$('#ks-body')) return;                    // boshqa bo'limga o'tilgan
   draw();
+  loadControl();                                 // nazorat ro'yxati — alohida so'rov, sahifani kutdirmaydi
+}
+// Nazorat ro'yxati (RP-06): 2-ro'yxat (Moliya menejeri, buxgalter) va Direktor uchun. Ketma-ket ikki so'rovdan faqat OXIRGISINING
+//   javobi ko'rsatiladi (oldingisi kech kelsa — tashlab yuboriladi), aks holda eskirgan holat yangi bo'lib ko'rinishi mumkin.
+let CTL_SEQ = 0;
+async function loadControl() {
+  const m = me(); if (!$('#ks-ctl') || !(m.list2 || m.director)) return;
+  const desk = ST.desk, seq = ++CTL_SEQ;
+  let c;
+  try { c = await call('kassa_checks', { p_desk: desk }); }
+  catch (e) {
+    if (seq !== CTL_SEQ) return;
+    const b = $('#ks-ctl'); if (b) b.innerHTML = `<div class="card" style="padding:14px 18px;margin-bottom:14px"><b>Nazorat ro‘yxati</b><div class="small muted" style="margin-top:6px">O‘qib bo‘lmadi: ${esc(errText(e))}</div></div>`;
+    return;
+  }
+  if (seq !== CTL_SEQ || desk !== ST.desk) return;
+  ST.checks = Object.assign(c || {}, { _desk: desk });
+  const b2 = $('#ks-ctl'); if (b2) b2.innerHTML = controlHtml(ST.checks);
 }
 function draw() {
   const s = ST.ov.state, m = me(), od = s.openDay, ld = s.lastDay, started = s.desk && s.desk.started;
@@ -125,7 +144,7 @@ function draw() {
       <td data-label="Holat">${stChip(d.status)}${d.status === 'void' && d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : ''}<div class="small muted">${d.isSystem ? 'tizim' : esc(nameOf(d.postedBy))}</div></td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Orderni chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-void="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`;
   }).join('');
-  const docsHtml = ready ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>${od ? 'Ochiq kun hujjatlari — ' + esc(dmy(od.day)) : 'Ochiq kun yo‘q'}</b>${od ? `<button class="btn sm" data-book="${esc(od.day)}">🖨 Kassa kitobi varag‘i (qoralama)</button>` : ''}</div>
+  const docsHtml = ready ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>${od ? 'Ochiq kun hujjatlari — ' + esc(dmy(od.day)) : 'Ochiq kun yo‘q'}</b>${od ? `<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-report="${esc(od.day)}" title="Kunlik hisobot: kimdan / kimga qancha">🖨 Kunlik hisobot</button><button class="btn sm" data-book="${esc(od.day)}">🖨 Kassa kitobi varag‘i (qoralama)</button></span>` : ''}</div>
     ${docs.length ? `<div class="tablewrap"><table><thead><tr><th>№</th><th>Operatsiya</th><th>Kimdan / kimga</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th>Holat</th><th></th></tr></thead><tbody>${docRows}</tbody></table></div>`
       : `<div class="empty">${od ? 'Bu kunda hali hujjat yo‘q.' : 'Birinchi hujjat bilan yangi kun ochiladi (kun boshi = oxirgi qoldiq).'}</div>`}</div>` : '';
 
@@ -177,7 +196,8 @@ function draw() {
   const daysHtml = days.length ? `<div class="card" style="padding:14px 18px"><b>Kassa kunlari</b><div class="small muted" style="margin:2px 0 8px">Kun oxiri = kun boshi + kirim − chiqim. Kun faqat pul sanalgach yopiladi; farq shu kunning hujjati bo‘lib yoziladi.</div>
     <div class="tablewrap"><table><thead><tr><th>Kun</th><th style="text-align:right">Kun boshi</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th style="text-align:right">Kun oxiri</th><th style="text-align:right">Farq</th><th>Holat</th><th></th></tr></thead><tbody>${dayRows}</tbody></table></div></div>` : '';
 
-  $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + daysHtml;
+  const ctlHtml = (m.list2 || m.director) && ready ? `<div id="ks-ctl">${ST.checks && ST.checks._desk === ST.desk ? controlHtml(ST.checks, true) : ''}</div>` : '';
+  $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml;
   bind();
 }
 function bind() {
@@ -199,6 +219,7 @@ function bind() {
     b.disabled = true; act('kassa_doc_pay', { p_id: id }, d.form === 'KO1' ? 'Kirim o‘tkazildi' : 'Chiqim o‘tkazildi', r => offerPrint(r)); });
   each('data-print', id => printDoc(id));
   each('data-book', day => printBook(day));
+  each('data-report', day => printReport(day));
   each('data-view', day => openDayView(day));
   each('data-verify', day => openVerifyForm(day));
   each('data-reopen', day => ask('Kunni qayta ochish — ' + dmy(day), 'Sababi (kamida 5 belgi). Sanash farqi hujjati bekor bo‘ladi, kun qayta sanab yopiladi.', 5, r => act('kassa_day_reopen', { p_desk: ST.desk, p_day: day, p_reason: r }, 'Kun qayta ochildi')));
@@ -466,7 +487,7 @@ function openSettings() {
 // ---------------------------------------------------------------- chop etish (fin-print.js — kerak bo'lganda yuklanadi)
 // Har chop etish serverda qayd qilinadi (kassa_print_mark): birinchisi — asl nusxa, keyingilari — «НУСХА» belgisi bilan.
 //   «Avvalgisi qog'ozga chiqmadi» tanlansa — asl nusxa qayta chiqadi va buxgalterning nazorat ro'yxatida ko'rinadi.
-const printCtx = (names, isTest, mk) => ({ org: (ST.refs && ST.refs.org) || {}, signatories: (ST.refs && ST.refs.signatories) || [], names: names || {}, isTest: !!isTest,
+const printCtx = (names, isTest, mk) => ({ org: (ST.refs && ST.refs.org) || {}, signatories: (ST.refs && ST.refs.signatories) || [], rules: (ST.refs && ST.refs.rules) || [], names: names || {}, isTest: !!isTest,
   mark: mk ? { mode: mk.mode, replaced: !!mk.replaced } : {}, printedBy: (mk && mk.byName) || (C.SESSION && C.SESSION.email) || '', printedAt: (mk && mk.at) || new Date().toISOString() });
 function askReprint(title, prior, go, back) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>${esc(title)}</h3><button class="x" id="m-x">×</button></div>
@@ -508,8 +529,91 @@ async function printCount(book, countId) {
     C.printHTML(pm.countHtml(c, book, printCtx(book.names, book.isTest, null), wm));
   } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
 }
+// Kassirning kunlik hisoboti (RP-02): raqamli hujjat emas — jurnalga yozilmaydi; ochiq kunda «QORALAMA» belgisi bilan.
+//   Ma'lumot KO-4 bilan bir manbadan (kassa_day_book) — jamlari bir xil.
+async function printReport(day, bookOrNull) {
+  try {
+    const [pm, wm, book] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), bookOrNull || call('kassa_day_book', { p_desk: ST.desk, p_day: day }), loadRefs()]);
+    if (!book || !book.day) { C.toast('Bu kunda kassa varag‘i yo‘q', true); return; }
+    C.printHTML(pm.reportHtml(book, printCtx(book.names, book.isTest, null), wm));
+  } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+}
 // «To'lov» oynasidan: naqd o'quv to'lovining kirim orderini chop etish (hujjat id bo'yicha).
 export async function printDocById(ctx, docId, back) { C = ctx; await printDoc(docId, back); }
+
+// ---------------------------------------------------------------- nazorat ro'yxati (RP-06)
+// Server faktlarni beradi (kassa_checks) — baho va matn shu yerda. Daraja: bad — darhol hal qilinadi; warn — ko'rib chiqiladi;
+//   info — ma'lumot; ok — joyida. Muddatli ko'rsatkichlar — oxirgi 30 kun.
+const SERIES = { KO1: 'kirim orderlari', KO2: 'chiqim orderlari', ACT: 'dalolatnomalar' };
+const LVL = { bad: ['muhim', '#B42318', '#FDECEC'], warn: ['diqqat', '#B54708', '#FEF3E2'], info: ['ma’lumot', '#175CD3', '#E8F1FD'], ok: ['joyida', '#157347', '#E7F6EC'] };
+export function controlRows(c) {
+  c = c || {};
+  const rows = [], add = (key, label, level, value, hint) => rows.push({ key, label, level, value, hint: hint || '' });
+  const cnt = (v, unit) => `${num(v)} ${unit || 'ta'}`, days = a => (a || []).slice(0, 6).map(dmy).join(', ') + ((a || []).length > 6 ? ' …' : '');
+  const gaps = c.gaps || [];
+  add('gaps', 'Hujjat raqamlari uzluksizligi', gaps.length ? 'bad' : 'ok',
+    gaps.length ? gaps.map(g => `${g.year}: ${(g.problems || []).map(x => SERIES[x.series] || x.series).join(', ')}`).join('; ') + ' — bo‘shliq yoki takror' : 'uzluksiz',
+    'Hisoblagich = hujjatlar soni = eng katta raqam');
+  add('staleOpenDay', 'Yopilmagan o‘tgan kun', c.staleOpenDay ? 'bad' : 'ok', c.staleOpenDay ? dmy(c.staleOpenDay) : 'yo‘q', 'Kecha yopilmaguncha bugun hujjat yozilmaydi');
+  const uv = c.unverifiedDays || [];
+  add('unverified', 'Tekshirilmagan (yopilgan) kunlar', uv.length > 3 ? 'bad' : uv.length ? 'warn' : 'ok', uv.length ? `${uv.length} ta: ${days(uv)}` : 'yo‘q', 'Qog‘oz varaq va orderlar olinib, «Tekshirish» bosiladi');
+  const sh = c.undecidedShortages || [];
+  add('shortages', 'Qarori kutilayotgan kamomad', sh.length ? 'bad' : 'ok', sh.length ? `${sh.length} ta · ${som(sh.reduce((a, x) => a + num(x.amount), 0))}` : 'yo‘q', 'Direktor qarori: xodim zimmasiga yoki hisobdan chiqarish');
+  const df = c.diffs30 || [];
+  add('diffs', 'Sanash farqlari', df.length ? 'warn' : 'ok', df.length ? df.slice(0, 6).map(x => `${dmy(x.day)}: ${num(x.diff) > 0 ? '+' : ''}${som(x.diff)}`).join('; ') + (df.length > 6 ? ' …' : '') : 'yo‘q', 'Kunni yopishdagi kamomad / ortiqcha');
+  add('voids', 'Bekor qilingan hujjatlar', num(c.voids30) ? 'info' : 'ok', num(c.voids30) ? cnt(c.voids30) : 'yo‘q', 'Sababi har hujjatda yozilgan; raqami saqlanadi');
+  add('reopens', 'Kunni qayta ochishlar', num(c.reopens30) ? 'warn' : 'ok', num(c.reopens30) ? cnt(c.reopens30, 'marta') : 'yo‘q', 'Faqat Direktor, sabab bilan');
+  add('waiting', 'Tasdiq kutayotgan so‘rovlar', num(c.waitingApproval) ? 'info' : 'ok', num(c.waitingApproval) ? cnt(c.waitingApproval) : 'yo‘q', 'Chiqim faqat tasdiqdan keyin beriladi');
+  add('unpaid', 'Tasdiqlangan, pul hali berilmagan', num(c.approvedUnpaid) ? 'info' : 'ok', num(c.approvedUnpaid) ? cnt(c.approvedUnpaid) : 'yo‘q', '');
+  add('staleRefunds', 'Kechikkan qaytarishlar', num(c.staleRefunds) ? 'bad' : 'ok', num(c.staleRefunds) ? cnt(c.staleRefunds) : 'yo‘q', 'Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmagan');
+  add('fiscal', 'Fiskal cheksiz kirimlar', num(c.fiscalExempt30) ? 'warn' : 'ok', num(c.fiscalExempt30) ? cnt(c.fiscalExempt30) : 'yo‘q', 'Direktor istisnosi bilan o‘tkazilgan');
+  add('other', '«Boshqa» tomonli hujjatlar', num(c.otherParties30) ? 'info' : 'ok', num(c.otherParties30) ? cnt(c.otherParties30) : 'yo‘q', 'Imkon bo‘lsa kontragent ma’lumotnomasidan tanlanadi');
+  const lateTxt = [num(c.late30) ? `kech yozilgan hujjat: ${cnt(c.late30)}` : '', num(c.pendingDays30) ? `oflayn yozuv bilan yopilgan kun: ${cnt(c.pendingDays30)}` : ''].filter(Boolean).join('; ');
+  add('late', 'Oflayn va kech kiritilgan yozuvlar', lateTxt ? 'info' : 'ok', lateTxt || 'yo‘q', 'Pul olingan kun yopilgani uchun keyingi kunga yozilgan');
+  add('reissues', 'Asl nusxani qayta chop etish', num(c.reissues30) ? 'warn' : 'ok', num(c.reissues30) ? cnt(c.reissues30, 'marta') : 'yo‘q', '«Avvalgisi qog‘ozga chiqmadi» deb qayta chiqarilgan');
+  add('gateOff', 'Vedomost tasdig‘isiz naqd maosh', num(c.salaryGateOff30) ? 'warn' : 'ok', num(c.salaryGateOff30) ? cnt(c.salaryGateOff30) : 'yo‘q', 'Direktor ruxsati bilan berilgan');
+  const ub = c.unprintedBooks30 || [];
+  add('unprinted', 'Kassa kitobi varag‘i chop etilmagan kunlar', ub.length ? 'warn' : 'ok', ub.length ? `${ub.length} ta: ${days(ub)}` : 'yo‘q', 'KO-4 ikki nusxada chop etilib imzolanadi');
+  const lim = c.limit || {};
+  add('limit', 'Kassa limiti', !lim.set ? 'info' : lim.exceeded ? 'warn' : num(lim.days30) ? 'info' : 'ok',
+    !lim.set ? 'belgilanmagan' : lim.exceeded ? `qoldiq ${som(lim.balance)} — limit ${som(lim.cashLimit)}dan oshgan` : `limit ${som(lim.cashLimit)}` + (num(lim.days30) ? ` · ${cnt(lim.days30, 'kun')} limitdan oshib yopilgan` : ' — oshmagan'),
+    'Ortiqchasi bankka topshiriladi');
+  const rc = c.reconcile || {};
+  if (!c.isTest) {
+    if (!rc.live) add('reconcile', 'Moslik: kassa hujjatlari ↔ pul yozuvlari', 'info', 'kassa hali ishga tushirilmagan', 'Ishga tushgan kundan har kuni tekshiriladi');
+    else {
+      const p1 = rc.p1 || {}, p4 = rc.p4 || {}, p5 = rc.p5 || {}, p8 = rc.p8 || {};
+      const bad = [num(p1.pay) ? `kirim orderisiz naqd o‘quv to‘lovi: ${cnt(p1.pay)} (${som(p1.paySum)})` : '', num(p1.doc) ? `to‘lov yozuvisiz kirim orderi: ${cnt(p1.doc)}` : '',
+        num(p4.row) ? `chiqim orderisiz naqd xarajat: ${cnt(p4.row)}` : '', num(p4.doc) ? `«Buxgalteriya»ga ko‘chmagan xarajat orderi: ${cnt(p4.doc)}` : '',
+        num(p5.row) ? `chiqim orderisiz naqd maosh / avans: ${cnt(p5.row)}` : '', num(p5.doc) ? `yozuvsiz maosh / avans orderi: ${cnt(p5.doc)}` : '',
+        num(p8.row) ? `chiqim orderisiz naqd qaytarish: ${cnt(p8.row)}` : '', num(p8.doc) ? `yozuvsiz qaytarish orderi: ${cnt(p8.doc)}` : ''].filter(Boolean);
+      add('reconcile', 'Moslik: kassa hujjatlari ↔ pul yozuvlari', num(rc.total) ? 'bad' : 'ok', num(rc.total) ? bad.join('; ') : 'hammasi mos',
+        'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan');
+    }
+  }
+  const ac = c.accountable || [];
+  add('accountable', 'Hisobdorlardagi pul', ac.some(x => x.overdue) ? 'warn' : ac.length ? 'info' : 'ok',
+    ac.length ? ac.map(x => `${x.name || '—'}: ${som(x.balance)} (${dmy(x.since)} dan, ${num(x.workDays)} ish kuni${x.overdue ? ' — muddati o‘tgan' : ''})`).join('; ') : 'yo‘q',
+    'Berilgan − naqd qaytarilgan (avans hisobotlari hozircha qog‘ozda); hisobot muddati — 3 ish kuni');
+  const ho = c.handover || {};
+  add('handover', 'Rahbar / ta’sischiga berilgan pul', num(ho.earlierCount) ? 'warn' : num(ho.monthCount) ? 'info' : 'ok',
+    [num(ho.monthCount) ? `shu oyda: ${cnt(ho.monthCount)} · ${som(ho.monthSum)}` : '', num(ho.earlierCount) ? `oldingi oylarda: ${cnt(ho.earlierCount)} · ${som(ho.earlierSum)} — tasniflanganini tekshiring` : ''].filter(Boolean).join('; ') || 'yo‘q',
+    'Buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — xarajat emas');
+  return rows;
+}
+function controlHtml(c, stale) {   // stale — oldingi yuklashdagi ma'lumot (yangisi kelguncha ko'rsatiladi)
+  const rows = controlRows(c), ord = { bad: 0, warn: 1, info: 2, ok: 3 };
+  const att = rows.filter(r => r.level === 'bad' || r.level === 'warn'), rest = rows.filter(r => r.level === 'info'), ok = rows.filter(r => r.level === 'ok');
+  const tr = r => `<tr data-ctl="${esc(r.key)}" data-level="${esc(r.level)}"><td data-label="Tekshiruv"><div><b>${esc(r.label)}</b>${r.hint ? `<div class="small muted">${esc(r.hint)}</div>` : ''}</div></td>
+    <td data-label="Holat">${chip(LVL[r.level][0], LVL[r.level][1], LVL[r.level][2])}</td><td data-label="Natija">${esc(r.value)}</td></tr>`;
+  const tbl = xs => `<div class="tablewrap"><table><thead><tr><th>Tekshiruv</th><th>Holat</th><th>Natija</th></tr></thead><tbody>${xs.slice().sort((a, b) => ord[a.level] - ord[b.level]).map(tr).join('')}</tbody></table></div>`;
+  const nBad = att.filter(r => r.level === 'bad').length;
+  const head = att.length ? chip(`E’tibor talab qiladi: ${att.length} ta`, nBad ? '#B42318' : '#B54708', nBad ? '#FDECEC' : '#FEF3E2') : chip('Hammasi joyida', '#157347', '#E7F6EC');
+  return `<div class="card" style="padding:14px 18px;margin-bottom:14px" id="ks-ctl-card"${stale ? ' data-stale="1"' : ''}><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>Nazorat ro‘yxati</b>${head}</div>
+    <div class="small muted" style="margin:2px 0 8px">Moliya menejeri va buxgalter har kuni ko‘rib chiqadi. Muddatli ko‘rsatkichlar — oxirgi 30 kun${c && c.isTest ? ' · SINOV kassasi' : ''}.</div>
+    ${att.length || rest.length ? tbl(att.concat(rest)) : ''}
+    <details style="margin-top:${att.length || rest.length ? 10 : 0}px"><summary class="small" style="cursor:pointer;font-weight:700">Joyida bo‘lgan tekshiruvlar (${ok.length} ta)</summary><div style="margin-top:6px">${ok.length ? tbl(ok) : '<div class="small muted">—</div>'}</div></details></div>`;
+}
 
 // ---------------------------------------------------------------- kun varag'i: hujjatlar, sanashlar, jurnal (tekshiruvchi uchun)
 const CNT_LBL = { close: 'Kun yopish sanashi', handover: 'Smena topshirish-qabul', opening: 'Boshlang‘ich qoldiq', monthly: 'Oylik sanash', yearly: 'Yillik sanash', surprise: 'To‘satdan sanash' };
@@ -533,11 +637,22 @@ async function openDayView(day) {
       <div class="small"><b>${esc(CNT_LBL[c.kind] || c.kind)}</b> · ${esc(hm(c.at))} · sanalgan ${esc(som(c.counted))}${num(c.diff) ? ` · <span style="color:${num(c.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">farq ${num(c.diff) > 0 ? '+' : ''}${esc(som(c.diff))}</span>` : ' · farq yo‘q'}<div class="muted">${esc(nm(c.byUid))}${c.toUid ? ' → ' + esc(nm(c.toUid)) : ''}</div></div>
       <button class="btn sm" data-cprint="${esc(c.id)}">🖨 Dalolatnoma</button></div>`).join('');
   const evs = (book.events || []).map(e => `<div class="small muted">${esc(hm(e.at))} · ${esc(EV_LBL[e.kind] || e.kind)} · ${esc(nm(e.byUid))}${e.reason ? ' — ' + esc(e.reason) : ''}</div>`).join('');
+  // «kimdan / kimga qancha» — tomon KALITI bo'yicha (server guruhlaydi); tizim hujjati (sanash farqi) — alohida qator
+  const PT = { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', bank: 'bank', founder: 'ta’sischi', other: 'boshqa', system: 'tizim', none: '' };
+  const pName = x => x.partyType === 'system' ? (x.ops || []).map(opName).join(', ') : (x.name || '—');
+  const partyTbl = (form, who) => { const xs = (book.byParty || []).filter(x => x.form === form); if (!xs.length) return '';
+    return `<div class="small" style="font-weight:700;margin:8px 0 4px">${who} — ${esc(som(xs.reduce((a, x) => a + num(x.amount), 0)))}</div><div class="tablewrap"><table data-party="${form}"><thead><tr><th>${who}</th><th>Turi</th><th style="text-align:right">Hujjat</th><th style="text-align:right">Summa</th></tr></thead><tbody>${xs.map(x => `<tr>
+      <td data-label="${who}"><div>${esc(pName(x))}${x.partyType === 'student' && x.partyId ? ` <span class="small muted">${esc(x.partyId)}</span>` : ''}</div></td><td data-label="Turi"><span class="small muted">${esc(PT[x.partyType] || x.partyType || '')}</span></td>
+      <td data-label="Hujjat" style="text-align:right">${esc(String(num(x.count)))}</td><td data-label="Summa" style="text-align:right;white-space:nowrap"><b>${esc(som(x.amount))}</b></td></tr>`).join('')}</tbody></table></div>`; };
+  const tr = book.transfers || {};
+  const trTxt = (num(tr.inCount) || num(tr.outCount)) ? `<div class="small muted" style="margin-top:6px">Ichki o‘tkazmalar (daromad ham, xarajat ham emas): bankdan olindi ${esc(som(tr.inAmount))} · bankka topshirildi ${esc(som(tr.outAmount))}</div>` : '';
+  const who = partyTbl('KO1', 'Kimdan') + partyTbl('KO2', 'Kimga');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa kuni — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px">${dayChip(d.status)} Kun boshi <b>${esc(som(d.opening))}</b> · kirim <b>${esc(som(closed ? d.receipts : d.receiptsLive))}</b> · chiqim <b>${esc(som(closed ? d.payouts : d.payoutsLive))}</b> · kun oxiri <b>${esc(som(closed ? d.closing : d.balance))}</b>${closed ? ` · sanalgan <b>${esc(som(d.counted))}</b>` : ''}${closed && d.sheetFrom ? ` · varaq ${esc(String(d.sheetFrom))}${d.sheetTo > d.sheetFrom ? '–' + esc(String(d.sheetTo)) : ''}` : ''}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px"><b>Hujjatlar (${docs.length} ta)</b><button class="btn sm" id="kdv-book">🖨 Kassa kitobi varag‘i${closed ? '' : ' (qoralama)'}</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 6px"><b>Hujjatlar (${docs.length} ta)</b><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="kdv-report" title="Kunlik hisobot: kimdan / kimga qancha">🖨 Kunlik hisobot</button><button class="btn sm" id="kdv-book">🖨 Kassa kitobi varag‘i${closed ? '' : ' (qoralama)'}</button></span></div>
       ${docs.length ? `<div class="tablewrap"><table><thead><tr><th>№</th><th>Operatsiya / tomon</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th>Kim</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Hujjat yo‘q.</div>'}
+      ${who ? `<details style="margin-top:12px" open id="kdv-who"><summary class="small" style="cursor:pointer;font-weight:700">Kimdan / kimga qancha</summary>${who}${trTxt}</details>` : ''}
       ${cnts ? `<div style="margin-top:12px"><b>Sanashlar</b>${cnts}</div>` : ''}
       ${evs ? `<details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:700">Kun jurnali</summary><div style="margin-top:6px">${evs}</div></details>` : ''}
     </div>
@@ -545,6 +660,7 @@ async function openDayView(day) {
   $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   const back = () => openDayView(day);
   $('#kdv-book').onclick = () => printBook(day, back);
+  $('#kdv-report').onclick = () => printReport(day, book);
   $('#modal').querySelectorAll('[data-dprint]').forEach(b => b.onclick = () => printDoc(b.dataset.dprint, back));
   $('#modal').querySelectorAll('[data-cprint]').forEach(b => b.onclick = () => printCount(book, b.dataset.cprint));
 }
