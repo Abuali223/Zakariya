@@ -1432,6 +1432,34 @@ bo'lsa) yoqiladi; kassasiz serverda sahifa avvalgidek ishlaydi (brauzer sinovi 1
 - **Qilinmagan:** mustaqil (boshqa agentlar bilan) ko'rik; F1.5 (naqd maosh / avans KO-2 orqali), F1.6 (qaytarish), F1.15
   (kunlik hisobot, Telegram), F1.16–F1.19.
 
+## 58) Moliya, 1a-bosqich: maosh, avans, qaytarish va xarajatni kassaga bog'lash (faqat lokal sinov zanjirida) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN** (`kassa-links.sql` ham «--dev \ir»). Jonli zanjirga tegadigan yagona o'zgarish —
+`refund-rpc.sql` dagi ruxsat sharti (kassa funksiyasi ichidan chaqirilganda ham ishlaydi; kassa yo'q joyda ta'siri yo'q).
+
+- **`migration/kassa-links.sql`** (yangi): ustunlar (`method`, `cashDocId` — maosh, avans, qaytarish, xarajat; xarajatda
+  `articleId`, `counterpartyId`); `kassa_salary_pay` (naqd — kassir yoki Direktor, KO-2 Dt 6710 Kt 5010 bilan bitta
+  tranzaksiyada; vedomost tasdig'i yoqilmagan oy — faqat Direktor, nazorat ro'yxatida ko'rinadi; karta — Moliya menejeri /
+  Direktor, kassa hujjatisiz); `kassa_refund_request` (Direktor: tasdiq = so'rov; summa = qaytarish + tanlansa avans; Dt 4010 /
+  6310); `app.kassa_link_paid` — pul berilganda shu tranzaksiyada: qaytarish (`refund_invoice`), avans (`staff_advances`),
+  xarajat (`expenses` ga ko'chirish: statiya → eski toifa); `app.kassa_link_void` — bekor qilinganda bog'langan yozuvni olib
+  tashlash; `app.kassa_cash_guard` — kassa ishga tushgach naqd (yoki usulsiz) yozuvni to'g'ridan-to'g'ri kiritib bo'lmaydi,
+  bog'langan qator o'zgarmaydi; xarajatga statiya toifadan o'zi qo'yiladi.
+- **`kassa-docs.sql`:** `kassa_doc_pay` bog'langan amallarni bajaradi (qulf tartibi L1 → L4 saqlangan), `kassa_doc_void`
+  maosh / avans / xarajat orderini bog'langan yozuvi bilan bekor qiladi (qaytarish orderi bekor qilinmaydi),
+  `kassa_payout_request` — tasdiqlangan oy uchun avans so'rovini rad etadi. **`fin-seed.sql`:** «Ish haqi avansi» endi
+  «+ Chiqim so'rovi» shaklida; qaytarishda «boshqa» tomon (biriktirilmagan to'lov). **`kassa-day.sql`:** kechikkan qaytarish
+  (`refundsLate`, `staleRefunds`), vedomostsiz naqd maosh (`salaryGateOff30`).
+- **admin.html (faqat kassa ishga tushgach o'zgaradi):** «Maosh berish» — to'lov usuli (naqd / karta), naqdda KO-2 raqami va
+  chop etish; «Xodim avansi» — faqat karta / bank (naqd — «Kassa»ga yo'llanma); «Xarajat» — naqdsiz usul + kontragent, naqd —
+  «Kassa»ga yo'llanma, kassadan ko'chgan qatorlar «Kassa» belgisi bilan (tahrirsiz); «Qaytarish» — usul, naqdda oluvchi
+  F.I.Sh. va ariza sanasi. **fin-kassa.js:** tasdiqlangan qaytarishni to'lash, maosh orderini bekor qilish, kechikkan
+  qaytarish ogohlantirishi. **fin-print.js:** maosh va qaytarish orderi matnlari chop etish tilida.
+- **Sinovlar:** `test-kassa-links.sql` 68/68; `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-race.sh` 22,
+  `test-fin-prereq.sql` 87 (jonli va sinov zanjirida); brauzer: `e2e-kassa3` 26 (v1 va v2), oldingi stsenariylar 36 + 35,
+  eski oqimlar — kassa ishga tushmagan holatda 12 va kassasiz jonli zanjirda 10 + 12.
+- **Qilinmagan:** o'zaro hisob (`nc_offset`); mustaqil (boshqa agentlar bilan) ko'rik.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

@@ -780,22 +780,27 @@ payments `npm test`, mavjud SQL to‘plamlari, rol testlari.
 Maqsad: Excel kunlik varaqlari, qog‘oz orderlar va tracker kassa reyestri o‘rniga raqamlangan KO-1/KO-2, sanash bilan
 yopiladigan kun, KO-4 chop etish, o‘tkazma va naqdsizni ajratish, Telegram.
 
-**Holat (2026-11-10):** server yadrosi, «Kassa» ekranlari va chop etish shakllari yozildi va lokal sinovdan o‘tdi — hali
-**faqat lokal sinov zanjirida** (`run-all.sql` da «--dev \ir»; `chain.sh --dev`), jonli tizimga chiqmaydi. F1.1
-`fin-core.sql` + `fin-seed.sql` (92 hisobvaraq, 75 statiya, 21 toifa mosligi, 20 operatsiya qoidasi); F1.2 `kassa.sql`
-(jadvallar, I1–I6 va o‘zgarmaslik triggerlari, chop etish jurnali); F1.3 raqamlash va kassa qulfi; F1.4 `kassa-docs.sql`
-(KO-1, KO-2 so‘rov → tasdiq → to‘lash, bekor qilish, fiskal chek №) va `kassa-pay.sql` (naqd o‘quv to‘lovi KO-1 bilan bitta
-tranzaksiyada, taqsimot 4010 / 6310); F1.7 naqd o‘quv to‘lovini shu kunda bekor qilish; F1.9 va F1.10 `kassa-day.sql`
+**Holat (2026-11-10):** server yadrosi, «Kassa» ekranlari, chop etish shakllari va mavjud pul oqimlarining kassaga
+ulanishi yozildi va lokal sinovdan o‘tdi — hali **faqat lokal sinov zanjirida** (`run-all.sql` da «--dev \ir»;
+`chain.sh --dev`), jonli tizimga chiqmaydi. F1.1 `fin-core.sql` + `fin-seed.sql` (92 hisobvaraq, 75 statiya, 21 toifa
+mosligi, 20 operatsiya qoidasi); F1.2 `kassa.sql` (jadvallar, I1–I6 va o‘zgarmaslik triggerlari, chop etish jurnali); F1.3
+raqamlash va kassa qulfi; F1.4 `kassa-docs.sql` (KO-1, KO-2 so‘rov → tasdiq → to‘lash, bekor qilish, fiskal chek №) va
+`kassa-pay.sql` (naqd o‘quv to‘lovi KO-1 bilan bitta tranzaksiyada, taqsimot 4010 / 6310); F1.5 naqd maosh
+(`kassa_salary_pay`: maosh to‘lovi + KO-2 bitta tranzaksiyada, vedomost chegarasi; karta — KO siz) va ish haqi avansi
+(«+ Chiqim so‘rovi» → tasdiq → pul berilganda avans yoziladi; oy vedomosti qulfi); F1.6 qaytarish (Direktor tasdiqlaydi —
+balans o‘zgarmaydi; kassir pulni berganda `refund_invoice` shu tranzaksiyada; 1 kundan kechiksa ogohlantirish); F1.7 shu
+kunda bekor qilish (o‘quv to‘lovi, maosh, avans, xarajat — bog‘langan yozuv bilan birga); F1.9 va F1.10 `kassa-day.sql`
 (boshlang‘ich qoldiq, sanab yopish, farq hujjati, smena topshirish, tekshirish, qayta ochish, kamomad qarori, oflayn / kech
-kiritish, o‘qish funksiyalari); F1.12 «Kassa» bo‘limi (`assets/js/fin-kassa.js`: kun kartasi, hujjatlar, so‘rovlar va
-tasdiqlar, sanash oynalari, kun varag‘i, sozlamalar; «✅ Tasdiqlash»da kassa navbati); F1.13 ning bir qismi («💵 To‘lov»
-shakli: naqdda fiskal chek №, KO-1 raqami va chop etish, to‘lovchiga termal chek o‘rniga patta; naqd — faqat kassa
-rollarida); F1.14 chop etish (`fin-print.js`: KO-1 + patta, KO-2, KO-4 2 nusxa, sanash dalolatnomasi — o‘zbek kirill, rus,
-lotin; `fin-words.js`; «НУСХА» belgisi server jurnaliga tayanadi). Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
-ko‘rinadi; ishga tushirish kunigacha «To‘lov» shakli avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223,
-`test-kassa-pay.sql` 50, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 11,
-`fin-words.test.mjs` 7; brauzerda ikki to‘liq stsenariy (71 tekshiruv) eski va yangi dizaynda, 1440 va 390 px. Qoldi:
-F1.5 maosh / avans, F1.6 qaytarish, F1.11, F1.13 ning qolgani (Buxgalteriya xarajat shakli), F1.15–F1.19 (hisobotlar,
+kiritish, o‘qish funksiyalari); F1.12 «Kassa» bo‘limi (`assets/js/fin-kassa.js`); F1.13 mavjud oynalar ulandi («💵 To‘lov»:
+fiskal chek №, KO-1; «Maosh berish»: usul; «Xodim avansi» va «Xarajat»: naqd — faqat «Kassa» orqali, naqdsiz — usul +
+statiya (toifadan) + kontragent; «Qaytarish»: usul; kassa xarajati «Buxgalteriya»ga o‘zi ko‘chadi; kassa ishga tushgach
+naqd yozuvni funksiyani chetlab kiritib bo‘lmaydi — `kassa-links.sql`); F1.14 chop etish (`fin-print.js`: KO-1 + patta,
+KO-2, KO-4 2 nusxa, sanash dalolatnomasi — o‘zbek kirill, rus, lotin; «НУСХА» belgisi server jurnaliga tayanadi). Bo‘lim
+faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi.
+Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 68, `test-kassa-race.sh` 22 (8 × 200
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 12, `fin-words.test.mjs` 7; brauzerda uch to‘liq stsenariy (97 tekshiruv)
+eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34
+tekshiruv). Qoldi: o‘zaro hisob (`nc_offset`), F1.11 (RLS qismi), F1.15–F1.19 (kunlik hisobot, nazorat ro‘yxati ekrani,
 Telegram, 31.12 surati, ishga tushirish to‘plami), mustaqil ko‘rik.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |

@@ -26,6 +26,7 @@ const T = {
     seal: 'М.Ў.', mVoid: 'БЕКОР ҚИЛИНГАН', mCopy: 'НУСХА', mRepl: 'АЛМАШТИРИЛДИ', mTest: 'СИНОВ', mDraft: 'ҚОРАЛАМА',
     voided: 'Бекор қилинди', reason: 'сабаб', noBasis: 'асос ҳужжатисиз нақд харид', late: 'Пул қабул қилинган сана',
     student: 'ўқувчи', tuition: 'Ўқув тўлови', advance: 'аванс', surplus: 'Касса ортиқчаси', shortage: 'Касса камомади',
+    salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза',
     countBasis: 'Кассани санаш далолатномаси', nonCash: 'Маълумот учун, нақд пулсиз ёзув', docId: 'Ҳужжат', printed: 'чоп этилди',
     act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор' },
     kassaFor: d => `КАССА ${d} учун`, sheet: 'Варақ', copy1: 'КАССА ДАФТАРИ ВАРАҒИ', copy2: 'КАССИР ҲИСОБОТИ',
@@ -57,6 +58,7 @@ const T = {
     seal: 'M.O‘.', mVoid: 'BEKOR QILINGAN', mCopy: 'NUSXA', mRepl: 'ALMASHTIRILDI', mTest: 'SINOV', mDraft: 'QORALAMA',
     voided: 'Bekor qilindi', reason: 'sabab', noBasis: 'asos hujjatisiz naqd xarid', late: 'Pul qabul qilingan sana',
     student: 'o‘quvchi', tuition: 'O‘quv to‘lovi', advance: 'avans', surplus: 'Kassa ortiqchasi', shortage: 'Kassa kamomadi',
+    salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza',
     countBasis: 'Kassani sanash dalolatnomasi', nonCash: 'Ma’lumot uchun, naqd pulsiz yozuv', docId: 'Hujjat', printed: 'chop etildi',
     act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror' },
     kassaFor: d => `KASSA ${d} uchun`, sheet: 'Varaq', copy1: 'KASSA DAFTARI VARAG‘I', copy2: 'KASSIR HISOBOTI',
@@ -88,6 +90,7 @@ const T = {
     seal: 'М.П.', mVoid: 'АННУЛИРОВАН', mCopy: 'КОПИЯ', mRepl: 'ЗАМЕНЁН', mTest: 'ТЕСТ', mDraft: 'ЧЕРНОВИК',
     voided: 'Аннулирован', reason: 'причина', noBasis: 'покупка за наличные без документа-основания', late: 'Дата приёма денег',
     student: 'учащийся', tuition: 'Оплата за обучение', advance: 'аванс', surplus: 'Излишек кассы', shortage: 'Недостача кассы',
+    salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление',
     countBasis: 'Акт пересчёта наличных денег в кассе', nonCash: 'Справочно, безналичная запись', docId: 'Документ', printed: 'напечатано',
     act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче' },
     kassaFor: d => `КАССА за ${d}`, sheet: 'Лист', copy1: 'ВКЛАДНОЙ ЛИСТ КАССОВОЙ КНИГИ', copy2: 'ОТЧЁТ КАССИРА',
@@ -136,9 +139,16 @@ const money = (W, v) => W.fmtMoney(v == null ? 0 : v) || '';
 const ymLabel = m => /^\d{4}-\d{2}$/.test(m || '') ? m.slice(5, 7) + '.' + m.slice(0, 4) : (m || '');
 const docNo = (doc, t) => doc && doc.no ? `${t.pre[doc.form] || ''}-${doc.no}` : '—';
 
-// Tizim tuzgan matnlarni chop etish tilida qayta tuzish: tomon va asos.
+// Tizim tuzgan matnlarni chop etish tilida qayta tuzish: tomon, asos va ilova.
 function texts(doc, t) {
-  let party = doc.partyName || '', basis = doc.basis || '';
+  let party = doc.partyName || '', basis = doc.basis || '', attachment = doc.attachment || '';
+  const snap = doc.sourceSnapshot || {};
+  if (doc.op === 'out_salary' && /^\d{4}-\d{2}$/.test(snap.month || '')) basis = t.salary + ': ' + ymLabel(snap.month);
+  if (doc.op === 'out_refund') {   // «Qaytarish: <sabab>; ariza DD.MM.YYYY» — kalit so'zlar chop etish tilida, sabab — yozilganidek
+    basis = basis.replace(/^Qaytarish: /, t.refund + ': ').replace(/; ariza (\d{2}\.\d{2}\.\d{4})$/, '; ' + t.application + ' $1');
+    if (attachment === 'Yozma ariza') attachment = t.writtenApp;
+    if (doc.partyType === 'student' && doc.partyId) party = (party ? party + ' ' : '') + `(${t.student}: ${doc.partyId})`;
+  }
   if (doc.op === 'in_surplus' || doc.op === 'out_shortage') {
     party = doc.op === 'in_surplus' ? t.surplus : t.shortage;
     basis = t.countBasis + (dmy(doc.businessDay) ? ', ' + dmy(doc.businessDay) : '');
@@ -150,7 +160,7 @@ function texts(doc, t) {
     basis = t.tuition + (months.length ? ': ' + months.map(ymLabel).join(', ') : '') + (over ? (months.length ? ' + ' + t.advance : ' (' + t.advance + ')') : '');
     if (doc.partyId) party = (party ? party + ' ' : '') + `(${t.student}: ${doc.partyId})`;
   } else if (doc.noBasis && !basis) basis = t.noBasis;
-  return { party, basis };
+  return { party, basis, attachment };
 }
 // Analitik hisob kodi: o'quvchi kodi va oy; bo'lmasa — qisqa tomon kodi; bo'lmasa «X» (tegishli emas).
 function anCode(line, doc) {
@@ -315,7 +325,7 @@ function ko2Html(doc, ctx, W, t, lang) {
     ${fld(t.to, esc(tx.party))}
     ${fld(t.basis, esc(tx.basis))}
     ${fld(t.amount, `<b>${esc(amount)}</b> — ${esc(words)}`)}
-    ${fld(t.attach, esc(doc.attachment || ''))}
+    ${fld(t.attach, esc(tx.attachment))}
     ${voidInfo(doc, ctx, t)}
     <div class="two">${sig(head.title, head.name)}${sig(chief.title, chief.name)}</div>
     ${fld(t.got, '')}<div class="cap">(${esc(t.gotHint)})</div>

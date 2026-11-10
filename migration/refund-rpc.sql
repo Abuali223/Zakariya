@@ -33,8 +33,12 @@ declare
   v_pname text;
 begin
   -- Ruxsat: refund — FAQAT direktor (refunds jadvali ins = is_admin) yoki server.
+  --   Kassa (moliya rejasi 1a, kassa-links.sql): Direktor TASDIQLAGAN naqd qaytarishni kassir pulni berayotgan paytda kassa
+  --   funksiyasi (kassa_doc_pay) shu funksiya orqali bajaradi — tranzaksiya bayrog'i iqror.kassa_rpc faqat kassa funksiyalari
+  --   ichida yoqiladi (mijoz uni o'zi yoqa olmaydi: PostgREST faqat public sxemasidagi funksiyalarni chaqiradi).
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
-  if not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role') then
+  if not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role'
+          or coalesce(current_setting('iqror.kassa_rpc', true), '') = '1') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
   p_amount := coalesce(p_amount, 0);

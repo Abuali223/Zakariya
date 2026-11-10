@@ -451,6 +451,10 @@ begin
   if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
     raise exception 'Ruxsat yo''q: chiqim so''rovini kassir, Moliya menejeri yoki Direktor yozadi' using errcode = '42501';
   end if;
+  -- Ish haqi avansi: shu oy vedomosti tasdiqlangan bo'lsa so'rov ham qabul qilinmaydi (kassa-links.sql).
+  if jsonb_typeof(p) = 'object' and coalesce(p ->> 'op', '') = 'out_advance' then
+    perform app.kassa_advance_check(to_char(app.fin_today(), 'YYYY-MM'));
+  end if;
   perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_id, v_dup from app.kassa_doc_build(p, 'KO2', v_uid, false) b;
   -- Tasdiq talab qilmaydigan chiqim (hozircha qo'lda kiritiladiganlar ichida yo'q) darhol «tasdiqlangan» bo'ladi.
@@ -548,23 +552,32 @@ revoke all on function public.kassa_doc_cancel(text, text) from public, anon;
 grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 
 -- ---------- Tasdiqlangan hujjat bo'yicha pulni berish / qabul qilish ----------
+--   Bog'langan amallar (kassa-links.sql) SHU tranzaksiyada bajariladi: tasdiqlangan qaytarish (out_refund) — refund_invoice;
+--   ish haqi avansi (out_advance) — staff_advances qatori; xarajat (out_expense) — «Buxgalteriya»ga (expenses) ko'chirish.
+--   Boshqa bo'limdan yozilib, o'sha zahoti o'tkaziladigan hujjatlar (o'quv to'lovi, maosh) bu yerdan to'lanmaydi.
 create or replace function public.kassa_doc_pay(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_was text; v_src text;
+declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_was text; v_src text; v_op text; v_desk text;
 begin
   if not (app.kassa_operator() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: naqd pulni kassir (favqulodda — Direktor) beradi' using errcode = '42501';
   end if;
-  select c.status, c."sourceTable" into v_was, v_src from public.cash_docs c where c.id = p_id;
+  select c.status, c."sourceTable", c.op, c.desk into v_was, v_src, v_op, v_desk from public.cash_docs c where c.id = p_id;
   if v_was is null then raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
-  if v_src is not null then
+  if v_src is not null and v_op <> 'out_refund' then
     raise exception 'Bu hujjat boshqa bo''limdan yozilgan — pul o''sha bo''limdan beriladi' using errcode = '42501', hint = 'kassa:linked_doc';
   end if;
   if v_was = 'draft' then
     raise exception 'Hujjat hali tasdiqlanmagan' using errcode = '42501', hint = 'kassa:not_approved';
   end if;
+  perform app.kassa_link_prelock(p_id);   -- bog'langan amal qulflari kassa qulfidan OLDIN (qulf tartibi: L1 → L4)
+  perform app.kassa_lock_desk(v_desk);    -- L4 (kassa_doc_post shu qulfni qayta oladi)
+  select c.status into v_was from public.cash_docs c where c.id = p_id;   -- qulf ostida: aynan shu chaqiruv o'tkazadimi
   perform app.kassa_flag(true);
   v_doc := app.kassa_doc_post(p_id, v_uid);
+  if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense') then
+    perform app.kassa_link_paid(p_id, v_uid);
+  end if;
   perform app.kassa_flag(false);
   return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', v_was = 'posted');
 end $$;
@@ -576,7 +589,9 @@ grant execute on function public.kassa_doc_pay(text) to authenticated;
 --   Naqd o'quv to'lovi orderi (in_tuition) bekor qilinsa — to'lovning o'zi ham teskari qilinadi (kassa-pay.sql:
 --   app.tuition_reverse_core): fakturalar va avans to'lovdan OLDINGI holatga qaytadi, to'lov «bekor qilingan» bo'ladi, ota-onaga
 --   hali yuborilmagan xabarnoma to'xtatiladi. Faqat shu to'lovdan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan bo'lsa.
---   Boshqa bo'limlardan avtomatik yozilgan hujjatlar (maosh, qaytarish) o'z bo'limidan bekor qilinadi.
+--   Naqd maosh (out_salary), ish haqi avansi (out_advance) va xarajat (out_expense) orderi bekor qilinsa — bog'langan yozuv
+--   (maosh to'lovi, avans, «Buxgalteriya»dagi xarajat) ham olib tashlanadi (kassa-links.sql: app.kassa_link_void).
+--   Qaytarish orderi (out_refund) bekor qilinmaydi.
 create or replace function public.kassa_doc_void(p_id text, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_day public.cash_days%rowtype;
@@ -600,8 +615,8 @@ begin
   if v_doc."isSystem" then
     raise exception 'Sanash farqi hujjati alohida bekor qilinmaydi (Direktor kunni qayta ochadi)' using errcode = '42501', hint = 'kassa:system_doc';
   end if;
-  if v_doc."sourceTable" is not null and not v_tuition then
-    raise exception 'Bu hujjat boshqa bo''limdan yozilgan — o''sha bo''limdan bekor qilinadi' using errcode = '42501', hint = 'kassa:linked_doc';
+  if v_doc."sourceTable" is not null and not v_tuition and v_doc.op <> 'out_salary' then
+    raise exception 'Bu hujjat bekor qilinmaydi (qaytarish orderi — xato bo''lsa, pulni yangi to''lov sifatida qayta qabul qiling)' using errcode = '42501', hint = 'kassa:linked_doc';
   end if;
   if not (app.fin_list2() or app.is_admin()) and v_doc."postedBy" is distinct from v_uid then
     raise exception 'Kassir faqat o''zi o''tkazgan hujjatni bekor qiladi' using errcode = '42501', hint = 'kassa:not_own';
@@ -618,6 +633,7 @@ begin
   end if;
   perform app.kassa_flag(true);
   if v_tuition then perform app.tuition_reverse_core(p_id, v_uid, v_reason); end if;
+  if v_doc.op in ('out_salary', 'out_advance', 'out_expense') then perform app.kassa_link_void(p_id, v_uid, v_reason); end if;
   update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = v_reason where id = p_id;
   perform app.kassa_flag(false);
   return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', false, 'balance', app.kassa_day_balance(v_day.id));

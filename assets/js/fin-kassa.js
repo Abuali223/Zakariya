@@ -87,6 +87,7 @@ function draw() {
   if (!s.kassaGoLive) warn.push(['#B54708', '#FEF3E2', 'Kassa hali «ishga tushirilgan» deb belgilanmagan: naqd o‘quv to‘lovlari kassa orderisiz yozilmoqda' + (m.director ? ' («⚙ Sozlamalar» → ishga tushirish sanasi).' : '.')]);
   if (num(s.pending.toApprove) > 0) warn.push(['#175CD3', '#E8F1FD', `Sizning tasdig‘ingizni kutayotgan so‘rovlar: ${s.pending.toApprove} ta.`]);
   if (num(s.pending.toPay) > 0 && (m.operator || m.director)) warn.push(['#175CD3', '#E8F1FD', `Tasdiqlangan, pul berilishi / qabul qilinishi kerak: ${s.pending.toPay} ta (${som(s.pending.toPaySum)}).`]);
+  if (num(s.pending.refundsLate) > 0) warn.push(['#B42318', '#FDECEC', `Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi: ${s.pending.refundsLate} ta.`]);
   if (num(s.unverifiedDays) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Tekshirilmagan (yopilgan) kunlar: ${s.unverifiedDays} ta.`]);
   if (num(s.undecidedShortages) > 0) warn.push(['#B42318', '#FDECEC', `Qarori kutilayotgan kamomad: ${s.undecidedShortages} ta${m.director ? ' — pastda qaror qabul qiling.' : ' (Direktor qarori).'}`]);
   if (s.limit && s.limit.exceeded) warn.push(['#B54708', '#FEF3E2', `Kassa qoldig‘i limitdan (${som(s.limit.cashLimit)}) oshgan — ortiqchasini bankka topshiring.`]);
@@ -112,7 +113,8 @@ function draw() {
   // ---- bugungi hujjatlar
   const docs = ST.ov.docs || [];
   const docRows = docs.map(d => {
-    const canVoid = od && d.status === 'posted' && !d.isSystem && (!d.sourceTable || d.op === 'in_tuition') && (m.director || m.list2 || (m.operator && d.postedBy === m.uid));
+    // bekor qilinadi: qo'lda kiritilganlar, naqd o'quv to'lovi va naqd maosh orderi (bog'langan yozuv ham teskari bo'ladi); qaytarish — yo'q
+    const canVoid = od && d.status === 'posted' && !d.isSystem && (!d.sourceTable || d.op === 'in_tuition' || d.op === 'out_salary') && (m.director || m.list2 || (m.operator && d.postedBy === m.uid));
     const isIn = d.form === 'KO1';
     return `<tr${d.status === 'void' ? ' style="opacity:.55"' : ''}>
       <td data-label="№"><b>${isIn ? 'K' : 'Ch'}-${esc(String(d.no))}</b><div class="small muted">${esc(hm(d.postedAt))}</div></td>
@@ -133,7 +135,7 @@ function draw() {
     const mine = d.requestedBy === m.uid;
     const canAppr = d.status === 'draft' && ((m.list2 && d.needsList2 && !d.approvedBy && !mine) || (m.director && d.needsDirector && !d.dirApprovedBy));
     const canRej = d.status === 'draft' && (m.list2 || m.director);
-    const canPay = d.status === 'approved' && (m.operator || m.director) && !d.sourceTable;
+    const canPay = d.status === 'approved' && (m.operator || m.director) && (!d.sourceTable || d.op === 'out_refund');   // tasdiqlangan qaytarish ham shu yerdan beriladi
     const canCancel = mine || m.director;
     const need = [];
     if (d.needsList2) need.push(d.approvedBy ? '✓ moliya: ' + nameOf(d.approvedBy) : '… moliya (2-ro‘yxat) tasdig‘i');

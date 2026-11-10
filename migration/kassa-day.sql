@@ -533,7 +533,10 @@ begin
                         or (v_dir and c."needsDirector" and c."dirApprovedBy" is null))),
       'waiting', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'),
       'toPay', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'approved'),
-      'toPaySum', (select coalesce(sum(c.amount), 0) from public.cash_docs c where c.desk = v_desk and c.status = 'approved' and c.form = 'KO2')),
+      'toPaySum', (select coalesce(sum(c.amount), 0) from public.cash_docs c where c.desk = v_desk and c.status = 'approved' and c.form = 'KO2'),
+      -- CT-26: Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi
+      'refundsLate', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
+                        and c."dirApprovedAt" < app.fin_now() - interval '1 day')),
     'unverifiedDays', (select count(*) from public.cash_days d where d.desk = v_desk and d.status = 'closed'),
     'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
     'limit', jsonb_build_object('cashLimit', v_o."cashLimit", 'set', v_o."cashLimit" > 0, 'exceeded', v_o."cashLimit" > 0 and coalesce(v_bal, 0) > v_o."cashLimit"),
@@ -604,7 +607,11 @@ begin
     'fiscalExempt30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."fiscalExempt" and c.status = 'posted' and c."businessDay" >= v_today - 30),
     'otherParties30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."partyType" = 'other' and c.status = 'posted' and not c."isSystem" and c."businessDay" >= v_today - 30),
     'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30),
-    'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'));
+    'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
+    'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
+                       and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
+    'salaryGateOff30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_salary' and c.status = 'posted'
+                          and c."sourceSnapshot" ->> 'gateOff' = 'true' and c."businessDay" >= v_today - 30));
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;

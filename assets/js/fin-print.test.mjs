@@ -211,3 +211,24 @@ test('Sanash dalolatnomasi: kun yopish (kamomad) va smena topshirish-qabul', () 
   for (const must of ['АКТ ПЕРЕСЧЁТА НАЛИЧНЫХ ДЕНЕГ В КАССЕ', 'при закрытии дня', 'Недостача — 5 000=00. Датой этого дня оформлен расходный кассовый ордер № 10.', 'Решение руководителя:'])
     assert.ok(ru.includes(must), 'yo‘q: ' + must);
 });
+
+test('KO-2: maosh va qaytarish orderi — tizim matnlari chop etish tilida', () => {
+  const sal = { id: 'kd_s', form: 'KO2', op: 'out_salary', status: 'posted', no: 3, businessDay: '2027-01-04', amount: 1000000, partyType: 'employee', partyId: 'teachers:tch1',
+    partyName: 'Sinov O‘qituvchi', basis: 'Ish haqi: 2026-12', sourceTable: 'salary_payments', sourceId: 'sp_x', sourceSnapshot: { month: '2026-12' }, postedBy: 'u_kas',
+    lines: [{ debit: '6710', credit: '5010', amount: 1000000, cash: true, articleId: 'OP-09' }] };
+  const t = text(docHtml(sal, ctx(), W));
+  for (const must of ['ЧИҚИМ КАССА ОРДЕРИ № 3', '6710 teachers:tch1 5010 1 000 000=00 OP-09', 'Берилсин: Sinov O‘qituvchi', 'Асоси: Иш ҳақи: 12.2026', 'Бир миллион сўм 00 тийин'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(text(docHtml(sal, ctx({ lang: 'ru' }), W)).includes('Основание: Заработная плата: 12.2026'));
+  const rf = { id: 'kd_r', form: 'KO2', op: 'out_refund', status: 'posted', no: 4, businessDay: '2027-01-04', amount: 450000, partyType: 'student', partyId: 'T-1', partyName: 'Sinov Ota Onaevich',
+    basis: 'Qaytarish: O‘quvchi ketdi; ariza 03.01.2027', attachment: 'Yozma ariza', sourceTable: 'refunds', dirApprovedBy: 'u_dir', postedBy: 'u_kas',
+    lines: [{ debit: '4010', credit: '5010', amount: 300000, cash: true, articleId: 'OP-15', analytics: { studentId: 'T-1', month: '2026-12' } },
+            { debit: '6310', credit: '5010', amount: 150000, cash: true, articleId: 'OP-15', analytics: { studentId: 'T-1', kind: 'credit_refund' } }] };
+  const r = text(docHtml(rf, ctx(), W));
+  for (const must of ['4010 T-1 · 12.2026 5010 300 000=00 OP-15', '6310 T-1 5010 150 000=00 OP-15', 'Берилсин: Sinov Ota Onaevich (ўқувчи: T-1)',
+    'Асоси: Қайтариш: O‘quvchi ketdi; ариза 03.01.2027', 'Иловаси: Ёзма ариза', 'Раҳбар Синов Д.Д.'])
+    assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
+  const rr = text(docHtml(rf, ctx({ lang: 'ru' }), W));
+  for (const must of ['Выдать: Sinov Ota Onaevich (учащийся: T-1)', 'Основание: Возврат: O‘quvchi ketdi; заявление 03.01.2027', 'Приложение: Письменное заявление'])
+    assert.ok(rr.includes(must), 'yo‘q: ' + must + '\n' + rr);
+});

@@ -8972,6 +8972,11 @@ async function openSalaryPayout(opts){
   const presel=opts.preselectPayId?String(opts.preselectPayId):'';
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
+  // Kassa ishga tushgach (KASSA.live) maosh funksiya orqali yoziladi: naqd — faqat kassir (favqulodda Direktor), kassa chiqim
+  //   orderi (KO-2) bilan bitta tranzaksiyada; karta / bank orqali — Moliya menejeri yoki Direktor (kassa orderisiz).
+  const spMethods=KASSA.live ? [kassaCashOk()?['cash','Naqd — kassadan (chiqim orderi bilan)']:null,
+    (SESSION.isAdmin||SESSION.role==='finance_mgr')?['card','Karta / bank orqali (kassa orderisiz)']:null].filter(Boolean) : [];
+  if(KASSA.live && !spMethods.length){ toast('Kassa ishga tushgan: naqd maoshni kassir beradi, karta orqali to‘lovni Moliya menejeri yozadi', true); return; }
   $('#modal').innerHTML=`<div class="modal-h"><h3>Maosh berish (xodimga)</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Xodim<select id="sp-t" style="${fld};background:#fff">${payees.map(p=>`<option value="${esc(p.id)}" ${presel&&String(p.id)===presel?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
@@ -8979,6 +8984,8 @@ async function openSalaryPayout(opts){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi oy uchun<input type="month" id="sp-month" value="${esc(M)}" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Berilgan sana<input type="date" id="sp-date" value="${esc(today)}" style="${fld}"></label>
       </div>
+      ${KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="sp-method" style="${fld};background:#fff">${spMethods.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select></label>
+      <div class="small muted" id="sp-method-info" style="margin-top:4px"></div>`:''}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Davomat ushlanmasi (so‘m) — <span id="sp-ded-info" style="font-weight:400" class="muted"></span>
         <input type="text" inputmode="numeric" id="sp-ded" value="0" style="${fld}"></label>
       <div id="sp-info" class="small" style="margin-top:10px;background:#eef3f1;border-radius:10px;padding:12px;font-weight:700"></div>
@@ -8990,6 +8997,9 @@ async function openSalaryPayout(opts){
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sp-do">Berish + chek</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  { const ms=$('#sp-method'); if(ms){ const upd=()=>{ const cash=ms.value==='cash', dt=$('#sp-date'); if(dt){ dt.disabled=cash; if(cash) dt.value=today; }
+      $('#sp-method-info').textContent = cash ? 'Sana — kassa kuni (server belgilaydi). Xodim chiqim orderiga imzo qo‘yadi.' : 'Kassadan pul chiqmaydi — bank ko‘chirmasi bo‘yicha yoziladi.'; };
+    ms.addEventListener('change', upd); upd(); } }
   const dnum=v=>Number(String(v==null?'':v).replace(/\D/g,''))||0;
   let sameMonthPaidV=0;   // Audit L1: SHU oy uchun ALLAQACHON berilgan naqd (bo'lib berishning oldingi qismi)
   // Qoldiq QIRQILMAGAN jami qarzdan hisoblanadi (sp-raw = maosh − avans − ushlanma + o'rinbosarlik + oldingi
@@ -9116,15 +9126,21 @@ async function openSalaryPayout(opts){
     //   beradi. Shu sabab: javob yo'qolib qayta bosilganda yozuv ALLAQACHON bor bo'lsa — takror yozmaymiz,
     //   «berildi» deb ko'rsatamiz (avval «Xatolik: 42501» chiqib, kassir yangi oynada ikkinchi marta berardi).
     const spId='sp_'+String(tid)+'_'+mm+'_'+payNonce;
-    const showDone=(rec)=>{   // rec — bazada ALLAQACHON bor yozuv (qayta bosish): ekranda o'shaning summasi
+    const showDone=(rec, kassa)=>{   // rec — bazada ALLAQACHON bor yozuv (qayta bosish): ekranda o'shaning summasi; kassa — yozilgan chiqim orderi
       const pd=rec?(Number(rec.paid)||0):paid, co=rec?Math.round(Number(rec.carryOut)||0):carryOut;
+      const kdoc=(kassa&&kassa.docId) ? kassa : ((rec&&rec.cashDocId) ? { docId:rec.cashDocId } : null);
+      const how=(rec&&rec.method==='card') || (!rec && $('#sp-method') && $('#sp-method').value==='card') ? 'karta / bank orqali' : 'naqd';
       toast('Maosh berildi ✓');
       $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Maosh berildi</h3><button class="x" id="m-x2">×</button></div>
-        <div class="modal-b"><div class="small" style="background:#eef3f1;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} · ${esc(mLabel(mm))} — naqd <b>${fmtSum(pd)}</b> so‘m${co>0?`<br><span style="color:#B45309;font-weight:400">Keyingi oyga qoldiq: ${fmtSum(co)} so‘m</span>`:(co<0?`<br><span style="color:#B45309;font-weight:400">Ortiqcha berildi: ${fmtSum(-co)} so‘m (keyingi oydan ayiriladi)</span>`:'')}</div>
-        <div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div></div>
-        <div class="modal-f"><button type="button" class="btn ghost" id="sp-close">Yopish</button><button type="button" class="btn gold" id="sp-print">🧾 Chek chiqarish</button></div>`;
+        <div class="modal-b"><div class="small" style="background:#eef3f1;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} · ${esc(mLabel(mm))} — ${how} <b>${fmtSum(pd)}</b> so‘m${co>0?`<br><span style="color:#B45309;font-weight:400">Keyingi oyga qoldiq: ${fmtSum(co)} so‘m</span>`:(co<0?`<br><span style="color:#B45309;font-weight:400">Ortiqcha berildi: ${fmtSum(-co)} so‘m (keyingi oydan ayiriladi)</span>`:'')}</div>
+        ${kdoc?`<div class="small" style="margin-top:8px;background:#E8F1FD;color:#175CD3;border-radius:8px;padding:8px 10px;font-weight:600">Kassa chiqim orderi${kdoc.no?` № ${esc(String(kdoc.no))}`:''} yozildi — chop eting, xodim «Олдим» qatoriga imzo qo‘yadi.</div>`
+              :`<div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`}</div>
+        <div class="modal-f"><button type="button" class="btn ghost" id="sp-close">Yopish</button>${kdoc?`<button type="button" class="btn gold" id="sp-ko2">🖨 Chiqim orderi</button>`:`<button type="button" class="btn gold" id="sp-print">🧾 Chek chiqarish</button>`}</div>`;
       $('#m-x2').onclick=closeModal; $('#sp-close').onclick=()=>{ closeModal(); if(typeof opts.onDone==='function') try{ opts.onDone(); }catch(e){} };
-      $('#sp-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount:pd, reason:'Oylik maosh', period:mm, date:(rec&&rec.date)||dt });
+      { const pb=$('#sp-print'); if(pb) pb.onclick=()=>printReceipt({ kind:'expense', who:tn, amount:pd, reason:'Oylik maosh', period:mm, date:(rec&&rec.date)||dt }); }
+      { const kb=$('#sp-ko2'); if(kb) kb.onclick=async()=>{ kb.disabled=true;
+          try{ const m=await finMod('fin-kassa'); await m.printDocById(finCtx(), kdoc.docId, ()=>showDone(rec, kassa)); }catch(e){ toast('Chop etib bo‘lmadi: '+String((e&&(e.message||e.code))||''),true); }
+          const b2=$('#sp-ko2'); if(b2) b2.disabled=false; }; }
     };
     const showStale=(e)=>{   // baza rad etdi (23503): eski forma qayta yuborilmasin — aniq ko'rsatma
       toast('Maosh yozilmadi — xodimning ID’si o‘zgargan yoki u o‘chirilgan: oynani yopib, qayta oching',true);
@@ -9154,8 +9170,16 @@ async function openSalaryPayout(opts){
     if(exDocs.some(d=>{ const x=d.data()||{}; return String(x.month)===String(mm) && (x.payeeRef==null || String(x.payeeRef)===myRef); }) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
     // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
     //   baza rad etadi (id-guards.sql 5-band) — maosh eski ID'ning YANGI egasiga jim yozilmaydi.
-    try{ await setDoc(doc(db,'salary_payments',spId), { teacherId:String(tid), payeeRef:(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt, byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }, {merge:true});
-      showDone();
+    const spRow={ teacherId:String(tid), payeeRef:(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt };
+    try{
+      if(KASSA.live){   // kassa ishga tushgan: funksiya orqali — naqd bo'lsa kassa chiqim orderi (KO-2) bilan BITTA tranzaksiyada
+        if(paid<=0){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Berilayotgan summani kiriting',true); return; }
+        const res=await rpc('kassa_salary_pay', { p:Object.assign({ id:spId, method:(($('#sp-method')&&$('#sp-method').value)||'') }, spRow) });
+        showDone((res&&res.row)||null, res&&res.kassa);
+      } else {
+        await setDoc(doc(db,'salary_payments',spId), Object.assign({}, spRow, { byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }), {merge:true});
+        showDone();
+      }
     }catch(e){
       let saved=null; try{ const g=await getDoc(doc(db,'salary_payments',spId)); if(g&&g.exists()) saved=g.data()||{}; }catch(_){}
       if(saved){ showDone(saved); return; }
@@ -9340,7 +9364,7 @@ async function renderAccounting(){
         <td data-label="Toifa"><span class="acc-cat-chip">${esc(e.category||'—')}</span></td>
         <td data-label="Izoh">${esc(e.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:var(--bad);white-space:nowrap">${fmtSum(e.amount)}</td>
-        <td class="td-actions"><div class="row-actions"><button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button></div></td></tr>`;
+        <td class="td-actions"><div class="row-actions">${e.cashDocId?'<span class="chip" title="Kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi">Kassa</span>':`<button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`}</div></td></tr>`;
     }).join('');
     const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
       ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>'}</div>`;
@@ -9362,7 +9386,7 @@ async function renderAccounting(){
         <td data-label="Xodim">${esc(a.teacherName||a.teacherId||'—')}</td>
         <td data-label="Izoh">${esc(a.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
-        <td class="td-actions"><button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button></td></tr>`).join('')}</tbody></table></div></div>` : '';
+        <td class="td-actions"><button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button>${a.cashDocId?'<span class="chip" title="Kassa chiqim orderi bilan berilgan — «Kassa» bo‘limidan bekor qilinadi">Kassa</span>':`<button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     // ---- Avans — kimlarda (2,9 mln kimdan iboratini ko'rsatadi) ----
     const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; });
     INV.forEach(i=>{ const k=String(i.studentId||''); if(k && !nameC[k] && i.studentName) nameC[k]=i.studentName; });
@@ -9388,6 +9412,9 @@ async function renderAccounting(){
   function openExpenseForm(exp){
     const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
     const e=exp||{};
+    if(e.cashDocId){ toast('Bu xarajat kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi',true); return; }
+    // Kassa ishga tushgach (KASSA.live): bu oynada faqat NAQDSIZ xarajat (usuli bilan); naqd xarajat — «Kassa» → «+ Chiqim so‘rovi».
+    const EXP_METHODS=[['bank','Bank o‘tkazmasi'],['card','Korporativ karta'],['accountable','Hisobdor shaxs orqali (avans hisoboti)']];
     const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
     $('#modal').innerHTML=`<div class="modal-h"><h3>${exp?'Xarajatni tahrirlash':'Xarajat qo‘shish'}</h3><button class="x" id="m-x">×</button></div>
       <div class="modal-b">
@@ -9395,9 +9422,15 @@ async function renderAccounting(){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Toifa<select id="e-cat" style="${fld};background:#fff">${CATS.map(c=>`<option ${e.category===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input type="text" inputmode="numeric" id="e-amt" value="${e.amount?fmtSum(e.amount):''}" placeholder="masalan: 2 000 000" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="e-note" value="${esc(e.note||'')}" placeholder="masalan: Avgust oyliklari" style="${fld}"></label>
+        ${KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="e-method" style="${fld};background:#fff">${EXP_METHODS.map(m=>`<option value="${m[0]}" ${e.method===m[0]?'selected':''}>${esc(m[1])}</option>`).join('')}</select></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Kontragent <span class="muted" style="font-weight:500">— ixtiyoriy</span><select id="e-cp" style="${fld};background:#fff"><option value="">—</option></select></label>
+        <div class="small" style="margin-top:10px;background:#E8F1FD;color:#175CD3;border-radius:10px;padding:10px 12px"><b>Kassa ishga tushgan.</b> Naqd xarajat bu yerda yozilmaydi — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Xarajat» (pul berilgach xarajat shu ro‘yxatga o‘zi tushadi). <a href="#" id="e-kassa" style="font-weight:700">Kassaga o‘tish</a></div>`:''}
       </div>
       <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="e-save">Saqlash</button></div>`;
     openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    { const ek=$('#e-kassa'); if(ek) ek.onclick=ev=>{ ev.preventDefault(); closeModal(); openTab('kassa'); }; }
+    if(KASSA.live){ rpc('kassa_refs').then(r=>{ const sel=$('#e-cp'); if(!sel) return;   // kontragentlar ro'yxati (kassa bilan umumiy)
+        sel.innerHTML='<option value="">—</option>'+((r&&r.counterparties)||[]).map(c=>`<option value="${esc(c.id)}" ${e.counterpartyId===c.id?'selected':''}>${esc(c.name)}</option>`).join(''); }).catch(()=>{}); }
     const amt=$('#e-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
     $('#e-save').onclick=async()=>{
       const date=$('#e-date').value, category=$('#e-cat').value, amount=Number(($('#e-amt').value||'').replace(/\D/g,''))||0, note=$('#e-note').value.trim();
@@ -9412,6 +9445,7 @@ async function renderAccounting(){
       const btn=$('#e-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{
         const data={ date, month:date.slice(0,7), category, amount, note, updatedAt:serverTimestamp() };
+        if(KASSA.live){ data.method=($('#e-method')&&$('#e-method').value)||'bank'; data.counterpartyId=($('#e-cp')&&$('#e-cp').value)||null; }
         if(exp&&exp._id) await setDoc(doc(db,'expenses',exp._id),data,{merge:true});
         else { data.createdAt=serverTimestamp(); await addDoc(collection(db,'expenses'),data); }
         toast('Saqlandi ✓'); if(await reload()) draw($('#ac-month').value||curMonth());
@@ -9521,9 +9555,11 @@ async function renderAccounting(){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="av-date" value="${esc(dflt)}" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Avans summasi (so‘m)<input type="text" inputmode="numeric" id="av-amt" placeholder="masalan: 1 000 000" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="av-note" placeholder="ixtiyoriy" style="${fld}"></label>
+        ${KASSA.live?`<div class="small" style="margin-top:10px;background:#E8F1FD;color:#175CD3;border-radius:10px;padding:10px 12px"><b>Kassa ishga tushgan.</b> Bu yerda faqat <b>karta / bank orqali</b> berilgan avans yoziladi. Naqd avans — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Ish haqi avansi» (tasdiqdan keyin kassir beradi, avans o‘zi yoziladi). <a href="#" id="av-kassa" style="font-weight:700">Kassaga o‘tish</a></div>`:''}
       </div>
-      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">Saqlash</button></div>`;
+      <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">${KASSA.live?'Saqlash (karta / bank)':'Saqlash'}</button></div>`;
     openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+    { const ak=$('#av-kassa'); if(ak) ak.onclick=ev=>{ ev.preventDefault(); closeModal(); openTab('kassa'); }; }
     const amt=$('#av-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
     $('#av-save').onclick=async()=>{
       const tid=$('#av-t').value, date=$('#av-date').value, amount=Number(($('#av-amt').value||'').replace(/\D/g,''))||0, note=$('#av-note').value.trim();
@@ -9544,7 +9580,9 @@ async function renderAccounting(){
         $('#av-print').onclick=()=>printReceipt({ kind:'expense', who:tn, amount:am, reason:`Xodim avansi${nt?' · '+nt:''}`, period:dd.slice(0,7), date:dd }); };
       // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
       //   baza rad etadi (id-guards.sql 5-band) — avans eski ID'ning YANGI egasiga jim yozilmaydi.
-      try{ await setDoc(doc(db,'staff_advances',advId), { teacherId:String(tid), payeeRef:(pp.kind==='teacher'?'teachers':'staff')+':'+String(pp.refId), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() }, {merge:true});
+      const advRow={ teacherId:String(tid), payeeRef:(pp.kind==='teacher'?'teachers':'staff')+':'+String(pp.refId), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() };
+      if(KASSA.live) advRow.method='card';   // kassa ishga tushgach bu oynadan faqat naqdsiz avans (naqd — «Kassa» orqali)
+      try{ await setDoc(doc(db,'staff_advances',advId), advRow, {merge:true});
         await done(); }
       catch(err){
         let saved=null; try{ const g=await getDoc(doc(db,'staff_advances',advId)); if(g&&g.exists()) saved=g.data()||{}; }catch(_){}
@@ -12077,12 +12115,17 @@ async function openRefund(ctx, reload){
       <div class="small" style="font-weight:700;background:#fdecec;color:#B42318;border-radius:10px;padding:10px 12px">${esc(who)} — qaytariladigan: <b>${maxStr}</b> so‘m gacha</div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}" ${isInv?'':'readonly'}></label>${isInv?'':`<div class="small muted" style="margin-top:4px">Biriktirilmagan to‘lov faqat TO‘LIQ qaytariladi. Qisman bo‘lsa — avval «Biriktirish» qiling (ortiqchasi avansga o‘tadi), so‘ng avansdan qaytaring.</div>`}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab (majburiy)<input id="rf-reason" type="text" placeholder="masalan: adashib kiritilgan" style="${fld}"></label>
+      ${KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaytarish usuli<select id="rf-method" style="${fld};background:#fff"><option value="cash">Naqd — kassadan (chiqim orderi bilan)</option><option value="bank">Naqdsiz (bank / karta orqali — asl kanal)</option></select></label>
+      <div id="rf-cash"><div class="grid2" style="margin-top:8px"><label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Pul kimga beriladi (to‘liq F.I.Sh.)<input id="rf-payee" type="text" maxlength="200" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Ariza sanasi<input id="rf-reqdate" type="date" value="${esc(tkDay(new Date()))}" style="${fld}"></label></div>
+        <div class="small muted" style="margin-top:6px">Tasdiqlagach so‘rov «Kassa»da paydo bo‘ladi; kassir pulni chiqim orderi bilan beradi. Hisob-faktura va avans <b>pul berilgan kuni</b> o‘zgaradi.</div></div>`:''}
       ${refundPin?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor PIN kodi<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>`:`<div class="small" style="margin-top:8px;color:#B45309">ℹ️ Refund PIN o‘rnatilmagan — Sozlamalar → «🔐 Qaytarish PIN»da o‘rnating (himoya uchun).</div>`}
       ${studCredit>0?`<label class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-clawback" style="margin-top:2px"><span>Bu o‘quvchida <b>${fmtSom(studCredit)}</b> so‘m <b>avans</b> bor. Belgilansa — qaytargach avans ham <b>0</b> ga tushiriladi (o‘quvchi butunlay ketayotган bo‘lsa). Belgilanmasa — avans qoladi.</span></label>`:''}
       <div class="small muted" style="margin-top:8px">${isInv?'Hisob-faktura to‘langan summasidan ayiriladi — qarz qayta paydo bo‘ladi.':'Biriktirilmagan to‘lov «qaytarilgan» deb belgilanadi.'} Amal jurnalga (refunds) yoziladi.</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn danger" id="rf-do">Qaytarish</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  { const rm=$('#rf-method'); if(rm){ const upd=()=>{ const c=rm.value==='cash'; $('#rf-cash').style.display=c?'':'none'; $('#rf-do').textContent=c?'Tasdiqlash (kassadan beriladi)':'Qaytarish'; }; rm.addEventListener('change', upd); upd(); } }
   const amt=$('#rf-amt'); amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   let busy=false;
   $('#rf-do').onclick=async()=>{
@@ -12093,9 +12136,21 @@ async function openRefund(ctx, reload){
     if(amount>maxAmt+0.5){ toast('Summa qaytariladigandan ko‘p',true); return; }
     if(!reason){ toast('Sababni yozing',true); return; }
     if(refundPin && pass!==refundPin){ toast('PIN noto‘g‘ri',true); return; }
-    if(!confirm(`${fmtSom(amount)} qaytarilsinmi?\nSabab: ${reason}`)) return;   // fmtSom «so‘m»ni o'zi qo'shadi
-    busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent='Qaytarilmoqda…';
+    // Kassa ishga tushgan va naqd: Direktor TASDIQLAYDI (so'rov), pulni kassir chiqim orderi bilan beradi — balans o'sha paytda o'zgaradi.
+    const viaKassa = KASSA.live && $('#rf-method') && $('#rf-method').value==='cash';
+    const payee = viaKassa ? ($('#rf-payee').value||'').trim() : '';
+    if(viaKassa && payee.length<5){ toast('Pul kimga berilishini to‘liq yozing (F.I.Sh.)',true); return; }
+    if(!confirm(viaKassa ? `${fmtSom(amount)} naqd qaytarish tasdiqlansinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nPulni kassir «Kassa» bo‘limidan beradi.` : `${fmtSom(amount)} qaytarilsinmi?\nSabab: ${reason}`)) return;   // fmtSom «so‘m»ni o'zi qo'shadi
+    busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent=viaKassa?'Tasdiqlanmoqda…':'Qaytarilmoqda…';
     const email=(auth.currentUser&&auth.currentUser.email)||'';
+    if(viaKassa){
+      try{ const cbEl=$('#rf-clawback');
+        const d=await rpc('kassa_refund_request', { p:{ target:isInv?'invoice':'payment', id:String(isInv?(ctx.invoice._id||''):(ctx.payment._id||'')), amount, reason,
+          clawback:!!(cbEl && cbEl.checked && studCredit>0), payee, requestDate:($('#rf-reqdate').value||null), clientRef:'rf_'+Date.now()+'_'+Math.random().toString(36).slice(2,8) } });
+        toast(`Qaytarish tasdiqlandi ✓ — ${fmtSom((d&&d.amount)||amount)} kassadan beriladi («Kassa» → «Pulni berish»)`); closeModal(); if(reload) reload(); kassaProbe();
+      }catch(e){ busy=false; btn.disabled=false; btn.textContent='Tasdiqlash (kassadan beriladi)'; toast('Xatolik: '+((e&&(e.message||e.code))||''),true); }
+      return;
+    }
     try{
       // [High A / Medium#2] ATOMIK + IDEMPOTENT refund_invoice RPC (migration/refund-rpc.sql):
       // refunds jurnal + invoice paidAmount↓ + (clawback) avans=0 + credit_ledger — BITTA
