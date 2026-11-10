@@ -804,14 +804,21 @@ tuziladi — jamlari bir xil; ichki hisobot bo‘lgani uchun ilova tilida, chop 
 RP-06 («Kassa» sahifasida, 2-ro‘yxat va direktor uchun: 20 tekshiruv, jumladan moslik P1 / P4 / P5 / P8 —
 `app.kassa_reconcile`, hisobdorlardagi pul muddati, rahbarga berilgan pul, limit, chop etilmagan KO-4) va Telegram RP-05
 (`director_daily` → `app.kassa_daily`: kun jamlari, sanash va farq, bank o‘tkazmalari, nazorat qatori; kassa moduli
-bo‘lmasa yoki ishlatilmasa — blok yo‘q). Sinov kassasi (CT-20) hujjatlari «Buxgalteriya» va avans jadvallariga
-ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish kunigacha barcha oynalar
-avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 91,
-`test-kassa-report.sql` 52, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18,
-`fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs` 39; brauzerda besh to‘liq stsenariy (143 tekshiruv)
-eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34
-tekshiruv). Qoldi: F1.11 (RLS qismi), F1.16–F1.19 (31.12 surati, sinov va predeploy tekshiruvlari, ishga tushirish
-to‘plami), mustaqil ko‘rik.
+bo‘lmasa yoki ishlatilmasa — blok yo‘q); F1.16 `fin-period.sql` — davr surati (`fin_snapshot_take`: o‘quvchilar bo‘yicha
+qarz va avanslar, aniqlanmagan tushumlar, kassa qoldig‘i, hisoblagichlar, to‘lanmagan ish haqi, berilmagan qaytarishlar;
+o‘zgarmaydi, SHA-256 xeshi qayta hisoblab tekshiriladi; yillik / oylik / qo‘lda, bir kun uchun bir necha versiya) va
+davr qulfi (`fin_period_lock`: shu sanagacha to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi, o‘zgartirilmaydi —
+42501; server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida); «Kassa» sahifasida «Davr»
+oynasi (Direktor — surat va qulf; 2-ro‘yxat — ko‘rish, xeshni tekshirish, JSON yuklab olish), sana maydonlarida eng erta
+sana = qulfdan keyingi kun; F1.11 — kassa ishga tushgach «Maosh berish»ni faqat kassa operatori (naqd) va Moliya
+menejeri (karta) ochadi, HR menejer pul bermaydi (server ham rad etadi). Sinov kassasi (CT-20) hujjatlari «Buxgalteriya»
+va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish
+kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50,
+`test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-period.sql` 27, `test-kassa-race.sh` 22 (8 × 200
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
+39; brauzerda olti to‘liq stsenariy (163 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34 tekshiruv). Qoldi: F1.18–F1.19 (o‘rnatishdan keyingi
+tekshiruvlar, ishga tushirish to‘plami), jonli zanjirga o‘tkazish, mustaqil ko‘rik; F1.20 (RLS relizi) — 1b-bosqichda.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

@@ -4,6 +4,7 @@
 //   Barcha yozish amallari — serverdagi kassa funksiyalari (migration/kassa-docs.sql, kassa-day.sql) orqali; bu fayl faqat
 //   ko'rsatadi va so'rov yuboradi. Raqam, sana, qoldiq va huquqni SERVER belgilaydi.
 //   F1.15: kunlik hisobot (RP-02, «kimdan / kimga qancha» — kun oynasida va chop etishda) va nazorat ro'yxati (RP-06).
+//   F1.16: «Davr» — davr surati (yil / oy yakuni) va yopilgan davr qulfi.
 //   Kirish:  renderKassa(ctx)            — sahifa
 //            approvalCount(ctx)          — «Tasdiqlash» bo'limidagi navbat soni
 //            approvalRender(ctx, el)     — «Tasdiqlash» bo'limidagi navbat ro'yxati
@@ -44,6 +45,7 @@ const stChip = st => chip(ST_LBL[st] || st, ({ posted: '#157347', void: '#B42318
   ({ posted: '#E7F6EC', void: '#FDECEC', rejected: '#FDECEC', cancelled: '#F2F4F7', approved: '#E8F1FD', draft: '#FEF3E2' })[st] || '#F2F4F7');
 const dayChip = st => chip(DAY_LBL[st] || st, ({ open: '#B54708', closed: '#175CD3', verified: '#157347' })[st] || '#475467', ({ open: '#FEF3E2', closed: '#E8F1FD', verified: '#E7F6EC' })[st] || '#F2F4F7');
 const FLD = 'padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%;background:#fff';
+const CHK = 'width:auto;flex:none;padding:0;margin:2px 0 0';   // belgilash katagi: umumiy «input{width:100%}» qoidasi uni cho'zib yubormasin
 const lbl = (t, inner, extra) => `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px${extra || ''}">${t}${inner}</label>`;
 const fmtInput = el => { if (el) el.addEventListener('input', () => { const d = digits(el.value); el.value = d.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }); };
 
@@ -96,6 +98,7 @@ function draw() {
   if (ready && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-out">+ Chiqim so‘rovi</button>`);
   if (od && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-close">Kunni yopish</button>`);
   if (od && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul (pul sanaladi, kun ochiq qoladi)">Smena topshirish</button>`);
+  if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
   if (m.director) acts.push(`<button class="btn ghost2" id="ks-set" title="Kassa sozlamalari">⚙ Sozlamalar</button>`);
   $('#ks-actions').innerHTML = acts.join('');
 
@@ -109,6 +112,7 @@ function draw() {
   if (num(s.pending.refundsLate) > 0) warn.push(['#B42318', '#FDECEC', `Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi: ${s.pending.refundsLate} ta.`]);
   if (num(s.unverifiedDays) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Tekshirilmagan (yopilgan) kunlar: ${s.unverifiedDays} ta.`]);
   if (num(s.undecidedShortages) > 0) warn.push(['#B42318', '#FDECEC', `Qarori kutilayotgan kamomad: ${s.undecidedShortages} ta${m.director ? ' — pastda qaror qabul qiling.' : ' (Direktor qarori).'}`]);
+  if (s.lockedThrough && (m.director || m.list2)) warn.push(['#475467', '#F2F4F7', `Davr ${dmy(s.lockedThrough)} gacha yopilgan: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.`]);
   if (s.limit && s.limit.exceeded) warn.push(['#B54708', '#FEF3E2', `Kassa qoldig‘i limitdan (${som(s.limit.cashLimit)}) oshgan — ortiqchasini bankka topshiring.`]);
   const warnHtml = warn.map(w => `<div class="small" style="margin-bottom:8px;color:${w[0]};background:${w[1]};border-radius:10px;padding:10px 12px;font-weight:600">${esc(w[2])}</div>`).join('');
 
@@ -222,6 +226,7 @@ function bind() {
   on('#ks-close', openCloseForm);
   on('#ks-hand', openHandoverForm);
   on('#ks-set', openSettings);
+  on('#ks-period', openPeriodForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
   each('data-void', id => ask('Hujjatni bekor qilish', 'Bekor qilish sababi (kamida 5 belgi). Hujjat raqami saqlanadi va «bekor qilingan» deb belgilanadi.', 5, r => act('kassa_doc_void', { p_id: id, p_reason: r }, 'Hujjat bekor qilindi')));
@@ -284,10 +289,10 @@ async function openDocForm(form) {
       ${multi ? `<div class="small" style="font-weight:700;margin-top:10px">Statiya va summa <span class="muted" style="font-weight:500">— bir hujjatda bir nechta statiya bo‘lishi mumkin</span></div><div id="kf-lines"></div><button type="button" class="btn sm" id="kf-addline" style="margin-top:6px">+ qator</button>`
         : lbl('Summa (so‘m)', `<input id="kf-amt" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}
       ${lbl('Asos <span class="muted" style="font-weight:500">— hujjat nomi, raqami, sanasi</span>', `<input id="kf-basis" type="text" maxlength="300" style="${FLD}">`)}
-      ${r.op === 'out_expense' ? `<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="kf-nobasis"> Asos hujjati yo‘q (bozordan naqd xarid) — faqat ${esc(som(ST.ov.state.l1))}gacha va bitta statiya</label>` : ''}
+      ${r.op === 'out_expense' ? `<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="kf-nobasis" style="${CHK}"> Asos hujjati yo‘q (bozordan naqd xarid) — faqat ${esc(som(ST.ov.state.l1))}gacha va bitta statiya</label>` : ''}
       ${lbl('Ilova <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<input id="kf-attach" type="text" maxlength="300" style="${FLD}">`)}
       ${lbl('Izoh' + (r.op === 'in_other' ? ' <span style="color:#B42318">(majburiy)</span>' : ''), `<input id="kf-note" type="text" maxlength="300" style="${FLD}">`)}
-      ${r.fiscalRequired ? lbl('Fiskal chek № <span style="color:#B42318">(majburiy)</span>', `<input id="kf-fiscal" type="text" maxlength="40" style="${FLD}">`) + (m.director ? `<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="kf-fexempt"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>` : '') : ''}`;
+      ${r.fiscalRequired ? lbl('Fiskal chek № <span style="color:#B42318">(majburiy)</span>', `<input id="kf-fiscal" type="text" maxlength="40" style="${FLD}">`) + (m.director ? `<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="kf-fexempt" style="${CHK}"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>` : '') : ''}`;
     fmtInput($('#kf-amt'));
     const hint = [];
     if (r.needsApproval) hint.push('Pul berishdan oldin Moliya menejeri / buxgalter tasdiqlaydi' + (r.directorAlways ? ', Direktor ham' : `; ${som(ST.ov.state.t1)}dan katta summada — Direktor ham`) + '.');
@@ -443,7 +448,7 @@ function openHandoverForm() {
 function openVerifyForm(day) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni tekshirish — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small muted">Kassa kitobi varag‘i va unga ilova qilingan kirim / chiqim orderlari qog‘ozda qabul qilinadi va tizimdagi yozuvlar bilan solishtiriladi. Tekshirilgan kun endi o‘zgarmaydi.</div>
-      <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:700"><input type="checkbox" id="kv-papers" style="margin-top:2px"> Qog‘oz hujjatlar va ilovalarni oldim, yozuvlarni tekshirdim</label>
+      <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:700"><input type="checkbox" id="kv-papers" style="${CHK}"> Qog‘oz hujjatlar va ilovalarni oldim, yozuvlarni tekshirdim</label>
       ${lbl('Izoh', `<input id="kv-note" type="text" maxlength="300" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kv-save">Tekshirdim</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
@@ -498,6 +503,74 @@ function openSettings() {
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
+}
+
+// ---------------------------------------------------------------- davr surati va qulfi (F1.16)
+// Surat — davr oxiridagi holat (qarzdorlik, avanslar, kassa qoldig'i, to'lanmagan ish haqi …): o'zgarmaydi, xeshi bilan saqlanadi.
+//   Qulf — shu sanagacha pul yozuvlari kiritilmaydi va o'zgartirilmaydi. Olish va qulfni surish — faqat Direktor; ko'rish — 2-ro'yxat ham.
+const SNAP_KIND = { year_end: 'Yil yakuni', month_end: 'Oy yakuni', manual: 'Qo‘lda' };
+const prevMonthEnd = today => { const d = new Date(String(today).slice(0, 7) + '-01T12:00:00Z'); d.setUTCDate(0); return d.toISOString().slice(0, 10); };
+function saveJson(name, obj) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+async function openPeriodForm() {
+  const m = me();
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal;
+  let L;
+  try { L = await call('fin_snapshots_list'); } catch (e) { C.toast(errText(e), true); C.closeModal(); return; }
+  const items = L.items || [], today = L.today || (ST.ov && ST.ov.state && ST.ov.state.today) || '';
+  const def = prevMonthEnd(today);
+  const tot = t => { t = t || {}; return `qarzdorlik ${som(t.receivable)} · avans va oldindan to‘lov ${som(num(t.credit) + num(t.prepaid))} · kassa ${som(t.cash)}${num(t.salaryPayable) ? ' · to‘lanmagan ish haqi ' + som(t.salaryPayable) : ''}${num(t.unmatched) ? ' · biriktirilmagan ' + som(t.unmatched) : ''}`; };
+  const rows = items.map(x => `<div data-snap="${esc(x.id)}" style="border:1px solid var(--border-2);border-radius:10px;padding:10px 12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>${esc(dmy(x.asOf))}</b> <span class="small muted">${esc(SNAP_KIND[x.kind] || x.kind)}${num(x.version) > 1 ? ' · ' + esc(String(x.version)) + '-surat' : ''}</span>${x.late ? ' ' + chip('kechikib olingan', '#B54708', '#FEF3E2') : ''}</div>
+        <span style="display:flex;gap:6px"><button class="btn sm" data-snap-chk="${esc(x.id)}">Tekshirish</button><button class="btn sm" data-snap-dl="${esc(x.id)}" title="To‘liq suratni fayl sifatida saqlash">⬇ JSON</button></span></div>
+      <div class="small muted" style="margin-top:4px">olindi: ${esc(dmy(String(x.takenAt).slice(0, 10)))} ${esc(hm(x.takenAt))}${x.byName ? ' · ' + esc(x.byName) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>
+      <div class="small" style="margin-top:4px">${esc(tot(x.totals))}</div>
+      <div class="small muted" style="margin-top:2px;overflow-wrap:anywhere" title="${esc(x.hash)}">xesh: ${esc(String(x.hash).slice(0, 16))}…</div></div>`).join('');
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small" id="kpd-lock" style="background:#eef3f1;border-radius:10px;padding:10px 12px;font-weight:600">${L.lockedThrough ? `Davr <b>${esc(dmy(L.lockedThrough))}</b> gacha yopilgan — shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.` : 'Davr yopilmagan: orqaga sanali yozuvlar cheklanmagan (to‘lovda — 31 kungacha).'}</div>
+      ${m.director ? `<div style="margin-top:12px"><b>Yangi surat</b>
+        <div class="small muted" style="margin-top:2px">Davr oxiridagi holat saqlanadi: o‘quvchilar bo‘yicha qarzdorlik va avanslar, biriktirilmagan tushumlar, kassa qoldig‘i, to‘lanmagan ish haqi. Surat keyin o‘zgarmaydi. Yil yakuni — 31-dekabr holati, yanvar yozuvlari boshlanguncha olinadi.</div>
+        <div class="grid2">${lbl('Qaysi kun oxiri holati', `<input id="kpd-day" type="date" value="${esc(def)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Izoh', `<input id="kpd-note" type="text" maxlength="300" placeholder="masalan: 2026-yil yakuni" style="${FLD}">`)}</div>
+        <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-weight:700"><input type="checkbox" id="kpd-lockit" checked style="${CHK}"> Shu sanagacha davrni yopish (orqaga sanali yozuvlar taqiqlanadi)</label>
+        <div style="margin-top:10px"><button type="button" class="btn gold" id="kpd-take">Surat olish</button></div>
+        <details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:700">Davr qulfini o‘zgartirish</summary>
+          <div class="small muted" style="margin-top:4px">Oldinga surish — erkin. Orqaga surish yoki olib tashlash (yopilgan davrni qayta ochish) — faqat sabab bilan; o‘zgarishlar tarixiga yoziladi.</div>
+          <div class="grid2">${lbl('Shu sanagacha yopiq (bo‘sh — qulf yo‘q)', `<input id="kpd-through" type="date" value="${esc(L.lockedThrough || '')}" max="${esc(today)}" style="${FLD}">`)}${lbl('Sabab', `<input id="kpd-reason" type="text" maxlength="300" style="${FLD}">`)}</div>
+          <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kpd-setlock">Qulfni saqlash</button></div></details></div>` : ''}
+      <div style="margin-top:14px"><b>Olingan suratlar</b></div>
+      ${items.length ? rows : '<div class="small muted" style="margin-top:6px">Hali surat olinmagan.</div>'}
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  const day = $('#kpd-day'), lk = $('#kpd-lockit');
+  if (day && lk) { const upd = () => { const can = day.value && day.value < today; lk.disabled = !can; if (!can) lk.checked = false; }; day.onchange = upd; upd(); }
+  const take = $('#kpd-take');
+  if (take) take.onclick = async () => {
+    if (!day.value) { C.toast('Sanani tanlang', true); return; }
+    if (!confirm(`${dmy(day.value)} kuni oxiridagi holat surati olinsinmi?${lk.checked ? `\n\nDavr ${dmy(day.value)} gacha YOPILADI: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.` : ''}`)) return;
+    take.disabled = true;
+    try { const r = await call('fin_snapshot_take', { p: { asOf: day.value, note: $('#kpd-note').value.trim(), lock: !!lk.checked } });
+      C.toast(`Surat olindi ✓${r.late ? ' (kechikib — keyingi kunlar harakati aralashgan bo‘lishi mumkin)' : ''}`); await reload().catch(() => {}); if (C.onChange) C.onChange(); await openPeriodForm(); }
+    catch (e) { take.disabled = false; C.toast(errText(e), true); }
+  };
+  const sl = $('#kpd-setlock');
+  if (sl) sl.onclick = async () => {
+    const v = $('#kpd-through').value || null, why = $('#kpd-reason').value.trim();
+    if (!confirm(v ? `Davr ${dmy(v)} gacha yopilsinmi?` : 'Davr qulfi olib tashlansinmi?')) return;
+    sl.disabled = true;
+    try { await call('fin_period_lock', { p_through: v, p_note: why }); C.toast('Davr qulfi saqlandi ✓'); await reload().catch(() => {}); if (C.onChange) C.onChange(); await openPeriodForm(); }
+    catch (e) { sl.disabled = false; C.toast(errText(e), true); }
+  };
+  $('#modal').querySelectorAll('[data-snap-chk]').forEach(b => b.onclick = async () => { b.disabled = true;
+    try { const g = await call('fin_snapshot_get', { p_id: b.dataset.snapChk }); C.toast(g.hashOk ? 'Surat butun: xesh mos ✓' : 'DIQQAT: surat xeshi mos emas — administratorga xabar bering', !g.hashOk); }
+    catch (e) { C.toast(errText(e), true); } b.disabled = false; });
+  $('#modal').querySelectorAll('[data-snap-dl]').forEach(b => b.onclick = async () => { b.disabled = true;
+    try { const g = await call('fin_snapshot_get', { p_id: b.dataset.snapDl }); saveJson(`davr-surati-${g.asOf}-${g.version}.json`, { id: g.id, kind: g.kind, asOf: g.asOf, version: g.version, takenAt: g.takenAt, hash: g.hash, data: g.data }); }
+    catch (e) { C.toast(errText(e), true); } b.disabled = false; });
 }
 
 // ---------------------------------------------------------------- chop etish (fin-print.js — kerak bo'lganda yuklanadi)

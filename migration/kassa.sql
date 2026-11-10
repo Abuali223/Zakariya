@@ -230,7 +230,9 @@ do $$ declare t text; begin
     execute format('revoke all on table public.%I from public, anon, authenticated', t);
     execute format('grant select on table public.%I to authenticated', t);
     execute format('drop policy if exists %I on public.%I', t || '_sel', t);
-    execute format('create policy %I on public.%I for select using (app.kassa_reader())', t || '_sel', t);
+    -- davr suratida o'quvchilar va xodimlar bo'yicha qoldiqlar bor — faqat Direktor va 2-ro'yxat (Moliya menejeri, buxgalter)
+    execute format('create policy %I on public.%I for select using (%s)', t || '_sel', t,
+                   case when t = 'fin_snapshots' then 'app.is_admin() or app.fin_list2()' else 'app.kassa_reader()' end);
     execute format('grant all on table public.%I to service_role', t);
   end loop;
 end $$;

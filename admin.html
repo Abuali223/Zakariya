@@ -1471,6 +1471,11 @@ function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','tr
 function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
 // Naqd pulni shu foydalanuvchi qabul qila oladimi (kassa ishga tushgach): kassir / g'aznachi (qo'shimcha lavozim ham) yoki Direktor.
 function kassaCashOk(){ return !KASSA.live || !!(KASSA.me && (KASSA.me.operator || KASSA.me.director)); }
+// Davr qulfi (moliya rejasi F1.16): Direktor yopgan sanagacha pul yozuvlari kiritilmaydi — shakllarda eng erta sana = qulfdan
+//   keyingi kun ('' — qulf yo'q yoki kassa moduli yo'q). Server ham rad etadi (42501) — bu faqat qulaylik uchun.
+function finLockMin(){ const l=KASSA.state&&KASSA.state.lockedThrough; if(!l||!/^\d{4}-\d{2}-\d{2}$/.test(String(l))) return '';
+  return new Date(Date.parse(String(l)+'T00:00:00Z')+864e5).toISOString().slice(0,10); }
+const finLockAttr=()=>{ const m=finLockMin(); return m?` min="${esc(m)}"`:''; };
 function kassaQueue(){
   if(APPROVAL_QUEUES.some(q=>q.key==='kassa')) return;
   APPROVAL_QUEUES.push({ key:'kassa', title:'Kassa: chiqim va kirim so‘rovlari', roles:['director','finance_mgr'],
@@ -1534,7 +1539,11 @@ function canSeeSalary(){
 function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }
 // Maosh TO'LAY oladimi (payout + chek) — direktor/HR/moliya/kassir (RLS salpay_ins bilan bir xil).
 //   DIQQAT: bu oylikni TAHRIRLASH emas (maosh summasini faqat direktor/HR o'zgartiradi — canManageStaffCol).
-function canPaySalary(){ if(SESSION.isAdmin) return true; const r=SESSION.role; return r==='hr'||r==='finance_mgr'||r==='treasurer'||r==='kassir'; }
+// Kassa ishga tushgach (RF-08, F1.11): naqd maoshni faqat kassa operatori (kassir, g'aznachi) beradi, karta orqali to'lovni Moliya
+//   menejeri yozadi — HR menejer vedomostni tasdiqlaydi, lekin pul bermaydi (server ham rad etadi).
+function canPaySalary(){ if(SESSION.isAdmin) return true; const r=SESSION.role;
+  if(KASSA.live) return r==='finance_mgr' || kassaCashOk();
+  return r==='hr'||r==='finance_mgr'||r==='treasurer'||r==='kassir'; }
 // O'quvchi yozuvini boshqara oladimi (qo'shish/tahrir/o'chir/import). Kassir — FAQAT ko'rish.
 function canManageStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch' || SESSION.role==='reception'; }
 // O'CHIRISH / bulk-o'chirish / Excel-import — reception BUNGA kirmaydi (u faqat KIRITISH+TAHRIR qiladi).
@@ -8984,7 +8993,7 @@ async function openSalaryPayout(opts){
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Xodim<select id="sp-t" style="${fld};background:#fff">${payees.map(p=>`<option value="${esc(p.id)}" ${presel&&String(p.id)===presel?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
       <div class="grid2" style="margin-top:8px">
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Qaysi oy uchun<input type="month" id="sp-month" value="${esc(M)}" style="${fld}"></label>
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Berilgan sana<input type="date" id="sp-date" value="${esc(today)}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Berilgan sana<input type="date" id="sp-date" value="${esc(today)}"${finLockAttr()} style="${fld}"></label>
       </div>
       ${KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="sp-method" style="${fld};background:#fff">${spMethods.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select></label>
       <div class="small muted" id="sp-method-info" style="margin-top:4px"></div>
@@ -9457,7 +9466,7 @@ async function renderAccounting(){
     const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
     $('#modal').innerHTML=`<div class="modal-h"><h3>${exp?'Xarajatni tahrirlash':'Xarajat qo‘shish'}</h3><button class="x" id="m-x">×</button></div>
       <div class="modal-b">
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="e-date" value="${esc(e.date||today)}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="e-date" value="${esc(e.date||today)}"${finLockAttr()} style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Toifa<select id="e-cat" style="${fld};background:#fff">${CATS.map(c=>`<option ${e.category===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input type="text" inputmode="numeric" id="e-amt" value="${e.amount?fmtSum(e.amount):''}" placeholder="masalan: 2 000 000" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="e-note" value="${esc(e.note||'')}" placeholder="masalan: Avgust oyliklari" style="${fld}"></label>
@@ -9591,7 +9600,7 @@ async function renderAccounting(){
     $('#modal').innerHTML=`<div class="modal-h"><h3>Xodim avansi — ${esc(mLabel(M))}</h3><button class="x" id="m-x">×</button></div>
       <div class="modal-b">
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Xodim<select id="av-t" style="${fld};background:#fff">${payees.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="av-date" value="${esc(dflt)}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="av-date" value="${esc(dflt)}"${finLockAttr()} style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Avans summasi (so‘m)<input type="text" inputmode="numeric" id="av-amt" placeholder="masalan: 1 000 000" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="av-note" placeholder="ixtiyoriy" style="${fld}"></label>
         ${KASSA.live?`<div class="small" style="margin-top:10px;background:#E8F1FD;color:#175CD3;border-radius:10px;padding:10px 12px"><b>Kassa ishga tushgan.</b> Bu yerda faqat <b>karta / bank orqali</b> berilgan avans yoziladi. Naqd avans — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Ish haqi avansi» (tasdiqdan keyin kassir beradi, avans o‘zi yoziladi). <a href="#" id="av-kassa" style="font-weight:700">Kassaga o‘tish</a></div>`:''}
@@ -11990,7 +11999,7 @@ async function openRecordPayment(students, reload, pre){
       <div id="rp-kassa"></div>
       <div class="grid2" style="margin-top:8px">
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Summa (so‘m)<input id="rp-amt" type="text" inputmode="numeric" placeholder="2 900 000" value="${esc(preAmtStr)}" style="${fld}"></label>
-        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(tkDay(new Date()))}" min="${esc(new Date(Date.parse(tkDay(new Date())+'T00:00:00Z')-31*864e5).toISOString().slice(0,10))}" max="${esc(tkDay(new Date()))}" style="${fld}"></label>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input id="rp-date" type="date" value="${esc(tkDay(new Date()))}" min="${esc([new Date(Date.parse(tkDay(new Date())+'T00:00:00Z')-31*864e5).toISOString().slice(0,10), finLockMin()].sort().pop())}" max="${esc(tkDay(new Date()))}" style="${fld}"></label>
       </div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaysi oy uchun <span class="muted" style="font-weight:500">— chekda ko‘rinadi</span><input id="rp-period" type="text" placeholder="masalan: Sentyabr 2026" value="${esc(pre.period||'')}" style="${fld}"></label>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Izoh<input id="rp-note" type="text" placeholder="ixtiyoriy (masalan bank kvitansiya №)" style="${fld}"></label>
@@ -12007,7 +12016,7 @@ async function openRecordPayment(students, reload, pre){
     const block = cash && st && st.canPost===false ? `<div class="small" style="margin-top:6px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px;font-weight:600">${esc(KASSA_BLOCK[st.blockReason]||'Kassa hozir hujjat qabul qilmaydi.')}</div>` : '';
     el.innerHTML = cash
       ? `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Fiskal chek № <span style="color:#B42318;font-weight:600">— majburiy (onlayn kassa chekidagi raqam)</span><input id="rp-fiscal" type="text" maxlength="40" autocomplete="off" style="${fld}"></label>
-         ${SESSION.isAdmin?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rp-fexempt"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>`:''}
+         ${SESSION.isAdmin?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rp-fexempt" style="width:auto;flex:none;padding:0;margin:0"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>`:''}
          <div class="small muted" style="margin-top:6px">Naqd to‘lovga kassa kirim orderi (KO-1) yoziladi: raqam va sana kassa kuni bo‘yicha serverdan beriladi.</div>${block}`
       : (cashOk?'':`<div class="small muted" style="margin-top:6px">Naqd pulni kassir qabul qiladi («Kassa» ishga tushgan).</div>`); };
   { const ms=$('#rp-m'); if(ms){ ms.addEventListener('change', kassaBox); kassaBox(); } }

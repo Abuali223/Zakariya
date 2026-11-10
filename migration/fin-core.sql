@@ -103,6 +103,7 @@ create table if not exists public.fin_org (
   "updatedAt"   timestamptz not null default now(),
   "updatedBy"   text
 );
+alter table public.fin_org add column if not exists "lockedThrough" date;   -- shu sanagacha (shu kun ham) davr yopilgan: fin-period.sql
 insert into public.fin_org (id) values ('main') on conflict (id) do nothing;
 create table if not exists public.fin_signatories (
   id          text primary key,

@@ -542,7 +542,7 @@ begin
     'unverifiedDays', (select count(*) from public.cash_days d where d.desk = v_desk and d.status = 'closed'),
     'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
     'limit', jsonb_build_object('cashLimit', v_o."cashLimit", 'set', v_o."cashLimit" > 0, 'exceeded', v_o."cashLimit" > 0 and coalesce(v_bal, 0) > v_o."cashLimit"),
-    't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang",
+    't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang", 'lockedThrough', v_o."lockedThrough",
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
                   where k.desk = v_desk and k.year = extract(year from v_today)::int),
     'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir));

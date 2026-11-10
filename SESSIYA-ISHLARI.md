@@ -1525,6 +1525,36 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   qolgan stsenariylar qayta o'tkazildi.
 - **Qilinmagan:** F1.11, F1.16–F1.19; mustaqil (boshqa agentlar bilan) ko'rik.
 
+## 61) Moliya, 1a-bosqich: davr surati va yopilgan davr qulfi (F1.16), maosh berish huquqini toraytirish (F1.11) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN** (`run-all.sql` da `--dev \ir fin-period.sql`). Jonli zanjir fayllariga tegilmadi.
+
+- **Davr surati** (`fin-period.sql`; jadval `fin_snapshots` — `kassa.sql` dagi, faqat qo'shiladi): `fin_snapshot_take(p)` —
+  faqat Direktor; tanlangan kun oxiri holati: qarzi, kelgusi oyga oldindan to'lovi yoki avansi bor o'quvchilar (fakturalari
+  bilan), o'quvchiga biriktirilmagan tushumlar, kassalar qoldig'i, hujjat hisoblagichlari, tasdiqlangan vedomostlar bo'yicha
+  to'lanmagan ish haqi, Direktor tasdiqlagan — hali berilmagan qaytarishlar va jamlar. Mazmun SHA-256 xeshi bilan saqlanadi;
+  `fin_snapshot_get` xeshni qayta hisoblab solishtiradi (`hashOk`). Turi sanadan: 31-dekabr — yillik, oy oxiri — oylik, boshqa
+  kun — qo'lda. Bir kun uchun bir necha surat mumkin (versiya); kun o'tgandan keyin olingani «kechikkan» deb belgilanadi
+  (keyingi kunlar harakati aralashgan bo'lishi mumkin). Bu surat keyin bosh kitobning boshlang'ich qoldig'i uchun asos (F4.4).
+- **Davr qulfi**: `fin_period_lock(sana, sabab)` — faqat Direktor; shu sanagacha (shu kun ham) to'lov (yangi yozuvning kassa
+  kuni), «Buxgalteriya» xarajati, maosh to'lovi va xodim avansi kiritilmaydi, o'zgartirilmaydi, o'chirilmaydi (42501,
+  `fin:locked`); server (onlayn to'lov webhook'lari) mustasno. Bugungi va kelajakdagi kun yopilmaydi; orqaga surish yoki olib
+  tashlash — faqat sabab bilan, o'zgarishlar tarixiga yoziladi. Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf
+  kerak emas. Barcha pul jadvallari uchun oy qulfi — 2-bosqich (F2.8).
+- **Ekran:** «Kassa» sahifasida «Davr» tugmasi (Direktor va 2-ro'yxat): suratlar ro'yxati, «Xeshni tekshirish», JSON yuklab
+  olish; Direktorga — surat olish (xohlasa shu sanagacha yopish bilan) va qulf sanasini o'zgartirish. Qulf bo'lsa sahifada
+  eslatma; «To'lov», «Maosh berish», «Xarajat», «Xodim avansi» shakllarida eng erta sana — qulfdan keyingi kun.
+- **Yil oxiri tartibi (tavsiya):** 31-dekabr kechqurun kassa yopilgach surat olinadi (qulfsiz — o'sha kuni yopib bo'lmaydi);
+  qulf keyingi ish kuni qo'yiladi.
+- **F1.11:** kassa ishga tushgach `canPaySalary` — faqat kassa operatori (naqd) va Moliya menejeri (karta); HR menejer
+  vedomostni tasdiqlaydi, pul bermaydi. Server tomoni avvaldan bor (naqd yozuv faqat kassa funksiyasi orqali).
+- **Sinovlar:** `test-fin-period.sql` 27/27 (ruxsatlar, surat mazmuni va xeshi, versiya, kechikkan belgi, qulf — har jadval,
+  server mustasnosi, orqaga surish sababi, o'zgarmaslik, RLS); qolganlari o'zgarishsiz yashil: `test-kassa.sql` 223,
+  `test-kassa-pay.sql` 50, `test-kassa-links.sql` 91, `test-kassa-report.sql` 52, `test-fin-prereq.sql` 87,
+  `test-audit-fixes.sql` 36, `test-public-close.sql` 92, `test-kassa-race.sh` 22; JS 28; brauzer: yangi `e2e-kassa6` 20 (v1 va
+  v2) va qolgan barcha stsenariylar qayta o'tkazildi (16 ta ishga tushirish, hammasi yashil).
+- **Qilinmagan:** F1.18–F1.19, jonli zanjirga o'tkazish; mustaqil (boshqa agentlar bilan) ko'rik.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
