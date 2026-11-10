@@ -49,6 +49,19 @@ begin
   end if;
   p_amount := coalesce(p_amount, 0);
   if p_amount < 0 then return jsonb_build_object('ok', false, 'reason', 'neg'); end if;
+  -- Moliya rejasi 0-bosqich (ko'rik): NaN / Infinity summa (PostgREST JSON "NaN" satrini numeric NaN qiladi) — barcha
+  --   fakturalarni «to'langan» qilib, avansni abadiy NaN qilardi. Bema'ni katta summa ham rad etiladi.
+  if p_amount = 'NaN'::numeric or p_amount >= 1e12 then return jsonb_build_object('ok', false, 'reason', 'bad-amount'); end if;
+  -- RF-04 (to'lov yozuvisiz pul yo'q): musbat summa faqat (a) shu payId bilan payments qatori bo'lsa (kassir/moliya
+  --   yo'llari — qo'lda to'lov, biriktirish, bo'lish — qatorni AVVAL yozadi), (b) ichki pul RPC'si bayrog'i bilan
+  --   (record_manual_payment, reattribute_avans), (c) Direktor yoki server. Aks holda kvitansiyasiz avans/qarz yopilishi
+  --   kassa hisobotiga ko'rinmas edi.
+  if p_amount > 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role'
+       or coalesce(current_setting('iqror.money_rpc', true), '') = '1'
+       or exists (select 1 from public.payments p where p.id = p_pay_id and p.amount = p_amount
+                   and coalesce(p.status, '') in ('pending', 'applied', 'confirmed', 'paid', 'unmatched'))) then
+    raise exception 'apply_payment: to''lov yozuvisiz (payments) pul qo''llanmaydi' using errcode = '42501';
+  end if;
   v_provider := coalesce(nullif(p_provider, ''), case when p_amount > 0 then 'click' else 'credit' end);
 
   -- ★ KANONIK KALIT: p_sid _id (Firebase hujjat) YOKI studentId (IQ-xxxx) bo'lishi mumkin.

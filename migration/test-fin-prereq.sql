@@ -149,6 +149,40 @@ select zz.chk('D15 «pending» qator summasi boshqa — rad (mismatch)',
 select zz.chk('D16 G''aznachi ham kirita oladi',
   zz.as('U_TRE', $q$select (public.record_manual_payment('man_1731000000008_abc12','T-3',1000,'cash',null,'','','',null) ->> 'ok')$q$), '^true$');
 
+-- ---------- (D, davomi) ko'rik topilmalari ----------
+select zz.chk('D17 NaN summa — rad', zz.as('U_KAS', $q$select public.record_manual_payment('man_1731000000009_abc12','T-3','NaN'::numeric,'cash',null,'','','',null)::text$q$), '^ERR 22023');
+select zz.chk('D17b Infinity summa — rad', zz.as('U_KAS', $q$select public.record_manual_payment('man_1731000000010_abc12','T-3','Infinity'::numeric,'cash',null,'','','',null)::text$q$), '^ERR 22023');
+select zz.chk('D18 sana bo''sh — kassa kuni kiritilgan kun (p_captured)',
+  zz.as('U_KAS', $q$select (r ->> 'day') = to_char((now() at time zone 'Asia/Tashkent')::date - 1,'YYYY-MM-DD') from (select public.record_manual_payment('man_1731000000011_abc12','T-3',1000,'cash',null,'','','',now() - interval '1 day') r) z$q$), '^true$');
+select zz.chk('D19 «qaysi oy uchun» uzun matn — qabul',
+  zz.as('U_KAS', $q$select (public.record_manual_payment('man_1731000000012_abc12','T-3',1000,'cash',null,'',repeat('Oyyy 2026, ',18),'',null) ->> 'ok')$q$), '^true$');
+select zz.chk('D19b 198 belgi to''liq saqlandi', (select length(raw ->> 'forPeriod')::text from public.payments where id = 'man_1731000000012_abc12'), '^198$');
+select zz.chk('A14 NaN summa — tushum emas', app.counts_as_receipt('p6','applied','cash','NaN'::numeric)::text, '^false$');
+
+-- ---------- (F) RF-04: to'lov yozuvisiz pul qo'llanmaydi; avans faqat RPC orqali ----------
+select zz.chk('F1 kassir apply_payment — payments qatorisiz rad',
+  zz.as('U_KAS', $q$select public.apply_payment('T-3', 500000, 'cash', 'soxta-id-1')::text$q$), '^ERR 42501');
+select zz.chk('F1b moliya ham rad', zz.as('U_FM', $q$select public.apply_payment('T-3', 500000, 'cash', 'soxta-id-2')::text$q$), '^ERR 42501');
+select zz.chk('F2 eski mijoz yo''li (avval pending qator) — ishlaydi',
+  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, raw) values ('man_old_flow_001','T-3','cash',1000,'pending','{"manual":true}') returning 1) select (select public.apply_payment('T-3', 1000, 'cash', 'man_old_flow_001') ->> 'ok') from x$q$), '^true$');
+select zz.chk('F3 Direktor NaN — bad-amount', zz.as('U_DIR', $q$select public.apply_payment('T-3', 'NaN'::numeric, 'cash', 'fix_x') ->> 'reason'$q$), '^bad-amount$');
+select zz.chk('F4 kassir summa 0 (avansni qo''llash) — ruxsat', zz.as('U_KAS', $q$select public.apply_payment('T-3', 0, 'credit', null) ->> 'ok'$q$), '^true$');
+select zz.chk('F5 kassir add_credit — rad (manfiy ham)', zz.as('U_KAS', $q$select public.add_credit('T-2', -1000, 'recompute', '', 'f5')::text$q$), '^ERR 42501');
+select zz.chk('F6 moliya student_credit''ni to''g''ridan-to''g''ri o''zgartira olmaydi',
+  zz.as('U_FM', $q$with x as (update public.student_credit set credit = 9999999 where id = 'T-2' returning 1) select count(*)::text from x$q$), '^0$');
+select zz.chk('F6b g''aznachi student_credit qo''sha olmaydi',
+  zz.as('U_TRE', $q$with x as (insert into public.student_credit(id, "studentId", credit) values ('T-9','T-9',7000000) returning 1) select count(*)::text from x$q$), '^ERR 42501');
+select zz.chk('F7 moliya avansni ko''chira oladi (reattribute_avans, ichki bayroq)',
+  zz.as('U_FM', $q$select (public.reattribute_avans('T-2','T-3',50000,'sinov','f7') ->> 'ok')$q$), '^true$');
+select zz.chk('F8 kassir apply_to_invoice — payments qatorisiz rad',
+  zz.as('U_KAS', $q$select public.apply_to_invoice('inv3', 1000, 'cash', 'soxta-id-3')::text$q$), '^ERR 42501');
+insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched) values ('click_unm_1','','click',300000,'unmatched','Sinov',false);
+select zz.chk('F9 kassir biriktirish (assign_payment) — ishlaydi',
+  zz.as('U_KAS', $q$select (public.assign_payment('click_unm_1','T-3') ->> 'ok')$q$), '^true$');
+insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched) values ('click_unm_2','','click',300000,'unmatched','Sinov',false);
+select zz.chk('F10 moliya bo''lish (split_payment) — ishlaydi',
+  zz.as('U_FM', $q$select (public.split_payment('click_unm_2','click','[{"sid":"T-1","amount":100000},{"sid":"T-3","amount":200000}]'::jsonb) ->> 'ok')$q$), '^true$');
+
 -- ---------- (C, davomi) qaytarish: «kim» — server ----------
 select zz.chk('C7 qaytarish: byEmail Direktorniki (p_by e''tiborsiz)',
   zz.as('U_DIR', $q$select (public.refund_invoice('invoice','inv1',100000,'sinov qaytarish',false,'spoof@x','ref-c7') ->> 'ok')$q$), '^true$');

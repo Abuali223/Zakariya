@@ -733,8 +733,12 @@ o‘tdi: F0.10 (`verify-db.sh` — trigger, cheklov, indeks), F0.11 (sinov to‘
 Supabase event trigger’ni supautils orqali ruxsat beradi; deploy bitta tranzaksiyada bo‘lgani uchun xavfsiz), F0.12
 (`app.counts_as_receipt`, `app.pay_day`, `app.fin_receipts`; `director_daily` + «kechikib kiritilgan» qatori), F0.13,
 F0.14, F0.15 (`record_manual_payment`, admin outbox), F0.16 (RF-01, 02, 03, 05, 06, 07). F0.19 — `docs/moliya/oraliq-qoidalar.md`.
-Keyingi relizda: F0.17 (RF-04, A relizi prod’da ishlagandan keyin), F0.18 (maosh tayyorligi — faqat o‘qish tekshiruvi),
-F0.20 (sinov stendi), F0.3 buyruq namunalari.
+Mustaqil ko‘rikdan keyin: **F0.17 (RF-04) shu relizga kirdi** — `apply_payment` / `apply_to_invoice` musbat summani faqat
+payments qatori, ichki RPC bayrog‘i, Direktor yoki server bilan qabul qiladi (eski mijozlar ishlayveradi, majburiy qayta
+yuklash kerak emas); NaN / Infinity summalar barcha pul RPC’larida rad etiladi; `student_credit` — faqat RPC’lar orqali.
+F0.18 (prod, faqat o‘qish): vedomost tasdig‘i 2026-12 dan yoqilgan; takroriy maosh ID 2 ta — tuzatilishi kerak; noyabr
+vedomosti tizimda tayyorlanmagan. F0.3 — `docs/moliya/buyruq-namunalari.md`. Qoldi: F0.20 (sinov stendi — server joyi
+egasi bilan kelishiladi), maktab tomonidagi F0.2, F0.4–F0.8.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

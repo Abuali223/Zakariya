@@ -38,6 +38,16 @@ begin
   end if;
   p_amount := coalesce(p_amount, 0);
   if p_amount < 0 then return jsonb_build_object('ok', false, 'reason', 'neg'); end if;
+  -- Moliya rejasi 0-bosqich (ko'rik): NaN / Infinity / bema'ni katta summa rad etiladi (apply_payment bilan bir xil).
+  if p_amount = 'NaN'::numeric or p_amount >= 1e12 then return jsonb_build_object('ok', false, 'reason', 'bad-amount'); end if;
+  -- RF-04: musbat summa — faqat to'lov serveri (service_role), Direktor, ichki pul RPC'si yoki shu payId'li payments qatori
+  --   bilan (admin ilovasi bu funksiyani chaqirmaydi; kassir REST orqali kvitansiyasiz qo'llay olmasin).
+  if p_amount > 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role'
+       or coalesce(current_setting('iqror.money_rpc', true), '') = '1'
+       or exists (select 1 from public.payments p where p.id = p_pay_id and p.amount = p_amount
+                   and coalesce(p.status, '') in ('pending', 'applied', 'confirmed', 'paid', 'unmatched'))) then
+    raise exception 'apply_to_invoice: to''lov yozuvisiz (payments) pul qo''llanmaydi' using errcode = '42501';
+  end if;
   v_provider := coalesce(nullif(p_provider, ''), 'click');
 
   -- 1) AVVAL invoysни qulflab o'qib, notfound/terminal holatlarини QAYTARAMIZ — POSBONNI (idempotentlik)

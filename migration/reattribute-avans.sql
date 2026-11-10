@@ -44,6 +44,7 @@ begin
 
   p_amount := coalesce(p_amount, 0);
   if p_amount <= 0 then return jsonb_build_object('ok', false, 'reason', 'amount<=0'); end if;
+  if p_amount = 'NaN'::numeric or p_amount >= 1e12 then return jsonb_build_object('ok', false, 'reason', 'bad-amount'); end if;
   -- p_ref MAJBURIY: takrorlanish himoyasi (va audit izi) HAR DOIM bo'lsin. Refsiz
   --   ikki marta chaqirilса pul ikki marta ko'chib ketardi.
   if coalesce(p_ref, '') = '' then return jsonb_build_object('ok', false, 'reason', 'ref-required'); end if;
@@ -93,8 +94,12 @@ begin
 
   -- 2) To'g'ri o'quvchига QO'LLAYMIZ (fakturasi + ortiqcha avans). apply_payment ichki
   --    ravishda kanonik kalitga keltiradi, jurnal ham yozadi.
+  --    Ichki pul RPC'si bayrog'i: apply_payment musbat summani payments qatorisiz qabul qilmaydi (RF-04) — bu yerda pul
+  --    yangi emas (boshqa o'quvchining avansidan ko'chadi, 1b-banddagi 'reattr' qatorlari yozilgan).
+  perform set_config('iqror.money_rpc', '1', true);
   v_res := public.apply_payment(v_to, p_amount, 'reattr',
              'reattr-' || v_from || '-' || v_to || '-' || substr(md5(random()::text || clock_timestamp()::text), 1, 10));
+  perform set_config('iqror.money_rpc', '', true);
 
   return jsonb_build_object('ok', true, 'from', v_from, 'to', v_to, 'amount', p_amount, 'target', v_res);
 end $$;

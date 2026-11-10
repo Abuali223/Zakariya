@@ -49,7 +49,9 @@ select kind||'|'||name||'|'||h from (
     from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind in ('r','p')
   union all
-  select 'index', schemaname||'.'||indexname, md5(indexdef) from pg_indexes where schemaname='public'
+  -- UNIQUE indeks — cheklov kabi yozishni to'sishi mumkin (repo'da yo'q bo'lsa 🟠); oddiy indeks — zararsiz (ℹ️).
+  select case when i.indisunique then 'uindex' else 'index' end, n.nspname||'.'||ic.relname, md5(pg_get_indexdef(i.indexrelid))
+    from pg_index i join pg_class ic on ic.oid=i.indexrelid join pg_namespace n on n.oid=ic.relnamespace where n.nspname='public'
   union all
   select 'view', schemaname||'.'||viewname, md5(definition) from pg_views v where schemaname='public'
      and not exists (select 1 from pg_depend dp join pg_class c on c.oid=dp.objid
@@ -110,9 +112,9 @@ changed=$(join -t'|' -j1 <(awk -F'|' '{print $1"#"$2"|"$3}' "$FP_CANON" | sort -
 
 xp=$(echo "$extra" | grep -c '^policy|' || true); xf=$(echo "$extra" | grep -c '^func|' || true)
 # Repo'da YO'Q trigger yoki cheklov — ma'lumotni o'zgartirishi / yozishni to'sishi mumkin (indeks esa zararsiz — ℹ️).
-xt=$(echo "$extra" | grep -c '^trigger|' || true); xk=$(echo "$extra" | grep -c '^constraint|' || true)
+xt=$(echo "$extra" | grep -c '^trigger|' || true); xk=$(echo "$extra" | grep -c '^constraint|' || true); xu=$(echo "$extra" | grep -c '^uindex|' || true)
 nm=$(echo "$missing" | grep -c . || true); nc=$(echo "$changed" | grep -c . || true)
-info=$(echo "$extra" | grep -vE '^(policy|func|trigger|constraint)\|' | grep . || true)
+info=$(echo "$extra" | grep -vE '^(policy|func|trigger|constraint|uindex)\|' | grep . || true)
 # Repo'da yo'q obyektlar orasida HAQIQIY xavf: RLS o'chiq jadval mijozga (anon/authenticated) SELECT berilgan bo'lsa — ma'lumot
 #   ochiq; view mijozga berilgan bo'lsa — egasi huquqi bilan RLS'ni chetlab o'tishi mumkin. Qolgani (eski ustunlar, RLS
 #   yoqilgan jadvalga ruxsatlar) — zararsiz qoldiq.
@@ -134,7 +136,7 @@ infoline="prod'da repo'da yo'q qo'shimcha obyektlar: jadval $nt, ustun $ncl, rux
 # D6: ommaviy o'quvchi ro'yxati (students_public) prodda YO'Q bo'lishi shart (public-close.sql o'chiradi) — bo'lsa anon barcha
 #   o'quvchi ismi/bali/rasmini oladi. Kanonikda u yo'q, shuning uchun bor bo'lsa — alohida 🔴.
 sp_live=$(grep -c '^view|public\.students_public|' "$FP_LIVE" || true)
-if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$xt" = 0 ] && [ "$xk" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ] && [ "${sp_live:-0}" = 0 ]; then
+if [ "$xp" = 0 ] && [ "$xf" = 0 ] && [ "$xt" = 0 ] && [ "$xk" = 0 ] && [ "$xu" = 0 ] && [ "$nm" = 0 ] && [ "$nc" = 0 ] && [ -z "$open_t" ] && [ -z "$open_v" ] && [ "${sp_live:-0}" = 0 ]; then
   echo "    ✓ Prod bazasi repo'dagi kanonik holat bilan BIR XIL ($(wc -l < "$FP_CANON") obyekt)."
   [ -n "$info" ] && echo "      ℹ️ $infoline"
   exit 0
@@ -147,6 +149,7 @@ echo "    ⚠️ Prod bazasi kanonik holatdan farq qiladi:"
 [ "$xf" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha funksiya ($xf):"; echo "$extra" | grep '^func|' | sed 's/^/         /'; }
 [ "$xt" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha trigger ($xt) — ma'lumotni o'zgartirishi yoki yozishni to'sishi mumkin:"; echo "$extra" | grep '^trigger|' | sed 's/^/         /'; }
 [ "$xk" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha cheklov ($xk) — yozishni to'sishi mumkin:"; echo "$extra" | grep '^constraint|' | sed 's/^/         /'; }
+[ "$xu" != 0 ] && { echo "      🟠 Repo'da YO'Q ortiqcha UNIQUE indeks ($xu) — yozishni to'sishi mumkin:"; echo "$extra" | grep '^uindex|' | sed 's/^/         /'; }
 [ "$nm" != 0 ] && { echo "      🟠 Kanonikda bor, prod'da YO'Q ($nm):"; echo "$missing" | head -20 | sed 's/^/         /'; }
 [ "$nc" != 0 ] && { echo "      🟠 Ta'rifi FARQLI ($nc):"; echo "$changed" | head -20 | sed 's/^/         /'; }
 [ -n "$info" ] && echo "      ℹ️ $infoline"

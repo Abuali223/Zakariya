@@ -26,7 +26,11 @@ do $iqror_guard$ begin raise exception 'iqror: fin-prereq.sql ALOHIDA ishga tush
 --          RF-03 add_credit musbat summa — faqat Direktor va server (add-credit.sql o'zida);
 --          RF-05 O'IBDO' xarajat yozmaydi;
 --          RF-06 qaytarish va maosh berishda «kim» (byUid / byEmail) — server qo'yadi (mijoz yuborgani emas);
---          RF-07 credit_ledger (avans jurnali) — faqat qo'shiladi, o'chirilmaydi.
+--          RF-07 credit_ledger (avans jurnali) — faqat qo'shiladi, o'chirilmaydi; student_credit'ga to'g'ridan-to'g'ri yozish —
+--                faqat Direktor (avans faqat jurnal yozadigan RPC'lar orqali o'zgaradi);
+--          RF-04 (ko'rik, oldinga surildi) apply_payment / apply_to_invoice musbat summani faqat payments qatori, ichki pul
+--                RPC'si bayrog'i (iqror.money_rpc), Direktor yoki server bilan qabul qiladi (audit-7.sql, audit-5.sql o'zida);
+--          NaN / Infinity / bema'ni katta summa barcha pul RPC'larida rad etiladi.
 -- =====================================================================
 
 -- ---------- Ustunlar ----------
@@ -50,6 +54,7 @@ returns boolean language sql immutable set search_path = public, app, pg_temp as
      and coalesce(p_provider, '') <> 'reattr'
      and strpos(coalesce(p_id, ''), ':s:') = 0
      and coalesce(p_amount, 0) > 0
+     and p_amount <> 'NaN'::numeric   -- JS: (Number(NaN)||0) > 0 — false
 $$;
 -- admin.html: payDay(p). Kassa kuni = Toshkent sanasi (createdAt); qo'lda to'lovda (raw.manual) kassir tanlagan raw.date —
 --   faqat [kiritilgan kun − 31 kun, kiritilgan kun] ichida (kelajak yoki juda eski sana — kiritilgan kun).
@@ -148,7 +153,8 @@ begin
   end if;
   p_sid := trim(coalesce(p_sid, ''));
   if p_sid = '' then raise exception 'record_manual_payment: o''quvchi tanlanmagan' using errcode = '22023'; end if;
-  if coalesce(p_amount, 0) <= 0 or p_amount <> round(p_amount, 2) then
+  -- NaN / Infinity (PostgREST JSON "NaN" satrini numeric NaN qiladi) va bema'ni katta summa ham rad etiladi.
+  if p_amount is null or not (p_amount > 0 and p_amount < 1e12) or p_amount <> round(p_amount, 2) then
     raise exception 'record_manual_payment: summa noto''g''ri' using errcode = '22023';
   end if;
   if coalesce(p_method, '') not in ('cash', 'bank', 'terminal', 'uzum') then
@@ -162,6 +168,12 @@ begin
     end if;
   end if;
   if v_cap is not null and v_cap > now() + interval '5 minutes' then v_cap := null; end if;
+  -- «Sana» bo'sh kelsa (eski mijoz yoki oflayn navbat) — kassa kuni to'lov KIRITILGAN kun (p_captured), yuborilgan kun emas:
+  --   chek o'sha kun bilan chop etilgan. Faqat [bugun − 31, bugun] ichida.
+  if v_date is null and not v_adj and v_cap is not null
+     and (v_cap at time zone 'Asia/Tashkent')::date between v_today - 31 and v_today then
+    v_date := to_char((v_cap at time zone 'Asia/Tashkent')::date, 'YYYY-MM-DD');
+  end if;
   if not exists (select 1 from public.students s where s.id = p_sid or s."studentId" = p_sid) then
     raise exception 'record_manual_payment: o''quvchi topilmadi (%)', p_sid using errcode = '22023';
   end if;
@@ -169,7 +181,7 @@ begin
   -- Yangi qator; shu payId allaqachon bo'lsa (qayta yuborish, ikkinchi tab, eski 3 bosqichli mijoz yarim yo'lda qolgan) —
   --   ON CONFLICT parallel chaqiruvni birinchisi tugaguncha kutadi, keyin mavjud qator holatiga qaraladi.
   v_raw := jsonb_build_object('manual', true, 'method', p_method, 'date', coalesce(v_date, to_char(v_today, 'YYYY-MM-DD')),
-                              'note', left(coalesce(p_note, ''), 500), 'forPeriod', left(coalesce(p_period, ''), 120),
+                              'note', left(coalesce(p_note, ''), 500), 'forPeriod', left(coalesce(p_period, ''), 500),
                               'byUid', app.uid());
   if v_cap is not null then v_raw := v_raw || jsonb_build_object('capturedAt', v_cap); end if;
   if v_adj then v_raw := v_raw || jsonb_build_object('dateRequested', left(coalesce(p_date, ''), 20)); end if;
@@ -221,5 +233,12 @@ drop policy if exists sa_del on public.staff_advances;
 create policy sa_del on public.staff_advances for delete using (app.is_admin() or app.is_finance());
 -- RF-07: avans jurnali faqat qo'shiladi (o'chirish siyosati yo'q).
 drop policy if exists cl_del on public.credit_ledger;
+-- Avans (student_credit) — faqat pul RPC'lari orqali (apply_payment, add_credit, reattribute_avans va b. — jurnal bilan).
+--   To'g'ridan-to'g'ri yozish faqat Direktor (moliya menejeri / g'aznachi avansni jurnalsiz o'zgartira olmasin; admin ilovasi
+--   bu jadvalga to'g'ridan-to'g'ri yozmaydi).
+drop policy if exists sc_credit_ins on public.student_credit;
+create policy sc_credit_ins on public.student_credit for insert with check (app.is_admin());
+drop policy if exists sc_credit_upd on public.student_credit;
+create policy sc_credit_upd on public.student_credit for update using (app.is_admin()) with check (app.is_admin());
 
 notify pgrst, 'reload schema';

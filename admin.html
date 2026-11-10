@@ -907,8 +907,11 @@ function isCashPay(p){ return CASH_PAY_ST.has(String(p&&p.status||'')) && String
 // pays — payments qatorlari; [fromDay..toDay] Toshkent sanasi (ichiga oladi). Qaytadi: {byPm:{provider:summa}, total, list}
 // To'lov KUNI (kassa): qo'lda kiritilgan to'lovda kassir tanlagan «Sana» (chekdagi sana bilan bir xil), lekin faqat
 //   kiritilgan kundan 31 kun ichida ORQAGA (kelajak/bema'ni sana -> kiritilgan kun). Onlayn (Click/Uzum) — yaratilgan vaqt.
-function payDay(p){ const c=tkDay(p&&p.createdAt); const r=(p&&p.raw&&p.raw.manual)?String(p.raw.date||''):'';
+//   Bazadagi app.pay_day (migration/fin-prereq.sql) bilan AYNAN bir xil (test-fin-parity.cjs): sana satr va haqiqiy kalendar
+//   sanasi bo'lishi shart (2026-02-30 kabi — kiritilgan kun).
+function payDay(p){ const c=tkDay(p&&p.createdAt); const r=(p&&p.raw&&p.raw.manual&&typeof p.raw.date==='string')?p.raw.date:'';
   if(!/^\d{4}-\d{2}-\d{2}$/.test(r) || !/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
+  { const t=Date.parse(r+'T00:00:00Z'); if(isNaN(t) || new Date(t).toISOString().slice(0,10)!==r) return c; }
   const lo=new Date(Date.parse(c+'T00:00:00Z')-31*864e5).toISOString().slice(0,10); return (r<=c && r>=lo) ? r : c; }
 function cashByMethod(pays, fromDay, toDay, method){
   const byPm={}; let total=0; const list=[];
@@ -11695,12 +11698,16 @@ function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return 
 //   Moliya rejasi F0.15: BITTA server tranzaksiyasi — payments qatori + balansga qo'llash + holat 'applied'
 //   (record_manual_payment, migration/fin-prereq.sql). Avvalgi 3 ta alohida so'rov yarim yo'lda uzilsa «pending» yetim
 //   qator qolib, kassa hisobotidan tushib qolardi. Eski yo'l (pastda) — faqat server hali yangilanmagan bo'lsa (funksiya yo'q).
+// Server javoblari (payId -> natija): server kassa kunini o'zgartirsa (dateAdjusted) — kassir ogohlantiriladi, chek shu kun bilan.
+const _obResults=new Map();
 async function obFlushOne(it){
   try{
+    // Sana bo'sh bo'lsa ham aniq kun yuboriladi — to'lov KIRITILGAN kun (oflayn navbat ertasi kuni yuborilsa ham).
     const r=await rpc('record_manual_payment', { p_pay_id:it.payId, p_sid:String(it.sid), p_amount:Number(it.amount)||0, p_method:it.method,
-      p_date:it.date||null, p_note:it.note||'', p_period:it.period||'', p_payer_name:it.nm||'',
+      p_date:(it.date || (Number(it.ts)>0 ? tkDay(Number(it.ts)) : null)), p_note:it.note||'', p_period:it.period||'', p_payer_name:it.nm||'',
       p_captured:(Number(it.ts)>0 ? new Date(Number(it.ts)).toISOString() : null) });
-    if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa/o‘quvchi bilan yozilgan' : ('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); throw e; }
+    if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa yoki o‘quvchi bilan yozilgan' : ('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); e.permanent=true; throw e; }
+    if(r) _obResults.set(it.payId, r);
     return r;
   }catch(e){ if(!rpcMissing(e)) throw e; }
   await setDoc(doc(db,'payments',it.payId), { id:it.payId, studentId:String(it.sid), provider:it.method, amount:Number(it.amount)||0, status:'pending',
@@ -11720,7 +11727,10 @@ async function _obFlushCore(){
     catch(e){
       if(obIsNetErr(e)) break;                             // tarmoq — keyinroq qayta urinamiz
       const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — attempts++, cheklaymiz
-      if(x){ x.attempts=(x.attempts||0)+1; x.lastError=String((e&&(e.code||e.message))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
+      // Qayta urinish foyda bermaydigan rad etish (huquq yo'q 42501, noto'g'ri ma'lumot 22023, 23xxx, «mismatch»/«exists») —
+      //   darhol «Yuborilmadi» (kassirga «internet yo'q — navbatda» deb ko'rsatilmaydi); xabar o'qiladigan matn bilan.
+      const code=String((e&&e.code)||''); const permanent=!!(e&&e.permanent) || code==='42501' || code==='22023' || /^23/.test(code);
+      if(x){ x.attempts=permanent?3:(x.attempts||0)+1; x.lastError=String((e&&(e.message||e.code))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
     }
   }
   return done;
@@ -11732,7 +11742,10 @@ async function flushOutbox(opts){
   if(!obPending().length){ obBadge(); return; }
   const run=async()=>{ if(_obFlushing) return; _obFlushing=true; let done=0;
     try{ done=await _obFlushCore(); } finally{ _obFlushing=false; }
-    obBadge(); if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} } };
+    obBadge(); if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} }
+    // Server kassa kunini o'zgartirgan to'lovlar (sana oraliqdan tashqarida qolgan) — kassir chekni shu kun bilan qayta chiqaradi.
+    const adj=[..._obResults.values()].filter(r=>r&&r.dateAdjusted&&!r._shown); adj.forEach(r=>{ r._shown=true; });
+    if(adj.length) toast(`⚠️ ${adj.length} ta to‘lov sanasi kassa oralig‘idan tashqarida edi — kassa kuni: ${adj.map(r=>r.day).join(', ')} (chekni qayta chiqaring)`, true); };
   if(navigator.locks && navigator.locks.request){
     await navigator.locks.request('iqror_pay_flush', opts.wait?{mode:'exclusive'}:{mode:'exclusive', ifAvailable:true}, async(lock)=>{ if(!lock) return; await run(); });
   } else { await run(); }
@@ -11837,7 +11850,8 @@ async function openRecordPayment(students, reload, pre){
     // bosishda ikkalasi ham o'tib, ikkita payId bilan ikki marta to'lov ketardi.
     saving=true; const btn=$('#rp-save'); if(btn) btn.disabled=true;
     const unlock=()=>{ saving=false; if(btn){ btn.disabled=false; btn.textContent='Qabul qilish'; } };
-    const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=$('#rp-date').value, note=$('#rp-note').value.trim(), period=$('#rp-period').value.trim();
+    // «Sana» bo'sh qoldirilsa — bugun (kassa kuni har doim aniq bo'lsin; chek va hisobot bir xil kun).
+    const sid=$('#rp-sid').value, method=$('#rp-m').value, amount=Number(($('#rp-amt').value||'').replace(/\D/g,''))||0, date=($('#rp-date').value||tkDay(new Date())), note=$('#rp-note').value.trim(), period=$('#rp-period').value.trim();
     if(!sid){ toast('O‘quvchini tanlang',true); unlock(); return; }
     if(amount<=0){ toast('Summani kiriting',true); unlock(); return; }
     // «Sana» — kassa hisoboti shu kunga yozadi (payDay: kiritilgan kundan 31 kungacha orqaga). Oraliqdan tashqari sana
@@ -11853,8 +11867,11 @@ async function openRecordPayment(students, reload, pre){
     if(navigator.onLine){ try{ const rq=await getDocs(query(collection(db,'payments'), where('studentId','==',String(sid)))); const now=Date.now();
       let dupAgo=null;
       rq.docs.map(d=>d.data()).forEach(p=>{ if(Number(p.amount)!==amount || !(p.raw&&p.raw.manual) || p.status==='canceled' || p.status==='failed') return;
-        let t=null; try{ if(p.createdAt&&p.createdAt.toDate) t=p.createdAt.toDate().getTime(); }catch(e){}
-        if(t==null) return; const ago=now-t; if(ago>=0 && ago<43200000 && (dupAgo==null||ago<dupAgo)) dupAgo=ago; });
+        // createdAt endi SERVER vaqti (moliya rejasi F0.14) — kompyuter soati orqada bo'lsa «ago» manfiy chiqib, takror
+        //   ogohlantirishi jim o'tib ketardi. Avval to'lov kiritilgan payt (raw.capturedAt — shu kompyuter soati), bo'lmasa
+        //   createdAt; 15 daqiqagacha manfiy farq ham qabul qilinadi (boshqa kompyuterdan kiritilganlar ham ushlansin).
+        let t=null; try{ const ca=p.raw&&p.raw.capturedAt; const tc=ca?Date.parse(ca):NaN; if(!isNaN(tc)) t=tc; else if(p.createdAt&&p.createdAt.toDate) t=p.createdAt.toDate().getTime(); }catch(e){}
+        if(t==null) return; const ago=now-t; if(ago>-15*60000 && ago<43200000 && (dupAgo==null||Math.max(0,ago)<dupAgo)) dupAgo=Math.max(0,ago); });
       if(dupAgo!=null){ const mm=Math.round(dupAgo/60000); const agoTxt=mm<60?`${mm} daqiqa`:`${Math.floor(mm/60)} soat ${mm%60} daqiqa`;
         if(!confirm(`⚠️ DIQQAT — BU TAKROR BO‘LISHI MUMKIN!\n\nShu o‘quvchiga ${fmtSom(amount)} so‘m allaqachon ${agoTxt} oldin (bugun) yozilgan.\n\nAgar ota-ona FAQAT BIR MARTA to‘lagan bo‘lsa — «Bekor»ni bosing, QAYTA yozmang.\nFaqat bu HAQIQATAN alohida, yangi to‘lov bo‘lsa — «OK».`)){ unlock(); return; }
       }
@@ -11879,7 +11896,8 @@ async function openRecordPayment(students, reload, pre){
     const item={ payId:'man_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), sid:String(sid), amount, method, date, note, period:receiptPeriod||period, nm, ts:Date.now() };
     // Natija UI — bir joyda (chek tugmasi bilan).
     // Chekdagi sana = kassa/qayta chop etish sanasi (payDay) — uchala joyda bir xil kun.
-    const doReceipt=()=>printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date:payDay({ createdAt:new Date(item.ts).toISOString(), raw:{ manual:true, date } }) });
+    // Chek sanasi — server tasdiqlagan kassa kuni (record_manual_payment javobi), bo'lmasa (navbatda / eski server) mijoz hisobi.
+    const doReceipt=()=>{ const r=_obResults.get(item.payId); printReceipt({ kind:'income', who:nm, amount, reason:'To‘lov', period:receiptPeriod||period||undefined, method:methLbl, date:(r&&r.day) || payDay({ createdAt:new Date(item.ts).toISOString(), raw:{ manual:true, date } }) }); };
     const finishUI=(title, bodyHtml)=>{
       $('#modal').innerHTML=`<div class="modal-h"><h3>${title}</h3><button class="x" id="m-x2">×</button></div>
         <div class="modal-b">${bodyHtml}</div>
@@ -11912,7 +11930,10 @@ async function openRecordPayment(students, reload, pre){
     await flushOutbox({wait:true});
     // 3) Natijani navbat holatidan aniqlaymiz.
     const cur=obLoad().find(x=>x.payId===item.payId);
-    if(!cur){ toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); }
+    if(!cur){ const r=_obResults.get(item.payId);
+      if(r&&r.dateAdjusted){ if(r) r._shown=true; toast(`⚠️ Sana kassa oralig‘idan tashqarida — kassa kuni: ${r.day}`, true);
+        finishUI('✓ To‘lov qabul qilindi', okBody+`<div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Tanlangan sana kassa oralig‘idan (oxirgi 31 kun) tashqarida edi — to‘lov <b>${esc(r.day)}</b> kuni bilan yozildi. Chek shu kun bilan chiqadi.</div>`); }
+      else { toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); } }
     else if(cur.status==='failed'){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
       toast('Xatolik: '+(cur.lastError||'server rad etdi')+' — «⏳ navbat»dan ko‘ring',true); obBadge(); }
     else { obBadge(); toast('⏳ Internet yo‘q — navbatga qo‘yildi, ulanganда avtomatik yuboriladi'); finishUI('⏳ To‘lov navbatga qo‘yildi', queuedBody); }

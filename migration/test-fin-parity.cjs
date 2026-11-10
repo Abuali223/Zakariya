@@ -41,7 +41,8 @@ for (let i = 0; i < 600; i++) {
   if (k < 0.55) {
     const off = Math.floor(rnd() * 70) - 20;   // -20 (kelajak) … +49 kun orqaga
     const dd = isoDay(Date.parse(cDay + 'T00:00:00Z') - off * 864e5);
-    raw = { manual: pick([true, true, true, false, 1, 'yes']), date: pick([dd, dd, dd, '', 'bad', dd.replace(/-/g, '.')]) };
+    const bad = dd.slice(0, 8) + pick(['30', '31', '29', '00', '32']);   // ba'zan yaroqsiz kalendar sanasi (2026-02-30, 2026-04-31 …)
+    raw = { manual: pick([true, true, true, false, 1, 'yes']), date: pick([dd, dd, dd, '', 'bad', dd.replace(/-/g, '.'), bad, [dd], 20261101, null]) };
   } else if (k < 0.7) raw = { date: isoDay(created) };
   const id = pick(['man_', 'click_', 'uz_', 'pay_']) + i + (rnd() < 0.15 ? ':s:S' + i : '');
   rows.push({ id, status: pick(STATUSES), provider: pick(PROVS), amount: pick([0, -100, 100, 2900000, 1500000.5, null]), created: new Date(created).toISOString(), raw });
@@ -52,6 +53,9 @@ rows.push({ id: 'b2', status: 'applied', provider: 'cash', amount: 1, created: '
 rows.push({ id: 'b3', status: 'applied', provider: 'bank', amount: 1, created: '2026-11-10T06:00:00Z', raw: { manual: true, date: '2026-10-10' } });   // aynan 31 kun
 rows.push({ id: 'b4', status: 'applied', provider: 'bank', amount: 1, created: '2026-11-10T06:00:00Z', raw: { manual: true, date: '2026-10-09' } });   // 32 kun
 rows.push({ id: 'b5', status: 'split', provider: 'click', amount: 5, created: '2026-11-10T06:00:00Z', raw: null });
+rows.push({ id: 'b6', status: 'applied', provider: 'cash', amount: 1, created: '2026-03-05T06:00:00Z', raw: { manual: true, date: '2026-02-30' } });   // yaroqsiz sana
+rows.push({ id: 'b7', status: 'applied', provider: 'cash', amount: 1, created: '2026-11-10T06:00:00Z', raw: { manual: true, date: ['2026-11-01'] } });  // satr emas
+rows.push({ id: 'b8', status: 'applied', provider: 'cash', amount: 1, created: '2028-03-05T06:00:00Z', raw: { manual: true, date: '2028-02-29' } });   // kabisa yili — yaroqli
 
 // --- JS natija ---
 const js = rows.map(r => {

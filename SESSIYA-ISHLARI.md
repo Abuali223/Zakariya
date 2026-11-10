@@ -1338,6 +1338,15 @@ Egasi barcha qarorlarni ijrochiga topshirdi (reja §6 tavsiyalari qabul qilindi)
 - **Prod (faqat o'qish):** vedomost tasdig'i 2026-12 dan yoqilgan; takroriy maosh ID 2 ta (tuzatish kerak); noyabr vedomosti
   tizimda yo'q; SINOV Direktor hisobi va «2099-12» sinov vedomosti hali turibdi (tozalash kerak).
 - Hujjatlar: `docs/moliya/oraliq-qoidalar.md` (16-noyabrdan), `docs/moliya/buyruq-namunalari.md` (G5).
+- **Mustaqil ko'rik (3 tekshiruvchi + har jiddiy topilmaga skeptik) va tuzatmalar:** NaN / Infinity / bema'ni katta summa
+  barcha pul RPC'larida rad (record_manual_payment, apply_payment, apply_to_invoice, add_credit, reattribute_avans) — avval
+  NaN barcha fakturalarni «to'langan» qilardi; **RF-04 oldinga surildi**: apply_payment / apply_to_invoice musbat summani faqat
+  shu payId'li payments qatori, ichki RPC bayrog'i, Direktor yoki server bilan qabul qiladi (eski mijozlar qatorni avval
+  yozgani uchun ishlayveradi); add_credit — kassir yo'q; student_credit'ga to'g'ridan-to'g'ri yozish — faqat Direktor; takror
+  to'lov ogohlantirishi kompyuter soati orqada bo'lsa ham ishlaydi (raw.capturedAt); sana bo'sh bo'lsa — kiritilgan kun; server
+  kassa kunini o'zgartirsa — kassirga ogohlantirish va chek shu kun bilan; qayta urinib bo'lmaydigan rad etish «navbatda» deb
+  ko'rsatilmaydi; payDay yaroqsiz sanada bazadagidek; forPeriod 500 belgi; verify-db — repo'da yo'q UNIQUE indeks ham 🟠.
+  Sinov: test-fin-prereq 87/87, moslik 608/608, poyga 9/9, brauzer 12/12 (takror ogohlantirishi bilan), qolgan to'plamlar yashil.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

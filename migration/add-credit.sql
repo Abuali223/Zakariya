@@ -32,13 +32,15 @@ declare
   v_name text;
   v_inserted int := 0;
 begin
-  -- Ruxsat: to'lov/avans oluvchilar (kassir/moliya/direktor) yoki server — apply_payment bilan bir xil.
+  -- Ruxsat: Direktor, moliya yoki server. Kassir — yo'q (moliya rejasi 0-bosqich, ko'rik: kassir manfiy delta bilan
+  --   istalgan o'quvchining avansini 0 ga tushira olardi; admin ilovasida kassir bu funksiyani chaqirmaydi).
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
-  if not (app.is_admin() or app.is_finance() or app.is_cashier()
+  if not (app.is_admin() or app.is_finance()
           or coalesce(v_claims->>'role','') = 'service_role') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
   p_delta := coalesce(p_delta, 0);
+  if p_delta = 'NaN'::numeric or abs(p_delta) >= 1e12 then return jsonb_build_object('ok', false, 'reason', 'bad-amount'); end if;
   if abs(p_delta) < 0.5 then return jsonb_build_object('ok', false, 'reason', 'zero'); end if;
   -- RF-03 (moliya ish rejasi, 0-bosqich): avansni KO'PAYTIRISH (to'lovsiz pul paydo bo'lishi) — faqat Direktor yoki server.
   --   Admin ilovasida yagona chaqiruv — Direktorning «↻ Qayta hisoblash» (narx kamayganda ortiqcha to'lov avansga).
