@@ -1348,6 +1348,52 @@ Egasi barcha qarorlarni ijrochiga topshirdi (reja §6 tavsiyalari qabul qilindi)
   ko'rsatilmaydi; payDay yaroqsiz sanada bazadagidek; forPeriod 500 belgi; verify-db — repo'da yo'q UNIQUE indeks ham 🟠.
   Sinov: test-fin-prereq 87/87, moslik 608/608, poyga 9/9, brauzer 12/12 (takror ogohlantirishi bilan), qolgan to'plamlar yashil.
 
+## 56) Moliya, 1a-bosqich poydevori (kassa yadrosi — faqat lokal sinov zanjirida) va sinov stendi — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN.** Kassa fayllari `run-all.sql` da «--dev \ir» bilan yozilgan — `deploy.sh` / `verify-db.sh`
+ularni izoh deb o'tkazib yuboradi; faqat `bash migration/chain.sh --dev` (lokal sinov, o'quv stendi `--dev`) qo'shadi. Tayyor
+bo'lganda qator boshidagi «--dev » olib tashlanadi.
+
+- **`chain.sh --dev`**, `rls-initplan.sql` (yangi rol yordamchilari ro'yxatda: `is_accountant`, `kassa_operator`, `fin_list2`,
+  `kassa_reader`).
+- **`fin-core.sql`** — ma'lumotnoma jadvallari (hisobvaraqlar rejasi, statiyalar, kassa operatsiyalari qoidalari, tashkilot
+  sozlamalari T1 / L1 / limit / kassaGoLive, imzo ro'yxatlari, kontragentlar, kassalar, raqam hisoblagichi); RLS — faqat o'qish
+  (kassa / moliya rollari), yozish — faqat RPC. **`fin-seed.sql`** — 92 hisobvaraq (BHMS 21), 75 statiya (IN 7, EX 44, OP 24),
+  21 eski toifa mosligi, 20 operatsiya qoidasi (hammasi `ON CONFLICT DO NOTHING`).
+- **`kassa.sql`** — `cash_docs`, `cash_doc_lines`, `cash_days`, `cash_counts`, `cash_day_events`, `payment_allocations`,
+  `fin_snapshots`; bazadagi himoya (RPC'ni chetlab o'tib ham buzib bo'lmaydi): bitta ochiq kun; kun boshi = kecha oxiri; kun
+  oxiri = boshi + kirim − chiqim; qoldiq manfiy emas; yopilgan kunga hujjat yozilmaydi; tekshirilgan kun o'zgarmaydi; hujjat
+  o'chirilmaydi, mazmuni o'zgarmaydi; tasdiqsiz o'tkazish yo'q; hisoblagich faqat +1.
+- **`kassa-docs.sql`** — `kassa_receipt` (KO-1), `kassa_payout_request` → `kassa_doc_approve` (2-ro'yxat ≠ so'rovchi; T1 dan
+  katta, rahbarga berish, qarz — Direktor ham) → `kassa_doc_pay`; `kassa_doc_reject`, `kassa_doc_cancel`, `kassa_doc_void` (shu
+  kunda, raqam saqlanadi). Raqam — o'tkazishning OXIRGI qadami, kassa eksklyuziv qulfi ostida: ROLLBACK raqam yemaydi.
+  Idempotent (`clientRef`); fiskal chek № majburiy va takrorlanmaydi; statiya ruxsat ro'yxati; asos hujjatisiz ≤ L1.
+- **`kassa-day.sql`** — `kassa_opening_set` (faqat Direktor, kassa ishga tushguncha), `kassa_day_close` (farq = sanalgan −
+  hisobdagi − hali o'tkazilmagan → shu kun sanasi bilan tizim hujjati: kamomad KO-2 Dt 5910, ortiqcha KO-1 Kt 9390; KO-4
+  varaqlari; sha256 izi), `kassa_handover`, `kassa_day_verify` (≠ yopuvchi / o'tkazuvchi; bo'shliq, jamlar, iz), `kassa_day_reopen`
+  (faqat Direktor, oxirgi tekshirilmagan kun), `kassa_shortage_decide` (4730 / 9430), `kassa_state`, `kassa_day_book`,
+  `kassa_checks`. Oflayn / kech kiritish: olingan kuni ochiq bo'lsa — o'sha kunga, yopilgan bo'lsa — joriy kunga «kech»
+  belgisi bilan; 48 soatdan eskisini faqat Direktor kiritadi.
+- **`kassa-pay.sql`** + **`fin-prereq.sql`** (`record_manual_payment`, yangi ixtiyoriy `p_extra`): kassa ishga tushgach
+  (`fin_org.kassaGoLive`) naqd o'quv to'lovi SHU tranzaksiyada KO-1 bilan: Kt 4010 (boshlangan davr), Kt 6310 (kelgusi oy,
+  ortiqcha), naqdsiz Dt 6310 Kt 4010 (qo'llangan eski avans). Order o'tmasa to'lov ham yozilmaydi. Kassa fayllari zanjirda
+  bo'lmasa — avvalgidek (dinamik chaqiruv). Eski 9 parametrli chaqiruvlar mos.
+- **Moliya soati** (`app.fin_now` / `app.fin_today`, `fin-prereq.sql`): jonli bazada DOIM `now()`; faqat nomi «fx_…»,
+  «…sinov…», «…test…» bo'lgan bazalarda siljitiladi (jonli bazada jadvalga yozib bo'lmaydi).
+- **Sinovlar:** `test-kassa.sql` 198/198, `test-kassa-pay.sql` 41/41, `test-kassa-race.sh` 22/22 (8 seans × 200 hujjat, 10 %
+  ROLLBACK; ikki katta chiqimdan bittasi; parallel tasdiqlar; poyga paytida kun yopish), eski to'plamlar yashil
+  (`test-fin-prereq` 87, `test-audit-fixes` 36, `test-public-close` 92, `test-auth-rls` — bazaviy natija bilan bir xil,
+  payments `npm test` 192, JS↔SQL moslik 608). Oddiy zanjir ikki marta ketma-ket xatosiz; unda kassa jadvallari yo'q.
+  Lokal sinov bazalari UTF8 da quriladi (jonli baza kabi).
+- **Sinov stendi (F0.20) — `sinov/`:** `install.sh`, `update.sh`, `reset.sh`, `remove.sh`, `lib-preflight.sh`, `server.cjs`,
+  `seed.cjs`, `README.md`. Yangi domen kerak emas (asosiy sayt manzili, boshqa port — standart 8443 = brauzer uchun boshqa
+  manzil). O'rnatish chiqishida parollar ko'rsatilmaydi (faqat `sudo cat /opt/iqror-sinov/accounts.txt`). Soxta server
+  muhitida (haqiqiy nginx / Postgres / PostgREST, soxta docker / systemctl / ufw) 107 stsenariy va brauzerda 39 tekshiruv
+  o'tdi; HTTP darajasidagi 68 tekshiruvdan 67 tasi o'tdi (bittasi — sinov skriptining o'zidagi noto'g'ri kutilma: kassir
+  `is_staff` tarkibida emas, stend xatosi emas). Haqiqiy serverda hali ishga tushirilmagan.
+- **Qilinmagan:** kassa yadrosining mustaqil (boshqa agentlar bilan) ko'rigi — ishga tushirish rad etildi; o'rniga muallifning
+  o'z qayta ko'rigi (3 tuzatma: band kalitlar, qarordan keyin qayta ochish, fiskal № indeksi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

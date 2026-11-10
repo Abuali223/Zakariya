@@ -737,8 +737,18 @@ Mustaqil ko‘rikdan keyin: **F0.17 (RF-04) shu relizga kirdi** — `apply_payme
 payments qatori, ichki RPC bayrog‘i, Direktor yoki server bilan qabul qiladi (eski mijozlar ishlayveradi, majburiy qayta
 yuklash kerak emas); NaN / Infinity summalar barcha pul RPC’larida rad etiladi; `student_credit` — faqat RPC’lar orqali.
 F0.18 (prod, faqat o‘qish): vedomost tasdig‘i 2026-12 dan yoqilgan; takroriy maosh ID 2 ta — tuzatilishi kerak; noyabr
-vedomosti tizimda tayyorlanmagan. F0.3 — `docs/moliya/buyruq-namunalari.md`. Qoldi: F0.20 (sinov stendi — server joyi
-egasi bilan kelishiladi), maktab tomonidagi F0.2, F0.4–F0.8.
+vedomosti tizimda tayyorlanmagan. F0.3 — `docs/moliya/buyruq-namunalari.md`.
+
+**Egasining javoblari (2026-11-10):** naqd va terminal to‘lovlari uchun ro‘yxatdan o‘tgan onlayn / virtual kassa (fiskal
+chek) **bor** — G1 uchun yozma tasdiq (F0.5) qoldi; buxgalter — **maktab xodimi**, rejaning hisob qismini 21‑noyabrgacha
+ko‘rib chiqadi (G2); kassa limiti bo‘yicha javob **yo‘q** (F0.4 ochiq — tizimda limit 0, ya’ni faqat ogohlantirish);
+sinov nusxasi **yangi domen ochmasdan** — asosiy sayt manzilida, boshqa portda (standart 8443).
+
+**F0.20 tayyor (`sinov/`):** `install.sh` / `update.sh` / `reset.sh` / `remove.sh` — alohida `iqror_sinov` bazasi, ikkinchi
+PostgREST (faqat 127.0.0.1, o‘z JWT siri), kirish emulyatsiyasi bilan Node server, alohida nginx bloki; faqat to‘qima
+ma’lumot; jonli baza, nginx sayt fayli va xizmatlarga tegmaydi (`--dry-run` bor). Soxta server muhitida (haqiqiy nginx,
+Postgres, PostgREST) 107 stsenariy va brauzerda 39 tekshiruv o‘tdi; haqiqiy serverda hali ishga tushirilmagan — egasi
+o‘rnatadi (`sinov/README.md`). Qoldi: maktab tomonidagi F0.2, F0.4–F0.8.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|
@@ -769,6 +779,17 @@ payments `npm test`, mavjud SQL to‘plamlari, rol testlari.
 ### 1a-bosqich — Kassa MVP (qurish 16-noyabr – 26-dekabr; jonli — yanvarning birinchi kassa kuni)
 Maqsad: Excel kunlik varaqlari, qog‘oz orderlar va tracker kassa reyestri o‘rniga raqamlangan KO-1/KO-2, sanash bilan
 yopiladigan kun, KO-4 chop etish, o‘tkazma va naqdsizni ajratish, Telegram.
+
+**Holat (2026-11-10):** server yadrosi yozildi va lokal sinovdan o‘tdi — hali **faqat lokal sinov zanjirida**
+(`run-all.sql` da «--dev \ir»; `chain.sh --dev`), jonli tizimga chiqmaydi. F1.1 `fin-core.sql` + `fin-seed.sql` (92
+hisobvaraq, 75 statiya, 21 toifa mosligi, 20 operatsiya qoidasi); F1.2 `kassa.sql` (jadvallar, I1–I6 va o‘zgarmaslik
+triggerlari); F1.3 raqamlash va kassa qulfi; F1.4 `kassa-docs.sql` (KO-1, KO-2 so‘rov → tasdiq → to‘lash, bekor qilish,
+fiskal chek №) va `kassa-pay.sql` (naqd o‘quv to‘lovi KO-1 bilan bitta tranzaksiyada, taqsimot 4010 / 6310); F1.9 va F1.10
+ning server qismi `kassa-day.sql` (boshlang‘ich qoldiq, sanab yopish, farq hujjati, smena topshirish, tekshirish, qayta
+ochish, kamomad qarori, oflayn / kech kiritish, o‘qish funksiyalari). Sinovlar: `test-kassa.sql` 198, `test-kassa-pay.sql`
+41, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK). Reja bo‘yicha yo‘l nazorati (28‑noyabr: yadro F1.1–F1.4)
+shartining server qismi bajarildi. Qoldi: F1.5 maosh / avans, F1.6 qaytarish, F1.7 o‘quv to‘lovini bekor qilish, F1.11–
+F1.19 (ekranlar, chop etish, hisobotlar, Telegram, 31.12 surati), mustaqil ko‘rik.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|
