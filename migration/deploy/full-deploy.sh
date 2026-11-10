@@ -175,7 +175,9 @@ if [ -f "$REPO/migration/kassa-checks.sql" ]; then
   case "$KSUM" in
     '✅'*) echo "    ✓ ${KSUM#✅ }" ;;
     *)
-      if printf '%s\n' "$KOUT" | grep -q 'moduli bu bazada o.rnatilmagan'; then
+      # (case — quvursiz: pipefail + grep -q erta chiqishi soxta «yo'q» bermasin)
+      case "$KOUT" in *"moduli bu bazada o'rnatilmagan"*) KMOD=0 ;; *) KMOD=1 ;; esac
+      if [ "$KMOD" = 0 ]; then
         echo "    ⚠️ ${KSUM#!! }"
         printf '%s\n' "$KOUT" | grep -E '^ !!    ' | head -n 20 | sed 's/^ !!    | /       /' || true
       else
