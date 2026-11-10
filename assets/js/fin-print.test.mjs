@@ -337,3 +337,44 @@ test('RP-02: rus tilida; HTML xavfsizligi', () => {
   assert.ok(h.includes('Bozor &lt;sotuvchisi&gt;') && !h.includes('<sotuvchisi>'), 'foydalanuvchi matni ekranlanadi');
   assert.ok(/^<!DOCTYPE html><html lang="ru">/.test(h) && h.includes('@page{size:A4 portrait;margin:12mm 10mm 12mm 18mm}'), 'o‘z sahifa chegaralari');
 });
+
+// ---------------------------------------------------------------- o'zaro hisob dalolatnomasi (nc_offset, naqdsiz)
+const ofsDoc = {
+  id: 'kd_ofs1', form: 'ACT', op: 'nc_offset', status: 'posted', no: 3, year: 2027, businessDay: '2027-01-04', amount: 1300000,
+  partyType: 'employee', partyId: 'teachers:tch1', partyName: 'Sinov O‘qituvchi', attachment: 'Yozma ariza', note: '',
+  basis: 'O‘zaro hisob: ish haqi 2026-12 hisobidan o‘quv to‘lovi — Sinov B (T-2); ariza 03.01.2027',
+  dirApprovedBy: 'u_dir', postedBy: 'u_dir', postedAt: '2027-01-04T06:00:00Z',
+  sourceSnapshot: { month: '2026-12', studentId: 'T-2', studentName: 'Sinov B', requestDate: '2027-01-03', paymentId: 'ofs_x', allocation: 'exact' },
+  lines: [
+    { lineNo: 1, debit: '6710', credit: '4010', amount: 1000000, articleId: 'IN-01', cash: false, analytics: { studentId: 'T-2', month: '2027-01' } },
+    { lineNo: 2, debit: '6710', credit: '6310', amount: 300000, articleId: 'IN-01', cash: false, analytics: { studentId: 'T-2', month: '2027-03' } },
+  ],
+};
+test('o‘zaro hisob dalolatnomasi: o‘zbek kirill — matn, qatorlar, xodim, o‘quvchi, asos, imzolar', () => {
+  const t = text(docHtml(ofsDoc, ctx(), W));
+  for (const must of ['ДАЛОЛАТНОМА № Д-3', 'Ўзаро ҳисоб — 2027 йил 4 январь',
+    'Ходимнинг ёзма аризасига асосан унинг 12.2026 ойи учун иш ҳақидан 1 300 000=00 сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.',
+    '6710 4010 T-2 · 01.2027 1 000 000=00 IN-01', '6710 6310 T-2 · 03.2027 300 000=00 IN-01',
+    'Ходим: Sinov O‘qituvchi', 'Ўқувчи: Sinov B (T-2)', 'Асоси: Ўзаро ҳисоб: 12.2026 ойи иш ҳақи ҳисобидан ўқув тўлови — Sinov B (T-2); ариза 03.01.2027',
+    'Сумма: 1 300 000=00 — Бир миллион уч юз минг сўм 00 тийин', 'Иловаси: Ёзма ариза',
+    'Раҳбар Синов Д.Д.', 'Бош бухгалтер Синов Б.Б.', 'Танишдим, розиман: ходим Sinov O‘qituvchi', 'Ҳужжат: kd_ofs1'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(!t.includes('Берилсин') && !t.includes('O‘zaro hisob'), 'chiqim orderi yorlig‘i yo‘q; tizim matni chop etish tilida');
+  const v = text(docHtml(Object.assign({}, ofsDoc, { status: 'void', voidedBy: 'u_dir', voidedAt: '2027-01-04T09:00:00Z', voidReason: 'Xato o‘quvchi tanlangan' }), ctx(), W));
+  assert.ok(v.includes('БЕКОР ҚИЛИНГАН') && v.includes('Бекор қилинди: 04.01.2027 14:00, Sinov Direktor — сабаб: Xato o‘quvchi tanlangan'), v);
+});
+test('o‘zaro hisob dalolatnomasi: rus va lotin; boshqa dalolatnomalarda «tomon» qatori yo‘q', () => {
+  const r = text(docHtml(ofsDoc, ctx({ lang: 'ru' }), W));
+  for (const must of ['АКТ № А-3', 'Взаимозачёт — 4 января 2027 г.', 'На основании письменного заявления сотрудника из его заработной платы за 12.2026 сумма 1 300 000=00 сум зачтена в счёт оплаты за обучение ребёнка.',
+    'Сотрудник: Sinov O‘qituvchi', 'Учащийся: Sinov B (T-2)', 'Основание: Взаимозачёт: оплата за обучение в счёт заработной платы за 12.2026 — Sinov B (T-2); заявление от 03.01.2027',
+    'Приложение: Письменное заявление', 'Ознакомлен, согласен: сотрудник Sinov O‘qituvchi'])
+    assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
+  const l = text(docHtml(ofsDoc, ctx({ lang: 'uz-latn' }), W));
+  assert.ok(l.includes('DALOLATNOMA № D-3') && l.includes('Xodim: Sinov O‘qituvchi') && l.includes('O‘quvchi: Sinov B (T-2)') && l.includes('Tanishdim, roziman: xodim Sinov O‘qituvchi'), l);
+  const op = text(docHtml({ id: 'kd_op', form: 'ACT', op: 'nc_opening', status: 'posted', no: 1, businessDay: '2027-01-04', amount: 2000000, partyName: 'Boshlang‘ich qoldiq',
+    basis: 'Kassani sanash dalolatnomasi (boshlang‘ich qoldiq)', lines: [{ debit: '5010', credit: '0000', amount: 2000000, articleId: 'OP-23', cash: true }] }, ctx(), W));
+  assert.ok(op.includes('ДАЛОЛАТНОМА № Д-1') && op.includes('Кассанинг бошланғич қолдиғи — 2027 йил 4 январь') && !op.includes('Берилсин') && !op.includes('Ходим:') && !op.includes('Танишдим'), op);
+  const dec = text(docHtml({ id: 'kd_dec', form: 'ACT', op: 'nc_shortage_dec', status: 'posted', no: 2, businessDay: '2027-01-05', amount: 5000, partyType: 'employee', partyId: 'staff:st1', partyName: 'Sinov Kassir',
+    basis: 'Buyruq № 3', decidedBy: 'u_dir', lines: [{ debit: '4730', credit: '5910', amount: 5000, articleId: 'OP-22', cash: false }] }, ctx(), W));
+  assert.ok(dec.includes('Камомад бўйича қарор') && dec.includes('Жавобгар шахс: Sinov Kassir') && !dec.includes('Берилсин'), dec);
+});

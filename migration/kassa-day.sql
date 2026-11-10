@@ -828,7 +828,8 @@ revoke all on function public.kassa_people() from public, anon;
 grant execute on function public.kassa_people() to authenticated;
 
 -- ---------- O'qish: «Kassa» sahifasi uchun hammasi bir chaqiruvda ----------
---   holat + ochiq kun hujjatlari + so'rovlar (tasdiq kutayotgan / to'lanishi kerak) + oxirgi kunlar + qarorsiz kamomadlar + ismlar.
+--   holat + ochiq kun hujjatlari + so'rovlar (tasdiq kutayotgan / to'lanishi kerak) + oxirgi kunlar + qarorsiz kamomadlar +
+--   naqdsiz dalolatnomalar + ismlar.
 create or replace function public.kassa_overview(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_state jsonb; v_day text; v_uids text[];
@@ -838,6 +839,9 @@ begin
   select array_agg(distinct x) into v_uids from (
       select unnest(array[c."requestedBy", c."approvedBy", c."dirApprovedBy", c."rejectedBy", c."postedBy", c."voidedBy", c."createdBy"]) as x
         from public.cash_docs c where c.desk = v_desk and (c."dayId" = v_day or c.status in ('draft', 'approved'))
+      union all
+      select unnest(array[c."postedBy", c."voidedBy", c."dirApprovedBy"]) from public.cash_docs c
+       where c.desk = v_desk and c.form = 'ACT' and c.no is not null and c."businessDay" >= app.fin_today() - 92
       union all
       select unnest(array[d."cashierUid", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.desk = v_desk and d.day >= app.fin_today() - 62) q
    where x is not null;
@@ -851,6 +855,11 @@ begin
     'shortages', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'no', c.no, 'day', c."businessDay", 'amount', c.amount,
                                                                'cashierUid', c."sourceSnapshot" ->> 'cashierUid') order by c."businessDay")
                              from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null), '[]'::jsonb),
+    -- naqdsiz dalolatnomalar (boshlang'ich qoldiq, kamomad qarori, o'zaro hisob): kassa kitobiga kirmaydi — oxirgi 92 kun, eng yangisi 30 ta
+    'acts', coalesce((select jsonb_agg(app.kassa_doc_json(a.id) order by a."postedAt" desc, a.no desc)
+                        from (select c.id, c."postedAt", c.no from public.cash_docs c
+                               where c.desk = v_desk and c.form = 'ACT' and c.no is not null and c."businessDay" >= app.fin_today() - 92
+                               order by c."postedAt" desc, c.no desc limit 30) a), '[]'::jsonb),
     'names', app.kassa_names(v_uids));
 end $$;
 revoke all on function public.kassa_overview(text) from public, anon;

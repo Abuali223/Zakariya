@@ -197,7 +197,21 @@ function draw() {
     <div class="tablewrap"><table><thead><tr><th>Kun</th><th style="text-align:right">Kun boshi</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th style="text-align:right">Kun oxiri</th><th style="text-align:right">Farq</th><th>Holat</th><th></th></tr></thead><tbody>${dayRows}</tbody></table></div></div>` : '';
 
   const ctlHtml = (m.list2 || m.director) && ready ? `<div id="ks-ctl">${ST.checks && ST.checks._desk === ST.desk ? controlHtml(ST.checks, true) : ''}</div>` : '';
-  $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml;
+
+  // ---- naqdsiz dalolatnomalar: kassa kitobiga kirmaydi (boshlang'ich qoldiq, kamomad bo'yicha qaror, o'zaro hisob)
+  const actDocs = ST.ov.acts || [];
+  const actRows = actDocs.map(d => { const v = d.status === 'void';
+    const canVoid = m.director && d.op === 'nc_offset' && d.status === 'posted' && String(d.businessDay) === String(s.today);   // o'zaro hisob — faqat shu kunda, Direktor
+    return `<tr${v ? ' style="opacity:.55"' : ''}>
+      <td data-label="№"><b>D-${esc(String(d.no))}</b><div class="small muted">${esc(dmy(d.businessDay))}</div></td>
+      <td data-label="Tur">${esc(opName(d.op))}</td>
+      <td data-label="Tomon / asos"><div>${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></div></td>
+      <td data-label="Summa" style="text-align:right;white-space:nowrap">${v ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>'}</td>
+      <td data-label="Holat">${v ? stChip('void') + (d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : '') : `<span class="small muted">${esc(nameOf(d.postedBy))}</span>`}</td>
+      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
+  const actsHtml = actDocs.length ? `<div class="card" style="padding:14px 18px;margin-top:14px" id="ks-acts"><b>Naqdsiz dalolatnomalar</b><div class="small muted" style="margin:2px 0 8px">Kassa kitobiga kirmaydi: boshlang‘ich qoldiq, kamomad bo‘yicha qaror, o‘zaro hisob (ish haqidan o‘quv to‘lovi — «Maosh berish» oynasida, faqat Direktor). Oxirgi 3 oy.</div>
+    <div class="tablewrap"><table><thead><tr><th>№</th><th>Tur</th><th>Tomon / asos</th><th style="text-align:right">Summa</th><th>Holat</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div></div>` : '';
+  $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml + actsHtml;
   bind();
 }
 function bind() {
@@ -224,6 +238,8 @@ function bind() {
   each('data-verify', day => openVerifyForm(day));
   each('data-reopen', day => ask('Kunni qayta ochish — ' + dmy(day), 'Sababi (kamida 5 belgi). Sanash farqi hujjati bekor bo‘ladi, kun qayta sanab yopiladi.', 5, r => act('kassa_day_reopen', { p_desk: ST.desk, p_day: day, p_reason: r }, 'Kun qayta ochildi')));
   each('data-decide', id => openDecideForm(id));
+  each('data-ofsvoid', id => ask('O‘zaro hisobni bekor qilish', 'Sababi (kamida 5 belgi). O‘quv to‘lovi teskari qilinadi, maosh to‘lovi olib tashlanadi; dalolatnoma raqami saqlanadi. Faqat rasmiylashtirilgan kunning o‘zida.', 5,
+    r => act('kassa_offset_void', { p_id: id, p_reason: r }, 'O‘zaro hisob bekor qilindi')));
 }
 // Server amali: bajaradi, xabar beradi, sahifani yangilaydi. Xato — serverning o'zbekcha matni bilan.
 async function act(fn, args, okMsg, after) {
@@ -586,9 +602,10 @@ export function controlRows(c) {
       const bad = [num(p1.pay) ? `kirim orderisiz naqd o‘quv to‘lovi: ${cnt(p1.pay)} (${som(p1.paySum)})` : '', num(p1.doc) ? `to‘lov yozuvisiz kirim orderi: ${cnt(p1.doc)}` : '',
         num(p4.row) ? `chiqim orderisiz naqd xarajat: ${cnt(p4.row)}` : '', num(p4.doc) ? `«Buxgalteriya»ga ko‘chmagan xarajat orderi: ${cnt(p4.doc)}` : '',
         num(p5.row) ? `chiqim orderisiz naqd maosh / avans: ${cnt(p5.row)}` : '', num(p5.doc) ? `yozuvsiz maosh / avans orderi: ${cnt(p5.doc)}` : '',
+        num(p5.ofs) ? `o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: ${cnt(p5.ofs)}` : '',
         num(p8.row) ? `chiqim orderisiz naqd qaytarish: ${cnt(p8.row)}` : '', num(p8.doc) ? `yozuvsiz qaytarish orderi: ${cnt(p8.doc)}` : ''].filter(Boolean);
       add('reconcile', 'Moslik: kassa hujjatlari ↔ pul yozuvlari', num(rc.total) ? 'bad' : 'ok', num(rc.total) ? bad.join('; ') : 'hammasi mos',
-        'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan');
+        'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan; o‘zaro hisob — dalolatnomasi bilan');
     }
   }
   const ac = c.accountable || [];

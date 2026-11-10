@@ -1494,6 +1494,37 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   stsenariylar va eski oqimlar qayta o'tkazildi.
 - **Qilinmagan:** o'zaro hisob (`nc_offset`); F1.11, F1.16–F1.19; mustaqil (boshqa agentlar bilan) ko'rik.
 
+## 60) Moliya, 1a-bosqich: o'zaro hisob — ish haqidan farzandining o'quv to'lovi (faqat lokal sinov zanjirida) — 2026-11-10
+
+**Holat: jonli tizimga CHIQMAGAN.** Jonli zanjir fayllariga tegilmadi.
+
+- **`kassa_offset(p)`** (`kassa-links.sql`; faqat Direktor, kassa ishga tushgach, xodimning yozma arizasi sanasi majburiy):
+  BITTA tranzaksiyada — maosh to'lovi (`salary_payments`, usul `offset`; tasdiqlangan vedomost chegarasi mavjud darvoza
+  trigeri bilan), o'quv to'lovi (`payments`, provider `offset`) va uning balansga qo'llanishi (`apply_payment`), naqdsiz
+  dalolatnoma (ACT, o'z raqam seriyasi «Д-»): Dt 6710 Kt 4010 (joriy / o'tgan oy fakturasi) yoki Kt 6310 (kelgusi oy,
+  ortiqchasi — avans). Kassadan pul chiqmaydi va kirmaydi — kassa kitobida (KO-4) yo'q, kassa kuni ochilmaydi. Qulf tartibi
+  saqlangan (hujjat kaliti → o'quvchi navbati → maosh → kassa → hisoblagich); qayta yuborish — takror (yangi yozuvsiz).
+- **`kassa_offset_void(id, reason)`**: faqat Direktor, faqat rasmiylashtirilgan kunning o'zida, sabab bilan — o'quv to'lovi
+  teskari qilinadi (fakturalar va avans avvalgi holatga; keyin o'quvchi bo'yicha boshqa pul harakati bo'lgan bo'lsa — rad),
+  maosh to'lovi olib tashlanadi, dalolatnoma raqami saqlanib «bekor qilingan» bo'ladi, ota-onaga yuborilmagan xabarnoma
+  to'xtatiladi. Keyingi kunlarda — «Qaytarish» va buxgalter tuzatishi.
+- **Umumiy qoida:** taqsimot hisobi `kassa_tuition_post` dan `app.kassa_tuition_alloc` ga ajratildi — naqd o'quv to'lovi
+  (KO-1) va o'zaro hisob bitta qoida bilan; `app.tuition_reverse_core` ikkala hujjat turini teskari qiladi.
+- **Moslik:** `app.kassa_reconcile` → `p5.ofs` (dalolatnoma ↔ maosh to'lovi ↔ o'quv to'lovi uch tomondan); nazorat ro'yxatida
+  ko'rinadi. **Hisobotlarda:** o'quv to'lovi «tushgan to'lovlar»da alohida usul («O'zaro hisob (ish haqidan)») bilan,
+  maosh — maosh to'lovi sifatida; ikkalasi teng — sof pul oqimi 0.
+- **Ekran:** «Maosh berish» oynasida (kassa ishga tushgach, Direktorga) uchinchi usul — «O'zaro hisob»: o'quvchi qidiruvi,
+  ariza sanasi; summa oldindan to'ldirilmaydi (butun maosh adashib o'tkazilmasin), tasdiq oynasi; natijada «🖨 Dalolatnoma».
+  «Kassa» sahifasida yangi karta — «Naqdsiz dalolatnomalar» (boshlang'ich qoldiq, kamomad qarori, o'zaro hisob; oxirgi 3 oy):
+  chop etish va (Direktorga, shu kuni) «Bekor». **Chop etish:** o'zaro hisob dalolatnomasi — matn, xodim, o'quvchi, asos
+  (oy va ariza sanasi) chop etish tilida, rahbar / bosh buxgalter / xodim imzosi; boshqa dalolatnomalarda «Берилсин»
+  yorlig'i olib tashlandi (kamomad qarorida — «Жавобгар шахс»).
+- **Sinovlar:** `test-kassa-links.sql` 91/91 (+23: ruxsatlar, taqsimot, takror, vedomost chegarasi, atomarlik, bekor qilish,
+  ertasi kun, moslik); `test-kassa-pay.sql` 50 (taqsimot ajratilgandan keyin o'zgarishsiz), `test-kassa.sql` 223,
+  `test-kassa-report.sql` 52, `test-fin-prereq.sql` 87; `fin-print.test.mjs` 18; brauzer: `e2e-kassa5` 22 (v1 va v2),
+  qolgan stsenariylar qayta o'tkazildi.
+- **Qilinmagan:** F1.11, F1.16–F1.19; mustaqil (boshqa agentlar bilan) ko'rik.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

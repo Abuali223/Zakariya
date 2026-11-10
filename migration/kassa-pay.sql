@@ -68,29 +68,19 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_tuition_info(text) from public, anon, authenticated;
 
--- To'lov qo'llangandan KEYIN: taqsimotni hisoblab, KO-1 ni yozadi va o'tkazadi. p_apply_dup — balansga avval qo'llangan
---   (eski 3 bosqichli mijoz yarim yo'lda qolgan) to'lov: taqsimot noma'lum, bitta qator (Kt 4010) bilan yoziladi va belgilanadi.
-create or replace function app.kassa_tuition_post(p_pay_id text, p_amount numeric, p_payer_name text, p_captured timestamptz,
-                                                  p_extra jsonb, p_before jsonb, p_apply_dup boolean) returns jsonb
-language plpgsql security definer set search_path = public, app, pg_temp as $$
+-- To'lov qo'llangandan KEYIN: pul qayerga taqsimlandi (fakturalar bo'yicha; ortiqchasi — avans). Naqd o'quv to'lovi (KO-1,
+--   p_debit '5010') va o'zaro hisob dalolatnomasi (kassa-links.sql, p_debit '6710') — bitta qoida bilan.
+--   p_before — app.kassa_tuition_before() natijasi (to'lovdan OLDINGI fakturalar va avans); p_credit_lines — shu to'lov bilan
+--   birga fakturaga qo'llangan ESKI avans uchun naqdsiz qator (Dt 6310 Kt 4010) qo'shilsinmi (KO-1 da — ha).
+--   Natija: {mode: exact | fallback | unknown, lines, alloc, months, over, creditBefore, creditAfter}.
+create or replace function app.kassa_tuition_alloc(p_before jsonb, p_amount numeric, p_debit text, p_credit_lines boolean, p_apply_dup boolean)
+returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
-  v_uid text := app.uid(); v_sid text := p_before ->> 'sid'; v_c0 numeric := coalesce((p_before ->> 'credit')::numeric, 0); v_c1 numeric;
-  v_extra jsonb := case when jsonb_typeof(p_extra) = 'object' then p_extra else '{}'::jsonb end;
-  v_fiscal text; v_exempt boolean; v_month text := to_char(app.fin_today(), 'YYYY-MM');
+  v_sid text := p_before ->> 'sid'; v_c0 numeric := coalesce((p_before ->> 'credit')::numeric, 0); v_c1 numeric;
+  v_month text := to_char(app.fin_today(), 'YYYY-MM');
   v_inv jsonb; v_paid numeric; v_delta numeric; v_rem numeric; v_fc numeric; v_fk numeric; v_cash_inv numeric := 0; v_over numeric := 0;
   v_acct text; v_lines jsonb := '[]'::jsonb; v_alloc jsonb := '[]'::jsonb; v_months text[] := '{}'; v_mode text := 'exact';
-  v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_info jsonb; v_basis text;
 begin
-  v_info := app.kassa_tuition_info(p_pay_id);
-  if v_info ->> 'status' = 'posted' then return v_info || jsonb_build_object('dup', true); end if;   -- qayta yuborish
-
-  -- Fiskal chek (CT-21): raqamsiz — faqat Direktor istisnosi.
-  v_fiscal := nullif(left(btrim(coalesce(v_extra ->> 'fiscalNo', '')), 40), '');
-  v_exempt := v_fiscal is null and app.kassa_bool(v_extra, 'fiscalExempt');
-  if v_fiscal is null and not (v_exempt and app.is_admin()) then
-    raise exception 'Fiskal chek raqami kiritilmagan' using errcode = '22023', hint = 'kassa:fiscal';
-  end if;
-
   select c.credit into v_c1 from public.student_credit c where c.id = v_sid;
   v_c1 := coalesce(v_c1, 0);
   if p_apply_dup then
@@ -104,11 +94,11 @@ begin
       v_fc := least(v_delta, v_rem); v_rem := v_rem - v_fc; v_fk := v_delta - v_fc;
       v_acct := case when coalesce(v_inv ->> 'month', '') ~ '^\d{4}-\d{2}$' and (v_inv ->> 'month') > v_month then '6310' else '4010' end;
       if v_fk > 0 then
-        v_lines := v_lines || jsonb_build_object('debit', '5010', 'credit', v_acct, 'amount', v_fk, 'articleId', 'IN-01',
+        v_lines := v_lines || jsonb_build_object('debit', p_debit, 'credit', v_acct, 'amount', v_fk, 'articleId', 'IN-01',
                      'analytics', jsonb_build_object('studentId', v_sid, 'invoiceId', v_inv ->> 'id', 'month', v_inv ->> 'month'));
         v_cash_inv := v_cash_inv + v_fk;
       end if;
-      if v_fc > 0 and v_acct = '4010' then   -- naqdsiz: avans fakturaga qo'llandi
+      if v_fc > 0 and v_acct = '4010' and p_credit_lines then   -- naqdsiz: avans fakturaga qo'llandi
         v_lines := v_lines || jsonb_build_object('debit', '6310', 'credit', '4010', 'amount', v_fc, 'articleId', 'IN-01',
                      'analytics', jsonb_build_object('studentId', v_sid, 'invoiceId', v_inv ->> 'id', 'month', v_inv ->> 'month', 'kind', 'credit_applied'));
       end if;
@@ -116,21 +106,53 @@ begin
       if coalesce(v_inv ->> 'month', '') <> '' then v_months := v_months || (v_inv ->> 'month'); end if;
     end loop;
     v_over := p_amount - v_cash_inv;
-    -- Nazorat: yangi avans = sarflanmagan eski avans + ortiqcha naqd. Mos kelmasa (shu payt boshqa tuzatish bo'lgan) — bitta qator.
+    -- Nazorat: yangi avans = sarflanmagan eski avans + ortiqcha pul. Mos kelmasa (shu payt boshqa tuzatish bo'lgan) — bitta qator.
     if v_over < 0 or abs(v_c1 - (v_rem + v_over)) >= 0.01 then
       v_mode := 'fallback';
     elsif v_over > 0 then
-      v_lines := v_lines || jsonb_build_object('debit', '5010', 'credit', '6310', 'amount', v_over, 'articleId', 'IN-01',
+      v_lines := v_lines || jsonb_build_object('debit', p_debit, 'credit', '6310', 'amount', v_over, 'articleId', 'IN-01',
                    'analytics', jsonb_build_object('studentId', v_sid, 'kind', 'overpay'));
       v_alloc := v_alloc || jsonb_build_object('invoiceId', null, 'month', null, 'fromCash', v_over, 'fromCredit', 0, 'account', '6310');
     end if;
   end if;
   if v_mode <> 'exact' then
-    v_lines := jsonb_build_array(jsonb_build_object('debit', '5010', 'credit', '4010', 'amount', p_amount, 'articleId', 'IN-01',
+    v_lines := jsonb_build_array(jsonb_build_object('debit', p_debit, 'credit', '4010', 'amount', p_amount, 'articleId', 'IN-01',
                  'analytics', jsonb_build_object('studentId', v_sid, 'allocation', v_mode)));
     v_alloc := jsonb_build_array(jsonb_build_object('invoiceId', null, 'month', null, 'fromCash', p_amount, 'fromCredit', 0, 'account', '4010'));
-    v_months := '{}';
+    v_months := '{}'; v_over := 0;
   end if;
+  return jsonb_build_object('mode', v_mode, 'lines', v_lines, 'alloc', v_alloc, 'months', to_jsonb(v_months), 'over', v_over,
+                            'creditBefore', v_c0, 'creditAfter', v_c1);
+end $$;
+revoke all on function app.kassa_tuition_alloc(jsonb, numeric, text, boolean, boolean) from public, anon, authenticated;
+
+-- To'lov qo'llangandan KEYIN: taqsimotni hisoblab, KO-1 ni yozadi va o'tkazadi. p_apply_dup — balansga avval qo'llangan
+--   (eski 3 bosqichli mijoz yarim yo'lda qolgan) to'lov: taqsimot noma'lum, bitta qator (Kt 4010) bilan yoziladi va belgilanadi.
+create or replace function app.kassa_tuition_post(p_pay_id text, p_amount numeric, p_payer_name text, p_captured timestamptz,
+                                                  p_extra jsonb, p_before jsonb, p_apply_dup boolean) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_sid text := p_before ->> 'sid'; v_c0 numeric := coalesce((p_before ->> 'credit')::numeric, 0); v_c1 numeric;
+  v_extra jsonb := case when jsonb_typeof(p_extra) = 'object' then p_extra else '{}'::jsonb end;
+  v_fiscal text; v_exempt boolean;
+  v_over numeric := 0; v_a jsonb;
+  v_lines jsonb := '[]'::jsonb; v_alloc jsonb := '[]'::jsonb; v_months text[] := '{}'; v_mode text := 'exact';
+  v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_info jsonb; v_basis text;
+begin
+  v_info := app.kassa_tuition_info(p_pay_id);
+  if v_info ->> 'status' = 'posted' then return v_info || jsonb_build_object('dup', true); end if;   -- qayta yuborish
+
+  -- Fiskal chek (CT-21): raqamsiz — faqat Direktor istisnosi.
+  v_fiscal := nullif(left(btrim(coalesce(v_extra ->> 'fiscalNo', '')), 40), '');
+  v_exempt := v_fiscal is null and app.kassa_bool(v_extra, 'fiscalExempt');
+  if v_fiscal is null and not (v_exempt and app.is_admin()) then
+    raise exception 'Fiskal chek raqami kiritilmagan' using errcode = '22023', hint = 'kassa:fiscal';
+  end if;
+
+  v_a := app.kassa_tuition_alloc(p_before, p_amount, '5010', true, p_apply_dup);
+  v_mode := v_a ->> 'mode'; v_lines := v_a -> 'lines'; v_alloc := v_a -> 'alloc'; v_over := (v_a ->> 'over')::numeric;
+  v_c1 := (v_a ->> 'creditAfter')::numeric;
+  v_months := array(select jsonb_array_elements_text(v_a -> 'months'));
   v_basis := 'O‘quv to‘lovi' || case when cardinality(v_months) > 0 then ': ' || array_to_string(v_months, ', ') else '' end
              || case when v_mode = 'exact' and v_over > 0 then case when cardinality(v_months) > 0 then ' + avans' else ' (avans)' end else '' end;
 
@@ -159,6 +181,8 @@ end $$;
 revoke all on function app.kassa_tuition_post(text, numeric, text, timestamptz, jsonb, jsonb, boolean) from public, anon, authenticated;
 
 -- ---------- O'quv to'lovini teskari qilish (F1.7) — kassa_doc_void ichidan, shu kunda ----------
+--   Ikki hujjat turi uchun: naqd o'quv to'lovi orderi (in_tuition; to'lov — hujjat manbasi) va o'zaro hisob dalolatnomasi
+--   (nc_offset; to'lov va o'quvchi — hujjat suratida: kassa-links.sql kassa_offset_void chaqiradi).
 --   Rol tekshirilmaydi (chaqiruvchi tekshirgan); chaqiruvchi o'quvchi navbati (L1), kassa qulfi (L4) va hujjat qatorini ushlab turadi.
 --   Shart: shu to'lovdan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan (avans va fakturalar aynan to'lovdan keyingi
 --   holatda). Aks holda rad — tuzatish Direktorning «Qaytarish» amali orqali.
@@ -166,20 +190,22 @@ create or replace function app.tuition_reverse_core(p_doc_id text, p_uid text, p
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_doc public.cash_docs%rowtype; v_pay public.payments%rowtype; v_sid text; v_c0 numeric; v_c1 numeric; v_cr numeric;
-  a record; b jsonb; v_paid numeric; v_st text; v_name text;
+  a record; b jsonb; v_paid numeric; v_st text; v_name text; v_ofs boolean; v_pay_id text;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
-  if not found or v_doc.op <> 'in_tuition' or v_doc."sourceTable" is distinct from 'payments' or v_doc.status <> 'posted' then
+  v_ofs := found and v_doc.op = 'nc_offset' and v_doc."sourceTable" = 'salary_payments';
+  if not found or v_doc.status <> 'posted' or not (v_ofs or (v_doc.op = 'in_tuition' and v_doc."sourceTable" = 'payments')) then
     raise exception 'Bu hujjat — amaldagi o''quv to''lovi orderi emas' using errcode = 'P0001', hint = 'kassa:bad_status';
   end if;
+  v_pay_id := case when v_ofs then v_doc."sourceSnapshot" ->> 'paymentId' else v_doc."sourceId" end;
   if coalesce(v_doc."sourceSnapshot" ->> 'allocation', '') <> 'exact' then
     raise exception 'Bu to''lovning taqsimoti aniq emas — avtomatik bekor qilinmaydi (Direktor: «Qaytarish»)' using errcode = 'P0001', hint = 'kassa:not_reversible';
   end if;
-  select * into v_pay from public.payments p where p.id = v_doc."sourceId" for update;
+  select * into v_pay from public.payments p where p.id = v_pay_id for update;
   if not found or coalesce(v_pay.status, '') <> 'applied' then
     raise exception 'To''lov topilmadi yoki holati o''zgargan (%)', coalesce(v_pay.status, 'yo''q') using errcode = 'P0001', hint = 'kassa:pay_status';
   end if;
-  v_sid := v_doc."partyId";
+  v_sid := case when v_ofs then v_doc."sourceSnapshot" ->> 'studentId' else v_doc."partyId" end;
   v_c0 := coalesce((v_doc."sourceSnapshot" ->> 'creditBefore')::numeric, 0);
   v_c1 := coalesce((v_doc."sourceSnapshot" ->> 'creditAfter')::numeric, 0);
   select c.credit into v_cr from public.student_credit c where c.id = v_sid for update;
@@ -209,8 +235,9 @@ begin
     insert into public.student_credit (id, "studentId", credit, "updatedAt") values (v_sid, v_sid, v_c0, now())
       on conflict (id) do update set credit = excluded.credit, "updatedAt" = now();
     insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, provider, note, "at")
-      values (gen_random_uuid()::text, v_sid, coalesce(v_name, ''), v_c0 - v_c1, v_c0, 'manual', 'cash',
-              'Naqd to‘lov bekor qilindi (KO-1 № ' || v_doc.no || '): ' || left(coalesce(p_reason, ''), 200), now());
+      values (gen_random_uuid()::text, v_sid, coalesce(v_name, ''), v_c0 - v_c1, v_c0, 'manual', case when v_ofs then 'offset' else 'cash' end,
+              case when v_ofs then 'O‘zaro hisob bekor qilindi (dalolatnoma № ' else 'Naqd to‘lov bekor qilindi (KO-1 № ' end
+                || v_doc.no || '): ' || left(coalesce(p_reason, ''), 200), now());
   end if;
   -- 4) to'lov — bekor qilingan (kirim hisobotlaridan chiqadi); tavsiya bonusi trigger orqali qaytariladi
   update public.payments

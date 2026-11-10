@@ -31,7 +31,7 @@ test('nazorat ro‘yxati: muammolar — daraja va matn', () => {
     diffs30: [{ day: '2027-01-04', diff: -5000 }, { day: '2027-01-05', diff: 1200 }], voids30: 3, reopens30: 1, waitingApproval: 2, approvedUnpaid: 1, staleRefunds: 1,
     fiscalExempt30: 2, otherParties30: 4, late30: 1, pendingDays30: 2, reissues30: 1, salaryGateOff30: 1, unprintedBooks30: ['2027-01-05'],
     limit: { cashLimit: 3000000, set: true, balance: 4525000, exceeded: true, days30: 1 },
-    reconcile: { live: true, total: 9, p1: { pay: 1, paySum: 111000, doc: 1 }, p4: { row: 1, doc: 1 }, p5: { row: 2, doc: 1 }, p8: { row: 1, doc: 1 } },
+    reconcile: { live: true, total: 10, p1: { pay: 1, paySum: 111000, doc: 1 }, p4: { row: 1, doc: 1 }, p5: { row: 2, doc: 1, ofs: 1 }, p8: { row: 1, doc: 1 } },
     accountable: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', given: 400000, returned: 150000, balance: 250000, since: '2027-01-04', workDays: 4, overdue: true }],
     handover: { monthCount: 1, monthSum: 500000, earlierCount: 2, earlierSum: 900000 } });
   const r = by(controlRows(c));
@@ -47,7 +47,8 @@ test('nazorat ro‘yxati: muammolar — daraja va matn', () => {
   assert.equal(r.late.value, 'kech yozilgan hujjat: 1 ta; oflayn yozuv bilan yopilgan kun: 2 ta');
   assert.equal(r.limit.value, 'qoldiq 4 525 000 so‘m — limit 3 000 000 so‘mdan oshgan');
   assert.equal(r.reconcile.value, 'kirim orderisiz naqd o‘quv to‘lovi: 1 ta (111 000 so‘m); to‘lov yozuvisiz kirim orderi: 1 ta; chiqim orderisiz naqd xarajat: 1 ta; '
-    + '«Buxgalteriya»ga ko‘chmagan xarajat orderi: 1 ta; chiqim orderisiz naqd maosh / avans: 2 ta; yozuvsiz maosh / avans orderi: 1 ta; chiqim orderisiz naqd qaytarish: 1 ta; yozuvsiz qaytarish orderi: 1 ta');
+    + '«Buxgalteriya»ga ko‘chmagan xarajat orderi: 1 ta; chiqim orderisiz naqd maosh / avans: 2 ta; yozuvsiz maosh / avans orderi: 1 ta; '
+    + 'o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: 1 ta; chiqim orderisiz naqd qaytarish: 1 ta; yozuvsiz qaytarish orderi: 1 ta');
   assert.equal(r.accountable.value, 'Sinov Zavxoz: 250 000 so‘m (04.01.2027 dan, 4 ish kuni — muddati o‘tgan)');
   assert.equal(r.handover.value, 'shu oyda: 1 ta · 500 000 so‘m; oldingi oylarda: 2 ta · 900 000 so‘m — tasniflanganini tekshiring');
 });

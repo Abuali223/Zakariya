@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const PROV = { cash: 'naqd', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'o‘tkazma', bank: 'bank', terminal: 'terminal', boshqa: 'boshqa' };
+const PROV = { cash: 'naqd', click: 'Click', uzum: 'Uzum', payme: 'Payme', transfer: 'o‘tkazma', bank: 'bank', terminal: 'terminal', offset: 'o‘zaro hisob', boshqa: 'boshqa' };
 const fmtNum = n => Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/[\s,]/g, ' ');
 const tkDay = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).toISOString().slice(0, 10);
 const tkHour = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUTCHours();

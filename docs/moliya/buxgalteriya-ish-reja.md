@@ -787,7 +787,9 @@ mosligi, 20 operatsiya qoidasi); F1.2 `kassa.sql` (jadvallar, I1–I6 va o‘zga
 raqamlash va kassa qulfi; F1.4 `kassa-docs.sql` (KO-1, KO-2 so‘rov → tasdiq → to‘lash, bekor qilish, fiskal chek №) va
 `kassa-pay.sql` (naqd o‘quv to‘lovi KO-1 bilan bitta tranzaksiyada, taqsimot 4010 / 6310); F1.5 naqd maosh
 (`kassa_salary_pay`: maosh to‘lovi + KO-2 bitta tranzaksiyada, vedomost chegarasi; karta — KO siz) va ish haqi avansi
-(«+ Chiqim so‘rovi» → tasdiq → pul berilganda avans yoziladi; oy vedomosti qulfi); F1.6 qaytarish (Direktor tasdiqlaydi —
+(«+ Chiqim so‘rovi» → tasdiq → pul berilganda avans yoziladi; oy vedomosti qulfi) va o‘zaro hisob (`kassa_offset`: xodimning
+yozma arizasi bo‘yicha ish haqidan farzandining o‘quv to‘lovi — maosh to‘lovi, o‘quv to‘lovi va naqdsiz dalolatnoma Dt 6710
+Kt 4010 / 6310 bitta tranzaksiyada, faqat Direktor; shu kuni bekor qilish — `kassa_offset_void`; KO-4 da yo‘q); F1.6 qaytarish (Direktor tasdiqlaydi —
 balans o‘zgarmaydi; kassir pulni berganda `refund_invoice` shu tranzaksiyada; 1 kundan kechiksa ogohlantirish); F1.7 shu
 kunda bekor qilish (o‘quv to‘lovi, maosh, avans, xarajat — bog‘langan yozuv bilan birga); F1.9 va F1.10 `kassa-day.sql`
 (boshlang‘ich qoldiq, sanab yopish, farq hujjati, smena topshirish, tekshirish, qayta ochish, kamomad qarori, oflayn / kech
@@ -804,12 +806,12 @@ RP-06 («Kassa» sahifasida, 2-ro‘yxat va direktor uchun: 20 tekshiruv, jumlad
 (`director_daily` → `app.kassa_daily`: kun jamlari, sanash va farq, bank o‘tkazmalari, nazorat qatori; kassa moduli
 bo‘lmasa yoki ishlatilmasa — blok yo‘q). Sinov kassasi (CT-20) hujjatlari «Buxgalteriya» va avans jadvallariga
 ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda ko‘rinadi; ishga tushirish kunigacha barcha oynalar
-avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 68,
-`test-kassa-report.sql` 52, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 16,
-`fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs` 39; brauzerda to‘rt to‘liq stsenariy (121 tekshiruv)
+avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 223, `test-kassa-pay.sql` 50, `test-kassa-links.sql` 91,
+`test-kassa-report.sql` 52, `test-kassa-race.sh` 22 (8 × 200 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18,
+`fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs` 39; brauzerda besh to‘liq stsenariy (143 tekshiruv)
 eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (34
-tekshiruv). Qoldi: o‘zaro hisob (`nc_offset`), F1.11 (RLS qismi), F1.16–F1.19 (31.12 surati, sinov va predeploy
-tekshiruvlari, ishga tushirish to‘plami), mustaqil ko‘rik.
+tekshiruv). Qoldi: F1.11 (RLS qismi), F1.16–F1.19 (31.12 surati, sinov va predeploy tekshiruvlari, ishga tushirish
+to‘plami), mustaqil ko‘rik.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

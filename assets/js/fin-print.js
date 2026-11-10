@@ -47,6 +47,9 @@ const T = {
     resShort: (a, no) => `Камомад — ${a}. Шу кун санаси билан чиқим касса ордери ${no} расмийлаштирилди.`,
     resOver: (a, no) => `Ортиқча — ${a}. Шу кун санаси билан кирим касса ордери ${no} расмийлаштирилди.`,
     decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', note: 'Изоҳ', member: 'Комиссия аъзоси',
+    employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
+    offsetBasis: (m, st, req) => `Ўзаро ҳисоб: ${m} ойи иш ҳақи ҳисобидан ўқув тўлови — ${st}${req ? '; ариза ' + req : ''}`,
+    offsetText: (a, m) => `Ходимнинг ёзма аризасига асосан унинг ${m} ойи учун иш ҳақидан ${a} сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.`,
   },
   'uz-latn': {
     html: 'uz', stir: 'STIR', no: '№',
@@ -79,6 +82,9 @@ const T = {
     resShort: (a, no) => `Kamomad — ${a}. Shu kun sanasi bilan chiqim kassa orderi ${no} rasmiylashtirildi.`,
     resOver: (a, no) => `Ortiqcha — ${a}. Shu kun sanasi bilan kirim kassa orderi ${no} rasmiylashtirildi.`,
     decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', note: 'Izoh', member: 'Komissiya a’zosi',
+    employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
+    offsetBasis: (m, st, req) => `O‘zaro hisob: ${m} oyi ish haqi hisobidan o‘quv to‘lovi — ${st}${req ? '; ariza ' + req : ''}`,
+    offsetText: (a, m) => `Xodimning yozma arizasiga asosan uning ${m} oyi uchun ish haqidan ${a} so‘m farzandining o‘quv to‘lovi hisobiga o‘tkazildi. Naqd pul berilmadi va qabul qilinmadi.`,
   },
   ru: {
     html: 'ru', stir: 'ИНН', no: '№',
@@ -111,6 +117,9 @@ const T = {
     resShort: (a, no) => `Недостача — ${a}. Датой этого дня оформлен расходный кассовый ордер ${no}.`,
     resOver: (a, no) => `Излишек — ${a}. Датой этого дня оформлен приходный кассовый ордер ${no}.`,
     decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', note: 'Примечание', member: 'Член комиссии',
+    employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
+    offsetBasis: (m, st, req) => `Взаимозачёт: оплата за обучение в счёт заработной платы за ${m} — ${st}${req ? '; заявление от ' + req : ''}`,
+    offsetText: (a, m) => `На основании письменного заявления сотрудника из его заработной платы за ${m} сумма ${a} сум зачтена в счёт оплаты за обучение ребёнка. Наличные деньги не выдавались и не принимались.`,
   },
 };
 
@@ -151,6 +160,11 @@ function texts(doc, t) {
     basis = basis.replace(/^Qaytarish: /, t.refund + ': ').replace(/; ariza (\d{2}\.\d{2}\.\d{4})$/, '; ' + t.application + ' $1');
     if (attachment === 'Yozma ariza') attachment = t.writtenApp;
     if (doc.partyType === 'student' && doc.partyId) party = (party ? party + ' ' : '') + `(${t.student}: ${doc.partyId})`;
+  }
+  if (doc.op === 'nc_offset') {   // asos — suratdagi oy, o'quvchi va ariza sanasidan, chop etish tilida
+    const st = [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ');
+    if (/^\d{4}-\d{2}$/.test(snap.month || '')) basis = t.offsetBasis(ymLabel(snap.month), st, dmy(snap.requestDate));
+    if (attachment === 'Yozma ariza') attachment = t.writtenApp;
   }
   if (doc.op === 'in_surplus' || doc.op === 'out_shortage') {
     party = doc.op === 'in_surplus' ? t.surplus : t.shortage;
@@ -340,20 +354,28 @@ function ko2Html(doc, ctx, W, t, lang) {
 
 // ---------------------------------------------------------------- ACT: naqdsiz dalolatnoma (qisqa shakl)
 function actHtml(doc, ctx, W, t, lang) {
-  const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t);
+  const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t), snap = doc.sourceSnapshot || {};
   const rows = (doc.lines || []).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
   const head = pickSign(ctx, 1, doc.dirApprovedBy || doc.decidedBy, t.head), chief = pickSign(ctx, 2, doc.approvedBy, t.chief);
+  const ofs = doc.op === 'nc_offset';
+  // tomon yorlig'i: o'zaro hisob — xodim; kamomad qarori — javobgar shaxs (xodim zimmasiga olinganda); boshqasida tomon ko'rsatilmaydi
+  const partyLbl = ofs ? t.employee : (doc.op === 'nc_shortage_dec' && doc.partyType === 'employee') ? t.liable : '';
+  const pupil = ofs ? [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ') : '';
   return `<div class="pg act">${doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : ''}
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <div class="ttl">${esc(t.act)} ${t.no} <span class="nob">${esc(docNo(doc, t))}</span></div>
     <div class="dt">${esc((t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '') + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
+    ${ofs && /^\d{4}-\d{2}$/.test(snap.month || '') ? `<p>${esc(t.offsetText(money(W, doc.amount), ymLabel(snap.month)))}</p>` : ''}
     <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
-    ${tx.party ? fld(doc.form === 'KO1' ? t.from : t.to, esc(tx.party)) : ''}
+    ${partyLbl && tx.party ? fld(partyLbl, esc(tx.party)) : ''}
+    ${pupil ? fld(t.pupil, esc(pupil)) : ''}
     ${fld(t.basis, esc(tx.basis))}
     ${fld(t.amount, `<b>${esc(money(W, doc.amount))}</b> — ${esc(W.sumWords(doc.amount, lang))}`)}
+    ${tx.attachment ? fld(t.attach, esc(tx.attachment)) : ''}
     ${doc.note ? fld(t.note, esc(doc.note)) : ''}
     ${voidInfo(doc, ctx, t)}
     <div class="two" style="display:flex;gap:8mm">${sig(head.title, head.name)}${sig(chief.title, chief.name)}</div>
+    ${ofs ? sig(t.acquainted, tx.party) : ''}
     ${footer(doc, ctx, t)}</div>`;
 }
 

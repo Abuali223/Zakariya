@@ -893,7 +893,7 @@ const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"
 // Maktab sayti — bosma hujjatlardagi QR va manzil uchun BITTA manba (ilgari 3 joyda «iroacademy.uz» — mavjud bo'lmagan domen edi).
 const SITE_HOST='iqroacademy.uz', SITE_URL='https://'+SITE_HOST;
 // To'lov usuli -> yorliq (BITTA manba — ilgari 3 joyda nomuvofiq nusxada edi: ba'zisi 'grant'siz).
-const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', credit:'Avans', grant:'Grant', reattr:'↔ Avans ko‘chirish' };
+const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', credit:'Avans', grant:'Grant', reattr:'↔ Avans ko‘chirish', offset:'O‘zaro hisob (ish haqidan)' };
 // ===== KASSA ASOSIDAGI pul tushumi (to'lov USULI va SANASI bo'yicha) =====
 //   Manba — payments qatorlari (har bir haqiqiy to'lov o'z usuli, summasi va vaqti bilan). Hisob-faktura
 //   «provider»i faqat OXIRGI to'lov usulini saqlaydi (aralash to'lovda — masalan 1 mln naqd + 1,9 mln Click —
@@ -8973,9 +8973,11 @@ async function openSalaryPayout(opts){
   const today=(()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
   // Kassa ishga tushgach (KASSA.live) maosh funksiya orqali yoziladi: naqd — faqat kassir (favqulodda Direktor), kassa chiqim
-  //   orderi (KO-2) bilan bitta tranzaksiyada; karta / bank orqali — Moliya menejeri yoki Direktor (kassa orderisiz).
+  //   orderi (KO-2) bilan bitta tranzaksiyada; karta / bank orqali — Moliya menejeri yoki Direktor (kassa orderisiz);
+  //   o'zaro hisob (xodimning yozma arizasi bo'yicha ish haqidan farzandining o'quv to'lovi, naqdsiz dalolatnoma) — faqat Direktor.
   const spMethods=KASSA.live ? [kassaCashOk()?['cash','Naqd — kassadan (chiqim orderi bilan)']:null,
-    (SESSION.isAdmin||SESSION.role==='finance_mgr')?['card','Karta / bank orqali (kassa orderisiz)']:null].filter(Boolean) : [];
+    (SESSION.isAdmin||SESSION.role==='finance_mgr')?['card','Karta / bank orqali (kassa orderisiz)']:null,
+    SESSION.isAdmin?['offset','O‘zaro hisob — farzandining o‘quv to‘lovi hisobiga (naqdsiz)']:null].filter(Boolean) : [];
   if(KASSA.live && !spMethods.length){ toast('Kassa ishga tushgan: naqd maoshni kassir beradi, karta orqali to‘lovni Moliya menejeri yozadi', true); return; }
   $('#modal').innerHTML=`<div class="modal-h"><h3>Maosh berish (xodimga)</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
@@ -8985,11 +8987,17 @@ async function openSalaryPayout(opts){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Berilgan sana<input type="date" id="sp-date" value="${esc(today)}" style="${fld}"></label>
       </div>
       ${KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">To‘lov usuli<select id="sp-method" style="${fld};background:#fff">${spMethods.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join('')}</select></label>
-      <div class="small muted" id="sp-method-info" style="margin-top:4px"></div>`:''}
+      <div class="small muted" id="sp-method-info" style="margin-top:4px"></div>
+      <div id="sp-ofs" style="display:none;margin-top:8px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">O‘quvchi (xodimning farzandi)<input type="text" id="sp-ofs-q" placeholder="Ism yoki ID…" autocomplete="off" style="${fld}"></label>
+        <div id="sp-ofs-list" style="max-height:150px;overflow:auto;margin-top:4px"></div>
+        <div id="sp-ofs-sel" class="small muted"></div>
+        <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Xodimning yozma arizasi sanasi<input type="date" id="sp-ofs-date" value="${esc(today)}" max="${esc(today)}" style="${fld}"></label>
+      </div>`:''}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Davomat ushlanmasi (so‘m) — <span id="sp-ded-info" style="font-weight:400" class="muted"></span>
         <input type="text" inputmode="numeric" id="sp-ded" value="0" style="${fld}"></label>
       <div id="sp-info" class="small" style="margin-top:10px;background:#eef3f1;border-radius:10px;padding:12px;font-weight:700"></div>
-      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Naqd berilayotgan (so‘m) — <span style="font-weight:400" class="muted">kam bersangiz, qolgani keyingi oyga qo‘shiladi</span>
+      <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px"><span><span id="sp-paid-lbl">Naqd berilayotgan (so‘m)</span> — <span style="font-weight:400" class="muted">kam bersangiz, qolgani keyingi oyga qo‘shiladi</span></span>
         <input type="text" inputmode="numeric" id="sp-paid" value="0" style="${fld}"></label>
       <div id="sp-carry" class="small" style="margin-top:8px;font-weight:700"></div>
       <input type="hidden" id="sp-gross"><input type="hidden" id="sp-adv"><input type="hidden" id="sp-net"><input type="hidden" id="sp-raw"><input type="hidden" id="sp-sub"><input type="hidden" id="sp-prior">
@@ -8997,9 +9005,25 @@ async function openSalaryPayout(opts){
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="sp-do">Berish + chek</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
-  { const ms=$('#sp-method'); if(ms){ const upd=()=>{ const cash=ms.value==='cash', dt=$('#sp-date'); if(dt){ dt.disabled=cash; if(cash) dt.value=today; }
-      $('#sp-method-info').textContent = cash ? 'Sana — kassa kuni (server belgilaydi). Xodim chiqim orderiga imzo qo‘yadi.' : 'Kassadan pul chiqmaydi — bank ko‘chirmasi bo‘yicha yoziladi.'; };
-    ms.addEventListener('change', upd); upd(); } }
+  let ofsStudent=null;   // o'zaro hisob: tanlangan o'quvchi { id, name }
+  { const ms=$('#sp-method'); if(ms){ const upd=()=>{ const cash=ms.value==='cash', ofs=ms.value==='offset', dt=$('#sp-date'); if(dt){ dt.disabled=cash||ofs; if(cash||ofs) dt.value=today; }
+      $('#sp-method-info').textContent = cash ? 'Sana — kassa kuni (server belgilaydi). Xodim chiqim orderiga imzo qo‘yadi.'
+        : ofs ? 'Kassadan pul chiqmaydi: summa xodimning ish haqidan farzandining o‘quv to‘loviga o‘tkaziladi va naqdsiz dalolatnoma yoziladi. Faqat xodimning yozma arizasi asosida.'
+        : 'Kassadan pul chiqmaydi — bank ko‘chirmasi bo‘yicha yoziladi.';
+      const ob=$('#sp-ofs'); if(ob) ob.style.display=ofs?'':'none';
+      const pl=$('#sp-paid-lbl'); if(pl) pl.textContent=ofs?'O‘quv to‘loviga o‘tkaziladigan summa (so‘m)':'Naqd berilayotgan (so‘m)';
+      const bd=$('#sp-do'); if(bd) bd.textContent=ofs?'O‘zaro hisobni rasmiylashtirish':'Berish + chek'; };
+    // usul almashganda summa qayta taklif qilinadi: o'zaro hisobda — bo'sh (Direktor o'quv to'lovi summasini o'zi yozadi), aks holda — qolgan qarz
+    ms.addEventListener('change', ()=>{ upd(); paidTouched=false; try{ calc(); }catch(_){} }); upd();
+    const oq=$('#sp-ofs-q'); if(oq){ let stList=null;
+      const drawSt=async q=>{ q=String(q||'').trim().toLowerCase(); const box=$('#sp-ofs-list'); if(!box) return; if(!q){ box.innerHTML=''; return; }
+        if(!stList){ try{ stList=await finCtx().students(); }catch(e){ stList=[]; } }
+        if(!$('#sp-ofs-list')) return;
+        box.innerHTML=stList.filter(x=>String(x.name||'').toLowerCase().includes(q)||String(x.studentId||x._id||'').toLowerCase().includes(q)).slice(0,20)
+          .map(x=>{ const sid=x.studentId||x._id; return `<div data-ofs-sid="${esc(sid)}" style="padding:6px 8px;border:1px solid var(--border-2);border-radius:7px;margin-bottom:4px;cursor:pointer"><b>${esc(x.name||'')}</b> <span class="small muted">${esc(sid)}</span></div>`; }).join('')||'<div class="small muted">Topilmadi.</div>';
+        box.querySelectorAll('[data-ofs-sid]').forEach(el=>el.onclick=()=>{ const x=stList.find(y=>String(y.studentId||y._id)===el.dataset.ofsSid)||{};
+          ofsStudent={ id:el.dataset.ofsSid, name:x.name||el.dataset.ofsSid }; $('#sp-ofs-sel').innerHTML=`✓ <b>${esc(ofsStudent.name)}</b> <span class="muted">${esc(ofsStudent.id)}</span> tanlandi`; box.innerHTML=''; oq.value=ofsStudent.name; }); };
+      oq.addEventListener('input', e=>{ ofsStudent=null; const sl=$('#sp-ofs-sel'); if(sl) sl.textContent=''; drawSt(e.target.value); }); } } }
   const dnum=v=>Number(String(v==null?'':v).replace(/\D/g,''))||0;
   let sameMonthPaidV=0;   // Audit L1: SHU oy uchun ALLAQACHON berilgan naqd (bo'lib berishning oldingi qismi)
   // Qoldiq QIRQILMAGAN jami qarzdan hisoblanadi (sp-raw = maosh − avans − ushlanma + o'rinbosarlik + oldingi
@@ -9032,7 +9056,7 @@ async function openSalaryPayout(opts){
     $('#sp-gross').value=gross; $('#sp-adv').value=adv; $('#sp-net').value=totalDue; $('#sp-raw').value=rawDue;
     // Tasdiqlangan vedomost chegarasi (baza ham shuni tekshiradi): min(tasdiqlangan, hozirgi qarz) − shu oy berilgani.
     gateCap = gOk ? Math.max(0, Math.min(Number(gate.line.payable)||0, Math.max(0, rawDue)) - sameMonthPaidV) : 0;
-    if(!paidTouched && $('#sp-paid')) $('#sp-paid').value=String(gOk ? Math.min(dueNow, gateCap) : dueNow);
+    if(!paidTouched && $('#sp-paid')) $('#sp-paid').value=(($('#sp-method')&&$('#sp-method').value)==='offset') ? '' : String(gOk ? Math.min(dueNow, gateCap) : dueNow);
     const proNote=(bi&&bi.skip)?` <span style="color:#B45309">(${esc(bi.reason||'faol emas')}: maosh yo‘q)</span>`:((bi&&bi.partial)?` <span style="color:#B45309">(prorata ${bi.actDays}/${bi.fullDays} ish kuni)</span>`:'');
     const paidNote=sameMonthPaidV>0?` · <span style="color:#B45309">Shu oy berilgan: ${fmtSum(sameMonthPaidV)}</span> · <span style="color:#1F9982">Qolgani: <b>${fmtSum(dueNow)}</b></span>`:'';
     const dupNote=isDupId(tid)?`<div style="color:#B42318;margin-top:6px">⛔ «${esc(tid)}» ID ikki (yoki undan ko‘p) xodimda bor — maosh/avans aralashadi. Avval xodim kartochkasida «Tahrir» → «Yangi noyob ID berish» (bir martalik).</div>`:'';
@@ -9100,6 +9124,7 @@ async function openSalaryPayout(opts){
   if($('#sp-paid')) $('#sp-paid').oninput=()=>{ paidTouched=true; carryShow(); };
   loadDed();
   $('#sp-do').onclick=async()=>{
+    const btnLbl=()=>((($('#sp-method')&&$('#sp-method').value)==='offset')?'O‘zaro hisobni rasmiylashtirish':'Berish + chek');   // xatodan keyin tugma yozuvi
     const tid=$('#sp-t').value, mm=$('#sp-month').value||M, dt=$('#sp-date').value;
     const p=payees.find(x=>x.id===String(tid))||{}, tn=p.name||tid;
     const gross=Number($('#sp-gross').value)||0, adv=Number($('#sp-adv').value)||0, ded=dnum($('#sp-ded')&&$('#sp-ded').value);
@@ -9120,7 +9145,7 @@ async function openSalaryPayout(opts){
     //   to'lovga olib kelardi). O'qilmasa bloklaymiz; o'qilsa — ogohlantiramiz.
     let exDocs;
     try{ const ex=await getDocs(query(collection(db,'salary_payments'), where('teacherId','==',String(tid)))); exDocs=ex.docs; }
-    catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Oldingi to‘lovlarni tekshirib bo‘lmadi — qayta urinib ko‘ring (takror to‘lov bo‘lmasin)',true); return; }
+    catch(e){ btn.disabled=false; btn.textContent=btnLbl(); toast('Oldingi to‘lovlarni tekshirib bo‘lmadi — qayta urinib ko‘ring (takror to‘lov bo‘lmasin)',true); return; }
     // Audit M6: IDEMPOTENT yozuv — bitta modal uchun barqaror id. addDoc (har safar yangi hujjat) carryBalance'ni
     //   buzardi. salary_payments — FAQAT QO'SHISH (UPDATE RLS yo'q, audit-3.sql): shu id bilan qayta upsert 42501
     //   beradi. Shu sabab: javob yo'qolib qayta bosilganda yozuv ALLAQACHON bor bo'lsa — takror yozmaymiz,
@@ -9129,13 +9154,17 @@ async function openSalaryPayout(opts){
     const showDone=(rec, kassa)=>{   // rec — bazada ALLAQACHON bor yozuv (qayta bosish): ekranda o'shaning summasi; kassa — yozilgan chiqim orderi
       const pd=rec?(Number(rec.paid)||0):paid, co=rec?Math.round(Number(rec.carryOut)||0):carryOut;
       const kdoc=(kassa&&kassa.docId) ? kassa : ((rec&&rec.cashDocId) ? { docId:rec.cashDocId } : null);
-      const how=(rec&&rec.method==='card') || (!rec && $('#sp-method') && $('#sp-method').value==='card') ? 'karta / bank orqali' : 'naqd';
-      toast('Maosh berildi ✓');
-      $('#modal').innerHTML=`<div class="modal-h"><h3>✓ Maosh berildi</h3><button class="x" id="m-x2">×</button></div>
+      const mth=(rec&&rec.method) || (!rec && $('#sp-method') && $('#sp-method').value) || '';
+      const isOfs=mth==='offset';
+      const how=mth==='card' ? 'karta / bank orqali' : isOfs ? 'o‘zaro hisob (o‘quv to‘lovi hisobiga)' : 'naqd';
+      toast(isOfs?'O‘zaro hisob rasmiylashtirildi ✓':'Maosh berildi ✓');
+      $('#modal').innerHTML=`<div class="modal-h"><h3>${isOfs?'✓ O‘zaro hisob rasmiylashtirildi':'✓ Maosh berildi'}</h3><button class="x" id="m-x2">×</button></div>
         <div class="modal-b"><div class="small" style="background:#eef3f1;border-radius:10px;padding:12px;font-weight:700">${esc(tn)} · ${esc(mLabel(mm))} — ${how} <b>${fmtSum(pd)}</b> so‘m${co>0?`<br><span style="color:#B45309;font-weight:400">Keyingi oyga qoldiq: ${fmtSum(co)} so‘m</span>`:(co<0?`<br><span style="color:#B45309;font-weight:400">Ortiqcha berildi: ${fmtSum(-co)} so‘m (keyingi oydan ayiriladi)</span>`:'')}</div>
-        ${kdoc?`<div class="small" style="margin-top:8px;background:#E8F1FD;color:#175CD3;border-radius:8px;padding:8px 10px;font-weight:600">Kassa chiqim orderi${kdoc.no?` № ${esc(String(kdoc.no))}`:''} yozildi — chop eting, xodim «Олдим» qatoriga imzo qo‘yadi.</div>`
+        ${kdoc?`<div class="small" style="margin-top:8px;background:#E8F1FD;color:#175CD3;border-radius:8px;padding:8px 10px;font-weight:600">${isOfs
+            ? `Naqdsiz dalolatnoma${kdoc.no?` № ${esc(String(kdoc.no))}`:''} yozildi — chop eting: rahbar, bosh buxgalter va xodim imzolaydi. Kassadan pul chiqmadi; o‘quv to‘lovi «To‘lovlar»da «O‘zaro hisob» usuli bilan ko‘rinadi.`
+            : `Kassa chiqim orderi${kdoc.no?` № ${esc(String(kdoc.no))}`:''} yozildi — chop eting, xodim «Олдим» qatoriga imzo qo‘yadi.`}</div>`
               :`<div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`}</div>
-        <div class="modal-f"><button type="button" class="btn ghost" id="sp-close">Yopish</button>${kdoc?`<button type="button" class="btn gold" id="sp-ko2">🖨 Chiqim orderi</button>`:`<button type="button" class="btn gold" id="sp-print">🧾 Chek chiqarish</button>`}</div>`;
+        <div class="modal-f"><button type="button" class="btn ghost" id="sp-close">Yopish</button>${kdoc?`<button type="button" class="btn gold" id="sp-ko2">${isOfs?'🖨 Dalolatnoma':'🖨 Chiqim orderi'}</button>`:`<button type="button" class="btn gold" id="sp-print">🧾 Chek chiqarish</button>`}</div>`;
       $('#m-x2').onclick=closeModal; $('#sp-close').onclick=()=>{ closeModal(); if(typeof opts.onDone==='function') try{ opts.onDone(); }catch(e){} };
       { const pb=$('#sp-print'); if(pb) pb.onclick=()=>printReceipt({ kind:'expense', who:tn, amount:pd, reason:'Oylik maosh', period:mm, date:(rec&&rec.date)||dt }); }
       { const kb=$('#sp-ko2'); if(kb) kb.onclick=async()=>{ kb.disabled=true;
@@ -9158,23 +9187,33 @@ async function openSalaryPayout(opts){
     //   berilgan» savoli yolg'on bo'lardi, «Bekor» esa hech narsa tushuntirmasdi): xodim qatori qayta o'qiladi.
     let curKey=null;
     try{ const pr=await getDoc(doc(db, p.kind==='teacher'?'teachers':'staff', String(p.refId))); if(pr&&pr.exists()){ const x=pr.data()||{}; curKey=String((p.kind==='teacher'?x.teacherId:x.staffId)||pr.id); } }
-    catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Xodim ma’lumotini tekshirib bo‘lmadi — qayta urinib ko‘ring',true); return; }
+    catch(e){ btn.disabled=false; btn.textContent=btnLbl(); toast('Xodim ma’lumotini tekshirib bo‘lmadi — qayta urinib ko‘ring',true); return; }
     if(curKey!==String(tid)){
       //   Shu oynaning oldingi bosishdagi yozuvi (javobi yo'qolgan) bo'lsa — u ID bilan birga yangi kalitga ko'chgan, eski kalit
       //   bo'yicha topilmaydi: «yozilmadi» emas, «berildi» (takror yozilmaydi).
       let saved=null; try{ const g=await getDoc(doc(db,'salary_payments',spId)); if(g&&g.exists()) saved=g.data()||{}; }
-      catch(e){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Oldingi bosish yozilgan-yozilmaganini tekshirib bo‘lmadi (tarmoq) — qayta urinib ko‘ring',true); return; }
+      catch(e){ btn.disabled=false; btn.textContent=btnLbl(); toast('Oldingi bosish yozilgan-yozilmaganini tekshirib bo‘lmadi (tarmoq) — qayta urinib ko‘ring',true); return; }
       if(saved){ showDone(saved); return; }
       showStale({ message: curKey==null ? 'Xodim o‘chirilgan.' : `Xodimning hozirgi ID’si: «${curKey}».` }); return; }
     const myRef=(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId);
-    if(exDocs.some(d=>{ const x=d.data()||{}; return String(x.month)===String(mm) && (x.payeeRef==null || String(x.payeeRef)===myRef); }) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent='Berish + chek'; return; }
+    if(exDocs.some(d=>{ const x=d.data()||{}; return String(x.month)===String(mm) && (x.payeeRef==null || String(x.payeeRef)===myRef); }) && !confirm(`⚠️ ${tn} ga ${mLabel(mm)} oyi uchun maosh ALLAQACHON berilgan.\nBu — takror bo‘lishi mumkin. Yana berilsinmi?`)){ btn.disabled=false; btn.textContent=btnLbl(); return; }
     // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
     //   baza rad etadi (id-guards.sql 5-band) — maosh eski ID'ning YANGI egasiga jim yozilmaydi.
     const spRow={ teacherId:String(tid), payeeRef:(p.kind==='teacher'?'teachers':'staff')+':'+String(p.refId), teacherName:tn, month:mm, gross, advance:adv, deduction:ded, subBonus:Math.round(sub), net:monthRemainder, carryIn:Math.round(prior), paid, carryOut, date:dt };
     try{
       if(KASSA.live){   // kassa ishga tushgan: funksiya orqali — naqd bo'lsa kassa chiqim orderi (KO-2) bilan BITTA tranzaksiyada
-        if(paid<=0){ btn.disabled=false; btn.textContent='Berish + chek'; toast('Berilayotgan summani kiriting',true); return; }
-        const res=await rpc('kassa_salary_pay', { p:Object.assign({ id:spId, method:(($('#sp-method')&&$('#sp-method').value)||'') }, spRow) });
+        const mth=(($('#sp-method')&&$('#sp-method').value)||''), lbl0=btnLbl();
+        if(paid<=0){ btn.disabled=false; btn.textContent=lbl0; toast(mth==='offset'?'O‘quv to‘loviga o‘tkaziladigan summani kiriting':'Berilayotgan summani kiriting',true); return; }
+        if(mth==='offset'){   // o'zaro hisob: maosh to'lovi + o'quv to'lovi + naqdsiz dalolatnoma — BITTA tranzaksiyada (faqat Direktor)
+          const rq=($('#sp-ofs-date')&&$('#sp-ofs-date').value)||'';
+          if(!ofsStudent){ btn.disabled=false; btn.textContent=lbl0; toast('O‘quvchini (xodimning farzandini) ro‘yxatdan tanlang',true); return; }
+          if(!rq){ btn.disabled=false; btn.textContent=lbl0; toast('Xodimning yozma arizasi sanasini kiriting',true); return; }
+          if(!confirm(`O‘zaro hisob rasmiylashtirilsinmi?\n\n${tn} — ${mLabel(mm)} ish haqidan ${fmtSum(paid)} so‘m\n→ ${ofsStudent.name} (${ofsStudent.id}) o‘quv to‘lovi hisobiga.\n\nKassadan pul chiqmaydi. Naqdsiz dalolatnoma yoziladi.`)){ btn.disabled=false; btn.textContent=lbl0; return; }
+          const res=await rpc('kassa_offset', { p:Object.assign({ id:spId, studentId:ofsStudent.id, requestDate:rq }, spRow) });
+          showDone((res&&res.row)||null, res&&res.kassa);
+          return;
+        }
+        const res=await rpc('kassa_salary_pay', { p:Object.assign({ id:spId, method:mth }, spRow) });
         showDone((res&&res.row)||null, res&&res.kassa);
       } else {
         await setDoc(doc(db,'salary_payments',spId), Object.assign({}, spRow, { byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }), {merge:true});
@@ -9186,7 +9225,7 @@ async function openSalaryPayout(opts){
       // 23503 — xodimning ID'si oyna ochilgandan keyin o'zgargan / xodim o'chirilgan: ro'yxat faqat oyna ochilganda o'qiladi,
       //   shu oynada qayta bosish har safar rad etiladi — eski forma o'rniga aniq ko'rsatma; yopilganda ro'yxat yangilanadi.
       if(e&&e.code==='23503'){ showStale(e); return; }
-      btn.disabled=false; btn.textContent='Berish + chek'; toast('Xatolik: '+((e.code && e.message && e.message!==e.code) ? e.code+' — '+e.message : (e.code||e.message)),true); }
+      btn.disabled=false; btn.textContent=btnLbl(); toast('Xatolik: '+((e.code && e.message && e.message!==e.code) ? e.code+' — '+e.message : (e.code||e.message)),true); }
   };
 }
 async function renderAccounting(){

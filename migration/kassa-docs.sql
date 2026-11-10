@@ -111,8 +111,8 @@ begin
     raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
   -- Tizim hujjatlari kalitlari (sanash farqi, boshlang'ich qoldiq, kamomad qarori, o'quv to'lovi / maosh / avans / qaytarish
-  --   orderlari) mijozga band qilib qo'yilmaydi.
-  if not p_internal and v_ref ~* '^(sys|opening_|shdec_|pay_|sal_|adv_|ref_)' then
+  --   orderlari, o'zaro hisob dalolatnomasi) mijozga band qilib qo'yilmaydi.
+  if not p_internal and v_ref ~* '^(sys|opening_|shdec_|pay_|sal_|adv_|ref_|ofs_)' then
     raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
   v_op := btrim(coalesce(p ->> 'op', ''));

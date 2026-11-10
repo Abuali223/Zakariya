@@ -9,6 +9,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-links.sql ALOHIDA ishga tus
 --   Kassa ishga tushgach (fin_org."kassaGoLive") NAQD pul faqat kassa hujjati bilan harakatlanadi:
 --     • maosh     — kassa_salary_pay(p): salary_payments qatori + KO-2 (Dt 6710 Kt 5010) BITTA tranzaksiyada (tasdiqlangan
 --                   vedomost chegarasi — mavjud darvoza trigeri); karta orqali — KO siz, Moliya menejeri / Direktor yozadi;
+--     • o'zaro hisob — kassa_offset(p): xodimning ish haqidan farzandining o'quv to'lovi (naqdsiz dalolatnoma, Dt 6710 Kt 4010 /
+--                   6310) — maosh to'lovi, o'quv to'lovi va dalolatnoma BITTA tranzaksiyada; faqat Direktor; kassa_offset_void;
 --     • avans     — «Kassa» → «+ Chiqim so'rovi» → «Ish haqi avansi» (2-ro'yxat tasdig'i, T1 dan katta — Direktor ham) → kassir
 --                   pulni berganda staff_advances qatori shu tranzaksiyada yoziladi (oy vedomosti tasdiqlangan bo'lsa — rad);
 --     • qaytarish — kassa_refund_request(p): Direktor tasdiqlaydi (so'rov = tasdiq), balans O'ZGARMAYDI; kassir pulni berganda
@@ -384,19 +386,164 @@ begin
 end $$;
 revoke all on function app.kassa_link_void(text, text, text) from public, anon, authenticated;
 
+-- ---------- O'zaro hisob (nc_offset): xodimning ish haqidan farzandining o'quv to'lovi — NAQDSIZ ----------
+--   Yozma ariza + Direktor (§4.10). BITTA tranzaksiyada:
+--     • maosh to'lovi (salary_payments, usul 'offset') — tasdiqlangan vedomost chegarasi mavjud darvoza trigeri bilan;
+--     • o'quv to'lovi (payments, provider 'offset') va uning balansga qo'llanishi (apply_payment: eng eski fakturadan, ortiqchasi avansga);
+--     • naqdsiz dalolatnoma (ACT): Dt 6710 Kt 4010 / 6310 — taqsimot naqd o'quv to'lovidagi qoida bilan (app.kassa_tuition_alloc).
+--   Kassadan pul chiqmaydi ham, kirmaydi ham — kassa kitobida (KO-4) yo'q; dalolatnoma o'z raqam seriyasida («Д-»).
+--   p: id ('sp_…' — «Maosh berish» oynasining barqaror kaliti), teacherId, payeeRef ('teachers:<id>' | 'staff:<id>'), teacherName,
+--      month ('YYYY-MM'), paid (> 0 — hisobga olinadigan summa), gross, advance, deduction, subBonus, net, carryIn, carryOut,
+--      studentId (o'quvchi kodi yoki qator id), requestDate (ariza sanasi 'YYYY-MM-DD' — majburiy), note
+create or replace function public.kassa_offset(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_id text; v_tid text; v_ref text; v_month text; v_paid numeric; v_from text; v_gate_off boolean;
+  v_sid_in text; v_sid text; v_sname text; v_ename text; v_req text; v_note text; v_key text; v_pay_id text; v_today date := app.fin_today();
+  v_ex public.salary_payments%rowtype; v_before jsonb; v_res jsonb; v_a jsonb; v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype;
+begin
+  if not app.is_admin() then
+    raise exception 'Ruxsat yo''q: o''zaro hisobni faqat Direktor rasmiylashtiradi' using errcode = '42501';
+  end if;
+  if not app.kassa_live() then raise exception 'Kassa ishga tushirilmagan' using errcode = 'P0001', hint = 'kassa:not_live'; end if;
+  if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
+  v_id := btrim(coalesce(p ->> 'id', ''));
+  v_tid := btrim(coalesce(p ->> 'teacherId', ''));
+  v_ref := btrim(coalesce(p ->> 'payeeRef', ''));
+  v_month := coalesce(p ->> 'month', '');
+  if v_id !~ '^sp_.{3,200}$' or v_tid = '' or v_ref !~ '^(teachers|staff):.+$' or v_month !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+    raise exception 'Maosh to''lovi ma''lumoti to''liq emas' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  v_paid := app.kassa_amount(p -> 'paid', 'O''zaro hisob');
+  v_sid_in := btrim(coalesce(p ->> 'studentId', ''));
+  select coalesce(nullif(s."studentId", ''), s.id), coalesce(s.name, '') into v_sid, v_sname
+    from public.students s where s.id = v_sid_in or s."studentId" = v_sid_in order by (s.id = v_sid_in) desc limit 1;
+  if v_sid_in = '' or v_sid is null then raise exception 'O''quvchi tanlanmagan yoki topilmadi' using errcode = '22023', hint = 'kassa:party'; end if;
+  v_ename := app.kassa_party_label('employee', v_ref);
+  if v_ename is null then raise exception 'Xodim topilmadi' using errcode = '22023', hint = 'kassa:party'; end if;
+  -- Ariza sanasi — hujjat asosi: majburiy, kelajakda emas, 92 kundan eski emas.
+  v_req := coalesce(p ->> 'requestDate', '');
+  begin
+    if v_req !~ '^\d{4}-\d{2}-\d{2}$' or v_req::date > v_today or v_req::date < v_today - 92 then v_req := null; end if;
+  exception when others then v_req := null; end;
+  if v_req is null then raise exception 'Xodimning yozma arizasi sanasini kiriting' using errcode = '22023', hint = 'kassa:basis'; end if;
+  v_note := left(btrim(coalesce(p ->> 'note', '')), 300);
+  v_key := 'ofs_' || md5(v_id); v_pay_id := v_key;
+  perform pg_advisory_xact_lock(hashtext('iqror_doc:' || v_key));   -- L0: shu oynadan parallel / qayta yuborish navbatga turadi
+  select * into v_ex from public.salary_payments s where s.id = v_id;
+  if found then
+    if coalesce(v_ex.paid, 0) <> v_paid or coalesce(v_ex."teacherId", '') <> v_tid or coalesce(v_ex.month, '') <> v_month
+       or coalesce(v_ex.method, '') <> 'offset' then
+      raise exception 'Shu kalit bilan boshqa maosh to''lovi yozilgan' using errcode = '22023', hint = 'kassa:ref_mismatch';
+    end if;
+    return jsonb_build_object('ok', true, 'dup', true, 'id', v_id, 'method', 'offset', 'payId', v_pay_id, 'row', to_jsonb(v_ex),
+      'kassa', (select jsonb_build_object('docId', c.id, 'form', c.form, 'no', c.no, 'day', c."businessDay", 'status', c.status)
+                  from public.cash_docs c where c.id = v_ex."cashDocId"));
+  end if;
+  select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
+  v_gate_off := v_from is null or v_month < v_from;
+
+  v_before := app.kassa_tuition_before(v_sid);   -- L1: o'quvchi bo'yicha navbat + to'lovdan oldingi holat
+  perform app.kassa_flag(true);
+  -- 1) maosh to'lovi (L3: vedomost chegarasi — darvoza trigeri)
+  insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, gross, advance, deduction, "subBonus", net,
+                                      "carryIn", paid, "carryOut", date, note, method)
+    values (v_id, v_tid, v_ref, left(btrim(coalesce(nullif(btrim(coalesce(p ->> 'teacherName', '')), ''), v_ename)), 200), v_month,
+            app.kassa_num(p, 'gross'), app.kassa_num(p, 'advance'), app.kassa_num(p, 'deduction'), app.kassa_num(p, 'subBonus'),
+            app.kassa_num(p, 'net'), app.kassa_num(p, 'carryIn'), v_paid, app.kassa_num(p, 'carryOut'), to_char(v_today, 'YYYY-MM-DD'),
+            left(btrim('O‘zaro hisob: o‘quv to‘lovi — ' || v_sname || ' (' || v_sid || ')' || case when v_note <> '' then '; ' || v_note else '' end), 300),
+            'offset');
+  -- 2) o'quv to'lovi va uning balansga qo'llanishi
+  insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw)
+    values (v_pay_id, v_sid, 'offset', v_paid, 'pending', left(v_ename, 200), true,
+            jsonb_build_object('manual', true, 'method', 'offset', 'date', to_char(v_today, 'YYYY-MM-DD'), 'byUid', v_uid,
+                               'note', left('O‘zaro hisob: ish haqi ' || v_month || case when v_note <> '' then '; ' || v_note else '' end, 500),
+                               'offset', jsonb_build_object('salaryPaymentId', v_id, 'payeeRef', v_ref, 'month', v_month, 'requestDate', v_req)));
+  perform set_config('iqror.money_rpc', '1', true);
+  v_res := public.apply_payment(v_sid, v_paid, 'offset', v_pay_id);
+  perform set_config('iqror.money_rpc', '', true);
+  if v_res is null or not coalesce((v_res ->> 'ok')::boolean, false) then
+    raise exception 'O''zaro hisob qo''llanmadi (%)', coalesce(v_res::text, 'null') using errcode = 'P0001', hint = 'kassa:offset';
+  end if;
+  update public.payments set status = 'applied' where id = v_pay_id;
+  -- 3) naqdsiz dalolatnoma: Dt 6710 Kt 4010 / 6310 (to'lov qayerga taqsimlangan bo'lsa)
+  v_a := app.kassa_tuition_alloc(v_before, v_paid, '6710', false, false);
+  select b.o_id, b.o_dup into v_doc_id, v_dup from app.kassa_doc_build(jsonb_build_object(
+      'desk', 'main', 'op', 'nc_offset', 'amount', v_paid, 'partyType', 'employee', 'partyId', v_ref,
+      'basis', 'O‘zaro hisob: ish haqi ' || v_month || ' hisobidan o‘quv to‘lovi — ' || v_sname || ' (' || v_sid || '); ariza '
+               || to_char(v_req::date, 'DD.MM.YYYY'),
+      'attachment', 'Yozma ariza', 'note', v_note, 'clientRef', v_key, 'needsDirector', true,
+      'sourceTable', 'salary_payments', 'sourceId', v_id,
+      'sourceSnapshot', jsonb_build_object('allocation', v_a ->> 'mode', 'creditBefore', v_a -> 'creditBefore', 'creditAfter', v_a -> 'creditAfter',
+                                           'before', v_before -> 'invoices', 'paymentId', v_pay_id, 'studentId', v_sid, 'studentName', v_sname,
+                                           'month', v_month, 'teacherId', v_tid, 'gateOff', v_gate_off, 'requestDate', v_req,
+                                           'months', v_a -> 'months', 'over', v_a -> 'over'),
+      'lines', v_a -> 'lines'), 'ACT', v_uid, true) b;
+  update public.cash_docs set "dirApprovedBy" = v_uid, "dirApprovedAt" = app.fin_now() where id = v_doc_id and status = 'draft';   -- Direktor o'zi rasmiylashtiradi
+  v_doc := app.kassa_act_post(v_doc_id, v_uid, v_today);   -- L4, L5
+  insert into public.payment_allocations (id, "paymentId", "docId", "studentId", "invoiceId", month, "fromCash", "fromCredit", account)
+    select 'pa_' || replace(gen_random_uuid()::text, '-', ''), v_pay_id, v_doc.id, v_sid, a ->> 'invoiceId', a ->> 'month',
+           (a ->> 'fromCash')::numeric, (a ->> 'fromCredit')::numeric, a ->> 'account'
+      from jsonb_array_elements(v_a -> 'alloc') a;
+  update public.salary_payments set "cashDocId" = v_doc.id where id = v_id;
+  update public.payments
+     set "cashDocId" = v_doc.id, raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('actNo', v_doc.no)
+   where id = v_pay_id;
+  perform app.kassa_flag(false);
+  return jsonb_build_object('ok', true, 'dup', false, 'id', v_id, 'method', 'offset', 'payId', v_pay_id,
+    'row', (select to_jsonb(s) from public.salary_payments s where s.id = v_id),
+    'kassa', jsonb_build_object('docId', v_doc.id, 'form', 'ACT', 'no', v_doc.no, 'day', v_doc."businessDay", 'status', v_doc.status),
+    'student', jsonb_build_object('id', v_sid, 'name', v_sname, 'credit', coalesce((v_a ->> 'creditAfter')::numeric, 0)));
+end $$;
+revoke all on function public.kassa_offset(jsonb) from public, anon;
+grant execute on function public.kassa_offset(jsonb) to authenticated;
+
+-- O'zaro hisobni bekor qilish: FAQAT Direktor, FAQAT rasmiylashtirilgan kunning o'zida, sabab bilan. O'quv to'lovi teskari qilinadi
+--   (fakturalar va avans avvalgi holatga — faqat undan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan bo'lsa), maosh to'lovi
+--   olib tashlanadi, dalolatnoma raqami saqlanib «bekor qilingan» bo'ladi. Keyingi kunlarda — «Qaytarish» va buxgalter tuzatishi.
+create or replace function public.kassa_offset_void(p_id text, p_reason text) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_sid text; v_desk text;
+begin
+  if not app.is_admin() then raise exception 'Ruxsat yo''q: o''zaro hisobni faqat Direktor bekor qiladi' using errcode = '42501'; end if;
+  if length(v_reason) < 5 then raise exception 'Bekor qilish sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
+  select c."sourceSnapshot" ->> 'studentId', c.desk into v_sid, v_desk from public.cash_docs c where c.id = p_id and c.op = 'nc_offset';
+  if not found then raise exception 'O''zaro hisob dalolatnomasi topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));   -- L1 — kassa qulfidan (L4) oldin
+  perform app.kassa_lock_desk(v_desk);                                            -- L4
+  select * into v_doc from public.cash_docs c where c.id = p_id for update;
+  if v_doc.status = 'void' then return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', true); end if;
+  if v_doc.status <> 'posted' then
+    raise exception 'Dalolatnoma bekor qilinmaydi (holati: %)', v_doc.status using errcode = 'P0001', hint = 'kassa:bad_status';
+  end if;
+  if v_doc."businessDay" <> app.fin_today() then
+    raise exception 'O''zaro hisob faqat rasmiylashtirilgan kunning o''zida bekor qilinadi (keyin — «Qaytarish» va buxgalter tuzatishi)'
+      using errcode = 'P0001', hint = 'kassa:day_closed';
+  end if;
+  perform app.kassa_flag(true);
+  perform app.tuition_reverse_core(p_id, v_uid, v_reason);
+  delete from public.salary_payments s where s."cashDocId" = p_id;
+  update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = v_reason where id = p_id;
+  perform app.kassa_flag(false);
+  return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', false);
+end $$;
+revoke all on function public.kassa_offset_void(text, text) from public, anon;
+grant execute on function public.kassa_offset_void(text, text) to authenticated;
+
 -- ---------- Moslik (§8.1: P1, P4, P5, P8) — kassa hujjatlari ↔ pul yozuvlari, kassa ishga tushgan kundan ----------
 --   P1  naqd o'quv to'lovi = KO-1:   pay  — kirim orderisiz (yoki summasi / kuni boshqa) naqd to'lov;
 --                                     doc  — to'lov yozuvi yo'q (yoki summasi boshqa) o'quv to'lovi orderi;
 --   P4  naqd xarajat = KO-2:         row  — chiqim orderisiz naqd (usuli ko'rsatilmagan) «Buxgalteriya» xarajati;
 --                                     doc  — «Buxgalteriya»ga ko'chmagan (summasi mos emas) xarajat orderi;
 --   P5  maosh va avans = KO-2:       row  — chiqim orderisiz naqd (usulsiz) maosh / avans yozuvi; doc — yozuvsiz maosh / avans orderi;
+--                                     ofs  — o'zaro hisob: dalolatnoma, maosh to'lovi ('offset') va o'quv to'lovi ('offset') bir-biriga mos emas;
 --   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi.
 --   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
 create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
   v_live date; v_to date := coalesce(p_to, app.fin_today()); v_from date; v_f text; v_t text;
-  v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p5r int; v_p5d int; v_p8r int; v_p8d int;
+  v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p5r int; v_p5d int; v_p5o int; v_p8r int; v_p8d int;
 begin
   select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
   if v_live is null or v_live > v_to then return jsonb_build_object('live', false, 'total', 0); end if;
@@ -432,6 +579,20 @@ begin
      and not (case when c.op = 'out_salary'
                    then exists (select 1 from public.salary_payments s where s."cashDocId" = c.id and coalesce(s.paid, 0) = c.amount)
                    else exists (select 1 from public.staff_advances a where a."cashDocId" = c.id and coalesce(a.amount, 0) = c.amount) end);
+  -- P5: o'zaro hisob — dalolatnoma ↔ maosh to'lovi ↔ o'quv to'lovi
+  select (select count(*) from public.cash_docs c
+           where c.op = 'nc_offset' and c.status = 'posted' and c."businessDay" between v_from and v_to
+             and not (exists (select 1 from public.salary_payments s where s."cashDocId" = c.id and s.method = 'offset' and coalesce(s.paid, 0) = c.amount)
+                      and exists (select 1 from public.payments pm where pm."cashDocId" = c.id and pm.provider = 'offset' and pm.amount = c.amount
+                                                                      and coalesce(pm.status, '') <> 'canceled')))
+       + (select count(*) from public.salary_payments s
+           where s.date between v_f and v_t and s.method = 'offset'
+             and not exists (select 1 from public.cash_docs c where c.id = s."cashDocId" and c.status = 'posted' and c.op = 'nc_offset'))
+       + (select count(*) from app.fin_receipts(v_from, v_to) r
+           where r.provider = 'offset'
+             and not exists (select 1 from public.payments pm join public.cash_docs c on c.id = pm."cashDocId"
+                              where pm.id = r.id and c.status = 'posted' and c.op = 'nc_offset' and c.amount = r.amount))
+    into v_p5o;
   -- P8
   select count(*) into v_p8r from public.refunds r
    where r."createdAt" >= (v_from::timestamp at time zone 'Asia/Tashkent') and r."createdAt" < ((v_to + 1)::timestamp at time zone 'Asia/Tashkent')
@@ -443,9 +604,9 @@ begin
   return jsonb_build_object('live', true, 'from', v_from, 'to', v_to,
     'p1', jsonb_build_object('pay', v_p1p, 'paySum', v_p1ps, 'doc', v_p1d),
     'p4', jsonb_build_object('row', v_p4r, 'doc', v_p4d),
-    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d),
+    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d, 'ofs', v_p5o),
     'p8', jsonb_build_object('row', v_p8r, 'doc', v_p8d),
-    'total', v_p1p + v_p1d + v_p4r + v_p4d + v_p5r + v_p5d + v_p8r + v_p8d);
+    'total', v_p1p + v_p1d + v_p4r + v_p4d + v_p5r + v_p5d + v_p5o + v_p8r + v_p8d);
 end $$;
 revoke all on function app.kassa_reconcile(date, date) from public, anon, authenticated;
 
