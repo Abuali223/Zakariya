@@ -1631,6 +1631,55 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   bo'limsiz va xatosiz (11), modul bor — «Kassa» bilan (13). Server qoidalari `test-kassa.sql` da avvaldan (tasdiqlaydi, tekshiradi;
   kirim va so'rov yoza olmaydi).
 
+## 64) Moliya, 1a-bosqich: kassa modulining yakka chuqur ko'rigi — topilmalar va tuzatishlar — 2026-11-11
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar faqat `--dev` zanjiridagi kassa fayllarida (`fin-period.sql`, `kassa.sql`,
+`kassa-day.sql`, `kassa-pay.sql`, `kassa-links.sql`, `kassa-checks.sql`) va `fin-kassa.js` da; jonli zanjir fayllariga tegilmadi.
+
+- **Usul:** mustaqil ko'p agentli ko'rik ishga tushirilmadi (ruxsat berilmadi) — o'rniga modul yakka, «buzishga urinish» nuqtai
+  nazaridan qayta ko'rildi. Har topilma avval sinov bazasida takrorlanib tasdiqlandi, keyin tuzatildi va doimiy testga aylandi.
+- **Tasdiqlangan topilmalar va tuzatishlar:**
+  1. *Yopilgan davrni mavjud to'lovni tahrirlash orqali chetlab o'tish* (`fin-period.sql`). Qulf faqat yangi to'lovni tekshirardi:
+     mavjud to'lovning kuni (`raw.manual` / `raw.date`), summasi yoki kanali o'zgartirilsa, yopilgan oy tushumi orqaga o'zgarardi
+     yoki yozuv yopilgan davrga «ko'chib» kelardi. Endi bunday o'zgarishda eski ham, yangi kun ham tekshiriladi; yozuvni bekor
+     qilish yoki bekorini qaytarish ham yopilgan davrda rad etiladi (biriktirish, bo'lish, qaytarish — bugungi amal, avvalgidek).
+     Sahifaning `setDoc`i — upsert: mavjud to'lovga oddiy belgi qo'yilganda («qo'lda tuzatildi») ham soxta «yopilgan davr» xatosi
+     chiqardi (taklif qilingan INSERT qatorida kun hozirgi paytdan hisoblanardi). Endi mavjud qator uchun INSERT qatori
+     tekshirilmaydi — o'zgarishni UPDATE tarmog'i tekshiradi. `test-fin-period.sql` L1e–L1g.
+  2. *Kassa hujjatiga bog'langan to'lovni to'g'ridan-to'g'ri o'zgartirish* (`kassa-links.sql`, yangi `trg_kassa_pay_guard`).
+     Naqd o'quv to'lovi (KO-1) yoki o'zaro hisob dalolatnomasiga bog'langan to'lov qatorining summasi, kanali, o'quvchisi,
+     holati, kuni, havolasi va fiskal chek № ini moliya roli jadvalga to'g'ridan-to'g'ri yozib o'zgartira yoki bekor qila olardi
+     (order o'zgarmay qolardi, moslik buzilardi). Endi bular faqat kassa funksiyalari yoki server orqali; bekor qilish — «Kassa»da
+     hujjat orqali. Havolani ham faqat kassa qo'yadi. Izoh kabi boshqa maydonlar — avvalgidek; deploy paytidagi o'quvchi kalitini
+     kanonlash (`invoice-guards.sql`) — mustasno. `test-kassa-pay.sql` LK1–LK3.
+  3. *Bayroq tartibi* (`kassa-pay.sql`): `kassa_tuition_post` to'lov qatoriga order havolasi va fiskal № ni kassa bayrog'i
+     o'chirilgandan keyin yozardi — yangi himoya bilan rad bo'lardi. Endi bayroq ichida.
+  4. *Xodim ID sini qayta berish kassa yozuvida to'xtardi* (`kassa-links.sql`): «Yangi noyob ID berish» (`rekey_payroll_id`)
+     KO-2 ga bog'langan maosh va avans qatorlarida xodim kalitini almashtira olmasdi. Endi faqat shu ustun o'zgarsa — ruxsat.
+     `test-kassa-links.sql` S9c.
+  5. *FD-28 (shaxsiy ma'lumot):* davr surati mazmunida o'quvchi va xodim ismlari bor — 2-ro'yxat (moliya menejeri, buxgalter)
+     ularni funksiya orqali ham, jadvaldan to'g'ridan-to'g'ri ham ko'rardi. Endi jadvalni faqat Direktor o'qiydi; `fin_snapshot_get`
+     2-ro'yxatga ismsiz (ID bilan) nusxa beradi (`masked`), xesh tekshiruvi to'liq mazmun bo'yicha. Sahifada fayl nomi
+     «…-ismsiz.json» va eslatma. `test-fin-period.sql` S2, S2a, G3.
+  6. *Biriktirilmagan to'lovni qaytarish hisobvarag'i* (`kassa-links.sql`): KO-2 qatori 6310 (olingan avanslar) dan yozilardi,
+     aniqlanmagan tushum esa 6390 da turadi. Endi Dt 6390 Kt 5010, statiya OP-16. `test-kassa-links.sql` R6b.
+  7. *Poyga* (`kassa-day.sql`): kunni qayta ochish yoki boshlang'ich qoldiqni kiritish davr yopilishi bilan bir paytda bo'lsa, qulf
+     tekshiruvi eski qiymatni ko'rishi mumkin edi. Endi ikkalasi sozlama qatorini (`fin_org`) FOR SHARE bilan qulflaydi — davr
+     yopilayotgan bo'lsa, u tugaguncha kutib, yangi qulf bilan tekshiradi.
+- **Tekshirildi, o'zgarish talab qilmadi:** barcha ochiq kassa va moliya funksiyalari begona rollar (o'qituvchi, ota-ona, HR,
+  o'quv bo'limi, bloklangan hisob) uchun faqat 42501 qaytaradi; so'rovga soxta maydonlar, mijoz bergan hisobvaraqlar, manfiy
+  qator, kalit shakli, sanash summasi; sahifadagi foydalanuvchi matni (`fin-kassa.js`, `fin-print.js`, admin oynalari) hamma joyda
+  ekranlanadi; to'ldirilgan bazada (≈ 1 500 hujjat) zanjirni qayta ishga tushirish; kunni qayta ochish + yil oxiri + qulf
+  aralash ssenariysi — tekshiruv fayli toza. To'lovni o'zgartiradigan barcha server funksiyalari yangi himoya bilan solishtirildi
+  (kassa funksiyalari — bayroq ostida; qolganlari bog'langan qatorga tegmaydi yoki rad etilishi to'g'ri).
+- **`kassa-checks.sql`:** kutilgan obyektlar soni yangilandi (ichki funksiyalar 61, triggerlar 24; 8-band — `trg_kassa_pay_guard`).
+- **Sinovlar:** `test-kassa.sql` 225, `test-kassa-pay.sql` 54 (+3), `test-kassa-links.sql` 93 (+1), `test-kassa-report.sql` 52,
+  `test-fin-period.sql` 36 (+4), `test-kassa-checks.sql` 32, `test-fin-prereq.sql` 87, `test-audit-fixes.sql` 36,
+  `test-public-close.sql` 92, `test-kassa-race.sh` 22 (keyin tekshiruv fayli toza), to'ldirilgan bazada zanjirni qayta
+  ishga tushirish — OK; jonli zanjirda 87 / 36 / 92; JS 28. Brauzer: 18 ta ishga tushirish, hammasi yashil (449 tekshiruv;
+  `e2e-kassa6` 31 — moliya menejeri yuklagan JSON ismsiz).
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ishga tushirishga ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

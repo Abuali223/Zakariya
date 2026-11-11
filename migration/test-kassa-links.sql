@@ -145,6 +145,15 @@ select zz.chk('S8 kassada pul yetmasa — rad, maosh to''lovi ham yozilmaydi',
   '^ERR P0001 \[kassa:negative\].* / 0$');
 select zz.chk('S9 bog''langan maosh qatorini mijoz o''chira olmaydi',
   zz.as('U_DIR', $q$with x as (delete from public.salary_payments where id = 'sp_IQT-T1_2026-12_n1' returning id) select count(*)::text from x$q$), '^ERR 42501 \[kassa:linked_row\]');
+savepoint s9c;
+set local iqror.rekey = '1';   -- «Yangi noyob ID berish» (id-guards.sql: rekey_payroll_id) shu bayroq ostida xodim kalitini almashtiradi (vedomost darvozasidan oldingi oy qatori)
+update public.salary_payments set "teacherId" = 'IQX-T9' where id = 'sp_IQX-T1_2026-11_n1';
+select (select "teacherId" from public.salary_payments where id = 'sp_IQX-T1_2026-11_n1') || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.salary_payments set paid = 1 where id = 'sp_IQX-T1_2026-11_n1' returning id) select count(*)::text from x$q$) as s9c \gset
+rollback to savepoint s9c;
+select zz.chk('S9c bog''langan maosh qatorida xodim kalitini almashtirish (ID tuzatish) — o''tadi; mijoz maosh qatorini umuman o''zgartira olmaydi (RLS: 0 qator)',
+  :'s9c' || ' | ' || zz.as('U_DIR', $q$with x as (update public.salary_payments set "teacherId" = 'IQX-T9' where id = 'sp_IQX-T1_2026-11_n1' returning id) select count(*)::text from x$q$),
+  '^IQX-T9 \| 0 \| 0$');
 select zz.chk('S9b maosh orderi «pulni berish» orqali qayta o''tkazilmaydi', zz.pay('U_KAS', (select id from public.cash_docs where "sourceId" = 'sp_IQT-T1_2026-12_n1')), '^ERR 42501 \[kassa:linked_doc\]');
 select zz.put('S10', zz.void('U_FM', (select id from public.cash_docs where "sourceId" = 'sp_IQX-T1_2026-11_n1'), 'Xato xodimga yozilgan'));
 select zz.chk('S10 maosh orderi shu kunda bekor qilindi: to''lov qatori ham olib tashlandi, qoldiq tiklandi',
@@ -227,10 +236,10 @@ select zz.chk('R6 biriktirilmagan to''lov: qisman qaytarish so''rovi rad',
   zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"payment","id":"pu1","amount":100000,"reason":"Egasi topilmadi","payee":"Sinov Begona Shaxs","clientRef":"rf_test_0006"}'), '^ERR 22023 \[kassa:refund\]');
 select zz.put('R6b', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"payment","id":"pu1","amount":250000,"reason":"Egasi topilmadi","payee":"Sinov Begona Shaxs","clientRef":"rf_test_0007"}'));
 select zz.put('R6c', zz.pay('U_KAS', zz.id('R6b')));
-select zz.chk('R6b biriktirilmagan to''lov to''liq qaytarildi: tomon — «boshqa», Dt 6310; to''lov «qaytarilgan»',
+select zz.chk('R6b biriktirilmagan to''lov to''liq qaytarildi: tomon — «boshqa», Dt 6390 (aniqlanmagan tushum, OP-16); to''lov «qaytarilgan»',
   (zz.get('R6c')::jsonb ->> 'partyType') || ':' || (zz.get('R6c')::jsonb ->> 'status') || ' / ' || zz.lines(zz.id('R6b')) || ' / ' || (select status from public.payments where id = 'pu1')
   || ' / ' || (select method || ':' || ("cashDocId" = zz.id('R6b')) from public.refunds where target = 'payment'),
-  '^other:posted / 6310>5010=250000@OP-15 / refunded / cash:true$');
+  '^other:posted / 6390>5010=250000@OP-16 / refunded / cash:true$');
 -- o'quvchi qatori yo'q (eski, «yetim» faktura): tomon — «boshqa», qaytarish baribir bajariladi
 set local session_replication_role = replica;
 insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values ('iz','T-OLD','Sinov Eski','2026-11',500000,500000,'paid');

@@ -811,9 +811,11 @@ bo‘lmasa yoki ishlatilmasa — blok yo‘q); F1.16 `fin-period.sql` — davr s
 qarz va avanslar, aniqlanmagan tushumlar, kassa qoldig‘i, hisoblagichlar, to‘lanmagan ish haqi, berilmagan qaytarishlar;
 o‘zgarmaydi, SHA-256 xeshi qayta hisoblab tekshiriladi; yillik / oylik / qo‘lda, bir kun uchun bir necha versiya) va
 davr qulfi (`fin_period_lock`: shu sanagacha to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi, o‘zgartirilmaydi —
-42501; server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida; davr faqat shu sanagacha
+42501; mavjud to‘lovning kuni, summasi yoki kanali o‘zgarsa yoki u bekor qilinsa — eski va yangi kun tekshiriladi;
+server (webhook) mustasno; orqaga surish faqat sabab bilan, o‘zgarishlar tarixida; davr faqat shu sanagacha
 bo‘lgan kassa kunlari yopilgan bo‘lsa yopiladi, yopilgan davrdagi kassa kuni qayta ochilmaydi); «Kassa» sahifasida «Davr»
-oynasi (Direktor — surat va qulf; 2-ro‘yxat — ko‘rish, xeshni tekshirish, JSON yuklab olish), sana maydonlarida eng erta
+oynasi (Direktor — surat va qulf; 2-ro‘yxat — ko‘rish, xeshni tekshirish, JSON yuklab olish — ismsiz, faqat ID bilan:
+FD-28, ismli surat jadvalini faqat Direktor o‘qiydi), sana maydonlarida eng erta
 sana = qulfdan keyingi kun; F1.11 — kassa ishga tushgach «Maosh berish»ni faqat kassa operatori (naqd) va Moliya
 menejeri (karta) ochadi, HR menejer pul bermaydi (server ham rad etadi); F1.18 — `migration/kassa-checks.sql`
 (o‘rnatishdan keyingi, faqat o‘qiydigan tekshiruv: 1–10-bandlar tuzilma va huquqlar — `search_path`, ichki `app.*`
@@ -827,16 +829,20 @@ orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar
 shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
 parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom; «Buxgalter» roli (F1.21 dan
 oldinga tortilgan minimal qism: «Tasdiqlash» va «Kassa» — so‘rovni tasdiqlash, kunni tekshirish, nazorat ro‘yxati; pul
-amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b). Sinov kassasi (CT-20)
+amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b). Kassa hujjatiga bog‘langan
+to‘lov qatorini (KO-1, o‘zaro hisob dalolatnomasi) faqat kassa funksiyalari o‘zgartiradi (`trg_kassa_pay_guard`: summa,
+kanal, o‘quvchi, holat, kun, havola, fiskal № — boshqa yo‘l bilan rad; bekor qilish — hujjat orqali); biriktirilmagan
+to‘lovni qaytarish — Dt 6390 Kt 5010 (OP-16). Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 51, `test-kassa-links.sql` 92, `test-kassa-report.sql` 52, `test-fin-period.sql` 32,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 52, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
-39; brauzerda yetti to‘liq stsenariy (190 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
-o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
-kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil ko‘rik; F1.20 (RLS relizi)
-— 1b-bosqichda.
+39; brauzerda yetti to‘liq stsenariy (191 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
+va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil (ko‘p agentli) ko‘rik —
+hali o‘tkazilmagan; F1.20 (RLS relizi) — 1b-bosqichda.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|

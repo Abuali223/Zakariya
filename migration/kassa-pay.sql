@@ -169,12 +169,13 @@ begin
     select 'pa_' || replace(gen_random_uuid()::text, '-', ''), p_pay_id, v_doc.id, v_sid, a ->> 'invoiceId', a ->> 'month',
            (a ->> 'fromCash')::numeric, (a ->> 'fromCredit')::numeric, a ->> 'account'
       from jsonb_array_elements(v_alloc) a;
-  perform app.kassa_flag(false);
-  -- To'lov qatori: order havolasi, fiskal chek №; kassa kuni — order kuni (hisobotlarda «tushgan kun» shu).
+  -- To'lov qatori: order havolasi, fiskal chek №; kassa kuni — order kuni (hisobotlarda «tushgan kun» shu). Bayroq ostida:
+  --   orderga bog'langan to'lov qatorini faqat kassa funksiyalari o'zgartiradi (kassa-links.sql: app.kassa_pay_guard).
   update public.payments
      set "cashDocId" = v_doc.id, "fiscalNo" = v_fiscal,
          raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('date', to_char(v_doc."businessDay", 'YYYY-MM-DD'), 'kassaNo', v_doc.no)
    where id = p_pay_id;
+  perform app.kassa_flag(false);
   return jsonb_build_object('docId', v_doc.id, 'form', 'KO1', 'no', v_doc.no, 'year', v_doc.year, 'day', to_char(v_doc."businessDay", 'YYYY-MM-DD'),
                             'late', v_doc.late, 'status', v_doc.status, 'desk', v_doc.desk, 'dup', false, 'allocation', v_mode);
 end $$;

@@ -193,7 +193,10 @@ begin
   if exists (select 1 from public.cash_days d where d.desk = v_desk) then
     raise exception 'Kassa ishga tushgan — boshlang''ich qoldiq endi o''zgarmaydi' using errcode = '42501', hint = 'kassa:started';
   end if;
-  if not v_k."isTest" then perform app.fin_lock_check(v_start, 'Birinchi kassa kuni'); end if;   -- yopilgan davrga kassa kuni qo'yilmaydi (fin-period.sql)
+  if not v_k."isTest" then   -- yopilgan davrga kassa kuni qo'yilmaydi (fin-period.sql); sozlama qatori — davr qulfi bilan navbatga
+    perform 1 from public.fin_org o where o.id = 'main' for share;
+    perform app.fin_lock_check(v_start, 'Birinchi kassa kuni');
+  end if;
   perform app.kassa_flag(true);
   -- Avval kiritilgan dalolatnoma bo'lsa — bekor qilinadi (raqami saqlanadi), yangisi yoziladi.
   if v_k."openingDocId" is not null then
@@ -418,7 +421,11 @@ begin
     raise exception 'Faqat oxirgi kassa kuni qayta ochiladi (keyingi kunda hujjat bor)' using errcode = 'P0001', hint = 'kassa:reopen_last';
   end if;
   -- Yopilgan davrdagi kun qayta ochilmaydi (qayta yopilishida farq hujjati o'zgarishi mumkin) — avval Direktor davrni qayta ochadi.
-  if not exists (select 1 from public.cash_desks k where k.id = v_desk and k."isTest") then perform app.fin_lock_check(p_day, 'Kassa kuni'); end if;
+  --   (fin_org qatori FOR SHARE: bir vaqtda davr yopilayotgan bo'lsa — u tugaguncha kutib, yangi qulf bilan tekshiradi)
+  if not exists (select 1 from public.cash_desks k where k.id = v_desk and k."isTest") then
+    perform 1 from public.fin_org o where o.id = 'main' for share;
+    perform app.fin_lock_check(p_day, 'Kassa kuni');
+  end if;
   perform app.kassa_flag(true);
   update public.cash_days
      set status = 'open', receipts = null, payouts = null, closing = null, counted = null, diff = null, "diffDocId" = null, denoms = null,

@@ -59,9 +59,9 @@ select '!!' as belgi, x.nima, x.bor, case when x.aniq then '' else 'kamida ' end
   from (values
     ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 17, true),
     ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 32, true),
-    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 60, true),
+    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 61, true),
     ('himoya triggerlari (trg_kassa_*, trg_fin_*)', (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                                                      where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 23, true),
+                                                      where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 24, true),
     ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 16, true),
     -- ma'lumotnomalar keyin to'ldirilishi mumkin — faqat kamayishi muammo
     ('hisobvaraqlar rejasi (gl_accounts)', (select count(*) from public.gl_accounts), 92, false),
@@ -126,6 +126,7 @@ select '!!' as belgi, w.jadval, w.trigger, case when t.oid is null then 'yo''q' 
                ('cash_days', 'trg_kassa_day_guard'), ('cash_desks', 'trg_kassa_desk_guard'), ('cash_doc_lines', 'trg_kassa_line_guard'),
                ('cash_docs', 'trg_kassa_doc_guard'), ('cash_docs', 'trg_kassa_doc_after'), ('doc_counters', 'trg_kassa_counter_guard'),
                ('expenses', 'trg_kassa_cash_guard'), ('salary_payments', 'trg_kassa_cash_guard'), ('staff_advances', 'trg_kassa_cash_guard'),
+               ('payments', 'trg_kassa_pay_guard'),
                ('payments', 'trg_fin_zlock'), ('expenses', 'trg_fin_zlock'), ('salary_payments', 'trg_fin_zlock'), ('staff_advances', 'trg_fin_zlock'),
                ('payments', 'trg_fin_server_ts'), ('expenses', 'trg_fin_server_ts'), ('salary_payments', 'trg_fin_server_ts'),
                ('staff_advances', 'trg_fin_server_ts'), ('refunds', 'trg_fin_server_ts')) w(jadval, trigger)

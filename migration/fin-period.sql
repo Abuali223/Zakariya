@@ -11,10 +11,10 @@ do $iqror_guard$ begin raise exception 'iqror: fin-period.sql ALOHIDA ishga tush
 --                                 to'lanmagan ish haqi, berilishi kerak bo'lgan qaytarishlar. O'zgarmaydi (faqat qo'shiladi),
 --                                 SHA-256 xeshi bilan — keyin bosh kitobning boshlang'ich qoldig'i shundan tekshiriladi (F4.4).
 --   fin_snapshot_take(p)        — suratni olish (FAQAT Direktor); xohlasa shu sanagacha davrni yopadi;
---   fin_snapshots_list() / fin_snapshot_get(id) — ro'yxat va to'liq surat (xeshi qayta hisoblanib tekshiriladi);
+--   fin_snapshots_list() / fin_snapshot_get(id) — ro'yxat va to'liq surat (xeshi qayta hisoblanib tekshiriladi; ismlar — faqat Direktorga);
 --   fin_period_lock(date, note) — davr qulfi: shu sanagacha (shu kun ham) pul yozuvlari kiritilmaydi va o'zgartirilmaydi
 --                                 (42501; server — webhook'lar — mustasno). Orqaga surish — faqat sabab bilan.
---   Qulf qamrovi (1a): to'lovlar (yangi yozuvning kassa kuni), «Buxgalteriya» xarajatlari, maosh to'lovlari, xodim avanslari
+--   Qulf qamrovi (1a): to'lovlar (yangi yozuvning kassa kuni; mavjud to'lovning kuni, summasi, kanali, bekor qilinishi), «Buxgalteriya» xarajatlari, maosh to'lovlari, xodim avanslari
 --   (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas; lekin:
 --   davr faqat shu sanagacha bo'lgan kassa kunlari yopilgan bo'lsa yopiladi (app.fin_lock_ready), yopilgan davrdagi kassa kuni
 --   qayta ochilmaydi va birinchi kassa kuni yopilgan davrga qo'yilmaydi (kassa-day.sql: kassa_day_reopen, kassa_opening_set).
@@ -24,7 +24,8 @@ do $iqror_guard$ begin raise exception 'iqror: fin-period.sql ALOHIDA ishga tush
 
 -- ---------- Jadval ----------
 --   public.fin_snapshots kassa.sql da yaratilgan (id, kind, "asOf", payload, hash, note, "createdAt", "createdBy"; faqat qo'shiladi —
---   app.kassa_append_only: o'zgartirish va o'chirish yo'q, yozish faqat funksiya orqali; o'qish — Direktor va 2-ro'yxat).
+--   app.kassa_append_only: o'zgartirish va o'chirish yo'q, yozish faqat funksiya orqali; jadvalni faqat Direktor o'qiydi —
+--   2-ro'yxat fin_snapshot_get orqali ismsiz nusxa oladi, FD-28).
 --   Bu yerda — qo'shimcha ustunlar: qaysi KUN oxiri holati, shu kun uchun nechanchi surat, kechikib olinganmi.
 alter table public.fin_snapshots add column if not exists "asOfDay" date;
 alter table public.fin_snapshots add column if not exists version int not null default 1 check (version > 0);
@@ -125,16 +126,33 @@ end $$;
 revoke all on function app.fin_text_day(text) from public, anon, authenticated;
 
 -- To'lovlar: YANGI yozuvning kassa kuni yopilgan davrga tushmasin (qo'lda to'lovda kassir tanlagan «Sana»).
---   Mavjud to'lov holatining o'zgarishi (qaytarish, biriktirish) — bugungi amal, cheklanmaydi.
+--   Mavjud to'lov holatining o'zgarishi (biriktirish, bo'lish, qaytarish) — bugungi amal, cheklanmaydi. Lekin to'lovning KUNI
+--   (raw.manual / raw.date), SUMMASI yoki KANALI o'zgarsa, yoki yozuv BEKOR qilinsa / bekori qaytarilsa — eski ham, yangi kun ham
+--   yopilgan davrga tushmasin (aks holda yopilgan oy tushumi orqaga o'zgarardi yoki yangi kunga yopilgan davr yozuvi «ko'chib» kelardi).
+--   Mijozning setDoc'i — upsert (INSERT … ON CONFLICT DO UPDATE): mavjud qator uchun taklif qilingan INSERT qatori tekshirilmaydi
+--   (createdAt unda — hozirgi payt, raw esa eski: oddiy belgi qo'yish ham «yopilgan davr» bo'lib rad etilardi); o'zgarishni BEFORE
+--   UPDATE tarmog'i tekshiradi, oddiy INSERT esa noyoblik xatosi bilan to'xtaydi.
 create or replace function app.fin_lock_payments() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_new date := app.pay_day(coalesce(new."createdAt", app.fin_now()), new.raw); v_old date;
 begin
-  perform app.fin_lock_check(app.pay_day(coalesce(new."createdAt", app.fin_now()), new.raw), 'To‘lov');
+  if tg_op = 'INSERT' then
+    if not exists (select 1 from public.payments p where p.id = new.id) then
+      perform app.fin_lock_check(v_new, 'To‘lov');
+    end if;
+  else
+    v_old := app.pay_day(old."createdAt", old.raw);
+    if v_new is distinct from v_old or new.amount is distinct from old.amount or new.provider is distinct from old.provider
+       or (new.status is distinct from old.status and 'canceled' in (coalesce(new.status, ''), coalesce(old.status, ''))) then
+      perform app.fin_lock_check(v_old, 'To‘lov');
+      perform app.fin_lock_check(v_new, 'To‘lov');
+    end if;
+  end if;
   return new;
 end $$;
 revoke all on function app.fin_lock_payments() from public, anon, authenticated;
-drop trigger if exists trg_fin_zlock on public.payments;   -- nomi «z» bilan: trg_fin_server_ts dan KEYIN ishlaydi (createdAt serverdan qo'yilgan bo'ladi)
-create trigger trg_fin_zlock before insert on public.payments for each row execute function app.fin_lock_payments();
+drop trigger if exists trg_fin_zlock on public.payments;   -- nomi «z» bilan: trg_fin_server_ts dan KEYIN ishlaydi (createdAt serverdan qo'yilgan / tiklangan bo'ladi)
+create trigger trg_fin_zlock before insert or update on public.payments for each row execute function app.fin_lock_payments();
 
 -- Xarajat, maosh to'lovi, xodim avansi: yopilgan davr sanasi bilan yangi yozuv ham, o'sha davr yozuvini o'zgartirish / o'chirish ham yo'q.
 create or replace function app.fin_lock_rows() returns trigger
@@ -254,17 +272,25 @@ end $$;
 revoke all on function public.fin_snapshots_list() from public, anon;
 grant execute on function public.fin_snapshots_list() to authenticated;
 
--- To'liq surat; "hashOk" — saqlangan mazmun xeshi qayta hisoblanib solishtirilgan.
+-- To'liq surat; "hashOk" — saqlangan mazmun xeshi qayta hisoblanib solishtirilgan (har doim to'liq mazmun bo'yicha).
+--   Ismlar (o'quvchi, xodim, qaytarish oluvchisi) — faqat Direktorga; 2-ro'yxatga ID bilan, ismsiz ("masked": true) — FD-28 / D7.
 create or replace function public.fin_snapshot_get(p_id text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare s public.fin_snapshots%rowtype;
+declare s public.fin_snapshots%rowtype; v_dir boolean := app.is_admin(); v_data jsonb;
 begin
-  if not (app.is_admin() or app.fin_list2()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if not (v_dir or app.fin_list2()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   select * into s from public.fin_snapshots x where x.id = p_id;
   if not found then raise exception 'Surat topilmadi' using errcode = '22023', hint = 'fin:not_found'; end if;
+  v_data := s.payload;
+  if not v_dir then
+    v_data := v_data
+      || jsonb_build_object('students', coalesce((select jsonb_agg(x - 'name' order by o) from jsonb_array_elements(v_data -> 'students') with ordinality t(x, o)), '[]'::jsonb),
+                            'salary', coalesce((select jsonb_agg(x - 'name' order by o) from jsonb_array_elements(v_data -> 'salary') with ordinality t(x, o)), '[]'::jsonb),
+                            'refundsPending', coalesce((select jsonb_agg(x - 'party' order by o) from jsonb_array_elements(v_data -> 'refundsPending') with ordinality t(x, o)), '[]'::jsonb));
+  end if;
   return jsonb_build_object('ok', true, 'id', s.id, 'kind', s.kind, 'asOf', s."asOfDay", 'version', s.version, 'takenAt', s."createdAt", 'takenBy', s."createdBy",
-                            'late', s.late, 'note', s.note, 'totals', s.payload -> 'totals', 'hash', s.hash,
-                            'hashOk', s.hash = encode(sha256(convert_to(s.payload::text, 'UTF8')), 'hex'), 'data', s.payload);
+                            'late', s.late, 'note', s.note, 'totals', s.payload -> 'totals', 'hash', s.hash, 'masked', not v_dir,
+                            'hashOk', s.hash = encode(sha256(convert_to(s.payload::text, 'UTF8')), 'hex'), 'data', v_data);
 end $$;
 revoke all on function public.fin_snapshot_get(text) from public, anon;
 grant execute on function public.fin_snapshot_get(text) to authenticated;

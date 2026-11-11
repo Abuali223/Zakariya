@@ -92,6 +92,11 @@ begin
   v_m := coalesce(new.method, '');
   if tg_op = 'UPDATE' then
     if old."cashDocId" is not null or new."cashDocId" is not null then
+      -- «Yangi noyob ID berish» (id-guards.sql: rekey_payroll_id) xodim kalitini tarix qatorlarida ham almashtiradi — faqat shu ustun.
+      if coalesce(current_setting('iqror.rekey', true), '') = '1' and tg_table_name in ('salary_payments', 'staff_advances')
+         and (to_jsonb(new) - 'updatedAt' - 'teacherId') = (to_jsonb(old) - 'updatedAt' - 'teacherId') then
+        return new;
+      end if;
       if (to_jsonb(new) - 'updatedAt') is distinct from (to_jsonb(old) - 'updatedAt') then
         raise exception 'Bu yozuv kassa hujjatiga bog''langan — o''zgartirilmaydi' using errcode = '42501', hint = 'kassa:linked_row';
       end if;
@@ -222,6 +227,49 @@ begin
 end $$;
 revoke all on function app.kassa_advance_check(text) from public, anon, authenticated;
 
+-- ---------- Kassa hujjatiga bog'langan to'lov qatori (naqd o'quv to'lovi KO-1, o'zaro hisob dalolatnomasi) ----------
+--   Order va dalolatnoma o'zgarmaydi — ularga bog'langan to'lov qatori ham: summa, kanal, o'quvchi, holat, kun (raw.manual / raw.date),
+--   havola va fiskal chek № faqat kassa funksiyalari (bayroq) yoki server orqali o'zgaradi. Bekor qilish — «Kassa»da hujjat orqali
+--   (to'lov ham, taqsimot ham teskari bo'ladi). Boshqa raw maydonlari (izoh, belgilar) — avvalgidek. Havolani ham faqat kassa qo'yadi.
+create or replace function app.kassa_pay_guard() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(current_setting('iqror.kassa_rpc', true), '') = '1' or app.is_system() then return coalesce(new, old); end if;
+  if tg_op = 'DELETE' then
+    if old."cashDocId" is not null then
+      raise exception 'Bu to''lov kassa hujjatiga bog''langan — «Kassa» bo''limida hujjatni bekor qilish orqali bekor qilinadi' using errcode = '42501', hint = 'kassa:linked_row';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'INSERT' then
+    if new."cashDocId" is not null then
+      raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
+    end if;
+    return new;
+  end if;
+  if old."cashDocId" is null then
+    if new."cashDocId" is not null then
+      raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
+    end if;
+    return new;
+  end if;
+  -- Deploy paytidagi kalit kanonlash (invoice-guards.sql: o'quvchi doc id -> studentId) — faqat «studentId» o'zgarsa, ruxsat.
+  if coalesce(current_setting('iqror.migrating', true), '') = '1'
+     and (to_jsonb(new) - 'studentId' - 'statusAt') = (to_jsonb(old) - 'studentId' - 'statusAt') then
+    return new;
+  end if;
+  if new.amount is distinct from old.amount or new.provider is distinct from old.provider or new."studentId" is distinct from old."studentId"
+     or new.status is distinct from old.status or new.matched is distinct from old.matched or new."cashDocId" is distinct from old."cashDocId"
+     or new."fiscalNo" is distinct from old."fiscalNo" or new."createdAt" is distinct from old."createdAt"
+     or app.pay_day(new."createdAt", new.raw) is distinct from app.pay_day(old."createdAt", old.raw) then
+    raise exception 'Bu to''lov kassa hujjatiga bog''langan — o''zgartirilmaydi (xato bo''lsa «Kassa» bo''limida hujjatni bekor qiling)' using errcode = '42501', hint = 'kassa:linked_row';
+  end if;
+  return new;
+end $$;
+revoke all on function app.kassa_pay_guard() from public, anon, authenticated;
+drop trigger if exists trg_kassa_pay_guard on public.payments;   -- trg_fin_server_ts va trg_fin_zlock dan keyin ishlaydi (alifbo tartibi)
+create trigger trg_kassa_pay_guard before insert or update or delete on public.payments for each row execute function app.kassa_pay_guard();
+
 -- ---------- Qaytarish: Direktor tasdiqlaydi (so'rov), pul kassadan beriladi ----------
 --   p: target ('invoice' | 'payment'), id, amount, reason, clawback (avansni ham qaytarish), payee (kimga beriladi — to'liq F.I.Sh.),
 --      requestDate (ariza sanasi, ixtiyoriy), clientRef. Hech narsa o'zgarmaydi — faqat tasdiqlangan KO-2 so'rovi paydo bo'ladi;
@@ -281,7 +329,8 @@ begin
       raise exception 'Biriktirilmagan to''lov faqat to''liq qaytariladi (% so''m)', v_pamt using errcode = '22023', hint = 'kassa:refund';
     end if;
     v_claw := false;
-    v_lines := jsonb_build_array(jsonb_build_object('debit', '6310', 'credit', '5010', 'amount', v_amount,
+    -- biriktirilmagan (aniqlanmagan) tushum 6390 da turadi (PR-13, OP-16) — qaytarish ham shu hisobdan
+    v_lines := jsonb_build_array(jsonb_build_object('debit', '6390', 'credit', '5010', 'amount', v_amount, 'articleId', 'OP-16',
                                                     'analytics', jsonb_build_object('paymentId', v_tid)));
   end if;
 

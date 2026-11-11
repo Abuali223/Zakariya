@@ -612,7 +612,8 @@ async function openPeriodForm() {
     try { const g = await call('fin_snapshot_get', { p_id: b.dataset.snapChk }); C.toast(g.hashOk ? 'Surat butun: xesh mos ✓' : 'DIQQAT: surat xeshi mos emas — administratorga xabar bering', !g.hashOk); }
     catch (e) { C.toast(errText(e), true); } b.disabled = false; });
   $('#modal').querySelectorAll('[data-snap-dl]').forEach(b => b.onclick = async () => { b.disabled = true;
-    try { const g = await call('fin_snapshot_get', { p_id: b.dataset.snapDl }); saveJson(`davr-surati-${g.asOf}-${g.version}.json`, { id: g.id, kind: g.kind, asOf: g.asOf, version: g.version, takenAt: g.takenAt, hash: g.hash, data: g.data }); }
+    try { const g = await call('fin_snapshot_get', { p_id: b.dataset.snapDl }); saveJson(`davr-surati-${g.asOf}-${g.version}${g.masked ? '-ismsiz' : ''}.json`, { id: g.id, kind: g.kind, asOf: g.asOf, version: g.version, takenAt: g.takenAt, hash: g.hash, masked: !!g.masked, data: g.data });
+      if (g.masked) C.toast('Saqlandi: ismsiz (ID bilan) — ismli nusxa faqat Direktorda'); }
     catch (e) { C.toast(errText(e), true); } b.disabled = false; });
 }
 

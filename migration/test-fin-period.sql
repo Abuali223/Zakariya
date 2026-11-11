@@ -98,10 +98,15 @@ select zz.chk('S1a jamlar: qarzdorlik 600 000 (4010), kelgusi oy fakturasi 1 000
     || ':' || (zz.get('S1')::jsonb -> 'totals' ->> 'unmatchedCount') || ':' || zz.tot(zz.get('S1'), 'salaryPayable') || ':' || (zz.get('S1')::jsonb -> 'totals' ->> 'students') || ':' || zz.tot(zz.get('S1'), 'cash'),
   '^600000:1000000:1000000:250000:300000:1:2000000:2:0$');
 select zz.put('S2', zz.as('U_FM', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$));
-select zz.chk('S2 to''liq surat (2-ro''yxat ko''radi): xesh mos; o''quvchilar — T-1 (3 faktura) va T-2 (avans); to''liq to''langan va bekor qilingan fakturali T-3 yo''q',
-  (zz.get('S2')::jsonb ->> 'hashOk') || ':' || (select string_agg((s ->> 'studentId') || '/' || (s ->> 'name') || '/' || jsonb_array_length(s -> 'invoices') || '/' || trim_scale((s ->> 'credit')::numeric), ',' order by s ->> 'studentId')
+select zz.chk('S2 to''liq surat (2-ro''yxat ko''radi — ismsiz, ID bilan): xesh mos; o''quvchilar — T-1 (3 faktura) va T-2 (avans); to''liq to''langan va bekor qilingan fakturali T-3 yo''q',
+  (zz.get('S2')::jsonb ->> 'hashOk') || ':' || (zz.get('S2')::jsonb ->> 'masked') || ':' || (select string_agg((s ->> 'studentId') || '/' || coalesce(s ->> 'name', '-') || '/' || jsonb_array_length(s -> 'invoices') || '/' || trim_scale((s ->> 'credit')::numeric), ',' order by s ->> 'studentId')
                                                   from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'students') s),
-  '^true:T-1/Sinov A/3/0,T-2/Sinov B/0/250000$');
+  '^true:true:T-1/-/3/0,T-2/-/0/250000$');
+select zz.chk('S2a Direktor — ismlari bilan (FD-28: ismli nusxa faqat Direktorda); 2-ro''yxatda xodim ismi ham yo''q',
+  (select (j ->> 'masked') || ':' || (select string_agg((s ->> 'studentId') || '/' || (s ->> 'name'), ',' order by s ->> 'studentId') from jsonb_array_elements(j -> 'data' -> 'students') s)
+     from (select zz.as('U_DIR', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$)::jsonb as j) q)
+  || ' | ' || (select count(*)::text from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'salary') x where x ? 'name'),
+  '^false:T-1/Sinov A,T-2/Sinov B \| 0$');
 select zz.chk('S2b fakturalar tafsiloti; ish haqi qatori — faqat qoldig''i bor xodim; biriktirilmagan tushum',
   (select string_agg((i ->> 'id') || '=' || (i ->> 'month') || ':' || trim_scale((i ->> 'amount')::numeric) || '-' || trim_scale((i ->> 'paid')::numeric) || ':' || (i ->> 'status'), ',' order by i ->> 'id')
      from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'students' -> 0 -> 'invoices') i)
@@ -135,6 +140,34 @@ select zz.chk('L1c server (webhook) yopilgan davrga ham yoza oladi — tizim mus
   zz.as('SYSTEM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "createdAt") values ('wh_old_1', 'T-1', 'click', 5000, 'pending', true, '{}', '2026-12-30 09:00+05') returning id) select id from x$q$), '^wh_old_1$');
 select zz.chk('L1d eski to''lov holatini o''zgartirish (biriktirish, qaytarish) cheklanmaydi',
   zz.as('SYSTEM', $q$with x as (update public.payments set status = 'refunded' where id = 'pu1' returning status) select status from x$q$), '^refunded$');
+-- Mavjud to'lov: kuni (raw.manual / raw.date), summasi yoki kanali o'zgarsa — eski va yangi kun qulfga tekshiriladi.
+set local session_replication_role = replica;
+insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "createdAt") values
+  ('man_dec_late', 'T-1', 'bank', 70000, 'applied', true, '{"manual":true,"date":"2026-12-30"}', '2027-01-01 10:00+05'),   -- dekabr kuni bilan, yanvarda kiritilgan
+  ('man_jan_1', 'T-1', 'bank', 80000, 'applied', true, '{"manual":true,"date":"2027-01-01"}', '2027-01-01 11:00+05'),
+  ('man_jan_ph', 'T-1', 'bank', 90000, 'pending', true, '{"manual":true,"date":"2027-01-01"}', '2027-01-01 12:00+05');   -- takror (fantom) yozuv
+set local session_replication_role = origin;
+select zz.chk('L1e yopilgan davr to''lovini ochiq kunga ko''chirish, ochiq kun to''lovini yopilgan davrga ko''chirish, summa va kanalni o''zgartirish — rad',
+  zz.as('U_FM', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"date":"2026-12-29"}' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_KAS', $q$with x as (update public.payments set amount = 1 where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_FM', $q$with x as (update public.payments set provider = 'click' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  (select string_agg(app.pay_day("createdAt", raw)::text || '/' || trim_scale(amount)::text, ',' order by id) from public.payments where id in ('man_dec_late', 'man_jan_1')),
+  '^ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| 2026-12-30/70000,2027-01-01/80000$');
+select zz.chk('L1f kunga ta''sir qilmaydigan o''zgarish (izoh) va ochiq davr ichida kunni o''zgartirish — avvalgidek; server — mustasno',
+  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"note":"izoh"}' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_FM', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
+  zz.as('SYSTEM', $q$with x as (update public.payments set amount = 70001 where id = 'man_dec_late' returning id) select id from x$q$),
+  '^man_dec_late \| man_jan_1 \| man_dec_late$');
+-- Sahifaning setDoc'i — upsert (INSERT … ON CONFLICT (id) DO UPDATE, faqat berilgan ustunlar): «qo'lda tuzatildi» belgisi, fantom yozuvni bekor qilish.
+select zz.put('L1g',
+  zz.as('U_DIR', $q$with x as (insert into public.payments (id, raw) values ('man_dec_late', (select raw from public.payments where id = 'man_dec_late') || '{"manualReverseDone":true}') on conflict (id) do update set raw = excluded.raw returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (insert into public.payments (id, status) values ('man_dec_late', 'canceled') on conflict (id) do update set status = excluded.status returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_FM', $q$with x as (update public.payments set status = 'canceled' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (insert into public.payments (id, status) values ('man_jan_ph', 'canceled') on conflict (id) do update set status = excluded.status returning id) select id from x$q$));
+select zz.chk('L1g upsert bilan belgi qo''yish yopilgan davr to''lovida ham o''tadi; bekor qilish (upsert yoki UPDATE) — rad; ochiq davrda fantom yozuvni bekor qilish — avvalgidek',
+  zz.get('L1g') || ' | ' || (select string_agg(id || '/' || status || '/' || coalesce(raw ->> 'manualReverseDone', '-') || '/' || app.pay_day("createdAt", raw)::text, ',' order by id) from public.payments where id in ('man_dec_late', 'man_jan_ph')),
+  '^man_dec_late \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| man_jan_ph \| man_dec_late/applied/true/2026-12-30,man_jan_ph/canceled/-/2027-01-01$');
 select zz.chk('L2 xarajat: yopilgan davr sanasi bilan yangi yozuv — rad; o''sha davr yozuvini o''zgartirish va o''chirish — rad',
   zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_l1', '2026-12-30', '2026-12', 'Boshqa', 1000, 'kech', 'bank') returning id) select id from x$q$) || ' | ' ||
   zz.as('U_FM', $q$with x as (update public.expenses set amount = 1 where id = 'ex_dec' returning id) select count(*)::text from x$q$) || ' | ' ||
@@ -191,9 +224,10 @@ select zz.chk('G1 kassir va o''qituvchi suratlarni ko''ra olmaydi; anon — hech
   '^ERR 42501.* \| ERR 42501.* \| ERR 42501.* \| 0 \| ERR 42501');
 select zz.chk('G2 ichki funksiyalar mijozga yopiq',
   zz.as('U_DIR', $q$select app.fin_snapshot_data('2026-12-31')::text$q$) || ' | ' || zz.as('U_DIR', $q$select app.fin_lock_check('2026-12-31', 'x')::text$q$), '^ERR 42501.* \| ERR 42501');
-select zz.chk('G3 2-ro''yxat jadvaldan o''qiy oladi (RLS), yoza olmaydi',
-  zz.as('U_FM', $q$select count(*)::text from public.fin_snapshots$q$) || ' | ' || zz.as('U_FM', $q$with x as (insert into public.fin_snapshots (id, kind, "asOf", payload, hash) values ('x','manual',now(),'{}','x') returning id) select id from x$q$),
-  '^3 \| ERR 42501');
+select zz.chk('G3 jadvalni to''g''ridan-to''g''ri faqat Direktor o''qiydi (ismlar bor); 2-ro''yxat — 0 qator (faqat funksiya orqali, ismsiz); hech kim yoza olmaydi',
+  zz.as('U_DIR', $q$select count(*)::text from public.fin_snapshots$q$) || ' | ' || zz.as('U_FM', $q$select count(*)::text from public.fin_snapshots$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.fin_snapshots (id, kind, "asOf", payload, hash) values ('x','manual',now(),'{}','x') returning id) select id from x$q$),
+  '^3 \| 0 \| ERR 42501');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 600), '<null>') || ' ; kutilgan: ' || pat || ')' end

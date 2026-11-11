@@ -82,7 +82,13 @@ bilan yozadi (kassa orderisiz); naqd — faqat kassir.
 menejeri tasdiqlangan xarajatlarni «Buxgalteriya»ga kiritadi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
 
 **Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → Direktor «Davr»da surat oladi va
-davrni yopadi. «Davr» oynasida suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq.
+davrni yopadi. «Davr» oynasida suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq. Sizga yuklanadigan JSON —
+ismsiz (o‘quvchi va xodim faqat ID bilan, fayl nomida «-ismsiz»); ismli to‘liq nusxa faqat Direktorda — arxivga Direktor yuklagani
+qo‘yiladi.
+
+**Kassa orqali o‘tgan to‘lov** (naqd o‘quv to‘lovi, o‘zaro hisob) summasi, o‘quvchisi, sanasi yoki usuli «To‘lovlar»dan
+o‘zgartirilmaydi va bekor qilinmaydi — xato bo‘lsa shu kuni hujjat «Kassa»da bekor qilinadi, keyin esa Direktor «Qaytarish»
+qiladi (1-bo‘lim, «Xato qildim»). Yopilgan davrdagi to‘lovning sanasi, summasi, usuli o‘zgartirilmaydi va u bekor qilinmaydi.
 
 ## 3. Direktor
 

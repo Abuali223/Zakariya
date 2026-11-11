@@ -174,6 +174,31 @@ select zz.chk('V5 avansga tushgan to''lov ham bekor qilinadi (Moliya menejeri): 
   (select trim_scale(credit)::text from public.student_credit where id = 'T-2') || ':' ||
   (select trim_scale(delta) || '/' || reason from public.credit_ledger where "studentId" = 'T-2' order by "at" desc, delta limit 1), '^110000:-7000/manual$');
 
+-- ---------- Orderga bog'langan to'lov qatori: faqat kassa funksiyalari orqali ----------
+select zz.put('LK', (select id from public.payments where "cashDocId" is not null and status = 'applied' and provider = 'cash' order by id limit 1));
+select zz.chk('LK1 orderga bog''langan to''lov: summa, holat (bekor), o''quvchi, kun, havola va fiskal № ni to''g''ridan-to''g''ri o''zgartirib bo''lmaydi',
+  zz.as('U_FM', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_KAS', format($q$with x as (update public.payments set status = 'canceled' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_FM', format($q$with x as (update public.payments set "studentId" = 'T-2' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_FM', format($q$with x as (update public.payments set raw = raw || '{"date":"2027-01-03"}' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set "cashDocId" = null, "fiscalNo" = null where id = %L returning id) select id from x$q$, zz.get('LK'))),
+  '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\]');
+select zz.chk('LK2 havolani faqat kassa qo''yadi: yangi qatorda ham, bog''lanmagan qatorga ham — rad; bog''lanmagan qator va izoh — avvalgidek',
+  zz.as('U_FM', format($q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "cashDocId") values ('fake_lk', 'T-1', 'cash', 1, 'applied', true, '{}', %L) returning id) select id from x$q$,
+                       (select "cashDocId" from public.payments where id = zz.get('LK')))) || ' | ' ||
+  zz.as('U_FM', format($q$with x as (update public.payments set "cashDocId" = %L where id = 'man_j1_0001' returning id) select id from x$q$,
+                       (select "cashDocId" from public.payments where id = zz.get('LK')))) || ' | ' ||
+  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"note":"tuzatildi"}' where id = 'man_j1_0001' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_FM', format($q$with x as (update public.payments set raw = raw || '{"manualReverseDone":true}' where id = %L returning id) select id from x$q$, zz.get('LK'))),
+  '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| man_j1_0001 \| ' || zz.get('LK') || '$');
+savepoint lk3;
+set local iqror.migrating = '1';
+update public.payments set "studentId" = 'kanon-' || "studentId" where id = zz.get('LK');
+select (select count(*)::text from public.payments where id = zz.get('LK') and "studentId" like 'kanon-%')
+  || ' | ' || zz.as('U_FM', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) as lk3 \gset
+rollback to savepoint lk3;   -- (savepoint ichidagi natija psql o'zgaruvchisida saqlanadi)
+select zz.chk('LK3 deploy paytidagi kalit kanonlash (faqat «studentId») o''tadi; boshqa o''zgarish deploy paytida ham rad', :'lk3', '^1 \| ERR 42501 \[kassa:linked_row\]');
+
 -- ---------- Kun, moslik ----------
 select zz.chk('J16 kassa qoldig''i = naqd to''lovlar yig''indisi (ishga tushgandan beri)',
   zz.as('U_KAS', $q$select (s ->> 'balance') from public.kassa_state('main') s$q$) || '/' ||
