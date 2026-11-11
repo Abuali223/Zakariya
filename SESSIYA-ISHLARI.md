@@ -1680,6 +1680,23 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   `e2e-kassa6` 31 — moliya menejeri yuklagan JSON ismsiz).
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ishga tushirishga ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 65) Deploy tayyorligi: jonli versiyadan joriy versiyaga yangilanish yo'li tekshirildi — 2026-11-11
+
+- **Jonli sayt holati (faqat o'qish, ochiq sahifa fayllari):** `admin.html` — `47b31a8` (9-noyabr; dizayn v2 1-bosqichi),
+  `index.html` — joriy bilan bir xil, `assets/js/fin-kassa.js` — yo'q. Demak saytda hali yo'q: dizayn v2 2-bosqichi (`6446f57`),
+  A relizi (`fin-prereq.sql` va bog'liq tuzatmalar), kassa moduli kodi (u `--dev` da — deploy bilan bazaga chiqmaydi, sahifada yashirin).
+- **Lokal simulyatsiya (deploy.sh bilan aynan bir xil: `chain.sh | psql`, bitta tranzaksiya, lock_timeout):** `47b31a8` zanjiri +
+  sintetik ma'lumot → joriy zanjir: 89 fayl, xatosiz, ma'lumot (soni va summalari) o'zgarmadi; qayta ishga tushirish xatosiz;
+  `verify-db.sh` — «BIR XIL» (2984 obyekt); `kassa-checks.sql` — «kassa moduli o'rnatilmagan»; `predeploy-checks.sql` (yangi fayl)
+  eski bazada xatosiz; `full-deploy.sh` keyingi tekshiruvidagi barcha «kutilgan» qiymatlar mos; kassa bloki uch holatda
+  (modul yo'q / toza / ataylab buzilgan) to'g'ri; `deploy.sh` 5-bosqich markerlari joriy fayllarda bor.
+- **Brauzer, yangilangan bazada:** yangi sahifa — to'lov 12/12, eski oqimlar 11/11, dizayn (kompyuter va telefon) xatosiz; eski
+  sahifa (`47b31a8`, ochiq qolgan oynalar) — onlayn va oflayn naqd to'lov 9/9, yetim «pending» yo'q. Server kodi: payments 192,
+  auth, `tg-daily` 39.
+- **Kutiladigan ma'lumot qatori:** prod'da takroriy o'qituvchi/xodim ID 2 ta (A relizi tekshiruvidan ma'lum) — deploy xatosi emas,
+  kartochkada «Yangi noyob ID berish» bilan bir martalik tuzatiladi.
+- Deploy buyrug'i — `migration/deploy/full-deploy.sh` boshidagi qator (egasi ishga tushiradi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
