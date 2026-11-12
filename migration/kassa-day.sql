@@ -12,11 +12,13 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_handover(p)           — smena topshirish-qabul sanashi (kun ochiq qoladi, kassir almashadi; farq — darhol hujjat);
 --   kassa_day_verify(...)       — 2-ro'yxat / Direktor tekshiradi: tekshiruvchi ≠ yopuvchi va ≠ shu kun hujjat o'tkazganlar;
 --                                 raqamlarda bo'shliq, xesh yoki jamlar mos kelmasa — rad;
+--   kassa_day_z(p)              — onlayn kassa (NKM) Z-hisobotini kiritish / tuzatish (kun tekshirilguncha; yopishda ham beriladi);
+--                                 tizim Z ni fiskal chekli KO-1 va terminal to'lovlari bilan solishtiradi (F1.26);
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
 --   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
---                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit …);
+--                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit, Z-hisobot …);
 --   app.kassa_daily(day)        — Direktorning kunlik Telegram hisobotidagi kassa bloki va nazorat qatori (RP-05; director_daily chaqiradi);
 --   kassa_refs() / kassa_people() / kassa_overview(desk) / kassa_doc_get(id) — «Kassa» ekrani va chop etish uchun o'qish;
 --   kassa_print_mark(kind, id)  — chop etish jurnali: birinchi chop etish — asl nusxa, keyingilari — «НУСХА».
@@ -148,6 +150,91 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_names(text[]) from public, anon, authenticated;
 
+-- ---------- Onlayn kassa (NKM) Z-hisoboti (F1.26, buxgalter ko'rigi M6) ----------
+--   Kun oxirida kassir NKM Z-hisobotidagi SOTUV jamlarini kiritadi: naqd va bank kartasi (qaytarishlarsiz). Tizim solishtiradi:
+--     naqd  ↔ shu kunning fiskal chekli kirim orderlari (KO-1, "fiscalNo" bor, bekor qilinmagan; fiskal cheksiz istisno — chekda yo'q);
+--     karta ↔ shu kunning terminal to'lovlari («💵 To‘lov» → Terminal; kassa kuni bo'yicha, app.fin_receipts bilan bir xil qoida).
+--   Faktlar (Z raqami va summalar yoki «Z-hisobot yo'q» + sabab) kun hodisasi bo'lib yoziladi (cash_day_events, 'zreport'; faqat
+--   qo'shiladi, oxirgisi amalda); kutilgan summalar va farq har safar hujjatlardan hisoblanadi (qayta ochilgan kunda ham to'g'ri).
+--   Kiritilmagan yoki mos kelmagan Z kunni yopishga to'sqinlik qilmaydi: nazorat ro'yxatida ko'rinadi, kunni tekshirishda izoh
+--   talab qilinadi. Sinov kassasida Z-hisobot yuritilmaydi (karta to'lovlari asosiy kassaga tegishli).
+create or replace function app.kassa_z_state(p_day_id text) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_d public.cash_days%rowtype; v_e public.cash_day_events%rowtype; v_cash numeric; v_ncash int; v_card numeric; v_ncard int;
+  v_rec boolean; v_miss boolean; v_need boolean; v_zc numeric; v_zk numeric; v_dc numeric; v_dk numeric;
+begin
+  select * into v_d from public.cash_days d where d.id = p_day_id;
+  if not found then return null; end if;
+  if coalesce((select k."isTest" from public.cash_desks k where k.id = v_d.desk), false) then return jsonb_build_object('applies', false); end if;
+  select coalesce(sum(c.amount), 0), count(*) into v_cash, v_ncash from public.cash_docs c
+   where c."dayId" = v_d.id and c.form = 'KO1' and c.status = 'posted' and c."fiscalNo" is not null;
+  -- terminal to'lovlari (app.fin_receipts bilan bir xil: kassa kuni = pay_day; avval arzon filtr — usul va kiritilgan vaqt oralig'i)
+  select coalesce(sum(p.amount), 0), count(*) into v_card, v_ncard from public.payments p
+   where p.provider = 'terminal'
+     and p."createdAt" >= (v_d.day::timestamp at time zone 'Asia/Tashkent')
+     and p."createdAt" <  ((v_d.day + 32)::timestamp at time zone 'Asia/Tashkent')
+     and app.counts_as_receipt(p.id, p.status, p.provider, p.amount)
+     and app.pay_day(p."createdAt", p.raw) = v_d.day;
+  select * into v_e from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'zreport' order by e.at desc, e.id desc limit 1;
+  v_rec := v_e.id is not null;
+  v_miss := v_rec and coalesce((v_e.data ->> 'missing')::boolean, false);
+  v_need := v_cash > 0 or v_card > 0;
+  if v_rec and not v_miss then
+    v_zc := (v_e.data ->> 'cash')::numeric; v_zk := (v_e.data ->> 'card')::numeric;
+    v_dc := v_zc - v_cash; v_dk := v_zk - v_card;
+  end if;
+  return jsonb_build_object('applies', true, 'needed', v_need, 'recorded', v_rec, 'missing', v_miss,
+    'no', v_e.data ->> 'no', 'reason', v_e.reason, 'cash', v_zc, 'card', v_zk, 'byUid', v_e."byUid", 'at', v_e.at,
+    'expCash', v_cash, 'nCash', v_ncash, 'expCard', v_card, 'nCard', v_ncard, 'diffCash', v_dc, 'diffCard', v_dk,
+    -- mos: kiritilgan Z tizim bilan teng; yoki Z kerak emas edi (shu kuni fiskal kirim va terminal to'lovi yo'q)
+    'ok', case when v_rec and not v_miss then v_dc = 0 and v_dk = 0 else not v_need end);
+end $$;
+revoke all on function app.kassa_z_state(text) from public, anon, authenticated;
+
+-- Z-hisobot faktini yozish (ichki; chaqiruvchi kassa bayrog'ini yoqqan). p_z: {no, cash, card[, note]} yoki {missing: true, reason}.
+--   Oxirgi yozuv bilan aynan bir xil bo'lsa — qayta yozilmaydi (false qaytadi).
+create or replace function app.kassa_z_put(p_day_id text, p_z jsonb, p_uid text) returns boolean
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_d public.cash_days%rowtype; v_no text; v_cash numeric; v_card numeric; v_miss boolean; v_reason text; v_data jsonb;
+  v_last public.cash_day_events%rowtype;
+begin
+  if p_z is null or jsonb_typeof(p_z) <> 'object' then
+    raise exception 'Z-hisobot ma''lumoti noto''g''ri' using errcode = '22023', hint = 'kassa:z';
+  end if;
+  select * into v_d from public.cash_days d where d.id = p_day_id;
+  if not found then raise exception 'Kassa kuni topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  if coalesce((select k."isTest" from public.cash_desks k where k.id = v_d.desk), false) then
+    raise exception 'Sinov kassasida Z-hisobot yuritilmaydi' using errcode = '22023', hint = 'kassa:z';
+  end if;
+  v_miss := app.kassa_bool(p_z, 'missing');
+  v_reason := left(btrim(coalesce(p_z ->> case when v_miss then 'reason' else 'note' end, '')), 300);
+  if v_miss then
+    if length(v_reason) < 5 then
+      raise exception 'Z-hisobot yo''qligi sababini yozing (kamida 5 belgi)' using errcode = '22023', hint = 'kassa:z';
+    end if;
+    v_data := jsonb_build_object('missing', true);
+  else
+    v_no := btrim(coalesce(p_z ->> 'no', ''));
+    if v_no !~ '^[0-9A-Za-z/-]{1,20}$' then
+      raise exception 'Z-hisobot raqamini kiriting (kassa apparati chiqargan hisobotdagi №)' using errcode = '22023', hint = 'kassa:z';
+    end if;
+    v_cash := app.kassa_amount0(p_z -> 'cash', 'Z-hisobot: naqd');
+    v_card := app.kassa_amount0(p_z -> 'card', 'Z-hisobot: bank kartasi');
+    if v_cash is null or v_card is null then
+      raise exception 'Z-hisobotdagi naqd va bank kartasi summalarini kiriting (bo''lmasa — 0)' using errcode = '22023', hint = 'kassa:z';
+    end if;
+    v_data := jsonb_build_object('missing', false, 'no', v_no, 'cash', v_cash, 'card', v_card);
+  end if;
+  select * into v_last from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'zreport' order by e.at desc, e.id desc limit 1;
+  if v_last.id is not null and v_last.data = v_data and coalesce(v_last.reason, '') = v_reason then return false; end if;
+  insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
+    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_d.desk, v_d.day, 'zreport', p_uid, clock_timestamp(), nullif(v_reason, ''), v_data);
+  return true;
+end $$;
+revoke all on function app.kassa_z_put(text, jsonb, text) from public, anon, authenticated;
+
 -- Kun (javob uchun): ochiq kunda jamlar hujjatlardan hisoblanadi.
 create or replace function app.kassa_day_json(p_day_id text) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
@@ -159,7 +246,12 @@ language sql stable security definer set search_path = public, app, pg_temp as $
            'voids', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status = 'void'),
            -- kassa kitobi varag'i necha marta chop etishga yuborilgan: hozirgi holati (prints) va qayta ochilishdan oldingisi (printsOld)
            'prints', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version = d."reopenCount"),
-           'printsOld', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version < d."reopenCount"))
+           'printsOld', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version < d."reopenCount"),
+           -- onlayn kassa Z-hisoboti: ochiq kunda faqat kiritilgan faktlar va «kerakmi» (kutilgan summalar — yopilgach; kassir
+           --   Z dagi raqamni yozadi, tizimnikini emas)
+           'z', case when d.status = 'open'
+                     then app.kassa_z_state(d.id) - 'expCash' - 'nCash' - 'expCard' - 'nCard' - 'diffCash' - 'diffCard' - 'ok'
+                     else app.kassa_z_state(d.id) end)
     from public.cash_days d where d.id = p_day_id
 $$;
 revoke all on function app.kassa_day_json(text) from public, anon, authenticated;
@@ -225,7 +317,8 @@ grant execute on function public.kassa_opening_set(jsonb) to authenticated;
 
 -- ---------- Kunni sanab yopish (CT-03) ----------
 --   p: desk, day ('YYYY-MM-DD' — yopilayotgan kun; eski ekrandan boshqa kunni yopib qo'ymaslik uchun), counted, denoms {nominal: soni},
---      pendingCount, pendingSum (qurilma navbatidagi hali o'tkazilmagan yozuvlar), note, commission [{title, name}]
+--      pendingCount, pendingSum (qurilma navbatidagi hali o'tkazilmagan yozuvlar), note, commission [{title, name}],
+--      z — onlayn kassa Z-hisoboti {no, cash, card} yoki {missing: true, reason} (ixtiyoriy; sinov kassasida e'tiborga olinmaydi)
 --   Kassir yopadi; Direktor yoki Moliya menejeri — kassir o'rniga, kamida 2 kishilik komissiya bilan.
 create or replace function public.kassa_day_close(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -274,6 +367,10 @@ begin
   end if;
 
   perform app.kassa_flag(true);
+  -- Z-hisobot (F1.26) — sanashdan oldin: noto'g'ri ma'lumot bo'lsa kun yopilmaydi (xato matni bilan qaytadi)
+  if jsonb_typeof(p -> 'z') = 'object' and not coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false) then
+    perform app.kassa_z_put(v_d.id, p -> 'z', v_uid);
+  end if;
   select c.o_expected, c.o_diff, c.o_doc_id, c.o_count_id into v_exp, v_diff, v_doc_id, v_cnt_id
     from app.kassa_count_apply(v_desk, v_d.id, v_d.day, 'close', v_counted, v_pending, v_denoms, v_comm, v_note, v_uid, null) c;
   select coalesce(sum(c.amount) filter (where c.status = 'posted' and c.form = 'KO1'), 0),
@@ -352,7 +449,7 @@ create or replace function public.kassa_day_verify(p_desk text, p_day date, p_pa
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_d public.cash_days%rowtype;
-  v_prev date; v_gaps jsonb; v_rec numeric; v_pay numeric;
+  v_prev date; v_gaps jsonb; v_rec numeric; v_pay numeric; v_z jsonb;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: kassa kunini Moliya menejeri / buxgalter yoki Direktor tekshiradi' using errcode = '42501';
@@ -379,6 +476,16 @@ begin
   if not coalesce(p_papers, false) then
     raise exception 'Qog''oz hujjatlar va ilovalar olinganini tasdiqlang' using errcode = '22023', hint = 'kassa:papers';
   end if;
+  -- Onlayn kassa Z-hisoboti (F1.26): kiritilmagan, «yo'q» deb belgilangan yoki tizim bilan mos emas — tekshiruvchi sababini yozadi
+  v_z := app.kassa_z_state(v_d.id);
+  if coalesce((v_z ->> 'applies')::boolean, false) and not coalesce((v_z ->> 'ok')::boolean, true)
+     and length(btrim(coalesce(p_note, ''))) < 5 then
+    raise exception 'Onlayn kassa Z-hisoboti %: izohda sababini yozing (kamida 5 belgi)',
+      case when not coalesce((v_z ->> 'recorded')::boolean, false) then 'kiritilmagan'
+           when coalesce((v_z ->> 'missing')::boolean, false) then 'yo''q deb belgilangan'
+           else 'tizimdagi summalar bilan mos emas' end
+      using errcode = '22023', hint = 'kassa:z_note';
+  end if;
   v_gaps := app.kassa_gap_check(v_desk, extract(year from p_day)::int);
   if jsonb_array_length(v_gaps) > 0 then
     raise exception 'Hujjat raqamlarida nomuvofiqlik bor — tekshirish to''xtatildi: %', v_gaps::text using errcode = 'P0001', hint = 'kassa:gaps';
@@ -398,6 +505,36 @@ begin
 end $$;
 revoke all on function public.kassa_day_verify(text, date, boolean, text) from public, anon;
 grant execute on function public.kassa_day_verify(text, date, boolean, text) to authenticated;
+
+-- ---------- Onlayn kassa Z-hisobotini kiritish / tuzatish (F1.26) ----------
+--   Kunni yopishda kiritilmagan bo'lsa (kassir yo'q edi, hisobot keyin topildi) yoki xato yozilgan bo'lsa — kun tekshirilguncha.
+--   p: desk, day ('YYYY-MM-DD'), z: {no, cash, card[, note]} | {missing: true, reason}. Tarix saqlanadi (oxirgi yozuv amalda).
+create or replace function public.kassa_day_z(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_uid text := app.uid(); v_desk text; v_day date; v_d public.cash_days%rowtype; v_new boolean;
+begin
+  if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
+    raise exception 'Ruxsat yo''q: Z-hisobotni kassir (kassir o''rniga — Direktor yoki Moliya menejeri) kiritadi' using errcode = '42501';
+  end if;
+  if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
+  v_desk := coalesce(nullif(btrim(coalesce(p ->> 'desk', '')), ''), 'main');
+  begin
+    if coalesce(p ->> 'day', '') !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'x'; end if;
+    v_day := (p ->> 'day')::date;
+  exception when others then raise exception 'Kun (sana) ko''rsatilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end;
+  perform app.kassa_lock_desk(v_desk);
+  select * into v_d from public.cash_days d where d.desk = v_desk and d.day = v_day for update;
+  if not found then raise exception 'Kassa kuni topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  if v_d.status = 'verified' then
+    raise exception 'Tekshirilgan kunning Z-hisoboti o''zgarmaydi' using errcode = 'P0001', hint = 'kassa:verified';
+  end if;
+  perform app.kassa_flag(true);
+  v_new := app.kassa_z_put(v_d.id, p -> 'z', v_uid);
+  perform app.kassa_flag(false);
+  return jsonb_build_object('ok', true, 'dup', not v_new, 'day', app.kassa_day_json(v_d.id));
+end $$;
+revoke all on function public.kassa_day_z(jsonb) from public, anon;
+grant execute on function public.kassa_day_z(jsonb) to authenticated;
 
 -- ---------- Qayta ochish (CT-06): FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun ----------
 --   Sanash farqi hujjati bekor qilinadi (raqami saqlanadi) — kun qayta sanab yopiladi; KO-4 varaqlari o'sha raqamlardan qayta beriladi.
@@ -672,7 +809,8 @@ grant execute on function public.kassa_day_book(text, date) to authenticated;
 --   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,
 --   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
 --   tomonlar, kech (oflayn) yozuvlar, asl nusxani qayta chiqarish, darvozasiz naqd maosh, KO-4 chop etilmagan kunlar, limit,
---   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati, rahbar / ta'sischiga berilgan pul (4290 / 4890).
+--   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati, rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa
+--   Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
@@ -713,6 +851,12 @@ begin
                                      and not exists (select 1 from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version = d."reopenCount")), '[]'::jsonb),
     -- yopish paytida «hali o'tkazilmagan» (oflayn navbatdagi) yozuv bilan yopilgan kunlar
     'pendingDays30', (select count(*) from public.cash_days d where d.desk = v_desk and d.status <> 'open' and coalesce(d."pendingCount", 0) > 0 and d.day >= v_today - 30),
+    -- onlayn kassa Z-hisoboti (F1.26): yopilgan, hali tekshirilmagan kunlarda — kiritilmagan, «yo'q» yoki tizim bilan mos emas
+    'zreport', case when v_test then '[]'::jsonb else
+                 coalesce((select jsonb_agg(jsonb_build_object('day', x.day, 'recorded', (x.z ->> 'recorded')::boolean, 'missing', (x.z ->> 'missing')::boolean,
+                                                               'diffCash', x.z -> 'diffCash', 'diffCard', x.z -> 'diffCard') order by x.day)
+                             from (select d.day, app.kassa_z_state(d.id) as z from public.cash_days d where d.desk = v_desk and d.status = 'closed') x
+                            where not coalesce((x.z ->> 'ok')::boolean, true)), '[]'::jsonb) end,
     'limit', jsonb_build_object('cashLimit', coalesce(v_limit, 0), 'set', coalesce(v_limit, 0) > 0, 'balance', v_bal,
                                 'exceeded', coalesce(v_limit, 0) > 0 and v_bal > v_limit,
                                 'days30', case when coalesce(v_limit, 0) > 0 then
@@ -796,7 +940,12 @@ begin
       'gaps', (select count(*) from (select distinct year from public.doc_counters where desk = 'main') k
                 where jsonb_array_length(app.kassa_gap_check('main', k.year)) > 0),
       'fiscalExempt', (select count(*) from public.cash_docs c where c.desk = 'main' and c."fiscalExempt" and c.status = 'posted' and c."businessDay" = v_day),
-      'limitExceeded', coalesce(v_o."cashLimit", 0) > 0 and v_bal > v_o."cashLimit"));
+      'limitExceeded', coalesce(v_o."cashLimit", 0) > 0 and v_bal > v_o."cashLimit",
+      -- onlayn kassa Z-hisoboti (F1.26) — shu kun yopilgan bo'lsa
+      'z', case when v_closed then (select jsonb_build_object('ok', (z ->> 'ok')::boolean, 'needed', (z ->> 'needed')::boolean,
+                                                               'recorded', (z ->> 'recorded')::boolean, 'missing', (z ->> 'missing')::boolean,
+                                                               'diffCash', z -> 'diffCash', 'diffCard', z -> 'diffCard')
+                                      from app.kassa_z_state(v_d.id) z) end));
 end $$;
 revoke all on function app.kassa_daily(date) from public, anon, authenticated;
 

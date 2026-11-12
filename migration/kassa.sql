@@ -164,12 +164,16 @@ create table if not exists public.cash_day_events (
   "dayId"   text references public.cash_days(id),
   desk      text not null,
   day       date,
-  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision')),
+  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport')),
   "byUid"   text,
   at        timestamptz not null default now(),
   reason    text,
   data      jsonb not null default '{}'::jsonb
 );
+-- 'zreport' — onlayn kassa (NKM) Z-hisoboti fakti (F1.26; kassa-day.sql). Avval o'rnatilgan bazada cheklov yangilanadi.
+alter table public.cash_day_events drop constraint if exists cash_day_events_kind_check;
+alter table public.cash_day_events add constraint cash_day_events_kind_check
+  check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport'));
 create index if not exists cash_day_events_day_idx on public.cash_day_events ("dayId");
 
 -- Sanash dalolatnomalari: kun yopish, smena topshirish-qabul, oylik / yillik komissiya sanashi, boshlang'ich qoldiq.

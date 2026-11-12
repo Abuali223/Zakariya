@@ -7,7 +7,9 @@
 --   (C) nazorat ro'yxati (kassa_checks): chop etilmagan KO-4, oflayn yozuvli yopish, limit, hisobdorlar muddati, rahbarga berilgan pul;
 --   (M) moslik P1/P4/P5/P8 — toza holatda 0; har buzilish o'z hisoblagichida ko'rinadi;
 --   (T) sinov kassasi (CT-20): xarajat va avans orderi «Buxgalteriya» / avans jadvaliga yozilmaydi;
---   (G) rollar.
+--   (G) rollar;
+--   (AV) avans hisoboti va «hisobotsiz yangi avans yo'q» qoidasi;
+--   (Z) onlayn kassa (NKM) Z-hisoboti: kiritish, solishtirish (fiskal chekli KO-1, terminal), nazorat, Telegram, kunni tekshirish.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -361,6 +363,97 @@ select (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') as av_m_adv \gset
 rollback to savepoint av_m;
 select zz.chk('AV15 moslik buzilishni topadi: hisobot xarajatlarisiz qolsa — p4.adv = 1', :'av_m_adv', '^1$');
 select zz.chk('AV16 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.kassa_acc_open('staff:st1')::text$q$), '^ERR 42501');
+
+-- ---------- (Z) onlayn kassa (NKM) Z-hisoboti (F1.26, buxgalter ko'rigi M6) ----------
+select zz.clock('2027-01-11 18:00+05');
+select zz.chk('Z0 1-kun: fiskal chekli kirim bor, Z-hisobot kiritilmagan — izohsiz tekshirilmaydi',
+  zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true)::text$q$), '^ERR 22023 \[kassa:z_note\].*kiritilmagan');
+select zz.chk('Z1 rad: o''qituvchi; raqamsiz Z; manfiy summa; noto''g''ri sana',
+  zz.rpc('U_TCH', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"1","cash":0,"card":0}}') || ' | '
+  || zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"","cash":0,"card":0}}') || ' | '
+  || zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-1","cash":-5,"card":0}}') || ' | '
+  || zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-02-30","z":{"no":"Z-1","cash":0,"card":0}}'),
+  '^ERR 42501.* \| ERR 22023 \[kassa:z\].* \| ERR 22023 \[kassa:amount\].* \| ERR 22023 \[kassa:bad_input\]');
+select zz.chk('Z2a 1-kun: kutilgan naqd — fiskal chekli kirim orderlari (3 ta, 1 500 000), karta 0',
+  (select trim_scale((z ->> 'expCash')::numeric) || '/' || (z ->> 'nCash') || ':' || trim_scale((z ->> 'expCard')::numeric) || '/' || (z ->> 'nCard')
+     from (select app.kassa_z_state('cd_main_2027-01-04') z) q), '^1500000/3:0/0$');
+select zz.put('Z2', zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-0104","cash":1500000,"card":0}}'));
+select zz.chk('Z2 kassir Z-hisobotni keyin kiritdi: tizim bilan mos (farq 0)',
+  (select (z ->> 'recorded') || ':' || (z ->> 'ok') || ':' || trim_scale((z ->> 'diffCash')::numeric) || ':' || trim_scale((z ->> 'diffCard')::numeric) || ':' || (j ->> 'dup')
+     from (select zz.get('Z2')::jsonb j, zz.get('Z2')::jsonb -> 'day' -> 'z' z) q), '^true:true:0:0:false$');
+select zz.chk('Z2b aynan o''sha ma''lumot qayta yuborilsa — yangi yozuv yo''q (dup)',
+  zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-0104","cash":1500000,"card":0}}')::jsonb ->> 'dup', '^true$');
+select zz.chk('Z2c kun jurnalida bitta Z yozuvi (kim kiritgani bilan)',
+  (select count(*) || ':' || min(e."byUid") from public.cash_day_events e where e."dayId" = 'cd_main_2027-01-04' and e.kind = 'zreport'), '^1:U_KAS$');
+select zz.chk('Z3 Z mos — izohsiz tekshirildi', zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true)::text$q$), '"status": "verified"');
+select zz.chk('Z4 tekshirilgan kunning Z-hisoboti o''zgarmaydi', zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-9","cash":0,"card":0}}'), '^ERR P0001 \[kassa:verified\]');
+select zz.chk('Z5 2-kun (08.01): fiskal kirim va terminal to''lovi yo''q — Z talab qilinmaydi, izohsiz tekshirildi',
+  (app.kassa_z_state('cd_main_2027-01-08') ->> 'needed') || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true)::text$q$)::jsonb -> 'day' ->> 'status'),
+  '^false \| verified$');
+-- 3-kun (11.01, ochiq): fiskal chekli naqd o'quv to'lovi va terminal to'lovi; bekor qilingan terminal va Click — hisobga kirmaydi
+select zz.put('Zt1', zz.tui('U_KAS', 'man_z_0001', 'T-2', 300000, 'Sinov Bobo', '211'));
+set local session_replication_role = replica;
+insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "createdAt") values
+  ('trm_z1', 'T-1', 'terminal', 150000, 'applied', true, '{}', '2027-01-11 12:00+05'),
+  ('trm_z2', 'T-1', 'terminal', 70000, 'canceled', true, '{}', '2027-01-11 12:10+05'),
+  ('clk_z1', 'T-2', 'click', 90000, 'applied', true, '{}', '2027-01-11 12:20+05');
+set local session_replication_role = origin;
+select zz.chk('Z6 ochiq kunda: Z kerak, hali kiritilmagan; kutilgan summalar ko''rsatilmaydi (kassir Z dagi raqamni yozadi)',
+  (select (z ->> 'needed') || ':' || (z ->> 'recorded') || ':' || (z ? 'expCash')::text || ':' || (z ? 'diffCash')::text
+     from (select app.kassa_day_json('cd_main_2027-01-11') -> 'z' as z) q), '^true:false:false:false$');
+select zz.put('Z7', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-11","counted":%s,"z":{"no":"","cash":290000,"card":150000}}',
+                                                             (select app.kassa_day_balance('cd_main_2027-01-11')))));
+select zz.chk('Z7 noto''g''ri Z bilan kun yopilmaydi (raqamsiz)', zz.get('Z7') || ' | ' || (select status from public.cash_days where id = 'cd_main_2027-01-11'),
+  '^ERR 22023 \[kassa:z\].* \| open$');
+select zz.put('Z8', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-11","counted":%s,"z":{"no":"Z-0111","cash":290000,"card":150000}}',
+                                                             (select app.kassa_day_balance('cd_main_2027-01-11')))));
+select zz.chk('Z8 kun Z bilan yopildi: naqd 10 000 kam (tizimda 300 000, 1 chek), karta mos (150 000, 1 ta)',
+  (select (j -> 'day' ->> 'status') || ':' || (z ->> 'recorded') || ':' || (z ->> 'ok') || ':' || trim_scale((z ->> 'expCash')::numeric) || '/' || (z ->> 'nCash')
+          || ':' || trim_scale((z ->> 'expCard')::numeric) || '/' || (z ->> 'nCard') || ':' || trim_scale((z ->> 'diffCash')::numeric) || ':' || trim_scale((z ->> 'diffCard')::numeric)
+     from (select zz.get('Z8')::jsonb j, zz.get('Z8')::jsonb -> 'day' -> 'z' z) q), '^closed:true:false:300000/1:150000/1:-10000:0$');
+select zz.chk('Z8b kunlik hisobot ma''lumotida Z (raqami, summalari)',
+  (select (z ->> 'no') || ':' || trim_scale((z ->> 'cash')::numeric) || ':' || trim_scale((z ->> 'card')::numeric) from (select zz.book('main', '2027-01-11') -> 'day' -> 'z' z) q),
+  '^Z-0111:290000:150000$');
+select zz.chk('Z9 nazorat ro''yxati: tekshirilmagan kundagi Z farqi',
+  (select string_agg((x ->> 'day') || ':' || (x ->> 'recorded') || ':' || trim_scale((x ->> 'diffCash')::numeric) || ':' || trim_scale((x ->> 'diffCard')::numeric), ',')
+     from jsonb_array_elements(zz.checks('main') -> 'zreport') x), '^2027-01-11:true:-10000:0$');
+select zz.chk('Z10 Telegram kassa bloki: shu kun Z farqi',
+  (select (z ->> 'ok') || ':' || (z ->> 'recorded') || ':' || trim_scale((z ->> 'diffCash')::numeric) from (select app.kassa_daily('2027-01-11') -> 'control' -> 'z' as z) q),
+  '^false:true:-10000$');
+select zz.chk('Z11 Z mos emas: izohsiz tekshirilmaydi; izoh bilan — tekshirildi',
+  zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-11', true)::text$q$) || ' | '
+  || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-11', true, 'Bitta chek qaytarilgan, dalolatnoma bor')::text$q$)::jsonb -> 'day' ->> 'status'),
+  '^ERR 22023 \[kassa:z_note\].*mos emas.* \| verified$');
+select zz.chk('Z11b tekshirilgan kun nazorat ro''yxatidan tushdi', jsonb_array_length(zz.checks('main') -> 'zreport')::text, '^0$');
+-- 4-kun (12.01): «Z-hisobot yo'q» — faqat sabab bilan
+select zz.clock('2027-01-12 10:00+05');
+select zz.put('Zt2', zz.tui('U_KAS', 'man_z_0002', 'T-1', 100000, 'Sinov Ota', '212'));
+select zz.put('Z12a', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-12","counted":%s,"z":{"missing":true,"reason":"xx"}}',
+                                                               (select app.kassa_day_balance('cd_main_2027-01-12')))));
+select zz.put('Z12', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-12","counted":%s,"z":{"missing":true,"reason":"Kassa apparati ishlamadi"}}',
+                                                              (select app.kassa_day_balance('cd_main_2027-01-12')))));
+select zz.chk('Z12 «Z-hisobot yo''q» sababsiz — rad; sabab bilan — kun yopildi, Z «yo''q»',
+  zz.get('Z12a') || ' | ' || (select (j -> 'day' ->> 'status') || ':' || (z ->> 'missing') || ':' || (z ->> 'ok') || ':' || coalesce(z ->> 'reason', '')
+                                from (select zz.get('Z12')::jsonb j, zz.get('Z12')::jsonb -> 'day' -> 'z' z) q),
+  '^ERR 22023 \[kassa:z\].* \| closed:true:false:Kassa apparati ishlamadi$');
+select zz.chk('Z13 «yo''q» deb belgilangan Z: izohsiz tekshirilmaydi; izoh bilan — tekshirildi',
+  zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-12', true)::text$q$) || ' | '
+  || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-12', true, 'Apparat ta''mirda, servis dalolatnomasi bor')::text$q$)::jsonb -> 'day' ->> 'status'),
+  '^ERR 22023 \[kassa:z_note\].*yo''q deb belgilangan.* \| verified$');
+-- 5-kun (13.01): fiskal kirim ham, terminal ham yo'q — Z so'ralmaydi
+select zz.clock('2027-01-13 10:00+05');
+select zz.put('Zt3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":20000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat, 13.01.2027","note":"Sinov","clientRef":"z-k3-0001"}'));
+select zz.put('Z14', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-13","counted":%s}', (select app.kassa_day_balance('cd_main_2027-01-13')))));
+select zz.chk('Z14 Z talab qilinmaydigan kun Z siz yopildi va izohsiz tekshirildi',
+  (select (j -> 'day' ->> 'status') || ':' || (z ->> 'needed') || ':' || (z ->> 'recorded') || ':' || (z ->> 'ok') from (select zz.get('Z14')::jsonb j, zz.get('Z14')::jsonb -> 'day' -> 'z' z) q)
+  || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-13', true)::text$q$)::jsonb -> 'day' ->> 'status'),
+  '^closed:false:false:true \| verified$');
+select zz.chk('Z15 sinov kassasida Z-hisobot yuritilmaydi',
+  zz.rpc('U_KAS', 'kassa_day_z', '{"desk":"sinov","day":"2027-01-08","z":{"no":"Z-1","cash":0,"card":0}}') || ' | ' || (app.kassa_z_state('cd_sinov_2027-01-08') ->> 'applies'),
+  '^ERR 22023 \[kassa:z\].*Sinov kassasida.* \| false$');
+select zz.chk('Z16 ichki Z funksiyalari mijozga yopiq',
+  zz.as('U_DIR', $q$select app.kassa_z_state('cd_main_2027-01-11')::text$q$) || ' | ' || zz.as('U_DIR', $q$select app.kassa_z_put('cd_main_2027-01-11', '{}'::jsonb, 'U_DIR')::text$q$),
+  '^ERR 42501.* \| ERR 42501');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

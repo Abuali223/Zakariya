@@ -1742,6 +1742,38 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
   Keyingi: F1.26 (M6), F1.27 (M3), F1.22 (M4).
 
+## 67) Moliya, 1b boshi: onlayn kassa (NKM) Z-hisoboti bilan solishtirish (F1.26, buxgalter ko'rigi M6) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi kassa fayllarida (`kassa.sql`, `kassa-day.sql`,
+`kassa-checks.sql`, `fin-version.sql`), `fin-kassa.js`, `fin-print.js` va `auth/tg-daily.cjs` da (kassa bloki bo'lmasa — o'zgarishsiz).
+
+- **Nima qiladi:** kun oxirida kassir NKM Z-hisobotining raqami va undagi sotuv jamlarini (naqd, bank kartasi; qaytarishlarsiz)
+  kunni yopish oynasida kiritadi. Tizim solishtiradi: naqd ↔ shu kunning fiskal chekli kirim orderlari (bekor qilinganlarsiz;
+  fiskal cheksiz istisno Z da bo'lmaydi), karta ↔ shu kunning terminal to'lovlari (kassa kuni bo'yicha, `fin_receipts` qoidasi).
+  Ochiq kunda kutilgan summalar ko'rsatilmaydi — kassir qog'ozdagi raqamni yozadi; natija yopilgach aytiladi.
+- **Saqlash:** fakt — kun hodisasi (`cash_day_events`, yangi tur `zreport`; faqat qo'shiladi, oxirgisi amalda, kim kiritgani bilan).
+  Kutilgan summa va farq har safar hujjatlardan hisoblanadi (qayta ochilgan kun, kechikib kiritilgan terminal to'lovi ham).
+- **Yo'llar:** Z yopishda kiritiladi (kerak bo'lsa-yu kiritilmasa — ogohlantirish); «Z-hisobot yo'q» — faqat sabab bilan; keyin
+  kiritish yoki tuzatish — «Kassa kunlari» qatoridagi «Z» tugmasi (`kassa_day_z`: kassir, kassir o'rniga Direktor yoki Moliya
+  menejeri; kun tekshirilguncha). Noto'g'ri Z ma'lumoti bilan kun yopilmaydi (xabar bilan qaytadi). Sinov kassasida Z yuritilmaydi.
+- **Nazorat:** Z kiritilmagan / «yo'q» / mos emas — kun qatorida (tekshirilmagan kunda qizil), nazorat ro'yxatida («Onlayn kassa
+  Z-hisoboti», qizil), Direktorning Telegram hisobotida; kunni tekshirishda izoh majburiy (sahifa va server: `kassa:z_note`).
+  Tekshirilgan kunning Z i o'zgarmaydi.
+- **Ko'rinish va chop etish:** kun oynasida Z (raqam, summalar, tizimdagi summalar va chek soni, holat); kunlik hisobotda (RP-02,
+  o'zbek / rus) yangi bo'lim «Onlayn kassa (NKM) Z-hisoboti» — Z ↔ tizim, farq; kun jurnalida «Z-hisobot».
+- **Modul relizi 3** (`kassa_day_z`; kun javobida «z», nazoratda «zreport»; `kassa-checks.sql`: ochiq funksiyalar 35, ichki 64).
+- **Qo'llanma:** `yoriqnomalar.md` (kassir — kechqurun Z; buxgalter — tekshirishda Z ogohlantirishi, nazorat ro'yxati), reja — F1.26 ✅.
+- **Sinovlar:** `test-kassa-report.sql` 90 (+22: Z0–Z16 — rollar va rad holatlari, keyin kiritish va dup, izoh talabi uch holatda
+  (kiritilmagan / «yo'q» / farq), yopishda noto'g'ri Z, kutilgan summalar (bekor qilingan terminal va Click hisobga kirmaydi),
+  ochiq kunda yashirin, nazorat, Telegram, kunlik hisobot, kerak bo'lmagan kun, sinov kassasi, ichki funksiyalar yopiq),
+  `test-kassa-checks.sql` 32 (reliz 3), qolganlari o'zgarishsiz (225 / 54 / 93 / 36 / 87 / 36 / 92); JS 31 (`fin-print` 20,
+  `fin-kassa` 4), `tg-daily` 42. Brauzer: yangi `e2e-kassa8` 28 (ikkala dizaynda) — xato Z bilan yopish, farq kun qatorida va
+  nazoratda, izohsiz tekshirib bo'lmaydi, «Z» bilan tuzatish, izohsiz tekshirish, kun oynasi va kunlik hisobot, telefonda
+  «Z-hisobot yo'q». `e2e-kassa2` — kassir Z ni kiritadigan qilib yangilandi; `e2e-kassa4` — nazorat ro'yxati 21 qator;
+  `e2e-kassa6` — reliz 3. Jami 20 ta ishga tushirish, hammasi yashil (504 tekshiruv). Poyga 22; zanjirni qayta ishga tushirish —
+  OK; oldingi relizdan (`fdb6a11`, reliz 2) yangilanish — xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 3)».
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

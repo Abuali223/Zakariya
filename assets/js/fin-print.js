@@ -522,6 +522,9 @@ const R = {
     limit: 'Kassa limiti', limitNone: 'Kassa limiti belgilanmagan.', limitOk: 'kun oxiridagi qoldiq limitdan oshmagan',
     limitOver: 'KUN OXIRIDAGI QOLDIQ LIMITDAN OSHGAN — ortiqchasi bankka topshiriladi',
     cashier: 'Kassir', checked: 'Tekshirdi', draft: 'QORALAMA', test: 'SINOV', printed: 'chop etildi', day: 'Kun',
+    zSec: 'Onlayn kassa (NKM) Z-hisoboti', zNo: 'Z-hisobot №', zZ: 'Z-hisobotda', zSys: 'Tizimda', zDiff: 'Farq', zCash: 'Naqd', zCard: 'Bank kartasi',
+    zChecks: n => `${n} chek`, zPcs: n => `${n} ta`, zOk: 'mos', zNone: 'Z-hisobot kiritilmagan', zMissing: 'Z-hisobot yo‘q', zOpen: 'kun yopilgach solishtiriladi',
+    zNote: 'Tizimda: naqd — fiskal chekli kirim orderlari, karta — terminal to‘lovlari.',
   },
   ru: {
     title: 'ЕЖЕДНЕВНЫЙ ОТЧЁТ КАССИРА', state: { open: 'день открыт', closed: 'день закрыт', verified: 'день проверен' },
@@ -541,6 +544,9 @@ const R = {
     limit: 'Лимит кассы', limitNone: 'Лимит кассы не установлен.', limitOk: 'остаток на конец дня не превышает лимит',
     limitOver: 'ОСТАТОК НА КОНЕЦ ДНЯ ПРЕВЫШАЕТ ЛИМИТ — излишек сдаётся в банк',
     cashier: 'Кассир', checked: 'Проверил', draft: 'ЧЕРНОВИК', test: 'ТЕСТ', printed: 'напечатано', day: 'День',
+    zSec: 'Z-отчёт онлайн-ККМ', zNo: 'Z-отчёт №', zZ: 'В Z-отчёте', zSys: 'В системе', zDiff: 'Расхождение', zCash: 'Наличные', zCard: 'Банковские карты',
+    zChecks: n => `чеков: ${n}`, zPcs: n => `операций: ${n}`, zOk: 'совпадает', zNone: 'Z-отчёт не введён', zMissing: 'Z-отчёта нет', zOpen: 'сверка — после закрытия дня',
+    zNote: 'В системе: наличные — приходные ордера с фискальным чеком, карты — платежи через терминал.',
   },
 };
 const CSS_RP = `
@@ -646,6 +652,24 @@ export function reportHtml(book, ctx, W) {
       <tr><td class="b">${esc(r.total)}</td><td class="c b">${esc(String(ch.reduce((s, x) => s + num(x.count), 0)))}</td><td class="r b">${m(ch.reduce((s, x) => s + num(x.amount), 0))}</td></tr></tbody></table>` : ''}
       <p${Math.abs(cashCh - tuitionDocs) >= 0.005 ? ' class="warn"' : ''}>${esc(r.p1(money(W, cashCh), money(W, tuitionDocs)))}: ${esc(Math.abs(cashCh - tuitionDocs) < 0.005 ? r.p1ok : r.p1bad)}.</p>` : '';
 
+  // 8b) onlayn kassa (NKM) Z-hisoboti (F1.26): Z raqamlari ↔ tizim (fiskal chekli KO-1, terminal); ochiq kunda — faqat kiritilgani
+  const z = d.z || {};
+  let zSec = '';
+  if (z.applies && !ctx.isTest && (z.recorded || (closed && z.needed))) {
+    const zd = v => num(v) === 0 ? esc(r.zOk) : `<b>${num(v) > 0 ? '+' : '−'}${m(Math.abs(num(v)))}</b>`;
+    if (z.recorded && !z.missing && closed) {
+      zSec = `<p>${esc(r.zNo)} ${esc(z.no || '')}</p><table><thead><tr><th></th><th style="width:30mm">${esc(r.zZ)}</th><th style="width:42mm">${esc(r.zSys)}</th><th style="width:30mm">${esc(r.zDiff)}</th></tr></thead><tbody>
+        <tr${num(z.diffCash) ? ' class="warn"' : ''}><td>${esc(r.zCash)}</td><td class="r">${m(z.cash)}</td><td class="r">${m(z.expCash)} <span class="sm">(${esc(r.zChecks(num(z.nCash)))})</span></td><td class="r">${zd(z.diffCash)}</td></tr>
+        <tr${num(z.diffCard) ? ' class="warn"' : ''}><td>${esc(r.zCard)}</td><td class="r">${m(z.card)}</td><td class="r">${m(z.expCard)} <span class="sm">(${esc(r.zPcs(num(z.nCard)))})</span></td><td class="r">${zd(z.diffCard)}</td></tr></tbody></table>
+        <p class="sm">${esc(r.zNote)}</p>`;
+    } else if (z.recorded && !z.missing) {
+      zSec = `<p>${esc(r.zNo)} ${esc(z.no || '')}: ${esc(r.zCash)} ${m(z.cash)}, ${esc(r.zCard)} ${m(z.card)} (${esc(r.zOpen)}).</p>`;
+    } else {
+      zSec = `<p class="warn">${esc(z.missing ? r.zMissing : r.zNone)}${z.missing && z.reason ? ': ' + esc(z.reason) : ''}.</p>`
+        + (closed ? `<p>${esc(r.zSys)}: ${esc(r.zCash)} ${m(z.expCash)} (${esc(r.zChecks(num(z.nCash)))}), ${esc(r.zCard)} ${m(z.expCard)} (${esc(r.zPcs(num(z.nCard)))}).</p>` : '');
+    }
+  }
+
   // 9) kutilayotganlar, 10) limit
   const pe = book.pending || {};
   const peSec = (num(pe.waiting) || num(pe.toPay)) ? `<table><tbody>
@@ -660,7 +684,7 @@ export function reportHtml(book, ctx, W) {
   const title = `${r.title} — ${dmy(d.day)}`;
   // bo'limlar — bo'sh bo'lgani tushib qoladi, raqamlar ketma-ket
   const secs = [[r.sum, sum], [r.ko1, list('KO1', r.from)], [r.ko2, list('KO2', r.to)], [r.byFrom, byParty('KO1')], [r.byTo, byParty('KO2')],
-    [r.byArt, artSec], [r.tr, trSec], [r.ch, chSec], [r.pend, peSec], [r.limit, limSec]].filter(x => x[1]);
+    [r.byArt, artSec], [r.tr, trSec], [r.ch, chSec], [r.zSec, zSec], [r.pend, peSec], [r.limit, limSec]].filter(x => x[1]);
   const body = `<div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <h1>${esc(r.title)}</h1><div class="dt">${esc(W.fmtDateLong(iso(d.day), lang))} · ${esc(r.state[d.status] || '')}</div>
     ${secs.map((x, i) => `<h2>${i + 1}. ${esc(x[0])}</h2>${x[1]}`).join('')}

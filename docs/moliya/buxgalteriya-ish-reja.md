@@ -836,17 +836,20 @@ to‘lovni qaytarish — Dt 6390 Kt 5010 (OP-16). Avans hisoboti (F2.6 dan oldin
 M1/M2): «Kassa» → «Avans hisoboti» — naqdsiz dalolatnoma (`nc_adv_report`), har chek qatori Dt statiya hisobvarag‘i Kt 4230,
 xarajat «Buxgalteriya»ga o‘zi ko‘chadi (usul «hisobdor orqali»; qo‘lda bunday xarajat yozilmaydi), hisobdor qoldig‘i =
 berilgan − qaytim − hisobotlar; hisobot qoldiqdan oshmaydi (ortiqcha sarf — F2.6); oldingi avansi hisobotsiz xodimga yangi
-avans — faqat Direktor tasdig‘i bilan (so‘rovda ham, pul berishda ham tekshiriladi); moslikda P4 «adv»; modul relizi 2. Sinov kassasi (CT-20)
+avans — faqat Direktor tasdig‘i bilan (so‘rovda ham, pul berishda ham tekshiriladi); moslikda P4 «adv». Onlayn kassa
+Z-hisoboti (F1.26, buxgalter ko‘rigi M6): kunni yopishda Z raqami va undagi naqd va karta sotuvi kiritiladi, tizim fiskal chekli
+KO-1 va terminal to‘lovlari bilan solishtiradi; kiritilmagan, «yo‘q» yoki mos emas — kun qatori, nazorat ro‘yxati, Telegram,
+kunni tekshirishda izoh majburiy; keyin kiritish / tuzatish — «Z» tugmasi; kunlik hisobotda Z bo‘limi. Modul relizi 3. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 68, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 90, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
-parallel, 10 % ROLLBACK), `fin-print.test.mjs` 19, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
-39; brauzerda yetti to‘liq stsenariy (200 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 20, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
+42; brauzerda sakkiz to‘liq stsenariy (228 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
-hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6), 12 ta hisob siyosati qarori
-buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1, M2, M6 bajarildi — 66- va
+67-bo‘limlar), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
 kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil (ko‘p agentli) ko‘rik —
 hali o‘tkazilmagan; F1.20 (RLS relizi) — 1b-bosqichda.
 
@@ -901,7 +904,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 | F1.23 | S | 0,5 | O‘zaro hisob dalolatnomasi chop etish; sozlamalar | F1.5 | — |
 | F1.24 | S | 1 | Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | RP-22 haftalik KPI | F1.15 | Direktor ko‘radi |
-| F1.26 | S | 1 | Kunni yopishda onlayn kassa (NKM) Z-hisoboti: naqd va karta jami kiritiladi, KO-1 jami bilan solishtiriladi (buxgalter ko‘rigi M6) | F1.9 | Farq nazorat ro‘yxatida va Telegramda |
+| F1.26 | S | 1 | ✅ Kunni yopishda onlayn kassa (NKM) Z-hisoboti: naqd va karta sotuvi kiritiladi, fiskal chekli KO-1 va terminal to‘lovlari bilan solishtiriladi; keyin kiritish / tuzatish — «Z» (buxgalter ko‘rigi M6) | F1.9 | Farq nazorat ro‘yxatida va Telegramda; tekshirishda izoh |
 | F1.27 | S | 0,5 | Kontragent-tashkilotga kassadan naqd to‘lovda ogohlantirish va Direktor tasdig‘i (M3; chegara — hisob siyosati qarori) | F1.10 | Qoidaga test |
 
 Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.

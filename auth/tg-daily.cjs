@@ -53,6 +53,13 @@ function kassaLines(k) {
   if (n(c.gaps) > 0) w.push('⚠️ raqamlashda bo‘shliq');
   if (n(c.fiscalExempt) > 0) w.push(`fiskal cheksiz: ${n(c.fiscalExempt)}`);
   if (c.limitExceeded === true) w.push('⚠️ qoldiq limitdan oshgan');
+  // onlayn kassa (NKM) Z-hisoboti — shu kun yopilgan bo'lsa (F1.26): faqat muammo bo'lsa
+  const z = c.z;
+  if (z && typeof z === 'object' && z.ok === false) {
+    const sg = v => `${n(v) > 0 ? '+' : '−'}${fmtNum(Math.abs(n(v)))}`;
+    w.push(z.recorded !== true ? '⚠️ Z-hisobot kiritilmagan' : z.missing === true ? '⚠️ Z-hisobot yo‘q (sababi yozilgan)'
+      : `⚠️ Z-hisobot farqi: ${[n(z.diffCash) ? `naqd ${sg(z.diffCash)}` : '', n(z.diffCard) ? `karta ${sg(z.diffCard)}` : ''].filter(Boolean).join(', ')}`);
+  }
   L.push(`🔎 Kassa nazorati: ${w.join(' · ')}`);
   return L;
 }

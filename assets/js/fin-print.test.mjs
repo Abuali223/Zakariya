@@ -405,3 +405,28 @@ test('avans hisoboti: o‘zbek kirill va rus — qatorlar (chek), hisobdor, asos
     'Приложение: Чеки и документы: 2 шт.', 'Остаток аванса у подотчётного лица: до отчёта 250 000=00 сум, после 50 000=00 сум.'])
     assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
 });
+
+test('RP-02: onlayn kassa Z-hisoboti — solishtirish, «yo‘q», kiritilmagan, ochiq kun, sinov kassasi', () => {
+  const zb = { applies: true, needed: true, recorded: true, missing: false, no: 'Z-0104', cash: 990000, card: 150000, expCash: 1000000, nCash: 2, expCard: 150000, nCard: 1, ok: false, diffCash: -10000, diffCard: 0 };
+  const withZ = z => { const b = mkDay(); b.day.z = z; return b; };
+  let t = text(reportHtml(withZ(zb), ctx({ rules }), W));
+  for (const must of ['8. Tushumlar kanallar bo‘yicha', '9. Onlayn kassa (NKM) Z-hisoboti', 'Z-hisobot № Z-0104', 'Z-hisobotda Tizimda Farq',
+    'Naqd 990 000=00 1 000 000=00 (2 chek) −10 000=00', 'Bank kartasi 150 000=00 150 000=00 (1 ta) mos',
+    'Tizimda: naqd — fiskal chekli kirim orderlari, karta — terminal to‘lovlari.', '10. Kutilayotganlar', '11. Kassa limiti'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  t = text(reportHtml(withZ(Object.assign({}, zb, { missing: true, reason: 'Apparat <buzilgan>', no: null, cash: null, card: null, diffCash: null, diffCard: null })), ctx({ rules }), W));
+  assert.ok(t.includes('Z-hisobot yo‘q: Apparat <buzilgan>.') && t.includes('Tizimda: Naqd 1 000 000=00 (2 chek), Bank kartasi 150 000=00 (1 ta).'), t);
+  t = text(reportHtml(withZ(Object.assign({}, zb, { recorded: false, no: null, cash: null, card: null, diffCash: null, diffCard: null })), ctx({ rules }), W));
+  assert.ok(t.includes('Z-hisobot kiritilmagan.'), t);
+  t = text(reportHtml(withZ({ applies: true, needed: false, recorded: false, ok: true, expCash: 0, expCard: 0 }), ctx({ rules }), W));
+  assert.ok(!t.includes('Z-hisobot'), 'kerak bo‘lmagan va kiritilmagan — bo‘lim yo‘q');
+  const open = withZ({ applies: true, needed: true, recorded: true, missing: false, no: 'Z-1', cash: 500000, card: 0 });
+  Object.assign(open.day, { status: 'open', receipts: null, payouts: null, closing: null, counted: null, diff: null, receiptsLive: 2000000, payoutsLive: 1800000, balance: 2200000, hash: null, verifiedBy: null });
+  t = text(reportHtml(open, ctx({ rules }), W));
+  assert.ok(t.includes('Z-hisobot № Z-1: Naqd 500 000=00, Bank kartasi – (kun yopilgach solishtiriladi).') && !t.includes('Tizimda'), t);
+  t = text(reportHtml(withZ(zb), ctx({ rules, isTest: true }), W));
+  assert.ok(!t.includes('Z-hisobot'), 'sinov kassasida Z bo‘limi yo‘q');
+  const h = reportHtml(withZ(zb), ctx({ rules, lang: 'ru' }), W), tr = text(h);
+  assert.ok(tr.includes('Z-отчёт онлайн-ККМ') && tr.includes('Наличные 990 000=00 1 000 000=00 (чеков: 2) −10 000=00') && tr.includes('Банковские карты 150 000=00 150 000=00 (операций: 1) совпадает'), tr);
+  assert.ok(!reportHtml(withZ(Object.assign({}, zb, { missing: true, reason: '<script>x</script>' })), ctx({ rules }), W).includes('<script>x'), 'sabab ekranlanadi');
+});

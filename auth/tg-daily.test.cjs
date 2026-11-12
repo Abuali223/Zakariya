@@ -84,6 +84,10 @@ function world(o) {
     ok('harakatsiz kun: qoldiq; kassa ishga tushmagan — moslik hisoblanmaydi', /🏦 Kassa: bugun harakat yo‘q · qoldiq 500 000 so‘m\n🔎 Kassa nazorati: moslik — kassa hali ishga tushmagan · yopilmagan o‘tgan kun yo‘q · bekor qilingan: 0 · farq yo‘q/.test(t3), t3);
     ok('ortiqcha', /⚠️ ortiqcha 1 200 so‘m/.test(kassaLines({ day: { status: 'verified', opening: 0, receipts: 0, payouts: 0, closing: 1200, counted: 1200, diff: 1200 }, control: { diff: 1200 } }).join('\n')));
     ok('noto‘g‘ri kirish — bo‘sh', kassaLines(null).length === 0 && kassaLines('x').length === 0);
+    const zl = z => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0, z } }).join('\n');
+    ok('Z-hisobot: mos yoki kun yopilmagan — qator yo‘q', !/Z-hisobot/.test(zl({ ok: true, recorded: true })) && !/Z-hisobot/.test(zl(null)), zl({ ok: true }));
+    ok('Z-hisobot farqi: naqd −10 000, karta +5 000', /· ⚠️ Z-hisobot farqi: naqd −10 000, karta \+5 000$/.test(zl({ ok: false, recorded: true, missing: false, diffCash: -10000, diffCard: 5000 })), zl({ ok: false, recorded: true, diffCash: -10000, diffCard: 5000 }));
+    ok('Z-hisobot kiritilmagan / yo‘q', /⚠️ Z-hisobot kiritilmagan$/.test(zl({ ok: false, recorded: false })) && /⚠️ Z-hisobot yo‘q \(sababi yozilgan\)$/.test(zl({ ok: false, recorded: true, missing: true })));
   }
 
   console.log('\n— yuborish: faqat faol Direktor, /sozlamalar, bir kunda bir marta');
