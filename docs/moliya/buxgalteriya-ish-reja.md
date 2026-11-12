@@ -665,9 +665,11 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
 
 ### 4.17 Texnik dizayn asoslari
 - **Migratsiyalar** (`rls-initplan.sql` dan yuqorida, zanjir himoyasi, qayta bajariladigan, o‘z revoke’lari bilan):
-  `fin-prereq.sql` (0), `fin-core.sql` + `kassa.sql` (1a), `fin-rights.sql` (1b / 2, orqaga qaytarish migratsiyalari
-  bilan), `fin-exp.sql` (2), `fin-bank.sql` (3), `fin-gl.sql` (4). Mavjud funksiyalar o‘z faylida tahrirlanadi.
-  Yordamchilar `is_accountant`, `fin_reader`, `kassa_reader`, `kassa_operator` — `v_fns` ga.
+  `fin-prereq.sql` (0), `fin-core.sql` + `kassa.sql` (1a), `fin-rights.sql` (1b / 2; orqaga qaytarish — faylning o‘zida:
+  `fin_rights_on = off` va deploy, tozalash bo‘limi siyosat va ko‘rinishlarni o‘chiradi; ✅ 1b: F1.21 buxgalter o‘qish
+  ro‘yxati), `fin-exp.sql` (2), `fin-bank.sql` (3), `fin-gl.sql` (4). Mavjud
+  funksiyalar o‘z faylida tahrirlanadi. Yordamchilar `is_accountant`, `fin_list2`, `kassa_reader`, `kassa_operator` —
+  `v_fns` ga (alohida `fin_reader` kerak bo‘lmadi: buxgalter o‘qishi — `is_accountant` siyosatlari va `*_acc` ko‘rinishlari).
 - **1a jadvallari:** `gl_accounts`, `fin_articles`, `fin_category_map`, `fin_op_rules`, `fin_org` (sozlamalar;
   T1/L1/limit — direktor), `fin_signatories`, `fin_counterparties` (minimal), `cash_desks`, `doc_counters`, `cash_docs`
   (tur, holat draft/approved/posted/void, kassa, yil, raqam, `businessDay`, `capturedAt`, tomon, asos hujjati,
@@ -829,7 +831,7 @@ orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar
 shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
 parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom; «Buxgalter» roli (F1.21 dan
 oldinga tortilgan minimal qism: «Tasdiqlash» va «Kassa» — so‘rovni tasdiqlash, kunni tekshirish, nazorat ro‘yxati; pul
-amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b). Kassa hujjatiga bog‘langan
+amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b, F1.21 ✅). Kassa hujjatiga bog‘langan
 to‘lov qatorini (KO-1, o‘zaro hisob dalolatnomasi) faqat kassa funksiyalari o‘zgartiradi (`trg_kassa_pay_guard`: summa,
 kanal, o‘quvchi, holat, kun, havola, fiskal № — boshqa yo‘l bilan rad; bekor qilish — hujjat orqali); biriktirilmagan
 to‘lovni qaytarish — Dt 6390 Kt 5010 (OP-16). Avans hisoboti (F2.6 dan oldinga tortilgan minimal qism, buxgalter ko‘rigi
@@ -852,11 +854,12 @@ Telegram nazorat qatorida (qolganlari — yopilmagan / tekshirilmagan kun, 5910,
 KPI (F1.25, `kassa_kpi`): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi (maqsad ≤ 2 %), muddati o‘tgan
 avanslar — «KPI» oynasi (8 hafta) va dushanba kungi Telegram qatori. Raqam seriyalari (4.14): o‘zaro hisob «ЎҲ-» va avans
 hisoboti «А-» — dalolatnomalardan («Д-») alohida hisoblagichlar bilan; chop etishda o‘z sarlavhasi («Ўзаро ҳисоб
-далолатномаси», «Аванс ҳисоботи»). Modul relizi 9. Sinov kassasi (CT-20)
+далолатномаси», «Аванс ҳисоботи»). Modul relizi 10 (F1.21 buxgalter roli). Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
 `test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 129, `test-fin-period.sql` 36,
-`test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
+`test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-fin-rights.sql` 108 (buxgalter
+o‘qish huquqlari — yopiq ro‘yxat, D6/D7, orqaga qaytarish), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 27, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 5, `tg-daily.test.cjs`
 45; brauzerda o‘n ikkita to‘liq stsenariy (287 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
@@ -864,7 +867,7 @@ va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
 66–69-bo‘limlar; M5 — bankdan limit xati, maktab), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
 kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil (ko‘p agentli) ko‘rik —
-hali o‘tkazilmagan; F1.20 (RLS relizi) — 1b-bosqichda.
+kassa moduli uchun hali o‘tkazilmagan (F1.21 uchun o‘tkazildi — `SESSIYA-ISHLARI.md` 76-bo‘lim); F1.20 (RLS relizi) — 1b-bosqichda.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|
@@ -912,7 +915,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul |
 |---|---|---|---|---|---|
 | F1.20 | S | 0,5 | RF-08 RLS relizi (toza haftadan keyin), orqaga qaytarish migratsiyasi bilan | F1.11; 7 kun P4/P5 = 0 | To‘g‘ridan-to‘g‘ri yozuv rad |
-| F1.21 | M | 2,5 | `accountant` roli: yorliqlar, tablar, ~10 jadval SELECT siyosati, `can_see_salary`, `students_billing`, `v_fns` | F1.1; FD-18, 28 | Rol testlari; ro‘yxat yopiq |
+| F1.21 | M | 2,5 | ✅ `accountant` roli (reliz 10): «To‘lovlar», «Buxgalteriya» (+ oylik vedomost) — faqat ko‘rish; «Tasdiqlash», «Kassa» — 2-ro‘yxat nazorati (tasdiqlash / rad etish, kunni tekshirish, hujjatni bekor qilish, avans hisoboti); YOPIQ RO‘YXAT (`fin-rights.sql`): `expenses`, `credit_ledger`, `student_credit`, `staff_advances`, `payroll_runs`, `config` (finance, salary) — `*_acc_sel`; `invoices_acc` (kasallik sanalarisiz), `payments_acc`, `refunds_acc`, `salary_payments_acc`, `payroll_lines_acc` — to‘lovchi matni (ism, «sinf» — maxfiy kod yoki telefon bo‘lishi mumkin), telefon, email, davomat tafsilotisiz ko‘rinishlar; `students_billing` (nurse-sick.sql); `claim_child` buxgalterga yopiq (parent-link-canon.sql); `can_see_salary` o‘zgarmagan (xodim kartochkasi ochilmaydi); qo‘shimcha lavozim yo‘q; kassa javoblari va hujjat suratlarida xodim emaili yo‘q; A4 hisobot ismsiz (FD-28); orqaga qaytarish — `fin_rights_on = off` | F1.1; FD-18, 28 | Rol testlari (`test-fin-rights.sql` 108: yopiq ro‘yxat — o‘qish siyosatlari, yozish siyosati yo‘qligi, ko‘rinishlar, RPC’lar matn va xatti-harakat bo‘yicha; kod / telefon / email / kasallik sanasi buxgalter o‘qiy oladigan hech bir joyda yo‘q; orqaga qaytarish yo‘li); brauzer `e2e-kassa13` |
 | F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli; Excel — FD-28 bo‘yicha `kassa_journal_export`: kassirda yo‘q, 2-ro‘yxatga ismsiz, Direktorga to‘liq) — buxgalter ko‘rigi M4; ✅ RP-08 oylik statiya matritsasi (`kassa_matrix`; chop etish — haftalar, XLSX — kunlar); ✅ oylik kassa to‘plami E1–E4 (`kassa_month_pack`: KO-3, statiyalar, kassa kunlari, hisobdorlar; FD-28) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
 | F1.23 | S | 0,5 | ✅ O‘zaro hisob dalolatnomasi chop etish (o‘z sarlavhasi va «ЎҲ-» seriyasi, uch tilda; xodim «Танишдим, розиман» imzosi); sozlamalar — imzo egalari va chop etish tili «⚙ Sozlamalar»da | F1.5 | — |
 | F1.24 | S | 1 | ✅ Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) — «Kassa» sahifasida, nazorat ro‘yxatida va Telegram nazorat qatorida | F1.15 | RP-06 va Telegramda |
@@ -934,7 +937,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 | F2.7 | M | 2,5 | Faktura tarkibi (`grossAmount`, `discountParts`), noyabrdan backfill | FD-32 | 100 % fakturada mos (±1 so‘m) |
 | F2.8 | M | 3 | Oylik sanash dalolatnomasi, topshirish-qabul, oy oxiri ro‘yxati; barcha pul jadvallari uchun oy qulfi (tizim mustasno) | F1.9, F1.16 | Qulflangan oyga yozuv rad; webhook’lar ishlaydi |
 | F2.9 | L | 5 | Huquqlar II (RF-09…12): detektor → revoke; provider `fix`; barcha pul RPC larida bayroq | F1.13 | 7 kun 0 yozuv, keyin revoke |
-| F2.10 | M | 2 | 9 rol + anon REST RLS matritsasi | F2.9 | Barcha rad etishlar |
+| F2.10 | M | 2 | 10 rol (buxgalter bilan) + anon REST RLS matritsasi | F2.9 | Barcha rad etishlar |
 | F2.11 | S | 0,5 | `refund_credit` (FD-25 talab qilsa) | F1.6 | — |
 | F2.12 | S | 0,5 | KO-3 A4; yil muqovasi va guvohnoma; patta QR | F1.14 | — |
 

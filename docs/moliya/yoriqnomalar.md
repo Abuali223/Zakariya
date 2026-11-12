@@ -67,10 +67,21 @@ farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi yozadi — 
 
 ## 2. Moliya menejeri va buxgalter (2-ro‘yxat)
 
-Buxgalterning o‘z hisobi va roli bor — **«Buxgalter»** (Direktor «Foydalanuvchilar»da beradi). Unda ikki bo‘lim ochiladi: «Tasdiqlash»
-va «Kassa» (so‘rovlarni tasdiqlash, kunni tekshirish, nazorat ro‘yxati, chop etish, «Davr»ni ko‘rish). Pul qabul qilish, berish va
-so‘rov yuborish buxgalterda yo‘q; «Buxgalteriya», «To‘lovlar» va maosh bo‘limlari hozircha moliya menejerida (buxgalterga o‘qish
-huquqi keyingi bosqichda ochiladi).
+Buxgalterning o‘z hisobi va roli bor — **«Buxgalter»** (Direktor «Foydalanuvchilar»da beradi; qo‘shimcha lavozim bu rolga
+berilmaydi — buxgalter kassirni nazorat qiladi). To‘rt bo‘lim ochiladi:
+- **«Tasdiqlash»** va **«Kassa»** — 2-ro‘yxat nazorati: kassir so‘rovlarini tasdiqlash yoki rad etish, kunni tekshirish,
+  o‘tkazilgan hujjatni bekor qilish, avans hisoboti (o‘tkazilganda xarajat «Buxgalteriya»ga o‘zi tushadi), nazorat ro‘yxati, KO-3,
+  statiyalar, KPI, chop etish, «Davr»ni ko‘rish;
+- **«To‘lovlar»** (faqat ko‘rish) — oy bo‘yicha hisob-fakturalar, to‘lovlar (kassa, bank, terminal, Click/Uzum), qaytarishlar,
+  avanslar, biriktirilmagan to‘lovlar (sana, provayder, summa), o‘quvchining to‘lov tarixi (📋);
+- **«Buxgalteriya»** (faqat ko‘rish) — kirim, chiqim, xarajatlar ro‘yxati va toifalari, xodim avanslari, berilgan maosh, **oylik
+  vedomost** (holati va qatorlari), A4 oylik hisobot.
+
+Pul qabul qilish va berish, kassaga so‘rov yuborish, xarajatni qo‘lda yozish, tahrirlash va o‘chirish buxgalterda yo‘q (tugmalar
+ko‘rinmaydi, server ham rad etadi). O‘quvchi ismi, ID, sinfi ko‘rinadi; telefon, manzil, sog‘liq kartasi, baholar, davomat
+jurnali, xodim kartochkalari — yo‘q (D6/D7). To‘lovchi yozgan matn (ism, «sinf», izoh) va ota-ona telefoni to‘lov yozuvlarida
+ham ko‘rsatilmaydi. Chegirma va uning sababi (monitoring 20% / 100%, kasal kunlar soni va summasi) ko‘rinadi — hisob uchun
+kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** (o‘quvchi — ID, xodim — maosh ID’si; FD-28).
 
 **Har kuni**
 1. **Chiqim so‘rovlarini tasdiqlash:** «Kassa» → «So‘rovlar» → «Ko‘rish»: oluvchi, statiya, asos hujjati to‘g‘rimi → «Tasdiqlash»

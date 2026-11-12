@@ -151,6 +151,8 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 12 | Nazorat ro‘yxati va Telegram hisobotidagi kassa qatori tushunarli | ☐ | |
 | 13 | Davr surati va davrni yopish; yopilgan sanaga yozuv rad etildi | ☐ | |
 | 14 | Internet uzilganda to‘lov navbatga tushdi, keyin o‘zi o‘tdi | ☐ | |
+| 15 | Buxgalter: «To‘lovlar» va «Buxgalteriya» — oy ma’lumoti ko‘rinadi, yozish tugmalari yo‘q, telefon va to‘lovchi matni ko‘rinmaydi | ☐ | |
+| 16 | Buxgalter: oylik vedomost (holati, qatorlar) — faqat ko‘rish; A4 oylik hisobot — ismsiz (o‘quvchi va xodim ID bilan) | ☐ | |
 
 Har rol o‘ziga tegishli qatorlarni bajaradi (qolganlariga «—»). Xulosa: ☐ qabul qilaman ☐ quyidagi tuzatishlardan keyin: [___]
 Imzo: [___]

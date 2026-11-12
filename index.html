@@ -2574,7 +2574,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         kabRefresh();
         // Admin bo'lsa (custom claim yoki role=='admin') "Admin panel" havolasini ko'rsatamiz
         try{
-          let adminOk = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','marketing_mgr','kassir','reception'].includes(role);
+          let adminOk = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','marketing_mgr','kassir','reception','nurse','accountant'].includes(role);   // admin.html STAFF bilan bir xil
           try{ const tok=await user.getIdTokenResult(true); if(tok&&tok.claims&&tok.claims.admin) adminOk=true; }catch(e){}
           const el=document.getElementById('auth-admin'); if(el) el.style.display=adminOk?'inline-flex':'none';
         }catch(e){}

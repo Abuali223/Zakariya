@@ -824,7 +824,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, updateProfile, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, limit, doc, setDoc, updateDoc, addDoc, createDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js?v=4";   // ?v — yangi shim (createDoc) keshdan emas
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection as fsCollection, getDocs, getDoc, query, where, orderBy, limit, doc, setDoc, updateDoc, addDoc, createDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js?v=4";   // ?v — yangi shim (createDoc) keshdan emas
 
 // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
 const firebaseConfig = { apiKey:"x", authDomain:"x", projectId:"x", storageBucket:"x", messagingSenderId:"x", appId:"x", measurementId:"x" };
@@ -1412,16 +1412,19 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
   hr:['teachers','staff','staffatt'], admin:['enrollments','feedback','canteen'], admin_head:['enrollments','feedback','canteen'],
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
   finance_mgr:['payments','finance','planfact','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'],
-  // Buxgalter (2-ro'yxat): o'z bo'limi yo'q — «Kassa» (tasdiq, kunni tekshirish, nazorat ro'yxati) va «Tasdiqlash» navbati pastda
-  //   qo'shiladi (faqat serverda kassa moduli bo'lsa). O'quvchi va xodim ma'lumotlarini ko'rmaydi (D6); to'liq o'qish huquqlari — 1b.
+  // Buxgalter (2-ro'yxat, moliya rejasi F1.21): bo'limlari allowedTabs()'da qo'shiladi — «Tasdiqlash», «To‘lovlar», «Kassa»,
+  //   «Buxgalteriya» (faqat serverda kassa moduli va F1.21 o'qish ro'yxati — reliz 10+ — bo'lsa). «To‘lovlar» va «Buxgalteriya» —
+  //   FAQAT KO'RISH (accRO); «Tasdiqlash» va «Kassa» — 2-ro'yxat nazorati (so'rovni tasdiqlash / rad etish, kunni tekshirish,
+  //   hujjatni bekor qilish, avans hisoboti); o'quvchi va xodim kartochkalari, telefonlar, davomat — yo'q (D6/D7);
+  //   eksport / chop etish — ismsiz (FD-28).
   accountant:[] };
 // PKG-11: qo'shimcha (ikkinchi) lavozim bo'la oladigan rollar — bazadagi app.extra_roles_allowed() bilan bir xil.
 //   Direktor, Moliya menejeri, G'aznachi — yo'q (superuser va pul roli faqat asosiy rol bo'ladi).
 const EXTRA_ROLES_OK=['teacher','kurator','reception','hr','kassir','nurse','marketing_mgr','admin_head','zavuch'];
 // Bazadagi app.u_has bilan bir xil: foydalanuvchi qatori r lavozimidami — asosiy rol r, yoki qo'shimcha olish mumkin bo'lgan
-//   asosiy rolda (Direktor/ota-ona/o'quvchi/rolsiz — yo'q) users."extraRoles" ichida r. Sinf/fan biriktirishda shu bilan qaraladi.
+//   asosiy rolda (Direktor/ota-ona/o'quvchi/buxgalter/rolsiz — yo'q) users."extraRoles" ichida r. Sinf/fan biriktirishda shu bilan qaraladi.
 function uHas(u, r){ if(!u) return false; const p=String(u.role||''); if(p===r) return true;
-  if(['director','parent','student',''].includes(p) || !EXTRA_ROLES_OK.includes(r)) return false;
+  if(['director','parent','student','accountant',''].includes(p) || !EXTRA_ROLES_OK.includes(r)) return false;
   return Array.isArray(u.extraRoles) && u.extraRoles.includes(r); }
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
@@ -1434,6 +1437,7 @@ function allowedTabs(){
   if(SESSION.notifyEditor && !base.includes('notify')) base.push('notify');                       // Direktor tayinlagan xabarnoma muharriri
   // Kassir — maosh ko'rish uchun O'qituvchilar+Xodimlar (faqat o'qish).
   if(SESSION.role==='kassir' && canSeeSalary()){ if(!base.includes('teachers')) base.push('teachers'); if(!base.includes('staff')) base.push('staff'); }
+  if(SESSION.role==='accountant' && accFinOk()) ['payments','accounting'].forEach(k=>{ if(!base.includes(k)) base.push(k); });   // F1.21
   if(kassaTabOk() && !base.includes('kassa')){ const i=base.indexOf('payments'); base.splice(i<0?base.length:i+1, 0, 'kassa'); }   // «Kassa» — «To‘lovlar»dan keyin
   if(approvalQueuesForMe().length && !base.includes('approvals')) base.unshift('approvals');   // tasdiqlovchi — navbat birinchi
   return base;
@@ -1467,8 +1471,12 @@ const KASSA_BLOCK={ prev_open:'Oldingi kassa kuni yopilmagan — avval «Kassa»
   day_closed:'Bugungi kassa kuni yopilgan. Yangi naqd to‘lov uchun Direktor kunni qayta ochishi kerak.',
   not_started:'Kassa hali ishga tushirilmagan: Direktor boshlang‘ich qoldiqni kiritishi kerak.',
   clock:'Server sanasi kassa kunidan orqada — administratorga xabar bering.' };
-let KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+let KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
 const finMod=name=>import('./assets/js/'+name+'.js');
+// F1.21: buxgalter moliya bo'limlarini faqat KO'RADI — yozish tugmalari yashiriladi (server ham rad etadi).
+function accRO(){ return SESSION.role==='accountant'; }
+// «To‘lovlar» / «Buxgalteriya» buxgalterga — serverda kassa moduli va F1.21 o'qish ro'yxati (modul relizi 10+) bo'lsa.
+function accFinOk(){ return !!KASSA.on && Number(KASSA.ver||0)>=10; }
 function kassaRole(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).some(r=>['finance_mgr','treasurer','kassir','accountant'].includes(r)); }
 function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','treasurer','kassir','accountant'].includes(SESSION.role)); }
 function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
@@ -1487,29 +1495,30 @@ function kassaQueue(){
 }
 // Kirishda: saqlangan holat (darhol, tarmoqsiz) — keyin kassaProbe() uni serverdan yangilaydi.
 function kassaInit(uid){
-  KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+  KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
   if(!kassaRole()) return;
   try{ const c=JSON.parse(localStorage.getItem(KASSA_LS)||'null');
-    if(c && c.uid===uid && c.on){ KASSA={ on:true, live:kassaLiveOn(c.goLive), me:c.me||{}, state:null, goLive:c.goLive||null }; kassaQueue(); } }catch(e){}
+    if(c && c.uid===uid && c.on){ KASSA={ on:true, live:kassaLiveOn(c.goLive), me:c.me||{}, state:null, goLive:c.goLive||null, ver:Number(c.ver)||0 }; kassaQueue(); } }catch(e){}
 }
 async function kassaProbe(){
   if(!kassaRole()) return KASSA;
   const uid=(auth.currentUser&&auth.currentUser.uid)||'';
-  const was=kassaTabOk();
+  const navKey=()=>kassaTabOk()+'|'+allowedTabs().join(',');   // bo'limlar o'zgardimi (kassa va buxgalterning moliya bo'limlari)
+  const was=navKey();
   try{
     const s=await rpc('kassa_state', { p_desk:'main' });
-    KASSA={ on:true, live:kassaLiveOn(s.kassaGoLive, s.today), me:s.me||{}, state:s, goLive:s.kassaGoLive||null };
-    try{ localStorage.setItem(KASSA_LS, JSON.stringify({ uid, on:true, goLive:KASSA.goLive, me:KASSA.me })); }catch(e){}
+    KASSA={ on:true, live:kassaLiveOn(s.kassaGoLive, s.today), me:s.me||{}, state:s, goLive:s.kassaGoLive||null, ver:Number(s.version)||0 };
+    try{ localStorage.setItem(KASSA_LS, JSON.stringify({ uid, on:true, goLive:KASSA.goLive, me:KASSA.me, ver:KASSA.ver })); }catch(e){}
     kassaQueue();
   }catch(e){
     // Faqat ANIQ javobda o'chadi: funksiya yo'q (server hali yangilanmagan) yoki ruxsat yo'q. Tarmoq uzilishi va vaqtinchalik
     //   server xatosida oxirgi ma'lum holat qoladi — aks holda naqd to'lov fiskal raqamsiz navbatga tushib, keyin rad etilardi.
     if(!(rpcMissing(e) || String((e&&e.code)||'')==='42501')) return KASSA;
-    KASSA={ on:false, live:false, me:{}, state:null, goLive:null };
+    KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
     try{ localStorage.removeItem(KASSA_LS); }catch(_){}
   }
   KASSA_PROBED=true;
-  if(was!==kassaTabOk()) navRebuild();
+  if(was!==navKey()) navRebuild();
   // Joriy bo'lim endi yo'q (yoki hali ochilmagan edi) — rolning birinchi bo'limi ochiladi; umuman bo'lmasa — tushuntirish.
   if(!SESSION.isAdmin && !allowedTabs().includes(currentTab)) openTab(allowedTabs()[0]);
   return KASSA;
@@ -1541,6 +1550,9 @@ function canSeeSalary(){
   const r=SESSION.role;
   return r==='hr'||r==='finance_mgr'||r==='treasurer'||r==='kassir';
 }
+// Oylik vedomostni (payroll_runs / payroll_lines) ko'rish: maoshni ko'radiganlar + buxgalter (F1.21 — fin-rights.sql; buxgalterga
+//   xodim kartochkalari ochilmaydi, shuning uchun canSeeSalary'ga qo'shilmagan).
+function canSeePayroll(){ return canSeeSalary() || SESSION.role==='accountant'; }
 // O'qituvchi/xodim yozuvini boshqara oladimi (qo'shish/tahrir/o'chir) — faqat direktor/HR.
 function canManageStaffCol(){ return SESSION.isAdmin || SESSION.role==='hr'; }
 // Maosh TO'LAY oladimi (payout + chek) — direktor/HR/moliya/kassir (RLS salpay_ins bilan bir xil).
@@ -1737,9 +1749,9 @@ onAuthStateChanged(auth, async user=>{
   }
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
   const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse','accountant'];
-  // PKG-11: ikkinchi lavozim (users."extraRoles", faqat Direktor beradi). Direktor/ota-ona/o'quvchi — qo'shimchasiz (bazada ham).
+  // PKG-11: ikkinchi lavozim (users."extraRoles", faqat Direktor beradi). Direktor/ota-ona/o'quvchi/buxgalter — qo'shimchasiz (bazada ham).
   //   Panelga kirish: asosiy YOKI qo'shimcha lavozimlardan biri panel roli bo'lsa (masalan, qorovul + kassir).
-  const roles = [role].concat(['director','parent','student',''].includes(role) ? [] : extraRoles.filter(r=>EXTRA_ROLES_OK.includes(r) && r!==role))
+  const roles = [role].concat(['director','parent','student','accountant',''].includes(role) ? [] : extraRoles.filter(r=>EXTRA_ROLES_OK.includes(r) && r!==role))
     .filter((r,i,a)=>a.indexOf(r)===i);
   const panelRoles = roles.filter(r=>STAFF.includes(r));
   if(!panelRoles.length){
@@ -2209,7 +2221,16 @@ function watchBadges(){
 // D6: kassa va moliya (finance_mgr, treasurer, kassir) o'quvchini FAQAT ism, ID, sinf, holat va sanalar bilan ko'radi —
 //   xom 'students' jadvali ularga yopiq (staff-d6.sql), ro'yxat 'students_billing' ko'rinishidan keladi.
 // Hamshira ham: faqat ism va sinf (ball, davomat, rasm yo'q) — nurse-sick.sql (students_billing WHERE).
-function billingOnlyRole(){ return ['finance_mgr','treasurer','kassir','nurse'].includes(SESSION.role); }
+// Buxgalter ham (F1.21): nurse-sick.sql students_billing WHERE — my_role() = 'accountant'.
+function billingOnlyRole(){ return ['finance_mgr','treasurer','kassir','nurse','accountant'].includes(SESSION.role); }
+// F1.21: buxgalter fakturalar, to'lovlar, qaytarishlar, berilgan maosh va vedomost qatorlarini xom jadvallardan emas, «*_acc»
+//   ko'rinishlaridan O'QIYDI — ularda to'lovchi yozgan matn (maxfiy kod yoki telefon bo'lishi mumkin), ota-ona telefoni, xom javob,
+//   xodim emaili, kasallik sanalari va davomat tafsiloti yo'q (D6/D7; migration/fin-rights.sql). Nom faqat O'QISH uchun almashadi:
+//   yozish doc(db,'payments',id) orqali ketadi (buxgalterda yozish tugmalari yo'q, server ham rad etadi).
+function collection(dbRef, name){
+  const v = SESSION.role==='accountant' ? ({ invoices:'invoices_acc', payments:'payments_acc', refunds:'refunds_acc', salary_payments:'salary_payments_acc', payroll_lines:'payroll_lines_acc' })[name] : '';
+  return fsCollection(dbRef, v || name);
+}
 async function loadCol(name, orderField){
   const snap = await getDocs(collection(db, (name==='students' && billingOnlyRole()) ? 'students_billing' : name));
   const arr = snap.docs.map(d=>({ _id:d.id, ...d.data() }));
@@ -5893,7 +5914,7 @@ async function renderUsers(){
     ['parent','Ota-ona'],['student','O‘quvchi']
   ];
   // Buxgalter roli — faqat serverda kassa moduli bo'lsa beriladi (yoki allaqachon shu rolda hisob bo'lsa — ro'yxatda ko'rinsin).
-  if(KASSA.on || rows.some(u=>u.role==='accountant')){ const i=roleOpts.findIndex(o=>o[0]==='finance_mgr'); roleOpts.splice(i+1, 0, ['accountant','Buxgalter (kassa: tasdiq va tekshiruv)']); }
+  if(KASSA.on || rows.some(u=>u.role==='accountant')){ const i=roleOpts.findIndex(o=>o[0]==='finance_mgr'); roleOpts.splice(i+1, 0, ['accountant','Buxgalter (kassa nazorati; to‘lov, xarajat, vedomost — faqat ko‘rish)']); }
   let CLS={classes:{},keys:[]};
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
   // HR yozuvlari (staff+teachers) — login hisobini davomat/maosh yozuviga TELEFON bo'yicha
@@ -5933,8 +5954,8 @@ async function renderUsers(){
     const xrOf=r=>Array.isArray(r.extraRoles)?r.extraRoles:[];
     const roleCell=r=> roleChip(r.role||'') + (xrOf(r).length ? `<div class="small" style="margin-top:3px;color:var(--teal)" data-xr-of="${esc(r._id)}">+ ${xrOf(r).map(x=>esc(roleName(x))).join(', ')}</div>` : '')
       + ((String(r.status||'')==='blocked' && r.blockedRole) ? `<div class="small muted" style="margin-top:3px">avvalgi rol: ${esc(roleName(r.blockedRole))}</div>` : '');
-    // PKG-11: ikkinchi lavozim — faqat Direktor; o'ziga emas; asosiy roli Direktor/ota-ona/o'quvchi/rolsiz, kutilayotgan yoki bloklangan hisobga — yo'q.
-    const xrBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid || ['director','parent','student','staff',''].includes(String(r.role||'')) || ['pending','blocked'].includes(String(r.status||''))) ? ''
+    // PKG-11: ikkinchi lavozim — faqat Direktor; o'ziga emas; asosiy roli Direktor/ota-ona/o'quvchi/buxgalter/rolsiz, kutilayotgan yoki bloklangan hisobga — yo'q.
+    const xrBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid || ['director','parent','student','accountant','staff',''].includes(String(r.role||'')) || ['pending','blocked'].includes(String(r.status||''))) ? ''
       : `<button class="btn sm" data-xru="${esc(r._id)}" title="Ikkinchi lavozim (masalan, o‘qituvchi + qabulxona): xodimga o‘sha bo‘limlar ham ochiladi">➕ Lavozim</button>`;
     // HR yozuviga bog'lanish ko'rsatkichi: bog'langan bo'lsa 🔗 kod; aks holda telefon bo'yicha taklif.
     const linkChip=r=>{ if(r.staffRefId){ const rec=linkCtx.byRef[(r.staffRefType||'')+':'+(r.staffRefId||'')];
@@ -6047,9 +6068,9 @@ function openUserEditor(u, CLS, roleOpts, opts){
   const roleSel=ov.querySelector('#u-role');
   // PKG-11: ikkinchi lavozim «O‘qituvchi» / «Kurator» bo'lsa ham sinf (va fan) kerak — aks holda asosiy roli boshqa xodimga
   //   sinf biriktirib bo'lmasdi va har saqlashda biriktirilgan sinflar o'chib ketardi. Qo'shimcha lavozim faqat bazadagi
-  //   app.u_has qoidasida hisoblanadigan asosiy rollarda (Direktor/ota-ona/o'quvchi/rolsiz — yo'q).
+  //   app.u_has qoidasida hisoblanadigan asosiy rollarda (Direktor/ota-ona/o'quvchi/buxgalter/rolsiz — yo'q).
   const xr=(Array.isArray(u.extraRoles)?u.extraRoles:[]).filter(r=>EXTRA_ROLES_OK.includes(r));
-  const xrOk=r=>!['director','parent','student',''].includes(String(r||''));
+  const xrOk=r=>!['director','parent','student','accountant',''].includes(String(r||''));
   const needsClsFor=r=>(r==='kurator'||r==='teacher') || (xrOk(r) && (xr.includes('kurator')||xr.includes('teacher')));
   const needsSubjFor=r=>(r==='teacher') || (xrOk(r) && xr.includes('teacher'));
   const sync=()=>{ const r=roleSel.value;
@@ -6661,7 +6682,7 @@ function openExtraRolesEditor(u, onDone){
 }
 
 /* ---- 🔍 Global qidiruv (sarlavha yoki «/» tugmasi): faqat rolingiz ko'ra oladigan to'plamlar (bazada RLS ham) ---- */
-function canSearchFinance(){ return SESSION.isAdmin || ['finance_mgr','treasurer','kassir'].includes(SESSION.role); }
+function canSearchFinance(){ return SESSION.isAdmin || ['finance_mgr','treasurer','kassir','accountant'].includes(SESSION.role); }
 function canSearchPeople(){ return SESSION.isAdmin || ['hr','zavuch','admin_head','admin'].includes(SESSION.role); }
 function canSearchPhone(){ return SESSION.isAdmin || ['reception','kassir'].includes(SESSION.role); }
 const maskPh=p=>{ const d=String(p||'').replace(/\D/g,''); if(SESSION.isAdmin) return d?pmPrettyPhone('+'+d):''; return d.length>=7?`+${d.slice(0,3)} ${d.slice(3,5)} *** ** ${d.slice(-2)}`:(d?'***':''); };
@@ -7620,14 +7641,15 @@ async function payrollBuildLines(C){
       payable:Math.max(0, Math.round(gross-adv-ded+sub+prior)), workedMin:det.workedMin==null?null:det.workedMin, details:det };
   }).filter(l=>l.gross>0 || l.subBonus>0 || l.carryIn!==0 || l.advance>0);
 }
-function prWho(uid, names){ const u=(names||{})[String(uid||'')]; return u ? (u.name||u.role||uid) : (uid?String(uid):'—'); }
+function prWho(uid, names){ const u=(names||{})[String(uid||'')]; return u ? (u.name||u.role||uid) : ((uid && !accRO())?String(uid):'—'); }
 async function prUserNames(uids){ const out={}; for(const u of [...new Set((uids||[]).filter(Boolean))]){ try{ const d=await getDoc(doc(db,'users',String(u))); if(d.exists()){ const x=d.data()||{}; out[u]={ name:x.name||x.displayName||'', role:ROLE_LABEL[x.role]||x.role||'' }; } }catch(e){} } return out; }
 // «Xodimlar davomati» → «Oylik hisobot»: vedomost holati va amallar (yuborish / qayta ochish / qatorlar).
 async function renderPayrollCard(box, mon, C, onChange){
-  if(!box || !canSeeSalary()) return;
+  if(!box || !canSeePayroll()) return;
   const I=await payrollRunInfo(mon); if(!document.body.contains(box)) return;
   if(I.err){ box.innerHTML=''; return; }
-  const run=I.run, st=run?run.status:'', names=await prUserNames(run?[run.preparedBy, run.approvedBy, run.returnedBy, run.reopenedBy]:[]);
+  // Buxgalter boshqa foydalanuvchilar qatorini o'qiy olmaydi (users — faqat o'z qatori) — ism o'rniga «—».
+  const run=I.run, st=run?run.status:'', names=accRO()?{}:await prUserNames(run?[run.preparedBy, run.approvedBy, run.returnedBy, run.reopenedBy]:[]);
   if(!document.body.contains(box)) return;
   const chip=x=>{ const v=PR_ST[x]||['Tuzilmagan','#475467','#F2F4F7']; return `<span class="chip" style="background:${v[2]};color:${v[1]};border-color:transparent">${esc(v[0])}</span>`; };
   const rule = I.newRule ? `<div class="small muted" style="margin-top:4px">${esc(I.from)} oydan boshlab maosh faqat HR menejer tasdiqlagan vedomost bo‘yicha beriladi (tasdiqlangan summadan oshmaydi).</div>`
@@ -9259,14 +9281,14 @@ async function renderAccounting(){
   const CATS=['Maosh','Soliq','Bank','Ijara','Avtobus','Oziq-ovqat','Kommunal','Xo‘jalik tovarlari','Kanselyariya','Boshqa','Ta‘mir','Inventar','Outsource (buxgalteriya)','Marketing','Qaytarilgan','Med chiqim','Korporativ karta','Dasturiy ta‘minot','Kitoblar','IT-PARK','Hayriya'];
   const ERAMP=['#A0331B','#BC4426','#CE6046','#D98A6A','#E6A98F','#B45309','#D97706','#F59E0B','#CA8A04','#65A30D','#16A34A','#059669','#0D9488','#0891B2','#2563EB','#4F46E5','#7C3AED','#9333EA','#C026D3','#DB2777','#9F1239'];
   $('#view').innerHTML = `<div class="page-head"><h2>Buxgalteriya</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Kirim — <b>«To'lovlar»</b>dan avtomatik, chiqim (xarajat) — siz kiritasiz. Foyda = kirim − chiqim.</p>
+    <p class="small muted" style="margin:-8px 0 14px">${accRO()?'<b>Faqat ko‘rish</b> (buxgalter): kirim — «To‘lovlar»dan, chiqim — xarajatlar (kassa orderlari, bank va karta, avans hisobotlari), maosh va avanslar, oylik vedomost. Foyda = kirim − chiqim.':'Kirim — <b>«To\'lovlar»</b>dan avtomatik, chiqim (xarajat) — siz kiritasiz. Foyda = kirim − chiqim.'}</p>
     <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
-      <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>
+      <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>${accRO()?'':`
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-payroll" style="width:100%" title="Barcha o‘qituvchilar maoshini shu oyga «Maosh» xarajati qilib yozadi">💼 Oylik maoshni yozish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-paysal" style="width:100%" title="Har xodimni tanlab oylik maoshini berish + chek (qaysi oy uchunligi bilan)">💵 Maosh berish (xodimga)</button></label>
-      <label>&nbsp;<button class="btn ghost2" id="ac-adv" style="width:100%" title="Xodimга oy ichida oldindan berilgan maosh (avans) — maoshdan ushlab qolinadi">👤 Xodim avansi</button></label>
-    </div><div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div></div>
+      <label>&nbsp;<button class="btn ghost2" id="ac-adv" style="width:100%" title="Xodimга oy ichida oldindan berilgan maosh (avans) — maoshdan ushlab qolinadi">👤 Xodim avansi</button></label>`}
+    </div>${accRO()?'':`<div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div>`}</div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
   let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='';
@@ -9331,9 +9353,9 @@ async function renderAccounting(){
     //   «Maosh» XARAJATI (hisoblangan majburiyat) alohida qator — ikkisi aralashtirilmaydi.
     const salPaidOf=x=>(x.paid==null||x.paid==='')?((Number(x.net)||0)+(Number(x.subBonus)||0)):(Number(x.paid)||0);
     const salBy={}; SAL.filter(s=>String(s.month||'')===M).forEach(x=>{ const k=String(x.teacherId||'');
-      const g=salBy[k]=salBy[k]||{ name:x.teacherName||k, last:null, paid:0, n:0 };
+      const g=salBy[k]=salBy[k]||{ name:x.teacherName||k, id:k, last:null, paid:0, n:0 };
       g.paid+=salPaidOf(x); g.n++; if(!g.last || String(x.date||'')>=String(g.last.date||'')) g.last=x; });
-    const salMonth=Object.values(salBy).map(g=>({ teacherName:g.name, gross:Number(g.last.gross)||0, advance:Number(g.last.advance)||0,
+    const salMonth=Object.values(salBy).map(g=>({ teacherName:g.name, id:g.id, gross:Number(g.last.gross)||0, advance:Number(g.last.advance)||0,
       deduction:Number(g.last.deduction)||0, subBonus:Number(g.last.subBonus)||0, paid:g.paid, n:g.n })).sort((a,b)=>b.paid-a.paid);
     const salPaid=salMonth.reduce((s,x)=>s+x.paid,0);
     const salAdv=advOfMonth(M).reduce((s,a)=>s+(Number(a.amount)||0),0);
@@ -9343,9 +9365,11 @@ async function renderAccounting(){
     const catRows=catKeys.length?catKeys.map(c=>`<tr><td>${esc(c)}</td><td style="text-align:right">${S(byCat[c])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">Xarajat yo‘q</td></tr>`;
     const pmRows=PAYERR?`<tr><td colspan="2" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — bu bo‘lim to‘liq emas, qayta yuklang</td></tr>`
       :(pmKeys.length?pmKeys.map(k=>`<tr><td>${esc(PMlab[k]||k)}</td><td style="text-align:right">${S(byPm[k])}</td></tr>`).join(''):`<tr><td colspan="2" style="color:#888">—</td></tr>`);
-    const avRows=avList.length?avList.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.amt)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Avans yo‘q</td></tr>`;
-    const debtRows=debtors.length?debtors.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.name)}</td><td>${esc(x.sid)}</td><td style="text-align:right">${S(x.d)}</td></tr>`).join(''):`<tr><td colspan="4" style="color:#888">Qarzdorlik yo‘q</td></tr>`;
-    const salRows=salMonth.length?salMonth.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.teacherName||'—')}${x.n>1?` <span class="muted">(${x.n} marta)</span>`:''}</td><td style="text-align:right">${S(x.gross)}</td><td style="text-align:right">${x.advance?('−'+S(x.advance)):'—'}</td><td style="text-align:right">${x.deduction?('−'+S(x.deduction)):'—'}</td><td style="text-align:right">${x.subBonus?('+'+S(x.subBonus)):'—'}</td><td style="text-align:right;font-weight:700">${S(x.paid)}</td></tr>`).join(''):'';
+    // FD-28: buxgalter nusxasi ismsiz — o'quvchi faqat ID bilan, xodim — maosh ID'si bilan (ismli nusxa — Direktor).
+    const NM=!accRO();
+    const avRows=avList.length?avList.map((x,i)=>`<tr><td>${i+1}</td>${NM?`<td>${esc(nameC[x.sid]||x.sid)}</td>`:''}<td>${esc(x.sid)}</td><td style="text-align:right">${S(x.amt)}</td></tr>`).join(''):`<tr><td colspan="${NM?4:3}" style="color:#888">Avans yo‘q</td></tr>`;
+    const debtRows=debtors.length?debtors.map((x,i)=>`<tr><td>${i+1}</td>${NM?`<td>${esc(x.name)}</td>`:''}<td>${esc(x.sid)}</td><td style="text-align:right">${S(x.d)}</td></tr>`).join(''):`<tr><td colspan="${NM?4:3}" style="color:#888">Qarzdorlik yo‘q</td></tr>`;
+    const salRows=salMonth.length?salMonth.map((x,i)=>`<tr><td>${i+1}</td><td>${esc((NM?x.teacherName:x.id)||'—')}${x.n>1?` <span class="muted">(${x.n} marta)</span>`:''}</td><td style="text-align:right">${S(x.gross)}</td><td style="text-align:right">${x.advance?('−'+S(x.advance)):'—'}</td><td style="text-align:right">${x.deduction?('−'+S(x.deduction)):'—'}</td><td style="text-align:right">${x.subBonus?('+'+S(x.subBonus)):'—'}</td><td style="text-align:right;font-weight:700">${S(x.paid)}</td></tr>`).join(''):'';
     const html=`<!doctype html><html><head><meta charset="utf-8"><title>Hisobot ${mLabel(M)} ${M.slice(0,4)}</title>
       <style>@page{ size:A4; margin:16mm; } *{ box-sizing:border-box; } body{ font:13px/1.5 'Segoe UI',system-ui,sans-serif; color:#1a2e28; margin:0; }
       .hd{ display:flex; align-items:center; gap:14px; border-bottom:3px solid #1F9982; padding-bottom:12px; margin-bottom:16px; }
@@ -9354,17 +9378,17 @@ async function renderAccounting(){
       table{ width:100%; border-collapse:collapse; margin-bottom:6px; } th,td{ border:1px solid #d5ddd8; padding:6px 9px; text-align:left; font-size:12.5px; }
       th{ background:#eef3f1; } .kpi td:first-child{ width:62%; } .big td{ font-size:14px; }
       .sign{ margin-top:40px; display:flex; justify-content:space-between; font-size:12.5px; } .muted{ color:#666; }</style></head><body>
-      <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}</div></div></div>
+      <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}${NM?'':' · <b>ismsiz nusxa</b> (FD-28: o‘quvchi va xodim — ID bilan)'}</div></div></div>
       <h2>Umumiy ko‘rsatkichlar</h2>
       <table class="kpi big">${row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
       <h2>Shu oyda tushgan to‘lovlar — usul bo‘yicha (${PAYERR?'—':S(cashM.total)})</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
       <div class="muted" style="font-size:11px;margin:-2px 0 6px">Kassa asosida (to‘lov vaqti, Toshkent). «Kirim» — shu oy hisob-fakturalariga to‘langan summa; avans/oldingi oy qarzi tufayli farq qilishi mumkin.</div>
       <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
       <h2>Oylik maosh — naqd berilgan ${S(salPaid)}${salMonth.length?` · ${salMonth.length} xodim`:''}${salFromExp>0?` · hisoblangan (xarajat) ${S(salFromExp)}`:''}</h2>
-      ${salMonth.length?`<table><thead><tr><th>№</th><th>Xodim</th><th style="text-align:right">Hisoblangan</th><th style="text-align:right">Avans</th><th style="text-align:right">Davomat ushlanmasi</th><th style="text-align:right">O‘rinbosarlik</th><th style="text-align:right">Naqd berilgan</th></tr></thead><tbody>${salRows}</tbody></table>`:`<table><tbody><tr><td class="muted">Bu oy «Maosh berish (xodimga)» yozuvi yo‘q.${salFromExp>0?` «Maosh» xarajati (hisoblangan): ${S(salFromExp)}.`:''}</td></tr></tbody></table>`}
-      <h2>Qarzdorlar — ${mLabel(M)} (${debtors.length} ta · ${S(debtSum)})</h2><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Qarz</th></tr></thead><tbody>${debtRows}</tbody></table>
-      <h2>Avans — kimlarda (${avList.length} o‘quvchi · ${S(av)})</h2><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Avans</th></tr></thead><tbody>${avRows}</tbody></table>
-      <div class="sign"><div>Direktor: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
+      ${salMonth.length?`<table><thead><tr><th>№</th><th>${NM?'Xodim':'Xodim (ID)'}</th><th style="text-align:right">Hisoblangan</th><th style="text-align:right">Avans</th><th style="text-align:right">Davomat ushlanmasi</th><th style="text-align:right">O‘rinbosarlik</th><th style="text-align:right">Naqd berilgan</th></tr></thead><tbody>${salRows}</tbody></table>`:`<table><tbody><tr><td class="muted">Bu oy «Maosh berish (xodimga)» yozuvi yo‘q.${salFromExp>0?` «Maosh» xarajati (hisoblangan): ${S(salFromExp)}.`:''}</td></tr></tbody></table>`}
+      <h2>Qarzdorlar — ${mLabel(M)} (${debtors.length} ta · ${S(debtSum)})</h2><table><thead><tr><th>№</th>${NM?'<th>O‘quvchi</th>':''}<th>ID</th><th style="text-align:right">Qarz</th></tr></thead><tbody>${debtRows}</tbody></table>
+      <h2>Avans — kimlarda (${avList.length} o‘quvchi · ${S(av)})</h2><table><thead><tr><th>№</th>${NM?'<th>O‘quvchi</th>':''}<th>ID</th><th style="text-align:right">Avans</th></tr></thead><tbody>${avRows}</tbody></table>
+      <div class="sign"><div>${NM?'Direktor':'Buxgalter'}: __________________ <span class="muted">(imzo)</span></div><div>Sana: ${dstr}</div></div>
       </body></html>`;
     printHTML(html);
   }
@@ -9430,10 +9454,10 @@ async function renderAccounting(){
         <td data-label="Toifa"><span class="acc-cat-chip">${esc(e.category||'—')}</span></td>
         <td data-label="Izoh">${esc(e.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:var(--bad);white-space:nowrap">${fmtSum(e.amount)}</td>
-        <td class="td-actions"><div class="row-actions">${e.cashDocId?'<span class="chip" title="Kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi">Kassa</span>':`<button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`}</div></td></tr>`;
+        <td class="td-actions"><div class="row-actions">${e.cashDocId?'<span class="chip" title="Kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi">Kassa</span>':accRO()?'':`<button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`}</div></td></tr>`;
     }).join('');
     const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
-      ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>'}</div>`;
+      ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:(accRO()?'<div class="empty">Bu oy uchun xarajat yo‘q.</div>':'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>')}</div>`;
 
     // Avans (ortiqcha to'lov — qarzdan ortiq to'langan pul) — bu DAROMAD (xarajat emas). Foydaga hali qo'shilmaydi:
     // tegishli oy hisob-fakturasi yaratilганда avtomatik qo'llanib, o'sha oy «Kirim»iga o'tadi.
@@ -9452,7 +9476,7 @@ async function renderAccounting(){
         <td data-label="Xodim">${esc(a.teacherName||a.teacherId||'—')}</td>
         <td data-label="Izoh">${esc(a.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
-        <td class="td-actions"><button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button>${a.cashDocId?'<span class="chip" title="Kassa chiqim orderi bilan berilgan — «Kassa» bo‘limidan bekor qilinadi">Kassa</span>':`<button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+        <td class="td-actions">${accRO()?'':`<button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`}${a.cashDocId?'<span class="chip" title="Kassa chiqim orderi bilan berilgan — «Kassa» bo‘limidan bekor qilinadi">Kassa</span>':accRO()?'':`<button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     // ---- Avans — kimlarda (2,9 mln kimdan iboratini ko'rsatadi) ----
     const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; });
     INV.forEach(i=>{ const k=String(i.studentId||''); if(k && !nameC[k] && i.studentName) nameC[k]=i.studentName; });
@@ -9460,12 +9484,13 @@ async function renderAccounting(){
     const avansListCard = avList.length ? `<div class="card" style="margin-top:16px;border-left:4px solid #0891B2"><div class="cls-card-head"><h3>Avans — kimlarda</h3><span class="cls-count">${avList.length} o‘quvchi · ${fmtC(av)}</span></div>
       <div class="tablewrap"><table><thead><tr><th>№</th><th>O‘quvchi</th><th>ID</th><th style="text-align:right">Avans (so‘m)</th></tr></thead><tbody>${avList.map((x,i)=>`<tr><td class="num">${i+1}</td><td>${esc(nameC[x.sid]||x.sid)}</td><td class="small muted">${esc(x.sid)}</td><td style="text-align:right;font-weight:700;color:#0891B2;white-space:nowrap">${fmtSum(x.amt)}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     // ---- Direktor uchun A4 hisobot ----
-    const reportCard=`<div class="card" style="margin-bottom:16px"><div class="cls-card-head"><h3>📄 Direktor hisoboti</h3><span class="cls-count">${mLabel(M)} ${M.slice(0,4)}</span></div>
+    const reportCard=`<div class="card" style="margin-bottom:16px"><div class="cls-card-head"><h3>${accRO()?'📄 Oylik hisobot (ismsiz)':'📄 Direktor hisoboti'}</h3><span class="cls-count">${mLabel(M)} ${M.slice(0,4)}</span></div>
       <div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn gold" id="ac-report">📄 A4 hisobot — chop etish / PDF saqlash</button>
-        <span class="small muted">Oylik moliyaviy hisobot: kirim, chiqim, foyda, xarajat toifalari, qaytarilgan, avans, qarzdorlik + imzo joyi.</span></div></div>`;
-    $('#ac-body').innerHTML = reportCard+kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+tableCard+advCard+avansListCard;
+        <span class="small muted">Oylik moliyaviy hisobot: kirim, chiqim, foyda, xarajat toifalari, qaytarilgan, avans, qarzdorlik + imzo joyi.${accRO()?' O‘quvchi va xodim — ID bilan (FD-28).':''}</span></div></div>`;
+    $('#ac-body').innerHTML = reportCard+kpis+avansNote+chart+`<div class="acc-cols">${donut}${catCard}</div>`+(accRO()?'<div id="ac-prc" style="margin-top:16px"></div>':'')+tableCard+advCard+avansListCard;
     { const rb=$('#ac-report'); if(rb) rb.onclick=()=>printAccountingReport(M); }
+    if(accRO()){ const bx=$('#ac-prc'); if(bx) renderPayrollCard(bx, M, null, null); }   // F1.21: oylik vedomost — faqat ko'rish
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
       printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||tkDay(new Date()) }); }));
@@ -9529,9 +9554,9 @@ async function renderAccounting(){
   if(!(await reload())) return;
   draw($('#ac-month').value||curMonth());
   $('#ac-month').addEventListener('change',()=>draw($('#ac-month').value||curMonth()));
-  $('#ac-add').addEventListener('click',()=>openExpenseForm(null));
+  if($('#ac-add')) $('#ac-add').addEventListener('click',()=>openExpenseForm(null));   // buxgalterda (faqat ko'rish) bu tugmalar yo'q
   // Oylik maosh -> «Maosh» xarajati (bir oyga bir marta: id=payroll__oy, qayta bossa yangilanadi)
-  $('#ac-payroll').addEventListener('click', async ()=>{
+  if($('#ac-payroll')) $('#ac-payroll').addEventListener('click', async ()=>{
     const M=$('#ac-month').value||curMonth();
     // Oylik «Maosh» xarajati = shu oy haqiqiy maosh MAJBURIYATI — «Maosh berish» bilan BIR XIL qoidada:
     //   • holat/sana prorata (billingInterval): sinov/muzlatilgan/chiqdi -> 0, oy o'rtasida kirgan/ketgan -> ulush
@@ -9604,7 +9629,7 @@ async function renderAccounting(){
   });
   // Xodim avansi — oy ichida oldindan berilgan maosh (staff_advances). Maosh xarajatiga
   // qo'shimcha yozilmaydi (payroll TO'LIQ maoshni qamraydi) — faqat qoldiqni bilish uchun.
-  $('#ac-adv').addEventListener('click', async ()=>{
+  if($('#ac-adv')) $('#ac-adv').addEventListener('click', async ()=>{
     // Avans ham to'lov kaliti (teacherId) bilan yoziladi — ro'yxat BAZADAN (eskirgan kesh boshqa kishi kalitini bermasin).
     let payees; try{ payees=await loadPayees({fresh:true}); }catch(e){ toast('Xodimlar ro‘yxati yoki maosh stavkalarini o‘qib bo‘lmadi — qayta urinib ko‘ring',true); return; }
     if(!payees.length){ toast('Avval «O‘qituvchilar» yoki «Xodimlar» bo‘limida xodim qo‘shing',true); return; }
@@ -9666,7 +9691,7 @@ async function renderAccounting(){
     };
   });
   // Maosh berish (har xodimni tanlab) — payout jurnali (salary_payments) + chek. XARAJATga qo'shilmaydi.
-  $('#ac-paysal').addEventListener('click', ()=> openSalaryPayout({ month: ($('#ac-month').value||curMonth()), onDone: reload }) );
+  if($('#ac-paysal')) $('#ac-paysal').addEventListener('click', ()=> openSalaryPayout({ month: ($('#ac-month').value||curMonth()), onDone: reload }) );
 }
 
 /* ==================== Marketing (CRM / CAC / ROI) ====================
@@ -10055,7 +10080,7 @@ async function openPayHistory(sid, name){
   // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
   const paysSum=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','split'].indexOf(String(p.status||''))<0).reduce((s,p)=>s+(Number(p.amount)||0),0);
   const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
-  const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.</div>` : '';
+  const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. ${SESSION.isAdmin?'To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.':'Direktorga xabar bering (tuzatish — Direktorda).'}</div>` : '';
   body.innerHTML=`
     <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}</div>
     ${warn}
@@ -11318,7 +11343,7 @@ async function renderFeedback(){
 }
 async function renderPayments(){
   $('#view').innerHTML = `<div class="page-head"><h2>To‘lovlar</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>
+    ${accRO()?`<p class="small muted" style="margin:-8px 0 14px"><b>Faqat ko‘rish</b> (buxgalter): hisob-fakturalar, to‘lovlar (kassa, bank, Click/Uzum), qaytarishlar va avanslar. To‘lov qabul qilish va biriktirish — kassir va moliya menejeri, hisob-fakturalar — Direktor.</p>`:`<p class="small muted" style="margin:-8px 0 14px">Har oy uchun hisob-faktura yarating. Narx <b>«Narx jadvali»</b>dan (sinf/yo‘nalish bo‘yicha) olinadi, chegirmalar (xodim farzandi, grant, kontrakt, monitoring, aka-uka, kasal kun) <b>avtomatik</b> hisoblanadi. Ota-ona kabinetida <b>Click/Uzum</b> orqali to‘laydi.</p>`}
     <div class="card" style="padding:18px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="pm-month" value="${curMonth()}"></label>
       ${SESSION.isAdmin?`<label>Zaxira summa (sinf narxi topilmasa)<input type="text" inputmode="numeric" id="pm-amount" placeholder="ixtiyoriy" value=""></label>
@@ -11326,9 +11351,9 @@ async function renderPayments(){
       <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-audit" style="width:100%" title="Har o‘quvchida real to‘lov = hisob-faktura + avans ekanini tekshiradi (takror hisoblangan avans / nomutanosiblikni topadi)">🔍 Moliya tekshiruvi</button></label>`:''}
-    </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`}</div>
+    </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:(accRO()?'':`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`)}</div>
     <div class="ph-actions" style="margin-bottom:12px">
-      <input id="pm-search" class="search-inp" placeholder="Qidiruv: ism, ID yoki telefon…" autocomplete="off">
+      <input id="pm-search" class="search-inp" placeholder="${accRO()?'Qidiruv: ism yoki ID…':'Qidiruv: ism, ID yoki telefon…'}" autocomplete="off">
       <select id="pm-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
       <select id="pm-flang" class="search-inp" style="max-width:130px"><option value="">Barcha tillar</option><option value="uz">O‘zbek</option><option value="ru">Rus</option></select>
       <select id="pm-fstatus" class="search-inp" style="max-width:180px" title="To‘lov holati bo‘yicha"><option value="">Barcha holatlar</option><option value="debt">Qarzdorlar</option><option value="partial">Qisman to‘laganlar</option><option value="paid">To‘liq to‘laganlar</option></select>
@@ -11352,7 +11377,7 @@ async function renderPayments(){
     catch(e){ if(_g!==VIEW_GEN) return; $('#pm-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
     if(_g!==VIEW_GEN) return;   // boshqa tab ochildi
     // Saralash sinf bo'yicha guruhlashda amalga oshiriladi (quyida).
-    if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).</div></div>`; return; }
+    if(!rows.length){ $('#pm-body').innerHTML=`<div class="card"><div class="empty">${accRO()?'Bu oy uchun hisob-faktura yo‘q.':`Bu oy uchun hisob-faktura yo‘q. Yuqorida summani kiritib «Hisob-fakturalar yaratish» tugmasini bosing (${esc(String(students.length))} o‘quvchi).`}</div></div>`; return; }
     // Balans: paidAmount (qisman to'lov), qarzdorlik = amount - paidAmount.
     // status==='paid' -> to'liq to'langan deb hisoblanadi (Uzum/eski ma'lumot paidAmount'siz bo'lishi mumkin).
     const isCanc=r=>r.status==='canceled'||r.status==='reversed';
@@ -11444,10 +11469,10 @@ async function renderPayments(){
         <td data-label="Izoh" class="small">${esc((p.raw&&p.raw.reverseNote)||'')}</td>
         ${SESSION.isAdmin?`<td class="td-actions"><button class="btn sm ghost2" data-ph="${esc(p.studentId||'')}" title="To‘lov / avans tarixi">📋</button><button class="btn sm danger" data-mrrev="${esc(p._id)}" title="Provayder qaytargan pulni fakturadan ayirish — refund yozilmaydi">↩ Fakturadan</button><button class="btn sm" data-mrdone="${esc(p._id)}">✓ Bajarildi</button></td>`:''}</tr>`).join('')}</tbody></table></div></div>` : '';
     const unmatchedCard = unmatched.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--gold)"><div class="cls-card-head"><h3>⚠️ Biriktirilmagan to‘lovlar</h3><span class="cls-count">${unmatched.length} ta · o‘quvchi topilmadi (qo‘lda biriktiring)</span></div>
-      <div class="tablewrap"><table><thead><tr><th>To‘lovchi</th><th>Telefon</th><th>Sinf</th><th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
-        <td data-label="To‘lovchi">${esc(u.payerName||'—')}</td><td data-label="Telefon">${esc(u.payerPhone||'—')}</td>
-        <td data-label="Sinf">${esc(u.payerClass||'—')}</td><td data-label="Summa"><b>${fmtSom(u.amount)}</b></td>
-        <td class="td-actions"><button class="btn sm gold" data-assign="${esc(u._id)}">Biriktirish</button>${SESSION.isAdmin?` <button class="btn sm danger" data-refund-pay="${esc(u._id)}" title="Adashib tushgan to‘lovni qaytarish (direktor paroli)">↩ Qaytarish</button>`:''}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+      <div class="tablewrap"><table><thead><tr>${accRO()?'<th>Sana</th><th>Provayder</th>':'<th>To‘lovchi</th><th>Telefon</th><th>Sinf</th>'}<th>Summa</th><th></th></tr></thead><tbody>${unmatched.map(u=>`<tr>
+        ${accRO()?`<td data-label="Sana">${esc(tkDay(u.createdAt)||'—')}</td><td data-label="Provayder">${esc(PROV_LBL[u.provider]||u.provider||'—')}</td>`:`<td data-label="To‘lovchi">${esc(u.payerName||'—')}</td><td data-label="Telefon">${esc(u.payerPhone||'—')}</td><td data-label="Sinf">${esc(u.payerClass||'—')}</td>`}
+        <td data-label="Summa"><b>${fmtSom(u.amount)}</b></td>
+        <td class="td-actions">${accRO()?'':`<button class="btn sm gold" data-assign="${esc(u._id)}">Biriktirish</button>`}${SESSION.isAdmin?` <button class="btn sm danger" data-refund-pay="${esc(u._id)}" title="Adashib tushgan to‘lovni qaytarish (direktor paroli)">↩ Qaytarish</button>`:''}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     // O'quvchisi topilmagan (eski/o'chirilgan / ID o'zgargan) invoyslar — statistika bilan farqni tushuntiradi + tozalash.
     const orphanCard = orphan.length ? `<div class="card" style="margin-bottom:14px;border-color:#B42318"><div class="cls-card-head"><h3>⚠️ O‘quvchisi topilmagan hisob-fakturalar</h3><span class="cls-count">${orphan.length} ta · o‘quvchi ro‘yxatda yo‘q</span></div>
       <div style="padding:10px 16px" class="small muted">Bu oyda jami <b>${rows.length}</b> hisob-faktura, ro‘yxatda esa <b>${curAll.length}</b> o‘quvchi — farq (${orphan.length} ta) o‘chirilgan yoki ID‘si o‘zgargan o‘quvchilarnikidir.${SESSION.isAdmin?' Tozalash uchun quyidagi tugmani bosing.':''}</div>
@@ -11489,7 +11514,7 @@ async function renderPayments(){
           return `<tr><td data-label="O‘quvchi">${esc(s.name||'')}<div class="small muted">${esc(sid)} · ${gradeName(Number(s.grade)||0)} ${esc(s.classLetter||s.track||'')}</div></td>
             <td data-label="Avans"><b style="color:#1F9982">${fmtSom(x.c.credit)}</b></td>
             <td class="td-actions"><button class="btn sm ghost2" data-hist="${esc(sid)}" title="To‘lov / avans tarixi">📋</button></td></tr>`; }).join('');
-        avansCard=`<div class="card" style="margin-bottom:14px;border-color:#1F9982"><div class="cls-card-head"><h3>💰 Avanslar (fakturasi yo‘q)</h3><span class="cls-count">${av.length} ta · puli tushgan, lekin bu oyga hisob-faktura yaratilmagan — «Hisob-fakturalar yaratish» bossangiz avtomatik yopiladi</span></div>
+        avansCard=`<div class="card" style="margin-bottom:14px;border-color:#1F9982"><div class="cls-card-head"><h3>💰 Avanslar (fakturasi yo‘q)</h3><span class="cls-count">${av.length} ta · puli tushgan, lekin bu oyga hisob-faktura yaratilmagan — ${SESSION.isAdmin?'«Hisob-fakturalar yaratish» bossangiz':'hisob-faktura yaratilganda'} avtomatik yopiladi</span></div>
           <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Avans</th><th></th></tr></thead><tbody>${avRows}</tbody></table></div></div>`;
       }
     }catch(e){}
@@ -11525,8 +11550,8 @@ async function renderPayments(){
       <td data-label="Holat">${stBadge(r)}</td>
       <td class="td-actions"><div class="row-actions">
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
-        ${paidOf(r)>0?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
-        ${r.status!=='paid'&&!isCanc(r)?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
+        ${paidOf(r)>0&&!accRO()?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
+        ${r.status!=='paid'&&!isCanc(r)&&!accRO()?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
         ${((SESSION.isAdmin||SESSION.role==='finance_mgr'||SESSION.role==='treasurer') && r.status==='pending')?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
         ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial'))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}

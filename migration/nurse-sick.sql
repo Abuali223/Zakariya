@@ -41,12 +41,15 @@ revoke all on function app.is_nurse(), app.is_finance_mgr() from public;
 grant execute on function app.is_nurse(), app.is_finance_mgr() to anon, authenticated, service_role;
 
 -- 2) Hamshira: o'quvchi ismi va sinfi (students_billing — staff-d6.sql bilan bir xil ustunlar), dam olish kunlari.
+--    Buxgalter ham (moliya rejasi F1.21; asosiy rol, faol hisob — my_role). Ta'rif shu yerda yagona: buxgalterning qolgan
+--    o'qish ro'yxati — fin-rights.sql.
 create or replace view public.students_billing with (security_barrier = true) as
   select s.id, s."studentId", s.name, s.grade, s."classLetter", s.track, s.lang, s."payStatus", s."activeFrom", s."stopFrom",
          s.pauses, s."order"
     from public.students s
    where (select app.is_admin()) or (select app.is_zavuch()) or (select app.is_reception())
-      or (select app.is_finance()) or (select app.is_cashier()) or (select app.is_nurse());
+      or (select app.is_finance()) or (select app.is_cashier()) or (select app.is_nurse())
+      or (select app.my_role()) = 'accountant';
 revoke all on public.students_billing from anon;
 grant select on public.students_billing to authenticated, service_role;
 

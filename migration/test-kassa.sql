@@ -478,7 +478,7 @@ select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamla
   left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"sinov","amount":0,"startDay":"2028-01-03"}')::text$q$), 0) ||
   zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":777,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"h6-000001"}', zz.id('cp_bank'))), '"no": 1[,}].*"desk": "sinov"|"desk": "sinov".*"no": 1[,}]');
 select zz.chk('H8 ma''lumotnomalar: 21 qoida, 75 statiya, tashkilot, kassirlar',
-  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^21:75:main:[3-9]$');
+  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^21:75:main:4$');
 select zz.chk('H8b ma''lumotnomalar: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_refs()::text$q$), '^ERR 42501');
 -- Har bir ochiq moliya funksiyasi (public.kassa_* / fin_*) bo'sh ma'lumot bilan chaqirilganda ham AVVAL ruxsatni tekshiradi:
 --   begona rol (o'qituvchi, zavuch) va bloklangan hisob (roli moliya menejeri + kassir bo'lsa ham) faqat «ruxsat yo'q» (42501) oladi.

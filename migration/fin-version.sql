@@ -22,9 +22,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     6 — KO-3 Excel eksporti FD-28 bo'yicha (kassa_journal_export: kassirga yo'q, 2-ro'yxatga ismsiz);
 --     7 — RP-08 oylik statiya matritsasi (kassa_matrix) va buxgalter uchun oylik kassa to'plami (kassa_month_pack);
 --     8 — eslatmalar: muddati o'tgan avans (holat va Telegram nazoratida «accOverdue»), RP-22 haftalik KPI (kassa_kpi; Telegram «week»);
---     9 — dalolatnomalar raqami hujjat turi seriyasida (cash_docs.series: ACT «Д-», OFS «ЎҲ-», ADV «А-»; noyoblik va bo'shliq — seriya bo'yicha).
+--     9 — dalolatnomalar raqami hujjat turi seriyasida (cash_docs.series: ACT «Д-», OFS «ЎҲ-», ADV «А-»; noyoblik va bo'shliq — seriya bo'yicha);
+--     10 — F1.21 buxgalter roli: o'qish ro'yxati — fin-rights.sql («*_acc_sel» siyosatlari; invoices_acc, payments_acc, refunds_acc,
+--          salary_payments_acc, payroll_lines_acc ko'rinishlari), nurse-sick.sql (students_billing), parent-link-canon.sql (claim_child
+--          buxgalter hisobini rad etadi); reports-roles.sql — buxgalterga qo'shimcha lavozim berilmaydi; kassa javoblari va hujjat
+--          suratlarida xodim emaili yo'q (kassa_names, kassa_refs, kassa_shortage_decide, kassa_refund_request).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 9 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 10 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

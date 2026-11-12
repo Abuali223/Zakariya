@@ -9,8 +9,8 @@ do $iqror_guard$ begin raise exception 'iqror: reports-roles.sql ALOHIDA ishga t
 --   haftalik ko'rsatkichlari va pul qoidalari tekshiruvi.
 --   * Ikkinchi lavozim: Direktor xodimga qo'shimcha rol beradi (o'qituvchi + qabulxona, HR + kassa ...). Barcha rol
 --     yordamchilari (app.is_*, has_role, sinf predikatlari) ASOSIY rol YOKI FAOL qo'shimcha rolni hisobga oladi —
---     yagona app.role_set() orqali. Director, finance_mgr (va treasurer, admin) qo'shimcha rol BO'LA OLMAYDI; Direktor,
---     ota-ona va o'quvchiga qo'shimcha rol berilmaydi. Faqat Direktor beradi/oladi (o'zi o'ziga — yo'q); change_log.
+--     yagona app.role_set() orqali. Director, finance_mgr (va treasurer, admin, accountant) qo'shimcha rol BO'LA OLMAYDI;
+--     Direktor, ota-ona, o'quvchi va buxgalterga (F1.21) qo'shimcha rol berilmaydi. Faqat Direktor beradi/oladi (o'zi o'ziga — yo'q); change_log.
 --     Olib tashlansa — huquq DARHOL yo'qoladi (har so'rovda bazadan o'qiladi). Ikki kishilik tasdiqlarda bitta odam
 --     ikkala bosqichni to'ldira olmaydi: chegirma, maosh, «Bemor» kuni — uid bo'yicha (avvaldan); monitoring balli —
 --     qo'shimcha O'IBDO' roli bilan o'zi kiritgan ballni tasdiqlay olmaydi (shu faylda); qo'shimcha HR rolli xodimning o'z
@@ -27,7 +27,10 @@ do $$ begin
   end if;
 end $$;
 
--- Qo'shimcha bo'la oladigan rollar (director / finance_mgr / treasurer / admin / parent / student — YO'Q).
+-- Qo'shimcha bo'la oladigan rollar (director / finance_mgr / treasurer / admin / parent / student / accountant — YO'Q).
+--   Qo'shimcha OLA OLMAYDIGAN asosiy rollar (pastdagi u_has, role_set, users_extra_roles_guard va admin.html bilan bir xil):
+--   director, parent, student, rolsiz va accountant (buxgalter kassirni nazorat qiladi — vazifalar ajratilishi; qo'shimcha
+--   kassir / qabulxona / HR o'quvchi va xodim ma'lumotini ham ochardi — D6; moliya rejasi F1.21).
 create or replace function app.extra_roles_allowed() returns text[]
 language sql immutable set search_path = pg_catalog as $$
   select array['teacher', 'kurator', 'reception', 'hr', 'kassir', 'nurse', 'marketing_mgr', 'admin_head', 'zavuch']::text[]
@@ -36,7 +39,7 @@ $$;
 create or replace function app.u_has(p_role text, p_extra jsonb, r text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select coalesce(p_role = r, false)
-      or (coalesce(p_role, '') not in ('director', 'parent', 'student', '') and r = any(app.extra_roles_allowed())
+      or (coalesce(p_role, '') not in ('director', 'parent', 'student', 'accountant', '') and r = any(app.extra_roles_allowed())
           and jsonb_typeof(p_extra) = 'array' and p_extra ? r)
 $$;
 -- Joriy foydalanuvchining FAOL rollari: [asosiy, ...qo'shimchalar]. Faol bo'lmagan / bloklangan / noma'lum — bo'sh.
@@ -45,7 +48,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select coalesce((
     select case
              when coalesce(u.role, '') = '' then '{}'::text[]
-             when u.role in ('director', 'parent', 'student') then array[u.role]
+             when u.role in ('director', 'parent', 'student', 'accountant') then array[u.role]
              else array[u.role] || coalesce(array(
                     select distinct e from jsonb_array_elements_text(case when jsonb_typeof(u."extraRoles") = 'array' then u."extraRoles" else '[]'::jsonb end) e
                      where e = any(app.extra_roles_allowed()) and e <> u.role), '{}'::text[])
@@ -125,7 +128,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 
 -- 3) users: qo'shimcha rolni faqat Direktor (yoki server) o'zgartiradi; qiymatlar tekshiriladi, takror/asosiy rol olib
---    tashlanadi; asosiy rol Direktor/ota-ona/o'quvchi bo'lib qolsa — qo'shimchalar avtomatik tozalanadi. Bloklangan hisob
+--    tashlanadi; asosiy rol Direktor/ota-ona/o'quvchi/buxgalter bo'lib qolsa — qo'shimchalar avtomatik tozalanadi. Bloklangan hisob
 --    (status blocked) — qo'shimchalar saqlanadi (role_set baribir bo'sh; blokdan chiqqanda tiklanadi).
 create or replace function app.users_extra_roles_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -142,7 +145,7 @@ begin
   v := coalesce(new."extraRoles", '[]'::jsonb);
   if jsonb_typeof(v) <> 'array' then raise exception 'Qo''shimcha lavozimlar ro''yxat bo''lishi kerak' using errcode = '22023'; end if;
   if coalesce(new.status, '') = 'blocked' and not v_changed then return new; end if;
-  if coalesce(new.role, '') in ('director', 'parent', 'student', '') then
+  if coalesce(new.role, '') in ('director', 'parent', 'student', 'accountant', '') then
     if jsonb_array_length(v) > 0 then
       if v_changed then raise exception 'Bu asosiy rolga qo''shimcha lavozim berilmaydi' using errcode = '22023'; end if;
       new."extraRoles" := '[]'::jsonb;   -- asosiy rol o'zgardi (masalan, Direktor bo'ldi) — qo'shimchalar bekor
@@ -162,6 +165,9 @@ revoke all on function app.users_extra_roles_guard() from public, anon, authenti
 drop trigger if exists trg_users_extra_roles on public.users;
 create trigger trg_users_extra_roles before insert or update on public.users
   for each row execute function app.users_extra_roles_guard();
+-- Buxgalter qo'shimcha lavozimsiz (F1.21): oldin berilgan bo'lsa — bir martalik tozalash (zanjir — tizim nomidan; idempotent).
+update public.users set "extraRoles" = '[]'::jsonb
+ where role = 'accountant' and coalesce("extraRoles", '[]'::jsonb) <> '[]'::jsonb;
 
 -- users_upd / users_ins: o'z qatorini tahrirlashda qo'shimcha rol ham O'ZGARMASIN (staff-user-link.sql dagi ro'yxat + extraRoles).
 drop policy if exists users_upd on public.users;

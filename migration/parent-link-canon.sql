@@ -114,6 +114,11 @@ begin
     return jsonb_build_object('ok', false, 'blocked', true,
       'error', 'Hisobingiz bloklangan. Maktab ma''muriyatiga murojaat qiling.');
   end if;
+  -- Buxgalter hisobi farzand biriktirmaydi (moliya rejasi F1.21, D6): bu ish hisobi o'quvchi ma'lumotiga ota-ona huquqini olmasin —
+  --   maktab buxgalteri ota-ona bo'lsa, alohida ota-ona hisobidan foydalanadi.
+  if app.my_role() = 'accountant' then
+    return jsonb_build_object('ok', false, 'error', 'Buxgalter hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning.');
+  end if;
   p_sid := btrim(coalesce(p_sid, ''));
   -- Lockout: oxirgi 15 daqiqada 5+ MUVAFFAQIYATSIZ urinish -> bloklash.
   select count(*) into v_fails

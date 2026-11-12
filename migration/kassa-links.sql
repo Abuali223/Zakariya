@@ -287,7 +287,7 @@ language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_target text; v_tid text; v_amount numeric; v_reason text; v_payee text; v_claw boolean; v_ref text;
   v_inv record; v_sid text; v_cr numeric := 0; v_pst text; v_pamt numeric; v_lines jsonb; v_month text := to_char(app.fin_today(), 'YYYY-MM');
-  v_id text; v_dup boolean; v_email text; v_req text; v_basis text;
+  v_id text; v_dup boolean; v_req text; v_basis text;
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: qaytarishni faqat Direktor tasdiqlaydi' using errcode = '42501'; end if;
   if not app.kassa_live() then raise exception 'Kassa ishga tushirilmagan' using errcode = 'P0001', hint = 'kassa:not_live'; end if;
@@ -304,7 +304,6 @@ begin
   if length(v_reason) < 3 then raise exception 'Qaytarish sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
   if length(v_payee) < 5 then raise exception 'Pul kimga berilishini to''liq yozing (F.I.Sh.)' using errcode = '22023', hint = 'kassa:party'; end if;
   begin v_req := to_char(nullif(p ->> 'requestDate', '')::date, 'DD.MM.YYYY'); exception when others then v_req := null; end;
-  select nullif(u.email, '') into v_email from public.users u where u.id = v_uid;
   v_basis := 'Qaytarish: ' || v_reason || case when v_req is not null then '; ariza ' || v_req else '' end;
 
   if v_target = 'invoice' then
@@ -350,8 +349,10 @@ begin
                         then 'student' else 'other' end, 'partyId', v_sid, 'partyName', v_payee,
       'basis', v_basis, 'attachment', 'Yozma ariza', 'clientRef', 'ref_' || v_ref, 'needsDirector', true,
       'sourceTable', 'refunds', 'sourceId', 'kref_' || v_ref,
+      -- «kim so'radi» — uid (email EMAS: hujjat suratini 2-ro'yxat, jumladan buxgalter ham o'qiydi — F1.21, D6); qaytarish
+      --   jurnalidagi «kim» (refunds."byUid" / "byEmail") ni pul berilganda server o'zi yozadi (fin_server_ts).
       'sourceSnapshot', jsonb_build_object('target', v_target, 'targetId', v_tid, 'amount', v_amount, 'reason', v_reason, 'clawback', v_claw and v_cr > 0,
-                                           'clawbackAmount', v_cr, 'studentId', v_sid, 'by', coalesce(v_email, '')),
+                                           'clawbackAmount', v_cr, 'studentId', v_sid, 'byUid', v_uid),
       'lines', v_lines), 'KO2', v_uid, true) b;
   if not v_dup then   -- Direktor so'rovni o'zi yozadi — shu uning tasdig'i
     update public.cash_docs set "dirApprovedBy" = v_uid, "dirApprovedAt" = app.fin_now() where id = v_id and status = 'draft';
@@ -396,7 +397,7 @@ begin
     select coalesce(array_agg(x.id), '{}') into v_before from public.refunds x
      where x."targetId" in (s ->> 'targetId', coalesce(s ->> 'studentId', ''));
     r := public.refund_invoice(s ->> 'target', s ->> 'targetId', (s ->> 'amount')::numeric, s ->> 'reason',
-                               coalesce((s ->> 'clawback')::boolean, false), coalesce(s ->> 'by', ''), v_doc."sourceId");
+                               coalesce((s ->> 'clawback')::boolean, false), '', v_doc."sourceId");   -- p_by e'tiborsiz: «kim»ni fin_server_ts yozadi
     if r is null or coalesce((r ->> 'dup')::boolean, false) or not coalesce((r ->> 'ok')::boolean, false) then
       raise exception 'Qaytarib bo''lmadi (%): tasdiqdan keyin hisob-faktura yoki to''lov o''zgargan — so''rovni bekor qilib, qaytadan tasdiqlang',
         coalesce(r ->> 'reason', r ->> 'error', case when coalesce((r ->> 'dup')::boolean, false) then 'takror' else '?' end)

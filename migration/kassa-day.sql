@@ -148,10 +148,11 @@ begin
 end $$;
 revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text) from public, anon, authenticated;
 
--- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar).
+-- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar). Ism bo'lmasa — uid (email EMAS: bu javoblarni
+--   2-ro'yxat, jumladan buxgalter ham o'qiydi — F1.21, D6).
 create or replace function app.kassa_names(p_uids text[]) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id))
+  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(btrim(u.name), ''), u.id))
                      from public.users u where u.id = any (coalesce(p_uids, '{}'))), '{}'::jsonb)
 $$;
 revoke all on function app.kassa_names(text[]) from public, anon, authenticated;
@@ -429,8 +430,7 @@ begin
   v_to := nullif(btrim(coalesce(p ->> 'toUid', '')), '');
   if v_to is null or v_to = v_uid or not exists (
        select 1 from public.users u where u.id = v_to and coalesce(nullif(u.status, ''), 'active') = 'active'
-          and (u.role in ('kassir', 'treasurer')
-               or (jsonb_typeof(u."extraRoles") = 'array' and u."extraRoles" ? 'kassir' and u.role not in ('director', 'parent', 'student')))) then
+          and (u.role = 'treasurer' or app.u_has(u.role, u."extraRoles", 'kassir'))) then   -- kassir (asosiy yoki qo'shimcha) / g'aznachi
     raise exception 'Qabul qiluvchi kassir tanlanmagan yoki kassir emas' using errcode = '22023', hint = 'kassa:handover_to';
   end if;
   perform app.kassa_lock_desk(v_desk);
@@ -620,7 +620,7 @@ begin
   v_cashier := v_doc."sourceSnapshot" ->> 'cashierUid';
   if p_decision = 'employee' then
     select case when coalesce(u."staffRefId", '') <> '' then (case when u."staffRefType" = 'teacher' then 'teachers' else 'staff' end) || ':' || u."staffRefId" end,
-           coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id)
+           coalesce(nullif(btrim(u.name), ''), u.id)   -- email emas: hujjat 2-ro'yxatga (buxgalterga ham) ko'rinadi
       into v_ref, v_name from public.users u where u.id = v_cashier;
     if v_ref is not null and (
          (split_part(v_ref, ':', 1) = 'teachers' and exists (select 1 from public.teachers t where t.id = split_part(v_ref, ':', 2)))
@@ -1271,19 +1271,16 @@ begin
     'org', (select to_jsonb(o) from public.fin_org o where o.id = 'main'),
     'desks', coalesce((select jsonb_agg(to_jsonb(k) order by k.id) from public.cash_desks k where k.active), '[]'::jsonb),
     'signatories', coalesce((select jsonb_agg(to_jsonb(s) order by s.list, s."fullName") from public.fin_signatories s where s.active), '[]'::jsonb),
-    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id)) order by u.name)
+    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), u.id)) order by u.name)   -- email emas
                              from public.users u
                             where coalesce(nullif(u.status, ''), 'active') = 'active'
-                              and (u.role in ('kassir', 'treasurer')
-                                   or (jsonb_typeof(u."extraRoles") = 'array' and u."extraRoles" ? 'kassir' and u.role not in ('director', 'parent', 'student')))), '[]'::jsonb),
+                              and (u.role = 'treasurer' or app.u_has(u.role, u."extraRoles", 'kassir'))), '[]'::jsonb),
     -- imzo huquqi bo'lishi mumkin bo'lgan hisoblar («⚙ Sozlamalar» → «Imzo egalari» da hisobni bog'lash uchun) — faqat Direktorga
     'signers', case when app.is_admin() then
                  coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), nullif(btrim(u.email), ''), u.id), 'role', u.role) order by u.name)
                              from public.users u
                             where coalesce(nullif(u.status, ''), 'active') = 'active'
-                              and (u.role in ('director', 'finance_mgr', 'accountant')
-                                   or (jsonb_typeof(u."extraRoles") = 'array' and (u."extraRoles" ? 'finance_mgr' or u."extraRoles" ? 'accountant')
-                                       and u.role not in ('parent', 'student')))), '[]'::jsonb)
+                              and u.role in ('director', 'finance_mgr', 'accountant')), '[]'::jsonb)   -- faqat asosiy rol (qo'shimcha bo'lmaydi)
                else '[]'::jsonb end);
 end $$;
 revoke all on function public.kassa_refs() from public, anon;
