@@ -556,7 +556,7 @@ begin
   perform app.kassa_flag(false);
   return jsonb_build_object('ok', true, 'dup', false, 'id', v_id, 'method', 'offset', 'payId', v_pay_id,
     'row', (select to_jsonb(s) from public.salary_payments s where s.id = v_id),
-    'kassa', jsonb_build_object('docId', v_doc.id, 'form', 'ACT', 'no', v_doc.no, 'day', v_doc."businessDay", 'status', v_doc.status),
+    'kassa', jsonb_build_object('docId', v_doc.id, 'form', 'ACT', 'series', v_doc.series, 'no', v_doc.no, 'day', v_doc."businessDay", 'status', v_doc.status),
     'student', jsonb_build_object('id', v_sid, 'name', v_sname, 'credit', coalesce((v_a ->> 'creditAfter')::numeric, 0)));
 end $$;
 revoke all on function public.kassa_offset(jsonb) from public, anon;

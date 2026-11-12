@@ -119,7 +119,16 @@ create table if not exists public.cash_docs (
   constraint cash_docs_approver_ne_requester check ("approvedBy" is null or "approvedBy" <> "requestedBy"),
   constraint cash_docs_fiscal check (not "fiscalExempt" or "fiscalNo" is null)
 );
-create unique index if not exists cash_docs_number on public.cash_docs (desk, form, year, no) where no is not null;
+-- Raqam seriyasi (reja 4.14): KO1 / KO2; dalolatnomalar — «Д-» (ACT: boshlang'ich qoldiq, kamomad qarori), «ЎҲ-» o'zaro hisob (OFS),
+--   «А-» avans hisoboti (ADV) — har biri o'z hisoblagichi bilan, yil boshidan 1 dan (1C dagi kabi: har hujjat turi o'z raqami).
+alter table public.cash_docs add column if not exists series text generated always as (
+  case when form = 'ACT' and op = 'nc_offset' then 'OFS' when form = 'ACT' and op = 'nc_adv_report' then 'ADV' else form end) stored;
+do $iqror_num$ begin
+  if exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number' and indexdef not like '%(desk, series, year, no)%') then
+    drop index public.cash_docs_number;   -- avvalgi ta'rif (desk, form, year, no) — seriya bo'yicha qayta quriladi
+  end if;
+end $iqror_num$;
+create unique index if not exists cash_docs_number on public.cash_docs (desk, series, year, no) where no is not null;
 create index if not exists cash_docs_day_idx on public.cash_docs ("dayId");
 create index if not exists cash_docs_status_idx on public.cash_docs (status) where status in ('draft', 'approved');
 create index if not exists cash_docs_source_idx on public.cash_docs ("sourceTable", "sourceId") where "sourceId" is not null;
@@ -402,7 +411,8 @@ begin
   else
     raise exception 'Bu hujjat endi o''zgarmaydi (holati: %)', old.status using errcode = '42501', hint = 'kassa:immutable';
   end if;
-  if (to_jsonb(new) - v_keep) is distinct from (to_jsonb(old) - v_keep) then
+  -- series — form / op dan hisoblanadigan (generated) ustun: BEFORE triggerda NEW da hali hisoblanmagan; form / op baribir solishtiriladi
+  if (to_jsonb(new) - v_keep - 'series') is distinct from (to_jsonb(old) - v_keep - 'series') then
     raise exception 'Kassa hujjatining mazmuni o''zgartirilmaydi — bekor qilib, yangisini yozing' using errcode = '42501', hint = 'kassa:immutable';
   end if;
   -- Tasdiqsiz hujjat tasdiqlangan / o'tkazilgan bo'lmaydi (CT-07).

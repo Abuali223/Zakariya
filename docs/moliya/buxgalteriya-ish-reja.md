@@ -617,7 +617,7 @@ faqat buxgalter tasdiqlasa. Buxgalter roli faqat asosiy rol, `is_staff` / `is_fi
 |---|---|---|
 | KO1 / KO2 (kassa bo‘yicha, 1-yanvardan qayta) | ishga tushirishda 1 (B variantida — 2026 qog‘oz maksimumi + 1) | «№ 1234»; KO-4 da «К-1234» / «Ч-567» (rus «П-» / «Р-») |
 | KO4 varaqlari | 1 | «Варақ N» |
-| «Д-» dalolatnomalar; «ЎҲ-» o‘zaro hisob; «А-» avans hisoboti; «JV» jurnal | 1 | til bo‘yicha prefiks |
+| «Д-» dalolatnomalar; «ЎҲ-» o‘zaro hisob; «А-» avans hisoboti; «JV» jurnal | 1 | til bo‘yicha prefiks (✅ 1b: `cash_docs.series` — ACT / OFS / ADV, har biri o‘z hisoblagichi; lotin «D-», «O‘H-», «A-», rus «А-», «ВЗ-», «АО-»; JV — 4-bosqich) |
 | `sinov` kassa | o‘z hisoblagichlari | «СИНОВ», hisobotlarga kirmaydi |
 
 Raqamni server o‘tkazishda oxirgi qulf sifatida beradi; sequence va identity yo‘q; ajratish va yozish orasida
@@ -850,10 +850,12 @@ kassa to‘plami (`kassa_month_pack`, E1–E4): bitta Excel — KO-3, statiyalar
 hisobdorlar (4230); 2-ro‘yxatga ismsiz (FD-28). Eslatmalar (F1.24): muddati o‘tgan avans hisoboti — «Kassa» sahifasida va
 Telegram nazorat qatorida (qolganlari — yopilmagan / tekshirilmagan kun, 5910, eski qaytarish, limit — avvaldan). RP-22 haftalik
 KPI (F1.25, `kassa_kpi`): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi (maqsad ≤ 2 %), muddati o‘tgan
-avanslar — «KPI» oynasi (8 hafta) va dushanba kungi Telegram qatori. Modul relizi 8. Sinov kassasi (CT-20)
+avanslar — «KPI» oynasi (8 hafta) va dushanba kungi Telegram qatori. Raqam seriyalari (4.14): o‘zaro hisob «ЎҲ-» va avans
+hisoboti «А-» — dalolatnomalardan («Д-») alohida hisoblagichlar bilan; chop etishda o‘z sarlavhasi («Ўзаро ҳисоб
+далолатномаси», «Аванс ҳисоботи»). Modul relizi 9. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 126, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 129, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 27, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 5, `tg-daily.test.cjs`
 45; brauzerda o‘n ikkita to‘liq stsenariy (287 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
@@ -912,7 +914,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 | F1.20 | S | 0,5 | RF-08 RLS relizi (toza haftadan keyin), orqaga qaytarish migratsiyasi bilan | F1.11; 7 kun P4/P5 = 0 | To‘g‘ridan-to‘g‘ri yozuv rad |
 | F1.21 | M | 2,5 | `accountant` roli: yorliqlar, tablar, ~10 jadval SELECT siyosati, `can_see_salary`, `students_billing`, `v_fns` | F1.1; FD-18, 28 | Rol testlari; ro‘yxat yopiq |
 | F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli; Excel — FD-28 bo‘yicha `kassa_journal_export`: kassirda yo‘q, 2-ro‘yxatga ismsiz, Direktorga to‘liq) — buxgalter ko‘rigi M4; ✅ RP-08 oylik statiya matritsasi (`kassa_matrix`; chop etish — haftalar, XLSX — kunlar); ✅ oylik kassa to‘plami E1–E4 (`kassa_month_pack`: KO-3, statiyalar, kassa kunlari, hisobdorlar; FD-28) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
-| F1.23 | S | 0,5 | O‘zaro hisob dalolatnomasi chop etish; sozlamalar | F1.5 | — |
+| F1.23 | S | 0,5 | ✅ O‘zaro hisob dalolatnomasi chop etish (o‘z sarlavhasi va «ЎҲ-» seriyasi, uch tilda; xodim «Танишдим, розиман» imzosi); sozlamalar — imzo egalari va chop etish tili «⚙ Sozlamalar»da | F1.5 | — |
 | F1.24 | S | 1 | ✅ Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) — «Kassa» sahifasida, nazorat ro‘yxatida va Telegram nazorat qatorida | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | ✅ RP-22 haftalik KPI (`kassa_kpi`: «KPI» oynasi — 8 hafta; dushanba kungi Telegram qatori) | F1.15 | Direktor ko‘radi |
 | F1.26 | S | 1 | ✅ Kunni yopishda onlayn kassa (NKM) Z-hisoboti: naqd va karta sotuvi kiritiladi, fiskal chekli KO-1 va terminal to‘lovlari bilan solishtiriladi; keyin kiritish / tuzatish — «Z» (buxgalter ko‘rigi M6) | F1.9 | Farq nazorat ro‘yxatida va Telegramda; tekshirishda izoh |

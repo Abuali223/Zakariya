@@ -456,8 +456,8 @@ select zz.put('G24b', zz.close('U_KAS2', '{"day":"2028-01-03","counted":1629000}
 select zz.chk('G24b 2028: varaqlar 1 dan', (select v from zz.v where k = 'G24b') || ' / ' || (select "sheetFrom" from public.cash_days where day = '2028-01-03'), '"status": "closed".* / 1$');
 select zz.chk('G25 raqamlash nazorati: bo''shliq yo''q (2027, 2028)', (select app.kassa_gap_check('main', 2027)::text || app.kassa_gap_check('main', 2028)::text), '^\[\]\[\]$');
 select zz.chk('G25b har seriyada: hisoblagich = hujjatlar soni = eng katta raqam',
-  (select string_agg(k.series || k.year || ':' || k."lastNo" || '=' || (select count(*) from public.cash_docs c where c.form = k.series and c.year = k.year and c.no is not null)
-                     || '=' || (select max(no) from public.cash_docs c where c.form = k.series and c.year = k.year), ',' order by k.year, k.series) from public.doc_counters k),
+  (select string_agg(k.series || k.year || ':' || k."lastNo" || '=' || (select count(*) from public.cash_docs c where c.series = k.series and c.year = k.year and c.no is not null)
+                     || '=' || (select max(no) from public.cash_docs c where c.series = k.series and c.year = k.year), ',' order by k.year, k.series) from public.doc_counters k),
   '^ACT2027:3=3=3,KO12027:15=15=15,KO22027:9=9=9,KO12028:1=1=1$');
 -- Hisoblagich hujjatsiz oshib qolsa (nazariy) — tekshiruv to'xtaydi
 select app.kassa_flag(true); select app.kassa_next_no('main', 'KO1', 2028); select app.kassa_flag(false);

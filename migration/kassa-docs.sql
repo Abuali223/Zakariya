@@ -398,7 +398,7 @@ begin
 end $$;
 revoke all on function app.kassa_doc_post(text, text, boolean, timestamptz, boolean, text) from public, anon, authenticated;
 
--- Naqdsiz dalolatnomani (ACT) o'tkazish: kassa kuniga bog'lanmaydi, o'z raqam seriyasi.
+-- Naqdsiz dalolatnomani (ACT) o'tkazish: kassa kuniga bog'lanmaydi; raqam — hujjat turi seriyasidan (Д- / ЎҲ- / А-, cash_docs.series).
 create or replace function app.kassa_act_post(p_doc_id text, p_uid text, p_day date) returns public.cash_docs
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_desk text; v_doc public.cash_docs%rowtype; v_no int;
@@ -411,7 +411,7 @@ begin
   if v_doc.status not in ('draft', 'approved') or v_doc.form <> 'ACT' then
     raise exception 'Dalolatnoma o''tkazilmaydi (holati: %)', v_doc.status using errcode = 'P0001', hint = 'kassa:bad_status';
   end if;
-  v_no := app.kassa_next_no(v_desk, 'ACT', extract(year from p_day)::int);
+  v_no := app.kassa_next_no(v_desk, v_doc.series, extract(year from p_day)::int);
   update public.cash_docs
      set status = 'posted', year = extract(year from p_day)::int, no = v_no, "businessDay" = p_day, "postedBy" = p_uid, "postedAt" = now()
    where id = p_doc_id returning * into v_doc;

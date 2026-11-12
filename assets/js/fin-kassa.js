@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 8;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 9;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -221,7 +221,7 @@ function draw() {
     const canVoid = m.director && d.op === 'nc_offset' && d.status === 'posted' && String(d.businessDay) === String(s.today);   // o'zaro hisob — faqat shu kunda, Direktor
     const canVoidAdv = (m.list2 || m.director) && d.op === 'nc_adv_report' && d.status === 'posted' && String(d.businessDay) === String(s.today);   // avans hisoboti — shu kunda
     return `<tr${v ? ' style="opacity:.55"' : ''}>
-      <td data-label="№"><b>D-${esc(String(d.no))}</b><div class="small muted">${esc(dmy(d.businessDay))}</div></td>
+      <td data-label="№"><b>${esc(({ OFS: 'O‘H', ADV: 'A' })[d.series] || 'D')}-${esc(String(d.no))}</b><div class="small muted">${esc(dmy(d.businessDay))}</div></td>
       <td data-label="Tur">${esc(opName(d.op))}</td>
       <td data-label="Tomon / asos"><div>${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap">${v ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>'}</td>
@@ -958,7 +958,7 @@ export async function printDocById(ctx, docId, back) { C = ctx; await printDoc(d
 // ---------------------------------------------------------------- nazorat ro'yxati (RP-06)
 // Server faktlarni beradi (kassa_checks) — baho va matn shu yerda. Daraja: bad — darhol hal qilinadi; warn — ko'rib chiqiladi;
 //   info — ma'lumot; ok — joyida. Muddatli ko'rsatkichlar — oxirgi 30 kun.
-const SERIES = { KO1: 'kirim orderlari', KO2: 'chiqim orderlari', ACT: 'dalolatnomalar' };
+const SERIES = { KO1: 'kirim orderlari', KO2: 'chiqim orderlari', ACT: 'dalolatnomalar', OFS: 'o‘zaro hisob dalolatnomalari', ADV: 'avans hisobotlari' };
 const LVL = { bad: ['muhim', '#B42318', '#FDECEC'], warn: ['diqqat', '#B54708', '#FEF3E2'], info: ['ma’lumot', '#175CD3', '#E8F1FD'], ok: ['joyida', '#157347', '#E7F6EC'] };
 export function controlRows(c) {
   c = c || {};

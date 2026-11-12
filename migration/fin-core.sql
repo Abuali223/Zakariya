@@ -135,7 +135,7 @@ insert into public.cash_desks (id, name, "isTest") values ('main', 'Asosiy kassa
 -- Hujjat raqamlari: sequence / identity EMAS (ROLLBACK raqam «yeb» qo'ymasin) — qator qulfi bilan, o'tkazishning oxirgi qadami.
 create table if not exists public.doc_counters (
   desk     text not null,
-  series   text not null,          -- 'KO1' / 'KO2' / 'KO4' (varaq) / 'ACT'
+  series   text not null,          -- 'KO1' / 'KO2' / 'KO4' (varaq) / 'ACT' (Д-) / 'OFS' (ЎҲ-, o'zaro hisob) / 'ADV' (А-, avans hisoboti)
   year     int  not null,
   "lastNo" int  not null default 0 check ("lastNo" >= 0),
   primary key (desk, series, year)

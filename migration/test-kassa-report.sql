@@ -16,7 +16,8 @@
 --       (kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq);
 --   (X) RP-08 oylik statiya matritsasi va buxgalter uchun oylik kassa to'plami: huquqlar, KO-3 / KO-4 bilan o'zaro tekshiruv,
 --       ichki o'tkazmalar, kunlik jamlar va qoldiq, sinov kassasi alohida, bo'sh oy, to'plam tarkibi va FD-28;
---   (W) eslatmalar (muddati o'tgan avans: holat, Telegram nazorati) va RP-22 haftalik KPI (kassa_kpi; dushanba — o'tgan hafta).
+--   (W) eslatmalar (muddati o'tgan avans: holat, Telegram nazorati) va RP-22 haftalik KPI (kassa_kpi; dushanba — o'tgan hafta);
+--   (S) raqam seriyalari (reja 4.14): dalolatnomalar «Д-» (ACT), avans hisoboti «А-» (ADV) — har biri o'z hisoblagichi bilan.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -668,6 +669,21 @@ select zz.chk('W5 joriy hafta (11.01–14.01): EX-49 ulushi = 50 000 / 200 000 =
      from (select zz.as('U_DIR', $q$select public.kassa_kpi('main', 2)::text$q$)::jsonb -> 'weeks' w) q)
   || ':' || (zz.get('W5p')::jsonb ->> 'status'),
   '^2027-01-11…2027-01-14:25\.0:50000/200000:2027-01-04:4/3:posted$');
+
+-- ---------- (S) raqam seriyalari: dalolatnoma (ACT), avans hisoboti (ADV) — alohida ----------
+select zz.chk('S1 seriya hujjat turidan: KO1 / KO2 — shakl, boshlang''ich qoldiq va kamomad qarori — ACT, avans hisoboti — ADV',
+  (select string_agg(distinct c.op || '=' || c.series, ',' order by c.op || '=' || c.series) from public.cash_docs c
+    where c.op in ('in_tuition', 'out_expense', 'nc_opening', 'nc_shortage_dec', 'nc_adv_report') and c.no is not null),
+  '^in_tuition=KO1,nc_adv_report=ADV,nc_opening=ACT(,nc_shortage_dec=ACT)?,out_expense=KO2$');
+select zz.chk('S2 har seriya o''z hisoblagichi bilan 1 dan uzluksiz: hisoblagich = hujjatlar soni = eng katta raqam (asosiy kassa, 2027)',
+  (select string_agg(k.series || ':' || k."lastNo" || '=' || (select count(*) from public.cash_docs c where c.desk = k.desk and c.series = k.series and c.year = k.year and c.no is not null)
+                     || '=' || (select max(no) from public.cash_docs c where c.desk = k.desk and c.series = k.series and c.year = k.year)
+                     || '/' || (select min(no) from public.cash_docs c where c.desk = k.desk and c.series = k.series and c.year = k.year), ',' order by k.series)
+     from public.doc_counters k where k.desk = 'main' and k.year = 2027 and k.series in ('ACT', 'ADV')),
+  '^ACT:(\d+)=\1=\1/1,ADV:(\d+)=\2=\2/1$');
+select zz.chk('S3 bo''shliq tekshiruvi seriya bo''yicha toza; noyoblik indeksi (kassa, seriya, yil, raqam)',
+  app.kassa_gap_check('main', 2027)::text || ':' || (select (indexdef like '%(desk, series, year, no)%')::text from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number'),
+  '^\[\]:true$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

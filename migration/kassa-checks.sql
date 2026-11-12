@@ -18,7 +18,7 @@ set default_transaction_read_only = on;
 \pset null ''
 \set bad 0
 \set err 0
-\set want_ver 8
+\set want_ver 9
 \set ver 0
 -- har band bo'yicha muammo qatorlari soni (c1 … c22) — sinov (test-kassa-checks.sql) shularni o'qiydi
 \set c1 0 \set c2 0 \set c3 0 \set c4 0 \set c5 0 \set c6 0 \set c7 0 \set c8 0 \set c9 0 \set c10 0 \set c11 0
@@ -198,9 +198,9 @@ select '!!' as belgi, d.desk as kassa, d.day as kun, d.status as holat
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c13 \gset
 
 \qecho '== 14) Raqamlash: bo''shliq yoki takror (hisoblagich = hujjatlar soni = eng katta raqam bo''lishi kerak)'
-with s as (select c.desk, c.form as series, c.year, count(*) as cnt, max(c.no) as mx
+with s as (select c.desk, c.series, c.year, count(*) as cnt, max(c.no) as mx
              from public.cash_docs c where c.no is not null group by 1, 2, 3),
-     k as (select k.desk, k.series, k.year, k."lastNo" as last_no from public.doc_counters k where k.series in ('KO1', 'KO2', 'ACT'))
+     k as (select k.desk, k.series, k.year, k."lastNo" as last_no from public.doc_counters k where k.series in ('KO1', 'KO2', 'ACT', 'OFS', 'ADV'))
 select '!!' as belgi, coalesce(s.desk, k.desk) as kassa, coalesce(s.series, k.series) as turkum, coalesce(s.year, k.year) as yil,
        coalesce(k.last_no, 0) as hisoblagich, coalesce(s.cnt, 0) as hujjatlar, coalesce(s.mx, 0) as eng_katta_raqam
   from s full join k on k.desk = s.desk and k.series = s.series and k.year = s.year

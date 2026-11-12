@@ -302,10 +302,10 @@ select zz.chk('O1 o''zaro hisob 1 300 000: javobda dalolatnoma (ACT), o''quvchi 
 select zz.put('O1d', (select jsonb_build_object('id', c.id)::text from public.cash_docs c where c.op = 'nc_offset'));
 select zz.chk('O1a dalolatnoma: naqdsiz, Dt 6710 Kt 4010 (joriy oy fakturasi) / Kt 6310 (kelgusi oy), xodim — tomon, Direktor tasdig''i, kassa kunisiz',
   (select c.form || ':' || c.status || ':' || c."partyType" || ':' || c."partyId" || ':' || c."partyName" || ':' || c."sourceTable" || ':' || c."sourceId" || ':' || c."dirApprovedBy"
-          || ':' || coalesce(c."dayId", 'kunsiz') || ':' || c.no || '=' || (select max(x.no) from public.cash_docs x where x.form = 'ACT') || ' / ' || zz.lines(c.id)
+          || ':' || coalesce(c."dayId", 'kunsiz') || ':' || c.series || '-' || c.no || '=' || (select max(x.no) from public.cash_docs x where x.series = 'OFS') || ' / ' || zz.lines(c.id)
           || ' / ' || (select bool_or(l.cash)::text from public.cash_doc_lines l where l."docId" = c.id)
      from public.cash_docs c where c.id = zz.id('O1d')),
-  '^ACT:posted:employee:teachers:tch1:Sinov O''qituvchi:salary_payments:sp_ofs_0001:U_DIR:kunsiz:(\d+)=\1 / 6710>4010=1000000@IN-01, 6710>6310=300000@IN-01 / false$');
+  '^ACT:posted:employee:teachers:tch1:Sinov O''qituvchi:salary_payments:sp_ofs_0001:U_DIR:kunsiz:OFS-(\d+)=\1 / 6710>4010=1000000@IN-01, 6710>6310=300000@IN-01 / false$');
 select zz.chk('O1b maosh to''lovi: usul «offset», dalolatnoma havolasi, sana — bugun',
   (select method || ':' || ("cashDocId" = zz.id('O1d')) || ':' || date || ':' || trim_scale(paid) || ':' || "byUid" from public.salary_payments where id = 'sp_ofs_0001'), '^offset:true:2027-01-04:1300000:U_DIR$');
 select zz.chk('O1c o''quv to''lovi: provider «offset», qo''llangan, dalolatnoma havolasi; fakturalar: 2027-01 to''liq, 2027-03 — 300 000; avans 0',

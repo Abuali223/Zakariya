@@ -1936,6 +1936,37 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   yangilanish — xatosiz (`--no-lock-timeout` siz ham), `kassa-checks.sql` «muammo topilmadi (modul relizi 8)».
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 73) Moliya, 1b: raqam seriyalari — o'zaro hisob «ЎҲ-» va avans hisoboti «А-» alohida (reja 4.14) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN** (`--dev` zanjiri: `kassa.sql`, `kassa-docs.sql`, `kassa-day.sql`, `kassa-links.sql`,
+`kassa-checks.sql`, `fin-version.sql`; `fin-print.js`, `fin-kassa.js`, `admin.html` — bitta matn).
+
+- **Topilma (rejani qayta o'qishda):** reja 4.14 va «Yangi formatlar» bo'yicha dalolatnomalar «Д-», o'zaro hisob «ЎҲ-», avans hisoboti
+  «А-» — har biri o'z raqami bilan (1C dagi kabi: har hujjat turi o'z raqamlagichi). Amalda hammasi bitta «Д-» hisoblagichidan edi
+  (boshlang'ich qoldiq Д-1, o'zaro hisob Д-2, avans hisoboti Д-3 …).
+- **Server:** `cash_docs.series` — form / op dan hisoblanadigan (generated) ustun: KO1, KO2, ACT (boshlang'ich qoldiq, kamomad qarori),
+  OFS (o'zaro hisob), ADV (avans hisoboti). Raqam noyobligi — (kassa, seriya, yil, raqam) (indeks nomi o'sha — `cash_docs_number`,
+  eski ta'rif bo'lsa qayta quriladi); `kassa_act_post` raqamni hujjat seriyasidan oladi; bo'shliq tekshiruvi (`kassa_gap_check`) va
+  `kassa-checks.sql` 14-band — seriya bo'yicha; o'zaro hisob javobida «series». Hujjat o'zgarmasligi qo'riqchisi (`kassa_doc_guard`)
+  `series` ni solishtiruvdan chiqaradi (BEFORE triggerda u hali hisoblanmagan; form / op baribir solishtiriladi) — buni sinov
+  topdi va tuzatildi.
+- **Chop etish:** prefiks seriya bo'yicha (kirill Д- / ЎҲ- / А-, lotin D- / O‘H- / A-, rus А- / ВЗ- / АО-); o'zaro hisob —
+  «ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ № ЎҲ-n», avans hisoboti — «АВАНС ҲИСОБОТИ № А-n» (rus: «АКТ ВЗАИМОЗАЧЁТА», «АВАНСОВЫЙ ОТЧЁТ»),
+  ostida — sana. **Sahifa:** «Naqdsiz dalolatnomalar» ro'yxatida D- / O‘H- / A-; nazoratdagi seriya nomlari; maosh oynasida
+  «O‘zaro hisob dalolatnomasi № O‘H-n».
+- **Yangilanish:** ma'lumotli bazada (reliz 8 → 9) xatosiz (ustun qo'shiladi, indeks qayta quriladi). Jonli bazada kassa ma'lumoti
+  yo'q. **Sinov stendida eski kassa hujjatlari bo'lsa**, ular avvalgi umumiy raqam bilan qoladi va nazoratda «raqamlashda bo'shliq»
+  ko'rinadi — stendni `sinov/reset.sh` bilan qayta tiklang (sintetik ma'lumot).
+- **Reja:** 4.14 jadvalida seriyalar ✅; F1.23 ✅ (o'zaro hisob dalolatnomasi chop etish — o'z sarlavhasi va seriyasi, uch tilda;
+  imzo egalari va chop etish tili — «⚙ Sozlamalar»da); `yoriqnomalar.md` — hujjat raqamlari ro'yxati (K-, Ch-, D-, O‘H-, A-).
+- **Modul relizi 9** (funksiyalar soni o'zgarmadi: ochiq 40, ichki 70).
+- **Sinovlar:** `test-kassa-report.sql` 129 (+3, S1–S3: seriya hujjat turidan; har seriya 1 dan uzluksiz, hisoblagich = soni = eng
+  katta raqam; bo'shliq tekshiruvi toza va noyoblik indeksi seriya bo'yicha); `test-kassa-links.sql` O1a — «OFS-n», `test-kassa.sql`
+  G25b — seriya bo'yicha; `fin-print.test.mjs` — yangi sarlavha va prefikslar (uch tilda); brauzer `e2e-kassa5` — «ЎЗАРО ҲИСОБ
+  ДАЛОЛАТНОМАСИ № ЎҲ-1», ro'yxatda «O‘H-1», maosh oynasida «№ O‘H-1», bekor qilinganda raqam saqlanadi; `e2e-kassa6` — reliz 9.
+  Barcha SQL to'plamlari yashil (225 / 54 / 93 / 129 / 36 / 87 / 36 / 92 / 32), poyga 22, JS 39, `tg-daily` 45. Brauzer: 28 ta ishga tushirish, hammasi yashil (622 tekshiruv). Yangilanish 8 → 9 ma'lumotli bazada ham xatosiz.
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

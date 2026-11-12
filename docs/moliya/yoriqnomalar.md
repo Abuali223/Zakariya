@@ -1,8 +1,9 @@
 # «Kassa» bo‘limi: rol bo‘yicha qisqa yo‘riqnomalar (F1.19)
 
 O‘qitishda (sinov stendida) tarqatiladi; har bo‘lim — bir varaq. Bo‘lim «Moliya» → «Kassa» da. Tugma nomlari ekrandagidek.
-Hujjat raqamlari: **K-** kirim orderi (KO-1), **Ch-** chiqim orderi (KO-2), **D-** naqdsiz dalolatnoma. Raqamni tizim beradi,
-har yili 1 dan boshlanadi, bo‘shliq va takror bo‘lmaydi. To‘liq tartib: `docs/moliya/ishga-tushirish.md`; shakllar: `docs/moliya/shakllar.md`.
+Hujjat raqamlari: **K-** kirim orderi (KO-1), **Ch-** chiqim orderi (KO-2), **D-** naqdsiz dalolatnoma (boshlang‘ich qoldiq,
+kamomad qarori), **O‘H-** o‘zaro hisob dalolatnomasi, **A-** avans hisoboti (chop etishda kirillcha: К-, Ч-, Д-, ЎҲ-, А-). Har
+turning o‘z raqami bor; raqamni tizim beradi, har yili 1 dan boshlanadi, bo‘shliq va takror bo‘lmaydi. To‘liq tartib: `docs/moliya/ishga-tushirish.md`; shakllar: `docs/moliya/shakllar.md`.
 
 **Hamma uchun umumiy qoidalar**
 1. Har kim faqat **o‘z hisobi** bilan ishlaydi; parol boshqaga berilmaydi (hujjatda kim yozgani, tasdiqlagani va pul bergani qoladi).
@@ -93,8 +94,8 @@ bilan yozadi (kassa orderisiz); naqd — faqat kassir.
 **Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
 `shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter (yoki moliya menejeri) hisobotni
 tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlaydi, har chek — bitta qator (statiya, summa, chek raqami va
-sanasi). Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; dalolatnoma chop etiladi va qog‘oz hisobotga
-qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
+sanasi). Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; «Avans hisoboti № A-…» chop etiladi va qog‘oz
+hisobotga qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
 «Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
 beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi, «Kassa» sahifasining yuqorisida eslatma chiqadi («Avans hisoboti
 muddati o‘tgan hisobdorlar: N ta») va Direktorning Telegram nazorat qatorida ham bo‘ladi.

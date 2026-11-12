@@ -353,7 +353,7 @@ const ofsDoc = {
 };
 test('o‘zaro hisob dalolatnomasi: o‘zbek kirill — matn, qatorlar, xodim, o‘quvchi, asos, imzolar', () => {
   const t = text(docHtml(ofsDoc, ctx(), W));
-  for (const must of ['ДАЛОЛАТНОМА № Д-3', 'Ўзаро ҳисоб — 2027 йил 4 январь',
+  for (const must of ['ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ № ЎҲ-3', '2027 йил 4 январь',
     'Ходимнинг ёзма аризасига асосан унинг 12.2026 ойи учун иш ҳақидан 1 300 000=00 сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.',
     '6710 4010 T-2 · 01.2027 1 000 000=00 IN-01', '6710 6310 T-2 · 03.2027 300 000=00 IN-01',
     'Ходим: Sinov O‘qituvchi', 'Ўқувчи: Sinov B (T-2)', 'Асоси: Ўзаро ҳисоб: 12.2026 ойи иш ҳақи ҳисобидан ўқув тўлови — Sinov B (T-2); ариза 03.01.2027',
@@ -366,12 +366,12 @@ test('o‘zaro hisob dalolatnomasi: o‘zbek kirill — matn, qatorlar, xodim, o
 });
 test('o‘zaro hisob dalolatnomasi: rus va lotin; boshqa dalolatnomalarda «tomon» qatori yo‘q', () => {
   const r = text(docHtml(ofsDoc, ctx({ lang: 'ru' }), W));
-  for (const must of ['АКТ № А-3', 'Взаимозачёт — 4 января 2027 г.', 'На основании письменного заявления сотрудника из его заработной платы за 12.2026 сумма 1 300 000=00 сум зачтена в счёт оплаты за обучение ребёнка.',
+  for (const must of ['АКТ ВЗАИМОЗАЧЁТА № ВЗ-3', '4 января 2027 г.', 'На основании письменного заявления сотрудника из его заработной платы за 12.2026 сумма 1 300 000=00 сум зачтена в счёт оплаты за обучение ребёнка.',
     'Сотрудник: Sinov O‘qituvchi', 'Учащийся: Sinov B (T-2)', 'Основание: Взаимозачёт: оплата за обучение в счёт заработной платы за 12.2026 — Sinov B (T-2); заявление от 03.01.2027',
     'Приложение: Письменное заявление', 'Ознакомлен, согласен: сотрудник Sinov O‘qituvchi'])
     assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
   const l = text(docHtml(ofsDoc, ctx({ lang: 'uz-latn' }), W));
-  assert.ok(l.includes('DALOLATNOMA № D-3') && l.includes('Xodim: Sinov O‘qituvchi') && l.includes('O‘quvchi: Sinov B (T-2)') && l.includes('Tanishdim, roziman: xodim Sinov O‘qituvchi'), l);
+  assert.ok(l.includes('O‘ZARO HISOB DALOLATNOMASI № O‘H-3') && l.includes('Xodim: Sinov O‘qituvchi') && l.includes('O‘quvchi: Sinov B (T-2)') && l.includes('Tanishdim, roziman: xodim Sinov O‘qituvchi'), l);
   const op = text(docHtml({ id: 'kd_op', form: 'ACT', op: 'nc_opening', status: 'posted', no: 1, businessDay: '2027-01-04', amount: 2000000, partyName: 'Boshlang‘ich qoldiq',
     basis: 'Kassani sanash dalolatnomasi (boshlang‘ich qoldiq)', lines: [{ debit: '5010', credit: '0000', amount: 2000000, articleId: 'OP-23', cash: true }] }, ctx(), W));
   assert.ok(op.includes('ДАЛОЛАТНОМА № Д-1') && op.includes('Кассанинг бошланғич қолдиғи — 2027 йил 4 январь') && !op.includes('Берилсин') && !op.includes('Ходим:') && !op.includes('Танишдим'), op);
@@ -393,7 +393,7 @@ const advDoc = {
 };
 test('avans hisoboti: o‘zbek kirill va rus — qatorlar (chek), hisobdor, asos, qoldiq, imzolar', () => {
   const t = text(docHtml(advDoc, ctx(), W));
-  for (const must of ['ДАЛОЛАТНОМА № Д-5', 'Аванс ҳисоботи — 2027 йил 11 январь', 'Чек, ҳужжат',
+  for (const must of ['АВАНС ҲИСОБОТИ № А-5', '2027 йил 11 январь', 'Чек, ҳужжат',
     '1010 4230 Chek 15, 09.01 150 000=00 EX-20', '2010 4230 Chek 16, 09.01 50 000=00 EX-16',
     'Ҳисобдор шахс: Sinov Zavxoz', 'Асоси: Аванс ҳисоботи 10.01.2027; Oziq-ovqat xaridi',
     'Сумма: 200 000=00 — Икки юз минг сўм 00 тийин', 'Иловаси: Чеклар ва ҳужжатлар: 2 та',
@@ -402,7 +402,7 @@ test('avans hisoboti: o‘zbek kirill va rus — qatorlar (chek), hisobdor, asos
     assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   assert.ok(!t.includes('Avans hisoboti') && !t.includes('Берилсин'), 'tizim matni chop etish tilida; chiqim orderi yorlig‘i yo‘q');
   const r = text(docHtml(advDoc, ctx({ lang: 'ru' }), W));
-  for (const must of ['АКТ № А-5', 'Авансовый отчёт — 11 января 2027 г.', 'Подотчётное лицо: Sinov Zavxoz', 'Основание: Авансовый отчёт 10.01.2027; Oziq-ovqat xaridi',
+  for (const must of ['АВАНСОВЫЙ ОТЧЁТ № АО-5', '11 января 2027 г.', 'Подотчётное лицо: Sinov Zavxoz', 'Основание: Авансовый отчёт 10.01.2027; Oziq-ovqat xaridi',
     'Приложение: Чеки и документы: 2 шт.', 'Остаток аванса у подотчётного лица: до отчёта 250 000=00 сум, после 50 000=00 сум.'])
     assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
 });

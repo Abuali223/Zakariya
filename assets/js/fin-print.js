@@ -32,13 +32,14 @@ const T = {
     salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза',
     countBasis: 'Кассани санаш далолатномаси', nonCash: 'Маълумот учун, нақд пулсиз ёзув', docId: 'Ҳужжат', printed: 'чоп этилди',
     act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор', nc_adv_report: 'Аванс ҳисоботи' },
+    actTitle: { nc_offset: 'ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ', nc_adv_report: 'АВАНС ҲИСОБОТИ' },
     kassaFor: d => `КАССА ${d} учун`, sheet: 'Варақ', copy1: 'КАССА ДАФТАРИ ВАРАҒИ', copy2: 'КАССИР ҲИСОБОТИ',
     cols: ['Ҳужжат рақами', 'Кимдан олинди ёки кимга берилди', 'Корреспонденцияловчи ҳисобварақ, субсчёт рақами', 'Кирим', 'Чиқим'],
     openBal: 'Кун бошига қолдиқ', carried: 'Олдинги варақдан кўчирилди', dayTotal: 'Кун бўйича жами', closeBal: 'Кун охирига қолдиқ',
     incl: 'шу жумладан иш ҳақи, ижтимоий тусдаги тўловлар ва стипендиялар учун',
     counted: 'Санаб чиқилган нақд пул', diff: 'Фарқ', diffNone: 'йўқ', pending: 'Ҳали ўтказилмаган ёзувлар', pcs: 'та',
     verify: (a, aw, b, bw) => `Касса дафтаридаги ёзувларни текширдим ҳамда ${a} (${aw}) та кирим ва ${b} (${bw}) та чиқим ҳужжатини олдим.`,
-    pre: { KO1: 'К', KO2: 'Ч', ACT: 'Д' },
+    pre: { KO1: 'К', KO2: 'Ч', ACT: 'Д', OFS: 'ЎҲ', ADV: 'А' },
     cntTitle: 'КАССАДАГИ НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ',
     cntKind: { close: 'кунни ёпишда', handover: 'сменани топшириш-қабул қилишда', opening: 'бошланғич қолдиқни аниқлашда', monthly: 'ойлик санаш', yearly: 'йиллик санаш', surprise: 'тўсатдан санаш' },
     commission: 'Комиссия', lastNos: 'Санаш пайтидаги охирги ҳужжат рақамлари', lastIn: 'кирим ордери', lastOut: 'чиқим ордери', none: 'йўқ',
@@ -76,13 +77,14 @@ const T = {
     salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza',
     countBasis: 'Kassani sanash dalolatnomasi', nonCash: 'Ma’lumot uchun, naqd pulsiz yozuv', docId: 'Hujjat', printed: 'chop etildi',
     act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror', nc_adv_report: 'Avans hisoboti' },
+    actTitle: { nc_offset: 'O‘ZARO HISOB DALOLATNOMASI', nc_adv_report: 'AVANS HISOBOTI' },
     kassaFor: d => `KASSA ${d} uchun`, sheet: 'Varaq', copy1: 'KASSA DAFTARI VARAG‘I', copy2: 'KASSIR HISOBOTI',
     cols: ['Hujjat raqami', 'Kimdan olindi yoki kimga berildi', 'Korrespondensiyalovchi hisobvaraq, subschyot raqami', 'Kirim', 'Chiqim'],
     openBal: 'Kun boshiga qoldiq', carried: 'Oldingi varaqdan ko‘chirildi', dayTotal: 'Kun bo‘yicha jami', closeBal: 'Kun oxiriga qoldiq',
     incl: 'shu jumladan ish haqi, ijtimoiy tusdagi to‘lovlar va stipendiyalar uchun',
     counted: 'Sanab chiqilgan naqd pul', diff: 'Farq', diffNone: 'yo‘q', pending: 'Hali o‘tkazilmagan yozuvlar', pcs: 'ta',
     verify: (a, aw, b, bw) => `Kassa daftaridagi yozuvlarni tekshirdim hamda ${a} (${aw}) ta kirim va ${b} (${bw}) ta chiqim hujjatini oldim.`,
-    pre: { KO1: 'K', KO2: 'Ch', ACT: 'D' },
+    pre: { KO1: 'K', KO2: 'Ch', ACT: 'D', OFS: 'O‘H', ADV: 'A' },
     cntTitle: 'KASSADAGI NAQD PULNI SANASH DALOLATNOMASI',
     cntKind: { close: 'kunni yopishda', handover: 'smenani topshirish-qabul qilishda', opening: 'boshlang‘ich qoldiqni aniqlashda', monthly: 'oylik sanash', yearly: 'yillik sanash', surprise: 'to‘satdan sanash' },
     commission: 'Komissiya', lastNos: 'Sanash paytidagi oxirgi hujjat raqamlari', lastIn: 'kirim orderi', lastOut: 'chiqim orderi', none: 'yo‘q',
@@ -120,13 +122,14 @@ const T = {
     salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление',
     countBasis: 'Акт пересчёта наличных денег в кассе', nonCash: 'Справочно, безналичная запись', docId: 'Документ', printed: 'напечатано',
     act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче', nc_adv_report: 'Авансовый отчёт' },
+    actTitle: { nc_offset: 'АКТ ВЗАИМОЗАЧЁТА', nc_adv_report: 'АВАНСОВЫЙ ОТЧЁТ' },
     kassaFor: d => `КАССА за ${d}`, sheet: 'Лист', copy1: 'ВКЛАДНОЙ ЛИСТ КАССОВОЙ КНИГИ', copy2: 'ОТЧЁТ КАССИРА',
     cols: ['Номер документа', 'От кого получено или кому выдано', 'Номер корреспондирующего счёта, субсчёта', 'Приход', 'Расход'],
     openBal: 'Остаток на начало дня', carried: 'Перенос с предыдущего листа', dayTotal: 'Итого за день', closeBal: 'Остаток на конец дня',
     incl: 'в том числе на заработную плату, выплаты социального характера и стипендии',
     counted: 'Пересчитано наличных денег', diff: 'Расхождение', diffNone: 'нет', pending: 'Ещё не проведённые записи', pcs: 'шт.',
     verify: (a, aw, b, bw) => `Записи в кассовой книге проверил и документы в количестве ${a} (${aw}) приходных и ${b} (${bw}) расходных получил.`,
-    pre: { KO1: 'П', KO2: 'Р', ACT: 'А' },
+    pre: { KO1: 'П', KO2: 'Р', ACT: 'А', OFS: 'ВЗ', ADV: 'АО' },
     cntTitle: 'АКТ ПЕРЕСЧЁТА НАЛИЧНЫХ ДЕНЕГ В КАССЕ',
     cntKind: { close: 'при закрытии дня', handover: 'при приёме-передаче смены', opening: 'при определении начального остатка', monthly: 'ежемесячный пересчёт', yearly: 'годовой пересчёт', surprise: 'внезапный пересчёт' },
     commission: 'Комиссия', lastNos: 'Последние номера документов на момент пересчёта', lastIn: 'приходный ордер', lastOut: 'расходный ордер', none: 'нет',
@@ -176,7 +179,9 @@ function pickSign(ctx, list, uid, label) {
 }
 const money = (W, v) => W.fmtMoney(v == null ? 0 : v) || '';
 const ymLabel = m => /^\d{4}-\d{2}$/.test(m || '') ? m.slice(5, 7) + '.' + m.slice(0, 4) : (m || '');
-const docNo = (doc, t) => doc && doc.no ? `${t.pre[doc.form] || ''}-${doc.no}` : '—';
+// Raqam seriyasi (reja 4.14): server cash_docs.series beradi; eski javobda bo'lmasa — shakl va operatsiyadan.
+const seriesOf = doc => (doc && doc.series) || (doc && doc.form === 'ACT' ? (doc.op === 'nc_offset' ? 'OFS' : doc.op === 'nc_adv_report' ? 'ADV' : 'ACT') : (doc && doc.form) || '');
+const docNo = (doc, t) => doc && doc.no ? `${t.pre[seriesOf(doc)] || ''}-${doc.no}` : '—';
 
 // Tizim tuzgan matnlarni chop etish tilida qayta tuzish: tomon, asos va ilova.
 function texts(doc, t) {
@@ -403,8 +408,8 @@ function actHtml(doc, ctx, W, t, lang) {
   const pupil = ofs ? [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ') : '';
   return `<div class="pg act">${doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : ''}
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
-    <div class="ttl">${esc(t.act)} ${t.no} <span class="nob">${esc(docNo(doc, t))}</span></div>
-    <div class="dt">${esc((t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '') + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
+    <div class="ttl">${esc(t.actTitle[doc.op] || t.act)} ${t.no} <span class="nob">${esc(docNo(doc, t))}</span></div>
+    <div class="dt">${esc((t.actTitle[doc.op] ? '' : (t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '')) + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
     ${ofs && /^\d{4}-\d{2}$/.test(snap.month || '') ? `<p>${esc(t.offsetText(money(W, doc.amount), ymLabel(snap.month)))}</p>` : ''}
     <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(adv ? t.advDoc : t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
     ${partyLbl && tx.party ? fld(partyLbl, esc(tx.party)) : ''}
@@ -424,7 +429,7 @@ export function docHtml(doc, ctx, W) {
   ctx = ctx || {}; doc = doc || {};
   const lang = langOf(ctx), t = T[lang];
   const body = doc.form === 'KO1' ? ko1Html(doc, ctx, W, t, lang) : doc.form === 'KO2' ? ko2Html(doc, ctx, W, t, lang) : actHtml(doc, ctx, W, t, lang);
-  return page(`${doc.form === 'KO1' ? t.ko1 : doc.form === 'KO2' ? t.ko2 : t.act} ${t.no} ${doc.no || ''}`, t, body);
+  return page(`${doc.form === 'KO1' ? t.ko1 : doc.form === 'KO2' ? t.ko2 : (t.actTitle[doc.op] || t.act)} ${t.no} ${docNo(doc, t)}`, t, body);
 }
 
 // ---------------------------------------------------------------- KO-4: kassa kitobi varag'i + kassir hisoboti

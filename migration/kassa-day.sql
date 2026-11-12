@@ -55,9 +55,9 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select coalesce(jsonb_agg(jsonb_build_object('series', x.series, 'lastNo', x.last_no, 'count', x.cnt, 'max', x.mx) order by x.series), '[]'::jsonb)
     from (select s.series,
                  coalesce((select k."lastNo" from public.doc_counters k where k.desk = p_desk and k.series = s.series and k.year = p_year), 0) as last_no,
-                 (select count(*) from public.cash_docs c where c.desk = p_desk and c.form = s.series and c.year = p_year and c.no is not null) as cnt,
-                 coalesce((select max(c.no) from public.cash_docs c where c.desk = p_desk and c.form = s.series and c.year = p_year), 0) as mx
-            from (values ('KO1'), ('KO2'), ('ACT')) s(series)) x
+                 (select count(*) from public.cash_docs c where c.desk = p_desk and c.series = s.series and c.year = p_year and c.no is not null) as cnt,
+                 coalesce((select max(c.no) from public.cash_docs c where c.desk = p_desk and c.series = s.series and c.year = p_year), 0) as mx
+            from (values ('KO1'), ('KO2'), ('ACT'), ('OFS'), ('ADV')) s(series)) x
    where x.last_no <> x.cnt or x.last_no <> x.mx
 $$;
 revoke all on function app.kassa_gap_check(text, int) from public, anon, authenticated;
