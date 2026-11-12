@@ -91,11 +91,11 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/3$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/4$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
-  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000,"cashLimit":5000000}')::text$q$), 0)
+  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000,"cashLimit":5000000,"orgCashMax":1000000000}')::text$q$), 0)
   || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":2000000,"startDay":"2027-01-04"}')::text$q$), '"ok": true');
 select zz.put('P1', zz.tui('U_KAS', 'man_c1_0001', 'T-1', 600000, 'Sinov Ota', '111'));      -- KO-1 № 1: qisman (4010)
 select zz.put('P2', zz.tui('U_KAS', 'man_c1_0002', 'T-2', 1200000, 'Sinov Ona', '112'));     -- KO-1 № 2: faktura + ortiqchasi avansga (6310)
@@ -152,7 +152,7 @@ rollback to savepoint b1;
 select zz.chk('B1 search_path''siz SECURITY DEFINER funksiya (istalgan) — 1-band', :'c1' || '/' || :'bad', '^1/1$');
 
 savepoint b2;
-create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 4';
+create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 5';
 \ir kassa-checks.sql
 rollback to savepoint b2;
 select zz.chk('B2 bazadagi reliz tekshiruv fayli kutganidan boshqa — 2-band (sonlar bandi o''tkazib yuboriladi)', :'c2' || '/' || :'c3' || '/' || :'bad', '^1/0/1$');

@@ -1774,6 +1774,35 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   OK; oldingi relizdan (`fdb6a11`, reliz 2) yangilanish — xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 3)».
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 68) Moliya, 1b: yuridik shaxsga kassadan naqd to'lov — ogohlantirish va Direktor tasdig'i (F1.27, buxgalter ko'rigi M3) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi fayllarda (`fin-core.sql`, `kassa-docs.sql`, `kassa-day.sql`,
+`kassa-checks.sql`, `fin-version.sql`) va `fin-kassa.js` da.
+
+- **Qoida:** «Xarajat» chiqim so'rovining oluvchisi yuridik shaxs kontragent (turi «yetkazib beruvchi» yoki «tashkilot») bo'lsa,
+  so'rov Direktor tasdig'ini ham kutadi (summasi T1 dan kichik bo'lsa ham). Chegara — «⚙ Sozlamalar» → «Yuridik shaxsga kassadan
+  naqd to'lov — Direktor tasdig'isiz chegara» (`fin_org.extra.orgCashMax`; bo'sh yoki 0 — har doim Direktor; faqat Direktor
+  o'zgartiradi). Jismoniy shaxs (YaTT ham), «boshqa», bank, ta'sischi qoidaga kirmaydi; boshqa operatsiyalar o'zgarmaydi.
+- **Sahifa:** so'rov oynasida yuridik shaxs tanlansa — sariq ogohlantirish (asosiy yo'l — bank o'tkazmasi yoki hisobdor shaxs;
+  chegara qo'yilgan bo'lsa — matnda); yuborilgach «Direktor tasdig'i ham kerak» xabari; nazorat ro'yxatida yangi qator
+  «Yuridik shaxslarga kassadan naqd to'lov» (oxirgi 30 kun: soni va summasi; «diqqat»).
+- **Qaror va qo'llanma:** FD-47 (chegara va kontragent turlari — buxgalter tasdiqlaydi, Direktor sozlamaga kiritadi);
+  `ishga-tushirish.md` 4-qadam (sozlama va kontragent turlari), `yoriqnomalar.md` (kassir, buxgalter, Direktor jadvali).
+- **Modul relizi 4** (javobda «orgCash», nazoratda «orgCash30», sozlama `orgCashMax`; `kassa-checks.sql`: ichki funksiyalar 65).
+  Deploy tekshiruvi (`kassa-checks.sql`, 10-band) yangi yordamchi funksiya nomi mavjud `app.kassa_num` bilan bir xil ekanini
+  (overload) ushladi — mavjudidan foydalanildi.
+- **Sinovlar:** `test-kassa-report.sql` 98 (+8: O0–O7 — standart «har doim Direktor», rollar va noto'g'ri qiymat, moliya tasdig'i
+  yetmasligi, chegara 100 000 / 100 001, nazorat ro'yxati, boshqa operatsiyalar, ichki funksiya yopiq). M3 haqida bo'lmagan SQL
+  to'plamlari va brauzer ssenariylarida sozlamada chegara katta qo'yildi — ularning oqimi o'zgarmadi (`e2e-kassa` chegarani
+  sozlamalar oynasidan kiritib, saqlanganini tekshiradi). Yangi `e2e-kassa9` 12 (ikkala dizaynda): ogohlantirish (yetkazib beruvchi
+  — bor, YaTT — yo'q, operatsiya almashsa — yo'qoladi), so'rov Direktorga boradi, Direktor chegara qo'yadi, kichik summa Direktorsiz,
+  nazorat ro'yxatida qator.
+  `e2e-kassa4` — nazorat ro'yxati 22 qator, yetkazib beruvchiga naqd to'lov «diqqat» bo'lib ko'rinadi; `e2e-kassa6` — reliz 4;
+  `test-kassa-race.sh` — sozlamada chegara katta (poyga qoidani emas, parallellikni tekshiradi) — 22/22. Barcha SQL to'plamlari
+  yashil (225 / 54 / 93 / 98 / 36 / 87 / 36 / 92 / 32); JS 31; `tg-daily` 42. Brauzer: 22 ta ishga tushirish, hammasi yashil
+  (528 tekshiruv). Oldingi relizdan (`3d1dfa3`, reliz 3) yangilanish — xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 4)».
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

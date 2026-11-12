@@ -9,13 +9,13 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
   limit: { cashLimit: 3000000, set: true, balance: 1200000, exceeded: false, days30: 0 },
   reconcile: { live: true, total: 0, p1: { pay: 0, paySum: 0, doc: 0 }, p4: { row: 0, doc: 0 }, p5: { row: 0, doc: 0 }, p8: { row: 0, doc: 0 } },
-  accountable: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [] });
+  accountable: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 } });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 21 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 22 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 21);
-  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'other',
+  assert.equal(rows.length, 22);
+  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'orgCash', 'other',
     'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'handover']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
@@ -35,12 +35,14 @@ test('nazorat ro‘yxati: muammolar — daraja va matn', () => {
     accountable: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', given: 400000, returned: 150000, balance: 250000, since: '2027-01-04', workDays: 4, overdue: true }],
     handover: { monthCount: 1, monthSum: 500000, earlierCount: 2, earlierSum: 900000 },
     zreport: [{ day: '2027-01-05', recorded: true, missing: false, diffCash: -10000, diffCard: 0 }, { day: '2027-01-06', recorded: false, missing: false },
-              { day: '2027-01-07', recorded: true, missing: true }, { day: '2027-01-07', recorded: true, missing: false, diffCash: 0, diffCard: 2500 }] });
+              { day: '2027-01-07', recorded: true, missing: true }, { day: '2027-01-07', recorded: true, missing: false, diffCash: 0, diffCard: 2500 }],
+    orgCash30: { count: 2, sum: 450000 } });
   const r = by(controlRows(c));
   const lv = k => r[k].level;
   assert.deepEqual(['gaps', 'staleOpenDay', 'shortages', 'staleRefunds', 'reconcile', 'zreport'].map(lv), ['bad', 'bad', 'bad', 'bad', 'bad', 'bad']);
   assert.equal(r.zreport.value, '05.01.2027: farq: naqd −10 000 so‘m; 06.01.2027: kiritilmagan; 07.01.2027: yo‘q; 07.01.2027: farq: karta +2 500 so‘m');
-  assert.deepEqual(['unverified', 'diffs', 'reopens', 'fiscal', 'reissues', 'gateOff', 'unprinted', 'limit', 'accountable', 'handover'].map(lv), Array(10).fill('warn'));
+  assert.deepEqual(['unverified', 'diffs', 'reopens', 'fiscal', 'orgCash', 'reissues', 'gateOff', 'unprinted', 'limit', 'accountable', 'handover'].map(lv), Array(11).fill('warn'));
+  assert.equal(r.orgCash.value, '2 ta · 450 000 so‘m');
   assert.deepEqual(['voids', 'waiting', 'unpaid', 'other', 'late'].map(lv), Array(5).fill('info'));
   assert.equal(r.gaps.value, '2027: kirim orderlari — bo‘shliq yoki takror');
   assert.equal(r.staleOpenDay.value, '06.01.2027');
@@ -70,9 +72,9 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
   assert.ok(!controlRows(c).some(x => x.key === 'reconcile' || x.key === 'zreport'), 'sinov kassasida moslik va Z-hisobot qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 19);
+  assert.equal(controlRows(c).length, 20);
   const empty = controlRows(null);
-  assert.ok(empty.length === 21 && empty.filter(x => x.level === 'ok').length === 19, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 22 && empty.filter(x => x.level === 'ok').length === 20, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('Z-hisobot holati matni (kun javobidagi «z»)', () => {

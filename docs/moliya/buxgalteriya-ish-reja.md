@@ -839,17 +839,19 @@ berilgan − qaytim − hisobotlar; hisobot qoldiqdan oshmaydi (ortiqcha sarf �
 avans — faqat Direktor tasdig‘i bilan (so‘rovda ham, pul berishda ham tekshiriladi); moslikda P4 «adv». Onlayn kassa
 Z-hisoboti (F1.26, buxgalter ko‘rigi M6): kunni yopishda Z raqami va undagi naqd va karta sotuvi kiritiladi, tizim fiskal chekli
 KO-1 va terminal to‘lovlari bilan solishtiradi; kiritilmagan, «yo‘q» yoki mos emas — kun qatori, nazorat ro‘yxati, Telegram,
-kunni tekshirishda izoh majburiy; keyin kiritish / tuzatish — «Z» tugmasi; kunlik hisobotda Z bo‘limi. Modul relizi 3. Sinov kassasi (CT-20)
+kunni tekshirishda izoh majburiy; keyin kiritish / tuzatish — «Z» tugmasi; kunlik hisobotda Z bo‘limi. Yuridik shaxsga (yetkazib
+beruvchi / tashkilot) kassadan naqd xarajat (F1.27, M3): so‘rov oynasida ogohlantirish, Direktor tasdig‘i (chegara — sozlama,
+standart 0), nazorat ro‘yxatida oxirgi 30 kun. Modul relizi 4. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 90, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 98, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 20, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
-42; brauzerda sakkiz to‘liq stsenariy (228 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+42; brauzerda to‘qqizta to‘liq stsenariy (240 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
-hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1, M2, M6 bajarildi — 66- va
-67-bo‘limlar), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1, M2, M3, M6 bajarildi —
+66–68-bo‘limlar), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
 kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil (ko‘p agentli) ko‘rik —
 hali o‘tkazilmagan; F1.20 (RLS relizi) — 1b-bosqichda.
 
@@ -905,7 +907,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 | F1.24 | S | 1 | Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | RP-22 haftalik KPI | F1.15 | Direktor ko‘radi |
 | F1.26 | S | 1 | ✅ Kunni yopishda onlayn kassa (NKM) Z-hisoboti: naqd va karta sotuvi kiritiladi, fiskal chekli KO-1 va terminal to‘lovlari bilan solishtiriladi; keyin kiritish / tuzatish — «Z» (buxgalter ko‘rigi M6) | F1.9 | Farq nazorat ro‘yxatida va Telegramda; tekshirishda izoh |
-| F1.27 | S | 0,5 | Kontragent-tashkilotga kassadan naqd to‘lovda ogohlantirish va Direktor tasdig‘i (M3; chegara — hisob siyosati qarori) | F1.10 | Qoidaga test |
+| F1.27 | S | 0,5 | ✅ Kontragent-tashkilotga (yetkazib beruvchi / tashkilot) kassadan naqd to‘lovda ogohlantirish va Direktor tasdig‘i; chegara — «⚙ Sozlamalar» (standart 0 — har doim), nazorat ro‘yxatida (M3) | F1.10 | Qoidaga test |
 
 Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 
@@ -1053,6 +1055,7 @@ J — ish jarayoni.
 | FD-44 | Ish haqi fondi mosligi | Tizim vedomosti buxgalter hisobotidagi fond bilan bir xilligi yozma tasdiqlanadi (yoki tuzatish rejasi) | [BUX] · 19-dekabr · J |
 | FD-45 | Korxona o‘lchami | Kichik bo‘lsa 1/2-shakl; aks holda 1–4-shakl va izohlar | [BUX] · 27-mart · K |
 | FD-46 | Ta’til rezervi | 8910 yuritilmaydi (standart) — buxgalter hal qiladi | [BUX] · 27-mart · D |
+| FD-47 | Yuridik shaxsga kassadan naqd to‘lov | Standart — har to‘lov Direktor tasdig‘i bilan (chegara 0); amaldagi qonunchilik bo‘yicha chegara va kontragent turlari («yetkazib beruvchi» / «tashkilot» — yuridik shaxs; YaTT — «jismoniy shaxs») buxgalter tasdiqlaydi, Direktor «⚙ Sozlamalar»ga kiritadi | [BUX] · 12-dekabr · J |
 
 ---
 

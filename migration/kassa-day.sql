@@ -840,6 +840,10 @@ begin
     'fiscalExempt30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."fiscalExempt" and c.status = 'posted' and c."businessDay" >= v_today - 30),
     'otherParties30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."partyType" = 'other' and c.status = 'posted' and not c."isSystem" and c."businessDay" >= v_today - 30),
     'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30),
+    -- yuridik shaxslarga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat (F1.27) — buxgalter ko'rib chiqadi
+    'orgCash30', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(c.amount), 0)) from public.cash_docs c
+                   where c.desk = v_desk and c.op = 'out_expense' and c.status = 'posted' and c."partyType" = 'counterparty'
+                     and app.kassa_is_org(c."partyId") and c."businessDay" >= v_today - 30),
     'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),

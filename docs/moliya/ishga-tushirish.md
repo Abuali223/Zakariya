@@ -91,8 +91,11 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    qoldiq, farq va uning sababi. Farq majburan tenglashtirilmaydi — Direktor qaror qiladi (kamomad — javobgar shaxsga yoki zararga; ortiqcha — daromadga).
 3. **Qog‘oz order daftarlari yopiladi** (Sh-4): oxirgi П/О va Р/О raqamlari, ishlatilmagan blankalar bekor qilinadi; buxgalter imzolaydi.
 4. **«Kassa» → «⚙ Sozlamalar»:** tashkilot nomi (hujjatlardagidek), STIR, joy, chop etish tili; T1 (shundan katta chiqimga Direktor
-   tasdig‘i), L1 (asos hujjatisiz naqd xarid chegarasi), kassa limiti; **imzo egalari** (1-ro‘yxat — rahbar; 2-ro‘yxat — bosh
-   buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi, tizimdagi hisobi).
+   tasdig‘i), L1 (asos hujjatisiz naqd xarid chegarasi), kassa limiti; **yuridik shaxsga kassadan naqd to‘lov chegarasi** (yetkazib
+   beruvchi / tashkilotga shu summagacha Direktor tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida
+   tasdiqlaydi); **imzo egalari** (1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi,
+   tizimdagi hisobi). Kontragentlar turi to‘g‘ri bo‘lsin: korxona (MChJ, AJ va b.) — «Yetkazib beruvchi» yoki «Tashkilot», yakka
+   tadbirkor va fuqaro — «Jismoniy shaxs».
 5. **«Boshlang‘ich qoldiqni kiritish»:** summa — komissiya sanagan pul; «Birinchi kassa kuni» — yanvarning birinchi kassa kuni;
    komissiya a’zolari. Tizim «Boshlang‘ich qoldiq» dalolatnomasini yozadi (D-1) — chop etilib, komissiya imzolaydi.
    Birinchi kassa kuni ochilguncha qoldiqni qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi, raqami saqlanadi).

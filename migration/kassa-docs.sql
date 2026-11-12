@@ -100,7 +100,7 @@ declare
   v_basis text; v_note text; v_attach text; v_nobasis boolean; v_fiscal text; v_fexempt boolean := false;
   v_lines jsonb; v_line jsonb; v_i int := 0; v_n int; v_lamt numeric; v_art public.fin_articles%rowtype; v_aid text;
   v_debit text; v_credit text; v_counter text; v_sum_cash numeric := 0; v_sum_all numeric := 0; v_lnote text;
-  v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean;
+  v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean; v_orgcash boolean := false;
 begin
   o_dup := false;
   if p is null or jsonb_typeof(p) <> 'object' then
@@ -272,6 +272,11 @@ begin
                -- hisobdorga avans: oldingi avans bo'yicha hisobot qilinmagan qoldiq bo'lsa — Direktor ham (kassa tartibi: yangi avans
                --   oldingisi hisobotidan keyin; istisno — Direktor). Pul berishda (kassa_doc_pay) hisobdor qulfi ostida yana tekshiriladi.
                or (v_op = 'out_accountable' and app.kassa_acc_open(v_pid) > 0);
+    -- yuridik shaxsga (kontragent turi «yetkazib beruvchi» / «tashkilot») kassadan naqd xarajat: hisob-kitob asosan bankdan
+    --   (yoki hisobdor shaxs orqali); kassadan — sozlamadagi chegaradan (fin_org.extra.orgCashMax, standart 0) katta bo'lsa
+    --   Direktor tasdig'i bilan (F1.27, buxgalter ko'rigi M3).
+    v_orgcash := v_op = 'out_expense' and v_ptype = 'counterparty' and app.kassa_is_org(v_pid);
+    v_needd := v_needd or (v_orgcash and v_amount > coalesce(app.kassa_num(v_org.extra, 'orgCashMax'), 0));   -- kassa-links.sql
   end if;
 
   begin v_cap := nullif(p ->> 'capturedAt', '')::timestamptz; exception when others then v_cap := null; end;
@@ -447,6 +452,14 @@ revoke all on function public.kassa_receipt(jsonb) from public, anon;
 grant execute on function public.kassa_receipt(jsonb) to authenticated;
 
 -- ---------- KO-2: chiqim so'rovi (raqamsiz; pul berilmaydi) ----------
+-- Kontragent yuridik shaxsmi (F1.27): «yetkazib beruvchi» va «tashkilot» turlari — ha; «jismoniy shaxs» (YaTT ham), bank, ta'sischi,
+--   «boshqa» — yo'q. Buxgalter kontragent turini shu qoida bilan belgilaydi.
+create or replace function app.kassa_is_org(p_cp text) returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select c.kind in ('supplier', 'org') from public.fin_counterparties c where c.id = p_cp), false)
+$$;
+revoke all on function app.kassa_is_org(text) from public, anon, authenticated;
+
 -- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari (sinov kassasisiz).
 create or replace function app.kassa_acc_open(p_party text) returns numeric
 language sql stable security definer set search_path = public, app, pg_temp as $$
@@ -475,6 +488,9 @@ begin
   if coalesce(p ->> 'op', '') = 'out_accountable' then
     select c."partyId" into v_party from public.cash_docs c where c.id = v_id;
     v_extra := jsonb_build_object('accOpen', app.kassa_acc_open(v_party));
+  elsif coalesce(p ->> 'op', '') = 'out_expense' then   -- yuridik shaxsga naqd: sahifa ogohlantiradi (F1.27)
+    select c."partyId" into v_party from public.cash_docs c where c.id = v_id and c."partyType" = 'counterparty';
+    v_extra := jsonb_build_object('orgCash', v_party is not null and app.kassa_is_org(v_party));
   end if;
   -- Tasdiq talab qilmaydigan chiqim (hozircha qo'lda kiritiladiganlar ichida yo'q) darhol «tasdiqlangan» bo'ladi.
   update public.cash_docs set status = 'approved'

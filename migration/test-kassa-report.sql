@@ -9,7 +9,9 @@
 --   (T) sinov kassasi (CT-20): xarajat va avans orderi «Buxgalteriya» / avans jadvaliga yozilmaydi;
 --   (G) rollar;
 --   (AV) avans hisoboti va «hisobotsiz yangi avans yo'q» qoidasi;
---   (Z) onlayn kassa (NKM) Z-hisoboti: kiritish, solishtirish (fiskal chekli KO-1, terminal), nazorat, Telegram, kunni tekshirish.
+--   (Z) onlayn kassa (NKM) Z-hisoboti: kiritish, solishtirish (fiskal chekli KO-1, terminal), nazorat, Telegram, kunni tekshirish;
+--   (O) yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat: Direktor tasdig'i, chegara (orgCashMax), nazorat.
+--   Eslatma: boshqa bo'limlar shu qoidaga bog'liq bo'lmasin deb sozlamada chegara katta qo'yilgan (N1); (O) uni o'zi o'zgartiradi.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -104,7 +106,7 @@ select zz.clock('2027-01-04 10:00+05');
 select zz.chk('N0 kassa ishlatilmayapti: director_daily''da kassa bloki yo''q', (zz.daily('2027-01-04') ? 'kassa')::text || ':' || coalesce(app.kassa_daily('2027-01-04')::text, 'null'), '^false:null$');
 select zz.chk('N0b moslik: kassa ishga tushmagan', app.kassa_reconcile('2026-12-01', '2027-01-04')::text, '"live": false.*"total": 0|"total": 0.*"live": false');
 select zz.chk('N1 ishga tushirish: limit 3 000 000, T1 1 000 000, boshlang''ich qoldiq 2 000 000',
-  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000,"cashLimit":3000000}')::text$q$), 0)
+  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000,"cashLimit":3000000,"orgCashMax":1000000000}')::text$q$), 0)
   || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":2000000,"startDay":"2027-01-04"}')::text$q$), '"ok": true');
 select zz.chk('N2 ishga tushgan, hali hujjat yo''q: blok bor, kun varag''i yo''q, qoldiq 2 000 000',
   (select (k -> 'day')::text || ':' || trim_scale((k ->> 'balance')::numeric) || ':' || (k ->> 'live') || ':' || (k -> 'control' ->> 'reconcile') from (select zz.daily('2027-01-04') -> 'kassa' as k) q),
@@ -454,6 +456,45 @@ select zz.chk('Z15 sinov kassasida Z-hisobot yuritilmaydi',
 select zz.chk('Z16 ichki Z funksiyalari mijozga yopiq',
   zz.as('U_DIR', $q$select app.kassa_z_state('cd_main_2027-01-11')::text$q$) || ' | ' || zz.as('U_DIR', $q$select app.kassa_z_put('cd_main_2027-01-11', '{}'::jsonb, 'U_DIR')::text$q$),
   '^ERR 42501.* \| ERR 42501');
+
+-- ---------- (O) yuridik shaxsga kassadan naqd xarajat (F1.27, buxgalter ko'rigi M3) ----------
+select zz.clock('2027-01-14 10:00+05');
+set local session_replication_role = replica;
+insert into public.fin_counterparties (id, kind, name, stir, active) values
+  ('cp_org', 'org', 'Sinov Tashkilot MChJ', '', true), ('cp_per', 'person', 'Sinov YaTT', '', true);
+set local session_replication_role = origin;
+select zz.put('Ot0', (select (c -> 'orgCash30' ->> 'count') || ':' || trim_scale((c -> 'orgCash30' ->> 'sum')::numeric) from zz.checks('main') c));
+select zz.chk('O0 boshlang''ich: 1-kundagi yetkazib beruvchiga naqd xarajat (300 000) nazoratda ko''rinadi', zz.get('Ot0'), '^1:300000$');
+select zz.chk('O1 chegarani faqat Direktor o''zgartiradi; manfiy va matn — rad',
+  zz.as('U_FM', $q$select public.fin_org_set('{"orgCashMax":0}')::text$q$) || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"orgCashMax":-1}')::text$q$)
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"orgCashMax":"abc"}')::text$q$), '^ERR 42501.* \| ERR 22023.* \| ERR 22023');
+select zz.put('O2s', zz.as('U_DIR', $q$select (public.fin_org_set('{"orgCashMax":0}') -> 'extra' ->> 'orgCashMax')$q$));
+select zz.put('O2a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 9","clientRef":"o-2-0001","lines":[{"articleId":"EX-32","amount":50000}]}'));
+select zz.put('O2b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_per","basis":"Hisob-faktura № 10","clientRef":"o-2-0002","lines":[{"articleId":"EX-32","amount":50000}]}'));
+select zz.put('O2c', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"o-2-0003","lines":[{"articleId":"EX-07","amount":50000}]}'));
+select zz.chk('O2 chegara 0 (standart): yetkazib beruvchiga naqd — T1 dan kichik bo''lsa ham Direktor; jismoniy shaxs va «boshqa» — yo''q',
+  zz.get('O2s') || ' | ' || (zz.get('O2a')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2a')::jsonb ->> 'orgCash')
+  || ' | ' || (zz.get('O2b')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2b')::jsonb ->> 'orgCash')
+  || ' | ' || (zz.get('O2c')::jsonb ->> 'needsDirector') || ':' || coalesce(zz.get('O2c')::jsonb ->> 'orgCash', '-'),
+  '^0 \| true:true \| false:false \| false:false$');
+select zz.chk('O3 moliya tasdig''i yetmaydi: Direktorsiz pul berilmaydi',
+  left(zz.appr('U_FM', zz.id('O2a')), 0) || zz.pay('U_KAS', zz.id('O2a')), '^ERR 42501 \[kassa:not_approved\]');
+select zz.put('O4s', zz.as('U_DIR', $q$select (public.fin_org_set('{"orgCashMax":100000}') -> 'extra' ->> 'orgCashMax')$q$));
+select zz.put('O4a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":100000,"partyType":"counterparty","partyId":"cp_org","basis":"Shartnoma № 3","clientRef":"o-4-0001","lines":[{"articleId":"EX-32","amount":100000}]}'));
+select zz.put('O4b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":100001,"partyType":"counterparty","partyId":"cp_org","basis":"Shartnoma № 4","clientRef":"o-4-0002","lines":[{"articleId":"EX-32","amount":100001}]}'));
+select zz.chk('O4 chegara 100 000: tashkilotga 100 000 — Direktorsiz, 100 001 — Direktor bilan; ikkalasida ogohlantirish belgisi',
+  zz.get('O4s') || ' | ' || (zz.get('O4a')::jsonb ->> 'needsDirector') || ':' || (zz.get('O4a')::jsonb ->> 'orgCash')
+  || ' | ' || (zz.get('O4b')::jsonb ->> 'needsDirector') || ':' || (zz.get('O4b')::jsonb ->> 'orgCash'), '^100000 \| false:true \| true:true$');
+select zz.put('O5', left(zz.appr('U_FM', zz.id('O4a')), 0) || (zz.pay('U_KAS', zz.id('O4a'))::jsonb ->> 'status')
+  || ':' || (left(zz.appr('U_DIR', zz.id('O2a')), 0) || (zz.pay('U_KAS', zz.id('O2a'))::jsonb ->> 'status')));
+select zz.chk('O5 berildi (100 000 — moliya tasdig''i bilan; 50 000 — Direktor tasdig''i bilan); nazoratda +2 ta, +150 000',
+  zz.get('O5') || ' | ' || (select (c -> 'orgCash30' ->> 'count') || ':' || trim_scale((c -> 'orgCash30' ->> 'sum')::numeric) from zz.checks('main') c),
+  '^posted:posted \| 3:450000$');
+select zz.chk('O6 boshqa operatsiyalar o''zgarmaydi: kontragentdan kirim, bankka topshirish — ogohlantirishsiz',
+  (zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":10000,"partyType":"counterparty","partyId":"cp_org","articleId":"IN-06","basis":"Qaytarilgan ortiqcha to''lov","note":"Sinov","clientRef":"o-6-0001"}')::jsonb ->> 'status')
+  || ':' || coalesce(zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":10000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya","clientRef":"o-6-0002"}')::jsonb ->> 'orgCash', '-'),
+  '^posted:-$');
+select zz.chk('O7 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.kassa_is_org('cp_org')::text$q$), '^ERR 42501');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

@@ -109,7 +109,7 @@ select zz.chk('A10 tizim (bayroqsiz) ham hujjat yoza olmaydi — trigger',
 select zz.chk('A11 sozlamalar: kassir o''zgartira olmaydi', zz.as('U_KAS', $q$select public.fin_org_set('{"t1":1}')::text$q$), '^ERR 42501');
 select zz.chk('A12 sozlamalar: Moliya menejeri T1 ni o''zgartira olmaydi', zz.as('U_FM', $q$select public.fin_org_set('{"t1":1}')::text$q$), '^ERR 42501');
 select zz.chk('A13 sozlamalar: Direktor T1 = 500 000, L1 = 200 000',
-  zz.as('U_DIR', $q$select public.fin_org_set('{"t1":500000,"l1":200000,"nameUz":"Sinov maktabi"}')::text$q$), '"t1": 500000.*"l1": 200000|"l1": 200000.*"t1": 500000');
+  zz.as('U_DIR', $q$select public.fin_org_set('{"t1":500000,"l1":200000,"nameUz":"Sinov maktabi","orgCashMax":1000000000}')::text$q$), '"t1": 500000.*"l1": 200000|"l1": 200000.*"t1": 500000');
 select zz.chk('A14 sozlamalar: noma''lum maydon rad', zz.as('U_DIR', $q$select public.fin_org_set('{"hack":1}')::text$q$), '^ERR 22023');
 select zz.chk('A15 sozlamalar: NaN rad', zz.as('U_DIR', $q$select public.fin_org_set('{"t1":"NaN"}')::text$q$), '^ERR 22023');
 select zz.put('cp_sup', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'supplier', 'Sinov Yetkazuvchi MChJ')::text$q$));

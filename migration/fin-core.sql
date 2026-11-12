@@ -158,6 +158,8 @@ end $$;
 
 -- ---------- Sozlamalar RPC'lari ----------
 -- Tashkilot sozlamalari — FAQAT Direktor (T1, L1, limit, kassaGoLive va rekvizitlar). Faqat berilgan maydonlar o'zgaradi.
+--   orgCashMax (extra) — yuridik shaxs kontragentga (yetkazib beruvchi / tashkilot) kassadan naqd to'lovda Direktor tasdig'isiz
+--   chegara (so'm; 0 yoki yo'q — har doim Direktor). Hisob siyosati qarori (F1.27, buxgalter ko'rigi M3).
 create or replace function public.fin_org_set(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare k text; v_num numeric; r public.fin_org%rowtype; v_live date; v_rec jsonb;
@@ -170,7 +172,7 @@ begin
       if length(coalesce(p ->> k, '')) > 300 then raise exception 'fin_org_set: % juda uzun', k using errcode = '22023'; end if;
     elsif k = 'printLang' then
       if coalesce(p ->> k, '') not in ('uz-cyrl', 'uz-latn', 'ru') then raise exception 'fin_org_set: printLang noto''g''ri' using errcode = '22023'; end if;
-    elsif k in ('t1', 'l1', 'cashLimit') then
+    elsif k in ('t1', 'l1', 'cashLimit', 'orgCashMax') then
       begin v_num := (p ->> k)::numeric; exception when others then raise exception 'fin_org_set: % son emas', k using errcode = '22023'; end;
       if v_num is null or v_num = 'NaN'::numeric or v_num < 0 or v_num >= 1e12 then raise exception 'fin_org_set: % noto''g''ri', k using errcode = '22023'; end if;
     elsif k = 'kassaGoLive' then
@@ -189,6 +191,7 @@ begin
     l1            = case when p ? 'l1' then (p ->> 'l1')::numeric else l1 end,
     "cashLimit"   = case when p ? 'cashLimit' then (p ->> 'cashLimit')::numeric else "cashLimit" end,
     "kassaGoLive" = case when p ? 'kassaGoLive' then nullif(p ->> 'kassaGoLive', '')::date else "kassaGoLive" end,
+    extra         = case when p ? 'orgCashMax' then extra || jsonb_build_object('orgCashMax', (p ->> 'orgCashMax')::numeric) else extra end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';
   -- Ishga tushadigan kun bugungi yoki o'tgan kunga qo'yilsa: shu kundan beri kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat,

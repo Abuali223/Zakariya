@@ -27,7 +27,7 @@ insert into public.users (id, email, role, status, "extraRoles") values
 on conflict (id) do nothing;
 insert into public.fin_counterparties (id, kind, name) values ('cp_rbank','bank','Poyga Bank'), ('cp_rsup','supplier','Poyga Yetkazuvchi')
 on conflict (id) do nothing;
-update public.fin_org set t1 = 100000000000, l1 = 0 where id = 'main';
+update public.fin_org set t1 = 100000000000, l1 = 0, extra = extra || '{"orgCashMax": 100000000000}'::jsonb where id = 'main';   -- poyga — qoida emas (F1.27)
 SQL
 as_sess(){   # $1 uid — seans boshida rolni o'rnatadigan satrlar
   printf "select set_config('request.jwt.claims', '{\"sub\":\"%s\",\"role\":\"authenticated\"}', false);\nset role authenticated;\n" "$1"

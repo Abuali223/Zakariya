@@ -102,7 +102,7 @@ select zz.chk('K0d ishga tushadigan kun kassa orderisiz naqd maosh berilgan kung
   '^ERR P0001 \[kassa:live_gap\].*maosh / avans: 1.* \| bo''sh$');
 select zz.clock('2027-01-04 10:00+05');
 select zz.chk('K1 ishga tushirish va boshlang''ich qoldiq 5 000 000',
-  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000}')::text$q$), 0)
+  left(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04","t1":1000000,"l1":200000,"orgCashMax":1000000000}')::text$q$), 0)
   || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":5000000,"startDay":"2027-01-04"}')::text$q$), '"ok": true');
 
 -- ---------- (S) naqd maosh ----------

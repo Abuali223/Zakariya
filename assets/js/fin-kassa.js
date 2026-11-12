@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 3;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 4;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -339,6 +339,7 @@ async function openDocForm(form) {
     <div class="modal-b">
       ${lbl('Operatsiya', `<select id="kf-op" style="${FLD}">${ops.map(r => `<option value="${esc(r.op)}">${esc(r.nameUz)}</option>`).join('')}</select>`, ';margin-top:0')}
       <div id="kf-dyn"></div>
+      <div class="small" id="kf-orgw" style="display:none;margin-top:10px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:10px 12px"></div>
       <div class="small muted" id="kf-hint" style="margin-top:10px"></div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kf-save">${isOut ? 'So‘rov yuborish' : 'Qabul qilish'}</button></div>`;
@@ -404,7 +405,12 @@ async function openDocForm(form) {
       const drawC = sel => { const cps = (ST.refs.counterparties || []).filter(c => want(c.kind));
         box.innerHTML = `<div style="display:flex;gap:6px;margin-top:6px"><select id="kf-pc" style="${FLD}"><option value="">— ${esc(PARTY_LBL[type] || type)} —</option>${cps.map(c => `<option value="${esc(c.id)}"${c.id === sel ? ' selected' : ''}>${esc(c.name + (c.stir ? ' · STIR ' + c.stir : ''))}</option>`).join('')}</select><button type="button" class="btn sm" id="kf-pnew" title="Yangi qo‘shish">+ yangi</button></div><div id="kf-pnewbox"></div>`;
         F.party.id = sel || '';
-        $('#kf-pc').onchange = () => { F.party.id = $('#kf-pc').value; };
+        const orgWarn = () => { const op = $('#kf-op').value, c = (ST.refs.counterparties || []).find(x => x.id === F.party.id), w = $('#kf-orgw');
+          const on = isOut && op === 'out_expense' && type === 'counterparty' && c && (c.kind === 'supplier' || c.kind === 'org');
+          const mx = num(((ST.refs.org || {}).extra || {}).orgCashMax);
+          if (w) { w.style.display = on ? '' : 'none'; if (on) w.innerHTML = `<b>Yuridik shaxsga kassadan naqd to‘lov cheklangan.</b> Asosiy yo‘l — bank o‘tkazmasi yoki hisobdor shaxs orqali (avans hisoboti). Kassadan berilsa — ${mx ? esc(som(mx)) + 'dan katta summada ' : ''}Direktor tasdig‘i ham talab qilinadi; buxgalter nazorat ro‘yxatida ko‘radi.`; } };
+        $('#kf-pc').onchange = () => { F.party.id = $('#kf-pc').value; orgWarn(); };
+        orgWarn();
         $('#kf-pnew').onclick = () => {
           const kinds = type === 'bank' ? ['bank'] : type === 'founder' ? ['founder'] : ['supplier', 'org', 'person', 'other'];
           $('#kf-pnewbox').innerHTML = `<div style="border:1px dashed var(--border);border-radius:10px;padding:8px;margin-top:6px"><input id="kf-cn" type="text" placeholder="Nomi (to‘liq)" maxlength="200" style="${FLD}"><div style="display:flex;gap:6px;margin-top:6px"><select id="kf-ck" style="${FLD}">${kinds.map(k => `<option value="${k}">${esc(CP_KIND[k])}</option>`).join('')}</select><input id="kf-cs" type="text" inputmode="numeric" placeholder="STIR (ixtiyoriy)" maxlength="14" style="${FLD}"><button type="button" class="btn sm gold" id="kf-cadd">Qo‘shish</button></div></div>`;
@@ -415,7 +421,7 @@ async function openDocForm(form) {
       drawC('');
     }
   };
-  $('#kf-op').onchange = () => { F.lines = [{ articleId: '', amount: '', note: '' }]; drawDyn(); };
+  $('#kf-op').onchange = () => { F.lines = [{ articleId: '', amount: '', note: '' }]; const w = $('#kf-orgw'); if (w) w.style.display = 'none'; drawDyn(); };
   await drawDyn();
   let busy = false;
   $('#kf-save').onclick = async () => {
@@ -444,7 +450,8 @@ async function openDocForm(form) {
       const res = await call(isOut ? 'kassa_payout_request' : 'kassa_receipt', { p });
       C.closeModal();
       if (res.status === 'posted') { C.toast(`Kirim orderi № ${res.no} o‘tkazildi ✓`); await reload(); offerPrint(res); }
-      else { C.toast(num(res.accOpen) > 0 ? `So‘rov yuborildi — hisobdorda ${som(res.accOpen)} hisobot qilinmagan avans bor, Direktor tasdig‘i ham kerak ✓` : 'So‘rov yuborildi — tasdiq kutilmoqda ✓'); await reload(); }
+      else { C.toast(num(res.accOpen) > 0 ? `So‘rov yuborildi — hisobdorda ${som(res.accOpen)} hisobot qilinmagan avans bor, Direktor tasdig‘i ham kerak ✓`
+        : res.orgCash && res.needsDirector ? 'So‘rov yuborildi — yuridik shaxsga naqd to‘lov: Direktor tasdig‘i ham kerak ✓' : 'So‘rov yuborildi — tasdiq kutilmoqda ✓'); await reload(); }
       if (C.onChange) C.onChange();
     } catch (e) { busy = false; btn.disabled = false; btn.textContent = isOut ? 'So‘rov yuborish' : 'Qabul qilish'; C.toast(errText(e), true); }
   };
@@ -626,6 +633,8 @@ function openSettings() {
       ${lbl('Chop etish tili', `<select id="kx-lang" style="${FLD}">${[['uz-cyrl', 'O‘zbek (kirill)'], ['uz-latn', 'O‘zbek (lotin)'], ['ru', 'Rus']].map(x => `<option value="${x[0]}"${o.printLang === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>`)}
       <div class="grid2">${lbl('T1 — shundan katta chiqimga Direktor tasdig‘i (0 — har doim)', `<input id="kx-t1" type="text" inputmode="numeric" value="${nv('t1')}" placeholder="0" style="${FLD}">`)}${lbl('L1 — asos hujjatisiz naqd xarid chegarasi (0 — mumkin emas)', `<input id="kx-l1" type="text" inputmode="numeric" value="${nv('l1')}" placeholder="0" style="${FLD}">`)}</div>
       <div class="grid2">${lbl('Kassa limiti (0 — belgilanmagan)', `<input id="kx-limit" type="text" inputmode="numeric" value="${nv('cashLimit')}" placeholder="0" style="${FLD}">`)}${lbl('Kassa ishga tushadigan kun', `<input id="kx-live" type="date" value="${v('kassaGoLive')}" style="${FLD}">`)}</div>
+      ${lbl('Yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd to‘lov — Direktor tasdig‘isiz chegara (0 — har doim Direktor)', `<input id="kx-orgmax" type="text" inputmode="numeric" value="${esc(num((o.extra || {}).orgCashMax) ? String(num(o.extra.orgCashMax)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}" placeholder="0" style="${FLD}">`)}
+      <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
       <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek.</div>
       <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
       <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs (hisobi bog‘langan bo‘lsa — shu yerdagi to‘liq F.I.Sh. bilan). Qo‘shish va o‘chirish darhol saqlanadi.</div>
@@ -635,7 +644,7 @@ function openSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kx-sadd">+ Imzo egasini qo‘shish</button></div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kx-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  ['#kx-t1', '#kx-l1', '#kx-limit'].forEach(s => fmtInput($(s)));
+  ['#kx-t1', '#kx-l1', '#kx-limit', '#kx-orgmax'].forEach(s => fmtInput($(s)));
   const sigSave = (x, active) => call('fin_signatory_save', { p_id: x.id || null, p_list: Number(x.list), p_uid: x.uid || null, p_title: x.title || '', p_full_name: x.fullName, p_active: active });
   const drawSigs = () => {
     const box = $('#kx-sigs'); if (!box) return;
@@ -663,7 +672,7 @@ function openSettings() {
     if (live && live !== (o.kassaGoLive || '') && !confirm(`Kassa ${dmy(live)} dan ishga tushsinmi?\n\nShu kundan naqd o‘quv to‘lovlari faqat kassa orderi va fiskal chek raqami bilan qabul qilinadi.`)) return;
     $('#kx-save').disabled = true;
     try { await call('fin_org_set', { p: { nameUz: $('#kx-name').value.trim(), nameRu: $('#kx-name-ru').value.trim(), stir: digits($('#kx-stir').value), place: $('#kx-place').value.trim(), printLang: $('#kx-lang').value,
-        t1: num(digits($('#kx-t1').value)), l1: num(digits($('#kx-l1').value)), cashLimit: num(digits($('#kx-limit').value)), kassaGoLive: live } });
+        t1: num(digits($('#kx-t1').value)), l1: num(digits($('#kx-l1').value)), cashLimit: num(digits($('#kx-limit').value)), orgCashMax: num(digits($('#kx-orgmax').value)), kassaGoLive: live } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
@@ -827,6 +836,9 @@ export function controlRows(c) {
       zr.length ? zr.slice(0, 6).map(x => `${dmy(x.day)}: ${zText(Object.assign({ applies: true, needed: true, ok: false }, x))}`).join('; ') + (zr.length > 6 ? ' …' : '') : 'tekshirilmagan kunlarda mos',
       'Kun yopishda Z dagi naqd va karta sotuvi kiritiladi; tizim fiskal chekli kirim orderlari va terminal to‘lovlari bilan solishtiradi. Farq bo‘lsa — buxgalter izoh bilan tekshiradi');
   }
+  const oc = c.orgCash30 || {};
+  add('orgCash', 'Yuridik shaxslarga kassadan naqd to‘lov', num(oc.count) ? 'warn' : 'ok', num(oc.count) ? `${cnt(oc.count)} · ${som(oc.sum)}` : 'yo‘q',
+    'Yetkazib beruvchi / tashkilot bilan hisob-kitob asosan bankdan; kassadan berilganlari — Direktor tasdig‘i bilan, buxgalter ko‘rib chiqadi');
   add('other', '«Boshqa» tomonli hujjatlar', num(c.otherParties30) ? 'info' : 'ok', num(c.otherParties30) ? cnt(c.otherParties30) : 'yo‘q', 'Imkon bo‘lsa kontragent ma’lumotnomasidan tanlanadi');
   const lateTxt = [num(c.late30) ? `kech yozilgan hujjat: ${cnt(c.late30)}` : '', num(c.pendingDays30) ? `oflayn yozuv bilan yopilgan kun: ${cnt(c.pendingDays30)}` : ''].filter(Boolean).join('; ');
   add('late', 'Oflayn va kech kiritilgan yozuvlar', lateTxt ? 'info' : 'ok', lateTxt || 'yo‘q', 'Pul olingan kun yopilgani uchun keyingi kunga yozilgan');
