@@ -34,6 +34,14 @@ echo "\\set iqror_chain 1"
 echo "begin;"
 # Migratsiya paytidagi ma'lumot tuzatishlari o'zgarishlar tarixiga (change_log) yozilmasin — faqat shu tranzaksiyada.
 echo "set local iqror.migrating = '1';"
+# Avtomatik tozalovchi (autovacuum) bilan o'zaro qulflanish bo'lmasin: zanjir jadval huquqlari va indekslarini o'zgartirayotganda
+#   autovacuum o'sha jadvalda ishlab, shu tranzaksiyani kutib qolsa, PostgreSQL ulardan birini «deadlock detected» bilan bekor
+#   qiladi — zanjir bekor bo'lishi mumkin edi (lokal sinovda kuzatilgan; baza o'zgarmaydi, lekin o'rnatish qaytadan kerak bo'ladi).
+#   Shu sabab boshida mavjud public / app jadvallari SHARE UPDATE EXCLUSIVE rejimida qulflanadi: ilovaning o'qish va yozishi
+#   to'xtamaydi, autovacuum esa tranzaksiya tugaguncha bu jadvallarga kirmaydi (ishlab turgani bo'lsa — PostgreSQL uni
+#   deadlock_timeout dan keyin o'zi to'xtatadi, chunki zanjir hali hech narsani o'zgartirmagan).
+#   Faqat zanjir egasi qulflay oladigan jadvallar (UPDATE / DELETE / TRUNCATE huquqi) — boshqa egalikdagi jadval o'rnatishni to'xtatmaydi.
+echo "do \$iqror_lock\$ declare r record; begin for r in select c.oid::regclass as t from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('public', 'app') and c.relkind in ('r', 'p') and (has_table_privilege(c.oid, 'UPDATE') or has_table_privilege(c.oid, 'DELETE') or has_table_privilege(c.oid, 'TRUNCATE')) order by c.oid loop execute format('lock table %s in share update exclusive mode', r.t); end loop; end \$iqror_lock\$;"
 for f in $(chain_files); do
   [ -f "$HERE/$f" ] || { echo "chain.sh: '$f' topilmadi (run-all.sql'da bor, papkada yo'q)" >&2; exit 1; }
   echo "\\echo '-> $f'"

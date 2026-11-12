@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 7;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 8;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -103,6 +103,7 @@ function draw() {
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
+  if (started && (m.director || m.list2)) acts.push(`<button class="btn ghost2" id="ks-kpi" title="Haftalik ko‘rsatkichlar (RP-22): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar">KPI</button>`);
   if (m.director) acts.push(`<button class="btn ghost2" id="ks-set" title="Kassa sozlamalari">⚙ Sozlamalar</button>`);
   $('#ks-actions').innerHTML = acts.join('');
 
@@ -121,6 +122,8 @@ function draw() {
   if (num(s.pending.refundsLate) > 0) warn.push(['#B42318', '#FDECEC', `Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi: ${s.pending.refundsLate} ta.`]);
   if (num(s.unverifiedDays) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Tekshirilmagan (yopilgan) kunlar: ${s.unverifiedDays} ta.`]);
   if (num(s.undecidedShortages) > 0) warn.push(['#B42318', '#FDECEC', `Qarori kutilayotgan kamomad: ${s.undecidedShortages} ta${m.director ? ' — pastda qaror qabul qiling.' : ' (Direktor qarori).'}`]);
+  // eslatma (F1.24): avans hisoboti muddati (3 ish kuni) o'tgan hisobdorlar — ismlar nazorat ro'yxatida
+  if (s.accOverdue && num(s.accOverdue.n) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Avans hisoboti muddati o‘tgan hisobdorlar: ${num(s.accOverdue.n)} ta (${som(s.accOverdue.sum)}) — «Avans hisoboti» yoki qaytim; ismlar — nazorat ro‘yxatida.`]);
   if (s.lockedThrough && (m.director || m.list2)) warn.push(['#475467', '#F2F4F7', `Davr ${dmy(s.lockedThrough)} gacha yopilgan: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.`]);
   if (s.limit && s.limit.exceeded) warn.push(['#B54708', '#FEF3E2', `Kassa qoldig‘i limitdan (${som(s.limit.cashLimit)}) oshgan — ortiqchasini bankka topshiring.`]);
   const warnHtml = warn.map(w => `<div class="small" style="margin-bottom:8px;color:${w[0]};background:${w[1]};border-radius:10px;padding:10px 12px;font-weight:600">${esc(w[2])}</div>`).join('');
@@ -240,6 +243,7 @@ function bind() {
   on('#ks-period', openPeriodForm);
   on('#ks-ko3', openJournal);
   on('#ks-mx', openMatrix);
+  on('#ks-kpi', openKpi);
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
@@ -915,6 +919,38 @@ async function openMatrix() {
     } catch (e) { C.toast('Excel fayl tuzilmadi: ' + errText(e), true); }
   };
   await load();
+}
+// ---------------------------------------------------------------- RP-22: haftalik ko'rsatkichlar (F1.25) — Direktor va 2-ro'yxat
+//   Bir hafta uchun qatorlar (sof funksiya — sinovda ham ishlatiladi). EX-49 maqsadi — ≤ 2 % (reja, 4.4).
+export function kpiRows(w) {
+  w = w || {};
+  const r = [], add = (key, label, level, value) => r.push({ key, label, level, value });
+  const d = num(w.days), cl = num(w.closed), ao = w.accOverdue || {};
+  add('days', 'Kassa kunlari', d ? 'ok' : 'info', d ? `${d} ta (yopilgan ${cl})` : 'yo‘q');
+  add('onTime', 'O‘sha kuni yopilgan', !cl ? 'info' : num(w.onTime) === cl ? 'ok' : 'warn', cl ? `${num(w.onTime)} / ${cl}` : '–');
+  add('unverified', 'Tekshirilmagan', num(w.unverified) ? 'warn' : 'ok', num(w.unverified) ? `${num(w.unverified)} ta` : 'yo‘q');
+  add('diffs', 'Sanash farqi bo‘lgan kunlar', num(w.diffDays) ? 'warn' : 'ok',
+    num(w.diffDays) ? `${num(w.diffDays)} ta` + (num(w.shortage) ? ` · kamomad ${som(w.shortage)}` : '') + (num(w.surplus) ? ` · ortiqcha ${som(w.surplus)}` : '') : 'yo‘q');
+  add('ex49', '«Boshqa xarajatlar» (EX-49) ulushi', w.ex49Share == null ? 'info' : num(w.ex49Share) > 2 ? 'warn' : 'ok',
+    w.ex49Share == null ? 'naqd xarajat yo‘q' : `${String(w.ex49Share).replace('.', ',')}% (${som(w.ex49)} / ${som(w.exTotal)}; maqsad ≤ 2%)`);
+  add('accOverdue', 'Muddati o‘tgan avans (hafta oxirida)', num(ao.n) ? 'warn' : 'ok', num(ao.n) ? `${num(ao.n)} ta · ${som(ao.sum)}` : 'yo‘q');
+  add('reopened', 'Qayta ochilgan kunlar', num(w.reopened) ? 'warn' : 'ok', num(w.reopened) ? `${num(w.reopened)} ta` : 'yo‘q');
+  add('voids', 'Bekor qilingan hujjatlar', num(w.voids) ? 'info' : 'ok', num(w.voids) ? `${num(w.voids)} ta` : 'yo‘q');
+  return r;
+}
+async function openKpi() {
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Haftalik ko‘rsatkichlar (KPI)</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Kassa intizomi haftalar bo‘yicha (dushanba — yakshanba; joriy hafta — bugungacha): kun o‘sha kuni yopildimi, tekshirildimi, sanashda farq, «Boshqa xarajatlar» (EX-49) ulushi va hafta oxirida avans hisoboti muddati o‘tgan hisobdorlar. O‘tgan hafta — dushanba kungi Telegram hisobotida ham.</div>
+      <div id="kk-body" style="margin-top:10px"><div class="loading">Yuklanmoqda…</div></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  let K;
+  try { K = await call('kassa_kpi', { p_desk: ST.desk, p_weeks: 8 }); }
+  catch (e) { $('#kk-body').innerHTML = ''; C.toast(errText(e), true); return; }
+  const dm = d => dmy(d).slice(0, 5);
+  const tr = (w, i) => `<tr data-week="${esc(String(w.from))}"><td data-label="Hafta" style="vertical-align:top"><b>${esc(dm(w.from))}–${esc(dm(w.to))}</b>${i === 0 ? '<div class="small muted">joriy hafta</div>' : ''}</td>
+    <td data-label="Ko‘rsatkichlar" style="white-space:normal">${kpiRows(w).map(x => `<div class="small" style="${x.level === 'warn' ? 'color:#B54708;font-weight:700' : ''}">${esc(x.label)}: ${esc(x.value)}</div>`).join('')}</td></tr>`;
+  $('#kk-body').innerHTML = `<div class="tablewrap" style="max-height:420px;overflow:auto"><table id="kk-tbl"><thead><tr><th>Hafta</th><th style="white-space:normal">Ko‘rsatkichlar</th></tr></thead><tbody>${(K.weeks || []).map(tr).join('')}</tbody></table></div>`;
 }
 // «To'lov» oynasidan: naqd o'quv to'lovining kirim orderini chop etish (hujjat id bo'yicha).
 export async function printDocById(ctx, docId, back) { C = ctx; await printDoc(docId, back); }

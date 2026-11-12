@@ -53,6 +53,9 @@ function kassaLines(k) {
   if (n(c.gaps) > 0) w.push('⚠️ raqamlashda bo‘shliq');
   if (n(c.fiscalExempt) > 0) w.push(`fiskal cheksiz: ${n(c.fiscalExempt)}`);
   if (c.limitExceeded === true) w.push('⚠️ qoldiq limitdan oshgan');
+  // eslatma (F1.24): avans hisoboti muddati o'tgan hisobdorlar
+  const ao = c.accOverdue;
+  if (ao && typeof ao === 'object' && n(ao.n) > 0) w.push(`⚠️ muddati o‘tgan avans: ${n(ao.n)} (${fmtNum(ao.sum)} so‘m)`);
   // onlayn kassa (NKM) Z-hisoboti — shu kun yopilgan bo'lsa (F1.26): faqat muammo bo'lsa
   const z = c.z;
   if (z && typeof z === 'object' && z.ok === false) {
@@ -61,6 +64,18 @@ function kassaLines(k) {
       : `⚠️ Z-hisobot farqi: ${[n(z.diffCash) ? `naqd ${sg(z.diffCash)}` : '', n(z.diffCard) ? `karta ${sg(z.diffCard)}` : ''].filter(Boolean).join(', ')}`);
   }
   L.push(`🔎 Kassa nazorati: ${w.join(' · ')}`);
+  // RP-22 (F1.25): dushanba kungi hisobotda o'tgan hafta ko'rsatkichlari (k.week — faqat dushanba)
+  const wk = k.week;
+  if (wk && typeof wk === 'object') {
+    const p = [`o‘sha kuni yopilgan ${n(wk.onTime)}/${n(wk.closed)} kun`];
+    if (n(wk.unverified) > 0) p.push(`tekshirilmagan ${n(wk.unverified)}`);
+    p.push(n(wk.diffDays) > 0 ? `farqli kun ${n(wk.diffDays)}${n(wk.shortage) ? ` (kamomad ${fmtNum(wk.shortage)})` : ''}${n(wk.surplus) ? ` (ortiqcha ${fmtNum(wk.surplus)})` : ''}` : 'farq yo‘q');
+    if (wk.ex49Share != null) p.push(`«Boshqa xarajatlar» ${String(wk.ex49Share).replace('.', ',')}%${Number(wk.ex49Share) > 2 ? ' ⚠️' : ''}`);
+    const wa = wk.accOverdue || {};
+    if (n(wa.n) > 0) p.push(`⚠️ muddati o‘tgan avans ${n(wa.n)}`);
+    if (n(wk.reopened) > 0) p.push(`qayta ochilgan ${n(wk.reopened)}`);
+    L.push(`📈 Kassa — o‘tgan hafta (${dmy(wk.from)}–${dmy(wk.to)}): ${p.join(' · ')}`);
+  }
   return L;
 }
 // Hisobot matni (Telegram, oddiy matn). d — director_daily(); checks — health runChecks() yoki null.

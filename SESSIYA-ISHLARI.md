@@ -1899,6 +1899,43 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   qo'shildi. Chop etishda yakuniy summalar satr oxirida bo'linmaydi.
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 72) Moliya, 1b: eslatmalar (F1.24) va RP-22 haftalik KPI (F1.25); zanjirda autovacuum bilan qulflanish oldi olindi — 2026-11-12
+
+**Holat: kassa qismi jonli tizimga CHIQMAGAN** (`--dev` zanjiri: `kassa-day.sql`, `kassa-checks.sql`, `fin-version.sql`;
+`fin-kassa.js`, `auth/tg-daily.cjs`). **`migration/chain.sh` o'zgarishi esa keyingi har qanday o'rnatishga (jonli ham) taalluqli.**
+
+- **Server:** umumiy yordamchilar — `app.kassa_accountables(desk, sana)` (hisobdorlar 4230, sana holatiga: FIFO bo'yicha eng eski
+  hisobotsiz avans sanasi, ish kunlari, muddati — 3 ish kuni; nazorat ro'yxati endi shundan foydalanadi), `app.kassa_acc_overdue`
+  (muddati o'tganlar soni va summasi), `app.kassa_week_kpi(desk, from, to)` (kunlar: yopilgan, o'sha kuni yopilgan, tekshirilgan /
+  tekshirilmagan, qayta ochilgan; sanash farqi bo'lgan kunlar, kamomad, ortiqcha; bekor qilinganlar; naqd xarajat (EX) ichida EX-49
+  ulushi; davr oxirida muddati o'tgan avanslar). `kassa_state` — «accOverdue»; `app.kassa_daily` — nazorat qatorida «accOverdue»,
+  dushanba kuni «week» (o'tgan hafta). `public.kassa_kpi(desk, weeks)` — oxirgi N hafta (joriy — bugungacha), faqat Direktor va
+  2-ro'yxat.
+- **Sahifa:** Moliya menejeri / buxgalter va Direktorga eslatma — «Avans hisoboti muddati o'tgan hisobdorlar: N ta (summa)»;
+  «KPI» tugmasi — 8 haftalik jadval (hafta | ko'rsatkichlar; muammo rang bilan, telefonda sig'adi). Kassirda yo'q.
+- **Telegram:** nazorat qatorida «⚠️ muddati o'tgan avans: N (summa)»; dushanba — «📈 Kassa — o'tgan hafta (…): o'sha kuni
+  yopilgan a/b kun · tekshirilmagan · farqli kun (kamomad / ortiqcha) · «Boshqa xarajatlar» % (2 % dan oshsa ⚠️) · muddati o'tgan
+  avans · qayta ochilgan».
+- **Topilma va tuzatish (zanjir):** to'liq sinovdan keyin zanjirni qayta qo'llashda bir marta «deadlock detected» chiqdi. Server
+  jurnali: zanjir (bitta tranzaksiya) kassa jadvallari huquqlarini o'zgartirib, keyin indeksni tekshirayotganda, o'sha jadvalni
+  autovacuum tozalayotgan va zanjir tranzaksiyasini kutib qolgan — PostgreSQL zanjirni bekor qilgan (baza o'zgarmaydi, lekin
+  o'rnatish qaytadan kerak bo'ladi; jonli o'rnatishda ham tasodifan bo'lishi mumkin edi). Tuzatish: `chain.sh` tranzaksiya boshida
+  mavjud public / app jadvallarini SHARE UPDATE EXCLUSIVE rejimida qulflaydi (ilova o'qish / yozishi to'xtamaydi; autovacuum
+  tranzaksiya tugaguncha kirmaydi, ishlab turgani — PostgreSQL tomonidan to'xtatiladi); faqat qulflash huquqi bor jadvallar.
+  Isbot (lokal, autovacuum ataylab tez): eski zanjir — 6 urinishdan 2 tasida deadlock, yangi zanjir — 16 urinishning hammasi
+  toza; cheklangan huquqli rol bilan blok xatosiz (faqat o'z jadvalini qulflaydi); `lock_timeout` bilan (jonli rejim) yangilanish
+  toza.
+- **Modul relizi 8** (`kassa-checks.sql`: ochiq funksiyalar 40, ichki 70).
+- **Sinovlar:** `test-kassa-report.sql` 126 (+6, W0–W5: huquqlar; hafta KPI qiymatlari; nazorat ro'yxatidagi hisobdorlar refaktordan
+  keyin avvalgidek; holat va Telegram nazoratida muddati o'tgan avans; dushanba «week» = haftalik KPI, boshqa kun — yo'q; EX-49
+  ulushi 25 % va haftalar tartibi); `fin-kassa.test.mjs` 5 (+1: KPI qatorlari va darajalari); `tg-daily.test.cjs` 45 (+3: muddati
+  o'tgan avans, o'tgan hafta qatori, toza hafta); brauzer — yangi `e2e-kassa12` 13 (ikkala dizaynda): KPI oynasi (8 hafta, joriy
+  hafta, EX-49 ogohlantirish rangi), sinov soati bilan 7 kundan keyin eslatma va nazorat ro'yxatida «muddati o'tgan», Telegram
+  nazorati, kassirda «KPI» yo'q, server rad, telefonda oyna va jadval sig'adi. `e2e-kassa6` — reliz 8. Barcha SQL to'plamlari yashil
+  (225 / 54 / 93 / 126 / 36 / 87 / 36 / 92 / 32), poyga 22, JS 39. Brauzer: 28 ta ishga tushirish, hammasi yashil (622 tekshiruv). Oldingi relizdan (`2da7589`, reliz 7)
+  yangilanish — xatosiz (`--no-lock-timeout` siz ham), `kassa-checks.sql` «muammo topilmadi (modul relizi 8)».
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

@@ -96,7 +96,12 @@ tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlay
 sanasi). Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; dalolatnoma chop etiladi va qog‘oz hisobotga
 qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
 «Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
-beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
+beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi, «Kassa» sahifasining yuqorisida eslatma chiqadi («Avans hisoboti
+muddati o‘tgan hisobdorlar: N ta») va Direktorning Telegram nazorat qatorida ham bo‘ladi.
+
+**Har hafta (dushanba)** — **«KPI»** (haftalik ko‘rsatkichlar, RP-22): oxirgi 8 hafta bo‘yicha kun o‘sha kuni yopildimi,
+tekshirilmagan kunlar, sanash farqlari, «Boshqa xarajatlar» (EX-49) ulushi (maqsad ≤ 2 %; oshsa — qayta tasniflang) va hafta
+oxirida avans hisoboti muddati o‘tgan hisobdorlar. Rang bilan ajratilgan ko‘rsatkichni kassir bilan shu hafta tuzating.
 
 **Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → **«KO-3»** (kassa orderlari jurnali):
 oy tanlanadi, jamlar va «davr boshi + kirim − chiqim = davr oxiri» tekshiriladi, «🖨 KO-3» chop etilib imzolanadi, «⬇ Excel» —
@@ -123,8 +128,9 @@ qiladi (1-bo‘lim, «Xato qildim»). Yopilgan davrdagi to‘lovning sanasi, sum
 ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushirish.md`, 4-bo‘lim.
 
 **Har kuni**
-- **Telegram hisoboti:** kassa qatori (kirim, chiqim, qoldiq; sanaldi / farq) va «Kassa nazorati» qatori. Nazorat qatori bo‘sh
-  bo‘lmasa — «Kassa» → «Nazorat ro‘yxati».
+- **Telegram hisoboti:** kassa qatori (kirim, chiqim, qoldiq; sanaldi / farq) va «Kassa nazorati» qatori (muddati o‘tgan avans
+  ham). Nazorat qatori bo‘sh bo‘lmasa — «Kassa» → «Nazorat ro‘yxati». Dushanba kuni — qo‘shimcha «Kassa — o‘tgan hafta» qatori
+  (haftalik ko‘rsatkichlar); batafsil — «Kassa» → «KPI».
 - **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash».
 - **Qaytarish:** «↩ Qaytarish» (sababi, ariza sanasi, usul). Naqd bo‘lsa pulni kassir beradi; balans pul berilganda o‘zgaradi.
 - **O‘zaro hisob:** xodim yozma ariza bilan ish haqidan farzandining o‘quv haqini to‘lasa — «Maosh berish» → «O‘zaro hisob»

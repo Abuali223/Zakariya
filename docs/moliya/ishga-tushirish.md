@@ -166,4 +166,5 @@ versiyaga qaytariladi (`git revert` + deploy; sayt fayllari va server kodi — d
 ## 10. Qo‘llab-quvvatlash (birinchi 2 hafta)
 Har kuni 15 daqiqalik qo‘ng‘iroq (kassir, moliya menejeri, administrator). Kassa ish soatlarida navbatchi. Muhimlik: ishni
 to‘xtatadigan xato — o‘sha kuni (tuzalmasa — «Қ» blankalari); noqulaylik — 2 ish kuni; istak — keyingi yangilanish. Har hafta —
-nazorat ro‘yxati va `kassa-checks.sql` natijasi ko‘rib chiqiladi.
+nazorat ro‘yxati, «Kassa» → «KPI» (haftalik ko‘rsatkichlar; dushanba kungi Telegram hisobotida ham) va `kassa-checks.sql`
+natijasi ko‘rib chiqiladi.

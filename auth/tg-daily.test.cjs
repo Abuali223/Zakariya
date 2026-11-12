@@ -88,6 +88,14 @@ function world(o) {
     ok('Z-hisobot: mos yoki kun yopilmagan — qator yo‘q', !/Z-hisobot/.test(zl({ ok: true, recorded: true })) && !/Z-hisobot/.test(zl(null)), zl({ ok: true }));
     ok('Z-hisobot farqi: naqd −10 000, karta +5 000', /· ⚠️ Z-hisobot farqi: naqd −10 000, karta \+5 000$/.test(zl({ ok: false, recorded: true, missing: false, diffCash: -10000, diffCard: 5000 })), zl({ ok: false, recorded: true, diffCash: -10000, diffCard: 5000 }));
     ok('Z-hisobot kiritilmagan / yo‘q', /⚠️ Z-hisobot kiritilmagan$/.test(zl({ ok: false, recorded: false })) && /⚠️ Z-hisobot yo‘q \(sababi yozilgan\)$/.test(zl({ ok: false, recorded: true, missing: true })));
+    const al = ao => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0, accOverdue: ao } }).join('\n');
+    ok('eslatma: muddati o‘tgan avans — nazorat qatorida; yo‘q bo‘lsa — qator yo‘q', /· ⚠️ muddati o‘tgan avans: 2 \(200 000 so‘m\)$/.test(al({ n: 2, sum: 200000 })) && !/avans/.test(al({ n: 0, sum: 0 })) && !/avans/.test(al(null)), al({ n: 2, sum: 200000 }));
+    const wl = wk => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0 }, week: wk }).join('\n');
+    ok('dushanba: o‘tgan hafta KPI qatori', /\n📈 Kassa — o‘tgan hafta \(04\.01\.2027–10\.01\.2027\): o‘sha kuni yopilgan 2\/3 kun · tekshirilmagan 1 · farqli kun 1 \(kamomad 5 000\) · «Boshqa xarajatlar» 25% ⚠️ · ⚠️ muddati o‘tgan avans 1 · qayta ochilgan 1$/.test(
+      wl({ from: '2027-01-04', to: '2027-01-10', closed: 3, onTime: 2, unverified: 1, diffDays: 1, shortage: 5000, surplus: 0, ex49Share: 25, accOverdue: { n: 1, sum: 150000 }, reopened: 1 })),
+      wl({ from: '2027-01-04', to: '2027-01-10', closed: 3, onTime: 2, unverified: 1, diffDays: 1, shortage: 5000, ex49Share: 25, accOverdue: { n: 1 }, reopened: 1 }));
+    ok('toza hafta: farq yo‘q, EX-49 yo‘q bo‘lsa — ko‘rsatilmaydi; boshqa kunlari — qator yo‘q', /📈 Kassa — o‘tgan hafta \(04\.01\.2027–10\.01\.2027\): o‘sha kuni yopilgan 5\/5 kun · farq yo‘q$/.test(
+      wl({ from: '2027-01-04', to: '2027-01-10', closed: 5, onTime: 5, diffDays: 0, ex49Share: null, accOverdue: { n: 0 } })) && !/📈/.test(wl(null)), wl({ from: '2027-01-04', to: '2027-01-10', closed: 5, onTime: 5 }));
   }
 
   console.log('\n— yuborish: faqat faol Direktor, /sozlamalar, bir kunda bir marta');

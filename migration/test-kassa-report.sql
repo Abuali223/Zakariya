@@ -15,7 +15,8 @@
 --   (J) KO-3 — kassa orderlari jurnali: huquqlar, davr, jamlar, qoldiqlar mosligi, sinov kassasi alohida; Excel eksporti FD-28 bo'yicha
 --       (kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq);
 --   (X) RP-08 oylik statiya matritsasi va buxgalter uchun oylik kassa to'plami: huquqlar, KO-3 / KO-4 bilan o'zaro tekshiruv,
---       ichki o'tkazmalar, kunlik jamlar va qoldiq, sinov kassasi alohida, bo'sh oy, to'plam tarkibi va FD-28.
+--       ichki o'tkazmalar, kunlik jamlar va qoldiq, sinov kassasi alohida, bo'sh oy, to'plam tarkibi va FD-28;
+--   (W) eslatmalar (muddati o'tgan avans: holat, Telegram nazorati) va RP-22 haftalik KPI (kassa_kpi; dushanba — o'tgan hafta).
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -636,6 +637,37 @@ select zz.chk('X9 Direktor: to''plam to''liq — xodim ismi bilan, KO-3 ismli',
   (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || (select string_agg(a ->> 'partyName', ',' order by a ->> 'code') from jsonb_array_elements(p -> 'advances') a)
      from (select zz.as('U_DIR', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)::jsonb p) q),
   '^false:false:Sinov O''qituvchi,Sinov Zavxoz$');
+
+-- ---------- (W) eslatmalar va RP-22 haftalik KPI ----------
+select zz.chk('W0 huquqlar: KPI — Direktor va 2-ro''yxat; kassir va o''qituvchi — rad; noto''g''ri kassa',
+  (select (j ->> 'ok') || ':' || jsonb_array_length(j -> 'weeks') from (select zz.as('U_FM', $q$select public.kassa_kpi('main', 3)::text$q$)::jsonb j) q)
+  || ' | ' || zz.as('U_KAS', $q$select public.kassa_kpi('main', 3)::text$q$) || ' | ' || zz.as('U_TCH', $q$select public.kassa_kpi('main', 3)::text$q$)
+  || ' | ' || zz.as('U_DIR', $q$select public.kassa_kpi('nope', 3)::text$q$),
+  '^true:3 \| ERR 42501.*haftalik ko''rsatkichlar.* \| ERR 42501.* \| ERR 22023 \[kassa:bad_desk\]');
+select zz.chk('W1 hafta 04.01–10.01: 2 kun, ikkalasi o''sha kuni yopilgan va tekshirilgan, 1 farqli kun (kamomad 5 000), 1 bekor, naqd xarajat 300 000 (EX-49 — 0 %)',
+  (select (k ->> 'days') || ':' || (k ->> 'closed') || ':' || (k ->> 'onTime') || ':' || (k ->> 'verified') || ':' || (k ->> 'unverified') || ':' || (k ->> 'diffDays')
+          || ':' || trim_scale((k ->> 'shortage')::numeric) || ':' || trim_scale((k ->> 'surplus')::numeric) || ':' || (k ->> 'voids') || ':' || trim_scale((k ->> 'exTotal')::numeric)
+          || ':' || (k ->> 'ex49Share') || ':' || (k ->> 'reopened')
+     from (select app.kassa_week_kpi('main', '2027-01-04', '2027-01-10') k) q), '^2:2:2:2:0:1:5000:0:1:300000:0\.0:0$');
+select zz.chk('W2 nazorat ro''yxatidagi hisobdorlar yangi umumiy yordamchidan — avvalgidek (FIFO sana, ish kunlari, muddati)',
+  (select string_agg((a ->> 'partyId') || '/' || trim_scale((a ->> 'balance')::numeric) || '/' || (a ->> 'since') || '/' || (a ->> 'workDays') || '/' || (a ->> 'overdue'), ',' order by a ->> 'since')
+     from jsonb_array_elements(zz.checks('main') -> 'accountable') a),
+  '^staff:st1/150000/2027-01-04/8/true,teachers:tch1/50000/2027-01-11/3/false$');
+select zz.chk('W3 eslatma: «Kassa» holatida va Telegram nazoratida muddati o''tgan avans — 1 ta, 150 000 (o''qituvchiniki hali muddatida)',
+  (select (s -> 'accOverdue' ->> 'n') || '/' || trim_scale((s -> 'accOverdue' ->> 'sum')::numeric) from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb s) q)
+  || ':' || (select (zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'n') || '/' || trim_scale((zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'sum')::numeric)),
+  '^1/150000:1/150000$');
+select zz.chk('W4 Telegram: dushanba (11.01) hisobotida o''tgan hafta KPI = kassa_week_kpi(04.01–10.01); payshanba (14.01) — yo''q',
+  (((zz.daily('2027-01-11') -> 'kassa' -> 'week') = app.kassa_week_kpi('main', '2027-01-04', '2027-01-10'))::text || ':' || coalesce(zz.daily('2027-01-14') -> 'kassa' ->> 'week', 'yo''q')),
+  '^true:yo''q$');
+select zz.put('W5', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 21","clientRef":"r-w5-0001","lines":[{"articleId":"EX-49","amount":50000,"note":"Tasniflanmagan xarid (sinov)"}]}'));
+select zz.put('W5p', left(zz.appr('U_FM', zz.id('W5')), 0) || left(zz.appr('U_DIR', zz.id('W5')), 0) || zz.pay('U_KAS', zz.id('W5')));
+select zz.chk('W5 joriy hafta (11.01–14.01): EX-49 ulushi = 50 000 / 200 000 = 25 %; tartib — eng yangi hafta birinchi; joriy hafta bugungacha',
+  (select (w -> 0 ->> 'from') || '…' || (w -> 0 ->> 'to') || ':' || (w -> 0 ->> 'ex49Share') || ':' || trim_scale((w -> 0 ->> 'ex49')::numeric) || '/' || trim_scale((w -> 0 ->> 'exTotal')::numeric)
+          || ':' || (w -> 1 ->> 'from') || ':' || (w -> 0 ->> 'days') || '/' || (w -> 0 ->> 'closed')
+     from (select zz.as('U_DIR', $q$select public.kassa_kpi('main', 2)::text$q$)::jsonb -> 'weeks' w) q)
+  || ':' || (zz.get('W5p')::jsonb ->> 'status'),
+  '^2027-01-11…2027-01-14:25\.0:50000/200000:2027-01-04:4/3:posted$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

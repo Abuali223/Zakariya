@@ -3,7 +3,7 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText } from './fin-kassa.js';
+import { controlRows, zText, kpiRows } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -85,4 +85,17 @@ test('Z-hisobot holati matni (kun javobidagi «z»)', () => {
   assert.equal(zText({ applies: true, recorded: true, missing: false, ok: false, diffCash: 5000, diffCard: -1200 }), 'farq: naqd +5 000 so‘m, karta −1 200 so‘m');
   assert.equal(zText({ applies: true, recorded: true, missing: false, ok: true, diffCash: 0, diffCard: 0 }), 'mos');
   assert.equal(zText({ applies: true, recorded: true, missing: false, no: 'Z-1', cash: 1, card: 0 }), 'kiritilgan', 'ochiq kun: solishtirish yo‘q');
+});
+
+test('RP-22 haftalik KPI qatorlari: darajalar va matn (EX-49 maqsadi ≤ 2 %)', () => {
+  const ok0 = kpiRows({ days: 5, closed: 5, onTime: 5, verified: 5, unverified: 0, diffDays: 0, shortage: 0, surplus: 0, ex49Share: 1.5, ex49: 15000, exTotal: 1000000, accOverdue: { n: 0, sum: 0 }, reopened: 0, voids: 0 });
+  assert.deepEqual(ok0.map(x => x.key), ['days', 'onTime', 'unverified', 'diffs', 'ex49', 'accOverdue', 'reopened', 'voids']);
+  assert.ok(ok0.every(x => x.level === 'ok'), JSON.stringify(ok0));
+  assert.equal(ok0.find(x => x.key === 'ex49').value, '1,5% (15 000 so‘m / 1 000 000 so‘m; maqsad ≤ 2%)');
+  const bad = kpiRows({ days: 6, closed: 5, onTime: 3, unverified: 2, diffDays: 2, shortage: 5000, surplus: 1200, ex49Share: 25, ex49: 50000, exTotal: 200000, accOverdue: { n: 1, sum: 150000 }, reopened: 1, voids: 2 });
+  const L = Object.fromEntries(bad.map(x => [x.key, x]));
+  assert.deepEqual([L.onTime.level, L.onTime.value, L.unverified.level, L.diffs.value, L.ex49.level, L.accOverdue.value, L.reopened.level, L.voids.level],
+    ['warn', '3 / 5', 'warn', '2 ta · kamomad 5 000 so‘m · ortiqcha 1 200 so‘m', 'warn', '1 ta · 150 000 so‘m', 'warn', 'info']);
+  const empty = Object.fromEntries(kpiRows({}).map(x => [x.key, x]));
+  assert.deepEqual([empty.days.value, empty.onTime.value, empty.ex49.value, empty.ex49.level], ['yo‘q', '–', 'naqd xarajat yo‘q', 'info']);
 });

@@ -21,6 +21,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_journal_export(...)   — KO-3 Excel uchun ma'lumot (FD-28): kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq;
 --   kassa_matrix(desk, month)   — RP-08: oylik statiya matritsasi (statiya × kun; kunlik jamlar va qoldiq; chop etish va XLSX — sahifada);
 --   kassa_month_pack(desk, month) — buxgalter uchun oylik kassa to'plami (E1–E4: KO-3, matritsa, kassa kunlari, hisobdorlar; FD-28);
+--   kassa_kpi(desk, weeks)      — RP-22 haftalik ko'rsatkichlar (o'z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi,
+--                                 muddati o'tgan avanslar) — Direktor va 2-ro'yxat; dushanba kungi Telegram hisobotida o'tgan hafta;
 --   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
 --                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit, Z-hisobot …);
 --   app.kassa_daily(day)        — Direktorning kunlik Telegram hisobotidagi kassa bloki va nazorat qatori (RP-05; director_daily chaqiradi);
@@ -692,6 +694,7 @@ begin
                         and c."dirApprovedAt" < app.fin_now() - interval '1 day')),
     'unverifiedDays', (select count(*) from public.cash_days d where d.desk = v_desk and d.status = 'closed'),
     'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
+    'accOverdue', app.kassa_acc_overdue(v_desk, v_today),   -- eslatma (F1.24): avans hisoboti muddati o'tgan hisobdorlar
     'limit', jsonb_build_object('cashLimit', v_o."cashLimit", 'set', v_o."cashLimit" > 0, 'exceeded', v_o."cashLimit" > 0 and coalesce(v_bal, 0) > v_o."cashLimit"),
     't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang", 'lockedThrough', v_o."lockedThrough",
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
@@ -1045,6 +1048,80 @@ end $$;
 revoke all on function public.kassa_month_pack(text, text) from public, anon;
 grant execute on function public.kassa_month_pack(text, text) to authenticated;
 
+-- Hisobdorlardagi pul (4230) p_asof sanasi holatiga: berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan
+--   eng eski berilgan sana (FIFO); "workDays" — o'shandan p_asof gacha o'tgan ish kunlari (du–ju); hisobot muddati — 3 ish kuni (§4.9).
+create or replace function app.kassa_accountables(p_desk text, p_asof date) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
+                                                       'given', o.given, 'returned', o.ret, 'reported', o.rep, 'balance', o.given - o.ret - o.rep, 'since', o.since,
+                                                       'workDays', (select count(*) from generate_series(o.since + 1, p_asof, interval '1 day') g
+                                                                     where extract(isodow from g) < 6),
+                                                       'overdue', (select count(*) from generate_series(o.since + 1, p_asof, interval '1 day') g
+                                                                    where extract(isodow from g) < 6) > 3)
+                                    order by o.since, o.pid)
+                     from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret, coalesce(max(r.rep), 0) as rep,
+                                  min(g.d) filter (where g.cum > coalesce(r.ret, 0) + coalesce(r.rep, 0)) as since
+                             from (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
+                                          sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
+                                     from public.cash_docs c where c.desk = p_desk and c.op = 'out_accountable' and c.status = 'posted' and c."businessDay" <= p_asof) g
+                             left join (select c."partyId" as pid, sum(c.amount) filter (where c.op = 'in_acc_return') as ret,
+                                               sum(c.amount) filter (where c.op = 'nc_adv_report') as rep from public.cash_docs c
+                                         where c.desk = p_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' and c."businessDay" <= p_asof
+                                         group by 1) r on r.pid = g.pid
+                            group by g.pid) o
+                    where o.given - o.ret - o.rep > 0), '[]'::jsonb)
+$$;
+revoke all on function app.kassa_accountables(text, date) from public, anon, authenticated;
+
+-- Muddati o'tgan avans hisobotlari soni va summasi (eslatmalar — F1.24: «Kassa» sahifasi va Telegram nazorat qatori).
+create or replace function app.kassa_acc_overdue(p_desk text, p_asof date) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select jsonb_build_object('n', count(*), 'sum', coalesce(sum((x ->> 'balance')::numeric), 0))
+    from jsonb_array_elements(app.kassa_accountables(p_desk, p_asof)) x where (x ->> 'overdue')::boolean
+$$;
+revoke all on function app.kassa_acc_overdue(text, date) from public, anon, authenticated;
+
+-- RP-22 haftalik KPI (F1.25) davr bo'yicha: kassa kunlari (yopilgan, o'z vaqtida — o'sha kuni yopilgan, tekshirilgan / tekshirilmagan,
+--   qayta ochilgan), sanash farqlari (kunlar, kamomad, ortiqcha), bekor qilingan hujjatlar, «Boshqa xarajatlar» (EX-49) ulushi —
+--   davrdagi naqd xarajat (EX statiyalari) ichida, davr oxirida muddati o'tgan avans hisobotlari.
+create or replace function app.kassa_week_kpi(p_desk text, p_from date, p_to date) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select jsonb_build_object('from', p_from, 'to', p_to) || d.j || e.j || jsonb_build_object('voids', v.n) || jsonb_build_object('accOverdue', app.kassa_acc_overdue(p_desk, p_to))
+    from (select jsonb_build_object(
+                   'days', count(*), 'closed', count(*) filter (where x.status <> 'open'),
+                   'onTime', count(*) filter (where x.status <> 'open' and (x."closedAt" at time zone 'Asia/Tashkent')::date <= x.day),
+                   'verified', count(*) filter (where x.status = 'verified'), 'unverified', count(*) filter (where x.status = 'closed'),
+                   'reopened', count(*) filter (where x."reopenCount" > 0),
+                   'diffDays', count(*) filter (where coalesce(x.diff, 0) <> 0),
+                   'shortage', coalesce(sum(-x.diff) filter (where x.diff < 0), 0), 'surplus', coalesce(sum(x.diff) filter (where x.diff > 0), 0)) as j
+            from public.cash_days x where x.desk = p_desk and x.day between p_from and p_to) d,
+         (select jsonb_build_object('exTotal', coalesce(sum(l.amount), 0), 'ex49', coalesce(sum(l.amount) filter (where l."articleId" = 'EX-49'), 0),
+                                    'ex49Share', case when coalesce(sum(l.amount), 0) > 0
+                                                      then round(100 * coalesce(sum(l.amount) filter (where l."articleId" = 'EX-49'), 0) / sum(l.amount), 1) end) as j
+            from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id join public.fin_articles a on a.id = l."articleId"
+           where c.desk = p_desk and c.status = 'posted' and c.form = 'KO2' and l.cash and a.kind = 'EX' and c."businessDay" between p_from and p_to) e,
+         (select count(*) as n from public.cash_docs c where c.desk = p_desk and c.status = 'void' and c."businessDay" between p_from and p_to) v
+$$;
+revoke all on function app.kassa_week_kpi(text, date, date) from public, anon, authenticated;
+
+-- O'qish: RP-22 haftalik KPI — oxirgi N hafta (du–ya; joriy hafta — bugungacha). Direktor va 2-ro'yxat ko'radi.
+create or replace function public.kassa_kpi(p_desk text, p_weeks int default 8) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_k public.cash_desks%rowtype; v_today date := app.fin_today();
+  v_n int := least(greatest(coalesce(p_weeks, 8), 1), 26); v_mon date;
+begin
+  if not (app.is_admin() or app.fin_list2()) then raise exception 'Ruxsat yo''q: haftalik ko''rsatkichlar — Direktor, Moliya menejeri yoki buxgalter' using errcode = '42501'; end if;
+  select * into v_k from public.cash_desks k where k.id = v_desk;
+  if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
+  v_mon := v_today - (extract(isodow from v_today)::int - 1);
+  return jsonb_build_object('ok', true, 'today', v_today, 'desk', jsonb_build_object('id', v_k.id, 'name', v_k.name, 'isTest', v_k."isTest"),
+    'weeks', (select jsonb_agg(app.kassa_week_kpi(v_desk, w.m, least(w.m + 6, v_today)) order by w.m desc)
+                from (select v_mon - 7 * i as m from generate_series(0, v_n - 1) i) w));
+end $$;
+revoke all on function public.kassa_kpi(text, int) from public, anon;
+grant execute on function public.kassa_kpi(text, int) to authenticated;
+
 -- ---------- O'qish: nazorat ro'yxati (RP-06) ----------
 --   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,
 --   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
@@ -1108,25 +1185,8 @@ begin
                                           else 0 end),
     -- moslik (kassa-links.sql: app.kassa_reconcile) — faqat asosiy kassa
     'reconcile', case when v_test then jsonb_build_object('live', false, 'total', 0) else app.kassa_reconcile(v_today - 30, v_today) end,
-    -- hisobdorlardagi pul (4230): berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan eng eski berilgan sana (FIFO);
-    --   "workDays" — o'shandan beri o'tgan ish kunlari (du–ju); hisobot muddati — 3 ish kuni (§4.9).
-    'accountable', coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
-                                                                 'given', o.given, 'returned', o.ret, 'reported', o.rep, 'balance', o.given - o.ret - o.rep, 'since', o.since,
-                                                                 'workDays', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
-                                                                               where extract(isodow from g) < 6),
-                                                                 'overdue', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
-                                                                              where extract(isodow from g) < 6) > 3)
-                                              order by o.since, o.pid)
-                               from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret, coalesce(max(r.rep), 0) as rep,
-                                            min(g.d) filter (where g.cum > coalesce(r.ret, 0) + coalesce(r.rep, 0)) as since
-                                       from (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
-                                                    sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
-                                               from public.cash_docs c where c.desk = v_desk and c.op = 'out_accountable' and c.status = 'posted') g
-                                       left join (select c."partyId" as pid, sum(c.amount) filter (where c.op = 'in_acc_return') as ret,
-                                                         sum(c.amount) filter (where c.op = 'nc_adv_report') as rep from public.cash_docs c
-                                                   where c.desk = v_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' group by 1) r on r.pid = g.pid
-                                      group by g.pid) o
-                              where o.given - o.ret - o.rep > 0), '[]'::jsonb),
+    -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — 3 ish kuni (§4.9)
+    'accountable', app.kassa_accountables(v_desk, v_today),
     -- rahbar / ta'sischiga berilgan pul: buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — hech qachon xarajat emas
     'handover', (select jsonb_build_object(
                    'monthCount', count(*) filter (where c."businessDay" >= v_m0), 'monthSum', coalesce(sum(c.amount) filter (where c."businessDay" >= v_m0), 0),
@@ -1185,11 +1245,14 @@ begin
                 where jsonb_array_length(app.kassa_gap_check('main', k.year)) > 0),
       'fiscalExempt', (select count(*) from public.cash_docs c where c.desk = 'main' and c."fiscalExempt" and c.status = 'posted' and c."businessDay" = v_day),
       'limitExceeded', coalesce(v_o."cashLimit", 0) > 0 and v_bal > v_o."cashLimit",
+      'accOverdue', app.kassa_acc_overdue('main', v_day),   -- eslatma (F1.24)
       -- onlayn kassa Z-hisoboti (F1.26) — shu kun yopilgan bo'lsa
       'z', case when v_closed then (select jsonb_build_object('ok', (z ->> 'ok')::boolean, 'needed', (z ->> 'needed')::boolean,
                                                                'recorded', (z ->> 'recorded')::boolean, 'missing', (z ->> 'missing')::boolean,
                                                                'diffCash', z -> 'diffCash', 'diffCard', z -> 'diffCard')
-                                      from app.kassa_z_state(v_d.id) z) end));
+                                      from app.kassa_z_state(v_d.id) z) end),
+    -- RP-22 (F1.25): dushanba kungi hisobotda o'tgan hafta (du–ya) ko'rsatkichlari
+    'week', case when extract(isodow from v_day) = 1 then app.kassa_week_kpi('main', v_day - 7, v_day - 1) end);
 end $$;
 revoke all on function app.kassa_daily(date) from public, anon, authenticated;
 

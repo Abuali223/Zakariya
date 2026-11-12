@@ -20,9 +20,10 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     4 — yuridik shaxsga kassadan naqd to'lov: Direktor tasdig'i (sozlama orgCashMax), javobda «orgCash», nazoratda «orgCash30»;
 --     5 — KO-3 kassa orderlari jurnali (kassa_journal; chop etish va XLSX — sahifada);
 --     6 — KO-3 Excel eksporti FD-28 bo'yicha (kassa_journal_export: kassirga yo'q, 2-ro'yxatga ismsiz);
---     7 — RP-08 oylik statiya matritsasi (kassa_matrix) va buxgalter uchun oylik kassa to'plami (kassa_month_pack).
+--     7 — RP-08 oylik statiya matritsasi (kassa_matrix) va buxgalter uchun oylik kassa to'plami (kassa_month_pack);
+--     8 — eslatmalar: muddati o'tgan avans (holat va Telegram nazoratida «accOverdue»), RP-22 haftalik KPI (kassa_kpi; Telegram «week»).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 7 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 8 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;
