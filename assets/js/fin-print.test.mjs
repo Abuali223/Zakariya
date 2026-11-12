@@ -378,3 +378,30 @@ test('o‘zaro hisob dalolatnomasi: rus va lotin; boshqa dalolatnomalarda «tomo
     basis: 'Buyruq № 3', decidedBy: 'u_dir', lines: [{ debit: '4730', credit: '5910', amount: 5000, articleId: 'OP-22', cash: false }] }, ctx(), W));
   assert.ok(dec.includes('Камомад бўйича қарор') && dec.includes('Жавобгар шахс: Sinov Kassir') && !dec.includes('Берилсин'), dec);
 });
+
+// ---------------------------------------------------------------- avans hisoboti (nc_adv_report, naqdsiz)
+const advDoc = {
+  id: 'kd_adv1', form: 'ACT', op: 'nc_adv_report', status: 'posted', no: 5, year: 2027, businessDay: '2027-01-11', amount: 200000,
+  partyType: 'employee', partyId: 'staff:st1', partyName: 'Sinov Zavxoz', attachment: 'Cheklar va hujjatlar: 2 ta', note: '',
+  basis: 'Avans hisoboti 10.01.2027; Oziq-ovqat xaridi', postedBy: 'u_acc', postedAt: '2027-01-11T06:00:00Z',
+  sourceSnapshot: { reportDate: '2027-01-10', openBefore: 250000, openAfter: 50000 },
+  lines: [
+    { lineNo: 1, debit: '1010', credit: '4230', amount: 150000, articleId: 'EX-20', cash: false, note: 'Chek 15, 09.01', analytics: { partyId: 'staff:st1' } },
+    { lineNo: 2, debit: '2010', credit: '4230', amount: 50000, articleId: 'EX-16', cash: false, note: 'Chek 16, 09.01', analytics: { partyId: 'staff:st1' } },
+  ],
+};
+test('avans hisoboti: o‘zbek kirill va rus — qatorlar (chek), hisobdor, asos, qoldiq, imzolar', () => {
+  const t = text(docHtml(advDoc, ctx(), W));
+  for (const must of ['ДАЛОЛАТНОМА № Д-5', 'Аванс ҳисоботи — 2027 йил 11 январь', 'Чек, ҳужжат',
+    '1010 4230 Chek 15, 09.01 150 000=00 EX-20', '2010 4230 Chek 16, 09.01 50 000=00 EX-16',
+    'Ҳисобдор шахс: Sinov Zavxoz', 'Асоси: Аванс ҳисоботи 10.01.2027; Oziq-ovqat xaridi',
+    'Сумма: 200 000=00 — Икки юз минг сўм 00 тийин', 'Иловаси: Чеклар ва ҳужжатлар: 2 та',
+    'Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин 250 000=00 сўм, кейин 50 000=00 сўм.',
+    'Раҳбар', 'Бош бухгалтер', 'Ҳисобдор шахс Sinov Zavxoz', 'Ҳужжат: kd_adv1'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(!t.includes('Avans hisoboti') && !t.includes('Берилсин'), 'tizim matni chop etish tilida; chiqim orderi yorlig‘i yo‘q');
+  const r = text(docHtml(advDoc, ctx({ lang: 'ru' }), W));
+  for (const must of ['АКТ № А-5', 'Авансовый отчёт — 11 января 2027 г.', 'Подотчётное лицо: Sinov Zavxoz', 'Основание: Авансовый отчёт 10.01.2027; Oziq-ovqat xaridi',
+    'Приложение: Чеки и документы: 2 шт.', 'Остаток аванса у подотчётного лица: до отчёта 250 000=00 сум, после 50 000=00 сум.'])
+    assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
+});

@@ -31,7 +31,7 @@ const T = {
     student: 'ўқувчи', tuition: 'Ўқув тўлови', advance: 'аванс', surplus: 'Касса ортиқчаси', shortage: 'Касса камомади',
     salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза',
     countBasis: 'Кассани санаш далолатномаси', nonCash: 'Маълумот учун, нақд пулсиз ёзув', docId: 'Ҳужжат', printed: 'чоп этилди',
-    act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор' },
+    act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор', nc_adv_report: 'Аванс ҳисоботи' },
     kassaFor: d => `КАССА ${d} учун`, sheet: 'Варақ', copy1: 'КАССА ДАФТАРИ ВАРАҒИ', copy2: 'КАССИР ҲИСОБОТИ',
     cols: ['Ҳужжат рақами', 'Кимдан олинди ёки кимга берилди', 'Корреспонденцияловчи ҳисобварақ, субсчёт рақами', 'Кирим', 'Чиқим'],
     openBal: 'Кун бошига қолдиқ', carried: 'Олдинги варақдан кўчирилди', dayTotal: 'Кун бўйича жами', closeBal: 'Кун охирига қолдиқ',
@@ -48,6 +48,7 @@ const T = {
     resOver: (a, no) => `Ортиқча — ${a}. Шу кун санаси билан кирим касса ордери ${no} расмийлаштирилди.`,
     decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', note: 'Изоҳ', member: 'Комиссия аъзоси',
     employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
+    accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`,
     offsetBasis: (m, st, req) => `Ўзаро ҳисоб: ${m} ойи иш ҳақи ҳисобидан ўқув тўлови — ${st}${req ? '; ариза ' + req : ''}`,
     offsetText: (a, m) => `Ходимнинг ёзма аризасига асосан унинг ${m} ойи учун иш ҳақидан ${a} сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.`,
   },
@@ -66,7 +67,7 @@ const T = {
     student: 'o‘quvchi', tuition: 'O‘quv to‘lovi', advance: 'avans', surplus: 'Kassa ortiqchasi', shortage: 'Kassa kamomadi',
     salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza',
     countBasis: 'Kassani sanash dalolatnomasi', nonCash: 'Ma’lumot uchun, naqd pulsiz yozuv', docId: 'Hujjat', printed: 'chop etildi',
-    act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror' },
+    act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror', nc_adv_report: 'Avans hisoboti' },
     kassaFor: d => `KASSA ${d} uchun`, sheet: 'Varaq', copy1: 'KASSA DAFTARI VARAG‘I', copy2: 'KASSIR HISOBOTI',
     cols: ['Hujjat raqami', 'Kimdan olindi yoki kimga berildi', 'Korrespondensiyalovchi hisobvaraq, subschyot raqami', 'Kirim', 'Chiqim'],
     openBal: 'Kun boshiga qoldiq', carried: 'Oldingi varaqdan ko‘chirildi', dayTotal: 'Kun bo‘yicha jami', closeBal: 'Kun oxiriga qoldiq',
@@ -83,6 +84,7 @@ const T = {
     resOver: (a, no) => `Ortiqcha — ${a}. Shu kun sanasi bilan kirim kassa orderi ${no} rasmiylashtirildi.`,
     decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', note: 'Izoh', member: 'Komissiya a’zosi',
     employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
+    accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`,
     offsetBasis: (m, st, req) => `O‘zaro hisob: ${m} oyi ish haqi hisobidan o‘quv to‘lovi — ${st}${req ? '; ariza ' + req : ''}`,
     offsetText: (a, m) => `Xodimning yozma arizasiga asosan uning ${m} oyi uchun ish haqidan ${a} so‘m farzandining o‘quv to‘lovi hisobiga o‘tkazildi. Naqd pul berilmadi va qabul qilinmadi.`,
   },
@@ -101,7 +103,7 @@ const T = {
     student: 'учащийся', tuition: 'Оплата за обучение', advance: 'аванс', surplus: 'Излишек кассы', shortage: 'Недостача кассы',
     salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление',
     countBasis: 'Акт пересчёта наличных денег в кассе', nonCash: 'Справочно, безналичная запись', docId: 'Документ', printed: 'напечатано',
-    act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче' },
+    act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче', nc_adv_report: 'Авансовый отчёт' },
     kassaFor: d => `КАССА за ${d}`, sheet: 'Лист', copy1: 'ВКЛАДНОЙ ЛИСТ КАССОВОЙ КНИГИ', copy2: 'ОТЧЁТ КАССИРА',
     cols: ['Номер документа', 'От кого получено или кому выдано', 'Номер корреспондирующего счёта, субсчёта', 'Приход', 'Расход'],
     openBal: 'Остаток на начало дня', carried: 'Перенос с предыдущего листа', dayTotal: 'Итого за день', closeBal: 'Остаток на конец дня',
@@ -118,6 +120,7 @@ const T = {
     resOver: (a, no) => `Излишек — ${a}. Датой этого дня оформлен приходный кассовый ордер ${no}.`,
     decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', note: 'Примечание', member: 'Член комиссии',
     employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
+    accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`,
     offsetBasis: (m, st, req) => `Взаимозачёт: оплата за обучение в счёт заработной платы за ${m} — ${st}${req ? '; заявление от ' + req : ''}`,
     offsetText: (a, m) => `На основании письменного заявления сотрудника из его заработной платы за ${m} сумма ${a} сум зачтена в счёт оплаты за обучение ребёнка. Наличные деньги не выдавались и не принимались.`,
   },
@@ -165,6 +168,11 @@ function texts(doc, t) {
     const st = [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ');
     if (/^\d{4}-\d{2}$/.test(snap.month || '')) basis = t.offsetBasis(ymLabel(snap.month), st, dmy(snap.requestDate));
     if (attachment === 'Yozma ariza') attachment = t.writtenApp;
+  }
+  if (doc.op === 'nc_adv_report') {   // asos — hisobot sanasi chop etish tilida; foydalanuvchi izohi — yozilganidek
+    const rest = basis.replace(/^Avans hisoboti \d{2}\.\d{2}\.\d{4}(; )?/, '');
+    basis = t.actOps.nc_adv_report + (snap.reportDate ? ' ' + dmy(snap.reportDate) : '') + (rest ? '; ' + rest : '');
+    const m = /^Cheklar va hujjatlar: (\d+) ta$/.exec(attachment); if (m) attachment = t.advAttach(m[1]);
   }
   if (doc.op === 'in_surplus' || doc.op === 'out_shortage') {
     party = doc.op === 'in_surplus' ? t.surplus : t.shortage;
@@ -355,27 +363,29 @@ function ko2Html(doc, ctx, W, t, lang) {
 // ---------------------------------------------------------------- ACT: naqdsiz dalolatnoma (qisqa shakl)
 function actHtml(doc, ctx, W, t, lang) {
   const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t), snap = doc.sourceSnapshot || {};
-  const rows = (doc.lines || []).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
+  // avans hisobotida tahlil ustuni o'rnida — chek / hujjat (qatordagi izoh)
+  const rows = (doc.lines || []).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(doc.op === 'nc_adv_report' ? (l.note || 'X') : anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
   const head = pickSign(ctx, 1, doc.dirApprovedBy || doc.decidedBy, t.head), chief = pickSign(ctx, 2, doc.approvedBy, t.chief);
-  const ofs = doc.op === 'nc_offset';
-  // tomon yorlig'i: o'zaro hisob — xodim; kamomad qarori — javobgar shaxs (xodim zimmasiga olinganda); boshqasida tomon ko'rsatilmaydi
-  const partyLbl = ofs ? t.employee : (doc.op === 'nc_shortage_dec' && doc.partyType === 'employee') ? t.liable : '';
+  const ofs = doc.op === 'nc_offset', adv = doc.op === 'nc_adv_report';
+  // tomon yorlig'i: o'zaro hisob — xodim; avans hisoboti — hisobdor shaxs; kamomad qarori — javobgar shaxs (xodim zimmasiga olinganda)
+  const partyLbl = ofs ? t.employee : adv ? t.accPerson : (doc.op === 'nc_shortage_dec' && doc.partyType === 'employee') ? t.liable : '';
   const pupil = ofs ? [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ') : '';
   return `<div class="pg act">${doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : ''}
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <div class="ttl">${esc(t.act)} ${t.no} <span class="nob">${esc(docNo(doc, t))}</span></div>
     <div class="dt">${esc((t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '') + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
     ${ofs && /^\d{4}-\d{2}$/.test(snap.month || '') ? `<p>${esc(t.offsetText(money(W, doc.amount), ymLabel(snap.month)))}</p>` : ''}
-    <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(adv ? t.advDoc : t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
     ${partyLbl && tx.party ? fld(partyLbl, esc(tx.party)) : ''}
     ${pupil ? fld(t.pupil, esc(pupil)) : ''}
     ${fld(t.basis, esc(tx.basis))}
     ${fld(t.amount, `<b>${esc(money(W, doc.amount))}</b> — ${esc(W.sumWords(doc.amount, lang))}`)}
     ${tx.attachment ? fld(t.attach, esc(tx.attachment)) : ''}
     ${doc.note ? fld(t.note, esc(doc.note)) : ''}
+    ${adv && snap.openBefore != null && snap.openAfter != null ? `<p>${esc(t.advBal(money(W, snap.openBefore), money(W, snap.openAfter)))}</p>` : ''}
     ${voidInfo(doc, ctx, t)}
     <div class="two" style="display:flex;gap:8mm">${sig(head.title, head.name)}${sig(chief.title, chief.name)}</div>
-    ${ofs ? sig(t.acquainted, tx.party) : ''}
+    ${ofs ? sig(t.acquainted, tx.party) : adv ? sig(t.accPerson, tx.party) : ''}
     ${footer(doc, ctx, t)}</div>`;
 }
 

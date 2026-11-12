@@ -720,24 +720,25 @@ begin
                                           else 0 end),
     -- moslik (kassa-links.sql: app.kassa_reconcile) — faqat asosiy kassa
     'reconcile', case when v_test then jsonb_build_object('live', false, 'total', 0) else app.kassa_reconcile(v_today - 30, v_today) end,
-    -- hisobdorlardagi pul (4230): berilgan − naqd qaytarilgan; "since" — hali yopilmagan eng eski berilgan sana (FIFO);
+    -- hisobdorlardagi pul (4230): berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan eng eski berilgan sana (FIFO);
     --   "workDays" — o'shandan beri o'tgan ish kunlari (du–ju); hisobot muddati — 3 ish kuni (§4.9).
     'accountable', coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
-                                                                 'given', o.given, 'returned', o.ret, 'balance', o.given - o.ret, 'since', o.since,
+                                                                 'given', o.given, 'returned', o.ret, 'reported', o.rep, 'balance', o.given - o.ret - o.rep, 'since', o.since,
                                                                  'workDays', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
                                                                                where extract(isodow from g) < 6),
                                                                  'overdue', (select count(*) from generate_series(o.since + 1, v_today, interval '1 day') g
                                                                               where extract(isodow from g) < 6) > 3)
                                               order by o.since, o.pid)
-                               from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret,
-                                            min(g.d) filter (where g.cum > coalesce(r.ret, 0)) as since
+                               from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret, coalesce(max(r.rep), 0) as rep,
+                                            min(g.d) filter (where g.cum > coalesce(r.ret, 0) + coalesce(r.rep, 0)) as since
                                        from (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
                                                     sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
                                                from public.cash_docs c where c.desk = v_desk and c.op = 'out_accountable' and c.status = 'posted') g
-                                       left join (select c."partyId" as pid, sum(c.amount) as ret from public.cash_docs c
-                                                   where c.desk = v_desk and c.op = 'in_acc_return' and c.status = 'posted' group by 1) r on r.pid = g.pid
+                                       left join (select c."partyId" as pid, sum(c.amount) filter (where c.op = 'in_acc_return') as ret,
+                                                         sum(c.amount) filter (where c.op = 'nc_adv_report') as rep from public.cash_docs c
+                                                   where c.desk = v_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' group by 1) r on r.pid = g.pid
                                       group by g.pid) o
-                              where o.given - o.ret > 0), '[]'::jsonb),
+                              where o.given - o.ret - o.rep > 0), '[]'::jsonb),
     -- rahbar / ta'sischiga berilgan pul: buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — hech qachon xarajat emas
     'handover', (select jsonb_build_object(
                    'monthCount', count(*) filter (where c."businessDay" >= v_m0), 'monthSum', coalesce(sum(c.amount) filter (where c."businessDay" >= v_m0), 0),

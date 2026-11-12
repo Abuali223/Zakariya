@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 1;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 2;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -97,6 +97,7 @@ function draw() {
   if (desks.length > 1 && (m.director || m.list2)) acts.push(`<select id="ks-desk" class="search-inp" style="max-width:170px" title="Kassa">${desks.map(d => `<option value="${esc(d.id)}"${d.id === ST.desk ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>`);
   if (ready && (m.operator || m.director)) acts.push(`<button class="btn gold" id="ks-in">+ Kirim</button>`);
   if (ready && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-out">+ Chiqim so‘rovi</button>`);
+  if (ready && s.kassaGoLive && (m.list2 || m.director)) acts.push(`<button class="btn ghost2" id="ks-adv" title="Hisobdor shaxsning avans hisoboti — qog‘oz hisobot va cheklar bo‘yicha">Avans hisoboti</button>`);
   if (od && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-close">Kunni yopish</button>`);
   if (od && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul (pul sanaladi, kun ochiq qoladi)">Smena topshirish</button>`);
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
@@ -212,14 +213,15 @@ function draw() {
   const actDocs = ST.ov.acts || [];
   const actRows = actDocs.map(d => { const v = d.status === 'void';
     const canVoid = m.director && d.op === 'nc_offset' && d.status === 'posted' && String(d.businessDay) === String(s.today);   // o'zaro hisob — faqat shu kunda, Direktor
+    const canVoidAdv = (m.list2 || m.director) && d.op === 'nc_adv_report' && d.status === 'posted' && String(d.businessDay) === String(s.today);   // avans hisoboti — shu kunda
     return `<tr${v ? ' style="opacity:.55"' : ''}>
       <td data-label="№"><b>D-${esc(String(d.no))}</b><div class="small muted">${esc(dmy(d.businessDay))}</div></td>
       <td data-label="Tur">${esc(opName(d.op))}</td>
       <td data-label="Tomon / asos"><div>${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap">${v ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>'}</td>
       <td data-label="Holat">${v ? stChip('void') + (d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : '') : `<span class="small muted">${esc(nameOf(d.postedBy))}</span>`}</td>
-      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
-  const actsHtml = actDocs.length ? `<div class="card" style="padding:14px 18px;margin-top:14px" id="ks-acts"><b>Naqdsiz dalolatnomalar</b><div class="small muted" style="margin:2px 0 8px">Kassa kitobiga kirmaydi: boshlang‘ich qoldiq, kamomad bo‘yicha qaror, o‘zaro hisob (ish haqidan o‘quv to‘lovi — «Maosh berish» oynasida, faqat Direktor). Oxirgi 3 oy.</div>
+      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}${canVoidAdv ? ` <button class="btn sm danger" data-advvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
+  const actsHtml = actDocs.length ? `<div class="card" style="padding:14px 18px;margin-top:14px" id="ks-acts"><b>Naqdsiz dalolatnomalar</b><div class="small muted" style="margin:2px 0 8px">Kassa kitobiga kirmaydi: boshlang‘ich qoldiq, kamomad bo‘yicha qaror, o‘zaro hisob (ish haqidan o‘quv to‘lovi — «Maosh berish» oynasida, faqat Direktor), avans hisoboti. Oxirgi 3 oy.</div>
     <div class="tablewrap"><table><thead><tr><th>№</th><th>Tur</th><th>Tomon / asos</th><th style="text-align:right">Summa</th><th>Holat</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div></div>` : '';
   $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml + actsHtml;
   bind();
@@ -233,6 +235,7 @@ function bind() {
   on('#ks-hand', openHandoverForm);
   on('#ks-set', openSettings);
   on('#ks-period', openPeriodForm);
+  on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
   each('data-void', id => ask('Hujjatni bekor qilish', 'Bekor qilish sababi (kamida 5 belgi). Hujjat raqami saqlanadi va «bekor qilingan» deb belgilanadi.', 5, r => act('kassa_doc_void', { p_id: id, p_reason: r }, 'Hujjat bekor qilindi')));
@@ -251,6 +254,8 @@ function bind() {
   each('data-decide', id => openDecideForm(id));
   each('data-ofsvoid', id => ask('O‘zaro hisobni bekor qilish', 'Sababi (kamida 5 belgi). O‘quv to‘lovi teskari qilinadi, maosh to‘lovi olib tashlanadi; dalolatnoma raqami saqlanadi. Faqat rasmiylashtirilgan kunning o‘zida.', 5,
     r => act('kassa_offset_void', { p_id: id, p_reason: r }, 'O‘zaro hisob bekor qilindi')));
+  each('data-advvoid', id => ask('Avans hisobotini bekor qilish', 'Sababi (kamida 5 belgi). Xarajatlar «Buxgalteriya»dan olib tashlanadi, hisobdordagi qoldiq tiklanadi; dalolatnoma raqami saqlanadi. Faqat kiritilgan kunning o‘zida.', 5,
+    r => act('kassa_adv_report_void', { p_id: id, p_reason: r }, 'Avans hisoboti bekor qilindi')));
 }
 // Server amali: bajaradi, xabar beradi, sahifani yangilaydi. Xato — serverning o'zbekcha matni bilan.
 async function act(fn, args, okMsg, after) {
@@ -267,6 +272,60 @@ function ask(title, hint, minLen, onOk) {
   setTimeout(() => { const t = $('#ks-reason'); if (t) t.focus(); }, 50);
 }
 function offerPrint(r) { if (r && r.id && r.status === 'posted' && confirm('Order chop etilsinmi?')) printDoc(r.id); }
+
+// ---------------------------------------------------------------- avans hisoboti (hisobdor shaxs, naqdsiz dalolatnoma)
+//   Qog'ozdagi hisobot va cheklar bo'yicha 2-ro'yxat (Moliya menejeri, buxgalter) yoki Direktor kiritadi. Har qator — bitta chek yoki
+//   hujjat; xarajat «Buxgalteriya»ga o'zi ko'chadi, hisobdordagi qoldiq kamayadi (server: kassa_adv_report).
+async function openAdvForm() {
+  const refs = ST.refs;
+  // Hisobdorlar qoldig'i — har doim asosiy kassa bo'yicha (server ham sinov kassasini hisobga olmaydi).
+  let c = ST.checks && ST.checks._desk === 'main' ? ST.checks : null;
+  if (!c) { try { c = await call('kassa_checks', { p_desk: 'main' }); } catch (e) { C.toast(errText(e), true); return; } }
+  const acc = (c.accountable || []).filter(x => num(x.balance) > 0);
+  if (!acc.length) { C.toast('Hisobot qilinmagan avansi bor hisobdor yo‘q', true); return; }
+  const arts = (refs.articles || []).filter(a => a.kind === 'EX' && a.cashOutAllowed);
+  const today = ST.ov.state.today;
+  const F = { ref: null, lines: [{ articleId: '', amount: '', note: '' }] };
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Avans hisoboti</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small muted">Hisobdor topshirgan qog‘oz hisobot va cheklar bo‘yicha. Har qator — bitta chek yoki hujjat. Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi.</div>
+      ${lbl('Hisobdor shaxs', `<select id="av-p" style="${FLD}"><option value="">— tanlang —</option>${acc.map(x => `<option value="${esc(x.partyId)}">${esc((x.name || x.partyId) + ' — qoldiq ' + som(x.balance))}</option>`).join('')}</select>`)}
+      <div class="grid2">${lbl('Hisobot sanasi', `<input id="av-d" type="date" value="${esc(today)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Izoh <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<input id="av-b" type="text" maxlength="300" style="${FLD}">`)}</div>
+      <div class="small" style="font-weight:700;margin-top:10px">Xarajatlar <span class="muted" style="font-weight:500">— statiya, summa, chek yoki hujjat</span></div>
+      <div id="av-lines"></div><button type="button" class="btn sm" id="av-add" style="margin-top:6px">+ qator</button>
+      <div class="small" id="av-sum" style="margin-top:8px"></div>
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">Saqlash</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  const bal = () => { const x = acc.find(a => a.partyId === $('#av-p').value); return x ? num(x.balance) : 0; };
+  const total = () => F.lines.reduce((t2, l) => t2 + num(digits(l.amount)), 0);
+  const sum = () => { const b = bal(), tt = total(), over = b && tt > b;
+    $('#av-sum').innerHTML = `Jami: <b>${esc(som(tt))}</b>` + (b ? ` · qoldiq: ${esc(som(b))} → <b${over ? ' style="color:#B42318"' : ''}>${esc(som(b - tt))}</b>` : '')
+      + (over ? ' — qoldiqdan katta: ortiqcha sarfni alohida «Xarajat» orderi bilan bering' : ''); };
+  const artSel = (i, v) => `<select data-aart="${i}" style="${FLD}"><option value="">— statiya —</option>${arts.map(a => `<option value="${esc(a.id)}"${a.id === v ? ' selected' : ''}>${esc(a.id + ' · ' + a.nameUz)}</option>`).join('')}</select>`;
+  const draw = () => {
+    $('#av-lines').innerHTML = F.lines.map((l, i) => `<div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.4fr) auto;gap:6px;margin-top:6px">${artSel(i, l.articleId)}<input data-aamt="${i}" type="text" inputmode="numeric" placeholder="summa" value="${esc(l.amount)}" style="${FLD}"><input data-anote="${i}" type="text" maxlength="300" placeholder="chek № va sana" value="${esc(l.note)}" style="${FLD}">${F.lines.length > 1 ? `<button type="button" class="btn sm danger" data-adel="${i}">×</button>` : '<span></span>'}</div>`).join('');
+    $('#av-lines').querySelectorAll('[data-aart]').forEach(el => el.onchange = () => { F.lines[Number(el.dataset.aart)].articleId = el.value; });
+    $('#av-lines').querySelectorAll('[data-aamt]').forEach(el => { fmtInput(el); el.addEventListener('input', () => { F.lines[Number(el.dataset.aamt)].amount = el.value; sum(); }); });
+    $('#av-lines').querySelectorAll('[data-anote]').forEach(el => el.addEventListener('input', () => { F.lines[Number(el.dataset.anote)].note = el.value; }));
+    $('#av-lines').querySelectorAll('[data-adel]').forEach(el => el.onclick = () => { F.lines.splice(Number(el.dataset.adel), 1); draw(); sum(); });
+  };
+  draw(); sum();
+  $('#av-p').onchange = sum;
+  $('#av-add').onclick = () => { if (F.lines.length < 40) { F.lines.push({ articleId: '', amount: '', note: '' }); draw(); sum(); } };
+  let busy = false;
+  $('#av-save').onclick = async () => {
+    if (busy) return;
+    const pid = $('#av-p').value; if (!pid) { C.toast('Hisobdor shaxsni tanlang', true); return; }
+    const ls = F.lines.map(l => ({ articleId: l.articleId, amount: num(digits(l.amount)), note: String(l.note || '').trim() })).filter(l => l.articleId || l.amount || l.note);
+    if (!ls.length || ls.some(l => !l.articleId || !(l.amount > 0) || l.note.length < 3)) { C.toast('Har qatorda statiya, summa va chek yoki hujjat bo‘lsin', true); return; }
+    if (ls.reduce((t2, l) => t2 + l.amount, 0) > bal()) { C.toast('Hisobot summasi hisobdordagi qoldiqdan katta', true); return; }
+    busy = true; $('#av-save').disabled = true;
+    const r = await act('kassa_adv_report', { p: { clientRef: F.ref || (F.ref = newRef()), partyId: pid, reportDate: $('#av-d').value, basis: $('#av-b').value.trim(), lines: ls } }, 'Avans hisoboti saqlandi');
+    if (r) { if (r.id && confirm('Avans hisoboti chop etilsinmi?')) printDoc(r.id); }
+    else { busy = false; const b = $('#av-save'); if (b) b.disabled = false; }
+  };
+}
 
 // ---------------------------------------------------------------- kirim / chiqim shakli
 async function openDocForm(form) {
@@ -383,7 +442,7 @@ async function openDocForm(form) {
       const res = await call(isOut ? 'kassa_payout_request' : 'kassa_receipt', { p });
       C.closeModal();
       if (res.status === 'posted') { C.toast(`Kirim orderi № ${res.no} o‘tkazildi ✓`); await reload(); offerPrint(res); }
-      else { C.toast('So‘rov yuborildi — tasdiq kutilmoqda ✓'); await reload(); }
+      else { C.toast(num(res.accOpen) > 0 ? `So‘rov yuborildi — hisobdorda ${som(res.accOpen)} hisobot qilinmagan avans bor, Direktor tasdig‘i ham kerak ✓` : 'So‘rov yuborildi — tasdiq kutilmoqda ✓'); await reload(); }
       if (C.onChange) C.onChange();
     } catch (e) { busy = false; btn.disabled = false; btn.textContent = isOut ? 'So‘rov yuborish' : 'Qabul qilish'; C.toast(errText(e), true); }
   };
@@ -720,15 +779,16 @@ export function controlRows(c) {
         num(p4.row) ? `chiqim orderisiz naqd xarajat: ${cnt(p4.row)}` : '', num(p4.doc) ? `«Buxgalteriya»ga ko‘chmagan xarajat orderi: ${cnt(p4.doc)}` : '',
         num(p5.row) ? `chiqim orderisiz naqd maosh / avans: ${cnt(p5.row)}` : '', num(p5.doc) ? `yozuvsiz maosh / avans orderi: ${cnt(p5.doc)}` : '',
         num(p5.ofs) ? `o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: ${cnt(p5.ofs)}` : '',
+        num(p4.adv) ? `avans hisoboti ↔ «Buxgalteriya» xarajatlari mos emas: ${cnt(p4.adv)}` : '',
         num(p8.row) ? `chiqim orderisiz naqd qaytarish: ${cnt(p8.row)}` : '', num(p8.doc) ? `yozuvsiz qaytarish orderi: ${cnt(p8.doc)}` : ''].filter(Boolean);
       add('reconcile', 'Moslik: kassa hujjatlari ↔ pul yozuvlari', num(rc.total) ? 'bad' : 'ok', num(rc.total) ? bad.join('; ') : 'hammasi mos',
-        'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan; o‘zaro hisob — dalolatnomasi bilan');
+        'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan; o‘zaro hisob va avans hisoboti — dalolatnomasi bilan');
     }
   }
   const ac = c.accountable || [];
   add('accountable', 'Hisobdorlardagi pul', ac.some(x => x.overdue) ? 'warn' : ac.length ? 'info' : 'ok',
     ac.length ? ac.map(x => `${x.name || '—'}: ${som(x.balance)} (${dmy(x.since)} dan, ${num(x.workDays)} ish kuni${x.overdue ? ' — muddati o‘tgan' : ''})`).join('; ') : 'yo‘q',
-    'Berilgan − naqd qaytarilgan (avans hisobotlari hozircha qog‘ozda); hisobot muddati — 3 ish kuni');
+    'Berilgan − naqd qaytarilgan − avans hisobotlari («Avans hisoboti» tugmasi); hisobot muddati — 3 ish kuni');
   const ho = c.handover || {};
   add('handover', 'Rahbar / ta’sischiga berilgan pul', num(ho.earlierCount) ? 'warn' : num(ho.monthCount) ? 'info' : 'ok',
     [num(ho.monthCount) ? `shu oyda: ${cnt(ho.monthCount)} · ${som(ho.monthSum)}` : '', num(ho.earlierCount) ? `oldingi oylarda: ${cnt(ho.earlierCount)} · ${som(ho.earlierSum)} — tasniflanganini tekshiring` : ''].filter(Boolean).join('; ') || 'yo‘q',

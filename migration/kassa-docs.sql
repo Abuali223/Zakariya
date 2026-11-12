@@ -111,8 +111,8 @@ begin
     raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
   -- Tizim hujjatlari kalitlari (sanash farqi, boshlang'ich qoldiq, kamomad qarori, o'quv to'lovi / maosh / avans / qaytarish
-  --   orderlari, o'zaro hisob dalolatnomasi) mijozga band qilib qo'yilmaydi.
-  if not p_internal and v_ref ~* '^(sys|opening_|shdec_|pay_|sal_|adv_|ref_|ofs_)' then
+  --   orderlari, o'zaro hisob dalolatnomasi, avans hisoboti) mijozga band qilib qo'yilmaydi.
+  if not p_internal and v_ref ~* '^(sys|opening_|shdec_|pay_|sal_|adv_|ref_|ofs_|avh_)' then
     raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
   v_op := btrim(coalesce(p ->> 'op', ''));
@@ -268,7 +268,10 @@ begin
     v_needd := app.kassa_bool(p, 'needsDirector');
   else
     v_need2 := v_rule."needsApproval";
-    v_needd := v_rule."directorAlways" or (p_form = 'KO2' and v_rule."needsApproval" and v_amount > coalesce(v_org.t1, 0));
+    v_needd := v_rule."directorAlways" or (p_form = 'KO2' and v_rule."needsApproval" and v_amount > coalesce(v_org.t1, 0))
+               -- hisobdorga avans: oldingi avans bo'yicha hisobot qilinmagan qoldiq bo'lsa — Direktor ham (kassa tartibi: yangi avans
+               --   oldingisi hisobotidan keyin; istisno — Direktor). Pul berishda (kassa_doc_pay) hisobdor qulfi ostida yana tekshiriladi.
+               or (v_op = 'out_accountable' and app.kassa_acc_open(v_pid) > 0);
   end if;
 
   begin v_cap := nullif(p ->> 'capturedAt', '')::timestamptz; exception when others then v_cap := null; end;
@@ -444,9 +447,20 @@ revoke all on function public.kassa_receipt(jsonb) from public, anon;
 grant execute on function public.kassa_receipt(jsonb) to authenticated;
 
 -- ---------- KO-2: chiqim so'rovi (raqamsiz; pul berilmaydi) ----------
+-- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari (sinov kassasisiz).
+create or replace function app.kassa_acc_open(p_party text) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(sum(case when c.op = 'out_accountable' then c.amount else -c.amount end), 0)
+    from public.cash_docs c
+   where c."partyType" = 'employee' and c."partyId" = p_party and c.status = 'posted'
+     and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report')
+     and not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest")
+$$;
+revoke all on function app.kassa_acc_open(text) from public, anon, authenticated;
+
 create or replace function public.kassa_payout_request(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_id text; v_dup boolean;
+declare v_uid text := app.uid(); v_id text; v_dup boolean; v_party text; v_extra jsonb := '{}'::jsonb;
 begin
   if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
     raise exception 'Ruxsat yo''q: chiqim so''rovini kassir, Moliya menejeri yoki Direktor yozadi' using errcode = '42501';
@@ -457,11 +471,16 @@ begin
   end if;
   perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_id, v_dup from app.kassa_doc_build(p, 'KO2', v_uid, false) b;
+  -- Hisobdorga avans: javobda hisobot qilinmagan qoldiq (bo'lsa — so'rov Direktor tasdig'ini ham kutadi: kassa_doc_build).
+  if coalesce(p ->> 'op', '') = 'out_accountable' then
+    select c."partyId" into v_party from public.cash_docs c where c.id = v_id;
+    v_extra := jsonb_build_object('accOpen', app.kassa_acc_open(v_party));
+  end if;
   -- Tasdiq talab qilmaydigan chiqim (hozircha qo'lda kiritiladiganlar ichida yo'q) darhol «tasdiqlangan» bo'ladi.
   update public.cash_docs set status = 'approved'
    where id = v_id and status = 'draft' and not "needsList2" and not "needsDirector";
   perform app.kassa_flag(false);
-  return app.kassa_doc_json(v_id) || jsonb_build_object('ok', true, 'dup', v_dup);
+  return app.kassa_doc_json(v_id) || v_extra || jsonb_build_object('ok', true, 'dup', v_dup);
 end $$;
 revoke all on function public.kassa_payout_request(jsonb) from public, anon;
 grant execute on function public.kassa_payout_request(jsonb) to authenticated;
@@ -558,6 +577,7 @@ grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 create or replace function public.kassa_doc_pay(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_was text; v_src text; v_op text; v_desk text;
+        v_party text; v_dir text; v_nd boolean; v_open numeric;
 begin
   if not (app.kassa_operator() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: naqd pulni kassir (favqulodda — Direktor) beradi' using errcode = '42501';
@@ -573,6 +593,17 @@ begin
   perform app.kassa_link_prelock(p_id);   -- bog'langan amal qulflari kassa qulfidan OLDIN (qulf tartibi: L1 → L4)
   perform app.kassa_lock_desk(v_desk);    -- L4 (kassa_doc_post shu qulfni qayta oladi)
   select c.status into v_was from public.cash_docs c where c.id = p_id;   -- qulf ostida: aynan shu chaqiruv o'tkazadimi
+  -- Hisobdorga avans: hisobot qilinmagan qoldiq bo'lsa — faqat Direktor tasdiqlagan so'rov bo'yicha (hisobdor qulfi prelock'da olingan).
+  if v_op = 'out_accountable' and v_was <> 'posted' then
+    select c."partyId", c."dirApprovedBy", c."needsDirector" into v_party, v_dir, v_nd from public.cash_docs c where c.id = p_id;
+    v_open := app.kassa_acc_open(v_party);
+    if v_open > 0 and v_dir is null then
+      -- So'rov yozilganda qoldiq yo'q edi (Direktorga bormagan), keyin boshqa avans berilgan — yangi so'rov Direktorga boradi.
+      raise exception 'Hisobdorda oldingi avans bo''yicha hisobot qilinmagan qoldiq bor (% so''m): avval avans hisoboti yoki qaytim; istisno — Direktor tasdig''i bilan%', v_open,
+        case when coalesce(v_nd, false) then '' else ' (bu so''rov Direktorga bormagan: uni bekor qilib, qaytadan yozing — yangi so''rov Direktor tasdig''iga boradi)' end
+        using errcode = '42501', hint = 'kassa:acc_open';
+    end if;
+  end if;
   perform app.kassa_flag(true);
   v_doc := app.kassa_doc_post(p_id, v_uid);
   if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense') then

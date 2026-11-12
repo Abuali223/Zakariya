@@ -655,7 +655,7 @@ pastda hujjat ID, vaqt, foydalanuvchi; to‘lovchi hujjati termal printerda chiq
 
 **Qo‘lda qoladi:** kechki sanash va inventarizatsiya (qonun; tizim dalolatnomani tayyorlaydi); qog‘oz imzolar (ERI —
 F6.2); fiskal chek raqamini kiritish (F6.1); bank satrlari va komissiyalar (F3.2–F3.4); bankdan to‘langan xarajatni
-kiritish (F3.2 gacha); yanvar avans hisobotlari (F2.6 gacha); soliq provodkalari (F4.7 / F6.3); rahbarga berilganni
+kiritish (F3.2 gacha); avans hisobotidagi ortiqcha sarf (F2.6 gacha); soliq provodkalari (F4.7 / F6.3); rahbarga berilganni
 tasniflash va statutor hisobot topshirish (buxgalter).
 
 **Statiya bo‘yicha to‘liqlik:** kassa xarajati — ishga tushirishdan; bankdan to‘langan xarajat — ishga tushirishdan
@@ -832,15 +832,21 @@ oldinga tortilgan minimal qism: «Tasdiqlash» va «Kassa» — so‘rovni tasdi
 amallari yo‘q; rol faqat kassa moduli o‘rnatilgan tizimda beriladi; o‘qish huquqlari — 1b). Kassa hujjatiga bog‘langan
 to‘lov qatorini (KO-1, o‘zaro hisob dalolatnomasi) faqat kassa funksiyalari o‘zgartiradi (`trg_kassa_pay_guard`: summa,
 kanal, o‘quvchi, holat, kun, havola, fiskal № — boshqa yo‘l bilan rad; bekor qilish — hujjat orqali); biriktirilmagan
-to‘lovni qaytarish — Dt 6390 Kt 5010 (OP-16). Sinov kassasi (CT-20)
+to‘lovni qaytarish — Dt 6390 Kt 5010 (OP-16). Avans hisoboti (F2.6 dan oldinga tortilgan minimal qism, buxgalter ko‘rigi
+M1/M2): «Kassa» → «Avans hisoboti» — naqdsiz dalolatnoma (`nc_adv_report`), har chek qatori Dt statiya hisobvarag‘i Kt 4230,
+xarajat «Buxgalteriya»ga o‘zi ko‘chadi (usul «hisobdor orqali»; qo‘lda bunday xarajat yozilmaydi), hisobdor qoldig‘i =
+berilgan − qaytim − hisobotlar; hisobot qoldiqdan oshmaydi (ortiqcha sarf — F2.6); oldingi avansi hisobotsiz xodimga yangi
+avans — faqat Direktor tasdig‘i bilan (so‘rovda ham, pul berishda ham tekshiriladi); moslikda P4 «adv»; modul relizi 2. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 52, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 68, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
-parallel, 10 % ROLLBACK), `fin-print.test.mjs` 18, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
-39; brauzerda yetti to‘liq stsenariy (191 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 19, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 3, `tg-daily.test.cjs`
+39; brauzerda yetti to‘liq stsenariy (200 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
-va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar). Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
+va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
+hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6), 12 ta hisob siyosati qarori
+buxgalter imzosini kutadi. Qoldi: jonli zanjirga o‘tkazish — yashirin o‘rnatish
 kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band), mustaqil (ko‘p agentli) ko‘rik —
 hali o‘tkazilmagan; F1.20 (RLS relizi) — 1b-bosqichda.
 
@@ -895,6 +901,8 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 | F1.23 | S | 0,5 | O‘zaro hisob dalolatnomasi chop etish; sozlamalar | F1.5 | — |
 | F1.24 | S | 1 | Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | RP-22 haftalik KPI | F1.15 | Direktor ko‘radi |
+| F1.26 | S | 1 | Kunni yopishda onlayn kassa (NKM) Z-hisoboti: naqd va karta jami kiritiladi, KO-1 jami bilan solishtiriladi (buxgalter ko‘rigi M6) | F1.9 | Farq nazorat ro‘yxatida va Telegramda |
+| F1.27 | S | 0,5 | Kontragent-tashkilotga kassadan naqd to‘lovda ogohlantirish va Direktor tasdig‘i (M3; chegara — hisob siyosati qarori) | F1.10 | Qoidaga test |
 
 Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 
@@ -906,7 +914,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 | F2.3 | S | 0,5 | Noyabr–yanvar xarajatlariga statiya (sinov ishga tushirishi → buxgalter RPC si) | F1.1; FD-10 | Buxgalter imzolaydi |
 | F2.4 | M | 2 | `expenses.kind = 'accrual'` va o‘quvchi kodlar | — | Naqd ko‘rinishda hisoblash yo‘q |
 | F2.5 | M | 2,5 | RP-09 (maosh taqsimoti, XLSX) | F2.1, F2.3 | Jami = Σ hujjatlar |
-| F2.6 | L | 5 | Avans hisobotlari («А-»), suratlar, tasdiq, RP-07 yoshi; zavxoz maqsadlaridan statiya taklifi | F1.4; FD-14, 31 | Qoldiq formulasi; yanvar qulfdan oldin |
+| F2.6 | L | 5 | Avans hisobotlari: ortiqcha sarf (6970 va qaytarish orderi), suratlar, tasdiq, RP-07 yoshi; zavxoz maqsadlaridan statiya taklifi (minimal qism — 1a da, `nc_adv_report`) | F1.4; FD-14, 31 | Qoldiq formulasi; yanvar qulfdan oldin |
 | F2.7 | M | 2,5 | Faktura tarkibi (`grossAmount`, `discountParts`), noyabrdan backfill | FD-32 | 100 % fakturada mos (±1 so‘m) |
 | F2.8 | M | 3 | Oylik sanash dalolatnomasi, topshirish-qabul, oy oxiri ro‘yxati; barcha pul jadvallari uchun oy qulfi (tizim mustasno) | F1.9, F1.16 | Qulflangan oyga yozuv rad; webhook’lar ishlaydi |
 | F2.9 | L | 5 | Huquqlar II (RF-09…12): detektor → revoke; provider `fix`; barcha pul RPC larida bayroq | F1.13 | 7 kun 0 yozuv, keyin revoke |

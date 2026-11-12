@@ -220,6 +220,7 @@ insert into public.fin_op_rules (op, form, "nameUz", "nameRu", debit, credit, "a
   ('out_shortage',    'KO2', 'Kassa kamomadi',               'Недостача кассы',                    '5910', '5010', 'fixed',  'OP-22', '{}', '{}', '{}',                                false, false, true,  false, false, 180),
   ('out_loan_repay',  'KO2', 'So‘mdagi qarzni qaytarish',    'Возврат займа в сумах',              '6820', '5010', 'fixed',  'OP-19', '{}', '{}', '{founder,counterparty}',            true,  true,  false, false, true,  190),
   ('nc_offset',       'ACT', 'O‘zaro hisob',                 'Взаимозачёт',                        '6710', null,   'fixed',  'OP-11', '{}', '{}', '{employee}',                        false, true,  false, false, false, 210),
+  ('nc_adv_report',   'ACT', 'Avans hisoboti',               'Авансовый отчёт',                    null,   '4230', 'choose', null,    '{}', '{}', '{employee}',                        false, false, false, false, false, 215),
   ('nc_opening',      'ACT', 'Boshlang‘ich qoldiq',          'Начальные остатки',                  '5010', '0000', 'fixed',  'OP-23', '{}', '{}', '{}',                                false, true,  false, false, false, 220),
   ('nc_shortage_dec', 'ACT', 'Kamomad bo‘yicha qaror',       'Решение по недостаче',               null,   '5910', 'fixed',  'OP-22', '{}', '{}', '{employee,other}',                  false, true,  false, false, false, 230)
 on conflict (op) do nothing;

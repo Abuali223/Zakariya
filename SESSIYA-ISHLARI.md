@@ -1703,6 +1703,45 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   zaxira — hammasi ✓; yangi dizayn: kompyuterda 80px ikonali panel, telefonda 5 bandli pastki menyu, sahifa xatolari yo'q.
   SINOV direktor hisobi bilan, har qanday yozuv so'rovi to'xtatilgan holda.
 
+## 66) Moliya: buxgalter ko'zi bilan ko'rik, 1C bilan solishtirish; avans hisoboti (M1/M2) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi kassa fayllarida (`fin-seed.sql`, `kassa-docs.sql`,
+`kassa-day.sql`, `kassa-links.sql`, `kassa-checks.sql`, `fin-version.sql`), `fin-kassa.js`, `fin-print.js` va `admin.html` ning
+kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmaydi).
+
+- **Buxgalter ko'rigi** (Claude Docs hisoboti «Kassa moduli: buxgalter ko'rigi va 1C bilan solishtirish»; yakka, buxgalter
+  ko'zi bilan — mustaqil ko'p agentli ko'rik ishga tushirilmadi): 21 ta provodka, 17 ta kassa intizomi talabi, hisobdorlar,
+  fiskal chek, davr yopish ko'rildi. Xulosa: to'sib qo'yuvchi topilma yo'q; 6 ta muhim (M1–M6), 12 ta hisob siyosati qarori
+  buxgalter imzosini kutadi (21-noyabrgacha). 1C bilan: kassa nazorati bo'yicha 1C darajasida (server qulflari, o'zgarmas
+  hujjatlar, kunlik moslik — undan qat'iyroq); to'liq buxgalteriya emas — bosh kitob (4-bosqich), hisobotlar (5-bosqich),
+  soliqlar, asosiy vositalar va ish haqi soliqlari buxgalter dasturida qoladi. M1–M4 va M6 1b-bosqich boshiga qo'yildi.
+- **M1 — avans hisoboti** (F2.6 dan oldinga tortilgan minimal qism): «Kassa» → «Avans hisoboti» (2-ro'yxat yoki Direktor).
+  Naqdsiz dalolatnoma `nc_adv_report` (umumiy «D-» seriya, kassa kitobiga kirmaydi): har chek qatori Dt statiya hisobvarag'i
+  Kt 4230 (hisobdor bo'yicha); xarajatlar «Buxgalteriya»ga o'zi ko'chadi (usul «hisobdor orqali», hujjatga bog'langan);
+  hisobot sanasi (92 kun ichida), 1–40 qator, har qatorda chek yoki hujjat; hisobot qoldiqdan oshmaydi (ortiqcha sarf — F2.6);
+  qayta yuborish — o'sha hujjat; bekor qilish — faqat kiritilgan kuni, sabab bilan (xarajatlar olib tashlanadi, qoldiq tiklanadi).
+  Chop etish: dalolatnoma «Avans hisoboti» (uch tilda), izoh ustuni, qoldiq «oldin → keyin», hisobdor imzosi.
+  «Buxgalteriya»da qo'lda «hisobdor orqali» xarajat endi yozilmaydi (aks holda ikki marta yozilib, qoldiq kamaymasdi) —
+  server ham rad etadi; eski yozuvlarda usul ko'rinib turadi.
+- **M2 — hisobotsiz yangi avans yo'q:** hisobdorda hisobot qilinmagan qoldiq bo'lsa, yangi avans so'rovi Direktor tasdig'ini
+  ham kutadi (summasi T1 dan kichik bo'lsa ham); pul berishda hisobdor qulfi ostida yana tekshiriladi (ikki so'rov qoldiqsiz
+  paytda yozilgan bo'lsa, ikkinchisi rad — xabarda «bekor qilib, qaytadan yozing» yo'li). Sahifa so'rovdan keyin bu haqda aytadi.
+- **Nazorat:** «Hisobdorlardagi pul» = berilgan − qaytim − avans hisobotlari («reported» kaliti); moslikda P4 «adv» — hisobot ↔
+  xarajatlar mos emas yoki hisobotsiz «hisobdor orqali» xarajat. Qulf tartibi: L0 hujjat → hisobdor (`iqror_acc`) → L4 kassa.
+- **Modul relizi 2** (`fin-version.sql`, `SERVER_VER`, `kassa-checks.sql`: ochiq funksiyalar 34, ichki 62).
+- **Hujjatlar:** `yoriqnomalar.md` (bank xarajati usullari, «Hisobdorlar», Direktor istisnosi), `shakllar.md` (Sh-1),
+  `buxgalteriya-ish-reja.md` (holat, F1.26 Z-hisobot — M6, F1.27 tashkilotga naqd — M3, F2.6 toraydi).
+- **Sinovlar:** `test-kassa-report.sql` 68 (+16: AV0–AV16 — rollar, rad holatlari, provodkalar, ko'chgan xarajatlar,
+  nazorat, dup, bekor qilish, Direktor istisnosi, ikki so'rov poygasi, moslik buzilishi), `test-kassa.sql` 225,
+  `test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-fin-period.sql` 36, `test-kassa-checks.sql` 32 (toza holatda
+  avans va hisobot bilan), `test-fin-prereq.sql` 87, `test-audit-fixes.sql` 36, `test-public-close.sql` 92,
+  `test-kassa-race.sh` 22; zanjirni qayta ishga tushirish — OK; JS 29 (`fin-print` 19). Brauzer: 18 ta ishga tushirish
+  (7 kassa ssenariysi × 2 dizayn + to'lov va eski oqimlar, kassali va jonli zanjirda) — hammasi yashil, 448 tekshiruv;
+  `e2e-kassa7` 26 — avans berish, avans hisoboti, bekor qilish, hisobotsiz qoldiqli xodimga yangi avans so'rovi (Direktorga
+  boradi, sahifa aytadi); `e2e-kassa3` — xarajat oynasida endi 2 usul.
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+  Keyingi: F1.26 (M6), F1.27 (M3), F1.22 (M4).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

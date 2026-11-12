@@ -34,6 +34,10 @@ Bekor qilingan order yirtib tashlanmaydi — jildda o‘z raqami o‘rnida saqla
 
 ## Sh-1. Avans hisoboti
 
+Qog‘ozdagi hisobot (cheklar bilan) — birlamchi hujjat. Tekshirilgach u tizimga «Kassa» → «Avans hisoboti» bilan kiritiladi: har chek —
+bitta qator, xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi. Tizim chop etgan dalolatnoma (tasdiqlovchi imzolar
+bilan) shu qog‘oz hisobotga qo‘shib saqlanadi.
+
 «[Tashkilot nomi]» · Avans hisoboti № [___] · [sana]
 «TASDIQLAYMAN»: rahbar [___] (imzo) · summa: [___] so‘m
 

@@ -91,7 +91,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/1$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/2$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
@@ -126,6 +126,9 @@ select zz.chk('A4 2-kun farqsiz yopildi (tekshirilmagan)', (select status || ':'
 -- ---------- 3-kun (06.01.2027): ochiq kun, sinov kassasi, davr surati va qulfi ----------
 select zz.clock('2027-01-06 10:00+05');
 select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 06.01.2027","note":"Kitob uchun","clientRef":"c-k5-0001"}'));
+select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:tch1","basis":"Xo''jalik xaridlari","clientRef":"c-c4-0001"}'));
+select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || zz.pay('U_KAS', zz.id('C4')));   -- hisobdorga avans
+select zz.put('AV1', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"c-av1-0001","partyId":"teachers:tch1","reportDate":"2027-01-06","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 7, 06.01"}]}'));   -- avans hisoboti (dalolatnoma)
 select zz.put('T0', zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"sinov","amount":100000,"startDay":"2027-01-06"}')::text$q$));
 select zz.put('T1', zz.rpc('U_KAS', 'kassa_payout_request', '{"desk":"sinov","op":"out_expense","amount":20000,"partyType":"counterparty","partyId":"cp_sup","basis":"Sinov hisob-fakturasi","clientRef":"c-t1-0001","lines":[{"articleId":"EX-32","amount":20000}]}'));
 select zz.put('T1p', left(zz.appr('U_FM', zz.id('T1')), 0) || zz.pay('U_KAS', zz.id('T1')));
@@ -149,7 +152,7 @@ rollback to savepoint b1;
 select zz.chk('B1 search_path''siz SECURITY DEFINER funksiya (istalgan) — 1-band', :'c1' || '/' || :'bad', '^1/1$');
 
 savepoint b2;
-create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 2';
+create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 3';
 \ir kassa-checks.sql
 rollback to savepoint b2;
 select zz.chk('B2 bazadagi reliz tekshiruv fayli kutganidan boshqa — 2-band (sonlar bandi o''tkazib yuboriladi)', :'c2' || '/' || :'c3' || '/' || :'bad', '^1/0/1$');

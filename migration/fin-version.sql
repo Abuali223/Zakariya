@@ -15,8 +15,9 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --   QOIDA: moliya modulining server shartnomasi o'zgarganda (yangi / o'zgargan RPC, jadval, javob tuzilishi) raqam BIRGA
 --     oshiriladi: shu fayl, fin-kassa.js (SERVER_VER) va kassa-checks.sql (want_ver va kutilgan sonlar) — uchalasi bir xil.
 --   Bu fayl zanjirda moliya fayllarining OXIRGISI bo'lib qoladi (yangi moliya migratsiyalari undan OLDIN qo'shiladi).
+--   Relizlar: 1 — 1a-bosqich (2026-11-10); 2 — avans hisoboti (nc_adv_report), hisobotsiz yangi avans qoidasi (2026-11-12).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 1 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 2 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;
