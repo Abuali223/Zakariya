@@ -1696,6 +1696,12 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
 - **Kutiladigan ma'lumot qatori:** prod'da takroriy o'qituvchi/xodim ID 2 ta (A relizi tekshiruvidan ma'lum) — deploy xatosi emas,
   kartochkada «Yangi noyob ID berish» bilan bir martalik tuzatiladi.
 - Deploy buyrug'i — `migration/deploy/full-deploy.sh` boshidagi qator (egasi ishga tushiradi).
+- **2026-11-12: egasi deploy qildi; tekshiruv (faqat o'qish):** saytdagi 55 fayl (sahifalar, `/sb`, `assets`, `vendor`) `b4ee8e2`
+  bilan bayt-bayt bir xil; A relizi bazada (`payments.statusAt`, `refunds.byUid`, `salary_payments.byUid` ustunlari;
+  `director_daily` da yangi `late` kaliti; `record_manual_payment` bor va anonga yopiq — 42501); kassa moduli yo'q (`kassa_state`,
+  `fin_snapshot_get` — 404, sahifada «Kassa» bo'limi yo'q); «🩺 Tizim holati» — auth, db, gotrue, eskiz, pay, ai, onlayn to'lov,
+  zaxira — hammasi ✓; yangi dizayn: kompyuterda 80px ikonali panel, telefonda 5 bandli pastki menyu, sahifa xatolari yo'q.
+  SINOV direktor hisobi bilan, har qanday yozuv so'rovi to'xtatilgan holda.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
