@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from './fin-words.js';
-import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet } from './fin-print.js';
+import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet, matrixHtml, matrixSheet, daysSheet, advSheet, packSheets } from './fin-print.js';
 import { createRequire } from 'node:module';
 
 const org = { nameUz: '«SINOV MAKTAB» МЧЖ', nameRu: 'ООО «SINOV MAKTAB»', stir: '123456789', place: 'Тошкент ш.', printLang: 'uz-cyrl', extra: {} };
@@ -506,4 +506,101 @@ test('KO-3 XLSX ismsiz nusxa (FD-28): shaxs ID bilan, yuridik shaxs nomi va asos
   assert.match(ru.rows[3][0], /^Обезличенная копия \(FD-28\)/);
   assert.deepEqual([ru.rows[5][4], ru.rows[8][4], ru.rows[6][8]], ['учащийся T-7', 'сотрудник IQX-T1', 'аннулирован (50 000)']);
   assert.deepEqual(journalSheet(mkJournal(), ctx({ rules: rulesJ })).rows[3], [], 'to‘liq nusxada izoh qatori bo‘sh');
+});
+
+// ---------------------------------------------------------------- RP-08: oylik statiya matritsasi va oylik kassa to'plami (F1.22)
+const arr = (n, o) => Array.from({ length: n }, (_, i) => o[i + 1] || 0);
+const run = (n, open, din, dout) => { let b = open; return Array.from({ length: n }, (_, i) => (b += num0(din[i]) - num0(dout[i]))); };
+const num0 = v => Number(v) || 0;
+const mkMatrix = over => {
+  const dayIn = arr(31, { 4: 600000, 8: 2000000, 12: 500000 }), dayOut = arr(31, { 4: 450000, 12: 1500000, 29: 500000 });
+  return Object.assign({ ok: true, month: '2027-01', from: '2027-01-01', to: '2027-01-31', nDays: 31, desk: { id: 'main', name: 'Asosiy kassa', isTest: false },
+    opening: 1000000, closing: 1650000, balanced: true, in: 3100000, out: 2450000, transferIn: 2000000, transferOut: 1500000,
+    rows: [
+      { form: 'KO1', articleId: 'IN-01', kind: 'IN', nameUz: 'Ta’lim xizmati (oylik to‘lov)', nameRu: 'Образовательные услуги', transfer: false, byDay: arr(31, { 4: 600000, 12: 500000 }), total: 1100000 },
+      { form: 'KO1', articleId: 'OP-01', kind: 'OP', nameUz: 'Bankdan naqd olish', nameRu: 'Получение наличных в банке', transfer: true, byDay: arr(31, { 8: 2000000 }), total: 2000000 },
+      { form: 'KO2', articleId: 'EX-20', kind: 'EX', nameUz: 'Oziq-ovqat mahsulotlari', nameRu: 'Продукты питания', transfer: false, byDay: arr(31, { 4: 450000, 29: 500000 }), total: 950000 },
+      { form: 'KO2', articleId: 'OP-02', kind: 'OP', nameUz: 'Bankka topshirish', nameRu: 'Сдача в банк', transfer: true, byDay: arr(31, { 12: 1500000 }), total: 1500000 }],
+    dayIn, dayOut, dayBal: run(31, 1000000, dayIn, dayOut),
+    days: [{ day: '2027-01-04', status: 'verified', closing: 1150000 }, { day: '2027-01-08', status: 'verified', closing: 3150000 },
+           { day: '2027-01-12', status: 'closed', closing: 2150000 }, { day: '2027-01-29', status: 'open', closing: 1650000 }] }, over || {});
+};
+
+test('RP-08 matritsa (chop etish): haftalar bo‘yicha, bo‘limlar va jamlar, ichki o‘tkazma belgisi, qoldiqlar, imzolar; uch tilda', () => {
+  const h = matrixHtml(mkMatrix(), ctx(), W), t = text(h);
+  for (const must of ['«SINOV MAKTAB» МЧЖ', 'КАССА БЎЙИЧА ОЙЛИК СТАТИЯЛАР МАТРИЦАСИ', '2027 йил январь · Asosiy kassa', 'Код Статья Ой кунлари Жами 1–7 8–14 15–21 22–28 29–31',
+    'КИРИМ IN-01 Ta’lim xizmati (oylik to‘lov) 600 000=00 500 000=00 1 100 000=00', 'OP-01 Bankdan naqd olish (ички ўтказма) 2 000 000=00 2 000 000=00',
+    'Жами кирим 600 000=00 2 500 000=00 3 100 000=00', 'ЧИҚИМ EX-20 Oziq-ovqat mahsulotlari 450 000=00 500 000=00 950 000=00',
+    'Жами чиқим 450 000=00 1 500 000=00 500 000=00 2 450 000=00',
+    'Давр охирига қолдиқ 1 150 000=00 2 150 000=00 2 150 000=00 2 150 000=00 1 650 000=00 1 650 000=00',
+    'Ой бошига қолдиқ: 1 000 000=00 · Жами кирим: 3 100 000=00 · Жами чиқим: 2 450 000=00 · Ой охирига қолдиқ: 1 650 000=00',
+    'Ички ўтказмаларсиз (банк): кирим 1 100 000=00, чиқим 950 000=00', 'Тузди: бухгалтер', 'Бош бухгалтер Синов Б.Б.'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(!t.includes('ДИҚҚАТ') && !t.includes('СИНОВ'), 'mos matritsada ogohlantirish va sinov belgisi yo‘q');
+  let r = text(matrixHtml(mkMatrix(), ctx({ lang: 'ru' }), W));
+  assert.ok(r.includes('МЕСЯЧНАЯ МАТРИЦА СТАТЕЙ ПО КАССЕ') && r.includes('Январь 2027 г.') && r.includes('Образовательные услуги') && r.includes('(внутреннее перемещение)')
+    && r.includes('Итого приход') && r.includes('Без внутренних перемещений (банк): приход 1 100 000=00, расход 950 000=00') && r.includes('Составил: бухгалтер'), r);
+  r = text(matrixHtml(mkMatrix({ balanced: false, desk: { id: 'sinov', name: 'Sinov kassasi', isTest: true } }), ctx({ lang: 'uz-latn' }), W));
+  assert.ok(r.includes('KASSA BO‘YICHA OYLIK STATIYALAR MATRITSASI') && r.includes('2027-yil yanvar') && r.includes('DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas') && r.includes('SINOV'), r);
+  const feb = text(matrixHtml(mkMatrix({ month: '2027-02', nDays: 28, rows: [], dayIn: arr(28, {}), dayOut: arr(28, {}), dayBal: arr(28, {}), in: 0, out: 0, transferIn: 0, transferOut: 0, opening: 0, closing: 0 }), ctx({ lang: 'uz-latn' }), W));
+  assert.ok(feb.includes('Bu oyda o‘tkazilgan order yo‘q.') && feb.includes('2027-yil fevral'), feb);
+  assert.ok(!matrixHtml(mkMatrix({ rows: [Object.assign({}, mkMatrix().rows[0], { nameUz: '<b>x</b>' })] }), ctx(), W).includes('<b>x</b>'), 'nom ekranlanadi');
+});
+
+test('RP-08 XLSX varag‘i: kunlar bo‘yicha (son katakchalar), bo‘limlar, kun oxiri qoldig‘i faqat kassa kunlarida; SheetJS bilan yozib-o‘qiladi', () => {
+  const sh = matrixSheet(mkMatrix(), ctx());
+  assert.equal(sh.name, 'E2 Statiyalar');
+  assert.deepEqual(sh.rows[4].slice(0, 4).concat(sh.rows[4].slice(-2)), ['Kod', 'Statiya', '1', '2', '31', 'Jami']);
+  assert.equal(sh.rows[4].length, 34);
+  assert.deepEqual([sh.rows[5][1], sh.rows[6][0], sh.rows[6][1], sh.rows[6][5], sh.rows[6][6], sh.rows[6][33]],
+    ['KIRIM', 'IN-01', 'Ta’lim xizmati (oylik to‘lov)', { t: 'n', v: 600000, z: '#,##0.00' }, '', { t: 'n', v: 1100000, z: '#,##0.00' }]);
+  assert.equal(sh.rows[7][1], 'Bankdan naqd olish (ichki o‘tkazma)');
+  assert.deepEqual([sh.rows[8][1], sh.rows[8][33].v, sh.rows[9][1], sh.rows[12][1], sh.rows[12][33].v], ['Jami kirim', 3100000, 'CHIQIM', 'Jami chiqim', 2450000]);
+  const bal = sh.rows[13];
+  assert.deepEqual([bal[1], bal[5].v, bal[6], bal[9].v, bal[13].v, bal[30].v, bal[31], bal[33].v], ['Kun oxiriga qoldiq', 1150000, '', 3150000, 2150000, 1650000, '', 1650000], 'faqat kassa kunlari');
+  assert.ok(sh.rows.some(r => r[1] === 'Oy boshiga qoldiq' && r[2].v === 1000000) && sh.rows.some(r => r[1] === 'Jami kirim — ichki o‘tkazma' && r[2].v === 2000000));
+  const require = createRequire(import.meta.url), X = require('../../vendor/xlsx/xlsx.mini.min.js');
+  const wb = X.utils.book_new(); const ws = X.utils.aoa_to_sheet(sh.rows); ws['!cols'] = sh.cols; X.utils.book_append_sheet(wb, ws, sh.name);
+  const back = X.read(X.write(wb, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  const rows = X.utils.sheet_to_json(back.Sheets['E2 Statiyalar'], { header: 1, raw: true, defval: '' });
+  assert.equal(rows[6].slice(2, 33).reduce((s, v) => s + (Number(v) || 0), 0), rows[6][33], 'kunlar yig‘indisi = jami (Excel’da son)');
+  const ru = matrixSheet(mkMatrix(), ctx({ lang: 'ru' }));
+  assert.ok(ru.name === 'E2 Статьи' && ru.rows[4][1] === 'Статья' && ru.rows[5][1] === 'ПРИХОД' && ru.rows[6][1] === 'Образовательные услуги', JSON.stringify(ru.rows.slice(4, 7)));
+});
+
+test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobdorlar — ismsiz va to‘liq; bitta kitobga yoziladi', () => {
+  const pack = { ok: true, month: '2027-01', from: '2027-01-01', to: '2027-01-31', masked: true, desk: { id: 'main', name: 'Asosiy kassa', isTest: false },
+    journal: mkJournal({ masked: true }), matrix: mkMatrix(),
+    days: [
+      { day: '2027-01-04', status: 'verified', opening: 1000000, receipts: 600000, payouts: 450000, closing: 1150000, counted: 1150000, diff: 0, docs: 3, voids: 1, reopens: 0, z: { needed: true, recorded: true, missing: false, no: 'Z-1', cash: 600000, card: 0, ok: true } },
+      { day: '2027-01-08', status: 'verified', opening: 1150000, receipts: 2000000, payouts: 0, closing: 3150000, counted: 3150000, diff: 0, docs: 1, voids: 0, reopens: 0, z: { needed: true, recorded: true, missing: true, reason: 'Apparat buzilgan' } },
+      { day: '2027-01-12', status: 'closed', opening: 3150000, receipts: 500000, payouts: 1500000, closing: 2150000, counted: 2140000, diff: -10000, docs: 2, voids: 0, reopens: 1, z: { needed: true, recorded: true, missing: false, no: 'Z-2', cash: 490000, card: 0, ok: false, diffCash: -10000, diffCard: 0 } },
+      { day: '2027-01-29', status: 'open', opening: 2150000, receipts: 0, payouts: 500000, closing: 1650000, counted: null, diff: null, docs: 1, voids: 0, reopens: 0, z: { needed: true, recorded: false, missing: false } }],
+    advances: [{ code: 'IQT-T1', partyName: null, opening: 0, issued: 50000, returned: 0, reported: 0, closing: 50000 },
+               { code: 'IQX-T1', partyName: null, opening: 100000, issued: 500000, returned: 150000, reported: 200000, closing: 250000 }] };
+  const sheets = packSheets(pack, ctx());
+  assert.deepEqual(sheets.map(x => x.name), ['E1 KO-3', 'E2 Statiyalar', 'E3 Kassa kunlari', 'E4 Hisobdorlar']);
+  assert.match(sheets[0].rows[3][0], /^Ismsiz nusxa \(FD-28\)/, 'E1 — ismsiz KO-3');
+  const d = sheets[2].rows;
+  assert.deepEqual(d[4].slice(0, 4), ['Sana', 'Holat', 'Kun boshi', 'Kirim']);
+  assert.deepEqual(d.slice(5, 9).map(r => [r[1], r[11], r[14]]), [['tekshirilgan', 'Z-1', 'mos'], ['tekshirilgan', '', 'yo‘q: Apparat buzilgan'],
+    ['yopilgan', 'Z-2', 'farq: naqd -10 000, karta 0'], ['ochiq', '', 'kiritilmagan']]);
+  assert.deepEqual([d[5][0].v, d[7][7].v, d[8][6], d[7][10]], [46391, -10000, '', 1], 'sana — Excel sanasi, farq — son, ochiq kunda sanalgan yo‘q');
+  const tot = d[d.length - 1];
+  assert.deepEqual([tot[0], tot[3].v, tot[4].v, tot[7].v, tot[8], tot[9]], ['Jami', 3100000, 2450000, -10000, 7, 1]);
+  const a = sheets[3].rows;
+  assert.match(a[3][0], /^Ismsiz nusxa \(FD-28\): xodimlar tabel kodi bilan/);
+  assert.deepEqual(a[4], ['Xodim (tabel kodi)', 'Oy boshiga qoldiq', 'Berildi (avans)', 'Qaytdi (qaytim)', 'Avans hisobotlari', 'Oy oxiriga qoldiq'], 'ismsizda F.I.Sh. ustuni yo‘q');
+  assert.deepEqual([a[6][0], a[6][1].v, a[6][5].v, a[a.length - 1][0], a[a.length - 1][5].v], ['IQX-T1', 100000, 250000, 'Jami', 300000]);
+  const full = advSheet(Object.assign({}, pack, { masked: false, advances: [Object.assign({}, pack.advances[1], { partyName: 'Sinov Zavxoz' })] }), ctx());
+  assert.deepEqual([full.rows[3], full.rows[4][1], full.rows[5][1], full.rows[5][6].v], [[], 'F.I.Sh.', 'Sinov Zavxoz', 250000], 'Direktor nusxasi — ism bilan');
+  assert.equal(advSheet(Object.assign({}, pack, { advances: [] }), ctx()).rows[5][0], 'Harakat va qoldiq yo‘q');
+  const require = createRequire(import.meta.url), X = require('../../vendor/xlsx/xlsx.mini.min.js');
+  const wb = X.utils.book_new();
+  sheets.forEach(s => { const ws = X.utils.aoa_to_sheet(s.rows); ws['!cols'] = s.cols; X.utils.book_append_sheet(wb, ws, s.name); });
+  const back = X.read(X.write(wb, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  assert.deepEqual(back.SheetNames, ['E1 KO-3', 'E2 Statiyalar', 'E3 Kassa kunlari', 'E4 Hisobdorlar']);
+  const ru = packSheets(pack, ctx({ lang: 'ru' }));
+  assert.deepEqual(ru.map(x => x.name), ['E1 КО-3', 'E2 Статьи', 'E3 Кассовые дни', 'E4 Подотчётные']);
+  assert.ok(ru[2].rows[5][1] === 'проверен' && ru[2].rows[7][14] === 'расхождение: наличные -10 000, карты 0' && ru[3].rows[4][0] === 'Сотрудник (табельный №)');
 });

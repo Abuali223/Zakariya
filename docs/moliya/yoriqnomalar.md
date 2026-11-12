@@ -59,8 +59,8 @@ natijani aytadi; farq bo‘lsa buxgalter sababini so‘raydi. Z-hisobot qo‘lda
 farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi yozadi — sababini izohga yozing. Keyin «🖨 KO-4» (2 nusxa) va
 «🖨 Kunlik hisobot»: imzolab, orderlar, ilovalari va Z-hisobot bilan moliya menejeriga topshiring.
 
-**Oy oxiri** — «KO-3» (kassa orderlari jurnali): oyni tanlab ko‘ring va «🖨 KO-3» chop eting. Excel fayl sizda yo‘q — uni moliya
-menejeri, buxgalter yoki Direktor oladi.
+**Oy oxiri** — «KO-3» (kassa orderlari jurnali) va «Statiyalar» (oylik statiya matritsasi): oyni tanlab ko‘ring va chop eting
+(«🖨 KO-3», «🖨 Chop etish»). Excel fayllar sizda yo‘q — ularni moliya menejeri, buxgalter yoki Direktor oladi.
 
 **Internet yoki tizim ishlamasa** — `ishga-tushirish.md`, 8-bo‘lim («Қ» blankasi to‘lovchiga berilmaydi; dalil — fiskal chek).
 
@@ -100,11 +100,15 @@ beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
 
 **Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → **«KO-3»** (kassa orderlari jurnali):
 oy tanlanadi, jamlar va «davr boshi + kirim − chiqim = davr oxiri» tekshiriladi, «🖨 KO-3» chop etilib imzolanadi, «⬇ Excel» —
-buxgalter dasturi uchun (summalar son, sana — Excel sanasi) → Direktor «Davr»da surat oladi va davrni yopadi.
+buxgalter dasturi uchun (summalar son, sana — Excel sanasi) → **«Statiyalar»** (oylik statiya matritsasi, RP-08): oy tanlanadi,
+kirim va chiqim statiyalar bo‘yicha (bank bilan ichki o‘tkazma alohida — daromad ham, xarajat ham emas), «🖨 Chop etish» —
+haftalar kesimida, imzolanadi; «⬇ Oylik to‘plam (Excel)» — buxgalter uchun bitta fayl, to‘rt varaq: E1 KO-3, E2 statiyalar
+(kunlar bo‘yicha), E3 kassa kunlari (KO-4 jamlari, sanash va farq, Z-hisobot), E4 hisobdorlar (oy boshi, berildi, qaytdi,
+hisobot, oy oxiri) → Direktor «Davr»da surat oladi va davrni yopadi.
 
-KO-3 Excel tugmasi Moliya menejeri, buxgalter va Direktorda (kassir jurnalni chop etadi). Sizning faylingiz ismsiz (FD-28, fayl
-nomida «-ismsiz»): o‘quvchi — ID, xodim — tabel kodi, boshqa jismoniy shaxs — nomsiz, ularning hujjatlaridagi asos va bekor qilish
-sababi chiqmaydi; yetkazib beruvchi, tashkilot va bank nomi va asosi qoladi; to‘liq nusxa — Direktorda. «Davr» oynasida
+KO-3 Excel va oylik to‘plam tugmalari Moliya menejeri, buxgalter va Direktorda (kassir chop etadi). Sizning fayllaringiz ismsiz
+(FD-28, fayl nomida «-ismsiz»): o‘quvchi — ID, xodim — tabel kodi, boshqa jismoniy shaxs — nomsiz, ularning hujjatlaridagi asos
+va bekor qilish sababi chiqmaydi; yetkazib beruvchi, tashkilot va bank nomi va asosi qoladi; to‘liq nusxa — Direktorda. «Davr» oynasida
 suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq. Sizga yuklanadigan JSON —
 ismsiz (o‘quvchi va xodim faqat ID bilan, fayl nomida «-ismsiz»); ismli to‘liq nusxa faqat Direktorda — arxivga Direktor yuklagani
 qo‘yiladi.
@@ -137,7 +141,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Oldingi avansi hisobotsiz xodimga yangi avans (istisno) | «So‘rovlar» → «Tasdiqlash» | kassa tartibidan istisno; so‘rovda «Direktor tasdig‘i» talabi o‘zi qo‘yiladi |
 | Yuridik shaxsga kassadan naqd to‘lov | «So‘rovlar» → «Tasdiqlash» | chegara — «⚙ Sozlamalar» (bo‘sh — har doim Direktor); asosiy yo‘l — bank |
 | Sozlamalar, imzo egalari, boshlang‘ich qoldiq | «⚙ Sozlamalar» | chegaralarni faqat Direktor o‘zgartiradi |
-| KO-3 jurnalining to‘liq (ismli) Excel nusxasi | «Kassa» → «KO-3» → «⬇ Excel» | boshqalarga ismsiz nusxa chiqadi (FD-28); ismli faylda shaxsiy ma’lumot bor — ehtiyot bilan saqlanadi |
+| KO-3 va oylik kassa to‘plamining to‘liq (ismli) Excel nusxasi | «Kassa» → «KO-3» → «⬇ Excel»; «Statiyalar» → «⬇ Oylik to‘plam» | boshqalarga ismsiz nusxa chiqadi (FD-28); ismli faylda shaxsiy ma’lumot bor — ehtiyot bilan saqlanadi |
 
 Kassir yo‘qligida kunni Direktor yoki moliya menejeri yopishi mumkin — kamida 2 kishilik komissiya bilan.
 

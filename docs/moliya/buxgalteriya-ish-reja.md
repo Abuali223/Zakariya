@@ -702,9 +702,9 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
 | RP-05 | Telegram kassa bloki + nazorat qatori (moslik, ochiq kunlar, bekor qilishlar, farqlar) | 1a |
 | RP-06 | Nazorat ro‘yxati (ochiq / tekshirilmagan kunlar, bekor qilish, qayta ochish, farq va 5910, KO-1 siz naqd, tasdiq kutayotgan KO-2, eski qaytarishlar, oflayn, fiskal istisno, «boshqa» tomonlar, limit, raqamlash, 4230/4290 muddati) | 1a |
 | RP-07 | Hisobdor kartochkasi (yosh — 2) | 1a–2 |
-| RP-08 / 09 | Oy statiya matritsasi (kassa); barcha usullar bo‘yicha matritsa (o‘quv va kalendar yili, maosh taqsimoti) | 1b / 2 |
+| RP-08 / 09 | Oy statiya matritsasi (kassa — ✅ 1b, `kassa_matrix`); barcha usullar bo‘yicha matritsa (o‘quv va kalendar yili, maosh taqsimoti) | 1b / 2 |
 | RP-10 / 11 / 12 | Kontragent ko‘chirmasi; kanallar bo‘yicha pul; bank reyestri va 5710 qoldiqlari | 2 / 3 |
-| RP-13…16 | Jurnal, OSV, kartochka va tahlillar; oylik eksport to‘plami E1–E8 (kassa qismi 1b dan, F1.22) | 4 |
+| RP-13…16 | Jurnal, OSV, kartochka va tahlillar; oylik eksport to‘plami E1–E8: kassa qismi E1–E4 (✅ 1b, F1.22 — KO-3, statiya matritsasi, kassa kunlari, hisobdorlar), bosh kitob qismi E5–E8 (jurnal, OSV, kartochkalar, tahlillar) | 4 |
 | RP-17…21 | 1/2-shakl (FD-45 bo‘yicha 3/4 ham); BHMS 9 pul oqimi (230 + 220 + 221 = 240); hisoblash asosidagi matritsa; ota-ona ma’lumotnomasi; nazorat hisobotlari | 5 |
 | RP-22 | Haftalik KPI (o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar) | 1b |
 
@@ -844,13 +844,16 @@ beruvchi / tashkilot) kassadan naqd xarajat (F1.27, M3): so‘rov oynasida ogohl
 standart 0), nazorat ro‘yxatida oxirgi 30 kun. KO-3 kassa orderlari jurnali (F1.22, M4): oy yoki chorak bo‘yicha, bekor
 qilinganlari bilan, qoldiqlar mosligi, chop etish (KO-3 shakli, uch tilda) va XLSX (summa — son, sana — Excel sanasi; FD-28:
 kassirda yo‘q, Moliya menejeri va buxgalterga ismsiz — ID bilan, jismoniy shaxs hujjatining asosi va sababisiz; Direktorga
-to‘liq). Modul relizi 6. Sinov kassasi (CT-20)
+to‘liq). RP-08 oylik statiya matritsasi (`kassa_matrix`): statiya × kun, bank bilan ichki o‘tkazma alohida, kunlik jamlar va
+qoldiq — KO-3 va KO-4 bilan o‘zaro tekshiriladi; chop etish haftalar kesimida, Excel — kunlar bo‘yicha. Buxgalter uchun oylik
+kassa to‘plami (`kassa_month_pack`, E1–E4): bitta Excel — KO-3, statiyalar, kassa kunlari (KO-4 jamlari, sanash, Z),
+hisobdorlar (4230); 2-ro‘yxatga ismsiz (FD-28). Modul relizi 7. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 109, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 120, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
-parallel, 10 % ROLLBACK), `fin-print.test.mjs` 24, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
-42; brauzerda o‘nta to‘liq stsenariy (257 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 27, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
+42; brauzerda o‘n bitta to‘liq stsenariy (274 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
@@ -905,7 +908,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 |---|---|---|---|---|---|
 | F1.20 | S | 0,5 | RF-08 RLS relizi (toza haftadan keyin), orqaga qaytarish migratsiyasi bilan | F1.11; 7 kun P4/P5 = 0 | To‘g‘ridan-to‘g‘ri yozuv rad |
 | F1.21 | M | 2,5 | `accountant` roli: yorliqlar, tablar, ~10 jadval SELECT siyosati, `can_see_salary`, `students_billing`, `v_fns` | F1.1; FD-18, 28 | Rol testlari; ro‘yxat yopiq |
-| F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli; Excel — FD-28 bo‘yicha `kassa_journal_export`: kassirda yo‘q, 2-ro‘yxatga ismsiz, Direktorga to‘liq) — buxgalter ko‘rigi M4; qoldi: RP-08 va oylik kassa to‘plami (E1–E8) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
+| F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli; Excel — FD-28 bo‘yicha `kassa_journal_export`: kassirda yo‘q, 2-ro‘yxatga ismsiz, Direktorga to‘liq) — buxgalter ko‘rigi M4; ✅ RP-08 oylik statiya matritsasi (`kassa_matrix`; chop etish — haftalar, XLSX — kunlar); ✅ oylik kassa to‘plami E1–E4 (`kassa_month_pack`: KO-3, statiyalar, kassa kunlari, hisobdorlar; FD-28) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
 | F1.23 | S | 0,5 | O‘zaro hisob dalolatnomasi chop etish; sozlamalar | F1.5 | — |
 | F1.24 | S | 1 | Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | RP-22 haftalik KPI | F1.15 | Direktor ko‘radi |

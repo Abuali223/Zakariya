@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 6;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 7;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -102,6 +102,7 @@ function draw() {
   if (od && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul (pul sanaladi, kun ochiq qoladi)">Smena topshirish</button>`);
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
+  if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
   if (m.director) acts.push(`<button class="btn ghost2" id="ks-set" title="Kassa sozlamalari">⚙ Sozlamalar</button>`);
   $('#ks-actions').innerHTML = acts.join('');
 
@@ -238,6 +239,7 @@ function bind() {
   on('#ks-set', openSettings);
   on('#ks-period', openPeriodForm);
   on('#ks-ko3', openJournal);
+  on('#ks-mx', openMatrix);
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
@@ -850,6 +852,66 @@ async function openJournal() {
       const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, sh.name);
       X.writeFile(wb, `KO-3_${(E.desk && E.desk.id) || 'kassa'}_${E.from}_${E.to}${E.masked ? '-ismsiz' : ''}.xlsx`);
       if (E.masked) C.toast('Saqlandi: ismsiz (ID bilan) — ismli nusxa faqat Direktorda');
+    } catch (e) { C.toast('Excel fayl tuzilmadi: ' + errText(e), true); }
+  };
+  await load();
+}
+// ---------------------------------------------------------------- RP-08: oylik statiya matritsasi (F1.22) va oylik kassa to'plami
+//   Ekranda va chop etishda — haftalar bo'yicha; Excel (oylik to'plam: KO-3, statiyalar kunlar bo'yicha, kassa kunlari, hisobdorlar) —
+//   faqat Moliya menejeri, buxgalter va Direktor (FD-28: 2-ro'yxatga ismsiz).
+const MONTHS_UZ = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+async function openMatrix() {
+  const today = String(ST.ov.state.today || ''), m = me(), canX = !!(m.director || m.list2);
+  const opts = []; let y = +today.slice(0, 4), mo = +today.slice(5, 7);
+  for (let i = 0; i < 24 && y > 2000; i++) { opts.push(`${y}-${String(mo).padStart(2, '0')}`); if (--mo < 1) { mo = 12; y--; } }
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Statiyalar — oylik matritsa</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Kassadagi naqd kirim va chiqim statiyalar bo‘yicha, haftalar kesimida (Excel’da — kunlar bo‘yicha). Ichki o‘tkazma (bank) daromad ham, xarajat ham emas.${canX ? ` «Oylik to‘plam» — buxgalter uchun bitta Excel: KO-3, statiyalar, kassa kunlari, hisobdorlar${m.director ? '' : ' (ismsiz: shaxslar ID bilan; to‘liq nusxa — Direktorda)'}.` : ''}</div>
+      <div class="grid2">${lbl('Oy', `<select id="km-month" style="${FLD}">${opts.map(v => `<option value="${esc(v)}">${esc(MONTHS_UZ[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4))}</option>`).join('')}</select>`)}
+        <div style="display:flex;align-items:flex-end"><button type="button" class="btn ghost2" id="km-load">Ko‘rsatish</button></div></div>
+      <div id="km-body" style="margin-top:10px"></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${canX ? '<button type="button" class="btn ghost2" id="km-pack" disabled>⬇ Oylik to‘plam (Excel)</button>' : ''}<button type="button" class="btn gold" id="km-print" disabled>🖨 Chop etish</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  let M = null;
+  const pb = () => $('#km-pack');
+  const load = async () => {
+    const month = $('#km-month').value;
+    $('#km-body').innerHTML = '<div class="loading">Yuklanmoqda…</div>'; $('#km-print').disabled = true; if (pb()) pb().disabled = true; M = null;
+    try { M = await call('kassa_matrix', { p_desk: ST.desk, p_month: month }); }
+    catch (e) { $('#km-body').innerHTML = ''; C.toast(errText(e), true); return; }
+    const n = num(M.nDays), wk = []; for (let a = 1; a <= n; a += 7) wk.push([a, Math.min(a + 6, n)]);
+    const sumW = (arr, a, b) => { let v = 0; for (let i = a - 1; i < b; i++) v += num(arr && arr[i]); return Math.round(v * 100) / 100; };
+    // ekranda — «statiya | oy jami», haftalar bo'yicha taqsimot nom ostida (to'liq jadval — chop etishda va Excel'da)
+    const amt = v => esc(som(v).replace(' so‘m', ''));
+    const weeks = arr => wk.map(([a, b]) => [a, b, sumW(arr, a, b)]).filter(w => w[2]).map(([a, b, v]) => `${a}–${b}: ${amt(v)}`).join(' · ');
+    const sec = (form, title, totLabel, dayArr, tot) => {
+      const rs = (M.rows || []).filter(x => x.form === form);
+      return `<tr><td colspan="2" style="font-weight:700;background:#eef3f1">${esc(title)}</td></tr>`
+        + rs.map(x => `<tr><td data-label="Statiya" style="white-space:normal;overflow-wrap:anywhere">${esc(x.nameUz || x.articleId || '(statiyasiz)')}<div class="small muted">${esc(x.articleId || '')}${x.transfer ? ' · ichki o‘tkazma' : ''}</div><div class="small muted">${weeks(x.byDay)}</div></td>
+            <td data-label="Oy jami" style="text-align:right;white-space:nowrap;vertical-align:top"><b>${amt(x.total)}</b></td></tr>`).join('')
+        + `<tr style="font-weight:700"><td data-label="" style="white-space:normal">${esc(totLabel)}<div class="small muted" style="font-weight:400">${weeks(dayArr)}</div></td><td data-label="Oy jami" style="text-align:right;white-space:nowrap;vertical-align:top">${esc(som(tot))}</td></tr>`;
+    };
+    const exIn = num(M.in) - num(M.transferIn), exOut = num(M.out) - num(M.transferOut);
+    $('#km-body').innerHTML = `<div class="small" id="km-sum" style="background:#eef3f1;border-radius:10px;padding:10px 12px">Oy boshi <b>${esc(som(M.opening))}</b> · kirim <b>${esc(som(M.in))}</b> · chiqim <b>${esc(som(M.out))}</b> · oy oxiri <b>${esc(som(M.closing))}</b><br>Ichki o‘tkazmalarsiz (bank): kirim <b>${esc(som(exIn))}</b>, chiqim <b>${esc(som(exOut))}</b>${M.balanced === false ? ' · <b style="color:#B42318">qoldiqlar mos emas — Direktorga xabar bering</b>' : ''}</div>
+      ${(M.rows || []).length ? `<div class="tablewrap" style="max-height:360px;overflow:auto;margin-top:8px"><table id="km-tbl"><thead><tr><th style="white-space:normal">Statiya · haftalar (kunlar)</th><th style="text-align:right">Oy jami</th></tr></thead>
+        <tbody>${sec('KO1', 'Kirim', 'Jami kirim', M.dayIn, M.in)}${sec('KO2', 'Chiqim', 'Jami chiqim', M.dayOut, M.out)}</tbody></table></div>` : '<div class="empty" style="margin-top:8px">Bu oyda o‘tkazilgan order yo‘q.</div>'}`;
+    $('#km-print').disabled = false; if (pb()) pb().disabled = false;
+  };
+  $('#km-load').onclick = load; $('#km-month').onchange = load;
+  $('#km-print').onclick = async () => {
+    if (!M) return;
+    try { const [pm, wm] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), loadRefs()]); C.printHTML(pm.matrixHtml(M, printCtx({}, M.desk && M.desk.isTest, null), wm)); }
+    catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+  };
+  if (canX) pb().onclick = async () => {
+    if (!M) return;
+    const X = window.XLSX;
+    if (!X || !X.utils || !X.writeFile) { C.toast('Excel kutubxonasi hali yuklanmadi — sahifani yangilab qayta urining', true); return; }
+    try {
+      const [pm, P] = await Promise.all([C.finMod('fin-print'), call('kassa_month_pack', { p_desk: ST.desk, p_month: M.month }), loadRefs()]);
+      const wb = X.utils.book_new();
+      pm.packSheets(P, printCtx({}, false, null)).forEach(sh => { const ws = X.utils.aoa_to_sheet(sh.rows); ws['!cols'] = sh.cols; X.utils.book_append_sheet(wb, ws, sh.name); });
+      X.writeFile(wb, `Kassa_${(P.desk && P.desk.id) || 'kassa'}_${P.month}${P.masked ? '-ismsiz' : ''}.xlsx`);
+      C.toast(P.masked ? 'Saqlandi: ismsiz (ID bilan) — ismli nusxa faqat Direktorda' : 'Saqlandi: oylik kassa to‘plami');
     } catch (e) { C.toast('Excel fayl tuzilmadi: ' + errText(e), true); }
   };
   await load();

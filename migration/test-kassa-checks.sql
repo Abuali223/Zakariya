@@ -91,7 +91,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/6$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/7$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
@@ -152,7 +152,7 @@ rollback to savepoint b1;
 select zz.chk('B1 search_path''siz SECURITY DEFINER funksiya (istalgan) — 1-band', :'c1' || '/' || :'bad', '^1/1$');
 
 savepoint b2;
-create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 7';
+create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 8';
 \ir kassa-checks.sql
 rollback to savepoint b2;
 select zz.chk('B2 bazadagi reliz tekshiruv fayli kutganidan boshqa — 2-band (sonlar bandi o''tkazib yuboriladi)', :'c2' || '/' || :'c3' || '/' || :'bad', '^1/0/1$');

@@ -1861,6 +1861,44 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 6)».
 - **Qilinmagan:** RP-08 va oylik kassa to'plami (E1–E8) — keyingi qadam; mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi.
 
+## 71) Moliya, 1b: RP-08 oylik statiya matritsasi va buxgalter uchun oylik kassa to'plami (F1.22 yakuni) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi kassa fayllarida (`kassa-day.sql`, `kassa-checks.sql`,
+`fin-version.sql`) va `fin-kassa.js`, `fin-print.js` da.
+
+- **Server:** `kassa_matrix(desk, month)` — oy bo'yicha kassadagi naqd harakat statiyalar kesimida: qator — (shakl, statiya),
+  ustun — oy kunlari; manba — o'tkazilgan KO-1 / KO-2 ning naqd qatorlari (KO-4 va kunlik hisobot bilan bir manba); bank bilan
+  ichki o'tkazma (5110 / 5710 — kunlik hisobotdagi qoida) belgilanadi va jamlari alohida; kunlik kirim / chiqim va qoldiq; oy boshi
+  va oxiri — KO-3 bilan bitta qoida (yangi umumiy yordamchi `app.kassa_period_bal`, `kassa_journal` ham undan foydalanadi). Ko'rish —
+  kassa o'quvchilari (kassir ham); o'qituvchi — yo'q. `kassa_month_pack(desk, month)` — buxgalter uchun oylik kassa to'plami
+  (E1–E4): KO-3 (`kassa_journal_export`, FD-28), matritsa, kassa kunlari (KO-4 jamlari, sanash va farq, hujjatlar, qayta ochish,
+  Z-hisobot solishtiruvi — kim kiritgani chiqmaydi), hisobdorlar (4230: oy boshi, berildi, qaytdi, avans hisoboti, oy oxiri). Faqat
+  Moliya menejeri, buxgalter va Direktor; 2-ro'yxatga ismsiz (xodim — tabel kodi), Direktorga to'liq; kassir — rad.
+- **Sahifa:** «Kassa» → «Statiyalar» (kassir, Moliya menejeri / buxgalter, Direktor): oy tanlanadi (oxirgi 24 oy), jamlar (ichki
+  o'tkazmasiz ham), «Statiya · haftalar» jadvali — oy jami, haftalar bo'yicha taqsimot nom ostida (telefonda ham sig'adi);
+  «🖨 Chop etish» — rasmiy shakl (uch tilda, A4): haftalar ustunlari (1–7, 8–14, …), bo'limlar va jamlar, davr oxiri qoldig'i,
+  ichki o'tkazmasiz jamlar, manba izohi, «Tuzdi» va bosh buxgalter imzosi; «⬇ Oylik to'plam (Excel)» — faqat 2-ro'yxat va Direktor:
+  bitta kitob, to'rt varaq (E1 KO-3, E2 statiyalar kunlar bo'yicha, E3 kassa kunlari, E4 hisobdorlar), ismsiz faylda «-ismsiz».
+- **Qo'llanma:** `yoriqnomalar.md` (kassir — oy oxiri; 2-ro'yxat — statiyalar va oylik to'plam; Direktor — to'liq nusxa),
+  `ishga-tushirish.md` (oy oxiri ro'yxatining 4-qadami), reja — F1.22 ✅ (KO-3, RP-08, oylik kassa to'plami E1–E4), hisobotlar
+  katalogida RP-08 va E1–E8 tarkibi (E1–E4 — kassa qismi, E5–E8 — bosh kitob qismi, 4-bosqich).
+- **Modul relizi 7** (`kassa-checks.sql`: ochiq funksiyalar 39, ichki 67).
+- **Sinovlar:** `test-kassa-report.sql` 120 (+11, X0–X9: huquqlar va noto'g'ri oy / kassa; matritsa = KO-3 (kirim, chiqim, qoldiqlar);
+  qatorlar va kunlar yig'indilari; ichki o'tkazmalar va tartib; har yopilgan kunda kunlik jamlar va qoldiq = kassa kuni (KO-4);
+  sinov kassasi alohida; bo'sh oy; to'plam tarkibi va Z (kim kiritgani yo'q); hisobdorlar — formula va matritsa bilan tenglik;
+  ismsiz to'plamda ism va foydalanuvchi ID lari yo'q; Direktor — to'liq); `fin-print.test.mjs` 27 (+3: matritsa chop etish uch tilda,
+  ogohlantirish, bo'sh oy, ekranlash; matritsa XLSX varag'i — kunlar, kun oxiri qoldig'i faqat kassa kunlarida, SheetJS bilan
+  yozib-o'qiladi; oylik to'plam — E1–E4, Z holatlari, ismsiz va to'liq hisobdorlar, bitta kitob); brauzer — yangi `e2e-kassa11`
+  17 (ikkala dizaynda): oyna jamlari va jadvali, chop etish matni, ismsiz to'plam yuklab olinib o'qiladi (4 varaq, son katakchalar,
+  sana, tabel kodi, ism yo'q), xabar, Direktor to'plami to'liq, kassirda Excel yo'q, telefonda oyna va jadval sig'adi, server rad
+  etadi. `e2e-kassa6` — reliz 7. Barcha SQL to'plamlari yashil (225 / 54 / 93 / 120 / 36 / 87 / 36 / 92 / 32), poyga 22, JS 38,
+  `tg-daily` 42. Brauzer: 26 ta ishga tushirish, hammasi yashil (596 tekshiruv). Oldingi relizdan (`0867f4f`, reliz 6) yangilanish — xatosiz, `kassa-checks.sql` «muammo
+  topilmadi (modul relizi 7)». Matritsa chop etish shakli A4 da ko'z bilan tekshirildi (kirill va rus).
+- **Ko'rikda topilib tuzatilgan:** ekrandagi jadvalda haftalik ustunlar oynaga sig'masdan summalar ko'rinmay qolgan edi (kompyuterda
+  ham, telefonda ham) — ekranda «statiya | oy jami» ga soddalashtirildi, haftalar nom ostida; sinovga jadval kengligi tekshiruvi
+  qo'shildi. Chop etishda yakuniy summalar satr oxirida bo'linmaydi.
+- **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

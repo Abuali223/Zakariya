@@ -51,7 +51,12 @@ const T = {
     ko3: 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', ko3Form: 'КО-3 шакли', ko3In: 'Кирим касса ҳужжатлари', ko3Out: 'Чиқим касса ҳужжатлари',
     ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ',
     ko3Nos: (f1, l1, f2, l2) => `Рақамлар: кирим ${f1 ? f1 + '–' + l1 : 'йўқ'}, чиқим ${f2 ? f2 + '–' + l2 : 'йўқ'}`, ko3Bad: 'ДИҚҚАТ: давр боши + кирим − чиқим давр охирига тенг эмас', ko3Docs: (a, b, v) => `Кирим: ${a} та, чиқим: ${b} та, бекор қилинган: ${v} та`,
-    accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`,
+    mx: 'КАССА БЎЙИЧА ОЙЛИК СТАТИЯЛАР МАТРИЦАСИ', mxPer: (y, mi) => `${y} йил ${['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][mi]}`,
+    mxCode: 'Код', mxArt: 'Статья', mxDays: 'Ой кунлари', mxIn: 'КИРИМ', mxOut: 'ЧИҚИМ', mxInTot: 'Жами кирим', mxOutTot: 'Жами чиқим', mxTr: 'ички ўтказма',
+    mxNoArt: '(статьясиз)', mxBalEnd: 'Давр охирига қолдиқ', mxOpen: 'Ой бошига қолдиқ', mxClose: 'Ой охирига қолдиқ',
+    mxExTr: (a, b) => `Ички ўтказмаларсиз (банк): кирим ${a}, чиқим ${b}`, mxEmpty: 'Бу ойда ўтказилган ордер йўқ.',
+    mxSrc: 'Манба — ўтказилган кирим ва чиқим ордерларининг нақд қаторлари (KO-4 билан бир манба). Ички ўтказма (банк) даромад ҳам, харажат ҳам эмас.',
+    mxMade: 'Тузди', accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`,
     offsetBasis: (m, st, req) => `Ўзаро ҳисоб: ${m} ойи иш ҳақи ҳисобидан ўқув тўлови — ${st}${req ? '; ариза ' + req : ''}`,
     offsetText: (a, m) => `Ходимнинг ёзма аризасига асосан унинг ${m} ойи учун иш ҳақидан ${a} сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.`,
   },
@@ -90,7 +95,12 @@ const T = {
     ko3: 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI', ko3Form: 'KO-3 shakli', ko3In: 'Kirim kassa hujjatlari', ko3Out: 'Chiqim kassa hujjatlari',
     ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq',
     ko3Nos: (f1, l1, f2, l2) => `Raqamlar: kirim ${f1 ? f1 + '–' + l1 : 'yo‘q'}, chiqim ${f2 ? f2 + '–' + l2 : 'yo‘q'}`, ko3Bad: 'DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas', ko3Docs: (a, b, v) => `Kirim: ${a} ta, chiqim: ${b} ta, bekor qilingan: ${v} ta`,
-    accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`,
+    mx: 'KASSA BO‘YICHA OYLIK STATIYALAR MATRITSASI', mxPer: (y, mi) => `${y}-yil ${['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'][mi]}`,
+    mxCode: 'Kod', mxArt: 'Statiya', mxDays: 'Oy kunlari', mxIn: 'KIRIM', mxOut: 'CHIQIM', mxInTot: 'Jami kirim', mxOutTot: 'Jami chiqim', mxTr: 'ichki o‘tkazma',
+    mxNoArt: '(statiyasiz)', mxBalEnd: 'Davr oxiriga qoldiq', mxOpen: 'Oy boshiga qoldiq', mxClose: 'Oy oxiriga qoldiq',
+    mxExTr: (a, b) => `Ichki o‘tkazmalarsiz (bank): kirim ${a}, chiqim ${b}`, mxEmpty: 'Bu oyda o‘tkazilgan order yo‘q.',
+    mxSrc: 'Manba — o‘tkazilgan kirim va chiqim orderlarining naqd qatorlari (KO-4 bilan bir manba). Ichki o‘tkazma (bank) daromad ham, xarajat ham emas.',
+    mxMade: 'Tuzdi', accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`,
     offsetBasis: (m, st, req) => `O‘zaro hisob: ${m} oyi ish haqi hisobidan o‘quv to‘lovi — ${st}${req ? '; ariza ' + req : ''}`,
     offsetText: (a, m) => `Xodimning yozma arizasiga asosan uning ${m} oyi uchun ish haqidan ${a} so‘m farzandining o‘quv to‘lovi hisobiga o‘tkazildi. Naqd pul berilmadi va qabul qilinmadi.`,
   },
@@ -129,7 +139,12 @@ const T = {
     ko3: 'ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ', ko3Form: 'Форма КО-3', ko3In: 'Приходные кассовые документы', ko3Out: 'Расходные кассовые документы',
     ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода',
     ko3Nos: (f1, l1, f2, l2) => `Номера: приход ${f1 ? f1 + '–' + l1 : 'нет'}, расход ${f2 ? f2 + '–' + l2 : 'нет'}`, ko3Bad: 'ВНИМАНИЕ: остаток на начало + приход − расход не равен остатку на конец', ko3Docs: (a, b, v) => `Приход: ${a}, расход: ${b}, аннулировано: ${v}`,
-    accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`,
+    mx: 'МЕСЯЧНАЯ МАТРИЦА СТАТЕЙ ПО КАССЕ', mxPer: (y, mi) => `${['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'][mi]} ${y} г.`,
+    mxCode: 'Код', mxArt: 'Статья', mxDays: 'Дни месяца', mxIn: 'ПРИХОД', mxOut: 'РАСХОД', mxInTot: 'Итого приход', mxOutTot: 'Итого расход', mxTr: 'внутреннее перемещение',
+    mxNoArt: '(без статьи)', mxBalEnd: 'Остаток на конец периода', mxOpen: 'Остаток на начало месяца', mxClose: 'Остаток на конец месяца',
+    mxExTr: (a, b) => `Без внутренних перемещений (банк): приход ${a}, расход ${b}`, mxEmpty: 'В этом месяце проведённых ордеров нет.',
+    mxSrc: 'Источник — наличные строки проведённых приходных и расходных ордеров (тот же источник, что и КО-4). Внутреннее перемещение (банк) не является ни доходом, ни расходом.',
+    mxMade: 'Составил', accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`,
     offsetBasis: (m, st, req) => `Взаимозачёт: оплата за обучение в счёт заработной платы за ${m} — ${st}${req ? '; заявление от ' + req : ''}`,
     offsetText: (a, m) => `На основании письменного заявления сотрудника из его заработной платы за ${m} сумма ${a} сум зачтена в счёт оплаты за обучение ребёнка. Наличные деньги не выдавались и не принимались.`,
   },
@@ -295,6 +310,9 @@ table{border-collapse:collapse;width:100%}
 .jr .t th{font-size:7pt}.jr .t td{font-size:8.5pt;padding:.6mm 1mm}.jr td.jn{font-size:7.5pt;overflow-wrap:anywhere}
 .jr .t td.sep,.jr .t th.sep{border-left:1.2pt solid #000}
 .jr .sumj{margin-top:2.5mm;font-size:9.5pt}.jr .sumj div{margin-top:.8mm}
+.mx .t th{font-size:7pt}.mx .t td{font-size:8pt;padding:.5mm 1mm}.mx .b{font-weight:bold}
+.mx tr.sh td{font-weight:bold;letter-spacing:.3pt;background:#eee}.mx tr.tot td{font-weight:bold;border-top:1pt solid #000}
+.mx td.an{overflow-wrap:anywhere}.mx .src{font-size:7.5pt;margin-top:1.5mm}.mx .sumj b{white-space:nowrap}
 .jr .warnj{margin-top:2mm;font-weight:bold;border:.8pt solid #000;padding:.8mm 1.5mm}
 `;
 const page = (title, t, body) => `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${body}</body></html>`;
@@ -449,6 +467,14 @@ export function journalHtml(j, ctx, W) {
   return page(`${t.ko3} ${per}`, t, body);
 }
 
+// XLSX katakchalari (SheetJS aoa_to_sheet): sana — Excel sanasi (kk.oo.yyyy; nuqta — matn belgisi: Excel, LibreOffice, SheetJS),
+//   summa — son (ustunlar bo'yicha qo'shiladi).
+const xlDate = d => { const s = iso(d); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''; return { t: 'n', v: Math.round((Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 864e5), z: 'dd\\.mm\\.yyyy' }; };
+const xlMoney = v => ({ t: 'n', v: Math.round(num(v) * 100) / 100, z: '#,##0.00' });
+const xlOrgName = (o, ru) => (ru && o.nameRu) ? o.nameRu : (o.nameUz || o.nameRu || '');
+const FD28_NOTE = { ru: 'Обезличенная копия (FD-28): физические лица — по ID, основание и причина аннулирования их документов не выводятся; полная копия — у директора',
+  uz: 'Ismsiz nusxa (FD-28): jismoniy shaxslar ID bilan, ular hujjatlarining asosi va bekor qilish sababi chiqmaydi; to‘liq nusxa — Direktorda' };
+
 // KO-3 XLSX varag'i (SheetJS aoa_to_sheet uchun): xronologik ro'yxat — bitta qator = bitta order. j — kassa_journal_export() javobi:
 //   masked (Moliya menejeri, buxgalter — FD-28) bo'lsa tomon ID bilan, ismsiz (yuridik shaxs nomi qoladi; jismoniy shaxs hujjatining
 //   asosi va bekor qilish sababini server bermaydi). Ichki hujjat: o'zbek lotin
@@ -463,14 +489,11 @@ export function journalSheet(j, ctx) {
                  : { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', founder: 'ta’sischi', bank: 'bank', other: 'boshqa shaxs' };
   const party = x => !masked ? texts(x, t).party : x.partyKept ? (x.partyName || '') : [LBL[x.partyType] || '', x.partyId || ''].filter(Boolean).join(' ');
   const basis = x => masked ? (x.basis || '') : texts(x, t).basis;
-  const serial = d => { const s = iso(d); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''; return { t: 'n', v: Math.round((Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 864e5), z: 'dd\\.mm\\.yyyy' }; };   // nuqta — matn belgisi (Excel, LibreOffice, SheetJS)
-  const money2 = v => ({ t: 'n', v: Math.round(num(v) * 100) / 100, z: '#,##0.00' });
+  const serial = xlDate, money2 = xlMoney;
   const H = ru ? ['Дата', 'Документ', '№', 'Операция', 'От кого / кому', 'Основание', 'Приход, сум', 'Расход, сум', 'Состояние', 'Фискальный чек №']
                : ['Sana', 'Hujjat', '№', 'Operatsiya', 'Kimdan / kimga', 'Asos', 'Kirim, so‘m', 'Chiqim, so‘m', 'Holat', 'Fiskal chek №'];
-  const nm = (lang => (lang === 'ru' && o.nameRu) ? o.nameRu : (o.nameUz || o.nameRu || ''))(ru ? 'ru' : 'uz');
-  const rows = [[nm], [t.ko3 + ' (' + t.ko3Form + ')'], [t.ko3Per(dmy(j.from), dmy(j.to)) + (j.desk && j.desk.name ? ' · ' + j.desk.name : '')],
-    masked ? [ru ? 'Обезличенная копия (FD-28): физические лица — по ID, основание и причина аннулирования их документов не выводятся; полная копия — у директора'
-                 : 'Ismsiz nusxa (FD-28): jismoniy shaxslar ID bilan, ular hujjatlarining asosi va bekor qilish sababi chiqmaydi; to‘liq nusxa — Direktorda'] : [], H];
+  const rows = [[xlOrgName(o, ru)], [t.ko3 + ' (' + t.ko3Form + ')'], [t.ko3Per(dmy(j.from), dmy(j.to)) + (j.desk && j.desk.name ? ' · ' + j.desk.name : '')],
+    masked ? [ru ? FD28_NOTE.ru : FD28_NOTE.uz] : [], H];
   (j.docs || []).filter(x => x.form === 'KO1' || x.form === 'KO2').forEach(x => {
     const v = x.status === 'void', isIn = x.form === 'KO1';
     rows.push([serial(x.businessDay), (ru ? (isIn ? 'ПКО' : 'РКО') : (isIn ? 'Kirim orderi' : 'Chiqim orderi')), num(x.no), opName(x.op), party(x), basis(x),
@@ -483,6 +506,115 @@ export function journalSheet(j, ctx) {
   rows.push(['', '', '', '', '', t.ko3Close, money2(j.closing)]);
   if (j.balanced === false) rows.push([t.ko3Bad]);
   return { name: 'KO-3', rows, cols: [{ wch: 11 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 30 }, { wch: 36 }, { wch: 15 }, { wch: 15 }, { wch: 26 }, { wch: 16 }] };
+}
+
+// ---------------------------------------------------------------- RP-08: oylik statiya matritsasi (kassa) (F1.22)
+//   m — kassa_matrix() javobi: qator — (shakl, statiya), byDay — oy kunlari bo'yicha summa. Chop etish — haftalar bo'yicha
+//   (1–7, 8–14, …) va jami (A4 ga sig'adi); XLSX — kunlar bo'yicha (matrixSheet). Ichki o'tkazma (bank) belgilanadi.
+const mxWeeks = n => { const w = []; for (let a = 1; a <= n; a += 7) w.push([a, Math.min(a + 6, n)]); return w; };
+const mxSum = (arr, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += num(arr && arr[i]); return Math.round(s * 100) / 100; };
+const mxPerOf = (m, t) => { const s = String(m.month || ''); return /^\d{4}-\d{2}$/.test(s) ? t.mxPer(s.slice(0, 4), +s.slice(5, 7) - 1) : s; };
+const mxName = (x, t, lang) => ((lang === 'ru' && x.nameRu) ? x.nameRu : (x.nameUz || '')) || x.articleId || t.mxNoArt;
+export function matrixHtml(m, ctx, W) {
+  ctx = ctx || {}; m = m || {};
+  const lang = langOf(ctx), t = T[lang], o = ctx.org || {}, rows = m.rows || [], n = num(m.nDays);
+  const wk = mxWeeks(n), span = wk.length + 3;
+  const cellsW = arr => wk.map(([a, b]) => { const v = mxSum(arr, a, b); return `<td class="r">${v ? esc(money(W, v)) : ''}</td>`; }).join('');
+  const sec = (form, title, totLabel, dayArr, tot) => {
+    const rs = rows.filter(x => x.form === form);
+    return `<tr class="sh"><td colspan="${span}">${esc(title)}</td></tr>`
+      + (rs.length ? rs.map(x => `<tr><td class="c">${esc(x.articleId || '')}</td><td class="an">${esc(mxName(x, t, lang))}${x.transfer ? ` (${esc(t.mxTr)})` : ''}</td>${cellsW(x.byDay)}<td class="r b">${esc(money(W, x.total))}</td></tr>`).join('')
+                   : `<tr><td colspan="${span}" class="c">–</td></tr>`)
+      + `<tr class="tot"><td></td><td>${esc(totLabel)}</td>${cellsW(dayArr)}<td class="r">${esc(money(W, tot))}</td></tr>`;
+  };
+  const head = `<thead><tr><th rowspan="2" style="width:13mm">${esc(t.mxCode)}</th><th rowspan="2">${esc(t.mxArt)}</th><th colspan="${wk.length}">${esc(t.mxDays)}</th><th rowspan="2" style="width:24mm">${esc(t.total)}</th></tr>
+    <tr>${wk.map(([a, b]) => `<th style="width:21mm">${a}–${b}</th>`).join('')}</tr></thead>`;
+  const bal = `<tr class="tot"><td></td><td>${esc(t.mxBalEnd)}</td>${wk.map(([, b]) => `<td class="r">${esc(money(W, (m.dayBal || [])[b - 1]))}</td>`).join('')}<td class="r">${esc(money(W, m.closing))}</td></tr>`;
+  const per = mxPerOf(m, t);
+  const marks = marksOf(null, Object.assign({}, ctx, { isTest: ctx.isTest || !!(m.desk && m.desk.isTest) }), t);
+  const chief = pickSign(ctx, 2, null, t.chief);
+  const exIn = num(m.in) - num(m.transferIn), exOut = num(m.out) - num(m.transferOut);
+  const body = `<div class="pg jr mx">
+    <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <div class="ttl">${esc(t.mx)}</div><div class="dt">${esc(per)}${m.desk && m.desk.name ? ' · ' + esc(m.desk.name) : ''}</div>
+    ${rows.length ? `<table class="t">${head}<tbody>${sec('KO1', t.mxIn, t.mxInTot, m.dayIn, m.in)}${sec('KO2', t.mxOut, t.mxOutTot, m.dayOut, m.out)}${bal}</tbody></table>`
+                  : `<div class="note" style="margin-top:4mm">${esc(t.mxEmpty)}</div>`}
+    <div class="sumj"><div>${esc(t.mxOpen)}: <b>${esc(money(W, m.opening))}</b> · ${esc(t.mxInTot)}: <b>${esc(money(W, m.in))}</b> · ${esc(t.mxOutTot)}: <b>${esc(money(W, m.out))}</b> · ${esc(t.mxClose)}: <b>${esc(money(W, m.closing))}</b></div>
+      <div>${esc(t.mxExTr(money(W, exIn), money(W, exOut)))}</div></div>
+    ${m.balanced === false ? `<div class="warnj">${esc(t.ko3Bad)}</div>` : ''}
+    <div class="src">${esc(t.mxSrc)}</div>
+    ${sig(t.mxMade + ': ' + t.accountant.toLowerCase(), '')}${sig(t.chief, chief.name)}
+    ${footer({ id: `${(m.desk && m.desk.id) || ''} ${m.month || ''}` }, ctx, t)}</div>`;
+  return page(`${t.mx} ${per}`, t, body);
+}
+// RP-08 XLSX varag'i: kunlar bo'yicha (1 … 28–31) va jami; kun oxiri qoldig'i — faqat kassa kuni bo'lgan sanalarda.
+export function matrixSheet(m, ctx) {
+  ctx = ctx || {}; m = m || {};
+  const ru = langOf(ctx) === 'ru', lang = ru ? 'ru' : 'uz-latn', t = T[lang], o = ctx.org || {}, n = num(m.nDays), rows = m.rows || [];
+  const cell = v => num(v) ? xlMoney(v) : '';
+  const days = Array.from({ length: n }, (_, i) => i + 1);
+  const out = [[xlOrgName(o, ru)], [t.mx], [mxPerOf(m, t) + (m.desk && m.desk.name ? ' · ' + m.desk.name : '')], [], [t.mxCode, t.mxArt, ...days.map(String), t.total]];
+  const sec = (form, title, totLabel, dayArr, tot) => {
+    out.push(['', title]);
+    rows.filter(x => x.form === form).forEach(x => out.push([x.articleId || '', mxName(x, t, lang) + (x.transfer ? ` (${t.mxTr})` : ''), ...days.map(d => cell((x.byDay || [])[d - 1])), xlMoney(x.total)]));
+    out.push(['', totLabel, ...days.map(d => cell((dayArr || [])[d - 1])), xlMoney(tot)]);
+  };
+  sec('KO1', t.mxIn, t.mxInTot, m.dayIn, m.in);
+  sec('KO2', t.mxOut, t.mxOutTot, m.dayOut, m.out);
+  const has = new Set((m.days || []).map(x => iso(x.day)));
+  out.push(['', t.closeBal, ...days.map(d => has.has(`${m.month}-${String(d).padStart(2, '0')}`) ? xlMoney((m.dayBal || [])[d - 1]) : ''), xlMoney(m.closing)]);
+  out.push([]);
+  out.push(['', t.mxOpen, xlMoney(m.opening)]);
+  out.push(['', t.mxClose, xlMoney(m.closing)]);
+  out.push(['', `${t.mxInTot} — ${t.mxTr}`, xlMoney(m.transferIn)]);
+  out.push(['', `${t.mxOutTot} — ${t.mxTr}`, xlMoney(m.transferOut)]);
+  if (m.balanced === false) out.push([t.ko3Bad]);
+  return { name: ru ? 'E2 Статьи' : 'E2 Statiyalar', rows: out, cols: [{ wch: 8 }, { wch: 42 }, ...days.map(() => ({ wch: 12 })), { wch: 15 }] };
+}
+// Oylik kassa to'plami (E3): kassa kunlari — KO-4 jamlari, sanash va farq, holat, Z-hisobot solishtiruvi.
+export function daysSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, days = p.days || [];
+  const ST = ru ? { open: 'открыт', closed: 'закрыт', verified: 'проверен' } : { open: 'ochiq', closed: 'yopilgan', verified: 'tekshirilgan' };
+  const H = ru ? ['Дата', 'Состояние', 'Остаток на начало', 'Приход', 'Расход', 'Остаток на конец', 'Пересчитано', 'Разница', 'Документов', 'Аннулировано', 'Переоткрыт', 'Z-отчёт №', 'Z: наличные', 'Z: карты', 'Z: сверка']
+               : ['Sana', 'Holat', 'Kun boshi', 'Kirim', 'Chiqim', 'Kun oxiri', 'Sanalgan', 'Farq', 'Hujjatlar', 'Bekor qilingan', 'Qayta ochilgan', 'Z-hisobot №', 'Z: naqd', 'Z: karta', 'Z: solishtirish'];
+  const n2 = v => String(Math.round(num(v) * 100) / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const zState = z => !z ? '' : z.missing ? (ru ? 'нет: ' : 'yo‘q: ') + (z.reason || '')
+    : !z.recorded ? (z.needed ? (ru ? 'не введён' : 'kiritilmagan') : '')
+    : z.ok === true ? (ru ? 'совпадает' : 'mos') : z.ok === false ? (ru ? `расхождение: наличные ${n2(z.diffCash)}, карты ${n2(z.diffCard)}` : `farq: naqd ${n2(z.diffCash)}, karta ${n2(z.diffCard)}`) : '';
+  const rows = [[xlOrgName(o, ru)], [ru ? 'КАССОВЫЕ ДНИ (итоги КО-4, пересчёт, Z-отчёт)' : 'KASSA KUNLARI (KO-4 jamlari, sanash, Z-hisobot)'],
+    [mxPerOf(p, t) + (p.desk && p.desk.name ? ' · ' + p.desk.name : '')], [], H];
+  days.forEach(d => { const z = d.z || null;
+    rows.push([xlDate(d.day), ST[d.status] || d.status || '', xlMoney(d.opening), xlMoney(d.receipts), xlMoney(d.payouts), xlMoney(d.closing),
+      d.counted == null ? '' : xlMoney(d.counted), d.diff == null ? '' : xlMoney(d.diff), num(d.docs), num(d.voids), num(d.reopens),
+      (z && z.no) || '', z && z.cash != null ? xlMoney(z.cash) : '', z && z.card != null ? xlMoney(z.card) : '', zState(z)]); });
+  rows.push([]);
+  rows.push([t.total, '', '', xlMoney(days.reduce((s, d) => s + num(d.receipts), 0)), xlMoney(days.reduce((s, d) => s + num(d.payouts), 0)), '', '',
+    xlMoney(days.reduce((s, d) => s + num(d.diff), 0)), days.reduce((s, d) => s + num(d.docs), 0), days.reduce((s, d) => s + num(d.voids), 0)]);
+  return { name: ru ? 'E3 Кассовые дни' : 'E3 Kassa kunlari', rows, cols: [{ wch: 11 }, { wch: 13 }, ...Array.from({ length: 6 }, () => ({ wch: 15 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 34 }] };
+}
+// Oylik kassa to'plami (E4): hisobdor shaxslar bilan hisob-kitob (4230) — oy boshi, berildi, qaytdi, avans hisoboti, oy oxiri.
+//   2-ro'yxatga — tabel kodi bilan, ismsiz (FD-28); Direktorga — ism bilan.
+export function advSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, a = p.advances || [], masked = !!p.masked;
+  const H = (ru ? ['Сотрудник (табельный №)', 'ФИО', 'Остаток на начало месяца', 'Выдано под отчёт', 'Возвращено в кассу', 'Авансовые отчёты', 'Остаток на конец месяца']
+                : ['Xodim (tabel kodi)', 'F.I.Sh.', 'Oy boshiga qoldiq', 'Berildi (avans)', 'Qaytdi (qaytim)', 'Avans hisobotlari', 'Oy oxiriga qoldiq']).filter((_, i) => i !== 1 || !masked);
+  const rows = [[xlOrgName(o, ru)], [ru ? 'РАСЧЁТЫ С ПОДОТЧЁТНЫМИ ЛИЦАМИ (4230)' : 'HISOBDOR SHAXSLAR BILAN HISOB-KITOB (4230)'],
+    [mxPerOf(p, t) + (p.desk && p.desk.name ? ' · ' + p.desk.name : '')],
+    masked ? [ru ? 'Обезличенная копия (FD-28): сотрудники — по табельному номеру; полная копия — у директора' : 'Ismsiz nusxa (FD-28): xodimlar tabel kodi bilan; to‘liq nusxa — Direktorda'] : [], H];
+  const sum = k => xlMoney(a.reduce((s, x) => s + num(x[k]), 0));
+  a.forEach(x => rows.push([x.code || '', ...(masked ? [] : [x.partyName || '']), xlMoney(x.opening), xlMoney(x.issued), xlMoney(x.returned), xlMoney(x.reported), xlMoney(x.closing)]));
+  if (!a.length) rows.push([ru ? 'Нет движения и остатков' : 'Harakat va qoldiq yo‘q']);
+  rows.push([]);
+  rows.push([t.total, ...(masked ? [] : ['']), sum('opening'), sum('issued'), sum('returned'), sum('reported'), sum('closing')]);
+  return { name: ru ? 'E4 Подотчётные' : 'E4 Hisobdorlar', rows, cols: [{ wch: 20 }, ...(masked ? [] : [{ wch: 30 }]), ...Array.from({ length: 5 }, () => ({ wch: 17 }))] };
+}
+// Buxgalter uchun oylik kassa to'plami — bitta XLSX kitob: E1 KO-3, E2 statiyalar, E3 kassa kunlari, E4 hisobdorlar.
+//   p — kassa_month_pack() javobi (2-ro'yxatga ismsiz, FD-28).
+export function packSheets(p, ctx) {
+  p = p || {}; const ru = langOf(ctx || {}) === 'ru';
+  return [Object.assign(journalSheet(p.journal || {}, ctx), { name: ru ? 'E1 КО-3' : 'E1 KO-3' }), matrixSheet(p.matrix || {}, ctx), daysSheet(p, ctx), advSheet(p, ctx)];
 }
 
 export function bookRows(v) { const n = parseInt(v, 10); return Math.min(Math.max(Number.isFinite(n) && n > 0 ? n : 30, 10), 60); }

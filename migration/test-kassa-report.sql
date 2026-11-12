@@ -13,7 +13,9 @@
 --   (O) yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat: Direktor tasdig'i, chegara (orgCashMax), nazorat.
 --   Eslatma: boshqa bo'limlar shu qoidaga bog'liq bo'lmasin deb sozlamada chegara katta qo'yilgan (N1); (O) uni o'zi o'zgartiradi.
 --   (J) KO-3 — kassa orderlari jurnali: huquqlar, davr, jamlar, qoldiqlar mosligi, sinov kassasi alohida; Excel eksporti FD-28 bo'yicha
---       (kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq).
+--       (kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq);
+--   (X) RP-08 oylik statiya matritsasi va buxgalter uchun oylik kassa to'plami: huquqlar, KO-3 / KO-4 bilan o'zaro tekshiruv,
+--       ichki o'tkazmalar, kunlik jamlar va qoldiq, sinov kassasi alohida, bo'sh oy, to'plam tarkibi va FD-28.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -564,6 +566,76 @@ select zz.chk('J8 Direktor: to''liq (ismlar, asos va bekor qilish sababi bilan),
           || ':' || (jsonb_array_length(j -> 'docs') = jsonb_array_length(zz.get('J1')::jsonb -> 'docs'))::text
      from (select zz.as('U_DIR', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q),
   '^false:true:true$');
+
+-- ---------- (X) RP-08 — oylik statiya matritsasi va oylik kassa to'plami ----------
+select zz.chk('X0 huquqlar: matritsa — kassa o''quvchilari (kassir ham), o''qituvchi — rad; to''plam — kassir va o''qituvchi rad; noto''g''ri oy / kassa',
+  (zz.as('U_KAS', $q$select public.kassa_matrix('main', '2027-01')::jsonb ->> 'ok'$q$)) || ' | ' || zz.as('U_TCH', $q$select public.kassa_matrix('main', '2027-01')::text$q$)
+  || ' | ' || zz.as('U_KAS', $q$select public.kassa_month_pack('main', '2027-01')::text$q$) || ' | ' || zz.as('U_TCH', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)
+  || ' | ' || zz.as('U_FM', $q$select public.kassa_matrix('main', '2027-13')::text$q$) || ' | ' || zz.as('U_FM', $q$select public.kassa_matrix('main', '27-01')::text$q$)
+  || ' | ' || zz.as('U_FM', $q$select public.kassa_matrix('nope', '2027-01')::text$q$),
+  '^true \| ERR 42501.* \| ERR 42501 .*Ruxsat yo''q: oylik kassa to''plami.* \| ERR 42501.* \| ERR 22023 \[kassa:bad_input\].* \| ERR 22023 \[kassa:bad_input\].* \| ERR 22023 \[kassa:bad_desk\]');
+select zz.put('X1', zz.as('U_FM', $q$select public.kassa_matrix('main', '2027-01')::text$q$));
+select zz.chk('X1 matritsa = KO-3: kirim, chiqim, oy boshi va oxiri bir xil; qoldiqlar mos; 31 kun',
+  (select ((m ->> 'in')::numeric = (j -> 'totals' ->> 'in')::numeric and (m ->> 'out')::numeric = (j -> 'totals' ->> 'out')::numeric
+          and (m ->> 'opening')::numeric = (j ->> 'opening')::numeric and (m ->> 'closing')::numeric = (j ->> 'closing')::numeric)::text
+          || ':' || (m ->> 'balanced') || ':' || (m ->> 'nDays') || ':' || (m ->> 'from') || '…' || (m ->> 'to') || ':' || ((m ->> 'in')::numeric > 0)::text
+     from (select zz.get('X1')::jsonb m, zz.get('J1')::jsonb j) q), '^true:true:31:2027-01-01…2027-01-31:true$');
+select zz.chk('X2 qatorlar: har qatorda 31 kun va kunlar yig''indisi = jami; shakl bo''yicha qatorlar jami = kirim / chiqim; kunlik jamlar yig''indisi = kirim / chiqim',
+  (select (select bool_and(jsonb_array_length(r -> 'byDay') = 31
+                           and (select sum(x::numeric) from jsonb_array_elements_text(r -> 'byDay') x) = (r ->> 'total')::numeric)
+             from jsonb_array_elements(m -> 'rows') r)::text
+          || ':' || ((select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO1') = (m ->> 'in')::numeric)::text
+          || ':' || ((select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO2') = (m ->> 'out')::numeric)::text
+          || ':' || ((select sum(x::numeric) from jsonb_array_elements_text(m -> 'dayIn') x) = (m ->> 'in')::numeric
+                     and (select sum(x::numeric) from jsonb_array_elements_text(m -> 'dayOut') x) = (m ->> 'out')::numeric)::text
+          || ':' || (select count(*) from jsonb_array_elements(m -> 'rows') r where r ->> 'articleId' is null)
+     from (select zz.get('X1')::jsonb m) q), '^true:true:true:true:0$');
+select zz.chk('X3 ichki o''tkazmalar: bankdan naqd (OP-01) va bankka topshirish (OP-02) belgilangan, jamlari alohida; o''quv to''lovi — o''tkazma emas; tartib — statiya tartibida',
+  (select (select string_agg((r ->> 'form') || '/' || (r ->> 'articleId'), ',') from jsonb_array_elements(m -> 'rows') r where (r ->> 'transfer')::boolean)
+          || ':' || ((m ->> 'transferIn')::numeric = (select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO1' and (r ->> 'transfer')::boolean))::text
+          || ':' || ((m ->> 'transferOut')::numeric = (select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO2' and (r ->> 'transfer')::boolean))::text
+          || ':' || (select (r ->> 'transfer') || '/' || (r ->> 'kind') || '/' || (r ->> 'nameUz') from jsonb_array_elements(m -> 'rows') r where r ->> 'articleId' = 'IN-01')
+          || ':' || (select string_agg(r ->> 'articleId', ',' order by o) from jsonb_array_elements(m -> 'rows') with ordinality x(r, o) where r ->> 'form' = 'KO1')
+     from (select zz.get('X1')::jsonb m) q),
+  '^KO1/OP-01,KO2/OP-02:true:true:false/IN/Ta’lim xizmati \(oylik to‘lov\):IN-01,IN-06,OP-01,OP-07$');
+select zz.chk('X4 kunlar: har yopilgan kunda kunlik kirim / chiqim / qoldiq = kassa kunidagi (KO-4); ochiq kunda — joriy qoldiq; kunsiz sana — oldingi qoldiq',
+  (select bool_and((m -> 'dayIn' ->> (d.day - date '2027-01-01'))::numeric = d.receipts and (m -> 'dayOut' ->> (d.day - date '2027-01-01'))::numeric = d.payouts
+                   and (m -> 'dayBal' ->> (d.day - date '2027-01-01'))::numeric = d.closing)::text
+          || ':' || count(*) || ':' || ((m -> 'dayBal' ->> 4)::numeric = (m -> 'dayBal' ->> 3)::numeric)::text
+          || ':' || ((select (x ->> 'closing')::numeric from jsonb_array_elements(m -> 'days') x where x ->> 'status' = 'open') = (m ->> 'closing')::numeric)::text
+          || ':' || jsonb_array_length(m -> 'days')
+     from public.cash_days d, (select zz.get('X1')::jsonb m) q
+    where d.desk = 'main' and d.day between '2027-01-01' and '2027-01-31' and d.status <> 'open'
+    group by m), '^true:5:true:true:6$');
+select zz.chk('X5 sinov kassasi alohida: asosiy matritsada sinov hujjati yo''q, sinov matritsasida — faqat o''zi (isTest)',
+  (select (m ->> 'out') || '/' || (select string_agg((r ->> 'articleId') || '=' || trim_scale((r ->> 'total')::numeric), ',') from jsonb_array_elements(m -> 'rows') r)
+          || '/' || (m -> 'desk' ->> 'isTest') || '/' || trim_scale((m ->> 'opening')::numeric)
+     from (select zz.as('U_FM', $q$select public.kassa_matrix('sinov', '2027-01')::text$q$)::jsonb m) q)
+  || ':' || (select (count(*) = 0)::text from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where (r ->> 'total')::numeric = 10000 and r ->> 'articleId' = 'OP-08'),
+  '^10000/OP-08=10000/true/100000:true$');
+select zz.chk('X6 bo''sh oy (ishga tushishdan oldin): qatorlar yo''q, jamlar 0, qoldiq 0, mos',
+  (select jsonb_array_length(m -> 'rows') || ':' || (m ->> 'in') || ':' || (m ->> 'out') || ':' || (m ->> 'opening') || ':' || (m ->> 'closing') || ':' || (m ->> 'balanced') || ':' || (m ->> 'nDays')
+     from (select zz.as('U_FM', $q$select public.kassa_matrix('main', '2026-11')::text$q$)::jsonb m) q), '^0:0:0:0:0:true:30$');
+select zz.put('X7', zz.as('U_FM', $q$select public.kassa_month_pack('main', '2027-01')::text$q$));
+select zz.chk('X7 oylik to''plam (Moliya menejeri): ismsiz; KO-3 ismsiz nusxa, matritsa o''sha; kunlar — 6 ta, KO-4 jamlari va Z (kim kiritgani yo''q)',
+  (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || ((p -> 'matrix') = zz.get('X1')::jsonb)::text
+          || ':' || jsonb_array_length(p -> 'days') || ':' || (p -> 'days' -> 0 ->> 'day') || '/' || trim_scale((p -> 'days' -> 0 ->> 'receipts')::numeric) || '/' || (p -> 'days' -> 0 ->> 'status')
+          || '/' || (p -> 'days' -> 0 -> 'z' ->> 'no') || '/' || (p -> 'days' -> 0 -> 'z' ->> 'ok')
+          || ':' || (position('byUid' in p::text) = 0 and position('"at"' in p::text) = 0)::text
+     from (select zz.get('X7')::jsonb p) q), '^true:true:true:6:2027-01-04/2730000/verified/Z-0104/true:true$');
+select zz.chk('X8 hisobdorlar: tabel kodi bilan, ismsiz; oy oxiri = boshi + berildi − qaytdi − hisobot; jamlar matritsadagi avans (OP-06) va qaytim (OP-07) bilan teng',
+  (select string_agg((a ->> 'code') || '/' || coalesce(a ->> 'partyName', '-') || '/' || trim_scale((a ->> 'closing')::numeric), ',' order by a ->> 'code')
+          || ':' || bool_and((a ->> 'closing')::numeric = (a ->> 'opening')::numeric + (a ->> 'issued')::numeric - (a ->> 'returned')::numeric - (a ->> 'reported')::numeric)::text
+          || ':' || (sum((a ->> 'issued')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where r ->> 'articleId' = 'OP-06'))::text
+          || ':' || (sum((a ->> 'returned')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where r ->> 'articleId' = 'OP-07'))::text
+     from jsonb_array_elements(zz.get('X7')::jsonb -> 'advances') a), '^IQT-T1/-/50000,IQX-T1/-/150000:true:true:true$');
+select zz.chk('X8b ismsiz to''plamda o''quvchi, to''lovchi, xodim va «boshqa» tomon ismlari, foydalanuvchi ID lari yo''q',
+  (select (position('Sinov Ota' in t) = 0 and position('Sinov Zavxoz' in t) = 0 and position('Sinov O''qituvchi' in t) = 0 and position('Sinov Mehmon' in t) = 0
+          and position('Aliyev' in t) = 0 and position('U_KAS' in t) = 0 and position('U_FM' in t) = 0)::text from (select zz.get('X7') as t) q), '^true$');
+select zz.chk('X9 Direktor: to''plam to''liq — xodim ismi bilan, KO-3 ismli',
+  (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || (select string_agg(a ->> 'partyName', ',' order by a ->> 'code') from jsonb_array_elements(p -> 'advances') a)
+     from (select zz.as('U_DIR', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)::jsonb p) q),
+  '^false:false:Sinov O''qituvchi,Sinov Zavxoz$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end
