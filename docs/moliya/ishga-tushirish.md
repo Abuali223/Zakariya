@@ -63,6 +63,11 @@ Yakuniy tekshiruvda «Kassa tekshiruvi: muammo topilmadi (modul relizi N)» qato
 Qisman o‘tkazish (bayroq bilan, ayrim deploylarda) **qilinmaydi**: zanjir har deployda ichki funksiyalar huquqini qayta
 beradi va kassa fayllari ularni qaytarib oladi — kassa fayllarisiz deploy bu himoyani ochiq qoldiradi.
 
+**Mashq (2026-11-12, lokal, modul relizi 9):** jonli versiya (3108d19) prod zanjiri bilan qurilgan baza ustiga «`--dev`»siz
+zanjir (jonli `lock_timeout` bilan) — xatosiz; qayta qo‘llash — xatosiz; `kassa-checks.sql` — «muammo topilmadi»; toza
+o‘rnatishda barcha SQL to‘plamlari yashil; `payments` (192) va `auth` sinovlari yashil. 2-qadamda `_schema-columns.json` ga
+qo‘shiladigan ustunlar: `payments.cashDocId`, `payments.fiscalNo`, `refunds.method`, `refunds.cashDocId`.
+
 **3.3 Yashirin o‘rnatish (≈ 21-dekabr, ish vaqtidan tashqari).**
 ```bash
 cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash migration/deploy/full-deploy.sh

@@ -1967,6 +1967,18 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   Barcha SQL to'plamlari yashil (225 / 54 / 93 / 129 / 36 / 87 / 36 / 92 / 32), poyga 22, JS 39, `tg-daily` 45. Brauzer: 28 ta ishga tushirish, hammasi yashil (622 tekshiruv). Yangilanish 8 → 9 ma'lumotli bazada ham xatosiz.
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 74) Jonli zanjirga o'tkazish mashqi (ishga-tushirish 3.2) — 2026-11-12
+
+Repo'ga hech narsa yozilmagan (scratch nusxa). Natija:
+- jonli versiya (3108d19) prod zanjiri bilan qurilgan baza → kassa fayllari «`--dev`»siz zanjir (`lock_timeout` 20 s bilan, ya'ni
+  jonli rejim) — xatosiz; zanjirni qayta qo'llash — xatosiz; `kassa-checks.sql` — «muammo topilmadi (modul relizi 9)»;
+- shu zanjir bilan toza o'rnatish — xatosiz; SQL to'plamlari 225 / 54 / 93 / 129 / 36 / 87 / 36 / 92 / 32 — hammasi yashil;
+  `payments` npm test 192, `auth` npm test — yashil;
+- `payments/_schema-columns.json` farqi (o'rnatish kuni qayta tuziladi): `payments` + `cashDocId`, `fiscalNo`; `refunds` + `method`,
+  `cashDocId`.
+`ishga-tushirish.md` 3.2 ga mashq natijasi yozildi. O'tkazishning o'zi (run-all.sql dan «--dev» olish) — rejadagi kunda, qabul sinovi
+va buxgalter ko'rigidan keyin.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
