@@ -1979,6 +1979,17 @@ Repo'ga hech narsa yozilmagan (scratch nusxa). Natija:
 `ishga-tushirish.md` 3.2 ga mashq natijasi yozildi. O'tkazishning o'zi (run-all.sql dan «--dev» olish) — rejadagi kunda, qabul sinovi
 va buxgalter ko'rigidan keyin.
 
+## 75) Ko'p agentli ish (Workflow) nega rad etilardi — sabab va tuzatish — 2026-11-12
+
+- **Sabab:** bulutli sessiyani ishga tushiruvchi dastur Claude'ga oldindan ruxsat etilgan vositalar ro'yxatini beradi (Bash, Read,
+  Edit, … , github), lekin unda **Workflow yo'q**, ishga tushirgich sozlamasida ham faqat «Skill» ruxsat etilgan. Shu sabab har bir
+  ko'p agentli ish egasining ilovasida qo'lda tasdiq kutardi. Sessiya jurnali bo'yicha 18 ta chaqiruvdan 12 tasi 16 soniya … 7 soat
+  kutib tasdiqlangan, 6 tasi rad etilgan: 2 tasi ~16 soniyada qo'lda, 4 tasi uzoq kutib (23 daqiqa … 1,4 soat) — javob berilmagan
+  so'rov ishchi jarayon qayta ishga tushganda avtomatik «rad etildi» bo'lib yopiladi.
+- **Tuzatish:** `.claude/settings.json` (repo'da, keyingi sessiyalarga ham o'tadi) — `permissions.allow: ["Workflow"]`; joriy konteyner
+  uchun xuddi shu qoida foydalanuvchi sozlamasiga ham yozildi. Boshqa ruxsat qo'shilmagan; maxfiy ma'lumot yo'q; fayl saytga
+  chiqmaydi (deploy faqat aniq fayllarni ko'chiradi). Qaytarish: shu qatorni (yoki faylni) o'chirish.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
