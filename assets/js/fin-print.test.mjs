@@ -487,3 +487,23 @@ test('KO-3 XLSX varag‘i: sarlavha, xronologik qatorlar (son va sana katakchala
   const ru = journalSheet(mkJournal(), ctx({ lang: 'ru', rules: rulesJ }));
   assert.ok(ru.rows[4][0] === 'Дата' && ru.rows[5][1] === 'ПКО' && ru.rows[5][3] === 'Оплата за обучение (наличные)' && ru.rows[7][1] === 'РКО');
 });
+
+test('KO-3 XLSX ismsiz nusxa (FD-28): shaxs ID bilan, yuridik shaxs nomi va asosi qoladi, izoh qatori; sarlavha joyida', () => {
+  const m = mkJournal({ masked: true, docs: [
+    { id: 'cd_1', form: 'KO1', no: 12, businessDay: '2027-01-04', op: 'in_tuition', amount: 2350000, status: 'posted', partyType: 'student', partyId: 'T-7', partyName: null, partyKept: false, basis: null, voidReason: null, fiscalNo: '000123456789' },
+    { id: 'cd_2', form: 'KO1', no: 13, businessDay: '2027-01-04', op: 'in_other', amount: 50000, status: 'void', partyType: 'other', partyId: null, partyName: null, partyKept: false, basis: null, voidReason: null },
+    { id: 'cd_3', form: 'KO2', no: 7, businessDay: '2027-01-04', op: 'out_expense', amount: 1234567.89, status: 'posted', partyType: 'counterparty', partyId: 'cp_sup', partyName: 'Sinov Ta’minot MChJ', partyKept: true, basis: 'Hisob-faktura № 5' },
+    { id: 'cd_4', form: 'KO2', no: 8, businessDay: '2027-01-05', op: 'out_salary', amount: 900000, status: 'posted', partyType: 'employee', partyId: 'IQX-T1', partyName: null, partyKept: false, basis: null },
+    { id: 'cd_5', form: 'KO2', no: 9, businessDay: '2027-01-05', op: 'out_shortage', amount: 5000, status: 'posted', partyType: null, partyId: null, partyName: 'Kassa kamomadi', partyKept: true, isSystem: true, basis: 'Kassani sanash dalolatnomasi, 05.01.2027' }] });
+  const sh = journalSheet(m, ctx({ rules: rulesJ }));
+  assert.match(sh.rows[3][0], /^Ismsiz nusxa \(FD-28\): jismoniy shaxslar ID bilan/);
+  assert.equal(sh.rows[4][0], 'Sana', 'ustun sarlavhasi o‘z joyida (5-qator)');
+  assert.deepEqual(sh.rows.slice(5, 10).map(r => [r[4], r[5]]), [['o‘quvchi T-7', ''], ['boshqa shaxs', ''], ['Sinov Ta’minot MChJ', 'Hisob-faktura № 5'],
+    ['xodim IQX-T1', ''], ['Kassa kamomadi', 'Kassani sanash dalolatnomasi, 05.01.2027']]);
+  assert.equal(sh.rows[6][8], 'bekor qilingan (50 000)', 'sababsiz — faqat holat va summa');
+  assert.deepEqual(sh.rows[5][6], { t: 'n', v: 2350000, z: '#,##0.00' }, 'summa son bo‘lib qoladi');
+  const ru = journalSheet(m, ctx({ lang: 'ru', rules: rulesJ }));
+  assert.match(ru.rows[3][0], /^Обезличенная копия \(FD-28\)/);
+  assert.deepEqual([ru.rows[5][4], ru.rows[8][4], ru.rows[6][8]], ['учащийся T-7', 'сотрудник IQX-T1', 'аннулирован (50 000)']);
+  assert.deepEqual(journalSheet(mkJournal(), ctx({ rules: rulesJ })).rows[3], [], 'to‘liq nusxada izoh qatori bo‘sh');
+});

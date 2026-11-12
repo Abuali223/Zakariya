@@ -842,13 +842,15 @@ KO-1 va terminal to‘lovlari bilan solishtiradi; kiritilmagan, «yo‘q» yoki 
 kunni tekshirishda izoh majburiy; keyin kiritish / tuzatish — «Z» tugmasi; kunlik hisobotda Z bo‘limi. Yuridik shaxsga (yetkazib
 beruvchi / tashkilot) kassadan naqd xarajat (F1.27, M3): so‘rov oynasida ogohlantirish, Direktor tasdig‘i (chegara — sozlama,
 standart 0), nazorat ro‘yxatida oxirgi 30 kun. KO-3 kassa orderlari jurnali (F1.22, M4): oy yoki chorak bo‘yicha, bekor
-qilinganlari bilan, qoldiqlar mosligi, chop etish (KO-3 shakli, uch tilda) va XLSX (summa — son, sana — Excel sanasi). Modul relizi 5. Sinov kassasi (CT-20)
+qilinganlari bilan, qoldiqlar mosligi, chop etish (KO-3 shakli, uch tilda) va XLSX (summa — son, sana — Excel sanasi; FD-28:
+kassirda yo‘q, Moliya menejeri va buxgalterga ismsiz — ID bilan, jismoniy shaxs hujjatining asosi va sababisiz; Direktorga
+to‘liq). Modul relizi 6. Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
 ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 225,
-`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 104, `test-fin-period.sql` 36,
+`test-kassa-pay.sql` 54, `test-kassa-links.sql` 93, `test-kassa-report.sql` 109, `test-fin-period.sql` 36,
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-kassa-race.sh` 22 (8 × 200
-parallel, 10 % ROLLBACK), `fin-print.test.mjs` 23, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
-42; brauzerda o‘nta to‘liq stsenariy (252 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+parallel, 10 % ROLLBACK), `fin-print.test.mjs` 24, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 4, `tg-daily.test.cjs`
+42; brauzerda o‘nta to‘liq stsenariy (257 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
@@ -903,7 +905,7 @@ bermaydi; naqd xarajat «Buxgalteriya»da yozilmaydi. Testlar: F1.17 va har rol 
 |---|---|---|---|---|---|
 | F1.20 | S | 0,5 | RF-08 RLS relizi (toza haftadan keyin), orqaga qaytarish migratsiyasi bilan | F1.11; 7 kun P4/P5 = 0 | To‘g‘ridan-to‘g‘ri yozuv rad |
 | F1.21 | M | 2,5 | `accountant` roli: yorliqlar, tablar, ~10 jadval SELECT siyosati, `can_see_salary`, `students_billing`, `v_fns` | F1.1; FD-18, 28 | Rol testlari; ro‘yxat yopiq |
-| F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli) — buxgalter ko‘rigi M4; qoldi: RP-08 va oylik kassa to‘plami (E1–E8) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
+| F1.22 | M | 2,5 | ✅ KO-3 (kassa orderlari jurnali: chop etish, XLSX; `kassa_journal`, rol tekshiruvli; Excel — FD-28 bo‘yicha `kassa_journal_export`: kassirda yo‘q, 2-ro‘yxatga ismsiz, Direktorga to‘liq) — buxgalter ko‘rigi M4; qoldi: RP-08 va oylik kassa to‘plami (E1–E8) | F1.9 | XLSX raqamli; yanvar to‘plami fevral boshida |
 | F1.23 | S | 0,5 | O‘zaro hisob dalolatnomasi chop etish; sozlamalar | F1.5 | — |
 | F1.24 | S | 1 | Eslatmalar (yopilmagan va tekshirilmagan kun, 5910, eski qaytarish, muddati o‘tgan avans, limit) | F1.15 | RP-06 va Telegramda |
 | F1.25 | S | 0,5 | RP-22 haftalik KPI | F1.15 | Direktor ko‘radi |

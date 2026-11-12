@@ -18,6 +18,7 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
 --   kassa_journal(desk, from, to) — KO-3: kirim va chiqim orderlari jurnali (davr ≤ 93 kun; chop etish va XLSX — sahifada);
+--   kassa_journal_export(...)   — KO-3 Excel uchun ma'lumot (FD-28): kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq;
 --   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
 --                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit, Z-hisobot …);
 --   app.kassa_daily(day)        — Direktorning kunlik Telegram hisobotidagi kassa bloki va nazorat qatori (RP-05; director_daily chaqiradi);
@@ -860,6 +861,58 @@ begin
 end $$;
 revoke all on function public.kassa_journal(text, date, date) from public, anon;
 grant execute on function public.kassa_journal(text, date, date) to authenticated;
+
+-- Shaxs ma'lumotini eksport uchun yashirish (FD-28 / D7): {partyName, partyId, partyKept}.
+--   Yuridik shaxs (yetkazib beruvchi, tashkilot, bank) va tizim hujjati nomi qoladi (partyKept); o'quvchi — ID, xodim — tabel
+--   kodi, jismoniy shaxs / ta'sischi / «boshqa» turdagi kontragent — kontragent ID, yozilgan «boshqa» tomon — nomsiz.
+create or replace function app.kassa_mask_party(p_type text, p_id text, p_name text, p_system boolean) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_kind text; v_coll text; v_row text; v_code text;
+begin
+  if coalesce(p_system, false) or p_type is null then
+    return jsonb_build_object('partyName', p_name, 'partyId', null, 'partyKept', true);
+  end if;
+  if p_type = 'student' then return jsonb_build_object('partyName', null, 'partyId', p_id, 'partyKept', false); end if;
+  if p_type = 'employee' then
+    v_coll := split_part(coalesce(p_id, ''), ':', 1); v_row := substr(coalesce(p_id, ''), length(v_coll) + 2);
+    if v_coll = 'teachers' then select nullif(t."teacherId", '') into v_code from public.teachers t where t.id = v_row;
+    elsif v_coll = 'staff' then select nullif(s."staffId", '') into v_code from public.staff s where s.id = v_row; end if;
+    return jsonb_build_object('partyName', null, 'partyId', coalesce(v_code, nullif(v_row, '')), 'partyKept', false);
+  end if;
+  if p_type in ('counterparty', 'bank', 'founder') then
+    select c.kind into v_kind from public.fin_counterparties c where c.id = p_id;
+    if v_kind in ('supplier', 'org', 'bank') then return jsonb_build_object('partyName', p_name, 'partyId', p_id, 'partyKept', true); end if;
+    return jsonb_build_object('partyName', null, 'partyId', p_id, 'partyKept', false);
+  end if;
+  return jsonb_build_object('partyName', null, 'partyId', null, 'partyKept', false);   -- 'other': yozilgan ism — eksportga chiqmaydi
+end $$;
+revoke all on function app.kassa_mask_party(text, text, text, boolean) from public, anon, authenticated;
+
+-- KO-3 Excel eksporti uchun ma'lumot (FD-28): kassirga — yo'q (jurnalni chop etadi); 2-ro'yxatga (Moliya menejeri, buxgalter) —
+--   ismsiz (app.kassa_mask_party; hujjat surati va qatorlari chiqmaydi); Direktorga — to'liq. Jismoniy shaxs hujjatida qo'lda
+--   kiritilgan matn (asos, bekor qilish sababi) ismsiz nusxaga chiqmaydi — unda ism bo'lishi mumkin (masalan, qaytarish sababi);
+--   operatsiya turi, summa, raqam va ID qoladi. Yuridik shaxs va tizim hujjatlarida asos qoladi.
+create or replace function public.kassa_journal_export(p_desk text, p_from date, p_to date) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_j jsonb; v_dir boolean := app.is_admin();
+begin
+  if not (v_dir or app.fin_list2()) then
+    raise exception 'Ruxsat yo''q: Excel eksporti — Moliya menejeri, buxgalter yoki Direktor (kassir jurnalni chop etadi)' using errcode = '42501';
+  end if;
+  v_j := public.kassa_journal(p_desk, p_from, p_to);
+  if v_dir then return v_j || jsonb_build_object('masked', false); end if;
+  return v_j || jsonb_build_object('masked', true, 'docs', coalesce((
+    select jsonb_agg(jsonb_build_object('id', d ->> 'id', 'form', d ->> 'form', 'no', d -> 'no', 'year', d -> 'year', 'businessDay', d ->> 'businessDay',
+                                        'op', d ->> 'op', 'amount', d -> 'amount', 'status', d ->> 'status', 'partyType', d ->> 'partyType',
+                                        'basis', case when (m ->> 'partyKept')::boolean then d ->> 'basis' end, 'fiscalNo', d ->> 'fiscalNo',
+                                        'voidReason', case when (m ->> 'partyKept')::boolean then d ->> 'voidReason' end, 'isSystem', d -> 'isSystem')
+                     || m
+                     order by x.ord)
+      from jsonb_array_elements(v_j -> 'docs') with ordinality x(d, ord)
+      cross join lateral (select app.kassa_mask_party(d ->> 'partyType', d ->> 'partyId', d ->> 'partyName', coalesce((d ->> 'isSystem')::boolean, false)) as m) mm), '[]'::jsonb));
+end $$;
+revoke all on function public.kassa_journal_export(text, date, date) from public, anon;
+grant execute on function public.kassa_journal_export(text, date, date) to authenticated;
 
 -- ---------- O'qish: nazorat ro'yxati (RP-06) ----------
 --   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,

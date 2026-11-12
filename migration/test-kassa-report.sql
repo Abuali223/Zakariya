@@ -12,7 +12,8 @@
 --   (Z) onlayn kassa (NKM) Z-hisoboti: kiritish, solishtirish (fiskal chekli KO-1, terminal), nazorat, Telegram, kunni tekshirish;
 --   (O) yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat: Direktor tasdig'i, chegara (orgCashMax), nazorat.
 --   Eslatma: boshqa bo'limlar shu qoidaga bog'liq bo'lmasin deb sozlamada chegara katta qo'yilgan (N1); (O) uni o'zi o'zgartiradi.
---   (J) KO-3 — kassa orderlari jurnali: huquqlar, davr, jamlar, qoldiqlar mosligi, sinov kassasi alohida.
+--   (J) KO-3 — kassa orderlari jurnali: huquqlar, davr, jamlar, qoldiqlar mosligi, sinov kassasi alohida; Excel eksporti FD-28 bo'yicha
+--       (kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq).
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -534,6 +535,35 @@ select zz.chk('J5 sinov kassasi alohida: asosiy jurnalda yo''q, sinov jurnalida 
   (select count(*) from jsonb_array_elements(zz.get('J1')::jsonb -> 'docs') x where x ->> 'desk' <> 'main') || ':'
   || (select (j -> 'desk' ->> 'isTest') || ':' || (jsonb_array_length(j -> 'docs') = (select count(*) from public.cash_docs where desk = 'sinov' and form in ('KO1', 'KO2') and status in ('posted', 'void')))::text
         from (select zz.as('U_FM', $q$select public.kassa_journal('sinov', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q), '^0:true:true$');
+
+select zz.chk('J6 Excel eksporti: kassir va o''qituvchi — rad (kassir jurnalni chop etadi)',
+  zz.as('U_KAS', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$) || ' | '
+  || zz.as('U_TCH', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$), '^ERR 42501.* \| ERR 42501');
+select zz.put('J7', zz.as('U_FM', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$));
+select zz.chk('J7 Moliya menejeri: ismsiz — o''quvchi ID bilan, xodim tabel kodi bilan, «boshqa» nomsiz; yuridik shaxs nomi qoladi; jamlar o''sha',
+  (select (j ->> 'masked') || ':' || jsonb_array_length(j -> 'docs') || '=' || jsonb_array_length(zz.get('J1')::jsonb -> 'docs')
+          || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'student' and x ->> 'partyName' is null and x ->> 'partyId' ~ '^T-')
+          || ':' || (select string_agg(distinct x ->> 'partyId', ',') from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'employee')
+          || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'other' and x ->> 'partyName' is null and x ->> 'partyId' is null)
+          || ':' || (select string_agg(distinct x ->> 'partyName', ',') from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'counterparty' and (x ->> 'partyKept')::boolean)
+          || ':' || ((j -> 'totals') = (zz.get('J1')::jsonb -> 'totals'))::text
+     from (select zz.get('J7')::jsonb j) q), '^true:(\d+)=\1:[1-9]\d*:IQT-T1,IQX-T1:[1-9]\d*:Sinov Ta''minot MChJ(,Sinov Tashkilot MChJ)?:true$');
+select zz.chk('J7b ismsiz eksportda o''quvchi, to''lovchi, xodim va «boshqa» tomon ismlari, hujjat surati va qatorlari yo''q',
+  (select (position('Sinov Ota' in t) = 0 and position('Sinov Ona' in t) = 0 and position('Sinov Bobo' in t) = 0 and position('Sinov A' in t) = 0
+          and position('Sinov Zavxoz' in t) = 0 and position('Sinov O''qituvchi' in t) = 0 and position('Aliyev' in lower(t)) = 0 and position('aliyev' in lower(t)) = 0
+          and position('Bozor sotuvchisi' in t) = 0 and position('sourceSnapshot' in t) = 0 and position('"lines"' in t) = 0)::text
+     from (select zz.get('J7') as t) q), '^true$');
+select zz.chk('J7c ismsiz: jismoniy shaxs hujjatida qo''lda kiritilgan matn (asos, bekor qilish sababi) yo''q; yuridik shaxs va tizim hujjatida asos bor',
+  (select count(*) filter (where not (x ->> 'partyKept')::boolean and x ? 'basis' and x ->> 'basis' is null and x ->> 'voidReason' is null)
+          || '/' || count(*) filter (where not (x ->> 'partyKept')::boolean)
+          || ':' || count(*) filter (where (x ->> 'partyKept')::boolean and x ->> 'basis' is not null) || '/' || count(*) filter (where (x ->> 'partyKept')::boolean)
+          || ':' || (position('Qaytarish: sinov' in zz.get('J7')) = 0 and position('Xato kiritilgan' in zz.get('J7')) = 0 and position('Tilxat' in zz.get('J7')) = 0)::text
+     from jsonb_array_elements(zz.get('J7')::jsonb -> 'docs') x), '^([1-9]\d*)/\1:([1-9]\d*)/\2:true$');
+select zz.chk('J8 Direktor: to''liq (ismlar, asos va bekor qilish sababi bilan), masked = false; hujjatlar soni o''sha',
+  (select (j ->> 'masked') || ':' || (position('Sinov Ota' in j::text) > 0 and position('Qaytarish: sinov qaytarish' in j::text) > 0 and position('Xato kiritilgan' in j::text) > 0)::text
+          || ':' || (jsonb_array_length(j -> 'docs') = jsonb_array_length(zz.get('J1')::jsonb -> 'docs'))::text
+     from (select zz.as('U_DIR', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q),
+  '^false:true:true$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

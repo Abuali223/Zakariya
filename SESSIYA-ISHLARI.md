@@ -1831,6 +1831,36 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
 - **Qilinmagan:** RP-08 va buxgalter uchun oylik kassa to'plami (E1–E8) — F1.22 ning qolgan qismi; mustaqil (ko'p agentli) ko'rik —
   ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 70) Moliya, 1b: KO-3 Excel eksporti FD-28 ga moslandi — kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi kassa fayllarida (`kassa-day.sql`, `kassa-checks.sql`,
+`fin-version.sql`) va `fin-kassa.js`, `fin-print.js` da.
+
+- **Topilma (rejani qayta o'qishda, o'z ko'rigim):** 69-bo'limdagi «⬇ Excel» barcha kassa o'quvchilarida (kassirda ham) va ismlar
+  bilan edi — FD-28 ga zid (reja: «XLSX eksport — kassir: yo'q (chop etadi); Moliya menejeri, buxgalter: ID bilan, ismsiz;
+  Direktor: to'liq»).
+- **Server:** `kassa_journal_export(desk, from, to)` — Excel uchun alohida ma'lumot. Kassir va boshqalar — rad (42501). Moliya
+  menejeri / buxgalter — ismsiz (`masked: true`): o'quvchi — ID, xodim — tabel kodi (`teacherId` / `staffId`), jismoniy shaxs va
+  ta'sischi turidagi kontragent — ID, yozilgan «boshqa» tomon — nomsiz; jismoniy shaxs hujjatining asosi va bekor qilish sababi
+  chiqmaydi (qo'lda yozilgan matnda ism bo'lishi mumkin — masalan, qaytarish sababi); hujjat surati va qatorlari chiqmaydi;
+  yetkazib beruvchi, tashkilot, bank va tizim hujjatlarining nomi va asosi qoladi; jamlar, qoldiqlar, raqamlar — o'sha. Direktor —
+  to'liq (`masked: false`). Yordamchi `app.kassa_mask_party` — faqat server ichida.
+- **Sahifa:** «⬇ Excel» faqat Moliya menejeri, buxgalter va Direktorda; ma'lumot `kassa_journal_export` dan olinadi; ismsiz fayl
+  nomida «-ismsiz», varaqda izoh qatori («Ismsiz nusxa (FD-28)…», rus tilida ham), saqlangach xabar. Kassir jurnalni ko'radi va chop
+  etadi (o'zgarmadi).
+- **Qo'llanma:** `yoriqnomalar.md` — kassir (oy oxiri: KO-3 chop etish, Excel yo'q), 2-ro'yxat (ismsiz fayl tarkibi), Direktor
+  (to'liq nusxa — jadvalda); `ishga-tushirish.md` — oy oxiri ro'yxatining 4-qadami; reja — F1.22 qatori va holat bandi.
+- **Modul relizi 6** (`kassa-checks.sql`: ochiq funksiyalar 37, ichki 66).
+- **Sinovlar:** `test-kassa-report.sql` 109 (+5: J6 kassir va o'qituvchi rad; J7 ismsiz — o'quvchi ID, xodim kodi, «boshqa» nomsiz,
+  yuridik shaxs nomi qoladi, jamlar o'sha; J7b ismlar, surat va qatorlar yo'q; J7c jismoniy shaxs hujjatida asos va sabab yo'q,
+  yuridik shaxs va tizim hujjatida bor; J8 Direktor — to'liq); `test-kassa-checks.sql` — reliz 6; `fin-print.test.mjs` 24 (+1:
+  ismsiz varaq — ID, izoh qatori, sarlavha o'z joyida, rus tilida); brauzer `e2e-kassa10` 17 (+5, ikkala dizaynda): Moliya menejeri
+  fayli «-ismsiz» va ismsiz (asos va sabab ham yo'q), yetkazib beruvchi nomi va asosi bor, xabar chiqadi; Direktor fayli to'liq;
+  kassirda Excel tugmasi yo'q; kassir serverda rad. `e2e-kassa6` — reliz 6. Barcha SQL to'plamlari yashil (225 / 54 / 93 / 109 /
+  36 / 87 / 36 / 92 / 32), poyga 22, JS 35, `tg-daily` 42. Brauzer: 24 ta ishga tushirish, hammasi yashil (562 tekshiruv). Oldingi relizdan (`61dc9f1`, reliz 5) yangilanish —
+  xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 6)».
+- **Qilinmagan:** RP-08 va oylik kassa to'plami (E1–E8) — keyingi qadam; mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

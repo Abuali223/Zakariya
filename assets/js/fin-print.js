@@ -449,22 +449,31 @@ export function journalHtml(j, ctx, W) {
   return page(`${t.ko3} ${per}`, t, body);
 }
 
-// KO-3 XLSX varag'i (SheetJS aoa_to_sheet uchun): xronologik ro'yxat — bitta qator = bitta order. Ichki hujjat: o'zbek lotin
+// KO-3 XLSX varag'i (SheetJS aoa_to_sheet uchun): xronologik ro'yxat — bitta qator = bitta order. j — kassa_journal_export() javobi:
+//   masked (Moliya menejeri, buxgalter — FD-28) bo'lsa tomon ID bilan, ismsiz (yuridik shaxs nomi qoladi; jismoniy shaxs hujjatining
+//   asosi va bekor qilish sababini server bermaydi). Ichki hujjat: o'zbek lotin
 //   (chop etish tili rus bo'lsa — ruscha). Sana — Excel sanasi (kk.oo.yyyy), summalar — son (ustunlar bo'yicha qo'shiladi).
 export function journalSheet(j, ctx) {
   ctx = ctx || {}; j = j || {};
   const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, tt = j.totals || {};
   const rules = {}; (ctx.rules || []).forEach(x => { if (x && x.op) rules[x.op] = x; });
   const opName = op => { const x = rules[op]; return x ? ((ru && x.nameRu) || x.nameUz || op) : (op || ''); };
+  const masked = !!j.masked;
+  const LBL = ru ? { student: 'учащийся', employee: 'сотрудник', counterparty: 'контрагент', founder: 'учредитель', bank: 'банк', other: 'прочее лицо' }
+                 : { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', founder: 'ta’sischi', bank: 'bank', other: 'boshqa shaxs' };
+  const party = x => !masked ? texts(x, t).party : x.partyKept ? (x.partyName || '') : [LBL[x.partyType] || '', x.partyId || ''].filter(Boolean).join(' ');
+  const basis = x => masked ? (x.basis || '') : texts(x, t).basis;
   const serial = d => { const s = iso(d); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''; return { t: 'n', v: Math.round((Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 864e5), z: 'dd\\.mm\\.yyyy' }; };   // nuqta — matn belgisi (Excel, LibreOffice, SheetJS)
   const money2 = v => ({ t: 'n', v: Math.round(num(v) * 100) / 100, z: '#,##0.00' });
   const H = ru ? ['Дата', 'Документ', '№', 'Операция', 'От кого / кому', 'Основание', 'Приход, сум', 'Расход, сум', 'Состояние', 'Фискальный чек №']
                : ['Sana', 'Hujjat', '№', 'Operatsiya', 'Kimdan / kimga', 'Asos', 'Kirim, so‘m', 'Chiqim, so‘m', 'Holat', 'Fiskal chek №'];
   const nm = (lang => (lang === 'ru' && o.nameRu) ? o.nameRu : (o.nameUz || o.nameRu || ''))(ru ? 'ru' : 'uz');
-  const rows = [[nm], [t.ko3 + ' (' + t.ko3Form + ')'], [t.ko3Per(dmy(j.from), dmy(j.to)) + (j.desk && j.desk.name ? ' · ' + j.desk.name : '')], [], H];
+  const rows = [[nm], [t.ko3 + ' (' + t.ko3Form + ')'], [t.ko3Per(dmy(j.from), dmy(j.to)) + (j.desk && j.desk.name ? ' · ' + j.desk.name : '')],
+    masked ? [ru ? 'Обезличенная копия (FD-28): физические лица — по ID, основание и причина аннулирования их документов не выводятся; полная копия — у директора'
+                 : 'Ismsiz nusxa (FD-28): jismoniy shaxslar ID bilan, ular hujjatlarining asosi va bekor qilish sababi chiqmaydi; to‘liq nusxa — Direktorda'] : [], H];
   (j.docs || []).filter(x => x.form === 'KO1' || x.form === 'KO2').forEach(x => {
-    const v = x.status === 'void', isIn = x.form === 'KO1', tx = texts(x, t);
-    rows.push([serial(x.businessDay), (ru ? (isIn ? 'ПКО' : 'РКО') : (isIn ? 'Kirim orderi' : 'Chiqim orderi')), num(x.no), opName(x.op), tx.party, tx.basis,
+    const v = x.status === 'void', isIn = x.form === 'KO1';
+    rows.push([serial(x.businessDay), (ru ? (isIn ? 'ПКО' : 'РКО') : (isIn ? 'Kirim orderi' : 'Chiqim orderi')), num(x.no), opName(x.op), party(x), basis(x),
       isIn && !v ? money2(x.amount) : '', !isIn && !v ? money2(x.amount) : '',
       v ? (ru ? 'аннулирован' : 'bekor qilingan') + (x.voidReason ? ': ' + x.voidReason : '') + ` (${String(Math.round(num(x.amount) * 100) / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')})` : (ru ? 'проведён' : 'o‘tkazilgan'), x.fiscalNo || '']);
   });
