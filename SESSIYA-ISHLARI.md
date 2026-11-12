@@ -1803,6 +1803,34 @@ kassa ishga tushgandagi xarajat oynasida (kassasiz tizimda hech narsa o'zgarmayd
   (528 tekshiruv). Oldingi relizdan (`3d1dfa3`, reliz 3) yangilanish — xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 4)».
 - **Qilinmagan:** mustaqil (ko'p agentli) ko'rik — ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
 
+## 69) Moliya, 1b: KO-3 — kassa orderlari jurnali, chop etish va Excel (F1.22, buxgalter ko'rigi M4) — 2026-11-12
+
+**Holat: jonli tizimga CHIQMAGAN.** O'zgarishlar `--dev` zanjiridagi kassa fayllarida (`kassa-day.sql`, `kassa-checks.sql`,
+`fin-version.sql`) va `fin-kassa.js`, `fin-print.js` da.
+
+- **Server:** `kassa_journal(desk, from, to)` — davr (≤ 93 kun: oy yoki chorak) bo'yicha barcha kirim va chiqim orderlari:
+  o'tkazilgan va bekor qilingan (raqami saqlanadi), jamlar (faqat o'tkazilgan), davr boshi va oxiridagi qoldiq va ularning mosligi
+  (boshi + kirim − chiqim = oxiri — kassa kunlari bilan o'zaro tekshiruv), har shakl bo'yicha birinchi / oxirgi raqam. Ko'rish —
+  kassa o'quvchilari (kassir, 2-ro'yxat, Direktor); o'qituvchi va boshqalar — yo'q. Sinov kassasi alohida.
+- **Sahifa:** «Kassa» → «KO-3» (kassir, Moliya menejeri / buxgalter, Direktor): davr (standart — joriy oy), jamlar va qoldiqlar,
+  ro'yxat (bekor qilingani sababi bilan), qoldiqlar mos bo'lmasa — qizil ogohlantirish. «🖨 KO-3» — rasmiy shakl (uch tilda;
+  ikki tomonlama: chapda kirim, o'ngda chiqim — sana, raqam, summa, izoh; jamlar, qoldiqlar, raqamlar oralig'i, bosh buxgalter va
+  kassir imzosi). «⬇ Excel (XLSX)» — xronologik ro'yxat: sana — Excel sanasi, summalar — son (ustun bo'yicha qo'shiladi), holat,
+  fiskal chek №, jami va qoldiq qatorlari (vendored SheetJS, yangi kutubxona yo'q).
+- **Qo'llanma:** `yoriqnomalar.md` (oy oxiri — KO-3), `ishga-tushirish.md` (oy oxiri ro'yxatining 4-qadami), reja — F1.22 (KO-3 ✅;
+  RP-08 va oylik kassa to'plami — keyin).
+- **Modul relizi 5** (`kassa-checks.sql`: ochiq funksiyalar 36).
+- **Sinovlar:** `test-kassa-report.sql` 104 (+6: J0–J5 — rollar, noto'g'ri davr va kassa, jamlar hujjatlar bilan teng, qoldiqlar
+  mosligi va boshlang'ich qoldiq, chop etish uchun to'liq ma'lumot va tartib, ishga tushmagan va hujjatsiz davr, sinov kassasi
+  alohida); `fin-print.test.mjs` 23 (+3: KO-3 uch tilda, ogohlantirish, bo'sh davr, XLSX varag'i — SheetJS bilan yozib-o'qiladi,
+  sana Excel formatida); brauzer — yangi `e2e-kassa10` 12 (ikkala dizaynda): oyna jamlari, ro'yxat, chop etish matni, Excel fayl
+  yuklab olinib o'qiladi, bir kunlik davr, kassirda tugma, telefonda oyna sig'adi, o'qituvchi serverda rad.
+  `e2e-kassa6` — reliz 5. Barcha SQL to'plamlari yashil (225 / 54 / 93 / 104 / 36 / 87 / 36 / 92 / 32), poyga 22, JS 34,
+  `tg-daily` 42. Brauzer: 24 ta ishga tushirish, hammasi yashil (552 tekshiruv). Oldingi relizdan (`cc03437`, reliz 4)
+  yangilanish — xatosiz, `kassa-checks.sql` «muammo topilmadi (modul relizi 5)». KO-3 chop etish shakli A4 da ko'z bilan tekshirildi.
+- **Qilinmagan:** RP-08 va buxgalter uchun oylik kassa to'plami (E1–E8) — F1.22 ning qolgan qismi; mustaqil (ko'p agentli) ko'rik —
+  ruxsat berilmadi; jonli zanjirga o'tkazish — rejadagi kunda.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

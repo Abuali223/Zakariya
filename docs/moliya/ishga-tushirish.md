@@ -134,8 +134,10 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 1. Oyning oxirgi ish kuni — komissiya sanashi: kunni Direktor yoki moliya menejeri komissiya ishtirokida yopadi (yopish oynasida
    komissiya a’zolari kiritiladi — kamida 2 kishi), sanash dalolatnomasi chop etilib imzolanadi.
 2. Barcha kunlar «Tekshirilgan»; nazorat ro‘yxatida qizil qator yo‘q; `kassa-checks.sql` — «muammo topilmadi».
-3. Yanvar avans hisobotlari (qog‘oz, Sh-1) buxgalterga topshirilgan va xarajatlar «Buxgalteriya»ga kiritilgan.
-4. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi).
+3. Yanvar avans hisobotlari (qog‘oz, Sh-1) buxgalterga topshirilgan va «Kassa» → «Avans hisoboti» bilan kiritilgan.
+4. «KO-3» jurnali (oy) chop etilib bosh buxgalter imzolaydi; Excel nusxasi buxgalter dasturiga olinadi; jurnal oynasida qoldiqlar
+   mos (ogohlantirish yo‘q).
+5. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi).
 
 ## 8. Favqulodda holatlar
 | Holat | Nima qilinadi |

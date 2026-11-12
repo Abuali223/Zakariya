@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 4;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 5;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -101,6 +101,7 @@ function draw() {
   if (od && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-close">Kunni yopish</button>`);
   if (od && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul (pul sanaladi, kun ochiq qoladi)">Smena topshirish</button>`);
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
+  if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (m.director) acts.push(`<button class="btn ghost2" id="ks-set" title="Kassa sozlamalari">⚙ Sozlamalar</button>`);
   $('#ks-actions').innerHTML = acts.join('');
 
@@ -236,6 +237,7 @@ function bind() {
   on('#ks-hand', openHandoverForm);
   on('#ks-set', openSettings);
   on('#ks-period', openPeriodForm);
+  on('#ks-ko3', openJournal);
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
@@ -800,6 +802,53 @@ async function printReport(day, bookOrNull) {
     if (!book || !book.day) { C.toast('Bu kunda kassa varag‘i yo‘q', true); return; }
     C.printHTML(pm.reportHtml(book, printCtx(book.names, book.isTest, null), wm));
   } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+}
+// ---------------------------------------------------------------- KO-3: kirim va chiqim orderlari jurnali (F1.22)
+//   Davr (oy yoki chorak) bo'yicha barcha orderlar, bekor qilinganlari bilan; chop etish (KO-3 shakli) va Excel (buxgalter dasturi uchun).
+async function openJournal() {
+  const today = String(ST.ov.state.today || ''), m0 = today.slice(0, 8) + '01';
+  $('#modal').innerHTML = `<div class="modal-h"><h3>KO-3 — kassa orderlari jurnali</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Kirim va chiqim kassa orderlari (bekor qilinganlari raqami bilan) — oy yoki chorak bo‘yicha. Chop etilib, bosh buxgalter imzolaydi; Excel — buxgalter dasturi uchun.</div>
+      <div class="grid2">${lbl('Davr boshi', `<input id="kj-from" type="date" value="${esc(m0)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Davr oxiri', `<input id="kj-to" type="date" value="${esc(today)}" max="${esc(today)}" style="${FLD}">`)}</div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kj-load">Ko‘rsatish</button></div>
+      <div id="kj-body" style="margin-top:10px"></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn ghost2" id="kj-xlsx" disabled>⬇ Excel (XLSX)</button><button type="button" class="btn gold" id="kj-print" disabled>🖨 KO-3</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  let J = null;
+  const load = async () => {
+    const from = $('#kj-from').value, to = $('#kj-to').value;
+    if (!from || !to || from > to) { C.toast('Davrni to‘g‘ri tanlang (boshi oxiridan keyin bo‘lmasin)', true); return; }
+    $('#kj-body').innerHTML = '<div class="loading">Yuklanmoqda…</div>'; $('#kj-print').disabled = true; $('#kj-xlsx').disabled = true; J = null;
+    try { J = await call('kassa_journal', { p_desk: ST.desk, p_from: from, p_to: to }); }
+    catch (e) { $('#kj-body').innerHTML = ''; C.toast(errText(e), true); return; }
+    const t = J.totals || {}, docs = J.docs || [];
+    const row = x => { const isIn = x.form === 'KO1', v = x.status === 'void', a = v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount));
+      return `<tr${v ? ' style="opacity:.55"' : ''}><td data-label="Sana">${esc(dmy(x.businessDay))}</td><td data-label="№"><b>${isIn ? 'K' : 'Ch'}-${esc(String(x.no))}</b></td>
+        <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}${v ? ' — bekor qilingan' + (x.voidReason ? ': ' + esc(x.voidReason) : '') : ''}</div></td>
+        <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? a : ''}</td><td data-label="Chiqim" style="text-align:right;white-space:nowrap">${isIn ? '' : a}</td></tr>`; };
+    $('#kj-body').innerHTML = `<div class="small" id="kj-sum" style="background:#eef3f1;border-radius:10px;padding:10px 12px">Davr boshi <b>${esc(som(J.opening))}</b> · kirim <b>${esc(som(t.in))}</b> (${esc(String(num(t.nIn)))} ta) · chiqim <b>${esc(som(t.out))}</b> (${esc(String(num(t.nOut)))} ta) · davr oxiri <b>${esc(som(J.closing))}</b>${num(t.voids) ? ` · bekor qilingan: ${esc(String(num(t.voids)))} ta` : ''}${J.balanced === false ? ' · <b style="color:#B42318">qoldiqlar mos emas — Direktorga xabar bering</b>' : ''}</div>
+      ${docs.length ? `<div class="tablewrap" style="max-height:340px;overflow:auto;margin-top:8px"><table id="kj-tbl"><thead><tr><th>Sana</th><th>№</th><th>Operatsiya / tomon</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th></tr></thead><tbody>${docs.map(row).join('')}</tbody></table></div>` : '<div class="empty" style="margin-top:8px">Bu davrda order yo‘q.</div>'}`;
+    $('#kj-print').disabled = false; $('#kj-xlsx').disabled = false;
+  };
+  $('#kj-load').onclick = load;
+  $('#kj-print').onclick = async () => {
+    if (!J) return;
+    try { const [pm, wm] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), loadRefs()]); C.printHTML(pm.journalHtml(J, printCtx({}, J.desk && J.desk.isTest, null), wm)); }
+    catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+  };
+  $('#kj-xlsx').onclick = async () => {
+    if (!J) return;
+    const X = window.XLSX;
+    if (!X || !X.utils || !X.writeFile) { C.toast('Excel kutubxonasi hali yuklanmadi — sahifani yangilab qayta urining', true); return; }
+    try {
+      const [pm] = await Promise.all([C.finMod('fin-print'), loadRefs()]);
+      const sh = pm.journalSheet(J, printCtx({}, false, null));
+      const ws = X.utils.aoa_to_sheet(sh.rows); ws['!cols'] = sh.cols;
+      const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, sh.name);
+      X.writeFile(wb, `KO-3_${(J.desk && J.desk.id) || 'kassa'}_${J.from}_${J.to}.xlsx`);
+    } catch (e) { C.toast('Excel fayl tuzilmadi: ' + errText(e), true); }
+  };
+  await load();
 }
 // «To'lov» oynasidan: naqd o'quv to'lovining kirim orderini chop etish (hujjat id bo'yicha).
 export async function printDocById(ctx, docId, back) { C = ctx; await printDoc(docId, back); }

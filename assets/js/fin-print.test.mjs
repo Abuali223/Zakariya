@@ -5,7 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from './fin-words.js';
-import { docHtml, bookHtml, countHtml, bookRows, reportHtml } from './fin-print.js';
+import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet } from './fin-print.js';
+import { createRequire } from 'node:module';
 
 const org = { nameUz: '«SINOV MAKTAB» МЧЖ', nameRu: 'ООО «SINOV MAKTAB»', stir: '123456789', place: 'Тошкент ш.', printLang: 'uz-cyrl', extra: {} };
 const signatories = [
@@ -429,4 +430,60 @@ test('RP-02: onlayn kassa Z-hisoboti — solishtirish, «yo‘q», kiritilmagan,
   const h = reportHtml(withZ(zb), ctx({ rules, lang: 'ru' }), W), tr = text(h);
   assert.ok(tr.includes('Z-отчёт онлайн-ККМ') && tr.includes('Наличные 990 000=00 1 000 000=00 (чеков: 2) −10 000=00') && tr.includes('Банковские карты 150 000=00 150 000=00 (операций: 1) совпадает'), tr);
   assert.ok(!reportHtml(withZ(Object.assign({}, zb, { missing: true, reason: '<script>x</script>' })), ctx({ rules }), W).includes('<script>x'), 'sabab ekranlanadi');
+});
+
+// ---------------------------------------------------------------- KO-3: kassa orderlari jurnali (F1.22)
+const mkJournal = over => Object.assign({ ok: true, from: '2027-01-01', to: '2027-01-31', desk: { id: 'main', name: 'Asosiy kassa', isTest: false },
+  opening: 1000000, closing: 2115432.11, balanced: true,
+  totals: { in: 2350000, nIn: 1, out: 1234567.89, nOut: 1, voids: 1, firstKo1: 12, lastKo1: 13, firstKo2: 7, lastKo2: 7 },
+  docs: [ko1, Object.assign({}, ko1, { id: 'cd_0003', no: 13, status: 'void', voidReason: 'Xato <summa>', partyName: 'Sinov Bobo', amount: 50000 }), ko2] }, over || {});
+const rulesJ = [{ op: 'in_tuition', nameUz: 'O‘quv haqi (naqd)', nameRu: 'Оплата за обучение (наличные)' }, { op: 'out_expense', nameUz: 'Xarajat', nameRu: 'Расход' }];
+
+test('KO-3 jurnal: kirill (standart) — ikki tomonlama jadval, bekor qilingan chizilgan, jamlar va qoldiqlar', () => {
+  const h = journalHtml(mkJournal(), ctx(), W), t = text(h);
+  for (const must of ['«SINOV MAKTAB» МЧЖ', 'КО-3 шакли', 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', '01.01.2027 – 31.01.2027 · Asosiy kassa',
+    'Кирим касса ҳужжатлари', 'Чиқим касса ҳужжатлари', 'Сана Рақами Сумма Изоҳ Сана Рақами Сумма Изоҳ',
+    '04.01.2027 12 2 350 000=00', '04.01.2027 7 1 234 567=89 Sinov Ta’minot MChJ', '04.01.2027 13 50 000=00 бекор қилинган: Xato <summa>',
+    'Жами (бекор қилинганларсиз) 2 350 000=00 Жами (бекор қилинганларсиз) 1 234 567=89',
+    'Давр бошига қолдиқ: 1 000 000=00 · Давр охирига қолдиқ: 2 115 432=11', 'Кирим: 1 та, чиқим: 1 та, бекор қилинган: 1 та · Рақамлар: кирим 12–13, чиқим 7–7',
+    'Бош бухгалтер Синов Б.Б.', 'Кассир'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(h.includes('<s>50 000=00</s>') && !h.includes('<summa>'), 'bekor qilingan summa chizilgan; sabab ekranlangan');
+  assert.ok(!t.includes('ДИҚҚАТ') && !t.includes('СИНОВ'), 'mos jurnalda ogohlantirish yo‘q');
+});
+
+test('KO-3 jurnal: rus va lotin; qoldiq mos emas — ogohlantirish; sinov kassasi — belgi; bo‘sh davr', () => {
+  let t = text(journalHtml(mkJournal(), ctx({ lang: 'ru' }), W));
+  assert.ok(t.includes('ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ') && t.includes('Форма КО-3') && t.includes('Итого (без аннулированных) 2 350 000=00')
+    && t.includes('Номера: приход 12–13, расход 7–7') && t.includes('аннулирован: Xato <summa>') && t.includes('Главный бухгалтер'), t);
+  t = text(journalHtml(mkJournal({ balanced: false }), ctx({ lang: 'uz-latn' }), W));
+  assert.ok(t.includes('KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI') && t.includes('DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas'), t);
+  t = text(journalHtml(mkJournal({ desk: { id: 'sinov', name: 'Sinov kassasi', isTest: true } }), ctx(), W));
+  assert.ok(t.includes('СИНОВ'), 'sinov kassasi belgisi');
+  t = text(journalHtml(mkJournal({ docs: [], totals: { in: 0, nIn: 0, out: 0, nOut: 0, voids: 0 } }), ctx(), W));
+  assert.ok(t.includes('Рақамлар: кирим йўқ, чиқим йўқ') && t.includes('Жами (бекор қилинганларсиз) –'), t);
+});
+
+test('KO-3 XLSX varag‘i: sarlavha, xronologik qatorlar (son va sana katakchalari), jamlar; SheetJS bilan yozib-o‘qiladi', () => {
+  const sh = journalSheet(mkJournal(), ctx({ rules: rulesJ }));
+  assert.equal(sh.name, 'KO-3');
+  assert.deepEqual(sh.rows[4], ['Sana', 'Hujjat', '№', 'Operatsiya', 'Kimdan / kimga', 'Asos', 'Kirim, so‘m', 'Chiqim, so‘m', 'Holat', 'Fiskal chek №']);
+  const r1 = sh.rows[5], r2 = sh.rows[6], r3 = sh.rows[7];
+  assert.deepEqual(r1[0], { t: 'n', v: 46391, z: 'dd\\.mm\\.yyyy' }, '04.01.2027 — Excel sanasi');
+  assert.deepEqual([r1[1], r1[2], r1[3], r1[6], r1[7], r1[8], r1[9]], ['Kirim orderi', 12, 'O‘quv haqi (naqd)', { t: 'n', v: 2350000, z: '#,##0.00' }, '', 'o‘tkazilgan', '000123456789']);
+  assert.deepEqual([r2[2], r2[6], r2[7], r2[8]], [13, '', '', 'bekor qilingan: Xato <summa> (50 000)'], 'bekor qilingan — summa ustunlarda yo‘q, holatda');
+  assert.deepEqual([r3[1], r3[2], r3[3], r3[7]], ['Chiqim orderi', 7, 'Xarajat', { t: 'n', v: 1234567.89, z: '#,##0.00' }]);
+  const tot = sh.rows.find(r => r[5] === 'Jami (bekor qilinganlarsiz)');
+  assert.ok(tot && tot[6].v === 2350000 && tot[7].v === 1234567.89, 'jami qatori');
+  assert.ok(sh.rows.some(r => r[5] === 'Davr oxiriga qoldiq' && r[6].v === 2115432.11));
+  const require = createRequire(import.meta.url), X = require('../../vendor/xlsx/xlsx.mini.min.js');
+  const ws = X.utils.aoa_to_sheet(sh.rows); ws['!cols'] = sh.cols;
+  const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, sh.name);
+  const back = X.read(X.write(wb, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  const rows = X.utils.sheet_to_json(back.Sheets['KO-3'], { header: 1, raw: true, defval: '' });
+  assert.equal(rows[1][0], 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI (KO-3 shakli)');
+  assert.deepEqual([rows[5][0], rows[5][2], rows[5][6], rows[7][7]], [46391, 12, 2350000, 1234567.89], 'raqamlar Excel’da son bo‘lib qoladi');
+  assert.equal(X.SSF.format(sh.rows[5][0].z, rows[5][0]), '04.01.2027');
+  const ru = journalSheet(mkJournal(), ctx({ lang: 'ru', rules: rulesJ }));
+  assert.ok(ru.rows[4][0] === 'Дата' && ru.rows[5][1] === 'ПКО' && ru.rows[5][3] === 'Оплата за обучение (наличные)' && ru.rows[7][1] === 'РКО');
 });

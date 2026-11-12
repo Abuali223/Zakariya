@@ -17,6 +17,7 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
+--   kassa_journal(desk, from, to) — KO-3: kirim va chiqim orderlari jurnali (davr ≤ 93 kun; chop etish va XLSX — sahifada);
 --   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
 --                                 moslik P1/P4/P5/P8, hisobdorlar muddati, limit, Z-hisobot …);
 --   app.kassa_daily(day)        — Direktorning kunlik Telegram hisobotidagi kassa bloki va nazorat qatori (RP-05; director_daily chaqiradi);
@@ -804,6 +805,61 @@ begin
 end $$;
 revoke all on function public.kassa_day_book(text, date) from public, anon;
 grant execute on function public.kassa_day_book(text, date) to authenticated;
+
+-- ---------- O'qish: KO-3 — kirim va chiqim kassa hujjatlarini ro'yxatga olish jurnali (F1.22, buxgalter ko'rigi M4) ----------
+--   Davr (≤ 93 kun: oy yoki chorak) bo'yicha barcha kirim va chiqim orderlari — o'tkazilgan va bekor qilingan (raqami saqlanadi),
+--   jamlar (faqat o'tkazilgan), davr boshi va oxiridagi qoldiq va ularning mosligi (boshi + kirim − chiqim = oxiri), har shakl
+--   bo'yicha davrdagi birinchi / oxirgi raqam. Chop etish (KO-3) va XLSX — sahifada (fin-print.js: journalHtml, journalSheet).
+create or replace function public.kassa_journal(p_desk text, p_from date, p_to date) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_k public.cash_desks%rowtype;
+  v_open numeric; v_close numeric; v_t jsonb;
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if p_from is null or p_to is null or p_from > p_to then
+    raise exception 'Jurnal davri noto''g''ri (boshi oxiridan keyin bo''lmasin)' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  if p_to - p_from > 92 then
+    raise exception 'Jurnal davri 93 kundan oshmasin (oy yoki chorak)' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  select * into v_k from public.cash_desks k where k.id = v_desk;
+  if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
+  -- davr boshidagi qoldiq: davrdagi birinchi kassa kunining boshi; kun bo'lmasa — oldingi oxirgi kun oxiri; u ham bo'lmasa —
+  --   boshlang'ich qoldiq (birinchi kassa kuni davr oxirigacha bo'lsa). Oxiri — davrdagi (yoki undan oldingi) oxirgi kun oxiri.
+  select d.opening into v_open from public.cash_days d where d.desk = v_desk and d.day between p_from and p_to order by d.day limit 1;
+  if v_open is null then
+    select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end into v_open
+      from public.cash_days d where d.desk = v_desk and d.day < p_from order by d.day desc limit 1;
+  end if;
+  if v_open is null then
+    v_open := case when v_k."startDay" is not null and v_k."startDay" <= p_to then coalesce(v_k."openingAmount", 0) else 0 end;
+  end if;
+  select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end into v_close
+    from public.cash_days d where d.desk = v_desk and d.day <= p_to order by d.day desc limit 1;
+  v_close := coalesce(v_close, v_open);
+  select jsonb_build_object(
+           'in', coalesce(sum(c.amount) filter (where c.form = 'KO1' and c.status = 'posted'), 0),
+           'nIn', count(*) filter (where c.form = 'KO1' and c.status = 'posted'),
+           'out', coalesce(sum(c.amount) filter (where c.form = 'KO2' and c.status = 'posted'), 0),
+           'nOut', count(*) filter (where c.form = 'KO2' and c.status = 'posted'),
+           'voids', count(*) filter (where c.status = 'void'),
+           'firstKo1', min(c.no) filter (where c.form = 'KO1'), 'lastKo1', max(c.no) filter (where c.form = 'KO1'),
+           'firstKo2', min(c.no) filter (where c.form = 'KO2'), 'lastKo2', max(c.no) filter (where c.form = 'KO2'))
+    into v_t
+    from public.cash_docs c
+   where c.desk = v_desk and c.form in ('KO1', 'KO2') and c.status in ('posted', 'void') and c."businessDay" between p_from and p_to;
+  return jsonb_build_object('ok', true, 'from', p_from, 'to', p_to,
+    'desk', jsonb_build_object('id', v_k.id, 'name', v_k.name, 'isTest', v_k."isTest"),
+    'opening', v_open, 'closing', v_close, 'totals', v_t,
+    'balanced', v_open + (v_t ->> 'in')::numeric - (v_t ->> 'out')::numeric = v_close,
+    'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."businessDay", c."postedAt", c.form, c.no)
+                        from public.cash_docs c
+                       where c.desk = v_desk and c.form in ('KO1', 'KO2') and c.status in ('posted', 'void')
+                         and c."businessDay" between p_from and p_to), '[]'::jsonb));
+end $$;
+revoke all on function public.kassa_journal(text, date, date) from public, anon;
+grant execute on function public.kassa_journal(text, date, date) to authenticated;
 
 -- ---------- O'qish: nazorat ro'yxati (RP-06) ----------
 --   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,

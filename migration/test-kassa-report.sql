@@ -12,6 +12,7 @@
 --   (Z) onlayn kassa (NKM) Z-hisoboti: kiritish, solishtirish (fiskal chekli KO-1, terminal), nazorat, Telegram, kunni tekshirish;
 --   (O) yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat: Direktor tasdig'i, chegara (orgCashMax), nazorat.
 --   Eslatma: boshqa bo'limlar shu qoidaga bog'liq bo'lmasin deb sozlamada chegara katta qo'yilgan (N1); (O) uni o'zi o'zgartiradi.
+--   (J) KO-3 — kassa orderlari jurnali: huquqlar, davr, jamlar, qoldiqlar mosligi, sinov kassasi alohida.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-report.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -495,6 +496,44 @@ select zz.chk('O6 boshqa operatsiyalar o''zgarmaydi: kontragentdan kirim, bankka
   || ':' || coalesce(zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":10000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya","clientRef":"o-6-0002"}')::jsonb ->> 'orgCash', '-'),
   '^posted:-$');
 select zz.chk('O7 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.kassa_is_org('cp_org')::text$q$), '^ERR 42501');
+
+-- ---------- (J) KO-3 — kassa orderlari jurnali (F1.22, buxgalter ko'rigi M4) ----------
+select zz.chk('J0 o''qituvchi ko''rmaydi; noto''g''ri davr — rad (boshi oxiridan keyin; 93 kundan ortiq)',
+  zz.as('U_TCH', $q$select public.kassa_journal('main', '2027-01-01', '2027-01-31')::text$q$) || ' | '
+  || zz.as('U_FM', $q$select public.kassa_journal('main', '2027-01-31', '2027-01-01')::text$q$) || ' | '
+  || zz.as('U_FM', $q$select public.kassa_journal('main', '2027-01-01', '2027-04-05')::text$q$) || ' | '
+  || zz.as('U_FM', $q$select public.kassa_journal('nokassa', '2027-01-01', '2027-01-31')::text$q$),
+  '^ERR 42501.* \| ERR 22023 \[kassa:bad_input\].* \| ERR 22023 \[kassa:bad_input\].* \| ERR 22023 \[kassa:bad_desk\]');
+select zz.put('J1', zz.as('U_KAS', $q$select public.kassa_journal('main', '2027-01-01', '2027-01-31')::text$q$));
+select zz.chk('J1 yanvar (kassir ham ko''radi): soni va summalari hujjatlar bilan bir xil, bekor qilinganlar raqami bilan ro''yxatda',
+  (select (j -> 'totals' ->> 'nIn') || '/' || (j -> 'totals' ->> 'nOut') || '/' || (j -> 'totals' ->> 'voids') || '/' || jsonb_array_length(j -> 'docs')
+          || ':' || trim_scale((j -> 'totals' ->> 'in')::numeric) || '/' || trim_scale((j -> 'totals' ->> 'out')::numeric) from (select zz.get('J1')::jsonb j) q)
+  || ' = ' || (select count(*) filter (where form = 'KO1' and status = 'posted') || '/' || count(*) filter (where form = 'KO2' and status = 'posted') || '/'
+                      || count(*) filter (where status = 'void') || '/' || count(*) || ':' || trim_scale(coalesce(sum(amount) filter (where form = 'KO1' and status = 'posted'), 0))
+                      || '/' || trim_scale(coalesce(sum(amount) filter (where form = 'KO2' and status = 'posted'), 0))
+                 from public.cash_docs where desk = 'main' and form in ('KO1', 'KO2') and status in ('posted', 'void') and "businessDay" between '2027-01-01' and '2027-01-31'),
+  '^(\S+) = \1$');
+select zz.chk('J2 qoldiqlar: davr boshi = boshlang''ich qoldiq (2 000 000), oxiri = oxirgi kun oxiri, boshi + kirim − chiqim = oxiri',
+  (select trim_scale((j ->> 'opening')::numeric) || ':' || (j ->> 'balanced') || ':' || (trim_scale((j ->> 'closing')::numeric)
+          = (select trim_scale(case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end) from public.cash_days d where d.desk = 'main' order by d.day desc limit 1))::text
+     from (select zz.get('J1')::jsonb j) q), '^2000000:true:true$');
+select zz.chk('J3 hujjatlar chop etish uchun to''liq (raqam, kun, tomon, qatorlar); tartib — kun bo''yicha; bekor qilingan — sababi bilan',
+  (select ((j -> 'docs' -> 0) ? 'lines')::text || ':' || ((j -> 'docs' -> 0) ? 'partyName')::text
+          || ':' || (select bool_and(a.d <= b.d)::text from (select (x ->> 'businessDay') d, row_number() over () n from jsonb_array_elements(j -> 'docs') x) a
+                       join (select (x ->> 'businessDay') d, row_number() over () n from jsonb_array_elements(j -> 'docs') x) b on b.n = a.n + 1)
+          || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'status' = 'void' and coalesce(x ->> 'voidReason', '') <> '')
+     from (select zz.get('J1')::jsonb j) q), '^true:true:true:[1-9]');
+select zz.chk('J4 kassa ishga tushmagan davr: hujjat yo''q, qoldiq 0; hujjatsiz oraliq (05–07.01): qoldiq o''zgarmagan',
+  (select jsonb_array_length(j -> 'docs') || ':' || trim_scale((j ->> 'opening')::numeric) || ':' || (j ->> 'balanced')
+     from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2026-12-01', '2026-12-31')::text$q$)::jsonb j) q)
+  || ' | ' || (select jsonb_array_length(j -> 'docs') || ':' || ((j ->> 'opening')::numeric = (j ->> 'closing')::numeric
+                      and (j ->> 'opening')::numeric = (select d.closing from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04'))::text
+                 from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2027-01-05', '2027-01-07')::text$q$)::jsonb j) q),
+  '^0:0:true \| 0:true$');
+select zz.chk('J5 sinov kassasi alohida: asosiy jurnalda yo''q, sinov jurnalida bor (SINOV belgisi uchun isTest)',
+  (select count(*) from jsonb_array_elements(zz.get('J1')::jsonb -> 'docs') x where x ->> 'desk' <> 'main') || ':'
+  || (select (j -> 'desk' ->> 'isTest') || ':' || (jsonb_array_length(j -> 'docs') = (select count(*) from public.cash_docs where desk = 'sinov' and form in ('KO1', 'KO2') and status in ('posted', 'void')))::text
+        from (select zz.as('U_FM', $q$select public.kassa_journal('sinov', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q), '^0:true:true$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

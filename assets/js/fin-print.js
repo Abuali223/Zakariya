@@ -48,6 +48,9 @@ const T = {
     resOver: (a, no) => `Ортиқча — ${a}. Шу кун санаси билан кирим касса ордери ${no} расмийлаштирилди.`,
     decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', note: 'Изоҳ', member: 'Комиссия аъзоси',
     employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
+    ko3: 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', ko3Form: 'КО-3 шакли', ko3In: 'Кирим касса ҳужжатлари', ko3Out: 'Чиқим касса ҳужжатлари',
+    ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ',
+    ko3Nos: (f1, l1, f2, l2) => `Рақамлар: кирим ${f1 ? f1 + '–' + l1 : 'йўқ'}, чиқим ${f2 ? f2 + '–' + l2 : 'йўқ'}`, ko3Bad: 'ДИҚҚАТ: давр боши + кирим − чиқим давр охирига тенг эмас', ko3Docs: (a, b, v) => `Кирим: ${a} та, чиқим: ${b} та, бекор қилинган: ${v} та`,
     accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`,
     offsetBasis: (m, st, req) => `Ўзаро ҳисоб: ${m} ойи иш ҳақи ҳисобидан ўқув тўлови — ${st}${req ? '; ариза ' + req : ''}`,
     offsetText: (a, m) => `Ходимнинг ёзма аризасига асосан унинг ${m} ойи учун иш ҳақидан ${a} сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.`,
@@ -84,6 +87,9 @@ const T = {
     resOver: (a, no) => `Ortiqcha — ${a}. Shu kun sanasi bilan kirim kassa orderi ${no} rasmiylashtirildi.`,
     decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', note: 'Izoh', member: 'Komissiya a’zosi',
     employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
+    ko3: 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI', ko3Form: 'KO-3 shakli', ko3In: 'Kirim kassa hujjatlari', ko3Out: 'Chiqim kassa hujjatlari',
+    ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq',
+    ko3Nos: (f1, l1, f2, l2) => `Raqamlar: kirim ${f1 ? f1 + '–' + l1 : 'yo‘q'}, chiqim ${f2 ? f2 + '–' + l2 : 'yo‘q'}`, ko3Bad: 'DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas', ko3Docs: (a, b, v) => `Kirim: ${a} ta, chiqim: ${b} ta, bekor qilingan: ${v} ta`,
     accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`,
     offsetBasis: (m, st, req) => `O‘zaro hisob: ${m} oyi ish haqi hisobidan o‘quv to‘lovi — ${st}${req ? '; ariza ' + req : ''}`,
     offsetText: (a, m) => `Xodimning yozma arizasiga asosan uning ${m} oyi uchun ish haqidan ${a} so‘m farzandining o‘quv to‘lovi hisobiga o‘tkazildi. Naqd pul berilmadi va qabul qilinmadi.`,
@@ -120,6 +126,9 @@ const T = {
     resOver: (a, no) => `Излишек — ${a}. Датой этого дня оформлен приходный кассовый ордер ${no}.`,
     decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', note: 'Примечание', member: 'Член комиссии',
     employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
+    ko3: 'ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ', ko3Form: 'Форма КО-3', ko3In: 'Приходные кассовые документы', ko3Out: 'Расходные кассовые документы',
+    ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода',
+    ko3Nos: (f1, l1, f2, l2) => `Номера: приход ${f1 ? f1 + '–' + l1 : 'нет'}, расход ${f2 ? f2 + '–' + l2 : 'нет'}`, ko3Bad: 'ВНИМАНИЕ: остаток на начало + приход − расход не равен остатку на конец', ko3Docs: (a, b, v) => `Приход: ${a}, расход: ${b}, аннулировано: ${v}`,
     accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`,
     offsetBasis: (m, st, req) => `Взаимозачёт: оплата за обучение в счёт заработной платы за ${m} — ${st}${req ? '; заявление от ' + req : ''}`,
     offsetText: (a, m) => `На основании письменного заявления сотрудника из его заработной платы за ${m} сумма ${a} сум зачтена в счёт оплаты за обучение ребёнка. Наличные деньги не выдавались и не принимались.`,
@@ -283,6 +292,10 @@ table{border-collapse:collapse;width:100%}
 .bk .ft{position:absolute;left:20mm;right:10mm;bottom:4mm;margin:0}
 .act{font-size:10.5pt}.act .ttl{font-size:12.5pt}.act p{margin:2.5mm 0 0}.act .t td{font-size:10pt}
 .act .ln{border-bottom:.4pt solid #000;height:6mm}
+.jr .t th{font-size:7pt}.jr .t td{font-size:8.5pt;padding:.6mm 1mm}.jr td.jn{font-size:7.5pt;overflow-wrap:anywhere}
+.jr .t td.sep,.jr .t th.sep{border-left:1.2pt solid #000}
+.jr .sumj{margin-top:2.5mm;font-size:9.5pt}.jr .sumj div{margin-top:.8mm}
+.jr .warnj{margin-top:2mm;font-weight:bold;border:.8pt solid #000;padding:.8mm 1.5mm}
 `;
 const page = (title, t, body) => `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${body}</body></html>`;
 
@@ -398,6 +411,71 @@ export function docHtml(doc, ctx, W) {
 
 // ---------------------------------------------------------------- KO-4: kassa kitobi varag'i + kassir hisoboti
 // Varaqdagi qatorlar soni — serverdagi bilan AYNAN bir xil qoida (kassa_day_close): 10…60, standart 30.
+// ---------------------------------------------------------------- KO-3: kirim va chiqim kassa hujjatlari jurnali (F1.22)
+//   j — kassa_journal() javobi. Ikki tomonlama jadval: chapda kirim, o'ngda chiqim orderlari (sana, raqam, summa, izoh) — har biri
+//   o'z tartibida; bekor qilingan order raqami bilan qoladi (summa chizilgan, izohda sabab). Pastda jamlar va qoldiqlar.
+export function journalHtml(j, ctx, W) {
+  ctx = ctx || {}; j = j || {};
+  const lang = langOf(ctx), t = T[lang], o = ctx.org || {}, tt = j.totals || {};
+  const docs = (j.docs || []).filter(x => x.form === 'KO1' || x.form === 'KO2');
+  const ins = docs.filter(x => x.form === 'KO1'), outs = docs.filter(x => x.form === 'KO2');
+  const n = Math.max(ins.length, outs.length, 1);
+  const cell = (x, sep) => {
+    const s = sep ? ' sep' : '';
+    if (!x) return `<td class="c${s}"></td><td class="c"></td><td class="r"></td><td class="jn"></td>`;
+    const v = x.status === 'void', note = v ? `${t.mVoid.toLowerCase()}${x.voidReason ? ': ' + x.voidReason : ''}` : texts(x, t).party;
+    return `<td class="c${s}">${esc(dmy(x.businessDay))}</td><td class="c">${esc(String(x.no || ''))}</td><td class="r">${v ? `<s>${esc(money(W, x.amount))}</s>` : esc(money(W, x.amount))}</td><td class="jn">${esc(note)}</td>`;
+  };
+  const rows = Array.from({ length: n }, (_, i) => `<tr>${cell(ins[i], false)}${cell(outs[i], true)}</tr>`).join('');
+  const cols = t.ko3Cols;
+  const head = `<thead><tr><th colspan="4">${esc(t.ko3In)}</th><th colspan="4" class="sep">${esc(t.ko3Out)}</th></tr>
+    <tr><th style="width:17mm">${esc(cols[0])}</th><th style="width:11mm">${esc(cols[1])}</th><th style="width:24mm">${esc(cols[2])}</th><th>${esc(cols[3])}</th>
+        <th class="sep" style="width:17mm">${esc(cols[0])}</th><th style="width:11mm">${esc(cols[1])}</th><th style="width:24mm">${esc(cols[2])}</th><th>${esc(cols[3])}</th></tr></thead>`;
+  const foot = `<tr><td colspan="2" class="b">${esc(t.ko3Tot)}</td><td class="r b">${esc(money(W, tt.in))}</td><td></td>
+    <td colspan="2" class="b sep">${esc(t.ko3Tot)}</td><td class="r b">${esc(money(W, tt.out))}</td><td></td></tr>`;
+  const per = t.ko3Per(dmy(j.from), dmy(j.to));
+  const marks = marksOf(null, Object.assign({}, ctx, { isTest: ctx.isTest || !!(j.desk && j.desk.isTest) }), t);
+  const chief = pickSign(ctx, 2, null, t.chief);
+  const body = `<div class="pg jr">
+    <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <div class="note" style="text-align:right">${esc(t.ko3Form)}</div>
+    <div class="ttl">${esc(t.ko3)}</div><div class="dt">${esc(per)}${j.desk && j.desk.name ? ' · ' + esc(j.desk.name) : ''}</div>
+    <table class="t">${head}<tbody>${rows}${foot}</tbody></table>
+    <div class="sumj"><div>${esc(t.ko3Open)}: <b>${esc(money(W, j.opening))}</b> · ${esc(t.ko3Close)}: <b>${esc(money(W, j.closing))}</b></div>
+      <div>${esc(t.ko3Docs(num(tt.nIn), num(tt.nOut), num(tt.voids)))} · ${esc(t.ko3Nos(tt.firstKo1, tt.lastKo1, tt.firstKo2, tt.lastKo2))}</div></div>
+    ${j.balanced === false ? `<div class="warnj">${esc(t.ko3Bad)}</div>` : ''}
+    ${sig(t.chief, chief.name)}${sig(t.cashier, '')}
+    ${footer({ id: `${(j.desk && j.desk.id) || ''} ${iso(j.from)}…${iso(j.to)}` }, ctx, t)}</div>`;
+  return page(`${t.ko3} ${per}`, t, body);
+}
+
+// KO-3 XLSX varag'i (SheetJS aoa_to_sheet uchun): xronologik ro'yxat — bitta qator = bitta order. Ichki hujjat: o'zbek lotin
+//   (chop etish tili rus bo'lsa — ruscha). Sana — Excel sanasi (kk.oo.yyyy), summalar — son (ustunlar bo'yicha qo'shiladi).
+export function journalSheet(j, ctx) {
+  ctx = ctx || {}; j = j || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, tt = j.totals || {};
+  const rules = {}; (ctx.rules || []).forEach(x => { if (x && x.op) rules[x.op] = x; });
+  const opName = op => { const x = rules[op]; return x ? ((ru && x.nameRu) || x.nameUz || op) : (op || ''); };
+  const serial = d => { const s = iso(d); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''; return { t: 'n', v: Math.round((Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 864e5), z: 'dd\\.mm\\.yyyy' }; };   // nuqta — matn belgisi (Excel, LibreOffice, SheetJS)
+  const money2 = v => ({ t: 'n', v: Math.round(num(v) * 100) / 100, z: '#,##0.00' });
+  const H = ru ? ['Дата', 'Документ', '№', 'Операция', 'От кого / кому', 'Основание', 'Приход, сум', 'Расход, сум', 'Состояние', 'Фискальный чек №']
+               : ['Sana', 'Hujjat', '№', 'Operatsiya', 'Kimdan / kimga', 'Asos', 'Kirim, so‘m', 'Chiqim, so‘m', 'Holat', 'Fiskal chek №'];
+  const nm = (lang => (lang === 'ru' && o.nameRu) ? o.nameRu : (o.nameUz || o.nameRu || ''))(ru ? 'ru' : 'uz');
+  const rows = [[nm], [t.ko3 + ' (' + t.ko3Form + ')'], [t.ko3Per(dmy(j.from), dmy(j.to)) + (j.desk && j.desk.name ? ' · ' + j.desk.name : '')], [], H];
+  (j.docs || []).filter(x => x.form === 'KO1' || x.form === 'KO2').forEach(x => {
+    const v = x.status === 'void', isIn = x.form === 'KO1', tx = texts(x, t);
+    rows.push([serial(x.businessDay), (ru ? (isIn ? 'ПКО' : 'РКО') : (isIn ? 'Kirim orderi' : 'Chiqim orderi')), num(x.no), opName(x.op), tx.party, tx.basis,
+      isIn && !v ? money2(x.amount) : '', !isIn && !v ? money2(x.amount) : '',
+      v ? (ru ? 'аннулирован' : 'bekor qilingan') + (x.voidReason ? ': ' + x.voidReason : '') + ` (${String(Math.round(num(x.amount) * 100) / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')})` : (ru ? 'проведён' : 'o‘tkazilgan'), x.fiscalNo || '']);
+  });
+  rows.push([]);
+  rows.push(['', '', '', '', '', t.ko3Tot, money2(tt.in), money2(tt.out)]);
+  rows.push(['', '', '', '', '', t.ko3Open, money2(j.opening)]);
+  rows.push(['', '', '', '', '', t.ko3Close, money2(j.closing)]);
+  if (j.balanced === false) rows.push([t.ko3Bad]);
+  return { name: 'KO-3', rows, cols: [{ wch: 11 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 30 }, { wch: 36 }, { wch: 15 }, { wch: 15 }, { wch: 26 }, { wch: 16 }] };
+}
+
 export function bookRows(v) { const n = parseInt(v, 10); return Math.min(Math.max(Number.isFinite(n) && n > 0 ? n : 30, 10), 60); }
 export function bookHtml(book, ctx, W) {
   ctx = ctx || {}; book = book || {};

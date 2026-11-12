@@ -95,8 +95,9 @@ qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xaraj
 «Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
 beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi.
 
-**Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → Direktor «Davr»da surat oladi va
-davrni yopadi. «Davr» oynasida suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq. Sizga yuklanadigan JSON —
+**Oy oxiri.** Hamma kun «Tekshirilgan»; nazorat ro‘yxati toza; avans hisobotlari kiritilgan → **«KO-3»** (kassa orderlari jurnali):
+oy tanlanadi, jamlar va «davr boshi + kirim − chiqim = davr oxiri» tekshiriladi, «🖨 KO-3» chop etilib imzolanadi, «⬇ Excel» —
+buxgalter dasturi uchun (summalar son, sana — Excel sanasi) → Direktor «Davr»da surat oladi va davrni yopadi. «Davr» oynasida suratlarni ko‘rish, «Tekshirish» (xesh) va «⬇ JSON» sizga ham ochiq. Sizga yuklanadigan JSON —
 ismsiz (o‘quvchi va xodim faqat ID bilan, fayl nomida «-ismsiz»); ismli to‘liq nusxa faqat Direktorda — arxivga Direktor yuklagani
 qo‘yiladi.
 
