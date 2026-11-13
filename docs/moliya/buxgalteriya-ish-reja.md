@@ -862,7 +862,7 @@ ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinov
 `test-kassa-checks.sql` 32 (toza holat va har band uchun ataylab buzilgan holat), `test-fin-rights.sql` 125 (buxgalter
 o‘qish huquqlari — yopiq ro‘yxat, D6/D7, orqaga qaytarish), `test-kassa-race.sh` 22 (8 × 200
 parallel, 10 % ROLLBACK), `fin-print.test.mjs` 27, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 5, `tg-daily.test.cjs`
-45; brauzerda o‘n uchta to‘liq stsenariy (325 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
+45; brauzerda o‘n uchta to‘liq stsenariy (326 tekshiruv) eski va yangi dizaynda, 1440 va 390 px; kassasiz va «kassa
 o‘rnatilgan, ishga tushmagan» holatda eski oqimlar (36 tekshiruv). Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —

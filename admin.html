@@ -1864,7 +1864,9 @@ async function openProfile(){
     const fn=$p('pf-first').value.trim(), ln=$p('pf-last').value.trim();
     if(!fn||!ln){ msg('Ism va familiyani kiriting.'); return; }
     const b=$p('pf-name-save'); b.disabled=true;
-    try{ await setDoc(doc(db,'users',u.uid),{firstName:fn,lastName:ln,name:(fn+' '+ln).trim(),updatedAt:serverTimestamp()},{merge:true});
+    // updateDoc (UPDATE), setDoc EMAS: setDoc — upsert, uni server yangi qator qo'shish sifatida ham tekshiradi va Direktordan
+    //   boshqa xodimga rad etadi (users_ins: o'zi faqat ota-ona / o'quvchi qatorini yaratadi); o'z qatorini yangilash — users_upd.
+    try{ await updateDoc(doc(db,'users',u.uid),{firstName:fn,lastName:ln,name:(fn+' '+ln).trim(),updatedAt:serverTimestamp()},{mustExist:true});
       try{ await updateProfile(u,{displayName:(fn+' '+ln).trim()}); }catch(e){}
       msg('Ism-familiya saqlandi ✓',true);
     }catch(e){ msg('Xatolik: '+(e.code||e.message)); } b.disabled=false;

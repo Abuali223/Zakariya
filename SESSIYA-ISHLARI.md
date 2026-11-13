@@ -2054,6 +2054,20 @@ Commitlar: `d29deb4` (asosiy ish), `8971bd0` (2-davra tuzatishlari), 3-davra tuz
   ID ga o'tkazish (eksport ishlari bilan, egasi tasdig'i bilan); (3) F1.20 (RLS relizi) — toza prod haftasidan keyin;
   (4) buxgalter storno tartibi — egasi qarori.
 
+## 77) «Profil»: Direktordan boshqa xodimlar ism-familiyasini saqlay olmasdi — 2026-11-13
+
+- **Topildi:** F1.21 ning 3-davra mustaqil tekshiruvida (yon topilma), o'zim bazada va brauzerda tasdiqladim. **Jonli tizimda ham bor**
+  (F1.21 dan oldingi xato, kassa moduliga bog'liq emas).
+- **Sabab:** `admin.html` → «Profil» → «Saqlash» `setDoc(doc(db,'users',uid), …)` ishlatardi — shim'da bu upsert (INSERT … ON CONFLICT
+  DO UPDATE). Server uni yangi qator qo'shish sifatida ham tekshiradi: `users_ins` o'z qatorini faqat ota-ona / o'quvchi sifatida
+  yaratishga ruxsat beradi — o'qituvchi, kassir, buxgalter va boshqa xodimlarga «Xatolik: 42501». Direktor (`is_admin`) o'tardi, shu
+  sabab oldingi ko'riklarda sezilmagan.
+- **Tuzatish:** `updateDoc(…, {mustExist:true})` — o'z qatorini yangilash (`users_upd`: rol, holat, telefon va bog'lanishlar
+  o'zgarmasa ruxsat). Boshqa `setDoc(doc(db,'users',…))` chaqiruvlari — Direktor amallari yoki ro'yxatdan o'tish (INSERT), ular to'g'ri.
+- **Sinov:** `e2e-kassa13` ga tekshiruv qo'shildi (buxgalter — Direktor emas — ism-familiyani saqlaydi, bazada yangilanadi): ikkala
+  dizaynda 39/39; tuzatishsiz kod bilan shu tekshiruv «Xatolik: 42501» bilan yiqiladi (ataylab qaytarib ko'rildi).
+- **Jonli tizimga:** keyingi oddiy deploy bilan chiqadi (`admin.html`).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
