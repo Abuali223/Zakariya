@@ -148,11 +148,12 @@ begin
 end $$;
 revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text) from public, anon, authenticated;
 
--- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar). Ism bo'lmasa — uid (email EMAS: bu javoblarni
---   2-ro'yxat, jumladan buxgalter ham o'qiydi — F1.21, D6).
+-- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar). Ism bo'lmasa yoki ism o'rnida email
+--   turgan bo'lsa (eski ro'yxatdan o'tishda name = email) — uid (email EMAS: bu javoblarni 2-ro'yxat, jumladan buxgalter ham o'qiydi
+--   — F1.21, D6).
 create or replace function app.kassa_names(p_uids text[]) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(btrim(u.name), ''), u.id))
+  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(case when u.name ~ '@' then '' else btrim(u.name) end, ''), u.id))
                      from public.users u where u.id = any (coalesce(p_uids, '{}'))), '{}'::jsonb)
 $$;
 revoke all on function app.kassa_names(text[]) from public, anon, authenticated;
@@ -620,7 +621,7 @@ begin
   v_cashier := v_doc."sourceSnapshot" ->> 'cashierUid';
   if p_decision = 'employee' then
     select case when coalesce(u."staffRefId", '') <> '' then (case when u."staffRefType" = 'teacher' then 'teachers' else 'staff' end) || ':' || u."staffRefId" end,
-           coalesce(nullif(btrim(u.name), ''), u.id)   -- email emas: hujjat 2-ro'yxatga (buxgalterga ham) ko'rinadi
+           nullif(case when u.name ~ '@' then '' else btrim(u.name) end, '')   -- email emas (hujjat 2-ro'yxatga ham ko'rinadi); yo'q — «Kassir»
       into v_ref, v_name from public.users u where u.id = v_cashier;
     if v_ref is not null and (
          (split_part(v_ref, ':', 1) = 'teachers' and exists (select 1 from public.teachers t where t.id = split_part(v_ref, ':', 2)))
@@ -700,6 +701,7 @@ begin
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
                   where k.desk = v_desk and k.year = extract(year from v_today)::int),
     'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir),
+    'accRead', app.acc_read(),   -- F1.21: buxgalterning «To‘lovlar» / «Buxgalteriya» bo'limlari (fin-rights.sql «fin_rights_on»)
     'version', app.kassa_version());   -- modul relizi (fin-version.sql): sahifa o'zi kutgani bilan solishtiradi
 end $$;
 revoke all on function public.kassa_state(text) from public, anon;
@@ -1271,7 +1273,7 @@ begin
     'org', (select to_jsonb(o) from public.fin_org o where o.id = 'main'),
     'desks', coalesce((select jsonb_agg(to_jsonb(k) order by k.id) from public.cash_desks k where k.active), '[]'::jsonb),
     'signatories', coalesce((select jsonb_agg(to_jsonb(s) order by s.list, s."fullName") from public.fin_signatories s where s.active), '[]'::jsonb),
-    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(btrim(u.name), ''), u.id)) order by u.name)   -- email emas
+    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(case when u.name ~ '@' then '' else btrim(u.name) end, ''), u.id)) order by u.name)   -- email emas
                              from public.users u
                             where coalesce(nullif(u.status, ''), 'active') = 'active'
                               and (u.role = 'treasurer' or app.u_has(u.role, u."extraRoles", 'kassir'))), '[]'::jsonb),

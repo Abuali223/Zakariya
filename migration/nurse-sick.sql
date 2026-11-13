@@ -41,15 +41,24 @@ revoke all on function app.is_nurse(), app.is_finance_mgr() from public;
 grant execute on function app.is_nurse(), app.is_finance_mgr() to anon, authenticated, service_role;
 
 -- 2) Hamshira: o'quvchi ismi va sinfi (students_billing — staff-d6.sql bilan bir xil ustunlar), dam olish kunlari.
---    Buxgalter ham (moliya rejasi F1.21; asosiy rol, faol hisob — my_role). Ta'rif shu yerda yagona: buxgalterning qolgan
---    o'qish ro'yxati — fin-rights.sql.
+--    Buxgalter ham (moliya rejasi F1.21) — app.acc_read() orqali: uni fin-rights.sql boshqaradi («fin_rights_on»: yoqilganda
+--    app.is_accountant(), o'chirilganda false). Bu yerda faqat BIRINCHI marta (false) yaratiladi — fin-rights.sql zanjirda bo'lmasa
+--    (prod, kassa modulisiz) buxgalterga hech narsa ochilmaydi; qayta ishga tushirish fin-rights.sql qiymatini o'zgartirmaydi.
+--    Ta'rif shu yerda yagona: buxgalterning qolgan o'qish ro'yxati — fin-rights.sql.
+do $$ begin
+  if to_regprocedure('app.acc_read()') is null then
+    create function app.acc_read() returns boolean language sql stable set search_path = public, app, pg_temp as 'select false';
+  end if;
+end $$;
+revoke all on function app.acc_read() from public, anon;
+grant execute on function app.acc_read() to authenticated, service_role;
 create or replace view public.students_billing with (security_barrier = true) as
   select s.id, s."studentId", s.name, s.grade, s."classLetter", s.track, s.lang, s."payStatus", s."activeFrom", s."stopFrom",
          s.pauses, s."order"
     from public.students s
    where (select app.is_admin()) or (select app.is_zavuch()) or (select app.is_reception())
       or (select app.is_finance()) or (select app.is_cashier()) or (select app.is_nurse())
-      or (select app.my_role()) = 'accountant';
+      or (select app.acc_read());
 revoke all on public.students_billing from anon;
 grant select on public.students_billing to authenticated, service_role;
 

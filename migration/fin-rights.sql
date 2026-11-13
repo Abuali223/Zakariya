@@ -23,13 +23,18 @@ do $iqror_guard$ begin raise exception 'iqror: fin-rights.sql ALOHIDA ishga tush
 --     • can_see_salary() O'ZGARMAYDI (u teachers / staff qatorlarini ham ochadi);
 --     • eksport / chop etish — ID bilan, ismsiz (FD-28): kassa eksportlari serverda (kassa_journal_export, kassa_month_pack),
 --       «Buxgalteriya» A4 hisoboti sahifada.
---   YOPIQ RO'YXAT uch faylda: shu fayl (jadval siyosatlari va «*_acc» ko'rinishlari), nurse-sick.sql (students_billing — o'quvchilar
---   ro'yxati; ta'rif bitta joyda qoladi), parent-link-canon.sql (claim_child buxgalter hisobini rad etadi). migration/test-fin-rights.sql
---   (L-bandlar) aynan shu ro'yxatni kutadi. «<jadval>_acc_sel» nomlari va «*_acc» ko'rinishlari — faqat F1.21 uchun.
+--   YOPIQ RO'YXAT uch faylda: shu fayl (jadval siyosatlari, «*_acc» ko'rinishlari va app.acc_read() kaliti), nurse-sick.sql
+--   (students_billing — o'quvchilar ro'yxati, buxgalter app.acc_read() orqali; ta'rif bitta joyda qoladi), parent-link-canon.sql
+--   (claim_child buxgalter hisobini rad etadi). migration/test-fin-rights.sql (L-bandlar) aynan shu ro'yxatni kutadi.
+--   «<jadval>_acc_sel» nomlari va «*_acc» ko'rinishlari — faqat F1.21 uchun.
+--   Sahifa buxgalterning «To‘lovlar» / «Buxgalteriya» bo'limlarini kassa_state javobidagi «accRead» (= app.acc_read()) bo'yicha
+--   ochadi — reliz raqamiga bog'liq emas.
 --   ORQAGA QAYTARISH: faylni zanjirdan OLIB TASHLAMANG — yangi nomli siyosat va ko'rinishlarni boshqa hech bir fayl o'chirmaydi
---   (bazada qolib, buxgalter o'qishda davom etadi). Quyidagi «fin_rights_on» qiymatini «off» qilib deploy qiling: 0-bo'limdagi
---   tozalash hammasini o'chiradi, yangisi yaratilmaydi (test-fin-rights.sql Q-bandi shu yo'lni tekshiradi). Reliz raqami ham
---   qaytariladi (fin-version.sql: 10 → 9) — sahifada buxgalterning «To‘lovlar» / «Buxgalteriya» bo'limlari relizga bog'langan.
+--   (bazada qolib, buxgalter o'qishda davom etadi). Quyidagi «fin_rights_on» qiymatini «off» qilib deploy qiling — boshqa hech narsa
+--   o'zgarmaydi (reliz 10 qoladi): 0-bo'limdagi tozalash siyosat va ko'rinishlarni o'chiradi, app.acc_read() false bo'ladi
+--   (students_billing buxgalterga yopiladi, sahifa bo'limlarni o'zi yashiradi); test-fin-rights.sql Q-bandi shu yo'lni tekshiradi.
+--   Reliz 10 ning boshqa o'zgarishlari (buxgalterga qo'shimcha lavozim yo'q, kassa javoblarida email o'rniga uid) huquq bermaydi —
+--   ular qoladi.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi (kassa moduli bilan birga o'rnatiladi).
 --   Idempotent — QAYTA ishga tushirishga xavfsiz.
 -- =====================================================================
@@ -53,8 +58,15 @@ begin
   end loop;
 end $$;
 drop view if exists public.invoices_acc, public.payments_acc, public.refunds_acc, public.salary_payments_acc, public.payroll_lines_acc;
+-- Kalit: o'chiq holat (students_billing va sahifa bo'limlari uchun) — yoqilgan bo'lsa pastda qayta belgilanadi.
+create or replace function app.acc_read() returns boolean language sql stable set search_path = public, app, pg_temp as $$ select false $$;
+revoke all on function app.acc_read() from public, anon;
+grant execute on function app.acc_read() to authenticated, service_role;
 
 \if :fin_rights_on
+-- Kalit yoqildi: buxgalter (faol, asosiy rol) — students_billing va kassa_state «accRead».
+create or replace function app.acc_read() returns boolean language sql stable set search_path = public, app, pg_temp as $$ select app.is_accountant() $$;
+
 -- 1) Jadvallar (ustunlarida to'lovchi matni, telefon, email yoki kasallik sanalari yo'q): buxgalterga SELECT — «*_acc_sel».
 --    app.is_accountant() — PUBLIC uchun bajariladigan (anon'ga false), anon o'qiy oladigan jadvallarda ham xavfsiz.
 do $$

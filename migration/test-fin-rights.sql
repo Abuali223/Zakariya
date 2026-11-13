@@ -2,13 +2,17 @@
 -- test-fin-rights.sql — moliya ish rejasi F1.21 (fin-rights.sql, nurse-sick.sql students_billing, reports-roles.sql, claim_child)
 --   sinovi: «Buxgalter» (accountant) rolining o'qish huquqlari — YOPIQ RO'YXAT.
 --   (R) ruxsat etilgan jadvallar; (V) «*_acc» ko'rinishlari — to'lovchi matni, telefon, email, kasallik sanalari, davomat tafsilotisiz;
---   (K) maxfiy ota-ona kodi, telefon, boshqa xodim emaili va kasallik sanalari buxgalter o'qiy oladigan HECH BIR jadval / ko'rinishda
---       va kassa javoblarida yo'q; farzand biriktira olmaydi;
---   (B) students_billing; (D) D6/D7: boshqa jadvallar yopiq; (W) yozish yo'q (UPDATE / DELETE — ustunsiz so'rov, faqat yozish
---       siyosati ishlaydi); (P) pul va yozish RPC'lari — 42501;
+--   (K) maxfiy ota-ona kodi, telefon, boshqa xodim emaili (ism o'rnida email turgan eski hisob ham), kasallik sanalari, manzil va
+--       sog'liq belgilari buxgalter o'qiy oladigan HECH BIR jadval / ko'rinishda va kassa javoblarida (qaytarish so'rovi, kamomad
+--       dalolatnomasi ham) yo'q; farzand biriktira olmaydi;
+--   (B) students_billing; (D) D6/D7: boshqa jadvallar (baholar, davomat, monitoring ham) yopiq; (W) yozish yo'q: UPDATE / DELETE —
+--       ustunsiz so'rov (faqat yozish siyosati ishlaydi), INSERT — triggerlarsiz (faqat RLS qaror qiladi); (P) pul RPC'lari — 42501;
 --   (L) yopiq ro'yxat: buxgalterga «true» bo'ladigan yordamchilar ishlatilgan siyosatlar (yozish siyosati — umuman yo'q), ko'rinishlar
---       va RPC'lar = kutilgan ro'yxat; L4b — RPC'lar xatti-harakati bo'yicha (bilvosita tekshiruv ham topiladi);
---   (X) qo'shimcha lavozim yo'q; (Q) orqaga qaytarish yo'li: fin-rights.sql «fin_rights_on = off» bilan hammasini o'chiradi.
+--       va RPC'lar (matn + chaqiruvlar zanjiri: ruxsatni boshqa RPC orqali tekshiradiganlar ham) = kutilgan ro'yxat; L4b — xatti-harakat
+--       bo'yicha (NULL argumentlar bilan: STRICT yoki avval qator qidiradigan RPC'larni ko'rmaydi — ularni L4 zanjiri topadi);
+--   (X) qo'shimcha lavozim yo'q; (Q) orqaga qaytarish yo'li: fin-rights.sql «fin_rights_on = off» — siyosatlar, ko'rinishlar,
+--       students_billing va sahifa kaliti (kassa_state «accRead») o'chadi; qayta «on» — tiklanadi.
+--   Sana belgilari (kasallik kunlari) — 2001-yil: kassa javoblari bugungi sanadan hosil bo'ladi va ular bilan hech qachon to'qnashmaydi.
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub). Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan
 --   keyin:  bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-fin-rights.sql
 --   (Q-band fin-rights.sql ni «\ir» bilan o'qiydi — test fayli «-f» bilan beriladi yoki migration/ papkasidan ishga tushiriladi.)
@@ -46,6 +50,15 @@ begin
 exception when others then
   get stacked diagnostics v_hint = pg_exception_hint;
   return 'ERR ' || sqlstate || ' [' || coalesce(v_hint, '') || '] ' || sqlerrm;
+end $$;
+-- INSERT sinovi: triggerlarsiz (session_replication_role = replica) — qatorni faqat RLS qabul qiladi yoki rad etadi.
+create or replace function zz.ins(p_uid text, p_q text) returns text language plpgsql as $$
+declare r text;
+begin
+  perform set_config('session_replication_role', 'replica', true);
+  r := zz.as(p_uid, p_q);
+  perform set_config('session_replication_role', 'origin', true);
+  return r;
 end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 truncate zz.res;
@@ -85,7 +98,7 @@ on conflict (id) do update set role = excluded.role, status = excluded.status, "
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',6,'B','ru','',2,'[]');
 insert into public.student_codes (id, code) values ('s1','K7Q2ZP');
-insert into public.student_private (id, "parentPhone", address, health) values ('s1','+998900000001','Sinov ko''chasi','sinov');
+insert into public.student_private (id, "parentPhone", address, health) values ('s1','+998900000001','ZZADDR1 ko''chasi','ZZHEALTH1');
 insert into public.teachers (id, "teacherId", name, phone, pauses) values ('tch1','IQT-T1','Sinov O''qituvchi','+998900000003','[]');
 insert into public.staff (id, "staffId", name, phone, position) values ('st1','IQX-T1','Sinov Xodim','+998900000004','Qorovul');
 insert into public.payments (id, "studentId", provider, amount, status, raw, "payerName", "payerPhone", "payerClass", matched, "createdAt", merchant_trans_id, click_trans_id) values
@@ -93,14 +106,14 @@ insert into public.payments (id, "studentId", provider, amount, status, raw, "pa
   ('p2','T-1','cash',500000,'applied','{"manual":true,"method":"cash","date":"2027-01-03","note":"+998900000005 qo''ng''iroq qildi","byUid":"U_KAS"}','Sinov Ota','',null,true,'2027-01-04 11:00+05',null,null),
   ('p3','','click',300000,'reversed','{"needsManualReverse":true,"reverseNote":"Click bekor qildi (som=300000, studentId=)","manualReverseBy":"k@x"}','K7Q2ZP','+998900000006','K7Q2ZP +998900000009',false,'2027-01-04 12:00+05','K7Q2ZP','777002');
 insert into public.invoices (id, "studentId", "studentName", month, amount, status, "sickDaysApplied", "sickAmount", "sickNoteRefs", "discountInfo") values
-  ('i1','T-1','Sinov A','2027-01',1000000,'paid',2,100000,'{"sn1": ["2027-01-18", "2027-01-19"]}','Monitoring 90–99 · 20% + 2 kasal kun (−100000)');
+  ('i1','T-1','Sinov A','2027-01',1000000,'paid',2,100000,'{"sn1": ["2001-01-18", "2001-01-19"]}','Monitoring 90–99 · 20% + 2 kasal kun (−100000)');
 insert into public.refunds (id, target, "targetId", "studentId", "studentName", amount, reason, "byEmail", month) values
   ('r1','invoice','i1','T-1','Sinov A',1000,'sinov','d@x','2027-01'), ('r2','payment','p3','','K7Q2ZP',300000,'adashib tushgan','d@x','');
 insert into public.expenses (id, date, month, category, amount, note) values ('e1','2027-01-04','2027-01','Kanselyariya',5000,'sinov');
 insert into public.credit_ledger (id, "studentId", delta, "balanceAfter", reason) values ('cl1','T-1',100,100,'overpay');
 insert into public.student_credit (id, "studentId", credit) values ('T-1','T-1',100);
 insert into public.applied_payments (id, "studentId", amount) values ('ap1','T-1',1000000);
-insert into public.staff_advances (id, "teacherId", "teacherName", amount, month, date) values ('sa1','IQX-T1','Sinov Xodim',1000,'2027-01','2027-01-04');
+insert into public.staff_advances (id, "teacherId", "teacherName", amount, month, date) values ('sa1','IQX-T1','Sinov Xodim',1000,'2027-02','2027-02-04');
 insert into public.salary_payments (id, "teacherId", "teacherName", month, gross, net, date, "byEmail") values ('sp1','IQX-T1','Sinov Xodim','2027-01',5000,4000,'2027-01-04','f@x');
 insert into public.payroll_runs (id, status) values ('2027-01','approved');
 insert into public.payroll_lines (id, "runId", "personType", "personId", name, gross, payable, "workedMin", details, "directorNote") values
@@ -110,7 +123,7 @@ insert into public.config (id, "lessonRate") values ('finance', 50000) on confli
 insert into public.config (id) values ('salary') on conflict (id) do nothing;
 insert into public.config (id, "tenureYears") values ('ltv', 4) on conflict (id) do nothing;
 insert into public.staff_checkins (id, "personId", name, day) values ('ck1','IQX-T1','Sinov Xodim','2027-01-04');
-insert into public.sick_notes (id, "studentId", "fromDay", "toDay", status) values ('sn1','T-1','2027-01-04','2027-01-05','pending');
+insert into public.sick_notes (id, "studentId", "fromDay", "toDay", status) values ('sn1','T-1','2001-01-18','2001-01-19','pending');
 insert into public.sms_log (id, "studentId", phone, message) values ('sm1','T-1','+998900000007','sinov');
 insert into public.price_table (id, grade, amount) values ('pt1', 5, 1000000);
 insert into public.pay_notes (id, note) values ('T-1','sinov');
@@ -120,11 +133,27 @@ insert into public.staff_leaves (id, "refId", name, type, "startDay", "endDay", 
 insert into public.staff_substitutions (id, day, month, "absentName", "subName") values ('sub1','2027-01-04','2027-01','Sinov A1','Sinov B1');
 insert into public.fin_snapshots (id, kind, "asOf", payload, hash) values ('fs1','manual','2027-01-04 10:00+05','{"students":[{"name":"Sinov A"}]}','h');
 insert into public.child_claims (id, uid, "studentId", code) values ('U_DIR__T-2','U_DIR','T-2','K7Q2ZP');
-insert into public.student_health (id, "studentId", allergies) values ('s1','T-1','sinov');
+insert into public.student_health (id, "studentId", allergies) values ('s1','T-1','ZZALLERGY1');
+insert into public.attendance (id, "studentId", "classKey", month, days) values ('att1','T-1','uz-5-A','2027-01','{"04": "absent", "05": "sick"}');
+insert into public.grades (id, "studentId", "classKey", year, subjects) values ('gr1','T-1','uz-5-A','2026-2027','{"math": [2, 3]}');
+insert into public.monitoring (id, "studentId", "classKey", subject, period, score, status) values ('mon1','T-1','uz-5-A','math','2027-01',41,'approved');
+insert into public.applications (id, name, phone, specialty, status) values ('app1','Sinov Nomzod','+998900000010','math','submitted');
+update public.users set name = email where id = 'U_KAS';   -- eski ro'yxatdan o'tish shakli: ism o'rnida email (index.html askRole)
 update public.fin_org set "kassaGoLive" = app.fin_today() - 1 where id = 'main';
 set local session_replication_role = origin;
 -- Direktor kassadan qaytarish so'rovini yozadi (KO-2, tasdiqlangan) — surat va hujjat buxgalterga ko'rinadi (kassa_reader).
-select zz.as('U_DIR', $q$select public.kassa_refund_request('{"target":"invoice","id":"i1","amount":1000,"reason":"sinov qaytarish","payee":"Sinov Ota Onasi","clientRef":"zz-ref-k7a"}'::jsonb) ->> 'ok'$q$) as zz_k0
+-- Kamomad oqimi: boshlang'ich qoldiq → kirim (kun ochiladi) → kassir kunni kam pul bilan yopadi → Direktor «xodim zimmasiga» qaror
+--   qiladi (kassir HR kartasiga bog'lanmagan — dalolatnoma tomoni ismi bilan; ismi o'rnida email turgan hisob — email chiqmasligi kerak).
+--   Har qadam alohida so'rovda (oldingi qadam yozganini keyingisi ko'rishi uchun).
+select zz.as('U_DIR', $q$select public.kassa_refund_request('{"target":"invoice","id":"i1","amount":1000,"reason":"sinov qaytarish","payee":"Sinov Ota Onasi","clientRef":"zz-ref-k7a"}'::jsonb) ->> 'ok'$q$) as zz_k0a
+\gset
+select zz.as('U_DIR', format($q$select public.kassa_opening_set('{"amount":1000000,"startDay":"%s"}') ->> 'ok'$q$, app.fin_today())) as zz_k0b
+\gset
+select zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma''lum shaxs","articleId":"OP-16","basis":"Ariza","note":"Aniqlanmagan tushum","clientRef":"zz-c1-000001"}'::jsonb) ->> 'ok'$q$) as zz_k0c
+\gset
+select zz.as('U_KAS', format($q$select public.kassa_day_close('{"day":"%s","counted":1090000}') ->> 'ok'$q$, app.fin_today())) as zz_k0d
+\gset
+select zz.as('U_DIR', format('select public.kassa_shortage_decide(%L, %L, %L) ->> ''ok''', (select "diffDocId" from public.cash_days where day = app.fin_today()), 'employee', 'Kassir yozma roziligi bilan')) as zz_k0e
 \gset
 
 -- ---------- (R) ruxsat etilgan jadvallar ----------
@@ -177,12 +206,13 @@ select zz.chk('V17 invoices: yangi ustun ko''rinishda yoki istisnoda bo''lishi s
 -- ---------- (K) maxfiy kod va telefon ----------
 --   Buxgalter o'qiy oladigan HAR BIR jadval / ko'rinishda (dinamik: SELECT huquqi bor barcha public obyektlar — kassa jadvallari va
 --   kelajakdagi yangilari ham) qatorlar matni: kod, telefon, boshqa xodim emaili, kasallik sanalari yo'q.
-select zz.chk('K0 sinov sharti: Direktor kassadan qaytarish so''rovini yozdi (hujjat surati buxgalterga ko''rinadi)', :'zz_k0', '^true$');
+select zz.chk('K0 sinov sharti: qaytarish so''rovi, boshlang''ich qoldiq, kirim, kamomad bilan yopilgan kun, Direktor qarori — hammasi bajarildi',
+  :'zz_k0a' || '/' || :'zz_k0b' || '/' || :'zz_k0c' || '/' || :'zz_k0d' || '/' || :'zz_k0e', '^true/true/true/true/true$');
 select zz.chk('K1 maxfiy ota-ona kodi (K7Q2ZP) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '(?i)K7Q2ZP'), '^$');
 select zz.chk('K2 telefon raqami (+998…) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '\+?998[0-9]{9}'), '^$');
 select zz.chk('K5 boshqa foydalanuvchilar emaili (…@x) buxgalter o''qiy oladigan hech bir joyda yo''q (o''z qatori — users — bundan tashqari)',
   zz.scan('U_ACC', '[A-Za-z0-9._-]+@x\M', array['users']), '^$');
-select zz.chk('K6 kasallik sanalari (2027-01-18/19) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '2027-01-1[89]'), '^$');
+select zz.chk('K6 kasallik sanalari (2001-01-18/19) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '2001-01-1[89]'), '^$');
 select zz.chk('K7 qaytarish so''rovi suratida Direktor emaili emas, uid',
   (select ("sourceSnapshot" ->> 'byUid') || '/' || ("sourceSnapshot" ? 'by')::text from public.cash_docs where "sourceId" = 'kref_zz-ref-k7a'), '^U_DIR/false$');
 select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik sanasi yo''q',
@@ -193,8 +223,15 @@ select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik san
                          format('public.kassa_day_book(''main'', %L::date)', app.fin_today()),
                          format('public.kassa_journal(''main'', %L::date, %L::date)', app.fin_today() - 7, app.fin_today()),
                          format('public.kassa_matrix(''main'', %L)', to_char(app.fin_today(), 'YYYY-MM')),
-                         format('public.kassa_doc_get(%L)', (select id from public.cash_docs where "sourceId" = 'kref_zz-ref-k7a'))]) f) x
-    where r ~ '^ERR' or r ~ '(?i)K7Q2ZP' or r ~ '\+?998[0-9]{9}' or r ~ '[A-Za-z0-9._-]+@x\M' or r ~ '2027-01-1[89]'), '^$');
+                         format('public.kassa_doc_get(%L)', (select id from public.cash_docs where "sourceId" = 'kref_zz-ref-k7a')),
+                         format('public.kassa_doc_get(%L)', (select id from public.cash_docs where op = 'out_shortage')),
+                         format('public.kassa_doc_get(%L)', (select id from public.cash_docs where op = 'nc_shortage_dec'))]) f) x
+    where r ~ '^ERR' or r ~ '(?i)K7Q2ZP' or r ~ '\+?998[0-9]{9}' or r ~ '[A-Za-z0-9._-]+@x\M' or r ~ '2001-01-1[89]'), '^$');
+select zz.chk('K9 kamomad dalolatnomasi tomoni: ism o''rnida email turgan kassir — email emas, «Kassir»; kassirlar ro''yxatida ham email yo''q',
+  (select "partyType" || '/' || coalesce("partyName", '∅') from public.cash_docs where op = 'nc_shortage_dec') || ' | ' ||
+  zz.as('U_ACC', $q$select (public.kassa_refs() -> 'operators')::text$q$), '^other/Kassir \| \[\{"uid": "U_KAS", "name": "U_KAS"\}\]$');
+select zz.chk('K10 manzil va sog''liq belgilari (ZZADDR1 / ZZHEALTH1 / ZZALLERGY1) buxgalter o''qiy oladigan hech bir joyda yo''q',
+  zz.scan('U_ACC', '(ZZADDR1|ZZHEALTH1|ZZALLERGY1)'), '^$');
 select zz.chk('K3 buxgalter farzand biriktira olmaydi (kodni bilsa ham)',
   zz.as('U_ACC', $q$select public.claim_child('T-1', 'K7Q2ZP')::text$q$) || ' | ' || (select count(*)::text from public.child_claims where uid = 'U_ACC'),
   'Buxgalter hisobiga farzand biriktirilmaydi.* \| 0$');
@@ -211,34 +248,54 @@ select zz.chk('B5 anon students_billing ni o''qiy olmaydi', zz.cnt(null, 'studen
 -- ---------- (D) D6 / D7: yopiq ----------
 select zz.chk('D0 urug'' tekshiruvi: D-bandidagi har jadvalda kamida 1 qator bor (aks holda «0» hech narsani isbotlamaydi)',
   (select coalesce(string_agg(t, ','), '') from unnest(array['student_private','student_codes','student_health','teachers','staff','staff_checkins','sick_notes',
-     'fin_snapshots','sms_log','price_table','pay_notes','discount_requests','enrollments','staff_leaves','staff_substitutions','refunds','child_claims','applied_payments']) t
+     'fin_snapshots','sms_log','price_table','pay_notes','discount_requests','enrollments','staff_leaves','staff_substitutions','refunds','child_claims','applied_payments',
+     'attendance','grades','monitoring','applications']) t
     where not (xpath('/row/c/text()', query_to_xml(format('select exists(select 1 from public.%I) as c', t), false, true, '')))[1]::text::boolean), '^$');
 select zz.chk('D' || x.n || ' buxgalterga yopiq: ' || x.t, zz.cnt('U_ACC', x.t), '^0$')
   from unnest(array['student_private','student_phones','student_codes','student_health','teachers','staff','staff_checkins','sick_notes',
                     'fin_snapshots','sms_log','price_table','pay_notes','discount_requests','enrollments','staff_leaves','staff_substitutions',
-                    'refunds','child_claims']) with ordinality x(t, n);
-select zz.chk('D20 users: faqat o''z qatori', zz.as('U_ACC', 'select string_agg(id, '','') from public.users'), '^U_ACC$');
+                    'refunds','child_claims','attendance','grades','monitoring','applications']) with ordinality x(t, n);
+select zz.chk('DU users: faqat o''z qatori', zz.as('U_ACC', 'select string_agg(id, '','') from public.users'), '^U_ACC$');
 
 -- ---------- (W) yozish va pul RPC'lari yo'q ----------
 --   So'rovda ustun o'qilmaydi (set id = doimiy, returning 1, WHERE yo'q) — shuning uchun faqat UPDATE / DELETE siyosatlari ishlaydi
 --   (ustun o'qilsa, PostgreSQL SELECT siyosatini ham qo'shadi va xom jadvalda bu tekshiruv doim 0 qaytarardi).
+--   Kutilgan natija aniq: authenticated'da huquq bor jadvalda — 0 qator (RLS o'tkazmadi), huquq yo'q jadvalda — «permission denied»
+--   (biznes triggeri bergan boshqa 42501 tekshiruvni «o'tkazib» yubormaydi).
 select zz.chk('W' || x.n || ' buxgalter ' || x.t || ' ni o''zgartira olmaydi',
-  zz.as('U_ACC', format($q$with u as (update public.%I set id = 'zz-w' returning 1) select count(*)::text from u$q$, x.t)), '^(0|ERR 42501.*)$')
+  zz.as('U_ACC', format($q$with u as (update public.%I set id = 'zz-w' returning 1) select count(*)::text from u$q$, x.t)),
+  case when has_table_privilege('authenticated', ('public.' || x.t)::regclass, 'UPDATE') then '^0$' else '^ERR 42501 .*permission denied' end)
   from unnest(array['invoices','expenses','credit_ledger','student_credit','staff_advances','payroll_runs','config','payments',
                     'refunds','salary_payments','payroll_lines']) with ordinality x(t, n);
 select zz.chk('W' || x.n || 'd buxgalter ' || x.t || ' dan o''chira olmaydi',
-  zz.as('U_ACC', format($q$with d as (delete from public.%I returning 1) select count(*)::text from d$q$, x.t)), '^(0|ERR 42501.*)$')
+  zz.as('U_ACC', format($q$with d as (delete from public.%I returning 1) select count(*)::text from d$q$, x.t)),
+  case when has_table_privilege('authenticated', ('public.' || x.t)::regclass, 'DELETE') then '^0$' else '^ERR 42501 .*permission denied' end)
   from unnest(array['invoices','expenses','credit_ledger','student_credit','staff_advances','payroll_runs','config','payments',
                     'refunds','salary_payments','payroll_lines']) with ordinality x(t, n);
-select zz.chk('W20 buxgalter xarajat qo''sha olmaydi',
-  zz.as('U_ACC', $q$insert into public.expenses (id, date, month, category, amount) values ('eX','2027-01-04','2027-01','Boshqa',1) returning id$q$), '^ERR 42501');
+select zz.chk('W' || x.n || 'i buxgalter ' || x.t || ' ga qator qo''sha olmaydi (triggerlarsiz — faqat RLS qaror qiladi)',
+  zz.ins('U_ACC', format('insert into public.%I %s returning 1', x.t, x.v)), '^ERR 42501 .*(row-level security|permission denied)')
+  from (values
+    (1, 'invoices', $v$(id, "studentId", month, amount, status) values ('zz-wi', 'T-1', '2027-02', 1, 'pending')$v$),
+    (2, 'expenses', $v$(id, date, month, category, amount, method) values ('zz-we', '2027-02-04', '2027-02', 'Boshqa', 1, 'bank')$v$),
+    (3, 'credit_ledger', $v$(id, "studentId", delta, "balanceAfter", reason) values ('zz-wc', 'T-1', 1, 1, 'manual')$v$),
+    (4, 'student_credit', $v$(id, "studentId", credit) values ('T-2', 'T-2', 1)$v$),
+    (5, 'staff_advances', $v$(id, "teacherId", "teacherName", amount, month, date) values ('zz-wa', 'IQX-T1', 'Sinov Xodim', 1, '2027-02', '2027-02-04')$v$),
+    (6, 'payroll_runs', $v$(id, status) values ('2027-03', 'draft')$v$),
+    (7, 'config', $v$(id) values ('zz-wconf')$v$),
+    (8, 'payments', $v$(id, "studentId", provider, amount, status) values ('zz-wp', 'T-1', 'cash', 1, 'applied')$v$),
+    (9, 'refunds', $v$(target, "targetId", "studentId", amount, reason, month) values ('invoice', 'i1', 'T-1', 1, 'zz', '2027-02')$v$),
+    (10, 'salary_payments', $v$("teacherId", "teacherName", month, gross, net, date) values ('IQX-T1', 'Sinov Xodim', '2027-02', 1, 1, '2027-02-04')$v$),
+    (11, 'payroll_lines', $v$(id, "runId", "personType", "personId", name, gross, payable) values ('zz-wl', '2027-01', 'staff', 'IQX-T1', 'x', 1, 1)$v$)) x(n, t, v);
+select zz.chk('W20 buxgalter naqdsiz xarajat qo''sha olmaydi (triggerlar bilan — RLS rad etadi)',
+  zz.as('U_ACC', $q$insert into public.expenses (id, date, month, category, amount, method) values ('eX','2027-02-04','2027-02','Boshqa',1,'bank') returning id$q$),
+  '^ERR 42501 .*row-level security');
 select zz.chk('W21 buxgalter pul RPC''larini chaqira olmaydi (qo''lda to''lov, avans qo''shish, vedomost yuborish)',
   zz.as('U_ACC', $q$select public.record_manual_payment('zz-pay-1', 'T-1', 1000, 'bank', null, null, null, null, null, null)::text$q$) || ' | ' ||
   zz.as('U_ACC', $q$select public.add_credit('T-1', 1000, 'sinov', 'manual', 'zz-ref-1')::text$q$) || ' | ' ||
   zz.as('U_ACC', $q$select public.payroll_submit('2027-02', '[]'::jsonb, null)::text$q$),
   '^ERR 42501.* \| ERR 42501.* \| ERR 42501');
 select zz.chk('W22 buxgalter xarajatni o''chira olmaydi',
-  zz.as('U_ACC', $q$with d as (delete from public.expenses returning 1) select count(*)::text from d$q$), '^(0|ERR 42501.*)$');
+  zz.as('U_ACC', $q$with d as (delete from public.expenses returning 1) select count(*)::text from d$q$), '^0$');
 
 -- ---------- (L) yopiq ro'yxat ----------
 --   Buxgalterga TRUE, rolsiz xodimga (U_BASE — hech bir tekshiruv o'zgartirmaydi; U_NONE K4 da ota-ona bo'lib qolgan) FALSE
@@ -257,7 +314,7 @@ create temp table zz_acc_re2 on commit drop as
   select '(app\.(' || coalesce(string_agg(distinct p.proname, '|'), 'zz_none') || ')\()' as re from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.pronargs > 0
      and p.prosrc ~ ('\m(app\.)?(' || (select string_agg(proname, '|') from zz_acc_fns) || ')\s*\(\s*\)');
-select zz.chk('L1 buxgalterga true yordamchilar', (select string_agg(proname, ',' order by proname) from zz_acc_fns), '^fin_list2,is_accountant,kassa_reader$');
+select zz.chk('L1 buxgalterga true yordamchilar', (select string_agg(proname, ',' order by proname) from zz_acc_fns), '^acc_read,fin_list2,is_accountant,kassa_reader$');
 select zz.chk('L2 YOPIQ RO''YXAT: buxgalterni o''tkazadigan siyosatlar jadvallari',
   (select string_agg(distinct p.tablename, ',' order by p.tablename) from pg_policies p, zz_acc_re
     , zz_acc_re2 where p.schemaname = 'public' and p.cmd in ('SELECT', 'ALL') and (coalesce(p.qual, '') ~ zz_acc_re.re or coalesce(p.qual, '') ~ zz_acc_re2.re)),
@@ -268,13 +325,23 @@ select zz.chk('L2w YOPIQ RO''YXAT: buxgalterni o''tkazadigan YOZISH siyosati yo'
       and ((coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')) ~ zz_acc_re.re
         or (coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')) ~ zz_acc_re2.re)), '^$');
 select zz.chk('L3 YOPIQ RO''YXAT: buxgalterni o''tkazadigan ko''rinishlar',
-  (select string_agg(v.viewname, ',' order by v.viewname) from pg_views v, zz_acc_re where v.schemaname = 'public' and v.definition ~ zz_acc_re.re),
+  (select string_agg(v.viewname, ',' order by v.viewname) from pg_views v, zz_acc_re, zz_acc_re2
+    where v.schemaname = 'public' and (v.definition ~ zz_acc_re.re or v.definition ~ zz_acc_re2.re)),
   '^invoices_acc,payments_acc,payroll_lines_acc,refunds_acc,salary_payments_acc,students_billing$');
-select zz.chk('L4 YOPIQ RO''YXAT: buxgalterni o''tkazadigan (yoki uni tilga oladigan) mijoz RPC''lari',
-  (select string_agg(p.proname, ',' order by p.proname) from pg_proc p, zz_acc_re
-    where p.pronamespace = 'public'::regnamespace and p.prosecdef and has_function_privilege('authenticated', p.oid, 'execute')
-      and p.prosrc ~ zz_acc_re.re),
-  '^claim_child,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
+--   L4: mijoz chaqira oladigan SECURITY DEFINER RPC'lar — matnida yordamchi (yoki 'accountant' so'zi) bor, YOKI shunday RPC'ni
+--   chaqiradi (zanjir: ruxsatni boshqa RPC orqali tekshiradigan kassa_overview kabilar; STRICT bo'lsa ham, avval qator qidirsa ham).
+create temp table zz_l4 on commit drop as
+with recursive base as (
+  select p.oid, p.proname, p.prosrc from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.prosecdef and has_function_privilege('authenticated', p.oid, 'execute')
+), clo(proname) as (
+  select b.proname from base b, zz_acc_re, zz_acc_re2 where b.prosrc ~ zz_acc_re.re or b.prosrc ~ zz_acc_re2.re
+  union
+  select b.proname from base b, clo where b.prosrc ~ ('\m(public\.)?' || clo.proname || '\s*\(') and b.proname <> clo.proname
+) select distinct proname from clo;
+select zz.chk('L4 YOPIQ RO''YXAT: buxgalterni o''tkazadigan mijoz RPC''lari (matn + chaqiruvlar zanjiri)',
+  (select string_agg(proname, ',' order by proname) from zz_l4),
+  '^claim_child,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
 select zz.chk('L5 rls-initplan: buxgalter siyosatlari o''ralgan (o''ralmagan app.* chaqiruvi — faqat users)',
   (select coalesce(string_agg(distinct tablename, ','), '') from pg_policies where schemaname = 'public'
      and (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '(?<!SELECT )app\.(is_accountant|kassa_reader|fin_list2)\(\)'), '^$');
@@ -296,7 +363,8 @@ select zz.chk('L7 ko''rinishlar huquqi: authenticated — faqat SELECT, anon —
 
 -- L4b: xatti-harakat bo'yicha — authenticated chaqira oladigan har bir SECURITY DEFINER RPC buxgalter (U_ACC) va rolsiz xodim (U_BASE)
 --   nomidan bo'sh (NULL) argumentlar bilan chaqiriladi; javobi farq qiladiganlari (uid / email / rol nomi tenglashtirilgan) = buxgalterni
---   boshqacha ko'radigan RPC'lar. Matnda yordamchi ko'rinmasa ham (masalan, ruxsatni boshqa RPC orqali tekshiradigan kassa_overview) topiladi.
+--   boshqacha ko'radigan RPC'lar. Matnda yordamchi ko'rinmasa ham (masalan, ruxsatni boshqa RPC orqali tekshiradigan kassa_overview) topiladi;
+--   STRICT yoki argumentini avval qidiradigan RPC'larni NULL bilan ko'rib bo'lmaydi — ularni L4 zanjiri topadi.
 --   Chaqiruvlarning har qanday ta'siri savepoint bilan bekor qilinadi (natija psql o'zgaruvchisida).
 savepoint zz_l4b_sp;
 create temp table zz_l4b as
@@ -364,17 +432,21 @@ savepoint zz_q;
 select (select count(*) from pg_policies where schemaname = 'public' and policyname = tablename || '_acc_sel')
        || '/' || (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace
                     and (c.relname in ('invoices_acc','payments_acc','refunds_acc','salary_payments_acc','payroll_lines_acc') or obj_description(c.oid, 'pg_class') like 'F1.21:%'))
-       || '/' || zz.cnt('U_ACC', 'expenses') || zz.cnt('U_ACC', 'payroll_runs') || zz.cnt('U_ACC', 'config') || zz.cnt('U_ACC', 'credit_ledger') as zz_q1
+       || '/' || zz.cnt('U_ACC', 'expenses') || zz.cnt('U_ACC', 'payroll_runs') || zz.cnt('U_ACC', 'config') || zz.cnt('U_ACC', 'credit_ledger')
+       || '/' || zz.cnt('U_ACC', 'students_billing') || '/' || zz.as('U_ACC', $q$select public.kassa_state('main') ->> 'accRead'$q$)
+       || '/' || zz.cnt('U_FM', 'students_billing') as zz_q1
 \gset
 \ir fin-rights.sql
 select (select count(*) from pg_policies where schemaname = 'public' and policyname = tablename || '_acc_sel')
        || '/' || (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and obj_description(c.oid, 'pg_class') like 'F1.21:%')
-       || '/' || zz.cnt('U_ACC', 'invoices_acc') || zz.cnt('U_ACC', 'expenses') || zz.cnt('U_ACC', 'payments_acc') as zz_q2
+       || '/' || zz.cnt('U_ACC', 'invoices_acc') || zz.cnt('U_ACC', 'expenses') || zz.cnt('U_ACC', 'payments_acc')
+       || '/' || zz.cnt('U_ACC', 'students_billing') || '/' || zz.as('U_ACC', $q$select public.kassa_state('main') ->> 'accRead'$q$) as zz_q2
 \gset
 rollback to savepoint zz_q;
 \unset iqror_chain
-select zz.chk('Q1 orqaga qaytarish (fin_rights_on = off): «*_acc_sel» siyosatlari va «*_acc» ko''rinishlari o''chdi, buxgalter o''qimaydi', :'zz_q1', '^0/0/0000$');
-select zz.chk('Q2 qayta yoqish (fin_rights_on = on): 6 siyosat, 5 ko''rinish tiklandi, buxgalter yana o''qiydi', :'zz_q2', '^6/5/113$');
+select zz.chk('Q1 orqaga qaytarish (fin_rights_on = off): siyosatlar va ko''rinishlar o''chdi, buxgalter o''qimaydi (students_billing ham), sahifa kaliti o''chiq; MM — o''zgarmagan',
+  :'zz_q1', '^0/0/0000/0/false/2$');
+select zz.chk('Q2 qayta yoqish (fin_rights_on = on): 6 siyosat, 5 ko''rinish, students_billing va sahifa kaliti tiklandi', :'zz_q2', '^6/5/113/2/true$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end

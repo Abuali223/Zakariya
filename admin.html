@@ -1413,7 +1413,7 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
   reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
   finance_mgr:['payments','finance','planfact','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'],
   // Buxgalter (2-ro'yxat, moliya rejasi F1.21): bo'limlari allowedTabs()'da qo'shiladi — «Tasdiqlash», «To‘lovlar», «Kassa»,
-  //   «Buxgalteriya» (faqat serverda kassa moduli va F1.21 o'qish ro'yxati — reliz 10+ — bo'lsa). «To‘lovlar» va «Buxgalteriya» —
+  //   «Buxgalteriya» (faqat serverda kassa moduli va F1.21 o'qish ro'yxati yoqilgan bo'lsa — accFinOk). «To‘lovlar» va «Buxgalteriya» —
   //   FAQAT KO'RISH (accRO); «Tasdiqlash» va «Kassa» — 2-ro'yxat nazorati (so'rovni tasdiqlash / rad etish, kunni tekshirish,
   //   hujjatni bekor qilish, avans hisoboti); o'quvchi va xodim kartochkalari, telefonlar, davomat — yo'q (D6/D7);
   //   eksport / chop etish — ismsiz (FD-28).
@@ -1471,12 +1471,14 @@ const KASSA_BLOCK={ prev_open:'Oldingi kassa kuni yopilmagan — avval «Kassa»
   day_closed:'Bugungi kassa kuni yopilgan. Yangi naqd to‘lov uchun Direktor kunni qayta ochishi kerak.',
   not_started:'Kassa hali ishga tushirilmagan: Direktor boshlang‘ich qoldiqni kiritishi kerak.',
   clock:'Server sanasi kassa kunidan orqada — administratorga xabar bering.' };
-let KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
+let KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0, acc:false };
 const finMod=name=>import('./assets/js/'+name+'.js');
 // F1.21: buxgalter moliya bo'limlarini faqat KO'RADI — yozish tugmalari yashiriladi (server ham rad etadi).
 function accRO(){ return SESSION.role==='accountant'; }
-// «To‘lovlar» / «Buxgalteriya» buxgalterga — serverda kassa moduli va F1.21 o'qish ro'yxati (modul relizi 10+) bo'lsa.
-function accFinOk(){ return !!KASSA.on && Number(KASSA.ver||0)>=10; }
+// «To‘lovlar» / «Buxgalteriya» buxgalterga — serverda kassa moduli va F1.21 o'qish ro'yxati yoqilgan bo'lsa: buni server o'zi aytadi
+//   (kassa_state «accRead» — fin-rights.sql «fin_rights_on»; eski server bu kalitni bermaydi — bo'limlar yo'q). Reliz raqamiga bog'liq
+//   emas: ro'yxat o'chirilsa (orqaga qaytarish) bo'limlar o'zi yashirinadi.
+function accFinOk(){ return !!KASSA.on && !!KASSA.acc; }
 function kassaRole(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).some(r=>['finance_mgr','treasurer','kassir','accountant'].includes(r)); }
 function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','treasurer','kassir','accountant'].includes(SESSION.role)); }
 function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
@@ -1495,10 +1497,10 @@ function kassaQueue(){
 }
 // Kirishda: saqlangan holat (darhol, tarmoqsiz) — keyin kassaProbe() uni serverdan yangilaydi.
 function kassaInit(uid){
-  KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
+  KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0, acc:false };
   if(!kassaRole()) return;
   try{ const c=JSON.parse(localStorage.getItem(KASSA_LS)||'null');
-    if(c && c.uid===uid && c.on){ KASSA={ on:true, live:kassaLiveOn(c.goLive), me:c.me||{}, state:null, goLive:c.goLive||null, ver:Number(c.ver)||0 }; kassaQueue(); } }catch(e){}
+    if(c && c.uid===uid && c.on){ KASSA={ on:true, live:kassaLiveOn(c.goLive), me:c.me||{}, state:null, goLive:c.goLive||null, ver:Number(c.ver)||0, acc:!!c.acc }; kassaQueue(); } }catch(e){}
 }
 async function kassaProbe(){
   if(!kassaRole()) return KASSA;
@@ -1507,14 +1509,14 @@ async function kassaProbe(){
   const was=navKey();
   try{
     const s=await rpc('kassa_state', { p_desk:'main' });
-    KASSA={ on:true, live:kassaLiveOn(s.kassaGoLive, s.today), me:s.me||{}, state:s, goLive:s.kassaGoLive||null, ver:Number(s.version)||0 };
-    try{ localStorage.setItem(KASSA_LS, JSON.stringify({ uid, on:true, goLive:KASSA.goLive, me:KASSA.me, ver:KASSA.ver })); }catch(e){}
+    KASSA={ on:true, live:kassaLiveOn(s.kassaGoLive, s.today), me:s.me||{}, state:s, goLive:s.kassaGoLive||null, ver:Number(s.version)||0, acc:s.accRead===true };
+    try{ localStorage.setItem(KASSA_LS, JSON.stringify({ uid, on:true, goLive:KASSA.goLive, me:KASSA.me, ver:KASSA.ver, acc:KASSA.acc })); }catch(e){}
     kassaQueue();
   }catch(e){
     // Faqat ANIQ javobda o'chadi: funksiya yo'q (server hali yangilanmagan) yoki ruxsat yo'q. Tarmoq uzilishi va vaqtinchalik
     //   server xatosida oxirgi ma'lum holat qoladi — aks holda naqd to'lov fiskal raqamsiz navbatga tushib, keyin rad etilardi.
     if(!(rpcMissing(e) || String((e&&e.code)||'')==='42501')) return KASSA;
-    KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0 };
+    KASSA={ on:false, live:false, me:{}, state:null, goLive:null, ver:0, acc:false };
     try{ localStorage.removeItem(KASSA_LS); }catch(_){}
   }
   KASSA_PROBED=true;
