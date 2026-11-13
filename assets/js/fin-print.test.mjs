@@ -615,3 +615,54 @@ test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobd
   assert.deepEqual(ru.map(x => x.name), ['E1 КО-3', 'E2 Статьи', 'E3 Кассовые дни', 'E4 Подотчётные']);
   assert.ok(ru[2].rows[5][1] === 'проверен' && ru[2].rows[7][14] === 'расхождение: наличные -10 000, карты 0' && ru[3].rows[4][0] === 'Сотрудник (табельный №)');
 });
+
+// ---------------------------------------------------------------- ko'rik 2-guruhi (acc-2, acc-5, crit-2)
+test('o‘zaro hisob (eski avans bilan, acc-2): avans qo‘llangan qator jadvalda emas — ma’lumot qatori; jadval jami = dalolatnoma summasi; uch tilda', () => {
+  const d = Object.assign({}, ofsDoc, { id: 'kd_ofs2', no: 4, amount: 100000,
+    basis: 'O‘zaro hisob: ish haqi 2026-12 hisobidan o‘quv to‘lovi — Sinov D (T-4); ariza 06.01.2027',
+    sourceSnapshot: { month: '2026-12', studentId: 'T-4', studentName: 'Sinov D', requestDate: '2027-01-06', paymentId: 'ofs_y', allocation: 'exact' },
+    lines: [
+      { lineNo: 1, debit: '6710', credit: '4010', amount: 50000, articleId: 'IN-01', cash: false, analytics: { studentId: 'T-4', invoiceId: 'ic4', month: '2027-01' } },
+      { lineNo: 2, debit: '6310', credit: '4010', amount: 50000, articleId: 'IN-01', cash: false, analytics: { studentId: 'T-4', invoiceId: 'ic4', month: '2027-01', kind: 'credit_applied' } },
+      { lineNo: 3, debit: '6710', credit: '6310', amount: 50000, articleId: 'IN-01', cash: false, analytics: { studentId: 'T-4', kind: 'overpay' } },
+    ] });
+  const t = text(docHtml(d, ctx(), W));
+  for (const must of ['ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ № ЎҲ-4', '6710 4010 T-4 · 01.2027 50 000=00 IN-01', '6710 6310 T-4 50 000=00 IN-01',
+    'Маълумот учун — ўқувчининг аввалги аванси фактурага қўлланди (далолатнома суммасига кирмайди): Дебет 6310 — Кредит 4010: 50 000=00 (T-4 · 01.2027)',
+    'Сумма: 100 000=00 — Бир юз минг сўм 00 тийин'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(!t.includes('6310 4010 T-4'), 'avans qatori jadvalda emas (jadval jami = summa)');
+  const h = docHtml(d, ctx(), W), body = h.slice(h.indexOf('<tbody>'), h.indexOf('</tbody>'));
+  assert.equal(count(body, '<tr>'), 2, 'jadvalda 2 qator: 50 000 + 50 000 = 100 000');
+  const r = text(docHtml(d, ctx({ lang: 'ru' }), W));
+  assert.ok(r.includes('Справочно — ранее внесённый аванс учащегося зачтён в счёт (в сумму акта не входит): Дебет 6310 — Кредит 4010: 50 000=00 (T-4 · 01.2027)'), r);
+  const l = text(docHtml(d, ctx({ lang: 'uz-latn' }), W));
+  assert.ok(l.includes('Ma’lumot uchun — o‘quvchining avvalgi avansi fakturaga qo‘llandi (dalolatnoma summasiga kirmaydi): Debet 6310 — Kredit 4010: 50 000=00 (T-4 · 01.2027)'), l);
+  assert.ok(!text(docHtml(ofsDoc, ctx(), W)).includes('Маълумот учун'), 'avanssiz o‘zaro hisobda ma’lumot qatori yo‘q');
+});
+
+test('avans hisoboti (acc-5): asosiy vosita va sotish uchun tovar — haqiqiy debet hisobvaraqlari (0820, 2910)', () => {
+  const d = Object.assign({}, advDoc, { id: 'kd_adv2', no: 6, amount: 100000, basis: 'Avans hisoboti 11.01.2027; Noutbuk va forma',
+    sourceSnapshot: { reportDate: '2027-01-11', openBefore: 150000, openAfter: 50000 },
+    lines: [
+      { lineNo: 1, debit: '0820', credit: '4230', amount: 70000, articleId: 'OP-18', cash: false, note: 'Chek 31, noutbuk', analytics: { partyId: 'staff:st1' } },
+      { lineNo: 2, debit: '2910', credit: '4230', amount: 30000, articleId: 'OP-24', cash: false, note: 'Chek 32, forma', analytics: { partyId: 'staff:st1' } },
+    ] });
+  const t = text(docHtml(d, ctx(), W));
+  for (const must of ['АВАНС ҲИСОБОТИ № А-6', '0820 4230 Chek 31, noutbuk 70 000=00 OP-18', '2910 4230 Chek 32, forma 30 000=00 OP-24',
+    'Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин 150 000=00 сўм, кейин 50 000=00 сўм.'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+});
+
+test('o‘quvchi avansini naqd qaytarish (crit-2): KO-2 — Dt 6310, asos chop etish tilida, o‘quvchi kodi', () => {
+  const d = { id: 'kd_rc', form: 'KO2', op: 'out_refund', status: 'posted', no: 9, businessDay: '2027-01-06', amount: 200000, partyType: 'student', partyId: 'T-6',
+    partyName: 'Sinov Ota Onaevich', basis: 'Qaytarish: o‘quvchi avansi — O‘quvchi ketdi; ariza 05.01.2027', attachment: 'Yozma ariza', sourceTable: 'refunds',
+    sourceSnapshot: { target: 'credit', targetId: 'T-6', studentId: 'T-6', amount: 200000 }, dirApprovedBy: 'u_dir', postedBy: 'u_kas',
+    lines: [{ debit: '6310', credit: '5010', amount: 200000, cash: true, articleId: 'OP-15', analytics: { studentId: 'T-6', kind: 'credit_refund' } }] };
+  const t = text(docHtml(d, ctx(), W));
+  for (const must of ['ЧИҚИМ КАССА ОРДЕРИ № 9', '6310 T-6 5010 200 000=00 OP-15', 'Берилсин: Sinov Ota Onaevich (ўқувчи: T-6)',
+    'Асоси: Қайтариш: ўқувчи аванси — O‘quvchi ketdi; ариза 05.01.2027', 'Иловаси: Ёзма ариза', 'Икки юз минг сўм 00 тийин'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(text(docHtml(d, ctx({ lang: 'ru' }), W)).includes('Основание: Возврат: аванс учащегося — O‘quvchi ketdi; заявление 05.01.2027'));
+  assert.ok(text(docHtml(d, ctx({ lang: 'uz-latn' }), W)).includes('Asosi: Qaytarish: o‘quvchi avansi — O‘quvchi ketdi; ariza 05.01.2027'));
+});

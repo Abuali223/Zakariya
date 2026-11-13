@@ -51,8 +51,9 @@ qoplash (xodim)», «Forma va tovarlar», «Boshqa kirim», «Qarz / ta’sischi
 **Maosh.** «Maosh» sahifasida «Maosh berish» → usul «Naqd» → chiqim orderi o‘zi yoziladi. Faqat tasdiqlangan vedomost chegarasida.
 Naqd maoshni faqat kassir beradi. **Ish haqi avansi** — «+ Chiqim so‘rovi» orqali (yuqoridagi uch qadam).
 
-**Ota-onaga pul qaytarish.** Direktor «↩ Qaytarish» orqali tasdiqlagach, «So‘rovlar»da paydo bo‘ladi → «Pulni berish» → chiqim
-orderi; ota-onaning yozma arizasi orderga ilova qilinadi. Bir kundan ortiq kechiktirilmaydi (eslatma chiqadi).
+**Ota-onaga pul qaytarish** (o‘quvchi avansini qaytarish ham). Direktor tasdiqlagach, «So‘rovlar»da paydo bo‘ladi → «Pulni berish» →
+chiqim orderi; ota-onaning yozma arizasi orderga ilova qilinadi. Bir kundan ortiq kechiktirilmaydi (eslatma chiqadi). Tasdiqdan keyin
+faktura yoki o‘quvchi avansi o‘zgargan bo‘lsa, tizim pulni bermaydi — Direktorga ayting (so‘rovni bekor qilib, qaytadan tasdiqlaydi).
 
 **Xato qildim.** Shu kuni hujjat qatorida «Bekor» → sababi. Kassir faqat **o‘zi o‘tkazgan** orderni bekor qiladi; boshqasinikini —
 moliya menejeri yoki Direktor. O‘quv to‘lovidan keyin o‘quvchi bo‘yicha boshqa pul harakati bo‘lgan bo‘lsa, bekor qilinmaydi —
@@ -88,6 +89,12 @@ berilmaydi — buxgalter kassirni nazorat qiladi). To‘rt bo‘lim ochiladi:
   avanslar, biriktirilmagan to‘lovlar (sana, provayder, summa), o‘quvchining to‘lov tarixi (📋);
 - **«Buxgalteriya»** (faqat ko‘rish) — kirim, chiqim, xarajatlar ro‘yxati va toifalari, xodim avanslari, berilgan maosh, **oylik
   vedomost** (holati va qatorlari), A4 oylik hisobot.
+
+«Buxgalteriya»dagi **«Foyda» — taxminiy**: hisob-fakturalar bo‘yicha to‘langan o‘quv to‘lovi (qaytarilgani ayirilgan) minus **barcha**
+chiqimlar ro‘yxati — kassa xarajat orderlari, avans hisobotlari, bank va karta xarajatlari. Asosiy vosita va sotish uchun tovar ham shu
+ro‘yxatda («Inventar» / «Boshqa» toifasida, izoh statiya nomi bilan boshlanadi: «Sotish uchun tovar xaridi: …»). Forma sotuvi va o‘quv
+to‘lovidan boshqa kirimlar unga kirmaydi — ular kassa hisobotlarida (KO-3 jurnali, RP-08 statiyalar matritsasi). Haqiqiy moliyaviy natija —
+4-bosqichda (bosh kitob).
 
 Pul qabul qilish va berish, kassaga so‘rov yuborish, xarajatni qo‘lda yozish, tahrirlash va o‘chirish buxgalterda yo‘q (tugmalar
 ko‘rinmaydi, server ham rad etadi). O‘quvchi ismi, ID, sinfi ko‘rinadi; telefon, manzil, sog‘liq kartasi, baholar, davomat
@@ -125,13 +132,20 @@ kamayadi: qolgani shu oy yana berilishi yoki keyingi oyga qoldiq bo‘lib o‘ti
 **Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
 `shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter (yoki moliya menejeri) hisobotni
 tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlaydi, har chek — bitta qator (statiya, summa, chek raqami va
-sanasi). Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; «Avans hisoboti № A-…» chop etiladi va qog‘oz
+sanasi). Statiya — kassa xarajati (EX), asosiy vosita (OP-18, Dt 0820) yoki sotish uchun tovar (OP-24, Dt 2910); yetkazib beruvchiga
+qarz (OP-17) avans hisoboti bilan yopilmaydi — u kassa «Xarajat» orderi yoki bank orqali to‘lanadi. Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; «Avans hisoboti № A-…» chop etiladi va qog‘oz
 hisobotga qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
 «Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Qaytim ham qoldiqdan oshmaydi; hisoboti yoki qaytimi yozilgan avans orderi bekor
 qilinmaydi (avval hisobot yoki qaytim bekor qilinadi). Manfiy qoldiq (xato yozuv izi) nazorat ro‘yxatida qizil, oylik to‘plamda
 (E4) alohida belgi bilan ko‘rinadi. Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
 beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi, «Kassa» sahifasining yuqorisida eslatma chiqadi («Avans hisoboti
 muddati o‘tgan hisobdorlar: N ta») va Direktorning Telegram nazorat qatorida ham bo‘ladi.
+
+**O‘quvchi pullari hujjatlarida.** Qaytarish chiqim orderida faktura qismining hisobvarag‘i (4010 — boshlangan davr, 6310 — kelgusi oy)
+pul **berilgan** kunga ko‘ra aniqlanadi: so‘rov oy oxirida tasdiqlanib, pul keyingi oyda berilsa, tizim qatorni o‘zi to‘g‘rilaydi (summa va
+tasdiq o‘zgarmaydi), kun jurnalida «Qaytarish hisobvarag‘i qayta aniqlandi» yozuvi qoladi. Oflayn navbatda kechagi (hali ochiq) kunda
+olingan to‘lov ham kechagi kun oyi bo‘yicha taqsimlanadi. O‘zaro hisob dalolatnomasida o‘quvchining avvalgi avansi fakturaga qo‘llangan
+bo‘lsa, kirim orderidagi kabi «ma’lumot uchun» qatori (Dt 6310 Kt 4010) chiqadi — u dalolatnoma summasiga kirmaydi.
 
 **Har hafta (dushanba)** — **«KPI»** (haftalik ko‘rsatkichlar, RP-22): oxirgi 8 hafta bo‘yicha kun o‘sha kuni yopildimi,
 tekshirilmagan kunlar, sanash farqlari, «Boshqa xarajatlar» (EX-49) ulushi (maqsad ≤ 2 %; oshsa — qayta tasniflang) va hafta
@@ -167,6 +181,14 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
   (haftalik ko‘rsatkichlar); batafsil — «Kassa» → «KPI».
 - **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash».
 - **Qaytarish:** «↩ Qaytarish» (sababi, ariza sanasi, usul). Naqd bo‘lsa pulni kassir beradi; balans pul berilganda o‘zgaradi.
+  «Avans ham» belgilansa avans ham **naqd beriladi** (bitta chiqim orderida) — tasdiqlashda «qaytarish X + avans Y = jami Z» ko‘rinadi.
+  Javob kelmay qayta bosilsa ikkinchi so‘rov yozilmaydi; shu faktura, to‘lov yoki avans bo‘yicha hali berilmagan so‘rovlar bilan jami
+  qaytariladigan summadan oshsa — rad etiladi (avval o‘sha so‘rov beriladi yoki bekor qilinadi).
+- **Ketgan o‘quvchining avansini naqd qaytarish:** o‘quvchining «📋» (to‘lov / avans tarixi) → «↩ Avansni naqd qaytarish» (yoki faktura
+  «↩ Qaytarish» oynasida, usul «Naqd» bo‘lsa, «O‘quvchi avansini naqd qaytarish»): joriy avans ko‘rinadi; summa (standart — butun avans),
+  sabab, oluvchi F.I.Sh., ariza sanasi. So‘rov = tasdiq; kassir «Pulni berish» bilan chiqim orderi (Dt 6310, OP-15) yozadi — avans **pul
+  berilgan kuni** kamayadi (avans jurnali va qaytarishlar ro‘yxatiga yoziladi). Avans shu orada o‘zgargan bo‘lsa pul berilmaydi — so‘rovni
+  bekor qilib, qaytadan tasdiqlang. Faqat naqd va faqat kassa ishga tushgach (naqdsiz — keyingi bosqichda); xarajat sifatida yozilmaydi.
 - **O‘zaro hisob:** xodim yozma ariza bilan ish haqidan farzandining o‘quv haqini to‘lasa — «Maosh berish» → «O‘zaro hisob»
   (o‘quvchi, ariza sanasi, summa). Kassadan pul chiqmaydi; dalolatnoma chop etiladi. Xato bo‘lsa — shu kuni «Bekor».
 

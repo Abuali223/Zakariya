@@ -376,7 +376,7 @@ namunasi uchun taklif qoidalari F2.6 va F3.3 da.
 | `out_overspend` | KO-2 | Ortiqcha sarfni qoplash | 6970 | 5010 | OP-07 | tasdiqlangan avans hisobotidan | 2 |
 | `nc_offset` | dalolatnoma | O‘zaro hisob | 6710 | 4010 / 6310 | OP-11 | yozma ariza + direktor; KO-4 da emas | 1a |
 | `nc_opening` | dalolatnoma | Boshlang‘ich qoldiq | 5010 / 4230 | 0000 | OP-23 | komissiya; buxgalter; direktor | 1a |
-| `nc_adv_report` | AO | Avans hisoboti | statiya hisobvaraqlari | 4230 | EX / OP-24 | tasdiqlovchi ≠ yaratuvchi | 2 |
+| `nc_adv_report` | AO | Avans hisoboti | statiya hisobvaraqlari | 4230 | EX / OP-18 / OP-24 | tasdiqlovchi ≠ yaratuvchi | 2 |
 
 Kassadan soliq to‘lash operatsiyasi yo‘q. Kassa qismi hisobvaraqlari ishga tushirishdan oldin tasdiqlanadi (G2) — «bo‘sh
 qoldirib keyin to‘ldirish» yo‘q; xarita o‘zgarsa faqat yangi hujjatlarga ta’sir qiladi.
@@ -399,7 +399,7 @@ bosh kitob.
 | PR-05 | Boshqa sababli qayta narxlash | 4010 / 9030 | 9030 / 4010 | AUTO · 4 |
 | PR-06 | To‘lanmagan faktura bekor / o‘chirildi | PR-01/02 storno | | AUTO · 4 |
 | PR-07 | Naqd o‘quv haqi (`in_tuition`) | 5010 | 4010 (boshlangan davr) + 6310 (ortiqcha, kelgusi oy) | NEW · 1a / 4 |
-| PR-08 | Avans fakturaga qo‘llandi | 6310 | 4010 | AUTO; KO-1 dagi naqdsiz qator · 1a / 4 |
+| PR-08 | Avans fakturaga qo‘llandi | 6310 | 4010 | AUTO; KO-1 va o‘zaro hisob dalolatnomasidagi naqdsiz qator (summaga kirmaydi) · 1a / 4 |
 | PR-09 | POS to‘lovi | 5710[pos] | 4010 / 6310 | AUTO · 4 |
 | PR-10 | Click / Uzum (yakunlangan sana) | 5710[CH] | 4010 / 6310 | AUTO (F3.1) · 4 |
 | PR-11 | Ota-onadan bank o‘tkazmasi | 5110 | 4010 / 6310 | BANK · 3 / 4 |
@@ -560,8 +560,10 @@ Direktor tasdiqlaydi (refund-rpc.sql:35-39) va usulni tanlaydi (standart — asl
 yoziladi. Naqd: «To‘lanishi kerak» ro‘yxatida; kassir KO-2 `out_refund` bilan, to‘liq F.I.Sh. va yozma ariza ilova (VM
 943, 1-ilova, 35–38-band); balans KO-2 sanasida o‘zgaradi; qaytarish cheki NKM da (6-bosqichgacha qo‘lda); 1 bank kunidan
 oshsa ogohlantirish; oldin bankdan naqd olish shartmi — [BUX, FD-25]. Naqdsiz — hozirgidek. Qaytarish debitorlikni
-tiklaydi yoki avansni yopadi; ko‘rsatilmagan xizmat — daromad storno; hech qachon xarajat emas. Avansning bir qismini
-qaytarish (`refund_credit`) — kerak bo‘lsa (F2.11).
+tiklaydi yoki avansni yopadi; ko‘rsatilmagan xizmat — daromad storno; hech qachon xarajat emas. O‘quvchi avansini **naqd**
+qaytarish (masalan, ketgan o‘quvchining oldindan to‘lagan puli) — 1a da bor: `kassa_refund_request`, target `credit` (Direktor so‘rovi
+= tasdiq; summa joriy avansgacha, butun yoki bir qismi; KO-2 Dt 6310 Kt 5010, OP-15; avans va jurnallar pul berilganda o‘zgaradi).
+Naqdsiz avans qaytarish (`refund_credit`) — kerak bo‘lsa (F2.11).
 
 ### 4.12 Davrni yopish
 Kun: sanash → yopish → tekshirish. Oy (kassa): oxirgi ish kuni komissiya sanashi (INV-16, oxirgi KO raqamlari), KO-3,

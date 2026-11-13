@@ -75,10 +75,11 @@ insert into public.users (id, email, name, role, status, "extraRoles") values
   ('U_KAS','k@x','Sinov Kassir','kassir','active','[]')
 on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email, name = excluded.name;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
-  ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',5,'A','uz','',2,'[]');
+  ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',5,'A','uz','',2,'[]'), ('s3','T-3','Sinov C',5,'A','uz','',3,'[]');
 insert into public.teachers (id, "teacherId", name, pauses) values ('tch1','IQT-T1','Sinov O''qituvchi','[]');
 insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
-  ('ia','T-1','Sinov A','2027-01',1000000,0,'pending'), ('ib','T-2','Sinov B','2027-01',1000000,0,'pending');
+  ('ia','T-1','Sinov A','2027-01',1000000,0,'pending'), ('ib','T-2','Sinov B','2027-01',1000000,0,'pending'), ('ic','T-3','Sinov C','2027-01',100000,0,'pending');
+insert into public.student_credit (id, "studentId", credit) values ('T-3','T-3',50000);
 insert into public.fin_counterparties (id, kind, name, stir, active) values
   ('cp_bank','bank','Sinov Bank','',true), ('cp_sup','supplier','Sinov Ta''minot MChJ','',true);
 insert into public.config (id, "payrollApprovalFrom") values ('finance', '2026-12')
@@ -131,6 +132,10 @@ select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:tch1","basis":"Xo''jalik xaridlari","clientRef":"c-c4-0001"}'));
 select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || zz.pay('U_KAS', zz.id('C4')));   -- hisobdorga avans
 select zz.put('AV1', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"c-av1-0001","partyId":"teachers:tch1","reportDate":"2027-01-06","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 7, 06.01"}]}'));   -- avans hisoboti (dalolatnoma)
+-- o'zaro hisob o'quvchining eski avansi bilan (acc-2): dalolatnomada naqdsiz Dt 6310 Kt 4010 ma'lumot qatori — tekshiruv uni summaga qo'shmasligi kerak
+select zz.put('O2', zz.rpc('U_DIR', 'kassa_offset', jsonb_build_object('id', 'sp_ofs_c2', 'teacherId', 'IQT-T1', 'payeeRef', 'teachers:tch1', 'teacherName', 'Sinov',
+  'month', '2026-12', 'paid', 100000, 'gross', 3000000, 'advance', 0, 'deduction', 0, 'subBonus', 0, 'net', 3000000, 'carryIn', 0, 'carryOut', 0,
+  'studentId', 'T-3', 'requestDate', '2027-01-06')::text));
 select zz.put('T0', zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"sinov","amount":100000,"startDay":"2027-01-06"}')::text$q$));
 select zz.put('T1', zz.rpc('U_KAS', 'kassa_payout_request', '{"desk":"sinov","op":"out_expense","amount":20000,"partyType":"counterparty","partyId":"cp_sup","basis":"Sinov hisob-fakturasi","clientRef":"c-t1-0001","lines":[{"articleId":"EX-32","amount":20000}]}'));
 select zz.put('T1p', left(zz.appr('U_FM', zz.id('T1')), 0) || zz.pay('U_KAS', zz.id('T1')));
@@ -145,6 +150,10 @@ select zz.chk('A5 holat: 3 kun (tekshirilgan, yopilgan, ochiq), sinov kassasida 
 select zz.chk('A6 toza holat: tekshiruv hech narsa topmadi (barcha bandlar bajarildi)',
   :'bad' || '/' || :'err' || ' | ' || concat_ws(',', :'c1', :'c2', :'c3', :'c4', :'c5', :'c6', :'c7', :'c8', :'c9', :'c10', :'c11', :'c12', :'c13', :'c14', :'c15', :'c16',
                                                :'c17', :'c18', :'c19', :'c20', :'c21', :'c22'), '^0/0 \| 0(,0){21}$');
+select zz.chk('A6b acc-2: o''zaro hisob (eski avans bilan) dalolatnomasida naqdsiz Dt 6310 Kt 4010 ma''lumot qatori; 16- va 18-band uni summaga qo''shmaydi',
+  (select string_agg(l.debit || '>' || l.credit || '=' || trim_scale(l.amount) || coalesce('#' || (l.analytics ->> 'kind'), ''), ', ' order by l."lineNo")
+     from public.cash_doc_lines l where l."docId" = (select "cashDocId" from public.salary_payments where id = 'sp_ofs_c2'))
+  || ' | ' || :'c16' || '/' || :'c18', '^6710>4010=50000, 6310>4010=50000#credit_applied, 6710>6310=50000#overpay \| 0/0$');
 
 -- ---------- (B) tuzilma va huquqlar ----------
 savepoint b1;
@@ -270,7 +279,7 @@ select zz.chk('D15 kassa kitobi varaqlari: uzluksiz emas va soni mos emas — 15
 savepoint d16;
 set local session_replication_role = replica;
 update public.cash_doc_lines set amount = amount - 1 where "docId" = (select "openingDocId" from public.cash_desks where id = 'main');
-update public.cash_doc_lines set amount = amount - 1 where "docId" = (select id from public.cash_docs where op = 'nc_offset' and status = 'posted') and "lineNo" = 1;
+update public.cash_doc_lines set amount = amount - 1 where "docId" = (select "cashDocId" from public.salary_payments where id = 'sp_ofs_c1') and "lineNo" = 1;   -- 1-kungi o'zaro hisob (endi ikkita)
 update public.cash_doc_lines set amount = amount + 10000 where "docId" = zz.id('C1') and "lineNo" = 1;
 set local session_replication_role = origin;
 \ir kassa-checks.sql

@@ -29,8 +29,9 @@ const T = {
     seal: 'М.Ў.', mVoid: 'БЕКОР ҚИЛИНГАН', mCopy: 'НУСХА', mRepl: 'АЛМАШТИРИЛДИ', mTest: 'СИНОВ', mDraft: 'ҚОРАЛАМА',
     voided: 'Бекор қилинди', reason: 'сабаб', noBasis: 'асос ҳужжатисиз нақд харид', late: 'Пул қабул қилинган сана',
     student: 'ўқувчи', tuition: 'Ўқув тўлови', advance: 'аванс', surplus: 'Касса ортиқчаси', shortage: 'Касса камомади',
-    salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза', monthOf: 'аванс / иш ҳақи ойи',
+    salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза', monthOf: 'аванс / иш ҳақи ойи', refundCredit: 'ўқувчи аванси',
     countBasis: 'Кассани санаш далолатномаси', nonCash: 'Маълумот учун, нақд пулсиз ёзув', docId: 'Ҳужжат', printed: 'чоп этилди',
+    creditApplied: 'Маълумот учун — ўқувчининг аввалги аванси фактурага қўлланди (далолатнома суммасига кирмайди)',
     act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор', nc_adv_report: 'Аванс ҳисоботи' },
     actTitle: { nc_offset: 'ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ', nc_adv_report: 'АВАНС ҲИСОБОТИ' },
     kassaFor: d => `КАССА ${d} учун`, sheet: 'Варақ', copy1: 'КАССА ДАФТАРИ ВАРАҒИ', copy2: 'КАССИР ҲИСОБОТИ',
@@ -74,8 +75,9 @@ const T = {
     seal: 'M.O‘.', mVoid: 'BEKOR QILINGAN', mCopy: 'NUSXA', mRepl: 'ALMASHTIRILDI', mTest: 'SINOV', mDraft: 'QORALAMA',
     voided: 'Bekor qilindi', reason: 'sabab', noBasis: 'asos hujjatisiz naqd xarid', late: 'Pul qabul qilingan sana',
     student: 'o‘quvchi', tuition: 'O‘quv to‘lovi', advance: 'avans', surplus: 'Kassa ortiqchasi', shortage: 'Kassa kamomadi',
-    salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza', monthOf: 'avans / ish haqi oyi',
+    salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza', monthOf: 'avans / ish haqi oyi', refundCredit: 'o‘quvchi avansi',
     countBasis: 'Kassani sanash dalolatnomasi', nonCash: 'Ma’lumot uchun, naqd pulsiz yozuv', docId: 'Hujjat', printed: 'chop etildi',
+    creditApplied: 'Ma’lumot uchun — o‘quvchining avvalgi avansi fakturaga qo‘llandi (dalolatnoma summasiga kirmaydi)',
     act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror', nc_adv_report: 'Avans hisoboti' },
     actTitle: { nc_offset: 'O‘ZARO HISOB DALOLATNOMASI', nc_adv_report: 'AVANS HISOBOTI' },
     kassaFor: d => `KASSA ${d} uchun`, sheet: 'Varaq', copy1: 'KASSA DAFTARI VARAG‘I', copy2: 'KASSIR HISOBOTI',
@@ -119,8 +121,9 @@ const T = {
     seal: 'М.П.', mVoid: 'АННУЛИРОВАН', mCopy: 'КОПИЯ', mRepl: 'ЗАМЕНЁН', mTest: 'ТЕСТ', mDraft: 'ЧЕРНОВИК',
     voided: 'Аннулирован', reason: 'причина', noBasis: 'покупка за наличные без документа-основания', late: 'Дата приёма денег',
     student: 'учащийся', tuition: 'Оплата за обучение', advance: 'аванс', surplus: 'Излишек кассы', shortage: 'Недостача кассы',
-    salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление', monthOf: 'месяц аванса / зарплаты',
+    salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление', monthOf: 'месяц аванса / зарплаты', refundCredit: 'аванс учащегося',
     countBasis: 'Акт пересчёта наличных денег в кассе', nonCash: 'Справочно, безналичная запись', docId: 'Документ', printed: 'напечатано',
+    creditApplied: 'Справочно — ранее внесённый аванс учащегося зачтён в счёт (в сумму акта не входит)',
     act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче', nc_adv_report: 'Авансовый отчёт' },
     actTitle: { nc_offset: 'АКТ ВЗАИМОЗАЧЁТА', nc_adv_report: 'АВАНСОВЫЙ ОТЧЁТ' },
     kassaFor: d => `КАССА за ${d}`, sheet: 'Лист', copy1: 'ВКЛАДНОЙ ЛИСТ КАССОВОЙ КНИГИ', copy2: 'ОТЧЁТ КАССИРА',
@@ -190,8 +193,9 @@ function texts(doc, t) {
   if (doc.op === 'out_salary' && /^\d{4}-\d{2}$/.test(snap.month || '')) basis = t.salary + ': ' + ymLabel(snap.month);
   // xodim qaytargan pul (acc-1): qaysi oy avansi / maoshi kamaygani qog'ozda ham ko'rinsin — kassir yozgan asosdan keyin
   if (doc.op === 'in_staff_return' && /^\d{4}-\d{2}$/.test(snap.month || '')) basis = (basis ? basis + '; ' : '') + t.monthOf + ': ' + ymLabel(snap.month);
-  if (doc.op === 'out_refund') {   // «Qaytarish: <sabab>; ariza DD.MM.YYYY» — kalit so'zlar chop etish tilida, sabab — yozilganidek
-    basis = basis.replace(/^Qaytarish: /, t.refund + ': ').replace(/; ariza (\d{2}\.\d{2}\.\d{4})$/, '; ' + t.application + ' $1');
+  if (doc.op === 'out_refund') {   // «Qaytarish: [o‘quvchi avansi — ]<sabab>; ariza DD.MM.YYYY» — kalit so'zlar chop etish tilida, sabab — yozilganidek
+    basis = basis.replace(/^Qaytarish: o‘quvchi avansi/, t.refund + ': ' + t.refundCredit).replace(/^Qaytarish: /, t.refund + ': ')
+      .replace(/; ariza (\d{2}\.\d{2}\.\d{4})$/, '; ' + t.application + ' $1');
     if (attachment === 'Yozma ariza') attachment = t.writtenApp;
     if (doc.partyType === 'student' && doc.partyId) party = (party ? party + ' ' : '') + `(${t.student}: ${doc.partyId})`;
   }
@@ -401,8 +405,12 @@ function ko2Html(doc, ctx, W, t, lang) {
 // ---------------------------------------------------------------- ACT: naqdsiz dalolatnoma (qisqa shakl)
 function actHtml(doc, ctx, W, t, lang) {
   const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t), snap = doc.sourceSnapshot || {};
+  // o'zaro hisobda o'quvchining eski avansi fakturaga qo'llangan qator (Dt 6310 Kt 4010, acc-2) — jadvalda emas, ma'lumot qatori sifatida:
+  //   jadval qatorlari jami = dalolatnoma summasi (KO-1 dagi naqdsiz qator bilan bir xil ko'rinish)
+  const memo = l => !!(l && l.analytics && l.analytics.kind === 'credit_applied');
+  const memoLines = (doc.lines || []).filter(memo);
   // avans hisobotida tahlil ustuni o'rnida — chek / hujjat (qatordagi izoh)
-  const rows = (doc.lines || []).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(doc.op === 'nc_adv_report' ? (l.note || 'X') : anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
+  const rows = (doc.lines || []).filter(l => !memo(l)).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(doc.op === 'nc_adv_report' ? (l.note || 'X') : anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
   const head = pickSign(ctx, 1, doc.dirApprovedBy || doc.decidedBy, t.head), chief = pickSign(ctx, 2, doc.approvedBy, t.chief);
   const ofs = doc.op === 'nc_offset', adv = doc.op === 'nc_adv_report';
   // tomon yorlig'i: o'zaro hisob — xodim; avans hisoboti — hisobdor shaxs; kamomad qarori — javobgar shaxs (xodim zimmasiga olinganda)
@@ -414,6 +422,7 @@ function actHtml(doc, ctx, W, t, lang) {
     <div class="dt">${esc((t.actTitle[doc.op] ? '' : (t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '')) + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
     ${ofs && /^\d{4}-\d{2}$/.test(snap.month || '') ? `<p>${esc(t.offsetText(money(W, doc.amount), ymLabel(snap.month)))}</p>` : ''}
     <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(adv ? t.advDoc : t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
+    ${memoLines.length ? `<div class="note">${esc(t.creditApplied)}: ${memoLines.map(l => `${esc(t.debit)} ${esc(l.debit)} — ${esc(t.credit)} ${esc(l.credit)}: ${esc(money(W, l.amount))} (${esc(anCode(l, doc))})`).join('; ')}</div>` : ''}
     ${partyLbl && tx.party ? fld(partyLbl, esc(tx.party)) : ''}
     ${pupil ? fld(t.pupil, esc(pupil)) : ''}
     ${fld(t.basis, esc(tx.basis))}

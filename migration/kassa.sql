@@ -24,6 +24,9 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --   QULF TARTIBI: L0 iqror_doc:<clientRef> → L1 iqror_pay:<o'quvchi> → L3 biznes qatorlari → L4 iqror_desk:<kassa> → cash_docs /
 --     cash_days qatorlari → L5 doc_counters (oxirgi). cash_docs qatori kassa qulfisiz faqat keyin kassa qulfini OLMAYDIGAN
 --     tranzaksiyada qulflanadi (tasdiq / rad / so'rovni bekor qilish) — halqa (deadlock) bo'lmaydi.
+--     Istisno (acc-7): naqd o'quv to'lovi (kassa_tuition_post) kunni qatorlardan OLDIN aniqlaydi — L1 → L4 → L0 iqror_doc:pay_<id>.
+--     Xavfsiz: pay_<id> kalitini faqat shu yo'l oladi (doim shu o'quvchining L1 i va L4 dan keyin), L4 ni kutib turgan boshqa
+--     tranzaksiya bu kalitni ushlab turmaydi.
 --   XAVFSIZLIK: RLS; mijoz faqat o'qiydi (kassa/moliya rollari); DML barcha rollardan qaytarib olingan.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
@@ -173,16 +176,17 @@ create table if not exists public.cash_day_events (
   "dayId"   text references public.cash_days(id),
   desk      text not null,
   day       date,
-  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport')),
+  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit')),
   "byUid"   text,
   at        timestamptz not null default now(),
   reason    text,
   data      jsonb not null default '{}'::jsonb
 );
--- 'zreport' — onlayn kassa (NKM) Z-hisoboti fakti (F1.26; kassa-day.sql). Avval o'rnatilgan bazada cheklov yangilanadi.
+-- 'zreport' — onlayn kassa (NKM) Z-hisoboti fakti (F1.26; kassa-day.sql). 'resplit' — qaytarish orderida faktura qismining
+--   hisobvarag'i (4010 / 6310) pul berilgan kunga ko'ra qayta aniqlandi (acc-7; kassa-links.sql). Avval o'rnatilgan bazada cheklov yangilanadi.
 alter table public.cash_day_events drop constraint if exists cash_day_events_kind_check;
 alter table public.cash_day_events add constraint cash_day_events_kind_check
-  check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport'));
+  check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit'));
 create index if not exists cash_day_events_day_idx on public.cash_day_events ("dayId");
 
 -- Sanash dalolatnomalari: kun yopish, smena topshirish-qabul, oylik / yillik komissiya sanashi, boshlang'ich qoldiq.
@@ -427,7 +431,9 @@ begin
     if new.year <> extract(year from new."businessDay")::int then
       raise exception 'Hujjat yili kassa kuni yiliga teng bo''lishi shart' using errcode = '22023', hint = 'kassa:bad_doc';
     end if;
-    select coalesce(sum(l.amount) filter (where l.cash), 0), coalesce(sum(l.amount), 0),
+    -- dalolatnoma summasi: avans fakturaga qo'llangani (Dt 6310 Kt 4010, kind 'credit_applied') — ma'lumot qatori, summaga kirmaydi (acc-2)
+    select coalesce(sum(l.amount) filter (where l.cash), 0),
+           coalesce(sum(l.amount) filter (where l.analytics ->> 'kind' is distinct from 'credit_applied'), 0),
            count(*) filter (where l.cash and ((new.form = 'KO1' and l.debit <> '5010') or (new.form = 'KO2' and l.credit <> '5010')
                                               or (new.form = 'ACT' and new.op <> 'nc_opening')))
       into v_cash, v_all, v_bad from public.cash_doc_lines l where l."docId" = new.id;
@@ -478,10 +484,20 @@ create trigger trg_kassa_doc_after after update on public.cash_docs
   for each row execute function app.kassa_doc_after();
 
 -- Hujjat qatorlari: faqat hujjat yaratilayotganda qo'shiladi; keyin o'zgarmaydi.
+--   Yagona istisno (acc-7): tasdiqlangan, hali to'lanmagan qaytarish orderida (out_refund) pul berilayotganda faktura qatorining
+--   debeti 4010 ↔ 6310 to'lov kuniga ko'ra qayta aniqlanadi (kassa-links.sql: app.kassa_refund_resplit — shu hujjat uchun bayroq
+--   ostida); summa, kredit, statiya, analitika va boshqa ustunlar o'zgarmaydi.
 create or replace function app.kassa_line_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_st text; v_no int;
 begin
+  if tg_op = 'UPDATE' and coalesce(current_setting('iqror.kassa_rpc', true), '') = '1'
+     and coalesce(current_setting('iqror.kassa_resplit', true), '') = new."docId"
+     and old.debit in ('4010', '6310') and new.debit in ('4010', '6310')
+     and (to_jsonb(new) - 'debit') = (to_jsonb(old) - 'debit')
+     and exists (select 1 from public.cash_docs c where c.id = new."docId" and c.op = 'out_refund' and c.status = 'approved' and c.no is null) then
+    return new;
+  end if;
   if tg_op <> 'INSERT' then
     raise exception 'Kassa hujjati qatorlari o''zgartirilmaydi va o''chirilmaydi' using errcode = '42501', hint = 'kassa:immutable';
   end if;

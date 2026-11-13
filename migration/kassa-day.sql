@@ -1300,8 +1300,9 @@ begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   return jsonb_build_object(
     'rules', coalesce((select jsonb_agg(to_jsonb(r) order by r."sortOrder") from public.fin_op_rules r where r.active), '[]'::jsonb),
+    -- advReport — avans hisoboti (АО-1) qatoriga tanlanadimi: server bilan bir xil qoida (kassa-docs.sql: app.kassa_adv_article; acc-5)
     'articles', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'nameUz', a."nameUz", 'nameRu', a."nameRu", 'accountCode', a."accountCode",
-                                                              'cashOutAllowed', a."cashOutAllowed", 'needsNote', a."needsNote") order by a."sortOrder")
+                                                              'cashOutAllowed', a."cashOutAllowed", 'needsNote', a."needsNote", 'advReport', app.kassa_adv_article(a)) order by a."sortOrder")
                             from public.fin_articles a where a.active), '[]'::jsonb),
     'counterparties', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'name', c.name, 'stir', c.stir) order by c.name)
                                   from public.fin_counterparties c where c.active), '[]'::jsonb),

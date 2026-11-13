@@ -21,10 +21,10 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-links.sql ALOHIDA ishga tus
 --                   qaytim yozilgan avans / maosh orderining o'zi undan oldin bekor qilinmaydi (oy avansi / berilgan maosh manfiy
 --                   bo'lardi); kassir oynasidagi qoldiqlar (avans, maosh, hisobdor, kamomad) — kassa_staff_open;
 --     • qaytarish — kassa_refund_request(p): Direktor tasdiqlaydi (so'rov = tasdiq), balans O'ZGARMAYDI; kassir pulni berganda
---                   (kassa_doc_pay) refund_invoice shu tranzaksiyada bajariladi — balans KO-2 sanasida o'zgaradi;
---                   naqdsiz qaytarish — avvalgidek refund_invoice;
---     • xarajat   — KO-2 «Xarajat» o'tkazilganda har qatori «Buxgalteriya»ga (expenses) ko'chiriladi (statiya → eski toifa),
---                   bekor qilinsa — olib tashlanadi.
+--                   (kassa_doc_pay) refund_invoice shu tranzaksiyada bajariladi — balans KO-2 sanasida o'zgaradi; o'quvchi avansini
+--                   naqd qaytarish (crit-2) — avans ham pul berilganda kamayadi; naqdsiz qaytarish — avvalgidek refund_invoice;
+--     • xarajat   — KO-2 «Xarajat» o'tkazilganda har qatori «Buxgalteriya»ga (expenses) ko'chiriladi (statiya → eski toifa:
+--                   app.kassa_exp_category), bekor qilinsa — olib tashlanadi.
 --   Himoya (F1.13 qabul mezoni: funksiyani chetlab o'tadigan naqd yo'l yo'q): kassa ishga tushgach salary_payments,
 --     staff_advances va expenses jadvallariga NAQD (yoki usuli ko'rsatilmagan) yozuvni to'g'ridan-to'g'ri qo'shib bo'lmaydi;
 --     kassa hujjatiga bog'langan qator o'zgartirilmaydi va o'chirilmaydi (faqat «Kassa»dan, hujjatni bekor qilish orqali).
@@ -74,6 +74,19 @@ begin
   return v_code;
 end $$;
 revoke all on function app.kassa_payee_code(text) from public, anon, authenticated;
+
+-- «Buxgalteriya»ga (expenses) ko'chiriladigan xarajat qatorining eski toifasi — KO-2 «Xarajat» ham, avans hisoboti (АО-1) ham shu
+--   bitta qoida bilan (acc-9): avval fin_category_map; xaritada yo'q statiya — OP-18 (asosiy vosita) «Inventar» (reja §4.4: «Inventar
+--   EX-21/EX-16 yoki OP-18»), qolganlari «Boshqa». Toifa xaritadan olinmagan bo'lsa o_label — statiya nomi: ko'chgan yozuv izohi shu
+--   bilan boshlanadi (Direktor «Boshqa» ichida nima ekanini ko'radi: «Sotish uchun tovar xaridi: …», «Yetkazib beruvchilar bilan
+--   hisob-kitob: …»). Eski «Buxgalteriya» — barcha naqd chiqimlarning to'liq ro'yxati bo'lib qoladi (asosiy vosita va tovar ham).
+create or replace function app.kassa_exp_category(p_article text, out o_category text, out o_label text)
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(m.category, case when p_article = 'OP-18' then 'Inventar' else 'Boshqa' end),
+         case when m.category is null then (select a."nameUz" from public.fin_articles a where a.id = p_article) end
+    from (select (select x.category from public.fin_category_map x where x."articleId" = p_article order by x.category limit 1) as category) m
+$$;
+revoke all on function app.kassa_exp_category(text) from public, anon, authenticated;
 
 -- ---------- Himoya: kassa ishga tushgach naqd yozuv faqat kassa funksiyalari orqali ----------
 create or replace function app.kassa_cash_guard() returns trigger
@@ -323,15 +336,22 @@ drop trigger if exists trg_kassa_pay_guard on public.payments;   -- trg_fin_serv
 create trigger trg_kassa_pay_guard before insert or update or delete on public.payments for each row execute function app.kassa_pay_guard();
 
 -- ---------- Qaytarish: Direktor tasdiqlaydi (so'rov), pul kassadan beriladi ----------
---   p: target ('invoice' | 'payment'), id, amount, reason, clawback (avansni ham qaytarish), payee (kimga beriladi — to'liq F.I.Sh.),
---      requestDate (ariza sanasi, ixtiyoriy), clientRef. Hech narsa o'zgarmaydi — faqat tasdiqlangan KO-2 so'rovi paydo bo'ladi;
+--   p: target ('invoice' | 'payment' | 'credit'), id, amount, reason, clawback (avansni ham qaytarish), payee (kimga beriladi — to'liq
+--      F.I.Sh.), requestDate (ariza sanasi, ixtiyoriy), clientRef. Hech narsa o'zgarmaydi — faqat tasdiqlangan KO-2 so'rovi paydo bo'ladi;
 --      qaytarishning o'zi kassir pulni bergan paytda (kassa_doc_pay → app.kassa_link_paid) bajariladi.
+--   'credit' (crit-2) — o'quvchi avansini (student_credit) naqd qaytarish, masalan ketgan o'quvchining oldindan to'lagan puli: id —
+--      o'quvchi kodi; summa o'quvchi bo'yicha navbat (L1) ostida o'qilgan joriy avansdan oshmaydi; KO-2 — bitta qator Dt 6310 Kt 5010
+--      (OP-15). Faqat naqd va faqat kassa ishga tushgach; naqdsiz avans qaytarish — F2.11.
+--   So'rovlar navbati (ui-3): shu maqsad bo'yicha hali pul berilmagan (so'rov / tasdiqlangan) qaytarish so'rovlari + yangi summa
+--      qaytariladigan summadan oshmaydi — faktura: to'langan summa; biriktirilmagan to'lov: uning summasi (faqat bitta so'rov); avans:
+--      joriy avans (avans qaytarish so'rovlari va fakturadan qaytarishga qo'shilgan avans bilan) — aks holda kassa:refund_pending.
+--      Oyna o'sha kalit (clientRef) bilan qayta yuborsa (javob yo'qolgan) — mavjud so'rov qaytadi (dup), qayta tekshirilmaydi.
 create or replace function public.kassa_refund_request(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_target text; v_tid text; v_amount numeric; v_reason text; v_payee text; v_claw boolean; v_ref text;
   v_inv record; v_sid text; v_cr numeric := 0; v_pst text; v_pamt numeric; v_lines jsonb; v_month text := to_char(app.fin_today(), 'YYYY-MM');
-  v_id text; v_dup boolean; v_req text; v_basis text;
+  v_id text; v_dup boolean; v_req text; v_basis text; v_ex public.cash_docs%rowtype; v_held numeric; v_have numeric;
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: qaytarishni faqat Direktor tasdiqlaydi' using errcode = '42501'; end if;
   if not app.kassa_live() then raise exception 'Kassa ishga tushirilmagan' using errcode = 'P0001', hint = 'kassa:not_live'; end if;
@@ -342,21 +362,45 @@ begin
   v_payee := left(btrim(coalesce(p ->> 'payee', '')), 200);
   v_claw := app.kassa_bool(p, 'clawback');
   v_ref := btrim(coalesce(p ->> 'clientRef', ''));
-  if v_target not in ('invoice', 'payment') or v_tid = '' or v_ref !~ '^[A-Za-z0-9_.:-]{6,70}$' then
+  if v_target not in ('invoice', 'payment', 'credit') or v_tid = '' or v_ref !~ '^[A-Za-z0-9_.:-]{6,70}$' then
     raise exception 'Qaytarish ma''lumoti to''liq emas' using errcode = '22023', hint = 'kassa:bad_input';
   end if;
   if length(v_reason) < 3 then raise exception 'Qaytarish sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
   if length(v_payee) < 5 then raise exception 'Pul kimga berilishini to''liq yozing (F.I.Sh.)' using errcode = '22023', hint = 'kassa:party'; end if;
   begin v_req := to_char(nullif(p ->> 'requestDate', '')::date, 'DD.MM.YYYY'); exception when others then v_req := null; end;
-  v_basis := 'Qaytarish: ' || v_reason || case when v_req is not null then '; ariza ' || v_req else '' end;
+  v_basis := 'Qaytarish: ' || case when v_target = 'credit' then 'o‘quvchi avansi — ' else '' end || v_reason
+             || case when v_req is not null then '; ariza ' || v_req else '' end;
+  if v_target = 'credit' then   -- o'quvchi kodi — apply_payment bilan bir xil kanonik kalit (avans qatori va L1 navbati shu kalit bilan)
+    select s."studentId" into v_sid from public.students s where s.id = v_tid or s."studentId" = v_tid order by (s.id = v_tid) desc limit 1;
+    v_sid := coalesce(nullif(v_sid, ''), v_tid); v_tid := v_sid;
+  end if;
+  -- O'sha kalit bilan qayta yuborish — mavjud so'rov (L0 — kassa_doc_build bilan bir xil qulf)
+  perform pg_advisory_xact_lock(hashtext('iqror_doc:ref_' || v_ref));
+  select * into v_ex from public.cash_docs c where c."clientRef" = 'ref_' || v_ref;
+  if found then
+    if v_ex.op <> 'out_refund' or (v_ex."sourceSnapshot" ->> 'target') is distinct from v_target
+       or (v_ex."sourceSnapshot" ->> 'targetId') is distinct from v_tid or (v_ex."sourceSnapshot" ->> 'amount')::numeric is distinct from v_amount then
+      raise exception 'Bu oynadan boshqa qaytarish so''rovi allaqachon yuborilgan — «Kassa» → «So''rovlar»ni tekshiring' using errcode = '22023', hint = 'kassa:ref_mismatch';
+    end if;
+    return app.kassa_doc_json(v_ex.id) || jsonb_build_object('ok', true, 'dup', true);
+  end if;
 
   if v_target = 'invoice' then
+    select i."studentId" into v_sid from public.invoices i where i.id = v_tid;
+    if not found then raise exception 'Hisob-faktura topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+    perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));   -- L1: o'quvchi bo'yicha navbat (refund_invoice bilan bir xil)
     select i.id, i."studentId", coalesce(i.amount, 0) as amount, coalesce(i.status, '') as status, coalesce(i.month, '') as month,
            case when i.status = 'paid' then greatest(coalesce(i."paidAmount", 0), coalesce(i.amount, 0)) else coalesce(i."paidAmount", 0) end as paid
       into v_inv from public.invoices i where i.id = v_tid;
     if not found then raise exception 'Hisob-faktura topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
     if v_inv.status in ('canceled', 'reversed') or v_amount > v_inv.paid + 0.5 then
       raise exception 'Qaytarib bo''lmaydi: bu hisob-fakturada % so''m to''langan', v_inv.paid using errcode = '22023', hint = 'kassa:refund';
+    end if;
+    select coalesce(sum((c."sourceSnapshot" ->> 'amount')::numeric), 0) into v_held from public.cash_docs c
+     where c.op = 'out_refund' and c.status in ('draft', 'approved') and c."sourceSnapshot" ->> 'target' = 'invoice' and c."sourceSnapshot" ->> 'targetId' = v_tid;
+    if v_held > 0 and v_held + v_amount > v_inv.paid + 0.5 then
+      raise exception 'Bu hisob-faktura bo''yicha pul hali berilmagan qaytarish so''rovi bor (% so''m): yangisi bilan jami to''langan summadan (% so''m) oshadi — avval o''sha so''rovni bering yoki bekor qiling',
+        v_held, v_inv.paid using errcode = '22023', hint = 'kassa:refund_pending';
     end if;
     v_sid := v_inv."studentId";
     v_lines := jsonb_build_array(jsonb_build_object(
@@ -366,12 +410,23 @@ begin
       select coalesce(c.credit, 0) into v_cr from public.student_credit c where c.id = v_sid;
       v_cr := coalesce(v_cr, 0);
       if v_cr > 0 then
+        -- avans boshqa hali to'lanmagan so'rovda band (avans qaytarish yoki fakturadan qaytarish bilan) — ikkinchi marta qo'shilmaydi
+        select coalesce(sum(case when c."sourceSnapshot" ->> 'target' = 'credit' then (c."sourceSnapshot" ->> 'amount')::numeric
+                                 else coalesce((c."sourceSnapshot" ->> 'clawbackAmount')::numeric, 0) end), 0) into v_held
+          from public.cash_docs c
+         where c.op = 'out_refund' and c.status in ('draft', 'approved') and c."sourceSnapshot" ->> 'studentId' = v_sid
+           and (c."sourceSnapshot" ->> 'target' = 'credit' or coalesce((c."sourceSnapshot" ->> 'clawback')::boolean, false));
+        if v_held > 0 then
+          raise exception 'Bu o''quvchi avansi bo''yicha pul hali berilmagan qaytarish so''rovi bor (% so''m) — avval o''sha so''rovni bering yoki bekor qiling', v_held
+            using errcode = '22023', hint = 'kassa:refund_pending';
+        end if;
         v_lines := v_lines || jsonb_build_object('debit', '6310', 'credit', '5010', 'amount', v_cr,
                                                  'analytics', jsonb_build_object('studentId', v_sid, 'kind', 'credit_refund'));
       end if;
     end if;
-  else
-    select coalesce(pm.status, ''), coalesce(pm.amount, 0) into v_pst, v_pamt from public.payments pm where pm.id = v_tid;
+  elsif v_target = 'payment' then
+    -- qator qulfi: shu to'lov bo'yicha so'rovlar navbatga turadi (kassa_link_prelock ham shu qatorni qulflaydi)
+    select coalesce(pm.status, ''), coalesce(pm.amount, 0) into v_pst, v_pamt from public.payments pm where pm.id = v_tid for update;
     if not found then raise exception 'To''lov topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
     if v_pst not in ('unmatched', '') then
       raise exception 'Faqat biriktirilmagan to''lov shu yo''l bilan qaytariladi (holati: %)', v_pst using errcode = '22023', hint = 'kassa:refund';
@@ -379,10 +434,38 @@ begin
     if abs(v_amount - v_pamt) > 0.5 then
       raise exception 'Biriktirilmagan to''lov faqat to''liq qaytariladi (% so''m)', v_pamt using errcode = '22023', hint = 'kassa:refund';
     end if;
+    select coalesce(sum((c."sourceSnapshot" ->> 'amount')::numeric), 0) into v_held from public.cash_docs c
+     where c.op = 'out_refund' and c.status in ('draft', 'approved') and c."sourceSnapshot" ->> 'target' = 'payment' and c."sourceSnapshot" ->> 'targetId' = v_tid;
+    if v_held > 0 then
+      raise exception 'Bu to''lov bo''yicha pul hali berilmagan qaytarish so''rovi bor (% so''m) — avval o''sha so''rovni bering yoki bekor qiling', v_held
+        using errcode = '22023', hint = 'kassa:refund_pending';
+    end if;
     v_claw := false;
     -- biriktirilmagan (aniqlanmagan) tushum 6390 da turadi (PR-13, OP-16) — qaytarish ham shu hisobdan
     v_lines := jsonb_build_array(jsonb_build_object('debit', '6390', 'credit', '5010', 'amount', v_amount, 'articleId', 'OP-16',
                                                     'analytics', jsonb_build_object('paymentId', v_tid)));
+  else   -- 'credit': o'quvchi avansini naqd qaytarish (crit-2)
+    perform pg_advisory_xact_lock(hashtext('iqror_pay:' || v_sid));   -- L1: avans shu navbat ostida o'qiladi (to'lov, qaytarish bilan bir xil)
+    select coalesce(c.credit, 0) into v_have from public.student_credit c where c.id = v_sid;
+    v_have := coalesce(v_have, 0);
+    if v_have <= 0 then
+      raise exception 'Bu o''quvchida qaytariladigan avans yo''q' using errcode = '22023', hint = 'kassa:credit_none';
+    end if;
+    if v_amount > v_have then
+      raise exception 'Qaytarib bo''lmaydi: o''quvchi avansi % so''m', v_have using errcode = '22023', hint = 'kassa:credit_over';
+    end if;
+    select coalesce(sum(case when c."sourceSnapshot" ->> 'target' = 'credit' then (c."sourceSnapshot" ->> 'amount')::numeric
+                             else coalesce((c."sourceSnapshot" ->> 'clawbackAmount')::numeric, 0) end), 0) into v_held
+      from public.cash_docs c
+     where c.op = 'out_refund' and c.status in ('draft', 'approved') and c."sourceSnapshot" ->> 'studentId' = v_sid
+       and (c."sourceSnapshot" ->> 'target' = 'credit' or coalesce((c."sourceSnapshot" ->> 'clawback')::boolean, false));
+    if v_held > 0 and v_held + v_amount > v_have then
+      raise exception 'Bu o''quvchi avansi bo''yicha pul hali berilmagan qaytarish so''rovi bor (% so''m): yangisi bilan jami avansdan (% so''m) oshadi — avval o''sha so''rovni bering yoki bekor qiling',
+        v_held, v_have using errcode = '22023', hint = 'kassa:refund_pending';
+    end if;
+    v_claw := false;
+    v_lines := jsonb_build_array(jsonb_build_object('debit', '6310', 'credit', '5010', 'amount', v_amount,
+                                                    'analytics', jsonb_build_object('studentId', v_sid, 'kind', 'credit_refund')));
   end if;
 
   perform app.kassa_flag(true);
@@ -439,11 +522,51 @@ begin
     end if;
   end if;
   if v_op = 'out_refund' and v_snap is not null then
+    -- qaytarish (faktura, to'lov, o'quvchi avansi — crit-2): o'quvchi bo'yicha navbat (L1) — avans / faktura tekshiruvi va o'zgarishi orasida
     perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_snap ->> 'studentId', '')));
     if v_snap ->> 'target' = 'payment' then perform 1 from public.payments pm where pm.id = v_snap ->> 'targetId' for update; end if;
   end if;
 end $$;
 revoke all on function app.kassa_link_prelock(text) from public, anon, authenticated;
+
+-- ---------- Qaytarish orderi pul berilayotganda: faktura qismining hisobvarag'i to'lov kuniga ko'ra (acc-7) ----------
+--   So'rov paytida qatorlar o'sha kun bo'yicha tuzilgan (4010 — boshlangan davr, 6310 — kelgusi oy). So'rov oy oxirida tasdiqlanib, pul
+--   keyingi oyda berilsa, fakturaning oyi endi boshlangan davr: qator to'lov kuniga ko'ra qayta aniqlanadi. Summa, oluvchi va tasdiq
+--   o'zgarmaydi (tasdiq — summa va maqsad uchun, texnik hisobvaraq uchun emas); avans (clawback / 'credit') qismi doim Dt 6310.
+--   kassa_doc_pay chaqiradi — prelock (L1) va kassa qulfi (L4) ostida, kassa bayrog'i bilan, o'tkazishdan OLDIN (kun — kassa_doc_post
+--   aynan shu qoida bilan oladigan kun). Qator faqat shu hujjat uchun bayroq ostida o'zgaradi (kassa.sql: app.kassa_line_guard);
+--   o'zgargan bo'lsa — kun jurnaliga «resplit» hodisasi (qaysi qator, qaysi hisobvaraqdan qaysiga).
+create or replace function app.kassa_refund_resplit(p_doc_id text, p_uid text) returns void
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_doc public.cash_docs%rowtype; v_day_id text; v_day date; v_m text; l record; v_acct text; v_ch jsonb := '[]'::jsonb; v_txt text := '';
+begin
+  select * into v_doc from public.cash_docs c where c.id = p_doc_id;
+  if v_doc.op is distinct from 'out_refund' or v_doc.status <> 'approved' or v_doc.no is not null
+     or coalesce(v_doc."sourceSnapshot" ->> 'target', '') <> 'invoice' then
+    return;
+  end if;
+  select d.o_day_id, d.o_day into v_day_id, v_day from app.kassa_resolve_day(v_doc.desk, null, p_uid, false) d;
+  v_m := to_char(v_day, 'YYYY-MM');
+  for l in select * from public.cash_doc_lines x
+            where x."docId" = p_doc_id and x.analytics ? 'invoiceId' and x.debit in ('4010', '6310') order by x."lineNo" loop
+    v_acct := case when coalesce(l.analytics ->> 'month', '') ~ '^\d{4}-\d{2}$' and (l.analytics ->> 'month') > v_m then '6310' else '4010' end;
+    if v_acct <> l.debit then
+      perform set_config('iqror.kassa_resplit', p_doc_id, true);
+      update public.cash_doc_lines set debit = v_acct where id = l.id;
+      perform set_config('iqror.kassa_resplit', '', true);
+      v_ch := v_ch || jsonb_build_object('lineNo', l."lineNo", 'from', l.debit, 'to', v_acct, 'invoiceId', l.analytics ->> 'invoiceId',
+                                         'month', l.analytics ->> 'month', 'amount', l.amount);
+      v_txt := v_txt || case when v_txt = '' then '' else '; ' end || 'faktura ' || coalesce(l.analytics ->> 'month', '?') || ': Dt ' || l.debit || ' → Dt ' || v_acct;
+    end if;
+  end loop;
+  if jsonb_array_length(v_ch) > 0 then
+    insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
+      values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_day_id, v_doc.desk, v_day, 'resplit', p_uid,
+              left('Qaytarish orderi: hisobvaraq pul berilgan kun (' || to_char(v_day, 'DD.MM.YYYY') || ') bo''yicha qayta aniqlandi — ' || v_txt, 500),
+              jsonb_build_object('docId', p_doc_id, 'asOf', v_day, 'lines', v_ch));
+  end if;
+end $$;
+revoke all on function app.kassa_refund_resplit(text, text) from public, anon, authenticated;
 
 -- ---------- Pul berilgandan / qabul qilingandan keyin (hujjat o'tkazilgan, shu tranzaksiya): bog'langan amal ----------
 --   Xodim bilan hisob-kitob kirimlarida tekshiruv shu yerda (qoldiq qulfi prelock'da, kassa qulfi o'tkazishda olingan): rad etilsa
@@ -451,8 +574,8 @@ revoke all on function app.kassa_link_prelock(text) from public, anon, authentic
 create or replace function app.kassa_link_paid(p_doc_id text, p_uid text) returns void
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
-  v_doc public.cash_docs%rowtype; s jsonb; r jsonb; v_before text[]; v_code text; l record; v_cat text;
-  v_open numeric; v_month text; v_art text; v_last public.salary_payments%rowtype;
+  v_doc public.cash_docs%rowtype; s jsonb; r jsonb; v_before text[]; v_code text; l record; v_cat text; v_lbl text;
+  v_open numeric; v_month text; v_art text; v_last public.salary_payments%rowtype; v_sid text; v_cr numeric; v_name text;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
   -- Hisobdordan qaytim (acc-3) / kamomadni qoplash (acc-4): o'tkazilgandan keyin xodim qoldig'i manfiy bo'lmasin — qaytim hisobdordagi
@@ -479,6 +602,26 @@ begin
     if s is null or v_doc."sourceTable" is distinct from 'refunds' then
       raise exception 'Qaytarish hujjati ma''lumoti to''liq emas' using errcode = 'P0001', hint = 'kassa:refund';
     end if;
+    if s ->> 'target' = 'credit' then
+      -- o'quvchi avansini naqd qaytarish (crit-2): avans pul berilayotgan paytdagi holatda qayta tekshiriladi (L1 — prelock'da) va shu
+      --   tranzaksiyada kamayadi: avans jurnali (credit_ledger) va qaytarish jurnali (refunds, target 'credit' — moslik P8 shu bilan)
+      v_sid := s ->> 'studentId';
+      select c.credit into v_cr from public.student_credit c where c.id = v_sid for update;
+      v_cr := coalesce(v_cr, 0);
+      if v_cr < v_doc.amount then
+        raise exception 'Qaytarib bo''lmadi: o''quvchi avansi tasdiqdan keyin o''zgargan (hozir % so''m, so''rovda % so''m) — so''rovni bekor qilib, qaytadan tasdiqlang',
+          v_cr, v_doc.amount using errcode = 'P0001', hint = 'kassa:credit_changed';
+      end if;
+      update public.student_credit set credit = v_cr - v_doc.amount, "updatedAt" = now() where id = v_sid;
+      select st.name into v_name from public.students st where st."studentId" = v_sid or st.id = v_sid order by (st."studentId" = v_sid) desc limit 1;
+      insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, provider, note, "at")
+        values (gen_random_uuid()::text, v_sid, coalesce(v_name, ''), -v_doc.amount, v_cr - v_doc.amount, 'manual', 'cash',
+                left('Avans naqd qaytarildi (KO-2 № ' || v_doc.no || '): ' || coalesce(s ->> 'reason', ''), 300), now());
+      insert into public.refunds (id, target, "targetId", "studentId", "studentName", amount, reason, "byEmail", month, method, "cashDocId")
+        values (gen_random_uuid()::text, 'credit', v_sid, v_sid, coalesce(v_name, ''), v_doc.amount,
+                coalesce(s ->> 'reason', '') || ' · avans naqd qaytarildi', '', '', 'cash', v_doc.id);
+      return;
+    end if;
     select coalesce(array_agg(x.id), '{}') into v_before from public.refunds x
      where x."targetId" in (s ->> 'targetId', coalesce(s ->> 'studentId', ''));
     r := public.refund_invoice(s ->> 'target', s ->> 'targetId', (s ->> 'amount')::numeric, s ->> 'reason',
@@ -503,12 +646,13 @@ begin
               to_char(v_doc."businessDay", 'YYYY-MM-DD'), left(v_doc.basis, 300), 'cash', v_doc.id);
 
   elsif v_doc.op = 'out_expense' then
+    -- har naqd qator (asosiy vosita, sotish uchun tovar, yetkazib beruvchi ham) — toifa va izoh boshi app.kassa_exp_category dan (acc-9)
     for l in select * from public.cash_doc_lines x where x."docId" = v_doc.id and x.cash order by x."lineNo" loop
-      select m.category into v_cat from public.fin_category_map m where m."articleId" = l."articleId" order by m.category limit 1;
+      select k.o_category, k.o_label into v_cat, v_lbl from app.kassa_exp_category(l."articleId") k;
       insert into public.expenses (id, date, month, category, amount, note, method, "cashDocId", "articleId", "counterpartyId")
         values ('kx_' || v_doc.id || '_' || l."lineNo", to_char(v_doc."businessDay", 'YYYY-MM-DD'), to_char(v_doc."businessDay", 'YYYY-MM'),
-                coalesce(v_cat, 'Boshqa'), l.amount,
-                left(btrim(coalesce(nullif(v_doc."partyName", ''), '') || case when v_doc.basis <> '' then ' — ' || v_doc.basis else '' end
+                v_cat, l.amount,
+                left(btrim(coalesce(v_lbl || ': ', '') || coalesce(nullif(v_doc."partyName", ''), '') || case when v_doc.basis <> '' then ' — ' || v_doc.basis else '' end
                            || ' (KO-2 № ' || v_doc.no || ')'), 300),
                 'cash', v_doc.id, l."articleId", case when v_doc."partyType" = 'counterparty' then v_doc."partyId" end);
     end loop;
@@ -650,7 +794,8 @@ revoke all on function app.kassa_link_void(text, text, text) from public, anon, 
 --   Yozma ariza + Direktor (§4.10). BITTA tranzaksiyada:
 --     • maosh to'lovi (salary_payments, usul 'offset') — tasdiqlangan vedomost chegarasi mavjud darvoza trigeri bilan;
 --     • o'quv to'lovi (payments, provider 'offset') va uning balansga qo'llanishi (apply_payment: eng eski fakturadan, ortiqchasi avansga);
---     • naqdsiz dalolatnoma (ACT): Dt 6710 Kt 4010 / 6310 — taqsimot naqd o'quv to'lovidagi qoida bilan (app.kassa_tuition_alloc).
+--     • naqdsiz dalolatnoma (ACT): Dt 6710 Kt 4010 / 6310 — taqsimot naqd o'quv to'lovidagi qoida bilan (app.kassa_tuition_alloc);
+--       eski avans fakturaga qo'llangan bo'lsa — KO-1 dagi kabi naqdsiz Dt 6310 Kt 4010 ma'lumot qatori ham (summaga kirmaydi, acc-2).
 --   Kassadan pul chiqmaydi ham, kirmaydi ham — kassa kitobida (KO-4) yo'q; dalolatnoma o'z raqam seriyasida («Д-»).
 --   p: id ('sp_…' — «Maosh berish» oynasining barqaror kaliti), teacherId, payeeRef ('teachers:<id>' | 'staff:<id>'), teacherName,
 --      month ('YYYY-MM'), paid (> 0 — hisobga olinadigan summa), gross, advance, deduction, subBonus, net, carryIn, carryOut,
@@ -726,8 +871,10 @@ begin
     raise exception 'O''zaro hisob qo''llanmadi (%)', coalesce(v_res::text, 'null') using errcode = 'P0001', hint = 'kassa:offset';
   end if;
   update public.payments set status = 'applied' where id = v_pay_id;
-  -- 3) naqdsiz dalolatnoma: Dt 6710 Kt 4010 / 6310 (to'lov qayerga taqsimlangan bo'lsa)
-  v_a := app.kassa_tuition_alloc(v_before, v_paid, '6710', false, false);
+  -- 3) naqdsiz dalolatnoma: Dt 6710 Kt 4010 / 6310 (to'lov qayerga taqsimlangan bo'lsa) — naqd KO-1 bilan aynan bir xil qoida (acc-2):
+  --    o'quvchining ESKI avansi shu to'lov bilan fakturaga qo'llangan bo'lsa — naqdsiz qator Dt 6310 Kt 4010 (ma'lumot qatori,
+  --    dalolatnoma summasiga kirmaydi); oy chegarasi — dalolatnoma sanasi (bugun) bo'yicha
+  v_a := app.kassa_tuition_alloc(v_before, v_paid, '6710', true, false, v_today);
   select b.o_id, b.o_dup into v_doc_id, v_dup from app.kassa_doc_build(jsonb_build_object(
       'desk', 'main', 'op', 'nc_offset', 'amount', v_paid, 'partyType', 'employee', 'partyId', v_ref,
       'basis', 'O‘zaro hisob: ish haqi ' || v_month || ' hisobidan o‘quv to‘lovi — ' || v_sname || ' (' || v_sid || '); ariza '
@@ -793,9 +940,12 @@ grant execute on function public.kassa_offset_void(text, text) to authenticated;
 -- ---------- Avans hisoboti (АО-1, minimal): hisobdor shaxs sarflagan pul — NAQDSIZ dalolatnoma ----------
 --   Qog'ozdagi avans hisoboti (cheklar bilan; shakllar.md, Sh-1) bo'yicha buxgalter, Moliya menejeri yoki Direktor kiritadi.
 --   BITTA tranzaksiyada: dalolatnoma (ACT; kassa kitobiga kirmaydi) — har qator Dt statiya hisobvarag'i Kt 4230 (hisobdor
---   bo'yicha) + har qator «Buxgalteriya»dagi xarajat (usul 'accountable', shu hujjatga bog'langan). Hisobot summasi hisobdordagi
---   hisobot qilinmagan qoldiqdan oshmaydi: ortiqcha sarf hozircha alohida «Xarajat» orderi bilan beriladi (to'liq versiya — F2.6).
---   Statiyalar — kassa xarajatidagi ro'yxat (ish haqi, soliq, eskirish, bank komissiyasi, jarima kabilar — yo'q).
+--   bo'yicha) + har qator «Buxgalteriya»dagi xarajat (usul 'accountable', shu hujjatga bog'langan; toifa — app.kassa_exp_category). Hisobot
+--   summasi hisobdordagi hisobot qilinmagan qoldiqdan oshmaydi: ortiqcha sarf hozircha alohida «Xarajat» orderi bilan beriladi (to'liq
+--   versiya — F2.6).
+--   Statiyalar (acc-5; kassa-docs.sql: app.kassa_adv_article — shakldagi ro'yxat ham shundan): EX — kassadan xarajat qilinadiganlari
+--   (ish haqi, soliq, eskirish, bank komissiyasi, jarima kabilar — yo'q), OP-18 (asosiy vosita — Dt 0820) va OP-24 (sotish uchun tovar —
+--   Dt 2910), reja §4.4 da Kt 4230 bilan provodkasi borlari. OP-17 (yetkazib beruvchi bilan hisob-kitob) va boshqa OP — yo'q.
 --   p: clientRef, partyId (xodim: 'teachers:<id>' | 'staff:<id>'), reportDate (qog'ozdagi hisobot sanasi, 92 kun ichida),
 --      basis (ixtiyoriy izoh), lines: [{articleId, amount, note — chek yoki hujjat}], 1–40 qator.
 create or replace function public.kassa_adv_report(p jsonb) returns jsonb
@@ -803,7 +953,7 @@ language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_ref text; v_pid text; v_pname text; v_rep text; v_basis text; v_today date := app.fin_today();
   v_lines jsonb := '[]'::jsonb; v_line jsonb; v_i int := 0; v_amt numeric; v_total numeric := 0; v_art public.fin_articles%rowtype;
-  v_note text; v_open numeric; v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_ex public.cash_docs%rowtype; l record; v_cat text;
+  v_note text; v_open numeric; v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_ex public.cash_docs%rowtype; l record; v_cat text; v_lbl text;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: avans hisobotini buxgalter, Moliya menejeri yoki Direktor kiritadi' using errcode = '42501';
@@ -831,8 +981,10 @@ begin
     v_amt := app.kassa_amount(v_line -> 'amount', v_i || '-qator');
     select * into v_art from public.fin_articles a where a.id = nullif(btrim(coalesce(v_line ->> 'articleId', '')), '') and a.active;
     if not found then raise exception '%-qator: statiya tanlanmagan yoki faol emas', v_i using errcode = '22023', hint = 'kassa:article'; end if;
-    if v_art.kind <> 'EX' or not v_art."cashOutAllowed" or nullif(v_art."accountCode", '') is null then
-      raise exception '«%» statiyasi bo''yicha hisobdor xarajati yozilmaydi', v_art."nameUz" using errcode = '22023', hint = 'kassa:article';
+    if not app.kassa_adv_article(v_art) then
+      raise exception '«%» statiyasi bo''yicha hisobdor xarajati yozilmaydi%', v_art."nameUz",
+        case when v_art.id = 'OP-17' then ' (yetkazib beruvchiga qarz kassa «Xarajat» orderi yoki bank orqali to''lanadi)' else '' end
+        using errcode = '22023', hint = 'kassa:article';
     end if;
     v_note := left(btrim(coalesce(v_line ->> 'note', '')), 300);
     if length(v_note) < 3 then raise exception '%-qator: chek yoki hujjatni yozing (raqami, sanasi)', v_i using errcode = '22023', hint = 'kassa:note'; end if;
@@ -868,11 +1020,12 @@ begin
       'lines', v_lines), 'ACT', v_uid, true) b;
   v_doc := app.kassa_act_post(v_doc_id, v_uid, v_today);   -- L4, L5
   for l in select * from public.cash_doc_lines x where x."docId" = v_doc.id order by x."lineNo" loop
-    select m.category into v_cat from public.fin_category_map m where m."articleId" = l."articleId" order by m.category limit 1;
+    select k.o_category, k.o_label into v_cat, v_lbl from app.kassa_exp_category(l."articleId") k;   -- KO-2 «Xarajat» bilan bir xil qoida (acc-9)
     insert into public.expenses (id, date, month, category, amount, note, method, "cashDocId", "articleId")
       values ('ka_' || v_doc.id || '_' || l."lineNo", to_char(v_doc."businessDay", 'YYYY-MM-DD'), to_char(v_doc."businessDay", 'YYYY-MM'),
-              coalesce(v_cat, 'Boshqa'), l.amount,
-              left(btrim(v_pname || case when coalesce(l.note, '') <> '' then ' — ' || l.note else '' end || ' (avans hisoboti № ' || v_doc.no || ')'), 300),
+              v_cat, l.amount,
+              left(btrim(coalesce(v_lbl || ': ', '') || v_pname || case when coalesce(l.note, '') <> '' then ' — ' || l.note else '' end
+                         || ' (avans hisoboti № ' || v_doc.no || ')'), 300),
               'accountable', v_doc.id, l."articleId");
   end loop;
   perform app.kassa_flag(false);
@@ -922,7 +1075,8 @@ grant execute on function public.kassa_adv_report_void(text, text) to authentica
 --                                     ofs  — o'zaro hisob: dalolatnoma, maosh to'lovi ('offset') va o'quv to'lovi ('offset') bir-biriga mos emas;
 --                                     ret  — xodim qaytargan pul (KO-1, acc-1): manfiy avans (OP-08) / maosh (OP-09) yozuvisiz order yoki
 --                                            o'tkazilgan orderisiz (summasi mos emas) manfiy naqd avans / maosh yozuvi;
---   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi.
+--   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi
+--                                     (faktura, to'lov va o'quvchi avansi — crit-2: avans qaytarish ham refunds qatori, target 'credit').
 --   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
 create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$

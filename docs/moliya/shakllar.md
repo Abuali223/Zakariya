@@ -63,7 +63,8 @@ Ilova: [___] ta hujjat, [___] varaq.
 Hisobdor shaxs: [___] (imzo), sana [___] · Hisobotni tekshirdi — buxgalter: [___] (imzo), sana [___]
 Tasdiqlangan summa: [___] so‘m ([summa so‘z bilan]).
 
-*Qoidalar:* muddat — 3 ish kuni (korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; cheksiz xarajat qabul
+*Qoidalar:* muddat — 3 ish kuni (korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; statiya — kassa xarajati
+(EX), asosiy vosita (OP-18) yoki sotish uchun tovar (OP-24), yetkazib beruvchiga qarz (OP-17) avans hisobotida yopilmaydi; cheksiz xarajat qabul
 qilinmaydi (istisno — rahbar ruxsati bilan tushuntirish xati); hisobot topshirilmaguncha yangi avans berilmaydi; buxgalter
 tekshirgan qatorlarni moliya menejeri «Buxgalteriya»ga xarajat qilib kiritadi (to‘lov usuli — «Hisobdor shaxs orqali (avans hisoboti)»); yanvar
 hisobotlari — yanvar yopilishidan oldin.

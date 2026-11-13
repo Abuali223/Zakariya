@@ -71,13 +71,17 @@ revoke all on function app.kassa_tuition_info(text) from public, anon, authentic
 -- To'lov qo'llangandan KEYIN: pul qayerga taqsimlandi (fakturalar bo'yicha; ortiqchasi — avans). Naqd o'quv to'lovi (KO-1,
 --   p_debit '5010') va o'zaro hisob dalolatnomasi (kassa-links.sql, p_debit '6710') — bitta qoida bilan.
 --   p_before — app.kassa_tuition_before() natijasi (to'lovdan OLDINGI fakturalar va avans); p_credit_lines — shu to'lov bilan
---   birga fakturaga qo'llangan ESKI avans uchun naqdsiz qator (Dt 6310 Kt 4010) qo'shilsinmi (KO-1 da — ha).
+--   birga fakturaga qo'llangan ESKI avans uchun naqdsiz qator (Dt 6310 Kt 4010) qo'shilsinmi (KO-1 da ham, dalolatnomada ham — ha;
+--   dalolatnomada u ma'lumot qatori, hujjat summasiga kirmaydi — acc-2).
+--   p_day — hujjat kuni (kassa kuni / dalolatnoma sanasi): «boshlangan davr» (4010) va «kelgusi oy» (6310) shu kunning oyiga nisbatan
+--   (acc-7: kecha olingan, yarim tundan keyin yuborilgan oflayn to'lov hali ochiq kechagi kunga tushadi — oyi ham kechagi).
 --   Natija: {mode: exact | fallback | unknown, lines, alloc, months, over, creditBefore, creditAfter}.
-create or replace function app.kassa_tuition_alloc(p_before jsonb, p_amount numeric, p_debit text, p_credit_lines boolean, p_apply_dup boolean)
+drop function if exists app.kassa_tuition_alloc(jsonb, numeric, text, boolean, boolean);
+create or replace function app.kassa_tuition_alloc(p_before jsonb, p_amount numeric, p_debit text, p_credit_lines boolean, p_apply_dup boolean, p_day date)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_sid text := p_before ->> 'sid'; v_c0 numeric := coalesce((p_before ->> 'credit')::numeric, 0); v_c1 numeric;
-  v_month text := to_char(app.fin_today(), 'YYYY-MM');
+  v_month text := to_char(coalesce(p_day, app.fin_today()), 'YYYY-MM');
   v_inv jsonb; v_paid numeric; v_delta numeric; v_rem numeric; v_fc numeric; v_fk numeric; v_cash_inv numeric := 0; v_over numeric := 0;
   v_acct text; v_lines jsonb := '[]'::jsonb; v_alloc jsonb := '[]'::jsonb; v_months text[] := '{}'; v_mode text := 'exact';
 begin
@@ -124,7 +128,7 @@ begin
   return jsonb_build_object('mode', v_mode, 'lines', v_lines, 'alloc', v_alloc, 'months', to_jsonb(v_months), 'over', v_over,
                             'creditBefore', v_c0, 'creditAfter', v_c1);
 end $$;
-revoke all on function app.kassa_tuition_alloc(jsonb, numeric, text, boolean, boolean) from public, anon, authenticated;
+revoke all on function app.kassa_tuition_alloc(jsonb, numeric, text, boolean, boolean, date) from public, anon, authenticated;
 
 -- To'lov qo'llangandan KEYIN: taqsimotni hisoblab, KO-1 ni yozadi va o'tkazadi. p_apply_dup — balansga avval qo'llangan
 --   (eski 3 bosqichli mijoz yarim yo'lda qolgan) to'lov: taqsimot noma'lum, bitta qator (Kt 4010) bilan yoziladi va belgilanadi.
@@ -134,7 +138,7 @@ language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_sid text := p_before ->> 'sid'; v_c0 numeric := coalesce((p_before ->> 'credit')::numeric, 0); v_c1 numeric;
   v_extra jsonb := case when jsonb_typeof(p_extra) = 'object' then p_extra else '{}'::jsonb end;
-  v_fiscal text; v_exempt boolean;
+  v_fiscal text; v_exempt boolean; v_day date;
   v_over numeric := 0; v_a jsonb;
   v_lines jsonb := '[]'::jsonb; v_alloc jsonb := '[]'::jsonb; v_months text[] := '{}'; v_mode text := 'exact';
   v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_info jsonb; v_basis text;
@@ -149,14 +153,19 @@ begin
     raise exception 'Fiskal chek raqami kiritilmagan' using errcode = '22023', hint = 'kassa:fiscal';
   end if;
 
-  v_a := app.kassa_tuition_alloc(p_before, p_amount, '5010', true, p_apply_dup);
+  perform app.kassa_flag(true);
+  -- Kassa kuni taqsimotdan OLDIN aniqlanadi (acc-7): kassa qulfi (L4; o'quvchi navbati L1 — kassa_tuition_before'da, undan keyin)
+  --   ostida o'sha kun qoidasi bilan (app.kassa_resolve_day; kun hali ochilmagan bo'lsa — shu yerda ochiladi) — kassa_doc_post o'sha
+  --   qulf ostida aynan shu kunni qaytadan oladi. «Boshlangan davr» (4010) / «kelgusi oy» (6310) — shu kunning oyiga nisbatan.
+  perform app.kassa_lock_desk('main');
+  select d.o_day into v_day from app.kassa_resolve_day('main', p_captured, v_uid, app.is_admin()) d;
+  v_a := app.kassa_tuition_alloc(p_before, p_amount, '5010', true, p_apply_dup, v_day);
   v_mode := v_a ->> 'mode'; v_lines := v_a -> 'lines'; v_alloc := v_a -> 'alloc'; v_over := (v_a ->> 'over')::numeric;
   v_c1 := (v_a ->> 'creditAfter')::numeric;
   v_months := array(select jsonb_array_elements_text(v_a -> 'months'));
   v_basis := 'O‘quv to‘lovi' || case when cardinality(v_months) > 0 then ': ' || array_to_string(v_months, ', ') else '' end
              || case when v_mode = 'exact' and v_over > 0 then case when cardinality(v_months) > 0 then ' + avans' else ' (avans)' end else '' end;
 
-  perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_doc_id, v_dup from app.kassa_doc_build(jsonb_build_object(
       'desk', 'main', 'op', 'in_tuition', 'amount', p_amount, 'partyType', 'student', 'partyId', v_sid, 'partyName', p_payer_name,
       'basis', v_basis, 'fiscalNo', v_fiscal, 'fiscalExempt', v_exempt, 'clientRef', 'pay_' || p_pay_id, 'capturedAt', p_captured,

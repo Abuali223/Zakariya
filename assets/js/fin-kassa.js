@@ -286,6 +286,9 @@ function offerPrint(r) { if (r && r.id && r.status === 'posted' && confirm('Orde
 // ---------------------------------------------------------------- avans hisoboti (hisobdor shaxs, naqdsiz dalolatnoma)
 //   Qog'ozdagi hisobot va cheklar bo'yicha 2-ro'yxat (Moliya menejeri, buxgalter) yoki Direktor kiritadi. Har qator — bitta chek yoki
 //   hujjat; xarajat «Buxgalteriya»ga o'zi ko'chadi, hisobdordagi qoldiq kamayadi (server: kassa_adv_report).
+// Avans hisoboti qatoriga tanlanadigan statiyalar — server qabul qiladigan ro'yxatning o'zi (acc-5): kassa_refs har statiyaga «advReport»
+//   belgisini serverdagi qoidadan (app.kassa_adv_article: EX — kassa xarajati, OP-18 asosiy vosita, OP-24 sotish uchun tovar) beradi.
+export const advArticles = refs => ((refs && refs.articles) || []).filter(a => a && a.advReport === true);
 async function openAdvForm() {
   const refs = ST.refs;
   // Hisobdorlar qoldig'i — har doim asosiy kassa bo'yicha (server ham sinov kassasini hisobga olmaydi).
@@ -293,7 +296,7 @@ async function openAdvForm() {
   if (!c) { try { c = await call('kassa_checks', { p_desk: 'main' }); } catch (e) { C.toast(errText(e), true); return; } }
   const acc = (c.accountable || []).filter(x => num(x.balance) > 0);
   if (!acc.length) { C.toast('Hisobot qilinmagan avansi bor hisobdor yo‘q', true); return; }
-  const arts = (refs.articles || []).filter(a => a.kind === 'EX' && a.cashOutAllowed);
+  const arts = advArticles(refs);
   const today = ST.ov.state.today;
   const F = { ref: null, lines: [{ articleId: '', amount: '', note: '' }] };
   $('#modal').innerHTML = `<div class="modal-h"><h3>Avans hisoboti</h3><button class="x" id="m-x">×</button></div>
@@ -1090,7 +1093,8 @@ function controlHtml(c, stale) {   // stale — oldingi yuklashdagi ma'lumot (ya
 
 // ---------------------------------------------------------------- kun varag'i: hujjatlar, sanashlar, jurnal (tekshiruvchi uchun)
 const CNT_LBL = { close: 'Kun yopish sanashi', handover: 'Smena topshirish-qabul', opening: 'Boshlang‘ich qoldiq', monthly: 'Oylik sanash', yearly: 'Yillik sanash', surprise: 'To‘satdan sanash' };
-const EV_LBL = { open: 'Kun ochildi', close: 'Kun yopildi', verify: 'Tekshirildi', reopen: 'Qayta ochildi', handover: 'Smena topshirildi', opening: 'Boshlang‘ich qoldiq', decision: 'Kamomad qarori', zreport: 'Z-hisobot' };
+const EV_LBL = { open: 'Kun ochildi', close: 'Kun yopildi', verify: 'Tekshirildi', reopen: 'Qayta ochildi', handover: 'Smena topshirildi', opening: 'Boshlang‘ich qoldiq', decision: 'Kamomad qarori', zreport: 'Z-hisobot',
+  resplit: 'Qaytarish hisobvarag‘i (4010 / 6310) qayta aniqlandi' };
 async function openDayView(day) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa kuni — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal;

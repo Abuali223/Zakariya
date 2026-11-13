@@ -232,6 +232,36 @@ select zz.chk('J25 kunlar bo''yicha: order jami = to''lovlar jami (kassa kitobi 
   '^2027-01-04=3090000/3090000,2027-01-05=32000/32000,2027-01-06=3000/3000$');
 select zz.chk('J26 raqamlash uzluksiz', (select app.kassa_gap_check('main', 2027)::text), '^\[\]$');
 
+-- ---------- acc-7: oy chegarasi — «boshlangan davr» (4010) / «kelgusi oy» (6310) HUJJAT KUNIGA nisbatan ----------
+--   31.01 kassa kuni ochiq. Oflayn navbatda 31.01 23:55 da olingan to'lov yarim tundan keyin (01.02 00:30) yuborilsa, u hali ochiq 31.01
+--   kuniga tushadi — fevral fakturasi o'sha kun bo'yicha kelgusi oy (Kt 6310), o'z vaqtida yozilgan to'lov bilan bir xil.
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
+  ('s3','T-3','Sinov C',5,'A','uz','',3,'[]'), ('s4','T-4','Sinov D',5,'A','uz','',4,'[]'), ('s5','T-5','Sinov E',5,'A','uz','',5,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
+  ('mf3','T-3','Sinov C','2027-02',400000,0,'pending'), ('mf4','T-4','Sinov D','2027-02',400000,0,'pending'),
+  ('mm4','T-4','Sinov D','2027-03',400000,0,'pending'), ('mf5','T-5','Sinov E','2027-02',400000,0,'pending');
+set local session_replication_role = origin;
+select zz.put('M0', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-01-06","counted":3125000}')::text$q$));
+select zz.clock('2027-01-31 23:50+05');
+select zz.put('M1', zz.pay('U_KAS', 'man_m1_0001', 'T-4', 400000, 'cash', '', null, '{"fiscalNo":"F-31"}'));   -- o'z vaqtida (31.01 23:50)
+select zz.clock('2027-02-01 00:30+05');
+select zz.put('M2', zz.pay('U_KAS', 'man_m2_0001', 'T-3', 400000, 'cash', '', '2027-01-31 23:55+05', '{"fiscalNo":"F-32"}'));   -- 31.01 da olingan, 01.02 00:30 da yuborilgan
+select zz.chk('M1 06.01 yopildi; 31.01 23:50 da o''z vaqtida yozilgan to''lov: kun 31.01, fevral fakturasi — Kt 6310 (kelgusi oy)',
+  (zz.get('M0')::jsonb -> 'day' ->> 'status') || ' / ' || (zz.get('M1')::jsonb -> 'kassa' ->> 'day') || ' / ' || zz.lines('man_m1_0001'), '^closed / 2027-01-31 / 5010>6310=400000@2027-02$');
+select zz.chk('M2 oflayn: 31.01 da olingan, yarim tundan keyin yuborilgan — hali ochiq 31.01 kuniga, fevral fakturasi o''sha kun bo''yicha Kt 6310; taqsimot yozuvi ham 6310',
+  (zz.get('M2')::jsonb -> 'kassa' ->> 'day') || ':' || (zz.get('M2')::jsonb -> 'kassa' ->> 'late') || ' / ' || zz.lines('man_m2_0001')
+  || ' / ' || (select string_agg(account || '@' || month, ',') from public.payment_allocations where "paymentId" = 'man_m2_0001'),
+  '^2027-01-31:false / 5010>6310=400000@2027-02 / 6310@2027-02$');
+select zz.put('M3', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-01-31","counted":3925000}')::text$q$));
+select zz.clock('2027-02-01 10:00+05');
+select zz.put('M4', zz.pay('U_KAS', 'man_m4_0001', 'T-5', 400000, 'cash', '', null, '{"fiscalNo":"F-33"}'));
+select zz.put('M5', zz.pay('U_KAS', 'man_m5_0001', 'T-4', 400000, 'cash', '', null, '{"fiscalNo":"F-34"}'));
+select zz.chk('M3 31.01 yopildi; 01.02 kuni: fevral fakturasi — Kt 4010 (fevral boshlangan), mart — Kt 6310',
+  (zz.get('M3')::jsonb -> 'day' ->> 'status') || ' / ' || (zz.get('M4')::jsonb -> 'kassa' ->> 'day') || ' ' || zz.lines('man_m4_0001')
+  || ' / ' || (zz.get('M5')::jsonb -> 'kassa' ->> 'day') || ' ' || zz.lines('man_m5_0001'),
+  '^closed / 2027-02-01 5010>4010=400000@2027-02 / 2027-02-01 5010>6310=400000@2027-03$');
+
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end
   from zz.res order by n;

@@ -233,7 +233,8 @@ begin
                       or (p_form = 'ACT' and v_op <> 'nc_opening')) then
       raise exception 'Kassa hisobvarag''i (5010) noto''g''ri tomonda' using errcode = '22023', hint = 'kassa:account';
     end if;
-    v_sum_all := v_sum_all + v_lamt;
+    -- naqdsiz ma'lumot qatori «avans fakturaga qo'llandi» (Dt 6310 Kt 4010 — o'quv to'lovi taqsimotidan): hujjat summasiga kirmaydi (acc-2)
+    if not coalesce(p_internal and v_line -> 'analytics' ->> 'kind' = 'credit_applied', false) then v_sum_all := v_sum_all + v_lamt; end if;
     if v_is_cash then v_sum_cash := v_sum_cash + v_lamt; end if;
     v_rows := v_rows || jsonb_build_object('n', v_i, 'debit', v_debit, 'credit', v_credit, 'amount', v_lamt, 'articleId', v_aid,
                                            'cash', v_is_cash, 'note', v_lnote,
@@ -493,6 +494,17 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_acc_open(text, text) from public, anon, authenticated;
 
+-- Avans hisobotining (АО-1) qatoriga tanlanadigan statiya — BITTA qoida (acc-5): server (kassa-links.sql: kassa_adv_report) ham,
+--   «Avans hisoboti» shaklidagi ro'yxat ham (kassa-day.sql: kassa_refs — «advReport» belgisi) shundan. Reja §4.4 da ikkinchi tomoni
+--   Kt 4230 bo'lishi mumkin bo'lgan statiyalar: kassadan xarajat qilinadigan EX (ish haqi, soliq, eskirish, bank komissiyasi, jarima
+--   kabilar — yo'q), OP-18 (asosiy vosita, nomoddiy aktiv — Dt 0820) va OP-24 (sotish uchun tovar — Dt 2910). OP-17 (yetkazib
+--   beruvchi bilan hisob-kitob) — yo'q: uning provodkasida 4230 yo'q, qarz kassa yoki bankdan to'lanadi; boshqa OP statiyalari ham yo'q.
+create or replace function app.kassa_adv_article(a public.fin_articles) returns boolean
+language sql immutable set search_path = public, app, pg_temp as $$
+  select coalesce(a.active and a."cashOutAllowed" and nullif(a."accountCode", '') is not null and (a.kind = 'EX' or a.id in ('OP-18', 'OP-24')), false)
+$$;
+revoke all on function app.kassa_adv_article(public.fin_articles) from public, anon, authenticated;
+
 -- Xodim zimmasidagi kamomad qoldig'i (4730): Direktor qarori bilan xodimga yozilgan kamomad (Dt 4730) − kassaga qoplangani
 --   («Kamomadni qoplash (xodim)», Kt 4730). Doira — app.kassa_acc_open bilan bir xil (acc-4).
 create or replace function app.kassa_damage_open(p_party text, p_desk text default null) returns numeric
@@ -621,7 +633,8 @@ revoke all on function public.kassa_doc_cancel(text, text) from public, anon;
 grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 
 -- ---------- Tasdiqlangan hujjat bo'yicha pulni berish / qabul qilish ----------
---   Bog'langan amallar (kassa-links.sql) SHU tranzaksiyada bajariladi: tasdiqlangan qaytarish (out_refund) — refund_invoice;
+--   Bog'langan amallar (kassa-links.sql) SHU tranzaksiyada bajariladi: tasdiqlangan qaytarish (out_refund) — refund_invoice (o'quvchi
+--   avansini qaytarish — avans kamayadi; faktura qismining hisobvarag'i 4010 / 6310 o'tkazishdan oldin to'lov kuniga ko'ra qayta aniqlanadi);
 --   ish haqi avansi (out_advance) — staff_advances qatori; xarajat (out_expense) — «Buxgalteriya»ga (expenses) ko'chirish;
 --   xodim bilan hisob-kitob kirimlari (tasdiq talab qilinsa) — kassa_receipt'dagi kabi qoldiq tekshiruvi va avans / maosh yozuvi.
 --   Boshqa bo'limdan yozilib, o'sha zahoti o'tkaziladigan hujjatlar (o'quv to'lovi, maosh) bu yerdan to'lanmaydi.
@@ -656,6 +669,8 @@ begin
     end if;
   end if;
   perform app.kassa_flag(true);
+  -- Qaytarish: faktura qismining hisobvarag'i (4010 — boshlangan davr / 6310 — kelgusi oy) pul berilayotgan kunga ko'ra (acc-7)
+  if v_op = 'out_refund' and v_was = 'approved' then perform app.kassa_refund_resplit(p_id, v_uid); end if;
   v_doc := app.kassa_doc_post(p_id, v_uid);
   if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense', 'in_acc_return', 'in_staff_return', 'in_damage_repay') then
     perform app.kassa_link_paid(p_id, v_uid);

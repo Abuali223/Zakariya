@@ -3,7 +3,7 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText, kpiRows } from './fin-kassa.js';
+import { controlRows, zText, kpiRows, advArticles } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -119,4 +119,16 @@ test('RP-22 haftalik KPI qatorlari: darajalar va matn (EX-49 maqsadi ≤ 2 %)', 
     ['warn', '3 / 5', 'warn', '2 ta · kamomad 5 000 so‘m · ortiqcha 1 200 so‘m', 'warn', '1 ta · 150 000 so‘m', 'warn', 'info']);
   const empty = Object.fromEntries(kpiRows({}).map(x => [x.key, x]));
   assert.deepEqual([empty.days.value, empty.onTime.value, empty.ex49.value, empty.ex49.level], ['yo‘q', '–', 'naqd xarajat yo‘q', 'info']);
+});
+
+test('avans hisoboti statiyalari: server bergan «advReport» belgisi bo‘yicha (EX, OP-18, OP-24) — OP-17 va ish haqi yo‘q (acc-5)', () => {
+  const refs = { articles: [
+    { id: 'EX-01', kind: 'EX', nameUz: 'Ish haqi', accountCode: '9410', cashOutAllowed: false, advReport: false },
+    { id: 'EX-20', kind: 'EX', nameUz: 'Oziq-ovqat', accountCode: '1010', cashOutAllowed: true, advReport: true },
+    { id: 'OP-17', kind: 'OP', nameUz: 'Yetkazib beruvchilar bilan hisob-kitob', accountCode: '6010', cashOutAllowed: true, advReport: false },
+    { id: 'OP-18', kind: 'OP', nameUz: 'Asosiy vosita', accountCode: '0820', cashOutAllowed: true, advReport: true },
+    { id: 'OP-24', kind: 'OP', nameUz: 'Sotish uchun tovar xaridi', accountCode: '2910', cashOutAllowed: true, advReport: true },
+    { id: 'EX-21', kind: 'EX', nameUz: 'Oshxona inventari', accountCode: '1080', cashOutAllowed: true } ] };   // eski javob (belgisiz) — ro‘yxatga kirmaydi
+  assert.deepEqual(advArticles(refs).map(a => a.id), ['EX-20', 'OP-18', 'OP-24']);
+  assert.deepEqual(advArticles(null), []); assert.deepEqual(advArticles({}), []);
 });

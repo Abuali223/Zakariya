@@ -405,6 +405,32 @@ select (select trim_scale((a ->> 'balance')::numeric) || ':' || (a ->> 'negative
 rollback to savepoint neg;
 select zz.chk('AV18 manfiy qoldiq ko''rinadi (berilgan 50 000 − qaytim 70 000 = −20 000): «negative», muddati o''tgan hisoblanmaydi',
   :'neg_r', '^-20000:true:false:- \| 1$');
+-- acc-5: hisobdor asosiy vosita (OP-18, Dt 0820) va sotish uchun tovarni (OP-24, Dt 2910) ham avans hisoboti bilan topshiradi (reja §4.4: Kt 4230);
+--   yetkazib beruvchi bilan hisob-kitob (OP-17) — yo'q. Shakldagi ro'yxat (kassa_refs: advReport) server qoidasining o'zi. acc-9: «Buxgalteriya»ga
+--   ko'chishda asosiy vosita — «Inventar», tovar — «Boshqa», izoh statiya nomi bilan boshlanadi. Savepoint ichida (keyingi bo'limlar qoldig'i o'zgarmasin).
+savepoint ao5;
+select zz.put('AO5', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-a5-0001","partyId":"staff:st1","reportDate":"2027-01-11","basis":"Noutbuk va forma","lines":[{"articleId":"OP-18","amount":70000,"note":"Chek 31, noutbuk"},{"articleId":"OP-24","amount":30000,"note":"Chek 32, forma"}]}'));
+select (zz.get('AO5')::jsonb ->> 'status') || ':' || trim_scale((zz.get('AO5')::jsonb ->> 'amount')::numeric) || ':'
+       || (select string_agg((l ->> 'debit') || '>' || (l ->> 'credit') || '=' || trim_scale((l ->> 'amount')::numeric) || '@' || (l ->> 'articleId'), ',' order by (l ->> 'lineNo')::int)
+             from jsonb_array_elements(zz.get('AO5')::jsonb -> 'lines') l)
+       || ':' || trim_scale((zz.get('AO5')::jsonb ->> 'openBefore')::numeric) || '>' || trim_scale((zz.get('AO5')::jsonb ->> 'openAfter')::numeric) as ao5_a,
+       (select string_agg(e.category || '=' || trim_scale(e.amount) || ':' || e.method || ':' || e."articleId" || ' «' || e.note || '»', ' | ' order by e.id) from public.expenses e where e."cashDocId" = zz.id('AO5'))
+       || ' | ' || (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') as ao5_b,
+       zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-a5-0002","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"OP-17","amount":10000,"note":"Chek 33"}]}') as ao5_c \gset
+rollback to savepoint ao5;
+select zz.chk('AV19 acc-5: avans hisobotida OP-18 (Dt 0820) va OP-24 (Dt 2910) — Kt 4230, qoldiq 150 000 → 50 000',
+  :'ao5_a', '^posted:100000:0820>4230=70000@OP-18,2910>4230=30000@OP-24:150000>50000$');
+select zz.chk('AV20 acc-9: «Buxgalteriya»ga ko''chdi — asosiy vosita «Inventar», tovar «Boshqa»; izoh statiya nomi bilan; moslik P4 «adv» toza',
+  :'ao5_b', '^Inventar=70000:accountable:OP-18 «Asosiy vosita, nomoddiy aktiv, ijaradagi binoga qo‘yilma: Sinov Zavxoz — Chek 31, noutbuk \(avans hisoboti № \d+\)» \| Boshqa=30000:accountable:OP-24 «Sotish uchun tovar xaridi: Sinov Zavxoz — Chek 32, forma \(avans hisoboti № \d+\)» \| 0$');
+select zz.chk('AV21 acc-5: yetkazib beruvchi bilan hisob-kitob (OP-17) avans hisobotida — rad (qarz kassa yoki bankdan to''lanadi)',
+  :'ao5_c', '^ERR 22023 \[kassa:article\] «Yetkazib beruvchilar bilan hisob-kitob» statiyasi bo''yicha hisobdor xarajati yozilmaydi \(yetkazib beruvchiga qarz');
+select zz.chk('AV22 acc-5: shakldagi ro''yxat (kassa_refs → advReport) — server qoidasining o''zi: EX (kassa xarajati) + OP-18 + OP-24; ish haqi, OP-17, OP-15 — yo''q',
+  (select string_agg((a ->> 'id') || ':' || (a ->> 'advReport'), ',' order by a ->> 'id') from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)::jsonb -> 'articles') a
+    where a ->> 'id' in ('EX-01', 'EX-20', 'OP-15', 'OP-17', 'OP-18', 'OP-24'))
+  || ' | ' || (select count(*) filter (where (a ->> 'advReport')::boolean) || '=' || count(*) filter (where (a ->> 'kind' = 'EX' and (a ->> 'cashOutAllowed')::boolean and coalesce(a ->> 'accountCode', '') <> '')
+                                                                                           or a ->> 'id' in ('OP-18', 'OP-24'))
+                 from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)::jsonb -> 'articles') a),
+  '^EX-01:false,EX-20:true,OP-15:false,OP-17:false,OP-18:true,OP-24:true \| (\d+)=\1$');
 
 -- ---------- (Z) onlayn kassa (NKM) Z-hisoboti (F1.26, buxgalter ko'rigi M6) ----------
 select zz.clock('2027-01-11 18:00+05');
