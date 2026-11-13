@@ -2068,6 +2068,18 @@ Commitlar: `d29deb4` (asosiy ish), `8971bd0` (2-davra tuzatishlari), 3-davra tuz
   dizaynda 39/39; tuzatishsiz kod bilan shu tekshiruv «Xatolik: 42501» bilan yiqiladi (ataylab qaytarib ko'rildi).
 - **Jonli tizimga:** keyingi oddiy deploy bilan chiqadi (`admin.html`).
 
+## 78) Deploy (`82e605a`, egasi, 2026-11-13) — tekshiruv (faqat o'qish)
+
+- **Sayt fayllari:** 55 ta (sahifalar, `/sb`, `assets`, `vendor`) `82e605a` bilan bayt-bayt bir xil — deploy to'liq tushgan.
+- **Baza va xizmatlar (SINOV direktor hisobi, yozish so'rovlari to'xtatilgan holda):** A relizi ustunlari, `students_billing` va
+  `director_daily` ishlaydi; kassa moduli jonli tizimda yo'q (`kassa_state` — 404, «Kassa» bo'limi yo'q) — kutilganidek (`--dev`);
+  «🩺 Tizim holati»: auth, db, gotrue, eskiz, pay, ai, payments, backup — hammasi ✓; yangi dizayn (kompyuter: ikonali panel,
+  telefon: 5 bandli pastki menyu), sahifa xatolari yo'q.
+- **«Profil» tuzatishi (77-bo'lim):** yangi saqlash yo'li (o'z qatorini yangilash) jonli tizimda ishlaydi — SINOV direktor ismini
+  o'zgartirmasdan saqladi: «Ism-familiya saqlandi ✓» (yagona yozuv — shu hisobning o'z qatori). Direktor bo'lmagan hisob bilan
+  tekshirilmadi: SINOV moliya menejeri va o'qituvchi hisoblari jonli tizimda **bloklangan** (kirishda «Hisobingiz bloklangan»);
+  bu holat lokal brauzer testida isbotlangan (`e2e-kassa13`).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
