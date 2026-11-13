@@ -148,12 +148,23 @@ begin
 end $$;
 revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text) from public, anon, authenticated;
 
--- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar). Ism bo'lmasa yoki ism o'rnida email
---   turgan bo'lsa (eski ro'yxatdan o'tishda name = email) — uid (email EMAS: bu javoblarni 2-ro'yxat, jumladan buxgalter ham o'qiydi
---   — F1.21, D6).
+-- Hisobning kassada ko'rinadigan ismi: users.name (ism o'rnida email bo'lmasa — eski ro'yxatdan o'tishda name = email) → bog'langan
+--   xodim kartasi (teachers / staff) ismi → uid. Email HECH QACHON: kassa javoblari va chop etishni 2-ro'yxat, jumladan buxgalter
+--   ham ko'radi (F1.21, D6); xodim ismi 2-ro'yxatga ochiq.
+create or replace function app.kassa_user_label(p_name text, p_ref_type text, p_ref_id text, p_uid text) returns text
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(nullif(case when p_name ~ '@' then '' else btrim(p_name) end, ''),
+                  case when coalesce(p_ref_id, '') <> '' then
+                    case when p_ref_type = 'teacher' then (select nullif(btrim(t.name), '') from public.teachers t where t.id = p_ref_id)
+                         else (select nullif(btrim(s.name), '') from public.staff s where s.id = p_ref_id) end end,
+                  p_uid)
+$$;
+revoke all on function app.kassa_user_label(text, text, text, text) from public, anon, authenticated;
+
+-- Foydalanuvchi ismlari {uid: ism} — ekran va chop etish uchun (faqat berilgan uid'lar); ism — app.kassa_user_label (email emas).
 create or replace function app.kassa_names(p_uids text[]) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select jsonb_object_agg(u.id, coalesce(nullif(case when u.name ~ '@' then '' else btrim(u.name) end, ''), u.id))
+  select coalesce((select jsonb_object_agg(u.id, app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", u.id))
                      from public.users u where u.id = any (coalesce(p_uids, '{}'))), '{}'::jsonb)
 $$;
 revoke all on function app.kassa_names(text[]) from public, anon, authenticated;
@@ -1273,7 +1284,7 @@ begin
     'org', (select to_jsonb(o) from public.fin_org o where o.id = 'main'),
     'desks', coalesce((select jsonb_agg(to_jsonb(k) order by k.id) from public.cash_desks k where k.active), '[]'::jsonb),
     'signatories', coalesce((select jsonb_agg(to_jsonb(s) order by s.list, s."fullName") from public.fin_signatories s where s.active), '[]'::jsonb),
-    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', coalesce(nullif(case when u.name ~ '@' then '' else btrim(u.name) end, ''), u.id)) order by u.name)   -- email emas
+    'operators', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", u.id)) order by u.name)   -- email emas
                              from public.users u
                             where coalesce(nullif(u.status, ''), 'active') = 'active'
                               and (u.role = 'treasurer' or app.u_has(u.role, u."extraRoles", 'kassir'))), '[]'::jsonb),

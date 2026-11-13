@@ -2223,7 +2223,8 @@ function watchBadges(){
 // D6: kassa va moliya (finance_mgr, treasurer, kassir) o'quvchini FAQAT ism, ID, sinf, holat va sanalar bilan ko'radi —
 //   xom 'students' jadvali ularga yopiq (staff-d6.sql), ro'yxat 'students_billing' ko'rinishidan keladi.
 // Hamshira ham: faqat ism va sinf (ball, davomat, rasm yo'q) — nurse-sick.sql (students_billing WHERE).
-// Buxgalter ham (F1.21): nurse-sick.sql students_billing WHERE — my_role() = 'accountant'.
+// Buxgalter ham (F1.21): nurse-sick.sql students_billing WHERE — app.acc_read() (fin-rights.sql «fin_rights_on» kaliti; o'chirilganda
+//   va prod zanjirida — 0 qator, qidiruv natijasiz).
 function billingOnlyRole(){ return ['finance_mgr','treasurer','kassir','nurse','accountant'].includes(SESSION.role); }
 // F1.21: buxgalter fakturalar, to'lovlar, qaytarishlar, berilgan maosh va vedomost qatorlarini xom jadvallardan emas, «*_acc»
 //   ko'rinishlaridan O'QIYDI — ularda to'lovchi yozgan matn (maxfiy kod yoki telefon bo'lishi mumkin), ota-ona telefoni, xom javob,

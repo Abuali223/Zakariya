@@ -1990,6 +1990,70 @@ va buxgalter ko'rigidan keyin.
   uchun xuddi shu qoida foydalanuvchi sozlamasiga ham yozildi. Boshqa ruxsat qo'shilmagan; maxfiy ma'lumot yo'q; fayl saytga
   chiqmaydi (deploy faqat aniq fayllarni ko'chiradi). Qaytarish: shu qatorni (yoki faylni) o'chirish.
 
+## 76) Moliya, 1b: F1.21 — to'liq «Buxgalter» roli (o'qish huquqlari, yopiq ro'yxat) — 2026-11-12/13
+
+**Holat: jonli tizimga CHIQMAGAN** (`fin-rights.sql` — «--dev»; kassa moduli bilan birga o'rnatiladi). Prod zanjiridagi uchta
+fayl ham tahrirlandi (`reports-roles.sql`, `nurse-sick.sql`, `parent-link-canon.sql`) — ular faqat `accountant` roliga tegadi;
+prod zanjirida (kassa modulisiz) buxgalterga hech narsa ochilmaydi (`app.acc_read()` = false). Modul relizi 9 → 10.
+Commitlar: `d29deb4` (asosiy ish), `8971bd0` (2-davra tuzatishlari), 3-davra tuzatishlari (shu bo'lim bilan birga).
+
+- **Usul (ko'p agentli):** 4 agent mavjud huquqlar xaritasini tuzdi → loyiha → 3 mustaqil ko'rikchi → tuzatilgan loyiha →
+  amalga oshirish → 1-davra kod ko'rigi (3 yo'nalish, 19 agent; har topilmani alohida agent rad etishga urindi): 16 topilma,
+  14 tasi tasdiqlandi (2 o'rta, qolgani past; faol xavf yo'q) — hammasi tuzatildi → 2-davra mustaqil tekshiruv (6 yo'nalish;
+  hisob limiti tufayli 4 tasi yakunlandi): 11 topilma — hammasi tuzatildi → 3-davra (qolgan 2 yo'nalish + 2-davra tuzatishlari
+  tekshiruvi; 11 agent): 8 topilma, hammasi past va tasdiqlangan — telefon belgisi tasodifiy hujjat ID'lari ichida uchrab,
+  taxminan 500 ishga tushirishdan birida soxta xato berardi; L4 zanjiri ichki va app.* yordamchilar orqali tekshiradigan RPC'ni
+  ko'rmasdi; K8 kassa javoblarida manzil / sog'liq belgilarini tekshirmasdi; xodim kartasiga bog'langan eski (ism o'rnida email)
+  kassir kassa ekranlari va chop etishda ID bo'lib ko'rinardi; `admin.html` da eskirgan izoh; shu 76-bo'lim yo'q edi — hammasi
+  tuzatildi (telefon belgisi chegaralandi, zanjir public va app dagi barcha sql / plpgsql funksiyalar bo'yicha, `app.kassa_user_label`:
+  ism → bog'langan xodim kartasi ismi → uid).
+- **Ko'riklarda topilgan va hal qilingan xavflar:**
+  - Click to'lovchi matni — ism (`payerName`), «sinf» (`payerClass`), `merchant_trans_id` — erkin matn: unda o'quvchining maxfiy
+    ota-ona kodi yoki telefon bo'lishi mumkin; `claim_child` chaqiruvchi rolini tekshirmaydi. Buxgalterga bu ustunlar umuman
+    berilmadi (ko'rinish), «Biriktirilmagan to'lovlar»da buxgalterga sana, provayder va summa; `claim_child` buxgalterni rad etadi.
+  - Kasallik sanalari (`invoices."sickNoteRefs"`) — buxgalterga `invoices_acc` orqali, shu ustunsiz. Chegirma sababi (monitoring
+    20% / 100%, kasal kunlar soni va summasi) ko'rinadi — hisob uchun kerak (4.3, FD-32).
+  - Xodim emaili: kassadan qaytarish so'rovi surati (Direktor emaili), ismi yo'q yoki ism o'rnida email turgan (eski ro'yxatdan
+    o'tish) hisoblar uchun kassa javoblari va kamomad dalolatnomasi — endi uid yoki «Kassir».
+  - Orqaga qaytarish: dastlab faylni zanjirdan olib tashlash obyektlarni o'chirmasdi, keyin `students_billing` va reliz raqami
+    kalitga bog'lanmagan edi. Endi bitta kalit: `fin_rights_on = off` va deploy — siyosatlar, ko'rinishlar, `students_billing` va
+    sahifadagi buxgalter bo'limlari (`kassa_state` «accRead» = `app.acc_read()`) o'chadi; reliz 10 qoladi, kassa tekshiruvi yashil.
+  - Testlar: yozish siyosati tekshirilmasdi; yozish sinovlari xom jadvalda yoki biznes triggeri tufayli doim «o'tardi»; asos
+    foydalanuvchi oldingi tekshiruvda ota-onaga aylanardi; ruxsatni boshqa RPC orqali tekshiradigan, STRICT yoki avval qator
+    qidiradigan RPC'lar yopiq ro'yxatdan chetda qolardi; D-band jadvallari bo'sh edi; baholar / davomat / monitoring, manzil va
+    sog'liq tekshirilmasdi; kasallik sanasi belgilari 2027-yil yanvar–mart oralig'ida soxta xato berardi — hammasi tuzatildi.
+  - Hujjatlar: «hammasi faqat ko'rish», «ismli nusxa faqat Direktorda», «sog'liq, davomat — yo'q» (chegirma sababi aytilmagan),
+    reja holatida «reliz 9», orqaga qaytarish — to'g'rilandi.
+  - **Mavjud xavf (F1.21 dan oldingi, egasi qarori kerak):** moliya menejeri, g'aznachi va kassir `payments` ni to'liq o'qiydi —
+    to'lovchi matnidagi kod ularga ko'rinadi (pastda, «Qolgan ishlar»).
+- **Server (`fin-rights.sql`, yangi):** jadvallar — `*_acc_sel` (faqat SELECT, `app.is_accountant()`): `expenses`,
+  `credit_ledger`, `student_credit`, `staff_advances`, `payroll_runs`; `config` — faqat `finance` va `salary`; ko'rinishlar (egasi
+  nomidan, `security_barrier`, avtomatik yangilanmaydigan, aniq ustunlar ro'yxati, faqat buxgalterga qator): `invoices_acc`,
+  `payments_acc`, `refunds_acc`, `salary_payments_acc`, `payroll_lines_acc`; kalit `app.acc_read()`. Boshqa fayllar:
+  `nurse-sick.sql` (`students_billing` — buxgalter `app.acc_read()` orqali), `reports-roles.sql` (buxgalterga qo'shimcha lavozim
+  yo'q, eskilari tozalanadi), `kassa-day.sql` (kassir tekshiruvlari `app.u_has` orqali; ismda email — uid; `kassa_state`
+  «accRead»), `kassa-links.sql` (qaytarish so'rovi suratida uid), `parent-link-canon.sql` (`claim_child` buxgalterni rad etadi).
+- **Sahifa (`admin.html`):** buxgalter bo'limlari — «Tasdiqlash», «Kassa» (2-ro'yxat nazorati), «To‘lovlar», «Buxgalteriya» (faqat
+  ko'rish; server kaliti «accRead» bo'lsa — eski kesh bilan ham kalit kelgach menyu o'zi yangilanadi); yozish tugmalari yo'q;
+  5 jadval o'qishi `*_acc` ko'rinishlariga yo'naltiriladi; oylik vedomost kartochkasi; A4 hisobot ismsiz (FD-28); qidiruvda
+  telefon yo'q; buxgalterga «➕ Lavozim» yo'q. `index.html` — «Admin panel» havolasi buxgalter va hamshiraga ham.
+- **Sinovlar:** `test-fin-rights.sql` 125 — yopiq ro'yxat (o'qish siyosatlari, yozish siyosati yo'qligi, ko'rinishlar, RPC'lar —
+  matn, chaqiruvlar zanjiri va xatti-harakat bo'yicha), dinamik skaner (kod, telefon, email, kasallik sanasi, manzil / sog'liq
+  belgilari — buxgalter o'qiy oladigan hech bir jadval / ko'rinishda va kassa javoblarida yo'q), UPDATE / DELETE / INSERT
+  sinovlari (INSERT — faqat RLS), seed'da kassa oqimi (qaytarish so'rovi, kamomad, Direktor qarori), pul RPC'lari 42501,
+  qo'shimcha lavozim, `claim_child`, orqaga qaytarish yo'li. Ataylab buzilgan 19 holatning hammasi ushlandi; sana nazorati
+  (2027-02-10) yashil. Qolgan SQL to'plamlari o'zgarishsiz yashil (225 / 54 / 93 / 129 / 36 / 87 / 36 / 92), `test-kassa-checks.sql`
+  32 (reliz 10), zanjirni qayta qo'llash xatosiz; prod zanjiri (kassasiz) xatosiz, prod testlari yashil; jonli zanjirga o'tkazish
+  mashqi (3.2) toza. Brauzer: to'liq to'plam 30 ishga tushirish, 698 tekshiruv — hammasi o'tdi (13 kassa stsenariysi, 325
+  tekshiruv, eski va yangi dizaynda; yangi `e2e-kassa13` 38). Sinov muhiti: brauzer Toshkent vaqt zonasida ishga tushiriladi
+  (UTC brauzerda kechqurun «ariza sanasi» bir kun farq qilib, o'zaro hisob stsenariysida soxta xato berardi; jonli tizimda bunday
+  farq yo'q — foydalanuvchi brauzeri Toshkent vaqtida).
+- **Qolgan ishlar:** (1) egasi qarori — Click to'lovchi matnidagi kod moliya rollariga ko'rinishi (taklif: payments serveri kodni
+  maskalab saqlasin, mavjud yozuvlarni maskalash, ishlatilgan kodlarni almashtirish; yoki `claim_child` ni xodim hisoblariga yopish);
+  (2) FD-28: moliya menejeri uchun qarzdorlar CSV va «Buxgalteriya» A4 hisoboti hozir ismli (F1.21 dan oldingi) — FD-28 ga ko'ra
+  ID ga o'tkazish (eksport ishlari bilan, egasi tasdig'i bilan); (3) F1.20 (RLS relizi) — toza prod haftasidan keyin;
+  (4) buxgalter storno tartibi — egasi qarori.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

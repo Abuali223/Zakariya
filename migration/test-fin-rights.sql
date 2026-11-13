@@ -8,8 +8,9 @@
 --   (B) students_billing; (D) D6/D7: boshqa jadvallar (baholar, davomat, monitoring ham) yopiq; (W) yozish yo'q: UPDATE / DELETE —
 --       ustunsiz so'rov (faqat yozish siyosati ishlaydi), INSERT — triggerlarsiz (faqat RLS qaror qiladi); (P) pul RPC'lari — 42501;
 --   (L) yopiq ro'yxat: buxgalterga «true» bo'ladigan yordamchilar ishlatilgan siyosatlar (yozish siyosati — umuman yo'q), ko'rinishlar
---       va RPC'lar (matn + chaqiruvlar zanjiri: ruxsatni boshqa RPC orqali tekshiradiganlar ham) = kutilgan ro'yxat; L4b — xatti-harakat
---       bo'yicha (NULL argumentlar bilan: STRICT yoki avval qator qidiradigan RPC'larni ko'rmaydi — ularni L4 zanjiri topadi);
+--       va RPC'lar (matn + chaqiruvlar zanjiri public va app dagi BARCHA sql / plpgsql funksiyalar bo'yicha: ruxsatni boshqa RPC,
+--       ichki yordamchi yoki app.* tekshiruv orqali qiladiganlar ham) = kutilgan ro'yxat; L4b — xatti-harakat bo'yicha (NULL
+--       argumentlar bilan: STRICT yoki avval qator qidiradigan RPC'larni ko'rmaydi — ularni L4 zanjiri topadi);
 --   (X) qo'shimcha lavozim yo'q; (Q) orqaga qaytarish yo'li: fin-rights.sql «fin_rights_on = off» — siyosatlar, ko'rinishlar,
 --       students_billing va sahifa kaliti (kassa_state «accRead») o'chadi; qayta «on» — tiklanadi.
 --   Sana belgilari (kasallik kunlari) — 2001-yil: kassa javoblari bugungi sanadan hosil bo'ladi va ular bilan hech qachon to'qnashmaydi.
@@ -93,7 +94,8 @@ insert into public.users (id, email, role, status, "extraRoles") values
   ('U_ACCX','ax@x','accountant','active','["kassir","reception","hr","zavuch","teacher"]'),   -- eski (qo'shimchali) qator
   ('U_ACCB2','ab2@x','accountant','active','["kassir"]'),   -- eski qo'shimchali; X9 da bloklanib, blokdan chiqariladi
   ('U_TCH','t@x','teacher','active','[]'), ('U_TX','tx@x','teacher','active','["reception"]'), ('U_NONE','n@x','cleaner','active','[]'),
-  ('U_BASE','bs@x','cleaner','active','[]')   -- L1 / L4b solishtirish asosi: rolsiz xodim, hech bir tekshiruv uni o'zgartirmaydi
+  ('U_BASE','bs@x','cleaner','active','[]'),   -- L1 / L4b solishtirish asosi: rolsiz xodim, hech bir tekshiruv uni o'zgartirmaydi
+  ('U_KAS2','k2@x','kassir','active','[]')   -- eski kassir: ism o'rnida email, xodim kartasiga (st1) bog'langan
 on conflict (id) do update set role = excluded.role, status = excluded.status, "extraRoles" = excluded."extraRoles";
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',6,'B','ru','',2,'[]');
@@ -138,7 +140,8 @@ insert into public.attendance (id, "studentId", "classKey", month, days) values 
 insert into public.grades (id, "studentId", "classKey", year, subjects) values ('gr1','T-1','uz-5-A','2026-2027','{"math": [2, 3]}');
 insert into public.monitoring (id, "studentId", "classKey", subject, period, score, status) values ('mon1','T-1','uz-5-A','math','2027-01',41,'approved');
 insert into public.applications (id, name, phone, specialty, status) values ('app1','Sinov Nomzod','+998900000010','math','submitted');
-update public.users set name = email where id = 'U_KAS';   -- eski ro'yxatdan o'tish shakli: ism o'rnida email (index.html askRole)
+update public.users set name = email where id in ('U_KAS', 'U_KAS2');   -- eski ro'yxatdan o'tish shakli: ism o'rnida email (index.html askRole)
+update public.users set "staffRefType" = 'staff', "staffRefId" = 'st1' where id = 'U_KAS2';
 update public.fin_org set "kassaGoLive" = app.fin_today() - 1 where id = 'main';
 set local session_replication_role = origin;
 -- Direktor kassadan qaytarish so'rovini yozadi (KO-2, tasdiqlangan) — surat va hujjat buxgalterga ko'rinadi (kassa_reader).
@@ -209,13 +212,14 @@ select zz.chk('V17 invoices: yangi ustun ko''rinishda yoki istisnoda bo''lishi s
 select zz.chk('K0 sinov sharti: qaytarish so''rovi, boshlang''ich qoldiq, kirim, kamomad bilan yopilgan kun, Direktor qarori — hammasi bajarildi',
   :'zz_k0a' || '/' || :'zz_k0b' || '/' || :'zz_k0c' || '/' || :'zz_k0d' || '/' || :'zz_k0e', '^true/true/true/true/true$');
 select zz.chk('K1 maxfiy ota-ona kodi (K7Q2ZP) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '(?i)K7Q2ZP'), '^$');
-select zz.chk('K2 telefon raqami (+998…) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '\+?998[0-9]{9}'), '^$');
+--   Telefon belgisi chegaralangan: tasodifiy hex identifikatorlar (kd_…, ce_…) ichida «998» + 9 raqam uchrab qolishi mumkin.
+select zz.chk('K2 telefon raqami (+998…) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '(^|[^0-9A-Za-z_])\+?998[0-9]{9}([^0-9A-Za-z]|$)'), '^$');
 select zz.chk('K5 boshqa foydalanuvchilar emaili (…@x) buxgalter o''qiy oladigan hech bir joyda yo''q (o''z qatori — users — bundan tashqari)',
   zz.scan('U_ACC', '[A-Za-z0-9._-]+@x\M', array['users']), '^$');
 select zz.chk('K6 kasallik sanalari (2001-01-18/19) buxgalter o''qiy oladigan hech bir joyda yo''q', zz.scan('U_ACC', '2001-01-1[89]'), '^$');
 select zz.chk('K7 qaytarish so''rovi suratida Direktor emaili emas, uid',
   (select ("sourceSnapshot" ->> 'byUid') || '/' || ("sourceSnapshot" ? 'by')::text from public.cash_docs where "sourceId" = 'kref_zz-ref-k7a'), '^U_DIR/false$');
-select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik sanasi yo''q',
+select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik sanasi, manzil / sog''liq belgilari yo''q',
   (select coalesce(string_agg(f, ','), '') from (
      select f, zz.as('U_ACC', 'select ' || f || '::text') as r
        from unnest(array['public.kassa_refs()', 'public.kassa_people()', 'public.kassa_state(''main'')', 'public.kassa_overview(''main'')',
@@ -226,10 +230,12 @@ select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik san
                          format('public.kassa_doc_get(%L)', (select id from public.cash_docs where "sourceId" = 'kref_zz-ref-k7a')),
                          format('public.kassa_doc_get(%L)', (select id from public.cash_docs where op = 'out_shortage')),
                          format('public.kassa_doc_get(%L)', (select id from public.cash_docs where op = 'nc_shortage_dec'))]) f) x
-    where r ~ '^ERR' or r ~ '(?i)K7Q2ZP' or r ~ '\+?998[0-9]{9}' or r ~ '[A-Za-z0-9._-]+@x\M' or r ~ '2001-01-1[89]'), '^$');
-select zz.chk('K9 kamomad dalolatnomasi tomoni: ism o''rnida email turgan kassir — email emas, «Kassir»; kassirlar ro''yxatida ham email yo''q',
+    where r ~ '^ERR' or r ~ '(?i)K7Q2ZP' or r ~ '(^|[^0-9A-Za-z_])\+?998[0-9]{9}([^0-9A-Za-z]|$)' or r ~ '[A-Za-z0-9._-]+@x\M' or r ~ '2001-01-1[89]'
+       or r ~ '(ZZADDR1|ZZHEALTH1|ZZALLERGY1)'), '^$');
+select zz.chk('K9 ism o''rnida email turgan kassir: dalolatnomada «Kassir», ro''yxatda — xodim kartasi ismi (bog''langan bo''lsa) yoki uid; email yo''q',
   (select "partyType" || '/' || coalesce("partyName", '∅') from public.cash_docs where op = 'nc_shortage_dec') || ' | ' ||
-  zz.as('U_ACC', $q$select (public.kassa_refs() -> 'operators')::text$q$), '^other/Kassir \| \[\{"uid": "U_KAS", "name": "U_KAS"\}\]$');
+  zz.as('U_ACC', $q$select ((public.kassa_refs() -> 'operators') @> '[{"uid": "U_KAS", "name": "U_KAS"}, {"uid": "U_KAS2", "name": "Sinov Xodim"}]')::text
+                          || '/' || ((public.kassa_refs() -> 'operators')::text ~ '@')::text$q$), '^other/Kassir \| true/false$');
 select zz.chk('K10 manzil va sog''liq belgilari (ZZADDR1 / ZZHEALTH1 / ZZALLERGY1) buxgalter o''qiy oladigan hech bir joyda yo''q',
   zz.scan('U_ACC', '(ZZADDR1|ZZHEALTH1|ZZALLERGY1)'), '^$');
 select zz.chk('K3 buxgalter farzand biriktira olmaydi (kodni bilsa ham)',
@@ -328,17 +334,23 @@ select zz.chk('L3 YOPIQ RO''YXAT: buxgalterni o''tkazadigan ko''rinishlar',
   (select string_agg(v.viewname, ',' order by v.viewname) from pg_views v, zz_acc_re, zz_acc_re2
     where v.schemaname = 'public' and (v.definition ~ zz_acc_re.re or v.definition ~ zz_acc_re2.re)),
   '^invoices_acc,payments_acc,payroll_lines_acc,refunds_acc,salary_payments_acc,students_billing$');
---   L4: mijoz chaqira oladigan SECURITY DEFINER RPC'lar — matnida yordamchi (yoki 'accountant' so'zi) bor, YOKI shunday RPC'ni
---   chaqiradi (zanjir: ruxsatni boshqa RPC orqali tekshiradigan kassa_overview kabilar; STRICT bo'lsa ham, avval qator qidirsa ham).
+--   L4: mijoz chaqira oladigan public SECURITY DEFINER RPC'lar — matnida yordamchi (yoki 'accountant' so'zi) bor, YOKI shunday
+--   funksiyani (bevosita yoki zanjir bo'ylab) chaqiradi. Zanjir tugunlari — public va app dagi BARCHA sql / plpgsql funksiyalar
+--   (mijozga yopiq ichki yordamchilar va app.* tekshiruvlar ham): ruxsatni kassa_state, ichki «_gate()» yoki app.need_x() orqali
+--   tekshiradigan RPC ham topiladi (STRICT bo'lsa ham, avval qator qidirsa ham).
 create temp table zz_l4 on commit drop as
-with recursive base as (
-  select p.oid, p.proname, p.prosrc from pg_proc p
-   where p.pronamespace = 'public'::regnamespace and p.prosecdef and has_function_privilege('authenticated', p.oid, 'execute')
-), clo(proname) as (
-  select b.proname from base b, zz_acc_re, zz_acc_re2 where b.prosrc ~ zz_acc_re.re or b.prosrc ~ zz_acc_re2.re
+with recursive node as (
+  select p.oid, p.proname, p.prosrc, p.pronamespace = 'public'::regnamespace and p.prosecdef
+         and has_function_privilege('authenticated', p.oid, 'execute') as rpc
+    from pg_proc p join pg_language l on l.oid = p.prolang
+   where p.pronamespace in ('public'::regnamespace, 'app'::regnamespace) and l.lanname in ('sql', 'plpgsql')
+), clo(oid, proname) as (
+  select n.oid, n.proname from node n, zz_acc_re, zz_acc_re2
+   where (n.rpc and (n.prosrc ~ zz_acc_re.re or n.prosrc ~ zz_acc_re2.re))
+      or n.prosrc ~ ('\m(app\.)?(' || (select string_agg(proname, '|') from zz_acc_fns) || ')\s*\(\s*\)')
   union
-  select b.proname from base b, clo where b.prosrc ~ ('\m(public\.)?' || clo.proname || '\s*\(') and b.proname <> clo.proname
-) select distinct proname from clo;
+  select n.oid, n.proname from node n, clo where n.oid <> clo.oid and n.prosrc ~ ('\m((public|app)\.)?' || clo.proname || '\s*\(')
+) select distinct c.proname from clo c join node n on n.oid = c.oid where n.rpc;
 select zz.chk('L4 YOPIQ RO''YXAT: buxgalterni o''tkazadigan mijoz RPC''lari (matn + chaqiruvlar zanjiri)',
   (select string_agg(proname, ',' order by proname) from zz_l4),
   '^claim_child,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');

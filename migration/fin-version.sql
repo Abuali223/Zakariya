@@ -27,7 +27,7 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          salary_payments_acc, payroll_lines_acc ko'rinishlari), nurse-sick.sql (students_billing), parent-link-canon.sql (claim_child
 --          buxgalter hisobini rad etadi); reports-roles.sql — buxgalterga qo'shimcha lavozim berilmaydi; kassa javoblari va hujjat
 --          suratlarida xodim emaili yo'q (kassa_names, kassa_refs, kassa_shortage_decide, kassa_refund_request; ism o'rnida email
---          turgan eski hisoblar ham); kassa_state «accRead» — sahifadagi buxgalter bo'limlari kaliti (app.acc_read()).
+--          turgan eski hisoblar ham — bog'langan xodim kartasi ismi yoki uid); kassa_state «accRead» — sahifadagi buxgalter bo'limlari kaliti (app.acc_read()).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
