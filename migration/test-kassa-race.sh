@@ -6,6 +6,9 @@
 #   (2) bir xil kalit (clientRef) 8 seansdan — bitta hujjat, qolganlari «takror»;
 #   (3) bitta qoldiqqa ikki katta chiqim parallel — faqat BITTASI o'tadi; 8 ta chiqim — qoldiq hech qachon manfiy emas;
 #   (4) ikki tasdiq (2-ro'yxat va Direktor) parallel — hujjat «tasdiqlangan» bo'ladi, hech biri yo'qolmaydi;
+#   (6) bitta xodimning hisobdor qoldig'i va oy avansiga 8 tadan parallel qaytim — faqat qoldiq yetganlari o'tadi, deadlock yo'q;
+#   (7) bitta o'qituvchi va oy: maosh qaytimi (OP-09), naqd maosh va ularni bekor qilish parallel — qulf tartibi bir xil
+#       (S → P → L4): deadlock yo'q, berilgan maosh 0 … tasdiqlangan summa oralig'ida, moslik toza;
 #   (5) kirimlar davom etayotganda kun yopiladi — yopilgandan keyingi kirimlar rad, kun jami = hujjatlar, tekshiruv o'tadi.
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
@@ -111,6 +114,90 @@ wait
 chk "4a parallel ikki tasdiq: 16 tasi ham qabul qilindi" "$(cat "$TMP"/ap.* | grep -c '^true$')" "16"
 chk "4b sakkiz hujjat ham «tasdiqlangan» (ikkala imzo joyida)" \
     "$(q -c "select count(*) from public.cash_docs where \"clientRef\" like 'race-two-%' and status = 'approved' and \"approvedBy\" = 'R_FM' and \"dirApprovedBy\" = 'R_DIR'")" "8"
+
+# ---------- (6) xodim qoldig'i: parallel qaytimlar qoldiqdan oshmaydi (acc-3 hisobdor qulfi, acc-1 avans navbati) ----------
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.staff (id, "staffId", name, position) values ('r_st1','IQX-R1','Poyga Xodim','Farrosh') on conflict (id) do nothing;
+SQL
+mkpaid(){   # $1 operatsiya, $2 clientRef, $3 summa -> xodimga berilgan chiqim hujjati holati (T1 = 0: 2-ro'yxat va Direktor tasdig'i)
+  local id
+  id=$(call_as R_KAS "public.kassa_payout_request('{\"op\":\"$1\",\"amount\":$3,\"partyType\":\"employee\",\"partyId\":\"staff:r_st1\",\"basis\":\"Poyga avansi\",\"clientRef\":\"$2\"}'::jsonb) ->> 'id'")
+  call_as R_FM "public.kassa_doc_approve('$id') ->> 'status'" >/dev/null
+  call_as R_DIR "public.kassa_doc_approve('$id') ->> 'status'" >/dev/null
+  call_as R_KAS "public.kassa_doc_pay('$id') ->> 'status'"
+}
+adv=$(( sum / 5 / 10 * 10 )); ret=$(( adv * 3 / 10 ))   # 3 ta qaytim sig'adi (90 %), 4-chisi — yo'q
+chk "6a hisobdorga avans va ish haqi avansi berildi (qoldiqning 1/5 qismidan)" "$(mkpaid out_accountable race-acc-0001 $adv)/$(mkpaid out_advance race-adv-0001 $adv)" "posted/posted"
+sum=$(( sum - 2 * adv ))
+for i in $(seq 1 8); do
+  ( call_raw R_KAS "public.kassa_receipt('{\"op\":\"in_acc_return\",\"amount\":$ret,\"partyType\":\"employee\",\"partyId\":\"staff:r_st1\",\"basis\":\"Poyga qaytimi\",\"clientRef\":\"race-ret-000$i\"}'::jsonb) ->> 'status'" > "$TMP/ret.$i" ) &
+  ( call_raw R_KAS "public.kassa_receipt('{\"op\":\"in_staff_return\",\"amount\":$ret,\"month\":\"${TODAY:0:7}\",\"partyType\":\"employee\",\"partyId\":\"staff:r_st1\",\"articleId\":\"OP-08\",\"basis\":\"Poyga avans qaytimi\",\"clientRef\":\"race-sret-000$i\"}'::jsonb) ->> 'status'" > "$TMP/sret.$i" ) &
+done
+wait
+chk "6b sakkiz parallel hisobdor qaytimidan faqat qoldiq yetgani (3 ta) o'tdi" "$(cat "$TMP"/ret.* | grep -c '^posted$')/$(cat "$TMP"/ret.* | grep -c 'kassa:acc_over')" "3/5"
+chk "6c sakkiz parallel avans qaytimidan faqat avans qoldig'i yetgani (3 ta) o'tdi; deadlock yo'q" \
+    "$(cat "$TMP"/sret.* | grep -c '^posted$')/$(cat "$TMP"/sret.* | grep -c 'kassa:staff_over')/$(cat "$TMP"/ret.* "$TMP"/sret.* | grep -ci 'deadlock')" "3/5/0"
+chk "6d qoldiqlar manfiy emas: hisobdorda va oy avansida — avansning 10 % i (manfiy avans yozuvlari 3 ta)" \
+    "$(q -c "select trim_scale(app.kassa_acc_open('staff:r_st1')) || '/' || trim_scale(app.payroll_adv('IQX-R1', '${TODAY:0:7}')) || '/' || (select count(*) from public.staff_advances where amount < 0)")" "$(( adv - 3 * ret ))/$(( adv - 3 * ret ))/3"
+sum=$(( sum + 6 * ret ))
+
+# ---------- (7) bitta o'qituvchi va oy: maosh qaytimi (OP-09), naqd maosh va bekor qilish parallel — qulf tartibi S → P → L4 ----------
+#   Naqd maosh (kassa_salary_pay) maosh navbatini (S, darvoza trigeri) xodim kaliti navbatidan (P, kalit trigeri) OLDIN oladi;
+#   qaytim va uni bekor qilish ham shu tartibda (kassa_link_prelock) — teskari tartib deadlock berardi; maosh orderini bekor qilish —
+#   P bilan (undan yozilgan qaytimlar bilan bir navbat). O'tgan oy vedomosti tasdiqlangan: 3 000 000. Natija tartibga bog'liq —
+#   tekshiruvlar invariant: har amal yo o'tadi, yo o'z qoidasi bilan rad etiladi; deadlock yo'q; berilgan maosh = o'tganlar yig'indisi,
+#   0 … 3 000 000 oralig'ida (manfiy ham, tasdiqlangandan ko'p ham emas); moslik toza; kassa qoldig'i = hisob.
+PREV=$(q -c "select to_char(app.fin_today() - interval '1 month', 'YYYY-MM')")
+q >/dev/null <<SQL
+set session_replication_role = replica;
+insert into public.teachers (id, "teacherId", name, pauses) values ('r_t1','IQT-R1','Poyga Oqituvchi','[]') on conflict (id) do nothing;
+insert into public.config (id, "payrollApprovalFrom") values ('finance', '$PREV')
+  on conflict (id) do update set "payrollApprovalFrom" = excluded."payrollApprovalFrom";
+insert into public.payroll_runs (id, status, "approvedBy", "approvedAt") values ('$PREV', 'approved', 'R_DIR', now()) on conflict (id) do nothing;
+insert into public.payroll_lines (id, "runId", "personType", "personId", "refId", name, gross, payable)
+  values ('${PREV}__teacher__IQT-R1', '$PREV', 'teacher', 'IQT-R1', 'r_t1', 'Poyga', 3000000, 3000000) on conflict (id) do nothing;
+SQL
+salp(){ echo "{\"id\":\"$1\",\"method\":\"cash\",\"teacherId\":\"IQT-R1\",\"payeeRef\":\"teachers:r_t1\",\"teacherName\":\"Poyga\",\"month\":\"$PREV\",\"paid\":$2,\"gross\":3000000,\"advance\":0,\"deduction\":0,\"subBonus\":0,\"net\":3000000,\"carryIn\":0,\"carryOut\":0}"; }
+op9(){ echo "{\"op\":\"in_staff_return\",\"amount\":$2,\"month\":\"$PREV\",\"partyType\":\"employee\",\"partyId\":\"teachers:r_t1\",\"articleId\":\"OP-09\",\"basis\":\"Poyga maosh qaytimi\",\"clientRef\":\"$1\"}"; }
+state7(){ q -c "select coalesce(trim_scale(sum(paid)), 0) from public.salary_payments where \"teacherId\" = 'IQT-R1' and month = '$PREV'" | tr '\n' '/'
+          q -c "select (app.kassa_reconcile(null, null) ->> 'total') || '/' || trim_scale(app.kassa_day_balance((select id from public.cash_days where desk = 'main' and status = 'open')))"; }
+in7(){ [ "$net" -ge 0 ] && [ "$net" -le 3000000 ] && echo ichida; }
+chk "7a kassa bugundan ishga tushirildi (shu kungi hujjatlar moslikdan o'tdi); kassaga bankdan 20 000 000 kirdi; o'qituvchiga o'tgan oy uchun naqd maosh 1 000 000 berildi" \
+    "$(call_as R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$TODAY\"}') ->> 'kassaGoLive'")/$(call_as R_KAS "public.kassa_receipt('{\"op\":\"in_bank\",\"amount\":20000000,\"partyType\":\"bank\",\"partyId\":\"cp_rbank\",\"basis\":\"Poyga cheki\",\"clientRef\":\"race-fund-0001\"}'::jsonb) ->> 'status'")/$(call_as R_KAS "public.kassa_salary_pay('$(salp sp_race_s0000 1000000)'::jsonb) -> 'kassa' ->> 'status'")" "$TODAY/posted/posted"
+sum=$(( sum + 20000000 - 1000000 )); net=1000000
+# 1-to'lqin: 8 ta qaytim (200 000) va 8 ta maosh (300 000)
+for i in $(seq 1 8); do
+  ( call_raw R_KAS "public.kassa_receipt('$(op9 race-op9-000$i 200000)'::jsonb) ->> 'status'" > "$TMP/r7.$i" ) &
+  ( call_raw R_KAS "public.kassa_salary_pay('$(salp sp_race_s000$i 300000)'::jsonb) -> 'kassa' ->> 'status'" > "$TMP/s7.$i" ) &
+done
+wait
+pr=$(cat "$TMP"/r7.* | grep -c '^posted$'); ps=$(cat "$TMP"/s7.* | grep -c '^posted$')
+chk "7b sakkiz qaytim (200 000) va sakkiz maosh (300 000) parallel: o'tdi yoki rad (qaytim — berilgandan katta, maosh — tasdiqlangandan ko'p); deadlock yo'q" \
+    "$(( pr + $(cat "$TMP"/r7.* | grep -c 'kassa:staff_over') ))/$(( ps + $(cat "$TMP"/s7.* | grep -c 'tasdiqlangan summadan oshadi') ))/$(cat "$TMP"/r7.* "$TMP"/s7.* | grep -ci 'deadlock')" "8/8/0"
+sum=$(( sum + 200000 * pr - 300000 * ps )); net=$(( net + 300000 * ps - 200000 * pr ))
+chk "7c berilgan maosh = 1 000 000 + o'tgan maoshlar − o'tgan qaytimlar (0 … 3 000 000); moslik toza; kassa qoldig'i hisobga teng" "$(state7)/$(in7)" "$net/0/$sum/ichida"
+# 2-to'lqin: o'tgan qaytimlar bekor qilinadi (darvoza bilan bir navbat — S) va yana 8 ta maosh beriladi
+ids7=$(q -c "select string_agg(id, ' ' order by id) from public.cash_docs where \"clientRef\" like 'race-op9-%' and status = 'posted'")
+i=0; for id in $ids7; do i=$((i+1)); ( call_raw R_KAS "public.kassa_doc_void('$id', 'Poyga bekor') ->> 'status'" > "$TMP/v7.$i" ) & done
+for i in $(seq 1 8); do ( call_raw R_KAS "public.kassa_salary_pay('$(salp sp_race_s001$i 300000)'::jsonb) -> 'kassa' ->> 'status'" > "$TMP/t7.$i" ) & done
+wait
+pv=$(cat "$TMP"/v7.* | grep -c '^void$'); pt=$(cat "$TMP"/t7.* | grep -c '^posted$')
+chk "7d qaytimlarni bekor qilish (qaytgan pul qayta berilgan bo'lsa — rad) va yana 8 ta maosh parallel: o'tdi yoki o'z qoidasi bilan rad; deadlock yo'q" \
+    "$(( pv + $(cat "$TMP"/v7.* | grep -c 'kassa:salary_repaid') ))/$(( pt + $(cat "$TMP"/t7.* | grep -c 'tasdiqlangan summadan oshadi') ))/$(cat "$TMP"/v7.* "$TMP"/t7.* | grep -ci 'deadlock')" "$pr/8/0"
+sum=$(( sum - 200000 * pv - 300000 * pt )); net=$(( net + 200000 * pv + 300000 * pt ))
+chk "7e berilgan maosh tasdiqlangandan oshmadi (0 … 3 000 000) va o'tganlar yig'indisiga teng; moslik toza; kassa qoldig'i hisobga teng" "$(state7)/$(in7)" "$net/0/$sum/ichida"
+# 3-to'lqin: 8 ta katta qaytim (2 100 000) va shu payt birinchi maosh orderi (1 000 000) bekor qilinadi — bir navbatda (P): kim oldin
+#   o'tsa, ikkinchisi rad etiladi (qaytimdan keyin bekor qilinsa yoki bekor qilingandan keyin qaytim bo'lsa sof berilgan manfiy bo'lardi)
+s0=$(q -c "select \"cashDocId\" from public.salary_payments where id = 'sp_race_s0000'")
+for i in $(seq 1 8); do ( call_raw R_KAS "public.kassa_receipt('$(op9 race-op9-001$i 2100000)'::jsonb) ->> 'status'" > "$TMP/u7.$i" ) & done
+( call_raw R_KAS "public.kassa_doc_void('$s0', 'Poyga bekor') ->> 'status'" > "$TMP/w7.0" ) &
+wait
+pw=$(grep -c '^void$' "$TMP/w7.0"); pu=$(cat "$TMP"/u7.* | grep -c '^posted$')
+chk "7f 8 ta katta qaytim va birinchi maoshni bekor qilish parallel: o'tdi yoki o'z qoidasi bilan rad (qaytim — berilgandan katta, bekor qilish — undan qaytim bor); deadlock yo'q" \
+    "$(( pw + $(grep -c 'kassa:staff_returned' "$TMP/w7.0") ))/$(( pu + $(cat "$TMP"/u7.* | grep -c 'kassa:staff_over') ))/$(cat "$TMP"/w7.0 "$TMP"/u7.* | grep -ci 'deadlock')" "1/8/0"
+sum=$(( sum + 1000000 * pw + 2100000 * pu )); net=$(( net - 1000000 * pw - 2100000 * pu ))
+chk "7g sof berilgan maosh manfiy emas (0 … 3 000 000) va o'tganlar yig'indisiga teng; moslik toza; kassa qoldig'i hisobga teng" "$(state7)/$(in7)" "$net/0/$sum/ichida"
 
 # ---------- (5) kirimlar davom etayotganda kun yopiladi ----------
 for w in 1 2 3 4; do

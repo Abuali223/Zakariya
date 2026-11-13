@@ -338,6 +338,9 @@ async function openAdvForm() {
 }
 
 // ---------------------------------------------------------------- kirim / chiqim shakli
+//   Xodim bilan hisob-kitob kirimlari (acc-1, acc-3, acc-4): xodim (va «Xodim qaytargan pul»da oy) tanlangach oynada qoldiq ko'rinadi
+//   (kassa_staff_open) — qaytim / qoplash shundan oshmaydi; qoida baribir serverda (kassa_receipt).
+const STAFF_OPS = ['in_staff_return', 'in_acc_return', 'in_damage_repay'];
 async function openDocForm(form) {
   const refs = ST.refs, m = me();
   const ops = (refs.rules || []).filter(r => r.form === form && r.manual && !r.systemOnly);
@@ -352,7 +355,36 @@ async function openDocForm(form) {
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kf-save">${isOut ? 'So‘rov yuborish' : 'Qabul qilish'}</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const F = { party: null, lines: [{ articleId: '', amount: '', note: '' }] };
+  const F = { party: null, lines: [{ articleId: '', amount: '', note: '' }], limit: null };
+  // xodim qoldig'i (faqat ko'rsatish va oldindan ogohlantirish uchun)
+  let infoSeq = 0;
+  const staffInfo = async () => {
+    const r = ops.find(x => x.op === $('#kf-op').value), box = $('#kf-staff');
+    F.limit = null;
+    if (!box || !r || !STAFF_OPS.includes(r.op)) return;
+    const pid = F.party && F.party.type === 'employee' ? F.party.id : '';
+    const mon = r.op === 'in_staff_return' ? String(($('#kf-month') || {}).value || '') : '';
+    if (!pid || (r.op === 'in_staff_return' && !/^\d{4}-\d{2}$/.test(mon))) { box.style.display = 'none'; return; }
+    const seq = ++infoSeq;
+    box.style.display = ''; box.textContent = 'Qoldiq tekshirilmoqda…';
+    let j;
+    try { j = await call('kassa_staff_open', { p_desk: ST.desk, p_party: pid, p_month: mon || null }); }
+    catch (e) { if (seq === infoSeq && $('#kf-staff')) $('#kf-staff').textContent = errText(e); return; }
+    if (seq !== infoSeq || !$('#kf-staff')) return;
+    const a = j.advance || {}, s = j.salary || {}, art = F.lines[0].articleId;
+    let html;
+    if (r.op === 'in_acc_return') { F.limit = num(j.accountable); html = `Hisobdordagi hisobot qilinmagan avans: <b>${esc(som(j.accountable))}</b> — qaytim shundan oshmaydi.`; }
+    else if (r.op === 'in_damage_repay') { F.limit = num(j.damage); html = `Xodim zimmasidagi kamomad (Direktor qarori bilan): <b>${esc(som(j.damage))}</b> — qoplash shundan oshmaydi.`; }
+    else if (art === 'OP-08') {
+      F.limit = j.locked ? 0 : num(a.open);
+      html = j.locked ? `<span style="color:#B42318">${esc(mon)} oy vedomosti tasdiqlangan — avans maoshdan ushlab qolingan. Pulni «OP-09» (ish haqi to‘lovi) statiyasi bilan qabul qiling yoki Direktor oyni qayta ochsin.</span>`
+        : `${esc(mon)} oy naqd avansi: berilgan ${esc(som(a.given))}${num(a.returned) ? `, qaytgan ${esc(som(a.returned))}` : ''} — qoldiq <b>${esc(som(a.open))}</b>. Qaytim avansdan ayiriladi (vedomost sof avansni ushlaydi).`;
+    } else if (art === 'OP-09') {
+      F.limit = num(s.net);
+      html = `${esc(mon)} oy uchun naqd berilgan maosh: ${esc(som(s.paid))}${num(s.returned) ? `, qaytgan ${esc(som(s.returned))}` : ''} — sof <b>${esc(som(s.net))}</b>. Qaytgan pul shu oy yana berilishi yoki keyingi oyga qoldiq bo‘lib o‘tishi mumkin.`;
+    } else html = `${esc(mon)}: naqd avans qoldig‘i ${esc(som(a.open))}, naqd berilgan maosh ${esc(som(s.net))} — statiyani tanlang (avans yoki ish haqi).`;
+    $('#kf-staff').innerHTML = html;
+  };
   const drawDyn = async () => {
     const r = ops.find(x => x.op === $('#kf-op').value);
     const types = r.partyTypes || [];
@@ -362,6 +394,8 @@ async function openDocForm(form) {
     $('#kf-dyn').innerHTML = `
       ${types.length ? lbl(isOut ? 'Kimga' : 'Kimdan', `${types.length > 1 ? `<select id="kf-ptype" style="${FLD}">${types.map(t => `<option value="${t}">${esc(PARTY_LBL[t] || t)}</option>`).join('')}</select>` : `<input type="hidden" id="kf-ptype" value="${esc(types[0])}">`}<div id="kf-party"></div>`) : ''}
       ${r.articleMode === 'choose' && !multi ? lbl('Statiya', artSel(0, F.lines[0].articleId)) : ''}
+      ${r.op === 'in_staff_return' ? lbl('Qaysi oy avansi / maoshi <span style="color:#B42318">(majburiy)</span>', `<input id="kf-month" type="month" value="${esc(String((ST.ov && ST.ov.state && ST.ov.state.today) || '').slice(0, 7))}" style="${FLD}">`) : ''}
+      ${STAFF_OPS.includes(r.op) ? `<div class="small" id="kf-staff" style="display:none;margin-top:8px;background:#eef3f1;border-radius:10px;padding:10px 12px"></div>` : ''}
       ${multi ? `<div class="small" style="font-weight:700;margin-top:10px">Statiya va summa <span class="muted" style="font-weight:500">— bir hujjatda bir nechta statiya bo‘lishi mumkin</span></div><div id="kf-lines"></div><button type="button" class="btn sm" id="kf-addline" style="margin-top:6px">+ qator</button>`
         : lbl('Summa (so‘m)', `<input id="kf-amt" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}
       ${lbl('Asos <span class="muted" style="font-weight:500">— hujjat nomi, raqami, sanasi</span>', `<input id="kf-basis" type="text" maxlength="300" style="${FLD}">`)}
@@ -374,7 +408,10 @@ async function openDocForm(form) {
     if (r.needsApproval) hint.push('Pul berishdan oldin Moliya menejeri / buxgalter tasdiqlaydi' + (r.directorAlways ? ', Direktor ham' : `; ${som(ST.ov.state.t1)}dan katta summada — Direktor ham`) + '.');
     else if (r.directorAlways) hint.push('Avval Direktor ruxsat beradi, keyin kassir pulni qabul qiladi.');
     else if (!isOut) hint.push('Order darhol o‘tkaziladi: raqam va sana serverdan beriladi.');
+    if (r.op === 'in_staff_return') hint.push('Avans qaytsa (OP-08) — shu oy avansidan ayiriladi (oy vedomosti hali tasdiqlanmagan bo‘lsin); berilgan maosh qaytsa (OP-09) — shu oy berilgan maoshdan.');
+    if (r.op === 'in_damage_repay') hint.push('Direktor qarori bilan xodim zimmasiga yozilgan kassa kamomadi naqd qoplanadi.');
     $('#kf-hint').textContent = hint.join(' ');
+    const km = $('#kf-month'); if (km) km.addEventListener('change', staffInfo);
     if (multi) {
       const drawLines = () => {
         $('#kf-lines').innerHTML = F.lines.map((l, i) => `<div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:6px;margin-top:6px">${artSel(i, l.articleId)}<input data-lamt="${i}" type="text" inputmode="numeric" placeholder="summa" value="${esc(l.amount)}" style="${FLD}">${F.lines.length > 1 ? `<button type="button" class="btn sm danger" data-ldel="${i}">×</button>` : '<span></span>'}</div>`).join('')
@@ -386,11 +423,12 @@ async function openDocForm(form) {
         total();
       };
       drawLines(); $('#kf-addline').onclick = () => { if (F.lines.length < 20) { F.lines.push({ articleId: '', amount: '', note: '' }); drawLines(); } };
-    } else { const a0 = $('#kf-dyn').querySelector('[data-art="0"]'); if (a0) a0.onchange = () => { F.lines[0].articleId = a0.value; }; }
+    } else { const a0 = $('#kf-dyn').querySelector('[data-art="0"]'); if (a0) a0.onchange = () => { F.lines[0].articleId = a0.value; staffInfo(); }; }
     const pt = $('#kf-ptype'); if (pt) { pt.onchange = () => drawParty(pt.value); await drawParty(pt.value); }
   };
   const drawParty = async type => {
     F.party = { type, id: '', name: '' };
+    F.limit = null; infoSeq++;   // tomon almashdi — oldingi xodim qoldig'i (va kechikkan javobi) amal qilmaydi
     const box = $('#kf-party'); if (!box) return;
     if (type === 'student') {
       box.innerHTML = `<input id="kf-ps" type="text" placeholder="O‘quvchi: ism yoki ID…" autocomplete="off" style="${FLD};margin-top:6px"><div id="kf-pl" style="max-height:150px;overflow:auto;margin-top:4px"></div><div id="kf-psel" class="small muted"></div><input id="kf-payer" type="text" placeholder="To‘lovchi (ota-ona) F.I.Sh. — ixtiyoriy" maxlength="200" style="${FLD};margin-top:6px">`;
@@ -404,7 +442,7 @@ async function openDocForm(form) {
       box.innerHTML = `<div class="small muted" style="margin-top:6px">Yuklanmoqda…</div>`;
       const ppl = await loadPeople().catch(() => []);
       box.innerHTML = `<select id="kf-pe" style="${FLD};margin-top:6px"><option value="">— xodim —</option>${ppl.map(p => `<option value="${esc(p.ref)}">${esc(p.name + (p.pos ? ' · ' + p.pos : ''))}</option>`).join('')}</select>`;
-      $('#kf-pe').onchange = () => { F.party.id = $('#kf-pe').value; };
+      $('#kf-pe').onchange = () => { F.party.id = $('#kf-pe').value; staffInfo(); };
     } else if (type === 'other') {
       box.innerHTML = `<input id="kf-po" type="text" placeholder="F.I.Sh. yoki nomi (to‘liq)" maxlength="200" style="${FLD};margin-top:6px"><div class="small muted" style="margin-top:4px">«Boshqa» tomonlar nazorat ro‘yxatida alohida ko‘rinadi — imkon bo‘lsa kontragentni tanlang.</div>`;
       $('#kf-po').addEventListener('input', () => { F.party.name = $('#kf-po').value.trim(); });
@@ -451,6 +489,8 @@ async function openDocForm(form) {
       if (r.articleMode === 'choose') { p.articleId = F.lines[0].articleId; if (!p.articleId) { C.toast('Statiyani tanlang', true); return; } }
     }
     if (!(p.amount > 0)) { C.toast('Summani kiriting', true); return; }
+    if (r.op === 'in_staff_return') { p.month = String(($('#kf-month') || {}).value || ''); if (!/^\d{4}-\d{2}$/.test(p.month)) { C.toast('Qaysi oy avansi / maoshi qaytarilayotganini tanlang', true); return; } }
+    if (STAFF_OPS.includes(r.op) && F.limit != null && p.amount > F.limit) { C.toast(`Summa xodim qoldig‘idan (${som(F.limit)}) katta`, true); return; }
     if (!p.noBasis && p.basis.length < 3) { C.toast('Asosni yozing (hujjat nomi, raqami, sanasi)', true); return; }
     if (r.fiscalRequired) { const fx = $('#kf-fexempt'); p.fiscalNo = $('#kf-fiscal').value.trim(); if (!p.fiscalNo) { if (fx && fx.checked) p.fiscalExempt = true; else { C.toast('Fiskal chek raqamini kiriting', true); return; } } }
     busy = true; const btn = $('#kf-save'); btn.disabled = true; btn.textContent = 'Yuborilmoqda…';
@@ -1010,16 +1050,24 @@ export function controlRows(c) {
         num(p4.row) ? `chiqim orderisiz naqd xarajat: ${cnt(p4.row)}` : '', num(p4.doc) ? `«Buxgalteriya»ga ko‘chmagan xarajat orderi: ${cnt(p4.doc)}` : '',
         num(p5.row) ? `chiqim orderisiz naqd maosh / avans: ${cnt(p5.row)}` : '', num(p5.doc) ? `yozuvsiz maosh / avans orderi: ${cnt(p5.doc)}` : '',
         num(p5.ofs) ? `o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: ${cnt(p5.ofs)}` : '',
+        num(p5.ret) ? `xodim qaytargan pul (kirim orderi ↔ avans / maosh yozuvi) mos emas: ${cnt(p5.ret)}` : '',
         num(p4.adv) ? `avans hisoboti ↔ «Buxgalteriya» xarajatlari mos emas: ${cnt(p4.adv)}` : '',
         num(p8.row) ? `chiqim orderisiz naqd qaytarish: ${cnt(p8.row)}` : '', num(p8.doc) ? `yozuvsiz qaytarish orderi: ${cnt(p8.doc)}` : ''].filter(Boolean);
       add('reconcile', 'Moslik: kassa hujjatlari ↔ pul yozuvlari', num(rc.total) ? 'bad' : 'ok', num(rc.total) ? bad.join('; ') : 'hammasi mos',
         'Naqd o‘quv to‘lovi, xarajat, maosh / avans, qaytarish — har biri o‘z orderi bilan; o‘zaro hisob va avans hisoboti — dalolatnomasi bilan');
     }
   }
-  const ac = c.accountable || [];
-  add('accountable', 'Hisobdorlardagi pul', ac.some(x => x.overdue) ? 'warn' : ac.length ? 'info' : 'ok',
-    ac.length ? ac.map(x => `${x.name || '—'}: ${som(x.balance)} (${dmy(x.since)} dan, ${num(x.workDays)} ish kuni${x.overdue ? ' — muddati o‘tgan' : ''})`).join('; ') : 'yo‘q',
+  // manfiy qoldiq (qaytim yoki hisobot berilgan avansdan ko'p) — xato yozuv izi: yashirilmaydi, qizil (acc-3, state-5)
+  const ac = c.accountable || [], acNeg = ac.filter(x => num(x.balance) < 0), acPos = ac.filter(x => num(x.balance) >= 0);
+  add('accountable', 'Hisobdorlardagi pul', acNeg.length ? 'bad' : acPos.some(x => x.overdue) ? 'warn' : acPos.length ? 'info' : 'ok',
+    ac.length ? acNeg.map(x => `${x.name || '—'}: ${som(x.balance)} — manfiy qoldiq (qaytim yoki hisobot berilgan avansdan ko‘p), tekshiring`)
+      .concat(acPos.map(x => `${x.name || '—'}: ${som(x.balance)} (${dmy(x.since)} dan, ${num(x.workDays)} ish kuni${x.overdue ? ' — muddati o‘tgan' : ''})`)).join('; ') : 'yo‘q',
     'Berilgan − naqd qaytarilgan − avans hisobotlari («Avans hisoboti» tugmasi); hisobot muddati — 3 ish kuni');
+  // xodimlar zimmasidagi kamomad (4730, acc-4): Direktor qarori − kassaga qoplangani; xodim kartasiga bog'lanmagan kassir qarori — alohida belgi
+  const dm = c.damage || [], dmNeg = dm.filter(x => num(x.balance) < 0);
+  add('damage', 'Xodimlar zimmasidagi kamomad', dmNeg.length ? 'bad' : dm.length ? 'info' : 'ok',
+    dm.length ? dm.map(x => `${x.name || '—'}: ${som(x.balance)}${num(x.balance) < 0 ? ' — qoplangani qarordan ko‘p, tekshiring' : ` (${dmy(x.since)} dan${num(x.repaid) ? `, qoplangan ${som(x.repaid)}` : ''})`}${x.linked === false ? ' — xodim kartasiga bog‘lanmagan' : ''}`).join('; ') : 'yo‘q',
+    'Direktor qarori bilan xodim zimmasiga yozilgan kamomad: kassaga «Kamomadni qoplash (xodim)» kirim orderi bilan qoplanadi yoki buxgalter ish haqidan ushlaydi');
   const ho = c.handover || {};
   add('handover', 'Rahbar / ta’sischiga berilgan pul', num(ho.earlierCount) ? 'warn' : num(ho.monthCount) ? 'info' : 'ok',
     [num(ho.monthCount) ? `shu oyda: ${cnt(ho.monthCount)} · ${som(ho.monthSum)}` : '', num(ho.earlierCount) ? `oldingi oylarda: ${cnt(ho.earlierCount)} · ${som(ho.earlierSum)} — tasniflanganini tekshiring` : ''].filter(Boolean).join('; ') || 'yo‘q',

@@ -29,7 +29,7 @@ const T = {
     seal: 'М.Ў.', mVoid: 'БЕКОР ҚИЛИНГАН', mCopy: 'НУСХА', mRepl: 'АЛМАШТИРИЛДИ', mTest: 'СИНОВ', mDraft: 'ҚОРАЛАМА',
     voided: 'Бекор қилинди', reason: 'сабаб', noBasis: 'асос ҳужжатисиз нақд харид', late: 'Пул қабул қилинган сана',
     student: 'ўқувчи', tuition: 'Ўқув тўлови', advance: 'аванс', surplus: 'Касса ортиқчаси', shortage: 'Касса камомади',
-    salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза',
+    salary: 'Иш ҳақи', refund: 'Қайтариш', application: 'ариза', writtenApp: 'Ёзма ариза', monthOf: 'аванс / иш ҳақи ойи',
     countBasis: 'Кассани санаш далолатномаси', nonCash: 'Маълумот учун, нақд пулсиз ёзув', docId: 'Ҳужжат', printed: 'чоп этилди',
     act: 'ДАЛОЛАТНОМА', actOps: { nc_opening: 'Кассанинг бошланғич қолдиғи', nc_offset: 'Ўзаро ҳисоб', nc_shortage_dec: 'Камомад бўйича қарор', nc_adv_report: 'Аванс ҳисоботи' },
     actTitle: { nc_offset: 'ЎЗАРО ҲИСОБ ДАЛОЛАТНОМАСИ', nc_adv_report: 'АВАНС ҲИСОБОТИ' },
@@ -74,7 +74,7 @@ const T = {
     seal: 'M.O‘.', mVoid: 'BEKOR QILINGAN', mCopy: 'NUSXA', mRepl: 'ALMASHTIRILDI', mTest: 'SINOV', mDraft: 'QORALAMA',
     voided: 'Bekor qilindi', reason: 'sabab', noBasis: 'asos hujjatisiz naqd xarid', late: 'Pul qabul qilingan sana',
     student: 'o‘quvchi', tuition: 'O‘quv to‘lovi', advance: 'avans', surplus: 'Kassa ortiqchasi', shortage: 'Kassa kamomadi',
-    salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza',
+    salary: 'Ish haqi', refund: 'Qaytarish', application: 'ariza', writtenApp: 'Yozma ariza', monthOf: 'avans / ish haqi oyi',
     countBasis: 'Kassani sanash dalolatnomasi', nonCash: 'Ma’lumot uchun, naqd pulsiz yozuv', docId: 'Hujjat', printed: 'chop etildi',
     act: 'DALOLATNOMA', actOps: { nc_opening: 'Kassaning boshlang‘ich qoldig‘i', nc_offset: 'O‘zaro hisob', nc_shortage_dec: 'Kamomad bo‘yicha qaror', nc_adv_report: 'Avans hisoboti' },
     actTitle: { nc_offset: 'O‘ZARO HISOB DALOLATNOMASI', nc_adv_report: 'AVANS HISOBOTI' },
@@ -119,7 +119,7 @@ const T = {
     seal: 'М.П.', mVoid: 'АННУЛИРОВАН', mCopy: 'КОПИЯ', mRepl: 'ЗАМЕНЁН', mTest: 'ТЕСТ', mDraft: 'ЧЕРНОВИК',
     voided: 'Аннулирован', reason: 'причина', noBasis: 'покупка за наличные без документа-основания', late: 'Дата приёма денег',
     student: 'учащийся', tuition: 'Оплата за обучение', advance: 'аванс', surplus: 'Излишек кассы', shortage: 'Недостача кассы',
-    salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление',
+    salary: 'Заработная плата', refund: 'Возврат', application: 'заявление', writtenApp: 'Письменное заявление', monthOf: 'месяц аванса / зарплаты',
     countBasis: 'Акт пересчёта наличных денег в кассе', nonCash: 'Справочно, безналичная запись', docId: 'Документ', printed: 'напечатано',
     act: 'АКТ', actOps: { nc_opening: 'Начальный остаток кассы', nc_offset: 'Взаимозачёт', nc_shortage_dec: 'Решение по недостаче', nc_adv_report: 'Авансовый отчёт' },
     actTitle: { nc_offset: 'АКТ ВЗАИМОЗАЧЁТА', nc_adv_report: 'АВАНСОВЫЙ ОТЧЁТ' },
@@ -188,6 +188,8 @@ function texts(doc, t) {
   let party = doc.partyName || '', basis = doc.basis || '', attachment = doc.attachment || '';
   const snap = doc.sourceSnapshot || {};
   if (doc.op === 'out_salary' && /^\d{4}-\d{2}$/.test(snap.month || '')) basis = t.salary + ': ' + ymLabel(snap.month);
+  // xodim qaytargan pul (acc-1): qaysi oy avansi / maoshi kamaygani qog'ozda ham ko'rinsin — kassir yozgan asosdan keyin
+  if (doc.op === 'in_staff_return' && /^\d{4}-\d{2}$/.test(snap.month || '')) basis = (basis ? basis + '; ' : '') + t.monthOf + ': ' + ymLabel(snap.month);
   if (doc.op === 'out_refund') {   // «Qaytarish: <sabab>; ariza DD.MM.YYYY» — kalit so'zlar chop etish tilida, sabab — yozilganidek
     basis = basis.replace(/^Qaytarish: /, t.refund + ': ').replace(/; ariza (\d{2}\.\d{2}\.\d{4})$/, '; ' + t.application + ' $1');
     if (attachment === 'Yozma ariza') attachment = t.writtenApp;
@@ -613,6 +615,10 @@ export function advSheet(p, ctx) {
   if (!a.length) rows.push([ru ? 'Нет движения и остатков' : 'Harakat va qoldiq yo‘q']);
   rows.push([]);
   rows.push([t.total, ...(masked ? [] : ['']), sum('opening'), sum('issued'), sum('returned'), sum('reported'), sum('closing')]);
+  // manfiy oy oxiri qoldig'i — xato yozuv izi (qaytim yoki hisobot berilgan avansdan ko'p): yashirilmaydi, alohida belgilanadi
+  const neg = a.filter(x => num(x.closing) < 0).map(x => x.code || '—');
+  if (neg.length) rows.push([], [(ru ? 'Внимание: отрицательный остаток на конец месяца (возврат или авансовый отчёт больше выданного аванса) — проверьте: '
+                                     : 'Diqqat: oy oxiriga manfiy qoldiq (qaytim yoki avans hisoboti berilgan avansdan ko‘p) — tekshiring: ') + neg.join(', ')]);
   return { name: ru ? 'E4 Подотчётные' : 'E4 Hisobdorlar', rows, cols: [{ wch: 20 }, ...(masked ? [] : [{ wch: 30 }]), ...Array.from({ length: 5 }, () => ({ wch: 17 }))] };
 }
 // Buxgalter uchun oylik kassa to'plami — bitta XLSX kitob: E1 KO-3, E2 statiyalar, E3 kassa kunlari, E4 hisobdorlar.

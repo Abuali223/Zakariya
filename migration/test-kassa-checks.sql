@@ -125,6 +125,8 @@ select zz.chk('A4 2-kun farqsiz yopildi (tekshirilmagan)', (select status || ':'
 
 -- ---------- 3-kun (06.01.2027): ochiq kun, sinov kassasi, davr surati va qulfi ----------
 select zz.clock('2027-01-06 10:00+05');
+-- xodim qaytargan avans (acc-1): C3 avansidan 40 000 — manfiy avans yozuvi shu order bilan (moslik P5 «ret» toza bo'lishi kerak)
+select zz.put('K5r', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":40000,"month":"2027-01","partyType":"employee","partyId":"teachers:tch1","articleId":"OP-08","basis":"Avans qaytdi, 06.01.2027","clientRef":"c-k5r-0001"}'));
 select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 06.01.2027","note":"Kitob uchun","clientRef":"c-k5-0001"}'));
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:tch1","basis":"Xo''jalik xaridlari","clientRef":"c-c4-0001"}'));
 select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || zz.pay('U_KAS', zz.id('C4')));   -- hisobdorga avans
@@ -310,6 +312,14 @@ set local session_replication_role = origin;
 \ir kassa-checks.sql
 rollback to savepoint d20;
 select zz.chk('D20 kassani chetlab yozilgan naqd xarajat va naqd o''quv to''lovi — 20-band (P4, P1)', :'c20' || '/' || :'bad', '^2/2$');
+
+savepoint d20b;
+set local session_replication_role = replica;
+delete from public.staff_advances where "cashDocId" = zz.id('K5r');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d20b;
+select zz.chk('D20b xodim qaytargan pul orderi manfiy avans yozuvisiz qolgan — 20-band (P5 «ret», acc-1)', :'c20' || '/' || :'bad', '^1/1$');
 
 savepoint d21;
 set local session_replication_role = replica;

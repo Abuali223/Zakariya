@@ -26,9 +26,17 @@ avval uni bajaring. **Kecha yopilmagan bo‘lsa, bugun hujjat yozilmaydi** — a
 Tizim summani o‘zi taqsimlaydi: avval eng eski qarz, ortig‘i — avansga. Naqdsiz to‘lov (Click, terminal, bank) ham shu oynada
 kiritiladi, lekin kassa orderi yozilmaydi va kassa qoldig‘iga kirmaydi.
 
-**Boshqa kirim** — «+ Kirim»: operatsiya tanlanadi («Bankdan naqd», «Hisobdordan qaytim», «Xodim qaytargan pul», «Forma va
-tovarlar», «Boshqa kirim», «Qarz / ta’sischi mablag‘i» — bunisi Direktor tasdig‘i bilan), **kimdan** (ro‘yxatdan tanlanadi), summa,
-asos (hujjat nomi, raqami, sanasi) → «Qabul qilish» → chop etish.
+**Boshqa kirim** — «+ Kirim»: operatsiya tanlanadi («Bankdan naqd», «Hisobdordan qaytim», «Xodim qaytargan pul», «Kamomadni
+qoplash (xodim)», «Forma va tovarlar», «Boshqa kirim», «Qarz / ta’sischi mablag‘i» — bunisi Direktor tasdig‘i bilan), **kimdan**
+(ro‘yxatdan tanlanadi), summa, asos (hujjat nomi, raqami, sanasi) → «Qabul qilish» → chop etish.
+
+**Xodimdan qaytgan pul** — xodim tanlangach oynada uning qoldig‘i ko‘rinadi; summa undan oshmaydi (tizim ham qabul qilmaydi):
+- «Hisobdordan qaytim» — hisobdordagi hisobot qilinmagan avans qoldig‘idan;
+- «Xodim qaytargan pul» — **qaysi oy** avansi yoki maoshi qaytayotgani tanlanadi (majburiy). Avans qaytsa (statiya OP-08) — shu oy
+  naqd avans qoldig‘idan; oy vedomosti tasdiqlangan bo‘lsa qabul qilinmaydi (avans maoshdan ushlangan): pul «OP-09» bilan qabul
+  qilinadi yoki Direktor oyni qayta ochadi. Berilgan maosh qaytsa (OP-09) — shu oy naqd berilgan maoshdan. Avans va maosh
+  yozuvini tizim o‘zi tuzatadi: vedomost avansni qaytgani ayirilgan holda ushlaydi, qaytgan maosh yana berilishi mumkin;
+- «Kamomadni qoplash (xodim)» — Direktor qarori bilan xodim zimmasiga yozilgan kassa kamomadidan.
 
 **Chiqim** — uch qadam:
 1. «+ Chiqim so‘rovi»: operatsiya («Xarajat», «Ish haqi avansi», «Hisobdorga avans», «Bankka topshirish», «Rahbar / ta’sischiga»,
@@ -48,7 +56,11 @@ orderi; ota-onaning yozma arizasi orderga ilova qilinadi. Bir kundan ortiq kechi
 
 **Xato qildim.** Shu kuni hujjat qatorida «Bekor» → sababi. Kassir faqat **o‘zi o‘tkazgan** orderni bekor qiladi; boshqasinikini —
 moliya menejeri yoki Direktor. O‘quv to‘lovidan keyin o‘quvchi bo‘yicha boshqa pul harakati bo‘lgan bo‘lsa, bekor qilinmaydi —
-Direktor «Qaytarish» qiladi. Qaytarish chiqim orderi bekor qilinmaydi.
+Direktor «Qaytarish» qiladi. Qaytarish chiqim orderi bekor qilinmaydi. Hisobdorga avans orderidan avans hisoboti yoki qaytim
+yozilgan bo‘lsa — avval o‘sha hisobot (buxgalter) yoki qaytim bekor qilinadi. «Xodim qaytargan pul» orderi: avans qaytimi (OP-08)
+— oy vedomosti shu orada tasdiqlangan bo‘lsa bekor qilinmaydi (Direktor oyni qayta ochadi); maosh qaytimi (OP-09) — qaytgan maosh
+keyin qayta berilgan bo‘lsa bekor qilinmaydi (avval keyingi maosh orderi bekor qilinadi). Ish haqi avansi yoki naqd maosh orderidan
+kassaga qaytim yozilgan bo‘lsa — avval o‘sha qaytim orderi, keyin avans / maosh orderi bekor qilinadi.
 
 **Smena almashsa** — «Smena topshirish»: pul sanaladi, qabul qiluvchi kassir tanlanadi, dalolatnoma chop etiladi, ikkalasi imzolaydi.
 
@@ -93,21 +105,31 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    kassir xato yozgan bo‘lsa, u «Z» tugmasi bilan tuzatadi; haqiqiy farq bo‘lsa (masalan, chek urilgan, lekin order bekor qilingan)
    — sababini izohga yozib tekshirasiz.
 3. **«Nazorat ro‘yxati»** (shu sahifada): qizil — bugun hal qilinadi (raqamlashda bo‘shliq, yopilmagan kecha, qarorsiz kamomad,
-   kechikkan qaytarish, «Moslik» mos emas, Z-hisobot farqi); sariq — shu hafta (shu jumladan yuridik shaxslarga kassadan naqd
-   to‘lovlar — har biri asosli ekanini tekshiring); «Moslik» qatori doim «hammasi mos» bo‘lishi kerak.
+   kechikkan qaytarish, «Moslik» mos emas, Z-hisobot farqi, hisobdorda **manfiy qoldiq** — qaytim yoki hisobot berilgan avansdan
+   ko‘p: xato yozuv izi); sariq — shu hafta (shu jumladan yuridik shaxslarga kassadan naqd to‘lovlar — har biri asosli ekanini
+   tekshiring); «Moslik» qatori doim «hammasi mos» bo‘lishi kerak (xodim qaytargan pul orderi va avans / maosh yozuvi ham
+   solishtiriladi). **«Xodimlar zimmasidagi kamomad»** — Direktor qarori bilan xodimga yozilgan kamomad va qoplangani: kassir
+   «Kamomadni qoplash (xodim)» bilan qabul qiladi, qolganini ish haqidan ushlash — buxgalter (4-bosqichgacha qo‘lda). Kassir hisobi
+   xodim kartasiga bog‘lanmagan bo‘lsa qaror «boshqa» tomonga yoziladi va kassadan qoplanmaydi (ro‘yxatda belgi bilan) — kassir
+   hisoblarini xodim kartasiga bog‘lab qo‘ying.
 4. **Bank orqali to‘langan xarajatlar** (moliya menejeri) — «Buxgalteriya» → «+ Xarajat qo‘shish»: to‘lov usuli (bank o‘tkazmasi
    yoki korporativ karta), statiya, kontragent. Hisobdor shaxs sarflagan pul bu yerda emas — «Kassa» → «Avans hisoboti».
    Naqd xarajat bu yerda yozilmaydi — u kassa chiqim orderidan o‘zi ko‘chadi.
 
 **Maosh.** Vedomostni moliya menejeri tayyorlaydi, HR tasdiqlaydi. Karta orqali to‘lovni moliya menejeri «Maosh berish» → «Karta»
-bilan yozadi (kassa orderisiz); naqd — faqat kassir.
+bilan yozadi (kassa orderisiz); naqd — faqat kassir. Xodim avansni kassaga qaytarsa (kassir — «Xodim qaytargan pul», OP-08),
+vedomost avansni bazadan qaytgani ayirilgan holda oladi — vedomostni qaytimdan keyin tayyorlang (yuborilgan bo‘lsa — HR qaytaradi,
+qayta yuboring); tasdiqlangan oy uchun avans qaytimi qabul qilinmaydi. Berilgan maosh qaytsa (OP-09) — shu oy berilgan summa
+kamayadi: qolgani shu oy yana berilishi yoki keyingi oyga qoldiq bo‘lib o‘tishi mumkin.
 
 **Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
 `shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter (yoki moliya menejeri) hisobotni
 tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlaydi, har chek — bitta qator (statiya, summa, chek raqami va
 sanasi). Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; «Avans hisoboti № A-…» chop etiladi va qog‘oz
 hisobotga qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
-«Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
+«Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Qaytim ham qoldiqdan oshmaydi; hisoboti yoki qaytimi yozilgan avans orderi bekor
+qilinmaydi (avval hisobot yoki qaytim bekor qilinadi). Manfiy qoldiq (xato yozuv izi) nazorat ro‘yxatida qizil, oylik to‘plamda
+(E4) alohida belgi bilan ko‘rinadi. Oldingi avansi hisobotsiz qolgan xodimga yangi avans faqat Direktor tasdig‘i bilan
 beriladi. Muddati o‘tgan qoldiqlar nazorat ro‘yxatida ko‘rinadi, «Kassa» sahifasining yuqorisida eslatma chiqadi («Avans hisoboti
 muddati o‘tgan hisobdorlar: N ta») va Direktorning Telegram nazorat qatorida ham bo‘ladi.
 
@@ -151,7 +173,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 **Faqat Direktor qiladigan amallar**
 | Amal | Qayerda | Eslatma |
 |---|---|---|
-| Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | xodim hisobiga yoki zararga; dalolatnoma |
+| Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | xodim hisobiga yoki zararga; dalolatnoma; xodim hisobiga — u pulni kassaga «Kamomadni qoplash (xodim)» bilan qaytaradi (qolgani nazorat ro‘yxatida) |
 | Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |
@@ -167,10 +189,13 @@ Kassir yo‘qligida kunni Direktor yoki moliya menejeri yopishi mumkin — kamid
 - Vedomostni tekshirib **tasdiqlaysiz** — maosh kunidan oldin. Tasdiqlanmagan oy uchun naqd maosh berilmaydi.
 - Kassa ishga tushgach **pul bermaysiz**: «Maosh berish» tugmasi sizda ko‘rinmaydi (naqd — kassir, karta — moliya menejeri).
 - Ish haqi avansi so‘rovini kassir yoki moliya menejeri yuboradi; tasdiqlangan vedomostdan ortiq avans berilmaydi.
+- Xodim avansni kassaga qaytarsa, vedomostda avans qaytgani ayirilgan holda ko‘rinadi; oy tasdiqlangach avans qaytimi qabul
+  qilinmaydi (kerak bo‘lsa Direktor oyni qayta ochadi).
 
 ## 5. Hisobdor shaxs (zavxoz, oshpaz va boshqalar)
 1. Pulni kassadan **chiqim orderi** bilan olasiz («Hisobdorga avans») — orderga «Oldim», summa, sana, imzo.
 2. Har xarid uchun chek yoki hisob-faktura oling (sana, sotuvchi, nima, summa ko‘rinib tursin).
 3. **3 ish kuni ichida** avans hisobotini (qog‘oz shakl, `shakllar.md` Sh-1) cheklari bilan buxgalterga topshiring.
-4. Ortgan pulni kassaga qaytaring — kassir **kirim orderi** yozadi («Hisobdordan qaytim»), pattasi sizda qoladi.
+4. Ortgan pulni kassaga qaytaring — kassir **kirim orderi** yozadi («Hisobdordan qaytim»; hisobot qilinmagan qoldiqdan oshmaydi),
+   pattasi sizda qoladi.
 5. Avvalgi pul bo‘yicha hisobot topshirilmaguncha yangi pul so‘ralmaydi. Hisobdor puli — shaxsiy xarajat uchun emas.

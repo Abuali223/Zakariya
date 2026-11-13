@@ -9,14 +9,14 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
   limit: { cashLimit: 3000000, set: true, balance: 1200000, exceeded: false, days30: 0 },
   reconcile: { live: true, total: 0, p1: { pay: 0, paySum: 0, doc: 0 }, p4: { row: 0, doc: 0 }, p5: { row: 0, doc: 0 }, p8: { row: 0, doc: 0 } },
-  accountable: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 } });
+  accountable: [], damage: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 } });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 22 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 23 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 22);
+  assert.equal(rows.length, 23);
   assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'orgCash', 'other',
-    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'handover']);
+    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'handover']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
   assert.equal(r.gaps.value, 'uzluksiz'); assert.equal(r.reconcile.value, 'hammasi mos'); assert.equal(r.limit.value, 'limit 3 000 000 so‘m — oshmagan');
@@ -31,7 +31,7 @@ test('nazorat ro‘yxati: muammolar — daraja va matn', () => {
     diffs30: [{ day: '2027-01-04', diff: -5000 }, { day: '2027-01-05', diff: 1200 }], voids30: 3, reopens30: 1, waitingApproval: 2, approvedUnpaid: 1, staleRefunds: 1,
     fiscalExempt30: 2, otherParties30: 4, late30: 1, pendingDays30: 2, reissues30: 1, salaryGateOff30: 1, unprintedBooks30: ['2027-01-05'],
     limit: { cashLimit: 3000000, set: true, balance: 4525000, exceeded: true, days30: 1 },
-    reconcile: { live: true, total: 10, p1: { pay: 1, paySum: 111000, doc: 1 }, p4: { row: 1, doc: 1 }, p5: { row: 2, doc: 1, ofs: 1 }, p8: { row: 1, doc: 1 } },
+    reconcile: { live: true, total: 11, p1: { pay: 1, paySum: 111000, doc: 1 }, p4: { row: 1, doc: 1 }, p5: { row: 2, doc: 1, ofs: 1, ret: 1 }, p8: { row: 1, doc: 1 } },
     accountable: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', given: 400000, returned: 150000, balance: 250000, since: '2027-01-04', workDays: 4, overdue: true }],
     handover: { monthCount: 1, monthSum: 500000, earlierCount: 2, earlierSum: 900000 },
     zreport: [{ day: '2027-01-05', recorded: true, missing: false, diffCash: -10000, diffCard: 0 }, { day: '2027-01-06', recorded: false, missing: false },
@@ -53,7 +53,8 @@ test('nazorat ro‘yxati: muammolar — daraja va matn', () => {
   assert.equal(r.limit.value, 'qoldiq 4 525 000 so‘m — limit 3 000 000 so‘mdan oshgan');
   assert.equal(r.reconcile.value, 'kirim orderisiz naqd o‘quv to‘lovi: 1 ta (111 000 so‘m); to‘lov yozuvisiz kirim orderi: 1 ta; chiqim orderisiz naqd xarajat: 1 ta; '
     + '«Buxgalteriya»ga ko‘chmagan xarajat orderi: 1 ta; chiqim orderisiz naqd maosh / avans: 2 ta; yozuvsiz maosh / avans orderi: 1 ta; '
-    + 'o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: 1 ta; chiqim orderisiz naqd qaytarish: 1 ta; yozuvsiz qaytarish orderi: 1 ta');
+    + 'o‘zaro hisob (dalolatnoma ↔ maosh ↔ o‘quv to‘lovi) mos emas: 1 ta; xodim qaytargan pul (kirim orderi ↔ avans / maosh yozuvi) mos emas: 1 ta; '
+    + 'chiqim orderisiz naqd qaytarish: 1 ta; yozuvsiz qaytarish orderi: 1 ta');
   assert.equal(r.accountable.value, 'Sinov Zavxoz: 250 000 so‘m (04.01.2027 dan, 4 ish kuni — muddati o‘tgan)');
   assert.equal(r.handover.value, 'shu oyda: 1 ta · 500 000 so‘m; oldingi oylarda: 2 ta · 900 000 so‘m — tasniflanganini tekshiring');
 });
@@ -72,9 +73,29 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
   assert.ok(!controlRows(c).some(x => x.key === 'reconcile' || x.key === 'zreport'), 'sinov kassasida moslik va Z-hisobot qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 20);
+  assert.equal(controlRows(c).length, 21);
   const empty = controlRows(null);
-  assert.ok(empty.length === 22 && empty.filter(x => x.level === 'ok').length === 20, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 23 && empty.filter(x => x.level === 'ok').length === 21, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+});
+
+test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
+  const c = clean();
+  c.accountable = [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', balance: 250000, since: '2027-01-04', workDays: 4, overdue: true },
+    { partyId: 'teachers:tch1', name: 'Sinov O‘qituvchi', balance: -20000, since: null, workDays: 0, overdue: false, negative: true }];
+  c.damage = [{ partyId: 'teachers:tch1', name: 'Sinov O‘qituvchi', charged: 10000, repaid: 4000, balance: 6000, since: '2027-01-07', linked: true },
+    { partyId: null, name: 'Sinov Kassir', charged: 2000, repaid: 0, balance: 2000, since: '2027-01-05', linked: false }];
+  let r = by(controlRows(c));
+  assert.equal(r.accountable.level, 'bad');
+  assert.equal(r.accountable.value, 'Sinov O‘qituvchi: −20 000 so‘m — manfiy qoldiq (qaytim yoki hisobot berilgan avansdan ko‘p), tekshiring; '
+    + 'Sinov Zavxoz: 250 000 so‘m (04.01.2027 dan, 4 ish kuni — muddati o‘tgan)');
+  assert.equal(r.damage.level, 'info');
+  assert.equal(r.damage.value, 'Sinov O‘qituvchi: 6 000 so‘m (07.01.2027 dan, qoplangan 4 000 so‘m); Sinov Kassir: 2 000 so‘m (05.01.2027 dan) — xodim kartasiga bog‘lanmagan');
+  c.damage = [{ partyId: 'staff:st1', name: 'Sinov Xodim', charged: 1000, repaid: 1500, balance: -500, since: '2027-01-05', linked: true }];
+  r = by(controlRows(c));
+  assert.deepEqual([r.damage.level, r.damage.value], ['bad', 'Sinov Xodim: −500 so‘m — qoplangani qarordan ko‘p, tekshiring']);
+  c.accountable = []; c.damage = [];
+  r = by(controlRows(c));
+  assert.deepEqual([r.accountable.level, r.accountable.value, r.damage.level, r.damage.value], ['ok', 'yo‘q', 'ok', 'yo‘q']);
 });
 
 test('Z-hisobot holati matni (kun javobidagi «z»)', () => {

@@ -372,6 +372,129 @@ select zz.chk('R8 tasdiqlangan qaytarish 1 kundan ortiq berilmagan — ogohlanti
 select zz.chk('Z1 raqamlashda bo''shliq yo''q (bekor qilinganlar raqamini saqlaydi)', jsonb_array_length(app.kassa_gap_check('main', 2027))::text, '^0$');
 select zz.chk('Z2 kun qoldig''i hujjatlardan: 5 000 000 − 1 000 000 − 450 000 − 250 000 − 200 000', zz.bal(), '^3100000$');
 
+-- ---------- (Q) xodim qaytargan pul (acc-1): avans / maosh qaytimi KO-1 bilan SHU tranzaksiyada avans / maosh yozuviga tushadi ----------
+--   04.01 kuni yopiladi (sanalgan = hisobdagi), 06.01 — yangi kun. Xodim st1 (IQX-T1): 2027-01 da karta avansi 50 000 (A4b) bor.
+select zz.put('Q0', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-01-04","counted":3100000}')::text$q$));
+select zz.put('Q1', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_advance","amount":200000,"partyType":"employee","partyId":"staff:st1","basis":"Ariza, 06.01.2027","clientRef":"q1-000001"}'));
+select zz.put('Q1p', left(zz.appr('U_FM', zz.id('Q1')), 0) || zz.pay('U_KAS', zz.id('Q1')));
+select zz.chk('Q0 04.01 yopildi; 06.01: naqd avans 200 000 berildi (avans yozuvi 2027-01)',
+  (zz.get('Q0')::jsonb -> 'day' ->> 'status') || ':' || (zz.get('Q1p')::jsonb ->> 'status') || ':' || (select trim_scale(amount) || ':' || month from public.staff_advances where "cashDocId" = zz.id('Q1')),
+  '^closed:posted:200000:2027-01$');
+select zz.chk('Q2 rad: oy tanlanmagan; naqd avans qoldig''idan katta (karta avansi 50 000 hisobga olinmaydi); Moliya menejeri kirim yozmaydi; boshqa statiya',
+  zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}') || ' | '
+  || zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":200001,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}') || ' | '
+  || zz.rpc('U_FM', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}') || ' | '
+  || zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-22","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}') || ' | '
+  || (select count(*) from public.cash_docs where op = 'in_staff_return'),
+  '^ERR 22023 \[kassa:month\].* \| ERR P0001 \[kassa:staff_over\].*qoldiq 200000 so''m.* \| ERR 42501.* \| ERR 22023 \[kassa:article\].* \| 0$');
+select zz.put('Q3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}'));
+select zz.chk('Q3 avans qaytdi: KO-1 № 1, Dt 5010 Kt 4210 (OP-08); avans yozuvi −80 000 shu order bilan (xodim kodi, oy, sana, usul)',
+  (zz.get('Q3')::jsonb ->> 'status') || ':' || (zz.get('Q3')::jsonb ->> 'no') || ':' || zz.lines(zz.id('Q3')) || ' / '
+  || (select "teacherId" || ':' || "payeeRef" || ':' || trim_scale(amount) || ':' || month || ':' || date || ':' || method || ':' || (note ~ 'KO-1 № 1') from public.staff_advances where "cashDocId" = zz.id('Q3')),
+  '^posted:1:5010>4210=80000@OP-08 / IQX-T1:staff:st1:-80000:2027-01:2027-01-06:cash:true$');
+select zz.chk('Q3b oylik hisobida avans sof: naqd 200 000 − 80 000 + karta 50 000 = 170 000; kassir oynasi: berilgan / qaytgan / qoldiq',
+  trim_scale(app.payroll_adv('IQX-T1', '2027-01')) || ' | '
+  || (select (j -> 'advance' ->> 'given') || '/' || (j -> 'advance' ->> 'returned') || '/' || (j -> 'advance' ->> 'open') || ':' || (j ->> 'locked')
+        from (select zz.as('U_KAS', $q$select public.kassa_staff_open('main', 'staff:st1', '2027-01')::text$q$)::jsonb as j) q),
+  '^170000 \| 200000/80000/120000:false$');
+select zz.chk('Q4 qayta yuborish — takror, ikkinchi yozuv yo''q; bog''langan manfiy qatorni mijoz o''chira olmaydi',
+  (zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}')::jsonb ->> 'dup')
+  || ':' || (select count(*) from public.staff_advances where amount < 0) || ' | '
+  || zz.as('U_DIR', $q$with x as (delete from public.staff_advances where amount < 0 returning id) select count(*)::text from x$q$),
+  '^true:1 \| ERR 42501 \[kassa:linked_row\]');
+select zz.chk('Q4b o''sha kalit, boshqa oy — rad', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":80000,"month":"2026-12","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q3-000001"}'),
+  '^ERR 22023 \[kassa:ref_mismatch\]');
+select zz.put('Q5', zz.as('U_FM', $q$select public.payroll_submit('2027-01', '[{"personType":"staff","personId":"IQX-T1","gross":2000000}]')::text$q$));
+select zz.chk('Q5 yanvar vedomosti: avans BAZADAN sof 170 000 (qaytgan 80 000 ushlanmaydi)',
+  (zz.get('Q5')::jsonb ->> 'ok') || ' | ' || (select trim_scale(advance) || ':' || (payable = greatest(0, gross - advance - deduction + "subBonus" + "carryIn")) from public.payroll_lines where "runId" = '2027-01'),
+  '^true \| 170000:true$');
+select zz.put('Q6', zz.as('U_HR', $q$select public.payroll_decide('2027-01', true)::text$q$));
+select zz.chk('Q6 vedomost tasdiqlandi: endi avans qaytimi rad («Ish haqi to''lovi» statiyasi yoki oyni qayta ochish); qaytimni bekor qilish ham rad',
+  (zz.get('Q6')::jsonb ->> 'status') || ' | '
+  || zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":10000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q6-000001"}') || ' | '
+  || zz.void('U_KAS', zz.id('Q3'), 'Xato kiritilgan qaytim'),
+  '^approved \| ERR P0001 \[kassa:advance_locked\].*Ish haqi to''lovi.* \| ERR P0001 \[kassa:advance_locked\]');
+select zz.put('Q7', zz.as('U_DIR', $q$select public.payroll_reopen('2027-01', 'Avans qaytimi xato')::text$q$) || ' | ' || zz.void('U_KAS', zz.id('Q3'), 'Xato kiritilgan qaytim'));
+select zz.chk('Q7 Direktor oyni qayta ochdi — qaytim shu kuni bekor qilindi: manfiy avans yozuvi olib tashlandi, avans 250 000',
+  (split_part(zz.get('Q7'), ' | ', 1)::jsonb ->> 'status') || ':' || (split_part(zz.get('Q7'), ' | ', 2)::jsonb ->> 'status') || ':'
+  || (select count(*) from public.staff_advances where "cashDocId" = zz.id('Q3')) || ':' || trim_scale(app.payroll_adv('IQX-T1', '2027-01')),
+  '^returned:void:0:250000$');
+-- OP-09: o'qituvchi IQT-T1, dekabr — kassadan oldingi (usulsiz) 100 000 (K0) + naqd 1 000 000 (S1) + o'zaro hisob 500 000 (O9, naqd emas);
+--   tasdiqlangan 3 000 000, qolgani 1 400 000
+select zz.put('Qc0', app.salary_carry('IQT-T1', '2027-01')::text);
+select zz.chk('Q8 maosh qaytimi naqd berilgan maoshdan (100 000 + 1 000 000; o''zaro hisob kirmaydi) katta — rad',
+  zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":1100001,"month":"2026-12","partyType":"employee","partyId":"teachers:tch1","articleId":"OP-09","basis":"Ortiqcha maosh qaytdi","clientRef":"q9-000001"}'),
+  '^ERR P0001 \[kassa:staff_over\].*berilgan 1100000 so''m');
+select zz.put('Q9', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":300000,"month":"2026-12","partyType":"employee","partyId":"teachers:tch1","articleId":"OP-09","basis":"Ortiqcha maosh qaytdi","clientRef":"q9-000001"}'));
+select zz.chk('Q9 maosh qaytdi: Dt 5010 Kt 6710 (OP-09); maosh yozuvi −300 000 (oy hisob qiymatlari o''zgarmagan), qoldiq hisobi +300 000',
+  (zz.get('Q9')::jsonb ->> 'status') || ':' || zz.lines(zz.id('Q9')) || ' / '
+  || (select trim_scale(paid) || ':' || trim_scale(gross) || ':' || month || ':' || date || ':' || method || ':' || "payeeRef" from public.salary_payments where "cashDocId" = zz.id('Q9'))
+  || ' / ' || (app.salary_carry('IQT-T1', '2027-01') - zz.get('Qc0')::numeric),
+  '^posted:5010>6710=300000@OP-09 / -300000:3000000:2026-12:2027-01-06:cash:teachers:tch1 / 300000$');
+select zz.chk('Q9b kassir oynasi: dekabr naqd maosh berilgan 1 100 000, qaytgan 300 000, sof 800 000; oy tasdiqlangan',
+  (select (j -> 'salary' ->> 'paid') || '/' || (j -> 'salary' ->> 'returned') || '/' || (j -> 'salary' ->> 'net') || ':' || (j ->> 'locked')
+     from (select zz.as('U_KAS', $q$select public.kassa_staff_open('main', 'teachers:tch1', '2026-12')::text$q$)::jsonb as j) q), '^1100000/300000/800000:true$');
+select zz.chk('Q10 darvoza qaytgan summani ko''radi: berish mumkin 1 700 000 (1 400 000 + qaytgan 300 000), undan ortiq — rad',
+  zz.rpc('U_KAS', 'kassa_salary_pay', zz.sal('sp_IQT-T1_2026-12_q10', 'cash', 'IQT-T1', 'teachers:tch1', '2026-12', 1700001)), '^ERR 23514 .*berish mumkin: 1700000');
+select zz.put('Q10', zz.rpc('U_KAS', 'kassa_salary_pay', zz.sal('sp_IQT-T1_2026-12_q10', 'cash', 'IQT-T1', 'teachers:tch1', '2026-12', 1700000)));
+select zz.chk('Q10b qaytgan maosh qayta berildi — dekabr to''liq yopildi: qoldiq 0',
+  (zz.get('Q10')::jsonb -> 'kassa' ->> 'status') || ':' || trim_scale(app.salary_carry('IQT-T1', '2027-01')) || ':' || zz.get('Qc0'), '^posted:0:1400000$');
+select zz.chk('Q11 qaytgan maosh qayta berilgan — qaytimni bekor qilish rad (tasdiqlangandan 300 000 ortiq bo''lardi)',
+  zz.void('U_KAS', zz.id('Q9'), 'Xato kiritilgan qaytim'), '^ERR P0001 \[kassa:salary_repaid\].*300000 so''m ortiq');
+select zz.put('Q12', (zz.void('U_KAS', zz.get('Q10')::jsonb -> 'kassa' ->> 'docId', 'Xato berilgan maosh')::jsonb ->> 'status') || ':'
+  || (zz.void('U_KAS', zz.id('Q9'), 'Xato kiritilgan qaytim')::jsonb ->> 'status'));
+select zz.chk('Q12 avval keyingi maosh orderi, keyin qaytim bekor qilindi: ikkala yozuv olib tashlandi, qoldiq hisobi boshlang''ich holatda',
+  zz.get('Q12') || ':' || (select count(*) from public.salary_payments where "cashDocId" in (zz.id('Q9'), zz.get('Q10')::jsonb -> 'kassa' ->> 'docId'))
+  || ':' || (app.salary_carry('IQT-T1', '2027-01') = zz.get('Qc0')::numeric), '^void:void:0:true$');
+select zz.put('Q13', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":50000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Avans qaytdi","clientRef":"q13-00001"}'));
+select zz.chk('Q13 moslik (P5 «ret»): xodim qaytargan pul orderlari ↔ manfiy yozuvlar — toza; kassa qoldig''i hujjatlardan',
+  (zz.get('Q13')::jsonb ->> 'status') || ':' || (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'ret') || ':' || (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'row')
+  || ':' || zz.bal(), '^posted:0:0:2950000$');
+savepoint q14;
+set local session_replication_role = replica;
+delete from public.staff_advances where "cashDocId" = zz.id('Q13');
+insert into public.salary_payments (id, "teacherId", "payeeRef", month, paid, date, method) values ('spr_zz_1', 'IQT-T1', 'teachers:tch1', '2026-12', -1000, '2027-01-06', 'cash');
+set local session_replication_role = origin;
+select (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'ret') || ':' || (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'row') as q14 \gset
+rollback to savepoint q14;
+select zz.chk('Q14 moslik buzilishni topadi: yozuvsiz qaytim orderi va ordersiz manfiy maosh yozuvi — «ret» 2 (P5 «row» o''zgarmaydi)', :'q14', '^2:0$');
+-- payroll-approval.sql (jonli fayl) darvozasi: manfiy yozuv faqat kassa funksiyasi bayrog'i bilan o'tadi; bayroqsiz — avvalgidek (2027-01 qayta ochilgan)
+savepoint q15;
+do $x$ begin
+  begin
+    insert into public.salary_payments (id, "teacherId", "payeeRef", month, paid, date, method) values ('spr_zz_2', 'IQX-T1', 'staff:st1', '2027-01', -1000, '2027-01-06', 'cash');
+    perform zz.put('Q15a', 'ok');
+  exception when others then perform zz.put('Q15a', 'ERR ' || sqlstate || ' ' || sqlerrm); end;
+  perform set_config('iqror.kassa_rpc', '1', true);
+  begin
+    insert into public.salary_payments (id, "teacherId", "payeeRef", month, paid, date, method) values ('spr_zz_3', 'IQX-T1', 'staff:st1', '2027-01', -1000, '2027-01-06', 'cash');
+    perform zz.put('Q15b', 'ok');
+  exception when others then perform zz.put('Q15b', 'ERR ' || sqlstate || ' ' || sqlerrm); end;
+  perform set_config('iqror.kassa_rpc', '', true);
+end $x$;
+select zz.get('Q15a') || ' | ' || zz.get('Q15b') as q15 \gset
+rollback to savepoint q15;
+select zz.chk('Q15 maosh darvozasi: bayroqsiz manfiy yozuv — avvalgidek tekshiriladi (oy tasdiqlanmagan — rad); kassa bayrog''i bilan — o''tadi',
+  :'q15', '^ERR 23514 .*tasdiqlanmagan \| ok$');
+-- Avans / maosh orderining o'zi qaytimdan oldin bekor qilinmaydi (g1, 2-davra): aks holda oy avansi / berilgan maosh manfiy bo'lib
+--   qolardi (vedomost avans o'rniga maoshga qo'shardi, darvoza chegarasi tasdiqlangandan oshardi) — avval qaytim, keyin order.
+select zz.put('Q16', zz.void('U_KAS', zz.id('Q1'), 'Xato berilgan avans'));
+select zz.put('Q16b', (zz.void('U_KAS', zz.id('Q13'), 'Xato kiritilgan qaytim')::jsonb ->> 'status') || ':' || (zz.void('U_KAS', zz.id('Q1'), 'Xato berilgan avans')::jsonb ->> 'status'));
+select zz.chk('Q16 avans orderi (200 000), undan qaytim (50 000) bor — bekor qilish rad (oy naqd avansi −50 000 bo''lardi); avval qaytim, keyin avans — ikkalasi bekor, yozuvlar olib tashlandi, oy avansi faqat karta 50 000',
+  zz.get('Q16') || ' | ' || zz.get('Q16b') || ':' || (select count(*) from public.staff_advances where "cashDocId" in (zz.id('Q1'), zz.id('Q13')))
+  || ':' || trim_scale(app.payroll_adv('IQX-T1', '2027-01')) || ':' || zz.bal(),
+  '^ERR P0001 \[kassa:staff_returned\].*2027-01 oy naqd avansi manfiy.*\(-50000 so''m\).*qaytim orderini bekor qiling \| void:void:0:50000:3100000$');
+select zz.put('Q17', zz.rpc('U_KAS', 'kassa_salary_pay', zz.sal('sp_IQT-T1_2026-12_q17', 'cash', 'IQT-T1', 'teachers:tch1', '2026-12', 200000)));
+select zz.put('Q17r', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":1200000,"month":"2026-12","partyType":"employee","partyId":"teachers:tch1","articleId":"OP-09","basis":"Ortiqcha maosh qaytdi","clientRef":"q17-00001"}'));
+select zz.put('Q17v', zz.void('U_KAS', zz.get('Q17')::jsonb -> 'kassa' ->> 'docId', 'Xato berilgan maosh'));
+select zz.put('Q17b', (zz.void('U_KAS', zz.id('Q17r'), 'Xato kiritilgan qaytim')::jsonb ->> 'status') || ':'
+  || (zz.void('U_KAS', zz.get('Q17')::jsonb -> 'kassa' ->> 'docId', 'Xato berilgan maosh')::jsonb ->> 'status'));
+select zz.chk('Q17 dekabr: naqd maosh 200 000 va qaytim 1 200 000 (naqd berilgan 1 300 000 dan) — maosh orderini bekor qilish rad (sof berilgan −100 000 bo''lardi); avval qaytim, keyin maosh — ikkalasi bekor, qoldiq hisobi boshlang''ich holatda',
+  (zz.get('Q17')::jsonb -> 'kassa' ->> 'status') || ':' || (zz.get('Q17r')::jsonb ->> 'status') || ' | ' || zz.get('Q17v') || ' | ' || zz.get('Q17b') || ':'
+  || (select count(*) from public.salary_payments where "cashDocId" in (zz.id('Q17r'), zz.get('Q17')::jsonb -> 'kassa' ->> 'docId'))
+  || ':' || (app.salary_carry('IQT-T1', '2027-01') = zz.get('Qc0')::numeric) || ':' || zz.bal(),
+  '^posted:posted \| ERR P0001 \[kassa:staff_returned\].*2026-12 oy uchun naqd berilgan maosh manfiy.*\(-100000 so''m\).*qaytim orderini bekor qiling \| void:void:0:true:3100000$');
+
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end
   from zz.res order by n;

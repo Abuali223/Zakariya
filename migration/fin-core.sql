@@ -204,9 +204,9 @@ begin
        and to_regprocedure('app.kassa_reconcile(date,date)') is not null then
       execute 'select app.kassa_reconcile($1, $2)' into v_rec using v_live, app.fin_today();
       if coalesce((v_rec ->> 'total')::int, 0) > 0 then
-        raise exception 'Kassani % dan ishga tushirib bo''lmaydi: shu kundan beri kassa orderisiz naqd yozuvlar bor (o''quv to''lovi: %, xarajat: %, maosh / avans: %, qaytarish: %). Ishga tushadigan kunni shu yozuvlardan keyingi kunga qo''ying',
+        raise exception 'Kassani % dan ishga tushirib bo''lmaydi: shu kundan beri kassa orderisiz naqd yozuvlar bor (o''quv to''lovi: %, xarajat: %, maosh / avans: %, qaytarish: %; jami moslik farqi: %). Ishga tushadigan kunni shu yozuvlardan keyingi kunga qo''ying',
           to_char(v_live, 'DD.MM.YYYY'), coalesce(v_rec #>> '{p1,pay}', '0'), coalesce(v_rec #>> '{p4,row}', '0'),
-          coalesce(v_rec #>> '{p5,row}', '0'), coalesce(v_rec #>> '{p8,row}', '0')
+          coalesce(v_rec #>> '{p5,row}', '0'), coalesce(v_rec #>> '{p8,row}', '0'), coalesce(v_rec ->> 'total', '0')
           using errcode = 'P0001', hint = 'kassa:live_gap';
       end if;
     end if;

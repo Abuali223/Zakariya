@@ -1063,26 +1063,32 @@ grant execute on function public.kassa_month_pack(text, text) to authenticated;
 
 -- Hisobdorlardagi pul (4230) p_asof sanasi holatiga: berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan
 --   eng eski berilgan sana (FIFO); "workDays" — o'shandan p_asof gacha o'tgan ish kunlari (du–ju); hisobot muddati — 3 ish kuni (§4.9).
+--   Manfiy qoldiq (qaytim yoki hisobot berilgan avansdan ko'p, avanssiz qaytim ham — xato yozuv izi; acc-3, state-5) yashirilmaydi:
+--   "negative" belgisi bilan (muddat hisoblanmaydi) — nazorat ro'yxatida qizil.
 create or replace function app.kassa_accountables(p_desk text, p_asof date) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
+  with g as (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
+                    sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
+               from public.cash_docs c where c.desk = p_desk and c.op = 'out_accountable' and c.status = 'posted' and c."businessDay" <= p_asof),
+       r as (select c."partyId" as pid, max(c."partyName") as nm, coalesce(sum(c.amount) filter (where c.op = 'in_acc_return'), 0) as ret,
+                    coalesce(sum(c.amount) filter (where c.op = 'nc_adv_report'), 0) as rep
+               from public.cash_docs c
+              where c.desk = p_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' and c."businessDay" <= p_asof
+              group by 1),
+       o as (select coalesce(gg.pid, r.pid) as pid, coalesce(gg.nm, r.nm) as nm, coalesce(gg.given, 0) as given,
+                    coalesce(r.ret, 0) as ret, coalesce(r.rep, 0) as rep,
+                    (select min(g.d) from g where g.pid = gg.pid and g.cum > coalesce(r.ret, 0) + coalesce(r.rep, 0)) as since
+               from (select g.pid, max(g.nm) as nm, max(g.cum) as given from g group by g.pid) gg
+               full join r on r.pid = gg.pid)
   select coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
                                                        'given', o.given, 'returned', o.ret, 'reported', o.rep, 'balance', o.given - o.ret - o.rep, 'since', o.since,
                                                        'workDays', (select count(*) from generate_series(o.since + 1, p_asof, interval '1 day') g
                                                                      where extract(isodow from g) < 6),
                                                        'overdue', (select count(*) from generate_series(o.since + 1, p_asof, interval '1 day') g
-                                                                    where extract(isodow from g) < 6) > 3)
+                                                                    where extract(isodow from g) < 6) > 3,
+                                                       'negative', o.given - o.ret - o.rep < 0)
                                     order by o.since, o.pid)
-                     from (select g.pid, max(g.nm) as nm, max(g.cum) as given, coalesce(max(r.ret), 0) as ret, coalesce(max(r.rep), 0) as rep,
-                                  min(g.d) filter (where g.cum > coalesce(r.ret, 0) + coalesce(r.rep, 0)) as since
-                             from (select c."partyId" as pid, c."partyName" as nm, c."businessDay" as d,
-                                          sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
-                                     from public.cash_docs c where c.desk = p_desk and c.op = 'out_accountable' and c.status = 'posted' and c."businessDay" <= p_asof) g
-                             left join (select c."partyId" as pid, sum(c.amount) filter (where c.op = 'in_acc_return') as ret,
-                                               sum(c.amount) filter (where c.op = 'nc_adv_report') as rep from public.cash_docs c
-                                         where c.desk = p_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' and c."businessDay" <= p_asof
-                                         group by 1) r on r.pid = g.pid
-                            group by g.pid) o
-                    where o.given - o.ret - o.rep > 0), '[]'::jsonb)
+                     from o where o.given - o.ret - o.rep <> 0), '[]'::jsonb)
 $$;
 revoke all on function app.kassa_accountables(text, date) from public, anon, authenticated;
 
@@ -1139,8 +1145,8 @@ grant execute on function public.kassa_kpi(text, int) to authenticated;
 --   Faktlar (baho va matn — mijozda): raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad, sanash farqlari,
 --   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
 --   tomonlar, kech (oflayn) yozuvlar, asl nusxani qayta chiqarish, darvozasiz naqd maosh, KO-4 chop etilmagan kunlar, limit,
---   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati, rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa
---   Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas).
+--   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati va manfiy qoldiq, xodimlar zimmasidagi kamomad (4730),
+--   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
@@ -1198,8 +1204,26 @@ begin
                                           else 0 end),
     -- moslik (kassa-links.sql: app.kassa_reconcile) — faqat asosiy kassa
     'reconcile', case when v_test then jsonb_build_object('live', false, 'total', 0) else app.kassa_reconcile(v_today - 30, v_today) end,
-    -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — 3 ish kuni (§4.9)
+    -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — 3 ish kuni (§4.9);
+    --   manfiy qoldiq ham («negative»)
     'accountable', app.kassa_accountables(v_desk, v_today),
+    -- xodimlar zimmasidagi kamomad (4730, acc-4): Direktor qarori bilan yozilgan − kassaga qoplangani («Kamomadni qoplash (xodim)»);
+    --   qolgani — qoplash orderi yoki ish haqidan ushlash (buxgalter). Xodim kartasiga bog'lanmagan kassir qarori («boshqa» tomon,
+    --   kassadan qoplab bo'lmaydi) ham ismi bilan ko'rinadi ("linked": false). Doira — app.kassa_damage_open bilan bir xil.
+    'damage', coalesce((select jsonb_agg(jsonb_build_object('partyId', x.pid, 'name', coalesce(app.kassa_party_label('employee', x.pid), x.nm, ''),
+                                                            'charged', x.dt, 'repaid', x.kt, 'balance', x.dt - x.kt, 'since', x.since, 'linked', x.pid is not null)
+                                         order by x.since, x.nm)
+                         from (select y.pid, max(y.nm) as nm, sum(y.dt) as dt, sum(y.kt) as kt, min(y.d) filter (where y.dt > 0) as since
+                                 from (select case when c."partyType" = 'employee' then c."partyId" end as pid,
+                                              case when c."partyType" = 'employee' then c."partyId" else 'other:' || lower(btrim(c."partyName")) end as k,
+                                              c."partyName" as nm, c."businessDay" as d,
+                                              case when l.debit = '4730' then l.amount else 0 end as dt, case when l.credit = '4730' then l.amount else 0 end as kt
+                                         from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+                                        where c.status = 'posted' and (l.debit = '4730' or l.credit = '4730') and c."partyType" in ('employee', 'other')
+                                          and case when v_test then c.desk = v_desk
+                                                   else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end) y
+                                group by y.k, y.pid) x
+                        where x.dt - x.kt <> 0), '[]'::jsonb),
     -- rahbar / ta'sischiga berilgan pul: buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — hech qachon xarajat emas
     'handover', (select jsonb_build_object(
                    'monthCount', count(*) filter (where c."businessDay" >= v_m0), 'monthSum', coalesce(sum(c.amount) filter (where c."businessDay" >= v_m0), 0),

@@ -13,6 +13,13 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-links.sql ALOHIDA ishga tus
 --                   6310) — maosh to'lovi, o'quv to'lovi va dalolatnoma BITTA tranzaksiyada; faqat Direktor; kassa_offset_void;
 --     • avans     — «Kassa» → «+ Chiqim so'rovi» → «Ish haqi avansi» (2-ro'yxat tasdig'i, T1 dan katta — Direktor ham) → kassir
 --                   pulni berganda staff_advances qatori shu tranzaksiyada yoziladi (oy vedomosti tasdiqlangan bo'lsa — rad);
+--     • xodim qaytargan pul (acc-1) — «+ Kirim» → «Xodim qaytargan pul» (KO-1, oy tanlanadi): avans qaytdi (OP-08, Kt 4210) — shu oy
+--                   naqd avans qoldig'idan oshmaydi, oy vedomosti tasdiqlangan bo'lsa rad, staff_advances ga MANFIY qator (vedomost
+--                   avansni sof summada ushlaydi); maosh qaytdi (OP-09, Kt 6710) — shu oy naqd berilgan maoshdan oshmaydi,
+--                   salary_payments ga MANFIY qator (darvoza, qoldiq va hisobotlar sof berilganni ko'radi; qaytgan pul yana berilishi
+--                   mumkin). Ikkalasi shu tranzaksiyada; shu kunda bekor qilinsa qator olib tashlanadi (izchillik buzilsa — rad);
+--                   qaytim yozilgan avans / maosh orderining o'zi undan oldin bekor qilinmaydi (oy avansi / berilgan maosh manfiy
+--                   bo'lardi); kassir oynasidagi qoldiqlar (avans, maosh, hisobdor, kamomad) — kassa_staff_open;
 --     • qaytarish — kassa_refund_request(p): Direktor tasdiqlaydi (so'rov = tasdiq), balans O'ZGARMAYDI; kassir pulni berganda
 --                   (kassa_doc_pay) refund_invoice shu tranzaksiyada bajariladi — balans KO-2 sanasida o'zgaradi;
 --                   naqdsiz qaytarish — avvalgidek refund_invoice;
@@ -235,6 +242,43 @@ begin
 end $$;
 revoke all on function app.kassa_advance_check(text) from public, anon, authenticated;
 
+-- ---------- O'qish: xodim bilan hisob-kitob qoldiqlari («+ Kirim» shakli uchun; qoida — server tekshiruvida) ----------
+--   p_party — 'teachers:<id>' | 'staff:<id>'; p_month — 'YYYY-MM' (avans / maosh oyi; bo'sh — faqat oyga bog'liq bo'lmagan qoldiqlar).
+--   advance — shu oy naqd avansi: berilgan, qaytarilgan, qoldiq (avans qaytimi chegarasi); salary — shu oy naqd berilgan maosh:
+--   berilgan, qaytarilgan, sof (maosh qaytimi chegarasi); locked — oy vedomosti tasdiqlangan (avans qaytimi qabul qilinmaydi);
+--   accountable — hisobdordagi hisobot qilinmagan qoldiq (4230); damage — xodim zimmasidagi kamomad (4730). Doira — p_desk kassasi
+--   (sinov kassasi — o'z qoldig'i). Kirim orderini yozadiganlar: kassa operatori va Direktor (acc-1, acc-3, acc-4).
+create or replace function public.kassa_staff_open(p_desk text, p_party text, p_month text default null) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_pid text; v_name text; v_code text;
+        v_m text := nullif(btrim(coalesce(p_month, '')), '');
+begin
+  if not (app.kassa_operator() or app.is_admin()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if v_m is not null and v_m !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+    raise exception 'Oy noto''g''ri (YYYY-MM)' using errcode = '22023', hint = 'kassa:month';
+  end if;
+  select k.o_id, k.o_name into v_pid, v_name from app.kassa_party('employee', p_party, null) k;
+  v_code := app.kassa_payee_code(v_pid);
+  return jsonb_build_object('ok', true, 'partyId', v_pid, 'name', v_name, 'code', v_code, 'month', v_m,
+    'accountable', app.kassa_acc_open(v_pid, v_desk), 'damage', app.kassa_damage_open(v_pid, v_desk),
+    'advance', case when v_m is not null then
+                 (select jsonb_build_object('given', coalesce(sum(a.amount) filter (where a.amount > 0), 0),
+                                            'returned', coalesce(-sum(a.amount) filter (where a.amount < 0), 0),
+                                            'open', coalesce(sum(coalesce(a.amount, 0)), 0))
+                    from public.staff_advances a
+                   where a."teacherId" = v_code and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) = v_m
+                     and coalesce(a.method, '') in ('', 'cash')) end,
+    'salary', case when v_m is not null then
+                (select jsonb_build_object('paid', coalesce(sum(s.paid) filter (where s.paid > 0), 0),
+                                           'returned', coalesce(-sum(s.paid) filter (where s.paid < 0), 0),
+                                           'net', coalesce(sum(coalesce(s.paid, 0)), 0))
+                   from public.salary_payments s
+                  where s."teacherId" = v_code and s.month = v_m and coalesce(s.method, '') in ('', 'cash')) end,
+    'locked', case when v_m is not null then app.payroll_locked_month(v_m, v_m) is not null end);
+end $$;
+revoke all on function public.kassa_staff_open(text, text, text) from public, anon;
+grant execute on function public.kassa_staff_open(text, text, text) to authenticated;
+
 -- ---------- Kassa hujjatiga bog'langan to'lov qatori (naqd o'quv to'lovi KO-1, o'zaro hisob dalolatnomasi) ----------
 --   Order va dalolatnoma o'zgarmaydi — ularga bog'langan to'lov qatori ham: summa, kanal, o'quvchi, holat, kun (raw.manual / raw.date),
 --   havola va fiskal chek № faqat kassa funksiyalari (bayroq) yoki server orqali o'zgaradi. Bekor qilish — «Kassa»da hujjat orqali
@@ -365,13 +409,34 @@ revoke all on function public.kassa_refund_request(jsonb) from public, anon;
 grant execute on function public.kassa_refund_request(jsonb) to authenticated;
 
 -- ---------- Pul berishdan OLDIN olinadigan qulflar (kassa qulfidan oldin — qulf tartibi L1 → L4) ----------
+--   Xodim bilan hisob-kitob: hisobdor (iqror_acc) va kamomad (iqror_dmg) qoldig'i qulfi; avans / maosh yozuvi bilan bog'langan
+--   hujjatlarda — qaytgan maoshda AVVAL oy bo'yicha maosh navbati (payroll-approval.sql salary_payment_gate: iqror_salpay, S), KEYIN
+--   xodim kaliti navbati (id-guards.sql guard_payroll_key: iqror:payroll, P): naqd maosh (kassa_salary_pay) va o'zaro hisob
+--   (kassa_offset) bilan BIR XIL tartib S → P → L4 — ularda maosh yozuvining darvoza trigeri kalit trigeridan oldin ishlaydi
+--   (triggerlar alifbo tartibida: trg_salary_payment_gate, keyin trg_salpay_key). Teskari tartib (P → S) parallel naqd maosh bilan
+--   o'zaro qulflanardi (deadlock). Avans to'lovi, avans qaytimi va bekor qilinadigan avans / maosh orderi — faqat P (avvalgi avans
+--   to'lovi qulfni kassa qulfidan keyin, yozuv paytida olardi — maosh to'lovi bilan teskari tartib edi).
+--   Pul berish (kassa_doc_pay), kirim (kassa_receipt) va bekor qilish (kassa_doc_void) shu funksiyani chaqiradi.
 create or replace function app.kassa_link_prelock(p_doc_id text) returns void
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_op text; v_snap jsonb; v_party text;
+declare v_op text; v_snap jsonb; v_party text; v_code text;
 begin
   select c.op, c."sourceSnapshot", c."partyId" into v_op, v_snap, v_party from public.cash_docs c where c.id = p_doc_id;
-  if v_op = 'out_accountable' then   -- hisobdor qulfi (avans hisoboti bilan bir navbat): qoldiq tekshiruvi va to'lov orasida o'zgarmasin
+  if v_op in ('out_accountable', 'in_acc_return') then   -- hisobdor qulfi (avans hisoboti bilan bir navbat): qoldiq tekshiruvi va to'lov orasida o'zgarmasin
     perform pg_advisory_xact_lock(hashtext('iqror_acc:' || coalesce(v_party, '')));
+  end if;
+  if v_op = 'in_damage_repay' then   -- xodim zimmasidagi kamomad: ikki qoplash parallel o'tib, qoldiqdan oshib ketmasin (acc-4)
+    perform pg_advisory_xact_lock(hashtext('iqror_dmg:' || coalesce(v_party, '')));
+  end if;
+  if v_op in ('out_advance', 'out_salary', 'in_staff_return') then
+    v_code := app.kassa_payee_code(v_party);
+    if v_code is not null then
+      if v_op = 'in_staff_return' and coalesce(v_snap ->> 'month', '') <> ''
+         and exists (select 1 from public.cash_doc_lines l where l."docId" = p_doc_id and l."articleId" = 'OP-09') then
+        perform pg_advisory_xact_lock(hashtext('iqror_salpay:' || v_code || ':' || (v_snap ->> 'month')));   -- S — P dan OLDIN
+      end if;
+      perform pg_advisory_xact_lock(hashtext('iqror:payroll:' || v_code));   -- P
+    end if;
   end if;
   if v_op = 'out_refund' and v_snap is not null then
     perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_snap ->> 'studentId', '')));
@@ -380,13 +445,33 @@ begin
 end $$;
 revoke all on function app.kassa_link_prelock(text) from public, anon, authenticated;
 
--- ---------- Pul berilgandan keyin (hujjat o'tkazilgan, shu tranzaksiya): bog'langan amal ----------
+-- ---------- Pul berilgandan / qabul qilingandan keyin (hujjat o'tkazilgan, shu tranzaksiya): bog'langan amal ----------
+--   Xodim bilan hisob-kitob kirimlarida tekshiruv shu yerda (qoldiq qulfi prelock'da, kassa qulfi o'tkazishda olingan): rad etilsa
+--   butun tranzaksiya bekor — hujjat ham, raqam ham qolmaydi.
 create or replace function app.kassa_link_paid(p_doc_id text, p_uid text) returns void
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_doc public.cash_docs%rowtype; s jsonb; r jsonb; v_before text[]; v_code text; l record; v_cat text;
+  v_open numeric; v_month text; v_art text; v_last public.salary_payments%rowtype;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
+  -- Hisobdordan qaytim (acc-3) / kamomadni qoplash (acc-4): o'tkazilgandan keyin xodim qoldig'i manfiy bo'lmasin — qaytim hisobdordagi
+  --   hisobot qilinmagan qoldiqdan, qoplash xodim zimmasidagi kamomad qoldig'idan oshmaydi (sinov kassasida — o'sha kassaning o'z qoldig'i).
+  if v_doc.op = 'in_acc_return' then
+    v_open := app.kassa_acc_open(v_doc."partyId", v_doc.desk);   -- shu qaytim bilan
+    if v_open < 0 then
+      raise exception 'Qaytim summasi (% so''m) hisobdordagi hisobot qilinmagan avans qoldig''idan katta (qoldiq % so''m)', v_doc.amount, v_open + v_doc.amount
+        using errcode = 'P0001', hint = 'kassa:acc_over';
+    end if;
+    return;
+  elsif v_doc.op = 'in_damage_repay' then
+    v_open := app.kassa_damage_open(v_doc."partyId", v_doc.desk);   -- shu qoplash bilan
+    if v_open < 0 then
+      raise exception 'Qoplash summasi (% so''m) xodim zimmasidagi kamomad qoldig''idan katta (qoldiq % so''m)', v_doc.amount, v_open + v_doc.amount
+        using errcode = 'P0001', hint = 'kassa:damage_over';
+    end if;
+    return;
+  end if;
   -- Sinov kassasi (CT-20): hujjatlari va raqamlari alohida — «Buxgalteriya», avans va qaytarish jadvallariga HECH NARSA yozilmaydi.
   if coalesce((select k."isTest" from public.cash_desks k where k.id = v_doc.desk), false) then return; end if;
   if v_doc.op = 'out_refund' then
@@ -427,26 +512,136 @@ begin
                            || ' (KO-2 № ' || v_doc.no || ')'), 300),
                 'cash', v_doc.id, l."articleId", case when v_doc."partyType" = 'counterparty' then v_doc."partyId" end);
     end loop;
+
+  elsif v_doc.op = 'in_staff_return' then   -- xodim qaytargan pul (acc-1): avans / maosh yozuvi (MANFIY) — vedomost va darvoza sof summani ko'radi
+    v_month := v_doc."sourceSnapshot" ->> 'month';
+    select x."articleId" into v_art from public.cash_doc_lines x where x."docId" = v_doc.id order by x."lineNo" limit 1;
+    v_code := app.kassa_payee_code(v_doc."partyId");
+    if v_code is null then raise exception 'Xodim topilmadi' using errcode = '22023', hint = 'kassa:party'; end if;
+    if coalesce(v_month, '') !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+      raise exception 'Qaysi oy avansi / maoshi qaytarilayotgani tanlanmagan' using errcode = '22023', hint = 'kassa:month';
+    end if;
+    if v_art = 'OP-08' then
+      -- avans qaytdi: oy vedomosti tasdiqlangan bo'lsa avans maoshdan allaqachon ushlangan — endi bu pul «berilgan maosh qaytdi»
+      perform 1 from public.payroll_runs pr where pr.id = v_month for share;   -- tasdiqlash / qayta ochish bilan bir navbat
+      if app.payroll_locked_month(v_month, v_month) is not null then
+        raise exception '% oy vedomosti tasdiqlangan — avans maoshdan allaqachon ushlab qolingan: pulni «Ish haqi to''lovi» statiyasi bilan qabul qiling (berilgan maosh qaytdi) yoki Direktor oyni qayta ochsin', v_month
+          using errcode = 'P0001', hint = 'kassa:advance_locked';
+      end if;
+      -- shu oy naqd avans qoldig'i (berilgan − qaytarilgan; usulsiz eski yozuv — naqd); qatorlar qulf ostida (to'g'ridan-to'g'ri o'chirish kutadi)
+      perform 1 from public.staff_advances a
+       where a."teacherId" = v_code and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) = v_month and coalesce(a.method, '') in ('', 'cash') for share;
+      select coalesce(sum(coalesce(a.amount, 0)), 0) into v_open from public.staff_advances a
+       where a."teacherId" = v_code and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) = v_month and coalesce(a.method, '') in ('', 'cash');
+      if v_doc.amount > v_open then
+        raise exception 'Qaytim summasi (% so''m) xodimning % oy naqd avansi qoldig''idan katta (qoldiq % so''m)', v_doc.amount, v_month, v_open
+          using errcode = 'P0001', hint = 'kassa:staff_over';
+      end if;
+      insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, note, method, "cashDocId")
+        values ('advr_' || v_doc.id, v_code, v_doc."partyId", v_doc."partyName", -v_doc.amount, v_month, to_char(v_doc."businessDay", 'YYYY-MM-DD'),
+                left('Avans kassaga qaytarildi (KO-1 № ' || v_doc.no || ')' || case when v_doc.basis <> '' then ' — ' || v_doc.basis else '' end, 300),
+                'cash', v_doc.id);
+    elsif v_art = 'OP-09' then
+      -- maosh qaytdi: shu oy naqd berilgan maoshdan (qaytganlari ayirilgan; usulsiz eski yozuv — naqd) oshmaydi
+      perform 1 from public.salary_payments x
+       where x."teacherId" = v_code and x.month = v_month and coalesce(x.method, '') in ('', 'cash') for share;
+      select coalesce(sum(coalesce(x.paid, 0)), 0) into v_open from public.salary_payments x
+       where x."teacherId" = v_code and x.month = v_month and coalesce(x.method, '') in ('', 'cash');
+      if v_doc.amount > v_open then
+        raise exception 'Qaytim summasi (% so''m) xodimga % oy uchun naqd berilgan maoshdan katta (berilgan % so''m)', v_doc.amount, v_month, v_open
+          using errcode = 'P0001', hint = 'kassa:staff_over';
+      end if;
+      -- oyning hisob qiymatlari (maosh, avans, ushlanma, o'rinbosarlik) — qoldiq hisobida (app.salary_carry, admin.html carryBalance) oy
+      --   qarzini belgilovchi yozuvdan (eng so'nggi sana, tengida — kattasi): oy qarzi o'zgarmaydi, berilgani kamayadi (qaytgan pul shu
+      --   oy yana berilishi yoki keyingi oyga qoldiq bo'lib o'tishi mumkin)
+      select * into v_last from public.salary_payments x where x."teacherId" = v_code and x.month = v_month
+       order by coalesce(x.date, '') desc,
+                case when x.gross is not null or x.advance is not null or x.deduction is not null
+                     then coalesce(x.gross, 0) - coalesce(x.advance, 0) - coalesce(x.deduction, 0) + coalesce(x."subBonus", 0)
+                     else coalesce(x.net, 0) + coalesce(x."subBonus", 0) end desc
+       limit 1;
+      insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, gross, advance, deduction, "subBonus", net,
+                                          "carryIn", paid, "carryOut", date, note, method, "cashDocId")
+        values ('spr_' || v_doc.id, v_code, v_doc."partyId", coalesce(nullif(v_doc."partyName", ''), v_last."teacherName"), v_month,
+                v_last.gross, v_last.advance, v_last.deduction, v_last."subBonus", v_last.net, v_last."carryIn", -v_doc.amount,
+                v_last."carryOut" + v_doc.amount, to_char(v_doc."businessDay", 'YYYY-MM-DD'),
+                left('Maosh kassaga qaytarildi (KO-1 № ' || v_doc.no || ')' || case when v_doc.basis <> '' then ' — ' || v_doc.basis else '' end, 300),
+                'cash', v_doc.id);
+    else
+      raise exception 'Xodim qaytargan pul: statiya noto''g''ri (avans yoki maosh)' using errcode = '22023', hint = 'kassa:article';
+    end if;
   end if;
 end $$;
 revoke all on function app.kassa_link_paid(text, text) from public, anon, authenticated;
 
 -- ---------- Shu kunda bekor qilish: bog'langan yozuvni olib tashlash ----------
 --   Qaytarish orderi bekor qilinmaydi (pul qaytib kelgan bo'lsa — yangi kirim sifatida qabul qilinadi).
+--   Xodim qaytargan pul (acc-1): manfiy avans / maosh yozuvi olib tashlanadi; avans qaytimi — oy vedomosti shu orada tasdiqlangan
+--   bo'lsa (qaytgan avans maoshda hisobga olingan) rad; maosh qaytimi — qaytgan pul keyin qayta berilgan bo'lsa (bekor qilinsa
+--   tasdiqlangan summadan ortiq berilgan bo'lib qoladi) rad: avval keyingi maosh orderi bekor qilinadi.
+--   Avans / maosh orderining o'zi — undan kassaga qaytim yozilgan va bekor qilinsa shu oy naqd avansi / berilgan maosh manfiy bo'lib
+--   qolsa rad: avval qaytim orderi bekor qilinadi (hisobdorga avansdagi kassa:acc_used kabi; xodim navbati — prelock'da).
 create or replace function app.kassa_link_void(p_doc_id text, p_uid text, p_reason text) returns void
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_doc public.cash_docs%rowtype;
+declare v_doc public.cash_docs%rowtype; r_adv public.staff_advances%rowtype; r_sal public.salary_payments%rowtype; r_line public.payroll_lines%rowtype;
+        v_m text; v_from text; v_paid numeric; v_cap numeric;
 begin
   select * into v_doc from public.cash_docs c where c.id = p_doc_id;
   if coalesce((select k."isTest" from public.cash_desks k where k.id = v_doc.desk), false) then return; end if;   -- sinov kassasi: bog'langan yozuv yo'q
   if v_doc.op = 'out_refund' then
     raise exception 'Qaytarish orderi bekor qilinmaydi — xato bo''lsa, pulni yangi to''lov sifatida qayta qabul qiling' using errcode = '42501', hint = 'kassa:linked_doc';
   elsif v_doc.op = 'out_advance' then
+    for r_adv in select * from public.staff_advances a where a."cashDocId" = v_doc.id loop
+      v_m := coalesce(nullif(r_adv.month, ''), left(coalesce(r_adv.date, ''), 7));
+      select coalesce(sum(coalesce(a.amount, 0)), 0) into v_paid from public.staff_advances a
+       where a."teacherId" = r_adv."teacherId" and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) = v_m
+         and coalesce(a.method, '') in ('', 'cash') and a.id <> r_adv.id;
+      if v_paid < 0 then
+        raise exception 'Bu avansdan kassaga qaytim yozilgan («Xodim qaytargan pul»): bekor qilinsa xodimning % oy naqd avansi manfiy bo''ladi (% so''m) — avval qaytim orderini bekor qiling',
+          v_m, v_paid using errcode = 'P0001', hint = 'kassa:staff_returned';
+      end if;
+    end loop;
     delete from public.staff_advances a where a."cashDocId" = v_doc.id;   -- oy vedomosti tasdiqlangan bo'lsa — trigger rad etadi
   elsif v_doc.op = 'out_salary' then
+    for r_sal in select * from public.salary_payments s where s."cashDocId" = v_doc.id loop
+      select coalesce(sum(coalesce(s.paid, 0)), 0) into v_paid from public.salary_payments s
+       where s."teacherId" = r_sal."teacherId" and s.month = r_sal.month and coalesce(s.method, '') in ('', 'cash') and s.id <> r_sal.id;
+      if v_paid < 0 then
+        raise exception 'Bu maoshdan kassaga qaytim yozilgan («Xodim qaytargan pul»): bekor qilinsa xodimga % oy uchun naqd berilgan maosh manfiy bo''ladi (% so''m) — avval qaytim orderini bekor qiling',
+          r_sal.month, v_paid using errcode = 'P0001', hint = 'kassa:staff_returned';
+      end if;
+    end loop;
     delete from public.salary_payments s where s."cashDocId" = v_doc.id;
   elsif v_doc.op = 'out_expense' then
     delete from public.expenses e where e."cashDocId" = v_doc.id;
+  elsif v_doc.op = 'in_staff_return' then
+    for r_adv in select * from public.staff_advances a where a."cashDocId" = v_doc.id loop
+      v_m := coalesce(nullif(r_adv.month, ''), left(coalesce(r_adv.date, ''), 7));
+      perform 1 from public.payroll_runs pr where pr.id = v_m for share;   -- tasdiqlash bilan bir navbat
+      if app.payroll_locked_month(v_m, v_m) is not null then
+        raise exception '% oy vedomosti tasdiqlangan — avans qaytimi bekor qilinmaydi (qaytgan avans maosh hisobida): Direktor oyni qayta ochsin', v_m
+          using errcode = 'P0001', hint = 'kassa:advance_locked';
+      end if;
+    end loop;
+    delete from public.staff_advances a where a."cashDocId" = v_doc.id;
+    select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
+    for r_sal in select * from public.salary_payments s where s."cashDocId" = v_doc.id loop
+      -- darvoza bilan bir xil chegara (payroll-approval.sql: app.salary_payment_gate) — tasdiqlangan, lekin hozirgi qarzdan ko'p emas
+      if v_from is not null and coalesce(r_sal.month, '') >= v_from then
+        r_line := null;
+        select * into r_line from public.payroll_lines pl where pl."runId" = r_sal.month and pl."personId" = r_sal."teacherId";
+        select coalesce(sum(coalesce(s.paid, 0)), 0) into v_paid from public.salary_payments s
+         where s."teacherId" = r_sal."teacherId" and s.month = r_sal.month and s.id <> r_sal.id;
+        v_cap := case when r_line.id is null then 0
+                      else least(r_line.payable, greatest(0, r_line.gross - app.payroll_adv(r_sal."teacherId", r_sal.month) - r_line.deduction
+                                                             + r_line."subBonus" + app.salary_carry(r_sal."teacherId", r_sal.month))) end;
+        if v_paid > v_cap + 0.5 then
+          raise exception 'Qaytgan maosh keyin qayta berilgan: bekor qilinsa xodimga % oy uchun tasdiqlangan summadan % so''m ortiq berilgan bo''lib qoladi — avval keyingi maosh orderini bekor qiling',
+            r_sal.month, round(v_paid - v_cap) using errcode = 'P0001', hint = 'kassa:salary_repaid';
+        end if;
+      end if;
+    end loop;
+    delete from public.salary_payments s where s."cashDocId" = v_doc.id;
   end if;
 end $$;
 revoke all on function app.kassa_link_void(text, text, text) from public, anon, authenticated;
@@ -725,13 +920,15 @@ grant execute on function public.kassa_adv_report_void(text, text) to authentica
 --                                     adv  — avans hisoboti ↔ xarajatlar mos emas yoki hisobotsiz 'accountable' xarajat;
 --   P5  maosh va avans = KO-2:       row  — chiqim orderisiz naqd (usulsiz) maosh / avans yozuvi; doc — yozuvsiz maosh / avans orderi;
 --                                     ofs  — o'zaro hisob: dalolatnoma, maosh to'lovi ('offset') va o'quv to'lovi ('offset') bir-biriga mos emas;
+--                                     ret  — xodim qaytargan pul (KO-1, acc-1): manfiy avans (OP-08) / maosh (OP-09) yozuvisiz order yoki
+--                                            o'tkazilgan orderisiz (summasi mos emas) manfiy naqd avans / maosh yozuvi;
 --   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi.
 --   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
 create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
   v_live date; v_to date := coalesce(p_to, app.fin_today()); v_from date; v_f text; v_t text;
-  v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p4a int; v_p5r int; v_p5d int; v_p5o int; v_p8r int; v_p8d int;
+  v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p4a int; v_p5r int; v_p5d int; v_p5o int; v_p5t int; v_p8r int; v_p8d int;
 begin
   select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
   if v_live is null or v_live > v_to then return jsonb_build_object('live', false, 'total', 0); end if;
@@ -762,12 +959,12 @@ begin
            where e.date between v_f and v_t and e.method = 'accountable'
              and not exists (select 1 from public.cash_docs c where c.id = e."cashDocId" and c.status = 'posted' and c.op = 'nc_adv_report'))
     into v_p4a;
-  -- P5
+  -- P5 (manfiy — xodim qaytargan pul yozuvlari — «ret» da)
   select (select count(*) from public.salary_payments s
-           where s.date between v_f and v_t and coalesce(s.method, '') in ('', 'cash')
+           where s.date between v_f and v_t and coalesce(s.method, '') in ('', 'cash') and coalesce(s.paid, 0) >= 0
              and not exists (select 1 from public.cash_docs c where c.id = s."cashDocId" and c.status = 'posted' and c.op = 'out_salary'))
        + (select count(*) from public.staff_advances a
-           where a.date between v_f and v_t and coalesce(a.method, '') in ('', 'cash')
+           where a.date between v_f and v_t and coalesce(a.method, '') in ('', 'cash') and coalesce(a.amount, 0) >= 0
              and not exists (select 1 from public.cash_docs c where c.id = a."cashDocId" and c.status = 'posted' and c.op = 'out_advance'))
     into v_p5r;
   select count(*) into v_p5d from public.cash_docs c
@@ -789,6 +986,19 @@ begin
              and not exists (select 1 from public.payments pm join public.cash_docs c on c.id = pm."cashDocId"
                               where pm.id = r.id and c.status = 'posted' and c.op = 'nc_offset' and c.amount = r.amount))
     into v_p5o;
+  -- P5: xodim qaytargan pul (KO-1) ↔ manfiy avans / maosh yozuvi (acc-1)
+  select (select count(*) from public.cash_docs c
+           where c.desk = 'main' and c.op = 'in_staff_return' and c.status = 'posted' and c."businessDay" between v_from and v_to
+             and not exists (select 1 from public.cash_doc_lines l where l."docId" = c.id and (
+                   (l."articleId" = 'OP-08' and exists (select 1 from public.staff_advances a where a."cashDocId" = c.id and a.amount = -c.amount))
+                or (l."articleId" = 'OP-09' and exists (select 1 from public.salary_payments s where s."cashDocId" = c.id and s.paid = -c.amount)))))
+       + (select count(*) from public.staff_advances a
+           where a.date between v_f and v_t and coalesce(a.method, '') in ('', 'cash') and a.amount < 0
+             and not exists (select 1 from public.cash_docs c where c.id = a."cashDocId" and c.status = 'posted' and c.op = 'in_staff_return' and c.amount = -a.amount))
+       + (select count(*) from public.salary_payments s
+           where s.date between v_f and v_t and coalesce(s.method, '') in ('', 'cash') and s.paid < 0
+             and not exists (select 1 from public.cash_docs c where c.id = s."cashDocId" and c.status = 'posted' and c.op = 'in_staff_return' and c.amount = -s.paid))
+    into v_p5t;
   -- P8
   select count(*) into v_p8r from public.refunds r
    where r."createdAt" >= (v_from::timestamp at time zone 'Asia/Tashkent') and r."createdAt" < ((v_to + 1)::timestamp at time zone 'Asia/Tashkent')
@@ -800,9 +1010,9 @@ begin
   return jsonb_build_object('live', true, 'from', v_from, 'to', v_to,
     'p1', jsonb_build_object('pay', v_p1p, 'paySum', v_p1ps, 'doc', v_p1d),
     'p4', jsonb_build_object('row', v_p4r, 'doc', v_p4d, 'adv', v_p4a),
-    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d, 'ofs', v_p5o),
+    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d, 'ofs', v_p5o, 'ret', v_p5t),
     'p8', jsonb_build_object('row', v_p8r, 'doc', v_p8d),
-    'total', v_p1p + v_p1d + v_p4r + v_p4d + v_p4a + v_p5r + v_p5d + v_p5o + v_p8r + v_p8d);
+    'total', v_p1p + v_p1d + v_p4r + v_p4d + v_p4a + v_p5r + v_p5d + v_p5o + v_p5t + v_p8r + v_p8d);
 end $$;
 revoke all on function app.kassa_reconcile(date, date) from public, anon, authenticated;
 

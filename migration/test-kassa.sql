@@ -86,6 +86,9 @@ insert into public.students (id, "studentId", name, grade, "classLetter", lang, 
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]');
 insert into public.teachers (id, "teacherId", name, pauses) values ('tch1','IQT-T1','Sinov O''qituvchi','[]');
 insert into public.staff (id, "staffId", name, position) values ('st1','IQX-T1','Sinov Xodim','Kassir');
+-- kassadan oldingi (usulsiz = naqd) avans: C11 «Xodim qaytargan pul» (OP-08) shu oy avans qoldig'idan qaytariladi (acc-1)
+insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date) values
+  ('adv_old_st1', 'IQX-T1', 'staff:st1', 'Sinov Xodim', 50000, '2027-01', '2027-01-03');
 set local session_replication_role = origin;
 select zz.clock('2027-01-04 10:00+05');
 
@@ -176,12 +179,24 @@ select zz.chk('C8 kassa ortiqchasi qo''lda kiritilmaydi (tizim hujjati)',
 select zz.chk('C9 o''qituvchi kirim yoza olmaydi', zz.rcpt('U_TCH', $q${"op":"in_other","amount":1,"clientRef":"c9-000001"}$q$), '^ERR 42501');
 select zz.chk('C9b Moliya menejeri kirim yoza olmaydi (pulni kassir oladi)', zz.rcpt('U_FM', $q${"op":"in_other","amount":1,"clientRef":"c9-000002"}$q$), '^ERR 42501');
 select zz.chk('C9c buxgalter kirim yoza olmaydi', zz.rcpt('U_ACC', $q${"op":"in_other","amount":1,"clientRef":"c9-000003"}$q$), '^ERR 42501');
-select zz.put('C10', zz.rcpt('U_KAS', $q${"op":"in_acc_return","amount":40000,"partyType":"employee","partyId":"teachers:tch1","basis":"Avans hisoboti qoldig'i","clientRef":"c10-00001"}$q$));
-select zz.chk('C10 hisobdordan qaytim: KO-1 № 5, Kt 4230, xodim',
-  (select c.no || ':' || l.credit || ':' || c."partyId" || ':' || c."partyName" from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C10')), '^5:4230:teachers:tch1:Sinov O''qituvchi$');
-select zz.put('C11', zz.rcpt('U_KAS', $q${"op":"in_staff_return","amount":10000,"partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha berilgan avans","clientRef":"c11-00001"}$q$));
-select zz.chk('C11 xodim qaytargan avans: KO-1 № 6, Kt 4210',
-  (select c.no || ':' || l.credit from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C11')), '^6:4210$');
+-- acc-3: hisobdordan qaytim faqat hisobot qilinmagan avans qoldig'idan (bu xodimda avans yo'q) — rad, iz qolmaydi
+select zz.chk('C10 hisobdordan qaytim: avans berilmagan xodimdan — rad (qoldiq 0), hujjat ham, raqam ham yo''q',
+  zz.rcpt('U_KAS', $q${"op":"in_acc_return","amount":40000,"partyType":"employee","partyId":"teachers:tch1","basis":"Avans hisoboti qoldig'i","clientRef":"c10-00001"}$q$)
+  || ' / ' || (select count(*) from public.cash_docs where "clientRef" = 'c10-00001') || '/' || (select "lastNo" from public.doc_counters where series = 'KO1'),
+  '^ERR P0001 \[kassa:acc_over\].*qoldiq 0 so''m.* / 0/4$');
+select zz.put('C10', zz.rcpt('U_KAS', $q${"op":"in_other","amount":40000,"partyType":"employee","partyId":"teachers:tch1","articleId":"IN-06","basis":"Tushuntirish xati","note":"Ortiqcha olingan pul qaytdi","clientRef":"c10-00002"}$q$));
+select zz.chk('C10b boshqa kirim xodimdan: KO-1 № 5, Kt 9390, xodim',
+  (select c.no || ':' || l.credit || ':' || c."partyId" || ':' || c."partyName" from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C10')), '^5:9390:teachers:tch1:Sinov O''qituvchi$');
+-- acc-1: xodim qaytargan avans — oy majburiy, shu oy naqd avans qoldig'idan (50 000) oshmaydi; manfiy avans yozuvi shu tranzaksiyada
+select zz.chk('C11a xodim qaytargan pul: oy tanlanmagan — rad; avans qoldig''idan katta — rad (qoldiq 50 000)',
+  zz.rcpt('U_KAS', $q${"op":"in_staff_return","amount":10000,"partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha berilgan avans","clientRef":"c11-00001"}$q$) || ' | ' ||
+  zz.rcpt('U_KAS', $q${"op":"in_staff_return","amount":50001,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha berilgan avans","clientRef":"c11-00001"}$q$),
+  '^ERR 22023 \[kassa:month\].* \| ERR P0001 \[kassa:staff_over\].*qoldiq 50000 so''m');
+select zz.put('C11', zz.rcpt('U_KAS', $q${"op":"in_staff_return","amount":10000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha berilgan avans","clientRef":"c11-00001"}$q$));
+select zz.chk('C11 xodim qaytargan avans: KO-1 № 6, Kt 4210; avans yozuvi −10 000 (shu order bilan), oy avansi sof 40 000',
+  (select c.no || ':' || l.credit || ':' || (c."sourceSnapshot" ->> 'month') from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C11'))
+  || ' / ' || (select trim_scale(amount) || ':' || month || ':' || method || ':' || ("cashDocId" = zz.id('C11')) from public.staff_advances where "cashDocId" is not null)
+  || ' / ' || trim_scale(app.payroll_adv('IQX-T1', '2027-01')), '^6:4210:2027-01 / -10000:2027-01:cash:true / 40000$');
 select zz.chk('C12a summa 0 rad', zz.rcpt('U_KAS', format('{"op":"in_bank","amount":0,"partyType":"bank","partyId":"%s","basis":"Chek 001","clientRef":"c12-00001"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:amount\]');
 select zz.chk('C12b manfiy summa rad', zz.rcpt('U_KAS', format('{"op":"in_bank","amount":-5,"partyType":"bank","partyId":"%s","basis":"Chek 001","clientRef":"c12-00002"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:amount\]');
 select zz.chk('C12c NaN rad', zz.rcpt('U_KAS', format('{"op":"in_bank","amount":"NaN","partyType":"bank","partyId":"%s","basis":"Chek 001","clientRef":"c12-00003"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:amount\]');
@@ -477,8 +492,8 @@ select zz.chk('H5 holat: g''aznachi — kassa operatori', zz.as('U_TRE', $q$sele
 select zz.chk('H6 sinov kassasi alohida: o''z boshlang''ich qoldig''i va raqamlari',
   left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"sinov","amount":0,"startDay":"2028-01-03"}')::text$q$), 0) ||
   zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":777,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"h6-000001"}', zz.id('cp_bank'))), '"no": 1[,}].*"desk": "sinov"|"desk": "sinov".*"no": 1[,}]');
-select zz.chk('H8 ma''lumotnomalar: 21 qoida, 75 statiya, tashkilot, kassirlar',
-  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^21:75:main:4$');
+select zz.chk('H8 ma''lumotnomalar: 22 qoida (+ «Kamomadni qoplash (xodim)», acc-4), 75 statiya, tashkilot, kassirlar',
+  zz.as('U_KAS', $q$select jsonb_array_length(r -> 'rules') || ':' || jsonb_array_length(r -> 'articles') || ':' || (r -> 'org' ->> 'id') || ':' || jsonb_array_length(r -> 'operators') from public.kassa_refs() r$q$), '^22:75:main:4$');
 select zz.chk('H8b ma''lumotnomalar: o''qituvchi ko''ra olmaydi', zz.as('U_TCH', $q$select public.kassa_refs()::text$q$), '^ERR 42501');
 -- Har bir ochiq moliya funksiyasi (public.kassa_* / fin_*) bo'sh ma'lumot bilan chaqirilganda ham AVVAL ruxsatni tekshiradi:
 --   begona rol (o'qituvchi, zavuch) va bloklangan hisob (roli moliya menejeri + kassir bo'lsa ham) faqat «ruxsat yo'q» (42501) oladi.
@@ -563,6 +578,38 @@ select zz.chk('J12b chop etish jurnali: funksiyasiz yozish yo''q',
   '^ERR 42501 \[kassa:rpc_only\].* \| ERR 42501');
 select zz.chk('J13 asosiy kassa: yopilgan kunda varaq qatorlari soni saqlangan (30)',
   (select string_agg(distinct "sheetRows"::text, ',') from public.cash_days where desk = 'main' and status <> 'open'), '^30$');
+
+-- ---------- (K) kamomadni qoplash (xodim) — acc-4: Dt 5010 Kt 4730 (OP-22), xodim zimmasidagi qoldiqdan oshmaydi ----------
+--   G17: 06.01.2027 dagi 10 000 kamomad Direktor qarori bilan kassir-o'qituvchi (teachers:tch1) zimmasiga yozilgan (Dt 4730 Kt 5910).
+select zz.clock('2028-01-04 10:00+05');
+create or replace function zz.dmg() returns jsonb language sql as $$
+  select zz.as('U_FM', $q$select (public.kassa_checks('main') -> 'damage')::text$q$)::jsonb $$;
+select zz.chk('K1 RP-06: xodim zimmasidagi kamomad 10 000 — nazorat ro''yxatida (xodim kartasiga bog''langan)',
+  (select string_agg((x ->> 'partyId') || ':' || (x ->> 'name') || ':' || trim_scale((x ->> 'charged')::numeric) || ':' || trim_scale((x ->> 'repaid')::numeric)
+                     || ':' || trim_scale((x ->> 'balance')::numeric) || ':' || (x ->> 'linked') || ':' || (x ->> 'since'), ',') from jsonb_array_elements(zz.dmg()) x),
+  '^teachers:tch1:Sinov O''qituvchi:10000:0:10000:true:2027-01-07$');
+select zz.chk('K2 qoplash qoldiqdan katta — rad; «boshqa» tomon — rad (faqat xodim); iz qolmaydi',
+  zz.rcpt('U_KAS2', $q${"op":"in_damage_repay","amount":10001,"partyType":"employee","partyId":"teachers:tch1","basis":"Tushuntirish xati","clientRef":"k2-000001"}$q$) || ' | '
+  || zz.rcpt('U_KAS2', $q${"op":"in_damage_repay","amount":1000,"partyType":"other","partyName":"Sinov Kassir","basis":"Tushuntirish xati","clientRef":"k2-000002"}$q$) || ' | '
+  || (select count(*) from public.cash_docs where op = 'in_damage_repay'),
+  '^ERR P0001 \[kassa:damage_over\].*qoldiq 10000 so''m.* \| ERR 22023 \[kassa:party\].* \| 0$');
+select zz.put('K3', zz.rcpt('U_KAS2', $q${"op":"in_damage_repay","amount":4000,"partyType":"employee","partyId":"teachers:tch1","basis":"Tushuntirish xati, 04.01.2028","clientRef":"k3-000001"}$q$));
+select zz.chk('K3 kamomad qisman qoplandi: KO-1, Dt 5010 Kt 4730 (OP-22); qoldiq 6 000 — kassir oynasida ham, RP-06 da ham',
+  ((select v from zz.v where k = 'K3')::jsonb ->> 'status') || ':' || (select string_agg(l.debit || '>' || l.credit || '@' || l."articleId", ',') from public.cash_doc_lines l where l."docId" = zz.id('K3'))
+  || ' | ' || (zz.as('U_KAS2', $q$select public.kassa_staff_open('main', 'teachers:tch1')::text$q$)::jsonb ->> 'damage')
+  || ':' || (select string_agg(trim_scale((x ->> 'repaid')::numeric) || '/' || trim_scale((x ->> 'balance')::numeric), ',') from jsonb_array_elements(zz.dmg()) x),
+  '^posted:5010>4730@OP-22 \| 6000:4000/6000$');
+select zz.chk('K4 ikkinchi qoplash qolgan 6 000 dan katta — rad',
+  zz.rcpt('U_KAS2', $q${"op":"in_damage_repay","amount":6001,"partyType":"employee","partyId":"teachers:tch1","basis":"Tushuntirish xati","clientRef":"k4-000001"}$q$),
+  '^ERR P0001 \[kassa:damage_over\].*qoldiq 6000 so''m');
+select zz.put('K5', zz.void('U_KAS2', zz.id('K3'), 'Summa xato yozildi'));
+select zz.chk('K5 shu kunda bekor qilindi — qoldiq yana 10 000', ((select v from zz.v where k = 'K5')::jsonb ->> 'status') || ':' || trim_scale(app.kassa_damage_open('teachers:tch1')), '^void:10000$');
+select zz.put('K6', zz.rcpt('U_KAS2', $q${"op":"in_damage_repay","amount":10000,"partyType":"employee","partyId":"teachers:tch1","basis":"Tushuntirish xati, 04.01.2028","clientRef":"k6-000001"}$q$));
+select zz.chk('K6 to''liq qoplandi — nazorat ro''yxatidan chiqdi', ((select v from zz.v where k = 'K6')::jsonb ->> 'status') || ':' || jsonb_array_length(zz.dmg()), '^posted:0$');
+select zz.chk('K7 xodim qoldiqlari (kirim shakli uchun): faqat kirim yozuvchilarga — Moliya menejeri, o''qituvchi — yo''q; noto''g''ri oy — rad',
+  zz.as('U_FM', $q$select public.kassa_staff_open('main', 'teachers:tch1')::text$q$) || ' | ' || zz.as('U_TCH', $q$select public.kassa_staff_open('main', 'teachers:tch1')::text$q$)
+  || ' | ' || zz.as('U_KAS2', $q$select public.kassa_staff_open('main', 'teachers:tch1', '2027-13')::text$q$),
+  '^ERR 42501.* \| ERR 42501.* \| ERR 22023 \[kassa:month\]');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end

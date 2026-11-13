@@ -139,7 +139,9 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 |---|---|---|---|
 | 1 | Naqd o‘quv to‘lovi: fiskal chek № bilan; kirim orderi va patta chop etildi | ☐ | |
 | 2 | Ortiqcha to‘lov (avansga) va kelgusi oy uchun to‘lov — taqsimot to‘g‘ri | ☐ | |
-| 3 | Boshqa kirim («Bankdan naqd», «Hisobdordan qaytim») | ☐ | |
+| 3 | Boshqa kirim («Bankdan naqd», «Hisobdordan qaytim» — qoldiqdan katta summa rad etildi) | ☐ | |
+| 3a | «Xodim qaytargan pul»: oy tanlandi, oynada avans qoldig‘i / berilgan maosh ko‘rindi; avans qaytimidan keyin vedomostda avans kamaydi | ☐ | |
+| 3b | «Kamomadni qoplash (xodim)»: xodim zimmasidagi kamomaddan qabul qilindi, nazorat ro‘yxatida qoldiq kamaydi | ☐ | |
 | 4 | Chiqim so‘rovi → tasdiq → pul berish; chiqim orderi chop etildi | ☐ | |
 | 5 | T1 dan katta chiqim — Direktor tasdig‘isiz berilmadi | ☐ | |
 | 6 | Xato orderni shu kuni bekor qilish | ☐ | |

@@ -58,15 +58,15 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 select '!!' as belgi, x.nima, x.bor, case when x.aniq then '' else 'kamida ' end || x.kutilgan as kutilgan
   from (values
     ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 17, true),
-    ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 40, true),
-    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 71, true),   -- +1: kassa_user_label (F1.21)
+    ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 41, true),   -- +1: kassa_staff_open (acc-1)
+    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 72, true),   -- +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4)
     ('himoya triggerlari (trg_kassa_*, trg_fin_*)', (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
                                                       where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 24, true),
     ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 16, true),
     -- ma'lumotnomalar keyin to'ldirilishi mumkin — faqat kamayishi muammo
     ('hisobvaraqlar rejasi (gl_accounts)', (select count(*) from public.gl_accounts), 92, false),
     ('statiyalar (fin_articles)', (select count(*) from public.fin_articles), 75, false),
-    ('operatsiya qoidalari (fin_op_rules)', (select count(*) from public.fin_op_rules), 20, false)
+    ('operatsiya qoidalari (fin_op_rules)', (select count(*) from public.fin_op_rules), 22, false)   -- 21 + in_damage_repay (acc-4)
   ) x(nima, bor, kutilgan, aniq)
  where x.bor <> x.kutilgan and (x.aniq or x.bor < x.kutilgan);
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c3 \gset
@@ -272,7 +272,7 @@ select '!!' as belgi, x.jadval, x.id as yozuv, x.doc as hujjat, case when c.id i
  order by 2, 3;
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c19 \gset
 
-\qecho '== 20) Moslik (ishga tushirilgan kundan bugungacha): pul yozuvlari va kassa hujjatlari bir-biriga mos kelmaydi — P1 o''quv to''lovi, P4 xarajat, P5 maosh / avans / o''zaro hisob, P8 qaytarish'
+\qecho '== 20) Moslik (ishga tushirilgan kundan bugungacha): pul yozuvlari va kassa hujjatlari bir-biriga mos kelmaydi — P1 o''quv to''lovi, P4 xarajat, P5 maosh / avans / o''zaro hisob / xodim qaytargan pul, P8 qaytarish'
 select '!!' as belgi, x.tekshiruv, x.soni
   from (select app.kassa_reconcile(null, null) as j) r
  cross join lateral (values ('P1: kirim orderisiz naqd o''quv to''lovi', (r.j #>> '{p1,pay}')::int),
@@ -282,6 +282,7 @@ select '!!' as belgi, x.tekshiruv, x.soni
                             ('P5: chiqim orderisiz naqd maosh / avans', (r.j #>> '{p5,row}')::int),
                             ('P5: yozuvsiz maosh / avans orderi', (r.j #>> '{p5,doc}')::int),
                             ('P5: o''zaro hisob (dalolatnoma, maosh, o''quv to''lovi) mos emas', (r.j #>> '{p5,ofs}')::int),
+                            ('P5: xodim qaytargan pul (kirim orderi) va manfiy avans / maosh yozuvi mos emas', (r.j #>> '{p5,ret}')::int),
                             ('P8: chiqim orderisiz naqd qaytarish', (r.j #>> '{p8,row}')::int),
                             ('P8: yozuvsiz qaytarish orderi', (r.j #>> '{p8,doc}')::int)) x(tekshiruv, soni)
  where coalesce((r.j ->> 'live')::boolean, false) and coalesce(x.soni, 0) > 0;

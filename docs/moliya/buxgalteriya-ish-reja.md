@@ -357,8 +357,9 @@ namunasi uchun taklif qoidalari F2.6 va F3.3 da.
 |---|---|---|---|---|---|---|---|
 | `in_tuition` | KO-1 | O‘quv haqi (naqd) | 5010 | 4010 + 6310 | IN-01/02 | «💵 To‘lov» dan avtomatik; fiskal chek № | 1a |
 | `in_bank` | KO-1 | Bankdan naqd | 5010 | 5110 | OP-01 | kassir | 1a |
-| `in_acc_return` | KO-1 | Hisobdordan qaytim | 5010 | 4230 | OP-07 | kassir | 1a |
-| `in_staff_return` | KO-1 | Xodim qaytargan pul | 5010 | 6710 / 4210 | OP-09/08 | kassir | 1a |
+| `in_acc_return` | KO-1 | Hisobdordan qaytim | 5010 | 4230 | OP-07 | kassir; hisobdordagi hisobot qilinmagan qoldiqdan oshmaydi | 1a |
+| `in_staff_return` | KO-1 | Xodim qaytargan pul | 5010 | 6710 / 4210 | OP-09/08 | kassir; oy majburiy: avans (OP-08) — shu oy naqd avans qoldig‘idan, vedomost tasdiqlanmagan; maosh (OP-09) — shu oy naqd berilgan maoshdan; manfiy avans / maosh yozuvi shu tranzaksiyada | 1a |
+| `in_damage_repay` | KO-1 | Kamomadni qoplash (xodim) | 5010 | 4730 | OP-22 | kassir; xodim zimmasidagi kamomad (direktor qarori) qoldig‘idan oshmaydi | 1a |
 | `in_sale` | KO-1 | Forma va tovarlar | 5010 | 9020 (+ Dt 9120 Kt 2910) | IN-04 | kassir; fiskal chek № | 1a |
 | `in_other` | KO-1 | Boshqa kirim | 5010 | 9390 / 6390 (noma’lum) | IN-06 / OP-16 | kassir; izoh majburiy | 1a |
 | `in_funding` | KO-1 | Qarz / ta’sischi mablag‘i | 5010 | 6820 / 4610 | OP-19/20 | direktor ruxsati | 1a |

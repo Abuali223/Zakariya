@@ -136,6 +136,10 @@ select zz.put('C1p', left(zz.appr('U_FM', zz.id('C1')), 0) || zz.pay('U_KAS', zz
 select zz.put('C2', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":400000,"partyType":"employee","partyId":"staff:st1","basis":"Xo''jalik xaridlari uchun","clientRef":"r-c2-0001"}'));
 select zz.put('C2p', left(zz.appr('U_FM', zz.id('C2')), 0) || zz.pay('U_KAS', zz.id('C2')));
 select zz.put('K7', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_acc_return","amount":150000,"partyType":"employee","partyId":"staff:st1","basis":"Qaytim","clientRef":"r-k7-0001"}'));
+select zz.chk('K7b acc-3: qaytim hisobdordagi qoldiqdan (400 000 − 150 000) katta — rad, iz qolmaydi',
+  zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_acc_return","amount":250001,"partyType":"employee","partyId":"staff:st1","basis":"Qaytim","clientRef":"r-k7-0002"}')
+  || ' / ' || (select count(*) from public.cash_docs where "clientRef" = 'r-k7-0002'),
+  '^ERR P0001 \[kassa:acc_over\].*\(250001 so''m\).*qoldiq 250000 so''m.* / 0$');
 select zz.put('C3', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":1500000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya, 04.01.2027","clientRef":"r-c3-0001"}'));
 select zz.put('C3p', left(zz.appr('U_FM', zz.id('C3')), 0) || left(zz.appr('U_DIR', zz.id('C3')), 0) || zz.pay('U_KAS', zz.id('C3')));
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"r-c4-0001","lines":[{"articleId":"EX-07","amount":50000}]}'));
@@ -280,6 +284,9 @@ select zz.put('T2p', left(zz.appr('U_FM', zz.id('T2')), 0) || zz.pay('U_KAS', zz
 select zz.chk('T2 sinov kassasida avans orderi: xodim avansi jadvaliga yozilmadi',
   (zz.get('T2p')::jsonb ->> 'status') || ':' || (select count(*) from public.staff_advances where "cashDocId" = zz.id('T2')), '^posted:0$');
 select zz.chk('T3 sinov kassasi hujjatini bekor qilish — bog''langan yozuvsiz ham ishlaydi', zz.void('U_FM', zz.id('T1'), 'Sinov tugadi') :: jsonb ->> 'status', '^void$');
+select zz.chk('T3b acc-3: sinov kassasida qaytim — o''sha kassaning o''z qoldig''idan (asosiy kassadagi 250 000 hisobga olinmaydi)',
+  zz.rpc('U_KAS', 'kassa_receipt', '{"desk":"sinov","op":"in_acc_return","amount":10000,"partyType":"employee","partyId":"staff:st1","basis":"Sinov qaytimi","clientRef":"r-t3b-0001"}'),
+  '^ERR P0001 \[kassa:acc_over\].*qoldiq 0 so''m');
 select zz.chk('T4 sinov kassasi: kun ma''lumotida kanallar yo''q, «sinov» belgisi bor; nazoratda moslik hisoblanmaydi',
   (zz.book('sinov', '2027-01-08') -> 'channels')::text || ':' || (zz.book('sinov', '2027-01-08') ->> 'isTest') || ':' || (zz.checks('sinov') -> 'reconcile' ->> 'live') || ':' || (zz.checks('sinov') ->> 'isTest'), '^\[\]:true:false:true$');
 select zz.chk('T5 asosiy kassa hisobotiga sinov kassasi aralashmaydi (Telegram bloki — faqat asosiy kassa)',
@@ -371,6 +378,33 @@ select (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') as av_m_adv \gset
 rollback to savepoint av_m;
 select zz.chk('AV15 moslik buzilishni topadi: hisobot xarajatlarisiz qolsa — p4.adv = 1', :'av_m_adv', '^1$');
 select zz.chk('AV16 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.kassa_acc_open('staff:st1')::text$q$), '^ERR 42501');
+-- state-5: avans hisoboti yozilgan hisobdorga avans (KO-2) bekor qilinmaydi (qoldiq manfiy bo'lardi); avval hisobot bekor qilinadi.
+--   Ssenariy savepoint ichida (keyingi bo'limlar kun jamlari o'zgarmasin): AV13a — o'qituvchiga 50 000 bugun berilgan avans.
+savepoint st5;
+select zz.put('S5r', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-s5-0001","partyId":"teachers:tch1","reportDate":"2027-01-11","lines":[{"articleId":"EX-32","amount":50000,"note":"Chek 21, 11.01"}]}'));
+select (zz.get('S5r')::jsonb ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) as s5_a,
+       zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans') as s5_b, zz.void('U_FM', zz.id('AV13a'), 'Xato berilgan avans') as s5_c \gset
+select (zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('S5r'), 'Xato kiritilgan hisobot'))::jsonb ->> 'status') || ':'
+       || (zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans')::jsonb ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) || ':'
+       || (select count(*) from jsonb_array_elements(zz.checks('main') -> 'accountable') a where a ->> 'partyId' = 'teachers:tch1') as s5_d \gset
+rollback to savepoint st5;
+select zz.chk('AV17 state-5: hisobot 50 000 avansni yopdi (qoldiq 0); avans orderini kassir ham, Moliya menejeri ham bekor qila olmaydi',
+  :'s5_a' || ' | ' || :'s5_b' || ' | ' || :'s5_c',
+  '^posted:0 \| ERR P0001 \[kassa:acc_used\].*qoldiq 0 so''m, avans 50000 so''m.* \| ERR P0001 \[kassa:acc_used\]');
+select zz.chk('AV17b avval hisobot bekor qilinsa — avans orderi bekor qilinadi, qoldiq 0, ro''yxatda yo''q (manfiy emas)', :'s5_d', '^void:void:0:0$');
+-- Manfiy qoldiq (eski yoki qo'lda buzilgan yozuv izi) yashirilmaydi: ro'yxatda «negative», nazoratda qizil, muddat hisoblanmaydi
+savepoint neg;
+set local session_replication_role = replica;
+insert into public.cash_docs (id, desk, form, op, status, year, no, "businessDay", "dayId", amount, "partyType", "partyId", "partyName", "clientRef", "postedAt")
+  select 'kd_zz_neg', 'main', 'KO1', 'in_acc_return', 'posted', 2027, 999, '2027-01-11', d.id, 70000, 'employee', 'teachers:tch1', 'Sinov O''qituvchi', 'zz-neg-0001', now()
+    from public.cash_days d where d.desk = 'main' and d.day = '2027-01-11';
+set local session_replication_role = origin;
+select (select trim_scale((a ->> 'balance')::numeric) || ':' || (a ->> 'negative') || ':' || (a ->> 'overdue') || ':' || coalesce(a ->> 'since', '-')
+          from jsonb_array_elements(zz.checks('main') -> 'accountable') a where a ->> 'partyId' = 'teachers:tch1')
+       || ' | ' || (app.kassa_acc_overdue('main', '2027-01-11') ->> 'n') as neg_r \gset
+rollback to savepoint neg;
+select zz.chk('AV18 manfiy qoldiq ko''rinadi (berilgan 50 000 − qaytim 70 000 = −20 000): «negative», muddati o''tgan hisoblanmaydi',
+  :'neg_r', '^-20000:true:false:- \| 1$');
 
 -- ---------- (Z) onlayn kassa (NKM) Z-hisoboti (F1.26, buxgalter ko'rigi M6) ----------
 select zz.clock('2027-01-11 18:00+05');

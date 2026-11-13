@@ -87,7 +87,9 @@ revoke all on function app.kassa_amount(jsonb, text) from public, anon, authenti
 
 -- ---------- Hujjatni yaratish (so'rov holatida, raqamsiz) ----------
 --   p: desk, op, amount, partyType, partyId, partyName, basis, attachment, note, noBasis, fiscalNo, fiscalExempt, clientRef,
---      capturedAt, articleId | lines:[{articleId, amount, note}]
+--      capturedAt, articleId | lines:[{articleId, amount, note}],
+--      month ('YYYY-MM' — «Xodim qaytargan pul»da majburiy: qaysi oy avansi / maoshi; hujjat suratiga yoziladi, kassa-links.sql
+--      app.kassa_link_paid shu oy bo'yicha avans / maosh yozuvini yozadi)
 --   p_internal (faqat tizim funksiyalari): systemOnly / manual=false operatsiyalar, qatorlarda aniq debit/credit/analytics,
 --      sourceTable/sourceId/sourceSnapshot, isSystem, tasdiq talablari (needsList2/needsDirector) berilishi mumkin.
 --   Bir xil clientRef qayta kelsa — mavjud hujjat qaytadi (o_dup = true); mazmuni boshqa bo'lsa — xato.
@@ -101,6 +103,7 @@ declare
   v_lines jsonb; v_line jsonb; v_i int := 0; v_n int; v_lamt numeric; v_art public.fin_articles%rowtype; v_aid text;
   v_debit text; v_credit text; v_counter text; v_sum_cash numeric := 0; v_sum_all numeric := 0; v_lnote text;
   v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean; v_orgcash boolean := false;
+  v_month text;
 begin
   o_dup := false;
   if p is null or jsonb_typeof(p) <> 'object' then
@@ -118,11 +121,19 @@ begin
   v_op := btrim(coalesce(p ->> 'op', ''));
   v_desk := coalesce(nullif(btrim(coalesce(p ->> 'desk', '')), ''), 'main');
   v_amount := app.kassa_amount(p -> 'amount', 'Hujjat');
+  -- Xodim qaytargan pul: qaysi oy avansi / maoshi qaytgani — avans yoki maosh yozuvi shu oyga yoziladi (acc-1)
+  if v_op = 'in_staff_return' and not p_internal then
+    v_month := btrim(coalesce(p ->> 'month', ''));
+    if v_month !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+      raise exception 'Qaysi oy avansi / maoshi qaytarilayotgani tanlanmagan' using errcode = '22023', hint = 'kassa:month';
+    end if;
+  end if;
 
   perform pg_advisory_xact_lock(hashtext('iqror_doc:' || v_ref));   -- L0: bir xil kalit bilan parallel yuborish navbatga turadi
   select * into v_ex from public.cash_docs c where c."clientRef" = v_ref;
   if found then
-    if v_ex.op <> v_op or v_ex.amount <> v_amount or v_ex.desk <> v_desk or v_ex.form <> p_form then
+    if v_ex.op <> v_op or v_ex.amount <> v_amount or v_ex.desk <> v_desk or v_ex.form <> p_form
+       or (v_month is not null and (v_ex."sourceSnapshot" ->> 'month') is distinct from v_month) then
       raise exception 'Shu kalit bilan boshqa hujjat allaqachon yozilgan' using errcode = '22023', hint = 'kassa:ref_mismatch';
     end if;
     o_id := v_ex.id; o_dup := true; return;
@@ -289,7 +300,7 @@ begin
     values (o_id, v_desk, p_form, v_op, 'draft', v_amount, v_ptype, v_pid, coalesce(v_pname, ''), v_basis, v_attach, v_note, v_nobasis,
             v_fiscal, v_fexempt,
             case when p_internal then nullif(p ->> 'sourceTable', '') end, case when p_internal then nullif(p ->> 'sourceId', '') end,
-            case when p_internal then p -> 'sourceSnapshot' end, v_ref, v_cap,
+            case when p_internal then p -> 'sourceSnapshot' when v_month is not null then jsonb_build_object('month', v_month) end, v_ref, v_cap,
             v_need2, v_needd, p_uid, now(), p_internal and app.kassa_bool(p, 'isSystem'), p_uid);
   insert into public.cash_doc_lines (id, "docId", "lineNo", debit, credit, amount, "articleId", cash, analytics, note)
     select o_id || '_' || (r ->> 'n'), o_id, (r ->> 'n')::int, r ->> 'debit', r ->> 'credit', (r ->> 'amount')::numeric,
@@ -430,6 +441,11 @@ $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;
 
 -- ---------- KO-1: kirim orderi ----------
+--   Xodim bilan hisob-kitob kirimlari (kassa-links.sql): «Hisobdordan qaytim» hisobdordagi hisobot qilinmagan qoldiqdan, «Kamomadni
+--   qoplash (xodim)» xodim zimmasidagi kamomad qoldig'idan oshmaydi; «Xodim qaytargan pul» — tanlangan oyning naqd avans qoldig'idan
+--   (OP-08, oy vedomosti hali tasdiqlanmagan) yoki shu oy naqd berilgan maoshdan (OP-09) oshmaydi va avans / maosh yozuvi (manfiy)
+--   SHU tranzaksiyada yoziladi. Qoldiq qulfi kassa qulfidan (L4) OLDIN (app.kassa_link_prelock); tekshiruv va yozuv — o'tkazilgandan
+--   keyin, o'sha tranzaksiyada (app.kassa_link_paid): rad etilsa hujjat ham, raqam ham qolmaydi.
 create or replace function public.kassa_receipt(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_id text; v_dup boolean; v_doc public.cash_docs%rowtype;
@@ -443,7 +459,9 @@ begin
   -- Direktor ruxsati kerak bo'lmagan kirim darhol o'tkaziladi; kerak bo'lsa — so'rov bo'lib qoladi (keyin kassa_doc_pay).
   --   48 soatdan eski (qog'oz «Қ» bo'yicha) kirimni faqat Direktor o'zi kiritadi.
   if v_doc.status = 'draft' and not v_doc."needsList2" and not v_doc."needsDirector" then
+    perform app.kassa_link_prelock(v_id);   -- xodim qoldig'i / maosh navbati — kassa qulfidan (L4) oldin
     v_doc := app.kassa_doc_post(v_id, v_uid, false, v_doc."capturedAt", app.is_admin());
+    perform app.kassa_link_paid(v_id, v_uid);   -- xodim bilan hisob-kitob: qoldiq tekshiruvi, avans / maosh yozuvi (boshqa kirimda — hech narsa)
   end if;
   perform app.kassa_flag(false);
   return app.kassa_doc_json(v_id) || jsonb_build_object('ok', true, 'dup', v_dup);
@@ -460,16 +478,32 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_is_org(text) from public, anon, authenticated;
 
--- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari (sinov kassasisiz).
-create or replace function app.kassa_acc_open(p_party text) returns numeric
+-- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari. Doira — sinov kassasisiz barcha
+--   kassalar; p_desk sinov kassasi bo'lsa — faqat o'sha kassa (sinov hujjatlari haqiqiy hisobga kirmaydi, ularning qoldig'i alohida).
+--   Avvalgi bir argumentli ta'rif o'rniga (chaqiruvlar o'zgarmaydi: p_desk berilmasa — avvalgidek).
+drop function if exists app.kassa_acc_open(text);
+create or replace function app.kassa_acc_open(p_party text, p_desk text default null) returns numeric
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select coalesce(sum(case when c.op = 'out_accountable' then c.amount else -c.amount end), 0)
     from public.cash_docs c
    where c."partyType" = 'employee' and c."partyId" = p_party and c.status = 'posted'
      and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report')
-     and not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest")
+     and case when coalesce((select k."isTest" from public.cash_desks k where k.id = p_desk), false) then c.desk = p_desk
+              else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
 $$;
-revoke all on function app.kassa_acc_open(text) from public, anon, authenticated;
+revoke all on function app.kassa_acc_open(text, text) from public, anon, authenticated;
+
+-- Xodim zimmasidagi kamomad qoldig'i (4730): Direktor qarori bilan xodimga yozilgan kamomad (Dt 4730) − kassaga qoplangani
+--   («Kamomadni qoplash (xodim)», Kt 4730). Doira — app.kassa_acc_open bilan bir xil (acc-4).
+create or replace function app.kassa_damage_open(p_party text, p_desk text default null) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(sum(case when l.debit = '4730' then l.amount else -l.amount end), 0)
+    from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+   where c."partyType" = 'employee' and c."partyId" = p_party and c.status = 'posted' and (l.debit = '4730' or l.credit = '4730')
+     and case when coalesce((select k."isTest" from public.cash_desks k where k.id = p_desk), false) then c.desk = p_desk
+              else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
+$$;
+revoke all on function app.kassa_damage_open(text, text) from public, anon, authenticated;
 
 create or replace function public.kassa_payout_request(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -588,7 +622,8 @@ grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 
 -- ---------- Tasdiqlangan hujjat bo'yicha pulni berish / qabul qilish ----------
 --   Bog'langan amallar (kassa-links.sql) SHU tranzaksiyada bajariladi: tasdiqlangan qaytarish (out_refund) — refund_invoice;
---   ish haqi avansi (out_advance) — staff_advances qatori; xarajat (out_expense) — «Buxgalteriya»ga (expenses) ko'chirish.
+--   ish haqi avansi (out_advance) — staff_advances qatori; xarajat (out_expense) — «Buxgalteriya»ga (expenses) ko'chirish;
+--   xodim bilan hisob-kitob kirimlari (tasdiq talab qilinsa) — kassa_receipt'dagi kabi qoldiq tekshiruvi va avans / maosh yozuvi.
 --   Boshqa bo'limdan yozilib, o'sha zahoti o'tkaziladigan hujjatlar (o'quv to'lovi, maosh) bu yerdan to'lanmaydi.
 create or replace function public.kassa_doc_pay(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -622,7 +657,7 @@ begin
   end if;
   perform app.kassa_flag(true);
   v_doc := app.kassa_doc_post(p_id, v_uid);
-  if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense') then
+  if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense', 'in_acc_return', 'in_staff_return', 'in_damage_repay') then
     perform app.kassa_link_paid(p_id, v_uid);
   end if;
   perform app.kassa_flag(false);
@@ -636,13 +671,18 @@ grant execute on function public.kassa_doc_pay(text) to authenticated;
 --   Naqd o'quv to'lovi orderi (in_tuition) bekor qilinsa — to'lovning o'zi ham teskari qilinadi (kassa-pay.sql:
 --   app.tuition_reverse_core): fakturalar va avans to'lovdan OLDINGI holatga qaytadi, to'lov «bekor qilingan» bo'ladi, ota-onaga
 --   hali yuborilmagan xabarnoma to'xtatiladi. Faqat shu to'lovdan keyin o'quvchi bo'yicha boshqa pul harakati bo'lmagan bo'lsa.
---   Naqd maosh (out_salary), ish haqi avansi (out_advance) va xarajat (out_expense) orderi bekor qilinsa — bog'langan yozuv
---   (maosh to'lovi, avans, «Buxgalteriya»dagi xarajat) ham olib tashlanadi (kassa-links.sql: app.kassa_link_void).
+--   Naqd maosh (out_salary), ish haqi avansi (out_advance), xarajat (out_expense) va xodim qaytargan pul (in_staff_return) orderi
+--   bekor qilinsa — bog'langan yozuv (maosh to'lovi, avans, «Buxgalteriya»dagi xarajat, manfiy avans / maosh yozuvi) ham olib
+--   tashlanadi (kassa-links.sql: app.kassa_link_void; vedomost shu orada tasdiqlangan yoki qaytgan maosh qayta berilgan bo'lsa — rad;
+--   avans / maosh orderidan kassaga qaytim yozilgan va bekor qilinsa oy avansi / berilgan maosh manfiy bo'lib qolsa — rad, avval qaytim).
+--   Hisobdorga avans (out_accountable) — undan avans hisoboti yoki qaytim yozilgan bo'lsa (bekor qilinsa qoldiq manfiy bo'lardi)
+--   bekor qilinmaydi: avval o'sha hisobot yoki qaytim bekor qilinadi (hisobdor qulfi ostida, pul berish va avans hisoboti bilan bir navbat).
 --   Qaytarish orderi (out_refund) bekor qilinmaydi.
 create or replace function public.kassa_doc_void(p_id text, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_day public.cash_days%rowtype;
         v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_bal numeric; v_op text; v_src text; v_party text; v_tuition boolean;
+        v_open numeric;
 begin
   if not (app.kassa_operator() or app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q' using errcode = '42501';
@@ -653,6 +693,9 @@ begin
   v_tuition := (v_op = 'in_tuition' and v_src = 'payments');
   -- Qulf tartibi: o'quvchi bo'yicha navbat (L1) kassa qulfidan (L4) OLDIN — yangi to'lov bilan o'zaro qulflanish bo'lmasin.
   if v_tuition then perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_party, ''))); end if;
+  -- Hisobdor qulfi (hisobdorga avans, qaytim) va maosh / avans navbati (xodim qaytargan pul, avans va naqd maosh orderi) — pul berish /
+  --   qabul qilishdagi tartibda (S → P → L4)
+  if v_op in ('out_accountable', 'in_acc_return', 'in_staff_return', 'out_advance', 'out_salary') then perform app.kassa_link_prelock(p_id); end if;
   perform app.kassa_lock_desk(v_desk);
   select * into v_doc from public.cash_docs c where c.id = p_id for update;
   if v_doc.status = 'void' then return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', true); end if;
@@ -678,9 +721,17 @@ begin
       raise exception 'Bekor qilinsa kassa qoldig''i manfiy bo''lib qoladi (qoldiq % so''m)', v_bal using errcode = 'P0001', hint = 'kassa:negative';
     end if;
   end if;
+  -- Hisobdorga avans: hisobdordagi qoldiq (shu avans bilan) avansdan kam bo'lsa — undan hisobot yoki qaytim yozilgan (state-5)
+  if v_doc.op = 'out_accountable' then
+    v_open := app.kassa_acc_open(v_doc."partyId", v_doc.desk);
+    if v_open - v_doc.amount < 0 then
+      raise exception 'Bu avans bo''yicha avans hisoboti yoki qaytim yozilgan (hisobdordagi qoldiq % so''m, avans % so''m): bekor qilinsa qoldiq manfiy bo''ladi — avval o''sha hisobot yoki qaytimni bekor qiling',
+        v_open, v_doc.amount using errcode = 'P0001', hint = 'kassa:acc_used';
+    end if;
+  end if;
   perform app.kassa_flag(true);
   if v_tuition then perform app.tuition_reverse_core(p_id, v_uid, v_reason); end if;
-  if v_doc.op in ('out_salary', 'out_advance', 'out_expense') then perform app.kassa_link_void(p_id, v_uid, v_reason); end if;
+  if v_doc.op in ('out_salary', 'out_advance', 'out_expense', 'in_staff_return') then perform app.kassa_link_void(p_id, v_uid, v_reason); end if;
   update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = v_reason where id = p_id;
   perform app.kassa_flag(false);
   return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', false, 'balance', app.kassa_day_balance(v_day.id));

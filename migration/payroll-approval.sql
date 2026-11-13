@@ -241,10 +241,14 @@ revoke all on function public.payroll_reopen(text, text) from public, anon;
 grant execute on function public.payroll_reopen(text, text) to authenticated, service_role;
 
 -- 4) To'lov darvozasi (o'tish oyidan): tasdiqlangan vedomost, xodim qatori, Direktor tasdig'i (kerak bo'lsa), summa chegarasi.
+--   Kassaga qaytarilgan maosh (moliya moduli, kassa-links.sql «Xodim qaytargan pul») — MANFIY yozuv, faqat kassa funksiyasi ichida
+--   (bayroq iqror.kassa_rpc): berilganni kamaytiradi, chegaradan oshmaydi — darvozadan o'tadi (oy shu orada qayta ochilgan bo'lsa ham).
+--   Kassa moduli o'rnatilmagan bazada bu bayroqni hech narsa qo'ymaydi — darvoza avvalgidek.
 create or replace function app.salary_payment_gate() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_from text; v_st text; l public.payroll_lines%rowtype; v_paid numeric; v_live numeric; v_cap numeric;
 begin
+  if tg_op = 'INSERT' and coalesce(new.paid, 0) < 0 and coalesce(current_setting('iqror.kassa_rpc', true), '') = '1' then return new; end if;
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
   if v_from is null or coalesce(new.month, '') < v_from then return new; end if;
   if tg_op = 'UPDATE' and new.paid is not distinct from old.paid and new.month is not distinct from old.month

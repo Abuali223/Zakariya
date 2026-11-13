@@ -222,6 +222,13 @@ test('KO-2: maosh va qaytarish orderi — tizim matnlari chop etish tilida', () 
   for (const must of ['ЧИҚИМ КАССА ОРДЕРИ № 3', '6710 teachers:tch1 5010 1 000 000=00 OP-09', 'Берилсин: Sinov O‘qituvchi', 'Асоси: Иш ҳақи: 12.2026', 'Бир миллион сўм 00 тийин'])
     assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   assert.ok(text(docHtml(sal, ctx({ lang: 'ru' }), W)).includes('Основание: Заработная плата: 12.2026'));
+  // xodim qaytargan pul (acc-1): kassir yozgan asos + qaysi oy avansi / maoshi kamaygani
+  const sr = { id: 'kd_sr', form: 'KO1', op: 'in_staff_return', status: 'posted', no: 5, businessDay: '2027-01-04', amount: 100000, partyType: 'employee', partyId: 'teachers:tch1',
+    partyName: 'Sinov O‘qituvchi', basis: 'Ariza 04.01.2027', sourceSnapshot: { month: '2026-12' }, postedBy: 'u_kas',
+    lines: [{ debit: '5010', credit: '4210', amount: 100000, cash: true, articleId: 'OP-08' }] };
+  assert.ok(text(docHtml(sr, ctx(), W)).includes('Асоси: Ariza 04.01.2027; аванс / иш ҳақи ойи: 12.2026'), text(docHtml(sr, ctx(), W)));
+  assert.ok(text(docHtml(sr, ctx({ lang: 'ru' }), W)).includes('Основание: Ariza 04.01.2027; месяц аванса / зарплаты: 12.2026'));
+  assert.ok(text(docHtml(Object.assign({}, sr, { basis: '' }), ctx({ lang: 'uz-latn' }), W)).includes('Asosi: avans / ish haqi oyi: 12.2026'));
   const rf = { id: 'kd_r', form: 'KO2', op: 'out_refund', status: 'posted', no: 4, businessDay: '2027-01-04', amount: 450000, partyType: 'student', partyId: 'T-1', partyName: 'Sinov Ota Onaevich',
     basis: 'Qaytarish: O‘quvchi ketdi; ariza 03.01.2027', attachment: 'Yozma ariza', sourceTable: 'refunds', dirApprovedBy: 'u_dir', postedBy: 'u_kas',
     lines: [{ debit: '4010', credit: '5010', amount: 300000, cash: true, articleId: 'OP-15', analytics: { studentId: 'T-1', month: '2026-12' } },
@@ -595,6 +602,10 @@ test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobd
   const full = advSheet(Object.assign({}, pack, { masked: false, advances: [Object.assign({}, pack.advances[1], { partyName: 'Sinov Zavxoz' })] }), ctx());
   assert.deepEqual([full.rows[3], full.rows[4][1], full.rows[5][1], full.rows[5][6].v], [[], 'F.I.Sh.', 'Sinov Zavxoz', 250000], 'Direktor nusxasi — ism bilan');
   assert.equal(advSheet(Object.assign({}, pack, { advances: [] }), ctx()).rows[5][0], 'Harakat va qoldiq yo‘q');
+  assert.ok(!a.some(r => /manfiy/.test(String(r[0] || ''))), 'manfiy qoldiq bo‘lmasa — eslatma yo‘q');
+  const neg = advSheet(Object.assign({}, pack, { advances: pack.advances.concat([{ code: 'IQT-T9', partyName: null, opening: 0, issued: 50000, returned: 70000, reported: 0, closing: -20000 }]) }), ctx()).rows;
+  assert.deepEqual([neg[neg.length - 3][0], neg[neg.length - 3][5].v, neg[neg.length - 1][0]],
+    ['Jami', 280000, 'Diqqat: oy oxiriga manfiy qoldiq (qaytim yoki avans hisoboti berilgan avansdan ko‘p) — tekshiring: IQT-T9'], 'acc-3 / state-5: manfiy qoldiq belgilanadi');
   const require = createRequire(import.meta.url), X = require('../../vendor/xlsx/xlsx.mini.min.js');
   const wb = X.utils.book_new();
   sheets.forEach(s => { const ws = X.utils.aoa_to_sheet(s.rows); ws['!cols'] = s.cols; X.utils.book_append_sheet(wb, ws, s.name); });
