@@ -13,7 +13,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --   INVARIANTLAR (bazada, RPC'dan mustaqil):
 --     I1  kassada BITTA ochiq kun (qisman noyob indeks);
 --     I2  yangi kun faqat oldingi kun yopilgan bo'lsa ochiladi; kunlar faqat oldinga qo'shiladi;
---     I3  kun boshi = oldingi kun oxiri (birinchi kun — boshlang'ich qoldiq dalolatnomasidan);
+--     I3  kun boshi = oldingi kun oxiri (birinchi kun — boshlang'ich qoldiq dalolatnomasidan; to'xtatilgan kassa qayta ishga
+--         tushirilganda birinchi kun — komissiya sanagan summa, farqi texnik dalolatnomada);
 --     I4  kun oxiri = kun boshi + kirim − chiqim (CHECK);
 --     I5  kassa qoldig'i hech qachon manfiy emas (har o'tkazish / bekor qilishdan keyin tekshiriladi);
 --     I6  tekshirilgan kun o'zgarmaydi; yopilgan kunga hujjat yozilmaydi (faqat Direktor qayta ochadi).
@@ -27,6 +28,12 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --     Istisno (acc-7): naqd o'quv to'lovi (kassa_tuition_post) kunni qatorlardan OLDIN aniqlaydi — L1 → L4 → L0 iqror_doc:pay_<id>.
 --     Xavfsiz: pay_<id> kalitini faqat shu yo'l oladi (doim shu o'quvchining L1 i va L4 dan keyin), L4 ni kutib turgan boshqa
 --     tranzaksiya bu kalitni ushlab turmaydi.
+--     Sozlama qatori (fin_org 'main', state-7): yozuvchilar (pul triggerlari, kassa RPC'lari — app.kassa_live, app.fin_lock_check,
+--     kassa_tuition_before) uni FOR SHARE bilan istalgan joyda oladi — FOR SHARE bir-birini kutmaydi. Uni o'zgartiruvchilar (fin_org_set,
+--     fin_period_lock, fin_snapshot_take — FOR UPDATE, birinchi qulf bo'lib) kassa qulfini (L4) KUTMAYDI (faqat pg_try_advisory_xact_lock,
+--     kassa-day.sql: app.kassa_golive_guard); guard yangilaydigan kassa qatorini (cash_desks) faqat kassa_opening_set qulflaydi — u
+--     sozlama qatorini FOR SHARE bilan L4 va kassa qatoridan OLDIN oladi. Halqa yo'q; yozuvchi o'zgarish tugashini kutib, yangi qiymat
+--     bilan tekshiradi.
 --   XAVFSIZLIK: RLS; mijoz faqat o'qiydi (kassa/moliya rollari); DML barcha rollardan qaytarib olingan.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
@@ -37,6 +44,17 @@ alter table public.cash_desks add column if not exists "openingAmount" numeric c
 alter table public.cash_desks add column if not exists "openingDocId" text;
 alter table public.cash_desks add column if not exists "openingBy" text;
 alter table public.cash_desks add column if not exists "openingAt" timestamptz;
+-- Kassani to'xtatish va qayta ishga tushirish (ishga-tushirish §9; ui-5). Ishlagan kassada «ishga tushadigan kun» bo'shatilsa yoki
+--   surilsa (fin_org_set → kassa-day.sql: app.kassa_golive_guard) kassa TO'XTATILADI: yangi kassa kuni ochilmaydi, naqd pul kassa
+--   hujjatisiz yoziladi. Qayta ishga tushirish — komissiya sanashi (kassa_opening_set): sanalgan summa bilan oxirgi kun oxiri farqi
+--   texnik dalolatnoma («Д-», OP-23: Dt 5010 Kt 0000 yoki teskari); qayta ochilgan birinchi kun boshi = sanalgan summa (I3 istisnosi).
+alter table public.cash_desks add column if not exists "pausedAt" timestamptz;      -- to'xtatilgan payt (bo'sh — ishlaydi)
+alter table public.cash_desks add column if not exists "pausedBy" text;
+alter table public.cash_desks add column if not exists "restartDay" date;          -- qayta ishga tushirish kuni (oxirgi kassa kunidan keyin)
+alter table public.cash_desks add column if not exists "restartAmount" numeric check ("restartAmount" is null or ("restartAmount" >= 0 and "restartAmount" < 1e12));
+alter table public.cash_desks add column if not exists "restartDocId" text;        -- farq dalolatnomasi (farq 0 bo'lsa — bo'sh)
+alter table public.cash_desks add column if not exists "restartBy" text;
+alter table public.cash_desks add column if not exists "restartAt" timestamptz;
 
 -- ---------- Kassa kuni ----------
 create table if not exists public.cash_days (
@@ -176,17 +194,19 @@ create table if not exists public.cash_day_events (
   "dayId"   text references public.cash_days(id),
   desk      text not null,
   day       date,
-  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit')),
+  kind      text not null check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit', 'golive')),
   "byUid"   text,
   at        timestamptz not null default now(),
   reason    text,
   data      jsonb not null default '{}'::jsonb
 );
 -- 'zreport' — onlayn kassa (NKM) Z-hisoboti fakti (F1.26; kassa-day.sql). 'resplit' — qaytarish orderida faktura qismining
---   hisobvarag'i (4010 / 6310) pul berilgan kunga ko'ra qayta aniqlandi (acc-7; kassa-links.sql). Avval o'rnatilgan bazada cheklov yangilanadi.
+--   hisobvarag'i (4010 / 6310) pul berilgan kunga ko'ra qayta aniqlandi (acc-7; kassa-links.sql). 'golive' — «ishga tushadigan kun»
+--   o'zgardi: ishga tushirish, to'xtatish yoki qayta ishga tushirish (ui-5; kassa-day.sql: app.kassa_golive_guard). Avval o'rnatilgan
+--   bazada cheklov yangilanadi.
 alter table public.cash_day_events drop constraint if exists cash_day_events_kind_check;
 alter table public.cash_day_events add constraint cash_day_events_kind_check
-  check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit'));
+  check (kind in ('open', 'close', 'verify', 'reopen', 'handover', 'opening', 'decision', 'zreport', 'resplit', 'golive'));
 create index if not exists cash_day_events_day_idx on public.cash_day_events ("dayId");
 
 -- Sanash dalolatnomalari: kun yopish, smena topshirish-qabul, oylik / yillik komissiya sanashi, boshlang'ich qoldiq.
@@ -333,15 +353,25 @@ begin
         using errcode = 'P0001', hint = 'kassa:day_order';
     end if;
     select * into v_prev from public.cash_days d where d.desk = new.desk order by d.day desc limit 1;
-    if found then
+    select * into v_desk from public.cash_desks k where k.id = new.desk;
+    if v_prev.id is not null then
       if v_prev.status = 'open' then   -- I2
         raise exception '% kuni yopilmagan — avval sanab yoping', to_char(v_prev.day, 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:prev_open';
       end if;
-      if new.opening <> v_prev.closing then   -- I3
+      -- I3 istisnosi — qayta ishga tushirish (ishga-tushirish §9): to'xtatilgan kassada komissiya sanagan summa birinchi qayta
+      --   ochilgan kun boshi bo'ladi (oxirgi kun oxiridan farqi — texnik dalolatnoma «Д-», kassa_opening_set); undan oldingi kun ochilmaydi.
+      if v_desk."restartDay" is not null and v_desk."restartDay" > v_prev.day then
+        if new.day < v_desk."restartDay" then
+          raise exception 'Kassa % dan qayta ishga tushadi', to_char(v_desk."restartDay", 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:not_started';
+        end if;
+        if new.opening <> v_desk."restartAmount" then
+          raise exception 'Qayta ishga tushirishdagi birinchi kun boshi komissiya sanagan summaga teng bo''lishi shart (% ≠ %)', new.opening, v_desk."restartAmount"
+            using errcode = 'P0001', hint = 'kassa:opening';
+        end if;
+      elsif new.opening <> v_prev.closing then   -- I3
         raise exception 'Kun boshi oldingi kun oxiriga teng bo''lishi shart (% ≠ %)', new.opening, v_prev.closing using errcode = 'P0001', hint = 'kassa:opening';
       end if;
     else
-      select * into v_desk from public.cash_desks k where k.id = new.desk;
       if v_desk."startDay" is null or v_desk."openingAmount" is null then
         raise exception 'Kassaning boshlang''ich qoldig''i kiritilmagan' using errcode = 'P0001', hint = 'kassa:not_started';
       end if;
@@ -552,6 +582,21 @@ begin
       raise exception 'Kassa ishga tushgan — boshlang''ich qoldiq endi o''zgarmaydi' using errcode = '42501', hint = 'kassa:started';
     end if;
   end if;
+  -- To'xtatish va qayta ishga tushirish (ishga-tushirish §9) — faqat kassa funksiyalari orqali; qayta ishga tushirish qoldig'i
+  --   birinchi qayta ochilgan kungacha o'zgarishi mumkin (qayta sanash), keyin — yo'q, kassa ishlab turgan ekan. Kassa yana
+  --   to'xtatilsa ("pausedAt") — navbatdagi qayta ishga tushirish uchun yana kiritiladi (avvalgi dalolatnoma joyida qoladi).
+  if tg_op = 'UPDATE'
+     and (new."pausedAt", new."pausedBy", new."restartDay", new."restartAmount", new."restartDocId")
+         is distinct from (old."pausedAt", old."pausedBy", old."restartDay", old."restartAmount", old."restartDocId") then
+    if coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1' then
+      raise exception 'Kassani to''xtatish va qayta ishga tushirish faqat kassa funksiyalari orqali' using errcode = '42501', hint = 'kassa:rpc_only';
+    end if;
+    if (new."restartDay", new."restartAmount", new."restartDocId") is distinct from (old."restartDay", old."restartAmount", old."restartDocId")
+       and old."pausedAt" is null
+       and old."restartDay" is not null and exists (select 1 from public.cash_days d where d.desk = old.id and d.day >= old."restartDay") then
+      raise exception 'Kassa qayta ishga tushgan — qayta ishga tushirish qoldig''i endi o''zgarmaydi' using errcode = '42501', hint = 'kassa:started';
+    end if;
+  end if;
   return new;
 end $$;
 drop trigger if exists trg_kassa_desk_guard on public.cash_desks;
@@ -569,6 +614,6 @@ revoke all on function app.kassa_desk_guard() from public, anon, authenticated;
 -- O'zgarishlar tarixi (Direktor ko'radi): holat o'zgarishlari, bekor qilish, qarorlar, kun yopish / tekshirish / qayta ochish.
 select app.chlog_attach('cash_docs', 'status,no,year,businessDay,amount,op,partyType,partyId,approvedBy,dirApprovedBy,rejectReason,voidReason,decision,fiscalExempt,late');
 select app.chlog_attach('cash_days', 'status,opening,closing,counted,diff,pendingSum,closedBy,verifiedBy,reopenCount,reopenReason');
-select app.chlog_attach('cash_desks', 'name,active,startDay,openingAmount');
+select app.chlog_attach('cash_desks', 'name,active,startDay,openingAmount,pausedAt,restartDay,restartAmount');
 
 notify pgrst, 'reload schema';

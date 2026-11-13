@@ -1484,6 +1484,12 @@ function kassaTabOk(){ return KASSA.on && (SESSION.isAdmin || ['finance_mgr','tr
 function kassaLiveOn(goLive, today){ return !!goLive && String(today||tkDay(new Date()))>=String(goLive); }
 // Naqd pulni shu foydalanuvchi qabul qila oladimi (kassa ishga tushgach): kassir / g'aznachi (qo'shimcha lavozim ham) yoki Direktor.
 function kassaCashOk(){ return !KASSA.live || !!(KASSA.me && (KASSA.me.operator || KASSA.me.director)); }
+// Kassa ishga tushishidan OLDINGI sana bilan naqd yozuv (crit-1, ishga-tushirish §4): kechikib topilgan yozuvni faqat Direktor
+//   haqiqiy sanasi bilan kiritadi — kassa hujjatisiz (bu pul boshlang'ich qoldiq sanashidan oldin harakatlangan). Server ham
+//   tekshiradi (kassa:pre_live); bu faqat oynalardagi tanlov va ogohlantirish uchun.
+function kassaPreLiveOk(){ return !!KASSA.live && !!SESSION.isAdmin && /^\d{4}-\d{2}-\d{2}$/.test(String(KASSA.goLive||'')); }
+function kassaGoLiveDmy(){ const g=String(KASSA.goLive||''); return /^\d{4}-\d{2}-\d{2}$/.test(g) ? g.slice(8,10)+'.'+g.slice(5,7)+'.'+g.slice(0,4) : ''; }
+function kassaPreLiveDay(day){ return kassaPreLiveOk() && /^\d{4}-\d{2}-\d{2}$/.test(String(day||'')) && String(day)<String(KASSA.goLive); }
 // Davr qulfi (moliya rejasi F1.16): Direktor yopgan sanagacha pul yozuvlari kiritilmaydi — shakllarda eng erta sana = qulfdan
 //   keyingi kun ('' — qulf yo'q yoki kassa moduli yo'q). Server ham rad etadi (42501) — bu faqat qulaylik uchun.
 function finLockMin(){ const l=KASSA.state&&KASSA.state.lockedThrough; if(!l||!/^\d{4}-\d{2}-\d{2}$/.test(String(l))) return '';
@@ -9031,7 +9037,9 @@ async function openSalaryPayout(opts){
   //   o'zaro hisob (xodimning yozma arizasi bo'yicha ish haqidan farzandining o'quv to'lovi, naqdsiz dalolatnoma) — faqat Direktor.
   const spMethods=KASSA.live ? [kassaCashOk()?['cash','Naqd — kassadan (chiqim orderi bilan)']:null,
     (SESSION.isAdmin||SESSION.role==='finance_mgr')?['card','Karta / bank orqali (kassa orderisiz)']:null,
-    SESSION.isAdmin?['offset','O‘zaro hisob — farzandining o‘quv to‘lovi hisobiga (naqdsiz)']:null].filter(Boolean) : [];
+    SESSION.isAdmin?['offset','O‘zaro hisob — farzandining o‘quv to‘lovi hisobiga (naqdsiz)']:null,
+    //   Direktor: kassa ishga tushishidan oldin naqd berilgan, kechikib topilgan maosh (crit-1) — orderisiz, haqiqiy sana bilan.
+    kassaPreLiveOk()?['cash_pre',`Naqd — kassa ishga tushishidan (${kassaGoLiveDmy()}) oldin berilgan (orderisiz)`]:null].filter(Boolean) : [];
   if(KASSA.live && !spMethods.length){ toast('Kassa ishga tushgan: naqd maoshni kassir beradi, karta orqali to‘lovni Moliya menejeri yozadi', true); return; }
   $('#modal').innerHTML=`<div class="modal-h"><h3>Maosh berish (xodimga)</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
@@ -9063,6 +9071,7 @@ async function openSalaryPayout(opts){
   { const ms=$('#sp-method'); if(ms){ const upd=()=>{ const cash=ms.value==='cash', ofs=ms.value==='offset', dt=$('#sp-date'); if(dt){ dt.disabled=cash||ofs; if(cash||ofs) dt.value=today; }
       $('#sp-method-info').textContent = cash ? 'Sana — kassa kuni (server belgilaydi). Xodim chiqim orderiga imzo qo‘yadi.'
         : ofs ? 'Kassadan pul chiqmaydi: summa xodimning ish haqidan farzandining o‘quv to‘loviga o‘tkaziladi va naqdsiz dalolatnoma yoziladi. Faqat xodimning yozma arizasi asosida.'
+        : ms.value==='cash_pre' ? 'Kassa ishga tushishidan oldin naqd berilgan maosh (kechikib kiritilmoqda): kassa orderisiz yoziladi — bu pul boshlang‘ich qoldiq sanashidan oldin kassadan chiqqan. «Berilgan sana» — haqiqiy kun.'
         : 'Kassadan pul chiqmaydi — bank ko‘chirmasi bo‘yicha yoziladi.';
       const ob=$('#sp-ofs'); if(ob) ob.style.display=ofs?'':'none';
       const pl=$('#sp-paid-lbl'); if(pl) pl.textContent=ofs?'O‘quv to‘loviga o‘tkaziladigan summa (so‘m)':'Naqd berilayotgan (so‘m)';
@@ -9265,6 +9274,12 @@ async function openSalaryPayout(opts){
           if(!confirm(`O‘zaro hisob rasmiylashtirilsinmi?\n\n${tn} — ${mLabel(mm)} ish haqidan ${fmtSum(paid)} so‘m\n→ ${ofsStudent.name} (${ofsStudent.id}) o‘quv to‘lovi hisobiga.\n\nKassadan pul chiqmaydi. Naqdsiz dalolatnoma yoziladi.`)){ btn.disabled=false; btn.textContent=lbl0; return; }
           const res=await rpc('kassa_offset', { p:Object.assign({ id:spId, studentId:ofsStudent.id, requestDate:rq }, spRow) });
           showDone((res&&res.row)||null, res&&res.kassa);
+          return;
+        }
+        if(mth==='cash_pre'){   // Direktor, ishga tushishdan oldingi sana (crit-1): to'g'ridan-to'g'ri yozuv, kassa orderisiz (server: kassa_cash_guard)
+          if(!kassaPreLiveDay(dt)){ btn.disabled=false; btn.textContent=lbl0; toast(`«Berilgan sana» kassa ishga tushishidan (${kassaGoLiveDmy()}) oldin bo‘lsin`,true); return; }
+          await setDoc(doc(db,'salary_payments',spId), Object.assign({}, spRow, { method:'cash', byEmail:(auth.currentUser&&auth.currentUser.email)||'', createdAt:serverTimestamp() }), {merge:true});
+          showDone();
           return;
         }
         const res=await rpc('kassa_salary_pay', { p:Object.assign({ id:spId, method:mth }, spRow) });
@@ -9511,7 +9526,9 @@ async function renderAccounting(){
     if(e.cashDocId){ toast('Bu xarajat kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi',true); return; }
     // Kassa ishga tushgach (KASSA.live): bu oynada faqat NAQDSIZ xarajat (usuli bilan); naqd xarajat — «Kassa» → «+ Chiqim so‘rovi».
     // Hisobdor shaxs orqali xarajat — «Kassa» → «Avans hisoboti» (hisobdordagi avansdan hisobdan chiqariladi); bu yerda faqat eski yozuvni ko'rsatish uchun.
-    const EXP_METHODS=[['bank','Bank o‘tkazmasi'],['card','Korporativ karta']].concat(e.method==='accountable'?[['accountable','Hisobdor shaxs orqali (avans hisoboti)']]:[]);
+    //   Direktor — kassa ishga tushishidan oldin naqd berilgan, kechikib topilgan xarajat (crit-1): «Naqd» usuli, haqiqiy sana bilan.
+    const EXP_METHODS=[['bank','Bank o‘tkazmasi'],['card','Korporativ karta']].concat(e.method==='accountable'?[['accountable','Hisobdor shaxs orqali (avans hisoboti)']]:[])
+      .concat(kassaPreLiveOk()?[['cash',`Naqd — kassa ishga tushishidan (${kassaGoLiveDmy()}) oldin berilgan (orderisiz)`]]:[]);
     const fld='padding:11px 14px;border:1px solid var(--border);border-radius:10px;font:inherit';
     $('#modal').innerHTML=`<div class="modal-h"><h3>${exp?'Xarajatni tahrirlash':'Xarajat qo‘shish'}</h3><button class="x" id="m-x">×</button></div>
       <div class="modal-b">
@@ -9533,6 +9550,8 @@ async function renderAccounting(){
       const date=$('#e-date').value, category=$('#e-cat').value, amount=Number(($('#e-amt').value||'').replace(/\D/g,''))||0, note=$('#e-note').value.trim();
       if(!date){ toast('Sanani tanlang',true); return; }
       if(amount<=0){ toast('Summani kiriting',true); return; }
+      if(KASSA.live && $('#e-method') && $('#e-method').value==='cash' && !kassaPreLiveDay(date)){
+        toast(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat kassa ishga tushishidan (${kassaGoLiveDmy()}) oldingi sana bilan`,true); return; }
       // «Qaytarilgan» — o'quvchiga pul qaytarish «To'lovlar → ↩ Qaytarish» orqali qilinadi va u KIRIMNI o'zi kamaytiradi.
       //   Shu pulni bu yerda XARAJAT qilib ham yozish foydani IKKI marta kamaytiradi.
       if(category==='Qaytarilgan' && !(exp && exp.category==='Qaytarilgan') && !confirm('«Qaytarilgan» xarajat:\n\nO‘quvchiga to‘lovni qaytarish «To‘lovlar → ↩ Qaytarish» orqali qilinadi — u «Kirim»ni o‘zi kamaytiradi. Shu pulni bu yerda XARAJAT sifatida ham yozsangiz, foyda IKKI MARTA kamayadi.\n\nFaqat «↩ Qaytarish» orqali o‘tmagan qaytarish uchun yozing. Davom etilsinmi?')) return;
@@ -9652,11 +9671,13 @@ async function renderAccounting(){
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Sana<input type="date" id="av-date" value="${esc(dflt)}"${finLockAttr()} style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Avans summasi (so‘m)<input type="text" inputmode="numeric" id="av-amt" placeholder="masalan: 1 000 000" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Izoh<input type="text" id="av-note" placeholder="ixtiyoriy" style="${fld}"></label>
+        ${kassaPreLiveOk()?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="av-pre" style="width:auto;flex:none;padding:0;margin:0"> Naqd — kassa ishga tushishidan (${esc(kassaGoLiveDmy())}) oldin berilgan (kechikib kiritilmoqda; orderisiz, sana — haqiqiy kun)</label>`:''}
         ${KASSA.live?`<div class="small" style="margin-top:10px;background:#E8F1FD;color:#175CD3;border-radius:10px;padding:10px 12px"><b>Kassa ishga tushgan.</b> Bu yerda faqat <b>karta / bank orqali</b> berilgan avans yoziladi. Naqd avans — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Ish haqi avansi» (tasdiqdan keyin kassir beradi, avans o‘zi yoziladi). <a href="#" id="av-kassa" style="font-weight:700">Kassaga o‘tish</a></div>`:''}
       </div>
       <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">${KASSA.live?'Saqlash (karta / bank)':'Saqlash'}</button></div>`;
     openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
     { const ak=$('#av-kassa'); if(ak) ak.onclick=ev=>{ ev.preventDefault(); closeModal(); openTab('kassa'); }; }
+    { const ap=$('#av-pre'); if(ap) ap.onchange=()=>{ const b=$('#av-save'); if(b) b.textContent=ap.checked?'Saqlash (naqd, orderisiz)':'Saqlash (karta / bank)'; }; }
     const amt=$('#av-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
     $('#av-save').onclick=async()=>{
       const tid=$('#av-t').value, date=$('#av-date').value, amount=Number(($('#av-amt').value||'').replace(/\D/g,''))||0, note=$('#av-note').value.trim();
@@ -9664,6 +9685,8 @@ async function renderAccounting(){
       if(!date){ toast('Sanani tanlang',true); return; }
       if(amount<=0){ toast('Summani kiriting',true); return; }
       if((advIdCount[pidKey(tid)]||0)>1){ toast(`«${tid}» ID bir nechta xodimda bor — avval xodim kartochkasida «Tahrir» → «Yangi noyob ID berish» (bir martalik; avans boshqa odamga yozilmasin)`,true); return; }
+      const avPre=!!($('#av-pre') && $('#av-pre').checked);
+      if(avPre && !kassaPreLiveDay(date)){ toast(`Naqd avans bu yerda faqat kassa ishga tushishidan (${kassaGoLiveDmy()}) oldingi sana bilan yoziladi`,true); return; }
       const btn=$('#av-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       const advId='adv_'+String(tid)+'_'+advNonce;
       const done=async(rec)=>{   // rec — bazada ALLAQACHON bor yozuv (oldingi bosish javobi yo'qolgan): ekranda o'shaning summasi
@@ -9678,7 +9701,7 @@ async function renderAccounting(){
       // payeeRef — KIMGA (jadval:qator id): oyna ochilgandan keyin uning ID'si o'zgarsa / bo'shagan ID boshqa odamga berilsa
       //   baza rad etadi (id-guards.sql 5-band) — avans eski ID'ning YANGI egasiga jim yozilmaydi.
       const advRow={ teacherId:String(tid), payeeRef:(pp.kind==='teacher'?'teachers':'staff')+':'+String(pp.refId), teacherName:tn, amount, month:date.slice(0,7), date, note, createdAt:serverTimestamp() };
-      if(KASSA.live) advRow.method='card';   // kassa ishga tushgach bu oynadan faqat naqdsiz avans (naqd — «Kassa» orqali)
+      if(KASSA.live) advRow.method=avPre?'cash':'card';   // kassa ishga tushgach bu oynadan faqat naqdsiz avans (naqd — «Kassa» orqali; Direktor — ishga tushishdan oldingi sana bilan)
       try{ await setDoc(doc(db,'staff_advances',advId), advRow, {merge:true});
         await done(); }
       catch(err){
@@ -12061,16 +12084,25 @@ async function openRecordPayment(students, reload, pre){
   const rpDone=()=>{ closeModal(); if(pre&&pre.onDone) try{ pre.onDone(); }catch(e){} };
   openModal(); $('#m-x').onclick=rpDone; $('#m-cancel').onclick=rpDone;
   // Kassa bloki: naqd tanlanganda fiskal chek № (Direktorga — istisno belgisi), sana — kassa kuni (server belgilaydi).
+  //   Direktor naqd to'lovga o'tgan sanani tanlay oladi (crit-1, ishga-tushirish §4): kassa ishga tushishidan OLDINGI kun puli
+  //   (boshlang'ich qoldiq sanashiga kirgan) — kirim orderisiz va fiskal cheksiz yoziladi (server ham shunday qiladi, boshqa
+  //   rolga rad etadi). Boshqalarga naqdda sana — bugun.
+  const kGoLiveDmy=kassaGoLiveDmy(), kPreLive=(method, day)=>kLive && method==='cash' && kassaPreLiveDay(day);
   const kassaBox=()=>{ const el=$('#rp-kassa'); if(!el || !kLive) return;
-    const cash=$('#rp-m').value==='cash', dt=$('#rp-date'), st=KASSA.state;
-    if(dt){ dt.disabled=cash; if(cash) dt.value=tkDay(new Date()); }
-    const block = cash && st && st.canPost===false ? `<div class="small" style="margin-top:6px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px;font-weight:600">${esc(KASSA_BLOCK[st.blockReason]||'Kassa hozir hujjat qabul qilmaydi.')}</div>` : '';
-    el.innerHTML = cash
-      ? `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Fiskal chek № <span style="color:#B42318;font-weight:600">— majburiy (onlayn kassa chekidagi raqam)</span><input id="rp-fiscal" type="text" maxlength="40" autocomplete="off" style="${fld}"></label>
-         ${SESSION.isAdmin?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rp-fexempt" style="width:auto;flex:none;padding:0;margin:0"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>`:''}
-         <div class="small muted" style="margin-top:6px">Naqd to‘lovga kassa kirim orderi (KO-1) yoziladi: raqam va sana kassa kuni bo‘yicha serverdan beriladi.</div>${block}`
-      : (cashOk?'':`<div class="small muted" style="margin-top:6px">Naqd pulni kassir qabul qiladi («Kassa» ishga tushgan).</div>`); };
-  { const ms=$('#rp-m'); if(ms){ ms.addEventListener('change', kassaBox); kassaBox(); } }
+    const cash=$('#rp-m').value==='cash', dt=$('#rp-date'), st=KASSA.state, td=tkDay(new Date());
+    if(dt){ dt.disabled=cash && !SESSION.isAdmin; if(cash && !SESSION.isAdmin) dt.value=td; }
+    const pre=kPreLive($('#rp-m').value, dt && dt.value);
+    const f0=$('#rp-fiscal') ? $('#rp-fiscal').value : '', x0=!!($('#rp-fexempt') && $('#rp-fexempt').checked);   // qayta chizishda yo'qolmasin
+    const block = cash && !pre && st && st.canPost===false ? `<div class="small" style="margin-top:6px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px;font-weight:600">${esc(KASSA_BLOCK[st.blockReason]||'Kassa hozir hujjat qabul qilmaydi.')}</div>` : '';
+    const past = cash && !pre && SESSION.isAdmin && dt && dt.value && dt.value!==td
+      ? `<div class="small muted" style="margin-top:6px">Kassa ishga tushgandan keyingi naqd to‘lov <b>bugungi kassa kuniga</b> yoziladi — tanlangan sana hisobga olinmaydi.</div>` : '';
+    el.innerHTML = !cash ? (cashOk?'':`<div class="small muted" style="margin-top:6px">Naqd pulni kassir qabul qiladi («Kassa» ishga tushgan).</div>`)
+      : pre ? `<div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px;font-weight:600">Kassa ishga tushishidan (${esc(kGoLiveDmy)}) oldingi sana: to‘lov <b>kirim orderisiz</b> (KO-1) va fiskal cheksiz yoziladi — kassa qoldig‘i o‘zgarmaydi. Bu pul boshlang‘ich qoldiq sanashida kassada bo‘lgan bo‘lishi kerak (ishga-tushirish §4). Sana — pul haqiqatda olingan kun.</div>`
+      : `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Fiskal chek № <span style="color:#B42318;font-weight:600">— majburiy (onlayn kassa chekidagi raqam)</span><input id="rp-fiscal" type="text" maxlength="40" autocomplete="off" value="${esc(f0)}" style="${fld}"></label>
+         ${SESSION.isAdmin?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rp-fexempt"${x0?' checked':''} style="width:auto;flex:none;padding:0;margin:0"> Fiskal cheksiz (istisno — jurnalga yoziladi)</label>`:''}
+         <div class="small muted" style="margin-top:6px">Naqd to‘lovga kassa kirim orderi (KO-1) yoziladi: raqam va sana kassa kuni bo‘yicha serverdan beriladi.${SESSION.isAdmin && kGoLiveDmy?` Kassa ishga tushishidan (${esc(kGoLiveDmy)}) oldin olingan pulni — haqiqiy sanasi bilan kiriting.`:''}</div>${past}${block}`; };
+  { const ms=$('#rp-m'); if(ms){ ms.addEventListener('change', kassaBox); kassaBox(); }
+    const dt=$('#rp-date'); if(dt && kLive) dt.addEventListener('change', kassaBox); }
   const amt=$('#rp-amt'); if(amt) amt.addEventListener('input',()=>{ const d=amt.value.replace(/\D/g,''); amt.value=d.replace(/\B(?=(\d{3})+(?!\d))/g,' '); });
   if(!preSid){
     const draw=q=>{ q=String(q||'').trim().toLowerCase();
@@ -12125,7 +12157,9 @@ async function openRecordPayment(students, reload, pre){
     }
     // Kassa (ishga tushgan): naqd to'lovga fiskal chek № (yoki Direktor istisnosi); kassa hujjat qabul qilmayotgan bo'lsa — navbatga ham qo'yilmaydi.
     let extra=null;
-    if(kLive && method==='cash'){
+    // Direktor, kassa ishga tushishidan oldingi sana (crit-1): kirim orderi yozilmaydi — fiskal № va kassa holati tekshirilmaydi.
+    const preLive=kPreLive(method, date);
+    if(kLive && method==='cash' && !preLive){
       const fn=($('#rp-fiscal')?$('#rp-fiscal').value:'').trim(), fx=$('#rp-fexempt');
       if(fn) extra={ fiscalNo:fn }; else if(fx && fx.checked) extra={ fiscalExempt:true };
       else { toast('Fiskal chek raqamini kiriting',true); unlock(); return; }
@@ -12160,9 +12194,10 @@ async function openRecordPayment(students, reload, pre){
         const b2=$('#rp-ko1'); if(b2) b2.disabled=false; };
     };
     const okBody=`<div class="small" style="background:#eef6f2;color:#1F9982;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div>`
-      + (kLive ? (method==='cash'?`<div class="small muted" style="margin-top:8px">To‘lovchiga onlayn kassaning fiskal cheki va kirim orderi pattasi beriladi.</div>`:'')
+      + (kLive ? (preLive?`<div class="small muted" style="margin-top:8px">Kassa ishga tushishidan oldingi sana bilan yozildi: kirim orderi va fiskal chek yo‘q (pul boshlang‘ich qoldiqda).</div>`
+                 : method==='cash'?`<div class="small muted" style="margin-top:8px">To‘lovchiga onlayn kassaning fiskal cheki va kirim orderi pattasi beriladi.</div>`:'')
                : `<div class="small muted" style="margin-top:8px">Termal printerда (80/58 mm) chek chiqarishingiz mumkin.</div>`);
-    const queuedBody=`<div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich). ${kLive ? (method==='cash'?'To‘lovchiga onlayn kassaning (NKM) cheki beriladi; kassa kirim orderi ulanish tiklangach yoziladi — kunni yopishda bu to‘lov «hali o‘tkazilmagan yozuvlar» qatorida ko‘rsatiladi.':'') : 'Chekni hozir ham chiqarishingiz mumkin.'}</div>`;
+    const queuedBody=`<div class="small" style="background:#f2f4f7;color:#475467;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} so‘m (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Internet yo‘q. To‘lov saqlandi va ulanish tiklanganda <b>avtomatik</b> yuboriladi (pastda ⏳ ko‘rsatkich). ${kLive ? (preLive?'Kassa ishga tushishidan oldingi sana — kirim orderisiz yoziladi.':method==='cash'?'To‘lovchiga onlayn kassaning (NKM) cheki beriladi; kassa kirim orderi ulanish tiklangach yoziladi — kunni yopishda bu to‘lov «hali o‘tkazilmagan yozuvlar» qatorida ko‘rsatiladi.':'') : 'Chekni hozir ham chiqarishingiz mumkin.'}</div>`;
     // 1) AVVAL outbox'ga durdmli yozamiz. obAdd=false -> localStorage ishlamadi (Safari private/kvota).
     const saved=obAdd(item);
     if(!saved){

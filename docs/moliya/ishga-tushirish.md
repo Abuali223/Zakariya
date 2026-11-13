@@ -93,7 +93,10 @@ Chiqishda ism, telefon va summalar yo‘q. «!!» bilan boshlangan qator — mua
 
 ## 4. 31-dekabr (yoki dekabrning oxirgi ish kuni) kechqurun
 Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishtirokida.
-1. **Kun yakuni eski tartibda:** oxirgi qog‘oz kirim va chiqim orderlari yoziladi, kunlik varaq yopiladi.
+1. **Kun yakuni eski tartibda:** oxirgi qog‘oz kirim va chiqim orderlari yoziladi, kunlik varaq yopiladi. **Sanashdan oldin
+   hamma naqd yozuv tizimda bo‘lsin:** to‘lov qabul qiladigan barcha qurilmalar (kompyuter, telefon) internetga ulanadi va
+   navbati (⏳) bo‘shaguncha kutiladi; kassadan berilgan xarajat, maosh va avanslar ham kiritiladi. Sanashdan keyin topilgan
+   kechikkan yozuv — pastdagi «Kechikib topilgan yozuv» bandi bo‘yicha.
 2. **Komissiya kassani sanaydi** (nominallar bo‘yicha) va dalolatnoma tuzadi (`shakllar.md`, Sh-3): sanalgan summa, hisobdagi
    qoldiq, farq va uning sababi. Farq majburan tenglashtirilmaydi — Direktor qaror qiladi (kamomad — javobgar shaxsga yoki zararga; ortiqcha — daromadga).
 3. **Qog‘oz order daftarlari yopiladi** (Sh-4): oxirgi П/О va Р/О raqamlari, ishlatilmagan blankalar bekor qilinadi; buxgalter imzolaydi.
@@ -122,6 +125,20 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    oylarda: davr faqat shu sanagacha bo‘lgan barcha kassa kunlari sanab yopilgan bo‘lsa yopiladi; yopilgan davrdagi kassa kuni
    qayta ochilmaydi (avval Direktor davrni sababi bilan qayta ochadi).
 10. Hujjat raqamlari (K-, Ch-, D-) yangi yilda 1 dan boshlanadi — bu avtomatik.
+
+**Kechikib topilgan yozuv (ishga tushish kunidan oldingi naqd pul, tizimga keyin kiritiladi).** Bu pul boshlang‘ich qoldiq
+sanashiga kirgan — uni **bugungi sana bilan qayta kiritish uni ikki marta hisoblaydi** (kassada ortiqcha kirim orderi va
+fiskal chek paydo bo‘ladi). Tartib:
+- **Direktor** yozuvni **haqiqiy sanasi** bilan kiritadi: «💵 To‘lov» → «Naqd» → «Sana» = pul olingan kun (ishga tushish kunidan
+  oldin; oyna buni ko‘rsatadi) — kirim orderisiz va fiskal cheksiz yoziladi, kassa qoldig‘i o‘zgarmaydi. To‘lov sanasi 31 kundan
+  eski bo‘lsa — «💵 To‘lov» uni qabul qilmaydi (bugungi sanaga ham surmaydi), buxgalter bilan hal qilinadi. Kassadan berilgan
+  xarajat, maosh yoki avans — «Buxgalteriya»dagi o‘z oynasida haqiqiy sanasi bilan, usul «Naqd — kassa ishga tushishidan oldin
+  berilgan» (avansda — shu belgi); kassa chiqim orderi yozilmaydi.
+- **Boshqa rollar** (kassir, g‘aznachi, moliya menejeri) bunday yozuvni o‘zi kirita olmaydi — tizim rad etadi. Faqat kassir yoki
+  g‘aznachi qurilmasi navbatida qolib ketgan yozuv (ishga tushishdan oldin yozilgan, 48 soatdan eski emas) internet qaytganda o‘zi
+  o‘tadi — u ham kirim orderisiz; undan eskisini Direktor kiritadi.
+- Bunday yozuvlar nazorat ro‘yxatida «Kassa ishga tushishidan oldingi naqd yozuvlar (keyin kiritilgan)» qatorida ko‘rinadi
+  (ma’lumot uchun): buxgalter ularni sanash dalolatnomasi bilan solishtiradi. Davr qulfi (8–9-qadamlar) ularga ham amal qiladi.
 
 ## 5. Birinchi kassa kuni
 - [ ] Ertalab «Kassa»: «Oxirgi qoldiq» = boshlang‘ich qoldiq = kassadagi haqiqiy pul (farq bo‘lsa — birinchi hujjatdan oldin qayta sanab, qayta kiriting); qizil ogohlantirish yo‘q.
@@ -162,15 +179,46 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 | Sahifada «sahifani yangilang» ogohlantirishi | Tizim yangilangan: Ctrl+Shift+R (telefonda — sahifani yopib qayta ochish). |
 
 ## 9. Orqaga qaytish
-**Ish jarayoni (tizimdan vaqtincha voz kechish).** Qaror — Direktor. (1) Kassa «Қ» blankalari va jurnali bilan ishlaydi; raqamlar
-tizimdagi oxirgi raqamdan davom etadi. (2) Excel kunlik varag‘i tizimdagi oxirgi kun oxiri qoldig‘idan qayta boshlanadi.
-(3) Tizimda yozilgan hujjatlar haqiqiy bo‘lib qoladi — o‘chirilmaydi. (4) Oyni buxgalter birlashtiradi (tizim + qog‘oz).
-(5) Qayta ishga tushirish — yangi komissiya sanashidan (boshlang‘ich qoldiq o‘rniga — joriy kun yopilishidagi sanash).
+**Ish jarayoni (tizimdan vaqtincha voz kechish).** Qaror — Direktor. (1) **To‘xtatishdan oldin:** joriy kassa kuni sanab
+yopiladi; tasdiq kutayotgan va tasdiqlangan (puli berilmagan) kassa so‘rovlari bajariladi yoki bekor qilinadi — aks holda tizim
+kassani to‘xtatmaydi va to‘sqinlik qilayotgan kun yoki so‘rovlar ro‘yxatini ko‘rsatadi. (2) Kassa «Қ» blankalari va jurnali bilan
+ishlaydi; blankalar **o‘z raqamlari** bilan (alohida daftar) — tizim raqamlari qayta ishga tushganda tizimdagi oxirgi raqamdan
+uzluksiz davom etadi, qog‘oz raqamlari bilan aralashmaydi. (3) Excel kunlik varag‘i tizimdagi oxirgi kun oxiri qoldig‘idan qayta
+boshlanadi. (4) Tizimda yozilgan hujjatlar haqiqiy bo‘lib qoladi — o‘chirilmaydi. (5) Oyni buxgalter birlashtiradi (tizim + qog‘oz).
+(6) Qayta ishga tushirish — yangi komissiya sanashidan (pastda, «Texnik — qayta ishga tushirish»).
 
-**Texnik.** (1) «⚙ Sozlamalar» → «Kassa ishga tushadigan kun» bo‘shatiladi: «💵 To‘lov», maosh, avans, xarajat va qaytarish oynalari
-avvalgi (ordersiz) tartibga qaytadi; «Kassa» bo‘limi va yozilgan hujjatlar joyida qoladi. (2) Kod xatosi bo‘lsa — oldingi
-versiyaga qaytariladi (`git revert` + deploy; sayt fayllari va server kodi — deploy chiqishidagi «Orqaga qaytarish» buyruqlari).
-(3) Bazadagi obyektlar o‘chirilmaydi, zaxiradan tiklash — faqat maslahatlashib. Davr qulfi qayta ochilsa — sababi bilan.
+**Texnik — to‘xtatish.** (1) «⚙ Sozlamalar» → «Kassa ishga tushadigan kun» bo‘shatiladi yoki keyinga suriladi (faqat Direktor).
+Saqlashdan oldin oyna oqibatlarini sanab tasdiq so‘raydi («KASSANI TO‘XTATISH»). Kassa ishlab turgan bo‘lsa (kassa kuni bor)
+kassa **to‘xtatiladi**: sana bo‘sh saqlanadi (surilgan sana faqat hodisa jurnalida qoladi — qayta ishga tushirish baribir sanash
+bilan), «💵 To‘lov», maosh, avans, xarajat va qaytarish oynalari avvalgi (ordersiz) tartibga qaytadi; «Kassa» bo‘limi va yozilgan
+hujjatlar joyida qoladi, yangi kassa hujjati yozilmaydi; «Kassa» sahifasida «Kassa to‘xtatilgan» ogohlantirishi turadi. Kim,
+qachon va qaysi sanadan to‘xtatgani hodisa jurnaliga yoziladi. To‘xtatilgan kassada oxirgi kassa kuni qayta ochilmaydi — tuzatish
+qayta ishga tushirish sanashida (farq dalolatnomasida) aks etadi. (2) Kod xatosi bo‘lsa — oldingi versiyaga qaytariladi (`git revert`
+\+ deploy; sayt fayllari va server kodi — deploy chiqishidagi «Orqaga qaytarish» buyruqlari). (3) Bazadagi obyektlar o‘chirilmaydi,
+zaxiradan tiklash — faqat maslahatlashib. Davr qulfi qayta ochilsa — sababi bilan.
+
+**Texnik — qayta ishga tushirish** (Direktor, komissiya ishtirokida; to‘xtatilgan davrdagi barcha naqd yozuvlar va qurilmalar
+navbati avval tizimga kiritilgan bo‘lsin — 4-bo‘lim, 1-qadam):
+1. Komissiya kassadagi pulni sanaydi va dalolatnoma tuzadi (`shakllar.md`, Sh-3).
+2. «Kassa» → **«Qayta ishga tushirish»**: sanalgan summa, qayta ishga tushadigan kun (bugun yoki keyingi kun, oxirgi kassa
+   kunidan keyin), komissiya a’zolari. Tizim summani tizimdagi oxirgi kun oxiri qoldig‘i bilan solishtiradi: farq —
+   to‘xtatilgan davrdagi naqd harakat (qog‘oz «Қ» bo‘yicha). U kassirga kamomad yoki ortiqcha sifatida yozilmaydi — tizim texnik
+   dalolatnoma yozadi («Д-», asos «Qayta ishga tushirish: sanash dalolatnomasi»; ko‘p bo‘lsa Dt 5010 Kt 0000, kam bo‘lsa
+   Dt 0000 Kt 5010; farq bo‘lmasa dalolatnoma yozilmaydi). Kun ochilguncha qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi).
+   **Qayta ishga tushadigan kun — to‘xtatilgan davrdagi oxirgi kassa hujjatisiz naqd yozuvdan keyingi kun:** shu kun yoki keyingi
+   sana bilan bunday yozuv bo‘lsa tizim qoldiqni qabul qilmaydi (bugun shunday yozuv bo‘lgan bo‘lsa — ertangi kun). Sanashdan
+   keyin, kassa qayta ishga tushguncha yana naqd yozuv kiritilsa — u sanashga kirmagan: komissiya qayta sanaydi va qoldiq qayta
+   kiritiladi (qayta ishga tushadigan kun bugun bo‘lib, yozuv ham bugungi sana bilan bo‘lsa, 3-qadamni tizim qabul qilmaydi —
+   qoldiq ertangi kun bilan qayta kiritiladi).
+3. «⚙ Sozlamalar» → «Kassa ishga tushadigan kun» = o‘sha kun (boshqa sana qabul qilinmaydi). Shu kuni birinchi kun boshi =
+   sanalgan summa; hujjatlar raqami tizimdagi oxirgi raqamdan davom etadi.
+4. Buxgalter: nazorat ro‘yxatida **«Kassani to‘xtatish va qayta ishga tushirish»** qatori — har qayta ishga tushirish bo‘yicha
+   farq va to‘xtatilgan davrda kassa hujjatisiz yozilgan naqd kirim va chiqim; ularni «Қ» jurnali va «Д-» dalolatnoma bilan
+   solishtiradi. To‘xtatilgan davrda orqa sana bilan (oxirgi kassa kunidan oldingi sana) kiritilgan yozuvlar alohida ko‘rsatiladi;
+   farq shu harakatlar bilan tushuntirilmasa — «izohlanmagan farq» (sariq): bu kamomad yoki ortiqcha, «Қ» jurnali bilan tekshiriladi.
+   KO-3 jurnali va «Statiyalar»da farq «Qayta ishga tushirish farqi» qatorida alohida ko‘rsatiladi
+   (kun boshi + kirim − chiqim + farq = kun oxiri). Kassa keyin yana to‘xtatilishi va qayta ishga tushirilishi mumkin — har gal
+   shu tartibda, o‘z sanashi va dalolatnomasi bilan.
 
 ## 10. Qo‘llab-quvvatlash (birinchi 2 hafta)
 Har kuni 15 daqiqalik qo‘ng‘iroq (kassir, moliya menejeri, administrator). Kassa ish soatlarida navbatchi. Muhimlik: ishni

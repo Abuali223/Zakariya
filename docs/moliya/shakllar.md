@@ -23,8 +23,8 @@ Bekor qilingan order yirtib tashlanmaydi — jildda o‘z raqami o‘rnida saqla
 | № | Shakl | Qachon | Kim to‘ldiradi |
 |---|---|---|---|
 | Sh-1 | Avans hisoboti | hisobdor pul sarflaganda (3 ish kuni ichida) | hisobdor shaxs; tekshiradi — buxgalter; tasdiqlaydi — rahbar |
-| Sh-2 | «Қ» blankasi va jurnali | tizim (server) ishlamay qolganda | kassir |
-| Sh-3 | Kassani sanash dalolatnomasi (boshlang‘ich qoldiq) | 31-dekabr kechqurun (tizim ishga tushmasidan oldin) | inventarizatsiya komissiyasi |
+| Sh-2 | «Қ» blankasi va jurnali | tizim (server) ishlamay qolganda; kassa to‘xtatilganda (`ishga-tushirish.md`, 9-bo‘lim) | kassir |
+| Sh-3 | Kassani sanash dalolatnomasi (boshlang‘ich qoldiq) | 31-dekabr kechqurun (tizim ishga tushmasidan oldin); to‘xtatilgan kassani qayta ishga tushirishda | inventarizatsiya komissiyasi |
 | Sh-4 | Qog‘oz order daftarlarini yopish dalolatnomasi | 31-dekabr kechqurun | kassir, buxgalter |
 | Sh-5 | Qabul sinovi varag‘i | sinov stendida, ishga tushirishdan oldin | har rol |
 | Sh-6 | Parallel yuritish kunlik nazorat varag‘i | birinchi 5 ish kuni | moliya menejeri |
@@ -72,6 +72,9 @@ hisobotlari — yanvar yopilishidan oldin.
 ## Sh-2. «Қ» blankasi (ichki vaqtinchalik kvitansiya) va jurnali
 Faqat tizim (server) ishlamay qolganda. **To‘lovchiga berilmaydi** — to‘lovchi fiskal chek oladi. Blankalar oldindan raqamlanadi
 (Қ-0001 …), buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi va jurnalda order raqami yoziladi.
+Kassa **to‘xtatilganda** ham (orqaga qaytish, `ishga-tushirish.md`, 9-bo‘lim) shu blankalar ishlatiladi: raqamlari o‘z daftari bo‘yicha —
+tizimning kirim / chiqim order raqamlari bilan aralashmaydi (qayta ishga tushganda tizim o‘z oxirgi raqamidan davom etadi); bu davrda
+tizimga kiritilgan yozuvlar kassa orderisiz bo‘ladi — «Order №» ustuni bo‘sh qoladi.
 
 **Blanka:**
 «Қ» № [___] · sana [___], vaqt [___]
@@ -118,7 +121,10 @@ Rahbar qarori: [___] (imzo, sana)
 Komissiya raisi: [___] · A’zolar: [___], [___] · Kassir: [___] (imzolar)
 
 *Eslatma:* shu dalolatnomadagi «haqiqatda mavjud» summa tizimga boshlang‘ich qoldiq sifatida kiritiladi. Tizim ishga tushgach
-sanash dalolatnomalarini (kun yopilishi, smena, oy oxiri) tizimning o‘zi chop etadi.
+sanash dalolatnomalarini (kun yopilishi, smena, oy oxiri) tizimning o‘zi chop etadi. **Qayta ishga tushirishda** (`ishga-tushirish.md`,
+9-bo‘lim) ham shu shakl: «hisob ma’lumoti» — tizimdagi oxirgi kun oxiri qoldig‘i va to‘xtatilgan davrdagi «Қ» jurnali jamlari;
+«haqiqatda mavjud» summa «Kassa» → «Qayta ishga tushirish»ga kiritiladi, tizimdagi qoldiq bilan farqi texnik «Д-» dalolatnoma
+bilan yoziladi (kamomad / ortiqcha emas).
 
 ## Sh-4. Qog‘oz order daftarlarini yopish dalolatnomasi
 

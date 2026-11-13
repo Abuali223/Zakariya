@@ -89,9 +89,13 @@ $$;
 revoke all on function app.kassa_exp_category(text) from public, anon, authenticated;
 
 -- ---------- Himoya: kassa ishga tushgach naqd yozuv faqat kassa funksiyalari orqali ----------
+--   Istisno (crit-1): sanasi kassa ishga tushishidan OLDINGI naqd yozuv (usuli 'cash' yoki ko'rsatilmagan: kech kelgan xarajat cheki,
+--   maosh / avans qog'ozi — o'sha pul kassadan sanashdan oldin chiqqan, boshlang'ich qoldiqqa kirmagan) — faqat Direktor kiritadi; davr
+--   qulfi (trg_fin_zlock) baribir amal qiladi. Boshqalarga — alohida xabar (kassa:pre_live). Nazorat ro'yxatida «Kassa ishga
+--   tushishidan oldingi naqd yozuvlar» bo'lib ko'rinadi. Boshqa usullar (hisobdor shaxs, karta orqali maosh) — istisnosiz, avvalgidek.
 create or replace function app.kassa_cash_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_m text;
+declare v_m text; v_msg text; v_live date; v_day date;
 begin
   -- Xarajatga standart statiya — eski toifadan (fin_category_map); «payroll__» (maosh hisoblash) qatoriga tegilmaydi.
   --   (Shartlar ichma-ich: «articleId» ustuni faqat expenses jadvalida bor — boshqa jadvalda bu ifoda hisoblanmasligi kerak.)
@@ -121,37 +125,48 @@ begin
         raise exception 'Bu yozuv kassa hujjatiga bog''langan — o''zgartirilmaydi' using errcode = '42501', hint = 'kassa:linked_row';
       end if;
     elsif v_m = 'cash' and coalesce(old.method, '') <> 'cash' then
-      raise exception 'Naqd yozuv faqat «Kassa» orqali kiritiladi' using errcode = '42501', hint = 'kassa:cash_only_kassa';
+      v_msg := 'Naqd yozuv faqat «Kassa» orqali kiritiladi';
     elsif tg_table_name = 'expenses' and v_m = 'accountable' and coalesce(old.method, '') <> 'accountable' then
-      raise exception 'Hisobdor shaxs xarajati «Kassa» → «Avans hisoboti» orqali yoziladi' using errcode = '42501', hint = 'kassa:cash_only_kassa';
+      v_msg := 'Hisobdor shaxs xarajati «Kassa» → «Avans hisoboti» orqali yoziladi';
+    elsif v_m in ('', 'cash') and app.fin_text_day(new.date) is distinct from app.fin_text_day(old.date)
+          and not (tg_table_name = 'expenses' and coalesce(new.id, '') like 'payroll\_\_%')
+          and app.fin_text_day(new.date) >= (select o."kassaGoLive" from public.fin_org o where o.id = 'main') then
+      -- crit-1: kassa hujjatisiz (ishga tushishdan oldingi) naqd yozuvni kassa ishlayotgan kunga ko'chirish — u kunning kassa
+      --   hujjatlarida yo'q naqd harakat bo'lib qolardi (yaratishdagi qoidani tahrir orqali chetlab o'tish yo'li bo'lmasin).
+      v_msg := 'Kassa hujjatisiz naqd yozuvning sanasini kassa ishga tushgan kunga (yoki keyingi kunga) o''zgartirib bo''lmaydi — bu kunlardagi naqd harakat «Kassa» orqali yoziladi';
     end if;
-    return new;
-  end if;
-  -- INSERT
-  if new."cashDocId" is not null then
-    raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
-  end if;
-  if tg_table_name = 'salary_payments' then
-    raise exception 'Kassa ishga tushgan: maosh «Maosh berish» oynasidan, to''lov usuli bilan yoziladi (naqd — kassa chiqim orderi bilan)'
-      using errcode = '42501', hint = 'kassa:cash_only_kassa';
-  elsif tg_table_name = 'staff_advances' then
-    if v_m <> 'card' then
-      raise exception 'Kassa ishga tushgan: naqd avans «Kassa» → «+ Chiqim so''rovi» → «Ish haqi avansi» orqali beriladi' using errcode = '42501', hint = 'kassa:cash_only_kassa';
+  else   -- INSERT
+    if new."cashDocId" is not null then
+      raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
     end if;
-  elsif tg_table_name = 'expenses' then
-    -- «payroll__YYYY-MM» — oylik maoshni hisoblash qatori (pul harakati emas): avvalgidek.
-    --   Hisobdor shaxs orqali xarajat ('accountable') — faqat «Avans hisoboti» dalolatnomasidan (shu funksiya bayroq bilan yozadi):
-    --   aks holda xarajat ikki marta (qo'lda va hisobotdan) yozilib, hisobdordagi qoldiq kamaymay qolardi.
-    if coalesce(new.id, '') not like 'payroll\_\_%' and v_m not in ('bank', 'card') then
-      if v_m = 'accountable' then
-        raise exception 'Kassa ishga tushgan: hisobdor shaxs xarajati «Kassa» → «Avans hisoboti» orqali yoziladi (avans qoldig''idan hisobdan chiqariladi)'
-          using errcode = '42501', hint = 'kassa:cash_only_kassa';
+    if tg_table_name = 'salary_payments' then
+      v_msg := 'Kassa ishga tushgan: maosh «Maosh berish» oynasidan, to''lov usuli bilan yoziladi (naqd — kassa chiqim orderi bilan)';
+    elsif tg_table_name = 'staff_advances' then
+      if v_m <> 'card' then
+        v_msg := 'Kassa ishga tushgan: naqd avans «Kassa» → «+ Chiqim so''rovi» → «Ish haqi avansi» orqali beriladi';
       end if;
-      raise exception 'Kassa ishga tushgan: naqd xarajat «Kassa» → «+ Chiqim so''rovi» orqali yoziladi; naqdsiz xarajatda to''lov usulini tanlang'
-        using errcode = '42501', hint = 'kassa:cash_only_kassa';
+    elsif tg_table_name = 'expenses' then
+      -- «payroll__YYYY-MM» — oylik maoshni hisoblash qatori (pul harakati emas): avvalgidek.
+      --   Hisobdor shaxs orqali xarajat ('accountable') — faqat «Avans hisoboti» dalolatnomasidan (shu funksiya bayroq bilan yozadi):
+      --   aks holda xarajat ikki marta (qo'lda va hisobotdan) yozilib, hisobdordagi qoldiq kamaymay qolardi.
+      if coalesce(new.id, '') not like 'payroll\_\_%' and v_m not in ('bank', 'card') then
+        v_msg := case when v_m = 'accountable'
+                      then 'Kassa ishga tushgan: hisobdor shaxs xarajati «Kassa» → «Avans hisoboti» orqali yoziladi (avans qoldig''idan hisobdan chiqariladi)'
+                      else 'Kassa ishga tushgan: naqd xarajat «Kassa» → «+ Chiqim so''rovi» orqali yoziladi; naqdsiz xarajatda to''lov usulini tanlang' end;
+      end if;
     end if;
   end if;
-  return new;
+  if v_msg is null then return new; end if;
+  -- kassa ishga tushishidan oldingi sana (crit-1): faqat NAQD yozuv (usuli 'cash' yoki ko'rsatilmagan) va faqat Direktor; boshqa usul
+  --   (hisobdor shaxs, karta orqali maosh …) — avvalgidek o'z oynasi orqali (sozlama qatori kassa_live() da FOR SHARE bilan ushlangan)
+  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
+  v_day := app.fin_text_day(new.date);
+  if v_day < v_live and v_m in ('', 'cash') then
+    if app.is_admin() then return new; end if;
+    raise exception '% — kassa ishga tushishidan (%) oldingi sana: bunday naqd yozuvni faqat Direktor kiritadi (kech kelgan hujjat; o''sha pul kassadan sanashdan oldin chiqqan)',
+      to_char(v_day, 'DD.MM.YYYY'), to_char(v_live, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+  end if;
+  raise exception '%', v_msg using errcode = '42501', hint = 'kassa:cash_only_kassa';
 end $$;
 revoke all on function app.kassa_cash_guard() from public, anon, authenticated;
 do $$ declare t text; begin
@@ -848,7 +863,7 @@ begin
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
   v_gate_off := v_from is null or v_month < v_from;
 
-  v_before := app.kassa_tuition_before(v_sid);   -- L1: o'quvchi bo'yicha navbat + to'lovdan oldingi holat
+  v_before := app.kassa_tuition_before(v_sid, v_today, null, null);   -- L1: o'quvchi bo'yicha navbat + to'lovdan oldingi holat (bugungi kun)
   perform app.kassa_flag(true);
   -- 1) maosh to'lovi (L3: vedomost chegarasi — darvoza trigeri)
   insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, gross, advance, deduction, "subBonus", net,
@@ -1078,6 +1093,47 @@ grant execute on function public.kassa_adv_report_void(text, text) to authentica
 --   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi
 --                                     (faktura, to'lov va o'quvchi avansi — crit-2: avans qaytarish ham refunds qatori, target 'credit').
 --   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
+-- Kassa hujjatisiz naqd yozuvlar — sanasi [p_from, p_to] oralig'ida, [p_created_from, p_created_to) oralig'ida kiritilganlari (bo'sh
+--   chegara — cheklanmagan): turi bo'yicha soni va summasi; kirim (o'quv to'lovi) va chiqim (xarajat, maosh, avans, qaytarish) jami.
+--   Nazorat ro'yxati (kassa_checks): kassa ishga tushishidan oldingi sanali, keyin kiritilgan yozuvlar (crit-1) va to'xtatilgan davrdagi
+--   naqd harakat — qayta ishga tushirish farqi bilan solishtirish uchun (ishga-tushirish §9; to'xtatilgan davrda kiritilgan, lekin orqa
+--   sanali yozuvlar ham). Qoidalar moslik (P1 / P4 / P5 / P8) bilan bir xil: usuli ko'rsatilmagan yozuv — naqd; maoshni hisoblash qatori
+--   (payroll__) — pul harakati emas. Manfiy avans / maosh (xodim qaytargan pul) — summaga ishorasi bilan.
+--   (Uch argumentli oraliq variant sinov bazalarida qolgan bo'lsa — o'chiriladi: aks holda uch argumentli chaqiruv ikki ma'noli bo'lardi.)
+drop function if exists app.kassa_cash_rows(date, date, timestamptz);
+create or replace function app.kassa_cash_rows(p_from date, p_to date, p_created_from timestamptz, p_created_to timestamptz default null) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  with x(kind, dir, n, s) as (
+    select 'tuition', 1, count(*), coalesce(sum(r.amount), 0)
+      from app.fin_receipts(greatest(p_from, coalesce((p_created_from at time zone 'Asia/Tashkent')::date - 32, p_from)), p_to) r
+      join public.payments p on p.id = r.id
+     where r.provider = 'cash' and p."cashDocId" is null and (p_created_from is null or p."createdAt" >= p_created_from)
+       and (p_created_to is null or p."createdAt" < p_created_to)
+    union all
+    select 'expense', -1, count(*), coalesce(sum(e.amount), 0) from public.expenses e
+     where e.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(e.method, '') in ('', 'cash')
+       and e."cashDocId" is null and coalesce(e.id, '') not like 'payroll\_\_%' and (p_created_from is null or e."createdAt" >= p_created_from)
+       and (p_created_to is null or e."createdAt" < p_created_to)
+    union all
+    select 'salary', -1, count(*), coalesce(sum(s.paid), 0) from public.salary_payments s
+     where s.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(s.method, '') in ('', 'cash')
+       and s."cashDocId" is null and (p_created_from is null or s."createdAt" >= p_created_from) and (p_created_to is null or s."createdAt" < p_created_to)
+    union all
+    select 'advance', -1, count(*), coalesce(sum(a.amount), 0) from public.staff_advances a
+     where a.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(a.method, '') in ('', 'cash')
+       and a."cashDocId" is null and (p_created_from is null or a."createdAt" >= p_created_from) and (p_created_to is null or a."createdAt" < p_created_to)
+    union all
+    select 'refund', -1, count(*), coalesce(sum(r.amount), 0) from public.refunds r
+     where r."createdAt" >= (p_from::timestamp at time zone 'Asia/Tashkent') and r."createdAt" < ((p_to + 1)::timestamp at time zone 'Asia/Tashkent')
+       and coalesce(r.method, '') = 'cash' and r."cashDocId" is null and (p_created_from is null or r."createdAt" >= p_created_from)
+       and (p_created_to is null or r."createdAt" < p_created_to))
+  select jsonb_build_object(
+           'items', coalesce(jsonb_agg(jsonb_build_object('kind', x.kind, 'n', x.n, 'sum', x.s) order by x.dir desc, x.kind) filter (where x.n > 0), '[]'::jsonb),
+           'n', coalesce(sum(x.n), 0), 'in', coalesce(sum(x.s) filter (where x.dir > 0), 0), 'out', coalesce(sum(x.s) filter (where x.dir < 0), 0))
+    from x
+$$;
+revoke all on function app.kassa_cash_rows(date, date, timestamptz, timestamptz) from public, anon, authenticated;
+
 create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare

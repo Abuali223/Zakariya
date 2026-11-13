@@ -277,6 +277,52 @@ select zz.chk('E3e naqdsiz yozuvni tahrirlash — avvalgidek', zz.as('U_FM', $q$
 select zz.put('E4', zz.void('U_FM', zz.id('E1'), 'Tovar qaytarildi'));
 select zz.chk('E4 xarajat orderi bekor qilindi: ko''chgan yozuvlar olib tashlandi',
   (zz.get('E4')::jsonb ->> 'status') || ' / ' || (select string_agg(id, ',' order by id) from public.expenses), '^void / ex_bank_1,payroll__2027-01$');
+-- crit-1: kassa ishga tushishidan OLDINGI sanali naqd yozuv (kech kelgan chek, maosh / avans qog'ozi — pul sanashdan oldin chiqqan):
+--   faqat Direktor kiritadi (boshqalarga — alohida xabar); ishga tushgan kundan — avvalgidek faqat «Kassa» orqali; davr qulfi amal qiladi.
+select zz.chk('EP1 Moliya menejeri 02.01 sanali naqd xarajat — faqat Direktor (kassa:pre_live)',
+  zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_1','2027-01-02','2027-01','Boshqa',12000,'kech kelgan chek','cash') returning id) select id from x$q$),
+  '^ERR 42501 \[kassa:pre_live\] 02\.01\.2027 — kassa ishga tushishidan \(04\.01\.2027\) oldingi sana');
+select zz.put('EP2', zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_1','2027-01-02','2027-01','Boshqa',12000,'kech kelgan chek','cash') returning id || ':' || coalesce("articleId", '-') as r) select r from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_2','2027-01-04','2027-01','Boshqa',12000,'bugungi','cash') returning id) select id from x$q$));
+select zz.chk('EP2 Direktor: o''sha xarajat — yoziladi (statiya toifadan); ishga tushgan kundagi (04.01) naqd xarajat esa — Direktorga ham «Kassa» orqali',
+  zz.get('EP2'), '^ex_pre_1:EX-49 \| ERR 42501 \[kassa:cash_only_kassa\]');
+select zz.chk('EP3 avans va maosh (kassadan oldingi sana; vedomosti tasdiqlanmagan oy): Moliya menejeri — rad; Direktor — yoziladi',
+  zz.as('U_FM', $q$with x as (insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, method) values ('adv_pre_1','IQX-T1','staff:st1','Sinov',7000,'2026-11','2026-11-30','cash') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, method) values ('adv_pre_1','IQX-T1','staff:st1','Sinov',7000,'2026-11','2026-11-30','cash') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, paid, date) values ('sp_pre_1','IQT-T1','teachers:tch1','Sinov','2026-11',9000,'2026-12-29') returning id) select id from x$q$),
+  '^ERR 42501 \[kassa:pre_live\].* \| adv_pre_1 \| sp_pre_1$');
+select zz.chk('EP4 kassadan oldingi sanali naqdsiz yozuvni «naqd»ga aylantirish: Moliya menejeri — rad, Direktor — mumkin',
+  left(zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_3','2027-01-03','2027-01','Boshqa',5000,'bank','bank') returning id) select id from x$q$), 0)
+  || zz.as('U_FM', $q$with x as (update public.expenses set method = 'cash' where id = 'ex_pre_3' returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.expenses set method = 'cash' where id = 'ex_pre_3' returning method) select method from x$q$),
+  '^ERR 42501 \[kassa:pre_live\].* \| cash$');
+select zz.chk('EP4b kassadan oldingi naqd yozuvni tahrirlab kassa ishlayotgan kunga ko''chirib bo''lmaydi (Direktor ham); oldingi sanalar ichida tahrir — mumkin',
+  zz.as('U_FM', $q$with x as (update public.expenses set date = '2027-01-05' where id = 'ex_pre_1' returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.expenses set date = '2027-01-04' where id = 'ex_pre_1' returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.expenses set date = '2027-01-03', note = 'kech kelgan chek (tuzatildi)' where id = 'ex_pre_1' returning date) select date from x$q$),
+  '^ERR 42501 \[kassa:cash_only_kassa\] Kassa hujjatisiz naqd yozuvning sanasini kassa ishga tushgan kunga.* \| ERR 42501 \[kassa:cash_only_kassa\].* \| 2027-01-03$');
+-- g4-v1 (e): istisno faqat NAQD yozuvga (usuli 'cash' yoki ko'rsatilmagan) — hisobdor shaxs xarajati va karta orqali maosh
+--   kassadan oldingi sana bilan ham Direktorga avvalgidek o'z oynasi orqali (ro'yxatda ko'rinmaydigan yozuv bo'lmasin)
+select zz.chk('EP4c kassadan oldingi sana: Direktor — hisobdor shaxs xarajati, karta orqali maosh va bankdan avans — rad (kassa:cash_only_kassa)',
+  zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_5','2027-01-02','2027-01','Boshqa',4000,'hisobdor','accountable') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, paid, date, method) values ('sp_pre_2','IQT-T1','teachers:tch1','Sinov','2026-11',9000,'2026-12-29','card') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, method) values ('adv_pre_2','IQX-T1','staff:st1','Sinov',7000,'2026-11','2026-11-30','bank') returning id) select id from x$q$),
+  '^ERR 42501 \[kassa:cash_only_kassa\] Kassa ishga tushgan: hisobdor shaxs xarajati.* \| ERR 42501 \[kassa:cash_only_kassa\] Kassa ishga tushgan: maosh.* \| ERR 42501 \[kassa:cash_only_kassa\] Kassa ishga tushgan: naqd avans.*$');
+select zz.put('EP5q', zz.as('U_DIR', $q$select public.fin_period_lock('2027-01-01', '')::text$q$));
+select zz.chk('EP5 davr qulfi baribir: 01.01 gacha yopilgan davrga Direktor ham kassadan oldingi naqd yozuv kirita olmaydi',
+  (zz.get('EP5q')::jsonb ->> 'lockedThrough') || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_pre_4','2027-01-01','2027-01','Boshqa',3000,'yopilgan davr','cash') returning id) select id from x$q$),
+  '^2027-01-01 \| ERR 42501 \[fin:locked\]');
+select zz.chk('EP5b qulf olib tashlandi', coalesce(zz.as('U_DIR', $q$select public.fin_period_lock(null, 'Sinov: qulf olib tashlandi')::text$q$)::jsonb ->> 'lockedThrough', 'yo''q'), '^yo''q$');
+select zz.chk('EP6 nazorat ro''yxati: «kassa ishga tushishidan oldingi naqd yozuvlar (keyin kiritilgan)» — xarajat 2 ta, maosh 1, avans 1 (turi bo''yicha)',
+  (select string_agg((i ->> 'kind') || '=' || (i ->> 'n') || '/' || (i ->> 'sum'), ',' order by i ->> 'kind')
+     from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q, jsonb_array_elements(c #> '{preLive,items}') i),
+  '^advance=1/7000,expense=2/17000,salary=1/9000$');
+-- (keyingi tekshiruvlarga ta'sir qilmasin — kassaga bog'lanmagan yozuvlar Direktor tomonidan olib tashlanadi)
+select zz.chk('EP7 tozalash: bog''lanmagan kassadan oldingi yozuvlarni Direktor o''chira oladi',
+  zz.as('U_DIR', $q$with x as (delete from public.expenses where id in ('ex_pre_1', 'ex_pre_3') returning id) select count(*)::text from x$q$) || ':'
+  || zz.as('U_DIR', $q$with x as (delete from public.staff_advances where id = 'adv_pre_1' returning id) select count(*)::text from x$q$) || ':'
+  || zz.as('U_DIR', $q$with x as (delete from public.salary_payments where id = 'sp_pre_1' returning id) select count(*)::text from x$q$), '^2:1:1$');
 
 -- ---------- (O) o'zaro hisob: ish haqidan farzandining o'quv to'lovi (naqdsiz) ----------
 -- o'zaro hisob JSON'i: (kalit, xodim kodi, xodim havolasi, oy, summa, o'quvchi, ariza sanasi)

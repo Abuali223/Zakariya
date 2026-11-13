@@ -59,7 +59,7 @@ select '!!' as belgi, x.nima, x.bor, case when x.aniq then '' else 'kamida ' end
   from (values
     ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 17, true),
     ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 41, true),   -- +1: kassa_staff_open (acc-1)
-    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 75, true),   -- +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7)
+    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 79, true),   -- +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7); +4: kassa_golive_guard, kassa_restart_adj, kassa_desk_balance (ui-5, §9 qayta ishga tushirish), kassa_cash_rows (crit-1)
     ('himoya triggerlari (trg_kassa_*, trg_fin_*)', (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
                                                       where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 24, true),
     ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 16, true),
@@ -150,14 +150,21 @@ select '!!' as belgi, n.nspname || '.' || p.proname as funksiya, count(*) as nus
  group by 2 having count(*) > 1 order by 2;
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c10 \gset
 
-\qecho '== 11) Kassa kunlari zanjiri: kun boshi = oldingi kun oxiri; birinchi kun boshi = boshlang''ich qoldiq = uning dalolatnomasi; kassada bittadan ortiq ochiq kun yo''q'
+\qecho '== 11) Kassa kunlari zanjiri: kun boshi = oldingi kun oxiri (qayta ishga tushirishda — + farq dalolatnomasi); birinchi kun boshi = boshlang''ich qoldiq = uning dalolatnomasi; kassada bittadan ortiq ochiq kun yo''q'
+-- qayta ishga tushirish (ishga-tushirish §9; ui-5): oldingi kun bilan shu kun orasidagi «Д-» farq dalolatnomasi (OP-23, Dt 5010 Kt 0000 yoki teskari)
 with d as (select d.id, d.desk, d.day, d.status, d.opening,
                   lag(d.closing) over w as prev_closing, lag(d.day) over w as prev_day, row_number() over w as rn
-             from public.cash_days d window w as (partition by d.desk order by d.day))
+             from public.cash_days d window w as (partition by d.desk order by d.day)),
+     d2 as (select d.*, coalesce((select sum(case when l.debit = '5010' then l.amount else -l.amount end)
+                                    from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id and l.cash
+                                   where c.desk = d.desk and c.op = 'nc_opening' and c.status = 'posted' and c."sourceSnapshot" ->> 'kind' = 'restart'
+                                     and c."businessDay" > d.prev_day and c."businessDay" <= d.day), 0) as restart_adj
+              from d)
 select '!!' as belgi, x.kassa, x.kun, x.muammo, x.farq
-  from (select d.desk as kassa, d.day as kun, 'kun boshi oldingi kun (' || to_char(d.prev_day, 'DD.MM.YYYY') || ') oxiriga teng emas' as muammo,
-               d.opening - d.prev_closing as farq
-          from d where d.rn > 1 and d.opening is distinct from d.prev_closing
+  from (select d.desk as kassa, d.day as kun, 'kun boshi oldingi kun (' || to_char(d.prev_day, 'DD.MM.YYYY') || ') oxiriga teng emas'
+               || case when d.restart_adj <> 0 then ' (qayta ishga tushirish farqi bilan)' else '' end as muammo,
+               d.opening - d.prev_closing - d.restart_adj as farq
+          from d2 d where d.rn > 1 and d.opening is distinct from d.prev_closing + d.restart_adj
         union all
         select d.desk, d.day, 'birinchi kun boshi kassaning boshlang''ich qoldig''iga teng emas', d.opening - k."openingAmount"
           from d join public.cash_desks k on k.id = d.desk where d.rn = 1 and d.opening is distinct from k."openingAmount"
@@ -172,7 +179,8 @@ select '!!' as belgi, x.kassa, x.kun, x.muammo, x.farq
                                                                and c.status = 'posted' and c.amount = k."openingAmount")
         union all
         select c.desk, min(c."businessDay"), 'kassada ' || count(*) || ' ta o''tkazilgan boshlang''ich qoldiq dalolatnomasi', null
-          from public.cash_docs c where c.op = 'nc_opening' and c.status = 'posted' group by c.desk having count(*) > 1) x
+          from public.cash_docs c where c.op = 'nc_opening' and c.status = 'posted' and coalesce(c."sourceSnapshot" ->> 'kind', '') <> 'restart'
+         group by c.desk having count(*) > 1) x
  order by 2, 3;
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c11 \gset
 
@@ -231,7 +239,11 @@ select '!!' as belgi, c.desk as kassa, c.form as shakl, c.year as yil, c.no as r
  cross join lateral (select case when s.n = 0 then 'qatorlari yo''q'
                                  when c.form = 'KO1' and (s.dt <> c.amount or s.kt <> 0) then 'kirim orderi: Dt 5010 qatorlar jami summaga teng emas'
                                  when c.form = 'KO2' and (s.kt <> c.amount or s.dt <> 0) then 'chiqim orderi: Kt 5010 qatorlar jami summaga teng emas'
-                                 when c.op = 'nc_opening' and (s.dt <> c.amount or s.kt <> 0 or s.nc <> 0) then 'boshlang''ich qoldiq dalolatnomasi: Dt 5010 qatorlar jami summaga teng emas'
+                                 when c.op = 'nc_opening' and coalesce(c."sourceSnapshot" ->> 'kind', '') = 'restart'   -- qayta ishga tushirish farqi: ikkala tomon ham mumkin
+                                      and (s.nc <> 0 or not ((s.dt = c.amount and s.kt = 0) or (s.kt = c.amount and s.dt = 0)))
+                                   then 'qayta ishga tushirish dalolatnomasi: kassa (5010) qatori summaga teng emas'
+                                 when c.op = 'nc_opening' and coalesce(c."sourceSnapshot" ->> 'kind', '') <> 'restart' and (s.dt <> c.amount or s.kt <> 0 or s.nc <> 0)
+                                   then 'boshlang''ich qoldiq dalolatnomasi: Dt 5010 qatorlar jami summaga teng emas'
                                  when c.form = 'ACT' and c.op <> 'nc_opening' and (s.dt <> 0 or s.kt <> 0) then 'dalolatnomada naqd (5010) qator bor'
                                  when c.form = 'ACT' and c.op <> 'nc_opening' and s.nc <> c.amount then 'dalolatnoma: qatorlar jami summaga teng emas' end as muammo) x
  where c.status in ('posted', 'void') and x.muammo is not null
@@ -329,7 +341,16 @@ select x.nima, x.qiymat
     (8, 'asosiy kassa hujjatlari', (select coalesce(string_agg(y.form || ' ' || y.status || ': ' || y.n, '; ' order by y.form, y.status), 'yo''q')
                                       from (select c.form, c.status, count(*) as n from public.cash_docs c where c.desk = 'main' group by 1, 2) y)),
     (9, 'sinov kassalari hujjatlari', (select count(*)::text from public.cash_docs c join public.cash_desks k on k.id = c.desk where k."isTest")),
-    (10, 'davr suratlari', (select count(*) || ' ta' || coalesce('; oxirgisi ' || to_char(max(s."asOfDay"), 'DD.MM.YYYY'), '') from public.fin_snapshots s where s."asOfDay" is not null))
+    (10, 'davr suratlari', (select count(*) || ' ta' || coalesce('; oxirgisi ' || to_char(max(s."asOfDay"), 'DD.MM.YYYY'), '') from public.fin_snapshots s where s."asOfDay" is not null)),
+    -- kassani to'xtatish va qayta ishga tushirish (ishga-tushirish §9) — summasiz
+    (11, 'asosiy kassa: to''xtatish / qayta ishga tushirish',
+         (select case when k."pausedAt" is not null then 'TO''XTATILGAN (' || to_char(k."pausedAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY') || ' dan)'
+                           || case when k."restartDay" > coalesce((select max(d.day) from public.cash_days d where d.desk = k.id), k."restartDay" - 1)
+                                   then '; qayta ishga tushirish tayyorlangan: ' || to_char(k."restartDay", 'DD.MM.YYYY') else '' end
+                      when k."restartDay" > coalesce((select max(d.day) from public.cash_days d where d.desk = k.id), k."restartDay" - 1)
+                        then 'qayta ishga tushadi: ' || to_char(k."restartDay", 'DD.MM.YYYY')
+                      else 'ishlaydi' || coalesce('; oxirgi qayta ishga tushirish: ' || to_char(k."restartDay", 'DD.MM.YYYY'), '') end
+            from public.cash_desks k where k.id = 'main'))
   ) x(n, nima, qiymat)
  order by x.n;
 select :err + (:'ERROR' = 'true')::int as err \gset

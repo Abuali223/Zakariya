@@ -575,6 +575,26 @@ test('RP-08 XLSX varag‘i: kunlar bo‘yicha (son katakchalar), bo‘limlar, ku
   assert.ok(ru.name === 'E2 Статьи' && ru.rows[4][1] === 'Статья' && ru.rows[5][1] === 'ПРИХОД' && ru.rows[6][1] === 'Образовательные услуги', JSON.stringify(ru.rows.slice(4, 7)));
 });
 
+test('Qayta ishga tushirish farqi (ui-5, ishga-tushirish §9): KO-3 va RP-08 — chop etishda va XLSX da alohida qator; 0 bo‘lsa yo‘q', () => {
+  const j = mkJournal({ closing: 2150432.11, restartAdj: 35000 });
+  let t = text(journalHtml(j, ctx(), W));
+  assert.ok(t.includes('Давр бошига қолдиқ: 1 000 000=00 · Қайта ишга тушириш фарқи (техник далолатнома «Д-»): +35 000=00 · Давр охирига қолдиқ: 2 150 432=11'), t);
+  t = text(journalHtml(mkJournal({ closing: 2114432.11, restartAdj: -1000 }), ctx({ lang: 'ru' }), W));
+  assert.ok(t.includes('Разница при повторном запуске кассы (технический акт «Д-»): -1 000=00'), t);
+  assert.ok(!text(journalHtml(mkJournal({ restartAdj: 0 }), ctx(), W)).includes('Қайта ишга'), 'farq 0 — qator yo‘q');
+  const sh = journalSheet(j, ctx({ rules: rulesJ }));
+  const i = sh.rows.findIndex(r => r[5] === 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)');
+  assert.ok(i > 0 && sh.rows[i][6].v === 35000 && sh.rows[i - 1][5] === 'Davr boshiga qoldiq' && sh.rows[i + 1][5] === 'Davr oxiriga qoldiq', JSON.stringify(sh.rows.slice(-4)));
+  assert.ok(!journalSheet(mkJournal(), ctx({ rules: rulesJ })).rows.some(r => r[5] === 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)'), 'farqsiz — XLSX da yo‘q');
+  const m = mkMatrix({ closing: 1685000, restartAdj: 35000 });
+  t = text(matrixHtml(m, ctx({ lang: 'uz-latn' }), W));
+  assert.ok(t.includes('Jami chiqim: 2 450 000=00 · Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»): +35 000=00 · Oy oxiriga qoldiq: 1 685 000=00'), t);
+  const ms = matrixSheet(m, ctx());
+  const k = ms.rows.findIndex(r => r[1] === 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)');
+  assert.ok(k > 0 && ms.rows[k][2].v === 35000 && ms.rows[k - 1][1] === 'Oy boshiga qoldiq' && ms.rows[k + 1][1] === 'Oy oxiriga qoldiq', JSON.stringify(ms.rows.slice(-6)));
+  assert.ok(!matrixSheet(mkMatrix(), ctx()).rows.some(r => r[1] === 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)'));
+});
+
 test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobdorlar — ismsiz va to‘liq; bitta kitobga yoziladi', () => {
   const pack = { ok: true, month: '2027-01', from: '2027-01-01', to: '2027-01-31', masked: true, desk: { id: 'main', name: 'Asosiy kassa', isTest: false },
     journal: mkJournal({ masked: true }), matrix: mkMatrix(),

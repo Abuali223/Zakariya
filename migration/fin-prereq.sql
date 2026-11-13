@@ -167,6 +167,8 @@ end $$;
 --   p_extra    — qo'shimcha maydonlar: {"fiscalNo": "...", "fiscalExempt": true} (kassa ishga tushgach naqd to'lovda fiskal chek №).
 --   KASSA (moliya rejasi 1a, kassa-pay.sql): kassa ishga tushgan bo'lsa (fin_org.kassaGoLive) NAQD to'lov shu tranzaksiyaning
 --     o'zida kassa kirim orderi (KO-1) bilan yoziladi — order o'tmasa (kecha yopilmagan, fiskal chek № yo'q …) to'lov ham yozilmaydi.
+--     Kassa qo'llanadimi — to'lovning O'Z kassa kuni («Sana», bo'lmasa olingan kun) bo'yicha: ishga tushishdan oldingi kun puli —
+--     KO-1 siz (boshlang'ich qoldiq sanashiga kirgan; kim kirita olishi — kassa-pay.sql).
 --     Kassa funksiyalari hali o'rnatilmagan bo'lsa (kassa-pay.sql zanjirda yo'q) — avvalgidek, KO-1 siz.
 drop function if exists public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamptz);
 create or replace function public.record_manual_payment(
@@ -219,8 +221,9 @@ begin
     raise exception 'record_manual_payment: o''quvchi topilmadi (%)', p_sid using errcode = '22023';
   end if;
   -- Kassa (1a): naqd to'lov — kassa ishga tushgan bo'lsa to'lovdan OLDINGI holat olinadi (o'quvchi bo'yicha navbat qulfi ichida).
-  if p_method = 'cash' and to_regprocedure('app.kassa_tuition_before(text)') is not null then
-    execute 'select app.kassa_tuition_before($1)' into v_before using p_sid;
+  --   Kassa kuni: kassir tanlagan «Sana», bo'lmasa olingan kun, bo'lmasa bugun; so'ralgan «Sana» matni ham beriladi (crit-1).
+  if p_method = 'cash' and to_regprocedure('app.kassa_tuition_before(text,date,timestamptz,text)') is not null then
+    execute 'select app.kassa_tuition_before($1, $2, $3, $4)' into v_before using p_sid, coalesce(v_date::date, v_today), v_cap, p_date;
   end if;
 
   -- Yangi qator; shu payId allaqachon bo'lsa (qayta yuborish, ikkinchi tab, eski 3 bosqichli mijoz yarim yo'lda qolgan) —

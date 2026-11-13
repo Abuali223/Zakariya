@@ -9,7 +9,12 @@
 #   (6) bitta xodimning hisobdor qoldig'i va oy avansiga 8 tadan parallel qaytim — faqat qoldiq yetganlari o'tadi, deadlock yo'q;
 #   (7) bitta o'qituvchi va oy: maosh qaytimi (OP-09), naqd maosh va ularni bekor qilish parallel — qulf tartibi bir xil
 #       (S → P → L4): deadlock yo'q, berilgan maosh 0 … tasdiqlangan summa oralig'ida, moslik toza;
-#   (5) kirimlar davom etayotganda kun yopiladi — yopilgandan keyingi kirimlar rad, kun jami = hujjatlar, tekshiruv o'tadi.
+#   (5) kirimlar davom etayotganda kun yopiladi — yopilgandan keyingi kirimlar rad, kun jami = hujjatlar, tekshiruv o'tadi;
+#   (8) sozlama qatori (fin_org) o'zgarayotganda pul yozuvi (state-7): davr qulfi va orqa sana bilan to'lov; kassani to'xtatish va
+#       qayta ishga tushirish (ishga tushadigan kun) va naqd o'quv to'lovi — yozuvchi o'zgarish tugashini kutib, yangi qiymat bilan
+#       tekshiradi; qayta sanash sozlama qatorini kassa qulfidan oldin kutadi (qulf tartibi); davr surati qulf bilan undan oldin
+#       boshlangan to'lovni kutib, uni suratga oladi (8-bo'lim test soatini ertangi kunga suradi — baza nomi sinov bazasiniki
+#       bo'lishi kerak: fx_… / …sinov… / …test…).
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -221,6 +226,70 @@ chk "5e farq hujjati: yopish paytigacha o'tgan kirimlar summasi" \
     "$(q -c "select (abs(d.diff) = (select coalesce(sum(amount), 0) from public.cash_docs c where c.\"dayId\" = d.id and c.status = 'posted' and c.\"clientRef\" like 'race-c%'))::text from public.cash_days d where d.desk = 'main' and d.day = '$TODAY'")" "true"
 chk "5f Moliya menejeri tekshirdi (xesh, jamlar, raqamlar)" "$(call_as R_FM "public.kassa_day_verify('main', '$TODAY', true) -> 'day' ->> 'status'")" "verified"
 chk "5g raqamlash yakunda ham uzluksiz" "$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" "[]"
+
+# ---------- (8) sozlama qatori (fin_org) o'zgarishi va pul yozuvi parallel (state-7) ----------
+#   Davr qulfi / ishga tushadigan kun FOR UPDATE bilan o'zgarayotganda yozuvchi qatorni FOR SHARE bilan o'qiydi: o'zgarish tugashini
+#   kutadi va YANGI qiymat bilan tekshiradi (avval eski qiymat bilan o'tib ketardi: yopilgan davrga to'lov, KO-1 siz naqd to'lov).
+#   A — Direktor tranzaksiyasi (o'zgarish + 2 s kutish + commit), B — 0,5 s keyin boshlangan pul yozuvi.
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('r_s1','R-1','Poyga Oquvchi',5,'A','uz','',1,'[]') on conflict (id) do nothing;
+SQL
+slow_tx(){   # $1 uid, $2 SQL ifoda — tranzaksiya ichida bajariladi, 2 s kutib commit qilinadi; $3 — chiqish fayli
+  { as_sess "$1"; echo "begin;"; echo "select 'A|' || ($2)::text;"; echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$3" 2>&1
+}
+PREV_DAY=$(q -c "select app.fin_today() - 1"); NEXT_DAY=$(q -c "select app.fin_today() + 1")
+( slow_tx R_DIR "public.fin_period_lock('$PREV_DAY', 'poyga') ->> 'lockedThrough'" "$TMP/8a.A" ) &
+sleep 0.5
+call_raw R_FM "public.record_manual_payment('man_race8_0001', 'R-1', 100000, 'bank', '$PREV_DAY', '', '', '', null, null) ->> 'ok'" > "$TMP/8a.B"
+wait
+chk "8a davr qulfi o'rnatilayotganda orqa sana bilan to'lov: qulf tugashini kutdi va yangi qulf bilan rad etildi (yopilgan davrga to'lov tushmadi)" \
+    "$(grep -c "^A|$PREV_DAY" "$TMP/8a.A")/$(grep -c 'fin:locked' "$TMP/8a.B")/$(q -c "select count(*) from public.payments where id = 'man_race8_0001'")" "1/1/0"
+# Kassani to'xtatish uchun: pul berilmagan so'rovlar bekor qilinadi (Direktor); bugungi kun yopilgan va tekshirilgan (5-bo'lim)
+for id in $(q -c "select id from public.cash_docs where desk = 'main' and status in ('draft', 'approved') order by id"); do
+  call_as R_DIR "public.kassa_doc_cancel('$id', 'Poyga: to''xtatishdan oldin') ->> 'status'" >/dev/null
+done
+( slow_tx R_DIR "coalesce(public.fin_org_set('{\"kassaGoLive\":null}') ->> 'kassaGoLive', 'bo''sh')" "$TMP/8b.A" ) &
+sleep 0.5
+call_raw R_KAS "coalesce(public.record_manual_payment('man_race8_0002', 'R-1', 60000, 'cash', null, '', '', '', null, '{\"fiscalNo\":\"F-R8-2\"}'::jsonb) ->> 'kassa', 'KO-1 siz')" > "$TMP/8b.B"
+wait
+chk "8b kassa to'xtatilayotganda naqd o'quv to'lovi: to'xtatish tugashini kutdi va KO-1 siz yozildi (eskicha «ishlaydi» deb kassa hujjatiga urinmadi)" \
+    "$(grep -c '^A|bo.sh' "$TMP/8b.A")/$(tail -1 "$TMP/8b.B")/$(q -c "select (\"pausedAt\" is not null)::text from public.cash_desks where id = 'main'")/$(q -c "select coalesce(\"cashDocId\", '-') from public.payments where id = 'man_race8_0002'")" "1/KO-1 siz/true/-"
+# Ertasi kun ertalab (test soati — sinov bazasi): komissiya sanashi va qayta ishga tushirish (to'xtatilgan davr puli — bugungi sana bilan)
+q >/dev/null -c "insert into app.fin_clock (id, t) values (1, ('$NEXT_DAY 09:00')::timestamp at time zone 'Asia/Tashkent') on conflict (id) do update set t = excluded.t"
+X8=$(q -c "select trim_scale(closing) from public.cash_days where desk = 'main' and day = '$TODAY'")
+chk "8c qayta ishga tushirish qoldig'i (komissiya: oxirgi kun oxiri + to'xtatilgan davrdagi 60 000) ertangi kun uchun kiritildi" \
+    "$(call_as R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$NEXT_DAY\"}') ->> 'delta'")" "60000"
+# (8c2) qulf tartibi (g4-v1): kassa_opening_set sozlama qatorini kassa qulfi (L4) va kassa qatoridan OLDIN oladi — fin_org shu payt
+#   o'zgarayotgan bo'lsa ularni ushlamay kutadi (aksincha: fin_org_set → app.kassa_golive_guard kassa qatorini yangilashda o'zaro qulflanish).
+#   A — sozlama qatorini 2 s ushlab turadi; O — 0,5 s keyin qayta sanash; yana 0,5 s keyin tekshiruv: L4 va kassa qatori bo'sh.
+T1=$(q -c "select trim_scale(t1) from public.fin_org where id = 'main'")
+( slow_tx R_DIR "public.fin_org_set('{\"t1\":$T1}') ->> 't1'" "$TMP/8c2.A" ) &
+sleep 0.5
+( call_raw R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$NEXT_DAY\",\"note\":\"Poyga: qayta sanaldi\"}') ->> 'delta'" > "$TMP/8c2.O" ) &
+sleep 0.5
+P8=$(q -c "select pg_try_advisory_xact_lock(hashtext('iqror_desk:main'))::text || '/' || (select count(*) from (select 1 from public.cash_desks where id = 'main' for update skip locked) x)")
+wait
+chk "8c2 qulf tartibi: sozlama qatori o'zgarayotganda qayta sanash kassa qulfini va kassa qatorini ushlamay kutdi, keyin o'tdi" \
+    "$P8/$(grep -c '^A|' "$TMP/8c2.A")/$(tail -1 "$TMP/8c2.O")" "true/1/1/60000"
+( slow_tx R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$NEXT_DAY\"}') ->> 'kassaGoLive'" "$TMP/8d.A" ) &
+sleep 0.5
+call_raw R_KAS "public.record_manual_payment('man_race8_0003', 'R-1', 40000, 'cash', null, '', '', '', null, '{\"fiscalNo\":\"F-R8-3\"}'::jsonb) #>> '{kassa,day}'" > "$TMP/8d.B"
+wait
+chk "8d kassa qayta ishga tushirilayotganda naqd o'quv to'lovi: tugashini kutdi va KO-1 bilan yozildi (kun boshi — sanalgan summa); moslik toza" \
+    "$(grep -c "^A|$NEXT_DAY" "$TMP/8d.A")/$(tail -1 "$TMP/8d.B")/$(q -c "select trim_scale(opening) from public.cash_days where desk = 'main' and day = '$NEXT_DAY'")/$(q -c "select app.kassa_reconcile(null, null) ->> 'total'")" \
+    "1/$NEXT_DAY/$((X8 + 60000))/0"
+# (8e) davr surati qulf bilan va undan OLDIN boshlangan orqa sanali to'lov (g4-v1): surat sozlama qatorini mazmundan oldin oladi —
+#   to'lov tugashini kutadi va to'lov suratga kiradi (avval mazmun darhol hisoblanib, qulf keyin qo'yilardi: to'lov yopilgan davrda,
+#   lekin suratda yo'q). B — 2 s ochiq turadigan to'lov (bugungi kassa kunidan oldingi sana), A — 0,5 s keyin surat + qulf.
+( slow_tx R_FM "public.record_manual_payment('man_race8_0004', 'R-1', 70000, 'bank', '$TODAY', '', '', '', null, null) ->> 'ok'" "$TMP/8e.B" ) &
+sleep 0.5
+call_raw R_DIR "public.fin_snapshot_take('{\"asOf\":\"$TODAY\",\"lock\":true}') ->> 'id'" > "$TMP/8e.A"
+wait
+SNAP=$(tail -1 "$TMP/8e.A")
+chk "8e davr surati (qulf bilan) shu payt yozilayotgan orqa sanali to'lovni kutdi: to'lov qo'llangan, davr yopilgan va to'lov suratda (o'quvchi avansi = hozirgi)" \
+    "$(grep -c '^A|true' "$TMP/8e.B")/$(q -c "select (\"lockedThrough\" = '$TODAY')::text from public.fin_org where id = 'main'")/$(q -c "select status from public.payments where id = 'man_race8_0004'")/$(q -c "select (coalesce((select (s ->> 'credit')::numeric from public.fin_snapshots f, jsonb_array_elements(f.payload -> 'students') s where f.id = '$SNAP' and s ->> 'studentId' = 'R-1'), -1) = (select credit from public.student_credit where id = 'R-1'))::text")" \
+    "1/true/applied/true"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]

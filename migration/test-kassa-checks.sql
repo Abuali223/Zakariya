@@ -357,6 +357,65 @@ alter table public.cash_docs rename to cash_docs_zz;
 rollback to savepoint c2;
 select zz.chk('C2 kassa jadvali yo''q baza: faqat 1-band ishlaydi, muammo yo''q', :'has_kassa' || '/' || :'bad' || '/' || :'err', '^f/0/0$');
 
+-- ---------- (E) kassani to'xtatish va qayta ishga tushirish (ishga-tushirish §9; ui-5) — tekshiruv uni muammo deb ko'rmasligi kerak ----------
+--   06.01 yopiladi, kassa to'xtatiladi; 07.01 komissiya 1 000 so'm KAM sanaydi (to'xtatilgan davrda naqd chiqim) — farq dalolatnomasi
+--   teskari tomonga (Dt 0000 Kt 5010); qayta ochilgan kun boshi = sanalgan summa. 11-band (zanjir) va 16-band (dalolatnoma) — toza;
+--   buzilsa — o'z bandida ko'rinadi.
+select zz.put('E0', zz.as('U_KAS', format('select public.kassa_day_close(%L::jsonb)::text', jsonb_build_object('desk', 'main', 'day', '2027-01-06',
+  'counted', (select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = 'main' and d.status = 'open')))));
+select zz.put('E1', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.clock('2027-01-07 09:00+05');
+select zz.put('E2', zz.as('U_DIR', format('select public.kassa_opening_set(%L::jsonb)::text', jsonb_build_object('amount',
+  (select closing - 1000 from public.cash_days where desk = 'main' and day = '2027-01-06'), 'startDay', '2027-01-07'))));
+select zz.put('E3', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-07"}')::text$q$));
+select zz.put('E4', zz.tui('U_KAS', 'man_e4_0001', 'T-3', 20000, 'Sinov Ota', '121'));
+select zz.chk('E1 06.01 yopildi, kassa to''xtatildi, 07.01 qayta ishga tushdi: farq −1 000 (Dt 0000 Kt 5010), kun boshi = sanalgan, KO-1 yozildi',
+  (zz.get('E0')::jsonb ->> 'diff') || ' | ' || coalesce(zz.get('E1')::jsonb ->> 'kassaGoLive', 'bo''sh') || ' | ' || (zz.get('E2')::jsonb ->> 'delta')
+  || ':' || (zz.get('E2')::jsonb #>> '{doc,lines,0,debit}') || '>' || (zz.get('E2')::jsonb #>> '{doc,lines,0,credit}') || ' | ' || (zz.get('E3')::jsonb ->> 'kassaGoLive')
+  || ' | ' || (select (opening = (select closing - 1000 from public.cash_days where desk = 'main' and day = '2027-01-06'))::text from public.cash_days where desk = 'main' and day = '2027-01-07')
+  || ' | ' || (zz.get('E4')::jsonb #>> '{kassa,day}'),
+  '^0 \| bo''sh \| -1000:0000>5010 \| 2027-01-07 \| true \| 2027-01-07$');
+\ir kassa-checks.sql
+select zz.chk('E2 qayta ishga tushirilgan kassa: tekshiruv hech narsa topmadi (zanjir, dalolatnoma, raqamlash, moslik)',
+  :'bad' || '/' || :'err' || ' | ' || :'c11' || ',' || :'c14' || ',' || :'c16' || ',' || :'c20', '^0/0 \| 0,0,0,0$');
+
+savepoint e3;
+set local session_replication_role = replica;
+update public.cash_days set opening = opening + 500 where desk = 'main' and day = '2027-01-07';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint e3;
+select zz.chk('E3 qayta ochilgan kun boshi o''zgartirilgan (sanalgan summadan farqli) — 11-band', :'c11' || '/' || :'bad', '^1/1$');
+
+savepoint e4;
+set local session_replication_role = replica;
+update public.cash_doc_lines set amount = amount + 1 where "docId" = (select c.id from public.cash_docs c where c.op = 'nc_opening' and c."sourceSnapshot" ->> 'kind' = 'restart' and c.status = 'posted');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint e4;
+select zz.chk('E4 qayta ishga tushirish dalolatnomasi qatori o''zgartirilgan — 16-band (dalolatnoma) va 11-band (zanjir farqi)', :'c16' || '/' || :'c11' || '/' || :'bad', '^1/1/2$');
+
+-- ---------- (E5) IKKINCHI to'xtatish va qayta ishga tushirish (g4-v1): 07.01 yopiladi, kassa yana to'xtatiladi; 08.01 komissiya
+--   2 000 so'm KO'P sanaydi — ikkinchi farq dalolatnomasi (Dt 5010 Kt 0000); ikkala dalolatnoma bilan zanjir (11) va dalolatnomalar (16) toza.
+select zz.put('E5a', zz.as('U_KAS', format('select public.kassa_day_close(%L::jsonb)::text', jsonb_build_object('desk', 'main', 'day', '2027-01-07',
+  'counted', (select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = 'main' and d.status = 'open')))));
+select zz.put('E5b', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.clock('2027-01-08 09:00+05');
+select zz.put('E5c', zz.as('U_DIR', format('select public.kassa_opening_set(%L::jsonb)::text', jsonb_build_object('amount',
+  (select closing + 2000 from public.cash_days where desk = 'main' and day = '2027-01-07'), 'startDay', '2027-01-08'))));
+select zz.put('E5d', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-08"}')::text$q$));
+select zz.put('E5e', zz.tui('U_KAS', 'man_e5_0001', 'T-3', 30000, 'Sinov Ota', '122'));
+select zz.chk('E5 ikkinchi to''xtatish va qayta ishga tushirish: farq +2 000 (Dt 5010 Kt 0000), kun boshi = sanalgan, KO-1 yozildi; ikki dalolatnoma',
+  (zz.get('E5a')::jsonb ->> 'diff') || ' | ' || coalesce(zz.get('E5b')::jsonb ->> 'kassaGoLive', 'bo''sh') || ' | ' || (zz.get('E5c')::jsonb ->> 'delta')
+  || ':' || (zz.get('E5c')::jsonb #>> '{doc,lines,0,debit}') || '>' || (zz.get('E5c')::jsonb #>> '{doc,lines,0,credit}') || ' | ' || (zz.get('E5d')::jsonb ->> 'kassaGoLive')
+  || ' | ' || (select (opening = (select closing + 2000 from public.cash_days where desk = 'main' and day = '2027-01-07'))::text from public.cash_days where desk = 'main' and day = '2027-01-08')
+  || ' | ' || (zz.get('E5e')::jsonb #>> '{kassa,day}')
+  || ' | ' || (select count(*) from public.cash_docs where op = 'nc_opening' and "sourceSnapshot" ->> 'kind' = 'restart' and status = 'posted'),
+  '^0 \| bo''sh \| 2000:5010>0000 \| 2027-01-08 \| true \| 2027-01-08 \| 2$');
+\ir kassa-checks.sql
+select zz.chk('E5b ikki marta qayta ishga tushirilgan kassa: tekshiruv hech narsa topmadi (zanjir, dalolatnomalar, raqamlash, moslik)',
+  :'bad' || '/' || :'err' || ' | ' || :'c11' || ',' || :'c14' || ',' || :'c16' || ',' || :'c20', '^0/0 \| 0,0,0,0$');
+
 -- ---------- Natija ----------
 \o
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 600), '<null>') || ' ; kutilgan: ' || pat || ')' end

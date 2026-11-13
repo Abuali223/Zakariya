@@ -18,6 +18,7 @@ bajariladi. Maqsad: yangi tizimga toza ma’lumot bilan o‘tish (rasmiy boshlan
 | 10 | **Bank va to‘lov tizimlari komissiyalari** (Click, Uzum, terminal, bank xizmati) oyiga bir marta bank ko‘chirmasi bo‘yicha «Bank» toifasida yoziladi. | Moliya menejeri |
 | 11 | **Kassada ortiqcha naqd saqlanmaydi.** Bank bilan kassa limiti kelishilguncha kun oxiridagi ortiqcha pul bankka topshiriladi; maosh uchun olingan pul 3 ish kunidan ortiq saqlanmaydi. | Kassir, direktor |
 | 12 | **Google Sheet faqat tarix uchun** — yangi oylar (dekabr va keyingilari) ochilmaydi. | Hammasi |
+| 13 | **Boshlang‘ich qoldiq sanashidan oldin hamma naqd yozuv tizimda:** to‘lov, xarajat, maosh, avans kiritilgan; to‘lov qabul qiladigan har qurilma internetga ulangan va navbati (⏳) bo‘sh. Sanashdan keyin topilgan eski yozuvni faqat direktor **haqiqiy sanasi** bilan kiritadi — bugungi sana bilan kiritilsa pul ikki marta hisoblanadi (`ishga-tushirish.md`, 4-bo‘lim). | Kassir, moliya menejeri, direktor |
 
 **Savol yoki istisno** bo‘lsa — moliya menejeri orqali direktorga. Bu qoidalar yangi «Kassa» bo‘limi ishga tushganda
 uning ichki tekshiruvlari bilan almashtiriladi.

@@ -314,6 +314,8 @@ revoke all on function app.kassa_doc_build(jsonb, text, text, boolean) from publ
 --   Odatda — bugungi ochiq kun (yo'q bo'lsa ochiladi: kun boshi = oldingi kun oxiri). Oldingi kun yopilmagan bo'lsa — rad,
 --   faqat o'sha kuni olingan (capturedAt) oflayn yozuv o'sha ochiq kunga tushadi. Olingan kuni yopilgan bo'lsa — joriy ochiq
 --   kunga «kech» belgisi bilan. 48 soatdan eski yozuv — faqat Direktor ruxsati bilan (p_late_ok).
+--   To'xtatilgan kassa (ishga-tushirish §9; ui-5) hujjat qabul qilmaydi; qayta ishga tushirilganda birinchi kun "restartDay" dan
+--   ochiladi va uning boshi — komissiya sanagan summa ("restartAmount").
 create or replace function app.kassa_resolve_day(p_desk text, p_captured timestamptz, p_uid text, p_late_ok boolean,
                                                  out o_day_id text, out o_day date, out o_late boolean)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -322,6 +324,11 @@ declare
   v_open public.cash_days%rowtype; v_last public.cash_days%rowtype; v_k public.cash_desks%rowtype; v_cap date; v_opening numeric;
 begin
   o_late := false;
+  select * into v_k from public.cash_desks k where k.id = p_desk;
+  if not coalesce(v_k."isTest", false) and v_k."pausedAt" is not null then
+    raise exception 'Kassa to''xtatilgan (% dan): kassa hujjati yozilmaydi. Qayta ishga tushirish — komissiya sanashi, «Qayta ishga tushirish» va ishga tushadigan kun (Direktor)',
+      to_char(v_k."pausedAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:paused';
+  end if;
   if p_captured is not null and p_captured > v_now + interval '5 minutes' then p_captured := null; end if;
   if p_captured is not null then
     v_cap := (p_captured at time zone 'Asia/Tashkent')::date;
@@ -347,9 +354,15 @@ begin
     elsif v_last.day > v_today then
       raise exception 'Server sanasi oxirgi kassa kunidan (%) oldin — soatni tekshiring', to_char(v_last.day, 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:clock';
     end if;
-    v_opening := v_last.closing;
+    if v_k."restartDay" is not null and v_k."restartDay" > v_last.day then   -- qayta ishga tushirish (kassa.sql: I3 istisnosi)
+      if v_today < v_k."restartDay" then
+        raise exception 'Kassa % dan qayta ishga tushadi', to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:not_started';
+      end if;
+      v_opening := v_k."restartAmount";
+    else
+      v_opening := v_last.closing;
+    end if;
   else
-    select * into v_k from public.cash_desks k where k.id = p_desk;
     if v_k."startDay" is null or v_k."openingAmount" is null then
       raise exception 'Kassa hali ishga tushirilmagan: boshlang''ich qoldiq kiritilmagan (Direktor)' using errcode = 'P0001', hint = 'kassa:not_started';
     end if;

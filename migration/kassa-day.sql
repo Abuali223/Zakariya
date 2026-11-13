@@ -7,6 +7,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 -- =====================================================================
 -- kassa-day.sql — MOLIYA ISH REJASI, 1a-BOSQICH (F1.9): KASSA KUNI SIKLI VA O'QISH FUNKSIYALARI.
 --   kassa_opening_set(p)        — boshlang'ich qoldiq (komissiya sanashi) va birinchi kassa kuni: FAQAT Direktor, kassa ishga tushguncha;
+--                                 to'xtatilgan kassada — qayta ishga tushirish qoldig'i va farq dalolatnomasi (ishga-tushirish §9);
+--   app.kassa_golive_guard(...) — «ishga tushadigan kun» o'zgarishi (fin_org_set): to'xtatish va qayta ishga tushirish shartlari (ui-5);
 --   kassa_day_close(p)          — kunni SANAB yopish: farq (sanalgan − hisobdagi − hali o'tkazilmagan) shu kun sanasi bilan tizim
 --                                 hujjatiga aylanadi (kamomad KO-2 Dt 5910, ortiqcha KO-1 Kt 9390), varaqlar va xesh muzlaydi;
 --   kassa_handover(p)           — smena topshirish-qabul sanashi (kun ochiq qoladi, kassir almashadi; farq — darhol hujjat);
@@ -275,13 +277,46 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_day_json(text) from public, anon, authenticated;
 
+-- Qayta ishga tushirish farqi (ishga-tushirish §9): kuni (p_after, p_to] oralig'idagi o'tkazilgan qayta ishga tushirish dalolatnomalarining
+--   (nc_opening, "sourceSnapshot".kind = 'restart') kassa qoldig'iga ta'siri: Dt 5010 — «+», Kt 5010 — «−». Farq 0 bo'lsa dalolatnoma yo'q.
+create or replace function app.kassa_restart_adj(p_desk text, p_after date, p_to date) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(sum(case when l.debit = '5010' then l.amount else -l.amount end), 0)
+    from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id and l.cash
+   where c.desk = p_desk and c.op = 'nc_opening' and c.status = 'posted' and c."sourceSnapshot" ->> 'kind' = 'restart'
+     and c."businessDay" > p_after and c."businessDay" <= p_to
+$$;
+revoke all on function app.kassa_restart_adj(text, date, date) from public, anon, authenticated;
+
+-- Kassadagi hisob qoldig'i (hozir): ochiq kun bo'lsa — uning qoldig'i; bo'lmasa — tayyorlangan qayta ishga tushirishning sanalgan summasi,
+--   oxirgi yopilgan kun oxiri yoki boshlang'ich qoldiq (hech biri yo'q — NULL). «Kassa» kartasi, nazorat ro'yxati, Telegram bloki va davr
+--   surati — bitta qoida.
+create or replace function app.kassa_desk_balance(p_desk text) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = k.id and d.status = 'open'),
+                  case when k."restartDay" > (select max(d.day) from public.cash_days d where d.desk = k.id) then k."restartAmount" end,
+                  (select d.closing from public.cash_days d where d.desk = k.id and d.status <> 'open' order by d.day desc limit 1),
+                  k."openingAmount")
+    from public.cash_desks k where k.id = p_desk
+$$;
+revoke all on function app.kassa_desk_balance(text) from public, anon, authenticated;
+
 -- ---------- Boshlang'ich qoldiq (CT-02): FAQAT Direktor, kassa ishga tushguncha ----------
 --   p: desk, amount (0 mumkin), startDay ('YYYY-MM-DD' — birinchi kassa kuni), note, commission [{title, name}]
+--   QAYTA ISHGA TUSHIRISH (ishga-tushirish §9; ui-5): to'xtatilgan kassada (yoki tayyorlangan, hali boshlanmagan qayta ishga
+--   tushirishni o'sha kun bilan qayta sanashda) — amount: komissiya sanagan summa, startDay: qayta ishga tushirish kuni (oxirgi kassa
+--   kunidan keyin, bugundan oldin emas). Sanalgan summa bilan oxirgi kun oxiri farqi — texnik dalolatnoma («Д-», OP-23; ortiqcha —
+--   Dt 5010 Kt 0000, kam — Dt 0000 Kt 5010; asos «Qayta ishga tushirish: sanash dalolatnomasi»): to'xtatilgan davrda kassa hujjatisiz
+--   yozilgan naqd harakat (nazorat ro'yxati, «Kassani to'xtatish va qayta ishga tushirish» — buxgalter solishtiradi). Kassir zimmasiga
+--   kamomad / ortiqcha yozilmaydi. Qayta ochilgan birinchi kun boshi — sanalgan summa; kassa ishga tushadigan kun (fin_org_set) shu
+--   sanaga qo'yilgach qayta ishlaydi. Kassa keyin yana to'xtatilsa — navbatdagi qayta ishga tushirish xuddi shunday (har biri o'z
+--   dalolatnomasi bilan). Qayta ishga tushirish kuni va undan keyingi sana bilan kassa hujjatisiz naqd yozuv bo'lmasin (kassa:restart_gap):
+--   u yangi kassa davrida «hujjatisiz naqd harakat» bo'lib qolardi (fin_org_set ham qabul qilmaydi — kassa:live_gap).
 create or replace function public.kassa_opening_set(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_desk text; v_amount numeric; v_start date; v_k public.cash_desks%rowtype; v_doc_id text;
-  v_comm jsonb; v_note text;
+  v_comm jsonb; v_note text; v_last public.cash_days%rowtype; v_delta numeric; v_gap jsonb; v_pfrom timestamptz;
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: boshlang''ich qoldiqni faqat Direktor kiritadi' using errcode = '42501'; end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
@@ -298,17 +333,80 @@ begin
   v_comm := app.kassa_commission(p -> 'commission');
   v_note := left(btrim(coalesce(p ->> 'note', '')), 500);
 
+  -- Qulf tartibi (kassa.sql, QULF TARTIBI): sozlama qatori FOR SHARE — kassa qulfi (L4) va kassa qatoridan OLDIN. «Ishga tushadigan kun»
+  --   shu payt o'zgarayotgan bo'lsa (fin_org_set FOR UPDATE → app.kassa_golive_guard kassa qatorini yangilaydi) — u tugaguncha kutiladi;
+  --   aksincha (kassa qatori ushlangan holda sozlama qatorini kutish) o'zaro qulflanish (deadlock) bo'lardi.
+  perform 1 from public.fin_org o where o.id = 'main' for share;
   perform app.kassa_lock_desk(v_desk);
   select * into v_k from public.cash_desks k where k.id = v_desk and k.active for update;
   if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
-  if exists (select 1 from public.cash_days d where d.desk = v_desk) then
-    raise exception 'Kassa ishga tushgan — boshlang''ich qoldiq endi o''zgarmaydi' using errcode = '42501', hint = 'kassa:started';
+  select * into v_last from public.cash_days d where d.desk = v_desk order by d.day desc limit 1;
+  if v_last.id is not null then
+    -- tayyorlangan qayta ishga tushirish va ishga tushadigan kun allaqachon shu sanada: boshqa kun — avval sanani bo'shatish (kassa yana
+    --   to'xtatiladi), keyin yangi kun bilan qayta sanash
+    if not v_k."isTest" and v_k."pausedAt" is null and v_k."restartDay" > v_last.day and v_start <> v_k."restartDay" then
+      raise exception 'Qayta ishga tushirish % ga tayyorlangan va ishga tushadigan kun shu sanaga qo''yilgan: boshqa kun bilan qayta sanash uchun avval «⚙ Sozlamalar»da ishga tushadigan kunni bo''shating (kassa yana to''xtatiladi), keyin qoldiqni yangi kun bilan kiriting',
+        to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:restart_pending';
+    end if;
+    if v_k."isTest" or not (v_k."pausedAt" is not null or coalesce(v_k."restartDay" > v_last.day and v_start = v_k."restartDay", false)) then
+      raise exception 'Kassa ishga tushgan — boshlang''ich qoldiq endi o''zgarmaydi' using errcode = '42501', hint = 'kassa:started';
+    end if;
+    if v_last.status = 'open' then   -- (to'xtatishda ochiq kun bo'lmaydi — himoya)
+      raise exception 'Avval % kassa kunini sanab yoping', to_char(v_last.day, 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:prev_open';
+    end if;
+    if v_start <= v_last.day or v_start < app.fin_today() then
+      raise exception 'Qayta ishga tushirish kuni oxirgi kassa kunidan (%) keyin va bugundan oldin bo''lmasin', to_char(v_last.day, 'DD.MM.YYYY')
+        using errcode = '22023', hint = 'kassa:bad_input';
+    end if;
   end if;
-  if not v_k."isTest" then   -- yopilgan davrga kassa kuni qo'yilmaydi (fin-period.sql); sozlama qatori — davr qulfi bilan navbatga
-    perform 1 from public.fin_org o where o.id = 'main' for share;
-    perform app.fin_lock_check(v_start, 'Birinchi kassa kuni');
+  if not v_k."isTest" then   -- yopilgan davrga kassa kuni qo'yilmaydi (fin-period.sql); sozlama qatori boshida FOR SHARE bilan olingan
+    perform app.fin_lock_check(v_start, case when v_last.id is null then 'Birinchi kassa kuni' else 'Qayta ishga tushirish kuni' end);
+  end if;
+  if v_last.id is not null then   -- qayta ishga tushirish (sinov kassasida — yo'q, yuqorida rad)
+    -- to'xtatilgan davrdagi kassa hujjatisiz naqd yozuvlar qayta ishga tushirish kunidan OLDINGI sanali bo'lsin
+    v_gap := app.kassa_cash_rows(v_start, v_start + 366, null);
+    if (v_gap ->> 'n')::int > 0 then
+      raise exception 'Qayta ishga tushirish kuni (%) yoki undan keyingi sana bilan kassa hujjatisiz naqd yozuvlar bor (% ta) — ular to''xtatilgan davrga tegishli: qayta ishga tushirish kunini ulardan keyingi kunga qo''ying (sana xato bo''lsa — yozuvni tuzating)',
+        to_char(v_start, 'DD.MM.YYYY'), v_gap ->> 'n' using errcode = 'P0001', hint = 'kassa:restart_gap';
+    end if;
+    -- to'xtatilgan davr boshi (nazorat ro'yxati: shu paytdan qayta ishga tushirish kunigacha kiritilgan yozuvlar, sanasidan qat'i nazar):
+    --   kassa hozir to'xtatilgan bo'lsa — "pausedAt"; tayyorlangan qayta ishga tushirishni qayta sanashda — avvalgi sanashdagisi (eng erta)
+    v_pfrom := least(v_k."pausedAt",
+                     (select (e.data ->> 'pausedFrom')::timestamptz from public.cash_day_events e
+                       where e.desk = v_desk and e.kind = 'opening' and e.data ->> 'restart' = 'true' and v_k."restartDay" > v_last.day
+                         and e.day = v_k."restartDay" order by e.at desc, e.id desc limit 1));
   end if;
   perform app.kassa_flag(true);
+  if v_last.id is not null then   -- qayta ishga tushirish
+    v_delta := v_amount - v_last.closing;
+    -- Avval kiritilgan (hali boshlanmagan) qayta ishga tushirish dalolatnomasi bo'lsa — bekor qilinadi (raqami saqlanadi).
+    if v_k."restartDocId" is not null and v_k."restartDay" > v_last.day then
+      update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = 'Qayta ishga tushirish qoldig''i qayta kiritildi'
+       where id = v_k."restartDocId" and status = 'posted';
+    end if;
+    if v_delta <> 0 then
+      select b.o_id into v_doc_id from app.kassa_doc_build(jsonb_build_object(
+          'desk', v_desk, 'op', 'nc_opening', 'amount', abs(v_delta), 'clientRef', 'opening_' || replace(gen_random_uuid()::text, '-', ''),
+          'partyName', 'Qayta ishga tushirish', 'basis', 'Qayta ishga tushirish: sanash dalolatnomasi', 'note', v_note,
+          'sourceSnapshot', jsonb_build_object('kind', 'restart', 'prevDay', v_last.day, 'prevClosing', v_last.closing, 'counted', v_amount,
+                                               'startDay', v_start, 'pausedAt', v_k."pausedAt"),
+          'lines', jsonb_build_array(jsonb_build_object('debit', case when v_delta > 0 then '5010' else '0000' end,
+                                                        'credit', case when v_delta > 0 then '0000' else '5010' end, 'amount', abs(v_delta), 'articleId', 'OP-23'))),
+        'ACT', v_uid, true) b;
+      perform app.kassa_act_post(v_doc_id, v_uid, v_start);
+    end if;
+    update public.cash_desks set "restartDay" = v_start, "restartAmount" = v_amount, "restartDocId" = v_doc_id, "restartBy" = v_uid, "restartAt" = now()
+     where id = v_desk;
+    insert into public.cash_counts (id, desk, day, kind, expected, counted, diff, "diffDocId", commission, note, "byUid", at)
+      values ('cc_' || replace(gen_random_uuid()::text, '-', ''), v_desk, v_start, 'opening', v_last.closing, v_amount, v_delta, v_doc_id, v_comm, v_note, v_uid, clock_timestamp());
+    insert into public.cash_day_events (id, desk, day, kind, "byUid", at, reason, data)   -- at — qayta sanash bir tranzaksiyada ham tartibli
+      values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_desk, v_start, 'opening', v_uid, clock_timestamp(), v_note,
+              jsonb_build_object('amount', v_amount, 'docId', v_doc_id, 'restart', true, 'prevDay', v_last.day, 'prevClosing', v_last.closing, 'delta', v_delta,
+                                 'pausedFrom', v_pfrom));
+    perform app.kassa_flag(false);
+    return jsonb_build_object('ok', true, 'restart', true, 'delta', v_delta, 'doc', case when v_doc_id is not null then app.kassa_doc_json(v_doc_id) end,
+                              'desk', (select to_jsonb(k) from public.cash_desks k where k.id = v_desk));
+  end if;
   -- Avval kiritilgan dalolatnoma bo'lsa — bekor qilinadi (raqami saqlanadi), yangisi yoziladi.
   if v_k."openingDocId" is not null then
     update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = 'Boshlang''ich qoldiq qayta kiritildi'
@@ -333,6 +431,84 @@ begin
 end $$;
 revoke all on function public.kassa_opening_set(jsonb) from public, anon;
 grant execute on function public.kassa_opening_set(jsonb) to authenticated;
+
+-- ---------- «Kassa ishga tushadigan kun» o'zgarishi: to'xtatish va qayta ishga tushirish (ishga-tushirish §9; ui-5) ----------
+--   fin_org_set (fin-core.sql) sana o'zgarganda DINAMIK chaqiradi — sozlama qatori FOR UPDATE bilan ushlangan holda. Natija — saqlanadigan sana.
+--   * TO'XTATISH — kelgan sana bo'shatilsa yoki keyinga surilsa, kassada kunlar bo'lsa: kassa qulfi (L4) bo'sh bo'lishi (shu payt hujjat
+--     yozilmayotgan), ochiq kassa kuni va pul berilmagan so'rovlar (tasdiq kutayotgan / tasdiqlangan) bo'lmasligi shart — aks holda rad,
+--     alohida hint bilan. Kassa to'xtatiladi ("pausedAt"): yangi kassa kuni ochilmaydi, naqd pul kassa hujjatisiz yoziladi. Saqlanadigan sana —
+--     bo'sh (kiritilgan keyingi sana — rejalashtirilgan kun sifatida hodisada qoladi): qayta ishga tushirish faqat yangi komissiya sanashi bilan.
+--   * TO'XTATILGAN kassada sana faqat tayyorlangan qayta ishga tushirish kuniga ("restartDay", kassa_opening_set) qo'yiladi — kassa
+--     shundan qayta ishlaydi; tayyorlangan, hali boshlanmagan qayta ishga tushirishda sana bo'shatilsa — kassa yana to'xtatiladi.
+--   Har o'zgarish kun jurnaliga 'golive' hodisasi bo'lib yoziladi (kim, qachon, qaysi sanadan qaysiga). Sinov kassasi bunga kirmaydi.
+--   Qulf tartibi: sozlama qatori (FOR UPDATE) → kassa qulfi faqat pg_try_advisory_xact_lock bilan (kutmaydi) — yozuvchilar sozlama qatorini
+--   FOR SHARE bilan kassa qulfidan oldin ham, keyin ham oladi; kutmaydigan qulf o'zaro qulflanishga (deadlock) yo'l qo'ymaydi.
+create or replace function app.kassa_golive_guard(p_old date, p_new date) returns date
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_today date := app.fin_today(); v_k public.cash_desks%rowtype; v_last date; v_open date; v_req text;
+  v_store date := p_new; v_pause boolean; v_resume boolean; v_reached boolean := p_old is not null and p_old <= app.fin_today();
+begin
+  for v_k in select * from public.cash_desks k where not k."isTest" and k.active order by k.id loop
+    select max(d.day) into v_last from public.cash_days d where d.desk = v_k.id;
+    v_pause := false; v_resume := false;
+    if v_k."pausedAt" is not null then   -- to'xtatilgan kassa
+      if p_new is not null then
+        if v_k."restartDay" is null or v_k."restartDay" <= v_last then
+          raise exception 'Kassa to''xtatilgan: avval komissiya sanashi bilan qayta ishga tushirish qoldig''ini kiriting («Qayta ishga tushirish»), keyin ishga tushadigan kunni shu sanaga qo''ying'
+            using errcode = 'P0001', hint = 'kassa:restart_needed';
+        end if;
+        if p_new <> v_k."restartDay" then
+          raise exception 'Qayta ishga tushirish kuni — %: ishga tushadigan kun shu sana bo''ladi (boshqa sana kerak bo''lsa — qoldiqni o''sha sana bilan qayta kiriting)',
+            to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = '22023', hint = 'kassa:restart_day';
+        end if;
+        v_resume := true;
+      end if;
+    elsif v_k."restartDay" is not null and v_k."restartDay" > coalesce(v_last, v_k."restartDay" - 1) then   -- tayyorlangan qayta ishga tushirish
+      if p_new is null then v_pause := true;
+      elsif p_new <> v_k."restartDay" then   -- (sana allaqachon qayta ishga tushirish kunida: boshqa kun — avval bo'shatib, qayta sanash)
+        raise exception 'Qayta ishga tushirish kuni — %: ishga tushadigan kun shu sana bo''ladi. Boshqa sana kerak bo''lsa — avval ishga tushadigan kunni bo''shating (kassa yana to''xtatiladi), keyin «Qayta ishga tushirish» qoldig''ini o''sha sana bilan qayta kiriting',
+          to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = '22023', hint = 'kassa:restart_day';
+      end if;
+    elsif v_reached and (p_new is null or p_new > p_old) then   -- kelgan sana bo'shatiladi yoki suriladi — kassani to'xtatish
+      if not pg_try_advisory_xact_lock(hashtext('iqror_desk:' || v_k.id)) then   -- shu payt kun ochilayotgan / hujjat yozilayotgan bo'lmasin
+        raise exception 'Kassada hozir hujjat yozilmoqda — bir oz kutib, qayta saqlang' using errcode = 'P0001', hint = 'kassa:busy';
+      end if;
+      select max(d.day) into v_last from public.cash_days d where d.desk = v_k.id;
+      select d.day into v_open from public.cash_days d where d.desk = v_k.id and d.status = 'open';
+      if v_open is not null then
+        raise exception 'Kassani to''xtatib bo''lmaydi: % kassa kuni ochiq — avval pulni sanab, kunni yoping (ishga-tushirish §9)', to_char(v_open, 'DD.MM.YYYY')
+          using errcode = 'P0001', hint = 'kassa:rollback_open_day';
+      end if;
+      select string_agg(x.t, '; ' order by x.rn) filter (where x.rn <= 10)
+             || case when count(*) > 10 then '; … (jami ' || count(*) || ' ta)' else '' end
+        into v_req
+        from (select case when c.form = 'KO1' then 'kirim' else 'chiqim' end || ' «' || coalesce(r."nameUz", c.op) || '» ' || trim_scale(c.amount) || ' so''m — '
+                     || case when c.status = 'draft' then 'tasdiq kutilmoqda' else 'tasdiqlangan, pul berilmagan' end as t,
+                     row_number() over (order by c."createdAt", c.id) as rn
+                from public.cash_docs c left join public.fin_op_rules r on r.op = c.op
+               where c.desk = v_k.id and c.status in ('draft', 'approved')) x;
+      if v_req is not null then
+        raise exception 'Kassani to''xtatib bo''lmaydi: pul berilmagan kassa so''rovlari bor — avval ularni bekor qiling yoki pulini bering: %', v_req
+          using errcode = 'P0001', hint = 'kassa:rollback_requests';
+      end if;
+      v_pause := v_last is not null;
+      if v_pause then v_store := null; end if;
+    end if;
+    perform app.kassa_flag(true);
+    if v_pause then
+      update public.cash_desks set "pausedAt" = app.fin_now(), "pausedBy" = v_uid where id = v_k.id;
+    elsif v_resume then
+      update public.cash_desks set "pausedAt" = null, "pausedBy" = null where id = v_k.id;
+    end if;
+    insert into public.cash_day_events (id, desk, day, kind, "byUid", at, data)
+      values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_k.id, v_today, 'golive', v_uid, clock_timestamp(),
+              jsonb_build_object('from', p_old, 'to', p_new, 'stored', v_store, 'pause', v_pause, 'resume', v_resume, 'lastDay', v_last));
+    perform app.kassa_flag(false);
+  end loop;
+  return v_store;
+end $$;
+revoke all on function app.kassa_golive_guard(date, date) from public, anon, authenticated;
 
 -- ---------- Kunni sanab yopish (CT-03) ----------
 --   p: desk, day ('YYYY-MM-DD' — yopilayotgan kun; eski ekrandan boshqa kunni yopib qo'ymaslik uchun), counted, denoms {nominal: soni},
@@ -575,6 +751,13 @@ begin
   if exists (select 1 from public.cash_days d where d.desk = v_desk and d.day > p_day) then
     raise exception 'Faqat oxirgi kassa kuni qayta ochiladi (keyingi kunda hujjat bor)' using errcode = 'P0001', hint = 'kassa:reopen_last';
   end if;
+  -- To'xtatilgan kassa yoki tayyorlangan qayta ishga tushirish (ishga-tushirish §9): oxirgi kun qayta ochilmaydi — qayta yopilsa kun oxiri
+  --   o'zgarib, qayta ishga tushirish sanashi (farq dalolatnomasi) shu kun oxiridan hisoblangani bilan mos kelmay qolardi. Tuzatish —
+  --   qayta ishga tushirish sanashida (farq dalolatnomasida) aks etadi.
+  if exists (select 1 from public.cash_desks k where k.id = v_desk and not k."isTest" and (k."pausedAt" is not null or k."restartDay" > p_day)) then
+    raise exception 'Kassa to''xtatilgan yoki qayta ishga tushirish tayyorlangan: % kassa kuni qayta ochilmaydi — farq qayta ishga tushirish sanashida (dalolatnomada) aks etadi (ishga-tushirish §9)',
+      to_char(p_day, 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:reopen_paused';
+  end if;
   -- Yopilgan davrdagi kun qayta ochilmaydi (qayta yopilishida farq hujjati o'zgarishi mumkin) — avval Direktor davrni qayta ochadi.
   --   (fin_org qatori FOR SHARE: bir vaqtda davr yopilayotgan bo'lsa — u tugaguncha kutib, yangi qulf bilan tekshiradi)
   if not exists (select 1 from public.cash_desks k where k.id = v_desk and k."isTest") then
@@ -671,6 +854,7 @@ declare
   v_uid text := app.uid(); v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today();
   v_k public.cash_desks%rowtype; v_o public.fin_org%rowtype; v_open public.cash_days%rowtype; v_last public.cash_days%rowtype;
   v_block text; v_bal numeric; v_l2 boolean := app.fin_list2(); v_dir boolean := app.is_admin(); v_op boolean := app.kassa_operator();
+  v_paused boolean; v_restart jsonb;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   select * into v_k from public.cash_desks k where k.id = v_desk;
@@ -678,17 +862,28 @@ begin
   select * into v_o from public.fin_org o where o.id = 'main';
   select * into v_open from public.cash_days d where d.desk = v_desk and d.status = 'open';
   select * into v_last from public.cash_days d where d.desk = v_desk and d.status <> 'open' order by d.day desc limit 1;
+  v_bal := app.kassa_desk_balance(v_desk);
+  -- To'xtatilgan kassa va tayyorlangan (hali boshlanmagan) qayta ishga tushirish (ishga-tushirish §9; ui-5)
+  v_paused := not v_k."isTest" and v_k."pausedAt" is not null;
+  if v_open.id is null and v_last.id is not null and v_k."restartDay" > v_last.day then
+    v_restart := jsonb_build_object('day', v_k."restartDay", 'amount', v_k."restartAmount", 'prevDay', v_last.day, 'prevClosing', v_last.closing,
+                                    'delta', v_k."restartAmount" - v_last.closing, 'docId', v_k."restartDocId",
+                                    'docNo', (select c.no from public.cash_docs c where c.id = v_k."restartDocId" and c.status = 'posted'));
+  end if;
   if v_open.id is not null then
-    v_bal := app.kassa_day_balance(v_open.id);
     v_block := case when v_open.day < v_today then 'prev_open' when v_open.day > v_today then 'clock' end;
   else
-    v_bal := coalesce(v_last.closing, v_k."openingAmount");
-    v_block := case when v_last.id is null and (v_k."startDay" is null or v_k."openingAmount" is null or v_today < v_k."startDay") then 'not_started'
+    v_block := case when v_paused then 'paused'
+                    when v_restart is not null and v_today < v_k."restartDay" then 'restart'
+                    when v_last.id is null and (v_k."startDay" is null or v_k."openingAmount" is null or v_today < v_k."startDay") then 'not_started'
                     when v_last.day = v_today then 'day_closed' when v_last.day > v_today then 'clock' end;
   end if;
   return jsonb_build_object(
     'desk', jsonb_build_object('id', v_k.id, 'name', v_k.name, 'isTest', v_k."isTest", 'active', v_k.active, 'startDay', v_k."startDay",
-                               'openingAmount', v_k."openingAmount", 'started', exists (select 1 from public.cash_days d where d.desk = v_desk)),
+                               'openingAmount', v_k."openingAmount", 'started', exists (select 1 from public.cash_days d where d.desk = v_desk),
+                               'pausedAt', case when v_paused then v_k."pausedAt" end,
+                               'pausedDay', case when v_paused then (v_k."pausedAt" at time zone 'Asia/Tashkent')::date end,
+                               'restart', v_restart),
     'today', v_today, 'now', app.fin_now(),
     'openDay', case when v_open.id is not null then app.kassa_day_json(v_open.id) end,
     'lastDay', case when v_last.id is not null then app.kassa_day_json(v_last.id) end,
@@ -828,22 +1023,28 @@ grant execute on function public.kassa_day_book(text, date) to authenticated;
 -- Davr boshidagi va oxiridagi kassa qoldig'i — KO-3 va RP-08 uchun bitta qoida: boshi — davrdagi birinchi kassa kunining boshi;
 --   kun bo'lmasa — oldingi oxirgi kun oxiri; u ham bo'lmasa — boshlang'ich qoldiq (birinchi kassa kuni davr oxirigacha bo'lsa).
 --   Oxiri — davrdagi (yoki undan oldingi) oxirgi kun oxiri (ochiq kunda — joriy qoldiq).
-create or replace function app.kassa_period_bal(p_desk text, p_from date, p_to date, out o_open numeric, out o_close numeric)
+--   Qayta ishga tushirish (ishga-tushirish §9): o_ref — boshi olingan kun; o_adj — o_ref dan davr oxirigacha bo'lgan qayta ishga tushirish
+--   dalolatnomalari farqi (oxiriga ham qo'shiladi: kun ochilmagan bo'lsa ham hisob qoldig'i — sanalgan summa). Davr uchun: boshi + kirim −
+--   chiqim + o_adj = oxiri. OUT parametrlar o'zgargani uchun avvalgi ta'rif o'chiriladi (chaqiruvchilar — kassa_journal, kassa_matrix).
+drop function if exists app.kassa_period_bal(text, date, date);
+create or replace function app.kassa_period_bal(p_desk text, p_from date, p_to date, out o_open numeric, out o_close numeric, out o_adj numeric, out o_ref date)
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_k public.cash_desks%rowtype;
+declare v_k public.cash_desks%rowtype; v_cday date;
 begin
   select * into v_k from public.cash_desks k where k.id = p_desk;
-  select d.opening into o_open from public.cash_days d where d.desk = p_desk and d.day between p_from and p_to order by d.day limit 1;
+  select d.opening, d.day into o_open, o_ref from public.cash_days d where d.desk = p_desk and d.day between p_from and p_to order by d.day limit 1;
   if o_open is null then
-    select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end into o_open
+    select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end, d.day into o_open, o_ref
       from public.cash_days d where d.desk = p_desk and d.day < p_from order by d.day desc limit 1;
   end if;
   if o_open is null then
     o_open := case when v_k."startDay" is not null and v_k."startDay" <= p_to then coalesce(v_k."openingAmount", 0) else 0 end;
+    o_ref := p_from - 1;
   end if;
-  select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end into o_close
+  select case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end, d.day into o_close, v_cday
     from public.cash_days d where d.desk = p_desk and d.day <= p_to order by d.day desc limit 1;
-  o_close := coalesce(o_close, o_open);
+  o_close := coalesce(o_close, o_open) + app.kassa_restart_adj(p_desk, coalesce(v_cday, o_ref), p_to);
+  o_adj := app.kassa_restart_adj(p_desk, o_ref, p_to);
 end $$;
 revoke all on function app.kassa_period_bal(text, date, date) from public, anon, authenticated;
 
@@ -855,7 +1056,7 @@ create or replace function public.kassa_journal(p_desk text, p_from date, p_to d
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
   v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_k public.cash_desks%rowtype;
-  v_open numeric; v_close numeric; v_t jsonb;
+  v_open numeric; v_close numeric; v_adj numeric; v_t jsonb;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if p_from is null or p_to is null or p_from > p_to then
@@ -866,7 +1067,7 @@ begin
   end if;
   select * into v_k from public.cash_desks k where k.id = v_desk;
   if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
-  select b.o_open, b.o_close into v_open, v_close from app.kassa_period_bal(v_desk, p_from, p_to) b;
+  select b.o_open, b.o_close, b.o_adj into v_open, v_close, v_adj from app.kassa_period_bal(v_desk, p_from, p_to) b;
   select jsonb_build_object(
            'in', coalesce(sum(c.amount) filter (where c.form = 'KO1' and c.status = 'posted'), 0),
            'nIn', count(*) filter (where c.form = 'KO1' and c.status = 'posted'),
@@ -881,7 +1082,8 @@ begin
   return jsonb_build_object('ok', true, 'from', p_from, 'to', p_to,
     'desk', jsonb_build_object('id', v_k.id, 'name', v_k.name, 'isTest', v_k."isTest"),
     'opening', v_open, 'closing', v_close, 'totals', v_t,
-    'balanced', v_open + (v_t ->> 'in')::numeric - (v_t ->> 'out')::numeric = v_close,
+    'restartAdj', v_adj,   -- qayta ishga tushirish farqi (texnik dalolatnoma, kassa kitobidan tashqari): boshi + kirim − chiqim + farq = oxiri
+    'balanced', v_open + (v_t ->> 'in')::numeric - (v_t ->> 'out')::numeric + v_adj = v_close,
     'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."businessDay", c."postedAt", c.form, c.no)
                         from public.cash_docs c
                        where c.desk = v_desk and c.form in ('KO1', 'KO2') and c.status in ('posted', 'void')
@@ -951,7 +1153,7 @@ create or replace function public.kassa_matrix(p_desk text, p_month text) return
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
   v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_k public.cash_desks%rowtype;
-  v_from date; v_to date; v_n int; v_open numeric; v_close numeric; v_rows jsonb; v_t jsonb;
+  v_from date; v_to date; v_n int; v_open numeric; v_close numeric; v_adj numeric; v_ref date; v_rows jsonb; v_t jsonb;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if coalesce(p_month, '') !~ '^20\d{2}-(0[1-9]|1[0-2])$' then
@@ -960,7 +1162,7 @@ begin
   select * into v_k from public.cash_desks k where k.id = v_desk;
   if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
   v_from := to_date(p_month || '-01', 'YYYY-MM-DD'); v_to := (v_from + interval '1 month')::date - 1; v_n := v_to - v_from + 1;
-  select b.o_open, b.o_close into v_open, v_close from app.kassa_period_bal(v_desk, v_from, v_to) b;
+  select b.o_open, b.o_close, b.o_adj, b.o_ref into v_open, v_close, v_adj, v_ref from app.kassa_period_bal(v_desk, v_from, v_to) b;
   with l as (
          select c.form, coalesce(l."articleId", '') as art, c."businessDay" as d, sum(l.amount) as amount,
                 bool_or((case when c.form = 'KO1' then l.credit else l.debit end) in ('5110', '5710')) as transfer
@@ -990,14 +1192,15 @@ begin
                left join t i on i.d = v_from + g.i and i.form = 'KO1'
                left join t o on o.d = v_from + g.i and o.form = 'KO2')
   select jsonb_build_object('dayIn', jsonb_agg(y.din order by y.i), 'dayOut', jsonb_agg(y.dout order by y.i),
-                            'dayBal', jsonb_agg(v_open + y.cum order by y.i),
+                            -- kun oxiri qoldig'i: qayta ishga tushirish farqi o'z kunidan qo'shiladi (ishga-tushirish §9)
+                            'dayBal', jsonb_agg(v_open + y.cum + case when v_adj <> 0 then app.kassa_restart_adj(v_desk, v_ref, v_from + y.i) else 0 end order by y.i),
                             'in', sum(y.din), 'out', sum(y.dout), 'transferIn', sum(y.trin), 'transferOut', sum(y.trout))
     into v_t
     from (select x.*, sum(x.din - x.dout) over (order by x.i) as cum from x) y;
   return jsonb_build_object('ok', true, 'month', p_month, 'from', v_from, 'to', v_to, 'nDays', v_n,
     'desk', jsonb_build_object('id', v_k.id, 'name', v_k.name, 'isTest', v_k."isTest"),
-    'opening', v_open, 'closing', v_close,
-    'balanced', v_open + (v_t ->> 'in')::numeric - (v_t ->> 'out')::numeric = v_close,
+    'opening', v_open, 'closing', v_close, 'restartAdj', v_adj,
+    'balanced', v_open + (v_t ->> 'in')::numeric - (v_t ->> 'out')::numeric + v_adj = v_close,
     'rows', v_rows,
     'days', coalesce((select jsonb_agg(jsonb_build_object('day', d.day, 'status', d.status,
                                                           'closing', case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end)
@@ -1146,19 +1349,23 @@ grant execute on function public.kassa_kpi(text, int) to authenticated;
 --   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
 --   tomonlar, kech (oflayn) yozuvlar, asl nusxani qayta chiqarish, darvozasiz naqd maosh, KO-4 chop etilmagan kunlar, limit,
 --   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati va manfiy qoldiq, xodimlar zimmasidagi kamomad (4730),
---   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas).
+--   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas),
+--   kassa ishga tushishidan oldingi sanali, keyin kiritilgan naqd yozuvlar (crit-1), kassani to'xtatish va qayta ishga tushirish (§9).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
   v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today(); v_limit numeric; v_bal numeric;
-  v_test boolean; v_m0 date := date_trunc('month', app.fin_today())::date;
+  v_test boolean; v_m0 date := date_trunc('month', app.fin_today())::date; v_live date; v_pre_to date;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
-  select o."cashLimit" into v_limit from public.fin_org o where o.id = 'main';
-  select coalesce((select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = v_desk and d.status = 'open'),
-                  (select d.closing from public.cash_days d where d.desk = v_desk and d.status <> 'open' order by d.day desc limit 1),
-                  (select k."openingAmount" from public.cash_desks k where k.id = v_desk), 0) into v_bal;
+  select o."cashLimit", o."kassaGoLive" into v_limit, v_live from public.fin_org o where o.id = 'main';
+  v_bal := coalesce(app.kassa_desk_balance(v_desk), 0);
+  -- «ishga tushishdan oldingi» ro'yxat chegarasi: qayta ishga tushirilgan kassada — oxirgi to'xtatishdan oldingi kassa kunigacha
+  v_pre_to := v_live - 1;
+  if v_live is not null and exists (select 1 from public.cash_desks k where k.id = 'main' and k."restartDay" = v_live) then
+    v_pre_to := least(v_pre_to, (select max(d.day) from public.cash_days d where d.desk = 'main' and d.day < v_live) - 1);
+  end if;
   return jsonb_build_object('ok', true, 'today', v_today, 'isTest', v_test,
     'gaps', (select coalesce(jsonb_agg(jsonb_build_object('year', y.year, 'problems', y.g)), '[]'::jsonb)
                from (select k.year, app.kassa_gap_check(v_desk, k.year) as g from (select distinct year from public.doc_counters where desk = v_desk) k) y
@@ -1228,7 +1435,49 @@ begin
     'handover', (select jsonb_build_object(
                    'monthCount', count(*) filter (where c."businessDay" >= v_m0), 'monthSum', coalesce(sum(c.amount) filter (where c."businessDay" >= v_m0), 0),
                    'earlierCount', count(*) filter (where c."businessDay" < v_m0), 'earlierSum', coalesce(sum(c.amount) filter (where c."businessDay" < v_m0), 0))
-                   from public.cash_docs c where c.desk = v_desk and c.op = 'out_handover' and c.status = 'posted' and c."businessDay" >= v_today - 92));
+                   from public.cash_docs c where c.desk = v_desk and c.op = 'out_handover' and c.status = 'posted' and c."businessDay" >= v_today - 92),
+    -- kassa ishga tushishidan OLDINGI sanali, ishga tushgandan KEYIN kiritilgan kassa hujjatisiz naqd yozuvlar (crit-1: kech kelgan
+    --   to'lov / xarajat qog'ozi — Direktor haqiqiy sanasi bilan kiritadi): turi bo'yicha soni va summasi. Buxgalter ularni boshlang'ich
+    --   qoldiq sanashi bilan solishtiradi — o'sha pul sanashga kirgan bo'lishi va ikkinchi marta (bugungi sana bilan) kiritilmagan bo'lishi kerak.
+    --   Kassa qayta ishga tushirilgan bo'lsa — oxirgi to'xtatilgan davr sanalari bu yerga kirmaydi (ular «restarts» ro'yxatida).
+    'preLive', case when v_test or v_live is null then null
+                    else jsonb_build_object('goLive', v_live, 'to', v_pre_to)
+                         || app.kassa_cash_rows(v_live - 400, v_pre_to, v_live::timestamp at time zone 'Asia/Tashkent') end,
+    -- kassani to'xtatish va qayta ishga tushirish (ishga-tushirish §9): to'xtatilgan bo'lsa — qachondan; oxirgi 400 kundagi qayta ishga
+    --   tushirishlar (har to'xtatish uchun oxirgi sanash — qayta sanalganlari o'rniga) — oxirgi kun oxiri, komissiya sanagan summa, farq
+    --   dalolatnomasi va to'xtatilgan davrdagi kassa hujjatisiz naqd harakat; izohlanmagan farq = farq − (shu harakat kirimi − chiqimi):
+    --   0 bo'lmasa — buxgalter «Қ» jurnali bilan tekshiradi (texnik 0000 yozuvi orqasida kamomad / ortiqcha qolmasin).
+    'paused', case when v_test then null else
+                (select jsonb_build_object('day', (k."pausedAt" at time zone 'Asia/Tashkent')::date,
+                                           'lastDay', (select max(d.day) from public.cash_days d where d.desk = k.id))
+                   from public.cash_desks k where k.id = v_desk and k."pausedAt" is not null) end,
+    --   Har yozuv bitta joyda: «rows» — sanasi shu to'xtatilgan davrda (oxirgi kun ham: to'xtatish kun yopilgandan keyin), keyingi
+    --   to'xtatishgacha kiritilgan (kech kiritilgan qog'oz ham); «backdated» — shu to'xtatilgan davrda (to'xtatilgandan qayta ishga
+    --   tushirish kunigacha) kiritilgan, sanasi esa oxirgi kassa kunidan oldingi (orqa sana bilan — u kunlar kassa hujjatlarida yo'q).
+    'restarts', case when v_test then '[]'::jsonb else
+                  coalesce((select jsonb_agg(jsonb_build_object('startDay', r.day, 'prevDay', r.prev_day, 'prevClosing', r.prev_closing,
+                                                                'counted', r.counted, 'delta', r.delta, 'docNo', r.doc_no, 'started', r.started,
+                                                                'rows', r.rows, 'backdated', r.back,
+                                                                'unexplained', r.delta - ((r.rows ->> 'in')::numeric - (r.rows ->> 'out')::numeric)
+                                                                               - coalesce((r.back ->> 'in')::numeric - (r.back ->> 'out')::numeric, 0))
+                                             order by r.day desc)
+                              from (select q.*, app.kassa_cash_rows(q.prev_day, q.day - 1, null, q.next_from) as rows,
+                                           case when q.paused_from is not null
+                                                then app.kassa_cash_rows(q.prev_day - 400, q.prev_day - 1, q.paused_from, q.day::timestamp at time zone 'Asia/Tashkent') end as back
+                                      from (select e.*,
+                                                   -- keyingi to'xtatish boshi: keyingi qayta ishga tushirishniki yoki (bu qayta ishga tushirish boshlangan va kassa
+                                                   --   hozir yana to'xtatilgan bo'lsa) hozirgi to'xtatish
+                                                   coalesce(lead(e.paused_from) over (order by e.prev_day),
+                                                            case when e.started and row_number() over (order by e.prev_day desc) = 1
+                                                                 then (select k."pausedAt" from public.cash_desks k where k.id = v_desk) end) as next_from
+                                              from (select x.day, (x.data ->> 'prevDay')::date as prev_day, (x.data ->> 'prevClosing')::numeric as prev_closing,
+                                                           (x.data ->> 'amount')::numeric as counted, (x.data ->> 'delta')::numeric as delta,
+                                                           (x.data ->> 'pausedFrom')::timestamptz as paused_from,
+                                                           (select c.no from public.cash_docs c where c.id = x.data ->> 'docId' and c.status = 'posted') as doc_no,
+                                                           exists (select 1 from public.cash_days d where d.desk = x.desk and d.day >= x.day) as started
+                                                      from (select distinct on (y.data ->> 'prevDay') y.* from public.cash_day_events y
+                                                             where y.desk = v_desk and y.kind = 'opening' and y.data ->> 'restart' = 'true' and y.day >= v_today - 400
+                                                             order by y.data ->> 'prevDay', y.at desc, y.id desc) x) e) q) r), '[]'::jsonb) end);
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;
@@ -1249,7 +1498,7 @@ begin
   select * into v_d from public.cash_days d where d.desk = 'main' and d.day = v_day;
   select * into v_open from public.cash_days d where d.desk = 'main' and d.status = 'open';
   select * into v_last from public.cash_days d where d.desk = 'main' and d.status <> 'open' order by d.day desc limit 1;
-  v_bal := case when v_open.id is not null then app.kassa_day_balance(v_open.id) else coalesce(v_last.closing, v_k."openingAmount", 0) end;
+  v_bal := coalesce(app.kassa_desk_balance('main'), 0);   -- qayta ishga tushirish tayyorlangan bo'lsa — sanalgan summa
   if v_d.id is not null then
     v_j := app.kassa_day_json(v_d.id); v_closed := v_d.status <> 'open';
   end if;

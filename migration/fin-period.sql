@@ -66,9 +66,8 @@ begin
     into v_unm from public.payments p where coalesce(p.status, '') = 'unmatched' and coalesce(p.amount, 0) > 0;
   select coalesce(jsonb_agg(jsonb_build_object('desk', k.id, 'isTest', k."isTest", 'startDay', k."startDay", 'openingAmount', k."openingAmount",
            'lastDay', (select max(d.day) from public.cash_days d where d.desk = k.id),
-           'balance', coalesce((select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = k.id and d.status = 'open'),
-                               (select d.closing from public.cash_days d where d.desk = k.id and d.status <> 'open' order by d.day desc limit 1),
-                               k."openingAmount", 0)) order by k.id), '[]'::jsonb)
+           -- qayta ishga tushirish tayyorlangan bo'lsa — sanalgan summa (kassa-day.sql: app.kassa_desk_balance)
+           'balance', coalesce(app.kassa_desk_balance(k.id), 0)) order by k.id), '[]'::jsonb)
     into v_cash from public.cash_desks k where k.active;
   select coalesce(jsonb_agg(jsonb_build_object('desk', c.desk, 'series', c.series, 'year', c.year, 'lastNo', c."lastNo") order by c.desk, c.series, c.year), '[]'::jsonb)
     into v_cnt from public.doc_counters c;
@@ -102,12 +101,18 @@ revoke all on function app.fin_snapshot_data(date) from public, anon, authentica
 
 -- ---------- Davr qulfi ----------
 -- Yozuv sanasi yopilgan davrga tushsa — rad (server / webhook mustasno).
+--   Sozlama qatori FOR SHARE (state-7): davr shu payt yopilayotgan bo'lsa (fin_period_lock / fin_snapshot_take qatorni FOR UPDATE bilan
+--   ushlab turadi) yozuv u tugaguncha kutadi va YANGI qulf bilan tekshiriladi — aks holda eski qiymat bilan o'tib, yangi yopilgan davrga
+--   tushib qolardi. Aksincha, yozuv qulfdan oldin boshlangan bo'lsa — qulf (va surat mazmuni: fin_snapshot_take qatorni suratdan OLDIN
+--   oladi) yozuv tugashini kutadi, yozuv suratga kiradi. FOR SHARE faqat VOLATILE funksiyada ishlaydi; chaqiruvchilar — faqat yozuvchi
+--   yo'llar (pul jadvallari triggerlari, kassa_opening_set, kassa_day_reopen). Sozlamani o'zgartiruvchilar (FOR UPDATE) kassa qulfini
+--   kutmaydi — o'zaro qulflanish (deadlock) yo'q (kassa.sql: QULF TARTIBI; kassa-day.sql: app.kassa_golive_guard).
 create or replace function app.fin_lock_check(p_day date, p_what text) returns void
-language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+language plpgsql volatile security definer set search_path = public, app, pg_temp as $$
 declare v_lock date;
 begin
   if p_day is null or app.is_system() then return; end if;
-  select o."lockedThrough" into v_lock from public.fin_org o where o.id = 'main';
+  select o."lockedThrough" into v_lock from public.fin_org o where o.id = 'main' for share;
   if v_lock is not null and p_day <= v_lock then
     raise exception '%: % — yopilgan davr (% gacha yopilgan). Sana % dan keyin bo''lishi kerak; yopilgan davrni faqat Direktor qayta ochadi',
       coalesce(p_what, 'Yozuv'), to_char(p_day, 'DD.MM.YYYY'), to_char(v_lock, 'DD.MM.YYYY'), to_char(v_lock, 'DD.MM.YYYY')
@@ -229,7 +234,13 @@ begin
   if v_lock and v_as >= v_today then
     raise exception 'Bugungi kun yopilmaydi: suratni qulfsiz oling yoki ertaga yoping' using errcode = '22023', hint = 'fin:lock_day';
   end if;
-  if v_lock then perform app.fin_lock_ready(v_as); end if;   -- yopib bo'lmasa — surat ham olinmaydi (bitta amal)
+  if v_lock then
+    -- Sozlama qatori FOR UPDATE — surat mazmunidan OLDIN (state-7): shu payt yozilayotgan orqa sanali pul yozuvlari (FOR SHARE bilan
+    --   tekshirilgan) tugashi kutiladi va suratga kiradi; yangilari qulf o'rnatilguncha kutib, yangi qulf bilan tekshiriladi — yopilgan
+    --   davrda suratda yo'q yozuv qolmaydi. Ochiq kun tekshiruvi ham shundan keyin (bir vaqtda qayta ochilayotgan kun ham ko'rinadi).
+    select o."lockedThrough" into v_old from public.fin_org o where o.id = 'main' for update;
+    perform app.fin_lock_ready(v_as);   -- yopib bo'lmasa — surat ham olinmaydi (bitta amal)
+  end if;
   perform pg_advisory_xact_lock(hashtext('iqror_fin_snapshot'));
   v_kind := case when to_char(v_as, 'MM-DD') = '12-31' then 'year_end'
                  when (v_as + 1) = date_trunc('month', v_as + 1)::date then 'month_end' else 'manual' end;
@@ -242,8 +253,7 @@ begin
     values (v_id, v_kind, ((v_as + 1)::timestamp at time zone 'Asia/Tashkent') - interval '1 second', v_as, v_ver, v_today > v_as, v_data, v_hash,
             left(btrim(coalesce(p ->> 'note', '')), 300), app.fin_now(), v_uid);
   perform app.kassa_flag(false);
-  if v_lock then
-    select o."lockedThrough" into v_old from public.fin_org o where o.id = 'main' for update;
+  if v_lock then   -- (sozlama qatori boshida FOR UPDATE bilan olingan — v_old o'shandan)
     if v_old is null or v_old < v_as then
       update public.fin_org set "lockedThrough" = v_as, "updatedAt" = now(), "updatedBy" = v_uid,
              extra = coalesce(extra, '{}'::jsonb) || jsonb_build_object('lockNote', 'Davr surati ' || v_id, 'lockPrev', v_old) where id = 'main';

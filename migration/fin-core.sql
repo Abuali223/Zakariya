@@ -160,9 +160,12 @@ end $$;
 -- Tashkilot sozlamalari — FAQAT Direktor (T1, L1, limit, kassaGoLive va rekvizitlar). Faqat berilgan maydonlar o'zgaradi.
 --   orgCashMax (extra) — yuridik shaxs kontragentga (yetkazib beruvchi / tashkilot) kassadan naqd to'lovda Direktor tasdig'isiz
 --   chegara (so'm; 0 yoki yo'q — har doim Direktor). Hisob siyosati qarori (F1.27, buxgalter ko'rigi M3).
+--   kassaGoLive o'zgarsa — kassa-day.sql: app.kassa_golive_guard (modulning shu qismi o'rnatilgan bo'lsa): ishlagan kassada kelgan sanani
+--   bo'shatish / surish — kassani TO'XTATISH (ochiq kun va pul berilmagan so'rovlar bo'lmasa; sana bo'sh saqlanadi), to'xtatilgan kassada —
+--   faqat qayta ishga tushirish kuniga (ishga-tushirish §9; ui-5). O'zgarish kun jurnaliga yoziladi.
 create or replace function public.fin_org_set(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare k text; v_num numeric; r public.fin_org%rowtype; v_live date; v_rec jsonb;
+declare k text; v_num numeric; r public.fin_org%rowtype; v_live date; v_rec jsonb; v_new date;
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'fin_org_set: obyekt kerak' using errcode = '22023'; end if;
@@ -181,6 +184,12 @@ begin
       raise exception 'fin_org_set: noma''lum maydon %', k using errcode = '22023';
     end if;
   end loop;
+  if p ? 'kassaGoLive' then
+    v_new := nullif(p ->> 'kassaGoLive', '')::date;
+    if v_new is distinct from r."kassaGoLive" and to_regprocedure('app.kassa_golive_guard(date,date)') is not null then
+      execute 'select app.kassa_golive_guard($1, $2)' into v_new using r."kassaGoLive", v_new;
+    end if;
+  end if;
   update public.fin_org set
     "nameUz"      = case when p ? 'nameUz' then coalesce(p ->> 'nameUz', '') else "nameUz" end,
     "nameRu"      = case when p ? 'nameRu' then coalesce(p ->> 'nameRu', '') else "nameRu" end,
@@ -190,7 +199,7 @@ begin
     t1            = case when p ? 't1' then (p ->> 't1')::numeric else t1 end,
     l1            = case when p ? 'l1' then (p ->> 'l1')::numeric else l1 end,
     "cashLimit"   = case when p ? 'cashLimit' then (p ->> 'cashLimit')::numeric else "cashLimit" end,
-    "kassaGoLive" = case when p ? 'kassaGoLive' then nullif(p ->> 'kassaGoLive', '')::date else "kassaGoLive" end,
+    "kassaGoLive" = case when p ? 'kassaGoLive' then v_new else "kassaGoLive" end,
     extra         = case when p ? 'orgCashMax' then extra || jsonb_build_object('orgCashMax', (p ->> 'orgCashMax')::numeric) else extra end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';

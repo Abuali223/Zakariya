@@ -26,19 +26,53 @@ alter table public.payments add column if not exists "cashDocId" text;   -- naqd
 alter table public.payments add column if not exists "fiscalNo" text;    -- fiskal chek raqami
 create index if not exists payments_cash_doc_idx on public.payments ("cashDocId") where "cashDocId" is not null;
 
--- Kassa ishga tushganmi: Direktor belgilagan kundan boshlab (bo'sh — hali yo'q).
+-- Kassa ishga tushganmi: Direktor belgilagan kundan boshlab (bo'sh — hali yo'q; to'xtatilgan kassada ham bo'sh — kassa-day.sql:
+--   app.kassa_golive_guard). Sozlama qatori FOR SHARE (state-7): ishga tushadigan kun shu payt o'zgarayotgan bo'lsa (fin_org_set qatorni
+--   FOR UPDATE bilan ushlaydi) — u tugaguncha kutib, YANGI qiymat bilan javob beradi; aks holda naqd yozuv eski qiymat bilan kassa
+--   hujjatisiz o'tib ketardi (moslik P1 / P4 / P5 da abadiy qolardi). FOR SHARE faqat VOLATILE funksiyada ishlaydi; chaqiruvchilar —
+--   faqat yozuvchi yo'llar (naqd yozuv triggeri va kassa RPC'lari); o'qish funksiyalari fin_org ni o'zi o'qiydi.
 create or replace function app.kassa_live() returns boolean
-language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select o."kassaGoLive" is not null and app.fin_today() >= o."kassaGoLive" from public.fin_org o where o.id = 'main'), false)
-$$;
+language plpgsql volatile security definer set search_path = public, app, pg_temp as $$
+declare v_live date;
+begin
+  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main' for share;
+  return v_live is not null and app.fin_today() >= v_live;
+end $$;
 revoke all on function app.kassa_live() from public, anon, authenticated;
 
--- To'lovdan OLDINGI holat (o'quvchi bo'yicha navbat qulfi ichida): avans va to'lanmagan fakturalar. NULL — kassa ishga tushmagan.
-create or replace function app.kassa_tuition_before(p_sid text) returns jsonb
+-- To'lovdan OLDINGI holat (o'quvchi bo'yicha navbat qulfi ichida): avans va to'lanmagan fakturalar. NULL — KO-1 yozilmaydi.
+--   Kassa qo'llanadimi — to'lovning O'Z kassa kuni bo'yicha, bugun bo'yicha emas (crit-1). p_day — record_manual_payment hisoblagan
+--   kun: kassir tanlagan «Sana», bo'lmasa olingan kun (p_captured, Toshkent), bo'lmasa bugun. p_asked — so'ralgan «Sana» (matn, o'zgarmagan).
+--   * kassa hali ishga tushmagan (sana yo'q yoki kelmagan) — NULL, avvalgidek;
+--   * p_day ishga tushish kunidan OLDIN — kassadan oldingi davr puli: u boshlang'ich qoldiq sanashiga kirgan (ishga-tushirish §4) —
+--     KO-1 siz va fiskal cheksiz (NULL). Kim: Direktor; kassir / g'aznachi — faqat qurilma navbatidan kelgan yozuv: olingan payt
+--     ishga tushishdan oldin va 48 soatdan eski emas (kassa:late_limit qoidasi), «Sana» olingan kundan keyin emas. Boshqasi — rad
+--     (kassa:pre_live): KO-1 qoidasini chetlab o'tish yo'li bo'lmasin (state-4 bilan solishtiring). Davr qulfi baribir amal qiladi;
+--   * p_day ishga tushgan kundan — KO-1 bilan (RF-08: kassir yoki Direktor), lekin so'ralgan sana ishga tushishdan oldingi kun bo'lib,
+--     31 kunlik oraliqdan chiqqani uchun bugunga surilgan bo'lsa — rad (kassa:pre_live_old): eski pul bugungi KO-1 bo'lib ikki marta
+--     hisoblanmasin.
+--   Sozlama qatori FOR SHARE (state-7): ishga tushadigan kun shu payt o'zgarayotgan bo'lsa — u tugaguncha kutib, yangi qiymat bilan qaror.
+drop function if exists app.kassa_tuition_before(text);
+create or replace function app.kassa_tuition_before(p_sid text, p_day date, p_captured timestamptz, p_asked text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_sid text; v_credit numeric;
+declare v_sid text; v_credit numeric; v_live date; v_today date := app.fin_today(); v_day date := coalesce(p_day, app.fin_today());
+        v_asked date := app.fin_text_day(p_asked);
 begin
-  if not app.kassa_live() then return null; end if;
+  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main' for share;
+  if v_live is null or v_today < v_live then return null; end if;
+  if v_day < v_live then
+    if app.is_admin()
+       or (app.kassa_operator() and p_captured is not null and p_captured >= app.fin_now() - interval '48 hours'
+           and (p_captured at time zone 'Asia/Tashkent')::date < v_live and v_day <= (p_captured at time zone 'Asia/Tashkent')::date) then
+      return null;
+    end if;
+    raise exception 'Kassa ishga tushishidan (%) oldingi sana bilan naqd to''lov (%) — faqat Direktor kiritadi: bu pul boshlang''ich qoldiq sanashiga kirgan (kassir — faqat ishga tushishdan oldin qurilma navbatiga yozilgan va 48 soatdan eski bo''lmagan to''lovni yuboradi)',
+      to_char(v_live, 'DD.MM.YYYY'), to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+  end if;
+  if v_asked is not null and v_asked < v_live and v_asked <> v_day then
+    raise exception 'So''ralgan sana (%) kassa ishga tushishidan oldin va 31 kunlik oraliqdan tashqarida: bu to''lov bugungi kirim orderi bilan yozilmaydi (pul boshlang''ich qoldiqqa kirgan) — buxgalter bilan hal qilinadi',
+      to_char(v_asked, 'DD.MM.YYYY') using errcode = '22023', hint = 'kassa:pre_live_old';
+  end if;
   if not (app.kassa_operator() or app.is_admin()) then   -- RF-08
     raise exception 'Ruxsat yo''q: naqd pulni kassir (favqulodda — Direktor) qabul qiladi' using errcode = '42501', hint = 'kassa:cash_role';
   end if;
@@ -55,7 +89,7 @@ begin
                             from public.invoices i
                            where i."studentId" = v_sid and (i.status is null or i.status not in ('paid', 'canceled', 'reversed'))), '[]'::jsonb));
 end $$;
-revoke all on function app.kassa_tuition_before(text) from public, anon, authenticated;
+revoke all on function app.kassa_tuition_before(text, date, timestamptz, text) from public, anon, authenticated;
 
 -- To'lovning kassa orderi haqida qisqa ma'lumot (javob va chop etish uchun).
 create or replace function app.kassa_tuition_info(p_pay_id text) returns jsonb

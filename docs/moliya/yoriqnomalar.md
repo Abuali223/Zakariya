@@ -78,6 +78,14 @@ farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi yozadi — 
 
 **Internet yoki tizim ishlamasa** — `ishga-tushirish.md`, 8-bo‘lim («Қ» blankasi to‘lovchiga berilmaydi; dalil — fiskal chek).
 
+**Kassa ishga tushishidan oldingi pul.** Boshlang‘ich qoldiq sanashidan oldin qurilmangiz internetga ulangan va navbati (⏳)
+bo‘sh bo‘lsin. Ishga tushish kunidan oldin olingan pulni keyin **bugungi sana bilan qayta kiritmang** — u sanashga kirgan,
+ikki marta hisoblanadi: bugungi sana bilan kiritilgan to‘lovni tizim oddiy bugungi to‘lov deb qabul qiladi (kirim orderi
+yoziladi), farqini bilmaydi. Navbatda qolib ketgan yozuv internet qaytganda o‘zi o‘tadi (48 soatgacha;
+kirim orderisiz); undan eskisini yoki qog‘ozda topilganini Direktor haqiqiy sanasi bilan kiritadi. Kassa to‘xtatilgan bo‘lsa
+(«Kassa to‘xtatilgan» ogohlantirishi) — kassa hujjati yozilmaydi; pul «Қ» blankalari bilan (o‘z raqamlari bilan) qabul
+qilinadi, qayta ishga tushirish — Direktor, komissiya sanashi bilan (`ishga-tushirish.md`, 9-bo‘lim).
+
 ## 2. Moliya menejeri va buxgalter (2-ro‘yxat)
 
 Buxgalterning o‘z hisobi va roli bor — **«Buxgalter»** (Direktor «Foydalanuvchilar»da beradi; qo‘shimcha lavozim bu rolga
@@ -159,6 +167,12 @@ haftalar kesimida, imzolanadi; «⬇ Oylik to‘plam (Excel)» — buxgalter uch
 (kunlar bo‘yicha), E3 kassa kunlari (KO-4 jamlari, sanash va farq, Z-hisobot), E4 hisobdorlar (oy boshi, berildi, qaytdi,
 hisobot, oy oxiri) → Direktor «Davr»da surat oladi va davrni yopadi.
 
+Kassa to‘xtatilib qayta ishga tushirilgan oyda KO-3 va «Statiyalar»da **«Qayta ishga tushirish farqi»** qatori bor:
+davr boshi + kirim − chiqim + farq = davr oxiri. Farq — texnik «Д-» dalolatnoma (to‘xtatilgan davrdagi naqd harakat; kassa
+kitobiga kirmaydi): uni nazorat ro‘yxatidagi «Kassani to‘xtatish va qayta ishga tushirish» qatori (to‘xtatilgan davrda kassa
+hujjatisiz yozilgan naqd kirim va chiqim) va qog‘oz «Қ» jurnali bilan solishtiring. «Kassa ishga tushishidan oldingi naqd
+yozuvlar (keyin kiritilgan)» qatori — Direktor kechikib kiritgan, sanashga kirgan yozuvlar: sanash dalolatnomasi bilan solishtiring.
+
 KO-3 Excel va oylik to‘plam tugmalari Moliya menejeri, buxgalter va Direktorda (kassir chop etadi). Sizning fayllaringiz ismsiz
 (FD-28, fayl nomida «-ismsiz»): o‘quvchi — ID, xodim — tabel kodi, boshqa jismoniy shaxs — nomsiz, ularning hujjatlaridagi asos
 va bekor qilish sababi chiqmaydi; yetkazib beruvchi, tashkilot va bank nomi va asosi qoladi; to‘liq nusxa — Direktorda. «Davr» oynasida
@@ -199,6 +213,9 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |
+| Kassa ishga tushishidan oldingi kechikib topilgan naqd yozuv | «💵 To‘lov» → «Naqd», «Sana» = pul olingan kun; xarajat, maosh, avans — «Buxgalteriya» oynalarida «Naqd — kassa ishga tushishidan oldin berilgan» | kirim / chiqim orderisiz va fiskal cheksiz, kassa qoldig‘i o‘zgarmaydi (pul sanashga kirgan); bugungi sana bilan kiritilmaydi — ikki marta hisoblanadi; nazorat ro‘yxatida ko‘rinadi (`ishga-tushirish.md`, 4-bo‘lim) |
+| Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi); oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
+| Kassani qayta ishga tushirish | «Kassa» → «Qayta ishga tushirish» (komissiya sanagan summa, kun), keyin «⚙ Sozlamalar»da ishga tushadigan kun = o‘sha kun | farq (to‘xtatilgan davrdagi naqd harakat) texnik «Д-» dalolatnoma bilan yoziladi — kamomad / ortiqcha emas; nazorat ro‘yxatida «Kassani to‘xtatish va qayta ishga tushirish» |
 | Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi |
 | Oldingi avansi hisobotsiz xodimga yangi avans (istisno) | «So‘rovlar» → «Tasdiqlash» | kassa tartibidan istisno; so‘rovda «Direktor tasdig‘i» talabi o‘zi qo‘yiladi |
 | Yuridik shaxsga kassadan naqd to‘lov | «So‘rovlar» → «Tasdiqlash» | chegara — «⚙ Sozlamalar» (bo‘sh — har doim Direktor); asosiy yo‘l — bank |

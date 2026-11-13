@@ -51,7 +51,7 @@ const T = {
     decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', note: 'Изоҳ', member: 'Комиссия аъзоси',
     employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
     ko3: 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', ko3Form: 'КО-3 шакли', ko3In: 'Кирим касса ҳужжатлари', ko3Out: 'Чиқим касса ҳужжатлари',
-    ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ',
+    ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ', ko3Adj: 'Қайта ишга тушириш фарқи (техник далолатнома «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Рақамлар: кирим ${f1 ? f1 + '–' + l1 : 'йўқ'}, чиқим ${f2 ? f2 + '–' + l2 : 'йўқ'}`, ko3Bad: 'ДИҚҚАТ: давр боши + кирим − чиқим давр охирига тенг эмас', ko3Docs: (a, b, v) => `Кирим: ${a} та, чиқим: ${b} та, бекор қилинган: ${v} та`,
     mx: 'КАССА БЎЙИЧА ОЙЛИК СТАТИЯЛАР МАТРИЦАСИ', mxPer: (y, mi) => `${y} йил ${['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][mi]}`,
     mxCode: 'Код', mxArt: 'Статья', mxDays: 'Ой кунлари', mxIn: 'КИРИМ', mxOut: 'ЧИҚИМ', mxInTot: 'Жами кирим', mxOutTot: 'Жами чиқим', mxTr: 'ички ўтказма',
@@ -97,7 +97,7 @@ const T = {
     decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', note: 'Izoh', member: 'Komissiya a’zosi',
     employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
     ko3: 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI', ko3Form: 'KO-3 shakli', ko3In: 'Kirim kassa hujjatlari', ko3Out: 'Chiqim kassa hujjatlari',
-    ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq',
+    ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq', ko3Adj: 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Raqamlar: kirim ${f1 ? f1 + '–' + l1 : 'yo‘q'}, chiqim ${f2 ? f2 + '–' + l2 : 'yo‘q'}`, ko3Bad: 'DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas', ko3Docs: (a, b, v) => `Kirim: ${a} ta, chiqim: ${b} ta, bekor qilingan: ${v} ta`,
     mx: 'KASSA BO‘YICHA OYLIK STATIYALAR MATRITSASI', mxPer: (y, mi) => `${y}-yil ${['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'][mi]}`,
     mxCode: 'Kod', mxArt: 'Statiya', mxDays: 'Oy kunlari', mxIn: 'KIRIM', mxOut: 'CHIQIM', mxInTot: 'Jami kirim', mxOutTot: 'Jami chiqim', mxTr: 'ichki o‘tkazma',
@@ -143,7 +143,7 @@ const T = {
     decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', note: 'Примечание', member: 'Член комиссии',
     employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
     ko3: 'ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ', ko3Form: 'Форма КО-3', ko3In: 'Приходные кассовые документы', ko3Out: 'Расходные кассовые документы',
-    ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода',
+    ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода', ko3Adj: 'Разница при повторном запуске кассы (технический акт «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Номера: приход ${f1 ? f1 + '–' + l1 : 'нет'}, расход ${f2 ? f2 + '–' + l2 : 'нет'}`, ko3Bad: 'ВНИМАНИЕ: остаток на начало + приход − расход не равен остатку на конец', ko3Docs: (a, b, v) => `Приход: ${a}, расход: ${b}, аннулировано: ${v}`,
     mx: 'МЕСЯЧНАЯ МАТРИЦА СТАТЕЙ ПО КАССЕ', mxPer: (y, mi) => `${['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'][mi]} ${y} г.`,
     mxCode: 'Код', mxArt: 'Статья', mxDays: 'Дни месяца', mxIn: 'ПРИХОД', mxOut: 'РАСХОД', mxInTot: 'Итого приход', mxOutTot: 'Итого расход', mxTr: 'внутреннее перемещение',
@@ -448,6 +448,9 @@ export function docHtml(doc, ctx, W) {
 // ---------------------------------------------------------------- KO-3: kirim va chiqim kassa hujjatlari jurnali (F1.22)
 //   j — kassa_journal() javobi. Ikki tomonlama jadval: chapda kirim, o'ngda chiqim orderlari (sana, raqam, summa, izoh) — har biri
 //   o'z tartibida; bekor qilingan order raqami bilan qoladi (summa chizilgan, izohda sabab). Pastda jamlar va qoldiqlar.
+// Qayta ishga tushirish farqi (ishga-tushirish §9, ui-5): kassa to'xtatilib qayta ishga tushirilgan davrda texnik «Д-» dalolatnoma
+//   (kassa kitobidan tashqari) — boshi + kirim − chiqim + farq = oxiri. Farq 0 bo'lsa qator chiqmaydi.
+const adjHtml = (W, t, v) => num(v) ? ` · ${esc(t.ko3Adj)}: <b>${num(v) > 0 ? '+' : ''}${esc(money(W, v))}</b>` : '';
 export function journalHtml(j, ctx, W) {
   ctx = ctx || {}; j = j || {};
   const lang = langOf(ctx), t = T[lang], o = ctx.org || {}, tt = j.totals || {};
@@ -475,7 +478,7 @@ export function journalHtml(j, ctx, W) {
     <div class="note" style="text-align:right">${esc(t.ko3Form)}</div>
     <div class="ttl">${esc(t.ko3)}</div><div class="dt">${esc(per)}${j.desk && j.desk.name ? ' · ' + esc(j.desk.name) : ''}</div>
     <table class="t">${head}<tbody>${rows}${foot}</tbody></table>
-    <div class="sumj"><div>${esc(t.ko3Open)}: <b>${esc(money(W, j.opening))}</b> · ${esc(t.ko3Close)}: <b>${esc(money(W, j.closing))}</b></div>
+    <div class="sumj"><div>${esc(t.ko3Open)}: <b>${esc(money(W, j.opening))}</b>${adjHtml(W, t, j.restartAdj)} · ${esc(t.ko3Close)}: <b>${esc(money(W, j.closing))}</b></div>
       <div>${esc(t.ko3Docs(num(tt.nIn), num(tt.nOut), num(tt.voids)))} · ${esc(t.ko3Nos(tt.firstKo1, tt.lastKo1, tt.firstKo2, tt.lastKo2))}</div></div>
     ${j.balanced === false ? `<div class="warnj">${esc(t.ko3Bad)}</div>` : ''}
     ${sig(t.chief, chief.name)}${sig(t.cashier, '')}
@@ -519,6 +522,7 @@ export function journalSheet(j, ctx) {
   rows.push([]);
   rows.push(['', '', '', '', '', t.ko3Tot, money2(tt.in), money2(tt.out)]);
   rows.push(['', '', '', '', '', t.ko3Open, money2(j.opening)]);
+  if (num(j.restartAdj)) rows.push(['', '', '', '', '', t.ko3Adj, money2(j.restartAdj)]);
   rows.push(['', '', '', '', '', t.ko3Close, money2(j.closing)]);
   if (j.balanced === false) rows.push([t.ko3Bad]);
   return { name: 'KO-3', rows, cols: [{ wch: 11 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 30 }, { wch: 36 }, { wch: 15 }, { wch: 15 }, { wch: 26 }, { wch: 16 }] };
@@ -555,7 +559,7 @@ export function matrixHtml(m, ctx, W) {
     <div class="ttl">${esc(t.mx)}</div><div class="dt">${esc(per)}${m.desk && m.desk.name ? ' · ' + esc(m.desk.name) : ''}</div>
     ${rows.length ? `<table class="t">${head}<tbody>${sec('KO1', t.mxIn, t.mxInTot, m.dayIn, m.in)}${sec('KO2', t.mxOut, t.mxOutTot, m.dayOut, m.out)}${bal}</tbody></table>`
                   : `<div class="note" style="margin-top:4mm">${esc(t.mxEmpty)}</div>`}
-    <div class="sumj"><div>${esc(t.mxOpen)}: <b>${esc(money(W, m.opening))}</b> · ${esc(t.mxInTot)}: <b>${esc(money(W, m.in))}</b> · ${esc(t.mxOutTot)}: <b>${esc(money(W, m.out))}</b> · ${esc(t.mxClose)}: <b>${esc(money(W, m.closing))}</b></div>
+    <div class="sumj"><div>${esc(t.mxOpen)}: <b>${esc(money(W, m.opening))}</b> · ${esc(t.mxInTot)}: <b>${esc(money(W, m.in))}</b> · ${esc(t.mxOutTot)}: <b>${esc(money(W, m.out))}</b>${adjHtml(W, t, m.restartAdj)} · ${esc(t.mxClose)}: <b>${esc(money(W, m.closing))}</b></div>
       <div>${esc(t.mxExTr(money(W, exIn), money(W, exOut)))}</div></div>
     ${m.balanced === false ? `<div class="warnj">${esc(t.ko3Bad)}</div>` : ''}
     <div class="src">${esc(t.mxSrc)}</div>
@@ -581,6 +585,7 @@ export function matrixSheet(m, ctx) {
   out.push(['', t.closeBal, ...days.map(d => has.has(`${m.month}-${String(d).padStart(2, '0')}`) ? xlMoney((m.dayBal || [])[d - 1]) : ''), xlMoney(m.closing)]);
   out.push([]);
   out.push(['', t.mxOpen, xlMoney(m.opening)]);
+  if (num(m.restartAdj)) out.push(['', t.ko3Adj, xlMoney(m.restartAdj)]);
   out.push(['', t.mxClose, xlMoney(m.closing)]);
   out.push(['', `${t.mxInTot} — ${t.mxTr}`, xlMoney(m.transferIn)]);
   out.push(['', `${t.mxOutTot} — ${t.mxTr}`, xlMoney(m.transferOut)]);

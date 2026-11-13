@@ -3,7 +3,7 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText, kpiRows, advArticles } from './fin-kassa.js';
+import { controlRows, zText, kpiRows, advArticles, goLiveConfirm } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -12,11 +12,11 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   accountable: [], damage: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 } });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 23 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 25 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 23);
+  assert.equal(rows.length, 25);
   assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'orgCash', 'other',
-    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'handover']);
+    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'handover', 'preLive', 'restart']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
   assert.equal(r.gaps.value, 'uzluksiz'); assert.equal(r.reconcile.value, 'hammasi mos'); assert.equal(r.limit.value, 'limit 3 000 000 so‘m — oshmagan');
@@ -72,10 +72,10 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   c = clean(); c.limit.days30 = 2;
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
-  assert.ok(!controlRows(c).some(x => x.key === 'reconcile' || x.key === 'zreport'), 'sinov kassasida moslik va Z-hisobot qatorlari yo‘q');
+  assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
   assert.equal(controlRows(c).length, 21);
   const empty = controlRows(null);
-  assert.ok(empty.length === 23 && empty.filter(x => x.level === 'ok').length === 21, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 25 && empty.filter(x => x.level === 'ok').length === 23, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
@@ -131,4 +131,79 @@ test('avans hisoboti statiyalari: server bergan «advReport» belgisi bo‘yicha
     { id: 'EX-21', kind: 'EX', nameUz: 'Oshxona inventari', accountCode: '1080', cashOutAllowed: true } ] };   // eski javob (belgisiz) — ro‘yxatga kirmaydi
   assert.deepEqual(advArticles(refs).map(a => a.id), ['EX-20', 'OP-18', 'OP-24']);
   assert.deepEqual(advArticles(null), []); assert.deepEqual(advArticles({}), []);
+});
+
+test('nazorat ro‘yxati: kassa ishga tushishidan oldingi naqd yozuvlar (crit-1) va kassani to‘xtatish / qayta ishga tushirish (§9)', () => {
+  const c = clean();
+  c.preLive = { goLive: '2027-01-04', n: 3, in: 500000, out: 120000, items: [{ kind: 'tuition', n: 2, sum: 500000 }, { kind: 'expense', n: 1, sum: 120000 }] };
+  let r = by(controlRows(c));
+  assert.deepEqual([r.preLive.level, r.preLive.value], ['info', 'o‘quv to‘lovi: 2 ta · 500 000 so‘m; xarajat: 1 ta · 120 000 so‘m']);
+  assert.match(r.preLive.hint, /04\.01\.2027/);
+  c.paused = { day: '2027-02-01', lastDay: '2027-02-01' };
+  r = by(controlRows(c));
+  assert.deepEqual([r.restart.level, r.restart.value], ['warn', 'kassa to‘xtatilgan: 01.02.2027 dan (oxirgi kassa kuni 01.02.2027) — naqd pul kassa hujjatisiz yozilmoqda']);
+  c.paused = null;
+  c.restarts = [{ startDay: '2027-02-03', prevDay: '2027-02-01', prevClosing: 4725000, counted: 4760000, delta: 35000, docNo: 2, started: true,
+                  rows: { n: 2, in: 60000, out: 25000, items: [] } }];
+  r = by(controlRows(c));
+  assert.equal(r.restart.level, 'info');
+  assert.equal(r.restart.value, '03.02.2027 dan qayta ishga tushirildi: tizimda 4 725 000 so‘m, sanaldi 4 760 000 so‘m, farq +35 000 so‘m (D-2); '
+    + 'to‘xtatilgan davrdagi kassa hujjatisiz naqd: kirim 60 000 so‘m, chiqim 25 000 so‘m (2 ta)');
+  c.restarts[0].delta = -1000; c.restarts[0].started = false; c.restarts[0].docNo = null;
+  assert.match(by(controlRows(c)).restart.value, /\(hali boshlanmagan\).*farq −1 000 so‘m;/);
+  // g4-v1: shu davrda orqa sana bilan kiritilgan yozuvlar alohida; izohlanmagan farq (farq − (kirim − chiqim)) — sariq
+  c.restarts = [{ startDay: '2027-01-07', prevDay: '2027-01-05', prevClosing: 1150000, counted: 1230000, delta: 80000, docNo: 2, started: true,
+                  rows: { n: 3, in: 100000, out: 20000 }, backdated: { n: 1, in: 0, out: 33000 }, unexplained: 33000 }];
+  r = by(controlRows(c));
+  assert.equal(r.restart.level, 'warn');
+  assert.match(r.restart.value, /kirim 100 000 so‘m, chiqim 20 000 so‘m \(3 ta\); shu davrda orqa sana bilan kiritilgan: kirim 0 so‘m, chiqim 33 000 so‘m \(1 ta\); izohlanmagan farq \+33 000 so‘m — «Қ» jurnali bilan tekshiring$/);
+  c.restarts[0].unexplained = 0; c.restarts[0].backdated = { n: 0, in: 0, out: 0 };
+  r = by(controlRows(c));
+  assert.equal(r.restart.level, 'info'); assert.doesNotMatch(r.restart.value, /orqa sana|izohlanmagan/);
+  // qayta ishga tushirilgan kassada «ishga tushishdan oldingi» ro'yxat oxirgi to'xtatishdan oldingi kungacha — izohda aytiladi
+  c.preLive = { goLive: '2027-01-07', to: '2027-01-04', n: 0, in: 0, out: 0, items: [] };
+  assert.match(by(controlRows(c)).preLive.hint, /07\.01\.2027\) oldin \(04\.01\.2027 gacha; to‘xtatilgan davr sanalari — «Kassani to‘xtatish va qayta ishga tushirish» qatorida\)/);
+  c.preLive = { goLive: '2027-01-04', to: '2027-01-03', n: 0, in: 0, out: 0, items: [] };
+  assert.doesNotMatch(by(controlRows(c)).preLive.hint, /gacha;/);
+});
+
+test('ishga tushadigan kun o‘zgarishi (ui-5): to‘xtatish, qayta ishga tushirish, ishga tushirish — har biri o‘z tasdig‘i bilan', () => {
+  const live = { started: true, pausedAt: null, restart: null };
+  assert.equal(goLiveConfirm('2027-01-04', '2027-01-04', '2027-01-10', live).kind, 'none');
+  // ishlagan kassa: sanani bo'shatish yoki surish — to'xtatish (oqibatlari yozilgan, ishga tushirish tasdig'idan boshqa matn)
+  let g = goLiveConfirm('2027-01-04', null, '2027-01-10', live);
+  assert.equal(g.kind, 'stop');
+  assert.match(g.text, /KASSANI TO‘XTATISH/); assert.match(g.text, /kirim orderisiz va fiskal chek raqamisiz/); assert.match(g.text, /«Қ» blankalari/);
+  assert.match(g.text, /komissiya sanashi/); assert.match(g.text, /ishga-tushirish §9/); assert.doesNotMatch(g.text, /ishga tushsinmi/);
+  g = goLiveConfirm('2027-01-04', '2027-02-01', '2027-01-10', live);
+  assert.equal(g.kind, 'stop'); assert.match(g.text, /keyinga surish/); assert.match(g.text, /01\.02\.2027 — faqat rejalashtirilgan kun/);
+  // hali kelmagan sana yoki kassa ishlamagan — oddiy ishga tushirish; bo'shatish — tasdiqsiz
+  assert.equal(goLiveConfirm('2027-01-20', '2027-01-25', '2027-01-10', live).kind, 'launch');
+  // g4-v1 (a): kelgan sana, kassa kuni hali ochilmagan — ishga tushirish tasdig'i emas, o'z «to'xtatish» uslubidagi tasdig'i
+  g = goLiveConfirm('2027-01-04', '2027-02-01', '2027-01-10', { started: false });
+  assert.equal(g.kind, 'stop'); assert.match(g.text, /KASSANI ISHGA TUSHIRISH SURILADI/); assert.match(g.text, /01\.02\.2027 gacha/);
+  assert.match(g.text, /kirim orderisiz va fiskal chek raqamisiz/); assert.match(g.text, /«Boshlang‘ich qoldiq» yangi kun bilan qayta kiritiladi/);
+  assert.doesNotMatch(g.text, /ishga tushsinmi/);
+  g = goLiveConfirm('2027-01-04', null, '2027-01-10', { started: false });
+  assert.equal(g.kind, 'stop'); assert.match(g.text, /BEKOR QILINADI/); assert.match(g.text, /Ishga tushirish bekor qilinsinmi\?$/);
+  assert.equal(goLiveConfirm('2027-01-10', '2027-01-08', '2027-01-10', { started: false }).kind, 'launch');   // oldinga surish — ishga tushirish
+  assert.equal(goLiveConfirm('2027-01-20', null, '2027-01-10', live).kind, 'none');
+  assert.match(goLiveConfirm(null, '2027-01-04', '2027-01-03', {}).text, /^Kassa 04\.01\.2027 dan ishga tushsinmi\?/);
+  // to'xtatilgan kassa: avval qayta ishga tushirish qoldig'i; sana — faqat o'sha kun
+  const paused = { started: true, pausedAt: '2027-02-01T05:00:00Z', restart: null };
+  assert.equal(goLiveConfirm(null, '2027-02-03', '2027-02-02', paused).kind, 'block');
+  assert.equal(goLiveConfirm(null, null, '2027-02-02', paused).kind, 'none');
+  const ready = Object.assign({}, paused, { restart: { day: '2027-02-03', amount: 4760000, prevClosing: 4725000, delta: 35000, docNo: 2 } });
+  assert.deepEqual([goLiveConfirm(null, '2027-02-04', '2027-02-02', ready).kind, goLiveConfirm(null, '2027-02-04', '2027-02-02', ready).text.slice(0, 40)],
+    ['block', 'Qayta ishga tushirish kuni — 03.02.2027:']);
+  g = goLiveConfirm(null, '2027-02-03', '2027-02-02', ready);
+  assert.equal(g.kind, 'relaunch'); assert.match(g.text, /QAYTA ishga tushsinmi/); assert.match(g.text, /4 760 000 so‘m.*farq \+35 000 so‘m — dalolatnoma D-2/);
+  // tayyorlangan (hali boshlanmagan) qayta ishga tushirishni bekor qilish — kassa to'xtatilgan holatga qaytadi
+  const pending = { started: true, pausedAt: null, restart: ready.restart };
+  assert.equal(goLiveConfirm('2027-02-03', null, '2027-02-02', pending).kind, 'stop');
+  assert.equal(goLiveConfirm('2027-02-03', '2027-02-05', '2027-02-02', pending).kind, 'block');
+  // (b): ishga tushadigan kun allaqachon qayta ishga tushirish kunida — boshqa kun uchun avval sanani bo'shatish kerakligi aytiladi;
+  //   to'xtatilgan kassada esa — to'g'ridan-to'g'ri qayta sanash
+  assert.match(goLiveConfirm('2027-02-03', '2027-02-05', '2027-02-02', pending).text, /avval ishga tushadigan kunni bo‘shating \(kassa yana to‘xtatiladi\), keyin «Qayta ishga tushirish»/);
+  assert.doesNotMatch(goLiveConfirm(null, '2027-02-04', '2027-02-02', ready).text, /bo‘shating/);
 });
