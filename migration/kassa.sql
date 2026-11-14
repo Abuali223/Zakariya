@@ -6,7 +6,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 \endif
 -- =====================================================================
 -- kassa.sql — MOLIYA ISH REJASI, 1a-BOSQICH (docs/moliya/buxgalteriya-ish-reja.md: F1.2, F1.3): KASSA JADVALLARI VA HIMOYASI.
---   Hujjatlar (KO-1 kirim, KO-2 chiqim, naqdsiz dalolatnomalar) → Dt/Kt qatorlari → kassa kuni (KO-4) → sanash dalolatnomalari.
+--   Hujjatlar (KO-1 kirim, KO-2 chiqim, naqdsiz dalolatnomalar) → Dt/Kt qatorlari → kassa kuni (KO-4) → sanash dalolatnomalari;
+--   smena topshirish-qabul (ikki bosqichli, cash_handovers).
 --   Shu faylda: jadvallar, O'ZGARMASLIK va kun qulfi triggerlari (bazadagi invariantlar I1–I6), raqamlash va kassa qulfi
 --   yordamchilari. Hujjat funksiyalari — kassa-docs.sql; kun sikli va o'qish funksiyalari — kassa-day.sql.
 --
@@ -22,8 +23,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --     DELETE yo'q; o'tkazilgan hujjatda faqat «bekor qilindi» belgisi (kun ochiq bo'lsa) va kamomad qarori o'zgaradi.
 --   RAQAMLASH (CT-10): sequence / identity EMAS — doc_counters qatori, o'tkazishning OXIRGI qadami, kassa eksklyuziv qulfi
 --     ostida: ROLLBACK raqam «yemaydi», bo'shliq va takror bo'lmaydi. Bekor qilingan hujjat raqamini saqlaydi.
---   QULF TARTIBI: L0 iqror_doc:<clientRef> → L1 iqror_pay:<o'quvchi> → L3 biznes qatorlari → L4 iqror_desk:<kassa> → cash_docs /
---     cash_days qatorlari → L5 doc_counters (oxirgi). cash_docs qatori kassa qulfisiz faqat keyin kassa qulfini OLMAYDIGAN
+--   QULF TARTIBI: L0 iqror_doc:<clientRef> → L1 iqror_pay:<o'quvchi> → L3 biznes qatorlari → L4 iqror_desk:<kassa> → cash_handovers /
+--     cash_docs / cash_days qatorlari → L5 doc_counters (oxirgi). cash_docs qatori kassa qulfisiz faqat keyin kassa qulfini OLMAYDIGAN
 --     tranzaksiyada qulflanadi (tasdiq / rad / so'rovni bekor qilish) — halqa (deadlock) bo'lmaydi.
 --     Istisno (acc-7): naqd o'quv to'lovi (kassa_tuition_post) kunni qatorlardan OLDIN aniqlaydi — L1 → L4 → L0 iqror_doc:pay_<id>.
 --     Xavfsiz: pay_<id> kalitini faqat shu yo'l oladi (doim shu o'quvchining L1 i va L4 dan keyin), L4 ni kutib turgan boshqa
@@ -95,6 +96,13 @@ create table if not exists public.cash_days (
 );
 create unique index if not exists cash_days_one_open on public.cash_days (desk) where status = 'open';   -- I1
 alter table public.cash_days add column if not exists "sheetRows" int;
+-- Kassa egasi va ismlar (sec-2, sec-4). "cashierUid" — kassa egasi (kun kassiri): kunning birinchi hujjatini o'tkazgan KASSA OPERATORI
+--   (kassir / g'aznachi; Direktor yoki Moliya menejeri favqulodda hujjati uni egasi qilmaydi), keyin — smenani QABUL QILGAN kassir
+--   (kassa-day.sql: kassa_handover_accept). Ismlar amal paytidagi holatda muzlatiladi: kassa egasi — egasi bo'lganda, yopgan va tekshirgan
+--   xodim — yopish / tekshirishda. Keyin ism o'zgarsa ham (foydalanuvchi o'z ismini o'zgartira oladi) chop etilgan tarix o'zgarmaydi.
+alter table public.cash_days add column if not exists "cashierName" text;
+alter table public.cash_days add column if not exists "closedByName" text;
+alter table public.cash_days add column if not exists "verifiedByName" text;
 
 -- ---------- Kassa hujjati ----------
 create table if not exists public.cash_docs (
@@ -151,6 +159,9 @@ alter table public.cash_docs add column if not exists series text generated alwa
 --   orgCash30 shu belgidan: kontragent keyin qayta tasniflansa ham o'tgan to'lov yashirinmaydi. Boshqa operatsiyalarda — bo'sh (NULL;
 --   bu ustundan oldingi hujjatlarda ham — nazorat ro'yxati ular uchun kontragentning hozirgi turidan foydalanadi).
 alter table public.cash_docs add column if not exists "orgCash" boolean;
+-- O'tkazgan xodim ismi O'TKAZISH paytidagi holatda (sec-4): KO-1 / KO-2 dagi «Кассир» va ro'yxatlar shundan — keyin ism o'zgarsa ham
+--   chop etilgan hujjat o'zgarmaydi. Tizim hujjatida (sanash farqi) — bo'sh.
+alter table public.cash_docs add column if not exists "postedByName" text;
 do $iqror_num$ begin
   if exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number' and indexdef not like '%(desk, series, year, no)%') then
     drop index public.cash_docs_number;   -- avvalgi ta'rif (desk, form, year, no) — seriya bo'yicha qayta quriladi
@@ -236,6 +247,43 @@ create table if not exists public.cash_counts (
   at           timestamptz not null default now()
 );
 create index if not exists cash_counts_day_idx on public.cash_counts (desk, day);
+-- Kimning kassasi va kim sanadi (sec-2): "cashierUid" — sanash paytidagi kassa egasi (kun kassiri; smenada — topshiruvchi), "byUid" —
+--   sanagan xodim (kassa egasi bo'lmasa — uning o'rniga, komissiya bilan). "handoverId" — qabul qilingan smena topshirish (cash_handovers).
+--   names — ismlar sanash paytidagi holatda {uid: ism} (sec-4: dalolatnoma keyin ham o'sha ismlar bilan chiqadi).
+alter table public.cash_counts add column if not exists "cashierUid" text;
+alter table public.cash_counts add column if not exists "handoverId" text;
+alter table public.cash_counts add column if not exists names jsonb;
+create index if not exists cash_counts_dayid_idx on public.cash_counts ("dayId");
+
+-- Smena topshirish-qabul — IKKI BOSQICHLI (FD-16; state-6). Topshiruvchi (kassa egasi; boshqa kassir yoki Direktor — uning o'rniga,
+--   komissiya bilan) pulni qabul qiluvchi bilan sanaydi: KUTILAYOTGAN topshirish ('pending'). Qabul qiluvchi o'z hisobidan «Qabul qildim»
+--   degachgina sanash dalolatnomasi (cash_counts), farq hujjati (kassa egasi — topshiruvchi nomidan) va yangi kassa egasi yoziladi
+--   ('accepted'). Kutilayotgan topshirishni topshiruvchi, qabul qiluvchi (rad etish) yoki Direktor bekor qiladi ('cancelled').
+--   Kassada bittadan ortiq kutilayotgan topshirish yo'q; kutilayotgan paytda kassada hujjat yozilmaydi va bekor qilinmaydi, kun yopilmaydi
+--   (kassa-docs.sql: app.kassa_handover_block). names — ismlar yaratish paytidagi holatda {uid: ism} (sec-4).
+create table if not exists public.cash_handovers (
+  id            text primary key,                     -- 'ho_<uuid>'
+  desk          text not null references public.cash_desks(id),
+  "dayId"       text not null references public.cash_days(id),
+  day           date not null,
+  status        text not null check (status in ('pending', 'accepted', 'cancelled')),
+  "fromUid"     text,                                 -- kassa egasi (topshiruvchi); egasi aniqlanmagan kunda — bo'sh
+  "toUid"       text not null,                        -- qabul qiluvchi kassir
+  "byUid"       text not null,                        -- sanagan va yozgan xodim (kassa egasi yoki uning o'rniga)
+  expected      numeric not null,                     -- hisobdagi qoldiq (yozish paytida; kutilayotganda o'zgarmaydi)
+  counted       numeric not null check (counted >= 0),
+  "pendingSum"  numeric not null default 0 check ("pendingSum" >= 0),
+  diff          numeric not null,                     -- sanalgan − hisobdagi − hali o'tkazilmagan
+  denoms        jsonb,
+  commission    jsonb,
+  note          text not null default '',
+  names         jsonb not null default '{}'::jsonb,
+  "createdAt"   timestamptz not null default now(),
+  "acceptedAt"  timestamptz, "countId" text, "diffDocId" text,
+  "cancelledBy" text, "cancelledAt" timestamptz, "cancelReason" text
+);
+create unique index if not exists cash_handovers_one_pending on public.cash_handovers (desk) where status = 'pending';
+create index if not exists cash_handovers_day_idx on public.cash_handovers ("dayId");
 
 -- Xeshli suratlar (31.12 holati va b.) — keyin o'zgarmaydi.
 create table if not exists public.fin_snapshots (
@@ -269,7 +317,8 @@ create index if not exists cash_prints_day_idx on public.cash_prints ("dayId") w
 
 -- ---------- RLS: faqat o'qish; yozish — kassa funksiyalari ----------
 do $$ declare t text; begin
-  foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints'] loop
+  foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints',
+                           'cash_handovers'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from public, anon, authenticated', t);
     execute format('grant select on table public.%I to authenticated', t);
@@ -407,7 +456,8 @@ begin
     raise exception 'Faqat oxirgi kassa kuni qayta ochiladi' using errcode = 'P0001', hint = 'kassa:reopen_last';
   end if;
   if old.status = 'closed' and new.status = 'verified'
-     and (to_jsonb(new) - array['status', 'verifiedBy', 'verifiedAt', 'verifyNote']) is distinct from (to_jsonb(old) - array['status', 'verifiedBy', 'verifiedAt', 'verifyNote']) then
+     and (to_jsonb(new) - array['status', 'verifiedBy', 'verifiedAt', 'verifyNote', 'verifiedByName'])
+         is distinct from (to_jsonb(old) - array['status', 'verifiedBy', 'verifiedAt', 'verifyNote', 'verifiedByName']) then
     raise exception 'Tekshirishda yopilgan kun ma''lumoti o''zgarmaydi' using errcode = '42501', hint = 'kassa:immutable';
   end if;
   return new;
@@ -423,7 +473,7 @@ declare
   v_day public.cash_days%rowtype; v_keep text[]; v_cash numeric; v_all numeric; v_bad int;
   c_pre constant text[] := array['status', 'approvedBy', 'approvedAt', 'dirApprovedBy', 'dirApprovedAt', 'rejectedBy', 'rejectedAt',
                                  'rejectReason', 'year', 'no', 'businessDay', 'dayId', 'postedBy', 'postedAt', 'capturedAt', 'late',
-                                 'voidedBy', 'voidedAt', 'voidReason', 'needsDirector', 'orgCash'];
+                                 'voidedBy', 'voidedAt', 'voidReason', 'needsDirector', 'orgCash', 'postedByName'];
 begin
   if tg_op = 'DELETE' then
     raise exception 'Kassa hujjati o''chirilmaydi (xato bo''lsa — «Bekor qilish»)' using errcode = '42501', hint = 'kassa:immutable';
@@ -576,6 +626,37 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
+-- Smena topshirish (cash_handovers, state-6): faqat kassa funksiyalari ichida; o'chirilmaydi; yangi yozuv — «kutilmoqda»; «kutilmoqda» →
+--   «qabul qilindi» (qabul payti, sanash dalolatnomasi, farq hujjati) yoki «bekor qilindi» (kim, qachon, sabab) — bir marta; summalar,
+--   kimdan-kimga, komissiya va ismlar o'zgarmaydi.
+create or replace function app.kassa_handover_guard() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare c_keep constant text[] := array['status', 'acceptedAt', 'countId', 'diffDocId', 'cancelledBy', 'cancelledAt', 'cancelReason'];
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Smena topshirish yozuvi o''chirilmaydi' using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  if coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1' then
+    raise exception 'Smena topshirish faqat kassa funksiyalari orqali yoziladi' using errcode = '42501', hint = 'kassa:rpc_only';
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status <> 'pending' or new."acceptedAt" is not null or new."countId" is not null or new."cancelledAt" is not null then
+      raise exception 'Smena topshirish «qabul kutilmoqda» holatida yoziladi' using errcode = '22023', hint = 'kassa:bad_handover';
+    end if;
+    return new;
+  end if;
+  if old.status <> 'pending' or new.status not in ('accepted', 'cancelled')
+     or (new.status = 'accepted' and (new."acceptedAt" is null or new."countId" is null or new."cancelledAt" is not null))
+     or (new.status = 'cancelled' and (new."cancelledBy" is null or new."cancelledAt" is null or new."acceptedAt" is not null))
+     or (to_jsonb(new) - c_keep) is distinct from (to_jsonb(old) - c_keep) then
+    raise exception 'Smena topshirish yozuvi faqat bir marta qabul qilinadi yoki bekor qilinadi (holati: %)', old.status using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_kassa_handover_guard on public.cash_handovers;
+create trigger trg_kassa_handover_guard before insert or update or delete on public.cash_handovers
+  for each row execute function app.kassa_handover_guard();
+
 -- Kassa: boshlang'ich qoldiq faqat kassa funksiyasi orqali va faqat birinchi kun ochilguncha.
 create or replace function app.kassa_desk_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -623,6 +704,7 @@ revoke all on function app.kassa_doc_after() from public, anon, authenticated;
 revoke all on function app.kassa_line_guard() from public, anon, authenticated;
 revoke all on function app.kassa_append_only() from public, anon, authenticated;
 revoke all on function app.kassa_desk_guard() from public, anon, authenticated;
+revoke all on function app.kassa_handover_guard() from public, anon, authenticated;
 
 -- O'zgarishlar tarixi (Direktor ko'radi): holat o'zgarishlari, bekor qilish, qarorlar, kun yopish / tekshirish / qayta ochish.
 select app.chlog_attach('cash_docs', 'status,no,year,businessDay,amount,op,partyType,partyId,approvedBy,dirApprovedBy,rejectReason,voidReason,decision,fiscalExempt,late');

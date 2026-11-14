@@ -601,7 +601,7 @@ test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobd
     days: [
       { day: '2027-01-04', status: 'verified', opening: 1000000, receipts: 600000, payouts: 450000, closing: 1150000, counted: 1150000, diff: 0, docs: 3, voids: 1, reopens: 0, z: { needed: true, recorded: true, missing: false, no: 'Z-1', cash: 600000, card: 0, ok: true } },
       { day: '2027-01-08', status: 'verified', opening: 1150000, receipts: 2000000, payouts: 0, closing: 3150000, counted: 3150000, diff: 0, docs: 1, voids: 0, reopens: 0, z: { needed: true, recorded: true, missing: true, reason: 'Apparat buzilgan' } },
-      { day: '2027-01-12', status: 'closed', opening: 3150000, receipts: 500000, payouts: 1500000, closing: 2150000, counted: 2140000, diff: -10000, docs: 2, voids: 0, reopens: 1, z: { needed: true, recorded: true, missing: false, no: 'Z-2', cash: 490000, card: 0, ok: false, diffCash: -10000, diffCard: 0 } },
+      { day: '2027-01-12', status: 'closed', opening: 3150000, receipts: 500000, payouts: 1500000, closing: 2150000, counted: 2140000, diff: -10000, handoverDiff: 5000, docs: 2, voids: 0, reopens: 1, z: { needed: true, recorded: true, missing: false, no: 'Z-2', cash: 490000, card: 0, ok: false, diffCash: -10000, diffCard: 0 } },
       { day: '2027-01-29', status: 'open', opening: 2150000, receipts: 0, payouts: 500000, closing: 1650000, counted: null, diff: null, docs: 1, voids: 0, reopens: 0, z: { needed: true, recorded: false, missing: false } }],
     advances: [{ code: 'IQT-T1', partyName: null, opening: 0, issued: 50000, returned: 0, reported: 0, closing: 50000 },
                { code: 'IQX-T1', partyName: null, opening: 100000, issued: 500000, returned: 150000, reported: 200000, closing: 250000 }] };
@@ -610,11 +610,13 @@ test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobd
   assert.match(sheets[0].rows[3][0], /^Ismsiz nusxa \(FD-28\)/, 'E1 — ismsiz KO-3');
   const d = sheets[2].rows;
   assert.deepEqual(d[4].slice(0, 4), ['Sana', 'Holat', 'Kun boshi', 'Kirim']);
-  assert.deepEqual(d.slice(5, 9).map(r => [r[1], r[11], r[14]]), [['tekshirilgan', 'Z-1', 'mos'], ['tekshirilgan', '', 'yo‘q: Apparat buzilgan'],
+  // (acc-6: «Farq» dan keyin «Smena topshirishdagi farq» ustuni — keyingi ustunlar bittaga suriladi)
+  assert.deepEqual(d.slice(5, 9).map(r => [r[1], r[12], r[15]]), [['tekshirilgan', 'Z-1', 'mos'], ['tekshirilgan', '', 'yo‘q: Apparat buzilgan'],
     ['yopilgan', 'Z-2', 'farq: naqd -10 000, karta 0'], ['ochiq', '', 'kiritilmagan']]);
-  assert.deepEqual([d[5][0].v, d[7][7].v, d[8][6], d[7][10]], [46391, -10000, '', 1], 'sana — Excel sanasi, farq — son, ochiq kunda sanalgan yo‘q');
+  assert.deepEqual([d[5][0].v, d[7][7].v, d[8][6], d[7][11]], [46391, -10000, '', 1], 'sana — Excel sanasi, farq — son, ochiq kunda sanalgan yo‘q');
+  assert.deepEqual([d[4][7], d[4][8], d[5][8], d[7][8].v], ['Farq', 'Smena topshirishdagi farq', '', 5000], 'smena farqi — yopish farqi yonida (yo‘q bo‘lsa — bo‘sh)');
   const tot = d[d.length - 1];
-  assert.deepEqual([tot[0], tot[3].v, tot[4].v, tot[7].v, tot[8], tot[9]], ['Jami', 3100000, 2450000, -10000, 7, 1]);
+  assert.deepEqual([tot[0], tot[3].v, tot[4].v, tot[7].v, tot[8].v, tot[9], tot[10]], ['Jami', 3100000, 2450000, -10000, 5000, 7, 1]);
   const a = sheets[3].rows;
   assert.match(a[3][0], /^Ismsiz nusxa \(FD-28\): xodimlar tabel kodi bilan/);
   assert.deepEqual(a[4], ['Xodim (tabel kodi)', 'Oy boshiga qoldiq', 'Berildi (avans)', 'Qaytdi (qaytim)', 'Avans hisobotlari', 'Oy oxiriga qoldiq'], 'ismsizda F.I.Sh. ustuni yo‘q');
@@ -633,7 +635,8 @@ test('Oylik kassa to‘plami: E1–E4 varaqlari; kunlar (KO-4, Z holati), hisobd
   assert.deepEqual(back.SheetNames, ['E1 KO-3', 'E2 Statiyalar', 'E3 Kassa kunlari', 'E4 Hisobdorlar']);
   const ru = packSheets(pack, ctx({ lang: 'ru' }));
   assert.deepEqual(ru.map(x => x.name), ['E1 КО-3', 'E2 Статьи', 'E3 Кассовые дни', 'E4 Подотчётные']);
-  assert.ok(ru[2].rows[5][1] === 'проверен' && ru[2].rows[7][14] === 'расхождение: наличные -10 000, карты 0' && ru[3].rows[4][0] === 'Сотрудник (табельный №)');
+  assert.ok(ru[2].rows[5][1] === 'проверен' && ru[2].rows[7][15] === 'расхождение: наличные -10 000, карты 0' && ru[3].rows[4][0] === 'Сотрудник (табельный №)'
+    && ru[2].rows[4][8] === 'Разница при приёме-передаче смены');
 });
 
 // ---------------------------------------------------------------- ko'rik 2-guruhi (acc-2, acc-5, crit-2)
@@ -685,4 +688,47 @@ test('o‘quvchi avansini naqd qaytarish (crit-2): KO-2 — Dt 6310, asos chop e
     assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   assert.ok(text(docHtml(d, ctx({ lang: 'ru' }), W)).includes('Основание: Возврат: аванс учащегося — O‘quvchi ketdi; заявление 05.01.2027'));
   assert.ok(text(docHtml(d, ctx({ lang: 'uz-latn' }), W)).includes('Asosi: Qaytarish: o‘quvchi avansi — O‘quvchi ketdi; ariza 05.01.2027'));
+});
+
+// ---------------------------------------------------------------- ko'rik 6-guruhi (sec-2, state-6, sec-4, acc-6)
+test('sec-4: chop etishda ism — amal paytidagi (hujjat / kun / dalolatnomada muzlatilgan), keyingi o‘zgarish ta’sir qilmaydi', () => {
+  const renamed = ctx({ names: Object.assign({}, names, { u_kas: 'Boshqa Ism', u_acc: 'Boshqa Buxgalter' }) });
+  const k1 = text(docHtml(Object.assign({}, ko1, { postedByName: 'Sinov Kassir' }), renamed, W));
+  assert.ok(k1.includes('Қабул қилди: кассир Sinov Kassir') && !k1.includes('Boshqa Ism'), k1);
+  const k2 = text(docHtml(Object.assign({}, ko2, { postedByName: 'Sinov Kassir' }), renamed, W));
+  assert.ok(k2.includes('Берди: кассир Sinov Kassir') && !k2.includes('Boshqa Ism'), k2);
+  assert.ok(text(docHtml(ko2, renamed, W)).includes('Берди: кассир Boshqa Ism'), 'muzlatilgan ism yo‘q (eski hujjat) — ro‘yxatdagi ism');
+  const b = mkBook(); Object.assign(b.day, { cashierName: 'Sinov Kassir', closedByName: 'Sinov Kassir', verifiedByName: 'Sinov Buxgalter' });
+  const t = text(bookHtml(b, renamed, W));
+  assert.ok(t.includes('Кассир Sinov Kassir') && t.includes('Бухгалтер Sinov Buxgalter') && !t.includes('Boshqa'), t.slice(-1500));
+  const rp = text(reportHtml(b, renamed, W));
+  assert.ok(rp.includes('Kassir Sinov Kassir') && rp.includes('Tekshirdi Sinov Buxgalter') && !rp.includes('Boshqa'), rp.slice(-600));
+});
+
+test('sec-2 / state-6: dalolatnoma — sanash paytidagi ismlar; kassa egasi o‘rniga sanalganda «Санади» qatori', () => {
+  const b = mkBook();
+  const ho = { id: 'cc_3', kind: 'handover', day: '2027-01-04', expected: 500000, counted: 495000, pendingSum: 0, diff: -5000, fromUid: 'u_kas', toUid: 'u_kas2', byUid: 'u_mm',
+    cashierUid: 'u_kas', at: '2027-01-04T05:00:00Z', commission: [{ title: 'Бухгалтер', name: 'Sinov B.B.' }, { title: 'Директор ўринбосари', name: 'Sinov A.A.' }],
+    names: { u_kas: 'Kassir Muzlagan', u_kas2: 'Qabul Muzlagan', u_mm: 'Sanovchi Muzlagan' } };
+  const h = text(countHtml(ho, b, ctx(), W));
+  for (const must of ['Топширди Kassir Muzlagan', 'Қабул қилди Qabul Muzlagan', 'Санади Sanovchi Muzlagan', 'Бухгалтер Sinov B.B.'])
+    assert.ok(h.includes(must), 'yo‘q: ' + must + '\n' + h);
+  const own = text(countHtml(Object.assign({}, ho, { byUid: 'u_kas' }), b, ctx(), W));
+  assert.ok(!own.includes('Санади'), 'kassa egasi o‘zi sanagan — qator yo‘q');
+  const cl = text(countHtml(Object.assign({}, b.counts[0], { byUid: 'u_mm', cashierUid: 'u_kas', names: { u_kas: 'Kassir Muzlagan', u_mm: 'Sanovchi Muzlagan' } }), b, ctx({ lang: 'ru' }), W));
+  assert.ok(cl.includes('Кассир Kassir Muzlagan') && cl.includes('Пересчитал Sanovchi Muzlagan'), cl);
+});
+
+test('acc-6: KO-4 va RP-02 «Farq» — smena topshirishdagi farq yopish farqi yonida (hujjat raqami bilan)', () => {
+  const b = mkBook();
+  b.docs.push({ id: 'dh', form: 'KO1', op: 'in_surplus', status: 'posted', no: 27, businessDay: '2027-01-04', amount: 3000, isSystem: true, partyName: 'Kassa ortiqchasi',
+    postedAt: '2027-01-04T09:00:00Z', lines: [{ debit: '5010', credit: '9390', amount: 3000, cash: true }] });
+  b.counts.unshift({ id: 'cc_h', kind: 'handover', day: '2027-01-04', expected: 1000000, counted: 1003000, pendingSum: 0, diff: 3000, diffDocId: 'dh', fromUid: 'u_kas', toUid: 'u_kas2', byUid: 'u_kas', at: '2027-01-04T09:00:00Z' });
+  const t = text(bookHtml(b, ctx(), W));
+  assert.ok(t.includes('Фарқ: кунни ёпишда: Касса камомади 5 000=00 — Ч-10; сменани топшириш-қабул қилишда: Касса ортиқчаси 3 000=00 — К-27'), t.slice(-1200));
+  const rp = text(reportHtml(b, ctx({ rules: [] }), W));
+  assert.ok(rp.includes('Farq kunni yopishda: kamomad 5 000=00 — Ch-10; smenani topshirish-qabul qilishda: ortiqcha 3 000=00 — K-27'), rp);
+  const open = { day: Object.assign({}, b.day, { status: 'open', receiptsLive: b.rec, payoutsLive: b.pay, balance: 1, counted: null, diff: null, verifiedBy: null }), docs: b.docs, counts: b.counts.filter(c => c.kind === 'handover') };
+  assert.ok(text(reportHtml(open, ctx({ rules: [] }), W)).includes('Farq smenani topshirish-qabul qilishda: ortiqcha 3 000=00 — K-27'), 'ochiq kunda ham smena farqi');
+  assert.ok(text(bookHtml(mkBook(), ctx(), W)).includes('Фарқ: Касса камомади 5 000=00 — Ч-10'), 'smena farqi yo‘q — avvalgidek');
 });

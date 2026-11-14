@@ -40,7 +40,10 @@ Biror shart bajarilmasa — boshlanish sanasi suriladi (keyingi oyning birinchi 
 - [ ] **Hisoblar (login):** kassir(lar), moliya menejeri, buxgalter, HR — har birining o‘z hisobi bor; parol boshqaga berilmaydi.
   Buxgalterga «Foydalanuvchilar»da **«Buxgalter»** roli beriladi (bu rol tanlovda kassa bo‘limi o‘rnatilgandan keyin paydo bo‘ladi;
   bo‘limlari — «Tasdiqlash» va «Kassa» (so‘rovni tasdiqlash yoki rad etish, kunni tekshirish, hujjatni bekor qilish, avans hisoboti),
-  «To‘lovlar» va «Buxgalteriya» (faqat ko‘rish); qo‘shimcha lavozim berilmaydi — F1.21).
+  «To‘lovlar» va «Buxgalteriya» (faqat ko‘rish); qo‘shimcha lavozim berilmaydi — F1.21). Kassa hisoblari (kassir, o‘rinbosari,
+  g‘aznachi, moliya menejeri, buxgalter) «Foydalanuvchilar» → «Tahrirlash»da **xodim kartasiga (HR yozuviga) bog‘langan**: kassa
+  hujjatlaridagi ism shu kartadan olinadi (foydalanuvchi o‘zi yozgan ism emas), kamomad qarori xodim kartasiga yoziladi; nazorat
+  ro‘yxatida «Xodim kartasiga bog‘lanmagan kassa hisoblari» — «yo‘q».
 - [ ] **Qabul sinovi:** kassir, moliya menejeri, buxgalter va direktor stendda o‘z ssenariylarini bajarib, varaqni imzolagan (`shakllar.md`, Sh-5).
 - [ ] **Bank bilan kassa limiti** kelishilgan (bo‘lmasa — limit 0: ortiqcha pul har kuni bankka topshiriladi).
 - [ ] **Printer:** A4 (KO-1 + patta, KO-2, KO-4, dalolatnomalar); sinov varag‘i chop etilgan.
@@ -187,7 +190,8 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 
 ## 9. Orqaga qaytish
 **Ish jarayoni (tizimdan vaqtincha voz kechish).** Qaror — Direktor. (1) **To‘xtatishdan oldin:** to‘lov qabul qiladigan
-qurilmalar navbati (⏳) bo‘shaguncha kutiladi; joriy kassa kuni sanab yopiladi; tasdiq kutayotgan va tasdiqlangan (puli berilmagan)
+qurilmalar navbati (⏳) bo‘shaguncha kutiladi; kutilayotgan smena topshirish qabul qilinadi yoki bekor qilinadi (qabul qilinmagan
+topshirishda tizim kassani to‘xtatmaydi); joriy kassa kuni sanab yopiladi; tasdiq kutayotgan va tasdiqlangan (puli berilmagan)
 kassa so‘rovlari bajariladi yoki bekor qilinadi — aks holda tizim kassani to‘xtatmaydi va to‘sqinlik qilayotgan kun yoki so‘rovlar
 ro‘yxatini ko‘rsatadi. Oxirgi kassa kuni **«Hali o‘tkazilmagan yozuvlar»** (qurilma navbati) bilan yopilgan bo‘lsa ham tizim
 to‘xtatmaydi: bu pul kassada bor, hisobda hali yo‘q — to‘xtatilgandan keyin u to‘g‘ri yozilmaydi (qayta ishga tushgach kirim orderi

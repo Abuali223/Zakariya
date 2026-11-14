@@ -146,7 +146,8 @@ update public.fin_org set "kassaGoLive" = app.fin_today() - 1 where id = 'main';
 set local session_replication_role = origin;
 -- Direktor kassadan qaytarish so'rovini yozadi (KO-2, tasdiqlangan) — surat va hujjat buxgalterga ko'rinadi (kassa_reader).
 -- Kamomad oqimi: boshlang'ich qoldiq → kirim (kun ochiladi) → kassir kunni kam pul bilan yopadi → Direktor «xodim zimmasiga» qaror
---   qiladi (kassir HR kartasiga bog'lanmagan — dalolatnoma tomoni ismi bilan; ismi o'rnida email turgan hisob — email chiqmasligi kerak).
+--   qiladi (kassir HR kartasiga bog'lanmagan — Direktor javobgar xodim kartasini o'zi tanlaydi, sec-4: hisobdagi ism — bu yerda email —
+--   dalolatnomaga hech qachon chiqmaydi).
 --   Har qadam alohida so'rovda (oldingi qadam yozganini keyingisi ko'rishi uchun).
 select zz.as('U_DIR', $q$select public.kassa_refund_request('{"target":"invoice","id":"i1","amount":1000,"reason":"sinov qaytarish","payee":"Sinov Ota Onasi","clientRef":"zz-ref-k7a"}'::jsonb) ->> 'ok'$q$) as zz_k0a
 \gset
@@ -156,7 +157,7 @@ select zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":
 \gset
 select zz.as('U_KAS', format($q$select public.kassa_day_close('{"day":"%s","counted":1090000}') ->> 'ok'$q$, app.fin_today())) as zz_k0d
 \gset
-select zz.as('U_DIR', format('select public.kassa_shortage_decide(%L, %L, %L) ->> ''ok''', (select "diffDocId" from public.cash_days where day = app.fin_today()), 'employee', 'Kassir yozma roziligi bilan')) as zz_k0e
+select zz.as('U_DIR', format('select public.kassa_shortage_decide(%L, %L, %L, %L) ->> ''ok''', (select "diffDocId" from public.cash_days where day = app.fin_today()), 'employee', 'Kassir yozma roziligi bilan', 'teachers:tch1')) as zz_k0e
 \gset
 
 -- ---------- (R) ruxsat etilgan jadvallar ----------
@@ -232,10 +233,10 @@ select zz.chk('K8 kassa javoblari (buxgalter): kod, telefon, email, kasallik san
                          format('public.kassa_doc_get(%L)', (select id from public.cash_docs where op = 'nc_shortage_dec'))]) f) x
     where r ~ '^ERR' or r ~ '(?i)K7Q2ZP' or r ~ '(^|[^0-9A-Za-z_])\+?998[0-9]{9}([^0-9A-Za-z]|$)' or r ~ '[A-Za-z0-9._-]+@x\M' or r ~ '2001-01-1[89]'
        or r ~ '(ZZADDR1|ZZHEALTH1|ZZALLERGY1)'), '^$');
-select zz.chk('K9 ism o''rnida email turgan kassir: dalolatnomada «Kassir», ro''yxatda — xodim kartasi ismi (bog''langan bo''lsa) yoki uid; email yo''q',
+select zz.chk('K9 ism o''rnida email turgan kassir: dalolatnomada Direktor tanlagan xodim kartasi (sec-4), ro''yxatda — xodim kartasi ismi (bog''langan bo''lsa) yoki uid; email yo''q',
   (select "partyType" || '/' || coalesce("partyName", '∅') from public.cash_docs where op = 'nc_shortage_dec') || ' | ' ||
   zz.as('U_ACC', $q$select ((public.kassa_refs() -> 'operators') @> '[{"uid": "U_KAS", "name": "U_KAS"}, {"uid": "U_KAS2", "name": "Sinov Xodim"}]')::text
-                          || '/' || ((public.kassa_refs() -> 'operators')::text ~ '@')::text$q$), '^other/Kassir \| true/false$');
+                          || '/' || ((public.kassa_refs() -> 'operators')::text ~ '@')::text$q$), '^employee/Sinov O''qituvchi \| true/false$');
 select zz.chk('K10 manzil va sog''liq belgilari (ZZADDR1 / ZZHEALTH1 / ZZALLERGY1) buxgalter o''qiy oladigan hech bir joyda yo''q',
   zz.scan('U_ACC', '(ZZADDR1|ZZHEALTH1|ZZALLERGY1)'), '^$');
 select zz.chk('K3 buxgalter farzand biriktira olmaydi (kodni bilsa ham)',
@@ -324,7 +325,7 @@ select zz.chk('L1 buxgalterga true yordamchilar', (select string_agg(proname, ',
 select zz.chk('L2 YOPIQ RO''YXAT: buxgalterni o''tkazadigan siyosatlar jadvallari',
   (select string_agg(distinct p.tablename, ',' order by p.tablename) from pg_policies p, zz_acc_re
     , zz_acc_re2 where p.schemaname = 'public' and p.cmd in ('SELECT', 'ALL') and (coalesce(p.qual, '') ~ zz_acc_re.re or coalesce(p.qual, '') ~ zz_acc_re2.re)),
-  '^cash_counts,cash_day_events,cash_days,cash_desks,cash_doc_lines,cash_docs,cash_prints,config,credit_ledger,expenses,fin_articles,fin_category_map,fin_counterparties,fin_op_rules,fin_org,fin_signatories,gl_accounts,payment_allocations,payroll_runs,staff_advances,student_credit$');
+  '^cash_counts,cash_day_events,cash_days,cash_desks,cash_doc_lines,cash_docs,cash_handovers,cash_prints,config,credit_ledger,expenses,fin_articles,fin_category_map,fin_counterparties,fin_op_rules,fin_org,fin_signatories,gl_accounts,payment_allocations,payroll_runs,staff_advances,student_credit$');
 select zz.chk('L2w YOPIQ RO''YXAT: buxgalterni o''tkazadigan YOZISH siyosati yo''q (INSERT / UPDATE / DELETE / ALL; USING va WITH CHECK)',
   (select coalesce(string_agg(distinct p.tablename || ':' || p.cmd, ','), '') from pg_policies p, zz_acc_re, zz_acc_re2
     where p.schemaname = 'public' and p.cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
@@ -401,7 +402,7 @@ create temp table zz_money on commit drop as
      'record_manual_payment','apply_payment','apply_to_invoice','split_payment','assign_payment','reverse_payment','refund_invoice',
      'add_credit','adjust_credit','reattribute_avans','cancel_invoice','reprice_invoice','delete_unpaid_invoice',
      'kassa_receipt','kassa_payout_request','kassa_doc_pay','kassa_salary_pay','kassa_refund_request','kassa_offset',
-     'kassa_day_close','kassa_day_z','kassa_handover','kassa_day_reopen','kassa_opening_set','kassa_shortage_decide',
+     'kassa_day_close','kassa_day_z','kassa_handover','kassa_handover_accept','kassa_handover_cancel','kassa_day_reopen','kassa_opening_set','kassa_shortage_decide',
      'fin_period_lock','fin_snapshot_take','fin_org_set','fin_signatory_save','payroll_submit','payroll_decide','payroll_approve_line',
      'payroll_reopen']);
 select zz.chk('P1 tekshiriladigan pul RPC''lari soni (ro''yxatdagi nomlar bazada bor)', (select (count(*) >= 30)::text from zz_money), '^true$');

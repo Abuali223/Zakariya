@@ -48,7 +48,7 @@ const T = {
     nominal: 'Номинал', qty: 'Сони', total: 'Жами', resNone: 'Фарқ аниқланмади.',
     resShort: (a, no) => `Камомад — ${a}. Шу кун санаси билан чиқим касса ордери ${no} расмийлаштирилди.`,
     resOver: (a, no) => `Ортиқча — ${a}. Шу кун санаси билан кирим касса ордери ${no} расмийлаштирилди.`,
-    decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', note: 'Изоҳ', member: 'Комиссия аъзоси',
+    decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', countedBy: 'Санади', note: 'Изоҳ', member: 'Комиссия аъзоси',
     employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
     ko3: 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', ko3Form: 'КО-3 шакли', ko3In: 'Кирим касса ҳужжатлари', ko3Out: 'Чиқим касса ҳужжатлари',
     ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ', ko3Adj: 'Қайта ишга тушириш фарқи (техник далолатнома «Д-»)',
@@ -94,7 +94,7 @@ const T = {
     nominal: 'Nominal', qty: 'Soni', total: 'Jami', resNone: 'Farq aniqlanmadi.',
     resShort: (a, no) => `Kamomad — ${a}. Shu kun sanasi bilan chiqim kassa orderi ${no} rasmiylashtirildi.`,
     resOver: (a, no) => `Ortiqcha — ${a}. Shu kun sanasi bilan kirim kassa orderi ${no} rasmiylashtirildi.`,
-    decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', note: 'Izoh', member: 'Komissiya a’zosi',
+    decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', countedBy: 'Sanadi', note: 'Izoh', member: 'Komissiya a’zosi',
     employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
     ko3: 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI', ko3Form: 'KO-3 shakli', ko3In: 'Kirim kassa hujjatlari', ko3Out: 'Chiqim kassa hujjatlari',
     ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq', ko3Adj: 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)',
@@ -140,7 +140,7 @@ const T = {
     nominal: 'Номинал', qty: 'Количество', total: 'Итого', resNone: 'Расхождений не выявлено.',
     resShort: (a, no) => `Недостача — ${a}. Датой этого дня оформлен расходный кассовый ордер ${no}.`,
     resOver: (a, no) => `Излишек — ${a}. Датой этого дня оформлен приходный кассовый ордер ${no}.`,
-    decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', note: 'Примечание', member: 'Член комиссии',
+    decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', countedBy: 'Пересчитал', note: 'Примечание', member: 'Член комиссии',
     employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
     ko3: 'ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ', ko3Form: 'Форма КО-3', ko3In: 'Приходные кассовые документы', ko3Out: 'Расходные кассовые документы',
     ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода', ko3Adj: 'Разница при повторном запуске кассы (технический акт «Д-»)',
@@ -333,7 +333,7 @@ function ko1Html(doc, ctx, W, t, lang) {
   const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t);
   const cash = (doc.lines || []).filter(l => l.cash !== false), nonCash = (doc.lines || []).filter(l => l.cash === false);
   const amount = money(W, doc.amount), words = W.sumWords(doc.amount, lang), date = W.fmtDateLong(iso(doc.businessDay), lang);
-  const chief = pickSign(ctx, 2, null, t.chief), cashier = doc.isSystem ? '' : nameOf(ctx, doc.postedBy);
+  const chief = pickSign(ctx, 2, null, t.chief), cashier = doc.isSystem ? '' : (doc.postedByName || nameOf(ctx, doc.postedBy));   // sec-4: o'tkazish paytidagi ism
   const fiscal = doc.fiscalNo ? esc(doc.fiscalNo) : (doc.fiscalExempt ? esc(t.fiscalExempt) : '');
   const wm = doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : '';
   const rows = (cash.length ? cash : [{ debit: '5010', credit: '', amount: doc.amount }]).map(l =>
@@ -379,7 +379,7 @@ function ko2Html(doc, ctx, W, t, lang) {
   const cash = (doc.lines || []).filter(l => l.cash !== false);
   const amount = money(W, doc.amount), words = W.sumWords(doc.amount, lang), date = W.fmtDateLong(iso(doc.businessDay), lang);
   const head = pickSign(ctx, 1, doc.dirApprovedBy, t.head), chief = pickSign(ctx, 2, doc.approvedBy, t.chief);
-  const cashier = doc.isSystem ? '' : nameOf(ctx, doc.postedBy);
+  const cashier = doc.isSystem ? '' : (doc.postedByName || nameOf(ctx, doc.postedBy));   // sec-4: o'tkazish paytidagi ism
   const wm = doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : '';
   const rows = (cash.length ? cash : [{ debit: '', credit: '5010', amount: doc.amount }]).map(l =>
     `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(anCode(l, doc))}</td><td class="c">${esc(l.credit)}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
@@ -592,13 +592,14 @@ export function matrixSheet(m, ctx) {
   if (m.balanced === false) out.push([t.ko3Bad]);
   return { name: ru ? 'E2 Статьи' : 'E2 Statiyalar', rows: out, cols: [{ wch: 8 }, { wch: 42 }, ...days.map(() => ({ wch: 12 })), { wch: 15 }] };
 }
-// Oylik kassa to'plami (E3): kassa kunlari — KO-4 jamlari, sanash va farq, holat, Z-hisobot solishtiruvi.
+// Oylik kassa to'plami (E3): kassa kunlari — KO-4 jamlari, sanash va farq (kunni yopishdagi va smena topshirishdagi — acc-6), holat,
+//   Z-hisobot solishtiruvi.
 export function daysSheet(p, ctx) {
   ctx = ctx || {}; p = p || {};
   const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, days = p.days || [];
   const ST = ru ? { open: 'открыт', closed: 'закрыт', verified: 'проверен' } : { open: 'ochiq', closed: 'yopilgan', verified: 'tekshirilgan' };
-  const H = ru ? ['Дата', 'Состояние', 'Остаток на начало', 'Приход', 'Расход', 'Остаток на конец', 'Пересчитано', 'Разница', 'Документов', 'Аннулировано', 'Переоткрыт', 'Z-отчёт №', 'Z: наличные', 'Z: карты', 'Z: сверка']
-               : ['Sana', 'Holat', 'Kun boshi', 'Kirim', 'Chiqim', 'Kun oxiri', 'Sanalgan', 'Farq', 'Hujjatlar', 'Bekor qilingan', 'Qayta ochilgan', 'Z-hisobot №', 'Z: naqd', 'Z: karta', 'Z: solishtirish'];
+  const H = ru ? ['Дата', 'Состояние', 'Остаток на начало', 'Приход', 'Расход', 'Остаток на конец', 'Пересчитано', 'Разница', 'Разница при приёме-передаче смены', 'Документов', 'Аннулировано', 'Переоткрыт', 'Z-отчёт №', 'Z: наличные', 'Z: карты', 'Z: сверка']
+               : ['Sana', 'Holat', 'Kun boshi', 'Kirim', 'Chiqim', 'Kun oxiri', 'Sanalgan', 'Farq', 'Smena topshirishdagi farq', 'Hujjatlar', 'Bekor qilingan', 'Qayta ochilgan', 'Z-hisobot №', 'Z: naqd', 'Z: karta', 'Z: solishtirish'];
   const n2 = v => String(Math.round(num(v) * 100) / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   const zState = z => !z ? '' : z.missing ? (ru ? 'нет: ' : 'yo‘q: ') + (z.reason || '')
     : !z.recorded ? (z.needed ? (ru ? 'не введён' : 'kiritilmagan') : '')
@@ -607,12 +608,12 @@ export function daysSheet(p, ctx) {
     [mxPerOf(p, t) + (p.desk && p.desk.name ? ' · ' + p.desk.name : '')], [], H];
   days.forEach(d => { const z = d.z || null;
     rows.push([xlDate(d.day), ST[d.status] || d.status || '', xlMoney(d.opening), xlMoney(d.receipts), xlMoney(d.payouts), xlMoney(d.closing),
-      d.counted == null ? '' : xlMoney(d.counted), d.diff == null ? '' : xlMoney(d.diff), num(d.docs), num(d.voids), num(d.reopens),
+      d.counted == null ? '' : xlMoney(d.counted), d.diff == null ? '' : xlMoney(d.diff), num(d.handoverDiff) ? xlMoney(d.handoverDiff) : '', num(d.docs), num(d.voids), num(d.reopens),
       (z && z.no) || '', z && z.cash != null ? xlMoney(z.cash) : '', z && z.card != null ? xlMoney(z.card) : '', zState(z)]); });
   rows.push([]);
   rows.push([t.total, '', '', xlMoney(days.reduce((s, d) => s + num(d.receipts), 0)), xlMoney(days.reduce((s, d) => s + num(d.payouts), 0)), '', '',
-    xlMoney(days.reduce((s, d) => s + num(d.diff), 0)), days.reduce((s, d) => s + num(d.docs), 0), days.reduce((s, d) => s + num(d.voids), 0)]);
-  return { name: ru ? 'E3 Кассовые дни' : 'E3 Kassa kunlari', rows, cols: [{ wch: 11 }, { wch: 13 }, ...Array.from({ length: 6 }, () => ({ wch: 15 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 34 }] };
+    xlMoney(days.reduce((s, d) => s + num(d.diff), 0)), xlMoney(days.reduce((s, d) => s + num(d.handoverDiff), 0)), days.reduce((s, d) => s + num(d.docs), 0), days.reduce((s, d) => s + num(d.voids), 0)]);
+  return { name: ru ? 'E3 Кассовые дни' : 'E3 Kassa kunlari', rows, cols: [{ wch: 11 }, { wch: 13 }, ...Array.from({ length: 6 }, () => ({ wch: 15 })), { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 34 }] };
 }
 // Oylik kassa to'plami (E4): hisobdor shaxslar bilan hisob-kitob (4230) — oy boshi, berildi, qaytdi, avans hisoboti, oy oxiri.
 //   2-ro'yxatga — tabel kodi bilan, ismsiz (FD-28); Direktorga — ism bilan.
@@ -643,6 +644,17 @@ export function packSheets(p, ctx) {
 }
 
 export function bookRows(v) { const n = parseInt(v, 10); return Math.min(Math.max(Number.isFinite(n) && n > 0 ? n : 30, 10), 60); }
+// Smena topshirishdagi farqlar (acc-6): kun varag'idagi qabul qilingan topshirish sanashlari (book.counts, kind 'handover') — har biri farq
+//   hujjati raqami bilan. KO-4 va RP-02 dagi «Farq» qatorida kunni yopishdagi farq yonida chiqadi.
+function handoverDiffTxt(book, docs, W, t, short, surplus) {
+  return (book.counts || []).filter(c => c && c.kind === 'handover' && num(c.diff) !== 0).map(c => {
+    const dd = c.diffDocId ? (docs || []).find(x => x.id === c.diffDocId) : null;
+    return `${num(c.diff) < 0 ? short : surplus} ${money(W, Math.abs(num(c.diff)))}${dd ? ' — ' + docNo(dd, t) : ''}`;
+  }).join('; ');
+}
+// Kassir va tekshirgan ismi — amal paytidagi (sec-4: cashierName / closedByName / verifiedByName); eski javobda — ismlar ro'yxatidan.
+const dayCashier = (d, ctx) => d.cashierName || nameOf(ctx, d.cashierUid) || d.closedByName || nameOf(ctx, d.closedBy);
+const dayVerifier = (d, ctx) => d.verifiedBy ? (d.verifiedByName || nameOf(ctx, d.verifiedBy)) : '';
 export function bookHtml(book, ctx, W) {
   ctx = ctx || {}; book = book || {};
   const lang = langOf(ctx), t = T[lang], o = ctx.org || {}, d = book.day || {};
@@ -661,9 +673,11 @@ export function bookHtml(book, ctx, W) {
   const corr = x => [...new Set((x.lines || []).filter(l => l.cash !== false).map(l => x.form === 'KO1' ? l.credit : l.debit))].join(', ');
   const n1 = docs.filter(x => x.form === 'KO1').length, n2 = docs.filter(x => x.form === 'KO2').length;
   const diffDoc = d.diffDocId ? docs.find(x => x.id === d.diffDocId) : null;
-  const diffTxt = !closed ? '' : num(d.diff) === 0 ? t.diffNone
+  const closeTxt = num(d.diff) === 0 ? t.diffNone
     : `${num(d.diff) < 0 ? t.shortage : t.surplus} ${money(W, Math.abs(num(d.diff)))}${diffDoc ? ' — ' + docNo(diffDoc, t) : ''}`;
-  const cashier = nameOf(ctx, d.cashierUid) || nameOf(ctx, d.closedBy), verifier = d.verifiedBy ? nameOf(ctx, d.verifiedBy) : '';
+  const hoTxt = handoverDiffTxt(book, docs, W, t, t.shortage, t.surplus);   // acc-6: smena topshirishdagi farq — yopish farqi yonida
+  const diffTxt = !closed ? '' : hoTxt ? `${t.cntKind.close}: ${closeTxt}; ${t.cntKind.handover}: ${hoTxt}` : closeTxt;
+  const cashier = dayCashier(d, ctx), verifier = dayVerifier(d, ctx);
   const cw = W.countWords;
   const head = `<thead><tr><th style="width:21mm">${esc(t.cols[0])}</th><th>${esc(t.cols[1])}</th><th style="width:27mm">${esc(t.cols[2])}</th><th style="width:29mm">${esc(t.cols[3])}</th><th style="width:29mm">${esc(t.cols[4])}</th></tr>
     <tr class="nn"><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead>`;
@@ -718,8 +732,12 @@ export function countHtml(count, book, ctx, W) {
   const den = count.denoms && typeof count.denoms === 'object' ? Object.keys(count.denoms).map(k => [Number(k), num(count.denoms[k])]).filter(x => x[0] > 0 && x[1] > 0).sort((a, b) => b[0] - a[0]) : [];
   const marks = marksOf(null, ctx, t);
   const day = iso(count.day || d.day);
-  const fromName = nameOf(ctx, count.fromUid) || nameOf(ctx, count.byUid), toName = nameOf(ctx, count.toUid);
-  const cashier = count.kind === 'handover' ? '' : (nameOf(ctx, d.cashierUid) || nameOf(ctx, count.byUid));
+  // ismlar — sanash paytidagi (sec-4: count.names); kassa egasi va sanagan xodim alohida (sec-2): boshqa xodim sanagan bo'lsa — «Санади» qatori
+  const cn = uid => (uid && count.names && count.names[uid]) || nameOf(ctx, uid);
+  const fromName = cn(count.fromUid) || cn(count.byUid), toName = cn(count.toUid);
+  const holderUid = count.kind === 'handover' ? count.fromUid : (count.cashierUid || d.cashierUid);
+  const cashier = count.kind === 'handover' ? '' : (cn(holderUid) || cn(count.byUid));
+  const counter = count.byUid && holderUid && count.byUid !== holderUid ? cn(count.byUid) : '';
   return page(t.cntTitle, t, `<div class="pg act">
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <div class="ttl">${esc(t.cntTitle)}</div>
@@ -741,6 +759,7 @@ export function countHtml(count, book, ctx, W) {
     ${diff < 0 ? `<p>${esc(t.explain)}:</p><div class="ln"></div><div class="ln"></div><p>${esc(t.decision)}:</p><div class="ln"></div>` : ''}
     ${comm.map(m => sig(m.title || t.member, m.name)).join('')}
     ${count.kind === 'handover' ? sig(t.handFrom, fromName) + sig(t.handTo, toName) : sig(t.cashier, cashier)}
+    ${counter ? sig(t.countedBy, counter) : ''}
     ${footer({ id: count.id }, ctx, t)}</div>`);
 }
 
@@ -834,7 +853,9 @@ export function reportHtml(book, ctx, W) {
   const posted = f => all.filter(x => x.form === f && x.status === 'posted');
   const n1 = posted('KO1').length, n2 = posted('KO2').length, nVoid = all.filter(x => x.status === 'void').length;
   const diffDoc = d.diffDocId ? all.find(x => x.id === d.diffDocId) : null;
-  const diffTxt = num(d.diff) === 0 ? r.diffNone : `${num(d.diff) < 0 ? r.shortage : r.surplus} ${money(W, Math.abs(num(d.diff)))}${diffDoc ? ' — ' + docNo(diffDoc, t) : ''}`;
+  const diffTxt0 = num(d.diff) === 0 ? r.diffNone : `${num(d.diff) < 0 ? r.shortage : r.surplus} ${money(W, Math.abs(num(d.diff)))}${diffDoc ? ' — ' + docNo(diffDoc, t) : ''}`;
+  const hoTxt = handoverDiffTxt(book, all, W, t, r.shortage, r.surplus);   // acc-6: smena topshirishdagi farq — yopish farqi yonida
+  const diffTxt = hoTxt ? `${t.cntKind.close}: ${diffTxt0}; ${t.cntKind.handover}: ${hoTxt}` : diffTxt0;
   const kv = (k, v, cls) => `<tr><td>${k}</td><td class="r${cls ? ' ' + cls : ''}" style="width:42mm">${v}</td></tr>`;
   const marks = []; if (ctx.isTest) marks.push(r.test); if (!closed) marks.push(r.draft);
 
@@ -844,7 +865,8 @@ export function reportHtml(book, ctx, W) {
     ${kv(`${esc(r.receipts)} (${esc(r.orders(n1))})`, m(receipts))}
     ${kv(`${esc(r.payouts)} (${esc(r.orders(n2))})`, m(payouts))}
     ${kv(`<b>${esc(r.closing)}</b>`, m(closing), 'b')}
-    ${closed ? kv(esc(r.counted), m(d.counted)) + (num(d.pendingSum) > 0 ? kv(`${esc(r.pending)} (${esc(String(num(d.pendingCount)))} ${esc(r.pcs)})`, m(d.pendingSum)) : '') + kv(esc(r.diff), `<b>${esc(diffTxt)}</b>`) : ''}
+    ${closed ? kv(esc(r.counted), m(d.counted)) + (num(d.pendingSum) > 0 ? kv(`${esc(r.pending)} (${esc(String(num(d.pendingCount)))} ${esc(r.pcs)})`, m(d.pendingSum)) : '') + kv(esc(r.diff), `<b>${esc(diffTxt)}</b>`)
+      : (hoTxt ? kv(esc(r.diff), `<b>${esc(t.cntKind.handover + ': ' + hoTxt)}</b>`) : '')}
     ${nVoid ? kv(esc(r.voids), `${esc(String(nVoid))} ${esc(r.pcs)}`) : ''}
   </tbody></table>${closed ? '' : `<p>${esc(r.notCounted)}</p>`}`;
 
@@ -922,7 +944,7 @@ export function reportHtml(book, ctx, W) {
   const lim = book.limit || {};
   const limSec = `${lim.set ? `<p${lim.exceeded ? ' class="warn"' : ''}>${esc(r.limit)}: ${m(lim.cashLimit)} — ${esc(lim.exceeded ? r.limitOver : r.limitOk)}.</p>` : `<p>${esc(r.limitNone)}</p>`}`;
 
-  const cashier = nameOf(ctx, d.cashierUid) || nameOf(ctx, d.closedBy), verifier = d.verifiedBy ? nameOf(ctx, d.verifiedBy) : '';
+  const cashier = dayCashier(d, ctx), verifier = dayVerifier(d, ctx);
   const at = stamp(ctx.printedAt), ft = [`${r.day}: ${d.id || ''}${closed && d.hash ? ' · ' + String(d.hash).slice(0, 16) : ''}`];
   if (at || ctx.printedBy) ft.push(`${r.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
   const title = `${r.title} — ${dmy(d.day)}`;

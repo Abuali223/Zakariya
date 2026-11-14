@@ -11,7 +11,7 @@ chop etilishi mumkin — mazmuni o‘zgarmasin.
 | **Kirim orderi (KO-1) + patta** | har naqd kirimda («💵 To‘lov», «+ Kirim») | 1 (order va uzib olinadigan patta) | bosh buxgalter (2-ro‘yxat), kassir | order — kassa hujjatlari jildida; patta — pul topshirgan shaxsda |
 | **Chiqim orderi (KO-2)** | pul berilganda («Pulni berish», naqd maosh) | 1 | rahbar, bosh buxgalter, kassir; oluvchi — «Oldim», summa so‘z bilan, sana, imzo, shaxsni tasdiqlovchi hujjat | kassa hujjatlari jildida, ilovalari bilan |
 | **Kassa kitobi varag‘i (KO-4)** | kun yopilganda | 2 (kassa kitobi varag‘i va «Kassir hisoboti») | kassir; tekshirgan buxgalter / moliya menejeri | 1-nusxa — kassa kitobi (yil oxirida tikiladi); 2-nusxa — orderlar bilan buxgalterga |
-| **Kassani sanash dalolatnomasi** | har sanashda chop etish mumkin («Sanashlar» → «🖨 Dalolatnoma»): kun yopilishi (farq bo‘lsa — albatta), smena topshirish, komissiya sanashi | 2 | kassir, komissiya a’zolari (smenada — topshirgan va qabul qilgan) | kassa hujjatlari jildida |
+| **Kassani sanash dalolatnomasi** | har sanashda chop etish mumkin («Sanashlar» → «🖨 Dalolatnoma»): kun yopilishi (farq bo‘lsa — albatta), smena topshirish-qabul (qabul qiluvchi o‘z hisobidan «Qabul qildim» degandan keyin — tizim darhol chop etishni taklif qiladi; qabul qilinmagan yoki bekor qilingan topshirishda dalolatnoma yo‘q), komissiya sanashi | 2 | kassir (kassa egasi), komissiya a’zolari; smenada — topshirgan va qabul qilgan (ismlar tizimda sanash paytidagidek); pulni kassa egasi o‘rniga boshqa xodim sanagan bo‘lsa — u ham («Санади» qatori) | kassa hujjatlari jildida |
 | **Naqdsiz dalolatnoma** (boshlang‘ich qoldiq; kamomad bo‘yicha qaror; o‘zaro hisob) | Direktor amali bilan | 2 | rahbar, bosh buxgalter; qarorda — javobgar shaxs; o‘zaro hisobda — xodim | buxgalteriyada |
 | **Kunlik hisobot** | kun yopilgach (ichki hisobot) | 1 | — | moliya menejerida |
 
@@ -156,7 +156,7 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 6 | Xato orderni shu kuni bekor qilish | ☐ | |
 | 7 | Naqd maosh (tasdiqlangan vedomost chegarasida); ish haqi avansi | ☐ | |
 | 8 | Qaytarish: Direktor tasdig‘i → kassir pulni berdi | ☐ | |
-| 9 | Smena topshirish | ☐ | |
+| 9 | Smena topshirish ikki bosqichda: topshiruvchi yozdi — qabul qilinguncha kassada hujjat yozilmadi; qabul qiluvchi o‘z hisobidan «Qabul qildim» (yoki «Rad etish») — dalolatnomada ikkala ism; kassa egasi o‘rniga topshirish komissiyasiz rad etildi | ☐ | |
 | 10 | Kunni farq bilan yopish; KO-4 (2 nusxa), sanash dalolatnomasi, kunlik hisobot | ☐ | |
 | 11 | Kunni tekshirish («Tekshirdim»); kamomad bo‘yicha qaror | ☐ | |
 | 12 | Nazorat ro‘yxati va Telegram hisobotidagi kassa qatori tushunarli | ☐ | |

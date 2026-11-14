@@ -32,6 +32,25 @@ export const canApproveList2 = (d, m) => {
   return !!(m.director && emp && (m.l2Cards || []).includes(d.partyId));
 };
 export const canPayDoc = (d, m) => !!(d && m && d.status === 'approved' && (m.operator || m.director) && (!d.sourceTable || d.op === 'out_refund') && d.approvedBy !== m.uid);
+// Kassa egasi va smena topshirish (sec-2, state-6; server — kassa_day_close, kassa_handover, kassa_handover_accept / _cancel). Sof funksiyalar
+//   (fin-kassa.test.mjs). Kassa egasi — kun kassiri ("cashierUid"); egasi hali aniqlanmagan kunda kassa operatori o'zi egasi hisoblanadi.
+//   Egasi bo'lmagan kassir, Direktor va Moliya menejeri — kassir o'rniga: kunni yopish va smena topshirishda kamida 2 kishilik komissiya.
+export const deskHolder = (od, m) => (od && od.cashierUid) || (m && m.operator ? m.uid : null);
+export const needCommission = (od, m) => !(m && m.operator) || deskHolder(od, m) !== (m && m.uid);
+//   Kutilayotgan smena topshirish (kassa_state → handover) — kim nima qila oladi: qabul qiluvchi — «Qabul qildim» / «Rad etish» (faqat o'z
+//   hisobidan); topshiruvchi (kassa egasi yoki yozgan xodim) va Direktor — «Bekor qilish».
+export function handoverRole(h, m) {
+  if (!h || !m || h.status !== 'pending') return { receiver: false, canAccept: false, canCancel: false };
+  const receiver = h.toUid === m.uid, giver = h.byUid === m.uid || (!!h.fromUid && h.fromUid === m.uid);
+  return { receiver, giver, canAccept: receiver && !!m.operator, canCancel: receiver || giver || !!m.director };
+}
+// Kun farqi matni (acc-6): kunni yopishdagi farq va smena topshirishdagi farqlar yonma-yon; smena farqi bo'lmasa — avvalgidek (faqat summa).
+const sgnS = v => `${num(v) > 0 ? '+' : ''}${som(v)}`;
+export function diffText(closeDiff, handovers) {
+  const hd = (handovers || []).map(num).filter(x => x !== 0);
+  if (!hd.length) return sgnS(closeDiff);
+  return [num(closeDiff) ? 'yopishda ' + sgnS(closeDiff) : '', ...hd.map(x => 'smenada ' + sgnS(x))].filter(Boolean).join(', ');
+}
 const ST_LBL = { draft: 'Tasdiq kutilmoqda', approved: 'Tasdiqlangan — to‘lanadi', posted: 'O‘tkazilgan', void: 'Bekor qilingan', rejected: 'Rad etilgan', cancelled: 'Bekor qilingan so‘rov' };
 const DAY_LBL = { open: 'Ochiq', closed: 'Yopilgan', verified: 'Tekshirilgan' };
 const BLOCK_TXT = {
@@ -43,6 +62,8 @@ const BLOCK_TXT = {
   paused: 'Kassa to‘xtatilgan: kassa hujjatlari yozilmaydi. Qayta ishga tushirish — komissiya sanashi bilan (Direktor).',
   restart: 'Kassa qayta ishga tushirish kunini kutmoqda.',
   restart_recount: 'Qayta ishga tushirish sanashidan keyin kassa hujjatisiz naqd yozuv kiritilgan — komissiya pulni qayta sanab, qoldiq qayta kiritilmaguncha birinchi kassa kuni ochilmaydi (Direktor).',
+  // state-6: smena topshirish qabul qilinmagan (batafsil — «Smena topshirish» kartasida)
+  handover: 'Smena topshirilmoqda: qabul qiluvchi o‘z hisobidan «Qabul qildim» deguncha yoki topshirish bekor qilinguncha kassada hujjat yozilmaydi va kun yopilmaydi.',
 };
 
 const $ = s => C.$(s);
@@ -194,8 +215,10 @@ function draw() {
   if (ready && (m.operator || m.director)) acts.push(`<button class="btn gold" id="ks-in">+ Kirim</button>`);
   if (ready && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-out">+ Chiqim so‘rovi</button>`);
   if (ready && s.kassaGoLive && (m.list2 || m.director)) acts.push(`<button class="btn ghost2" id="ks-adv" title="Hisobdor shaxsning avans hisoboti — qog‘oz hisobot va cheklar bo‘yicha">Avans hisoboti</button>`);
-  if (od && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-close">Kunni yopish</button>`);
-  if (od && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul (pul sanaladi, kun ochiq qoladi)">Smena topshirish</button>`);
+  // state-6: smena topshirish qabul qilinmagan bo'lsa — kunni yopish va yangi topshirish yo'q (kartadagi «Qabul qildim» / «Bekor qilish»)
+  const ho = s.handover || null;
+  if (od && !ho && (m.operator || m.director || C.SESSION.role === 'finance_mgr')) acts.push(`<button class="btn ghost2" id="ks-close">Kunni yopish</button>`);
+  if (od && !ho && (m.operator || m.director)) acts.push(`<button class="btn ghost2" id="ks-hand" title="Smena topshirish-qabul: pul birga sanaladi, qabul qiluvchi o‘z hisobidan qabul qiladi (kun ochiq qoladi)">Smena topshirish</button>`);
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
@@ -246,7 +269,7 @@ function draw() {
       <div class="acc-kpi teal"><div><div class="k-l">${od ? 'Kun boshi' : (rs ? 'Qayta ishga tushirish qoldig‘i' : 'Oxirgi qoldiq')}</div><div class="k-v">${esc(som(opening))}</div><div class="k-d">${od ? esc(dmy(od.day)) + ' · ' + DAY_LBL.open : (rs ? esc(dmy(rs.day)) + ' dan · komissiya sanashi' : (ld ? esc(dmy(ld.day)) + ' · ' + (DAY_LBL[ld.status] || '') : 'boshlang‘ich qoldiq'))}</div></div></div>
       <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v">${esc(som(rec))}</div><div class="k-d">${od ? 'bugungi ochiq kun' : 'ochiq kun yo‘q'}</div></div></div>
       <div class="acc-kpi neg"><div><div class="k-l">Chiqim</div><div class="k-v">${esc(som(pay))}</div><div class="k-d">${od ? esc(String(od.docs)) + ' ta hujjat' + (num(od.voids) ? ', ' + od.voids + ' tasi bekor' : '') : '—'}</div></div></div>
-      <div class="acc-kpi gold"><div><div class="k-l">Kassadagi qoldiq</div><div class="k-v">${esc(som(s.balance))}</div><div class="k-d">${od && od.cashierUid ? 'kassir: ' + esc(nameOf(od.cashierUid)) : (!started && m.director ? '<a href="#" id="ks-opening">boshlang‘ich qoldiqni o‘zgartirish</a>' : '&nbsp;')}</div></div></div>
+      <div class="acc-kpi gold"><div><div class="k-l">Kassadagi qoldiq</div><div class="k-v">${esc(som(s.balance))}</div><div class="k-d">${od && od.cashierUid ? 'kassir: ' + esc(od.cashierName || nameOf(od.cashierUid)) : (!started && m.director ? '<a href="#" id="ks-opening">boshlang‘ich qoldiqni o‘zgartirish</a>' : '&nbsp;')}</div></div></div>
     </div>`;
   }
 
@@ -262,7 +285,7 @@ function draw() {
       <td data-label="${isIn ? 'Kimdan' : 'Kimga'}">${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></td>
       <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? (d.status === 'void' ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>') : ''}</td>
       <td data-label="Chiqim" style="text-align:right;white-space:nowrap">${!isIn ? (d.status === 'void' ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>') : ''}</td>
-      <td data-label="Holat">${stChip(d.status)}${d.status === 'void' && d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : ''}<div class="small muted">${d.isSystem ? 'tizim' : esc(nameOf(d.postedBy))}</div></td>
+      <td data-label="Holat">${stChip(d.status)}${d.status === 'void' && d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : ''}<div class="small muted">${d.isSystem ? 'tizim' : esc(d.postedByName || nameOf(d.postedBy))}</div></td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Orderni chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-void="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`;
   }).join('');
   const docsHtml = ready ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>${od ? 'Ochiq kun hujjatlari — ' + esc(dmy(od.day)) : 'Ochiq kun yo‘q'}</b>${od ? `<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-report="${esc(od.day)}" title="Kunlik hisobot: kimdan / kimga qancha">🖨 Kunlik hisobot</button><button class="btn sm" data-book="${esc(od.day)}">🖨 Kassa kitobi varag‘i (qoralama)</button></span>` : ''}</div>
@@ -293,9 +316,13 @@ function draw() {
 
   // ---- kamomadlar (Direktor qarori)
   const sh = ST.ov.shortages || [];
+  // sec-2: kassa egasi (kun kassiri) va pulni sanagan xodim alohida (ismlar — sanash paytidagi); smenada — qabul qiluvchi ham
+  const shWho = x => { const nm = u => (u && x.names && x.names[u]) || nameOf(u);
+    return esc(x.cashierUid ? nm(x.cashierUid) : 'aniqlanmagan') + (x.countedBy && x.countedBy !== x.cashierUid ? `<div class="small muted">sanadi: ${esc(nm(x.countedBy))} (kassir o‘rniga)</div>` : '')
+      + (x.kind === 'handover' ? `<div class="small muted">smena topshirishda${x.toUid ? ' → ' + esc(nm(x.toUid)) : ''}</div>` : ''); };
   const shHtml = sh.length ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><b>Qarori kutilayotgan kamomadlar</b>
     <div class="tablewrap"><table><thead><tr><th>Kun</th><th>Hujjat</th><th>Kassir</th><th style="text-align:right">Summa</th><th></th></tr></thead><tbody>${sh.map(x => `<tr>
-      <td data-label="Kun">${esc(dmy(x.day))}</td><td data-label="Hujjat">Ch-${esc(String(x.no))}</td><td data-label="Kassir">${esc(nameOf(x.cashierUid))}</td>
+      <td data-label="Kun">${esc(dmy(x.day))}</td><td data-label="Hujjat">Ch-${esc(String(x.no))}</td><td data-label="Kassir">${shWho(x)}</td>
       <td data-label="Summa" style="text-align:right"><b>${esc(som(x.amount))}</b></td>
       <td data-label="">${m.director ? `<button class="btn sm gold" data-decide="${esc(x.id)}">Qaror</button>` : '<span class="small muted">Direktor qarori</span>'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
 
@@ -311,14 +338,29 @@ function draw() {
       <td data-label="Kirim" style="text-align:right">${esc(som(closed ? d.receipts : d.receiptsLive))}</td>
       <td data-label="Chiqim" style="text-align:right">${esc(som(closed ? d.payouts : d.payoutsLive))}</td>
       <td data-label="Kun oxiri" style="text-align:right"><b>${esc(som(closed ? d.closing : d.balance))}</b></td>
-      <td data-label="Farq" style="text-align:right">${closed ? (num(d.diff) === 0 ? '—' : `<span style="color:${num(d.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">${num(d.diff) > 0 ? '+' : ''}${esc(som(d.diff))}</span>`) : ''}</td>
-      <td data-label="Holat">${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(nameOf(d.closedBy)) : 'kassir: ' + esc(nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(nameOf(d.verifiedBy)) : ''}</div>${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}</td>
+      <td data-label="Farq" style="text-align:right">${closed ? (num(d.diff) === 0 ? '—' : `<span style="color:${num(d.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">${num(d.diff) > 0 ? '+' : ''}${esc(som(d.diff))}</span>`) : ''}${(d.handoverDiffs || []).filter(x => num(x)).length ? `<div class="small" style="color:#B54708">smenada ${esc((d.handoverDiffs || []).filter(x => num(x)).map(sgnS).join(', '))}</div>` : ''}</td>
+      <td data-label="Holat">${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(d.closedByName || nameOf(d.closedBy)) : 'kassir: ' + esc(d.cashierName || nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(d.verifiedByName || nameOf(d.verifiedBy)) : ''}</div>${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}</td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-view="${esc(d.day)}" title="Kun hujjatlari, sanashlar, jurnal">Ko‘rish</button> <button class="btn sm" data-book="${esc(d.day)}" title="Kassa kitobi varag‘i (KO-4)">🖨 KO-4</button>${d.status === 'closed' && zOp ? ` <button class="btn sm" data-zrep="${esc(d.day)}" title="Onlayn kassa Z-hisobotini kiritish / tuzatish">Z</button>` : ''}${d.status === 'closed' && (m.list2 || m.director) ? ` <button class="btn sm gold" data-verify="${esc(d.day)}">Tekshirish</button>` : ''}${d.status === 'closed' && m.director && d.id === lastId ? ` <button class="btn sm danger" data-reopen="${esc(d.day)}">Qayta ochish</button>` : ''}</td></tr>`;
   }).join('');
   const daysHtml = days.length ? `<div class="card" style="padding:14px 18px"><b>Kassa kunlari</b><div class="small muted" style="margin:2px 0 8px">Kun oxiri = kun boshi + kirim − chiqim. Kun faqat pul sanalgach yopiladi; farq shu kunning hujjati bo‘lib yoziladi.</div>
     <div class="tablewrap"><table><thead><tr><th>Kun</th><th style="text-align:right">Kun boshi</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th style="text-align:right">Kun oxiri</th><th style="text-align:right">Farq</th><th>Holat</th><th></th></tr></thead><tbody>${dayRows}</tbody></table></div></div>` : '';
 
   const ctlHtml = (m.list2 || m.director) && ready ? `<div id="ks-ctl">${ST.checks && ST.checks._desk === ST.desk ? controlHtml(ST.checks, true) : ''}</div>` : '';
+
+  // ---- kutilayotgan smena topshirish (state-6): qabul qiluvchiga «Smenani qabul qilish», topshiruvchi va Direktorga «Bekor qilish»
+  let hoHtml = '';
+  if (ho) {
+    const hr = handoverRole(ho, m), hn = u => (u && ho.names && ho.names[u]) || nameOf(u), d0 = num(ho.diff);
+    const sum = `sanalgan <b>${esc(som(ho.counted))}</b> (hisobda ${esc(som(ho.expected))}${num(ho.pendingSum) ? ', hali o‘tkazilmagan ' + esc(som(ho.pendingSum)) : ''}) · `
+      + (d0 === 0 ? 'farq yo‘q' : `<b style="color:${d0 < 0 ? '#B42318' : '#B54708'}">${d0 < 0 ? 'KAMOMAD ' + esc(som(-d0)) : 'ORTIQCHA ' + esc(som(d0))}</b>`);
+    const who = `${esc(ho.fromUid ? hn(ho.fromUid) : '—')} → <b>${esc(hn(ho.toUid))}</b>${ho.byUid && ho.byUid !== ho.fromUid ? ` · sanadi: ${esc(hn(ho.byUid))} (komissiya bilan)` : ''} · ${esc(hm(ho.createdAt))}`;
+    hoHtml = `<div class="card" id="ks-ho" style="padding:14px 18px;margin-bottom:14px;border-color:#F5C26B">
+      <b>${hr.receiver ? 'Smenani qabul qilish' : 'Smena topshirish — qabul kutilmoqda'}</b>
+      <div class="small" style="margin-top:6px">${who}</div><div class="small" style="margin-top:4px">${sum}</div>
+      <div class="small muted" style="margin-top:6px">${hr.receiver ? 'Pulni birga sanang. «Qabul qildim» — kassa siz zimmangizda; farq bo‘lsa, shu kun hujjati topshiruvchi (kassa egasi) nomidan yoziladi. Summa mos kelmasa — «Rad etish» (sababi bilan).'
+        : 'Qabul qiluvchi o‘z hisobidan «Qabul qildim» deguncha yoki topshirish bekor qilinguncha kassada hujjat yozilmaydi va kun yopilmaydi.'}</div>
+      ${hr.canAccept || hr.canCancel ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${hr.canAccept ? `<button class="btn sm gold" data-hoacc="${esc(ho.id)}">Qabul qildim</button>` : ''}${hr.canCancel ? `<button class="btn sm danger" data-horej="${esc(ho.id)}">${hr.receiver && !hr.giver ? 'Rad etish' : 'Bekor qilish'}</button>` : ''}</div>` : ''}</div>`;
+  }
 
   // ---- naqdsiz dalolatnomalar: kassa kitobiga kirmaydi (boshlang'ich qoldiq, kamomad bo'yicha qaror, o'zaro hisob)
   const actDocs = ST.ov.acts || [];
@@ -330,11 +372,11 @@ function draw() {
       <td data-label="Tur">${esc(opName(d.op))}</td>
       <td data-label="Tomon / asos"><div>${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap">${v ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>'}</td>
-      <td data-label="Holat">${v ? stChip('void') + (d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : '') : `<span class="small muted">${esc(nameOf(d.postedBy))}</span>`}</td>
+      <td data-label="Holat">${v ? stChip('void') + (d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : '') : `<span class="small muted">${esc(d.postedByName || nameOf(d.postedBy))}</span>`}</td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}${canVoidAdv ? ` <button class="btn sm danger" data-advvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
   const actsHtml = actDocs.length ? `<div class="card" style="padding:14px 18px;margin-top:14px" id="ks-acts"><b>Naqdsiz dalolatnomalar</b><div class="small muted" style="margin:2px 0 8px">Kassa kitobiga kirmaydi: boshlang‘ich qoldiq, kamomad bo‘yicha qaror, o‘zaro hisob (ish haqidan o‘quv to‘lovi — «Maosh berish» oynasida, faqat Direktor), avans hisoboti. Oxirgi 3 oy.</div>
     <div class="tablewrap"><table><thead><tr><th>№</th><th>Tur</th><th>Tomon / asos</th><th style="text-align:right">Summa</th><th>Holat</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div></div>` : '';
-  $('#ks-body').innerHTML = warnHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml + actsHtml;
+  $('#ks-body').innerHTML = warnHtml + hoHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml + actsHtml;
   bind();
 }
 function bind() {
@@ -368,6 +410,10 @@ function bind() {
   each('data-zrep', day => openZForm(day));
   each('data-reopen', day => ask('Kunni qayta ochish — ' + dmy(day), 'Sababi (kamida 5 belgi). Sanash farqi hujjati bekor bo‘ladi, kun qayta sanab yopiladi.', 5, r => act('kassa_day_reopen', { p_desk: ST.desk, p_day: day, p_reason: r }, 'Kun qayta ochildi')));
   each('data-decide', id => openDecideForm(id));
+  each('data-hoacc', id => acceptHandover(id));
+  each('data-horej', id => { const h = ST.ov.state.handover || {}, rej = h.toUid === me().uid && h.byUid !== me().uid && h.fromUid !== me().uid;
+    ask(rej ? 'Smenani qabul qilmaslik (rad etish)' : 'Smena topshirishni bekor qilish', rej ? 'Sababi (masalan: sanalgan summa mos emas). Topshiruvchi pulni qayta sanab, yangidan topshiradi.' : 'Sababi. Kassa egasi o‘zgarmaydi, hujjat yozilmaydi.', 3,
+      r => act('kassa_handover_cancel', { p_id: id, p_reason: r }, rej ? 'Smena qabul qilinmadi (rad etildi)' : 'Smena topshirish bekor qilindi')); });
   each('data-ofsvoid', id => ask('O‘zaro hisobni bekor qilish', 'Sababi (kamida 5 belgi). O‘quv to‘lovi teskari qilinadi, maosh to‘lovi olib tashlanadi; dalolatnoma raqami saqlanadi. Faqat rasmiylashtirilgan kunning o‘zida.', 5,
     r => act('kassa_offset_void', { p_id: id, p_reason: r }, 'O‘zaro hisob bekor qilindi')));
   each('data-advvoid', id => ask('Avans hisobotini bekor qilish', 'Sababi (kamida 5 belgi). Xarajatlar «Buxgalteriya»dan olib tashlanadi, hisobdordagi qoldiq tiklanadi; dalolatnoma raqami saqlanadi. Faqat kiritilgan kunning o‘zida.', 5,
@@ -707,8 +753,11 @@ function openCloseForm() {
   const od = ST.ov.state.openDay, m = me(); if (!od) return;
   const pend = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0 };
   const isTest = !!(ST.ov.state.desk && ST.ov.state.desk.isTest), oz = od.z || {};
+  // sec-2: kassa egasi (kun kassiri) bo'lmagan kassir, Direktor, Moliya menejeri — kassir o'rniga: komissiya (server ham tekshiradi)
+  const needC = needCommission(od, m);
+  const instead = needC && od.cashierUid ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">Kassa egasi — ${esc(od.cashierName || nameOf(od.cashierUid))}. Uning o‘rniga yopilmoqda: komissiya (kamida 2 kishi) dalolatnomani imzolaydi; kamomad bo‘lsa, javobgarni Direktor tanlaydi.</div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni yopish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b">${countFields(num(od.balance), pend)}${m.operator ? '' : commissionFields()}${isTest ? '' : zFields(oz)}
+    <div class="modal-b">${countFields(num(od.balance), pend)}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
       <div class="small muted" style="margin-top:8px">Yopilgach bu kunga hujjat yozilmaydi (faqat Direktor qayta ochadi). Kassa kitobi varag‘ini 2 nusxada chop eting va imzolang.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kc-save">Sanab yopish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
@@ -718,7 +767,7 @@ function openCloseForm() {
     if ((v.pendingSum > 0) !== (v.pendingCount > 0)) { C.toast('Hali o‘tkazilmagan yozuvlar: soni va summasi birga kiritiladi', true); return; }
     const p = { desk: ST.desk, day: od.day, counted: v.counted, pendingCount: v.pendingCount, pendingSum: v.pendingSum, note: v.note };
     if (v.denoms) p.denoms = v.denoms;
-    if (!m.operator) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
     const zr = zRead(); if (zr.err) { C.toast(zr.err, true); return; }
     if (zr.z) p.z = zr.z;
     else if (!isTest && oz.needed && !confirm('Onlayn kassa Z-hisoboti kiritilmadi.\n\nKun yopiladi, lekin nazorat ro‘yxatida ko‘rinadi va kunni tekshirishda izoh talab qilinadi. Z-hisobotni keyin «Z» tugmasi bilan kiritish mumkin.\n\nDavom etilsinmi?')) return;
@@ -729,13 +778,18 @@ function openCloseForm() {
     const b = $('#kc-save'); if (b) b.disabled = false;
   };
 }
+// Smena topshirish (state-6): IKKI BOSQICH — topshiruvchi pulni qabul qiluvchi bilan birga sanaydi va yozadi (qabul kutiladi); qabul qiluvchi
+//   o'z hisobidan «Qabul qildim» deydi (kartadagi tugma) — shundagina dalolatnoma, farq hujjati va yangi kassa egasi. Kassa egasi bo'lmagan
+//   kassir yoki Direktor — kassir o'rniga, komissiya bilan (sec-2; o'zi qabul qiluvchi bo'lishi ham mumkin).
 function openHandoverForm() {
   const od = ST.ov.state.openDay, m = me(); if (!od) return;
-  const opsL = (ST.refs.operators || []).filter(o => o.uid !== m.uid);
+  const holder = deskHolder(od, m), needC = needCommission(od, m);
+  const opsL = (ST.refs.operators || []).filter(o => o.uid !== holder);
   const pend = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0 };
   $('#modal').innerHTML = `<div class="modal-h"><h3>Smena topshirish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b">${lbl('Qabul qiluvchi kassir', `<select id="kh-to" style="${FLD}"><option value="">— tanlang —</option>${opsL.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}</option>`).join('')}</select>`, ';margin-top:0')}
-      ${countFields(num(od.balance), pend)}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Kun ochiq qoladi; farq bo‘lsa darhol hujjat yoziladi.</div></div>
+    <div class="modal-b">${lbl('Qabul qiluvchi kassir', `<select id="kh-to" style="${FLD}"><option value="">— tanlang —</option>${opsL.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}${o.uid === m.uid ? ' (o‘zim)' : ''}</option>`).join('')}</select>`, ';margin-top:0')}
+      ${needC ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">${holder ? `Kassa egasi — ${esc(od.cashierName || nameOf(holder))}. ` : ''}Siz kassir o‘rniga topshiryapsiz: komissiya (kamida 2 kishi) bilan.</div>` : ''}
+      ${countFields(num(od.balance), pend)}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kh-save">Topshirish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   const read = countBind(num(od.balance));
@@ -743,7 +797,18 @@ function openHandoverForm() {
     if (!to) { C.toast('Qabul qiluvchi kassirni tanlang', true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting', true); return; }
     const p = { desk: ST.desk, counted: v.counted, pendingSum: v.pendingSum, toUid: to, note: v.note }; if (v.denoms) p.denoms = v.denoms;
-    $('#kh-save').disabled = true; await act('kassa_handover', { p }, 'Smena topshirildi'); const b = $('#kh-save'); if (b) b.disabled = false; };
+    if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    $('#kh-save').disabled = true; await act('kassa_handover', { p }, 'Smena topshirish yozildi — qabul qiluvchi o‘z hisobidan «Qabul qildim» desin'); const b = $('#kh-save'); if (b) b.disabled = false; };
+}
+// Smenani qabul qilish (qabul qiluvchi): tasdiqdan keyin topshirish-qabul dalolatnomasi chop etishga taklif qilinadi (ikkala ism bilan).
+function acceptHandover(id) {
+  const h = ST.ov.state.handover; if (!h || h.id !== id) return;
+  const d0 = num(h.diff), hn = u => (u && h.names && h.names[u]) || nameOf(u);
+  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan: ' + som(h.pendingSum) : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
+  act('kassa_handover_accept', { p_id: id }, 'Smena qabul qilindi', async r => {
+    if (!(r && r.count && r.count.id) || !confirm('Smena topshirish-qabul dalolatnomasi chop etilsinmi?')) return;
+    try { const book = await call('kassa_day_book', { p_desk: ST.desk, p_day: r.count.day }); await printCount(book, r.count.id); } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+  });
 }
 function openVerifyForm(day) {
   const dd = (ST.ov.days || []).find(x => String(x.day) === String(day)) || {}, zz = dd.z || {}, zNeed = !!(zz.applies && zz.ok === false);
@@ -758,16 +823,35 @@ function openVerifyForm(day) {
     if (zNeed && $('#kv-note').value.trim().length < 5) { C.toast('Z-hisobot bo‘yicha sababni izohda yozing (kamida 5 belgi)', true); return; }
     $('#kv-save').disabled = true; await act('kassa_day_verify', { p_desk: ST.desk, p_day: day, p_papers: true, p_note: $('#kv-note').value.trim() }, 'Kun tekshirildi'); const b = $('#kv-save'); if (b) b.disabled = false; };
 }
-function openDecideForm(id) {
+// Kamomad bo'yicha qaror (sec-2, sec-4): kassa egasi va pulni sanagan xodim alohida, shu kungi smena topshirishlar. «Xodim zimmasiga» —
+//   FAQAT xodim kartasiga: standart javobgar faqat kassa egasi o'zi sanagan bo'lsa (server — defaultParty); aks holda Direktor kartani tanlaydi.
+async function openDecideForm(id) {
   const x = (ST.ov.shortages || []).find(s => s.id === id); if (!x) return;
+  let people = [];
+  try { people = await loadPeople(); } catch (_) { people = []; }
+  const nm = u => (u && x.names && x.names[u]) || nameOf(u);
+  const ST_HO = { pending: 'qabul kutilmoqda', accepted: 'qabul qilingan', cancelled: 'bekor qilingan' };
+  const hist = (x.handovers || []).map(h => { const hn = u => (u && h.names && h.names[u]) || nameOf(u);
+    return `<div>${esc(hm(h.createdAt))} · ${esc(h.fromUid ? hn(h.fromUid) : '—')} → ${esc(hn(h.toUid))} · sanalgan ${esc(som(h.counted))}${num(h.diff) ? ' · farq ' + esc(sgnS(h.diff)) : ''} · ${esc(ST_HO[h.status] || h.status)}${h.byUid && h.byUid !== h.fromUid ? ' · sanadi: ' + esc(hn(h.byUid)) : ''}${h.cancelReason ? ' — ' + esc(h.cancelReason) : ''}</div>`; }).join('');
+  const byOther = !!(x.countedBy && x.countedBy !== x.cashierUid);
+  const why = x.defaultParty ? '' : !x.cashierUid ? 'Kassa egasi (kun kassiri) aniqlanmagan' : byOther ? 'Pulni kassa egasining o‘zi sanamagan (kassir o‘rniga sanalgan)' : 'Kassir hisobi xodim kartasiga bog‘lanmagan';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kamomad bo‘yicha qaror</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b"><div class="small" style="background:#FDECEC;color:#B42318;border-radius:10px;padding:10px 12px;font-weight:700">${esc(dmy(x.day))} · Ch-${esc(String(x.no))} · ${esc(som(x.amount))} · kassir: ${esc(nameOf(x.cashierUid))}</div>
+    <div class="modal-b"><div class="small" style="background:#FDECEC;color:#B42318;border-radius:10px;padding:10px 12px;font-weight:700">${esc(dmy(x.day))} · Ch-${esc(String(x.no))} · ${esc(som(x.amount))} · ${x.kind === 'handover' ? 'smena topshirishda' : 'kunni yopishda'}</div>
+      <div class="small" style="margin-top:8px" id="kd-who">Kassa egasi (kassir): <b>${esc(x.cashierUid ? nm(x.cashierUid) : 'aniqlanmagan')}</b>${x.countedBy ? ` · sanadi: <b>${esc(nm(x.countedBy))}</b>${byOther ? ' (kassir o‘rniga, komissiya bilan)' : ''}` : ''}${x.kind === 'handover' && x.toUid ? ` · qabul qildi: <b>${esc(nm(x.toUid))}</b>` : ''}</div>
+      ${hist ? `<div class="small muted" style="margin-top:6px"><b>Shu kungi smena topshirishlar:</b>${hist}</div>` : ''}
       ${lbl('Qaror', `<select id="kd-dec" style="${FLD}"><option value="employee">Xodim zimmasiga (yozma rozilik yoki to‘liq moddiy javobgarlik bilan)</option><option value="writeoff">Hisobdan chiqarish (aybdor aniqlanmadi)</option></select>`)}
+      <div id="kd-emp">${lbl('Javobgar xodim (xodim kartasi)', `<select id="kd-party" style="${FLD}"><option value="">— tanlang —</option>${(people || []).map(p => `<option value="${esc(p.ref)}"${p.ref === x.defaultParty ? ' selected' : ''}>${esc(p.name)}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select>`)}
+        <div class="small muted" style="margin-top:4px">${x.defaultParty ? 'Kassa egasi pulni o‘zi sanagan — uning kartasi tanlangan (boshqasini tanlash mumkin).' : esc(why) + ' — javobgar xodim kartasini tanlang.'}</div></div>
       ${lbl('Asos <span class="muted" style="font-weight:500">— buyruq / tushuntirish xati</span>', `<input id="kd-note" type="text" maxlength="300" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kd-save">Qarorni saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  $('#kd-save').onclick = async () => { const n = $('#kd-note').value.trim(); if (n.length < 5) { C.toast('Qaror asosini yozing', true); return; }
-    $('#kd-save').disabled = true; await act('kassa_shortage_decide', { p_doc_id: id, p_decision: $('#kd-dec').value, p_note: n }, 'Qaror saqlandi'); const b = $('#kd-save'); if (b) b.disabled = false; };
+  const sync = () => { $('#kd-emp').style.display = $('#kd-dec').value === 'employee' ? '' : 'none'; };
+  $('#kd-dec').onchange = sync; sync();
+  $('#kd-save').onclick = async () => { const n = $('#kd-note').value.trim(), dec = $('#kd-dec').value, party = $('#kd-party').value;
+    if (n.length < 5) { C.toast('Qaror asosini yozing', true); return; }
+    if (dec === 'employee' && !party) { C.toast('Javobgar xodim kartasini tanlang', true); return; }
+    const args = { p_doc_id: id, p_decision: dec, p_note: n }; if (dec === 'employee') args.p_party = party;
+    $('#kd-save').disabled = true; await act('kassa_shortage_decide', args, 'Qaror saqlandi'); const b = $('#kd-save'); if (b) b.disabled = false; };
 }
 function openOpeningForm() {
   const s = ST.ov.state;
@@ -1132,8 +1216,10 @@ export function kpiRows(w) {
   add('days', 'Kassa kunlari', d ? 'ok' : 'info', d ? `${d} ta (yopilgan ${cl})` : 'yo‘q');
   add('onTime', 'O‘sha kuni yopilgan', !cl ? 'info' : num(w.onTime) === cl ? 'ok' : 'warn', cl ? `${num(w.onTime)} / ${cl}` : '–');
   add('unverified', 'Tekshirilmagan', num(w.unverified) ? 'warn' : 'ok', num(w.unverified) ? `${num(w.unverified)} ta` : 'yo‘q');
+  // acc-6: kunni yopish va smena topshirishdagi farqlar birga (har sanash alohida); shundan smena topshirishdagilari soni
   add('diffs', 'Sanash farqi bo‘lgan kunlar', num(w.diffDays) ? 'warn' : 'ok',
-    num(w.diffDays) ? `${num(w.diffDays)} ta` + (num(w.shortage) ? ` · kamomad ${som(w.shortage)}` : '') + (num(w.surplus) ? ` · ortiqcha ${som(w.surplus)}` : '') : 'yo‘q');
+    num(w.diffDays) ? `${num(w.diffDays)} ta` + (num(w.shortage) ? ` · kamomad ${som(w.shortage)}` : '') + (num(w.surplus) ? ` · ortiqcha ${som(w.surplus)}` : '')
+      + (num(w.handoverDiffs) ? ` (smena topshirishda: ${num(w.handoverDiffs)} ta)` : '') : 'yo‘q');
   add('ex49', '«Boshqa xarajatlar» (EX-49) ulushi', w.ex49Share == null ? 'info' : num(w.ex49Share) > 2 ? 'warn' : 'ok',
     w.ex49Share == null ? 'naqd xarajat yo‘q' : `${String(w.ex49Share).replace('.', ',')}% (${som(w.ex49)} / ${som(w.exTotal)}; maqsad ≤ 2%)`);
   add('accOverdue', 'Muddati o‘tgan avans (hafta oxirida)', num(ao.n) ? 'warn' : 'ok', num(ao.n) ? `${num(ao.n)} ta · ${som(ao.sum)}` : 'yo‘q');
@@ -1177,7 +1263,8 @@ export function controlRows(c) {
   const sh = c.undecidedShortages || [];
   add('shortages', 'Qarori kutilayotgan kamomad', sh.length ? 'bad' : 'ok', sh.length ? `${sh.length} ta · ${som(sh.reduce((a, x) => a + num(x.amount), 0))}` : 'yo‘q', 'Direktor qarori: xodim zimmasiga yoki hisobdan chiqarish');
   const df = c.diffs30 || [];
-  add('diffs', 'Sanash farqlari', df.length ? 'warn' : 'ok', df.length ? df.slice(0, 6).map(x => `${dmy(x.day)}: ${num(x.diff) > 0 ? '+' : ''}${som(x.diff)}`).join('; ') + (df.length > 6 ? ' …' : '') : 'yo‘q', 'Kunni yopishdagi kamomad / ortiqcha');
+  add('diffs', 'Sanash farqlari', df.length ? 'warn' : 'ok', df.length ? df.slice(0, 6).map(x => `${dmy(x.day)}: ${diffText(x.diff, x.handover)}`).join('; ') + (df.length > 6 ? ' …' : '') : 'yo‘q',
+    'Kunni yopish va smena topshirishdagi kamomad / ortiqcha (har sanash alohida)');   // acc-6
   add('voids', 'Bekor qilingan hujjatlar', num(c.voids30) ? 'info' : 'ok', num(c.voids30) ? cnt(c.voids30) : 'yo‘q', 'Sababi har hujjatda yozilgan; raqami saqlanadi');
   add('reopens', 'Kunni qayta ochishlar', num(c.reopens30) ? 'warn' : 'ok', num(c.reopens30) ? cnt(c.reopens30, 'marta') : 'yo‘q', 'Faqat Direktor, sabab bilan');
   add('waiting', 'Tasdiq kutayotgan so‘rovlar', num(c.waitingApproval) ? 'info' : 'ok', num(c.waitingApproval) ? cnt(c.waitingApproval) : 'yo‘q', 'Chiqim faqat tasdiqdan keyin beriladi');
@@ -1244,6 +1331,11 @@ export function controlRows(c) {
   add('damage', 'Xodimlar zimmasidagi kamomad', dmNeg.length ? 'bad' : dm.length ? 'info' : 'ok',
     dm.length ? dm.map(x => `${x.name || '—'}: ${som(x.balance)}${num(x.balance) < 0 ? ' — qoplangani qarordan ko‘p, tekshiring' : ` (${dmy(x.since)} dan${num(x.repaid) ? `, qoplangan ${som(x.repaid)}` : ''})`}${x.linked === false ? ' — xodim kartasiga bog‘lanmagan' : ''}`).join('; ') : 'yo‘q',
     'Direktor qarori bilan xodim zimmasiga yozilgan kamomad: kassaga «Kamomadni qoplash (xodim)» kirim orderi bilan qoplanadi yoki buxgalter ish haqidan ushlaydi');
+  // sec-4: xodim kartasiga bog'lanmagan kassa hisoblari — ism foydalanuvchining o'zi yozgani (o'zgartira oladi), kamomad qarorida standart javobgar yo'q
+  const ul = c.unlinkedUsers || [], RL = { treasurer: 'g‘aznachi', finance_mgr: 'moliya menejeri', accountant: 'buxgalter', kassir: 'kassir' };
+  add('unlinked', 'Xodim kartasiga bog‘lanmagan kassa hisoblari', ul.length ? 'warn' : 'ok',
+    ul.length ? ul.map(x => `${x.name || x.uid} (${[RL[x.role] || x.role, x.kassir && x.role !== 'kassir' ? 'kassir' : ''].filter(Boolean).join(' + ')})`).join(', ') : 'yo‘q',
+    'Kassa hujjatlaridagi ism xodim kartasidan (HR) olinadi; bog‘lanmagan hisobda — foydalanuvchi o‘zi yozgan ism. Direktor «Foydalanuvchilar» → «Tahrirlash»da hisobni HR yozuviga bog‘laydi');
   const ho = c.handover || {};
   add('handover', 'Rahbar / ta’sischiga berilgan pul', num(ho.earlierCount) ? 'warn' : num(ho.monthCount) ? 'info' : 'ok',
     [num(ho.monthCount) ? `shu oyda: ${cnt(ho.monthCount)} · ${som(ho.monthSum)}` : '', num(ho.earlierCount) ? `oldingi oylarda: ${cnt(ho.earlierCount)} · ${som(ho.earlierSum)} — tasniflanganini tekshiring` : ''].filter(Boolean).join('; ') || 'yo‘q',
@@ -1292,6 +1384,9 @@ function controlHtml(c, stale) {   // stale — oldingi yuklashdagi ma'lumot (ya
 const CNT_LBL = { close: 'Kun yopish sanashi', handover: 'Smena topshirish-qabul', opening: 'Boshlang‘ich qoldiq', monthly: 'Oylik sanash', yearly: 'Yillik sanash', surprise: 'To‘satdan sanash' };
 const EV_LBL = { open: 'Kun ochildi', close: 'Kun yopildi', verify: 'Tekshirildi', reopen: 'Qayta ochildi', handover: 'Smena topshirildi', opening: 'Boshlang‘ich qoldiq', decision: 'Kamomad qarori', zreport: 'Z-hisobot',
   resplit: 'Qaytarish hisobvarag‘i (4010 / 6310) qayta aniqlandi' };
+// smena topshirish bosqichlari (state-6; eski yozuvda bosqich yo'q — bir bosqichli topshirish)
+const HO_STEP = { pending: 'Smena topshirish yozildi (qabul kutilmoqda)', accept: 'Smena qabul qilindi', cancel: 'Smena topshirish bekor qilindi', reject: 'Smena qabul qilinmadi (rad etildi)' };
+const HO_ST = { pending: 'qabul kutilmoqda', accepted: 'qabul qilingan', cancelled: 'bekor qilingan' };
 async function openDayView(day) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa kuni — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal;
@@ -1305,12 +1400,19 @@ async function openDayView(day) {
       <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}</div></td>
       <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
       <td data-label="Chiqim" style="text-align:right;white-space:nowrap">${!isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
-      <td data-label="Holat">${v ? stChip('void') : '<span class="small muted">' + (x.isSystem ? 'tizim' : esc(nm(x.postedBy))) + '</span>'}${num(x.prints) ? `<div class="small muted">chop etilgan: ${esc(String(x.prints))}</div>` : ''}</td>
+      <td data-label="Holat">${v ? stChip('void') : '<span class="small muted">' + (x.isSystem ? 'tizim' : esc(x.postedByName || nm(x.postedBy))) + '</span>'}${num(x.prints) ? `<div class="small muted">chop etilgan: ${esc(String(x.prints))}</div>` : ''}</td>
       <td data-label=""><button class="btn sm" data-dprint="${esc(x.id)}" title="Orderni chop etish">🖨</button></td></tr>`; }).join('');
+  // sanashlar: ismlar — sanash paytidagi (sec-4); kassa egasi va sanagan xodim alohida (sec-2); smenada — topshirdi → qabul qildi
+  const cn = (c, u) => (u && c.names && c.names[u]) || nm(u);
   const cnts = (book.counts || []).map(c => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-2)">
-      <div class="small"><b>${esc(CNT_LBL[c.kind] || c.kind)}</b> · ${esc(hm(c.at))} · sanalgan ${esc(som(c.counted))}${num(c.diff) ? ` · <span style="color:${num(c.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">farq ${num(c.diff) > 0 ? '+' : ''}${esc(som(c.diff))}</span>` : ' · farq yo‘q'}<div class="muted">${esc(nm(c.byUid))}${c.toUid ? ' → ' + esc(nm(c.toUid)) : ''}</div></div>
+      <div class="small"><b>${esc(CNT_LBL[c.kind] || c.kind)}</b> · ${esc(hm(c.at))} · sanalgan ${esc(som(c.counted))}${num(c.diff) ? ` · <span style="color:${num(c.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">farq ${num(c.diff) > 0 ? '+' : ''}${esc(som(c.diff))}</span>` : ' · farq yo‘q'}<div class="muted">${c.kind === 'handover'
+        ? esc(cn(c, c.fromUid || c.byUid)) + (c.toUid ? ' → ' + esc(cn(c, c.toUid)) : '') + (c.byUid && c.fromUid && c.byUid !== c.fromUid ? ' · sanadi: ' + esc(cn(c, c.byUid)) : '')
+        : esc(cn(c, c.byUid)) + (c.cashierUid && c.cashierUid !== c.byUid ? ' · kassa egasi: ' + esc(cn(c, c.cashierUid)) + ' (kassir o‘rniga)' : '')}</div></div>
       <button class="btn sm" data-cprint="${esc(c.id)}">🖨 Dalolatnoma</button></div>`).join('');
-  const evs = (book.events || []).map(e => `<div class="small muted">${esc(hm(e.at))} · ${esc(EV_LBL[e.kind] || e.kind)} · ${esc(nm(e.byUid))}${e.reason ? ' — ' + esc(e.reason) : ''}</div>`).join('');
+  // qabul qilinmagan (kutilayotgan, bekor qilingan / rad etilgan) smena topshirishlar — dalolatnomasiz, ma'lumot uchun
+  const hos = (book.handovers || []).filter(h => h.status !== 'accepted').map(h => { const hn = u => (u && h.names && h.names[u]) || nm(u);
+    return `<div class="small muted" style="padding:4px 0">Smena topshirish · ${esc(hm(h.createdAt))} · ${esc(h.fromUid ? hn(h.fromUid) : '—')} → ${esc(hn(h.toUid))} · sanalgan ${esc(som(h.counted))} · ${esc(HO_ST[h.status] || h.status)}${h.cancelReason ? ' — ' + esc(h.cancelReason) : ''}</div>`; }).join('');
+  const evs = (book.events || []).map(e => `<div class="small muted">${esc(hm(e.at))} · ${esc((e.kind === 'handover' && HO_STEP[(e.data || {}).step]) || EV_LBL[e.kind] || e.kind)} · ${esc(nm(e.byUid))}${e.reason ? ' — ' + esc(e.reason) : ''}</div>`).join('');
   // «kimdan / kimga qancha» — tomon KALITI bo'yicha (server guruhlaydi); tizim hujjati (sanash farqi) — alohida qator
   const PT = { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', bank: 'bank', founder: 'ta’sischi', other: 'boshqa', system: 'tizim', none: '' };
   const pName = x => x.partyType === 'system' ? (x.ops || []).map(opName).join(', ') : (x.name || '—');
@@ -1332,12 +1434,12 @@ async function openDayView(day) {
   const zLine = zp.length ? `<div class="small" id="kdv-z" style="margin-top:8px${closed && z.ok === false ? ';color:#B42318;font-weight:700' : ''}">Onlayn kassa Z-hisoboti: ${zp.join(' — ')}</div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa kuni — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px">${dayChip(d.status)} Kun boshi <b>${esc(som(d.opening))}</b> · kirim <b>${esc(som(closed ? d.receipts : d.receiptsLive))}</b> · chiqim <b>${esc(som(closed ? d.payouts : d.payoutsLive))}</b> · kun oxiri <b>${esc(som(closed ? d.closing : d.balance))}</b>${closed ? ` · sanalgan <b>${esc(som(d.counted))}</b>` : ''}${closed && d.sheetFrom ? ` · varaq ${esc(String(d.sheetFrom))}${d.sheetTo > d.sheetFrom ? '–' + esc(String(d.sheetTo)) : ''}` : ''}</div>
+      <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px">${dayChip(d.status)} Kun boshi <b>${esc(som(d.opening))}</b> · kirim <b>${esc(som(closed ? d.receipts : d.receiptsLive))}</b> · chiqim <b>${esc(som(closed ? d.payouts : d.payoutsLive))}</b> · kun oxiri <b>${esc(som(closed ? d.closing : d.balance))}</b>${closed ? ` · sanalgan <b>${esc(som(d.counted))}</b>` : ''}${(d.handoverDiffs || []).filter(x => num(x)).length ? ` · smena topshirishda farq <b>${esc((d.handoverDiffs || []).filter(x => num(x)).map(sgnS).join(', '))}</b>` : ''}${closed && d.sheetFrom ? ` · varaq ${esc(String(d.sheetFrom))}${d.sheetTo > d.sheetFrom ? '–' + esc(String(d.sheetTo)) : ''}` : ''}</div>
       ${zLine}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 6px"><b>Hujjatlar (${docs.length} ta)</b><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="kdv-report" title="Kunlik hisobot: kimdan / kimga qancha">🖨 Kunlik hisobot</button><button class="btn sm" id="kdv-book">🖨 Kassa kitobi varag‘i${closed ? '' : ' (qoralama)'}</button></span></div>
       ${docs.length ? `<div class="tablewrap"><table><thead><tr><th>№</th><th>Operatsiya / tomon</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th>Kim</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Hujjat yo‘q.</div>'}
       ${who ? `<details style="margin-top:12px" open id="kdv-who"><summary class="small" style="cursor:pointer;font-weight:700">Kimdan / kimga qancha</summary>${who}${trTxt}</details>` : ''}
-      ${cnts ? `<div style="margin-top:12px"><b>Sanashlar</b>${cnts}</div>` : ''}
+      ${cnts || hos ? `<div style="margin-top:12px"><b>Sanashlar</b>${cnts}${hos}</div>` : ''}
       ${evs ? `<details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:700">Kun jurnali</summary><div style="margin-top:6px">${evs}</div></details>` : ''}
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;

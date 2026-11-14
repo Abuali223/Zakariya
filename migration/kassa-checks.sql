@@ -24,7 +24,7 @@ set default_transaction_read_only = on;
 \set c1 0 \set c2 0 \set c3 0 \set c4 0 \set c5 0 \set c6 0 \set c7 0 \set c8 0 \set c9 0 \set c10 0 \set c11 0
 \set c12 0 \set c13 0 \set c14 0 \set c15 0 \set c16 0 \set c17 0 \set c18 0 \set c19 0 \set c20 0 \set c21 0 \set c22 0
 \set fn_re '^(kassa|fin_|tuition_)'
-\set fin_tables '{gl_accounts,fin_articles,fin_category_map,fin_op_rules,fin_org,fin_signatories,fin_counterparties,cash_desks,doc_counters,cash_days,cash_docs,cash_doc_lines,payment_allocations,cash_day_events,cash_counts,fin_snapshots,cash_prints}'
+\set fin_tables '{gl_accounts,fin_articles,fin_category_map,fin_op_rules,fin_org,fin_signatories,fin_counterparties,cash_desks,doc_counters,cash_days,cash_docs,cash_doc_lines,payment_allocations,cash_day_events,cash_counts,fin_snapshots,cash_prints,cash_handovers}'
 
 \qecho '== 1) SECURITY DEFINER funksiyalar search_path''siz (butun baza: app, public) — bunday funksiyani chaqiruvchi o''z sxemasi orqali aldashi mumkin'
 select '!!' as belgi, n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as funksiya
@@ -57,12 +57,12 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 \qecho '== 3) Obyektlar soni (shu reliz uchun kutilgan). Farq bo''lsa — qaysi obyektligini verify-db.sh ko''rsatadi'
 select '!!' as belgi, x.nima, x.bor, case when x.aniq then '' else 'kamida ' end || x.kutilgan as kutilgan
   from (values
-    ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 17, true),
-    ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 42, true),   -- +1: kassa_staff_open (acc-1); +1: fin_counterparty_confirm (sec-3)
-    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 85, true),   -- +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7); +4: kassa_golive_guard, kassa_restart_adj, kassa_desk_balance (ui-5, §9 qayta ishga tushirish), kassa_cash_rows (crit-1); +4: kassa_periods, kassa_pre_day (g4v-1), kassa_restart_stale (g4v-2), kassa_reconcile_range (g4v-4); +2: kassa_user_cards (sec-1), kassa_org_due (sec-3)
+    ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 18, true),   -- +1: cash_handovers (state-6, ikki bosqichli smena topshirish)
+    ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 44, true),   -- +1: kassa_staff_open (acc-1); +1: fin_counterparty_confirm (sec-3); +2: kassa_handover_accept, kassa_handover_cancel (state-6)
+    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 90, true),   -- +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7); +4: kassa_golive_guard, kassa_restart_adj, kassa_desk_balance (ui-5, §9 qayta ishga tushirish), kassa_cash_rows (crit-1); +4: kassa_periods, kassa_pre_day (g4v-1), kassa_restart_stale (g4v-2), kassa_reconcile_range (g4v-4); +2: kassa_user_cards (sec-1), kassa_org_due (sec-3); +4: kassa_handover_guard, kassa_handover_pending, kassa_handover_block (state-6), kassa_op_user (sec-2); +1: kassa_shortage_default (sec-2 / sec-4)
     ('himoya triggerlari (trg_kassa_*, trg_fin_*)', (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                                                      where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 24, true),
-    ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 16, true),
+                                                      where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 25, true),   -- +1: trg_kassa_handover_guard (state-6)
+    ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 17, true),   -- +1: cash_handovers_sel (state-6)
     -- ma'lumotnomalar keyin to'ldirilishi mumkin — faqat kamayishi muammo
     ('hisobvaraqlar rejasi (gl_accounts)', (select count(*) from public.gl_accounts), 92, false),
     ('statiyalar (fin_articles)', (select count(*) from public.fin_articles), 75, false),
@@ -124,6 +124,7 @@ select '!!' as belgi, w.jadval, w.trigger, case when t.oid is null then 'yo''q' 
   from (values ('cash_counts', 'trg_kassa_append_only'), ('cash_day_events', 'trg_kassa_append_only'), ('cash_prints', 'trg_kassa_append_only'),
                ('fin_snapshots', 'trg_kassa_append_only'), ('payment_allocations', 'trg_kassa_append_only'),
                ('cash_days', 'trg_kassa_day_guard'), ('cash_desks', 'trg_kassa_desk_guard'), ('cash_doc_lines', 'trg_kassa_line_guard'),
+               ('cash_handovers', 'trg_kassa_handover_guard'),
                ('cash_docs', 'trg_kassa_doc_guard'), ('cash_docs', 'trg_kassa_doc_after'), ('doc_counters', 'trg_kassa_counter_guard'),
                ('expenses', 'trg_kassa_cash_guard'), ('salary_payments', 'trg_kassa_cash_guard'), ('staff_advances', 'trg_kassa_cash_guard'),
                ('payments', 'trg_kassa_pay_guard'),
@@ -135,9 +136,10 @@ select '!!' as belgi, w.jadval, w.trigger, case when t.oid is null then 'yo''q' 
  order by 2, 3;
 select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_COUNT as c8 \gset
 
-\qecho '== 9) Noyoblik indekslari: yo''q yoki yaroqsiz (bitta ochiq kun, hujjat raqami, takror yuborish kaliti, surat versiyasi)'
+\qecho '== 9) Noyoblik indekslari: yo''q yoki yaroqsiz (bitta ochiq kun, hujjat raqami, takror yuborish kaliti, surat versiyasi, bitta kutilayotgan smena topshirish)'
 select '!!' as belgi, w.indeks, case when i.indexrelid is null then 'yo''q' else 'yaroqsiz (INVALID) — qayta quring' end as holat
-  from (values ('cash_days_one_open'), ('cash_days_desk_day_key'), ('cash_docs_number'), ('cash_docs_client_ref'), ('fin_snapshots_day_ver')) w(indeks)
+  from (values ('cash_days_one_open'), ('cash_days_desk_day_key'), ('cash_docs_number'), ('cash_docs_client_ref'), ('fin_snapshots_day_ver'),
+               ('cash_handovers_one_pending')) w(indeks)   -- state-6: kassada bittadan ortiq kutilayotgan smena topshirish yo'q
   left join pg_index i on i.indexrelid = to_regclass('public.' || quote_ident(w.indeks))
  where i.indexrelid is null or not i.indisvalid or not i.indisunique
  order by 2;

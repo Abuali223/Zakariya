@@ -84,6 +84,15 @@ function world(o) {
     ok('harakatsiz kun: qoldiq; kassa ishga tushmagan — moslik hisoblanmaydi', /🏦 Kassa: bugun harakat yo‘q · qoldiq 500 000 so‘m\n🔎 Kassa nazorati: moslik — kassa hali ishga tushmagan · yopilmagan o‘tgan kun yo‘q · bekor qilingan: 0 · farq yo‘q/.test(t3), t3);
     ok('ortiqcha', /⚠️ ortiqcha 1 200 so‘m/.test(kassaLines({ day: { status: 'verified', opening: 0, receipts: 0, payouts: 0, closing: 1200, counted: 1200, diff: 1200 }, control: { diff: 1200 } }).join('\n')));
     ok('noto‘g‘ri kirish — bo‘sh', kassaLines(null).length === 0 && kassaLines('x').length === 0);
+    // acc-6: smena topshirishdagi farq — kun qatorida va nazorat qatorida yopish farqi yonida (bo'lmasa — avvalgi matn)
+    const hl = kassaLines({ live: true, balance: 0, day: { status: 'closed', opening: 0, receipts: 0, payouts: 0, closing: 0, counted: 0, diff: -2000, handoverDiffs: [5000, 0], n1: 0, n2: 0 },
+      control: { reconcile: 0, voids: 0, diff: -2000, handoverDiffs: [5000] } }).join('\n');
+    ok('smena topshirishdagi farq: kun qatori', /Sanaldi: 0 so‘m · kunni yopishda: ⚠️ KAMOMAD 2 000 so‘m · smena topshirishda: ⚠️ ortiqcha 5 000 so‘m/.test(hl), hl);
+    ok('smena topshirishdagi farq: nazorat qatori', /· ⚠️ farq: yopishda −2 000, smenada \+5 000 ·|· ⚠️ farq: yopishda −2 000, smenada \+5 000$/m.test(hl), hl);
+    const ho = kassaLines({ live: true, balance: 0, day: { status: 'open', opening: 0, receipts: 0, payouts: 0, closing: 0, handoverDiffs: [-7000] }, control: { reconcile: 0, voids: 0, diff: 0, handoverDiffs: [-7000] } }).join('\n');
+    ok('ochiq kun: smena topshirishdagi farq ko‘rinadi; yopish farqi yo‘q bo‘lsa — faqat smena', /⏳ Kun hali yopilmagan — pul sanalmagan · smena topshirishda: ⚠️ KAMOMAD 7 000 so‘m/.test(ho) && /· ⚠️ farq: smenada −7 000( ·|$)/m.test(ho), ho);
+    ok('dushanba KPI: smena topshirishdagi farqlar soni', /farqli kun 1 \(kamomad 2 000\) \(ortiqcha 5 000\) \(smena topshirishda 1\)/.test(
+      kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0 }, week: { from: '2027-01-04', to: '2027-01-10', closed: 1, onTime: 1, diffDays: 1, shortage: 2000, surplus: 5000, handoverDiffs: 1 } }).join('\n')));
     const zl = z => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0, z } }).join('\n');
     ok('Z-hisobot: mos yoki kun yopilmagan — qator yo‘q', !/Z-hisobot/.test(zl({ ok: true, recorded: true })) && !/Z-hisobot/.test(zl(null)), zl({ ok: true }));
     ok('Z-hisobot farqi: naqd −10 000, karta +5 000', /· ⚠️ Z-hisobot farqi: naqd −10 000, karta \+5 000$/.test(zl({ ok: false, recorded: true, missing: false, diffCash: -10000, diffCard: 5000 })), zl({ ok: false, recorded: true, diffCash: -10000, diffCard: 5000 }));

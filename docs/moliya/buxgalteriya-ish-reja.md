@@ -679,7 +679,8 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
   (tur, holat draft/approved/posted/void, kassa, yil, raqam, `businessDay`, `capturedAt`, tomon, asos hujjati,
   `fiscalNo`, `sourceSnapshot`, `reversalOf`, noyob `clientRef`, tasdiqlar), `cash_doc_lines` (statiya, hisobvaraq,
   summa, analitika, xarita versiyasi), `payment_allocations`, `cash_days` (qoldiqlar, sanalgan, farq, o‘tkazilmagan
-  yozuvlar, `cashierUid`, xesh, kim yopgan/tekshirgan), `cash_day_events`, `cash_counts`, `fin_snapshots`; hammasida
+  yozuvlar, `cashierUid`, xesh, kim yopgan/tekshirgan), `cash_day_events`, `cash_counts`, `cash_handovers` (ikki bosqichli
+  smena topshirish: kutilmoqda → qabul qilindi / bekor qilindi), `fin_snapshots`; hammasida
   `id`. Eski jadvallarga faqat bo‘sh bo‘lishi mumkin bo‘lgan ustunlar (`cashDocId`, `statusAt`, `fiscalNo`,
   `articleId`, `method`, refund `status` va boshqalar).
 - **Yozish:** faqat SECURITY DEFINER RPC (`search_path`, aniq rol); yozish siyosatlari yo‘q; eski qator va hujjat bitta

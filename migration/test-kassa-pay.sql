@@ -324,7 +324,18 @@ select zz.chk('M3 31.01 yopildi; 01.02 kuni: fevral fakturasi — Kt 4010 (fevra
 --   01.02 kun ochiq: kun boshi 3 925 000, kirim 800 000 → hisobda 4 725 000.
 set local session_replication_role = replica;
 insert into public.fin_counterparties (id, kind, name) values ('cp_sup','supplier','Sinov Ta''minot MChJ');
+insert into public.users (id, email, role, status, "extraRoles") values ('U_KAS2','k2@x','kassir','active','[]')
+on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email;
 set local session_replication_role = origin;
+-- state-6: smena topshirish qabul qilinmagan (pul sanalgan, ikki kassir kassa yonida) — kassa to'xtatilmaydi (alohida hint, ochiq kundan oldin)
+select zz.put('R00', zz.as('U_KAS', $q$select public.kassa_handover('{"counted":4725000,"toUid":"U_KAS2"}')::text$q$));
+select zz.chk('R00 kutilayotgan smena topshirish — kassani to''xtatib bo''lmaydi (kassa:rollback_handover: avval qabul yoki bekor); bekor qilingach — keyingi qoida (ochiq kun)',
+  (case when zz.get('R00') ~ '^\s*\{' then zz.get('R00')::jsonb #>> '{handover,status}' else left(zz.get('R00'), 200) end)
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$)
+  || ' | ' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi')
+  || ' | ' || (select case when r ~ '^\s*\{' then r::jsonb #>> '{handover,status}' else left(r, 200) end
+                 from (select zz.as('U_KAS', format('select public.kassa_handover_cancel(%L, %L)::text', substring(zz.get('R00') from '"id": "(ho_[0-9a-f]+)"'), 'To''xtatish rejalashtirilgan')) r) q),
+  '^pending \| ERR P0001 \[kassa:rollback_handover\] Kassani to''xtatib bo''lmaydi: smena topshirish qabul qilinmagan — avval qabul qiluvchi uni qabul qilsin yoki topshirish bekor qilinsin.* \| ishlaydi \| cancelled$');
 select zz.chk('R0 ochiq kassa kuni bor — kassani to''xtatib bo''lmaydi (sana o''zgarmadi, kassa to''xtamadi)',
   zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$) || ' | ' || (select "kassaGoLive"::text from public.fin_org where id = 'main')
   || ' | ' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi'),

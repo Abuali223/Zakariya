@@ -25,16 +25,20 @@ const tkDow = ms => new Date(tkDay(ms) + 'T12:00:00Z').getUTCDay();
 
 const dmy = s => String(s || '').slice(0, 10).split('-').reverse().join('.');
 // Kassa bloki (0–3 qator) va nazorat qatori. k — director_daily().kassa (yo'q bo'lsa — bo'sh ro'yxat).
+//   Smena topshirishdagi sanash farqlari (handoverDiffs — kassa moduli acc-6) kunni yopishdagi farq yonida; bo'lmasa — matn avvalgidek.
 function kassaLines(k) {
   if (!k || typeof k !== 'object') return [];
   const L = [], kd = k.day, c = k.control || {}, n = v => Number(v) || 0;
+  const hds = a => (Array.isArray(a) ? a : []).map(n).filter(x => x !== 0);
   if (kd) {
     const st = { open: 'ochiq', closed: 'yopilgan', verified: 'tekshirilgan' }[kd.status] || String(kd.status || '');
     L.push(`🏦 Kassa (${st}): kun boshi ${fmtNum(kd.opening)} + kirim ${fmtNum(kd.receipts)} (${n(kd.n1)} ta) − chiqim ${fmtNum(kd.payouts)} (${n(kd.n2)} ta) = ${fmtNum(kd.closing)} so‘m`);
-    if (kd.status === 'open') L.push('   ⏳ Kun hali yopilmagan — pul sanalmagan');
+    const dTxt = x => x === 0 ? 'farq yo‘q' : x < 0 ? `⚠️ KAMOMAD ${fmtNum(-x)} so‘m` : `⚠️ ortiqcha ${fmtNum(x)} so‘m`;
+    const hd = hds(kd.handoverDiffs), hTxt = hd.length ? ` · smena topshirishda: ${hd.map(dTxt).join(', ')}` : '';
+    if (kd.status === 'open') L.push('   ⏳ Kun hali yopilmagan — pul sanalmagan' + hTxt);
     else {
       const df = n(kd.diff);
-      L.push(`   Sanaldi: ${fmtNum(kd.counted)} so‘m · ${df === 0 ? 'farq yo‘q' : df < 0 ? `⚠️ KAMOMAD ${fmtNum(-df)} so‘m` : `⚠️ ortiqcha ${fmtNum(df)} so‘m`}`);
+      L.push(`   Sanaldi: ${fmtNum(kd.counted)} so‘m · ${hd.length ? 'kunni yopishda: ' : ''}${dTxt(df)}${hTxt}`);
     }
     const tr = kd.transfers || {};
     if (n(tr.inAmount) > 0 || n(tr.outAmount) > 0) L.push(`   Bank (ichki o‘tkazma): olindi ${fmtNum(tr.inAmount)} · topshirildi ${fmtNum(tr.outAmount)} so‘m`);
@@ -44,7 +48,9 @@ function kassaLines(k) {
   w.push(n(c.reconcile) > 0 ? `⚠️ moslik buzilgan: ${n(c.reconcile)} ta` : (k.live === false ? 'moslik — kassa hali ishga tushmagan' : 'moslik ✓'));
   w.push(c.staleOpenDay ? `⚠️ yopilmagan kun: ${dmy(c.staleOpenDay)}` : 'yopilmagan o‘tgan kun yo‘q');
   w.push(`bekor qilingan: ${n(c.voids)}`);
-  w.push(n(c.diff) === 0 ? 'farq yo‘q' : `⚠️ farq: ${n(c.diff) > 0 ? '+' : '−'}${fmtNum(Math.abs(n(c.diff)))}`);
+  const sgd = v => `${v > 0 ? '+' : '−'}${fmtNum(Math.abs(v))}`, chd = hds(c.handoverDiffs);
+  if (!chd.length) w.push(n(c.diff) === 0 ? 'farq yo‘q' : `⚠️ farq: ${n(c.diff) > 0 ? '+' : '−'}${fmtNum(Math.abs(n(c.diff)))}`);
+  else w.push(`⚠️ farq: ${[n(c.diff) ? `yopishda ${sgd(n(c.diff))}` : '', ...chd.map(x => `smenada ${sgd(x)}`)].filter(Boolean).join(', ')}`);
   if (n(c.undecidedShortages) > 0) w.push(`⚠️ qarorsiz kamomad: ${n(c.undecidedShortages)}`);
   if (n(c.unverifiedDays) > 0) w.push(`tekshirilmagan kun: ${n(c.unverifiedDays)}`);
   if (n(c.waitingApproval) > 0) w.push(`tasdiq kutmoqda: ${n(c.waitingApproval)}`);
@@ -69,7 +75,7 @@ function kassaLines(k) {
   if (wk && typeof wk === 'object') {
     const p = [`o‘sha kuni yopilgan ${n(wk.onTime)}/${n(wk.closed)} kun`];
     if (n(wk.unverified) > 0) p.push(`tekshirilmagan ${n(wk.unverified)}`);
-    p.push(n(wk.diffDays) > 0 ? `farqli kun ${n(wk.diffDays)}${n(wk.shortage) ? ` (kamomad ${fmtNum(wk.shortage)})` : ''}${n(wk.surplus) ? ` (ortiqcha ${fmtNum(wk.surplus)})` : ''}` : 'farq yo‘q');
+    p.push(n(wk.diffDays) > 0 ? `farqli kun ${n(wk.diffDays)}${n(wk.shortage) ? ` (kamomad ${fmtNum(wk.shortage)})` : ''}${n(wk.surplus) ? ` (ortiqcha ${fmtNum(wk.surplus)})` : ''}${n(wk.handoverDiffs) ? ` (smena topshirishda ${n(wk.handoverDiffs)})` : ''}` : 'farq yo‘q');
     if (wk.ex49Share != null) p.push(`«Boshqa xarajatlar» ${String(wk.ex49Share).replace('.', ',')}%${Number(wk.ex49Share) > 2 ? ' ⚠️' : ''}`);
     const wa = wk.accOverdue || {};
     if (n(wa.n) > 0) p.push(`⚠️ muddati o‘tgan avans ${n(wa.n)}`);

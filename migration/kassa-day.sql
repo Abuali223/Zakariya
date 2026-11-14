@@ -11,7 +11,10 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   app.kassa_golive_guard(...) — «ishga tushadigan kun» o'zgarishi (fin_org_set): to'xtatish va qayta ishga tushirish shartlari (ui-5);
 --   kassa_day_close(p)          — kunni SANAB yopish: farq (sanalgan − hisobdagi − hali o'tkazilmagan) shu kun sanasi bilan tizim
 --                                 hujjatiga aylanadi (kamomad KO-2 Dt 5910, ortiqcha KO-1 Kt 9390), varaqlar va xesh muzlaydi;
---   kassa_handover(p)           — smena topshirish-qabul sanashi (kun ochiq qoladi, kassir almashadi; farq — darhol hujjat);
+--   kassa_handover(p)           — smena topshirish-qabul, IKKI BOSQICHLI (state-6): topshiruvchi sanab KUTILAYOTGAN topshirish yozadi
+--                                 (kassa egasi bo'lmasa — kassir o'rniga, komissiya bilan; sec-2), kassada hujjat to'xtaydi;
+--   kassa_handover_accept(id)   — qabul qiluvchi o'z hisobidan qabul qiladi: sanash dalolatnomasi, farq hujjati (kassa egasi —
+--                                 topshiruvchi), kassa egasi — qabul qiluvchi; kassa_handover_cancel(id, sabab) — bekor / rad etish;
 --   kassa_day_verify(...)       — 2-ro'yxat / Direktor tekshiradi: tekshiruvchi ≠ yopuvchi, ≠ shu kun hujjat o'tkazgan, bekor qilgan,
 --                                 Z-hisobotni kiritgan / tuzatgan va kunni qayta ochganlar (crit-4); raqamlarda bo'shliq, xesh yoki
 --                                 jamlar mos kelmasa — rad;
@@ -19,7 +22,7 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --                                 tizim Z ni fiskal chekli KO-1 va terminal to'lovlari bilan solishtiradi (F1.26); yopilgandan keyingi
 --                                 o'zgarish belgilanadi va nazorat ro'yxatida ko'rinadi;
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
---   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
+--   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 — faqat xodim kartasiga; hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
 --   kassa_journal(desk, from, to) — KO-3: kirim va chiqim orderlari jurnali (davr ≤ 93 kun; chop etish va XLSX — sahifada);
 --   kassa_journal_export(...)   — KO-3 Excel uchun ma'lumot (FD-28): kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq;
@@ -122,11 +125,17 @@ revoke all on function app.kassa_commission(jsonb) from public, anon, authentica
 -- ---------- Sanash yadrosi: farq bo'lsa — SHU KUN sanasi bilan tizim hujjati (CT-14) ----------
 --   farq = sanalgan − hisobdagi qoldiq − hali o'tkazilmagan (oflayn) yozuvlar. Kamomad — KO-2 Dt 5910; ortiqcha — KO-1 Kt 9390.
 --   Tizim hujjati hech kimni «o'tkazuvchi» qilmaydi (postedBy bo'sh) — tekshiruvchini cheklamaydi.
+--   sec-2: kassa egasi (p_holder — kun kassiri; smenada — topshiruvchi) va sanagan xodim (p_by) ALOHIDA yoziladi — hujjat suratida
+--   ("cashierUid", "countedBy"; smenada — "toUid", "handoverId") va sanash dalolatnomasida; ismlar shu paytdagi holatda (sec-4).
+--   Kamomad bo'yicha «xodim zimmasiga» qarorida standart javobgar — faqat kassa egasi o'zi sanagan bo'lsa (app.kassa_shortage_default).
+--   p_uid — amalni bajarayotgan seans (hujjatni yaratgan): kunni yopgan yoki smenani qabul qilgan xodim.
+drop function if exists app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text);   -- avvalgi ta'rif (kassa egasisiz)
 create or replace function app.kassa_count_apply(p_desk text, p_day_id text, p_day date, p_kind text, p_counted numeric, p_pending numeric,
-                                                 p_denoms jsonb, p_commission jsonb, p_note text, p_uid text, p_to_uid text,
+                                                 p_denoms jsonb, p_commission jsonb, p_note text, p_uid text,
+                                                 p_holder text, p_by text, p_to_uid text, p_handover text,
                                                  out o_expected numeric, out o_diff numeric, out o_doc_id text, out o_count_id text)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_cashier text;
+declare v_names jsonb := app.kassa_names(array[p_holder, p_by, p_to_uid]);
 begin
   o_expected := app.kassa_day_balance(p_day_id);
   if p_counted < p_pending then
@@ -134,33 +143,55 @@ begin
   end if;
   o_diff := p_counted - o_expected - p_pending;
   if o_diff <> 0 then
-    select d."cashierUid" into v_cashier from public.cash_days d where d.id = p_day_id;
     select b.o_id into o_doc_id from app.kassa_doc_build(jsonb_build_object(
         'desk', p_desk, 'op', case when o_diff > 0 then 'in_surplus' else 'out_shortage' end, 'amount', abs(o_diff),
         'clientRef', 'sysdiff_' || replace(gen_random_uuid()::text, '-', ''), 'isSystem', true,
         'partyName', case when o_diff > 0 then 'Kassa ortiqchasi' else 'Kassa kamomadi' end,
         'basis', 'Kassani sanash dalolatnomasi, ' || to_char(p_day, 'DD.MM.YYYY'),
         'note', case p_kind when 'handover' then 'Smena topshirish-qabul sanashi' else 'Kun yopish sanashi' end,
-        'sourceSnapshot', jsonb_build_object('cashierUid', v_cashier, 'expected', o_expected, 'counted', p_counted, 'pending', p_pending, 'kind', p_kind)),
+        'sourceSnapshot', jsonb_strip_nulls(jsonb_build_object('cashierUid', p_holder, 'countedBy', p_by, 'toUid', p_to_uid, 'handoverId', p_handover,
+                                                               'expected', o_expected, 'counted', p_counted, 'pending', p_pending, 'kind', p_kind, 'names', v_names))),
       case when o_diff > 0 then 'KO1' else 'KO2' end, p_uid, true) b;
     perform app.kassa_doc_post(o_doc_id, p_uid, true, null, false, p_day_id);
   end if;
   o_count_id := 'cc_' || replace(gen_random_uuid()::text, '-', '');
-  insert into public.cash_counts (id, desk, day, "dayId", kind, expected, counted, "pendingSum", diff, "diffDocId", denoms, commission, "fromUid", "toUid", note, "byUid")
+  insert into public.cash_counts (id, desk, day, "dayId", kind, expected, counted, "pendingSum", diff, "diffDocId", denoms, commission, "fromUid", "toUid", note, "byUid",
+                                  "cashierUid", "handoverId", names, at)
     values (o_count_id, p_desk, p_day, p_day_id, p_kind, o_expected, p_counted, p_pending, o_diff, o_doc_id, p_denoms, p_commission,
-            case when p_kind = 'handover' then p_uid end, p_to_uid, left(btrim(coalesce(p_note, '')), 500), p_uid);
+            case when p_kind = 'handover' then p_holder end, p_to_uid, left(btrim(coalesce(p_note, '')), 500), p_by,
+            p_holder, p_handover, v_names, clock_timestamp());
 end $$;
-revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text) from public, anon, authenticated;
+revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text, text, text, text) from public, anon, authenticated;
 
--- Hisobning kassada ko'rinadigan ismi: users.name (ism o'rnida email bo'lmasa — eski ro'yxatdan o'tishda name = email) → bog'langan
---   xodim kartasi (teachers / staff) ismi → uid. Email HECH QACHON: kassa javoblari va chop etishni 2-ro'yxat, jumladan buxgalter
---   ham ko'radi (F1.21, D6); xodim ismi 2-ro'yxatga ochiq.
+-- Kamomad «xodim zimmasiga» bo'lsa — standart javobgar (sec-2, sec-4): FAQAT kassa egasi pulni o'zi sanagan bo'lsa (hujjat suratida
+--   "cashierUid" = "countedBy") — uning xodim kartasi (asosiy havola; bo'lmasa — yagona bog'langan karta). Boshqa holatda (kassir o'rniga
+--   sanalgan, kassa egasi aniqlanmagan, hisob kartaga bog'lanmagan yoki kartalar bir nechta; eski hujjat — sanagan xodim yozilmagan) —
+--   NULL: Direktor javobgar xodim kartasini o'zi tanlaydi.
+create or replace function app.kassa_shortage_default(p_snap jsonb) returns text
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when coalesce(p_snap ->> 'cashierUid', '') <> '' and p_snap ->> 'cashierUid' = p_snap ->> 'countedBy' then
+           coalesce((select case when u."staffRefType" = 'teacher' then 'teachers:' else 'staff:' end || u."staffRefId"
+                       from public.users u
+                      where u.id = p_snap ->> 'cashierUid' and coalesce(u."staffRefId", '') <> ''
+                        and case when u."staffRefType" = 'teacher' then exists (select 1 from public.teachers t where t.id = u."staffRefId")
+                                 else exists (select 1 from public.staff s where s.id = u."staffRefId") end),
+                    (select c[1] from (select app.kassa_user_cards(p_snap ->> 'cashierUid') as c) x where cardinality(x.c) = 1)) end
+$$;
+revoke all on function app.kassa_shortage_default(jsonb) from public, anon, authenticated;
+
+-- Hisobning kassada ko'rinadigan ismi (sec-4): bog'langan xodim kartasi ismi (HR yuritadi; asosiy havola — users.staffRefType / staffRefId,
+--   bo'lmasa — teskari havola staff / teachers."userUid") → kartaga bog'lanmagan hisobda users.name (ism o'rnida email bo'lmasa — eski
+--   ro'yxatdan o'tishda name = email) → uid. users.name ni foydalanuvchi o'zi o'zgartira oladi («Profil») — bog'langan hisobda u kassa
+--   hujjatlariga chiqmaydi; bog'lanmaganlar nazorat ro'yxatida (kassa_checks → unlinkedUsers). Email HECH QACHON: kassa javoblari va
+--   chop etishni 2-ro'yxat, jumladan buxgalter ham ko'radi (F1.21, D6); xodim ismi 2-ro'yxatga ochiq.
 create or replace function app.kassa_user_label(p_name text, p_ref_type text, p_ref_id text, p_uid text) returns text
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce(nullif(case when p_name ~ '@' then '' else btrim(p_name) end, ''),
-                  case when coalesce(p_ref_id, '') <> '' then
+  select coalesce(case when coalesce(p_ref_id, '') <> '' then
                     case when p_ref_type = 'teacher' then (select nullif(btrim(t.name), '') from public.teachers t where t.id = p_ref_id)
                          else (select nullif(btrim(s.name), '') from public.staff s where s.id = p_ref_id) end end,
+                  (select nullif(btrim(s.name), '') from public.staff s where coalesce(p_uid, '') <> '' and s."userUid" = p_uid order by s.id limit 1),
+                  (select nullif(btrim(t.name), '') from public.teachers t where coalesce(p_uid, '') <> '' and t."userUid" = p_uid order by t.id limit 1),
+                  nullif(case when p_name ~ '@' then '' else btrim(p_name) end, ''),
                   p_uid)
 $$;
 revoke all on function app.kassa_user_label(text, text, text, text) from public, anon, authenticated;
@@ -272,6 +303,10 @@ language sql stable security definer set search_path = public, app, pg_temp as $
            'docs', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status in ('posted', 'void')),
            'voids', (select count(*) from public.cash_docs c where c."dayId" = d.id and c.status = 'void'),
            -- kassa kitobi varag'i necha marta chop etishga yuborilgan: hozirgi holati (prints) va qayta ochilishdan oldingisi (printsOld)
+           -- acc-6: smena topshirishda topilgan farqlar (qabul qilingan topshirishlar sanashidan, cash_counts — yagona manba): jami va
+           --   har biri (vaqt tartibida, 0 lari tashlanadi). Yopish farqi — "diff"; kun farqi ko'rsatkichlari ikkalasidan
+           'handoverDiff', coalesce((select sum(n.diff) from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover'), 0),
+           'handoverDiffs', coalesce((select jsonb_agg(n.diff order by n.at, n.id) from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover' and n.diff <> 0), '[]'::jsonb),
            'prints', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version = d."reopenCount"),
            'printsOld', (select count(*) from public.cash_prints x where x."dayId" = d.id and x.kind = 'book' and x.version < d."reopenCount"),
            -- onlayn kassa Z-hisoboti: ochiq kunda faqat kiritilgan faktlar va «kerakmi» (kutilgan summalar — yopilgach; kassir
@@ -497,7 +532,8 @@ grant execute on function public.kassa_opening_set(jsonb) to authenticated;
 -- ---------- «Kassa ishga tushadigan kun» o'zgarishi: to'xtatish va qayta ishga tushirish (ishga-tushirish §9; ui-5) ----------
 --   fin_org_set (fin-core.sql) sana o'zgarganda DINAMIK chaqiradi — sozlama qatori FOR UPDATE bilan ushlangan holda. Natija — saqlanadigan sana.
 --   * TO'XTATISH — kelgan sana bo'shatilsa yoki keyinga surilsa, kassada kunlar bo'lsa: kassa qulfi (L4) bo'sh bo'lishi (shu payt hujjat
---     yozilmayotgan), ochiq kassa kuni, qurilma navbatidagi hali o'tkazilmagan yozuvlar bilan yopilgan oxirgi kun (g4b-v1: ishga-tushirish §9 (1)
+--     yozilmayotgan), qabul qilinmagan smena topshirish (state-6, kassa:rollback_handover), ochiq kassa kuni, qurilma navbatidagi hali
+--     o'tkazilmagan yozuvlar bilan yopilgan oxirgi kun (g4b-v1: ishga-tushirish §9 (1)
 --     — navbat avval yuborilsin) va pul berilmagan so'rovlar (tasdiq kutayotgan / tasdiqlangan) bo'lmasligi shart — aks holda rad,
 --     alohida hint bilan. Kassa to'xtatiladi ("pausedAt"): yangi kassa kuni ochilmaydi, naqd pul kassa hujjatisiz yoziladi. Saqlanadigan sana —
 --     bo'sh (kiritilgan keyingi sana — rejalashtirilgan kun sifatida hodisada qoladi): qayta ishga tushirish faqat yangi komissiya sanashi bilan.
@@ -557,6 +593,11 @@ begin
         raise exception 'Kassada hozir hujjat yozilmoqda — bir oz kutib, qayta saqlang' using errcode = 'P0001', hint = 'kassa:busy';
       end if;
       select max(d.day) into v_last from public.cash_days d where d.desk = v_k.id;
+      -- state-6: smena topshirish qabul qilinmagan (pul sanalgan, ikki kassir kassa yonida) — avval qabul qilinsin yoki bekor qilinsin
+      if exists (select 1 from public.cash_handovers h where h.desk = v_k.id and h.status = 'pending') then
+        raise exception 'Kassani to''xtatib bo''lmaydi: smena topshirish qabul qilinmagan — avval qabul qiluvchi uni qabul qilsin yoki topshirish bekor qilinsin, keyin kunni sanab yoping (ishga-tushirish §9)'
+          using errcode = 'P0001', hint = 'kassa:rollback_handover';
+      end if;
       select d.day into v_open from public.cash_days d where d.desk = v_k.id and d.status = 'open';
       if v_open is not null then
         raise exception 'Kassani to''xtatib bo''lmaydi: % kassa kuni ochiq — avval pulni sanab, kunni yoping (ishga-tushirish §9)', to_char(v_open, 'DD.MM.YYYY')
@@ -605,15 +646,18 @@ revoke all on function app.kassa_golive_guard(date, date) from public, anon, aut
 --   p: desk, day ('YYYY-MM-DD' — yopilayotgan kun; eski ekrandan boshqa kunni yopib qo'ymaslik uchun), counted, denoms {nominal: soni},
 --      pendingCount, pendingSum (qurilma navbatidagi hali o'tkazilmagan yozuvlar), note, commission [{title, name}],
 --      z — onlayn kassa Z-hisoboti {no, cash, card} yoki {missing: true, reason} (ixtiyoriy; sinov kassasida e'tiborga olinmaydi)
---   Kassir yopadi; Direktor yoki Moliya menejeri — kassir o'rniga, kamida 2 kishilik komissiya bilan.
+--   Kassa egasi (kun kassiri, "cashierUid") yopadi. Boshqa kassir (g'aznachi), Direktor yoki Moliya menejeri — kassir o'rniga, kamida
+--   2 kishilik komissiya bilan (sec-2; kassa egasi hali aniqlanmagan kunni kassa operatori o'zi yopadi). Smena topshirish kutilayotganda
+--   kun yopilmaydi (state-6: avval qabul qilinadi yoki bekor qilinadi). Kamomad hujjati suratida kassa egasi va sanagan xodim alohida.
 create or replace function public.kassa_day_close(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_desk text; v_day date; v_d public.cash_days%rowtype; v_counted numeric; v_pending numeric; v_pcount int;
   v_denoms jsonb; v_comm jsonb; v_note text; v_exp numeric; v_diff numeric; v_doc_id text; v_cnt_id text;
   v_rec numeric; v_pay numeric; v_docs int; v_f1 int; v_l1 int; v_f2 int; v_l2 int; v_rows int; v_sheets int; v_from int;
+  v_op boolean := app.kassa_operator(); v_holder text;
 begin
-  if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
+  if not (v_op or app.is_admin() or app.is_finance_mgr()) then
     raise exception 'Ruxsat yo''q: kunni kassir yopadi' using errcode = '42501';
   end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
@@ -632,7 +676,7 @@ begin
   v_denoms := app.kassa_denoms_check(p -> 'denoms', v_counted);
   v_comm := app.kassa_commission(p -> 'commission');
   v_note := left(btrim(coalesce(p ->> 'note', '')), 500);
-  if not app.kassa_operator() and jsonb_array_length(v_comm) < 2 then   -- kassir o'rniga yopish: 2 kishilik dalolatnoma
+  if not v_op and jsonb_array_length(v_comm) < 2 then   -- kassir o'rniga yopish: 2 kishilik dalolatnoma
     raise exception 'Kassir o''rniga yopishda kamida 2 kishilik komissiya ko''rsatiladi' using errcode = '22023', hint = 'kassa:commission';
   end if;
 
@@ -651,6 +695,14 @@ begin
   if v_d.day > app.fin_today() then
     raise exception 'Server sanasi ochiq kassa kunidan oldin — soatni tekshiring' using errcode = 'P0001', hint = 'kassa:clock';
   end if;
+  perform app.kassa_handover_block(v_desk);   -- state-6: smena topshirish kutilmoqda — avval qabul qilinadi yoki bekor qilinadi
+  -- sec-2: kassa egasi bo'lmagan kassir (g'aznachi) yopsa — kassir o'rniga: 2 kishilik dalolatnoma (Direktor / Moliya menejeri — yuqorida).
+  --   Kassa egasi hali aniqlanmagan kunni (faqat Direktor / Moliya menejeri hujjatlari) kassa operatori o'zi yopadi — u kassa egasi.
+  v_holder := coalesce(v_d."cashierUid", case when v_op then v_uid end);
+  if v_op and v_holder is distinct from v_uid and jsonb_array_length(v_comm) < 2 then
+    raise exception 'Kunni kassa egasi — % — yopadi: uning o''rniga yopishda kamida 2 kishilik komissiya ko''rsatiladi (yoki avval smena topshiriladi)',
+      coalesce(v_d."cashierName", app.kassa_names(array[v_holder]) ->> v_holder, v_holder) using errcode = '22023', hint = 'kassa:commission';
+  end if;
 
   perform app.kassa_flag(true);
   -- Z-hisobot (F1.26) — sanashdan oldin: noto'g'ri ma'lumot bo'lsa kun yopilmaydi (xato matni bilan qaytadi)
@@ -658,7 +710,7 @@ begin
     perform app.kassa_z_put(v_d.id, p -> 'z', v_uid);
   end if;
   select c.o_expected, c.o_diff, c.o_doc_id, c.o_count_id into v_exp, v_diff, v_doc_id, v_cnt_id
-    from app.kassa_count_apply(v_desk, v_d.id, v_d.day, 'close', v_counted, v_pending, v_denoms, v_comm, v_note, v_uid, null) c;
+    from app.kassa_count_apply(v_desk, v_d.id, v_d.day, 'close', v_counted, v_pending, v_denoms, v_comm, v_note, v_uid, v_holder, v_uid, null, null) c;
   select coalesce(sum(c.amount) filter (where c.status = 'posted' and c.form = 'KO1'), 0),
          coalesce(sum(c.amount) filter (where c.status = 'posted' and c.form = 'KO2'), 0),
          count(*), min(c.no) filter (where c.form = 'KO1'), max(c.no) filter (where c.form = 'KO1'),
@@ -676,11 +728,13 @@ begin
      set status = 'closed', receipts = v_rec, payouts = v_pay, closing = opening + v_rec - v_pay, counted = v_counted, diff = v_diff,
          "diffDocId" = v_doc_id, denoms = v_denoms, "pendingCount" = v_pcount, "pendingSum" = v_pending, "docCount" = v_docs,
          "firstKo1" = v_f1, "lastKo1" = v_l1, "firstKo2" = v_f2, "lastKo2" = v_l2, "sheetFrom" = v_from, "sheetTo" = v_from + v_sheets - 1, "sheetRows" = v_rows,
-         hash = app.kassa_day_hash(v_d.id), "closedBy" = v_uid, "closedAt" = now(), "closeNote" = v_note, commission = v_comm
+         hash = app.kassa_day_hash(v_d.id), "closedBy" = v_uid, "closedAt" = now(), "closeNote" = v_note, commission = v_comm,
+         "closedByName" = app.kassa_names(array[v_uid]) ->> v_uid   -- sec-4: yopish paytidagi ism
    where id = v_d.id;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
     values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'close', v_uid, v_note,
-            jsonb_build_object('expected', v_exp, 'counted', v_counted, 'pendingSum', v_pending, 'diff', v_diff, 'diffDocId', v_doc_id, 'countId', v_cnt_id));
+            jsonb_build_object('expected', v_exp, 'counted', v_counted, 'pendingSum', v_pending, 'diff', v_diff, 'diffDocId', v_doc_id, 'countId', v_cnt_id,
+                               'cashierUid', v_holder));
   perform app.kassa_flag(false);
   return jsonb_build_object('ok', true, 'dup', false, 'day', app.kassa_day_json(v_d.id), 'expected', v_exp, 'diff', v_diff,
                             'diffDoc', case when v_doc_id is not null then app.kassa_doc_json(v_doc_id) end);
@@ -688,15 +742,23 @@ end $$;
 revoke all on function public.kassa_day_close(jsonb) from public, anon;
 grant execute on function public.kassa_day_close(jsonb) to authenticated;
 
--- ---------- Smena topshirish-qabul (FD-16): kun ochiq qoladi, kassir almashadi ----------
---   p: desk, counted, denoms, pendingCount, pendingSum, toUid (qabul qiluvchi kassir), note, commission
+-- ---------- Smena topshirish-qabul (FD-16): IKKI BOSQICHLI (state-6), kun ochiq qoladi ----------
+--   1) kassa_handover(p) — topshiruvchi pulni qabul qiluvchi bilan birga sanaydi va KUTILAYOTGAN topshirish yozadi (cash_handovers):
+--      kassa egasi hali o'zgarmaydi, sanash dalolatnomasi va farq hujjati hali yozilmaydi. Kassa egasi (kun kassiri) bo'lmagan kassir
+--      (g'aznachi) yoki Direktor — kassir o'rniga (sec-2): kamida 2 kishilik komissiya bilan (shunda qabul qiluvchi o'zi ham bo'lishi
+--      mumkin — egasi yo'q kassani qabul qilish). Kutilayotgan paytda kassada hujjat yozilmaydi va bekor qilinmaydi, kun yopilmaydi
+--      (app.kassa_handover_block). Aynan shu so'rov qayta kelsa (javob yetib kelmagan) — o'sha topshirish qaytadi.
+--   2) kassa_handover_accept(id) — FAQAT qabul qiluvchi o'z hisobidan: sanash dalolatnomasi (cash_counts), farq bo'lsa — shu kun hujjati
+--      (kamomad / ortiqcha; kassa egasi — topshiruvchi, sanagan — topshirishni yozgan xodim), kassa egasi — qabul qiluvchi.
+--   3) kassa_handover_cancel(id, sabab) — topshiruvchi (kassa egasi yoki topshirishni yozgan xodim), qabul qiluvchi (rad etish) yoki Direktor.
+--   p: desk, counted, denoms, pendingSum, toUid (qabul qiluvchi kassir), note, commission [{title, name}]
 create or replace function public.kassa_handover(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
-  v_uid text := app.uid(); v_desk text; v_d public.cash_days%rowtype; v_counted numeric; v_pending numeric; v_denoms jsonb;
-  v_to text; v_exp numeric; v_diff numeric; v_doc_id text; v_cnt_id text; v_note text;
+  v_uid text := app.uid(); v_op boolean := app.kassa_operator(); v_desk text; v_d public.cash_days%rowtype; v_counted numeric; v_pending numeric;
+  v_denoms jsonb; v_to text; v_note text; v_comm jsonb; v_holder text; v_from text; v_h public.cash_handovers%rowtype; v_exp numeric;
 begin
-  if not (app.kassa_operator() or app.is_admin()) then
+  if not (v_op or app.is_admin()) then
     raise exception 'Ruxsat yo''q: smenani kassir topshiradi' using errcode = '42501';
   end if;
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Ma''lumot yuborilmagan' using errcode = '22023', hint = 'kassa:bad_input'; end if;
@@ -704,35 +766,150 @@ begin
   v_counted := app.kassa_amount0(p -> 'counted', 'Sanalgan summa');
   if v_counted is null then raise exception 'Kassadagi pulni sanab, summasini kiriting' using errcode = '22023', hint = 'kassa:count'; end if;
   v_pending := coalesce(app.kassa_amount0(p -> 'pendingSum', 'Hali o''tkazilmagan yozuvlar'), 0);
+  if v_counted < v_pending then
+    raise exception 'Sanalgan summa hali o''tkazilmagan yozuvlar summasidan kam bo''lmaydi' using errcode = '22023', hint = 'kassa:count';
+  end if;
   v_denoms := app.kassa_denoms_check(p -> 'denoms', v_counted);
   v_note := left(btrim(coalesce(p ->> 'note', '')), 500);
+  v_comm := app.kassa_commission(p -> 'commission');
   v_to := nullif(btrim(coalesce(p ->> 'toUid', '')), '');
-  if v_to is null or v_to = v_uid or not exists (
-       select 1 from public.users u where u.id = v_to and coalesce(nullif(u.status, ''), 'active') = 'active'
-          and (u.role = 'treasurer' or app.u_has(u.role, u."extraRoles", 'kassir'))) then   -- kassir (asosiy yoki qo'shimcha) / g'aznachi
-    raise exception 'Qabul qiluvchi kassir tanlanmagan yoki kassir emas' using errcode = '22023', hint = 'kassa:handover_to';
-  end if;
   perform app.kassa_lock_desk(v_desk);
   select * into v_d from public.cash_days d where d.desk = v_desk and d.status = 'open' for update;
   if not found then raise exception 'Ochiq kassa kuni yo''q' using errcode = 'P0001', hint = 'kassa:no_open_day'; end if;
+  -- kutilayotgan topshirish bor: aynan shu so'rov qayta kelgan bo'lsa — o'sha (javob yetib kelmagan); boshqasi — rad
+  v_h := app.kassa_handover_pending(v_desk);
+  if v_h.id is not null then
+    if v_h."byUid" = v_uid and v_h."toUid" is not distinct from v_to and v_h.counted = v_counted and v_h."pendingSum" = v_pending then
+      return jsonb_build_object('ok', true, 'dup', true, 'pending', true, 'handover', to_jsonb(v_h), 'expected', v_h.expected, 'diff', v_h.diff,
+                                'day', app.kassa_day_json(v_d.id));
+    end if;
+    perform app.kassa_handover_block(v_desk);
+  end if;
+  -- sec-2: kassa egasi (kun kassiri) bo'lmagan kassir yoki Direktor — kassir o'rniga: kamida 2 kishilik komissiya.
+  --   Kassa egasi hali aniqlanmagan kunda (faqat Direktor / Moliya menejeri hujjatlari) kassa operatori — o'zi topshiruvchi.
+  v_holder := v_d."cashierUid";
+  v_from := coalesce(v_holder, case when v_op then v_uid end);
+  if v_from is distinct from v_uid and jsonb_array_length(v_comm) < 2 then
+    raise exception '%', case when v_holder is not null
+                              then format('Smenani kassa egasi — %s — topshiradi: uning o''rniga topshirishda kamida 2 kishilik komissiya ko''rsatiladi',
+                                          coalesce(v_d."cashierName", app.kassa_names(array[v_holder]) ->> v_holder, v_holder))
+                              else 'Kassir o''rniga smena topshirishda kamida 2 kishilik komissiya ko''rsatiladi' end
+      using errcode = '22023', hint = 'kassa:commission';
+  end if;
+  -- qabul qiluvchi: faol kassir / g'aznachi, kassa egasining o'zi emas (o'zingizga — faqat kassir o'rniga, komissiya bilan)
+  if v_to is null or not app.kassa_op_user(v_to) or v_to is not distinct from v_from then
+    raise exception 'Qabul qiluvchi kassir tanlanmagan, kassir emas yoki kassaning hozirgi egasi' using errcode = '22023', hint = 'kassa:handover_to';
+  end if;
+  v_exp := app.kassa_day_balance(v_d.id);
   perform app.kassa_flag(true);
-  select c.o_expected, c.o_diff, c.o_doc_id, c.o_count_id into v_exp, v_diff, v_doc_id, v_cnt_id
-    from app.kassa_count_apply(v_desk, v_d.id, v_d.day, 'handover', v_counted, v_pending, v_denoms, app.kassa_commission(p -> 'commission'), v_note, v_uid, v_to) c;
-  update public.cash_days set "cashierUid" = v_to where id = v_d.id;
-  insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
-    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'handover', v_uid, v_note,
-            jsonb_build_object('toUid', v_to, 'expected', v_exp, 'counted', v_counted, 'pendingSum', v_pending, 'diff', v_diff, 'diffDocId', v_doc_id, 'countId', v_cnt_id));
+  insert into public.cash_handovers (id, desk, "dayId", day, status, "fromUid", "toUid", "byUid", expected, counted, "pendingSum", diff, denoms, commission, note,
+                                     names, "createdAt")
+    values ('ho_' || replace(gen_random_uuid()::text, '-', ''), v_desk, v_d.id, v_d.day, 'pending', v_from, v_to, v_uid, v_exp, v_counted, v_pending,
+            v_counted - v_exp - v_pending, v_denoms, v_comm, v_note, app.kassa_names(array[v_from, v_to, v_uid]), clock_timestamp())
+    returning * into v_h;
+  insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
+    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'handover', v_uid, clock_timestamp(), nullif(v_note, ''),
+            jsonb_build_object('step', 'pending', 'handoverId', v_h.id, 'fromUid', v_from, 'toUid', v_to, 'expected', v_exp, 'counted', v_counted,
+                               'pendingSum', v_pending, 'diff', v_h.diff));
   perform app.kassa_flag(false);
-  return jsonb_build_object('ok', true, 'day', app.kassa_day_json(v_d.id), 'expected', v_exp, 'diff', v_diff,
-                            'diffDoc', case when v_doc_id is not null then app.kassa_doc_json(v_doc_id) end);
+  return jsonb_build_object('ok', true, 'dup', false, 'pending', true, 'handover', to_jsonb(v_h), 'expected', v_exp, 'diff', v_h.diff,
+                            'day', app.kassa_day_json(v_d.id));
 end $$;
 revoke all on function public.kassa_handover(jsonb) from public, anon;
 grant execute on function public.kassa_handover(jsonb) to authenticated;
 
+-- Smenani qabul qilish (state-6): FAQAT qabul qiluvchi kassir o'z hisobidan. Kutilayotgan paytda kassa qoldig'i o'zgarmagan bo'lishi shart
+--   (hujjatlar to'xtatilgan; himoya — farq bo'lsa rad, topshirish bekor qilinib qayta sanaladi). Farq hujjati — kassa egasi (topshiruvchi)
+--   nomidan, sanagan — topshirishni yozgan xodim; kassa egasi — qabul qiluvchi. Qayta yuborilsa — takror (o'zgarishsiz).
+create or replace function public.kassa_handover_accept(p_id text) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_desk text; v_h public.cash_handovers%rowtype; v_d public.cash_days%rowtype; v_exp numeric; v_diff numeric;
+  v_doc_id text; v_cnt_id text;
+begin
+  if not app.kassa_operator() then
+    raise exception 'Ruxsat yo''q: smenani qabul qiluvchi kassir o''z hisobidan qabul qiladi' using errcode = '42501';
+  end if;
+  select h.desk into v_desk from public.cash_handovers h where h.id = p_id;
+  if v_desk is null then raise exception 'Smena topshirish topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  perform app.kassa_lock_desk(v_desk);
+  select * into v_h from public.cash_handovers h where h.id = p_id for update;
+  if v_h."toUid" is distinct from v_uid then
+    raise exception 'Smenani faqat qabul qiluvchi kassir — % — o''z hisobidan qabul qiladi', coalesce(v_h.names ->> v_h."toUid", v_h."toUid")
+      using errcode = '42501', hint = 'kassa:handover_receiver';
+  end if;
+  if v_h.status = 'accepted' then
+    return jsonb_build_object('ok', true, 'dup', true, 'handover', to_jsonb(v_h), 'count', (select to_jsonb(n) from public.cash_counts n where n.id = v_h."countId"),
+                              'diff', v_h.diff, 'day', app.kassa_day_json(v_h."dayId"));
+  end if;
+  if v_h.status <> 'pending' then
+    raise exception 'Smena topshirish bekor qilingan — topshiruvchi pulni qayta sanab, yangidan topshiradi' using errcode = 'P0001', hint = 'kassa:handover_state';
+  end if;
+  select * into v_d from public.cash_days d where d.id = v_h."dayId" for update;
+  if v_d.status <> 'open' then raise exception 'Kassa kuni ochiq emas' using errcode = 'P0001', hint = 'kassa:no_open_day'; end if;
+  v_exp := app.kassa_day_balance(v_d.id);
+  if v_exp <> v_h.expected then
+    raise exception 'Smena topshirilgandan keyin kassa qoldig''i o''zgargan (% → % so''m): topshirishni bekor qiling va pulni qayta sanang', trim_scale(v_h.expected), trim_scale(v_exp)
+      using errcode = 'P0001', hint = 'kassa:handover_stale';
+  end if;
+  perform app.kassa_flag(true);
+  select c.o_diff, c.o_doc_id, c.o_count_id into v_diff, v_doc_id, v_cnt_id
+    from app.kassa_count_apply(v_h.desk, v_d.id, v_d.day, 'handover', v_h.counted, v_h."pendingSum", v_h.denoms, v_h.commission, v_h.note, v_uid,
+                               v_h."fromUid", v_h."byUid", v_h."toUid", v_h.id) c;
+  update public.cash_handovers set status = 'accepted', "acceptedAt" = clock_timestamp(), "countId" = v_cnt_id, "diffDocId" = v_doc_id
+   where id = v_h.id returning * into v_h;
+  update public.cash_days set "cashierUid" = v_h."toUid", "cashierName" = app.kassa_names(array[v_h."toUid"]) ->> v_h."toUid" where id = v_d.id;
+  insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
+    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_h.desk, v_d.day, 'handover', v_uid, clock_timestamp(), nullif(v_h.note, ''),
+            jsonb_build_object('step', 'accept', 'handoverId', v_h.id, 'fromUid', v_h."fromUid", 'toUid', v_h."toUid", 'countedBy', v_h."byUid",
+                               'expected', v_exp, 'counted', v_h.counted, 'pendingSum', v_h."pendingSum", 'diff', v_diff, 'diffDocId', v_doc_id, 'countId', v_cnt_id));
+  perform app.kassa_flag(false);
+  return jsonb_build_object('ok', true, 'dup', false, 'handover', to_jsonb(v_h), 'count', (select to_jsonb(n) from public.cash_counts n where n.id = v_cnt_id),
+                            'diff', v_diff, 'diffDoc', case when v_doc_id is not null then app.kassa_doc_json(v_doc_id) end, 'day', app.kassa_day_json(v_d.id));
+end $$;
+revoke all on function public.kassa_handover_accept(text) from public, anon;
+grant execute on function public.kassa_handover_accept(text) to authenticated;
+
+-- Kutilayotgan smena topshirishni bekor qilish (state-6): topshiruvchi (kassa egasi yoki topshirishni yozgan xodim), qabul qiluvchi
+--   («Rad etish» — summa mos emas va h.k.) yoki Direktor; sabab bilan. Kassa egasi o'zgarmaydi, hujjat yozilmaydi; kassa yana ishlaydi.
+create or replace function public.kassa_handover_cancel(p_id text, p_reason text) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_uid text := app.uid(); v_desk text; v_h public.cash_handovers%rowtype; v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_step text;
+begin
+  if not (app.kassa_operator() or app.is_admin()) then
+    raise exception 'Ruxsat yo''q: smena topshirishni topshiruvchi, qabul qiluvchi yoki Direktor bekor qiladi' using errcode = '42501';
+  end if;
+  if length(v_reason) < 3 then raise exception 'Sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
+  select h.desk into v_desk from public.cash_handovers h where h.id = p_id;
+  if v_desk is null then raise exception 'Smena topshirish topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  perform app.kassa_lock_desk(v_desk);
+  select * into v_h from public.cash_handovers h where h.id = p_id for update;
+  if not (app.is_admin() or v_uid = v_h."byUid" or v_uid = v_h."toUid" or v_uid is not distinct from v_h."fromUid") then
+    raise exception 'Kutilayotgan smena topshirishni topshiruvchi, qabul qiluvchi yoki Direktor bekor qiladi' using errcode = '42501', hint = 'kassa:handover_cancel';
+  end if;
+  if v_h.status = 'cancelled' then return jsonb_build_object('ok', true, 'dup', true, 'handover', to_jsonb(v_h)); end if;
+  if v_h.status <> 'pending' then
+    raise exception 'Smena allaqachon qabul qilingan — bekor qilinmaydi' using errcode = 'P0001', hint = 'kassa:handover_state';
+  end if;
+  v_step := case when v_uid = v_h."toUid" and v_uid <> v_h."byUid" and v_uid is distinct from v_h."fromUid" then 'reject' else 'cancel' end;
+  perform app.kassa_flag(true);
+  update public.cash_handovers set status = 'cancelled', "cancelledBy" = v_uid, "cancelledAt" = clock_timestamp(), "cancelReason" = v_reason
+   where id = v_h.id returning * into v_h;
+  insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
+    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_h."dayId", v_h.desk, v_h.day, 'handover', v_uid, clock_timestamp(), v_reason,
+            jsonb_build_object('step', v_step, 'handoverId', v_h.id, 'fromUid', v_h."fromUid", 'toUid', v_h."toUid", 'counted', v_h.counted, 'diff', v_h.diff));
+  perform app.kassa_flag(false);
+  return jsonb_build_object('ok', true, 'dup', false, 'handover', to_jsonb(v_h));
+end $$;
+revoke all on function public.kassa_handover_cancel(text, text) from public, anon;
+grant execute on function public.kassa_handover_cancel(text, text) to authenticated;
+
 -- ---------- Kunni tekshirish (CT-05): 2-ro'yxat yoki Direktor; tekshiruvchi ≠ yopuvchi, ≠ shu kun hujjat o'tkazganlar ----------
 --   crit-4: kunning nazorat ma'lumotini o'zgartirganlar ham tekshirmaydi — shu kun hujjatini bekor qilgan, shu kunning Z-hisobotini
---   kiritgan yoki tuzatgan (kassa_day_z; yopilgandan keyin ham, oldin ham), kunni qayta ochgan xodim. Har holat o'z matni bilan
---   (hint 'kassa:self_verify'); kunni boshqa 2-ro'yxat xodimi yoki Direktor tekshiradi.
+--   kiritgan yoki tuzatgan (kassa_day_z; yopilgandan keyin ham, oldin ham), kunni qayta ochgan xodim, shu kungi smena topshirish-qabulida
+--   qatnashgan xodim (state-6). Har holat o'z matni bilan (hint 'kassa:self_verify'); kunni boshqa 2-ro'yxat xodimi yoki Direktor tekshiradi.
+--   Tekshirgan xodim ismi tekshirish paytidagi holatda muzlatiladi (sec-4).
 create or replace function public.kassa_day_verify(p_desk text, p_day date, p_papers boolean, p_note text default '') returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
@@ -764,7 +941,11 @@ begin
                    then 'Kunni o''zingiz qayta ochgansiz'
                  when exists (select 1 from public.cash_docs c where c."dayId" = v_d.id and c."voidedBy" = v_uid) then 'Shu kunning hujjatini o''zingiz bekor qilgansiz'
                  when exists (select 1 from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'zreport' and e."byUid" = v_uid)
-                   then 'Shu kunning Z-hisobotini o''zingiz kiritgansiz yoki tuzatgansiz' end;
+                   then 'Shu kunning Z-hisobotini o''zingiz kiritgansiz yoki tuzatgansiz'
+                 -- state-6: shu kungi smena topshirish sanashida qatnashgan (topshirgan, sanagan yoki qabul qilgan) — o'z sanashini tekshirmaydi
+                 when exists (select 1 from public.cash_handovers h where h."dayId" = v_d.id and h.status = 'accepted'
+                                and v_uid in (h."byUid", h."toUid", coalesce(h."fromUid", '')))
+                   then 'Shu kuni smena topshirish-qabulida qatnashgansiz' end;
   if v_self is not null then
     raise exception '% — kunni o''zingiz tekshira olmaysiz: uni boshqa 2-ro''yxat xodimi (Moliya menejeri / buxgalter) yoki Direktor tekshiradi', v_self
       using errcode = '42501', hint = 'kassa:self_verify';
@@ -792,7 +973,8 @@ begin
     raise exception 'Yopilgan kun ma''lumoti o''zgargan (jamlar yoki iz mos kelmadi) — Direktorga xabar bering' using errcode = 'P0001', hint = 'kassa:hash';
   end if;
   perform app.kassa_flag(true);
-  update public.cash_days set status = 'verified', "verifiedBy" = v_uid, "verifiedAt" = now(), "verifyNote" = left(btrim(coalesce(p_note, '')), 500)
+  update public.cash_days set status = 'verified', "verifiedBy" = v_uid, "verifiedAt" = now(), "verifyNote" = left(btrim(coalesce(p_note, '')), 500),
+         "verifiedByName" = app.kassa_names(array[v_uid]) ->> v_uid
    where id = v_d.id;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason)
     values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'verify', v_uid, left(btrim(coalesce(p_note, '')), 500));
@@ -871,6 +1053,7 @@ begin
      set status = 'open', receipts = null, payouts = null, closing = null, counted = null, diff = null, "diffDocId" = null, denoms = null,
          "pendingCount" = 0, "pendingSum" = 0, "docCount" = null, "firstKo1" = null, "lastKo1" = null, "firstKo2" = null, "lastKo2" = null,
          "sheetFrom" = null, "sheetTo" = null, "sheetRows" = null, hash = null, "closedBy" = null, "closedAt" = null, "closeNote" = null, commission = null,
+         "closedByName" = null,
          "reopenCount" = "reopenCount" + 1, "reopenedBy" = v_uid, "reopenedAt" = now(), "reopenReason" = v_reason
    where id = v_d.id;
   if v_d."diffDocId" is not null then
@@ -891,11 +1074,16 @@ revoke all on function public.kassa_day_reopen(text, date, text) from public, an
 grant execute on function public.kassa_day_reopen(text, date, text) to authenticated;
 
 -- ---------- Kamomad bo'yicha Direktor qarori (PR-60): xodim zimmasiga (Dt 4730) yoki hisobdan chiqarish (Dt 9430), Kt 5910 ----------
-create or replace function public.kassa_shortage_decide(p_doc_id text, p_decision text, p_note text default '') returns jsonb
+--   «Xodim zimmasiga» — FAQAT xodim kartasiga (sec-4; tomon 'employee', ism kartadan — HR yuritadi; foydalanuvchi o'zi o'zgartiradigan
+--   users.name hech qachon). p_party — Direktor tanlagan javobgar xodim kartasi ('teachers:<id>' / 'staff:<id>'). Berilmasa — standart
+--   javobgar (sec-2): faqat kassa egasi pulni o'zi sanagan bo'lsa, uning kartasi (app.kassa_shortage_default); aks holda (kassir o'rniga
+--   sanalgan, kassa egasi yo'q yoki kartaga bog'lanmagan) — rad (kassa:shortage_party): Direktor javobgarni o'zi tanlaydi.
+drop function if exists public.kassa_shortage_decide(text, text, text);   -- avvalgi ta'rif (javobgar tanlovisiz)
+create or replace function public.kassa_shortage_decide(p_doc_id text, p_decision text, p_note text default '', p_party text default null) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
-  v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_act text; v_cashier text; v_ref text; v_name text;
-  v_note text := left(btrim(coalesce(p_note, '')), 500); v_party jsonb;
+  v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_act text; v_ref text; v_snap jsonb;
+  v_note text := left(btrim(coalesce(p_note, '')), 500); v_party jsonb; v_pick text := nullif(btrim(coalesce(p_party, '')), '');
 begin
   if not app.is_admin() then raise exception 'Ruxsat yo''q: kamomad bo''yicha qarorni faqat Direktor qabul qiladi' using errcode = '42501'; end if;
   if coalesce(p_decision, '') not in ('employee', 'writeoff') then
@@ -910,22 +1098,24 @@ begin
     raise exception 'Bu hujjat — amaldagi kamomad hujjati emas' using errcode = 'P0001', hint = 'kassa:bad_status';
   end if;
   if v_doc.decision is not null then
-    if v_doc.decision = p_decision then return app.kassa_doc_json(p_doc_id) || jsonb_build_object('ok', true, 'dup', true); end if;
+    if v_doc.decision = p_decision and (p_decision <> 'employee' or v_pick is null
+         or v_pick = (select a."partyId" from public.cash_docs a where a.id = v_doc."decisionDocId")) then
+      return app.kassa_doc_json(p_doc_id) || jsonb_build_object('ok', true, 'dup', true);
+    end if;
     raise exception 'Bu kamomad bo''yicha qaror allaqachon qabul qilingan' using errcode = 'P0001', hint = 'kassa:decided';
   end if;
-  -- Xodim zimmasiga: shu kun kassiri (xodim kartasiga bog'langan bo'lsa — o'sha, aks holda ismi bilan «boshqa»).
-  v_cashier := v_doc."sourceSnapshot" ->> 'cashierUid';
+  v_snap := coalesce(v_doc."sourceSnapshot", '{}'::jsonb);
   if p_decision = 'employee' then
-    select case when coalesce(u."staffRefId", '') <> '' then (case when u."staffRefType" = 'teacher' then 'teachers' else 'staff' end) || ':' || u."staffRefId" end,
-           nullif(case when u.name ~ '@' then '' else btrim(u.name) end, '')   -- email emas (hujjat 2-ro'yxatga ham ko'rinadi); yo'q — «Kassir»
-      into v_ref, v_name from public.users u where u.id = v_cashier;
-    if v_ref is not null and (
-         (split_part(v_ref, ':', 1) = 'teachers' and exists (select 1 from public.teachers t where t.id = split_part(v_ref, ':', 2)))
-      or (split_part(v_ref, ':', 1) = 'staff' and exists (select 1 from public.staff s where s.id = split_part(v_ref, ':', 2)))) then
-      v_party := jsonb_build_object('partyType', 'employee', 'partyId', v_ref);
-    else
-      v_party := jsonb_build_object('partyType', 'other', 'partyName', coalesce(v_name, 'Kassir'));
+    v_ref := coalesce(v_pick, app.kassa_shortage_default(v_snap));
+    if v_ref is null then
+      raise exception '%', case when coalesce(v_snap ->> 'cashierUid', '') = '' then 'Kassa egasi (kun kassiri) aniqlanmagan'
+                                when (v_snap ->> 'countedBy') is distinct from (v_snap ->> 'cashierUid') then 'Pulni kassa egasining o''zi sanamagan (kassir o''rniga sanalgan)'
+                                else 'Kassir hisobi xodim kartasiga bog''lanmagan (yoki bir nechta kartaga)' end
+                           || ' — javobgar xodim kartasini tanlang'
+        using errcode = '22023', hint = 'kassa:shortage_party';
     end if;
+    -- karta kassa_doc_build ichida tekshiriladi (app.kassa_party: 'teachers:<id>' / 'staff:<id>', mavjud bo'lishi shart); ism — kartadan
+    v_party := jsonb_build_object('partyType', 'employee', 'partyId', v_ref);
   else
     v_party := jsonb_build_object('partyType', 'other', 'partyName', 'Kassa kamomadi (hisobdan chiqarildi)');
   end if;
@@ -934,6 +1124,8 @@ begin
       'desk', v_desk, 'op', 'nc_shortage_dec', 'amount', v_doc.amount, 'clientRef', 'shdec_' || p_doc_id,
       'basis', 'Direktor qarori: KO-2 № ' || v_doc.no || ', ' || to_char(v_doc."businessDay", 'DD.MM.YYYY'), 'note', v_note,
       'sourceTable', 'cash_docs', 'sourceId', p_doc_id,
+      'sourceSnapshot', jsonb_strip_nulls(jsonb_build_object('cashierUid', v_snap ->> 'cashierUid', 'countedBy', v_snap ->> 'countedBy', 'kind', v_snap ->> 'kind',
+                                                             'defaultParty', app.kassa_shortage_default(v_snap), 'picked', v_pick is not null)),
       'lines', jsonb_build_array(jsonb_build_object('debit', case when p_decision = 'employee' then '4730' else '9430' end, 'credit', '5910',
                                                     'amount', v_doc.amount, 'articleId', case when p_decision = 'employee' then 'OP-22' else 'EX-45' end))),
     'ACT', v_uid, true) b;
@@ -942,12 +1134,13 @@ begin
    where id = p_doc_id;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
     values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_doc."dayId", v_desk, v_doc."businessDay", 'decision', v_uid, v_note,
-            jsonb_build_object('docId', p_doc_id, 'decision', p_decision, 'actId', v_act, 'amount', v_doc.amount));
+            jsonb_strip_nulls(jsonb_build_object('docId', p_doc_id, 'decision', p_decision, 'actId', v_act, 'amount', v_doc.amount,
+                                                 'partyId', case when p_decision = 'employee' then v_ref end)));
   perform app.kassa_flag(false);
   return app.kassa_doc_json(p_doc_id) || jsonb_build_object('ok', true, 'dup', false, 'act', app.kassa_doc_json(v_act));
 end $$;
-revoke all on function public.kassa_shortage_decide(text, text, text) from public, anon;
-grant execute on function public.kassa_shortage_decide(text, text, text) to authenticated;
+revoke all on function public.kassa_shortage_decide(text, text, text, text) from public, anon;
+grant execute on function public.kassa_shortage_decide(text, text, text, text) to authenticated;
 
 -- ---------- O'qish: «Kassa» kun kartasi ----------
 create or replace function public.kassa_state(p_desk text default 'main') returns jsonb
@@ -956,7 +1149,7 @@ declare
   v_uid text := app.uid(); v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today();
   v_k public.cash_desks%rowtype; v_o public.fin_org%rowtype; v_open public.cash_days%rowtype; v_last public.cash_days%rowtype;
   v_block text; v_bal numeric; v_l2 boolean := app.fin_list2(); v_dir boolean := app.is_admin(); v_op boolean := app.kassa_operator();
-  v_paused boolean; v_restart jsonb; v_per jsonb; v_cards text[] := app.kassa_user_cards(v_uid);
+  v_paused boolean; v_restart jsonb; v_per jsonb; v_cards text[] := app.kassa_user_cards(v_uid); v_ho public.cash_handovers%rowtype;
   -- 2-ro'yxat xodimlarining kartalari (faqat Direktorga): ularga beriladigan pulning 2-ro'yxat bosqichini Direktor imzolaydi (sec-1)
   v_l2cards text[] := case when app.is_admin() then array(select distinct x from public.users u cross join lateral unnest(app.kassa_user_cards(u.id)) x
                                                            where u.role in ('finance_mgr', 'accountant') order by 1) else '{}'::text[] end;
@@ -969,6 +1162,7 @@ begin
   select * into v_last from public.cash_days d where d.desk = v_desk and d.status <> 'open' order by d.day desc limit 1;
   v_bal := app.kassa_desk_balance(v_desk);
   v_per := app.kassa_periods(v_desk);
+  v_ho := app.kassa_handover_pending(v_desk);   -- state-6: kutilayotgan smena topshirish (qabul qilinguncha hujjat yozilmaydi)
   -- To'xtatilgan kassa va tayyorlangan (hali boshlanmagan) qayta ishga tushirish (ishga-tushirish §9; ui-5); «stale» — sanashdan keyin
   --   kiritilgan, sanasi qayta ishga tushirish kunidan oldingi kassa hujjatisiz naqd yozuvlar (g4v-2: bo'lsa — qayta sanash kerak)
   v_paused := not v_k."isTest" and v_k."pausedAt" is not null;
@@ -979,7 +1173,7 @@ begin
                                     'countedAt', v_k."restartAt", 'stale', app.kassa_restart_stale(v_desk));
   end if;
   if v_open.id is not null then
-    v_block := case when v_open.day < v_today then 'prev_open' when v_open.day > v_today then 'clock' end;
+    v_block := case when v_ho.id is not null then 'handover' when v_open.day < v_today then 'prev_open' when v_open.day > v_today then 'clock' end;
   else
     v_block := case when v_paused then 'paused'
                     when v_restart is not null and v_today < v_k."restartDay" then 'restart'
@@ -1000,6 +1194,8 @@ begin
     'today', v_today, 'now', app.fin_now(),
     'openDay', case when v_open.id is not null then app.kassa_day_json(v_open.id) end,
     'lastDay', case when v_last.id is not null then app.kassa_day_json(v_last.id) end,
+    -- state-6: kutilayotgan smena topshirish — qabul qiluvchiga «Smenani qabul qilish», topshiruvchi va Direktorga «Bekor qilish»
+    'handover', case when v_ho.id is not null then to_jsonb(v_ho) end,
     'balance', v_bal,
     'canPost', v_block is null, 'blockReason', v_block,
     'pending', jsonb_build_object(
@@ -1112,7 +1308,9 @@ begin
       union all
       select unnest(array[d."cashierUid", d."openedBy", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.id = v_id
       union all
-      select unnest(array[n."byUid", n."fromUid", n."toUid"]) from public.cash_counts n where n."dayId" = v_id
+      select unnest(array[n."byUid", n."fromUid", n."toUid", n."cashierUid"]) from public.cash_counts n where n."dayId" = v_id
+      union all
+      select unnest(array[h."byUid", h."fromUid", h."toUid", h."cancelledBy"]) from public.cash_handovers h where h."dayId" = v_id
       union all
       select e."byUid" from public.cash_day_events e where e."dayId" = v_id) q
    where x is not null;
@@ -1126,6 +1324,8 @@ begin
     'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."postedAt", c.form, c.no)
                         from public.cash_docs c where c."dayId" = v_id and c.status in ('posted', 'void')), '[]'::jsonb),
     'counts', coalesce((select jsonb_agg(to_jsonb(n) order by n.at) from public.cash_counts n where n."dayId" = v_id), '[]'::jsonb),
+    -- smena topshirishlar (state-6): kutilayotgan, qabul qilingan, bekor qilingan / rad etilgan — kun varag'i va kamomad qarori uchun
+    'handovers', coalesce((select jsonb_agg(to_jsonb(h) order by h."createdAt", h.id) from public.cash_handovers h where h."dayId" = v_id), '[]'::jsonb),
     'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.at) from public.cash_day_events e where e."dayId" = v_id), '[]'::jsonb))
     || app.kassa_day_blocks(v_id)
     || jsonb_build_object(
@@ -1335,7 +1535,8 @@ grant execute on function public.kassa_matrix(text, text) to authenticated;
 
 -- ---------- O'qish: buxgalter uchun oylik kassa to'plami (F1.22; E1–E4 — eksport to'plamining kassa qismi) ----------
 --   Bitta javob — bitta XLSX kitob: E1 KO-3 (kassa_journal_export, FD-28), E2 statiya matritsasi (kassa_matrix), E3 kassa kunlari
---   (KO-4 jamlari, sanash va farq, tekshirilganmi, Z-hisobot), E4 hisobdorlar (oy boshi, berildi, qaytdi, hisobot, oy oxiri).
+--   (KO-4 jamlari, sanash va farq — yopishdagi va smena topshirishdagi (acc-6), tekshirilganmi, Z-hisobot), E4 hisobdorlar (oy boshi,
+--   berildi, qaytdi, hisobot, oy oxiri).
 --   Moliya menejeri / buxgalter va Direktor; 2-ro'yxatga ismsiz (xodim — tabel kodi bilan), Direktorga to'liq. Kassir — yo'q.
 create or replace function public.kassa_month_pack(p_desk text, p_month text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -1355,6 +1556,7 @@ begin
                                  'day', d.day, 'status', d.status, 'opening', d.opening,
                                  'receipts', coalesce(d.receipts, (j ->> 'receiptsLive')::numeric), 'payouts', coalesce(d.payouts, (j ->> 'payoutsLive')::numeric),
                                  'closing', coalesce(d.closing, (j ->> 'balance')::numeric), 'counted', d.counted, 'diff', d.diff,
+                                 'handoverDiff', (j ->> 'handoverDiff')::numeric,   -- acc-6: smena topshirishdagi farq (E3 da yopish farqi yonida)
                                  'docs', (j ->> 'docs')::int, 'voids', (j ->> 'voids')::int, 'reopens', d."reopenCount",
                                  'z', case when coalesce((j -> 'z' ->> 'applies')::boolean, false)
                                            then jsonb_strip_nulls(jsonb_build_object('needed', j -> 'z' -> 'needed', 'recorded', j -> 'z' -> 'recorded',
@@ -1428,6 +1630,8 @@ revoke all on function app.kassa_acc_overdue(text, date) from public, anon, auth
 -- RP-22 haftalik KPI (F1.25) davr bo'yicha: kassa kunlari (yopilgan, o'z vaqtida — o'sha kuni yopilgan, tekshirilgan / tekshirilmagan,
 --   qayta ochilgan), sanash farqlari (kunlar, kamomad, ortiqcha), bekor qilingan hujjatlar, «Boshqa xarajatlar» (EX-49) ulushi —
 --   davrdagi naqd xarajat (EX statiyalari) ichida, davr oxirida muddati o'tgan avans hisobotlari.
+--   acc-6: sanash farqi = kunni yopishdagi (cash_days.diff) va smena topshirishdagi (qabul qilingan topshirishlar sanashi, cash_counts)
+--   farqlar; har sanash alohida (kamomad va ortiqcha bir-birini «yopmaydi»); "handoverDiffs" — shundan smena topshirishdagi farqlar soni.
 create or replace function app.kassa_week_kpi(p_desk text, p_from date, p_to date) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select jsonb_build_object('from', p_from, 'to', p_to) || d.j || e.j || jsonb_build_object('voids', v.n) || jsonb_build_object('accOverdue', app.kassa_acc_overdue(p_desk, p_to))
@@ -1436,9 +1640,15 @@ language sql stable security definer set search_path = public, app, pg_temp as $
                    'onTime', count(*) filter (where x.status <> 'open' and (x."closedAt" at time zone 'Asia/Tashkent')::date <= x.day),
                    'verified', count(*) filter (where x.status = 'verified'), 'unverified', count(*) filter (where x.status = 'closed'),
                    'reopened', count(*) filter (where x."reopenCount" > 0),
-                   'diffDays', count(*) filter (where coalesce(x.diff, 0) <> 0),
-                   'shortage', coalesce(sum(-x.diff) filter (where x.diff < 0), 0), 'surplus', coalesce(sum(x.diff) filter (where x.diff > 0), 0)) as j
-            from public.cash_days x where x.desk = p_desk and x.day between p_from and p_to) d,
+                   'diffDays', count(*) filter (where coalesce(x.diff, 0) <> 0 or h.n > 0),
+                   'shortage', coalesce(sum(-x.diff) filter (where x.diff < 0), 0) + coalesce(sum(h.short), 0),
+                   'surplus', coalesce(sum(x.diff) filter (where x.diff > 0), 0) + coalesce(sum(h.over), 0),
+                   'handoverDiffs', coalesce(sum(h.n), 0)) as j
+            from public.cash_days x
+            cross join lateral (select count(*) filter (where n.diff <> 0) as n, sum(-n.diff) filter (where n.diff < 0) as short,
+                                       sum(n.diff) filter (where n.diff > 0) as over
+                                  from public.cash_counts n where n."dayId" = x.id and n.kind = 'handover') h
+           where x.desk = p_desk and x.day between p_from and p_to) d,
          (select jsonb_build_object('exTotal', coalesce(sum(l.amount), 0), 'ex49', coalesce(sum(l.amount) filter (where l."articleId" = 'EX-49'), 0),
                                     'ex49Share', case when coalesce(sum(l.amount), 0) > 0
                                                       then round(100 * coalesce(sum(l.amount) filter (where l."articleId" = 'EX-49'), 0) / sum(l.amount), 1) end) as j
@@ -1473,7 +1683,8 @@ grant execute on function public.kassa_kpi(text, int) to authenticated;
 --   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati va manfiy qoldiq, xodimlar zimmasidagi kamomad (4730),
 --   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas; kun
 --   yopilgandan keyin o'zgartirilgani — crit-4), kontragent turi o'zgarishlari va tasdiqlanmagan turlar (sec-3),
---   kassa ishga tushishidan oldingi sanali, keyin kiritilgan naqd yozuvlar (crit-1), kassani to'xtatish va qayta ishga tushirish (§9).
+--   kassa ishga tushishidan oldingi sanali, keyin kiritilgan naqd yozuvlar (crit-1), kassani to'xtatish va qayta ishga tushirish (§9),
+--   xodim kartasiga bog'lanmagan kassa hisoblari (sec-4); sanash farqlari smena topshirishdagilari bilan (acc-6).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
@@ -1527,8 +1738,13 @@ begin
     'unverifiedDays', coalesce((select jsonb_agg(d.day order by d.day) from public.cash_days d where d.desk = v_desk and d.status = 'closed'), '[]'::jsonb),
     'undecidedShortages', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'no', c.no, 'day', c."businessDay", 'amount', c.amount) order by c."businessDay")
                                       from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null), '[]'::jsonb),
-    'diffs30', coalesce((select jsonb_agg(jsonb_build_object('day', d.day, 'diff', d.diff) order by d.day)
-                           from public.cash_days d where d.desk = v_desk and d.diff <> 0 and d.day >= v_today - 30), '[]'::jsonb),
+    -- sanash farqlari (acc-6): kunni yopishdagi ("diff"; ochiq kunda 0) va smena topshirishdagi ("handover" — qabul qilingan topshirishlar
+    --   sanashidagi farqlar, vaqt tartibida) — ikkalasidan biri bo'lgan kunlar
+    'diffs30', coalesce((select jsonb_agg(jsonb_build_object('day', d.day, 'diff', coalesce(d.diff, 0), 'handover', h.diffs) order by d.day)
+                           from public.cash_days d
+                           cross join lateral (select coalesce(jsonb_agg(n.diff order by n.at, n.id), '[]'::jsonb) as diffs from public.cash_counts n
+                                                where n."dayId" = d.id and n.kind = 'handover' and n.diff <> 0) h
+                          where d.desk = v_desk and d.day >= v_today - 30 and (coalesce(d.diff, 0) <> 0 or jsonb_array_length(h.diffs) > 0)), '[]'::jsonb),
     'voids30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'void' and c."businessDay" >= v_today - 30),
     'reopens30', (select count(*) from public.cash_day_events e where e.desk = v_desk and e.kind = 'reopen' and e.at >= now() - interval '30 days'),
     'waitingApproval', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'),
@@ -1556,6 +1772,15 @@ begin
     --   Direktor tasdig'i) — buxgalter yoki Direktor turini tasdiqlaydi (fin-core.sql: fin_counterparty_confirm)
     'cpUnconfirmed', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'kind', c.kind, 'stir', c.stir) order by c.name, c.id)
                                  from public.fin_counterparties c where c.active and c.kind in ('person', 'other') and c."kindConfirmedBy" is null), '[]'::jsonb),
+    -- sec-4: xodim kartasiga bog'lanmagan kassa hisoblari (kassir — asosiy yoki qo'shimcha lavozim, g'aznachi, Moliya menejeri, buxgalter):
+    --   kassa hujjatlaridagi ism kartadan olinadi (HR); bog'lanmagan hisobda — foydalanuvchi o'zi yozgan va o'zgartira oladigan ism, kamomad
+    --   «xodim zimmasiga» qarorida esa standart javobgar yo'q. Direktor «Foydalanuvchilar»da hisobni HR yozuviga (kartaga) bog'laydi
+    'unlinkedUsers', coalesce((select jsonb_agg(jsonb_build_object('uid', u.id, 'name', app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", u.id),
+                                                                  'role', u.role, 'kassir', app.u_has(u.role, u."extraRoles", 'kassir')) order by u.role, u.id)
+                                 from public.users u
+                                where coalesce(nullif(u.status, ''), 'active') = 'active'
+                                  and (u.role in ('treasurer', 'finance_mgr', 'accountant') or app.u_has(u.role, u."extraRoles", 'kassir'))
+                                  and cardinality(app.kassa_user_cards(u.id)) = 0), '[]'::jsonb),
     'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
@@ -1670,6 +1895,8 @@ begin
              'payouts', case when v_closed then v_d.payouts else (v_j ->> 'payoutsLive')::numeric end,
              'closing', case when v_closed then v_d.closing else (v_j ->> 'balance')::numeric end,
              'counted', v_d.counted, 'diff', v_d.diff,
+             -- acc-6: smena topshirishdagi farqlar (jami va har biri) — kunni yopishdagi farq bilan yonma-yon
+             'handoverDiff', (v_j ->> 'handoverDiff')::numeric, 'handoverDiffs', v_j -> 'handoverDiffs',
              'n1', (select count(*) from public.cash_docs c where c."dayId" = v_d.id and c.status = 'posted' and c.form = 'KO1'),
              'n2', (select count(*) from public.cash_docs c where c."dayId" = v_d.id and c.status = 'posted' and c.form = 'KO2'),
              'voids', (v_j ->> 'voids')::int,
@@ -1682,6 +1909,7 @@ begin
       'unverifiedDays', (select count(*) from public.cash_days d where d.desk = 'main' and d.status = 'closed'),
       'voids', coalesce((v_j ->> 'voids')::int, 0),
       'diff', coalesce(v_d.diff, 0),
+      'handoverDiffs', coalesce(v_j -> 'handoverDiffs', '[]'::jsonb),   -- acc-6: shu kungi smena topshirishdagi farqlar
       'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = 'main' and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
       'waitingApproval', (select count(*) from public.cash_docs c where c.desk = 'main' and c.status = 'draft'),
       'approvedUnpaid', (select count(*) from public.cash_docs c where c.desk = 'main' and c.status = 'approved'),
@@ -1766,7 +1994,14 @@ begin
       select unnest(array[c."postedBy", c."voidedBy", c."dirApprovedBy"]) from public.cash_docs c
        where c.desk = v_desk and c.form = 'ACT' and c.no is not null and c."businessDay" >= app.fin_today() - 92
       union all
-      select unnest(array[d."cashierUid", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.desk = v_desk and d.day >= app.fin_today() - 62) q
+      select unnest(array[d."cashierUid", d."closedBy", d."verifiedBy", d."reopenedBy"]) from public.cash_days d where d.desk = v_desk and d.day >= app.fin_today() - 62
+      union all   -- kamomad qarori: kassa egasi, sanagan, qabul qiluvchi (sec-2); kutilayotgan va shu kunlardagi smena topshirishlar (state-6)
+      select unnest(array[c."sourceSnapshot" ->> 'cashierUid', c."sourceSnapshot" ->> 'countedBy', c."sourceSnapshot" ->> 'toUid']) from public.cash_docs c
+       where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null
+      union all
+      select unnest(array[h."fromUid", h."toUid", h."byUid", h."cancelledBy"]) from public.cash_handovers h
+       where h.desk = v_desk and (h.status = 'pending' or h."dayId" = v_day
+                                  or h."dayId" in (select c."dayId" from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null))) q
    where x is not null;
   return jsonb_build_object('ok', true, 'state', v_state,
     'docs', coalesce((select jsonb_agg(app.kassa_doc_json(c.id) order by c."postedAt" desc, c.form, c.no desc)
@@ -1775,9 +2010,17 @@ begin
                             from public.cash_docs c where c.desk = v_desk and c.status in ('draft', 'approved')), '[]'::jsonb),
     'days', coalesce((select jsonb_agg(app.kassa_day_json(d.id) order by d.day desc)
                         from (select x.id, x.day from public.cash_days x where x.desk = v_desk order by x.day desc limit 31) d), '[]'::jsonb),
+    -- qarori kutilayotgan kamomadlar (sec-2): kassa egasi va sanagan xodim alohida (ismlar — sanash paytidagi holatda), smenada — qabul qiluvchi;
+    --   standart javobgar (faqat kassa egasi o'zi sanagan bo'lsa — uning kartasi; aks holda bo'sh — Direktor tanlaydi); shu kungi smena topshirishlar
     'shortages', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'no', c.no, 'day', c."businessDay", 'amount', c.amount,
-                                                               'cashierUid', c."sourceSnapshot" ->> 'cashierUid') order by c."businessDay")
-                             from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null), '[]'::jsonb),
+                                                               'cashierUid', c."sourceSnapshot" ->> 'cashierUid', 'countedBy', c."sourceSnapshot" ->> 'countedBy',
+                                                               'toUid', c."sourceSnapshot" ->> 'toUid', 'kind', c."sourceSnapshot" ->> 'kind',
+                                                               'handoverId', c."sourceSnapshot" ->> 'handoverId', 'names', coalesce(c."sourceSnapshot" -> 'names', '{}'::jsonb),
+                                                               'defaultParty', x.def, 'defaultPartyName', app.kassa_party_label('employee', x.def),
+                                                               'handovers', coalesce((select jsonb_agg(to_jsonb(h) order by h."createdAt", h.id) from public.cash_handovers h
+                                                                                       where h."dayId" = c."dayId"), '[]'::jsonb)) order by c."businessDay")
+                             from public.cash_docs c cross join lateral (select app.kassa_shortage_default(c."sourceSnapshot") as def) x
+                            where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null), '[]'::jsonb),
     -- naqdsiz dalolatnomalar (boshlang'ich qoldiq, kamomad qarori, o'zaro hisob): kassa kitobiga kirmaydi — oxirgi 92 kun, eng yangisi 30 ta
     'acts', coalesce((select jsonb_agg(app.kassa_doc_json(a.id) order by a."postedAt" desc, a.no desc)
                         from (select c.id, c."postedAt", c.no from public.cash_docs c
@@ -1798,8 +2041,10 @@ begin
   if not found then raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
   return jsonb_build_object('ok', true, 'doc', app.kassa_doc_json(v_c.id),
     'isTest', coalesce((select k."isTest" from public.cash_desks k where k.id = v_c.desk), false),
+    -- o'tkazgan xodim ismi — o'tkazish paytidagisi (sec-4: "postedByName"; keyingi o'zgarish chop etilgan hujjatga ta'sir qilmaydi)
     'names', app.kassa_names(array[v_c."requestedBy", v_c."approvedBy", v_c."dirApprovedBy", v_c."rejectedBy", v_c."postedBy",
-                                   v_c."voidedBy", v_c."createdBy", v_c."decidedBy"]));
+                                   v_c."voidedBy", v_c."createdBy", v_c."decidedBy"])
+             || case when v_c."postedBy" is not null and v_c."postedByName" is not null then jsonb_build_object(v_c."postedBy", v_c."postedByName") else '{}'::jsonb end);
 end $$;
 revoke all on function public.kassa_doc_get(text) from public, anon;
 grant execute on function public.kassa_doc_get(text) to authenticated;

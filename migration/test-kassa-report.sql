@@ -812,11 +812,12 @@ select zz.chk('SD6 bekor qilingan to''lov: kassir haqiqiy Z bilan yopdi — naqd
   '^void:closed \| false:70000 \| 2027-01-14 \| 2027-01-04:verified:1:Sinov Kassir$');
 select zz.clock('2027-01-15 09:00+05');
 select zz.put('SD7', zz.rpc('U_FM', 'kassa_day_z', format('{"desk":"main","day":"2027-01-14","z":{"no":"Z-0114","cash":%s,"card":0}}', zz.get('SD6x'))));
+-- (ism — sec-4: bog'langan xodim kartasidan; Moliya menejeri bu bo'limda Sinov Zavxoz kartasiga bog'langan, o'zi yozgan ism emas)
 select zz.chk('SD7 Moliya menejeri Z ni yopilgandan keyin tizim summasiga tuzatdi: farq yo''qoldi, lekin RP-06 «Z yopilgandan keyin o''zgartirilgan» qatorida (kim, necha marta); aynan o''sha — takror',
   (select (z ->> 'ok') from (select app.kassa_z_state('cd_main_2027-01-14') z) q) || ' | ' || jsonb_array_length(zz.checks('main') -> 'zreport')
   || ' | ' || (select string_agg((x ->> 'day') || ':' || (x ->> 'status') || ':' || (x ->> 'n') || ':' || (x ->> 'byName'), ',') from jsonb_array_elements(zz.checks('main') -> 'zChanged30') x where x ->> 'day' = '2027-01-14')
   || ' | ' || (zz.f(zz.rpc('U_FM', 'kassa_day_z', format('{"desk":"main","day":"2027-01-14","z":{"no":"Z-0114","cash":%s,"card":0}}', zz.get('SD6x'))), 'dup')),
-  '^true \| 0 \| 2027-01-14:closed:1:Sinov Moliyachi \| true$');
+  '^true \| 0 \| 2027-01-14:closed:1:Sinov Zavxoz \| true$');
 select zz.chk('SD8 ko''rik ssenariysi: shu kun hujjatini bekor qilgan va Z ni tuzatgan Moliya menejeri kunni tekshira olmaydi',
   zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-14', true, '')::text$q$),
   '^ERR 42501 \[kassa:self_verify\] Shu kunning hujjatini o''zingiz bekor qilgansiz — kunni o''zingiz tekshira olmaysiz');
@@ -834,6 +835,44 @@ select zz.chk('SD10 mustaqil tekshiruvchi (buxgalter): Z farqi — izohsiz rad, 
 select zz.chk('SD11 kun yopilishidagi Z (kassir) belgisiz; yopilgandan keyingi tuzatishlar — «afterClose» belgili',
   (select string_agg(e."byUid" || ':' || coalesce(e.data ->> 'afterClose', '-'), ',' order by e.at, e.id) from public.cash_day_events e where e."dayId" = 'cd_main_2027-01-14' and e.kind = 'zreport'),
   '^U_KAS:-,U_FM:true,U_DIR:true$');
+
+-- ---------- (HD) smena topshirishdagi farq — kun farqi ko'rsatkichlarida (acc-6); topshirish ishtirokchisi kunni tekshirmaydi (state-6) ----------
+--   15.01: U_KAS kunni ochadi; smena U_KAS → U_FMK (qo'shimcha «kassir» lavozimli Moliya menejeri; ortiqcha 5 000) → U_KAS2 (farqsiz);
+--   U_KAS2 kunni 2 000 kamomad bilan yopadi. Ko'rsatkichlar shu kungacha bo'lgani bilan solishtiriladi.
+set local session_replication_role = replica;
+insert into public.users (id, email, name, role, status, "extraRoles") values
+  ('U_KAS2','k2@x','Sinov Kassir Ikki','kassir','active','[]'), ('U_FMK','fk@x','Sinov Moliyachi Kassir','finance_mgr','active','["kassir"]')
+on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email, name = excluded.name, "extraRoles" = excluded."extraRoles";
+set local session_replication_role = origin;
+create or replace function zz.hbal() returns numeric language sql as $$ select app.kassa_day_balance('cd_main_2027-01-15') $$;
+select zz.put('HD0', (select (k ->> 'diffDays') || ':' || trim_scale((k ->> 'shortage')::numeric) || ':' || trim_scale((k ->> 'surplus')::numeric) from (select app.kassa_week_kpi('main', '2027-01-11', '2027-01-17') k) q));
+select zz.put('HD1', zz.tui('U_KAS', 'man_hd_0001', 'T-1', 30000, 'Sinov Ota', '511'));
+select zz.put('HD1h', zz.rpc('U_KAS', 'kassa_handover', format('{"counted":%s,"toUid":"U_FMK"}', zz.hbal() + 5000)));
+select zz.put('HD1a', zz.as('U_FMK', format('select public.kassa_handover_accept(%L)::text', zz.get('HD1h')::jsonb #>> '{handover,id}')));
+select zz.put('HD2h', zz.rpc('U_FMK', 'kassa_handover', format('{"counted":%s,"toUid":"U_KAS2"}', zz.hbal())));
+select zz.put('HD2a', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.get('HD2h')::jsonb #>> '{handover,id}')));
+select zz.put('HD3', zz.rpc('U_KAS2', 'kassa_day_close', format('{"desk":"main","day":"2027-01-15","counted":%s}', zz.hbal() - 2000)));
+select zz.chk('HD1 ikki smena topshirish qabul qilindi (+5 000 va 0), kun 2 000 kamomad bilan yopildi: kun javobida smena farqi; kun varag''ida sanashlar',
+  zz.f(zz.get('HD1a'), 'diff') || ':' || zz.f(zz.get('HD2a'), 'diff') || ':' || zz.f(zz.get('HD3'), 'diff')
+  || ' | ' || zz.f(zz.get('HD3'), 'day', 'handoverDiff') || ':' || zz.f(zz.get('HD3'), 'day', 'handoverDiffs')
+  || ' | ' || (select string_agg((c ->> 'kind') || '=' || (c ->> 'diff'), ',' order by c ->> 'at') from jsonb_array_elements(zz.as('U_ACC', $q$select public.kassa_day_book('main', '2027-01-15')::text$q$)::jsonb -> 'counts') c),
+  '^5000:0:-2000 \| 5000:\[5000\] \| handover=5000,handover=0,close=-2000$');
+select zz.chk('HD2 acc-6: RP-22 haftalik KPI — smena topshirishdagi farq ham: farqli kun +1, kamomad +2 000, ortiqcha +5 000; smena farqlari soni',
+  zz.get('HD0') || ' > ' || (select (k ->> 'diffDays') || ':' || trim_scale((k ->> 'shortage')::numeric) || ':' || trim_scale((k ->> 'surplus')::numeric) || ':' || (k ->> 'handoverDiffs')
+                             from (select app.kassa_week_kpi('main', '2027-01-11', '2027-01-17') k) q),
+  '^0:0:0 > 1:2000:5000:1$');
+select zz.chk('HD3 acc-6: RP-06 sanash farqlari — 15.01: yopishda −2 000, smena topshirishda +5 000',
+  (select (x ->> 'diff') || '/' || (x -> 'handover')::text from jsonb_array_elements(zz.checks('main') -> 'diffs30') x where x ->> 'day' = '2027-01-15'), '^-2000/\[5000\]$');
+select zz.chk('HD4 acc-6: Telegram kassa bloki — kun qatorida va nazorat qatorida smena farqi yopish farqi yonida',
+  (select (d -> 'day' ->> 'diff') || ':' || (d -> 'day' ->> 'handoverDiff') || ':' || (d -> 'day' -> 'handoverDiffs')::text || ' | ' || (d -> 'control' ->> 'diff') || ':' || (d -> 'control' -> 'handoverDiffs')::text
+     from (select zz.daily('2027-01-15') -> 'kassa' as d) q),
+  '^-2000:5000:\[5000\] \| -2000:\[5000\]$');
+select zz.chk('HD5 acc-6: oylik to''plam E3 — kun qatorida smena farqi (yopish farqi yonida)',
+  (select (d ->> 'diff') || ':' || (d ->> 'handoverDiff') from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)::jsonb -> 'days') d where d ->> 'day' = '2027-01-15'),
+  '^-2000:5000$');
+select zz.chk('HD6 state-6: shu kungi smena topshirish-qabulida qatnashgan Moliya menejeri (qo''shimcha «kassir») kunni tekshira olmaydi',
+  zz.as('U_FMK', $q$select public.kassa_day_verify('main', '2027-01-15', true, 'Tekshirildi')::text$q$),
+  '^ERR 42501 \[kassa:self_verify\] Shu kuni smena topshirish-qabulida qatnashgansiz — kunni o''zingiz tekshira olmaysiz');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

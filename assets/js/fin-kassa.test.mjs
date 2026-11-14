@@ -3,7 +3,8 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc } from './fin-kassa.js';
+import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
+  deskHolder, needCommission, handoverRole, diffText } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -13,11 +14,11 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   zChanged30: [], cpKinds30: [], cpUnconfirmed: [] });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 27 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 28 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 27);
+  assert.equal(rows.length, 28);   // +1: xodim kartasiga bog'lanmagan kassa hisoblari (sec-4)
   assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'zChanged', 'orgCash', 'cpKinds', 'other',
-    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'handover', 'preLive', 'restart']);
+    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'unlinked', 'handover', 'preLive', 'restart']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
   assert.equal(r.gaps.value, 'uzluksiz'); assert.equal(r.reconcile.value, 'hammasi mos'); assert.equal(r.limit.value, 'limit 3 000 000 so‘m — oshmagan');
@@ -74,9 +75,9 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
   assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'zChanged', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 22);
+  assert.equal(controlRows(c).length, 23);   // (sinov kassasida ham bog'lanmagan hisoblar qatori — hisoblar kassaga bog'liq emas)
   const empty = controlRows(null);
-  assert.ok(empty.length === 27 && empty.filter(x => x.level === 'ok').length === 25, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 28 && empty.filter(x => x.level === 'ok').length === 26, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
@@ -289,4 +290,49 @@ test('vazifalar ajratilishi (sec-1, sec-5): tasdiqlash va pul berish tugmalari �
   assert.equal(canPayDoc(Object.assign({}, a, { status: 'draft' }), kas), false);
   assert.equal(canPayDoc(Object.assign({}, a, { sourceTable: 'salary_payments', op: 'out_salary' }), kas), false, 'boshqa bo‘limdan yozilgan');
   assert.equal(canPayDoc(Object.assign({}, a, { sourceTable: 'refunds', op: 'out_refund' }), kas), true, 'tasdiqlangan qaytarish');
+});
+
+// ---------------------------------------------------------------- ko'rik 6-guruhi (sec-2, state-6, sec-4, acc-6)
+test('kassa egasi va komissiya (sec-2): egasi bo‘lmagan kassir, Direktor, Moliya menejeri — kassir o‘rniga', () => {
+  const kas = { uid: 'u_kas', operator: true }, kas2 = { uid: 'u_kas2', operator: true }, dir = { uid: 'u_dir', director: true }, fm = { uid: 'u_fm', list2: true };
+  assert.deepEqual([deskHolder({ cashierUid: 'u_kas' }, kas2), deskHolder({ cashierUid: null }, kas), deskHolder({ cashierUid: null }, dir), deskHolder(null, kas)],
+    ['u_kas', 'u_kas', null, 'u_kas'], 'egasi aniqlanmagan kunda kassa operatori — o‘zi');
+  assert.deepEqual([needCommission({ cashierUid: 'u_kas' }, kas), needCommission({ cashierUid: 'u_kas' }, kas2), needCommission({ cashierUid: null }, kas2),
+    needCommission({ cashierUid: 'u_kas' }, dir), needCommission({ cashierUid: null }, fm), needCommission({}, null)],
+    [false, true, false, true, true, true]);
+});
+
+test('kutilayotgan smena topshirish (state-6): qabul qiluvchi qabul qiladi / rad etadi, topshiruvchi va Direktor bekor qiladi', () => {
+  const h = { id: 'ho_1', status: 'pending', fromUid: 'u_kas', toUid: 'u_kas2', byUid: 'u_kas' };
+  assert.deepEqual(handoverRole(h, { uid: 'u_kas2', operator: true }), { receiver: true, giver: false, canAccept: true, canCancel: true });
+  assert.deepEqual(handoverRole(h, { uid: 'u_kas', operator: true }), { receiver: false, giver: true, canAccept: false, canCancel: true });
+  assert.deepEqual(handoverRole(h, { uid: 'u_dir', director: true }), { receiver: false, giver: false, canAccept: false, canCancel: true });
+  assert.deepEqual(handoverRole(h, { uid: 'u_tre', operator: true }), { receiver: false, giver: false, canAccept: false, canCancel: false }, 'ishtirok etmagan kassir — hech narsa');
+  // kassir o'rniga (komissiya bilan) yozilgan: yozgan xodim ham bekor qila oladi
+  assert.equal(handoverRole(Object.assign({}, h, { byUid: 'u_tre' }), { uid: 'u_tre', operator: true }).canCancel, true);
+  assert.deepEqual(handoverRole(Object.assign({}, h, { status: 'accepted' }), { uid: 'u_kas2', operator: true }), { receiver: false, canAccept: false, canCancel: false });
+  assert.deepEqual(handoverRole(null, { uid: 'u_kas2' }), { receiver: false, canAccept: false, canCancel: false });
+});
+
+test('kun farqi (acc-6): smena topshirishdagi farqlar yopish farqi yonida; nazorat ro‘yxati va KPI', () => {
+  assert.equal(diffText(-5000, []), '−5 000 so‘m', 'smena farqi yo‘q — avvalgidek');
+  assert.equal(diffText(1200), '+1 200 so‘m');
+  assert.equal(diffText(-2000, [5000, 0]), 'yopishda −2 000 so‘m, smenada +5 000 so‘m');
+  assert.equal(diffText(0, [-7000]), 'smenada −7 000 so‘m', 'ochiq yoki farqsiz yopilgan kunda — faqat smena farqi');
+  const c = clean();
+  c.diffs30 = [{ day: '2027-01-04', diff: -5000, handover: [] }, { day: '2027-01-06', diff: -2000, handover: [5000] }, { day: '2027-01-07', diff: 0, handover: [-7000] }];
+  const r = by(controlRows(c));
+  assert.deepEqual([r.diffs.level, r.diffs.value], ['warn', '04.01.2027: −5 000 so‘m; 06.01.2027: yopishda −2 000 so‘m, smenada +5 000 so‘m; 07.01.2027: smenada −7 000 so‘m']);
+  assert.match(r.diffs.hint, /smena topshirish/);
+  const k = Object.fromEntries(kpiRows({ days: 2, closed: 2, onTime: 2, diffDays: 2, shortage: 2000, surplus: 5000, handoverDiffs: 1 }).map(x => [x.key, x]));
+  assert.equal(k.diffs.value, '2 ta · kamomad 2 000 so‘m · ortiqcha 5 000 so‘m (smena topshirishda: 1 ta)');
+});
+
+test('nazorat ro‘yxati (sec-4): xodim kartasiga bog‘lanmagan kassa hisoblari — «diqqat», ism va lavozim', () => {
+  const c = clean();
+  c.unlinkedUsers = [{ uid: 'U_HRK', name: 'Sinov HR', role: 'hr', kassir: true }, { uid: 'U_TRE', name: 'U_TRE', role: 'treasurer', kassir: false }];
+  const r = by(controlRows(c));
+  assert.deepEqual([r.unlinked.level, r.unlinked.value], ['warn', 'Sinov HR (hr + kassir), U_TRE (g‘aznachi)']);
+  assert.match(r.unlinked.hint, /Foydalanuvchilar/);
+  assert.equal(by(controlRows(clean())).unlinked.value, 'yo‘q');
 });

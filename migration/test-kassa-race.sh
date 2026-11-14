@@ -10,6 +10,9 @@
 #   (7) bitta o'qituvchi va oy: maosh qaytimi (OP-09), naqd maosh va ularni bekor qilish parallel — qulf tartibi bir xil
 #       (S → P → L4): deadlock yo'q, berilgan maosh 0 … tasdiqlangan summa oralig'ida, moslik toza;
 #   (5) kirimlar davom etayotganda kun yopiladi — yopilgandan keyingi kirimlar rad, kun jami = hujjatlar, tekshiruv o'tadi;
+#   (9) ikki bosqichli smena topshirish (state-6): qabul kutilayotganda parallel kirimlar — qabulgacha rad (kassa:handover_pending),
+#       keyin o'tadi, qabul paytidagi qoldiq topshirish paytidagi bilan bir xil; topshiruvchining kunni yopishi va qabul parallel — yopish
+#       o'tmaydi; bekor qilish va qabul parallel — faqat bittasi; deadlock yo'q;
 #   (8) sozlama qatori (fin_org) o'zgarayotganda pul yozuvi (state-7): davr qulfi va orqa sana bilan to'lov; kassani to'xtatish va
 #       qayta ishga tushirish (ishga tushadigan kun) va naqd o'quv to'lovi — yozuvchi o'zgarish tugashini kutib, yangi qiymat bilan
 #       tekshiradi; qayta sanash sozlama qatorini kassa qulfidan oldin kutadi (qulf tartibi); davr surati qulf bilan undan oldin
@@ -31,7 +34,8 @@ chk(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "PASS $1"; else fail=$((f
 q >/dev/null <<'SQL'
 set session_replication_role = replica;
 insert into public.users (id, email, role, status, "extraRoles") values
-  ('R_KAS','rk@x','kassir','active','[]'), ('R_FM','rf@x','finance_mgr','active','[]'), ('R_DIR','rd@x','director','active','[]')
+  ('R_KAS','rk@x','kassir','active','[]'), ('R_FM','rf@x','finance_mgr','active','[]'), ('R_DIR','rd@x','director','active','[]'),
+  ('R_KAS2','rk2@x','kassir','active','[]')
 on conflict (id) do nothing;
 insert into public.fin_counterparties (id, kind, name) values ('cp_rbank','bank','Poyga Bank'), ('cp_rsup','supplier','Poyga Yetkazuvchi')
 on conflict (id) do nothing;
@@ -298,6 +302,51 @@ SNAP=$(tail -1 "$TMP/8e.A")
 chk "8e davr surati (qulf bilan) shu payt yozilayotgan orqa sanali to'lovni kutdi: to'lov qo'llangan, davr yopilgan va to'lov suratda (o'quvchi avansi = hozirgi)" \
     "$(grep -c '^A|true' "$TMP/8e.B")/$(q -c "select (\"lockedThrough\" = '$TODAY')::text from public.fin_org where id = 'main'")/$(q -c "select status from public.payments where id = 'man_race8_0004'")/$(q -c "select (coalesce((select (s ->> 'credit')::numeric from public.fin_snapshots f, jsonb_array_elements(f.payload -> 'students') s where f.id = '$SNAP' and s ->> 'studentId' = 'R-1'), -1) = (select credit from public.student_credit where id = 'R-1'))::text")" \
     "1/true/applied/true"
+# ---------- (9) ikki bosqichli smena topshirish (state-6) va kassa yozuvlari / kunni yopish / bekor qilish parallel ----------
+#   DAY2 ochiq kun, kassa egasi — R_KAS (8d). Har bo'limda avval topshirish yoziladi (qabul kutiladi), keyin seanslar bir vaqtda.
+BAL(){ q -c "select trim_scale(app.kassa_day_balance((select id from public.cash_days where desk = 'main' and status = 'open')))"; }
+HID(){ sed -n 's/.*"id": "\(ho_[0-9a-f]*\)".*/\1/p' | head -1; }
+# (9a) 8 seans × 15 kirim va 0,3 s keyin qabul: qabulgacha rad, keyin o'tadi; qabul paytida qoldiq o'zgarmagan (dalolatnoma farqi 0)
+H9=$(call_as R_KAS "public.kassa_handover('{\"counted\":$(BAL),\"toUid\":\"R_KAS2\"}'::jsonb)" | HID)
+for w in $(seq 1 8); do
+  { as_sess R_KAS
+    for i in $(seq 1 15); do
+      echo "select 'r=' || coalesce(public.kassa_receipt('{\"op\":\"in_bank\",\"amount\":100,\"partyType\":\"bank\",\"partyId\":\"cp_rbank\",\"basis\":\"Poyga cheki\",\"clientRef\":\"$(printf 'race-h%d-%04d' "$w" "$i")\"}'::jsonb) ->> 'no', '?');"
+      echo "select pg_sleep(0.03);"
+    done
+  } > "$TMP/h$w.sql"
+done
+for w in $(seq 1 8); do ( $PSQL_CMD -X -q -At -d "$DB" < "$TMP/h$w.sql" > "$TMP/h$w.out" 2>&1 ) & done
+sleep 0.3
+call_raw R_KAS2 "public.kassa_handover_accept('$H9') #>> '{handover,status}'" > "$TMP/h9.acc"
+wait
+ok9=$(cat "$TMP"/h*.out | grep -c '^r=[0-9]'); rej9=$(cat "$TMP"/h*.out | grep -c 'kassa:handover_pending'); oth9=$(cat "$TMP"/h*.out | grep -ci 'deadlock')
+chk "9a qabul kutilayotganda parallel kirimlar: har biri yo o'tdi (qabuldan keyin), yo «smena topshirilmoqda» deb rad; qabulgacha birortasi o'tmadi (qabul paytidagi qoldiq = topshirish paytidagi, farq 0); kassa egasi — qabul qiluvchi; deadlock yo'q" \
+    "$((ok9 + rej9))/$oth9/$(tail -1 "$TMP/h9.acc")/$(q -c "select (n.expected = h.expected)::text || ':' || trim_scale(n.diff) from public.cash_handovers h join public.cash_counts n on n.id = h.\"countId\" where h.id = '$H9'")/$(q -c "select \"cashierUid\" from public.cash_days where desk = 'main' and status = 'open'")/$(q -c "select (count(*) = $ok9)::text from public.cash_docs where \"clientRef\" like 'race-h%' and status = 'posted'")" \
+    "120/0/accepted/true:0/R_KAS2/true"
+# (9b) topshiruvchi (kassa egasi R_KAS2) kunni komissiyasiz yopmoqchi va qabul qiluvchi qabul qiladi — bir vaqtda: yopish o'tmaydi
+#   (avval — «smena topshirilmoqda», keyin — endi kassa egasi emas, komissiya kerak); qabul o'tadi, kun ochiq qoladi
+H9B=$(call_as R_KAS2 "public.kassa_handover('{\"counted\":$(BAL),\"toUid\":\"R_KAS\"}'::jsonb)" | HID)
+( call_raw R_KAS2 "public.kassa_day_close('{\"day\":\"$DAY2\",\"counted\":$(BAL)}'::jsonb) ->> 'ok'" > "$TMP/h9b.close" ) &
+( call_raw R_KAS "public.kassa_handover_accept('$H9B') #>> '{handover,status}'" > "$TMP/h9b.acc" ) &
+wait
+chk "9b topshiruvchining kunni yopishi va qabul parallel: yopish rad (kutilmoqda yoki komissiya), qabul o'tdi, kun ochiq, kassa egasi — R_KAS" \
+    "$(grep -cE 'kassa:(handover_pending|commission)' "$TMP/h9b.close")/$(tail -1 "$TMP/h9b.acc")/$(q -c "select status || ':' || \"cashierUid\" from public.cash_days where desk = 'main' and day = '$DAY2'")" \
+    "1/accepted/open:R_KAS"
+# (9c) bekor qilish va qabul parallel — faqat bittasi; natija holatga mos (qabul — dalolatnoma va yangi kassa egasi; bekor — hech biri)
+H9C=$(call_as R_KAS "public.kassa_handover('{\"counted\":$(BAL),\"toUid\":\"R_KAS2\"}'::jsonb)" | HID)
+( call_raw R_KAS "public.kassa_handover_cancel('$H9C', 'Poyga: bekor') #>> '{handover,status}'" > "$TMP/h9c.can" ) &
+( call_raw R_KAS2 "public.kassa_handover_accept('$H9C') #>> '{handover,status}'" > "$TMP/h9c.acc" ) &
+wait
+st9c=$(q -c "select status from public.cash_handovers where id = '$H9C'")
+if [ "$st9c" = accepted ]; then win9=$(tail -1 "$TMP/h9c.acc"); lose9=$(grep -c 'kassa:handover_state' "$TMP/h9c.can"); ho9=R_KAS2; nc9=1
+else win9=$(tail -1 "$TMP/h9c.can"); lose9=$(grep -c 'kassa:handover_state' "$TMP/h9c.acc"); ho9=R_KAS; nc9=0; fi
+chk "9c bekor qilish va qabul parallel: faqat bittasi o'tdi, ikkinchisi «holati o'zgargan» deb rad; dalolatnoma va kassa egasi holatga mos" \
+    "$win9/$lose9/$(q -c "select count(*) from public.cash_counts where \"handoverId\" = '$H9C'")/$(q -c "select \"cashierUid\" from public.cash_days where desk = 'main' and status = 'open'")" \
+    "$st9c/1/$nc9/$ho9"
+chk "9d qayta: kutilayotgan smena topshirish qolmadi, deadlock yo'q, raqamlash uzluksiz" \
+    "$(q -c "select count(*) from public.cash_handovers where status = 'pending'")/$(cat "$TMP"/h9b.* "$TMP"/h9c.* | grep -ci 'deadlock')/$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" \
+    "0/0/[]"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]
