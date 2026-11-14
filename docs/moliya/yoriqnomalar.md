@@ -14,6 +14,10 @@ turning o‘z raqami bor; raqamni tizim beradi, har yili 1 dan boshlanadi, bo‘
 6. Javob kelmay qolgan oynada **ma’lumotni o‘zgartirib qayta yubormang**: shu oynadan avval boshqa ma’lumot (summa, tomon, asos,
    fiskal chek…) bilan yozilgan bo‘lsa, tizim «Bu oynadan avval boshqa ma’lumot bilan … yozilgan» deb rad etadi va ro‘yxatni
    yangilaydi — yozilgan hujjatni tekshiring; xato bo‘lsa uni bekor qilib, yangi oynada to‘g‘risini kiriting.
+7. **Summa yozish** («Kassa» oynalari, «💵 To‘lov», «Buxgalteriya» xarajat va avans, «Maosh berish»): summa butun so‘mda, mingliklar
+   orasida bo‘sh joy mumkin («2 900 000»); tiyin yozilmaydi (naqd pulda tiyin yo‘q; oxiridagi «,00» — mumkin). Nuqta yoki vergul
+   mingliklar ajratkichi sifatida («2.900.000», «2,900,000») qabul qilinmaydi — tizim xabar beradi (raqam jim o‘zgarib ketmaydi).
+   Rad etilgan amalda tizim sababini o‘zbekcha aytadi.
 
 ---
 
@@ -36,7 +40,8 @@ o‘zgartirish, «naqd» kanal bilan balansga qo‘llash) tizim qabul qilmaydi �
 qoplash (xodim)», «Forma va tovarlar», «Boshqa kirim», «Qarz / ta’sischi mablag‘i» — bunisi Direktor tasdig‘i bilan), **kimdan**
 (ro‘yxatdan tanlanadi), summa, asos (hujjat nomi, raqami, sanasi) → «Qabul qilish» → chop etish. «Boshqa kirim»da pul **o‘quvchi
 (ota-ona) yoki boshqa shaxsdan** bo‘lsa — onlayn kassada fiskal chek uriladi va **«Fiskal chek №»** kiritiladi (majburiy; apparat
-ishlamasa — Direktor istisnosi, jurnalda qoladi); kontragent yoki xodimdan — talab qilinmaydi.
+ishlamasa — Direktor istisnosi, jurnalda qoladi); kontragent yoki xodimdan — talab qilinmaydi. Summa T1 chegarasidan katta bo‘lsa,
+tizim «… so‘m qabul qilinsinmi?» deb so‘raydi — raqamni qayta tekshiring.
 
 **Xodimdan qaytgan pul** — xodim tanlangach oynada uning qoldig‘i ko‘rinadi; summa undan oshmaydi (tizim ham qabul qilmaydi):
 - «Hisobdordan qaytim» — hisobdordagi hisobot qilinmagan avans qoldig‘idan;
@@ -55,6 +60,9 @@ ishlamasa — Direktor istisnosi, jurnalda qoladi); kontragent yoki xodimdan —
    Ro‘yxatda yo‘q tashkilotga («Boshqa» tomon) **asos hujjati bilan** xarajat ham yuridik shaxsga to‘lov hisoblanadi (xuddi shu
    ogohlantirish va Direktor tasdig‘i) — imkon bo‘lsa kontragentni qo‘shing; bozordan asos hujjatisiz xarid — «Asos hujjati yo‘q»
    belgisi bilan (ogohlantirishsiz).
+   **Ishdan ketgan xodimga** (ro‘yxatda «(ketgan)») yangi ish haqi avansi va hisobdorga avans berilmaydi — tizim rad etadi; yakuniy
+   hisob-kitob (naqd maosh, «Xodim qaytargan pul», «Hisobdordan qaytim», avans hisoboti) — mumkin. Xodim ketgunicha tasdiqlangan,
+   lekin pul berilmagan avans so‘rovi ham berilmaydi — uni bekor qiling.
    Yangi kontragent («+ yangi») turini to‘g‘ri tanlang: korxona (MChJ, AJ) — «Yetkazib beruvchi» yoki «Tashkilot». «Jismoniy shaxs» va
    «Boshqa» turini buxgalter (yoki Direktor) tasdiqlaydi — ungacha kontragent yuridik shaxs hisoblanadi (ro‘yxatda «turi tasdiqlanmagan»).
 2. Moliya menejeri yoki buxgalter tasdiqlaydi (katta summa, rahbarga berish va qarz — Direktor ham).
@@ -89,7 +97,9 @@ yoki naqd maosh orderidan kassaga qaytim yozilgan bo‘lsa — avval o‘sha qay
    Topshirish-qabul dalolatnomasi shundan keyin chop etiladi (ikkala ism bilan) — ikkalasi imzolaydi.
 
 Summa mos kelmasa qabul qiluvchi «Rad etish» bosadi (sababi bilan) — topshiruvchi qayta sanab, yangidan topshiradi; topshiruvchi
-yoki Direktor «Bekor qilish» bilan qaytarib oladi. Kassa egasi (kun kartasidagi kassir) yo‘q bo‘lsa, uning o‘rniga boshqa kassir
+yoki Direktor «Bekor qilish» bilan qaytarib oladi. Topshirish 2 soatdan ortiq yoki ertasi kungacha qabul qilinmay qolsa — nazorat
+ro‘yxatida «Qabul qilinmagan smena topshirish» (sariq) va Direktorning Telegram nazorat qatorida ko‘rinadi; boshqa kuni yozilgan
+topshirish kartasida sanasi ham chiqadi. Dalolatnomada sanash va qabul qilish vaqti alohida yoziladi. Kassa egasi (kun kartasidagi kassir) yo‘q bo‘lsa, uning o‘rniga boshqa kassir
 yoki Direktor topshiradi — kamida 2 kishilik komissiya bilan.
 
 **Kechqurun.** Avval onlayn kassada (NKM) smenani yopib **Z-hisobot** chiqaring. «Kunni yopish»: kassadagi pulni sanang va
@@ -113,6 +123,9 @@ ko‘ring. «Kassa qoldig‘i oyna ochilgandan keyin o‘zgargan» xabari chiqsa
 «Қ» blankalari»** maydonlariga yozing (soni, summasi, raqamlari): bu pul kassada bor, hisobda hali yo‘q. Kun yopilgach har birini
 «💵 To‘lov» bilan kiriting (izohda — «Қ» raqami va pul olingan sana).
 
+**Chop etish.** Orderning va KO-4 varag‘ining asl nusxasini kassir (yoki Direktor) chop etadi; buxgalter yoki moliya menejeri chop
+etsa — doim «НУСХА» (asl nusxa hali chop etilmagan bo‘lib qoladi).
+
 **Oy oxiri** — «KO-3» (kassa orderlari jurnali) va «Statiyalar» (oylik statiya matritsasi): oyni tanlab ko‘ring va chop eting
 («🖨 KO-3», «🖨 Chop etish»). Excel fayllar sizda yo‘q — ularni moliya menejeri, buxgalter yoki Direktor oladi.
 
@@ -126,7 +139,7 @@ bo‘sh bo‘lsin. Ishga tushish kunidan oldin olingan pulni keyin **bugungi san
 ikki marta hisoblanadi: bugungi sana bilan kiritilgan to‘lovni tizim oddiy bugungi to‘lov deb qabul qiladi (kirim orderi
 yoziladi), farqini bilmaydi. Navbatda qolib ketgan yozuv internet qaytganda o‘zi o‘tadi (48 soatgacha;
 kirim orderisiz); undan eskisini yoki qog‘ozda topilganini Direktor haqiqiy sanasi bilan kiritadi. Kassa to‘xtatilgan bo‘lsa
-(«Kassa to‘xtatilgan» ogohlantirishi) — kassa hujjati yozilmaydi; pul «Қ» blankalari bilan (o‘z raqamlari bilan) qabul
+(«Kassa to‘xtatilgan» ogohlantirishi) — kassa hujjati (kirim, chiqim so‘rovi) yozilmaydi, tizim rad etadi; pul «Қ» blankalari bilan (o‘z raqamlari bilan) qabul
 qilinadi va tizimga **oxirgi kassa kunidan keyingi sana** bilan kiritiladi: oxirgi kassa kuni va undan oldingi sana bilan tizim
 qabul qilmaydi (to‘xtatilgan kunning o‘zida, kun yopilgandan keyin olingan pul — ertasi kuni). Navbatda qolib, to‘xtatilgan kassa
 qabul qilmagan to‘lovni kassa qayta ishga tushgach ham **qayta yubormang** — Direktorga ayting (pul kassada sanalgan bo‘lsa, kirim
@@ -188,8 +201,8 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    tekshiring; to‘lov paytidagi belgi saqlanadi, kontragent keyin qayta tasniflansa ham ro‘yxatda qoladi; «Z-hisobot kun yopilgandan
    keyin o‘zgartirilgan» — kim va necha marta); «Moslik» qatori doim «hammasi mos» bo‘lishi kerak (xodim qaytargan pul orderi va avans /
    maosh yozuvi ham solishtiriladi). **«Kontragent turi»** (ma’lumot) — oxirgi 30 kunda turi o‘zgargan kontragentlar (kim, qachon,
-   eski → yangi) va turi tasdiqlanmagan «jismoniy shaxs» / «boshqa»lar: buxgalter tekshirib «✓ … — Jismoniy shaxs» tugmasi bilan
-   tasdiqlaydi; korxona bo‘lsa — tasdiqlamay, turini «Yetkazib beruvchi» / «Tashkilot»ga o‘zgartiradi. Tasdiqlanguncha kontragent
+   eski → yangi; tasdiqlangan bo‘lsa — kim tasdiqlagani) va turi tasdiqlanmagan «jismoniy shaxs» / «boshqa»lar: buxgalter tekshirib
+   «✓ … — Jismoniy shaxs» tugmasi bilan tasdiqlaydi; korxona bo‘lsa — tasdiqlamay, turini «Yetkazib beruvchi» / «Tashkilot»ga o‘zgartiradi. Tasdiqlanguncha kontragent
    yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i). Turni buxgalter o‘zi kiritsa yoki o‘zgartirsa — darhol
    tasdiqlangan; moliya menejeri turini, nomini yoki STIR’ini o‘zgartirsa — tasdiq bekor bo‘ladi. **«Xodimlar zimmasidagi kamomad»** — Direktor qarori bilan xodimga yozilgan kamomad va qoplangani: kassir
    «Kamomadni qoplash (xodim)» bilan qabul qiladi, qolganini ish haqidan ushlash — buxgalter (4-bosqichgacha qo‘lda). Qaror doim
@@ -200,10 +213,15 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    farqlari»** — kunni yopishdagi va smena topshirishdagi kamomad / ortiqcha alohida («yopishda −…, smenada +…»). **«Hali kelmagan
    «hali o‘tkazilmagan» yozuvlar»** (sariq) — kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun
    (48 soat) ichida kelmagan (kun, soni, summasi; navbat yo‘qolgan, o‘chirilgan yoki yozuv o‘ylab topilgan bo‘lishi mumkin — kassir
-   bilan aniqlang) va tekshirilmagan kunlarning «Қ» blankalari.
+   bilan aniqlang) va tekshirilmagan kunlarning «Қ» blankalari. **«Qabul qilinmagan smena topshirish»** (sariq) — topshirish o‘tgan
+   kassa kunida yoki 2 soatdan ortiq qabul qilinmay turibdi (kimdan → kimga, sanalgan summa, qachondan): qabul qiluvchi qabul qilsin
+   yoki topshiruvchi / Direktor bekor qilsin.
 4. **Bank orqali to‘langan xarajatlar** (moliya menejeri) — «Buxgalteriya» → «+ Xarajat qo‘shish»: to‘lov usuli (bank o‘tkazmasi
    yoki korporativ karta), statiya, kontragent. Hisobdor shaxs sarflagan pul bu yerda emas — «Kassa» → «Avans hisoboti».
-   Naqd xarajat bu yerda yozilmaydi — u kassa chiqim orderidan o‘zi ko‘chadi.
+   Naqd xarajat bu yerda yozilmaydi — u kassa chiqim orderidan o‘zi ko‘chadi. Kassa **to‘xtatilgan** (yoki qayta ishga tushirish
+   kunini kutayotgan) paytda xarajat, maosh va avans oynalarida ham to‘lov usuli tanlanadi: bank / karta — istalgan sana bilan; naqd —
+   faqat to‘xtatilgan davr sanasi bilan (orderisiz; usulsiz yozuv naqd hisoblanadi).
+   Yangi kontragent qo‘shilganda xuddi shu tur, nom va STIR bilan faol kontragent bo‘lsa, yangisi yaratilmaydi — o‘shasi tanlanadi.
 
 **Maosh.** Vedomostni moliya menejeri tayyorlaydi, HR tasdiqlaydi. Karta orqali to‘lovni moliya menejeri «Maosh berish» → «Karta»
 bilan yozadi (kassa orderisiz); naqd — faqat kassir. Xodim avansni kassaga qaytarsa (kassir — «Xodim qaytargan pul», OP-08),
@@ -211,7 +229,8 @@ vedomost avansni bazadan qaytgani ayirilgan holda oladi — vedomostni qaytimdan
 qayta yuboring); tasdiqlangan oy uchun avans qaytimi qabul qilinmaydi. Berilgan maosh qaytsa (OP-09) — shu oy berilgan summa
 kamayadi: qolgani shu oy yana berilishi yoki keyingi oyga qoldiq bo‘lib o‘tishi mumkin.
 
-**Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
+**Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni (shanba, yakshanba va «Bayram / ta’til
+kunlari» sanalmaydi) ichida avans hisobotini (qog‘oz,
 `shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter (yoki moliya menejeri) hisobotni
 tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlaydi, har chek — bitta qator (statiya, summa, chek raqami va
 sanasi). Hisobdorning o‘zi (hisobi xodim kartasiga bog‘langan buxgalter yoki moliya menejeri) o‘z hisobotini kiritmaydi va bekor
@@ -277,7 +296,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 
 **Har kuni**
 - **Telegram hisoboti:** kassa qatori (kirim, chiqim, qoldiq; sanaldi / farq — kunni yopishdagi va smena topshirishdagi alohida)
-  va «Kassa nazorati» qatori (muddati o‘tgan avans ham). Nazorat qatori bo‘sh bo‘lmasa — «Kassa» → «Nazorat ro‘yxati». Dushanba
+  va «Kassa nazorati» qatori (muddati o‘tgan avans, qabul qilinmay qolgan smena topshirish ham). Nazorat qatori bo‘sh bo‘lmasa — «Kassa» → «Nazorat ro‘yxati». Dushanba
   kuni — qo‘shimcha «Kassa — o‘tgan hafta» qatori (haftalik ko‘rsatkichlar); batafsil — «Kassa» → «KPI».
 - **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash».
 - **Qaytarish:** «↩ Qaytarish» (sababi, ariza sanasi, usul). Naqd bo‘lsa pulni kassir beradi; balans pul berilganda o‘zgaradi.

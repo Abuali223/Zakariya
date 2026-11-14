@@ -11,13 +11,20 @@ chop etilishi mumkin — mazmuni o‘zgarmasin.
 | **Kirim orderi (KO-1) + patta** | har naqd kirimda («💵 To‘lov», «+ Kirim») | 1 (order va uzib olinadigan patta) | bosh buxgalter (2-ro‘yxat), kassir | order — kassa hujjatlari jildida; patta — pul topshirgan shaxsda |
 | **Chiqim orderi (KO-2)** | pul berilganda («Pulni berish», naqd maosh) | 1 | rahbar, bosh buxgalter, kassir; oluvchi — «Oldim», summa so‘z bilan, sana, imzo, shaxsni tasdiqlovchi hujjat | kassa hujjatlari jildida, ilovalari bilan |
 | **Kassa kitobi varag‘i (KO-4)** | kun yopilganda | 2 (kassa kitobi varag‘i va «Kassir hisoboti») | kassir; tekshirgan buxgalter / moliya menejeri | 1-nusxa — kassa kitobi (yil oxirida tikiladi); 2-nusxa — orderlar bilan buxgalterga |
-| **Kassani sanash dalolatnomasi** | har sanashda chop etish mumkin («Sanashlar» → «🖨 Dalolatnoma»): kun yopilishi (farq bo‘lsa — albatta), smena topshirish-qabul (qabul qiluvchi o‘z hisobidan «Qabul qildim» degandan keyin — tizim darhol chop etishni taklif qiladi; qabul qilinmagan yoki bekor qilingan topshirishda dalolatnoma yo‘q), komissiya sanashi | 2 | kassir (kassa egasi), komissiya a’zolari; smenada — topshirgan va qabul qilgan (ismlar tizimda sanash paytidagidek); pulni kassa egasi o‘rniga boshqa xodim sanagan bo‘lsa — u ham («Санади» qatori) | kassa hujjatlari jildida |
-| **Naqdsiz dalolatnoma** (boshlang‘ich qoldiq; kamomad bo‘yicha qaror; o‘zaro hisob) | Direktor amali bilan | 2 | rahbar, bosh buxgalter; qarorda — javobgar shaxs; o‘zaro hisobda — xodim | buxgalteriyada |
+| **Kassani sanash dalolatnomasi** | har sanashda chop etish mumkin («Sanashlar» → «🖨 Dalolatnoma»): kun yopilishi (farq bo‘lsa — albatta), smena topshirish-qabul (qabul qiluvchi o‘z hisobidan «Qabul qildim» degandan keyin — tizim darhol chop etishni taklif qiladi; qabul qilinmagan yoki bekor qilingan topshirishda dalolatnoma yo‘q), komissiya sanashi | 2 | kassir (kassa egasi), komissiya a’zolari; smenada — topshirgan va qabul qilgan (ismlar tizimda sanash paytidagidek); pulni kassa egasi o‘rniga boshqa xodim sanagan bo‘lsa — u ham («Санади» qatori). Sanash vaqti, qaysi kassa kuni uchun ekani va smenada «qabul qilindi» vaqti yoziladi | kassa hujjatlari jildida |
+| **Naqdsiz dalolatnoma** (boshlang‘ich qoldiq; qayta ishga tushirish; kamomad bo‘yicha qaror; o‘zaro hisob) | Direktor amali bilan | 2 | rahbar, bosh buxgalter; kamomad xodim zimmasiga qo‘yilganda (4730) — javobgar shaxs («Танишдим, розиман» qatori), qaror so‘z bilan; boshlang‘ich qoldiq / qayta ishga tushirishda — sanagan komissiya a’zolari (tizimga kiritilgan tarkib bo‘yicha); o‘zaro hisobda — xodim | buxgalteriyada |
 | **Kunlik hisobot** | kun yopilgach (ichki hisobot) | 1 | — | moliya menejerida |
 
 Belgilar: qayta chop etilganda — «НУСХА»; kun qayta ochilib yopilgan bo‘lsa — «АЛМАШТИРИЛДИ» (avvalgi varaq bekor qilinib
 saqlanadi); bekor qilingan hujjatda — «БЕКОР ҚИЛИНГАН»; yopilmagan kun varag‘ida — «ҚОРАЛАМА»; sinov kassasida — «СИНОВ».
 Bekor qilingan order yirtib tashlanmaydi — jildda o‘z raqami o‘rnida saqlanadi.
+Asl nusxani (order, KO-4 varag‘i) faqat kassir yoki Direktor chop etadi; boshqa rollar (buxgalter, moliya menejeri) chop etganda doim
+«НУСХА» chiqadi va asl nusxa hali chop etilmagan hisoblanadi. «Chop etdi» qatorida — xodim kartasidagi ism (login / e-mail emas).
+Rahbar va bosh buxgalter imzo qatori: «⚙ Sozlamalar»dagi ro‘yxatda shu lavozimda bitta faol shaxs bo‘lsa — uning F.I.Sh.; bir nechta
+bo‘lsa — hujjatni tasdiqlagan foydalanuvchi, agar hisobi ulardan biriga bog‘langan bo‘lsa; aks holda bo‘sh (qo‘lda yoziladi).
+Qayta ishga tushirish dalolatnomasi o‘z sarlavhasi bilan chiqadi (boshlang‘ich qoldiq dalolatnomasidan farqli).
+«Hali o‘tkazilmagan yozuvlar» (kunni yopish dalolatnomasi, KO-4 «Kassir hisoboti», kunlik hisobot) ikki qismga ajratib yoziladi:
+qurilma navbatidagi yozuvlar va server ishlamagan paytdagi «Қ» blankalari (soni, summasi, raqamlari).
 
 ## B. Qog‘oz shakllar (shablonlar quyida)
 | № | Shakl | Qachon | Kim to‘ldiradi |
@@ -64,7 +71,7 @@ Ilova: [___] ta hujjat, [___] varaq.
 Hisobdor shaxs: [___] (imzo), sana [___] · Hisobotni tekshirdi — buxgalter: [___] (imzo), sana [___]
 Tasdiqlangan summa: [___] so‘m ([summa so‘z bilan]).
 
-*Qoidalar:* muddat — 3 ish kuni (korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; statiya — kassa xarajati
+*Qoidalar:* muddat — 3 ish kuni (tizim shanba, yakshanba va «Bayram / ta’til kunlari»ni sanamaydi; korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; statiya — kassa xarajati
 (EX), asosiy vosita (OP-18) yoki sotish uchun tovar (OP-24), yetkazib beruvchiga qarz (OP-17) avans hisobotida yopilmaydi; cheksiz xarajat qabul
 qilinmaydi (istisno — rahbar ruxsati bilan tushuntirish xati); hisobot topshirilmaguncha yangi avans berilmaydi; buxgalter
 tekshirgan qatorlarni moliya menejeri «Buxgalteriya»ga xarajat qilib kiritadi (to‘lov usuli — «Hisobdor shaxs orqali (avans hisoboti)»); yanvar

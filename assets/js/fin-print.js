@@ -50,6 +50,9 @@ const T = {
     resOver: (a, no) => `Ортиқча — ${a}. Шу кун санаси билан кирим касса ордери ${no} расмийлаштирилди.`,
     decision: 'Раҳбар қарори', explain: 'Кассирнинг тушунтириши', handFrom: 'Топширди', handTo: 'Қабул қилди', countedBy: 'Санади', note: 'Изоҳ', member: 'Комиссия аъзоси',
     employee: 'Ходим', pupil: 'Ўқувчи', liable: 'Жавобгар шахс', acquainted: 'Танишдим, розиман: ходим',
+    decEmp: 'Ходим зиммасига', decOff: 'Зарарга (ҳисобдан чиқарилди)', acqLiable: 'Танишдим, розиман: жавобгар шахс',
+    actRestart: 'Қайта ишга тушириш: санаш далолатномаси', dayFor: d => `${d} кун учун`, cntAt: 'Санаш вақти', hoCounted: 'Саналди', hoAccepted: 'Қабул қилинди',
+    pendIncl: 'шу жумладан', pendQueue: n => `қурилма навбатидаги ёзувлар — ${n} та`, pendPaper: (n, nos) => `«Қ» бланкалари — ${n} та${nos ? ` (№ ${nos})` : ''}`,
     ko3: 'КИРИМ ВА ЧИҚИМ КАССА ҲУЖЖАТЛАРИНИ РЎЙХАТГА ОЛИШ ЖУРНАЛИ', ko3Form: 'КО-3 шакли', ko3In: 'Кирим касса ҳужжатлари', ko3Out: 'Чиқим касса ҳужжатлари',
     ko3Cols: ['Сана', 'Рақами', 'Сумма', 'Изоҳ'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Жами (бекор қилинганларсиз)', ko3Open: 'Давр бошига қолдиқ', ko3Close: 'Давр охирига қолдиқ', ko3Adj: 'Қайта ишга тушириш фарқи (техник далолатнома «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Рақамлар: кирим ${f1 ? f1 + '–' + l1 : 'йўқ'}, чиқим ${f2 ? f2 + '–' + l2 : 'йўқ'}`, ko3Bad: 'ДИҚҚАТ: давр боши + кирим − чиқим давр охирига тенг эмас', ko3Docs: (a, b, v) => `Кирим: ${a} та, чиқим: ${b} та, бекор қилинган: ${v} та`,
@@ -96,6 +99,9 @@ const T = {
     resOver: (a, no) => `Ortiqcha — ${a}. Shu kun sanasi bilan kirim kassa orderi ${no} rasmiylashtirildi.`,
     decision: 'Rahbar qarori', explain: 'Kassirning tushuntirishi', handFrom: 'Topshirdi', handTo: 'Qabul qildi', countedBy: 'Sanadi', note: 'Izoh', member: 'Komissiya a’zosi',
     employee: 'Xodim', pupil: 'O‘quvchi', liable: 'Javobgar shaxs', acquainted: 'Tanishdim, roziman: xodim',
+    decEmp: 'Xodim zimmasiga', decOff: 'Zararga (hisobdan chiqarildi)', acqLiable: 'Tanishdim, roziman: javobgar shaxs',
+    actRestart: 'Qayta ishga tushirish: sanash dalolatnomasi', dayFor: d => `${d} kun uchun`, cntAt: 'Sanash vaqti', hoCounted: 'Sanaldi', hoAccepted: 'Qabul qilindi',
+    pendIncl: 'shu jumladan', pendQueue: n => `qurilma navbatidagi yozuvlar — ${n} ta`, pendPaper: (n, nos) => `«Қ» blankalari — ${n} ta${nos ? ` (№ ${nos})` : ''}`,
     ko3: 'KIRIM VA CHIQIM KASSA HUJJATLARINI RO‘YXATGA OLISH JURNALI', ko3Form: 'KO-3 shakli', ko3In: 'Kirim kassa hujjatlari', ko3Out: 'Chiqim kassa hujjatlari',
     ko3Cols: ['Sana', 'Raqami', 'Summa', 'Izoh'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Jami (bekor qilinganlarsiz)', ko3Open: 'Davr boshiga qoldiq', ko3Close: 'Davr oxiriga qoldiq', ko3Adj: 'Qayta ishga tushirish farqi (texnik dalolatnoma «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Raqamlar: kirim ${f1 ? f1 + '–' + l1 : 'yo‘q'}, chiqim ${f2 ? f2 + '–' + l2 : 'yo‘q'}`, ko3Bad: 'DIQQAT: davr boshi + kirim − chiqim davr oxiriga teng emas', ko3Docs: (a, b, v) => `Kirim: ${a} ta, chiqim: ${b} ta, bekor qilingan: ${v} ta`,
@@ -142,6 +148,9 @@ const T = {
     resOver: (a, no) => `Излишек — ${a}. Датой этого дня оформлен приходный кассовый ордер ${no}.`,
     decision: 'Решение руководителя', explain: 'Объяснение кассира', handFrom: 'Сдал', handTo: 'Принял', countedBy: 'Пересчитал', note: 'Примечание', member: 'Член комиссии',
     employee: 'Сотрудник', pupil: 'Учащийся', liable: 'Ответственное лицо', acquainted: 'Ознакомлен, согласен: сотрудник',
+    decEmp: 'Отнести на сотрудника', decOff: 'Списать на убытки', acqLiable: 'Ознакомлен, согласен: ответственное лицо',
+    actRestart: 'Повторный запуск кассы: акт пересчёта', dayFor: d => `Кассовый день: ${d}`, cntAt: 'Время пересчёта', hoCounted: 'Пересчитано', hoAccepted: 'Принято',
+    pendIncl: 'в том числе', pendQueue: n => `записи в очереди устройств — ${n} шт.`, pendPaper: (n, nos) => `бланки «Қ» — ${n} шт.${nos ? ` (№ ${nos})` : ''}`,
     ko3: 'ЖУРНАЛ РЕГИСТРАЦИИ ПРИХОДНЫХ И РАСХОДНЫХ КАССОВЫХ ДОКУМЕНТОВ', ko3Form: 'Форма КО-3', ko3In: 'Приходные кассовые документы', ko3Out: 'Расходные кассовые документы',
     ko3Cols: ['Дата', 'Номер', 'Сумма', 'Примечание'], ko3Per: (a, b) => `${a} – ${b}`, ko3Tot: 'Итого (без аннулированных)', ko3Open: 'Остаток на начало периода', ko3Close: 'Остаток на конец периода', ko3Adj: 'Разница при повторном запуске кассы (технический акт «Д-»)',
     ko3Nos: (f1, l1, f2, l2) => `Номера: приход ${f1 ? f1 + '–' + l1 : 'нет'}, расход ${f2 ? f2 + '–' + l2 : 'нет'}`, ko3Bad: 'ВНИМАНИЕ: остаток на начало + приход − расход не равен остатку на конец', ko3Docs: (a, b, v) => `Приход: ${a}, расход: ${b}, аннулировано: ${v}`,
@@ -171,15 +180,27 @@ function stamp(ts) {
   } catch (_) { return ''; }
 }
 const nameOf = (ctx, uid) => (uid && ctx.names && ctx.names[uid]) || '';
-// Imzo qo'yuvchining F.I.Sh.: hujjatni tasdiqlagan foydalanuvchi (bo'lsa), aks holda imzo ro'yxatidagi yagona shaxs; topilmasa —
-//   bo'sh (qo'lda yoziladi). Shakldagi yorliq («Раҳбар», «Бош бухгалтер») o'zgarmaydi — chop etish tilida, shakl bo'yicha.
+// Imzo qo'yuvchining F.I.Sh. (ui-7; «⚙ Sozlamalar» yordam matni bilan bir qoida): ro'yxatda bitta faol shaxs bo'lsa — o'sha; bir nechta
+//   bo'lsa — hujjatni tasdiqlagan foydalanuvchi, agar uning hisobi ulardan biriga bog'langan bo'lsa (ro'yxatdagi to'liq F.I.Sh.); aks holda
+//   bo'sh — qo'lda yoziladi. Tasdiqlovchining tizimdagi hisob ismi (to'liq F.I.Sh. emas) imzo o'rniga chiqmaydi. Shakldagi yorliq
+//   («Раҳбар», «Бош бухгалтер») o'zgarmaydi — chop etish tilida, shakl bo'yicha.
 function pickSign(ctx, list, uid, label) {
   const all = (ctx.signatories || []).filter(s => Number(s.list) === list && s.active !== false);
-  let s = uid ? all.find(x => x.uid === uid) : null;
-  if (!s && uid && nameOf(ctx, uid)) return { title: label, name: nameOf(ctx, uid) };
-  if (!s && all.length === 1) s = all[0];
+  const s = all.length === 1 ? all[0] : (uid && all.length > 1 ? all.find(x => x.uid === uid) : null);
   return { title: label, name: (s && s.fullName) || '' };
 }
+// «Hali o'tkazilmagan yozuvlar» tarkibi (g7 qoldig'i): qurilma navbati yozuvlari (kalit bilan — pendingRefs; eski yozuvda — soni farqdan)
+//   va server ishlamagan paytdagi «Қ» blankalari (paperCount / paperSum / paperNos) alohida. Sanash dalolatnomasi (cash_counts), KO-4 va
+//   RP-02 (cash_days) — bitta qoida. Jami bo'lmasa — null.
+function pendParts(x) {
+  x = x || {};
+  const total = num(x.pendingSum); if (!(total > 0)) return null;
+  const qn = num(x.paperCount), qs = qn > 0 ? num(x.paperSum) : 0, refs = Array.isArray(x.pendingRefs) ? x.pendingRefs : [];
+  const ps = Math.round((total - qs) * 100) / 100;
+  return { total, pn: ps > 0 ? (refs.length || Math.max(0, num(x.pendingCount) - qn)) : 0, ps: Math.max(0, ps), qn, qs, nos: String(x.paperNos || '') };
+}
+const pendLine = (pp, t, W) => !pp ? '' : t.pendIncl + ': ' + [pp.ps > 0 ? `${t.pendQueue(pp.pn)}, ${money(W, pp.ps)}` : '', pp.qn > 0 ? `${t.pendPaper(pp.qn, pp.nos)}, ${money(W, pp.qs)}` : '']
+  .filter(Boolean).join('; ');
 const money = (W, v) => W.fmtMoney(v == null ? 0 : v) || '';
 const ymLabel = m => /^\d{4}-\d{2}$/.test(m || '') ? m.slice(5, 7) + '.' + m.slice(0, 4) : (m || '');
 // Raqam seriyasi (reja 4.14): server cash_docs.series beradi; eski javobda bo'lmasa — shakl va operatsiyadan.
@@ -412,27 +433,37 @@ function actHtml(doc, ctx, W, t, lang) {
   // avans hisobotida tahlil ustuni o'rnida — chek / hujjat (qatordagi izoh)
   const rows = (doc.lines || []).filter(l => !memo(l)).map(l => `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(doc.op === 'nc_adv_report' ? (l.note || 'X') : anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
   const head = pickSign(ctx, 1, doc.dirApprovedBy || doc.decidedBy, t.head), chief = pickSign(ctx, 2, doc.approvedBy, t.chief);
-  const ofs = doc.op === 'nc_offset', adv = doc.op === 'nc_adv_report';
+  const ofs = doc.op === 'nc_offset', adv = doc.op === 'nc_adv_report', shd = doc.op === 'nc_shortage_dec', opn = doc.op === 'nc_opening';
+  // kamomad qarori (ui-4): xodim zimmasiga (Dt 4730) — javobgar shaxs (xodim kartasi ismi; eski, kartaga bog'lanmagan qarorda — «boshqa»
+  //   tomon nomi), qaror so'z bilan va javobgarning «Tanishdim, roziman» imzo qatori; hisobdan chiqarish (Dt 9430) — faqat qaror so'z bilan
+  const liable = shd && (doc.lines || []).some(l => l.debit === '4730');
   // tomon yorlig'i: o'zaro hisob — xodim; avans hisoboti — hisobdor shaxs; kamomad qarori — javobgar shaxs (xodim zimmasiga olinganda)
-  const partyLbl = ofs ? t.employee : adv ? t.accPerson : (doc.op === 'nc_shortage_dec' && doc.partyType === 'employee') ? t.liable : '';
+  const partyLbl = ofs ? t.employee : adv ? t.accPerson : liable ? t.liable : '';
   const pupil = ofs ? [snap.studentName, snap.studentId ? `(${snap.studentId})` : ''].filter(Boolean).join(' ') : '';
+  // boshlang'ich qoldiq / qayta ishga tushirish dalolatnomasi (ui-4): sanagan komissiya a'zolari imzo qatorlari bilan (server: kassa_doc_get);
+  //   qayta ishga tushirish farqi dalolatnomasi — o'z sarlavhasi bilan (g4 qoldig'i)
+  const comm = opn && Array.isArray(doc.commission) ? doc.commission.filter(m => m && m.name) : [];
+  const opLbl = opn && snap.kind === 'restart' ? t.actRestart : t.actOps[doc.op];
   return `<div class="pg act">${doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : ''}
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <div class="ttl">${esc(t.actTitle[doc.op] || t.act)} ${t.no} <span class="nob">${esc(docNo(doc, t))}</span></div>
-    <div class="dt">${esc((t.actTitle[doc.op] ? '' : (t.actOps[doc.op] || '') + (t.actOps[doc.op] ? ' — ' : '')) + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
+    <div class="dt">${esc((t.actTitle[doc.op] ? '' : (opLbl || '') + (opLbl ? ' — ' : '')) + W.fmtDateLong(iso(doc.businessDay), lang))}</div>
     ${ofs && /^\d{4}-\d{2}$/.test(snap.month || '') ? `<p>${esc(t.offsetText(money(W, doc.amount), ymLabel(snap.month)))}</p>` : ''}
     <table class="t"><thead><tr><th style="width:20mm">${esc(t.debit)}</th><th style="width:20mm">${esc(t.credit)}</th><th>${esc(adv ? t.advDoc : t.an)}</th><th style="width:38mm">${esc(t.sum)}</th><th style="width:30mm">${esc(t.target)}</th></tr></thead><tbody>${rows}</tbody></table>
     ${memoLines.length ? `<div class="note">${esc(t.creditApplied)}: ${memoLines.map(l => `${esc(t.debit)} ${esc(l.debit)} — ${esc(t.credit)} ${esc(l.credit)}: ${esc(money(W, l.amount))} (${esc(anCode(l, doc))})`).join('; ')}</div>` : ''}
     ${partyLbl && tx.party ? fld(partyLbl, esc(tx.party)) : ''}
     ${pupil ? fld(t.pupil, esc(pupil)) : ''}
+    ${shd ? fld(t.decision, `<b>${esc(liable ? t.decEmp : t.decOff)}</b>`) : ''}
     ${fld(t.basis, esc(tx.basis))}
     ${fld(t.amount, `<b>${esc(money(W, doc.amount))}</b> — ${esc(W.sumWords(doc.amount, lang))}`)}
+    ${comm.length ? `<p><b>${esc(t.commission)}:</b> ${comm.map(m => esc([m.title, m.name].filter(Boolean).join(' — '))).join('; ')}</p>` : ''}
     ${tx.attachment ? fld(t.attach, esc(tx.attachment)) : ''}
     ${doc.note ? fld(t.note, esc(doc.note)) : ''}
     ${adv && snap.openBefore != null && snap.openAfter != null ? `<p>${esc(t.advBal(money(W, snap.openBefore), money(W, snap.openAfter)))}</p>` : ''}
     ${voidInfo(doc, ctx, t)}
     <div class="two" style="display:flex;gap:8mm">${sig(head.title, head.name)}${sig(chief.title, chief.name)}</div>
-    ${ofs ? sig(t.acquainted, tx.party) : adv ? sig(t.accPerson, tx.party) : ''}
+    ${ofs ? sig(t.acquainted, tx.party) : adv ? sig(t.accPerson, tx.party) : liable ? sig(t.acqLiable, tx.party) : ''}
+    ${comm.map(m => sig(m.title || t.member, m.name)).join('')}
     ${footer(doc, ctx, t)}</div>`;
 }
 
@@ -700,7 +731,7 @@ export function bookHtml(book, ctx, W) {
       rows.push(`<tr>${td('', '')}${td('b', esc(t.closeBal))}${td('c', 'X')}${td('r b', esc(money(W, closing)))}${td('c', 'X')}</tr>`);
       rows.push(`<tr>${td('', '')}${td('', esc(t.incl))}${td('c', 'X')}${td('r', '–')}${td('c', 'X')}</tr>`);
       tail = `${closed ? `<div class="sum"><div>${esc(t.counted)}: <b>${esc(money(W, d.counted))}</b> (${esc(W.sumWords(d.counted, lang))})</div>
-          ${num(d.pendingSum) > 0 ? `<div>${esc(t.pending)}: ${esc(String(num(d.pendingCount)))} ${esc(t.pcs)}, ${esc(money(W, d.pendingSum))}</div>` : ''}
+          ${num(d.pendingSum) > 0 ? `<div>${esc(t.pending)}: ${esc(String(num(d.pendingCount)))} ${esc(t.pcs)}, ${esc(money(W, d.pendingSum))} (${esc(pendLine(pendParts(d), t, W))})</div>` : ''}
           <div>${esc(t.diff)}: <b>${esc(diffTxt)}</b></div></div>` : ''}
         ${sig(t.cashier, cashier)}
         <div class="vf">${esc(t.verify(n1, cw(n1, lang), n2, cw(n2, lang)))}</div>
@@ -732,6 +763,11 @@ export function countHtml(count, book, ctx, W) {
   const den = count.denoms && typeof count.denoms === 'object' ? Object.keys(count.denoms).map(k => [Number(k), num(count.denoms[k])]).filter(x => x[0] > 0 && x[1] > 0).sort((a, b) => b[0] - a[0]) : [];
   const marks = marksOf(null, ctx, t);
   const day = iso(count.day || d.day);
+  // ui-8: sanash payti (haqiqiy vaqt, Toshkent) va kassa kuni alohida — kecha yopilmagan kun ertasi kuni sanab yopilsa ham dalolatnomadagi
+  //   sana-vaqt haqiqiy; smena topshirishda (g6 qoldig'i) — topshiruvchi sanagan payt (cash_handovers."createdAt") va qabul payti ("acceptedAt")
+  const hov = count.kind === 'handover' && count.handoverId ? (book.handovers || []).find(h => h && h.id === count.handoverId) : null;
+  const times = (hov ? [[t.hoCounted, stamp(hov.createdAt)], [t.hoAccepted, stamp(hov.acceptedAt || count.at)]] : [[t.cntAt, stamp(count.at)]]).filter(x => x[1]);
+  const pp = pendParts(count);
   // ismlar — sanash paytidagi (sec-4: count.names); kassa egasi va sanagan xodim alohida (sec-2): boshqa xodim sanagan bo'lsa — «Санади» qatori
   const cn = uid => (uid && count.names && count.names[uid]) || nameOf(ctx, uid);
   const fromName = cn(count.fromUid) || cn(count.byUid), toName = cn(count.toUid);
@@ -741,13 +777,14 @@ export function countHtml(count, book, ctx, W) {
   return page(t.cntTitle, t, `<div class="pg act">
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
     <div class="ttl">${esc(t.cntTitle)}</div>
-    <div class="dt">${esc(W.fmtDateLong(day, lang))}${t.cntKind[count.kind] ? ' — ' + esc(t.cntKind[count.kind]) : ''}${stamp(count.at) ? ', ' + esc(stamp(count.at).slice(11)) : ''}</div>
+    <div class="dt">${esc(t.dayFor(W.fmtDateLong(day, lang)))}${t.cntKind[count.kind] ? ' — ' + esc(t.cntKind[count.kind]) : ''}</div>
+    ${times.length ? `<div class="dt">${times.map(x => esc(x[0] + ': ' + x[1])).join(' · ')}</div>` : ''}
     ${comm.length ? `<p><b>${esc(t.commission)}:</b> ${comm.map(m => esc([m.title, m.name].filter(Boolean).join(' — '))).join('; ')}</p>` : ''}
     ${count.kind === 'opening' ? '' : `<p>${esc(t.lastNos)}: ${esc(t.lastIn)} ${esc(last('KO1'))}, ${esc(t.lastOut)} ${esc(last('KO2'))}.</p>`}
     <table class="t"><tbody>
       <tr><td>${esc(t.expected)}</td><td class="r" style="width:45mm">${esc(money(W, count.expected))}</td></tr>
       <tr><td><b>${esc(t.counted)}</b></td><td class="r"><b>${esc(money(W, count.counted))}</b></td></tr>
-      <tr><td>${esc(t.pendingSum)}</td><td class="r">${esc(money(W, count.pendingSum))}</td></tr>
+      <tr><td>${esc(t.pendingSum)}${pp ? `<br><span class="note">${esc(pendLine(pp, t, W))}</span>` : ''}</td><td class="r">${esc(money(W, count.pendingSum))}</td></tr>
       <tr><td>${esc(t.diffFull)}</td><td class="r"><b>${diff === 0 ? '–' : (diff > 0 ? '+' : '−') + esc(money(W, Math.abs(diff)))}</b></td></tr>
     </tbody></table>
     <p>${esc(t.counted)} ${esc(t.words)}: ${esc(W.sumWords(count.counted, lang))}</p>
@@ -865,7 +902,7 @@ export function reportHtml(book, ctx, W) {
     ${kv(`${esc(r.receipts)} (${esc(r.orders(n1))})`, m(receipts))}
     ${kv(`${esc(r.payouts)} (${esc(r.orders(n2))})`, m(payouts))}
     ${kv(`<b>${esc(r.closing)}</b>`, m(closing), 'b')}
-    ${closed ? kv(esc(r.counted), m(d.counted)) + (num(d.pendingSum) > 0 ? kv(`${esc(r.pending)} (${esc(String(num(d.pendingCount)))} ${esc(r.pcs)})`, m(d.pendingSum)) : '') + kv(esc(r.diff), `<b>${esc(diffTxt)}</b>`)
+    ${closed ? kv(esc(r.counted), m(d.counted)) + (num(d.pendingSum) > 0 ? kv(`${esc(r.pending)} (${esc(String(num(d.pendingCount)))} ${esc(r.pcs)})<br><span class="sm">${esc(pendLine(pendParts(d), t, W))}</span>`, m(d.pendingSum)) : '') + kv(esc(r.diff), `<b>${esc(diffTxt)}</b>`)
       : (hoTxt ? kv(esc(r.diff), `<b>${esc(t.cntKind.handover + ': ' + hoTxt)}</b>`) : '')}
     ${nVoid ? kv(esc(r.voids), `${esc(String(nVoid))} ${esc(r.pcs)}`) : ''}
   </tbody></table>${closed ? '' : `<p>${esc(r.notCounted)}</p>`}`;

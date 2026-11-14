@@ -97,6 +97,11 @@ function world(o) {
     ok('Z-hisobot: mos yoki kun yopilmagan — qator yo‘q', !/Z-hisobot/.test(zl({ ok: true, recorded: true })) && !/Z-hisobot/.test(zl(null)), zl({ ok: true }));
     ok('Z-hisobot farqi: naqd −10 000, karta +5 000', /· ⚠️ Z-hisobot farqi: naqd −10 000, karta \+5 000$/.test(zl({ ok: false, recorded: true, missing: false, diffCash: -10000, diffCard: 5000 })), zl({ ok: false, recorded: true, diffCash: -10000, diffCard: 5000 }));
     ok('Z-hisobot kiritilmagan / yo‘q', /⚠️ Z-hisobot kiritilmagan$/.test(zl({ ok: false, recorded: false })) && /⚠️ Z-hisobot yo‘q \(sababi yozilgan\)$/.test(zl({ ok: false, recorded: true, missing: true })));
+    const shl = sh => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0, staleHandover: sh } }).join('\n');
+    ok('qabul qilinmagan smena topshirish: vaqti bilan, ismsiz; yo‘q bo‘lsa — qator yo‘q',
+      /· ⚠️ qabul qilinmagan smena topshirish \(16\.01\.2027 09:05 dan\)$/.test(shl({ id: 'h1', day: '2027-01-16', createdAt: '2027-01-16T04:05:00+00:00', fromName: 'Sinov Kassir', toName: 'Sinov Kassir Ikki', counted: 1000 }))
+      && !/Sinov/.test(shl({ createdAt: '2027-01-16T04:05:00Z', fromName: 'Sinov Kassir' })) && !/smena topshirish/.test(shl(null)) && !/smena topshirish/.test(shl(undefined))
+      && /· ⚠️ qabul qilinmagan smena topshirish$/.test(shl({ createdAt: 'x' })), shl({ createdAt: '2027-01-16T04:05:00+00:00' }));
     const al = ao => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0, accOverdue: ao } }).join('\n');
     ok('eslatma: muddati o‘tgan avans — nazorat qatorida; yo‘q bo‘lsa — qator yo‘q', /· ⚠️ muddati o‘tgan avans: 2 \(200 000 so‘m\)$/.test(al({ n: 2, sum: 200000 })) && !/avans/.test(al({ n: 0, sum: 0 })) && !/avans/.test(al(null)), al({ n: 2, sum: 200000 }));
     const wl = wk => kassaLines({ day: null, balance: 0, control: { reconcile: 0, voids: 0, diff: 0 }, week: wk }).join('\n');

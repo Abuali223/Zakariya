@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText, handoverRefs, fiscalReq, orgCashParty } from './fin-kassa.js';
+  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -17,10 +17,10 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   zChanged30: [], cpKinds30: [], cpUnconfirmed: [] });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 29 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 30 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 29);   // +1: xodim kartasiga bog'lanmagan kassa hisoblari (sec-4); +1: hali kelmagan «hali o'tkazilmagan» yozuvlar (state-2, crit-3)
-  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'zChanged', 'orgCash', 'cpKinds', 'other',
+  assert.equal(rows.length, 30);   // +1: xodim kartasiga bog'lanmagan kassa hisoblari (sec-4); +1: hali kelmagan «hali o'tkazilmagan» yozuvlar (state-2, crit-3); +1: qabul qilinmagan smena topshirish (g9)
+  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'staleHandover', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'zChanged', 'orgCash', 'cpKinds', 'other',
     'late', 'pending', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'unlinked', 'handover', 'preLive', 'restart']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
@@ -78,9 +78,9 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
   assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'zChanged', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 24);   // (sinov kassasida ham bog'lanmagan hisoblar va hali kelmagan yozuvlar qatori — sinov kunlari ham navbat bilan yopiladi)
+  assert.equal(controlRows(c).length, 25);   // (sinov kassasida ham bog'lanmagan hisoblar, hali kelmagan yozuvlar va qabul qilinmagan smena qatori — sinov kunlari ham navbat bilan yopiladi)
   const empty = controlRows(null);
-  assert.ok(empty.length === 29 && empty.filter(x => x.level === 'ok').length === 27, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 30 && empty.filter(x => x.level === 'ok').length === 28, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
@@ -156,6 +156,8 @@ test('nazorat ro‘yxati: kassa ishga tushishidan oldingi naqd yozuvlar (crit-1)
     + 'to‘xtatilgan davrdagi kassa hujjatisiz naqd: kirim 60 000 so‘m, chiqim 25 000 so‘m (2 ta)');
   c.restarts[0].delta = -1000; c.restarts[0].started = false; c.restarts[0].docNo = null;
   assert.match(by(controlRows(c)).restart.value, /\(hali boshlanmagan\).*farq −1 000 so‘m;/);
+  c.restarts[0].delta = 0;   // g9 (g4 qoldig'i): farq 0 — «−0 so‘m» emas
+  assert.match(by(controlRows(c)).restart.value, /farq 0 so‘m;/); assert.doesNotMatch(by(controlRows(c)).restart.value, /[−+]0 so‘m/);
   // g4-v1: shu davrda orqa sana bilan kiritilgan yozuvlar alohida; izohlanmagan farq (farq − (kirim − chiqim)) — sariq
   c.restarts = [{ startDay: '2027-01-07', prevDay: '2027-01-05', prevClosing: 1150000, counted: 1230000, delta: 80000, docNo: 2, started: true,
                   rows: { n: 3, in: 100000, out: 20000 }, backdated: { n: 1, in: 0, out: 33000 }, unexplained: 33000 }];
@@ -215,6 +217,9 @@ test('ishga tushadigan kun o‘zgarishi (ui-5): to‘xtatish, qayta ishga tushir
     ['block', 'Qayta ishga tushirish kuni — 03.02.2027:']);
   g = goLiveConfirm(null, '2027-02-03', '2027-02-02', ready);
   assert.equal(g.kind, 'relaunch'); assert.match(g.text, /QAYTA ishga tushsinmi/); assert.match(g.text, /4 760 000 so‘m.*farq \+35 000 so‘m — dalolatnoma D-2/);
+  // g9 (g4 qoldig'i): komissiya tizimdagi qoldiqni sanagan (farq 0, dalolatnoma yo'q) — «farq 0 so‘m», «−0» emas
+  g = goLiveConfirm(null, '2027-02-03', '2027-02-02', Object.assign({}, paused, { restart: { day: '2027-02-03', amount: 4725000, prevClosing: 4725000, delta: 0, docNo: null } }));
+  assert.match(g.text, /farq 0 so‘m\)/); assert.doesNotMatch(g.text, /−0/);
   // tayyorlangan (hali boshlanmagan) qayta ishga tushirishni bekor qilish — kassa to'xtatilgan holatga qaytadi
   const pending = { started: true, pausedAt: null, restart: ready.restart };
   assert.equal(goLiveConfirm('2027-02-03', null, '2027-02-02', pending).kind, 'stop');
@@ -242,7 +247,7 @@ test('vazifalar ajratilishi — RP-06: Z yopilgandan keyin o‘zgartirilgan kunl
   const c = clean();
   c.zChanged30 = [{ day: '2027-01-05', status: 'closed', n: 2, at: '2027-01-06T04:00:00Z', byName: 'Sinov Moliyachi' }, { day: '2027-01-04', status: 'verified', n: 1, byName: 'Sinov Kassir' }];
   c.cpKinds30 = [{ id: 'cp1', name: 'Alfa Qurilish MChJ', from: 'supplier', to: 'person', byName: 'Sinov Moliyachi', at: '2027-01-05T20:30:00Z', confirmed: false },
-                 { id: 'cp2', name: 'Beta Savdo', from: null, to: 'other', byName: 'Sinov Kassir', at: '2027-01-06T05:00:00Z', confirmed: true },
+                 { id: 'cp2', name: 'Beta Savdo', from: null, to: 'other', byName: 'Sinov Kassir', at: '2027-01-06T05:00:00Z', confirmed: true, confirmedByName: 'Sinov Buxgalter', confirmedAt: '2027-01-06T06:00:00Z' },
                  { id: 'cp3', name: 'Gamma MChJ', from: 'person', to: 'org', byName: null, at: '2027-01-06T05:00:00Z', confirmed: false }];
   c.cpUnconfirmed = [{ id: 'cp1', name: 'Alfa Qurilish MChJ', kind: 'person', stir: '301234567' }];
   const r = by(controlRows(c));
@@ -251,7 +256,7 @@ test('vazifalar ajratilishi — RP-06: Z yopilgandan keyin o‘zgartirilgan kunl
   assert.equal(r.cpKinds.level, 'info');
   // vaqt — Toshkent bo'yicha (20:30 UTC = ertasi kun 01:30)
   assert.equal(r.cpKinds.value, 'Alfa Qurilish MChJ: Yetkazib beruvchi → Jismoniy shaxs (Sinov Moliyachi, 06.01.2027, tasdiqlanmagan); '
-    + 'Beta Savdo: yangi → Boshqa (Sinov Kassir, 06.01.2027); Gamma MChJ: Jismoniy shaxs → Tashkilot (tizim, 06.01.2027); turi tasdiqlanmagan: 1 ta — Alfa Qurilish MChJ');
+    + 'Beta Savdo: yangi → Boshqa (Sinov Kassir, 06.01.2027, tasdiqladi: Sinov Buxgalter); Gamma MChJ: Jismoniy shaxs → Tashkilot (tizim, 06.01.2027); turi tasdiqlanmagan: 1 ta — Alfa Qurilish MChJ');
   assert.deepEqual(r.cpKinds.acts, [{ id: 'cp1', kind: 'person', name: 'Alfa Qurilish MChJ' }]);
   assert.ok(controlRows(clean()).every(x => !(x.acts || []).length), 'toza holatda tasdiqlash tugmasi yo‘q');
   c.isTest = true; c.reconcile = { live: false, total: 0 };
@@ -571,4 +576,86 @@ test('g8: yuridik shaxsga naqd «Xarajat» — kontragent (server belgisi) va as
   assert.equal(orgCashParty('out_expense', 'other', null, false), true, 'asos hujjati bor «boshqa» tomon — tashkilot hisoblanadi');
   assert.equal(orgCashParty('out_expense', 'other', null, true), false, 'bozordan asossiz xarid — yo‘q');
   assert.deepEqual([orgCashParty('out_bank', 'other', null, false), orgCashParty('in_other', 'other', null, false), orgCashParty('out_expense', 'employee', null, false)], [false, false, false]);
+});
+
+test('g9 (g6 qoldig‘i): RP-06 — qabul qilinmay qolgan smena topshirish: «diqqat», ismlar, sanalgan summa, qachondan (Toshkent vaqti) va kassa kuni', () => {
+  const c = clean();
+  c.staleHandover = { id: 'ho_1', day: '2027-01-07', createdAt: '2027-01-07T12:40:00Z', counted: 1250000, fromName: 'Sinov Kassir', toName: 'Sinov Kassir Ikki' };
+  const r = by(controlRows(c));
+  assert.equal(r.staleHandover.level, 'warn');
+  assert.equal(r.staleHandover.value, 'Sinov Kassir → Sinov Kassir Ikki, sanalgan 1 250 000 so‘m; 07.01.2027 17:40 dan kutilmoqda (kassa kuni 07.01.2027)');
+  assert.match(r.staleHandover.hint, /kassada hujjat yozilmaydi va kun yopilmaydi/);
+  c.staleHandover.fromName = null;   // kassa egasi aniqlanmagan kunda (Direktor topshirgan)
+  assert.match(by(controlRows(c)).staleHandover.value, /^— → Sinov Kassir Ikki/);
+  assert.equal(by(controlRows(clean())).staleHandover.value, 'yo‘q');
+});
+
+test('g9 (ui-6): pul maydoni — bo‘sh joy mingliklar, butun so‘m (oxiridagi «,00» mumkin, tiyin — rad); boshqa ajratkich jim tashlanmaydi — rad', () => {
+  for (const [x, v] of [['1 000 000,00', 1000000], ['1250000.00', 1250000], ['1000,0', 1000], ['0', 0], ['007', 7], [' 2 900 000 ', 2900000], ['2\u00a0900\u202f000', 2900000]]) {
+    assert.deepEqual(amtRead(x), { v }, x);
+  }
+  // rahbar qarori (g9): nolsiz tiyin — alohida xabar bilan rad (naqd pulda tiyin yo'q — deyarli doim yozuv xatosi)
+  for (const x of ['1000.50', '12,5', '1 000 000,01', '0,5']) assert.deepEqual(amtRead(x), { err: AMT_TIYIN }, x);
+  for (const x of ['1.000.000', '1,000,000', '1,500', '1000.505', '12a', '-500', ',5', '1 000 000,0,0', '1e6', '1000,', '1 000 000 000 000']) assert.deepEqual(amtRead(x), { err: AMT_ERR }, x);
+  assert.deepEqual(amtRead(''), {}); assert.deepEqual(amtRead('   '), {}); assert.deepEqual(amtRead(null), {});
+  assert.match(AMT_ERR, /mingliklar ajratkichi sifatida qabul qilinmaydi/); assert.match(AMT_TIYIN, /butun so‘mda/);
+  // yozish paytidagi ko'rinish: mingliklar bo'sh joy bilan, ajratkich va tiyin saqlanadi; noto'g'ri yozuv o'zgartirilmaydi (xatosi — saqlashda)
+  assert.equal(amtShow('1000000'), '1 000 000'); assert.equal(amtShow('1000000,'), '1 000 000,'); assert.equal(amtShow('1000000,5'), '1 000 000,5');
+  assert.equal(amtShow('1 000 000.50'), '1 000 000.50'); assert.equal(amtShow('1.000.000'), '1.000.000'); assert.equal(amtShow('12a'), '12a'); assert.equal(amtShow(''), '');
+  // avvalgi xato: «1 000 000,00» ajratkichi o'chirilib 100 000 000 bo'lardi
+  assert.notEqual(amtRead(amtShow('1 000 000,00')).v, 100000000);
+  // «Қ» blankalari summasi ham shu qoida bilan; soni — butun son
+  assert.deepEqual(paperRead('2', '1 500 000,00', 'Қ-1, Қ-2'), { paper: { count: 2, sum: 1500000, nos: 'Қ-1, Қ-2' } });
+  assert.deepEqual(paperRead('2', '1 500,50', 'Қ-1, Қ-2'), { err: '«Қ» blankalari summasi: ' + AMT_TIYIN });
+  assert.deepEqual(paperRead('2', '1.500.000', 'Қ-1'), { err: '«Қ» blankalari summasi: ' + AMT_ERR });
+  assert.deepEqual(paperRead('1,5', '5000', 'Қ-1'), { err: '«Қ» blankalari soni — butun son (dona)' });
+});
+
+// admin.html UI-MSG bloki (g9): rad etish xabari va «To'lov qabul qilish» summasi — sof funksiyalar faylning o'zidan olinadi
+const umBlock = (() => { const a = ADM.indexOf('// UI-MSG:BEGIN'), b = ADM.indexOf('// UI-MSG:END'); return a >= 0 && b > a ? ADM.slice(a, b) : ''; })();
+const UM = (() => { const ctx = vm.createContext({}); vm.runInContext(umBlock + '\n;this.__um = { errMsg, pmAmtRead, pmAmtShow, PM_AMT_ERR, PM_AMT_TIYIN, fmtSom };', ctx); return ctx.__um; })();
+
+test('g9 (g8 qoldig‘i, ui-6): admin.html — rad etishda o‘zbekcha sabab (hint bilan), «To‘lov» summasi fin-kassa.js bilan bir qoida', () => {
+  assert.ok(umBlock.length > 0 && (ADM.match(/UI-MSG:BEGIN/g) || []).length === 1, 'blok bitta');
+  // himoyamiz (kassa:* / fin:* — hint bilan) — xabar matni; hint yo'q — avvalgidek: kod, bo'lmasa xabar
+  assert.equal(UM.errMsg({ code: '42501', hint: 'kassa:paused', message: 'Kassa to‘xtatilgan' }), 'Kassa to‘xtatilgan');
+  assert.equal(UM.errMsg({ code: '42501', message: 'new row violates row-level security policy' }), '42501');
+  assert.equal(UM.errMsg({ message: 'Failed to fetch' }), 'Failed to fetch');
+  assert.equal(UM.errMsg({ code: 'P0001', hint: 'kassa:x', message: '' }), 'P0001');
+  assert.equal(UM.errMsg('oddiy matn'), 'oddiy matn'); assert.equal(UM.errMsg(null), ''); assert.equal(UM.errMsg(undefined), '');
+  // «Xatolik: '+(e.code||e.message)» qolmagan (hammasi errMsg orqali)
+  assert.equal((ADM.match(/'Xatolik: '\+\(e\.code\|\|e\.message\)/g) || []).length, 0);
+  assert.ok((ADM.match(/'Xatolik: '\+errMsg\((e|err)\)/g) || []).length >= 60);
+  // summa: fin-kassa.js amtRead / amtShow bilan bir xil natija (xato matni — har birida o'ziniki)
+  const norm = r => JSON.stringify(r.err ? { err: 1 } : r);
+  for (const x of ['1 000 000,00', '1250000.00', '1000.50', '12,5', '0', ' 2 900 000 ', '2 900 000', '1.000.000', '1,000,000', '1,500',
+    '1000.505', '12a', '-500', ',5', '1 000 000,0,0', '1e6', '', '   ', null]) assert.equal(norm(UM.pmAmtRead(x)), norm(amtRead(x)), String(x));
+  assert.equal(UM.pmAmtRead('2.900.000').err, UM.PM_AMT_ERR);
+  assert.equal(UM.pmAmtRead('2 900 000,00').v, 2900000); assert.equal(UM.pmAmtRead('2 900 000,50').err, UM.PM_AMT_TIYIN);   // butun so'm (g9 rahbar qarori)
+  assert.match(UM.PM_AMT_ERR, /masalan: 2 900 000/); assert.match(UM.PM_AMT_TIYIN, /butun so‘mda/);
+  for (const x of ['1000000', '1000000,', '1000000,5', '1 000 000.50', '1.000.000', '12a', '']) assert.equal(UM.pmAmtShow(x), amtShow(x), x);
+  // pul maydonlari faqat shu qoida bilan o'qiladi (avvalgi /\D/g — ajratkichni jim tashlardi): «To'lov», «Buxgalteriya» xarajat va xodim
+  //   avansi (yozish paytida ham — pmAmtShow), «Maosh berish» (berilayotgan summa va davomat ushlanmasi: dbad — saqlashdan oldin rad)
+  assert.ok(/amtR=pmAmtRead\(\$\('#rp-amt'\)\.value\)/.test(ADM) && (ADM.match(/if\(amtR\.err\)\{ toast\(amtR\.err,true\)/g) || []).length >= 3);
+  for (const id of ['e-amt', 'av-amt']) {
+    assert.ok(ADM.includes(`amtR=pmAmtRead($('#${id}').value)`), id);
+    assert.ok(new RegExp(`const amt=\\$\\('#${id}'\\); if\\(amt\\) amt\\.addEventListener\\('input',\\(\\)=>\\{ const v=pmAmtShow\\(amt\\.value\\)`).test(ADM), id + ' input');
+    assert.ok(!new RegExp(`\\$\\('#${id}'\\)\\.value\\|\\|''\\)\\.replace\\(/\\\\D/g`).test(ADM), id + ': /\\D/g qolmagan');
+  }
+  assert.ok(/const dnum=v=>Number\(pmAmtRead\(v\)\.v\)\|\|0, dbad=/.test(ADM) && (ADM.match(/const bad=dbad\(\); if\(bad\)/g) || []).length === 2);
+  // fmtSom: butun summa — avvalgidek (ru-RU guruhlash), tiyinli — «,NN» bilan (avval vergul bo'sh joyga aylanib «2 900 000 5 so‘m» chiqardi)
+  const sp = s => String(s).replace(/[  ]/g, ' ');
+  assert.equal(sp(UM.fmtSom(2900000)), '2 900 000 so‘m'); assert.equal(sp(UM.fmtSom(0)), '0 so‘m'); assert.equal(sp(UM.fmtSom(-150000)), '-150 000 so‘m');
+  assert.equal(sp(UM.fmtSom('2900000')), '2 900 000 so‘m'); assert.equal(sp(UM.fmtSom(null)), '0 so‘m'); assert.equal(sp(UM.fmtSom('x')), '0 so‘m');
+  assert.equal(sp(UM.fmtSom(2900000.5)), '2 900 000,50 so‘m'); assert.equal(sp(UM.fmtSom(1000.05)), '1 000,05 so‘m');
+  assert.equal(sp(UM.fmtSom(-1000.05)), '-1 000,05 so‘m'); assert.equal(sp(UM.fmtSom(0.004)), '0 so‘m'); assert.equal(sp(UM.fmtSom(2.999)), '3 so‘m');
+  for (const n of [1, 12, 1234, 1234567, 999999999, -7, -1234567]) assert.equal(UM.fmtSom(n), n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' so‘m', String(n));   // butun — o'zgarishsiz
+  assert.equal((ADM.match(/function fmtSom\(/g) || []).length, 1, 'fmtSom bitta (UI-MSG blokida)');
+});
+
+test('g9 (ui-10): chop etilgan hujjatdagi «chop etdi» — kassa_state.me nomi, e-mail emas', () => {
+  const src = readFileSync(new URL('./fin-kassa.js', import.meta.url), 'utf8');
+  const i = src.indexOf('const printCtx = '), pc = i >= 0 ? src.slice(i, src.indexOf('\n', src.indexOf('printedAt', i))) : '';
+  assert.ok(pc.length > 100 && /printedBy: \(mk && mk\.byName\) \|\| me\(\)\.name \|\| ''/.test(pc), pc.slice(0, 400));
+  assert.ok(!/email/i.test(pc));
 });

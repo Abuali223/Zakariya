@@ -601,9 +601,11 @@ select zz.put('J2', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L
 select zz.chk('J2 birinchi chop etish — asl nusxa', (select v from zz.v where k = 'J2'), '"mode": "original".*"prior": 0|"prior": 0.*"mode": "original"');
 select zz.put('J3', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
 select zz.chk('J3 ikkinchi chop etish — «НУСХА»', (select v from zz.v where k = 'J3'), '"mode": "copy".*"prior": 1|"prior": 1.*"mode": "copy"');
-select zz.put('J3b', zz.as('U_FM', format('select public.kassa_print_mark(%L, %L, true)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
+-- (g9: asl nusxani faqat kassa operatori yoki Direktor chiqaradi — «qayta asl»ni ham; avval bu qadam Moliya menejeri nomidan edi)
+select zz.put('J3b', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L, true)::text', 'doc', (select v from zz.v where k = 'j_doc'))));
 select zz.chk('J3b «avvalgisi chiqmadi» — asl nusxa qayta (jurnalda alohida)', (select v from zz.v where k = 'J3b'), '"mode": "reissue".*"prior": 2|"prior": 2.*"mode": "reissue"');
-select zz.chk('J4 hujjatda chop etishlar soni', zz.as('U_ACC', format($q$select g -> 'doc' ->> 'prints' from public.kassa_doc_get(%L) g$q$, (select v from zz.v where k = 'j_doc'))), '^3$');
+select zz.chk('J4 hujjatda chop etishlar soni; asl nusxalar (asl va «qayta asl») — alohida',
+  zz.as('U_ACC', format($q$select (g -> 'doc' ->> 'prints') || ':' || (g -> 'doc' ->> 'printsOrig') from public.kassa_doc_get(%L) g$q$, (select v from zz.v where k = 'j_doc'))), '^3:2$');
 select zz.chk('J5 raqamsiz (so''rov holatidagi) hujjat chop etilmaydi',
   zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select id from public.cash_docs where desk = 'main' and status in ('draft', 'approved') limit 1))), '^ERR 22023 \[kassa:print\]');
 select zz.chk('J5b o''qituvchi chop etishni qayd qila olmaydi', zz.as('U_TCH', format('select public.kassa_print_mark(%L, %L)::text', 'doc', (select v from zz.v where k = 'j_doc'))), '^ERR 42501');
@@ -1131,6 +1133,101 @@ select zz.put('N15', zz.close('U_KAS', format('{"day":"2028-01-14","counted":%s}
 select zz.chk('N15 g6 tekshiruvchisi 1-holati: kassa egasi yo''q kunni kassir yopdi — kassa egasi va sanagan o''zi, lekin kunning orderini Direktor o''tkazgan: standart javobgar yo''q',
   coalesce((select "cashierUid" from public.cash_days where day = '2028-01-14'), '-') || ' | ' || zz.f(zz.get('N15'), 'diff') || ' | ' || zz.sh('2028-01-14'),
   '^- \| -400 \| close:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar$');
+
+-- ---------- (P) g9: asl nusxani kim chiqaradi (ko'rik bo'shlig'i), ishdan ketgan xodim, to'xtatilgan kassada so'rov (g4 qoldig'i),
+--   kontragent takrori (ui-13), «chop etdi» ismi (ui-10), sinov kassasida xodim qoldig'i (g1 qoldig'i), boshlang'ich qoldiq
+--   dalolatnomasida komissiya (ui-4) ----------
+--   15.01.2028 — yangi kun. U_KAS — kassa operatori; U_ACC, U_FM — 2-ro'yxat (hujjatni o'qiydi, asl nusxani chiqarmaydi).
+--   st_left — ishdan ketgan (ketish sanasi o'tgan), st_nodate — «chiqdi», sanasi yozilmagan, st_soon — ketish sanasi hali kelmagan.
+select zz.clock('2028-01-15 09:00+05');
+set local session_replication_role = replica;
+insert into public.staff (id, "staffId", name, position, "payStatus", "stopFrom") values
+  ('st_left', 'IQX-TL', 'Sinov Ketgan', 'Qorovul', 'chiqdi', '2028-01-10'),
+  ('st_nodate', 'IQX-TN', 'Sinov Sanasiz', 'Bog''bon', 'chiqdi', null),
+  ('st_soon', 'IQX-TS', 'Sinov Ketadigan', 'Oshpaz', 'chiqdi', '2028-02-01');
+insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date) values
+  ('adv_old_left', 'IQX-TL', 'staff:st_left', 'Sinov Ketgan', 20000, '2028-01', '2028-01-05');
+set local session_replication_role = origin;
+select zz.put('P1d', zz.inb('U_KAS', 15000, 'p1-000001'));
+select zz.put('P1a', zz.as('U_ACC', format('select public.kassa_print_mark(%L, %L)::text', 'doc', zz.id('P1d'))));
+select zz.put('P1f', zz.as('U_FM', format('select public.kassa_print_mark(%L, %L, true)::text', 'doc', zz.id('P1d'))));
+select zz.put('P1k', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', zz.id('P1d'))));
+select zz.put('P1k2', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'doc', zz.id('P1d'))));
+select zz.chk('P1 asl nusxani faqat kassa operatori / Direktor chiqaradi: buxgalter birinchi bo''lib chop etsa — «НУСХА» (asl nusxa «yeyilmaydi»), Moliya menejerining «qayta asl» so''rovi ham nusxa; kassirniki — asl, keyingisi nusxa',
+  zz.f(zz.get('P1a'), 'mode') || ':' || zz.f(zz.get('P1a'), 'prior') || ' | ' || zz.f(zz.get('P1f'), 'mode') || ' | ' || zz.f(zz.get('P1k'), 'mode') || ':' || zz.f(zz.get('P1k'), 'prior')
+  || ' | ' || zz.f(zz.get('P1k2'), 'mode')
+  || ' | ' || zz.as('U_ACC', format($q$select (g -> 'doc' ->> 'prints') || ':' || (g -> 'doc' ->> 'printsOrig') from public.kassa_doc_get(%L) g$q$, zz.id('P1d')))
+  || ' | ' || zz.as('U_DIR', $q$select c ->> 'reissues30' from public.kassa_checks('main') c$q$),
+  '^copy:0 \| copy \| original:2 \| copy \| 4:1 \| 1$');
+select zz.chk('P2 ishdan ketgan xodimga yangi ish haqi avansi va hisobdorga avans — rad (kassa:emp_left); ketish sanasi yozilmagan «chiqdi» ham ketgan; iz qolmaydi',
+  zz.preq('U_KAS', '{"op":"out_advance","amount":10000,"partyType":"employee","partyId":"staff:st_left","basis":"Ariza","clientRef":"p2-000001"}')
+  || ' | ' || zz.preq('U_KAS', '{"op":"out_accountable","amount":10000,"partyType":"employee","partyId":"staff:st_left","basis":"Ariza","clientRef":"p2-000002"}')
+  || ' | ' || zz.preq('U_FM', '{"op":"out_accountable","amount":10000,"partyType":"employee","partyId":"staff:st_nodate","basis":"Ariza","clientRef":"p2-000003"}')
+  || ' | ' || (select count(*) from public.cash_docs where "clientRef" in ('p2-000001', 'p2-000002', 'p2-000003')),
+  '^ERR 22023 \[kassa:emp_left\] «Sinov Ketgan» ishdan ketgan: unga yangi ish haqi avansi berilmaydi.* \| ERR 22023 \[kassa:emp_left\] «Sinov Ketgan» ishdan ketgan: unga yangi hisobdorga avans.* \| ERR 22023 \[kassa:emp_left\] «Sinov Sanasiz».* \| 0$');
+select zz.put('P2s', zz.preq('U_KAS', '{"op":"out_advance","amount":10000,"partyType":"employee","partyId":"staff:st_soon","basis":"Ariza","clientRef":"p2-000004"}'));
+select zz.chk('P2b ketish sanasi hali kelmagan xodimga — so''rov yoziladi; xodimlar ro''yxatida ketganlar belgilangan (yakuniy hisob-kitob uchun qoladi)',
+  zz.f(zz.get('P2s'), 'status') || ' | ' || zz.as('U_KAS', $q$select string_agg((x ->> 'ref') || '=' || (x ->> 'left'), ',' order by x ->> 'ref') from jsonb_array_elements(public.kassa_people()) x
+                                                              where x ->> 'ref' in ('staff:st1', 'staff:st_left', 'staff:st_nodate', 'staff:st_soon')$q$),
+  '^draft \| staff:st1=false,staff:st_left=true,staff:st_nodate=true,staff:st_soon=false$');
+select zz.put('P2r', zz.rcpt('U_KAS', '{"op":"in_staff_return","amount":5000,"partyType":"employee","partyId":"staff:st_left","articleId":"OP-08","month":"2028-01","basis":"Avans qaytimi","clientRef":"p2-000005"}'));
+select zz.chk('P2c yakuniy hisob-kitob ketgan xodim bilan ham: avans qaytimi (OP-08) qabul qilindi, avans yozuvi kamaydi',
+  zz.f(zz.get('P2r'), 'status') || ':' || (select trim_scale(sum(amount)) from public.staff_advances where "teacherId" = 'IQX-TL'), '^posted:15000$');
+select zz.put('P2a', zz.f(zz.appr('U_FM', zz.id('P2s')), 'status'));
+set local session_replication_role = replica;
+update public.staff set "stopFrom" = '2028-01-14' where id = 'st_soon';
+set local session_replication_role = origin;
+select zz.put('P2p', zz.pay('U_KAS', zz.id('P2s')));
+select zz.put('P2x', zz.f(zz.as('U_KAS', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('P2s'), 'Xodim ishdan ketdi')), 'status'));
+select zz.chk('P2d so''rov tasdiqlangandan keyin xodim ketdi — pul berilmaydi (kassa:emp_left), so''rov bekor qilindi',
+  zz.get('P2a') || ' | ' || zz.get('P2p') || ' | ' || zz.get('P2x') || ' | ' || (select status from public.cash_docs where id = zz.id('P2s')),
+  '^approved \| ERR 22023 \[kassa:emp_left\] «Sinov Ketadigan» ishdan ketgan: unga ish haqi avansi berilmaydi.* \| cancelled \| cancelled$');
+-- to'xtatilgan kassa (RPC'siz belgi — faqat shu tekshiruv uchun; keyin qaytariladi)
+set local session_replication_role = replica;
+update public.cash_desks set "pausedAt" = '2028-01-15 08:00+05' where id = 'main';
+set local session_replication_role = origin;
+select zz.chk('P3 to''xtatilgan kassada chiqim so''rovi va Direktor ruxsatini kutadigan kirim so''rovi ham yozilmaydi (kassa:paused, kun ochish bilan bir xil matn); iz qolmaydi',
+  zz.preq('U_KAS', '{"op":"out_expense","amount":1000,"partyType":"other","partyName":"Sinov Bozor","noBasis":true,"lines":[{"articleId":"EX-20","amount":1000}],"clientRef":"p3-000001"}')
+  || ' | ' || zz.rcpt('U_DIR', format('{"op":"in_funding","amount":1000,"partyType":"founder","partyId":"%s","articleId":"OP-20","basis":"Qaror","clientRef":"p3-000002"}', zz.id('cp_fnd')))
+  || ' | ' || (select count(*) from public.cash_docs where "clientRef" in ('p3-000001', 'p3-000002')),
+  '^ERR P0001 \[kassa:paused\] Kassa to''xtatilgan \(15\.01\.2028 dan\): kassa hujjati yozilmaydi.* \| ERR P0001 \[kassa:paused\] Kassa to''xtatilgan.* \| 0$');
+set local session_replication_role = replica;
+update public.cash_desks set "pausedAt" = null where id = 'main';
+set local session_replication_role = origin;
+select zz.put('P4a', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'supplier', 'Yangi Savdo MChJ')::text$q$));
+select zz.put('P4b', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'supplier', '  yangi   savdo mchj ')::text$q$));
+select zz.put('P4c', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'supplier', 'Yangi Savdo MChJ', '301234567')::text$q$));
+select zz.put('P4d', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'org', 'Yangi Savdo MChJ')::text$q$));
+select zz.chk('P4 ui-13: «Qo''shish» ikki marta — shu tur, nom (bo''shliq va harf me''yorlangan) va STIR bilan mavjudi qaytadi (dup), takror yaratilmaydi; STIR yoki tur boshqa — yangi',
+  (zz.id('P4b') = zz.id('P4a'))::text || ':' || coalesce(zz.f(zz.get('P4a'), 'dup'), '-') || ':' || zz.f(zz.get('P4b'), 'dup') || ':' || zz.f(zz.get('P4b'), 'name')
+  || ' | ' || (zz.id('P4c') <> zz.id('P4a'))::text || ':' || (zz.id('P4d') <> zz.id('P4a'))::text
+  || ' | ' || (select count(*) from public.fin_counterparties where lower(name) like '%yangi%savdo%'),
+  '^true:-:true:Yangi Savdo MChJ \| true:true \| 3$');
+select zz.chk('P5 ui-10: holatda joriy foydalanuvchining kassadagi ismi — xodim kartasidan; kartasiz hisobda ham email emas',
+  zz.as('U_KAS', $q$select public.kassa_state('main') #>> '{me,name}'$q$) || ' | ' || zz.as('U_TRE', $q$select public.kassa_state('main') #>> '{me,name}'$q$),
+  '^Sinov Xodim Yangi \| U_TRE$');   -- (st1 kartasining ismi M bo'limida o'zgartirilgan — HR yuritadi)
+select zz.chk('P6 g1 qoldig''i: sinov kassasida xodim qoldig''ida haqiqiy avans / maosh hisobi yo''q (sinov hujjati unga tegmaydi); asosiy kassada — bor',
+  zz.as('U_KAS', $q$select (j ->> 'testDesk') || ':' || coalesce(j ->> 'advance', '-') || ':' || coalesce(j ->> 'salary', '-') || ':' || coalesce(j ->> 'locked', '-') || ':' || (j ->> 'month')
+                     from public.kassa_staff_open('sinov', 'staff:st_left', '2028-01') j$q$)
+  || ' | ' || zz.as('U_KAS', $q$select (j ->> 'testDesk') || ':' || (j -> 'advance' ->> 'open') from public.kassa_staff_open('main', 'staff:st_left', '2028-01') j$q$),
+  '^true:-:-:-:2028-01 \| false:15000$');
+select zz.chk('P7 ui-4: boshlang''ich qoldiq dalolatnomasi — sanagan komissiya a''zolari (sanash yozuvidan); qayta kiritilgani — o''z komissiyasi (bo''sh); boshqa dalolatnomada — yo''q',
+  zz.as('U_ACC', format($q$select coalesce((select string_agg((m ->> 'title') || ' — ' || (m ->> 'name'), '; ') from jsonb_array_elements(g -> 'commission') m), '')
+                                  || ' | ' || jsonb_array_length(h -> 'commission') || ' | ' || coalesce(jsonb_typeof(s -> 'commission'), '-')
+                             from public.kassa_doc_get(%L) g, public.kassa_doc_get(%L) h, public.kassa_doc_get(%L) s$q$,
+    (select id from public.cash_docs where desk = 'main' and op = 'nc_opening' and no = 1 and year = 2027),
+    (select id from public.cash_docs where desk = 'main' and op = 'nc_opening' and no = 2 and year = 2027),
+    (select id from public.cash_docs where desk = 'main' and op = 'nc_shortage_dec' order by "postedAt" limit 1))),
+  '^Direktor — Sinov D; Kassir — Sinov K \| 0 \| null$');
+select zz.put('P8c', zz.close('U_KAS', format('{"day":"2028-01-15","counted":%s}', zz.bal())));
+select zz.put('P8a', zz.as('U_ACC', format('select public.kassa_print_mark(%L, %L)::text', 'book', 'cd_main_2028-01-15')));
+select zz.put('P8u', zz.as('U_FM', $q$select ((c -> 'unprintedBooks30') @> '["2028-01-15"]')::text from public.kassa_checks('main') c$q$));
+select zz.put('P8k', zz.as('U_KAS', format('select public.kassa_print_mark(%L, %L)::text', 'book', 'cd_main_2028-01-15')));
+select zz.chk('P8 KO-4: buxgalter chop etgani — nusxa, varaq «chop etilmagan» bo''lib qoladi; kassirniki — asl nusxa, nazorat ro''yxatidan chiqdi; kun javobida soni',
+  zz.f(zz.get('P8c'), 'day', 'status') || ' | ' || zz.f(zz.get('P8a'), 'mode') || ':' || zz.get('P8u') || ' | ' || zz.f(zz.get('P8k'), 'mode')
+  || ':' || zz.as('U_FM', $q$select ((c -> 'unprintedBooks30') @> '["2028-01-15"]')::text from public.kassa_checks('main') c$q$)
+  || ' | ' || zz.as('U_FM', $q$select (b -> 'day' ->> 'prints') || ':' || (b -> 'day' ->> 'printsOrig') from public.kassa_day_book('main', '2028-01-15') b$q$),
+  '^closed \| copy:true \| original:false \| 2:1$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end

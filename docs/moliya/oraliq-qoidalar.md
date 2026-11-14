@@ -7,7 +7,7 @@ bajariladi. Maqsad: yangi tizimga toza ma’lumot bilan o‘tish (rasmiy boshlan
 | № | Qoida | Kim |
 |---|---|---|
 | 1 | **Har xarajat o‘sha kuni** tizimga kiritiladi («Buxgalteriya» → «+ Xarajat qo‘shish»). Izohga chiqim orderi raqami (Р/О) va **kimga berilgani** yoziladi. | Moliya menejeri |
-| 2 | **O‘quv to‘lovi faqat tizimda** («To‘lovlar» → «💵 To‘lov»). Google Sheet’dagi «tushum» varaqlari endi to‘ldirilmaydi. | Kassir |
+| 2 | **O‘quv to‘lovi faqat tizimda** («To‘lovlar» → «💵 To‘lov»). Google Sheet’dagi «tushum» varaqlari endi to‘ldirilmaydi. Summa — butun so‘mda, mingliklar orasida bo‘sh joy bilan («2 900 000»); tiyin yozilmaydi (oxiridagi «,00» — mumkin); «2.900.000» yoki «2,900,000» kabi yozuvni tizim qabul qilmaydi (xabar beradi, raqam jim o‘zgarib ketmaydi). | Kassir |
 | 3 | **Bankka topshirilgan va bankdan olingan naqd pul — kirim ham, xarajat ham emas.** Xarajatlar ro‘yxatiga yozilmaydi; Excel kunlik varag‘ida alohida «o‘tkazma» qatori. | Kassir, moliya menejeri |
 | 4 | **Har kech kassadagi pul sanaladi** (kassir + moliya menejeri). Qisqa dalolatnoma: sana, sanalgan summa, Excel’dagi qoldiq, farq (bo‘lsa — sababi), ikki imzo. | Kassir, moliya menejeri |
 | 5 | **Kun boshidagi qoldiq qo‘lda o‘zgartirilmaydi** — u kechagi kun oxiridagi qoldiq. Farq faqat 4-band dalolatnomasida yoziladi. | Kassir |

@@ -113,7 +113,7 @@ test('KO-2: chiqim orderi — qatorlar, imzolar, qo‘lda to‘ldiriladigan qato
   for (const must of ['ЧИҚИМ КАССА ОРДЕРИ № 7', '2027 йил 4 январь', '9420 X 5010 1 000 000=00 EX-32', '9430 X 5010 234 567=89 EX-20',
     'Берилсин: Sinov Ta’minot MChJ', 'Асоси: Hisob-faktura № 15, 03.01.2027',
     'Сумма: 1 234 567=89 — Бир миллион икки юз ўттиз тўрт минг беш юз олтмиш етти сўм 89 тийин', 'Иловаси: hisob-faktura, 1 varaq',
-    'Раҳбар Синов Д.Д.', 'Бош бухгалтер Sinov Moliya', 'Олдим:', '(сумма сўз билан)', 'Сана', 'Имзо',
+    'Раҳбар Синов Д.Д.', 'Бош бухгалтер Синов Б.Б.', 'Олдим:', '(сумма сўз билан)', 'Сана', 'Имзо',
     'Шахсни тасдиқловчи ҳужжат:', '(номи, серияси ва рақами, ким томонидан ва қачон берилган)', 'Берди: кассир Sinov Kassir', 'Ҳужжат: cd_0002'])
     assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   assert.ok(!t.includes('ПАТТА'), 'chiqim orderida patta yo‘q');
@@ -124,6 +124,13 @@ test('KO-2: chiqim orderi — qatorlar, imzolar, qo‘lda to‘ldiriladigan qato
   const two = signatories.concat([{ id: 's3', list: 2, uid: 'u_x', title: 'Молия менежери', fullName: 'Синов М.М.', active: true }]);
   const n = text(docHtml(Object.assign({}, ko2, { approvedBy: null }), ctx({ signatories: two }), W));
   assert.ok(n.includes('Бош бухгалтер Олдим:'), n);
+  // ui-7: bir nechta — tasdiqlovchi ulardan biriga bog'langan bo'lsa o'sha (to'liq F.I.Sh.); bog'lanmagan bo'lsa — bo'sh (hisob ismi emas)
+  assert.ok(text(docHtml(Object.assign({}, ko2, { approvedBy: 'u_x' }), ctx({ signatories: two }), W)).includes('Бош бухгалтер Синов М.М.'));
+  const nl = text(docHtml(ko2, ctx({ signatories: two }), W));   // approvedBy u_mm — ro'yxatdagilarga bog'lanmagan
+  assert.ok(nl.includes('Бош бухгалтер Олдим:') && !nl.includes('Sinov Moliya'), nl);
+  // ro'yxat bo'sh — ikkala imzo ham qo'lda (tasdiqlovchilar hisob ismi yozilmaydi)
+  const none = text(docHtml(ko2, ctx({ signatories: [] }), W));
+  assert.ok(none.includes('Раҳбар Бош бухгалтер Олдим:') && !none.includes('Sinov Moliya') && !none.includes('Sinov Direktor'), none);
 });
 
 test('Tizim hujjati (sanash farqi) va asos hujjatisiz xarid matni chop etish tilida', () => {
@@ -194,7 +201,7 @@ test('KO-4: ochiq kun — qoralama (varaq raqamsiz, sanash qatorlarisiz); belgil
 
 test('Sanash dalolatnomasi: kun yopish (kamomad) va smena topshirish-qabul', () => {
   const b = mkBook(), t = text(countHtml(b.counts[0], b, ctx(), W));
-  for (const must of ['КАССАДАГИ НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ', '2027 йил 4 январь — кунни ёпишда, 18:00', 'Комиссия: Директор ўринбосари — Sinov A.A.; Бухгалтер — Sinov B.B.',
+  for (const must of ['КАССАДАГИ НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ', '2027 йил 4 январь кун учун — кунни ёпишда Санаш вақти: 04.01.2027 18:00', 'Комиссия: Директор ўринбосари — Sinov A.A.; Бухгалтер — Sinov B.B.',
     'Санаш пайтидаги охирги ҳужжат рақамлари: кирим ордери № 26, чиқим ордери № 9.', 'Ҳисобдаги қолдиқ 33 850 000=00', 'Санаб чиқилган нақд пул 33 845 000=00',
     'Ҳали ўтказилмаган ёзувлар суммаси –', 'Фарқ (санаб чиқилган − ҳисобдаги − ўтказилмаган) −5 000=00',
     'Санаб чиқилган нақд пул сўз билан: Ўттиз уч миллион саккиз юз қирқ беш минг сўм 00 тийин',
@@ -204,7 +211,7 @@ test('Sanash dalolatnomasi: kun yopish (kamomad) va smena topshirish-qabul', () 
     assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   const ho = { id: 'cc_2', kind: 'handover', day: '2027-01-04', expected: 500000, counted: 500000, pendingSum: 0, diff: 0, fromUid: 'u_kas', toUid: 'u_kas2', byUid: 'u_kas', at: '2027-01-04T05:00:00Z', commission: [] };
   const h = text(countHtml(ho, b, ctx(), W));
-  for (const must of ['сменани топшириш-қабул қилишда, 10:00', 'Фарқ аниқланмади.', 'Топширди Sinov Kassir', 'Қабул қилди Sinov Kassir 2'])
+  for (const must of ['сменани топшириш-қабул қилишда Санаш вақти: 04.01.2027 10:00', 'Фарқ аниқланмади.', 'Топширди Sinov Kassir', 'Қабул қилди Sinov Kassir 2'])
     assert.ok(h.includes(must), 'yo‘q: ' + must + '\n' + h);
   assert.ok(!h.includes('Раҳбар қарори'), 'farq yo‘q — qaror qatori yo‘q');
   // topshirish paytigacha (10:00) o'tkazilgan hujjatlar: kirim 26 ta (08:00–08:26), chiqim hali yo'q (11:00 dan keyin)
@@ -731,4 +738,80 @@ test('acc-6: KO-4 va RP-02 «Farq» — smena topshirishdagi farq yopish farqi y
   const open = { day: Object.assign({}, b.day, { status: 'open', receiptsLive: b.rec, payoutsLive: b.pay, balance: 1, counted: null, diff: null, verifiedBy: null }), docs: b.docs, counts: b.counts.filter(c => c.kind === 'handover') };
   assert.ok(text(reportHtml(open, ctx({ rules: [] }), W)).includes('Farq smenani topshirish-qabul qilishda: ortiqcha 3 000=00 — K-27'), 'ochiq kunda ham smena farqi');
   assert.ok(text(bookHtml(mkBook(), ctx(), W)).includes('Фарқ: Касса камомади 5 000=00 — Ч-10'), 'smena farqi yo‘q — avvalgidek');
+});
+
+// ---------------------------------------------------------------- ko'rik 9-guruhi (ui-4, ui-7, ui-8, g4 / g6 / g7 qoldiqlari)
+const decDoc = (over) => Object.assign({ id: 'kd_dec', form: 'ACT', op: 'nc_shortage_dec', status: 'posted', no: 3, businessDay: '2027-01-05', amount: 5000,
+  partyType: 'employee', partyId: 'staff:st1', partyName: 'Sinov Kassir', basis: 'Direktor qarori: KO-2 № 4, 05.01.2027', note: 'Tushuntirish xati bilan', decidedBy: 'u_dir',
+  lines: [{ debit: '4730', credit: '5910', amount: 5000, articleId: 'OP-22', cash: false }] }, over || {});
+test('ui-4: kamomad qarori dalolatnomasi — javobgar shaxs, qaror so‘z bilan va «Tanishdim, roziman» imzo qatori; eski «boshqa» tomonli qaror ham; hisobdan chiqarish', () => {
+  const t = text(docHtml(decDoc(), ctx(), W));
+  for (const must of ['ДАЛОЛАТНОМА № Д-3', 'Камомад бўйича қарор — 2027 йил 5 январь', 'Жавобгар шахс: Sinov Kassir', 'Раҳбар қарори: Ходим зиммасига',
+    'Раҳбар Синов Д.Д.', 'Бош бухгалтер Синов Б.Б.', 'Танишдим, розиман: жавобгар шахс Sinov Kassir'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  // eski (g6 dan oldingi) qaror: kassir xodim kartasiga bog'lanmagan — «boshqa» tomon nomi bilan, Dt 4730: javobgar baribir ko'rinadi va imzolaydi
+  const o = text(docHtml(decDoc({ partyType: 'other', partyId: null, partyName: 'Kassir Ikki Sinov' }), ctx(), W));
+  assert.ok(o.includes('Жавобгар шахс: Kassir Ikki Sinov') && o.includes('Ходим зиммасига') && o.includes('Танишдим, розиман: жавобгар шахс Kassir Ikki Sinov'), o);
+  // hisobdan chiqarish (Dt 9430): qaror so'z bilan, javobgar va uning imzosi yo'q
+  const w = text(docHtml(decDoc({ partyType: 'other', partyId: null, partyName: 'Kassa kamomadi (hisobdan chiqarildi)', lines: [{ debit: '9430', credit: '5910', amount: 5000, articleId: 'EX-45', cash: false }] }), ctx(), W));
+  assert.ok(w.includes('Раҳбар қарори: Зарарга (ҳисобдан чиқарилди)') && !w.includes('Жавобгар шахс') && !w.includes('Танишдим'), w);
+  const r = text(docHtml(decDoc(), ctx({ lang: 'ru' }), W));
+  assert.ok(r.includes('Ответственное лицо: Sinov Kassir') && r.includes('Решение руководителя: Отнести на сотрудника') && r.includes('Ознакомлен, согласен: ответственное лицо Sinov Kassir'), r);
+  const l = text(docHtml(decDoc(), ctx({ lang: 'uz-latn' }), W));
+  assert.ok(l.includes('Rahbar qarori: Xodim zimmasiga') && l.includes('Tanishdim, roziman: javobgar shaxs Sinov Kassir'), l);
+  assert.ok(text(docHtml(decDoc({ lines: [{ debit: '9430', credit: '5910', amount: 5000, cash: false }] }), ctx({ lang: 'ru' }), W)).includes('Списать на убытки'));
+});
+
+test('ui-4: boshlang‘ich qoldiq dalolatnomasi (Д-1) — komissiya a‘zolari va imzo qatorlari; g4 qoldig‘i: qayta ishga tushirish dalolatnomasi o‘z sarlavhasi bilan (3 tilda)', () => {
+  const op = { id: 'kd_op', form: 'ACT', op: 'nc_opening', status: 'posted', no: 1, businessDay: '2027-01-04', amount: 2000000, partyName: 'Boshlang‘ich qoldiq',
+    basis: 'Kassani sanash dalolatnomasi (boshlang‘ich qoldiq)', lines: [{ debit: '5010', credit: '0000', amount: 2000000, articleId: 'OP-23', cash: true }],
+    commission: [{ title: 'Директор', name: 'Sinov D.D.' }, { title: 'Бош бухгалтер', name: 'Sinov B.B.' }, { title: '', name: 'Sinov K.K.' }] };
+  const t = text(docHtml(op, ctx(), W));
+  for (const must of ['ДАЛОЛАТНОМА № Д-1', 'Кассанинг бошланғич қолдиғи — 2027 йил 4 январь', 'Комиссия: Директор — Sinov D.D.; Бош бухгалтер — Sinov B.B.; Sinov K.K.',
+    'Директор Sinov D.D.', 'Бош бухгалтер Sinov B.B.', 'Комиссия аъзоси Sinov K.K.'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  assert.ok(!text(docHtml(Object.assign({}, op, { commission: [] }), ctx(), W)).includes('Комиссия'), 'komissiya yozilmagan — qator yo‘q');
+  const rs = Object.assign({}, op, { no: 4, businessDay: '2027-02-03', amount: 35000, partyName: 'Qayta ishga tushirish', basis: 'Qayta ishga tushirish: sanash dalolatnomasi',
+    sourceSnapshot: { kind: 'restart', prevDay: '2027-02-01', prevClosing: 4725000, counted: 4760000, startDay: '2027-02-03' } });
+  const r1 = text(docHtml(rs, ctx(), W));
+  assert.ok(r1.includes('Қайта ишга тушириш: санаш далолатномаси — 2027 йил 3 февраль') && !r1.includes('Кассанинг бошланғич қолдиғи'), r1);
+  assert.ok(text(docHtml(rs, ctx({ lang: 'uz-latn' }), W)).includes('Qayta ishga tushirish: sanash dalolatnomasi — 2027-yil 3-fevral'));
+  assert.ok(text(docHtml(rs, ctx({ lang: 'ru' }), W)).includes('Повторный запуск кассы: акт пересчёта — 3 февраля 2027 г.'));
+});
+
+test('ui-8: sanash dalolatnomasi — kassa kuni va haqiqiy sanash payti alohida (kechagi kun bugun ertalab sanalganda); g6 qoldig‘i: smenada sanalgan va qabul qilingan payt', () => {
+  const b = mkBook();
+  const late = Object.assign({}, b.counts[0], { at: '2027-01-05T03:30:00Z' });   // 04.01 kassa kuni 05.01 08:30 da sanalgan
+  const t = text(countHtml(late, b, ctx(), W));
+  assert.ok(t.includes('2027 йил 4 январь кун учун — кунни ёпишда') && t.includes('Санаш вақти: 05.01.2027 08:30'), t);
+  assert.ok(!t.includes('4 январь — кунни ёпишда, 08:30'), 'kun sanasi va soat bir qatorda aralashmaydi');
+  assert.ok(text(countHtml(late, b, ctx({ lang: 'uz-latn' }), W)).includes('2027-yil 4-yanvar kun uchun — kunni yopishda Sanash vaqti: 05.01.2027 08:30'));
+  assert.ok(text(countHtml(late, b, ctx({ lang: 'ru' }), W)).includes('Кассовый день: 4 января 2027 г. — при закрытии дня Время пересчёта: 05.01.2027 08:30'));
+  const ho = { id: 'cc_9', kind: 'handover', day: '2027-01-04', expected: 500000, counted: 500000, pendingSum: 0, diff: 0, fromUid: 'u_kas', toUid: 'u_kas2', byUid: 'u_kas',
+    handoverId: 'ho_9', at: '2027-01-04T07:40:00Z', commission: [] };
+  const bh = Object.assign({}, b, { handovers: [{ id: 'ho_9', status: 'accepted', createdAt: '2027-01-04T07:15:00Z', acceptedAt: '2027-01-04T07:40:00Z' }] });
+  const h = text(countHtml(ho, bh, ctx(), W));
+  assert.ok(h.includes('сменани топшириш-қабул қилишда Саналди: 04.01.2027 12:15 · Қабул қилинди: 04.01.2027 12:40'), h);
+  assert.ok(text(countHtml(ho, bh, ctx({ lang: 'ru' }), W)).includes('Пересчитано: 04.01.2027 12:15 · Принято: 04.01.2027 12:40'));
+  // topshirish yozuvi kun varag'ida yo'q (eski javob) — avvalgidek bitta vaqt
+  assert.ok(text(countHtml(ho, b, ctx(), W)).includes('Санаш вақти: 04.01.2027 12:40'));
+});
+
+test('g7 qoldig‘i: «hali o‘tkazilmagan yozuvlar» tarkibi — qurilma navbati (soni, summasi) va «Қ» blankalari (soni, summasi, raqamlari) alohida: dalolatnoma, KO-4, RP-02', () => {
+  const b = mkBook();
+  const refs = [{ ref: 'man_a1_x', amount: 10000 }, { ref: 'man_a2_x', amount: 5000 }];
+  Object.assign(b.day, { pendingCount: 3, pendingSum: 715000, pendingRefs: refs, paperCount: 1, paperSum: 700000, paperNos: 'Қ-0012' });
+  const cnt = Object.assign({}, b.counts[0], { pendingSum: 715000, pendingRefs: refs, paperCount: 1, paperSum: 700000, paperNos: 'Қ-0012' });
+  const c = text(countHtml(cnt, b, ctx(), W));
+  assert.ok(c.includes('Ҳали ўтказилмаган ёзувлар суммаси шу жумладан: қурилма навбатидаги ёзувлар — 2 та, 15 000=00; «Қ» бланкалари — 1 та (№ Қ-0012), 700 000=00 715 000=00'), c);
+  const k = text(bookHtml(b, ctx(), W));
+  assert.ok(k.includes('Ҳали ўтказилмаган ёзувлар: 3 та, 715 000=00 (шу жумладан: қурилма навбатидаги ёзувлар — 2 та, 15 000=00; «Қ» бланкалари — 1 та (№ Қ-0012), 700 000=00)'), k.slice(-1500));
+  const r = text(reportHtml(b, ctx({ rules: [] }), W));
+  assert.ok(r.includes('Hali o‘tkazilmagan yozuvlar (3 ta) shu jumladan: qurilma navbatidagi yozuvlar — 2 ta, 15 000=00; «Қ» blankalari — 1 ta (№ Қ-0012), 700 000=00 715 000=00'), r);
+  assert.ok(text(reportHtml(b, ctx({ rules: [], lang: 'ru' }), W)).includes('в том числе: записи в очереди устройств — 2 шт., 15 000=00; бланки «Қ» — 1 шт. (№ Қ-0012), 700 000=00'));
+  // faqat qurilma navbati (eski yozuv — kalitlarsiz: soni pendingCount dan); «Қ» yo'q
+  const q = Object.assign({}, cnt, { pendingSum: 15000, pendingRefs: [], pendingCount: 2, paperCount: 0, paperSum: 0, paperNos: '' });
+  assert.ok(text(countHtml(q, b, ctx(), W)).includes('шу жумладан: қурилма навбатидаги ёзувлар — 2 та, 15 000=00 15 000=00'));
+  // hali o'tkazilmagan yo'q — tarkib qatori yo'q
+  assert.ok(!text(countHtml(b.counts[0], mkBook(), ctx(), W)).includes('шу жумладан'));
 });

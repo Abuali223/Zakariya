@@ -24,6 +24,7 @@ const tkHour = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUT
 const tkDow = ms => new Date(tkDay(ms) + 'T12:00:00Z').getUTCDay();
 
 const dmy = s => String(s || '').slice(0, 10).split('-').reverse().join('.');
+const tkDmyHm = s => { const ms = Date.parse(String(s || '')); return Number.isFinite(ms) ? `${dmy(tkDay(ms))} ${new Date(ms + 5 * 3600e3).toISOString().slice(11, 16)}` : ''; };
 // Kassa bloki (0–3 qator) va nazorat qatori. k — director_daily().kassa (yo'q bo'lsa — bo'sh ro'yxat).
 //   Smena topshirishdagi sanash farqlari (handoverDiffs — kassa moduli acc-6) kunni yopishdagi farq yonida; bo'lmasa — matn avvalgidek.
 function kassaLines(k) {
@@ -56,6 +57,9 @@ function kassaLines(k) {
   if (n(c.waitingApproval) > 0) w.push(`tasdiq kutmoqda: ${n(c.waitingApproval)}`);
   if (n(c.approvedUnpaid) > 0) w.push(`pul berilmagan: ${n(c.approvedUnpaid)}`);
   if (n(c.staleRefunds) > 0) w.push(`⚠️ kechikkan qaytarish: ${n(c.staleRefunds)}`);
+  // qabul qilinmay qolgan smena topshirish (kassa moduli g9: o'tgan kassa kuni yoki 2 soatdan oshgan) — faqat bor bo'lsa; ismsiz (qolgan qatorlar kabi)
+  const sh = c.staleHandover;
+  if (sh && typeof sh === 'object') w.push(`⚠️ qabul qilinmagan smena topshirish${tkDmyHm(sh.createdAt) ? ` (${tkDmyHm(sh.createdAt)} dan)` : ''}`);
   if (n(c.gaps) > 0) w.push('⚠️ raqamlashda bo‘shliq');
   if (n(c.fiscalExempt) > 0) w.push(`fiskal cheksiz: ${n(c.fiscalExempt)}`);
   if (c.limitExceeded === true) w.push('⚠️ qoldiq limitdan oshgan');

@@ -114,7 +114,8 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    (nazorat ro‘yxati → «Kontragent turi»): kassir yoki moliya menejeri kiritgani tasdiqlanguncha yuridik shaxs hisoblanadi (kassadan
    naqd to‘lovga Direktor tasdig‘i kerak).
 5. **«Boshlang‘ich qoldiqni kiritish»:** summa — komissiya sanagan pul; «Birinchi kassa kuni» — yanvarning birinchi kassa kuni;
-   komissiya a’zolari. Tizim «Boshlang‘ich qoldiq» dalolatnomasini yozadi (D-1) — chop etilib, komissiya imzolaydi.
+   komissiya a’zolari. Tizim «Boshlang‘ich qoldiq» dalolatnomasini yozadi (D-1) — chop etilib, komissiya imzolaydi (dalolatnomada
+   komissiya tarkibi kiritilganidek chiqadi va har a’zoga imzo qatori bor).
    Birinchi kassa kuni ochilguncha qoldiqni qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi, raqami saqlanadi).
    **Sanashdan keyin va birinchi kassa kunidan oldin naqd pul harakati bo‘lsa** (masalan, ta’til kunlari qabul qilingan to‘lov) —
    birinchi kassa kuni ertalab pul qayta sanaladi va boshlang‘ich qoldiq qayta kiritiladi: u birinchi hujjatdan oldingi haqiqiy pulga teng bo‘lishi shart.
@@ -242,7 +243,8 @@ navbati avval tizimga kiritilgan bo‘lsin — 4-bo‘lim, 1-qadam):
    kunidan keyin), komissiya a’zolari. Tizim summani tizimdagi oxirgi kun oxiri qoldig‘i bilan solishtiradi: farq —
    to‘xtatilgan davrdagi naqd harakat (qog‘oz «Қ» bo‘yicha). U kassirga kamomad yoki ortiqcha sifatida yozilmaydi — tizim texnik
    dalolatnoma yozadi («Д-», asos «Qayta ishga tushirish: sanash dalolatnomasi»; ko‘p bo‘lsa Dt 5010 Kt 0000, kam bo‘lsa
-   Dt 0000 Kt 5010; farq bo‘lmasa dalolatnoma yozilmaydi). Kun ochilguncha qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi).
+   Dt 0000 Kt 5010; farq bo‘lmasa dalolatnoma yozilmaydi). Dalolatnoma «Qayta ishga tushirish» sarlavhasi bilan, komissiya a’zolari
+   imzo qatorlari bilan chop etiladi. Kun ochilguncha qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi).
    **Qayta ishga tushadigan kun — to‘xtatilgan davrdagi oxirgi kassa hujjatisiz naqd yozuvdan keyingi kun:** shu kun yoki keyingi
    sana bilan bunday yozuv bo‘lsa tizim qoldiqni qabul qilmaydi (bugun shunday yozuv bo‘lgan bo‘lsa — ertangi kun). **Sanashdan
    keyin, birinchi kassa kuni ochilguncha to‘xtatilgan davr sanasi bilan (oxirgi kassa kunidan keyingi kun) kassa hujjatisiz naqd

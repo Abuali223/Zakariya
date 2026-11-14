@@ -110,11 +110,15 @@ export function handoverRefs(po, own, room) {
 }
 // Server ishlamagan paytdagi «Қ» blankalari (crit-3; server — kassa_day_close paper): soni, summasi va raqamlari birga; hammasi bo'sh — yo'q.
 //   Natija: {paper: {count, sum, nos}} | {err} | {}. Sof funksiya (fin-kassa.test.mjs).
+//   ui-6: summa — amtRead qoidasi bilan (butun so'm, ajratkich jim tashlanmaydi), soni — butun son.
 export function paperRead(cnt, sum, nos) {
-  const c = String(cnt == null ? '' : cnt).replace(/[^\d]/g, ''), s = String(sum == null ? '' : sum).replace(/[^\d]/g, ''), n = String(nos == null ? '' : nos).trim();
+  const c = String(cnt == null ? '' : cnt).replace(AMT_SP, ''), s = String(sum == null ? '' : sum).trim(), n = String(nos == null ? '' : nos).trim();
   if (!c && !s && !n) return {};
-  if (!(num(c) > 0) || !(num(s) > 0) || !n) return { err: '«Қ» blankalari: soni, summasi va raqamlari birga kiritiladi' };
-  return { paper: { count: num(c), sum: num(s), nos: n.slice(0, 300) } };
+  const sv = amtRead(s);
+  if (sv.err) return { err: '«Қ» blankalari summasi: ' + sv.err };
+  if (c && !/^\d+$/.test(c)) return { err: '«Қ» blankalari soni — butun son (dona)' };
+  if (!(num(c) > 0) || !(num(sv.v) > 0) || !n) return { err: '«Қ» blankalari: soni, summasi va raqamlari birga kiritiladi' };
+  return { paper: { count: num(c), sum: sv.v, nos: n.slice(0, 300) } };
 }
 // Yopish / smena topshirish natijasi — SERVER hisoblagan farq (oynadagi taxmin emas; takror javobda — kun farqi) va hisobga olinmagan
 //   (allaqachon o'tib ketgan) navbat yozuvlari. Sof funksiya (fin-kassa.test.mjs).
@@ -132,6 +136,29 @@ export function pendingText(p) {
   if (num(p.n) > 0) a.push(`qurilma navbatidagi ${num(p.n)} ta yozuvning (${som(p.sum)}) kirim orderi hali kelmagan`);
   if (num(p.paperCount) > 0) a.push(`«Қ» blankalari — ${num(p.paperCount)} ta, ${som(p.paperSum)}${p.paperNos ? ` (№: ${p.paperNos})` : ''}`);
   return a.join('; ');
+}
+// Pul maydoni (ui-6): bo'sh joy (mingliklar orasida) qabul qilinadi; summa — butun so'm: oxiridagi «,00» / «.00» (odat bo'yicha)
+//   qabul qilinadi, nolsiz tiyin («1 250 000,50») — rad (naqd pulda tiyin yo'q: bu deyarli doim yozuv xatosi; server tiyinni qabul
+//   qilsa ham sahifa uni so'ramaydi — rahbar qarori, g9). Boshqa belgi yoki boshqacha ajratkich («1.000.000», «1,500») — rad, aniq
+//   xabar bilan: ajratkich hech qachon jim tashlab yuborilmaydi (avval «1 000 000,00» kirim orderida 100 000 000 bo'lib ketardi).
+//   Natija: {v} | {err} | {} (bo'sh). Sof funksiyalar (fin-kassa.test.mjs; admin.html UI-MSG bloki — pmAmtRead, xuddi shu qoida).
+export const AMT_ERR = 'Summa noto‘g‘ri: faqat raqamlar, mingliklar orasida bo‘sh joy mumkin (masalan: 1 250 000). Nuqta yoki vergul mingliklar ajratkichi sifatida qabul qilinmaydi';
+export const AMT_TIYIN = 'Tiyin yozilmaydi — summani butun so‘mda kiriting (masalan: 1 250 000)';
+const AMT_SP = /[\s\u00a0\u202f]/g;
+export function amtRead(s) {
+  const t = String(s == null ? '' : s).replace(AMT_SP, '');
+  if (!t) return {};
+  const m = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(t);
+  if (!m) return { err: AMT_ERR };
+  if (m[2] && Number(m[2]) !== 0) return { err: AMT_TIYIN };
+  const v = Number(m[1]);
+  return Number.isSafeInteger(v) && v < 1e12 ? { v } : { err: AMT_ERR };
+}
+// Yozish paytidagi ko'rinish: butun qism mingliklar bilan, ajratkich va tiyin yozilganidek; boshqa ko'rinish o'zgartirilmaydi (xatosi —
+//   saqlashda, amtRead).
+export function amtShow(s) {
+  const raw = String(s == null ? '' : s), m = /^(\d*)([.,]\d{0,2})?$/.exec(raw.replace(AMT_SP, ''));
+  return m ? m[1].replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (m[2] || '') : raw;
 }
 const ST_LBL = { draft: 'Tasdiq kutilmoqda', approved: 'Tasdiqlangan — to‘lanadi', posted: 'O‘tkazilgan', void: 'Bekor qilingan', rejected: 'Rad etilgan', cancelled: 'Bekor qilingan so‘rov' };
 const DAY_LBL = { open: 'Ochiq', closed: 'Yopilgan', verified: 'Tekshirilgan' };
@@ -155,7 +182,6 @@ const num = v => Number(v) || 0;
 const som = v => { const n = Math.round(num(v) * 100) / 100, a = Math.abs(n), w = Math.floor(a), t = Math.round((a - w) * 100);
   return (n < 0 ? '−' : '') + String(w).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (t ? ',' + String(t).padStart(2, '0') : '') + ' so‘m'; };
 const digits = s => String(s == null ? '' : s).replace(/[^\d]/g, '');
-const amtOf = s => { const t = String(s == null ? '' : s).replace(/[\s ]/g, '').replace(',', '.'); return /^\d+(\.\d{1,2})?$/.test(t) ? Number(t) : NaN; };
 const dmy = d => { const s = String(d || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(0, 4) : s; };
 const hm = ts => { try { return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tashkent' }); } catch (_) { return ''; } };
 const newRef = () => 'ks-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -172,7 +198,8 @@ const dayChip = st => chip(DAY_LBL[st] || st, ({ open: '#B54708', closed: '#175C
 const FLD = 'padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;width:100%;background:#fff';
 const CHK = 'width:auto;flex:none;padding:0;margin:2px 0 0';   // belgilash katagi: umumiy «input{width:100%}» qoidasi uni cho'zib yubormasin
 const lbl = (t, inner, extra) => `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px${extra || ''}">${t}${inner}</label>`;
-const fmtInput = el => { if (el) el.addEventListener('input', () => { const d = digits(el.value); el.value = d.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }); };
+// pul maydoni (ui-6): mingliklar bo'sh joy bilan, ajratkich va tiyin saqlanadi (amtShow) — raqam bo'lmagan belgi jim o'chirilmaydi
+const fmtInput = el => { if (el) el.addEventListener('input', () => { const v = amtShow(el.value); if (v !== el.value) el.value = v; }); };
 // KO-3 / statiyalar: davr ichidagi qayta ishga tushirish farqi (texnik dalolatnoma, kassa kitobidan tashqari) — boshi + kirim − chiqim + farq = oxiri
 //   (sgnSom — ishorali summa, Z-hisobot bo'limida ta'riflangan)
 const restartAdjTxt = v => num(v) ? ` · qayta ishga tushirish farqi (dalolatnoma) <b>${esc(sgnSom(v))}</b>` : '';
@@ -254,10 +281,22 @@ export async function renderKassa(ctx) {
   $('#view').innerHTML = `<div class="page-head"><h2>Kassa</h2><div class="ph-actions" id="ks-actions"></div></div><div id="ks-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
   await reload();
 }
-async function reload() {
+// ui-11: ketma-ket so'rovlardan faqat OXIRGISINING javobi olinadi (kassa tez almashtirilsa oldingisi kech kelishi mumkin); kassa (ST.desk)
+//   javob bilan BIRGA almashadi — kutish paytida sahifa va amallar eski kassa ma'lumoti bilan mos qoladi (boshqa kassaga eski qoldiq
+//   yuborilmaydi). desk — almashtirilayotgan kassa (berilmasa — joriy).
+let OV_SEQ = 0;
+async function reload(desk) {
   const body = $('#ks-body'); if (!body) return;
-  try { await Promise.all([loadOverview(), loadRefs()]); }
-  catch (e) { body.innerHTML = `<div class="card"><div class="empty">Kassa ma’lumotini o‘qib bo‘lmadi: ${esc(errText(e))}</div></div>`; return; }
+  const want = desk || ST.desk, seq = ++OV_SEQ;
+  let ov;
+  try { ov = (await Promise.all([call('kassa_overview', { p_desk: want }), loadRefs()]))[0]; }
+  catch (e) {
+    if (seq !== OV_SEQ) return;
+    const ds = $('#ks-desk'); if (ds) ds.value = ST.desk;   // tanlov ko'rsatilgan ma'lumotdagi kassaga qaytadi
+    body.innerHTML = `<div class="card"><div class="empty">Kassa ma’lumotini o‘qib bo‘lmadi: ${esc(errText(e))}</div></div>`; return;
+  }
+  if (seq !== OV_SEQ) return;                    // eskirgan javob — undan keyin yangi so'rov yuborilgan
+  ST.desk = want; ST.ov = ov;
   if (!$('#ks-body')) return;                    // boshqa bo'limga o'tilgan
   draw();
   loadControl();                                 // nazorat ro'yxati — alohida so'rov, sahifani kutdirmaydi
@@ -393,7 +432,7 @@ function draw() {
     if (d.needsList2) need.push(d.approvedBy ? '✓ moliya: ' + nameOf(d.approvedBy) : '… moliya (2-ro‘yxat) tasdig‘i');
     if (d.needsDirector) need.push(d.dirApprovedBy ? '✓ Direktor' : '… Direktor tasdig‘i');
     return `<tr>
-      <td data-label="Tur">${d.form === 'KO1' ? 'Kirim' : 'Chiqim'}<div class="small muted">${esc(dmy(String(d.requestedAt || d.createdAt).slice(0, 10)))}</div></td>
+      <td data-label="Tur">${d.form === 'KO1' ? 'Kirim' : 'Chiqim'}<div class="small muted">${esc(dmy(tkDate(d.requestedAt || d.createdAt)))}</div></td>
       <td data-label="Operatsiya">${esc(opName(d.op))}<div class="small muted">${esc((d.lines || []).map(l => artName(l.articleId)).filter((v, i, a) => v && a.indexOf(v) === i).join('; '))}</div></td>
       <td data-label="${d.form === 'KO1' ? 'Kimdan' : 'Kimga'}">${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || (d.noBasis ? 'asos hujjatisiz' : ''))}</div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap"><b>${esc(som(d.amount))}</b></td>
@@ -442,7 +481,9 @@ function draw() {
     const hr = handoverRole(ho, m), hn = u => (u && ho.names && ho.names[u]) || nameOf(u), d0 = num(ho.diff);
     const sum = `sanalgan <b>${esc(som(ho.counted))}</b> (hisobda ${esc(som(ho.expected))}${num(ho.pendingSum) ? ', hali o‘tkazilmagan ' + esc(som(ho.pendingSum)) + ((ho.pendingRefs || []).length ? ` — ${(ho.pendingRefs || []).length} ta navbat yozuvi` : '') : ''}) · `
       + (d0 === 0 ? 'farq yo‘q' : `<b style="color:${d0 < 0 ? '#B42318' : '#B54708'}">${d0 < 0 ? 'KAMOMAD ' + esc(som(-d0)) : 'ORTIQCHA ' + esc(som(d0))}</b>`);
-    const who = `${esc(ho.fromUid ? hn(ho.fromUid) : '—')} → <b>${esc(hn(ho.toUid))}</b>${ho.byUid && ho.byUid !== ho.fromUid ? ` · sanadi: ${esc(hn(ho.byUid))} (komissiya bilan)` : ''} · ${esc(hm(ho.createdAt))}`;
+    // g9 (g6 qoldig'i): bugun emas (kechasi qolib ketgan) — vaqt sanasi bilan
+    const hoAt = tkDate(ho.createdAt) && tkDate(ho.createdAt) !== String(s.today || '') ? dmy(tkDate(ho.createdAt)) + ' ' + hm(ho.createdAt) : hm(ho.createdAt);
+    const who = `${esc(ho.fromUid ? hn(ho.fromUid) : '—')} → <b>${esc(hn(ho.toUid))}</b>${ho.byUid && ho.byUid !== ho.fromUid ? ` · sanadi: ${esc(hn(ho.byUid))} (komissiya bilan)` : ''} · ${esc(hoAt)}`;
     hoHtml = `<div class="card" id="ks-ho" style="padding:14px 18px;margin-bottom:14px;border-color:#F5C26B">
       <b>${hr.receiver ? 'Smenani qabul qilish' : 'Smena topshirish — qabul kutilmoqda'}</b>
       <div class="small" style="margin-top:6px">${who}</div><div class="small" style="margin-top:4px">${sum}</div>
@@ -483,7 +524,7 @@ function bind() {
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   on('#ks-restart', openRestartForm);
-  const ds = $('#ks-desk'); if (ds) ds.onchange = () => { ST.desk = ds.value; reload(); };
+  const ds = $('#ks-desk'); if (ds) ds.onchange = () => { reload(ds.value); };   // ui-11: kassa javob bilan birga almashadi
   each('data-void', id => ask('Hujjatni bekor qilish', 'Bekor qilish sababi (kamida 5 belgi). Hujjat raqami saqlanadi va «bekor qilingan» deb belgilanadi.', 5, r => act('kassa_doc_void', { p_id: id, p_reason: r }, 'Hujjat bekor qilindi')));
   each('data-appr', id => { if (confirm('Bu so‘rov tasdiqlansinmi?')) act('kassa_doc_approve', { p_id: id }, 'Tasdiqlandi'); });
   each('data-rej', id => ask('So‘rovni rad etish', 'Rad etish sababi', 3, r => act('kassa_doc_reject', { p_id: id, p_reason: r }, 'Rad etildi')));
@@ -539,7 +580,11 @@ function ask(title, hint, minLen, onOk) {
     <div class="modal-b"><div class="small muted">${esc(hint)}</div><textarea id="ks-reason" rows="3" style="${FLD};margin-top:8px"></textarea></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="ks-ok">Tasdiqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  $('#ks-ok').onclick = () => { const r = $('#ks-reason').value.trim(); if (r.length < minLen) { C.toast(`Sabab kamida ${minLen} belgi bo‘lsin`, true); return; } $('#ks-ok').disabled = true; onOk(r); };
+  // ui-12: server rad etsa (act() — null, oyna ochiq qoladi) tugma yana yoqiladi: sababni tuzatib qayta yuborish mumkin
+  $('#ks-ok').onclick = async () => { const r = $('#ks-reason').value.trim(); if (r.length < minLen) { C.toast(`Sabab kamida ${minLen} belgi bo‘lsin`, true); return; }
+    const b = $('#ks-ok'); b.disabled = true;
+    try { await onOk(r); } catch (_) { /* xabarni onOk o'zi ko'rsatgan */ }
+    if (b.isConnected) b.disabled = false; };
   setTimeout(() => { const t = $('#ks-reason'); if (t) t.focus(); }, 50);
 }
 function offerPrint(r) { if (r && r.id && r.status === 'posted' && confirm('Order chop etilsinmi?')) printDoc(r.id); }
@@ -572,7 +617,7 @@ async function openAdvForm() {
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   const bal = () => { const x = acc.find(a => a.partyId === $('#av-p').value); return x ? num(x.balance) : 0; };
-  const total = () => F.lines.reduce((t2, l) => t2 + num(digits(l.amount)), 0);
+  const total = () => F.lines.reduce((t2, l) => t2 + num(amtRead(l.amount).v), 0);
   const sum = () => { const b = bal(), tt = total(), over = b && tt > b;
     $('#av-sum').innerHTML = `Jami: <b>${esc(som(tt))}</b>` + (b ? ` · qoldiq: ${esc(som(b))} → <b${over ? ' style="color:#B42318"' : ''}>${esc(som(b - tt))}</b>` : '')
       + (over ? ' — qoldiqdan katta: ortiqcha sarfni alohida «Xarajat» orderi bilan bering' : ''); };
@@ -591,7 +636,8 @@ async function openAdvForm() {
   $('#av-save').onclick = async () => {
     if (busy) return;
     const pid = $('#av-p').value; if (!pid) { C.toast('Hisobdor shaxsni tanlang', true); return; }
-    const ls = F.lines.map(l => ({ articleId: l.articleId, amount: num(digits(l.amount)), note: String(l.note || '').trim() })).filter(l => l.articleId || l.amount || l.note);
+    { const bad = F.lines.map(l => amtRead(l.amount)).find(x => x.err); if (bad) { C.toast(bad.err, true); return; } }   // ui-6: ajratkich jim tashlanmaydi
+    const ls = F.lines.map(l => ({ articleId: l.articleId, amount: num(amtRead(l.amount).v), note: String(l.note || '').trim() })).filter(l => l.articleId || l.amount || l.note);
     if (!ls.length || ls.some(l => !l.articleId || !(l.amount > 0) || l.note.length < 3)) { C.toast('Har qatorda statiya, summa va chek yoki hujjat bo‘lsin', true); return; }
     if (ls.reduce((t2, l) => t2 + l.amount, 0) > bal()) { C.toast('Hisobot summasi hisobdordagi qoldiqdan katta', true); return; }
     busy = true; $('#av-save').disabled = true;
@@ -637,7 +683,10 @@ async function openDocForm(form) {
     if (seq !== infoSeq || !$('#kf-staff')) return;
     const a = j.advance || {}, s = j.salary || {}, art = F.lines[0].articleId;
     let html;
-    if (r.op === 'in_acc_return') { F.limit = num(j.accountable); html = `Hisobdordagi hisobot qilinmagan avans: <b>${esc(som(j.accountable))}</b> — qaytim shundan oshmaydi.`; }
+    if (j.testDesk && r.op === 'in_staff_return') {   // g9 (g1 qoldig'i): sinov hujjati haqiqiy avans / maosh hisobiga tegmaydi
+      F.limit = null;
+      html = 'Sinov kassasi: xodimning haqiqiy avans / maosh hisobi ko‘rsatilmaydi va bu kirim unga ta’sir qilmaydi.';
+    } else if (r.op === 'in_acc_return') { F.limit = num(j.accountable); html = `Hisobdordagi hisobot qilinmagan avans: <b>${esc(som(j.accountable))}</b> — qaytim shundan oshmaydi.`; }
     else if (r.op === 'in_damage_repay') { F.limit = num(j.damage); html = `Xodim zimmasidagi kamomad (Direktor qarori bilan): <b>${esc(som(j.damage))}</b> — qoplash shundan oshmaydi.`; }
     else if (art === 'OP-08') {
       F.limit = j.locked ? 0 : num(a.open);
@@ -703,7 +752,7 @@ async function openDocForm(form) {
       const drawLines = () => {
         $('#kf-lines').innerHTML = F.lines.map((l, i) => `<div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:6px;margin-top:6px">${artSel(i, l.articleId)}<input data-lamt="${i}" type="text" inputmode="numeric" placeholder="summa" value="${esc(l.amount)}" style="${FLD}">${F.lines.length > 1 ? `<button type="button" class="btn sm danger" data-ldel="${i}">×</button>` : '<span></span>'}</div>`).join('')
           + `<div class="small muted" style="margin-top:6px">Jami: <b id="kf-total">0</b></div>`;
-        const total = () => { $('#kf-total').textContent = som(F.lines.reduce((s, l) => s + num(digits(l.amount)), 0)); };
+        const total = () => { $('#kf-total').textContent = som(F.lines.reduce((s, l) => s + num(amtRead(l.amount).v), 0)); };
         $('#kf-lines').querySelectorAll('[data-art]').forEach(el => el.onchange = () => { F.lines[Number(el.dataset.art)].articleId = el.value; });
         $('#kf-lines').querySelectorAll('[data-lamt]').forEach(el => { fmtInput(el); el.addEventListener('input', () => { F.lines[Number(el.dataset.lamt)].amount = el.value; total(); }); });
         $('#kf-lines').querySelectorAll('[data-ldel]').forEach(el => el.onclick = () => { F.lines.splice(Number(el.dataset.ldel), 1); drawLines(); });
@@ -730,7 +779,9 @@ async function openDocForm(form) {
     } else if (type === 'employee') {
       box.innerHTML = `<div class="small muted" style="margin-top:6px">Yuklanmoqda…</div>`;
       const ppl = await loadPeople().catch(() => []);
-      box.innerHTML = `<select id="kf-pe" style="${FLD};margin-top:6px"><option value="">— xodim —</option>${ppl.map(p => `<option value="${esc(p.ref)}">${esc(p.name + (p.pos ? ' · ' + p.pos : ''))}</option>`).join('')}</select>`;
+      const opNow = $('#kf-op').value, noLeft = opNow === 'out_advance' || opNow === 'out_accountable';
+      box.innerHTML = `<select id="kf-pe" style="${FLD};margin-top:6px"><option value="">— xodim —</option>${ppl.map(p => `<option value="${esc(p.ref)}"${p.left && noLeft ? ' disabled' : ''}>${esc(p.name + (p.left ? ' (ketgan)' : '') + (p.pos ? ' · ' + p.pos : ''))}</option>`).join('')}</select>`
+        + (noLeft && ppl.some(p => p.left) ? `<div class="small muted" style="margin-top:4px">Ishdan ketgan xodimga yangi avans berilmaydi; yakuniy hisob-kitob — maosh, qaytim, avans hisoboti.</div>` : '');
       $('#kf-pe').onchange = () => { F.party.id = $('#kf-pe').value; staffInfo(); };
     } else if (type === 'other') {
       box.innerHTML = `<input id="kf-po" type="text" placeholder="F.I.Sh. yoki nomi (to‘liq)" maxlength="200" style="${FLD};margin-top:6px"><div class="small muted" style="margin-top:4px">«Boshqa» tomonlar nazorat ro‘yxatida alohida ko‘rinadi — imkon bo‘lsa kontragentni tanlang.</div>`;
@@ -756,9 +807,13 @@ async function openDocForm(form) {
           const confNote = kinds.includes('person') && !me().kindConfirm
             ? `<div class="small muted" style="margin-top:6px">«Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi; tasdiqlanguncha kontragent yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i kerak). Korxona (MChJ, AJ) — «Yetkazib beruvchi» yoki «Tashkilot».</div>` : '';
           $('#kf-pnewbox').innerHTML = `<div style="border:1px dashed var(--border);border-radius:10px;padding:8px;margin-top:6px"><input id="kf-cn" type="text" placeholder="Nomi (to‘liq)" maxlength="200" style="${FLD}"><div style="display:flex;gap:6px;margin-top:6px"><select id="kf-ck" style="${FLD}">${kinds.map(k => `<option value="${k}">${esc(CP_KIND[k])}</option>`).join('')}</select><input id="kf-cs" type="text" inputmode="numeric" placeholder="STIR (ixtiyoriy)" maxlength="14" style="${FLD}"><button type="button" class="btn sm gold" id="kf-cadd">Qo‘shish</button></div>${confNote}</div>`;
-          $('#kf-cadd').onclick = async () => { const nm = $('#kf-cn').value.trim(); if (nm.length < 2) { C.toast('Nomini yozing', true); return; }
-            try { const c = await call('fin_counterparty_save', { p_id: null, p_kind: $('#kf-ck').value, p_name: nm, p_stir: digits($('#kf-cs').value) }); await loadRefs(true); drawC(c.id); C.toast('Qo‘shildi ✓'); }
-            catch (e) { C.toast(errText(e), true); } };
+          // ui-13: ikki marta bosilsa ikkinchisi kutadi (busy, tugma o'chirilgan); server ham shu tur, nom va STIR bilan mavjudini qaytaradi (dup)
+          let cpBusy = false;
+          $('#kf-cadd').onclick = async () => { if (cpBusy) return; const nm = $('#kf-cn').value.trim(); if (nm.length < 2) { C.toast('Nomini yozing', true); return; }
+            cpBusy = true; const b = $('#kf-cadd'); b.disabled = true;
+            try { const c = await call('fin_counterparty_save', { p_id: null, p_kind: $('#kf-ck').value, p_name: nm, p_stir: digits($('#kf-cs').value) }); await loadRefs(true); drawC(c.id); C.toast(c.dup ? 'Bu kontragent ro‘yxatda bor — o‘sha tanlandi ✓' : 'Qo‘shildi ✓'); }
+            catch (e) { C.toast(errText(e), true); }
+            finally { cpBusy = false; if (b.isConnected) b.disabled = false; } };
         }; };
       drawC('');
     }
@@ -776,12 +831,14 @@ async function openDocForm(form) {
       else { p.partyId = F.party && F.party.id; if (!p.partyId) { C.toast((isOut ? 'Kimga' : 'Kimdan') + ' — tanlang', true); return; } if (t === 'student') { const py = $('#kf-payer'); if (py && py.value.trim()) p.partyName = py.value.trim(); } }
     }
     if (multi) {
-      const ls = F.lines.map(l => ({ articleId: l.articleId, amount: num(digits(l.amount)) })).filter(l => l.articleId || l.amount);
+      { const bad = F.lines.map(l => amtRead(l.amount)).find(x => x.err); if (bad) { C.toast(bad.err, true); return; } }   // ui-6
+      const ls = F.lines.map(l => ({ articleId: l.articleId, amount: num(amtRead(l.amount).v) })).filter(l => l.articleId || l.amount);
       if (!ls.length || ls.some(l => !l.articleId || !(l.amount > 0))) { C.toast('Har qatorda statiya va summa bo‘lsin', true); return; }
       p.lines = ls; p.amount = ls.reduce((s, l) => s + l.amount, 0);
       if ($('#kf-nobasis') && $('#kf-nobasis').checked) p.noBasis = true;
     } else {
-      p.amount = num(digits($('#kf-amt').value));
+      const a = amtRead($('#kf-amt').value); if (a.err) { C.toast(a.err, true); return; }   // ui-6: «1 000 000,00» 100 marta katta bo'lib ketmaydi
+      p.amount = num(a.v);
       if (r.articleMode === 'choose') { p.articleId = F.lines[0].articleId; if (!p.articleId) { C.toast('Statiyani tanlang', true); return; } }
     }
     if (!(p.amount > 0)) { C.toast('Summani kiriting', true); return; }
@@ -789,6 +846,8 @@ async function openDocForm(form) {
     if (STAFF_OPS.includes(r.op) && F.limit != null && p.amount > F.limit) { C.toast(`Summa xodim qoldig‘idan (${som(F.limit)}) katta`, true); return; }
     if (!p.noBasis && p.basis.length < 3) { C.toast('Asosni yozing (hujjat nomi, raqami, sanasi)', true); return; }
     if (fiscalReq(r, p.partyType)) { const fx = $('#kf-fexempt'), fe = $('#kf-fiscal'); p.fiscalNo = fe ? fe.value.trim() : ''; if (!p.fiscalNo) { if (fx && fx.checked) p.fiscalExempt = true; else { C.toast('Fiskal chek raqamini kiriting', true); return; } } }
+    // ui-6: kirim orderi darhol o'tkaziladi — T1 dan katta summa yana bir bor so'raladi (yozuvdagi xato summa kassaga tushib qolmasin)
+    if (!isOut && p.amount > num(ST.ov.state.t1) && !confirm(`${som(p.amount)} qabul qilinsinmi?\n\n${r.nameUz}${(F.party && F.party.name) || p.partyName ? ' — ' + ((F.party && F.party.name) || p.partyName) : ''}`)) return;
     busy = true; const btn = $('#kf-save'); btn.disabled = true; btn.textContent = 'Yuborilmoqda…';
     try {
       const res = await call(isOut ? 'kassa_payout_request' : 'kassa_receipt', { p });
@@ -835,25 +894,30 @@ function paperFields(late) {
 }
 function countBind(expected, ob, po) {
   const counted = $('#kc-counted'); fmtInput(counted); fmtInput($('#kc-qsum'));
-  const o = outboxRefs(ob), qsum = () => { const el = $('#kc-qsum'); return el ? num(digits(el.value)) : 0; };
+  const o = outboxRefs(ob), qsum = () => { const el = $('#kc-qsum'); return el ? num(amtRead(el.value).v) : 0; };
   // g7b-v1: smena topshirishda e'lon qilingan yozuvlar — server kabi sanalgan pulga sig'ganicha (qolgan joy: sanalgan − navbat − «Қ»)
   const hand = c => handoverRefs(po, o.refs, c - o.sum - qsum());
-  const noms = () => { const o2 = {}; let sum = 0, any = false; $('#modal').querySelectorAll('[data-nom]').forEach(el => { const c = num(digits(el.value)); if (c > 0) { o2[el.dataset.nom] = c; sum += c * Number(el.dataset.nom); any = true; } }); return { o: o2, sum, any }; };
+  // nominallar soni — butun son (dona); boshqa belgi jim o'chirilmaydi (ui-6) — «bad»
+  const noms = () => { const o2 = {}; let sum = 0, any = false, bad = false; $('#modal').querySelectorAll('[data-nom]').forEach(el => { const t = String(el.value || '').replace(/\s/g, ''); if (!t) return;
+    if (!/^\d+$/.test(t)) { bad = true; return; } const c = Number(t); if (c > 0) { o2[el.dataset.nom] = c; sum += c * Number(el.dataset.nom); any = true; } }); return { o: o2, sum, any, bad }; };
   // farq — server bilan bir xil: sanalgan − hisobdagi − qurilma navbati − smena topshirishda e'lon qilingan, hali kelmagan (g7v-3) − «Қ» blankalari
-  const upd = () => { const c = num(digits(counted.value)), h = hand(c), d = c - expected - o.sum - h.sum - qsum(); const el = $('#kc-diff');
-    if (!digits(counted.value)) { el.textContent = ''; return; }
+  const upd = () => { const a = amtRead(counted.value), c = num(a.v), h = hand(c), d = c - expected - o.sum - h.sum - qsum(); const el = $('#kc-diff');
+    if (noms().bad) { el.style.color = '#B42318'; el.textContent = 'Nominallar soni — butun son (dona)'; return; }
+    if (a.err) { el.style.color = '#B42318'; el.textContent = a.err; return; }
+    if (a.v == null) { el.textContent = ''; return; }
     el.style.color = d === 0 ? '#157347' : (d < 0 ? '#B42318' : '#B54708');
     el.textContent = (d === 0 ? 'Farq yo‘q ✓' : (d < 0 ? `KAMOMAD: ${som(-d)} — shu kun sanasi bilan chiqim hujjati yoziladi (qaror — Direktor)` : `ORTIQCHA: ${som(d)} — shu kun sanasi bilan kirim hujjati yoziladi`))
       + (h.left ? ` · smena yozuvlaridan ${h.left} tasi (${som(h.leftSum)}) sanalgan pulga sig‘madi — ayirilmaydi` : ''); };
-  $('#modal').querySelectorAll('[data-nom]').forEach(el => el.addEventListener('input', () => { el.value = digits(el.value); const n = noms(); if (n.any) counted.value = String(n.sum).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); upd(); }));
+  $('#modal').querySelectorAll('[data-nom]').forEach(el => el.addEventListener('input', () => { const n = noms(); if (n.any && !n.bad) counted.value = amtShow(String(n.sum)); upd(); }));
   counted.addEventListener('input', upd); const qs = $('#kc-qsum'); if (qs) qs.addEventListener('input', upd);
-  return () => { const n = noms(), c = num(digits(counted.value)), h = hand(c), q = $('#kc-qcnt') ? paperRead($('#kc-qcnt').value, $('#kc-qsum').value, $('#kc-qnos').value) : {};
-    return { counted: digits(counted.value) === '' ? null : c, denoms: n.any && n.sum === c ? n.o : null, pendingRefs: o.refs, pending: o.sum, pendingCount: o.count,
+  return () => { const n = noms(), a = amtRead(counted.value), c = num(a.v), h = hand(c), q = $('#kc-qcnt') ? paperRead($('#kc-qcnt').value, $('#kc-qsum').value, $('#kc-qnos').value) : {};
+    return { counted: a.v == null ? null : c, countedErr: a.err || (n.bad ? 'Nominallar soni — butun son (dona)' : ''), denoms: n.any && !n.bad && n.sum === c ? n.o : null,
+             pendingRefs: o.refs, pending: o.sum, pendingCount: o.count,
              handSum: h.sum, handCount: h.count, handLeft: h.left, handLeftSum: h.leftSum, paper: q.paper || null, paperErr: q.err || '', note: $('#kc-note').value.trim() }; };
 }
 // ---- onlayn kassa (NKM) Z-hisoboti (F1.26): Z dagi SOTUV jamlari yoziladi; tizim fiskal chekli kirim orderlari va terminal
 //   to'lovlari bilan solishtiradi (kutilgan summa oldindan ko'rsatilmaydi — kassir Z dagi raqamni yozadi).
-const sgnSom = v => `${num(v) > 0 ? '+' : '−'}${som(Math.abs(num(v)))}`;
+const sgnSom = v => num(v) === 0 ? som(0) : `${num(v) > 0 ? '+' : '−'}${som(Math.abs(num(v)))}`;   // g9: farq 0 — «0 so‘m» («−0» emas)
 export function zText(z) {   // kun javobidagi «z» → qisqa holat matni ('' — ko'rsatiladigan narsa yo'q)
   if (!z || !z.applies) return '';
   if (!z.recorded) return z.needed ? 'kiritilmagan' : '';
@@ -877,11 +941,12 @@ function zBind() {   // o'qish funksiyasini qaytaradi: {z} | {err} | {} (hech na
   return () => {
     if (!$('#kz-no')) return {};
     if ($('#kz-miss').checked) { const r = $('#kz-why').value.trim(); return r.length < 5 ? { err: 'Z-hisobot yo‘qligi sababini yozing (kamida 5 belgi)' } : { z: { missing: true, reason: r } }; }
-    const no = $('#kz-no').value.trim(), c = digits($('#kz-cash').value), k = digits($('#kz-card').value);
-    if (!no && c === '' && k === '') return {};
+    const no = $('#kz-no').value.trim(), c = amtRead($('#kz-cash').value), k = amtRead($('#kz-card').value);
+    if (!no && c.v == null && !c.err && k.v == null && !k.err) return {};
     if (!/^[0-9A-Za-z/-]{1,20}$/.test(no)) return { err: 'Z-hisobot raqamini kiriting (harf, raqam, «-» yoki «/»)' };
-    if (c === '' || k === '') return { err: 'Z-hisobotdagi naqd va bank kartasi summalarini kiriting (bo‘lmasa — 0)' };
-    return { z: { no, cash: num(c), card: num(k) } };
+    if (c.err || k.err) return { err: 'Z-hisobot: ' + (c.err || k.err) };   // ui-6
+    if (c.v == null || k.v == null) return { err: 'Z-hisobotdagi naqd va bank kartasi summalarini kiriting (bo‘lmasa — 0)' };
+    return { z: { no, cash: c.v, card: k.v } };
   };
 }
 function zToast(z) {   // yopish / kiritishdan keyin solishtirish natijasi
@@ -924,7 +989,8 @@ async function openCloseForm() {
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   const read = countBind(num(od.balance), ob, od.pendingOpen), zRead = zBind();
   $('#kc-save').onclick = async () => {
-    const v = read(); if (v.counted == null) { C.toast('Sanalgan summani kiriting (0 bo‘lsa — 0)', true); return; }
+    const v = read(); if (v.countedErr) { C.toast(v.countedErr, true); return; }
+    if (v.counted == null) { C.toast('Sanalgan summani kiriting (0 bo‘lsa — 0)', true); return; }
     if (v.paperErr) { C.toast(v.paperErr, true); return; }
     // expected — oynadagi qoldiq (state-2: shu orada o'zgargan bo'lsa server rad etadi); pendingRefs — navbat yozuvlari kaliti bilan
     const p = { desk: ST.desk, day: od.day, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, note: v.note };
@@ -960,6 +1026,7 @@ async function openHandoverForm() {
   const read = countBind(num(od.balance), ob, od.pendingOpen);
   $('#kh-save').onclick = async () => { const v = read(), to = $('#kh-to').value;
     if (!to) { C.toast('Qabul qiluvchi kassirni tanlang', true); return; }
+    if (v.countedErr) { C.toast(v.countedErr, true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting', true); return; }
     const p = { desk: ST.desk, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, toUid: to, note: v.note }; if (v.denoms) p.denoms = v.denoms;
     if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
@@ -1017,7 +1084,7 @@ async function openDecideForm(id) {
       ${others.length ? `<div class="small" style="margin-top:4px" id="kd-others">Kassa egasidan boshqa kassa orderi o‘tkazgan yoki bekor qilgan: <b>${esc(others.join(', '))}</b></div>` : ''}
       ${hist ? `<div class="small muted" style="margin-top:6px"><b>Shu kungi smena topshirishlar:</b>${hist}</div>` : ''}
       ${lbl('Qaror', `<select id="kd-dec" style="${FLD}"><option value="employee">Xodim zimmasiga (yozma rozilik yoki to‘liq moddiy javobgarlik bilan)</option><option value="writeoff">Hisobdan chiqarish (aybdor aniqlanmadi)</option></select>`)}
-      <div id="kd-emp">${lbl('Javobgar xodim (xodim kartasi)', `<select id="kd-party" style="${FLD}"><option value="">— tanlang —</option>${(people || []).map(p => `<option value="${esc(p.ref)}"${p.ref === x.defaultParty ? ' selected' : ''}>${esc(p.name)}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select>`)}
+      <div id="kd-emp">${lbl('Javobgar xodim (xodim kartasi)', `<select id="kd-party" style="${FLD}"><option value="">— tanlang —</option>${(people || []).map(p => `<option value="${esc(p.ref)}"${p.ref === x.defaultParty ? ' selected' : ''}>${esc(p.name)}${p.left ? ' (ketgan)' : ''}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select>`)}
         <div class="small muted" style="margin-top:4px">${x.defaultParty ? 'Kassa egasi pulni o‘zi sanagan — uning kartasi tanlangan (boshqasini tanlash mumkin).' : esc(why) + ' — javobgar xodim kartasini tanlang.'}</div></div>
       ${lbl('Asos <span class="muted" style="font-weight:500">— buyruq / tushuntirish xati</span>', `<input id="kd-note" type="text" maxlength="300" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kd-save">Qarorni saqlash</button></div>`;
@@ -1039,7 +1106,8 @@ function openOpeningForm() {
       ${lbl('Izoh', `<input id="ko-note" type="text" maxlength="300" placeholder="masalan: 31.12 sanash dalolatnomasi № 1" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="ko-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal; fmtInput($('#ko-amt'));
-  $('#ko-save').onclick = async () => { const a = digits($('#ko-amt').value); if (a === '') { C.toast('Summani kiriting (pul bo‘lmasa — 0)', true); return; }
+  $('#ko-save').onclick = async () => { const ar = amtRead($('#ko-amt').value); if (ar.err) { C.toast(ar.err, true); return; }
+    const a = ar.v; if (a == null) { C.toast('Summani kiriting (pul bo‘lmasa — 0)', true); return; }
     if (!$('#ko-day').value) { C.toast('Birinchi kassa kunini tanlang', true); return; }
     $('#ko-save').disabled = true; await act('kassa_opening_set', { p: { desk: ST.desk, amount: num(a), startDay: $('#ko-day').value, note: $('#ko-note').value.trim(), commission: commissionRead() } }, 'Boshlang‘ich qoldiq saqlandi'); const b = $('#ko-save'); if (b) b.disabled = false; };
 }
@@ -1059,15 +1127,17 @@ function openRestartForm() {
       ${lbl('Izoh', `<input id="kr-note" type="text" maxlength="300" placeholder="masalan: sanash dalolatnomasi № 2" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kr-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal; fmtInput($('#kr-amt'));
-  const diffTxt = () => { const a = digits($('#kr-amt').value); const el = $('#kr-diff'); if (!el) return;
-    if (a === '') { el.innerHTML = ''; return; }
+  const diffTxt = () => { const ar = amtRead($('#kr-amt').value), a = ar.v; const el = $('#kr-diff'); if (!el) return;
+    if (ar.err) { el.innerHTML = `<b style="color:#B42318">${esc(ar.err)}</b>`; return; }
+    if (a == null) { el.innerHTML = ''; return; }
     const d = num(a) - X;
     el.innerHTML = d === 0 ? '<span class="muted">Farq yo‘q — dalolatnoma yozilmaydi.</span>'
       : `<b style="color:${d < 0 ? '#B42318' : '#B54708'}">Farq: ${esc(sgnSom(d))}</b> <span class="muted">— texnik dalolatnoma (${d > 0 ? 'Dt 5010 Kt 0000' : 'Dt 0000 Kt 5010'}): to‘xtatilgan davrdagi naqd ${d > 0 ? 'kirim' : 'chiqim'} ko‘p bo‘lgan</span>`; };
   $('#kr-amt').addEventListener('input', diffTxt); diffTxt();
   $('#kr-save').onclick = async () => {
-    const a = digits($('#kr-amt').value), day = $('#kr-day').value;
-    if (a === '') { C.toast('Komissiya sanagan summani kiriting (pul bo‘lmasa — 0)', true); return; }
+    const ar = amtRead($('#kr-amt').value), a = ar.v, day = $('#kr-day').value;
+    if (ar.err) { C.toast(ar.err, true); return; }
+    if (a == null) { C.toast('Komissiya sanagan summani kiriting (pul bo‘lmasa — 0)', true); return; }
     if (!day) { C.toast('Qayta ishga tushirish kunini tanlang', true); return; }
     const d = num(a) - X;
     if (!confirm(`Qayta ishga tushirish qoldig‘i saqlansinmi?\n\nKun: ${dmy(day)} · sanalgan ${som(num(a))} · tizimda ${som(X)}\n${d === 0 ? 'Farq yo‘q.' : 'Farq ' + sgnSom(d) + ' — texnik dalolatnoma yoziladi.'}\n\nKeyin «⚙ Sozlamalar»da ishga tushadigan kunni ${dmy(day)} ga qo‘ying.`)) return;
@@ -1101,7 +1171,7 @@ function openSettings() {
       <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
       <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun, qurilma navbatida qolgan yozuvlar bilan yopilgan oxirgi kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
       <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
-      <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs (hisobi bog‘langan bo‘lsa — shu yerdagi to‘liq F.I.Sh. bilan). Qo‘shish va o‘chirish darhol saqlanadi.</div>
+      <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs, agar uning hisobi shu ro‘yxatdagi biriga bog‘langan bo‘lsa (shu yerdagi to‘liq F.I.Sh. bilan); aks holda F.I.Sh. qo‘lda yoziladi. Qo‘shish va o‘chirish darhol saqlanadi.</div>
       <div id="kx-sigs">${sigRows()}</div>
       <div class="grid2">${lbl('Ro‘yxat', `<select id="kx-slist" style="${FLD}"><option value="1">1-ro‘yxat — rahbar</option><option value="2">2-ro‘yxat — bosh buxgalter / moliya</option></select>`)}${lbl('Lavozimi', `<input id="kx-stitle" type="text" maxlength="200" placeholder="masalan: Direktor" style="${FLD}">`)}</div>
       <div class="grid2">${lbl('F.I.Sh. (to‘liq)', `<input id="kx-sname" type="text" maxlength="200" style="${FLD}">`)}${lbl('Tizimdagi hisobi <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<select id="kx-suid" style="${FLD}"><option value="">—</option>${((ST.refs && ST.refs.signers) || []).map(u => `<option value="${esc(u.uid)}">${esc(u.name)}</option>`).join('')}</select>`)}</div>
@@ -1132,6 +1202,9 @@ function openSettings() {
     $('#kx-sadd').disabled = false;
   };
   $('#kx-save').onclick = async () => {
+    const nums = {};   // ui-6: chegaralar — amtRead qoidasi bilan (ajratkich jim tashlanmaydi)
+    for (const [k, sel] of [['t1', '#kx-t1'], ['l1', '#kx-l1'], ['cashLimit', '#kx-limit'], ['orgCashMax', '#kx-orgmax']]) {
+      const r = amtRead($(sel).value); if (r.err) { C.toast(r.err, true); $(sel).focus(); return; } nums[k] = num(r.v); }
     const live = $('#kx-live').value || null;
     // ui-5: kelgan sanani bo'shatish / surish — kassani to'xtatish (alohida, oqibatlari yozilgan tasdiq); to'xtatilgan kassada — qayta
     //   ishga tushirish kuni. Holat — asosiy kassaniki (sahifada sinov kassasi tanlangan bo'lishi mumkin); server baribir tekshiradi.
@@ -1144,7 +1217,7 @@ function openSettings() {
     }
     $('#kx-save').disabled = true;
     try { await call('fin_org_set', { p: { nameUz: $('#kx-name').value.trim(), nameRu: $('#kx-name-ru').value.trim(), stir: digits($('#kx-stir').value), place: $('#kx-place').value.trim(), printLang: $('#kx-lang').value,
-        t1: num(digits($('#kx-t1').value)), l1: num(digits($('#kx-l1').value)), cashLimit: num(digits($('#kx-limit').value)), orgCashMax: num(digits($('#kx-orgmax').value)), kassaGoLive: live } });
+        t1: nums.t1, l1: nums.l1, cashLimit: nums.cashLimit, orgCashMax: nums.orgCashMax, kassaGoLive: live } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
@@ -1171,7 +1244,7 @@ async function openPeriodForm() {
   const rows = items.map(x => `<div data-snap="${esc(x.id)}" style="border:1px solid var(--border-2);border-radius:10px;padding:10px 12px;margin-top:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>${esc(dmy(x.asOf))}</b> <span class="small muted">${esc(SNAP_KIND[x.kind] || x.kind)}${num(x.version) > 1 ? ' · ' + esc(String(x.version)) + '-surat' : ''}</span>${x.late ? ' ' + chip('kechikib olingan', '#B54708', '#FEF3E2') : ''}</div>
         <span style="display:flex;gap:6px"><button class="btn sm" data-snap-chk="${esc(x.id)}">Tekshirish</button><button class="btn sm" data-snap-dl="${esc(x.id)}" title="To‘liq suratni fayl sifatida saqlash">⬇ JSON</button></span></div>
-      <div class="small muted" style="margin-top:4px">olindi: ${esc(dmy(String(x.takenAt).slice(0, 10)))} ${esc(hm(x.takenAt))}${x.byName ? ' · ' + esc(x.byName) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>
+      <div class="small muted" style="margin-top:4px">olindi: ${esc(dmy(tkDate(x.takenAt)))} ${esc(hm(x.takenAt))}${x.byName ? ' · ' + esc(x.byName) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>
       <div class="small" style="margin-top:4px">${esc(tot(x.totals))}</div>
       <div class="small muted" style="margin-top:2px;overflow-wrap:anywhere" title="${esc(x.hash)}">xesh: ${esc(String(x.hash).slice(0, 16))}…</div></div>`).join('');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div>
@@ -1222,8 +1295,14 @@ async function openPeriodForm() {
 // ---------------------------------------------------------------- chop etish (fin-print.js — kerak bo'lganda yuklanadi)
 // Har chop etish serverda qayd qilinadi (kassa_print_mark): birinchisi — asl nusxa, keyingilari — «НУСХА» belgisi bilan.
 //   «Avvalgisi qog'ozga chiqmadi» tanlansa — asl nusxa qayta chiqadi va buxgalterning nazorat ro'yxatida ko'rinadi.
+//   g9: asl nusxani faqat kassa operatori yoki Direktor chiqaradi — 2-ro'yxat (Moliya menejeri, buxgalter) chop etgani doim «НУСХА»
+//   (tanlov oynasi yo'q); «avval chop etilgan» oynasi asl nusxa chiqarilgan bo'lsa (printsOrig; eski serverda — prints) ko'rinadi.
+const printTaker = () => { const m = me(); return !(ST.ov && ST.ov.state) || !!(m.operator || m.director); };
+const printPrior = d => num(d && d.printsOrig != null ? d.printsOrig : d && d.prints);
+//   ui-10: «chop etdi» — server bergan ism (jurnaldagi chop etishda — kassa_print_mark, boshqasida — kassa_state.me.name: xodim kartasi
+//   ismi); login emaili HECH QACHON (qog'oz buxgalterga beriladi; telefon bilan kirganlarda email telefon raqamidan).
 const printCtx = (names, isTest, mk) => ({ org: (ST.refs && ST.refs.org) || {}, signatories: (ST.refs && ST.refs.signatories) || [], rules: (ST.refs && ST.refs.rules) || [], names: names || {}, isTest: !!isTest,
-  mark: mk ? { mode: mk.mode, replaced: !!mk.replaced } : {}, printedBy: (mk && mk.byName) || (C.SESSION && C.SESSION.email) || '', printedAt: (mk && mk.at) || new Date().toISOString() });
+  mark: mk ? { mode: mk.mode, replaced: !!mk.replaced } : {}, printedBy: (mk && mk.byName) || me().name || '', printedAt: (mk && mk.at) || new Date().toISOString() });
 function askReprint(title, prior, go, back) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>${esc(title)}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small" style="background:#FEF3E2;color:#B54708;border-radius:10px;padding:10px 12px;font-weight:600">Bu hujjat avval chop etishga yuborilgan: ${esc(String(prior))} marta.</div>
@@ -1240,8 +1319,10 @@ async function printDoc(id, back) {
     const [pm, wm, got] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), call('kassa_doc_get', { p_id: id }), loadRefs()]);
     const d = got.doc;
     if (!d || !d.no) { C.toast('Faqat o‘tkazilgan (raqam olgan) hujjat chop etiladi', true); return; }
-    const go = async reissue => { const mk = await call('kassa_print_mark', { p_kind: 'doc', p_id: id, p_reissue: !!reissue }); C.printHTML(pm.docHtml(d, printCtx(got.names, got.isTest, mk), wm)); };
-    if (num(d.prints) > 0) askReprint(`${d.form === 'KO1' ? 'Kirim orderi' : d.form === 'KO2' ? 'Chiqim orderi' : 'Dalolatnoma'} № ${d.no}`, num(d.prints), go, back);
+    // ui-4: boshlang'ich qoldiq / qayta ishga tushirish dalolatnomasida — komissiya a'zolari (server: kassa_doc_get.commission)
+    const dd = Array.isArray(got.commission) ? Object.assign({}, d, { commission: got.commission }) : d;
+    const go = async reissue => { const mk = await call('kassa_print_mark', { p_kind: 'doc', p_id: id, p_reissue: !!reissue }); C.printHTML(pm.docHtml(dd, printCtx(got.names, got.isTest, mk), wm)); };
+    if (printTaker() && printPrior(d) > 0) askReprint(`${d.form === 'KO1' ? 'Kirim orderi' : d.form === 'KO2' ? 'Chiqim orderi' : 'Dalolatnoma'} № ${d.no}`, printPrior(d), go, back);
     else await go(false);
   } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
 }
@@ -1252,7 +1333,7 @@ async function printBook(day, back) {
     const d = book.day;
     if (d.status === 'open') { C.printHTML(pm.bookHtml(book, printCtx(book.names, book.isTest, null), wm)); return; }   // qoralama — jurnalga yozilmaydi
     const go = async reissue => { const mk = await call('kassa_print_mark', { p_kind: 'book', p_id: d.id, p_reissue: !!reissue }); C.printHTML(pm.bookHtml(book, printCtx(book.names, book.isTest, mk), wm)); };
-    if (num(d.prints) > 0) askReprint('Kassa kitobi varag‘i — ' + dmy(day), num(d.prints), go, back);
+    if (printTaker() && printPrior(d) > 0) askReprint('Kassa kitobi varag‘i — ' + dmy(day), printPrior(d), go, back);
     else await go(false);
   } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
 }
@@ -1435,6 +1516,11 @@ export function controlRows(c) {
     gaps.length ? gaps.map(g => `${g.year}: ${(g.problems || []).map(x => SERIES[x.series] || x.series).join(', ')}`).join('; ') + ' — bo‘shliq yoki takror' : 'uzluksiz',
     'Hisoblagich = hujjatlar soni = eng katta raqam');
   add('staleOpenDay', 'Yopilmagan o‘tgan kun', c.staleOpenDay ? 'bad' : 'ok', c.staleOpenDay ? dmy(c.staleOpenDay) : 'yo‘q', 'Kecha yopilmaguncha bugun hujjat yozilmaydi');
+  // g9 (g6 qoldig'i): qabul qilinmay qolgan smena topshirish — oldingi kassa kuniniki yoki 2 soatdan ko'p kutilmoqda (server: app.kassa_handover_stale)
+  const sho = c.staleHandover;
+  add('staleHandover', 'Qabul qilinmagan smena topshirish', sho ? 'warn' : 'ok',
+    sho ? `${sho.fromName || '—'} → ${sho.toName || '—'}${num(sho.counted) || sho.counted === 0 ? `, sanalgan ${som(sho.counted)}` : ''}; ${dmy(tkDate(sho.createdAt))} ${hm(sho.createdAt)} dan kutilmoqda${sho.day ? ` (kassa kuni ${dmy(sho.day)})` : ''}` : 'yo‘q',
+    'Qabul qilinguncha kassada hujjat yozilmaydi va kun yopilmaydi: qabul qiluvchi o‘z hisobidan qabul qilsin yoki topshirish bekor qilinsin (topshiruvchi, Direktor)');
   const uv = c.unverifiedDays || [];
   add('unverified', 'Tekshirilmagan (yopilgan) kunlar', uv.length > 3 ? 'bad' : uv.length ? 'warn' : 'ok', uv.length ? `${uv.length} ta: ${days(uv)}` : 'yo‘q', 'Qog‘oz varaq va orderlar olinib, «Tekshirish» bosiladi');
   const sh = c.undecidedShortages || [];
@@ -1463,10 +1549,10 @@ export function controlRows(c) {
   add('orgCash', 'Yuridik shaxslarga kassadan naqd to‘lov', num(oc.count) ? 'warn' : 'ok', num(oc.count) ? `${cnt(oc.count)} · ${som(oc.sum)}` : 'yo‘q',
     'Yetkazib beruvchi / tashkilot bilan hisob-kitob asosan bankdan; kassadan berilganlari — Direktor tasdig‘i bilan, buxgalter ko‘rib chiqadi');
   // sec-3: kontragent turi o'zgarishlari (30 kun; kim, qachon, eski → yangi) va turi tasdiqlanmagan «jismoniy shaxs» / «boshqa» lar —
-  //   «acts»: buxgalter / Direktor sahifada «✓ Tasdiqlash» tugmasi bilan tasdiqlaydi
+  //   «acts»: buxgalter / Direktor sahifada «✓ Tasdiqlash» tugmasi bilan tasdiqlaydi; g9 (g5 qoldig'i): turni kim tasdiqlagani (ism)
   const ck = c.cpKinds30 || [], cu = c.cpUnconfirmed || [], kd = k => k ? (CP_KIND[k] || k) : 'yangi';
   add('cpKinds', 'Kontragent turi', ck.length || cu.length ? 'info' : 'ok',
-    [ck.length ? ck.slice(0, 6).map(x => `${x.name || '—'}: ${kd(x.from)} → ${kd(x.to)} (${x.byName || 'tizim'}, ${dmy(tkDate(x.at))}${!x.confirmed && (x.to === 'person' || x.to === 'other') ? ', tasdiqlanmagan' : ''})`).join('; ') + (ck.length > 6 ? ' …' : '') : '',
+    [ck.length ? ck.slice(0, 6).map(x => `${x.name || '—'}: ${kd(x.from)} → ${kd(x.to)} (${x.byName || 'tizim'}, ${dmy(tkDate(x.at))}${!x.confirmed && (x.to === 'person' || x.to === 'other') ? ', tasdiqlanmagan' : ''}${x.confirmed && x.confirmedByName ? `, tasdiqladi: ${x.confirmedByName}` : ''})`).join('; ') + (ck.length > 6 ? ' …' : '') : '',
      cu.length ? `turi tasdiqlanmagan: ${cnt(cu.length)} — ${cu.slice(0, 6).map(x => x.name).join(', ')}${cu.length > 6 ? ' …' : ''}` : ''].filter(Boolean).join('; ') || 'yo‘q',
     '«Jismoniy shaxs» / «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi; tasdiqlanguncha kontragent yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i)');
   rows[rows.length - 1].acts = cu.map(x => ({ id: x.id, kind: x.kind, name: x.name }));

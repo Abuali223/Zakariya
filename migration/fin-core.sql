@@ -239,15 +239,27 @@ grant execute on function public.fin_org_set(jsonb) to authenticated;
 --   Tur tasdig'i (sec-3): buxgalter yoki Direktor saqlasa — tur tasdiqlangan (kim, qachon); kassir yoki Moliya menejeri qo'shgan kontragent —
 --   tasdiqlanmagan, mavjudining turi, nomi yoki STIR'i ular tomonidan o'zgarsa — tasdiq bekor bo'ladi (izoh va «faol» belgisi tasdiqqa
 --   ta'sir qilmaydi). Tasdiqlanmagan «Jismoniy shaxs» / «Boshqa» — yuridik shaxs hisoblanadi (kassa-docs.sql: app.kassa_is_org).
+--   Takror (ui-13): yangi kontragent shu tur, me'yorlangan nom (bo'shliqlar, katta-kichik harf, apostrof turlari) va STIR bilan faol
+--   kontragent bor bo'lsa yaratilmaydi — mavjudi qaytadi ("dup": true; «Qo'shish»ni ikki marta bosish, javob yo'qolib qayta yuborish).
+--   Bir vaqtdagi ikki chaqiruv shu kalit bo'yicha navbatga turadi (qulf) — ikkinchisi birinchisi yozganini ko'radi.
 create or replace function public.fin_counterparty_save(p_id text, p_kind text, p_name text, p_stir text default '', p_note text default '', p_active boolean default true)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_id text := nullif(btrim(coalesce(p_id, '')), ''); v_conf boolean := app.is_admin() or app.is_accountant();
-        v_name text := btrim(coalesce(p_name, '')); v_stir text := left(btrim(coalesce(p_stir, '')), 20);
+        v_name text := btrim(coalesce(p_name, '')); v_stir text := left(btrim(coalesce(p_stir, '')), 20); v_key text; v_ex text;
 begin
   if not (app.is_admin() or app.fin_list2() or app.kassa_operator()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if coalesce(p_kind, '') not in ('supplier', 'org', 'person', 'bank', 'founder', 'other') then raise exception 'Kontragent turi noto''g''ri' using errcode = '22023'; end if;
   if length(v_name) not between 2 and 200 then raise exception 'Kontragent nomi 2–200 belgi bo''lsin' using errcode = '22023'; end if;
   if v_id is null then
+    v_key := lower(regexp_replace(translate(v_name, '‘’ʻʼ`´', repeat(chr(39), 6)), '\s+', ' ', 'g'));
+    perform pg_advisory_xact_lock(hashtext('iqror_cp:' || p_kind || '|' || v_key || '|' || v_stir));
+    select c.id into v_ex from public.fin_counterparties c
+     where c.active and c.kind = p_kind and c.stir = v_stir
+       and lower(regexp_replace(translate(btrim(c.name), '‘’ʻʼ`´', repeat(chr(39), 6)), '\s+', ' ', 'g')) = v_key
+     order by c."createdAt", c.id limit 1;
+    if v_ex is not null then
+      return (select to_jsonb(c) from public.fin_counterparties c where c.id = v_ex) || jsonb_build_object('dup', true);
+    end if;
     v_id := 'cp_' || replace(gen_random_uuid()::text, '-', '');
     insert into public.fin_counterparties (id, kind, name, stir, note, active, "createdBy", "kindConfirmedBy", "kindConfirmedAt")
       values (v_id, p_kind, v_name, v_stir, left(coalesce(p_note, ''), 500), true, app.uid(),

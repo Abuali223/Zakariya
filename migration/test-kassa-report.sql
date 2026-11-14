@@ -761,6 +761,18 @@ select zz.chk('W2 nazorat ro''yxatidagi hisobdorlar yangi umumiy yordamchidan �
   (select string_agg((a ->> 'partyId') || '/' || trim_scale((a ->> 'balance')::numeric) || '/' || (a ->> 'since') || '/' || (a ->> 'workDays') || '/' || (a ->> 'overdue'), ',' order by a ->> 'since')
      from jsonb_array_elements(zz.checks('main') -> 'accountable') a),
   '^staff:st1/150000/2027-01-04/8/true,teachers:tch1/50000/2027-01-11/3/false$');
+-- g9 (ko'rik bo'shlig'i): «3 ish kuni» maktabning «Bayram / ta'til kunlari»ni ham sanamaydi (app.school_days — davomat bilan bir qoida)
+set local session_replication_role = replica;
+insert into public.school_holidays (id, day, name) select to_char(d, 'YYYY-MM-DD'), to_char(d, 'YYYY-MM-DD'), 'Sinov ta''tili'
+  from generate_series('2027-01-05'::date, '2027-01-11'::date, interval '1 day') d;
+set local session_replication_role = origin;
+select zz.chk('W2b g9: ta''til kunlari (05–11.01) ish kuni emas — hisobdor 3 ish kunida, muddati o''tmagan; «Kassa» eslatmasida ham yo''q',
+  (select string_agg((a ->> 'partyId') || '/' || (a ->> 'workDays') || '/' || (a ->> 'overdue'), ',' order by a ->> 'since') from jsonb_array_elements(zz.checks('main') -> 'accountable') a)
+  || ' | ' || (select s -> 'accOverdue' ->> 'n' from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb s) q),
+  '^staff:st1/3/false,teachers:tch1/3/false \| 0$');
+set local session_replication_role = replica;
+delete from public.school_holidays where name = 'Sinov ta''tili';
+set local session_replication_role = origin;
 select zz.chk('W3 eslatma: «Kassa» holatida va Telegram nazoratida muddati o''tgan avans — 1 ta, 150 000 (o''qituvchiniki hali muddatida)',
   (select (s -> 'accOverdue' ->> 'n') || '/' || trim_scale((s -> 'accOverdue' ->> 'sum')::numeric) from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb s) q)
   || ':' || (select (zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'n') || '/' || trim_scale((zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'sum')::numeric)),
@@ -831,6 +843,12 @@ select zz.chk('SD4 RP-06: kontragent turi o''zgarishlari (eski → yangi, kim �
 select zz.chk('SD5 Direktor turini tasdiqladi — tasdiqlanmaganlar ro''yxatidan chiqdi',
   (zz.f(zz.as('U_DIR', format('select public.fin_counterparty_confirm(%L, %L, %L)::text', zz.id('SD4'), 'person', 'Delta Savdo MChJ')), 'kindConfirmedBy'))
   || ' | ' || (select string_agg(x ->> 'name', ',') from jsonb_array_elements(zz.checks('main') -> 'cpUnconfirmed') x), '^U_DIR \| Sinov Usta$');
+select zz.chk('SD5b g9 (g5 qoldig''i): RP-06 kontragent turi qatorida turni kim (ism, email emas) va qachon tasdiqlagani; tasdiqlanmagani — bo''sh',
+  (select (x ->> 'confirmed') || ':' || coalesce(x ->> 'confirmedByName', '-') || ':' || ((x ->> 'confirmedAt') is not null)::text
+     from jsonb_array_elements(zz.checks('main') -> 'cpKinds30') x where x ->> 'name' = 'Delta Savdo MChJ')
+  || ' | ' || (select coalesce(x ->> 'confirmedByName', '-') from jsonb_array_elements(zz.checks('main') -> 'cpKinds30') x where x ->> 'name' = 'Sinov Tashkilot MChJ')
+  || ' | ' || coalesce((select string_agg(coalesce(x ->> 'confirmedByName', '-'), ',') from jsonb_array_elements(zz.checks('main') -> 'cpKinds30') x where x ->> 'name' = 'Sinov Usta'), 'yo''q'),
+  '^true:Sinov Direktor:true \| Sinov Direktor \| (-|yo''q)$');
 -- crit-4 (ko'rik ssenariysi): 14.01 — ikki fiskal chekli o'quv to'lovi; Moliya menejeri birini bekor qiladi; kassir haqiqiy Z bilan yopadi
 --   (farq); ertasi kuni Moliya menejeri Z ni tizim summasiga «tuzatadi» (farq yo'qoladi) va kunni o'zi tekshirmoqchi bo'ladi
 select zz.put('SD6a', zz.tui('U_KAS', 'man_sd_0001', 'T-1', 70000, 'Sinov Ota', '411'));
@@ -910,6 +928,31 @@ select zz.chk('HD5 acc-6: oylik to''plam E3 — kun qatorida smena farqi (yopish
 select zz.chk('HD6 state-6: shu kungi smena topshirish-qabulida qatnashgan Moliya menejeri (qo''shimcha «kassir») kunni tekshira olmaydi',
   zz.as('U_FMK', $q$select public.kassa_day_verify('main', '2027-01-15', true, 'Tekshirildi')::text$q$),
   '^ERR 42501 \[kassa:self_verify\] Shu kuni smena topshirish-qabulida qatnashgansiz — kunni o''zingiz tekshira olmaysiz');
+
+-- ---------- (G9) g9: qabul qilinmay qolgan smena topshirish — RP-06 va Direktorning Telegram nazorat qatori (g6 qoldig'i) ----------
+--   16.01: U_KAS kunni ochadi va smenani U_KAS2 ga topshiradi — qabul qilinmay qoladi.
+select zz.clock('2027-01-16 09:00+05');
+select zz.put('G9a', zz.tui('U_KAS', 'man_g9_0001', 'T-1', 10000, 'Sinov Ota', '611'));
+select zz.put('G9h', zz.rpc('U_KAS', 'kassa_handover', format('{"counted":%s,"toUid":"U_KAS2"}', app.kassa_day_balance('cd_main_2027-01-16'))));
+select zz.chk('G9 yangi kutilayotgan smena topshirish — hali eskirmagan: nazorat ro''yxatida ham, Telegram nazoratida ham yo''q',
+  zz.f(zz.get('G9h'), 'handover', 'status') || ' | ' || coalesce(zz.checks('main') ->> 'staleHandover', '-') || ' | ' || coalesce(zz.daily('2027-01-16') -> 'kassa' -> 'control' ->> 'staleHandover', '-'),
+  '^pending \| - \| -$');
+set local session_replication_role = replica;
+update public.cash_handovers set "createdAt" = now() - interval '3 hours' where id = zz.get('G9h')::jsonb #>> '{handover,id}';
+set local session_replication_role = origin;
+select zz.chk('G9b 2 soatdan ko''p qabul qilinmagan — RP-06 «qabul qilinmagan smena topshirish» (kun, ismlar, summa) va Telegram nazoratida',
+  (select (s ->> 'day') || ':' || (s ->> 'fromName') || '>' || (s ->> 'toName') || ':' || trim_scale((s ->> 'counted')::numeric) from (select zz.checks('main') -> 'staleHandover' s) q)
+  || ' | ' || (zz.daily('2027-01-16') -> 'kassa' -> 'control' -> 'staleHandover' ->> 'toName'),
+  '^2027-01-16:Sinov Kassir>Sinov Kassir Ikki:\d+ \| Sinov Kassir Ikki$');
+set local session_replication_role = replica;
+update public.cash_handovers set "createdAt" = now() where id = zz.get('G9h')::jsonb #>> '{handover,id}';
+set local session_replication_role = origin;
+select zz.clock('2027-01-17 08:00+05');
+select zz.chk('G9c kechasi qolib ketgan (oldingi kassa kuniniki) — vaqtidan qat''i nazar eskirgan; bekor qilingach — yo''q',
+  coalesce(zz.checks('main') -> 'staleHandover' ->> 'day', '-')
+  || ' | ' || zz.f(zz.as('U_KAS', format('select public.kassa_handover_cancel(%L, %L)::text', zz.get('G9h')::jsonb #>> '{handover,id}', 'Qabul qilinmadi')), 'handover', 'status')
+  || ' | ' || coalesce(zz.checks('main') ->> 'staleHandover', '-'),
+  '^2027-01-16 \| cancelled \| -$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

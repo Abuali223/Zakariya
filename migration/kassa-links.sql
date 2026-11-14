@@ -412,10 +412,12 @@ revoke all on function app.kassa_advance_check(text) from public, anon, authenti
 --   berilgan, qaytarilgan, sof (maosh qaytimi chegarasi); locked — oy vedomosti tasdiqlangan (avans qaytimi qabul qilinmaydi);
 --   accountable — hisobdordagi hisobot qilinmagan qoldiq (4230); damage — xodim zimmasidagi kamomad (4730). Doira — p_desk kassasi
 --   (sinov kassasi — o'z qoldig'i). Kirim orderini yozadiganlar: kassa operatori va Direktor (acc-1, acc-3, acc-4).
+--   g9 (g1 qoldig'i): sinov kassasida avans / maosh qoldig'i (haqiqiy staff_advances / salary_payments) berilmaydi — sinov hujjati ularga
+--   tegmaydi va chegara tekshirilmaydi (kassa_link_paid); javobda testDesk = true, advance / salary / locked — bo'sh.
 create or replace function public.kassa_staff_open(p_desk text, p_party text, p_month text default null) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_pid text; v_name text; v_code text;
-        v_m text := nullif(btrim(coalesce(p_month, '')), '');
+        v_m text := nullif(btrim(coalesce(p_month, '')), ''); v_test boolean;
 begin
   if not (app.kassa_operator() or app.is_admin()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if v_m is not null and v_m !~ '^\d{4}-(0[1-9]|1[0-2])$' then
@@ -423,22 +425,23 @@ begin
   end if;
   select k.o_id, k.o_name into v_pid, v_name from app.kassa_party('employee', p_party, null) k;
   v_code := app.kassa_payee_code(v_pid);
-  return jsonb_build_object('ok', true, 'partyId', v_pid, 'name', v_name, 'code', v_code, 'month', v_m,
+  v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
+  return jsonb_build_object('ok', true, 'partyId', v_pid, 'name', v_name, 'code', v_code, 'month', v_m, 'testDesk', v_test,
     'accountable', app.kassa_acc_open(v_pid, v_desk), 'damage', app.kassa_damage_open(v_pid, v_desk),
-    'advance', case when v_m is not null then
+    'advance', case when v_m is not null and not v_test then
                  (select jsonb_build_object('given', coalesce(sum(a.amount) filter (where a.amount > 0), 0),
                                             'returned', coalesce(-sum(a.amount) filter (where a.amount < 0), 0),
                                             'open', coalesce(sum(coalesce(a.amount, 0)), 0))
                     from public.staff_advances a
                    where a."teacherId" = v_code and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) = v_m
                      and coalesce(a.method, '') in ('', 'cash')) end,
-    'salary', case when v_m is not null then
+    'salary', case when v_m is not null and not v_test then
                 (select jsonb_build_object('paid', coalesce(sum(s.paid) filter (where s.paid > 0), 0),
                                            'returned', coalesce(-sum(s.paid) filter (where s.paid < 0), 0),
                                            'net', coalesce(sum(coalesce(s.paid, 0)), 0))
                    from public.salary_payments s
                   where s."teacherId" = v_code and s.month = v_m and coalesce(s.method, '') in ('', 'cash')) end,
-    'locked', case when v_m is not null then app.payroll_locked_month(v_m, v_m) is not null end);
+    'locked', case when v_m is not null and not v_test then app.payroll_locked_month(v_m, v_m) is not null end);
 end $$;
 revoke all on function public.kassa_staff_open(text, text, text) from public, anon;
 grant execute on function public.kassa_staff_open(text, text, text) to authenticated;

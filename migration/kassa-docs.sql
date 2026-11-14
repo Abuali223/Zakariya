@@ -61,6 +61,24 @@ begin
 end $$;
 revoke all on function app.kassa_party(text, text, text) from public, anon, authenticated;
 
+-- Ishdan ketgan xodim (g9, ko'rik bo'shlig'i): kartasi «Ishdan chiqqan» ("payStatus" = 'chiqdi') va ketish sanasi ("stopFrom") o'tgan
+--   yoki yozilmagan — ketish kunining o'zi hali ish kuni (public-close.sql dagi qoida bilan bir xil). Bunday xodimga YANGI ish haqi
+--   avansi va hisobdorga avans berilmaydi (kassa:emp_left: so'rovda ham, pul berishda ham); yakuniy hisob-kitob — naqd maosh, xodim
+--   qaytargan pul, hisobdordan qaytim, kamomadni qoplash, avans hisoboti — avvalgidek. Ro'yxatlarda (kassa_people) «(ketgan)» belgisi.
+--   p_ref — 'teachers:<id>' / 'staff:<id>'.
+create or replace function app.kassa_emp_left(p_ref text) returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select coalesce(x.st, '') = 'chiqdi'
+                          and not (left(coalesce(x.sf, ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' and left(x.sf, 10) >= to_char(app.fin_today(), 'YYYY-MM-DD'))
+                     from (select t."payStatus" as st, t."stopFrom" as sf from public.teachers t
+                            where left(coalesce(p_ref, ''), 9) = 'teachers:' and t.id = substr(p_ref, 10)
+                           union all
+                           select s."payStatus", s."stopFrom" from public.staff s
+                            where left(coalesce(p_ref, ''), 6) = 'staff:' and s.id = substr(p_ref, 7)) x
+                    limit 1), false)
+$$;
+revoke all on function app.kassa_emp_left(text) from public, anon, authenticated;
+
 -- JSON'dan mantiqiy qiymatni xavfsiz o'qish (noto'g'ri matn — false).
 create or replace function app.kassa_bool(p jsonb, p_key text) returns boolean
 language sql immutable set search_path = public, app, pg_temp as $$
@@ -186,6 +204,11 @@ begin
     select k.o_id, k.o_name into v_pid, v_pname from app.kassa_party(v_ptype, p ->> 'partyId', p ->> 'partyName') k;
   else
     v_ptype := null; v_pid := null; v_pname := left(btrim(coalesce(p ->> 'partyName', '')), 200);
+  end if;
+  -- g9: ishdan ketgan xodimga yangi ish haqi avansi / hisobdorga avans yo'q (yakuniy hisob-kitob operatsiyalari — mumkin)
+  if v_op in ('out_advance', 'out_accountable') and v_ptype = 'employee' and app.kassa_emp_left(v_pid) then
+    raise exception '«%» ishdan ketgan: unga yangi % berilmaydi. Yakuniy hisob-kitob (naqd maosh, xodim qaytargan pul, hisobdordan qaytim, avans hisoboti) — mumkin',
+      v_pname, case when v_op = 'out_advance' then 'ish haqi avansi' else 'hisobdorga avans' end using errcode = '22023', hint = 'kassa:emp_left';
   end if;
 
   v_basis := left(btrim(coalesce(p ->> 'basis', '')), 500);
@@ -537,12 +560,14 @@ begin
 end $$;
 revoke all on function app.kassa_act_post(text, text, date) from public, anon, authenticated;
 
--- Hujjat + qatorlari + chop etishlar soni (javob uchun).
+-- Hujjat + qatorlari + chop etishlar soni (javob uchun). printsOrig — asl nusxa chiqarilganlari (asl va «qayta asl»; g9: asl nusxani faqat
+--   kassa operatori yoki Direktor chiqaradi — kassa-day.sql kassa_print_mark): sahifa «avval chop etilgan» oynasini shunga qarab ko'rsatadi.
 create or replace function app.kassa_doc_json(p_id text) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select to_jsonb(c) || jsonb_build_object('lines', coalesce((
            select jsonb_agg(to_jsonb(l) - 'docId' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id), '[]'::jsonb),
-           'prints', (select count(*) from public.cash_prints x where x."docId" = c.id))   -- necha marta chop etishga yuborilgan
+           'prints', (select count(*) from public.cash_prints x where x."docId" = c.id),   -- necha marta chop etishga yuborilgan
+           'printsOrig', (select count(*) from public.cash_prints x where x."docId" = c.id and x.mode <> 'copy'))
     from public.cash_docs c where c.id = p_id
 $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;
@@ -555,10 +580,17 @@ revoke all on function app.kassa_doc_json(text) from public, anon, authenticated
 --   keyin, o'sha tranzaksiyada (app.kassa_link_paid): rad etilsa hujjat ham, raqam ham qolmaydi.
 create or replace function public.kassa_receipt(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_id text; v_dup boolean; v_doc public.cash_docs%rowtype;
+declare v_uid text := app.uid(); v_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_k public.cash_desks%rowtype;
 begin
   if not (app.kassa_operator() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: kirim orderini kassir (favqulodda — Direktor) yozadi' using errcode = '42501';
+  end if;
+  -- g9: to'xtatilgan kassada Direktor ruxsatini kutadigan kirim so'rovi ham yozilmaydi (darhol o'tkaziladigani — app.kassa_resolve_day rad
+  --   etadi, xuddi shu matn va hint bilan)
+  select * into v_k from public.cash_desks k where k.id = coalesce(nullif(btrim(coalesce(p ->> 'desk', '')), ''), 'main');
+  if not coalesce(v_k."isTest", false) and v_k."pausedAt" is not null then
+    raise exception 'Kassa to''xtatilgan (% dan): kassa hujjati yozilmaydi. Qayta ishga tushirish — komissiya sanashi, «Qayta ishga tushirish» va ishga tushadigan kun (Direktor)',
+      to_char(v_k."pausedAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:paused';
   end if;
   perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_id, v_dup from app.kassa_doc_build(p, 'KO1', v_uid, false) b;
@@ -656,10 +688,16 @@ revoke all on function app.kassa_damage_open(text, text) from public, anon, auth
 
 create or replace function public.kassa_payout_request(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_id text; v_dup boolean; v_party text; v_extra jsonb := '{}'::jsonb;
+declare v_uid text := app.uid(); v_id text; v_dup boolean; v_party text; v_extra jsonb := '{}'::jsonb; v_k public.cash_desks%rowtype;
 begin
   if not (app.kassa_operator() or app.is_admin() or app.is_finance_mgr()) then
     raise exception 'Ruxsat yo''q: chiqim so''rovini kassir, Moliya menejeri yoki Direktor yozadi' using errcode = '42501';
+  end if;
+  -- g9 (g4 qoldig'i): to'xtatilgan kassada so'rov ham yozilmaydi — puli baribir berilmaydi (kassa:paused; app.kassa_resolve_day bilan bir xil matn)
+  select * into v_k from public.cash_desks k where k.id = coalesce(nullif(btrim(coalesce(p ->> 'desk', '')), ''), 'main');
+  if not coalesce(v_k."isTest", false) and v_k."pausedAt" is not null then
+    raise exception 'Kassa to''xtatilgan (% dan): kassa hujjati yozilmaydi. Qayta ishga tushirish — komissiya sanashi, «Qayta ishga tushirish» va ishga tushadigan kun (Direktor)',
+      to_char(v_k."pausedAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:paused';
   end if;
   -- Ish haqi avansi: shu oy vedomosti tasdiqlangan bo'lsa so'rov ham qabul qilinmaydi (kassa-links.sql).
   if jsonb_typeof(p) = 'object' and coalesce(p ->> 'op', '') = 'out_advance' then
@@ -828,6 +866,11 @@ begin
   if v_was = 'approved' and v_cur."approvedBy" = v_uid then   -- sec-5: tasdiqlovchi ≠ pul beruvchi
     raise exception 'Bu so''rovni o''zingiz tasdiqlagansiz — pulini o''zingiz bera olmaysiz (tasdiqlovchi va pul beruvchi boshqa-boshqa kishi): pulni kassir beradi'
       using errcode = '42501', hint = 'kassa:self_pay';
+  end if;
+  -- g9: so'rov yozilgandan keyin xodim ishdan ketgan — yangi avans berilmaydi (so'rov bekor qilinadi; yakuniy hisob-kitob — boshqa operatsiyalar)
+  if v_was = 'approved' and v_op in ('out_advance', 'out_accountable') and v_cur."partyType" = 'employee' and app.kassa_emp_left(v_cur."partyId") then
+    raise exception '«%» ishdan ketgan: unga % berilmaydi — so''rovni bekor qiling. Yakuniy hisob-kitob (naqd maosh, xodim qaytargan pul, hisobdordan qaytim, avans hisoboti) — mumkin',
+      v_cur."partyName", case when v_op = 'out_advance' then 'ish haqi avansi' else 'hisobdorga avans' end using errcode = '22023', hint = 'kassa:emp_left';
   end if;
   -- sec-3: yuridik shaxsga naqd «Xarajat» — kontragent qatori FOR SHARE (turi shu payt o'zgarayotgan bo'lsa — tugashini kutib, yangi qiymat bilan);
   --   g8: «Boshqa» tomonga asos hujjati bilan xarajat — xuddi shu qoida (chegara shu payt bo'yicha)
