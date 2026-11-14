@@ -100,7 +100,7 @@ select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000'
   || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":2000000,"startDay":"2027-01-04"}')::text$q$), '"ok": true');
 select zz.put('P1', zz.tui('U_KAS', 'man_c1_0001', 'T-1', 600000, 'Sinov Ota', '111'));      -- KO-1 № 1: qisman (4010)
 select zz.put('P2', zz.tui('U_KAS', 'man_c1_0002', 'T-2', 1200000, 'Sinov Ona', '112'));     -- KO-1 № 2: faktura + ortiqchasi avansga (6310)
-select zz.put('K3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":50000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 04.01.2027","note":"Kitob uchun","clientRef":"c-k3-0001"}'));
+select zz.put('K3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":50000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 04.01.2027","note":"Kitob uchun","fiscalNo":"FC-K3","clientRef":"c-k3-0001"}'));
 select zz.put('C1', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":300000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 5","clientRef":"c-c1-0001","lines":[{"articleId":"EX-32","amount":200000},{"articleId":"EX-07","amount":100000}]}'));
 select zz.put('C1p', left(zz.appr('U_FM', zz.id('C1')), 0) || zz.pay('U_KAS', zz.id('C1')));   -- KO-2 № 1
 select zz.put('C2', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"c-c2-0001","lines":[{"articleId":"EX-07","amount":50000}]}'));
@@ -128,7 +128,7 @@ select zz.chk('A4 2-kun farqsiz yopildi (tekshirilmagan)', (select status || ':'
 select zz.clock('2027-01-06 10:00+05');
 -- xodim qaytargan avans (acc-1): C3 avansidan 40 000 — manfiy avans yozuvi shu order bilan (moslik P5 «ret» toza bo'lishi kerak)
 select zz.put('K5r', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":40000,"month":"2027-01","partyType":"employee","partyId":"teachers:tch1","articleId":"OP-08","basis":"Avans qaytdi, 06.01.2027","clientRef":"c-k5r-0001"}'));
-select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 06.01.2027","note":"Kitob uchun","clientRef":"c-k5-0001"}'));
+select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 06.01.2027","note":"Kitob uchun","fiscalNo":"FC-K5","clientRef":"c-k5-0001"}'));
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:tch1","basis":"Xo''jalik xaridlari","clientRef":"c-c4-0001"}'));
 select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || zz.pay('U_KAS', zz.id('C4')));   -- hisobdorga avans
 select zz.put('AV1', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"c-av1-0001","partyId":"teachers:tch1","reportDate":"2027-01-06","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 7, 06.01"}]}'));   -- avans hisoboti (dalolatnoma)

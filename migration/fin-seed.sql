@@ -226,5 +226,8 @@ insert into public.fin_op_rules (op, form, "nameUz", "nameRu", debit, credit, "a
   ('nc_opening',      'ACT', 'Boshlang‘ich qoldiq',          'Начальные остатки',                  '5010', '0000', 'fixed',  'OP-23', '{}', '{}', '{}',                                false, true,  false, false, false, 220),
   ('nc_shortage_dec', 'ACT', 'Kamomad bo‘yicha qaror',       'Решение по недостаче',               null,   '5910', 'fixed',  'OP-22', '{}', '{}', '{employee,other}',                  false, true,  false, false, false, 230)
 on conflict (op) do nothing;
+-- «Boshqa kirim»: aholidan (o'quvchi / to'lovchi, boshqa shaxs) naqd pul — fiskal chek № majburiy (CT-21, CL-08; istisno — Direktor),
+--   kontragent va xodimdan — yo'q (g8, fin-core.sql "fiscalParties"). Mavjud bazada ham (qoidani hech kim o'zgartirmagan bo'lsa).
+update public.fin_op_rules set "fiscalParties" = '{student,other}' where op = 'in_other' and "fiscalParties" = '{}';
 
 notify pgrst, 'reload schema';

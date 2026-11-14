@@ -31,6 +31,7 @@ declare
   v_new numeric;
   v_name text;
   v_inserted int := 0;
+  v_kday boolean := false;
 begin
   -- Ruxsat: Direktor, moliya yoki server. Kassir — yo'q (moliya rejasi 0-bosqich, ko'rik: kassir manfiy delta bilan
   --   istalgan o'quvchining avansini 0 ga tushira olardi; admin ilovasida kassir bu funksiyani chaqirmaydi).
@@ -46,6 +47,17 @@ begin
   --   Admin ilovasida yagona chaqiruv — Direktorning «↻ Qayta hisoblash» (narx kamayganda ortiqcha to'lov avansga).
   if p_delta > 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role') then
     raise exception 'forbidden: avansni ko''paytirish faqat Direktor' using errcode = '42501';
+  end if;
+  -- Moliya rejasi 1a (g8; kassa moduli o'rnatilgan bazada — kassa.sql): kassa ishlay boshlagach (asosiy kassa kuni bor) avansni KAMAYTIRISH
+  --   ham — faqat Direktor yoki server: avansda kirim orderidan o'tgan naqd ortiqcha bo'lishi mumkin (reverse-payment.sql bilan bir qoida,
+  --   kassa:reverse_credit). Moliya menejeriga — yo'q (avans Direktorning «Avansni tuzatish»i orqali, jurnal bilan). Kassasiz baza va hali
+  --   ishlamagan (yashirin o'rnatilgan) kassa — avvalgidek.
+  if p_delta < 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role') and to_regclass('public.cash_days') is not null then
+    execute 'select exists (select 1 from public.cash_days d join public.cash_desks k on k.id = d.desk where not k."isTest")' into v_kday;
+    if v_kday then
+      raise exception 'Kassa ishlay boshlagach o''quvchi avansini kamaytirish — faqat Direktor («Avansni tuzatish», jurnal bilan): avansda kirim orderidan o''tgan naqd pul bo''lishi mumkin'
+        using errcode = '42501', hint = 'kassa:reverse_credit';
+    end if;
   end if;
 
   -- Idempotentlik: bir xil ref bilan qayta chaqirilsa -> {dup:true} (avans ikki marta qo'shilmaydi).

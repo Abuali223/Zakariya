@@ -157,11 +157,35 @@ select zz.chk('C2 qayta yuborish (o''sha kalit): takror, raqam o''zgarmadi',
   || ' / ' || (select "lastNo" from public.doc_counters where series = 'KO1'), '"dup": true.* / 1$');
 select zz.chk('C3 o''sha kalit, boshqa summa — rad',
   zz.rcpt('U_KAS', format('{"op":"in_bank","amount":2000001,"partyType":"bank","partyId":"%s","basis":"Chek 001","clientRef":"c1-000001"}', zz.id('cp_bank'))), '^ERR 22023 \[kassa:ref_mismatch\]');
+-- state-9: o'sha kalit bilan qayta yuborishda mazmun ham solishtiriladi (so'rov izi "reqHash") — summa bir xil, lekin tomon / asos / statiya
+--   boshqa bo'lsa eski hujjat jim qaytmaydi; aynan o'sha mazmun — takror (C2)
+select zz.chk('C3b o''sha kalit va summa, boshqa asos yoki boshqa bank — rad (eski hujjat qaytmaydi); hujjat o''zgarmadi',
+  zz.rcpt('U_KAS', format('{"op":"in_bank","amount":2000000,"partyType":"bank","partyId":"%s","basis":"Chek kitobchasi № 002","clientRef":"c1-000001"}', zz.id('cp_bank'))) || ' | '
+  || zz.rcpt('U_KAS', format('{"op":"in_bank","amount":2000000,"partyType":"bank","partyId":"%s","basis":"Chek kitobchasi № 001","clientRef":"c1-000001"}', zz.id('cp_fnd'))) || ' | '
+  || (select basis || ':' || "partyId" = 'Chek kitobchasi № 001:' || zz.id('cp_bank') from public.cash_docs where "clientRef" = 'c1-000001')::text,
+  '^ERR 22023 \[kassa:ref_mismatch\].* \| ERR 22023 \[kassa:ref_mismatch\].* \| true$');
+select zz.chk('C3c so''rov izi hujjatda saqlanadi (md5), mijoz hujjatlarida — doim',
+  (select (length("reqHash") = 32)::text from public.cash_docs where "clientRef" = 'c1-000001'), '^true$');
 select zz.chk('C4 boshqa kirim: izohsiz rad',
   zz.rcpt('U_KAS', $q${"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma'lum shaxs","articleId":"OP-16","basis":"Ariza","clientRef":"c4-000001"}$q$), '^ERR 22023 \[kassa:note\]');
-select zz.put('C4', zz.rcpt('U_KAS', $q${"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma'lum shaxs","articleId":"OP-16","basis":"Ariza","note":"Aniqlanmagan tushum","clientRef":"c4-000002"}$q$));
+select zz.put('C4', zz.rcpt('U_KAS', $q${"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma'lum shaxs","articleId":"OP-16","basis":"Ariza","note":"Aniqlanmagan tushum","fiscalNo":"FK-C4","clientRef":"c4-000002"}$q$));
 select zz.chk('C4b boshqa kirim (aniqlanmagan): KO-1 № 2, Kt 6390',
   (select c.no || ':' || l.credit from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C4')), '^2:6390$');
+-- g8: «Boshqa kirim» aholidan (o'quvchi / to'lovchi, boshqa shaxs) — fiskal chek № majburiy (CT-21, CL-08; istisno — Direktor),
+--   kontragent va xodimdan — yo'q (C10); qoida — operatsiya qoidasidagi "fiscalParties"
+select zz.chk('C4c g8: boshqa kirim aholidan fiskal cheksiz — rad (boshqa shaxs ham, o''quvchi ham); kassir istisno so''ray olmaydi; raqam sarflanmaydi',
+  zz.rcpt('U_KAS', $q${"op":"in_other","amount":20000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat","note":"Tadbir chiptasi","clientRef":"c4c-00001"}$q$) || ' | '
+  || zz.rcpt('U_KAS', $q${"op":"in_other","amount":20000,"partyType":"student","partyId":"T-1","articleId":"IN-06","basis":"Tilxat","note":"To'garak","clientRef":"c4c-00002"}$q$) || ' | '
+  || zz.rcpt('U_KAS', $q${"op":"in_other","amount":20000,"partyType":"student","partyId":"T-1","articleId":"IN-06","basis":"Tilxat","note":"To'garak","fiscalExempt":true,"clientRef":"c4c-00003"}$q$) || ' | '
+  || (select "lastNo" from public.doc_counters where series = 'KO1')::text || ':' || (select "fiscalParties"::text from public.fin_op_rules where op = 'in_other'),
+  '^ERR 22023 \[kassa:fiscal\].* \| ERR 22023 \[kassa:fiscal\].* \| ERR 22023 \[kassa:fiscal\].* \| 2:\{student,other\}$');
+-- (raqamlar keyingi tekshiruvlar uchun o'zgarmasin: natija psql o'zgaruvchisida, savepoint qaytariladi)
+savepoint c4d;
+select (zz.rcpt('U_KAS', $q${"op":"in_other","amount":20000,"partyType":"student","partyId":"T-1","articleId":"IN-06","basis":"Tilxat","note":"To'garak","fiscalNo":"F-C4D","clientRef":"c4d-00001"}$q$)::jsonb ->> 'fiscalNo') || ':'
+  || (select (j ->> 'fiscalExempt') || ':' || (j ->> 'status') from (select zz.rcpt('U_DIR', $q${"op":"in_other","amount":20000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat","note":"Tadbir chiptasi","fiscalExempt":true,"clientRef":"c4d-00002"}$q$)::jsonb j) q) || ':'
+  || (zz.rcpt('U_KAS', format('{"op":"in_other","amount":20000,"partyType":"counterparty","partyId":"%s","articleId":"IN-06","basis":"Qaytarilgan ortiqcha to''lov","note":"Yetkazib beruvchidan","clientRef":"c4d-00003"}', zz.id('cp_sup')))::jsonb ->> 'status') as c4d \gset
+rollback to savepoint c4d;
+select zz.chk('C4d g8: o''quvchidan fiskal chek bilan va Direktor istisnosi bilan — o''tkaziladi; kontragentdan — fiskal cheksiz ham', :'c4d', '^F-C4D:true:posted:posted$');
 select zz.chk('C5 boshqa kirimda ruxsat etilmagan statiya rad',
   zz.rcpt('U_KAS', $q${"op":"in_other","amount":1000,"partyType":"other","partyName":"Noma'lum shaxs","articleId":"EX-20","basis":"Ariza","note":"izoh bor","clientRef":"c5-000001"}$q$), '^ERR 22023 \[kassa:article\]');
 select zz.chk('C6 forma sotuvi: fiskal chek raqamisiz rad',
@@ -171,6 +195,10 @@ select zz.chk('C6b forma sotuvi: KO-1 № 3, Kt 9020, o''quvchi kanonik kaliti, 
   (select c.no || ':' || l.credit || ':' || c."partyId" || ':' || c."partyName" || ':' || c."fiscalNo" from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id where c.id = zz.id('C6')), '^3:9020:T-1:Sinov Ota:F-1001$');
 select zz.chk('C6c o''sha fiskal chek raqami ikkinchi marta — rad',
   zz.rcpt('U_KAS', $q${"op":"in_sale","amount":150000,"partyType":"student","partyId":"T-1","basis":"Forma","fiscalNo":"F-1001","clientRef":"c6-000003"}$q$), '^ERR 22023 \[kassa:fiscal_dup\]');
+select zz.chk('C6c2 state-9: javob yo''qolgach fiskal chek raqami tuzatilib o''sha kalit bilan qayta yuborilsa — rad (eski raqamli hujjat jim qaytmaydi); aynan o''sha — takror',
+  zz.rcpt('U_KAS', $q${"op":"in_sale","amount":150000,"partyType":"student","partyId":"s1","partyName":"Sinov Ota","basis":"Forma","fiscalNo":"F-1002","clientRef":"c6-000002"}$q$) || ' | '
+  || (zz.rcpt('U_KAS', $q${"op":"in_sale","amount":150000,"partyType":"student","partyId":"s1","partyName":"Sinov Ota","basis":"Forma","fiscalNo":"F-1001","clientRef":"c6-000002"}$q$)::jsonb ->> 'dup'),
+  '^ERR 22023 \[kassa:ref_mismatch\].* \| true$');
 select zz.chk('C6d fiskal istisno: kassir so''ray olmaydi',
   zz.rcpt('U_KAS', $q${"op":"in_sale","amount":50000,"partyType":"student","partyId":"T-1","basis":"Forma","fiscalExempt":true,"clientRef":"c6-000004"}$q$), '^ERR 22023 \[kassa:fiscal\]');
 select zz.put('C6e', zz.rcpt('U_DIR', $q${"op":"in_sale","amount":50000,"partyType":"student","partyId":"T-1","basis":"Forma","fiscalExempt":true,"clientRef":"c6-000005"}$q$));
@@ -271,6 +299,11 @@ select zz.chk('D12 ko''p qatorli: yig''indi mos emas — rad',
 select zz.put('D12', zz.preq('U_KAS', format('{"op":"out_expense","amount":100000,"partyType":"counterparty","partyId":"%s","basis":"Hisob-faktura № 17","lines":[{"articleId":"EX-16","amount":70000},{"articleId":"EX-32","amount":30000}],"clientRef":"d12-00002"}', zz.id('cp_sup'))));
 select zz.chk('D12b ko''p qatorli: 2 qator (2010 va 9420)',
   (select string_agg(debit || '=' || trim_scale(amount), ',' order by "lineNo") from public.cash_doc_lines where "docId" = zz.id('D12')), '^2010=70000,9420=30000$');
+select zz.chk('D12b2 state-9: o''sha kalit, o''sha jami, lekin qatorlar boshqacha taqsimlangan — rad; aynan o''sha — takror (so''rov bitta)',
+  zz.preq('U_KAS', format('{"op":"out_expense","amount":100000,"partyType":"counterparty","partyId":"%s","basis":"Hisob-faktura № 17","lines":[{"articleId":"EX-16","amount":60000},{"articleId":"EX-32","amount":40000}],"clientRef":"d12-00002"}', zz.id('cp_sup'))) || ' | '
+  || (zz.preq('U_KAS', format('{"op":"out_expense","amount":100000,"partyType":"counterparty","partyId":"%s","basis":"Hisob-faktura № 17","lines":[{"articleId":"EX-16","amount":70000},{"articleId":"EX-32","amount":30000}],"clientRef":"d12-00002"}', zz.id('cp_sup')))::jsonb ->> 'dup')
+  || ':' || (select count(*) from public.cash_docs where "clientRef" = 'd12-00002'),
+  '^ERR 22023 \[kassa:ref_mismatch\].* \| true:1$');
 select zz.chk('D12c tasdiq va to''lov: KO-2 № 5', zz.appr('U_FM', zz.id('D12')) || zz.pay('U_KAS', zz.id('D12')), '"no": 5[,}]');
 select zz.chk('D13 «Boshqa xarajatlar» izohsiz — rad',
   zz.preq('U_KAS', format('{"op":"out_expense","amount":1000,"partyType":"counterparty","partyId":"%s","articleId":"EX-49","basis":"Hujjat № 2","clientRef":"d13-00001"}', zz.id('cp_sup'))), '^ERR 22023 \[kassa:note\]');

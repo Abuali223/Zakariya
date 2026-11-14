@@ -186,6 +186,7 @@ declare
   v_raw jsonb;
   v_before jsonb;   -- kassa: to'lovdan oldingi holat (fakturalar, avans); NULL — kassa ishga tushmagan yoki naqd emas
   v_k jsonb;        -- kassa: yozilgan KO-1 (raqam, kun)
+  v_live boolean;   -- kassa ishlayaptimi (faqat mavjud «pending» qator boshqa usul bilan tugatilayotganda so'raladi)
 begin
   if not (app.is_admin() or app.is_finance() or app.is_cashier()) then
     raise exception 'Ruxsat yo''q: to''lov faqat kassir, Moliya yoki Direktor tomonidan kiritiladi' using errcode = '42501';
@@ -240,31 +241,43 @@ begin
     v_raw := v_raw || jsonb_build_object('fiscalNo', left(btrim(p_extra ->> 'fiscalNo'), 40));
   end if;
   if v_adj then v_raw := v_raw || jsonb_build_object('dateRequested', left(coalesce(p_date, ''), 20)); end if;
+  -- Ichki pul RPC'si bayrog'i (iqror.money_rpc) qator yozilishidan holati 'applied' bo'lguncha: kassa moduli o'rnatilgan bazada naqd to'lov
+  --   qatorini to'g'ridan-to'g'ri yozish va «qo'llangan» qilish faqat shu funksiya orqali (kassa-links.sql: app.kassa_pay_guard, state-4).
+  --   Bayroq faqat shu tranzaksiyada va har chiqishda tozalanadi; kassasiz bazada uni faqat apply_payment o'qiydi — xatti-harakat avvalgidek.
+  perform set_config('iqror.money_rpc', '1', true);
   insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched, raw)
     values (p_pay_id, p_sid, p_method, p_amount, 'pending', left(coalesce(p_payer_name, ''), 200), true, v_raw)
     on conflict (id) do nothing;
   if not found then
-    select id, status, "studentId", amount into v_row from public.payments where id = p_pay_id for update;
+    select id, status, "studentId", amount, provider into v_row from public.payments where id = p_pay_id for update;
     if coalesce(v_row.status, '') = 'applied' then
+      perform set_config('iqror.money_rpc', '', true);
       if v_before is not null then execute 'select app.kassa_tuition_info($1)' into v_k using p_pay_id; end if;
       return jsonb_build_object('ok', true, 'dup', true, 'payId', p_pay_id, 'status', 'applied', 'kassa', v_k);
     end if;
     if coalesce(v_row.status, '') <> 'pending' then
+      perform set_config('iqror.money_rpc', '', true);
       return jsonb_build_object('ok', false, 'reason', 'exists', 'payId', p_pay_id, 'status', v_row.status);
     end if;
-    if coalesce(v_row."studentId", '') <> p_sid or coalesce(v_row.amount, 0) <> p_amount then
+    -- Moliya rejasi 1a (g8, state-4): kassa ishlayotganda «pending» qatorni BOSHQA usul bilan tugatish ham — «mismatch»: naqd qator «bank»
+    --   deb kirim orderisiz qo'llanardi, «bank» qatoriga esa kirim orderi yozilardi (moslik buzilardi). Kassa moduli yo'q yoki kassa
+    --   ishlamayapti — avvalgidek.
+    if coalesce(v_row.provider, '') <> p_method and to_regprocedure('app.kassa_live()') is not null then
+      execute 'select app.kassa_live()' into v_live;
+    end if;
+    if coalesce(v_row."studentId", '') <> p_sid or coalesce(v_row.amount, 0) <> p_amount or coalesce(v_live, false) then
+      perform set_config('iqror.money_rpc', '', true);
       return jsonb_build_object('ok', false, 'reason', 'mismatch', 'payId', p_pay_id);
     end if;
   end if;
 
   -- Balansga qo'llash (eng eski to'lanmagan fakturadan, ortiqchasi avansga). applied_payments posboni bilan idempotent.
-  perform set_config('iqror.money_rpc', '1', true);
   v_res := public.apply_payment(p_sid, p_amount, p_method, p_pay_id);
-  perform set_config('iqror.money_rpc', '', true);
   if v_res is null or not (coalesce((v_res ->> 'ok')::boolean, false) or coalesce((v_res ->> 'dup')::boolean, false)) then
     raise exception 'record_manual_payment: to''lov qo''llanmadi (%)', coalesce(v_res::text, 'null') using errcode = 'P0001';
   end if;
   update public.payments set status = 'applied' where id = p_pay_id;
+  perform set_config('iqror.money_rpc', '', true);
   -- Kassa (1a): kassa kirim orderi (KO-1) — shu tranzaksiyada. Kassa kuni server belgilaydi (kassir tanlagan «Sana» emas).
   if v_before is not null then
     execute 'select app.kassa_tuition_post($1, $2, $3, $4, $5, $6, $7)' into v_k

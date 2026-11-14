@@ -509,7 +509,11 @@ revoke all on function app.kassa_desk_balance(text) from public, anon, authentic
 --   moslik, nazorat ro'yxati, «Kassa» sahifasi):
 --   «first» — birinchi ishga tushgan kun: kassa hech to'xtatilmagan bo'lsa — hozirgi «ishga tushadigan kun» (bo'sh yoki kelmagan —
 --     kassa hali ishga tushmagan); to'xtatilgan bo'lsa — birinchi to'xtatishda amalda bo'lgan sana (hodisa jurnalidan; topilmasa —
---     birinchi kassa kuni);
+--     birinchi kassa kuni). g8 (g4b qoldig'i): kassa hujjati ishga tushadigan kundan OLDINGI kunga ham tushishi mumkin — boshlang'ich
+--     qoldiqdagi «Birinchi kassa kuni» undan oldin bo'lsa (kassa_receipt / kassa_doc_pay ishga tushishni tekshirmaydi, kun birinchi
+--     hujjat bilan ochiladi: kassa-docs.sql app.kassa_resolve_day), shuning uchun ishga tushish sanasi bor bo'lsa «first» — u va birinchi
+--     kassa kunining ertarog'i: bu kunlar ham kassa kitobida (qoldiq zanjiri boshlang'ich qoldiqdan), kassa hujjatisiz naqd yozuv
+--     ularga tushmasin va moslik ularni ham tekshirsin. Ishga tushish sanasi hech qo'yilmagan (sinov) — bo'sh, avvalgidek;
 --   «gaps» — to'xtatilgan davrlar [{after, before}]: oxirgi kassa kunidan (after) KEYIN va qayta ishga tushirish kunidan (before)
 --     OLDIN (qayta sanalgan bo'lsa — oxirgi sanash kuni); kassa hozir to'xtatilgan va qayta ishga tushirish hali tayyorlanmagan
 --     bo'lsa — oxirgi kassa kunidan keyingi kunlar («paused», «last»);
@@ -517,7 +521,8 @@ revoke all on function app.kassa_desk_balance(text) from public, anon, authentic
 create or replace function app.kassa_periods(p_desk text) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select jsonb_build_object(
-           'first', case when s.stopped then coalesce(s.pause_from, k."startDay") else o."kassaGoLive" end,
+           'first', least(case when s.stopped then coalesce(s.pause_from, k."startDay") else o."kassaGoLive" end,
+                          case when s.stopped or o."kassaGoLive" is not null then s.first_day end),
            'last', s.last_day,
            'paused', k."pausedAt" is not null,
            'hold', not k."isTest" and s.last_day is not null
@@ -527,6 +532,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
     left join public.fin_org o on o.id = 'main'
    cross join lateral (
      select (select max(d.day) from public.cash_days d where d.desk = k.id) as last_day,
+            (select min(d.day) from public.cash_days d where d.desk = k.id) as first_day,
             (select (e.data ->> 'from')::date from public.cash_day_events e
               where e.desk = k.id and e.kind = 'golive' and e.data ->> 'pause' = 'true' and e.data ->> 'from' is not null
               order by e.at, e.id limit 1) as pause_from,
@@ -2016,10 +2022,12 @@ begin
     'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30),
     -- yuridik shaxslarga (yetkazib beruvchi / tashkilot; tasdiqlanmagan «jismoniy shaxs» / «boshqa» ham) kassadan naqd xarajat (F1.27) —
     --   buxgalter ko'rib chiqadi. Hujjatda saqlangan belgi bo'yicha (sec-3: kontragent keyin qayta tasniflansa ham o'tgan to'lov yashirinmaydi;
-    --   belgidan oldingi hujjatlar — kontragentning hozirgi turi bo'yicha)
+    --   belgidan oldingi hujjatlar — kontragentning hozirgi turi bo'yicha); g8: «Boshqa» tomonga asos hujjati bilan xarajat ham (belgi bo'yicha)
     'orgCash30', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(c.amount), 0)) from public.cash_docs c
-                   where c.desk = v_desk and c.op = 'out_expense' and c.status = 'posted' and c."partyType" = 'counterparty'
-                     and coalesce(c."orgCash", app.kassa_is_org(c."partyId")) and c."businessDay" >= v_today - 30),
+                   where c.desk = v_desk and c.op = 'out_expense' and c.status = 'posted'
+                     and ((c."partyType" = 'counterparty' and coalesce(c."orgCash", app.kassa_is_org(c."partyId")))
+                          or (c."partyType" = 'other' and coalesce(c."orgCash", false)))
+                     and c."businessDay" >= v_today - 30),
     -- kontragent turi o'zgarishlari (sec-3; o'zgarishlar tarixi — change_log): oxirgi 30 kunda turi o'zgargan yoki «jismoniy shaxs» /
     --   «boshqa» turi bilan qo'shilgan kontragentlar — eski → yangi tur, kim (ism, email emas), qachon, tur hozir tasdiqlanganmi (ma'lumot uchun)
     'cpKinds30', coalesce((select jsonb_agg(jsonb_build_object('id', l.row_id, 'name', coalesce(c.name, ''), 'from', l.changes -> 'kind' ->> 0, 'to', l.changes -> 'kind' ->> 1,

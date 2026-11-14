@@ -29,6 +29,7 @@ declare
   v_cr numeric := 0;
   v_provider text;
   v_name text;
+  v_live boolean;
 begin
   -- Ruxsat: to'lov oluvchilar (kassir/moliya/direktor) yoki server (service_role) — apply_payment bilan bir xil.
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
@@ -47,6 +48,16 @@ begin
        or exists (select 1 from public.payments p where p.id = p_pay_id and p.amount = p_amount
                    and coalesce(p.status, '') in ('pending', 'applied', 'confirmed', 'paid', 'unmatched'))) then
     raise exception 'apply_to_invoice: to''lov yozuvisiz (payments) pul qo''llanmaydi' using errcode = '42501';
+  end if;
+  -- Moliya rejasi 1a (state-4): kassa ishga tushgach «naqd» kanal bilan — faqat kassa yo'llari (apply_payment bilan bir xil qoida, audit-7.sql).
+  if p_amount > 0 and lower(btrim(coalesce(p_provider, ''))) = 'cash' and coalesce(v_claims->>'role','') <> 'service_role'
+     and coalesce(current_setting('iqror.money_rpc', true), '') <> '1' and coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1'
+     and to_regprocedure('app.kassa_live()') is not null then
+    execute 'select app.kassa_live()' into v_live;
+    if coalesce(v_live, false) then
+      raise exception 'Kassa ishga tushgan: naqd pul balansga faqat «💵 To''lov» oynasi orqali — kirim orderi va fiskal chek bilan qo''llanadi'
+        using errcode = '42501', hint = 'kassa:cash_only_kassa';
+    end if;
   end if;
   v_provider := coalesce(nullif(p_provider, ''), 'click');
 

@@ -31,6 +31,9 @@ declare
   v_provider text;
   v_inserted int := 0;
   v_res jsonb;
+  v_kdoc numeric := 0;
+  v_kref numeric := 0;
+  v_kday boolean := false;
 begin
   -- Ruxsat: pulни QAYTARISH — sezgir money-move. Faqat direktor/moliya yoki server (Uzum/Click webhook).
   -- Kassir EMAS (kassir faqat to'lov QABUL qiladi, qaytarmaydi).
@@ -75,6 +78,33 @@ begin
     if v_inserted = 0 then
       return coalesce((select ap.result from public.applied_payments ap where ap.id = 'reverse:' || p_ref), '{}'::jsonb)
              || jsonb_build_object('dup', true, 'ref', p_ref);
+    end if;
+  end if;
+
+  -- Moliya rejasi 1a (g8; kassa moduli o'rnatilgan bazada — payment_allocations / cash_docs, kassa.sql): KASSA HUJJATI bilan to'langan pul
+  --   (naqd kirim orderi yoki o'zaro hisob dalolatnomasi — taqsimoti fakturaga yozilgan, kassadan qaytarilgani ayirilgan) bu yo'l bilan
+  --   ayirilmaydi: fakturaning qolgan to'langan summasi shundan kam bo'lmasin — xato bo'lsa «Kassa»da orderni shu kunda bekor qilish yoki
+  --   Direktorning «Qaytarish»i (kassadan chiqim orderi bilan). Kassa ishlay boshlagach (asosiy kassa kuni bor — avansda kirim orderidan o'tgan
+  --   naqd ortiqcha bo'lishi mumkin) avansdan qaytarib olish (summa fakturaning to'langan qismidan katta) — faqat to'lov serveri (provayder
+  --   qaytarishi); avans — Direktorning «Avansni tuzatish»i orqali (jurnal bilan). Server (Click / Uzum webhook), kassasiz baza va hali
+  --   ishlamagan (yashirin o'rnatilgan) kassa — avvalgidek.
+  if coalesce(v_claims->>'role','') <> 'service_role' and to_regclass('public.payment_allocations') is not null then
+    execute 'select coalesce(sum(a."fromCash" + a."fromCredit"), 0) from public.payment_allocations a join public.cash_docs c on c.id = a."docId"
+              where a."invoiceId" = $1 and c.status = ''posted'''
+      into v_kdoc using p_invoice;
+    execute 'select coalesce(sum(r.amount), 0) from public.refunds r where r.target = ''invoice'' and r."targetId" = $1 and r."cashDocId" is not null'
+      into v_kref using p_invoice;
+    v_kdoc := greatest(0, v_kdoc - v_kref);
+    if v_kdoc > 0 and v_inv.paid - least(p_amount, v_inv.paid) < v_kdoc - 0.5 then
+      raise exception 'Bu fakturaning % so''m qismi kassa hujjati (naqd kirim orderi yoki o''zaro hisob dalolatnomasi) bilan to''langan — uni bu yo''l bilan ayirib bo''lmaydi (ayirish mumkin: % so''m). Xato bo''lsa — «Kassa»da orderni shu kunda bekor qiling yoki Direktor «Qaytarish» bilan kassadan qaytaradi',
+        trim_scale(v_kdoc), trim_scale(greatest(0, v_inv.paid - v_kdoc)) using errcode = '42501', hint = 'kassa:linked_row';
+    end if;
+    if p_amount > v_inv.paid + 0.5 then
+      execute 'select exists (select 1 from public.cash_days d join public.cash_desks k on k.id = d.desk where not k."isTest")' into v_kday;
+    end if;
+    if v_kday then
+      raise exception 'Ayiriladigan summa fakturaning to''langan qismidan (% so''m) katta: avansdan qaytarib olish bu yo''l bilan bo''lmaydi (faqat to''lov serveri — provayder qaytarishi); avans — Direktorning «Avansni tuzatish»i orqali',
+        trim_scale(v_inv.paid) using errcode = '42501', hint = 'kassa:reverse_credit';
     end if;
   end if;
 

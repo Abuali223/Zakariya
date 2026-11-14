@@ -13,6 +13,8 @@ do $iqror_guard$ begin raise exception 'iqror: refund-rpc.sql ALOHIDA ishga tush
 --   Yechim: BITTA tranzaksiya — invoice qulfi + advisory lock + p_ref idempotentlik
 --     ('refund:'+ref applied_payments'да). refunds jurnal qatori DOIM shu tranzaksiyaда yoziladi.
 --   Ruxsat: FAQAT direktor (refunds_ins = is_admin) yoki server — refund sezgir amal.
+--   Kassa moduli o'rnatilgan bazada (moliya rejasi 1a, g8): pul hali berilmagan naqd qaytarish so'rovlari ham hisobga olinadi
+--   (kassa:refund_pending — pastda); modul yo'q bazada — avvalgidek.
 -- Idempotent (CREATE OR REPLACE). run-all.sql + deploy.sh'да.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
@@ -31,6 +33,8 @@ declare
   v_status text;
   v_cr numeric := 0;
   v_pname text;
+  v_held numeric := 0;
+  v_kassa boolean := to_regclass('public.cash_docs') is not null and coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1';
 begin
   -- Ruxsat: refund — FAQAT direktor (refunds jadvali ins = is_admin) yoki server.
   --   Kassa (moliya rejasi 1a, kassa-links.sql): Direktor TASDIQLAGAN naqd qaytarishni kassir pulni berayotgan paytda kassa
@@ -64,6 +68,39 @@ begin
     --   ikkinchi marta) qaytarish pul harakatlanmasa ham jurnalga «naqd qaytarildi» deb yozilmasin.
     if v_inv.status in ('canceled','reversed') or p_amount > v_inv.paid + 0.5 then
       return jsonb_build_object('ok', false, 'reason', 'exceeds-paid', 'paid', v_inv.paid, 'status', v_inv.status);
+    end if;
+    -- Moliya rejasi 1a (g8; kassa moduli o'rnatilgan bazada — kassa-links.sql: kassa_refund_request bilan bir xil qoida): shu faktura bo'yicha
+    --   pul hali berilmagan NAQD qaytarish so'rovlari (so'rov / tasdiqlangan) + shu summa to'langan summadan oshmasin; avans ham qaytarilsa —
+    --   o'quvchi avansi bo'yicha ochiq so'rov bo'lmasin. Aks holda «Naqd» so'rovi yuborilib (javob yo'qolgan), o'sha oynadan «bank» bilan
+    --   qayta urinish qisman qaytarishni ikki marta bajarardi. Kassa so'rovi puli berilayotgan payt (iqror.kassa_rpc) — mustasno (so'rov
+    --   paytida tekshirilgan). Kassasiz baza — avvalgidek.
+    if v_kassa then
+      -- Aynan shu qaytarish (o'sha p_ref) allaqachon bajarilgan bo'lsa — qayta urinish {dup}, so'rovlar tekshiruvidan OLDIN: aks holda
+      --   bajarilgan qaytarish kutilayotgan naqd so'rov tufayli xato bo'lib ko'rinardi. Faqat o'qish (posbon pastda; shu o'quvchi navbati
+      --   va faktura qulfi ostida — reattribute_avans kabi).
+      if coalesce(p_ref, '') <> '' and exists (select 1 from public.applied_payments where id = 'refund:' || p_ref) then
+        return jsonb_build_object('dup', true, 'ref', p_ref);
+      end if;
+      execute 'select coalesce(sum((c."sourceSnapshot" ->> ''amount'')::numeric), 0) from public.cash_docs c
+                where c.op = ''out_refund'' and c.status in (''draft'', ''approved'') and c."sourceSnapshot" ->> ''target'' = ''invoice''
+                  and c."sourceSnapshot" ->> ''targetId'' = $1'
+        into v_held using p_id;
+      if v_held > 0 and v_held + p_amount > v_inv.paid + 0.5 then
+        raise exception 'Bu hisob-faktura bo''yicha pul hali berilmagan naqd qaytarish so''rovi bor (% so''m): yangisi bilan jami to''langan summadan (% so''m) oshadi — avval o''sha so''rovni kassadan bering yoki «Kassa»da bekor qiling',
+          trim_scale(v_held), trim_scale(v_inv.paid) using errcode = '22023', hint = 'kassa:refund_pending';
+      end if;
+      if coalesce(p_clawback, false) and coalesce(v_sid, '') <> '' then
+        execute 'select coalesce(sum(case when c."sourceSnapshot" ->> ''target'' = ''credit'' then (c."sourceSnapshot" ->> ''amount'')::numeric
+                                          else coalesce((c."sourceSnapshot" ->> ''clawbackAmount'')::numeric, 0) end), 0)
+                   from public.cash_docs c
+                  where c.op = ''out_refund'' and c.status in (''draft'', ''approved'') and c."sourceSnapshot" ->> ''studentId'' = $1
+                    and (c."sourceSnapshot" ->> ''target'' = ''credit'' or coalesce((c."sourceSnapshot" ->> ''clawback'')::boolean, false))'
+          into v_held using v_sid;
+        if v_held > 0 then
+          raise exception 'Bu o''quvchi avansi bo''yicha pul hali berilmagan naqd qaytarish so''rovi bor (% so''m) — avval o''sha so''rovni kassadan bering yoki «Kassa»da bekor qiling',
+            trim_scale(v_held) using errcode = '22023', hint = 'kassa:refund_pending';
+        end if;
+      end if;
     end if;
 
     -- 2) IDEMPOTENTLIK POSBONI: aynan shu refund faqat BIR marta pulни harakatlantiradi.
@@ -117,6 +154,17 @@ begin
         return jsonb_build_object('ok', false, 'reason', 'partial-unmatched', 'amount', v_pamt);
       end if;
     end;
+    -- g8 (yuqoridagi qoida): shu to'lov bo'yicha pul hali berilmagan naqd qaytarish so'rovi bo'lsa — rad (to'lov faqat to'liq qaytariladi)
+    if v_kassa then
+      execute 'select coalesce(sum((c."sourceSnapshot" ->> ''amount'')::numeric), 0) from public.cash_docs c
+                where c.op = ''out_refund'' and c.status in (''draft'', ''approved'') and c."sourceSnapshot" ->> ''target'' = ''payment''
+                  and c."sourceSnapshot" ->> ''targetId'' = $1'
+        into v_held using p_id;
+      if v_held > 0 then
+        raise exception 'Bu to''lov bo''yicha pul hali berilmagan naqd qaytarish so''rovi bor (% so''m) — avval o''sha so''rovni kassadan bering yoki «Kassa»da bekor qiling',
+          trim_scale(v_held) using errcode = '22023', hint = 'kassa:refund_pending';
+      end if;
+    end if;
     if p_ref is not null and p_ref <> '' then
       insert into public.applied_payments(id, "studentId", amount, "createdAt")
         values ('refund:' || p_ref, '', p_amount, now()) on conflict (id) do nothing;

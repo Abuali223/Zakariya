@@ -14,8 +14,9 @@ do $iqror_guard$ begin raise exception 'iqror: fin-period.sql ALOHIDA ishga tush
 --   fin_snapshots_list() / fin_snapshot_get(id) — ro'yxat va to'liq surat (xeshi qayta hisoblanib tekshiriladi; ismlar — faqat Direktorga);
 --   fin_period_lock(date, note) — davr qulfi: shu sanagacha (shu kun ham) pul yozuvlari kiritilmaydi va o'zgartirilmaydi
 --                                 (42501; server — webhook'lar — mustasno). Orqaga surish — faqat sabab bilan.
---   Qulf qamrovi (1a): to'lovlar (yangi yozuvning kassa kuni; mavjud to'lovning kuni, summasi, kanali, bekor qilinishi), «Buxgalteriya» xarajatlari, maosh to'lovlari, xodim avanslari
---   (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas; lekin:
+--   Qulf qamrovi (1a): to'lovlar (yangi yozuvning kassa kuni; mavjud to'lovning kuni, summasi, kanali, bekor qilinishi; tushumga
+--   kirish-chiqishi — qaytarish, holatni to'g'ridan-to'g'ri o'zgartirish — va hisoblangan to'lovning o'quvchisi, state-1), «Buxgalteriya»
+--   xarajatlari, maosh to'lovlari, xodim avanslari (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas; lekin:
 --   davr faqat shu sanagacha bo'lgan kassa kunlari yopilgan bo'lsa yopiladi (app.fin_lock_ready), yopilgan davrdagi kassa kuni
 --   qayta ochilmaydi va birinchi kassa kuni yopilgan davrga qo'yilmaydi (kassa-day.sql: kassa_day_reopen, kassa_opening_set).
 --   Barcha pul jadvallari uchun oy qulfi — 2-bosqich (F2.8).
@@ -130,16 +131,36 @@ begin
 end $$;
 revoke all on function app.fin_text_day(text) from public, anon, authenticated;
 
+-- state-1: mavjud to'lov tushumga kirsa yoki undan chiqsa (app.counts_as_receipt — biriktirilmagan to'lovni qaytarish 'refunded', holatni
+--   to'g'ridan-to'g'ri 'reversed' / 'pending' / 'failed' … qilish), yoki hisoblangan to'lovning o'quvchisi o'zgarsa (biriktirish) — o'sha
+--   kun tushumi o'zgaradi. Kun yopilgan davrda bo'lsa — rad (fin_lock_check bilan bir xil qulf qoidasi; server / webhook mustasno): yopilgan
+--   davr jim o'zgarmaydi — kerak bo'lsa Direktor «Davr»da davrni sababi bilan qayta ochadi (fin_period_lock), amaldan keyin qayta yopadi.
+--   To'lovlar triggeri va naqd qaytarish so'rovi (kassa-links.sql: kassa_refund_request — biriktirilmagan to'lov) chaqiradi.
+create or replace function app.fin_lock_receipt(p_day date) returns void
+language plpgsql volatile security definer set search_path = public, app, pg_temp as $$
+declare v_lock date;
+begin
+  if p_day is null or app.is_system() then return; end if;
+  select o."lockedThrough" into v_lock from public.fin_org o where o.id = 'main' for share;
+  if v_lock is not null and p_day <= v_lock then
+    raise exception 'To‘lov (% kuni) yopilgan davrga tegishli (% gacha yopilgan): uning holati yoki o''quvchisi o''zgarsa (qaytarish, bekor qilish, biriktirish) o''sha oy tushumi o''zgaradi. Kerak bo''lsa Direktor «Davr»da davrni sababi bilan qayta ochadi, amaldan keyin qayta yopadi',
+      to_char(p_day, 'DD.MM.YYYY'), to_char(v_lock, 'DD.MM.YYYY') using errcode = '42501', hint = 'fin:locked';
+  end if;
+end $$;
+revoke all on function app.fin_lock_receipt(date) from public, anon, authenticated;
+
 -- To'lovlar: YANGI yozuvning kassa kuni yopilgan davrga tushmasin (qo'lda to'lovda kassir tanlagan «Sana»).
---   Mavjud to'lov holatining o'zgarishi (biriktirish, bo'lish, qaytarish) — bugungi amal, cheklanmaydi. Lekin to'lovning KUNI
---   (raw.manual / raw.date), SUMMASI yoki KANALI o'zgarsa, yoki yozuv BEKOR qilinsa / bekori qaytarilsa — eski ham, yangi kun ham
---   yopilgan davrga tushmasin (aks holda yopilgan oy tushumi orqaga o'zgarardi yoki yangi kunga yopilgan davr yozuvi «ko'chib» kelardi).
+--   Mavjud to'lov holatining tushumga ta'sir qilmaydigan o'zgarishi (bo'lish 'unmatched' → 'split', 'applied' ↔ 'paid' …) — bugungi amal,
+--   cheklanmaydi. Lekin to'lovning KUNI (raw.manual / raw.date), SUMMASI yoki KANALI o'zgarsa, yoki yozuv BEKOR qilinsa / bekori
+--   qaytarilsa — eski ham, yangi kun ham yopilgan davrga tushmasin (aks holda yopilgan oy tushumi orqaga o'zgarardi yoki yangi kunga
+--   yopilgan davr yozuvi «ko'chib» kelardi). state-1: to'lov tushumga kirsa / chiqsa yoki hisoblangan to'lovning o'quvchisi o'zgarsa —
+--   ham (app.fin_lock_receipt).
 --   Mijozning setDoc'i — upsert (INSERT … ON CONFLICT DO UPDATE): mavjud qator uchun taklif qilingan INSERT qatori tekshirilmaydi
 --   (createdAt unda — hozirgi payt, raw esa eski: oddiy belgi qo'yish ham «yopilgan davr» bo'lib rad etilardi); o'zgarishni BEFORE
 --   UPDATE tarmog'i tekshiradi, oddiy INSERT esa noyoblik xatosi bilan to'xtaydi.
 create or replace function app.fin_lock_payments() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_new date := app.pay_day(coalesce(new."createdAt", app.fin_now()), new.raw); v_old date;
+declare v_new date := app.pay_day(coalesce(new."createdAt", app.fin_now()), new.raw); v_old date; v_was boolean;
 begin
   if tg_op = 'INSERT' then
     if not exists (select 1 from public.payments p where p.id = new.id) then
@@ -151,6 +172,12 @@ begin
        or (new.status is distinct from old.status and 'canceled' in (coalesce(new.status, ''), coalesce(old.status, ''))) then
       perform app.fin_lock_check(v_old, 'To‘lov');
       perform app.fin_lock_check(v_new, 'To‘lov');
+    end if;
+    v_was := app.counts_as_receipt(old.id, old.status, old.provider, old.amount);
+    if v_was is distinct from app.counts_as_receipt(new.id, new.status, new.provider, new.amount)
+       or (v_was and new."studentId" is distinct from old."studentId") then
+      perform app.fin_lock_receipt(v_old);
+      if v_new is distinct from v_old then perform app.fin_lock_receipt(v_new); end if;
     end if;
   end if;
   return new;

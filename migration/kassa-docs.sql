@@ -91,8 +91,15 @@ revoke all on function app.kassa_amount(jsonb, text) from public, anon, authenti
 --      month ('YYYY-MM' — «Xodim qaytargan pul»da majburiy: qaysi oy avansi / maoshi; hujjat suratiga yoziladi, kassa-links.sql
 --      app.kassa_link_paid shu oy bo'yicha avans / maosh yozuvini yozadi)
 --   p_internal (faqat tizim funksiyalari): systemOnly / manual=false operatsiyalar, qatorlarda aniq debit/credit/analytics,
---      sourceTable/sourceId/sourceSnapshot, isSystem, tasdiq talablari (needsList2/needsDirector) berilishi mumkin.
---   Bir xil clientRef qayta kelsa — mavjud hujjat qaytadi (o_dup = true); mazmuni boshqa bo'lsa — xato.
+--      sourceTable/sourceId/sourceSnapshot, isSystem, tasdiq talablari (needsList2/needsDirector), so'rov izi (reqHash) berilishi mumkin.
+--   Bir xil clientRef qayta kelsa — mavjud hujjat qaytadi (o_dup = true); mazmuni boshqa bo'lsa — xato (kassa:ref_mismatch). state-9: mijoz
+--      hujjatida mazmun — operatsiya, kassa, summa, tomon (turi, kaliti, nomi), statiya / qatorlar, asos, ilova, izoh, asossiz belgisi, fiskal
+--      chek (va istisno), oy: kanonik izi (md5) hujjatda ("reqHash") saqlanadi va qayta kelganda solishtiriladi (javob yo'qolgach tomon yoki
+--      fiskal chek tuzatilib qayta yuborilsa eski hujjat jim qaytmasin).
+--   Fiskal chek (CT-21): operatsiya qoidasida majburiy ("fiscalRequired") yoki tomon turi bo'yicha ("fiscalParties": «Boshqa kirim» —
+--      o'quvchi / boshqa shaxs, ya'ni aholidan; kontragent va xodimdan — yo'q; g8) — raqam yoki Direktor istisnosi.
+--   Yuridik shaxsga naqd xarajat ("orgCash", F1.27): kontragent yuridik shaxs hisoblansa (app.kassa_is_org) yoki tomon «Boshqa» (erkin yozilgan
+--      nom) va xarajat asos hujjati bilan (hisob-faktura, shartnoma — yuridik shaxsnikidek; g8, g5 qoldig'i). Asossiz «Boshqa» xarid (≤ L1) — yo'q.
 create or replace function app.kassa_doc_build(p jsonb, p_form text, p_uid text, p_internal boolean default false,
                                                out o_id text, out o_dup boolean)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -103,7 +110,7 @@ declare
   v_lines jsonb; v_line jsonb; v_i int := 0; v_n int; v_lamt numeric; v_art public.fin_articles%rowtype; v_aid text;
   v_debit text; v_credit text; v_counter text; v_sum_cash numeric := 0; v_sum_all numeric := 0; v_lnote text;
   v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean; v_orgcash boolean := false;
-  v_month text;
+  v_month text; v_hash text;
 begin
   o_dup := false;
   if p is null or jsonb_typeof(p) <> 'object' then
@@ -129,12 +136,29 @@ begin
     end if;
   end if;
 
+  -- state-9: so'rov mazmunining kanonik izi (yuqoridagi izoh); qiymatlar hujjatga yoziladigandek me'yorlanadi (btrim, uzunlik, summa
+  --   ko'rinishi — trim_scale), shuning uchun bir xil mazmun doim bir xil iz beradi. Tizim funksiyalari izni o'zi beradi (yoki bermaydi).
+  v_hash := case when p_internal then nullif(btrim(coalesce(p ->> 'reqHash', '')), '') else md5(jsonb_build_object(
+      'op', v_op, 'desk', v_desk, 'form', p_form, 'amount', trim_scale(v_amount), 'month', v_month,
+      'partyType', nullif(btrim(coalesce(p ->> 'partyType', '')), ''), 'partyId', nullif(btrim(coalesce(p ->> 'partyId', '')), ''),
+      'partyName', left(btrim(coalesce(p ->> 'partyName', '')), 200), 'basis', left(btrim(coalesce(p ->> 'basis', '')), 500),
+      'attachment', left(btrim(coalesce(p ->> 'attachment', '')), 500), 'note', left(btrim(coalesce(p ->> 'note', '')), 500),
+      'noBasis', app.kassa_bool(p, 'noBasis'), 'fiscalNo', nullif(left(btrim(coalesce(p ->> 'fiscalNo', '')), 40), ''),
+      'fiscalExempt', app.kassa_bool(p, 'fiscalExempt'),
+      'lines', (select jsonb_agg(jsonb_build_object('articleId', nullif(btrim(coalesce(x ->> 'articleId', '')), ''),
+                                                    'amount', trim_scale(app.kassa_num(x, 'amount')), 'note', left(btrim(coalesce(x ->> 'note', '')), 300)) order by o)
+                  from jsonb_array_elements(case when jsonb_typeof(p -> 'lines') = 'array' and jsonb_array_length(p -> 'lines') > 0 then p -> 'lines'
+                                                 else jsonb_build_array(jsonb_build_object('articleId', p ->> 'articleId', 'amount', v_amount)) end)
+                       with ordinality t(x, o)))::text) end;
+
   perform pg_advisory_xact_lock(hashtext('iqror_doc:' || v_ref));   -- L0: bir xil kalit bilan parallel yuborish navbatga turadi
   select * into v_ex from public.cash_docs c where c."clientRef" = v_ref;
   if found then
     if v_ex.op <> v_op or v_ex.amount <> v_amount or v_ex.desk <> v_desk or v_ex.form <> p_form
-       or (v_month is not null and (v_ex."sourceSnapshot" ->> 'month') is distinct from v_month) then
-      raise exception 'Shu kalit bilan boshqa hujjat allaqachon yozilgan' using errcode = '22023', hint = 'kassa:ref_mismatch';
+       or (v_month is not null and (v_ex."sourceSnapshot" ->> 'month') is distinct from v_month)
+       or (v_ex."reqHash" is not null and v_hash is not null and v_ex."reqHash" <> v_hash) then
+      raise exception 'Bu oynadan avval boshqa ma''lumot bilan hujjat yozilgan (javob yo''qolgan bo''lishi mumkin) — ro''yxatdagi hujjatni tekshiring; kerak bo''lsa uni bekor qilib, yangi oynada qayta kiriting'
+        using errcode = '22023', hint = 'kassa:ref_mismatch';
     end if;
     o_id := v_ex.id; o_dup := true; return;
   end if;
@@ -259,9 +283,10 @@ begin
     end if;
   end if;
 
-  -- Fiskal chek (CT-21): aholidan naqd kirimda raqam majburiy; istisno — faqat Direktor.
+  -- Fiskal chek (CT-21): aholidan naqd kirimda raqam majburiy; istisno — faqat Direktor. «Boshqa kirim» — tomon turiga qarab
+  --   ("fiscalParties": o'quvchi / boshqa shaxs — aholi; kontragent, xodim — yo'q; g8).
   v_fiscal := nullif(left(btrim(coalesce(p ->> 'fiscalNo', '')), 40), '');
-  if v_rule."fiscalRequired" and v_fiscal is null then
+  if (v_rule."fiscalRequired" or coalesce(v_ptype = any (v_rule."fiscalParties"), false)) and v_fiscal is null then
     if app.kassa_bool(p, 'fiscalExempt') and (app.is_admin() or p_internal) then
       v_fexempt := true;
     else
@@ -286,8 +311,10 @@ begin
                or (v_op = 'out_accountable' and app.kassa_acc_open(v_pid) > 0);
     -- yuridik shaxsga (kontragent turi «yetkazib beruvchi» / «tashkilot») kassadan naqd xarajat: hisob-kitob asosan bankdan
     --   (yoki hisobdor shaxs orqali); kassadan — sozlamadagi chegaradan (fin_org.extra.orgCashMax, standart 0) katta bo'lsa
-    --   Direktor tasdig'i bilan (F1.27, buxgalter ko'rigi M3).
-    v_orgcash := v_op = 'out_expense' and v_ptype = 'counterparty' and app.kassa_is_org(v_pid);
+    --   Direktor tasdig'i bilan (F1.27, buxgalter ko'rigi M3). g8 (g5 qoldig'i): «Boshqa» tomon (erkin yozilgan nom) asos hujjati bilan
+    --   (hisob-faktura, shartnoma) — yuridik shaxsga to'lov kabi (aks holda korxonani «Boshqa» deb yozib qoidani chetlab o'tish mumkin edi);
+    --   asossiz «Boshqa» xarid (≤ L1, bitta statiya) — yo'q. Bir qoida: app.kassa_org_due, kassa_doc_pay, nazorat ro'yxati (orgCash30).
+    v_orgcash := v_op = 'out_expense' and ((v_ptype = 'counterparty' and app.kassa_is_org(v_pid)) or (v_ptype = 'other' and not v_nobasis));
     v_needd := v_needd or (v_orgcash and v_amount > coalesce(app.kassa_num(v_org.extra, 'orgCashMax'), 0));   -- kassa-links.sql
   end if;
 
@@ -298,13 +325,13 @@ begin
   -- "orgCash" — yuridik shaxsga naqd xarajat belgisi (sec-3; kassa.sql): «Xarajat» so'rovida saqlanadi, boshqa operatsiyalarda bo'sh
   insert into public.cash_docs (id, desk, form, op, status, amount, "partyType", "partyId", "partyName", basis, attachment, note, "noBasis",
                                 "fiscalNo", "fiscalExempt", "sourceTable", "sourceId", "sourceSnapshot", "clientRef", "capturedAt",
-                                "needsList2", "needsDirector", "requestedBy", "requestedAt", "isSystem", "createdBy", "orgCash")
+                                "needsList2", "needsDirector", "requestedBy", "requestedAt", "isSystem", "createdBy", "orgCash", "reqHash")
     values (o_id, v_desk, p_form, v_op, 'draft', v_amount, v_ptype, v_pid, coalesce(v_pname, ''), v_basis, v_attach, v_note, v_nobasis,
             v_fiscal, v_fexempt,
             case when p_internal then nullif(p ->> 'sourceTable', '') end, case when p_internal then nullif(p ->> 'sourceId', '') end,
             case when p_internal then p -> 'sourceSnapshot' when v_month is not null then jsonb_build_object('month', v_month) end, v_ref, v_cap,
             v_need2, v_needd, p_uid, now(), p_internal and app.kassa_bool(p, 'isSystem'), p_uid,
-            case when v_op = 'out_expense' and not p_internal then v_orgcash end);
+            case when v_op = 'out_expense' and not p_internal then v_orgcash end, v_hash);
   insert into public.cash_doc_lines (id, "docId", "lineNo", debit, credit, amount, "articleId", cash, analytics, note)
     select o_id || '_' || (r ->> 'n'), o_id, (r ->> 'n')::int, r ->> 'debit', r ->> 'credit', (r ->> 'amount')::numeric,
            r ->> 'articleId', (r ->> 'cash')::boolean, r -> 'analytics', r ->> 'note'
@@ -564,11 +591,12 @@ revoke all on function app.kassa_is_org(text) from public, anon, authenticated;
 -- Yuridik shaxsga naqd xarajat qoidasi HOZIRGI holat bo'yicha (sec-3): «Xarajat» kontragentga, kontragent hozir yuridik shaxs hisoblanadi,
 --   summa sozlamadagi chegaradan (fin_org.extra.orgCashMax) katta, Direktor tasdig'i esa yo'q — Direktor tasdig'i kerak. Kontragent turi va
 --   chegara so'rovdan keyin o'zgarishi mumkin: 2-ro'yxat tasdig'ida (kassa_doc_approve) va pul berishda (kassa_doc_pay) qayta baholanadi.
+--   g8 (g5 qoldig'i): «Boshqa» tomonga asos hujjati bilan xarajat — turi tasdiqlanmagan kontragent kabi (yuridik shaxs hisoblanadi).
 create or replace function app.kassa_org_due(p_doc public.cash_docs) returns boolean
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 begin
-  return coalesce(p_doc.op = 'out_expense' and p_doc."partyType" = 'counterparty' and p_doc."dirApprovedBy" is null
-                  and app.kassa_is_org(p_doc."partyId")
+  return coalesce(p_doc.op = 'out_expense' and p_doc."dirApprovedBy" is null
+                  and ((p_doc."partyType" = 'counterparty' and app.kassa_is_org(p_doc."partyId")) or (p_doc."partyType" = 'other' and not p_doc."noBasis"))
                   and p_doc.amount > coalesce((select app.kassa_num(o.extra, 'orgCashMax') from public.fin_org o where o.id = 'main'), 0), false);   -- kassa-links.sql
 end $$;
 revoke all on function app.kassa_org_due(public.cash_docs) from public, anon, authenticated;
@@ -801,9 +829,10 @@ begin
     raise exception 'Bu so''rovni o''zingiz tasdiqlagansiz — pulini o''zingiz bera olmaysiz (tasdiqlovchi va pul beruvchi boshqa-boshqa kishi): pulni kassir beradi'
       using errcode = '42501', hint = 'kassa:self_pay';
   end if;
-  -- sec-3: yuridik shaxsga naqd «Xarajat» — kontragent qatori FOR SHARE (turi shu payt o'zgarayotgan bo'lsa — tugashini kutib, yangi qiymat bilan)
-  if v_was = 'approved' and v_op = 'out_expense' and v_cur."partyType" = 'counterparty' then
-    perform 1 from public.fin_counterparties c where c.id = v_cur."partyId" for share;
+  -- sec-3: yuridik shaxsga naqd «Xarajat» — kontragent qatori FOR SHARE (turi shu payt o'zgarayotgan bo'lsa — tugashini kutib, yangi qiymat bilan);
+  --   g8: «Boshqa» tomonga asos hujjati bilan xarajat — xuddi shu qoida (chegara shu payt bo'yicha)
+  if v_was = 'approved' and v_op = 'out_expense' and v_cur."partyType" in ('counterparty', 'other') then
+    if v_cur."partyType" = 'counterparty' then perform 1 from public.fin_counterparties c where c.id = v_cur."partyId" for share; end if;
     if app.kassa_org_due(v_cur) then
       perform app.kassa_flag(true);
       update public.cash_docs set "needsDirector" = true, status = 'draft', "orgCash" = true where id = p_id;
@@ -812,7 +841,8 @@ begin
         'message', 'Pul berilmadi: yuridik shaxsga kassadan naqd to''lov qoidasi bo''yicha endi Direktor tasdig''i kerak (so''rovdan keyin kontragent turi yoki sozlamadagi chegara o''zgargan, yoki tur hali tasdiqlanmagan). So''rov Direktor tasdig''iga qaytarildi; Direktor tasdiqlagach pulni bering');
     end if;
     -- belgi pul berish paytidagi holat bilan qotiriladi («ha» bo'lsa — qoladi; ustundan oldingi so'rovda bo'sh bo'lsa — shu paytdagi qiymat)
-    v_org := coalesce(v_cur."orgCash", false) or app.kassa_is_org(v_cur."partyId");
+    v_org := coalesce(v_cur."orgCash", false)
+             or case when v_cur."partyType" = 'counterparty' then app.kassa_is_org(v_cur."partyId") else not v_cur."noBasis" end;
     if v_cur."orgCash" is distinct from v_org then
       perform app.kassa_flag(true);
       update public.cash_docs set "orgCash" = v_org where id = p_id;

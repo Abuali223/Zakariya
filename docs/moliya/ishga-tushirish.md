@@ -83,6 +83,8 @@ Keyin, hali hech narsa kiritmasdan:
 - «💵 To‘lov», «Maosh berish», «Xarajat», «Qaytarish» oynalari avvalgidek ishlaydi (fiskal chek maydoni yo‘q) — bitta haqiqiy to‘lovni kutib kuzatish kifoya, sinov to‘lovi kiritilmaydi.
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
+  «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa
+  «Fiskal chek №» majburiy (Direktor — istisno belgisi bilan).
   Sinov kassasi hujjatlari hisobotlarga, «Buxgalteriya»ga va Telegram hisobotiga kirmaydi. O‘quv to‘lovi bilan sinov o‘tkazilmaydi
   (ota-onaga xabar ketadi).
 - Direktorga kunlik Telegram hisoboti matni (hech narsa yubormaydi): auth xizmati papkasida `node tg-daily.cjs --dry` (`auth/README.md`,
@@ -116,8 +118,12 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    Birinchi kassa kuni ochilguncha qoldiqni qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi, raqami saqlanadi).
    **Sanashdan keyin va birinchi kassa kunidan oldin naqd pul harakati bo‘lsa** (masalan, ta’til kunlari qabul qilingan to‘lov) —
    birinchi kassa kuni ertalab pul qayta sanaladi va boshlang‘ich qoldiq qayta kiritiladi: u birinchi hujjatdan oldingi haqiqiy pulga teng bo‘lishi shart.
+   «Birinchi kassa kuni» odatda ishga tushadigan kunning o‘zi (6-qadam). Undan oldin bo‘lsa va o‘sha kuni kassa hujjati yozilsa — kassa
+   **o‘sha kundan** ishlagan hisoblanadi: ishga tushgach o‘sha kun sanasi bilan kassa hujjatisiz naqd yozuv kiritilmaydi (Direktorga
+   ham), «Moslik» uni ham tekshiradi.
 6. **«⚙ Sozlamalar» → «Kassa ishga tushadigan kun»** = birinchi kassa kuni. Shu kundan boshlab har naqd o‘quv to‘lovi kirim orderi
-   va fiskal chek raqami bilan yoziladi. Sana 31-dekabr kechqurun (oldindan) kiritiladi. Bugungi yoki o‘tgan kun qo‘yilsa, tizim
+   va fiskal chek raqami bilan, faqat «💵 To‘lov» orqali yoziladi (to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish yoki «naqd» kanal bilan
+   balansga qo‘llash — Direktorga ham yo‘q). Sana 31-dekabr kechqurun (oldindan) kiritiladi. Bugungi yoki o‘tgan kun qo‘yilsa, tizim
    tekshiradi: shu kundan beri kassa orderisiz naqd yozuv (o‘quv to‘lovi, xarajat, maosh, avans, qaytarish) bo‘lsa — sozlama
    saqlanmaydi va sanani o‘sha yozuvlardan keyingi kunga qo‘yish so‘raladi (ular boshlang‘ich qoldiq sanashiga kiradi).
 7. **To‘lanmagan qaytarishlar:** «↩ Qaytarish» orqali tasdiqlangan, lekin hali berilmagan pullar ro‘yxati (yangi yilda kassadan «Qaytarish» chiqim orderi bilan beriladi).
@@ -126,7 +132,8 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    qoldig‘i, to‘lanmagan ish haqi, berilmagan qaytarishlar. «⬇ JSON» bilan yuklab (Direktor yuklagani — ismli to‘liq nusxa; moliya menejeri va buxgalterga ismsiz nusxa
    beriladi), arxivga qo‘yiladi.
 9. **Davrni yopish** — keyingi ish kuni: «Davr» → «Shu sanagacha yopiq» = 31-dekabr → «Qulfni saqlash». Shundan keyin 31-dekabrgacha
-   sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno). Keyingi
+   sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno); o‘sha davr
+   to‘lovini qaytarish, biriktirish yoki holatini o‘zgartirish ham (tushum o‘zgaradi) — avval davr sababi bilan qayta ochiladi. Keyingi
    oylarda: davr faqat shu sanagacha bo‘lgan barcha kassa kunlari sanab yopilgan bo‘lsa yopiladi; yopilgan davrdagi kassa kuni
    qayta ochilmaydi (avval Direktor davrni sababi bilan qayta ochadi).
 10. Hujjat raqamlari (K-, Ch-, D-) yangi yilda 1 dan boshlanadi — bu avtomatik.
@@ -144,7 +151,8 @@ fiskal chek paydo bo‘ladi). Tartib:
   o‘tadi — u ham kirim orderisiz; undan eskisini Direktor kiritadi.
 - Bunday yozuvlar nazorat ro‘yxatida «Kassa ishga tushishidan oldingi naqd yozuvlar (keyin kiritilgan)» qatorida ko‘rinadi
   (ma’lumot uchun): buxgalter ularni sanash dalolatnomasi bilan solishtiradi. Davr qulfi (8–9-qadamlar) ularga ham amal qiladi.
-- Bu tartib faqat **kassa ishlamagan kunlar** uchun: kassa **birinchi** ishga tushgan kundan oldingi sana yoki kassa to‘xtatilgan
+- Bu tartib faqat **kassa ishlamagan kunlar** uchun: kassa **birinchi** ishga tushgan kundan (birinchi kassa hujjati ishga tushadigan
+  kundan oldin yozilgan bo‘lsa — o‘sha kundan) oldingi sana yoki kassa to‘xtatilgan
   davr ichidagi sana (9-bo‘lim; bu davr yozuvlari «Kassani to‘xtatish va qayta ishga tushirish» qatorida). Kassa ishlagan kun
   sanasi bilan (kassa to‘xtatilib qayta ishga tushirilgandan keyin ham — oldingi davrning yopilgan kuni) kassa hujjatisiz naqd yozuv
   kiritilmaydi: naqd o‘quv to‘lovi bugungi kirim orderi bilan yoziladi, xarajat, maosh va avans — faqat «Kassa» orqali (tizim rad
@@ -220,7 +228,9 @@ sanalgan bo‘lsa, kirim orderi uni ikkinchi marta hisoblaydi va birinchi yopish
 Kun yopilgandan keyin olingan bo‘lsa — u to‘xtatilgan davr puli, navbatdan o‘chirilib ertangi sana bilan qayta kiritiladi (qayta
 ishga tushirish sanashidan oldin); boshqasini Direktor buxgalter bilan hal qiladi. «Kassa» bo‘limi va yozilgan
 hujjatlar joyida qoladi, yangi kassa hujjati yozilmaydi; «Kassa» sahifasida «Kassa to‘xtatilgan» ogohlantirishi turadi. Kim,
-qachon va qaysi sanadan to‘xtatgani hodisa jurnaliga yoziladi. To‘xtatilgan kassada oxirgi kassa kuni qayta ochilmaydi — tuzatish
+qachon va qaysi sanadan to‘xtatgani hodisa jurnaliga yoziladi. Kassa to‘xtatilgan yoki qayta ishga tushirish kunini kutayotgan paytda
+naqd (yoki usuli ko‘rsatilmagan) xarajat, maosh va avans yozuvi **sanasiz** kiritilmaydi va sanasi bo‘shatilmaydi (kassa ishlaganda ham
+— sanasi bo‘shatilmaydi). To‘xtatilgan kassada oxirgi kassa kuni qayta ochilmaydi — tuzatish
 qayta ishga tushirish sanashida (farq dalolatnomasida) aks etadi. (2) Kod xatosi bo‘lsa — oldingi versiyaga qaytariladi (`git revert`
 \+ deploy; sayt fayllari va server kodi — deploy chiqishidagi «Orqaga qaytarish» buyruqlari). (3) Bazadagi obyektlar o‘chirilmaydi,
 zaxiradan tiklash — faqat maslahatlashib. Davr qulfi qayta ochilsa — sababi bilan.

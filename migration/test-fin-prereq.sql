@@ -146,6 +146,9 @@ select zz.chk('D14c holat applied, avans 200000',
   (select p.status || '|' || c.credit::bigint from public.payments p, public.student_credit c where p.id = 'man_legacy_00001' and c.id = 'T-2'), '^applied\|200000$');
 select zz.chk('D15 «pending» qator summasi boshqa — rad (mismatch)',
   zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status) values ('man_legacy_00002','T-2','cash',300000,'pending') returning 1) select (select public.record_manual_payment('man_legacy_00002','T-2',999,'cash',null,'','','',null) ->> 'reason') from x$q$), '^mismatch$');
+-- g8: usul boshqa — kassa moduli yo'q yoki kassa ishlamayapti: avvalgidek tugatiladi (kassa ishlaganda «mismatch» — test-kassa-pay.sql N6)
+select zz.chk('D15b «pending» qatorni boshqa usul bilan tugatish — kassasiz (ishlamayotgan kassa) avvalgidek qo''llanadi',
+  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status) values ('man_legacy_00003','T-2','cash',1000,'pending') returning 1) select (select public.record_manual_payment('man_legacy_00003','T-2',1000,'bank',null,'','','',null) ->> 'status') from x$q$), '^applied$');
 select zz.chk('D16 G''aznachi ham kirita oladi',
   zz.as('U_TRE', $q$select (public.record_manual_payment('man_1731000000008_abc12','T-3',1000,'cash',null,'','','',null) ->> 'ok')$q$), '^true$');
 

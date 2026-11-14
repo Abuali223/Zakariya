@@ -138,7 +138,7 @@ select zz.chk('L1 yopilgan davr sanasi bilan qo''lda to''lov — rad (42501), iz
 select zz.chk('L1b qulfdan keyingi sana bilan — yoziladi', (zz.bank('U_KAS', 'man_p_0002', 'T-1', 100000, '2027-01-01')::jsonb ->> 'status'), '^applied$');
 select zz.chk('L1c server (webhook) yopilgan davrga ham yoza oladi — tizim mustasno',
   zz.as('SYSTEM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "createdAt") values ('wh_old_1', 'T-1', 'click', 5000, 'pending', true, '{}', '2026-12-30 09:00+05') returning id) select id from x$q$), '^wh_old_1$');
-select zz.chk('L1d eski to''lov holatini o''zgartirish (biriktirish, qaytarish) cheklanmaydi',
+select zz.chk('L1d server (webhook) yopilgan davr to''lovining holatini o''zgartira oladi — tizim mustasno (foydalanuvchiga — L8)',
   zz.as('SYSTEM', $q$with x as (update public.payments set status = 'refunded' where id = 'pu1' returning status) select status from x$q$), '^refunded$');
 -- Mavjud to'lov: kuni (raw.manual / raw.date), summasi yoki kanali o'zgarsa — eski va yangi kun qulfga tekshiriladi.
 set local session_replication_role = replica;
@@ -168,6 +168,53 @@ select zz.put('L1g',
 select zz.chk('L1g upsert bilan belgi qo''yish yopilgan davr to''lovida ham o''tadi; bekor qilish (upsert yoki UPDATE) — rad; ochiq davrda fantom yozuvni bekor qilish — avvalgidek',
   zz.get('L1g') || ' | ' || (select string_agg(id || '/' || status || '/' || coalesce(raw ->> 'manualReverseDone', '-') || '/' || app.pay_day("createdAt", raw)::text, ',' order by id) from public.payments where id in ('man_dec_late', 'man_jan_ph')),
   '^man_dec_late \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| man_jan_ph \| man_dec_late/applied/true/2026-12-30,man_jan_ph/canceled/-/2027-01-01$');
+-- ---------- state-1: tushumga kirish / chiqish va hisoblangan to'lovning o'quvchisi ----------
+--   Biriktirilmagan to'lovni qaytarish ('refunded'), holatni to'g'ridan-to'g'ri o'zgartirish ('reversed', 'pending', 'failed' …) va
+--   biriktirish (o'quvchi o'zgaradi) — o'sha kun tushumini o'zgartiradi: yopilgan davrda rad (davrni qayta ochish tartibi bilan). Bo'lish
+--   (ota qator 'split' — tushumda qoladi, bola qatorlari — yo'q) va ochiq davr — avvalgidek; server (webhook) — mustasno.
+set local session_replication_role = replica;
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw, "createdAt") values
+  ('pu_s1', '', 'bank', 250000, 'unmatched', 'Noma''lum', false, '{}', '2026-12-20 10:00+05'),
+  ('pu_s2', '', 'click', 150000, 'unmatched', 'Noma''lum 2', false, '{}', '2026-12-22 10:00+05'),
+  ('pu_s3', '', 'click', 90000, 'unmatched', 'Noma''lum 3', false, '{}', '2026-12-23 10:00+05'),
+  ('pc_s1', 'T-2', 'click', 100000, 'applied', 'Sinov Ota', true, '{}', '2026-12-21 10:00+05'),
+  ('pu_j1', '', 'bank', 40000, 'unmatched', 'Noma''lum 4', false, '{}', '2027-01-02 09:00+05'),
+  ('pc_j1', 'T-2', 'click', 60000, 'applied', 'Sinov Ota', true, '{}', '2027-01-02 09:10+05');
+set local session_replication_role = origin;
+select zz.put('L8r0', (select count(*) || ':' || trim_scale(sum(amount)) from app.fin_receipts('2026-12-01', '2026-12-31')));
+select zz.chk('L8 yopilgan davr (20.12) biriktirilmagan to''lovini qaytarish (Direktor, refund_invoice) — rad, davrni qayta ochish tartibi aytiladi; to''lov va jurnal o''zgarmadi',
+  zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_s1', 250000, 'Egasi topilmadi', false, '', 'rf_l8_0001')::text$q$) || ' | '
+  || (select status from public.payments where id = 'pu_s1') || ':' || (select count(*) from public.refunds where "targetId" = 'pu_s1'),
+  '^ERR 42501 \[fin:locked\] To‘lov \(20\.12\.2026 kuni\) yopilgan davrga tegishli \(31\.12\.2026 gacha yopilgan\): uning holati yoki o''quvchisi o''zgarsa.*Direktor «Davr»da davrni sababi bilan qayta ochadi.* \| unmatched:0$');
+select zz.chk('L8b yopilgan davr to''lovi holatini to''g''ridan-to''g''ri o''zgartirish: Moliya menejeri «reversed» / «failed», kassir «pending» — rad',
+  zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.payments set status = 'failed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_KAS', $q$with x as (update public.payments set status = 'pending' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || (select status from public.payments where id = 'pc_s1'),
+  '^ERR 42501 \[fin:locked\] To‘lov \(21\.12\.2026 kuni\).* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| applied$');
+select zz.put('L8c1', zz.as('U_FM', $q$select public.assign_payment('pu_s2', 'T-1')::text$q$));
+select zz.put('L8c2', zz.as('U_FM', $q$select public.split_payment('pu_s3', 'click', '[{"sid":"T-1","amount":90000}]')::text$q$));
+select zz.chk('L8c yopilgan davr biriktirilmagan to''lovini biriktirish (o''quvchi o''zgaradi) — rad; bo''lish (tushum o''zgarmaydi) — avvalgidek; dekabr tushumi o''zgarmadi',
+  zz.get('L8c1') || ' | ' || case when zz.get('L8c2') like '{%' then zz.get('L8c2')::jsonb ->> 'ok' else zz.get('L8c2') end || ' | '
+  || (select status from public.payments where id = 'pu_s2') || ':' || (select status from public.payments where id = 'pu_s3') || ' | '
+  || ((select count(*) || ':' || trim_scale(sum(amount)) from app.fin_receipts('2026-12-01', '2026-12-31')) = zz.get('L8r0'))::text,
+  '^ERR 42501 \[fin:locked\] To‘lov \(22\.12\.2026 kuni\).* \| true \| unmatched:split \| true$');
+select zz.chk('L8d ochiq davr (02.01): biriktirilmagan to''lovni qaytarish va holatni o''zgartirish — avvalgidek',
+  (zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_j1', 40000, 'Egasi topilmadi', false, '', 'rf_l8_0002')::text$q$)::jsonb ->> 'ok') || ' | '
+  || zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_j1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.payments set status = 'applied' where id = 'pc_j1' returning status) select status from x$q$),
+  '^true \| reversed \| applied$');
+select zz.chk('L8e server (webhook) yopilgan davr to''lovini qaytara oladi — tizim mustasno',
+  zz.as('SYSTEM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('SYSTEM', $q$with x as (update public.payments set status = 'applied' where id = 'pc_s1' returning status) select status from x$q$),
+  '^reversed \| applied$');
+select zz.put('L8f', zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-19', 'Biriktirilmagan to''lov qaytariladi (sinov)')::text$q$));
+select zz.put('L8f2', zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_s1', 250000, 'Egasi topilmadi', false, '', 'rf_l8_0003')::text$q$));
+select zz.put('L8f3', zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-31')::text$q$));
+select zz.chk('L8f mavjud tartib: Direktor davrni sababi bilan qayta ochadi — qaytarish o''tadi; davr yana yopiladi',
+  (zz.get('L8f')::jsonb ->> 'lockedThrough') || ' | ' || case when zz.get('L8f2') like '{%' then zz.get('L8f2')::jsonb ->> 'ok' else zz.get('L8f2') end || ' | '
+  || (zz.get('L8f3')::jsonb ->> 'lockedThrough') || ':' || (select status from public.payments where id = 'pu_s1'),
+  '^2026-12-19 \| true \| 2026-12-31:refunded$');
 select zz.chk('L2 xarajat: yopilgan davr sanasi bilan yangi yozuv — rad; o''sha davr yozuvini o''zgartirish va o''chirish — rad',
   zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_l1', '2026-12-30', '2026-12', 'Boshqa', 1000, 'kech', 'bank') returning id) select id from x$q$) || ' | ' ||
   zz.as('U_FM', $q$with x as (update public.expenses set amount = 1 where id = 'ex_dec' returning id) select count(*)::text from x$q$) || ' | ' ||
@@ -201,7 +248,7 @@ select zz.chk('L7 kassa holatida davr qulfi ko''rinadi (shakllarda eng erta sana
 select zz.put('K1', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2026-12-31"}')::text$q$));
 select zz.chk('K1 birinchi kassa kuni yopilgan davrga qo''yilmaydi', zz.get('K1'), '^ERR 42501 \[fin:locked\] Birinchi kassa kuni');
 select zz.put('K2', left(zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":500000,"startDay":"2027-01-02"}')::text$q$), 0)
-  || zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":10000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 02.01.2027","note":"Sinov","clientRef":"p-k2-0001"}'::jsonb)::text$q$));
+  || zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":10000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat, 02.01.2027","note":"Sinov","fiscalNo":"FP-K2","clientRef":"p-k2-0001"}'::jsonb)::text$q$));
 select zz.chk('K2 kassa ishga tushdi: 02.01.2027 kuni ochiq', (select status from public.cash_days where desk = 'main' and day = '2027-01-02'), '^open$');
 select zz.clock('2027-01-03 10:00+05');   -- ertasi kun: kechagi kassa kuni hali sanalmagan
 select zz.put('K3n', (select count(*)::text from public.fin_snapshots));

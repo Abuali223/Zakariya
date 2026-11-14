@@ -9,6 +9,9 @@
 #   (6) bitta xodimning hisobdor qoldig'i va oy avansiga 8 tadan parallel qaytim — faqat qoldiq yetganlari o'tadi, deadlock yo'q;
 #   (7) bitta o'qituvchi va oy: maosh qaytimi (OP-09), naqd maosh va ularni bekor qilish parallel — qulf tartibi bir xil
 #       (S → P → L4): deadlock yo'q, berilgan maosh 0 … tasdiqlangan summa oralig'ida, moslik toza;
+#   (11) kassaga qaytim yozilgan oyning eski naqd avans / maosh qatorlarini ikki seans parallel o'chiradi — oy sof summasi manfiy
+#       bo'lmaydi (g8: tekshiruv xodim / oy navbati ostida, ikkinchisi kassa:staff_returned bilan rad); qaytim orderi va eski qatorni
+#       o'chirish parallel — o'chirish o'zbekcha «qayta urining» (kassa:busy) bilan bekor, qaytim o'tadi, deadlock yo'q;
 #   (5) kirimlar davom etayotganda kun yopiladi — yopilgandan keyingi kirimlar rad, kun jami = hujjatlar, tekshiruv o'tadi;
 #   (9) ikki bosqichli smena topshirish (state-6): qabul kutilayotganda parallel kirimlar — qabulgacha rad (kassa:handover_pending),
 #       keyin o'tadi, qabul paytidagi qoldiq topshirish paytidagi bilan bir xil; topshiruvchining kunni yopishi va qabul parallel — yopish
@@ -209,6 +212,62 @@ chk "7f 8 ta katta qaytim va birinchi maoshni bekor qilish parallel: o'tdi yoki 
     "$(( pw + $(grep -c 'kassa:staff_returned' "$TMP/w7.0") ))/$(( pu + $(cat "$TMP"/u7.* | grep -c 'kassa:staff_over') ))/$(cat "$TMP"/w7.0 "$TMP"/u7.* | grep -ci 'deadlock')" "1/8/0"
 sum=$(( sum + 1000000 * pw + 2100000 * pu )); net=$(( net - 1000000 * pw - 2100000 * pu ))
 chk "7g sof berilgan maosh manfiy emas (0 … 3 000 000) va o'tganlar yig'indisiga teng; moslik toza; kassa qoldig'i hisobga teng" "$(state7)/$(in7)" "$net/0/$sum/ichida"
+
+# ---------- (11) g8: kassaga qaytim yozilgan oyning eski naqd avans / maosh qatorlarini parallel o'chirish ----------
+#   Eski (kassa hujjatisiz) naqd avans A, B, C — 60 000 dan, kassaga qaytim −100 000 (kassa hujjatiga bog'langan): bittasini o'chirish
+#   mumkin (oy sof summasi 20 000), ikkitasini — yo'q (−40 000, kassa:staff_returned). A seansi o'chirib 2 s kutadi, B 0,5 s keyin boshqa
+#   qatorni o'chiradi: tekshiruv xodim navbati (P) ostida — B navbat kutib, A natijasini ko'radi va rad etiladi (avval ikkalasi ham o'tardi).
+#   Urug' va qoldiq triggerlarsiz (keyingi bo'limlar moslik / qoldiq hisobiga ta'sir qilmasin).
+MON11=${TODAY:0:7}
+q >/dev/null <<SQL
+set session_replication_role = replica;
+insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, "cashDocId") values
+  ('adv_r11a', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null), ('adv_r11b', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null),
+  ('adv_r11c', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null), ('adv_r11r', 'IQX-R11', 'staff:r_st11', 'Poyga', -100000, '$MON11', '$TODAY', 'cd_race11_ret');
+SQL
+( { as_sess R_FM; echo "begin;"; echo "delete from public.staff_advances where id = 'adv_r11a';"
+    echo "select 'A|' || count(*) from public.staff_advances where id = 'adv_r11a';"; echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11.A" 2>&1 ) &
+sleep 0.5
+{ as_sess R_FM; echo "delete from public.staff_advances where id = 'adv_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11.B" 2>&1
+wait
+chk "11a qaytim yozilgan oyning ikki eski naqd avans qatorini parallel o'chirish: biri o'tdi, ikkinchisi navbatda A natijasini ko'rib rad etildi (kassa:staff_returned); oy sof summasi manfiy emas; deadlock yo'q" \
+    "$(grep -c '^A|0$' "$TMP/11.A")/$(grep -c 'kassa:staff_returned' "$TMP/11.B")/$(q -c "select trim_scale(sum(amount)) from public.staff_advances where \"teacherId\" = 'IQX-R11'")/$(cat "$TMP/11.A" "$TMP/11.B" | grep -ci 'deadlock')" "1/1/20000/0"
+#   (11c) qaytim orderi va eski qatorni o'chirish parallel (g8 tekshiruvchisi): qaytim avval xodim navbatini (P), keyin shu oy qatorlarini
+#   (FOR SHARE) oladi, o'chirish esa avval qator qulfini, keyin navbatni — teskari tartib. O'chirish navbatni kutmaydi (so'raydi): navbat
+#   bo'shamasa ≈ 5 s dan keyin o'zbekcha «qayta urining» (kassa:busy) bilan bekor bo'ladi va qaytim o'tadi — deadlock (inglizcha xato) yo'q.
+#   Qaytimning P navbati sinovda qo'lda oldinroq olinadi (qaytimning o'zi ham shu navbatni birinchi oladi; shu seansda qayta olinadi).
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.staff (id, "staffId", name, position) values ('r_st11','IQX-R11','Poyga Xodim 11','Farrosh') on conflict (id) do nothing;
+SQL
+( { as_sess R_KAS; echo "begin;"; echo "select pg_advisory_xact_lock(hashtext('iqror:payroll:IQX-R11'));"; echo "select pg_sleep(1);"
+    echo "select 'A|' || (public.kassa_receipt('{\"op\":\"in_staff_return\",\"amount\":10000,\"month\":\"$MON11\",\"partyType\":\"employee\",\"partyId\":\"staff:r_st11\",\"articleId\":\"OP-08\",\"basis\":\"Poyga avans qaytimi 11\",\"clientRef\":\"race-sret-11c\"}'::jsonb) ->> 'status');"
+    echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11c.A" 2>&1 ) &
+sleep 0.3
+{ as_sess R_FM; echo "delete from public.staff_advances where id = 'adv_r11c';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11c.B" 2>&1
+wait
+chk "11c qaytim orderi (navbat → qatorlar) va eski qatorni o'chirish (qator → navbat) parallel: o'chirish kassa:busy bilan bekor, qaytim o'tdi; oy sof summasi 10 000; deadlock yo'q" \
+    "$(grep -c '^A|posted$' "$TMP/11c.A")/$(grep -c 'kassa:busy' "$TMP/11c.B")/$(q -c "select trim_scale(sum(amount)) from public.staff_advances where \"teacherId\" = 'IQX-R11'")/$(cat "$TMP/11c.A" "$TMP/11c.B" | grep -ci 'deadlock')" "1/1/10000/0"
+sum=$(( sum + 10000 ))   # qaytim orderi (KO-1) kassa qoldig'iga qo'shildi (kun 5-bo'limda shu summa bilan yopiladi)
+#   Xuddi shu maosh bilan (oy bo'yicha maosh navbati — S): eski naqd maosh qatorlari va maosh qaytimi
+q >/dev/null <<SQL
+set session_replication_role = replica;
+insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", month, paid, date, "cashDocId") values
+  ('sp_r11a', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null), ('sp_r11b', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null),
+  ('sp_r11c', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null), ('sp_r11r', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', -100000, '$TODAY', 'cd_race11_sret');
+SQL
+( { as_sess R_FM; echo "begin;"; echo "delete from public.salary_payments where id = 'sp_r11a';"
+    echo "select 'A|' || count(*) from public.salary_payments where id = 'sp_r11a';"; echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11b.A" 2>&1 ) &
+sleep 0.5
+{ as_sess R_FM; echo "delete from public.salary_payments where id = 'sp_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11b.B" 2>&1
+wait
+chk "11b xuddi shunday eski naqd maosh qatorlari (oy bo'yicha maosh navbati): biri o'tdi, ikkinchisi rad (kassa:staff_returned); oy sof summasi manfiy emas; deadlock yo'q" \
+    "$(grep -c '^A|0$' "$TMP/11b.A")/$(grep -c 'kassa:staff_returned' "$TMP/11b.B")/$(q -c "select trim_scale(sum(paid)) from public.salary_payments where \"teacherId\" = 'IQT-R11'")/$(cat "$TMP/11b.A" "$TMP/11b.B" | grep -ci 'deadlock')" "1/1/20000/0"
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+delete from public.staff_advances where id like 'adv\_r11%';
+delete from public.salary_payments where id like 'sp\_r11%';
+SQL
 
 # ---------- (5) kirimlar davom etayotganda kun yopiladi ----------
 for w in 1 2 3 4; do

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText, handoverRefs } from './fin-kassa.js';
+  pendingText, handoverRefs, fiscalReq, orgCashParty } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -554,4 +554,21 @@ test('kunni yopish / smena (g7b-v1): smena yozuvlari sanalgan pulga sig‘ganich
   assert.deepEqual(handoverRefs(po, [], 2080000).count, 3);
   assert.deepEqual(handoverRefs(po, [R('man_1_r', 40000)], 50000).refs, [R('man_1_s', 40000)], 'shu qurilma navbatidagisi — chiqarib tashlanadi');
   assert.deepEqual(handoverRefs(po, [], null).refs.map(r => r.ref), ['man_1_g', 'man_1_s', 'man_1_r'], 'joy berilmagan (oyna ochilganda) — hammasi, asl tartibda');
+});
+
+test('g8: fiskal chek — operatsiya qoidasi yoki tomon turi bo‘yicha («Boshqa kirim»: o‘quvchi / boshqa shaxsdan — majburiy, kontragent / xodimdan — yo‘q)', () => {
+  const inOther = { op: 'in_other', fiscalRequired: false, fiscalParties: ['student', 'other'] };
+  assert.deepEqual(['student', 'other', 'counterparty', 'employee', null].map(t => fiscalReq(inOther, t)), [true, true, false, false, false]);
+  assert.equal(fiscalReq({ op: 'in_sale', fiscalRequired: true, fiscalParties: [] }, 'counterparty'), true, 'qoida majburiy — tomondan qat’i nazar');
+  assert.equal(fiscalReq({ op: 'in_tuition', fiscalRequired: false }, 'student'), false, 'eski javob (fiscalParties yo‘q) — avvalgidek');
+  assert.equal(fiscalReq(null, 'student'), false);
+});
+
+test('g8: yuridik shaxsga naqd «Xarajat» — kontragent (server belgisi) va asos hujjati bilan «boshqa» tomon; asossiz «boshqa» va boshqa operatsiyalar — yo‘q', () => {
+  assert.equal(orgCashParty('out_expense', 'counterparty', { kind: 'supplier', org: true }, false), true);
+  assert.equal(orgCashParty('out_expense', 'counterparty', { kind: 'person', confirmed: true, org: false }, false), false);
+  assert.equal(orgCashParty('out_expense', 'counterparty', { kind: 'org', org: true }, true), true, 'kontragent — asossiz belgisi ahamiyatsiz (server kabi)');
+  assert.equal(orgCashParty('out_expense', 'other', null, false), true, 'asos hujjati bor «boshqa» tomon — tashkilot hisoblanadi');
+  assert.equal(orgCashParty('out_expense', 'other', null, true), false, 'bozordan asossiz xarid — yo‘q');
+  assert.deepEqual([orgCashParty('out_bank', 'other', null, false), orgCashParty('in_other', 'other', null, false), orgCashParty('out_expense', 'employee', null, false)], [false, false, false]);
 });

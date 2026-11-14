@@ -361,10 +361,10 @@ namunasi uchun taklif qoidalari F2.6 va F3.3 da.
 | `in_staff_return` | KO-1 | Xodim qaytargan pul | 5010 | 6710 / 4210 | OP-09/08 | kassir; oy majburiy: avans (OP-08) — shu oy naqd avans qoldig‘idan, vedomost tasdiqlanmagan; maosh (OP-09) — shu oy naqd berilgan maoshdan; manfiy avans / maosh yozuvi shu tranzaksiyada | 1a |
 | `in_damage_repay` | KO-1 | Kamomadni qoplash (xodim) | 5010 | 4730 | OP-22 | kassir; xodim zimmasidagi kamomad (direktor qarori) qoldig‘idan oshmaydi | 1a |
 | `in_sale` | KO-1 | Forma va tovarlar | 5010 | 9020 (+ Dt 9120 Kt 2910) | IN-04 | kassir; fiskal chek № | 1a |
-| `in_other` | KO-1 | Boshqa kirim | 5010 | 9390 / 6390 (noma’lum) | IN-06 / OP-16 | kassir; izoh majburiy | 1a |
+| `in_other` | KO-1 | Boshqa kirim | 5010 | 9390 / 6390 (noma’lum) | IN-06 / OP-16 | kassir; izoh majburiy; o‘quvchi yoki boshqa shaxsdan — fiskal chek № (`fiscalParties`; istisno — direktor), kontragent / xodimdan — yo‘q | 1a |
 | `in_funding` | KO-1 | Qarz / ta’sischi mablag‘i | 5010 | 6820 / 4610 | OP-19/20 | direktor ruxsati | 1a |
 | `in_surplus` | KO-1 | Kassa ortiqchasi | 5010 | 9390 | IN-06 | tizim, kun yopishda | 1a |
-| `out_expense` | KO-2 | Xarajat | statiya hisobvarag‘i | 5010 | EX (ruxsat ro‘yxati), OP-17/18/24 | 2-ro‘yxat; > T1 direktor; oluvchi kontragent; asos hujjatisiz ≤ L1, bitta statiya | 1a |
+| `out_expense` | KO-2 | Xarajat | statiya hisobvarag‘i | 5010 | EX (ruxsat ro‘yxati), OP-17/18/24 | 2-ro‘yxat; > T1 direktor; oluvchi kontragent; asos hujjatisiz ≤ L1, bitta statiya; yuridik shaxsga (kontragent yoki asos hujjati bilan «boshqa» tomon) > orgCashMax — direktor | 1a |
 | `out_salary` | KO-2 | Ish haqi | 6710 | 5010 | OP-09 | to‘lovdan avtomatik; tasdiqlangan vedomost va to‘lov qaydnomasi | 1a |
 | `out_advance` | KO-2 | Ish haqi avansi | 4210 | 5010 | OP-08 | avans shaklidan; 2-ro‘yxat | 1a |
 | `out_accountable` | KO-2 | Hisobdorga avans | 4230 | 5010 | OP-06 | 2-ro‘yxat | 1a |

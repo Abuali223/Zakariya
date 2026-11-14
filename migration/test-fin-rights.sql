@@ -153,7 +153,7 @@ select zz.as('U_DIR', $q$select public.kassa_refund_request('{"target":"invoice"
 \gset
 select zz.as('U_DIR', format($q$select public.kassa_opening_set('{"amount":1000000,"startDay":"%s"}') ->> 'ok'$q$, app.fin_today())) as zz_k0b
 \gset
-select zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma''lum shaxs","articleId":"OP-16","basis":"Ariza","note":"Aniqlanmagan tushum","clientRef":"zz-c1-000001"}'::jsonb) ->> 'ok'$q$) as zz_k0c
+select zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":100000,"partyType":"other","partyName":"Noma''lum shaxs","articleId":"OP-16","basis":"Ariza","note":"Aniqlanmagan tushum","fiscalNo":"FR-C1","clientRef":"zz-c1-000001"}'::jsonb) ->> 'ok'$q$) as zz_k0c
 \gset
 select zz.as('U_KAS', format($q$select public.kassa_day_close('{"day":"%s","counted":1090000}') ->> 'ok'$q$, app.fin_today())) as zz_k0d
 \gset

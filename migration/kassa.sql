@@ -182,6 +182,11 @@ alter table public.cash_docs add column if not exists "orgCash" boolean;
 -- O'tkazgan xodim ismi O'TKAZISH paytidagi holatda (sec-4): KO-1 / KO-2 dagi «Кассир» va ro'yxatlar shundan — keyin ism o'zgarsa ham
 --   chop etilgan hujjat o'zgarmaydi. Tizim hujjatida (sanash farqi) — bo'sh.
 alter table public.cash_docs add column if not exists "postedByName" text;
+-- So'rov mazmunining kanonik izi (state-9; md5): o'sha mijoz kaliti ("clientRef") bilan qayta yuborishda mazmuni boshqa bo'lsa (tomon,
+--   statiya / qatorlar, asos, ilova, izoh, asossiz belgisi, fiskal chek, oy) eski hujjat jim qaytmaydi — kassa:ref_mismatch (kassa-docs.sql:
+--   kassa_doc_build; avans hisoboti va qaytarish so'rovi — o'z izi bilan, kassa-links.sql). Yaratilganda yoziladi, keyin o'zgarmaydi
+--   (kassa_doc_guard). Bu ustundan oldingi hujjatlarda — bo'sh (avvalgi solishtirish: operatsiya, summa, kassa, shakl).
+alter table public.cash_docs add column if not exists "reqHash" text;
 do $iqror_num$ begin
   if exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number' and indexdef not like '%(desk, series, year, no)%') then
     drop index public.cash_docs_number;   -- avvalgi ta'rif (desk, form, year, no) — seriya bo'yicha qayta quriladi

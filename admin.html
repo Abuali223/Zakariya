@@ -9310,7 +9310,8 @@ async function openSalaryPayout(opts){
       }
     }catch(e){
       let saved=null; try{ const g=await getDoc(doc(db,'salary_payments',spId)); if(g&&g.exists()) saved=g.data()||{}; }catch(_){}
-      if(saved){ showDone(saved); return; }
+      // state-9: shu oynadan avval BOSHQA ma'lumot (summa, usul…) bilan yozilgan — oynada yozilgani ko'rsatiladi, yangisi yozilmaganini aytamiz
+      if(saved){ showDone(saved); if(e&&e.hint==='kassa:ref_mismatch') toast(String(e.message||'Bu oynadan avval boshqa ma’lumot bilan yozilgan'),true); return; }
       // 23503 — xodimning ID'si oyna ochilgandan keyin o'zgargan / xodim o'chirilgan: ro'yxat faqat oyna ochilganda o'qiladi,
       //   shu oynada qayta bosish har safar rad etiladi — eski forma o'rniga aniq ko'rsatma; yopilganda ro'yxat yangilanadi.
       if(e&&e.code==='23503'){ showStale(e); return; }
@@ -9534,8 +9535,8 @@ async function renderAccounting(){
     $('#ac-body').querySelectorAll('[data-eedit]').forEach(b=>b.addEventListener('click',()=>openExpenseForm(EXP.find(x=>x._id===b.dataset.eedit))));
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
       printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||tkDay(new Date()) }); }));
-    $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
-    $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+(err.code||err.message),true); } }));
+    $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+((err&&err.hint&&err.message)||err.code||err.message),true); } }));
+    $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+((err&&err.hint&&err.message)||err.code||err.message),true); } }));   // izohli rad etish (kassa:staff_returned, kassa:busy, fin:locked …) — o'zbekcha matni bilan
     $('#ac-body').querySelectorAll('[data-arec]').forEach(b=>b.addEventListener('click',()=>{ const a=madv.find(x=>x._id===b.dataset.arec); if(!a) return;
       printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, period:a.month, date:a.date||tkDay(new Date()) }); }));
   };
@@ -9956,7 +9957,7 @@ async function openAssign(payment, students, reload){
         r={ok:true}; }
       if(!(r&&r.ok)){ busy=false; toast(r&&r.reason==='not-unmatched'?`Bu to‘lov allaqachon «${r.status}» holatida (boshqa xodim biriktirgan/qaytargan) — biriktirilmadi.`:('Biriktirilmadi: '+((r&&(r.reason||r.error))||'xato')),true); if(reload) reload(); return; }
       toast('To‘lov biriktirildi ✓'); closeModal(); if(reload) reload();
-    }catch(e){ busy=false; toast('Xatolik: '+(e.code||e.message),true); } };
+    }catch(e){ busy=false; toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true); } };   // izohli rad etish (masalan fin:locked — yopilgan davr) — matni bilan
 
   // ---- Bir nechaga bo'lib (split): har o'quvchiga qismini ----
   const doSplit=async()=>{ if(busy) return;
@@ -9969,7 +9970,7 @@ async function openAssign(payment, students, reload){
       const res=await rpc('split_payment', { p_pay_id:String(payment._id), p_provider:payment.provider||'click', p_allocs:allocs });
       if(res && res.ok===false){ throw new Error(res.reason||res.error||'split-failed'); }
       toast((res&&res.dup)?'Allaqachon bo‘lingan ✓':'To‘lov bo‘lib biriktirildi ✓'); closeModal(); if(reload) reload();
-    }catch(e){ busy=false; if(dob){ dob.disabled=false; dob.textContent='Bo‘lib biriktirish'; } toast('Xatolik: '+(e.code||e.message),true); } };
+    }catch(e){ busy=false; if(dob){ dob.disabled=false; dob.textContent='Bo‘lib biriktirish'; } toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true); } };
 
   const updateFoot=()=>{
     if(mode!==2){ $('#as-foot').innerHTML=`<button type="button" class="btn ghost" id="m-cancel">Bekor</button>`; $('#m-cancel').onclick=closeModal; return; }
@@ -10161,7 +10162,7 @@ async function openPayHistory(sid, name){
     // FAQAT mavjud 'status' ustunini yozamiz (payments jadvalida canceledAt/By ustuni yo'q -> PGRST204).
     try{ await setDoc(doc(db,'payments',pid),{ status:'canceled' },{merge:true});
       toast('To‘lov yozuvi bekor qilindi ✓'); openPayHistory(sid, name); }
-    catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); }
+    catch(e){ b.disabled=false; toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true); }   // izohli rad etish (fin:locked …) — matni bilan
   });
 }
 // ==== MOLIYA TEKSHIRUVI (reconciliation) =============================
@@ -10270,14 +10271,19 @@ async function openFinanceAudit(){
     //   har xil kalit oladi va ikkalasi ham qo'llanadi; faqat AYNAN o'sha hodisaning retry'si to'qnashadi.
     //   (Oldin sana+summa edi -> belgilangan oylik summada ikkinchi to'lov noto'g'ri "dup" bo'lib qolardi.)
     const payId='fix_'+String(sid)+'_'+amt+'_'+paidTot;
-    try{ const res=await applyPaymentClient(String(sid), amt, 'cash', payId);
+    // g8 (state-4): kassa ishga tushgach «naqd» kanal bilan balansga faqat kassa yo'llari qo'llaydi (server rad etadi) — bu yerda yangi pul
+    //   kirmaydi (mavjud to'lovlar fakturaga biriktiriladi), kanal yorlig'i «Aralash»
+    try{ const res=await applyPaymentClient(String(sid), amt, KASSA.live?'mixed':'cash', payId);
       // dup -> AYNAN shu hodisa allaqachon qo'llangan: SUCCESS deb ko'rsatmaymiz (admin adashmasin).
       if(res && res.dup) toast('Bu summa allaqachon qo‘llangan (qayta qo‘llanmadi) — to‘lov tarixини tekshiring',true);
       else toast('Fakturaga qo‘llandi ✓');
       openFinanceAudit(); }
     // Xato bo'lsa HAM auditni qayta chizamiz: server qo'llagan-u javob yo'qolgan bo'lsa (lost ack),
     //   qator hal bo'lgan holda ko'rinadi (eski tugma stale summa bilan qayta bosishga chorlamaydi).
-    catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+(e.code||e.message),true); openFinanceAudit(); }
+    //   Izohli server rad etishi — o'zbekcha matni bilan; kassa:cash_only_kassa (sahifadagi kassa holati eskirgan: kassa shu orada ishga
+    //   tushgan) — holat serverdan yangilanadi, qayta bosilganda kanal «Aralash» bo'ladi.
+    catch(e){ b.disabled=false; b.textContent=t0; toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true);
+      if(e&&e.hint==='kassa:cash_only_kassa') kassaProbe().catch(()=>{}); openFinanceAudit(); }
   });
 }
 async function renderPriceTable(){
@@ -11677,7 +11683,7 @@ async function renderPayments(){
       try{ const rv=await rpc('reverse_payment',{ p_invoice:inv._id, p_amount:amt, p_provider:String(p.provider||''), p_ref:'mrev:'+p._id+':'+inv._id });
         if(rv && rv.ok===false) throw new Error(rv.error||rv.reason||'xato');
         toast(rv&&rv.dup?'Bu faktura uchun allaqachon ayirilgan ✓':'Fakturadan ayirildi ✓ (refund yozilmadi)'); load(); }
-      catch(e){ b.disabled=false; toast('Xatolik: '+(e.code||e.message),true); } }));
+      catch(e){ b.disabled=false; toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true); } }));   // kassa:linked_row — kassa hujjati bilan to'langan qism (matni bilan)
     $('#pm-body').querySelectorAll('[data-mrdone]').forEach(b=>b.addEventListener('click',async()=>{ const p=manualRev.find(x=>x._id===b.dataset.mrdone); if(!p) return;
       if(!confirm('Bu qaytarilgan to‘lov bo‘yicha o‘quvchi balansi (avans/faktura) qo‘lda tuzatildimi?\n«OK» — ro‘yxatdan olib tashlanadi.')) return;
       b.disabled=true;
@@ -12026,7 +12032,7 @@ async function obFlushOne(it){
     // Kassa ishga tushgach naqd to'lov: fiskal chek № (it.extra). Parametr faqat bo'lganda yuboriladi — kassasiz server ham ishlayveradi.
     if(it.extra) args.p_extra=it.extra;
     const r=await rpc('record_manual_payment', args);
-    if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa yoki o‘quvchi bilan yozilgan' : ('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); e.permanent=true; throw e; }
+    if(r && r.ok===false){ const e=new Error(r.reason==='mismatch' ? 'Shu raqamli to‘lov boshqa summa, o‘quvchi yoki usul bilan yozilgan' :('To‘lov qabul qilinmadi: '+(r.reason||'?')+(r.status?' ('+r.status+')':''))); e.code=String(r.reason||'rejected'); e.permanent=true; throw e; }
     if(r) _obResults.set(it.payId, r);
     return r;
   }catch(e){ if(!rpcMissing(e) || it.extra) throw e; }   // kassa yozuvi (it.extra) eski, kassasiz yo'lga HECH QACHON tushmaydi
@@ -12387,12 +12393,18 @@ async function openRefund(ctx, reload){
     busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent=viaKassa?'Tasdiqlanmoqda…':'Qaytarilmoqda…';
     const email=(auth.currentUser&&auth.currentUser.email)||'';
     if(viaKassa){
+      // g8 (g2 qoldig'i): kassaga yuborilgach usul QULFLANADI — javob yo'qolgan bo'lsa ham so'rov yozilgan bo'lishi mumkin; shu oynada
+      //   «Naqdsiz»ga o'tib ikkinchi marta qaytarilmasin (server ham rad etadi: kassa:refund_pending). Boshqa usul — oynani qayta ochib.
+      { const rm=$('#rf-method'); if(rm) rm.disabled=true; }
       try{
         const d=await rpc('kassa_refund_request', { p:{ target:isCred?'credit':(isInv?'invoice':'payment'), id:isCred?credSid:String(isInv?(ctx.invoice._id||''):(ctx.payment._id||'')), amount, reason,
           clawback:!isCred && claw, payee, requestDate:($('#rf-reqdate').value||null), clientRef:rfRef } });
         if(d && d.dup && (d.status==='cancelled'||d.status==='rejected')){ toast('Bu oynadan yuborilgan so‘rov keyin bekor qilingan — oynani yopib, qaytadan oching',true); closeModal(); if(reload) reload(); return; }
         toast(`${(d&&d.dup)?'So‘rov avval yuborilgan ✓':'Qaytarish tasdiqlandi ✓'} — ${fmtSom((d&&d.amount)||amount)} kassadan beriladi («Kassa» → «Pulni berish»)`); closeModal(); if(reload) reload(); kassaProbe();
-      }catch(e){ busy=false; btn.disabled=false; btn.textContent='Tasdiqlash (kassadan beriladi)'; toast('Xatolik: '+((e&&(e.message||e.code))||''),true); }
+      }catch(e){
+        // state-9: shu oyna kaliti bilan avval BOSHQA ma'lumot (summa, kimga, sabab…) yuborilgan — eski so'rov jim qaytmaydi: xabar, ro'yxat yangilanadi
+        if(e&&e.hint==='kassa:ref_mismatch'){ toast(String(e.message||'Bu oynadan boshqa ma’lumot bilan so‘rov allaqachon yuborilgan'),true); closeModal(); if(reload) reload(); kassaProbe(); return; }
+        busy=false; btn.disabled=false; btn.textContent='Tasdiqlash (kassadan beriladi)'; toast('Xatolik: '+((e&&(e.message||e.code))||''),true); }
       return;
     }
     try{
@@ -12413,7 +12425,9 @@ async function openRefund(ctx, reload){
         if(res.reason==='exceeds-paid') throw new Error(`Qaytarib bo‘lmaydi: hozir bu hisob-fakturada ${fmtSom(res.paid||0)} to‘langan${(res.status==='canceled'||res.status==='reversed')?' (faktura bekor qilingan — puli avansda bo‘lishi mumkin)':''}. Sahifani yangilab qayta tekshiring.`);
         throw new Error(res.error||res.reason||'refund-failed'); }
       toast((res && res.dup) ? 'Allaqachon qaytarilgan ✓' : 'Qaytarildi ✓'); closeModal(); if(reload) reload();
-    }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Xatolik: '+(e.code||e.message),true); }
+    }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish';
+      // izohli server rad etishi (kassa:refund_pending — kassada hali berilmagan so'rov bor; fin:locked — yopilgan davr) — o'zbekcha matni bilan
+      toast('Xatolik: '+((e&&e.hint&&e.message)||e.code||e.message),true); }
   };
 }
 

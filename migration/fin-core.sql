@@ -88,6 +88,9 @@ create table if not exists public.fin_op_rules (
   active           boolean not null default true,
   "sortOrder"      int not null default 0
 );
+-- Fiskal chek tomon turiga qarab (g8): shu tomon turlaridan naqd kirimda fiskal chek № majburiy ("fiscalRequired" bo'lmasa ham) —
+--   «Boshqa kirim» o'quvchi / boshqa shaxsdan (aholidan) — ha, kontragent va xodimdan — yo'q (kassa-docs.sql: kassa_doc_build).
+alter table public.fin_op_rules add column if not exists "fiscalParties" text[] not null default '{}';
 create table if not exists public.fin_org (
   id            text primary key,
   "nameUz"      text not null default '',
@@ -318,6 +321,6 @@ select app.chlog_attach('fin_org', 'nameUz,nameRu,stir,place,printLang,t1,l1,cas
 select app.chlog_attach('fin_signatories', 'list,uid,title,fullName,active');
 select app.chlog_attach('fin_counterparties', 'kind,name,stir,active,kindConfirmedBy');   -- tur o'zgarishlari — nazorat ro'yxatida ham (sec-3)
 select app.chlog_attach('fin_articles', 'kind,nameUz,accountCode,cashOutAllowed,active');
-select app.chlog_attach('fin_op_rules', 'debit,credit,articleMode,articleId,allowedArticles,accountByParty,partyTypes,needsApproval,directorAlways,fiscalRequired,active');
+select app.chlog_attach('fin_op_rules', 'debit,credit,articleMode,articleId,allowedArticles,accountByParty,partyTypes,needsApproval,directorAlways,fiscalRequired,fiscalParties,active');
 
 notify pgrst, 'reload schema';

@@ -55,6 +55,8 @@ create or replace function zz.payd(p_uid text, p_id text, p_sid text, p_amount n
                              p_id, p_sid, p_amount, p_method, case when p_date is null then 'null' else quote_literal(p_date) end, '', '', '',
                              case when p_cap is null then 'null' else quote_literal(p_cap) || '::timestamptz' end,
                              case when p_extra is null then 'null' else quote_literal(p_extra) || '::jsonb' end)) $$;
+create or replace function zz.js(p text) returns jsonb language plpgsql as $$   -- xato matni (ERR …) bo'lsa — NULL: mutatsiyada FAIL, to'plam to'xtamaydi
+begin return p::jsonb; exception when others then return null; end $$;
 create or replace function zz.lines(p_pay text) returns text language sql as $$
   select string_agg(l.debit || '>' || l.credit || '=' || trim_scale(l.amount) || case when l.cash then '' else '(naqdsiz)' end
                     || coalesce('@' || (l.analytics ->> 'month'), '') || coalesce('#' || (l.analytics ->> 'kind'), ''), ', ' order by l."lineNo")
@@ -83,6 +85,37 @@ select zz.chk('J1b to''lov qo''llandi, kassa hujjati yo''q',
 select zz.chk('J1c ishga tushadigan kun kassa orderisiz naqd to''lov yozilgan kunga qo''yilmaydi; sozlama o''zgarmaydi',
   zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-03"}')::text$q$) || ' | ' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh'),
   '^ERR P0001 \[kassa:live_gap\].*o''quv to''lovi: 1.* \| bo''sh$');
+-- g8 (g4b qoldig'i): kassa hujjati ishga tushadigan kundan OLDINGI kunga ham tushishi mumkin — boshlang'ich qoldiqdagi «Birinchi kassa
+--   kuni» undan oldin bo'lsa (kassa_receipt ishga tushishni tekshirmaydi, kun birinchi hujjat bilan ochiladi). Shunda «first» — birinchi
+--   kassa kuni: u kun ham kassa kitobida, ishga tushgach kassa hujjatisiz naqd yozuv unga tushmaydi (Direktorga ham — kassa:live_day);
+--   undan oldingi kun — avvalgidek (Direktor). Ssenariy savepoint ichida (natija psql o'zgaruvchisida): keyingi bo'limlar 04.01 dan boshlanadi.
+savepoint kpf;
+select zz.put('KF1', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":0,"startDay":"2027-01-03"}')::text$q$));
+select zz.put('KF2', zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":5000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","fiscalNo":"F-KF1","clientRef":"kf-rcp-00001"}')::text$q$));
+select zz.put('KF3', (select (app.kassa_periods('main') ->> 'first') is null)::text);
+select zz.clock('2027-01-04 10:00+05');
+select zz.put('KF4', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-04"}')::text$q$));
+select (case when zz.get('KF2') like '{%' then zz.get('KF2')::jsonb ->> 'businessDay' else zz.get('KF2') end) || ':' || zz.get('KF3')
+  || ' | ' || (case when zz.get('KF4') like '{%' then zz.get('KF4')::jsonb ->> 'kassaGoLive' else zz.get('KF4') end)
+  || ' | ' || (app.kassa_periods('main') ->> 'first') || ':' || app.kassa_pre_day('main', '2027-01-03')::text || ':' || app.kassa_pre_day('main', '2027-01-02')::text
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_kf1', '2027-01-03', '2027-01', 'Boshqa', 7000, 'birinchi kassa kuni', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_kf2', '2027-01-02', '2027-01', 'Boshqa', 7000, 'kassadan oldingi kun', 'cash') returning id) select id from x$q$) as kpf \gset
+rollback to savepoint kpf;
+select zz.chk('KF g8: birinchi kassa kuni (03.01) ishga tushadigan kundan (04.01) oldin — «first» = 03.01 (ishga tushmagan kassada — bo''sh); 03.01 sanali kassa hujjatisiz naqd xarajat Direktorga ham rad (kassa:live_day), 02.01 — Direktor kiritadi',
+  :'kpf', '^2027-01-03:true \| 2027-01-04 \| 2027-01-03:false:true \| ERR 42501 \[kassa:live_day\].* \| e_kf2$');
+-- g8: kassa hali ishlamagan (yashirin o'rnatilgan — asosiy kassa kuni yo'q): reverse_payment avansdan qaytarib olishi — avvalgidek (N3 — ishlagach)
+savepoint n0;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('sN0','T-N0','Sinov N0',5,'A','uz','',91,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values ('iN0','T-N0','Sinov N0','2027-01',500000,0,'pending');
+set local session_replication_role = origin;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select left(public.apply_payment('T-N0', 600000, 'click', 'clk_n0_0001')::text, 0);   -- faktura 500 000 to'landi, avans 100 000
+select set_config('request.jwt.claims', '', true);
+select zz.as('U_FM', $q$select (public.reverse_payment('iN0', 600000, 'click', 'mrev:n0a') ->> 'ok') || ':' || trim_scale((public.reverse_payment('iN0', 600000, 'click', 'mrev:n0a') ->> 'fromCredit')::numeric)$q$)
+  || ' | ' || (select count(*) from public.cash_days) as n0 \gset
+rollback to savepoint n0;
+select zz.chk('N0 kassa hali ishlamagan (kassa kuni yo''q): Moliya menejeri reverse_payment bilan avansdan ham qaytarib oladi — avvalgidek', :'n0', '^true:100000 \| 0$');
 select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- Ishga tushirish ----------
@@ -200,7 +233,11 @@ set local session_replication_role = origin;
 select zz.put('J14', zz.pay('U_KAS', 'man_legacy_001', 'T-2', 10000, 'cash', '', null, '{"fiscalNo":"F-4"}'));
 select zz.chk('J14 yetim «pending» qator tugatiladi: qo''llandi + KO-1', (select status || ':' || ("cashDocId" is not null) from public.payments where id = 'man_legacy_001') || ' / ' || zz.lines('man_legacy_001'),
   '^applied:true / 5010>6310=10000#overpay$');
-select zz.put('J15a', zz.as('U_DIR', $q$select public.apply_payment('T-2', 20000, 'cash', 'man_legacy_002')::text$q$));
+-- (eski mijoz pulni balansga kassa ishga tushishidan OLDIN qo'llagan, holatni 'applied' qilolmay qolgan: shu holat server roli bilan tiklanadi —
+--   kassa ishlayotganda to'g'ridan-to'g'ri naqd apply_payment endi Direktorga ham rad etiladi, state-4: N-bandlar)
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select zz.put('J15a', public.apply_payment('T-2', 20000, 'cash', 'man_legacy_002')::text);
+select set_config('request.jwt.claims', '', true);
 select zz.put('J15', zz.pay('U_KAS', 'man_legacy_002', 'T-2', 20000, 'cash', '', null, '{"fiscalNo":"F-5"}'));
 select zz.chk('J15 balansga avval qo''llangan to''lov: pul ikki marta qo''llanmaydi, KO-1 bitta qator bilan (taqsimot noma''lum — belgilanadi)',
   (zz.get('J15')::jsonb ->> 'dup') || ':' || (zz.get('J15')::jsonb -> 'kassa' ->> 'allocation') || ' / ' || zz.lines('man_legacy_002') || ' / ' ||
@@ -262,6 +299,136 @@ select zz.chk('J17 P1: ishga tushgandan keyingi har naqd to''lovda order bor (ye
      and app.pay_day(p."createdAt", p.raw) >= '2027-01-04'), '^0$');
 select zz.chk('J18 hisobotdagi «tushgan kun» (pay_day) = order kuni',
   (select count(*)::text from public.payments p join public.cash_docs c on c.id = p."cashDocId" where app.pay_day(p."createdAt", p.raw) is distinct from c."businessDay"), '^0$');
+-- ---------- (N) state-4: kassa hujjatisiz naqd to'lov qatori yo'q (F1.13 qabul mezoni: «RPC ni chetlab o'tadigan naqd yo'l yo'q») ----------
+--   Eski 3 bosqichli yo'l (qator + apply_payment + holat) va unga yaqin yo'llar kassa qo'llanadigan kun bilan rad: kirim orderisiz, fiskal
+--   cheksiz pul fakturaga tushmasin. «💵 To'lov» (record_manual_payment) va server (webhook) — avvalgidek. Holatni o'zgartiradigan ijobiy
+--   holatlar savepoint ichida (natija psql o'zgaruvchisida) — keyingi tekshiruvlar qoldig'iga ta'sir qilmasin.
+select zz.chk('N1 naqd to''lov qatorini to''g''ridan-to''g''ri yozish — kassir (pending), Moliya menejeri (applied), Direktor (bugungi «Sana» bilan) — rad, iz yo''q',
+  zz.as('U_KAS', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1_0001', 'T-1', 'cash', 100000, 'pending', true, '{"manual":true}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1_0002', 'T-1', 'cash', 100000, 'applied', true, '{}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1_0003', 'T-1', 'cash', 100000, 'applied', true, '{"manual":true,"date":"2027-01-04"}') returning id) select id from x$q$) || ' | '
+  || (select count(*) from public.payments where id like 'man_n1_%'),
+  '^ERR 42501 \[kassa:cash_only_kassa\] Kassa ishga tushgan: naqd o''quv to''lovi faqat «💵 To''lov» oynasi orqali.* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| 0$');
+select zz.chk('N1b apply_payment «naqd» kanal bilan to''g''ridan-to''g''ri: Direktor (yozuvsiz) ham — rad; apply_to_invoice ham — rad',
+  zz.as('U_DIR', $q$select public.apply_payment('T-1', 5000, 'cash', 'x_n1b_0001')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.apply_to_invoice('ic', 5000, 'cash', 'x_n1b_0002')::text$q$) || ' | '
+  || (select count(*) from public.applied_payments where id like 'x_n1b_%'),
+  '^ERR 42501 \[kassa:cash_only_kassa\] Kassa ishga tushgan: naqd pul balansga faqat «💵 To''lov» oynasi orqali.* \| ERR 42501 \[kassa:cash_only_kassa\].* \| 0$');
+-- ichki pul RPC'si bayrog'i (iqror.money_rpc) «💵 To'lov» tugagach tozalanadi: o'sha tranzaksiyadagi keyingi to'g'ridan-to'g'ri naqd yozuv — rad
+savepoint n1c;
+select zz.put('N1c1', zz.pay('U_KAS', 'man_n1c_0001', 'T-1', 1000, 'cash', '', null, '{"fiscalNo":"F-N1C"}'));
+select zz.put('N1c2', coalesce(nullif(current_setting('iqror.money_rpc', true), ''), 'bo''sh'));
+select zz.put('N1c3', zz.as('U_FM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1c_0002', 'T-1', 'cash', 1000, 'applied', true, '{}') returning id) select id from x$q$));
+select (case when zz.get('N1c1') like '{%' then (zz.get('N1c1')::jsonb ->> 'ok') || ':' || coalesce(zz.get('N1c1')::jsonb #>> '{kassa,status}', '-') else zz.get('N1c1') end)
+  || ' | ' || zz.get('N1c2') || ' | ' || zz.get('N1c3') as n1c \gset
+rollback to savepoint n1c;
+select zz.chk('N1c «💵 To''lov» (kirim orderi bilan) tugagach ichki bayroq tozalangan: keyingi to''g''ridan-to''g''ri naqd qator — rad', :'n1c',
+  '^true:posted \| bo''sh \| ERR 42501 \[kassa:cash_only_kassa\]');
+savepoint n2;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('sN','T-N1','Sinov N',5,'A','uz','',90,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values ('iN1','T-N1','Sinov N','2027-01',500000,0,'pending');
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw, "createdAt") values
+  ('man_n2_old', 'T-N1', 'cash', 40000, 'pending', '', true, '{"manual":true}', '2027-01-04 09:30+05'),   -- eski mijoz qoldirgan «pending»
+  ('bnk_n2', 'T-N1', 'bank', 30000, 'applied', '', true, '{"manual":true}', '2027-01-04 09:40+05'),
+  ('clk_n2u', '', 'click', 60000, 'unmatched', 'Noma''lum', false, '{}', '2027-01-04 09:50+05');
+set local session_replication_role = origin;
+select zz.as('U_KAS', $q$with x as (update public.payments set status = 'applied' where id = 'man_n2_old' returning id) select id from x$q$) || ' | '
+  || zz.as('U_KAS', $q$select public.apply_payment('T-N1', 40000, 'cash', 'man_n2_old')::text$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.payments set provider = 'cash' where id = 'bnk_n2' returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$select public.split_payment('clk_n2u', 'cash', '[{"sid":"T-N1","amount":60000}]')::text$q$) || ' | '
+  || (select status || ':' || provider from public.payments where id = 'man_n2_old') || ':' || (select status from public.payments where id = 'clk_n2u')
+  || ':' || (select trim_scale("paidAmount")::text from public.invoices where id = 'iN1') as n2 \gset
+-- ijobiy: o'sha yo'llar naqdsiz kanal bilan — avvalgidek; eski «pending» naqd qatorni «💵 To'lov» tugatadi (kirim orderi bilan)
+select coalesce(zz.js(zz.as('U_FM', $q$select public.split_payment('clk_n2u', 'click', '[{"sid":"T-N1","amount":60000}]')::text$q$)) ->> 'ok', 'ERR') || ':'
+  || coalesce(zz.js(zz.as('U_DIR', $q$select public.apply_payment('T-N1', 10000, 'bank', 'x_n2_bank')::text$q$)) ->> 'ok', 'ERR') || ':'
+  || coalesce(zz.js(zz.pay('U_KAS', 'man_n2_old', 'T-N1', 40000, 'cash', '', null, '{"fiscalNo":"F-N2"}')) #>> '{kassa,status}', 'ERR') as n2b \gset
+-- (faktura alohida so'rov bilan o'qiladi: yuqoridagi so'rov o'z boshidagi holatni ko'radi)
+select :'n2b' || ':' || (select trim_scale("paidAmount")::text from public.invoices where id = 'iN1') as n2b \gset
+rollback to savepoint n2;
+select zz.chk('N2 eski 3 bosqichli yo''l: «pending» naqd qatorni «qo''llangan» qilish, uni apply_payment bilan qo''llash, bank qatorini naqdga o''zgartirish, bo''lishda «naqd» bola qator — rad; holat o''zgarmadi',
+  :'n2', '^ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| pending:cash:unmatched:0$');
+select zz.chk('N2b ijobiy: bo''lish (Click), Direktorning naqdsiz apply_payment''i — avvalgidek; eski «pending» naqd qator «💵 To''lov» bilan kirim orderi orqali tugadi (faktura 60 000 + 10 000 + 40 000)',
+  :'n2b', '^true:true:posted:110000$');
+-- reverse_payment (eski pul RPC'si): kassa hujjati bilan to'langan qism ayirilmaydi; naqdsiz qismi — avvalgidek; avansdan qaytarib olish — faqat server
+savepoint n3;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('sN','T-N1','Sinov N',5,'A','uz','',90,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
+  ('iN1','T-N1','Sinov N','2027-01',500000,0,'pending'), ('iN2','T-N1','Sinov N','2027-02',500000,0,'pending');
+set local session_replication_role = origin;
+select left(zz.pay('U_KAS', 'man_n3_0001', 'T-N1', 300000, 'cash', '', null, '{"fiscalNo":"F-N3"}'), 0);
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select left(public.apply_payment('T-N1', 100000, 'click', 'clk_n3_0001')::text, 0);   -- Click (server): faktura 400 000 = naqd 300 000 + Click 100 000
+select left(public.apply_to_invoice('iN2', 100000, 'click', 'clk_n3_0002')::text, 0);   -- fevral fakturasi — faqat Click (kassa hujjatisiz)
+select set_config('request.jwt.claims', '', true);
+select zz.as('U_FM', $q$select public.reverse_payment('iN1', 100001, 'click', 'mrev:n3a')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.reverse_payment('iN1', 400000, 'cash', 'mrev:n3b')::text$q$) || ' | '
+  || zz.as('U_FM', $q$select public.reverse_payment('iN2', 150000, 'click', 'mrev:n3c')::text$q$) || ' | '
+  || (zz.as('U_FM', $q$select public.reverse_payment('iN1', 100000, 'click', 'mrev:n3d')::text$q$)::jsonb ->> 'newPaid') || ' | '
+  || (zz.as('U_FM', $q$select public.reverse_payment('iN1', 100000, 'click', 'mrev:n3d')::text$q$)::jsonb ->> 'dup') as n3 \gset
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select (public.reverse_payment('iN1', 300000, 'uzum', 'uz_n3_0001') ->> 'newPaid') as n3s \gset
+select set_config('request.jwt.claims', '', true);
+rollback to savepoint n3;
+select zz.chk('N3 reverse_payment: kirim orderi bilan to''langan 300 000 ayirilmaydi (Moliya menejeri ham, Direktor ham); avansdan qaytarib olish — rad; Click qismi (100 000) — avvalgidek, takrori — dup; server (provayder qaytarishi) — mustasno',
+  :'n3' || ' | ' || :'n3s',
+  '^ERR 42501 \[kassa:linked_row\] Bu fakturaning 300000 so''m qismi kassa hujjati.*ayirish mumkin: 100000 so''m.* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:reverse_credit\] Ayiriladigan summa fakturaning to''langan qismidan \(100000 so''m\) katta.* \| 300000 \| true \| 0$');
+-- g8 (tekshiruvchi): avansni kamaytirish add_credit (manfiy delta) bilan ham — kassa ishlay boshlagach faqat Direktor yoki server
+--   (reverse_payment bilan bir qoida, kassa:reverse_credit); Moliya menejeriga — rad, iz yo'q (applied_payments posboniga ham yozilmaydi)
+savepoint n3b;
+select zz.as('U_FM', $q$select public.add_credit('T-1', -1000, 'recompute', '', 'n3b-fm')::text$q$) || ' | '
+  || coalesce(zz.js(zz.as('U_DIR', $q$select public.add_credit('T-1', -1000, 'recompute', '', 'n3b-dir')::text$q$)) ->> 'ok', 'ERR') as n3b \gset
+-- (posbon yozuvlari alohida so'rov bilan o'qiladi: yuqoridagi so'rov o'z boshidagi holatni ko'radi)
+select :'n3b' || ' | ' || (select count(*) from public.applied_payments where id like 'addcredit:n3b-%') as n3b \gset
+rollback to savepoint n3b;
+select zz.chk('N3b add_credit manfiy delta (avansni kamaytirish) kassa ishlay boshlagach: Moliya menejeri — rad (kassa:reverse_credit, iz yo''q), Direktor — avvalgidek',
+  :'n3b', '^ERR 42501 \[kassa:reverse_credit\] Kassa ishlay boshlagach o''quvchi avansini kamaytirish.* \| true \| 1$');
+-- kassa ishlamagan kun (03.01 — ishga tushishdan oldin): to'g'ridan-to'g'ri naqd qator — faqat Direktor (kech qog'oz), boshqalarga — rad
+savepoint n4;
+select zz.as('U_KAS', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n4_0001', 'T-1', 'cash', 1000, 'pending', true, '{"manual":true,"date":"2027-01-03"}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n4_0002', 'T-1', 'cash', 1000, 'pending', true, '{"manual":true,"date":"2027-01-03"}') returning id) select id from x$q$) as n4 \gset
+rollback to savepoint n4;
+select zz.chk('N4 kassa ishlamagan kun (03.01) sanali naqd qator: kassir — rad (kassa:pre_live), Direktor — avvalgidek', :'n4', '^ERR 42501 \[kassa:pre_live\] To''lov kuni \(03\.01\.2027\).* \| man_n4_0002$');
+-- g8 (tekshiruvchi): kanal yozuvi katta-kichik harf yoki bo'sh joy bilan ('CASH', ' Cash ') ham naqd — to'g'ridan-to'g'ri qator va naqd kanal
+--   bilan apply_payment / apply_to_invoice rad (kassa_pay_guard, audit-7.sql, audit-5.sql)
+select zz.chk('N1d «CASH» / « Cash » kanal yozuvi ham naqd: kassir va Moliya menejeri qatori, Direktorning apply_payment / apply_to_invoice''i — rad, iz yo''q',
+  zz.as('U_KAS', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1d_0001', 'T-1', 'CASH', 100000, 'pending', true, '{"manual":true}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n1d_0002', 'T-1', ' Cash ', 100000, 'applied', true, '{}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.apply_payment('T-1', 5000, 'CASH', 'x_n1d_0001')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.apply_to_invoice('ic', 5000, ' Cash', 'x_n1d_0002')::text$q$) || ' | '
+  || (select count(*) from public.payments where id like 'man_n1d_%') || ':' || (select count(*) from public.applied_payments where id like 'x_n1d_%'),
+  '^ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| 0:0$');
+-- g8 (tekshiruvchi): kassa ishlayotganda mavjud «pending» qatorni BOSHQA usul bilan tugatish — «mismatch» (record_manual_payment): eski naqd
+--   qator «bank» deb kirim orderisiz qo'llanmaydi, «bank» qatoriga kirim orderi yozilmaydi; o'sha usul bilan — avvalgidek (savepoint ichida)
+savepoint n6;
+set local session_replication_role = replica;
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw, "createdAt") values
+  ('man_n6_old', 'T-1', 'cash', 40000, 'pending', '', true, '{"manual":true,"date":"2027-01-03"}', '2027-01-03 15:00+05'),   -- kassadan oldingi eski «pending»
+  ('man_n6_bnk', 'T-1', 'bank', 30000, 'pending', '', true, '{"manual":true}', '2027-01-04 09:00+05');
+set local session_replication_role = origin;
+select zz.put('N6a', zz.pay('U_KAS', 'man_n6_old', 'T-1', 40000, 'bank', '', null, null));
+select zz.put('N6b', zz.pay('U_KAS', 'man_n6_bnk', 'T-1', 30000, 'cash', '', null, '{"fiscalNo":"F-N6"}'));
+select zz.put('N6c', zz.pay('U_KAS', 'man_n6_bnk', 'T-1', 30000, 'bank', '', null, null));
+-- (javob JSON bo'lsa — «reason», bo'lmasa «status»; xato matni — o'zi: mutatsiyada FAIL, to'plam to'xtamaydi)
+select (select string_agg(case when zz.get(k) like '{%' then coalesce(zz.get(k)::jsonb ->> 'reason', zz.get(k)::jsonb ->> 'status') else zz.get(k) end, ' | ' order by k)
+          from unnest(array['N6a', 'N6b', 'N6c']) k)
+  || ' | ' || coalesce((select string_agg(id || '=' || status || ':' || provider || ':' || coalesce("cashDocId", '-'), ',' order by id) from public.payments where id like 'man_n6_%'), '-')
+  || ' | ' || (select count(*) from public.cash_docs where "sourceId" like 'man_n6_%') as n6 \gset
+rollback to savepoint n6;
+select zz.chk('N6 g8: «pending» qatorni boshqa usul bilan tugatish — rad (mismatch): eski naqd qator «bank» deb, bank qatori «naqd» deb (kirim orderi bilan); o''sha usul bilan — qo''llanadi (kirim orderisiz)',
+  :'n6', '^mismatch \| mismatch \| applied \| man_n6_bnk=applied:bank:-,man_n6_old=pending:cash:- \| 0$');
+-- g8 (tekshiruvchi): createdAt bo'sh eski naqd to'lov qatori (import) — kassa ishlayotganda to'lovchi ismini tuzatish kabi o'zgarish
+--   avvalgidek o'tadi (kassa_pay_guard eski va yangi kunni bir xil hisoblaydi; avval «kuni ko'chdi» deb kassa:cash_only_kassa bilan rad etilardi)
+savepoint n7;
+set local session_replication_role = replica;
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw, "createdAt") values
+  ('man_n7_old', 'T-1', 'cash', 1000, 'applied', '', true, '{}', null);
+set local session_replication_role = origin;
+select zz.as('U_FM', $q$with x as (update public.payments set "payerName" = 'Tuzatildi' where id = 'man_n7_old' returning id) select id from x$q$) as n7 \gset
+select :'n7' || ' | ' || coalesce((select "payerName" from public.payments where id = 'man_n7_old'), '-') as n7 \gset
+rollback to savepoint n7;
+select zz.chk('N7 createdAt bo''sh eski naqd to''lov qatorining to''lovchi ismini tuzatish (kassa ishlayapti) — avvalgidek o''tadi', :'n7', '^man_n7_old \| Tuzatildi$');
 select zz.chk('J19 kun yopildi: farq 0', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-01-04","counted":3090000}')::text$q$), '"diff": 0[,}]');
 select zz.clock('2027-01-05 09:00+05');
 select zz.put('J20', zz.pay('U_KAS', 'man_j20_001', 'T-2', 30000, 'cash', '', null, '{"fiscalNo":"F-6"}'));
@@ -360,7 +527,7 @@ select zz.chk('R4 to''xtatilgan kassa, bugun = oxirgi kassa kuni (01.02): naqd o
   || ' | ' || (select count(*) from public.payments where id = 'man_r4_0000') || '/' || (select count(*) from public.expenses where id = 'e_r4x'),
   '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(01\.02\.2027\) — kassa kuni edi: to''xtatilgan kassada yozilmaydi.*\(oxirgi kassa kuni 01\.02\.2027 .*ertasi kuni.* \| ERR 42501 \[kassa:paused_live_day\] 01\.02\.2027 — kassa kuni edi.* \| 0/0$');
 select zz.chk('R4b kassa hujjati yozilmaydi (kassa:paused)',
-  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","clientRef":"r4-rcp-00001"}')::text$q$),
+  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","fiscalNo":"F-R4B","clientRef":"r4-rcp-00001"}')::text$q$),
   '^ERR P0001 \[kassa:paused\]');
 select zz.chk('R4c «Kassa» holati: to''xtatilgan (01.02 dan), qoldiq — oxirgi kun oxiri; sanani to''g''ridan-to''g''ri qo''yib bo''lmaydi (avval komissiya sanashi)',
   (select (s ->> 'blockReason') || ':' || (s -> 'desk' ->> 'pausedDay') || ':' || (s ->> 'balance') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q)
@@ -372,6 +539,19 @@ select zz.chk('R4a to''xtatilgan davr sanasi (02.02): naqd o''quv to''lovi KO-1 
   (zz.get('R4')::jsonb ->> 'ok') || ':' || coalesce(zz.get('R4')::jsonb ->> 'kassa', 'null') || ':' || (zz.get('R4')::jsonb ->> 'day') || ':' || (select coalesce("cashDocId", '-') from public.payments where id = 'man_r4_0001')
   || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r4', '2027-02-02', '2027-02', 'Boshqa', 25000, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$),
   '^true:null:2027-02-02:- \| e_r4$');
+-- state-4 (ushlangan kassa; kassa_tuition_before / kassa_cash_guard qoidasi): to'g'ridan-to'g'ri naqd to'lov qatori — oxirgi kassa kuni (01.02)
+--   va undan oldingi sana bilan hech kimga (Direktorga ham) yo'q; to'xtatilgan davr sanasi (02.02) — avvalgi tartibda. g8 (g4b qoldig'i):
+--   sanasiz naqd (yoki usulsiz) yozuv — kiritilmaydi, mavjud yozuvning sanasi bo'shatilmaydi (avval kunga oid qoidalar uni o'tkazardi)
+savepoint n5;
+select zz.as('U_DIR', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n5_0001', 'T-5', 'cash', 1000, 'pending', true, '{"manual":true,"date":"2027-02-01"}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_KAS', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n5_0002', 'T-5', 'cash', 1000, 'pending', true, '{"manual":true}') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_n5a', null, '2027-02', 'Boshqa', 1000, 'sanasiz', 'cash') returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note) values ('e_n5b', null, '2027-02', 'Boshqa', 1000, 'sanasiz, usulsiz') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, method) values ('adv_n5', 'IQX-T1', 'staff:st1', 'Sinov', 1000, '2027-02', null, 'cash') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.expenses set date = null where id = 'e_r4' returning id) select id from x$q$) as n5 \gset
+rollback to savepoint n5;
+select zz.chk('N5 ushlangan kassa: oxirgi kassa kuni sanali naqd qator — Direktorga ham rad; to''xtatilgan davr sanasi — avvalgidek; sanasiz naqd / usulsiz yozuv va sanani bo''shatish — rad (kassa:cash_date)',
+  :'n5', '^ERR 42501 \[kassa:paused_live_day\] To''lov kuni \(01\.02\.2027\) — oxirgi kassa kuni.* \| man_n5_0002 \| ERR 42501 \[kassa:cash_date\] Kassa to''xtatilgan: naqd.* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].*$');
 select zz.clock('2027-02-02 09:00+05');
 -- Komissiya sanadi: 4 725 000 + 60 000 (o'quv to'lovi) − 25 000 (xarajat) = 4 760 000. Avval xato (4 750 000), keyin qayta sanaldi.
 select zz.chk('R5 qayta ishga tushirish qoldig''ini faqat Direktor kiritadi; kun oxirgi kassa kunidan keyin va bugundan oldin emas',
@@ -400,7 +580,7 @@ select zz.chk('R6 ishga tushadigan kun boshqa sana — rad; qayta ishga tushiris
 -- (g4-v1: boshqa kun bilan qayta sanash avval «Kassa ishga tushgan — boshlang'ich qoldiq o'zgarmaydi» deb rad etilardi — endi
 --   alohida xabar: avval ishga tushadigan kunni bo'shatish kerak)
 select zz.chk('R6b 03.02 gacha kassa hujjati yozilmaydi (kassa:not_started); boshqa kun bilan qayta sanash — rad, avval sanani bo''shatish kerak (kassa:restart_pending)',
-  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","clientRef":"r6-rcp-00001"}')::text$q$)
+  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","fiscalNo":"F-R6B","clientRef":"r6-rcp-00001"}')::text$q$)
   || ' | ' || zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4760000,"startDay":"2027-02-04"}')::text$q$)
   || ' | ' || (select (s ->> 'blockReason') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q),
   '^ERR P0001 \[kassa:not_started\].*03\.02\.2027.* \| ERR P0001 \[kassa:restart_pending\] Qayta ishga tushirish 03\.02\.2027 ga tayyorlangan.*avval «⚙ Sozlamalar»da ishga tushadigan kunni bo''shating.* \| restart$');
@@ -497,8 +677,6 @@ select zz.chk('R19 kassa ishlab turganda (qayta ishga tushirish boshlangan) qayt
 --   Kassa ishlagan davrlar: 04.01–01.02, 03.02, 05.02–08.02, 11.02 dan; to'xtatilgan davrlar (kassa ishlamagan kunlar): 02.02, 04.02,
 --   09.02–10.02; birinchi ishga tushgan kundan (04.01) oldingi kunlar ham. 08.02: kassa orqali xarajat (KO-2 — «Buxgalteriya»ga bog'langan
 --   qator) va eski yo'l bilan (himoyani chetlab) kiritilgan kassa hujjatisiz naqd xarajat — kassa ishlagan davr «yetimi» (P4).
-create or replace function zz.js(p text) returns jsonb language plpgsql as $$   -- xato matni (ERR …) bo'lsa — NULL: mutatsiyada FAIL, to'plam to'xtamaydi
-begin return p::jsonb; exception when others then return null; end $$;
 select zz.clock('2027-02-08 09:00+05');
 select zz.put('G1', zz.pay('U_KAS', 'man_g1_0001', 'T-5', 10000, 'cash', '', null, '{"fiscalNo":"F-G1"}'));
 select zz.put('G1r', zz.as('U_KAS', $q$select public.kassa_payout_request('{"op":"out_expense","amount":15000,"partyType":"counterparty","partyId":"cp_sup","articleId":"EX-16","basis":"Hisob-faktura 8","clientRef":"g1-req-00001"}')::text$q$));
