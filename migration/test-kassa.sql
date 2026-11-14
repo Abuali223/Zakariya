@@ -457,8 +457,13 @@ select zz.chk('G19 48 soatdan eski yozuv: kassir kirita olmaydi',
   zz.rcpt('U_KAS2', format('{"op":"in_bank","amount":5000,"partyType":"bank","partyId":"%s","basis":"Qog''oz varaqa Қ-1","capturedAt":"2027-01-04T09:00:00+05:00","clientRef":"g19-00001"}', zz.id('cp_bank'))), '^ERR P0001 \[kassa:late_limit\]');
 select zz.put('G19', zz.rcpt('U_DIR', format('{"op":"in_bank","amount":5000,"partyType":"bank","partyId":"%s","basis":"Qog''oz varaqa Қ-1","capturedAt":"2027-01-04T09:00:00+05:00","clientRef":"g19-00002"}', zz.id('cp_bank'))));
 select zz.chk('G19b 48 soatdan eski yozuvni Direktor kiritadi (kech)', (select late || ':' || "postedBy" from public.cash_docs where id = zz.id('G19')), '^true:U_DIR$');
-select zz.chk('G20 «hali o''tkazilmagan» yozuvlar: soni va summasi birga', zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingSum":100000}'), '^ERR 22023 \[kassa:count\]');
-select zz.put('G20', zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingCount":1,"pendingSum":100000,"denoms":{"100000":17,"5000":5,"1000":1}}'));
+-- state-2: hali o'tkazilmagan yozuvlar — ro'yxat bilan (qurilma navbatidagi har yozuv kaliti va summasi); avvalgi ro'yxatsiz soni / summa — rad
+select zz.chk('G20 «hali o''tkazilmagan» yozuvlar: ro''yxatsiz soni / summa (avvalgi oyna) — rad; yozuv kaliti noto''g''ri yoki takror — rad',
+  zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingCount":1,"pendingSum":100000}')
+  || ' | ' || zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingRefs":[{"ref":"x1","amount":100000}]}')
+  || ' | ' || zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingRefs":[{"ref":"man_g20_00001","amount":50000},{"ref":"man_g20_00001","amount":50000}]}'),
+  '^ERR 22023 \[kassa:pending_refs\] Hali o''tkazilmagan yozuvlar endi ro''yxat bilan yuboriladi.* \| ERR 22023 \[kassa:pending_refs\] Qurilma navbatidagi yozuv kaliti noto''g''ri .* \| ERR 22023 \[kassa:pending_refs\] Qurilma navbatidagi yozuv ikki marta ko''rsatilgan \(man_g20_00001\)$');
+select zz.put('G20', zz.close('U_KAS2', '{"day":"2027-01-07","counted":1726000,"pendingRefs":[{"ref":"man_g20_00001","amount":100000}],"denoms":{"100000":17,"5000":5,"1000":1}}'));
 select zz.chk('G20b qurilmada 100 000 lik yozuv hali o''tkazilmagan: farq 0, kun oxiri (hisobda) 1 626 000, sanalgan 1 726 000',
   (select trim_scale(diff) || ':' || trim_scale(closing) || ':' || trim_scale(counted) || ':' || "pendingCount" from public.cash_days where day = '2027-01-07'), '^0:1626000:1726000:1$');
 select zz.chk('G21 tekshirish tartib bilan: avval 06.01', zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-07', true)::text$q$), '^ERR P0001 \[kassa:verify_order\]');
@@ -470,8 +475,11 @@ select zz.chk('G22 yopilgan kun hujjati o''zgartirilgan bo''lsa tekshiruv to''xt
 set local session_replication_role = replica;
 update public.cash_docs set amount = amount - 1 where id = (select zz.id('G12'));
 set local session_replication_role = origin;
-select zz.chk('G22b tiklangach tekshiruv o''tadi (06.01, keyin 07.01)',
-  left(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-06', true)::text$q$), 0) || zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-07', true)::text$q$), '"status": "verified"');
+-- (state-2: 07.01 qurilma navbatidagi hali kelmagan yozuv bilan yopilgan — endi izohsiz tekshirilmaydi; izoh bilan — o'tadi)
+select zz.chk('G22b tiklangach tekshiruv o''tadi (06.01, keyin 07.01 — hali kelmagan navbat yozuvi bor: izohsiz rad, izoh bilan o''tadi)',
+  left(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-06', true)::text$q$), 0) || zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-07', true)::text$q$)
+  || ' | ' || zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-07', true, 'Navbatdagi to''lov hali yuborilmagan, kassir bilan aniqlanadi')::text$q$),
+  '^ERR 22023 \[kassa:pending_note\] Kun hali o''tkazilmagan yozuvlar bilan yopilgan: qurilma navbatidagi 1 ta yozuvning \(100000 so''m\) kirim orderi hali kelmagan\..* \| .*"status": "verified"');
 
 -- Yil chegarasi: raqamlar va varaqlar yangi yilda 1 dan
 select zz.clock('2027-12-31 11:00+05');

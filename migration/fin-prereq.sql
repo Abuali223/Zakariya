@@ -228,7 +228,10 @@ begin
 
   -- Yangi qator; shu payId allaqachon bo'lsa (qayta yuborish, ikkinchi tab, eski 3 bosqichli mijoz yarim yo'lda qolgan) —
   --   ON CONFLICT parallel chaqiruvni birinchisi tugaguncha kutadi, keyin mavjud qator holatiga qaraladi.
-  v_raw := jsonb_build_object('manual', true, 'method', p_method, 'date', coalesce(v_date, to_char(v_today, 'YYYY-MM-DD')),
+  --   Kassa orqali o'tadigan naqd to'lov (v_before bor): kuni — kirim orderi tushadigan kassa kuni (kassa-pay.sql: kassa_tuition_before 'day'),
+  --   olingan payt — raw.capturedAt da. Davr qulfi (yopilgan oy) shu kunni tekshiradi: oy oxirida navbatda qolgan to'lov keyingi oyda o'tadi.
+  --   Kassasiz (yoki kassa ishlamagan kun puli) — avvalgidek, «Sana» / olingan kun.
+  v_raw := jsonb_build_object('manual', true, 'method', p_method, 'date', coalesce(v_before ->> 'day', v_date, to_char(v_today, 'YYYY-MM-DD')),
                               'note', left(coalesce(p_note, ''), 500), 'forPeriod', left(coalesce(p_period, ''), 500),
                               'byUid', app.uid());
   if v_cap is not null then v_raw := v_raw || jsonb_build_object('capturedAt', v_cap); end if;

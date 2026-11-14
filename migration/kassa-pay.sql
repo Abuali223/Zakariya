@@ -59,12 +59,13 @@ revoke all on function app.kassa_live() from public, anon, authenticated;
 --     so'ralgan sana kassa ishlamagan kun bo'lib, 31 kunlik oraliqdan chiqqani uchun bugunga surilgan bo'lsa — rad (kassa:pre_live_old):
 --     eski pul bugungi KO-1 bo'lib ikki marta hisoblanmasin.
 --   Sozlama qatori FOR SHARE (state-7): ishga tushadigan kun shu payt o'zgarayotgan bo'lsa — u tugaguncha kutib, yangi qiymat bilan qaror.
+--   Natijadagi «day» (state-3) — kirim orderi tushadigan kassa kuni (taxmin): record_manual_payment to'lov qatorini shu kun bilan yozadi.
 drop function if exists app.kassa_tuition_before(text);
 create or replace function app.kassa_tuition_before(p_sid text, p_day date, p_captured timestamptz, p_asked text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_sid text; v_credit numeric; v_live date; v_today date := app.fin_today(); v_day date := coalesce(p_day, app.fin_today());
         v_asked date := app.fin_text_day(p_asked); v_cap date := (p_captured at time zone 'Asia/Tashkent')::date; v_p jsonb; v_chk date;
-        v_after boolean := false;
+        v_after boolean := false; v_open date;
 begin
   select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main' for share;
   v_p := app.kassa_periods('main');
@@ -115,7 +116,14 @@ begin
   v_sid := coalesce(nullif(v_sid, ''), p_sid);
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
   select c.credit into v_credit from public.student_credit c where c.id = v_sid;
+  -- state-3: kirim orderi tushadigan kassa kuni (kassa qulfisiz taxmin; aniq kunni kassa_tuition_post da app.kassa_resolve_day beradi):
+  --   ochiq kun bugundan oldin va to'lov o'sha kuni olingan — o'sha kun, aks holda — bugun. record_manual_payment to'lov qatorini SHU kun
+  --   bilan yozadi (olingan payt — raw.capturedAt da): davr qulfi to'lov olingan kunni emas, order tushadigan kunni tekshiradi — yopilgan
+  --   oyning oxirgi kunida navbatda qolgan to'lov keyingi oyning ochiq kuniga «kech» tushadi (avval fin:locked bilan abadiy rad etilardi).
+  --   Taxmin aniq kundan farq qilsa (shu orada kun yopilgan) — qator sanasi order kuniga tuzatiladi, davr qulfi ikkala kunni tekshiradi.
+  select d.day into v_open from public.cash_days d where d.desk = 'main' and d.status = 'open';
   return jsonb_build_object('sid', v_sid, 'credit', coalesce(v_credit, 0), 'redate', v_after,
+    'day', to_char(case when v_open < v_today and v_cap = v_open then v_open else v_today end, 'YYYY-MM-DD'),
     'invoices', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'month', coalesce(i.month, ''), 'amount', coalesce(i.amount, 0),
                                                               'paid', coalesce(i."paidAmount", 0), 'paidRaw', i."paidAmount", 'status', i.status,
                                                               'provider', i.provider, 'paidAt', i."paidAt")
@@ -224,7 +232,8 @@ begin
   perform app.kassa_flag(true);
   -- g4b: sanashdan keyin olingan, to'xtatilgan davr sanali to'lov (kassa_tuition_before 'redate') — qatori sanasi oldindan bugunga:
   --   birinchi qayta ochilgan kun shu hujjat bilan ochilsa, «sanashdan keyingi hujjatisiz yozuv» tekshiruvi (app.kassa_restart_stale)
-  --   uni — hali hujjatsiz turgan o'zini — sanab, kunni ochmay qo'ymasin. Yakuniy sana — pastda, order kuni.
+  --   uni — hali hujjatsiz turgan o'zini — sanab, kunni ochmay qo'ymasin. Yakuniy sana — pastda, order kuni. (state-3: yangi qator endi
+  --   kirim orderi kuni bilan yoziladi — kassa_tuition_before 'day', bu holda bugun; qadam eski mijozdan qolgan «pending» qator uchun qoladi.)
   if coalesce((p_before ->> 'redate')::boolean, false) then
     update public.payments set raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('date', to_char(app.fin_today(), 'YYYY-MM-DD'))
      where id = p_pay_id;

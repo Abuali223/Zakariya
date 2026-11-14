@@ -66,6 +66,44 @@ export function diffText(closeDiff, handovers) {
   if (!hd.length) return sgnS(closeDiff);
   return [num(closeDiff) ? 'yopishda ' + sgnS(closeDiff) : '', ...hd.map(x => 'smenada ' + sgnS(x))].filter(Boolean).join(', ');
 }
+// Kunni yopish / smena topshirish — qurilma navbatidagi hali yuborilmagan naqd to'lovlar (state-2; server — kassa_day_close / kassa_handover
+//   pendingRefs): har biri kaliti (payId) va summasi bilan yuboriladi. Server shu payt o'tib ketganlarini hisobga olmaydi (ular qoldiqda bor),
+//   qolganini sanashdan ayiradi va saqlaydi — keyin kelgan kech kirim orderi shu kalit bilan bog'lanadi. ob — admin.html outboxCash().
+//   «old» — eski sahifa (kalitlarsiz soni / summa): yuborilmaydi, sahifani yangilash kerak. Sof funksiya (fin-kassa.test.mjs).
+export function outboxRefs(ob) {
+  const seen = new Set(), refs = [];
+  for (const r of ((ob && ob.refs) || [])) {
+    const ref = String((r && r.ref) || ''), amount = Math.round(num(r && r.amount) * 100) / 100;
+    if (!/^man_[A-Za-z0-9_]{3,64}$/.test(ref) || !(amount > 0) || seen.has(ref)) continue;
+    seen.add(ref); refs.push({ ref, amount });
+  }
+  return { refs, count: refs.length, sum: Math.round(refs.reduce((t, r) => t + r.amount, 0) * 100) / 100, old: !!ob && !Array.isArray(ob.refs) && num(ob.count) > 0 };
+}
+// Server ishlamagan paytdagi «Қ» blankalari (crit-3; server — kassa_day_close paper): soni, summasi va raqamlari birga; hammasi bo'sh — yo'q.
+//   Natija: {paper: {count, sum, nos}} | {err} | {}. Sof funksiya (fin-kassa.test.mjs).
+export function paperRead(cnt, sum, nos) {
+  const c = String(cnt == null ? '' : cnt).replace(/[^\d]/g, ''), s = String(sum == null ? '' : sum).replace(/[^\d]/g, ''), n = String(nos == null ? '' : nos).trim();
+  if (!c && !s && !n) return {};
+  if (!(num(c) > 0) || !(num(s) > 0) || !n) return { err: '«Қ» blankalari: soni, summasi va raqamlari birga kiritiladi' };
+  return { paper: { count: num(c), sum: num(s), nos: n.slice(0, 300) } };
+}
+// Yopish / smena topshirish natijasi — SERVER hisoblagan farq (oynadagi taxmin emas; takror javobda — kun farqi) va hisobga olinmagan
+//   (allaqachon o'tib ketgan) navbat yozuvlari. Sof funksiya (fin-kassa.test.mjs).
+export function countResultText(r) {
+  r = r || {};
+  const d = num(r.diff != null ? r.diff : (r.day && r.day.diff)), ign = (r.ignoredRefs || []).length;
+  return (d === 0 ? 'farq yo‘q' : d < 0 ? `KAMOMAD ${som(-d)}` : `ORTIQCHA ${som(d)}`)
+    + (ign ? ` · navbatdagi ${ign} ta yozuv allaqachon o‘tgan edi — ayirilmadi` : '');
+}
+// Kunning hali bog'lanmagan yozuvlari (kun javobidagi pendingOpen; nazorat ro'yxatidagi pendingOpen qatori; server — app.kassa_day_pending):
+//   qurilma navbati yozuvining kech kirim orderi hali kelmagan va «Қ» blankalari — matn ('' — yo'q). Sof funksiya (fin-kassa.test.mjs).
+export function pendingText(p) {
+  if (!p) return '';
+  const a = [];
+  if (num(p.n) > 0) a.push(`qurilma navbatidagi ${num(p.n)} ta yozuvning (${som(p.sum)}) kirim orderi hali kelmagan`);
+  if (num(p.paperCount) > 0) a.push(`«Қ» blankalari — ${num(p.paperCount)} ta, ${som(p.paperSum)}${p.paperNos ? ` (№: ${p.paperNos})` : ''}`);
+  return a.join('; ');
+}
 const ST_LBL = { draft: 'Tasdiq kutilmoqda', approved: 'Tasdiqlangan — to‘lanadi', posted: 'O‘tkazilgan', void: 'Bekor qilingan', rejected: 'Rad etilgan', cancelled: 'Bekor qilingan so‘rov' };
 const DAY_LBL = { open: 'Ochiq', closed: 'Yopilgan', verified: 'Tekshirilgan' };
 const BLOCK_TXT = {
@@ -117,7 +155,8 @@ const restartAdjTxt = v => num(v) ? ` · qayta ishga tushirish farqi (dalolatnom
 //   'relaunch' — to'xtatilgan kassani qayta ishga tushirish; 'launch' — ishga tushirish / hali kelmagan sanani o'zgartirish;
 //   'block' — avval komissiya sanashi kerak yoki sana qayta ishga tushirish kuniga teng emas (saqlanmaydi); 'none' — tasdiq kerak emas.
 //   last — oxirgi YOPILGAN kassa kuni (kassa_state('main').lastDay; ochiq kun bo'lsa — berilmaydi): u qurilma navbatidagi hali
-//   o'tkazilmagan yozuvlar bilan yopilgan bo'lsa kassa to'xtatilmaydi (g4b-v1; server ham rad etadi — kassa:rollback_pending).
+//   o'tkazilmagan (kech kirim orderi hali kelmagan — pendingOpen, state-2) yozuvlar yoki hali kiritilmagan «Қ» blankalari (crit-3) bilan
+//   yopilgan bo'lsa kassa to'xtatilmaydi (g4b-v1; server ham rad etadi — kassa:rollback_pending).
 export function goLiveConfirm(oldDay, newDay, today, desk, last) {
   oldDay = oldDay || null; newDay = newDay || null; desk = desk || {};
   if (oldDay === newDay) return { kind: 'none', text: '' };
@@ -136,7 +175,12 @@ export function goLiveConfirm(oldDay, newDay, today, desk, last) {
   }
   const reached = !!oldDay && !!today && String(oldDay) <= String(today);
   if (reached && (!newDay || newDay > oldDay) && desk.started) {
-    if (last && num(last.pendingCount) > 0) return { kind: 'block', text: `Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni (${dmy(last.day)}) qurilma navbatidagi hali o‘tkazilmagan ${num(last.pendingCount)} ta yozuv (${som(last.pendingSum)}) bilan yopilgan — bu pul kassada bor, hisobda hali yo‘q. Avval navbat yuborilsin: kunni qayta oching, qurilmalar navbati o‘tgach kunni qayta sanab yoping (kun tekshirilgan bo‘lsa — navbat keyingi kassa kuniga «kech» tushadi, o‘sha kunni yoping), keyin kassani to‘xtating (ishga-tushirish §9).` };
+    // state-2, crit-3: kech kirim orderi hali kelmagan navbat yozuvlari va hali kiritilmagan «Қ» blankalari (kun javobidagi pendingOpen;
+    //   eski server — pendingCount / pendingSum)
+    const po = last && last.pendingOpen, pn = last ? num(po ? po.n : last.pendingCount) : 0, ps = last ? num(po ? po.sum : last.pendingSum) : 0;
+    const qn = po ? num(po.paperCount) : 0, qs = po ? num(po.paperSum) : 0;
+    if (pn > 0) return { kind: 'block', text: `Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni (${dmy(last.day)}) qurilma navbatidagi hali o‘tkazilmagan ${pn} ta yozuv (${som(ps)})${qn ? ` va hali kiritilmagan «Қ» blankalari (${qn} ta, ${som(qs)})` : ''} bilan yopilgan — bu pul kassada bor, hisobda hali yo‘q. Avval navbat yuborilsin: kunni qayta oching, qurilmalar navbati o‘tgach kunni qayta sanab yoping (kun tekshirilgan bo‘lsa — navbat keyingi kassa kuniga «kech» tushadi, o‘sha kunni yoping), keyin kassani to‘xtating (ishga-tushirish §9).` };
+    if (qn > 0) return { kind: 'block', text: `Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni (${dmy(last.day)}) server ishlamagan paytdagi hali kiritilmagan «Қ» blankalari (${qn} ta, ${som(qs)}) bilan yopilgan — bu pul kassada bor, hisobda hali yo‘q. Avval «Қ» yozuvlarini kiriting (ular yangi kassa kuniga tushadi), o‘sha kunni sanab yoping, keyin kassani to‘xtating (ishga-tushirish §8, §9).` };
     return { kind: 'stop', text: `DIQQAT — KASSANI TO‘XTATISH (ishga-tushirish §9).\n\nKassa ${dmy(oldDay)} dan ishlayapti. Sanani ${newDay ? 'keyinga surish' : 'bo‘shatish'} kassani to‘xtatadi:\n`
       + '• naqd o‘quv to‘lovlari kirim orderisiz va fiskal chek raqamisiz yoziladi; naqd maosh, avans, xarajat va qaytarish — avvalgi (ordersiz) tartibda;\n'
       + '• «Kassa»da yangi hujjat yozilmaydi — kassa nazorati o‘chadi, kassa «Қ» blankalari va jurnali bilan ishlaydi (blankalar o‘z raqamlari bilan; tizim raqamlari qayta ishga tushganda davom etadi);\n'
@@ -355,7 +399,7 @@ function draw() {
       <td data-label="Chiqim" style="text-align:right">${esc(som(closed ? d.payouts : d.payoutsLive))}</td>
       <td data-label="Kun oxiri" style="text-align:right"><b>${esc(som(closed ? d.closing : d.balance))}</b></td>
       <td data-label="Farq" style="text-align:right">${closed ? (num(d.diff) === 0 ? '—' : `<span style="color:${num(d.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">${num(d.diff) > 0 ? '+' : ''}${esc(som(d.diff))}</span>`) : ''}${(d.handoverDiffs || []).filter(x => num(x)).length ? `<div class="small" style="color:#B54708">smenada ${esc((d.handoverDiffs || []).filter(x => num(x)).map(sgnS).join(', '))}</div>` : ''}</td>
-      <td data-label="Holat">${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(d.closedByName || nameOf(d.closedBy)) : 'kassir: ' + esc(d.cashierName || nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(d.verifiedByName || nameOf(d.verifiedBy)) : ''}</div>${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}</td>
+      <td data-label="Holat">${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(d.closedByName || nameOf(d.closedBy)) : 'kassir: ' + esc(d.cashierName || nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(d.verifiedByName || nameOf(d.verifiedBy)) : ''}</div>${closed && pendingText(d.pendingOpen) ? `<div class="small" data-pend="${esc(d.day)}" style="color:#B54708">hali o‘tkazilmagan: ${esc(pendingText(d.pendingOpen))}</div>` : ''}${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}</td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-view="${esc(d.day)}" title="Kun hujjatlari, sanashlar, jurnal">Ko‘rish</button> <button class="btn sm" data-book="${esc(d.day)}" title="Kassa kitobi varag‘i (KO-4)">🖨 KO-4</button>${d.status === 'closed' && zOp ? ` <button class="btn sm" data-zrep="${esc(d.day)}" title="Onlayn kassa Z-hisobotini kiritish / tuzatish">Z</button>` : ''}${d.status === 'closed' && (m.list2 || m.director) ? ` <button class="btn sm gold" data-verify="${esc(d.day)}">Tekshirish</button>` : ''}${d.status === 'closed' && m.director && d.id === lastId ? ` <button class="btn sm danger" data-reopen="${esc(d.day)}">Qayta ochish</button>` : ''}</td></tr>`;
   }).join('');
   const daysHtml = days.length ? `<div class="card" style="padding:14px 18px"><b>Kassa kunlari</b><div class="small muted" style="margin:2px 0 8px">Kun oxiri = kun boshi + kirim − chiqim. Kun faqat pul sanalgach yopiladi; farq shu kunning hujjati bo‘lib yoziladi.</div>
@@ -367,7 +411,7 @@ function draw() {
   let hoHtml = '';
   if (ho) {
     const hr = handoverRole(ho, m), hn = u => (u && ho.names && ho.names[u]) || nameOf(u), d0 = num(ho.diff);
-    const sum = `sanalgan <b>${esc(som(ho.counted))}</b> (hisobda ${esc(som(ho.expected))}${num(ho.pendingSum) ? ', hali o‘tkazilmagan ' + esc(som(ho.pendingSum)) : ''}) · `
+    const sum = `sanalgan <b>${esc(som(ho.counted))}</b> (hisobda ${esc(som(ho.expected))}${num(ho.pendingSum) ? ', hali o‘tkazilmagan ' + esc(som(ho.pendingSum)) + ((ho.pendingRefs || []).length ? ` — ${(ho.pendingRefs || []).length} ta navbat yozuvi` : '') : ''}) · `
       + (d0 === 0 ? 'farq yo‘q' : `<b style="color:${d0 < 0 ? '#B42318' : '#B54708'}">${d0 < 0 ? 'KAMOMAD ' + esc(som(-d0)) : 'ORTIQCHA ' + esc(som(d0))}</b>`);
     const who = `${esc(ho.fromUid ? hn(ho.fromUid) : '—')} → <b>${esc(hn(ho.toUid))}</b>${ho.byUid && ho.byUid !== ho.fromUid ? ` · sanadi: ${esc(hn(ho.byUid))} (komissiya bilan)` : ''} · ${esc(hm(ho.createdAt))}`;
     hoHtml = `<div class="card" id="ks-ho" style="padding:14px 18px;margin-bottom:14px;border-color:#F5C26B">
@@ -438,14 +482,21 @@ function bind() {
 }
 // Server amali: bajaradi, xabar beradi, sahifani yangilaydi. Xato — serverning o'zbekcha matni bilan.
 //   ok = false — server rad etdi, lekin holatni saqlab qoldi (kassa_doc_pay: so'rov Direktor tasdig'iga qaytarildi, sec-3): matn — message.
-async function act(fn, args, okMsg, after) {
+//   okMsg — matn yoki javobdan matn tuzadigan funksiya (masalan, server hisoblagan farq); onErr(e) — true qaytarsa, xatoni o'zi hal qilgan.
+async function act(fn, args, okMsg, after, onErr) {
   try {
     const r = await call(fn, args);
     if (r && r.ok === false) { C.toast(String(r.message || 'Rad etildi'), true); C.closeModal(); await reload().catch(() => {}); if (C.onChange) C.onChange(); return null; }
-    C.toast(okMsg + (r && r.dup ? ' (avval bajarilgan)' : '') + ' ✓'); C.closeModal(); await reload(); if (after) after(r); if (C.onChange) C.onChange(); return r;
+    C.toast((typeof okMsg === 'function' ? okMsg(r) : okMsg) + (r && r.dup ? ' (avval bajarilgan)' : '') + ' ✓'); C.closeModal(); await reload(); if (after) after(r); if (C.onChange) C.onChange(); return r;
   }
-  catch (e) { C.toast(errText(e), true); await reload().catch(() => {}); return null; }
+  catch (e) { if (onErr && await onErr(e)) return null; C.toast(errText(e), true); await reload().catch(() => {}); return null; }
 }
+// state-2: oyna ochilgandan keyin kassa qoldig'i o'zgargan (server — kassa:stale; masalan, qurilma navbati shu orada o'tgan): xabar,
+//   oyna yangi qoldiq va navbat bilan qayta ochiladi — pul qayta sanaladi.
+const staleReopen = open => async e => {
+  if (String((e && e.hint) || '') !== 'kassa:stale') return false;
+  C.toast(errText(e), true); C.closeModal(); await reload().catch(() => {}); open(); return true;
+};
 // Sabab so'raydigan kichik oyna.
 function ask(title, hint, minLen, onOk) {
   $('#modal').innerHTML = `<div class="modal-h"><h3>${esc(title)}</h3><button class="x" id="m-x">×</button></div>
@@ -689,26 +740,45 @@ async function openDocForm(form) {
 }
 
 // ---------------------------------------------------------------- sanash: kunni yopish / smena topshirish
-function countFields(expected, pend) {
+// state-2: qurilma navbatidagi hali yuborilmagan naqd to'lovlar — oyna ochilganda o'qiladi va kaliti bilan yuboriladi (qo'lda kiritilmaydi:
+//   server o'tib ketganlarini o'zi hisobga olmaydi); crit-3: «Қ» blankalari — alohida qo'lda (faqat kunni yopishda).
+//   opts: paper — «Қ» blankalari maydonlari; late — o'tgan kun yopilmoqda (server ishlamagan kun bo'lishi mumkin — ajratib ko'rsatiladi).
+function countFields(expected, ob, opts) {
+  opts = opts || {};
+  const o = outboxRefs(ob);
   return `<div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px">Hisobdagi qoldiq: <b>${esc(som(expected))}</b></div>
     ${lbl('Kassadagi pul — SANALGAN summa (so‘m)', `<input id="kc-counted" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}
     <details style="margin-top:8px"><summary class="small" style="cursor:pointer;font-weight:700">Nominallar bo‘yicha sanash</summary>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px">${NOMINALS.map(n => `<label class="small muted" style="display:flex;flex-direction:column;gap:3px">${n.toLocaleString('ru-RU')}<input data-nom="${n}" type="text" inputmode="numeric" placeholder="dona" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font:inherit;width:100%"></label>`).join('')}</div></details>
-    <div class="grid2" style="margin-top:4px">${lbl('Hali o‘tkazilmagan yozuvlar — soni', `<input id="kc-pcount" type="text" inputmode="numeric" value="${esc(String(pend.count || ''))}" placeholder="0" style="${FLD}">`)}${lbl('…summasi (so‘m)', `<input id="kc-psum" type="text" inputmode="numeric" value="${pend.sum ? esc(String(pend.sum).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')) : ''}" placeholder="0" style="${FLD}">`)}</div>
-    <div class="small muted">Internet yo‘qligida qabul qilingan, hali serverga yetmagan naqd to‘lovlar (shu qurilma navbatida: ${esc(String(pend.count || 0))} ta). Ular kassada bor, lekin hisobda hali yo‘q.</div>
+    <div class="small" id="kc-ob" style="margin-top:8px;border-radius:10px;padding:8px 10px;${o.count ? 'background:#FEF3E2;color:#B54708' : 'background:#F2F4F7;color:#475467'}">${o.count
+      ? `Shu qurilma navbatida hali yuborilmagan naqd to‘lovlar: <b>${esc(String(o.count))} ta, ${esc(som(o.sum))}</b> — «hali o‘tkazilmagan yozuvlar» sifatida hisobga olinadi (pul kassada bor, hisobda hali yo‘q). Keyin o‘tganda «kech» bo‘lib tushadi va shu kun bilan bog‘lanadi.`
+      : 'Shu qurilma navbatida yuborilmagan naqd to‘lov yo‘q.'}${o.old ? ' <b>Sahifani yangilang</b> (Ctrl+Shift+R) — navbat yozuvlari kalitsiz.' : ''}</div>
+    ${opts.paper ? paperFields(!!opts.late) : ''}
     <div id="kc-diff" class="small" style="margin-top:8px;font-weight:700"></div>
     ${lbl('Izoh', `<input id="kc-note" type="text" maxlength="300" style="${FLD}">`)}`;
 }
-function countBind(expected) {
-  const counted = $('#kc-counted'); fmtInput(counted); fmtInput($('#kc-psum'));
-  const noms = () => { const o = {}; let sum = 0, any = false; $('#modal').querySelectorAll('[data-nom]').forEach(el => { const c = num(digits(el.value)); if (c > 0) { o[el.dataset.nom] = c; sum += c * Number(el.dataset.nom); any = true; } }); return { o, sum, any }; };
-  const upd = () => { const c = num(digits(counted.value)), p = num(digits($('#kc-psum').value)), d = c - expected - p; const el = $('#kc-diff');
+// crit-3: server ishlamagan paytdagi «Қ» blankalari (kassada pul bor, hisobda hali yo'q); o'tgan kun yopilayotganda — ajratib ko'rsatiladi.
+function paperFields(late) {
+  return `<div id="kc-paper" style="margin-top:10px;border-radius:10px;padding:${late ? '8px 10px;background:#FEF3E2' : '0'}">
+    <div class="small" style="font-weight:700">Server ishlamagan paytdagi «Қ» blankalari <span class="muted" style="font-weight:500">— bo‘lmasa, bo‘sh qoldiring</span></div>
+    <div class="small muted">Tizim (server) ishlamagan paytda to‘ldirilgan, hali kiritilmagan «Қ» blankalari: pul kassada bor, hisobda hali yo‘q. Kun yopilgach har birini «Қ» raqami bilan (izohda) kiriting — ishga-tushirish §8.</div>
+    ${late ? `<div class="small" style="color:#B54708;font-weight:700;margin-top:4px">O‘tgan kun yopilmoqda: shu kuni server ishlamagan bo‘lsa — to‘ldirilgan «Қ» blankalarini shu yerda ko‘rsating (aks holda ular bugun ortiqcha, keyin kamomad bo‘lib chiqadi).</div>` : ''}
+    <div class="grid2" style="margin-top:4px">${lbl('Soni', `<input id="kc-qcnt" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}${lbl('Summasi (so‘m)', `<input id="kc-qsum" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}</div>
+    ${lbl('Blanka raqamlari', `<input id="kc-qnos" type="text" maxlength="300" placeholder="masalan: Қ-0012, Қ-0013" style="${FLD}">`)}</div>`;
+}
+function countBind(expected, ob) {
+  const counted = $('#kc-counted'); fmtInput(counted); fmtInput($('#kc-qsum'));
+  const o = outboxRefs(ob), qsum = () => { const el = $('#kc-qsum'); return el ? num(digits(el.value)) : 0; };
+  const noms = () => { const o2 = {}; let sum = 0, any = false; $('#modal').querySelectorAll('[data-nom]').forEach(el => { const c = num(digits(el.value)); if (c > 0) { o2[el.dataset.nom] = c; sum += c * Number(el.dataset.nom); any = true; } }); return { o: o2, sum, any }; };
+  const upd = () => { const c = num(digits(counted.value)), d = c - expected - o.sum - qsum(); const el = $('#kc-diff');
     if (!digits(counted.value)) { el.textContent = ''; return; }
     el.style.color = d === 0 ? '#157347' : (d < 0 ? '#B42318' : '#B54708');
     el.textContent = d === 0 ? 'Farq yo‘q ✓' : (d < 0 ? `KAMOMAD: ${som(-d)} — shu kun sanasi bilan chiqim hujjati yoziladi (qaror — Direktor)` : `ORTIQCHA: ${som(d)} — shu kun sanasi bilan kirim hujjati yoziladi`); };
   $('#modal').querySelectorAll('[data-nom]').forEach(el => el.addEventListener('input', () => { el.value = digits(el.value); const n = noms(); if (n.any) counted.value = String(n.sum).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); upd(); }));
-  counted.addEventListener('input', upd); $('#kc-psum').addEventListener('input', upd);
-  return () => { const n = noms(), c = num(digits(counted.value)); return { counted: digits(counted.value) === '' ? null : c, denoms: n.any && n.sum === c ? n.o : null, pendingCount: num(digits($('#kc-pcount').value)), pendingSum: num(digits($('#kc-psum').value)), note: $('#kc-note').value.trim() }; };
+  counted.addEventListener('input', upd); const qs = $('#kc-qsum'); if (qs) qs.addEventListener('input', upd);
+  return () => { const n = noms(), c = num(digits(counted.value)), q = $('#kc-qcnt') ? paperRead($('#kc-qcnt').value, $('#kc-qsum').value, $('#kc-qnos').value) : {};
+    return { counted: digits(counted.value) === '' ? null : c, denoms: n.any && n.sum === c ? n.o : null, pendingRefs: o.refs, pending: o.sum, pendingCount: o.count,
+             paper: q.paper || null, paperErr: q.err || '', note: $('#kc-note').value.trim() }; };
 }
 // ---- onlayn kassa (NKM) Z-hisoboti (F1.26): Z dagi SOTUV jamlari yoziladi; tizim fiskal chekli kirim orderlari va terminal
 //   to'lovlari bilan solishtiradi (kutilgan summa oldindan ko'rsatilmaydi — kassir Z dagi raqamni yozadi).
@@ -765,62 +835,74 @@ function openZForm(day) {
 }
 const commissionFields = () => `<div class="small" style="font-weight:700;margin-top:10px">Komissiya (kassir o‘rniga yopilganda kamida 2 kishi)</div>${[0, 1, 2].map(i => `<div class="grid2" style="margin-top:6px"><input data-ct="${i}" type="text" placeholder="Lavozimi" maxlength="120" style="${FLD}"><input data-cn="${i}" type="text" placeholder="F.I.Sh." maxlength="200" style="${FLD}"></div>`).join('')}`;
 const commissionRead = () => [0, 1, 2].map(i => ({ title: ($('#modal').querySelector(`[data-ct="${i}"]`) || {}).value || '', name: (($('#modal').querySelector(`[data-cn="${i}"]`) || {}).value || '').trim() })).filter(x => x.name.length >= 3);
-function openCloseForm() {
-  const od = ST.ov.state.openDay, m = me(); if (!od) return;
-  const pend = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0 };
-  const isTest = !!(ST.ov.state.desk && ST.ov.state.desk.isTest), oz = od.z || {};
+// Kunni yopish (state-2, CT-15): avval qurilma navbati yuboriladi (internet bo'lsa), keyin oyna yangi qoldiq bilan ochiladi — qolgan (yuborilmagan)
+//   navbat yozuvlari kaliti bilan «hali o'tkazilmagan» bo'lib yuboriladi (yopish bloklanmaydi); server qoldiq oyna ochilgandan keyin o'zgargan
+//   bo'lsa rad etadi (kassa:stale) — oyna qayta ochiladi. Natija xabarida — server hisoblagan farq. crit-3: «Қ» blankalari — alohida.
+async function openCloseForm() {
+  if (C.flushOutbox) { try { await C.flushOutbox(); } catch (_) { /* internet yo'q — navbatda qolganlari e'lon qilinadi */ } await reload().catch(() => {}); }
+  const od = ST.ov && ST.ov.state.openDay, m = me(); if (!od) return;
+  const ob = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0, refs: [] };
+  const isTest = !!(ST.ov.state.desk && ST.ov.state.desk.isTest), oz = od.z || {}, late = String(od.day) < String(ST.ov.state.today || '');
   // sec-2: kassa egasi (kun kassiri) bo'lmagan kassir, Direktor, Moliya menejeri — kassir o'rniga: komissiya (server ham tekshiradi)
   const needC = needCommission(od, m);
   const instead = needC && od.cashierUid ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">Kassa egasi — ${esc(od.cashierName || nameOf(od.cashierUid))}. Uning o‘rniga yopilmoqda: komissiya (kamida 2 kishi) dalolatnomani imzolaydi; kamomad bo‘lsa, javobgarni Direktor tanlaydi.</div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni yopish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b">${countFields(num(od.balance), pend)}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
+    <div class="modal-b">${countFields(num(od.balance), ob, { paper: true, late })}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
       <div class="small muted" style="margin-top:8px">Yopilgach bu kunga hujjat yozilmaydi (faqat Direktor qayta ochadi). Kassa kitobi varag‘ini 2 nusxada chop eting va imzolang.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kc-save">Sanab yopish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance)), zRead = zBind();
+  const read = countBind(num(od.balance), ob), zRead = zBind();
   $('#kc-save').onclick = async () => {
     const v = read(); if (v.counted == null) { C.toast('Sanalgan summani kiriting (0 bo‘lsa — 0)', true); return; }
-    if ((v.pendingSum > 0) !== (v.pendingCount > 0)) { C.toast('Hali o‘tkazilmagan yozuvlar: soni va summasi birga kiritiladi', true); return; }
-    const p = { desk: ST.desk, day: od.day, counted: v.counted, pendingCount: v.pendingCount, pendingSum: v.pendingSum, note: v.note };
+    if (v.paperErr) { C.toast(v.paperErr, true); return; }
+    // expected — oynadagi qoldiq (state-2: shu orada o'zgargan bo'lsa server rad etadi); pendingRefs — navbat yozuvlari kaliti bilan
+    const p = { desk: ST.desk, day: od.day, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, note: v.note };
+    if (v.paper) p.paper = v.paper;
     if (v.denoms) p.denoms = v.denoms;
     if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
     const zr = zRead(); if (zr.err) { C.toast(zr.err, true); return; }
     if (zr.z) p.z = zr.z;
     else if (!isTest && oz.needed && !confirm('Onlayn kassa Z-hisoboti kiritilmadi.\n\nKun yopiladi, lekin nazorat ro‘yxatida ko‘rinadi va kunni tekshirishda izoh talab qilinadi. Z-hisobotni keyin «Z» tugmasi bilan kiritish mumkin.\n\nDavom etilsinmi?')) return;
-    const d = v.counted - num(od.balance) - v.pendingSum;
-    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pendingSum ? '\nHali o‘tkazilmagan: ' + som(v.pendingSum) : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}`)) return;
+    const qs = v.paper ? v.paper.sum : 0, d = v.counted - num(od.balance) - v.pending - qs;
+    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pending ? `\nQurilma navbatida (hali o‘tkazilmagan): ${som(v.pending)} (${v.pendingCount} ta)` : ''}${qs ? `\n«Қ» blankalari: ${som(qs)} (${v.paper.count} ta, № ${v.paper.nos})` : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}`)) return;
     $('#kc-save').disabled = true;
-    await act('kassa_day_close', { p }, 'Kun yopildi', r => { zToast(r && r.day && r.day.z); if (confirm('Kassa kitobi varag‘i (KO-4) chop etilsinmi?')) printBook(od.day); });
+    await act('kassa_day_close', { p }, r => 'Kun yopildi: ' + countResultText(r), r => { zToast(r && r.day && r.day.z); if (confirm('Kassa kitobi varag‘i (KO-4) chop etilsinmi?')) printBook(od.day); },
+      staleReopen(openCloseForm));
     const b = $('#kc-save'); if (b) b.disabled = false;
   };
 }
 // Smena topshirish (state-6): IKKI BOSQICH — topshiruvchi pulni qabul qiluvchi bilan birga sanaydi va yozadi (qabul kutiladi); qabul qiluvchi
 //   o'z hisobidan «Qabul qildim» deydi (kartadagi tugma) — shundagina dalolatnoma, farq hujjati va yangi kassa egasi. Kassa egasi bo'lmagan
 //   kassir yoki Direktor — kassir o'rniga, komissiya bilan (sec-2; o'zi qabul qiluvchi bo'lishi ham mumkin).
-function openHandoverForm() {
-  const od = ST.ov.state.openDay, m = me(); if (!od) return;
+async function openHandoverForm() {
+  if (C.flushOutbox) { try { await C.flushOutbox(); } catch (_) { /* internet yo'q */ } await reload().catch(() => {}); }   // state-2: avval navbat yuboriladi
+  const od = ST.ov && ST.ov.state.openDay, m = me(); if (!od || ST.ov.state.handover) return;
   const holder = deskHolder(od, m), needC = needCommission(od, m);
   const opsL = (ST.refs.operators || []).filter(o => o.uid !== holder);
-  const pend = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0 };
+  const ob = C.outboxCash ? C.outboxCash() : { count: 0, sum: 0, refs: [] };
   $('#modal').innerHTML = `<div class="modal-h"><h3>Smena topshirish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">${lbl('Qabul qiluvchi kassir', `<select id="kh-to" style="${FLD}"><option value="">— tanlang —</option>${opsL.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}${o.uid === m.uid ? ' (o‘zim)' : ''}</option>`).join('')}</select>`, ';margin-top:0')}
       ${needC ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">${holder ? `Kassa egasi — ${esc(od.cashierName || nameOf(holder))}. ` : ''}Siz kassir o‘rniga topshiryapsiz: komissiya (kamida 2 kishi) bilan.</div>` : ''}
-      ${countFields(num(od.balance), pend)}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
+      ${countFields(num(od.balance), ob)}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kh-save">Topshirish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance));
+  const read = countBind(num(od.balance), ob);
   $('#kh-save').onclick = async () => { const v = read(), to = $('#kh-to').value;
     if (!to) { C.toast('Qabul qiluvchi kassirni tanlang', true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting', true); return; }
-    const p = { desk: ST.desk, counted: v.counted, pendingSum: v.pendingSum, toUid: to, note: v.note }; if (v.denoms) p.denoms = v.denoms;
+    const p = { desk: ST.desk, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, toUid: to, note: v.note }; if (v.denoms) p.denoms = v.denoms;
     if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
-    $('#kh-save').disabled = true; await act('kassa_handover', { p }, 'Smena topshirish yozildi — qabul qiluvchi o‘z hisobidan «Qabul qildim» desin'); const b = $('#kh-save'); if (b) b.disabled = false; };
+    $('#kh-save').disabled = true;
+    await act('kassa_handover', { p }, r => 'Smena topshirish yozildi (' + countResultText(r) + ') — qabul qiluvchi o‘z hisobidan «Qabul qildim» desin', null, staleReopen(openHandoverForm));
+    const b = $('#kh-save'); if (b) b.disabled = false; };
 }
 // Smenani qabul qilish (qabul qiluvchi): tasdiqdan keyin topshirish-qabul dalolatnomasi chop etishga taklif qilinadi (ikkala ism bilan).
 function acceptHandover(id) {
   const h = ST.ov.state.handover; if (!h || h.id !== id) return;
   const d0 = num(h.diff), hn = u => (u && h.names && h.names[u]) || nameOf(u);
-  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan: ' + som(h.pendingSum) : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
+  // state-2: topshiruvchi qurilmasi navbatidagi hali o'tkazilmagan yozuvlar (topshirishda saqlangan) — dalolatnomaga o'zgarmay o'tadi
+  const np = (h.pendingRefs || []).length;
+  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan: ' + som(h.pendingSum) + (np ? ` (topshiruvchi qurilmasi navbatida ${np} ta)` : '') : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
   act('kassa_handover_accept', { p_id: id }, 'Smena qabul qilindi', async r => {
     if (!(r && r.count && r.count.id) || !confirm('Smena topshirish-qabul dalolatnomasi chop etilsinmi?')) return;
     try { const book = await call('kassa_day_book', { p_desk: ST.desk, p_day: r.count.day }); await printCount(book, r.count.id); } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
@@ -828,14 +910,18 @@ function acceptHandover(id) {
 }
 function openVerifyForm(day) {
   const dd = (ST.ov.days || []).find(x => String(x.day) === String(day)) || {}, zz = dd.z || {}, zNeed = !!(zz.applies && zz.ok === false);
+  // state-2, crit-3: kun hali bog'lanmagan yozuvlar bilan yopilgan (navbat yozuvining kech kirim orderi hali kelmagan; «Қ» blankalari) — izoh majburiy
+  const pTxt = pendingText(dd.pendingOpen);
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni tekshirish — ${esc(dmy(day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small muted">Kassa kitobi varag‘i va unga ilova qilingan kirim / chiqim orderlari qog‘ozda qabul qilinadi va tizimdagi yozuvlar bilan solishtiriladi. Tekshirilgan kun endi o‘zgarmaydi.</div>
+      ${pTxt ? `<div class="small" id="kv-pend" style="margin-top:10px;background:#FDECEC;color:#B42318;border-radius:10px;padding:10px 12px"><b>Kun hali o‘tkazilmagan yozuvlar bilan yopilgan:</b> ${esc(pTxt)}. Kassir bilan aniqlang (navbat yuborilmaganmi, «Қ» yozuvlari kiritilganmi — izohida «Қ» raqami); sababini izohda yozing (majburiy).</div>` : ''}
       ${zNeed ? `<div class="small" id="kv-z" style="margin-top:10px;background:#FDECEC;color:#B42318;border-radius:10px;padding:10px 12px"><b>Onlayn kassa Z-hisoboti: ${esc(zText(zz))}.</b>${zz.recorded && !zz.missing ? ` Tizimda: naqd ${esc(som(zz.expCash))} (${esc(String(num(zz.nCash)))} chek), karta ${esc(som(zz.expCard))} (${esc(String(num(zz.nCard)))} ta).` : ''} Qog‘ozdagi Z-hisobot bilan solishtiring; sababini izohda yozing (majburiy).</div>` : ''}
       <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:700"><input type="checkbox" id="kv-papers" style="${CHK}"> Qog‘oz hujjatlar va ilovalarni oldim, yozuvlarni tekshirdim</label>
       ${lbl('Izoh', `<input id="kv-note" type="text" maxlength="300" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kv-save">Tekshirdim</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   $('#kv-save').onclick = async () => { if (!$('#kv-papers').checked) { C.toast('Avval qog‘oz hujjatlar olinganini belgilang', true); return; }
+    if (pTxt && $('#kv-note').value.trim().length < 5) { C.toast('Hali o‘tkazilmagan yozuvlar bo‘yicha sababni izohda yozing (kamida 5 belgi)', true); return; }
     if (zNeed && $('#kv-note').value.trim().length < 5) { C.toast('Z-hisobot bo‘yicha sababni izohda yozing (kamida 5 belgi)', true); return; }
     $('#kv-save').disabled = true; await act('kassa_day_verify', { p_desk: ST.desk, p_day: day, p_papers: true, p_note: $('#kv-note').value.trim() }, 'Kun tekshirildi'); const b = $('#kv-save'); if (b) b.disabled = false; };
 }
@@ -1315,6 +1401,12 @@ export function controlRows(c) {
   add('other', '«Boshqa» tomonli hujjatlar', num(c.otherParties30) ? 'info' : 'ok', num(c.otherParties30) ? cnt(c.otherParties30) : 'yo‘q', 'Imkon bo‘lsa kontragent ma’lumotnomasidan tanlanadi');
   const lateTxt = [num(c.late30) ? `kech yozilgan hujjat: ${cnt(c.late30)}` : '', num(c.pendingDays30) ? `oflayn yozuv bilan yopilgan kun: ${cnt(c.pendingDays30)}` : ''].filter(Boolean).join('; ');
   add('late', 'Oflayn va kech kiritilgan yozuvlar', lateTxt ? 'info' : 'ok', lateTxt || 'yo‘q', 'Pul olingan kun yopilgani uchun keyingi kunga yozilgan');
+  // state-2, crit-3: kunni yopishda e'lon qilingan, hali bog'lanmagan yozuvlar — qurilma navbati yozuvi 2 kundan (48 soat) beri kelmagan;
+  //   «Қ» blankalari — kun tekshirilguncha
+  const po = c.pendingOpen || [];
+  add('pending', 'Hali kelmagan «hali o‘tkazilmagan» yozuvlar', po.length ? 'warn' : 'ok',
+    po.length ? po.slice(0, 6).map(x => `${dmy(x.day)}${x.status === 'verified' ? ' (tekshirilgan)' : ''}: ${pendingText(x)}`).join('; ') + (po.length > 6 ? ' …' : '') : 'yo‘q',
+    'Kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun (48 soat) ichida kelmagan — navbat yo‘qolgan, o‘chirilgan yoki yozuv o‘ylab topilgan bo‘lishi mumkin (kassir bilan aniqlang); «Қ» blankalari — yozuvlar «Қ» raqami bilan kiritilib, kun izoh bilan tekshirilguncha');
   add('reissues', 'Asl nusxani qayta chop etish', num(c.reissues30) ? 'warn' : 'ok', num(c.reissues30) ? cnt(c.reissues30, 'marta') : 'yo‘q', '«Avvalgisi qog‘ozga chiqmadi» deb qayta chiqarilgan');
   add('gateOff', 'Vedomost tasdig‘isiz naqd maosh', num(c.salaryGateOff30) ? 'warn' : 'ok', num(c.salaryGateOff30) ? cnt(c.salaryGateOff30) : 'yo‘q', 'Direktor ruxsati bilan berilgan');
   const ub = c.unprintedBooks30 || [];

@@ -173,19 +173,21 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
    menejerida — ismsiz, FD-28; to‘liq nusxa kerak bo‘lsa — Direktor yuklaydi); jurnal oynasida qoldiqlar mos (ogohlantirish yo‘q).
    «Statiyalar» — oylik statiya matritsasi chop etilib imzolanadi; «Oylik to‘plam (Excel)» (KO-3, statiyalar, kassa kunlari,
    hisobdorlar) buxgalterga topshiriladi.
-5. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi).
+5. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi; oy kunlaridan
+   biri hali bog‘lanmagan «hali o‘tkazilmagan» yozuvlar — kech kirim orderi kelmagan qurilma navbati yozuvi yoki «Қ» blankalari —
+   bilan yopilgan va tekshirilmagan bo‘lsa ham: avval navbat yuboriladi, qolganini 2-ro‘yxat kunni izoh bilan tekshirib tasdiqlaydi).
 
 ## 8. Favqulodda holatlar
 | Holat | Nima qilinadi |
 |---|---|
-| Internet uzildi | Fiskal chek uriladi (kassa apparati oflayn rejimda). «💵 To‘lov» qurilmada navbatga yoziladi; to‘lovchiga tizimdan varaqa berilmaydi — dalil fiskal chek. Internet qaytgach yozuv o‘zi o‘tadi va kirim orderi chiqadi. Navbatda yozuv turganida kun yopilsa — «Hali o‘tkazilmagan yozuvlar» soni va summasi o‘zi to‘ldiriladi (bu pul kassada bor, hisobda hali yo‘q); yozuv keyin o‘tganda navbatdagi ochiq kunga «kech» belgisi bilan tushadi. 48 soatdan eski yozuvni faqat Direktor kiritadi. Navbat bo‘shamaguncha kassa to‘xtatilmaydi (9-bo‘lim). |
-| Tizim (server) ishlamayapti | Ichki «Қ» blankasi to‘ldiriladi (to‘lovchiga berilmaydi), jurnalga yoziladi; fiskal chek uriladi. Tizim tiklangach yozuvlar shu kungi sana bilan kiritiladi (izohda — «Қ» raqami va pul olingan sana), jurnalda order raqami belgilanadi. |
+| Internet uzildi | Fiskal chek uriladi (kassa apparati oflayn rejimda). «💵 To‘lov» qurilmada navbatga yoziladi; to‘lovchiga tizimdan varaqa berilmaydi — dalil fiskal chek. Internet qaytgach yozuv o‘zi o‘tadi va kirim orderi chiqadi. **Kunni yopish** avval qurilma navbatini yuboradi; yuborilmay qolgan yozuvlar oynada ko‘rinadi va har biri o‘z kaliti bilan «hali o‘tkazilmagan yozuv» sifatida o‘zi hisobga olinadi (bu pul kassada bor, hisobda hali yo‘q; qo‘lda kiritilmaydi, yopish to‘xtatilmaydi) — shu payt o‘tib ketganini tizim ayirmaydi (natija xabarida aytiladi). Navbat **boshqa** qurilmada bo‘lsa — avval o‘sha qurilma internetga ulanadi va navbati o‘tadi (aks holda farq chiqadi). Oyna ochilgandan keyin kassa qoldig‘i o‘zgarsa (masalan, navbat shu orada o‘tdi) tizim yopmaydi: oyna yangi qoldiq bilan qayta ochiladi, pul qayta sanaladi (smena topshirishda ham). Kun yopilgandan keyin navbatdagi yozuv kutib turadi («Navbatda · Bugungi kassa kuni yopilgan …» — o‘chirilmaydi) va keyingi ochiq kassa kuniga «kech» belgisi bilan tushadi (pul olingan payt saqlanadi) — yopishdagi yozuv bilan bog‘lanadi. Onlayn kassa Z-hisoboti bilan u chek urilgan kunga solishtiriladi: yozuv kelguncha o‘sha kunda Z farqi ko‘rinishi mumkin. 2 kun (48 soat) ichida kelmagan yozuv nazorat ro‘yxatida sariq («Hali kelmagan «hali o‘tkazilmagan» yozuvlar»); bunday kunni tekshirishda izoh majburiy. 48 soatdan eski yozuvni faqat Direktor kiritadi. Navbat bo‘shamaguncha kassa to‘xtatilmaydi (9-bo‘lim). |
+| Tizim (server) ishlamayapti | Ichki «Қ» blankasi to‘ldiriladi (to‘lovchiga berilmaydi), jurnalga yoziladi; fiskal chek uriladi. Tizim **o‘sha kuni, kun yopilishidan oldin** tiklansa — yozuvlar shu kunga kiritiladi (izohda — «Қ» raqami), kun odatdagidek yopiladi. **Server ishlamagan kun yopilmay qolgan bo‘lsa** (masalan, ertasi ertalab tiklandi): (1) avval o‘sha kun yopiladi — «Kunni yopish» oynasidagi **«Server ishlamagan paytdagi «Қ» blankalari»** maydonlariga hali kiritilmagan blankalar soni, summasi va raqamlari yoziladi (bu pul kassada bor, hisobda hali yo‘q — sanashdan ayiriladi, farq chiqmaydi; yozilmasa — o‘sha kun ortiqcha, keyingi kun kamomad chiqadi); (2) keyin har bir «Қ» yozuvi joriy kassa kuniga kiritiladi (izohda — «Қ» raqami va pul olingan sana), jurnalda order raqami belgilanadi. O‘sha kunni tekshirishda izoh majburiy (2-ro‘yxat blankalarni kiritilgan orderlar bilan solishtiradi); kun tekshirilguncha oy davri yopilmaydi. |
 | Fiskal kassa ishlamayapti | Faqat soliq organida ro‘yxatdan o‘tgan maxsus kvitansiya daftari; naqd to‘lovni tizimga kiritishda Direktor «Fiskal cheksiz (istisno)» belgisini qo‘yadi — jurnalda qoladi. |
 | Order xato yozildi | **Shu kuni:** hujjat qatorida «Bekor» (sababi bilan) — raqam saqlanadi, to‘g‘risi yangi raqam bilan yoziladi. **Kun yopilgan, tekshirilmagan:** Direktor «Qayta ochish» (faqat oxirgi kun). **Tekshirilgan kun:** o‘zgarmaydi — buxgalter tuzatish hujjati bilan. |
 | Sanashda farq | Tizim shu kun sanasi bilan kamomad (chiqim) yoki ortiqcha (kirim) hujjatini o‘zi yozadi; dalolatnoma chop etiladi; kamomad bo‘yicha Direktor qarori («Qaror»): xodim hisobiga yoki zararga. Xodim hisobiga bo‘lsa — u pulni kassaga «+ Kirim» → «Kamomadni qoplash (xodim)» bilan qaytaradi (qarordagi summadan oshmaydi); qolgani nazorat ro‘yxatida («Xodimlar zimmasidagi kamomad») ko‘rinadi. |
 | Xodim avans yoki maoshni kassaga qaytardi | «+ Kirim» → «Xodim qaytargan pul»: xodim, **qaysi oy**, statiya (avans — OP-08, maosh — OP-09). Avans qaytimi shu oy avansidan ayiriladi — oy vedomosti tasdiqlangan bo‘lsa qabul qilinmaydi (OP-09 bilan yoki Direktor oyni qayta ochadi); maosh qaytimi shu oy berilgan maoshni kamaytiradi (qayta berilishi mumkin). |
 | O‘quvchi ketdi, oldindan to‘lagan puli (avansi) qaytariladi | Direktor: o‘quvchining «📋» → «↩ Avansni naqd qaytarish» (summa — joriy avansgacha, ariza sanasi, oluvchi F.I.Sh.); kassir «So‘rovlar» → «Pulni berish». Avans pul berilganda kamayadi; xarajat sifatida yozilmaydi. Naqdsiz qaytarish — hozircha yo‘q. |
-| Kecha yopilmagan | Bugun hujjat yozilmaydi — avval kechagi kun sanab yopiladi. |
+| Kecha yopilmagan | Bugun hujjat yozilmaydi — avval kechagi kun sanab yopiladi (kechasi server ishlamagan bo‘lsa — «Қ» blankalari bilan, yuqoriga qarang). |
 | Sahifada «sahifani yangilang» ogohlantirishi | Tizim yangilangan: Ctrl+Shift+R (telefonda — sahifani yopib qayta ochish). |
 
 ## 9. Orqaga qaytish
@@ -193,11 +195,13 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 qurilmalar navbati (⏳) bo‘shaguncha kutiladi; kutilayotgan smena topshirish qabul qilinadi yoki bekor qilinadi (qabul qilinmagan
 topshirishda tizim kassani to‘xtatmaydi); joriy kassa kuni sanab yopiladi; tasdiq kutayotgan va tasdiqlangan (puli berilmagan)
 kassa so‘rovlari bajariladi yoki bekor qilinadi — aks holda tizim kassani to‘xtatmaydi va to‘sqinlik qilayotgan kun yoki so‘rovlar
-ro‘yxatini ko‘rsatadi. Oxirgi kassa kuni **«Hali o‘tkazilmagan yozuvlar»** (qurilma navbati) bilan yopilgan bo‘lsa ham tizim
-to‘xtatmaydi: bu pul kassada bor, hisobda hali yo‘q — to‘xtatilgandan keyin u to‘g‘ri yozilmaydi (qayta ishga tushgach kirim orderi
-uni komissiya sanashiga qo‘shimcha, ikkinchi marta hisoblardi). Direktor kunni qayta ochadi, navbat o‘tgach (yozuvlar o‘sha kunga
-tushadi) kun qayta sanab yopiladi, keyin kassa to‘xtatiladi; kun tekshirilgan bo‘lsa — navbat keyingi kassa kuniga «kech» tushadi,
-o‘sha kun yopilgach to‘xtatiladi. (2) Kassa «Қ» blankalari va jurnali bilan
+ro‘yxatini ko‘rsatadi. Oxirgi kassa kuni **«Hali o‘tkazilmagan yozuvlar»** (qurilma navbati) bilan yopilgan va ularning kech kirim
+orderi hali kelmagan bo‘lsa ham tizim to‘xtatmaydi: bu pul kassada bor, hisobda hali yo‘q — to‘xtatilgandan keyin u to‘g‘ri
+yozilmaydi (qayta ishga tushgach kirim orderi uni komissiya sanashiga qo‘shimcha, ikkinchi marta hisoblardi). Direktor kunni qayta
+ochadi, navbat o‘tgach (yozuvlar o‘sha kunga tushadi) kun qayta sanab yopiladi, keyin kassa to‘xtatiladi; kun tekshirilgan bo‘lsa —
+navbat keyingi kassa kuniga «kech» tushadi, o‘sha kun yopilgach to‘xtatiladi. Oxirgi kun hali kiritilmagan **«Қ» blankalari**
+(server ishlamagan kun, 8-bo‘lim) bilan yopilgan bo‘lsa — avval «Қ» yozuvlari kiritiladi (ular yangi kassa kuniga tushadi), o‘sha kun
+yopiladi, keyin kassa to‘xtatiladi. (2) Kassa «Қ» blankalari va jurnali bilan
 ishlaydi; blankalar **o‘z raqamlari** bilan (alohida daftar) — tizim raqamlari qayta ishga tushganda tizimdagi oxirgi raqamdan
 uzluksiz davom etadi, qog‘oz raqamlari bilan aralashmaydi. (3) Excel kunlik varag‘i tizimdagi oxirgi kun oxiri qoldig‘idan qayta
 boshlanadi. (4) Tizimda yozilgan hujjatlar haqiqiy bo‘lib qoladi — o‘chirilmaydi. (5) Oyni buxgalter birlashtiradi (tizim + qog‘oz).
@@ -211,9 +215,10 @@ sanasi** bilan (oxirgi kassa kunidan keyingi kunlar): oxirgi kassa kuni va undan
 kimga kiritilmaydi (u kunlar kassa hujjatlari bilan yopilgan; tuzatish — qayta ishga tushgach, «Kassa» orqali). To‘xtatilgan kunning
 o‘zida, kun yopilgandan keyin olingan pul ertasi kuni (o‘sha sana bilan) kiritiladi. Qurilma navbatidan kech kelgan, oxirgi kassa
 kuni (yoki undan oldingi) sanali to‘lovni tizim qabul qilmaydi — uni **qayta ishga tushgach ham qayta yubormang** (pul kassada
-sanalgan bo‘lsa, kirim orderi uni ikkinchi marta hisoblaydi va birinchi yopishda kassirga kamomad chiqadi): kun yopilgandan keyin
-olingan bo‘lsa — u to‘xtatilgan davr puli, navbatdan o‘chirilib ertangi sana bilan qayta kiritiladi (qayta ishga tushirish sanashidan
-oldin); boshqasini Direktor buxgalter bilan hal qiladi. «Kassa» bo‘limi va yozilgan
+sanalgan bo‘lsa, kirim orderi uni ikkinchi marta hisoblaydi va birinchi yopishda kassirga kamomad chiqadi). Navbat oynasida u
+**«Yuborilmadi — Direktor hal qiladi»** bo‘lib turadi: «Hammasini qayta yuborish» uni yubormaydi, navbatdan faqat Direktor o‘chiradi.
+Kun yopilgandan keyin olingan bo‘lsa — u to‘xtatilgan davr puli, navbatdan o‘chirilib ertangi sana bilan qayta kiritiladi (qayta
+ishga tushirish sanashidan oldin); boshqasini Direktor buxgalter bilan hal qiladi. «Kassa» bo‘limi va yozilgan
 hujjatlar joyida qoladi, yangi kassa hujjati yozilmaydi; «Kassa» sahifasida «Kassa to‘xtatilgan» ogohlantirishi turadi. Kim,
 qachon va qaysi sanadan to‘xtatgani hodisa jurnaliga yoziladi. To‘xtatilgan kassada oxirgi kassa kuni qayta ochilmaydi — tuzatish
 qayta ishga tushirish sanashida (farq dalolatnomasida) aks etadi. (2) Kod xatosi bo‘lsa — oldingi versiyaga qaytariladi (`git revert`

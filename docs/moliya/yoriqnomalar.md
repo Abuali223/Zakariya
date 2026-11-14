@@ -91,10 +91,20 @@ farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi yozadi — 
 «🖨 Kunlik hisobot»: imzolab, orderlar, ilovalari va Z-hisobot bilan moliya menejeriga topshiring. Kunni **kassa egasi** (kun
 kartasidagi kassir) yopadi; boshqa kassir uning o‘rniga yopsa — kamida 2 kishilik komissiya bilan (yoki avval smena topshiriladi).
 
+**Kunni yopishda qurilma navbati va «Қ» blankalari.** Oyna ochilishidan oldin tizim shu qurilma navbatini (⏳) yuboradi;
+yuborilmay qolganlari oynada ko‘rinadi va «hali o‘tkazilmagan yozuvlar» bo‘lib o‘zi hisobga olinadi — qo‘lda kiritmang. Navbat
+boshqa qurilmada bo‘lsa — avval o‘sha qurilmani internetga ulang. «Kassa qoldig‘i oyna ochilgandan keyin o‘zgargan» xabari chiqsa —
+oyna yangilanadi: pulni qayta sanab, yana yuboring (smena topshirishda ham). Natija xabarida tizim hisoblagan farq aytiladi.
+**Server ishlamagan kunni** (ertasi kuni) yopayotgan bo‘lsangiz — hali kiritilmagan «Қ» blankalarini **«Server ishlamagan paytdagi
+«Қ» blankalari»** maydonlariga yozing (soni, summasi, raqamlari): bu pul kassada bor, hisobda hali yo‘q. Kun yopilgach har birini
+«💵 To‘lov» bilan kiriting (izohda — «Қ» raqami va pul olingan sana).
+
 **Oy oxiri** — «KO-3» (kassa orderlari jurnali) va «Statiyalar» (oylik statiya matritsasi): oyni tanlab ko‘ring va chop eting
 («🖨 KO-3», «🖨 Chop etish»). Excel fayllar sizda yo‘q — ularni moliya menejeri, buxgalter yoki Direktor oladi.
 
 **Internet yoki tizim ishlamasa** — `ishga-tushirish.md`, 8-bo‘lim («Қ» blankasi to‘lovchiga berilmaydi; dalil — fiskal chek).
+Kun yopilgandan keyin navbatda qolgan to‘lov «Navbatda · …» bo‘lib kutadi va keyingi kassa kuniga «kech» bo‘lib o‘zi o‘tadi —
+o‘chirmang va qayta kiritmang. «Yuborilmadi — Direktor hal qiladi» yozuvini qayta yubormang — Direktorga ayting.
 
 **Kassa ishga tushishidan oldingi pul.** Boshlang‘ich qoldiq sanashidan oldin qurilmangiz internetga ulangan va navbati (⏳)
 bo‘sh bo‘lsin. Ishga tushish kunidan oldin olingan pulni keyin **bugungi sana bilan qayta kiritmang** — u sanashga kirgan,
@@ -145,6 +155,10 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    qatnashgan va kunni qayta ochgan shaxs tekshira olmaydi — kunni boshqa 2-ro‘yxat xodimi yoki Direktor tekshiradi (tizim sababini
    aytadi). Tekshirilgan kun endi o‘zgarmaydi. Kunda smena topshirilgan bo‘lsa, topshirish-qabul dalolatnomasi (ikkala imzo bilan)
    ham ilovada bo‘ladi.
+   **Hali o‘tkazilmagan yozuvlar** bilan yopilgan kunda (qurilma navbati yozuvining kech kirim orderi hali kelmagan yoki server
+   ishlamagan paytdagi «Қ» blankalari) oynada qizil blok chiqadi: kassir bilan aniqlang — navbat yuborilmaganmi (qurilma internetga
+   ulansin), «Қ» yozuvlari kiritilganmi (izohida «Қ» raqami; blanka raqamlari oynada) — va sababini izohga yozing (majburiy).
+   Navbat yozuvi kelgach (kech kirim orderi o‘sha kun bilan bog‘lanadi) izoh talab qilinmaydi.
    **Onlayn kassa Z-hisoboti** kiritilmagan, «yo‘q» deb belgilangan yoki tizimdagi summalar bilan mos kelmasa, oynada qizil
    ogohlantirish chiqadi — qog‘ozdagi Z bilan solishtiring: kassir xato yozgan bo‘lsa, u «Z» tugmasi bilan tuzatadi; haqiqiy farq
    bo‘lsa (masalan, chek urilgan, lekin order bekor qilingan) — sababini izohga yozib tekshirasiz. Kun yopilgandan keyin kiritilgan
@@ -164,7 +178,10 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    qoladi va kassadan qoplanmaydi). **«Xodim kartasiga bog‘lanmagan kassa hisoblari»** (sariq) — kassir, g‘aznachi, moliya
    menejeri yoki buxgalter hisobi HR yozuviga bog‘lanmagan: kassa hujjatlarida uning ismi foydalanuvchining o‘zi yozgani bo‘ladi va
    kamomad qarorida javobgar o‘zi tanlanmaydi — Direktorga ayting («Foydalanuvchilar» → «Tahrirlash»da bog‘laydi). **«Sanash
-   farqlari»** — kunni yopishdagi va smena topshirishdagi kamomad / ortiqcha alohida («yopishda −…, smenada +…»).
+   farqlari»** — kunni yopishdagi va smena topshirishdagi kamomad / ortiqcha alohida («yopishda −…, smenada +…»). **«Hali kelmagan
+   «hali o‘tkazilmagan» yozuvlar»** (sariq) — kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun
+   (48 soat) ichida kelmagan (kun, soni, summasi; navbat yo‘qolgan, o‘chirilgan yoki yozuv o‘ylab topilgan bo‘lishi mumkin — kassir
+   bilan aniqlang) va tekshirilmagan kunlarning «Қ» blankalari.
 4. **Bank orqali to‘langan xarajatlar** (moliya menejeri) — «Buxgalteriya» → «+ Xarajat qo‘shish»: to‘lov usuli (bank o‘tkazmasi
    yoki korporativ karta), statiya, kontragent. Hisobdor shaxs sarflagan pul bu yerda emas — «Kassa» → «Avans hisoboti».
    Naqd xarajat bu yerda yozilmaydi — u kassa chiqim orderidan o‘zi ko‘chadi.
@@ -254,9 +271,10 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | oynada kassa egasi (kun kassiri), pulni kim sanagani, kassa egasidan boshqa kassa orderi o‘tkazgan yoki bekor qilgan xodimlar va shu kungi smena topshirishlar ko‘rinadi; xodim hisobiga — faqat **xodim kartasiga**: kassa egasi pulni o‘zi sanagan, kassani olgandan beri kassa orderini undan boshqa hech kim (siz ham, moliya menejeri ham) o‘tkazmagan va bekor qilmagan hamda hisobi kartaga bog‘langan bo‘lsa uning kartasi tanlangan bo‘ladi, aks holda (kassir o‘rniga sanalgan, egasi aniqlanmagan, kassaga boshqa xodim ham tekkan, hisob bog‘lanmagan — sababi oynada yoziladi) javobgar xodimni o‘zingiz tanlaysiz; yoki zararga; dalolatnoma; xodim hisobiga — u pulni kassaga «Kamomadni qoplash (xodim)» bilan qaytaradi (qolgani nazorat ro‘yxatida) |
 | Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi; qayta ochgan kunni o‘zingiz tekshirmaysiz (2-ro‘yxat tekshiradi) |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
-| 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |
+| 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida; kassir qurilmasi navbatidagi o‘sha yozuv o‘chiriladi (kunni yopishda e’lon qilingan bo‘lsa — u bog‘lanmay qoladi, kun izoh bilan tekshiriladi) |
+| Navbatdagi «Yuborilmadi — Direktor hal qiladi» yozuvi | ⏳ To‘lov navbati | qayta yuborilmaydi («Hammasini qayta yuborish» ham yubormaydi): pul ikki marta hisoblanishi mumkin — buxgalter bilan hal qilib, navbatdan o‘zingiz o‘chirasiz (`ishga-tushirish.md`, 9-bo‘lim) |
 | Kassa ishga tushishidan oldingi (yoki kassa to‘xtatilgan davrdagi) kechikib topilgan naqd yozuv | «💵 To‘lov» → «Naqd», «Sana» = pul olingan kun; xarajat, maosh, avans — «Buxgalteriya» oynalarida «Naqd — kassa ishga tushishidan … oldin berilgan» | kirim / chiqim orderisiz va fiskal cheksiz, kassa qoldig‘i o‘zgarmaydi (pul sanashga kirgan); bugungi sana bilan kiritilmaydi — ikki marta hisoblanadi; faqat kassa ishlamagan kun sanasi bilan (birinchi ishga tushgan kundan oldin yoki to‘xtatilgan davrda) — kassa ishlagan kun sanasi bilan tizim qabul qilmaydi; nazorat ro‘yxatida ko‘rinadi (`ishga-tushirish.md`, 4-bo‘lim) |
-| Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin qurilmalar navbati bo‘shagan, kutilayotgan smena topshirish qabul qilingan yoki bekor qilingan, kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi); oxirgi kun «hali o‘tkazilmagan yozuvlar» bilan yopilgan bo‘lsa — kunni qayta oching, navbat o‘tgach qayta yoping (kun tekshirilgan bo‘lsa — navbat tushgan keyingi kunni yoping); oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
+| Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin qurilmalar navbati bo‘shagan, kutilayotgan smena topshirish qabul qilingan yoki bekor qilingan, kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi); oxirgi kun «hali o‘tkazilmagan yozuvlar» bilan yopilgan va ular hali kelmagan bo‘lsa — kunni qayta oching, navbat o‘tgach qayta yoping (kun tekshirilgan bo‘lsa — navbat tushgan keyingi kunni yoping); hali kiritilmagan «Қ» blankalari bilan yopilgan bo‘lsa — «Қ» yozuvlari kiritilib, ular tushgan yangi kun yopiladi; oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
 | Kassani qayta ishga tushirish | «Kassa» → «Qayta ishga tushirish» (komissiya sanagan summa, kun), keyin «⚙ Sozlamalar»da ishga tushadigan kun = o‘sha kun | farq (to‘xtatilgan davrdagi naqd harakat) texnik «Д-» dalolatnoma bilan yoziladi — kamomad / ortiqcha emas; nazorat ro‘yxatida «Kassani to‘xtatish va qayta ishga tushirish»; sanashdan keyin kassa hujjatisiz naqd yozuv kiritilsa — qayta sanash (tizim birinchi kunni ochmaydi, «Kassa»da qizil ogohlantirish) |
 | Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi |
 | Oldingi avansi hisobotsiz xodimga yangi avans (istisno) | «So‘rovlar» → «Tasdiqlash» | kassa tartibidan istisno; so‘rovda «Direktor tasdig‘i» talabi o‘zi qo‘yiladi |

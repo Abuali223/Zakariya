@@ -1556,7 +1556,14 @@ function navRebuild(){
 // Modullarga beriladigan yordamchilar (modul admin.html ichki funksiyalarini shu orqali ishlatadi).
 function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, printHTML, SESSION, finMod,
   students:async()=>{ const a=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=a; return a; },
-  outboxCash:()=>{ const a=obPending().filter(x=>x.method==='cash'); return { count:a.length, sum:a.reduce((t,x)=>t+(Number(x.amount)||0),0) }; },
+  // Kunni yopish / smena topshirish (state-2): qurilma navbatidagi hali yuborilmagan naqd to'lovlar — har biri kaliti (payId) va summasi
+  //   bilan (server o'tib ketganlarini hisobga olmaydi, qolganini saqlab, keyin kelgan kech kirim orderiga bog'laydi); oynadan oldin navbat yuboriladi.
+  //   «Yuborilmadi» yozuvlari ham (pul kassada; navbatda turgan har yopishda e'lon qilinadi — aks holda keyingi yopishda soxta ortiqcha),
+  //   Direktor hal qiladiganlari ('final') — yo'q.
+  outboxCash:()=>{ const a=obLoad().filter(x=>x&&x.method==='cash'&&!x.final); return { count:a.length, sum:a.reduce((t,x)=>t+(Number(x.amount)||0),0),
+    refs:a.map(x=>({ ref:x.payId, amount:Number(x.amount)||0 })) }; },
+  //   force — kassa holatini kutayotgan ('wait') yozuvlar ham darhol bir marta urinadi (yopish oldidan navbat iloji boricha o'tsin)
+  flushOutbox:()=>flushOutbox({wait:true, force:true}),
   onChange:()=>{ kassaProbe(); } }; }
 async function renderKassa(){
   const g=VIEW_GEN;
@@ -11947,6 +11954,42 @@ function obRecentDup(sid, amount){ const now=Date.now(); return obPending().some
 // Tarmoq xatosimi (qayta urinamiz) yoki haqiqiy xatomi (masalan ustun yo'q — qayta urinmaymiz)?
 function obIsNetErr(e){ if(!navigator.onLine) return true; if(e&&e.code) return false; /* server javob berdi (PGRST/Postgres) -> qattiq */
   const m=String((e&&(e.message||e))||'').toLowerCase(); return /failed to fetch|networkerror|load failed|timeout|connection|err_|abort|fetch/.test(m); }   /* mos kelmasa -> qattiq (cheksiz retry emas) */
+// OUTBOX-CLASS:BEGIN — server rad etgan navbat yozuvi bilan nima qilinadi (kassa javobidagi HINT bo'yicha; sof funksiya — sinovi
+//   assets/js/fin-kassa.test.mjs). Kassa o'rnatilmagan serverda bunday HINT kelmaydi — avvalgi tartib ('perm' / 'retry').
+//   'wait'  — kassa holati o'zgarguncha kutiladi: yozuv navbatda qoladi va vaqti-vaqti bilan qayta yuboriladi (30 s dan 10 daqiqagacha),
+//             urinishlar soniga kirmaydi, «Yuborilmadi» bo'lmaydi — bugungi kassa kuni yopilgan (ertasi kuni yangi kunga «kech» tushadi),
+//             kecha yopilmagan, kassa hali ochilmagan yoki qayta sanash kutilmoqda, smena topshirilmoqda (qabul / bekor qilingach o'tadi);
+//   'final' — Direktor hal qiladi: avtomatik ham, «Hammasini qayta yuborish» bilan ham qayta yuborilmaydi (to'xtatilgan kassada kassa kuni
+//             sanasi bilan to'lov — pul kassada sanalgan bo'lsa, qayta yuborilganda ikki marta hisoblanadi); server xabari bilan ko'rinib
+//             turadi, uni faqat Direktor o'chiradi;
+//   'perm'  — qayta urinish foyda bermaydi (huquq yo'q 42501, noto'g'ri ma'lumot 22023, 23xxx, «mismatch» / «exists»): darhol «Yuborilmadi»;
+//   'retry' — boshqa server xatosi: 3 marta urinib, keyin «Yuborilmadi».
+const OB_WAIT={ 'kassa:day_closed':'Bugungi kassa kuni yopilgan — ertaga yangi kunga «kech» bo‘lib o‘tadi',
+  'kassa:prev_open':'Kechagi kassa kuni yopilmagan — kun yopilgach o‘tadi',
+  'kassa:not_started':'Kassa hali ochilmagan — kassa ishga tushgach o‘tadi',
+  'kassa:restart_recount':'Kassa qayta sanashni kutmoqda — Direktor qayta sanagach o‘tadi',
+  'kassa:handover_pending':'Smena topshirilmoqda — qabul qilinishini kuting' };
+const OB_FINAL={ 'kassa:paused_live_day':1, 'kassa:live_day':1 };
+function obErrClass(e){ const h=String((e&&e.hint)||''), code=String((e&&e.code)||'');
+  if(OB_FINAL[h]) return 'final';
+  if(OB_WAIT[h]) return 'wait';
+  if((e&&e.permanent) || code==='42501' || code==='22023' || /^23/.test(code)) return 'perm';
+  return 'retry'; }
+function obWaitMs(n){ return Math.min(600000, 30000*Math.pow(2, Math.max(0, (Number(n)||1)-1))); }   // 30 s, 1, 2, 4, 8, 10 daqiqa
+// Navbat yozuvi holati (oyna uchun): 'final' — Direktor hal qiladi; 'failed' — yuborilmadi; 'wait' — kassani kutmoqda; 'pending' — navbatda.
+function obItemState(x){ return x&&x.final ? 'final' : x&&x.status==='failed' ? 'failed' : x&&x.waitWhy ? 'wait' : 'pending'; }
+// Server rad etgan yozuvga xato turini qo'llash (x o'zgaradi va qaytadi): 'wait' — keyingi urinish vaqti (urinishlar soni o'zgarmaydi);
+//   'final' / 'perm' — darhol «Yuborilmadi» ('final' — qayta yuborilmaydi); 'retry' — 3-urinishda «Yuborilmadi».
+function obApplyErr(x, e, now){ const k=obErrClass(e); x.lastError=String((e&&(e.message||e.code))||'');
+  if(k==='wait'){ x.waits=(x.waits||0)+1; x.waitUntil=(Number(now)||0)+obWaitMs(x.waits); x.waitWhy=OB_WAIT[String(e.hint)]; }
+  else{ delete x.waitUntil; delete x.waitWhy; if(k==='final') x.final=true;
+    x.attempts=(k==='perm'||k==='final')?3:(x.attempts||0)+1; if(x.attempts>=3) x.status='failed'; }
+  return x; }
+// «Hammasini qayta yuborish»: Direktor hal qiladigan yozuvlar ('final') o'zgarmaydi — qayta yuborilmaydi (pul ikki marta hisoblanishi
+//   mumkin); «Yuborilmadi» lari va kassani kutayotganlari darhol qayta urinadi. Yangi ro'yxat qaytadi.
+function obResendAll(items){ return (items||[]).map(x=>{ if(!x||x.final) return x; const y=Object.assign({}, x); delete y.waitUntil;
+  if(y.status==='failed'){ delete y.status; y.attempts=0; delete y.lastError; } return y; }); }
+// OUTBOX-CLASS:END
 // Bitta navbat elementini serverga yuborish. Idempotent.
 //   Moliya rejasi F0.15: BITTA server tranzaksiyasi — payments qatori + balansga qo'llash + holat 'applied'
 //   (record_manual_payment, migration/fin-prereq.sql). Avvalgi 3 ta alohida so'rov yarim yo'lda uzilsa «pending» yetim
@@ -11975,18 +12018,18 @@ async function obFlushOne(it){
   await setDoc(doc(db,'payments',it.payId), { status:'applied' }, {merge:true});
 }
 let _obFlushing=false;
-async function _obFlushCore(){
+async function _obFlushCore(force){
   const items=obPending(); if(!items.length) return 0;
-  let done=0;
+  let done=0; const now=Date.now();
   for(const it of items){
+    if(!force && Number(it.waitUntil)>now) continue;       // kassa holati o'zgarishini kutmoqda ('wait') — navbati kelmagan
     try{ await obFlushOne(it); obRemove(it.payId); done++; }
     catch(e){
       if(obIsNetErr(e)) break;                             // tarmoq — keyinroq qayta urinamiz
-      const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — attempts++, cheklaymiz
-      // Qayta urinish foyda bermaydigan rad etish (huquq yo'q 42501, noto'g'ri ma'lumot 22023, 23xxx, «mismatch»/«exists») —
-      //   darhol «Yuborilmadi» (kassirga «internet yo'q — navbatda» deb ko'rsatilmaydi); xabar o'qiladigan matn bilan.
-      const code=String((e&&e.code)||''); const permanent=!!(e&&e.permanent) || code==='42501' || code==='22023' || /^23/.test(code);
-      if(x){ x.attempts=permanent?3:(x.attempts||0)+1; x.lastError=String((e&&(e.message||e.code))||''); if(x.attempts>=3) x.status='failed'; obSave(a); }
+      const a=obLoad(); const x=a.find(y=>y.payId===it.payId);   // haqiqiy xato — turi bo'yicha (OUTBOX-CLASS)
+      // Qayta urinish foyda bermaydigan rad etish — darhol «Yuborilmadi» (kassirga «internet yo'q — navbatda» deb ko'rsatilmaydi); kassa
+      //   holatini kutadigan rad etish — navbatda qoladi (urinish sanalmaydi); Direktor hal qiladigani — «Yuborilmadi», qayta yuborilmaydi.
+      if(x){ obApplyErr(x, e, Date.now()); obSave(a); }
     }
   }
   return done;
@@ -11997,7 +12040,7 @@ async function flushOutbox(opts){
   if(!navigator.onLine){ obBadge(); return; }
   if(!obPending().length){ obBadge(); return; }
   const run=async()=>{ if(_obFlushing) return; _obFlushing=true; let done=0;
-    try{ done=await _obFlushCore(); } finally{ _obFlushing=false; }
+    try{ done=await _obFlushCore(!!opts.force); } finally{ _obFlushing=false; }
     obBadge(); if(done>0){ toast(`✓ ${done} ta navbatdagi to‘lov yuborildi`); try{ if(currentTab==='payments') renderPayments(); }catch(e){} }
     // Server kassa kunini o'zgartirgan to'lovlar (sana oraliqdan tashqarida qolgan) — kassir chekni shu kun bilan qayta chiqaradi.
     const adj=[..._obResults.values()].filter(r=>r&&r.dateAdjusted&&!r._shown); adj.forEach(r=>{ r._shown=true; });
@@ -12028,19 +12071,24 @@ function startOutboxSync(){
   obBadge(); if(navigator.onLine) flushOutbox();
 }
 // Navbat modali: navbatдаgi + «failed» (3 marta urinib bo'lmagan) to'lovlarни ko'rish/qayta urinish/o'chirish.
-function obRetryFailed(){ const a=obLoad(); a.forEach(x=>{ if(x.status==='failed'){ delete x.status; x.attempts=0; delete x.lastError; } }); obSave(a); obBadge(); flushOutbox({wait:true}); }
+// «Hammasini qayta yuborish» — OUTBOX-CLASS obResendAll (Direktor hal qiladigan yozuvlar qayta yuborilmaydi).
+function obRetryFailed(){ obSave(obResendAll(obLoad())); obBadge(); flushOutbox({wait:true}); }
 function openOutboxModal(){
   const meth={cash:'Naqd',bank:'Bank',terminal:'Terminal',uzum:'Uzum (qo‘lda)'};
   const items=obLoad();
-  const rows=items.map(x=>{ const bad=x.status==='failed';
+  const rows=items.map(x=>{ const st=obItemState(x), bad=st==='failed'||st==='final', er=x.lastError?` · ${esc(String(x.lastError).slice(0,140))}`:'';
+    // 'final' — Direktor hal qiladi (qayta yuborilmaydi; o'chirish — faqat Direktor); 'wait' — kassa holatini kutmoqda (o'zi o'tadi)
+    const txt=st==='final'?`Yuborilmadi — Direktor hal qiladi (qayta yubormang)${er}`:bad?`Yuborilmadi${er}`:st==='wait'?`Navbatda · ${esc(x.waitWhy)}`:`Navbatda${er}`;
+    const del=st!=='final'||SESSION.isAdmin;
     return `<tr><td>${esc(x.nm||x.sid)}<div class="small muted">${esc(x.sid)}</div></td><td style="text-align:right">${fmtSom(x.amount)}</td><td>${esc(meth[x.method]||x.method||'')}</td>
-      <td style="color:${bad?'#B42318':'#B54708'};font-weight:600">${bad?`Yuborilmadi${x.lastError?` · ${esc(String(x.lastError).slice(0,140))}`:''}`:`Navbatda${x.lastError?` · ${esc(String(x.lastError).slice(0,140))}`:''}`}</td>
-      <td><button class="btn sm danger" data-obdel="${esc(x.payId)}" title="Bu yozuvni navbatdan o‘chirish (pul qo‘llanmaydi)">O‘chir</button></td></tr>`; }).join('')
+      <td style="color:${bad?'#B42318':'#B54708'};font-weight:600">${txt}</td>
+      <td>${del?`<button class="btn sm danger" data-obdel="${esc(x.payId)}" title="Bu yozuvni navbatdan o‘chirish (pul qo‘llanmaydi)">O‘chir</button>`:''}</td></tr>`; }).join('')
     || '<tr><td colspan="5" class="muted" style="padding:16px;text-align:center">Navbat bo‘sh — barcha to‘lovlar yuborilgan ✓</td></tr>';
+  const canResend=items.some(x=>!x.final);
   $('#modal').innerHTML=`<div class="modal-h"><h3>⏳ To‘lov navbati</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b"><div class="small muted" style="margin-bottom:8px">Internet uzilganда saqlangan to‘lovlar. Ulanish tiklanganda avtomatik yuboriladi. «Yuborilmadi» — 3 marta urinib bo‘lmagan (tekshiring / qayta urining).</div>
+    <div class="modal-b"><div class="small muted" style="margin-bottom:8px">Internet uzilganda saqlangan to‘lovlar. Ulanish tiklanganda avtomatik yuboriladi. «Yuborilmadi» — 3 marta urinib bo‘lmagan (tekshiring / qayta urining).${items.some(x=>x.final)?' «Direktor hal qiladi» — qayta yuborilmaydi (pul ikki marta hisoblanishi mumkin): Direktorga ayting.':''}</div>
       <div class="tablewrap"><table><thead><tr><th>O‘quvchi</th><th>Summa</th><th>Usul</th><th>Holat</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${items.length?`<button type="button" class="btn gold" id="ob-retry">🔄 Hammasini qayta yuborish</button>`:''}</div>`;
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${canResend?`<button type="button" class="btn gold" id="ob-retry">🔄 Hammasini qayta yuborish</button>`:''}</div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   const rt=$('#ob-retry'); if(rt) rt.onclick=()=>{ closeModal(); obRetryFailed(); };
   $('#modal').querySelectorAll('[data-obdel]').forEach(b=>b.onclick=()=>{ if(confirm('Bu navbat yozuvi o‘chirilsinmi?\n(To‘lov qo‘llanmaydi — faqat haqiqatan xato/takror bo‘lsa o‘chiring.)')){ obSave(obLoad().filter(x=>x.payId!==b.dataset.obdel)); obBadge(); openOutboxModal(); } });

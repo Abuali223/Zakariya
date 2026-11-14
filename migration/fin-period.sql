@@ -178,9 +178,13 @@ end $$;
 
 -- Davrni yopishdan oldin: shu sanagacha bo'lgan kassa kunlari YOPILGAN bo'lishi kerak. Ochiq kun — hali sanalmagan pul: uni
 --   yopishda farq hujjati yozilishi mumkin, bu esa yopilgan davrga yozuv bo'lardi. Sinov kassasi hisobga olinmaydi.
+--   state-3: hali bog'lanmagan yozuvlar bilan yopilgan, tekshirilmagan kun ham (qurilma navbatidagi yozuvning kech kirim orderi hali
+--   kelmagan yoki «Қ» blankalari — kassa-day.sql: app.kassa_day_pending): navbat yozuvi kelsa — bog'lanadi; qolganini va «Қ» blankalarini
+--   (ular avtomatik bog'lanmaydi) 2-ro'yxat kunni izoh bilan tekshirib tasdiqlaydi (kassa_day_verify — izoh majburiy). Kech yozuvning o'zi
+--   yopilgan oyga tushmaydi — u ochiq kunga yoziladi (fin-prereq.sql: record_manual_payment).
 create or replace function app.fin_lock_ready(p_through date) returns void
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_day date;
+declare v_day date; v_p jsonb;
 begin
   if p_through is null then return; end if;
   select min(d.day) into v_day from public.cash_days d join public.cash_desks k on k.id = d.desk
@@ -188,6 +192,20 @@ begin
   if v_day is not null then
     raise exception 'Davrni yopib bo''lmaydi: % kassa kuni hali yopilmagan — avval kunni sanab yoping', to_char(v_day, 'DD.MM.YYYY')
       using errcode = 'P0001', hint = 'fin:open_day';
+  end if;
+  select x.day, x.p into v_day, v_p
+    from (select d.day, app.kassa_day_pending(d.id) as p from public.cash_days d join public.cash_desks k on k.id = d.desk
+           where d.status = 'closed' and d.day <= p_through and not k."isTest"
+             and (jsonb_array_length(d."pendingRefs") > 0 or d."paperCount" > 0
+                  or exists (select 1 from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover' and jsonb_array_length(n."pendingRefs") > 0))) x
+   where (x.p ->> 'n')::int > 0 or (x.p ->> 'paperCount')::int > 0
+   order by x.day limit 1;
+  if v_day is not null then
+    raise exception 'Davrni yopib bo''lmaydi: % kassa kuni hali o''tkazilmagan yozuvlar bilan yopilgan (%) va tekshirilmagan — avval qurilma navbati yuborilsin; qolganini (va «Қ» blankalarini — yozuvlari kiritilgach) 2-ro''yxat kunni izoh bilan tekshirib tasdiqlaydi',
+      to_char(v_day, 'DD.MM.YYYY'),
+      concat_ws('; ', case when (v_p ->> 'n')::int > 0 then format('qurilma navbatidagi %s ta yozuvning kirim orderi hali kelmagan', v_p ->> 'n') end,
+                      case when (v_p ->> 'paperCount')::int > 0 then format('«Қ» blankalari — %s ta', v_p ->> 'paperCount') end)
+      using errcode = 'P0001', hint = 'fin:pending';
   end if;
 end $$;
 revoke all on function app.fin_lock_ready(date) from public, anon, authenticated;

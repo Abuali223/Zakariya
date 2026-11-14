@@ -72,7 +72,10 @@ hisobotlari — yanvar yopilishidan oldin.
 
 ## Sh-2. «Қ» blankasi (ichki vaqtinchalik kvitansiya) va jurnali
 Faqat tizim (server) ishlamay qolganda. **To‘lovchiga berilmaydi** — to‘lovchi fiskal chek oladi. Blankalar oldindan raqamlanadi
-(Қ-0001 …), buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi va jurnalda order raqami yoziladi.
+(Қ-0001 …), buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi (izohda — «Қ» raqami) va jurnalda
+order raqami yoziladi. Server ishlamagan kun hali yopilmagan bo‘lsa — avval o‘sha kun yopiladi: kiritilmagan blankalar soni, summasi
+va raqamlari «Kunni yopish» oynasidagi «Server ishlamagan paytdagi «Қ» blankalari»ga yoziladi, keyin blankalar kiritiladi
+(`ishga-tushirish.md`, 8-bo‘lim).
 Kassa **to‘xtatilganda** ham (orqaga qaytish, `ishga-tushirish.md`, 9-bo‘lim) shu blankalar ishlatiladi: raqamlari o‘z daftari bo‘yicha —
 tizimning kirim / chiqim order raqamlari bilan aralashmaydi (qayta ishga tushganda tizim o‘z oxirgi raqamidan davom etadi); bu davrda
 tizimga kiritilgan yozuvlar kassa orderisiz bo‘ladi — «Order №» ustuni bo‘sh qoladi; tizimdagi sanasi — oxirgi kassa kunidan keyingi
@@ -162,6 +165,8 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 12 | Nazorat ro‘yxati va Telegram hisobotidagi kassa qatori tushunarli | ☐ | |
 | 13 | Davr surati va davrni yopish; yopilgan sanaga yozuv rad etildi | ☐ | |
 | 14 | Internet uzilganda to‘lov navbatga tushdi, keyin o‘zi o‘tdi | ☐ | |
+| 14a | Navbatda to‘lov turganida kun yopildi: u oynada «hali o‘tkazilmagan» bo‘lib hisobga olindi (farq yo‘q); keyingi kuni «kech» bo‘lib o‘tdi | ☐ | |
+| 14b | Server ishlamagan kun ertasi kuni «Қ» blankalari bilan yopildi (farq yo‘q); «Қ» yozuvlari kiritildi; kun izoh bilan tekshirildi | ☐ | |
 | 15 | Buxgalter: «To‘lovlar» va «Buxgalteriya» — oy ma’lumoti ko‘rinadi, yozish tugmalari yo‘q, telefon va to‘lovchi matni ko‘rinmaydi | ☐ | |
 | 16 | Buxgalter: oylik vedomost (holati, qatorlar) — faqat ko‘rish; A4 oylik hisobot — ismsiz (o‘quvchi va xodim ID bilan) | ☐ | |
 

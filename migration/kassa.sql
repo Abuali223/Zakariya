@@ -111,6 +111,18 @@ alter table public.cash_days add column if not exists "verifiedByName" text;
 --   ("others"): ro'yxat bo'sh bo'lmasa kamomad bo'yicha standart javobgar yo'q (kassa-day.sql: app.kassa_shortage_default). Faqat ochiq
 --   kunda o'zgaradi (kassa_day_guard); kun izi (hash) unga bog'liq emas.
 alter table public.cash_days add column if not exists "othersUids" text[] not null default '{}';
+-- Hali o'tkazilmagan yozuvlar tarkibi (state-2, crit-3). "pendingCount" / "pendingSum" — JAMI (sanashdan ayirilgani): qurilma navbatidagi
+--   yozuvlar + «Қ» blankalari. "pendingRefs" — kunni yopishda mijoz e'lon qilgan qurilma navbati yozuvlari [{ref: to'lov kaliti (payId),
+--   amount}], faqat o'sha paytda serverda hali YO'Q bo'lganlari (o'tganlari hisobga olinmaydi): keyin kelgan kech kirim orderi shu kalit
+--   bilan bog'lanadi (kassa-day.sql: app.kassa_day_pending — hali kelmaganlari nazorat ro'yxatida, kunni tekshirishda izoh bilan).
+--   "paperCount" / "paperSum" / "paperNos" — server ishlamagan paytda to'ldirilgan, hali kiritilmagan «Қ» blankalari (soni, summasi,
+--   raqamlari): avtomatik bog'lanmaydi — kun faqat izoh bilan tekshiriladi. Qayta ochilganda bo'shatiladi.
+alter table public.cash_days add column if not exists "pendingRefs" jsonb not null default '[]'::jsonb;
+alter table public.cash_days add column if not exists "paperCount" int not null default 0 check ("paperCount" >= 0);
+alter table public.cash_days add column if not exists "paperSum" numeric not null default 0 check ("paperSum" >= 0);
+alter table public.cash_days add column if not exists "paperNos" text not null default '';
+alter table public.cash_days drop constraint if exists cash_days_paper;
+alter table public.cash_days add constraint cash_days_paper check ("paperCount" <= "pendingCount" and "paperSum" <= "pendingSum");
 
 -- ---------- Kassa hujjati ----------
 create table if not exists public.cash_docs (
@@ -262,6 +274,12 @@ alter table public.cash_counts add column if not exists "cashierUid" text;
 alter table public.cash_counts add column if not exists "handoverId" text;
 alter table public.cash_counts add column if not exists names jsonb;
 create index if not exists cash_counts_dayid_idx on public.cash_counts ("dayId");
+-- Hali o'tkazilmagan yozuvlar tarkibi (state-2, crit-3; cash_days dagi kabi): "pendingSum" — jami; "pendingRefs" — qurilma navbati yozuvlari
+--   (sanash paytida serverda hali yo'q bo'lganlari), "paperCount" / "paperSum" / "paperNos" — «Қ» blankalari (faqat kunni yopishda).
+alter table public.cash_counts add column if not exists "pendingRefs" jsonb not null default '[]'::jsonb;
+alter table public.cash_counts add column if not exists "paperCount" int not null default 0 check ("paperCount" >= 0);
+alter table public.cash_counts add column if not exists "paperSum" numeric not null default 0 check ("paperSum" >= 0);
+alter table public.cash_counts add column if not exists "paperNos" text not null default '';
 
 -- Smena topshirish-qabul — IKKI BOSQICHLI (FD-16; state-6). Topshiruvchi (kassa egasi; boshqa kassir yoki Direktor — uning o'rniga,
 --   komissiya bilan) pulni qabul qiluvchi bilan sanaydi: KUTILAYOTGAN topshirish ('pending'). Qabul qiluvchi o'z hisobidan «Qabul qildim»
@@ -298,6 +316,9 @@ create index if not exists cash_handovers_day_idx on public.cash_handovers ("day
 --   qilmaydi (kassa-docs.sql: kassa_doc_void, kassa:void_counted).
 alter table public.cash_handovers add column if not exists "lastKo1" int;
 alter table public.cash_handovers add column if not exists "lastKo2" int;
+-- Qurilma navbatidagi hali o'tkazilmagan yozuvlar (state-2): topshiruvchi e'lon qilgani [{ref, amount}] — yozish paytida serverda hali yo'q
+--   bo'lganlari ("pendingSum" — ularning jami). Qabulda sanash dalolatnomasiga o'zgarmay o'tadi (kutilayotgan paytda order yozilmaydi).
+alter table public.cash_handovers add column if not exists "pendingRefs" jsonb not null default '[]'::jsonb;
 
 -- Xeshli suratlar (31.12 holati va b.) — keyin o'zgarmaydi.
 create table if not exists public.fin_snapshots (

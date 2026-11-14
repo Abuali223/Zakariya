@@ -250,7 +250,7 @@ select zz.put('RFp', zz.pay('U_KAS', zz.id('RF')));
 select zz.chk('H2 2-kun: avans, rahbarga berish va qaytarish o''tkazildi', (select string_agg(op || ':' || status, ',' order by no) from public.cash_docs where "businessDay" = '2027-01-08' and form = 'KO2'),
   '^out_advance:posted,out_handover:posted,out_refund:posted$');
 select zz.chk('M1 moslik — hali ham toza (avans, qaytarish, xarajat bog''langan)', zz.rec(), '^true p1=0/0 p4=0/0 p5=0/0 p8=0/0 jami=0$');
-select zz.put('CL2', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-08","counted":3835000,"pendingCount":1,"pendingSum":10000}')::text$q$));
+select zz.put('CL2', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-08","counted":3835000,"pendingRefs":[{"ref":"man_cl2_0001","amount":10000}]}')::text$q$));
 select zz.chk('C6 2-kun yopildi (3 825 000 + 10 000 oflayn = sanalgan); nazorat: oflayn yozuvli yopish 1 kun, limitdan oshgan yopilish 1 kun',
   (zz.get('CL2')::jsonb -> 'day' ->> 'status') || ':' || trim_scale((zz.get('CL2')::jsonb -> 'day' ->> 'closing')::numeric) || ':' || trim_scale((zz.get('CL2')::jsonb -> 'day' ->> 'diff')::numeric)
     || ':' || (zz.checks('main') ->> 'pendingDays30') || ':' || (zz.checks('main') -> 'limit' ->> 'days30'), '^closed:3825000:0:1:1$');
@@ -459,9 +459,11 @@ select zz.chk('Z2c kun jurnalida bitta Z yozuvi (kim kiritgani bilan)',
   (select count(*) || ':' || min(e."byUid") from public.cash_day_events e where e."dayId" = 'cd_main_2027-01-04' and e.kind = 'zreport'), '^1:U_KAS$');
 select zz.chk('Z3 Z mos — izohsiz tekshirildi', zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true)::text$q$), '"status": "verified"');
 select zz.chk('Z4 tekshirilgan kunning Z-hisoboti o''zgarmaydi', zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-9","cash":0,"card":0}}'), '^ERR P0001 \[kassa:verified\]');
-select zz.chk('Z5 2-kun (08.01): fiskal kirim va terminal to''lovi yo''q — Z talab qilinmaydi, izohsiz tekshirildi',
-  (app.kassa_z_state('cd_main_2027-01-08') ->> 'needed') || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true)::text$q$)::jsonb -> 'day' ->> 'status'),
-  '^false \| verified$');
+-- (state-2: 08.01 qurilma navbatidagi hali kelmagan yozuv bilan yopilgan — izoh shu sababli talab qilinadi, Z uchun emas)
+select zz.chk('Z5 2-kun (08.01): fiskal kirim va terminal to''lovi yo''q — Z talab qilinmaydi (izohsiz rad etilsa — sababi navbat yozuvi, Z emas); izoh bilan tekshirildi',
+  (app.kassa_z_state('cd_main_2027-01-08') ->> 'needed') || ' | ' || left(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true)::text$q$), 40)
+  || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true, 'Navbat yozuvi qurilmada qolgan')::text$q$)::jsonb -> 'day' ->> 'status'),
+  '^false \| ERR 22023 \[kassa:pending_note\].* \| verified$');
 -- 3-kun (11.01, ochiq): fiskal chekli naqd o'quv to'lovi va terminal to'lovi; bekor qilingan terminal va Click — hisobga kirmaydi
 select zz.put('Zt1', zz.tui('U_KAS', 'man_z_0001', 'T-2', 300000, 'Sinov Bobo', '211'));
 set local session_replication_role = replica;

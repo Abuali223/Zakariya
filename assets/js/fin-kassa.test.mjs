@@ -4,7 +4,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
-  deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy } from './fin-kassa.js';
+  deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
+  pendingText } from './fin-kassa.js';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -14,11 +17,11 @@ const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], s
   zChanged30: [], cpKinds30: [], cpUnconfirmed: [] });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 28 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 29 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 28);   // +1: xodim kartasiga bog'lanmagan kassa hisoblari (sec-4)
+  assert.equal(rows.length, 29);   // +1: xodim kartasiga bog'lanmagan kassa hisoblari (sec-4); +1: hali kelmagan «hali o'tkazilmagan» yozuvlar (state-2, crit-3)
   assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'zChanged', 'orgCash', 'cpKinds', 'other',
-    'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'unlinked', 'handover', 'preLive', 'restart']);
+    'late', 'pending', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'unlinked', 'handover', 'preLive', 'restart']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
   assert.equal(r.gaps.value, 'uzluksiz'); assert.equal(r.reconcile.value, 'hammasi mos'); assert.equal(r.limit.value, 'limit 3 000 000 so‘m — oshmagan');
@@ -75,9 +78,9 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
   assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'zChanged', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 23);   // (sinov kassasida ham bog'lanmagan hisoblar qatori — hisoblar kassaga bog'liq emas)
+  assert.equal(controlRows(c).length, 24);   // (sinov kassasida ham bog'lanmagan hisoblar va hali kelmagan yozuvlar qatori — sinov kunlari ham navbat bilan yopiladi)
   const empty = controlRows(null);
-  assert.ok(empty.length === 28 && empty.filter(x => x.level === 'ok').length === 26, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 29 && empty.filter(x => x.level === 'ok').length === 27, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
@@ -367,4 +370,110 @@ test('kamomad qarori (g6v-3): nega standart javobgar yo‘q — server matni (de
   assert.equal(shortageWhy({ cashierUid: 'u_kas', countedBy: 'u_kas2' }), 'Pulni kassa egasining o‘zi sanamagan (kassir o‘rniga sanalgan)');
   assert.equal(shortageWhy({ cashierUid: 'u_kas', countedBy: 'u_kas' }), 'Kassir hisobi xodim kartasiga bog‘lanmagan');
   assert.equal(shortageWhy(null), '');
+});
+
+// ---------------------------------------------------------------- ko'rik 7-guruhi (state-2, state-3, state-8, crit-3)
+test('kunni yopish / smena (state-2): qurilma navbati yozuvlari kaliti va summasi bilan; noto‘g‘ri / takror kalit tashlanadi; eski sahifa belgisi', () => {
+  const ob = { count: 4, sum: 95000, refs: [{ ref: 'man_1731000000000_ab3de', amount: 50000 }, { ref: 'man_1731000000001_xx', amount: 30000.5 },
+    { ref: 'man_1731000000000_ab3de', amount: 50000 }, { ref: 'ks-abc', amount: 1000 }, { ref: 'man_1731000000002_zz', amount: 0 }] };
+  assert.deepEqual(outboxRefs(ob), { refs: [{ ref: 'man_1731000000000_ab3de', amount: 50000 }, { ref: 'man_1731000000001_xx', amount: 30000.5 }], count: 2, sum: 80000.5, old: false });
+  assert.deepEqual(outboxRefs({ count: 0, sum: 0, refs: [] }), { refs: [], count: 0, sum: 0, old: false });
+  assert.equal(outboxRefs({ count: 2, sum: 7000 }).old, true, 'eski admin.html (kalitlarsiz) — sahifani yangilash');
+  assert.deepEqual(outboxRefs(null), { refs: [], count: 0, sum: 0, old: false });
+});
+
+test('«Қ» blankalari (crit-3): soni, summasi va raqamlari birga; hammasi bo‘sh — yo‘q', () => {
+  assert.deepEqual(paperRead('', '', ''), {});
+  assert.deepEqual(paperRead(null, undefined, '  '), {});
+  assert.deepEqual(paperRead('1', '700 000', 'Қ-0012'), { paper: { count: 1, sum: 700000, nos: 'Қ-0012' } });
+  for (const [c, s, n] of [['1', '700 000', ''], ['', '700000', 'Қ-0012'], ['2', '', 'Қ-1, Қ-2'], ['0', '5000', 'Қ-3']]) {
+    assert.deepEqual(paperRead(c, s, n), { err: '«Қ» blankalari: soni, summasi va raqamlari birga kiritiladi' }, `${c}/${s}/${n}`);
+  }
+});
+
+test('yopish / smena natijasi (state-2): server hisoblagan farq va ayirilmagan (allaqachon o‘tgan) navbat yozuvlari', () => {
+  assert.equal(countResultText({ diff: 0, ignoredRefs: [] }), 'farq yo‘q');
+  assert.equal(countResultText({ diff: -50000, ignoredRefs: ['man_1_abc'] }), 'KAMOMAD 50 000 so‘m · navbatdagi 1 ta yozuv allaqachon o‘tgan edi — ayirilmadi');
+  assert.equal(countResultText({ diff: 1200.5 }), 'ORTIQCHA 1 200,50 so‘m');
+  assert.equal(countResultText({ dup: true, day: { diff: -700 } }), 'KAMOMAD 700 so‘m', 'takror javobda — kun farqi');
+  assert.equal(countResultText(null), 'farq yo‘q');
+});
+
+test('hali bog‘lanmagan yozuvlar (state-2, crit-3): kun javobidagi pendingOpen matni', () => {
+  assert.equal(pendingText({ n: 1, sum: 30000, paperCount: 0, paperSum: 0, paperNos: '' }), 'qurilma navbatidagi 1 ta yozuvning (30 000 so‘m) kirim orderi hali kelmagan');
+  assert.equal(pendingText({ n: 0, sum: 0, paperCount: 1, paperSum: 700000, paperNos: 'Қ-0012' }), '«Қ» blankalari — 1 ta, 700 000 so‘m (№: Қ-0012)');
+  assert.equal(pendingText({ n: 2, sum: 5000, paperCount: 1, paperSum: 100, paperNos: '' }),
+    'qurilma navbatidagi 2 ta yozuvning (5 000 so‘m) kirim orderi hali kelmagan; «Қ» blankalari — 1 ta, 100 so‘m');
+  assert.equal(pendingText({ n: 0, sum: 0, paperCount: 0 }), '');
+  assert.equal(pendingText(null), '');
+});
+
+test('nazorat ro‘yxati (state-2, crit-3): hali kelmagan yozuvlar — «diqqat», kun bo‘yicha (tekshirilgan kun belgisi bilan)', () => {
+  const c = clean();
+  c.pendingOpen = [{ day: '2027-03-03', status: 'verified', n: 1, sum: 30000, refs: [{ ref: 'man_x_1', amount: 30000 }], paperCount: 0, paperSum: 0, paperNos: '' },
+    { day: '2027-04-05', status: 'closed', n: 0, sum: 0, refs: [], paperCount: 1, paperSum: 700000, paperNos: 'Қ-0012' }];
+  const r = by(controlRows(c));
+  assert.equal(r.pending.level, 'warn');
+  assert.equal(r.pending.value, '03.03.2027 (tekshirilgan): qurilma navbatidagi 1 ta yozuvning (30 000 so‘m) kirim orderi hali kelmagan; 05.04.2027: «Қ» blankalari — 1 ta, 700 000 so‘m (№: Қ-0012)');
+  assert.match(r.pending.hint, /48 soat/);
+  assert.deepEqual([by(controlRows(clean())).pending.level, by(controlRows(clean())).pending.value], ['ok', 'yo‘q']);
+});
+
+test('kassani to‘xtatish (state-2, crit-3): oxirgi kun kech kirim orderi hali kelmagan navbat yozuvlari yoki «Қ» blankalari bilan — to‘siq; kelganidan keyin — to‘xtatish', () => {
+  const live = { started: true };
+  const day = po => ({ day: '2027-01-09', status: 'closed', pendingCount: 2, pendingSum: 9000, pendingOpen: po });
+  let g = goLiveConfirm('2027-01-04', null, '2027-01-10', live, day({ n: 1, sum: 5000, paperCount: 0, paperSum: 0 }));
+  assert.equal(g.kind, 'block');
+  assert.match(g.text, /^Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni \(09\.01\.2027\) qurilma navbatidagi hali o‘tkazilmagan 1 ta yozuv \(5 000 so‘m\) bilan yopilgan — /);
+  g = goLiveConfirm('2027-01-04', null, '2027-01-10', live, day({ n: 1, sum: 5000, paperCount: 1, paperSum: 4000 }));
+  assert.match(g.text, /1 ta yozuv \(5 000 so‘m\) va hali kiritilmagan «Қ» blankalari \(1 ta, 4 000 so‘m\) bilan yopilgan/);
+  g = goLiveConfirm('2027-01-04', null, '2027-01-10', live, day({ n: 0, sum: 0, paperCount: 2, paperSum: 9000 }));
+  assert.equal(g.kind, 'block');
+  assert.match(g.text, /server ishlamagan paytdagi hali kiritilmagan «Қ» blankalari \(2 ta, 9 000 so‘m\).*Avval «Қ» yozuvlarini kiriting/);
+  // navbat yozuvlari kelgan (bog'langan) — pendingCount saqlansa ham to'xtatish mumkin
+  assert.equal(goLiveConfirm('2027-01-04', null, '2027-01-10', live, day({ n: 0, sum: 0, paperCount: 0, paperSum: 0 })).kind, 'stop');
+});
+
+// admin.html qurilma navbati (to'lov outbox'i) — OUTBOX-CLASS bloki (sof funksiyalar) faylning o'zidan olinadi
+const ADM = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8');
+const obBlock = (() => { const a = ADM.indexOf('// OUTBOX-CLASS:BEGIN'), b = ADM.indexOf('// OUTBOX-CLASS:END'); return a >= 0 && b > a ? ADM.slice(a, b) : ''; })();
+const OB = (() => { const ctx = vm.createContext({}); vm.runInContext(obBlock + '\n;this.__ob = { obErrClass, obWaitMs, obItemState, obApplyErr, obResendAll, OB_WAIT };', ctx); return ctx.__ob; })();
+
+test('qurilma navbati (admin.html): rad etish turlari — kassa holatini kutish, Direktor hal qiladi, qattiq, qayta urinish', () => {
+  assert.ok(obBlock.length > 0 && (ADM.match(/OUTBOX-CLASS:BEGIN/g) || []).length === 1, 'blok bitta');
+  const E = (hint, code) => ({ hint, code: code || 'P0001', message: 'x' });
+  for (const h of ['kassa:day_closed', 'kassa:prev_open', 'kassa:not_started', 'kassa:restart_recount', 'kassa:handover_pending']) assert.equal(OB.obErrClass(E(h)), 'wait', h);
+  assert.equal(OB.obErrClass(E('kassa:paused_live_day', '42501')), 'final');
+  assert.equal(OB.obErrClass(E('kassa:live_day', '42501')), 'final');
+  assert.equal(OB.obErrClass(E('fin:locked', '42501')), 'perm', 'yopilgan davr — qattiq');
+  assert.equal(OB.obErrClass(E('kassa:fiscal', '22023')), 'perm');
+  assert.equal(OB.obErrClass({ code: '23505', message: 'dup' }), 'perm');
+  assert.equal(OB.obErrClass({ code: 'mismatch', permanent: true }), 'perm');
+  assert.equal(OB.obErrClass(E('kassa:late_limit')), 'retry');
+  assert.equal(OB.obErrClass({ code: 'P0001' }), 'retry', 'kassasiz server — avvalgi tartib');
+  assert.equal(OB.OB_WAIT['kassa:handover_pending'], 'Smena topshirilmoqda — qabul qilinishini kuting');
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 9].map(OB.obWaitMs), [30000, 60000, 120000, 240000, 480000, 600000, 600000]);
+});
+
+test('qurilma navbati (admin.html): kassani kutayotgan yozuv «Yuborilmadi» bo‘lmaydi; Direktor hal qiladigani «Hammasini qayta yuborish»da qayta yuborilmaydi', () => {
+  const x = { payId: 'man_1_a', amount: 5000 };
+  for (let i = 0; i < 10; i++) OB.obApplyErr(x, { hint: 'kassa:day_closed', code: 'P0001', message: 'Bugungi kassa kuni yopilgan' }, 1000);
+  assert.deepEqual([x.status, x.attempts, x.waits, x.waitUntil, OB.obItemState(x)], [undefined, undefined, 10, 1000 + 600000, 'wait'], 'urinishlar soniga kirmaydi');
+  assert.equal(x.waitWhy, 'Bugungi kassa kuni yopilgan — ertaga yangi kunga «kech» bo‘lib o‘tadi');
+  const y = OB.obApplyErr({ payId: 'man_1_b' }, { hint: 'kassa:paused_live_day', code: '42501', message: 'To‘lov sanasi … qayta yubormang — Direktor hal qiladi' }, 0);
+  assert.deepEqual([y.status, y.final, y.attempts, OB.obItemState(y)], ['failed', true, 3, 'final']);
+  const z = OB.obApplyErr({ payId: 'man_1_c' }, { code: 'P0001', message: 'boshqa' }, 0);
+  assert.deepEqual([z.status, z.attempts, OB.obItemState(z)], [undefined, 1, 'pending']);
+  OB.obApplyErr(z, { code: 'P0001' }, 0); OB.obApplyErr(z, { code: 'P0001' }, 0);
+  assert.deepEqual([z.status, z.attempts, OB.obItemState(z)], ['failed', 3, 'failed'], '3-urinishda «Yuborilmadi»');
+  const w = OB.obApplyErr({ payId: 'man_1_d', waits: 2, waitUntil: 5, waitWhy: 'x' }, { code: '22023', hint: 'kassa:fiscal' }, 0);
+  assert.deepEqual([w.waitUntil, w.waitWhy, w.status], [undefined, undefined, 'failed'], 'kutish belgisi tozalanadi');
+  // bulk resend: 'final' o'zgarmaydi, «Yuborilmadi» va kutayotgan — darhol qayta urinadi
+  const out = OB.obResendAll([y, z, x, { payId: 'man_1_e' }]);
+  assert.equal(out[0], y, 'Direktor hal qiladi — o‘sha yozuv, o‘zgarmagan');
+  assert.deepEqual([out[0].status, out[0].final], ['failed', true]);
+  assert.deepEqual([out[1].status, out[1].attempts, out[1].lastError], [undefined, 0, undefined]);
+  assert.deepEqual([out[2].waitUntil, out[2].waits, OB.obItemState(out[2])], [undefined, 10, 'wait']);
+  assert.equal(x.waitUntil, 1000 + 600000, 'asl ro‘yxat o‘zgarmaydi');
+  assert.equal(JSON.stringify(out[3]), '{"payId":"man_1_e"}');   // (vm konteksti — boshqa «realm», shuning uchun JSON bilan)
 });

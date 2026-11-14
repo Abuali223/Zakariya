@@ -13,6 +13,8 @@
 #   (9) ikki bosqichli smena topshirish (state-6): qabul kutilayotganda parallel kirimlar — qabulgacha rad (kassa:handover_pending),
 #       keyin o'tadi, qabul paytidagi qoldiq topshirish paytidagi bilan bir xil; topshiruvchining kunni yopishi va qabul parallel — yopish
 #       o'tmaydi; bekor qilish va qabul parallel — faqat bittasi; deadlock yo'q;
+#   (10) kunni oynadagi qoldiq bilan yopish (state-2, expected) va parallel kirimlar: yopish yo o'tadi (farq 0), yo kassa:stale bilan
+#       rad etiladi — eski qoldiq bilan soxta kamomad / ortiqcha hujjati yozilmaydi;
 #   (8) sozlama qatori (fin_org) o'zgarayotganda pul yozuvi (state-7): davr qulfi va orqa sana bilan to'lov; kassani to'xtatish va
 #       qayta ishga tushirish (ishga tushadigan kun) va naqd o'quv to'lovi — yozuvchi o'zgarish tugashini kutib, yangi qiymat bilan
 #       tekshiradi; qayta sanash sozlama qatorini kassa qulfidan oldin kutadi (qulf tartibi); davr surati qulf bilan undan oldin
@@ -347,6 +349,40 @@ chk "9c bekor qilish va qabul parallel: faqat bittasi o'tdi, ikkinchisi «holati
 chk "9d qayta: kutilayotgan smena topshirish qolmadi, deadlock yo'q, raqamlash uzluksiz" \
     "$(q -c "select count(*) from public.cash_handovers where status = 'pending'")/$(cat "$TMP"/h9b.* "$TMP"/h9c.* | grep -ci 'deadlock')/$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" \
     "0/0/[]"
+# ---------- (10) state-2: kunni oynadagi qoldiq bilan yopish va parallel kirimlar ----------
+#   Kassa egasi oynani ochib qoldiqni ko'radi va sanab yopadi (expected — ko'rgan qoldiq); shu payt boshqa seanslarda kirimlar o'tmoqda
+#   (masalan, qurilma navbati o'zi yuborildi). Avval yopish eski qoldiq bilan farq hisoblab, soxta kamomad / ortiqcha hujjati yozardi.
+#   Endi yopish yo o'tadi (ko'rgan qoldiq kassa qulfi ostida hamon to'g'ri — farq 0), yo kassa:stale bilan rad etiladi va oyna yangilangan
+#   qoldiq bilan qayta yuboradi. Kun yopilgach qolgan kirimlar «kun yopilgan» deb rad etiladi.
+HOLD=$(q -c "select \"cashierUid\" from public.cash_days where desk = 'main' and status = 'open'")
+for w in 1 2 3 4; do
+  { as_sess R_KAS
+    for i in $(seq 1 25); do
+      echo "select 'r=' || coalesce(public.kassa_receipt('{\"op\":\"in_bank\",\"amount\":300,\"partyType\":\"bank\",\"partyId\":\"cp_rbank\",\"basis\":\"Poyga cheki\",\"clientRef\":\"$(printf 'race-y%d-%04d' "$w" "$i")\"}'::jsonb) ->> 'no', '?');"
+      echo "select pg_sleep(0.01);"
+    done
+  } > "$TMP/s$w.sql"
+done
+for w in 1 2 3 4; do ( $PSQL_CMD -X -q -At -d "$DB" < "$TMP/s$w.sql" > "$TMP/s$w.out" 2>&1 ) & done
+sleep 0.1
+stale10=0; ok10=0; other10=0
+for a in $(seq 1 300); do
+  seen=$(BAL)
+  r=$(call_raw "$HOLD" "public.kassa_day_close('{\"day\":\"$DAY2\",\"counted\":$seen,\"expected\":$seen}'::jsonb) ->> 'diff'")
+  if echo "$r" | grep -q 'kassa:stale'; then stale10=$((stale10 + 1))
+  elif [ "$(echo "$r" | tail -1)" = "0" ]; then ok10=1; break
+  else other10=1; echo "$r" > "$TMP/s.close.err"; break; fi
+done
+wait
+okr10=$(cat "$TMP"/s*.out | grep -c '^r=[0-9]'); rej10=$(cat "$TMP"/s*.out | grep -c 'kassa kuni yopilgan'); dl10=$(cat "$TMP"/s*.out | grep -ci 'deadlock')
+echo "     (10: oynadagi qoldiq eskirgani uchun rad etilgan urinishlar: $stale10)"
+chk "10a kun oynadagi qoldiq bilan yopildi: har urinish yo o'tdi (farq 0), yo kassa:stale bilan rad etildi — boshqa natija yo'q" "$ok10/$other10" "1/0"
+chk "10b soxta farq hujjati yo'q: kun farqi 0, farq hujjati bo'sh; I4: kun oxiri = kun boshi + kirim − chiqim = sanalgan" \
+    "$(q -c "select trim_scale(d.diff) || ':' || coalesce(d.\"diffDocId\", '-') || ':' || (d.closing = d.opening + (select coalesce(sum(amount) filter (where form = 'KO1'), 0) - coalesce(sum(amount) filter (where form = 'KO2'), 0) from public.cash_docs c where c.\"dayId\" = d.id and c.status = 'posted'))::text || ':' || (d.counted = d.closing)::text from public.cash_days d where d.desk = 'main' and d.day = '$DAY2'")" \
+    "0:-:true:true"
+chk "10c har kirim yo o'tdi, yo «kun yopilgan» deb rad etildi; o'tganlari bazadagi bilan bir xil; deadlock yo'q; raqamlash uzluksiz" \
+    "$((okr10 + rej10))/$(q -c "select (count(*) = $okr10)::text from public.cash_docs where \"clientRef\" like 'race-y%' and status = 'posted'")/$dl10/$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" \
+    "100/true/0/[]"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]
