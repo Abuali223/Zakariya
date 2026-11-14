@@ -17,8 +17,12 @@ Buxgalteriya hisobi to‘g‘risidagi qonunning 13-moddasiga muvofiq **BUYURAMAN
    asosida bo‘lsa ham) [F.I.Sh.]; moliya menejeri [F.I.Sh.].
 3. Bitta hujjatni 1- va 2-ro‘yxat bo‘yicha **bir shaxs** imzolamaydi. Kassa chiqim orderi (KO-2) pul berilishidan
    **oldin** 2-ro‘yxatdagi shaxs tomonidan tizimda tasdiqlanadi; [___] so‘mdan ortiq summa, rahbar yoki ta’sischiga
-   beriladigan pul va qarz — direktor tomonidan ham.
-4. 2-ro‘yxat imzosi bo‘lmagan pul hujjati haqiqiy emas.
+   beriladigan pul va qarz — direktor tomonidan ham. **Istisnolar** (tizimda 2-ro‘yxat tasdig‘i bosqichi yo‘q, asos boshqa):
+   a) ota-onaga (o‘quvchiga) pul qaytarish — direktor tasdig‘i bilan (ariza asosida); b) naqd ish haqi — tasdiqlangan oylik
+   vedomost va to‘lov qaydnomasi asosida; c) kassani sanashdagi kamomad — komissiya dalolatnomasi asosida tizim o‘zi yozadi,
+   qarorni direktor qabul qiladi.
+4. 2-ro‘yxat imzosi bo‘lmagan pul hujjati haqiqiy emas (3-banddagi istisnolar bundan mustasno — ularning asosi o‘sha bandda
+   ko‘rsatilgan va hujjatga ilova qilinadi).
 5. Nazorat [lavozim] zimmasiga yuklansin.
 
 ## 2-buyruq. Doimiy inventarizatsiya komissiyasini tuzish
@@ -63,7 +67,7 @@ Kassa hujjatlarida **tuzatish taqiqlanadi**: xato hujjat bekor qilinadi va yangi
 | Hujjat | Kim tuzadi | Kim tasdiqlaydi / tekshiradi | Muddat | Qayerga topshiriladi |
 |---|---|---|---|---|
 | KO-1 (naqd o‘quv to‘lovi va boshqa kirim) | Kassir (dastur) | — | to‘lov paytida | to‘lovchiga patta |
-| KO-2 (har chiqim) | Kassir (so‘rov) | 2-ro‘yxat; [___] so‘mdan ortig‘i — direktor | pul berishdan oldin | asos hujjati ilova |
+| KO-2 (har chiqim) | Kassir (so‘rov) | 2-ro‘yxat; [___] so‘mdan ortig‘i — direktor (qaytarish — direktor; naqd maosh — tasdiqlangan vedomost; kamomad — komissiya dalolatnomasi, 1-buyruq, 3-band) | pul berishdan oldin | asos hujjati ilova |
 | KO-4 varag‘i, sanash dalolatnomasi | Kassir | Moliya menejeri yoki buxgalter («Tekshirdim») | har kuni kechqurun | buxgalteriya |
 | Avans hisoboti | Hisobdor shaxs | Moliya menejeri / buxgalter | 3 ish kuni ichida (karta — 10) | buxgalteriya |
 | Ish haqi vedomosti | Moliya menejeri | HR menejer; HR / MM o‘z maoshi — direktor | to‘lov kunidan oldin | kassir |

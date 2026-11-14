@@ -31,6 +31,8 @@ avval uni bajaring. **Kecha yopilmagan bo‘lsa, bugun hujjat yozilmaydi** — a
 1. Onlayn kassada fiskal chek uring — chek to‘lovchiga beriladi.
 2. «To‘lovlar» → «💵 To‘lov»: o‘quvchi, summa, to‘lovchi, **«Fiskal chek №»** (majburiy), usul — naqd → saqlash.
 3. «🖨 Kirim orderi va patta»: patta — to‘lovchiga, order — kassada (imzo qo‘yiladi).
+Bir nechta farzand uchun to‘lansa — **har o‘quvchiga alohida fiskal chek** uriladi va har to‘lov o‘z chek raqami bilan kiritiladi
+(bitta chek raqami ikkinchi to‘lovda qabul qilinmaydi; raqamga belgi qo‘shib kiritmang — FD-49).
 Tizim summani o‘zi taqsimlaydi: avval eng eski qarz, ortig‘i — avansga. Naqdsiz to‘lov (Click, terminal, bank) ham shu oynada
 kiritiladi, lekin kassa orderi yozilmaydi va kassa qoldig‘iga kirmaydi. Kassa ishga tushgach naqd o‘quv to‘lovi **faqat shu oyna**
 orqali yoziladi (kirim orderi va fiskal chek bilan): boshqa yo‘l bilan (to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish yoki «naqd»ga
@@ -283,7 +285,8 @@ qiladi (1-bo‘lim, «Xato qildim»). Yopilgan davrdagi to‘lovning sanasi, sum
 **holati va o‘quvchisi ham** — biriktirilmagan to‘lovni qaytarish yoki biriktirish, holatini o‘zgartirish o‘sha oy tushumini
 o‘zgartiradi, tizim rad etadi (bo‘lish — tushum o‘zgarmaydi, ruxsat). Kerak bo‘lsa Direktor «Davr»da davrni sababi bilan qayta
 ochadi, amaldan keyin qayta yopadi. «↩ Fakturadan» (provayder qaytargan pul) fakturaning kassa hujjati bilan to‘langan qismini
-ayirmaydi — u «↩ Qaytarish» bilan (kassa orqali) qaytariladi.
+ayirmaydi — u «↩ Qaytarish» bilan (kassa orqali) qaytariladi. Naqd pul naqdsiz yorliq bilan («bank», «terminal») yozilgan bo‘lsa,
+kassa uni ko‘rmaydi — bank ko‘chirmasi va Z-hisobot bilan solishtirganda aniqlanadi (`ishga-tushirish.md`, 8-bo‘lim oxiridagi cheklovlar).
 
 **Kassa ishga tushishidan oldingi naqd avans yoki maosh yozuvi** («Buxgalteriya»da, kassa orderisiz) bo‘yicha kassaga qaytim
 («Xodim qaytargan pul») yozilgan bo‘lsa, o‘sha xodim va oy bo‘yicha sof summa manfiy bo‘ladigan qilib yozuv o‘chirilmaydi,
@@ -298,7 +301,9 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 - **Telegram hisoboti:** kassa qatori (kirim, chiqim, qoldiq; sanaldi / farq — kunni yopishdagi va smena topshirishdagi alohida)
   va «Kassa nazorati» qatori (muddati o‘tgan avans, qabul qilinmay qolgan smena topshirish ham). Nazorat qatori bo‘sh bo‘lmasa — «Kassa» → «Nazorat ro‘yxati». Dushanba
   kuni — qo‘shimcha «Kassa — o‘tgan hafta» qatori (haftalik ko‘rsatkichlar); batafsil — «Kassa» → «KPI».
-- **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash».
+- **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash». O‘zingizga
+  (bog‘langan xodim kartangizga) beriladigan pulda Direktor bosqichini o‘zingiz imzolaysiz (FD-48) — 2-ro‘yxat tasdig‘i baribir kerak,
+  pulni kassir beradi.
 - **Qaytarish:** «↩ Qaytarish» (sababi, ariza sanasi, usul). Naqd bo‘lsa pulni kassir beradi; balans pul berilganda o‘zgaradi.
   «Avans ham» belgilansa avans ham **naqd beriladi** (bitta chiqim orderida) — tasdiqlashda «qaytarish X + avans Y = jami Z» ko‘rinadi.
   Javob kelmay qayta bosilsa ikkinchi so‘rov yozilmaydi; shu faktura, to‘lov yoki avans bo‘yicha hali berilmagan so‘rovlar bilan jami
@@ -340,7 +345,9 @@ alohida ko‘rinadi). Smena topshirish qabul qilinmay qolsa (qabul qiluvchi kelm
 ## 4. HR menejer
 - Vedomostni tekshirib **tasdiqlaysiz** — maosh kunidan oldin. Tasdiqlanmagan oy uchun naqd maosh berilmaydi.
 - Kassa ishga tushgach **pul bermaysiz**: «Maosh berish» tugmasi sizda ko‘rinmaydi (naqd — kassir, karta — moliya menejeri).
-- Ish haqi avansi so‘rovini kassir yoki moliya menejeri yuboradi; tasdiqlangan vedomostdan ortiq avans berilmaydi.
+- Ish haqi avansi so‘rovini kassir yoki moliya menejeri yuboradi, 2-ro‘yxat (katta summa — Direktor ham) tasdiqlaydi. Oy vedomosti
+  **tasdiqlangach o‘sha oy uchun avans umuman berilmaydi** (yangi so‘rov ham, avval tasdiqlangan so‘rov puli ham) — kerak bo‘lsa Direktor
+  oyni qayta ochadi. Vedomost tasdiqlanguncha avans summasini tizim vedomost bilan cheklamaydi — uni tasdiqlovchi tekshiradi.
 - Xodim avansni kassaga qaytarsa, vedomostda avans qaytgani ayirilgan holda ko‘rinadi; oy tasdiqlangach avans qaytimi qabul
   qilinmaydi (kerak bo‘lsa Direktor oyni qayta ochadi).
 

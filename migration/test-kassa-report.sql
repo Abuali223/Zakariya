@@ -48,6 +48,16 @@ begin
   perform set_config('request.jwt.claims', '', true);
   return coalesce(r, '<null>');
 end $$;
+-- Sinov natijasini JSON sifatida o'qish: xato matni (ERR …) yoki JSON bo'lmagan javobda — NULL (mutatsiyada tekshiruv FAIL bo'ladi,
+--   to'plam «invalid json» ERROR bilan to'xtamaydi)
+create or replace function zz.js(p text) returns jsonb language plpgsql as $$
+begin return p::jsonb; exception when others then return null; end $$;
+-- JSON maydoni (yo'q bo'lsa — standart qiymat), faqat javob JSON bo'lsa; JSON bo'lmagan javob (ERR …) o'zicha qaytadi — mutatsiyada
+--   standart qiymatga aylanib PASS bermaydi, FAIL bo'ladi (g10 tekshiruvchisi)
+create or replace function zz.jd(p text, p_key text, p_dflt text) returns text language sql as $$
+  select case when zz.js(p) is null then '<json emas> ' || left(coalesce(p, '<null>'), 200) else coalesce(zz.js(p) ->> p_key, p_dflt) end $$;
+create or replace function zz.jdp(p text, p_path text[], p_dflt text) returns text language sql as $$
+  select case when zz.js(p) is null then '<json emas> ' || left(coalesce(p, '<null>'), 200) else coalesce(zz.js(p) #>> p_path, p_dflt) end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 create table if not exists zz.v (k text primary key, v text);
 truncate zz.res; truncate zz.v;
@@ -56,10 +66,10 @@ begin insert into zz.res (name, got, pat, ok) values (p_name, p_got, p_pat, coal
 create or replace function zz.put(p_k text, p_v text) returns text language plpgsql as $$
 begin insert into zz.v (k, v) values (p_k, p_v) on conflict (k) do update set v = excluded.v; return p_v; end $$;
 create or replace function zz.get(p_k text) returns text language sql as $$ select v from zz.v where k = p_k $$;
-create or replace function zz.id(p_k text) returns text language sql as $$ select (v::jsonb ->> 'id') from zz.v where k = p_k $$;
+create or replace function zz.id(p_k text) returns text language sql as $$ select zz.js(v) ->> 'id' from zz.v where k = p_k $$;
 -- JSON javobdan maydon; javob xato matni bo'lsa — matnning o'zi (yangi qoida buzilsa tekshiruv ERR bilan to'xtamaydi, FAIL bo'lib ko'rinadi)
 create or replace function zz.f(p text, variadic p_path text[]) returns text language sql as $$
-  select case when p ~ '^\s*\{' then (p::jsonb #>> p_path) else left(coalesce(p, '<null>'), 300) end $$;
+  select case when p ~ '^\s*\{' and zz.js(p) is not null then (zz.js(p) #>> p_path) else left(coalesce(p, '<null>'), 300) end $$;
 create or replace function zz.clock(p_t timestamptz) returns void language sql as $$
   insert into app.fin_clock (id, t) values (1, p_t) on conflict (id) do update set t = excluded.t $$;
 create or replace function zz.rpc(p_uid text, p_fn text, p_json text) returns text language sql as $$
@@ -76,7 +86,7 @@ create or replace function zz.tui(p_uid text, p_id text, p_sid text, p_amount nu
                              p_id, p_sid, p_amount, 'cash', '', '', p_payer, jsonb_build_object('fiscalNo', p_fiscal)::text)) $$;
 -- Kun ma'lumoti (Moliya menejeri nomidan) va undan qism olish
 create or replace function zz.book(p_desk text, p_day text) returns jsonb language sql as $$
-  select zz.as('U_FM', format('select public.kassa_day_book(%L, %L)::text', p_desk, p_day))::jsonb $$;
+  select zz.js(zz.as('U_FM', format('select public.kassa_day_book(%L, %L)::text', p_desk, p_day))) $$;
 create or replace function zz.party(p_book jsonb, p_form text, p_type text, p_id text) returns text language sql as $$
   select string_agg((x ->> 'name') || '|' || (x ->> 'count') || '|' || trim_scale((x ->> 'amount')::numeric) || '|' || (x ->> 'ops'), ' ; ' order by x ->> 'name')
     from jsonb_array_elements(p_book -> 'byParty') x
@@ -84,9 +94,9 @@ create or replace function zz.party(p_book jsonb, p_form text, p_type text, p_id
 create or replace function zz.sumof(p_arr jsonb, p_form text) returns text language sql as $$
   select trim_scale(coalesce(sum((x ->> 'amount')::numeric), 0))::text from jsonb_array_elements(p_arr) x where x ->> 'form' = p_form $$;
 create or replace function zz.daily(p_day text) returns jsonb language sql as $$
-  select zz.as('U_DIR', format('select public.director_daily(%L)::text', p_day))::jsonb $$;
+  select zz.js(zz.as('U_DIR', format('select public.director_daily(%L)::text', p_day))) $$;
 create or replace function zz.checks(p_desk text) returns jsonb language sql as $$
-  select zz.as('U_FM', format('select public.kassa_checks(%L)::text', p_desk))::jsonb $$;
+  select zz.js(zz.as('U_FM', format('select public.kassa_checks(%L)::text', p_desk))) $$;
 create or replace function zz.rec() returns text language sql as $$
   select (c -> 'reconcile' ->> 'live') || ' p1=' || (c -> 'reconcile' -> 'p1' ->> 'pay') || '/' || (c -> 'reconcile' -> 'p1' ->> 'doc')
       || ' p4=' || (c -> 'reconcile' -> 'p4' ->> 'row') || '/' || (c -> 'reconcile' -> 'p4' ->> 'doc')
@@ -160,49 +170,49 @@ select zz.chk('H1 1-kun hujjatlari: 7 kirim, 3 chiqim, 1 bekor; so''rovlar: 1 ta
 select zz.put('B1', zz.book('main', '2027-01-04')::text);
 select zz.chk('R1 ochiq kun jamlari: kirim 2 730 000, chiqim 2 200 000, qoldiq 2 530 000',
   (select trim_scale((b -> 'day' ->> 'opening')::numeric) || ':' || trim_scale((b -> 'day' ->> 'receiptsLive')::numeric) || ':' || trim_scale((b -> 'day' ->> 'payoutsLive')::numeric) || ':' || trim_scale((b -> 'day' ->> 'balance')::numeric)
-     from (select zz.get('B1')::jsonb as b) q), '^2000000:2730000:2200000:2530000$');
+     from (select zz.js(zz.get('B1')) as b) q), '^2000000:2730000:2200000:2530000$');
 select zz.chk('R2 «kimdan / kimga» va statiya jamlari = kun jamlari (bekor qilingan hujjat kirmaydi)',
   (select zz.sumof(b -> 'byParty', 'KO1') || ':' || zz.sumof(b -> 'byParty', 'KO2') || ':' || zz.sumof(b -> 'byArticle', 'KO1') || ':' || zz.sumof(b -> 'byArticle', 'KO2')
-     from (select zz.get('B1')::jsonb as b) q), '^2730000:2200000:2730000:2200000$');
+     from (select zz.js(zz.get('B1')) as b) q), '^2730000:2200000:2730000:2200000$');
 select zz.chk('R3 o''quvchi KALITI bo''yicha: ikki xil to''lovchi — bitta qator (o''quvchi nomi bilan), 2 ta hujjat',
-  zz.party(zz.get('B1')::jsonb, 'KO1', 'student', 'T-1') || ' // ' || zz.party(zz.get('B1')::jsonb, 'KO1', 'student', 'T-2'),
+  zz.party(zz.js(zz.get('B1')), 'KO1', 'student', 'T-1') || ' // ' || zz.party(zz.js(zz.get('B1')), 'KO1', 'student', 'T-2'),
   '^Sinov A\|2\|1000000\|\["in_tuition"\] // Sinov B\|1\|500000\|\["in_tuition"\]$');
-select zz.chk('R3b «boshqa» tomon: katta-kichik harf va bo''shliq farqi — bitta qator', zz.party(zz.get('B1')::jsonb, 'KO1', 'other', null), '^A[Ll][Ii][Yy][Ee][Vv] +[Vv]ali ?\|2\|80000\|\["in_other"\]$');
+select zz.chk('R3b «boshqa» tomon: katta-kichik harf va bo''shliq farqi — bitta qator', zz.party(zz.js(zz.get('B1')), 'KO1', 'other', null), '^A[Ll][Ii][Yy][Ee][Vv] +[Vv]ali ?\|2\|80000\|\["in_other"\]$');
 select zz.chk('R3c xodim va bank — ma''lumotnomadagi nom bilan',
-  zz.party(zz.get('B1')::jsonb, 'KO1', 'employee', 'staff:st1') || ' // ' || zz.party(zz.get('B1')::jsonb, 'KO1', 'bank', 'cp_bank') || ' // ' || zz.party(zz.get('B1')::jsonb, 'KO2', 'employee', 'staff:st1')
-    || ' // ' || zz.party(zz.get('B1')::jsonb, 'KO2', 'counterparty', 'cp_sup') || ' // ' || zz.party(zz.get('B1')::jsonb, 'KO2', 'bank', 'cp_bank'),
+  zz.party(zz.js(zz.get('B1')), 'KO1', 'employee', 'staff:st1') || ' // ' || zz.party(zz.js(zz.get('B1')), 'KO1', 'bank', 'cp_bank') || ' // ' || zz.party(zz.js(zz.get('B1')), 'KO2', 'employee', 'staff:st1')
+    || ' // ' || zz.party(zz.js(zz.get('B1')), 'KO2', 'counterparty', 'cp_sup') || ' // ' || zz.party(zz.js(zz.get('B1')), 'KO2', 'bank', 'cp_bank'),
   '^Sinov Zavxoz\|1\|150000\|\["in_acc_return"\] // Sinov Bank\|1\|1000000\|\["in_bank"\] // Sinov Zavxoz\|1\|400000\|\["out_accountable"\] // Sinov Ta''minot MChJ\|1\|300000\|\["out_expense"\] // Sinov Bank\|1\|1500000\|\["out_bank"\]$');
-select zz.chk('R3d bekor qilingan chiqim tomoni ro''yxatda yo''q', coalesce(zz.party(zz.get('B1')::jsonb, 'KO2', 'other', null), 'yo''q'), '^yo''q$');
+select zz.chk('R3d bekor qilingan chiqim tomoni ro''yxatda yo''q', coalesce(zz.party(zz.js(zz.get('B1')), 'KO2', 'other', null), 'yo''q'), '^yo''q$');
 select zz.chk('R4 ichki o''tkazmalar: bankdan 1 ta 1 000 000, bankka 1 ta 1 500 000',
-  (select (t ->> 'inCount') || ':' || trim_scale((t ->> 'inAmount')::numeric) || ':' || (t ->> 'outCount') || ':' || trim_scale((t ->> 'outAmount')::numeric) from (select zz.get('B1')::jsonb -> 'transfers' as t) q),
+  (select (t ->> 'inCount') || ':' || trim_scale((t ->> 'inAmount')::numeric) || ':' || (t ->> 'outCount') || ':' || trim_scale((t ->> 'outAmount')::numeric) from (select zz.js(zz.get('B1')) -> 'transfers' as t) q),
   '^1:1000000:1:1500000$');
 select zz.chk('R4b statiya bo''yicha: o''tkazma belgisi faqat bank qatorlarida; nomlari bilan',
   (select string_agg((x ->> 'form') || ' ' || (x ->> 'articleId') || ' ' || trim_scale((x ->> 'amount')::numeric) || case when (x ->> 'transfer')::boolean then ' T' else '' end
                      || case when coalesce(x ->> 'nameUz', '') <> '' and x ->> 'kind' in ('IN', 'EX', 'OP') then '' else ' ?' end, ', '
                      order by x ->> 'form', x ->> 'articleId', x ->> 'credit', x ->> 'debit')
-     from jsonb_array_elements(zz.get('B1')::jsonb -> 'byArticle') x),
+     from jsonb_array_elements(zz.js(zz.get('B1')) -> 'byArticle') x),
   '^KO1 IN-01 1500000, KO1 IN-06 80000, KO1 OP-01 1000000 T, KO1 OP-07 150000, KO2 EX-07 100000, KO2 EX-32 200000, KO2 OP-02 1500000 T, KO2 OP-06 400000$');
 select zz.chk('R5 kanallar (ma''lumot): naqd 3 ta 1 500 000 = o''quv to''lovi orderlari; Click 1 ta 300 000',
-  (select string_agg((x ->> 'provider') || ' ' || (x ->> 'count') || ' ' || trim_scale((x ->> 'amount')::numeric), ', ' order by x ->> 'provider') from jsonb_array_elements(zz.get('B1')::jsonb -> 'channels') x),
+  (select string_agg((x ->> 'provider') || ' ' || (x ->> 'count') || ' ' || trim_scale((x ->> 'amount')::numeric), ', ' order by x ->> 'provider') from jsonb_array_elements(zz.js(zz.get('B1')) -> 'channels') x),
   '^cash 3 1500000, click 1 300000$');
 select zz.chk('R6 kutilayotganlar: tasdiq kutmoqda 1 ta 70 000; berilishi kerak 1 ta 100 000',
-  (select (p ->> 'waiting') || ':' || trim_scale((p ->> 'waitingSum')::numeric) || ':' || (p ->> 'toPay') || ':' || trim_scale((p ->> 'toPaySum')::numeric) from (select zz.get('B1')::jsonb -> 'pending' as p) q),
+  (select (p ->> 'waiting') || ':' || trim_scale((p ->> 'waitingSum')::numeric) || ':' || (p ->> 'toPay') || ':' || trim_scale((p ->> 'toPaySum')::numeric) from (select zz.js(zz.get('B1')) -> 'pending' as p) q),
   '^1:70000:1:100000$');
 select zz.chk('R7 limit 3 000 000 — qoldiq (2 530 000) oshmagan',
-  (select trim_scale((l ->> 'cashLimit')::numeric) || ':' || (l ->> 'set') || ':' || (l ->> 'exceeded') from (select zz.get('B1')::jsonb -> 'limit' as l) q), '^3000000:true:false$');
-select zz.chk('R8 hujjatlar ro''yxati: bekor qilingani ham (raqami bilan) bor', (select count(*) || ':' || count(*) filter (where x ->> 'status' = 'void') from jsonb_array_elements(zz.get('B1')::jsonb -> 'docs') x), '^11:1$');
+  (select trim_scale((l ->> 'cashLimit')::numeric) || ':' || (l ->> 'set') || ':' || (l ->> 'exceeded') from (select zz.js(zz.get('B1')) -> 'limit' as l) q), '^3000000:true:false$');
+select zz.chk('R8 hujjatlar ro''yxati: bekor qilingani ham (raqami bilan) bor', (select count(*) || ':' || count(*) filter (where x ->> 'status' = 'void') from jsonb_array_elements(zz.js(zz.get('B1')) -> 'docs') x), '^11:1$');
 
 -- ---------- (D) Telegram bloki: ochiq kun ----------
 select zz.put('D1', (zz.daily('2027-01-04') -> 'kassa')::text);
 select zz.chk('D1 kassa bloki = kun varag''i: ochiq, 2 000 000 + 2 730 000 − 2 200 000 = 2 530 000; 7 kirim, 3 chiqim, 1 bekor',
   (select (d ->> 'status') || ':' || trim_scale((d ->> 'opening')::numeric) || ':' || trim_scale((d ->> 'receipts')::numeric) || ':' || trim_scale((d ->> 'payouts')::numeric) || ':' || trim_scale((d ->> 'closing')::numeric)
        || ':' || (d ->> 'n1') || ':' || (d ->> 'n2') || ':' || (d ->> 'voids') || ':' || coalesce(d ->> 'counted', '-')
-     from (select zz.get('D1')::jsonb -> 'day' as d) q), '^open:2000000:2730000:2200000:2530000:7:3:1:-$');
-select zz.chk('D1b o''tkazmalar bloki ham shu manbadan', (zz.get('D1')::jsonb -> 'day' -> 'transfers')::text, '"inAmount": 1000000.*"outAmount": 1500000|"outAmount": 1500000.*"inAmount": 1000000');
+     from (select zz.js(zz.get('D1')) -> 'day' as d) q), '^open:2000000:2730000:2200000:2530000:7:3:1:-$');
+select zz.chk('D1b o''tkazmalar bloki ham shu manbadan', (zz.js(zz.get('D1')) -> 'day' -> 'transfers')::text, '"inAmount": 1000000.*"outAmount": 1500000|"outAmount": 1500000.*"inAmount": 1000000');
 select zz.chk('D2 nazorat qatori: moslik 0, ochiq kun — bugungi (eskirgan emas), 1 tasdiq kutmoqda, 1 berilmagan, limit oshmagan',
   (select (c ->> 'reconcile') || ':' || (c ->> 'openDay') || ':' || coalesce(c ->> 'staleOpenDay', '-') || ':' || (c ->> 'waitingApproval') || ':' || (c ->> 'approvedUnpaid') || ':' || (c ->> 'voids')
        || ':' || (c ->> 'limitExceeded') || ':' || (c ->> 'unverifiedDays') || ':' || (c ->> 'gaps')
-     from (select zz.get('D1')::jsonb -> 'control' as c) q), '^0:2027-01-04:-:1:1:1:false:0:0$');
+     from (select zz.js(zz.get('D1')) -> 'control' as c) q), '^0:2027-01-04:-:1:1:1:false:0:0$');
 select zz.chk('D3 boshqa bloklar joyida (to''lovlar: naqd + Click)', (zz.daily('2027-01-04') -> 'payments' ->> 'count') || ':' || trim_scale((zz.daily('2027-01-04') -> 'payments' ->> 'sum')::numeric), '^4:1800000$');
 select zz.chk('M0 moslik — toza: hammasi 0', zz.rec(), '^true p1=0/0 p4=0/0 p5=0/0 p8=0/0 jami=0$');
 
@@ -211,18 +221,18 @@ select zz.put('CL1', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"m
 select zz.put('B2', zz.book('main', '2027-01-04')::text);
 select zz.chk('R9 yopilgan kun: kirim 2 730 000, chiqim 2 205 000 (kamomad orderi bilan), kun oxiri = sanalgan = 2 525 000, farq −5 000',
   (select (d ->> 'status') || ':' || trim_scale((d ->> 'receipts')::numeric) || ':' || trim_scale((d ->> 'payouts')::numeric) || ':' || trim_scale((d ->> 'closing')::numeric) || ':' || trim_scale((d ->> 'counted')::numeric) || ':' || trim_scale((d ->> 'diff')::numeric)
-     from (select zz.get('B2')::jsonb -> 'day' as d) q), '^closed:2730000:2205000:2525000:2525000:-5000$');
+     from (select zz.js(zz.get('B2')) -> 'day' as d) q), '^closed:2730000:2205000:2525000:2525000:-5000$');
 select zz.chk('R9b RP-02 = KO-4: tomon va statiya jamlari yopilgan kun jamlariga teng',
   (select zz.sumof(b -> 'byParty', 'KO1') || ':' || zz.sumof(b -> 'byParty', 'KO2') || ':' || zz.sumof(b -> 'byArticle', 'KO1') || ':' || zz.sumof(b -> 'byArticle', 'KO2')
-     from (select zz.get('B2')::jsonb as b) q), '^2730000:2205000:2730000:2205000$');
-select zz.chk('R9c tizim hujjati (kamomad) alohida «tizim» qatorida', zz.party(zz.get('B2')::jsonb, 'KO2', 'system', null), '^Kassa kamomadi\|1\|5000\|\["out_shortage"\]$');
+     from (select zz.js(zz.get('B2')) as b) q), '^2730000:2205000:2730000:2205000$');
+select zz.chk('R9c tizim hujjati (kamomad) alohida «tizim» qatorida', zz.party(zz.js(zz.get('B2')), 'KO2', 'system', null), '^Kassa kamomadi\|1\|5000\|\["out_shortage"\]$');
 select zz.put('D4', (zz.daily('2027-01-04') -> 'kassa')::text);
 select zz.chk('D4 Telegram = kunlik hisobot (--dry = RP-02): yopilgan, jamlar, sanalgan va farq bir xil',
   (select (d ->> 'status') || ':' || trim_scale((d ->> 'receipts')::numeric) || ':' || trim_scale((d ->> 'payouts')::numeric) || ':' || trim_scale((d ->> 'closing')::numeric) || ':' || trim_scale((d ->> 'counted')::numeric) || ':' || trim_scale((d ->> 'diff')::numeric)
        || ':' || (d ->> 'n1') || ':' || (d ->> 'n2')
-     from (select zz.get('D4')::jsonb -> 'day' as d) q), '^closed:2730000:2205000:2525000:2525000:-5000:7:4$');
+     from (select zz.js(zz.get('D4')) -> 'day' as d) q), '^closed:2730000:2205000:2525000:2525000:-5000:7:4$');
 select zz.chk('D4b nazorat qatori: farq −5 000, qarorsiz kamomad 1, tekshirilmagan kun 1, ochiq kun yo''q',
-  (select trim_scale((c ->> 'diff')::numeric) || ':' || (c ->> 'undecidedShortages') || ':' || (c ->> 'unverifiedDays') || ':' || coalesce(c ->> 'openDay', '-') from (select zz.get('D4')::jsonb -> 'control' as c) q),
+  (select trim_scale((c ->> 'diff')::numeric) || ':' || (c ->> 'undecidedShortages') || ':' || (c ->> 'unverifiedDays') || ':' || coalesce(c ->> 'openDay', '-') from (select zz.js(zz.get('D4')) -> 'control' as c) q),
   '^-5000:1:1:-$');
 select zz.chk('C1 nazorat: yopilgan kunning KO-4 varag''i hali chop etilmagan', (zz.checks('main') -> 'unprintedBooks30')::text, '^\["2027-01-04"\]$');
 select zz.chk('C1b chop etilgach — ro''yxatdan chiqadi',
@@ -253,7 +263,7 @@ select zz.chk('H2 2-kun: avans, rahbarga berish va qaytarish o''tkazildi', (sele
 select zz.chk('M1 moslik — hali ham toza (avans, qaytarish, xarajat bog''langan)', zz.rec(), '^true p1=0/0 p4=0/0 p5=0/0 p8=0/0 jami=0$');
 select zz.put('CL2', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-08","counted":3835000,"pendingRefs":[{"ref":"man_cl2_0001","amount":10000}]}')::text$q$));
 select zz.chk('C6 2-kun yopildi (3 825 000 + 10 000 oflayn = sanalgan); nazorat: oflayn yozuvli yopish 1 kun, limitdan oshgan yopilish 1 kun',
-  (zz.get('CL2')::jsonb -> 'day' ->> 'status') || ':' || trim_scale((zz.get('CL2')::jsonb -> 'day' ->> 'closing')::numeric) || ':' || trim_scale((zz.get('CL2')::jsonb -> 'day' ->> 'diff')::numeric)
+  (zz.js(zz.get('CL2')) -> 'day' ->> 'status') || ':' || trim_scale((zz.js(zz.get('CL2')) -> 'day' ->> 'closing')::numeric) || ':' || trim_scale((zz.js(zz.get('CL2')) -> 'day' ->> 'diff')::numeric)
     || ':' || (zz.checks('main') ->> 'pendingDays30') || ':' || (zz.checks('main') -> 'limit' ->> 'days30'), '^closed:3825000:0:1:1$');
 select zz.chk('D5 kun varag''i yo''q kunda (07.01): blok bor, kun yo''q, qoldiq — oxirgi yopilgan kun oxiri',
   (select (k -> 'day')::text || ':' || trim_scale((k ->> 'balance')::numeric) from (select zz.daily('2027-01-07') -> 'kassa' as k) q), '^null:3825000$');
@@ -283,12 +293,12 @@ select zz.put('T0', zz.as('U_DIR', $q$select public.kassa_opening_set('{"desk":"
 select zz.put('T1', zz.rpc('U_KAS', 'kassa_payout_request', '{"desk":"sinov","op":"out_expense","amount":20000,"partyType":"counterparty","partyId":"cp_sup","basis":"Sinov hujjati","clientRef":"r-t1-0001","lines":[{"articleId":"EX-07","amount":20000}]}'));
 select zz.put('T1p', left(zz.appr('U_FM', zz.id('T1')), 0) || zz.pay('U_KAS', zz.id('T1')));
 select zz.chk('T1 sinov kassasida xarajat orderi o''tkazildi, «Buxgalteriya»ga HECH NARSA yozilmadi',
-  (zz.get('T1p')::jsonb ->> 'status') || ':' || (zz.get('T1p')::jsonb ->> 'desk') || ':' || (select count(*) from public.expenses where "cashDocId" = zz.id('T1')), '^posted:sinov:0$');
+  (zz.js(zz.get('T1p')) ->> 'status') || ':' || (zz.js(zz.get('T1p')) ->> 'desk') || ':' || (select count(*) from public.expenses where "cashDocId" = zz.id('T1')), '^posted:sinov:0$');
 select zz.put('T2', zz.rpc('U_KAS', 'kassa_payout_request', '{"desk":"sinov","op":"out_advance","amount":10000,"partyType":"employee","partyId":"staff:st1","basis":"Sinov avansi","clientRef":"r-t2-0001"}'));
 select zz.put('T2p', left(zz.appr('U_FM', zz.id('T2')), 0) || zz.pay('U_KAS', zz.id('T2')));
 select zz.chk('T2 sinov kassasida avans orderi: xodim avansi jadvaliga yozilmadi',
-  (zz.get('T2p')::jsonb ->> 'status') || ':' || (select count(*) from public.staff_advances where "cashDocId" = zz.id('T2')), '^posted:0$');
-select zz.chk('T3 sinov kassasi hujjatini bekor qilish — bog''langan yozuvsiz ham ishlaydi', zz.void('U_FM', zz.id('T1'), 'Sinov tugadi') :: jsonb ->> 'status', '^void$');
+  (zz.js(zz.get('T2p')) ->> 'status') || ':' || (select count(*) from public.staff_advances where "cashDocId" = zz.id('T2')), '^posted:0$');
+select zz.chk('T3 sinov kassasi hujjatini bekor qilish — bog''langan yozuvsiz ham ishlaydi', zz.js(zz.void('U_FM', zz.id('T1'), 'Sinov tugadi')) ->> 'status', '^void$');
 select zz.chk('T3b acc-3: sinov kassasida qaytim — o''sha kassaning o''z qoldig''idan (asosiy kassadagi 250 000 hisobga olinmaydi)',
   zz.rpc('U_KAS', 'kassa_receipt', '{"desk":"sinov","op":"in_acc_return","amount":10000,"partyType":"employee","partyId":"staff:st1","basis":"Sinov qaytimi","clientRef":"r-t3b-0001"}'),
   '^ERR P0001 \[kassa:acc_over\].*qoldiq 0 so''m');
@@ -326,10 +336,10 @@ select zz.chk('AV2 rad: ish haqi statiyasi, cheksiz qator, kelajak sana, qoldiqd
   '^ERR 22023 \[kassa:article\].* \| ERR 22023 \[kassa:note\].* \| ERR 22023 \[kassa:basis\].* \| ERR P0001 \[kassa:acc_over\].* \| ERR P0001 \[kassa:acc_none\]');
 select zz.put('AV3', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":50000,"note":"Chek 16, 09.01"}]}'));
 select zz.chk('AV3 avans hisoboti: naqdsiz dalolatnoma, Dt 1010 / 2010 Kt 4230, hisobdordagi qoldiq 250 000 → 50 000',
-  (zz.get('AV3')::jsonb ->> 'form') || ':' || (zz.get('AV3')::jsonb ->> 'op') || ':' || (zz.get('AV3')::jsonb ->> 'status') || ':' || trim_scale((zz.get('AV3')::jsonb ->> 'amount')::numeric)
+  (zz.js(zz.get('AV3')) ->> 'form') || ':' || (zz.js(zz.get('AV3')) ->> 'op') || ':' || (zz.js(zz.get('AV3')) ->> 'status') || ':' || trim_scale((zz.js(zz.get('AV3')) ->> 'amount')::numeric)
   || ':' || (select string_agg((l ->> 'debit') || '>' || (l ->> 'credit') || '=' || trim_scale((l ->> 'amount')::numeric) || '@' || (l ->> 'articleId'), ',' order by (l ->> 'lineNo')::int)
-               from jsonb_array_elements(zz.get('AV3')::jsonb -> 'lines') l)
-  || ':' || trim_scale((zz.get('AV3')::jsonb ->> 'openBefore')::numeric) || '>' || trim_scale((zz.get('AV3')::jsonb ->> 'openAfter')::numeric),
+               from jsonb_array_elements(zz.js(zz.get('AV3')) -> 'lines') l)
+  || ':' || trim_scale((zz.js(zz.get('AV3')) ->> 'openBefore')::numeric) || '>' || trim_scale((zz.js(zz.get('AV3')) ->> 'openAfter')::numeric),
   '^ACT:nc_adv_report:posted:200000:1010>4230=150000@EX-20,2010>4230=50000@EX-16:250000>50000$');
 select zz.chk('AV4 «Buxgalteriya»ga 2 ta xarajat ko''chdi: usul «hisobdor orqali», hujjatga bog''langan, toifa statiyadan; kassa kitobiga kirmaydi',
   (select string_agg(e.category || ':' || trim_scale(e.amount) || ':' || e.method || ':' || e."articleId", ',' order by e.id) from public.expenses e where e."cashDocId" = zz.id('AV3'))
@@ -341,7 +351,7 @@ select zz.chk('AV5 nazorat: berilgan 400 000 − qaytim 150 000 − hisobot 200 
   || ':' || (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') || ':' || (zz.rec() = zz.get('AVt0'))::text,
   '^400000:150000:200000:50000:0:true$');
 select zz.chk('AV6 qayta yuborish — o''sha hujjat (dup), ikkinchi dalolatnoma yo''q',
-  (zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":50000,"note":"Chek 16, 09.01"}]}')::jsonb ->> 'dup')
+  (zz.js(zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":50000,"note":"Chek 16, 09.01"}]}')) ->> 'dup')
   || ':' || (select count(*) from public.cash_docs where op = 'nc_adv_report'), '^true:1$');
 select zz.chk('AV6b state-9: o''sha kalit va jami, lekin qatorlar boshqa (statiya / summa taqsimoti / chek) — rad (eski hisobot jim qaytmaydi), ikkinchi dalolatnoma yo''q',
   zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":100000,"note":"Chek 16, 09.01"}]}')
@@ -355,28 +365,38 @@ select zz.chk('AV7 «Buxgalteriya»da qo''lda «hisobdor orqali» xarajat — ra
   '^ERR 42501 \[kassa:cash_only_kassa\].* \| ex_av7b \| ERR 42501 \[kassa:cash_only_kassa\]');
 select zz.put('AV8', zz.as('U_KAS', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'Xato kiritilgan hisobot')) || ' | '
   || zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'xx')) || ' | '
-  || (zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'Xato kiritilgan hisobot'))::jsonb ->> 'status') || ':'
-  || (zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'Xato kiritilgan hisobot'))::jsonb ->> 'dup'));
+  || (zz.js(zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'Xato kiritilgan hisobot'))) ->> 'status') || ':'
+  || (zz.js(zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV3'), 'Xato kiritilgan hisobot'))) ->> 'dup'));
 select zz.chk('AV8 bekor qilish: kassir — rad, sababsiz — rad; Moliya menejeri — xarajatlar olib tashlanadi, qoldiq 250 000 ga qaytadi; qayta — dup',
   zz.get('AV8') || ' | ' || (select count(*) from public.expenses where "cashDocId" = zz.id('AV3')) || ':'
   || (select trim_scale((a ->> 'balance')::numeric) from jsonb_array_elements(zz.checks('main') -> 'accountable') a where a ->> 'partyId' = 'staff:st1'),
   '^ERR 42501.* \| ERR 22023 \[kassa:reason\].* \| void:true \| 0:250000$');
 select zz.put('AV9', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r9-0001","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":200000,"note":"Cheklar 15-16, 09.01"}]}'));
+-- qa-8: avans hisoboti faqat kiritilgan kunning o'zida bekor qilinadi — ertasi kuni rad (aks holda o'tgan, yopilgan / tekshirilgan kunning
+--   «Buxgalteriya» xarajati orqaga o'chib, hisobdor qoldig'i tiklanardi; keyin — buxgalter tuzatishi). Savepoint ichida (soat va holat qaytadi).
+savepoint av9b;
+select zz.clock('2027-01-12 10:00+05');
+select zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('AV9'), 'Xato kiritilgan hisobot')) as av9b \gset
+select :'av9b' || ' | ' || coalesce((select status from public.cash_docs where id = zz.id('AV9')) || ':' || (select count(*) from public.expenses where "cashDocId" = zz.id('AV9'))
+  || ':' || trim_scale(app.kassa_acc_open('staff:st1')), '<null>') as av9b \gset
+rollback to savepoint av9b;
+select zz.chk('AV9b qa-8: ertasi kuni (12.01) 11.01 dagi avans hisoboti bekor qilinmaydi (kassa:day_closed) — hisobot, «Buxgalteriya» xarajati va hisobdor qoldig''i joyida',
+  :'av9b', '^ERR P0001 \[kassa:day_closed\] Avans hisoboti faqat kiritilgan kunning o''zida bekor qilinadi \(keyin — buxgalter tuzatishi\) \| posted:1:50000$');
 select zz.put('AV10', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":100000,"partyType":"employee","partyId":"staff:st1","basis":"Xo''jalik xaridlari uchun","clientRef":"av-c10-0001"}'));
 select zz.chk('AV10 hisobotsiz qoldiq (50 000) bor — yangi avans so''rovi Direktor tasdig''ini ham talab qiladi (T1 dan kichik bo''lsa ham)',
-  (zz.get('AV9')::jsonb ->> 'status') || ':' || (zz.get('AV10')::jsonb ->> 'needsDirector') || ':' || trim_scale((zz.get('AV10')::jsonb ->> 'accOpen')::numeric) || ':' || (zz.get('AV10')::jsonb ->> 'status'),
+  (zz.js(zz.get('AV9')) ->> 'status') || ':' || (zz.js(zz.get('AV10')) ->> 'needsDirector') || ':' || trim_scale((zz.js(zz.get('AV10')) ->> 'accOpen')::numeric) || ':' || (zz.js(zz.get('AV10')) ->> 'status'),
   '^posted:true:50000:draft$');
 select zz.chk('AV11 faqat moliya tasdig''i bilan — hali tasdiqlanmagan (Direktor kutilmoqda), pul berilmaydi',
   left(zz.appr('U_FM', zz.id('AV10')), 0) || zz.pay('U_KAS', zz.id('AV10')), '^ERR 42501 \[kassa:not_approved\]');
-select zz.put('AV12', (left(zz.appr('U_DIR', zz.id('AV10')), 0) || zz.pay('U_KAS', zz.id('AV10')))::jsonb ->> 'status');
+select zz.put('AV12', zz.js(left(zz.appr('U_DIR', zz.id('AV10')), 0) || zz.pay('U_KAS', zz.id('AV10'))) ->> 'status');
 select zz.chk('AV12 Direktor tasdig''i bilan — to''lov o''tadi (istisno); qoldiq 50 000 + 100 000 = 150 000',
   zz.get('AV12') || ':' || (select trim_scale(app.kassa_acc_open('staff:st1'))), '^posted:150000$');
 select zz.put('AV13a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":50000,"partyType":"employee","partyId":"teachers:tch1","basis":"Kanselyariya xaridi","clientRef":"av-c13-0001"}'));
 select zz.put('AV13b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":60000,"partyType":"employee","partyId":"teachers:tch1","basis":"Kanselyariya xaridi 2","clientRef":"av-c13-0002"}'));
 select zz.put('AV13', left(zz.appr('U_FM', zz.id('AV13a')), 0) || left(zz.appr('U_FM', zz.id('AV13b')), 0)
-  || (zz.pay('U_KAS', zz.id('AV13a'))::jsonb ->> 'status') || ' | ' || zz.pay('U_KAS', zz.id('AV13b')));
+  || (zz.js(zz.pay('U_KAS', zz.id('AV13a'))) ->> 'status') || ' | ' || zz.pay('U_KAS', zz.id('AV13b')));
 select zz.chk('AV13 ikki tasdiqlangan so''rov (qoldiq yo''q edi): birinchisi beriladi, ikkinchisi — oldingisi hisobotsiz, Direktor tasdig''isiz rad',
-  zz.get('AV13') || ' | ' || (zz.get('AV13a')::jsonb ->> 'needsDirector') || ':' || (zz.get('AV13b')::jsonb ->> 'needsDirector'),
+  zz.get('AV13') || ' | ' || (zz.js(zz.get('AV13a')) ->> 'needsDirector') || ':' || (zz.js(zz.get('AV13b')) ->> 'needsDirector'),
   '^posted \| ERR 42501 \[kassa:acc_open\].*Direktorga bormagan.* \| false:false$');
 select zz.chk('AV14 moslik: avans hisobotlari va xarajatlar mos (p4.adv = 0), boshqa hisoblagichlar o''zgarmagan',
   (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') || ':' || (zz.rec() = zz.get('AVt0'))::text || ' [' || zz.rec() || ']', '^0:true ');
@@ -392,10 +412,10 @@ select zz.chk('AV16 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.
 --   Ssenariy savepoint ichida (keyingi bo'limlar kun jamlari o'zgarmasin): AV13a — o'qituvchiga 50 000 bugun berilgan avans.
 savepoint st5;
 select zz.put('S5r', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-s5-0001","partyId":"teachers:tch1","reportDate":"2027-01-11","lines":[{"articleId":"EX-32","amount":50000,"note":"Chek 21, 11.01"}]}'));
-select (zz.get('S5r')::jsonb ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) as s5_a,
+select (zz.js(zz.get('S5r')) ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) as s5_a,
        zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans') as s5_b, zz.void('U_FM', zz.id('AV13a'), 'Xato berilgan avans') as s5_c \gset
-select (zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('S5r'), 'Xato kiritilgan hisobot'))::jsonb ->> 'status') || ':'
-       || (zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans')::jsonb ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) || ':'
+select (zz.js(zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('S5r'), 'Xato kiritilgan hisobot'))) ->> 'status') || ':'
+       || (zz.js(zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans')) ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) || ':'
        || (select count(*) from jsonb_array_elements(zz.checks('main') -> 'accountable') a where a ->> 'partyId' = 'teachers:tch1') as s5_d \gset
 rollback to savepoint st5;
 select zz.chk('AV17 state-5: hisobot 50 000 avansni yopdi (qoldiq 0); avans orderini kassir ham, Moliya menejeri ham bekor qila olmaydi',
@@ -420,10 +440,10 @@ select zz.chk('AV18 manfiy qoldiq ko''rinadi (berilgan 50 000 − qaytim 70 000 
 --   ko'chishda asosiy vosita — «Inventar», tovar — «Boshqa», izoh statiya nomi bilan boshlanadi. Savepoint ichida (keyingi bo'limlar qoldig'i o'zgarmasin).
 savepoint ao5;
 select zz.put('AO5', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-a5-0001","partyId":"staff:st1","reportDate":"2027-01-11","basis":"Noutbuk va forma","lines":[{"articleId":"OP-18","amount":70000,"note":"Chek 31, noutbuk"},{"articleId":"OP-24","amount":30000,"note":"Chek 32, forma"}]}'));
-select (zz.get('AO5')::jsonb ->> 'status') || ':' || trim_scale((zz.get('AO5')::jsonb ->> 'amount')::numeric) || ':'
+select (zz.js(zz.get('AO5')) ->> 'status') || ':' || trim_scale((zz.js(zz.get('AO5')) ->> 'amount')::numeric) || ':'
        || (select string_agg((l ->> 'debit') || '>' || (l ->> 'credit') || '=' || trim_scale((l ->> 'amount')::numeric) || '@' || (l ->> 'articleId'), ',' order by (l ->> 'lineNo')::int)
-             from jsonb_array_elements(zz.get('AO5')::jsonb -> 'lines') l)
-       || ':' || trim_scale((zz.get('AO5')::jsonb ->> 'openBefore')::numeric) || '>' || trim_scale((zz.get('AO5')::jsonb ->> 'openAfter')::numeric) as ao5_a,
+             from jsonb_array_elements(zz.js(zz.get('AO5')) -> 'lines') l)
+       || ':' || trim_scale((zz.js(zz.get('AO5')) ->> 'openBefore')::numeric) || '>' || trim_scale((zz.js(zz.get('AO5')) ->> 'openAfter')::numeric) as ao5_a,
        (select string_agg(e.category || '=' || trim_scale(e.amount) || ':' || e.method || ':' || e."articleId" || ' «' || e.note || '»', ' | ' order by e.id) from public.expenses e where e."cashDocId" = zz.id('AO5'))
        || ' | ' || (zz.checks('main') -> 'reconcile' -> 'p4' ->> 'adv') as ao5_b,
        zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-a5-0002","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"OP-17","amount":10000,"note":"Chek 33"}]}') as ao5_c \gset
@@ -435,11 +455,11 @@ select zz.chk('AV20 acc-9: «Buxgalteriya»ga ko''chdi — asosiy vosita «Inven
 select zz.chk('AV21 acc-5: yetkazib beruvchi bilan hisob-kitob (OP-17) avans hisobotida — rad (qarz kassa yoki bankdan to''lanadi)',
   :'ao5_c', '^ERR 22023 \[kassa:article\] «Yetkazib beruvchilar bilan hisob-kitob» statiyasi bo''yicha hisobdor xarajati yozilmaydi \(yetkazib beruvchiga qarz');
 select zz.chk('AV22 acc-5: shakldagi ro''yxat (kassa_refs → advReport) — server qoidasining o''zi: EX (kassa xarajati) + OP-18 + OP-24; ish haqi, OP-17, OP-15 — yo''q',
-  (select string_agg((a ->> 'id') || ':' || (a ->> 'advReport'), ',' order by a ->> 'id') from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)::jsonb -> 'articles') a
+  (select string_agg((a ->> 'id') || ':' || (a ->> 'advReport'), ',' order by a ->> 'id') from jsonb_array_elements(zz.js(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)) -> 'articles') a
     where a ->> 'id' in ('EX-01', 'EX-20', 'OP-15', 'OP-17', 'OP-18', 'OP-24'))
   || ' | ' || (select count(*) filter (where (a ->> 'advReport')::boolean) || '=' || count(*) filter (where (a ->> 'kind' = 'EX' and (a ->> 'cashOutAllowed')::boolean and coalesce(a ->> 'accountCode', '') <> '')
                                                                                            or a ->> 'id' in ('OP-18', 'OP-24'))
-                 from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)::jsonb -> 'articles') a),
+                 from jsonb_array_elements(zz.js(zz.as('U_FM', $q$select public.kassa_refs()::text$q$)) -> 'articles') a),
   '^EX-01:false,EX-20:true,OP-15:false,OP-17:false,OP-18:true,OP-24:true \| (\d+)=\1$');
 
 -- ---------- (Z) onlayn kassa (NKM) Z-hisoboti (F1.26, buxgalter ko'rigi M6) ----------
@@ -459,9 +479,9 @@ select zz.chk('Z2a 1-kun: kutilgan naqd — fiskal chekli kirim orderlari (5 ta:
 select zz.put('Z2', zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-0104","cash":1580000,"card":0}}'));
 select zz.chk('Z2 kassir Z-hisobotni keyin kiritdi: tizim bilan mos (farq 0)',
   (select (z ->> 'recorded') || ':' || (z ->> 'ok') || ':' || trim_scale((z ->> 'diffCash')::numeric) || ':' || trim_scale((z ->> 'diffCard')::numeric) || ':' || (j ->> 'dup')
-     from (select zz.get('Z2')::jsonb j, zz.get('Z2')::jsonb -> 'day' -> 'z' z) q), '^true:true:0:0:false$');
+     from (select zz.js(zz.get('Z2')) j, zz.js(zz.get('Z2')) -> 'day' -> 'z' z) q), '^true:true:0:0:false$');
 select zz.chk('Z2b aynan o''sha ma''lumot qayta yuborilsa — yangi yozuv yo''q (dup)',
-  zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-0104","cash":1580000,"card":0}}')::jsonb ->> 'dup', '^true$');
+  zz.js(zz.rpc('U_KAS', 'kassa_day_z', '{"day":"2027-01-04","z":{"no":"Z-0104","cash":1580000,"card":0}}')) ->> 'dup', '^true$');
 select zz.chk('Z2c kun jurnalida bitta Z yozuvi (kim kiritgani bilan)',
   (select count(*) || ':' || min(e."byUid") from public.cash_day_events e where e."dayId" = 'cd_main_2027-01-04' and e.kind = 'zreport'), '^1:U_KAS$');
 select zz.chk('Z3 Z mos — izohsiz tekshirildi', zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true)::text$q$), '"status": "verified"');
@@ -469,7 +489,7 @@ select zz.chk('Z4 tekshirilgan kunning Z-hisoboti o''zgarmaydi', zz.rpc('U_KAS',
 -- (state-2: 08.01 qurilma navbatidagi hali kelmagan yozuv bilan yopilgan — izoh shu sababli talab qilinadi, Z uchun emas)
 select zz.chk('Z5 2-kun (08.01): fiskal kirim va terminal to''lovi yo''q — Z talab qilinmaydi (izohsiz rad etilsa — sababi navbat yozuvi, Z emas); izoh bilan tekshirildi',
   (app.kassa_z_state('cd_main_2027-01-08') ->> 'needed') || ' | ' || left(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true)::text$q$), 40)
-  || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true, 'Navbat yozuvi qurilmada qolgan')::text$q$)::jsonb -> 'day' ->> 'status'),
+  || ' | ' || (zz.js(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true, 'Navbat yozuvi qurilmada qolgan')::text$q$)) -> 'day' ->> 'status'),
   '^false \| ERR 22023 \[kassa:pending_note\].* \| verified$');
 -- 3-kun (11.01, ochiq): fiskal chekli naqd o'quv to'lovi va terminal to'lovi; bekor qilingan terminal va Click — hisobga kirmaydi
 select zz.put('Zt1', zz.tui('U_KAS', 'man_z_0001', 'T-2', 300000, 'Sinov Bobo', '211'));
@@ -491,7 +511,7 @@ select zz.put('Z8', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","d
 select zz.chk('Z8 kun Z bilan yopildi: naqd 10 000 kam (tizimda 300 000, 1 chek), karta mos (150 000, 1 ta)',
   (select (j -> 'day' ->> 'status') || ':' || (z ->> 'recorded') || ':' || (z ->> 'ok') || ':' || trim_scale((z ->> 'expCash')::numeric) || '/' || (z ->> 'nCash')
           || ':' || trim_scale((z ->> 'expCard')::numeric) || '/' || (z ->> 'nCard') || ':' || trim_scale((z ->> 'diffCash')::numeric) || ':' || trim_scale((z ->> 'diffCard')::numeric)
-     from (select zz.get('Z8')::jsonb j, zz.get('Z8')::jsonb -> 'day' -> 'z' z) q), '^closed:true:false:300000/1:150000/1:-10000:0$');
+     from (select zz.js(zz.get('Z8')) j, zz.js(zz.get('Z8')) -> 'day' -> 'z' z) q), '^closed:true:false:300000/1:150000/1:-10000:0$');
 select zz.chk('Z8b kunlik hisobot ma''lumotida Z (raqami, summalari)',
   (select (z ->> 'no') || ':' || trim_scale((z ->> 'cash')::numeric) || ':' || trim_scale((z ->> 'card')::numeric) from (select zz.book('main', '2027-01-11') -> 'day' -> 'z' z) q),
   '^Z-0111:290000:150000$');
@@ -503,7 +523,7 @@ select zz.chk('Z10 Telegram kassa bloki: shu kun Z farqi',
   '^false:true:-10000$');
 select zz.chk('Z11 Z mos emas: izohsiz tekshirilmaydi; izoh bilan — tekshirildi',
   zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-11', true)::text$q$) || ' | '
-  || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-11', true, 'Bitta chek qaytarilgan, dalolatnoma bor')::text$q$)::jsonb -> 'day' ->> 'status'),
+  || (zz.js(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-11', true, 'Bitta chek qaytarilgan, dalolatnoma bor')::text$q$)) -> 'day' ->> 'status'),
   '^ERR 22023 \[kassa:z_note\].*mos emas.* \| verified$');
 select zz.chk('Z11b tekshirilgan kun nazorat ro''yxatidan tushdi', jsonb_array_length(zz.checks('main') -> 'zreport')::text, '^0$');
 -- 4-kun (12.01): «Z-hisobot yo'q» — faqat sabab bilan
@@ -515,19 +535,19 @@ select zz.put('Z12', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","
                                                               (select app.kassa_day_balance('cd_main_2027-01-12')))));
 select zz.chk('Z12 «Z-hisobot yo''q» sababsiz — rad; sabab bilan — kun yopildi, Z «yo''q»',
   zz.get('Z12a') || ' | ' || (select (j -> 'day' ->> 'status') || ':' || (z ->> 'missing') || ':' || (z ->> 'ok') || ':' || coalesce(z ->> 'reason', '')
-                                from (select zz.get('Z12')::jsonb j, zz.get('Z12')::jsonb -> 'day' -> 'z' z) q),
+                                from (select zz.js(zz.get('Z12')) j, zz.js(zz.get('Z12')) -> 'day' -> 'z' z) q),
   '^ERR 22023 \[kassa:z\].* \| closed:true:false:Kassa apparati ishlamadi$');
 select zz.chk('Z13 «yo''q» deb belgilangan Z: izohsiz tekshirilmaydi; izoh bilan — tekshirildi',
   zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-12', true)::text$q$) || ' | '
-  || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-12', true, 'Apparat ta''mirda, servis dalolatnomasi bor')::text$q$)::jsonb -> 'day' ->> 'status'),
+  || (zz.js(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-12', true, 'Apparat ta''mirda, servis dalolatnomasi bor')::text$q$)) -> 'day' ->> 'status'),
   '^ERR 22023 \[kassa:z_note\].*yo''q deb belgilangan.* \| verified$');
 -- 5-kun (13.01): fiskal kirim ham, terminal ham yo'q — Z so'ralmaydi (g8: xodimdan «Boshqa kirim» — fiskal cheksiz; aholidan bo'lsa chek majburiy)
 select zz.clock('2027-01-13 10:00+05');
 select zz.put('Zt3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":20000,"partyType":"employee","partyId":"teachers:tch1","articleId":"IN-06","basis":"Tilxat, 13.01.2027","note":"Sinov","clientRef":"z-k3-0001"}'));
 select zz.put('Z14', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-13","counted":%s}', (select app.kassa_day_balance('cd_main_2027-01-13')))));
 select zz.chk('Z14 Z talab qilinmaydigan kun Z siz yopildi va izohsiz tekshirildi',
-  (select (j -> 'day' ->> 'status') || ':' || (z ->> 'needed') || ':' || (z ->> 'recorded') || ':' || (z ->> 'ok') from (select zz.get('Z14')::jsonb j, zz.get('Z14')::jsonb -> 'day' -> 'z' z) q)
-  || ' | ' || (zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-13', true)::text$q$)::jsonb -> 'day' ->> 'status'),
+  (select (j -> 'day' ->> 'status') || ':' || (z ->> 'needed') || ':' || (z ->> 'recorded') || ':' || (z ->> 'ok') from (select zz.js(zz.get('Z14')) j, zz.js(zz.get('Z14')) -> 'day' -> 'z' z) q)
+  || ' | ' || (zz.js(zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-13', true)::text$q$)) -> 'day' ->> 'status'),
   '^closed:false:false:true \| verified$');
 select zz.chk('Z15 sinov kassasida Z-hisobot yuritilmaydi',
   zz.rpc('U_KAS', 'kassa_day_z', '{"desk":"sinov","day":"2027-01-08","z":{"no":"Z-1","cash":0,"card":0}}') || ' | ' || (app.kassa_z_state('cd_sinov_2027-01-08') ->> 'applies'),
@@ -554,9 +574,9 @@ select zz.put('O2a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense
 select zz.put('O2b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_per","basis":"Hisob-faktura № 10","clientRef":"o-2-0002","lines":[{"articleId":"EX-32","amount":50000}]}'));
 select zz.put('O2c', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"o-2-0003","lines":[{"articleId":"EX-07","amount":50000}]}'));
 select zz.chk('O2 chegara 0 (standart): yetkazib beruvchiga naqd — T1 dan kichik bo''lsa ham Direktor; turi tasdiqlangan jismoniy shaxs va «boshqa» tomon — yo''q',
-  zz.get('O2s') || ' | ' || (zz.get('O2a')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2a')::jsonb ->> 'orgCash')
-  || ' | ' || (zz.get('O2b')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2b')::jsonb ->> 'orgCash')
-  || ' | ' || (zz.get('O2c')::jsonb ->> 'needsDirector') || ':' || coalesce(zz.get('O2c')::jsonb ->> 'orgCash', '-'),
+  zz.get('O2s') || ' | ' || (zz.js(zz.get('O2a')) ->> 'needsDirector') || ':' || (zz.js(zz.get('O2a')) ->> 'orgCash')
+  || ' | ' || (zz.js(zz.get('O2b')) ->> 'needsDirector') || ':' || (zz.js(zz.get('O2b')) ->> 'orgCash')
+  || ' | ' || (zz.js(zz.get('O2c')) ->> 'needsDirector') || ':' || zz.jd(zz.get('O2c'), 'orgCash', '-'),
   '^0 \| true:true \| false:false \| false:false$');
 select zz.put('O2d', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_per2","basis":"Hisob-faktura № 11","clientRef":"o-2-0004","lines":[{"articleId":"EX-32","amount":50000}]}'));
 select zz.chk('O2d sec-3: turi tasdiqlanmagan «jismoniy shaxs» — yuridik shaxs hisoblanadi (Direktor tasdig''i, ogohlantirish belgisi); so''rov bekor qilindi',
@@ -568,16 +588,16 @@ select zz.put('O4s', zz.as('U_DIR', $q$select (public.fin_org_set('{"orgCashMax"
 select zz.put('O4a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":100000,"partyType":"counterparty","partyId":"cp_org","basis":"Shartnoma № 3","clientRef":"o-4-0001","lines":[{"articleId":"EX-32","amount":100000}]}'));
 select zz.put('O4b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":100001,"partyType":"counterparty","partyId":"cp_org","basis":"Shartnoma № 4","clientRef":"o-4-0002","lines":[{"articleId":"EX-32","amount":100001}]}'));
 select zz.chk('O4 chegara 100 000: tashkilotga 100 000 — Direktorsiz, 100 001 — Direktor bilan; ikkalasida ogohlantirish belgisi',
-  zz.get('O4s') || ' | ' || (zz.get('O4a')::jsonb ->> 'needsDirector') || ':' || (zz.get('O4a')::jsonb ->> 'orgCash')
-  || ' | ' || (zz.get('O4b')::jsonb ->> 'needsDirector') || ':' || (zz.get('O4b')::jsonb ->> 'orgCash'), '^100000 \| false:true \| true:true$');
-select zz.put('O5', left(zz.appr('U_FM', zz.id('O4a')), 0) || (zz.pay('U_KAS', zz.id('O4a'))::jsonb ->> 'status')
-  || ':' || (left(zz.appr('U_DIR', zz.id('O2a')), 0) || (zz.pay('U_KAS', zz.id('O2a'))::jsonb ->> 'status')));
+  zz.get('O4s') || ' | ' || (zz.js(zz.get('O4a')) ->> 'needsDirector') || ':' || (zz.js(zz.get('O4a')) ->> 'orgCash')
+  || ' | ' || (zz.js(zz.get('O4b')) ->> 'needsDirector') || ':' || (zz.js(zz.get('O4b')) ->> 'orgCash'), '^100000 \| false:true \| true:true$');
+select zz.put('O5', left(zz.appr('U_FM', zz.id('O4a')), 0) || (zz.js(zz.pay('U_KAS', zz.id('O4a'))) ->> 'status')
+  || ':' || (left(zz.appr('U_DIR', zz.id('O2a')), 0) || (zz.js(zz.pay('U_KAS', zz.id('O2a'))) ->> 'status')));
 select zz.chk('O5 berildi (100 000 — moliya tasdig''i bilan; 50 000 — Direktor tasdig''i bilan); nazoratda +2 ta, +150 000',
   zz.get('O5') || ' | ' || (select (c -> 'orgCash30' ->> 'count') || ':' || trim_scale((c -> 'orgCash30' ->> 'sum')::numeric) from zz.checks('main') c),
   '^posted:posted \| 3:450000$');
 select zz.chk('O6 boshqa operatsiyalar o''zgarmaydi: kontragentdan kirim, bankka topshirish — ogohlantirishsiz',
-  (zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":10000,"partyType":"counterparty","partyId":"cp_org","articleId":"IN-06","basis":"Qaytarilgan ortiqcha to''lov","note":"Sinov","clientRef":"o-6-0001"}')::jsonb ->> 'status')
-  || ':' || coalesce(zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":10000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya","clientRef":"o-6-0002"}')::jsonb ->> 'orgCash', '-'),
+  (zz.js(zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":10000,"partyType":"counterparty","partyId":"cp_org","articleId":"IN-06","basis":"Qaytarilgan ortiqcha to''lov","note":"Sinov","clientRef":"o-6-0001"}')) ->> 'status')
+  || ':' || zz.jd(zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":10000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya","clientRef":"o-6-0002"}'), 'orgCash', '-'),
   '^posted:-$');
 select zz.chk('O7 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.kassa_is_org('cp_org')::text$q$), '^ERR 42501');
 -- g8 (g5 qoldig'i): «boshqa» tomonga ASOS HUJJATI bilan (asossiz emas) naqd «Xarajat» — yuridik shaxsga to'lov kabi (kontragentlar ro'yxatiga
@@ -619,7 +639,7 @@ select zz.chk('J0 o''qituvchi ko''rmaydi; noto''g''ri davr — rad (boshi oxirid
 select zz.put('J1', zz.as('U_KAS', $q$select public.kassa_journal('main', '2027-01-01', '2027-01-31')::text$q$));
 select zz.chk('J1 yanvar (kassir ham ko''radi): soni va summalari hujjatlar bilan bir xil, bekor qilinganlar raqami bilan ro''yxatda',
   (select (j -> 'totals' ->> 'nIn') || '/' || (j -> 'totals' ->> 'nOut') || '/' || (j -> 'totals' ->> 'voids') || '/' || jsonb_array_length(j -> 'docs')
-          || ':' || trim_scale((j -> 'totals' ->> 'in')::numeric) || '/' || trim_scale((j -> 'totals' ->> 'out')::numeric) from (select zz.get('J1')::jsonb j) q)
+          || ':' || trim_scale((j -> 'totals' ->> 'in')::numeric) || '/' || trim_scale((j -> 'totals' ->> 'out')::numeric) from (select zz.js(zz.get('J1')) j) q)
   || ' = ' || (select count(*) filter (where form = 'KO1' and status = 'posted') || '/' || count(*) filter (where form = 'KO2' and status = 'posted') || '/'
                       || count(*) filter (where status = 'void') || '/' || count(*) || ':' || trim_scale(coalesce(sum(amount) filter (where form = 'KO1' and status = 'posted'), 0))
                       || '/' || trim_scale(coalesce(sum(amount) filter (where form = 'KO2' and status = 'posted'), 0))
@@ -628,37 +648,37 @@ select zz.chk('J1 yanvar (kassir ham ko''radi): soni va summalari hujjatlar bila
 select zz.chk('J2 qoldiqlar: davr boshi = boshlang''ich qoldiq (2 000 000), oxiri = oxirgi kun oxiri, boshi + kirim − chiqim = oxiri',
   (select trim_scale((j ->> 'opening')::numeric) || ':' || (j ->> 'balanced') || ':' || (trim_scale((j ->> 'closing')::numeric)
           = (select trim_scale(case when d.status = 'open' then app.kassa_day_balance(d.id) else d.closing end) from public.cash_days d where d.desk = 'main' order by d.day desc limit 1))::text
-     from (select zz.get('J1')::jsonb j) q), '^2000000:true:true$');
+     from (select zz.js(zz.get('J1')) j) q), '^2000000:true:true$');
 select zz.chk('J3 hujjatlar chop etish uchun to''liq (raqam, kun, tomon, qatorlar); tartib — kun bo''yicha; bekor qilingan — sababi bilan',
   (select ((j -> 'docs' -> 0) ? 'lines')::text || ':' || ((j -> 'docs' -> 0) ? 'partyName')::text
           || ':' || (select bool_and(a.d <= b.d)::text from (select (x ->> 'businessDay') d, row_number() over () n from jsonb_array_elements(j -> 'docs') x) a
                        join (select (x ->> 'businessDay') d, row_number() over () n from jsonb_array_elements(j -> 'docs') x) b on b.n = a.n + 1)
           || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'status' = 'void' and coalesce(x ->> 'voidReason', '') <> '')
-     from (select zz.get('J1')::jsonb j) q), '^true:true:true:[1-9]');
+     from (select zz.js(zz.get('J1')) j) q), '^true:true:true:[1-9]');
 select zz.chk('J4 kassa ishga tushmagan davr: hujjat yo''q, qoldiq 0; hujjatsiz oraliq (05–07.01): qoldiq o''zgarmagan',
   (select jsonb_array_length(j -> 'docs') || ':' || trim_scale((j ->> 'opening')::numeric) || ':' || (j ->> 'balanced')
-     from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2026-12-01', '2026-12-31')::text$q$)::jsonb j) q)
+     from (select zz.js(zz.as('U_FM', $q$select public.kassa_journal('main', '2026-12-01', '2026-12-31')::text$q$)) j) q)
   || ' | ' || (select jsonb_array_length(j -> 'docs') || ':' || ((j ->> 'opening')::numeric = (j ->> 'closing')::numeric
                       and (j ->> 'opening')::numeric = (select d.closing from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04'))::text
-                 from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2027-01-05', '2027-01-07')::text$q$)::jsonb j) q),
+                 from (select zz.js(zz.as('U_FM', $q$select public.kassa_journal('main', '2027-01-05', '2027-01-07')::text$q$)) j) q),
   '^0:0:true \| 0:true$');
 select zz.chk('J5 sinov kassasi alohida: asosiy jurnalda yo''q, sinov jurnalida bor (SINOV belgisi uchun isTest)',
-  (select count(*) from jsonb_array_elements(zz.get('J1')::jsonb -> 'docs') x where x ->> 'desk' <> 'main') || ':'
+  (select count(*) from jsonb_array_elements(zz.js(zz.get('J1')) -> 'docs') x where x ->> 'desk' <> 'main') || ':'
   || (select (j -> 'desk' ->> 'isTest') || ':' || (jsonb_array_length(j -> 'docs') = (select count(*) from public.cash_docs where desk = 'sinov' and form in ('KO1', 'KO2') and status in ('posted', 'void')))::text
-        from (select zz.as('U_FM', $q$select public.kassa_journal('sinov', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q), '^0:true:true$');
+        from (select zz.js(zz.as('U_FM', $q$select public.kassa_journal('sinov', '2027-01-01', '2027-01-31')::text$q$)) j) q), '^0:true:true$');
 
 select zz.chk('J6 Excel eksporti: kassir va o''qituvchi — rad (kassir jurnalni chop etadi)',
   zz.as('U_KAS', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$) || ' | '
   || zz.as('U_TCH', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$), '^ERR 42501.* \| ERR 42501');
 select zz.put('J7', zz.as('U_FM', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$));
 select zz.chk('J7 Moliya menejeri: ismsiz — o''quvchi ID bilan, xodim tabel kodi bilan, «boshqa» nomsiz; yuridik shaxs nomi qoladi; jamlar o''sha',
-  (select (j ->> 'masked') || ':' || jsonb_array_length(j -> 'docs') || '=' || jsonb_array_length(zz.get('J1')::jsonb -> 'docs')
+  (select (j ->> 'masked') || ':' || jsonb_array_length(j -> 'docs') || '=' || jsonb_array_length(zz.js(zz.get('J1')) -> 'docs')
           || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'student' and x ->> 'partyName' is null and x ->> 'partyId' ~ '^T-')
           || ':' || (select string_agg(distinct x ->> 'partyId', ',') from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'employee')
           || ':' || (select count(*) from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'other' and x ->> 'partyName' is null and x ->> 'partyId' is null)
           || ':' || (select string_agg(distinct x ->> 'partyName', ',') from jsonb_array_elements(j -> 'docs') x where x ->> 'partyType' = 'counterparty' and (x ->> 'partyKept')::boolean)
-          || ':' || ((j -> 'totals') = (zz.get('J1')::jsonb -> 'totals'))::text
-     from (select zz.get('J7')::jsonb j) q), '^true:(\d+)=\1:[1-9]\d*:IQT-T1,IQX-T1:[1-9]\d*:Sinov Ta''minot MChJ(,Sinov Tashkilot MChJ)?:true$');
+          || ':' || ((j -> 'totals') = (zz.js(zz.get('J1')) -> 'totals'))::text
+     from (select zz.js(zz.get('J7')) j) q), '^true:(\d+)=\1:[1-9]\d*:IQT-T1,IQX-T1:[1-9]\d*:Sinov Ta''minot MChJ(,Sinov Tashkilot MChJ)?:true$');
 select zz.chk('J7b ismsiz eksportda o''quvchi, to''lovchi, xodim va «boshqa» tomon ismlari, hujjat surati va qatorlari yo''q',
   (select (position('Sinov Ota' in t) = 0 and position('Sinov Ona' in t) = 0 and position('Sinov Bobo' in t) = 0 and position('Sinov A' in t) = 0
           and position('Sinov Zavxoz' in t) = 0 and position('Sinov O''qituvchi' in t) = 0 and position('Aliyev' in lower(t)) = 0 and position('aliyev' in lower(t)) = 0
@@ -669,11 +689,11 @@ select zz.chk('J7c ismsiz: jismoniy shaxs hujjatida qo''lda kiritilgan matn (aso
           || '/' || count(*) filter (where not (x ->> 'partyKept')::boolean)
           || ':' || count(*) filter (where (x ->> 'partyKept')::boolean and x ->> 'basis' is not null) || '/' || count(*) filter (where (x ->> 'partyKept')::boolean)
           || ':' || (position('Qaytarish: sinov' in zz.get('J7')) = 0 and position('Xato kiritilgan' in zz.get('J7')) = 0 and position('Tilxat' in zz.get('J7')) = 0)::text
-     from jsonb_array_elements(zz.get('J7')::jsonb -> 'docs') x), '^([1-9]\d*)/\1:([1-9]\d*)/\2:true$');
+     from jsonb_array_elements(zz.js(zz.get('J7')) -> 'docs') x), '^([1-9]\d*)/\1:([1-9]\d*)/\2:true$');
 select zz.chk('J8 Direktor: to''liq (ismlar, asos va bekor qilish sababi bilan), masked = false; hujjatlar soni o''sha',
   (select (j ->> 'masked') || ':' || (position('Sinov Ota' in j::text) > 0 and position('Qaytarish: sinov qaytarish' in j::text) > 0 and position('Xato kiritilgan' in j::text) > 0)::text
-          || ':' || (jsonb_array_length(j -> 'docs') = jsonb_array_length(zz.get('J1')::jsonb -> 'docs'))::text
-     from (select zz.as('U_DIR', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$)::jsonb j) q),
+          || ':' || (jsonb_array_length(j -> 'docs') = jsonb_array_length(zz.js(zz.get('J1')) -> 'docs'))::text
+     from (select zz.js(zz.as('U_DIR', $q$select public.kassa_journal_export('main', '2027-01-01', '2027-01-31')::text$q$)) j) q),
   '^false:true:true$');
 
 -- ---------- (X) RP-08 — oylik statiya matritsasi va oylik kassa to'plami ----------
@@ -688,7 +708,7 @@ select zz.chk('X1 matritsa = KO-3: kirim, chiqim, oy boshi va oxiri bir xil; qol
   (select ((m ->> 'in')::numeric = (j -> 'totals' ->> 'in')::numeric and (m ->> 'out')::numeric = (j -> 'totals' ->> 'out')::numeric
           and (m ->> 'opening')::numeric = (j ->> 'opening')::numeric and (m ->> 'closing')::numeric = (j ->> 'closing')::numeric)::text
           || ':' || (m ->> 'balanced') || ':' || (m ->> 'nDays') || ':' || (m ->> 'from') || '…' || (m ->> 'to') || ':' || ((m ->> 'in')::numeric > 0)::text
-     from (select zz.get('X1')::jsonb m, zz.get('J1')::jsonb j) q), '^true:true:31:2027-01-01…2027-01-31:true$');
+     from (select zz.js(zz.get('X1')) m, zz.js(zz.get('J1')) j) q), '^true:true:31:2027-01-01…2027-01-31:true$');
 select zz.chk('X2 qatorlar: har qatorda 31 kun va kunlar yig''indisi = jami; shakl bo''yicha qatorlar jami = kirim / chiqim; kunlik jamlar yig''indisi = kirim / chiqim',
   (select (select bool_and(jsonb_array_length(r -> 'byDay') = 31
                            and (select sum(x::numeric) from jsonb_array_elements_text(r -> 'byDay') x) = (r ->> 'total')::numeric)
@@ -698,14 +718,14 @@ select zz.chk('X2 qatorlar: har qatorda 31 kun va kunlar yig''indisi = jami; sha
           || ':' || ((select sum(x::numeric) from jsonb_array_elements_text(m -> 'dayIn') x) = (m ->> 'in')::numeric
                      and (select sum(x::numeric) from jsonb_array_elements_text(m -> 'dayOut') x) = (m ->> 'out')::numeric)::text
           || ':' || (select count(*) from jsonb_array_elements(m -> 'rows') r where r ->> 'articleId' is null)
-     from (select zz.get('X1')::jsonb m) q), '^true:true:true:true:0$');
+     from (select zz.js(zz.get('X1')) m) q), '^true:true:true:true:0$');
 select zz.chk('X3 ichki o''tkazmalar: bankdan naqd (OP-01) va bankka topshirish (OP-02) belgilangan, jamlari alohida; o''quv to''lovi — o''tkazma emas; tartib — statiya tartibida',
   (select (select string_agg((r ->> 'form') || '/' || (r ->> 'articleId'), ',') from jsonb_array_elements(m -> 'rows') r where (r ->> 'transfer')::boolean)
           || ':' || ((m ->> 'transferIn')::numeric = (select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO1' and (r ->> 'transfer')::boolean))::text
           || ':' || ((m ->> 'transferOut')::numeric = (select sum((r ->> 'total')::numeric) from jsonb_array_elements(m -> 'rows') r where r ->> 'form' = 'KO2' and (r ->> 'transfer')::boolean))::text
           || ':' || (select (r ->> 'transfer') || '/' || (r ->> 'kind') || '/' || (r ->> 'nameUz') from jsonb_array_elements(m -> 'rows') r where r ->> 'articleId' = 'IN-01')
           || ':' || (select string_agg(r ->> 'articleId', ',' order by o) from jsonb_array_elements(m -> 'rows') with ordinality x(r, o) where r ->> 'form' = 'KO1')
-     from (select zz.get('X1')::jsonb m) q),
+     from (select zz.js(zz.get('X1')) m) q),
   '^KO1/OP-01,KO2/OP-02:true:true:false/IN/Ta’lim xizmati \(oylik to‘lov\):IN-01,IN-06,OP-01,OP-07$');
 select zz.chk('X4 kunlar: har yopilgan kunda kunlik kirim / chiqim / qoldiq = kassa kunidagi (KO-4); ochiq kunda — joriy qoldiq; kunsiz sana — oldingi qoldiq',
   (select bool_and((m -> 'dayIn' ->> (d.day - date '2027-01-01'))::numeric = d.receipts and (m -> 'dayOut' ->> (d.day - date '2027-01-01'))::numeric = d.payouts
@@ -713,42 +733,42 @@ select zz.chk('X4 kunlar: har yopilgan kunda kunlik kirim / chiqim / qoldiq = ka
           || ':' || count(*) || ':' || ((m -> 'dayBal' ->> 4)::numeric = (m -> 'dayBal' ->> 3)::numeric)::text
           || ':' || ((select (x ->> 'closing')::numeric from jsonb_array_elements(m -> 'days') x where x ->> 'status' = 'open') = (m ->> 'closing')::numeric)::text
           || ':' || jsonb_array_length(m -> 'days')
-     from public.cash_days d, (select zz.get('X1')::jsonb m) q
+     from public.cash_days d, (select zz.js(zz.get('X1')) m) q
     where d.desk = 'main' and d.day between '2027-01-01' and '2027-01-31' and d.status <> 'open'
     group by m), '^true:5:true:true:6$');
 select zz.chk('X5 sinov kassasi alohida: asosiy matritsada sinov hujjati yo''q, sinov matritsasida — faqat o''zi (isTest)',
   (select (m ->> 'out') || '/' || (select string_agg((r ->> 'articleId') || '=' || trim_scale((r ->> 'total')::numeric), ',') from jsonb_array_elements(m -> 'rows') r)
           || '/' || (m -> 'desk' ->> 'isTest') || '/' || trim_scale((m ->> 'opening')::numeric)
-     from (select zz.as('U_FM', $q$select public.kassa_matrix('sinov', '2027-01')::text$q$)::jsonb m) q)
-  || ':' || (select (count(*) = 0)::text from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where (r ->> 'total')::numeric = 10000 and r ->> 'articleId' = 'OP-08'),
+     from (select zz.js(zz.as('U_FM', $q$select public.kassa_matrix('sinov', '2027-01')::text$q$)) m) q)
+  || ':' || (select (count(*) = 0)::text from jsonb_array_elements(zz.js(zz.get('X1')) -> 'rows') r where (r ->> 'total')::numeric = 10000 and r ->> 'articleId' = 'OP-08'),
   '^10000/OP-08=10000/true/100000:true$');
 select zz.chk('X6 bo''sh oy (ishga tushishdan oldin): qatorlar yo''q, jamlar 0, qoldiq 0, mos',
   (select jsonb_array_length(m -> 'rows') || ':' || (m ->> 'in') || ':' || (m ->> 'out') || ':' || (m ->> 'opening') || ':' || (m ->> 'closing') || ':' || (m ->> 'balanced') || ':' || (m ->> 'nDays')
-     from (select zz.as('U_FM', $q$select public.kassa_matrix('main', '2026-11')::text$q$)::jsonb m) q), '^0:0:0:0:0:true:30$');
+     from (select zz.js(zz.as('U_FM', $q$select public.kassa_matrix('main', '2026-11')::text$q$)) m) q), '^0:0:0:0:0:true:30$');
 select zz.put('X7', zz.as('U_FM', $q$select public.kassa_month_pack('main', '2027-01')::text$q$));
 select zz.chk('X7 oylik to''plam (Moliya menejeri): ismsiz; KO-3 ismsiz nusxa, matritsa o''sha; kunlar — 6 ta, KO-4 jamlari va Z (kim kiritgani yo''q)',
-  (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || ((p -> 'matrix') = zz.get('X1')::jsonb)::text
+  (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || ((p -> 'matrix') = zz.js(zz.get('X1')))::text
           || ':' || jsonb_array_length(p -> 'days') || ':' || (p -> 'days' -> 0 ->> 'day') || '/' || trim_scale((p -> 'days' -> 0 ->> 'receipts')::numeric) || '/' || (p -> 'days' -> 0 ->> 'status')
           || '/' || (p -> 'days' -> 0 -> 'z' ->> 'no') || '/' || (p -> 'days' -> 0 -> 'z' ->> 'ok')
           || ':' || (position('byUid' in p::text) = 0 and position('"at"' in p::text) = 0)::text
-     from (select zz.get('X7')::jsonb p) q), '^true:true:true:6:2027-01-04/2730000/verified/Z-0104/true:true$');
+     from (select zz.js(zz.get('X7')) p) q), '^true:true:true:6:2027-01-04/2730000/verified/Z-0104/true:true$');
 select zz.chk('X8 hisobdorlar: tabel kodi bilan, ismsiz; oy oxiri = boshi + berildi − qaytdi − hisobot; jamlar matritsadagi avans (OP-06) va qaytim (OP-07) bilan teng',
   (select string_agg((a ->> 'code') || '/' || coalesce(a ->> 'partyName', '-') || '/' || trim_scale((a ->> 'closing')::numeric), ',' order by a ->> 'code')
           || ':' || bool_and((a ->> 'closing')::numeric = (a ->> 'opening')::numeric + (a ->> 'issued')::numeric - (a ->> 'returned')::numeric - (a ->> 'reported')::numeric)::text
-          || ':' || (sum((a ->> 'issued')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where r ->> 'articleId' = 'OP-06'))::text
-          || ':' || (sum((a ->> 'returned')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.get('X1')::jsonb -> 'rows') r where r ->> 'articleId' = 'OP-07'))::text
-     from jsonb_array_elements(zz.get('X7')::jsonb -> 'advances') a), '^IQT-T1/-/50000,IQX-T1/-/150000:true:true:true$');
+          || ':' || (sum((a ->> 'issued')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.js(zz.get('X1')) -> 'rows') r where r ->> 'articleId' = 'OP-06'))::text
+          || ':' || (sum((a ->> 'returned')::numeric) = (select (r ->> 'total')::numeric from jsonb_array_elements(zz.js(zz.get('X1')) -> 'rows') r where r ->> 'articleId' = 'OP-07'))::text
+     from jsonb_array_elements(zz.js(zz.get('X7')) -> 'advances') a), '^IQT-T1/-/50000,IQX-T1/-/150000:true:true:true$');
 select zz.chk('X8b ismsiz to''plamda o''quvchi, to''lovchi, xodim va «boshqa» tomon ismlari, foydalanuvchi ID lari yo''q',
   (select (position('Sinov Ota' in t) = 0 and position('Sinov Zavxoz' in t) = 0 and position('Sinov O''qituvchi' in t) = 0 and position('Sinov Mehmon' in t) = 0
           and position('Aliyev' in t) = 0 and position('U_KAS' in t) = 0 and position('U_FM' in t) = 0)::text from (select zz.get('X7') as t) q), '^true$');
 select zz.chk('X9 Direktor: to''plam to''liq — xodim ismi bilan, KO-3 ismli',
   (select (p ->> 'masked') || ':' || (p -> 'journal' ->> 'masked') || ':' || (select string_agg(a ->> 'partyName', ',' order by a ->> 'code') from jsonb_array_elements(p -> 'advances') a)
-     from (select zz.as('U_DIR', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)::jsonb p) q),
+     from (select zz.js(zz.as('U_DIR', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)) p) q),
   '^false:false:Sinov O''qituvchi,Sinov Zavxoz$');
 
 -- ---------- (W) eslatmalar va RP-22 haftalik KPI ----------
 select zz.chk('W0 huquqlar: KPI — Direktor va 2-ro''yxat; kassir va o''qituvchi — rad; noto''g''ri kassa',
-  (select (j ->> 'ok') || ':' || jsonb_array_length(j -> 'weeks') from (select zz.as('U_FM', $q$select public.kassa_kpi('main', 3)::text$q$)::jsonb j) q)
+  (select (j ->> 'ok') || ':' || jsonb_array_length(j -> 'weeks') from (select zz.js(zz.as('U_FM', $q$select public.kassa_kpi('main', 3)::text$q$)) j) q)
   || ' | ' || zz.as('U_KAS', $q$select public.kassa_kpi('main', 3)::text$q$) || ' | ' || zz.as('U_TCH', $q$select public.kassa_kpi('main', 3)::text$q$)
   || ' | ' || zz.as('U_DIR', $q$select public.kassa_kpi('nope', 3)::text$q$),
   '^true:3 \| ERR 42501.*haftalik ko''rsatkichlar.* \| ERR 42501.* \| ERR 22023 \[kassa:bad_desk\]');
@@ -768,13 +788,13 @@ insert into public.school_holidays (id, day, name) select to_char(d, 'YYYY-MM-DD
 set local session_replication_role = origin;
 select zz.chk('W2b g9: ta''til kunlari (05–11.01) ish kuni emas — hisobdor 3 ish kunida, muddati o''tmagan; «Kassa» eslatmasida ham yo''q',
   (select string_agg((a ->> 'partyId') || '/' || (a ->> 'workDays') || '/' || (a ->> 'overdue'), ',' order by a ->> 'since') from jsonb_array_elements(zz.checks('main') -> 'accountable') a)
-  || ' | ' || (select s -> 'accOverdue' ->> 'n' from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb s) q),
+  || ' | ' || (select s -> 'accOverdue' ->> 'n' from (select zz.js(zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)) s) q),
   '^staff:st1/3/false,teachers:tch1/3/false \| 0$');
 set local session_replication_role = replica;
 delete from public.school_holidays where name = 'Sinov ta''tili';
 set local session_replication_role = origin;
 select zz.chk('W3 eslatma: «Kassa» holatida va Telegram nazoratida muddati o''tgan avans — 1 ta, 150 000 (o''qituvchiniki hali muddatida)',
-  (select (s -> 'accOverdue' ->> 'n') || '/' || trim_scale((s -> 'accOverdue' ->> 'sum')::numeric) from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb s) q)
+  (select (s -> 'accOverdue' ->> 'n') || '/' || trim_scale((s -> 'accOverdue' ->> 'sum')::numeric) from (select zz.js(zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)) s) q)
   || ':' || (select (zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'n') || '/' || trim_scale((zz.daily('2027-01-14') -> 'kassa' -> 'control' -> 'accOverdue' ->> 'sum')::numeric)),
   '^1/150000:1/150000$');
 select zz.chk('W4 Telegram: dushanba (11.01) hisobotida o''tgan hafta KPI = kassa_week_kpi(04.01–10.01); payshanba (14.01) — yo''q',
@@ -785,8 +805,8 @@ select zz.put('W5p', left(zz.appr('U_FM', zz.id('W5')), 0) || left(zz.appr('U_DI
 select zz.chk('W5 joriy hafta (11.01–14.01): EX-49 ulushi = 50 000 / 200 000 = 25 %; tartib — eng yangi hafta birinchi; joriy hafta bugungacha',
   (select (w -> 0 ->> 'from') || '…' || (w -> 0 ->> 'to') || ':' || (w -> 0 ->> 'ex49Share') || ':' || trim_scale((w -> 0 ->> 'ex49')::numeric) || '/' || trim_scale((w -> 0 ->> 'exTotal')::numeric)
           || ':' || (w -> 1 ->> 'from') || ':' || (w -> 0 ->> 'days') || '/' || (w -> 0 ->> 'closed')
-     from (select zz.as('U_DIR', $q$select public.kassa_kpi('main', 2)::text$q$)::jsonb -> 'weeks' w) q)
-  || ':' || (zz.get('W5p')::jsonb ->> 'status'),
+     from (select zz.js(zz.as('U_DIR', $q$select public.kassa_kpi('main', 2)::text$q$)) -> 'weeks' w) q)
+  || ':' || (zz.js(zz.get('W5p')) ->> 'status'),
   '^2027-01-11…2027-01-14:25\.0:50000/200000:2027-01-04:4/3:posted$');
 
 -- ---------- (S) raqam seriyalari: dalolatnoma (ACT), avans hisoboti (ADV) — alohida ----------
@@ -853,7 +873,7 @@ select zz.chk('SD5b g9 (g5 qoldig''i): RP-06 kontragent turi qatorida turni kim 
 --   (farq); ertasi kuni Moliya menejeri Z ni tizim summasiga «tuzatadi» (farq yo'qoladi) va kunni o'zi tekshirmoqchi bo'ladi
 select zz.put('SD6a', zz.tui('U_KAS', 'man_sd_0001', 'T-1', 70000, 'Sinov Ota', '411'));
 select zz.put('SD6b', zz.tui('U_KAS', 'man_sd_0002', 'T-2', 40000, 'Sinov Ona', '412'));
-select zz.put('SD6v', zz.void('U_FM', zz.get('SD6a')::jsonb #>> '{kassa,docId}', 'Xato kiritilgan to''lov'));
+select zz.put('SD6v', zz.void('U_FM', zz.js(zz.get('SD6a')) #>> '{kassa,docId}', 'Xato kiritilgan to''lov'));
 select zz.clock('2027-01-14 18:00+05');
 select zz.put('SD6x', (select trim_scale(coalesce(sum(c.amount), 0))::text from public.cash_docs c
                         where c."dayId" = 'cd_main_2027-01-14' and c.form = 'KO1' and c.status = 'posted' and c."fiscalNo" is not null));   -- tizimdagi fiskal kirim
@@ -903,14 +923,14 @@ create or replace function zz.hbal() returns numeric language sql as $$ select a
 select zz.put('HD0', (select (k ->> 'diffDays') || ':' || trim_scale((k ->> 'shortage')::numeric) || ':' || trim_scale((k ->> 'surplus')::numeric) from (select app.kassa_week_kpi('main', '2027-01-11', '2027-01-17') k) q));
 select zz.put('HD1', zz.tui('U_KAS', 'man_hd_0001', 'T-1', 30000, 'Sinov Ota', '511'));
 select zz.put('HD1h', zz.rpc('U_KAS', 'kassa_handover', format('{"counted":%s,"toUid":"U_FMK"}', zz.hbal() + 5000)));
-select zz.put('HD1a', zz.as('U_FMK', format('select public.kassa_handover_accept(%L)::text', zz.get('HD1h')::jsonb #>> '{handover,id}')));
+select zz.put('HD1a', zz.as('U_FMK', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('HD1h')) #>> '{handover,id}')));
 select zz.put('HD2h', zz.rpc('U_FMK', 'kassa_handover', format('{"counted":%s,"toUid":"U_KAS2"}', zz.hbal())));
-select zz.put('HD2a', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.get('HD2h')::jsonb #>> '{handover,id}')));
+select zz.put('HD2a', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('HD2h')) #>> '{handover,id}')));
 select zz.put('HD3', zz.rpc('U_KAS2', 'kassa_day_close', format('{"desk":"main","day":"2027-01-15","counted":%s}', zz.hbal() - 2000)));
 select zz.chk('HD1 ikki smena topshirish qabul qilindi (+5 000 va 0), kun 2 000 kamomad bilan yopildi: kun javobida smena farqi; kun varag''ida sanashlar',
   zz.f(zz.get('HD1a'), 'diff') || ':' || zz.f(zz.get('HD2a'), 'diff') || ':' || zz.f(zz.get('HD3'), 'diff')
   || ' | ' || zz.f(zz.get('HD3'), 'day', 'handoverDiff') || ':' || zz.f(zz.get('HD3'), 'day', 'handoverDiffs')
-  || ' | ' || (select string_agg((c ->> 'kind') || '=' || (c ->> 'diff'), ',' order by c ->> 'at') from jsonb_array_elements(zz.as('U_ACC', $q$select public.kassa_day_book('main', '2027-01-15')::text$q$)::jsonb -> 'counts') c),
+  || ' | ' || (select string_agg((c ->> 'kind') || '=' || (c ->> 'diff'), ',' order by c ->> 'at') from jsonb_array_elements(zz.js(zz.as('U_ACC', $q$select public.kassa_day_book('main', '2027-01-15')::text$q$)) -> 'counts') c),
   '^5000:0:-2000 \| 5000:\[5000\] \| handover=5000,handover=0,close=-2000$');
 select zz.chk('HD2 acc-6: RP-22 haftalik KPI — smena topshirishdagi farq ham: farqli kun +1, kamomad +2 000, ortiqcha +5 000; smena farqlari soni',
   zz.get('HD0') || ' > ' || (select (k ->> 'diffDays') || ':' || trim_scale((k ->> 'shortage')::numeric) || ':' || trim_scale((k ->> 'surplus')::numeric) || ':' || (k ->> 'handoverDiffs')
@@ -923,7 +943,7 @@ select zz.chk('HD4 acc-6: Telegram kassa bloki — kun qatorida va nazorat qator
      from (select zz.daily('2027-01-15') -> 'kassa' as d) q),
   '^-2000:5000:\[5000\] \| -2000:\[5000\]$');
 select zz.chk('HD5 acc-6: oylik to''plam E3 — kun qatorida smena farqi (yopish farqi yonida)',
-  (select (d ->> 'diff') || ':' || (d ->> 'handoverDiff') from jsonb_array_elements(zz.as('U_FM', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)::jsonb -> 'days') d where d ->> 'day' = '2027-01-15'),
+  (select (d ->> 'diff') || ':' || (d ->> 'handoverDiff') from jsonb_array_elements(zz.js(zz.as('U_FM', $q$select public.kassa_month_pack('main', '2027-01')::text$q$)) -> 'days') d where d ->> 'day' = '2027-01-15'),
   '^-2000:5000$');
 select zz.chk('HD6 state-6: shu kungi smena topshirish-qabulida qatnashgan Moliya menejeri (qo''shimcha «kassir») kunni tekshira olmaydi',
   zz.as('U_FMK', $q$select public.kassa_day_verify('main', '2027-01-15', true, 'Tekshirildi')::text$q$),
@@ -938,19 +958,19 @@ select zz.chk('G9 yangi kutilayotgan smena topshirish — hali eskirmagan: nazor
   zz.f(zz.get('G9h'), 'handover', 'status') || ' | ' || coalesce(zz.checks('main') ->> 'staleHandover', '-') || ' | ' || coalesce(zz.daily('2027-01-16') -> 'kassa' -> 'control' ->> 'staleHandover', '-'),
   '^pending \| - \| -$');
 set local session_replication_role = replica;
-update public.cash_handovers set "createdAt" = now() - interval '3 hours' where id = zz.get('G9h')::jsonb #>> '{handover,id}';
+update public.cash_handovers set "createdAt" = now() - interval '3 hours' where id = zz.js(zz.get('G9h')) #>> '{handover,id}';
 set local session_replication_role = origin;
 select zz.chk('G9b 2 soatdan ko''p qabul qilinmagan — RP-06 «qabul qilinmagan smena topshirish» (kun, ismlar, summa) va Telegram nazoratida',
   (select (s ->> 'day') || ':' || (s ->> 'fromName') || '>' || (s ->> 'toName') || ':' || trim_scale((s ->> 'counted')::numeric) from (select zz.checks('main') -> 'staleHandover' s) q)
   || ' | ' || (zz.daily('2027-01-16') -> 'kassa' -> 'control' -> 'staleHandover' ->> 'toName'),
   '^2027-01-16:Sinov Kassir>Sinov Kassir Ikki:\d+ \| Sinov Kassir Ikki$');
 set local session_replication_role = replica;
-update public.cash_handovers set "createdAt" = now() where id = zz.get('G9h')::jsonb #>> '{handover,id}';
+update public.cash_handovers set "createdAt" = now() where id = zz.js(zz.get('G9h')) #>> '{handover,id}';
 set local session_replication_role = origin;
 select zz.clock('2027-01-17 08:00+05');
 select zz.chk('G9c kechasi qolib ketgan (oldingi kassa kuniniki) — vaqtidan qat''i nazar eskirgan; bekor qilingach — yo''q',
   coalesce(zz.checks('main') -> 'staleHandover' ->> 'day', '-')
-  || ' | ' || zz.f(zz.as('U_KAS', format('select public.kassa_handover_cancel(%L, %L)::text', zz.get('G9h')::jsonb #>> '{handover,id}', 'Qabul qilinmadi')), 'handover', 'status')
+  || ' | ' || zz.f(zz.as('U_KAS', format('select public.kassa_handover_cancel(%L, %L)::text', zz.js(zz.get('G9h')) #>> '{handover,id}', 'Qabul qilinmadi')), 'handover', 'status')
   || ' | ' || coalesce(zz.checks('main') ->> 'staleHandover', '-'),
   '^2027-01-16 \| cancelled \| -$');
 

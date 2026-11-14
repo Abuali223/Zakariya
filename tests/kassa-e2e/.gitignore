@@ -1,0 +1,6 @@
+# Lokal stend holati: JWT siri, postgrest.conf, urug' (qaytarish PIN kodi bilan), id'lar, loglar, natijalar, PostgREST va npm paketlari
+local/
+local.env
+*.local.json
+node_modules/
+package-lock.json

@@ -36,6 +36,10 @@ begin
   perform set_config('request.jwt.claims', '', true);
   return coalesce(r, '<null>');
 end $$;
+-- Sinov natijasini JSON sifatida o'qish: xato matni (ERR …) yoki JSON bo'lmagan javobda — NULL (mutatsiyada tekshiruv FAIL bo'ladi,
+--   to'plam «invalid json» ERROR bilan to'xtamaydi)
+create or replace function zz.js(p text) returns jsonb language plpgsql as $$
+begin return p::jsonb; exception when others then return null; end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 create table if not exists zz.v (k text primary key, v text);
 truncate zz.res; truncate zz.v;
@@ -49,7 +53,7 @@ create or replace function zz.clock(p_t timestamptz) returns void language sql a
 -- qo'lda to'lov (naqdsiz): (uid, payId, o'quvchi, summa, sana)
 create or replace function zz.bank(p_uid text, p_id text, p_sid text, p_amount numeric, p_date text) returns text language sql as $$
   select zz.as(p_uid, format('select public.record_manual_payment(%L, %L, %s, %L, %L, %L, %L, %L, null, null)::text', p_id, p_sid, p_amount, 'bank', p_date, '', '', 'Sinov Ota')) $$;
-create or replace function zz.tot(p_j text, p_k text) returns text language sql as $$ select trim_scale((p_j::jsonb -> 'totals' ->> p_k)::numeric)::text $$;
+create or replace function zz.tot(p_j text, p_k text) returns text language sql as $$ select trim_scale((zz.js(p_j) -> 'totals' ->> p_k)::numeric)::text $$;
 
 -- ---------- Urug' (triggerlarsiz) ----------
 set local session_replication_role = replica;
@@ -91,30 +95,30 @@ select zz.chk('S0b kelajakdagi sana — rad; bugungi kunni qulf bilan — rad',
   '^ERR 22023 \[fin:bad_input\].* \| ERR 22023 \[fin:lock_day\]');
 select zz.put('S1', zz.as('U_DIR', $q$select public.fin_snapshot_take('{"asOf":"2026-12-31","note":"Yil yakuni (sinov)","lock":true}')::text$q$));
 select zz.chk('S1 yil yakuni surati: turi, versiya, «keyin olingan» belgisi, davr shu sanagacha yopildi',
-  (zz.get('S1')::jsonb ->> 'kind') || ':' || (zz.get('S1')::jsonb ->> 'version') || ':' || (zz.get('S1')::jsonb ->> 'late') || ':' || (zz.get('S1')::jsonb ->> 'lockedThrough') || ':' || (zz.get('S1')::jsonb ->> 'id'),
+  (zz.js(zz.get('S1')) ->> 'kind') || ':' || (zz.js(zz.get('S1')) ->> 'version') || ':' || (zz.js(zz.get('S1')) ->> 'late') || ':' || (zz.js(zz.get('S1')) ->> 'lockedThrough') || ':' || (zz.js(zz.get('S1')) ->> 'id'),
   '^year_end:1:true:2026-12-31:fs_20261231_1$');
 select zz.chk('S1a jamlar: qarzdorlik 600 000 (4010), kelgusi oy fakturasi 1 000 000, oldindan to''langan 1 000 000 va avans 250 000 (6310), biriktirilmagan 300 000 (1 ta), to''lanmagan ish haqi 2 000 000',
   zz.tot(zz.get('S1'), 'receivable') || ':' || zz.tot(zz.get('S1'), 'receivableFuture') || ':' || zz.tot(zz.get('S1'), 'prepaid') || ':' || zz.tot(zz.get('S1'), 'credit') || ':' || zz.tot(zz.get('S1'), 'unmatched')
-    || ':' || (zz.get('S1')::jsonb -> 'totals' ->> 'unmatchedCount') || ':' || zz.tot(zz.get('S1'), 'salaryPayable') || ':' || (zz.get('S1')::jsonb -> 'totals' ->> 'students') || ':' || zz.tot(zz.get('S1'), 'cash'),
+    || ':' || (zz.js(zz.get('S1')) -> 'totals' ->> 'unmatchedCount') || ':' || zz.tot(zz.get('S1'), 'salaryPayable') || ':' || (zz.js(zz.get('S1')) -> 'totals' ->> 'students') || ':' || zz.tot(zz.get('S1'), 'cash'),
   '^600000:1000000:1000000:250000:300000:1:2000000:2:0$');
 select zz.put('S2', zz.as('U_FM', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$));
 select zz.chk('S2 to''liq surat (2-ro''yxat ko''radi — ismsiz, ID bilan): xesh mos; o''quvchilar — T-1 (3 faktura) va T-2 (avans); to''liq to''langan va bekor qilingan fakturali T-3 yo''q',
-  (zz.get('S2')::jsonb ->> 'hashOk') || ':' || (zz.get('S2')::jsonb ->> 'masked') || ':' || (select string_agg((s ->> 'studentId') || '/' || coalesce(s ->> 'name', '-') || '/' || jsonb_array_length(s -> 'invoices') || '/' || trim_scale((s ->> 'credit')::numeric), ',' order by s ->> 'studentId')
-                                                  from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'students') s),
+  (zz.js(zz.get('S2')) ->> 'hashOk') || ':' || (zz.js(zz.get('S2')) ->> 'masked') || ':' || (select string_agg((s ->> 'studentId') || '/' || coalesce(s ->> 'name', '-') || '/' || jsonb_array_length(s -> 'invoices') || '/' || trim_scale((s ->> 'credit')::numeric), ',' order by s ->> 'studentId')
+                                                  from jsonb_array_elements(zz.js(zz.get('S2')) -> 'data' -> 'students') s),
   '^true:true:T-1/-/3/0,T-2/-/0/250000$');
 select zz.chk('S2a Direktor — ismlari bilan (FD-28: ismli nusxa faqat Direktorda); 2-ro''yxatda xodim ismi ham yo''q',
   (select (j ->> 'masked') || ':' || (select string_agg((s ->> 'studentId') || '/' || (s ->> 'name'), ',' order by s ->> 'studentId') from jsonb_array_elements(j -> 'data' -> 'students') s)
-     from (select zz.as('U_DIR', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$)::jsonb as j) q)
-  || ' | ' || (select count(*)::text from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'salary') x where x ? 'name'),
+     from (select zz.js(zz.as('U_DIR', $q$select public.fin_snapshot_get('fs_20261231_1')::text$q$)) as j) q)
+  || ' | ' || (select count(*)::text from jsonb_array_elements(zz.js(zz.get('S2')) -> 'data' -> 'salary') x where x ? 'name'),
   '^false:T-1/Sinov A,T-2/Sinov B \| 0$');
 select zz.chk('S2b fakturalar tafsiloti; ish haqi qatori — faqat qoldig''i bor xodim; biriktirilmagan tushum',
   (select string_agg((i ->> 'id') || '=' || (i ->> 'month') || ':' || trim_scale((i ->> 'amount')::numeric) || '-' || trim_scale((i ->> 'paid')::numeric) || ':' || (i ->> 'status'), ',' order by i ->> 'id')
-     from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'students' -> 0 -> 'invoices') i)
-  || ' / ' || (select string_agg((x ->> 'personId') || '=' || trim_scale((x ->> 'due')::numeric), ',') from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'salary') x)
-  || ' / ' || (select string_agg((u ->> 'id') || '=' || trim_scale((u ->> 'amount')::numeric) || '@' || (u ->> 'day'), ',') from jsonb_array_elements(zz.get('S2')::jsonb -> 'data' -> 'unmatched') u),
+     from jsonb_array_elements(zz.js(zz.get('S2')) -> 'data' -> 'students' -> 0 -> 'invoices') i)
+  || ' / ' || (select string_agg((x ->> 'personId') || '=' || trim_scale((x ->> 'due')::numeric), ',') from jsonb_array_elements(zz.js(zz.get('S2')) -> 'data' -> 'salary') x)
+  || ' / ' || (select string_agg((u ->> 'id') || '=' || trim_scale((u ->> 'amount')::numeric) || '@' || (u ->> 'day'), ',') from jsonb_array_elements(zz.js(zz.get('S2')) -> 'data' -> 'unmatched') u),
   '^ia=2026-12:1000000-400000:partial,ib=2027-01:1000000-0:pending,ic=2027-02:1000000-1000000:paid / IQT-T1=2000000 / pu1=300000@2026-12-30$');
 select zz.chk('S3 xesh — saqlangan mazmunning SHA-256 izi (64 belgi), javobdagi bilan bir xil',
-  (select (s.hash = encode(sha256(convert_to(s.payload::text, 'UTF8')), 'hex'))::text || ':' || length(s.hash) || ':' || (s.hash = zz.get('S1')::jsonb ->> 'hash')::text from public.fin_snapshots s where s.id = 'fs_20261231_1'),
+  (select (s.hash = encode(sha256(convert_to(s.payload::text, 'UTF8')), 'hex'))::text || ':' || length(s.hash) || ':' || (s.hash = zz.js(zz.get('S1')) ->> 'hash')::text from public.fin_snapshots s where s.id = 'fs_20261231_1'),
   '^true:64:true$');
 create or replace function zz.try(p_q text) returns text language plpgsql as $$
 declare v_hint text;
@@ -126,16 +130,16 @@ select zz.chk('S4 surat o''zgarmaydi va o''chirilmaydi — baza egasi uchun ham;
   '^ERR 42501 \[kassa:immutable\] \| ERR 42501 \[kassa:immutable\] \| ERR 42501');
 select zz.put('S5', zz.as('U_DIR', $q$select public.fin_snapshot_take('{"asOf":"2026-12-31","note":"Takroriy"}')::text$q$));
 select zz.chk('S5 shu sana uchun ikkinchi surat — yangi versiya, oldingisi saqlanadi; ro''yxat — eng yangisi birinchi, mazmunsiz',
-  (zz.get('S5')::jsonb ->> 'version') || ':' || (select count(*) from public.fin_snapshots) || ':' ||
+  (zz.js(zz.get('S5')) ->> 'version') || ':' || (select count(*) from public.fin_snapshots) || ':' ||
   zz.as('U_FM', $q$select (l ->> 'lockedThrough') || ':' || (select string_agg((i ->> 'id') || '/' || (i ->> 'byName') || '/' || ((i ? 'data')::text), ',') from jsonb_array_elements(l -> 'items') i) from public.fin_snapshots_list() l$q$),
   '^2:2:2026-12-31:fs_20261231_2/Sinov Direktor/false,fs_20261231_1/Sinov Direktor/false$');
 select zz.chk('S6 bugungi kun uchun surat (qulfsiz): «qo''lda», kechikmagan',
-  (select (j ->> 'kind') || ':' || (j ->> 'late') || ':' || (j ->> 'lockedThrough') from (select zz.as('U_DIR', $q$select public.fin_snapshot_take('{"asOf":"2027-01-02"}')::text$q$)::jsonb as j) q), '^manual:false:2026-12-31$');
+  (select (j ->> 'kind') || ':' || (j ->> 'late') || ':' || (j ->> 'lockedThrough') from (select zz.js(zz.as('U_DIR', $q$select public.fin_snapshot_take('{"asOf":"2027-01-02"}')::text$q$)) as j) q), '^manual:false:2026-12-31$');
 
 -- ---------- (L) davr qulfi ----------
 select zz.chk('L1 yopilgan davr sanasi bilan qo''lda to''lov — rad (42501), iz qolmaydi',
   zz.bank('U_KAS', 'man_p_0001', 'T-1', 100000, '2026-12-31') || ' / ' || (select count(*) from public.payments where id = 'man_p_0001'), '^ERR 42501 \[fin:locked\] To‘lov: 31\.12\.2026 — yopilgan davr \(31\.12\.2026 gacha yopilgan\).* / 0$');
-select zz.chk('L1b qulfdan keyingi sana bilan — yoziladi', (zz.bank('U_KAS', 'man_p_0002', 'T-1', 100000, '2027-01-01')::jsonb ->> 'status'), '^applied$');
+select zz.chk('L1b qulfdan keyingi sana bilan — yoziladi', (zz.js(zz.bank('U_KAS', 'man_p_0002', 'T-1', 100000, '2027-01-01')) ->> 'status'), '^applied$');
 select zz.chk('L1c server (webhook) yopilgan davrga ham yoza oladi — tizim mustasno',
   zz.as('SYSTEM', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "createdAt") values ('wh_old_1', 'T-1', 'click', 5000, 'pending', true, '{}', '2026-12-30 09:00+05') returning id) select id from x$q$), '^wh_old_1$');
 select zz.chk('L1d server (webhook) yopilgan davr to''lovining holatini o''zgartira oladi — tizim mustasno (foydalanuvchiga — L8)',
@@ -195,12 +199,12 @@ select zz.chk('L8b yopilgan davr to''lovi holatini to''g''ridan-to''g''ri o''zga
 select zz.put('L8c1', zz.as('U_FM', $q$select public.assign_payment('pu_s2', 'T-1')::text$q$));
 select zz.put('L8c2', zz.as('U_FM', $q$select public.split_payment('pu_s3', 'click', '[{"sid":"T-1","amount":90000}]')::text$q$));
 select zz.chk('L8c yopilgan davr biriktirilmagan to''lovini biriktirish (o''quvchi o''zgaradi) — rad; bo''lish (tushum o''zgarmaydi) — avvalgidek; dekabr tushumi o''zgarmadi',
-  zz.get('L8c1') || ' | ' || case when zz.get('L8c2') like '{%' then zz.get('L8c2')::jsonb ->> 'ok' else zz.get('L8c2') end || ' | '
+  zz.get('L8c1') || ' | ' || case when zz.get('L8c2') like '{%' then zz.js(zz.get('L8c2')) ->> 'ok' else zz.get('L8c2') end || ' | '
   || (select status from public.payments where id = 'pu_s2') || ':' || (select status from public.payments where id = 'pu_s3') || ' | '
   || ((select count(*) || ':' || trim_scale(sum(amount)) from app.fin_receipts('2026-12-01', '2026-12-31')) = zz.get('L8r0'))::text,
   '^ERR 42501 \[fin:locked\] To‘lov \(22\.12\.2026 kuni\).* \| true \| unmatched:split \| true$');
 select zz.chk('L8d ochiq davr (02.01): biriktirilmagan to''lovni qaytarish va holatni o''zgartirish — avvalgidek',
-  (zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_j1', 40000, 'Egasi topilmadi', false, '', 'rf_l8_0002')::text$q$)::jsonb ->> 'ok') || ' | '
+  (zz.js(zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_j1', 40000, 'Egasi topilmadi', false, '', 'rf_l8_0002')::text$q$)) ->> 'ok') || ' | '
   || zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_j1' returning status) select status from x$q$) || ' | '
   || zz.as('U_FM', $q$with x as (update public.payments set status = 'applied' where id = 'pc_j1' returning status) select status from x$q$),
   '^true \| reversed \| applied$');
@@ -212,8 +216,8 @@ select zz.put('L8f', zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-19
 select zz.put('L8f2', zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_s1', 250000, 'Egasi topilmadi', false, '', 'rf_l8_0003')::text$q$));
 select zz.put('L8f3', zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-31')::text$q$));
 select zz.chk('L8f mavjud tartib: Direktor davrni sababi bilan qayta ochadi — qaytarish o''tadi; davr yana yopiladi',
-  (zz.get('L8f')::jsonb ->> 'lockedThrough') || ' | ' || case when zz.get('L8f2') like '{%' then zz.get('L8f2')::jsonb ->> 'ok' else zz.get('L8f2') end || ' | '
-  || (zz.get('L8f3')::jsonb ->> 'lockedThrough') || ':' || (select status from public.payments where id = 'pu_s1'),
+  (zz.js(zz.get('L8f')) ->> 'lockedThrough') || ' | ' || case when zz.get('L8f2') like '{%' then zz.js(zz.get('L8f2')) ->> 'ok' else zz.get('L8f2') end || ' | '
+  || (zz.js(zz.get('L8f3')) ->> 'lockedThrough') || ':' || (select status from public.payments where id = 'pu_s1'),
   '^2026-12-19 \| true \| 2026-12-31:refunded$');
 select zz.chk('L2 xarajat: yopilgan davr sanasi bilan yangi yozuv — rad; o''sha davr yozuvini o''zgartirish va o''chirish — rad',
   zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_l1', '2026-12-30', '2026-12', 'Boshqa', 1000, 'kech', 'bank') returning id) select id from x$q$) || ' | ' ||
@@ -236,7 +240,7 @@ select zz.put('L5', zz.as('U_DIR', $q$select public.fin_period_lock('2026-12-31'
 select zz.chk('L5 orqaga surish (davrni qayta ochish) — sababsiz rad; sabab bilan — o''tadi va tarixda qoladi',
   zz.get('L5') || ' | ' || (select (o."lockedThrough")::text || ':' || (o.extra ->> 'lockNote') || ':' || (o.extra ->> 'lockPrev') from public.fin_org o where o.id = 'main'),
   '^ERR 22023 \[fin:lock_reason\].* \| \{.*"ok": true.*\} \| 2026-12-31:Bank ko''chirmasi kech keldi:2027-01-01$');
-select zz.put('L5b', left(zz.as('U_DIR', $q$select public.fin_period_lock(null, 'Sinov: qulf olib tashlandi')::text$q$), 0) || (zz.bank('U_KAS', 'man_p_0004', 'T-1', 100000, '2026-12-31')::jsonb ->> 'status'));
+select zz.put('L5b', left(zz.as('U_DIR', $q$select public.fin_period_lock(null, 'Sinov: qulf olib tashlandi')::text$q$), 0) || (zz.js(zz.bank('U_KAS', 'man_p_0004', 'T-1', 100000, '2026-12-31')) ->> 'status'));
 select zz.chk('L5b qulfni olib tashlash — sabab bilan; keyin dekabr sanasi bilan to''lov yana yoziladi',
   zz.get('L5b') || ':' || coalesce((select o."lockedThrough"::text from public.fin_org o where o.id = 'main'), 'yo''q'), '^applied:yo''q$');
 select zz.chk('L6 qulf o''zgarishlari «O''zgarishlar tarixi»ga yozilgan',
@@ -257,7 +261,7 @@ select zz.chk('K3 ochiq kassa kuni bor — davr yopilmaydi (qulf ham, qulfli sur
   || ' | ' || ((select count(*)::text from public.fin_snapshots) = zz.get('K3n'))::text, '^ERR P0001 \[fin:open_day\].*02\.01\.2027.* \| ERR P0001 \[fin:open_day\].* \| true$');
 select zz.put('K4', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-02","counted":510000}')::text$q$));
 select zz.chk('K4 kun sanab yopilgach davr 02.01.2027 gacha yopiladi',
-  (zz.get('K4')::jsonb -> 'day' ->> 'status') || ' | ' || zz.as('U_DIR', $q$select (public.fin_period_lock('2027-01-02') ->> 'lockedThrough')$q$), '^closed \| 2027-01-02$');
+  (zz.js(zz.get('K4')) -> 'day' ->> 'status') || ' | ' || zz.as('U_DIR', $q$select (public.fin_period_lock('2027-01-02') ->> 'lockedThrough')$q$), '^closed \| 2027-01-02$');
 select zz.put('K5', zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-01-02', 'Sanash xatosi')::text$q$));
 select zz.put('K5b', left(zz.as('U_DIR', $q$select public.fin_period_lock('2027-01-01', 'Kassa kunini tuzatish')::text$q$), 0)
   || zz.as('U_DIR', $q$select (public.kassa_day_reopen('main', '2027-01-02', 'Sanash xatosi') -> 'day' ->> 'status')$q$));

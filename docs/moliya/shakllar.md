@@ -73,8 +73,10 @@ Tasdiqlangan summa: [___] so‘m ([summa so‘z bilan]).
 
 *Qoidalar:* muddat — 3 ish kuni (tizim shanba, yakshanba va «Bayram / ta’til kunlari»ni sanamaydi; korporativ karta bo‘yicha — 10); har xarajat alohida qator va hujjat bilan; statiya — kassa xarajati
 (EX), asosiy vosita (OP-18) yoki sotish uchun tovar (OP-24), yetkazib beruvchiga qarz (OP-17) avans hisobotida yopilmaydi; cheksiz xarajat qabul
-qilinmaydi (istisno — rahbar ruxsati bilan tushuntirish xati); hisobot topshirilmaguncha yangi avans berilmaydi; buxgalter
-tekshirgan qatorlarni moliya menejeri «Buxgalteriya»ga xarajat qilib kiritadi (to‘lov usuli — «Hisobdor shaxs orqali (avans hisoboti)»); yanvar
+qilinmaydi (istisno — rahbar ruxsati bilan tushuntirish xati); hisobot topshirilmaguncha yangi avans berilmaydi (istisno — Direktor
+tasdig‘i, tizim uni o‘zi talab qiladi); tekshirilgan hisobotni buxgalter (yoki moliya menejeri) **«Kassa» → «Avans hisoboti»** bilan
+kiritadi — xarajatlar «Buxgalteriya»ga o‘zi ko‘chadi (usul «hisobdor orqali»), hisobdordagi qoldiq kamayadi; «Buxgalteriya»ga qo‘lda
+(bank / karta yoki boshqa usul bilan) **kiritilmaydi** — xarajat ikki marta yozilib, hisobdor qoldig‘i kamaymay qolardi; yanvar
 hisobotlari — yanvar yopilishidan oldin.
 
 ## Sh-2. «Қ» blankasi (ichki vaqtinchalik kvitansiya) va jurnali

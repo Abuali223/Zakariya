@@ -58,12 +58,24 @@ Hamma buyruqlar serverda oddiy foydalanuvchidan; kalit va parollar hech qayerga 
 bash ~/iqror-repo/sinov/update.sh --dev
 ```
 Yakuniy tekshiruvda «Kassa tekshiruvi: muammo topilmadi (modul relizi N)» qatori chiqishi kerak.
+Relizi 11 dan oldingi stendni yangilaganda: o‘sha paytda o‘tkazilgan «Xodim qaytargan pul» (`in_staff_return`) orderlari bo‘lsa, ular
+avans / maosh yozuvisiz yozilgan — yangilangach nazorat ro‘yxatidagi «Moslik» P5 «ret» qatorida (va `kassa-checks.sql` 20-bandida)
+ko‘rinadi. Bu stenddagi eski sinov yozuvi (jonli tizimda bunday hujjat yo‘q — modul hali chiqmagan): qabul sinovidan oldin stend
+ma’lumoti qayta yuklanadi yoki shu qator izohlanadi. Xuddi shunday, 24-band (vazifalar ajratilishi) eski sinov yozuvlarida «!!»
+qatorlarini ko‘rsatishi mumkin: relizi 11 gacha tizim ruxsat bergan holatlar (masalan, Moliya menejeri o‘z kartasiga avansni tasdiqlagan,
+tasdiqlovchining o‘zi pulni bergan, kunni bekor qilgan yoki smenada qatnashgan xodim tekshirgan) va band hozirgi rollar hamda xodim
+kartasiga bog‘lanishlar bo‘yicha tekshiradi — hujjatdan keyin bog‘langan karta ham qatorga tushadi. Yangilash yordamchisi buni «Kassa
+tekshiruvi … muammo» deb ko‘rsatadi; kod xatosi emas — stend ma’lumoti qayta yuklanadi yoki qatorlar qabul sinovidan oldin izohlanadi.
 
 **3.2 Jonli zanjirga o‘tkazish (dasturchi, yashirin o‘rnatishdan oldin — bir marta).** Qabul sinovi va buxgalter ko‘rigidan keyin:
 1. `migration/run-all.sql` dagi moliya qatorlaridan «`--dev `» belgisi olib tashlanadi (fin-core … fin-version; tartib o‘zgarmaydi).
 2. `payments/_schema-columns.json` kanonik zanjirdan qayta tuziladi (`information_schema.columns`).
 3. To‘liq sinov: SQL to‘plamlari (`test-kassa*.sql`, `test-fin-*.sql`, `test-kassa-checks.sql`, `test-audit-fixes.sql`,
-   `test-public-close.sql`), `test-kassa-race.sh`, `node --test assets/js/*.test.mjs`, `payments` va `auth` `npm test`, brauzer ssenariylari.
+   `test-public-close.sql`), `test-kassa-race.sh`, `node --test assets/js/*.test.mjs`, `payments` va `auth` `npm test`, brauzer
+   ssenariylari — lokal stendda `bash tests/kassa-e2e/run-all.sh` (stendni ko‘tarish, hisoblar va kutilgan natijalar —
+   `tests/kassa-e2e/README.md`; xulosa qatorlarida `fail=0`).
+   Modul relizi o‘zgargan bo‘lsa, `kassa-checks.sql` dagi himoya mantig‘i barmoq izlari ham shu relizniki bo‘lishi kerak:
+   `bash migration/kassa-fingerprints.sh` (lokal; `fin-version.sql` qoidasi) — `test-kassa-checks.sql` toza holati buni tekshiradi.
 4. Hujjatlardagi «faqat lokal sinov zanjirida» belgilari yangilanadi; commit.
 Qisman o‘tkazish (bayroq bilan, ayrim deploylarda) **qilinmaydi**: zanjir har deployda ichki funksiyalar huquqini qayta
 beradi va kassa fayllari ularni qaytarib oladi — kassa fayllarisiz deploy bu himoyani ochiq qoldiradi.
@@ -94,7 +106,14 @@ Keyin, hali hech narsa kiritmasdan:
 ```bash
 sudo docker exec -i supabase-db psql -U postgres -d postgres -X -P pager=off < ~/iqror-repo/migration/kassa-checks.sql
 ```
-Chiqishda ism, telefon va summalar yo‘q. «!!» bilan boshlangan qator — muammo; izohi `migration/deploy/README.md` da.
+Chiqishda ism, telefon va summalar yo‘q. «!!» bilan boshlangan qator — muammo; izohi `migration/deploy/README.md` da. 23-band —
+himoya mantig‘i izi: funksiya, himoya triggeri, o‘qish siyosati yoki cheklov shu relizdagidan farq qilsa (qo‘lda «tuzatilgan» baza)
+deploydan oldin ham ko‘rinadi; 24-band — vazifalar ajratilishi (tasdiqsiz o‘tgan hujjat, o‘zi tasdiqlagan, pulni tasdiqlovchi bergan,
+kunni unda qatnashgan xodim tekshirgan). Farq qaysi obyektda ekanini to‘liq solishtirish (faqat o‘qiydi; vaqtinchalik bazada kanonik
+zanjirni quradi) — har haftalik ko‘rikda ham:
+```bash
+bash ~/iqror-repo/migration/verify-db.sh
+```
 
 ## 4. 31-dekabr (yoki dekabrning oxirgi ish kuni) kechqurun
 Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishtirokida.
@@ -199,6 +218,14 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 | Kecha yopilmagan | Bugun hujjat yozilmaydi — avval kechagi kun sanab yopiladi (kechasi server ishlamagan bo‘lsa — «Қ» blankalari bilan, yuqoriga qarang). |
 | Sahifada «sahifani yangilang» ogohlantirishi | Tizim yangilangan: Ctrl+Shift+R (telefonda — sahifani yopib qayta ochish). |
 
+**Ma’lum va qabul qilingan cheklovlar (mustaqil ko‘rik, reliz 11).** (1) Naqd pul naqdsiz yorliq bilan («bank», «terminal») yozilsa,
+kassa uni ko‘rmaydi — bu bank ko‘chirmasi va onlayn kassa Z-hisoboti solishtiruvida aniqlanadi (RF-09 / F2.9). (2) Kassa ishga
+tushgach eski «biriktirilmagan» naqd to‘lov yozuvi biriktirilmaydi va bo‘linmaydi (ilova bunday yozuvni yaratmaydi; bo‘lsa —
+Direktor buxgalter bilan hal qiladi). (3) HR kartasidagi oylik maydonlari va stavka paneli yozayotganda raqam bo‘lmagan belgini o‘zi
+olib tashlaydi (maydonda ko‘rinadi; naqd pul emas). (4) «↩ Fakturadan» va qaytarish so‘rovlarida faqat raqamlar o‘qiladi — summa
+oyna va server chegarasidan oshmaydi. (5) Reliz 11 dan oldin buxgalter yoki moliya menejeri chop etgan «asl nusxa» asl nusxa bo‘lib
+qoladi (endi ular doim «НУСХА» chop etadi).
+
 ## 9. Orqaga qaytish
 **Ish jarayoni (tizimdan vaqtincha voz kechish).** Qaror — Direktor. (1) **To‘xtatishdan oldin:** to‘lov qabul qiladigan
 qurilmalar navbati (⏳) bo‘shaguncha kutiladi; kutilayotgan smena topshirish qabul qilinadi yoki bekor qilinadi (qabul qilinmagan
@@ -281,5 +308,5 @@ navbati avval tizimga kiritilgan bo‘lsin — 4-bo‘lim, 1-qadam):
 ## 10. Qo‘llab-quvvatlash (birinchi 2 hafta)
 Har kuni 15 daqiqalik qo‘ng‘iroq (kassir, moliya menejeri, administrator). Kassa ish soatlarida navbatchi. Muhimlik: ishni
 to‘xtatadigan xato — o‘sha kuni (tuzalmasa — «Қ» blankalari); noqulaylik — 2 ish kuni; istak — keyingi yangilanish. Har hafta —
-nazorat ro‘yxati, «Kassa» → «KPI» (haftalik ko‘rsatkichlar; dushanba kungi Telegram hisobotida ham) va `kassa-checks.sql`
-natijasi ko‘rib chiqiladi.
+nazorat ro‘yxati, «Kassa» → «KPI» (haftalik ko‘rsatkichlar; dushanba kungi Telegram hisobotida ham), `kassa-checks.sql` va
+`verify-db.sh` natijasi ko‘rib chiqiladi (ikkalasi faqat o‘qiydi).

@@ -178,7 +178,14 @@ hech narsa YOZMAYDI, chiqishida ism, telefon va pul summalari yo'q (ko'chirib yu
   chiqadi). Odatda repo'da yo'q eski funksiya — «7/7 baza tekshiruvi» ham uni ko'rsatadi.
 - `!! «Kassa» moduli tekshiruvida muammo bor` — to'liq chiqish yuqorida; «!!» bilan boshlangan qatorlarni yuboring. Bandlar:
   1–10 — tuzilma va huquqlar (reliz, funksiya va jadval huquqlari, himoya triggerlari, indekslar); 11–22 — ma'lumot (kunlar
-  zanjiri, kun jamlari va izi, raqamlash, hujjat qatorlari, taqsimot, bog'lanishlar, moslik P1/P4/P5/P8, davr suratlari).
+  zanjiri, kun jamlari va izi, raqamlash, hujjat qatorlari, taqsimot, bog'lanishlar, moslik P1/P4/P5/P8, davr suratlari); 23 — himoya
+  mantig'i izi (funksiya matni, himoya triggeri, o'qish siyosati yoki cheklov shu relizning toza zanjiridagidan farq qiladi: qo'lda
+  «tuzatilgan» yoki yarim o'rnatilgan baza — qaysi obyektligini `bash ~/iqror-repo/migration/verify-db.sh` to'liq ko'rsatadi; «eskirgan»
+  qatori — repo'dagi izlar boshqa reliz uchun: dasturchi `bash migration/kassa-fingerprints.sh` bilan yangilaydi); 24 — vazifalar
+  ajratilishi (tasdiqsiz o'tgan hujjat, o'zi tasdiqlagan / pul bergan / tekshirgan xodim). Relizi 11 dan oldingi ma'lumotli sinov
+  stendida 24-band qatorlari eski sinov yozuvlaridan (o'sha paytda ruxsat berilgan) yoki keyin qilingan xodim kartasi bog'lanishidan
+  chiqishi mumkin (band hozirgi rollar va bog'lanishlar bo'yicha tekshiradi): stend ma'lumoti qayta yuklanadi yoki qatorlar qabul
+  sinovidan oldin izohlanadi (`docs/moliya/ishga-tushirish.md` 3.1).
 Istalgan payt qo'lda (masalan har oy oxirida, davrni yopishdan oldin):
 ```bash
 sudo docker exec -i supabase-db psql -U postgres -d postgres -X -P pager=off < ~/iqror-repo/migration/kassa-checks.sql

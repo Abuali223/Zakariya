@@ -38,6 +38,16 @@ begin
   perform set_config('request.jwt.claims', '', true);
   return coalesce(r, '<null>');
 end $$;
+-- Sinov natijasini JSON sifatida o'qish: xato matni (ERR …) yoki JSON bo'lmagan javobda — NULL (mutatsiyada tekshiruv FAIL bo'ladi,
+--   to'plam «invalid json» ERROR bilan to'xtamaydi)
+create or replace function zz.js(p text) returns jsonb language plpgsql as $$
+begin return p::jsonb; exception when others then return null; end $$;
+-- JSON maydoni (yo'q bo'lsa — standart qiymat), faqat javob JSON bo'lsa; JSON bo'lmagan javob (ERR …) o'zicha qaytadi — mutatsiyada
+--   standart qiymatga aylanib PASS bermaydi, FAIL bo'ladi (g10 tekshiruvchisi)
+create or replace function zz.jd(p text, p_key text, p_dflt text) returns text language sql as $$
+  select case when zz.js(p) is null then '<json emas> ' || left(coalesce(p, '<null>'), 200) else coalesce(zz.js(p) ->> p_key, p_dflt) end $$;
+create or replace function zz.jdp(p text, p_path text[], p_dflt text) returns text language sql as $$
+  select case when zz.js(p) is null then '<json emas> ' || left(coalesce(p, '<null>'), 200) else coalesce(zz.js(p) #>> p_path, p_dflt) end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 create table if not exists zz.v (k text primary key, v text);
 truncate zz.res; truncate zz.v;
@@ -46,7 +56,7 @@ begin insert into zz.res (name, got, pat, ok) values (p_name, p_got, p_pat, coal
 create or replace function zz.put(p_k text, p_v text) returns text language plpgsql as $$
 begin insert into zz.v (k, v) values (p_k, p_v) on conflict (k) do update set v = excluded.v; return p_v; end $$;
 create or replace function zz.get(p_k text) returns text language sql as $$ select v from zz.v where k = p_k $$;
-create or replace function zz.id(p_k text) returns text language sql as $$ select (v::jsonb ->> 'id') from zz.v where k = p_k $$;
+create or replace function zz.id(p_k text) returns text language sql as $$ select zz.js(v) ->> 'id' from zz.v where k = p_k $$;
 create or replace function zz.clock(p_t timestamptz) returns void language sql as $$
   insert into app.fin_clock (id, t) values (1, p_t) on conflict (id) do update set t = excluded.t $$;
 create or replace function zz.rpc(p_uid text, p_fn text, p_json text) returns text language sql as $$
@@ -92,7 +102,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz', :'bad' || '/' || :'err' || '/' || :'ver', '^0/0/10$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 11; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/11/0/0$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
@@ -116,7 +126,7 @@ select zz.chk('A2 1-kun hujjatlari: 3 kirim, 2 chiqim, 1 bekor, 2 dalolatnoma (b
 -- hisobda 3 450 000; sanaldi 3 445 000 — kamomad 5 000 (chiqim orderi o'zi yoziladi)
 select zz.put('CL1', zz.as('U_KAS', $q$select public.kassa_day_close('{"desk":"main","day":"2027-01-04","counted":3445000}')::text$q$));
 select zz.chk('A3 1-kun kamomad bilan yopildi va tekshirildi',
-  (zz.get('CL1')::jsonb ->> 'diff') || ' | ' || zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true, 'Sinov')::text$q$), '^-5000(\.0+)? \| .*"status": "verified"');
+  (zz.js(zz.get('CL1')) ->> 'diff') || ' | ' || zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-04', true, 'Sinov')::text$q$), '^-5000(\.0+)? \| .*"status": "verified"');
 
 -- ---------- 2-kun (05.01.2027): bankdan olingan pul, aniq yopildi ----------
 select zz.clock('2027-01-05 10:00+05');
@@ -149,7 +159,7 @@ select zz.chk('A5 holat: 3 kun (tekshirilgan, yopilgan, ochiq), sinov kassasida 
 \ir kassa-checks.sql
 select zz.chk('A6 toza holat: tekshiruv hech narsa topmadi (barcha bandlar bajarildi)',
   :'bad' || '/' || :'err' || ' | ' || concat_ws(',', :'c1', :'c2', :'c3', :'c4', :'c5', :'c6', :'c7', :'c8', :'c9', :'c10', :'c11', :'c12', :'c13', :'c14', :'c15', :'c16',
-                                               :'c17', :'c18', :'c19', :'c20', :'c21', :'c22'), '^0/0 \| 0(,0){21}$');
+                                               :'c17', :'c18', :'c19', :'c20', :'c21', :'c22', :'c23', :'c24'), '^0/0 \| 0(,0){23}$');
 select zz.chk('A6b acc-2: o''zaro hisob (eski avans bilan) dalolatnomasida naqdsiz Dt 6310 Kt 4010 ma''lumot qatori; 16- va 18-band uni summaga qo''shmaydi',
   (select string_agg(l.debit || '>' || l.credit || '=' || trim_scale(l.amount) || coalesce('#' || (l.analytics ->> 'kind'), ''), ', ' order by l."lineNo")
      from public.cash_doc_lines l where l."docId" = (select "cashDocId" from public.salary_payments where id = 'sp_ofs_c2'))
@@ -163,7 +173,7 @@ rollback to savepoint b1;
 select zz.chk('B1 search_path''siz SECURITY DEFINER funksiya (istalgan) — 1-band', :'c1' || '/' || :'bad', '^1/1$');
 
 savepoint b2;
-create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 11';
+create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 12';
 \ir kassa-checks.sql
 rollback to savepoint b2;
 select zz.chk('B2 bazadagi reliz tekshiruv fayli kutganidan boshqa — 2-band (sonlar bandi o''tkazib yuboriladi)', :'c2' || '/' || :'c3' || '/' || :'bad', '^1/0/1$');
@@ -178,7 +188,7 @@ savepoint b3;
 create function public.kassa_zz() returns int language sql as 'select 1';
 \ir kassa-checks.sql
 rollback to savepoint b3;
-select zz.chk('B3 ortiqcha ochiq funksiya: soni (3), search_path (4), anon chaqira oladi (6)', :'c3' || '/' || :'c4' || '/' || :'c6' || '/' || :'bad', '^1/1/1/3$');
+select zz.chk('B3 ortiqcha ochiq funksiya: soni (3), search_path (4), anon chaqira oladi (6), reliz izida yo''q (23)', :'c3' || '/' || :'c4' || '/' || :'c6' || '/' || :'c23' || '/' || :'bad', '^1/1/1/1/4$');
 
 savepoint b5;
 grant execute on function app.kassa_day_hash(text) to authenticated;
@@ -201,14 +211,14 @@ grant select on public.fin_org to anon;
 create policy zz_w on public.cash_doc_lines for update using (true);
 \ir kassa-checks.sql
 rollback to savepoint b7;
-select zz.chk('B7 jadval: RLS o''chiq, yozish huquqi, anon o''qiydi, yozish siyosati — 7-band (4 ta; siyosatlar soni — 3-band)', :'c7' || '/' || :'c3' || '/' || :'bad', '^4/1/5$');
+select zz.chk('B7 jadval: RLS o''chiq, yozish huquqi, anon o''qiydi, yozish siyosati — 7-band (4 ta; siyosatlar soni — 3-band; ortiqcha siyosat — 23-band)', :'c7' || '/' || :'c3' || '/' || :'c23' || '/' || :'bad', '^4/1/1/6$');
 
 savepoint b8;
 alter table public.cash_docs disable trigger trg_kassa_doc_guard;
 drop trigger trg_fin_zlock on public.payments;
 \ir kassa-checks.sql
 rollback to savepoint b8;
-select zz.chk('B8 himoya triggeri o''chirilgan / olib tashlangan — 8-band (2 ta; soni — 3-band)', :'c8' || '/' || :'c3' || '/' || :'bad', '^2/1/3$');
+select zz.chk('B8 himoya triggeri o''chirilgan / olib tashlangan — 8-band (2 ta; soni — 3-band; olib tashlangani — 23-band)', :'c8' || '/' || :'c3' || '/' || :'c23' || '/' || :'bad', '^2/1/1/4$');
 
 savepoint b9;
 drop index public.cash_docs_number;
@@ -222,7 +232,57 @@ revoke all on function public.kassa_state(text, int) from public, anon;
 grant execute on function public.kassa_state(text, int) to authenticated;
 \ir kassa-checks.sql
 rollback to savepoint b10;
-select zz.chk('B10 bir xil nomli funksiya (overload) — 10-band (soni — 3-band)', :'c10' || '/' || :'c3' || '/' || :'bad', '^1/1/2$');
+select zz.chk('B10 bir xil nomli funksiya (overload) — 10-band (soni — 3-band; reliz izida yo''q — 23-band)', :'c10' || '/' || :'c3' || '/' || :'c23' || '/' || :'bad', '^1/1/1/3$');
+
+-- ---------- (B) qa-5: himoya mantig'i izi (23-band) — qo'lda «tuzatilgan» himoya; 7- va 8-band qo'shimchalari ----------
+savepoint b23a;
+create or replace function app.kassa_doc_guard() returns trigger language plpgsql security definer set search_path = public, app, pg_temp as $f$ begin return coalesce(new, old); end $f$;
+\ir kassa-checks.sql
+rollback to savepoint b23a;
+select zz.chk('B23a qa-5: himoya trigger funksiyasi matni almashtirilgan (hech narsani tekshirmaydi) — 23-band (o''zgargan funksiya)', :'c23' || '/' || :'bad', '^1/1$');
+
+savepoint b23b;
+drop trigger trg_kassa_doc_guard on public.cash_docs;
+create trigger trg_kassa_doc_guard before insert on public.cash_docs for each row execute function app.kassa_doc_guard();
+\ir kassa-checks.sql
+rollback to savepoint b23b;
+select zz.chk('B23b qa-5: himoya triggeri faqat INSERT uchun qayta yaratilgan (UPDATE / DELETE himoyasiz) — 23-band (nomi va holati joyida: 3- va 8-band ko''rmaydi)',
+  :'c23' || '/' || :'c3' || '/' || :'c8' || '/' || :'bad', '^1/0/0/1$');
+
+savepoint b23c;
+alter policy cash_docs_sel on public.cash_docs using (true);
+alter policy expenses_acc_sel on public.expenses using (true);
+\ir kassa-checks.sql
+rollback to savepoint b23c;
+select zz.chk('B23c qa-5: o''qish siyosatlari kengaytirilgan (kassa hujjatlari — hammaga; buxgalter o''qishi — *_acc_sel) — 23-band (2 ta)', :'c23' || '/' || :'bad', '^2/2$');
+
+savepoint b23d;
+create function public.zz_trg() returns trigger language plpgsql as $f$ begin return new; end $f$;
+create trigger zz_extra before update on public.cash_docs for each row execute function public.zz_trg();
+alter table public.cash_days drop constraint cash_days_verifier_ne_closer;
+alter table public.cash_docs drop constraint cash_docs_approver_ne_requester;
+\ir kassa-checks.sql
+rollback to savepoint b23d;
+select zz.chk('B23d qa-5: moliya jadvalida begona nomli ortiqcha trigger; vazifalar ajratilishi cheklovlari (tekshiruvchi ≠ yopuvchi, tasdiqlovchi ≠ so''rovchi) olib tashlangan — 23-band (3 ta)',
+  :'c23' || '/' || :'bad', '^3/3$');
+
+savepoint b23e;
+create or replace function public.kassa_doc_approve(p_id text, p_note text default '') returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $f$ begin return '{}'::jsonb; end $f$;
+\ir kassa-checks.sql
+rollback to savepoint b23e;
+select zz.chk('B23e qa-5: ochiq funksiya (kassa_doc_approve) matni almashtirilgan — 23-band; huquqlari va nomi joyida (5/6-band ko''rmaydi)', :'c23' || '/' || :'c5' || '/' || :'c6' || '/' || :'bad', '^1/0/0/1$');
+
+savepoint b23f;
+drop trigger trg_fin_clock_guard on app.fin_clock;
+\ir kassa-checks.sql
+rollback to savepoint b23f;
+select zz.chk('B23f qa-5: test soati qo''riqchisi (faqat sinov bazasida) olib tashlangan — 8-band va 23-band', :'c8' || '/' || :'c23' || '/' || :'bad', '^1/1/2$');
+
+savepoint b7b;
+revoke select on public.cash_docs from authenticated;
+\ir kassa-checks.sql
+rollback to savepoint b7b;
+select zz.chk('B7b qa-5: kirgan foydalanuvchida kassa hujjatlarini o''qish huquqi yo''q (sahifa ishlamaydi) — 7-band', :'c7' || '/' || :'bad', '^1/1$');
 
 -- ---------- (B) ma'lumot yaxlitligi (triggerlarni chetlab buziladi) ----------
 savepoint d11;
@@ -347,6 +407,109 @@ set local session_replication_role = origin;
 rollback to savepoint d22;
 select zz.chk('D22 sozlamalar ziddiyati: qulf bugungi kunda; ishga tushirilgan, lekin boshlang''ich qoldiq yo''q — 22-band (2 ta)', :'c22' || '/' || :'bad', '^2/2$');
 
+-- ---------- (D) qa-5: vazifalar ajratilishi (24-band) — funksiyalar va cheklovlar chetlab o'tilgan ma'lumot ----------
+savepoint d24a;
+set local session_replication_role = replica;
+update public.cash_docs set "approvedBy" = null, "approvedAt" = null where id = zz.id('C1');
+update public.cash_docs set "needsDirector" = true where id = zz.id('C3');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d24a;
+select zz.chk('D24a qa-5: tekshirilgan kundagi chiqim orderi 2-ro''yxat tasdig''isiz, boshqasi talab qilingan Direktor tasdig''isiz o''tgan — 24-band (2 ta; kun izi o''zgarmaydi)',
+  :'c24' || '/' || :'c13' || '/' || :'bad', '^2/0/2$');
+
+savepoint d24b;
+alter table public.cash_docs drop constraint cash_docs_approver_ne_requester;
+set local session_replication_role = replica;
+update public.cash_docs set "approvedBy" = "requestedBy" where id = zz.id('C1');   -- so'rovchi (kassir) o'zi tasdiqlagan va pulni ham o'zi bergan
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d24b;
+select zz.chk('D24b qa-5: tasdiqlovchi = so''rovchi (cheklov olib tashlangan) va pulni tasdiqlovchining o''zi bergan — 24-band (2 ta), cheklov yo''qligi — 23-band',
+  :'c24' || '/' || :'c23' || '/' || :'bad', '^2/1/3$');
+
+savepoint d24c;
+set local session_replication_role = replica;
+update public.users set "staffRefType" = 'teacher', "staffRefId" = 'tch1' where id = 'U_FM';   -- Moliya menejeri — o'qituvchi kartasiga bog'langan
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d24c;
+select zz.chk('D24c qa-5: tasdiqlovchi pul oluvchining o''zi (bog''langan karta: avans va hisobdorga avans), avans hisobotini hisobdorning o''zi kiritgan — 24-band (3 ta)',
+  :'c24' || '/' || :'bad', '^3/3$');
+
+savepoint d24d;
+set local session_replication_role = replica;
+update public.cash_docs set "approvedBy" = 'U_DIR' where id = zz.id('C1');   -- yetkazib beruvchiga xarajat: 2-ro'yxat bosqichini Direktor imzolagan
+update public.cash_docs set "postedBy" = "approvedBy" where id = zz.id('C4');  -- hisobdorga avans: pulni tasdiqlovchi (Moliya menejeri) bergan
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d24d;
+select zz.chk('D24d qa-5: 2-ro''yxat bosqichini Direktor imzolagan (oluvchi 2-ro''yxat xodimi emas); pulni so''rovni tasdiqlagan xodim bergan — 24-band (2 ta)',
+  :'c24' || '/' || :'bad', '^2/2$');
+
+savepoint d24e;
+alter table public.cash_days drop constraint cash_days_verifier_ne_closer;
+set local session_replication_role = replica;
+update public.cash_days set "verifiedBy" = "closedBy" where desk = 'main' and day = '2027-01-04';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' || '/' || :'c23' || '/' || :'bad' as d24e1 \gset
+rollback to savepoint d24e;
+savepoint d24e;
+set local session_replication_role = replica;
+insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
+  select 'ce_zz_z1', d.id, d.desk, d.day, 'zreport', d."verifiedBy", 'Z kiritildi', '{}'::jsonb from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+rollback to savepoint d24e;
+select zz.chk('D24e qa-5: kunni yopgan xodim uni o''zi tekshirgan (cheklov olib tashlangan) — 24-band, cheklov — 23-band; tekshiruvchi shu kunning Z-hisobotini kiritgan — 24-band',
+  :'d24e1' || ' | ' || :'c24' || '/' || :'bad', '^1/1/2 \| 1/1$');
+
+-- D24f (g10 tekshiruvchisi): 24-bandning qolgan qatorlari — har biri alohida savepoint'da (kun qatori birinchi mos sababni oladi), har biri
+--   bitta qator berishi kerak: tekshiruvchi (Moliya menejeri) shu kuni hujjat o'tkazgan; shu kunning hujjatini bekor qilgan; kunni qayta
+--   ochgan; shu kungi qabul qilingan smena topshirishda qatnashgan; avans hisobotini hisobdorning o'zi bekor qilgan (bog'langan karta)
+savepoint d24f;
+set local session_replication_role = replica;
+update public.cash_docs set "postedBy" = 'U_FM' where id = zz.doc('main', 'KO1', 1);
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24f1 \gset
+rollback to savepoint d24f;
+savepoint d24f;
+set local session_replication_role = replica;
+update public.cash_docs set "voidedBy" = 'U_FM' where id = zz.doc('main', 'KO2', 2);
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24f2 \gset
+rollback to savepoint d24f;
+savepoint d24f;
+set local session_replication_role = replica;
+insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
+  select 'ce_zz_r1', d.id, d.desk, d.day, 'reopen', 'U_FM', 'Sinov: qayta ochildi', '{}'::jsonb from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24f3 \gset
+rollback to savepoint d24f;
+savepoint d24f;
+set local session_replication_role = replica;
+insert into public.cash_handovers (id, desk, "dayId", day, status, "fromUid", "toUid", "byUid", expected, counted, diff, "acceptedAt")
+  select 'ho_zz_1', d.desk, d.id, d.day, 'accepted', 'U_KAS', 'U_FM', 'U_KAS', 0, 0, 0, now() from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24f4 \gset
+rollback to savepoint d24f;
+savepoint d24f;
+set local session_replication_role = replica;
+insert into public.users (id, email, name, role, status, "extraRoles", "staffRefType", "staffRefId")
+  values ('U_T1', 't1@x', 'Sinov O''qituvchi', 'teacher', 'active', '[]', 'teacher', 'tch1');
+update public.cash_docs set status = 'void', "voidedBy" = 'U_T1', "voidedAt" = now(), "voidReason" = 'Sinov: bekor' where id = zz.id('AV1');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24f5 \gset
+rollback to savepoint d24f;
+select zz.chk('D24f qa-5: tekshiruvchi shu kuni hujjat o''tkazgan / hujjatini bekor qilgan / kunni qayta ochgan / smena topshirishda qatnashgan; avans hisobotini hisobdorning o''zi bekor qilgan — 24-band (har biri 1 ta)',
+  :'d24f1' || '/' || :'d24f2' || '/' || :'d24f3' || '/' || :'d24f4' || '/' || :'d24f5', '^1/1/1/1/1$');
+
 -- ---------- (C) qaytarilgach — toza; modul bo'lmagan baza ----------
 \ir kassa-checks.sql
 select zz.chk('C1 buzilishlar qaytarilgach yana toza', :'bad' || '/' || :'err', '^0/0$');
@@ -370,10 +533,10 @@ select zz.put('E2', zz.as('U_DIR', format('select public.kassa_opening_set(%L::j
 select zz.put('E3', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-07"}')::text$q$));
 select zz.put('E4', zz.tui('U_KAS', 'man_e4_0001', 'T-3', 20000, 'Sinov Ota', '121'));
 select zz.chk('E1 06.01 yopildi, kassa to''xtatildi, 07.01 qayta ishga tushdi: farq −1 000 (Dt 0000 Kt 5010), kun boshi = sanalgan, KO-1 yozildi',
-  (zz.get('E0')::jsonb ->> 'diff') || ' | ' || coalesce(zz.get('E1')::jsonb ->> 'kassaGoLive', 'bo''sh') || ' | ' || (zz.get('E2')::jsonb ->> 'delta')
-  || ':' || (zz.get('E2')::jsonb #>> '{doc,lines,0,debit}') || '>' || (zz.get('E2')::jsonb #>> '{doc,lines,0,credit}') || ' | ' || (zz.get('E3')::jsonb ->> 'kassaGoLive')
+  (zz.js(zz.get('E0')) ->> 'diff') || ' | ' || zz.jd(zz.get('E1'), 'kassaGoLive', 'bo''sh') || ' | ' || (zz.js(zz.get('E2')) ->> 'delta')
+  || ':' || (zz.js(zz.get('E2')) #>> '{doc,lines,0,debit}') || '>' || (zz.js(zz.get('E2')) #>> '{doc,lines,0,credit}') || ' | ' || (zz.js(zz.get('E3')) ->> 'kassaGoLive')
   || ' | ' || (select (opening = (select closing - 1000 from public.cash_days where desk = 'main' and day = '2027-01-06'))::text from public.cash_days where desk = 'main' and day = '2027-01-07')
-  || ' | ' || (zz.get('E4')::jsonb #>> '{kassa,day}'),
+  || ' | ' || (zz.js(zz.get('E4')) #>> '{kassa,day}'),
   '^0 \| bo''sh \| -1000:0000>5010 \| 2027-01-07 \| true \| 2027-01-07$');
 \ir kassa-checks.sql
 select zz.chk('E2 qayta ishga tushirilgan kassa: tekshiruv hech narsa topmadi (zanjir, dalolatnoma, raqamlash, moslik)',
@@ -406,10 +569,10 @@ select zz.put('E5c', zz.as('U_DIR', format('select public.kassa_opening_set(%L::
 select zz.put('E5d', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-01-08"}')::text$q$));
 select zz.put('E5e', zz.tui('U_KAS', 'man_e5_0001', 'T-3', 30000, 'Sinov Ota', '122'));
 select zz.chk('E5 ikkinchi to''xtatish va qayta ishga tushirish: farq +2 000 (Dt 5010 Kt 0000), kun boshi = sanalgan, KO-1 yozildi; ikki dalolatnoma',
-  (zz.get('E5a')::jsonb ->> 'diff') || ' | ' || coalesce(zz.get('E5b')::jsonb ->> 'kassaGoLive', 'bo''sh') || ' | ' || (zz.get('E5c')::jsonb ->> 'delta')
-  || ':' || (zz.get('E5c')::jsonb #>> '{doc,lines,0,debit}') || '>' || (zz.get('E5c')::jsonb #>> '{doc,lines,0,credit}') || ' | ' || (zz.get('E5d')::jsonb ->> 'kassaGoLive')
+  (zz.js(zz.get('E5a')) ->> 'diff') || ' | ' || zz.jd(zz.get('E5b'), 'kassaGoLive', 'bo''sh') || ' | ' || (zz.js(zz.get('E5c')) ->> 'delta')
+  || ':' || (zz.js(zz.get('E5c')) #>> '{doc,lines,0,debit}') || '>' || (zz.js(zz.get('E5c')) #>> '{doc,lines,0,credit}') || ' | ' || (zz.js(zz.get('E5d')) ->> 'kassaGoLive')
   || ' | ' || (select (opening = (select closing + 2000 from public.cash_days where desk = 'main' and day = '2027-01-07'))::text from public.cash_days where desk = 'main' and day = '2027-01-08')
-  || ' | ' || (zz.get('E5e')::jsonb #>> '{kassa,day}')
+  || ' | ' || (zz.js(zz.get('E5e')) #>> '{kassa,day}')
   || ' | ' || (select count(*) from public.cash_docs where op = 'nc_opening' and "sourceSnapshot" ->> 'kind' = 'restart' and status = 'posted'),
   '^0 \| bo''sh \| 2000:5010>0000 \| 2027-01-08 \| true \| 2027-01-08 \| 2$');
 \ir kassa-checks.sql
@@ -429,7 +592,7 @@ select zz.put('E6b', zz.as('U_KAS', format('select public.kassa_day_close(%L::js
   'counted', (select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = 'main' and d.status = 'open')))));
 select zz.put('E6c', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
 \ir kassa-checks.sql
-select :'e6a' || ' | ' || coalesce(zz.get('E6c')::jsonb ->> 'kassaGoLive', 'bo''sh') || ':' || :'c20' || '/' || :'bad' as e6 \gset
+select :'e6a' || ' | ' || zz.jd(zz.get('E6c'), 'kassaGoLive', 'bo''sh') || ':' || :'c20' || '/' || :'bad' as e6 \gset
 rollback to savepoint e6;
 select zz.chk('E6 g4v-4: birinchi davr (05.01) yetimi ikki marta qayta ishga tushirilgandan keyin ham 20-bandda (P4); kassa yana to''xtatilganda ham',
   :'e6', '^1/1 \| bo''sh:1/1$');
