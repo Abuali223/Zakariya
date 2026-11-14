@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
-  deskHolder, needCommission, handoverRole, diffText } from './fin-kassa.js';
+  deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -335,4 +335,36 @@ test('nazorat ro‘yxati (sec-4): xodim kartasiga bog‘lanmagan kassa hisoblari
   assert.deepEqual([r.unlinked.level, r.unlinked.value], ['warn', 'Sinov HR (hr + kassir), U_TRE (g‘aznachi)']);
   assert.match(r.unlinked.hint, /Foydalanuvchilar/);
   assert.equal(by(controlRows(clean())).unlinked.value, 'yo‘q');
+});
+
+// ---------------------------------------------------------------- ko'rik 6b-guruhi (g6v-1, g6v-2, g6v-3)
+test('smena topshirishda sanalgan order (g6v-2): kassir bekor qilmaydi, 2-ro‘yxat va Direktor — bekor qiladi; boshqa qoidalar avvalgidek', () => {
+  const od = { id: 'cd_main_2028-01-13', status: 'open', countedKo1: 7, countedKo2: 3 };
+  const kas = { uid: 'u_kas', operator: true }, fm = { uid: 'u_fm', list2: true }, dir = { uid: 'u_dir', director: true };
+  const k1 = no => ({ id: 'd' + no, form: 'KO1', no, status: 'posted', postedBy: 'u_kas', isSystem: false, sourceTable: null, op: 'in_bank' });
+  assert.deepEqual([countedAtHandover(k1(7), od), countedAtHandover(k1(8), od), countedAtHandover(Object.assign(k1(3), { form: 'KO2' }), od),
+    countedAtHandover(Object.assign(k1(4), { form: 'KO2' }), od)], [true, false, true, false], 'raqam — topshirish yozilgan paytdagi eng katta raqamgacha');
+  assert.equal(countedAtHandover(k1(1), { id: 'x', countedKo1: null, countedKo2: null }), false, 'qabul qilingan topshirish yo‘q');
+  assert.equal(countedAtHandover(k1(5), null), false);
+  assert.deepEqual([canVoidDoc(k1(7), kas, od), canVoidDoc(k1(8), kas, od)], [false, true], 'kassir: sanalgani — yo‘q, keyingisi — o‘zi o‘tkazgan bo‘lsa, bor');
+  assert.deepEqual([canVoidDoc(k1(7), fm, od), canVoidDoc(k1(7), dir, od)], [true, true], '2-ro‘yxat va Direktor — sanalganini ham');
+  assert.equal(canVoidDoc(Object.assign(k1(8), { postedBy: 'u_kas2' }), kas, od), false, 'kassir boshqa kassir orderini bekor qilmaydi');
+  assert.equal(canVoidDoc(Object.assign(k1(8), { isSystem: true }), dir, od), false, 'tizim hujjati (sanash farqi) — hech kim');
+  assert.equal(canVoidDoc(Object.assign(k1(8), { sourceTable: 'refunds', op: 'out_refund' }), dir, od), false, 'qaytarish orderi — yo‘q');
+  assert.equal(canVoidDoc(Object.assign(k1(8), { sourceTable: 'payments', op: 'in_tuition' }), kas, od), true, 'naqd o‘quv to‘lovi — bor');
+  assert.deepEqual([canVoidDoc(Object.assign(k1(8), { status: 'void' }), dir, od), canVoidDoc(k1(8), kas, null)], [false, false], 'bekor qilingan / ochiq kun yo‘q');
+  assert.equal(canVoidDoc(k1(7), kas, { id: 'x' }), true, 'eski server (countedKo1 yo‘q) — avvalgidek, server baribir tekshiradi');
+});
+
+test('kamomad qarori (g6v-3): nega standart javobgar yo‘q — server matni (defaultWhy), eski serverda — avvalgi matn', () => {
+  assert.equal(shortageWhy({ defaultParty: 'staff:st1', defaultWhy: null }), '', 'standart javobgar bor — matn yo‘q');
+  assert.equal(shortageWhy({ cashierUid: 'u_kas', countedBy: 'u_kas', defaultParty: null,
+    defaultWhy: 'Shu kuni kassa egasidan boshqa xodim ham kassa orderini o\'tkazgan yoki bekor qilgan: Sinov Direktor' }),
+    'Shu kuni kassa egasidan boshqa xodim ham kassa orderini o\'tkazgan yoki bekor qilgan: Sinov Direktor');
+  assert.equal(shortageWhy({ cashierUid: 'u_kas', defaultParty: null, defaultWhy: 'Eski hujjat: pulni kim sanagani yozilmagan' }), 'Eski hujjat: pulni kim sanagani yozilmagan');
+  // eski server (defaultWhy yo'q) — sahifaning avvalgi matni
+  assert.equal(shortageWhy({ cashierUid: null, countedBy: 'u_dir' }), 'Kassa egasi (kun kassiri) aniqlanmagan');
+  assert.equal(shortageWhy({ cashierUid: 'u_kas', countedBy: 'u_kas2' }), 'Pulni kassa egasining o‘zi sanamagan (kassir o‘rniga sanalgan)');
+  assert.equal(shortageWhy({ cashierUid: 'u_kas', countedBy: 'u_kas' }), 'Kassir hisobi xodim kartasiga bog‘lanmagan');
+  assert.equal(shortageWhy(null), '');
 });

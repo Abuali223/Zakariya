@@ -953,6 +953,144 @@ select zz.chk('M23 RP-06 sanash farqlari: yopish va smena topshirish farqlari ku
   zz.as('U_FM', $q$select string_agg((x ->> 'day') || '=' || (x ->> 'diff') || '/' || (x -> 'handover')::text, ',' order by x ->> 'day') from jsonb_array_elements(public.kassa_checks('main') -> 'diffs30') x where x ->> 'day' >= '2028-01-05'$q$),
   '^2028-01-05=-30000/\[\],2028-01-06=-2000/\[5000\],2028-01-07=0/\[-7000\],2028-01-08=-1000/\[\]$');
 
+-- ---------- (N) smena qo'shimchalari (g6b): standart javobgar faqat boshqa hech kim tegmagan kassada (g6v-1), smenada sanalgan orderni
+--   kassir bekor qilmaydi (g6v-2), «nega standart javobgar yo'q» — bitta manba (g6v-3) ----------
+--   Yangi kunlar 10–14.01.2028. Ismlar — xodim kartasidan: U_DIR — «Sinov Rahbar» (st4), U_FM — «Sinov Moliyachi» (st2), U_KAS — staff:st1,
+--   U_KAS2 — teachers:tch1. Mavjud standart javobgar holatlari (G17, M12d: kassa egasi kassani olgandan keyin boshqa hech kim tegmagan) — o'zgarmagan.
+create or replace function zz.inb(p_uid text, p_amt numeric, p_ref text) returns text language sql as $$
+  select zz.rcpt(p_uid, format('{"op":"in_bank","amount":%s,"partyType":"bank","partyId":"%s","basis":"Chek","clientRef":"%s"}', p_amt, zz.id('cp_bank'), p_ref)) $$;
+-- qaror oynasi ma'lumoti (kassa_overview → shortages) kun bo'yicha: tur:kassa egasi:sanagan:standart javobgar:boshqalar:nega yo'q
+create or replace function zz.sh(p_day text) returns text language sql as $$
+  select zz.as('U_DIR', format($q$select string_agg(coalesce(x ->> 'kind', '-') || ':' || coalesce(x ->> 'cashierUid', '-') || ':' || coalesce(x ->> 'countedBy', '-')
+                                                    || ':' || coalesce(x ->> 'defaultParty', '-') || ':' || coalesce((x -> 'others')::text, '-') || ':' || coalesce(x ->> 'defaultWhy', '-'),
+                                                    ' ; ' order by x ->> 'kind')
+                                    from jsonb_array_elements(public.kassa_overview('main') -> 'shortages') x where x ->> 'day' = %L$q$, p_day)) $$;
+create or replace function zz.dec(p_day text, p_decision text, p_party text) returns text language sql as $$
+  select zz.as('U_DIR', format('select public.kassa_shortage_decide(%L, %L, %L, %L)::text', (select "diffDocId" from public.cash_days where day = p_day::date), p_decision,
+                               'Tushuntirish xati bilan', p_party)) $$;
+-- 10.01: Direktor kunning birinchi orderini o'tkazdi (kassa egasi yo'q), keyin kassir — kassa egasi; kassir o'zi sanab kamomad bilan yopdi
+select zz.clock('2028-01-10 09:00+05');
+select zz.put('N1a', zz.inb('U_DIR', 60000, 'n1-000001'));
+select zz.put('N1b', zz.inb('U_KAS', 30000, 'n1-000002'));
+select zz.chk('N1 g6v-1: Direktor birinchi orderni o''tkazdi — kassa egasi yo''q, u «boshqalar»da; birinchi kassir orderi bilan kassa egasi — kassir (u «boshqa» emas); '
+              || 'sanash farqi (tizim hujjati) yaratgan xodim «boshqa» emas (M2: 05.01 ni boshqa kassir komissiya bilan yopgan)',
+  zz.f(zz.get('N1a'), 'status') || ':' || zz.f(zz.get('N1b'), 'status') || ' | ' || (select "cashierUid" || ':' || array_to_string("othersUids", ',') from public.cash_days where day = '2028-01-10')
+  || ' | ' || (select "cashierUid" || ':' || cardinality("othersUids") || ':' || (select count(*) from public.cash_docs c where c."dayId" = d.id and c."isSystem")
+                 from public.cash_days d where d.day = '2028-01-05'),
+  '^posted:posted \| U_KAS:U_DIR \| U_KAS:0:1$');
+select zz.put('N2', zz.close('U_KAS', format('{"day":"2028-01-10","counted":%s}', zz.bal()::numeric - 1500)));
+select zz.chk('N2 kassa egasi o''zi sanagan kamomad — standart javobgar YO''Q: farq hujjati suratida «boshqalar» (ismi bilan); qaror oynasida sababi — server matni',
+  zz.f(zz.get('N2'), 'diff') || ' | ' || (select (c."sourceSnapshot" -> 'others')::text || ':' || (c."sourceSnapshot" -> 'names' ->> 'U_DIR')
+                                             from public.cash_docs c where c.id = (select "diffDocId" from public.cash_days where day = '2028-01-10'))
+  || ' | ' || zz.sh('2028-01-10'),
+  '^-1500 \| \["U_DIR"\]:Sinov Rahbar \| close:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar$');
+select zz.put('N3e', zz.dec('2028-01-10', 'employee', null));
+select zz.put('N3', zz.dec('2028-01-10', 'employee', 'staff:st1'));
+select zz.chk('N3 «xodim zimmasiga» kartasiz — rad, xuddi shu matn bilan (bitta manba); Direktor tanlagan karta bilan — qaror (dalolatnoma suratida «boshqalar», standart javobgar yo''q)',
+  zz.get('N3e') || ' | ' || (select a."partyType" || ':' || a."partyId" || ':' || (a."sourceSnapshot" -> 'others')::text || ':' || coalesce(a."sourceSnapshot" ->> 'defaultParty', '-')
+                               || ':' || (a."sourceSnapshot" ->> 'picked') from public.cash_docs a where a.id = zz.f(zz.get('N3'), 'act', 'id')),
+  '^ERR 22023 \[kassa:shortage_party\] Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar — javobgar xodim kartasini tanlang \| employee:staff:st1:\["U_DIR"\]:-:true$');
+-- 11.01: kassir kunida Direktor kabinetda chiqim orderini o'tkazdi (so'rov puli), kassir kamomad bilan yopdi
+select zz.clock('2028-01-11 09:00+05');
+select zz.put('N4a', zz.inb('U_KAS', 80000, 'n4-000001'));
+select zz.put('N4q', zz.preq('U_KAS', $q${"op":"out_expense","amount":15000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"n4-000002","lines":[{"articleId":"EX-20","amount":15000}]}$q$));
+select zz.put('N4r', zz.f(zz.appr('U_FM', zz.id('N4q')), 'status'));
+select zz.put('N4p', zz.f(zz.pay('U_DIR', zz.id('N4q')), 'status'));
+select zz.put('N4c', zz.close('U_KAS', format('{"day":"2028-01-11","counted":%s}', zz.bal()::numeric - 2500)));
+select zz.chk('N4 kassa egasi kunida Direktor chiqim orderini o''tkazdi — kassir kamomad bilan yopdi: standart javobgar yo''q, «boshqalar»da Direktor',
+  zz.get('N4r') || ':' || zz.get('N4p') || ' | ' || zz.f(zz.get('N4c'), 'diff') || ' | ' || zz.sh('2028-01-11'),
+  '^approved:posted \| -2500 \| close:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar$');
+-- g6v-3: eski hujjat (g6 dan oldingi surat — sanagan xodim yozilmagan): qaror oynasi va server xatosi bir xil «Eski hujjat…»
+set local session_replication_role = replica;
+update public.cash_docs set "sourceSnapshot" = "sourceSnapshot" - 'countedBy' - 'others' where id = (select "diffDocId" from public.cash_days where day = '2028-01-11');
+set local session_replication_role = origin;
+select zz.put('N5e', zz.sh('2028-01-11') || ' | ' || zz.dec('2028-01-11', 'employee', null));
+select zz.chk('N5 eski hujjat (sanagan xodim yozilmagan): qaror oynasi va server xatosi — bir xil «Eski hujjat…» (avval «kassir o''rniga» deyilardi); hisobdan chiqarish — mumkin',
+  zz.get('N5e') || ' | ' || zz.f(zz.dec('2028-01-11', 'writeoff', null), 'decision'),
+  '^close:U_KAS:-:-:\[\]:Eski hujjat: pulni kim sanagani yozilmagan \| ERR 22023 \[kassa:shortage_party\] Eski hujjat: pulni kim sanagani yozilmagan — javobgar xodim kartasini tanlang \| writeoff$');
+select zz.chk('N6 g6v-3: «nega standart javobgar yo''q» — bitta yordamchi, tartib bilan; eski surat (sanagan yozilmagan) — standart javobgar yo''q',
+  coalesce(app.kassa_shortage_why('{}'::jsonb), '-') || ' | ' || coalesce(app.kassa_shortage_why('{"cashierUid":"U_KAS"}'::jsonb), '-')
+  || ':' || coalesce(app.kassa_shortage_default('{"cashierUid":"U_KAS"}'::jsonb), 'NULL')
+  || ' | ' || coalesce(app.kassa_shortage_why('{"cashierUid":"U_KAS","countedBy":"U_KAS2","others":["U_DIR"]}'::jsonb), '-')
+  || ' | ' || coalesce(app.kassa_shortage_why('{"cashierUid":"U_KAS","countedBy":"U_KAS","others":["U_ZAV","U_DIR"],"names":{"U_DIR":"Sinov Rahbar"}}'::jsonb), '-')
+  || ':' || coalesce(app.kassa_shortage_default('{"cashierUid":"U_KAS","countedBy":"U_KAS","others":["U_DIR"]}'::jsonb), 'NULL')
+  || ' | ' || coalesce(app.kassa_shortage_why('{"cashierUid":"U_TRE","countedBy":"U_TRE"}'::jsonb), '-')
+  || ' | ' || coalesce(app.kassa_shortage_why('{"cashierUid":"U_KAS","countedBy":"U_KAS","others":[]}'::jsonb), 'NULL')
+  || ':' || coalesce(app.kassa_shortage_default('{"cashierUid":"U_KAS","countedBy":"U_KAS","others":[]}'::jsonb), 'NULL'),
+  '^Kassa egasi \(kun kassiri\) aniqlanmagan \| Eski hujjat: pulni kim sanagani yozilmagan:NULL \| Pulni kassa egasining o''zi sanamagan \(kassir o''rniga sanalgan\) \| '
+  || 'Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: U_ZAV, Sinov Rahbar:NULL \| Kassir hisobi xodim kartasiga bog''lanmagan \(yoki bir nechta kartaga\) \| NULL:staff:st1$');
+-- 12.01: A (U_KAS) va Direktor orderlari, A → B (U_KAS2) smena kamomad bilan qabul qilindi (ro'yxat bo'shatildi), B yolg'iz ishlab kamomad bilan yopdi
+select zz.clock('2028-01-12 09:00+05');
+select zz.put('N7a', zz.inb('U_KAS', 50000, 'n7-000001'));
+select zz.put('N7b', zz.inb('U_DIR', 20000, 'n7-000002'));
+select zz.put('N7h', zz.ho('U_KAS', format('{"counted":%s,"toUid":"U_KAS2"}', zz.bal()::numeric - 500)));
+select zz.put('N7x', zz.hacc('U_KAS2', zz.hid('N7h')));
+select zz.chk('N7 smena qabul qilindi: topshirishdagi kamomad hujjatida topshiruvchi davri («boshqalar»: Direktor) — standart javobgar yo''q; ro''yxat bo''shatildi, kassa egasi — qabul qiluvchi',
+  zz.f(zz.get('N7x'), 'diff') || ' | ' || (select "cashierUid" || ':' || cardinality("othersUids") from public.cash_days where day = '2028-01-12') || ' | ' || zz.sh('2028-01-12'),
+  '^-500 \| U_KAS2:0 \| handover:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar$');
+select zz.put('N8a', zz.inb('U_KAS2', 10000, 'n8-000001'));
+select zz.put('N8c', zz.close('U_KAS2', format('{"day":"2028-01-12","counted":%s}', zz.bal()::numeric - 700)));
+select zz.put('N8s', zz.sh('2028-01-12'));
+select zz.put('N8d', zz.dec('2028-01-12', 'employee', null));
+select zz.chk('N8 qabul qiluvchi o''z davrida yolg''iz ishlab kamomad bilan yopdi — standart javobgar uning kartasi (Direktorning smenadan oldingi orderi unga «boshqa» emas); kartasiz qaror o''tdi',
+  zz.f(zz.get('N8c'), 'diff') || ' | ' || zz.get('N8s') || ' | '
+  || (select a."partyType" || ':' || a."partyId" from public.cash_docs a where a.id = zz.f(zz.get('N8d'), 'act', 'id')),
+  '^-700 \| close:U_KAS2:U_KAS2:teachers:tch1:\[\]:- ; handover:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni .* \| employee:teachers:tch1$');
+-- 13.01: g6v-2 — smenada sanalgan orderni kassir bekor qilmaydi; 2-ro'yxat bekor qiladi va «boshqalar»ga tushadi
+select zz.clock('2028-01-13 09:00+05');
+select zz.put('N9a', zz.inb('U_KAS', 40000, 'n9-000001'));
+select zz.put('N9h', zz.ho('U_KAS', format('{"counted":%s,"toUid":"U_KAS2"}', zz.bal())));
+select zz.put('N9x', zz.f(zz.hacc('U_KAS2', zz.hid('N9h')), 'handover', 'status'));
+select zz.put('N9b', zz.bal());
+select zz.chk('N9 g6v-2: avvalgi kassa egasi smenada sanalgan o''z orderini bekor qila olmaydi (kassa:void_counted), qoldiq o''zgarmadi; topshirishda va kun javobida sanalgan raqam',
+  zz.get('N9x') || ' | ' || zz.void('U_KAS', zz.id('N9a'), 'Xato yozilgan edi') || ' | ' || (zz.bal() = zz.get('N9b'))::text
+  || ' | ' || (zz.f(zz.get('N9h'), 'handover', 'lastKo1') = zz.f(zz.get('N9a'), 'no'))::text || ':' || coalesce(zz.f(zz.get('N9h'), 'handover', 'lastKo2'), 'null')
+  || ':' || ((select app.kassa_day_json(id) ->> 'countedKo1' from public.cash_days where day = '2028-01-13') = zz.f(zz.get('N9a'), 'no'))::text,
+  '^accepted \| ERR 42501 \[kassa:void_counted\] Bu order smena topshirishda sanalgan \(topshirish-qabul dalolatnomasiga kirgan\) — kassir uni bekor qilmaydi\. Xato bo''lsa, moliya menejeri, buxgalter yoki Direktor bekor qiladi; farq kunni yopishda ko''rinadi \| true \| true:null:true$');
+select zz.put('N10a', zz.inb('U_KAS2', 25000, 'n10-00001'));
+select zz.put('N10h', zz.ho('U_KAS2', format('{"counted":%s,"toUid":"U_KAS"}', zz.bal())));
+select zz.put('N10x', zz.f(zz.hacc('U_KAS', zz.hid('N10h')), 'handover', 'status'));
+select zz.put('N10b', zz.inb('U_KAS', 12000, 'n10-00002'));
+select zz.put('N10v', left(zz.void('U_KAS2', zz.id('N10a'), 'Xato yozilgan edi'), 30));
+select zz.put('N10w', zz.f(zz.void('U_KAS', zz.id('N10b'), 'Xato yozilgan edi'), 'status'));
+select zz.put('N10y', left(zz.void('U_KAS', zz.id('N9a'), 'Xato yozilgan edi'), 30));
+select zz.chk('N10 smena qaytdi: U_KAS2 o''z sanalgan orderini ham bekor qilmaydi; U_KAS yana kassa egasi — oxirgi topshirishdan KEYIN o''tkazgan orderini bekor qiladi, oldingisini — yo''q; o''z orderini bekor qilgan kassa egasi «boshqa» emas',
+  zz.get('N10x') || ' | ' || zz.get('N10v') || ' | ' || zz.get('N10w') || ' | ' || zz.get('N10y')
+  || ' | ' || (select "cashierUid" || ':' || cardinality("othersUids") from public.cash_days where day = '2028-01-13'),
+  '^accepted \| ERR 42501 \[kassa:void_counted\] \| void \| ERR 42501 \[kassa:void_counted\] \| U_KAS:0$');
+select zz.chk('N10b sanalgan raqamlar o''zgarmaydi (topshirish yozuvi qabul qilingach o''zgarmaydi)',
+  zz.try(format($q$do $x$ begin perform app.kassa_flag(true); update public.cash_handovers set "lastKo1" = 0 where id = %L; end $x$$q$, zz.hid('N9h'))),
+  '^ERR 42501 \[kassa:immutable\]');
+select app.kassa_flag(false);
+select zz.put('N11', zz.f(zz.void('U_FM', zz.id('N9a'), 'Summa xato yozilgan'), 'status'));
+select zz.chk('N11 2-ro''yxat (Moliya menejeri) sanalgan orderni bekor qiladi — u kassa egasi emas, «boshqalar»ga tushdi; ochiq kunda ro''yxat qisqarmaydi (bayroq bilan ham)',
+  zz.get('N11') || ' | ' || (select array_to_string("othersUids", ',') from public.cash_days where day = '2028-01-13')
+  || ' | ' || zz.try($q$do $x$ begin perform app.kassa_flag(true); update public.cash_days set "othersUids" = '{}' where day = '2028-01-13'; end $x$$q$),
+  '^void \| U_FM \| ERR 42501 \[kassa:immutable\]');
+select app.kassa_flag(false);
+select zz.put('N12', zz.close('U_KAS', format('{"day":"2028-01-13","counted":%s}', zz.bal()::numeric - 900)));
+select zz.chk('N12 kassa egasi kamomad bilan yopdi — standart javobgar yo''q, «boshqalar»da Moliya menejeri (ismi bilan)',
+  zz.f(zz.get('N12'), 'diff') || ' | ' || zz.sh('2028-01-13'),
+  '^-900 \| close:U_KAS:U_KAS:-:\["U_FM"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Moliyachi$');
+select zz.chk('N13 kun qulfi: yopilgan kunda ro''yxat o''zgarmaydi (bayroq bilan ham); kun izi unga bog''liq emas',
+  zz.try($q$do $x$ begin perform app.kassa_flag(true); update public.cash_days set "othersUids" = '{}' where day = '2028-01-13'; end $x$$q$)
+  || ' | ' || zz.try($q$do $x$ begin perform app.kassa_flag(true); update public.cash_days set "othersUids" = "othersUids" || 'U_ACC'::text where day = '2028-01-10'; end $x$$q$)
+  || ' | ' || (select (hash = app.kassa_day_hash(id))::text from public.cash_days where day = '2028-01-13'),
+  '^ERR 42501 \[kassa:immutable\].* \| ERR 42501 \[kassa:immutable\].* \| true$');
+select app.kassa_flag(false);
+select zz.put('N14r', zz.f(zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2028-01-13', 'Qayta sanash kerak')::text$q$), 'day', 'othersUids'));
+select zz.put('N14', zz.close('U_KAS', format('{"day":"2028-01-13","counted":%s}', zz.bal()::numeric - 600)));
+select zz.chk('N14 qayta ochish ro''yxatni bo''shatmaydi (faqat sanash farqi hujjati bekor bo''ladi): qayta yopishdagi kamomadda ham standart javobgar yo''q',
+  zz.get('N14r') || ' | ' || zz.f(zz.get('N14'), 'diff') || ' | ' || zz.sh('2028-01-13'),
+  '^\["U_FM"\] \| -600 \| close:U_KAS:U_KAS:-:\["U_FM"\]:Shu kuni .*: Sinov Moliyachi$');
+-- 14.01: kassa egasi aniqlanmagan kun (faqat Direktor orderi) — kassir komissiyasiz yopadi (o'zi kassa egasi va sanagan), lekin standart javobgar yo'q
+select zz.clock('2028-01-14 09:00+05');
+select zz.put('N15a', zz.inb('U_DIR', 30000, 'n15-00001'));
+select zz.put('N15', zz.close('U_KAS', format('{"day":"2028-01-14","counted":%s}', zz.bal()::numeric - 400)));
+select zz.chk('N15 g6 tekshiruvchisi 1-holati: kassa egasi yo''q kunni kassir yopdi — kassa egasi va sanagan o''zi, lekin kunning orderini Direktor o''tkazgan: standart javobgar yo''q',
+  coalesce((select "cashierUid" from public.cash_days where day = '2028-01-14'), '-') || ' | ' || zz.f(zz.get('N15'), 'diff') || ' | ' || zz.sh('2028-01-14'),
+  '^- \| -400 \| close:U_KAS:U_KAS:-:\["U_DIR"\]:Shu kuni kassa egasidan boshqa xodim ham kassa orderini o''tkazgan yoki bekor qilgan: Sinov Rahbar$');
+
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end
   from zz.res order by n;

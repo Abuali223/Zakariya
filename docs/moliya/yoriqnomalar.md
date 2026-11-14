@@ -62,12 +62,14 @@ chiqim orderi; ota-onaning yozma arizasi orderga ilova qilinadi. Bir kundan orti
 faktura yoki o‘quvchi avansi o‘zgargan bo‘lsa, tizim pulni bermaydi — Direktorga ayting (so‘rovni bekor qilib, qaytadan tasdiqlaydi).
 
 **Xato qildim.** Shu kuni hujjat qatorida «Bekor» → sababi. Kassir faqat **o‘zi o‘tkazgan** orderni bekor qiladi; boshqasinikini —
-moliya menejeri yoki Direktor. O‘quv to‘lovidan keyin o‘quvchi bo‘yicha boshqa pul harakati bo‘lgan bo‘lsa, bekor qilinmaydi —
-Direktor «Qaytarish» qiladi. Qaytarish chiqim orderi bekor qilinmaydi. Hisobdorga avans orderidan avans hisoboti yoki qaytim
-yozilgan bo‘lsa — avval o‘sha hisobot (buxgalter) yoki qaytim bekor qilinadi. «Xodim qaytargan pul» orderi: avans qaytimi (OP-08)
-— oy vedomosti shu orada tasdiqlangan bo‘lsa bekor qilinmaydi (Direktor oyni qayta ochadi); maosh qaytimi (OP-09) — qaytgan maosh
-keyin qayta berilgan bo‘lsa bekor qilinmaydi (avval keyingi maosh orderi bekor qilinadi). Ish haqi avansi yoki naqd maosh orderidan
-kassaga qaytim yozilgan bo‘lsa — avval o‘sha qaytim orderi, keyin avans / maosh orderi bekor qilinadi.
+moliya menejeri yoki Direktor. Smena topshirilib qabul qilingan bo‘lsa, undan **oldin** o‘tkazilgan orderni (o‘zingiznikini ham)
+kassir bekor qilmaydi — u topshirish-qabul sanashiga kirgan («Bekor» tugmasi ko‘rinmaydi): xato bo‘lsa moliya menejeri, buxgalter
+yoki Direktor bekor qiladi, farq kunni yopishda ko‘rinadi. O‘quv to‘lovidan keyin o‘quvchi bo‘yicha boshqa pul harakati bo‘lgan
+bo‘lsa, bekor qilinmaydi — Direktor «Qaytarish» qiladi. Qaytarish chiqim orderi bekor qilinmaydi. Hisobdorga avans orderidan avans
+hisoboti yoki qaytim yozilgan bo‘lsa — avval o‘sha hisobot (buxgalter) yoki qaytim bekor qilinadi. «Xodim qaytargan pul» orderi:
+avans qaytimi (OP-08) — oy vedomosti shu orada tasdiqlangan bo‘lsa bekor qilinmaydi (Direktor oyni qayta ochadi); maosh qaytimi
+(OP-09) — qaytgan maosh keyin qayta berilgan bo‘lsa bekor qilinmaydi (avval keyingi maosh orderi bekor qilinadi). Ish haqi avansi
+yoki naqd maosh orderidan kassaga qaytim yozilgan bo‘lsa — avval o‘sha qaytim orderi, keyin avans / maosh orderi bekor qilinadi.
 
 **Smena almashsa** — ikki bosqichda, ikkala kassir kassa yonida:
 1. Topshiruvchi — «Smena topshirish»: pulni qabul qiluvchi bilan birga sanaydi, sanalgan summani kiritadi, qabul qiluvchi kassirni
@@ -112,8 +114,9 @@ kerak bo‘ladi (aks holda birinchi kassa kuni ochilmaydi).
 Buxgalterning o‘z hisobi va roli bor — **«Buxgalter»** (Direktor «Foydalanuvchilar»da beradi; qo‘shimcha lavozim bu rolga
 berilmaydi — buxgalter kassirni nazorat qiladi). To‘rt bo‘lim ochiladi:
 - **«Tasdiqlash»** va **«Kassa»** — 2-ro‘yxat nazorati: kassir so‘rovlarini tasdiqlash yoki rad etish, kunni tekshirish,
-  o‘tkazilgan hujjatni bekor qilish, avans hisoboti (o‘tkazilganda xarajat «Buxgalteriya»ga o‘zi tushadi), nazorat ro‘yxati, KO-3,
-  statiyalar, KPI, chop etish, «Davr»ni ko‘rish;
+  o‘tkazilgan hujjatni bekor qilish (smena topshirishda sanalgan orderni ham — kassir uni bekor qilmaydi; kassa egasi bo‘lmagan xodim
+  bekor qilsa, o‘sha kungi kamomadda standart javobgar bo‘lmaydi — Direktor tanlaydi), avans hisoboti (o‘tkazilganda xarajat
+  «Buxgalteriya»ga o‘zi tushadi), nazorat ro‘yxati, KO-3, statiyalar, KPI, chop etish, «Davr»ni ko‘rish;
 - **«To‘lovlar»** (faqat ko‘rish) — oy bo‘yicha hisob-fakturalar, to‘lovlar (kassa, bank, terminal, Click/Uzum), qaytarishlar,
   avanslar, biriktirilmagan to‘lovlar (sana, provayder, summa), o‘quvchining to‘lov tarixi (📋);
 - **«Buxgalteriya»** (faqat ko‘rish) — kirim, chiqim, xarajatlar ro‘yxati va toifalari, xodim avanslari, berilgan maosh, **oylik
@@ -248,7 +251,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 **Faqat Direktor qiladigan amallar**
 | Amal | Qayerda | Eslatma |
 |---|---|---|
-| Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | oynada kassa egasi (kun kassiri), pulni kim sanagani va shu kungi smena topshirishlar ko‘rinadi; xodim hisobiga — faqat **xodim kartasiga**: kassa egasi pulni o‘zi sanagan va hisobi kartaga bog‘langan bo‘lsa uning kartasi tanlangan bo‘ladi, aks holda (kassir o‘rniga sanalgan, egasi aniqlanmagan, hisob bog‘lanmagan) javobgar xodimni o‘zingiz tanlaysiz; yoki zararga; dalolatnoma; xodim hisobiga — u pulni kassaga «Kamomadni qoplash (xodim)» bilan qaytaradi (qolgani nazorat ro‘yxatida) |
+| Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | oynada kassa egasi (kun kassiri), pulni kim sanagani, kassa egasidan boshqa kassa orderi o‘tkazgan yoki bekor qilgan xodimlar va shu kungi smena topshirishlar ko‘rinadi; xodim hisobiga — faqat **xodim kartasiga**: kassa egasi pulni o‘zi sanagan, kassani olgandan beri kassa orderini undan boshqa hech kim (siz ham, moliya menejeri ham) o‘tkazmagan va bekor qilmagan hamda hisobi kartaga bog‘langan bo‘lsa uning kartasi tanlangan bo‘ladi, aks holda (kassir o‘rniga sanalgan, egasi aniqlanmagan, kassaga boshqa xodim ham tekkan, hisob bog‘lanmagan — sababi oynada yoziladi) javobgar xodimni o‘zingiz tanlaysiz; yoki zararga; dalolatnoma; xodim hisobiga — u pulni kassaga «Kamomadni qoplash (xodim)» bilan qaytaradi (qolgani nazorat ro‘yxatida) |
 | Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi; qayta ochgan kunni o‘zingiz tekshirmaysiz (2-ro‘yxat tekshiradi) |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |

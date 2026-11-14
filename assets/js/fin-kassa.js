@@ -44,6 +44,21 @@ export function handoverRole(h, m) {
   const receiver = h.toUid === m.uid, giver = h.byUid === m.uid || (!!h.fromUid && h.fromUid === m.uid);
   return { receiver, giver, canAccept: receiver && !!m.operator, canCancel: receiver || giver || !!m.director };
 }
+// Smena topshirishda sanalgan order (g6v-2; server — kassa_doc_void, kassa:void_counted): raqami qabul qilingan topshirishlar yozilgan
+//   paytdagi eng katta raqamgacha (kun javobida countedKo1 / countedKo2). Kassir uni bekor qilmaydi — 2-ro'yxat yoki Direktor bekor qiladi.
+export const countedAtHandover = (d, od) => !!(d && od) && num(d.no) > 0 && num(d.no) <= num(d.form === 'KO1' ? od.countedKo1 : d.form === 'KO2' ? od.countedKo2 : 0);
+// «Bekor» tugmasi (server — kassa_doc_void): ochiq kun orderi, tizim hujjati emas; bog'langanlardan faqat naqd o'quv to'lovi va naqd maosh
+//   orderi (bog'langan yozuv ham teskari bo'ladi; qaytarish — yo'q); kassir — faqat o'zi o'tkazgan va smena topshirishda sanalmagan orderni.
+export const canVoidDoc = (d, m, od) => !!(od && d && m) && d.status === 'posted' && !d.isSystem && (!d.sourceTable || d.op === 'in_tuition' || d.op === 'out_salary')
+  && !!(m.director || m.list2 || (m.operator && d.postedBy === m.uid && !countedAtHandover(d, od)));
+// Kamomad qarori: nega standart javobgar yo'q (g6v-3) — server matni (kassa_overview → shortages: defaultWhy; qaror xatosi ham shu manbadan);
+//   eski serverda (defaultWhy yo'q) — sahifaning avvalgi matni. Standart javobgar bor bo'lsa — bo'sh.
+export function shortageWhy(x) {
+  if (!x || x.defaultParty) return '';
+  if (typeof x.defaultWhy === 'string' && x.defaultWhy) return x.defaultWhy;
+  const byOther = !!(x.countedBy && x.countedBy !== x.cashierUid);
+  return !x.cashierUid ? 'Kassa egasi (kun kassiri) aniqlanmagan' : byOther ? 'Pulni kassa egasining o‘zi sanamagan (kassir o‘rniga sanalgan)' : 'Kassir hisobi xodim kartasiga bog‘lanmagan';
+}
 // Kun farqi matni (acc-6): kunni yopishdagi farq va smena topshirishdagi farqlar yonma-yon; smena farqi bo'lmasa — avvalgidek (faqat summa).
 const sgnS = v => `${num(v) > 0 ? '+' : ''}${som(v)}`;
 export function diffText(closeDiff, handovers) {
@@ -276,8 +291,9 @@ function draw() {
   // ---- bugungi hujjatlar
   const docs = ST.ov.docs || [];
   const docRows = docs.map(d => {
-    // bekor qilinadi: qo'lda kiritilganlar, naqd o'quv to'lovi va naqd maosh orderi (bog'langan yozuv ham teskari bo'ladi); qaytarish — yo'q
-    const canVoid = od && d.status === 'posted' && !d.isSystem && (!d.sourceTable || d.op === 'in_tuition' || d.op === 'out_salary') && (m.director || m.list2 || (m.operator && d.postedBy === m.uid));
+    // bekor qilinadi: qo'lda kiritilganlar, naqd o'quv to'lovi va naqd maosh orderi (bog'langan yozuv ham teskari bo'ladi); qaytarish — yo'q;
+    //   kassir — smena topshirishda sanalgan o'z orderini ham emas (g6v-2)
+    const canVoid = canVoidDoc(d, m, od);
     const isIn = d.form === 'KO1';
     return `<tr${d.status === 'void' ? ' style="opacity:.55"' : ''}>
       <td data-label="№"><b>${isIn ? 'K' : 'Ch'}-${esc(String(d.no))}</b><div class="small muted">${esc(hm(d.postedAt))}</div></td>
@@ -824,7 +840,9 @@ function openVerifyForm(day) {
     $('#kv-save').disabled = true; await act('kassa_day_verify', { p_desk: ST.desk, p_day: day, p_papers: true, p_note: $('#kv-note').value.trim() }, 'Kun tekshirildi'); const b = $('#kv-save'); if (b) b.disabled = false; };
 }
 // Kamomad bo'yicha qaror (sec-2, sec-4): kassa egasi va pulni sanagan xodim alohida, shu kungi smena topshirishlar. «Xodim zimmasiga» —
-//   FAQAT xodim kartasiga: standart javobgar faqat kassa egasi o'zi sanagan bo'lsa (server — defaultParty); aks holda Direktor kartani tanlaydi.
+//   FAQAT xodim kartasiga: standart javobgar faqat kassa egasi o'zi sanagan va kassaga boshqa hech kim tegmagan bo'lsa (server — defaultParty);
+//   aks holda Direktor kartani tanlaydi — sababi server matnidan (defaultWhy, g6v-3), kassa egasidan boshqa kassa orderi o'tkazgan / bekor
+//   qilganlar ismi bilan (others, g6v-1).
 async function openDecideForm(id) {
   const x = (ST.ov.shortages || []).find(s => s.id === id); if (!x) return;
   let people = [];
@@ -834,10 +852,11 @@ async function openDecideForm(id) {
   const hist = (x.handovers || []).map(h => { const hn = u => (u && h.names && h.names[u]) || nameOf(u);
     return `<div>${esc(hm(h.createdAt))} · ${esc(h.fromUid ? hn(h.fromUid) : '—')} → ${esc(hn(h.toUid))} · sanalgan ${esc(som(h.counted))}${num(h.diff) ? ' · farq ' + esc(sgnS(h.diff)) : ''} · ${esc(ST_HO[h.status] || h.status)}${h.byUid && h.byUid !== h.fromUid ? ' · sanadi: ' + esc(hn(h.byUid)) : ''}${h.cancelReason ? ' — ' + esc(h.cancelReason) : ''}</div>`; }).join('');
   const byOther = !!(x.countedBy && x.countedBy !== x.cashierUid);
-  const why = x.defaultParty ? '' : !x.cashierUid ? 'Kassa egasi (kun kassiri) aniqlanmagan' : byOther ? 'Pulni kassa egasining o‘zi sanamagan (kassir o‘rniga sanalgan)' : 'Kassir hisobi xodim kartasiga bog‘lanmagan';
+  const why = shortageWhy(x), others = (Array.isArray(x.others) ? x.others : []).map(nm);
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kamomad bo‘yicha qaror</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small" style="background:#FDECEC;color:#B42318;border-radius:10px;padding:10px 12px;font-weight:700">${esc(dmy(x.day))} · Ch-${esc(String(x.no))} · ${esc(som(x.amount))} · ${x.kind === 'handover' ? 'smena topshirishda' : 'kunni yopishda'}</div>
       <div class="small" style="margin-top:8px" id="kd-who">Kassa egasi (kassir): <b>${esc(x.cashierUid ? nm(x.cashierUid) : 'aniqlanmagan')}</b>${x.countedBy ? ` · sanadi: <b>${esc(nm(x.countedBy))}</b>${byOther ? ' (kassir o‘rniga, komissiya bilan)' : ''}` : ''}${x.kind === 'handover' && x.toUid ? ` · qabul qildi: <b>${esc(nm(x.toUid))}</b>` : ''}</div>
+      ${others.length ? `<div class="small" style="margin-top:4px" id="kd-others">Kassa egasidan boshqa kassa orderi o‘tkazgan yoki bekor qilgan: <b>${esc(others.join(', '))}</b></div>` : ''}
       ${hist ? `<div class="small muted" style="margin-top:6px"><b>Shu kungi smena topshirishlar:</b>${hist}</div>` : ''}
       ${lbl('Qaror', `<select id="kd-dec" style="${FLD}"><option value="employee">Xodim zimmasiga (yozma rozilik yoki to‘liq moddiy javobgarlik bilan)</option><option value="writeoff">Hisobdan chiqarish (aybdor aniqlanmadi)</option></select>`)}
       <div id="kd-emp">${lbl('Javobgar xodim (xodim kartasi)', `<select id="kd-party" style="${FLD}"><option value="">— tanlang —</option>${(people || []).map(p => `<option value="${esc(p.ref)}"${p.ref === x.defaultParty ? ' selected' : ''}>${esc(p.name)}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select>`)}

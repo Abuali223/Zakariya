@@ -18,7 +18,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --         tushirilganda birinchi kun — komissiya sanagan summa, farqi texnik dalolatnomada);
 --     I4  kun oxiri = kun boshi + kirim − chiqim (CHECK);
 --     I5  kassa qoldig'i hech qachon manfiy emas (har o'tkazish / bekor qilishdan keyin tekshiriladi);
---     I6  tekshirilgan kun o'zgarmaydi; yopilgan kunga hujjat yozilmaydi (faqat Direktor qayta ochadi).
+--     I6  tekshirilgan kun o'zgarmaydi; yopilgan kunga hujjat yozilmaydi (faqat Direktor qayta ochadi); kassa egasidan boshqa order
+--         yozganlar ro'yxati ("othersUids", g6v-1) faqat ochiq kunda to'ldiriladi.
 --   O'ZGARMASLIK (CT-11): kassa jadvallariga yozish FAQAT kassa funksiyalari ichida (tranzaksiya bayrog'i iqror.kassa_rpc);
 --     DELETE yo'q; o'tkazilgan hujjatda faqat «bekor qilindi» belgisi (kun ochiq bo'lsa) va kamomad qarori o'zgaradi.
 --   RAQAMLASH (CT-10): sequence / identity EMAS — doc_counters qatori, o'tkazishning OXIRGI qadami, kassa eksklyuziv qulfi
@@ -103,6 +104,13 @@ alter table public.cash_days add column if not exists "sheetRows" int;
 alter table public.cash_days add column if not exists "cashierName" text;
 alter table public.cash_days add column if not exists "closedByName" text;
 alter table public.cash_days add column if not exists "verifiedByName" text;
+-- Kassa egasidan boshqa xodimlar (g6v-1): hozirgi kassa egasi kassani olgandan beri shu kuni kassa orderini (KO-1 / KO-2; tizim hujjati
+--   emas) o'tkazgan yoki bekor qilgan BOSHQA xodimlar (Direktor, Moliya menejeri, buxgalter, boshqa kassir; kassa egasi aniqlanmagan
+--   kunda — har o'tkazuvchi). Yozish paytida to'ldiriladi (kassa-docs.sql: app.kassa_doc_post, kassa_doc_void), smena qabul qilinganda
+--   bo'shatiladi (qabul sanashi hammasini hisobga olgan — yangi kassa egasi toza boshlaydi). Sanashda farq hujjati suratiga ko'chadi
+--   ("others"): ro'yxat bo'sh bo'lmasa kamomad bo'yicha standart javobgar yo'q (kassa-day.sql: app.kassa_shortage_default). Faqat ochiq
+--   kunda o'zgaradi (kassa_day_guard); kun izi (hash) unga bog'liq emas.
+alter table public.cash_days add column if not exists "othersUids" text[] not null default '{}';
 
 -- ---------- Kassa hujjati ----------
 create table if not exists public.cash_docs (
@@ -284,6 +292,12 @@ create table if not exists public.cash_handovers (
 );
 create unique index if not exists cash_handovers_one_pending on public.cash_handovers (desk) where status = 'pending';
 create index if not exists cash_handovers_day_idx on public.cash_handovers ("dayId");
+-- Smena sanashiga kirgan orderlar (g6v-2): topshirish yozilgan paytdagi shu kunning eng katta KO-1 / KO-2 raqamlari (order bo'lmasa — bo'sh).
+--   Kutilayotgan paytda order yozilmaydi va bekor qilinmaydi, raqam kassa qulfi ostida beriladi — qabul qilingan topshirish sanashi aynan
+--   shu raqamgacha bo'lgan orderlarni o'z ichiga oladi (vaqtga emas, raqamga tayanadi). Kassir (2-ro'yxat yoki Direktor emas) ularni bekor
+--   qilmaydi (kassa-docs.sql: kassa_doc_void, kassa:void_counted).
+alter table public.cash_handovers add column if not exists "lastKo1" int;
+alter table public.cash_handovers add column if not exists "lastKo2" int;
 
 -- Xeshli suratlar (31.12 holati va b.) — keyin o'zgarmaydi.
 create table if not exists public.fin_snapshots (
@@ -446,6 +460,15 @@ begin
   end if;
   if (new.id, new.desk, new.day, new.opening, new."openedAt") is distinct from (old.id, old.desk, old.day, old.opening, old."openedAt") then
     raise exception 'Kassa kunining kaliti, sanasi va kun boshi o''zgarmaydi' using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  -- g6v-1: kassa egasidan boshqa order yozgan / bekor qilganlar ro'yxati — faqat ochiq kunda (yopilgan, tekshirilgan va qayta ochilayotgan
+  --   kunda o'zgarmaydi); ochiq kunda faqat to'ldiriladi, bo'shatiladi — faqat kassa egasi almashganda (smena qabul qilindi)
+  if new."othersUids" is distinct from old."othersUids"
+     and not (old.status = 'open' and new.status = 'open'
+              and (old."othersUids" <@ new."othersUids"
+                   or (new."othersUids" = '{}'::text[] and new."cashierUid" is distinct from old."cashierUid"))) then
+    raise exception 'Kassa egasidan boshqa order yozganlar ro''yxati faqat ochiq kunda to''ldiriladi (smena qabul qilinganda — yangi kassa egasi bilan bo''shatiladi)'
+      using errcode = '42501', hint = 'kassa:immutable';
   end if;
   if not ((old.status = 'open' and new.status in ('open', 'closed'))
        or (old.status = 'closed' and new.status in ('verified', 'open'))) then

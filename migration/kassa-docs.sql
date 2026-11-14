@@ -354,7 +354,7 @@ revoke all on function app.kassa_handover_block(text) from public, anon, authent
 --   bo'lsa — ochilmaydi (kassa:restart_recount, g4v-2).
 --   Smena topshirish kutilayotgan kassa hujjat qabul qilmaydi (kassa:handover_pending, state-6). Kassa egasi (sec-2) — kunning birinchi
 --   hujjatini o'tkazgan KASSA OPERATORI: kun Direktor / Moliya menejeri hujjati bilan ochilsa — egasi hali yo'q, birinchi operator hujjati
---   bilan belgilanadi (keyin faqat qabul qilingan smena bilan o'zgaradi).
+--   bilan belgilanadi (keyin faqat qabul qilingan smena bilan o'zgaradi). Kassa egasidan boshqa o'tkazuvchi — app.kassa_doc_post (g6v-1).
 create or replace function app.kassa_resolve_day(p_desk text, p_captured timestamptz, p_uid text, p_late_ok boolean,
                                                  out o_day_id text, out o_day date, out o_late boolean)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -440,6 +440,7 @@ revoke all on function app.kassa_resolve_day(text, timestamptz, text, boolean) f
 --   p_captured — faqat DARHOL o'tkaziladigan kirimda (oflayn navbat): pul olingan payt. Tasdiqdan keyin to'lanadigan
 --   hujjatda berilmaydi (pul to'lash paytida beriladi — kun o'sha payt bo'yicha).
 --   p_day_id   — tizim hujjati (sanash farqi) aynan shu OCHIQ kunga yoziladi (kecha yopilayotgan bo'lsa ham).
+--   O'tkazuvchi kassa egasi bo'lmasa — kunning «boshqalar» ro'yxatiga ("othersUids", g6v-1; tizim hujjatida — yo'q).
 create or replace function app.kassa_doc_post(p_doc_id text, p_uid text, p_system boolean default false,
                                               p_captured timestamptz default null, p_late_ok boolean default false,
                                               p_day_id text default null)
@@ -463,6 +464,13 @@ begin
     if not found then raise exception 'Kassa kuni ochiq emas' using errcode = 'P0001', hint = 'kassa:day_closed'; end if;
   else
     select d.o_day_id, d.o_day, d.o_late into v_day_id, v_day, v_late from app.kassa_resolve_day(v_desk, p_captured, p_uid, p_late_ok) d;
+  end if;
+  -- g6v-1: kassa egasidan boshqa xodim kassa orderini o'tkazdi (kassa egasi aniqlanmagan kunda — har o'tkazuvchi; kunning birinchi kassa
+  --   operatori yuqorida kassa egasi bo'ldi — u «boshqa» emas) — kunning «boshqalar» ro'yxatiga: kamomad bo'yicha standart javobgar faqat
+  --   boshqa hech kim tegmagan kassada (kassa-day.sql: app.kassa_shortage_default). Tizim hujjati (sanash farqi) — yo'q.
+  if not p_system then
+    update public.cash_days set "othersUids" = "othersUids" || p_uid
+     where id = v_day_id and "cashierUid" is distinct from p_uid and not (p_uid = any ("othersUids"));
   end if;
   if v_doc.form = 'KO2' then
     v_bal := app.kassa_day_balance(v_day_id);
@@ -847,6 +855,9 @@ grant execute on function public.kassa_doc_pay(text) to authenticated;
 --   Hisobdorga avans (out_accountable) — undan avans hisoboti yoki qaytim yozilgan bo'lsa (bekor qilinsa qoldiq manfiy bo'lardi)
 --   bekor qilinmaydi: avval o'sha hisobot yoki qaytim bekor qilinadi (hisobdor qulfi ostida, pul berish va avans hisoboti bilan bir navbat).
 --   Qaytarish orderi (out_refund) bekor qilinmaydi. Smena topshirish kutilayotganda (state-6) — bekor qilinmaydi (kassa:handover_pending).
+--   g6v-2: qabul qilingan smena topshirish sanashiga kirgan orderni (topshirish yozilgan paytdagi raqamgacha) kassir bekor qilmaydi —
+--   2-ro'yxat yoki Direktor bekor qiladi (kassa:void_counted). g6v-1: bekor qilgan xodim kassa egasi bo'lmasa — kunning «boshqalar»
+--   ro'yxatiga (kamomad bo'yicha standart javobgar bo'lmaydi).
 create or replace function public.kassa_doc_void(p_id text, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_desk text; v_doc public.cash_docs%rowtype; v_day public.cash_days%rowtype;
@@ -885,6 +896,14 @@ begin
   if v_day.status <> 'open' then
     raise exception 'Kun yopilgan — hujjat bekor qilinmaydi (Direktor kunni qayta ochadi yoki buxgalter storno qiladi)' using errcode = 'P0001', hint = 'kassa:day_closed';
   end if;
+  -- g6v-2: smena topshirishda sanalgan order (qabul qilingan topshirish yozilgan paytdagi raqamgacha — cash_handovers."lastKo1" / "lastKo2")
+  --   kassir tomonidan bekor qilinmaydi: sanash uni hisobga olgan, bekor qilinsa yangi kassa egasining qoldig'i uning ishtirokisiz o'zgarardi
+  if not (app.fin_list2() or app.is_admin())
+     and exists (select 1 from public.cash_handovers h where h."dayId" = v_day.id and h.status = 'accepted'
+                    and v_doc.no <= coalesce(case when v_doc.form = 'KO1' then h."lastKo1" else h."lastKo2" end, 0)) then
+    raise exception 'Bu order smena topshirishda sanalgan (topshirish-qabul dalolatnomasiga kirgan) — kassir uni bekor qilmaydi. Xato bo''lsa, moliya menejeri, buxgalter yoki Direktor bekor qiladi; farq kunni yopishda ko''rinadi'
+      using errcode = '42501', hint = 'kassa:void_counted';
+  end if;
   if v_doc.form = 'KO1' then
     v_bal := app.kassa_day_balance(v_day.id);
     if v_bal < v_doc.amount then
@@ -900,6 +919,9 @@ begin
     end if;
   end if;
   perform app.kassa_flag(true);
+  -- g6v-1: kassa egasidan boshqa xodim orderni bekor qildi (kassa egasining qoldig'i uning ishtirokisiz o'zgardi) — kunning «boshqalar» ro'yxatiga
+  update public.cash_days set "othersUids" = "othersUids" || v_uid
+   where id = v_day.id and "cashierUid" is distinct from v_uid and not (v_uid = any ("othersUids"));
   if v_tuition then perform app.tuition_reverse_core(p_id, v_uid, v_reason); end if;
   if v_doc.op in ('out_salary', 'out_advance', 'out_expense', 'in_staff_return') then perform app.kassa_link_void(p_id, v_uid, v_reason); end if;
   update public.cash_docs set status = 'void', "voidedBy" = v_uid, "voidedAt" = now(), "voidReason" = v_reason where id = p_id;
