@@ -341,17 +341,26 @@ select zz.chk('R3 so''rov bekor qilindi; Direktor sanani 20.02 ga SURDI — kass
   coalesce(zz.get('R3')::jsonb ->> 'kassaGoLive', 'bo''sh') || ' | ' || (select ("pausedAt" is not null) || ':' || "pausedBy" from public.cash_desks where id = 'main')
   || ' | ' || (select "byUid" || ':' || (data ->> 'from') || '>' || (data ->> 'to') || ':pause=' || (data ->> 'pause') from public.cash_day_events where kind = 'golive' order by at desc, id desc limit 1),
   '^bo''sh \| true:U_DIR \| U_DIR:2027-01-04>2027-02-20:pause=true$');
-select zz.put('R4', zz.pay('U_KAS', 'man_r4_0001', 'T-5', 60000, 'cash', '', null, null));
-select zz.chk('R4 to''xtatilgan kassa: naqd o''quv to''lovi KO-1 siz va fiskal cheksiz (avvalgi tartib)',
-  (zz.get('R4')::jsonb ->> 'ok') || ':' || coalesce(zz.get('R4')::jsonb ->> 'kassa', 'null') || ':' || (select coalesce("cashDocId", '-') from public.payments where id = 'man_r4_0001'), '^true:null:-$');
-select zz.chk('R4b kassa hujjati yozilmaydi (kassa:paused); naqd xarajat — «Buxgalteriya»dan, avvalgidek',
-  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","clientRef":"r4-rcp-00001"}')::text$q$)
-  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r4', '2027-02-01', '2027-02', 'Boshqa', 25000, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$),
-  '^ERR P0001 \[kassa:paused\].* \| e_r4$');
+-- g4r-2: to'xtatilgan kassada oxirgi kassa kuni (01.02) va undan oldingi sana bilan kassa hujjatisiz naqd yozuv hech kimga yo'q —
+--   to'xtatilgan kunning o'zida (kun yopilgandan keyin) olingan pul ertasi kuni kiritiladi (R4a)
+select zz.chk('R4 to''xtatilgan kassa, bugun = oxirgi kassa kuni (01.02): naqd o''quv to''lovi va naqd xarajat rad (kassa:paused_live_day), iz yo''q',
+  zz.pay('U_KAS', 'man_r4_0000', 'T-5', 60000, 'cash', '', null, null) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r4x', '2027-02-01', '2027-02', 'Boshqa', 25000, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$)
+  || ' | ' || (select count(*) from public.payments where id = 'man_r4_0000') || '/' || (select count(*) from public.expenses where id = 'e_r4x'),
+  '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(01\.02\.2027\) — kassa kuni edi: to''xtatilgan kassada yozilmaydi.*\(oxirgi kassa kuni 01\.02\.2027 .*ertasi kuni.* \| ERR 42501 \[kassa:paused_live_day\] 01\.02\.2027 — kassa kuni edi.* \| 0/0$');
+select zz.chk('R4b kassa hujjati yozilmaydi (kassa:paused)',
+  zz.as('U_KAS', $q$select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"Sinov Shaxs","articleId":"IN-06","basis":"Tilxat","note":"Kitob uchun","clientRef":"r4-rcp-00001"}')::text$q$),
+  '^ERR P0001 \[kassa:paused\]');
 select zz.chk('R4c «Kassa» holati: to''xtatilgan (01.02 dan), qoldiq — oxirgi kun oxiri; sanani to''g''ridan-to''g''ri qo''yib bo''lmaydi (avval komissiya sanashi)',
   (select (s ->> 'blockReason') || ':' || (s -> 'desk' ->> 'pausedDay') || ':' || (s ->> 'balance') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q)
   || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-02"}')::text$q$),
   '^paused:2027-02-01:4725000 \| ERR P0001 \[kassa:restart_needed\]');
+select zz.clock('2027-02-02 08:00+05');
+select zz.put('R4', zz.pay('U_KAS', 'man_r4_0001', 'T-5', 60000, 'cash', '', null, null));
+select zz.chk('R4a to''xtatilgan davr sanasi (02.02): naqd o''quv to''lovi KO-1 siz va fiskal cheksiz, naqd xarajat — «Buxgalteriya»dan (avvalgi tartib)',
+  (zz.get('R4')::jsonb ->> 'ok') || ':' || coalesce(zz.get('R4')::jsonb ->> 'kassa', 'null') || ':' || (zz.get('R4')::jsonb ->> 'day') || ':' || (select coalesce("cashDocId", '-') from public.payments where id = 'man_r4_0001')
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r4', '2027-02-02', '2027-02', 'Boshqa', 25000, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$),
+  '^true:null:2027-02-02:- \| e_r4$');
 select zz.clock('2027-02-02 09:00+05');
 -- Komissiya sanadi: 4 725 000 + 60 000 (o'quv to'lovi) − 25 000 (xarajat) = 4 760 000. Avval xato (4 750 000), keyin qayta sanaldi.
 select zz.chk('R5 qayta ishga tushirish qoldig''ini faqat Direktor kiritadi; kun oxirgi kassa kunidan keyin va bugundan oldin emas',
@@ -407,9 +416,9 @@ select zz.chk('R11 qayta ochilgan kundan keyin qoldiqni o''zgartirib bo''lmaydi;
 
 -- ---------- §9: IKKINCHI to'xtatish va qayta ishga tushirish (g4-v1: avval ikkinchi qayta ishga tushirish qoldig'i doim rad etilardi —
 --   kassa:started — va kassa to'xtatilgan holatda qolib ketardi) ----------
---   03.02 yopilgan (4 860 000). Kassa yana to'xtatiladi; to'xtatilgan davrda: 03.02 — naqd o'quv to'lovi 30 000; 01.02 sanali (orqa sana —
---   u kun birinchi to'xtatilgan davrda) naqd xarajat 7 000; 04.02 — naqd o'quv to'lovi 5 000. Komissiya 05.02 uchun sanaydi:
---   4 860 000 + 30 000 + 5 000 − 7 000 = 4 888 000.
+--   03.02 yopilgan (4 860 000). Kassa yana to'xtatiladi; to'xtatilgan davrda: 03.02 (oxirgi kassa kuni) sanali naqd o'quv to'lovi va
+--   01.02 sanali (orqa sana — yopilgan kassa kuni) naqd xarajat — rad (g4r-2); 04.02 — naqd o'quv to'lovi 5 000. Komissiya 05.02 uchun
+--   sanaydi: 4 860 000 + 5 000 = 4 865 000.
 create or replace function zz.su(p_q text) returns text language plpgsql as $$   -- joriy (superfoydalanuvchi) rolda, xato matni bilan
 declare r text; v_hint text;
 begin
@@ -423,50 +432,370 @@ select zz.chk('R12 ikkinchi marta to''xtatildi: sana bo''sh, kassa to''xtatilgan
   || ' | ' || zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-02-03', 'Sinov: qayta ochish')::text$q$)
   || ' | ' || (select status from public.cash_days where day = '2027-02-03'),
   '^bo''sh \| true:2027-02-03 \| ERR P0001 \[kassa:reopen_paused\].*03\.02\.2027.* \| closed$');
-select zz.put('R13', zz.pay('U_KAS', 'man_r13_0001', 'T-5', 30000, 'cash', '', null, null));
-select zz.put('R13b', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r13', '2027-02-01', '2027-02', 'Boshqa', 7000, 'to''xtatilgan davr, orqa sana', 'cash') returning id) select id from x$q$));
+-- g4r-2 (g4-v1 s5b_backdate): avval to'xtatilgan kassada moliya menejeri yopilgan kassa kunini (01.02) orqa sana bilan «ochib», unga naqd
+--   xarajat yozardi — u faqat «backdated» ro'yxatida ko'rinardi. Endi oxirgi kassa kuni va undan oldingi sana bilan hech kimga yo'q.
+select zz.chk('R13 to''xtatilgan davr: oxirgi kassa kuni (03.02) sanali naqd o''quv to''lovi va 01.02 sanali (orqa sana) naqd xarajat — rad (kassa:paused_live_day), iz yo''q',
+  zz.pay('U_KAS', 'man_r13_0001', 'T-5', 30000, 'cash', '', null, null) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_r13', '2027-02-01', '2027-02', 'Boshqa', 7000, 'to''xtatilgan davr, orqa sana', 'cash') returning id) select id from x$q$)
+  || ' | ' || (select count(*) from public.payments where id = 'man_r13_0001') || '/' || (select count(*) from public.expenses where id = 'e_r13'),
+  '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(03\.02\.2027\) — kassa kuni edi.* \| ERR 42501 \[kassa:paused_live_day\] 01\.02\.2027 — kassa kuni edi \(oxirgi kassa kuni 03\.02\.2027\).* \| 0/0$');
 select zz.clock('2027-02-04 09:00+05');
 select zz.put('R13c', zz.pay('U_KAS', 'man_r13_0002', 'T-5', 5000, 'cash', '', null, null));
-select zz.chk('R13 to''xtatilgan davr: naqd o''quv to''lovlari KO-1 siz (03.02 va 04.02), orqa sanali naqd xarajat qabul qilindi (kassa nazorati o''chiq)',
-  coalesce(zz.get('R13')::jsonb ->> 'kassa', 'null') || ':' || (zz.get('R13')::jsonb ->> 'day') || ' | ' || zz.get('R13b')
-  || ' | ' || coalesce(zz.get('R13c')::jsonb ->> 'kassa', 'null') || ':' || (zz.get('R13c')::jsonb ->> 'day'),
-  '^null:2027-02-03 \| e_r13 \| null:2027-02-04$');
+select zz.chk('R13c to''xtatilgan davr sanasi (04.02): naqd o''quv to''lovi KO-1 siz',
+  coalesce(zz.get('R13c')::jsonb ->> 'kassa', 'null') || ':' || (zz.get('R13c')::jsonb ->> 'day'), '^null:2027-02-04$');
 select zz.chk('R14 qayta ishga tushirish kuni bugun (04.02), lekin bugun kassa hujjatisiz naqd yozuv bor — rad (kassa:restart_gap), dalolatnoma yozilmadi',
-  zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4888000,"startDay":"2027-02-04"}')::text$q$)
+  zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4865000,"startDay":"2027-02-04"}')::text$q$)
   || ' | ' || (select count(*) from public.cash_docs where op = 'nc_opening' and "sourceSnapshot" ->> 'kind' = 'restart'),
   '^ERR P0001 \[kassa:restart_gap\] Qayta ishga tushirish kuni \(04\.02\.2027\).*\(1 ta\).* \| 2$');
-select zz.put('R14a', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4888000,"startDay":"2027-02-05","note":"Sanash dalolatnomasi 3"}')::text$q$));
-select zz.chk('R14a ikkinchi qayta ishga tushirish qoldig''i 05.02 uchun qabul qilindi: farq 28 000 — yangi «Д-3» (Dt 5010 Kt 0000); birinchisi («Д-2», 35 000) joyida',
+select zz.put('R14a', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4865000,"startDay":"2027-02-05","note":"Sanash dalolatnomasi 3"}')::text$q$));
+select zz.chk('R14a ikkinchi qayta ishga tushirish qoldig''i 05.02 uchun qabul qilindi: farq 5 000 — yangi «Д-3» (Dt 5010 Kt 0000); birinchisi («Д-2», 35 000) joyida',
   (zz.get('R14a')::jsonb ->> 'delta') || ':' || (zz.get('R14a')::jsonb #>> '{doc,lines,0,debit}') || '>' || (zz.get('R14a')::jsonb #>> '{doc,lines,0,credit}') || ' | '
   || (select string_agg('D-' || c.no || ':' || c.status || ':' || trim_scale(c.amount) || ':' || c."businessDay", ', ' order by c.no)
         from public.cash_docs c where c.op = 'nc_opening' and c."sourceSnapshot" ->> 'kind' = 'restart' and c.status = 'posted'),
-  '^28000:5010>0000 \| D-2:posted:35000:2027-02-03, D-3:posted:28000:2027-02-05$');
+  '^5000:5010>0000 \| D-2:posted:35000:2027-02-03, D-3:posted:5000:2027-02-05$');
 select zz.chk('R14b tayyorlangan qayta ishga tushirishda ham oxirgi kun qayta ochilmaydi (qayta yopilsa farq dalolatnomasi eskirardi)',
   zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-02-03', 'Sinov: qayta ochish')::text$q$), '^ERR P0001 \[kassa:reopen_paused\]');
 select zz.put('R15', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-05"}')::text$q$));
 select zz.clock('2027-02-05 09:00+05');
 select zz.put('R16', zz.pay('U_KAS', 'man_r16_0001', 'T-5', 50000, 'cash', '', null, '{"fiscalNo":"F-R16"}'));
-select zz.chk('R15 ishga tushadigan kun 05.02 — kassa yana ishlaydi; R16 05.02 naqd to''lov KO-1 bilan, kun boshi = ikkinchi komissiya sanagan 4 888 000; kun farqsiz yopildi',
+select zz.chk('R15 ishga tushadigan kun 05.02 — kassa yana ishlaydi; R16 05.02 naqd to''lov KO-1 bilan, kun boshi = ikkinchi komissiya sanagan 4 865 000; kun farqsiz yopildi',
   (zz.get('R15')::jsonb ->> 'kassaGoLive') || ':' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi')
   || ' | ' || (zz.get('R16')::jsonb #>> '{kassa,day}') || ':' || (select trim_scale(opening)::text from public.cash_days where day = '2027-02-05')
-  || ' | ' || (zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-05","counted":4938000}')::text$q$)::jsonb ->> 'diff'),
-  '^2027-02-05:ishlaydi \| 2027-02-05:4888000 \| 0$');
-select zz.chk('R17 nazorat ro''yxati: ikkita qayta ishga tushirish — har birining farqi va to''xtatilgan davr naqd harakati (orqa sanali xarajat — ikkinchisida alohida, birinchisiga kirmaydi), izohlanmagan farq 0',
+  || ' | ' || (zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-05","counted":4915000}')::text$q$)::jsonb ->> 'diff'),
+  '^2027-02-05:ishlaydi \| 2027-02-05:4865000 \| 0$');
+select zz.chk('R17 nazorat ro''yxati: ikkita qayta ishga tushirish — har birining farqi va to''xtatilgan davr naqd harakati (yangi yozuvlarda orqa sanalisi yo''q — g4r-2), izohlanmagan farq 0',
   (select string_agg((r ->> 'startDay') || ':' || (r ->> 'prevDay') || ':' || (r ->> 'delta') || ':D-' || (r ->> 'docNo') || ':' || (r #>> '{rows,in}') || '-' || (r #>> '{rows,out}')
-                     || ':' || (r #>> '{backdated,out}') || ':' || (r ->> 'unexplained'), ' | ' order by r ->> 'startDay' desc)
+                     || ':' || (r #>> '{backdated,n}') || ':' || (r ->> 'unexplained'), ' | ' order by r ->> 'startDay' desc)
      from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q, jsonb_array_elements(c -> 'restarts') r),
-  '^2027-02-05:2027-02-03:28000:D-3:35000-0:7000:0 \| 2027-02-03:2027-02-01:35000:D-2:60000-25000:0:0$');
-select zz.chk('R18 KO-3 va statiyalar (fevral): ikkala farq bilan qoldiqlar mos (boshi + kirim − chiqim + 63 000 = oxiri); kun oxirlari — farq o''z kunidan',
+  '^2027-02-05:2027-02-03:5000:D-3:5000-0:0:0 \| 2027-02-03:2027-02-01:35000:D-2:60000-25000:0:0$');
+select zz.chk('R18 KO-3 va statiyalar (fevral): ikkala farq bilan qoldiqlar mos (boshi + kirim − chiqim + 40 000 = oxiri); kun oxirlari — farq o''z kunidan',
   (select (j ->> 'opening') || '+' || (j #>> '{totals,in}') || '-' || (j #>> '{totals,out}') || '+' || (j ->> 'restartAdj') || '=' || (j ->> 'closing') || ':' || (j ->> 'balanced')
      from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2027-02-01', '2027-02-28')::text$q$)::jsonb as j) q)
   || ' | ' || (select (m ->> 'balanced') || ':' || (m ->> 'restartAdj') || ':' || (m -> 'dayBal' ->> 3) || ',' || (m -> 'dayBal' ->> 4)
      from (select zz.as('U_FM', $q$select public.kassa_matrix('main', '2027-02')::text$q$)::jsonb as m) q),
-  '^3925000\+950000-0\+63000=4938000:true \| true:63000:4860000,4938000$');
+  '^3925000\+950000-0\+40000=4915000:true \| true:40000:4860000,4915000$');
 do $$ begin perform set_config('iqror.kassa_rpc', '1', true); end $$;
 select zz.put('R19', zz.su($q$with x as (update public.cash_desks set "restartAmount" = 1 where id = 'main' returning id) select id from x$q$));
 do $$ begin perform set_config('iqror.kassa_rpc', '', true); end $$;
 select zz.chk('R19 kassa ishlab turganda (qayta ishga tushirish boshlangan) qayta ishga tushirish qoldig''i kassa funksiyasi bayrog''i bilan ham o''zgarmaydi; moslik toza',
   zz.get('R19') || ' | ' || (app.kassa_reconcile(null, null) ->> 'total'), '^ERR 42501 \[kassa:started\].* \| 0$');
+
+-- ---------- g4b: UCHINCHI to'xtatish va qayta ishga tushirish — kassa ishlamagan kunlar chegarasi (g4v-1), to'xtatilgan kassada yopilgan
+--   kunlar (g4r-2), eskirgan qayta ishga tushirish sanashi (g4v-2), «ishga tushishdan oldingi» ro'yxat oynasi (g4v-3), moslik — kassa
+--   ishlagan barcha davrlar (g4v-4) ----------
+--   Kassa ishlagan davrlar: 04.01–01.02, 03.02, 05.02–08.02, 11.02 dan; to'xtatilgan davrlar (kassa ishlamagan kunlar): 02.02, 04.02,
+--   09.02–10.02; birinchi ishga tushgan kundan (04.01) oldingi kunlar ham. 08.02: kassa orqali xarajat (KO-2 — «Buxgalteriya»ga bog'langan
+--   qator) va eski yo'l bilan (himoyani chetlab) kiritilgan kassa hujjatisiz naqd xarajat — kassa ishlagan davr «yetimi» (P4).
+create or replace function zz.js(p text) returns jsonb language plpgsql as $$   -- xato matni (ERR …) bo'lsa — NULL: mutatsiyada FAIL, to'plam to'xtamaydi
+begin return p::jsonb; exception when others then return null; end $$;
+select zz.clock('2027-02-08 09:00+05');
+select zz.put('G1', zz.pay('U_KAS', 'man_g1_0001', 'T-5', 10000, 'cash', '', null, '{"fiscalNo":"F-G1"}'));
+select zz.put('G1r', zz.as('U_KAS', $q$select public.kassa_payout_request('{"op":"out_expense","amount":15000,"partyType":"counterparty","partyId":"cp_sup","articleId":"EX-16","basis":"Hisob-faktura 8","clientRef":"g1-req-00001"}')::text$q$));
+select zz.put('G1a', zz.as('U_FM', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('G1r')) ->> 'id')));
+select zz.put('G1b', zz.as('U_DIR', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('G1r')) ->> 'id')));
+select zz.put('G1c', zz.as('U_KAS', format('select public.kassa_doc_pay(%L)::text', zz.js(zz.get('G1r')) ->> 'id')));
+set local session_replication_role = replica;
+insert into public.expenses (id, date, month, category, amount, note, method, "createdAt") values ('e_g4b_orphan', '2027-02-08', '2027-02', 'Boshqa', 1000, 'yetim (sinov)', 'cash', '2027-02-08 10:00+05');
+set local session_replication_role = origin;
+select zz.chk('G1 08.02: KO-1 (kun ochildi), kassa orqali xarajat (KO-2, bog''langan qator); kassa ishlagan davr yetimi moslikda (P4 = 1); kun farqsiz yopildi',
+  (zz.js(zz.get('G1')) #>> '{kassa,day}') || ' | ' || (zz.js(zz.get('G1c')) ->> 'status') || ':' || (select count(*) from public.expenses where "cashDocId" = zz.js(zz.get('G1r')) ->> 'id')
+  || ' | ' || (app.kassa_reconcile(null, null) #>> '{p4,row}') || ':' || (app.kassa_reconcile(null, null) ->> 'total')
+  || ' | ' || (zz.js(zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-08","counted":4910000}')::text$q$)) ->> 'diff'),
+  '^2027-02-08 \| posted:1 \| 1:1 \| 0$');
+select zz.clock('2027-02-08 18:00+05');
+select zz.put('G2', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.chk('G2 g4v-4: kassa to''xtatildi — moslik baribir tekshiriladi (oxirgi kassa kunigacha): yetim P4 = 1; Telegram bloki (kassa ishlagan, nazorat qatori) va nazorat ro''yxati ham',
+  coalesce(zz.js(zz.get('G2')) ->> 'kassaGoLive', 'bo''sh')
+  || ' | ' || (select (r ->> 'live') || ':' || (r ->> 'from') || ':' || (r ->> 'to') || ':' || (r #>> '{p4,row}') || ':' || (r ->> 'total') from (select app.kassa_reconcile(null, null) as r) x)
+  || ' | ' || (select (d ->> 'live') || ':' || (d #>> '{control,reconcile}') from (select app.kassa_daily('2027-02-08') as d) x)
+  || ' | ' || (select (c #>> '{reconcile,total}') from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q),
+  '^bo''sh \| true:2027-01-04:2027-02-08:1:1 \| true:1 \| 1$');
+-- g4r-2: to'xtatilgan kassada oxirgi kassa kuni (08.02) va undan oldingi sana bilan kassa hujjatisiz naqd yozuv hech kimga yo'q
+select zz.chk('G3 g4r-2: to''xtatilgan kassada yopilgan kassa kuni (05.02) sanali naqd xarajat — moliya menejeriga ham, Direktorga ham yo''q (kassa:paused_live_day)',
+  zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g3a', '2027-02-05', '2027-02', 'Boshqa', 3300, 'orqa sana', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g3b', '2027-02-05', '2027-02', 'Boshqa', 3300, 'orqa sana', 'cash') returning id) select id from x$q$),
+  '^ERR 42501 \[kassa:paused_live_day\] 05\.02\.2027 — kassa kuni edi \(oxirgi kassa kuni 08\.02\.2027\).*«Kassa» orqali \| ERR 42501 \[kassa:paused_live_day\] 05\.02\.2027 — kassa kuni edi');
+select zz.chk('G3b to''xtatilgan kassada kassa ishlamagan, lekin oxirgi kassa kunidan oldingi kun (03.01 — ishga tushishdan oldin; 02.02 — oldingi to''xtatilgan davr) ham yo''q: qayta ishga tushgach Direktor kiritadi',
+  zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g3c', '2027-01-03', '2027-01', 'Boshqa', 1500, 'kech chek', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.payd('U_DIR', 'man_g3_0001', 'T-5', 1500, 'cash', '2027-02-02', null, null),
+  '^ERR 42501 \[kassa:paused_live_day\] 03\.01\.2027 — oxirgi kassa kunidan \(08\.02\.2027\) oldingi sana.*Direktor kiritadi \| ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(02\.02\.2027\) oxirgi kassa kunidan \(08\.02\.2027\) oldin.*Direktor haqiqiy sanasi bilan kiritadi$');
+select zz.chk('G3c to''xtatilgan kunning o''zida (08.02 = oxirgi kassa kuni) naqd o''quv to''lovi — rad (ertasi kuni kiritiladi); Direktorning 31.01 sanali naqd to''lovi ham; iz yo''q',
+  zz.pay('U_KAS', 'man_g3_0002', 'T-5', 2000, 'cash', '', null, null) || ' | ' || zz.payd('U_DIR', 'man_g3_0003', 'T-5', 2000, 'cash', '2027-01-31', null, null)
+  || ' | ' || (select count(*) from public.payments where id in ('man_g3_0001', 'man_g3_0002', 'man_g3_0003')),
+  '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(08\.02\.2027\) — kassa kuni edi.*ertasi kuni.* \| ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(31\.01\.2027\) — kassa kuni edi.* \| 0$');
+select zz.put('G3d', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g3d', '2027-02-05', '2027-02', 'Boshqa', 900, 'bank xizmati', 'bank') returning id) select id from x$q$));
+select zz.chk('G3d naqdsiz yozuv yopilgan kun sanasi bilan — avvalgidek; uni naqdga aylantirish — rad; kassa hujjatiga bog''langan xarajat (KO-2) to''xtatilgan kassada ham o''zgarmaydi va o''chirilmaydi',
+  zz.get('G3d') || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set method = 'cash' where id = 'e_g3d' returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', format($q$with x as (update public.expenses set amount = amount + 1 where "cashDocId" = %L returning id) select id from x$q$, zz.js(zz.get('G1r')) ->> 'id'))
+  || ' | ' || zz.as('U_DIR', format($q$with x as (delete from public.expenses where "cashDocId" = %L returning id) select id from x$q$, zz.js(zz.get('G1r')) ->> 'id')),
+  '^e_g3d \| ERR 42501 \[kassa:paused_live_day\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\]');
+-- to'xtatilgan davr (09.02): avvalgi tartib; himoya chizig'i («backdated») uchun — himoyasiz eski tartibda orqa sana bilan kiritilgan yozuv
+--   (endi tizim qabul qilmaydi; u kassadan chiqqan pulni aks ettiradi — sanashga kirgan)
+select zz.clock('2027-02-09 09:00+05');
+select zz.put('G4', zz.pay('U_KAS', 'man_g4_0001', 'T-5', 20000, 'cash', '', null, null));
+select zz.put('G4b', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g4', '2027-02-09', '2027-02', 'Boshqa', 4000, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$));
+set local session_replication_role = replica;
+insert into public.expenses (id, date, month, category, amount, note, method, "createdAt") values ('e_g4b_legacy', '2027-02-05', '2027-02', 'Boshqa', 2500, 'orqa sana (eski tartib)', 'cash', '2027-02-09 09:30+05');
+set local session_replication_role = origin;
+select zz.chk('G4 to''xtatilgan davr sanasi (09.02): naqd o''quv to''lovi KO-1 siz, naqd xarajat — avvalgi tartibda',
+  coalesce(zz.js(zz.get('G4')) ->> 'kassa', 'null') || ':' || (zz.js(zz.get('G4')) ->> 'day') || ' | ' || zz.get('G4b'), '^null:2027-02-09 \| e_g4$');
+-- g4v-2: komissiya 09.02 10:00 da sanadi (11.02 uchun): 4 910 000 + 20 000 − 4 000 − 2 500 = 4 923 500 (kassa hali to'xtatilgan)
+select zz.clock('2027-02-09 10:00+05');
+select zz.put('G5a', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4923500,"startDay":"2027-02-11","note":"Sanash 4"}')::text$q$));
+select zz.chk('G5a qayta ishga tushirish qoldig''i 11.02 uchun; sanashdan keyin yozuv yo''q — «Kassa» holatida eskirgan yozuv 0, sanash payti beriladi',
+  (zz.js(zz.get('G5a')) ->> 'delta') || ' | ' || (select (s #>> '{desk,restart,stale,n}') || ':' || ((s #>> '{desk,restart,countedAt}') is not null) from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q),
+  '^13500 \| 0:true$');
+select zz.clock('2027-02-09 15:00+05');
+select zz.put('G5b', zz.pay('U_KAS', 'man_g5_0001', 'T-5', 7000, 'cash', '', null, null));
+select zz.chk('G5b g4v-2: sanashdan keyin (09.02 15:00) naqd o''quv to''lovi qabul qilinadi (to''xtatilgan davr), lekin sanashga kirmagan: eskirgan yozuv 1 ta (kirim 7 000); ishga tushadigan kun qo''yilmaydi (kassa:restart_recount — soni va summasi), kassa to''xtatilgan qoladi',
+  coalesce(zz.js(zz.get('G5b')) ->> 'kassa', 'null')
+  || ' | ' || (select (s #>> '{desk,restart,stale,n}') || ':' || (s #>> '{desk,restart,stale,in}') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q)
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-11"}')::text$q$)
+  || ' | ' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh') || ':' || (select ("pausedAt" is not null)::text from public.cash_desks where id = 'main'),
+  '^null \| 1:7000 \| ERR P0001 \[kassa:restart_recount\] Qayta ishga tushirish sanashidan \(09\.02\.2027 10:00\) keyin kassa hujjatisiz 1 ta naqd yozuv kiritilgan, sanasi qayta ishga tushirish kunidan \(11\.02\.2027\) oldin: kirim 7000 so''m, chiqim 0 so''m.* \| bo''sh:true$');
+select zz.clock('2027-02-09 16:00+05');
+select zz.put('G5c', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4930500,"startDay":"2027-02-11","note":"Qayta sanaldi"}')::text$q$));
+select zz.put('G5d', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-11"}')::text$q$));
+select zz.chk('G5c komissiya qayta sanadi (4 930 500; avvalgi dalolatnoma bekor) — eskirgan yozuv 0, ishga tushadigan kun 11.02 qo''yildi',
+  (zz.js(zz.get('G5c')) ->> 'delta') || ' | ' || (select string_agg(c.status || ':' || trim_scale(c.amount), ',' order by c.no) from public.cash_docs c
+                                                   where c.op = 'nc_opening' and c."sourceSnapshot" ->> 'kind' = 'restart' and c."businessDay" = '2027-02-11')
+  || ' | ' || (select (s #>> '{desk,restart,stale,n}') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q)
+  || ' | ' || (zz.js(zz.get('G5d')) ->> 'kassaGoLive') || ':' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi'),
+  '^20500 \| void:13500,posted:20500 \| 0 \| 2027-02-11:ishlaydi$');
+select zz.clock('2027-02-10 09:00+05');
+select zz.put('G6a', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g6', '2027-02-10', '2027-02', 'Boshqa', 3000, 'sanashdan keyin', 'cash') returning id) select id from x$q$));
+select zz.chk('G6a qayta ishga tushish kunini kutayotgan kassa ham ushlangan: yopilgan kassa kuni (08.02) sanali naqd xarajat — rad; to''xtatilgan davr sanasi (10.02) — qabul qilinadi, lekin sanashdan keyin: eskirgan (chiqim 3 000)',
+  zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g6x', '2027-02-08', '2027-02', 'Boshqa', 3000, 'orqa sana', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.get('G6a') || ' | ' || (select (s #>> '{desk,restart,stale,n}') || ':' || (s #>> '{desk,restart,stale,out}') from (select zz.as('U_FM', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q),
+  '^ERR 42501 \[kassa:paused_live_day\] 08\.02\.2027 — kassa kuni edi.* \| e_g6 \| 1:3000$');
+-- g4b-v1 (eslatma 1): kutilayotgan qayta ishga tushirish kuni va keyingi sana bilan kassa hujjatisiz naqd yozuv — yangi kassa davri yetimi bo'lardi
+savepoint g6a2;   -- (natija psql o'zgaruvchisida — savepoint ortga qaytarilgach tekshiriladi)
+select coalesce(zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g6y', '2027-02-11', '2027-02', 'Boshqa', 3000, 'oldindan', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (update public.expenses set date = '2027-02-12' where id = 'e_g6' returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g6z', '2027-02-11', '2027-02', 'Boshqa', 3000, 'bank orqali', 'bank') returning id) select id from x$q$)
+  || ' | ' || (select date from public.expenses where id = 'e_g6'), '<null>') as g6a2 \gset
+rollback to savepoint g6a2;
+select zz.chk('G6a2 qayta ishga tushish kunini kutayotgan kassada qayta ishga tushirish kuni (11.02) va keyingi sana bilan kassa hujjatisiz naqd xarajat — rad (kassa:restart_gap), sanani shunga ko''chirish ham; naqdsiz xarajat — avvalgidek', :'g6a2',
+  '^ERR 42501 \[kassa:restart_gap\] 11\.02\.2027 — qayta ishga tushirish kuni \(11\.02\.2027\) yoki undan keyingi sana: kassa shu kundan qayta ishlaydi.*«Kassa» orqali\) \| ERR 42501 \[kassa:restart_gap\] 12\.02\.2027 — .* \| e_g6z \| 2027-02-10$');
+select zz.clock('2027-02-11 09:00+05');
+savepoint g6p;   -- (qayta ishga tushirish kuni o'tib ketgan holat — xabar avval sanani bo'shatishni aytadi; keyin ortga qaytariladi)
+select zz.clock('2027-02-12 09:00+05');
+select zz.pay('U_KAS', 'man_g6_0009', 'T-5', 1000, 'cash', '', null, '{"fiscalNo":"F-G6P"}') as g6p \gset
+rollback to savepoint g6p;
+select zz.chk('G6b g4v-2: qayta ishga tushirish kuni (11.02) — birinchi kassa kuni sanashdan keyingi yozuv bilan ochilmaydi (kassa:restart_recount; soni va summasi); to''lov ham yozilmadi, kun ochilmadi; «Kassa» holati — hujjat qabul qilinmaydi',
+  zz.pay('U_KAS', 'man_g6_0001', 'T-5', 1000, 'cash', '', null, '{"fiscalNo":"F-G6"}')
+  || ' | ' || (select count(*) from public.payments where id = 'man_g6_0001') || '/' || (select count(*) from public.cash_days where day = '2027-02-11')
+  || ' | ' || (select (s ->> 'canPost') || ':' || (s ->> 'blockReason') from (select zz.as('U_KAS', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q),
+  '^ERR P0001 \[kassa:restart_recount\] Qayta ishga tushirish sanashidan \(09\.02\.2027 16:00\) keyin kassa hujjatisiz 1 ta naqd yozuv kiritilgan.*kirim 0 so''m, chiqim 3000 so''m.*\(shu kun bilan; avvalgi dalolatnoma bekor bo''ladi\) \| 0/0 \| false:restart_recount$');
+select zz.chk('G6p qayta ishga tushirish kuni o''tib ketgan bo''lsa — xabar avval ishga tushadigan kunni bo''shatishni aytadi', :'g6p',
+  '^ERR P0001 \[kassa:restart_recount\].*\(qayta ishga tushirish kuni o''tgan: avval «⚙ Sozlamalar»da ishga tushadigan kunni bo''shating, keyin qoldiqni yangi kun bilan kiriting\)$');
+-- komissiya 11.02 ertalab qayta sanadi: 4 930 500 − 3 000 (10.02 xarajat) − 2 000 (10.02 da berilgan, cheki keyin keladi) + 6 000 (10.02 da
+--   olingan, qurilma navbatida turgan to'lov) = 4 931 500
+select zz.clock('2027-02-11 09:10+05');
+select zz.put('G6c', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4931500,"startDay":"2027-02-11","note":"Qayta sanaldi (2)"}')::text$q$));
+-- g4b-v1: qayta sanashdan keyin birinchi hujjat — Direktorning oxirgi kassa kuni (08.02) sanali naqd to'lovi (yopilgan kassa kuni —
+--   KO-1 bilan bugungi kunga). Avval to'lov qatori shu tranzaksiyada hali hujjatsiz turib, o'zini «sanashdan keyingi yozuv» deb sanardi:
+--   birinchi kun kassa:restart_recount bilan ochilmasdi, qayta sanash ham yordam bermasdi (har urinishda qator yangi sanashdan keyin).
+savepoint g6v;   -- (natija psql o'zgaruvchisida — savepoint ortga qaytarilgach tekshiriladi)
+select zz.clock('2027-02-11 09:15+05');   -- (sanashdan keyin: to'lov qatori «sanashdan keyin kiritilgan» bo'lsin)
+select zz.put('G6v0', (select (s ->> 'canPost') || ':' || coalesce(s ->> 'blockReason', '-') || ':' || (s #>> '{desk,restart,stale,n}')
+                         from (select zz.as('U_KAS', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q));
+select zz.put('G6v', zz.payd('U_DIR', 'man_g6_0008', 'T-5', 3000, 'cash', '2027-02-08', null, '{"fiscalNo":"F-G6V"}'));
+select coalesce(zz.get('G6v0') || ' | ' || coalesce((zz.js(zz.get('G6v')) #>> '{kassa,day}') || ':' || (select trim_scale(opening)::text || ':' || status from public.cash_days where day = '2027-02-11'), zz.get('G6v'))
+  || ' | ' || coalesce(app.kassa_restart_stale('main') ->> 'n', 'yo''q'), '<null>') as g6v \gset
+rollback to savepoint g6v;
+select zz.chk('G6v g4b-v1: birinchi qayta ochilgan kunning birinchi hujjati — Direktorning oxirgi kassa kuni (08.02) sanali naqd to''lovi: KO-1 bilan bugungi kunga, kun ochildi (kun boshi — sanalgan summa); eskirgan yozuv 0', :'g6v',
+  '^true:-:0 \| 2027-02-11:4931500:open \| yo''q$');
+select zz.clock('2027-02-11 09:20+05');
+select zz.put('G6d', zz.pay('U_KAS', 'man_g6_0002', 'T-5', 1000, 'cash', '', null, '{"fiscalNo":"F-G6"}'));
+select zz.put('G6e', zz.pay('U_KAS', 'man_g6_0003', 'T-5', 6000, 'cash', '', '2027-02-10 12:00+05', null));
+select zz.chk('G6c qayta sanaldi (shu kun bilan) — birinchi kassa kuni ochildi (kun boshi = 4 931 500); qurilma navbatidan kelgan, to''xtatilgan davrda (10.02) olingan to''lov — KO-1 siz (kassa ishlamagan kun, 48 soatdan eski emas)',
+  (zz.js(zz.get('G6c')) ->> 'delta') || ' | ' || (zz.js(zz.get('G6d')) #>> '{kassa,day}') || ':' || (select trim_scale(opening)::text from public.cash_days where day = '2027-02-11')
+  || ' | ' || coalesce(zz.js(zz.get('G6e')) ->> 'kassa', 'null') || ':' || (zz.js(zz.get('G6e')) ->> 'day'),
+  '^21500 \| 2027-02-11:4931500 \| null:2027-02-10$');
+-- g4v-1: «kassa ishlamagan kun» — birinchi ishga tushgan kundan oldin yoki to'xtatilgan davr ichida; yopilgan kassa davri kuni — yo'q
+select zz.put('G7a', zz.payd('U_DIR', 'man_g7_0001', 'T-5', 33000, 'cash', '2027-01-31', null, '{"fiscalNo":"F-G7"}'));
+select zz.chk('G7a g4v-1: qayta ishga tushgandan keyin Direktor birinchi davrning yopilgan kassa kuni (31.01) sanasi bilan naqd to''lov — kassa ishlamagan kun emas: KO-1 bilan, bugungi kassa kuniga (11.02)',
+  (zz.js(zz.get('G7a')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('G7a')) ->> 'day') || ':' || (select (raw ->> 'date') || ':' || ("cashDocId" is not null) from public.payments where id = 'man_g7_0001'),
+  '^2027-02-11:2027-02-11:2027-02-11:true$');
+select zz.chk('G7b g4v-1: kassa ishlagan (yopilgan) kun sanasi (31.01 — birinchi davr, 08.02 — oxirgi davr) bilan kassa hujjatisiz naqd xarajat — Direktorga ham yo''q (kassa:live_day); moliya menejeriga ham',
+  zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7a', '2027-01-31', '2027-01', 'Boshqa', 22000, 'yopilgan kun', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7b', '2027-02-08', '2027-02', 'Boshqa', 22000, 'yopilgan kun', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7c', '2027-01-31', '2027-01', 'Boshqa', 22000, 'yopilgan kun', 'cash') returning id) select id from x$q$),
+  '^ERR 42501 \[kassa:live_day\] 31\.01\.2027 — kassa kuni edi \(kassa ishlagan davr\).*«Kassa» orqali.* \| ERR 42501 \[kassa:live_day\] 08\.02\.2027.* \| ERR 42501 \[kassa:live_day\] 31\.01\.2027');
+select zz.put('G7c', zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7d', '2027-01-03', '2027-01', 'Boshqa', 1500, 'kech chek (ishga tushishdan oldin)', 'cash') returning id) select id from x$q$));
+select zz.put('G7d', zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7e', '2027-02-10', '2027-02', 'Boshqa', 2000, 'kech chek (to''xtatilgan davr)', 'cash') returning id) select id from x$q$));
+select zz.chk('G7c kassa ishlamagan kun: birinchi ishga tushishdan oldin (03.01) va to''xtatilgan davr (10.02) — Direktor kassa hujjatisiz kiritadi; boshqalarga — rad (kassa:pre_live, alohida xabar)',
+  zz.get('G7c') || ' | ' || zz.get('G7d')
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7f', '2027-02-10', '2027-02', 'Boshqa', 2000, 'x', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_g7g', '2027-01-03', '2027-01', 'Boshqa', 2000, 'x', 'cash') returning id) select id from x$q$),
+  '^e_g7d \| e_g7e \| ERR 42501 \[kassa:pre_live\] 10\.02\.2027 — kassa to''xtatilgan davr sanasi.* \| ERR 42501 \[kassa:pre_live\] 03\.01\.2027 — kassa ishga tushishidan \(04\.01\.2027\) oldingi sana');
+select zz.chk('G7e kassa hujjatisiz naqd yozuvning sanasini kassa ishlagan kunga ko''chirib bo''lmaydi: yopilgan davr kuni — kassa:live_day, joriy kun — kassa:cash_only_kassa',
+  zz.as('U_FM', $q$with x as (update public.expenses set date = '2027-02-08' where id = 'e_g4' returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set date = '2027-02-11' where id = 'e_g4' returning id) select id from x$q$)
+  || ' | ' || (select date from public.expenses where id = 'e_g4'),
+  '^ERR 42501 \[kassa:live_day\] 08\.02\.2027 — kassa kuni edi.* \| ERR 42501 \[kassa:cash_only_kassa\].* \| 2027-02-09$');
+select zz.chk('G8 11.02 yopildi — farq 0: sanashdan keyingi yozuvlar qayta sanashga kirdi, kassirga kamomad / ortiqcha tushmadi',
+  zz.js(zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-11","counted":4965500}')::text$q$)) ->> 'diff', '^0$');
+select zz.chk('G9 g4v-3: «ishga tushishdan oldingi» ro''yxat chegarasi — birinchi ishga tushgan kun (04.01): birinchi davrda kiritilgan to''lovlar (2 ta, 500 000) uch marta qayta ishga tushirilgandan keyin ham ko''rinadi; Direktorning 03.01 cheki ham',
+  (select (c #>> '{preLive,goLive}') || ':' || (c #>> '{preLive,to}') || ' | ' || (select string_agg((i ->> 'kind') || ':' || (i ->> 'n') || ':' || (i ->> 'sum'), ',' order by i ->> 'kind') from jsonb_array_elements(c #> '{preLive,items}') i)
+     from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q),
+  '^2027-01-04:2027-01-03 \| expense:1:1500,tuition:2:500000$');
+select zz.chk('G10 g4v-4: moslik kassa ishlagan barcha davrlar bo''yicha (birinchi ishga tushgan kundan, to''xtatilgan davrlarsiz): yetimlar (08.02 va to''xtatilgan davrda orqa sana bilan kiritilgan 05.02) qayta ishga tushirilgandan keyin ham ko''rinadi; to''xtatilgan davr yozuvlari (09.02–10.02) yetim emas; Telegram bloki',
+  (select (r ->> 'from') || ':' || (r ->> 'to') || ':' || (r #>> '{p4,row}') || ':' || (r ->> 'total') from (select app.kassa_reconcile(null, null) as r) x)
+  || ' | ' || (app.kassa_reconcile('2027-02-08', '2027-02-08') #>> '{p4,row}') || ':' || (app.kassa_reconcile('2027-02-09', '2027-02-10') ->> 'total')
+  || ':' || (app.kassa_reconcile('2027-01-04', '2027-02-11') #>> '{p4,row}')
+  || ' | ' || (select (d ->> 'live') || ':' || (d #>> '{control,reconcile}') from (select app.kassa_daily('2027-02-11') as d) x),
+  '^2027-01-04:2027-02-11:2:2 \| 1:0:2 \| true:2$');
+select zz.chk('G11 nazorat ro''yxati: uchinchi qayta ishga tushirish — farq 21 500; to''xtatilgan davr (09.02–10.02) naqd harakati: kirim 33 000 (navbatdan kech kelgan to''lov ham), chiqim 9 000 (Direktor keyin kiritgan chek ham); orqa sanali — faqat eski tartibdagi yozuv (himoya chizig''i); izohlanmagan farq 0; oxirgi kassa kuni sanali yetim bu yerga kirmaydi',
+  (select (r ->> 'prevDay') || ':' || (r ->> 'delta') || ':' || (r #>> '{rows,in}') || '-' || (r #>> '{rows,out}') || ':' || (r #>> '{rows,n}')
+          || ':' || (r #>> '{backdated,n}') || '/' || (r #>> '{backdated,out}') || ':' || (r ->> 'unexplained')
+     from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q, jsonb_array_elements(c -> 'restarts') r where r ->> 'startDay' = '2027-02-11'),
+  '^2027-02-08:21500:33000-9000:6:1/2500:0$');
+select zz.chk('G13 «Kassa» holati — kassa ishlamagan kunlar (admin.html dagi Direktor oynalari shu bilan, server qoidasi bilan bir xil): birinchi ishga tushgan kun va to''xtatilgan davrlar',
+  (select (s #>> '{desk,firstDay}') || ' | ' || (select string_agg((g ->> 'after') || '>' || (g ->> 'before'), ',' order by g ->> 'after') from jsonb_array_elements(s #> '{desk,gaps}') g)
+     from (select zz.as('U_KAS', $q$select public.kassa_state('main')::text$q$)::jsonb as s) q)
+  || ' | ' || (select string_agg(app.kassa_pre_day('main', d::date)::text, ',' order by d) from generate_series('2027-01-03'::date, '2027-01-04'::date, '1 day') d)
+  || ' | ' || (select string_agg(app.kassa_pre_day('main', d::date)::text, ',' order by d) from generate_series('2027-02-07'::date, '2027-02-12'::date, '1 day') d),
+  '^2027-01-04 \| 2027-02-01>2027-02-03,2027-02-03>2027-02-05,2027-02-08>2027-02-11 \| true,false \| false,false,true,true,false,false$');
+select zz.chk('G12 KO-3 (fevral): uch qayta ishga tushirish farqi bilan qoldiqlar mos',
+  (select (j ->> 'restartAdj') || ':' || (j ->> 'closing') || ':' || (j ->> 'balanced') from (select zz.as('U_FM', $q$select public.kassa_journal('main', '2027-02-01', '2027-02-28')::text$q$)::jsonb as j) q),
+  '^61500:4965500:true$');
+
+-- ---------- g4b-v1: oxirgi kassa kuni qurilma navbatidagi «hali o'tkazilmagan yozuvlar» bilan yopilgan — kassa to'xtatilmaydi
+--   (ishga-tushirish §9 (1)); to'xtatilgan kassada navbatdan kech kelgan to'lov qayta yuborilmasin ----------
+--   Avval: bunday kundan keyin kassa to'xtatilsa, navbatdagi to'lovni to'xtatilgan kassa rad etardi, qayta ishga tushgach esa u kech KO-1
+--   bilan yozilib, komissiya sanashiga kirgan pulni ikkinchi marta hisoblardi — birinchi yopishda kassirga kamomad.
+--   12.02: KO-1 (kun ochildi); qurilma oflayn — 17:00 da 5 000 naqd to'lov navbatda; 18:00 kun «hali o'tkazilmagan 1 ta / 5 000» bilan
+--   yopildi (sanalgan = kun oxiri + 5 000).
+select zz.clock('2027-02-12 10:00+05');
+select zz.put('P1', zz.pay('U_KAS', 'man_p1_0001', 'T-5', 10000, 'cash', '', null, '{"fiscalNo":"F-P1"}'));
+select zz.clock('2027-02-12 18:00+05');
+select zz.put('P1c', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-12","counted":4980500,"pendingCount":1,"pendingSum":5000}')::text$q$));
+select zz.clock('2027-02-12 18:10+05');
+select zz.chk('P1 g4b-v1: oxirgi kun (12.02) qurilma navbatidagi hali o''tkazilmagan yozuv bilan yopilgan — kassa to''xtatilmaydi (kassa:rollback_pending: kun, soni, summasi); sanani surish (to''xtatish) ham — rad; kassa ishlayveradi',
+  (zz.js(zz.get('P1')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('P1c')) ->> 'diff') || ':' || (select trim_scale(closing) || '/' || "pendingCount" from public.cash_days where day = '2027-02-12')
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$)
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-03-01"}')::text$q$)
+  || ' | ' || (select "kassaGoLive"::text from public.fin_org where id = 'main') || ':' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi'),
+  '^2027-02-12:0:4975500/1 \| ERR P0001 \[kassa:rollback_pending\] Kassani to''xtatib bo''lmaydi: oxirgi kassa kuni \(12\.02\.2027\) qurilma navbatidagi hali o''tkazilmagan 1 ta yozuv \(5000 so''m\) bilan yopilgan — bu pul kassada bor, hisobda hali yo''q.*Direktor kunni qayta ochadi.*keyin kassa to''xtatiladi \(ishga-tushirish §9\) \| ERR P0001 \[kassa:rollback_pending\].* \| 2027-02-11:ishlaydi$');
+savepoint p2v;   -- kun tekshirilgan (qayta ochilmaydi): navbat keyingi kassa kuniga «kech» tushadi, o'sha kun yopilgach kassa to'xtatiladi
+set local session_replication_role = replica;   -- (holat: tekshiruv tartibi — oldingi kunlar ham tekshirilgan bo'lishi kerak; bu yerda faqat natija)
+update public.cash_days set status = 'verified', "verifiedBy" = 'U_FM', "verifiedAt" = now() where desk = 'main' and day = '2027-02-12';
+set local session_replication_role = origin;
+select zz.put('P2v', zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-02-12', 'Navbat yuborilsin')::text$q$));
+select zz.clock('2027-02-13 09:00+05');
+select zz.put('P2va', zz.payd('U_KAS', 'man_p2_0001', 'T-5', 5000, 'cash', '2027-02-12', '2027-02-12 17:00+05', '{"fiscalNo":"F-P2"}'));
+select zz.put('P2vb', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-13","counted":4980500}')::text$q$));
+select coalesce(zz.get('P2v') || ' | ' || (zz.js(zz.get('P2va')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('P2va')) #>> '{kassa,late}') || ' | ' || (zz.js(zz.get('P2vb')) ->> 'diff')
+  || ' | ' || coalesce(zz.js(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$)) ->> 'kassaGoLive', 'bo''sh'), '<null>') as p2v \gset
+rollback to savepoint p2v;
+select zz.chk('P2v kun tekshirilgan bo''lsa (qayta ochilmaydi): navbat keyingi kassa kuniga (13.02) «kech» KO-1 bilan tushadi, o''sha kun farqsiz yopilgach kassa to''xtatiladi', :'p2v',
+  '^ERR 42501 \[kassa:verified\].* \| 2027-02-13:true \| 0 \| bo''sh$');
+select zz.clock('2027-02-12 18:15+05');
+select zz.put('P3', zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-02-12', 'Qurilma navbati yuborilsin')::text$q$));
+select zz.clock('2027-02-12 18:20+05');
+select zz.put('P3a', zz.payd('U_KAS', 'man_p3_0001', 'T-5', 5000, 'cash', '2027-02-12', '2027-02-12 17:00+05', '{"fiscalNo":"F-P3"}'));
+select zz.clock('2027-02-12 18:30+05');
+select zz.put('P3b', zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-12","counted":4980500}')::text$q$));
+select zz.clock('2027-02-12 18:40+05');
+select zz.put('P4', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.chk('P3 Direktor kunni qayta ochdi — navbatdagi to''lov o''sha kunga tushdi (KO-1, «kech» emas), kun farqsiz qayta yopildi (hali o''tkazilmagan yozuv yo''q); endi kassa to''xtatildi',
+  (zz.js(zz.get('P3')) ->> 'ok') || ' | ' || (zz.js(zz.get('P3a')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('P3a')) #>> '{kassa,late}')
+  || ' | ' || (zz.js(zz.get('P3b')) ->> 'diff') || ':' || (select trim_scale(closing) || '/' || "pendingCount" from public.cash_days where day = '2027-02-12')
+  || ' | ' || coalesce(zz.js(zz.get('P4')) ->> 'kassaGoLive', 'bo''sh') || ':' || (select ("pausedAt" is not null)::text from public.cash_desks where id = 'main'),
+  '^true \| 2027-02-12:false \| 0:4980500/0 \| bo''sh:true$');
+select zz.clock('2027-02-13 09:00+05');
+select zz.put('P5', zz.payd('U_KAS', 'man_p5_0001', 'T-5', 4000, 'cash', '2027-02-12', '2027-02-12 18:35+05', null));
+select zz.chk('P5 to''xtatilgan kassa: qurilma navbatidan kech kelgan, oxirgi kassa kuni (12.02) sanali naqd to''lov — rad; xabar navbatdagi to''lov qayta ishga tushgach ham qayta yuborilmasligini (qurilma navbati oynasidagi 140 belgida) va to''xtatilgan davr puli qaysi sana bilan yozilishini aytadi',
+  zz.get('P5') || ' | ' || (strpos(left(regexp_replace(zz.get('P5'), '^ERR \S+ \[[^]]*\] ', ''), 140), 'qayta yubormang — Direktor hal qiladi') > 0)::text,
+  '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(12\.02\.2027\) — kassa kuni edi: to''xtatilgan kassada yozilmaydi, qayta ishga tushgach ham qayta yubormang — Direktor hal qiladi \(oxirgi kassa kuni 12\.02\.2027 kassa hujjatlari bilan yopilgan; pul kassada sanalgan bo''lsa, kirim orderi uni ikkinchi marta hisoblardi — buxgalter bilan\)\. .*kun yopilgandan keyin olingani — ertasi kuni, o''sha sana bilan\) \| true$');
+select zz.chk('P5b g4b-v1: to''xtatilgan kassada 31 kundan eski «Sana» (05.01 — yopilgan kassa kuni) bugungi to''xtatilgan davr sanasiga surilib yozilmaydi — so''ralgan sana bo''yicha rad; iz yo''q',
+  zz.payd('U_DIR', 'man_p5_0002', 'T-5', 4000, 'cash', '2027-01-05', null, null)
+  || ' | ' || (select count(*) from public.payments where id in ('man_p5_0001', 'man_p5_0002')),
+  '^ERR 42501 \[kassa:paused_live_day\] To''lov sanasi \(05\.01\.2027\) — kassa kuni edi: .*\(oxirgi kassa kuni 12\.02\.2027 .* \| 0$');
+select zz.clock('2027-02-13 18:00+05');
+select zz.put('P6', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4980500,"startDay":"2027-02-14","note":"Sanash 5"}')::text$q$));
+select zz.put('P6b', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-14"}')::text$q$));
+select zz.clock('2027-02-14 09:00+05');
+select zz.put('P7', zz.pay('U_KAS', 'man_p7_0001', 'T-5', 1000, 'cash', '', null, '{"fiscalNo":"F-P7"}'));
+select zz.chk('P7 qayta ishga tushirish farqi 0 (navbatdagi pul to''xtatishdan oldin hisobga kirgan) — birinchi kun farqsiz yopildi, kassirga kamomad yo''q; nazorat ro''yxatida izohlanmagan farq 0; moslik (12.02–14.02) toza',
+  (zz.js(zz.get('P6')) ->> 'delta') || ':' || (zz.js(zz.get('P6b')) ->> 'kassaGoLive') || ' | ' || (zz.js(zz.get('P7')) #>> '{kassa,day}')
+  || ':' || (zz.js(zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-14","counted":4981500}')::text$q$)) ->> 'diff')
+  || ' | ' || (select (r ->> 'delta') || ':' || (r ->> 'unexplained') from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q, jsonb_array_elements(c -> 'restarts') r where r ->> 'startDay' = '2027-02-14')
+  || ' | ' || (app.kassa_reconcile('2027-02-12', '2027-02-14') ->> 'total'),
+  '^0:2027-02-14 \| 2027-02-14:0 \| 0:0 \| 0$');
+
+-- ---------- g4b (yakuniy tekshiruv qoldiqlari): to'xtatilgan kassada tayyorlangan qayta ishga tushirish kuni va keyingi sanali naqd
+--   yozuv; sanashdan KEYIN qurilma navbatiga yozilgan to'lov; naqdsiz yozuvni usulsiz qilish ----------
+--   14.02 yopilgan (4 981 500), kassa to'xtatiladi. Qurilma A 15.02 17:00 da 3 000 naqd to'lov oldi (oflayn — sanashdan OLDIN: pul
+--   sanashga kiradi). Komissiya 15.02 18:00 da 17.02 uchun sanadi: 4 981 500 + 3 000 = 4 984 500 (kassa hali to'xtatilgan).
+select zz.clock('2027-02-14 19:00+05');
+select zz.put('L0', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.clock('2027-02-15 18:00+05');
+select zz.put('L0b', zz.as('U_DIR', $q$select public.kassa_opening_set('{"amount":4984500,"startDay":"2027-02-17","note":"Sanash 6"}')::text$q$));
+select zz.chk('L0 kassa to''xtatildi; qayta ishga tushirish qoldig''i 17.02 uchun (farq 3 000), ishga tushadigan kun hali qo''yilmagan',
+  coalesce(zz.js(zz.get('L0')) ->> 'kassaGoLive', 'bo''sh') || ' | ' || (zz.js(zz.get('L0b')) ->> 'delta')
+  || ' | ' || (select ("pausedAt" is not null)::text || ':' || "restartDay"::text from public.cash_desks where id = 'main'),
+  '^bo''sh \| 3000 \| true:2027-02-17$');
+-- Avval: to'xtatilgan kassada (kutayotgan kassadan farqli) qayta ishga tushirish kuni va keyingi sana bilan naqd yozuv hamma uchun ochiq edi;
+--   ishga tushadigan kun keyin qo'yilsa ham tekshirilmasdi — yangi kassa davri yetimi (P4) bo'lib qolardi.
+select zz.clock('2027-02-15 18:30+05');
+savepoint l1;   -- (natija psql o'zgaruvchisida — savepoint ortga qaytarilgach tekshiriladi)
+select coalesce(zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_l1a', '2027-02-17', '2027-02', 'Boshqa', 1200, 'oldindan', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_l1b', '2027-02-20', '2027-02', 'Boshqa', 1200, 'oldindan', '') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_l1c', '2027-02-17', '2027-02', 'Boshqa', 1200, 'bank orqali', 'bank') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set method = 'cash' where id = 'e_l1c' returning id) select id from x$q$), '<null>') as l1 \gset
+set local session_replication_role = replica;   -- himoyasiz eski yo'l bilan kiritilgan (yoki shu tuzatishdan oldin qolgan) yozuv
+insert into public.expenses (id, date, month, category, amount, note, method, "createdAt") values ('e_l1d', '2027-02-18', '2027-02', 'Boshqa', 1200, 'eski yo''l', 'cash', '2027-02-15 18:20+05');
+set local session_replication_role = origin;
+select coalesce(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-17"}')::text$q$)
+  || ' | ' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh') || ':' || (select ("pausedAt" is not null)::text from public.cash_desks where id = 'main'), '<null>') as l1g \gset
+rollback to savepoint l1;
+select zz.chk('L1 g4b: to''xtatilgan kassada tayyorlangan, hali kelmagan qayta ishga tushirish kuni (17.02) va keyingi sana bilan kassa hujjatisiz naqd (yoki usulsiz) xarajat — moliya menejeriga ham, Direktorga ham yo''q (kassa:restart_gap), naqdsiz yozuvni naqdga aylantirish ham; naqdsiz yozuv — avvalgidek', :'l1',
+  '^ERR 42501 \[kassa:restart_gap\] 17\.02\.2027 — qayta ishga tushirish kuni \(17\.02\.2027\) yoki undan keyingi sana.* \| ERR 42501 \[kassa:restart_gap\] 20\.02\.2027 — .* \| e_l1c \| ERR 42501 \[kassa:restart_gap\] 17\.02\.2027 — .*$');
+select zz.chk('L1g g4b: shunday yozuv bo''lsa (himoyasiz eski yo''l) — ishga tushadigan kun qo''yilmaydi (kassa:restart_gap: soni va chora), kassa to''xtatilgan qoladi', :'l1g',
+  '^ERR P0001 \[kassa:restart_gap\] Qayta ishga tushirish kuni \(17\.02\.2027\) yoki undan keyingi sana bilan kassa hujjatisiz 1 ta naqd yozuv bor.*ulardan keyingi kun bilan qayta kiritiladi \| bo''sh:true$');
+savepoint l1p;   -- qayta ishga tushirish kuni o'tib ketgan, kassa hali to'xtatilgan: eski tartib davom etadi, lekin kassa shu kundan ishga tushmaydi
+select zz.clock('2027-02-18 09:00+05');
+select coalesce(zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_l1p', '2027-02-18', '2027-02', 'Boshqa', 1200, 'to''xtatilgan davr', 'cash') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-17"}')::text$q$), '<null>') as l1p \gset
+rollback to savepoint l1p;
+select zz.chk('L1p qayta ishga tushirish kuni (17.02) o''tib ketgan, kassa hali to''xtatilgan — bugungi naqd xarajat avvalgi tartibda qabul qilinadi, lekin kassa 17.02 dan ishga tushirilmaydi (kassa:restart_gap — keyingi kun bilan qayta sanash)', :'l1p',
+  '^e_l1p \| ERR P0001 \[kassa:restart_gap\] Qayta ishga tushirish kuni \(17\.02\.2027\) yoki undan keyingi sana bilan kassa hujjatisiz 1 ta naqd yozuv bor.*$');
+-- Avval: sanashdan keyin (16.02) qurilma navbatiga yozilgan to'lov kassa qayta ishga tushgach (birinchi kun boshqa hujjat bilan ochilgandan
+--   keyin) KO-1 siz yozilardi — pul sanashga kirmagan: birinchi yopishda ortiqcha (in_surplus) chiqib, tushum ikki marta hisoblanardi;
+--   birinchi hujjat bo'lib kelsa — qator o'zini «sanashdan keyingi yozuv» deb sanab, birinchi kun qayta sanashsiz ochilmasdi.
+--   Qurilma B: 16.02 18:00 da 2 000 (17.02 09:00 da birinchi hujjat bo'lib yuborildi); qurilma C: 16.02 19:00 da 1 500 (10:00 da);
+--   qurilma A: 15.02 17:00 da (sanashdan OLDIN) 3 000 (10:30 da).
+select zz.clock('2027-02-15 19:00+05');
+select zz.put('L2a', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-17"}')::text$q$));
+select zz.clock('2027-02-17 09:00+05');
+select zz.put('L2b', zz.pay('U_KAS', 'man_l2_0001', 'T-5', 2000, 'cash', '', '2027-02-16 18:00+05', '{"fiscalNo":"F-L2B"}'));
+select zz.clock('2027-02-17 10:00+05');
+select zz.put('L2c', zz.pay('U_KAS', 'man_l2_0002', 'T-5', 1500, 'cash', '', '2027-02-16 19:00+05', '{"fiscalNo":"F-L2C"}'));
+select zz.clock('2027-02-17 10:30+05');
+select zz.put('L2d', zz.pay('U_KAS', 'man_l2_0003', 'T-5', 3000, 'cash', '', '2027-02-15 17:00+05', null));
+select zz.chk('L2 g4b: sanashdan keyin qurilma navbatiga yozilgan to''lov — birinchi hujjat bo''lib kelsa ham KO-1 bilan bugungi kunga («kech»): birinchi kun ochildi (kun boshi — sanalgan summa); kun ochilgandan keyin kelgani ham; sanashdan OLDIN olingani — KO-1 siz (pul sanashga kirgan)',
+  (zz.js(zz.get('L2a')) ->> 'kassaGoLive')
+  || ' | ' || coalesce((zz.js(zz.get('L2b')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('L2b')) #>> '{kassa,late}') || ':' || (select trim_scale(opening)::text from public.cash_days where day = '2027-02-17'), zz.get('L2b'))
+  || ' | ' || coalesce((zz.js(zz.get('L2c')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('L2c')) #>> '{kassa,late}'), zz.get('L2c'))
+  || ' | ' || (select string_agg(id || ':' || (raw ->> 'date') || ':' || ("cashDocId" is not null), ',' order by id) from public.payments where id like 'man\_l2\_%')
+  || ' | ' || coalesce(zz.js(zz.get('L2d')) ->> 'kassa', 'null'),
+  '^2027-02-17 \| 2027-02-17:true:4984500 \| 2027-02-17:true \| man_l2_0001:2027-02-17:true,man_l2_0002:2027-02-17:true,man_l2_0003:2027-02-15:false \| null$');
+select zz.chk('L3 17.02 yopildi — farq 0 (sanashdan keyingi pul kirim orderlari bilan); nazorat ro''yxati: qayta ishga tushirish farqi 3 000 = to''xtatilgan davr kirimi (sanashdan oldin olingan to''lov), izohlanmagan farq 0; moslik toza',
+  (zz.js(zz.as('U_KAS', $q$select public.kassa_day_close('{"day":"2027-02-17","counted":4988000}')::text$q$)) ->> 'diff')
+  || ' | ' || (select (r ->> 'delta') || ':' || (r #>> '{rows,in}') || ':' || (r ->> 'unexplained') from (select zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)::jsonb as c) q, jsonb_array_elements(c -> 'restarts') r where r ->> 'startDay' = '2027-02-17')
+  || ' | ' || (app.kassa_reconcile('2027-02-14', '2027-02-17') ->> 'total'),
+  '^0 \| 3000:3000:0 \| 0$');
+-- Avval: ishlayotgan kassada naqdsiz yozuvni usulsiz qilish (usuli ko'rsatilmagan — moslikda naqd) qabul qilinardi: moslik yetimi (P4)
+select zz.put('L4a', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('e_l4', '2027-02-17', '2027-02', 'Boshqa', 700, 'bank xizmati', 'bank') returning id) select id from x$q$));
+select zz.chk('L4 g4b: ishlayotgan kassada naqdsiz xarajatni usulsiz qilish — rad (kassa:cash_only_kassa), usuli bo''sh (null) ham; summasini o''zgartirish — avvalgidek; moslik toza qoladi',
+  zz.get('L4a') || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set method = '' where id = 'e_l4' returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set method = null where id = 'e_l4' returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set amount = 800 where id = 'e_l4' returning id) select id from x$q$)
+  || ' | ' || (app.kassa_reconcile('2027-02-17', '2027-02-17') ->> 'total'),
+  '^e_l4 \| ERR 42501 \[kassa:cash_only_kassa\] Naqd \(yoki usuli ko''rsatilmagan\) yozuv faqat «Kassa» orqali kiritiladi.* \| ERR 42501 \[kassa:cash_only_kassa\] .* \| e_l4 \| 0$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

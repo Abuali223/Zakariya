@@ -43,34 +43,68 @@ revoke all on function app.kassa_live() from public, anon, authenticated;
 -- To'lovdan OLDINGI holat (o'quvchi bo'yicha navbat qulfi ichida): avans va to'lanmagan fakturalar. NULL — KO-1 yozilmaydi.
 --   Kassa qo'llanadimi — to'lovning O'Z kassa kuni bo'yicha, bugun bo'yicha emas (crit-1). p_day — record_manual_payment hisoblagan
 --   kun: kassir tanlagan «Sana», bo'lmasa olingan kun (p_captured, Toshkent), bo'lmasa bugun. p_asked — so'ralgan «Sana» (matn, o'zgarmagan).
---   * kassa hali ishga tushmagan (sana yo'q yoki kelmagan) — NULL, avvalgidek;
---   * p_day ishga tushish kunidan OLDIN — kassadan oldingi davr puli: u boshlang'ich qoldiq sanashiga kirgan (ishga-tushirish §4) —
---     KO-1 siz va fiskal cheksiz (NULL). Kim: Direktor; kassir / g'aznachi — faqat qurilma navbatidan kelgan yozuv: olingan payt
---     ishga tushishdan oldin va 48 soatdan eski emas (kassa:late_limit qoidasi), «Sana» olingan kundan keyin emas. Boshqasi — rad
---     (kassa:pre_live): KO-1 qoidasini chetlab o'tish yo'li bo'lmasin (state-4 bilan solishtiring). Davr qulfi baribir amal qiladi;
---   * p_day ishga tushgan kundan — KO-1 bilan (RF-08: kassir yoki Direktor), lekin so'ralgan sana ishga tushishdan oldingi kun bo'lib,
---     31 kunlik oraliqdan chiqqani uchun bugunga surilgan bo'lsa — rad (kassa:pre_live_old): eski pul bugungi KO-1 bo'lib ikki marta
---     hisoblanmasin.
+--   * kassa hali ishga tushmagan (sana yo'q yoki kelmagan) — NULL, avvalgidek; kassa TO'XTATILGAN yoki qayta ishga tushirish kunini
+--     kutmoqda (g4r-2): oxirgi kassa kuni va undan oldingi sana bilan naqd to'lov hech kimga yozilmaydi (kassa:paused_live_day — u kunlar
+--     kassa hujjatlari bilan yopilgan; so'ralgan sana 31 kunlik oraliqdan chiqqani uchun bugunga surilgan bo'lsa ham — so'ralgani bo'yicha,
+--     aks holda u to'xtatilgan davr puli bo'lib yozilardi); to'xtatilgan davr sanasi — NULL, avvalgidek (ishga-tushirish §9). Qurilma
+--     navbatida qolgan to'lov qayta ishga tushgach qayta yuborilmasin (g4b-v1): pul kassada sanalgan bo'lsa, kech KO-1 uni ikkinchi marta
+--     hisoblardi — xabar shuni aytadi; oxirgi kun «hali o'tkazilmagan yozuvlar» bilan yopilgan bo'lsa kassa umuman to'xtatilmaydi
+--     (kassa-day.sql app.kassa_golive_guard, kassa:rollback_pending);
+--   * p_day KASSA ISHLAMAGAN kun (g4v-1, app.kassa_pre_day: birinchi ishga tushgan kundan oldin yoki to'xtatilgan davr ichida) — u pul
+--     komissiya sanashiga kirgan (ishga-tushirish §4, §9) — KO-1 siz va fiskal cheksiz (NULL). Kim: Direktor; kassir / g'aznachi — faqat
+--     qurilma navbatidan kelgan yozuv: olingan kun ham kassa ishlamagan kun, olingan payt 48 soatdan eski emas (kassa:late_limit qoidasi),
+--     «Sana» olingan kundan keyin emas. Boshqasi — rad (kassa:pre_live): KO-1 qoidasini chetlab o'tish yo'li bo'lmasin (state-4 bilan
+--     solishtiring). Davr qulfi baribir amal qiladi;
+--   * qolgan kunlar (kassa ishlagan davr — yopilganlari ham) — KO-1 bilan, bugungi kassa kuniga (RF-08: kassir yoki Direktor); lekin
+--     so'ralgan sana kassa ishlamagan kun bo'lib, 31 kunlik oraliqdan chiqqani uchun bugunga surilgan bo'lsa — rad (kassa:pre_live_old):
+--     eski pul bugungi KO-1 bo'lib ikki marta hisoblanmasin.
 --   Sozlama qatori FOR SHARE (state-7): ishga tushadigan kun shu payt o'zgarayotgan bo'lsa — u tugaguncha kutib, yangi qiymat bilan qaror.
 drop function if exists app.kassa_tuition_before(text);
 create or replace function app.kassa_tuition_before(p_sid text, p_day date, p_captured timestamptz, p_asked text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_sid text; v_credit numeric; v_live date; v_today date := app.fin_today(); v_day date := coalesce(p_day, app.fin_today());
-        v_asked date := app.fin_text_day(p_asked);
+        v_asked date := app.fin_text_day(p_asked); v_cap date := (p_captured at time zone 'Asia/Tashkent')::date; v_p jsonb; v_chk date;
+        v_after boolean := false;
 begin
   select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main' for share;
-  if v_live is null or v_today < v_live then return null; end if;
-  if v_day < v_live then
+  v_p := app.kassa_periods('main');
+  if v_live is null or v_today < v_live then
+    -- ushlangan kassada sana — so'ralgani (oraliqdan tashqarida bo'lib bugunga surilgan bo'lsa ham; kelajakdagisi — bugun)
+    v_chk := least(coalesce(v_asked, v_day), v_day);
+    if coalesce((v_p ->> 'hold')::boolean, false) and v_chk <= (v_p ->> 'last')::date then
+      if app.kassa_pre_day('main', v_chk) then
+        raise exception 'To''lov sanasi (%) oxirgi kassa kunidan (%) oldin: kassa to''xtatilgan paytda bunday naqd to''lov yozilmaydi. Kassa ishlamagan kun (ishga tushishdan oldingi yoki oldingi to''xtatilgan davr) pulini kassa qayta ishga tushgach Direktor haqiqiy sanasi bilan kiritadi',
+          to_char(v_chk, 'DD.MM.YYYY'), to_char((v_p ->> 'last')::date, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:paused_live_day';
+      end if;
+      -- (asosiy ko'rsatma boshida: qurilma navbati oynasi xabarning faqat boshini — 140 belgini — ko'rsatadi)
+      raise exception 'To''lov sanasi (%) — kassa kuni edi: to''xtatilgan kassada yozilmaydi, qayta ishga tushgach ham qayta yubormang — Direktor hal qiladi (oxirgi kassa kuni % kassa hujjatlari bilan yopilgan; pul kassada sanalgan bo''lsa, kirim orderi uni ikkinchi marta hisoblardi — buxgalter bilan). To''xtatilgan davr puli oxirgi kassa kunidan keyingi sana bilan kiritiladi (to''xtatilgan kunning o''zida, kun yopilgandan keyin olingani — ertasi kuni, o''sha sana bilan)',
+        to_char(v_chk, 'DD.MM.YYYY'), to_char((v_p ->> 'last')::date, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:paused_live_day';
+    end if;
+    return null;
+  end if;
+  -- g4b: qurilma navbatidagi to'lov qayta ishga tushirish SANASHIDAN KEYIN olingan ("capturedAt" > "restartAt"), olingan kuni esa qayta
+  --   ishga tushirish kunidan oldin (to'xtatilgan davr) — bu pul komissiya sanagan summaga kirmagan: kassa ishlayotgan bo'lsa kirim orderi
+  --   bilan (bugungi kassa kuniga, «kech») yoziladi. Aks holda KO-1 siz yozilib, birinchi yopishda ortiqcha bo'lib chiqar va tushum ikki
+  --   marta hisoblanardi. (Kassa hali kutayotgan paytda yuborilsa — KO-1 siz, sanash eskirgan: kassa:restart_recount.) Olingan payt
+  --   brauzerniki — onlayn kiritilgan (bugungi) yozuvga tegmaydi: Direktorning kechikkan qog'ozi avvalgi tartibda.
+  select p_captured is not null and k."restartAt" is not null and p_captured > k."restartAt" and v_cap < k."restartDay"
+    into v_after from public.cash_desks k where k.id = 'main' and not k."isTest";
+  v_after := coalesce(v_after, false);
+  if app.kassa_pre_day('main', v_day) and not v_after then
     if app.is_admin()
        or (app.kassa_operator() and p_captured is not null and p_captured >= app.fin_now() - interval '48 hours'
-           and (p_captured at time zone 'Asia/Tashkent')::date < v_live and v_day <= (p_captured at time zone 'Asia/Tashkent')::date) then
+           and app.kassa_pre_day('main', v_cap) and v_day <= v_cap) then
       return null;
     end if;
-    raise exception 'Kassa ishga tushishidan (%) oldingi sana bilan naqd to''lov (%) — faqat Direktor kiritadi: bu pul boshlang''ich qoldiq sanashiga kirgan (kassir — faqat ishga tushishdan oldin qurilma navbatiga yozilgan va 48 soatdan eski bo''lmagan to''lovni yuboradi)',
-      to_char(v_live, 'DD.MM.YYYY'), to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+    if v_day < (v_p ->> 'first')::date then
+      raise exception 'Kassa ishga tushishidan (%) oldingi sana bilan naqd to''lov (%) — faqat Direktor kiritadi: bu pul boshlang''ich qoldiq sanashiga kirgan (kassir — faqat ishga tushishdan oldin qurilma navbatiga yozilgan va 48 soatdan eski bo''lmagan to''lovni yuboradi)',
+        to_char((v_p ->> 'first')::date, 'DD.MM.YYYY'), to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+    end if;
+    raise exception 'Kassa to''xtatilgan davr sanasi bilan naqd to''lov (%) — faqat Direktor kiritadi: bu pul qayta ishga tushirish sanashiga kirgan (kassir — faqat o''sha davrda qurilma navbatiga yozilgan va 48 soatdan eski bo''lmagan to''lovni yuboradi)',
+      to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
   end if;
-  if v_asked is not null and v_asked < v_live and v_asked <> v_day then
-    raise exception 'So''ralgan sana (%) kassa ishga tushishidan oldin va 31 kunlik oraliqdan tashqarida: bu to''lov bugungi kirim orderi bilan yozilmaydi (pul boshlang''ich qoldiqqa kirgan) — buxgalter bilan hal qilinadi',
+  if v_asked is not null and v_asked <> v_day and app.kassa_pre_day('main', v_asked) then
+    raise exception 'So''ralgan sana (%) kassa ishlamagan kun (ishga tushishdan oldin yoki to''xtatilgan davr) va 31 kunlik oraliqdan tashqarida: bu to''lov bugungi kirim orderi bilan yozilmaydi (pul komissiya sanashiga kirgan) — buxgalter bilan hal qilinadi',
       to_char(v_asked, 'DD.MM.YYYY') using errcode = '22023', hint = 'kassa:pre_live_old';
   end if;
   if not (app.kassa_operator() or app.is_admin()) then   -- RF-08
@@ -81,7 +115,7 @@ begin
   v_sid := coalesce(nullif(v_sid, ''), p_sid);
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_sid, '')));
   select c.credit into v_credit from public.student_credit c where c.id = v_sid;
-  return jsonb_build_object('sid', v_sid, 'credit', coalesce(v_credit, 0),
+  return jsonb_build_object('sid', v_sid, 'credit', coalesce(v_credit, 0), 'redate', v_after,
     'invoices', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'month', coalesce(i.month, ''), 'amount', coalesce(i.amount, 0),
                                                               'paid', coalesce(i."paidAmount", 0), 'paidRaw', i."paidAmount", 'status', i.status,
                                                               'provider', i.provider, 'paidAt', i."paidAt")
@@ -188,6 +222,13 @@ begin
   end if;
 
   perform app.kassa_flag(true);
+  -- g4b: sanashdan keyin olingan, to'xtatilgan davr sanali to'lov (kassa_tuition_before 'redate') — qatori sanasi oldindan bugunga:
+  --   birinchi qayta ochilgan kun shu hujjat bilan ochilsa, «sanashdan keyingi hujjatisiz yozuv» tekshiruvi (app.kassa_restart_stale)
+  --   uni — hali hujjatsiz turgan o'zini — sanab, kunni ochmay qo'ymasin. Yakuniy sana — pastda, order kuni.
+  if coalesce((p_before ->> 'redate')::boolean, false) then
+    update public.payments set raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('date', to_char(app.fin_today(), 'YYYY-MM-DD'))
+     where id = p_pay_id;
+  end if;
   -- Kassa kuni taqsimotdan OLDIN aniqlanadi (acc-7): kassa qulfi (L4; o'quvchi navbati L1 — kassa_tuition_before'da, undan keyin)
   --   ostida o'sha kun qoidasi bilan (app.kassa_resolve_day; kun hali ochilmagan bo'lsa — shu yerda ochiladi) — kassa_doc_post o'sha
   --   qulf ostida aynan shu kunni qaytadan oladi. «Boshlangan davr» (4010) / «kelgusi oy» (6310) — shu kunning oyiga nisbatan.

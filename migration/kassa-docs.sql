@@ -315,13 +315,14 @@ revoke all on function app.kassa_doc_build(jsonb, text, text, boolean) from publ
 --   faqat o'sha kuni olingan (capturedAt) oflayn yozuv o'sha ochiq kunga tushadi. Olingan kuni yopilgan bo'lsa — joriy ochiq
 --   kunga «kech» belgisi bilan. 48 soatdan eski yozuv — faqat Direktor ruxsati bilan (p_late_ok).
 --   To'xtatilgan kassa (ishga-tushirish §9; ui-5) hujjat qabul qilmaydi; qayta ishga tushirilganda birinchi kun "restartDay" dan
---   ochiladi va uning boshi — komissiya sanagan summa ("restartAmount").
+--   ochiladi va uning boshi — komissiya sanagan summa ("restartAmount"); sanashdan keyin kassa hujjatisiz naqd yozuv kiritilgan
+--   bo'lsa — ochilmaydi (kassa:restart_recount, g4v-2).
 create or replace function app.kassa_resolve_day(p_desk text, p_captured timestamptz, p_uid text, p_late_ok boolean,
                                                  out o_day_id text, out o_day date, out o_late boolean)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_today date := app.fin_today(); v_now timestamptz := app.fin_now();
-  v_open public.cash_days%rowtype; v_last public.cash_days%rowtype; v_k public.cash_desks%rowtype; v_cap date; v_opening numeric;
+  v_open public.cash_days%rowtype; v_last public.cash_days%rowtype; v_k public.cash_desks%rowtype; v_cap date; v_opening numeric; v_stale jsonb;
 begin
   o_late := false;
   select * into v_k from public.cash_desks k where k.id = p_desk;
@@ -357,6 +358,17 @@ begin
     if v_k."restartDay" is not null and v_k."restartDay" > v_last.day then   -- qayta ishga tushirish (kassa.sql: I3 istisnosi)
       if v_today < v_k."restartDay" then
         raise exception 'Kassa % dan qayta ishga tushadi', to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:not_started';
+      end if;
+      -- g4v-2: komissiya sanashidan KEYIN to'xtatilgan davr sanasi bilan kassa hujjatisiz naqd yozuv kiritilgan — u sanalgan summaga
+      --   kirmagan: birinchi kun shu summa bilan ochilsa, farqi birinchi yopishda kassirga kamomad / ortiqcha bo'lib tushardi. Qayta sanash kerak.
+      v_stale := app.kassa_restart_stale(p_desk);
+      if coalesce((v_stale ->> 'n')::int, 0) > 0 then
+        raise exception 'Qayta ishga tushirish sanashidan (%) keyin kassa hujjatisiz % ta naqd yozuv kiritilgan, sanasi qayta ishga tushirish kunidan (%) oldin: kirim % so''m, chiqim % so''m — ular komissiya sanagan summaga kirmagan. Birinchi kassa kuni ochilmaydi: Direktor — komissiya pulni qayta sanaydi va «Qayta ishga tushirish» qoldig''i qayta kiritiladi (%)',
+          to_char(v_k."restartAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY HH24:MI'), v_stale ->> 'n', to_char(v_k."restartDay", 'DD.MM.YYYY'),
+          trim_scale((v_stale ->> 'in')::numeric), trim_scale((v_stale ->> 'out')::numeric),
+          case when v_today > v_k."restartDay" then 'qayta ishga tushirish kuni o''tgan: avval «⚙ Sozlamalar»da ishga tushadigan kunni bo''shating, keyin qoldiqni yangi kun bilan kiriting'
+               else 'shu kun bilan; avvalgi dalolatnoma bekor bo''ladi' end
+          using errcode = 'P0001', hint = 'kassa:restart_recount';
       end if;
       v_opening := v_k."restartAmount";
     else

@@ -3,7 +3,7 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText, kpiRows, advArticles, goLiveConfirm } from './fin-kassa.js';
+import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
@@ -160,11 +160,23 @@ test('nazorat ro‘yxati: kassa ishga tushishidan oldingi naqd yozuvlar (crit-1)
   c.restarts[0].unexplained = 0; c.restarts[0].backdated = { n: 0, in: 0, out: 0 };
   r = by(controlRows(c));
   assert.equal(r.restart.level, 'info'); assert.doesNotMatch(r.restart.value, /orqa sana|izohlanmagan/);
-  // qayta ishga tushirilgan kassada «ishga tushishdan oldingi» ro'yxat oxirgi to'xtatishdan oldingi kungacha — izohda aytiladi
-  c.preLive = { goLive: '2027-01-07', to: '2027-01-04', n: 0, in: 0, out: 0, items: [] };
-  assert.match(by(controlRows(c)).preLive.hint, /07\.01\.2027\) oldin \(04\.01\.2027 gacha; to‘xtatilgan davr sanalari — «Kassani to‘xtatish va qayta ishga tushirish» qatorida\)/);
+  // g4v-3: «ishga tushishdan oldingi» ro'yxat chegarasi — kassa BIRINCHI ishga tushgan kun (qayta ishga tushirilgandan keyin ham);
+  //   to'xtatish bo'lgan bo'lsa — to'xtatilgan davr sanalari qaysi qatorda ekani izohda aytiladi
   c.preLive = { goLive: '2027-01-04', to: '2027-01-03', n: 0, in: 0, out: 0, items: [] };
-  assert.doesNotMatch(by(controlRows(c)).preLive.hint, /gacha;/);
+  assert.match(by(controlRows(c)).preLive.hint, /^Sanasi kassa birinchi ishga tushgan kundan \(04\.01\.2027\) oldin,.*; to‘xtatilgan davr sanalari — «Kassani to‘xtatish va qayta ishga tushirish» qatorida$/);
+  c.restarts = [];
+  assert.doesNotMatch(by(controlRows(c)).preLive.hint, /to‘xtatilgan davr/);
+});
+
+test('eskirgan qayta ishga tushirish sanashi (g4v-2): sanashdan keyin kiritilgan naqd yozuvlar — qayta sanash kerak', () => {
+  const rs = { day: '2027-01-07', amount: 1100000, prevClosing: 1100000, delta: 0, countedAt: '2027-01-06T04:00:00Z', stale: { n: 1, in: 7000, out: 0 } };
+  let t = restartStaleTxt(rs, true, '2027-01-06', false);
+  assert.match(t, /^Qayta ishga tushirish sanashidan \(06\.01\.2027 09:00\) keyin kassa hujjatisiz 1 ta naqd yozuv kiritilgan \(kirim 7 000 so‘m, chiqim 0 so‘m\) — ular komissiya sanagan summaga kirmagan\. Birinchi kassa kuni ochilmaydi: /);
+  assert.match(t, /«Qayta ishga tushirish» qoldig‘ini qayta kiriting \(avvalgi dalolatnoma bekor bo‘ladi\)\.$/);
+  // qayta ishga tushirish kuni o'tgan (kassa ishga tushadigan kunda, birinchi kun ochilmagan) — avval sanani bo'shatish kerak
+  assert.match(restartStaleTxt(rs, true, '2027-01-08', false), /kuni o‘tgan — avval «⚙ Sozlamalar»da ishga tushadigan kunni bo‘shating/);
+  assert.doesNotMatch(restartStaleTxt(rs, true, '2027-01-08', true), /bo‘shating/);   // to'xtatilgan kassada — to'g'ridan-to'g'ri qayta sanash
+  assert.match(restartStaleTxt(rs, false, '2027-01-06', false), /Direktor komissiya bilan pulni qayta sanab, qoldiqni qayta kiritadi\.$/);
 });
 
 test('ishga tushadigan kun o‘zgarishi (ui-5): to‘xtatish, qayta ishga tushirish, ishga tushirish — har biri o‘z tasdig‘i bilan', () => {
@@ -206,4 +218,17 @@ test('ishga tushadigan kun o‘zgarishi (ui-5): to‘xtatish, qayta ishga tushir
   //   to'xtatilgan kassada esa — to'g'ridan-to'g'ri qayta sanash
   assert.match(goLiveConfirm('2027-02-03', '2027-02-05', '2027-02-02', pending).text, /avval ishga tushadigan kunni bo‘shating \(kassa yana to‘xtatiladi\), keyin «Qayta ishga tushirish»/);
   assert.doesNotMatch(goLiveConfirm(null, '2027-02-04', '2027-02-02', ready).text, /bo‘shating/);
+  // g4b-v1 (ishga-tushirish §9 (1)): oxirgi yopilgan kun qurilma navbatidagi hali o'tkazilmagan yozuvlar bilan — to'xtatish tasdig'i emas,
+  //   tushuntirish bilan to'siq (server ham rad etadi — kassa:rollback_pending); navbat yuborilib kun qayta yopilgach — oddiy to'xtatish
+  const lastPend = { day: '2027-01-09', status: 'closed', pendingCount: 1, pendingSum: 5000 };
+  g = goLiveConfirm('2027-01-04', null, '2027-01-10', live, lastPend);
+  assert.equal(g.kind, 'block');
+  assert.match(g.text, /^Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni \(09\.01\.2027\) qurilma navbatidagi hali o‘tkazilmagan 1 ta yozuv \(5 000 so‘m\) bilan yopilgan — /);
+  assert.match(g.text, /kunni qayta oching, qurilmalar navbati o‘tgach kunni qayta sanab yoping.*keyin kassani to‘xtating \(ishga-tushirish §9\)\.$/);
+  assert.equal(goLiveConfirm('2027-01-04', '2027-02-01', '2027-01-10', live, lastPend).kind, 'block');   // surish ham — to'xtatish
+  g = goLiveConfirm('2027-01-04', null, '2027-01-10', live, Object.assign({}, lastPend, { pendingCount: 0, pendingSum: 0 }));
+  assert.equal(g.kind, 'stop'); assert.match(g.text, /qurilma navbatida qolgan \(«hali o‘tkazilmagan»\) yozuvlar bilan yopilgan oxirgi kun/);
+  // (hali boshlanmagan qayta ishga tushirishni bekor qilish va kelmagan sana — bu to'siq yo'q)
+  assert.equal(goLiveConfirm('2027-02-03', null, '2027-02-02', pending, lastPend).kind, 'stop');
+  assert.equal(goLiveConfirm('2027-01-20', '2027-01-25', '2027-01-10', live, lastPend).kind, 'launch');
 });

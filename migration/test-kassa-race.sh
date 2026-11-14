@@ -13,7 +13,7 @@
 #   (8) sozlama qatori (fin_org) o'zgarayotganda pul yozuvi (state-7): davr qulfi va orqa sana bilan to'lov; kassani to'xtatish va
 #       qayta ishga tushirish (ishga tushadigan kun) va naqd o'quv to'lovi — yozuvchi o'zgarish tugashini kutib, yangi qiymat bilan
 #       tekshiradi; qayta sanash sozlama qatorini kassa qulfidan oldin kutadi (qulf tartibi); davr surati qulf bilan undan oldin
-#       boshlangan to'lovni kutib, uni suratga oladi (8-bo'lim test soatini ertangi kunga suradi — baza nomi sinov bazasiniki
+#       boshlangan to'lovni kutib, uni suratga oladi (8-bo'lim test soatini ertangi va indingi kunga suradi — baza nomi sinov bazasiniki
 #       bo'lishi kerak: fx_… / …sinov… / …test…).
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
@@ -253,32 +253,40 @@ done
 sleep 0.5
 call_raw R_KAS "coalesce(public.record_manual_payment('man_race8_0002', 'R-1', 60000, 'cash', null, '', '', '', null, '{\"fiscalNo\":\"F-R8-2\"}'::jsonb) ->> 'kassa', 'KO-1 siz')" > "$TMP/8b.B"
 wait
-chk "8b kassa to'xtatilayotganda naqd o'quv to'lovi: to'xtatish tugashini kutdi va KO-1 siz yozildi (eskicha «ishlaydi» deb kassa hujjatiga urinmadi)" \
-    "$(grep -c '^A|bo.sh' "$TMP/8b.A")/$(tail -1 "$TMP/8b.B")/$(q -c "select (\"pausedAt\" is not null)::text from public.cash_desks where id = 'main'")/$(q -c "select coalesce(\"cashDocId\", '-') from public.payments where id = 'man_race8_0002'")" "1/KO-1 siz/true/-"
-# Ertasi kun ertalab (test soati — sinov bazasi): komissiya sanashi va qayta ishga tushirish (to'xtatilgan davr puli — bugungi sana bilan)
+# (g4r-2: bugun — oxirgi kassa kuni: to'xtatilgan kassada bu sana bilan kassa hujjatisiz naqd to'lov yozilmaydi — yangi qiymat shu; eski
+#   qiymat bilan esa kassa hujjatiga urinib, yopilgan kun xatosini olardi — kassa:day_closed)
+chk "8b kassa to'xtatilayotganda naqd o'quv to'lovi: to'xtatish tugashini kutdi va yangi holat bilan tekshirildi (to'xtatilgan kassa, oxirgi kassa kuni — kassa:paused_live_day; eskicha «ishlaydi» deb kassa hujjatiga urinmadi)" \
+    "$(grep -c '^A|bo.sh' "$TMP/8b.A")/$(grep -c 'kassa:paused_live_day' "$TMP/8b.B")/$(grep -c 'kassa:day_closed' "$TMP/8b.B")/$(q -c "select (\"pausedAt\" is not null)::text from public.cash_desks where id = 'main'")/$(q -c "select count(*) from public.payments where id = 'man_race8_0002'")" "1/1/0/true/0"
+# Ertasi kun (test soati — sinov bazasi): to'xtatilgan davr puli — bugungi sana bilan; komissiya sanashi va qayta ishga tushirish — indinga
+#   (to'xtatilgan davr yozuvi qayta ishga tushirish kunidan oldin bo'lsin)
+DAY2=$(q -c "select app.fin_today() + 2")
+q >/dev/null -c "insert into app.fin_clock (id, t) values (1, ('$NEXT_DAY 08:30')::timestamp at time zone 'Asia/Tashkent') on conflict (id) do update set t = excluded.t"
+chk "8b2 to'xtatilgan davr sanasi (ertasi kun): naqd o'quv to'lovi KO-1 siz" \
+    "$(call_as R_KAS "coalesce(public.record_manual_payment('man_race8_0005', 'R-1', 60000, 'cash', null, '', '', '', null, null) ->> 'kassa', 'KO-1 siz')")" "KO-1 siz"
 q >/dev/null -c "insert into app.fin_clock (id, t) values (1, ('$NEXT_DAY 09:00')::timestamp at time zone 'Asia/Tashkent') on conflict (id) do update set t = excluded.t"
 X8=$(q -c "select trim_scale(closing) from public.cash_days where desk = 'main' and day = '$TODAY'")
-chk "8c qayta ishga tushirish qoldig'i (komissiya: oxirgi kun oxiri + to'xtatilgan davrdagi 60 000) ertangi kun uchun kiritildi" \
-    "$(call_as R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$NEXT_DAY\"}') ->> 'delta'")" "60000"
+chk "8c qayta ishga tushirish qoldig'i (komissiya: oxirgi kun oxiri + to'xtatilgan davrdagi 60 000) indinga uchun kiritildi" \
+    "$(call_as R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$DAY2\"}') ->> 'delta'")" "60000"
 # (8c2) qulf tartibi (g4-v1): kassa_opening_set sozlama qatorini kassa qulfi (L4) va kassa qatoridan OLDIN oladi — fin_org shu payt
 #   o'zgarayotgan bo'lsa ularni ushlamay kutadi (aksincha: fin_org_set → app.kassa_golive_guard kassa qatorini yangilashda o'zaro qulflanish).
 #   A — sozlama qatorini 2 s ushlab turadi; O — 0,5 s keyin qayta sanash; yana 0,5 s keyin tekshiruv: L4 va kassa qatori bo'sh.
 T1=$(q -c "select trim_scale(t1) from public.fin_org where id = 'main'")
 ( slow_tx R_DIR "public.fin_org_set('{\"t1\":$T1}') ->> 't1'" "$TMP/8c2.A" ) &
 sleep 0.5
-( call_raw R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$NEXT_DAY\",\"note\":\"Poyga: qayta sanaldi\"}') ->> 'delta'" > "$TMP/8c2.O" ) &
+( call_raw R_DIR "public.kassa_opening_set('{\"amount\":$((X8 + 60000)),\"startDay\":\"$DAY2\",\"note\":\"Poyga: qayta sanaldi\"}') ->> 'delta'" > "$TMP/8c2.O" ) &
 sleep 0.5
 P8=$(q -c "select pg_try_advisory_xact_lock(hashtext('iqror_desk:main'))::text || '/' || (select count(*) from (select 1 from public.cash_desks where id = 'main' for update skip locked) x)")
 wait
 chk "8c2 qulf tartibi: sozlama qatori o'zgarayotganda qayta sanash kassa qulfini va kassa qatorini ushlamay kutdi, keyin o'tdi" \
     "$P8/$(grep -c '^A|' "$TMP/8c2.A")/$(tail -1 "$TMP/8c2.O")" "true/1/1/60000"
-( slow_tx R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$NEXT_DAY\"}') ->> 'kassaGoLive'" "$TMP/8d.A" ) &
+q >/dev/null -c "insert into app.fin_clock (id, t) values (1, ('$DAY2 09:00')::timestamp at time zone 'Asia/Tashkent') on conflict (id) do update set t = excluded.t"
+( slow_tx R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$DAY2\"}') ->> 'kassaGoLive'" "$TMP/8d.A" ) &
 sleep 0.5
 call_raw R_KAS "public.record_manual_payment('man_race8_0003', 'R-1', 40000, 'cash', null, '', '', '', null, '{\"fiscalNo\":\"F-R8-3\"}'::jsonb) #>> '{kassa,day}'" > "$TMP/8d.B"
 wait
 chk "8d kassa qayta ishga tushirilayotganda naqd o'quv to'lovi: tugashini kutdi va KO-1 bilan yozildi (kun boshi — sanalgan summa); moslik toza" \
-    "$(grep -c "^A|$NEXT_DAY" "$TMP/8d.A")/$(tail -1 "$TMP/8d.B")/$(q -c "select trim_scale(opening) from public.cash_days where desk = 'main' and day = '$NEXT_DAY'")/$(q -c "select app.kassa_reconcile(null, null) ->> 'total'")" \
-    "1/$NEXT_DAY/$((X8 + 60000))/0"
+    "$(grep -c "^A|$DAY2" "$TMP/8d.A")/$(tail -1 "$TMP/8d.B")/$(q -c "select trim_scale(opening) from public.cash_days where desk = 'main' and day = '$DAY2'")/$(q -c "select app.kassa_reconcile(null, null) ->> 'total'")" \
+    "1/$DAY2/$((X8 + 60000))/0"
 # (8e) davr surati qulf bilan va undan OLDIN boshlangan orqa sanali to'lov (g4-v1): surat sozlama qatorini mazmundan oldin oladi —
 #   to'lov tugashini kutadi va to'lov suratga kiradi (avval mazmun darhol hisoblanib, qulf keyin qo'yilardi: to'lov yopilgan davrda,
 #   lekin suratda yo'q). B — 2 s ochiq turadigan to'lov (bugungi kassa kunidan oldingi sana), A — 0,5 s keyin surat + qulf.

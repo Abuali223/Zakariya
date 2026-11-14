@@ -28,6 +28,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-links.sql ALOHIDA ishga tus
 --   Himoya (F1.13 qabul mezoni: funksiyani chetlab o'tadigan naqd yo'l yo'q): kassa ishga tushgach salary_payments,
 --     staff_advances va expenses jadvallariga NAQD (yoki usuli ko'rsatilmagan) yozuvni to'g'ridan-to'g'ri qo'shib bo'lmaydi;
 --     kassa hujjatiga bog'langan qator o'zgartirilmaydi va o'chirilmaydi (faqat «Kassa»dan, hujjatni bekor qilish orqali).
+--     Kassa to'xtatilganda ham (ishga-tushirish §9; g4r-2): bog'langan qator o'zgarmaydi, oxirgi kassa kuni va undan oldingi sana bilan
+--     naqd yozuv kiritilmaydi — faqat to'xtatilgan davr sanasi bilan.
 --   kassa_doc_pay / kassa_doc_void (kassa-docs.sql) shu fayldagi app.kassa_link_* funksiyalarini chaqiradi.
 --   Sinov kassasi (CT-20) hujjatlari bog'lanmaydi: «Buxgalteriya», avans va maosh jadvallariga hech narsa yozilmaydi.
 --   app.kassa_reconcile(from, to) — moslik tekshiruvi (P1, P4, P5, P8): nazorat ro'yxati va Telegram nazorat qatori shundan.
@@ -89,13 +91,21 @@ $$;
 revoke all on function app.kassa_exp_category(text) from public, anon, authenticated;
 
 -- ---------- Himoya: kassa ishga tushgach naqd yozuv faqat kassa funksiyalari orqali ----------
---   Istisno (crit-1): sanasi kassa ishga tushishidan OLDINGI naqd yozuv (usuli 'cash' yoki ko'rsatilmagan: kech kelgan xarajat cheki,
---   maosh / avans qog'ozi — o'sha pul kassadan sanashdan oldin chiqqan, boshlang'ich qoldiqqa kirmagan) — faqat Direktor kiritadi; davr
---   qulfi (trg_fin_zlock) baribir amal qiladi. Boshqalarga — alohida xabar (kassa:pre_live). Nazorat ro'yxatida «Kassa ishga
---   tushishidan oldingi naqd yozuvlar» bo'lib ko'rinadi. Boshqa usullar (hisobdor shaxs, karta orqali maosh) — istisnosiz, avvalgidek.
+--   Istisno (crit-1): sanasi KASSA ISHLAMAGAN kunga tushgan naqd yozuv (usuli 'cash' yoki ko'rsatilmagan: kech kelgan xarajat cheki,
+--   maosh / avans qog'ozi — o'sha pul kassadan sanashdan oldin chiqqan) — faqat Direktor kiritadi; davr qulfi (trg_fin_zlock) baribir
+--   amal qiladi. Boshqalarga — alohida xabar (kassa:pre_live). Kassa ishlamagan kun (g4v-1, kassa-day.sql app.kassa_pre_day) — birinchi
+--   ishga tushgan kundan oldin yoki to'xtatilgan davr ichida; kassa ishlagan (yopilgan) davr kuni — Direktorga ham faqat «Kassa» orqali
+--   (kassa:live_day). Nazorat ro'yxatida «Kassa ishga tushishidan oldingi naqd yozuvlar» yoki «Kassani to'xtatish va qayta ishga tushirish»
+--   bo'lib ko'rinadi. Boshqa usullar (hisobdor shaxs, karta orqali maosh) — istisnosiz, avvalgidek.
+--   Kassa TO'XTATILGAN yoki qayta ishga tushirish kunini kutmoqda (g4r-2): himoya o'chmaydi — kassa hujjatiga bog'langan qator avvalgidek
+--   o'zgarmaydi; oxirgi kassa kuni va undan oldingi sana bilan kassa hujjatisiz NAQD yozuv (yangi, yoki sanasi / usuli shunga o'zgargan)
+--   hech kimga kiritilmaydi (kassa:paused_live_day — u kunlar kassa hujjatlari bilan yopilgan); to'xtatilgan davr sanasi — avvalgi tartibda.
+--   Qayta ishga tushirish kunini kutayotgan kassada (ishga tushadigan kun o'sha kunga qo'yilgan; g4b-v1) shu kun va keyingi sana bilan ham
+--   yo'q (kassa:restart_gap): u yangi kassa davrida «hujjatisiz naqd harakat» — moslik yetimi bo'lib qolardi (sanash va ishga tushadigan
+--   kunni qo'yishda shu qoida: kassa_opening_set — kassa:restart_gap, fin_org_set — kassa:live_gap).
 create or replace function app.kassa_cash_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_m text; v_msg text; v_live date; v_day date;
+declare v_m text; v_msg text; v_live date; v_day date; v_on boolean; v_p jsonb; v_rday date;
 begin
   -- Xarajatga standart statiya — eski toifadan (fin_category_map); «payroll__» (maosh hisoblash) qatoriga tegilmaydi.
   --   (Shartlar ichma-ich: «articleId» ustuni faqat expenses jadvalida bor — boshqa jadvalda bu ifoda hisoblanmasligi kerak.)
@@ -104,8 +114,13 @@ begin
       select m."articleId" into new."articleId" from public.fin_category_map m where m.category = new.category;
     end if;
   end if;
-  if coalesce(current_setting('iqror.kassa_rpc', true), '') = '1' or app.is_system() or not app.kassa_live() then
+  if coalesce(current_setting('iqror.kassa_rpc', true), '') = '1' or app.is_system() then
     return coalesce(new, old);
+  end if;
+  v_on := app.kassa_live();
+  if not v_on then   -- kassa hali ishga tushmagan — avvalgidek; to'xtatilgan yoki qayta ishga tushishini kutayotgan kassa — pastda
+    v_p := app.kassa_periods('main');
+    if not coalesce((v_p ->> 'hold')::boolean, false) then return coalesce(new, old); end if;
   end if;
   if tg_op = 'DELETE' then
     if old."cashDocId" is not null then
@@ -114,31 +129,60 @@ begin
     return old;
   end if;
   v_m := coalesce(new.method, '');
+  v_day := app.fin_text_day(new.date);
+  if tg_op = 'UPDATE' and (old."cashDocId" is not null or new."cashDocId" is not null) then
+    -- «Yangi noyob ID berish» (id-guards.sql: rekey_payroll_id) xodim kalitini tarix qatorlarida ham almashtiradi — faqat shu ustun.
+    if coalesce(current_setting('iqror.rekey', true), '') = '1' and tg_table_name in ('salary_payments', 'staff_advances')
+       and (to_jsonb(new) - 'updatedAt' - 'teacherId') = (to_jsonb(old) - 'updatedAt' - 'teacherId') then
+      return new;
+    end if;
+    if (to_jsonb(new) - 'updatedAt') is distinct from (to_jsonb(old) - 'updatedAt') then
+      raise exception 'Bu yozuv kassa hujjatiga bog''langan — o''zgartirilmaydi' using errcode = '42501', hint = 'kassa:linked_row';
+    end if;
+    return new;
+  end if;
+  if tg_op = 'INSERT' and new."cashDocId" is not null then
+    raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
+  end if;
+  if not v_on then
+    -- g4r-2: to'xtatilgan kassa — oxirgi kassa kuni va undan oldingi sana bilan kassa hujjatisiz naqd yozuv hech kimga kiritilmaydi;
+    --   g4b-v1: qayta ishga tushirish kunini kutayotgan kassada — shu kun va keyingi sana bilan ham
+    if v_m in ('', 'cash') and not (tg_table_name = 'expenses' and coalesce(new.id, '') like 'payroll\_\_%')
+       and (tg_op = 'INSERT' or coalesce(old.method, '') not in ('', 'cash') or app.fin_text_day(old.date) is distinct from v_day) then
+      if v_day <= (v_p ->> 'last')::date then
+        if app.kassa_pre_day('main', v_day) then
+          raise exception '% — oxirgi kassa kunidan (%) oldingi sana: kassa to''xtatilgan paytda bunday naqd yozuv kiritilmaydi. Kassa ishlamagan kun (ishga tushishdan oldingi yoki oldingi to''xtatilgan davr) yozuvini kassa qayta ishga tushgach Direktor kiritadi',
+            to_char(v_day, 'DD.MM.YYYY'), to_char((v_p ->> 'last')::date, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:paused_live_day';
+        end if;
+        raise exception '% — kassa kuni edi (oxirgi kassa kuni %): kassa to''xtatilgan paytda bu sana bilan kassa hujjatisiz naqd yozuv kiritilmaydi — u kun kassa hujjatlari bilan yopilgan. To''xtatilgan davr harakati oxirgi kassa kunidan keyingi sana bilan yoziladi; u kunning tuzatishi — kassa qayta ishga tushgach, «Kassa» orqali',
+          to_char(v_day, 'DD.MM.YYYY'), to_char((v_p ->> 'last')::date, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:paused_live_day';
+      end if;
+      --   to'xtatilgan kassada ham, qayta ishga tushirish kuni tayyorlangan va hali kelmagan bo'lsa (g4b: aks holda ishga tushadigan kun
+      --   qo'yilgach yangi davr yetimi bo'lardi); kun o'tib ketgan bo'lsa — eski tartib davom etadi, qayta ishga tushirish esa keyingi kun
+      --   bilan qayta sanashni talab qiladi (kassa-day.sql app.kassa_golive_guard — kassa:restart_gap)
+      select k."restartDay" into v_rday from public.cash_desks k where k.id = 'main' and k."restartDay" > (v_p ->> 'last')::date;
+      if v_day >= v_rday and (not coalesce((v_p ->> 'paused')::boolean, false) or v_rday > app.fin_today()) then
+        raise exception '% — qayta ishga tushirish kuni (%) yoki undan keyingi sana: kassa shu kundan qayta ishlaydi — bu kunlarning naqd harakati kassa hujjatisiz yozilmaydi (kassa qayta ishga tushgach, «Kassa» orqali)',
+          to_char(v_day, 'DD.MM.YYYY'), to_char(v_rday, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:restart_gap';
+      end if;
+    end if;
+    return new;
+  end if;
   if tg_op = 'UPDATE' then
-    if old."cashDocId" is not null or new."cashDocId" is not null then
-      -- «Yangi noyob ID berish» (id-guards.sql: rekey_payroll_id) xodim kalitini tarix qatorlarida ham almashtiradi — faqat shu ustun.
-      if coalesce(current_setting('iqror.rekey', true), '') = '1' and tg_table_name in ('salary_payments', 'staff_advances')
-         and (to_jsonb(new) - 'updatedAt' - 'teacherId') = (to_jsonb(old) - 'updatedAt' - 'teacherId') then
-        return new;
-      end if;
-      if (to_jsonb(new) - 'updatedAt') is distinct from (to_jsonb(old) - 'updatedAt') then
-        raise exception 'Bu yozuv kassa hujjatiga bog''langan — o''zgartirilmaydi' using errcode = '42501', hint = 'kassa:linked_row';
-      end if;
-    elsif v_m = 'cash' and coalesce(old.method, '') <> 'cash' then
-      v_msg := 'Naqd yozuv faqat «Kassa» orqali kiritiladi';
+    -- (usuli ko'rsatilmagan yozuv ham naqd hisoblanadi — moslik shunday sanaydi: naqdsiz yozuvni usulsiz qilish ham «Kassa» orqali; g4b)
+    if v_m in ('', 'cash') and coalesce(old.method, '') not in ('', 'cash')
+       and not (tg_table_name = 'expenses' and coalesce(new.id, '') like 'payroll\_\_%') then
+      v_msg := 'Naqd (yoki usuli ko''rsatilmagan) yozuv faqat «Kassa» orqali kiritiladi — naqdsiz yozuvda to''lov usulini tanlang';
     elsif tg_table_name = 'expenses' and v_m = 'accountable' and coalesce(old.method, '') <> 'accountable' then
       v_msg := 'Hisobdor shaxs xarajati «Kassa» → «Avans hisoboti» orqali yoziladi';
-    elsif v_m in ('', 'cash') and app.fin_text_day(new.date) is distinct from app.fin_text_day(old.date)
+    elsif v_m in ('', 'cash') and v_day is distinct from app.fin_text_day(old.date)
           and not (tg_table_name = 'expenses' and coalesce(new.id, '') like 'payroll\_\_%')
-          and app.fin_text_day(new.date) >= (select o."kassaGoLive" from public.fin_org o where o.id = 'main') then
-      -- crit-1: kassa hujjatisiz (ishga tushishdan oldingi) naqd yozuvni kassa ishlayotgan kunga ko'chirish — u kunning kassa
+          and v_day is not null and not app.kassa_pre_day('main', v_day) then
+      -- crit-1, g4v-1: kassa hujjatisiz naqd yozuvni kassa ishlagan kunga (yopilgan davrdagi kunga ham) ko'chirish — u kunning kassa
       --   hujjatlarida yo'q naqd harakat bo'lib qolardi (yaratishdagi qoidani tahrir orqali chetlab o'tish yo'li bo'lmasin).
       v_msg := 'Kassa hujjatisiz naqd yozuvning sanasini kassa ishga tushgan kunga (yoki keyingi kunga) o''zgartirib bo''lmaydi — bu kunlardagi naqd harakat «Kassa» orqali yoziladi';
     end if;
   else   -- INSERT
-    if new."cashDocId" is not null then
-      raise exception 'Kassa hujjati havolasini faqat kassa funksiyalari qo''yadi' using errcode = '42501', hint = 'kassa:linked_row';
-    end if;
     if tg_table_name = 'salary_payments' then
       v_msg := 'Kassa ishga tushgan: maosh «Maosh berish» oynasidan, to''lov usuli bilan yoziladi (naqd — kassa chiqim orderi bilan)';
     elsif tg_table_name = 'staff_advances' then
@@ -157,14 +201,25 @@ begin
     end if;
   end if;
   if v_msg is null then return new; end if;
-  -- kassa ishga tushishidan oldingi sana (crit-1): faqat NAQD yozuv (usuli 'cash' yoki ko'rsatilmagan) va faqat Direktor; boshqa usul
+  -- kassa ishlamagan kun (crit-1, g4v-1): faqat NAQD yozuv (usuli 'cash' yoki ko'rsatilmagan) va faqat Direktor; boshqa usul
   --   (hisobdor shaxs, karta orqali maosh …) — avvalgidek o'z oynasi orqali (sozlama qatori kassa_live() da FOR SHARE bilan ushlangan)
-  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
-  v_day := app.fin_text_day(new.date);
-  if v_day < v_live and v_m in ('', 'cash') then
-    if app.is_admin() then return new; end if;
-    raise exception '% — kassa ishga tushishidan (%) oldingi sana: bunday naqd yozuvni faqat Direktor kiritadi (kech kelgan hujjat; o''sha pul kassadan sanashdan oldin chiqqan)',
-      to_char(v_day, 'DD.MM.YYYY'), to_char(v_live, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+  if v_m in ('', 'cash') then
+    if app.kassa_pre_day('main', v_day) then
+      if app.is_admin() then return new; end if;
+      v_live := (app.kassa_periods('main') ->> 'first')::date;
+      if v_day < v_live then
+        raise exception '% — kassa ishga tushishidan (%) oldingi sana: bunday naqd yozuvni faqat Direktor kiritadi (kech kelgan hujjat; o''sha pul kassadan sanashdan oldin chiqqan)',
+          to_char(v_day, 'DD.MM.YYYY'), to_char(v_live, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+      end if;
+      raise exception '% — kassa to''xtatilgan davr sanasi (kassa ishlamagan kun): bunday naqd yozuvni faqat Direktor kiritadi (kech kelgan hujjat; o''sha pul qayta ishga tushirish sanashidan oldin harakatlangan)',
+        to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:pre_live';
+    end if;
+    -- g4v-1: yopilgan kassa davri kuni (hozirgi ishga tushish kunidan oldin, lekin kassa ishlagan) — Direktorga ham kassa hujjatisiz yo'q
+    select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
+    if v_day < v_live then
+      raise exception '% — kassa kuni edi (kassa ishlagan davr): bu sana bilan kassa hujjatisiz naqd yozuv kiritilmaydi — u kun kassa hujjatlari bilan yopilgan. Tuzatish — «Kassa» orqali (o''sha kunning sanash farqi, kamomad qarori — buxgalter bilan)',
+        to_char(v_day, 'DD.MM.YYYY') using errcode = '42501', hint = 'kassa:live_day';
+    end if;
   end if;
   raise exception '%', v_msg using errcode = '42501', hint = 'kassa:cash_only_kassa';
 end $$;
@@ -1080,7 +1135,7 @@ end $$;
 revoke all on function public.kassa_adv_report_void(text, text) from public, anon;
 grant execute on function public.kassa_adv_report_void(text, text) to authenticated;
 
--- ---------- Moslik (§8.1: P1, P4, P5, P8) — kassa hujjatlari ↔ pul yozuvlari, kassa ishga tushgan kundan ----------
+-- ---------- Moslik (§8.1: P1, P4, P5, P8) — kassa hujjatlari ↔ pul yozuvlari, kassa ishlagan kunlarda (g4v-4) ----------
 --   P1  naqd o'quv to'lovi = KO-1:   pay  — kirim orderisiz (yoki summasi / kuni boshqa) naqd to'lov;
 --                                     doc  — to'lov yozuvi yo'q (yoki summasi boshqa) o'quv to'lovi orderi;
 --   P4  naqd xarajat = KO-2:         row  — chiqim orderisiz naqd (usuli ko'rsatilmagan) «Buxgalteriya» xarajati;
@@ -1092,57 +1147,81 @@ grant execute on function public.kassa_adv_report_void(text, text) to authentica
 --                                            o'tkazilgan orderisiz (summasi mos emas) manfiy naqd avans / maosh yozuvi;
 --   P8  naqd qaytarish = KO-2:       row  — chiqim orderisiz naqd qaytarish; doc — qaytarish yozuvi yo'q qaytarish orderi
 --                                     (faktura, to'lov va o'quvchi avansi — crit-2: avans qaytarish ham refunds qatori, target 'credit').
---   Hammasi 0 bo'lishi shart (AC1.3). Kassa ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
+--   Hammasi 0 bo'lishi shart (AC1.3). Kassa hali ishga tushmagan bo'lsa — {live: false, total: 0}. Faqat asosiy kassa ('main').
+--   Kassa ishlagan kunlar — birinchi ishga tushgan kundan, to'xtatilgan davrlarsiz (app.kassa_reconcile, pastda).
 -- Kassa hujjatisiz naqd yozuvlar — sanasi [p_from, p_to] oralig'ida, [p_created_from, p_created_to) oralig'ida kiritilganlari (bo'sh
---   chegara — cheklanmagan): turi bo'yicha soni va summasi; kirim (o'quv to'lovi) va chiqim (xarajat, maosh, avans, qaytarish) jami.
+--   chegara — cheklanmagan), p_skip oraliqlarining birortasida kiritilganlaridan tashqari: turi bo'yicha soni va summasi; kirim (o'quv
+--   to'lovi) va chiqim (xarajat, maosh, avans, qaytarish) jami.
 --   Nazorat ro'yxati (kassa_checks): kassa ishga tushishidan oldingi sanali, keyin kiritilgan yozuvlar (crit-1) va to'xtatilgan davrdagi
 --   naqd harakat — qayta ishga tushirish farqi bilan solishtirish uchun (ishga-tushirish §9; to'xtatilgan davrda kiritilgan, lekin orqa
---   sanali yozuvlar ham). Qoidalar moslik (P1 / P4 / P5 / P8) bilan bir xil: usuli ko'rsatilmagan yozuv — naqd; maoshni hisoblash qatori
---   (payroll__) — pul harakati emas. Manfiy avans / maosh (xodim qaytargan pul) — summaga ishorasi bilan.
---   (Uch argumentli oraliq variant sinov bazalarida qolgan bo'lsa — o'chiriladi: aks holda uch argumentli chaqiruv ikki ma'noli bo'lardi.)
+--   sanali yozuvlar ham; p_skip — boshqa ro'yxatda sanalgan to'xtatilgan davr oynalari, ikki marta ko'rinmasin). Qayta ishga tushirish
+--   sanashidan keyin kiritilganlari — app.kassa_restart_stale. Qoidalar moslik (P1 / P4 / P5 / P8) bilan bir xil: usuli ko'rsatilmagan
+--   yozuv — naqd; maoshni hisoblash qatori (payroll__) — pul harakati emas. Manfiy avans / maosh (xodim qaytargan pul) — summaga ishorasi bilan.
+--   (Uch va to'rt argumentli oldingi variantlar o'chiriladi: aks holda qisqa chaqiruv ikki ma'noli bo'lardi.)
 drop function if exists app.kassa_cash_rows(date, date, timestamptz);
-create or replace function app.kassa_cash_rows(p_from date, p_to date, p_created_from timestamptz, p_created_to timestamptz default null) returns jsonb
+drop function if exists app.kassa_cash_rows(date, date, timestamptz, timestamptz);
+create or replace function app.kassa_cash_rows(p_from date, p_to date, p_created_from timestamptz, p_created_to timestamptz default null,
+                                               p_skip tstzrange[] default null) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   with x(kind, dir, n, s) as (
     select 'tuition', 1, count(*), coalesce(sum(r.amount), 0)
       from app.fin_receipts(greatest(p_from, coalesce((p_created_from at time zone 'Asia/Tashkent')::date - 32, p_from)), p_to) r
       join public.payments p on p.id = r.id
      where r.provider = 'cash' and p."cashDocId" is null and (p_created_from is null or p."createdAt" >= p_created_from)
-       and (p_created_to is null or p."createdAt" < p_created_to)
+       and (p_created_to is null or p."createdAt" < p_created_to) and (p_skip is null or not p."createdAt" <@ any(p_skip))
     union all
     select 'expense', -1, count(*), coalesce(sum(e.amount), 0) from public.expenses e
      where e.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(e.method, '') in ('', 'cash')
        and e."cashDocId" is null and coalesce(e.id, '') not like 'payroll\_\_%' and (p_created_from is null or e."createdAt" >= p_created_from)
-       and (p_created_to is null or e."createdAt" < p_created_to)
+       and (p_created_to is null or e."createdAt" < p_created_to) and (p_skip is null or not e."createdAt" <@ any(p_skip))
     union all
     select 'salary', -1, count(*), coalesce(sum(s.paid), 0) from public.salary_payments s
      where s.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(s.method, '') in ('', 'cash')
        and s."cashDocId" is null and (p_created_from is null or s."createdAt" >= p_created_from) and (p_created_to is null or s."createdAt" < p_created_to)
+       and (p_skip is null or not s."createdAt" <@ any(p_skip))
     union all
     select 'advance', -1, count(*), coalesce(sum(a.amount), 0) from public.staff_advances a
      where a.date between to_char(p_from, 'YYYY-MM-DD') and to_char(p_to, 'YYYY-MM-DD') and coalesce(a.method, '') in ('', 'cash')
        and a."cashDocId" is null and (p_created_from is null or a."createdAt" >= p_created_from) and (p_created_to is null or a."createdAt" < p_created_to)
+       and (p_skip is null or not a."createdAt" <@ any(p_skip))
     union all
     select 'refund', -1, count(*), coalesce(sum(r.amount), 0) from public.refunds r
      where r."createdAt" >= (p_from::timestamp at time zone 'Asia/Tashkent') and r."createdAt" < ((p_to + 1)::timestamp at time zone 'Asia/Tashkent')
        and coalesce(r.method, '') = 'cash' and r."cashDocId" is null and (p_created_from is null or r."createdAt" >= p_created_from)
-       and (p_created_to is null or r."createdAt" < p_created_to))
+       and (p_created_to is null or r."createdAt" < p_created_to) and (p_skip is null or not r."createdAt" <@ any(p_skip)))
   select jsonb_build_object(
            'items', coalesce(jsonb_agg(jsonb_build_object('kind', x.kind, 'n', x.n, 'sum', x.s) order by x.dir desc, x.kind) filter (where x.n > 0), '[]'::jsonb),
            'n', coalesce(sum(x.n), 0), 'in', coalesce(sum(x.s) filter (where x.dir > 0), 0), 'out', coalesce(sum(x.s) filter (where x.dir < 0), 0))
     from x
 $$;
-revoke all on function app.kassa_cash_rows(date, date, timestamptz, timestamptz) from public, anon, authenticated;
+revoke all on function app.kassa_cash_rows(date, date, timestamptz, timestamptz, tstzrange[]) from public, anon, authenticated;
 
-create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
+-- Qayta ishga tushirish sanashi eskirganmi (g4v-2): komissiya sanagan paytdan ("restartAt") QAT'IY KEYIN kiritilgan, sanasi to'xtatilgan
+--   davrda (oxirgi kassa kunidan KEYIN, qayta ishga tushirish kunidan oldin) bo'lgan kassa hujjatisiz naqd yozuvlar (soni, kirim, chiqim) —
+--   ular sanalgan summaga kirmagan: birinchi qayta ochilgan kun shu summa bilan ochilsa, farq birinchi yopishda kassirga kamomad / ortiqcha
+--   bo'lib tushardi. Oxirgi kassa kuni sanasi bu yerga kirmaydi (g4b-v1): kassa ushlangan paytda bunday hujjatisiz yozuv qabul qilinmaydi
+--   (g4r-2), ishlayotgan kassada esa naqd o'quv to'lovi KO-1 bilan yoziladi — to'lov qatori shu tranzaksiyada hujjat bog'lanishidan oldin
+--   (app.kassa_resolve_day chaqirilganda) hali hujjatsiz turadi va o'zini sanab, birinchi kunni qayta sanash ham ocholmaydigan qilib qo'yardi.
+--   Tayyorlangan (hali boshlanmagan) qayta ishga tushirish bo'lmasa — NULL. Shu kun bilan qayta sanash "restartAt" ni yangilaydi.
+--   Ishlatuvchilar: kassa-docs.sql app.kassa_resolve_day (birinchi kun ochilmaydi), kassa-day.sql app.kassa_golive_guard (ishga tushadigan
+--   kun qo'yilmaydi) va kassa_state (sahifadagi ogohlantirish).
+create or replace function app.kassa_restart_stale(p_desk text) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select app.kassa_cash_rows(l.last_day + 1, k."restartDay" - 1, k."restartAt" + interval '1 microsecond')
+    from public.cash_desks k
+   cross join lateral (select max(d.day) as last_day from public.cash_days d where d.desk = k.id) l
+   where k.id = p_desk and not k."isTest" and k."restartAt" is not null and k."restartDay" > l.last_day
+$$;
+revoke all on function app.kassa_restart_stale(text) from public, anon, authenticated;
+
+-- Moslikning bir oraliq bo'yicha hisobi (ichki; app.kassa_reconcile kassa ishlagan har davr uchun chaqiradi): [p_from, p_to] dagi
+--   P1 / P4 / P5 / P8 sonlari (qoidalar — pastda, app.kassa_reconcile izohida).
+create or replace function app.kassa_reconcile_range(p_from date, p_to date) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare
-  v_live date; v_to date := coalesce(p_to, app.fin_today()); v_from date; v_f text; v_t text;
+  v_to date := p_to; v_from date := p_from; v_f text; v_t text;
   v_p1p int; v_p1ps numeric; v_p1d int; v_p4r int; v_p4d int; v_p4a int; v_p5r int; v_p5d int; v_p5o int; v_p5t int; v_p8r int; v_p8d int;
 begin
-  select o."kassaGoLive" into v_live from public.fin_org o where o.id = 'main';
-  if v_live is null or v_live > v_to then return jsonb_build_object('live', false, 'total', 0); end if;
-  v_from := greatest(coalesce(p_from, v_live), v_live);
   v_f := to_char(v_from, 'YYYY-MM-DD'); v_t := to_char(v_to, 'YYYY-MM-DD');
   -- P1
   select count(*), coalesce(sum(r.amount), 0) into v_p1p, v_p1ps
@@ -1217,6 +1296,48 @@ begin
   select count(*) into v_p8d from public.cash_docs c
    where c.desk = 'main' and c.op = 'out_refund' and c.status = 'posted' and c."businessDay" between v_from and v_to
      and not exists (select 1 from public.refunds r where r."cashDocId" = c.id);
+  return jsonb_build_object(
+    'p1', jsonb_build_object('pay', v_p1p, 'paySum', v_p1ps, 'doc', v_p1d),
+    'p4', jsonb_build_object('row', v_p4r, 'doc', v_p4d, 'adv', v_p4a),
+    'p5', jsonb_build_object('row', v_p5r, 'doc', v_p5d, 'ofs', v_p5o, 'ret', v_p5t),
+    'p8', jsonb_build_object('row', v_p8r, 'doc', v_p8d));
+end $$;
+revoke all on function app.kassa_reconcile_range(date, date) from public, anon, authenticated;
+
+-- Moslik — kassa ISHLAGAN barcha davrlar bo'yicha (g4v-4): birinchi ishga tushgan kundan so'ralgan oxirgi kungacha, to'xtatilgan davrlar
+--   (oxirgi kassa kunidan keyin, qayta ishga tushirish kunidan oldin — kassa-day.sql app.kassa_periods) chiqarib tashlanadi; kassa hozir
+--   to'xtatilgan bo'lsa — oxirgi kassa kunigacha. Avval faqat hozirgi «ishga tushadigan kun»dan hisoblanardi: to'xtatilgan kassada
+--   (sana bo'sh) va qayta ishga tushirilgandan keyin birinchi davr yetimlari nazorat ro'yxati, Telegram va kassa-checks.sql dan yo'qolardi.
+--   p_from / p_to — so'ralgan oraliq (bo'sh: birinchi ishga tushgan kundan / bugungacha), kassa ishlagan kunlar bilan kesishmasi tekshiriladi.
+create or replace function app.kassa_reconcile(p_from date, p_to date) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_p jsonb := app.kassa_periods('main'); v_first date; v_to date := coalesce(p_to, app.fin_today()); v_from date; v_lo date;
+  v_los date[] := '{}'; v_his date[] := '{}'; g jsonb; v_r jsonb;
+  v_p1p int := 0; v_p1ps numeric := 0; v_p1d int := 0; v_p4r int := 0; v_p4d int := 0; v_p4a int := 0;
+  v_p5r int := 0; v_p5d int := 0; v_p5o int := 0; v_p5t int := 0; v_p8r int := 0; v_p8d int := 0;
+begin
+  v_first := (v_p ->> 'first')::date;
+  if v_first is null or v_first > v_to then return jsonb_build_object('live', false, 'total', 0); end if;
+  if coalesce((v_p ->> 'paused')::boolean, false) then v_to := least(v_to, (v_p ->> 'last')::date); end if;
+  v_from := greatest(coalesce(p_from, v_first), v_first);
+  -- kassa ishlagan davrlar: [birinchi kun, 1-to'xtatishdagi oxirgi kassa kuni], [1-qayta ishga tushirish kuni, 2-to'xtatishdagi oxirgi kun], …,
+  --   [oxirgi qayta ishga tushirish kuni, …) — har biri so'ralgan oraliq bilan kesishgan qismi tekshiriladi
+  v_lo := v_first;
+  for g in select x from jsonb_array_elements(v_p -> 'gaps') x order by (x ->> 'after')::date loop
+    if (g ->> 'after')::date >= v_lo then v_los := v_los || v_lo; v_his := v_his || (g ->> 'after')::date; end if;
+    v_lo := greatest(v_lo, (g ->> 'before')::date);
+  end loop;
+  v_los := v_los || v_lo; v_his := v_his || v_to;
+  for i in 1 .. cardinality(v_los) loop
+    if greatest(v_los[i], v_from) <= least(v_his[i], v_to) then
+      v_r := app.kassa_reconcile_range(greatest(v_los[i], v_from), least(v_his[i], v_to));
+      v_p1p := v_p1p + (v_r #>> '{p1,pay}')::int; v_p1ps := v_p1ps + (v_r #>> '{p1,paySum}')::numeric; v_p1d := v_p1d + (v_r #>> '{p1,doc}')::int;
+      v_p4r := v_p4r + (v_r #>> '{p4,row}')::int; v_p4d := v_p4d + (v_r #>> '{p4,doc}')::int; v_p4a := v_p4a + (v_r #>> '{p4,adv}')::int;
+      v_p5r := v_p5r + (v_r #>> '{p5,row}')::int; v_p5d := v_p5d + (v_r #>> '{p5,doc}')::int; v_p5o := v_p5o + (v_r #>> '{p5,ofs}')::int;
+      v_p5t := v_p5t + (v_r #>> '{p5,ret}')::int; v_p8r := v_p8r + (v_r #>> '{p8,row}')::int; v_p8d := v_p8d + (v_r #>> '{p8,doc}')::int;
+    end if;
+  end loop;
   return jsonb_build_object('live', true, 'from', v_from, 'to', v_to,
     'p1', jsonb_build_object('pay', v_p1p, 'paySum', v_p1ps, 'doc', v_p1d),
     'p4', jsonb_build_object('row', v_p4r, 'doc', v_p4d, 'adv', v_p4a),

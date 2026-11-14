@@ -416,6 +416,24 @@ select zz.chk('E5 ikkinchi to''xtatish va qayta ishga tushirish: farq +2 000 (Dt
 select zz.chk('E5b ikki marta qayta ishga tushirilgan kassa: tekshiruv hech narsa topmadi (zanjir, dalolatnomalar, raqamlash, moslik)',
   :'bad' || '/' || :'err' || ' | ' || :'c11' || ',' || :'c14' || ',' || :'c16' || ',' || :'c20', '^0/0 \| 0,0,0,0$');
 
+-- ---------- (E6) g4v-4: kassa ishlagan BIRINCHI davr (04.01–06.01) yetimi ikki marta to'xtatish / qayta ishga tushirishdan keyin ham
+--   20-bandda ko'rinadi, kassa yana to'xtatilganda ham (avval moslik faqat hozirgi «ishga tushadigan kun»dan hisoblanardi, to'xtatilgan
+--   kassada — umuman yo'q).
+savepoint e6;
+set local session_replication_role = replica;
+insert into public.expenses (id, date, month, category, amount, note, method) values ('ex_zz_6', '2027-01-05', '2027-01', 'Boshqa', 1000, 'kassani chetlab (birinchi davr)', 'cash');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c20' || '/' || :'bad' as e6a \gset
+select zz.put('E6b', zz.as('U_KAS', format('select public.kassa_day_close(%L::jsonb)::text', jsonb_build_object('desk', 'main', 'day', '2027-01-08',
+  'counted', (select app.kassa_day_balance(d.id) from public.cash_days d where d.desk = 'main' and d.status = 'open')))));
+select zz.put('E6c', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+\ir kassa-checks.sql
+select :'e6a' || ' | ' || coalesce(zz.get('E6c')::jsonb ->> 'kassaGoLive', 'bo''sh') || ':' || :'c20' || '/' || :'bad' as e6 \gset
+rollback to savepoint e6;
+select zz.chk('E6 g4v-4: birinchi davr (05.01) yetimi ikki marta qayta ishga tushirilgandan keyin ham 20-bandda (P4); kassa yana to''xtatilganda ham',
+  :'e6', '^1/1 \| bo''sh:1/1$');
+
 -- ---------- Natija ----------
 \o
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 600), '<null>') || ' ; kutilgan: ' || pat || ')' end

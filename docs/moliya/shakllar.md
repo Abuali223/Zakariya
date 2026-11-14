@@ -74,7 +74,8 @@ Faqat tizim (server) ishlamay qolganda. **To‘lovchiga berilmaydi** — to‘lo
 (Қ-0001 …), buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi va jurnalda order raqami yoziladi.
 Kassa **to‘xtatilganda** ham (orqaga qaytish, `ishga-tushirish.md`, 9-bo‘lim) shu blankalar ishlatiladi: raqamlari o‘z daftari bo‘yicha —
 tizimning kirim / chiqim order raqamlari bilan aralashmaydi (qayta ishga tushganda tizim o‘z oxirgi raqamidan davom etadi); bu davrda
-tizimga kiritilgan yozuvlar kassa orderisiz bo‘ladi — «Order №» ustuni bo‘sh qoladi.
+tizimga kiritilgan yozuvlar kassa orderisiz bo‘ladi — «Order №» ustuni bo‘sh qoladi; tizimdagi sanasi — oxirgi kassa kunidan keyingi
+kun (oxirgi kassa kuni va undan oldingi sana bilan tizim qabul qilmaydi).
 
 **Blanka:**
 «Қ» № [___] · sana [___], vaqt [___]

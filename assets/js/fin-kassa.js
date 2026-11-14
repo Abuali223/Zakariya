@@ -25,6 +25,7 @@ const BLOCK_TXT = {
   // ishga-tushirish §9 (ui-5): to'xtatilgan kassa va qayta ishga tushirishni kutayotgan kassa (batafsil matn — draw() da, sana bilan)
   paused: 'Kassa to‘xtatilgan: kassa hujjatlari yozilmaydi. Qayta ishga tushirish — komissiya sanashi bilan (Direktor).',
   restart: 'Kassa qayta ishga tushirish kunini kutmoqda.',
+  restart_recount: 'Qayta ishga tushirish sanashidan keyin kassa hujjatisiz naqd yozuv kiritilgan — komissiya pulni qayta sanab, qoldiq qayta kiritilmaguncha birinchi kassa kuni ochilmaydi (Direktor).',
 };
 
 const $ = s => C.$(s);
@@ -62,7 +63,9 @@ const restartAdjTxt = v => num(v) ? ` · qayta ishga tushirish farqi (dalolatnom
 //   'stop' — ishlagan kassada kelgan sanani bo'shatish / surish (kassa TO'XTATILADI) yoki tayyorlangan qayta ishga tushirishni bekor qilish;
 //   'relaunch' — to'xtatilgan kassani qayta ishga tushirish; 'launch' — ishga tushirish / hali kelmagan sanani o'zgartirish;
 //   'block' — avval komissiya sanashi kerak yoki sana qayta ishga tushirish kuniga teng emas (saqlanmaydi); 'none' — tasdiq kerak emas.
-export function goLiveConfirm(oldDay, newDay, today, desk) {
+//   last — oxirgi YOPILGAN kassa kuni (kassa_state('main').lastDay; ochiq kun bo'lsa — berilmaydi): u qurilma navbatidagi hali
+//   o'tkazilmagan yozuvlar bilan yopilgan bo'lsa kassa to'xtatilmaydi (g4b-v1; server ham rad etadi — kassa:rollback_pending).
+export function goLiveConfirm(oldDay, newDay, today, desk, last) {
   oldDay = oldDay || null; newDay = newDay || null; desk = desk || {};
   if (oldDay === newDay) return { kind: 'none', text: '' };
   const rs = desk.restart || null, paused = !!desk.pausedAt;
@@ -80,12 +83,13 @@ export function goLiveConfirm(oldDay, newDay, today, desk) {
   }
   const reached = !!oldDay && !!today && String(oldDay) <= String(today);
   if (reached && (!newDay || newDay > oldDay) && desk.started) {
+    if (last && num(last.pendingCount) > 0) return { kind: 'block', text: `Kassani to‘xtatib bo‘lmaydi: oxirgi kassa kuni (${dmy(last.day)}) qurilma navbatidagi hali o‘tkazilmagan ${num(last.pendingCount)} ta yozuv (${som(last.pendingSum)}) bilan yopilgan — bu pul kassada bor, hisobda hali yo‘q. Avval navbat yuborilsin: kunni qayta oching, qurilmalar navbati o‘tgach kunni qayta sanab yoping (kun tekshirilgan bo‘lsa — navbat keyingi kassa kuniga «kech» tushadi, o‘sha kunni yoping), keyin kassani to‘xtating (ishga-tushirish §9).` };
     return { kind: 'stop', text: `DIQQAT — KASSANI TO‘XTATISH (ishga-tushirish §9).\n\nKassa ${dmy(oldDay)} dan ishlayapti. Sanani ${newDay ? 'keyinga surish' : 'bo‘shatish'} kassani to‘xtatadi:\n`
       + '• naqd o‘quv to‘lovlari kirim orderisiz va fiskal chek raqamisiz yoziladi; naqd maosh, avans, xarajat va qaytarish — avvalgi (ordersiz) tartibda;\n'
       + '• «Kassa»da yangi hujjat yozilmaydi — kassa nazorati o‘chadi, kassa «Қ» blankalari va jurnali bilan ishlaydi (blankalar o‘z raqamlari bilan; tizim raqamlari qayta ishga tushganda davom etadi);\n'
       + '• qayta ishga tushirish — faqat yangi komissiya sanashi bilan: «Qayta ishga tushirish» (sanalgan summa va kun), keyin shu yerda o‘sha kun.\n'
       + (newDay ? `Kiritilgan ${dmy(newDay)} — faqat rejalashtirilgan kun sifatida yoziladi, sana maydoni bo‘sh qoladi.\n` : '')
-      + 'Ochiq kassa kuni yoki pul berilmagan so‘rovlar bo‘lsa — tizim to‘xtatmaydi (avval kunni yoping, so‘rovlarni bekor qiling yoki pulini bering).\n\nKassa to‘xtatilsinmi?' };
+      + 'Ochiq kassa kuni, qurilma navbatida qolgan («hali o‘tkazilmagan») yozuvlar bilan yopilgan oxirgi kun yoki pul berilmagan so‘rovlar bo‘lsa — tizim to‘xtatmaydi (avval qurilmalar navbati yuborilsin va kun yopilsin, so‘rovlarni bekor qiling yoki pulini bering).\n\nKassa to‘xtatilsinmi?' };
   }
   if (reached && (!newDay || newDay > oldDay)) {   // ishga tushgan deb belgilangan, kassa kuni hali ochilmagan — ishga tushirish bekor qilinadi / suriladi
     return { kind: 'stop', text: `DIQQAT — KASSANI ISHGA TUSHIRISH ${newDay ? 'SURILADI' : 'BEKOR QILINADI'}.\n\nKassa ${dmy(oldDay)} dan ishga tushgan deb belgilangan (kassa kuni hali ochilmagan). ${newDay ? dmy(newDay) + ' gacha' : 'Sana yana qo‘yilguncha'}:\n`
@@ -95,6 +99,20 @@ export function goLiveConfirm(oldDay, newDay, today, desk) {
   }
   if (!newDay) return { kind: 'none', text: '' };
   return { kind: 'launch', text: `Kassa ${dmy(newDay)} dan ishga tushsinmi?\n\nShu kundan naqd o‘quv to‘lovlari faqat kassa orderi va fiskal chek raqami bilan qabul qilinadi.` };
+}
+
+// Eskirgan qayta ishga tushirish sanashi (g4v-2): sanashdan keyin kiritilgan, sanasi qayta ishga tushirish kunidan oldingi kassa
+//   hujjatisiz naqd yozuvlar (kassa_state('main').desk.restart.stale {n, in, out}; countedAt — sanash payti). Server birinchi qayta
+//   ochilgan kunni ochmaydi (kassa:restart_recount) — sof funksiya (fin-kassa.test.mjs). today — server sanasi, paused — kassa to'xtatilgan.
+const tkDate = ts => { try { return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' }); } catch (_) { return ''; } };
+export function restartStaleTxt(rs, director, today, paused) {
+  rs = rs || {}; const st = rs.stale || {};
+  const at = rs.countedAt ? ` (${dmy(tkDate(rs.countedAt))} ${hm(rs.countedAt)})` : '';
+  const passed = !paused && !!today && !!rs.day && String(today) > String(rs.day);
+  return `Qayta ishga tushirish sanashidan${at} keyin kassa hujjatisiz ${num(st.n)} ta naqd yozuv kiritilgan (kirim ${som(st.in)}, chiqim ${som(st.out)}) — ular komissiya sanagan summaga kirmagan. Birinchi kassa kuni ochilmaydi: `
+    + (director ? 'komissiya pulni qayta sanaydi, «Qayta ishga tushirish» qoldig‘ini qayta kiriting'
+        + (passed ? ' (qayta ishga tushirish kuni o‘tgan — avval «⚙ Sozlamalar»da ishga tushadigan kunni bo‘shating, keyin yangi kun bilan).' : ' (avvalgi dalolatnoma bekor bo‘ladi).')
+      : 'Direktor komissiya bilan pulni qayta sanab, qoldiqni qayta kiritadi.');
 }
 
 async function call(fn, args) { return await C.rpc(fn, args || {}); }
@@ -153,7 +171,8 @@ function draw() {
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
   if (started && (m.director || m.list2)) acts.push(`<button class="btn ghost2" id="ks-kpi" title="Haftalik ko‘rsatkichlar (RP-22): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar">KPI</button>`);
-  if (ready && paused && m.director) acts.push(`<button class="btn gold" id="ks-restart" title="Komissiya sanashi bo‘yicha qayta ishga tushirish qoldig‘i (ishga-tushirish §9)">Qayta ishga tushirish</button>`);
+  // (tayyorlangan, hali boshlanmagan qayta ishga tushirishda ham — qayta sanash uchun, g4v-2)
+  if (ready && (paused || rs) && m.director) acts.push(`<button class="btn gold" id="ks-restart" title="Komissiya sanashi bo‘yicha qayta ishga tushirish qoldig‘i (ishga-tushirish §9)">Qayta ishga tushirish</button>`);
   if (m.director) acts.push(`<button class="btn ghost2" id="ks-set" title="Kassa sozlamalari">⚙ Sozlamalar</button>`);
   $('#ks-actions').innerHTML = acts.join('');
 
@@ -162,13 +181,16 @@ function draw() {
   if (s.version != null && Number(s.version) !== SERVER_VER) warn.push(['#B42318', '#FDECEC', Number(s.version) > SERVER_VER
     ? 'Tizim yangilangan, bu sahifa esa eski: sahifani yangilang (Ctrl+Shift+R; telefonda — sahifani yopib qayta oching).'
     : 'Serverdagi kassa moduli bu sahifadan eski relizda — administratorga xabar bering (o‘rnatish to‘liq bajarilmagan).']);
-  if (s.blockReason) warn.push(['#B42318', '#FDECEC', (s.blockReason === 'day_closed' && ld && ld.status === 'verified')
+  if (s.blockReason && !(s.blockReason === 'restart_recount' && rs && rs.stale)) warn.push(['#B42318', '#FDECEC', (s.blockReason === 'day_closed' && ld && ld.status === 'verified')   // (restart_recount — batafsil pastda)
     ? 'Bugungi kun yopilgan va tekshirilgan — bugun yangi hujjat yozilmaydi (tekshirilgan kun qayta ochilmaydi).'
     : s.blockReason === 'paused'
       ? `Kassa to‘xtatilgan (${dmy(s.desk.pausedDay)} dan): kassa hujjatlari yozilmaydi, naqd o‘quv to‘lovi kirim orderisiz yozilmoqda. Qayta ishga tushirish — yangi komissiya sanashi bilan${m.director ? ': «Qayta ishga tushirish», keyin «⚙ Sozlamalar»da ishga tushadigan kun' : ' (Direktor)'} (ishga-tushirish §9).`
       : (s.blockReason === 'restart' && rs ? `Kassa ${dmy(rs.day)} dan qayta ishga tushadi — o‘shangacha hujjat yozilmaydi.` : (BLOCK_TXT[s.blockReason] || s.blockReason))]);
   if (rs) warn.push(['#175CD3', '#E8F1FD', `Qayta ishga tushirish tayyorlangan: ${dmy(rs.day)} dan, kun boshi ${som(rs.amount)} (tizimdagi oxirgi qoldiq ${som(rs.prevClosing)}; farq ${sgnSom(rs.delta)}${rs.docNo ? ' — dalolatnoma D-' + rs.docNo : ''}).`
-    + (paused ? (m.director ? ' Endi «⚙ Sozlamalar»da ishga tushadigan kunni shu sanaga qo‘ying.' : ' Ishga tushadigan kunni Direktor belgilaydi.') : '')]);
+    + (paused ? (m.director ? ' Endi «⚙ Sozlamalar»da ishga tushadigan kunni shu sanaga qo‘ying.' : ' Ishga tushadigan kunni Direktor belgilaydi.') : '')
+    + ' Sanashdan keyin kassa hujjatisiz naqd yozuv kiritilsa — u sanashga kirmaydi: qayta sanash kerak bo‘ladi (aks holda birinchi kassa kuni ochilmaydi).']);
+  // g4v-2: sanashdan keyin kiritilgan, sanasi qayta ishga tushirish kunidan oldingi kassa hujjatisiz naqd yozuvlar — server birinchi kunni ochmaydi
+  if (rs && rs.stale && num(rs.stale.n) > 0) warn.push(['#B42318', '#FDECEC', restartStaleTxt(rs, m.director, s.today, paused)]);
   if (s.desk && s.desk.isTest) warn.push(['#175CD3', '#E8F1FD', 'Bu — SINOV kassasi: hujjatlari va raqamlari asosiy kassadan alohida, hisobotlarga kirmaydi.']);
   if (!s.kassaGoLive && !paused && !rs) warn.push(['#B54708', '#FEF3E2', 'Kassa hali «ishga tushirilgan» deb belgilanmagan: naqd o‘quv to‘lovlari kassa orderisiz yozilmoqda' + (m.director ? ' («⚙ Sozlamalar» → ishga tushirish sanasi).' : '.')]);
   if (num(s.pending.toApprove) > 0) warn.push(['#175CD3', '#E8F1FD', `Sizning tasdig‘ingizni kutayotgan so‘rovlar: ${s.pending.toApprove} ta.`]);
@@ -775,7 +797,7 @@ function openSettings() {
       <div class="grid2">${lbl('Kassa limiti (0 — belgilanmagan)', `<input id="kx-limit" type="text" inputmode="numeric" value="${nv('cashLimit')}" placeholder="0" style="${FLD}">`)}${lbl('Kassa ishga tushadigan kun', `<input id="kx-live" type="date" value="${v('kassaGoLive')}" style="${FLD}">`)}</div>
       ${lbl('Yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd to‘lov — Direktor tasdig‘isiz chegara (0 — har doim Direktor)', `<input id="kx-orgmax" type="text" inputmode="numeric" value="${esc(num((o.extra || {}).orgCashMax) ? String(num(o.extra.orgCashMax)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}" placeholder="0" style="${FLD}">`)}
       <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
-      <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
+      <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun, qurilma navbatida qolgan yozuvlar bilan yopilgan oxirgi kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
       <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
       <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs (hisobi bog‘langan bo‘lsa — shu yerdagi to‘liq F.I.Sh. bilan). Qo‘shish va o‘chirish darhol saqlanadi.</div>
       <div id="kx-sigs">${sigRows()}</div>
@@ -813,7 +835,8 @@ function openSettings() {
     //   ishga tushirish kuni. Holat — asosiy kassaniki (sahifada sinov kassasi tanlangan bo'lishi mumkin); server baribir tekshiradi.
     if (live !== (o.kassaGoLive || null)) {
       let sm = null; try { sm = await call('kassa_state', { p_desk: 'main' }); } catch (_) { sm = null; }
-      const g = goLiveConfirm(o.kassaGoLive || null, live, sm ? sm.today : (ST.ov.state && ST.ov.state.today), sm ? sm.desk : null);
+      const g = goLiveConfirm(o.kassaGoLive || null, live, sm ? sm.today : (ST.ov.state && ST.ov.state.today), sm ? sm.desk : null,
+        sm && !sm.openDay ? sm.lastDay : null);
       if (g.kind === 'block') { C.toast(g.text, true); return; }
       if (g.text && !confirm(g.text)) return;
     }
@@ -1173,12 +1196,13 @@ export function controlRows(c) {
     'Buxgalter shu oy ichida tasniflaydi (dividend, ish haqi …) — xarajat emas');
   if (!c.isTest) {
     // crit-1: ishga tushish kunidan oldingi sana bilan, keyin kiritilgan kassa hujjatisiz naqd yozuvlar (Direktor — kech kelgan qog'oz)
+    //   chegara — kassa BIRINCHI ishga tushgan kun (g4v-3: qayta ishga tushirilgandan keyin ham); to'xtatilgan davr sanalari — pastdagi qatorda,
+    //   kassa ishlagan kunlarniki — «Moslik» qatorida
     const pl = c.preLive || {}, pli = pl.items || [];
-    // qayta ishga tushirilgan kassada ro'yxat oxirgi to'xtatishdan oldingi kassa kunigacha (to'xtatilgan davr — pastdagi qatorda)
-    const plCut = pl.to && pl.goLive && new Date(Date.parse(pl.to + 'T00:00:00Z') + 864e5).toISOString().slice(0, 10) !== pl.goLive;
     add('preLive', 'Kassa ishga tushishidan oldingi naqd yozuvlar (keyin kiritilgan)', pli.length ? 'info' : 'ok',
       pli.length ? pli.map(x => `${CASH_KIND[x.kind] || x.kind}: ${cnt(x.n)} · ${som(x.sum)}`).join('; ') : 'yo‘q',
-      `Sanasi ishga tushish kunidan${pl.goLive ? ' (' + dmy(pl.goLive) + ')' : ''} oldin${plCut ? ' (' + dmy(pl.to) + ' gacha; to‘xtatilgan davr sanalari — «Kassani to‘xtatish va qayta ishga tushirish» qatorida)' : ''}, kassa hujjatisiz — boshlang‘ich qoldiq sanashi bilan solishtiriladi (o‘sha pul sanashga kirgan bo‘lishi va bugungi sana bilan ikkinchi marta kiritilmagan bo‘lishi kerak)`);
+      `Sanasi kassa birinchi ishga tushgan kundan${pl.goLive ? ' (' + dmy(pl.goLive) + ')' : ''} oldin, kassa hujjatisiz — boshlang‘ich qoldiq sanashi bilan solishtiriladi (o‘sha pul sanashga kirgan bo‘lishi va bugungi sana bilan ikkinchi marta kiritilmagan bo‘lishi kerak)`
+      + ((c.restarts || []).length ? '; to‘xtatilgan davr sanalari — «Kassani to‘xtatish va qayta ishga tushirish» qatorida' : ''));
     // ishga-tushirish §9: to'xtatilgan kassa; qayta ishga tushirishlar — farq dalolatnomasi va to'xtatilgan davrdagi kassa hujjatisiz naqd harakat
     //   (sanasi shu davrda — rows; shu davrda orqa sana bilan kiritilgan — backdated); izohlanmagan farq bo'lsa — sariq
     const pz = c.paused, rsl = c.restarts || [], rowTxt = (o, t) => `${t}: kirim ${som((o || {}).in)}, chiqim ${som((o || {}).out)} (${cnt((o || {}).n)})`;
