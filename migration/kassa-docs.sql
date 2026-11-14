@@ -295,14 +295,16 @@ begin
   if v_cap is not null and v_cap > app.fin_now() + interval '5 minutes' then v_cap := null; end if;
 
   o_id := 'kd_' || replace(gen_random_uuid()::text, '-', '');
+  -- "orgCash" — yuridik shaxsga naqd xarajat belgisi (sec-3; kassa.sql): «Xarajat» so'rovida saqlanadi, boshqa operatsiyalarda bo'sh
   insert into public.cash_docs (id, desk, form, op, status, amount, "partyType", "partyId", "partyName", basis, attachment, note, "noBasis",
                                 "fiscalNo", "fiscalExempt", "sourceTable", "sourceId", "sourceSnapshot", "clientRef", "capturedAt",
-                                "needsList2", "needsDirector", "requestedBy", "requestedAt", "isSystem", "createdBy")
+                                "needsList2", "needsDirector", "requestedBy", "requestedAt", "isSystem", "createdBy", "orgCash")
     values (o_id, v_desk, p_form, v_op, 'draft', v_amount, v_ptype, v_pid, coalesce(v_pname, ''), v_basis, v_attach, v_note, v_nobasis,
             v_fiscal, v_fexempt,
             case when p_internal then nullif(p ->> 'sourceTable', '') end, case when p_internal then nullif(p ->> 'sourceId', '') end,
             case when p_internal then p -> 'sourceSnapshot' when v_month is not null then jsonb_build_object('month', v_month) end, v_ref, v_cap,
-            v_need2, v_needd, p_uid, now(), p_internal and app.kassa_bool(p, 'isSystem'), p_uid);
+            v_need2, v_needd, p_uid, now(), p_internal and app.kassa_bool(p, 'isSystem'), p_uid,
+            case when v_op = 'out_expense' and not p_internal then v_orgcash end);
   insert into public.cash_doc_lines (id, "docId", "lineNo", debit, credit, amount, "articleId", cash, analytics, note)
     select o_id || '_' || (r ->> 'n'), o_id, (r ->> 'n')::int, r ->> 'debit', r ->> 'credit', (r ->> 'amount')::numeric,
            r ->> 'articleId', (r ->> 'cash')::boolean, r -> 'analytics', r ->> 'note'
@@ -496,13 +498,43 @@ revoke all on function public.kassa_receipt(jsonb) from public, anon;
 grant execute on function public.kassa_receipt(jsonb) to authenticated;
 
 -- ---------- KO-2: chiqim so'rovi (raqamsiz; pul berilmaydi) ----------
--- Kontragent yuridik shaxsmi (F1.27): «yetkazib beruvchi» va «tashkilot» turlari — ha; «jismoniy shaxs» (YaTT ham), bank, ta'sischi,
---   «boshqa» — yo'q. Buxgalter kontragent turini shu qoida bilan belgilaydi.
+-- Kontragent yuridik shaxsmi (F1.27): «yetkazib beruvchi» va «tashkilot» turlari — ha; bank, ta'sischi — yo'q; «jismoniy shaxs» (YaTT ham)
+--   va «boshqa» — turini buxgalter yoki Direktor tasdiqlagan bo'lsa yo'q, tasdiqlanmagan bo'lsa (kassir yoki Moliya menejeri kiritgan yoki
+--   turini, nomini, STIR'ini o'zgartirgan — fin-core.sql: fin_counterparty_save) — ha: so'rovchi turni o'zi tanlab Direktor tasdig'ini
+--   chetlab o'tolmaydi (sec-3). Buxgalter kontragent turini shu qoida bilan belgilaydi va tasdiqlaydi.
 create or replace function app.kassa_is_org(p_cp text) returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce((select c.kind in ('supplier', 'org') from public.fin_counterparties c where c.id = p_cp), false)
+  select coalesce((select c.kind in ('supplier', 'org') or (c.kind in ('person', 'other') and c."kindConfirmedBy" is null)
+                     from public.fin_counterparties c where c.id = p_cp), false)
 $$;
 revoke all on function app.kassa_is_org(text) from public, anon, authenticated;
+
+-- Yuridik shaxsga naqd xarajat qoidasi HOZIRGI holat bo'yicha (sec-3): «Xarajat» kontragentga, kontragent hozir yuridik shaxs hisoblanadi,
+--   summa sozlamadagi chegaradan (fin_org.extra.orgCashMax) katta, Direktor tasdig'i esa yo'q — Direktor tasdig'i kerak. Kontragent turi va
+--   chegara so'rovdan keyin o'zgarishi mumkin: 2-ro'yxat tasdig'ida (kassa_doc_approve) va pul berishda (kassa_doc_pay) qayta baholanadi.
+create or replace function app.kassa_org_due(p_doc public.cash_docs) returns boolean
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+begin
+  return coalesce(p_doc.op = 'out_expense' and p_doc."partyType" = 'counterparty' and p_doc."dirApprovedBy" is null
+                  and app.kassa_is_org(p_doc."partyId")
+                  and p_doc.amount > coalesce((select app.kassa_num(o.extra, 'orgCashMax') from public.fin_org o where o.id = 'main'), 0), false);   -- kassa-links.sql
+end $$;
+revoke all on function app.kassa_org_due(public.cash_docs) from public, anon, authenticated;
+
+-- Foydalanuvchining barcha bog'langan xodim kartalari — kassa tomoni kaliti ko'rinishida ('teachers:<id>' / 'staff:<id>'): asosiy havola
+--   (users.staffRefType / staffRefId, kassa-day.sql: kassa_shortage_decide dagi qoida bilan bir xil) va teskari havolalar
+--   (staff / teachers."userUid", staff-user-link.sql — ikkinchi lavozim kartasi shu yo'l bilan bog'lanadi); bog'lanmagan — bo'sh massiv.
+--   sec-1: pul oluvchi xodim hujjatni tasdiqlovchining yoki avans hisobotini kirituvchining o'zi emasligi shu bilan tekshiriladi.
+drop function if exists app.kassa_user_card(text);   -- avvalgi (bitta kartali) ta'rif
+create or replace function app.kassa_user_cards(p_uid text) returns text[]
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(array_agg(distinct x.card order by x.card) filter (where x.card is not null), '{}'::text[]) from (
+    select case when coalesce(u."staffRefId", '') <> '' then (case when u."staffRefType" = 'teacher' then 'teachers' else 'staff' end) || ':' || u."staffRefId" end
+      from public.users u where u.id = p_uid
+    union all select 'staff:' || s.id from public.staff s where coalesce(p_uid, '') <> '' and s."userUid" = p_uid
+    union all select 'teachers:' || t.id from public.teachers t where coalesce(p_uid, '') <> '' and t."userUid" = p_uid) x(card)
+$$;
+revoke all on function app.kassa_user_cards(text) from public, anon, authenticated;
 
 -- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari. Doira — sinov kassasisiz barcha
 --   kassalar; p_desk sinov kassasi bo'lsa — faqat o'sha kassa (sinov hujjatlari haqiqiy hisobga kirmaydi, ularning qoldig'i alohida).
@@ -556,12 +588,10 @@ begin
   perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_id, v_dup from app.kassa_doc_build(p, 'KO2', v_uid, false) b;
   -- Hisobdorga avans: javobda hisobot qilinmagan qoldiq (bo'lsa — so'rov Direktor tasdig'ini ham kutadi: kassa_doc_build).
+  --   Yuridik shaxsga naqd «Xarajat» (F1.27) — javobdagi hujjatning "orgCash" belgisi (sahifa ogohlantiradi; sec-3: hujjatda saqlanadi).
   if coalesce(p ->> 'op', '') = 'out_accountable' then
     select c."partyId" into v_party from public.cash_docs c where c.id = v_id;
     v_extra := jsonb_build_object('accOpen', app.kassa_acc_open(v_party));
-  elsif coalesce(p ->> 'op', '') = 'out_expense' then   -- yuridik shaxsga naqd: sahifa ogohlantiradi (F1.27)
-    select c."partyId" into v_party from public.cash_docs c where c.id = v_id and c."partyType" = 'counterparty';
-    v_extra := jsonb_build_object('orgCash', v_party is not null and app.kassa_is_org(v_party));
   end if;
   -- Tasdiq talab qilmaydigan chiqim (hozircha qo'lda kiritiladiganlar ichida yo'q) darhol «tasdiqlangan» bo'ladi.
   update public.cash_docs set status = 'approved'
@@ -572,10 +602,17 @@ end $$;
 revoke all on function public.kassa_payout_request(jsonb) from public, anon;
 grant execute on function public.kassa_payout_request(jsonb) to authenticated;
 
--- ---------- Tasdiqlash: 2-ro'yxat (≠ so'rovchi) va / yoki Direktor ----------
+-- ---------- Tasdiqlash: 2-ro'yxat (≠ so'rovchi, ≠ pul oluvchi xodim) va / yoki Direktor ----------
+--   sec-1: 2-ro'yxat xodimi o'z xodim kartalariga (app.kassa_user_cards — ikkinchi lavozim kartasi ham) beriladigan pulni tasdiqlamaydi —
+--   boshqa 2-ro'yxat xodimi yoki Direktor tasdiqlaydi: pul oluvchi 2-ro'yxat xodimi bo'lsa, 2-ro'yxat bosqichini Direktor ham imzolaydi
+--   (2-ro'yxatda boshqa xodim bo'lmasa ham so'rov to'xtab qolmaydi; Direktor tasdig'i ham kerak bo'lsa — o'sha bir tasdiq bilan). Boshqa
+--   hujjatlarda 2-ro'yxat bosqichi Direktorniki emas. Direktorning o'z kartasiga — Direktor tasdig'i bosqichi (u eng yuqori vakolat).
+--   sec-3: yuridik shaxsga naqd «Xarajat»
+--   qoidasi tasdiqda HOZIRGI holat bo'yicha qayta baholanadi — kontragent turi so'rovdan keyin o'zgargan bo'lsa ham so'rov Direktor
+--   tasdig'ini kutadi (Direktor ham shu payt tasdiqlay oladi).
 create or replace function public.kassa_doc_approve(p_id text, p_note text default '') returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_dup boolean := false;
+declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_dup boolean := false; v_due boolean;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: hujjatni Moliya menejeri / buxgalter yoki Direktor tasdiqlaydi' using errcode = '42501';
@@ -588,14 +625,34 @@ begin
     end if;
     raise exception 'Hujjat tasdiq kutmayapti (holati: %)', v_doc.status using errcode = 'P0001', hint = 'kassa:bad_status';
   end if;
+  v_due := not v_doc."needsDirector" and app.kassa_org_due(v_doc);   -- sec-3: Direktor talabi endi qo'shiladimi
   perform app.kassa_flag(true);
   if app.fin_list2() and v_doc."needsList2" and v_doc."approvedBy" is null then
     if v_doc."requestedBy" = v_uid then   -- CT-07
       raise exception 'O''zingiz so''ragan hujjatni o''zingiz tasdiqlay olmaysiz' using errcode = '42501', hint = 'kassa:self_approve';
     end if;
-    update public.cash_docs set "approvedBy" = v_uid, "approvedAt" = now() where id = p_id;
-  elsif app.is_admin() and v_doc."needsDirector" and v_doc."dirApprovedBy" is null then
-    update public.cash_docs set "dirApprovedBy" = v_uid, "dirApprovedAt" = now() where id = p_id;
+    if v_doc."partyType" = 'employee' and v_doc."partyId" = any(app.kassa_user_cards(v_uid)) then   -- sec-1
+      raise exception 'O''zingizga (bog''langan xodim kartangizga) beriladigan pulni o''zingiz tasdiqlay olmaysiz — uni boshqa 2-ro''yxat xodimi (Moliya menejeri / buxgalter) yoki Direktor tasdiqlaydi'
+        using errcode = '42501', hint = 'kassa:self_party';
+    end if;
+    update public.cash_docs set "approvedBy" = v_uid, "approvedAt" = now(), "needsDirector" = "needsDirector" or v_due,
+           "orgCash" = case when v_due then true else "orgCash" end
+     where id = p_id;
+  elsif app.is_admin() and v_doc."needsList2" and v_doc."approvedBy" is null and v_doc."partyType" = 'employee'
+        and exists (select 1 from public.users u where u.role in ('finance_mgr', 'accountant') and v_doc."partyId" = any(app.kassa_user_cards(u.id))) then
+    -- sec-1: pul oluvchi — 2-ro'yxat xodimi (o'zi tasdiqlay olmaydi): 2-ro'yxat bosqichini Direktor imzolaydi, kerak bo'lsa Direktor bosqichini ham
+    if v_doc."requestedBy" = v_uid then   -- CT-07
+      raise exception 'O''zingiz so''ragan hujjatni o''zingiz tasdiqlay olmaysiz' using errcode = '42501', hint = 'kassa:self_approve';
+    end if;
+    update public.cash_docs set "approvedBy" = v_uid, "approvedAt" = now(),
+           "dirApprovedBy" = case when ("needsDirector" or v_due) and "dirApprovedBy" is null then v_uid else "dirApprovedBy" end,
+           "dirApprovedAt" = case when ("needsDirector" or v_due) and "dirApprovedBy" is null then now() else "dirApprovedAt" end,
+           "needsDirector" = "needsDirector" or v_due, "orgCash" = case when v_due then true else "orgCash" end
+     where id = p_id;
+  elsif app.is_admin() and (v_doc."needsDirector" or v_due) and v_doc."dirApprovedBy" is null then
+    update public.cash_docs set "dirApprovedBy" = v_uid, "dirApprovedAt" = now(), "needsDirector" = true,
+           "orgCash" = case when v_due then true else "orgCash" end
+     where id = p_id;
   elsif v_uid in (v_doc."approvedBy", v_doc."dirApprovedBy") then
     v_dup := true;
   else
@@ -663,10 +720,15 @@ grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 --   ish haqi avansi (out_advance) — staff_advances qatori; xarajat (out_expense) — «Buxgalteriya»ga (expenses) ko'chirish;
 --   xodim bilan hisob-kitob kirimlari (tasdiq talab qilinsa) — kassa_receipt'dagi kabi qoldiq tekshiruvi va avans / maosh yozuvi.
 --   Boshqa bo'limdan yozilib, o'sha zahoti o'tkaziladigan hujjatlar (o'quv to'lovi, maosh) bu yerdan to'lanmaydi.
+--   sec-5: so'rovni 2-ro'yxat sifatida tasdiqlagan xodim (qo'shimcha «kassir» lavozimi bo'lsa ham) shu so'rov pulini bermaydi (reja 4.13).
+--   sec-3: yuridik shaxsga naqd «Xarajat» qoidasi pul berish paytida qayta baholanadi. Direktor tasdig'i endi kerak, lekin yo'q bo'lsa — pul
+--   berilmaydi va so'rov Direktor tasdig'iga qaytariladi (holati «tasdiq kutilmoqda», "needsDirector"): javob ok = false, hint
+--   'kassa:org_director', message — sabab (qaytarish saqlanishi uchun xato emas, qaytish qiymati; sahifa uni rad deb ko'rsatadi).
+--   Pul berilsa — "orgCash" belgisi shu paytdagi holat bilan saqlanadi (nazorat ro'yxati, orgCash30).
 create or replace function public.kassa_doc_pay(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_was text; v_src text; v_op text; v_desk text;
-        v_party text; v_dir text; v_nd boolean; v_open numeric;
+        v_party text; v_dir text; v_nd boolean; v_open numeric; v_cur public.cash_docs%rowtype; v_org boolean;
 begin
   if not (app.kassa_operator() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: naqd pulni kassir (favqulodda — Direktor) beradi' using errcode = '42501';
@@ -681,7 +743,30 @@ begin
   end if;
   perform app.kassa_link_prelock(p_id);   -- bog'langan amal qulflari kassa qulfidan OLDIN (qulf tartibi: L1 → L4)
   perform app.kassa_lock_desk(v_desk);    -- L4 (kassa_doc_post shu qulfni qayta oladi)
-  select c.status into v_was from public.cash_docs c where c.id = p_id;   -- qulf ostida: aynan shu chaqiruv o'tkazadimi
+  select * into v_cur from public.cash_docs c where c.id = p_id;   -- qulf ostida: aynan shu chaqiruv o'tkazadimi
+  v_was := v_cur.status;
+  if v_was = 'approved' and v_cur."approvedBy" = v_uid then   -- sec-5: tasdiqlovchi ≠ pul beruvchi
+    raise exception 'Bu so''rovni o''zingiz tasdiqlagansiz — pulini o''zingiz bera olmaysiz (tasdiqlovchi va pul beruvchi boshqa-boshqa kishi): pulni kassir beradi'
+      using errcode = '42501', hint = 'kassa:self_pay';
+  end if;
+  -- sec-3: yuridik shaxsga naqd «Xarajat» — kontragent qatori FOR SHARE (turi shu payt o'zgarayotgan bo'lsa — tugashini kutib, yangi qiymat bilan)
+  if v_was = 'approved' and v_op = 'out_expense' and v_cur."partyType" = 'counterparty' then
+    perform 1 from public.fin_counterparties c where c.id = v_cur."partyId" for share;
+    if app.kassa_org_due(v_cur) then
+      perform app.kassa_flag(true);
+      update public.cash_docs set "needsDirector" = true, status = 'draft', "orgCash" = true where id = p_id;
+      perform app.kassa_flag(false);
+      return app.kassa_doc_json(p_id) || jsonb_build_object('ok', false, 'dup', false, 'hint', 'kassa:org_director',
+        'message', 'Pul berilmadi: yuridik shaxsga kassadan naqd to''lov qoidasi bo''yicha endi Direktor tasdig''i kerak (so''rovdan keyin kontragent turi yoki sozlamadagi chegara o''zgargan, yoki tur hali tasdiqlanmagan). So''rov Direktor tasdig''iga qaytarildi; Direktor tasdiqlagach pulni bering');
+    end if;
+    -- belgi pul berish paytidagi holat bilan qotiriladi («ha» bo'lsa — qoladi; ustundan oldingi so'rovda bo'sh bo'lsa — shu paytdagi qiymat)
+    v_org := coalesce(v_cur."orgCash", false) or app.kassa_is_org(v_cur."partyId");
+    if v_cur."orgCash" is distinct from v_org then
+      perform app.kassa_flag(true);
+      update public.cash_docs set "orgCash" = v_org where id = p_id;
+      perform app.kassa_flag(false);
+    end if;
+  end if;
   -- Hisobdorga avans: hisobot qilinmagan qoldiq bo'lsa — faqat Direktor tasdiqlagan so'rov bo'yicha (hisobdor qulfi prelock'da olingan).
   if v_op = 'out_accountable' and v_was <> 'posted' then
     select c."partyId", c."dirApprovedBy", c."needsDirector" into v_party, v_dir, v_nd from public.cash_docs c where c.id = p_id;

@@ -3,19 +3,20 @@
 //   Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt } from './fin-kassa.js';
+import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc } from './fin-kassa.js';
 
 const clean = () => ({ ok: true, today: '2027-01-08', isTest: false, gaps: [], staleOpenDay: null, unverifiedDays: [], undecidedShortages: [], diffs30: [], voids30: 0, reopens30: 0,
   waitingApproval: 0, approvedUnpaid: 0, fiscalExempt30: 0, otherParties30: 0, late30: 0, reissues30: 0, staleRefunds: 0, salaryGateOff30: 0, unprintedBooks30: [], pendingDays30: 0,
   limit: { cashLimit: 3000000, set: true, balance: 1200000, exceeded: false, days30: 0 },
   reconcile: { live: true, total: 0, p1: { pay: 0, paySum: 0, doc: 0 }, p4: { row: 0, doc: 0 }, p5: { row: 0, doc: 0 }, p8: { row: 0, doc: 0 } },
-  accountable: [], damage: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 } });
+  accountable: [], damage: [], handover: { monthCount: 0, monthSum: 0, earlierCount: 0, earlierSum: 0 }, zreport: [], orgCash30: { count: 0, sum: 0 },
+  zChanged30: [], cpKinds30: [], cpUnconfirmed: [] });
 const by = rows => Object.fromEntries(rows.map(r => [r.key, r]));
 
-test('nazorat ro‘yxati: toza holat — 25 tekshiruvning hammasi «joyida»', () => {
+test('nazorat ro‘yxati: toza holat — 27 tekshiruvning hammasi «joyida»', () => {
   const rows = controlRows(clean());
-  assert.equal(rows.length, 25);
-  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'orgCash', 'other',
+  assert.equal(rows.length, 27);
+  assert.deepEqual(rows.map(r => r.key), ['gaps', 'staleOpenDay', 'unverified', 'shortages', 'diffs', 'voids', 'reopens', 'waiting', 'unpaid', 'staleRefunds', 'fiscal', 'zreport', 'zChanged', 'orgCash', 'cpKinds', 'other',
     'late', 'reissues', 'gateOff', 'unprinted', 'limit', 'reconcile', 'accountable', 'damage', 'handover', 'preLive', 'restart']);
   assert.ok(rows.every(r => r.level === 'ok'), JSON.stringify(rows.filter(r => r.level !== 'ok')));
   const r = by(rows);
@@ -72,10 +73,10 @@ test('nazorat ro‘yxati: oraliq holatlar — limit belgilanmagan, kassa ishga t
   c = clean(); c.limit.days30 = 2;
   assert.deepEqual([by(controlRows(c)).limit.level, by(controlRows(c)).limit.value], ['info', 'limit 3 000 000 so‘m · 2 kun limitdan oshib yopilgan']);
   c = clean(); c.isTest = true; c.reconcile = { live: false, total: 0 };
-  assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
-  assert.equal(controlRows(c).length, 21);
+  assert.ok(!controlRows(c).some(x => ['reconcile', 'zreport', 'zChanged', 'preLive', 'restart'].includes(x.key)), 'sinov kassasida moslik, Z-hisobot, ishga tushish chegarasi qatorlari yo‘q');
+  assert.equal(controlRows(c).length, 22);
   const empty = controlRows(null);
-  assert.ok(empty.length === 25 && empty.filter(x => x.level === 'ok').length === 23, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
+  assert.ok(empty.length === 27 && empty.filter(x => x.level === 'ok').length === 25, 'bo‘sh javob: xatosiz, limit va moslik — ma’lumot');
 });
 
 test('nazorat ro‘yxati: manfiy hisobdor qoldig‘i — qizil, birinchi; xodimlar zimmasidagi kamomad (4730)', () => {
@@ -231,4 +232,61 @@ test('ishga tushadigan kun o‘zgarishi (ui-5): to‘xtatish, qayta ishga tushir
   // (hali boshlanmagan qayta ishga tushirishni bekor qilish va kelmagan sana — bu to'siq yo'q)
   assert.equal(goLiveConfirm('2027-02-03', null, '2027-02-02', pending, lastPend).kind, 'stop');
   assert.equal(goLiveConfirm('2027-01-20', '2027-01-25', '2027-01-10', live, lastPend).kind, 'launch');
+});
+
+test('vazifalar ajratilishi — RP-06: Z yopilgandan keyin o‘zgartirilgan kunlar (crit-4), kontragent turi o‘zgarishlari va tasdiqlash tugmalari (sec-3)', () => {
+  const c = clean();
+  c.zChanged30 = [{ day: '2027-01-05', status: 'closed', n: 2, at: '2027-01-06T04:00:00Z', byName: 'Sinov Moliyachi' }, { day: '2027-01-04', status: 'verified', n: 1, byName: 'Sinov Kassir' }];
+  c.cpKinds30 = [{ id: 'cp1', name: 'Alfa Qurilish MChJ', from: 'supplier', to: 'person', byName: 'Sinov Moliyachi', at: '2027-01-05T20:30:00Z', confirmed: false },
+                 { id: 'cp2', name: 'Beta Savdo', from: null, to: 'other', byName: 'Sinov Kassir', at: '2027-01-06T05:00:00Z', confirmed: true },
+                 { id: 'cp3', name: 'Gamma MChJ', from: 'person', to: 'org', byName: null, at: '2027-01-06T05:00:00Z', confirmed: false }];
+  c.cpUnconfirmed = [{ id: 'cp1', name: 'Alfa Qurilish MChJ', kind: 'person', stir: '301234567' }];
+  const r = by(controlRows(c));
+  assert.deepEqual([r.zChanged.level, r.zChanged.value], ['warn', '05.01.2027: 2 marta, oxirgisi — Sinov Moliyachi; 04.01.2027: 1 marta, oxirgisi — Sinov Kassir (tekshirilgan)']);
+  assert.match(r.zChanged.hint, /Z ni o‘zgartirgan xodim tekshira olmaydi/);
+  assert.equal(r.cpKinds.level, 'info');
+  // vaqt — Toshkent bo'yicha (20:30 UTC = ertasi kun 01:30)
+  assert.equal(r.cpKinds.value, 'Alfa Qurilish MChJ: Yetkazib beruvchi → Jismoniy shaxs (Sinov Moliyachi, 06.01.2027, tasdiqlanmagan); '
+    + 'Beta Savdo: yangi → Boshqa (Sinov Kassir, 06.01.2027); Gamma MChJ: Jismoniy shaxs → Tashkilot (tizim, 06.01.2027); turi tasdiqlanmagan: 1 ta — Alfa Qurilish MChJ');
+  assert.deepEqual(r.cpKinds.acts, [{ id: 'cp1', kind: 'person', name: 'Alfa Qurilish MChJ' }]);
+  assert.ok(controlRows(clean()).every(x => !(x.acts || []).length), 'toza holatda tasdiqlash tugmasi yo‘q');
+  c.isTest = true; c.reconcile = { live: false, total: 0 };
+  const t = by(controlRows(c));
+  assert.ok(!t.zChanged && t.cpKinds, 'sinov kassasida Z qatori yo‘q, kontragent turi (umumiy ma’lumotnoma) — bor');
+});
+
+test('kontragent turi (sec-3): yuridik shaxs belgisi server qoidasidan, tasdiqlanmagan «jismoniy shaxs» / «boshqa» — yuridik shaxs', () => {
+  assert.equal(cpIsOrg({ kind: 'person', confirmed: false, org: true }), true);
+  assert.equal(cpIsOrg({ kind: 'person', confirmed: true, org: false }), false);
+  assert.equal(cpIsOrg({ kind: 'supplier', org: true }), true);
+  // eski javob («org» yo'q) — tur bo'yicha: tasdiqlanmagan jismoniy shaxs ham yuridik shaxs; bank / ta'sischi — yo'q
+  assert.deepEqual([{ kind: 'org' }, { kind: 'other', confirmed: false }, { kind: 'person' }, { kind: 'bank' }, { kind: 'founder', confirmed: false }].map(cpIsOrg), [true, true, false, false, false]);
+  assert.equal(cpIsOrg(null), false);
+  assert.deepEqual([cpUnconfirmed({ kind: 'person', confirmed: false }), cpUnconfirmed({ kind: 'supplier', confirmed: false }), cpUnconfirmed({ kind: 'other', confirmed: true })], [true, false, false]);
+  assert.equal(cpLabel({ name: 'Beta Qurilish MChJ', stir: '309876543', kind: 'person', confirmed: false }), 'Beta Qurilish MChJ · STIR 309876543 · turi tasdiqlanmagan');
+  assert.equal(cpLabel({ name: 'Sinov Bank', kind: 'bank', confirmed: false }), 'Sinov Bank');
+  assert.equal(cpLabel({ name: 'Sinov YaTT', kind: 'person', confirmed: true }), 'Sinov YaTT');
+});
+
+test('vazifalar ajratilishi (sec-1, sec-5): tasdiqlash va pul berish tugmalari — o‘zi so‘ragan, o‘z kartasiga, o‘zi tasdiqlagan', () => {
+  const fm = { uid: 'U_FM', list2: true, cards: ['staff:st2', 'teachers:tch5'] }, acc = { uid: 'U_ACC', list2: true, cards: [] };
+  const d = { status: 'draft', needsList2: true, approvedBy: null, requestedBy: 'U_KAS', partyType: 'employee', partyId: 'staff:st2' };
+  assert.deepEqual([canApproveList2(d, fm), canApproveList2(d, acc)], [false, true], 'o‘z kartasiga — boshqa 2-ro‘yxat xodimi tasdiqlaydi');
+  assert.equal(canApproveList2(Object.assign({}, d, { partyId: 'teachers:tch5' }), fm), false, 'ikkinchi lavozim kartasi ham o‘ziniki');
+  assert.equal(canApproveList2(Object.assign({}, d, { partyId: 'staff:st9' }), fm), true);
+  assert.equal(canApproveList2(Object.assign({}, d, { requestedBy: 'U_ACC' }), acc), false, 'o‘zi so‘ragan (CT-07)');
+  assert.equal(canApproveList2(Object.assign({}, d, { partyType: 'counterparty', partyId: 'staff:st2' }), fm), true, 'faqat xodim tomoni (kontragent kaliti — karta emas)');
+  assert.equal(canApproveList2(Object.assign({}, d, { approvedBy: 'U_ACC' }), fm), false);
+  // Direktor 2-ro'yxat bosqichini faqat 2-ro'yxat xodimiga beriladigan pulda imzolaydi (me.l2Cards)
+  const dir = { uid: 'U_DIR', director: true, l2Cards: ['staff:st2', 'staff:st3'] };
+  assert.equal(canApproveList2(d, { uid: 'U_DIR', director: true }), false, 'Direktor — o‘z bosqichida');
+  assert.deepEqual([canApproveList2(d, dir), canApproveList2(Object.assign({}, d, { partyId: 'staff:st1' }), dir)], [true, false], 'pul oluvchi 2-ro‘yxat xodimi — Direktor imzolaydi');
+  assert.equal(canApproveList2(Object.assign({}, d, { requestedBy: 'U_DIR' }), dir), false, 'Direktor o‘zi so‘ragan (CT-07)');
+  assert.equal(canApproveList2(Object.assign({}, d, { partyType: 'counterparty' }), dir), false);
+  const fmk = { uid: 'U_FMK', list2: true, operator: true }, kas = { uid: 'U_KAS', operator: true };
+  const a = { status: 'approved', approvedBy: 'U_FMK', op: 'out_expense', sourceTable: null };
+  assert.deepEqual([canPayDoc(a, fmk), canPayDoc(a, kas), canPayDoc(a, { uid: 'U_DIR', director: true })], [false, true, true]);
+  assert.equal(canPayDoc(Object.assign({}, a, { status: 'draft' }), kas), false);
+  assert.equal(canPayDoc(Object.assign({}, a, { sourceTable: 'salary_payments', op: 'out_salary' }), kas), false, 'boshqa bo‘limdan yozilgan');
+  assert.equal(canPayDoc(Object.assign({}, a, { sourceTable: 'refunds', op: 'out_refund' }), kas), true, 'tasdiqlangan qaytarish');
 });

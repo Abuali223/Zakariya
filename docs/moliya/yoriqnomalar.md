@@ -44,9 +44,14 @@ qoplash (xodim)», «Forma va tovarlar», «Boshqa kirim», «Qarz / ta’sischi
    (xodimga — avans yoki hisobdorga avans). Asos hujjatisiz xarid — faqat belgilangan chegaragacha va bitta statiya bilan.
    **Yuridik shaxsga** (yetkazib beruvchi yoki tashkilot) kassadan naqd to‘lov cheklangan: oynada sariq ogohlantirish chiqadi, so‘rov
    Direktor tasdig‘ini ham kutadi (sozlamadagi chegaradan katta bo‘lsa). Asosiy yo‘l — bank o‘tkazmasi yoki hisobdor shaxs orqali.
+   Yangi kontragent («+ yangi») turini to‘g‘ri tanlang: korxona (MChJ, AJ) — «Yetkazib beruvchi» yoki «Tashkilot». «Jismoniy shaxs» va
+   «Boshqa» turini buxgalter (yoki Direktor) tasdiqlaydi — ungacha kontragent yuridik shaxs hisoblanadi (ro‘yxatda «turi tasdiqlanmagan»).
 2. Moliya menejeri yoki buxgalter tasdiqlaydi (katta summa, rahbarga berish va qarz — Direktor ham).
 3. «So‘rovlar» ro‘yxatida «Pulni berish» → «🖨 Chiqim orderi» → oluvchi «Oldim» deb summa (so‘z bilan), sana va imzo qo‘yadi;
-   shaxsini tasdiqlovchi hujjat ma’lumoti yoziladi. Kassada pul yetmasa tizim chiqimga yo‘l qo‘ymaydi.
+   shaxsini tasdiqlovchi hujjat ma’lumoti yoziladi. Kassada pul yetmasa tizim chiqimga yo‘l qo‘ymaydi. So‘rovni o‘zi tasdiqlagan xodim
+   (masalan, qo‘shimcha «kassir» lavozimli moliya menejeri) uning pulini bermaydi — boshqa kassir beradi. Tasdiqdan keyin kontragent
+   turi o‘zgargan bo‘lsa (endi yuridik shaxs hisoblansa) pul berilmaydi: so‘rov o‘zi Direktor tasdig‘iga qaytadi (qizil xabar) —
+   Direktor tasdiqlagach pulni bering.
 
 **Maosh.** «Maosh» sahifasida «Maosh berish» → usul «Naqd» → chiqim orderi o‘zi yoziladi. Faqat tasdiqlangan vedomost chegarasida.
 Naqd maoshni faqat kassir beradi. **Ish haqi avansi** — «+ Chiqim so‘rovi» orqali (yuqoridagi uch qadam).
@@ -117,18 +122,27 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
 
 **Har kuni**
 1. **Chiqim so‘rovlarini tasdiqlash:** «Kassa» → «So‘rovlar» → «Ko‘rish»: oluvchi, statiya, asos hujjati to‘g‘rimi → «Tasdiqlash»
-   yoki «Rad etish» (sababi). O‘zingiz yuborgan so‘rovni o‘zingiz tasdiqlay olmaysiz.
+   yoki «Rad etish» (sababi). O‘zingiz yuborgan so‘rovni va o‘zingizga (hisobingiz bog‘langan xodim kartasiga, ikkinchi lavozim
+   kartasi ham) beriladigan pulni o‘zingiz tasdiqlay olmaysiz — uni boshqa 2-ro‘yxat xodimi yoki Direktor tasdiqlaydi. Tasdiqlagan
+   so‘rovingiz pulini o‘zingiz bermaysiz (qo‘shimcha «kassir» lavozimi bo‘lsa ham).
 2. **Kunni tekshirish:** kassir topshirgan KO-4, orderlar va ilovalarni ekrandagi kun bilan solishtiring → «Kassa kunlari» →
-   «Tekshirish» → «qog‘oz va ilovalar olindi» belgisi → «Tekshirdim». Kunlar tartib bilan tekshiriladi; shu kuni hujjat o‘tkazgan
-   yoki kunni yopgan shaxs tekshira olmaydi. Tekshirilgan kun endi o‘zgarmaydi. **Onlayn kassa Z-hisoboti** kiritilmagan, «yo‘q»
-   deb belgilangan yoki tizimdagi summalar bilan mos kelmasa, oynada qizil ogohlantirish chiqadi — qog‘ozdagi Z bilan solishtiring:
-   kassir xato yozgan bo‘lsa, u «Z» tugmasi bilan tuzatadi; haqiqiy farq bo‘lsa (masalan, chek urilgan, lekin order bekor qilingan)
-   — sababini izohga yozib tekshirasiz.
+   «Tekshirish» → «qog‘oz va ilovalar olindi» belgisi → «Tekshirdim». Kunlar tartib bilan tekshiriladi; kunni yopgan, shu kuni hujjat
+   o‘tkazgan yoki bekor qilgan, shu kunning Z-hisobotini kiritgan yoki tuzatgan («Z» tugmasi) va kunni qayta ochgan shaxs tekshira
+   olmaydi — kunni boshqa 2-ro‘yxat xodimi yoki Direktor tekshiradi (tizim sababini aytadi). Tekshirilgan kun endi o‘zgarmaydi.
+   **Onlayn kassa Z-hisoboti** kiritilmagan, «yo‘q» deb belgilangan yoki tizimdagi summalar bilan mos kelmasa, oynada qizil
+   ogohlantirish chiqadi — qog‘ozdagi Z bilan solishtiring: kassir xato yozgan bo‘lsa, u «Z» tugmasi bilan tuzatadi; haqiqiy farq
+   bo‘lsa (masalan, chek urilgan, lekin order bekor qilingan) — sababini izohga yozib tekshirasiz. Kun yopilgandan keyin kiritilgan
+   yoki tuzatilgan Z nazorat ro‘yxatida alohida ko‘rinadi — u ham qog‘ozdagi Z bilan solishtiriladi (farq yashirilgan bo‘lishi mumkin).
 3. **«Nazorat ro‘yxati»** (shu sahifada): qizil — bugun hal qilinadi (raqamlashda bo‘shliq, yopilmagan kecha, qarorsiz kamomad,
    kechikkan qaytarish, «Moslik» mos emas, Z-hisobot farqi, hisobdorda **manfiy qoldiq** — qaytim yoki hisobot berilgan avansdan
    ko‘p: xato yozuv izi); sariq — shu hafta (shu jumladan yuridik shaxslarga kassadan naqd to‘lovlar — har biri asosli ekanini
-   tekshiring); «Moslik» qatori doim «hammasi mos» bo‘lishi kerak (xodim qaytargan pul orderi va avans / maosh yozuvi ham
-   solishtiriladi). **«Xodimlar zimmasidagi kamomad»** — Direktor qarori bilan xodimga yozilgan kamomad va qoplangani: kassir
+   tekshiring; to‘lov paytidagi belgi saqlanadi, kontragent keyin qayta tasniflansa ham ro‘yxatda qoladi; «Z-hisobot kun yopilgandan
+   keyin o‘zgartirilgan» — kim va necha marta); «Moslik» qatori doim «hammasi mos» bo‘lishi kerak (xodim qaytargan pul orderi va avans /
+   maosh yozuvi ham solishtiriladi). **«Kontragent turi»** (ma’lumot) — oxirgi 30 kunda turi o‘zgargan kontragentlar (kim, qachon,
+   eski → yangi) va turi tasdiqlanmagan «jismoniy shaxs» / «boshqa»lar: buxgalter tekshirib «✓ … — Jismoniy shaxs» tugmasi bilan
+   tasdiqlaydi; korxona bo‘lsa — tasdiqlamay, turini «Yetkazib beruvchi» / «Tashkilot»ga o‘zgartiradi. Tasdiqlanguncha kontragent
+   yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i). Turni buxgalter o‘zi kiritsa yoki o‘zgartirsa — darhol
+   tasdiqlangan; moliya menejeri turini, nomini yoki STIR’ini o‘zgartirsa — tasdiq bekor bo‘ladi. **«Xodimlar zimmasidagi kamomad»** — Direktor qarori bilan xodimga yozilgan kamomad va qoplangani: kassir
    «Kamomadni qoplash (xodim)» bilan qabul qiladi, qolganini ish haqidan ushlash — buxgalter (4-bosqichgacha qo‘lda). Kassir hisobi
    xodim kartasiga bog‘lanmagan bo‘lsa qaror «boshqa» tomonga yoziladi va kassadan qoplanmaydi (ro‘yxatda belgi bilan) — kassir
    hisoblarini xodim kartasiga bog‘lab qo‘ying.
@@ -145,7 +159,9 @@ kamayadi: qolgani shu oy yana berilishi yoki keyingi oyga qoldiq bo‘lib o‘ti
 **Hisobdorlar.** Pul «Hisobdorga avans» bilan beriladi (bu xarajat emas). Hisobdor 3 ish kuni ichida avans hisobotini (qog‘oz,
 `shakllar.md` Sh-1) cheklari bilan topshiradi; qaytim — «+ Kirim» → «Hisobdordan qaytim». Buxgalter (yoki moliya menejeri) hisobotni
 tekshiradi va **«Kassa» → «Avans hisoboti»**ga kiritadi: hisobdorni tanlaydi, har chek — bitta qator (statiya, summa, chek raqami va
-sanasi). Statiya — kassa xarajati (EX), asosiy vosita (OP-18, Dt 0820) yoki sotish uchun tovar (OP-24, Dt 2910); yetkazib beruvchiga
+sanasi). Hisobdorning o‘zi (hisobi xodim kartasiga bog‘langan buxgalter yoki moliya menejeri) o‘z hisobotini kiritmaydi va bekor
+qilmaydi — boshqa 2-ro‘yxat xodimi yoki Direktor kiritadi; hisobotni ikkinchi shaxs tasdiqlashi (to‘liq АО-1 tartibi) — 2-bosqichda
+(F2.6). Statiya — kassa xarajati (EX), asosiy vosita (OP-18, Dt 0820) yoki sotish uchun tovar (OP-24, Dt 2910); yetkazib beruvchiga
 qarz (OP-17) avans hisoboti bilan yopilmaydi — u kassa «Xarajat» orderi yoki bank orqali to‘lanadi. Xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi; «Avans hisoboti № A-…» chop etiladi va qog‘oz
 hisobotga qo‘shiladi. Hisobot qoldiqdan katta bo‘lsa — ortiqcha sarf alohida «Xarajat» orderi bilan beriladi. Xato bo‘lsa — shu kuni
 «Naqdsiz dalolatnomalar» ro‘yxatida «Bekor». Qaytim ham qoldiqdan oshmaydi; hisoboti yoki qaytimi yozilgan avans orderi bekor
@@ -217,7 +233,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Amal | Qayerda | Eslatma |
 |---|---|---|
 | Kamomad bo‘yicha qaror | «Qarori kutilayotgan kamomadlar» → «Qaror» | xodim hisobiga yoki zararga; dalolatnoma; xodim hisobiga — u pulni kassaga «Kamomadni qoplash (xodim)» bilan qaytaradi (qolgani nazorat ro‘yxatida) |
-| Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi |
+| Yopilgan kunni qayta ochish | «Kassa kunlari» → «Qayta ochish» | faqat oxirgi, tekshirilmagan kun; sababi yoziladi; qayta ochgan kunni o‘zingiz tekshirmaysiz (2-ro‘yxat tekshiradi) |
 | Fiskal cheksiz naqd to‘lov (istisno) | «💵 To‘lov» → «Fiskal cheksiz» | faqat kassa apparati ishlamaganda; jurnalda qoladi |
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida |
 | Kassa ishga tushishidan oldingi (yoki kassa to‘xtatilgan davrdagi) kechikib topilgan naqd yozuv | «💵 To‘lov» → «Naqd», «Sana» = pul olingan kun; xarajat, maosh, avans — «Buxgalteriya» oynalarida «Naqd — kassa ishga tushishidan … oldin berilgan» | kirim / chiqim orderisiz va fiskal cheksiz, kassa qoldig‘i o‘zgarmaydi (pul sanashga kirgan); bugungi sana bilan kiritilmaydi — ikki marta hisoblanadi; faqat kassa ishlamagan kun sanasi bilan (birinchi ishga tushgan kundan oldin yoki to‘xtatilgan davrda) — kassa ishlagan kun sanasi bilan tizim qabul qilmaydi; nazorat ro‘yxatida ko‘rinadi (`ishga-tushirish.md`, 4-bo‘lim) |
@@ -225,7 +241,9 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | Kassani qayta ishga tushirish | «Kassa» → «Qayta ishga tushirish» (komissiya sanagan summa, kun), keyin «⚙ Sozlamalar»da ishga tushadigan kun = o‘sha kun | farq (to‘xtatilgan davrdagi naqd harakat) texnik «Д-» dalolatnoma bilan yoziladi — kamomad / ortiqcha emas; nazorat ro‘yxatida «Kassani to‘xtatish va qayta ishga tushirish»; sanashdan keyin kassa hujjatisiz naqd yozuv kiritilsa — qayta sanash (tizim birinchi kunni ochmaydi, «Kassa»da qizil ogohlantirish) |
 | Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi |
 | Oldingi avansi hisobotsiz xodimga yangi avans (istisno) | «So‘rovlar» → «Tasdiqlash» | kassa tartibidan istisno; so‘rovda «Direktor tasdig‘i» talabi o‘zi qo‘yiladi |
-| Yuridik shaxsga kassadan naqd to‘lov | «So‘rovlar» → «Tasdiqlash» | chegara — «⚙ Sozlamalar» (bo‘sh — har doim Direktor); asosiy yo‘l — bank |
+| Moliya menejeri yoki buxgalterga beriladigan pul (avans, hisobdorga avans) | «So‘rovlar» → «Tasdiqlash» | ular o‘zlariga beriladigan pulni tasdiqlay olmaydi — 2-ro‘yxat bosqichini Direktor imzolaydi (boshqa 2-ro‘yxat xodimi ham tasdiqlay oladi); Direktor tasdig‘i ham kerak bo‘lsa — o‘sha bir tasdiq bilan |
+| Yuridik shaxsga kassadan naqd to‘lov | «So‘rovlar» → «Tasdiqlash» | chegara — «⚙ Sozlamalar» (bo‘sh — har doim Direktor); asosiy yo‘l — bank; turi tasdiqlanmagan «jismoniy shaxs» / «boshqa» ham yuridik shaxs hisoblanadi; tur so‘rovdan keyin o‘zgargan bo‘lsa — so‘rov tasdiqda yoki pul berishda Direktorga qaytadi |
+| Kontragent turini tasdiqlash (buxgalter ham) | «Nazorat ro‘yxati» → «Kontragent turi» → «✓ …» | «Jismoniy shaxs» / «Boshqa» — faqat haqiqiy fuqaro yoki YaTT; Direktor yoki buxgalter kiritgan / o‘zgartirgan tur darhol tasdiqlangan |
 | Sozlamalar, imzo egalari, boshlang‘ich qoldiq | «⚙ Sozlamalar» | chegaralarni faqat Direktor o‘zgartiradi |
 | KO-3 va oylik kassa to‘plamining to‘liq (ismli) Excel nusxasi | «Kassa» → «KO-3» → «⬇ Excel»; «Statiyalar» → «⬇ Oylik to‘plam» | boshqalarga ismsiz nusxa chiqadi (FD-28); ismli faylda shaxsiy ma’lumot bor — ehtiyot bilan saqlanadi |
 

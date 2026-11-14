@@ -15,6 +15,23 @@ const SERVER_VER = 10;                           // shu sahifa kutadigan server 
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
+// Kontragent turi tasdig'i (sec-3): «Jismoniy shaxs» / «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi; tasdiqlanguncha kontragent yuridik
+//   shaxs hisoblanadi (kassadan naqd to'lovga Direktor tasdig'i). Server qoidasi — kassa_refs: «org» (app.kassa_is_org), «confirmed»;
+//   «org» bo'lmagan (eski) javobda — tur bo'yicha. Sof funksiyalar (fin-kassa.test.mjs).
+export const cpUnconfirmed = c => !!c && (c.kind === 'person' || c.kind === 'other') && c.confirmed === false;
+export const cpIsOrg = c => !!c && (typeof c.org === 'boolean' ? c.org : (c.kind === 'supplier' || c.kind === 'org' || cpUnconfirmed(c)));
+export const cpLabel = c => String((c && c.name) || '') + (c && c.stir ? ' · STIR ' + c.stir : '') + (cpUnconfirmed(c) ? ' · turi tasdiqlanmagan' : '');
+// Vazifalar ajratilishi (sec-1, sec-5; server — kassa_doc_approve, kassa_doc_pay): 2-ro'yxat xodimi o'zi so'ragan va o'z xodim kartalariga
+//   (me.cards — ikkinchi lavozim kartasi ham) beriladigan pulni tasdiqlamaydi; pul oluvchi 2-ro'yxat xodimi bo'lsa (me.l2Cards — faqat
+//   Direktorga), 2-ro'yxat bosqichini Direktor imzolaydi; o'zi (2-ro'yxat sifatida) tasdiqlagan so'rov pulini bermaydi. Sof funksiyalar
+//   (fin-kassa.test.mjs).
+export const canApproveList2 = (d, m) => {
+  if (!(d && m && d.status === 'draft' && d.needsList2 && !d.approvedBy && d.requestedBy !== m.uid)) return false;
+  const emp = d.partyType === 'employee' && !!d.partyId;
+  if (m.list2) return !(emp && (m.cards || []).includes(d.partyId));
+  return !!(m.director && emp && (m.l2Cards || []).includes(d.partyId));
+};
+export const canPayDoc = (d, m) => !!(d && m && d.status === 'approved' && (m.operator || m.director) && (!d.sourceTable || d.op === 'out_refund') && d.approvedBy !== m.uid);
 const ST_LBL = { draft: 'Tasdiq kutilmoqda', approved: 'Tasdiqlangan — to‘lanadi', posted: 'O‘tkazilgan', void: 'Bekor qilingan', rejected: 'Rad etilgan', cancelled: 'Bekor qilingan so‘rov' };
 const DAY_LBL = { open: 'Ochiq', closed: 'Yopilgan', verified: 'Tekshirilgan' };
 const BLOCK_TXT = {
@@ -151,7 +168,19 @@ async function loadControl() {
   }
   if (seq !== CTL_SEQ || desk !== ST.desk) return;
   ST.checks = Object.assign(c || {}, { _desk: desk });
-  const b2 = $('#ks-ctl'); if (b2) b2.innerHTML = controlHtml(ST.checks);
+  const b2 = $('#ks-ctl'); if (b2) { b2.innerHTML = controlHtml(ST.checks); bindControl(b2); }
+}
+// Nazorat ro'yxatidagi «✓ Tasdiqlash» (kontragent turi, sec-3): ko'rilgan tur va nom bilan — shu orada o'zgargan bo'lsa server rad etadi.
+function bindControl(el) {
+  if (!el) return;
+  el.querySelectorAll('[data-cpok]').forEach(b => { b.onclick = async ev => {
+    ev.preventDefault();
+    const kind = b.dataset.cpkind, name = b.dataset.cpname;
+    if (!confirm(`«${name}» turi — «${CP_KIND[kind] || kind}» — tasdiqlansinmi?\n\nTasdiqlangach u yuridik shaxs hisoblanmaydi: kassadan naqd to‘lovga Direktor tasdig‘i talab qilinmaydi. Korxona (MChJ, AJ) bo‘lsa — tasdiqlamang, turini o‘zgartiring.`)) return;
+    b.disabled = true;
+    try { await call('fin_counterparty_confirm', { p_id: b.dataset.cpok, p_kind: kind, p_name: name }); C.toast('Kontragent turi tasdiqlandi ✓'); await loadRefs(true); loadControl(); }
+    catch (e) { b.disabled = false; C.toast(errText(e), true); }
+  }; });
 }
 function draw() {
   const s = ST.ov.state, m = me(), od = s.openDay, ld = s.lastDay, started = s.desk && s.desk.started;
@@ -244,9 +273,9 @@ function draw() {
   const reqs = ST.ov.requests || [];
   const reqRows = reqs.map(d => {
     const mine = d.requestedBy === m.uid;
-    const canAppr = d.status === 'draft' && ((m.list2 && d.needsList2 && !d.approvedBy && !mine) || (m.director && d.needsDirector && !d.dirApprovedBy));
+    const canAppr = d.status === 'draft' && (canApproveList2(d, m) || (m.director && d.needsDirector && !d.dirApprovedBy));
     const canRej = d.status === 'draft' && (m.list2 || m.director);
-    const canPay = d.status === 'approved' && (m.operator || m.director) && (!d.sourceTable || d.op === 'out_refund');   // tasdiqlangan qaytarish ham shu yerdan beriladi
+    const canPay = canPayDoc(d, m);   // tasdiqlangan qaytarish ham shu yerdan beriladi; o'zi tasdiqlagan so'rov puli — yo'q (sec-5)
     const canCancel = mine || m.director;
     const need = [];
     if (d.needsList2) need.push(d.approvedBy ? '✓ moliya: ' + nameOf(d.approvedBy) : '… moliya (2-ro‘yxat) tasdig‘i');
@@ -343,10 +372,16 @@ function bind() {
     r => act('kassa_offset_void', { p_id: id, p_reason: r }, 'O‘zaro hisob bekor qilindi')));
   each('data-advvoid', id => ask('Avans hisobotini bekor qilish', 'Sababi (kamida 5 belgi). Xarajatlar «Buxgalteriya»dan olib tashlanadi, hisobdordagi qoldiq tiklanadi; dalolatnoma raqami saqlanadi. Faqat kiritilgan kunning o‘zida.', 5,
     r => act('kassa_adv_report_void', { p_id: id, p_reason: r }, 'Avans hisoboti bekor qilindi')));
+  bindControl($('#ks-ctl'));   // nazorat ro'yxati (oldingi yuklash ma'lumoti bilan chizilgan bo'lsa)
 }
 // Server amali: bajaradi, xabar beradi, sahifani yangilaydi. Xato — serverning o'zbekcha matni bilan.
+//   ok = false — server rad etdi, lekin holatni saqlab qoldi (kassa_doc_pay: so'rov Direktor tasdig'iga qaytarildi, sec-3): matn — message.
 async function act(fn, args, okMsg, after) {
-  try { const r = await call(fn, args); C.toast(okMsg + (r && r.dup ? ' (avval bajarilgan)' : '') + ' ✓'); C.closeModal(); await reload(); if (after) after(r); if (C.onChange) C.onChange(); return r; }
+  try {
+    const r = await call(fn, args);
+    if (r && r.ok === false) { C.toast(String(r.message || 'Rad etildi'), true); C.closeModal(); await reload().catch(() => {}); if (C.onChange) C.onChange(); return null; }
+    C.toast(okMsg + (r && r.dup ? ' (avval bajarilgan)' : '') + ' ✓'); C.closeModal(); await reload(); if (after) after(r); if (C.onChange) C.onChange(); return r;
+  }
   catch (e) { C.toast(errText(e), true); await reload().catch(() => {}); return null; }
 }
 // Sabab so'raydigan kichik oyna.
@@ -529,17 +564,23 @@ async function openDocForm(form) {
     } else {
       const want = k => type === 'bank' ? k === 'bank' : type === 'founder' ? k === 'founder' : (k !== 'bank' && k !== 'founder');
       const drawC = sel => { const cps = (ST.refs.counterparties || []).filter(c => want(c.kind));
-        box.innerHTML = `<div style="display:flex;gap:6px;margin-top:6px"><select id="kf-pc" style="${FLD}"><option value="">— ${esc(PARTY_LBL[type] || type)} —</option>${cps.map(c => `<option value="${esc(c.id)}"${c.id === sel ? ' selected' : ''}>${esc(c.name + (c.stir ? ' · STIR ' + c.stir : ''))}</option>`).join('')}</select><button type="button" class="btn sm" id="kf-pnew" title="Yangi qo‘shish">+ yangi</button></div><div id="kf-pnewbox"></div>`;
+        box.innerHTML = `<div style="display:flex;gap:6px;margin-top:6px"><select id="kf-pc" style="${FLD}"><option value="">— ${esc(PARTY_LBL[type] || type)} —</option>${cps.map(c => `<option value="${esc(c.id)}"${c.id === sel ? ' selected' : ''}>${esc(cpLabel(c))}</option>`).join('')}</select><button type="button" class="btn sm" id="kf-pnew" title="Yangi qo‘shish">+ yangi</button></div><div id="kf-pnewbox"></div>`;
         F.party.id = sel || '';
+        // yuridik shaxsga naqd (F1.27): server qoidasi (kassa_refs → org) — turi tasdiqlanmagan «jismoniy shaxs» / «boshqa» ham (sec-3)
         const orgWarn = () => { const op = $('#kf-op').value, c = (ST.refs.counterparties || []).find(x => x.id === F.party.id), w = $('#kf-orgw');
-          const on = isOut && op === 'out_expense' && type === 'counterparty' && c && (c.kind === 'supplier' || c.kind === 'org');
+          const on = isOut && op === 'out_expense' && type === 'counterparty' && cpIsOrg(c);
           const mx = num(((ST.refs.org || {}).extra || {}).orgCashMax);
-          if (w) { w.style.display = on ? '' : 'none'; if (on) w.innerHTML = `<b>Yuridik shaxsga kassadan naqd to‘lov cheklangan.</b> Asosiy yo‘l — bank o‘tkazmasi yoki hisobdor shaxs orqali (avans hisoboti). Kassadan berilsa — ${mx ? esc(som(mx)) + 'dan katta summada ' : ''}Direktor tasdig‘i ham talab qilinadi; buxgalter nazorat ro‘yxatida ko‘radi.`; } };
+          if (w) { w.style.display = on ? '' : 'none'; if (on) w.innerHTML = (cpUnconfirmed(c) ? `<b>Kontragent turi («${esc(CP_KIND[c.kind] || c.kind)}») hali tasdiqlanmagan — yuridik shaxs hisoblanadi.</b> Buxgalter yoki Direktor turini tasdiqlaguncha kassadan naqd to‘lov `
+            : `<b>Yuridik shaxsga kassadan naqd to‘lov cheklangan.</b> Asosiy yo‘l — bank o‘tkazmasi yoki hisobdor shaxs orqali (avans hisoboti). Kassadan berilsa — `)
+            + `${mx ? esc(som(mx)) + 'dan katta summada ' : ''}Direktor tasdig‘i ham talab qilinadi; buxgalter nazorat ro‘yxatida ko‘radi.`; } };
         $('#kf-pc').onchange = () => { F.party.id = $('#kf-pc').value; orgWarn(); };
         orgWarn();
         $('#kf-pnew').onclick = () => {
           const kinds = type === 'bank' ? ['bank'] : type === 'founder' ? ['founder'] : ['supplier', 'org', 'person', 'other'];
-          $('#kf-pnewbox').innerHTML = `<div style="border:1px dashed var(--border);border-radius:10px;padding:8px;margin-top:6px"><input id="kf-cn" type="text" placeholder="Nomi (to‘liq)" maxlength="200" style="${FLD}"><div style="display:flex;gap:6px;margin-top:6px"><select id="kf-ck" style="${FLD}">${kinds.map(k => `<option value="${k}">${esc(CP_KIND[k])}</option>`).join('')}</select><input id="kf-cs" type="text" inputmode="numeric" placeholder="STIR (ixtiyoriy)" maxlength="14" style="${FLD}"><button type="button" class="btn sm gold" id="kf-cadd">Qo‘shish</button></div></div>`;
+          // sec-3: «Jismoniy shaxs» / «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi (ular kiritsa — darhol tasdiqlangan)
+          const confNote = kinds.includes('person') && !me().kindConfirm
+            ? `<div class="small muted" style="margin-top:6px">«Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi; tasdiqlanguncha kontragent yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i kerak). Korxona (MChJ, AJ) — «Yetkazib beruvchi» yoki «Tashkilot».</div>` : '';
+          $('#kf-pnewbox').innerHTML = `<div style="border:1px dashed var(--border);border-radius:10px;padding:8px;margin-top:6px"><input id="kf-cn" type="text" placeholder="Nomi (to‘liq)" maxlength="200" style="${FLD}"><div style="display:flex;gap:6px;margin-top:6px"><select id="kf-ck" style="${FLD}">${kinds.map(k => `<option value="${k}">${esc(CP_KIND[k])}</option>`).join('')}</select><input id="kf-cs" type="text" inputmode="numeric" placeholder="STIR (ixtiyoriy)" maxlength="14" style="${FLD}"><button type="button" class="btn sm gold" id="kf-cadd">Qo‘shish</button></div>${confNote}</div>`;
           $('#kf-cadd').onclick = async () => { const nm = $('#kf-cn').value.trim(); if (nm.length < 2) { C.toast('Nomini yozing', true); return; }
             try { const c = await call('fin_counterparty_save', { p_id: null, p_kind: $('#kf-ck').value, p_name: nm, p_stir: digits($('#kf-cs').value) }); await loadRefs(true); drawC(c.id); C.toast('Qo‘shildi ✓'); }
             catch (e) { C.toast(errText(e), true); } };
@@ -1148,10 +1189,23 @@ export function controlRows(c) {
     add('zreport', 'Onlayn kassa Z-hisoboti', zr.length ? 'bad' : 'ok',
       zr.length ? zr.slice(0, 6).map(x => `${dmy(x.day)}: ${zText(Object.assign({ applies: true, needed: true, ok: false }, x))}`).join('; ') + (zr.length > 6 ? ' …' : '') : 'tekshirilmagan kunlarda mos',
       'Kun yopishda Z dagi naqd va karta sotuvi kiritiladi; tizim fiskal chekli kirim orderlari va terminal to‘lovlari bilan solishtiradi. Farq bo‘lsa — buxgalter izoh bilan tekshiradi');
+    // crit-4: Z-hisobot kun yopilgandan keyin kiritilgan / tuzatilgan kunlar (kim, necha marta) — kunni o'sha xodim tekshira olmaydi
+    const zc = c.zChanged30 || [];
+    add('zChanged', 'Z-hisobot kun yopilgandan keyin o‘zgartirilgan', zc.length ? 'warn' : 'ok',
+      zc.length ? zc.slice(0, 6).map(x => `${dmy(x.day)}: ${num(x.n)} marta, oxirgisi — ${x.byName || '—'}${x.status === 'verified' ? ' (tekshirilgan)' : ''}`).join('; ') + (zc.length > 6 ? ' …' : '') : 'yo‘q',
+      'Yopilgandan keyin kiritilgan yoki tuzatilgan Z qog‘ozdagi Z bilan solishtiriladi (farqni yashirish mumkin); kunni Z ni o‘zgartirgan xodim tekshira olmaydi');
   }
   const oc = c.orgCash30 || {};
   add('orgCash', 'Yuridik shaxslarga kassadan naqd to‘lov', num(oc.count) ? 'warn' : 'ok', num(oc.count) ? `${cnt(oc.count)} · ${som(oc.sum)}` : 'yo‘q',
     'Yetkazib beruvchi / tashkilot bilan hisob-kitob asosan bankdan; kassadan berilganlari — Direktor tasdig‘i bilan, buxgalter ko‘rib chiqadi');
+  // sec-3: kontragent turi o'zgarishlari (30 kun; kim, qachon, eski → yangi) va turi tasdiqlanmagan «jismoniy shaxs» / «boshqa» lar —
+  //   «acts»: buxgalter / Direktor sahifada «✓ Tasdiqlash» tugmasi bilan tasdiqlaydi
+  const ck = c.cpKinds30 || [], cu = c.cpUnconfirmed || [], kd = k => k ? (CP_KIND[k] || k) : 'yangi';
+  add('cpKinds', 'Kontragent turi', ck.length || cu.length ? 'info' : 'ok',
+    [ck.length ? ck.slice(0, 6).map(x => `${x.name || '—'}: ${kd(x.from)} → ${kd(x.to)} (${x.byName || 'tizim'}, ${dmy(tkDate(x.at))}${!x.confirmed && (x.to === 'person' || x.to === 'other') ? ', tasdiqlanmagan' : ''})`).join('; ') + (ck.length > 6 ? ' …' : '') : '',
+     cu.length ? `turi tasdiqlanmagan: ${cnt(cu.length)} — ${cu.slice(0, 6).map(x => x.name).join(', ')}${cu.length > 6 ? ' …' : ''}` : ''].filter(Boolean).join('; ') || 'yo‘q',
+    '«Jismoniy shaxs» / «Boshqa» turini buxgalter yoki Direktor tasdiqlaydi; tasdiqlanguncha kontragent yuridik shaxs hisoblanadi (kassadan naqd to‘lovga Direktor tasdig‘i)');
+  rows[rows.length - 1].acts = cu.map(x => ({ id: x.id, kind: x.kind, name: x.name }));
   add('other', '«Boshqa» tomonli hujjatlar', num(c.otherParties30) ? 'info' : 'ok', num(c.otherParties30) ? cnt(c.otherParties30) : 'yo‘q', 'Imkon bo‘lsa kontragent ma’lumotnomasidan tanlanadi');
   const lateTxt = [num(c.late30) ? `kech yozilgan hujjat: ${cnt(c.late30)}` : '', num(c.pendingDays30) ? `oflayn yozuv bilan yopilgan kun: ${cnt(c.pendingDays30)}` : ''].filter(Boolean).join('; ');
   add('late', 'Oflayn va kech kiritilgan yozuvlar', lateTxt ? 'info' : 'ok', lateTxt || 'yo‘q', 'Pul olingan kun yopilgani uchun keyingi kunga yozilgan');
@@ -1221,8 +1275,10 @@ const CASH_KIND = { tuition: 'o‘quv to‘lovi', expense: 'xarajat', salary: 'm
 function controlHtml(c, stale) {   // stale — oldingi yuklashdagi ma'lumot (yangisi kelguncha ko'rsatiladi)
   const rows = controlRows(c), ord = { bad: 0, warn: 1, info: 2, ok: 3 };
   const att = rows.filter(r => r.level === 'bad' || r.level === 'warn'), rest = rows.filter(r => r.level === 'info'), ok = rows.filter(r => r.level === 'ok');
+  // kontragent turini tasdiqlash (sec-3) — buxgalter va Direktor (kassa_state → me.kindConfirm); server ham tekshiradi
+  const acts = r => (r.acts || []).length && me().kindConfirm ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.acts.map(a => `<button type="button" class="btn sm" data-cpok="${esc(a.id)}" data-cpkind="${esc(a.kind)}" data-cpname="${esc(a.name)}" title="Turini tasdiqlash: ${esc(CP_KIND[a.kind] || a.kind)}">✓ ${esc(a.name)} — ${esc(CP_KIND[a.kind] || a.kind)}</button>`).join('')}</div>` : '';
   const tr = r => `<tr data-ctl="${esc(r.key)}" data-level="${esc(r.level)}"><td data-label="Tekshiruv"><div><b>${esc(r.label)}</b>${r.hint ? `<div class="small muted">${esc(r.hint)}</div>` : ''}</div></td>
-    <td data-label="Holat">${chip(LVL[r.level][0], LVL[r.level][1], LVL[r.level][2])}</td><td data-label="Natija">${esc(r.value)}</td></tr>`;
+    <td data-label="Holat">${chip(LVL[r.level][0], LVL[r.level][1], LVL[r.level][2])}</td><td data-label="Natija">${esc(r.value)}${acts(r)}</td></tr>`;
   const tbl = xs => `<div class="tablewrap"><table><thead><tr><th>Tekshiruv</th><th>Holat</th><th>Natija</th></tr></thead><tbody>${xs.slice().sort((a, b) => ord[a.level] - ord[b.level]).map(tr).join('')}</tbody></table></div>`;
   const nBad = att.filter(r => r.level === 'bad').length;
   const head = att.length ? chip(`E’tibor talab qiladi: ${att.length} ta`, nBad ? '#B42318' : '#B54708', nBad ? '#FDECEC' : '#FEF3E2') : chip('Hammasi joyida', '#157347', '#E7F6EC');
@@ -1302,7 +1358,7 @@ export async function approvalRender(ctx, el) {
   C = ctx; ST.desk = 'main';
   try { await Promise.all([loadOverview(), loadRefs()]); } catch (e) { el.innerHTML = `<div class="empty">O‘qib bo‘lmadi: ${esc(errText(e))}</div>`; return; }
   const m = me();
-  const mineToDo = (ST.ov.requests || []).filter(d => d.status === 'draft' && ((m.list2 && d.needsList2 && !d.approvedBy && d.requestedBy !== m.uid) || (m.director && d.needsDirector && !d.dirApprovedBy)));
+  const mineToDo = (ST.ov.requests || []).filter(d => d.status === 'draft' && (canApproveList2(d, m) || (m.director && d.needsDirector && !d.dirApprovedBy)));
   if (!mineToDo.length) { el.innerHTML = '<div class="small muted">Tasdiq kutayotgan kassa so‘rovi yo‘q.</div>'; return; }
   el.innerHTML = `<div class="tablewrap"><table><thead><tr><th>Operatsiya</th><th>Kimga / kimdan</th><th style="text-align:right">Summa</th><th>So‘radi</th><th></th></tr></thead><tbody>${mineToDo.map(d => `<tr>
     <td data-label="Operatsiya">${esc(opName(d.op))}<div class="small muted">${esc((d.lines || []).map(l => artName(l.articleId)).filter((v, i, a) => v && a.indexOf(v) === i).join('; '))}</div></td>

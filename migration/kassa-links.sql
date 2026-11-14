@@ -1018,6 +1018,8 @@ grant execute on function public.kassa_offset_void(text, text) to authenticated;
 --   Dt 2910), reja §4.4 da Kt 4230 bilan provodkasi borlari. OP-17 (yetkazib beruvchi bilan hisob-kitob) va boshqa OP — yo'q.
 --   p: clientRef, partyId (xodim: 'teachers:<id>' | 'staff:<id>'), reportDate (qog'ozdagi hisobot sanasi, 92 kun ichida),
 --      basis (ixtiyoriy izoh), lines: [{articleId, amount, note — chek yoki hujjat}], 1–40 qator.
+--   sec-1: hisobdor — kirituvchining o'zi (bog'langan xodim kartalaridan biri, app.kassa_user_cards) bo'lsa — rad: o'z avansini o'zi hisobdan chiqarmaydi,
+--   hisobotni boshqa 2-ro'yxat xodimi yoki Direktor kiritadi (ikkinchi shaxs tasdig'i — 2-bosqich, F2.6).
 create or replace function public.kassa_adv_report(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
@@ -1034,6 +1036,10 @@ begin
   if v_ref !~ '^[A-Za-z0-9_.:-]{6,60}$' then raise exception 'Hujjat kaliti (clientRef) noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input'; end if;
   v_ref := 'avh_' || v_ref;
   select k.o_id, k.o_name into v_pid, v_pname from app.kassa_party('employee', p ->> 'partyId', null) k;
+  if v_pid = any(app.kassa_user_cards(v_uid)) then   -- sec-1
+    raise exception 'O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz kiritmaysiz — uni boshqa 2-ro''yxat xodimi (buxgalter / Moliya menejeri) yoki Direktor kiritadi'
+      using errcode = '42501', hint = 'kassa:self_report';
+  end if;
   -- Hisobot sanasi — qog'ozdagi hujjat sanasi: majburiy, kelajakda emas, 92 kundan eski emas.
   v_rep := coalesce(p ->> 'reportDate', '');
   begin
@@ -1106,6 +1112,7 @@ grant execute on function public.kassa_adv_report(jsonb) to authenticated;
 
 -- Avans hisobotini bekor qilish: faqat kiritilgan kunning o'zida, sabab bilan (2-ro'yxat yoki Direktor). Xarajatlar olib tashlanadi,
 --   hisobdordagi qoldiq tiklanadi, dalolatnoma raqami saqlanib «bekor qilingan» bo'ladi. Keyingi kunlarda — buxgalter tuzatishi.
+--   sec-1: hisobdorning o'zi (bog'langan xodim kartalaridan biri) o'z hisobotini bekor qilmaydi — boshqa 2-ro'yxat xodimi yoki Direktor.
 create or replace function public.kassa_adv_report_void(p_id text, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_reason text := left(btrim(coalesce(p_reason, '')), 500); v_party text; v_desk text;
@@ -1116,6 +1123,10 @@ begin
   if length(v_reason) < 5 then raise exception 'Bekor qilish sababini yozing' using errcode = '22023', hint = 'kassa:reason'; end if;
   select c."partyId", c.desk into v_party, v_desk from public.cash_docs c where c.id = p_id and c.op = 'nc_adv_report';
   if not found then raise exception 'Avans hisoboti topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  if v_party = any(app.kassa_user_cards(v_uid)) then   -- sec-1
+    raise exception 'O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz bekor qilmaysiz — uni boshqa 2-ro''yxat xodimi (buxgalter / Moliya menejeri) yoki Direktor bekor qiladi'
+      using errcode = '42501', hint = 'kassa:self_report';
+  end if;
   perform pg_advisory_xact_lock(hashtext('iqror_acc:' || coalesce(v_party, '')));   -- hisobdor qulfi — kassa qulfidan (L4) oldin
   perform app.kassa_lock_desk(v_desk);
   select * into v_doc from public.cash_docs c where c.id = p_id for update;

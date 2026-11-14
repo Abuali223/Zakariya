@@ -105,7 +105,9 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    beruvchi / tashkilotga shu summagacha Direktor tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida
    tasdiqlaydi); **imzo egalari** (1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi,
    tizimdagi hisobi). Kontragentlar turi to‘g‘ri bo‘lsin: korxona (MChJ, AJ va b.) — «Yetkazib beruvchi» yoki «Tashkilot», yakka
-   tadbirkor va fuqaro — «Jismoniy shaxs».
+   tadbirkor va fuqaro — «Jismoniy shaxs». «Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor kiritadi yoki tasdiqlaydi
+   (nazorat ro‘yxati → «Kontragent turi»): kassir yoki moliya menejeri kiritgani tasdiqlanguncha yuridik shaxs hisoblanadi (kassadan
+   naqd to‘lovga Direktor tasdig‘i kerak).
 5. **«Boshlang‘ich qoldiqni kiritish»:** summa — komissiya sanagan pul; «Birinchi kassa kuni» — yanvarning birinchi kassa kuni;
    komissiya a’zolari. Tizim «Boshlang‘ich qoldiq» dalolatnomasini yozadi (D-1) — chop etilib, komissiya imzolaydi.
    Birinchi kassa kuni ochilguncha qoldiqni qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi, raqami saqlanadi).

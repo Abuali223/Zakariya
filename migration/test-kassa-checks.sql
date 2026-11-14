@@ -104,7 +104,7 @@ select zz.put('K3', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":
 select zz.put('C1', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":300000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 5","clientRef":"c-c1-0001","lines":[{"articleId":"EX-32","amount":200000},{"articleId":"EX-07","amount":100000}]}'));
 select zz.put('C1p', left(zz.appr('U_FM', zz.id('C1')), 0) || zz.pay('U_KAS', zz.id('C1')));   -- KO-2 № 1
 select zz.put('C2', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"c-c2-0001","lines":[{"articleId":"EX-07","amount":50000}]}'));
-select zz.put('C2p', left(zz.appr('U_FM', zz.id('C2')), 0) || left(zz.pay('U_KAS', zz.id('C2')), 0) || zz.void('U_FM', zz.id('C2'), 'Xato kiritilgan'));   -- KO-2 № 2: bekor
+select zz.put('C2p', left(zz.appr('U_FM', zz.id('C2')), 0) || left(zz.pay('U_KAS', zz.id('C2')), 0) || zz.void('U_KAS', zz.id('C2'), 'Xato kiritilgan'));   -- KO-2 № 2: bekor (kassir; crit-4 — kunni Moliya menejeri tekshiradi)
 select zz.put('C3', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_advance","amount":100000,"partyType":"employee","partyId":"teachers:tch1","basis":"Ariza, 04.01.2027","clientRef":"c-c3-0001"}'));
 select zz.put('C3p', left(zz.appr('U_FM', zz.id('C3')), 0) || zz.pay('U_KAS', zz.id('C3')));   -- KO-2 № 3: avans
 select zz.put('O1', zz.rpc('U_DIR', 'kassa_offset', jsonb_build_object('id', 'sp_ofs_c1', 'teacherId', 'IQT-T1', 'payeeRef', 'teachers:tch1', 'teacherName', 'Sinov',

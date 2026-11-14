@@ -124,6 +124,12 @@ create table if not exists public.fin_counterparties (
   "createdAt" timestamptz not null default now(),
   "createdBy" text
 );
+-- Kontragent turining tasdig'i (sec-3): tur yuridik shaxsga kassadan naqd to'lovda Direktor qoidasini hal qiladi (F1.27; kassa-docs.sql:
+--   app.kassa_is_org). Turni buxgalter yoki Direktor kiritgan / o'zgartirgan / tasdiqlagan bo'lsa — tasdiqlangan; kassir yoki Moliya
+--   menejeri kiritgan yoki turini, nomini, STIR'ini o'zgartirgan kontragent — tasdiqlanmagan: «Jismoniy shaxs» / «Boshqa» turi tasdiqlanguncha
+--   yuridik shaxs hisoblanadi (Direktor tasdig'i kerak).
+alter table public.fin_counterparties add column if not exists "kindConfirmedBy" text;
+alter table public.fin_counterparties add column if not exists "kindConfirmedAt" timestamptz;
 create table if not exists public.cash_desks (
   id       text primary key,
   name     text not null,
@@ -227,27 +233,63 @@ grant execute on function public.fin_org_set(jsonb) to authenticated;
 
 -- Kontragent (yetkazib beruvchi, tashkilot, bank, ta'sischi, boshqa): kassa operatori, 2-ro'yxat yoki Direktor qo'shadi;
 --   mavjudini 2-ro'yxat yoki Direktor o'zgartiradi. Kalit serverda beriladi.
+--   Tur tasdig'i (sec-3): buxgalter yoki Direktor saqlasa — tur tasdiqlangan (kim, qachon); kassir yoki Moliya menejeri qo'shgan kontragent —
+--   tasdiqlanmagan, mavjudining turi, nomi yoki STIR'i ular tomonidan o'zgarsa — tasdiq bekor bo'ladi (izoh va «faol» belgisi tasdiqqa
+--   ta'sir qilmaydi). Tasdiqlanmagan «Jismoniy shaxs» / «Boshqa» — yuridik shaxs hisoblanadi (kassa-docs.sql: app.kassa_is_org).
 create or replace function public.fin_counterparty_save(p_id text, p_kind text, p_name text, p_stir text default '', p_note text default '', p_active boolean default true)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_id text := nullif(btrim(coalesce(p_id, '')), '');
+declare v_id text := nullif(btrim(coalesce(p_id, '')), ''); v_conf boolean := app.is_admin() or app.is_accountant();
+        v_name text := btrim(coalesce(p_name, '')); v_stir text := left(btrim(coalesce(p_stir, '')), 20);
 begin
   if not (app.is_admin() or app.fin_list2() or app.kassa_operator()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if coalesce(p_kind, '') not in ('supplier', 'org', 'person', 'bank', 'founder', 'other') then raise exception 'Kontragent turi noto''g''ri' using errcode = '22023'; end if;
-  if length(btrim(coalesce(p_name, ''))) not between 2 and 200 then raise exception 'Kontragent nomi 2–200 belgi bo''lsin' using errcode = '22023'; end if;
+  if length(v_name) not between 2 and 200 then raise exception 'Kontragent nomi 2–200 belgi bo''lsin' using errcode = '22023'; end if;
   if v_id is null then
     v_id := 'cp_' || replace(gen_random_uuid()::text, '-', '');
-    insert into public.fin_counterparties (id, kind, name, stir, note, active, "createdBy")
-      values (v_id, p_kind, btrim(p_name), left(btrim(coalesce(p_stir, '')), 20), left(coalesce(p_note, ''), 500), true, app.uid());
+    insert into public.fin_counterparties (id, kind, name, stir, note, active, "createdBy", "kindConfirmedBy", "kindConfirmedAt")
+      values (v_id, p_kind, v_name, v_stir, left(coalesce(p_note, ''), 500), true, app.uid(),
+              case when v_conf then app.uid() end, case when v_conf then now() end);
   else
     if not (app.is_admin() or app.fin_list2()) then raise exception 'Ruxsat yo''q: mavjud kontragentni Moliya menejeri, buxgalter yoki Direktor o''zgartiradi' using errcode = '42501'; end if;
-    update public.fin_counterparties set kind = p_kind, name = btrim(p_name), stir = left(btrim(coalesce(p_stir, '')), 20),
-           note = left(coalesce(p_note, ''), 500), active = coalesce(p_active, true) where id = v_id;
+    update public.fin_counterparties
+       set kind = p_kind, name = v_name, stir = v_stir, note = left(coalesce(p_note, ''), 500), active = coalesce(p_active, true),
+           "kindConfirmedBy" = case when v_conf then app.uid()
+                                    when kind is distinct from p_kind or name is distinct from v_name or stir is distinct from v_stir then null
+                                    else "kindConfirmedBy" end,
+           "kindConfirmedAt" = case when v_conf then now()
+                                    when kind is distinct from p_kind or name is distinct from v_name or stir is distinct from v_stir then null
+                                    else "kindConfirmedAt" end
+     where id = v_id;
     if not found then raise exception 'Kontragent topilmadi' using errcode = '22023'; end if;
   end if;
   return (select to_jsonb(c) from public.fin_counterparties c where c.id = v_id);
 end $$;
 revoke all on function public.fin_counterparty_save(text, text, text, text, text, boolean) from public, anon;
 grant execute on function public.fin_counterparty_save(text, text, text, text, text, boolean) to authenticated;
+
+-- Kontragent turini tasdiqlash (sec-3): FAQAT buxgalter yoki Direktor. p_kind / p_name — tasdiqlovchi ekranda ko'rgan tur va nom: shu orada
+--   o'zgargan bo'lsa — rad (sahifani yangilab, qayta ko'rib chiqiladi). Allaqachon tasdiqlangan — takror (o'zgarishsiz).
+create or replace function public.fin_counterparty_confirm(p_id text, p_kind text, p_name text) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_c public.fin_counterparties%rowtype;
+begin
+  if not (app.is_admin() or app.is_accountant()) then
+    raise exception 'Ruxsat yo''q: kontragent turini buxgalter yoki Direktor tasdiqlaydi' using errcode = '42501';
+  end if;
+  select * into v_c from public.fin_counterparties c where c.id = nullif(btrim(coalesce(p_id, '')), '') for update;
+  if not found then raise exception 'Kontragent topilmadi' using errcode = '22023', hint = 'fin:not_found'; end if;
+  if v_c.kind is distinct from p_kind or v_c.name is distinct from btrim(coalesce(p_name, '')) then
+    raise exception 'Kontragent shu orada o''zgartirilgan (hozir: «%», turi %) — sahifani yangilab, qayta ko''rib chiqing', v_c.name, v_c.kind
+      using errcode = 'P0001', hint = 'fin:cp_changed';
+  end if;
+  if v_c."kindConfirmedBy" is not null then
+    return to_jsonb(v_c) || jsonb_build_object('ok', true, 'dup', true);
+  end if;
+  update public.fin_counterparties set "kindConfirmedBy" = app.uid(), "kindConfirmedAt" = now() where id = v_c.id;
+  return (select to_jsonb(c) from public.fin_counterparties c where c.id = v_c.id) || jsonb_build_object('ok', true, 'dup', false);
+end $$;
+revoke all on function public.fin_counterparty_confirm(text, text, text) from public, anon;
+grant execute on function public.fin_counterparty_confirm(text, text, text) to authenticated;
 
 -- Imzo ro'yxati — FAQAT Direktor.
 create or replace function public.fin_signatory_save(p_id text, p_list int, p_uid text, p_title text, p_full_name text, p_active boolean default true)
@@ -274,7 +316,7 @@ grant execute on function public.fin_signatory_save(text, int, text, text, text,
 -- O'zgarishlar tarixi (Direktor ko'radi).
 select app.chlog_attach('fin_org', 'nameUz,nameRu,stir,place,printLang,t1,l1,cashLimit,kassaGoLive');
 select app.chlog_attach('fin_signatories', 'list,uid,title,fullName,active');
-select app.chlog_attach('fin_counterparties', 'kind,name,stir,active');
+select app.chlog_attach('fin_counterparties', 'kind,name,stir,active,kindConfirmedBy');   -- tur o'zgarishlari — nazorat ro'yxatida ham (sec-3)
 select app.chlog_attach('fin_articles', 'kind,nameUz,accountCode,cashOutAllowed,active');
 select app.chlog_attach('fin_op_rules', 'debit,credit,articleMode,articleId,allowedArticles,accountByParty,partyTypes,needsApproval,directorAlways,fiscalRequired,active');
 

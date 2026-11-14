@@ -56,6 +56,9 @@ create or replace function zz.put(p_k text, p_v text) returns text language plpg
 begin insert into zz.v (k, v) values (p_k, p_v) on conflict (k) do update set v = excluded.v; return p_v; end $$;
 create or replace function zz.get(p_k text) returns text language sql as $$ select v from zz.v where k = p_k $$;
 create or replace function zz.id(p_k text) returns text language sql as $$ select (v::jsonb ->> 'id') from zz.v where k = p_k $$;
+-- JSON javobdan maydon; javob xato matni bo'lsa — matnning o'zi (yangi qoida buzilsa tekshiruv ERR bilan to'xtamaydi, FAIL bo'lib ko'rinadi)
+create or replace function zz.f(p text, variadic p_path text[]) returns text language sql as $$
+  select case when p ~ '^\s*\{' then (p::jsonb #>> p_path) else left(coalesce(p, '<null>'), 300) end $$;
 create or replace function zz.clock(p_t timestamptz) returns void language sql as $$
   insert into app.fin_clock (id, t) values (1, p_t) on conflict (id) do update set t = excluded.t $$;
 create or replace function zz.rpc(p_uid text, p_fn text, p_json text) returns text language sql as $$
@@ -143,7 +146,8 @@ select zz.chk('K7b acc-3: qaytim hisobdordagi qoldiqdan (400 000 − 150 000) ka
 select zz.put('C3', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_bank","amount":1500000,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya, 04.01.2027","clientRef":"r-c3-0001"}'));
 select zz.put('C3p', left(zz.appr('U_FM', zz.id('C3')), 0) || left(zz.appr('U_DIR', zz.id('C3')), 0) || zz.pay('U_KAS', zz.id('C3')));
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"r-c4-0001","lines":[{"articleId":"EX-07","amount":50000}]}'));
-select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || left(zz.pay('U_KAS', zz.id('C4')), 0) || zz.void('U_FM', zz.id('C4'), 'Xato kiritilgan'));
+-- bekor qiladi — pulni bergan kassir (crit-4: shu kun hujjatini bekor qilgan xodim kunni tekshirmaydi; tekshiruvchi — Moliya menejeri)
+select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || left(zz.pay('U_KAS', zz.id('C4')), 0) || zz.void('U_KAS', zz.id('C4'), 'Xato kiritilgan'));
 select zz.put('W1', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":70000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 6","clientRef":"r-w1-0001","lines":[{"articleId":"EX-32","amount":70000}]}'));
 select zz.put('W2', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_advance","amount":100000,"partyType":"employee","partyId":"teachers:tch1","basis":"Ariza, 04.01.2027","clientRef":"r-w2-0001"}'));
 select zz.put('W2a', zz.appr('U_FM', zz.id('W2')));
@@ -526,8 +530,10 @@ select zz.chk('Z16 ichki Z funksiyalari mijozga yopiq',
 -- ---------- (O) yuridik shaxsga kassadan naqd xarajat (F1.27, buxgalter ko'rigi M3) ----------
 select zz.clock('2027-01-14 10:00+05');
 set local session_replication_role = replica;
-insert into public.fin_counterparties (id, kind, name, stir, active) values
-  ('cp_org', 'org', 'Sinov Tashkilot MChJ', '', true), ('cp_per', 'person', 'Sinov YaTT', '', true);
+-- cp_per — turini Direktor tasdiqlagan jismoniy shaxs; cp_per2 — tasdiqlanmagan (kassir kiritgandek; sec-3)
+insert into public.fin_counterparties (id, kind, name, stir, active, "kindConfirmedBy", "kindConfirmedAt") values
+  ('cp_org', 'org', 'Sinov Tashkilot MChJ', '', true, null, null), ('cp_per', 'person', 'Sinov YaTT', '', true, 'U_DIR', now()),
+  ('cp_per2', 'person', 'Sinov Usta', '', true, null, null);
 set local session_replication_role = origin;
 select zz.put('Ot0', (select (c -> 'orgCash30' ->> 'count') || ':' || trim_scale((c -> 'orgCash30' ->> 'sum')::numeric) from zz.checks('main') c));
 select zz.chk('O0 boshlang''ich: 1-kundagi yetkazib beruvchiga naqd xarajat (300 000) nazoratda ko''rinadi', zz.get('Ot0'), '^1:300000$');
@@ -538,11 +544,15 @@ select zz.put('O2s', zz.as('U_DIR', $q$select (public.fin_org_set('{"orgCashMax"
 select zz.put('O2a', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_sup","basis":"Hisob-faktura № 9","clientRef":"o-2-0001","lines":[{"articleId":"EX-32","amount":50000}]}'));
 select zz.put('O2b', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_per","basis":"Hisob-faktura № 10","clientRef":"o-2-0002","lines":[{"articleId":"EX-32","amount":50000}]}'));
 select zz.put('O2c', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"other","partyName":"Bozor sotuvchisi","noBasis":true,"clientRef":"o-2-0003","lines":[{"articleId":"EX-07","amount":50000}]}'));
-select zz.chk('O2 chegara 0 (standart): yetkazib beruvchiga naqd — T1 dan kichik bo''lsa ham Direktor; jismoniy shaxs va «boshqa» — yo''q',
+select zz.chk('O2 chegara 0 (standart): yetkazib beruvchiga naqd — T1 dan kichik bo''lsa ham Direktor; turi tasdiqlangan jismoniy shaxs va «boshqa» tomon — yo''q',
   zz.get('O2s') || ' | ' || (zz.get('O2a')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2a')::jsonb ->> 'orgCash')
   || ' | ' || (zz.get('O2b')::jsonb ->> 'needsDirector') || ':' || (zz.get('O2b')::jsonb ->> 'orgCash')
   || ' | ' || (zz.get('O2c')::jsonb ->> 'needsDirector') || ':' || coalesce(zz.get('O2c')::jsonb ->> 'orgCash', '-'),
   '^0 \| true:true \| false:false \| false:false$');
+select zz.put('O2d', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_expense","amount":50000,"partyType":"counterparty","partyId":"cp_per2","basis":"Hisob-faktura № 11","clientRef":"o-2-0004","lines":[{"articleId":"EX-32","amount":50000}]}'));
+select zz.chk('O2d sec-3: turi tasdiqlanmagan «jismoniy shaxs» — yuridik shaxs hisoblanadi (Direktor tasdig''i, ogohlantirish belgisi); so''rov bekor qilindi',
+  (zz.f(zz.get('O2d'), 'needsDirector')) || ':' || (zz.f(zz.get('O2d'), 'orgCash'))
+  || ':' || (zz.f(zz.as('U_KAS', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('O2d'), 'Sinov uchun')), 'status')), '^true:true:cancelled$');
 select zz.chk('O3 moliya tasdig''i yetmaydi: Direktorsiz pul berilmaydi',
   left(zz.appr('U_FM', zz.id('O2a')), 0) || zz.pay('U_KAS', zz.id('O2a')), '^ERR 42501 \[kassa:not_approved\]');
 select zz.put('O4s', zz.as('U_DIR', $q$select (public.fin_org_set('{"orgCashMax":100000}') -> 'extra' ->> 'orgCashMax')$q$));
@@ -744,6 +754,86 @@ select zz.chk('S2 har seriya o''z hisoblagichi bilan 1 dan uzluksiz: hisoblagich
 select zz.chk('S3 bo''shliq tekshiruvi seriya bo''yicha toza; noyoblik indeksi (kassa, seriya, yil, raqam)',
   app.kassa_gap_check('main', 2027)::text || ':' || (select (indexdef like '%(desk, series, year, no)%')::text from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number'),
   '^\[\]:true$');
+
+-- ---------- (SD) vazifalar ajratilishi: avans hisoboti (sec-1), kontragent turi — RP-06 (sec-3), kunni tekshirish (crit-4) ----------
+--   Moliya menejeri hisobdor Sinov Zavxoz kartasiga (staff:st1) bog'lanadi; mustaqil tekshiruvchi — buxgalter (U_ACC).
+set local session_replication_role = replica;
+insert into public.users (id, email, name, role, status, "extraRoles") values ('U_ACC','a@x','Sinov Buxgalter','accountant','active','[]')
+on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email, name = excluded.name;
+update public.users set "staffRefType" = 'staff', "staffRefId" = 'st1' where id = 'U_FM';
+-- buxgalterning ikkinchi lavozim kartasi — faqat teskari havola bilan (teachers."userUid"; users.staffRefId bo'sh)
+insert into public.teachers (id, "teacherId", name, pauses, "userUid") values ('tch6','IQT-T6','Sinov Ikkinchi Lavozim','[]','U_ACC');
+set local session_replication_role = origin;
+select zz.chk('SD1b sec-1: ikkinchi lavozim kartasi (teskari havola) — buxgalter o''zi hisobdor bo''lgan avans hisobotini ham kirita olmaydi',
+  zz.rpc('U_ACC', 'kassa_adv_report', '{"clientRef":"av-sd1b-001","partyId":"teachers:tch6","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":1000,"note":"Chek 1"}]}'),
+  '^ERR 42501 \[kassa:self_report\] O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz kiritmaysiz');
+select zz.chk('SD1 sec-1: o''zi hisobdor bo''lgan avans hisobotini Moliya menejeri kirita olmaydi (ko''rik ssenariysi); iz qolmaydi',
+  zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-sd1-0001","partyId":"staff:st1","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 41, 14.01"}]}')
+  || ' | ' || trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.cash_docs where "clientRef" = 'avh_av-sd1-0001'),
+  '^ERR 42501 \[kassa:self_report\] O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz kiritmaysiz.* \| 150000:0$');
+select zz.put('SD2', zz.rpc('U_ACC', 'kassa_adv_report', '{"clientRef":"av-sd2-0001","partyId":"staff:st1","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 41, 14.01"}]}'));
+select zz.put('SD2o', trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.expenses where "cashDocId" = zz.f(zz.get('SD2'), 'id')));
+select zz.put('SD2f', zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.f(zz.get('SD2'), 'id'), 'Xato kiritilgan hisobot')));
+select zz.put('SD2v', zz.as('U_ACC', format('select public.kassa_adv_report_void(%L, %L)::text', zz.f(zz.get('SD2'), 'id'), 'Xato kiritilgan hisobot')));
+select zz.chk('SD2 boshqa 2-ro''yxat xodimi (buxgalter) kiritadi — qoldiq kamaydi, xarajat «Buxgalteriya»da; hisobdorning o''zi bekor qila olmaydi, buxgalter bekor qiladi',
+  zz.f(zz.get('SD2'), 'status') || ':' || zz.get('SD2o') || ' | ' || zz.get('SD2f') || ' | ' || zz.f(zz.get('SD2v'), 'status')
+  || ':' || trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.expenses where "cashDocId" = zz.f(zz.get('SD2'), 'id')),
+  '^posted:50000:1 \| ERR 42501 \[kassa:self_report\] O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz bekor qilmaysiz.* \| void:150000:0$');
+-- sec-3: nazorat ro'yxatidagi yuridik shaxsga naqd to'lovlar — hujjatda saqlangan belgi bo'yicha; tur o'zgarishlari va tasdiqlanmagan turlar
+select zz.put('SD3n', (select c -> 'orgCash30' ->> 'count' from zz.checks('main') c));
+select zz.put('SD3', zz.as('U_DIR', $q$select public.fin_counterparty_save('cp_org', 'person', 'Sinov Tashkilot MChJ')::text$q$));
+select zz.chk('SD3 to''lovdan keyin kontragent «jismoniy shaxs»ga o''tkazildi: o''tgan to''lov nazorat ro''yxatidan yo''qolmaydi (saqlangan belgi)',
+  zz.f(zz.get('SD3'), 'kind') || ':' || app.kassa_is_org('cp_org')::text || ':' || zz.get('SD3n') || ' | ' || (select c -> 'orgCash30' ->> 'count' from zz.checks('main') c),
+  '^person:false:(\d+) \| \1$');
+select zz.put('SD4', zz.as('U_KAS', $q$select public.fin_counterparty_save(null, 'person', 'Delta Savdo MChJ', '305555555')::text$q$));
+select zz.chk('SD4 RP-06: kontragent turi o''zgarishlari (eski → yangi, kim — ism, tasdiqlanganmi) va tasdiqlanmagan «jismoniy shaxs»lar',
+  (select string_agg(coalesce(x ->> 'from', 'yangi') || '>' || (x ->> 'to') || ':' || (x ->> 'name') || ':' || (x ->> 'byName') || ':' || (x ->> 'confirmed'), ',' order by x ->> 'name')
+     from jsonb_array_elements(zz.checks('main') -> 'cpKinds30') x)
+  || ' | ' || (select string_agg((x ->> 'name') || ':' || (x ->> 'kind'), ',' order by x ->> 'name') from jsonb_array_elements(zz.checks('main') -> 'cpUnconfirmed') x),
+  '^yangi>person:Delta Savdo MChJ:Sinov Kassir:false,org>person:Sinov Tashkilot MChJ:Sinov Direktor:true \| Delta Savdo MChJ:person,Sinov Usta:person$');
+select zz.chk('SD5 Direktor turini tasdiqladi — tasdiqlanmaganlar ro''yxatidan chiqdi',
+  (zz.f(zz.as('U_DIR', format('select public.fin_counterparty_confirm(%L, %L, %L)::text', zz.id('SD4'), 'person', 'Delta Savdo MChJ')), 'kindConfirmedBy'))
+  || ' | ' || (select string_agg(x ->> 'name', ',') from jsonb_array_elements(zz.checks('main') -> 'cpUnconfirmed') x), '^U_DIR \| Sinov Usta$');
+-- crit-4 (ko'rik ssenariysi): 14.01 — ikki fiskal chekli o'quv to'lovi; Moliya menejeri birini bekor qiladi; kassir haqiqiy Z bilan yopadi
+--   (farq); ertasi kuni Moliya menejeri Z ni tizim summasiga «tuzatadi» (farq yo'qoladi) va kunni o'zi tekshirmoqchi bo'ladi
+select zz.put('SD6a', zz.tui('U_KAS', 'man_sd_0001', 'T-1', 70000, 'Sinov Ota', '411'));
+select zz.put('SD6b', zz.tui('U_KAS', 'man_sd_0002', 'T-2', 40000, 'Sinov Ona', '412'));
+select zz.put('SD6v', zz.void('U_FM', zz.get('SD6a')::jsonb #>> '{kassa,docId}', 'Xato kiritilgan to''lov'));
+select zz.clock('2027-01-14 18:00+05');
+select zz.put('SD6x', (select trim_scale(coalesce(sum(c.amount), 0))::text from public.cash_docs c
+                        where c."dayId" = 'cd_main_2027-01-14' and c.form = 'KO1' and c.status = 'posted' and c."fiscalNo" is not null));   -- tizimdagi fiskal kirim
+select zz.put('SD6', zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"2027-01-14","counted":%s,"z":{"no":"Z-0114","cash":%s,"card":0}}',
+                                                              (select app.kassa_day_balance('cd_main_2027-01-14')), zz.get('SD6x')::numeric + 70000)));
+select zz.chk('SD6 bekor qilingan to''lov: kassir haqiqiy Z bilan yopdi — naqd 70 000 ko''p, nazorat ro''yxatida; 14.01 Z yopilgandan keyin o''zgarmagan (04.01 — kassir Z ni yopilgandan keyin kiritgan, Z2)',
+  zz.f(zz.get('SD6v'), 'status') || ':' || zz.f(zz.get('SD6'), 'day', 'status')
+  || ' | ' || (select (z ->> 'ok') || ':' || trim_scale((z ->> 'diffCash')::numeric) from (select app.kassa_z_state('cd_main_2027-01-14') z) q)
+  || ' | ' || (select string_agg(x ->> 'day', ',') from jsonb_array_elements(zz.checks('main') -> 'zreport') x)
+  || ' | ' || (select string_agg((x ->> 'day') || ':' || (x ->> 'status') || ':' || (x ->> 'n') || ':' || (x ->> 'byName'), ',' order by x ->> 'day') from jsonb_array_elements(zz.checks('main') -> 'zChanged30') x),
+  '^void:closed \| false:70000 \| 2027-01-14 \| 2027-01-04:verified:1:Sinov Kassir$');
+select zz.clock('2027-01-15 09:00+05');
+select zz.put('SD7', zz.rpc('U_FM', 'kassa_day_z', format('{"desk":"main","day":"2027-01-14","z":{"no":"Z-0114","cash":%s,"card":0}}', zz.get('SD6x'))));
+select zz.chk('SD7 Moliya menejeri Z ni yopilgandan keyin tizim summasiga tuzatdi: farq yo''qoldi, lekin RP-06 «Z yopilgandan keyin o''zgartirilgan» qatorida (kim, necha marta); aynan o''sha — takror',
+  (select (z ->> 'ok') from (select app.kassa_z_state('cd_main_2027-01-14') z) q) || ' | ' || jsonb_array_length(zz.checks('main') -> 'zreport')
+  || ' | ' || (select string_agg((x ->> 'day') || ':' || (x ->> 'status') || ':' || (x ->> 'n') || ':' || (x ->> 'byName'), ',') from jsonb_array_elements(zz.checks('main') -> 'zChanged30') x where x ->> 'day' = '2027-01-14')
+  || ' | ' || (zz.f(zz.rpc('U_FM', 'kassa_day_z', format('{"desk":"main","day":"2027-01-14","z":{"no":"Z-0114","cash":%s,"card":0}}', zz.get('SD6x'))), 'dup')),
+  '^true \| 0 \| 2027-01-14:closed:1:Sinov Moliyachi \| true$');
+select zz.chk('SD8 ko''rik ssenariysi: shu kun hujjatini bekor qilgan va Z ni tuzatgan Moliya menejeri kunni tekshira olmaydi',
+  zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-14', true, '')::text$q$),
+  '^ERR 42501 \[kassa:self_verify\] Shu kunning hujjatini o''zingiz bekor qilgansiz — kunni o''zingiz tekshira olmaysiz');
+select zz.put('SD9', zz.rpc('U_DIR', 'kassa_day_z', format('{"desk":"main","day":"2027-01-14","z":{"no":"Z-0114","cash":%s,"card":0,"note":"Qog''ozdagi Z bo''yicha"}}', zz.get('SD6x')::numeric + 70000)));
+select zz.chk('SD9 Z ni kiritgan / tuzatgan Direktor ham tekshira olmaydi (Z yana haqiqiy summada — farq qaytdi, qatorda 2 marta)',
+  zz.as('U_DIR', $q$select public.kassa_day_verify('main', '2027-01-14', true, 'Tekshirildi')::text$q$)
+  || ' | ' || (select (z ->> 'ok') from (select app.kassa_z_state('cd_main_2027-01-14') z) q)
+  || ':' || (select (x ->> 'n') || ':' || (x ->> 'byName') from jsonb_array_elements(zz.checks('main') -> 'zChanged30') x where x ->> 'day' = '2027-01-14'),
+  '^ERR 42501 \[kassa:self_verify\] Shu kunning Z-hisobotini o''zingiz kiritgansiz yoki tuzatgansiz.* \| false:2:Sinov Direktor$');
+select zz.chk('SD10 mustaqil tekshiruvchi (buxgalter): Z farqi — izohsiz rad, izoh bilan tekshirildi; tekshirilgan kun 30 kun ichida qatorda qoladi',
+  zz.as('U_ACC', $q$select public.kassa_day_verify('main', '2027-01-14', true)::text$q$) || ' | '
+  || zz.f(zz.as('U_ACC', $q$select public.kassa_day_verify('main', '2027-01-14', true, 'Bekor qilingan chek: qaytarish dalolatnomasi bor')::text$q$), 'day', 'status')
+  || ' | ' || (select (x ->> 'status') from jsonb_array_elements(zz.checks('main') -> 'zChanged30') x where x ->> 'day' = '2027-01-14'),
+  '^ERR 22023 \[kassa:z_note\].* \| verified \| verified$');
+select zz.chk('SD11 kun yopilishidagi Z (kassir) belgisiz; yopilgandan keyingi tuzatishlar — «afterClose» belgili',
+  (select string_agg(e."byUid" || ':' || coalesce(e.data ->> 'afterClose', '-'), ',' order by e.at, e.id) from public.cash_day_events e where e."dayId" = 'cd_main_2027-01-14' and e.kind = 'zreport'),
+  '^U_KAS:-,U_FM:true,U_DIR:true$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

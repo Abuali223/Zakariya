@@ -34,6 +34,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa.sql ALOHIDA ishga tushirilm
 --     kassa-day.sql: app.kassa_golive_guard); guard yangilaydigan kassa qatorini (cash_desks) faqat kassa_opening_set qulflaydi — u
 --     sozlama qatorini FOR SHARE bilan L4 va kassa qatoridan OLDIN oladi. Halqa yo'q; yozuvchi o'zgarish tugashini kutib, yangi qiymat
 --     bilan tekshiradi.
+--     Kontragent qatori (fin_counterparties, sec-3): kassa_doc_pay uni FOR SHARE bilan L4 dan keyin oladi (yuridik shaxs qoidasi pul
+--     berish paytida qayta baholanadi); uni o'zgartiruvchilar (fin_counterparty_save, fin_counterparty_confirm) boshqa qulf olmaydi — halqa yo'q.
 --   XAVFSIZLIK: RLS; mijoz faqat o'qiydi (kassa/moliya rollari); DML barcha rollardan qaytarib olingan.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
@@ -144,6 +146,11 @@ create table if not exists public.cash_docs (
 --   «А-» avans hisoboti (ADV) — har biri o'z hisoblagichi bilan, yil boshidan 1 dan (1C dagi kabi: har hujjat turi o'z raqami).
 alter table public.cash_docs add column if not exists series text generated always as (
   case when form = 'ACT' and op = 'nc_offset' then 'OFS' when form = 'ACT' and op = 'nc_adv_report' then 'ADV' else form end) stored;
+-- Yuridik shaxsga kassadan naqd xarajat belgisi (F1.27; sec-3): «Xarajat» so'rovi yozilganda (kontragent o'sha payt yuridik shaxs
+--   hisoblansa) saqlanadi va pul berilganda qayta baholanadi — faqat «yo'q»dan «ha»ga o'zgaradi (kassa_doc_guard). Nazorat ro'yxatidagi
+--   orgCash30 shu belgidan: kontragent keyin qayta tasniflansa ham o'tgan to'lov yashirinmaydi. Boshqa operatsiyalarda — bo'sh (NULL;
+--   bu ustundan oldingi hujjatlarda ham — nazorat ro'yxati ular uchun kontragentning hozirgi turidan foydalanadi).
+alter table public.cash_docs add column if not exists "orgCash" boolean;
 do $iqror_num$ begin
   if exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'cash_docs_number' and indexdef not like '%(desk, series, year, no)%') then
     drop index public.cash_docs_number;   -- avvalgi ta'rif (desk, form, year, no) — seriya bo'yicha qayta quriladi
@@ -416,7 +423,7 @@ declare
   v_day public.cash_days%rowtype; v_keep text[]; v_cash numeric; v_all numeric; v_bad int;
   c_pre constant text[] := array['status', 'approvedBy', 'approvedAt', 'dirApprovedBy', 'dirApprovedAt', 'rejectedBy', 'rejectedAt',
                                  'rejectReason', 'year', 'no', 'businessDay', 'dayId', 'postedBy', 'postedAt', 'capturedAt', 'late',
-                                 'voidedBy', 'voidedAt', 'voidReason'];
+                                 'voidedBy', 'voidedAt', 'voidReason', 'needsDirector', 'orgCash'];
 begin
   if tg_op = 'DELETE' then
     raise exception 'Kassa hujjati o''chirilmaydi (xato bo''lsa — «Bekor qilish»)' using errcode = '42501', hint = 'kassa:immutable';
@@ -434,8 +441,14 @@ begin
   -- UPDATE: qaysi ustunlar o'zgarishi mumkin — holatga qarab
   if old.status in ('draft', 'approved') then
     if not ((old.status = 'draft' and new.status in ('draft', 'approved', 'rejected', 'cancelled', 'posted'))
-         or (old.status = 'approved' and new.status in ('approved', 'cancelled', 'posted'))) then
+         or (old.status = 'approved' and new.status in ('approved', 'cancelled', 'posted'))
+         -- Direktor tasdig'iga qaytarish (sec-3): pul berish paytida Direktor tasdig'i talab qilinadigan bo'lib chiqsa (kassa-docs.sql: kassa_doc_pay)
+         or (old.status = 'approved' and new.status = 'draft' and new."needsDirector" and new."dirApprovedBy" is null)) then
       raise exception 'Hujjat holati noto''g''ri o''zgartirilmoqda (% → %)', old.status, new.status using errcode = '22023', hint = 'kassa:bad_doc';
+    end if;
+    -- Tasdiq talabi faqat qo'shiladi (Direktor talabi olib tashlanmaydi); yuridik shaxsga naqd belgisi faqat «ha»ga o'zgaradi (sec-3).
+    if (old."needsDirector" and not new."needsDirector") or (coalesce(old."orgCash", false) and not coalesce(new."orgCash", false)) then
+      raise exception 'Hujjatning tasdiq talabi yoki nazorat belgisi olib tashlanmaydi' using errcode = '42501', hint = 'kassa:immutable';
     end if;
     v_keep := c_pre;
   elsif old.status = 'posted' and new.status = 'void' then

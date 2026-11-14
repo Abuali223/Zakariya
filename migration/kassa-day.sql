@@ -12,10 +12,12 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_day_close(p)          — kunni SANAB yopish: farq (sanalgan − hisobdagi − hali o'tkazilmagan) shu kun sanasi bilan tizim
 --                                 hujjatiga aylanadi (kamomad KO-2 Dt 5910, ortiqcha KO-1 Kt 9390), varaqlar va xesh muzlaydi;
 --   kassa_handover(p)           — smena topshirish-qabul sanashi (kun ochiq qoladi, kassir almashadi; farq — darhol hujjat);
---   kassa_day_verify(...)       — 2-ro'yxat / Direktor tekshiradi: tekshiruvchi ≠ yopuvchi va ≠ shu kun hujjat o'tkazganlar;
---                                 raqamlarda bo'shliq, xesh yoki jamlar mos kelmasa — rad;
+--   kassa_day_verify(...)       — 2-ro'yxat / Direktor tekshiradi: tekshiruvchi ≠ yopuvchi, ≠ shu kun hujjat o'tkazgan, bekor qilgan,
+--                                 Z-hisobotni kiritgan / tuzatgan va kunni qayta ochganlar (crit-4); raqamlarda bo'shliq, xesh yoki
+--                                 jamlar mos kelmasa — rad;
 --   kassa_day_z(p)              — onlayn kassa (NKM) Z-hisobotini kiritish / tuzatish (kun tekshirilguncha; yopishda ham beriladi);
---                                 tizim Z ni fiskal chekli KO-1 va terminal to'lovlari bilan solishtiradi (F1.26);
+--                                 tizim Z ni fiskal chekli KO-1 va terminal to'lovlari bilan solishtiradi (F1.26); yopilgandan keyingi
+--                                 o'zgarish belgilanadi va nazorat ro'yxatida ko'rinadi;
 --   kassa_day_reopen(...)       — FAQAT Direktor, sabab bilan, faqat oxirgi yopilgan (tekshirilmagan) kun;
 --   kassa_shortage_decide(...)  — kamomad bo'yicha Direktor qarori (xodim zimmasiga 4730 / hisobdan chiqarish 9430);
 --   kassa_state(desk)           — «Kassa» kun kartasi uchun holat; kassa_day_book(desk, day) — KO-4 / kunlik hisobot (RP-02) ma'lumoti;
@@ -215,7 +217,10 @@ revoke all on function app.kassa_z_state(text) from public, anon, authenticated;
 
 -- Z-hisobot faktini yozish (ichki; chaqiruvchi kassa bayrog'ini yoqqan). p_z: {no, cash, card[, note]} yoki {missing: true, reason}.
 --   Oxirgi yozuv bilan aynan bir xil bo'lsa — qayta yozilmaydi (false qaytadi).
-create or replace function app.kassa_z_put(p_day_id text, p_z jsonb, p_uid text) returns boolean
+--   p_after — kun yopilgandan keyin kiritilgan / tuzatilgan (kassa_day_z): hodisada "afterClose" belgisi (crit-4) — nazorat ro'yxati
+--   («Z-hisobot kun yopilgandan keyin o'zgartirilgan») shundan; faktlar bir xil bo'lsa — belgisiz yozuv bilan ham takror hisoblanadi.
+drop function if exists app.kassa_z_put(text, jsonb, text);
+create or replace function app.kassa_z_put(p_day_id text, p_z jsonb, p_uid text, p_after boolean default false) returns boolean
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_d public.cash_days%rowtype; v_no text; v_cash numeric; v_card numeric; v_miss boolean; v_reason text; v_data jsonb;
@@ -249,12 +254,13 @@ begin
     v_data := jsonb_build_object('missing', false, 'no', v_no, 'cash', v_cash, 'card', v_card);
   end if;
   select * into v_last from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'zreport' order by e.at desc, e.id desc limit 1;
-  if v_last.id is not null and v_last.data = v_data and coalesce(v_last.reason, '') = v_reason then return false; end if;
+  if v_last.id is not null and (v_last.data - 'afterClose') = v_data and coalesce(v_last.reason, '') = v_reason then return false; end if;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
-    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_d.desk, v_d.day, 'zreport', p_uid, clock_timestamp(), nullif(v_reason, ''), v_data);
+    values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_d.desk, v_d.day, 'zreport', p_uid, clock_timestamp(), nullif(v_reason, ''),
+            v_data || case when coalesce(p_after, false) then jsonb_build_object('afterClose', true) else '{}'::jsonb end);
   return true;
 end $$;
-revoke all on function app.kassa_z_put(text, jsonb, text) from public, anon, authenticated;
+revoke all on function app.kassa_z_put(text, jsonb, text, boolean) from public, anon, authenticated;
 
 -- Kun (javob uchun): ochiq kunda jamlar hujjatlardan hisoblanadi.
 create or replace function app.kassa_day_json(p_day_id text) returns jsonb
@@ -724,11 +730,14 @@ revoke all on function public.kassa_handover(jsonb) from public, anon;
 grant execute on function public.kassa_handover(jsonb) to authenticated;
 
 -- ---------- Kunni tekshirish (CT-05): 2-ro'yxat yoki Direktor; tekshiruvchi ≠ yopuvchi, ≠ shu kun hujjat o'tkazganlar ----------
+--   crit-4: kunning nazorat ma'lumotini o'zgartirganlar ham tekshirmaydi — shu kun hujjatini bekor qilgan, shu kunning Z-hisobotini
+--   kiritgan yoki tuzatgan (kassa_day_z; yopilgandan keyin ham, oldin ham), kunni qayta ochgan xodim. Har holat o'z matni bilan
+--   (hint 'kassa:self_verify'); kunni boshqa 2-ro'yxat xodimi yoki Direktor tekshiradi.
 create or replace function public.kassa_day_verify(p_desk text, p_day date, p_papers boolean, p_note text default '') returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_d public.cash_days%rowtype;
-  v_prev date; v_gaps jsonb; v_rec numeric; v_pay numeric; v_z jsonb;
+  v_prev date; v_gaps jsonb; v_rec numeric; v_pay numeric; v_z jsonb; v_self text;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: kassa kunini Moliya menejeri / buxgalter yoki Direktor tekshiradi' using errcode = '42501';
@@ -748,9 +757,17 @@ begin
   if v_prev is not null then
     raise exception 'Avval % kunini tekshiring (kunlar tartib bilan tekshiriladi)', to_char(v_prev, 'DD.MM.YYYY') using errcode = 'P0001', hint = 'kassa:verify_order';
   end if;
-  if v_d."closedBy" = v_uid
-     or exists (select 1 from public.cash_docs c where c."dayId" = v_d.id and c."postedBy" = v_uid) then
-    raise exception 'Kunni yopgan yoki shu kuni hujjat o''tkazgan xodim o''zi tekshira olmaydi' using errcode = '42501', hint = 'kassa:self_verify';
+  -- (qayta ochish sanash farqi hujjatini ham qayta ochgan nomidan bekor qiladi — avval shu holat tekshiriladi)
+  v_self := case when v_d."closedBy" = v_uid then 'Kunni o''zingiz yopgansiz'
+                 when exists (select 1 from public.cash_docs c where c."dayId" = v_d.id and c."postedBy" = v_uid) then 'Shu kuni o''zingiz hujjat o''tkazgansiz'
+                 when exists (select 1 from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'reopen' and e."byUid" = v_uid)
+                   then 'Kunni o''zingiz qayta ochgansiz'
+                 when exists (select 1 from public.cash_docs c where c."dayId" = v_d.id and c."voidedBy" = v_uid) then 'Shu kunning hujjatini o''zingiz bekor qilgansiz'
+                 when exists (select 1 from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'zreport' and e."byUid" = v_uid)
+                   then 'Shu kunning Z-hisobotini o''zingiz kiritgansiz yoki tuzatgansiz' end;
+  if v_self is not null then
+    raise exception '% — kunni o''zingiz tekshira olmaysiz: uni boshqa 2-ro''yxat xodimi (Moliya menejeri / buxgalter) yoki Direktor tekshiradi', v_self
+      using errcode = '42501', hint = 'kassa:self_verify';
   end if;
   if not coalesce(p_papers, false) then
     raise exception 'Qog''oz hujjatlar va ilovalar olinganini tasdiqlang' using errcode = '22023', hint = 'kassa:papers';
@@ -808,7 +825,7 @@ begin
     raise exception 'Tekshirilgan kunning Z-hisoboti o''zgarmaydi' using errcode = 'P0001', hint = 'kassa:verified';
   end if;
   perform app.kassa_flag(true);
-  v_new := app.kassa_z_put(v_d.id, p -> 'z', v_uid);
+  v_new := app.kassa_z_put(v_d.id, p -> 'z', v_uid, v_d.status = 'closed');   -- yopilgan kunda — «yopilgandan keyin» belgisi (crit-4)
   perform app.kassa_flag(false);
   return jsonb_build_object('ok', true, 'dup', not v_new, 'day', app.kassa_day_json(v_d.id));
 end $$;
@@ -939,7 +956,10 @@ declare
   v_uid text := app.uid(); v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today();
   v_k public.cash_desks%rowtype; v_o public.fin_org%rowtype; v_open public.cash_days%rowtype; v_last public.cash_days%rowtype;
   v_block text; v_bal numeric; v_l2 boolean := app.fin_list2(); v_dir boolean := app.is_admin(); v_op boolean := app.kassa_operator();
-  v_paused boolean; v_restart jsonb; v_per jsonb;
+  v_paused boolean; v_restart jsonb; v_per jsonb; v_cards text[] := app.kassa_user_cards(v_uid);
+  -- 2-ro'yxat xodimlarining kartalari (faqat Direktorga): ularga beriladigan pulning 2-ro'yxat bosqichini Direktor imzolaydi (sec-1)
+  v_l2cards text[] := case when app.is_admin() then array(select distinct x from public.users u cross join lateral unnest(app.kassa_user_cards(u.id)) x
+                                                           where u.role in ('finance_mgr', 'accountant') order by 1) else '{}'::text[] end;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   select * into v_k from public.cash_desks k where k.id = v_desk;
@@ -983,9 +1003,14 @@ begin
     'balance', v_bal,
     'canPost', v_block is null, 'blockReason', v_block,
     'pending', jsonb_build_object(
+      -- sec-1: o'z kartasiga beriladigan pulni boshqa 2-ro'yxat xodimi tasdiqlaydi — bu xodimning navbatida yo'q; 2-ro'yxat xodimiga
+      --   beriladigan pulning 2-ro'yxat bosqichi — Direktor navbatida ham (kassa_doc_approve)
       'toApprove', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'
-                      and ((v_l2 and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid)
-                        or (v_dir and c."needsDirector" and c."dirApprovedBy" is null))),
+                      and ((v_l2 and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid
+                            and not (c."partyType" = 'employee' and c."partyId" = any(v_cards)))
+                        or (v_dir and c."needsDirector" and c."dirApprovedBy" is null)
+                        or (v_dir and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid
+                            and c."partyType" = 'employee' and c."partyId" = any(v_l2cards)))),
       'waiting', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'),
       'toPay', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'approved'),
       'toPaySum', (select coalesce(sum(c.amount), 0) from public.cash_docs c where c.desk = v_desk and c.status = 'approved' and c.form = 'KO2'),
@@ -999,7 +1024,11 @@ begin
     't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang", 'lockedThrough', v_o."lockedThrough",
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
                   where k.desk = v_desk and k.year = extract(year from v_today)::int),
-    'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir),
+    -- kindConfirm — kontragent turini tasdiqlay oladi (buxgalter, Direktor; sec-3); cards — bog'langan xodim kartalari (sec-1: o'ziga beriladigan
+    --   pulni tasdiqlamaydi — sahifa tugmani ko'rsatmaydi, server ham rad etadi); l2Cards — Direktorga: 2-ro'yxat xodimlarining kartalari
+    --   (ularga beriladigan pulning 2-ro'yxat bosqichini Direktor imzolaydi)
+    'me', jsonb_build_object('uid', v_uid, 'operator', v_op, 'list2', v_l2, 'director', v_dir, 'kindConfirm', v_dir or app.is_accountant(),
+                             'cards', to_jsonb(v_cards), 'l2Cards', to_jsonb(v_l2cards)),
     'accRead', app.acc_read(),   -- F1.21: buxgalterning «To‘lovlar» / «Buxgalteriya» bo'limlari (fin-rights.sql «fin_rights_on»)
     'version', app.kassa_version());   -- modul relizi (fin-version.sql): sahifa o'zi kutgani bilan solishtiradi
 end $$;
@@ -1442,7 +1471,8 @@ grant execute on function public.kassa_kpi(text, int) to authenticated;
 --   bekor qilish va qayta ochishlar, tasdiq kutayotgan va berilmagan so'rovlar, eski qaytarishlar, fiskal cheksiz kirimlar, «boshqa»
 --   tomonlar, kech (oflayn) yozuvlar, asl nusxani qayta chiqarish, darvozasiz naqd maosh, KO-4 chop etilmagan kunlar, limit,
 --   moslik (P1/P4/P5/P8), hisobdorlardagi pul (4230) muddati va manfiy qoldiq, xodimlar zimmasidagi kamomad (4730),
---   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas),
+--   rahbar / ta'sischiga berilgan pul (4290 / 4890), onlayn kassa Z-hisoboti (tekshirilmagan kunlarda kiritilmagan / mos emas; kun
+--   yopilgandan keyin o'zgartirilgani — crit-4), kontragent turi o'zgarishlari va tasdiqlanmagan turlar (sec-3),
 --   kassa ishga tushishidan oldingi sanali, keyin kiritilgan naqd yozuvlar (crit-1), kassani to'xtatish va qayta ishga tushirish (§9).
 create or replace function public.kassa_checks(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -1506,10 +1536,26 @@ begin
     'fiscalExempt30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."fiscalExempt" and c.status = 'posted' and c."businessDay" >= v_today - 30),
     'otherParties30', (select count(*) from public.cash_docs c where c.desk = v_desk and c."partyType" = 'other' and c.status = 'posted' and not c."isSystem" and c."businessDay" >= v_today - 30),
     'late30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.late and c.status = 'posted' and c."businessDay" >= v_today - 30),
-    -- yuridik shaxslarga (yetkazib beruvchi / tashkilot) kassadan naqd xarajat (F1.27) — buxgalter ko'rib chiqadi
+    -- yuridik shaxslarga (yetkazib beruvchi / tashkilot; tasdiqlanmagan «jismoniy shaxs» / «boshqa» ham) kassadan naqd xarajat (F1.27) —
+    --   buxgalter ko'rib chiqadi. Hujjatda saqlangan belgi bo'yicha (sec-3: kontragent keyin qayta tasniflansa ham o'tgan to'lov yashirinmaydi;
+    --   belgidan oldingi hujjatlar — kontragentning hozirgi turi bo'yicha)
     'orgCash30', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(c.amount), 0)) from public.cash_docs c
                    where c.desk = v_desk and c.op = 'out_expense' and c.status = 'posted' and c."partyType" = 'counterparty'
-                     and app.kassa_is_org(c."partyId") and c."businessDay" >= v_today - 30),
+                     and coalesce(c."orgCash", app.kassa_is_org(c."partyId")) and c."businessDay" >= v_today - 30),
+    -- kontragent turi o'zgarishlari (sec-3; o'zgarishlar tarixi — change_log): oxirgi 30 kunda turi o'zgargan yoki «jismoniy shaxs» /
+    --   «boshqa» turi bilan qo'shilgan kontragentlar — eski → yangi tur, kim (ism, email emas), qachon, tur hozir tasdiqlanganmi (ma'lumot uchun)
+    'cpKinds30', coalesce((select jsonb_agg(jsonb_build_object('id', l.row_id, 'name', coalesce(c.name, ''), 'from', l.changes -> 'kind' ->> 0, 'to', l.changes -> 'kind' ->> 1,
+                                                               'byName', case when l.actor_uid is not null then app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", l.actor_uid) end,
+                                                               'at', l.at, 'confirmed', coalesce(c."kindConfirmedBy" is not null, false)) order by l.at desc, l.id desc)
+                             from public.change_log l
+                             left join public.fin_counterparties c on c.id = l.row_id
+                             left join public.users u on u.id = l.actor_uid
+                            where l.tbl = 'fin_counterparties' and l.changes ? 'kind' and l.at >= now() - interval '30 days'
+                              and (l.op = 'UPDATE' or (l.op = 'INSERT' and l.changes -> 'kind' ->> 1 in ('person', 'other')))), '[]'::jsonb),
+    -- tasdiqlanmagan «jismoniy shaxs» / «boshqa» kontragentlar (sec-3): tasdiqlanguncha yuridik shaxs hisoblanadi (kassadan naqd to'lovga
+    --   Direktor tasdig'i) — buxgalter yoki Direktor turini tasdiqlaydi (fin-core.sql: fin_counterparty_confirm)
+    'cpUnconfirmed', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'kind', c.kind, 'stir', c.stir) order by c.name, c.id)
+                                 from public.fin_counterparties c where c.active and c.kind in ('person', 'other') and c."kindConfirmedBy" is null), '[]'::jsonb),
     'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
@@ -1527,6 +1573,18 @@ begin
                                                                'diffCash', x.z -> 'diffCash', 'diffCard', x.z -> 'diffCard') order by x.day)
                              from (select d.day, app.kassa_z_state(d.id) as z from public.cash_days d where d.desk = v_desk and d.status = 'closed') x
                             where not coalesce((x.z ->> 'ok')::boolean, true)), '[]'::jsonb) end,
+    -- Z-hisobot kun yopilgandan keyin kiritilgan yoki tuzatilgan kunlar (crit-4; «afterClose» belgili hodisa, kassa_day_z): tekshirilmagan
+    --   kunlar va oxirgi 30 kun — necha marta, oxirgisini kim (ism) va qachon. Kunni o'sha xodim tekshira olmaydi; buxgalter qog'ozdagi Z bilan
+    --   solishtiradi (kassir xatosini tuzatgan bo'lishi ham, farqni yashirgan bo'lishi ham mumkin)
+    'zChanged30', case when v_test then '[]'::jsonb else
+                    coalesce((select jsonb_agg(jsonb_build_object('day', x.day, 'status', x.status, 'n', x.n, 'at', x.at,
+                                                                  'byName', app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", x.by_uid)) order by x.day)
+                                from (select d.day, d.status, count(*) as n, max(e.at) as at, (array_agg(e."byUid" order by e.at desc, e.id desc))[1] as by_uid
+                                        from public.cash_days d
+                                        join public.cash_day_events e on e."dayId" = d.id and e.kind = 'zreport' and e.data ->> 'afterClose' = 'true'
+                                       where d.desk = v_desk and (d.status = 'closed' or d.day >= v_today - 30)
+                                       group by d.id, d.day, d.status) x
+                                left join public.users u on u.id = x.by_uid), '[]'::jsonb) end,
     'limit', jsonb_build_object('cashLimit', coalesce(v_limit, 0), 'set', coalesce(v_limit, 0) > 0, 'balance', v_bal,
                                 'exceeded', coalesce(v_limit, 0) > 0 and v_bal > v_limit,
                                 'days30', case when coalesce(v_limit, 0) > 0 then
@@ -1655,7 +1713,9 @@ begin
     'articles', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'nameUz', a."nameUz", 'nameRu', a."nameRu", 'accountCode', a."accountCode",
                                                               'cashOutAllowed', a."cashOutAllowed", 'needsNote', a."needsNote", 'advReport', app.kassa_adv_article(a)) order by a."sortOrder")
                             from public.fin_articles a where a.active), '[]'::jsonb),
-    'counterparties', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'name', c.name, 'stir', c.stir) order by c.name)
+    -- confirmed — turini buxgalter / Direktor tasdiqlagan; org — yuridik shaxs hisoblanadi (server qoidasi, app.kassa_is_org; sec-3)
+    'counterparties', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'name', c.name, 'stir', c.stir,
+                                                                    'confirmed', c."kindConfirmedBy" is not null, 'org', app.kassa_is_org(c.id)) order by c.name)
                                   from public.fin_counterparties c where c.active), '[]'::jsonb),
     'org', (select to_jsonb(o) from public.fin_org o where o.id = 'main'),
     'desks', coalesce((select jsonb_agg(to_jsonb(k) order by k.id) from public.cash_desks k where k.active), '[]'::jsonb),
