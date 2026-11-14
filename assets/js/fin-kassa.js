@@ -79,6 +79,29 @@ export function outboxRefs(ob) {
   }
   return { refs, count: refs.length, sum: Math.round(refs.reduce((t, r) => t + r.amount, 0) * 100) / 100, old: !!ob && !Array.isArray(ob.refs) && num(ob.count) > 0 };
 }
+// g7v-3: shu kungi qabul qilingan smena topshirishlarida e'lon qilingan, hali kelmagan navbat yozuvlari (kun javobidagi pendingOpen.refs,
+//   kind 'handover'; ochiq kunda boshqasi yo'q) — shu qurilma navbatidagilaridan (own — outboxRefs().refs) tashqari. Server kunni yopish va
+//   smena topshirishda ularni o'zi qo'shadi (app.kassa_pending_merge): oyna ko'rsatadi va farqqa qo'shadi — oldindan ko'rilgan farq server
+//   natijasiga teng. room (berilsa) — qolgan joy: sanalgan − shu qurilma navbati − «Қ» blankalari; server kabi kichigidan boshlab sig'guncha
+//   olinadi, sig'maganlari ayirilmaydi (left / leftSum — soni va summasi; g7b-v1). Sof funksiya (fin-kassa.test.mjs).
+export function handoverRefs(po, own, room) {
+  const skip = new Set((own || []).map(r => String((r && r.ref) || ''))), seen = new Set(), all = [];
+  for (const r of ((po && po.refs) || [])) {
+    const ref = String((r && r.ref) || ''), amount = Math.round(num(r && r.amount) * 100) / 100;
+    if (!r || r.kind !== 'handover' || !ref || !(amount > 0) || skip.has(ref) || seen.has(ref)) continue;
+    seen.add(ref); all.push({ ref, amount });
+  }
+  let refs = all;
+  if (room != null && Number.isFinite(Number(room))) {
+    let rest = Math.round(Number(room) * 100); refs = [];
+    for (const r of all.slice().sort((a, b) => a.amount - b.amount || (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0))) {
+      const c = Math.round(r.amount * 100); if (c > rest) break;   // kichigidan boshlab: keyingilari ham sig'maydi
+      refs.push(r); rest -= c;
+    }
+  }
+  const tot = a => Math.round(a.reduce((t, r) => t + r.amount, 0) * 100) / 100, sum = tot(refs);
+  return { refs, count: refs.length, sum, left: all.length - refs.length, leftSum: Math.round((tot(all) - sum) * 100) / 100 };
+}
 // Server ishlamagan paytdagi «Қ» blankalari (crit-3; server — kassa_day_close paper): soni, summasi va raqamlari birga; hammasi bo'sh — yo'q.
 //   Natija: {paper: {count, sum, nos}} | {err} | {}. Sof funksiya (fin-kassa.test.mjs).
 export function paperRead(cnt, sum, nos) {
@@ -742,10 +765,13 @@ async function openDocForm(form) {
 // ---------------------------------------------------------------- sanash: kunni yopish / smena topshirish
 // state-2: qurilma navbatidagi hali yuborilmagan naqd to'lovlar — oyna ochilganda o'qiladi va kaliti bilan yuboriladi (qo'lda kiritilmaydi:
 //   server o'tib ketganlarini o'zi hisobga olmaydi); crit-3: «Қ» blankalari — alohida qo'lda (faqat kunni yopishda).
-//   opts: paper — «Қ» blankalari maydonlari; late — o'tgan kun yopilmoqda (server ishlamagan kun bo'lishi mumkin — ajratib ko'rsatiladi).
+//   opts: paper — «Қ» blankalari maydonlari; late — o'tgan kun yopilmoqda (server ishlamagan kun bo'lishi mumkin — ajratib ko'rsatiladi);
+//   po — kun javobidagi pendingOpen (g7v-3: smena topshirishda e'lon qilingan, hali kelmagan yozuvlar — server o'zi hisobga oladi,
+//   sanalgan pulga sig'ganicha: oyna farqi ham shunday — countBind).
+//   g7v-2: pul kassaga tegishli emas deb server rad etgan navbat yozuvlari e'lon qilinmaydi — soni bitta qatorda (ob.skipped).
 function countFields(expected, ob, opts) {
   opts = opts || {};
-  const o = outboxRefs(ob);
+  const o = outboxRefs(ob), h = handoverRefs(opts.po, o.refs), sk = num(ob && ob.skipped);
   return `<div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px">Hisobdagi qoldiq: <b>${esc(som(expected))}</b></div>
     ${lbl('Kassadagi pul — SANALGAN summa (so‘m)', `<input id="kc-counted" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}
     <details style="margin-top:8px"><summary class="small" style="cursor:pointer;font-weight:700">Nominallar bo‘yicha sanash</summary>
@@ -753,6 +779,8 @@ function countFields(expected, ob, opts) {
     <div class="small" id="kc-ob" style="margin-top:8px;border-radius:10px;padding:8px 10px;${o.count ? 'background:#FEF3E2;color:#B54708' : 'background:#F2F4F7;color:#475467'}">${o.count
       ? `Shu qurilma navbatida hali yuborilmagan naqd to‘lovlar: <b>${esc(String(o.count))} ta, ${esc(som(o.sum))}</b> — «hali o‘tkazilmagan yozuvlar» sifatida hisobga olinadi (pul kassada bor, hisobda hali yo‘q). Keyin o‘tganda «kech» bo‘lib tushadi va shu kun bilan bog‘lanadi.`
       : 'Shu qurilma navbatida yuborilmagan naqd to‘lov yo‘q.'}${o.old ? ' <b>Sahifani yangilang</b> (Ctrl+Shift+R) — navbat yozuvlari kalitsiz.' : ''}</div>
+    ${h.count ? `<div class="small" id="kc-ho" style="margin-top:6px;border-radius:10px;padding:8px 10px;background:#FEF3E2;color:#B54708">Smena topshirishda e’lon qilingan, hali kelmagan: <b>${esc(String(h.count))} ta, ${esc(som(h.sum))}</b> — boshqa qurilma navbatida (pul kassada bor, hisobda hali yo‘q): tizim o‘zi hisobga oladi (sanalgan pulga sig‘ganicha).</div>` : ''}
+    ${sk ? `<div class="small muted" id="kc-skip" style="margin-top:6px">${esc(String(sk))} ta navbat yozuvi hisobga olinmadi — kassa ishga tushishidan oldingi pul; ⏳ navbatda ko‘ring</div>` : ''}
     ${opts.paper ? paperFields(!!opts.late) : ''}
     <div id="kc-diff" class="small" style="margin-top:8px;font-weight:700"></div>
     ${lbl('Izoh', `<input id="kc-note" type="text" maxlength="300" style="${FLD}">`)}`;
@@ -766,19 +794,23 @@ function paperFields(late) {
     <div class="grid2" style="margin-top:4px">${lbl('Soni', `<input id="kc-qcnt" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}${lbl('Summasi (so‘m)', `<input id="kc-qsum" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}</div>
     ${lbl('Blanka raqamlari', `<input id="kc-qnos" type="text" maxlength="300" placeholder="masalan: Қ-0012, Қ-0013" style="${FLD}">`)}</div>`;
 }
-function countBind(expected, ob) {
+function countBind(expected, ob, po) {
   const counted = $('#kc-counted'); fmtInput(counted); fmtInput($('#kc-qsum'));
   const o = outboxRefs(ob), qsum = () => { const el = $('#kc-qsum'); return el ? num(digits(el.value)) : 0; };
+  // g7b-v1: smena topshirishda e'lon qilingan yozuvlar — server kabi sanalgan pulga sig'ganicha (qolgan joy: sanalgan − navbat − «Қ»)
+  const hand = c => handoverRefs(po, o.refs, c - o.sum - qsum());
   const noms = () => { const o2 = {}; let sum = 0, any = false; $('#modal').querySelectorAll('[data-nom]').forEach(el => { const c = num(digits(el.value)); if (c > 0) { o2[el.dataset.nom] = c; sum += c * Number(el.dataset.nom); any = true; } }); return { o: o2, sum, any }; };
-  const upd = () => { const c = num(digits(counted.value)), d = c - expected - o.sum - qsum(); const el = $('#kc-diff');
+  // farq — server bilan bir xil: sanalgan − hisobdagi − qurilma navbati − smena topshirishda e'lon qilingan, hali kelmagan (g7v-3) − «Қ» blankalari
+  const upd = () => { const c = num(digits(counted.value)), h = hand(c), d = c - expected - o.sum - h.sum - qsum(); const el = $('#kc-diff');
     if (!digits(counted.value)) { el.textContent = ''; return; }
     el.style.color = d === 0 ? '#157347' : (d < 0 ? '#B42318' : '#B54708');
-    el.textContent = d === 0 ? 'Farq yo‘q ✓' : (d < 0 ? `KAMOMAD: ${som(-d)} — shu kun sanasi bilan chiqim hujjati yoziladi (qaror — Direktor)` : `ORTIQCHA: ${som(d)} — shu kun sanasi bilan kirim hujjati yoziladi`); };
+    el.textContent = (d === 0 ? 'Farq yo‘q ✓' : (d < 0 ? `KAMOMAD: ${som(-d)} — shu kun sanasi bilan chiqim hujjati yoziladi (qaror — Direktor)` : `ORTIQCHA: ${som(d)} — shu kun sanasi bilan kirim hujjati yoziladi`))
+      + (h.left ? ` · smena yozuvlaridan ${h.left} tasi (${som(h.leftSum)}) sanalgan pulga sig‘madi — ayirilmaydi` : ''); };
   $('#modal').querySelectorAll('[data-nom]').forEach(el => el.addEventListener('input', () => { el.value = digits(el.value); const n = noms(); if (n.any) counted.value = String(n.sum).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); upd(); }));
   counted.addEventListener('input', upd); const qs = $('#kc-qsum'); if (qs) qs.addEventListener('input', upd);
-  return () => { const n = noms(), c = num(digits(counted.value)), q = $('#kc-qcnt') ? paperRead($('#kc-qcnt').value, $('#kc-qsum').value, $('#kc-qnos').value) : {};
+  return () => { const n = noms(), c = num(digits(counted.value)), h = hand(c), q = $('#kc-qcnt') ? paperRead($('#kc-qcnt').value, $('#kc-qsum').value, $('#kc-qnos').value) : {};
     return { counted: digits(counted.value) === '' ? null : c, denoms: n.any && n.sum === c ? n.o : null, pendingRefs: o.refs, pending: o.sum, pendingCount: o.count,
-             paper: q.paper || null, paperErr: q.err || '', note: $('#kc-note').value.trim() }; };
+             handSum: h.sum, handCount: h.count, handLeft: h.left, handLeftSum: h.leftSum, paper: q.paper || null, paperErr: q.err || '', note: $('#kc-note').value.trim() }; };
 }
 // ---- onlayn kassa (NKM) Z-hisoboti (F1.26): Z dagi SOTUV jamlari yoziladi; tizim fiskal chekli kirim orderlari va terminal
 //   to'lovlari bilan solishtiradi (kutilgan summa oldindan ko'rsatilmaydi — kassir Z dagi raqamni yozadi).
@@ -847,11 +879,11 @@ async function openCloseForm() {
   const needC = needCommission(od, m);
   const instead = needC && od.cashierUid ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">Kassa egasi — ${esc(od.cashierName || nameOf(od.cashierUid))}. Uning o‘rniga yopilmoqda: komissiya (kamida 2 kishi) dalolatnomani imzolaydi; kamomad bo‘lsa, javobgarni Direktor tanlaydi.</div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni yopish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b">${countFields(num(od.balance), ob, { paper: true, late })}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
+    <div class="modal-b">${countFields(num(od.balance), ob, { paper: true, late, po: od.pendingOpen })}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
       <div class="small muted" style="margin-top:8px">Yopilgach bu kunga hujjat yozilmaydi (faqat Direktor qayta ochadi). Kassa kitobi varag‘ini 2 nusxada chop eting va imzolang.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kc-save">Sanab yopish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance), ob), zRead = zBind();
+  const read = countBind(num(od.balance), ob, od.pendingOpen), zRead = zBind();
   $('#kc-save').onclick = async () => {
     const v = read(); if (v.counted == null) { C.toast('Sanalgan summani kiriting (0 bo‘lsa — 0)', true); return; }
     if (v.paperErr) { C.toast(v.paperErr, true); return; }
@@ -863,8 +895,8 @@ async function openCloseForm() {
     const zr = zRead(); if (zr.err) { C.toast(zr.err, true); return; }
     if (zr.z) p.z = zr.z;
     else if (!isTest && oz.needed && !confirm('Onlayn kassa Z-hisoboti kiritilmadi.\n\nKun yopiladi, lekin nazorat ro‘yxatida ko‘rinadi va kunni tekshirishda izoh talab qilinadi. Z-hisobotni keyin «Z» tugmasi bilan kiritish mumkin.\n\nDavom etilsinmi?')) return;
-    const qs = v.paper ? v.paper.sum : 0, d = v.counted - num(od.balance) - v.pending - qs;
-    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pending ? `\nQurilma navbatida (hali o‘tkazilmagan): ${som(v.pending)} (${v.pendingCount} ta)` : ''}${qs ? `\n«Қ» blankalari: ${som(qs)} (${v.paper.count} ta, № ${v.paper.nos})` : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}`)) return;
+    const qs = v.paper ? v.paper.sum : 0, d = v.counted - num(od.balance) - v.pending - v.handSum - qs;   // g7v-3: server ham shunday hisoblaydi
+    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pending ? `\nQurilma navbatida (hali o‘tkazilmagan): ${som(v.pending)} (${v.pendingCount} ta)` : ''}${v.handSum ? `\nSmena topshirishda e’lon qilingan, hali kelmagan: ${som(v.handSum)} (${v.handCount} ta)` : ''}${v.handLeft ? `\nSanalgan pulga sig‘magan smena yozuvlari (ayirilmaydi): ${som(v.handLeftSum)} (${v.handLeft} ta)` : ''}${qs ? `\n«Қ» blankalari: ${som(qs)} (${v.paper.count} ta, № ${v.paper.nos})` : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}`)) return;
     $('#kc-save').disabled = true;
     await act('kassa_day_close', { p }, r => 'Kun yopildi: ' + countResultText(r), r => { zToast(r && r.day && r.day.z); if (confirm('Kassa kitobi varag‘i (KO-4) chop etilsinmi?')) printBook(od.day); },
       staleReopen(openCloseForm));
@@ -883,10 +915,10 @@ async function openHandoverForm() {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Smena topshirish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">${lbl('Qabul qiluvchi kassir', `<select id="kh-to" style="${FLD}"><option value="">— tanlang —</option>${opsL.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}${o.uid === m.uid ? ' (o‘zim)' : ''}</option>`).join('')}</select>`, ';margin-top:0')}
       ${needC ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">${holder ? `Kassa egasi — ${esc(od.cashierName || nameOf(holder))}. ` : ''}Siz kassir o‘rniga topshiryapsiz: komissiya (kamida 2 kishi) bilan.</div>` : ''}
-      ${countFields(num(od.balance), ob)}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
+      ${countFields(num(od.balance), ob, { po: od.pendingOpen })}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kh-save">Topshirish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance), ob);
+  const read = countBind(num(od.balance), ob, od.pendingOpen);
   $('#kh-save').onclick = async () => { const v = read(), to = $('#kh-to').value;
     if (!to) { C.toast('Qabul qiluvchi kassirni tanlang', true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting', true); return; }
@@ -900,9 +932,10 @@ async function openHandoverForm() {
 function acceptHandover(id) {
   const h = ST.ov.state.handover; if (!h || h.id !== id) return;
   const d0 = num(h.diff), hn = u => (u && h.names && h.names[u]) || nameOf(u);
-  // state-2: topshiruvchi qurilmasi navbatidagi hali o'tkazilmagan yozuvlar (topshirishda saqlangan) — dalolatnomaga o'zgarmay o'tadi
+  // state-2: topshirishda saqlangan hali o'tkazilmagan navbat yozuvlari (topshiruvchi qurilmasidan; g7v-3: shu kungi oldingi smena
+  //   topshirishlaridan qolganlari ham — shuning uchun qaysi qurilmada ekani aytilmaydi) — dalolatnomaga o'zgarmay o'tadi
   const np = (h.pendingRefs || []).length;
-  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan: ' + som(h.pendingSum) + (np ? ` (topshiruvchi qurilmasi navbatida ${np} ta)` : '') : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
+  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan navbat yozuvlari: ' + som(h.pendingSum) + (np ? ` (${np} ta)` : '') : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
   act('kassa_handover_accept', { p_id: id }, 'Smena qabul qilindi', async r => {
     if (!(r && r.count && r.count.id) || !confirm('Smena topshirish-qabul dalolatnomasi chop etilsinmi?')) return;
     try { const book = await call('kassa_day_book', { p_desk: ST.desk, p_day: r.count.day }); await printCount(book, r.count.id); } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText } from './fin-kassa.js';
+  pendingText, handoverRefs } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -437,7 +437,7 @@ test('kassani to‘xtatish (state-2, crit-3): oxirgi kun kech kirim orderi hali 
 // admin.html qurilma navbati (to'lov outbox'i) — OUTBOX-CLASS bloki (sof funksiyalar) faylning o'zidan olinadi
 const ADM = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8');
 const obBlock = (() => { const a = ADM.indexOf('// OUTBOX-CLASS:BEGIN'), b = ADM.indexOf('// OUTBOX-CLASS:END'); return a >= 0 && b > a ? ADM.slice(a, b) : ''; })();
-const OB = (() => { const ctx = vm.createContext({}); vm.runInContext(obBlock + '\n;this.__ob = { obErrClass, obWaitMs, obItemState, obApplyErr, obResendAll, OB_WAIT };', ctx); return ctx.__ob; })();
+const OB = (() => { const ctx = vm.createContext({}); vm.runInContext(obBlock + '\n;this.__ob = { obErrClass, obWaitMs, obItemState, obApplyErr, obResendAll, OB_WAIT, obDeclarable, obDue };', ctx); return ctx.__ob; })();
 
 test('qurilma navbati (admin.html): rad etish turlari — kassa holatini kutish, Direktor hal qiladi, qattiq, qayta urinish', () => {
   assert.ok(obBlock.length > 0 && (ADM.match(/OUTBOX-CLASS:BEGIN/g) || []).length === 1, 'blok bitta');
@@ -459,7 +459,7 @@ test('qurilma navbati (admin.html): kassani kutayotgan yozuv «Yuborilmadi» bo�
   const x = { payId: 'man_1_a', amount: 5000 };
   for (let i = 0; i < 10; i++) OB.obApplyErr(x, { hint: 'kassa:day_closed', code: 'P0001', message: 'Bugungi kassa kuni yopilgan' }, 1000);
   assert.deepEqual([x.status, x.attempts, x.waits, x.waitUntil, OB.obItemState(x)], [undefined, undefined, 10, 1000 + 600000, 'wait'], 'urinishlar soniga kirmaydi');
-  assert.equal(x.waitWhy, 'Bugungi kassa kuni yopilgan — ertaga yangi kunga «kech» bo‘lib o‘tadi');
+  assert.equal(x.waitWhy, 'Bugungi kassa kuni yopilgan — keyingi kassa kunida, sahifa ishlatilayotganda «kech» bo‘lib o‘tadi');   // g7v-4
   const y = OB.obApplyErr({ payId: 'man_1_b' }, { hint: 'kassa:paused_live_day', code: '42501', message: 'To‘lov sanasi … qayta yubormang — Direktor hal qiladi' }, 0);
   assert.deepEqual([y.status, y.final, y.attempts, OB.obItemState(y)], ['failed', true, 3, 'final']);
   const z = OB.obApplyErr({ payId: 'man_1_c' }, { code: 'P0001', message: 'boshqa' }, 0);
@@ -476,4 +476,82 @@ test('qurilma navbati (admin.html): kassani kutayotgan yozuv «Yuborilmadi» bo�
   assert.deepEqual([out[2].waitUntil, out[2].waits, OB.obItemState(out[2])], [undefined, 10, 'wait']);
   assert.equal(x.waitUntil, 1000 + 600000, 'asl ro‘yxat o‘zgarmaydi');
   assert.equal(JSON.stringify(out[3]), '{"payId":"man_1_e"}');   // (vm konteksti — boshqa «realm», shuning uchun JSON bilan)
+});
+
+// ---------------------------------------------------------------- ko'rik 7b-guruhi (g7v-2, g7v-3, g7v-4)
+test('qurilma navbati (admin.html, g7v-2): kunni yopishda e’lon qilinadigan yozuvlar — pul kassaga tegishli emas deb rad etilgani yo‘q, qolgan naqd yozuvlar — bor', () => {
+  const E = (hint, code) => ({ hint, code: code || 'P0001', message: 'x' });
+  const failed = (hint, code) => OB.obApplyErr({ payId: 'man_1_' + hint.replace(/\W/g, ''), method: 'cash', amount: 1000 }, E(hint, code), 0);
+  for (const [h, c] of [['kassa:pre_live', '42501'], ['kassa:pre_live_old', '22023'], ['fin:locked', '42501']]) {
+    const x = failed(h, c);
+    assert.deepEqual([x.status, x.lastHint, OB.obDeclarable(x)], ['failed', h, false], h);
+  }
+  const ll = { payId: 'man_1_ll', method: 'cash', amount: 2000 };   // 48 soatdan eski — 3 urinishdan keyin «Yuborilmadi», pul kassada
+  for (let i = 0; i < 3; i++) OB.obApplyErr(ll, E('kassa:late_limit'), 0);
+  assert.deepEqual([ll.status, ll.lastHint, OB.obDeclarable(ll)], ['failed', 'kassa:late_limit', true]);
+  assert.equal(OB.obDeclarable(failed('kassa:fiscal', '22023')), true, 'noto‘g‘ri ma’lumot — pul kassada');
+  assert.equal(OB.obDeclarable({ payId: 'man_1_p', method: 'cash', amount: 5 }), true, 'navbatda');
+  const w = OB.obApplyErr({ payId: 'man_1_w', method: 'cash', amount: 5 }, E('kassa:day_closed'), 0);
+  assert.deepEqual([OB.obItemState(w), w.lastHint, OB.obDeclarable(w)], ['wait', 'kassa:day_closed', true], 'kassani kutayotgan');
+  const f = OB.obApplyErr({ payId: 'man_1_f', method: 'cash', amount: 5 }, E('kassa:paused_live_day', '42501'), 0);
+  assert.deepEqual([OB.obItemState(f), OB.obDeclarable(f)], ['final', false], 'Direktor hal qiladi');
+  assert.equal(OB.obDeclarable({ payId: 'man_1_b', method: 'bank', amount: 5 }), false, 'naqd emas');
+  assert.equal(OB.obDeclarable(null), false);
+  // «Hammasini qayta yuborish» — yozuv yana navbatda (HINT tozalanadi): server yana rad etguncha e'lon qilinadi
+  const r = OB.obResendAll([failed('kassa:pre_live', '42501')])[0];
+  assert.deepEqual([r.status, r.lastHint, OB.obDeclarable(r)], [undefined, undefined, true]);
+  // HINTsiz xato (kassasiz server) — eski HINT qolmaydi
+  assert.equal(OB.obApplyErr({ payId: 'man_1_n', method: 'cash', lastHint: 'kassa:pre_live' }, { code: 'P0001', message: 'x' }, 0).lastHint, undefined);
+});
+
+test('qurilma navbati (admin.html, g7v-4): keyingi kassa kunini kutayotgan yozuv faqat sahifa ishlatilayotganda yuboriladi; majburiy — darhol', () => {
+  const E = hint => ({ hint, code: 'P0001', message: 'x' });
+  const now = 10 * 3600e3, min = 60e3;
+  const nextDay = hint => OB.obApplyErr({ payId: 'man_1_' + hint.slice(6), method: 'cash' }, E(hint), now - 20 * min);   // kutish vaqti o'tgan
+  const dc = nextDay('kassa:day_closed');
+  assert.deepEqual([dc.waitHint, dc.waitUntil < now], ['kassa:day_closed', true]);
+  assert.equal(OB.obDue(dc, now, now - 31 * min, false), false, 'sahifa 31 daqiqa ishlatilmagan — yo‘q (kassa kuni o‘zi ochilmasin)');
+  assert.equal(OB.obDue(dc, now, now - 30 * min, false), true, '30 daqiqa ichida ishlatilgan — ha');
+  assert.equal(OB.obDue(dc, now, now - 5 * min, false), true);
+  assert.equal(OB.obDue(dc, now, 0, true), true, 'majburiy (kunni yopish / smena oynasi) — ha');
+  assert.equal(OB.obDue(nextDay('kassa:not_started'), now, now - 2 * 3600e3, false), false, 'kassa hali ochilmagan — ham');
+  // kutish vaqti kelmagan — yo'q (sahifa ishlatilayotgan bo'lsa ham); majburiy — ha
+  const soon = OB.obApplyErr({ payId: 'man_1_s' }, E('kassa:day_closed'), now);
+  assert.deepEqual([OB.obDue(soon, now + 5e3, now + 5e3, false), OB.obDue(soon, now + 5e3, 0, true)], [false, true]);
+  // kecha yopilmagan (odam harakati bilan o'zgaradi) — kutish vaqti o'tgach, sahifa ishlatilmasa ham
+  const po = OB.obApplyErr({ payId: 'man_1_po' }, E('kassa:prev_open'), now);   // kutish 30 s
+  assert.deepEqual([po.waitHint, OB.obDue(po, now + 10e3, now + 10e3, false), OB.obDue(po, now + 31e3, 0, false)], ['kassa:prev_open', false, true]);
+  assert.equal(OB.obDue({ payId: 'man_1_x' }, now, 0, false), true, 'oddiy navbat yozuvi — har doim');
+  const z = OB.obApplyErr(nextDay('kassa:day_closed'), { code: 'P0001', message: 'boshqa' }, now);
+  assert.deepEqual([z.waitHint, OB.obDue(z, now, 0, false)], [undefined, true], 'boshqa xatoga o‘tgach — keyingi kun belgisi tozalanadi');
+  // «Hammasini qayta yuborish»: kutish vaqti yo'q, keyingi kun belgisi qoladi — bosish sahifani ishlatish (admin.html obRetryFailed)
+  const rs = OB.obResendAll([soon])[0];
+  assert.deepEqual([rs.waitUntil, rs.waitHint, OB.obDue(rs, now + 5e3, now + 5e3, false), OB.obDue(rs, now + 5e3, now - 40 * min, false)], [undefined, 'kassa:day_closed', true, false]);
+  assert.equal(OB.OB_WAIT['kassa:not_started'], 'Kassa hali ochilmagan — kassa ishga tushgach, sahifa ishlatilayotganda o‘tadi');
+});
+
+test('kunni yopish / smena (g7v-3): smena topshirishda e’lon qilingan, hali kelmagan yozuvlar — shu qurilma navbatidagilaridan tashqari (server ham shunday qo‘shadi)', () => {
+  const po = { n: 3, sum: 47000, refs: [{ ref: 'man_1_a', amount: 20000, kind: 'handover' }, { ref: 'man_1_b', amount: 15000, kind: 'handover' },
+    { ref: 'man_1_c', amount: 12000, kind: 'close' }, { ref: 'man_1_a', amount: 20000, kind: 'handover' }, { ref: '', amount: 5, kind: 'handover' },
+    { ref: 'man_1_d', amount: 0, kind: 'handover' }] };
+  assert.deepEqual(handoverRefs(po, []), { refs: [{ ref: 'man_1_a', amount: 20000 }, { ref: 'man_1_b', amount: 15000 }], count: 2, sum: 35000, left: 0, leftSum: 0 });
+  const own = outboxRefs({ count: 1, sum: 15000, refs: [{ ref: 'man_1_b', amount: 15000 }] }).refs;
+  assert.deepEqual(handoverRefs(po, own), { refs: [{ ref: 'man_1_a', amount: 20000 }], count: 1, sum: 20000, left: 0, leftSum: 0 }, 'qurilma navbatida ham bor — bir marta');
+  assert.deepEqual(handoverRefs(null, own), { refs: [], count: 0, sum: 0, left: 0, leftSum: 0 });
+  assert.deepEqual(handoverRefs({ n: 0, refs: [] }, null), { refs: [], count: 0, sum: 0, left: 0, leftSum: 0 });
+});
+
+test('kunni yopish / smena (g7b-v1): smena yozuvlari sanalgan pulga sig‘ganicha — kichigidan boshlab (server — app.kassa_pending_merge), sig‘magani ayirilmaydi', () => {
+  const R = (ref, amount) => ({ ref, amount });
+  // eski kalit (to'lov yangi kalit bilan qayta kiritilgan, pul bankka topshirilgan): kassada 140 000 = hisobdagi 100 000 + hali kelmagan 40 000
+  const h = handoverRefs({ refs: [{ ref: 'man_1_g', amount: 2000000, kind: 'handover' }, { ref: 'man_1_r', amount: 40000, kind: 'handover' }] }, [], 140000);
+  assert.deepEqual(h, { refs: [R('man_1_r', 40000)], count: 1, sum: 40000, left: 1, leftSum: 2000000 });
+  assert.equal(140000 - 100000 - 0 - h.sum - 0, 0, 'oyna farqi (sanalgan − hisobdagi − navbat − smena yozuvlari − «Қ») = 0, server kabi');
+  const po = { refs: [{ ref: 'man_1_g', amount: 2000000, kind: 'handover' }, { ref: 'man_1_s', amount: 40000, kind: 'handover' }, { ref: 'man_1_r', amount: 40000, kind: 'handover' }] };
+  assert.deepEqual(handoverRefs(po, [], 80000), { refs: [R('man_1_r', 40000), R('man_1_s', 40000)], count: 2, sum: 80000, left: 1, leftSum: 2000000 }, 'teng summa — sig‘adi');
+  assert.deepEqual(handoverRefs(po, [], 79999), { refs: [R('man_1_r', 40000)], count: 1, sum: 40000, left: 2, leftSum: 2040000 }, 'teng summalar — kaliti bo‘yicha');
+  assert.deepEqual([handoverRefs(po, [], 0).count, handoverRefs(po, [], -5).count, handoverRefs(po, [], -5).leftSum], [0, 0, 2080000], 'joy yo‘q (navbat va «Қ» sanalgandan ko‘p)');
+  assert.deepEqual(handoverRefs(po, [], 2080000).count, 3);
+  assert.deepEqual(handoverRefs(po, [R('man_1_r', 40000)], 50000).refs, [R('man_1_s', 40000)], 'shu qurilma navbatidagisi — chiqarib tashlanadi');
+  assert.deepEqual(handoverRefs(po, [], null).refs.map(r => r.ref), ['man_1_g', 'man_1_s', 'man_1_r'], 'joy berilmagan (oyna ochilganda) — hammasi, asl tartibda');
 });

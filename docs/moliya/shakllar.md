@@ -167,6 +167,7 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 14 | Internet uzilganda to‘lov navbatga tushdi, keyin o‘zi o‘tdi | ☐ | |
 | 14a | Navbatda to‘lov turganida kun yopildi: u oynada «hali o‘tkazilmagan» bo‘lib hisobga olindi (farq yo‘q); keyingi kuni «kech» bo‘lib o‘tdi | ☐ | |
 | 14b | Server ishlamagan kun ertasi kuni «Қ» blankalari bilan yopildi (farq yo‘q); «Қ» yozuvlari kiritildi; kun izoh bilan tekshirildi | ☐ | |
+| 14c | Smena navbatdagi yozuv bilan topshirildi; qabul qiluvchi kunni boshqa qurilmadan yopdi — oynada «Smena topshirishda e’lon qilingan, hali kelmagan» qatori, farq yo‘q; yozuv keyingi kuni «kech» kelib bog‘landi | ☐ | |
 | 15 | Buxgalter: «To‘lovlar» va «Buxgalteriya» — oy ma’lumoti ko‘rinadi, yozish tugmalari yo‘q, telefon va to‘lovchi matni ko‘rinmaydi | ☐ | |
 | 16 | Buxgalter: oylik vedomost (holati, qatorlar) — faqat ko‘rish; A4 oylik hisobot — ismsiz (o‘quvchi va xodim ID bilan) | ☐ | |
 

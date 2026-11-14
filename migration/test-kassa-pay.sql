@@ -991,6 +991,271 @@ rollback to savepoint q22;
 select zz.chk('Q22 crit-3: oxirgi kun hali kiritilmagan «Қ» blankalari bilan yopilgan — kassa to''xtatilmaydi (kassa:rollback_pending: soni, summasi; avval «Қ» yozuvlari); kun qayta ochilganda tarkib bo''shatiladi', :'q22',
   '^ERR P0001 \[kassa:rollback_pending\] Kassani to''xtatib bo''lmaydi: oxirgi kassa kuni \(07\.04\.2027\) server ishlamagan paytdagi hali kiritilmagan «Қ» blankalari \(2 ta, 9000 so''m\).* \| open:0:0:0::\[\]$');
 
+-- ---------- g7b: kech chekning Z-hisobot kuni (g7v-1); smena topshirishda e'lon qilingan yozuvlar qabul qiluvchining yopishida (g7v-3) ----------
+--   Avval: kech fiskal kirim orderi doim pul olingan kunning Z-hisobotida kutilardi — kun yopilgandan keyin olingan pul cheki NKM ning keyingi
+--   smenasida (keyingi kunning Z ida) bo'lsa ham: olingan kunda «−», order kunida «+» Z farqi (ikkala kunga izoh); olingan kuni kassa kuni
+--   ochilmagan bo'lsa (yakshanba) — chek hech bir kunda kutilmasdi. Smena topshirishda e'lon qilingan navbat yozuvi bilan qabul qilingan
+--   kunni qabul qiluvchi navbatida bu yozuv bo'lmagan qurilmadan yopsa — soxta ortiqcha, yozuv kelgan kuni esa xuddi shuncha soxta kamomad.
+--   Yangi kunlar 08.04–29.04.2027 (06.04 yopilgan, tekshirilmagan; 07.04 — savepoint bilan qaytarilgan; GV — 21.04–26.04; Z5 — 27.04–29.04).
+select zz.clock('2027-04-08 08:00+05');
+select zz.chk('Z0 g7v-5: «Қ» yozuvlari kiritilgan kun (06.04, kech emas) — Z farqi −700 000 (fiskal cheklar 05.04 Z ida); izohsiz tekshirilmaydi (kassa:z_note), izohda «Қ» raqami bilan — tekshirildi',
+  zz.zst('2027-04-06') || ' | ' || zz.kv('U_FM', '2027-04-06', null)
+  || ' | ' || (zz.js(zz.kv('U_FM', '2027-04-06', '«Қ-0012»: chek 05.04 da urilgan (05.04 Z da), yozuv 06.04 da kiritildi')) -> 'day' ->> 'status'),
+  '^700000:1:-700000:false \| ERR 22023 \[kassa:z_note\] Onlayn kassa Z-hisoboti tizimdagi summalar bilan mos emas.* \| verified$');
+-- Z1 (g7 tekshiruvchisi, s9): 08.04 18:00 da Z (100 000) chiqarildi va kun yopildi; 18:30 da qurilma (oflayn) 30 000 oldi — chek NKM ning
+--   keyingi smenasida; navbat yozuvi kassa:day_closed bilan kutdi va ertasi kuni «kech» o'tdi
+select zz.clock('2027-04-08 10:00+05');
+select left(zz.pay('U_KAS2', 'man_z1_0001', 'T-9', 100000, 'cash', '', null, '{"fiscalNo":"F-Z11"}'), 0);
+select zz.clock('2027-04-08 18:00+05');
+select zz.put('Z1c', zz.kc('U_KAS2', format('{"day":"2027-04-08","counted":%s,"expected":%s,"z":{"no":"Z-0408","cash":100000,"card":0}}', zz.kbal(), zz.kbal())));
+select zz.clock('2027-04-08 18:30+05');
+select zz.put('Z1a', zz.pay('U_KAS2', 'man_z1_0002', 'T-9', 30000, 'cash', '', '2027-04-08 18:30+05', '{"fiscalNo":"F-Z12"}'));
+select zz.clock('2027-04-09 09:00+05');
+select zz.put('Z1b', zz.pay('U_KAS2', 'man_z1_0002', 'T-9', 30000, 'cash', '', '2027-04-08 18:30+05', '{"fiscalNo":"F-Z12"}'));
+select zz.clock('2027-04-09 10:00+05');
+select left(zz.pay('U_KAS2', 'man_z1_0003', 'T-9', 20000, 'cash', '', null, '{"fiscalNo":"F-Z13"}'), 0);
+select zz.clock('2027-04-09 18:00+05');
+select zz.put('Z1d', zz.kc('U_KAS2', format('{"day":"2027-04-09","counted":%s,"expected":%s,"z":{"no":"Z-0409","cash":50000,"card":0}}', zz.kbal(), zz.kbal())));
+select zz.chk('Z1 g7v-1: kun yopilgandan keyin (18:30) olingan pul cheki — keyingi kun Z ida: 08.04 Z (100 000) mos, kech order (09.04) — 09.04 Z ida (30 000 + 20 000), mos; nazorat ro''yxatida Z farqi yo''q; yopilish payti — moliya soati bo''yicha (18:00)',
+  (zz.js(zz.get('Z1c')) ->> 'diff') || ':' || (select ("closedAt" = '2027-04-08 18:00+05')::text from public.cash_days where day = '2027-04-08')
+  || ' | ' || zz.get('Z1a') || ' | ' || coalesce((zz.js(zz.get('Z1b')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('Z1b')) #>> '{kassa,late}'), zz.get('Z1b'))
+  || ' | ' || (zz.js(zz.get('Z1d')) ->> 'diff') || ' | ' || zz.zst('2027-04-08') || ' / ' || zz.zst('2027-04-09')
+  || ' | ' || (zz.js(zz.as('U_FM', $q$select public.kassa_checks('main')::text$q$)) -> 'zreport')::text,
+  '^0:true \| ERR P0001 \[kassa:day_closed\].* \| 2027-04-09:true \| 0 \| 100000:1:0:true / 50000:2:0:true \| \[\]$');
+-- Z2: yakshanba (11.04) — kassa kuni ochilmagan; qurilma 12:00 da 40 000 oldi (oflayn), dushanba 09:00 da yubordi
+select zz.clock('2027-04-12 09:00+05');
+select zz.put('Z2a', zz.pay('U_KAS2', 'man_z2_0001', 'T-9', 40000, 'cash', '', '2027-04-11 12:00+05', '{"fiscalNo":"F-Z21"}'));
+select zz.clock('2027-04-12 10:00+05');
+select left(zz.pay('U_KAS2', 'man_z2_0002', 'T-9', 5000, 'cash', '', null, '{"fiscalNo":"F-Z22"}'), 0);
+select zz.clock('2027-04-12 18:00+05');
+select zz.put('Z2c', zz.kc('U_KAS2', format('{"day":"2027-04-12","counted":%s,"expected":%s,"z":{"no":"Z-0412","cash":45000,"card":0}}', zz.kbal(), zz.kbal())));
+select zz.chk('Z2 g7v-1: kassa kuni bo''lmagan kunda (yakshanba) olingan pul cheki — order kunida (12.04, «kech») kutiladi: Z (40 000 + 5 000) mos (avval bu chek hech bir kunda kutilmasdi)',
+  coalesce((zz.js(zz.get('Z2a')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('Z2a')) #>> '{kassa,late}'), zz.get('Z2a'))
+  || ' | ' || (zz.js(zz.get('Z2c')) ->> 'diff') || ' | ' || zz.zst('2027-04-12')
+  || ' | ' || app.kassa_z_day('main', '2027-04-12', true, '2027-04-11 12:00+05')::text,
+  '^2027-04-12:true \| 0 \| 45000:2:0:true \| 2027-04-12$');
+-- Z3: 13.04 18:00 da yopildi (Z 10 000); 18:30 da qurilma B 25 000 oldi (oflayn); 14.04 qurilma B navbatidagi yozuv e'lon qilinib yopildi
+--   (Z: 25 000 + 15 000); qurilma B 15.04 ertalab internetga ulandi — kech order 15.04 ga; 15.04 ni kassir ertasi ertalab yopdi
+select zz.clock('2027-04-13 10:00+05');
+select left(zz.pay('U_KAS2', 'man_z3_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-Z31"}'), 0);
+select zz.clock('2027-04-13 18:00+05');
+select zz.put('Z3c', zz.kc('U_KAS2', format('{"day":"2027-04-13","counted":%s,"expected":%s,"z":{"no":"Z-0413","cash":10000,"card":0}}', zz.kbal(), zz.kbal())));
+select zz.clock('2027-04-14 10:00+05');
+select left(zz.pay('U_KAS2', 'man_z3_0003', 'T-9', 15000, 'cash', '', null, '{"fiscalNo":"F-Z33"}'), 0);
+select zz.clock('2027-04-14 18:00+05');
+select zz.put('Z3k', (zz.kbal() + 25000)::text);   -- kassadagi pul (sanalgan): hisobdagi + qurilma B navbatidagi 25 000
+select zz.put('Z3d', zz.kc('U_KAS2', format('{"day":"2027-04-14","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_z3_0002","amount":25000}],"z":{"no":"Z-0414","cash":40000,"card":0}}',
+                                          zz.get('Z3k'), zz.kbal())));
+select zz.clock('2027-04-15 09:00+05');
+select zz.put('Z3a', zz.pay('U_KAS2', 'man_z3_0002', 'T-9', 25000, 'cash', '', '2027-04-13 18:30+05', '{"fiscalNo":"F-Z32"}'));
+select zz.clock('2027-04-16 08:30+05');
+select zz.put('Z3e', zz.kc('U_KAS2', format('{"day":"2027-04-15","counted":%s,"expected":%s,"z":{"no":"Z-0415","cash":0,"card":0}}', zz.get('Z3k'), zz.kbal())));
+select zz.chk('Z3 g7v-1: olingan kun (13.04) yopilgandan keyin olingan, keyingi kun (14.04) yopilgan, order 15.04 da — chek pul olingandan keyin yopilgan birinchi kun (14.04) Z ida: 13.04, 14.04, 15.04 Z mos; kunlar farqsiz, 14.04 yozuvi bog''landi',
+  (zz.js(zz.get('Z3c')) ->> 'diff') || ':' || (zz.js(zz.get('Z3d')) ->> 'diff') || ':' || (zz.js(zz.get('Z3e')) ->> 'diff')
+  || ' | ' || coalesce((zz.js(zz.get('Z3a')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('Z3a')) #>> '{kassa,late}'), zz.get('Z3a'))
+  || ' | ' || app.kassa_z_day('main', '2027-04-15', true, '2027-04-13 18:30+05')::text || ':' || app.kassa_z_day('main', '2027-04-15', true, '2027-04-13 17:30+05')::text
+  || ':' || app.kassa_z_day('main', '2027-04-15', false, '2027-04-13 18:30+05')::text
+  || ' | ' || zz.zst('2027-04-13') || ' / ' || zz.zst('2027-04-14') || ' / ' || zz.zst('2027-04-15') || ' | ' || zz.kpend('2027-04-14'),
+  '^0:0:0 \| 2027-04-15:true \| 2027-04-14:2027-04-13:2027-04-15 \| 10000:1:0:true / 40000:2:0:true / 0:0:0:true \| 0:0:0$');
+select zz.chk('Z4 kunlar izohsiz tekshirildi (Z mos, hali kelmagan yozuv yo''q); RP-22: yopilish payti moliya soati bo''yicha — 15.04 ertasi ertalab yopilgan, «o''sha kuni yopilgan» 3 / 4',
+  (select string_agg(coalesce(zz.js(zz.kv('U_FM', d, null)) -> 'day' ->> 'status', left(zz.kv('U_FM', d, null), 80)), ',' order by d)
+     from unnest(array['2027-04-08', '2027-04-09', '2027-04-12', '2027-04-13', '2027-04-14', '2027-04-15']) d)
+  || ' | ' || (select (k ->> 'closed') || ':' || (k ->> 'onTime') from (select app.kassa_week_kpi('main', '2027-04-12', '2027-04-18') k) q),
+  '^verified,verified,verified,verified,verified,verified \| 4:3$');
+-- H1 (g7 tekshiruvchisi, s8 H2–H6): 16.04 U_KAS kassa egasi; 12:00 smenani U_KAS2 ga topshirdi — qurilmasi navbatidagi 20 000 (11:00 da olingan,
+--   hali yuborilmagan) bilan; U_KAS2 qabul qildi va kunni O'Z qurilmasidan (navbatida bu yozuv yo'q — bo'sh ro'yxat) yopdi
+select zz.clock('2027-04-16 10:00+05');
+select left(zz.pay('U_KAS', 'man_h1_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-H11"}'), 0);
+select zz.clock('2027-04-16 12:00+05');
+select zz.put('H1h', zz.kh('U_KAS', format('{"counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[{"ref":"man_h1_0002","amount":20000}]}', zz.kbal() + 20000, zz.kbal())));
+select zz.put('H1q', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('H1h')) #>> '{handover,id}')));
+-- yopish oynasi shu ma'lumotdan «Smena topshirishda e'lon qilingan, hali kelmagan» qatorini va farqni ko'rsatadi (fin-kassa.js handoverRefs)
+select zz.put('H1o', (zz.js(zz.as('U_KAS2', $q$select public.kassa_state('main')::text$q$)) #> '{openDay,pendingOpen,refs}')::text);
+select zz.clock('2027-04-16 18:00+05');
+select zz.put('H1k', (zz.kbal() + 20000)::text);   -- kassadagi pul: hisobdagi + 11:00 da olingan, hali kelmagan 20 000 (17.04 da yangi pul yo'q)
+select zz.put('H1c', zz.kc('U_KAS2', format('{"day":"2027-04-16","counted":%s,"expected":%s,"pendingRefs":[],"z":{"no":"Z-0416","cash":30000,"card":0}}', zz.get('H1k'), zz.kbal())));
+select zz.chk('H1 g7v-3: smena topshirishda e''lon qilingan, hali kelmagan yozuv (ochiq kun holatida — oyna uchun) qabul qiluvchining yopishida o''zi hisobga olindi — farq 0 (avval soxta ortiqcha 20 000), kunda saqlandi (yopish yozuvi); kelguncha kun izohsiz tekshirilmaydi',
+  (zz.js(zz.get('H1h')) ->> 'diff') || ':' || (zz.js(zz.get('H1q')) ->> 'diff') || ' | ' || zz.get('H1o')
+  || ' | ' || (zz.js(zz.get('H1c')) ->> 'diff') || ':' || (zz.js(zz.get('H1c')) -> 'ignoredRefs')::text || ':' || (zz.js(zz.get('H1c')) ->> 'pending')
+  || ' | ' || (select "pendingCount" || ':' || trim_scale("pendingSum") || ':' || "pendingRefs"::text from public.cash_days where day = '2027-04-16')
+  || ' | ' || (select string_agg((r ->> 'ref') || '/' || (r ->> 'kind'), ',') from jsonb_array_elements(app.kassa_day_pending('cd_main_2027-04-16') -> 'refs') r)
+  || ' | ' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-16' and op in ('in_surplus', 'out_shortage'))
+  || ' | ' || zz.kv('U_FM', '2027-04-16', null),
+  '^0:0 \| \[\{"ref": "man_h1_0002", "kind": "handover", "amount": 20000\}\] \| 0:\[\]:20000 \| 1:20000:\[\{"ref": "man_h1_0002", "amount": 20000\}\] \| man_h1_0002/close \| 0 \| ERR 22023 \[kassa:pending_note\] .*1 ta yozuvning \(20000 so''m\).*$');
+select zz.clock('2027-04-17 09:00+05');
+select zz.put('H1f', zz.pay('U_KAS', 'man_h1_0002', 'T-9', 20000, 'cash', '', '2027-04-16 11:00+05', '{"fiscalNo":"F-H12"}'));
+select zz.clock('2027-04-17 18:00+05');
+select zz.put('H1d', zz.kc('U_KAS', format('{"day":"2027-04-17","counted":%s,"expected":%s,"z":{"no":"Z-0417","cash":0,"card":0}}', zz.get('H1k'), zz.kbal())));
+select zz.chk('H1b g7v-3: yozuv 17.04 da «kech» keldi — 16.04 yozuvi bog''landi; 17.04 farqsiz yopildi (avval — soxta kamomad 20 000); 16.04 Z (10 000 + 20 000) mos, kun izohsiz tekshirildi',
+  coalesce((zz.js(zz.get('H1f')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('H1f')) #>> '{kassa,late}'), zz.get('H1f'))
+  || ' | ' || zz.kpend('2027-04-16') || ' | ' || (zz.js(zz.get('H1d')) ->> 'diff') || ':' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-17' and op in ('in_surplus', 'out_shortage'))
+  || ' | ' || zz.zst('2027-04-16') || ' / ' || zz.zst('2027-04-17')
+  || ' | ' || coalesce(zz.js(zz.kv('U_FM', '2027-04-16', null)) -> 'day' ->> 'status', zz.kv('U_FM', '2027-04-16', null)),
+  '^2027-04-17:true \| 0:0:0 \| 0:0 \| 30000:2:0:true / 0:0:0:true \| verified$');
+-- H2/H3: 19.04 U_KAS2 kassa egasi; 12:00 smenani U_KAS ga ikki navbat yozuvi bilan topshirdi (15 000 va 5 000; kassadagi umumiy qurilma);
+--   qabuldan keyin 5 000 lik yozuv o'tdi (shu kunga); U_KAS kunni yopdi — qurilma navbatidagi 15 000 lik yozuv ham e'lon qilindi, 5 000 lik
+--   yozuv esa eskirgan ro'yxatda qolgan
+select zz.clock('2027-04-19 10:00+05');
+select left(zz.pay('U_KAS2', 'man_h2_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-H21"}'), 0);
+select zz.clock('2027-04-19 12:00+05');
+select zz.put('H2h', zz.kh('U_KAS2', format('{"counted":%s,"expected":%s,"toUid":"U_KAS","pendingRefs":[{"ref":"man_h2_0002","amount":15000},{"ref":"man_h3_0001","amount":5000}]}', zz.kbal() + 20000, zz.kbal())));
+select zz.put('H2q', zz.as('U_KAS', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('H2h')) #>> '{handover,id}')));
+select zz.clock('2027-04-19 13:00+05');
+select zz.put('H3f', zz.pay('U_KAS2', 'man_h3_0001', 'T-9', 5000, 'cash', '', '2027-04-19 11:30+05', '{"fiscalNo":"F-H31"}'));
+select zz.clock('2027-04-19 18:00+05');
+select zz.put('H2c', zz.kc('U_KAS', format('{"day":"2027-04-19","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_h2_0002","amount":15000},{"ref":"man_h3_0001","amount":5000}],"z":{"no":"Z-0419","cash":30000,"card":0}}',
+                                         zz.kbal() + 15000, zz.kbal())));
+select zz.chk('H2 g7v-3: qabul qiluvchining qurilmasi ham o''sha yozuvni e''lon qildi — bir marta ayirildi (farq 0; kunda bitta yozuv, 15 000)',
+  (zz.js(zz.get('H2h')) ->> 'diff') || ':' || (zz.js(zz.get('H2q')) ->> 'diff') || ' | ' || (zz.js(zz.get('H2c')) ->> 'diff') || ':' || (zz.js(zz.get('H2c')) ->> 'pending')
+  || ' | ' || (select "pendingCount" || ':' || trim_scale("pendingSum") || ':' || "pendingRefs"::text from public.cash_days where day = '2027-04-19'),
+  '^0:0 \| 0:15000 \| 1:15000:\[\{"ref": "man_h2_0002", "amount": 15000\}\]$');
+select zz.chk('H3 g7v-3: yopishdan oldin o''tib ketgan yozuv (shu kunga, «kech» emas) ayirilmadi — ignoredRefs da; ikkinchi marta hisoblanmadi',
+  coalesce((zz.js(zz.get('H3f')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('H3f')) #>> '{kassa,late}'), zz.get('H3f'))
+  || ' | ' || (zz.js(zz.get('H2c')) -> 'ignoredRefs')::text || ' | ' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-19' and op in ('in_surplus', 'out_shortage')),
+  '^2027-04-19:false \| \["man_h3_0001"\] \| 0$');
+-- H4: 20.04 — 19.04 dagi 15 000 lik yozuv ertalab «kech» keldi (U_KAS2 kassa egasi); 11:00 U_KAS2 smenani U_KAS ga 12 000 lik navbat
+--   yozuvi bilan topshirdi; 14:00 U_KAS smenani U_KAS2 ga qaytarib topshirdi — o'z qurilmasidan (navbatida bu yozuv yo'q)
+select zz.clock('2027-04-20 09:00+05');
+select zz.put('H4p', zz.pay('U_KAS2', 'man_h2_0002', 'T-9', 15000, 'cash', '', '2027-04-19 11:00+05', '{"fiscalNo":"F-H22"}'));
+select zz.clock('2027-04-20 11:00+05');
+select zz.put('H4h', zz.kh('U_KAS2', format('{"counted":%s,"expected":%s,"toUid":"U_KAS","pendingRefs":[{"ref":"man_h4_0001","amount":12000}]}', zz.kbal() + 12000, zz.kbal())));
+select left(zz.as('U_KAS', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('H4h')) #>> '{handover,id}')), 0);
+select zz.clock('2027-04-20 14:00+05');
+select zz.put('H4k', (zz.kbal() + 12000)::text);   -- kassadagi pul: hisobdagi + 10:30 da olingan, hali kelmagan 12 000 (keyin yangi pul yo'q)
+select zz.put('H4g', zz.kh('U_KAS', format('{"counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[]}', zz.get('H4k'), zz.kbal())));
+select zz.put('H4r', zz.kh('U_KAS', format('{"counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[]}', zz.get('H4k'), zz.kbal())));
+select zz.put('H4q', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('H4g')) #>> '{handover,id}')));
+select zz.clock('2027-04-20 15:00+05');
+select zz.put('H4f', zz.pay('U_KAS2', 'man_h4_0001', 'T-9', 12000, 'cash', '', '2027-04-20 10:30+05', '{"fiscalNo":"F-H41"}'));
+select zz.clock('2027-04-20 18:00+05');
+select zz.put('H4c', zz.kc('U_KAS2', format('{"day":"2027-04-20","counted":%s,"expected":%s,"z":{"no":"Z-0420","cash":12000,"card":0}}', zz.get('H4k'), zz.kbal())));
+select zz.chk('H4 g7v-3: ikkinchi smena topshirishda birinchisida e''lon qilingan, hali kelmagan yozuv o''zi qo''shildi — topshirishda saqlandi (takror yuborish — o''sha), qabul sanashiga o''tdi; farq 0 (avval qabulda soxta ortiqcha 12 000)',
+  (zz.js(zz.get('H4g')) ->> 'diff') || ':' || (zz.js(zz.get('H4g')) #>> '{handover,pendingSum}') || ':' || (zz.js(zz.get('H4g')) #> '{handover,pendingRefs}')::text
+  || ' | ' || (zz.js(zz.get('H4r')) ->> 'dup')
+  || ' | ' || (zz.js(zz.get('H4q')) ->> 'diff') || ':' || (zz.js(zz.get('H4q')) #>> '{count,pendingSum}') || ':' || (zz.js(zz.get('H4q')) #> '{count,pendingRefs}')::text
+  || ' | ' || (select "pendingRefs"::text from public.cash_handovers where id = zz.js(zz.get('H4g')) #>> '{handover,id}')
+  || ' | ' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-20' and op in ('in_surplus', 'out_shortage')),
+  '^0:12000:\[\{"ref": "man_h4_0001", "amount": 12000\}\] \| true \| 0:12000:\[\{"ref": "man_h4_0001", "amount": 12000\}\] \| \[\{"ref": "man_h4_0001", "amount": 12000\}\] \| 0$');
+select zz.chk('H4b yozuv o''sha kuni keldi (kech emas) — bog''landi; 20.04 farqsiz yopildi; 19.04 Z (pul olingan, yopilishidan oldingi chek 15 000 bilan) va 20.04 Z mos',
+  coalesce((zz.js(zz.get('H4p')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('H4p')) #>> '{kassa,late}'), zz.get('H4p'))
+  || ' | ' || coalesce((zz.js(zz.get('H4f')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('H4f')) #>> '{kassa,late}'), zz.get('H4f'))
+  || ' | ' || (zz.js(zz.get('H4c')) ->> 'diff') || ':' || zz.kpend('2027-04-19') || ':' || zz.kpend('2027-04-20')
+  || ' | ' || zz.zst('2027-04-19') || ' / ' || zz.zst('2027-04-20'),
+  '^2027-04-20:true \| 2027-04-20:false \| 0:0:0:0:0:0:0 \| 30000:3:0:true / 12000:1:0:true$');
+-- GV (g7b-v1): server qo'shadigan smena yozuvlari sanalgan puldan oshmaydi — avval sanalgan pul ulardan kam bo'lsa, kun yopilmas va smena
+--   topshirilmasdi (kassa:count; yopuvchi server qo'shgan yozuvni olib tashlay olmaydi — Direktor ham, kassa to'xtatilmaydi, ertasi har
+--   hujjat kassa:prev_open). 21.04: U_KAS kassa egasi; 10:30 da qurilmasi (oflayn) 2 000 000 oldi (fiskal chek F-GV12); 11:00 smenani U_KAS2
+--   ga shu navbat yozuvi bilan topshirdi, U_KAS2 qabul qildi. 11:30 U_KAS ning noutbuki ishdan chiqdi (navbat yo'qoldi) — to'lov yangi
+--   kalit bilan qayta kiritildi (eski kalit endi kelmaydi). 13:00 U_KAS2 ning qurilmasi (internet uzilgan) 40 000 oldi. 16:00 ortiqcha
+--   naqd bankka topshirildi (hisobda 100 000 qoldi); 17:00 U_KAS2 smenani U_KAS ga qaytardi (navbatidagi 40 000 bilan), 18:00 U_KAS kunni
+--   yopdi (yangi qurilmasidan — navbati bo'sh). Kassada: hisobdagi 100 000 + hali kelmagan 40 000 = 140 000.
+set local session_replication_role = replica;
+insert into public.fin_counterparties (id, kind, name) values ('cp_bank','bank','Sinov Bank') on conflict (id) do nothing;
+set local session_replication_role = origin;
+select zz.clock('2027-04-21 09:00+05');
+select left(zz.pay('U_KAS', 'man_gv1_0001', 'T-9', 300000, 'cash', '', null, '{"fiscalNo":"F-GV11"}'), 0);
+select zz.clock('2027-04-21 11:00+05');
+select zz.put('GV1h', zz.kh('U_KAS', format('{"counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[{"ref":"man_gv1_0002","amount":2000000}]}', zz.kbal() + 2000000, zz.kbal())));
+select zz.put('GV1a', zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('GV1h')) #>> '{handover,id}')));
+select zz.clock('2027-04-21 11:30+05');
+select left(zz.pay('U_KAS2', 'man_gv1_0004', 'T-9', 2000000, 'cash', '', null, '{"fiscalNo":"F-GV12"}'), 0);   -- o'sha to'lov, yangi kalit bilan
+select zz.clock('2027-04-21 16:00+05');
+select zz.put('GV1b', zz.as('U_KAS2', format('select public.kassa_payout_request(%L::jsonb)::text',
+  format('{"op":"out_bank","amount":%s,"partyType":"bank","partyId":"cp_bank","basis":"Inkassatsiya, 21.04.2027","clientRef":"gv1-bank-0001"}', zz.kbal() - 100000))));
+select left(zz.as('U_FM', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('GV1b')) ->> 'id')), 0);
+select left(zz.as('U_DIR', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('GV1b')) ->> 'id')), 0);
+select zz.put('GV1p', zz.as('U_KAS2', format('select public.kassa_doc_pay(%L)::text', zz.js(zz.get('GV1b')) ->> 'id')));
+select zz.clock('2027-04-21 17:00+05');
+select zz.put('GV1g', zz.kh('U_KAS2', format('{"counted":%s,"expected":%s,"toUid":"U_KAS","pendingRefs":[{"ref":"man_gv1_0003","amount":40000}]}', zz.kbal() + 40000, zz.kbal())));
+select zz.put('GV1q', zz.as('U_KAS', format('select public.kassa_handover_accept(%L)::text', zz.js(zz.get('GV1g')) #>> '{handover,id}')));
+select zz.clock('2027-04-21 18:00+05');
+select zz.put('GV1o', (zz.js(zz.as('U_KAS', $q$select public.kassa_state('main')::text$q$)) #> '{openDay,pendingOpen}')::text);   -- yopish oynasi shundan
+select zz.put('GV1c', zz.kc('U_KAS', format('{"day":"2027-04-21","counted":%s,"expected":%s,"pendingRefs":[],"z":{"no":"Z-0421","cash":2340000,"card":0}}', zz.kbal() + 40000, zz.kbal())));
+select zz.chk('GV1 g7b-v1: eski kalit (to''lov yangi kalit bilan qayta kiritilgan, pul bankka topshirilgan) sanalgan pulga sig''maydi — smena topshirildi va kun yopildi (avval kassa:count), farq 0; sig''gani (40 000) ayirildi va saqlandi, eski kalit saqlanmadi',
+  (zz.js(zz.get('GV1h')) ->> 'diff') || ':' || (zz.js(zz.get('GV1a')) ->> 'diff') || ':' || coalesce(zz.js(zz.get('GV1p')) ->> 'status', zz.get('GV1p'))
+  || ' | ' || coalesce((zz.js(zz.get('GV1g')) ->> 'diff') || ':' || (zz.js(zz.get('GV1g')) #>> '{handover,pendingSum}') || ':' || (zz.js(zz.get('GV1g')) #> '{handover,pendingRefs}')::text, zz.get('GV1g'))
+  || ' | ' || coalesce((zz.js(zz.get('GV1q')) ->> 'diff'), zz.get('GV1q'))
+  || ' | ' || (zz.js(zz.get('GV1o')) ->> 'n') || ':' || (zz.js(zz.get('GV1o')) ->> 'sum')
+  || ' | ' || coalesce((zz.js(zz.get('GV1c')) ->> 'diff') || ':' || (zz.js(zz.get('GV1c')) ->> 'pending') || ':' || (zz.js(zz.get('GV1c')) -> 'ignoredRefs')::text, zz.get('GV1c'))
+  || ' | ' || (select status || ':' || trim_scale(closing) || ':' || "pendingCount" || ':' || trim_scale("pendingSum") || ':' || "pendingRefs"::text from public.cash_days where day = '2027-04-21')
+  || ' | ' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-21' and op in ('in_surplus', 'out_shortage')),
+  '^0:0:posted \| 0:40000:\[\{"ref": "man_gv1_0003", "amount": 40000\}\] \| 0 \| 2:2040000 \| 0:40000:\[\] \| closed:100000:1:40000:\[\{"ref": "man_gv1_0003", "amount": 40000\}\] \| 0$');
+select zz.chk('GV1b eski kalit ko''rinib turadi: kunning bog''lanmagan yozuvlari — eski kalit (smena topshirish yozuvi) va 40 000 (yopish yozuvi); kun izohsiz tekshirilmaydi (oldingi kunlar tekshirildi)',
+  (select string_agg((r ->> 'ref') || '/' || (r ->> 'kind') || '/' || (r ->> 'amount'), ',' order by r ->> 'ref') from jsonb_array_elements(app.kassa_day_pending('cd_main_2027-04-21') -> 'refs') r)
+  || ' | ' || (select string_agg(coalesce(zz.js(zz.kv('U_FM', d, null)) -> 'day' ->> 'status', left(zz.kv('U_FM', d, null), 60)), ',' order by d)
+                 from unnest(array['2027-04-17', '2027-04-19', '2027-04-20']) d)
+  || ' | ' || zz.kv('U_FM', '2027-04-21', null),
+  '^man_gv1_0002/handover/2000000,man_gv1_0003/close/40000 \| verified,verified,verified \| ERR 22023 \[kassa:pending_note\] Kun hali o''tkazilmagan yozuvlar bilan yopilgan: qurilma navbatidagi 2 ta yozuvning \(2040000 so''m\) kirim orderi hali kelmagan\..*$');
+-- 22.04: U_KAS2 ning qurilmasi internetga ulandi — 40 000 «kech» o'tdi; kun kassadagi o'sha pul bilan yopildi
+select zz.clock('2027-04-22 09:00+05');
+select zz.put('GV2f', zz.pay('U_KAS2', 'man_gv1_0003', 'T-9', 40000, 'cash', '', '2027-04-21 13:00+05', '{"fiscalNo":"F-GV13"}'));
+select zz.clock('2027-04-22 18:00+05');
+select zz.put('GV2c', zz.kc('U_KAS2', format('{"day":"2027-04-22","counted":%s,"expected":%s,"z":{"no":"Z-0422","cash":0,"card":0}}', zz.kbal(), zz.kbal())));
+select zz.chk('GV2 40 000 bog''landi (eski kalit qoladi); 22.04 farqsiz (soxta juftlik yo''q); 21.04 Z (300 000 + 2 000 000 + kech 40 000) mos; 21.04 izoh bilan tekshirildi',
+  coalesce((zz.js(zz.get('GV2f')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('GV2f')) #>> '{kassa,late}'), zz.get('GV2f'))
+  || ' | ' || zz.kpend('2027-04-21') || ' | ' || coalesce(zz.js(zz.get('GV2c')) ->> 'diff', zz.get('GV2c'))
+  || ':' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-22' and op in ('in_surplus', 'out_shortage'))
+  || ' | ' || zz.zst('2027-04-21') || ' / ' || zz.zst('2027-04-22')
+  || ' | ' || coalesce(zz.js(zz.kv('U_FM', '2027-04-21', 'Eski navbat kaliti: to''lov 21.04 da yangi kalit bilan qayta kiritilgan (F-GV12)')) -> 'day' ->> 'status', 'xato'),
+  '^2027-04-22:true \| 1:2000000:0 \| 0:0 \| 2340000:3:0:true / 0:0:0:true \| verified$');
+-- GV3: eski kalit sanalgan pulga SIG'SA (pul bankka topshirilmagan) — hujjatlarda aytilgan juftlik: yopishda kamomad, keyingi sanashda
+--   xuddi shuncha ortiqcha (kamomad haqiqiy emas — Direktor «Hisobdan chiqarish» bilan yopadi; ishga-tushirish §8)
+select zz.clock('2027-04-23 09:00+05');
+select left(zz.pay('U_KAS', 'man_gv3_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-GV31"}'), 0);
+select zz.clock('2027-04-23 11:00+05');
+select left(zz.as('U_KAS2', format('select public.kassa_handover_accept(%L)::text',
+  zz.js(zz.kh('U_KAS', format('{"counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[{"ref":"man_gv3_0002","amount":25000}]}', zz.kbal() + 25000, zz.kbal()))) #>> '{handover,id}')), 0);
+select zz.clock('2027-04-23 11:30+05');
+select left(zz.pay('U_KAS2', 'man_gv3_0003', 'T-9', 25000, 'cash', '', null, '{"fiscalNo":"F-GV32"}'), 0);   -- o'sha to'lov, yangi kalit bilan
+select zz.clock('2027-04-23 18:00+05');
+select zz.put('GV3k', zz.kbal()::text);   -- kassadagi pul = hisobdagi (25 000 qayta kiritilgan to'lovda)
+select zz.put('GV3c', zz.kc('U_KAS2', format('{"day":"2027-04-23","counted":%s,"expected":%s,"z":{"no":"Z-0423","cash":35000,"card":0}}', zz.get('GV3k'), zz.kbal())));
+select zz.clock('2027-04-24 10:00+05');
+select left(zz.pay('U_KAS2', 'man_gv3_0004', 'T-9', 5000, 'cash', '', null, '{"fiscalNo":"F-GV33"}'), 0);
+select zz.clock('2027-04-24 18:00+05');
+select zz.put('GV3d', zz.kc('U_KAS2', format('{"day":"2027-04-24","counted":%s,"expected":%s,"z":{"no":"Z-0424","cash":5000,"card":0}}', zz.get('GV3k')::numeric + 5000, zz.kbal())));
+select zz.chk('GV3 eski kalit sig''di — 23.04 kamomad 25 000 (kamomad hujjati suratida eski kalit), 24.04 xuddi shuncha ortiqcha',
+  coalesce((zz.js(zz.get('GV3c')) ->> 'diff') || ':' || (zz.js(zz.get('GV3c')) #> '{diffDoc,sourceSnapshot,pendingRefs}')::text, zz.get('GV3c'))
+  || ' | ' || coalesce(zz.js(zz.get('GV3d')) ->> 'diff', zz.get('GV3d')) || ':' || coalesce(zz.js(zz.get('GV3d')) #>> '{diffDoc,op}', '-'),
+  '^-25000:\[\{"ref": "man_gv3_0002", "amount": 25000\}\] \| 25000:in_surplus$');
+-- GV4 (g7b tekshiruvchisi): «Қ» blankalari bilan yopishda server qo'shadigan smena yozuvlari uchun joy «Қ» summasini ham hisobga oladi.
+--   26.04: U_KAS2 kassa egasi; 11:00 smenani U_KAS ga qurilma navbatidagi 50 000 bilan topshirdi, U_KAS qabul qildi; keyin server ishlamadi —
+--   «Қ» blankasi (700 000) yozildi; kechqurun kassada 730 000 (katta kamomad). Joy = 730 000 − 700 000 = 30 000 < 50 000 — yozuv qo'shilmaydi.
+--   «Қ» hisobga olinmasa — qo'shilardi: hali o'tkazilmagan 750 000 > sanalgan 730 000 — kun yopilmasdi (kassa:count).
+select zz.clock('2027-04-26 10:00+05');
+select left(zz.pay('U_KAS2', 'man_gv4_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-GV41"}'), 0);
+select zz.clock('2027-04-26 11:00+05');
+select left(zz.as('U_KAS', format('select public.kassa_handover_accept(%L)::text',
+  zz.js(zz.kh('U_KAS2', format('{"counted":%s,"expected":%s,"toUid":"U_KAS","pendingRefs":[{"ref":"man_gv4_0002","amount":50000}]}', zz.kbal() + 50000, zz.kbal()))) #>> '{handover,id}')), 0);
+select zz.clock('2027-04-26 18:00+05');
+select zz.put('GV4b', zz.kbal()::text);
+select zz.put('GV4c', zz.kc('U_KAS', format('{"day":"2027-04-26","counted":730000,"expected":%s,"pendingRefs":[],"paper":{"count":1,"sum":700000,"nos":"Қ-0031"}}', zz.get('GV4b'))));
+select zz.chk('GV4 g7b tekshiruvchisi: «Қ» blankalari va katta kamomad bilan yopish — smena yozuvi (50 000) sanalgan pulga sig''madi (joy = sanalgan − «Қ»), kun yopildi (kassa:count emas), hali o''tkazilmagan = faqat «Қ»; yozuv smena topshirish yozuvi bo''lib bog''lanmagan qoldi',
+  coalesce(((zz.js(zz.get('GV4c')) ->> 'diff')::numeric = 30000 - zz.get('GV4b')::numeric)::text || ':' || (zz.js(zz.get('GV4c')) ->> 'pending'), left(zz.get('GV4c'), 200))
+  || ' | ' || (select status || ':' || "pendingCount" || ':' || trim_scale("pendingSum") || ':' || "pendingRefs"::text || ':' || "paperCount" from public.cash_days where day = '2027-04-26')
+  || ' | ' || (select string_agg((r ->> 'ref') || '/' || (r ->> 'kind') || '/' || (r ->> 'amount'), ',') from jsonb_array_elements(app.kassa_day_pending('cd_main_2027-04-26') -> 'refs') r),
+  '^true:700000 \| closed:1:700000:\[\]:1 \| man_gv4_0002/handover/50000$');
+-- Z5 (g7b tekshiruvchisi): kech orderning Z kuni pul olingan kundan oldin emas. 27.04 kassa kuni ertasi ertalab (28.04 08:30) yopildi (NKM
+--   smenasi — Z-hisobot — kechqurun yopilgan); qurilma 28.04 08:00 da (oflayn) 7 000 oldi, yozuv 28.04 yopilgandan keyin (29.04) «kech» o'tdi.
+--   Z kuni — 28.04: shu chek 28.04 da o'tganda (kech emas) ham o'sha kun Z ida kutilardi — Z kuni qurilma qachon internetga ulanganiga
+--   bog'liq emas. Chegarasiz — 27.04 bo'lardi (pul olingandan keyin yopilgan birinchi kun).
+select zz.clock('2027-04-27 10:00+05');
+select left(zz.pay('U_KAS', 'man_z5_0001', 'T-9', 10000, 'cash', '', null, '{"fiscalNo":"F-Z51"}'), 0);
+select zz.clock('2027-04-28 08:30+05');
+select zz.put('Z5c', zz.kc('U_KAS', format('{"day":"2027-04-27","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_z5_0002","amount":7000}],"z":{"no":"Z-0427","cash":10000,"card":0}}', zz.kbal() + 7000, zz.kbal())));
+select zz.clock('2027-04-28 10:00+05');
+select left(zz.pay('U_KAS', 'man_z5_0003', 'T-9', 3000, 'cash', '', null, '{"fiscalNo":"F-Z53"}'), 0);
+select zz.clock('2027-04-28 18:00+05');
+select zz.put('Z5d', zz.kc('U_KAS', format('{"day":"2027-04-28","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_z5_0002","amount":7000}],"z":{"no":"Z-0428","cash":10000,"card":0}}', zz.kbal() + 7000, zz.kbal())));
+select zz.clock('2027-04-29 09:00+05');
+select zz.put('Z5a', zz.pay('U_KAS', 'man_z5_0002', 'T-9', 7000, 'cash', '', '2027-04-28 08:00+05', '{"fiscalNo":"F-Z52"}'));
+select zz.chk('Z5 g7b tekshiruvchisi: kun ertasi ertalab yopilgan, pul o''sha ertalab yopilishdan oldin olingan — kech orderning Z kuni pul olingan kun (28.04), oldingi kun emas: 27.04 Z (10 000) va 28.04 Z (3 000 + kech 7 000) mos; ikkala kun yozuvi bog''landi',
+  coalesce((zz.js(zz.get('Z5c')) ->> 'diff') || ':' || (zz.js(zz.get('Z5d')) ->> 'diff'), left(coalesce(zz.get('Z5c'), '') || ' / ' || coalesce(zz.get('Z5d'), ''), 300))
+  || ' | ' || coalesce((zz.js(zz.get('Z5a')) #>> '{kassa,day}') || ':' || (zz.js(zz.get('Z5a')) #>> '{kassa,late}'), zz.get('Z5a'))
+  || ' | ' || app.kassa_z_day('main', '2027-04-29', true, '2027-04-28 08:00+05')::text
+  || ' | ' || zz.zst('2027-04-27') || ' / ' || zz.zst('2027-04-28') || ' | ' || zz.kpend('2027-04-27') || ':' || zz.kpend('2027-04-28'),
+  '^0:0 \| 2027-04-29:true \| 2027-04-28 \| 10000:1:0:true / 10000:2:0:true \| 0:0:0:0:0:0$');
+
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end
   from zz.res order by n;
