@@ -39,8 +39,14 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          pendingRefs (pendingSum / pendingCount rad), «Қ» blankalari (paper), kassa:stale; so'rov izi (reqHash, kassa:ref_mismatch),
 --          kassa_pay_guard, yopilgan davrda tushum qulfi; ketgan xodim (kassa:emp_left), printsOrig, kassa_state.me.name;
 --          kassa-checks.sql — 23-band (himoya mantig'i barmoq izi) va 24-band (vazifalar ajratilishi ma'lumoti).
+--     12 — yakuniy ko'rik tuzatishlari (g11): kassani qayta to'xtatish (tayyorlangan qayta ishga tushirish) to'xtatish qulfi va shartlari
+--          bilan, to'xtatilgan kassada ochiq kun — blockReason 'paused'; fiskal chek takrori o'tkazishda kassa qulfi ostida (kassa:fiscal_dup);
+--          so'rovni yolg'iz tasdiqlagan xodim pulini bermaydi (kassa:self_pay), Direktor o'ziga pulni / naqd maoshni o'zi bermaydi
+--          (kassa:self_recipient, FD-48); kunni qayta ochilishidan oldin yopgan xodim tekshirmaydi; qaytarish oynasi kaliti — naqd so'rov va
+--          naqdsiz qaytarish bir-birini rad etadi (kassa:ref_mismatch; refund_invoice — ref_mismatch, so'rov posbonda saqlanadi); sinov
+--          kassasida navbat yozuvlari rad (kassa:pending_test); 24-band — ikki yangi qator.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 11 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 12 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

@@ -33,6 +33,9 @@ avval uni bajaring. **Kecha yopilmagan bo‘lsa, bugun hujjat yozilmaydi** — a
 3. «🖨 Kirim orderi va patta»: patta — to‘lovchiga, order — kassada (imzo qo‘yiladi).
 Bir nechta farzand uchun to‘lansa — **har o‘quvchiga alohida fiskal chek** uriladi va har to‘lov o‘z chek raqami bilan kiritiladi
 (bitta chek raqami ikkinchi to‘lovda qabul qilinmaydi; raqamga belgi qo‘shib kiritmang — FD-49).
+Tizim to‘lovni rad etsa (masalan, chek raqami takror) — oyna ochiq qoladi: ma’lumotni tuzatib, o‘sha oynada (o‘sha o‘quvchi uchun)
+«Qabul qilish»ni qayta bosing — rad etilgan yozuv navbatdan almashtiriladi. Oyna yopilsa yoki boshqa o‘quvchi tanlansa, rad etilgan
+yozuv ⏳ navbatda «Yuborilmadi» bo‘lib qoladi (kunni yopishda tanlanadi).
 Tizim summani o‘zi taqsimlaydi: avval eng eski qarz, ortig‘i — avansga. Naqdsiz to‘lov (Click, terminal, bank) ham shu oynada
 kiritiladi, lekin kassa orderi yozilmaydi va kassa qoldig‘iga kirmaydi. Kassa ishga tushgach naqd o‘quv to‘lovi **faqat shu oyna**
 orqali yoziladi (kirim orderi va fiskal chek bilan): boshqa yo‘l bilan (to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish yoki «naqd»ga
@@ -70,12 +73,15 @@ tizim «… so‘m qabul qilinsinmi?» deb so‘raydi — raqamni qayta tekshiri
 2. Moliya menejeri yoki buxgalter tasdiqlaydi (katta summa, rahbarga berish va qarz — Direktor ham).
 3. «So‘rovlar» ro‘yxatida «Pulni berish» → «🖨 Chiqim orderi» → oluvchi «Oldim» deb summa (so‘z bilan), sana va imzo qo‘yadi;
    shaxsini tasdiqlovchi hujjat ma’lumoti yoziladi. Kassada pul yetmasa tizim chiqimga yo‘l qo‘ymaydi. So‘rovni o‘zi tasdiqlagan xodim
-   (masalan, qo‘shimcha «kassir» lavozimli moliya menejeri) uning pulini bermaydi — boshqa kassir beradi. Tasdiqdan keyin kontragent
+   (masalan, qo‘shimcha «kassir» lavozimli moliya menejeri) uning pulini bermaydi — boshqa kassir beradi. O‘zingizga (hisobingiz
+   bog‘langan xodim kartasiga) boshqa xodim tasdiqlagan avans yoki hisobdorga avansni o‘zingiz berasiz — 2-ro‘yxat tasdig‘i bor, kunni
+   boshqa xodim tekshiradi. Direktorga beriladigan pulni (FD-48) va qaytarishni ham kassir beradi. Tasdiqdan keyin kontragent
    turi o‘zgargan bo‘lsa (endi yuridik shaxs hisoblansa) yoki chegara pasaytirilgan bo‘lsa pul berilmaydi: so‘rov o‘zi Direktor
    tasdig‘iga qaytadi (qizil xabar) — Direktor tasdiqlagach pulni bering.
 
 **Maosh.** «Maosh» sahifasida «Maosh berish» → usul «Naqd» → chiqim orderi o‘zi yoziladi. Faqat tasdiqlangan vedomost chegarasida.
-Naqd maoshni faqat kassir beradi. **Ish haqi avansi** — «+ Chiqim so‘rovi» orqali (yuqoridagi uch qadam).
+Naqd maoshni faqat kassir beradi — vedomost bo‘yicha har kimga, o‘zingizga ham (Direktor o‘z maoshini naqd o‘zi olmaydi — uni ham
+kassir beradi). **Ish haqi avansi** — «+ Chiqim so‘rovi» orqali (yuqoridagi uch qadam).
 
 **Ota-onaga pul qaytarish** (o‘quvchi avansini qaytarish ham). Direktor tasdiqlagach, «So‘rovlar»da paydo bo‘ladi → «Pulni berish» →
 chiqim orderi; ota-onaning yozma arizasi orderga ilova qilinadi. Bir kundan ortiq kechiktirilmaydi (eslatma chiqadi). Tasdiqdan keyin
@@ -119,8 +125,12 @@ boshqa qurilmada bo‘lsa — avval o‘sha qurilmani internetga ulang. Smena to
 alohida qatorda — ularni tizim o‘zi hisobga oladi (sanalgan pulga sig‘ganicha; sig‘magani farqda ayirilmaydi — oyna aytadi).
 Navbatdagi to‘lovni yangi kalit bilan qayta kiritmang (qurilma yo‘qolgan bo‘lsa — Direktorga ayting). Kassaga tegishli bo‘lmagan
 pul bilan rad etilgan navbat yozuvi (kassa ishga tushishidan oldingi pul) hisobga olinmaydi — oynada soni ko‘rinadi, ⏳ navbatda
-ko‘ring. «Kassa qoldig‘i oyna ochilgandan keyin o‘zgargan» xabari chiqsa — oyna yangilanadi: pulni qayta sanab, yana yuboring
-(smena topshirishda ham). Natija xabarida tizim hisoblagan farq aytiladi.
+ko‘ring. Boshqa sabab bilan rad etilgan («Yuborilmadi») yozuvlar oynada alohida, tizim xatosi bilan: har biri uchun tanlang —
+pul kassada (qayta kiritilmagan) bo‘lsa **«Pul kassada — hisobga olinsin»**, to‘g‘ri ma’lumot bilan qayta kiritilgan yoki pul
+qaytarilgan bo‘lsa **«Qayta kiritilgan yoki pul qaytarilgan — navbatdan o‘chirilsin»** (kun yopilgach / smena topshirilgach
+o‘chiriladi); tanlanmaguncha oyna saqlamaydi, farq tanlovga qarab ko‘rinadi. Sinov kassasida navbat ko‘rsatilmaydi va e’lon
+qilinmaydi — navbatdagi o‘quv to‘lovlari asosiy kassaga tushadi. «Kassa qoldig‘i oyna ochilgandan keyin o‘zgargan» xabari
+chiqsa — oyna yangilanadi: pulni qayta sanab, yana yuboring (smena topshirishda ham). Natija xabarida tizim hisoblagan farq aytiladi.
 **Server ishlamagan kunni** (ertasi kuni) yopayotgan bo‘lsangiz — hali kiritilmagan «Қ» blankalarini **«Server ishlamagan paytdagi
 «Қ» blankalari»** maydonlariga yozing (soni, summasi, raqamlari): bu pul kassada bor, hisobda hali yo‘q. Kun yopilgach har birini
 «💵 To‘lov» bilan kiriting (izohda — «Қ» raqami va pul olingan sana).
@@ -180,7 +190,8 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
    kartasi ham) beriladigan pulni o‘zingiz tasdiqlay olmaysiz — uni boshqa 2-ro‘yxat xodimi yoki Direktor tasdiqlaydi. Tasdiqlagan
    so‘rovingiz pulini o‘zingiz bermaysiz (qo‘shimcha «kassir» lavozimi bo‘lsa ham).
 2. **Kunni tekshirish:** kassir topshirgan KO-4, orderlar va ilovalarni ekrandagi kun bilan solishtiring → «Kassa kunlari» →
-   «Tekshirish» → «qog‘oz va ilovalar olindi» belgisi → «Tekshirdim». Kunlar tartib bilan tekshiriladi; kunni yopgan, shu kuni hujjat
+   «Tekshirish» → «qog‘oz va ilovalar olindi» belgisi → «Tekshirdim». Kunlar tartib bilan tekshiriladi; kunni yopgan (qayta ochilishidan
+   oldin yopgan ham), shu kuni hujjat
    o‘tkazgan yoki bekor qilgan, shu kunning Z-hisobotini kiritgan yoki tuzatgan («Z» tugmasi), shu kungi smena topshirish-qabulida
    qatnashgan va kunni qayta ochgan shaxs tekshira olmaydi — kunni boshqa 2-ro‘yxat xodimi yoki Direktor tekshiradi (tizim sababini
    aytadi). Tekshirilgan kun endi o‘zgarmaydi. Kunda smena topshirilgan bo‘lsa, topshirish-qabul dalolatnomasi (ikkala imzo bilan)
@@ -304,12 +315,19 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 - **Tasdiqlash:** T1 dan katta chiqim, rahbar yoki ta’sischiga beriladigan pul, qarz — «So‘rovlar» → «Tasdiqlash». O‘zingizga
   (bog‘langan xodim kartangizga) beriladigan pulda Direktor bosqichini o‘zingiz imzolaysiz (FD-48) — 2-ro‘yxat tasdig‘i baribir kerak,
   pulni kassir beradi.
+- **Pul berish (favqulodda, kassir yo‘q):** faqat 2-ro‘yxat tasdiqlagan so‘rov bo‘yicha uchinchi shaxsga. Qaytarishni (so‘rovning o‘zi
+  sizning tasdig‘ingiz), o‘zingizga beriladigan pulni (avans, hisobdorga avans, rahbarga berish, naqd maosh — FD-48) va o‘zingiz yolg‘iz
+  tasdiqlagan «Qarz / ta’sischi mablag‘i» kirimini tizim sizga bermaydi va qabul qildirmaydi («Pulni berish» / «Qabul qilish» tugmasi
+  ko‘rinmaydi) — pulni kassir beradi / qabul qiladi. Vedomost tasdig‘iga o‘tish oyidan oldingi oy uchun o‘z maoshingizni naqd hech
+  kim bermaydi (kassir vedomostsiz oyda naqd maosh bermaydi) — u karta orqali yoziladi.
 - **Qaytarish:** «↩ Qaytarish» (sababi, ariza sanasi, usul). Naqd bo‘lsa pulni kassir beradi; balans pul berilganda o‘zgaradi.
   «Avans ham» belgilansa avans ham **naqd beriladi** (bitta chiqim orderida) — tasdiqlashda «qaytarish X + avans Y = jami Z» ko‘rinadi.
   Javob kelmay qayta bosilsa ikkinchi so‘rov yozilmaydi; shu faktura, to‘lov yoki avans bo‘yicha hali berilmagan so‘rovlar bilan jami
   qaytariladigan summadan oshsa — rad etiladi (avval o‘sha so‘rov beriladi yoki bekor qilinadi). **Naqdsiz** qaytarish ham shunday:
-  kassada hali berilmagan naqd so‘rov bilan jami oshsa — rad etiladi. Kassaga yuborilgach oynadagi usul o‘zgarmaydi (boshqa usul —
-  oynani qayta ochib). Yopilgan davr to‘lovini qaytarish — avval davrni qayta ochib.
+  kassada hali berilmagan naqd so‘rov bilan jami oshsa — rad etiladi. Birinchi yuborishdan keyin oynadagi usul o‘zgarmaydi (boshqa
+  usul — oynani qayta ochib). Javob kelmay qolgach summa, «avans ham» yoki usul o‘zgartirilib qayta yuborilsa — rad etiladi va
+  birinchi yozilgani ko‘rsatiladi («Bu oynadan avval boshqa ma’lumot bilan qaytarish yozilgan (…)»): ro‘yxatni tekshiring, boshqasi
+  kerak bo‘lsa — yangi oynada. Yopilgan davr to‘lovini qaytarish — avval davrni qayta ochib.
 - **Ketgan o‘quvchining avansini naqd qaytarish:** o‘quvchining «📋» (to‘lov / avans tarixi) → «↩ Avansni naqd qaytarish» (yoki faktura
   «↩ Qaytarish» oynasida, usul «Naqd» bo‘lsa, «O‘quvchi avansini naqd qaytarish»): joriy avans ko‘rinadi; summa (standart — butun avans),
   sabab, oluvchi F.I.Sh., ariza sanasi. So‘rov = tasdiq; kassir «Pulni berish» bilan chiqim orderi (Dt 6310, OP-15) yozadi — avans **pul
@@ -327,7 +345,7 @@ ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — `ishga-tushiri
 | 48 soatdan eski oflayn yozuvni kiritish | «💵 To‘lov» | «Қ» blankasi asosida; kassir qurilmasi navbatidagi o‘sha yozuv o‘chiriladi (kunni yopishda e’lon qilingan bo‘lsa — u bog‘lanmay qoladi, kun izoh bilan tekshiriladi) |
 | Navbatdagi «Yuborilmadi — Direktor hal qiladi» yozuvi | ⏳ To‘lov navbati | qayta yuborilmaydi («Hammasini qayta yuborish» ham yubormaydi): pul ikki marta hisoblanishi mumkin — buxgalter bilan hal qilib, navbatdan o‘zingiz o‘chirasiz (`ishga-tushirish.md`, 9-bo‘lim) |
 | Kassa ishga tushishidan oldingi (yoki kassa to‘xtatilgan davrdagi) kechikib topilgan naqd yozuv | «💵 To‘lov» → «Naqd», «Sana» = pul olingan kun; xarajat, maosh, avans — «Buxgalteriya» oynalarida «Naqd — kassa ishga tushishidan … oldin berilgan» | kirim / chiqim orderisiz va fiskal cheksiz, kassa qoldig‘i o‘zgarmaydi (pul sanashga kirgan); bugungi sana bilan kiritilmaydi — ikki marta hisoblanadi; faqat kassa ishlamagan kun sanasi bilan (birinchi ishga tushgan kundan oldin yoki to‘xtatilgan davrda) — kassa ishlagan kun sanasi bilan tizim qabul qilmaydi; nazorat ro‘yxatida ko‘rinadi (`ishga-tushirish.md`, 4-bo‘lim) |
-| Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin qurilmalar navbati bo‘shagan, kutilayotgan smena topshirish qabul qilingan yoki bekor qilingan, kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi); oxirgi kun «hali o‘tkazilmagan yozuvlar» bilan yopilgan va ular hali kelmagan bo‘lsa — kunni qayta oching, navbat o‘tgach qayta yoping (kun tekshirilgan bo‘lsa — navbat tushgan keyingi kunni yoping); hali kiritilmagan «Қ» blankalari bilan yopilgan bo‘lsa — «Қ» yozuvlari kiritilib, ular tushgan yangi kun yopiladi; oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
+| Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin qurilmalar navbati bo‘shagan, kutilayotgan smena topshirish qabul qilingan yoki bekor qilingan, kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi) — tayyorlangan, hali boshlanmagan qayta ishga tushirishda sanani bo‘shatganda ham; shu payt birinchi hujjat yozilayotgan bo‘lsa — «hozir hujjat yozilmoqda», bir oz kutib qayta saqlang; oxirgi kun «hali o‘tkazilmagan yozuvlar» bilan yopilgan va ular hali kelmagan bo‘lsa — kunni qayta oching, navbat o‘tgach qayta yoping (kun tekshirilgan bo‘lsa — navbat tushgan keyingi kunni yoping); hali kiritilmagan «Қ» blankalari bilan yopilgan bo‘lsa — «Қ» yozuvlari kiritilib, ular tushgan yangi kun yopiladi; oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
 | Kassani qayta ishga tushirish | «Kassa» → «Qayta ishga tushirish» (komissiya sanagan summa, kun), keyin «⚙ Sozlamalar»da ishga tushadigan kun = o‘sha kun | farq (to‘xtatilgan davrdagi naqd harakat) texnik «Д-» dalolatnoma bilan yoziladi — kamomad / ortiqcha emas; nazorat ro‘yxatida «Kassani to‘xtatish va qayta ishga tushirish»; sanashdan keyin kassa hujjatisiz naqd yozuv kiritilsa — qayta sanash (tizim birinchi kunni ochmaydi, «Kassa»da qizil ogohlantirish) |
 | Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi (yopilgan davr to‘lovini qaytarish, biriktirish yoki holatini o‘zgartirish uchun ham — amaldan keyin qayta yopiladi) |
 | Naqd pulni o‘quvchi balansiga qo‘llash (kassa ishga tushgach) | faqat «💵 To‘lov» | to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish, «naqd» kanal bilan qo‘llash yoki bo‘lishda «naqd» qism — Direktorga ham yo‘q (kirim orderisiz bo‘lardi); «Moliya tekshiruvi» → «Qo‘llash» (osilib qolgan mavjud pul, yangi pul kirmaydi) kanal yorlig‘i «Aralash» bilan ishlaydi |

@@ -191,6 +191,48 @@ select zz.chk('C7 qaytarish: byEmail Direktorniki (p_by e''tiborsiz)',
   zz.as('U_DIR', $q$select (public.refund_invoice('invoice','inv1',100000,'sinov qaytarish',false,'spoof@x','ref-c7') ->> 'ok')$q$), '^true$');
 select zz.chk('C7b refunds: byUid / byEmail', (select "byUid" || '|' || "byEmail" from public.refunds where "targetId" = 'inv1' limit 1), '^U_DIR\|d@x$');
 
+-- ---------- (R) qaytarish oynasi kaliti (live-1): o'sha kalit BOSHQA ma'lumot bilan — rad (ref_mismatch), bir xil — takror ----------
+--   admin.html qaytarish oynasi p_ref ni oyna ochilganda bir marta yaratadi. Javob yo'qolib, summa yoki «avans ham» o'zgartirilib qayta
+--   yuborilsa — avval jim {dup} qaytardi (oyna «Allaqachon qaytarilgan ✓» derdi, o'zgartirilgani yozilmagan). Endi — ref_mismatch (birinchi
+--   yozilgan summa va «avans ham» bilan); rad etilgan so'rov posbon yozmaydi. Jonli zanjirda posbon to'qnashuvi tarmog'i, --dev zanjirida
+--   (kassa o'rnatilgan) oldindan tekshirish tarmog'i ishlaydi — natija bir xil. Holat har chaqiruvdan keyin alohida so'rov bilan o'qiladi.
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('s4','T-4','Sinov D',7,'A','uz','',4,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
+  ('inv4','T-4','Sinov D','2026-10',2800000,2800000,'paid'), ('inv5','T-4','Sinov D','2026-11',2800000,2800000,'paid');
+insert into public.student_credit (id, "studentId", credit) values ('T-4','T-4',200000);
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched) values ('pu_r7','','bank',70000,'unmatched','Sinov',false);
+insert into public.applied_payments (id, "studentId", amount, "createdAt") values ('refund:rf_old_000001','T-4',50000,now());   -- live-1 tuzatishidan oldin yozilgan posbon (so'rovsiz)
+set local session_replication_role = origin;
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'newPaid') from (select public.refund_invoice('invoice','inv4',100000,'sinov qaytarish',false,'','rf_r1_000001') r) x$q$) as r1 \gset
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'reason') || ':' || (r ->> 'amount') || ':' || (r ->> 'clawback') from (select public.refund_invoice('invoice','inv4',150000,'sinov qaytarish',false,'','rf_r1_000001') r) x$q$) as r2 \gset
+select (select trim_scale("paidAmount") from public.invoices where id = 'inv4') || ':' || (select count(*) from public.refunds where "studentId" = 'T-4') || ':' || (select trim_scale(credit) from public.student_credit where id = 'T-4') as r2s \gset
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'reason') || ':' || (r ->> 'amount') || ':' || (r ->> 'clawback') from (select public.refund_invoice('invoice','inv4',100000,'sinov qaytarish',true,'','rf_r1_000001') r) x$q$) as r3 \gset
+select (select trim_scale(credit) from public.student_credit where id = 'T-4') || ':' || (select count(*) from public.refunds where "studentId" = 'T-4') || ':' || (select count(*) from public.credit_ledger where "studentId" = 'T-4') as r3s \gset
+select zz.as('U_DIR', $q$select public.refund_invoice('invoice','inv4',100000,'sinov qaytarish',false,'','rf_r1_000001')::text$q$) as r4 \gset
+select (select trim_scale("paidAmount") from public.invoices where id = 'inv4') || ':' || (select count(*) from public.refunds where "studentId" = 'T-4') as r4s \gset
+select zz.chk('R1 live-1: qaytarish (oyna kaliti) — o''tdi, to''langan 2 700 000', :'r1', '^true:2700000$');
+select zz.chk('R2 o''sha kalit, boshqa summa — rad (ref_mismatch, birinchi yozilgan summa bilan); to''langan, qaytarishlar va avans o''zgarmadi',
+  :'r2' || ' | ' || :'r2s', '^false:ref_mismatch:100000:false \| 2700000:1:200000$');
+select zz.chk('R3 o''sha kalit, «avans ham» endi belgilangan — rad (ref_mismatch); avans 200 000, avans jurnali tegilmadi',
+  :'r3' || ' | ' || :'r3s', '^false:ref_mismatch:100000:false \| 200000:1:0$');
+select zz.chk('R4 o''sha kalit, bir xil ma''lumot — avvalgidek takror (dup); ikkinchi qaytarish yozilmadi', :'r4' || ' | ' || :'r4s', '^\{"dup": true, "ref": "rf_r1_000001"\} \| 2700000:1$');
+select zz.as('U_DIR', $q$select coalesce(r ->> 'dup', r::text) from (select public.refund_invoice('invoice','inv5',50000,'eski oyna',false,'','rf_old_000001') r) x$q$) as r5a \gset
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'reason') || ':' || (r ->> 'amount') || ':' || coalesce(r ->> 'clawback', 'null') from (select public.refund_invoice('invoice','inv5',60000,'eski oyna',false,'','rf_old_000001') r) x$q$) as r5b \gset
+select (select trim_scale("paidAmount") from public.invoices where id = 'inv5') || ':' || (select count(*) from public.refunds where "targetId" = 'inv5') as r5s \gset
+select zz.chk('R5 live-1 tuzatishidan oldin yozilgan posbon (so''rovsiz): summa bir xil — takror; boshqa summa — rad (birinchi summa, «avans ham» noma''lum); faktura tegilmadi',
+  :'r5a' || ' | ' || :'r5b' || ' | ' || :'r5s', '^true \| false:ref_mismatch:50000:null \| 2800000:0$');
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'reason') from (select public.refund_invoice('invoice','inv5',9999999,'adashib kiritilgan',false,'','rf_r6_000001') r) x$q$) as r6a \gset
+select (select count(*) from public.applied_payments where id = 'refund:rf_r6_000001') as r6n \gset
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'newPaid') from (select public.refund_invoice('invoice','inv5',300000,'adashib kiritilgan',false,'','rf_r6_000001') r) x$q$) as r6b \gset
+select zz.chk('R6 rad etilgan so''rov (to''langandan ko''p) posbon yozmaydi — tuzatilib o''sha kalit bilan qayta yuborilgani o''tadi',
+  :'r6a' || ' | ' || :'r6n' || ' | ' || :'r6b', '^false:exceeds-paid \| 0 \| true:2500000$');
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'newPaid') from (select public.refund_invoice('invoice','inv4',70000,'sinov qaytarish',false,'','rf_r7_000001') r) x$q$) as r7a \gset
+select zz.as('U_DIR', $q$select (r ->> 'ok') || ':' || (r ->> 'reason') || ':' || (r ->> 'amount') from (select public.refund_invoice('payment','pu_r7',70000,'egasi topilmadi',false,'','rf_r7_000001') r) x$q$) as r7b \gset
+select (select status from public.payments where id = 'pu_r7') || ':' || (select count(*) from public.refunds where "targetId" = 'pu_r7') as r7s \gset
+select zz.chk('R7 o''sha kalit boshqa maqsad bilan (faktura, keyin biriktirilmagan to''lov; summa bir xil) — rad (ref_mismatch); to''lov biriktirilmagan holicha',
+  :'r7a' || ' | ' || :'r7b' || ' | ' || :'r7s', '^true:2630000 \| false:ref_mismatch:70000 \| unmatched:0$');
+
 -- ---------- (E) huquqlar I ----------
 select zz.chk('E1 kassir xarajat yoza olmaydi (RF-01)',
   zz.as('U_KAS', $q$with x as (insert into public.expenses(id, date, month, category, amount) values ('e2','2026-11-09','2026-11','Boshqa',1) returning 1) select count(*)::text from x$q$), '^ERR 42501');

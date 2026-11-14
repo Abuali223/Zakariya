@@ -316,7 +316,8 @@ begin
       raise exception 'Fiskal chek raqami kiritilmagan' using errcode = '22023', hint = 'kassa:fiscal';
     end if;
   end if;
-  -- Bitta fiskal chek — bitta kirim: shu raqam boshqa (bekor qilinmagan) hujjatda ishlatilgan bo'lsa rad etiladi.
+  -- Bitta fiskal chek — bitta kirim: shu raqam boshqa (bekor qilinmagan) hujjatda ishlatilgan bo'lsa rad etiladi (bu yerda qulfsiz; o'tkazishda
+  --   kassa qulfi ostida yana — app.kassa_doc_post, g11 sql-2: parallel ikki yozuvchi).
   if v_fiscal is not null and exists (select 1 from public.cash_docs c where c."fiscalNo" = v_fiscal and c.desk = v_desk
                                           and c.status in ('draft', 'approved', 'posted') and c."createdAt" > now() - interval '400 days') then
     raise exception 'Bu fiskal chek raqami boshqa hujjatda ishlatilgan (%)', v_fiscal using errcode = '22023', hint = 'kassa:fiscal_dup';
@@ -508,6 +509,15 @@ begin
   end if;
   if (v_doc."needsList2" and v_doc."approvedBy" is null) or (v_doc."needsDirector" and v_doc."dirApprovedBy" is null) then
     raise exception 'Hujjat tasdiqlanmagan — avval tasdiq kerak' using errcode = '42501', hint = 'kassa:not_approved';
+  end if;
+  -- g11 (sql-2): bitta fiskal chek — bitta kirim (CT-21, FD-49) — kassa qulfi ostida yana bir bor. kassa_doc_build'dagi tekshiruv qulfsiz
+  --   (kirim orderi L4 dan oldin yoziladi): parallel ikkinchi yozuvchi birinchisining hali saqlanmagan hujjatini ko'rmay, L4 ni kutib o'tib
+  --   ketardi. Faqat o'tkazilgan hujjat bilan (parallel qoralamalar bir-birini to'smaydi; yangi qulf yo'q — qulf tartibi o'zgarmaydi):
+  --   kirim orderi, so'rov bo'yicha qabul qilingan kirim va naqd o'quv to'lovi (kassa_tuition_post) — hammasi shu yerdan o'tadi.
+  if v_doc.form = 'KO1' and v_doc."fiscalNo" is not null
+     and exists (select 1 from public.cash_docs c where c."fiscalNo" = v_doc."fiscalNo" and c.desk = v_desk and c.id <> p_doc_id
+                    and c.status = 'posted' and c."createdAt" > now() - interval '400 days') then
+    raise exception 'Bu fiskal chek raqami boshqa hujjatda ishlatilgan (%)', v_doc."fiscalNo" using errcode = '22023', hint = 'kassa:fiscal_dup';
   end if;
   if p_day_id is not null then
     select d.id, d.day, false into v_day_id, v_day, v_late from public.cash_days d where d.id = p_day_id and d.desk = v_desk and d.status = 'open';
@@ -839,6 +849,8 @@ grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 --   xodim bilan hisob-kitob kirimlari (tasdiq talab qilinsa) — kassa_receipt'dagi kabi qoldiq tekshiruvi va avans / maosh yozuvi.
 --   Boshqa bo'limdan yozilib, o'sha zahoti o'tkaziladigan hujjatlar (o'quv to'lovi, maosh) bu yerdan to'lanmaydi.
 --   sec-5: so'rovni 2-ro'yxat sifatida tasdiqlagan xodim (qo'shimcha «kassir» lavozimi bo'lsa ham) shu so'rov pulini bermaydi (reja 4.13).
+--   g11 (sec-1): Direktor (favqulodda pul beruvchi) o'zi yolg'iz tasdiqlagan so'rov (qaytarish) pulini va o'ziga (bog'langan xodim kartasiga)
+--   beriladigan pulni bermaydi (FD-48) — kassir beradi; uchinchi shaxsga 2-ro'yxat tasdiqlagan pulni favqulodda berishi — avvalgidek.
 --   sec-3: yuridik shaxsga naqd «Xarajat» qoidasi pul berish paytida qayta baholanadi. Direktor tasdig'i endi kerak, lekin yo'q bo'lsa — pul
 --   berilmaydi va so'rov Direktor tasdig'iga qaytariladi (holati «tasdiq kutilmoqda», "needsDirector"): javob ok = false, hint
 --   'kassa:org_director', message — sabab (qaytarish saqlanishi uchun xato emas, qaytish qiymati; sahifa uni rad deb ko'rsatadi).
@@ -866,6 +878,22 @@ begin
   if v_was = 'approved' and v_cur."approvedBy" = v_uid then   -- sec-5: tasdiqlovchi ≠ pul beruvchi
     raise exception 'Bu so''rovni o''zingiz tasdiqlagansiz — pulini o''zingiz bera olmaysiz (tasdiqlovchi va pul beruvchi boshqa-boshqa kishi): pulni kassir beradi'
       using errcode = '42501', hint = 'kassa:self_pay';
+  end if;
+  -- g11 (sec-1): so'rovni yolg'iz tasdiqlagan xodim (2-ro'yxat tasdig'i yo'q, yagona tasdiq — Direktorniki: qaytarishda so'rovning o'zi
+  --   tasdiq; «Qarz / ta'sischi mablag'i» kirimi) uning pulini o'zi bermaydi va qabul qilmaydi — kassir beradi / qabul qiladi (reja §4.11)
+  if v_was = 'approved' and v_cur."approvedBy" is null and v_cur."dirApprovedBy" = v_uid then
+    raise exception '%', case when v_cur.form = 'KO1'
+                              then 'Bu kirim so''rovini o''zingiz tasdiqlagansiz va boshqa tasdiq yo''q — pulni o''zingiz qabul qila olmaysiz: pulni kassir qabul qiladi'
+                              else 'Bu qaytarishni (so''rovni) o''zingiz tasdiqlagansiz va boshqa tasdiq yo''q — pulini o''zingiz bera olmaysiz: pulni kassir beradi' end
+      using errcode = '42501', hint = 'kassa:self_pay';
+  end if;
+  -- g11 (sec-1, FD-48): Direktorning o'ziga (bog'langan xodim kartasiga) beriladigan pulni Direktor o'zi bermaydi — kassir beradi. Faqat
+  --   chiqim (KO-2): xodimdan kirim (hisobdordan qaytim, xodim qaytargan pul, kamomadni qoplash) ham shu funksiyadan o'tadi. Kassir (yoki
+  --   qo'shimcha «kassir» lavozimli Moliya menejeri) o'ziga boshqa xodim tasdiqlagan avans / hisobdorga avansni o'zi beradi (yo'riqnoma §1).
+  if v_was = 'approved' and app.is_admin() and v_cur.form = 'KO2' and v_cur."partyType" = 'employee'
+     and v_cur."partyId" = any(app.kassa_user_cards(v_uid)) then
+    raise exception 'Bu pul sizga (bog''langan xodim kartangizga) beriladi — Direktor o''ziga pulni o''zi bermaydi: pulni kassir beradi (FD-48)'
+      using errcode = '42501', hint = 'kassa:self_recipient';
   end if;
   -- g9: so'rov yozilgandan keyin xodim ishdan ketgan — yangi avans berilmaydi (so'rov bekor qilinadi; yakuniy hisob-kitob — boshqa operatsiyalar)
   if v_was = 'approved' and v_op in ('out_advance', 'out_accountable') and v_cur."partyType" = 'employee' and app.kassa_emp_left(v_cur."partyId") then

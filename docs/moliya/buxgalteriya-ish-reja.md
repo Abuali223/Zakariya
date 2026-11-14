@@ -506,7 +506,7 @@ kompyuter, smenalar; har almashuvda topshirish-qabul sanashi (FD-16).
 | CT-05 | Tekshiruvchi ≠ o‘tkazuvchilar (RPC) va ≠ yopuvchi (CHECK); tizim hujjatlari hech kimni o‘tkazuvchi qilmaydi | 1a |
 | CT-06 | Qayta ochish — faqat direktor, sabab bilan, oxirgi tekshirilmagan kun; qayta chop «АЛМАШТИРИЛДИ», eskisi bekor | 1a |
 | CT-07 | KO-2 — to‘lovdan oldin 2-ro‘yxat tasdig‘i (≠ so‘rovchi); > T1, rahbarga berish, qarz — direktor ham; tasdiqlangan vedomost va qaytarish qo‘shimcha talab qilmaydi [BUX]; T1/L1 — faqat direktor | 1a |
-| CT-08 | Naqd maoshni faqat kassir (favqulodda — direktor) to‘laydi | 1a / 1b |
+| CT-08 | Naqd maoshni faqat kassir (favqulodda — direktor, o‘ziga emas — FD-48) to‘laydi | 1a / 1b |
 | CT-09 | Naqd xarajat, maosh, avans faqat kassa RPC lari orqali; to‘g‘ridan-to‘g‘ri yozish yopilguncha har kuni moslik P1/P4/P5/P8 | 1a–2 |
 | CT-10 | Raqam hisoblagichi — oxirgi qulf; noyob (kassa, tur, yil, raqam); bo‘shliq tekshiruvi | 1a |
 | CT-11 | O‘zgarmaslik: UPDATE faqat RPC bayrog‘i bilan bekor qilish, DELETE yo‘q; yopilgandan keyin storno | 1a |
@@ -578,7 +578,7 @@ bilan solishtirilgach (F4.4); KO-4 varaqlari yil oxirida muqova va varaqlar soni
 | Imkoniyat | Kassir / g‘aznachi | Moliya menejeri | Buxgalter (1b) | Direktor | HR |
 |---|---|---|---|---|---|
 | Kassa hujjatlarini ko‘rish | R | R | R | R | — |
-| Naqd o‘quv to‘lovi; boshqa KO-1; KO-2 bo‘yicha pul berish; naqd maosh/avans | ✓ | — | — | favqulodda | — |
+| Naqd o‘quv to‘lovi; boshqa KO-1; KO-2 bo‘yicha pul berish; naqd maosh/avans | ✓ | — | — | favqulodda (2-ro‘yxat tasdiqlagan, uchinchi shaxsga; qaytarish va o‘ziga — yo‘q, FD-48) | — |
 | Naqdsiz qo‘lda to‘lov | ✓ | ✓ | — | ✓ | — |
 | KO-2 so‘rovi | ✓ | ✓ (1b dan) | — | ✓ | — |
 | KO-2 tasdig‘i, 2-ro‘yxat (≠ so‘rovchi) | — | ✓ | ✓ | — | — |
@@ -862,16 +862,16 @@ Telegram nazorat qatorida (qolganlari — yopilmagan / tekshirilmagan kun, 5910,
 KPI (F1.25, `kassa_kpi`): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi (maqsad ≤ 2 %), muddati o‘tgan
 avanslar — «KPI» oynasi (8 hafta) va dushanba kungi Telegram qatori. Raqam seriyalari (4.14): o‘zaro hisob «ЎҲ-» va avans
 hisoboti «А-» — dalolatnomalardan («Д-») alohida hisoblagichlar bilan; chop etishda o‘z sarlavhasi («Ўзаро ҳисоб
-далолатномаси», «Аванс ҳисоботи»). Modul relizi 11 (kassa moduli mustaqil ko‘rigi tuzatishlari; 10 — F1.21 buxgalter
-roli). Sinov kassasi (CT-20)
+далолатномаси», «Аванс ҳисоботи»). Modul relizi 12 (kassa moduli mustaqil ko‘rigining yakuniy tuzatishlari; 11 — ko‘rik tuzatishlari,
+10 — F1.21 buxgalter roli). Sinov kassasi (CT-20)
 hujjatlari «Buxgalteriya» va avans jadvallariga ko‘chmaydi. Bo‘lim faqat serverda kassa funksiyalari bo‘lganda
-ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 333,
-`test-kassa-pay.sql` 192, `test-kassa-links.sql` 157, `test-kassa-report.sql` 169, `test-fin-period.sql` 42,
-`test-kassa-checks.sql` 54 (toza holat va har band uchun ataylab buzilgan holat; 23-band — himoya mantig‘i barmoq izlari,
+ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinovlar: `test-kassa.sql` 339,
+`test-kassa-pay.sql` 195, `test-kassa-links.sql` 163, `test-kassa-report.sql` 169, `test-fin-period.sql` 42,
+`test-kassa-checks.sql` 55 (toza holat va har band uchun ataylab buzilgan holat; 23-band — himoya mantig‘i barmoq izlari,
 24-band — vazifalar ajratilishi ma’lumotda), `test-fin-rights.sql` 125 (buxgalter o‘qish huquqlari — yopiq ro‘yxat, D6/D7,
-orqaga qaytarish), `test-fin-prereq.sql` 88, `test-kassa-race.sh` 50 (8 × 200 parallel, 10 % ROLLBACK; takror kalit, ikki
-katta chiqim, ikki tasdiq, hisobdor va maosh qaytimlari, kunni yopish), `fin-print.test.mjs` 38, `fin-words.test.mjs` 7,
-`fin-kassa.test.mjs` 37, `tg-daily.test.cjs` 50. Brauzer ssenariylari repo’da — `tests/kassa-e2e` (lokal stend, sintetik
+orqaga qaytarish), `test-fin-prereq.sql` 95, `test-kassa-race.sh` 59 (8 × 200 parallel, 10 % ROLLBACK; takror kalit, ikki
+katta chiqim, ikki tasdiq, hisobdor va maosh qaytimlari, kunni yopish, smena topshirish, fiskal chek takrori, kassani qayta
+to‘xtatish, qaytarish oynasi kaliti), `fin-print.test.mjs` 38, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 42, `tg-daily.test.cjs` 50. Brauzer ssenariylari repo’da — `tests/kassa-e2e` (lokal stend, sintetik
 urug‘; ishga tushirish va kutilgan sonlar — o‘sha papkadagi README): o‘n uchta to‘liq ssenariy (326 tekshiruv) eski va yangi
 dizaynda, 1440 va 390 px; qo‘lda to‘lov va eski oqimlar kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda (48
 tekshiruv); oxirgi to‘liq o‘tish — 2026-11-13, ko‘rik tuzatishlaridan oldin. Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
@@ -879,7 +879,7 @@ va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
 66–69-bo‘limlar; M5 — bankdan limit xati, maktab), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Mustaqil (ko‘p
 agentli) ko‘rik kassa moduli uchun 2026-11-13…14 da o‘tkazildi (F1.21 uchun avvalroq — `SESSIYA-ISHLARI.md` 76-bo‘lim):
-tasdiqlangan topilmalar guruhlab tuzatildi (reliz 11), qabul qilingan cheklovlar — `ishga-tushirish.md`, «Ma’lum va qabul
+tasdiqlangan topilmalar guruhlab tuzatildi (reliz 11; yakuniy ko‘rik topilmalari — reliz 12), qabul qilingan cheklovlar — `ishga-tushirish.md`, «Ma’lum va qabul
 qilingan cheklovlar». Qoldi: brauzer ssenariylarini ko‘rikda o‘zgargan oqimlarga (smena topshirish, oflayn navbat, kunni yopish,
 chop etish) moslab qayta o‘tkazish; jonli zanjirga o‘tkazish — yashirin o‘rnatish kunida, qabul sinovi va buxgalter ko‘rigidan
 keyin (`ishga-tushirish.md`, 3.2-band); F1.20 (RLS relizi) — 1b-bosqichda.
@@ -1085,7 +1085,7 @@ J — ish jarayoni.
 | FD-45 | Korxona o‘lchami | Kichik bo‘lsa 1/2-shakl; aks holda 1–4-shakl va izohlar | [BUX] · 27-mart · K |
 | FD-46 | Ta’til rezervi | 8910 yuritilmaydi (standart) — buxgalter hal qiladi | [BUX] · 27-mart · D |
 | FD-47 | Yuridik shaxsga kassadan naqd to‘lov | Standart — har to‘lov Direktor tasdig‘i bilan (chegara 0); amaldagi qonunchilik bo‘yicha chegara va kontragent turlari («yetkazib beruvchi» / «tashkilot» — yuridik shaxs; YaTT — «jismoniy shaxs») buxgalter tasdiqlaydi, Direktor «⚙ Sozlamalar»ga kiritadi | [BUX] · 12-dekabr · J |
-| FD-48 | Direktorning o‘ziga (bog‘langan xodim kartasiga) beriladigan pul | Direktor bosqichini Direktor o‘zi imzolaydi (1-ro‘yxatdan yuqori imzo yo‘q); 2-ro‘yxat tasdig‘i (Moliya menejeri / buxgalter) o‘zgarishsiz talab qilinadi, pulni kassir beradi. 2-ro‘yxat xodimi o‘ziga beriladigan pulni tasdiqlamaydi — uning 2-ro‘yxat bosqichini boshqa 2-ro‘yxat xodimi yoki Direktor imzolaydi (g5) | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · K, J |
+| FD-48 | Direktorning o‘ziga (bog‘langan xodim kartasiga) beriladigan pul | Direktor bosqichini Direktor o‘zi imzolaydi (1-ro‘yxatdan yuqori imzo yo‘q); 2-ro‘yxat tasdig‘i (Moliya menejeri / buxgalter) o‘zgarishsiz talab qilinadi, pulni kassir beradi. 2-ro‘yxat xodimi o‘ziga beriladigan pulni tasdiqlamaydi — uning 2-ro‘yxat bosqichini boshqa 2-ro‘yxat xodimi yoki Direktor imzolaydi (g5). Tizim tekshiradi (g11): Direktor o‘z kartasiga chiqim orderi bo‘yicha pulni va naqd maoshni bermaydi (`kassa:self_recipient`), o‘zi yolg‘iz tasdiqlagan so‘rov (qaytarish) pulini ham (`kassa:self_pay`) — kassir beradi; kassir o‘ziga boshqa xodim tasdiqlagan avansni o‘zi beradi; buzilish — kassa-checks 24-bandida | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · K, J |
 | FD-49 | Fiskal chek va aka-uka / opa-singil to‘lovi | Bitta fiskal chek — bitta o‘quvchining bitta naqd to‘lovi: farzandlar uchun alohida chek uriladi va har to‘lov o‘z chek raqami bilan kiritiladi. Bir chek raqami ikkinchi hujjatda rad etiladi (`kassa:fiscal_dup`); raqamga qo‘shimcha belgi qo‘shib kiritish taqiqlanadi (chek raqami NKM dagidek yoziladi) | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · J |
 
 ---

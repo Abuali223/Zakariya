@@ -15,6 +15,13 @@ do $iqror_guard$ begin raise exception 'iqror: refund-rpc.sql ALOHIDA ishga tush
 --   Ruxsat: FAQAT direktor (refunds_ins = is_admin) yoki server — refund sezgir amal.
 --   Kassa moduli o'rnatilgan bazada (moliya rejasi 1a, g8): pul hali berilmagan naqd qaytarish so'rovlari ham hisobga olinadi
 --   (kassa:refund_pending — pastda); modul yo'q bazada — avvalgidek.
+--   Oyna kaliti (live-1): admin.html qaytarish oynasi p_ref ni oyna ochilganda BIR marta yaratadi. Posbon qatori so'rovni ham saqlaydi
+--     (applied_payments.result: target, id, amount, clawback); o'sha kalit BOSHQA ma'lumot bilan (summa, «avans ham», faktura / to'lov)
+--     qayta kelsa — {ok:false, reason:'ref_mismatch'} + birinchi yozilgan summa va «avans ham» (avval jim {dup} qaytib, oyna «Allaqachon
+--     qaytarilgan ✓» derdi — o'zgartirilgan summa yozilmagan bo'lsa ham). Bir xil ma'lumot — avvalgidek {dup}. Eski posbon qatori
+--     (result bo'sh) — faqat summa solishtiriladi. ok:false javoblarda posbon yozilmaydi: rad etilgan so'rovni tuzatib, o'sha kalit bilan
+--     qayta yuborsa bo'ladi. Kassa o'rnatilgan bazada shu oynadan naqd so'rov (cash_docs."clientRef" = 'ref_'||kalit) yuborilgan bo'lsa —
+--     ref_mismatch (via 'cash'; live-1b: bitta qaytarish ikki usulda yozilmasin).
 -- Idempotent (CREATE OR REPLACE). run-all.sql + deploy.sh'да.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
@@ -35,6 +42,9 @@ declare
   v_pname text;
   v_held numeric := 0;
   v_kassa boolean := to_regclass('public.cash_docs') is not null and coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1';
+  v_apamt numeric;      -- live-1: o'sha kalitning posbon qatori (birinchi yozilgan summa va so'rov)
+  v_apres jsonb;
+  v_viacash boolean := false;
 begin
   -- Ruxsat: refund — FAQAT direktor (refunds jadvali ins = is_admin) yoki server.
   --   Kassa (moliya rejasi 1a, kassa-links.sql): Direktor TASDIQLAGAN naqd qaytarishni kassir pulni berayotgan paytda kassa
@@ -77,9 +87,21 @@ begin
     if v_kassa then
       -- Aynan shu qaytarish (o'sha p_ref) allaqachon bajarilgan bo'lsa — qayta urinish {dup}, so'rovlar tekshiruvidan OLDIN: aks holda
       --   bajarilgan qaytarish kutilayotgan naqd so'rov tufayli xato bo'lib ko'rinardi. Faqat o'qish (posbon pastda; shu o'quvchi navbati
-      --   va faktura qulfi ostida — reattribute_avans kabi).
-      if coalesce(p_ref, '') <> '' and exists (select 1 from public.applied_payments where id = 'refund:' || p_ref) then
-        return jsonb_build_object('dup', true, 'ref', p_ref);
+      --   va faktura qulfi ostida — reattribute_avans kabi). live-1: o'sha kalit boshqa ma'lumot bilan — ref_mismatch (pastdagi posbon kabi).
+      if coalesce(p_ref, '') <> '' then
+        select a.amount, a.result into v_apamt, v_apres from public.applied_payments a where a.id = 'refund:' || p_ref;
+        if found then
+          if v_apamt is distinct from p_amount
+             or (v_apres is not null and (v_apres ->> 'target' is distinct from p_target or v_apres ->> 'id' is distinct from p_id
+                                          or (v_apres ->> 'clawback')::boolean is distinct from coalesce(p_clawback, false))) then
+            return jsonb_build_object('ok', false, 'reason', 'ref_mismatch', 'amount', v_apamt, 'clawback', (v_apres ->> 'clawback')::boolean);
+          end if;
+          return jsonb_build_object('dup', true, 'ref', p_ref);
+        end if;
+        -- live-1b: shu oynadan naqd qaytarish so'rovi yuborilgan (javob yo'qolgan bo'lishi mumkin) — naqdsiz usul bilan yana yozilmaydi
+        --   (so'rov bekor qilingan bo'lsa ham: boshqa usul — oynani qayta ochib, yangi kalit bilan)
+        execute 'select exists (select 1 from public.cash_docs c where c."clientRef" = $1)' into v_viacash using 'ref_' || p_ref;
+        if v_viacash then return jsonb_build_object('ok', false, 'reason', 'ref_mismatch', 'via', 'cash'); end if;
       end if;
       execute 'select coalesce(sum((c."sourceSnapshot" ->> ''amount'')::numeric), 0) from public.cash_docs c
                 where c.op = ''out_refund'' and c.status in (''draft'', ''approved'') and c."sourceSnapshot" ->> ''target'' = ''invoice''
@@ -104,11 +126,22 @@ begin
     end if;
 
     -- 2) IDEMPOTENTLIK POSBONI: aynan shu refund faqat BIR marta pulни harakatlantiradi.
+    --    live-1: posbon so'rovni ham saqlaydi; o'sha kalit boshqa ma'lumot bilan — ref_mismatch (birinchi yozilgani bilan), bir xil — {dup}.
     if p_ref is not null and p_ref <> '' then
-      insert into public.applied_payments(id, "studentId", amount, "createdAt")
-        values ('refund:' || p_ref, coalesce(v_sid,''), p_amount, now()) on conflict (id) do nothing;
+      insert into public.applied_payments(id, "studentId", amount, result, "createdAt")
+        values ('refund:' || p_ref, coalesce(v_sid,''), p_amount,
+                jsonb_build_object('target', p_target, 'id', p_id, 'amount', p_amount, 'clawback', coalesce(p_clawback, false)), now())
+        on conflict (id) do nothing;
       get diagnostics v_inserted = row_count;
-      if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
+      if v_inserted = 0 then
+        select a.amount, a.result into v_apamt, v_apres from public.applied_payments a where a.id = 'refund:' || p_ref;
+        if v_apamt is distinct from p_amount
+           or (v_apres is not null and (v_apres ->> 'target' is distinct from p_target or v_apres ->> 'id' is distinct from p_id
+                                        or (v_apres ->> 'clawback')::boolean is distinct from coalesce(p_clawback, false))) then
+          return jsonb_build_object('ok', false, 'reason', 'ref_mismatch', 'amount', v_apamt, 'clawback', (v_apres ->> 'clawback')::boolean);
+        end if;
+        return jsonb_build_object('dup', true, 'ref', p_ref);
+      end if;
     end if;
 
     -- 3) refunds jurnal (pul o'zgarishi hech qachon jurnalsiz qolmasin — bitta tranzaksiyaда).
@@ -156,6 +189,11 @@ begin
     end;
     -- g8 (yuqoridagi qoida): shu to'lov bo'yicha pul hali berilmagan naqd qaytarish so'rovi bo'lsa — rad (to'lov faqat to'liq qaytariladi)
     if v_kassa then
+      -- live-1b (fakturadagi kabi): shu oynadan naqd so'rov yuborilgan — naqdsiz usul bilan yozilmaydi
+      if coalesce(p_ref, '') <> '' then
+        execute 'select exists (select 1 from public.cash_docs c where c."clientRef" = $1)' into v_viacash using 'ref_' || p_ref;
+        if v_viacash then return jsonb_build_object('ok', false, 'reason', 'ref_mismatch', 'via', 'cash'); end if;
+      end if;
       execute 'select coalesce(sum((c."sourceSnapshot" ->> ''amount'')::numeric), 0) from public.cash_docs c
                 where c.op = ''out_refund'' and c.status in (''draft'', ''approved'') and c."sourceSnapshot" ->> ''target'' = ''payment''
                   and c."sourceSnapshot" ->> ''targetId'' = $1'
@@ -165,11 +203,21 @@ begin
           trim_scale(v_held) using errcode = '22023', hint = 'kassa:refund_pending';
       end if;
     end if;
-    if p_ref is not null and p_ref <> '' then
-      insert into public.applied_payments(id, "studentId", amount, "createdAt")
-        values ('refund:' || p_ref, '', p_amount, now()) on conflict (id) do nothing;
+    if p_ref is not null and p_ref <> '' then   -- posbon (live-1: so'rov bilan; o'sha kalit boshqa to'lov / summa bilan — ref_mismatch)
+      insert into public.applied_payments(id, "studentId", amount, result, "createdAt")
+        values ('refund:' || p_ref, '', p_amount,
+                jsonb_build_object('target', p_target, 'id', p_id, 'amount', p_amount, 'clawback', coalesce(p_clawback, false)), now())
+        on conflict (id) do nothing;
       get diagnostics v_inserted = row_count;
-      if v_inserted = 0 then return jsonb_build_object('dup', true, 'ref', p_ref); end if;
+      if v_inserted = 0 then
+        select a.amount, a.result into v_apamt, v_apres from public.applied_payments a where a.id = 'refund:' || p_ref;
+        if v_apamt is distinct from p_amount
+           or (v_apres is not null and (v_apres ->> 'target' is distinct from p_target or v_apres ->> 'id' is distinct from p_id
+                                        or (v_apres ->> 'clawback')::boolean is distinct from coalesce(p_clawback, false))) then
+          return jsonb_build_object('ok', false, 'reason', 'ref_mismatch', 'amount', v_apamt, 'clawback', (v_apres ->> 'clawback')::boolean);
+        end if;
+        return jsonb_build_object('dup', true, 'ref', p_ref);
+      end if;
     end if;
     select coalesce("payerName",'') into v_pname from public.payments where id = p_id;
     insert into public.refunds(id, target, "targetId", "studentId", "studentName", amount, reason, "byEmail", month, "createdAt")

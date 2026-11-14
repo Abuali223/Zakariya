@@ -174,6 +174,24 @@ select zz.put('S10', zz.void('U_FM', (select id from public.cash_docs where "sou
 select zz.chk('S10 maosh orderi shu kunda bekor qilindi: to''lov qatori ham olib tashlandi, qoldiq tiklandi',
   (select status || ':' || no from public.cash_docs where "sourceId" = 'sp_IQX-T1_2026-11_n1') || ' / ' || (select count(*) from public.salary_payments where id = 'sp_IQX-T1_2026-11_n1') || ' / ' || zz.bal(),
   '^void:2 / 0 / 4000000$');
+-- g11 (sec-1, FD-48): Direktor o'z kartasiga (bog'langan xodim kartasi — st1) naqd maoshni o'zi bermaydi (vedomostni o'zi tasdiqlaydi) —
+--   kassir beradi (tasdiqlangan vedomost bo'yicha). Savepoint ichida (keyingi raqamlar va qoldiq o'zgarmasin).
+savepoint s11;
+set local session_replication_role = replica;
+update public.users set "staffRefType" = 'staff', "staffRefId" = 'st1' where id = 'U_DIR';
+set local session_replication_role = origin;
+select zz.rpc('U_DIR', 'kassa_salary_pay', zz.sal('sp_IQX-T1_2026-12_d1', 'cash', 'IQX-T1', 'staff:st1', '2026-12', 100000)) as s11 \gset
+select :'s11' || ' | ' || (select count(*) from public.salary_payments where id = 'sp_IQX-T1_2026-12_d1') || ' | '
+       || zz.jdp(zz.rpc('U_KAS', 'kassa_salary_pay', zz.sal('sp_IQX-T1_2026-12_k1', 'cash', 'IQX-T1', 'staff:st1', '2026-12', 100000)), '{kassa,status}', '-') as s11 \gset
+select :'s11' || ':' || coalesce((select c."postedBy" || '/' || c."partyId" from public.cash_docs c where c."sourceId" = 'sp_IQX-T1_2026-12_k1'), '-') as s11 \gset
+-- o'tish oyidan oldingi oy (2026-11 — vedomostsiz; kassir naqd maosh bermaydi, kassa:payroll_gate): xabar chiqish yo'lini aytadi (karta)
+select zz.rpc('U_DIR', 'kassa_salary_pay', zz.sal('sp_IQX-T1_2026-11_d2', 'cash', 'IQX-T1', 'staff:st1', '2026-11', 100000)) as s11g \gset
+select :'s11g' || ' | ' || (select count(*) from public.salary_payments where id = 'sp_IQX-T1_2026-11_d2') as s11g \gset
+rollback to savepoint s11;
+select zz.chk('S11 g11 (sec-1, FD-48): Direktor o''z kartasiga naqd maosh bera olmaydi (kassa:self_recipient, yozuv yo''q); kassir beradi (tasdiqlangan vedomost bo''yicha)',
+  :'s11', '^ERR 42501 \[kassa:self_recipient\] Bu maosh sizga \(bog''langan xodim kartangizga\) beriladi — Direktor o''ziga naqd maoshni o''zi bermaydi: pulni kassir beradi \(FD-48\) \| 0 \| posted:U_KAS/staff:st1$');
+select zz.chk('S11b o''tish oyidan oldingi oy (vedomostsiz — kassir naqd maosh bermaydi): Direktorga rad xabari chiqish yo''lini aytadi (karta orqali), yozuv yo''q',
+  :'s11g', '^ERR 42501 \[kassa:self_recipient\] Bu maosh sizga .*\(FD-48\)\. 2026-11 oy maoshi HR tasdiqlagan vedomostsiz \(o''tish oyidan oldin\) — bunday oyda kassir naqd maosh bermaydi: maoshingizni karta orqali yozing \| 0$');
 
 -- ---------- (A) ish haqi avansi ----------
 select zz.put('A1', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_advance","amount":300000,"partyType":"employee","partyId":"staff:st1","basis":"Ariza, 03.01.2027","clientRef":"a1-000001"}'));
@@ -707,6 +725,13 @@ select zz.chk('RC2 ui-3: shu avans bo''yicha kutilayotgan so''rov (200 000) bila
   '^ERR 22023 \[kassa:refund_pending\].*\(200000 so''m\).*avansdan \(300000 so''m\).* \| approved$');
 select zz.put('RC2c', zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', (select id from public.cash_docs where "clientRef" = 'ref_rf_rc2_000002'), 'Ikkinchi so''rov kerak emas')));
 select zz.put('RC3b', zz.bal());
+-- g11 (sec-1): qaytarishni so'ragan (= tasdiqlagan) Direktor uning pulini o'zi bermaydi — kassir beradi (yagona tasdiq va pul berish bir
+--   odamda bo'lmasin; reja §4.11, yo'riqnoma §3)
+select zz.put('RC2d', zz.pay('U_DIR', zz.id('RC1')));
+select zz.chk('RC2d g11 (sec-1): qaytarishni so''ragan (= tasdiqlagan) Direktor pulini o''zi bera olmaydi (kassa:self_pay); so''rov, avans va kassa o''zgarmadi',
+  zz.get('RC2d') || ' | ' || (select status || ':' || coalesce(no::text, '-') from public.cash_docs where id = zz.id('RC1')) || ':' || (select trim_scale(credit)::text from public.student_credit where id = 'T-6')
+  || ':' || (zz.bal() = zz.get('RC3b'))::text,
+  '^ERR 42501 \[kassa:self_pay\] Bu qaytarishni \(so''rovni\) o''zingiz tasdiqlagansiz va boshqa tasdiq yo''q — pulini o''zingiz bera olmaysiz: pulni kassir beradi \| approved:-:300000:true$');
 select zz.put('RC3', zz.pay('U_KAS', zz.id('RC1')));
 select zz.chk('RC3 kassir pulni berdi: KO-2 o''tkazildi; avans 300 000 → 100 000; kassa qoldig''i −200 000',
   (zz.js(zz.get('RC3')) ->> 'status') || ':' || (zz.js(zz.get('RC3')) ->> 'postedBy') || ' / ' || (select trim_scale(credit)::text from public.student_credit where id = 'T-6')
@@ -782,6 +807,51 @@ select zz.chk('RP4 g8: biriktirilmagan to''lov (pu2) bo''yicha naqd so''rov (RP3
   zz.get('RP4a') || ' | ' || zz.get('RP4s') || ' | ' || zz.jf('RP4c', 'status') || ':' || zz.jf('RP4b', 'ok') || ':'
   || (select status from public.payments where id = 'pu2') || ':' || (select count(*) from public.refunds where "targetId" = 'pu2' and "cashDocId" is null),
   '^ERR 22023 \[kassa:refund_pending\] Bu to''lov bo''yicha pul hali berilmagan naqd qaytarish so''rovi bor \(70000 so''m\).* \| unmatched:0 \| cancelled:true:refunded:1$');
+
+-- (RK) live-1, live-1b: qaytarish oynasi kaliti kassa ishlayotganda. «Naqdsiz» (refund_invoice) o'sha kalit bilan boshqa ma'lumot — rad
+--   (oldindan tekshirish tarmog'i: ref_mismatch, birinchi yozilgani bilan); «Naqdsiz»dan keyin o'sha oynadan «Naqd» so'rovi — rad
+--   (kassa:ref_mismatch, so'rov yozilmaydi: avval ikkinchi so'rov yozilib, pul berilganda qaytarish ikki marta bajarilardi); teskarisi —
+--   «Naqd» so'rovidan keyin o'sha kalit bilan «Naqdsiz» — rad (ref_mismatch, via cash; so'rov bekor qilingach ham), faktura tegilmaydi.
+--   T-10: to'langan rk1, rk2 (600 000 dan), avans 120 000; pu_rk — biriktirilmagan 30 000.
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values ('s10','T-10','Sinov K',5,'A','uz','',10,'[]');
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
+  ('rk1','T-10','Sinov K','2027-01',600000,600000,'paid'), ('rk2','T-10','Sinov K','2026-12',600000,600000,'paid');
+insert into public.student_credit (id, "studentId", credit) values ('T-10','T-10',120000);
+insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw) values
+  ('pu_rk', '', 'bank', 30000, 'unmatched', 'Noma''lum To''lovchi 3', false, '{}');
+set local session_replication_role = origin;
+select zz.put('RK1a', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk1',100000,'Ortiqcha to''lov',false,'d@x','rf_rk1_000001')::text$q$));
+select zz.put('RK1b', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk1',150000,'Ortiqcha to''lov',true,'d@x','rf_rk1_000001')::text$q$));
+select zz.put('RK1s', (select trim_scale("paidAmount") from public.invoices where id = 'rk1') || ':' || (select count(*) from public.refunds where "studentId" = 'T-10')
+                      || ':' || (select trim_scale(credit) from public.student_credit where id = 'T-10'));
+select zz.put('RK1c', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk1',100000,'Ortiqcha to''lov',false,'d@x','rf_rk1_000001')::text$q$));
+select zz.chk('RK1 live-1 (kassa ishlayapti, «Naqdsiz»): o''sha kalit, boshqa summa + «avans ham» — rad (ref_mismatch, birinchi yozilgani: 100 000, avanssiz); faktura, qaytarishlar, avans o''zgarmadi; bir xil ma''lumot — takror',
+  zz.jf('RK1a', 'ok') || ':' || zz.jf('RK1a', 'newPaid') || ' | ' || zz.jf('RK1b', 'ok') || ':' || zz.jf('RK1b', 'reason') || ':' || zz.jf('RK1b', 'amount') || ':' || zz.jf('RK1b', 'clawback')
+  || ' | ' || zz.get('RK1s') || ' | ' || zz.jf('RK1c', 'dup'),
+  '^true:500000 \| false:ref_mismatch:100000:false \| 500000:1:120000 \| true$');
+select zz.put('RK2a', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk2',100000,'Adashib kiritilgan',false,'d@x','rf_rk2_000001')::text$q$));
+select zz.put('RK2b', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"invoice","id":"rk2","amount":100000,"reason":"Adashib kiritilgan","payee":"Sinov Ota Onaevich","clientRef":"rf_rk2_000001"}'));
+select zz.chk('RK2 live-1b: «Naqdsiz» qaytarishdan keyin o''sha oynadan (o''sha kalit) «Naqd» so''rovi — rad (kassa:ref_mismatch), naqd so''rov yozilmadi; faktura 500 000, qaytarish bitta',
+  zz.jf('RK2a', 'ok') || ' | ' || zz.get('RK2b')
+  || ' | ' || (select count(*) from public.cash_docs where "clientRef" = 'ref_rf_rk2_000001') || ':' || (select trim_scale("paidAmount") from public.invoices where id = 'rk2')
+  || ':' || (select count(*) from public.refunds where "targetId" = 'rk2'),
+  '^true \| ERR 22023 \[kassa:ref_mismatch\] Bu oynadan naqdsiz \(bank / karta\) qaytarish allaqachon yozilgan.* \| 0:500000:1$');
+select zz.put('RK3a', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"invoice","id":"rk2","amount":50000,"reason":"Ortiqcha to''lov","payee":"Sinov Ota Onaevich","clientRef":"rf_rk3_000001"}'));
+select zz.put('RK3b', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk2',50000,'Ortiqcha to''lov',false,'d@x','rf_rk3_000001')::text$q$));
+select zz.put('RK3s', (select trim_scale("paidAmount") from public.invoices where id = 'rk2') || ':' || (select count(*) from public.refunds where "targetId" = 'rk2')
+                      || ':' || (select count(*) from public.applied_payments where id = 'refund:rf_rk3_000001'));
+select zz.put('RK3c', zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('RK3a'), 'Naqdsiz qaytariladi')));
+select zz.put('RK3d', zz.as('U_DIR', $q$select public.refund_invoice('invoice','rk2',50000,'Ortiqcha to''lov',false,'d@x','rf_rk3_000001')::text$q$));
+select zz.put('RK4a', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"payment","id":"pu_rk","amount":30000,"reason":"Egasi topilmadi","payee":"Sinov Begona Shaxs","clientRef":"rf_rk4_000001"}'));
+select zz.put('RK4b', zz.as('U_DIR', $q$select public.refund_invoice('payment','pu_rk',30000,'Egasi topilmadi',false,'d@x','rf_rk4_000001')::text$q$));
+select zz.put('RK4s', (select status from public.payments where id = 'pu_rk') || ':' || (select count(*) from public.refunds where "targetId" = 'pu_rk'));
+select zz.put('RK4c', zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('RK4a'), 'Sinov tugadi')));
+select zz.chk('RK3 live-1b teskari: «Naqd» so''rovidan keyin o''sha kalit bilan «Naqdsiz» — rad (ref_mismatch, via cash; so''rov bilan jami to''langandan oshmasa ham), faktura tegilmadi, posbon yozilmadi; so''rov bekor qilingach ham — rad (boshqa usul — yangi oyna); biriktirilmagan to''lovda ham',
+  zz.jf('RK3a', 'status') || ' | ' || zz.jf('RK3b', 'ok') || ':' || zz.jf('RK3b', 'reason') || ':' || zz.jf('RK3b', 'via') || ' | ' || zz.get('RK3s')
+  || ' | ' || zz.jf('RK3c', 'status') || ':' || zz.jf('RK3d', 'reason') || ':' || zz.jf('RK3d', 'via')
+  || ' | ' || zz.jf('RK4a', 'status') || ':' || zz.jf('RK4b', 'reason') || ':' || zz.jf('RK4b', 'via') || ':' || zz.get('RK4s') || ':' || zz.jf('RK4c', 'status'),
+  '^approved \| false:ref_mismatch:cash \| 500000:1:0 \| cancelled:ref_mismatch:cash \| approved:ref_mismatch:cash:unmatched:0:cancelled$');
 
 -- (RS) acc-7: qaytarish orderining faktura qismi hisobvarag'i (4010 / 6310) pul BERILGAN kunga ko'ra qayta aniqlanadi; summa va tasdiq o'zgarmaydi
 select zz.put('RS0', zz.as('U_KAS', format('select public.kassa_day_close(%L::jsonb)::text', json_build_object('day', '2027-01-06', 'counted', zz.bal()::numeric))));

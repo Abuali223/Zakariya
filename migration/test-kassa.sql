@@ -203,6 +203,29 @@ select zz.chk('C6c2 state-9: javob yo''qolgach fiskal chek raqami tuzatilib o''s
   zz.rcpt('U_KAS', $q${"op":"in_sale","amount":150000,"partyType":"student","partyId":"s1","partyName":"Sinov Ota","basis":"Forma","fiscalNo":"F-1002","clientRef":"c6-000002"}$q$) || ' | '
   || (zz.js(zz.rcpt('U_KAS', $q${"op":"in_sale","amount":150000,"partyType":"student","partyId":"s1","partyName":"Sinov Ota","basis":"Forma","fiscalNo":"F-1001","clientRef":"c6-000002"}$q$)) ->> 'dup'),
   '^ERR 22023 \[kassa:ref_mismatch\].* \| true$');
+-- g11 (sql-2): bitta fiskal chek — bitta kirim — o'tkazishda kassa qulfi ostida ham tekshiriladi. Parallel holat (ikkinchi yozuvchi so'rov
+--   yozilganda birinchisining hujjati hali saqlanmagan — test-kassa-race.sh 12-bo'lim) bu yerda ketma-ket tiklanadi: Direktor ruxsatini
+--   kutayotgan kirim so'rovi F-C6F bilan yozilgach, o'sha raqam boshqa o'tkazilgan kirimga tushgan (RPC'siz, faqat shu tekshiruv uchun) —
+--   so'rov bo'yicha pul qabul qilinmaydi (kassa:fiscal_dup), raqam yeyilmaydi; raqam tiklangach — qabul qilinadi. Savepoint ichida
+--   (keyingi raqamlar o'zgarmasin).
+savepoint c6f;
+select zz.put('C6f', zz.rcpt('U_KAS', format('{"op":"in_funding","amount":5000,"partyType":"founder","partyId":"%s","articleId":"OP-20","basis":"Qaror 6f","fiscalNo":"F-C6F","clientRef":"c6f-000001"}', zz.id('cp_fnd'))));
+select zz.f(zz.get('C6f'), 'status') || ':' || zz.f(zz.appr('U_DIR', zz.id('C6f')), 'status') as c6f_a \gset
+set local session_replication_role = replica;
+update public.cash_docs set "fiscalNo" = 'F-C6F' where id = zz.id('C6');
+set local session_replication_role = origin;
+select zz.pay('U_KAS', zz.id('C6f')) as c6f_b \gset
+select :'c6f_b' || ' | ' || (select status || ':' || coalesce(no::text, '-') from public.cash_docs where id = zz.id('C6f'))
+       || ':' || (select "lastNo" from public.doc_counters where desk = 'main' and series = 'KO1' and year = 2027) as c6f_b \gset
+set local session_replication_role = replica;
+update public.cash_docs set "fiscalNo" = 'F-1001' where id = zz.id('C6');
+set local session_replication_role = origin;
+select zz.f(zz.pay('U_KAS', zz.id('C6f')), 'status') as c6f_c \gset
+select :'c6f_c' || ':' || coalesce((select no::text from public.cash_docs where id = zz.id('C6f')), '-') as c6f_c \gset
+rollback to savepoint c6f;
+select zz.chk('C6f g11 (sql-2): so''rov kutayotganda shu fiskal chek raqami boshqa o''tkazilgan kirimga tushgan — pul qabul qilinmaydi (kassa:fiscal_dup), raqam yeyilmaydi; takrori yo''qolgach — qabul qilinadi',
+  :'c6f_a' || ' | ' || :'c6f_b' || ' | ' || :'c6f_c',
+  '^draft:approved \| ERR 22023 \[kassa:fiscal_dup\] Bu fiskal chek raqami boshqa hujjatda ishlatilgan \(F-C6F\) \| approved:-:3 \| posted:4$');
 select zz.chk('C6d fiskal istisno: kassir so''ray olmaydi',
   zz.rcpt('U_KAS', $q${"op":"in_sale","amount":50000,"partyType":"student","partyId":"T-1","basis":"Forma","fiscalExempt":true,"clientRef":"c6-000004"}$q$), '^ERR 22023 \[kassa:fiscal\]');
 select zz.put('C6e', zz.rcpt('U_DIR', $q${"op":"in_sale","amount":50000,"partyType":"student","partyId":"T-1","basis":"Forma","fiscalExempt":true,"clientRef":"c6-000005"}$q$));
@@ -559,6 +582,24 @@ select zz.chk('G22c qa-4: kunni komissiya bilan yopgan Moliya menejeri uni o''zi
   '^closed:U_KAS2/U_FM \| ERR 42501 \[kassa:self_verify\] Kunni o''zingiz yopgansiz — kunni o''zingiz tekshira olmaysiz.* \| verified:U_ACC/U_FM$');
 select zz.chk('G22d qa-4: funksiyani chetlab «tekshiruvchi = yopuvchi» yozilsa — bazadagi cheklov rad etadi (23514, cash_days_verifier_ne_closer)',
   :'g22c_b', '^ERR 23514 \[\] .*cash_days_verifier_ne_closer');
+-- g11 (sec-2): 08.01 — Moliya menejeri kunni kassir o'rniga komissiya bilan, Z siz yopadi; Direktor qayta ochadi; kassa egasi (U_KAS2)
+--   qayta yopadi. Avval faqat hozirgi yopuvchi solishtirilardi (qayta ochish "closedBy" ni bo'shatadi) — pulni birinchi sanab yopgan Moliya
+--   menejeri kunni o'zi tekshirib qo'yardi. Endi yopish hodisasi bo'yicha rad (kassa:self_verify); buxgalter tekshiradi. Savepoint ichida.
+savepoint g22e;
+select zz.clock('2027-01-08 10:00+05');
+select left(zz.rcpt('U_KAS2', format('{"op":"in_bank","amount":5000,"partyType":"bank","partyId":"%s","basis":"Chek 008b","clientRef":"g22e-0001"}', zz.id('cp_bank'))), 0);
+select coalesce(zz.f(zz.close('U_FM', format('{"day":"2027-01-08","counted":%s,"commission":[{"title":"Moliya menejeri","name":"Sinov M"},{"title":"Buxgalter","name":"Sinov B"}]}', zz.bal())), 'day', 'status'), '<null>')
+       || ':' || coalesce(zz.f(zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-01-08', 'Hujjat tuzatiladi')::text$q$), 'day', 'status'), '<null>') as g22e_a \gset
+select :'g22e_a' || ':' || coalesce(zz.f(zz.close('U_KAS2', format('{"day":"2027-01-08","counted":%s}', zz.bal())), 'day', 'status'), '<null>') as g22e_a \gset
+select :'g22e_a' || ':' || coalesce((select d."closedBy" || '/' || (select string_agg(e."byUid", ',' order by e."byUid") from public.cash_day_events e where e."dayId" = d.id and e.kind = 'close')
+                                       from public.cash_days d where d.desk = 'main' and d.day = '2027-01-08'), '<null>') as g22e_a \gset
+select zz.as('U_FM', $q$select public.kassa_day_verify('main', '2027-01-08', true, 'Hammasi joyida')::text$q$) || ' | '
+       || coalesce(zz.f(zz.as('U_ACC', $q$select public.kassa_day_verify('main', '2027-01-08', true, 'Hammasi joyida')::text$q$), 'day', 'status'), '<null>') as g22e_b \gset
+select :'g22e_b' || ':' || coalesce((select "verifiedBy" from public.cash_days where desk = 'main' and day = '2027-01-08'), '<null>') as g22e_b \gset
+rollback to savepoint g22e;
+select zz.chk('G22e g11 (sec-2): kunni qayta ochilishidan oldin (kassir o''rniga, komissiya bilan, Z siz) yopgan Moliya menejeri uni tekshira olmaydi (kassa:self_verify); buxgalter tekshiradi',
+  :'g22e_a' || ' | ' || :'g22e_b',
+  '^closed:open:closed:U_KAS2/U_FM,U_KAS2 \| ERR 42501 \[kassa:self_verify\] Kunni o''zingiz yopgansiz \(qayta ochilishidan oldin\) — kunni o''zingiz tekshira olmaysiz.* \| verified:U_ACC$');
 
 -- Yil chegarasi: raqamlar va varaqlar yangi yilda 1 dan
 select zz.clock('2027-12-31 11:00+05');
@@ -750,6 +791,18 @@ select zz.put('L3', zz.preq('U_KAS2', $q${"op":"out_handover","amount":20000,"pa
 select zz.chk('L3 Direktor tasdig''i bosqichi — o''z kartasiga ham (eng yuqori vakolat): 2-ro''yxat, keyin Direktor — tasdiqlandi',
   zz.f(zz.get('L3'), 'needsDirector') || ':' || zz.f(zz.appr('U_FM', zz.id('L3')), 'status') || ':' || zz.f(zz.appr('U_DIR', zz.id('L3')), 'status'),
   '^true:draft:approved$');
+-- g11 (sec-1, FD-48): Direktorning o'ziga (bog'langan karta st4) beriladigan pulni Direktor o'zi bermaydi — kassir beradi; kassir esa o'ziga
+--   (bog'langan karta tch1) Moliya menejeri tasdiqlagan ish haqi avansini o'zi beradi (yo'riqnoma §1; kunni boshqa xodim tekshiradi)
+select zz.put('L3g', zz.pay('U_DIR', zz.id('L3')));
+select zz.put('L3g', zz.get('L3g') || ' | ' || (select status || ':' || coalesce("postedBy", '-') from public.cash_docs where id = zz.id('L3')));
+select zz.put('L3gk', zz.f(zz.pay('U_KAS2', zz.id('L3')), 'status'));
+select zz.chk('L3g g11 (sec-1): Direktor o''ziga (st4) beriladigan «Rahbar / ta''sischiga» pulini o''zi bera olmaydi (kassa:self_recipient), hujjat o''zgarmadi; kassir beradi',
+  zz.get('L3g') || ' | ' || zz.get('L3gk') || ':' || (select "postedBy" from public.cash_docs where id = zz.id('L3')),
+  '^ERR 42501 \[kassa:self_recipient\] Bu pul sizga \(bog''langan xodim kartangizga\) beriladi — Direktor o''ziga pulni o''zi bermaydi: pulni kassir beradi \(FD-48\) \| approved:- \| posted:U_KAS2$');
+select zz.put('L3h', zz.preq('U_KAS2', $q${"op":"out_advance","amount":30000,"partyType":"employee","partyId":"teachers:tch1","basis":"Ariza","clientRef":"l3h-00001"}$q$));
+select zz.put('L3hp', zz.f(zz.appr('U_FM', zz.id('L3h')), 'status') || ':' || zz.f(zz.pay('U_KAS2', zz.id('L3h')), 'status'));
+select zz.chk('L3h kassir o''ziga (bog''langan karta tch1) Moliya menejeri tasdiqlagan ish haqi avansini o''zi beradi — ruxsat (g11: qoida faqat Direktorga)',
+  zz.get('L3hp') || ':' || (select "approvedBy" || '/' || "postedBy" || '/' || "partyId" from public.cash_docs where id = zz.id('L3h')), '^approved:posted:U_FM/U_KAS2/teachers:tch1$');
 -- sec-1 (rahbar tuzatishi): xodim kartalari — asosiy havola va teskari havola (ikkinchi lavozim kartasi); pul oluvchi 2-ro'yxat xodimi bo'lsa,
 --   2-ro'yxat bosqichini Direktor imzolaydi (2-ro'yxatda boshqa xodim bo'lmasa ham so'rov to'xtab qolmaydi); boshqa xodimga — yo'q
 select zz.put('L3q', zz.as('U_DIR', $q$select public.kassa_state('main') #>> '{pending,toApprove}'$q$));
@@ -1247,6 +1300,15 @@ select zz.chk('P3 to''xtatilgan kassada chiqim so''rovi va Direktor ruxsatini ku
   || ' | ' || zz.rcpt('U_DIR', format('{"op":"in_funding","amount":1000,"partyType":"founder","partyId":"%s","articleId":"OP-20","basis":"Qaror","clientRef":"p3-000002"}', zz.id('cp_fnd')))
   || ' | ' || (select count(*) from public.cash_docs where "clientRef" in ('p3-000001', 'p3-000002')),
   '^ERR P0001 \[kassa:paused\] Kassa to''xtatilgan \(15\.01\.2028 dan\): kassa hujjati yozilmaydi.* \| ERR P0001 \[kassa:paused\] Kassa to''xtatilgan.* \| 0$');
+-- g11 (sql-1): to'xtatilgan kassada ochiq kun qolgan (15.01 — hujjat bor) — «Kassa» holati ham «to'xtatilgan» (avval ochiq kunga qarab
+--   canPost = true deyilardi, har hujjat esa kassa:paused bilan rad etilardi); kunni sanab yopish mumkin. Yopish savepoint ichida.
+select zz.put('P3s', zz.as('U_KAS', $q$select (s ->> 'canPost') || '/' || (s ->> 'blockReason') || '/' || coalesce(s #>> '{openDay,day}', '-') from public.kassa_state('main') s$q$));
+savepoint p3c;
+select coalesce(zz.f(zz.close('U_KAS', format('{"day":"2028-01-15","counted":%s}', zz.bal())), 'day', 'status'), '<null>')
+       || ' | ' || zz.as('U_FM', $q$select (s ->> 'canPost') || '/' || (s ->> 'blockReason') from public.kassa_state('main') s$q$) as p3c \gset
+rollback to savepoint p3c;
+select zz.chk('P3b g11 (sql-1): to''xtatilgan kassada ochiq kun qolgan — holat «to''xtatilgan» (canPost false, blockReason paused); kunni sanab yopish mumkin, keyin ham paused',
+  zz.get('P3s') || ' | ' || :'p3c', '^false/paused/2028-01-15 \| closed \| false/paused$');
 set local session_replication_role = replica;
 update public.cash_desks set "pausedAt" = null where id = 'main';
 set local session_replication_role = origin;
@@ -1284,6 +1346,25 @@ select zz.chk('P8 KO-4: buxgalter chop etgani — nusxa, varaq «chop etilmagan�
   || ':' || zz.as('U_FM', $q$select ((c -> 'unprintedBooks30') @> '["2028-01-15"]')::text from public.kassa_checks('main') c$q$)
   || ' | ' || zz.as('U_FM', $q$select (b -> 'day' ->> 'prints') || ':' || (b -> 'day' ->> 'printsOrig') from public.kassa_day_book('main', '2028-01-15') b$q$),
   '^closed \| copy:true \| original:false \| 2:1$');
+
+-- ---------- (S) js-3: sinov kassasini yopish / smena topshirishda qurilma navbati yozuvlari e'lon qilinmaydi — navbatdagi o'quv to'lovlari
+--   faqat asosiy kassaga tushadi (kassa_tuition_post): server rad etadi (kassa:pending_test). Avval qabul qilinardi: sinov kuni yopilmasdi
+--   (kassa:count) yoki sinov kassasida soxta kamomad yozilardi. Navbatsiz — avvalgidek. 15.01.2028: sinov kassasi kuni, U_KAS — kassa egasi.
+create or replace function zz.sbal() returns numeric language sql as $$
+  select app.kassa_day_balance((select id from public.cash_days where desk = 'sinov' and status = 'open')) $$;
+select zz.put('S1a', zz.rcpt('U_KAS', format('{"desk":"sinov","op":"in_bank","amount":5000,"partyType":"bank","partyId":"%s","basis":"Sinov cheki","clientRef":"s1-000001"}', zz.id('cp_bank'))));
+select zz.put('S1b', zz.close('U_KAS', format('{"desk":"sinov","day":"2028-01-15","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_s1_00001","amount":5000}]}', zz.sbal(), zz.sbal())));
+select zz.put('S1c', zz.ho('U_KAS', format('{"desk":"sinov","counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[{"ref":"man_s1_00001","amount":5000}]}', zz.sbal(), zz.sbal())));
+select zz.put('S1s', (select status || ':' || coalesce("cashierUid", '-') from public.cash_days where desk = 'sinov' and day = '2028-01-15')
+                     || ':' || (select count(*) from public.cash_handovers where desk = 'sinov'));
+select zz.put('S2h', zz.ho('U_KAS', format('{"desk":"sinov","counted":%s,"expected":%s,"toUid":"U_KAS2","pendingRefs":[]}', zz.sbal(), zz.sbal())));
+select zz.put('S2a', zz.f(zz.hacc('U_KAS2', zz.hid('S2h')), 'diff'));
+select zz.put('S2c', zz.close('U_KAS2', format('{"desk":"sinov","day":"2028-01-15","counted":%s,"expected":%s,"pendingRefs":[]}', zz.sbal(), zz.sbal())));
+select zz.chk('S1 js-3: sinov kassasini yopish va smena topshirish qurilma navbati yozuvi bilan — rad (kassa:pending_test): kun ochiq, topshirish yozilmadi; navbatsiz — smena topshirildi va qabul qilindi (farq 0), kun farqsiz yopildi',
+  left(zz.get('S1b'), 70) || ' | ' || left(zz.get('S1c'), 70) || ' | ' || zz.f(zz.get('S1a'), 'status') || ':' || zz.get('S1s')
+  || ' | ' || zz.f(zz.get('S2h'), 'diff') || ':' || zz.get('S2a') || ' | ' || zz.f(zz.get('S2c'), 'diff') || ':' || zz.f(zz.get('S2c'), 'day', 'status')
+  || ':' || (select count(*) from public.cash_docs where desk = 'sinov' and "businessDay" = '2028-01-15' and op in ('in_surplus', 'out_shortage')),
+  '^ERR 22023 \[kassa:pending_test\] Sinov kassasida navbat to''lovlari .* \| ERR 22023 \[kassa:pending_test\] Sinov kassasida .* \| posted:open:U_KAS:0 \| 0:0 \| 0:closed:0$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 400), '<null>') || ' ; kutilgan: ' || pat || ')' end

@@ -23,6 +23,12 @@
 #       tekshiradi; qayta sanash sozlama qatorini kassa qulfidan oldin kutadi (qulf tartibi); davr surati qulf bilan undan oldin
 #       boshlangan to'lovni kutib, uni suratga oladi (8-bo'lim test soatini ertangi va indingi kunga suradi — baza nomi sinov bazasiniki
 #       bo'lishi kerak: fx_… / …sinov… / …test…).
+#   (12) bir xil fiskal chek raqami bilan parallel ikki kirim (kirim orderi va naqd o'quv to'lovi, ikkala tartibda; g11 sql-2): biri o'tadi,
+#       ikkinchisi kassa:fiscal_dup (o'tkazishda kassa qulfi ostida tekshiriladi) — undan hujjat ham, raqam ham qolmaydi;
+#   (13) tayyorlangan qayta ishga tushirish kunining birinchi hujjati va sanani bo'shatish parallel (g11 sql-1): kassa:busy yoki kassa:paused —
+#       kassa ochiq kun bilan to'xtatilgan bo'lib qolmaydi.
+#   (14) o'sha qaytarish oynasi kaliti bilan naqdsiz qaytarish va naqd qaytarish so'rovi parallel (g11 live-1b): ikkinchisi qulf ostida
+#       rad (kassa:ref_mismatch / ref_mismatch via cash) — bitta qaytarish ikki usulda yozilmaydi; deadlock yo'q.
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -442,6 +448,102 @@ chk "10b soxta farq hujjati yo'q: kun farqi 0, farq hujjati bo'sh; I4: kun oxiri
 chk "10c har kirim yo o'tdi, yo «kun yopilgan» deb rad etildi; o'tganlari bazadagi bilan bir xil; deadlock yo'q; raqamlash uzluksiz" \
     "$((okr10 + rej10))/$(q -c "select (count(*) = $okr10)::text from public.cash_docs where \"clientRef\" like 'race-y%' and status = 'posted'")/$dl10/$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" \
     "100/true/0/[]"
+# ---------- (14) g11 (live-1b): o'sha qaytarish oynasi kaliti bilan naqdsiz qaytarish va naqd qaytarish so'rovi BIR VAQTDA ----------
+#   Direktor «Naqdsiz» yubordi (refund_invoice — posbon yozildi, tranzaksiya hali tugamagan), shu payt o'sha kalit bilan «Naqd» so'rovi
+#   keldi: so'rov kalit tekshiruvidan o'tadi (posbon hali ko'rinmaydi), o'quvchi navbatini (L1) kutadi va qulf ostida qayta tekshiradi —
+#   rad (kassa:ref_mismatch); naqd so'rov yozilmaydi, qaytarish bitta. Teskarisi: naqd so'rov (navbatni ushlab turibdi), o'sha kalit
+#   bilan naqdsiz qaytarish navbatni kutib, so'rovni ko'radi — rad (ref_mismatch, via cash). (Oyna buni qilmaydi — usul birinchi
+#   yuborishda qulflanadi; server himoyasi.)
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
+  ('s_r14','T-R14','Poyga Oquvchi',5,'A','uz','',1,'[]') on conflict (id) do nothing;
+insert into public.invoices (id, "studentId", "studentName", month, amount, "paidAmount", status) values
+  ('inv_r14a','T-R14','Poyga Oquvchi','2026-10',300000,300000,'paid'), ('inv_r14b','T-R14','Poyga Oquvchi','2026-11',300000,300000,'paid')
+on conflict (id) do nothing;
+SQL
+RQ14='{"target":"invoice","id":"%s","amount":100000,"reason":"Poyga qaytarish","payee":"Poyga Ota Onaevich","clientRef":"%s"}'
+( { as_sess R_DIR; echo "begin;"; echo "select 'A|' || (public.refund_invoice('invoice','inv_r14a',100000,'Poyga qaytarish',false,'','rf_r14a_00001') ->> 'ok');"
+    echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/14a.A" 2>&1 ) &
+sleep 0.5
+call_raw R_DIR "public.kassa_refund_request('$(printf "$RQ14" inv_r14a rf_r14a_00001)'::jsonb) ->> 'ok'" > "$TMP/14a.B"
+wait
+chk "14a naqdsiz qaytarish (tugamagan) va o'sha kalit bilan naqd so'rov parallel: naqdsiz o'tdi, naqd so'rov qulf ostida rad (kassa:ref_mismatch) — naqd hujjat yo'q, qaytarish bitta (100 000), faktura 200 000" \
+    "$(grep -c '^A|true' "$TMP/14a.A")/$(grep -c 'kassa:ref_mismatch' "$TMP/14a.B")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'ref_rf_r14a_00001'")/$(q -c "select count(*) || ':' || coalesce(trim_scale(sum(amount))::text, '-') from public.refunds where \"targetId\" = 'inv_r14a'")/$(q -c "select trim_scale(\"paidAmount\") from public.invoices where id = 'inv_r14a'")" \
+    "1/1/0/1:100000/200000"
+( { as_sess R_DIR; echo "begin;"; echo "select 'B|' || (public.kassa_refund_request('$(printf "$RQ14" inv_r14b rf_r14b_00001)'::jsonb) ->> 'ok');"
+    echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/14b.B" 2>&1 ) &
+sleep 0.5
+call_as R_DIR "(select r ->> 'reason' || ':' || coalesce(r ->> 'via', '-') from (select public.refund_invoice('invoice','inv_r14b',100000,'Poyga qaytarish',false,'','rf_r14b_00001') r) x)" > "$TMP/14b.A"
+wait
+chk "14b naqd so'rov (tugamagan) va o'sha kalit bilan naqdsiz qaytarish parallel: so'rov yozildi (tasdiqlangan), naqdsiz navbatni kutib rad (ref_mismatch, via cash) — qaytarish yo'q, faktura 300 000, posbon yo'q; deadlock yo'q" \
+    "$(grep -c '^B|true' "$TMP/14b.B")/$(tail -1 "$TMP/14b.A")/$(q -c "select status from public.cash_docs where \"clientRef\" = 'ref_rf_r14b_00001'")/$(q -c "select count(*) from public.refunds where \"targetId\" = 'inv_r14b'")/$(q -c "select trim_scale(\"paidAmount\") from public.invoices where id = 'inv_r14b'")/$(q -c "select count(*) from public.applied_payments where id = 'refund:rf_r14b_00001'")/$(cat "$TMP"/14a.* "$TMP"/14b.* | grep -ci 'deadlock')" \
+    "1/ref_mismatch:cash/approved/0/300000/0/0"
+# keyingi bo'limlar (13 — kassani yana to'xtatish) pul berilmagan so'rovsiz boshlanadi: 14b so'rovi (va 14a xato bo'lsa — uniki ham) bekor qilinadi
+for R14 in $(q -c "select id from public.cash_docs where \"clientRef\" in ('ref_rf_r14a_00001', 'ref_rf_r14b_00001') and status in ('draft', 'approved')"); do
+  call_as R_DIR "public.kassa_doc_cancel('$R14', 'Poyga sinovi: tozalash') ->> 'ok'" > /dev/null
+done
+chk "14c poyga so'rovi bekor qilindi — pul berilmagan so'rov qolmadi" "$(q -c "select count(*) from public.cash_docs where status in ('draft', 'approved')")" "0"
+# ---------- (12) g11 (sql-2): bitta fiskal chek — bitta kirim, parallel yozuvchilar ----------
+#   Kirim orderi hujjatni kassa qulfidan (L4) oldin yozadi: avval ikkinchi yozuvchi birinchisining hali saqlanmagan hujjatini ko'rmay, L4 ni
+#   kutib, o'sha fiskal chek raqami bilan o'tib ketardi. Endi raqam o'tkazishda L4 ostida qayta tekshiriladi: biri o'tadi, ikkinchisi
+#   kassa:fiscal_dup bilan rad etiladi — undan hujjat (qoralama ham) va raqam qolmaydi; naqd o'quv to'lovi bilan ham (ikkala tartibda).
+#   A — 2 s ochiq turadigan tranzaksiya, B — 0,5 s keyin. Yangi kun: DAY2 + 1 (test soati).
+clk(){ q >/dev/null -c "insert into app.fin_clock (id, t) values (1, ('$1')::timestamp at time zone 'Asia/Tashkent') on conflict (id) do update set t = excluded.t"; }
+DAY3=$(q -c "select '$DAY2'::date + 1"); DAY4=$(q -c "select '$DAY2'::date + 2"); DAY5=$(q -c "select '$DAY2'::date + 3")
+clk "$DAY3 09:00"
+rc12(){ echo "public.kassa_receipt('{\"op\":\"in_sale\",\"amount\":$2,\"partyType\":\"other\",\"partyName\":\"Poyga Xaridor\",\"basis\":\"Savdo cheki\",\"fiscalNo\":\"$3\",\"clientRef\":\"$1\"}'::jsonb) ->> 'status'"; }
+tu12(){ echo "public.record_manual_payment('$1', 'R-1', $2, 'cash', null, '', '', '', null, '{\"fiscalNo\":\"$3\"}'::jsonb) #>> '{kassa,status}'"; }
+( slow_tx R_KAS "$(rc12 race-f12-a 20000 F-R12A)" "$TMP/12a.A" ) &
+sleep 0.5
+call_raw R_KAS2 "$(rc12 race-f12-b 30000 F-R12A)" > "$TMP/12a.B"
+wait
+chk "12a ikki kirim orderi bir xil fiskal chek raqami bilan parallel: biri o'tdi, ikkinchisi kassa:fiscal_dup (L4 ostida); undan hujjat qolmadi" \
+    "$(grep -c '^A|posted$' "$TMP/12a.A")/$(grep -c 'kassa:fiscal_dup' "$TMP/12a.B")/$(q -c "select count(*) from public.cash_docs where \"fiscalNo\" = 'F-R12A' and status = 'posted'")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'race-f12-b'")" \
+    "1/1/1/0"
+( slow_tx R_KAS "$(tu12 man_race12_b 50000 F-R12B)" "$TMP/12b.A" ) &
+sleep 0.5
+call_raw R_KAS2 "$(rc12 race-f12-bb 30000 F-R12B)" > "$TMP/12b.B"
+wait
+chk "12b naqd o'quv to'lovi (A, qulfni ushlab turadi) va kirim orderi (B) bir xil raqam bilan: to'lov o'tdi, kirim orderi kassa:fiscal_dup; undan hujjat qolmadi" \
+    "$(grep -c '^A|posted$' "$TMP/12b.A")/$(grep -c 'kassa:fiscal_dup' "$TMP/12b.B")/$(q -c "select string_agg(op, ',') from public.cash_docs where \"fiscalNo\" = 'F-R12B' and status = 'posted'")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'race-f12-bb'")/$(q -c "select status from public.payments where id = 'man_race12_b'")" \
+    "1/1/in_tuition/0/applied"
+( slow_tx R_KAS "$(rc12 race-f12-c 20000 F-R12C)" "$TMP/12c.A" ) &
+sleep 0.5
+call_raw R_KAS2 "$(tu12 man_race12_c 40000 F-R12C)" > "$TMP/12c.B"
+wait
+chk "12c kirim orderi (A) va naqd o'quv to'lovi (B) bir xil raqam bilan: order o'tdi, to'lov kassa:fiscal_dup — to'lov qatori ham, order ham yozilmadi; deadlock yo'q, raqamlash uzluksiz" \
+    "$(grep -c '^A|posted$' "$TMP/12c.A")/$(grep -c 'kassa:fiscal_dup' "$TMP/12c.B")/$(q -c "select count(*) from public.payments where id = 'man_race12_c'")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'pay_man_race12_c'")/$(cat "$TMP"/12?.? | grep -ci 'deadlock')/$(q -c "select app.kassa_gap_check('main', extract(year from app.fin_today())::int)")" \
+    "1/1/0/0/0/[]"
+# ---------- (13) g11 (sql-1): tayyorlangan qayta ishga tushirish kunining birinchi hujjati va sanani bo'shatish (kassani yana to'xtatish) parallel ----------
+#   Avval bu yo'lda kassa qulfi ham, to'xtatish shartlari ham yo'q edi: kun ochilayotgan paytda bo'shatilsa — kassa ochiq kun bilan
+#   to'xtatilgan bo'lib qolardi. Endi: kirim avval boshlansa — to'xtatish kassa:busy (kassa ishlaydi, kun ochiq); to'xtatish avval
+#   boshlansa — kirim kassa:paused, kun ochilmaydi. Har ssenariydan oldin: kun yopiladi, kassa to'xtatiladi, ertasi kun uchun qayta
+#   sanaladi, ertasi kuni ishga tushadigan kun shu kunga qo'yiladi (kun hali ochilmagan).
+X3=$(BAL)
+S13="$(call_as R_KAS "public.kassa_day_close('{\"day\":\"$DAY3\",\"counted\":$X3}'::jsonb) ->> 'ok'")/$(call_as R_DIR "coalesce(public.fin_org_set('{\"kassaGoLive\":null}') ->> 'kassaGoLive', 'bo''sh')")/$(call_as R_DIR "public.kassa_opening_set('{\"amount\":$X3,\"startDay\":\"$DAY4\"}') ->> 'ok'")"
+clk "$DAY4 09:00"
+S13="$S13/$(call_as R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$DAY4\"}') ->> 'kassaGoLive'")/$(q -c "select coalesce(\"pausedAt\"::text, 'ishlaydi') || ':' || \"restartDay\" || ':' || (select count(*) from public.cash_days d where d.desk = k.id and d.day = '$DAY4') from public.cash_desks k where k.id = 'main'")"
+chk "13 tayyorgarlik: kun yopildi, kassa to'xtatildi, ertasi kun uchun qayta sanaldi; ishga tushadigan kun — o'sha kun (kassa kutmoqda, kun ochilmagan)" "$S13" "true/bo'sh/true/$DAY4/ishlaydi:$DAY4:0"
+rb13(){ echo "public.kassa_receipt('{\"op\":\"in_bank\",\"amount\":100,\"partyType\":\"bank\",\"partyId\":\"cp_rbank\",\"basis\":\"Poyga cheki\",\"clientRef\":\"$1\"}'::jsonb) ->> 'status'"; }
+( slow_tx R_KAS "$(rb13 race-g13-a)" "$TMP/13a.A" ) &
+sleep 0.5
+call_raw R_DIR "coalesce(public.fin_org_set('{\"kassaGoLive\":null}') ->> 'kassaGoLive', 'bo''sh')" > "$TMP/13a.B"
+wait
+chk "13a birinchi hujjat kunni ochmoqda (A) — shu payt sanani bo'shatish (B) kassa:busy: kassa ishlaydi, kun ochiq, sana joyida" \
+    "$(grep -c '^A|posted$' "$TMP/13a.A")/$(grep -c 'kassa:busy' "$TMP/13a.B")/$(q -c "select coalesce(\"pausedAt\"::text, 'ishlaydi') from public.cash_desks where id = 'main'")/$(q -c "select status from public.cash_days where desk = 'main' and day = '$DAY4'")/$(q -c "select \"kassaGoLive\" from public.fin_org where id = 'main'")" \
+    "1/1/ishlaydi/open/$DAY4"
+X4=$(BAL)
+S13B="$(call_as R_KAS "public.kassa_day_close('{\"day\":\"$DAY4\",\"counted\":$X4}'::jsonb) ->> 'ok'")/$(call_as R_DIR "coalesce(public.fin_org_set('{\"kassaGoLive\":null}') ->> 'kassaGoLive', 'bo''sh')")/$(call_as R_DIR "public.kassa_opening_set('{\"amount\":$X4,\"startDay\":\"$DAY5\"}') ->> 'ok'")"
+clk "$DAY5 09:00"
+S13B="$S13B/$(call_as R_DIR "public.fin_org_set('{\"kassaGoLive\":\"$DAY5\"}') ->> 'kassaGoLive'")"
+( slow_tx R_DIR "coalesce(public.fin_org_set('{\"kassaGoLive\":null}') ->> 'kassaGoLive', 'bo''sh')" "$TMP/13b.B" ) &
+sleep 0.5
+call_raw R_KAS "$(rb13 race-g13-b)" > "$TMP/13b.A"
+wait
+chk "13b sanani bo'shatish (B) avval — birinchi hujjat (A) kassa:paused: kun ochilmadi, hujjat yozilmadi, kassa to'xtatilgan; deadlock yo'q" \
+    "$S13B/$(grep -c "^A|bo'sh" "$TMP/13b.B")/$(grep -c 'kassa:paused' "$TMP/13b.A")/$(q -c "select (\"pausedAt\" is not null)::text from public.cash_desks where id = 'main'")/$(q -c "select count(*) from public.cash_days where desk = 'main' and day = '$DAY5'")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'race-g13-b'")/$(cat "$TMP"/13?.? | grep -ci 'deadlock')" \
+    "true/bo'sh/true/$DAY5/1/1/true/0/0/0"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]

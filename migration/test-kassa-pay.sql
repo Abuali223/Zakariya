@@ -677,6 +677,26 @@ select zz.chk('R14a ikkinchi qayta ishga tushirish qoldig''i 05.02 uchun qabul q
 select zz.chk('R14b tayyorlangan qayta ishga tushirishda ham oxirgi kun qayta ochilmaydi (qayta yopilsa farq dalolatnomasi eskirardi)',
   zz.as('U_DIR', $q$select public.kassa_day_reopen('main', '2027-02-03', 'Sinov: qayta ochish')::text$q$), '^ERR P0001 \[kassa:reopen_paused\]');
 select zz.put('R15', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-05"}')::text$q$));
+-- g11 (sql-1): kassa qayta ishga tushirish kunini kutmoqda (05.02 — hali kelmagan, bugun 04.02): sana bo'shatilsa kassa yana to'xtatiladi —
+--   endi to'xtatish shartlari bilan (avval bu yo'lda tekshiruv yo'q edi: kelmagan sana uchun «kelgan sana» sharti yolg'on). Tasdiqlangan,
+--   puli berilmagan so'rov bor — rad (kassa:rollback_requests), kassa ishlaydi, sana joyida; so'rov bekor qilingach — to'xtatiladi (hodisada
+--   qulf ostida o'qilgan oxirgi kun 03.02), keyin yana 05.02 (avvalgi holat — keyingi tekshiruvlar uchun)
+select zz.put('R15a', zz.as('U_KAS', $q$select public.kassa_payout_request('{"op":"out_expense","amount":12000,"partyType":"counterparty","partyId":"cp_sup","articleId":"EX-16","basis":"Hisob-faktura 15","clientRef":"r15a-req-0001"}')::text$q$));
+select zz.put('R15b', zz.jd(zz.as('U_FM', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('R15a')) ->> 'id')), 'status', '-')
+  || ':' || zz.jd(zz.as('U_DIR', format('select public.kassa_doc_approve(%L)::text', zz.js(zz.get('R15a')) ->> 'id')), 'status', '-'));   -- (T1 0 — Direktor ham)
+select zz.put('R15c', zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$));
+select zz.chk('R15a g11 (sql-1): kelmagan qayta ishga tushirish kuni (05.02), tasdiqlangan so''rov puli berilmagan — sanani bo''shatish rad (kassa:rollback_requests): kassa ishlaydi, sana joyida',
+  zz.get('R15b') || ' | ' || zz.get('R15c')
+  || ' | ' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi') || ':' || coalesce((select "kassaGoLive"::text from public.fin_org where id = 'main'), 'bo''sh'),
+  '^draft:approved \| ERR P0001 \[kassa:rollback_requests\] Kassani to''xtatib bo''lmaydi: pul berilmagan kassa so''rovlari bor.*chiqim «Xarajat» 12000 so''m — tasdiqlangan, pul berilmagan \| ishlaydi:2027-02-05$');
+select zz.put('R15d', zz.jd(zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', zz.js(zz.get('R15a')) ->> 'id', 'To''xtatishdan oldin')), 'status', '-'));
+select zz.put('R15e', zz.jd(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":null}')::text$q$), 'kassaGoLive', 'bo''sh'));
+select zz.put('R15e', zz.get('R15e') || ':' || (select ("pausedAt" is not null)::text from public.cash_desks where id = 'main')
+  || ':' || (select (data ->> 'pause') || '/' || (data ->> 'lastDay') from public.cash_day_events where kind = 'golive' order by at desc, id desc limit 1));
+select zz.put('R15f', zz.jd(zz.as('U_DIR', $q$select public.fin_org_set('{"kassaGoLive":"2027-02-05"}')::text$q$), 'kassaGoLive', '-'));
+select zz.chk('R15b … so''rov bekor qilingach — kassa yana to''xtatildi (pause, oxirgi kun 03.02), keyin ishga tushadigan kun yana 05.02 — kassa ishlaydi',
+  zz.get('R15d') || ' | ' || zz.get('R15e') || ' | ' || zz.get('R15f') || ':' || coalesce((select "pausedAt"::text from public.cash_desks where id = 'main'), 'ishlaydi'),
+  '^cancelled \| bo''sh:true:true/2027-02-03 \| 2027-02-05:ishlaydi$');
 select zz.clock('2027-02-05 09:00+05');
 select zz.put('R16', zz.pay('U_KAS', 'man_r16_0001', 'T-5', 50000, 'cash', '', null, '{"fiscalNo":"F-R16"}'));
 select zz.chk('R15 ishga tushadigan kun 05.02 — kassa yana ishlaydi; R16 05.02 naqd to''lov KO-1 bilan, kun boshi = ikkinchi komissiya sanagan 4 865 000; kun farqsiz yopildi',
@@ -1463,6 +1483,29 @@ select zz.chk('Z5 g7b tekshiruvchisi: kun ertasi ertalab yopilgan, pul o''sha er
   || ' | ' || app.kassa_z_day('main', '2027-04-29', true, '2027-04-28 08:00+05')::text
   || ' | ' || zz.zst('2027-04-27') || ' / ' || zz.zst('2027-04-28') || ' | ' || zz.kpend('2027-04-27') || ':' || zz.kpend('2027-04-28'),
   '^0:0 \| 2027-04-29:true \| 2027-04-28 \| 10000:1:0:true / 10000:2:0:true \| 0:0:0:0:0:0$');
+-- JS1 (js-1): server rad etgan navbat yozuvi (fiskal chek № takror — kassa:fiscal_dup; to'lov ham, kirim orderi ham yo'q) kassir tomonidan
+--   tuzatilib yangi kalit bilan qayta kiritildi — pul kassada bitta. Yopish oynasi rad etilgan yozuvni «pul kassada» deb e'lon qilsa
+--   (avval shunday edi) — o'sha summa soxta kamomad bo'lib yoziladi va kalit hech qachon bog'lanmaydi; «qayta kiritilgan» tanlovi bilan
+--   (e'lon qilinmaydi) — farq 0, kamomad hujjati yo'q (tanlov shuning uchun majburiy). 29.04 ochiq (Z5 dagi kech order).
+select zz.clock('2027-04-29 10:00+05');
+select left(zz.pay('U_KAS', 'man_js1_0001', 'T-9', 100000, 'cash', '', null, '{"fiscalNo":"F-JS11"}'), 0);
+select zz.clock('2027-04-29 11:00+05');
+select zz.put('JS1b', zz.pay('U_KAS', 'man_js1_0002', 'T-9', 290000, 'cash', '', null, '{"fiscalNo":"F-JS11"}'));   -- fiskal № takror — rad
+select zz.put('JS1n', (select count(*) from public.payments where id = 'man_js1_0002')::text || ':' || (select count(*) from public.cash_docs where "sourceId" = 'man_js1_0002'));
+select zz.clock('2027-04-29 11:01+05');
+select zz.put('JS1c', zz.pay('U_KAS', 'man_js1_0003', 'T-9', 290000, 'cash', '', null, '{"fiscalNo":"F-JS12"}'));   -- tuzatilgan, yangi kalit
+select zz.clock('2027-04-29 18:00+05');
+select zz.put('JS1k', zz.kbal()::text);   -- kassadagi pul = hisobdagi
+savepoint js1;
+select zz.kc('U_KAS', format('{"day":"2027-04-29","counted":%s,"expected":%s,"pendingRefs":[{"ref":"man_js1_0002","amount":290000}]}', zz.get('JS1k'), zz.get('JS1k'))) as js1x \gset
+rollback to savepoint js1;
+select zz.put('JS1d', zz.kc('U_KAS', format('{"day":"2027-04-29","counted":%s,"expected":%s,"pendingRefs":[]}', zz.get('JS1k'), zz.get('JS1k'))));
+select zz.chk('JS1 js-1: fiskal № takror bilan rad etilgan yozuv tuzatilib qayta kiritilgan — eski kalit e''lon qilinsa soxta kamomad 290 000 (kamomad hujjati, bog''lanmagan kalit); e''lon qilinmasa — farq 0, kamomad hujjati yo''q, bog''lanmagan yozuv yo''q',
+  left(zz.get('JS1b'), 40) || ' | ' || zz.get('JS1n') || ' | ' || zz.jdp(zz.get('JS1c'), '{kassa,no}', '-')
+  || ' | ' || zz.jd(:'js1x', 'diff', '-') || ':' || zz.jdp(:'js1x', '{diffDoc,op}', '-') || ':' || zz.jdp(:'js1x', '{day,pendingCount}', '-')
+  || ' | ' || zz.jd(zz.get('JS1d'), 'diff', '-') || ':' || zz.jdp(zz.get('JS1d'), '{day,status}', '-')
+  || ':' || (select count(*) from public.cash_docs where "businessDay" = '2027-04-29' and op in ('in_surplus', 'out_shortage')) || ':' || zz.kpend('2027-04-29'),
+  '^ERR 22023 \[kassa:fiscal_dup\] .* \| 0:0 \| [0-9]+ \| -290000:out_shortage:1 \| 0:closed:0:0:0:0$');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

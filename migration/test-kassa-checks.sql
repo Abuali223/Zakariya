@@ -102,7 +102,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 11; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/11/0/0$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 12; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/12/0/0$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
@@ -173,7 +173,7 @@ rollback to savepoint b1;
 select zz.chk('B1 search_path''siz SECURITY DEFINER funksiya (istalgan) — 1-band', :'c1' || '/' || :'bad', '^1/1$');
 
 savepoint b2;
-create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 12';
+create or replace function app.kassa_version() returns int language sql immutable set search_path = public, app, pg_temp as 'select 99';   -- kutilgandan boshqa (reliz oshganda ham)
 \ir kassa-checks.sql
 rollback to savepoint b2;
 select zz.chk('B2 bazadagi reliz tekshiruv fayli kutganidan boshqa — 2-band (sonlar bandi o''tkazib yuboriladi)', :'c2' || '/' || :'c3' || '/' || :'bad', '^1/0/1$');
@@ -509,6 +509,35 @@ select :'c24' as d24f5 \gset
 rollback to savepoint d24f;
 select zz.chk('D24f qa-5: tekshiruvchi shu kuni hujjat o''tkazgan / hujjatini bekor qilgan / kunni qayta ochgan / smena topshirishda qatnashgan; avans hisobotini hisobdorning o''zi bekor qilgan — 24-band (har biri 1 ta)',
   :'d24f1' || '/' || :'d24f2' || '/' || :'d24f3' || '/' || :'d24f4' || '/' || :'d24f5', '^1/1/1/1/1$');
+-- D24g (g11: sec-1, sec-2): yangi qatorlar, har biri alohida savepoint'da va bitta qator: kassa orderini uni yolg'iz tasdiqlagan Direktor
+--   o'zi o'tkazgan (2-ro'yxat tasdig'isiz — qaytarish kabi; o'zaro hisob dalolatnomalari O1, O2 — Direktor o'zi rasmiylashtiradi, toza
+--   holatda A6 ularni ko'rmaydi); Direktor o'ziga (bog'langan karta tch1) chiqim orderi bo'yicha pul bergan; tekshirilgan kunni uning
+--   tekshiruvchisi qayta ochilishidan oldin yopgan (yopish hodisasi)
+savepoint d24g;
+set local session_replication_role = replica;
+update public.cash_docs set "dirApprovedBy" = 'U_DIR', "dirApprovedAt" = now(), "postedBy" = 'U_DIR' where id = zz.id('K3');
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24g1 \gset
+rollback to savepoint d24g;
+savepoint d24g;
+set local session_replication_role = replica;
+update public.users set "staffRefType" = 'teacher', "staffRefId" = 'tch1' where id = 'U_DIR';
+update public.cash_docs set "postedBy" = 'U_DIR' where id = zz.id('C3');   -- ish haqi avansi (teachers:tch1) — pulni Direktor bergan
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24g2 \gset
+rollback to savepoint d24g;
+savepoint d24g;
+set local session_replication_role = replica;
+insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
+  select 'ce_zz_c1', d.id, d.desk, d.day, 'close', d."verifiedBy", 'Sinov: avvalgi yopish', '{}'::jsonb from public.cash_days d where d.desk = 'main' and d.day = '2027-01-04';
+set local session_replication_role = origin;
+\ir kassa-checks.sql
+select :'c24' as d24g3 \gset
+rollback to savepoint d24g;
+select zz.chk('D24g g11: kassa orderini uni yolg''iz tasdiqlagan Direktor o''tkazgan; Direktor o''ziga (bog''langan karta) pul bergan; tekshiruvchi kunni qayta ochilishidan oldin yopgan — 24-band (har biri 1 ta)',
+  :'d24g1' || '/' || :'d24g2' || '/' || :'d24g3', '^1/1/1$');
 
 -- ---------- (C) qaytarilgach — toza; modul bo'lmagan baza ----------
 \ir kassa-checks.sql

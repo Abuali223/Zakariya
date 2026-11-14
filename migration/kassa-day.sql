@@ -710,7 +710,8 @@ grant execute on function public.kassa_opening_set(jsonb) to authenticated;
 --     alohida hint bilan. Kassa to'xtatiladi ("pausedAt"): yangi kassa kuni ochilmaydi, naqd pul kassa hujjatisiz yoziladi. Saqlanadigan sana —
 --     bo'sh (kiritilgan keyingi sana — rejalashtirilgan kun sifatida hodisada qoladi): qayta ishga tushirish faqat yangi komissiya sanashi bilan.
 --   * TO'XTATILGAN kassada sana faqat tayyorlangan qayta ishga tushirish kuniga ("restartDay", kassa_opening_set) qo'yiladi — kassa
---     shundan qayta ishlaydi; tayyorlangan, hali boshlanmagan qayta ishga tushirishda sana bo'shatilsa — kassa yana to'xtatiladi.
+--     shundan qayta ishlaydi; tayyorlangan, hali boshlanmagan qayta ishga tushirishda sana bo'shatilsa — kassa yana to'xtatiladi
+--     (g11, sql-1: TO'XTATISHdagi qulf va shartlar bilan — pul berilmagan so'rov qolmasin; kun shu payt ochilayotgan bo'lsa — kassa:busy).
 --     Sanashdan keyin to'xtatilgan davr sanasi bilan kassa hujjatisiz naqd yozuv kiritilgan bo'lsa — rad (kassa:restart_recount, g4v-2);
 --     qayta ishga tushirish kuni va undan keyingi sana bilan bunday yozuv bo'lsa ham — rad (kassa:restart_gap, g4b).
 --   Har o'zgarish kun jurnaliga 'golive' hodisasi bo'lib yoziladi (kim, qachon, qaysi sanadan qaysiga). Sinov kassasi bunga kirmaydi.
@@ -754,13 +755,18 @@ begin
         end if;
         v_resume := true;
       end if;
-    elsif v_k."restartDay" is not null and v_k."restartDay" > coalesce(v_last, v_k."restartDay" - 1) then   -- tayyorlangan qayta ishga tushirish
-      if p_new is null then v_pause := true;
-      elsif p_new <> v_k."restartDay" then   -- (sana allaqachon qayta ishga tushirish kunida: boshqa kun — avval bo'shatib, qayta sanash)
+    elsif p_new is not null and v_k."restartDay" is not null and v_k."restartDay" > coalesce(v_last, v_k."restartDay" - 1) then   -- tayyorlangan qayta ishga tushirish
+      if p_new <> v_k."restartDay" then   -- (sana allaqachon qayta ishga tushirish kunida: boshqa kun — avval bo'shatib, qayta sanash)
         raise exception 'Qayta ishga tushirish kuni — %: ishga tushadigan kun shu sana bo''ladi. Boshqa sana kerak bo''lsa — avval ishga tushadigan kunni bo''shating (kassa yana to''xtatiladi), keyin «Qayta ishga tushirish» qoldig''ini o''sha sana bilan qayta kiriting',
           to_char(v_k."restartDay", 'DD.MM.YYYY') using errcode = '22023', hint = 'kassa:restart_day';
       end if;
-    elsif v_reached and (p_new is null or p_new > p_old) then   -- kelgan sana bo'shatiladi yoki suriladi — kassani to'xtatish
+    -- Kassani to'xtatish: kelgan sana bo'shatiladi yoki suriladi; yoki tayyorlangan, hali boshlanmagan qayta ishga tushirishda sana bo'shatiladi
+    --   (kassa yana to'xtatiladi). g11 (sql-1): ikkinchisi ham xuddi shu qulf va shartlar bilan — qayta ishga tushirish kuni shu payt birinchi
+    --   hujjat bilan ochilayotgan bo'lishi (kassa qulfi band — kassa:busy; kun ochilib bo'lgan bo'lsa — qulf ostida qayta o'qilgan oxirgi kun
+    --   bilan ishlayotgan kassa qoidalari) yoki pul berilmagan so'rov qolgan bo'lishi mumkin (avval kassa ochiq kun yoki so'rov bilan
+    --   to'xtab qolardi). Qayta ishga tushirish kuni kelajakda bo'lsa v_reached false — shart alohida.
+    elsif (p_new is null and v_k."restartDay" is not null and v_k."restartDay" > coalesce(v_last, v_k."restartDay" - 1))
+          or (v_reached and (p_new is null or p_new > p_old)) then
       if not pg_try_advisory_xact_lock(hashtext('iqror_desk:' || v_k.id)) then   -- shu payt kun ochilayotgan / hujjat yozilayotgan bo'lmasin
         raise exception 'Kassada hozir hujjat yozilmoqda — bir oz kutib, qayta saqlang' using errcode = 'P0001', hint = 'kassa:busy';
       end if;
@@ -831,6 +837,7 @@ revoke all on function app.kassa_golive_guard(date, date) from public, anon, aut
 --        payt allaqachon o'tganlarini hisobga olmaydi (ular qoldiqda bor — javobda ignoredRefs), qolganini sanashdan ayiradi va saqlaydi —
 --        keyin kelgan kech kirim orderi shu kalit bilan bog'lanadi (app.kassa_day_pending); shu kungi qabul qilingan smena topshirishlarida
 --        e'lon qilingan, hali kelmagan yozuvlarni server o'zi qo'shadi — sanalgan pulga sig'ganicha (g7v-3, app.kassa_pending_merge);
+--        navbat yozuvlari (o'quv to'lovi) faqat asosiy kassaga tushadi — sinov kassasida ro'yxat bo'sh bo'lmasa rad (js-3, kassa:pending_test);
 --      paper — server ishlamagan paytdagi, hali kiritilmagan «Қ» blankalari {count, sum, nos} (crit-3; soni, summasi va raqamlari birga);
 --      note, commission [{title, name}],
 --      z — onlayn kassa Z-hisoboti {no, cash, card} yoki {missing: true, reason} (ixtiyoriy; sinov kassasida e'tiborga olinmaydi)
@@ -865,6 +872,12 @@ begin
       using errcode = '22023', hint = 'kassa:pending_refs';
   end if;
   v_all := app.kassa_pending_parse(p -> 'pendingRefs');
+  -- js-3: qurilma navbatidagi o'quv to'lovlari faqat asosiy kassaga tushadi (kassa_tuition_post) — sinov kassasida e'lon qilinmaydi (aks holda
+  --   sinov kuni yopilmasdi — kassa:count — yoki sinov kassasida soxta kamomad yozilardi)
+  if jsonb_array_length(v_all) > 0 and coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false) then
+    raise exception 'Sinov kassasida navbat to''lovlari e''lon qilinmaydi — ular asosiy kassaga tushadi; sahifani yangilang'
+      using errcode = '22023', hint = 'kassa:pending_test';
+  end if;
   -- crit-3: «Қ» blankalari — soni, summasi va raqamlari birga
   if jsonb_typeof(p -> 'paper') = 'object' then
     begin v_qcnt := coalesce(nullif(btrim(coalesce(p -> 'paper' ->> 'count', '')), '')::int, 0); exception when others then v_qcnt := -1; end;
@@ -979,7 +992,8 @@ grant execute on function public.kassa_day_close(jsonb) to authenticated;
 --      expected — oynada ko'rsatilgan hisobdagi qoldiq (state-2: o'zgargan bo'lsa — rad, kassa:stale), pendingRefs — qurilma navbatidagi
 --      hali yuborilmagan naqd to'lovlar [{ref, amount}] (kunni yopishdagi kabi: o'tganlari tushib qoladi, qolganlari topshirishda saqlanadi
 --      va qabulda dalolatnomaga o'tadi; shu kungi oldingi topshirishlarda e'lon qilingan, hali kelmaganlarini server qo'shadi — sanalgan
---      pulga sig'ganicha, g7v-3). Avvalgi ro'yxatsiz pendingSum — qabul qilinmaydi (kassa:pending_refs).
+--      pulga sig'ganicha, g7v-3). Avvalgi ro'yxatsiz pendingSum — qabul qilinmaydi (kassa:pending_refs); sinov kassasida navbat yozuvlari —
+--      rad (js-3, kassa:pending_test: ular asosiy kassaga tushadi).
 create or replace function public.kassa_handover(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
@@ -1000,6 +1014,10 @@ begin
       using errcode = '22023', hint = 'kassa:pending_refs';
   end if;
   v_all := app.kassa_pending_parse(p -> 'pendingRefs');
+  if jsonb_array_length(v_all) > 0 and coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false) then   -- js-3 (kunni yopishdagi kabi)
+    raise exception 'Sinov kassasida navbat to''lovlari e''lon qilinmaydi — ular asosiy kassaga tushadi; sahifani yangilang'
+      using errcode = '22023', hint = 'kassa:pending_test';
+  end if;
   v_denoms := app.kassa_denoms_check(p -> 'denoms', v_counted);
   v_note := left(btrim(coalesce(p ->> 'note', '')), 500);
   v_comm := app.kassa_commission(p -> 'commission');
@@ -1160,6 +1178,7 @@ revoke all on function public.kassa_handover_cancel(text, text) from public, ano
 grant execute on function public.kassa_handover_cancel(text, text) to authenticated;
 
 -- ---------- Kunni tekshirish (CT-05): 2-ro'yxat yoki Direktor; tekshiruvchi ≠ yopuvchi, ≠ shu kun hujjat o'tkazganlar ----------
+--   Yopuvchi — kunni hozir yopgan va qayta ochilishidan oldin yopgan har kim (g11, sec-2: yopish hodisasi bo'yicha).
 --   crit-4: kunning nazorat ma'lumotini o'zgartirganlar ham tekshirmaydi — shu kun hujjatini bekor qilgan, shu kunning Z-hisobotini
 --   kiritgan yoki tuzatgan (kassa_day_z; yopilgandan keyin ham, oldin ham), kunni qayta ochgan xodim, shu kungi smena topshirish-qabulida
 --   qatnashgan xodim (state-6). Har holat o'z matni bilan (hint 'kassa:self_verify'); kunni boshqa 2-ro'yxat xodimi yoki Direktor tekshiradi.
@@ -1191,6 +1210,9 @@ begin
   end if;
   -- (qayta ochish sanash farqi hujjatini ham qayta ochgan nomidan bekor qiladi — avval shu holat tekshiriladi)
   v_self := case when v_d."closedBy" = v_uid then 'Kunni o''zingiz yopgansiz'
+                 -- g11 (sec-2): kunni qayta ochilishidan OLDIN yopgan xodim ham (qayta ochish "closedBy" ni bo'shatadi, yopish hodisasi qoladi)
+                 when exists (select 1 from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'close' and e."byUid" = v_uid)
+                   then 'Kunni o''zingiz yopgansiz (qayta ochilishidan oldin)'
                  when exists (select 1 from public.cash_docs c where c."dayId" = v_d.id and c."postedBy" = v_uid) then 'Shu kuni o''zingiz hujjat o''tkazgansiz'
                  when exists (select 1 from public.cash_day_events e where e."dayId" = v_d.id and e.kind = 'reopen' and e."byUid" = v_uid)
                    then 'Kunni o''zingiz qayta ochgansiz'
@@ -1442,7 +1464,10 @@ begin
                                     'countedAt', v_k."restartAt", 'stale', app.kassa_restart_stale(v_desk));
   end if;
   if v_open.id is not null then
-    v_block := case when v_ho.id is not null then 'handover' when v_open.day < v_today then 'prev_open' when v_open.day > v_today then 'clock' end;
+    -- g11 (sql-1): to'xtatilgan kassada ochiq kun qolgan bo'lsa ham (to'xtatish shartlari himoyasi; eski holat) hujjat yozilmaydi —
+    --   sabab 'paused' birinchi (kassa_resolve_day ham shunday rad etadi); kunni sanab yopish mumkin («Kunni yopish» tugmasi ochiq kunga qarab)
+    v_block := case when v_paused then 'paused' when v_ho.id is not null then 'handover' when v_open.day < v_today then 'prev_open'
+                    when v_open.day > v_today then 'clock' end;
   else
     v_block := case when v_paused then 'paused'
                     when v_restart is not null and v_today < v_k."restartDay" then 'restart'

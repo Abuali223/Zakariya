@@ -27,7 +27,7 @@ set default_transaction_read_only = on;
 \pset null ''
 \set bad 0
 \set err 0
-\set want_ver 11
+\set want_ver 12
 \set ver 0
 -- har band bo'yicha muammo qatorlari soni (c1 … c24) — sinov (test-kassa-checks.sql) shularni o'qiydi
 \set c1 0 \set c2 0 \set c3 0 \set c4 0 \set c5 0 \set c6 0 \set c7 0 \set c8 0 \set c9 0 \set c10 0 \set c11 0
@@ -373,7 +373,7 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 
 -- <barmoq-izlari> Shu reliz toza zanjiridan olingan himoya mantig'i izlari (23-band). Qo'lda tahrirlanmaydi — qayta yozish:
 --   bash migration/kassa-fingerprints.sh   (lokal PostgreSQL'da vaqtinchalik bazaga --dev zanjirni quradi va shu blokni almashtiradi)
-\set fp_rel 11
+\set fp_rel 12
 \set fp_pg 16
 select $fp$
 constraint|cash_counts.cash_counts_counted_check|4771070363f33300
@@ -514,15 +514,15 @@ func|app.kassa_denoms_check(p_denoms jsonb, p_counted numeric)|28ec036da759e4b5
 func|app.kassa_desk_balance(p_desk text)|9d7cf8a3ad593b5b
 func|app.kassa_desk_guard()|3cc432899ef14193
 func|app.kassa_doc_after()|01a4fe37a1af50a2
-func|app.kassa_doc_build(p jsonb, p_form text, p_uid text, p_internal boolean, OUT o_id text, OUT o_dup boolean)|86bb3846eef3723a
+func|app.kassa_doc_build(p jsonb, p_form text, p_uid text, p_internal boolean, OUT o_id text, OUT o_dup boolean)|6f08b0b24b31736c
 func|app.kassa_doc_guard()|e6d92321f3b7e851
 func|app.kassa_doc_json(p_id text)|773dae78fa4bb21b
-func|app.kassa_doc_post(p_doc_id text, p_uid text, p_system boolean, p_captured timestamp with time zone, p_late_ok boolean, p_day_id text)|3733c246698e8a85
+func|app.kassa_doc_post(p_doc_id text, p_uid text, p_system boolean, p_captured timestamp with time zone, p_late_ok boolean, p_day_id text)|a037ec747ce87092
 func|app.kassa_emp_left(p_ref text)|f781309f5cc1c81f
 func|app.kassa_exp_category(p_article text, OUT o_category text, OUT o_label text)|5e6a43c3f180581f
 func|app.kassa_flag(p_on boolean)|0ad01f53a15ee249
 func|app.kassa_gap_check(p_desk text, p_year integer)|c1f885b0d59a3a35
-func|app.kassa_golive_guard(p_old date, p_new date)|c9364d43ea226267
+func|app.kassa_golive_guard(p_old date, p_new date)|5b034a6a0d93fa86
 func|app.kassa_handover_block(p_desk text)|6b7553e04ed6f6bc
 func|app.kassa_handover_guard()|06886cf0d564e479
 func|app.kassa_handover_pending(p_desk text)|576708a6230b8640
@@ -566,7 +566,7 @@ func|app.kassa_tuition_info(p_pay_id text)|bc91bdae2f75c015
 func|app.kassa_tuition_post(p_pay_id text, p_amount numeric, p_payer_name text, p_captured timestamp with time zone, p_extra jsonb, p_before jsonb, p_apply_dup boolean)|13bcb0807603b2a5
 func|app.kassa_user_cards(p_uid text)|2fecd501adbfa623
 func|app.kassa_user_label(p_name text, p_ref_type text, p_ref_id text, p_uid text)|1619d01296fbe3b6
-func|app.kassa_version()|796eabf11e70a27a
+func|app.kassa_version()|c88d6e9fd5e3b9c3
 func|app.kassa_week_kpi(p_desk text, p_from date, p_to date)|23dc58b8b45d39cc
 func|app.kassa_z_day(p_desk text, p_day date, p_late boolean, p_captured timestamp with time zone)|e388c6c761abaa22
 func|app.kassa_z_put(p_day_id text, p_z jsonb, p_uid text, p_after boolean)|50bfdd09bc7cec0c
@@ -584,17 +584,17 @@ func|public.kassa_adv_report(p jsonb)|04f8d32694894e7b
 func|public.kassa_adv_report_void(p_id text, p_reason text)|e07212fd3b10e0d5
 func|public.kassa_checks(p_desk text)|8d28d9c8f41c18e9
 func|public.kassa_day_book(p_desk text, p_day date)|e659308b98324e16
-func|public.kassa_day_close(p jsonb)|dfd07187e6e0cb50
+func|public.kassa_day_close(p jsonb)|033da9bf08cc7299
 func|public.kassa_day_reopen(p_desk text, p_day date, p_reason text)|552711197fee976c
-func|public.kassa_day_verify(p_desk text, p_day date, p_papers boolean, p_note text)|6ba8e5ee66650b8b
+func|public.kassa_day_verify(p_desk text, p_day date, p_papers boolean, p_note text)|36daabc5e8fb3afc
 func|public.kassa_day_z(p jsonb)|df7dd934ea930d3d
 func|public.kassa_doc_approve(p_id text, p_note text)|8d7cf46af284722c
 func|public.kassa_doc_cancel(p_id text, p_reason text)|db85f1ade475c0f6
 func|public.kassa_doc_get(p_id text)|b50c76a4880785c6
-func|public.kassa_doc_pay(p_id text)|fb85ef896da1b993
+func|public.kassa_doc_pay(p_id text)|e7ed49ad1392f552
 func|public.kassa_doc_reject(p_id text, p_reason text)|5d5573f6a368421e
 func|public.kassa_doc_void(p_id text, p_reason text)|6ec84b5c11053d1d
-func|public.kassa_handover(p jsonb)|c5a2c18a56d59af5
+func|public.kassa_handover(p jsonb)|eece15bf9a220342
 func|public.kassa_handover_accept(p_id text)|929b734a8a70de68
 func|public.kassa_handover_cancel(p_id text, p_reason text)|b013fa34d41b3d8f
 func|public.kassa_journal(p_desk text, p_from date, p_to date)|d67fb5f5d01b22c1
@@ -611,11 +611,11 @@ func|public.kassa_people()|4f633283d004d704
 func|public.kassa_print_mark(p_kind text, p_id text, p_reissue boolean)|f7960e3209b1c2c7
 func|public.kassa_receipt(p jsonb)|8716d44b4cd0738a
 func|public.kassa_refs()|dc942708c9b16a35
-func|public.kassa_refund_request(p jsonb)|7336614cc5de469c
-func|public.kassa_salary_pay(p jsonb)|769c05bc466d4073
+func|public.kassa_refund_request(p jsonb)|bed1742f518f983d
+func|public.kassa_salary_pay(p jsonb)|8890bd4d4e196092
 func|public.kassa_shortage_decide(p_doc_id text, p_decision text, p_note text, p_party text)|bcc0d451b2182306
 func|public.kassa_staff_open(p_desk text, p_party text, p_month text)|8c672068449b6d79
-func|public.kassa_state(p_desk text)|73e40004dd0b8db0
+func|public.kassa_state(p_desk text)|a236c7b07d63f617
 policy|cash_counts.cash_counts_sel|c7bb2ccc4a83a1b4
 policy|cash_day_events.cash_day_events_sel|c7bb2ccc4a83a1b4
 policy|cash_days.cash_days_sel|c7bb2ccc4a83a1b4
@@ -699,7 +699,7 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 select set_config('search_path', :'kc_sp', false) as kc_sp \gset
 \endif
 
-\qecho '== 24) Vazifalar ajratilishi (CT-05, CT-07; g5) — o''tkazilgan / bekor qilingan hujjat va tekshirilgan kun: talab qilingan tasdiq yo''q; tasdiqlovchi so''rovchi yoki pul oluvchining o''zi; 2-ro''yxat bosqichini Direktor imzolagan (oluvchi 2-ro''yxat xodimi emas); pulni tasdiqlovchi bergan; avans hisobotini hisobdorning o''zi kiritgan / bekor qilgan; kunni unda qatnashgan xodim tekshirgan (rollar va xodim kartasiga bog''lanishlar — hozirgi holati bo''yicha)'
+\qecho '== 24) Vazifalar ajratilishi (CT-05, CT-07; g5) — o''tkazilgan / bekor qilingan hujjat va tekshirilgan kun: talab qilingan tasdiq yo''q; tasdiqlovchi so''rovchi yoki pul oluvchining o''zi; 2-ro''yxat bosqichini Direktor imzolagan (oluvchi 2-ro''yxat xodimi emas); pulni tasdiqlovchi bergan; so''rovni yolg''iz tasdiqlagan xodim yoki o''ziga beriladigan pulni Direktor o''zi bergan; avans hisobotini hisobdorning o''zi kiritgan / bekor qilgan; kunni unda qatnashgan xodim (qayta ochilishidan oldin yopgan ham) tekshirgan (rollar va xodim kartasiga bog''lanishlar — hozirgi holati bo''yicha)'
 select '!!' as belgi, x.kassa, x.kun, x.hujjat, x.muammo
   from (select c.desk as kassa, c."businessDay" as kun, c.form || coalesce(' № ' || c.no, '') || ' (' || c.id || ')' as hujjat, m.muammo
           from public.cash_docs c
@@ -714,6 +714,14 @@ select '!!' as belgi, x.kassa, x.kun, x.hujjat, x.muammo
                            and exists (select 1 from public.users u where u.role in ('finance_mgr', 'accountant') and c."partyId" = any(app.kassa_user_cards(u.id))))
                  then '2-ro''yxat bosqichini Direktor imzolagan, pul oluvchi 2-ro''yxat xodimi emas' end),
            (case when c."approvedBy" is not null and c."postedBy" = c."approvedBy" then 'pulni so''rovni tasdiqlagan xodimning o''zi bergan' end),
+           -- g11 (sec-1): yagona tasdiq — Direktorniki (2-ro'yxatsiz: qaytarish, «Qarz / ta'sischi mablag'i»), pulni ham u bergan / qabul qilgan
+           --   (kassa orderi; o'zaro hisob dalolatnomasini Direktor o'zi rasmiylashtiradi — u kirmaydi)
+           (case when c.form in ('KO1', 'KO2') and c."approvedBy" is null and c."dirApprovedBy" is not null and c."postedBy" = c."dirApprovedBy"
+                 then 'so''rovni yolg''iz tasdiqlagan xodim pulini o''zi bergan / qabul qilgan' end),
+           -- g11 (sec-1, FD-48): Direktor o'ziga (bog'langan xodim kartasiga) chiqim orderi bo'yicha pulni o'zi bergan (maosh ham)
+           (case when c.form = 'KO2' and c."partyType" = 'employee' and exists (select 1 from public.users u where u.id = c."postedBy" and u.role = 'director')
+                  and c."partyId" = any(app.kassa_user_cards(c."postedBy"))
+                 then 'Direktor o''ziga (bog''langan xodim kartasiga) pulni o''zi bergan' end),
            (case when c.op = 'nc_adv_report' and c."partyId" = any(app.kassa_user_cards(c."createdBy")) then 'avans hisobotini hisobdorning o''zi kiritgan' end),
            (case when c.op = 'nc_adv_report' and c.status = 'void' and c."partyId" = any(app.kassa_user_cards(c."voidedBy"))
                  then 'avans hisobotini hisobdorning o''zi bekor qilgan' end)) m(muammo)
@@ -721,7 +729,9 @@ select '!!' as belgi, x.kassa, x.kun, x.hujjat, x.muammo
         union all
         select d.desk, d.day, '—', 'kunni tekshirgan xodim ' || m.why
           from public.cash_days d
-         cross join lateral (select case when d."verifiedBy" = d."closedBy" then 'uni yopgan'
+         cross join lateral (select case when d."verifiedBy" = d."closedBy"   -- g11 (sec-2): qayta ochilishidan oldin yopgan ham (yopish hodisasi)
+                                              or exists (select 1 from public.cash_day_events e where e."dayId" = d.id and e.kind = 'close' and e."byUid" = d."verifiedBy")
+                                           then 'uni yopgan'
                                          when exists (select 1 from public.cash_docs c where c."dayId" = d.id and c."postedBy" = d."verifiedBy") then 'shu kuni hujjat o''tkazgan'
                                          when exists (select 1 from public.cash_day_events e where e."dayId" = d.id and e.kind = 'reopen' and e."byUid" = d."verifiedBy")
                                            then 'kunni qayta ochgan'

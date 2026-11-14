@@ -312,7 +312,8 @@ end $$;
 -- ---------- Maosh ----------
 --   p: id ('sp_…' — oynaning barqaror kaliti), method ('cash' | 'card'), teacherId, payeeRef ('teachers:<id>' | 'staff:<id>'),
 --      teacherName, month ('YYYY-MM'), paid (> 0), gross, advance, deduction, subBonus, net, carryIn, carryOut, date (karta uchun), note
---   Naqd: faqat kassa operatori (favqulodda — Direktor); vedomost tasdig'i yoqilmagan oy uchun — faqat Direktor (RP-06 da ko'rinadi).
+--   Naqd: faqat kassa operatori (favqulodda — Direktor; o'z kartasiga emas — FD-48, g11 sec-1); vedomost tasdig'i yoqilmagan oy uchun —
+--   faqat Direktor (RP-06 da ko'rinadi).
 --   Tasdiqlangan vedomost, xodim qatori va summa chegarasi — mavjud trigger (payroll-approval.sql: app.salary_payment_gate).
 create or replace function public.kassa_salary_pay(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -363,6 +364,15 @@ begin
   end if;
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
   v_gate_off := v_from is null or v_month < v_from;
+  -- g11 (sec-1, FD-48): Direktor o'ziga (bog'langan xodim kartasiga) naqd maoshni o'zi bermaydi — vedomostni o'zi tasdiqlaydi; pulni kassir
+  --   beradi (kassir tasdiqlangan vedomost bo'yicha har kimga, o'ziga ham). Karta orqali to'lov — kassadan emas, bu qoidaga kirmaydi.
+  --   Vedomost tasdig'i yoqilmagan oyda kassir naqd maosh bermaydi (pastda — kassa:payroll_gate): xabar shuni ham aytadi.
+  if v_method = 'cash' and app.is_admin() and v_ref = any(app.kassa_user_cards(v_uid)) then
+    raise exception 'Bu maosh sizga (bog''langan xodim kartangizga) beriladi — Direktor o''ziga naqd maoshni o''zi bermaydi: pulni kassir beradi (FD-48)%',
+      case when v_gate_off then format('. %s oy maoshi HR tasdiqlagan vedomostsiz (o''tish oyidan oldin) — bunday oyda kassir naqd maosh bermaydi: maoshingizni karta orqali yozing', v_month)
+           else '' end
+      using errcode = '42501', hint = 'kassa:self_recipient';
+  end if;
   if v_method = 'cash' and v_gate_off and not app.is_admin() then
     raise exception 'Naqd maosh berilmaydi: % oy uchun vedomost tasdig''i yoqilmagan — faqat Direktor ruxsati bilan', v_month
       using errcode = '42501', hint = 'kassa:payroll_gate';
@@ -541,6 +551,9 @@ create trigger trg_kassa_pay_guard before insert or update or delete on public.p
 --      yo'qolgach o'sha oynadan «bank» bilan qayta urinish qisman qaytarishni ikki marta bajarmasin.
 --      Oyna o'sha kalit (clientRef) bilan qayta yuborsa (javob yo'qolgan) — mavjud so'rov qaytadi (dup), qayta tekshirilmaydi; so'rov mazmuni
 --      (maqsad, summa, avans, kimga, sabab, ariza sanasi — kanonik izi "reqHash", state-9) boshqa bo'lsa — kassa:ref_mismatch.
+--      live-1b: shu oyna kaliti bilan naqdsiz qaytarish (refund_invoice — posbon 'refund:'||kalit) allaqachon yozilgan bo'lsa — ham
+--      kassa:ref_mismatch: «Naqdsiz» javobi yo'qolgach o'sha oynadan «Naqd» bilan yuborilsa, bitta qaytarish ikki marta yozilardi
+--      (refund_invoice ham teskarisini rad etadi: shu kalitli naqd so'rov bor bo'lsa — ref_mismatch, via 'cash').
 --   Biriktirilmagan to'lov yopilgan davrga tegishli bo'lsa (state-1, fin-period.sql: app.fin_lock_receipt) — so'rov ham yozilmaydi.
 create or replace function public.kassa_refund_request(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -575,6 +588,11 @@ begin
                                    'reason', v_reason, 'requestDate', v_req)::text);
   -- O'sha kalit bilan qayta yuborish — mavjud so'rov (L0 — kassa_doc_build bilan bir xil qulf)
   perform pg_advisory_xact_lock(hashtext('iqror_doc:ref_' || v_ref));
+  -- live-1b: shu oynadan naqdsiz qaytarish allaqachon yozilgan — naqd so'rov yozilmaydi (boshqa usul — oynani qayta ochib)
+  if exists (select 1 from public.applied_payments a where a.id = 'refund:' || v_ref) then
+    raise exception 'Bu oynadan naqdsiz (bank / karta) qaytarish allaqachon yozilgan (javob yo''qolgan bo''lishi mumkin) — «To''lovlar»da tekshiring; naqd qaytarish ham kerak bo''lsa, oynani yopib, qaytadan oching'
+      using errcode = '22023', hint = 'kassa:ref_mismatch';
+  end if;
   select * into v_ex from public.cash_docs c where c."clientRef" = 'ref_' || v_ref;
   if found then
     if v_ex.op <> 'out_refund' or (v_ex."sourceSnapshot" ->> 'target') is distinct from v_target
@@ -670,6 +688,12 @@ begin
     v_claw := false;
     v_lines := jsonb_build_array(jsonb_build_object('debit', '6310', 'credit', '5010', 'amount', v_amount,
                                                     'analytics', jsonb_build_object('studentId', v_sid, 'kind', 'credit_refund')));
+  end if;
+  -- live-1b, qayta tekshiruv — endi maqsad qulfi ostida (L1 / to'lov qatori; refund_invoice posbonni shu qulflar ostida yozadi): yuqoridagi
+  --   tekshiruvdan keyin o'sha kalit bilan bir vaqtda yuborilgan naqdsiz qaytarish o'tib ketgan bo'lsa ham, naqd so'rov yozilmaydi
+  if exists (select 1 from public.applied_payments a where a.id = 'refund:' || v_ref) then
+    raise exception 'Bu oynadan naqdsiz (bank / karta) qaytarish allaqachon yozilgan (javob yo''qolgan bo''lishi mumkin) — «To''lovlar»da tekshiring; naqd qaytarish ham kerak bo''lsa, oynani yopib, qaytadan oching'
+      using errcode = '22023', hint = 'kassa:ref_mismatch';
   end if;
 
   perform app.kassa_flag(true);

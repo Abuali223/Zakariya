@@ -1590,11 +1590,12 @@ function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, p
   students:async()=>{ const a=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=a; return a; },
   // Kunni yopish / smena topshirish (state-2): qurilma navbatidagi hali yuborilmagan naqd to'lovlar — har biri kaliti (payId) va summasi
   //   bilan (server o'tib ketganlarini hisobga olmaydi, qolganini saqlab, keyin kelgan kech kirim orderiga bog'laydi); oynadan oldin navbat yuboriladi.
-  //   «Yuborilmadi» yozuvlari ham (pul kassada; navbatda turgan har yopishda e'lon qilinadi — aks holda keyingi yopishda soxta ortiqcha),
+  //   «Yuborilmadi» yozuvlari — alohida (failed: oynada har biriga tanlov — pul kassada / qayta kiritilgan; js-1, OUTBOX-CLASS obCashSplit),
   //   Direktor hal qiladiganlari ('final') va server pul kassaga tegishli emas deb rad etganlari (g7v-2, OUTBOX-CLASS obDeclarable) — yo'q;
   //   skipped — shu sababli e'lon qilinmagan naqd yozuvlar soni (oynada bitta qator).
-  outboxCash:()=>{ const c=obLoad().filter(x=>x&&x.method==='cash'&&!x.final), a=c.filter(obDeclarable);
-    return { count:a.length, sum:a.reduce((t,x)=>t+(Number(x.amount)||0),0), refs:a.map(x=>({ ref:x.payId, amount:Number(x.amount)||0 })), skipped:c.length-a.length }; },
+  outboxCash:()=>obCashSplit(obLoad()),
+  //   js-1: oynada «qayta kiritilgan yoki pul qaytarilgan» deb belgilangan «Yuborilmadi» yozuvi — kun yopilgach / smena topshirilgach olinadi
+  outboxRemove:(payId)=>obRemove(payId),
   //   force — kassa holatini kutayotgan ('wait') yozuvlar ham darhol bir marta urinadi (yopish oldidan navbat iloji boricha o'tsin)
   flushOutbox:()=>flushOutbox({wait:true, force:true}),
   onChange:()=>{ kassaProbe(); } }; }
@@ -9354,7 +9355,8 @@ async function openSalaryPayout(opts){
       // 23503 — xodimning ID'si oyna ochilgandan keyin o'zgargan / xodim o'chirilgan: ro'yxat faqat oyna ochilganda o'qiladi,
       //   shu oynada qayta bosish har safar rad etiladi — eski forma o'rniga aniq ko'rsatma; yopilganda ro'yxat yangilanadi.
       if(e&&e.code==='23503'){ showStale(e); return; }
-      btn.disabled=false; btn.textContent=btnLbl(); toast('Xatolik: '+((e.code && e.message && e.message!==e.code) ? e.code+' — '+e.message : (e.code||e.message)),true); }
+      // kassa funksiyasi rad etgan (hint 'kassa:…' — o'zbekcha to'liq sabab, masalan FD-48: Direktor o'ziga naqd maoshni o'zi bermaydi) — matnning o'zi
+      btn.disabled=false; btn.textContent=btnLbl(); toast((e&&e.message&&String(e.hint||'').startsWith('kassa:')) ? String(e.message) : 'Xatolik: '+((e.code && e.message && e.message!==e.code) ? e.code+' — '+e.message : (e.code||e.message)),true); }
   };
 }
 async function renderAccounting(){
@@ -12056,6 +12058,21 @@ function obResendAll(items){ return (items||[]).map(x=>{ if(!x||x.final) return 
 //   kamomad chiqardi. Boshqa «Yuborilmadi» lar (kassa:late_limit, kassa:fiscal, noto'g'ri ma'lumot, huquq …) — e'lon qilinadi: pul kassada.
 const OB_NOT_IN_DRAWER={ 'kassa:pre_live':1, 'kassa:pre_live_old':1, 'fin:locked':1 };
 function obDeclarable(x){ return !!x && x.method==='cash' && !x.final && !(x.status==='failed' && OB_NOT_IN_DRAWER[String(x.lastHint||'')]); }
+// Kunni yopish / smena topshirish oynasi uchun naqd navbat yozuvlari (finCtx outboxCash): navbatda / kassani kutayotganlari — avvalgidek
+//   e'lon qilinadi (count, sum, refs); «Yuborilmadi» lari alohida (js-1: failed — har biri server xatosi bilan; oynada har biriga tanlov:
+//   pul kassada — e'lon qilinadi, qayta kiritilgan yoki pul qaytarilgan — navbatdan o'chiriladi): avval ular ham «hali yuborilmagan» bo'lib
+//   e'lon qilinardi — server rad etgan yozuv tuzatilib qayta kiritilgach ham, pul ikki marta ayirilib soxta kamomad chiqardi. skipped — pul
+//   kassaga tegishli emas deb rad etilganlar soni (obDeclarable); Direktor hal qiladiganlari ('final') — hech qayerda. Yangi obyekt.
+function obCashSplit(items){ const c=(items||[]).filter(x=>x&&x.method==='cash'&&!x.final), a=c.filter(obDeclarable),
+    p=a.filter(x=>x.status!=='failed'), f=a.filter(x=>x.status==='failed');
+  return { count:p.length, sum:p.reduce((t,x)=>t+(Number(x.amount)||0),0), refs:p.map(x=>({ ref:x.payId, amount:Number(x.amount)||0 })), skipped:c.length-a.length,
+    failed:f.map(x=>({ ref:x.payId, amount:Number(x.amount)||0, nm:String(x.nm||x.sid||''), err:String(x.lastError||'') })) }; }
+// js-1: «Qabul qilish» oynasida server rad etgan yozuv (oyna ochiq qoladi) tuzatilib shu oynadan qayta kiritilganda — yangi yozuv navbatga
+//   saqlangach eskisi navbatdan olinadi. Faqat hali «Yuborilmadi», Direktor hal qilmaydigani va SHU o'quvchiniki (sid — yangi yozuvniki:
+//   oynada boshqa o'quvchi tanlangan bo'lsa — bu boshqa to'lov; rad etilgani qoladi, kunni yopishda tanlanadi); boshqa holatdagisi
+//   (qayta yuborilgan, o'tgan) — tegilmaydi. sid berilmasa — hech narsa olinmaydi. Yangi ro'yxat qaytadi.
+function obSupersede(list, ids, sid){ const s=new Set((ids||[]).map(String)), k=sid==null?null:String(sid);
+  return (list||[]).filter(x=>!(x && k!==null && s.has(String(x.payId)) && String(x.sid==null?'':x.sid)===k && x.status==='failed' && !x.final)); }
 // Hozir yuborilsinmi (g7v-4): majburiy (kunni yopish / smena oynasi, «Hammasini qayta yuborish») — ha; kutish vaqti kelmagan — yo'q; KEYINGI
 //   kassa kunini kutayotgan yozuv (kassa:day_closed, kassa:not_started) — faqat sahifa oxirgi 30 daqiqada ishlatilgan bo'lsa (lastInput —
 //   oxirgi bosish / tugma / teginish; sahifa yuklanishi ham): u yuborilganda kassa kuni o'zi ochiladi — kechasi yoki dam olish kuni ochiq
@@ -12254,6 +12271,10 @@ async function openRecordPayment(students, reload, pre){
     $('#rp-search').addEventListener('input',e=>draw(e.target.value)); draw('');
   }
   let saving=false;
+  // js-1: shu oynada server rad etgan yozuvlar (navbatda «Yuborilmadi» bo'lib qoladi — pul kassada bo'lishi mumkin, g6): ma'lumot tuzatilib
+  //   shu oynadan O'SHA o'quvchi uchun qayta kiritilsa — yangi yozuv navbatga saqlangach eskisi olinadi (OUTBOX-CLASS obSupersede); oyna
+  //   yopilsa yoki boshqa o'quvchi tanlansa — qoladi (kunni yopish / smena oynasida tanlanadi: pul kassada yoki qayta kiritilgan).
+  const failedIds=[];
   $('#rp-save').onclick=async()=>{
     if(saving) return;
     // TAKROR HIMOYASI (0) — ikki bosish (double-click): navbatga/serverга tekshiruvдан OLDIN,
@@ -12359,6 +12380,9 @@ async function openRecordPayment(students, reload, pre){
         toast('Holat noaniq — avval tarixni tekshiring',true); }
       return;
     }
+    // js-1: shu oynada avval rad etilgan yozuv(lar) — tuzatilgan yozuv navbatga saqlandi: eskisi (hali «Yuborilmadi» va shu o'quvchiniki
+    //   bo'lsa) navbatdan olinadi; boshqa o'quvchiniki — qoladi
+    if(failedIds.length){ obSave(obSupersede(obLoad(), failedIds, item.sid)); failedIds.length=0; obBadge(); }
     if(reload) reload();
     // 2) Yuborishga urinamiz — Web Lock bilan TABLAR ARO SERIAL (bir payId ikki marta qo'llanmaydi).
     await flushOutbox({wait:true});
@@ -12369,7 +12393,8 @@ async function openRecordPayment(students, reload, pre){
         finishUI('✓ To‘lov qabul qilindi', okBody+`<div class="small" style="margin-top:8px;color:#B54708;background:#FEF3E2;border-radius:8px;padding:8px 10px">Tanlangan sana kassa oralig‘idan (oxirgi 31 kun) tashqarida edi — to‘lov <b>${esc(r.day)}</b> kuni bilan yozildi. Chek shu kun bilan chiqadi.</div>`); }
       else { toast('To‘lov qabul qilindi ✓'); finishUI('✓ To‘lov qabul qilindi', okBody); } }
     else if(cur.status==='failed'){ saving=false; btn.disabled=false; btn.textContent='Qabul qilish';
-      toast('Xatolik: '+(cur.lastError||'server rad etdi')+' — «⏳ navbat»dan ko‘ring',true); obBadge(); }
+      if(!cur.final) failedIds.push(item.payId);   // js-1: tuzatib qayta kiritilsa — almashtiriladi (Direktor hal qiladigani — yo'q)
+      toast('Xatolik: '+(cur.lastError||'server rad etdi')+(cur.final?' — «⏳ navbat»dan ko‘ring':' — ma’lumotni tuzatib, «Qabul qilish»ni qayta bosing (shu o‘quvchining rad etilgan yozuvi almashtiriladi) yoki «⏳ navbat»da o‘chiring'),true); obBadge(); }
     else if(cur.lastError){ obBadge(); toast('To‘lov hali o‘tkazilmadi: '+cur.lastError, true);   // server javob berdi, lekin qabul qilmadi (masalan kassa kuni yopilmagan)
       finishUI('⚠️ To‘lov o‘tkazilmadi — navbatda', `<div class="small" style="background:#FDECEC;color:#B42318;border-radius:10px;padding:12px;font-weight:700">${esc(nm)} — ${fmtSom(amount)} (${esc(methLbl)})</div><div class="small" style="margin-top:8px;color:#B42318">${esc(cur.lastError)}</div><div class="small muted" style="margin-top:8px">Yozuv navbatda turibdi (pastda ⏳). Sabab bartaraf etilgach avtomatik yuboriladi; «⏳ navbat» oynasidan qayta yuborish yoki o‘chirish mumkin. Qayta KIRITMANG — ikki marta yoziladi.</div>`); }
     else { obBadge(); toast('⏳ Internet yo‘q — navbatga qo‘yildi, ulanganда avtomatik yuboriladi'); finishUI('⏳ To‘lov navbatga qo‘yildi', queuedBody); }
@@ -12379,7 +12404,8 @@ async function openRecordPayment(students, reload, pre){
 // ---- To'lovni qaytarish (FAQAT direktor; summa + sabab + direktor paroli) ----
 //   ctx.type: 'invoice' (hisob-faktura to'lovi), 'payment' (biriktirilmagan to'lov), 'credit' — o'quvchi avansini NAQD qaytarish
 //   (faqat kassa ishga tushgach; server: kassa_refund_request target 'credit'). Oyna kaliti (clientRef / p_ref) oyna ochilganda BIR
-//   marta yaratiladi: javob yo'qolib qayta bosilsa server o'sha so'rovni qaytaradi — ikkinchi qaytarish yozilmaydi.
+//   marta yaratiladi: javob yo'qolib qayta bosilsa server o'sha so'rovni qaytaradi — ikkinchi qaytarish yozilmaydi; summa, «avans ham»
+//   yoki usul o'zgartirilib qayta yuborilsa — server rad etadi (ref_mismatch) va birinchi yozilgani ko'rsatiladi (live-1).
 async function openRefund(ctx, reload){
   if(!SESSION.isAdmin){ toast('Faqat direktor to‘lovni qaytara oladi',true); return; }
   const isCred = ctx.type==='credit';
@@ -12443,10 +12469,12 @@ async function openRefund(ctx, reload){
     if(!confirm(ask)) return;   // fmtSom «so‘m»ni o'zi qo'shadi
     busy=true; const btn=$('#rf-do'); btn.disabled=true; btn.textContent=viaKassa?'Tasdiqlanmoqda…':'Qaytarilmoqda…';
     const email=(auth.currentUser&&auth.currentUser.email)||'';
+    // g8, live-1b: birinchi yuborishdan keyin usul QULFLANADI (ikkala yo'lda) — javob yo'qolgan bo'lsa ham qaytarish / so'rov yozilgan
+    //   bo'lishi mumkin; shu oynada boshqa usulga o'tib ikkinchi marta qaytarilmasin (server ham rad etadi: kassa:ref_mismatch /
+    //   kassa:refund_pending). Boshqa usul — oynani qayta ochib. Summa va «avans ham» qulflanmaydi: o'zgartirib qayta yuborilsa server
+    //   rad etadi (ref_mismatch) va birinchi yozilganini qaytaradi.
+    { const rm=$('#rf-method'); if(rm) rm.disabled=true; }
     if(viaKassa){
-      // g8 (g2 qoldig'i): kassaga yuborilgach usul QULFLANADI — javob yo'qolgan bo'lsa ham so'rov yozilgan bo'lishi mumkin; shu oynada
-      //   «Naqdsiz»ga o'tib ikkinchi marta qaytarilmasin (server ham rad etadi: kassa:refund_pending). Boshqa usul — oynani qayta ochib.
-      { const rm=$('#rf-method'); if(rm) rm.disabled=true; }
       try{
         const d=await rpc('kassa_refund_request', { p:{ target:isCred?'credit':(isInv?'invoice':'payment'), id:isCred?credSid:String(isInv?(ctx.invoice._id||''):(ctx.payment._id||'')), amount, reason,
           clawback:!isCred && claw, payee, requestDate:($('#rf-reqdate').value||null), clientRef:rfRef } });
@@ -12463,7 +12491,8 @@ async function openRefund(ctx, reload){
       // refunds jurnal + invoice paidAmount↓ + (clawback) avans=0 + credit_ledger — BITTA
       // tranzaksiya (invoice qulfi + advisory lock + 'refund:'+ref posbon). Eski klient-yon
       // ketma-ketlik 2-5 alohida yozuv edi -> uzilishда chala refund / retry'да ikki marta.
-      //   Kalit (p_ref) — oyna kaliti: javob yo'qolib qayta bosilsa «allaqachon qaytarilgan» (ikkinchi marta qaytarilmaydi).
+      //   Kalit (p_ref) — oyna kaliti: javob yo'qolib qayta bosilsa «allaqachon qaytarilgan» (ikkinchi marta qaytarilmaydi);
+      //   o'zgartirilgan ma'lumot bilan — rad (ref_mismatch, pastda).
       const doClawback = claw;
       const ref = rfRef;
       const res = await rpc('refund_invoice', {
@@ -12472,8 +12501,16 @@ async function openRefund(ctx, reload){
         p_amount: amount, p_reason: reason, p_clawback: doClawback, p_by: email, p_ref: ref
       });
       if(res && res.ok===false){
+        // live-1: shu oyna kaliti bilan avval BOSHQA ma'lumot (summa, «avans ham») yoki boshqa usul (naqd so'rov) yozilgan — ikkinchisi
+        //   yozilmadi; birinchi yozilgani ko'rsatiladi, oyna yopiladi, ro'yxat yangilanadi (kassa yo'lidagi kassa:ref_mismatch kabi)
+        if(res.reason==='ref_mismatch'){
+          toast(res.via==='cash' ? 'Bu oynadan avval naqd qaytarish so‘rovi yuborilgan — javob yo‘qolgan bo‘lishi mumkin: «Kassa» → «So‘rovlar»ni tekshiring'
+            : `Bu oynadan avval boshqa ma’lumot bilan qaytarish yozilgan (${fmtSom(res.amount||0)}${res.clawback===true?', avans ham 0 ga':''}) — javob yo‘qolgan bo‘lishi mumkin: ro‘yxatni tekshiring`, true);
+          closeModal(); if(reload) reload(); if(res.via==='cash') kassaProbe(); return; }
         if(res.reason==='partial-unmatched') throw new Error(`Biriktirilmagan to‘lov faqat TO‘LIQ qaytariladi (${fmtSom(res.amount||0)}). Qisman bo‘lsa — avval o‘quvchiga biriktiring, ortiqchasini avansdan qaytaring.`);
         if(res.reason==='exceeds-paid') throw new Error(`Qaytarib bo‘lmaydi: hozir bu hisob-fakturada ${fmtSom(res.paid||0)} to‘langan${(res.status==='canceled'||res.status==='reversed')?' (faktura bekor qilingan — puli avansda bo‘lishi mumkin)':''}. Sahifani yangilab qayta tekshiring.`);
+        // biriktirilmagan to'lov endi biriktirilmagan emas (javob yo'qolgach qayta bosilgan — allaqachon qaytarilgan; yoki shu orada biriktirilgan)
+        if(res.reason==='not-unmatched') throw new Error(res.status==='refunded' ? 'Bu to‘lov allaqachon qaytarilgan — ro‘yxatni yangilab tekshiring.' : `Bu to‘lov endi biriktirilmagan emas (holati: ${res.status||'—'}) — o‘quvchiga biriktirilgan bo‘lishi mumkin. Ro‘yxatni yangilab tekshiring.`);
         throw new Error(res.error||res.reason||'refund-failed'); }
       toast((res && res.dup) ? 'Allaqachon qaytarilgan ✓' : 'Qaytarildi ✓'); closeModal(); if(reload) reload();
     }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish';

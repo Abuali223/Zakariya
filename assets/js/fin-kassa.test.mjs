@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN } from './fin-kassa.js';
+  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -300,6 +300,25 @@ test('vazifalar ajratilishi (sec-1, sec-5): tasdiqlash va pul berish tugmalari �
   assert.equal(canPayDoc(Object.assign({}, a, { sourceTable: 'refunds', op: 'out_refund' }), kas), true, 'tasdiqlangan qaytarish');
 });
 
+test('g11 (sec-1): pul berish tugmasi — yolg‘iz tasdiqlagan (qaytarish, ta’sischi mablag‘i) va Direktorning o‘z kartasi; kassir o‘z avansini beradi', () => {
+  const dir = { uid: 'U_DIR', director: true, cards: ['staff:st_dir'] }, kas = { uid: 'U_KAS', operator: true, cards: ['staff:st_kas'] };
+  const ref = { status: 'approved', op: 'out_refund', form: 'KO2', sourceTable: 'refunds', approvedBy: null, dirApprovedBy: 'U_DIR', partyType: 'student', partyId: 'T-1' };
+  assert.deepEqual([canPayDoc(ref, dir), canPayDoc(ref, kas)], [false, true], 'qaytarishni so‘ragan (= tasdiqlagan) Direktor bermaydi — kassir beradi');
+  const fund = { status: 'approved', op: 'in_funding', form: 'KO1', sourceTable: null, approvedBy: null, dirApprovedBy: 'U_DIR', partyType: 'founder', partyId: 'cp_fnd' };
+  assert.deepEqual([canPayDoc(fund, dir), canPayDoc(fund, kas)], [false, true], 'yolg‘iz tasdiqlagan kirim — kassir qabul qiladi');
+  assert.equal(canPayDoc(Object.assign({}, ref, { dirApprovedBy: 'U_DIR2' }), dir), true, 'boshqa Direktor tasdiqlagan — favqulodda beradi');
+  const own = { status: 'approved', op: 'out_handover', form: 'KO2', sourceTable: null, approvedBy: 'U_FM', dirApprovedBy: 'U_DIR', partyType: 'employee', partyId: 'staff:st_dir' };
+  assert.deepEqual([canPayDoc(own, dir), canPayDoc(own, kas)], [false, true], 'Direktorning o‘z kartasiga (FD-48) — kassir beradi');
+  assert.equal(canPayDoc(Object.assign({}, own, { op: 'out_accountable', dirApprovedBy: null }), dir), false, 'o‘ziga hisobdorga avans ham');
+  assert.equal(canPayDoc(Object.assign({}, own, { partyId: 'staff:st9' }), dir), true, 'uchinchi shaxsga 2-ro‘yxat tasdiqlagan — Direktor favqulodda beradi');
+  assert.equal(canPayDoc(Object.assign({}, own, { partyType: 'founder', partyId: 'staff:st_dir' }), dir), true, 'faqat xodim tomoni (kalit tasodifan bir xil)');
+  assert.equal(canPayDoc(Object.assign({}, own, { form: 'KO1', op: 'in_acc_return' }), dir), true, 'xodimdan kirim (KO-1) — qoida faqat chiqimga');
+  assert.equal(canPayDoc(own, { uid: 'U_DIR', director: true }), true, 'eski server (me.cards yo‘q) — server baribir rad etadi');
+  const adv = { status: 'approved', op: 'out_advance', form: 'KO2', sourceTable: null, approvedBy: 'U_FM', partyType: 'employee', partyId: 'staff:st_kas' };
+  assert.equal(canPayDoc(adv, kas), true, 'kassir o‘ziga boshqa xodim tasdiqlagan avansni o‘zi beradi (2-ro‘yxat tasdig‘i, kunni boshqa xodim tekshiradi)');
+  assert.equal(canPayDoc(Object.assign({}, adv, { approvedBy: 'U_KAS' }), kas), false, 'o‘zi tasdiqlagan — yo‘q (sec-5)');
+});
+
 // ---------------------------------------------------------------- ko'rik 6-guruhi (sec-2, state-6, sec-4, acc-6)
 test('kassa egasi va komissiya (sec-2): egasi bo‘lmagan kassir, Direktor, Moliya menejeri — kassir o‘rniga', () => {
   const kas = { uid: 'u_kas', operator: true }, kas2 = { uid: 'u_kas2', operator: true }, dir = { uid: 'u_dir', director: true }, fm = { uid: 'u_fm', list2: true };
@@ -442,7 +461,7 @@ test('kassani to‘xtatish (state-2, crit-3): oxirgi kun kech kirim orderi hali 
 // admin.html qurilma navbati (to'lov outbox'i) — OUTBOX-CLASS bloki (sof funksiyalar) faylning o'zidan olinadi
 const ADM = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8');
 const obBlock = (() => { const a = ADM.indexOf('// OUTBOX-CLASS:BEGIN'), b = ADM.indexOf('// OUTBOX-CLASS:END'); return a >= 0 && b > a ? ADM.slice(a, b) : ''; })();
-const OB = (() => { const ctx = vm.createContext({}); vm.runInContext(obBlock + '\n;this.__ob = { obErrClass, obWaitMs, obItemState, obApplyErr, obResendAll, OB_WAIT, obDeclarable, obDue };', ctx); return ctx.__ob; })();
+const OB = (() => { const ctx = vm.createContext({}); vm.runInContext(obBlock + '\n;this.__ob = { obErrClass, obWaitMs, obItemState, obApplyErr, obResendAll, OB_WAIT, obDeclarable, obDue, obCashSplit, obSupersede };', ctx); return ctx.__ob; })();
 
 test('qurilma navbati (admin.html): rad etish turlari — kassa holatini kutish, Direktor hal qiladi, qattiq, qayta urinish', () => {
   assert.ok(obBlock.length > 0 && (ADM.match(/OUTBOX-CLASS:BEGIN/g) || []).length === 1, 'blok bitta');
@@ -658,4 +677,83 @@ test('g9 (ui-10): chop etilgan hujjatdagi «chop etdi» — kassa_state.me nomi,
   const i = src.indexOf('const printCtx = '), pc = i >= 0 ? src.slice(i, src.indexOf('\n', src.indexOf('printedAt', i))) : '';
   assert.ok(pc.length > 100 && /printedBy: \(mk && mk\.byName\) \|\| me\(\)\.name \|\| ''/.test(pc), pc.slice(0, 400));
   assert.ok(!/email/i.test(pc));
+});
+
+// ---------------------------------------------------------------- yakuniy ko'rik (g11b): js-1, js-3
+const J = v => JSON.parse(JSON.stringify(v));   // vm konteksti (boshqa «realm») obyektlari — oddiy obyektga
+test('js-1 (admin.html): yopish / smena uchun navbat — «Yuborilmadi» yozuvlari alohida (server xatosi bilan); navbatdagi va kassani kutayotganlari — avvalgidek', () => {
+  const E = (hint, code, message) => ({ hint, code: code || 'P0001', message: message || 'x' });
+  const fd = OB.obApplyErr({ payId: 'man_1800000000000_aaaaa', sid: 'T-2', nm: 'Sinov B', method: 'cash', amount: 2900000 },
+    E('kassa:fiscal_dup', '22023', 'Bu fiskal chek raqami boshqa hujjatda ishlatilgan (F-1)'), 0);
+  assert.deepEqual([fd.status, OB.obDeclarable(fd)], ['failed', true], 'rad etilgan, lekin pul kassada bo‘lishi mumkin');
+  const pre = OB.obApplyErr({ payId: 'man_1_pre', method: 'cash', amount: 10000 }, E('kassa:pre_live', '42501'), 0);
+  const fin = OB.obApplyErr({ payId: 'man_1_fin', method: 'cash', amount: 7000 }, E('kassa:paused_live_day', '42501'), 0);
+  const wait = OB.obApplyErr({ payId: 'man_1_wait', method: 'cash', amount: 20000 }, E('kassa:day_closed'), 0);
+  const items = [{ payId: 'man_1_p', method: 'cash', amount: 50000 }, wait, fd, pre, fin, { payId: 'man_1_bank', method: 'bank', amount: 9 }];
+  const fdRow = { ref: 'man_1800000000000_aaaaa', amount: 2900000, nm: 'Sinov B', err: 'Bu fiskal chek raqami boshqa hujjatda ishlatilgan (F-1)' };
+  assert.deepEqual(J(OB.obCashSplit(items)), { count: 2, sum: 70000, refs: [{ ref: 'man_1_p', amount: 50000 }, { ref: 'man_1_wait', amount: 20000 }], skipped: 1, failed: [fdRow] });
+  // ko'rik ssenariysi: rad etilgan yozuv qolgan, tuzatilgani o'tib navbatdan chiqqan — avval «hali yuborilmagan: 1 ta» (soxta kamomad), endi — alohida, tanlov bilan
+  assert.deepEqual(J(OB.obCashSplit([fd])), { count: 0, sum: 0, refs: [], skipped: 0, failed: [fdRow] });
+  assert.deepEqual(J(OB.obCashSplit(null)), { count: 0, sum: 0, refs: [], skipped: 0, failed: [] });
+  assert.equal(OB.obCashSplit([{ payId: 'man_1_x', sid: 'T-7', method: 'cash', amount: 5, status: 'failed' }]).failed[0].nm, 'T-7', 'ismsiz — o‘quvchi kodi');
+  // admin.html: yopish / smena oynasi navbati shu funksiyadan; «navbatdan o'chirilsin» deganlari — kun yopilgach (obRemove)
+  assert.ok(ADM.includes('outboxCash:()=>obCashSplit(obLoad())') && ADM.includes('outboxRemove:(payId)=>obRemove(payId)'));
+});
+
+test('js-1 (admin.html): «Qabul qilish» oynasida rad etilgan yozuv o‘sha o‘quvchi uchun tuzatilib qayta kiritilsa — eskisi navbatdan olinadi (faqat hali «Yuborilmadi», Direktor hal qilmaydigani va shu o‘quvchiniki)', () => {
+  const fd = OB.obApplyErr({ payId: 'man_1_a', sid: 'T-1', method: 'cash', amount: 2900000 }, { code: '22023', hint: 'kassa:fiscal_dup', message: 'x' }, 0);
+  const fin = OB.obApplyErr({ payId: 'man_1_f', sid: 'T-1', method: 'cash', amount: 5 }, { code: '42501', hint: 'kassa:paused_live_day', message: 'x' }, 0);
+  const re = OB.obResendAll([OB.obApplyErr({ payId: 'man_1_r', sid: 'T-1', method: 'cash', amount: 5 }, { code: '22023', message: 'x' }, 0)])[0];   // qayta yuborilgan — navbatda
+  const other = OB.obApplyErr({ payId: 'man_1_o', sid: 'T-1', method: 'cash', amount: 7 }, { code: '22023', message: 'x' }, 0);   // boshqa oynada rad etilgan
+  const b = OB.obApplyErr({ payId: 'man_1_b', sid: 'T-2', method: 'cash', amount: 9 }, { code: '22023', hint: 'kassa:fiscal_dup', message: 'x' }, 0);   // shu oynada, boshqa o'quvchi
+  const list = [fd, fin, re, other, b, { payId: 'man_1_new', sid: 'T-1', method: 'cash', amount: 2900000 }];
+  const out = OB.obSupersede(list, ['man_1_a', 'man_1_f', 'man_1_r', 'man_1_b'], 'T-1');
+  assert.deepEqual(J(out.map(x => x.payId)), ['man_1_f', 'man_1_r', 'man_1_o', 'man_1_b', 'man_1_new'], 'faqat shu oynaning shu o‘quvchiga tegishli hali «Yuborilmadi» yozuvi olindi');
+  assert.equal(list.length, 6, 'asl ro‘yxat o‘zgarmaydi');
+  assert.deepEqual(J(OB.obSupersede(list, []).map(x => x.payId)), list.map(x => x.payId));
+  assert.deepEqual(J(OB.obSupersede(list, ['man_1_a']).map(x => x.payId)), list.map(x => x.payId), 'o‘quvchi berilmasa — hech narsa olinmaydi');
+  assert.deepEqual(J(OB.obSupersede(list, ['man_1_a'], 'T-2').map(x => x.payId)), list.map(x => x.payId), 'boshqa o‘quvchi kiritilsa — rad etilgani qoladi');
+  assert.deepEqual(J(OB.obSupersede(null, ['man_1_a'], 'T-1')), []);
+  assert.deepEqual(J(OB.obCashSplit(out).failed.map(x => x.ref)), ['man_1_o', 'man_1_b'], 'yopish oynasida boshqa oynaniki va boshqa o‘quvchiniki qoldi (tanlov bilan)');
+  // admin.html: rad etilganda yozuv qoladi (pul kassada bo'lishi mumkin) va kaliti eslab qolinadi; yangi yozuv navbatga saqlangach — almashtiriladi
+  const i = ADM.indexOf('const saved=obAdd(item);'), j = ADM.indexOf('if(failedIds.length){ obSave(obSupersede(obLoad(), failedIds, item.sid)); failedIds.length=0; obBadge(); }');
+  assert.ok(i > 0 && j > i && ADM.includes("if(!cur.final) failedIds.push(item.payId);"), 'tartib: avval saqlash, keyin almashtirish; Direktor hal qiladigani eslab qolinmaydi');
+  assert.ok(/shu o‘quvchining rad etilgan yozuvi almashtiriladi\) yoki «⏳ navbat»da o‘chiring/.test(ADM));
+});
+
+test('js-1: yopish / smena oynasi — «Yuborilmadi» yozuviga tanlov: «pul kassada» — e’lon qilinadi, «qayta kiritilgan» — yo‘q (kun yopilgach navbatdan olinadi); tanlanmagani — saqlash rad', () => {
+  const ob = { count: 1, sum: 50000, refs: [{ ref: 'man_1_p', amount: 50000 }], skipped: 0,
+    failed: [{ ref: 'man_1_f', amount: 290000, nm: 'Sinov B', err: 'x' }, { ref: 'man_1_g', amount: 10000, nm: 'Sinov C', err: 'y' }, { ref: 'bad', amount: 5 }] };
+  assert.deepEqual(outboxDeclare(ob, {}), { refs: [{ ref: 'man_1_p', amount: 50000 }], count: 1, sum: 50000, old: false, failed: 2, cash: 0, drop: [], missing: 2 }, 'tanlanmagan — e’lon qilinmaydi, saqlash rad');
+  assert.deepEqual(outboxDeclare(ob, { man_1_f: 'drop', man_1_g: 'cash' }),
+    { refs: [{ ref: 'man_1_p', amount: 50000 }, { ref: 'man_1_g', amount: 10000 }], count: 2, sum: 60000, old: false, failed: 2, cash: 1, drop: ['man_1_f'], missing: 0 });
+  assert.deepEqual(outboxDeclare(ob, { man_1_f: 'cash', man_1_g: 'cash', man_1_p: 'drop', bad: 'cash' }).refs.map(r => r.ref), ['man_1_p', 'man_1_f', 'man_1_g'],
+    'navbatdagi yozuv tanlovsiz e’lon qilinadi; noto‘g‘ri kalit — e’tiborsiz');
+  assert.equal(outboxDeclare(ob, { man_1_f: 'cash', man_1_g: 'x' }).missing, 1, 'noma’lum tanlov — tanlanmagan');
+  assert.deepEqual(outboxDeclare(null, null), { refs: [], count: 0, sum: 0, old: false, failed: 0, cash: 0, drop: [], missing: 0 });
+  assert.equal(outboxDeclare({ count: 2, sum: 7000 }, {}).old, true, 'eski admin.html — sahifani yangilash belgisi saqlanadi');
+  // ko'rik ssenariysi: rad etilgan 2 900 000 qayta kiritilgan — «qayta kiritilgan» bilan e'lon qilinmaydi (server farqi 0, test-kassa-pay JS1)
+  const fd = { count: 0, sum: 0, refs: [], failed: [{ ref: 'man_1800000000000_aaaaa', amount: 2900000 }] };
+  assert.deepEqual([outboxDeclare(fd, { man_1800000000000_aaaaa: 'drop' }).sum, outboxDeclare(fd, { man_1800000000000_aaaaa: 'cash' }).sum], [0, 2900000]);
+  // fin-kassa.js: yopish va smena oynasi tanlovsiz saqlamaydi
+  const src = readFileSync(new URL('./fin-kassa.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/if \(v\.failedMissing\) \{ C\.toast\(failedAsk, true\); return; \}/g) || []).length, 2);
+  // «navbatdan o'chirilsin» deganlari — faqat kun yopilgach / smena topshirilgach (act() muvaffaqiyatida — after; rad / xatoda qoladi)
+  assert.ok(src.includes("r => { dropOutbox(v.drop); zToast(r && r.day && r.day.z);"), 'kunni yopish: muvaffaqiyatdan keyin');
+  assert.ok(src.includes("() => dropOutbox(v.drop), staleReopen(openHandoverForm));"), 'smena topshirish: muvaffaqiyatdan keyin');
+  assert.equal((src.match(/dropOutbox\(/g) || []).length, 2, 'boshqa joyda chaqirilmaydi');
+  assert.match(src, /async function act\(fn, args, okMsg, after, onErr\) \{\n  try \{\n    const r = await call\(fn, args\);\n    if \(r && r\.ok === false\) \{[^\n]*return null; \}\n[^\n]*if \(after\) after\(r\);/,
+    'act(): after — faqat server qabul qilgach');
+  // smena yozuvi qatori (#kc-ho) tanlovga qarab yangilanadi
+  assert.ok(src.includes("el.addEventListener('change', () => { o = outboxDeclare(ob, choice()); hoUpd(); upd(); })"));
+});
+
+test('js-3: sinov kassasi — qurilma navbati (o‘quv to‘lovlari asosiy kassaga tushadi) ko‘rsatilmaydi va e’lon qilinmaydi', () => {
+  const ob = { count: 1, sum: 500000, refs: [{ ref: 'man_1_c', amount: 500000 }], skipped: 1, failed: [{ ref: 'man_1_f', amount: 5 }] };
+  assert.equal(deskOutbox('main', ob), ob);
+  assert.deepEqual(deskOutbox('main', null), { count: 0, sum: 0, refs: [], skipped: 0, failed: [] }, 'eski admin.html (outboxCash yo‘q) — bo‘sh navbat');
+  assert.equal(deskOutbox('sinov', ob), null);
+  assert.deepEqual(outboxDeclare(deskOutbox('sinov', ob), {}), { refs: [], count: 0, sum: 0, old: false, failed: 0, cash: 0, drop: [], missing: 0 }, 'sinov kassasida pendingRefs bo‘sh, tanlov ham yo‘q');
+  const src = readFileSync(new URL('./fin-kassa.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/const ob = deskOutbox\(ST\.desk, C\.outboxCash \? C\.outboxCash\(\) : null\);/g) || []).length, 2, 'yopish va smena oynasi');
 });

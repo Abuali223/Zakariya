@@ -168,6 +168,7 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 6 | Xato orderni shu kuni bekor qilish | ☐ | |
 | 7 | Naqd maosh (tasdiqlangan vedomost chegarasida); ish haqi avansi | ☐ | |
 | 8 | Qaytarish: Direktor tasdig‘i → kassir pulni berdi | ☐ | |
+| 8a | Qaytarish oynasi: javob kelmagach summa yoki «avans ham» o‘zgartirilib qayta yuborildi — rad etildi, birinchi yozilgani ko‘rsatildi; birinchi yuborishdan keyin usul o‘zgarmadi | ☐ | |
 | 9 | Smena topshirish ikki bosqichda: topshiruvchi yozdi — qabul qilinguncha kassada hujjat yozilmadi; qabul qiluvchi o‘z hisobidan «Qabul qildim» (yoki «Rad etish») — dalolatnomada ikkala ism; kassa egasi o‘rniga topshirish komissiyasiz rad etildi | ☐ | |
 | 10 | Kunni farq bilan yopish; KO-4 (2 nusxa), sanash dalolatnomasi, kunlik hisobot | ☐ | |
 | 11 | Kunni tekshirish («Tekshirdim»); kamomad bo‘yicha qaror | ☐ | |
@@ -177,6 +178,7 @@ Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] ·
 | 14a | Navbatda to‘lov turganida kun yopildi: u oynada «hali o‘tkazilmagan» bo‘lib hisobga olindi (farq yo‘q); keyingi kuni «kech» bo‘lib o‘tdi | ☐ | |
 | 14b | Server ishlamagan kun ertasi kuni «Қ» blankalari bilan yopildi (farq yo‘q); «Қ» yozuvlari kiritildi; kun izoh bilan tekshirildi | ☐ | |
 | 14c | Smena navbatdagi yozuv bilan topshirildi; qabul qiluvchi kunni boshqa qurilmadan yopdi — oynada «Smena topshirishda e’lon qilingan, hali kelmagan» qatori, farq yo‘q; yozuv keyingi kuni «kech» kelib bog‘landi | ☐ | |
+| 14d | «💵 To‘lov» rad etildi (fiskal chek № takror), o‘sha oynada tuzatilib qayta kiritildi — navbatda rad etilgan yozuv qolmadi; boshqa «Yuborilmadi» yozuvi yopish oynasida alohida, tanlov bilan («Pul kassada» / «Qayta kiritilgan …»), farq tanlovga mos; sinov kassasi yopilganda navbat ko‘rinmadi | ☐ | |
 | 15 | Buxgalter: «To‘lovlar» va «Buxgalteriya» — oy ma’lumoti ko‘rinadi, yozish tugmalari yo‘q, telefon va to‘lovchi matni ko‘rinmaydi | ☐ | |
 | 16 | Buxgalter: oylik vedomost (holati, qatorlar) — faqat ko‘rish; A4 oylik hisobot — ismsiz (o‘quvchi va xodim ID bilan) | ☐ | |
 
