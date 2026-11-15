@@ -74,7 +74,7 @@ E2E_DB=fx_e2e
 ```bash
 cd tests/kassa-e2e
 bash stand.sh setup          # bir marta: local/, JWT siri, dasturlar tekshiruvi → «tayyor: …»
-bash run-all.sh              # to‘liq to‘plam (36 o‘tish, ≈ 40–60 daqiqa) — reliz oldidan shu buyruq
+bash run-all.sh              # to‘liq to‘plam (36 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
 ```
 
 `run-all.sh` har o‘tishdan oldin stendni noldan quradi (ssenariylar kunlarni yopadi, hujjat o‘tkazadi — holat
@@ -127,12 +127,12 @@ shu jadval ham yangilanadi):
 
 Jami: 36 o‘tish, 990 tekshiruv (kassa 2 × 467, to‘lov 24, eski oqimlar 32).
 
-**Holat (2026-11-14).** Oxirgi to‘liq yashil o‘tish — 2026-11-13, kassa moduli mustaqil ko‘rigi tuzatishlaridan oldingi
-kod bilan (k13 da o‘shanda 38 ta edi; 39-tekshiruv — «Profil» — keyingi tuzatish bilan qo‘shilgan). Ko‘rik tuzatishlari
-(ayniqsa smena topshirish, oflayn navbat, kunni yopish va chop etish bo‘yicha guruhlar) kassa ekranlaridagi ba’zi oqimlarni
-o‘zgartirdi — masalan, smena topshirish endi ikki bosqichli (qabul qiluvchi «Qabul qildim» deb tasdiqlaydi), yopish va
-topshirish shakllari avval navbatdagi yozuvlarni yuboradi. Shunday oqimlarga tegadigan tekshiruvlar reliz oldidan
-yangilanadi va to‘plam qayta o‘tkaziladi; sonlar o‘zgarsa — yuqoridagi jadval ham.
+**Holat (2026-11-15).** Oxirgi to‘liq yashil o‘tish — 2026-11-15, modul relizi 12 (kassa moduli mustaqil ko‘rigi va yakuniy
+ko‘rik tuzatishlaridan keyingi kod): 36 o‘tish, 990 tekshiruv — hammasi o‘tdi (≈ 13 daqiqa). Ko‘rikda o‘zgargan oqimlar
+(ikki bosqichli smena topshirish, yopish va topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun
+tanlov, sinov kassasi, qaytarish oynasi kaliti, Direktor o‘ziga pul bermasligi, chop etish belgilari, T1, ishdan ketgan xodim)
+k14–k16 va yangilangan k1–k13, pay, legacy da tekshiriladi; har yangi tekshiruv mahsulot kodini vaqtincha eski holatiga
+qaytarib yiqilishi ko‘rsatilgan.
 
 ## Ssenariy yozish va tahrirlash
 

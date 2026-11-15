@@ -872,17 +872,17 @@ ko‘rinadi; ishga tushirish kunigacha barcha oynalar avvalgidek ishlaydi. Sinov
 orqaga qaytarish), `test-fin-prereq.sql` 95, `test-kassa-race.sh` 59 (8 × 200 parallel, 10 % ROLLBACK; takror kalit, ikki
 katta chiqim, ikki tasdiq, hisobdor va maosh qaytimlari, kunni yopish, smena topshirish, fiskal chek takrori, kassani qayta
 to‘xtatish, qaytarish oynasi kaliti), `fin-print.test.mjs` 38, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 42, `tg-daily.test.cjs` 50. Brauzer ssenariylari repo’da — `tests/kassa-e2e` (lokal stend, sintetik
-urug‘; ishga tushirish va kutilgan sonlar — o‘sha papkadagi README): o‘n uchta to‘liq ssenariy (326 tekshiruv) eski va yangi
-dizaynda, 1440 va 390 px; qo‘lda to‘lov va eski oqimlar kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda (48
-tekshiruv); oxirgi to‘liq o‘tish — 2026-11-13, ko‘rik tuzatishlaridan oldin. Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
+urug‘; ishga tushirish va kutilgan sonlar — o‘sha papkadagi README): o‘n olti kassa ssenariysi (467 tekshiruv) eski va yangi
+dizaynda, 1440 va 390 px; qo‘lda to‘lov va eski oqimlar kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda (56
+tekshiruv); oxirgi to‘liq o‘tish — 2026-11-15, reliz 12: 36 o‘tish, 990 tekshiruv — hammasi o‘tdi. Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
 66–69-bo‘limlar; M5 — bankdan limit xati, maktab), 12 ta hisob siyosati qarori buxgalter imzosini kutadi. Mustaqil (ko‘p
 agentli) ko‘rik kassa moduli uchun 2026-11-13…14 da o‘tkazildi (F1.21 uchun avvalroq — `SESSIYA-ISHLARI.md` 76-bo‘lim):
 tasdiqlangan topilmalar guruhlab tuzatildi (reliz 11; yakuniy ko‘rik topilmalari — reliz 12), qabul qilingan cheklovlar — `ishga-tushirish.md`, «Ma’lum va qabul
-qilingan cheklovlar». Qoldi: brauzer ssenariylarini ko‘rikda o‘zgargan oqimlarga (smena topshirish, oflayn navbat, kunni yopish,
-chop etish) moslab qayta o‘tkazish; jonli zanjirga o‘tkazish — yashirin o‘rnatish kunida, qabul sinovi va buxgalter ko‘rigidan
-keyin (`ishga-tushirish.md`, 3.2-band); F1.20 (RLS relizi) — 1b-bosqichda.
+qilingan cheklovlar». Brauzer ssenariylari ko‘rikda o‘zgargan oqimlarga moslandi (2026-11-15; yangi k14–k16). Qoldi: jonli
+zanjirga o‘tkazish — yashirin o‘rnatish kunida, qabul sinovi va buxgalter ko‘rigidan keyin (`ishga-tushirish.md`, 3.2-band);
+F1.20 (RLS relizi) — 1b-bosqichda.
 
 | ID | H | kun | Vazifa | Bog‘liq | Qabul mezoni |
 |---|---|---|---|---|---|
