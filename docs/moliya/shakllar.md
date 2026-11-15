@@ -15,7 +15,8 @@ chop etilishi mumkin — mazmuni o‘zgarmasin.
 | **Naqdsiz dalolatnoma** (boshlang‘ich qoldiq; qayta ishga tushirish; kamomad bo‘yicha qaror; o‘zaro hisob) | Direktor amali bilan | 2 | rahbar, bosh buxgalter; kamomad xodim zimmasiga qo‘yilganda (4730) — javobgar shaxs («Танишдим, розиман» qatori), qaror so‘z bilan; boshlang‘ich qoldiq / qayta ishga tushirishda — sanagan komissiya a’zolari (tizimga kiritilgan tarkib bo‘yicha); o‘zaro hisobda — xodim | buxgalteriyada |
 | **Kunlik hisobot** | kun yopilgach (ichki hisobot) | 1 | — | moliya menejerida |
 
-Belgilar: qayta chop etilganda — «НУСХА»; kun qayta ochilib yopilgan bo‘lsa — «АЛМАШТИРИЛДИ» (avvalgi varaq bekor qilinib
+Belgilar: raqamli hujjat (order, KO-4 varag‘i, «Д-», «ЎҲ-», «А-» dalolatnomalari) qayta chop etilganda — «НУСХА» (kassani sanash
+dalolatnomasi raqamli hujjat emas — chop etish jurnaliga yozilmaydi, qayta chop etilgani belgisiz; imzolangani jildda); kun qayta ochilib yopilgan bo‘lsa — «АЛМАШТИРИЛДИ» (avvalgi varaq bekor qilinib
 saqlanadi); bekor qilingan hujjatda — «БЕКОР ҚИЛИНГАН»; yopilmagan kun varag‘ida — «ҚОРАЛАМА»; sinov kassasida — «СИНОВ».
 Bekor qilingan order yirtib tashlanmaydi — jildda o‘z raqami o‘rnida saqlanadi.
 Asl nusxani (order, KO-4 varag‘i) faqat kassir yoki Direktor chop etadi; boshqa rollar (buxgalter, moliya menejeri) chop etganda doim
