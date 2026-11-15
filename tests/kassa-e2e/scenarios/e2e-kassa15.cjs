@@ -116,16 +116,25 @@ const dmy = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
       /To‘lov qabul qilindi/.test(await s.header()) && ob.length === 0 && payRow(B) === '500000:applied' && fiscalDoc('SINOV-F-1002') === `500000:posted:KO1:${B}`
       && q(`select count(*) from public.payments where id='${failB.payId}'`) === '0', { ob, pay: payRow(B), doc: fiscalDoc('SINOV-F-1002') });
     await s.closeAny(); await s.pg.waitForTimeout(500);
-    // boshqa o'quvchi: oynada o'quvchi almashtirildi (qidiruvli oynadagi kabi — yashirin #rp-sid), fiskal № tuzatildi — rad etilgani qoladi
+    // obSupersede o'quvchi filtri (ichki himoya): oynada o'quvchini almashtirib bo'lmaydi — holat yashirin #rp-sid orqali yaratiladi; foydalanuvchi
+    //   yo'li (oyna yopilib, boshqa o'quvchi o'z qatoridan to'lanadi) — pastda alohida
     await openPay(C2);
     n = await trySave('600 000', 'SINOV-F-1001'); await s.waitToast(n, /^Xatolik: /, 25000);
     const failC = (await s.outbox()).find(x => x.sid === C2) || {};
     await s.pg.$eval('#rp-sid', (e, v) => { e.value = v; }, D);
     n = await trySave('600 000', 'SINOV-F-1003'); await okHead();
     ob = await s.outbox();
-    ok('js-1: boshqa o‘quvchi uchun kiritilsa — rad etilgan yozuv navbatda «Yuborilmadi» bo‘lib qoladi, yangi to‘lov o‘tdi',
+    ok('js-1 (o‘quvchi filtri — yashirin maydon orqali): shu oynada boshqa o‘quvchi uchun saqlansa — rad etilgan yozuv navbatda «Yuborilmadi» bo‘lib qoladi, yangi to‘lov o‘tdi',
       failC.status === 'failed' && ob.length === 1 && ob[0].payId === failC.payId && ob[0].status === 'failed' && ob[0].sid === C2
       && payRow(D) === '600000:applied' && fiscalDoc('SINOV-F-1003') === `600000:posted:KO1:${D}` && payRow(C2) === '-', { failC, ob, pay: payRow(D) });
+    // foydalanuvchi yo'li: rad etilgan oyna yopildi, boshqa o'quvchi o'z qatoridan to'landi — yangi oyna rad etilgan yozuvga tegmaydi
+    const E2 = 'IQ-0015';
+    await openPay(E2);
+    n = await trySave('100 000', 'SINOV-F-1004'); await okHead();
+    ob = await s.outbox();
+    ok('js-1: rad etilgan oyna yopilib, boshqa o‘quvchi o‘z qatoridan to‘landi — rad etilgan yozuv navbatda «Yuborilmadi» bo‘lib qoladi',
+      ob.length === 1 && ob[0].payId === failC.payId && ob[0].status === 'failed' && payRow(E2) === '100000:applied' && fiscalDoc('SINOV-F-1004') === `100000:posted:KO1:${E2}`,
+      { ob, pay: payRow(E2), doc: fiscalDoc('SINOV-F-1004') });
     await s.closeAny();
   }
   // ---------------- 2) Kassir: «+ Chiqim so'rovi» — (e) summa maydoni; avans so'rovlari (Direktor kartasiga va uchinchi shaxsga)

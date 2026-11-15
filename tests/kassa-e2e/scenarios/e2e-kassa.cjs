@@ -175,7 +175,9 @@ const allErrs = [];
     ok('yopilgan kunda «+ Kirim» → server rad etadi (kun yopilgan)', await (async () => {
       await s.pg.click('#ks-in'); await s.pg.waitForSelector('#kf-op'); await s.pg.selectOption('#kf-op', 'in_other'); await s.pg.waitForSelector('#kf-ptype');
       await s.pg.selectOption('#kf-ptype', 'other'); await s.pg.fill('#kf-po', 'Sinov Kech'); await s.pg.selectOption('[data-art="0"]', 'IN-06'); await s.pg.fill('#kf-amt', '1 000');
-      await s.pg.fill('#kf-basis', 'Sinov asos 2'); await s.pg.fill('#kf-note', 'izoh'); await s.pg.fill('#kf-fiscal', 'SINOV-0102'); await s.pg.click('#kf-save'); await s.pg.waitForTimeout(1200);
+      await s.pg.fill('#kf-basis', 'Sinov asos 2'); await s.pg.fill('#kf-note', 'izoh'); await s.pg.fill('#kf-fiscal', 'SINOV-0102'); await s.pg.click('#kf-save');
+      // server javobi kelib xabar chiqquncha kutiladi (xabar ~2,9 s turadi — qat'iy kutish emas, shart bilan)
+      await s.pg.waitForFunction(() => /Bugungi kassa kuni yopilgan/.test([...document.querySelectorAll('.toast')].map(e => e.textContent).join(' ')), null, { timeout: 10000 }).catch(() => {});
       const t = await s.toastTxt();
       const n = q(`select count(*) from public.cash_docs where "partyName"='Sinov Kech' and status='posted'`); await s.pg.click('#m-cancel').catch(() => {}); return n === '0' && /Bugungi kassa kuni yopilgan/.test(t); })());
     await s.pg.setViewportSize({ width: 390, height: 844 }); await s.kassaReady(); await s.pg.waitForTimeout(400);
@@ -197,9 +199,13 @@ const allErrs = [];
     const dv = await s.pg.$eval('#modal', e => e.textContent);
     ok('kun varag‘i oynasi: 3 hujjat, sanash va jurnal', /Hujjatlar \(3 ta\)/.test(dv) && /Kun yopish sanashi/.test(dv) && /Kun jurnali/.test(dv), dv.slice(0, 300));
     // g9: asl nusxani faqat kassa operatori yoki Direktor chiqaradi — moliya menejeri (2-ro'yxat) chop etgani doim «НУСХА», tanlov oynasisiz
-    await s.pg.click('#kdv-book'); await s.pg.waitForTimeout(1800);
+    await s.pg.click('#kdv-book');
+    // chop etish varag'i paydo bo'lguncha (tanlov oynasi bo'lsa — u chop etishdan OLDIN chiqardi; pastda yo'qligi tekshiriladi)
+    await s.pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some(f => { try { const x = f.contentDocument.body.innerText; return /НУСХА/.test(x) && /КАССИР ҲИСОБОТИ/.test(x); } catch (e) { return false; } }), null, { timeout: 15000 }).catch(() => {});
     const p5 = await s.printed();
-    ok('moliya menejeri chop etadi: tanlov oynasisiz darhol «НУСХА», tekshiruvchi ismi bilan', !(await s.pg.$('#kp-copy')) && !(await s.pg.$('#kp-orig')) && p5.some(t => /НУСХА/.test(t) && /КАССИР ҲИСОБОТИ/.test(t) && /Бухгалтер/.test(t)), p5.map(t => t.slice(0, 160)));
+    const molLbl = q(`select app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", u.id) from public.users u where u.id = '${ids.R_MOL}'`);   // tekshiruvchi — bazadan
+    const verRx = new RegExp('Бухгалтер\\s*' + molLbl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    ok('moliya menejeri chop etadi: tanlov oynasisiz darhol «НУСХА», tekshiruvchi ismi bilan', !!molLbl && !(await s.pg.$('#kp-copy')) && !(await s.pg.$('#kp-orig')) && p5.some(t => /НУСХА/.test(t) && /КАССИР ҲИСОБОТИ/.test(t) && verRx.test(t)), [molLbl, p5.map(t => t.slice(-200))]);
     ok('chop etish jurnali: varaq — original (kassir), copy (kassir), copy (moliya menejeri)', q(`select string_agg(mode || '/' || case when "byUid" = '${ids.R_KAS}' then 'kas' when "byUid" = '${ids.R_MOL}' then 'mol' else '?' end, ',' order by at) from public.cash_prints where kind='book'`) === 'original/kas,copy/kas,copy/mol', q(`select string_agg(mode, ',' order by at) from public.cash_prints where kind='book'`));
     await s.pg.waitForSelector('#kdv-book', { timeout: 10000 });   // kun varag'i oynasi ochiq qoladi
     // sanash dalolatnomasi

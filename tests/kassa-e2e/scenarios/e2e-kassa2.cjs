@@ -139,11 +139,16 @@ const allErrs = [];
     {
       const r = rec; await r.kassaReady(); await r.pg.waitForSelector('[data-hoacc]', { timeout: 15000 });
       ok('qabul qiluvchida «Smenani qabul qilish» kartasi: «Qabul qildim» va «Rad etish»', /Smenani qabul qilish/.test(await r.bodyTxt()) && /Rad etish/.test(await r.pg.$eval('[data-horej]', e => e.textContent)));
-      await r.pg.click('[data-hoacc]'); await r.pg.waitForFunction(() => !document.querySelector('[data-hoacc]'), null, { timeout: 15000 }); await r.pg.waitForTimeout(1500);
+      await r.pg.click('[data-hoacc]'); await r.pg.waitForFunction(() => !document.querySelector('[data-hoacc]'), null, { timeout: 15000 });
+      // dalolatnoma qabuldan KEYIN chop etiladi (tasdiq, kassa_day_book, chop etish modullari yuklanadi) — varaq paydo bo'lguncha kutiladi
+      await r.pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some(f => { try { return /сменани топшириш-қабул қилишда/.test(f.contentDocument.body.innerText); } catch (e) { return false; } }), null, { timeout: 15000 }).catch(() => {});
       ok('smena qabul qilindi: kun kassiri — qabul qiluvchi, sanash dalolatnomasi yozildi', q(`select ("cashierUid" = '${ids.R_REC}') || ':' || (select count(*) from public.cash_counts where kind='handover' and "toUid"='${ids.R_REC}' and "fromUid"='${ids.R_KAS}' and diff = 0) || ':' || (select status from public.cash_handovers) from public.cash_days where desk='main'`) === 'true:1:accepted',
         q(`select "cashierUid", (select status from public.cash_handovers) from public.cash_days where desk='main'`));
       const pa = await r.printed();
-      ok('topshirish-qabul dalolatnomasi chop etildi: ikkala ism bilan', pa.some(t => /НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ/.test(t) && /сменани топшириш-қабул қилишда/.test(t) && /Топширди\s*Sinov Kassir/.test(t) && /Қабул қилди\s*Sinov Qabulxona/.test(t)), pa.map(t => t.slice(0, 300)));
+      // ismlar — bazadan (urug'ga yozib qo'yilmaydi; dalolatnomadagi ism — kassa_names bilan bir xil manba)
+      const NM = uid => q(`select app.kassa_names(array['${uid}']) ->> '${uid}'`), rx = t => String(t || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nKas = NM(ids.R_KAS), nRec = NM(ids.R_REC), giveRx = new RegExp('Топширди\\s*' + rx(nKas)), takeRx = new RegExp('Қабул қилди\\s*' + rx(nRec));
+      ok('topshirish-qabul dalolatnomasi chop etildi: ikkala ism bilan', !!nKas && !!nRec && pa.some(t => /НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ/.test(t) && /сменани топшириш-қабул қилишда/.test(t) && giveRx.test(t) && takeRx.test(t)), [nKas, nRec, pa.map(t => t.slice(0, 300))]);
       // kassa egasi endi qabul qiluvchi: u smenani asosiy kassirga qaytaradi (yana ikki bosqich) — kun oxirigacha kassir ishlaydi
       await r.pg.click('#ks-hand'); await r.pg.waitForSelector('#kh-to');
       await r.pg.selectOption('#kh-to', ids.R_KAS); await r.pg.fill('#kc-counted', '1 050 000'); await r.pg.click('#kh-save'); await r.modalGone();
@@ -259,7 +264,8 @@ const allErrs = [];
   {
     // crit-4: kunni qayta ochgan xodim (Direktor) uni tekshirmaydi — server sababi bilan rad etadi
     const s = await login(ids.R_DIR); await s.kassaReady();
-    await s.pg.click(`[data-verify="${day2}"]`); await s.pg.waitForSelector('#kv-papers'); await s.pg.check('#kv-papers'); await s.pg.click('#kv-save'); await s.pg.waitForTimeout(1000);
+    await s.pg.click(`[data-verify="${day2}"]`); await s.pg.waitForSelector('#kv-papers'); await s.pg.check('#kv-papers'); await s.pg.click('#kv-save');
+    await s.pg.waitForFunction(() => /qayta ochgansiz/.test([...document.querySelectorAll('.toast')].map(e => e.textContent).join(' ')), null, { timeout: 10000 }).catch(() => {});   // server javobi
     const tt = await s.toasts();
     ok('kunni qayta ochgan Direktor uni tekshira olmaydi — server rad etadi', q(`select status from public.cash_days where day='${day2}'`) === 'closed' && /Kunni o‘zingiz qayta ochgansiz|Kunni o'zingiz qayta ochgansiz/.test(tt), tt);
     await s.pg.click('#m-cancel').catch(() => {});

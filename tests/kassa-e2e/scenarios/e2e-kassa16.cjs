@@ -108,10 +108,12 @@ const allErrs = [];
     await mol.pg.waitForSelector(`[data-rej="${idSmall}"]`, { timeout: 15000 }); await mol.pg.click(`[data-rej="${idSmall}"]`); await mol.pg.waitForSelector('#ks-reason');
     asUser(ACC, `select public.kassa_doc_approve('${idSmall}')::text`);   // shu orada boshqa 2-ro'yxat xodimi (buxgalter) tasdiqladi
     await mol.pg.fill('#ks-reason', 'Hujjat to‘liq emas (sinov)'); await mol.pg.click('#ks-ok');
-    await mol.toastWait(/Faqat tasdiq kutayotgan hujjat rad etiladi/); await mol.pg.waitForTimeout(300);
+    // xabar ~2,9 s turadi — darhol olinadi; tugma qayta yoqilishi (kassa holati qayta o'qilgach) — shart bilan kutiladi
+    await mol.toastWait(/Faqat tasdiq kutayotgan hujjat rad etiladi/); const tRej = await mol.toasts();
+    await mol.pg.waitForFunction(() => { const b = document.querySelector('#ks-ok'); return b && !b.disabled; }, null, { timeout: 15000 }).catch(() => {});
     ok('server rad etdi («Faqat tasdiq kutayotgan hujjat rad etiladi (holati: approved)»): oyna ochiq, sabab saqlangan, «Tasdiqlash» tugmasi qayta yoqilgan',
-      /Faqat tasdiq kutayotgan hujjat rad etiladi \(holati: approved\)/.test(await mol.toasts()) && (await mol.modalOpen()) && (await mol.pg.$eval('#ks-ok', e => !e.disabled && /Tasdiqlash/.test(e.textContent)))
-      && (await mol.pg.$eval('#ks-reason', e => e.value)) === 'Hujjat to‘liq emas (sinov)', [await mol.toasts(), await mol.modalOpen(), await mol.pg.$eval('#ks-ok', e => e.disabled).catch(() => 'yo‘q')]);
+      /Faqat tasdiq kutayotgan hujjat rad etiladi \(holati: approved\)/.test(tRej) && (await mol.modalOpen()) && (await mol.pg.$eval('#ks-ok', e => !e.disabled && /Tasdiqlash/.test(e.textContent)))
+      && (await mol.pg.$eval('#ks-reason', e => e.value)) === 'Hujjat to‘liq emas (sinov)', [tRej, await mol.modalOpen(), await mol.pg.$eval('#ks-ok', e => e.disabled).catch(() => 'yo‘q')]);
     ok('so‘rov rad etilmadi: buxgalter tasdig‘i bilan «approved» (T1 dan kichik — Direktorsiz)', q(`select status || ':' || ("approvedBy" = '${ACC}') || ':' || coalesce("dirApprovedBy", '-') from public.cash_docs where id='${idSmall}'`) === 'approved:true:-');
     await mol.pg.click('#m-cancel'); await mol.modalGone();
     // T1 dan katta so'rov: 2-ro'yxat tasdiqlaydi — Direktor tasdig'ini kutadi
@@ -137,9 +139,11 @@ const allErrs = [];
     let refuse = true;
     await dir.pg.route('**/rest/v1/rpc/kassa_doc_approve', route => { if (!refuse) return route.continue(); refuse = false;
       return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: 'P0001', message: 'Sinov: server vaqtincha rad etdi', details: null, hint: 'kassa:sinov' }) }); });
-    await dir.pg.click(`[data-kappr="${idBig}"]`); await dir.toastWait(/Sinov: server vaqtincha rad etdi/); await dir.pg.waitForTimeout(600);
-    ok('server rad etdi: xabar ko‘rsatildi, so‘rov navbatda qoldi, «Tasdiqlash» tugmasi yana faol (bosish mumkin)', /Sinov: server vaqtincha rad etdi/.test(await dir.toasts())
-      && (await dir.pg.$eval(`[data-kappr="${idBig}"]`, e => !e.disabled).catch(() => false)) && q(`select status || ':' || coalesce("dirApprovedBy", '-') from public.cash_docs where id='${idBig}'`) === 'draft:-', await dir.toasts());
+    await dir.pg.click(`[data-kappr="${idBig}"]`); await dir.toastWait(/Sinov: server vaqtincha rad etdi/); const tAppr = await dir.toasts();
+    // navbat qayta chizilgach tugma yangidan faol bo'ladi — shart bilan kutiladi (eski, bosilgan tugma o'chiq turadi)
+    await dir.pg.waitForFunction(id => { const b = document.querySelector(`[data-kappr="${id}"]`); return b && !b.disabled; }, idBig, { timeout: 15000 }).catch(() => {});
+    ok('server rad etdi: xabar ko‘rsatildi, so‘rov navbatda qoldi, «Tasdiqlash» tugmasi yana faol (bosish mumkin)', /Sinov: server vaqtincha rad etdi/.test(tAppr)
+      && (await dir.pg.$eval(`[data-kappr="${idBig}"]`, e => !e.disabled).catch(() => false)) && q(`select status || ':' || coalesce("dirApprovedBy", '-') from public.cash_docs where id='${idBig}'`) === 'draft:-', tAppr);
     await dir.pg.click(`[data-kappr="${idBig}"]`);
     await dir.pg.waitForFunction(id => !document.querySelector(`[data-kappr="${id}"]`), idBig, { timeout: 15000 }).catch(() => {});
     ok('qayta bosildi — Direktor tasdiqladi: so‘rov «approved» (2-ro‘yxat + Direktor)', q(`select status || ':' || ("approvedBy" = '${ids.R_MOL}') || ':' || ("dirApprovedBy" = '${ids.R_DIR}') from public.cash_docs where id='${idBig}'`) === 'approved:true:true');
@@ -229,6 +233,9 @@ const allErrs = [];
     ok('asosiy kassa — smena topshirish: qurilma navbati qatori va «Yuborilmadi» yozuvi (ikki tanlov) bor', !!(await dir.pg.$('#kc-ob')) && !!(await dir.pg.$('#kc-failed'))
       && (await dir.pg.$$('[data-flref="man_e16_ob1"]')).length === 2);
     await dir.pg.click('#m-cancel'); await dir.modalGone();
+    // navbat yozuvining to'liq holati (status, xato, urinishlar, final) — SINOV oynalaridan oldin va keyin solishtiriladi
+    const obSnap = () => dir.pg.evaluate(() => { try { return JSON.stringify((JSON.parse(localStorage.getItem('iqror_pay_outbox_v1') || '[]')).find(x => x && x.payId === 'man_e16_ob1') || null); } catch (e) { return 'ERR'; } });
+    const ob0 = await obSnap();
     await dir.pg.selectOption('#ks-desk', 'sinov');
     await dir.pg.waitForFunction(t => document.querySelector('#ks-body').innerText.includes(t), SINOV_BANNER, { timeout: 15000 }).catch(() => {});
     await dir.pg.waitForSelector('#ks-close', { timeout: 15000 }); await dir.pg.click('#ks-close'); await dir.pg.waitForSelector('#kc-counted', { timeout: 15000 });
@@ -247,7 +254,8 @@ const allErrs = [];
     const r4 = refused(ids.R_KAS, `select public.kassa_handover('{"desk":"sinov","counted":520000,"expected":520000,"pendingRefs":[{"ref":"man_e16_ob1","amount":50000}],"toUid":"${ids.R_DIR}"}'::jsonb)::text`);
     ok('server: SINOV kassada smena topshirishda ham navbat yozuvi rad etiladi (kassa:pending_test), topshirish yozilmaydi', r4.hint === 'kassa:pending_test'
       && q(`select count(*) from public.cash_handovers`) === '0', r4);
-    ok('qurilma navbati o‘zgarmadi (yozuv shu qurilmada qoldi)', /man_e16_ob1/.test(await dir.pg.evaluate(() => localStorage.getItem('iqror_pay_outbox_v1') || '')));
+    const ob1 = await obSnap();
+    ok('SINOV oynalari qurilma navbatidagi yozuvni o‘chirmadi va o‘zgartirmadi (holati, xatosi, urinishlar — avvalgidek)', ob0 !== 'null' && ob0 !== 'ERR' && ob1 === ob0, [ob0, ob1]);
     await dir.pg.screenshot({ path: `${OUT}/desk-${UI}-1440.png` });
     await dir.ctx.close();
   }

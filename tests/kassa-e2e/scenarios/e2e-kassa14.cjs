@@ -5,7 +5,7 @@
 //       server rad etadi (kassa:stale), oyna yangi qoldiq bilan qayta ochiladi;
 //   (c) g11 js-1: «Yuborilmadi» navbat yozuvlari (#kc-failed) — har biriga tanlov (pul kassada / navbatdan o'chirilsin), tanlovsiz
 //       saqlanmaydi, farq tanlovga ergashadi; «o'chirilsin» — faqat muvaffaqiyatli yopish / topshirishdan keyin; «pul kassada» — pendingRefs da;
-//   (d) g11 js-3: SINOV kassasini yopishda qurilma navbati ko'rsatilmaydi, pendingRefs bo'sh, navbat o'zgarmaydi;
+//   (d) g11 js-3: SINOV kassasini yopishda qurilma navbati ko'rsatilmaydi, pendingRefs bo'sh, navbat yozuvlari o'chirilmaydi / o'zgartirilmaydi;
 //   (e) o'tgan (server ishlamagan) kunni yopishda «Қ» blankalari; #kc-ho, #kc-skip qatorlari; «… sig'madi — ayirilmaydi» izohi;
 //   (f) kamomad qarori: «xodim zimmasiga» — Direktor javobgar xodim kartasini tanlaydi (#kd-party).
 //   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa14.cjs [v1|v2]
@@ -298,7 +298,8 @@ const allErrs = [];
       gone && rq.length === 1 && p.desk === 'sinov' && Array.isArray(p.pendingRefs) && p.pendingRefs.length === 0
         && q(`select status || ':' || trim_scale(diff) || ':' || "pendingRefs"::text || ':' || trim_scale("pendingSum") from public.cash_days where desk = 'sinov'`) === 'closed:0:[]:0',
       [rq, q(`select status, diff, "pendingRefs" from public.cash_days where desk = 'sinov'`), await s.toastsSince(n1)]);
-    ok('(d) qurilma navbati o‘zgarmadi (asosiy kassa yozuvlari joyida, yuborilmagan)', JSON.stringify(await s.obGet()) === q0s && q(`select count(*) from public.payments where id = '${P2}'`) === '0', await s.obIds());
+    // (yuborish bu yerda tarmoq uzilgandek to'silgan — route.abort; tekshiriladigani: SINOV yopilishi navbatdan hech narsani o'chirmadi va o'zgartirmadi)
+    ok('(d) SINOV kunini yopish qurilma navbatidagi yozuvlarni o‘chirmadi va o‘zgartirmadi (asosiy kassa yozuvlari, «Yuborilmadi» ham — joyida)', JSON.stringify(await s.obGet()) === q0s, await s.obIds());
     await s.obSet([]); await s.ctx.close();   // Direktor qurilmasi navbati tozalanadi — yozuv keyin asosiy kassaga tushib qolmasin
   }
 

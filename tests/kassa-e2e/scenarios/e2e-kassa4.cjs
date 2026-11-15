@@ -79,15 +79,18 @@ const allErrs = [];
     const actId = q(`select id from public.cash_docs where op = 'nc_opening' and status = 'posted'`);
     const prModes = id => q(`select coalesce(string_agg(mode, ',' order by at, id), '') from public.cash_prints where "docId" = '${id}'`);
     await s.pg.waitForSelector(`#ks-acts [data-print="${actId}"]`, { timeout: 15000 });
+    // chop etish shart bilan kutiladi: yangi varaq (dalolatnoma matni bilan) va jurnal yozuvi (keyingi bosish «avval chop etilgan» oynasini ko'rsin)
+    const waitAct = n => s.pg.waitForFunction(k => [...document.querySelectorAll('iframe')].slice(k).some(f => { try { return /ДАЛОЛАТНОМА/.test(f.contentDocument.body.innerText); } catch (e) { return false; } }), n, { timeout: 20000 }).catch(() => {});
+    const waitMode = async m => { for (let i = 0; i < 60 && prModes(actId) !== m; i++) await s.pg.waitForTimeout(250); };
     let pb = (await s.printed()).length;
-    await s.pg.click(`#ks-acts [data-print="${actId}"]`); await s.pg.waitForTimeout(1500);
+    await s.pg.click(`#ks-acts [data-print="${actId}"]`); await waitAct(pb); await waitMode('original');
     const act1 = (await s.printed()).slice(pb).join(' || ');
     ok('dalolatnoma (boshlang‘ich qoldiq) birinchi chop etilishi — asl nusxa: «НУСХА» belgisi yo‘q, jurnalda «original»',
       /ДАЛОЛАТНОМА/.test(act1) && /Кассанинг бошланғич қолдиғи/.test(act1) && /1 000 000/.test(act1) && /Sinov A\.A\./.test(act1) && /Sinov B\.B\./.test(act1) && !/НУСХА/.test(act1) && !(await s.pg.$('#kp-copy')) && prModes(actId) === 'original', [prModes(actId), act1.slice(0, 300)]);
     pb = (await s.printed()).length;
     await s.pg.click(`#ks-acts [data-print="${actId}"]`); await s.pg.waitForSelector('#kp-copy', { timeout: 10000 });
     const ask = await s.pg.$eval('#modal', e => e.innerText.replace(/\s+/g, ' '));
-    await s.pg.click('#kp-copy'); await s.pg.waitForTimeout(1500);
+    await s.pg.click('#kp-copy'); await waitAct(pb); await waitMode('original,copy');
     const act2 = (await s.printed()).slice(pb).join(' || ');
     ok('dalolatnomani qayta chop etish: «avval chop etishga yuborilgan: 1 marta» oynasi → «НУСХА» belgili nusxa; jurnalda «original,copy»',
       /Bu hujjat avval chop etishga yuborilgan: 1 marta/.test(ask) && /ДАЛОЛАТНОМА/.test(act2) && /НУСХА/.test(act2) && prModes(actId) === 'original,copy', [ask.slice(0, 200), prModes(actId), act2.slice(0, 200)]);

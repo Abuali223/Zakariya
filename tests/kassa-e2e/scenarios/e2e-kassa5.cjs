@@ -38,7 +38,10 @@ const allErrs = [];
     const modalGone = async () => pg.waitForFunction(() => !document.querySelector('#modal-bg').classList.contains('show'), null, { timeout: 15000 });
     const printed = async () => pg.evaluate(() => [...document.querySelectorAll('iframe')].map(f => { try { return f.contentDocument.body.innerText.replace(/\s+/g, ' '); } catch (e) { return ''; } }));
     const toasts = async () => pg.evaluate(() => [...document.querySelectorAll('.toast')].map(e => e.textContent).join(' | '));
-    const salModal = async () => { await tab('accounting'); await pg.waitForSelector('#ac-paysal', { timeout: 30000 }); await pg.click('#ac-paysal'); await pg.waitForSelector('#sp-method', { timeout: 30000 }); };
+    // «Buxgalteriya» tugmani ma'lumot yuklanishidan oldin chizadi, bosish ishlovchisi keyin ulanadi — avval yuklanish tugashi kutiladi (k3 acReady kabi)
+    const salModal = async () => { await tab('accounting'); await pg.waitForSelector('#ac-paysal', { timeout: 30000 });
+      await pg.waitForFunction(() => { const x = document.querySelector('#ac-body'); return x && !x.querySelector('.loading'); }, null, { timeout: 30000 });
+      await pg.click('#ac-paysal'); await pg.waitForSelector('#sp-method', { timeout: 30000 }); };
     return { ctx, pg, dialogs, tab, kassaReady, modalGone, printed, toasts, salModal };
   }
 
@@ -72,7 +75,8 @@ const allErrs = [];
     ok('bitta tranzaksiya: maosh to‘lovi («offset») + o‘quv to‘lovi («offset», qo‘llangan) + dalolatnoma (ACT, o‘tkazilgan, 800 000: Dt 6710 Kt 4010; eski avans — naqdsiz Dt 6310 Kt 4010 ma’lumot qatori)',
       q(`select s.method || ':' || trim_scale(s.paid) || ':' || p.provider || ':' || p.status || ':' || trim_scale(p.amount) || ':' || p."studentId" || ':' || c.form || ':' || c.status || ':' || c.series || '-' || c.no || ':' || coalesce(c."dayId", 'kunsiz')
            || ':' || trim_scale(c.amount) || ':' || (select string_agg(l.debit || '/' || l.credit || '=' || trim_scale(l.amount) || case when l.cash then '/naqd' else '' end, ',' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id)
-           from public.cash_docs c join public.salary_payments s on s."cashDocId" = c.id join public.payments p on p."cashDocId" = c.id where c.id = '${docId}'`) === `offset:800000:offset:applied:800000:${sid}:ACT:posted:OFS-1:kunsiz:800000:6710/4010=800000${crUse > 0 ? ',6310/4010=' + crUse : ''}`,
+           from public.cash_docs c join public.salary_payments s on s."cashDocId" = c.id join public.payments p on p."cashDocId" = c.id where c.id = '${docId}'`) === `offset:800000:offset:applied:800000:${sid}:ACT:posted:OFS-1:kunsiz:800000:6710/4010=800000${crUse > 0 ? ',6310/4010=' + crUse : ''}`
+        && crUse > 0,   // urug' sharti: o'quvchida eski avans bor — aks holda «eski avans qatori» qismi tekshirilmay qolardi
       q(`select s.method, s.paid, p.provider, p.status, c.form, c.status, c.no from public.cash_docs c left join public.salary_payments s on s."cashDocId" = c.id left join public.payments p on p."cashDocId" = c.id where c.op = 'nc_offset'`));
     ok('kassadan pul chiqmadi: kassa kuni ochilmadi, naqd hujjat yo‘q', q(`select count(*) from public.cash_days`) === '0' && q(`select count(*) from public.cash_docs where form in ('KO1','KO2')`) === '0');
     const before = (await s.printed()).length;

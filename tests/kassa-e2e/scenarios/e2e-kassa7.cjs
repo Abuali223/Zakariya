@@ -142,9 +142,10 @@ const allErrs = [];
       const n0 = (await printed(s.pg)).length;
       await s.pg.click(`[data-dprint="${req.id}"]`);
       if (viaCopy) { await s.pg.waitForSelector('#kp-copy', { timeout: 10000 }); s.ask = await s.pg.$eval('#modal', e => e.innerText.replace(/\s+/g, ' ')); await s.pg.click('#kp-copy'); }
-      await s.pg.waitForFunction(n => document.querySelectorAll('iframe').length > n || !!document.querySelector('#kp-copy'), n0, { timeout: 15000 }).catch(() => {});
+      // «НУСХА» tanlangach bosilgan #kp-copy chop etish tugaguncha DOMda qoladi — shuning uchun ikki holat alohida kutiladi
+      if (viaCopy) await s.pg.waitForFunction(n => [...document.querySelectorAll('iframe')].slice(n).some(f => { try { return f.contentDocument.body.innerText.trim().length > 0; } catch (e) { return false; } }), n0, { timeout: 15000 }).catch(() => {});
+      else await s.pg.waitForFunction(n => [...document.querySelectorAll('iframe')].slice(n).some(f => { try { return f.contentDocument.body.innerText.trim().length > 0; } catch (e) { return false; } }) || !!document.querySelector('#kp-copy'), n0, { timeout: 15000 }).catch(() => {});
       if (!viaCopy && await s.pg.$('#kp-copy')) { s.unexpectedAsk = true; await s.pg.click('#m-cancel').catch(() => {}); }   // kutilmagan «avval chop etilgan» oynasi — yopiladi (tekshiruv FAIL bo'ladi)
-      await s.pg.waitForTimeout(1000);
       return (await printed(s.pg)).slice(n0).join(' || ');
     };
     await dayView(a);

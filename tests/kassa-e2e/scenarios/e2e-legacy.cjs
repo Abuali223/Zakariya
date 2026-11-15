@@ -101,7 +101,7 @@ const errs = [];
     await pg.waitForFunction(() => { const x = document.querySelector('#rf-do'); return x && !x.disabled; }, null, { timeout: 20000 }).catch(() => {});
     const t1 = await tsince(tm);
     ok('javob yo‘qoldi: server qaytarishni yozgan (1 ta), oyna ochiq, tugma qayta faol, xato xabari', nRef() === r0 + 1 && paidOf() === p0 - 100000 && await modalOpen()
-      && (await pg.$eval('#rf-do', b => b.textContent)) === 'Qaytarish' && t1.some(t => t.err && /^Xatolik: /.test(t.t)), { n: nRef() - r0, paid: [p0, paidOf()], t1 });
+      && (await pg.$eval('#rf-do', b => b.textContent)) === 'Qaytarish' && await pg.$eval('#rf-do', b => !b.disabled) && t1.some(t => t.err && /^Xatolik: /.test(t.t)), { n: nRef() - r0, paid: [p0, paidOf()], t1 });
     // 2) summa o'zgartirilib qayta yuborildi — rad: qizil xabar birinchi summa bilan, oyna yopiladi, ikkinchi qaytarish yo'q
     tm = await tmark(); await pg.fill('#rf-amt', '150 000'); await pg.click('#rf-do');
     await pg.waitForFunction(() => !document.querySelector('#modal-bg').classList.contains('show'), null, { timeout: 15000 }).catch(() => {});

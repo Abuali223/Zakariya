@@ -120,12 +120,12 @@ shu jadval ham yangilanadi):
 | k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | v1 13, v2 13 |
 | k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | v1 39, v2 39 |
 | k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | v1 41, v2 41 |
-| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 28, v2 28 |
+| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 29, v2 29 |
 | k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | v1 31, v2 31 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
 
-Jami: 36 o‘tish, 990 tekshiruv (kassa 2 × 467, to‘lov 24, eski oqimlar 32).
+Jami: 36 o‘tish, 992 tekshiruv (kassa 2 × 468, to‘lov 24, eski oqimlar 32).
 
 **Holat (2026-11-15).** Oxirgi to‘liq yashil o‘tish — 2026-11-15, modul relizi 12 (kassa moduli mustaqil ko‘rigi va yakuniy
 ko‘rik tuzatishlaridan keyingi kod): 36 o‘tish, 990 tekshiruv — hammasi o‘tdi (≈ 13 daqiqa). Ko‘rikda o‘zgargan oqimlar
