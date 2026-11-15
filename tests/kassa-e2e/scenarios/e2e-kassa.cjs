@@ -7,6 +7,9 @@ const OUT = E.OUT;
 const { session, ids } = E;
 const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
 const q = E.q;
+// onlayn kassa Z-hisoboti (F1.26): kassir Z dagi raqamlarni yozadi — sinovda tizimdagi kutilgan summalar bilan (Z mos; e2e-kassa2.cjs dagi kabi)
+const zFill = async pg => { if (!(await pg.$('#kz-no'))) return false; const t = q(`select coalesce(app.kassa_z_state(id), '{}')::text from public.cash_days where desk='main' and status='open'`); const z = t ? JSON.parse(t) : {};
+  if (!z.needed) return false; await pg.fill('#kz-no', 'Z-' + String(z.nCash || 0) + String(z.nCard || 0)); await pg.fill('#kz-cash', String(Math.round(Number(z.expCash) || 0))); await pg.fill('#kz-card', String(Math.round(Number(z.expCard) || 0))); return true; };
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 600))); };
 fs.mkdirSync(OUT, { recursive: true });
 const allErrs = [];
@@ -66,12 +69,17 @@ const allErrs = [];
     await s.pg.fill('#kf-po', 'Sinov To‘lovchi Tashkiloti');
     await s.pg.selectOption('[data-art="0"]', 'IN-06'); await s.pg.fill('#kf-amt', '250 000');
     await s.pg.fill('#kf-basis', 'Sinov asos № 1, ' + today); await s.pg.fill('#kf-note', 'Sinov izohi');
+    // g7 (CT-21, «fiscalParties»): «Boshqa kirim» boshqa shaxsdan — fiskal chek № majburiy; raqamsiz oyna saqlamaydi
+    ok('«Boshqa kirim» boshqa shaxsdan: fiskal chek № maydoni majburiy, raqamsiz saqlanmaydi', await (async () => {
+      const has = !!(await s.pg.$('#kf-fiscal')); await s.pg.click('#kf-save'); await s.pg.waitForTimeout(700);
+      const t = await s.toastTxt(); return has && /Fiskal chek raqamini kiriting/.test(t) && !!(await s.pg.$('#kf-save')) && q(`select count(*) from public.cash_docs where op='in_other'`) === '0'; })());
+    await s.pg.fill('#kf-fiscal', 'SINOV-0101');
     await s.pg.click('#kf-save'); await s.modalGone();
-    const d1 = q(`select form || ':' || no || ':' || status || ':' || trim_scale(amount) || ':' || "businessDay" from public.cash_docs where op='in_other'`);
-    ok('kirim orderi o‘tkazildi: K-1, kassa kuni — bugun', d1 === `KO1:1:posted:250000:${today}`, d1);
+    const d1 = q(`select form || ':' || no || ':' || status || ':' || trim_scale(amount) || ':' || "businessDay" || ':' || coalesce("fiscalNo", '') from public.cash_docs where op='in_other'`);
+    ok('kirim orderi o‘tkazildi: K-1, kassa kuni — bugun, fiskal chek № bilan', d1 === `KO1:1:posted:250000:${today}:SINOV-0101`, d1);
     await s.pg.waitForTimeout(1200);
     const p1 = await s.printed();
-    ok('kirim orderi chop etildi: KO-1 + patta, so‘z bilan, tashkilot rekvizitlari', p1.some(t => /КИРИМ КАССА ОРДЕРИ/.test(t) && /ПАТТА/.test(t) && /Икки юз эллик минг сўм 00 тийин/.test(t) && /SINOV MAKTAB/.test(t) && /Фискал чек эмас/.test(t) && !/НУСХА/.test(t)), p1.map(t => t.slice(0, 200)));
+    ok('kirim orderi chop etildi: KO-1 + patta, so‘z bilan, tashkilot rekvizitlari, fiskal chek №', p1.some(t => /КИРИМ КАССА ОРДЕРИ/.test(t) && /ПАТТА/.test(t) && /Икки юз эллик минг сўм 00 тийин/.test(t) && /SINOV MAKTAB/.test(t) && /Фискал чек эмас/.test(t) && /Фискал чек №: SINOV-0101/.test(t) && !/НУСХА/.test(t)), p1.map(t => t.slice(0, 200)));
     ok('chop etish jurnali: asl nusxa', q(`select string_agg(mode, ',') from public.cash_prints`) === 'original', q(`select string_agg(mode, ',') from public.cash_prints`));
     // chiqim so'rovi: yangi kontragent, bitta statiya
     await s.pg.click('#ks-out'); await s.pg.waitForSelector('#kf-op');
@@ -150,17 +158,26 @@ const allErrs = [];
     await s.pg.click('#ks-close'); await s.pg.waitForSelector('#kc-counted');
     await s.pg.fill('#kc-counted', '950 000');
     ok('yopish oynasi: farq yo‘q', /Farq yo‘q/.test(await s.pg.$eval('#kc-diff', e => e.textContent)));
+    // fiskal chekli kirim (K-1) bor — Z-hisobot talab qilinadi (g7: «Boshqa kirim» boshqa shaxsdan fiskal chek bilan): kassir Z ni kiritadi
+    ok('yopish oynasi: Z-hisobot kerak (fiskal chekli kirim bor) — kiritildi', await zFill(s.pg));
     await s.pg.click('#kc-save'); await s.modalGone();
     const dd = q(`select status || ':' || trim_scale(closing) || ':' || trim_scale(diff) || ':' || "docCount" || ':' || "sheetFrom" || '-' || "sheetTo" || ':' || "sheetRows" from public.cash_days where desk='main'`);
     ok('kun yopildi: kun oxiri 950 000, farq 0, 3 hujjat, varaq 1', dd === 'closed:950000:0:3:1-1:30', dd);
     await s.pg.waitForTimeout(1500);
     const p4 = await s.printed();
     ok('kassa kitobi chop etildi: 2 nusxa, varaq 1, bekor qilingan hujjat belgilangan, sonlar so‘z bilan', p4.some(t => /КАССА ДАФТАРИ ВАРАҒИ/.test(t) && /КАССИР ҲИСОБОТИ/.test(t) && /Варақ 1/.test(t) && /бекор қилинган/.test(t) && /2 \(икки\) та кирим ва 1 \(бир\) та чиқим/.test(t) && /Тўққиз юз эллик минг сўм/.test(t)), p4.map(t => t.slice(0, 200)));
-    ok('yopilgan kunda «+ Kirim» → server rad etadi', await (async () => {
+    // qayta chop etish (kassa operatori): avval chop etilgani haqida ogohlantirish, «НУСХА» (g9: 2-ro'yxatda bu oyna yo'q — 5-bo'lim)
+    await s.kassaReady(); await s.pg.waitForSelector(`[data-book="${today}"]`, { timeout: 15000 }); await s.pg.click(`[data-book="${today}"]`);
+    await s.pg.waitForSelector('#kp-copy', { timeout: 15000 });
+    ok('qayta chop etish (kassir): avval chop etilgani haqida ogohlantirish, «asl nusxa» va «НУСХА» tanlovi', /avval chop etishga yuborilgan: 1 marta/.test(await s.pg.$eval('#modal', e => e.textContent)) && !!(await s.pg.$('#kp-orig')));
+    await s.pg.click('#kp-copy'); await s.modalGone(); await s.pg.waitForTimeout(1500);
+    ok('kassir qayta chop etgan varaq «НУСХА» belgisi bilan', (await s.printed()).some(t => /НУСХА/.test(t) && /КАССА ДАФТАРИ ВАРАҒИ/.test(t)), (await s.printed()).map(t => t.slice(0, 160)));
+    ok('yopilgan kunda «+ Kirim» → server rad etadi (kun yopilgan)', await (async () => {
       await s.pg.click('#ks-in'); await s.pg.waitForSelector('#kf-op'); await s.pg.selectOption('#kf-op', 'in_other'); await s.pg.waitForSelector('#kf-ptype');
       await s.pg.selectOption('#kf-ptype', 'other'); await s.pg.fill('#kf-po', 'Sinov Kech'); await s.pg.selectOption('[data-art="0"]', 'IN-06'); await s.pg.fill('#kf-amt', '1 000');
-      await s.pg.fill('#kf-basis', 'Sinov asos 2'); await s.pg.fill('#kf-note', 'izoh'); await s.pg.click('#kf-save'); await s.pg.waitForTimeout(1200);
-      const n = q(`select count(*) from public.cash_docs where "partyName"='Sinov Kech' and status='posted'`); await s.pg.click('#m-cancel').catch(() => {}); return n === '0'; })());
+      await s.pg.fill('#kf-basis', 'Sinov asos 2'); await s.pg.fill('#kf-note', 'izoh'); await s.pg.fill('#kf-fiscal', 'SINOV-0102'); await s.pg.click('#kf-save'); await s.pg.waitForTimeout(1200);
+      const t = await s.toastTxt();
+      const n = q(`select count(*) from public.cash_docs where "partyName"='Sinov Kech' and status='posted'`); await s.pg.click('#m-cancel').catch(() => {}); return n === '0' && /Bugungi kassa kuni yopilgan/.test(t); })());
     await s.pg.setViewportSize({ width: 390, height: 844 }); await s.kassaReady(); await s.pg.waitForTimeout(400);
     await s.pg.screenshot({ path: `${OUT}/kas-${UI}-390.png`, fullPage: true });
     const wide = await s.pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -179,13 +196,12 @@ const allErrs = [];
     await s.pg.waitForSelector('#kdv-book', { timeout: 15000 });
     const dv = await s.pg.$eval('#modal', e => e.textContent);
     ok('kun varag‘i oynasi: 3 hujjat, sanash va jurnal', /Hujjatlar \(3 ta\)/.test(dv) && /Kun yopish sanashi/.test(dv) && /Kun jurnali/.test(dv), dv.slice(0, 300));
-    await s.pg.click('#kdv-book'); await s.pg.waitForSelector('#kp-copy', { timeout: 15000 });
-    ok('qayta chop etish: avval chop etilgani haqida ogohlantirish', /avval chop etishga yuborilgan: 1 marta/.test(await s.pg.$eval('#modal', e => e.textContent)));
-    await s.pg.click('#kp-copy'); await s.pg.waitForTimeout(1500);
+    // g9: asl nusxani faqat kassa operatori yoki Direktor chiqaradi — moliya menejeri (2-ro'yxat) chop etgani doim «НУСХА», tanlov oynasisiz
+    await s.pg.click('#kdv-book'); await s.pg.waitForTimeout(1800);
     const p5 = await s.printed();
-    ok('qayta chop etilgan varaq «НУСХА» belgisi bilan, tekshiruvchi ismi bilan', p5.some(t => /НУСХА/.test(t) && /КАССИР ҲИСОБОТИ/.test(t) && /Бухгалтер/.test(t)), p5.map(t => t.slice(0, 160)));
-    ok('chop etish jurnali: varaq — original, keyin copy', q(`select string_agg(mode, ',' order by at) from public.cash_prints where kind='book'`) === 'original,copy', q(`select string_agg(mode, ',' order by at) from public.cash_prints where kind='book'`));
-    await s.pg.waitForSelector('#kdv-book', { timeout: 10000 });   // nusxa chop etilgach kun varag'i oynasi qayta ochiladi
+    ok('moliya menejeri chop etadi: tanlov oynasisiz darhol «НУСХА», tekshiruvchi ismi bilan', !(await s.pg.$('#kp-copy')) && !(await s.pg.$('#kp-orig')) && p5.some(t => /НУСХА/.test(t) && /КАССИР ҲИСОБОТИ/.test(t) && /Бухгалтер/.test(t)), p5.map(t => t.slice(0, 160)));
+    ok('chop etish jurnali: varaq — original (kassir), copy (kassir), copy (moliya menejeri)', q(`select string_agg(mode || '/' || case when "byUid" = '${ids.R_KAS}' then 'kas' when "byUid" = '${ids.R_MOL}' then 'mol' else '?' end, ',' order by at) from public.cash_prints where kind='book'`) === 'original/kas,copy/kas,copy/mol', q(`select string_agg(mode, ',' order by at) from public.cash_prints where kind='book'`));
+    await s.pg.waitForSelector('#kdv-book', { timeout: 10000 });   // kun varag'i oynasi ochiq qoladi
     // sanash dalolatnomasi
     await s.pg.click('[data-cprint]'); await s.pg.waitForTimeout(1200);
     const p6 = await s.printed();
@@ -202,4 +218,5 @@ const allErrs = [];
   ok('sahifa xatosi yo‘q', allErrs.length === 0, allErrs);
   console.log(`JAMI (${UI}): ${res.filter(r => r.ok).length}/${res.length}`);
   await b.close();
+  process.exit(res.every(r => r.ok) ? 0 : 1);   // chiqish kodi: 0 — faqat hammasi o'tsa (README)
 })().catch(e => { console.error('XATO', e); process.exit(1); });

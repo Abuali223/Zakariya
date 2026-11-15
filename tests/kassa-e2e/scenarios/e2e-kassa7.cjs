@@ -61,8 +61,32 @@ const allErrs = [];
   const adv = JSON.parse(asUser(ids.R_KAS, `select public.kassa_payout_request('{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:${ids.T1}","basis":"Xojalik xaridlari","clientRef":"e7-adv-0001"}'::jsonb)::text`));
   asUser(ACC, `select public.kassa_doc_approve('${adv.id}')::text`);
   asUser(ids.R_KAS, `select public.kassa_doc_pay('${adv.id}')::text`);
+  // g11 (sec-2): avval Moliya menejeri kunni kassir o'rniga (2 kishilik komissiya bilan) yopadi, Direktor qayta ochadi — keyin kassir yopadi
+  const mmClosed = JSON.parse(asUser(ids.R_MOL, `select public.kassa_day_close('{"desk":"main","day":"${today}","counted":650000,"commission":[{"title":"Moliya menejeri","name":"Sinov Moliyachi"},{"title":"Buxgalter","name":"Sinov Buxgalter"}]}'::jsonb)::text`));
+  const reopened = JSON.parse(asUser(ids.R_DIR, `select public.kassa_day_reopen('main', '${today}', 'Sinov: hujjat tuzatiladi')::text`));
   const closed = JSON.parse(asUser(ids.R_KAS, `select public.kassa_day_close('{"desk":"main","day":"${today}","counted":650000}'::jsonb)::text`));
   ok('kassir pulni berdi (xarajat 150 000, hisobdorga avans 200 000) va kunni yopdi (qoldiq 650 000)', closed.ok && closed.day && closed.day.status === 'closed' && Number(closed.day.closing) === 650000, closed);
+  ok('g11: kun avval Moliya menejeri tomonidan (kassir o‘rniga, komissiya bilan) yopilgan, Direktor qayta ochgan; yopish hodisalari — MM, keyin kassir; hozirgi yopuvchi — kassir',
+    mmClosed.ok && mmClosed.day.status === 'closed' && reopened.ok && reopened.day.status === 'open'
+    && q(`select string_agg(case "byUid" when '${ids.R_MOL}' then 'MM' when '${ids.R_KAS}' then 'KAS' else "byUid" end, ',' order by at, id) from public.cash_day_events where kind = 'close'`) === 'MM,KAS'
+    && q(`select ("closedBy" = '${ids.R_KAS}') || ':' || "reopenCount" from public.cash_days where desk='main' and day='${today}'`) === 'true:1',
+    [mmClosed.day && mmClosed.day.status, reopened.day && reopened.day.status, q(`select string_agg("byUid", ',' order by at) from public.cash_day_events where kind = 'close'`)]);
+
+  // ---------------- 1b) g11 (sec-2): kunni qayta ochilishidan oldin yopgan Moliya menejeri uni tekshira olmaydi (server rad etadi, matn sahifada)
+  {
+    const m = await login(ids.R_MOL); await m.kassaReady();
+    const vb = await m.pg.waitForSelector(`[data-verify="${today}"]`, { timeout: 15000 }).catch(() => null);
+    if (vb) {
+      await vb.click(); await m.pg.waitForSelector('#kv-papers', { timeout: 15000 });
+      await m.pg.check('#kv-papers'); await m.pg.fill('#kv-note', 'Sinov: hujjatlar olindi'); await m.pg.click('#kv-save');
+      await m.pg.waitForFunction(() => /qayta ochilishidan oldin/.test([...document.querySelectorAll('.toast')].map(e => e.textContent).join(' ')), null, { timeout: 10000 }).catch(() => {});
+    }
+    const t = await m.toasts();
+    ok('g11: kunni qayta ochilishidan oldin yopgan Moliya menejeri uni tekshira olmaydi — «Kunni o‘zingiz yopgansiz (qayta ochilishidan oldin)»; kun «yopilgan» holatda qoladi',
+      !!vb && /Kunni o['‘]zingiz yopgansiz \(qayta ochilishidan oldin\) — kunni o['‘]zingiz tekshira olmaysiz/.test(t)
+      && q(`select status || ':' || coalesce("verifiedBy", '-') from public.cash_days where desk='main' and day='${today}'`) === 'closed:-', [!!vb, t]);
+    await m.ctx.close();
+  }
 
   // ---------------- 2) Buxgalter kunni tekshiradi; «Davr» — faqat ko'rish
   {
@@ -75,7 +99,7 @@ const allErrs = [];
       ok('«qog‘oz va ilovalar olindi» belgisisiz tekshirilmaydi', q(`select status from public.cash_days where desk='main' and day='${today}'`) === 'closed', await a.toasts());
       await a.pg.check('#kv-papers'); await a.pg.click('#kv-save'); await a.modalGone().catch(() => {});
     }
-    ok('buxgalter kunni tekshirdi: holat «tekshirilgan», tekshiruvchi — buxgalter', q(`select status || ':' || ("verifiedBy" = '${ACC}') from public.cash_days where desk='main' and day='${today}'`) === 'verified:true', q(`select status, "verifiedBy" from public.cash_days where desk='main' and day='${today}'`));
+    ok('buxgalter (boshqa 2-ro‘yxat xodimi) kunni tekshirdi: holat «tekshirilgan», tekshiruvchi — buxgalter', q(`select status || ':' || ("verifiedBy" = '${ACC}') from public.cash_days where desk='main' and day='${today}'`) === 'verified:true', q(`select status, "verifiedBy" from public.cash_days where desk='main' and day='${today}'`));
     await a.kassaReady(); await a.pg.click('#ks-period'); await a.pg.waitForSelector('#kpd-lock', { timeout: 15000 });
     ok('«Davr»: buxgalter ko‘radi, surat olish va qulf tugmalari yo‘q', !(await a.pg.$('#kpd-take')) && !(await a.pg.$('#kpd-setlock')));
     await a.pg.click('#m-cancel').catch(() => {});
@@ -108,6 +132,36 @@ const allErrs = [];
     ok('bekor qilindi: xarajat olib tashlandi, hisobdordagi qoldiq 200 000 ga qaytdi', vrow === 'void:0:200000', vrow);
     await a.pg.screenshot({ path: `${OUT}/acc-adv-${UI}-1440.png` });
   }
+  // ---------------- 2c) Chop etish (g9, printsOrig): 2-ro'yxat (buxgalter) chop etgani doim «НУСХА» va asl nusxa hisoblanmaydi;
+  //   kassirning birinchi chop etishi — asl nusxa, keyingisi — «avval chop etilgan» oynasi orqali «НУСХА»
+  {
+    const printed = pg => pg.evaluate(() => [...document.querySelectorAll('iframe')].map(f => { try { return f.contentDocument.body.innerText.replace(/\s+/g, ' '); } catch (e) { return ''; } }));
+    const modes = () => q(`select coalesce(string_agg(mode || '/' || case "byUid" when '${ACC}' then 'ACC' when '${ids.R_KAS}' then 'KAS' else "byUid" end, ',' order by at, id), '') from public.cash_prints where "docId" = '${req.id}'`);
+    const dayView = async s => { await s.kassaReady(); await s.pg.click(`[data-view="${today}"]`); await s.pg.waitForSelector(`[data-dprint="${req.id}"]`, { timeout: 15000 }); };
+    const printOnce = async (s, viaCopy) => {
+      const n0 = (await printed(s.pg)).length;
+      await s.pg.click(`[data-dprint="${req.id}"]`);
+      if (viaCopy) { await s.pg.waitForSelector('#kp-copy', { timeout: 10000 }); s.ask = await s.pg.$eval('#modal', e => e.innerText.replace(/\s+/g, ' ')); await s.pg.click('#kp-copy'); }
+      await s.pg.waitForFunction(n => document.querySelectorAll('iframe').length > n || !!document.querySelector('#kp-copy'), n0, { timeout: 15000 }).catch(() => {});
+      if (!viaCopy && await s.pg.$('#kp-copy')) { s.unexpectedAsk = true; await s.pg.click('#m-cancel').catch(() => {}); }   // kutilmagan «avval chop etilgan» oynasi — yopiladi (tekshiruv FAIL bo'ladi)
+      await s.pg.waitForTimeout(1000);
+      return (await printed(s.pg)).slice(n0).join(' || ');
+    };
+    await dayView(a);
+    const p1 = await printOnce(a), p2 = await printOnce(a), hadAsk = !!a.unexpectedAsk;
+    ok('buxgalter (2-ro‘yxat) chiqim orderini chop etdi — ikkala marta «НУСХА», «avval chop etilgan» tanlov oynasi yo‘q; jurnalda faqat nusxa',
+      /НУСХА/.test(p1) && /НУСХА/.test(p2) && /Sinov Taminot MChJ/.test(p1) && /Sinov Buxgalter/.test(p1) && !hadAsk && !(await a.pg.$('#kp-orig')) && modes() === 'copy/ACC,copy/ACC',
+      [modes(), hadAsk, p1.slice(0, 300)]);
+    await a.pg.click('#m-cancel').catch(() => {}); await a.modalGone().catch(() => {});
+    const k = await login(ids.R_KAS); await dayView(k);
+    const p3 = await printOnce(k);
+    ok('kassirning birinchi chop etishi — asl nusxa («НУСХА» yo‘q): buxgalter nusxalari asl nusxani «yemagan»', !k.unexpectedAsk && !/НУСХА/.test(p3) && /Sinov Taminot MChJ/.test(p3) && modes() === 'copy/ACC,copy/ACC,original/KAS', [modes(), p3.slice(0, 300)]);
+    if (!(await k.pg.$(`[data-dprint="${req.id}"]`))) await dayView(k);
+    const p4 = await printOnce(k, true);
+    ok('kassir qayta chop etsa — «avval chop etishga yuborilgan: 1 marta» (faqat asl nusxa sanaladi) oynasi va «НУСХА»', /Bu hujjat avval chop etishga yuborilgan: 1 marta/.test(k.ask || '') && /НУСХА/.test(p4)
+      && modes() === 'copy/ACC,copy/ACC,original/KAS,copy/KAS', [k.ask, modes(), p4.slice(0, 200)]);
+    await k.ctx.close();
+  }
   // server: buxgalter pul amallarini bajara olmaydi
   ok('server: buxgalter kirim yoza olmaydi, so‘rov yubora olmaydi, pul bera olmaydi',
     [asUserErr(ACC, `select public.kassa_receipt('{"op":"in_other","amount":1000,"partyType":"other","partyName":"X","articleId":"IN-06","basis":"T","note":"n","clientRef":"e7-x-0001"}'::jsonb)::text`),
@@ -128,9 +182,19 @@ const allErrs = [];
     await d.tab('accounting'); await d.pg.waitForSelector('#ac-add', { state: 'attached', timeout: 20000 });
     for (let i = 0; i < 6 && !(await d.pg.$('#e-date')); i++) { await d.pg.waitForTimeout(700); await d.pg.$eval('#ac-add', x => x.click()).catch(() => {}); }   // ro'yxat yuklanib, tugma ulangach ochiladi
     await d.pg.waitForSelector('#e-method', { state: 'attached', timeout: 15000 }).catch(() => {});
-    const meth = await d.pg.$$eval('#e-method option', os => os.map(o => o.value)).catch(() => []);
+    const meth = await d.pg.$$eval('#e-method option', os => os.map(o => o.value + '|' + o.textContent)).catch(() => []);
     const hint = await d.pg.$eval('#modal', e => e.innerText).catch(() => '');
-    ok('«Buxgalteriya» xarajat oynasida «Hisobdor shaxs orqali» usuli yo‘q (avans hisoboti orqali), eslatma bor', meth.join(',') === 'bank,card' && /Avans hisoboti/.test(hint), [meth, hint.slice(0, 300), await d.pg.$eval('#view', e => e.innerText.slice(0, 200)).catch(() => '')]);
+    // crit-1: Direktorda «Naqd» usuli ham bor — faqat kassa ishga tushishidan oldingi sana bilan (kechikib topilgan qog'oz, orderisiz)
+    const gl = today.slice(8, 10) + '.' + today.slice(5, 7) + '.' + today.slice(0, 4);
+    ok('«Buxgalteriya» xarajat oynasida «Hisobdor shaxs orqali» usuli yo‘q (avans hisoboti orqali), eslatma bor; Direktorda — bank, karta va ishga tushishdan oldingi «Naqd»',
+      meth.join(',') === `bank|Bank o‘tkazmasi,card|Korporativ karta,cash|Naqd — kassa ishga tushishidan (${gl}) oldin berilgan (orderisiz)` && /Avans hisoboti/.test(hint)
+      && hint.includes(`Bu yerda naqd — faqat sanasi kassa ishga tushishidan (${gl}) oldin bo‘lgan, kechikib topilgan xarajat`), [meth, hint.slice(-700)]);
+    // bugungi (ishga tushgan kun) sana bilan «Naqd» — oynaning o'zi to'xtatadi, yozuv yo'q
+    const nExp = q(`select count(*) from public.expenses`);
+    await d.pg.selectOption('#e-method', 'cash').catch(() => {}); await d.pg.fill('#e-date', today).catch(() => {}); await d.pg.fill('#e-amt', '30 000').catch(() => {}); await d.pg.fill('#e-note', 'Sinov: bugungi naqd').catch(() => {});
+    await d.pg.click('#e-save').catch(() => {}); await d.pg.waitForTimeout(700);
+    ok('ishga tushgan kun sanasi bilan «Naqd» xarajat yozilmaydi — «Kassa» → «+ Chiqim so‘rovi» ga yo‘llaydi', (await d.toasts()).includes(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat sanasi kassa ishga tushishidan (${gl}) oldin bo‘lsa`)
+      && q(`select count(*) from public.expenses`) === nExp && !!(await d.pg.$('#e-save')), [await d.toasts(), nExp]);
     await d.pg.keyboard.press('Escape').catch(() => {});
     await d.pg.evaluate(() => { const bg = document.querySelector('#modal-bg'); if (bg) bg.classList.remove('show'); });
     // M2: hisobotsiz qoldig'i (200 000) bor xodimga yangi avans so'rovi (T1 dan kichik) — Direktor tasdig'i ham; sahifa buni aytadi

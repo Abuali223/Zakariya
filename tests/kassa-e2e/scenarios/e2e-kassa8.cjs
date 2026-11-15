@@ -34,6 +34,11 @@ const allErrs = [];
     return { ctx, pg, dialogs, tab, kassaReady, modalGone, toasts, printed };
   }
   const bal = () => q(`select trim_scale(app.kassa_day_balance(id)) from public.cash_days where desk='main' and status='open'`);
+  const dmy = d => d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(0, 4);
+  // kassa hujjatlaridagi ism — xodim kartasidan (bog'lanmagan bo'lsa — hisob ismi), server qoidasi bilan
+  const kasLbl = q(`select app.kassa_user_label(u.name, u."staffRefType", u."staffRefId", u.id) from public.users u where u.id = '${ids.R_KAS}'`);
+  const ctlRow = async (pg, key) => { await pg.waitForSelector('#ks-ctl-card:not([data-stale])', { timeout: 15000 }).catch(() => {});
+    return pg.$eval(`#ks-ctl tr[data-ctl="${key}"]`, e => [e.dataset.level, e.innerText.replace(/\s+/g, ' ').trim()]).catch(() => ['', '']); };
 
   // tayyorgarlik: ishga tushirish, boshlang'ich qoldiq; kassir — fiskal chekli naqd o'quv to'lovi 300 000 va terminal to'lovi 150 000
   asUser(ids.R_DIR, `select public.fin_org_set('{"nameUz":"«SINOV MAKTAB» МЧЖ","t1":1000000,"l1":200000,"orgCashMax":1000000000,"kassaGoLive":"${today}"}'::jsonb)::text`);
@@ -97,6 +102,10 @@ const allErrs = [];
   // ---------------- 4) Moliya menejeri: izohsiz tekshiradi; kun oynasi va kunlik hisobotda Z
   {
     await mol.kassaReady();
+    // crit-4: kun yopilgandan keyin kiritilgan / tuzatilgan Z — nazorat ro'yxatida alohida (kim, necha marta); kunni o'sha xodim tekshirmaydi
+    const zc = await ctlRow(mol.pg, 'zChanged');
+    ok('nazorat ro‘yxati: «Z-hisobot kun yopilgandan keyin o‘zgartirilgan» — diqqat: kun, 1 marta, oxirgisi — kassir', zc[0] === 'warn' && zc[1].endsWith(`diqqat ${dmy(today)}: 1 marta, oxirgisi — ${kasLbl}`)
+      && q(`select count(*) filter (where data ->> 'afterClose' = 'true') || ':' || count(*) from public.cash_day_events where kind = 'zreport'`) === '1:2', zc);
     await mol.pg.click(`[data-verify="${today}"]`); await mol.pg.waitForSelector('#kv-papers');
     ok('Z mos — tekshirish oynasida ogohlantirish yo‘q', !(await mol.pg.$('#kv-z')));
     await mol.pg.check('#kv-papers'); await mol.pg.click('#kv-save'); await mol.modalGone();
@@ -146,6 +155,54 @@ const allErrs = [];
     ok('izoh bilan tekshirildi; izoh saqlandi', q(`select status || ':' || ("verifyNote" like 'Apparat ta%') from public.cash_days where desk='main' and day='${day2}'`) === 'verified:true');
     await mol.pg.screenshot({ path: `${OUT}/z-mol-${UI}-1440.png` });
     await mol.ctx.close();
+  }
+
+  // ---------------- 6) g7v-1: oflayn (qurilma navbatidagi) to'lov — NKM cheki 3-kun smenasida urilgan, kech kirim orderi 4-kuni keladi:
+  //   u 3-kunning Z iga tegishli (o'sha kun «mos», izoh endi talab qilinmaydi), 4-kunning Z iga qo'shilmaydi (ikki kunda teskari farq yo'q)
+  q(`update app.fin_clock set t = now() + interval '2 days' where id = 1`);
+  const day3 = q('select app.fin_today()');
+  asUser(ids.R_KAS, `select public.record_manual_payment('man_e8_0003', '${sid}', 100000, 'cash', null, '', '', 'Sinov Ota', null, '{"fiscalNo":"800005"}'::jsonb)::text`);
+  const cap3 = q(`select app.fin_now()::text`);   // oflayn to'lov olingan payt (chek urilgan, yozuv qurilma navbatida qoldi)
+  const c3 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_day_close('{"desk":"main","day":"${day3}","counted":${Number(bal()) + 50000},"pendingRefs":[{"ref":"man_e8_late","amount":50000}],"z":{"no":"Z-0003","cash":150000,"card":0}}'::jsonb)::text`));
+  const zs3 = () => q(`select concat_ws(':', z ->> 'expCash', z ->> 'nCash', z ->> 'diffCash', z ->> 'ok') from (select app.kassa_z_state(id) z from public.cash_days where desk='main' and day='${day3}') x`);
+  ok('3-kun: navbatdagi 50 000 e’lon qilinib yopildi (farq yo‘q); Z naqd 150 000 — tizimda hozircha 100 000 (1 chek), farq +50 000',
+    c3.ok && c3.day && c3.day.status === 'closed' && Number(c3.day.diff) === 0 && zs3() === '100000:1:50000:false', [c3.day && [c3.day.status, c3.day.diff], zs3()]);
+  {
+    const m = await login(ids.R_MOL); await m.kassaReady();
+    const zsB = await m.pg.$eval(`[data-zst="${day3}"]`, e => e.textContent).catch(() => '');
+    const zcV = await ctlRow(m.pg, 'zChanged');
+    ok('kech order kelguncha: 3-kun qatorida «Z: farq: naqd +50 000 so‘m»; tekshirilgan 1-kun «Z o‘zgartirilgan» qatorida «(tekshirilgan)» belgisi bilan',
+      /Z: farq: naqd \+50 000 so‘m/.test(zsB) && zcV[1].includes(`${dmy(today)}: 1 marta, oxirgisi — ${kasLbl} (tekshirilgan)`), [zsB, zcV]);
+    await m.pg.click(`[data-verify="${day3}"]`); await m.pg.waitForSelector('#kv-papers');
+    const pend = await m.pg.$eval('#kv-pend', e => e.textContent).catch(() => ''), kz = await m.pg.$eval('#kv-z', e => e.textContent).catch(() => '');
+    await m.pg.check('#kv-papers'); await m.pg.click('#kv-save'); await m.pg.waitForTimeout(700);
+    ok('kech order kelguncha tekshirish oynasi: «hali o‘tkazilmagan yozuv» (50 000) va Z farqi ogohlantirishi; izohsiz tekshirilmaydi',
+      /50 000/.test(pend) && /farq: naqd \+50 000 so‘m/.test(kz) && /Tizimda: naqd 100 000 so‘m \(1 chek\)/.test(kz)
+      && /Hali o‘tkazilmagan yozuvlar bo‘yicha sababni izohda yozing/.test(await m.toasts()) && q(`select status from public.cash_days where desk='main' and day='${day3}'`) === 'closed', [pend, kz, await m.toasts()]);
+    await m.pg.click('#m-cancel'); await m.modalGone();
+    await m.ctx.close();
+  }
+  q(`update app.fin_clock set t = now() + interval '3 days' where id = 1`);
+  const day4 = q('select app.fin_today()');
+  asUser(ids.R_KAS, `select public.record_manual_payment('man_e8_late', '${sid}', 50000, 'cash', null, '', '', 'Sinov Ota', '${cap3}', '{"fiscalNo":"800006"}'::jsonb)::text`);
+  const lateDoc = q(`select c.late || ':' || c."businessDay" || ':' || (c."capturedAt" = '${cap3}'::timestamptz) from public.cash_docs c join public.payments p on p."cashDocId" = c.id where p.id = 'man_e8_late'`);
+  ok('4-kun: navbatdagi to‘lov keldi — kech kirim orderi 4-kunga tushdi (olingan payti saqlangan); Z bo‘yicha 3-kunga tegishli: 3-kun tizimda 150 000 (2 chek), mos; 4-kun Z iga qo‘shilmadi',
+    lateDoc === `true:${day4}:true` && zs3() === '150000:2:0:true'
+    && q(`select (app.kassa_z_state(id) ->> 'expCash') || ':' || (app.kassa_z_state(id) ->> 'nCash') from public.cash_days where desk='main' and day='${day4}'`) === '0:0', [lateDoc, zs3()]);
+  {
+    const m = await login(ids.R_MOL); await m.kassaReady();
+    const zsA = await m.pg.$eval(`[data-zst="${day3}"]`, e => e.textContent).catch(() => '');
+    await m.pg.click(`[data-verify="${day3}"]`); await m.pg.waitForSelector('#kv-papers');
+    const noWarn = !(await m.pg.$('#kv-pend')) && !(await m.pg.$('#kv-z'));
+    await m.pg.check('#kv-papers'); await m.pg.click('#kv-save'); await m.modalGone().catch(() => {});
+    ok('kech order kelgach: 3-kun qatorida «Z: mos»; tekshirish oynasida ogohlantirish yo‘q — izohsiz tekshirildi',
+      /Z: mos/.test(zsA) && noWarn && q(`select status || ':' || coalesce("verifyNote", '') from public.cash_days where desk='main' and day='${day3}'`) === 'verified:', [zsA, noWarn, await m.toasts()]);
+    if (await m.pg.$('#modal-bg.show')) { await m.pg.click('#m-cancel').catch(() => {}); await m.modalGone().catch(() => {}); }   // tekshirilmagan bo'lsa — oyna ochiq qolgan
+    await m.kassaReady(); await m.pg.click(`[data-view="${day3}"]`); await m.pg.waitForSelector('#kdv-report', { timeout: 15000 });
+    const zl = await m.pg.$eval('#kdv-z', e => e.textContent).catch(() => '');
+    ok('3-kun oynasida Z: № Z-0003, naqd 150 000, «mos», tizimda 150 000 (2 chek)', /№ Z-0003 · naqd 150 000 so‘m · karta 0 so‘m/.test(zl) && /mos/.test(zl) && /tizimda: naqd 150 000 so‘m \(2 chek\)/.test(zl), zl);
+    await m.pg.screenshot({ path: `${OUT}/z-late-${UI}-1440.png` });
+    await m.ctx.close();
   }
   q(`delete from app.fin_clock`);
   ok('sahifa xatosi yo‘q', allErrs.length === 0, allErrs.slice(0, 3));

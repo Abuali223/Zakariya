@@ -35,7 +35,10 @@ const allErrs = [];
     const modalGone = async () => pg.waitForFunction(() => !document.querySelector('#modal-bg').classList.contains('show'), null, { timeout: 15000 });
     const printed = async () => pg.evaluate(() => [...document.querySelectorAll('iframe')].map(f => { try { return f.contentDocument.body.innerText.replace(/\s+/g, ' '); } catch (e) { return ''; } }));
     const toasts = async () => pg.evaluate(() => [...document.querySelectorAll('.toast')].map(e => e.textContent).join(' | '));
-    return { ctx, pg, dialogs, tab, kassaReady, modalGone, printed, toasts };
+    // «Buxgalteriya»: tugmalar darhol chiziladi, ishlovchilari ma'lumot yuklangach ulanadi — «Yuklanmoqda…» ketguncha kutiladi
+    const acReady = async () => { await tab('accounting'); await pg.waitForSelector('#ac-paysal', { timeout: 30000 });
+      await pg.waitForFunction(() => { const x = document.querySelector('#ac-body'); return x && !x.querySelector('.loading'); }, null, { timeout: 30000 }); };
+    return { ctx, pg, dialogs, tab, kassaReady, modalGone, printed, toasts, acReady };
   }
   const doc = (where, cols) => q(`select ${cols} from public.cash_docs where ${where}`);
   const bal = () => q(`select trim_scale(app.kassa_day_balance(id)) from public.cash_days where desk='main' and status='open'`);
@@ -43,9 +46,13 @@ const allErrs = [];
   // ---------------- 1) Direktor: naqd maosh (vedomost tasdig'i yoqilmagan — faqat Direktor ruxsati bilan), karta orqali maosh
   const dir = await login(ids.R_DIR);
   {
-    const s = dir; await s.tab('accounting'); await s.pg.waitForSelector('#ac-paysal', { timeout: 30000 });
+    const s = dir; await s.acReady();
     await s.pg.click('#ac-paysal'); await s.pg.waitForSelector('#sp-method', { timeout: 30000 });
-    ok('maosh oynasi: to‘lov usuli tanlanadi (naqd / karta / o‘zaro hisob — Direktorga)', (await s.pg.$$eval('#sp-method option', o => o.map(x => x.value).join(','))) === 'cash,card,offset');
+    // g3 (crit-1): Direktorga — kassa ishga tushishidan oldin naqd berilgan, kechikib topilgan maosh ham (orderisiz, haqiqiy sana bilan)
+    const spm = await s.pg.$$eval('#sp-method option', o => o.map(x => x.value + '=' + x.textContent));
+    ok('maosh oynasi: to‘lov usuli tanlanadi (naqd / karta / o‘zaro hisob / ishga tushishdan oldin berilgan naqd — Direktorga)',
+      spm.map(x => x.split('=')[0]).join(',') === 'cash,card,offset,cash_pre'
+      && spm[3] === `cash_pre=Naqd — kassa ishga tushishidan (${today.slice(8, 10)}.${today.slice(5, 7)}.${today.slice(0, 4)}) oldin berilgan (orderisiz)`, spm);
     await s.pg.selectOption('#sp-t', 'IQT-001');
     await s.pg.waitForFunction(() => { const b = document.querySelector('#sp-do'); return b && !b.disabled; }, null, { timeout: 30000 });
     ok('naqd tanlanganda sana — kassa kuni (o‘zgartirilmaydi)', await s.pg.$eval('#sp-date', e => e.disabled));
@@ -77,7 +84,10 @@ const allErrs = [];
     await s.pg.click('#ks-out'); await s.pg.waitForSelector('#kf-op');
     ok('«+ Chiqim so‘rovi»da «Ish haqi avansi» bor', (await s.pg.$$eval('#kf-op option', o => o.map(x => x.value))).includes('out_advance'));
     await s.pg.selectOption('#kf-op', 'out_advance'); await s.pg.waitForSelector('#kf-pe');
-    const emp = await s.pg.$eval('#kf-pe', e => [...e.options].find(o => /Sanjar/.test(o.textContent)).value);
+    // avans oluvchi — IQT-003 (urug'dagi ismi bazadan; option matni «ism · lavozim»)
+    const advName = q(`select name from public.teachers where "teacherId" = 'IQT-003'`);
+    const emp = await s.pg.$eval('#kf-pe', (e, nm) => { const o = [...e.options].find(x => x.textContent.split(' · ')[0] === nm); return o ? o.value : ''; }, advName);
+    ok('avans oynasi: xodimlar ro‘yxatida IQT-003 bor', !!emp, await s.pg.$$eval('#kf-pe option', o => o.map(x => x.textContent)));
     await s.pg.selectOption('#kf-pe', emp); await s.pg.fill('#kf-amt', '400 000'); await s.pg.fill('#kf-basis', 'Xodim arizasi, ' + today);
     await s.pg.click('#kf-save'); await s.modalGone();
     ok('avans so‘rovi yaratildi (2-ro‘yxat tasdig‘ini kutadi); avans hali yozilmagan', doc(`op='out_advance'`, `status || ':' || "needsList2" || ':' || "needsDirector"`) === 'draft:true:false' && q(`select count(*) from public.staff_advances`) === '0');
@@ -115,7 +125,7 @@ const allErrs = [];
     const m = await login(ids.R_MOL); await m.kassaReady();
     await m.pg.waitForSelector(`[data-appr="${advId}"]`); await m.pg.click(`[data-appr="${advId}"]`); await m.pg.waitForFunction(id => !document.querySelector(`[data-appr="${id}"]`), advId, { timeout: 15000 });
     await m.pg.click(`[data-appr="${expId}"]`); await m.pg.waitForFunction(id => !document.querySelector(`[data-appr="${id}"]`), expId, { timeout: 15000 });
-    ok('moliya menejeri: maosh oynasida faqat «karta» usuli (naqd — kassir)', await (async () => { await m.tab('accounting'); await m.pg.waitForSelector('#ac-paysal', { timeout: 30000 }); await m.pg.click('#ac-paysal'); await m.pg.waitForSelector('#sp-method', { timeout: 30000 });
+    ok('moliya menejeri: maosh oynasida faqat «karta» usuli (naqd — kassir)', await (async () => { await m.acReady(); await m.pg.click('#ac-paysal'); await m.pg.waitForSelector('#sp-method', { timeout: 30000 });
       const v = await m.pg.$$eval('#sp-method option', o => o.map(x => x.value).join(',')); await m.pg.click('#m-cancel').catch(() => {}); return v === 'card'; })());
     await m.ctx.close();
     // ---------------- 5) Kassir: pulni beradi — avans, xarajat, qaytarish
@@ -144,13 +154,28 @@ const allErrs = [];
   }
   // ---------------- 6) Direktor: «Buxgalteriya» — kassa xarajati belgisi, naqdsiz xarajat va avans shakllari
   {
-    const s = dir; await s.tab('accounting'); await s.pg.waitForSelector('#ac-add', { timeout: 30000 }); await s.pg.waitForTimeout(1500);
+    const s = dir; await s.acReady(); await s.pg.waitForTimeout(500);
     const at = await s.pg.$eval('#ac-body', e => e.textContent);
     ok('«Buxgalteriya»: kassadan ko‘chgan xarajat va avans «Kassa» belgisi bilan (tahrir / o‘chirish tugmasiz)', /Kanselyariya/.test(at) && (await s.pg.$$eval('#ac-body .chip', c => c.filter(x => x.textContent.trim() === 'Kassa').length)) >= 3
       && !(await s.pg.$(`[data-edel="kx_${expId}_1"]`)), at.slice(0, 200));
     await s.pg.click('#ac-add'); await s.pg.waitForSelector('#e-method', { timeout: 10000 });
-    ok('xarajat shakli: naqdsiz usullar (hisobdor xarajati — «Avans hisoboti»da) va «Kassa»ga yo‘llanma', (await s.pg.$$eval('#e-method option', o => o.map(x => x.value).join(','))) === 'bank,card' && /Naqd xarajat bu yerda yozilmaydi/.test(await s.pg.$eval('#modal', e => e.textContent)));
+    // g3 (crit-1): Direktorga «Naqd» ham bor — faqat kassa ishga tushishidan oldingi sana bilan kechikib topilgan xarajat (orderisiz);
+    //   bugungi naqd xarajat — baribir «Kassa» → «+ Chiqim so‘rovi»
+    const dmyT = `${today.slice(8, 10)}.${today.slice(5, 7)}.${today.slice(0, 4)}`;
+    const em = await s.pg.$$eval('#e-method option', o => o.map(x => x.value + '=' + x.textContent)), emt = await s.pg.$eval('#modal', e => e.textContent);
+    ok('xarajat shakli: naqdsiz usullar + Direktorga ishga tushishdan oldingi naqd (orderisiz), naqd xarajat — «Kassa»ga yo‘llanma, hisobdor — «Avans hisoboti»',
+      em.map(x => x.split('=')[0]).join(',') === 'bank,card,cash' && em[2] === `cash=Naqd — kassa ishga tushishidan (${dmyT}) oldin berilgan (orderisiz)`
+      && emt.includes('Naqd xarajat — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Xarajat»') && emt.includes(`Bu yerda naqd — faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lgan, kechikib topilgan xarajat`)
+      && emt.includes('«Kassa» → «Avans hisoboti»') && !!(await s.pg.$('#e-kassa')), [em, emt.slice(0, 400)]);
     await s.pg.selectOption('#e-cat', 'Ijara'); await s.pg.fill('#e-amt', '5 000 000'); await s.pg.fill('#e-note', 'Sinov ijara, bank orqali');
+    {   // «Naqd» + bugungi sana — oynaning o'zi rad etadi, yozuv yo'q
+      const ex0 = q(`select count(*) from public.expenses`);
+      await s.pg.selectOption('#e-method', 'cash'); await s.pg.click('#e-save'); await s.pg.waitForTimeout(600);
+      const tt = await s.toasts();
+      ok('xarajat shakli: «Naqd» bugungi sana bilan — rad («Kassa» → «+ Chiqim so‘rovi»), yozuv yo‘q, oyna ochiq',
+        tt.includes(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lsa`) && q(`select count(*) from public.expenses`) === ex0 && !!(await s.pg.$('#e-save')), tt);
+      await s.pg.selectOption('#e-method', 'bank');
+    }
     await s.pg.waitForFunction(() => document.querySelectorAll('#e-cp option').length > 1, null, { timeout: 10000 }).catch(() => {});
     await s.pg.click('#e-save');
     await s.pg.waitForFunction(() => /Xarajat saqlandi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
@@ -174,4 +199,5 @@ const allErrs = [];
   ok('sahifa xatosi yo‘q', allErrs.length === 0, allErrs);
   console.log(`JAMI (${UI}): ${res.filter(r => r.ok).length}/${res.length}`);
   await b.close();
+  process.exit(res.every(r => r.ok) ? 0 : 1);
 })().catch(e => { console.error('XATO', e); process.exit(1); });

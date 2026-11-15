@@ -78,4 +78,5 @@ const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c, x }); console.l
   ok('sahifa xatosi yo‘q', errs.length === 0, errs);
   console.log(`JAMI: ${res.filter(r => r.ok).length}/${res.length}`);
   await b.close();
-})().catch(e => { console.error(e); process.exit(1); });
+  process.exit(res.every(r => r.ok) ? 0 : 1);
+})().catch(e => { console.error('XATO', e); process.exit(1); });
