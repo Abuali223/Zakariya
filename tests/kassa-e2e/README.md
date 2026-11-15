@@ -128,7 +128,7 @@ shu jadval ham yangilanadi):
 Jami: 36 o‘tish, 992 tekshiruv (kassa 2 × 468, to‘lov 24, eski oqimlar 32).
 
 **Holat (2026-11-15).** Oxirgi to‘liq yashil o‘tish — 2026-11-15, modul relizi 12 (kassa moduli mustaqil ko‘rigi va yakuniy
-ko‘rik tuzatishlaridan keyingi kod): 36 o‘tish, 990 tekshiruv — hammasi o‘tdi (≈ 13 daqiqa). Ko‘rikda o‘zgargan oqimlar
+ko‘rik tuzatishlaridan keyingi kod): 36 o‘tish, 992 tekshiruv — hammasi o‘tdi (≈ 13 daqiqa). Ko‘rikda o‘zgargan oqimlar
 (ikki bosqichli smena topshirish, yopish va topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun
 tanlov, sinov kassasi, qaytarish oynasi kaliti, Direktor o‘ziga pul bermasligi, chop etish belgilari, T1, ishdan ketgan xodim)
 k14–k16 va yangilangan k1–k13, pay, legacy da tekshiriladi; har yangi tekshiruv mahsulot kodini vaqtincha eski holatiga

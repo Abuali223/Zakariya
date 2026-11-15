@@ -2080,6 +2080,76 @@ Commitlar: `d29deb4` (asosiy ish), `8971bd0` (2-davra tuzatishlari), 3-davra tuz
   tekshirilmadi: SINOV moliya menejeri va o'qituvchi hisoblari jonli tizimda **bloklangan** (kirishda «Hisobingiz bloklangan»);
   bu holat lokal brauzer testida isbotlangan (`e2e-kassa13`).
 
+## 79) Kassa moduli: mustaqil ko'p agentli ko'rik, 9 tuzatish guruhi va yakuniy ko'rik, modul relizi 12; brauzer ssenariylari — 2026-11-13…15
+
+**Holat:** kassa moduli hali jonli tizimga CHIQMAGAN («--dev» fayllar; o'rnatish — yashirin o'rnatish kunida, ≈ 21-dekabr).
+Jonli zanjirdagi fayllar va sahifa ham tahrirlandi — ular **keyingi deploy bilan** chiqadi (pastda, «Jonli tizimga ta'siri»).
+Jonli tizim hozir `82e605a` da. Commitlar: `e3ad425`, `17c0482`, `079dca6`, `4324998`, `26e19ba`, `fa3b950`, `19d0f54`, `44d40a4`,
+`6d49835`, `e9c1c99`, `8ba012d`, `dd56168` (reliz 11), `935dcf9` (yakuniy ko'rik tuzatishlari, reliz 12); brauzer ssenariylari — `45f0dbe`, `dbd7d47`, `05f77df`, `99a5346` (ko'rik topilmalari)
+va shu bo'lim bilan birgalikdagi commit; hujjat aniqligi — `8e8c741`.
+
+- **Usul (ko'p agentli, Workflow):** kassa moduli (server: `kassa*.sql`, `fin-*.sql`; sahifa: `admin.html`, `fin-kassa.js`,
+  `fin-print.js`; Telegram hisoboti) to'rt yo'nalishda ko'rildi: pul hisobi va kassa intizomi, holatlar va poyga (parallel
+  seanslar), xavfsizlik va vazifalar ajratilishi (SoD), ekran va chop etish; har topilmani alohida agent rad etishga urindi va
+  lokal bazada sinab ko'rdi; oxirida «nima qolib ketdi» tanqidchisi. Natija: 51 noyob tasdiqlangan topilma (yuqori 1, o'rta 23,
+  past 27) va 11 ta qamrov bo'shlig'i. Tuzatish — guruhlar bo'yicha: har guruhda amalga oshiruvchi agent → mustaqil tekshiruvchi
+  (to'liq to'plam, asl ssenariy qayta, eski kodni qaytarib testlar yiqilishini ko'rsatish) → kerak bo'lsa yana bir davra → rahbar
+  ko'rigi, to'liq to'plam, commit.
+- **Guruhlar:** g1 xodim va hisobdor hisob-kitoblari (`e3ad425`); g2 avans hisoboti statiyalari, xarajat nusxasi, o'quvchi puli
+  (`17c0482`); g3/g3b ishga tushirish chegarasi, to'xtatish va qayta ishga tushirish (`079dca6`, `4324998`); g4 vazifalar
+  ajratilishi — tasdiqlovchi, pul oluvchi, pul beruvchi, tekshiruvchi (`26e19ba`); g5/g5b kun egasi va ikki bosqichli smena
+  topshirish (`fa3b950`, `19d0f54`); g6/g6b oflayn rejim va «hali o'tkazilmagan» yozuvlar (`44d40a4`, `6d49835`); g7 to'lov
+  yaxlitligi (`e9c1c99`); g8 ekran va chop etish (`8ba012d`); g9 testlar, `kassa-checks.sql` 23-band (himoya mantig'i barmoq
+  izlari) va 24-band (vazifalar ajratilishi ma'lumotda), hujjatlar, reliz 11 (`dd56168`).
+- **Yakuniy ko'rik (butun o'zgarish ustidan, 4 yo'nalish, har biriga tekshiruvchi):** 7 tasdiqlangan + 1 yondosh topilma, 1 rad
+  etilgan (buxgalter chop etgan avans hisobotida doim «НУСХА» — hujjatlashtirilgan qoida). Ikki parallel guruh (alohida git
+  nusxalarida), rahbar birlashtirdi — `935dcf9`, reliz 12:
+  - qaytarish oynasi kaliti (jonli fayl `refund-rpc.sql`): javob yo'qolgach summa yoki «avans ham» o'zgartirilib qayta yuborilsa
+    avval jim «takror» qaytib, oyna «Allaqachon qaytarilgan ✓» derdi — endi rad (`ref_mismatch`, birinchi yozilgani ko'rsatiladi);
+    posbon qatori so'rovni saqlaydi; rad etilgan so'rov posbon yozmaydi;
+  - bitta oynadan naqdsiz qaytarish va naqd qaytarish so'rovi bir-birini rad etadi (bir qaytarish ikki usulda yozilmaydi),
+    parallel holatda ham — so'rov maqsad qulfi ostida qayta tekshiriladi (rahbar qo'shimchasi, poyga sinovi 14); usul birinchi
+    yuborishda qulflanadi;
+  - kunni yopish va smena topshirishda «Yuborilmadi» navbat yozuvi alohida, har biriga majburiy tanlov (pul kassada / qayta
+    kiritilgan): avval tuzatib qayta kiritilgan rad etilgan to'lov ham e'lon qilinib, soxta kamomad chiqardi; «💵 To'lov» oynasida
+    o'sha o'quvchi uchun tuzatilib qayta kiritilsa rad etilgani navbatdan olinadi (boshqa o'quvchi — qoladi; rahbar qarori);
+  - sinov kassasida qurilma navbati e'lon qilinmaydi (`kassa:pending_test`);
+  - tayyorlangan qayta ishga tushirishda sanani bo'shatish (kassani yana to'xtatish) endi to'xtatish qulfi va shartlari bilan —
+    avval kassa ochiq kun yoki pul berilmagan so'rov bilan to'xtab qolishi mumkin edi; to'xtatilgan kassada ochiq kun — «paused»;
+  - ikki kassir bir vaqtda bir xil fiskal chek raqamini kiritsa — endi faqat bittasi o'tadi (o'tkazishda kassa qulfi ostida);
+  - so'rovni yolg'iz tasdiqlagan xodim uning pulini bermaydi (`kassa:self_pay`); Direktor o'ziga (bog'langan xodim kartasiga)
+    pulni va naqd maoshni o'zi bermaydi — kassir beradi (`kassa:self_recipient`, FD-48); kassir o'ziga boshqa xodim tasdiqlagan
+    avansni beradi (O'zbekiston amaliyoti; tasdiq — boshqa xodimda); o'tish oyidan oldingi oy uchun Direktorning o'z naqd maoshi —
+    faqat karta orqali (xabar shuni aytadi);
+  - kunni qayta ochilishidan oldin yopgan xodim uni tekshirmaydi.
+- **Sinovlar (reliz 12):** `test-kassa.sql` 339, `test-kassa-pay.sql` 195, `test-kassa-links.sql` 163, `test-kassa-report.sql` 169,
+  `test-fin-period.sql` 42, `test-kassa-checks.sql` 55, `test-fin-rights.sql` 125, `test-fin-prereq.sql` 95 (dev va jonli
+  zanjirda), `test-audit-fixes.sql` 36, `test-public-close.sql` 92, `test-kassa-race.sh` 59, `fin-kassa.test.mjs` 42,
+  `fin-print.test.mjs` 38, `fin-words.test.mjs` 7, `tg-daily.test.cjs` 50 — hammasi yashil; zanjir qayta ishga tushirilganda xatosiz;
+  har tuzatish eski kodni qaytarib tekshirildi (yangi testlar yiqiladi). Jonli versiyadan (`82e605a`) yangilanish: zanjir xatosiz,
+  jonli to'plamlar yangilangan bazada yashil.
+- **Brauzer ssenariylari (`tests/kassa-e2e`):** ko'rikda o'zgargan oqimlarga moslandi — 4 parallel guruh (har biri o'z git
+  nusxasi, bazasi va portlarida; hisob limiti tufayli ish bir marta to'xtab, qolgan joyidan davom etdi). k1–k13, `pay`, `legacy`
+  yangilandi; yangi k14 (ikki bosqichli smena topshirish, yopish / topshirishdan oldin navbat yuborilishi va kassa:stale,
+  «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, kamomad qarori), k15 (qaytarish oynasi kaliti,
+  Direktor o'ziga pul bermasligi, «To'lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to'xtatilgan kassa usul
+  tanlovi), k16 (T1, «Tasdiqlash» qayta yoqilishi, ishdan ketgan xodim, asosiy ↔ sinov kassa). Har yangi g11 tekshiruvi mahsulot
+  kodini vaqtincha eski holatiga qaytarib yiqilishi ko'rsatildi; mahsulot xatosi topilmadi. Ikki mustaqil ko'rikchi (faqat
+  o'qish): zaiflashtirilgan tekshiruv va mahsulot kodiga o'zgarish yo'q; 16 ta sifat kamchiligi (2 o'rta: bitta hech qachon
+  yiqilmaydigan tekshiruv va bitta poyga; qolgani — qat'iy kutish o'rniga belgilangan vaqt, ortiqcha da'vo qiluvchi nom, urug'
+  ismlari kodda) — hammasi tuzatildi. To'liq o'tish (2026-11-15): 36 o'tish, 992 tekshiruv — hammasi o'tdi (≈ 13 daqiqa).
+- **Hujjat aniqligi:** «НУСХА» belgisi faqat raqamli hujjatlarga (order, KO-4 varag'i, «Д-», «ЎҲ-», «А-»); kassani sanash
+  dalolatnomasi chop etish jurnaliga yozilmaydi (`shakllar.md`).
+- **Jonli tizimga ta'siri (keyingi deploy bilan):** `admin.html` (qaytarish oynasi: usul qulfi, o'zgartirilgan qayta yuborishga aniq
+  xabar; «💵 To'lov» oynasi: rad etilgan yozuvni almashtirish; maosh oynasi: kassa xabari kodsiz; biriktirilmagan to'lov qayta
+  qaytarilganda tushunarli xabar; g1–g9 ekran tuzatishlari), `refund-rpc.sql` (o'zgartirilgan qayta yuborish — rad), shuningdek
+  g1–g9 da tahrirlangan jonli fayllar: `fin-prereq.sql`, `reverse-payment.sql`, `add-credit.sql`, `payroll-approval.sql`,
+  `audit-5.sql`, `audit-7.sql`, `auth/tg-daily.cjs`, `assets/js/fin-print.js`. Kassa moduli o'rnatilmagan jonli tizimda kassa
+  qoidalari ishlamaydi — o'zgarishlar faqat tegishli xato yo'llarida.
+- **Qabul qilingan cheklovlar** — `ishga-tushirish.md`, «Ma’lum va qabul qilingan cheklovlar (relizlar 11–12)», 1–8.
+- **Egasi uchun:** keyingi deploy (jonli zanjir va sahifa); qabul sinovi stendida 24-band eski sinov yozuvlarida «!!» ko'rsatishi
+  mumkin (ishga-tushirish §3.1 izohi). Qolgan ishlar ro'yxati — o'zgarishsiz (pastda).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
