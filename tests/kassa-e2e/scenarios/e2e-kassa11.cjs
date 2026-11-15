@@ -40,7 +40,7 @@ const book = file => { const wb = XLSX.read(fs.readFileSync(file), { type: 'buff
   q(`insert into public.fin_counterparties (id, kind, name, stir, active) values ('cp_e11', 'supplier', 'Sinov Taminot MChJ', '', true), ('cp_b11', 'bank', 'Sinov Bank', '', true) on conflict (id) do nothing`);
   const st = q(`select s.id || '|' || s."staffId" || '|' || s.name from public.staff s where coalesce(s."staffId", '') <> '' and coalesce(s.name, '') <> '' order by s.id limit 1`).split('|');
   const [stId, stCode, stName] = st;
-  asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":70000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat 1","note":"Sinov","clientRef":"e11-r1-0001"}'::jsonb)::text`);
+  asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":70000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat 1","note":"Sinov","fiscalNo":"FS-E11-0001","clientRef":"e11-r1-0001"}'::jsonb)::text`);
   asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_bank","amount":500000,"partyType":"bank","partyId":"cp_b11","basis":"Chek № 7","clientRef":"e11-r2-0001"}'::jsonb)::text`);
   const c1 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_payout_request('{"op":"out_expense","amount":45000,"partyType":"counterparty","partyId":"cp_e11","basis":"Hisob-faktura № 11","clientRef":"e11-c1-0001","lines":[{"articleId":"EX-32","amount":45000}]}'::jsonb)::text`));
   asUser(ids.R_MOL, `select public.kassa_doc_approve('${c1.id}')::text`); asUser(ids.R_KAS, `select public.kassa_doc_pay('${c1.id}')::text`);

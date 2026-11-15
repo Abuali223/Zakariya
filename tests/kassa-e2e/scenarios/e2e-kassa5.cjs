@@ -19,6 +19,9 @@ const allErrs = [];
   const tname = q(`select name from public.teachers where \"teacherId\" = 'IQT-001'`);   // o'qituvchi (urug'dagi ismi)
   const inv0 = q(`select coalesce(string_agg(id || '=' || coalesce(status, '') || ':' || coalesce("paidAmount", 0), ',' order by id), '') from public.invoices where "studentId"='${sid}'`);
   const cr0 = q(`select coalesce((select credit from public.student_credit where id='${sid}'), 0)`);
+  // o'quvchining shu oydagi qarzi (urug'dan): o'zaro hisobdan keyin eski avans (cr0) ham fakturaga qo'llanadi (acc-2) — qarzga sig'ganicha
+  const due0 = Number(q(`select coalesce(sum(amount - coalesce("paidAmount", 0)), 0) from public.invoices where "studentId"='${sid}' and month='${month}'`));
+  const crUse = Math.min(Number(cr0), Math.max(0, due0 - 800000)), dmy = today.slice(8, 10) + '.' + today.slice(5, 7) + '.' + today.slice(0, 4);
   async function login(uid, vp) {
     const email = q(`select email from public.users where id='${uid}'`);
     const ctx = await b.newContext({ timezoneId: 'Asia/Tashkent', viewport: vp || { width: 1440, height: 900 } });
@@ -44,7 +47,10 @@ const allErrs = [];
   let docId = '';
   {
     const s = dir; await s.salModal();
-    ok('direktor: maosh oynasida usullar — naqd, karta, o‘zaro hisob', (await s.pg.$$eval('#sp-method option', o => o.map(x => x.value).join(','))) === 'cash,card,offset');
+    // crit-1: Direktor (ishga tushirish kuni bor) — «Naqd — kassa ishga tushishidan (kun) oldin berilgan (orderisiz)» ham (kechikib topilgan naqd maosh)
+    const spOpts = await s.pg.$$eval('#sp-method option', o => o.map(x => x.value + '=' + x.textContent.trim()));
+    ok('direktor: maosh oynasida usullar — naqd, karta, o‘zaro hisob, «Naqd — kassa ishga tushishidan (kun) oldin berilgan (orderisiz)»',
+      spOpts.map(x => x.split('=')[0]).join(',') === 'cash,card,offset,cash_pre' && spOpts[3] === `cash_pre=Naqd — kassa ishga tushishidan (${dmy}) oldin berilgan (orderisiz)`, spOpts);
     await s.pg.selectOption('#sp-t', 'IQT-001'); await s.pg.selectOption('#sp-method', 'offset');
     await s.pg.waitForFunction(() => { const b = document.querySelector('#sp-do'); return b && !b.disabled; }, null, { timeout: 30000 });
     ok('o‘zaro hisob tanlanganda: o‘quvchi va ariza sanasi maydonlari, sana — bugun (o‘zgarmaydi), tugma va yorliq mos',
@@ -62,10 +68,11 @@ const allErrs = [];
       s.dialogs.some(m => /O‘zaro hisob rasmiylashtirilsinmi/.test(m) && m.includes('800 000') && m.includes(sname)) && /O‘zaro hisob dalolatnomasi № O‘H-1 yozildi/.test(mt) && /o‘zaro hisob/.test(mt)
       && /Dalolatnoma/.test(await s.pg.$eval('#sp-ko2', e => e.textContent).catch(() => '')) && !(await s.pg.$('#sp-print')), [s.dialogs.slice(-2), mt.slice(0, 400), await s.toasts()]);
     docId = q(`select id from public.cash_docs where op='nc_offset'`);
-    ok('bitta tranzaksiya: maosh to‘lovi («offset») + o‘quv to‘lovi («offset», qo‘llangan) + dalolatnoma (ACT, o‘tkazilgan, Dt 6710)',
+    // acc-2: eski avans (cr0) fakturaga qo'llansa — KO-1 dagi kabi naqdsiz Dt 6310 Kt 4010 ma'lumot qatori; dalolatnoma summasiga (c.amount) kirmaydi
+    ok('bitta tranzaksiya: maosh to‘lovi («offset») + o‘quv to‘lovi («offset», qo‘llangan) + dalolatnoma (ACT, o‘tkazilgan, 800 000: Dt 6710 Kt 4010; eski avans — naqdsiz Dt 6310 Kt 4010 ma’lumot qatori)',
       q(`select s.method || ':' || trim_scale(s.paid) || ':' || p.provider || ':' || p.status || ':' || trim_scale(p.amount) || ':' || p."studentId" || ':' || c.form || ':' || c.status || ':' || c.series || '-' || c.no || ':' || coalesce(c."dayId", 'kunsiz')
-           || ':' || (select string_agg(distinct l.debit, ',') from public.cash_doc_lines l where l."docId" = c.id) || ':' || (select trim_scale(sum(l.amount)) from public.cash_doc_lines l where l."docId" = c.id)
-           from public.cash_docs c join public.salary_payments s on s."cashDocId" = c.id join public.payments p on p."cashDocId" = c.id where c.id = '${docId}'`) === `offset:800000:offset:applied:800000:${sid}:ACT:posted:OFS-1:kunsiz:6710:800000`,
+           || ':' || trim_scale(c.amount) || ':' || (select string_agg(l.debit || '/' || l.credit || '=' || trim_scale(l.amount) || case when l.cash then '/naqd' else '' end, ',' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id)
+           from public.cash_docs c join public.salary_payments s on s."cashDocId" = c.id join public.payments p on p."cashDocId" = c.id where c.id = '${docId}'`) === `offset:800000:offset:applied:800000:${sid}:ACT:posted:OFS-1:kunsiz:800000:6710/4010=800000${crUse > 0 ? ',6310/4010=' + crUse : ''}`,
       q(`select s.method, s.paid, p.provider, p.status, c.form, c.status, c.no from public.cash_docs c left join public.salary_payments s on s."cashDocId" = c.id left join public.payments p on p."cashDocId" = c.id where c.op = 'nc_offset'`));
     ok('kassadan pul chiqmadi: kassa kuni ochilmadi, naqd hujjat yo‘q', q(`select count(*) from public.cash_days`) === '0' && q(`select count(*) from public.cash_docs where form in ('KO1','KO2')`) === '0');
     const before = (await s.printed()).length;

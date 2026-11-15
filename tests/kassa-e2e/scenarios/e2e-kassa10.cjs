@@ -31,12 +31,12 @@ const allErrs = [];
     const printed = async () => pg.evaluate(() => [...document.querySelectorAll('iframe')].map(f => { try { return f.contentDocument.body.innerText.replace(/\s+/g, ' '); } catch (e) { return ''; } }));
     return { ctx, pg, tab, kassaReady, printed };
   }
-  // tayyorgarlik: ishga tushirish; 2 ta kirim (biri bekor qilinadi), 1 ta chiqim
+  // tayyorgarlik: ishga tushirish; 2 ta kirim (biri bekor qilinadi), 1 ta chiqim. «Boshqa kirim» boshqa shaxsdan — fiskal chek № majburiy (g8, kassa:fiscal)
   asUser(ids.R_DIR, `select public.fin_org_set('{"nameUz":"«SINOV MAKTAB» МЧЖ","t1":1000000,"l1":200000,"orgCashMax":1000000000,"kassaGoLive":"${today}"}'::jsonb)::text`);
   asUser(ids.R_DIR, `select public.kassa_opening_set('{"amount":1000000,"startDay":"${today}"}'::jsonb)::text`);
   q(`insert into public.fin_counterparties (id, kind, name, stir, active) values ('cp_e10', 'supplier', 'Sinov Taminot MChJ', '', true) on conflict (id) do nothing`);
-  const r1 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":70000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat 1","note":"Sinov","clientRef":"e10-r1-0001"}'::jsonb)::text`));
-  const r2 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Xato","articleId":"IN-06","basis":"Tilxat 2","note":"Sinov","clientRef":"e10-r2-0001"}'::jsonb)::text`));
+  const r1 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":70000,"partyType":"other","partyName":"Sinov Mehmon","articleId":"IN-06","basis":"Tilxat 1","note":"Sinov","fiscalNo":"FS-E10-0001","clientRef":"e10-r1-0001"}'::jsonb)::text`));
+  const r2 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_receipt('{"op":"in_other","amount":30000,"partyType":"other","partyName":"Sinov Xato","articleId":"IN-06","basis":"Tilxat 2","note":"Sinov","fiscalNo":"FS-E10-0002","clientRef":"e10-r2-0001"}'::jsonb)::text`));
   asUser(ids.R_KAS, `select public.kassa_doc_void('${r2.id}', 'Xato kiritildi (sinov)')::text`);
   const c1 = JSON.parse(asUser(ids.R_KAS, `select public.kassa_payout_request('{"op":"out_expense","amount":45000,"partyType":"counterparty","partyId":"cp_e10","basis":"Hisob-faktura № 10","clientRef":"e10-c1-0001","lines":[{"articleId":"EX-32","amount":45000}]}'::jsonb)::text`));
   asUser(ids.R_MOL, `select public.kassa_doc_approve('${c1.id}')::text`); asUser(ids.R_KAS, `select public.kassa_doc_pay('${c1.id}')::text`);

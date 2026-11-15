@@ -74,13 +74,13 @@ E2E_DB=fx_e2e
 ```bash
 cd tests/kassa-e2e
 bash stand.sh setup          # bir marta: local/, JWT siri, dasturlar tekshiruvi → «tayyor: …»
-bash run-all.sh              # to‘liq to‘plam (30 o‘tish, ≈ 10–15 daqiqa) — reliz oldidan shu buyruq
+bash run-all.sh              # to‘liq to‘plam (36 o‘tish, ≈ 40–60 daqiqa) — reliz oldidan shu buyruq
 ```
 
 `run-all.sh` har o‘tishdan oldin stendni noldan quradi (ssenariylar kunlarni yopadi, hujjat o‘tkazadi — holat
 qayta ishlatilmaydi), oxirida stendni to‘xtatadi. Natija: `local/out/<vaqt>/summary.txt` (har qator:
 `k5.v1: rc=0 | JAMI (v1): 22/22 | fail=0`), har ssenariy chiqishi `local/out/<vaqt>/<teg>.out`, skrinshotlar
-`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 30 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
+`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 36 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
 (chiqish kodi ≠ 0).
 
 Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`).
@@ -106,23 +106,26 @@ shu jadval ham yangilanadi):
 
 | Teg | Fayl | Nimani tekshiradi | Tekshiruvlar |
 |---|---|---|---|
-| k1 | `e2e-kassa.cjs` | to‘liq kun sikli: boshlang‘ich qoldiq, sozlamalar, kirim, chiqim so‘rovi → tasdiq → pul berish, naqd o‘quv to‘lovi, bekor qilish, kunni yopish va tekshirish, qayta chop etish | v1 36, v2 36 |
-| k2 | `e2e-kassa2.cjs` | limit, asos hujjatisiz xarid, 2-ro‘yxat + Direktor, rad etish, smena topshirish, navbatdagi to‘lov, kamomad / ortiqcha, qayta ochish | v1 35, v2 35 |
-| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga | v1 26, v2 26 |
-| k4 | `e2e-kassa4.cjs` | kunlik hisobot (RP-02), nazorat ro‘yxati (RP-06) | v1 24, v2 24 |
+| k1 | `e2e-kassa.cjs` | to‘liq kun sikli: boshlang‘ich qoldiq, sozlamalar, kirim, chiqim so‘rovi → tasdiq → pul berish, naqd o‘quv to‘lovi, bekor qilish, kunni yopish va tekshirish, qayta chop etish | v1 39, v2 39 |
+| k2 | `e2e-kassa2.cjs` | limit, asos hujjatisiz xarid, 2-ro‘yxat + Direktor, rad etish, ikki bosqichli smena topshirish, navbatdagi to‘lov, kamomad / ortiqcha, qayta ochish | v1 40, v2 40 |
+| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga; to‘xtatilgan kassada usul tanlovi | v1 28, v2 28 |
+| k4 | `e2e-kassa4.cjs` | kunlik hisobot (RP-02), nazorat ro‘yxati (RP-06: eskirgan smena topshirish), dalolatnomalar va «НУСХА», kutilayotgan smena kartasi | v1 36, v2 36 |
 | k5 | `e2e-kassa5.cjs` | o‘zaro hisob (maosh hisobidan farzand to‘lovi), dalolatnoma, bekor qilish | v1 22, v2 22 |
 | k6 | `e2e-kassa6.cjs` | davr surati va qulfi, maosh berish huquqi | v1 31, v2 31 |
-| k7 | `e2e-kassa7.cjs` | Buxgalter (2-ro‘yxat): tasdiq, kunni tekshirish, nazorat ro‘yxati, «Davr» | v1 26, v2 26 |
-| k8 | `e2e-kassa8.cjs` | onlayn kassa Z-hisoboti bilan solishtirish | v1 28, v2 28 |
-| k9 | `e2e-kassa9.cjs` | yuridik shaxsga naqd to‘lov: ogohlantirish, Direktor tasdig‘i, chegara | v1 12, v2 12 |
+| k7 | `e2e-kassa7.cjs` | Buxgalter (2-ro‘yxat): tasdiq, kunni tekshirish (qayta ochilishidan oldin yopgan xodim — yo‘q), chop etish faqat «НУСХА», nazorat ro‘yxati, «Davr» | v1 32, v2 32 |
+| k8 | `e2e-kassa8.cjs` | onlayn kassa Z-hisoboti bilan solishtirish; kech kirim — NKM smenasi kuniga, Z tuzatilgani nazoratda | v1 35, v2 35 |
+| k9 | `e2e-kassa9.cjs` | yuridik shaxsga naqd to‘lov: ogohlantirish, Direktor tasdig‘i, chegara; kontragent turini tasdiqlash, ikki marta bosish | v1 18, v2 18 |
 | k10 | `e2e-kassa10.cjs` | KO-3 jurnali, chop etish, Excel (FD-28) | v1 17, v2 17 |
 | k11 | `e2e-kassa11.cjs` | RP-08 statiya matritsasi, oylik kassa to‘plami (Excel) | v1 17, v2 17 |
 | k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | v1 13, v2 13 |
 | k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | v1 39, v2 39 |
+| k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | v1 41, v2 41 |
+| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 28, v2 28 |
+| k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | v1 31, v2 31 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
-| legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar | dev 13, prod 11 |
+| legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
 
-Jami: 30 o‘tish, 700 tekshiruv (kassa 2 × 326, to‘lov 24, eski oqimlar 24).
+Jami: 36 o‘tish, 990 tekshiruv (kassa 2 × 467, to‘lov 24, eski oqimlar 32).
 
 **Holat (2026-11-14).** Oxirgi to‘liq yashil o‘tish — 2026-11-13, kassa moduli mustaqil ko‘rigi tuzatishlaridan oldingi
 kod bilan (k13 da o‘shanda 38 ta edi; 39-tekshiruv — «Profil» — keyingi tuzatish bilan qo‘shilgan). Ko‘rik tuzatishlari
