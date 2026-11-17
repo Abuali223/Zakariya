@@ -358,7 +358,7 @@ pf_ports(){
       local alt="" c
       for c in 9443 8444 9444 10443; do [ "$c" = "$PUBLIC_PORT" ] && continue; [ -z "$(port_listeners "$c")" ] && { alt="$c"; break; }; done
       die "$PUBLIC_PORT-port BAND — uni boshqa dastur tinglayapti (ko'pincha Supabase Kong'ning HTTPS porti)." \
-          "Stend uchun boshqa port tanlang${alt:+, masalan: bash $0 --port $alt} (keyin hosting panelidagi tashqi firewall'da ham shu portni oching)." \
+          "Stend uchun boshqa port tanlang${alt:+, masalan: bash $0$([ "${CHAIN_DEV:-0}" = 1 ] && echo " --dev") --port $alt} (keyin hosting panelidagi tashqi firewall'da ham shu portni oching)." \
           "Band qilgan jarayon — yuqoridagi «Topilgan holat»da."
     fi
   else ok "$PUBLIC_PORT-port bo'sh (nginx shu portda tinglaydi)"; fi
@@ -868,7 +868,7 @@ step_nginx(){
     nginx_remove_files
     as_root nginx -t >/dev/null 2>&1 && as_root systemctl reload nginx || warn "DIQQAT: nginx holatini tekshiring: sudo nginx -t"
     die "nginx $PUBLIC_PORT-portni ocha olmadi (port band bo'lishi mumkin) — stend bloki olib tashlandi, asosiy sayt avvalgidek ishlayapti." \
-        "nginx xatolari: $(as_root tail -n 3 /var/log/nginx/error.log 2>/dev/null | cut -c1-200 | tr '\n' '|')" "Boshqa port bilan urinib ko'ring: bash $0 --port 9443"
+        "nginx xatolari: $(as_root tail -n 3 /var/log/nginx/error.log 2>/dev/null | cut -c1-200 | tr '\n' '|')" "Boshqa port bilan urinib ko'ring: bash $0$([ "${CHAIN_DEV:-0}" = 1 ] && echo " --dev") --port 9443"
   fi
   [ -n "$bak" ] && rm -f "$bak"
   ok "nginx $PUBLIC_PORT-portda tinglayapti (fayl: $target)"

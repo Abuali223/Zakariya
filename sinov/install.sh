@@ -71,7 +71,7 @@ if want health; then step_health; fi
 
 if [ "$DRY" = 1 ]; then
   print_facts
-  say ""; say "✅ DRY-RUN tugadi: tekshiruvlar o'tdi, hech narsa o'zgartirilmadi. O'rnatish: bash $0$([ "$PUBLIC_PORT" != 8443 ] && echo " --port $PUBLIC_PORT")"
+  say ""; say "✅ DRY-RUN tugadi: tekshiruvlar o'tdi, hech narsa o'zgartirilmadi. O'rnatish: bash $0$([ "${CHAIN_DEV:-0}" = 1 ] && echo " --dev")$([ "$PUBLIC_PORT" != 8443 ] && echo " --port $PUBLIC_PORT")"
   exit 0
 fi
 
