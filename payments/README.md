@@ -280,20 +280,30 @@ bog'lanadi.
   matn bilan, Click / Uzum javobi provayderning asl qiymatlari bilan. Kodi almashtirilgan o'quvchining ESKI kodi (`student_code_prev`)
   to'lovda ishlayveradi (farzand ulashda — yo'q). Kod guruhlab (bo'laklar orasida 1–2 ta bo'sh joy / tab / «.» / «,» / «-» / «_» /
   «/» yoki 3 tagacha bo'sh joy belgisi, yangi qator ham: «3FA9 C21B 7D0E», «3FA9_C21B_7D0E», «3FA9, C21B, 7D0E») yoki kiril / «O»
-  harfi bilan yozilsa ham yashiriladi; «[kod]» kodga yondosh hex bo'laklarni ham qoplaydi (yaqin nusxa ochiq qolmasin), IQ-ID va
-  so'zlar qoladi: «IQ-0042 3FA9 C21B 7D0E» → «IQ-0042 [kod]». Bunday to'lov (odatdagi qoidalar — ID + kod, faqat kod, telefon —
-  o'quvchi topmaganda) matndagi kod(lar)ning YAGONA egasiga biriktiriladi (`raw.via = 'code_norm'`, Uzum'da ham — `raw` ichida).
+  harfi bilan yozilsa ham yashiriladi; «[kod]» kodga yondosh hex bo'laklarni ham qoplaydi (yaqin nusxa ochiq qolmasin), so'zlar va
+  IQ-ID raqami qoladi — pastda (a) da sanalgan har yozilishi, boshqa o'quvchiniki ham (Direktor qaysi ID yozilganini ko'radi):
+  «IQ-0042 3FA9 C21B 7D0E» → «IQ-0042 [kod]», «IQ+0043 3FA9 C21B 7D0E» → «IQ+0043 [kod]», «ИҚ-0043 …» → «ИҚ-0043 [kod]». Bunday to'lov
+  (odatdagi qoidalar — ID + kod, faqat kod, telefon — o'quvchi topmaganda) matndagi kod(lar)ning YAGONA egasiga biriktiriladi
+  (`raw.via = 'code_norm'`, Uzum'da ham — `raw` ichida).
   Quyidagi hollarda kod bo'yicha biriktirilmaydi (kod egasi qoidasi ham, ID + kod / faqat kod qoidalari ham) — to'lov qo'lda
   biriktiriladi: (a) matnda (merchant_trans_id, sinf, telefon; Uzum account) BOSHQA o'quvchining doc id'si yoki IQ-ID'si bor (bazada
   yo'q IQ-raqam ham). IQ-ID deb olinadi: «IQ» + «-» / «_» + raqam matnning istalgan joyida («IQ-0043-KOD», «IQ-0043_KOD»,
   «(IQ-0043)KOD», «5AIQ-0043»); so'z boshidagi (oldida harf yo'q) «IQ» yoki kiril harfli «ИҚ», «ИК», «ІQ», «IҚ», «ІҚ» — raqam bilan
   orasida 3 tagacha boshqa belgi bo'lsa ham («IQ0043KOD», «IQ 0043», «IQ,0043», «IQ(0043)», «IQ'0043», «IQ  -  0043», «ИҚ-0043»).
+  IQ-raqam qiymat bo'yicha solishtiriladi: egasining «IQ-0042» ID'si «IQ-42» / «IQ-042» deb yozilsa ham — o'ziniki (boshqa o'quvchi emas).
   Harfga yopishgan va «-» / «_» siz yozilgan ID («AliIQ0043», «5AIQ0043») TANILMAYDI: ism oxiridagi «…iq» («Rafiq 3FA9…»,
   «Sodiq 0043 …») ID deb olinmasin — bunday yozilgan boshqa o'quvchi ID'si bilan kelgan to'lov kod egasiga biriktirilishi mumkin
   (qabul qilingan qoldiq xavf); (b) matnda ikki o'quvchining (joriy yoki eski) kodi bor — aniq «ID KOD» / «KOD» qoidalarida ham;
-  (c) telefon (+ ism) bir o'quvchini, matndagi kod boshqasini ko'rsatadi (aka-uka bir telefonda: «Bobur <akasining kodi>»; ism
-  solishtirilganda kod matndan olib tashlanadi) — telefon qoidasi ham ishlamaydi, `raw.via = 'code_conflict'`. Kod jadvallarini
-  o'qib bo'lmasa (yoki matnda kalit juda ko'p) — kod bo'yicha ham, kodga o'xshash bo'lagi bor matnda telefon bo'yicha ham
-  biriktirilmaydi; o'qilmagan kalitlarga shakl qoidasi: 12 belgili 0-9/A-F (harfli) bo'lak yoki guruh yashiriladi (telefon / sana /
-  summa / sinf / ID, sinfdan keyin bo'sh joy bilan yozilgan telefon / sana / summa — «5A 998 90 123 45 67» — tegilmaydi). Eski
-  yozuvlar va qoida (SQL tomoni): `migration/payer-code-mask.sql`; sinov: `node mask.test.cjs`.
+  (c) telefon (+ ism / sinf) bir o'quvchini, matndagi kod yoki ID boshqasini ko'rsatadi (aka-uka bir telefonda: «Bobur <akasining
+  kodi>», «IQ-0050 <kod>» yoki «IQ_0050» + akasining sinfi; ism solishtirilganda kod matndan olib tashlanadi) yoki matnni tekshirib
+  bo'lmadi — telefon qoidasi ham ishlamaydi, `raw.via = 'code_conflict'`. Click'da aniq faktura ID («IQ-0050__2026-08») bilan kelgan,
+  lekin shu fakturasi yo'q to'lov o'sha o'quvchiga (`raw.via = 'invoice-id'`) faqat (c) bo'lmaganda, matndagi barcha kodlar shu
+  o'quvchiniki va matnda boshqa o'quvchi tilga olinmagan bo'lsa biriktiriladi: «IQ-0050__2026-08 <boshqa o'quvchining kodi>» — qo'lda
+  (Uzum'da faktura ID — faqat aniq faktura, o'zgarmagan). Kod jadvallarini o'qib bo'lmasa (yoki matnda kalit juda ko'p) — kod
+  bo'yicha biriktirilmaydi; telefon (+ ism) va faktura ID qoidalari esa faqat matn maydonlarida (merchant_trans_id, sinf) 12 belgili
+  0-9/A-F bo'lak yoki guruh (faqat raqamli eski kod ham — masalan matnga yozilgan telefon) va telefon maydonida harfli shunday bo'lak
+  bo'lmasa ishlaydi: telefon maydonidagi raqam (telefonning o'zi) va ism so'zlari to'sqinlik qilmaydi («Sinov Komil» + telefon —
+  biriktiriladi, «Sinov Komil <kod>» + telefon — qo'lda). O'qilmagan kalitlarga shakl qoidasi: 12 belgili 0-9/A-F (harfli) bo'lak
+  yoki guruh yashiriladi (telefon / sana / summa / sinf / ID, sinfdan keyin bo'sh joy bilan yozilgan telefon / sana / summa —
+  «5A 998 90 123 45 67», «5-A 998 …», «5 A 998 …», «A5 998 …» — tegilmaydi). Eski yozuvlar va qoida (SQL tomoni):
+  `migration/payer-code-mask.sql`; sinov: `node mask.test.cjs`.

@@ -16,6 +16,7 @@
 --   gen_student_code uni o'zi «shu tranzaksiyaniki» deb belgilaydi).
 --   4-raund: kod matnda FAQAT yangi qator / CR LF / bo'linmas bo'sh joy bilan ajratilgan (M25 — aniqlash qoidasining shu qismi alohida
 --   tekshiriladi); o'chirilgan o'quvchi tiklanganda qaytgan kod to'lovchi matnida ochiq bo'lsa — darhol almashtiriladi (T1–T4).
+--   5-raund: to'lov serveri taniydigan IQ-ID raqami («IQ+0043», «ИҚ-0043», «IQ = 0043») «[kod]» ga qo'shilmaydi (M26 = mask.test.cjs P3).
 --   Butun sinov BITTA tranzaksiya: urug' «oldingi tranzaksiyada yozilgan» bo'lishi uchun iqror.code_fresh tozalanadi (izohli joylarda).
 --   Har chaqiruv haqiqiy rol bilan (anon yoki authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin (jonli yoki --dev):
@@ -270,6 +271,26 @@ select zz.chk('M25 kod FAQAT yangi qator / CR LF / bo''linmas bo''sh joy bilan a
      from public.student_codes sc join (values ('IQ-0725','A7B8C9D0E1F2'), ('IQ-0726','B8C9D0E1F2A3'), ('IQ-0727','C9D0E1F2A3B4')) v(id, c) on v.id = sc.id)
   || '|' || (select string_agg(merchant_trans_id || '#' || "payerName", '|' order by id) from public.payments where id in ('click_t22','click_t23','click_t24')),
   E'^IQ-0725=true/1,IQ-0726=true/1,IQ-0727=true/1\\|Kod\n\\[kod\\]#Sinov Ota\\|\\[kod\\]#Sinov Ota\\|Kod:\u00a0\\[kod\\]#Sinov Ota$');
+-- 5-raund: IQ-ID raqami (to'lov serveridagi SID_IQ taniydigan yozilish: «IQ+0043», «ИҚ-0043», «IQ = 0043», kodga yopishgani ham) «[kod]» ga
+--   qo'shilmaydi (app.payer_idnum); harfga yopishgan «…iq», harfdan keyingi «IQ», son belgisi, 3 tadan ortiq belgi — ID emas
+select zz.chk('M26 app.payer_mask: IQ belgisidan keyingi ID raqami qoladi, ID bo''lmagan raqam kod bilan yashiriladi (payments/mask.test.cjs P3 bilan bir xil)',
+  (select string_agg(case when zz.pm(s) = w then 'ok' else s || ' -> ' || zz.pm(s) end, ' # ' order by n)
+     from (values
+                  (1, 'IQ+0043 3FA9 C21B 7D0E', 'IQ+0043 [kod]'), (2, 'ИҚ-0043 3FA9C21B7D0E', 'ИҚ-0043 [kod]'), (3, 'IQ#0043 3FA9 C21B 7D0E', 'IQ#0043 [kod]'),
+                  (4, 'IQ''0043 3FA9 C21B 7D0E', 'IQ''0043 [kod]'), (5, 'ІQ-0043 3FA9 C21B 7D0E', 'ІQ-0043 [kod]'), (6, 'IQ = 0043 3FA9 C21B 7D0E', 'IQ = 0043 [kod]'),
+                  (7, 'ик 0043 3FA9 C21B 7D0E', 'ик 0043 [kod]'), (8, 'IҚ_0043 3FA9 C21B 7D0E', 'IҚ_0043 [kod]'), (9, '5AIQ-0043 3FA9 C21B 7D0E', '5AIQ-0043 [kod]'),
+                  (10, 'IQ+00433FA9C21B7D0E', 'IQ+0043[kod]'), (11, 'ИК 00433FA9C21B7D0E', 'ИК 0043[kod]'), (12, 'IQ+0042 3FA9C21B7D0E', 'IQ+0042 [kod]'),
+                  (13, 'IQ–0043 3FA9C21B7D0E', 'IQ–0043 [kod]'), (14, '9IQ 0043 3FA9C21B7D0E', '9IQ 0043 [kod]'), (15, 'IQ_ 0043 3FA9C21B7D0E', 'IQ_ 0043 [kod]'),
+                  (16, 'IQ' || chr(160) || chr(160) || chr(160) || '#' || chr(160) || '0043 3FA9C21B7D0E', 'IQ' || chr(160) || chr(160) || chr(160) || '#' || chr(160) || '0043 [kod]'),
+                  (17, 'IQ' || chr(12288) || ':' || chr(12288) || '0043 3FA9C21B7D0E', 'IQ' || chr(12288) || ':' || chr(12288) || '0043 [kod]'),
+                  (18, 'IQ ' || chr(128512) || ' 0043 3FA9C21B7D0E', 'IQ ' || chr(128512) || ' 0043 [kod]'),
+                  (19, 'IQ   #   #   #   0043 3FA9C21B7D0E', 'IQ   #   #   #   0043 [kod]'),
+                  (20, 'Sinov Ota Sinov Ota Sinov Ota Sinov Ota Sinov Ota IQ+0043 3FA9C21B7D0E', 'Sinov Ota Sinov Ota Sinov Ota Sinov Ota Sinov Ota IQ+0043 [kod]'),
+                  (21, 'Sodiq 0043 3FA9 C21B 7D0E', 'Sodiq [kod]'), (22, 'Rafiq+0043 3FA9 C21B 7D0E', 'Rafiq+[kod]'), (23, 'ўIQ+0043 3FA9 C21B 7D0E', 'ўIQ+[kod]'),
+                  (24, 'αIQ+0043 3FA9 C21B 7D0E', 'αIQ+[kod]'), (25, 'xIQ   #   #   #   0043 3FA9C21B7D0E', 'xIQ   #   #   #   [kod]'),
+                  (26, 'IQ ½ 0043 3FA9 C21B 7D0E', 'IQ ½ [kod]'), (27, 'IQ - - - - 0043 3FA9 C21B 7D0E', 'IQ - - - - [kod]'), (28, 'IQ+123456789012', 'IQ+[kod]'),
+                  (29, 'IQ+3FA9C21B7D0F 3FA9C21B7D0E', 'IQ+[kod]'), (30, '3FA9C21B7D0E IQ+0043', '[kod] IQ+0043')) v(n, s, w)),
+  '^ok( # ok)*$');
 select zz.chk('K1 ochilgan kod bilan ulangan bog''lanishlar faqat sanaldi: hammasi o''z holatida (4 faol, 1 bekor qilingan)',
   (select string_agg(id || '=' || status, ',' order by id) from public.child_claims where id in ('cc_pk','cc_pc1','cc_tch','cc_pc2','cc_pc3')),
   '^cc_pc1=active,cc_pc2=active,cc_pc3=revoked,cc_pk=active,cc_tch=active$');

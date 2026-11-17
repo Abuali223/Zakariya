@@ -14,8 +14,12 @@
 //   (yaqin nusxa ham), IQ-ID va so'z qoladi; ajratgich — 1–2 ta [bo'sh joy, tab . , - _ /] yoki 3 tagacha bo'sh joy belgisi (yangi qator).
 //   4-raund: so'z boshidagi «IQ» va raqam orasida 3 tagacha istalgan belgi («IQ,0043», «IQ(0043)», «IQ  -  0043»), kiril «ИҚ» / «ІQ» —
 //   boshqa o'quvchi ID'si; ism oxiridagi «…iq» («Rafiq», «Sodiq») — ID emas; aniq kod qoidalarida ham matnda ikkinchi o'quvchining kodi
-//   bo'lsa — biriktirilmaydi (T1–T3, U13); telefon (+ ism) bir bolani, kod boshqasini ko'rsatsa — 'code_conflict' (N4, X1–X8, F8);
+//   bo'lsa — biriktirilmaydi (T1–T3, U13); telefon (+ ism) bir bolani, kod boshqasini ko'rsatsa — 'code_conflict' (N4, X1–X8);
 //   shakl qoidasi sinf + bo'sh joyli telefon / sana / summani kod deb olmaydi (F7b).
+//   5-raund: faktura ID («IQ-0050__2026-08», fakturasi yo'q) — matnda boshqa o'quvchining kodi / ID'si yoki 'code_conflict' bo'lsa
+//   biriktirilmaydi, Uzum o'zgarmagan (I1–I12); telefon (+ ism) qoidasi matnda boshqa o'quvchining ID'si bo'lsa — 'code_conflict' (Y1–Y8);
+//   kodlarni o'qib bo'lmasa telefon / faktura ID qoidasi faqat kodga o'xshash tekshirilmagan bo'lak bo'lmasa ishlaydi (F8–F9b); SID_IQ
+//   taniydigan IQ-ID raqami «[kod]» ga qo'shilmaydi (O23, O31–O43, Q15–Q16, P3 = SQL M26); sinf «5-A» / «5 A» / «A5» (F7b, F7c).
 //   node payments/mask.test.cjs
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), Module = require('module');
 
@@ -195,6 +199,11 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
   ok(r.row.matched === true && r.row.studentId === 'IQ-0042' && r.row.raw.via === 'code', `D2 «docId ESKI KOD» -> IQ-0042, via=code (${via(r.row)})`);
   r = await prep(CUR + ' fbX9kQ2');
   ok(r.row.matched === true && r.row.studentId === 'IQ-0042' && r.row.raw.via === 'code', `D3 «KOD docId» (teskari tartib) -> IQ-0042, via=code (${via(r.row)})`);
+  // IQ-raqam qiymat bo'yicha: «IQ-42» = «IQ-0042» (boshidagi nollarsiz yozilgan egasining ID'si — boshqa o'quvchi emas)
+  r = await prep('IQ-42 3FA9 C21B 7D0E');
+  ok(r.row.matched === true && r.row.studentId === 'IQ-0042' && r.row.raw.via === 'code_norm' && r.row.payerName === 'IQ-42 [kod]', `O15 egasining ID'si nollarsiz («IQ-42») + guruhlab yozilgan kod -> IQ-0042, via=code_norm (${via(r.row)})`);
+  r = await prep('IQ-042 ' + CUR);
+  ok(r.row.matched === true && r.row.studentId === 'IQ-0042' && r.row.payerName === 'IQ-042 [kod]', `O15b «IQ-042 KOD» -> IQ-0042 (${via(r.row)})`);
   // 3-raund (C1): matnda BOSHQA o'quvchi (IQ-0043 / fbX9kQ2) quyidagi shakllarda tilga olingan bo'lsa — kod bo'yicha biriktirilmaydi (kod egasi qoidasi
   //   ham, aniq kod qoidalari ham); yashirish baribir ishlaydi
   const refused = row => row.matched === false && row.studentId === '' && !!row.raw && row.raw.via !== 'code_norm' && row.raw.via !== 'code';
@@ -208,25 +217,26 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
     ['O12 boshqa o\'quvchining doc id\'si (fbX9kQ2) + IQ-0050 kodi guruhlab', 'fbX9kQ2 5E6F 7A8B 9C0D', 'fbX9kQ2 [kod]'],
     ['O13 boshqa o\'quvchining doc id\'si «-» bilan yopishgan', 'fbX9kQ2-5E6F7A8B9C0D', 'fbX9kQ2-[kod]'],
     ['O14 bazada yo\'q IQ-raqam (o\'chirilgan / xato yozilgan ID)', 'IQ-0099 3FA9 C21B 7D0E', 'IQ-0099 [kod]'],
-    ['O15 IQ-raqam egasining studentId\'siga aynan teng emas («IQ-42»)', 'IQ-42 3FA9 C21B 7D0E', 'IQ-42 [kod]'],
     ['O16 IQ-0050 kodi, hammasi «-» bilan («IQ-0043-5E6F-7A8B-9C0D»)', 'IQ-0043-5E6F-7A8B-9C0D', 'IQ-0043-[kod]'],
     ['O17 «№IQ-0043 5E6F 7A8B 9C0D»', '№IQ-0043 5E6F 7A8B 9C0D', '№IQ-0043 [kod]'],
     ['O18 «faqat kod» qoidasi: kod aniq, sinf maydonida boshqa o\'quvchi ID\'si', CUR_U, '[kod]', '5A-IQ-0043'],
     ['O19 «ID + kod» qoidasi: egasining ID\'si va kodi, yana boshqa o\'quvchi ID\'si', 'IQ-0050 ' + CUR_U + ' IQ-0043', 'IQ-0050 [kod] IQ-0043'],
     ['O20 «faqat kod» qoidasi: sinf maydonida boshqa o\'quvchining doc id\'si', CUR_U, '[kod]', 'fbX9kQ2'],
-    ['O23 sinfga ajratgichsiz yopishgan boshqa o\'quvchi ID\'si («5AIQ-0043»; «IQ» alohida bo\'lak emas — raqami ham yashirinadi)', '5AIQ-0043 3FA9 C21B 7D0E', '5AIQ-[kod]'],
+    ['O23 sinfga ajratgichsiz yopishgan boshqa o\'quvchi ID\'si («5AIQ-0043»; SID_IQ taniydi — raqami qoladi)', '5AIQ-0043 3FA9 C21B 7D0E', '5AIQ-0043 [kod]'],
     // ko'rik misollari aynan: IQ-0042 (doc id fbX9kQ2) — IQ-0050 kodi bilan
     ['O24 «IQ-0042-5E6F-7A8B-9C0D»', 'IQ-0042-5E6F-7A8B-9C0D', 'IQ-0042-[kod]'], ['O25 «№IQ-0042 5E6F 7A8B 9C0D»', '№IQ-0042 5E6F 7A8B 9C0D', '№IQ-0042 [kod]'],
     ['O26 apostrof', "IQ-0042'5E6F7A8B9C0D", "IQ-0042'[kod]"], ['O27 kiril harfli kod', 'IQ-0042-5Е6F7А8В9С0D', 'IQ-0042-[kod]'],
     ['O28 sinf maydonida «5A-IQ-0042», IQ-0050 kodi guruhlab', '5E6F 7A8B 9C0D', '[kod]', '5A-IQ-0042'],
     // so'z boshidagi «IQ» va raqam orasida 3 tagacha istalgan belgi (bo'sh joylar sanalmaydi), kiril harfli «IQ»
     ['O29 «IQ,0043»', 'IQ,0043 3FA9 C21B 7D0E', 'IQ,0043 [kod]'], ['O30 «IQ(0043)»', 'IQ(0043) 3FA9 C21B 7D0E', 'IQ(0043) [kod]'],
-    ['O31 «IQ+0043»', 'IQ+0043 3FA9 C21B 7D0E', 'IQ+[kod]'], ['O32 «IQ=0043»', 'IQ=0043 3FA9 C21B 7D0E', 'IQ=[kod]'],
-    ["O33 «IQ'0043»", "IQ'0043 3FA9 C21B 7D0E", "IQ'[kod]"], ['O34 «IQ\\0043»', 'IQ\\0043 3FA9 C21B 7D0E', 'IQ\\[kod]'],
-    ['O35 «IQ  -  0043»', 'IQ  -  0043 3FA9 C21B 7D0E', 'IQ  -  [kod]'], ['O36 «ID: iq #0043»', 'ID: iq #0043 3FA9 C21B 7D0E', 'ID: iq #[kod]'],
-    ['O37 kiril «ИҚ-0043»', 'ИҚ-0043 3FA9 C21B 7D0E', 'ИҚ-[kod]'], ['O38 kiril «І» bilan «ІQ-0043»', 'ІQ-0043 3FA9 C21B 7D0E', 'ІQ-[kod]'],
-    ['O39 kiril «ик 0043» (kichik harf)', 'ик 0043 3FA9 C21B 7D0E', 'ик [kod]'], ['O40 sinf maydonida kiril «ІҚ 0043»', '3FA9 C21B 7D0E', '[kod]', 'ІҚ 0043'],
-    ['O41 lotin I + kiril Қ «IҚ_0043»', 'IҚ_0043 3FA9 C21B 7D0E', 'IҚ_[kod]']]){
+    ['O31 «IQ+0043»', 'IQ+0043 3FA9 C21B 7D0E', 'IQ+0043 [kod]'], ['O32 «IQ=0043»', 'IQ=0043 3FA9 C21B 7D0E', 'IQ=0043 [kod]'],
+    ["O33 «IQ'0043»", "IQ'0043 3FA9 C21B 7D0E", "IQ'0043 [kod]"], ['O34 «IQ\\0043»', 'IQ\\0043 3FA9 C21B 7D0E', 'IQ\\0043 [kod]'],
+    ['O35 «IQ  -  0043»', 'IQ  -  0043 3FA9 C21B 7D0E', 'IQ  -  0043 [kod]'], ['O36 «ID: iq #0043»', 'ID: iq #0043 3FA9 C21B 7D0E', 'ID: iq #0043 [kod]'],
+    ['O37 kiril «ИҚ-0043»', 'ИҚ-0043 3FA9 C21B 7D0E', 'ИҚ-0043 [kod]'], ['O38 kiril «І» bilan «ІQ-0043»', 'ІQ-0043 3FA9 C21B 7D0E', 'ІQ-0043 [kod]'],
+    ['O39 kiril «ик 0043» (kichik harf)', 'ик 0043 3FA9 C21B 7D0E', 'ик 0043 [kod]'], ['O40 sinf maydonida kiril «ІҚ 0043»', '3FA9 C21B 7D0E', '[kod]', 'ІҚ 0043'],
+    ['O41 lotin I + kiril Қ «IҚ_0043»', 'IҚ_0043 3FA9 C21B 7D0E', 'IҚ_0043 [kod]'],
+    // IQ belgisidan keyingi raqam kodga yopishgan bo'lsa ham qoladi (SID_IQ ham shu raqamni oladi)
+    ['O42 «IQ+0043» kodga yopishgan', 'IQ+00433FA9C21B7D0E', 'IQ+0043[kod]'], ['O43 kiril «ИК 0043» kodga yopishgan', 'ИК 00433FA9C21B7D0E', 'ИК 0043[kod]']]){
     r = await prep(mti, klass || '');
     ok(r.row.payerName === want && refused(r.row), `${n}: «${mti}»${klass ? ' / «' + klass + '»' : ''} — biriktirilmadi, yashirildi (${via(r.row)})`);
   }
@@ -254,7 +264,8 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
     // «…iq» bilan tugaydigan ism — harfga yopishgan «iq» ID emas (kengaytirilgan qoidada ham)
     ['Q12 «Rafiq KOD»', 'Rafiq ' + CUR, 'Rafiq [kod]', 'IQ-0042'], ['Q13 «Sodiq» + guruhlab yozilgan kod', 'Sodiq 3FA9 C21B 7D0E', 'Sodiq [kod]', 'IQ-0042'],
     ['Q14 «Sodiq 0043 …» (raqam ID emas)', 'Sodiq 0043 3FA9 C21B 7D0E', 'Sodiq [kod]', 'IQ-0042'],
-    ['Q15 egasining o\'z ID\'si kiril harflarda («ИҚ-0050»)', 'ИҚ-0050 5E6F 7A8B 9C0D', 'ИҚ-[kod]', 'IQ-0050']]){
+    ['Q15 egasining o\'z ID\'si kiril harflarda («ИҚ-0050»)', 'ИҚ-0050 5E6F 7A8B 9C0D', 'ИҚ-0050 [kod]', 'IQ-0050'],
+    ['Q16 egasining o\'z ID\'si «IQ = 0050»', 'IQ = 0050 5E6F 7A8B 9C0D', 'IQ = 0050 [kod]', 'IQ-0050']]){
     r = await prep(mti, klass || '', phone || '');
     ok(r.row.payerName === want && norm(r.row, sid), `${n}: «${mti}» — ${sid} ga (${via(r.row)})`);
   }
@@ -307,7 +318,24 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
     ['3FA9 | C21B | 7D0E', '3FA9 | C21B | 7D0E'], ['3FA9    C21B    7D0E', '3FA9    C21B    7D0E'], ['3FA9 - C21B - 7D0E', '3FA9 - C21B - 7D0E'],
     ['3FA9 / C21B / 7D0E', '3FA9 / C21B / 7D0E'], ['3FA9:C21B:7D0E', '3FA9:C21B:7D0E'], ['3FA9–C21B—7D0E', '3FA9–C21B—7D0E'],
     ['3FA9...C21B...7D0E', '3FA9...C21B...7D0E'], ['3FA9\n\n\n\nC21B\n7D0E', '3FA9\n\n\n\nC21B\n7D0E'], ['IQ-0042 _ 3FA9 C21B 7D0E __', 'IQ-0042 _ [kod] __']];
-  for(const [name, list] of [['P1 yashirish (C3: yondosh hex bo\'laklar, yaqin nusxa; SQL M19)', P1], ['P2 ajratgichlar (C5; SQL M23)', P2]]){
+  // 5-raund: IQ-ID raqami (SID_IQ taniydigan yozilish) «[kod]» ga qo'shilmaydi; harfga yopishgan «…iq», harfdan keyingi «IQ», son belgisi,
+  //   3 tadan ortiq belgi — ID emas; kodning o'zi va yaqin nusxasi baribir yashiriladi (SQL M26 — o'sha satrlar)
+  const NB = String.fromCharCode(0xA0), IS = String.fromCharCode(0x3000), EM = String.fromCodePoint(0x1F600);
+  const P3 = [['IQ+0043 3FA9 C21B 7D0E', 'IQ+0043 [kod]'], ['ИҚ-0043 3FA9C21B7D0E', 'ИҚ-0043 [kod]'], ['IQ#0043 3FA9 C21B 7D0E', 'IQ#0043 [kod]'],
+    ['IQ\'0043 3FA9 C21B 7D0E', 'IQ\'0043 [kod]'], ['ІQ-0043 3FA9 C21B 7D0E', 'ІQ-0043 [kod]'], ['IQ = 0043 3FA9 C21B 7D0E', 'IQ = 0043 [kod]'],
+    ['ик 0043 3FA9 C21B 7D0E', 'ик 0043 [kod]'], ['IҚ_0043 3FA9 C21B 7D0E', 'IҚ_0043 [kod]'], ['5AIQ-0043 3FA9 C21B 7D0E', '5AIQ-0043 [kod]'],
+    ['IQ+00433FA9C21B7D0E', 'IQ+0043[kod]'], ['ИК 00433FA9C21B7D0E', 'ИК 0043[kod]'], ['IQ+0042 3FA9C21B7D0E', 'IQ+0042 [kod]'],
+    ['IQ–0043 3FA9C21B7D0E', 'IQ–0043 [kod]'], ['9IQ 0043 3FA9C21B7D0E', '9IQ 0043 [kod]'], ['IQ_ 0043 3FA9C21B7D0E', 'IQ_ 0043 [kod]'],
+    ['IQ' + NB + NB + NB + '#' + NB + '0043 3FA9C21B7D0E', 'IQ' + NB + NB + NB + '#' + NB + '0043 [kod]'],
+    ['IQ' + IS + ':' + IS + '0043 3FA9C21B7D0E', 'IQ' + IS + ':' + IS + '0043 [kod]'], ['IQ ' + EM + ' 0043 3FA9C21B7D0E', 'IQ ' + EM + ' 0043 [kod]'],
+    ['IQ   #   #   #   0043 3FA9C21B7D0E', 'IQ   #   #   #   0043 [kod]'],
+    ['Sinov Ota Sinov Ota Sinov Ota Sinov Ota Sinov Ota IQ+0043 3FA9C21B7D0E', 'Sinov Ota Sinov Ota Sinov Ota Sinov Ota Sinov Ota IQ+0043 [kod]'],
+    ['Sodiq 0043 3FA9 C21B 7D0E', 'Sodiq [kod]'], ['Rafiq+0043 3FA9 C21B 7D0E', 'Rafiq+[kod]'], ['ўIQ+0043 3FA9 C21B 7D0E', 'ўIQ+[kod]'],
+    ['αIQ+0043 3FA9 C21B 7D0E', 'αIQ+[kod]'], ['xIQ   #   #   #   0043 3FA9C21B7D0E', 'xIQ   #   #   #   [kod]'], ['IQ ½ 0043 3FA9 C21B 7D0E', 'IQ ½ [kod]'],
+    ['IQ - - - - 0043 3FA9 C21B 7D0E', 'IQ - - - - [kod]'], ['IQ+123456789012', 'IQ+[kod]'], ['IQ+3FA9C21B7D0F 3FA9C21B7D0E', 'IQ+[kod]'],
+    ['3FA9C21B7D0E IQ+0043', '[kod] IQ+0043']];
+  for(const [name, list] of [['P1 yashirish (C3: yondosh hex bo\'laklar, yaqin nusxa; SQL M19)', P1], ['P2 ajratgichlar (C5; SQL M23)', P2],
+                              ['P3 IQ-ID raqami (5-raund; SQL M26)', P3]]){
     const bad = [];
     for(const [s, w] of list){ const m = await maskPayer(s); if(m !== w) bad.push(JSON.stringify(s) + ' -> ' + JSON.stringify(m)); }
     ok(!bad.length, `${name}: ${list.length} ta satr${bad.length ? ' — ' + bad.join('; ') : ''}`);
@@ -319,6 +347,45 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
   const m11 = r;
   r = await prep(CUR + '__2026-09');
   ok(r.row.merchant_trans_id === '[kod]' && r.row.raw.mode === 'freeform', `M12 «KOD__oy» (invoice yo'q -> erkin) — kod yashirilgan, «__2026-09» (yondosh raqamli bo'laklar) ham («${r.row.merchant_trans_id}»)`);
+  // 5-raund: faktura ID («IQ-0050__2026-08» — shu oy fakturasi yo'q) bo'yicha biriktirish — faqat telefon / ism qoidasi 'code_conflict'
+  //   bermagan, matndagi kodlar faqat shu o'quvchiniki va matnda boshqa o'quvchi tilga olinmagan bo'lsa. IQ-0042 (fbX9kQ2, 5A) va IQ-0050
+  //   (7A) — bitta telefonda.
+  state.student_private['fbX9kQ2'] = { id: 'fbX9kQ2', parentPhone: '+998000000055' };
+  state.student_private['IQ-0050'] = { id: 'IQ-0050', parentPhone: '+998000000055' };
+  for(const [n, mti, klass, phone, sid, want] of [
+    ['I1 faqat faktura ID', 'IQ-0050__2026-08', '', '', 'IQ-0050', 'IQ-0050__2026-08'],
+    ['I2 faktura ID + umumiy telefon (aka-uka — telefon qoidasi aniqlay olmaydi)', 'IQ-0050__2026-08', '', '998000000055', 'IQ-0050', 'IQ-0050__2026-08'],
+    ['I3 faktura ID + egasining o\'z kodi', 'IQ-0050__2026-08 ' + CUR_U, '', '', 'IQ-0050', 'IQ-0050__[kod]'],
+    ['I4 faktura ID + BOSHQA o\'quvchining (IQ-0042) kodi', 'IQ-0050__2026-08 ' + CUR, '', '', '', 'IQ-0050__[kod]'],
+    ['I5 ... + umumiy telefon', 'IQ-0050__2026-08 ' + CUR, '', '998000000055', '', 'IQ-0050__[kod]'],
+    ['I6 ... + sinf 7A va umumiy telefon', 'IQ-0050__2026-08 ' + CUR, '7A', '998000000055', '', 'IQ-0050__[kod]'],
+    ['I7 ... + sinf 5A va umumiy telefon (telefon qoidasi: code_conflict)', 'IQ-0050__2026-08 ' + CUR, '5A', '998000000055', '', 'IQ-0050__[kod]'],
+    ['I8 «IQ-0050__KOD» (oysiz, boshqa o\'quvchining kodi)', 'IQ-0050__' + CUR, '', '', '', 'IQ-0050__[kod]'],
+    ['I9 faktura ID + boshqa o\'quvchining ID\'si', 'IQ-0050__2026-08 IQ-0043', '', '', '', 'IQ-0050__2026-08 IQ-0043'],
+    ['I10 faktura ID + sinf 5A va umumiy telefon: telefon qoidasi IQ-0042 ni, faktura IQ-0050 ni ko\'rsatadi', 'IQ-0050__2026-08', '5A', '998000000055', '', 'IQ-0050__2026-08'],
+    ['I11 faktura ID + egasining ESKI kodi', 'IQ-0050__2026-08 ' + OLD_U, '', '', 'IQ-0050', 'IQ-0050__[kod]']]){
+    r = await prep(mti, klass, phone);
+    const good = sid ? (r.row.matched === true && r.row.studentId === sid && r.row.raw.via === 'invoice-id') : (r.row.matched === false && r.row.studentId === '');
+    ok(good && r.row.payerName === want && !has(r.row, CUR) && !has(r.row, CUR_U), `${n}: «${mti}»${klass ? ' / «' + klass + '»' : ''}${phone ? ' / tel' : ''} — ${sid || 'biriktirilmadi'} (${via(r.row)})`);
+  }
+  // Uzum — o'zgarmagan: «{sid}__{oy}» faqat aniq faktura (yo'q bo'lsa — rad), kod bilan ham
+  for(const [acc, okW] of [['IQ-0050__2026-09', true], ['IQ-0050__2026-08', false], ['IQ-0050__2026-08 ' + CUR, false], ['IQ-0050__2026-08 ' + CUR_U, false]]){
+    const u0 = await handleUzum('check', { serviceId: SID, params: { account: acc } });
+    ok((u0.status === 'OK') === okW, `I12 Uzum check «${acc.replace(CUR, 'A kodi').replace(CUR_U, 'B kodi')}» — ${okW ? 'OK' : 'rad'} (${u0.status})`);
+  }
+  // telefon (+ ism / sinf) qoidasi: matnda BOSHQA o'quvchining ID'si (har qanday tanilgan yozilishi) bo'lsa — 'code_conflict' (qo'lda)
+  for(const [n, mti, klass, sid] of [
+    ['Y1 B ning ID\'si + A kodi, sinf 5A (A)', 'IQ-0050 ' + CUR, '5A', ''], ['Y2 «IQ_0050», sinf 5A', 'IQ_0050', '5A', ''],
+    ['Y3 A ismi + B ning ID\'si «IQ+0050»', 'Sardor IQ+0050', '', ''], ['Y4 A ismi, sinf maydonida B ning ID\'si', 'Sardor', '5A IQ-0050', ''],
+    ['Y5 A ismi (avvalgidek)', 'Sardor', '', 'IQ-0042'], ['Y6 A ismi + o\'z ID\'si', 'IQ-0042 Sardor', '', 'IQ-0042'],
+    ['Y7 B ismi + o\'z ID\'si kiril harflarda', 'ИҚ-0050 Uzum', '', 'IQ-0050'], ['Y8 A ismi + o\'z kodi', 'Sardor ' + CUR, '', 'IQ-0042'],
+    ['Y9 A ismi + o\'z ID\'si boshidagi nollarsiz «IQ-42»', 'Sardor IQ-42', '', 'IQ-0042'], ['Y10 «IQ-50» — B ning ID\'si (nollarsiz)', 'Sardor IQ-50', '', '']]){
+    r = await prep(mti, klass, '998000000055');
+    const good = sid ? (r.row.matched === true && r.row.studentId === sid && r.row.raw.via === 'phone')
+                     : (r.row.matched === false && r.row.studentId === '' && r.row.raw.via === 'code_conflict');
+    ok(good, `${n}: «${mti}»${klass ? ' / «' + klass + '»' : ''} + umumiy telefon — ${sid || 'biriktirilmadi (code_conflict)'} (${via(r.row)})`);
+  }
+  delete state.student_private['fbX9kQ2']; delete state.student_private['IQ-0050'];
 
   // ---------- Click complete: matn qayta yozilmaydi, javob asl ----------
   const cp = Object.assign({}, m1.p, { action: '1', merchant_prepare_id: m1.res.merchant_prepare_id, error: '0' }); cp.sign_string = sign(cp, true);
@@ -419,14 +486,43 @@ const CUR = '3FA9C21B7D0E', OLD = '9C0D1E2F3A4B', CUR_U = '5E6F7A8B9C0D', OLD_U 
                'Sinov Ota\n+998 90 123 45 67\n998901234567\n2026-11-16, 16.11.2026\n1 500 000 so\'m\n5A, 11B\nIQ-0042',
                // sinf + bo'sh joy bilan telefon / sana / summa (A–F harfi faqat boshidagi sinfdan) — guruh kod emas
                '5A 998 90 123 45 67', 'Sinov Ali 5A 998 90 123 45 67', '11B 2026-11-16 1 500 000', '9D 16.11.2026 15:30 1 500 000',
-               '5В 998 90 123 45 67', '5A, 90 123 45 67 1 500 000'];
+               '5В 998 90 123 45 67', '5A, 90 123 45 67 1 500 000',
+               // 5-raund: «5-A» / «5 A» (1–2 raqam + bitta harf, kiril ham) va «A5» yozilishidagi sinf
+               '5-A 998 90 123 45 67', '5 A 998 90 123 45 67', 'Sinov Ali 5-A 998 90 123 45 67', '11-B 2026-11-16 1 500 000',
+               '9-D 16.11.2026 15:30 1 500 000', '5-В 998 90 123 45 67', 'IQ-0042 5-A 998 90 123 45 67', 'A5 998 90 123 45 67',
+               '5-A, 998 90 123 45 67', '7 Д 998 90 123 45 67', '5 A 998 90 123 456 7', 'В11 2026-11-16 1 500 000'];
   const f7bad = [];
   for(const s of f7b){ const m = await maskPayer(s); if(m !== s) f7bad.push(JSON.stringify(s) + ' -> ' + JSON.stringify(m)); }
   ok(!f7bad.length, `F7b shakl qoidasi yangi ajratgichlar bilan ham telefon / sana / summa / sinf / ID'ga tegmaydi${f7bad.length ? ': ' + f7bad.join('; ') : ''}`);
+  // ... sinf yozilishi kodni «himoya» qilmaydi: sinfdan keyin kodga o'xshash guruh — yashiriladi
+  const f7c = [['5-A 3FA9 C21B 7D0E', '[kod]'], ['5 A 3FA9C21B7D0E', '[kod]'], ['A5 3FA9 C21B 7D0E', '[kod]'], ['Sinov 5-A, 3FA9/C21B/7D0E', 'Sinov [kod]'],
+               ['5 A 998 90 3FA9 C21B 7D0E', '[kod]']];
+  const f7cbad = [];
+  for(const [s, w] of f7c){ const m = await maskPayer(s); if(m !== w) f7cbad.push(JSON.stringify(s) + ' -> ' + JSON.stringify(m)); }
+  ok(!f7cbad.length, `F7c sinfdan keyingi kodga o'xshash guruh baribir yashiriladi${f7cbad.length ? ': ' + f7cbad.join('; ') : ''}`);
+  // kodlarni o'qib bo'lmasa telefon (+ ism) qoidasi: kodga o'xshash tekshirilmagan bo'lak bo'lsa — biriktirmaydi; faqat telefon maydonidagi
+  //   raqamli kalit (telefonning o'zi) va ism so'zlari — to'sqinlik qilmaydi
   state.student_private['IQ-0043'] = { id: 'IQ-0043', parentPhone: '+998000000043' };
-  r = await prep('Sinov Boshqa', '', '998000000043');
-  ok(r.row.matched === false && r.row.studentId === '' && r.row.raw.via === 'code_conflict', `F8 kodlarni o'qib bo'lmasa telefon (+ ism) qoidasi ham biriktirmaydi — matndagi kodga o'xshash bo'lak kimniki, noma'lum (${via(r.row)})`);
+  for(const [n, mti, phone, klass, sid] of [
+    ['F8 ism + telefon (kodga o\'xshash bo\'lak yo\'q)', 'Sinov Boshqa', '998000000043', '', 'IQ-0043'],
+    ['F8a ism + «+998 …» telefon, sinf', 'Sinov Boshqa', '+998 00 000 00 43', '6B', 'IQ-0043'],
+    ['F8b ism + kod (egasiniki, lekin tekshirib bo\'lmaydi)', 'Sinov Boshqa 0A1B 2C3D 4E5F', '998000000043', '', ''],
+    ['F8c matnda 12 raqam (eski faqat raqamli kod bo\'lishi mumkin)', 'Sinov Boshqa 123456789012', '998000000043', '', ''],
+    ['F8d telefon maydonida harfli kodga o\'xshash bo\'lak', 'Sinov Boshqa', '0A1B2C3D4E5F 998000000043', '', ''],
+    ['F8e telefon matnda ham yozilgan (12 raqam — matn maydonida)', 'Sinov Boshqa 998000000043', '998000000043', '', ''],
+    ['F8f sinf maydonida kodga o\'xshash bo\'lak', 'Sinov Boshqa', '998000000043', '6B 0A1B2C3D4E5F', ''],
+    ['F8g matnda boshqa o\'quvchining ID\'si', 'Sinov Boshqa IQ-0050', '998000000043', '', '']]){
+    r = await prep(mti, klass, phone);
+    const good = sid ? (r.row.matched === true && r.row.studentId === sid && r.row.raw.via === 'phone')
+                     : (r.row.matched === false && r.row.studentId === '' && r.row.raw.via === 'code_conflict');
+    ok(good, `${n}: «${mti}» / tel «${phone}»${klass ? ' / «' + klass + '»' : ''} — kodlarni o'qib bo'lmadi: ${sid || 'biriktirilmadi (code_conflict)'} (${via(r.row)})`);
+  }
   delete state.student_private['IQ-0043'];
+  // faktura ID qoidasi ham: kodga o'xshash tekshirilmagan bo'lak bo'lsa — yo'q; faqat telefon — to'sqinlik qilmaydi
+  r = await prep('IQ-0050__2026-08', '', '998000000001');
+  ok(r.row.matched === true && r.row.studentId === 'IQ-0050' && r.row.raw.via === 'invoice-id', `F9 «IQ-0050__2026-08» + telefon, kodlarni o'qib bo'lmadi — faktura ID bo'yicha IQ-0050 (${via(r.row)})`);
+  r = await prep('IQ-0050__2026-08 ' + CUR_U);
+  ok(r.row.matched === false && r.row.studentId === '' && r.row.payerName === 'IQ-0050__[kod]', `F9b ... matnda kod (tekshirib bo'lmaydi) — biriktirilmadi (${via(r.row)})`);
   state.__down = new Set(['student_code_prev']);   // faqat eski kodlar jadvali o'qilmaydi
   r = await prep('Sinov ' + CUR + ' va ' + DIGITS);
   ok(r.row.payerName === 'Sinov [kod] va [kod]', `F4 qisman xato: joriy kodlar jadvalida topilgan kod (faqat raqamli ham) yashirildi («${r.row.payerName}»)`);

@@ -2226,9 +2226,14 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   «G'aznachi» roli kassa xodimiga yo'q; yoriqnomalar §1 sarlavhasi, 3-buyruq, Sh-3 / Sh-5, FD-16 / FD-30, egasi bloki; qabulxona kodni
   telefonda faqat o'quvchi kartasidagi «Ota telefoni» / «Ona telefoni» raqamiga, shaxsan — hujjatdagi F.I.Sh. kartadagi bilan mos
   kelsa beradi; 4-yanvar ertalab kassir Direktor «tayyor» demaguncha kassa hujjati yozmaydi; stendda kassir — «Kassir» hisobi.
-- **Tekshiruv:** ikkala qism mustaqil tekshiruvchidan «pass» (past eslatmalar shu bo'limda tuzatildi). To'lov biriktirishning qolgan
-  past darajali eslatmalari (invoice-id zaxira yo'li, telefon qoidasi va boshqa o'quvchi ID si, yashirishda ID raqamlari, fail-closed
-  sinf yozuvlari) — keyingi raund.
+- **Tekshiruv:** ikkala qism mustaqil tekshiruvchidan «pass» (past eslatmalar shu bo'limda tuzatildi).
+- **5-raund — to'lov biriktirishning past darajali eslatmalari (`payments/index.cjs`, `payer-code-mask.sql`):** Click faktura ID zaxira
+  yo'li («IQ-0050__2026-08») matnda boshqa o'quvchining kodi / ID'si yoki `code_conflict` bo'lsa ishlamaydi; telefon (+ ism) qoidasi
+  matnda boshqa o'quvchining ID'si bo'lsa ham `code_conflict`; kod jadvallari o'qilmaganda telefon qoidasi faqat tekshirilmagan kodga
+  o'xshash bo'lak bo'lsa to'xtaydi (oddiy ism + telefon to'lovlari yana biriktiriladi); yashirishda boshqa o'quvchi ID raqami
+  o'qiladigan qoladi («IQ+0043 [kod]» — JS va SQL `app.payer_idnum` bir xil); fail-closed rejimida «5-A», «5 A», «A5» sinf yozuvlari
+  yashirilmaydi; IQ-raqam qiymat bo'yicha solishtiriladi («IQ-42» = «IQ-0042», rahbar). Mustaqil tekshiruv «pass»; `mask.test.cjs`
+  hammasi o'tdi, `test-payer-codes.sql` LIVE 64/0, DEV 67/0; tasodifiy biriktirish fuzz'ida noto'g'ri o'quvchi — 0.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

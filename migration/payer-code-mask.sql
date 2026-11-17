@@ -35,7 +35,8 @@ do $iqror_guard$ begin raise exception 'iqror: payer-code-mask.sql ALOHIDA ishga
 --      «3FA9_C21B_7D0E», «3FA9/C21B/7D0E», «3FA9, C21B, 7D0E», qatorma-qator yozilgan kod. Bo'lak (katta harfda yoki kodga o'xshash
 --      harflar normallangan holda) kodga teng bo'lsa yoki qator bo'laklari ulanganda undagi 12 belgili 0-9/A-F oyna kodga teng bo'lsa —
 --      kod va qatorda unga yondosh HEX-shaklli bo'laklar (oradagi ajratgichlar bilan) bitta «[kod]» (kodning bir belgisi farq qiladigan
---      nusxasi ham ochiq qolmasin). IQ-0042 kabi ID va hex bo'lmagan bo'lak (ism, so'z) o'zgarmaydi.
+--      nusxasi ham ochiq qolmasin). IQ-0042 kabi ID (to'lov serveri taniydigan har yozilishi: «IQ+0043», «IQ = 0043», «ИҚ-0043» —
+--      app.payer_idnum) va hex bo'lmagan bo'lak (ism, so'z) o'zgarmaydi.
 --      app.payer_codes_fix() — tuzatish: (0) student_code_prev dagi 12 belgidan qisqa (hech kimga berilmagan) yozuvlar o'chiriladi;
 --      (1) to'lovchi matnida (payments matn maydonlari va raw, refunds."studentName" — biriktirilmagan to'lov qaytarilganda
 --      payerName nusxasi) JORIY kodi uchragan o'quvchilarga yangi kod; (2) shu matnlardagi har joriy / eski kod -> «[kod]»;
@@ -217,21 +218,42 @@ create or replace function app.payer_norm(p text) returns text
 language sql immutable set search_path = public, app, pg_temp as $$
   select upper(translate(p, 'АаБбВвСсДдЕеФфОоOo', 'AABBBBCCDDEEFF0000'))
 $$;
+-- IQ-ID raqami (payments/index.cjs kodIdNum bilan AYNAN bir xil): matnning p_at (1 dan) o'rnidagi bo'lak raqam bilan boshlanadi va undan
+--   oldingi matn (40 belgigacha) IQ belgisi bilan tugaydi — «IQ» + «-» / «_» / «–» / «—» (+ 2 tagacha bo'sh joy / «_» / «-») yoki oldida
+--   harf yo'q «IQ», «ІQ», «IҚ», «ІҚ», «ИҚ», «ИК» (katta-kichik harf) + 3 tagacha boshqa belgi (atrofida bo'sh joylar): «IQ+0043»,
+--   «IQ = 0043», «ИҚ-0043», «ІQ-0043» (to'lov serveridagi SID_IQ qoidasi). Harf / son — U+0000–U+052F dagi ro'yxat, bo'sh joy — JS \s
+--   ro'yxati (JS bilan bir xil natija uchun; PostgreSQL regexida \p{…} yo'q).
+create or replace function app.payer_idnum(p text, p_at int) returns boolean
+language sql immutable set search_path = public, app, pg_temp as $$
+  select substr(p, p_at, 1) ~ '^[0-9]$'
+     and substr(p, greatest(1, p_at - 40), p_at - greatest(1, p_at - 40)) ~ (
+       '(?:[Ii][Qq][-_\u2013\u2014][\u0009-\u000D \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF_-]{0,2}'
+       || '|(?:^|[^A-Za-z\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0345\u0370-\u0374'
+       ||        '\u0376\u0377\u037A-\u037D\u037F\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5\u03F7-\u0481\u048A-\u052F])'
+       || '(?:[Ii][Qq]|[\u0406\u0456][Qq]|[Ii][\u049A\u049B]|[\u0406\u0456][\u049A\u049B]|[\u0418\u0438][\u049A\u049B]|[\u0418\u0438][\u041A\u043A])'
+       || '(?:[\u0009-\u000D \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]{0,3}'
+       ||    '[^A-Za-z\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0345\u0370-\u0374'
+       ||     '\u0376\u0377\u037A-\u037D\u037F\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5\u03F7-\u0481\u048A-\u052F'
+       ||     '0-9\u00B2\u00B3\u00B9\u00BC-\u00BE\u0009-\u000D \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]){0,3}'
+       || '[\u0009-\u000D \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]{0,3})$')
+$$;
 -- Matndagi kodlarni (p_codes — KATTA harfli kodlar) «[kod]» bilan almashtiradi; qolgan matn (ajratgichlar ham) AYNAN saqlanadi.
 --   Bo'laklar qatori bo'yicha (payments/index.cjs kodMaskRun / kodWiden bilan bir xil): kodga teng bo'lak yoki ulangan qatordagi
 --   12 belgili 0-9/A-F oyna — kod belgilari (oradagi ajratgichlar bilan); so'ng kengaytiriladi: kod turgan bo'lakdan chapga va o'ngga
 --   qatordagi HEX-shaklli (normallangan: faqat 0-9/A-F) bo'laklar ham (kod bo'lak o'rtasida bo'lsa — bo'lakning kod oldidagi / ortidagi
---   qismi ham hex bo'lsagina); hex bo'lmagan bo'lakda va IQ-ID raqamida («IQ» dan keyingi faqat raqamli bo'lak; «IQ» dan keyingi
---   bo'lakdagi kodning oldi) to'xtaydi. Hammasi bitta «[kod]»: «IQ-0042 3FA9 C21B 7D0E» -> «IQ-0042 [kod]», «3FA9C21B7D0E 3FA9C21B7D0F»
---   -> «[kod]», «Sinov Ali 3FA9C21B7D0E» -> «Sinov Ali [kod]», «IQ00423FA9C21B7D0E» -> «IQ0042[kod]».
+--   qismi ham hex bo'lsagina); hex bo'lmagan bo'lakda va IQ-ID raqamida (qatorda «IQ» dan keyingi yoki IQ belgisidan keyingi —
+--   app.payer_idnum — faqat raqamli bo'lak; shunday bo'lakdagi kodning oldi) to'xtaydi. Hammasi bitta «[kod]»: «IQ-0042 3FA9 C21B 7D0E»
+--   -> «IQ-0042 [kod]», «IQ+0043 3FA9 C21B 7D0E» -> «IQ+0043 [kod]», «3FA9C21B7D0E 3FA9C21B7D0F» -> «[kod]», «Sinov Ali 3FA9C21B7D0E» ->
+--   «Sinov Ali [kod]», «IQ00423FA9C21B7D0E» -> «IQ0042[kod]».
 create or replace function app.payer_mask(p text, p_codes text[]) returns text
 language plpgsql immutable set search_path = public, app, pg_temp as $$
 declare m text[]; v_out text := ''; v_run text; v_tok text; v_j text; v_w text; v_pos int[]; v_at int[]; v_base boolean[]; v_mk boolean[];
-        v_ts int[]; v_te int[]; v_tu text[]; v_tn text[]; n int; nt int; i int; k int; ts int; a int; b int; x int; y int;
+        v_ts int[]; v_te int[]; v_tu text[]; v_tn text[]; n int; nt int; i int; k int; ts int; a int; b int; x int; y int; v_off int := 0;
 begin
   if p is null or p = '' or p_codes is null or cardinality(p_codes) = 0 then return p; end if;
+  -- qatorlar va oradagi matn ketma-ket butun matnni qoplaydi: v_off — joriy qatordan oldingi belgilar soni (app.payer_idnum uchun)
   for m in select regexp_matches(p, '([0-9A-Za-zА-Яа-яЁё]+(?:(?:[ \t.,_/-]{1,2}|[ \t\r\n\u00A0]{1,3})[0-9A-Za-zА-Яа-яЁё]+)*)|([^0-9A-Za-zА-Яа-яЁё]+)', 'g') loop
-    if m[1] is null then v_out := v_out || m[2]; continue; end if;
+    if m[1] is null then v_out := v_out || m[2]; v_off := v_off + length(m[2]); continue; end if;
     v_run := m[1]; n := length(v_run); v_base := array_fill(false, array[n]); v_at := array_fill(0, array[n]);
     v_pos := '{}'; v_j := ''; v_ts := '{}'; v_te := '{}'; v_tu := '{}'; v_tn := '{}'; nt := 0; i := 1;
     while i <= n loop                                   -- bo'laklar: kodga tengini belgilash, ulangan normallangan matn (v_j)
@@ -256,16 +278,19 @@ begin
       if not v_base[a] then a := a + 1; continue; end if;
       b := a; while b < n and v_base[b + 1] loop b := b + 1; end loop;
       x := a; y := b; k := v_at[a];
-      if not (k > 1 and v_tu[k - 1] = 'IQ') and substr(v_tn[k], 1, a - v_ts[k]) ~ '^[0-9A-F]*$' then
+      -- IQ-ID raqami (kodWiden idPos): qatorda «IQ» dan keyingi yoki IQ belgisidan keyingi bo'lak
+      if not ((k > 1 and v_tu[k - 1] = 'IQ') or app.payer_idnum(p, v_off + v_ts[k])) and substr(v_tn[k], 1, a - v_ts[k]) ~ '^[0-9A-F]*$' then
         x := v_ts[k]; k := k - 1;
-        while k >= 1 and v_tn[k] ~ '^[0-9A-F]+$' and not (k > 1 and v_tu[k - 1] = 'IQ' and v_tn[k] ~ '^[0-9]+$') loop
+        while k >= 1 and v_tn[k] ~ '^[0-9A-F]+$'
+              and not (v_tn[k] ~ '^[0-9]+$' and ((k > 1 and v_tu[k - 1] = 'IQ') or app.payer_idnum(p, v_off + v_ts[k]))) loop
           x := v_ts[k]; k := k - 1;
         end loop;
       end if;
       k := v_at[b];
       if substr(v_tn[k], b - v_ts[k] + 2) ~ '^[0-9A-F]*$' then
         y := v_te[k]; k := k + 1;
-        while k <= nt and v_tn[k] ~ '^[0-9A-F]+$' and not (k > 1 and v_tu[k - 1] = 'IQ' and v_tn[k] ~ '^[0-9]+$') loop
+        while k <= nt and v_tn[k] ~ '^[0-9A-F]+$'
+              and not (v_tn[k] ~ '^[0-9]+$' and ((k > 1 and v_tu[k - 1] = 'IQ') or app.payer_idnum(p, v_off + v_ts[k]))) loop
           y := v_te[k]; k := k + 1;
         end loop;
       end if;
@@ -276,6 +301,7 @@ begin
       if not v_mk[k] then v_out := v_out || substr(v_run, k, 1);
       elsif k = 1 or not v_mk[k - 1] then v_out := v_out || '[kod]'; end if;
     end loop;
+    v_off := v_off + n;
   end loop;
   return v_out;
 end $$;
@@ -300,7 +326,8 @@ begin
       return j;
   end case;
 end $$;
-revoke all on function app.payer_norm(text), app.payer_mask(text, text[]), app.payer_mask_json(jsonb, text[]) from public, anon, authenticated;
+revoke all on function app.payer_norm(text), app.payer_idnum(text, int), app.payer_mask(text, text[]), app.payer_mask_json(jsonb, text[])
+  from public, anon, authenticated;
 
 -- ---------- 5) Tuzatish ----------
 -- To'lovchi matnlaridagi qidiruv kalitlari (payments/index.cjs kodKeys bilan bir xil): r_kind — 'p' (payments) / 'r' (refunds), r_id —

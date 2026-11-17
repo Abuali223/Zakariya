@@ -93,14 +93,16 @@ async function codeMatches(sid, code){
  * (А, Б/В, С, Д, Е, Ф) va «O» harfi (nol o'rniga) ham hisobga olinadi.
  * Kod: kodga teng bo'lak yoki qator bo'laklari ulanganda undagi 12 belgili 0-9/A-F oyna (bitta uzun bo'lak ichida ham). Yashiriladigan
  * joy — kod va qatorda unga yondosh HEX-shaklli (normallangandan keyin faqat 0-9/A-F) bo'laklarning eng uzun ketma-ketligi, oradagi
- * ajratgichlar bilan BITTA «[kod]» (kodning bir belgisi farq qiladigan nusxasi ham ochiq qolmasin). IQ uslubidagi ID («IQ» dan
- * keyingi raqam) va hex bo'lmagan bo'lak (ism, so'z) o'zgarmaydi: «IQ-0042 3FA9 C21B 7D0E» -> «IQ-0042 [kod]», «3FA9C21B7D0E
- * 3FA9C21B7D0F» -> «[kod]», «Sinov Ali 3FA9C21B7D0E» -> «Sinov Ali [kod]», «5A 3FA9C21B 7D0E» -> «[kod]», «IQ00423FA9C21B7D0E» ->
- * «IQ0042[kod]» (kod bo'lak o'rtasida bo'lsa — bo'lakning kod oldidagi / ortidagi qismi ham hex bo'lsagina u ham yashiriladi).
+ * ajratgichlar bilan BITTA «[kod]» (kodning bir belgisi farq qiladigan nusxasi ham ochiq qolmasin). IQ uslubidagi ID raqami (SID_IQ
+ * taniydigan yozilishlar: «IQ-0042», «IQ+0043», «IQ = 0043», «ИҚ-0043» — kodIdNum) va hex bo'lmagan bo'lak (ism, so'z) o'zgarmaydi:
+ * «IQ-0042 3FA9 C21B 7D0E» -> «IQ-0042 [kod]», «IQ+0043 3FA9 C21B 7D0E» -> «IQ+0043 [kod]», «3FA9C21B7D0E 3FA9C21B7D0F» -> «[kod]»,
+ * «Sinov Ali 3FA9C21B7D0E» -> «Sinov Ali [kod]», «5A 3FA9C21B 7D0E» -> «[kod]», «IQ00423FA9C21B7D0E» -> «IQ0042[kod]» (kod bo'lak
+ * o'rtasida bo'lsa — bo'lakning kod oldidagi / ortidagi qismi ham hex bo'lsagina u ham yashiriladi).
  * Bazadan o'qib bo'lmasa (xato) — o'qilmagan kalitlarga FAIL-CLOSED shakl qoidasi: 12 ta 0-9/A-F va kamida bitta harf A–F
  * (app.new_student_code har doim harfli kod beradi) — bo'lak ichida yoki aynan bo'lak chegaralaridagi guruh; telefon
  * («+998 90 123 45 67» — faqat raqam), sana, summa, sinf (5A) va IQ-0042 kabi ID tegilmaydi; harfi faqat boshidagi sinf nomidan
- * bo'lgan guruh ham («5A 998 90 123 45 67», «11B 2026-11-16 1 500 000» — sinf va undan keyingi faqat raqamli bo'laklar).
+ * bo'lgan guruh ham («5A 998 90 123 45 67», «5-A 998 90 123 45 67», «A5 998 90 123 45 67», «11B 2026-11-16 1 500 000» — sinf va
+ * undan keyingi faqat raqamli bo'laklar).
  * Eski yozuvlar uchun SQL tomoni (migration/payer-code-mask.sql: app.payer_codes_fix / app.payer_mask) — AYNAN shu qoida
  * (shakl qoidasi — faqat shu yerda: bazasiz holat uchun). */
 const KOD_MASK = '[kod]';
@@ -113,6 +115,19 @@ const KOD_WORD = /^[0-9A-Z]{5,16}$/, KOD_HEX12 = /^[0-9A-F]{12}$/;
 const kodShape = w => KOD_HEX12.test(w) && /[A-F]/.test(w);
 const KOD_CLASS = /^[0-9]{1,2}[A-F]$/;   // sinf nomiga o'xshash bo'lak (normallangan): «5A», «11B», kiril «5В» -> «5B»
 const KOD_MAX_KEYS = 120;   // bitta yozuvdagi kalitlar chegarasi (bitta «in» so'roviga sig'sin); oshsa — shakl qoidasi (fail-closed)
+// IQ-ID raqami (yashirishda «[kod]» ga qo'shilmaydi): raqam bilan boshlangan bo'lakdan oldingi matn IQ belgisi bilan tugaydi — SID_IQ
+//   (pastda, biriktirish qoidasi) bilan bir xil: «IQ» + «-» / «_» / «–» / «—» (+ 2 tagacha bo'sh joy / «_» / «-») yoki oldida harf yo'q
+//   «IQ», «ІQ», «IҚ», «ІҚ», «ИҚ», «ИК» (katta-kichik harf) + 3 tagacha boshqa belgi (atrofida bo'sh joylar): «IQ+0043», «IQ = 0043»,
+//   «ИҚ-0043», «ІQ-0043». SQL app.payer_idnum bilan AYNAN bir xil bo'lishi uchun \p{L} / \p{N} / \s o'rniga ro'yxat (PostgreSQL regexida
+//   \p{…} yo'q): U+0000–U+052F dagi (lotin, kiril, yunon) harf / son — SID_IQ (/iu) bilan aynan — va JS bo'sh joy belgilari. Belgi va
+//   ajratgichlar 20 belgidan (UTF-16) oshmaydi: 40 belgilik oyna natijani o'zgartirmaydi (uzun matnda ham tez).
+const KOD_L = 'A-Za-z\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0345\u0370-\u0374' +
+              '\u0376\u0377\u037A-\u037D\u037F\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5\u03F7-\u0481\u048A-\u052F';
+const KOD_N = '0-9\u00B2\u00B3\u00B9\u00BC-\u00BE', KOD_S = '\u0009-\u000D \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF';
+// belgilar: \u0406 / \u0456 — kiril І / і, \u049A / \u049B — Қ / қ, \u0418 / \u0438 — И / и, \u041A / \u043A — К / к
+const KOD_IDPRE = new RegExp(`(?:[Ii][Qq][-_\u2013\u2014][${KOD_S}_-]{0,2}|(?:^|[^${KOD_L}])(?:[Ii][Qq]|[\u0406\u0456][Qq]|[Ii][\u049A\u049B]|` +
+  `[\u0406\u0456][\u049A\u049B]|[\u0418\u0438][\u049A\u049B]|[\u0418\u0438][\u041A\u043A])(?:[${KOD_S}]{0,3}[^${KOD_L}${KOD_N}${KOD_S}]){0,3}[${KOD_S}]{0,3})$`, 'u');
+const kodIdNum = (s, at) => /[0-9]/.test(s[at] || '') && KOD_IDPRE.test(s.slice(Math.max(0, at - 40), at));   // s[at] — bo'lak boshi
 // Qator: bo'laklari (s/e — qatordagi o'rni, j — ulangan matndagi o'rni, u — katta harfda, n — normallangan), ulangan
 //   normallangan matn J va J'ning har belgisi qatorning qaysi o'rnida (pos).
 function kodRun(r){
@@ -148,12 +163,13 @@ function kodWalk(v, fn){
 // Yashiriladigan joyni KENGAYTIRADI (base — kod belgilari, oradagi ajratgichlar bilan): kod turgan bo'lakdan chapga va o'ngga
 //   qatordagi HEX-shaklli (normallangan: faqat 0-9/A-F) bo'laklar ham — «3FA9C21B7D0E 3FA9C21B7D0F» -> «[kod]». Kod bo'lak o'rtasida
 //   bo'lsa — bo'lakning kod oldidagi / ortidagi qismi ham hex bo'lsagina («AB3FA9…» -> «[kod]», «Kod3FA9…» -> «Kod[kod]»). To'xtaydi:
-//   hex bo'lmagan bo'lakda (ism, so'z, «IQ») va IQ-ID raqamida («IQ» dan keyingi faqat raqamli bo'lak; «IQ» dan keyingi bo'lakdagi
-//   kodning oldi — «IQ-00423FA9…» -> «IQ-0042[kod]»). SQL app.payer_mask bilan AYNAN bir xil.
-function kodWiden(r, toks, base){
+//   hex bo'lmagan bo'lakda (ism, so'z, «IQ») va IQ-ID raqamida (qatorda «IQ» dan keyingi yoki IQ belgisidan keyingi (kodIdNum: «IQ+0043»,
+//   «ИҚ-0043», «IQ = 0043») faqat raqamli bo'lak; shunday bo'lakdagi kodning oldi — «IQ-00423FA9…» -> «IQ-0042[kod]»). s — butun matn,
+//   off — qatorning undagi o'rni. SQL app.payer_mask bilan AYNAN bir xil.
+function kodWiden(r, toks, base, s, off){
   const mk = new Uint8Array(r.length), at = new Int32Array(r.length).fill(-1);
   toks.forEach((t, k) => { for(let i = t.s; i < t.e; i++) at[i] = k; });
-  const idPos = k => k > 0 && toks[k - 1].u === 'IQ';                                      // «IQ» dan keyingi bo'lak
+  const idPos = k => (k > 0 && toks[k - 1].u === 'IQ') || kodIdNum(s, off + toks[k].s);    // «IQ» yoki IQ belgisidan keyingi bo'lak
   const take = k => /^[0-9A-F]+$/.test(toks[k].n) && !(idPos(k) && /^[0-9]+$/.test(toks[k].n));
   for(let a = 0; a < r.length; a++){
     if(!base[a]) continue;
@@ -167,14 +183,21 @@ function kodWiden(r, toks, base){
   return mk;
 }
 // Bitta qatordagi kodlarni yashiradi. found — bazada topilgan kodlar (Map/Set); unknown(k) — k'ni bazadan tekshirib bo'lmadi;
-//   exact — faqat kod belgilari, kengaytirmasdan va bo'sh joy bilan (kodBlank: ID tekshiruvi uchun).
-function kodMaskRun(r, found, unknown, exact){
+//   exact — faqat kod belgilari, kengaytirmasdan va bo'sh joy bilan (kodBlank: ID tekshiruvi uchun); s, off — butun matn va qatorning
+//   undagi o'rni (kodWiden: IQ-ID raqami).
+function kodMaskRun(r, found, unknown, exact, s, off){
   const { toks, J, pos } = kodRun(r), base = new Uint8Array(r.length), starts = new Map(), ends = new Set(), idNum = new Set();
   const mark = (a, b) => { for(let i = a; i <= b; i++) base[i] = 1; };
-  // Shakl qoidasi sinf + raqamlarni kod deb olmasin: oyna (J'da i dan) boshidagi bo'lak sinf nomi (KOD_CLASS), qolganlari faqat raqam —
-  //   A–F harfi faqat sinfdan («5A 998 90 123 45 67», «11B 2026-11-16 1 500 000», «9D 16.11.2026 15», kiril «5В …»).
-  const classLead = i => { let k = starts.get(i); if(!KOD_CLASS.test(toks[k].n)) return false;
-    for(k++; k < toks.length && toks[k].j < i + 12; k++) if(!/^[0-9]+$/.test(toks[k].n)) return false;
+  // Shakl qoidasi sinf + raqamlarni kod deb olmasin: oyna (J'da i dan) boshidagi bo'lak(lar) sinf nomi, qolganlari faqat raqam — A–F
+  //   harfi faqat sinfdan: «5A» / «11B» / kiril «5В» (KOD_CLASS), «5-A» / «5 A» / «11-B» / «7 Д» (1–2 raqam + bitta harf; oyna shu
+  //   harfdan boshlansa ham), «A5» (harf + 1–2 raqam): «5A 998 90 123 45 67», «5-A 998 90 123 45 67», «11-B 2026-11-16 1 500 000»,
+  //   «9D 16.11.2026 15», «A5 998 90 123 45 67».
+  const classLead = i => { let k = starts.get(i); const n = toks[k].n, one = /^[A-F]$/;
+    if(one.test(n) && k > 0 && /^[0-9]{1,2}$/.test(toks[k - 1].n)) k++;                              // «5 A»ning harfi
+    else if(/^[0-9]{1,2}$/.test(n) && k + 1 < toks.length && one.test(toks[k + 1].n)) k += 2;         // «5-A», «5 A»
+    else if(KOD_CLASS.test(n) || /^[A-F][0-9]{1,2}$/.test(n)) k++;                                    // «5A», «A5»
+    else return false;
+    for(; k < toks.length && toks[k].j < i + 12; k++) if(!/^[0-9]+$/.test(toks[k].n)) return false;
     return true; };
   toks.forEach((t, k) => {
     starts.set(t.j, k); ends.add(t.j + t.n.length);
@@ -188,12 +211,12 @@ function kodMaskRun(r, found, unknown, exact){
     // Bazadagi kod — istalgan o'rinda; shakl qoidasi — faqat bo'lak chegaralaridagi guruh («5A 998901234567» kabi aralash emas).
     if(found.has(w) || (unknown && starts.has(i) && ends.has(i + 12) && !idNum.has(i) && kodShape(w) && !classLead(i) && unknown(w))) mark(pos[i], pos[i + 11]);
   }
-  const mk = exact ? base : kodWiden(r, toks, base), rep = exact ? ' ' : KOD_MASK;
+  const mk = exact ? base : kodWiden(r, toks, base, s, off), rep = exact ? ' ' : KOD_MASK;
   let out = '';
   for(let i = 0; i < r.length; i++){ if(!mk[i]) out += r[i]; else if(i === 0 || !mk[i - 1]) out += rep; }
   return out;
 }
-const kodMaskText = (s, found, unknown) => String(s).replace(KOD_RUN, r => kodMaskRun(r, found, unknown, false));
+const kodMaskText = (s, found, unknown) => { s = String(s); return s.replace(KOD_RUN, (r, off) => kodMaskRun(r, found, unknown, false, s, off)); };
 // Matndagi kodlar (faqat kod belgilari) bo'sh joy bilan almashtirilgan nusxa — ID qidirishda kodga yopishgan raqamlar ID'ga qo'shilmasin
 //   («IQ00423FA9C21B7D0E» -> «IQ0042 »).
 const kodBlank = (s, codes) => String(s).replace(KOD_RUN, r => kodMaskRun(r, codes, null, true));
@@ -220,9 +243,23 @@ async function kodMasker(...vals){
   mask.owners = failed ? null : new Set([...own.values()].flatMap(x => [...x]));
   mask.codes = failed ? null : new Set(own.keys());
   mask.own = failed ? null : own;   // kod -> egalari (aniq kod qoidasi: matndagi boshqa kodlar ham shu o'quvchinikimi)
+  mask.found = own; mask.unknown = unknown;   // o'qib bo'lmagan holatda ham: topilgan kodlar va tekshirilmagan kalit (onlyOwnCodes)
   return mask;
 }
 const maskPayer = async v => (await kodMasker(v))(v);
+// Telefon (+ ism) va faktura ID qoidalari uchun: matndagi BARCHA kodlar faqat docs (o'quvchi doc id'lari) egasiniki-mi? mk — kodMasker
+//   natijasi, fields — matn maydonlari (merchant_trans_id, sinf), phone — telefon maydoni. Kod jadvallari o'qilgan bo'lsa — egalar docs
+//   ichida. O'qib bo'lmasa (yoki kalit juda ko'p) — topilgan kodlar egalari docs ichida VA kodga o'xshash tekshirilmagan kalit yo'q: 12 ta
+//   0-9/A-F (normallangan) — matn maydonlarida (faqat raqamli eski kod ham) yoki telefon maydonida harfli (kodShape). Faqat telefon
+//   maydonidagi raqamli kalit (telefonning o'zi) va ism so'zlari kod bo'la olmaydi — ular rad etishga sabab emas.
+function onlyOwnCodes(mk, docs, fields, phone){
+  if(mk.owners) return [...mk.owners].every(o => docs.has(o));
+  for(const os of mk.found.values()) for(const o of os) if(!docs.has(o)) return false;
+  const fk = new Set(), pk = new Set();
+  for(const s of fields) for(const r of (String(s || '').match(KOD_RUN) || [])) kodKeys(r, fk);
+  for(const r of (String(phone || '').match(KOD_RUN) || [])) kodKeys(r, pk);
+  return ![...fk].some(k => KOD_HEX12.test(k) && mk.unknown(k)) && ![...pk].some(k => kodShape(k) && mk.unknown(k));
+}
 async function unpaidInvoices(sid){
   try{ const snap = await db.collection('invoices').where('studentId','==',String(sid)).get();
        return (snap.docs || []).map(d=>d.data())
@@ -323,9 +360,10 @@ async function studentExists(x){
 //   sid — DOIM kanonik (students.studentId). Kod bo'yicha topilgan o'quvchi — matnda (merchant_trans_id, telefon, sinf) BOSHQA
 //   o'quvchi tilga olinmagan (otherStudentInText — kod egasi qoidasi bilan bir xil) va matndagi BARCHA kodlar (kodMasker egalari)
 //   shu o'quvchiniki bo'lsagina; aks holda kod qoidasi o'tkaziladi (ikki o'quvchining kodi — kod egasi qoidasi ham rad etadi).
-//   Telefon (+ ism) bo'yicha topilgan o'quvchi ham — matndagi kod(lar) faqat o'shaniki bo'lsa; boshqa o'quvchining kodi bo'lsa yoki
-//   kodlarni o'qib bo'lmasa — 'code_conflict': ism / telefon bir o'quvchini, kod boshqasini ko'rsatadi -> biriktirilmaydi (kod egasi
-//   qoidasi ham ishlamaydi), Direktor qo'lda biriktiradi.
+//   Telefon (+ ism) bo'yicha topilgan o'quvchi ham — matndagi kod(lar) faqat o'shaniki (onlyOwnCodes; kodlarni o'qib bo'lmasa — kodga
+//   o'xshash bo'lak yo'q) va matnda BOSHQA o'quvchi (doc id / IQ-ID) tilga olinmagan bo'lsa; aks holda (yoki tekshirib bo'lmasa) —
+//   'code_conflict': ism / telefon bir o'quvchini, kod yoki ID boshqasini ko'rsatadi -> biriktirilmaydi (kod egasi va faktura ID
+//   qoidalari ham ishlamaydi), Direktor qo'lda biriktiradi.
 async function attributeStudent(mti, params){
   mti = String(mti||'').trim();
   const ph = (params && (params.param3 || params.phone)) || '';   // Click: param3 = telefon, param2 = sinf
@@ -350,11 +388,14 @@ async function attributeStudent(mti, params){
   // Ism solishtirishda matndagi kod xalaqit bermasin: «Sinov Bobur KOD» -> to'liq ism «Sinov Bobur» (aka-ukani ajratadi; kod kimniki —
   //   pastda tekshiriladi).
   let name = mti;
-  if(normPhone(ph).length >= 7){ const mk = await masker(); if(mk.codes) name = kodBlank(mti, mk.codes); }
+  if(normPhone(ph).length >= 7) name = kodBlank(mti, (await masker()).found);
   const r = await findStudentByPhone(ph, name, params && params.param2);
   if(r.status === 'ok'){
-    if(!(await onlyOwn(new Set([String(r.studentId)])))) return { sid: null, via: 'code_conflict' };   // matnda boshqa o'quvchining kodi
-    return { sid: await canonSid(r.studentId), via:'phone' };
+    const mk = await masker(), doc = String(r.studentId), sid = await canonSid(doc);
+    // matnda boshqa o'quvchining kodi (yoki tekshirilmagan kodga o'xshash bo'lak) yoki boshqa o'quvchining ID'si — qo'lda
+    if(!onlyOwnCodes(mk, new Set([doc]), [mti, params && params.param2], ph)
+       || (await otherStudentInText(texts, doc, sid, new Set(mk.found.keys()))) !== false) return { sid: null, via: 'code_conflict' };
+    return { sid, via:'phone' };
   }
   return { sid: null, via: r.status };
 }
@@ -368,6 +409,17 @@ async function ownerSid(mk, ...texts){
   const doc = [...owners][0], sid = await canonSid(doc);
   if(!sid || !(await studentExists(sid))) return null;
   return (await otherStudentInText(texts, doc, sid, mk.codes)) === false ? sid : null;   // boshqa o'quvchi yoki o'qib bo'lmadi — yo'q
+}
+// Click «{sid}__{oy}» (aniq faktura ID, fakturasi topilmagan — o'chirilgan / oy noto'g'ri) bo'yicha biriktirish — telefon / ism qoidasi
+//   'code_conflict' bermaganda (chaqiruvchi tekshiradi): sid'ning to'lanmagan fakturasi bor, matndagi BARCHA kodlar shu o'quvchiniki
+//   (onlyOwnCodes) va matnda BOSHQA o'quvchi (doc id / IQ-ID) tilga olinmagan bo'lsa — sid, aks holda null (qo'lda): «IQ-0050__2026-08
+//   <boshqa o'quvchining kodi>» B ga tushmaydi. mk — kodMasker(mti, phone, klass) natijasi.
+async function invoiceIdSid(mk, mti, phone, klass){
+  const sid = mti.split('__')[0]; if(!sid || !(await unpaidInvoices(sid)).length) return null;
+  const docs = new Set();   // matndagi kodlar egalaridan shu o'quvchiniki (doc id != studentId bo'lishi mumkin)
+  for(const os of mk.found.values()) for(const o of os) if((await canonSid(o)) === sid) docs.add(o);
+  if(!onlyOwnCodes(mk, docs, [mti, klass], phone)) return null;
+  return (await otherStudentInText([mti, phone, klass], sid, await canonSid(sid), new Set(mk.found.keys()))) === false ? sid : null;
 }
 // IQ uslubidagi o'quvchi ID'si matnning istalgan joyida: (1) «IQ» + «-» / «_» / «–» / «—» + raqam — oldida harf bo'lsa ham
 //   («IQ-0042», «iq_0042», «IQ-0042'…», «IQ-0042-KOD», «5AIQ-0042»); (2) so'z boshidagi (oldida harf yo'q) «IQ» yoki kiril harfli
@@ -384,6 +436,8 @@ const SID_IQ = /(?:IQ[-_–—][\s_-]{0,2}|(?<!\p{L})(?:IQ|ІQ|IҚ|ІҚ|ИҚ|И�
 //   matndagi har IQ-ID (SID_IQ) egasining o'z studentId'si bo'lmasa (bazada yo'q ID ham) -> true. Nomzod juda ko'p (KOD_MAX_KEYS
 //   dan ortiq) yoki o'qib bo'lmasa -> null. Aks holda false. So'rovga faqat ID belgilaridan (harf, raqam, «-», «_») iborat nomzod
 //   boradi: qo'shtirnoq / qavsli bo'lak «in» ro'yxatini buzmasin (uning toza qismlari (2) da bor).
+// IQ-ID raqami qiymat bo'yicha solishtiriladi: ota-ona «IQ-42» deb yozsa ham «IQ-0042» egasiniki (boshida nollar — farqsiz).
+const iqNum = n => String(n).replace(/^0+(?=[0-9])/, '');
 async function otherStudentInText(texts, doc, sid, codes){
   const cand = new Set(), iq = new Set();
   const add = x => { if(x.length >= 3 && x.length <= 64 && /^[0-9A-Za-zА-Яа-яЁё_-]+$/.test(x)){ cand.add(x); cand.add(x.toUpperCase()); } };
@@ -394,11 +448,11 @@ async function otherStudentInText(texts, doc, sid, codes){
       const ps = ch.split('-');
       for(let i = 0; i < ps.length; i++) if(ps[i]) for(let j = i; j < ps.length && j < i + 4; j++) if(ps[j]) add(ps.slice(i, j + 1).join('-'));
     }
-    for(const m of kodBlank(t, codes || new Set()).matchAll(SID_IQ)) iq.add(m[1]);
+    for(const m of kodBlank(t, codes || new Set()).matchAll(SID_IQ)) iq.add(iqNum(m[1]));
   }
   const own = new Set();
-  for(const k of [doc, sid]){ const m = /^IQ[-_ ]?([0-9]+)$/i.exec(String(k || '').trim()); if(m) own.add(m[1]); }
-  for(const n of iq) if(!own.has(n)) return true;          // egasinikidan boshqa (yoki bazada yo'q) IQ-ID
+  for(const k of [doc, sid]){ const m = /^IQ[-_ ]?([0-9]+)$/i.exec(String(k || '').trim()); if(m) own.add(iqNum(m[1])); }
+  for(const n of iq) if(!own.has(n)) return true;          // egasinikidan boshqa (yoki bazada yo'q) IQ-ID; «IQ-42» = «IQ-0042»
   if(!cand.size) return false;
   if(cand.size > KOD_MAX_KEYS) return null;
   let docs;
@@ -565,12 +619,13 @@ async function handlePrepare(p){
   // B) ERKIN to'lov (ism/telefon/kod + ixtiyoriy summa) -> BALANS modeli. HAR DOIM QABUL QILINADI
   //    (pul keladi -> yoziladi; biriktirilmasa admin biriktiradi). Attribution: kod yoki telefon.
   let at = await attributeStudent(mti, p);
-  // precise mti (sid__oy) invoice topilmagan bo'lsa — o'quvchi ID sini ajratib olamiz (bor bo'lsa)
-  if(!at.sid && mti.includes('__')){ const sidPart = mti.split('__')[0]; if(sidPart){ try{ const ui = await unpaidInvoices(sidPart); if(ui && ui.length) at = { sid: sidPart, via:'invoice-id' }; }catch(e){} } }
   // Biriktirish ASL matn bilan bo'ldi; saqlanadigan to'lovchi matni — kod yashirilgan (moliya rollari o'qiydi).
   const phone = String(p.param3||''), klass = String(p.param2||''), mask = await kodMasker(mti, phone, klass), mtiS = mask(mti);
-  // Yuqoridagi qoidalar topmadi — matndagi kod(lar)ning yagona egasi (kiril / «O» harfli, guruhlab yozilgan kod); via 'code_norm'.
-  //   'code_conflict' (telefon / ism boshqa o'quvchini ko'rsatdi) — yo'q: qo'lda biriktiriladi.
+  // precise mti (sid__oy) invoice topilmagan bo'lsa — o'quvchi ID sini ajratib olamiz (invoiceIdSid: to'lanmagan fakturasi bor, matndagi
+  //   kodlar faqat shu o'quvchiniki, boshqa o'quvchi tilga olinmagan). Yuqoridagi qoidalar topmagach — matndagi kod(lar)ning yagona egasi
+  //   (kiril / «O» harfli, guruhlab yozilgan kod); via 'code_norm'. 'code_conflict' (telefon / ism boshqa o'quvchini ko'rsatdi) — ikkalasi
+  //   ham yo'q: qo'lda biriktiriladi.
+  if(!at.sid && at.via !== 'code_conflict' && mti.includes('__')){ const sid = await invoiceIdSid(mask, mti, phone, klass); if(sid) at = { sid, via:'invoice-id' }; }
   if(!at.sid && at.via !== 'code_conflict'){ const sid = await ownerSid(mask, mti, phone, klass); if(sid) at = { sid, via:'code_norm' }; }
   await payRef.set({ provider:'click', click_trans_id:String(p.click_trans_id), merchant_trans_id:mtiS,
     studentId: at.sid || '', matched: !!at.sid, merchant_prepare_id:prepareId, amount, status:'prepared',
