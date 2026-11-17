@@ -133,7 +133,8 @@ kartasi (qaytarishlarsiz) → «Sanab yopish». Tizim Z ni fiskal chekli kirim o
 natijani aytadi; farq bo‘lsa buxgalter sababini so‘raydi. Z-hisobot qo‘lda bo‘lmasa — «Z-hisobot yo‘q» (sababi bilan), keyin
 «Kassa kunlari» qatoridagi **«Z»** tugmasi bilan kiriting (xato yozilgan bo‘lsa ham shu tugma bilan — kun tekshirilguncha). Sanashda
 farq bo‘lsa tizim shu kunga kamomad yoki ortiqcha hujjatini o‘zi yozadi — sababini izohga yozing. Keyin «🖨 KO-4» (2 nusxa) va
-«🖨 Kunlik hisobot»: imzolab, orderlar, ilovalari va Z-hisobot bilan moliya menejeriga topshiring. Kunni **kassa egasi** (kun
+«🖨 Kunlik hisobot»ni imzolang: KO-4 ning 2-nusxasini orderlar, ilovalari va Z-hisobot bilan buxgalterga (kunni u tekshiradi),
+kunlik hisobotni moliya menejeriga topshiring. Kunni **kassa egasi** (kun
 kartasidagi kassir) yopadi; boshqa kassir uning o‘rniga yopsa — kamida 2 kishilik komissiya bilan (yoki avval smena topshiriladi).
 
 **Kunni yopishda qurilma navbati va «Қ» blankalari.** Oyna ochilishidan oldin tizim shu qurilma navbatini (⏳) yuboradi;

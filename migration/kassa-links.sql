@@ -1024,7 +1024,7 @@ revoke all on function app.kassa_link_void(text, text, text) from public, anon, 
 --     • o'quv to'lovi (payments, provider 'offset') va uning balansga qo'llanishi (apply_payment: eng eski fakturadan, ortiqchasi avansga);
 --     • naqdsiz dalolatnoma (ACT): Dt 6710 Kt 4010 / 6310 — taqsimot naqd o'quv to'lovidagi qoida bilan (app.kassa_tuition_alloc);
 --       eski avans fakturaga qo'llangan bo'lsa — KO-1 dagi kabi naqdsiz Dt 6310 Kt 4010 ma'lumot qatori ham (summaga kirmaydi, acc-2).
---   Kassadan pul chiqmaydi ham, kirmaydi ham — kassa kitobida (KO-4) yo'q; dalolatnoma o'z raqam seriyasida («Д-»).
+--   Kassadan pul chiqmaydi ham, kirmaydi ham — kassa kitobida (KO-4) yo'q; dalolatnoma o'z raqam seriyasida («ЎҲ-», kassa.sql: OFS).
 --   p: id ('sp_…' — «Maosh berish» oynasining barqaror kaliti), teacherId, payeeRef ('teachers:<id>' | 'staff:<id>'), teacherName,
 --      month ('YYYY-MM'), paid (> 0 — hisobga olinadigan summa), gross, advance, deduction, subBonus, net, carryIn, carryOut,
 --      studentId (o'quvchi kodi yoki qator id), requestDate (ariza sanasi 'YYYY-MM-DD' — majburiy), note

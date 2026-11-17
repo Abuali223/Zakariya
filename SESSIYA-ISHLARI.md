@@ -2235,6 +2235,18 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   yashirilmaydi; IQ-raqam qiymat bo'yicha solishtiriladi («IQ-42» = «IQ-0042», rahbar). Mustaqil tekshiruv «pass»; `mask.test.cjs`
   hammasi o'tdi, `test-payer-codes.sql` LIVE 64/0, DEV 67/0; tasodifiy biriktirish fuzz'ida noto'g'ri o'quvchi — 0.
 
+## 82) Buxgalter bilan uchrashuv uchun «Buxgalteriya va kassa: ish rejimi» hujjati; hujjatlardagi tafovutlar — 2026-11-17
+
+- **Hujjat (Claude Docs, egasining shaxsiy hujjati, repoda emas):** qachon ishga tushadi, rollar va vazifalar ajratilishi, kundalik
+  kassa tartibi, chiqim va avans oqimi, hujjatlar va provodkalar, oylik ishlar va 1C, yil oxiri, Sh-8 (B1–B21), stendda sinash. Matnni
+  bir agent yozdi, ikkinchisi har faktni repo (hujjatlar va kod) bilan solishtirdi (18 tuzatish).
+- **Repo hujjatlaridagi tafovutlar (tuzatildi):** Sh-8 B17 va FD-15 — o'zaro hisobni Direktor yozadi (kodda shunday, moliya menejeri
+  emas); kassir yo'riqnomasida kunlik qog'ozlar yo'li — KO-4 ning 2-nusxasi orderlar va Z-hisobot bilan buxgalterga, kunlik hisobot —
+  moliya menejeriga (shakllar va buyruq namunasi bilan bir xil); ish reja §4.5 `nc_opening` — Dt 5010 Kt 0000 (hisobdorlar nolga
+  yopiladi); `kassa-links.sql` izohi — o'zaro hisob seriyasi «ЎҲ-».
+- **Ochiq (kod, kassa moduli):** «kassa limiti 0» kodda «belgilanmagan» (ogohlantirish yo'q), egasi qarori esa «limit 0 — ortgan pul
+  har kuni bankka». Tekshirilgan kunni tuzatish (buxgalter stornosi) — 2-bosqichda; ungacha tartib ochiq.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

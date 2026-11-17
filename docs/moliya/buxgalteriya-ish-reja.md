@@ -377,7 +377,7 @@ namunasi uchun taklif qoidalari F2.6 va F3.3 da.
 | `out_loan_repay` | KO-2 | So‘mdagi qarzni qaytarish | 6820 | 5010 | OP-19 | direktor | 1a |
 | `out_overspend` | KO-2 | Ortiqcha sarfni qoplash | 6970 | 5010 | OP-07 | tasdiqlangan avans hisobotidan | 2 |
 | `nc_offset` | dalolatnoma | O‘zaro hisob | 6710 | 4010 / 6310 | OP-11 | yozma ariza + direktor; KO-4 da emas | 1a |
-| `nc_opening` | dalolatnoma | Boshlang‘ich qoldiq | 5010 / 4230 | 0000 | OP-23 | komissiya; buxgalter; direktor | 1a |
+| `nc_opening` | dalolatnoma | Boshlang‘ich qoldiq | 5010 | 0000 | OP-23 | komissiya; buxgalter; direktor; hisobdorlar (4230) 30-dekabrgacha nolga yopiladi — boshlang‘ich qoldig‘i yo‘q (egasi, 2026-11-16) | 1a |
 | `nc_adv_report` | AO | Avans hisoboti | statiya hisobvaraqlari | 4230 | EX / OP-18 / OP-24 | tasdiqlovchi ≠ yaratuvchi | 2 |
 
 Kassadan soliq to‘lash operatsiyasi yo‘q. Kassa qismi hisobvaraqlari ishga tushirishdan oldin tasdiqlanadi (G2) — «bo‘sh
@@ -1123,7 +1123,7 @@ J — ish jarayoni.
 | FD-12 | O‘quv KO-1 krediti | 4010 boshlangan davrga, 6310 ortiqcha va kelgusi oyga; avansdan — naqdsiz 6310→4010 | [BUX] · 21-noyabr · K |
 | FD-13 | Bankka / bankdan | Topshirish 5710 orqali; olish Dt 5010 Kt 5110; komissiya bank tomonida | [BUX] · 21-noyabr · D |
 | FD-14 | Xarid puli | 4230 + avans hisoboti ≤ 3 ish kuni (karta 10); hujjatsiz xarid ≤ L1, bitta statiya; xodimga — faqat hisobdor operatsiyasi. **2026-11-16 — egasi:** L1 = 0 (juda kerak bo‘lsa keyin kichik chegara va bitta statiya); muddat maktab ish kunlari bo‘yicha; buxgalter imzosi kutilmoqda (Sh-8, B10) | [BUX] + Egasi · 21-noyabr · S |
-| FD-15 | Naqd maosh | Faqat kassir; har kishiga KO-2 + qaydnoma; karta va o‘zaro hisob — MM | Egasi + [BUX] · 21-noyabr · K |
+| FD-15 | Naqd maosh | Faqat kassir; har kishiga KO-2 + qaydnoma; karta — MM; o‘zaro hisob — Direktor (yozma ariza bilan; tizimda faqat Direktor) | Egasi + [BUX] · 21-noyabr · K |
 | FD-16 | Naqd qabul va kassa modeli | Kassir, g‘aznachi, direktor; bitta kassa, smenalar, topshirish-qabul sanashi. **2026-11-16 — egasi:** kassir — G‘aznachi lavozimidagi xodim; o‘rinbosar — buyruq bilan (MM va HR emas); naqdni faqat shu ikkisi oladi va beradi, Direktor — favqulodda; kassa du–ju. **2026-11-17 — egasi:** kassir tizimda «Kassir» roli bilan ishlaydi — kirim (KO-1), chiqim (so‘rov → tasdiq → pul berish), kunni ochish va yopish, kunlik hisobot (KO-4); o‘rinbosar — qo‘shimcha «Kassir» roli (sarlavhada «Rol: … ▾» bo‘lsa — undan tanlab); «G‘aznachi» tizim roli kassa xodimlariga berilmaydi (FD-30) | Egasi · 14-noyabr · J |
 | FD-17 | KO-2 ruxsati | T1 — direktor belgilaydi; ≤ T1 2-ro‘yxat, > T1 direktor ham; 1a dan oldindan tasdiq. **2026-11-16 — egasi:** T1 qo‘yiladi; summa buyruqda va «⚙ Sozlamalar»da bir xil (Direktor yozadi; 0 qolsa har chiqim Direktor tasdig‘ini kutadi) | Egasi · 21-noyabr · S |
 | FD-18 | Tekshiruvchi | 2-ro‘yxat (buxgalter yoki MM, direktor ham), o‘tkazmagan va yopmagan; buxgalter hisobi 1b. **2026-11-16 — egasi:** chiqim so‘rovlarini asosan MM tasdiqlaydi; kunni tekshirish va avans hisobotlari — buxgalter; biri yo‘q kuni ikkinchisi, telefondan ham; ikkalasi yo‘q kuni oddiy chiqim tasdiqlanmaydi; buxgalter roziligi — Sh-8, B1 (5-buyruq) | Egasi + [BUX] · 21-noyabr · K |
