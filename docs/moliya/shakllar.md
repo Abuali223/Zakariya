@@ -32,11 +32,12 @@ qurilma navbatidagi yozuvlar va server ishlamagan paytdagi «Қ» blankalari (so
 |---|---|---|---|
 | Sh-1 | Avans hisoboti | hisobdor pul sarflaganda (3 ish kuni ichida) | hisobdor shaxs; tekshiradi — buxgalter; tasdiqlaydi — rahbar |
 | Sh-2 | «Қ» blankasi va jurnali | tizim (server) ishlamay qolganda; kassa to‘xtatilganda (`ishga-tushirish.md`, 9-bo‘lim) | kassir |
-| Sh-3 | Kassani sanash dalolatnomasi (boshlang‘ich qoldiq) | 31-dekabr kechqurun (tizim ishga tushmasidan oldin); to‘xtatilgan kassani qayta ishga tushirishda | inventarizatsiya komissiyasi |
-| Sh-4 | Qog‘oz order daftarlarini yopish dalolatnomasi | 31-dekabr kechqurun | kassir, buxgalter |
-| Sh-5 | Qabul sinovi varag‘i | sinov stendida, ishga tushirishdan oldin | har rol |
+| Sh-3 | Kassani sanash dalolatnomasi (boshlang‘ich qoldiq) | 30-dekabr kechqurun (tizim ishga tushmasidan oldin; 31-dekabrda istisno naqd harakat bo‘lsa — 4-yanvar ertalab qayta sanashda yana); to‘xtatilgan kassani qayta ishga tushirishda | inventarizatsiya komissiyasi |
+| Sh-4 | Qog‘oz order daftarlarini yopish dalolatnomasi | 30-dekabr kechqurun (31-dekabrda istisno amal bo‘lsa — o‘sha amaldan keyin qayta tuziladi) | kassir, buxgalter |
+| Sh-5 | Qabul sinovi varag‘i | sinov stendida, ishga tushirishdan oldin (26-dekabrgacha imzolanadi) | har rol |
 | Sh-6 | Parallel yuritish kunlik nazorat varag‘i | birinchi 5 ish kuni | moliya menejeri |
-| Sh-7 | Hisobdor shaxs qoldig‘i ma’lumotnomasi | 31-dekabr holatiga | hisobdor shaxs, buxgalter |
+| Sh-7 | Hisobdor shaxs qoldig‘i ma’lumotnomasi | 31-dekabr holatiga (nol qoldiq: pul 30-dekabrgacha yopiladi) | hisobdor shaxs, buxgalter |
+| Sh-8 | Hisob siyosati va kassa tartibi — buxgalter tasdiq varag‘i | 21-noyabr — vaqtincha ko‘rik; 12-dekabr — imzo; B19 — 19-dekabr | bosh buxgalter; direktor |
 
 ---
 
@@ -81,8 +82,8 @@ kiritadi — xarajatlar «Buxgalteriya»ga o‘zi ko‘chadi (usul «hisobdor or
 hisobotlari — yanvar yopilishidan oldin.
 
 ## Sh-2. «Қ» blankasi (ichki vaqtinchalik kvitansiya) va jurnali
-Faqat tizim (server) ishlamay qolganda. **To‘lovchiga berilmaydi** — to‘lovchi fiskal chek oladi. Blankalar oldindan raqamlanadi
-(Қ-0001 …), buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi (izohda — «Қ» raqami) va jurnalda
+Faqat tizim (server) ishlamay qolganda. **To‘lovchiga berilmaydi** — to‘lovchi fiskal chek oladi. Blankalarni buxgalter oldindan
+chop etib raqamlaydi (Қ-0001 …; 30-dekabrdagi sanashgacha), ular kassada saqlanadi; buzilgani bekor qilinib saqlanadi. Tizim tiklangach har blanka tizimga kiritiladi (izohda — «Қ» raqami) va jurnalda
 order raqami yoziladi. Server ishlamagan kun hali yopilmagan bo‘lsa — avval o‘sha kun yopiladi: kiritilmagan blankalar soni, summasi
 va raqamlari «Kunni yopish» oynasidagi «Server ishlamagan paytdagi «Қ» blankalari»ga yoziladi, keyin blankalar kiritiladi
 (`ishga-tushirish.md`, 8-bo‘lim).
@@ -110,7 +111,7 @@ yozuvni tizimga Direktor kiritadi.
 
 «[Tashkilot nomi]» · Kassadagi pul mablag‘larini inventarizatsiya qilish dalolatnomasi № [___]
 [joy], [sana], [vaqt] · Asos: [sana]dagi № [___] buyruq
-Komissiya: rais — [lavozim, F.I.Sh.]; a’zolar — [lavozim, F.I.Sh.], [lavozim, F.I.Sh.]; moddiy javobgar shaxs — kassir [F.I.Sh.]
+Komissiya: rais — direktor [F.I.Sh.]; a’zolar — bosh buxgalter [F.I.Sh.], moliya menejeri [F.I.Sh.]; moddiy javobgar shaxs — kassir (g‘aznachi) [F.I.Sh.]
 
 **Kassirning tilxati:** inventarizatsiya boshlanishiga qadar barcha kirim va chiqim hujjatlari buxgalteriyaga topshirildi, menga
 ishonib topshirilgan barcha pul kirim qilindi, chiqib ketgani hisobdan chiqarildi. Kassir: [___] (imzo)
@@ -135,7 +136,9 @@ Farq sababi bo‘yicha kassirning tushuntirishi: [___]
 Rahbar qarori: [___] (imzo, sana)
 Komissiya raisi: [___] · A’zolar: [___], [___] · Kassir: [___] (imzolar)
 
-*Eslatma:* shu dalolatnomadagi «haqiqatda mavjud» summa tizimga boshlang‘ich qoldiq sifatida kiritiladi. Tizim ishga tushgach
+*Eslatma:* shu dalolatnomadagi «haqiqatda mavjud» summa tizimga boshlang‘ich qoldiq sifatida kiritiladi (30-dekabr kechqurun;
+31-dekabrda istisno naqd harakat bo‘lsa — 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin yangi dalolatnoma bilan qayta
+sanalib, qayta kiritiladi). Tizim ishga tushgach
 sanash dalolatnomalarini (kun yopilishi, smena, oy oxiri) tizimning o‘zi chop etadi. **Qayta ishga tushirishda** (`ishga-tushirish.md`,
 9-bo‘lim) ham shu shakl: «hisob ma’lumoti» — tizimdagi oxirgi kun oxiri qoldig‘i va to‘xtatilgan davrdagi «Қ» jurnali jamlari;
 «haqiqatda mavjud» summa «Kassa» → «Qayta ishga tushirish»ga kiritiladi, tizimdagi qoldiq bilan farqi texnik «Д-» dalolatnoma
@@ -155,7 +158,7 @@ Biz, quyida imzo chekuvchilar — [lavozim, F.I.Sh.], [lavozim, F.I.Sh.], kassir
 Imzolar: [___], [___], kassir [___] · Bosh buxgalter: [___]
 
 ## Sh-5. Qabul sinovi varag‘i (sinov stendida)
-Rol: [kassir / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] · Sana: [___] · Qurilma: ☐ kompyuter ☐ telefon
+Rol: [kassir (g‘aznachi) / o‘rinbosar / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] · Sana: [___] · Qurilma: ☐ kompyuter ☐ telefon
 
 | № | Ssenariy | Bajarildi | Izoh |
 |---|---|---|---|
@@ -204,8 +207,52 @@ Sana: [___] · To‘ldirdi (moliya menejeri): [___]
 Ketma-ket 3 ish kuni hammasi «ha» va tushuntirilmagan farq yo‘q bo‘lsa — parallel yuritish tugaydi (Direktor qarori: [___], sana [___]).
 
 ## Sh-7. Hisobdor shaxs qoldig‘i ma’lumotnomasi
-«[Tashkilot nomi]» · [sana] holatiga
+«[Tashkilot nomi]» · [sana] holatiga (yil yakunida — 31-dekabr holatiga)
 Men, [lavozim, F.I.Sh.], shuni tasdiqlaymanki, menda hisobdorlik asosida olingan va hali hisobot berilmagan pul qoldig‘i
 [raqam bilan] so‘m ([so‘z bilan]); shundan hujjatlari bor, hali hisobotga kiritilmagan xarajatlar — [___] so‘m, naqd qoldiq — [___] so‘m.
 Hisobdor shaxs: [___] (imzo) · Buxgalter: [___] (imzo)
-*Bu qoldiq yangi yilda hisobdor kartochkasining boshlang‘ich qoldig‘i bo‘ladi.*
+*Yil yakunida qoldiq **nol** bo‘lishi shart: eski pul 30-dekabrgacha (kassa naqd ishlaydigan oxirgi kun) cheklar bilan hisobot yoki
+qaytim orqali to‘liq yopiladi. Yangi tizim eski pulni ko‘rmaydi — yanvarda u bo‘yicha na avans hisoboti, na qaytim qabul qilinadi
+(egasi qarori, 2026-11-16).*
+
+## Sh-8. Hisob siyosati va kassa tartibi — buxgalter tasdiq varag‘i
+«[Tashkilot nomi]» · Bosh buxgalter tasdig‘i uchun · Asos: ish reja (`buxgalteriya-ish-reja.md`, §4.2–4.6, §6), G2 darvozasi
+
+Har band bo‘yicha: «Tizimda hozir» — tavsiya (egasi 2026-11-10 da vaqtincha qabul qilgan, dastur shu bo‘yicha qurilgan). Rozi
+bo‘lsangiz — «Roziman» ustuniga ☑; boshqacha bo‘lsa — «Tuzatish» ustuniga o‘z tanlovingizni yozing. Hisobvaraqlar, statiyalar va
+operatsiyalarni ekranda o‘zgartirib bo‘lmaydi — tuzatish yashirin o‘rnatishgacha (≈ 21-dekabr) dasturchiga yetib borishi kerak.
+**Muddatlar:** 21-noyabr — kassa qismi (B1–B13), buyruq namunalari va qog‘oz shakllar bo‘yicha vaqtincha ko‘rik; **12-dekabr** — varaq
+imzolanadi; B19 — 19-dekabr. Imzo bo‘lmasa, boshlanish 1-fevralga suriladi (G2). Ism va summalar bu varaqqa yozilmaydi (summalar —
+buyruq va «⚙ Sozlamalar»da); hisob siyosati to‘plami repozitoriyga kiritilmaydi.
+
+| № | Nima qaror qilinadi | Tizimda hozir (tavsiya) | Muddat | Roziman | Tuzatish (yozing) |
+|---|---|---|---|---|---|
+| B1 | Kassa qismi (hisobvaraqlar, statiyalar, operatsiyalar), buyruq namunalari, qog‘oz shakllar (Sh-1…Sh-7); ish rejimi; buxgalteriya dasturi | Ish rejimi A: tizim kassa hujjatlari va boshqaruv hisobini yuritadi, rasmiy registrlar buxgalter dasturida qoladi (FD-03); oylik Excel to‘plam buxgalter dasturiga moslanadi — dastur nomi: [___] | 21.11 vaqtincha / 12.12 | ☐ | |
+| B2 | Kassa kitobi (KO-4) tarkibi | Faqat naqd pul (5010); naqdsiz to‘lov va o‘zaro hisob — varaqda faqat ma’lumot blokida (FD-04) | 21.11 / 12.12 | ☐ | |
+| B3 | Hujjatlarni raqamlash | KO-1 va KO-2 alohida; har yili 1-yanvardan 1 dan, uzilishsiz, raqamni server beradi; KO-4 varaqlari ham 1 dan; dalolatnoma, o‘zaro hisob va avans hisobotining o‘z raqamlari (FD-05) | 21.11 / 12.12 | ☐ | |
+| B4 | Chop etish ko‘rinishi | O‘zbek kirill (rus va lotin ham bor; tilni Direktor «⚙ Sozlamalar»da tanlaydi); summa «1 234 567=89»; KO-4 ikki nusxa; pul harakati bo‘lmagan kunga varaq chiqmaydi (FD-07) | 21.11 / 12.12 | ☐ | |
+| B5 | Hujjatdagi hisobvaraqlar | BHMS 21 to‘rt xonali kodlari + analitika (eski «40.11» o‘rniga 4010 + to‘lovchi turi); kassa qismidagi hisobvaraqlar ro‘yxati — ish reja §4.2 (FD-09) | 21.11 / 12.12 | ☐ | |
+| B6 | Statiyalar katalogi | 75 statiya (IN 7, EX 44, OP 24) va eski toifalarni moslash jadvali (§4.4); «Boshqa xarajatlar» ulushi 2 % dan oshmaydi; eski «IT-PARK» → EX-33 «Dasturiy ta’minot, xosting, ERI» (FD-10) | 21.11 / 12.12 | ☐ | |
+| B7 | Kassa operatsiyalari (Dt / Kt) | Ish reja §4.5: kassadan soliq to‘lanmaydi; so‘mdagi qarzni kassadan qaytarish mumkin; rahbar va ta’sischiga beriladigan pul — alohida operatsiya; ro‘yxatda yo‘q operatsiya kassadan o‘tmaydi (FD-11) | 21.11 / 12.12 | ☐ | |
+| B8 | Naqd o‘quv to‘lovi kirim orderida | Boshlangan oy uchun — 4010; ortiqcha va kelgusi oy uchun — 6310 (avans); avansdan yopilgan qism — naqdsiz yozuv 6310 → 4010 (FD-12) | 21.11 / 12.12 | ☐ | |
+| B9 | Bankka topshirilgan va bankdan olingan naqd pul | Topshirish — «yo‘ldagi pul» (5710) orqali; olish — Dt 5010 Kt 5110; bank komissiyasi — bank tomonida (FD-13) | 21.11 / 12.12 | ☐ | |
+| B10 | Xarid puli (hisobdor) | 4230; avans hisoboti 3 ish kuni ichida (korporativ karta — 10 kun), maktab ish kunlari bo‘yicha (shanba, yakshanba va «Bayram / ta’til kunlari» sanalmaydi); xodimga — faqat «Hisobdorga avans»; hujjatsiz xarid chegarasi L1 = 0 (egasi qarori) (FD-14) | 21.11 / 12.12 | ☐ | |
+| B11 | Xato kassa hujjati | Faqat o‘sha kuni bekor qilinadi; oxirgi tekshirilmagan kunni faqat Direktor qayta ochadi; boshqa hollarda — teskari yozuv (storno), tahrirlash yo‘q (FD-20). Tekshirilgan kun uchun storno hujjatini buxgalter yozadi — bu huquqni berish egasining qarori (tizimda 2-bosqichdan) | 21.11 / 12.12 | ☐ | |
+| B12 | Kechki sanashdagi farq | Ruxsat etilgan farqsiz; o‘sha kuni hujjat: kamomad — 5910, ortiqcha — 9390; kamomad bo‘yicha Direktor qarori: xodimdan undirish (4730 — yozma rozilik yoki moddiy javobgarlik shartnomasi bilan) yoki xarajatga (9430) (FD-21) | 21.11 / 12.12 | ☐ | |
+| B13 | Rahbar yoki ta’sischiga kassadan pul | Xarajat emas — qarz: xodim — 4290, ta’sischi — 4890; o‘sha oy ichida tasniflanadi (dividend, ish haqi yoki hisobdan chiqarish); har doim Direktor tasdig‘i; iloji boricha bank orqali (FD-26) | 21.11 / 12.12 | ☐ | |
+| B14 | Kassadan olingan oziq-ovqat | 1010 (materiallar) + oy oxirida chiqim dalolatnomasi + har chorakda inventarizatsiya; oziq-ovqat statiyasi tizimda hozir 1010 ga bog‘langan — yanvar orderlariga shu yoziladi; variant — darhol xarajat; oshxona idishlari va kitoblar — 1080 + 014 (FD-31) | 12.12 | ☐ | |
+| B15 | Ota-onaga naqd qaytarish puli manbai | Tavsiya yo‘q — buxgalter tanlaydi. Qolgan tartib belgilangan: Direktor tasdiqlaydi va usulni tanlaydi, kassir chiqim orderi bilan beradi; 1 bank kunidan ko‘p kechiksa ogohlantirish (FD-25) | 12.12 | — | ☐ kassadagi tushumdan ☐ avval bankdan olinadi |
+| B16 | Imzo tartibi; kirim orderi (KO-1) va pattadagi «Bosh buxgalter» qatori | 1-ro‘yxat — Direktor va buyruq bilan tayinlangan o‘rinbosar (moliya menejeri emas); 2-ro‘yxat — bosh buxgalter va moliya menejeri; har chiqim orderiga ikki xil shaxs imzo qo‘yadi, 2-ro‘yxat tasdig‘i pul berilishidan oldin (FD-08). «Bosh buxgalter» qatori bo‘yicha tavsiya yo‘q | 12.12 | ☐ | «Bosh buxgalter» qatori: ☐ buxgalter ☐ moliya menejeri |
+| B17 | Naqd maosh | Faqat kassir beradi — har xodimga alohida chiqim orderi va oylik to‘lov qaydnomasi bilan; tasdiqlangan vedomost (qaytarishda — Direktor tasdig‘i) orderdagi rahbar tasdig‘i o‘rnini bosadi; karta orqali to‘lov va o‘zaro hisobni moliya menejeri yozadi (FD-15) | 12.12 | ☐ | |
+| B18 | Direktorga beriladigan pul (avans, naqd maosh, rahbarga berish) | Direktor bosqichini Direktor o‘zi imzolaydi, 2-ro‘yxat tasdig‘i baribir kerak, pulni faqat kassir beradi; 2-ro‘yxat xodimi o‘ziga beriladigan pulni o‘zi tasdiqlamaydi; vedomost tasdig‘iga o‘tishdan oldingi oy uchun Direktor maoshi faqat karta orqali (FD-48) | 12.12 | ☐ | |
+| B19 | Tizim vedomosti = ish haqi fondi | Buxgalter tizimdagi vedomost o‘z hisobotidagi ish haqi fondiga mosligini yozma tasdiqlaydi; mos kelmasa — tuzatish rejasi bilan (FD-44, G3) | 19.12 | ☐ | |
+| B20 | O‘zaro hisob va moddiy naf | Xodim farzandining o‘quv to‘lovini ish haqidan ushlash — dalolatnoma + yozma ariza + Direktor tasdig‘i; xodim farzandiga chegirma moddiy naf (SK 376-modda) hisoblanadimi — buxgalterning yozma xulosasi (FD-24) | 12.12 | ☐ | Xulosa: |
+| B21 | Kontragentlar turi va STIR | Ishga tushishdan oldin doimiy kontragentlar turi va STIR tekshiriladi: korxona — «Yetkazib beruvchi» yoki «Tashkilot», yakka tadbirkor va fuqaro — «Jismoniy shaxs», bank — «Bank»; yuridik shaxsga kassadan naqd to‘lov chegarasi — 0 (har biri Direktor tasdig‘i bilan; egasi qarori; FD-47) | 12.12 | ☐ | |
+
+21-noyabrdagi vaqtincha ko‘rik (B1–B13, buyruq namunalari, shakllar): ☐ o‘tkazildi, sana [___]; tuzatishlar: ☐ yo‘q ☐ ilovada, [___] varaq
+
+Umumiy xulosa: ☐ hammasiga roziman ☐ «Tuzatish» ustunidagi o‘zgarishlar bilan roziman
+
+Bosh buxgalter: ____ (F.I.Sh., imzo, sana)
+
+Direktor: ____ (F.I.Sh., imzo, sana)

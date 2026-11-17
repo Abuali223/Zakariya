@@ -145,6 +145,11 @@
   "status",
   "ts"
  ],
+ "student_code_prev": [
+  "code",
+  "retiredAt",
+  "studentDocId"
+ ],
  "student_codes": [
   "code",
   "id",

@@ -1145,7 +1145,7 @@ function openOpeningForm() {
     <div class="modal-b"><div class="small muted">Komissiya kassadagi pulni sanaydi (dalolatnoma). Shu summa birinchi kassa kunining «kun boshi» bo‘ladi. Kassa ishga tushgach bu qiymat o‘zgarmaydi.</div>
       <div class="grid2">${lbl('Sanalgan summa (so‘m)', `<input id="ko-amt" type="text" inputmode="numeric" placeholder="0" value="${s.desk.openingAmount != null ? esc(String(num(s.desk.openingAmount)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')) : ''}" style="${FLD}">`)}${lbl('Birinchi kassa kuni', `<input id="ko-day" type="date" value="${esc(s.desk.startDay || s.today)}" style="${FLD}">`)}</div>
       ${commissionFields().replace('Komissiya (kassir o‘rniga yopilganda kamida 2 kishi)', 'Komissiya a’zolari')}
-      ${lbl('Izoh', `<input id="ko-note" type="text" maxlength="300" placeholder="masalan: 31.12 sanash dalolatnomasi № 1" style="${FLD}">`)}</div>
+      ${lbl('Izoh', `<input id="ko-note" type="text" maxlength="300" placeholder="masalan: 30.12 sanash dalolatnomasi № 1" style="${FLD}">`)}</div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="ko-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal; fmtInput($('#ko-amt'));
   $('#ko-save').onclick = async () => { const ar = amtRead($('#ko-amt').value); if (ar.err) { C.toast(ar.err, true); return; }

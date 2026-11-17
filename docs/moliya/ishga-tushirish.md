@@ -1,14 +1,15 @@
 # «Kassa» bo‘limini ishga tushirish to‘plami (F1.19)
 
 **Holat:** tayyor, o‘qitish va ishga tushirishda ishlatiladi. Bo‘lim hali jonli tizimga chiqmagan (faqat sinov stendida).
+Egasining 2026-11-16 javoblari kiritilgan (ro‘yxati — `buxgalteriya-ish-reja.md`, 0-bosqich, «Egasi javoblari — 2026-11-16»).
 Ism, lavozim, rekvizit va summalar bu yerda yozilmaydi (repozitoriy ommaviy) — `[___]` o‘rniga qog‘ozda to‘ldiriladi.
 
 **To‘plam tarkibi**
 | Hujjat | Kim uchun | Fayl |
 |---|---|---|
-| Ishga tushirish tartibi (shu fayl): taqvim, shartlar, texnik tartib, 31-dekabr, birinchi kunlar, orqaga qaytish | direktor, moliya menejeri, buxgalter, administrator | `docs/moliya/ishga-tushirish.md` |
-| Rol bo‘yicha bir varaqli yo‘riqnomalar | kassir, moliya menejeri, buxgalter, direktor, HR, hisobdorlar | `docs/moliya/yoriqnomalar.md` |
-| Shakllar ro‘yxati va qog‘oz shablonlari (avans hisoboti, «Қ» blankasi, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi varag‘i) | kassir, buxgalter, komissiya | `docs/moliya/shakllar.md` |
+| Ishga tushirish tartibi (shu fayl): taqvim, shartlar, texnik tartib, yil yakuni (30-dekabr kechqurun, 4-yanvar ertalab), birinchi kunlar, orqaga qaytish | direktor, moliya menejeri, buxgalter, administrator | `docs/moliya/ishga-tushirish.md` |
+| Rol bo‘yicha bir varaqli yo‘riqnomalar | kassir, moliya menejeri, buxgalter, direktor, HR, hisobdorlar, qabulxona (ota-ona kodi) | `docs/moliya/yoriqnomalar.md` |
+| Shakllar ro‘yxati va qog‘oz shablonlari (avans hisoboti, «Қ» blankasi, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi varag‘i, buxgalter tasdiq varag‘i Sh-8) | kassir, buxgalter, komissiya | `docs/moliya/shakllar.md` |
 | Buyruq namunalari (imzo ro‘yxatlari, komissiya, kassir, shakllar, hujjatlar aylanishi) | direktor, buxgalter | `docs/moliya/buyruq-namunalari.md` |
 | Oraliq qoidalar (ishga tushguncha) | hamma | `docs/moliya/oraliq-qoidalar.md` |
 | Ish reja (asoslar va qarorlar) | — | `docs/moliya/buxgalteriya-ish-reja.md` |
@@ -18,42 +19,92 @@ Ism, lavozim, rekvizit va summalar bu yerda yozilmaydi (repozitoriy ommaviy) —
 ## 1. Taqvim
 | Sana | Nima | Kim |
 |---|---|---|
-| 16-noyabrdan | Oraliq qoidalar amalda | hamma |
-| 21-noyabr | Buxgalter hisob qismini ko‘rib chiqadi (hisobvaraqlar, statiyalar, operatsiyalar) — vaqtincha tasdiq | buxgalter |
-| 12-dekabr | Buyruqlar imzolangan; fiskal kassa bo‘yicha yozma tasdiq; hisob siyosati qarorlari | direktor, buxgalter |
-| 14–19-dekabr | Sinov stendida 1-qabul sinovi va o‘qitish | hamma rollar |
-| 19-dekabr | Tizim vedomosti buxgalter hisobotidagi ish haqi fondiga mosligi yozma tasdiqlanadi | buxgalter |
-| ≈ 21-dekabr | **Yashirin o‘rnatish**: bo‘lim jonli tizimga chiqadi, lekin «ishga tushadigan kun» bo‘sh — hamma oyna avvalgidek ishlaydi | administrator |
-| 21–26-dekabr | 2-qabul sinovi (stendda), maosh kuni mashqi; **26-dekabr — qabul sinovi varaqlari imzolanadi** | hamma rollar |
-| 31-dekabr (yoki oxirgi ish kuni) kechqurun | Komissiya sanashi, qog‘oz daftarlarni yopish, sozlamalar, boshlang‘ich qoldiq, davr surati | komissiya, direktor, buxgalter |
-| Yanvarning birinchi kassa kuni (reja: 4-yanvar) | **Rasmiy boshlanish** | kassir |
+| 16-noyabrdan | Oraliq qoidalar amalda (e’lon qilingan) | hamma |
+| 16-noyabr haftasi, yangilanishdan keyin | `yoriqnomalar.md`, 6-bo‘lim (ota-ona kodi) — qabulxonaga beriladi (o‘qitishni kutmaydi); Direktor deploy chiqishidagi «payer-code-mask» sonlarini ko‘radi (3-bo‘lim, «Ota-ona kodi») | Direktor; server huquqi bor shaxs (sonlarni beradi) |
+| 21-noyabr | Buxgalter hisob qismini (hisobvaraqlar, statiyalar, operatsiyalar), buyruq namunalari va qog‘oz shakllarni ko‘rib chiqadi — vaqtincha tasdiq (`shakllar.md`, Sh-8) | buxgalter |
+| 12-dekabr | Buyruqlar va moddiy javobgarlik shartnomalari imzolangan; fiskal kassa bo‘yicha yozma tasdiq; hisob siyosati qarorlari (Sh-8 imzolangan) | direktor, buxgalter |
+| 14-dekabrgacha | Sinov stendi o‘rnatilgan (§3.1); rollar bo‘yicha yo‘riqnomalar va qog‘oz shakllar tarqatilgan | server huquqi bor shaxs (stend), Direktor (tarqatish) |
+| 14–18-dekabr (du–ju) | Sinov stendida o‘qitish va 1-qabul sinovi (taklif jadvali — pastda) | hamma rollar |
+| 19-dekabr | Tizim vedomosti buxgalter hisobotidagi ish haqi fondiga mosligi yozma tasdiqlanadi (Sh-8, B19) | buxgalter |
+| ≈ 21-dekabr (dushanba), ish vaqtidan keyin | **Yashirin o‘rnatish**: bo‘lim jonli tizimga chiqadi, lekin «ishga tushadigan kun» bo‘sh — hamma oyna avvalgidek ishlaydi (shart: 1-qabul sinovi va buxgalterning stenddagi ko‘rigi — yozma rozilik bilan) | server huquqi bor shaxs (§3) |
+| 21–25-dekabr (du–ju) | 2-qabul sinovi (stendda), maosh kuni mashqi | hamma rollar |
+| 26-dekabr | Qabul sinovi varaqlari (Sh-5) imzolangan; **shartlar (G1–G6) bo‘yicha yakuniy tekshiruv** | direktor |
+| **30-dekabr (chorshanba) kechqurun**, kassa yopilgach | Komissiya sanashi, qog‘oz daftarlarni yopish, sozlamalar, boshlang‘ich qoldiq, «Kassa ishga tushadigan kun», berilmagan qaytarishlar ro‘yxati (§4) | komissiya, direktor, buxgalter (ikkalasi shaxsan) |
+| 31-dekabr (payshanba) | **Kassa naqd pul qabul qilmaydi va bermaydi** (Click, Uzum va bank orqali to‘lovlar ishlayveradi) | kassir |
+| 1–3-yanvar | Kassa yopiq (1-yanvar — bayram, 2–3-yanvar — dam olish) | — |
+| 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin | «31-dekabr holati» davr surati qulf bilan (§4, 8–9-qadamlar); 31-dekabrda naqd harakat bo‘lgan bo‘lsa — avval qayta sanash | direktor, komissiya |
+| 4-yanvar (dushanba) — birinchi kassa kuni | **Rasmiy boshlanish** (egasi qarori, 2026-11-16) | kassir (g‘aznachi) |
 | Birinchi 5 ish kuni | Parallel yuritish: kunlik nazorat varag‘i | moliya menejeri |
 | Yanvar oxiri | Oy oxiri sanashi; yanvar avans hisobotlari kiritiladi; davrni yopish | komissiya, buxgalter, direktor |
 
-Biror shart bajarilmasa — boshlanish sanasi suriladi (keyingi oyning birinchi ish kuni; boshlang‘ich qoldiq — o‘sha oy oxiridagi sanash).
+Biror shart bajarilmasa — boshlanish sanasi suriladi (keyingi oyning birinchi ish kuni — zaxira sana 1-fevral; boshlang‘ich qoldiq — o‘sha oy oxiridagi sanash).
+
+**Kassa ish kunlari** — dushanba–juma; shanba, yakshanba va bayram kunlari kassa yopiq. Ish soatlarini Direktor ichki kassa
+nizomiga yozadi (`buyruq-namunalari.md`, 6-bo‘lim, 1-band).
+
+**O‘qitish — TAKLIF jadvali.** Davomiylikni egasi qabul qilgan (2026-11-16); kun va soat — taklif, Direktor tasdiqlaydi yoki
+o‘zgartiradi. Hammasi sinov stendida, dushanba–juma; kassirlar — kassa yopilgandan keyin (ish soatlari nizomda belgilangach aniqlanadi).
+| Kun | Kim | Davomiylik | Mazmun |
+|---|---|---|---|
+| 14-dekabr (du) | g‘aznachi (kassir) va o‘rinbosar | 90 daqiqa | kirim (fiskal chek bilan), chiqim so‘rovi va pul berish, kunni sanab yopish, chop etish |
+| 15-dekabr (se) | moliya menejeri va buxgalter | 60 daqiqa | tasdiq, kunni tekshirish, nazorat ro‘yxati, avans hisoboti, KO-3, oylik to‘plam |
+| 16-dekabr (ch) | g‘aznachi (kassir) va o‘rinbosar | 90 daqiqa | smena topshirish, qurilma navbati, «Қ» blankalari, xato hujjat, favqulodda holatlar (8-bo‘lim) |
+| 16-dekabr (ch) | Direktor; HR | 30 daqiqa (har biri) | Direktor: sozlamalar, boshlang‘ich qoldiq, tasdiq, kamomad qarori, davr; HR: vedomost tasdig‘i |
+| 17-dekabr (pa) | hisobdorlar (zavxoz, oshpaz va b.) | 20 daqiqa | «Hisobdorga avans», «Олдим», cheklar, avans hisoboti (Sh-1), qaytim |
+| 17–18-dekabr (pa–ju) | har rol | — | 1-qabul sinovi (Sh-5 qatorlari) |
+| 21–25-dekabr (du–ju) | hamma rollar | — | 2-qabul sinovi (yashirin o‘rnatishdan keyingi tuzatishlar bilan); maosh kuni mashqi |
+| 26-dekabrgacha | har rol | — | Sh-5 varaqlari imzolanadi |
 
 ## 2. Boshlashdan oldingi shartlar (belgilab chiqiladi)
-- [ ] **Fiskal kassa:** har naqd to‘lovga onlayn kassa cheki uriladi (yozma tasdiq). Naqd o‘quv to‘lovi tizimga faqat chek raqami bilan kiritiladi.
-- [ ] **Buyruqlar** imzolangan: imzo ro‘yxatlari (1- va 2-ro‘yxat), inventarizatsiya komissiyasi, kassir va o‘rinbosari, to‘liq moddiy javobgarlik shartnomalari, shakllar, hujjatlar aylanishi grafigi, ichki kassa nizomi.
-- [ ] **Hisob siyosati:** hisobvaraqlar, statiyalar va operatsiyalar ro‘yxatini buxgalter tasdiqlagan.
-- [ ] **Maosh:** vedomost tasdig‘i yoqilgan (dekabrdan kechikmay), noyabr vedomosti tizimda sinov sifatida tasdiqlangan, dekabr vedomosti maosh kunidan oldin tasdiqlanadi; HR menejer hisobi faol.
-- [ ] **Hisoblar (login):** kassir(lar), moliya menejeri, buxgalter, HR — har birining o‘z hisobi bor; parol boshqaga berilmaydi.
+- [ ] **Fiskal kassa (G1):** har naqd va karta to‘lovi onlayn kassa apparatidan (NKM) chek bilan o‘tadi — yozma tasdiq 12-dekabrgacha
+  (chek turi va ta’lim xizmatining IKPU kodini buxgalter belgilaydi). Karta terminali shu NKM da — kechqurun bitta Z-hisobot (naqd + karta).
+  Apparat buzilganda — soliq organida ro‘yxatdan o‘tgan maxsus kvitansiya daftari (maktabda bor). Naqd o‘quv to‘lovi tizimga faqat chek
+  raqami bilan kiritiladi; aka-uka / opa-singil to‘lovida har o‘quvchiga alohida chek.
+- [ ] **Buyruqlar (G5)** 12-dekabrgacha imzolangan: imzo ro‘yxatlari (1- va 2-ro‘yxat), inventarizatsiya komissiyasi, kassir (g‘aznachi) va o‘rinbosari, to‘liq moddiy javobgarlik shartnomalari (kamida g‘aznachi va o‘rinbosar bilan, kerak bo‘lsa zavxoz bilan ham; matnni yurist yakunlaydi), shakllar, hujjatlar aylanishi grafigi, ichki kassa nizomi; 1-buyruq 5-bandi — ijroni Direktorning o‘zi nazorat qiladi.
+- [ ] **Hisob siyosati (G2):** hisobvaraqlar, statiyalar va operatsiyalar ro‘yxatini buxgalter tasdiqlagan — tasdiq varag‘i `shakllar.md`, **Sh-8**
+  (B1–B21): 21-noyabr — kassa qismi, buyruq namunalari va qog‘oz shakllar bo‘yicha vaqtincha tasdiq; 12-dekabr — imzo; B19 — 19-dekabr.
+- [ ] **Maosh (G3):** vedomost tasdig‘i yoqilgan (dekabrdan kechikmay); 2 ta takroriy maosh ID ni Direktor xodim kartasidagi «Yangi noyob ID
+  berish» tugmasi bilan tuzatgan (aks holda vedomost HR’ga yuborilmaydi); noyabr vedomosti noyabr maoshi berilishidan oldin tizimda
+  tayyorlanib, HR tasdiqlagan; dekabr vedomosti — maosh qaysi kun bo‘lmasin, maosh kunidan oldin tasdiqlanadi (yanvarda bo‘lsa — maosh
+  kuni mashqi shunga moslanadi); HR menejer hisobi faol (bo‘lmasa vedomost tasdiqlanmaydi); HR menejer va moliya menejeri hisobi
+  vedomost yuborilishidan oldin (noyabr vedomostidan; kechi bilan — dekabr vedomostidan oldin va 30-dekabrdan kechikmay) xodim kartasiga bog‘langan: bog‘lanmagan
+  bo‘lsa, ularning o‘z maosh qatori Direktor tasdig‘ini talab qilmaydi (5-buyruq: «HR / MM o‘z maoshi — direktor»; belgi vedomost
+  yuborilganda qo‘yiladi).
+- [ ] **Hisoblar (login):** g‘aznachi (kassir), o‘rinbosar, moliya menejeri, buxgalter, HR va Direktor — har birining o‘z hisobi bor; parol boshqaga berilmaydi.
+  Kassir — **G‘aznachi** lavozimidagi xodim: «Foydalanuvchilar»da rol **«G‘aznachi»** (kassada kassir bilan teng — kassa egasi, kunni
+  ochadi va yopadi). O‘rinbosar — buyruq bilan tayinlangan boshqa xodim (moliya menejeri va HR emas): o‘z roliga qo‘shimcha **«Kassir»**
+  lavozimi beriladi. Naqd pulni faqat shu ikkisi oladi va beradi (Direktor — faqat favqulodda holatda).
   Buxgalterga «Foydalanuvchilar»da **«Buxgalter»** roli beriladi (bu rol tanlovda kassa bo‘limi o‘rnatilgandan keyin paydo bo‘ladi;
   bo‘limlari — «Tasdiqlash» va «Kassa» (so‘rovni tasdiqlash yoki rad etish, kunni tekshirish, hujjatni bekor qilish, avans hisoboti),
-  «To‘lovlar» va «Buxgalteriya» (faqat ko‘rish); qo‘shimcha lavozim berilmaydi — F1.21). Kassa hisoblari (kassir, o‘rinbosari,
-  g‘aznachi, moliya menejeri, buxgalter) «Foydalanuvchilar» → «Tahrirlash»da **xodim kartasiga (HR yozuviga) bog‘langan**: kassa
-  hujjatlaridagi ism shu kartadan olinadi (foydalanuvchi o‘zi yozgan ism emas), kamomad qarori xodim kartasiga yoziladi; nazorat
-  ro‘yxatida «Xodim kartasiga bog‘lanmagan kassa hisoblari» — «yo‘q».
+  «To‘lovlar» va «Buxgalteriya» (faqat ko‘rish); qo‘shimcha lavozim berilmaydi — F1.21). Kassa hisoblari (g‘aznachi, o‘rinbosar,
+  moliya menejeri, buxgalter), HR menejer va Direktorning o‘z hisobi **30-dekabrgacha** «Foydalanuvchilar» → «Tahrirlash»da **xodim
+  kartasiga (HR yozuviga) bog‘langan**, kartada F.I.Sh. hujjatdagidek to‘liq: kassa hujjatlaridagi ism shu kartadan olinadi (foydalanuvchi o‘zi
+  yozgan ism emas), kamomad qarori xodim kartasiga yoziladi; nazorat ro‘yxatida «Xodim kartasiga bog‘lanmagan kassa hisoblari» — «yo‘q»
+  (HR va Direktor hisobi bu ro‘yxatga kirmaydi — «Foydalanuvchilar» ro‘yxatida ism ostidagi «🔗» belgisidan tekshiriladi; HR va moliya
+  menejeri hisobini bog‘lash muddati — G3).
 - [ ] **Qabul sinovi:** kassir, moliya menejeri, buxgalter va direktor stendda o‘z ssenariylarini bajarib, varaqni imzolagan (`shakllar.md`, Sh-5).
-- [ ] **Bank bilan kassa limiti** kelishilgan (bo‘lmasa — limit 0: ortiqcha pul har kuni bankka topshiriladi).
-- [ ] **Printer:** A4 (KO-1 + patta, KO-2, KO-4, dalolatnomalar); sinov varag‘i chop etilgan.
-- [ ] **Hisobdorlar qoldig‘i:** zavxoz, oshpaz va boshqa hisobdorlardagi pul bo‘yicha 31-dekabr holatiga imzolangan ma’lumotnomalar.
-- [ ] **Qog‘oz zaxira:** «Қ» blankalari va jurnali chop etilgan, raqamlangan (`shakllar.md`, Sh-2).
+- [ ] **Kassa limiti:** bankdan yozma javob (limit xati) kelguncha limit 0 — ortgan naqd pul har kuni bankka topshiriladi; bank
+  kontragentlar ro‘yxatida «Bank» turi bilan.
+- [ ] **Kassa joyi va printer** — hammasi 30-dekabrdagi sanashgacha (printer sanash kechasi D-1 dalolatnomasini chop etish uchun kerak):
+  A4 printer (KO-1 + patta, KO-2, KO-4, dalolatnomalar), sinov varag‘i chop etilgan; seyf, «Olindi» / «To‘landi» shtamplari, hujjat jildlari.
+- [ ] **Hisobdorlar qoldig‘i:** zavxoz, oshpaz va boshqa hisobdorlar qo‘lidagi eski pul **30-dekabrgacha** (kassa naqd ishlaydigan oxirgi
+  kun) cheklar bilan hisobot yoki qoldiqni qaytarish orqali to‘liq yopilgan; buxgalter har biridan 31-dekabr holatiga nol qoldiq
+  ma’lumotnomasini (`shakllar.md`, Sh-7) olgan. Tizim eski pulni ko‘rmaydi — yanvarda u bo‘yicha na avans hisoboti, na qaytim qabul qilinadi.
+- [ ] **Qog‘oz zaxira:** «Қ» blankalari va jurnali chop etilgan, buxgalter raqamlagan (`shakllar.md`, Sh-2); rollar bo‘yicha yo‘riqnomalar
+  va qog‘oz shakllar — 14-dekabrgacha.
+- [ ] **Eski «biriktirilmagan» naqd to‘lovlar** yo‘qligi 30-dekabrgacha buxgalter bilan tekshirilgan (8-bo‘lim oxiri, cheklov (2)).
+- [ ] **Taqvim va xabarnoma:** yanvar bayram va ta’til kunlari «Bayram / ta’til kunlari» ro‘yxatiga oldindan kiritilgan (avans hisoboti
+  muddati shu ro‘yxat, shanba va yakshanbasiz sanaladi); «Xabarnomalar» → «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju, soat — kassa
+  yopilgandan keyin (standart 19:00).
 
 ## 3. Texnik tartib (administrator)
 Hamma buyruqlar serverda oddiy foydalanuvchidan; kalit va parollar hech qayerga ko‘chirilmaydi.
+**Bajaruvchi** (egasi qarori, 2026-11-16) — server huquqi bor shaxs: deploylarni bajarayotgan egasi yoki u tayinlagan administrator.
+Stend, yashirin o‘rnatish, tekshiruvlar va kerak bo‘lsa orqaga qaytarishni o‘sha shaxs bajaradi; birinchi 2 hafta texnik navbatchi ham
+o‘sha (10-bo‘lim).
 
-**3.1 Sinov stendi (qabul sinovi va o‘qitish shu yerda).** O‘rnatish va yangilash — `sinov/README.md`. Kassa bo‘limi bilan:
+**3.1 Sinov stendi (qabul sinovi va o‘qitish shu yerda).** Shu haftadagi jonli yangilanish bilan birga, **14-dekabrdan oldin**
+o‘rnatiladi. O‘rnatish va yangilash — `sinov/README.md`. Kassa bo‘limi bilan:
 ```bash
 bash ~/iqror-repo/sinov/update.sh --dev
 ```
@@ -86,7 +137,8 @@ zanjir (jonli `lock_timeout` bilan) — xatosiz; qayta qo‘llash — xatosiz; `
 o‘rnatishda barcha SQL to‘plamlari yashil; `payments` (192) va `auth` sinovlari yashil. 2-qadamda `_schema-columns.json` ga
 qo‘shiladigan ustunlar: `payments.cashDocId`, `payments.fiscalNo`, `refunds.method`, `refunds.cashDocId`.
 
-**3.3 Yashirin o‘rnatish (≈ 21-dekabr, ish vaqtidan tashqari).**
+**3.3 Yashirin o‘rnatish (≈ 21-dekabr, dushanba, ish vaqtidan keyin — egasi tasdiqlagan, 2026-11-16).** Shart: 1-qabul sinovi
+o‘tgan va buxgalter stenddagi ko‘rikdan keyin yozma rozilik bergan; yakuniy «ha» — egasi.
 ```bash
 cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git checkout FETCH_HEAD -- deploy.sh migration && bash migration/deploy/full-deploy.sh
 ```
@@ -117,43 +169,64 @@ zanjirni quradi) — har haftalik ko‘rikda ham:
 bash ~/iqror-repo/migration/verify-db.sh
 ```
 
-## 4. 31-dekabr (yoki dekabrning oxirgi ish kuni) kechqurun
-Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishtirokida.
+## 4. Yil yakuni: 30-dekabr kechqurun va 4-yanvar ertalab
+Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishtirokida (egasi qarori, 2026-11-16):
+- **30-dekabr (chorshanba) kechqurun, kassa yopilgandan keyin** — 1–7-qadamlar. Direktor va buxgalter shaxsan qatnashadi.
+- **31-dekabr (payshanba) kassa naqd pul qabul qilmaydi va bermaydi** (Click, Uzum va bank orqali to‘lovlar ishlayveradi): sanalgan
+  pul = boshlang‘ich qoldiq. **1–3-yanvar** kassa yopiq. Bu kunlarda kassa hujjati baribir yozilmaydi — tizim birinchi kassa kunini kutadi.
+- **31-dekabr istisnosi.** Istisno tariqasida 31-dekabr kuni naqd pul olinsa yoki berilsa — eski qog‘oz orderda yoziladi va tizimga
+  o‘sha kuni avvalgidek (kirim / chiqim ordersiz) kiritiladi; qog‘oz daftarlar o‘sha amaldan keyin yopiladi (Sh-4 dalolatnomasi yangi
+  oxirgi raqam bilan qayta tuziladi). **4-yanvar ertalab**, birinchi kassa kuni ochilishidan oldin komissiya pulni qayta sanaydi (yangi Sh-3) va boshlang‘ich
+  qoldiq qayta kiritiladi (5-qadam). Tizim buni o‘zi talab qilmaydi — qayta sanalmasa, farq birinchi kunni yopishda kassirga chiqadi.
+- **4-yanvar (dushanba) ertalab, birinchi kassa kuni ochilishidan oldin** — 8–9-qadamlar (davr surati va qulf).
+
 1. **Kun yakuni eski tartibda:** oxirgi qog‘oz kirim va chiqim orderlari yoziladi, kunlik varaq yopiladi. **Sanashdan oldin
    hamma naqd yozuv tizimda bo‘lsin:** to‘lov qabul qiladigan barcha qurilmalar (kompyuter, telefon) internetga ulanadi va
    navbati (⏳) bo‘shaguncha kutiladi; kassadan berilgan xarajat, maosh va avanslar ham kiritiladi. Sanashdan keyin topilgan
    kechikkan yozuv — pastdagi «Kechikib topilgan yozuv» bandi bo‘yicha.
 2. **Komissiya kassani sanaydi** (nominallar bo‘yicha) va dalolatnoma tuzadi (`shakllar.md`, Sh-3): sanalgan summa, hisobdagi
-   qoldiq, farq va uning sababi. Farq majburan tenglashtirilmaydi — Direktor qaror qiladi (kamomad — javobgar shaxsga yoki zararga; ortiqcha — daromadga).
+   qoldiq, farq va uning sababi. Komissiya: rais — Direktor; a’zolar — bosh buxgalter va moliya menejeri; g‘aznachi (kassir) a’zo
+   emas, sanashda qatnashadi. Farq majburan tenglashtirilmaydi — Direktor qaror qiladi (kamomad — javobgar shaxsga yoki zararga; ortiqcha — daromadga).
 3. **Qog‘oz order daftarlari yopiladi** (Sh-4): oxirgi П/О va Р/О raqamlari, ishlatilmagan blankalar bekor qilinadi; buxgalter imzolaydi.
-4. **«Kassa» → «⚙ Sozlamalar»:** tashkilot nomi (hujjatlardagidek), STIR, joy, chop etish tili; T1 (shundan katta chiqimga Direktor
-   tasdig‘i), L1 (asos hujjatisiz naqd xarid chegarasi), kassa limiti; **yuridik shaxsga kassadan naqd to‘lov chegarasi** (yetkazib
-   beruvchi / tashkilotga shu summagacha Direktor tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida
-   tasdiqlaydi); **imzo egalari** (1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi,
-   tizimdagi hisobi). Kontragentlar turi to‘g‘ri bo‘lsin: korxona (MChJ, AJ va b.) — «Yetkazib beruvchi» yoki «Tashkilot», yakka
-   tadbirkor va fuqaro — «Jismoniy shaxs». «Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor kiritadi yoki tasdiqlaydi
+4. **«Kassa» → «⚙ Sozlamalar»** (egasi qarorlari, 2026-11-16): tashkilot nomi va tashkiliy-huquqiy shakli — ro‘yxatdan o‘tish
+   guvohnomasidagidek (buxgalter tekshiradi), STIR, joy, chop etish tili; T1 (shundan katta chiqimga Direktor tasdig‘i) — summa
+   buyruqdagi bilan bir xil (Direktor o‘zi yozadi; 0 qolsa har chiqim Direktor tasdig‘ini kutadi); L1 (asos hujjatisiz naqd xarid
+   chegarasi) — **0**, hujjatsiz xarid yo‘q (juda kerak bo‘lsa keyin kichik chegara va faqat bitta statiya); kassa limiti — bankdan yozma
+   javob kelguncha **0**; **yuridik shaxsga kassadan naqd to‘lov chegarasi** (yetkazib beruvchi / tashkilotga shu summagacha Direktor
+   tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida tasdiqlaydi) — **0**: har biri Direktor tasdig‘i bilan,
+   asosiy yo‘l — bank o‘tkazmasi; **imzo egalari** (1-ro‘yxat — Direktor va buyruq bilan tayinlangan o‘rinbosar, moliya menejeri emas;
+   2-ro‘yxat — bosh buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi, tizimdagi hisobi). Kontragentlar turi to‘g‘ri bo‘lsin: korxona (MChJ, AJ va b.) — «Yetkazib beruvchi» yoki «Tashkilot», yakka
+   tadbirkor va fuqaro — «Jismoniy shaxs», bank — «Bank». «Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor kiritadi yoki tasdiqlaydi
    (nazorat ro‘yxati → «Kontragent turi»): kassir yoki moliya menejeri kiritgani tasdiqlanguncha yuridik shaxs hisoblanadi (kassadan
    naqd to‘lovga Direktor tasdig‘i kerak).
-5. **«Boshlang‘ich qoldiqni kiritish»:** summa — komissiya sanagan pul; «Birinchi kassa kuni» — yanvarning birinchi kassa kuni;
+5. **«Boshlang‘ich qoldiqni kiritish»:** summa — komissiya sanagan pul; «Birinchi kassa kuni» — 2027-01-04 (yanvarning birinchi kassa kuni);
    komissiya a’zolari. Tizim «Boshlang‘ich qoldiq» dalolatnomasini yozadi (D-1) — chop etilib, komissiya imzolaydi (dalolatnomada
    komissiya tarkibi kiritilganidek chiqadi va har a’zoga imzo qatori bor).
    Birinchi kassa kuni ochilguncha qoldiqni qayta kiritish mumkin (avvalgi dalolatnoma bekor bo‘ladi, raqami saqlanadi).
-   **Sanashdan keyin va birinchi kassa kunidan oldin naqd pul harakati bo‘lsa** (masalan, ta’til kunlari qabul qilingan to‘lov) —
-   birinchi kassa kuni ertalab pul qayta sanaladi va boshlang‘ich qoldiq qayta kiritiladi: u birinchi hujjatdan oldingi haqiqiy pulga teng bo‘lishi shart.
+   **Sanashdan keyin va birinchi kassa kunidan oldin naqd pul harakati bo‘lsa** (masalan, 31-dekabr istisnosi) —
+   birinchi kassa kuni (4-yanvar) ertalab pul qayta sanaladi va boshlang‘ich qoldiq qayta kiritiladi: u birinchi hujjatdan oldingi haqiqiy pulga teng bo‘lishi shart.
    «Birinchi kassa kuni» odatda ishga tushadigan kunning o‘zi (6-qadam). Undan oldin bo‘lsa va o‘sha kuni kassa hujjati yozilsa — kassa
    **o‘sha kundan** ishlagan hisoblanadi: ishga tushgach o‘sha kun sanasi bilan kassa hujjatisiz naqd yozuv kiritilmaydi (Direktorga
    ham), «Moslik» uni ham tekshiradi.
 6. **«⚙ Sozlamalar» → «Kassa ishga tushadigan kun»** = birinchi kassa kuni. Shu kundan boshlab har naqd o‘quv to‘lovi kirim orderi
    va fiskal chek raqami bilan, faqat «💵 To‘lov» orqali yoziladi (to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish yoki «naqd» kanal bilan
-   balansga qo‘llash — Direktorga ham yo‘q). Sana 31-dekabr kechqurun (oldindan) kiritiladi. Bugungi yoki o‘tgan kun qo‘yilsa, tizim
+   balansga qo‘llash — Direktorga ham yo‘q). Sana 30-dekabr kechqurun (oldindan) kiritiladi: 2027-01-04. Bugungi yoki o‘tgan kun qo‘yilsa, tizim
    tekshiradi: shu kundan beri kassa orderisiz naqd yozuv (o‘quv to‘lovi, xarajat, maosh, avans, qaytarish) bo‘lsa — sozlama
    saqlanmaydi va sanani o‘sha yozuvlardan keyingi kunga qo‘yish so‘raladi (ular boshlang‘ich qoldiq sanashiga kiradi).
 7. **To‘lanmagan qaytarishlar:** «↩ Qaytarish» orqali tasdiqlangan, lekin hali berilmagan pullar ro‘yxati (yangi yilda kassadan «Qaytarish» chiqim orderi bilan beriladi).
-8. **Davr surati:** «Kassa» → «Davr» → «Yangi surat»: «Qaysi kun oxiri holati» = 31-dekabr → «Surat olish» («Shu sanagacha davrni
-   yopish» belgisi bugungi sana uchun o‘zi o‘chadi — bugungi kun yopilmaydi). Suratda: o‘quvchilar qarzi va avanslari, biriktirilmagan tushumlar, kassa
+8. **Davr surati — «31-dekabr holati»** (yil yakuni surati; **4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin**; 31-dekabr
+   istisnosi bo‘lsa — kechikkan yozuvlar kiritilib, qayta sanash va 5-qadamdan keyin): «Kassa» → «Davr» → «Yangi surat»: «Qaysi kun
+   oxiri holati» = 31-dekabr, **«Shu sanagacha davrni yopish»** belgisi qo‘yilgan holda → «Surat olish» — surat va qulf bitta amalda
+   (davrni yopib bo‘lmasa, surat ham olinmaydi). 30-dekabrda «31-dekabr holati» olinmaydi (kelajakdagi sana), 31-dekabrda esa qulf bilan
+   olinmaydi (bugungi kun yopilmaydi) — shuning uchun 4-yanvar ertalab. Surat — olingan paytdagi holat, ro‘yxatda «kechikib olingan»
+   belgisi bilan chiqadi: kassa kuni ochilishidan oldin olinsa, unga yanvar kassa hujjatlari aralashmaydi (kassa qoldig‘i =
+   boshlang‘ich qoldiq), yanvarda surat olinguncha (1–3-yanvar va 4-yanvar ertalab) kelgan onlayn to‘lovlar (Click, Uzum, bank) esa
+   kirgan bo‘ladi — buxgalter ularni «To‘lovlar»dagi shu kunlar ro‘yxati bilan ayiradi. Suratda: o‘quvchilar qarzi va avanslari, biriktirilmagan tushumlar, kassa
    qoldig‘i, to‘lanmagan ish haqi, berilmagan qaytarishlar. «⬇ JSON» bilan yuklab (Direktor yuklagani — ismli to‘liq nusxa; moliya menejeri va buxgalterga ismsiz nusxa
-   beriladi), arxivga qo‘yiladi.
-9. **Davrni yopish** — keyingi ish kuni: «Davr» → «Shu sanagacha yopiq» = 31-dekabr → «Qulfni saqlash». Shundan keyin 31-dekabrgacha
+   beriladi), ismli nusxa Direktorning xavfsiz arxiviga qo‘yiladi.
+9. **Davrni yopish** — 8-qadamdagi belgi bilan surat bilan birga (alohida kerak bo‘lsa: «Davr» → «Davr qulfini o‘zgartirish» →
+   «Shu sanagacha yopiq» = 31-dekabr → «Qulfni saqlash»). Qulfdan **oldin** 31-dekabrgacha sanali kechikkan yozuvlar kiritilgan
+   bo‘lsin (pastdagi «Kechikib topilgan yozuv»). Shundan keyin 31-dekabrgacha
    sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno); o‘sha davr
    to‘lovini qaytarish, biriktirish yoki holatini o‘zgartirish ham (tushum o‘zgaradi) — avval davr sababi bilan qayta ochiladi. Keyingi
    oylarda: davr faqat shu sanagacha bo‘lgan barcha kassa kunlari sanab yopilgan bo‘lsa yopiladi; yopilgan davrdagi kassa kuni
@@ -172,7 +245,8 @@ fiskal chek paydo bo‘ladi). Tartib:
   g‘aznachi qurilmasi navbatida qolib ketgan yozuv (ishga tushishdan oldin yozilgan, 48 soatdan eski emas) internet qaytganda o‘zi
   o‘tadi — u ham kirim orderisiz; undan eskisini Direktor kiritadi.
 - Bunday yozuvlar nazorat ro‘yxatida «Kassa ishga tushishidan oldingi naqd yozuvlar (keyin kiritilgan)» qatorida ko‘rinadi
-  (ma’lumot uchun): buxgalter ularni sanash dalolatnomasi bilan solishtiradi. Davr qulfi (8–9-qadamlar) ularga ham amal qiladi.
+  (ma’lumot uchun): buxgalter ularni sanash dalolatnomasi bilan solishtiradi. Davr qulfi (8–9-qadamlar) ularga ham amal qiladi —
+  31-dekabrgacha sanali yozuv 4-yanvar ertalabki qulfdan keyin kiritilmaydi (Direktorga ham; avval davr sababi bilan qayta ochiladi).
 - Bu tartib faqat **kassa ishlamagan kunlar** uchun: kassa **birinchi** ishga tushgan kundan (birinchi kassa hujjati ishga tushadigan
   kundan oldin yozilgan bo‘lsa — o‘sha kundan) oldingi sana yoki kassa to‘xtatilgan
   davr ichidagi sana (9-bo‘lim; bu davr yozuvlari «Kassani to‘xtatish va qayta ishga tushirish» qatorida). Kassa ishlagan kun
@@ -180,19 +254,25 @@ fiskal chek paydo bo‘ladi). Tartib:
   kiritilmaydi: naqd o‘quv to‘lovi bugungi kirim orderi bilan yoziladi, xarajat, maosh va avans — faqat «Kassa» orqali (tizim rad
   etadi: «kassa kuni edi»).
 
-## 5. Birinchi kassa kuni
+## 5. Birinchi kassa kuni (4-yanvar)
+- [ ] Ertalab, birinchi hujjatdan oldin (Direktor): 31-dekabrda naqd harakat bo‘lgan bo‘lsa — kechikkan yozuvlar kiritilgan, komissiya
+  qayta sanagan va boshlang‘ich qoldiq qayta kiritilgan; «31-dekabr holati» surati qulf bilan olingan (4-bo‘lim, 8–9-qadamlar).
 - [ ] Ertalab «Kassa»: «Oxirgi qoldiq» = boshlang‘ich qoldiq = kassadagi haqiqiy pul (farq bo‘lsa — birinchi hujjatdan oldin qayta sanab, qayta kiriting); qizil ogohlantirish yo‘q.
-- [ ] Birinchi naqd o‘quv to‘lovi: fiskal chek urildi → «💵 To‘lov» (chek raqami bilan) → «🖨 Kirim orderi va patta»; patta to‘lovchiga, order kassada.
-- [ ] Birinchi chiqim: «+ Chiqim so‘rovi» → moliya menejeri «Tasdiqlash» → kassir «Pulni berish» → «🖨 Chiqim orderi», oluvchi imzosi.
-- [ ] Kechqurun: «Kunni yopish» — pul sanaladi, summa kiritiladi; «🖨 KO-4» ikki nusxa (kassa kitobi varag‘i va kassir hisoboti) va «🖨 Kunlik hisobot».
-- [ ] Moliya menejeri yoki buxgalter: qog‘ozlarni olib, «Tekshirish» → «Tekshirdim».
-- [ ] Direktor: Telegram hisobotida kassa bloki (kirim, chiqim, qoldiq, sanash) va nazorat qatori.
+- [ ] Birinchi naqd o‘quv to‘lovi: NKM da fiskal chek urildi → «💵 To‘lov» (chek raqami bilan) → «🖨 Kirim orderi va patta»; patta to‘lovchiga, order kassada.
+- [ ] Birinchi chiqim: «+ Chiqim so‘rovi» → moliya menejeri «Tasdiqlash» → g‘aznachi (kassir) «Pulni berish» → «🖨 Chiqim orderi», oluvchi imzosi.
+- [ ] Kechqurun: NKM Z-hisoboti (naqd + karta, bitta) → «Kunni yopish» — pul sanaladi, summa va Z-hisobot kiritiladi; «🖨 KO-4» ikki nusxa (kassa kitobi varag‘i va kassir hisoboti) va «🖨 Kunlik hisobot».
+- [ ] Buxgalter (u yo‘q kuni — moliya menejeri): qog‘ozlarni olib, «Tekshirish» → «Tekshirdim».
+- [ ] Direktor: Telegram hisobotida kassa bloki (kirim, chiqim, qoldiq, sanash) va nazorat qatori. Hisobot kunlari va soati — «Xabarnomalar» →
+  «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju (standartdagi «Sh» belgisi olib tashlanadi), soat — kassa yopilgandan keyin (standart 19:00).
+- [ ] Kassa yopilgach 15 daqiqalik qo‘ng‘iroq: g‘aznachi, moliya menejeri, texnik navbatchi (10-bo‘lim).
 
 ## 6. Parallel yuritish (birinchi 5 ish kuni)
 Excel yuritilmaydi. Moliya menejeri har kuni (≈ 10 daqiqa) nazorat varag‘ini to‘ldiradi (`shakllar.md`, Sh-6). Chiqish sharti —
 **ketma-ket 3 ish kuni**: sanalgan pul = tizimdagi qoldiq; har order qog‘oz manbasi bilan; Click / Uzum kabinetidagi summalar =
 kunlik hisobotdagi «kanallar» bloki; bankka topshirish va bankdan olish = bank hujjatlari; raqamlar uzluksiz, bekor qilishlar
 izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori — «hammasi mos»; tushuntirilmagan farq yo‘q.
+Click / Uzum kabinetlari va bank hujjatlarini ko‘rish imkonini moliya menejeriga Direktor beradi (egasi qarori, 2026-11-16); chiqish
+sharti bajarilgach parallel yuritishni tugatish qarorini Direktor imzolaydi (Sh-6).
 
 ## 7. Oy oxiri
 1. Oyning oxirgi ish kuni — komissiya sanashi: kunni Direktor yoki moliya menejeri komissiya ishtirokida yopadi (yopish oynasida
@@ -200,7 +280,8 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 2. Barcha kunlar «Tekshirilgan»; nazorat ro‘yxatida qizil qator yo‘q; `kassa-checks.sql` — «muammo topilmadi».
 3. Yanvar avans hisobotlari (qog‘oz, Sh-1) buxgalterga topshirilgan va «Kassa» → «Avans hisoboti» bilan kiritilgan.
 4. «KO-3» jurnali (oy) chop etilib bosh buxgalter imzolaydi; Excel nusxasi buxgalter dasturiga olinadi (buxgalter va Moliya
-   menejerida — ismsiz, FD-28; to‘liq nusxa kerak bo‘lsa — Direktor yuklaydi); jurnal oynasida qoldiqlar mos (ogohlantirish yo‘q).
+   menejerida — ismsiz, FD-28; to‘liq nusxa kerak bo‘lsa — Direktor yuklaydi va xavfsiz arxivida saqlaydi, buxgalterga ismsiz nusxa
+   beriladi); jurnal oynasida qoldiqlar mos (ogohlantirish yo‘q).
    «Statiyalar» — oylik statiya matritsasi chop etilib imzolanadi; «Oylik to‘plam (Excel)» (KO-3, statiyalar, kassa kunlari,
    hisobdorlar) buxgalterga topshiriladi.
 5. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi; oy kunlaridan
@@ -212,7 +293,7 @@ izohlangan; Telegram = kunlik hisobot; nazorat ro‘yxatida «Moslik» qatori �
 |---|---|
 | Internet uzildi | Fiskal chek uriladi (kassa apparati oflayn rejimda). «💵 To‘lov» qurilmada navbatga yoziladi; to‘lovchiga tizimdan varaqa berilmaydi — dalil fiskal chek. Internet qaytgach yozuv o‘zi o‘tadi va kirim orderi chiqadi. **Kunni yopish** avval qurilma navbatini yuboradi; yuborilmay qolgan yozuvlar oynada ko‘rinadi va har biri o‘z kaliti bilan «hali o‘tkazilmagan yozuv» sifatida o‘zi hisobga olinadi (bu pul kassada bor, hisobda hali yo‘q; qo‘lda kiritilmaydi, yopish to‘xtatilmaydi) — shu payt o‘tib ketganini tizim ayirmaydi (natija xabarida aytiladi). Navbat **boshqa** qurilmada bo‘lsa — avval o‘sha qurilma internetga ulanadi va navbati o‘tadi (aks holda farq chiqadi). Oyna ochilgandan keyin kassa qoldig‘i o‘zgarsa (masalan, navbat shu orada o‘tdi) tizim yopmaydi: oyna yangi qoldiq bilan qayta ochiladi, pul qayta sanaladi (smena topshirishda ham). Smena topshirishda e’lon qilingan, hali kelmagan yozuvlarni tizim qabul qiluvchining kunni yopishi va keyingi smena topshirishida o‘zi hisobga oladi (oynada alohida qator) — navbat topshiruvchi qurilmasida qolgan bo‘lsa ham farq chiqmaydi; ular kichigidan boshlab sanalgan pulga sig‘guncha ayiriladi, sig‘magani ayirilmaydi — u bog‘lanmagan bo‘lib qoladi (kunni tekshirishda izoh; keyin kelsa, o‘sha yopishdagi ortiqcha va kelgan kungi kamomad birgalikda haqiqiy farqni beradi), yopish to‘xtamaydi. O‘sha to‘lov yangi kalit bilan qayta kiritilgan bo‘lsa (eski navbat yozuvi endi kelmaydi; qurilmada qolgan bo‘lsa — o‘chiriladi) va sanalgan pul yetsa, yopishda shu summaga kamomad, keyingi sanashda esa xuddi shuncha ortiqcha chiqadi: kamomad haqiqiy emas — Direktor uni xodim hisobiga emas, «Hisobdan chiqarish» bilan yopadi (ortiqcha uni qoplaydi), ikkala kun izohida sababi yoziladi. Server kassaga tegishli emas deb rad etgan navbat yozuvi (kassa ishga tushishidan oldingi yoki to‘xtatilgan davr puli, yopilgan oy sanasi) yopishda e’lon qilinmaydi — oynada soni ko‘rsatiladi. Boshqa sabab bilan rad etilgan («Yuborilmadi») yozuvlar oynada alohida, server xatosi bilan ko‘rsatiladi va har biri uchun tanlov so‘raladi (tanlanmaguncha oyna saqlamaydi): pul kassada (qayta kiritilmagan) — «hali o‘tkazilmagan yozuv» bo‘lib e’lon qilinadi; to‘g‘ri ma’lumot bilan qayta kiritilgan yoki pul qaytarilgan — e’lon qilinmaydi va kun yopilgach (smena topshirilgach) navbatdan o‘chiriladi. Avval hammasi e’lon qilinardi: «💵 To‘lov» oynasida rad etilgan to‘lov (masalan, fiskal chek raqami takror) tuzatilib qayta kiritilgach ham pul ikki marta ayirilib, soxta kamomad chiqardi. Shu oynadan o‘sha o‘quvchi uchun tuzatilib qayta kiritilganda rad etilgan yozuv navbatdan o‘zi almashtiriladi (boshqa o‘quvchi tanlansa — qoladi). Kun yopilgandan keyin navbatdagi yozuv kutib turadi («Navbatda · Bugungi kassa kuni yopilgan …» — o‘chirilmaydi) va keyingi ochiq kassa kuniga «kech» belgisi bilan tushadi (pul olingan payt saqlanadi) — yopishdagi yozuv bilan bog‘lanadi; u faqat sahifa ishlatilayotganda (oxirgi 30 daqiqada bosilgan yoki yozilgan) yuboriladi — kechasi yoki dam olish kuni ochiq qolgan brauzer kassa kunini o‘zi ochmaydi (ertalab sahifani bir bosish yetarli). Onlayn kassa Z-hisoboti bilan u chek tushgan NKM smenasi kuniga solishtiriladi — pul olingandan keyin yopilgan birinchi kassa kuni (odatda pul olingan kun; kun yopilgandan keyin olingan bo‘lsa — keyingi yopilgan kun; bunday kun bo‘lmasa, masalan yakshanba olingan pul, — order kuni): yozuv kelguncha o‘sha kunda Z farqi ko‘rinishi mumkin. 2 kun (48 soat) ichida kelmagan yozuv nazorat ro‘yxatida sariq («Hali kelmagan «hali o‘tkazilmagan» yozuvlar»); bunday kunni tekshirishda izoh majburiy. 48 soatdan eski yozuvni faqat Direktor kiritadi. Navbat bo‘shamaguncha kassa to‘xtatilmaydi (9-bo‘lim). |
 | Tizim (server) ishlamayapti | Ichki «Қ» blankasi to‘ldiriladi (to‘lovchiga berilmaydi), jurnalga yoziladi; fiskal chek uriladi. Tizim **o‘sha kuni, kun yopilishidan oldin** tiklansa — yozuvlar shu kunga kiritiladi (izohda — «Қ» raqami), kun odatdagidek yopiladi. **Server ishlamagan kun yopilmay qolgan bo‘lsa** (masalan, ertasi ertalab tiklandi): (1) avval o‘sha kun yopiladi — «Kunni yopish» oynasidagi **«Server ishlamagan paytdagi «Қ» blankalari»** maydonlariga hali kiritilmagan blankalar soni, summasi va raqamlari yoziladi (bu pul kassada bor, hisobda hali yo‘q — sanashdan ayiriladi, farq chiqmaydi; yozilmasa — o‘sha kun ortiqcha, keyingi kun kamomad chiqadi); (2) keyin har bir «Қ» yozuvi joriy kassa kuniga kiritiladi (izohda — «Қ» raqami va pul olingan sana), jurnalda order raqami belgilanadi. O‘sha kunni tekshirishda izoh majburiy (2-ro‘yxat blankalarni kiritilgan orderlar bilan solishtiradi); kun tekshirilguncha oy davri yopilmaydi. **Z-hisobot:** fiskal cheklar server ishlamagan kunda urilgan (o‘sha kun Z ida bor), «Қ» yozuvlari esa kiritilgan kunga tushadi («kech» emas) — server ishlamagan kunda Z farqi «+», «Қ» yozuvlari kiritilgan kunda xuddi shuncha «−». Ikkala kunni tekshirishda izoh majburiy: tekshiruvchi «Қ» blankalarini kiritilgan orderlar bilan solishtiradi va ikkala kun izohiga «Қ» raqamlarini yozadi. |
-| Fiskal kassa ishlamayapti | Faqat soliq organida ro‘yxatdan o‘tgan maxsus kvitansiya daftari; naqd to‘lovni tizimga kiritishda Direktor «Fiskal cheksiz (istisno)» belgisini qo‘yadi — jurnalda qoladi. |
+| Fiskal kassa (NKM) ishlamayapti | Faqat soliq organida ro‘yxatdan o‘tgan maxsus kvitansiya daftari (maktabda bor, kassada saqlanadi); naqd to‘lovni tizimga kiritishda Direktor «Fiskal cheksiz (istisno)» belgisini qo‘yadi — jurnalda qoladi. Internet uzilganda NKM oflayn chek rejimida ishlaydi — kvitansiya daftari faqat apparat buzilganda. |
 | Order xato yozildi | **Shu kuni:** hujjat qatorida «Bekor» (sababi bilan) — raqam saqlanadi, to‘g‘risi yangi raqam bilan yoziladi. **Kun yopilgan, tekshirilmagan:** Direktor «Qayta ochish» (faqat oxirgi kun). **Tekshirilgan kun:** o‘zgarmaydi — buxgalter tuzatish hujjati bilan. |
 | Sanashda farq | Tizim shu kun sanasi bilan kamomad (chiqim) yoki ortiqcha (kirim) hujjatini o‘zi yozadi; dalolatnoma chop etiladi; kamomad bo‘yicha Direktor qarori («Qaror»): xodim hisobiga yoki zararga. Xodim hisobiga bo‘lsa — u pulni kassaga «+ Kirim» → «Kamomadni qoplash (xodim)» bilan qaytaradi (qarordagi summadan oshmaydi); qolgani nazorat ro‘yxatida («Xodimlar zimmasidagi kamomad») ko‘rinadi. |
 | Xodim avans yoki maoshni kassaga qaytardi | «+ Kirim» → «Xodim qaytargan pul»: xodim, **qaysi oy**, statiya (avans — OP-08, maosh — OP-09). Avans qaytimi shu oy avansidan ayiriladi — oy vedomosti tasdiqlangan bo‘lsa qabul qilinmaydi (OP-09 bilan yoki Direktor oyni qayta ochadi); maosh qaytimi shu oy berilgan maoshni kamaytiradi (qayta berilishi mumkin). |
@@ -232,7 +313,8 @@ yozilgan» xabari o‘rniga; ikkinchi qaytarish baribir yozilmaydi. (7) Vedomost
 o‘z maoshini naqd hech kim bermaydi (kassir — vedomostsiz oyda, Direktor — o‘ziga, FD-48): u karta orqali yoziladi. (8) Kunni yopishda
 «Qayta kiritilgan …» deb navbatdan o‘chirilgan «Yuborilmadi» yozuvi avval smena topshirishda e’lon qilingan bo‘lsa, tizim uni baribir
 «smena topshirishda e’lon qilingan, hali kelmagan» deb hisobga oladi — yuqoridagi «Internet uzildi» qatoridagi tartib (soxta kamomad
-Direktor tomonidan «Hisobdan chiqarish» bilan yopiladi, ikkala kun izohida sababi yoziladi).
+Direktor tomonidan «Hisobdan chiqarish» bilan yopiladi, ikkala kun izohida sababi yoziladi). **Egasi qabul qildi (2026-11-16);**
+(2)-cheklov bo‘yicha tizimda eski «biriktirilmagan» naqd to‘lovlar yo‘qligi 30-dekabrgacha buxgalter bilan tekshiriladi.
 
 ## 9. Orqaga qaytish
 **Ish jarayoni (tizimdan vaqtincha voz kechish).** Qaror — Direktor. (1) **To‘xtatishdan oldin:** to‘lov qabul qiladigan
@@ -317,7 +399,8 @@ navbati avval tizimga kiritilgan bo‘lsin — 4-bo‘lim, 1-qadam):
    shu tartibda, o‘z sanashi va dalolatnomasi bilan.
 
 ## 10. Qo‘llab-quvvatlash (birinchi 2 hafta)
-Har kuni 15 daqiqalik qo‘ng‘iroq (kassir, moliya menejeri, administrator). Kassa ish soatlarida navbatchi. Muhimlik: ishni
-to‘xtatadigan xato — o‘sha kuni (tuzalmasa — «Қ» blankalari); noqulaylik — 2 ish kuni; istak — keyingi yangilanish. Har hafta —
+Texnik navbatchi (kassa ish soatlarida) — server huquqi bor shaxs: egasi yoki u tayinlagan administrator (egasi qarori, 2026-11-16).
+Har kuni kassa yopilgach 15 daqiqalik qo‘ng‘iroq (g‘aznachi, moliya menejeri, navbatchi). Muhimlik: ishni
+to‘xtatadigan xato — o‘sha kuni (tuzalmasa — «Қ» blankalari); noqulaylik — 2 ish kuni; istak — keyingi yangilanish. Har hafta (dushanba) —
 nazorat ro‘yxati, «Kassa» → «KPI» (haftalik ko‘rsatkichlar; dushanba kungi Telegram hisobotida ham), `kassa-checks.sql` va
 `verify-db.sh` natijasi ko‘rib chiqiladi (ikkalasi faqat o‘qiydi).

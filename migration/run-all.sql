@@ -129,6 +129,7 @@ set local iqror.migrating = '1';
 --dev \ir fin-period.sql
 --dev \ir fin-rights.sql
 --dev \ir fin-version.sql
+\ir payer-code-mask.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

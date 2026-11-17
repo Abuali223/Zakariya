@@ -882,7 +882,7 @@ const T = {
     kab_login:"Kabinetdan foydalanish uchun avval tizimga kiring (Kirish tugmasi).",
     kab_prompt:"Farzandingizning maktab bergan ID raqamini kiriting (bir nechtasini qo‘shishingiz mumkin):",
     kab_ph:"Masalan: IQ-1004",kab_save:"Saqlash",kab_change:"ID ni o‘zgartirish",kab_add:"Qo‘shish",
-    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",
+    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",kab_code_changed:"Bu kod almashtirilgan — yangi kodni maktabdan oling.",
     kab_children:"Farzandlaringiz",kab_remove:"Olib tashlash",kab_remove_q:"Bu farzand ro‘yxatdan olib tashlansinmi?",
     kab_dup:"Bu ID allaqachon qo‘shilgan.",
     kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
@@ -986,7 +986,7 @@ const T = {
     kab_login:"Чтобы пользоваться кабинетом, сначала войдите (кнопка «Войти»).",
     kab_prompt:"Введите ID, выданный школой вашему ребёнку (можно добавить несколько):",
     kab_ph:"Например: IQ-1004",kab_save:"Сохранить",kab_change:"Изменить ID",kab_add:"Добавить",
-    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",
+    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",kab_code_changed:"Этот код заменён — получите новый код в школе.",
     kab_children:"Ваши дети",kab_remove:"Убрать",kab_remove_q:"Убрать этого ребёнка из списка?",
     kab_dup:"Этот ID уже добавлен.",
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
@@ -1376,7 +1376,7 @@ function renderKabinet(){
       if(!code){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_code_need; } return; }
       const r=await A.addChild(val, code);
       if(r&&r.ok){ renderKabinet(); }
-      else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.msg)||((r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr); }   // r.msg: server xabari (lockout / kod noto'g'ri)
+      else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.err==='changed')?t.kab_code_changed:((r&&r.msg)||((r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr)); }   // r.msg: server xabari (lockout / kod noto'g'ri)
     };
     btn.onclick=add;
     inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
@@ -2545,7 +2545,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           // serverда majburlanadi. To'g'ridan-to'g'ri child_claims INSERT endi yopiq (cc_ins=false).
           let res; try{ res = await fsMod.rpc('claim_child', { p_sid:id, p_code:code }); }
           catch(e){ return {ok:false, err:'code'}; }
-          if(!res || !res.ok){ return {ok:false, err:(res&&res.locked)?'locked':'code', msg:(res&&res.error)||'' }; }
+          if(!res || !res.ok){ return {ok:false, err:(res&&res.locked)?'locked':((res&&res.reason==='code_changed')?'changed':'code'), msg:(res&&res.error)||'' }; }   // code_changed: eski (almashtirilgan) kod
           childIds = await loadChildIds(currentUser.uid);
           // Bog'lanish KANONIK kalit bilan saqlanadi (claim_child -> studentId) — ota-ona doc id kiritgan bo'lsa ham.
           const cid=String((res&&res.studentId)||id);

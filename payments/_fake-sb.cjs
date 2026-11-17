@@ -2,7 +2,7 @@
 // _fake-sb.cjs — pul oqimi testlari uchun SOXTA, stateful Supabase mijozi.
 //   Ikki qismdan iborat:
 //     1) from(table)  — doc/collection ustasi (sb-admin.js shuni chaqiradi):
-//        select/eq/maybeSingle/upsert/insert/update/delete/then — in-memory `state` ustida.
+//        select/eq/in/maybeSingle/upsert/insert/update/delete/then — in-memory `state` ustida.
 //     2) rpc(fn,params) — pul RPC'larini (apply_payment / apply_to_invoice / reverse_payment)
 //        HAQIQIY SQL (migration/audit-7.sql, audit-5.sql, reverse-payment.sql) kabi, aynan
 //        o'sha jsonb shakllarini qaytarib va o'sha jadval o'zgarishlarini `state` ustida bajaradi.
@@ -25,7 +25,8 @@ function badCol(table, obj) { const cols = SCHEMA && SCHEMA[table]; if (!Array.i
   for (const k of Object.keys(obj || {})) if (!cols.includes(k)) return { code: 'PGRST204', message: `Could not find the '${k}' column of '${table}' in the schema cache` };
   return null; }
 
-function match(r, filters) { return filters.every(([f, v]) => String(r[f]) === String(v)); }
+// [f, v] — tenglik (eq); [f, [v1, v2, ...], 'in'] — ro'yxatdagi biri (in).
+function match(r, filters) { return filters.every(([f, v, op]) => op === 'in' ? v.map(String).includes(String(r[f])) : String(r[f]) === String(v)); }
 
 function makeFake(state, nowFn) {
   const now = nowFn || (() => NOW);
@@ -123,6 +124,7 @@ function makeFake(state, nowFn) {
       const api = {
         select() { return api; },
         eq(f, v) { filters.push([f, v]); return api; },
+        in(f, vals) { filters.push([f, Array.from(vals || []), 'in']); return api; },
         maybeSingle() { const rows = Object.values(state[table] || {}).filter(r => match(r, filters)); return Promise.resolve({ data: rows[0] || null, error: null }); },
         upsert(obj) { const bc = badCol(table, obj); if (bc) return Promise.resolve({ error: bc }); tbl(table)[obj.id] = Object.assign({}, state[table][obj.id], obj); return Promise.resolve({ error: null }); },
         insert(obj) { const bc = badCol(table, obj); if (bc) return Promise.resolve({ error: bc }); if (tbl(table)[obj.id]) return Promise.resolve({ error: { message: 'dup' } }); state[table][obj.id] = obj; return Promise.resolve({ error: null }); },

@@ -214,12 +214,19 @@ create trigger trg_monitoring_selfok before insert or update on public.monitorin
 
 -- 5) Maosh: vedomostni tasdiqlaydigan (qo'shimcha HR rolli) xodimning o'z qatori ham Direktor tasdig'ida
 --    (payroll_submit asosiy hr/finance_mgr rolini tekshiradi; bu trigger qo'shimcha HR rolini qo'shadi).
+--    Bog'lanish — payroll_submit bilan bir xil, ikki yo'nalishda: asosiy havola (users."staffRefType" / "staffRefId") yoki teskari
+--    havola (staff / teachers."userUid" — ikkinchi lavozim kartasi shu yo'l bilan bog'lanadi).
 create or replace function app.payroll_line_extra_hr() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_link text;
 begin
-  if not coalesce(new."needsDirector", false) and exists (
-       select 1 from public.users u where u."staffRefType" = new."personType" and u."staffRefId" = new."refId"
-          and app.u_has(u.role, u."extraRoles", 'hr')) then
+  if coalesce(new."needsDirector", false) then return new; end if;
+  if new."personType" = 'teacher' then select t."userUid" into v_link from public.teachers t where t.id = new."refId";
+  elsif new."personType" = 'staff' then select s."userUid" into v_link from public.staff s where s.id = new."refId";
+  end if;
+  if exists (select 1 from public.users u
+              where ((u."staffRefType" = new."personType" and u."staffRefId" = new."refId") or u.id = nullif(v_link, ''))
+                and app.u_has(u.role, u."extraRoles", 'hr')) then
     new."needsDirector" := true;
   end if;
   return new;
@@ -228,6 +235,34 @@ revoke all on function app.payroll_line_extra_hr() from public, anon, authentica
 drop trigger if exists trg_payroll_line_extra_hr on public.payroll_lines;
 create trigger trg_payroll_line_extra_hr before insert on public.payroll_lines
   for each row execute function app.payroll_line_extra_hr();
+-- 5b) Bir martalik (har deployda xavfsiz) tuzatish: teskari havola qoidasidan OLDIN saqlangan qatorlar. Maosh darvozasi
+--     (payroll-approval.sql: app.salary_payment_gate) saqlangan «needsDirector» belgisini o'qiydi — deploydan oldin yuborilgan oyda
+--     teskari havola bilan bog'langan HR / Moliya menejeri o'z maoshini Direktorsiz olardi. Yuborilgan / tasdiqlangan vedomostning
+--     Direktor hali tasdiqlamagan qatori — kartasi (asosiy yoki teskari havola bilan) HR / Moliya menejeri yoki qo'shimcha HR rolli
+--     foydalanuvchiga bog'langan bo'lsa — Direktor tasdig'iga o'tkaziladi (payroll_submit va yuqoridagi trigger bilan bir xil shart).
+--     Faqat hali «false» qatorlar — qayta ishga tushganda 0. Zanjir tranzaksiyasida (iqror.migrating = '1') change_log'ga yozilmaydi;
+--     payroll_lines'dagi BEFORE trigger (yuqorida) faqat INSERT'da ishlaydi. Natija — bitta NOTICE, faqat soni (> 0 bo'lsa
+--     «OGOHLANTIRISH: » — deploy.sh chiqishida ko'rinadi).
+do $$
+declare n int;
+begin
+  update public.payroll_lines l set "needsDirector" = true
+    from public.payroll_runs r
+   where r.id = l."runId" and r.status in ('submitted', 'approved')
+     and not l."needsDirector" and l."directorOkAt" is null
+     and exists (select 1 from public.users u
+                  where (u.role in ('hr', 'finance_mgr') or app.u_has(u.role, u."extraRoles", 'hr'))
+                    and ((u."staffRefType" = l."personType" and u."staffRefId" = l."refId")
+                         or u.id = nullif(case l."personType"
+                                            when 'teacher' then (select t."userUid" from public.teachers t where t.id = l."refId")
+                                            when 'staff' then (select s."userUid" from public.staff s where s.id = l."refId") end, '')));
+  get diagnostics n = row_count;
+  if n > 0 then
+    raise notice 'OGOHLANTIRISH: % ta maosh vedomosti qatori (yuborilgan / tasdiqlangan oy, HR / Moliya menejerining o''z qatori) Direktor tasdig''iga o''tkazildi — «Oylik vedomost»da ko''rib chiqing', n;
+  else
+    raise notice 'Maosh vedomosti: Direktor tasdig''iga o''tkaziladigan saqlangan qator yo''q (0)';
+  end if;
+end $$;
 
 -- 6) Oshxona menyusi (raqib): kun bo'yicha nonushta / tushlik / peshinlik, izoh, allergenlar. Yozish — Direktor va
 --    Ma'muriyat rahbari; o'qish — tizimga kirgan FAOL foydalanuvchi (xodim, ota-ona, o'quvchi). Ommaviy saytda ko'rsatilmaydi.

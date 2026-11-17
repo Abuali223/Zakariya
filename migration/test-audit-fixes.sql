@@ -9,7 +9,13 @@
 --   (5) o'chirilgan e'lonning yuborilmagan navbat yozuvi bekor ('skipped');
 --   (6) ota-ona o'z users qatorida tanlangan farzandni PATCH bilan saqlay oladi (upsert esa RLS insert tekshiruvidan o'tmaydi);
 --   (7) reprice_invoice: bayroq (iqror.inv_reprice) faqat RPC ichida — Moliya menejeri RPC orqali narxni o'zgartira oladi,
---       to'g'ridan-to'g'ri o'zgartira olmaydi, va RPC'dan keyin tranzaksiyada bayroq qolmaydi (funksiya darajasidagi SET'siz).
+--       to'g'ridan-to'g'ri o'zgartira olmaydi, va RPC'dan keyin tranzaksiyada bayroq qolmaydi (funksiya darajasidagi SET'siz);
+--   (8) maosh vedomosti: HR / Moliya menejerining (qo'shimcha HR rolli xodimning ham) o'z qatori Direktor tasdig'ida — xodim kartasi
+--       asosiy havola (users."staffRefType" / "staffRefId") bilan ham, teskari havola (staff / teachers."userUid") bilan ham bog'langan
+--       bo'lsa (payroll_submit va app.payroll_line_extra_hr); oddiy xodim qatori — tasdiqsiz; teskari havolali HR o'z maoshini o'zi bermaydi;
+--   (9) xodim kartasining login havolasi (staff / teachers."userUid", payroll-approval.sql 7-bo'lim): HR uni uza / o'zgartira / yangi kartaga
+--       yoza olmaydi (42501), kartaning boshqa maydonlarini tahrirlaydi (o'sha havola bilan to'liq qator upsert'i ham), o'zi bog'langan
+--       kartani o'chira olmaydi; Direktor va server (service_role) o'zgartiradi, o'zgarish tarixga yoziladi.
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-audit-fixes.sql
@@ -159,6 +165,115 @@ select zz.chk('P02b summa 800 000 bo''ldi', (select amount::bigint::text from pu
 select zz.chk('P03 RPC''dan keyin tranzaksiyada bayroq qolmadi', (select coalesce(current_setting('iqror.inv_reprice', true), '')), '^$');
 select zz.chk('P04 bayroq qolmagani uchun keyingi to''g''ridan-to''g''ri o''zgartirish yana rad etiladi', zz.as('U_FM', $q$with u as (update public.invoices set amount = 1 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^ERR 42501');
 select zz.chk('P05 xato bo''lsa ham bayroq qolmaydi (ruxsatsiz rol: ota-ona)', zz.as('U_PA', $q$select public.reprice_invoice('T-12__2098-01', 1, '{}'::jsonb, false)->>'ok'$q$) || '|' || coalesce(current_setting('iqror.inv_reprice', true), ''), '^ERR 42501.*\|$');
+
+-- ===== (8) maosh vedomosti: o'z qatori Direktor tasdig'ida — asosiy va teskari havola =====
+-- Urug' (triggerlarsiz): asosiy havola — users."staffRefType" / "staffRefId"; teskari — staff / teachers."userUid" (ikkinchi lavozim kartasi).
+--   x_dup: bir xil qator id — xodimlar ro'yxatida bog'lanmagan karta, o'qituvchilarda HR'ning ikkinchi lavozim kartasi.
+set local session_replication_role = replica;
+insert into public.users (id, email, role, status, "extraRoles", "staffRefType", "staffRefId") values
+  ('U_HRF','hrf@x','hr','active','[]','staff','x_hrf'),            ('U_HRR','hrr@x','hr','active','[]',null,null),
+  ('U_FMF','fmf@x','finance_mgr','active','[]','teacher','x_fmf'), ('U_FMR','fmr@x','finance_mgr','active','[]',null,null),
+  ('U_XHF','xhf@x','teacher','active','["hr"]','teacher','x_xhf'), ('U_XHR','xhr@x','kassir','active','["hr"]',null,null),
+  ('U_KS','ks@x','kassir','active','[]','staff','x_ks'),           ('U_TR','tr@x','teacher','active','[]',null,null);
+insert into public.staff (id, "staffId", name, "userUid") values
+  ('x_hrf','IQX-T1','Sinov HR 1',null), ('x_hrr','IQX-T2','Sinov HR 2','U_HRR'), ('x_xhr','IQX-T3','Sinov Kassir HR','U_XHR'),
+  ('x_ks','IQX-T4','Sinov Kassir',null), ('x_free','IQX-T5','Sinov Qorovul',null), ('x_dup','IQX-T6','Sinov Farrosh',null);
+insert into public.teachers (id, "teacherId", name, "userUid") values
+  ('x_fmf','IQT-T1','Sinov Moliya 1',null), ('x_fmr','IQT-T2','Sinov Moliya 2','U_FMR'), ('x_xhf','IQT-T3','Sinov HR O''qituvchi',null),
+  ('x_tr','IQT-T4','Sinov O''qituvchi','U_TR'), ('x_dup','IQT-T6','Sinov HR 2 (ikkinchi lavozim)','U_HRR');
+update public.config set "payrollApprovalFrom" = '2098-03' where id = 'finance';
+set local session_replication_role = origin;
+create or replace function zz.nd(p_pid text) returns text language sql as $$
+  select coalesce((select "needsDirector"::text from public.payroll_lines where "runId" = '2098-03' and "personId" = p_pid), '<qator yo''q>') $$;
+select zz.chk('W00 Moliya menejeri vedomostni yuboradi (11 qator)', zz.as('U_FM', $q$select public.payroll_submit('2098-03', '[
+    {"personType":"staff","personId":"IQX-T1","gross":1000000}, {"personType":"staff","personId":"IQX-T2","gross":1000000},
+    {"personType":"staff","personId":"IQX-T3","gross":1000000}, {"personType":"staff","personId":"IQX-T4","gross":1000000},
+    {"personType":"staff","personId":"IQX-T5","gross":1000000}, {"personType":"staff","personId":"IQX-T6","gross":1000000},
+    {"personType":"teacher","personId":"IQT-T1","gross":1000000}, {"personType":"teacher","personId":"IQT-T2","gross":1000000},
+    {"personType":"teacher","personId":"IQT-T3","gross":1000000}, {"personType":"teacher","personId":"IQT-T4","gross":1000000},
+    {"personType":"teacher","personId":"IQT-T6","gross":1000000}]'::jsonb, null)->>'count'$q$), '^11$');
+select zz.chk('W01 HR, asosiy havola — o''z qatori Direktor tasdig''ida', zz.nd('IQX-T1'), '^true$');
+select zz.chk('W02 HR, faqat teskari havola (staff."userUid") — Direktor tasdig''ida', zz.nd('IQX-T2'), '^true$');
+select zz.chk('W03 Moliya menejeri, asosiy havola — Direktor tasdig''ida', zz.nd('IQT-T1'), '^true$');
+select zz.chk('W04 Moliya menejeri, faqat teskari havola (teachers."userUid") — Direktor tasdig''ida', zz.nd('IQT-T2'), '^true$');
+select zz.chk('W05 qo''shimcha HR rolli o''qituvchi, asosiy havola — Direktor tasdig''ida (trigger)', zz.nd('IQT-T3'), '^true$');
+select zz.chk('W06 qo''shimcha HR rolli kassir, faqat teskari havola — Direktor tasdig''ida (trigger)', zz.nd('IQX-T3'), '^true$');
+select zz.chk('W07 HR''ning ikkinchi lavozim kartasi (o''qituvchi, teskari havola) — Direktor tasdig''ida; xodimlardagi shu qator id''li bog''lanmagan karta — yo''q',
+  zz.nd('IQT-T6') || '|' || zz.nd('IQX-T6'), '^true\|false$');
+select zz.chk('W08 oddiy xodimlar (kassir — asosiy havola, o''qituvchi — teskari havola, bog''lanmagan qorovul) — Direktor tasdig''isiz',
+  zz.nd('IQX-T4') || '|' || zz.nd('IQT-T4') || '|' || zz.nd('IQX-T5'), '^false\|false\|false$');
+select zz.chk('W09 teskari havolali HR vedomostni tasdiqlaydi (tayyorlagani — Moliya menejeri)', zz.as('U_HRR', $q$select public.payroll_decide('2098-03', true, null)->>'status'$q$), '^approved$');
+select zz.chk('W10 teskari havolali HR o''z maoshini Direktor tasdig''isiz bera olmaydi',
+  zz.as('U_HRR', $q$insert into public.salary_payments (id, "teacherId", month, gross, net, paid, date) values ('w_sp1', 'IQX-T2', '2098-03', 1000000, 1000000, 1000000, '2098-03-28') returning id$q$),
+  '^ERR 23514 .*Direktor tasdig''i kerak');
+select zz.chk('W11 Direktor shu qatorni tasdiqlaydi', zz.as('U_DIR', $q$select public.payroll_approve_line('2098-03__staff__IQX-T2', null)->>'ok'$q$), '^true$');
+select zz.chk('W12 Direktor tasdig''idan keyin maosh beriladi (Moliya menejeri)',
+  zz.as('U_FM', $q$insert into public.salary_payments (id, "teacherId", month, gross, net, paid, date) values ('w_sp2', 'IQX-T2', '2098-03', 1000000, 1000000, 1000000, '2098-03-28') returning id$q$),
+  '^w_sp2$');
+
+-- ===== (9) xodim kartasining login havolasi (staff / teachers."userUid") — faqat Direktor / server =====
+-- (8)-bo'limdagi kartalar: x_hrr (U_HRR — teskari havola), x_dup o'qituvchi (U_HRR ning ikkinchi lavozimi), x_hrf (U_HRF — asosiy havola),
+--   x_tr (U_TR), x_free (bog'lanmagan). Server: faqat JWT da'vosi (service_role) — lokal sinov bazasida service_role RLS'ni chetlab
+--   o'tmaydi (jonli bazada o'tadi), shuning uchun so'rov postgres nomidan, da'vo bilan (test-fin-period.sql dagi SYSTEM kabi).
+create or replace function zz.sys(p_q text) returns text language plpgsql as $$
+declare r text;
+begin
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  begin execute p_q into r; exception when others then r := 'ERR ' || sqlstate || ' ' || sqlerrm; end;
+  perform set_config('request.jwt.claims', '', true);
+  return coalesce(r, '<null>');
+end $$;
+select zz.chk('H01 HR o''z kartasidagi teskari havolani uza olmaydi (null ham, bo''sh satr ham)',
+  zz.as('U_HRR', $q$with u as (update public.staff set "userUid" = null where id = 'x_hrr' returning 1) select count(*)::text from u$q$) || ' / '
+  || zz.as('U_HRR', $q$with u as (update public.staff set "userUid" = '' where id = 'x_hrr' returning 1) select count(*)::text from u$q$),
+  '^ERR 42501 .*faqat Direktor o''zgartiradi.* / ERR 42501 .*faqat Direktor o''zgartiradi');
+select zz.chk('H02 HR boshqa kartaning havolasini o''zgartira olmaydi (o''qituvchi) va bog''lanmagan kartaga o''zini bog''lay olmaydi',
+  zz.as('U_HR', $q$with u as (update public.teachers set "userUid" = 'U_HR' where id = 'x_tr' returning 1) select count(*)::text from u$q$) || ' / '
+  || zz.as('U_HR', $q$with u as (update public.staff set "userUid" = 'U_HR' where id = 'x_free' returning 1) select count(*)::text from u$q$),
+  '^ERR 42501 .*faqat Direktor o''zgartiradi.* / ERR 42501 .*faqat Direktor o''zgartiradi');
+select zz.chk('H03 HR havolali yangi karta qo''sha olmaydi (xodim va o''qituvchi)',
+  zz.as('U_HR', $q$insert into public.staff (id, "staffId", name, "userUid") values ('x_n1', 'IQX-901', 'Sinov Yangi 1', 'U_HR') returning id$q$) || ' / '
+  || zz.as('U_HR', $q$insert into public.teachers (id, "teacherId", name, "userUid") values ('x_n1', 'IQT-901', 'Sinov Yangi 1', 'U_HR') returning id$q$),
+  '^ERR 42501 .*faqat Direktor o''zgartiradi.* / ERR 42501 .*faqat Direktor o''zgartiradi');
+select zz.chk('H04 HR havolasiz yangi karta qo''shadi (null va bo''sh satr)',
+  zz.as('U_HR', $q$insert into public.staff (id, "staffId", name, "userUid") values ('x_n2', 'IQX-902', 'Sinov Yangi 2', null) returning id$q$) || '|'
+  || zz.as('U_HR', $q$insert into public.teachers (id, "teacherId", name, "userUid") values ('x_n3', 'IQT-902', 'Sinov Yangi 3', '') returning id$q$),
+  '^x_n2\|x_n3$');
+select zz.chk('H05 HR bog''langan kartaning boshqa maydonlarini tahrirlaydi — havola o''zgarmaydi',
+  zz.as('U_HRR', $q$with u as (update public.staff set position = 'Sinov lavozim' where id = 'x_hrr' returning "userUid") select count(*) || '|' || min("userUid") from u$q$),
+  '^1\|U_HRR$');
+select zz.chk('H06 HR to''liq qator upsert''i: o''sha havola bilan — o''tadi; havola ustunisiz — o''tadi; boshqa havola bilan — 42501',
+  zz.as('U_HRR', $q$insert into public.staff (id, "staffId", name, position, "userUid") values ('x_hrr', 'IQX-T2', 'Sinov HR 2', 'Sinov lavozim 2', 'U_HRR')
+     on conflict (id) do update set "staffId" = excluded."staffId", name = excluded.name, position = excluded.position, "userUid" = excluded."userUid"
+     returning position || ':' || "userUid"$q$) || ' / '
+  || zz.as('U_HRR', $q$insert into public.staff (id, "staffId", name, position) values ('x_hrr', 'IQX-T2', 'Sinov HR 2', 'Sinov lavozim 3')
+     on conflict (id) do update set "staffId" = excluded."staffId", name = excluded.name, position = excluded.position returning position || ':' || "userUid"$q$) || ' / '
+  || zz.as('U_HRR', $q$insert into public.staff (id, "staffId", name, position, "userUid") values ('x_hrr', 'IQX-T2', 'Sinov HR 2', 'Sinov lavozim 4', 'U_HR')
+     on conflict (id) do update set position = excluded.position, "userUid" = excluded."userUid" returning position || ':' || "userUid"$q$),
+  '^Sinov lavozim 2:U_HRR / Sinov lavozim 3:U_HRR / ERR 42501 .*faqat Direktor o''zgartiradi');
+select zz.chk('H07 HR o''zi bog''langan xodim kartasini o''chira olmaydi (teskari va asosiy havola); o''qituvchi kartasini HR umuman o''chirmaydi (teachers_del — Direktor)',
+  zz.as('U_HRR', $q$with d as (delete from public.staff where id = 'x_hrr' returning 1) select count(*)::text from d$q$) || ' / '
+  || zz.as('U_HRF', $q$with d as (delete from public.staff where id = 'x_hrf' returning 1) select count(*)::text from d$q$) || ' / '
+  || zz.as('U_HRR', $q$with d as (delete from public.teachers where id = 'x_dup' returning 1) select count(*)::text from d$q$),
+  '^ERR 42501 .*o''chira olmaysiz.* / ERR 42501 .*o''chira olmaysiz.* / 0$');
+select zz.chk('H08 HR boshqa (o''ziga bog''lanmagan) kartani o''chiradi',
+  zz.as('U_HRR', $q$with d as (delete from public.staff where id = 'x_n2' returning 1) select count(*)::text from d$q$), '^1$');
+select zz.chk('H09 HR urinishlaridan keyin havolalar o''zgarmagan',
+  (select string_agg(id || '=' || coalesce("userUid", ''), ',' order by id) from public.staff where id in ('x_hrr', 'x_hrf', 'x_free')) || ' | '
+  || (select string_agg(id || '=' || coalesce("userUid", ''), ',' order by id) from public.teachers where id in ('x_dup', 'x_tr')),
+  '^x_free=,x_hrf=,x_hrr=U_HRR \| x_dup=U_HRR,x_tr=U_TR$');
+select zz.chk('H10 Direktor havolani uzadi va qayta bog''laydi',
+  zz.as('U_DIR', $q$with u as (update public.staff set "userUid" = '' where id = 'x_hrr' returning 1) select count(*)::text from u$q$) || '|'
+  || zz.as('U_DIR', $q$with u as (update public.staff set "userUid" = 'U_HRR' where id = 'x_hrr' returning "userUid") select min("userUid") from u$q$),
+  '^1\|U_HRR$');
+select zz.chk('H11 server (ro''yxatdan o''tish, service_role) bo''sh kartaga havola yozadi (shartli yozish — auth/index.cjs kabi)',
+  zz.sys($q$with u as (update public.staff set "userUid" = 'U_HR' where id = 'x_free' and ("userUid" is null or "userUid" = '') returning 1) select count(*)::text from u$q$),
+  '^1$');
+select zz.chk('H12 havola o''zgarishi tarixda: Direktorniki (2 ta) va tizimniki (kim — bo''sh); HR tahriri — havolasiz',
+  (select count(*) filter (where row_id = 'x_hrr' and actor_uid = 'U_DIR') || '|' || count(*) filter (where row_id = 'x_free' and actor_uid is null)
+          || '|' || count(*) filter (where actor_uid in ('U_HR', 'U_HRR', 'U_HRF'))
+     from public.change_log where tbl in ('staff', 'teachers') and changes ? 'userUid'),
+  '^2\|1\|0$');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL' from zz.res;

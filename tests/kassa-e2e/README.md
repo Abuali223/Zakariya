@@ -74,13 +74,13 @@ E2E_DB=fx_e2e
 ```bash
 cd tests/kassa-e2e
 bash stand.sh setup          # bir marta: local/, JWT siri, dasturlar tekshiruvi → «tayyor: …»
-bash run-all.sh              # to‘liq to‘plam (36 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
+bash run-all.sh              # to‘liq to‘plam (38 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
 ```
 
 `run-all.sh` har o‘tishdan oldin stendni noldan quradi (ssenariylar kunlarni yopadi, hujjat o‘tkazadi — holat
 qayta ishlatilmaydi), oxirida stendni to‘xtatadi. Natija: `local/out/<vaqt>/summary.txt` (har qator:
 `k5.v1: rc=0 | JAMI (v1): 22/22 | fail=0`), har ssenariy chiqishi `local/out/<vaqt>/<teg>.out`, skrinshotlar
-`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 36 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
+`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 38 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
 (chiqish kodi ≠ 0).
 
 Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`).
@@ -122,17 +122,22 @@ shu jadval ham yangilanadi):
 | k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | v1 41, v2 41 |
 | k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 29, v2 29 |
 | k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | v1 31, v2 31 |
+| k17 | `e2e-kassa17.cjs` | FD-28 fayllari: qarzdorlar CSV («Moliya»), «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti — Direktorga (davomatda HR’ga ham) ismli; Moliya menejeri, buxgalter va kassirga ismsiz (o‘quvchi ID, xodim maosh ID’si — «Kamera ID»siz xodimning ruhsati ham, «-ismsiz», izoh), qolgan ustunlar qatorma-qator va jamlar bir xil; ekrandagi ro‘yxat ism bilan | v1 27, v2 27 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
 
-Jami: 36 o‘tish, 992 tekshiruv (kassa 2 × 468, to‘lov 24, eski oqimlar 32).
+Jami: 38 o‘tish, 1046 tekshiruv (kassa 2 × 495, to‘lov 24, eski oqimlar 32).
 
-**Holat (2026-11-15).** Oxirgi to‘liq yashil o‘tish — 2026-11-15, modul relizi 12 (kassa moduli mustaqil ko‘rigi va yakuniy
-ko‘rik tuzatishlaridan keyingi kod): 36 o‘tish, 992 tekshiruv — hammasi o‘tdi (≈ 13 daqiqa). Ko‘rikda o‘zgargan oqimlar
-(ikki bosqichli smena topshirish, yopish va topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun
-tanlov, sinov kassasi, qaytarish oynasi kaliti, Direktor o‘ziga pul bermasligi, chop etish belgilari, T1, ishdan ketgan xodim)
-k14–k16 va yangilangan k1–k13, pay, legacy da tekshiriladi; har yangi tekshiruv mahsulot kodini vaqtincha eski holatiga
-qaytarib yiqilishi ko‘rsatilgan.
+**Holat (2026-11-16).** Oxirgi to‘liq yashil o‘tish — 2026-11-16: 38 o‘tish, 1046 tekshiruv — hammasi o‘tdi (≈ 14 daqiqa).
+Kod — modul relizi 12 va FD-28 fayllari (qarzdorlar CSV, «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti —
+Direktordan boshqalarga ismsiz nusxa): ularni yangi k17 tekshiradi — ismsiz nusxa Direktor nusxasi bilan qatorma-qator va
+jamlari bo‘yicha solishtiriladi; k17 tekshiruvlari mahsulot kodini vaqtincha buzib (FD-28 o‘zgarishini qaytarib yoki ismsiz
+nusxadagi qiymatni o‘zgartirib) yiqilishi ko‘rsatilgan. Oldingi to‘liq o‘tish — 2026-11-15 (reliz 12: kassa moduli mustaqil
+ko‘rigi va yakuniy ko‘rik tuzatishlaridan keyingi kod; 36 o‘tish, 992 tekshiruv). O‘sha ko‘rikda o‘zgargan oqimlar (ikki bosqichli
+smena topshirish, yopish va topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov
+kassasi, qaytarish oynasi kaliti, Direktor o‘ziga pul bermasligi, chop etish belgilari, T1, ishdan ketgan xodim) k14–k16 va
+yangilangan k1–k13, pay, legacy da tekshiriladi; har yangi tekshiruv mahsulot kodini vaqtincha eski holatiga qaytarib yiqilishi
+ko‘rsatilgan.
 
 ## Ssenariy yozish va tahrirlash
 

@@ -138,8 +138,9 @@ select app.chlog_attach('staff_substitutions', 'day,absentRefType,absentRefId,su
 select app.chlog_attach('staff_leaves',    'refType,refId,type,paid,startDay,endDay');   -- paid: leave-paid.sql (D5)
 select app.chlog_attach('staff_break_marks', 'refType,refId,day,type,awayMin');
 select app.chlog_attach('school_holidays', 'day,name');
-select app.chlog_attach('teachers',        'teacherId,salary,baseSalary,salaryBonus,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours,degree,category,languages,russian,langLevel');
-select app.chlog_attach('staff',           'staffId,position,salary,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours');
+-- userUid — kartaning login hisobiga teskari havolasi («o'z qatori Direktor tasdig'ida» qoidasi unga tayanadi; payroll-approval.sql 7-bo'lim).
+select app.chlog_attach('teachers',        'teacherId,salary,baseSalary,salaryBonus,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours,degree,category,languages,russian,langLevel,userUid');
+select app.chlog_attach('staff',           'staffId,position,salary,payStatus,activeFrom,stopFrom,pauses,cameraId,workStart,workEnd,workDays,flexibleHours,userUid');
 -- users: rol/holat + RLS tekshiradigan biriktirishlar (sinf/fan/sinf rahbarligi/farzandlar) + login (telefon/email — qiymati
 --   yozilmaydi, faqat «o'zgardi»: hisobni boshqa telefonga o'tkazish = hisobni egallash xavfi) + bloklash (user-block.sql).
 select app.chlog_attach('users',           'role,status,verified,staffRefType,staffRefId,staffCode,assignedClasses,assignedSubjects,homeroomClasses,childIds,childId,!phone,!email,blockedRole,blockedAt,blockedBy');

@@ -261,6 +261,23 @@ fi
 if [ "$bad" = "1" ]; then
   echo "❌ Xizmat(lar) ishga tushmadi. Log: sudo journalctl $(for s in $SERVICES; do printf -- '-u %s ' "$s"; done)-n 50 --no-pager"; exit 1
 fi
+# To'lovchi matnidagi maxfiy kod (migration/payer-code-mask.sql): 3/7 (zanjir) va yuqoridagi qayta ishga tushirish oralig'ida ESKI
+#   to'lov serveri yozgan matnda kod yashirilmagan bo'lishi mumkin — yangi server ishlayotganda tuzatish yana bir marta: o'z
+#   tranzaksiyasida, zanjir kabi (iqror.migrating — o'zgarishlar tarixiga yozilmaydi; lock_timeout). Bajarilmasa — faqat ogohlantirish
+#   (deploy to'xtamaydi; keyingi deploy zanjiri baribir tuzatadi).
+PAYFIX_SQL="\\set ON_ERROR_STOP on
+set lock_timeout = '20s';
+begin;
+set local iqror.migrating = '1';
+select app.payer_codes_fix_notice();
+commit;"
+if printf '%s\n' "$PAYFIX_SQL" | sudo docker exec -i "$DB_CONT" psql -U postgres -d postgres -q >"$TMPD/payfix.log" 2>&1; then
+  echo "    ✓ to'lovchi matni qayta tekshirildi (eski server oralig'i — app.payer_codes_fix)"
+  grep -E "OGOHLANTIRISH" "$TMPD/payfix.log" | sed -E 's/^.*NOTICE: +/    ⚠️  /' || true
+else
+  echo "⚠️  To'lovchi matnidagi kodlarni qayta tekshirish bajarilmadi (deploy davom etadi): $(grep -E 'ERROR|FATAL|could not' "$TMPD/payfix.log" | tail -1 || true)"
+  echo "   Qo'lda: sudo docker exec -i $DB_CONT psql -U postgres -d postgres -c \"begin; set local iqror.migrating = '1'; select app.payer_codes_fix_notice(); commit;\""
+fi
 
 echo "==> 7/7 Baza holati tekshiruvi (prod == repo'dagi kanonik holat?)..."
 # Vaqtinchalik bazada kanonik holatni quradi va jonli bazaga SOLISHTIRADI (jonli bazaga hech narsa yozmaydi).

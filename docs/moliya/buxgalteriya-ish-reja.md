@@ -12,8 +12,8 @@ hisoblanadi; kassa kitobi (кассовая книга, KO-4) varaqlari kun yopi
 ega, statiya BHMS 21 hisobvarag‘iga bog‘langan — boshqaruv hisobi, bosh kitob va hisobotlar shundan quriladi. Ish 7
 bosqichda (1-bosqich ikki qismga bo‘lingan): **0** — qarorlar, tayyorgarlik, 16-noyabrdan oraliq qoidalar; **1a** —
 kassa (MVP): noyabr–dekabrda quriladi, dekabrda sinov stendida qabul sinovi va prod’da bayroq ostida yashirin o‘rnatish,
-**rasmiy ishga tushirish — 2027-yil yanvardagi birinchi kassa kuni (rejada 4-yanvar)**, boshlang‘ich qoldiq — 31-dekabr
-komissiya sanash dalolatnomasi; **1b** — yanvarda qo‘shimchalar; **2** — statiyalar hamma joyda, avans hisobotlari, oy
+**rasmiy ishga tushirish — 2027-yil yanvardagi birinchi kassa kuni (rejada 4-yanvar)**, boshlang‘ich qoldiq — 30-dekabr
+komissiya sanash dalolatnomasi (egasi qarori, 2026-11-16); **1b** — yanvarda qo‘shimchalar; **2** — statiyalar hamma joyda, avans hisobotlari, oy
 qulfi (fevral); **3** — bank va yo‘ldagi pul (mart); **4** — 2027-01-01 dan bosh kitob (aprel); **5** — hisobotlar
 (may–iyun); **6** — muvofiqlik kengaytmalari. Ishga tushirish 6 ta darvozaga bog‘langan (§5); biri bajarilmasa sana
 fevralning birinchi kassa kuniga suriladi, qamrov qisqarmaydi. Dizayn ishlari to‘xtatilgan: faqat mavjud komponentlar,
@@ -37,7 +37,8 @@ o‘rnatish (`sinov/README.md`; kassa bilan — `update.sh --dev`) — qabul sin
 21-noyabrgacha hisob qismini (hisobvaraqlar, statiyalar, operatsiyalar — §4.2–4.6), `docs/moliya/shakllar.md` va buyruq
 namunalarini ko‘rib chiqadi; (4) bank bilan kassa limiti bormi — javob; (5) 12-dekabrgacha: buyruqlar imzolanadi va
 fiskal kassa bo‘yicha yozma tasdiq (G1, G5); (6) 14–26-dekabr: har rol stendda qabul sinovini o‘tkazib imzolaydi (G4).
-Ishga tushirish tartibi va tekshiruv ro‘yxatlari — `docs/moliya/ishga-tushirish.md`.
+Ishga tushirish tartibi va tekshiruv ro‘yxatlari — `docs/moliya/ishga-tushirish.md`. **2026-11-16:** egasi ishga tushirish
+savollariga javob berdi (§5, 0-bosqich, «Egasi javoblari — 2026-11-16»); buxgalter savollari — `docs/moliya/shakllar.md`, Sh-8.
 
 **Belgilar.** `F<bosqich>.<n>` — vazifa; `FD-nn` — qaror; `IN-` / `EX-` / `OP-` — statiya (daromad / foyda-zararga
 kiradigan xarajat / kirmaydigan operatsiya); `PR` — provodka qoidasi; `MC` — oy yopish qadami; `RP` — hisobot; `CT` —
@@ -173,7 +174,8 @@ qatorlar — yopiq ilovada. Tuzilmalar — B-ilovada.
 
 ### 4.0 Asosiy tanlovlar (ziddiyatlar va ko‘rik topilmalari bo‘yicha)
 1. **Ishga tushirish — yanvardagi birinchi kassa kuni** (0 + 1a ≈ 64 dasturchi-kun 14-dekabrgacha sig‘maydi; yil boshidan
-   raqamlar 1 dan; 31.12 sanash 5010 va bosh kitob qoldig‘ini bir yo‘la tasdiqlaydi). Zaxira — 1-fevral (FD-01).
+   raqamlar 1 dan; yil yakuni sanashi — 30-dekabr kechqurun, egasi qarori 2026-11-16 — 5010 va bosh kitob qoldig‘ini bir yo‘la
+   tasdiqlaydi). Zaxira — 1-fevral (FD-01).
 2. **KO-2 to‘lovdan oldin 2-ro‘yxat tasdig‘i** (Buxgalteriya hisobi to‘g‘risidagi qonun, 13-modda); > T1 — direktor ham;
    moliya menejeri 1-ro‘yxatga kirmaydi; T1 va L1 ni faqat direktor o‘zgartiradi.
 3. **Fiskal chek — darvoza (G1)**: naqd KO-1 da fiskal chek raqami majburiy; termal patta va to‘lovchiga termal chek yo‘q;
@@ -517,7 +519,7 @@ kompyuter, smenalar; har almashuvda topshirish-qabul sanashi (FD-16).
 | CT-16 | `clientRef` noyob (takror yozuv yo‘q) | 1a |
 | CT-17 | `postedAt = now()`, `createdBy = app.uid()` | 1a |
 | CT-18 | `chlog_attach`; yopish / tekshirish / qayta ochish / bekor qilish faktlari ustunlarda | 1a |
-| CT-19 | Oyning oxirgi ish kuni komissiya sanashi (BHMS 19, 5-band); birinchisi 31-dekabr | 1a / 2 |
+| CT-19 | Oyning oxirgi ish kuni komissiya sanashi (BHMS 19, 5-band); birinchisi 30-dekabr (31-dekabr kassa naqd ishlamaydi — egasi qarori, 2026-11-16) | 1a / 2 |
 | CT-20 | `sinov` kassa (o‘z hisoblagichlari, hisobotlarga kirmaydi) | 1a |
 | CT-21 | Aholidan naqd KO-1 fiskal chek raqamisiz o‘tmaydi (istisno — direktor, jurnal, RP-06) | 1a |
 | CT-22 | Har KO-1/KO-2 da tomon majburiy: tur + kalit; erkin matn faqat «boshqa» uchun, belgilanadi | 1a |
@@ -539,14 +541,18 @@ bilan takror tekshiruvi.
 Berish — KO-2 `out_accountable` (taxminiy maqsad statiyasi); qaytim — KO-1. Avans hisoboti (2-bosqich, «А-»): sana,
 hujjat, yetkazib beruvchi, statiya, hisobvaraq, chek surati (yopiq bucket); tasdiqlovchi ≠ yaratuvchi; ortiqcha sarf →
 6970 → `out_overspend`. Yanvar hisobotlari qog‘oz shablonda (F1.19), yanvar qulfidan oldin kiritiladi. Muddat ≤ 3 ish kuni,
-karta — 10 [BUX, FD-14]; muddati o‘tsa ogohlantirish (bloklash — sozlama). Boshlang‘ich qoldiq — imzolangan
-ma’lumotnomalardan (F0.7). Rahbar/ta’sischiga berilgan pul: xodim — 4290, ta’sischi — 4890; buxgalter shu oyda tasniflaydi:
+karta — 10 [BUX, FD-14]; muddati o‘tsa ogohlantirish (bloklash — sozlama). Boshlang‘ich qoldiq — 0: eski pul
+30-dekabrgacha yopiladi, F0.7 — 31-dekabr holatiga nol qoldiq ma’lumotnomalari (Sh-7); yanvarda eski pul bo‘yicha avans hisoboti
+ham, qaytim ham qabul qilinmaydi (egasi, 2026-11-16). Rahbar/ta’sischiga berilgan pul: xodim — 4290, ta’sischi — 4890; buxgalter shu oyda tasniflaydi:
 dividend (qaror + JShDS ushlash, ushlanmasa majburiyat), hisobdan chiqarish (moddiy naf, SK 376-modda) yoki ish haqi;
 hech qachon xarajat emas [FD-26].
 
 ### 4.10 Maosh
 D2 o‘zgarmaydi: moliya menejeri tayyorlaydi → HR tasdiqlaydi → kassir to‘laydi. Shart (G3, F0.18):
-`payrollApprovalFrom` (eng kechi 2026-12), takroriy maosh ID tuzatilgan, HR hisobi faol, noyabr vedomosti tizimda sinov
+`payrollApprovalFrom` (eng kechi 2026-12), takroriy maosh ID tuzatilgan, HR hisobi faol, HR va MM hisoblari vedomost
+yuborilishidan oldin xodim kartasiga bog‘langan (aks holda ularning o‘z maosh qatoriga `needsDirector` qo‘yilmaydi; 2026-11-17 dan
+bog‘lanish ikki yo‘nalishdan istalgani bo‘lsa yetarli, kartadagi login havolasini faqat Direktor o‘zgartiradi, avval yuborilgan
+oylardagi shunday qatorlar yangilanishda Direktor tasdig‘iga o‘tkaziladi), noyabr vedomosti tizimda sinov
 sifatida tasdiqlangan, dekabr vedomosti maosh kunidan oldin tasdiqlangan, FD-44 tasdig‘i. Oylik to‘lov qaydnomasi:
 2-ro‘yxat tasdig‘i + direktor imzosi [BUX]; keyin har naqd to‘lov — mavjud darvoza bilan cheklangan har kishilik KO-2.
 Darvoza o‘chiq bo‘lsa naqd maosh rad etiladi (istisno — har hujjat bo‘yicha direktor ruxsati, RP-06). Karta to‘lovini
@@ -568,8 +574,12 @@ Naqdsiz avans qaytarish (`refund_credit`) — kerak bo‘lsa (F2.11).
 ### 4.12 Davrni yopish
 Kun: sanash → yopish → tekshirish. Oy (kassa): oxirgi ish kuni komissiya sanashi (INV-16, oxirgi KO raqamlari), KO-3,
 statiya matritsasi, nazorat ro‘yxati; barcha pul jadvallari uchun oy qulfi (F2.8). Oy (bosh kitob): MC-1…MC-13 5-ish
-kunigacha [BUX] (4-bosqich). Yil: 31-dekabr (yoki dekabrning oxirgi ish kuni) komissiya sanashi (oylik + yillik) =
-tizimning boshlang‘ich qoldig‘i; qog‘oz daftarlarni yopish dalolatnomasi (006); 31.12 23:59 surati (F1.16); hisoblagichlar
+kunigacha [BUX] (4-bosqich). Yil: 30-dekabr kechqurun komissiya sanashi (oylik + yillik; 31-dekabr kassa naqd ishlamaydi —
+egasi qarori, 2026-11-16) = tizimning boshlang‘ich qoldig‘i; qog‘oz daftarlarni yopish dalolatnomasi (006); «31-dekabr holati»
+surati (F1.16) — 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin, qulf bilan bitta amalda (surat — olingan paytdagi holat,
+«kechikib olingan»: kassa qoldig‘i = boshlang‘ich qoldiq, yanvarda surat olinguncha kelgan onlayn / bank to‘lovlari esa suratga
+kiradi (o‘quvchilar qarzi, avanslari, biriktirilmagan tushumlar) — buxgalter ularni «To‘lovlar» ro‘yxati bo‘yicha ayiradi;
+`ishga-tushirish.md` §4, 8-qadam); hisoblagichlar
 1-yanvarda qayta boshlanadi; yillik inventarizatsiya (egasi — buxgalter): asosiy vositalar, materiallar, hisob-kitoblar
 (solishtirish dalolatnomalari bilan), blankalar; bosh kitob boshlang‘ich qoldig‘i — sub-registrlar nazorat hisoblari
 bilan solishtirilgach (F4.4); KO-4 varaqlari yil oxirida muqova va varaqlar soni guvohnomasi bilan tikiladi (F2.12).
@@ -731,11 +741,13 @@ qoldiq — yanvar oxiridagi sanash).
 | Darvoza | Shart | Muddat |
 |---|---|---|
 | G1 Fiskal | Har naqd va POS to‘lovga ro‘yxatdan o‘tgan NKM / virtual kassa (yozma); bo‘lmasa — ishga tushirishgacha ro‘yxatdan o‘tkazish | 12-dekabr |
-| G2 Hisob siyosati | FD-04, 05, 07, 09…14, 20, 21, 26 tasdiqlangan | 21-noyabr (vaqtincha) / 12-dekabr |
-| G3 Maosh | F0.18; FD-44 yozma; dekabr vedomosti maosh kunidan oldin tasdiqlangan | 19-dekabr / 31-dekabr |
+| G2 Hisob siyosati | FD-04, 05, 07, 09…14, 20, 21, 26 tasdiqlangan — buxgalter tasdiq varag‘i `docs/moliya/shakllar.md` Sh-8 (B1–B21) | 21-noyabr (vaqtincha) / 12-dekabr |
+| G3 Maosh | F0.18; FD-44 yozma; dekabr vedomosti maosh kunidan oldin tasdiqlangan | 19-dekabr / dekabr maosh kunidan oldin (qaysi kun bo‘lmasin — egasi, 2026-11-16) |
 | G4 Qabul sinovi | Kassir, moliya menejeri, buxgalter, direktor sinov stendida imzolagan | 26-dekabr |
 | G5 Buyruqlar | F0.3 imzolangan | 12-dekabr |
-| G6 Yil yakuni | 31.12 sanash, qog‘oz daftarlarni yopish, sozlamalar | 31-dekabr |
+| G6 Yil yakuni | 30-dekabr sanashi (31-dekabr kassa naqd ishlamaydi), qog‘oz daftarlarni yopish, sozlamalar, boshlang‘ich qoldiq; «31-dekabr holati» surati va qulf — 4-yanvar ertalab | 30-dekabr (egasi, 2026-11-16) |
+
+Barcha darvozalar bo‘yicha yakuniy tekshiruv — 26-dekabr (egasi, 2026-11-16); biror shart bajarilmasa — zaxira sana 1-fevral.
 
 ### 0-bosqich — Qarorlar, tayyorgarlik, oraliq qoidalar (9–28-noyabr)
 Maqsad: 1a uchun qarorlar va siyosat, qarorga bog‘liq bo‘lmagan kod tuzatmalari, oraliq qoidalar, maosh va stend tayyorligi.
@@ -757,6 +769,49 @@ chek) **bor** — G1 uchun yozma tasdiq (F0.5) qoldi; buxgalter — **maktab xod
 ko‘rib chiqadi (G2); kassa limiti bo‘yicha javob **yo‘q** (F0.4 ochiq — tizimda limit 0, ya’ni faqat ogohlantirish);
 sinov nusxasi **yangi domen ochmasdan** — asosiy sayt manzilida, boshqa portda (standart 8443).
 
+**Egasi javoblari — 2026-11-16 (ishga tushirish savollari).** Egasi savollarga javob berdi, qolgan qarorlarni ijrochiga topshirdi;
+qarorlar `ishga-tushirish.md`, `buyruq-namunalari.md`, `oraliq-qoidalar.md`, `yoriqnomalar.md`, `shakllar.md` va §6 ga kiritildi.
+Buxgalter savollari (B1–B21) — `shakllar.md` Sh-8 tasdiq varag‘ida (21-noyabr — vaqtincha, 12-dekabr — imzo, 19-dekabr — B19).
+- 1 · Oraliq qoidalar e’lon qilingan → 16-noyabrdan amalda (F0.19).
+- 2 · «Boshlaymiz» → kassa 2027-01-04 da ishga tushadi; 26-dekabr — G1–G6 bo‘yicha yakuniy tekshiruv; shart bajarilmasa — 1-fevral (FD-01).
+- 3 · Yashirin o‘rnatish ≈21-dekabr (dushanba), ish vaqtidan keyin → shartlar o‘zgarmagan (1-qabul sinovi, buxgalterning stenddagi ko‘rigi — yozma).
+- 4 · Sanash 30-dekabr → komissiya sanashi va ishga tushirish kechasi amallari — 30-dekabr (chorshanba) kechqurun; 31-dekabr kassa naqd ishlamaydi
+  (istisno — qog‘oz order, 4-yanvar ertalab qayta sanash); «31-dekabr holati» surati qulf bilan — 4-yanvar ertalab (G6, CT-19, §4.12, §8.4).
+- 5 · Kassa du–ju → shanba, yakshanba va 1–3-yanvar yopiq; soatlar — ichki kassa nizomida; Telegram kunlik hisoboti du–ju, kassa yopilgach;
+  yanvar bayram / ta’til kunlari ro‘yxatga oldindan.
+- 6 · Kassir — G‘aznachi lavozimi → tizimda «G‘aznachi» roli (kassir bilan teng); o‘rinbosar — buyruq bilan, qo‘shimcha «Kassir» lavozimi
+  (MM va HR emas); naqdni faqat ikkisi oladi va beradi, Direktor — favqulodda (FD-16, FD-30, 3-buyruq).
+- 7 · 1-ro‘yxat o‘rinbosari → buyruq bilan tayinlangan o‘rinbosar, MM emas (FD-08).
+- 8 · 2-ro‘yxat → chiqimlarni asosan MM tasdiqlaydi, kunni tekshirish va avans hisobotlari — buxgalter; o‘zaro almashadi, telefondan ham (FD-18).
+- 9 · Komissiya → rais — Direktor; a’zolar — bosh buxgalter va MM; g‘aznachi va zavxoz sanashda qatnashadi (2-buyruq, CT-19).
+- 10 · Har kimning o‘z hisobi (g‘aznachi, o‘rinbosar, MM, buxgalter, HR, Direktor) → 30-dekabrgacha xodim kartasiga bog‘langan
+  (HR va MM — vedomost yuborilishidan oldin, aks holda o‘z maoshi direktor tasdig‘isiz qoladi; G3), F.I.Sh. to‘liq; «Buxgalter» roli —
+  yashirin o‘rnatishdan keyin; HR hisobi faol.
+- 11 · Hisobdorlar puli → 30-dekabrgacha yopiladi; Sh-7 — 31-dekabr holatiga nol qoldiq; yanvarda eski pul bo‘yicha hisobot va qaytim yo‘q (F0.7).
+- 12 · Moddiy javobgarlik shartnomasi → g‘aznachi va o‘rinbosar (kerak bo‘lsa zavxoz); matn — yurist; 12-dekabrgacha (G5).
+- 13 · T1 → qo‘yiladi; summa buyruqda va «⚙ Sozlamalar»da bir xil (FD-17).
+- 14 · Kassa limiti → bank xatigacha 0, ortgan pul har kuni bankka (FD-22, F0.4).
+- 15 · Yuridik shaxsga kassadan naqd → chegara 0, asosiy yo‘l — bank o‘tkazmasi (FD-47).
+- 16 · L1 → 0 (FD-14).
+- 17 · Boshqa naqd tushum → forma — maktabning o‘z sotuvi; chet el valyutasi qabul qilinmaydi (§4.0, FD-40).
+- 18 · Fiskal kassa → yozma tasdiq 12-dekabrgacha (G1, F0.5); chek turi va IKPU kodi — buxgalter (FD-29).
+- 19 · Chek — NKM dan → ro‘yxatdan o‘tgan kvitansiya daftari bor; internet uzilganda — apparatning oflayn rejimi (FD-23).
+- 20 · Karta terminali shu NKM da → bitta Z-hisobot; aka-uka / opa-singilga alohida chek (FD-29, FD-49).
+- 21 · Kassa joyi va qog‘oz zaxira → 30-dekabrdagi sanashgacha; yo‘riqnomalar va shakllar — 14-dekabrgacha; «Қ» blankalarini buxgalter raqamlaydi (FD-06).
+- 22 · Takroriy maosh ID → 2 tasini Direktor «Yangi noyob ID berish» bilan tuzatadi; noyabr vedomosti maoshdan oldin, HR tasdig‘i (G3, F0.18).
+- 23 · Dekabr maoshi → vedomost maosh kunidan oldin tasdiqlanadi, qaysi kun bo‘lmasin (G3).
+- 24 · Buyruqlar → 12-dekabrgacha; 1-buyruq 5-bandi — ijroni Direktorning o‘zi nazorat qiladi (G5, F0.3).
+- 25 · «MChJ» shakli → guvohnomadagidek, buxgalter tekshiradi; namunalarda bo‘sh joy; «⚙ Sozlamalar»ga 30-dekabr kechqurun (F0.6).
+- 26 · Jonli yangilanish → shu hafta; SINOV tozalash va «🔐 Qaytarish PIN» — javob berilmagan, ochiq.
+- 27 · Click / Uzum kodi → (a): to‘lov yozuvlarida kod o‘rnida «[kod]», ochilgan kodlar bir marta almashtiriladi, eski kod faqat to‘lovda ishlaydi — kodda bajarildi (2026-11-16).
+- 28 · Ismli fayllar → to‘liq nusxalar Direktorning xavfsiz arxivida, buxgalterga ismsiz; MM fayllari (qarzdorlar CSV, A4 hisobot) — ismsiz (FD-28)
+  — kodda bajarildi (2026-11-16; «Xodimlar davomati» oylik A4 hisoboti ham — MM va kassirga ismsiz).
+- 29 · 8 ta ma’lum cheklov → qabul qilindi; eski «biriktirilmagan» naqd to‘lovlar 30-dekabrgacha tekshiriladi.
+- 30 · Stend va server ishlari → server huquqi bor shaxs (egasi yoki u tayinlagan administrator): stend shu haftadagi yangilanish bilan,
+  14-dekabrdan oldin; yashirin o‘rnatish, tekshiruv, orqaga qaytarish va 2 haftalik navbatchilik ham (F0.20, §8.8).
+- 31 · O‘qitish → davomiylik qabul qilindi; kun va soat — taklif jadvali (`ishga-tushirish.md` §1, §8.7).
+- 32 · Parallel nazorat → MM Click / Uzum kabinetlari va bank hujjatlari bilan solishtiradi; 3 ish kuni farqsiz — Direktor imzolaydi (Sh-6).
+
 **F0.20 tayyor (`sinov/`):** `install.sh` / `update.sh` / `reset.sh` / `remove.sh` — alohida `iqror_sinov` bazasi, ikkinchi
 PostgREST (faqat 127.0.0.1, o‘z JWT siri), kirish emulyatsiyasi bilan Node server, alohida nginx bloki; faqat to‘qima
 ma’lumot; jonli baza, nginx sayt fayli va xizmatlarga tegmaydi (`--dry-run` bor). Soxta server muhitida (haqiqiy nginx,
@@ -771,7 +826,7 @@ o‘rnatadi (`sinov/README.md`). Qoldi: maktab tomonidagi F0.2, F0.4–F0.8.
 | F0.4 | S | 0,5 | Kassa limiti (yanvarda bankka ma’lumotnoma) | — | Limit ma’lum |
 | F0.5 | S | 0,5 | Fiskal holat: NKM / virtual kassa, IKPU, Click/Uzum/QR; VM 943, 4-band bo‘yicha yozma xulosa | — | Yozma javob (G1) |
 | F0.6 | S | 0,5 | Ishga tushirish ma’lumotlari (nom, STIR, joy, imzolar, nominallar, printer) | F0.1 | Sozlamaga kiritiladi |
-| F0.7 | S | 0,5 | Hisobdorlar qoldig‘i bo‘yicha imzolangan ma’lumotnomalar (31.12) | — | Imzolangan |
+| F0.7 | S | 0,5 | Hisobdorlar qoldig‘i bo‘yicha imzolangan ma’lumotnomalar (31.12 holatiga, nol qoldiq; pul 30-dekabrgacha yopiladi — egasi, 2026-11-16) | — | Imzolangan |
 | F0.8 | S | 0,5 | Bank ko‘chirmasi namunasi | — | Olingan |
 | F0.9 | S | 0,5 | Noyabr solishtiruvi (faqat o‘qish), ochiq masalalar — yopiq ilovaga | — | Topshirilgan |
 | F0.10 | S | 0,5 | verify-db: trigger, cheklov, indeks izlari | — | Farqlar ro‘yxati |
@@ -782,7 +837,7 @@ o‘rnatadi (`sinov/README.md`). Qoldi: maktab tomonidagi F0.2, F0.4–F0.8.
 | F0.15 | M | 2 | `record_manual_payment` atomar RPC; outbox shu orqali | F0.14 | Yetim «pending» yo‘q; qayta yuborish «dup» |
 | F0.16 | S | 0,5 | Huquqlar I: RF-01, 02, 03, 05, 06, 07 | F0.15 | Rol testlari |
 | F0.17 | M | 2 | RF-04 (bayroq / core), bitta reliz keyin, majburiy qayta yuklash | F0.16 | Kassir assign/split ishlaydi; direktor yo‘llari ishlaydi |
-| F0.18 | S | 0,5 | Maosh tayyorligi (G3): sozlama, ID takrori, HR hisobi, noyabr vedomosti tizimda | — | Noyabr tasdiqlangan |
+| F0.18 | S | 0,5 | Maosh tayyorligi (G3): sozlama, ID takrori, HR hisobi (faol; HR va MM hisoblari xodim kartasiga bog‘langan), noyabr vedomosti tizimda | — | Noyabr tasdiqlangan |
 | F0.19 | S | 0,5 | Oraliq qoidalar varag‘i (§8.3); Sheet funksiyalari inventari; Drive «faqat ko‘rish» sanasi | F0.1 | Tarqatilgan |
 | F0.20 | M | 2 | Sinov va o‘qitish stendi (auth + REST + admin.html, sintetik ma’lumot, alohida kalitlar); UAT stsenariylari | F0.11 | Kassir to‘liq kunni o‘tkazadi; prod o‘qitishga ishlatilmaydi |
 
@@ -834,7 +889,7 @@ yaxlitligi — kunlar zanjiri, kun jamlari va xeshi, raqamlash, varaqlar, hujjat
 P1 / P4 / P5 / P8, surat xeshlari; chiqishida shaxsiy ma’lumot va summa yo‘q), deploy markeri `app.kassa_version()`
 (`fin-version.sql`; sahifa o‘zi kutgan reliz bilan solishtirib «sahifani yangilang» / «server yangilanmagan» deb
 ogohlantiradi), `full-deploy.sh` va sinov stendining yakuniy tekshiruviga ulangan; F1.19 — ishga tushirish to‘plami
-(`docs/moliya/ishga-tushirish.md` — taqvim, shartlar, texnik tartib, 31-dekabr, birinchi kunlar, favqulodda holatlar,
+(`docs/moliya/ishga-tushirish.md` — taqvim, shartlar, texnik tartib, yil yakuni (30-dekabr sanashi, 4-yanvar ertalabki surat va qulf), birinchi kunlar, favqulodda holatlar,
 orqaga qaytish; `yoriqnomalar.md` — rol bo‘yicha bir varaqli yo‘riqnomalar; `shakllar.md` — shakllar ro‘yxati va qog‘oz
 shablonlari: avans hisoboti, «Қ» blankasi va jurnali, sanash va daftarlarni yopish dalolatnomalari, qabul sinovi va
 parallel yuritish varaqlari); «⚙ Sozlamalar»da imzo egalari (1- va 2-ro‘yxat) va ruscha nom; «Buxgalter» roli (F1.21 dan
@@ -979,7 +1034,7 @@ moslashtirish, 5710, webhook’lar.
 | F4.1 | M | 2 | `fin-gl.sql`: yozuvlar, qatorlar, davrlar; balans va davr himoyasi | F1.1 | Balanssiz / qulflangan yozuv rad |
 | F4.2 | M | 2,5 | Yangi hujjatlar uchun RPC ichida provodka; 1-yanvardan back-post | F4.1 | Har hujjatda balansli yozuv |
 | F4.3 | L | 5 | Sverka-provodkachi + tungi sverka; versiyalash; muammolar ro‘yxati; sintetik model SQL testi | F4.1, F2.7, F3.1; FD-31…34, 40, 41 | Ikki ishga tushirish — 0 o‘zgarish |
-| F4.4 | M | 2,5 | 31.12.2026 boshlang‘ich qoldiq: sub-registr ↔ nazorat hisoblari solishtiruvi, 31.12 suratidan, direktor tasdig‘i | F4.1, F1.16; FD-37, 42 | Jamlar mos; 0000 = 0 sun’iy tenglashtirishsiz |
+| F4.4 | M | 2,5 | 31.12.2026 boshlang‘ich qoldiq: sub-registr ↔ nazorat hisoblari solishtiruvi, 31.12 suratidan (4-yanvarda olinadi — yanvarda surat olinguncha kelgan onlayn / bank to‘lovlari «To‘lovlar» ro‘yxati bo‘yicha ayiriladi), direktor tasdig‘i | F4.1, F1.16; FD-37, 42 | Jamlar mos; 0000 = 0 sun’iy tenglashtirishsiz |
 | F4.5 | M | 3 | Oy yopish yordamchisi MC-1…MC-13, qulf | F4.3; FD-39 | 9xxx = 0; qulf ishlaydi |
 | F4.6 | L | 5 | Jurnal, OSV, kartochka, tahlillar; XLSX | F4.2 | OSV → kartochka → hujjat |
 | F4.7 | M | 2,5 | Maosh: xodim bo‘yicha, oy oxiri sanasi, stavkalar sozlamadan; soliqlar FD-38 dan keyin | F4.3; FD-38, 44 | Sintetik G testi; 4210 = 0 |
@@ -1015,11 +1070,11 @@ model, sverka o‘zgarmasligi, boshlang‘ich qoldiq. Chiqish: uchta toza yopili
 | W49 | 30-noyabr – 5-dekabr | F1.5–F1.8 | noyabr vedomosti tizimda (to‘lov eski usulda) |
 | W50 | 7–12-dekabr | F1.9–F1.11, F1.13 | **12-dekabr: G1, G2 (imzo), G5** |
 | W51 | 14–19-dekabr | F1.12, F1.14–F1.17 | UAT 1-raund; o‘qitish; **19-dekabr: FD-44 (G3)** |
-| W52 | 21–26-dekabr | tuzatishlar; F1.18–F1.19; **21-dekabr: yashirin deploy** + `sinov` smoke (o‘quv to‘lovisiz) | UAT 2-raund, **26-dekabr: G4**; o‘qitish (kassirlar, o‘rinbosar, hisobdorlar, HR); maosh kuni mashqi |
-| W53 | 28-dekabr – 2-yanvar | qo‘llab-quvvatlash | **31-dekabr: sanash dalolatnomasi, daftarlarni yopish, sozlamalar (G6)**; dekabr vedomosti (G3) |
-| W01 | 4–9-yanvar | qo‘llab-quvvatlash | **4-yanvar: rasmiy ishga tushirish**; parallel yuritish; birinchi tizim maosh kuni; Excel to‘xtaydi (≈ 9-yanvar) |
+| W52 | 21–26-dekabr | tuzatishlar; F1.18–F1.19; **21-dekabr: yashirin deploy** + `sinov` smoke (o‘quv to‘lovisiz) | UAT 2-raund, maosh kuni mashqi (o‘qitish — 14–18-dekabr, §8.7); **26-dekabr: G4** va G1–G6 yakuniy tekshiruv |
+| W53 | 28-dekabr – 2-yanvar | qo‘llab-quvvatlash | **30-dekabr: sanash dalolatnomasi, daftarlarni yopish, sozlamalar, boshlang‘ich qoldiq (G6)**; 31-dekabr — kassa naqd ishlamaydi; dekabr vedomosti — maosh kunidan oldin (G3) |
+| W01 | 4–9-yanvar | qo‘llab-quvvatlash | **4-yanvar: ertalab «31-dekabr holati» surati va qulf, rasmiy ishga tushirish**; parallel yuritish; birinchi tizim maosh kuni; Excel to‘xtaydi (≈ 9-yanvar) |
 | W02–W03 | 11–23-yanvar | 1b | kunlik qo‘ng‘iroq; haftalik ko‘rik |
-| W04–W08 | 25-yanvar – 27-fevral | 2 | 30-yanvar: oylik sanash; buxgalter 2026 yilni 1-martgacha topshiradi |
+| W04–W08 | 25-yanvar – 27-fevral | 2 | 29-yanvar (juma, oyning oxirgi ish kuni): oylik sanash; buxgalter 2026 yilni 1-martgacha topshiradi |
 | W09–W12 | 1–27-mart | 3 | bank eksporti; 31.12.2026 qoldiqlari |
 | W13–W17 | 29-mart – 1-may | 4 | solishtiruv → boshlang‘ich qoldiq; yanvar–mart yopilishi |
 | W18–W22 | 3-may – 5-iyun | 5 | B rejimni baholash |
@@ -1033,60 +1088,64 @@ qilindi** (FD-01…FD-46; [BUX] bandlar buxgalter ko‘rib chiqquncha vaqtincha 
 ma’lumotlar ochiq qoladi: fiskal kassa holati (G1), buxgalter va imzo ro‘yxatlari (G2, G5), bank kassa limiti (F0.4),
 ishga tushirish rekvizitlari (F0.6), hisobdorlar qoldig‘i (F0.7), bank ko‘chirmasi namunasi (F0.8).
 
+**2026-11-16 — egasining javoblari** (ishga tushirish savollari; §5, 0-bosqich): ta’sir qilgan qatorlarda «2026-11-16» belgisi bilan.
+[BUX] bandlar bo‘yicha **buxgalter imzosi kutilmoqda** — `docs/moliya/shakllar.md`, Sh-8 tasdiq varag‘i (B1–B21, har qatorda FD raqami;
+21-noyabr — vaqtincha ko‘rik, 12-dekabr — imzo, 19-dekabr — B19); buxgalter tuzatishlari shu varaq orqali dasturchiga keladi.
+
 Dastur tavsiyalar bo‘yicha quriladi; imzolarni faqat ishga tushirish kutadi. Ta’sir: K — kod, D — ma’lumot, S — sozlama,
 J — ish jarayoni.
 
 | ID | Qaror | Tavsiya | Kim · muddat · ta’sir |
 |---|---|---|---|
-| FD-01 | Ishga tushirish sanasi | Yanvarning birinchi kassa kuni (4-yanvar), 31.12 sanash bilan; dekabrda yashirin o‘rnatish va UAT; zaxira — 1-fevral; 14-dekabr — tavsiya etilmaydi | Egasi · 14-noyabr · J |
+| FD-01 | Ishga tushirish sanasi | Yanvarning birinchi kassa kuni (4-yanvar), yil yakuni sanashi bilan; dekabrda yashirin o‘rnatish va UAT; zaxira — 1-fevral; 14-dekabr — tavsiya etilmaydi. **2026-11-16 — egasi:** «Boshlaymiz» — 4-yanvar; sanash — 30-dekabr kechqurun (31-dekabr kassa naqd ishlamaydi); 26-dekabr — G1–G6 yakuniy tekshiruv | Egasi · 14-noyabr · J |
 | FD-02 | Dasturchi ustuvorligi | 0–1a yanvargacha birinchi; faqat boshlangan xavfsizlik ishlari va avariyalar aralashadi | Egasi · 14-noyabr · J |
 | FD-03 | Ish rejimi | A: tizim hujjatlari + boshqaruv bosh kitobi, statutor registrlar buxgalterda; B — 3 toza yopilish + rozilik + ERI yoki imzolangan nusxalardan keyin | [BUX] · 14-noyabr · J |
 | FD-04 | KO-4 tarkibi | Faqat 5010; naqdsiz va o‘zaro hisob — ma’lumot blokida | [BUX] · 21-noyabr · K |
 | FD-05 | Raqamlash | KO-1/KO-2 alohida, kalendar yili, server, uzluksiz, yanvardan 1 dan; KO-4 varaqlari 1 dan | [BUX] · 21-noyabr · S |
-| FD-06 | KO-1 va printer | Har naqd to‘lovga KO-1 + patta (A5 / A4 yarmi); termal patta yo‘q | Egasi · 21-noyabr · J |
+| FD-06 | KO-1 va printer | Har naqd to‘lovga KO-1 + patta (A5 / A4 yarmi); termal patta yo‘q. **2026-11-16 — egasi:** printer, seyf, shtamplar va qog‘oz zaxira — 30-dekabrdagi sanashgacha; «Қ» blankalarini buxgalter raqamlaydi | Egasi · 21-noyabr · J |
 | FD-07 | Chop etish | O‘zbek kirill (rus bor); «КАССА»; «1 234 567=89»; KO-4 2 nusxa; harakatsiz kunga varaq yo‘q; «юз» | [BUX] · 21-noyabr · S |
-| FD-08 | Imzo ro‘yxatlari | 1: direktor, o‘rinbosar; 2: bosh buxgalter, MM; KO-2 — 1 + 2 turli shaxslar, to‘lovdan oldin 2-ro‘yxat; rekvizitlar sozlamadan | Egasi + [BUX] · 12-dekabr · S, J |
+| FD-08 | Imzo ro‘yxatlari | 1: direktor, o‘rinbosar; 2: bosh buxgalter, MM; KO-2 — 1 + 2 turli shaxslar, to‘lovdan oldin 2-ro‘yxat; rekvizitlar sozlamadan. **2026-11-16 — egasi:** 1-ro‘yxat o‘rinbosari — buyruq bilan tayinlangan o‘rinbosar (MM emas); buxgalter imzosi kutilmoqda (Sh-8, B16 — KO-1 / pattadagi «Bosh buxgalter» qatori bilan) | Egasi + [BUX] · 12-dekabr · S, J |
 | FD-09 | Hujjatdagi hisobvaraqlar | BHMS 21 kodlari + analitika; «40.11» → 4010 + to‘lovchi turi; kassa qismi ishga tushirishdan oldin tasdiqlanadi | [BUX] · 21-noyabr · D |
 | FD-10 | Statiyalar | 75 statiya va ikki moslik; «Boshqa» ≤ 2 %; IT-PARK — buxgalter | [BUX] · 21-noyabr · D |
 | FD-11 | Operatsiyalar | §4.5 (kassadan soliq yo‘q; `out_loan_repay` 1a da; 4290/4890) | [BUX] · 21-noyabr · D |
 | FD-12 | O‘quv KO-1 krediti | 4010 boshlangan davrga, 6310 ortiqcha va kelgusi oyga; avansdan — naqdsiz 6310→4010 | [BUX] · 21-noyabr · K |
 | FD-13 | Bankka / bankdan | Topshirish 5710 orqali; olish Dt 5010 Kt 5110; komissiya bank tomonida | [BUX] · 21-noyabr · D |
-| FD-14 | Xarid puli | 4230 + avans hisoboti ≤ 3 ish kuni (karta 10); hujjatsiz xarid ≤ L1, bitta statiya; xodimga — faqat hisobdor operatsiyasi | [BUX] + Egasi · 21-noyabr · S |
+| FD-14 | Xarid puli | 4230 + avans hisoboti ≤ 3 ish kuni (karta 10); hujjatsiz xarid ≤ L1, bitta statiya; xodimga — faqat hisobdor operatsiyasi. **2026-11-16 — egasi:** L1 = 0 (juda kerak bo‘lsa keyin kichik chegara va bitta statiya); muddat maktab ish kunlari bo‘yicha; buxgalter imzosi kutilmoqda (Sh-8, B10) | [BUX] + Egasi · 21-noyabr · S |
 | FD-15 | Naqd maosh | Faqat kassir; har kishiga KO-2 + qaydnoma; karta va o‘zaro hisob — MM | Egasi + [BUX] · 21-noyabr · K |
-| FD-16 | Naqd qabul va kassa modeli | Kassir, g‘aznachi, direktor; bitta kassa, smenalar, topshirish-qabul sanashi | Egasi · 14-noyabr · J |
-| FD-17 | KO-2 ruxsati | T1 — direktor belgilaydi; ≤ T1 2-ro‘yxat, > T1 direktor ham; 1a dan oldindan tasdiq | Egasi · 21-noyabr · S |
-| FD-18 | Tekshiruvchi | 2-ro‘yxat (buxgalter yoki MM, direktor ham), o‘tkazmagan va yopmagan; buxgalter hisobi 1b | Egasi + [BUX] · 21-noyabr · K |
+| FD-16 | Naqd qabul va kassa modeli | Kassir, g‘aznachi, direktor; bitta kassa, smenalar, topshirish-qabul sanashi. **2026-11-16 — egasi:** kassir — G‘aznachi lavozimidagi xodim (tizimda «G‘aznachi» roli); o‘rinbosar — buyruq bilan (MM va HR emas; qo‘shimcha «Kassir» lavozimi); naqdni faqat shu ikkisi oladi va beradi, Direktor — favqulodda; kassa du–ju | Egasi · 14-noyabr · J |
+| FD-17 | KO-2 ruxsati | T1 — direktor belgilaydi; ≤ T1 2-ro‘yxat, > T1 direktor ham; 1a dan oldindan tasdiq. **2026-11-16 — egasi:** T1 qo‘yiladi; summa buyruqda va «⚙ Sozlamalar»da bir xil (Direktor yozadi; 0 qolsa har chiqim Direktor tasdig‘ini kutadi) | Egasi · 21-noyabr · S |
+| FD-18 | Tekshiruvchi | 2-ro‘yxat (buxgalter yoki MM, direktor ham), o‘tkazmagan va yopmagan; buxgalter hisobi 1b. **2026-11-16 — egasi:** chiqim so‘rovlarini asosan MM tasdiqlaydi; kunni tekshirish va avans hisobotlari — buxgalter; biri yo‘q kuni ikkinchisi, telefondan ham; ikkalasi yo‘q kuni oddiy chiqim tasdiqlanmaydi; buxgalter roziligi — Sh-8, B1 (5-buyruq) | Egasi + [BUX] · 21-noyabr · K |
 | FD-19 | Kun intizomi | Server sanasi; kecha avval yopiladi; boshqa shaxs — 2 kishilik dalolatnoma; kassa uchun orqaga yozish 0; oflayn §4.7 | Egasi · 21-noyabr · K |
 | FD-20 | Tuzatishlar | Shu kun bekor qilish; oxirgi tekshirilmagan kunni direktor qayta ochadi; aks holda storno; tahrir yo‘q | [BUX] · 21-noyabr · K |
-| FD-21 | Sanash farqi | Bardoshsiz; shu kun 5910 / 9390; qaror — direktor: 4730 (yozma rozilik yoki shartnoma) yoki 9430 | [BUX] · 21-noyabr · K |
-| FD-22 | Limit va maosh puli | Bank limiti (hujjatsiz 0), faqat ogohlantirish; 3 ish kuni rasmiy taqvim bo‘yicha | Egasi + [BUX] · 21-noyabr · S |
-| FD-23 | Oflayn naqd | Qabul qilinadi: NKM oflayn cheki; tizim varaqa bermaydi; bitta kompyuter | Egasi · 21-noyabr · K |
+| FD-21 | Sanash farqi | Bardoshsiz; shu kun 5910 / 9390; qaror — direktor: 4730 (yozma rozilik yoki shartnoma) yoki 9430. **2026-11-16 — egasi:** moddiy javobgarlik shartnomasi — g‘aznachi va o‘rinbosar (kerak bo‘lsa zavxoz), 12-dekabrgacha; buxgalter imzosi kutilmoqda (Sh-8, B12) | [BUX] · 21-noyabr · K |
+| FD-22 | Limit va maosh puli | Bank limiti (hujjatsiz 0), faqat ogohlantirish; 3 ish kuni rasmiy taqvim bo‘yicha. **2026-11-16 — egasi:** bankdan yozma javob kelguncha limit 0 — ortgan naqd pul har kuni bankka; bank — «Bank» turidagi kontragent; buxgalter roziligi — Sh-8, B1 (ichki kassa nizomi) | Egasi + [BUX] · 21-noyabr · S |
+| FD-23 | Oflayn naqd | Qabul qilinadi: NKM oflayn cheki; tizim varaqa bermaydi; bitta kompyuter. **2026-11-16 — egasi:** fiskal chek — onlayn kassa apparatidan (NKM); apparat buzilganda — soliq organida ro‘yxatdan o‘tgan kvitansiya daftari (bor; «Fiskal cheksiz (istisno)» belgisi bilan); oflayn tartib o‘zgarmaydi | Egasi · 21-noyabr · K |
 | FD-24 | O‘zaro hisob, imtiyozlar | Dalolatnoma + yozma ariza + direktor; moddiy naf (SK 376) bo‘yicha buxgalter xulosasi; belgilar | [BUX] + Egasi · 21-noyabr · J |
 | FD-25 | Qaytarish | Direktor tasdiqlaydi va usul (asl kanal); kassir KO-2 bilan; balans to‘lov sanasida; 1 bank kuni; bankdan naqd olish shartmi — buxgalter | Egasi + [BUX] · 21-noyabr · K |
 | FD-26 | Rahbar / ta’sischiga pul | 4290 / 4890; shu oyda tasnif; xarajat emas | [BUX] + Egasi · 21-noyabr · D |
 | FD-27 | Tarix, Sheet, Excel | Sentyabr–oktyabr importsiz; noyabr–dekabr yetishmagan xarajatlar buxgalter imzolagan sinov bilan; oraliq qoidalar; Excel soyasi yo‘q; Sheet ≈ 15-yanvardan faqat ko‘rish | Egasi · 14-noyabr · J |
-| FD-28 | Eksport | Ismli XLSX — faqat direktor; MM va buxgalter — ID bilan (D7 saqlanadi; o‘zgartirish faqat egasi imzosi bilan) | Egasi · 21-noyabr · K |
-| FD-29 | Fiskal chek | G1 darvoza; naqd KO-1 da fiskal № majburiy; to‘lovchiga tizim cheki yo‘q; chek turi — buxgalter; integratsiya 6-bosqichda | Egasi + [BUX] · 12-dekabr · J, K |
-| FD-30 | G‘aznachi | Kassir bilan teng; bazadagi moliya huquqlari olinadi | Egasi · 23-yanvar · K |
+| FD-28 | Eksport | Ismli XLSX — faqat direktor; MM va buxgalter — ID bilan (D7 saqlanadi; o‘zgartirish faqat egasi imzosi bilan). **2026-11-16 — egasi:** ismli to‘liq fayllar (davr surati, KO-3, oylik to‘plam) — Direktorning xavfsiz arxivida, buxgalterga ismsiz nusxa; MM yuklaydigan qarzdorlar CSV va oylik A4 hisobot ham ismsiz (o‘quvchi — ID, xodim — maosh ID). **Kodda bajarildi (2026-11-16):** «Moliya» qarzdorlar CSV (MM) — `qarzdorlar-<oy>-ismsiz.csv` (izoh qatori, «O‘quvchi ID»; ustunlar va jamlar bir xil); «Buxgalteriya» A4 (MM, buxgalter) — izoh, «-ismsiz», «Xodim (maosh ID)», muallif va imzo — rol nomi; «Xodimlar davomati» oylik A4 (MM, kassir) — maosh ID va kamera ID, lavozim va ruxsat sababisiz; ismli nusxa — Direktorda (HR’da ham — shaxsiy yozuvlar fayllari); ekrandagi ko‘rinishlar o‘zgarmagan | Egasi · 21-noyabr · K |
+| FD-29 | Fiskal chek | G1 darvoza; naqd KO-1 da fiskal № majburiy; to‘lovchiga tizim cheki yo‘q; chek turi — buxgalter; integratsiya 6-bosqichda. **2026-11-16 — egasi:** yozma tasdiq 12-dekabrgacha; NKM, karta terminali shu NKM da — bitta Z-hisobot (naqd + karta); chek turi va IKPU kodini buxgalter belgilaydi | Egasi + [BUX] · 12-dekabr · J, K |
+| FD-30 | G‘aznachi | Kassir bilan teng; bazadagi moliya huquqlari olinadi. **2026-11-16 — egasi:** kassir — G‘aznachi lavozimidagi xodim, tizimda shu rol; buyruq va moddiy javobgarlik shartnomasi bilan rasmiylashtiriladi; kod qismi (bazadagi moliya huquqlarini olish) — ochiq | Egasi · 23-yanvar · K |
 | FD-31 | Materiallar | Oziq-ovqat 1010 + oylik chiqim dalolatnomasi + choraklik inventarizatsiya (variant — to‘g‘ridan-to‘g‘ri); kitob va idish 1080 + 014; kapital 0820/0870; asosiy vositalar — buxgalter | [BUX] · 23-yanvar · D |
 | FD-32 | Daromad | Yalpi 9030, chegirma 9050 turi bo‘yicha; prorata — kamroq daromad; bemor kuni — 9030 storno (variant 9050); tavsiya 9050 (variant 9410) | [BUX] · 23-yanvar · D |
 | FD-33 | Aniqlanmagan tushum, komissiya | 6390 (30 kunda ko‘rik); kanallar 5710 orqali; komissiya ko‘chirmadan | [BUX] · 27-fevral · D |
 | FD-34 | Ish beruvchi to‘lovi | O‘quvchi bo‘yicha, to‘lovchi — tashkilot; oylik ma’lumotnoma; ESF — so‘rov bo‘yicha | [BUX] · 27-fevral · D |
 | FD-35 | Korporativ karta | Alohida karta hisobi bo‘lsa 5530 + 4230; aks holda 4230 ↔ 5110 | [BUX] · 27-fevral · D |
 | FD-36 | Bank formati | Bank-mijoz CSV/XLSX (hujjat №, STIR, hisob raqami) | Egasi · 27-fevral · K |
-| FD-37 | Bosh kitob boshlanishi | 2027-01-01; buxgalter qoldiqlari + tizimdagi 5010 va o‘quvchilar (31.12 surati); avval solishtiruv | [BUX] · 27-mart · D |
+| FD-37 | Bosh kitob boshlanishi | 2027-01-01; buxgalter qoldiqlari + tizimdagi 5010 va o‘quvchilar (31.12 surati — 4-yanvarda olinadi, yanvarda surat olinguncha kelgan onlayn / bank to‘lovlari ayiriladi); avval solishtiruv | [BUX] · 27-mart · D |
 | FD-38 | Maosh provodkalari | Xodim bo‘yicha, lavozimdan xarajat markazi, oy oxiri sanasi; stavkalar sozlamada; soliqlar FD-44 dan keyin avtomatik | [BUX] · 27-mart · D, K |
-| FD-39 | Oy yopish | 5-ish kunigacha, qulf; faqat direktor ochadi; kechikkanlar — joriy davrga | [BUX] · 23-yanvar · K |
-| FD-40 | Soliq holati va imtiyoz | SK 483-modda shartlarini buxgalter tasdiqlaydi; 8840 + reyestr (013 emas); QQS va boshqa soliqlar hisoblanmaydi (tasdiq bilan); forma — qayta sotish | [BUX] · 27-mart · D |
+| FD-39 | Oy yopish | 5-ish kunigacha, qulf; faqat direktor ochadi; kechikkanlar — joriy davrga. **2026-11-16:** dekabr — 4-yanvar ertalab «31-dekabr holati» surati bilan bitta amalda (G6) | [BUX] · 23-yanvar · K |
+| FD-40 | Soliq holati va imtiyoz | SK 483-modda shartlarini buxgalter tasdiqlaydi; 8840 + reyestr (013 emas); QQS va boshqa soliqlar hisoblanmaydi (tasdiq bilan); forma — qayta sotish. **2026-11-16 — egasi:** forma — maktabning o‘z sotuvi (tizimda shunday); chet el valyutasi qabul qilinmaydi | [BUX] · 27-mart · D |
 | FD-41 | Depozit va umidsiz qarz | 6310 da, shartnoma bo‘yicha; direktor buyrug‘i bilan hisobdan chiqarish (007); moddiy naf tekshiruvi | [BUX] · 27-mart · D |
 | FD-42 | Boshlang‘ich qoldiq majburiyatlari | Yopiq ilova ro‘yxati bo‘yicha buxgalter (kerak bo‘lsa yurist) tasdiqlaydi; valyutada bo‘lsa qayta baholash bilan | [BUX] + Egasi · 27-mart · D |
 | FD-43 | Imzo va B rejim | Hozir KO-4 har kuni chop etilib imzolanadi; ERI keyin; B — 3 toza yopilishdan keyin | Egasi + [BUX] · aprel · J |
-| FD-44 | Ish haqi fondi mosligi | Tizim vedomosti buxgalter hisobotidagi fond bilan bir xilligi yozma tasdiqlanadi (yoki tuzatish rejasi) | [BUX] · 19-dekabr · J |
+| FD-44 | Ish haqi fondi mosligi | Tizim vedomosti buxgalter hisobotidagi fond bilan bir xilligi yozma tasdiqlanadi (yoki tuzatish rejasi). **2026-11-16:** buxgalter imzosi kutilmoqda (Sh-8, B19); 2 ta takroriy maosh ID ni Direktor tuzatadi, noyabr vedomosti maoshdan oldin tasdiqlanadi (G3) | [BUX] · 19-dekabr · J |
 | FD-45 | Korxona o‘lchami | Kichik bo‘lsa 1/2-shakl; aks holda 1–4-shakl va izohlar | [BUX] · 27-mart · K |
 | FD-46 | Ta’til rezervi | 8910 yuritilmaydi (standart) — buxgalter hal qiladi | [BUX] · 27-mart · D |
-| FD-47 | Yuridik shaxsga kassadan naqd to‘lov | Standart — har to‘lov Direktor tasdig‘i bilan (chegara 0); amaldagi qonunchilik bo‘yicha chegara va kontragent turlari («yetkazib beruvchi» / «tashkilot» — yuridik shaxs; YaTT — «jismoniy shaxs») buxgalter tasdiqlaydi, Direktor «⚙ Sozlamalar»ga kiritadi | [BUX] · 12-dekabr · J |
+| FD-47 | Yuridik shaxsga kassadan naqd to‘lov | Standart — har to‘lov Direktor tasdig‘i bilan (chegara 0); amaldagi qonunchilik bo‘yicha chegara va kontragent turlari («yetkazib beruvchi» / «tashkilot» — yuridik shaxs; YaTT — «jismoniy shaxs») buxgalter tasdiqlaydi, Direktor «⚙ Sozlamalar»ga kiritadi. **2026-11-16 — egasi:** chegara 0, asosiy yo‘l — bank o‘tkazmasi; buxgalter imzosi kutilmoqda (Sh-8, B21 — kontragentlar turi va STIR bilan) | [BUX] · 12-dekabr · J |
 | FD-48 | Direktorning o‘ziga (bog‘langan xodim kartasiga) beriladigan pul | Direktor bosqichini Direktor o‘zi imzolaydi (1-ro‘yxatdan yuqori imzo yo‘q); 2-ro‘yxat tasdig‘i (Moliya menejeri / buxgalter) o‘zgarishsiz talab qilinadi, pulni kassir beradi. 2-ro‘yxat xodimi o‘ziga beriladigan pulni tasdiqlamaydi — uning 2-ro‘yxat bosqichini boshqa 2-ro‘yxat xodimi yoki Direktor imzolaydi (g5). Tizim tekshiradi (g11): Direktor o‘z kartasiga chiqim orderi bo‘yicha pulni va naqd maoshni bermaydi (`kassa:self_recipient`), o‘zi yolg‘iz tasdiqlagan so‘rov (qaytarish) pulini ham (`kassa:self_pay`) — kassir beradi; kassir o‘ziga boshqa xodim tasdiqlagan avansni o‘zi beradi; buzilish — kassa-checks 24-bandida | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · K, J |
-| FD-49 | Fiskal chek va aka-uka / opa-singil to‘lovi | Bitta fiskal chek — bitta o‘quvchining bitta naqd to‘lovi: farzandlar uchun alohida chek uriladi va har to‘lov o‘z chek raqami bilan kiritiladi. Bir chek raqami ikkinchi hujjatda rad etiladi (`kassa:fiscal_dup`); raqamga qo‘shimcha belgi qo‘shib kiritish taqiqlanadi (chek raqami NKM dagidek yoziladi) | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · J |
+| FD-49 | Fiskal chek va aka-uka / opa-singil to‘lovi | Bitta fiskal chek — bitta o‘quvchining bitta naqd to‘lovi: farzandlar uchun alohida chek uriladi va har to‘lov o‘z chek raqami bilan kiritiladi. Bir chek raqami ikkinchi hujjatda rad etiladi (`kassa:fiscal_dup`); raqamga qo‘shimcha belgi qo‘shib kiritish taqiqlanadi (chek raqami NKM dagidek yoziladi). **2026-11-16 — egasi:** tasdiqladi (har o‘quvchiga alohida chek; karta terminali shu NKM da) | Ijrochi (mustaqil ko‘rik) + [BUX] · 12-dekabr · J |
 
 ---
 
@@ -1138,7 +1197,7 @@ Ustuvorlik: **M0** — ishga tushirishdan oldin; **M1** — dastlabki oylarda; *
 | CL-10 | Kvitansiya daftarlari va «Қ» — qat’iy hisobdagi blankalar | BHMS 19, 5-band; 006 | yopish dalolatnomasi; oylik inventarizatsiya | M0 |
 | CL-11 | Shaxsiy ma’lumotni kamaytirish | D6 / D7 | RLS; ismsiz eksport | M0 |
 | CL-12 | Kun / oy qulfi | ichki nazorat | CT-04, CT-27; F2.8 | M0 |
-| CL-13 | Oylik komissiya inventarizatsiyasi (INV-16); moddiy javobgar almashganda inventarizatsiya | BHMS 19, 5, 8, 60–61-band | 31.12; F2.8; topshirish-qabul | M1 |
+| CL-13 | Oylik komissiya inventarizatsiyasi (INV-16); moddiy javobgar almashganda inventarizatsiya | BHMS 19, 5, 8, 60–61-band | 30.12 sanash (31.12 holatiga); F2.8; topshirish-qabul | M1 |
 | CL-14 | Natija o‘sha oyda; qaror rahbarda; aybdor bo‘lmasa — xarajat | BHMS 19, 69, 70, 72-band | CT-14; FD-21 | M0 |
 | CL-15 | Choraklik oziq-ovqat inventarizatsiyasi | BHMS 19, 5-band | 1010 (FD-31) | M1 |
 | CL-16 | Click / Uzum / QR fiskalizatsiyasi | VM 943, 1a-ilova | F0.5; F6.1 | M1 |
@@ -1180,12 +1239,16 @@ raqami va kimga. (2) O‘quv to‘lovi faqat tizimda; tracker tushum to‘ldiril
 — kirim ham, xarajat ham emas. (4) Har kech kassir va MM sanab, qisqa dalolatnoma imzolaydi. (5) Zavxoz qog‘ozda joriy
 qoldiq va chek; qaytim kirim orderi bilan. (6) Kun boshi qo‘lda tuzatilmaydi. (7) Maosh va avans faqat tizimdagi
 «Maosh berish» va «Xodim avansi» orqali; noyabr vedomosti tizimda tasdiqlanadi. (8) Qaytarish faqat «↩ Qaytarish»
-orqali. (9) Qog‘oz order daftarlari 31-dekabrda dalolatnoma bilan yopiladi. (10) Sheet faqat tarix uchun.
+orqali. (9) Qog‘oz order daftarlari 30-dekabr kechqurun dalolatnoma bilan yopiladi. (10) Sheet faqat tarix uchun. Varaq 2026-11-16
+da e’lon qilingan (egasi); yil yakuni qoidasi (30-dekabr — oxirgi naqd kun, 31-dekabr kassa naqd ishlamaydi) varaqqa qo‘shilgan.
 
 **8.4 O‘tish.** 21-dekabr: navbat bo‘shligi, deploy, verify-db, `kassa-checks.sql`, `sinov` smoke, `tg-daily --dry`.
-31-dekabr (yoki oxirgi ish kuni) kechqurun: komissiya sanashi → `kassa_opening` (farq majburlanmaydi, direktor hal
+30-dekabr (chorshanba) kechqurun (egasi qarori, 2026-11-16): komissiya sanashi → `kassa_opening` (farq majburlanmaydi, direktor hal
 qiladi); buxgalter daftarlarni yopish dalolatnomasini imzolaydi (006); direktor `kassaGoLive`, imzolar, limit, T1, L1 ni
-kiritadi; F0.7 qoldiqlari; to‘lanmagan qaytarishlar ro‘yxati; 31.12 23:59 surati. 4-yanvar: rasmiy boshlanish.
+kiritadi; F0.7 — hisobdorlarning nol qoldiq ma’lumotnomalari (Sh-7); to‘lanmagan qaytarishlar ro‘yxati. 31-dekabr: kassa naqd ishlamaydi (istisno — qog‘oz order, 4-yanvar
+ertalab qayta sanash va `kassa_opening` qayta). 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin: «31-dekabr holati»
+surati qulf bilan (`fin_snapshot_take`, `lock`; 30–31-dekabrda qulf bilan olinmaydi; surat — olingan paytdagi holat: yanvarda surat
+olinguncha kelgan onlayn / bank to‘lovlari kiradi, buxgalter ularni ayiradi), keyin rasmiy boshlanish.
 
 **8.5 Parallel yuritish (≤ 5 ish kuni, AC1.19 bajarilguncha).** MMning kunlik ro‘yxati (≈ 10 daqiqa): sanash = tizim;
 har KO qog‘oz manbasi va outbox / «Қ» jurnali bilan belgilangan; Click/Uzum kabinet = kanal bloki; bank = `in_bank` /
@@ -1196,9 +1259,11 @@ qayta boshlanadi; tizim hujjatlari haqiqiy qoladi; buxgalter oyni birlashtiradi;
 
 **8.7 O‘qitish** (faqat stendda): kassirlar va o‘rinbosar 2 × 90 daqiqa; MM 60; buxgalter 60; direktor 30; HR 30
 (vedomost tasdig‘i — maosh kunidan oldin); hisobdorlar (zavxoz, oshpaz) 20 daqiqa («Олдим», cheklar, qaytim, yanvar
-avans hisoboti); keyingi bosqichlar 30–60 daqiqa.
+avans hisoboti); keyingi bosqichlar 30–60 daqiqa. Davomiylikni egasi qabul qilgan (2026-11-16); kun va soat — taklif jadvali
+(`docs/moliya/ishga-tushirish.md`, §1: 14–18-dekabr — o‘qitish va 1-qabul sinovi, 21–25-dekabr — 2-qabul sinovi va maosh kuni mashqi).
 
-**8.8 Qo‘llab-quvvatlash.** 2 hafta kunlik 15 daqiqalik qo‘ng‘iroq; kassa soatlarida navbatchi; P1 — o‘sha kuni (aks holda
+**8.8 Qo‘llab-quvvatlash.** 2 hafta kunlik 15 daqiqalik qo‘ng‘iroq (kassa yopilgach: g‘aznachi, MM, navbatchi); kassa soatlarida
+navbatchi — server huquqi bor shaxs (egasi yoki u tayinlagan administrator; egasi, 2026-11-16); P1 — o‘sha kuni (aks holda
 «Қ»), P2 — 2 kun, P3 — keyingi reliz; server ishlamasa — NKM oflayn cheki + outbox yoki «Қ» + kech kiritish; NKM ishlamasa
 — maxsus kvitansiya daftari; haftalik ko‘rik (RP-22).
 
@@ -1206,7 +1271,7 @@ avans hisoboti); keyingi bosqichlar 30–60 daqiqa.
 | Artefakt | O‘rniga | To‘xtaydi |
 |---|---|---|
 | Excel kunlik varaqlari | KO-4 + RP-02 | parallel yuritish chiqishi (≈ 9-yanvar) |
-| Excel kirim orderlari va qog‘oz П/О, Р/О daftarlari | KO-1 + patta, KO-2 | 31-dekabr (yopish dalolatnomasi; arxiv ≥ 5 yil) |
+| Excel kirim orderlari va qog‘oz П/О, Р/О daftarlari | KO-1 + patta, KO-2 | 30-dekabr kechqurun (yopish dalolatnomasi; arxiv ≥ 5 yil) |
 | Tracker chiqim | KO-2 + Buxgalteriya reyestri | parallel yuritish chiqishi |
 | Tracker tushum va shablonlar | tizim fakturalari va to‘lovlari | 16-noyabrdan to‘ldirilmaydi |
 | Tracker Dashboard | RP-02, RP-08/09, Moliya ekranlari, RP-19 | 2-bosqich |

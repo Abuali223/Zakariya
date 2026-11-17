@@ -24,6 +24,7 @@ alter table public.users add column if not exists "linkedAt"     timestamptz;
 alter table public.users add column if not exists "linkedVia"    text;   -- 'auto' (register) | 'admin'
 
 -- 2) staff/teachers: teskari havola (bu yozuvга qaysi login bog'langan).
+--    Uni ham faqat Direktor yoki server o'zgartiradi (HR kartani tahrirlay oladi, havolani — yo'q): payroll-approval.sql, 7-bo'lim.
 alter table public.staff    add column if not exists "userUid" text;
 alter table public.teachers add column if not exists "userUid" text;
 

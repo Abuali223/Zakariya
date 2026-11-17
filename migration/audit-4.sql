@@ -67,6 +67,7 @@ update public.student_codes
    set code = upper(substr(md5(random()::text || id || clock_timestamp()::text), 1, 12)),
        "updatedAt" = now()
  where coalesce(length(code),0) < 12;
+-- (gen_student_code va claim_child'ning AMALDAGI ta'rifi — payer-code-mask.sql; bu yerdagisi zanjirda almashtiriladi.)
 create or replace function app.gen_student_code() returns trigger language plpgsql security definer as $$
 begin
   -- AFTER INSERT — faqat HAQIQATAN yangi o'quvchi qatori uchun ishlaydi (upsert'ning UPDATE yo'li ishga tushirmaydi).

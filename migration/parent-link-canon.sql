@@ -43,6 +43,7 @@ $$;
 revoke all on function app.student_keys_unique(text, text) from public, anon;
 grant execute on function app.student_keys_unique(text, text) to authenticated, service_role;
 
+-- DIQQAT: claim_row va claim_child'ning AMALDAGI ta'rifi — payer-code-mask.sql (shu yerdagisini kengaytirib almashtiradi: eski kod).
 -- claim_row(kalit, kod): ota-ona bog'lanishi (child_claims: "studentId" — kanonik yoki eski doc id, code — bog'lashda
 --   kiritilgan kod) QAYSI o'quvchi qatoriga (doc id) tegishli. Kalit bitta qatorga mos kelsa — o'sha. Ikki qatorga mos
 --   kelsa (eski import to'qnashuvi: bir xil studentId ikki qatorda, yoki biri doc id'si, ikkinchisi studentId'si) —

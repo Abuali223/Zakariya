@@ -4,44 +4,53 @@
 yozilmaydi (repozitoriy ommaviy) — `[___]` o‘rniga qog‘ozda to‘ldiriladi. Asos: Buxgalteriya hisobi to‘g‘risidagi qonun
 (13, 14, 29-moddalar), IMV 143-buyruq bilan tasdiqlangan Hujjatlar va hujjatlar aylanishi nizomi (ro‘yxat 3538),
 BHMS 19 (inventarizatsiya), BHMS 21 (hisobvaraqlar rejasi). Ish reja: `docs/moliya/buxgalteriya-ish-reja.md`.
+Egasining 2026-11-16 qarorlari kiritilgan: buyruqlar 12-dekabrgacha imzolanadi; tashkilotning tashkiliy-huquqiy shakli va nomi
+ro‘yxatdan o‘tish guvohnomasidagidek yoziladi (buxgalter tekshiradi) — namunada qat’iy shakl yozilmagan.
 
 ---
 
 ## 1-buyruq. Hujjatlarni imzolash huquqiga ega shaxslar ro‘yxatlarini tasdiqlash
-«[Tashkilot nomi]» MChJ, [shahar], [sana], № [___]
+[tashkiliy-huquqiy shakli va nomi — guvohnomadagidek], [shahar], [sana], № [___]
 
 Buxgalteriya hisobi to‘g‘risidagi qonunning 13-moddasiga muvofiq **BUYURAMAN:**
 1. Pul va hisob-kitob hujjatlarini **birinchi imzo** bilan imzolash huquqi berilgan shaxslar (1-ro‘yxat): direktor
-   [F.I.Sh.]; direktor yo‘qligida — buyruq bilan tayinlangan o‘rinbosar [lavozim, F.I.Sh.].
+   [F.I.Sh.]; direktor yo‘qligida — buyruq bilan tayinlangan o‘rinbosar [lavozim, F.I.Sh.] (moliya menejeri emas).
 2. **Ikkinchi imzo** (buxgalteriya / moliya) huquqi berilgan shaxslar (2-ro‘yxat): bosh buxgalter (autsors shartnomasi
    asosida bo‘lsa ham) [F.I.Sh.]; moliya menejeri [F.I.Sh.].
 3. Bitta hujjatni 1- va 2-ro‘yxat bo‘yicha **bir shaxs** imzolamaydi. Kassa chiqim orderi (KO-2) pul berilishidan
-   **oldin** 2-ro‘yxatdagi shaxs tomonidan tizimda tasdiqlanadi; [___] so‘mdan ortiq summa, rahbar yoki ta’sischiga
+   **oldin** 2-ro‘yxatdagi shaxs tomonidan tizimda tasdiqlanadi; [___] so‘mdan ortiq summa (T1 — «⚙ Sozlamalar»dagi bilan bir
+   xil summa), yetkazib beruvchi yoki tashkilotga (yuridik shaxsga) kassadan naqd to‘lov, rahbar yoki ta’sischiga
    beriladigan pul va qarz — direktor tomonidan ham. **Istisnolar** (tizimda 2-ro‘yxat tasdig‘i bosqichi yo‘q, asos boshqa):
    a) ota-onaga (o‘quvchiga) pul qaytarish — direktor tasdig‘i bilan (ariza asosida); b) naqd ish haqi — tasdiqlangan oylik
    vedomost va to‘lov qaydnomasi asosida; c) kassani sanashdagi kamomad — komissiya dalolatnomasi asosida tizim o‘zi yozadi,
    qarorni direktor qabul qiladi.
 4. 2-ro‘yxat imzosi bo‘lmagan pul hujjati haqiqiy emas (3-banddagi istisnolar bundan mustasno — ularning asosi o‘sha bandda
    ko‘rsatilgan va hujjatga ilova qilinadi).
-5. Nazorat [lavozim] zimmasiga yuklansin.
+5. Buyruq ijrosini nazorat qilish o‘z zimmamda qoladi.
 
 ## 2-buyruq. Doimiy inventarizatsiya komissiyasini tuzish
 BHMS 19 ga muvofiq **BUYURAMAN:**
-1. Doimiy inventarizatsiya komissiyasi tarkibi: rais — [lavozim, F.I.Sh.]; a’zolar — [lavozim, F.I.Sh.], [lavozim, F.I.Sh.].
-   Moddiy javobgar shaxs (kassir, zavxoz) komissiya a’zosi bo‘lmaydi, lekin sanashda ishtirok etadi.
+1. Doimiy inventarizatsiya komissiyasi tarkibi: rais — direktor [F.I.Sh.]; a’zolar — bosh buxgalter [F.I.Sh.], moliya menejeri
+   [F.I.Sh.]. Moddiy javobgar shaxs (kassir (g‘aznachi), zavxoz) komissiya a’zosi bo‘lmaydi, lekin sanashda ishtirok etadi.
 2. Kassa inventarizatsiyasi (pul va qat’iy hisobdagi blankalar): **har oyning oxirgi ish kuni** va moddiy javobgar shaxs
-   almashganda; natija INV-16 shaklidagi dalolatnomada (oxirgi kirim va chiqim order raqamlari bilan).
+   almashganda; natija INV-16 shaklidagi dalolatnomada (oxirgi kirim va chiqim order raqamlari bilan). Oy oxiridagi sanashda
+   kunni direktor yoki moliya menejeri komissiya ishtirokida yopadi; kassir kunni yopa olmasa — o‘rinbosar 2 kishilik komissiya bilan.
 3. Oziq-ovqat mahsulotlari — har chorakda; asosiy vositalar, materiallar va hisob-kitoblar — yillik (31-dekabr holatiga).
-4. **2026-yil 31-dekabr** kechqurun kassadagi pul komissiya tomonidan sanaladi — bu summa yangi kassa tizimining
-   boshlang‘ich qoldig‘i bo‘ladi; qog‘oz order daftarlari shu kuni dalolatnoma bilan yopiladi.
+4. **2026-yil 30-dekabr** kechqurun, kassa yopilgandan keyin kassadagi pul komissiya tomonidan sanaladi — bu summa yangi kassa
+   tizimining boshlang‘ich qoldig‘i bo‘ladi; qog‘oz order daftarlari shu kuni dalolatnoma bilan yopiladi. 2026-yil 31-dekabr kuni
+   kassa naqd pul qabul qilmaydi va bermaydi; istisno tariqasida naqd harakat bo‘lsa — u qog‘oz orderda yoziladi, daftarlar o‘sha
+   amaldan keyin yopiladi va 2027-yil 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin pul qayta sanaladi.
+   2027-yil 1–3-yanvar kunlari kassa yopiq.
 5. Kamomad yoki ortiqcha bo‘yicha qarorni faqat direktor qabul qiladi.
 
 ## 3-buyruq. Kassir va kassir o‘rinbosarini tayinlash
 **BUYURAMAN:**
-1. Kassa operatsiyalarini bajarish [lavozim, F.I.Sh.] zimmasiga yuklansin; u yo‘qligida — [lavozim, F.I.Sh.] (o‘rinbosar).
-2. Ikkalasi bilan **to‘liq moddiy javobgarlik to‘g‘risida shartnoma** tuzilsin (namunasi — 7-band).
-3. Naqd pulni **faqat** kassir (yoki o‘rinbosar) qabul qiladi va beradi; boshqa xodimlar (moliya menejeri, HR va b.)
-   naqd pul bermaydi.
+1. Kassa operatsiyalarini bajarish g‘aznachi [F.I.Sh.] zimmasiga yuklansin (kassir; tizimda «G‘aznachi» roli); u yo‘qligida —
+   [lavozim, F.I.Sh.] (o‘rinbosar; moliya menejeri va HR menejer emas; tizimda qo‘shimcha «Kassir» lavozimi).
+2. Ikkalasi bilan (zarur bo‘lsa zavxoz bilan ham) **to‘liq moddiy javobgarlik to‘g‘risida shartnoma** tuzilsin (asosiy bandlari —
+   7-bo‘lim; matnni yurist yakunlaydi).
+3. Naqd pulni **faqat** kassir (g‘aznachi) yoki o‘rinbosar qabul qiladi va beradi; direktor — faqat favqulodda holatda (kassir
+   yo‘q paytda); boshqa xodimlar (moliya menejeri, HR va b.) naqd pul bermaydi.
 4. Smena almashganda (kassir ↔ o‘rinbosar) pul sanab, topshirish-qabul dalolatnomasi bilan topshiriladi.
 
 ## 4-buyruq. Birlamchi hujjatlarning o‘z shakllarini tasdiqlash
@@ -67,26 +76,34 @@ Kassa hujjatlarida **tuzatish taqiqlanadi**: xato hujjat bekor qilinadi va yangi
 | Hujjat | Kim tuzadi | Kim tasdiqlaydi / tekshiradi | Muddat | Qayerga topshiriladi |
 |---|---|---|---|---|
 | KO-1 (naqd o‘quv to‘lovi va boshqa kirim) | Kassir (dastur) | — | to‘lov paytida | to‘lovchiga patta |
-| KO-2 (har chiqim) | Kassir (so‘rov) | 2-ro‘yxat; [___] so‘mdan ortig‘i — direktor (qaytarish — direktor; naqd maosh — tasdiqlangan vedomost; kamomad — komissiya dalolatnomasi, 1-buyruq, 3-band) | pul berishdan oldin | asos hujjati ilova |
-| KO-4 varag‘i, sanash dalolatnomasi | Kassir | Moliya menejeri yoki buxgalter («Tekshirdim») | har kuni kechqurun | buxgalteriya |
-| Avans hisoboti | Hisobdor shaxs | Moliya menejeri / buxgalter | 3 ish kuni ichida (karta — 10) | buxgalteriya |
+| KO-2 (har chiqim) | Kassir (so‘rov) | 2-ro‘yxat (asosan moliya menejeri; u yo‘q kuni — buxgalter); [___] so‘mdan ortig‘i va yuridik shaxsga naqd to‘lov — direktor (qaytarish — direktor; naqd maosh — tasdiqlangan vedomost; kamomad — komissiya dalolatnomasi, 1-buyruq, 3-band) | pul berishdan oldin | asos hujjati ilova |
+| KO-4 varag‘i, sanash dalolatnomasi | Kassir | Buxgalter («Tekshirdim»; u yo‘q kuni — moliya menejeri) | har kuni kechqurun | buxgalteriya |
+| Avans hisoboti | Hisobdor shaxs | Buxgalter (u yo‘q kuni — moliya menejeri) | 3 ish kuni ichida (karta — 10) | buxgalteriya |
 | Ish haqi vedomosti | Moliya menejeri | HR menejer; HR / MM o‘z maoshi — direktor | to‘lov kunidan oldin | kassir |
 | Oylik kassa paketi (KO-3, KO-4, statiyalar) | Dastur | Buxgalter | keyingi oyning 5-ish kuni | buxgalteriya |
 
 ## 6. Ichki kassa nizomi (qisqa)
-1. Maktabda **bitta kassa** (bitta pul qutisi, bitta kompyuter). Kassa ish vaqti: [___].
-2. Naqd pul faqat dasturdagi KO-1 bilan qabul qilinadi (to‘lovchiga fiskal chek — onlayn yoki virtual kassadan).
+1. Maktabda **bitta kassa** (bitta pul qutisi, bitta kompyuter). Kassa ish kunlari — dushanba–juma (shanba, yakshanba va bayram
+   kunlari yopiq); ish vaqti: [___].
+2. Naqd pul faqat dasturdagi KO-1 bilan qabul qilinadi (to‘lovchiga fiskal chek — onlayn kassa apparatidan (NKM); karta terminali
+   shu NKM da; apparat buzilganda — soliq organida ro‘yxatdan o‘tgan maxsus kvitansiya daftari). Har o‘quvchining to‘loviga alohida
+   chek; bitta chek raqami ikkinchi hujjatda qabul qilinmaydi. Chet el valyutasi qabul qilinmaydi.
 3. Har chiqim — dasturdagi tasdiqlangan KO-2 bilan, asos hujjati va oluvchi imzosi («Олдим») bilan.
 4. Har kuni kechqurun kassa sanaladi va kun yopiladi; kun boshidagi qoldiq — kechagi kun oxiridagi qoldiq.
-5. Kassada limitdan ortiq pul saqlanmaydi (bank bilan kelishilgan limit; maosh puli — 3 ish kunidan ko‘p emas);
-   ortiqchasi bankka topshiriladi.
-6. Xarid uchun berilgan pul (zavxoz, oshpaz, korporativ karta) — hisobdor puli; hisoboti 3 ish kuni ichida.
+5. Kassada limitdan ortiq pul saqlanmaydi (bank bilan kelishilgan limit; bankdan yozma javob kelguncha limit 0 — ortgan pul
+   har kuni bankka topshiriladi; maosh puli — 3 ish kunidan ko‘p emas); ortiqchasi bankka topshiriladi.
+6. Xarid uchun berilgan pul (zavxoz, oshpaz, korporativ karta) — hisobdor puli; hisoboti 3 ish kuni ichida. Chek yoki fakturasiz
+   naqd xarid ruxsat etilmaydi.
 7. Bankka topshirilgan va bankdan olingan pul — ichki o‘tkazma (daromad ham, xarajat ham emas).
 8. Xato hujjat faqat shu kunning o‘zida bekor qilinadi; yopilgan kunni faqat direktor sabab bilan qayta ochadi.
 9. Hujjatlar kamida 5 yil saqlanadi; KO-4 varaqlari yil oxirida tikiladi.
+10. Yetkazib beruvchi yoki tashkilotga (yuridik shaxsga) kassadan naqd to‘lov — har biri direktor tasdig‘i bilan; asosiy yo‘l —
+    bank o‘tkazmasi.
 
 ## 7. To‘liq moddiy javobgarlik shartnomasi — asosiy bandlar
-Shartnoma: «[Tashkilot nomi]» MChJ (ish beruvchi, direktor [F.I.Sh.] orqali) va [lavozim, F.I.Sh.] (xodim). Xodim:
+Kim bilan: kamida kassir (g‘aznachi) va o‘rinbosar, zarur bo‘lsa zavxoz bilan ham (3-buyruq, 2-band); matnni yurist 12-dekabrgacha
+yakunlaydi, boshqa buyruqlar bilan birga imzolanadi.
+Shartnoma: [tashkiliy-huquqiy shakli va nomi — guvohnomadagidek] (ish beruvchi, direktor [F.I.Sh.] orqali) va [lavozim, F.I.Sh.] (xodim). Xodim:
 o‘ziga topshirilgan pul va qat’iy hisobdagi blankalarning butligi uchun to‘liq moddiy javobgar; kamomad aniqlansa
 inventarizatsiyada ishtirok etadi; ish beruvchi: xavfsiz saqlash sharoitini (seyf) va o‘qitishni ta’minlaydi. Zarar
 qonunchilikda belgilangan tartibda, xodimning yozma roziligi yoki sud qarori bilan undiriladi. (Matnni yurist

@@ -15,6 +15,8 @@ do $iqror_guard$ begin raise exception 'iqror: payroll-approval.sql ALOHIDA ishg
 --     vedomostdagi xodimga va tasdiqlangan summadan oshmasdan. Undan oldingi oylar — eski tartib.
 --   * Tasdiqlangan oy uchun ta'til, chiqib-kelish belgilari, o'rinbosarlik, bayram kunlari va avans o'zgarmaydi (qayta
 --     ochilgandan keyin — mumkin).
+--   * Xodim kartasining login havolasi (staff / teachers."userUid") — «o'z qatori» qoidasi unga tayanadi: faqat Direktor yoki server
+--     o'zgartiradi, HR o'zi bog'langan kartani o'chira olmaydi (7-bo'lim).
 -- Idempotent — QAYTA ishga tushirishga xavfsiz.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
@@ -125,7 +127,7 @@ revoke all on function app.payroll_adv(text, text) from public, anon, authentica
 -- 3) RPC: yuborish (Moliya menejeri / Direktor)
 create or replace function public.payroll_submit(p_month text, p_lines jsonb, p_note text default null) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); r public.payroll_runs%rowtype; x jsonb; v_type text; v_pid text; v_ref text; v_name text;
+declare v_uid text := app.uid(); r public.payroll_runs%rowtype; x jsonb; v_type text; v_pid text; v_ref text; v_name text; v_link text;
         v_g numeric; v_d numeric; v_s numeric; v_a numeric; v_c numeric; v_p numeric; v_w numeric; v_nd boolean;
         n int := 0; t_g numeric := 0; t_d numeric := 0; t_p numeric := 0; v_ids text[] := '{}';
 begin
@@ -147,11 +149,11 @@ begin
     end if;
     if v_pid = any(v_ids) then raise exception 'Vedomostda takroriy maosh ID: %', v_pid using errcode = '23505'; end if;
     v_ids := v_ids || v_pid;
-    -- Xodim bazadan (ID, ism): mijoz yuborgan refId'ga ishonilmaydi (o'z qatori «Direktor tasdig'i»dan chetlab o'tmasin).
+    -- Xodim bazadan (ID, ism, teskari havola): mijoz yuborgan refId'ga ishonilmaydi (o'z qatori «Direktor tasdig'i»dan chetlab o'tmasin).
     if v_type = 'teacher' then
-      select t.id, t.name into v_ref, v_name from public.teachers t where coalesce(nullif(btrim(t."teacherId"), ''), t.id) = v_pid limit 1;
+      select t.id, t.name, t."userUid" into v_ref, v_name, v_link from public.teachers t where coalesce(nullif(btrim(t."teacherId"), ''), t.id) = v_pid limit 1;
     else
-      select s.id, s.name into v_ref, v_name from public.staff s where coalesce(nullif(btrim(s."staffId"), ''), s.id) = v_pid limit 1;
+      select s.id, s.name, s."userUid" into v_ref, v_name, v_link from public.staff s where coalesce(nullif(btrim(s."staffId"), ''), s.id) = v_pid limit 1;
     end if;
     if v_ref is null then raise exception 'Vedomost: «%» ID''li xodim topilmadi (o''chirilgan yoki ID o''zgargan) — qayta hisoblang', v_pid using errcode = '23503'; end if;
     begin
@@ -163,7 +165,11 @@ begin
     v_a := app.payroll_adv(v_pid, p_month);
     v_c := app.salary_carry(v_pid, p_month);
     v_p := greatest(0, round(v_g - v_a - v_d + v_s + v_c));
-    v_nd := exists (select 1 from public.users u where u."staffRefType" = v_type and u."staffRefId" = v_ref and u.role in ('hr', 'finance_mgr'));
+    -- HR / Moliya menejerining o'z qatori — Direktor tasdig'ida. Xodim kartasi foydalanuvchiga ikki yo'l bilan bog'lanadi: asosiy havola
+    --   (users."staffRefType" / "staffRefId") yoki teskari havola (staff / teachers."userUid", staff-user-link.sql — ikkinchi lavozim
+    --   kartasi shu yo'l bilan bog'lanadi); ikkalasi ham tekshiriladi (kassa moduli app.kassa_user_cards bilan bir xil qoida).
+    v_nd := exists (select 1 from public.users u where u.role in ('hr', 'finance_mgr')
+                     and ((u."staffRefType" = v_type and u."staffRefId" = v_ref) or u.id = nullif(v_link, '')));
     insert into public.payroll_lines(id, "runId", "personType", "personId", "refId", name, gross, deduction, "subBonus", advance, "carryIn", payable,
                                      "workedMin", details, "needsDirector")
     values (p_month || '__' || v_type || '__' || v_pid, p_month, v_type, v_pid, v_ref, coalesce(nullif(btrim(coalesce(x->>'name', '')), ''), v_name),
@@ -319,5 +325,50 @@ end $$;
 select app.chlog_attach('payroll_runs',  'status,preparedBy,prepNote,approvedBy,decisionNote,returnNote,reopenReason,totals,version');
 select app.chlog_attach('payroll_lines', 'runId,personId,gross,deduction,subBonus,advance,carryIn,payable,needsDirector,directorOkBy,directorNote');
 select app.chlog_attach('config',        '!refundPin,sickRate,sickApprovalFrom,bonusApprovalFrom,discountApprovalFrom,invoiceCreators,referralAmount,payrollApprovalFrom,entryDeadlineDay,lessonRate,latePenalty,earlyPenalty,allowedBreakMin,breakPenaltyPerHour,clickServiceId,clickMerchantId,uzumUrlTemplate,flatAmount,perYear,monthsPerYear,tenureYears,yearsCap,degree,category,languages,russian,langLevel');
+
+-- 7) Xodim kartasining login havolasi (staff / teachers."userUid" — teskari havola, staff-user-link.sql) himoyasi.
+--    «O'z qatori Direktor tasdig'ida» qoidasi (payroll_submit, reports-roles.sql: app.payroll_line_extra_hr) va kassa moduli
+--    (app.kassa_user_cards) shu havolaga ishonadi, staff_upd / teachers_upd esa HR'ga butun qatorni yozishga ruxsat beradi: HR o'z
+--    kartasidagi havolani uzib (yoki boshqa kartaga ko'chirib) o'z maosh qatorini Direktor tasdig'isiz qoldira olardi. Asosiy havolani
+--    (users."staffRefType" / "staffRefId") users_upd qotiradi; teskari havolani endi ham faqat Direktor («Foydalanuvchilar» → bog'lash)
+--    yoki server (ro'yxatdan o'tish — service_role, migratsiya, psql) o'zgartiradi, boshqa foydalanuvchida — 42501. Havola o'zgarmagan
+--    yozuv o'tadi (boshqa maydonlarni tahrirlash, shu qiymat bilan to'liq qator upsert'i); null va '' — bir xil (bog'lanmagan).
+--    O'zi bog'langan kartani (asosiy yoki teskari havola) HR o'chira olmaydi (staff_del HR'ga ochiq; teachers_del — faqat Direktor):
+--    o'chirib, bog'lanmagan yangi karta ochsa ham o'z qatori tasdiqsiz qolardi (bunday kartani Direktor o'chiradi).
+--    O'zgarishlar tarixida — change-log.sql («userUid» ustuni).
+create or replace function app.guard_card_user_link() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_cur text;
+begin
+  if app.is_system() or app.is_admin() then return coalesce(new, old); end if;
+  if tg_op = 'DELETE' then
+    if (coalesce(old."userUid", '') <> '' and old."userUid" = app.uid())
+       or exists (select 1 from public.users u
+                   where u.id = app.uid() and u."staffRefId" = old.id
+                     and u."staffRefType" = case tg_table_name when 'teachers' then 'teacher' else 'staff' end) then
+      raise exception 'O''zingiz bog''langan xodim kartasini o''chira olmaysiz — uni Direktor o''chiradi' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'UPDATE' then
+    if coalesce(new."userUid", '') = coalesce(old."userUid", '') then return new; end if;
+  else
+    -- INSERT: bo'sh havola — o'tadi; yozish huquqi yo'q rolni RLS (staff_ins / teachers_ins) rad etadi (trigger RLS'dan OLDIN
+    --   ishlaydi — javob farqi yozuv borligini oshkor qilmasin). Upsert (INSERT ... ON CONFLICT DO UPDATE) mavjud qatorga o'sha
+    --   qiymatni yozsa — o'tadi (UPDATE bosqichini shu trigger yana tekshiradi).
+    if coalesce(new."userUid", '') = '' or not app.is_hr() then return new; end if;
+    execute format('select "userUid" from public.%I where id = $1', tg_table_name) into v_cur using new.id;
+    if coalesce(v_cur, '') = new."userUid" then return new; end if;
+  end if;
+  raise exception 'Xodim kartasining login hisobiga bog''lanishini faqat Direktor o''zgartiradi («Foydalanuvchilar» bo''limi)'
+    using errcode = '42501';
+end $$;
+revoke all on function app.guard_card_user_link() from public, anon, authenticated;
+drop trigger if exists trg_teacher_user_link on public.teachers;
+create trigger trg_teacher_user_link before insert or update or delete on public.teachers
+  for each row execute function app.guard_card_user_link();
+drop trigger if exists trg_staff_user_link on public.staff;
+create trigger trg_staff_user_link before insert or update or delete on public.staff
+  for each row execute function app.guard_card_user_link();
 
 notify pgrst, 'reload schema';

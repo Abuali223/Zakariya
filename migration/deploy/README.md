@@ -92,6 +92,36 @@ Hammasi xavfsiz tartibda: belgilanmaguncha yoki yoqilmaguncha eski tartib ishlay
    `bash ~/iqror-repo/auth/install-tg-cron.sh` → «Xabarnomalar» → «📨 Telegram»da turlarni yoqing.
 5. **Ixtiyoriy:** «Foydalanuvchilar» → «➕ Lavozim» (xodimga ikkinchi lavozim), «Oshxona menyusi», «Haftalik hisobot».
 
+### To'lovchi matnidagi maxfiy kod (`payer-code-mask.sql`, egasi qarori (a), 2026-11-16)
+Ota-ona Click / Uzum'da yozgan «ID KOD» endi to'lov yozuvlarida «[kod]» bo'lib saqlanadi (moliya menejeri, g'aznachi va kassir
+ko'radigan `payments` qatorlarida kod qolmaydi — kod bilan begona hisobdan farzandni ulab bo'lmaydi).
+1. **`iqror-pay` zanjirdan KEYIN qayta ishga tushadi** (yashirish `payments/index.cjs`da). `deploy.sh` buni o'zi qiladi (6/7-bosqich)
+   va xizmatlar ishga tushgach tuzatishni YANA bir marta ishlatadi (o'z tranzaksiyasida): 3/7 va 6/7 oralig'ida eski server
+   yashirmay yozgan matn ham shu deployning o'zida yashiriladi, ochilgan kod almashtiriladi (chiqishda `✓ to'lovchi matni qayta
+   tekshirildi`, biror narsa o'zgargan bo'lsa — 2-banddagi `⚠️ OGOHLANTIRISH` qatori). Bu qadam bajarilmasa — `⚠️` va qo'lda buyruq
+   chiqadi, deploy to'xtamaydi. Zanjir qo'lda ishlatilsa — server kodi yangilangach `sudo systemctl restart iqror-pay`, so'ng:
+   `sudo docker exec -i supabase-db psql -U postgres -d postgres -c "begin; set local iqror.migrating = '1'; select app.payer_codes_fix_notice(); commit;"`
+2. **Migratsiya nima qiladi:** `payments` matn maydonlari (`merchant_trans_id`, `payerName`, `payerClass`, `payerPhone`, `raw`) va
+   biriktirilmagan to'lov qaytarilganda ko'chirilgan `refunds."studentName"`da JORIY kodi uchragan o'quvchiga YANGI kod beradi (eski
+   kod `student_code_prev`ga — faqat server o'qiydi), so'ng shu matnlardagi har joriy / eski kodni (kodga yondosh hex bo'laklar bilan)
+   «[kod]» qiladi — kod guruhlab («3FA9 C21B 7D0E», «_», «/», «, » bilan, ikki bo'sh joy yoki qatorma-qator) yoki kiril / «O» harfi
+   bilan yozilgan bo'lsa ham. Pul, holat, o'quvchi, sana ustunlariga tegmaydi; qayta ishga tushirilsa hech narsa o'zgarmaydi. Natija —
+   bitta qator, faqat sonlar:
+   `payer-code-mask: … N ta o'quvchi kodi almashtirildi, M ta to'lov va K ta qaytarish yozuvida «[kod]» bilan yashirildi; ochilgan kod bilan ulangan faol bog'lanish: B ta (shundan ota-ona bo'lmagan hisobda: X ta)`
+   (biror narsa o'zgargan bo'lsa — `⚠️ OGOHLANTIRISH: …` deploy chiqishida ko'rinadi; bo'lmasa faqat SQL logida, hammasi 0).
+   `student_code_prev`dagi qisqa (hech kimga berilmagan) yozuvlar tozalansa — alohida qator, faqat SQL logida (hech narsa qilish shart emas).
+3. **Ota-onaga nima deyiladi:** farzandni ulashda «Bu kod almashtirilgan — yangi kodni maktabdan oling» chiqsa — kodi almashtirilgan.
+   Qabulxona yoki Direktor «O'quvchilar» → «Kod (ota-onaga)» ustunidan YANGI kodni beradi (ilgari ulangan ota-onalar uzilmaydi).
+   Kimga beriladi: telefonda — faqat o'quvchining «Ota-ona tel.» raqamidan qo'ng'iroq qilgan kishiga (yoki maktab o'sha raqamga
+   o'zi qayta qo'ng'iroq qilib); boshqa hollarda — faqat shaxsan, shaxsini tasdiqlovchi hujjat bilan.
+   Eski kod Click / Uzum to'lovida ishlayveradi (saqlangan to'lov shablonini o'zgartirish shart emas, pul o'quvchiga tushadi).
+   O'chirilgan o'quvchi tiklanganda ham kod almashishi mumkin: o'quvchi yo'q paytda kelgan to'lovda kod ochiq qolgan bo'lsa, tiklash
+   darhol yangi kod beradi (eskisi to'lovda ishlayveradi; ota-onaga yangi kod — xuddi shu qoida bilan).
+4. **B > 0 (ochilgan kod bilan ulangan bog'lanish):** kod to'lov yozuvidan o'qilib, begona hisobdan ulangan bo'lishi mumkin. Bog'lanishga
+   tegilmaydi — Direktor ko'rib chiqadi (ayniqsa X > 0: ota-ona bo'lmagan, ya'ni xodim hisobi). Eski (almashtirilgan) kod bilan ulangan
+   faol bog'lanishlar ro'yxati:
+   `sudo docker exec -i supabase-db psql -U postgres -d postgres -c "select cc.uid, u.role, cc.\"studentId\" from public.child_claims cc left join public.users u on u.id = cc.uid where coalesce(nullif(cc.status, ''), 'active') = 'active' and upper(cc.code) in (select code from public.student_code_prev) order by u.role, cc.\"studentId\""`
+
 ### Deploy'dan keyingi ⚠️ / ℹ️ qatorlar — nima qilish
 Buyruqlar oddiy foydalanuvchidan (ubuntu); `sudo` o'zi kerakli joyda. Kod bloklarini GitHub sahifasidan yoki shu fayldan nusxalang.
 

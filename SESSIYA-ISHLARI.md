@@ -1545,7 +1545,8 @@ holat) javob avvalgidek, `kassa` kalitisiz (jonli zanjirda `test-fin-prereq` 87,
   olish; Direktorga — surat olish (xohlasa shu sanagacha yopish bilan) va qulf sanasini o'zgartirish. Qulf bo'lsa sahifada
   eslatma; «To'lov», «Maosh berish», «Xarajat», «Xodim avansi» shakllarida eng erta sana — qulfdan keyingi kun.
 - **Yil oxiri tartibi (tavsiya):** 31-dekabr kechqurun kassa yopilgach surat olinadi (qulfsiz — o'sha kuni yopib bo'lmaydi);
-  qulf keyingi ish kuni qo'yiladi.
+  qulf keyingi ish kuni qo'yiladi. *(2026-11-16 da egasi qarori bilan almashtirildi: sanash — 30-dekabr, «31-dekabr holati» surati
+  qulf bilan — 4-yanvar ertalab, birinchi kassa kunidan oldin; §80.)*
 - **F1.11:** kassa ishga tushgach `canPaySalary` — faqat kassa operatori (naqd) va Moliya menejeri (karta); HR menejer
   vedomostni tasdiqlaydi, pul bermaydi. Server tomoni avvaldan bor (naqd yozuv faqat kassa funksiyasi orqali).
 - **Sinovlar:** `test-fin-period.sql` 27/27 (ruxsatlar, surat mazmuni va xeshi, versiya, kechikkan belgi, qulf — har jadval,
@@ -2149,6 +2150,60 @@ va shu bo'lim bilan birgalikdagi commit; hujjat aniqligi — `8e8c741`.
 - **Qabul qilingan cheklovlar** — `ishga-tushirish.md`, «Ma’lum va qabul qilingan cheklovlar (relizlar 11–12)», 1–8.
 - **Egasi uchun:** keyingi deploy (jonli zanjir va sahifa); qabul sinovi stendida 24-band eski sinov yozuvlarida «!!» ko'rsatishi
   mumkin (ishga-tushirish §3.1 izohi). Qolgan ishlar ro'yxati — o'zgarishsiz (pastda).
+
+## 80) Egasining ishga tushirish javoblari (2026-11-16): hujjatlar, Sh-8; Click / Uzum kodi yashirildi (#41, (a)); FD-28 fayllar; maosh qoidasi — 2026-11-16…17
+
+**Holat:** jonli zanjir, to'lov serveri, `admin.html`, `index.html` va `deploy.sh` o'zgardi — **shu haftadagi deploy bilan** chiqadi
+(pastda, «Jonli tizimga ta'siri»). Kassa moduli hali «--dev» (o'rnatish — yashirin o'rnatish kunida). Commit — shu bo'lim bilan birga.
+
+- **Usul (Workflow, uch yo'nalish, har birida mustaqil tekshiruvchi):** #41 (to'lovchi matnidagi kod), FD-28 + maosh qoidasi, hujjatlar —
+  alohida git worktree'larda; har raundda amalga oshiruvchi → mustaqil tekshiruvchi (o'z bazasi, o'z stendi, eski kodni qaytarib
+  testlar yiqilishini ko'rsatish) → topilmalar bo'yicha keyingi raund. 1-raund; 2-raund konteyner qayta ishga tushishi bilan uzildi
+  (ish yo'qolmadi — worktree holatlari git ref'larida saqlandi), 2b va 3-raund bilan yakunlandi. Oxirgi tekshiruvlar: uchalasi «pass»,
+  faqat past darajali eslatmalar (4-raundga — pastda).
+- **Egasi javoblari (1–32) — hujjatlarda** (`docs/moliya`: ishga-tushirish, buyruq-namunalari, oraliq-qoidalar, yoriqnomalar, shakllar,
+  buxgalteriya-ish-reja): sanash va ishga tushirish kechasi — **30-dekabr** (chorshanba); 31-dekabr kassa naqd olmaydi / bermaydi
+  (istisno — eski tartibda, 4-yanvar ertalab qayta sanash); «31-dekabr holati» surati qulf bilan — **4-yanvar ertalab**, birinchi
+  kassa kunidan oldin (tizim bugungi kunni yopmaydi; surat olingan paytdagi holat — yanvar onlayn to'lovlari «To'lovlar» bo'yicha
+  ayiriladi); kassa du–ju, 1–3-yanvar yopiq; Telegram hisoboti Du–Ju; NKM (terminal o'sha apparatda) va ro'yxatdan o'tgan kvitansiya
+  daftari; T1 = buyruq = «Sozlamalar», L1 = 0, kassa limiti 0 (bank javobigacha), tashkilotga naqd 0; HR va moliya menejeri hisobi
+  vedomost yuborilishidan oldin kartaga bog'lanadi; o'qitish jadvali — TAKLIF; qabulxona kodni telefonda faqat «Ota-ona tel.»
+  raqamiga beradi. **Sh-8** — buxgalter tasdiq varag'i (B1–B21, muddatlar 21.11 / 12.12 / 19.12). Ish rejasidagi FD qatorlari
+  holati yangilandi. Eski tavsiya (§ «Yil oxiri tartibi», 31-dekabr kechqurun surat) — shu qarorlar bilan almashtirildi.
+- **#41 — Click / Uzum to'lovchi matnidagi maxfiy ota-ona kodi (egasi: (a)).** To'lov serveri (`payments/index.cjs`) kodni saqlashdan
+  oldin «[kod]» bilan almashtiradi (Click prepare, Uzum create / confirm / reverse, debug loglar; kichik harf, kirill harflari, «O»/«0»,
+  guruhlab yozilgan — `3FA9 C21B 7D0E`, `3FA9-C21B-7D0E` va boshqa ajratgichlar; kodga yopishgan hex parchalar ham). Almashtirilgan
+  kodlar `student_code_prev` da (faqat server ko'radi) — **to'lovda ishlayveradi, farzand biriktirishda yo'q**: `claim_child` →
+  `code_changed`, ota-ona sahifasida «Bu kod almashtirilgan — yangi kodni maktabdan oling» (lockout o'zgarmaydi). Yangi migratsiya
+  `migration/payer-code-mask.sql` (jonli): `app.payer_codes_fix()` — eski yozuvlarda ochilgan kodli o'quvchilarga yangi kod va
+  barcha matnni yashirish (idempotent; NOTICE — faqat sonlar); `deploy.sh` uni xizmatlar qayta ishga tushgach yana bir marta
+  bajaradi (eski server oralig'i). Biriktirish ehtiyotkor: matnda boshqa o'quvchining ID / kodi bo'lsa — kod qoidalari ham, telefon
+  qoidasi ham biriktirmaydi (qo'lda); kod guruhlab / kirillcha yozilsa — egasiga `code_norm` belgisi bilan. O'chirilib tiklangan
+  o'quvchining kodi to'lov matnida ochilgan bo'lsa — darhol almashtiriladi. Sinovlar: `payments/mask.test.cjs` 167/167,
+  `migration/test-payer-codes.sql` LIVE 63/0, DEV 66/0; 50 ming to'lovda ≈ 2 s; JS va SQL yashirishi 12 000 tasodifiy matnda bir xil.
+- **FD-28 (egasi: «afzali»):** moliya menejeriga qarzdorlar CSV — `qarzdorlar-<oy>-ismsiz.csv` (O'quvchi ID, izoh qatori, ustunlar va
+  jami bir xil); «Buxgalteriya» A4 hisobot — moliya menejeri va buxgalterga ID nusxa (sarlavhada tuzgan — rol nomi); «Xodimlar
+  davomati» oylik A4 — moliya menejeri va kassirga ID nusxa (maosh ID + kamera ID, lavozim va sabab yo'q). Direktor (kadr fayllarida
+  HR ham) — ismli. Ekrandagi ro'yxatlar o'zgarmadi. Brauzer ssenariysi `e2e-kassa17.cjs` (27 tekshiruv, qator va ID bo'yicha
+  solishtirish); to'liq brauzer to'plami: 38 o'tish, 1046 tekshiruv — o'tdi.
+- **Maosh qoidasi:** HR / moliya menejerining o'z maosh qatori Direktor tasdig'ida — hisob kartaga **qaysi tomondan** bog'langan
+  bo'lmasin (`payroll_submit`, `app.payroll_line_extra_hr`); kartadagi login havolasini (`staff` / `teachers."userUid"`) faqat
+  Direktor yoki server o'zgartiradi, HR o'zi bog'langan kartani o'chira olmaydi (`app.guard_card_user_link`), o'zgarishlar tarixida
+  «Bog'langan login»; avval yuborilgan / tasdiqlangan oylardagi shunday qatorlar deployda Direktor tasdig'iga o'tkaziladi (NOTICE
+  «… ta maosh vedomosti qatori …»). `test-audit-fixes.sql` LIVE / DEV 61/0.
+- **Jonli tizimga ta'siri (shu haftadagi deploy):** to'lov serveri (`payments/index.cjs` — deploy.sh 6/7 da qayta ishga tushiriladi),
+  `migration/payer-code-mask.sql` (yangi), `payroll-approval.sql`, `reports-roles.sql`, `change-log.sql`, `run-all.sql`, izoh qatorlari
+  (`admission-crm.sql`, `audit-4.sql`, `parent-link-canon.sql`, `staff-user-link.sql`), `admin.html`, `index.html`, `deploy.sh`.
+  Deploy chiqishida bo'lishi mumkin: «payer-code-mask: … N ta o'quvchi kodi almashtirildi …» (Direktor sonlarni ko'radi —
+  yoriqnomalar §3) va «… ta maosh vedomosti qatori … Direktor tasdig'iga o'tkazildi».
+- **Birlashtirilgan daraxt (rahbar):** `run-suites.sh` — «NATIJA: HAMMASI YASHIL» (dev: kassa 339, kassa-pay 195, kassa-links 163,
+  kassa-report 169, fin-period 42, fin-prereq 95, audit-fixes 61, public-close 92, fin-rights 125, kassa-checks 55; race 59/0; live:
+  fin-prereq 95, audit-fixes 61, public-close 92; fin-kassa / fin-print / fin-words, tg-daily 50/0); `test-payer-codes.sql` LIVE 63/0,
+  DEV 66/0; `payments/*.test.cjs` (8), `auth/*.test.cjs` (8), `server/sb-admin` — hammasi o'tdi; brauzer: k17 v1/v2 27/27, k1 v1 39/39,
+  k13 v2 39/39.
+- **Keyingi ish (4-raund):** egasining 2026-11-17 ko'rsatmasi — kassir **«Kassir» roli** bilan ishlaydi (G'aznachi lavozimidagi xodim;
+  «G'aznachi» tizim roli kassa xodimiga berilmaydi), Kassir kirim / chiqim va kunlik hisobotni yuritadi (kassa modulida bor) — hujjatlar,
+  rol nomi va lavozim → rol tavsiyasi; shuningdek 3-raund tekshiruvchilarining past darajali eslatmalari.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

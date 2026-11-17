@@ -209,6 +209,8 @@ create trigger trg_archive_deleted after delete on public.student_private for ea
 drop trigger if exists trg_archive_deleted on public.student_codes;
 create trigger trg_archive_deleted after delete on public.student_codes for each row execute function app.archive_deleted_row();
 
+-- DIQQAT: restore_deleted_student'ning AMALDAGI ta'rifi — payer-code-mask.sql (shu yerdagisini almashtiradi: tiklangan kod to'lovchi
+--   matnida ochiq bo'lsa — yangi kod).
 -- Tiklash: faqat direktor. O'quvchi qatori (va o'sha o'chirishdagi student_private) qaytadi; ota-ona kodi (student_codes)
 --   o'zgarmaydi — bog'langan ota-onalar kirishni yo'qotmaydi (AFTER INSERT trigger yangi kod yozsa ham eskisi qaytariladi).
 --   Fakturalar, to'lovlar, davomat o'quvchi o'chirilganda o'chmaydi — ID bir xil bo'lgani uchun qayta bog'lanadi.
