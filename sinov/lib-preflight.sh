@@ -514,7 +514,9 @@ step_secrets(){
   if ! as_root test -s "$SEC_DIR/jwt-secret"; then
     # 48 tasodifiy bayt (96 ta hex belgi) — PostgREST va Node server shu sir bilan ishlaydi; haqiqiy tizim siridan BOSHQA.
     as_root sh -c "umask 077; od -An -N48 -tx1 /dev/urandom | tr -d ' \n' > '$SEC_DIR/jwt-secret'"
-    [ "$(as_root wc -c < "$SEC_DIR/jwt-secret")" -ge 64 ] || die "JWT siri yaratilmadi."
+    # Hajmni root o'qiydi: «as_root wc -c < fayl» da yo'naltirishni oddiy foydalanuvchi qobig'i ochardi — 0700 papkada «Permission denied».
+    local n; n=$(as_root wc -c "$SEC_DIR/jwt-secret" 2>/dev/null | awk '{print $1}')
+    [ "${n:-0}" -ge 64 ] || die "JWT siri yaratilmadi."
     ok "yangi JWT siri yaratildi (faqat stend uchun)"
   else ok "JWT siri bor (saqlandi)"; fi
   as_root chmod 600 "$SEC_DIR/jwt-secret"
