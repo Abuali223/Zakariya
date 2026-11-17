@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================
 # «Kassa» brauzer ssenariylari — hammasi ketma-ket, har biri YANGI stend bilan (LOKAL; ishga-tushirish.md §3.2, 3-qadam).
-#   bash run-all.sh                     — to'liq to'plam: kassa 1–17 (v1 va v2 dizayn) + to'lov va eski oqimlar (dev va prod zanjir)
+#   bash run-all.sh                     — to'liq to'plam: kassa 1–18 (v1 va v2 dizayn) + to'lov va eski oqimlar (dev va prod zanjir)
 #   bash run-all.sh k5:v1 k3:v2 pay:dev  — tanlanganlari (kN:v1|v2, pay:dev|prod, legacy:dev|prod)
 #   Natija: local/out/<vaqt>/summary.txt (har qator: rc, JAMI, fail soni) va har ssenariy chiqishi; oxirida xulosa.
 #   Kutilgan sonlar — README.md («Kutilgan natija»). Hamma qatorda fail=0 va rc=0 bo'lishi kerak.
@@ -26,7 +26,7 @@ run(){   # kN:v1|v2 | pay:dev|prod | legacy:dev|prod
   esac
 }
 if [ $# -gt 0 ]; then SPECS=("$@"); else
-  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17; do SPECS+=("k$n:v1" "k$n:v2"); done
+  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18; do SPECS+=("k$n:v1" "k$n:v2"); done
   SPECS+=(pay:dev legacy:dev pay:prod legacy:prod)
 fi
 for s in "${SPECS[@]}"; do run "$s"; done

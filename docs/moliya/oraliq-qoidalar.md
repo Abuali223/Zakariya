@@ -1,6 +1,7 @@
 # Kassa va xarajatlar: oraliq qoidalar (2026-yil 16-noyabrdan yangi «Kassa» bo‘limi ishga tushguncha)
 
-Kimlar uchun: kassir(lar), moliya menejeri, zavxoz, oshpaz, direktor. Dasturda o‘zgarish talab qilmaydi — bugundan
+Kimlar uchun: kassir(lar) (kassir — G‘aznachi lavozimidagi xodim, tizimda «Kassir» roli; o‘rinbosar — qo‘shimcha «Kassir» roli; egasi
+ko‘rsatmasi, 2026-11-17), moliya menejeri, zavxoz, oshpaz, direktor. Dasturda o‘zgarish talab qilmaydi — bugundan
 bajariladi. Maqsad: yangi tizimga toza ma’lumot bilan o‘tish (rasmiy boshlanish — 2027-yil 4-yanvar, ish reja:
 `docs/moliya/buxgalteriya-ish-reja.md`). **Holat:** e’lon qilingan — 2026-11-16 dan amalda (egasi).
 

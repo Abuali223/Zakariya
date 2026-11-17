@@ -15,7 +15,8 @@
 --       bo'lsa (payroll_submit va app.payroll_line_extra_hr); oddiy xodim qatori — tasdiqsiz; teskari havolali HR o'z maoshini o'zi bermaydi;
 --   (9) xodim kartasining login havolasi (staff / teachers."userUid", payroll-approval.sql 7-bo'lim): HR uni uza / o'zgartira / yangi kartaga
 --       yoza olmaydi (42501), kartaning boshqa maydonlarini tahrirlaydi (o'sha havola bilan to'liq qator upsert'i ham), o'zi bog'langan
---       kartani o'chira olmaydi; Direktor va server (service_role) o'zgartiradi, o'zgarish tarixga yoziladi.
+--       kartani o'chira olmaydi; Direktor va server (service_role) o'zgartiradi, o'zgarish tarixga yoziladi; HR'ning null ↔ ''
+--       almashtirishi (UPDATE va upsert) saqlangan qiymatga qaytariladi — tarixda «— → —» qatori yo'q.
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-audit-fixes.sql
@@ -269,11 +270,22 @@ select zz.chk('H10 Direktor havolani uzadi va qayta bog''laydi',
 select zz.chk('H11 server (ro''yxatdan o''tish, service_role) bo''sh kartaga havola yozadi (shartli yozish — auth/index.cjs kabi)',
   zz.sys($q$with u as (update public.staff set "userUid" = 'U_HR' where id = 'x_free' and ("userUid" is null or "userUid" = '') returning 1) select count(*)::text from u$q$),
   '^1$');
+-- HR null ↔ '' (ikkalasi ham «bog'lanmagan»): UPDATE va upsert saqlangan qiymatni o'zgartirmaydi — H12 da HR nomidan havola qatori yo'q.
+select zz.chk('H13 HR null ↔ '''' almashtirishi saqlangan qiymatni o''zgartirmaydi: UPDATE (xodim null→'''', o''qituvchi ''''→null) va upsert (xodim, o''qituvchi)',
+  zz.as('U_HR', $q$with u as (update public.staff set "userUid" = '' where id = 'x_ks' returning '[' || coalesce("userUid", '<null>') || ']' v) select string_agg(v, ',') from u$q$) || ' '
+  || zz.as('U_HR', $q$with u as (update public.teachers set "userUid" = null where id = 'x_n3' returning '[' || coalesce("userUid", '<null>') || ']' v) select string_agg(v, ',') from u$q$) || ' '
+  || zz.as('U_HR', $q$insert into public.staff (id, "staffId", name, "userUid") values ('x_dup', 'IQX-T6', 'Sinov Farrosh', '')
+     on conflict (id) do update set name = excluded.name, "userUid" = excluded."userUid" returning '[' || coalesce("userUid", '<null>') || ']'$q$) || ' '
+  || zz.as('U_HR', $q$insert into public.teachers (id, "teacherId", name, "userUid") values ('x_n3', 'IQT-902', 'Sinov Yangi 3', null)
+     on conflict (id) do update set name = excluded.name, "userUid" = excluded."userUid" returning '[' || coalesce("userUid", '<null>') || ']'$q$),
+  '^\[<null>\] \[\] \[<null>\] \[\]$');
 select zz.chk('H12 havola o''zgarishi tarixda: Direktorniki (2 ta) va tizimniki (kim — bo''sh); HR tahriri — havolasiz',
   (select count(*) filter (where row_id = 'x_hrr' and actor_uid = 'U_DIR') || '|' || count(*) filter (where row_id = 'x_free' and actor_uid is null)
           || '|' || count(*) filter (where actor_uid in ('U_HR', 'U_HRR', 'U_HRF'))
      from public.change_log where tbl in ('staff', 'teachers') and changes ? 'userUid'),
   '^2\|1\|0$');
+select zz.chk('H14 null ↔ '''' almashtirishlaridan keyin bu kartalarda havola o''zgarishi tarixi yo''q (x_ks, x_n3, x_dup)',
+  (select count(*)::text from public.change_log where tbl in ('staff', 'teachers') and row_id in ('x_ks', 'x_n3', 'x_dup') and changes ? 'userUid'), '^0$');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL' from zz.res;

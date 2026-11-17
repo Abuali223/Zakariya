@@ -111,7 +111,8 @@ yozuvni tizimga Direktor kiritadi.
 
 «[Tashkilot nomi]» · Kassadagi pul mablag‘larini inventarizatsiya qilish dalolatnomasi № [___]
 [joy], [sana], [vaqt] · Asos: [sana]dagi № [___] buyruq
-Komissiya: rais — direktor [F.I.Sh.]; a’zolar — bosh buxgalter [F.I.Sh.], moliya menejeri [F.I.Sh.]; moddiy javobgar shaxs — kassir (g‘aznachi) [F.I.Sh.]
+Komissiya: rais — direktor [F.I.Sh.]; a’zolar — bosh buxgalter [F.I.Sh.], moliya menejeri [F.I.Sh.]; moddiy javobgar shaxs (komissiya
+a’zosi emas, sanashda qatnashadi) — kassir (G‘aznachi lavozimi) [F.I.Sh.]
 
 **Kassirning tilxati:** inventarizatsiya boshlanishiga qadar barcha kirim va chiqim hujjatlari buxgalteriyaga topshirildi, menga
 ishonib topshirilgan barcha pul kirim qilindi, chiqib ketgani hisobdan chiqarildi. Kassir: [___] (imzo)
@@ -158,7 +159,8 @@ Biz, quyida imzo chekuvchilar — [lavozim, F.I.Sh.], [lavozim, F.I.Sh.], kassir
 Imzolar: [___], [___], kassir [___] · Bosh buxgalter: [___]
 
 ## Sh-5. Qabul sinovi varag‘i (sinov stendida)
-Rol: [kassir (g‘aznachi) / o‘rinbosar / moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] · Sana: [___] · Qurilma: ☐ kompyuter ☐ telefon
+Rol: [kassir (G‘aznachi lavozimi; «Kassir» roli) / o‘rinbosar (qo‘shimcha «Kassir» roli — sarlavhada «Rol: … ▾» bo‘lsa, undan tanlab) /
+moliya menejeri / buxgalter / direktor / HR] · F.I.Sh.: [___] · Sana: [___] · Qurilma: ☐ kompyuter ☐ telefon
 
 | № | Ssenariy | Bajarildi | Izoh |
 |---|---|---|---|

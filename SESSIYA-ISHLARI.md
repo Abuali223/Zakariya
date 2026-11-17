@@ -2203,7 +2203,32 @@ va shu bo'lim bilan birgalikdagi commit; hujjat aniqligi — `8e8c741`.
   k13 v2 39/39.
 - **Keyingi ish (4-raund):** egasining 2026-11-17 ko'rsatmasi — kassir **«Kassir» roli** bilan ishlaydi (G'aznachi lavozimidagi xodim;
   «G'aznachi» tizim roli kassa xodimiga berilmaydi), Kassir kirim / chiqim va kunlik hisobotni yuritadi (kassa modulida bor) — hujjatlar,
-  rol nomi va lavozim → rol tavsiyasi; shuningdek 3-raund tekshiruvchilarining past darajali eslatmalari.
+  rol nomi va lavozim → rol tavsiyasi; shuningdek 3-raund tekshiruvchilarining past darajali eslatmalari. → §81.
+
+## 81) Kassir roli (egasi ko'rsatmasi, 2026-11-17) va maosh eslatmalari — 2026-11-17
+
+**Egasi:** «Kassir rolini g'aznachiga berib qo'yibmiz, kassir roli aslicha qolsin. Kassir kirim-chiqimlarni ham kirita olsin va kunlik
+kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html` o'zgardi — shu haftadagi deploy bilan chiqadi.
+
+- **Qaror:** kassir — HR kartasida lavozimi «G'aznachi» bo'lgan xodim, tizimda **«Kassir»** roli (asosiy); o'rinbosar — qo'shimcha
+  «Kassir» roli; **«G'aznachi» tizim roli kassa xodimiga berilmaydi** (moliya menejeri darajasidagi huquqlar — FD-30), shunday hisob naqd
+  bilan ishlasa — Direktor «Kassir»ga almashtiradi. Kodda «Kassir» roli kassa modulida allaqachon to'liq kassa operatori edi
+  (`app.is_cashier`, `app.kassa_operator`, `app.kassa_op_user`; «+ Kirim», «💵 To'lov», «+ Chiqim so'rovi» → tasdiq → pul berish,
+  «Kunni yopish», «🖨 Kunlik hisobot», «🖨 Kassa kitobi varag'i») — xato hujjatlardagi rol tanlovida edi.
+- **Kod:** `admin.html` — rol tanlash ro'yxatida «Kassir (to'lov qabul qiladi; «Kassa»da — kirim, chiqim, kunlik hisobot)» (kassa
+  modulisiz serverda — «Kassir (to'lov qabul qiladi)»), «G'aznachi (kassir uchun — «Kassir» roli)»; belgilarda qisqa nom; HR lavozimi
+  «G'aznachi» → tavsiya etiladigan rol «Kassir» (`POS_ROLE`; `auth/phone.test.cjs`). Yangi brauzer ssenariysi `e2e-kassa18.cjs`
+  (yopilgan kunning yakuniy «Kunlik hisobot»i, KO-4 qoralama va «НУСХА», Direktorning rol tanlash oynasi) — README: 40 o'tish.
+- **Maosh (3-raund eslatmalari):** `reports-roles.sql` 5b — Direktor tasdig'iga o'tkazish har deployda qayta qo'llanadi (izoh to'g'rilandi),
+  NOTICE ko'chirilgan qatorlarni `runId/personId` bilan sanaydi (ism yo'q, birinchi 20 ta); `app.guard_card_user_link` — HR yozuvidagi
+  null ↔ '' almashinuvi eski qiymatga qaytariladi (bo'sh tarix yozuvi yo'q). `test-audit-fixes.sql` kengaytirildi.
+- **Hujjatlar (6 fayl):** kassir — «Kassir» roli, o'rinbosar — qo'shimcha «Kassir» (sarlavhada «Rol: … ▾» bo'lsa — undan tanlab),
+  «G'aznachi» roli kassa xodimiga yo'q; yoriqnomalar §1 sarlavhasi, 3-buyruq, Sh-3 / Sh-5, FD-16 / FD-30, egasi bloki; qabulxona kodni
+  telefonda faqat o'quvchi kartasidagi «Ota telefoni» / «Ona telefoni» raqamiga, shaxsan — hujjatdagi F.I.Sh. kartadagi bilan mos
+  kelsa beradi; 4-yanvar ertalab kassir Direktor «tayyor» demaguncha kassa hujjati yozmaydi; stendda kassir — «Kassir» hisobi.
+- **Tekshiruv:** ikkala qism mustaqil tekshiruvchidan «pass» (past eslatmalar shu bo'limda tuzatildi). To'lov biriktirishning qolgan
+  past darajali eslatmalari (invoice-id zaxira yo'li, telefon qoidasi va boshqa o'quvchi ID si, yashirishda ID raqamlari, fail-closed
+  sinf yozuvlari) — keyingi raund.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

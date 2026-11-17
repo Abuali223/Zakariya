@@ -5978,12 +5978,15 @@ async function renderUsers(){
   let rows;
   try{ rows = await loadCol('users', null); rows.sort((a,b)=>(((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0))); }
   catch(e){ $('#usr-card').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">Firestore qoidalarida <b>users</b> uchun admin ruxsati borligini tekshiring.</span></div>`; return; }
+  // Kassa xodimi (HR lavozimi «G'aznachi» ham) — «Kassir» roli: to'lov qabul qiladi, «Kassa»da kirim, chiqim so'rovi, kunni yopish va
+  //   kunlik hisobot (egasi, 2026-11-17). «G'aznachi» tizim roli — moliya menejeri darajasidagi huquq, kassirga berilmaydi.
+  //   Kassa moduli yo'q serverda yorliqda «Kassa» tilga olinmaydi.
   const roleOpts=[
     ['staff','Xodim — rol tayinlanmagan (yangi)'],
     ['director','Direktor (superuser)'],['admin','Ma‘muriyat rahbari'],['zavuch','O‘IBDO‘'],
-    ['hr','HR'],['finance_mgr','Moliya menejeri'],['kassir','Kassir (faqat to‘lov qabul qiladi)'],['marketing_mgr','Marketing menejeri'],
+    ['hr','HR'],['finance_mgr','Moliya menejeri'],['kassir',KASSA.on?'Kassir (to‘lov qabul qiladi; «Kassa»da — kirim, chiqim, kunlik hisobot)':'Kassir (to‘lov qabul qiladi)'],['marketing_mgr','Marketing menejeri'],
     ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
-    ['reception','Qabulxona xodimi'],['nurse','Hamshira (tibbiyot)'],['treasurer','G‘aznachi'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
+    ['reception','Qabulxona xodimi'],['nurse','Hamshira (tibbiyot)'],['treasurer','G‘aznachi (kassir uchun — «Kassir» roli)'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
     ['parent','Ota-ona'],['student','O‘quvchi']
   ];
   // Buxgalter roli — faqat serverda kassa moduli bo'lsa beriladi (yoki allaqachon shu rolda hisob bo'lsa — ro'yxatda ko'rinsin).
@@ -6006,7 +6009,9 @@ async function renderUsers(){
     q=(q||'').trim().toLowerCase();
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role,...(Array.isArray(r.extraRoles)?r.extraRoles:[])].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
     if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
-    const roleName=rl=>(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
+    // Belgi (chip), qo'shimcha lavozim qatori va bloklash oynasida — qisqa nom: «Kassir» / «G‘aznachi» izohlari faqat tanlash ro'yxatida.
+    const ROLE_SHORT={ kassir:'Kassir', treasurer:'G‘aznachi' };
+    const roleName=rl=>ROLE_SHORT[rl]||(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
     const homeroomN=r=>(r.homeroomClasses||[]).length;
     const summaryOf=r=> uHas(r,'teacher') ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
       : uHas(r,'kurator') ? `${(r.assignedClasses||[]).length||homeroomN(r)} ta sinf${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
@@ -6066,9 +6071,11 @@ async function renderUsers(){
 }
 // HR lavozimi («Xodimlar» → Lavozim; STAFF_POSITIONS yoki qo'lda yozilgan) -> tizim roli (Foydalanuvchilar). Katta-kichik
 //   harf va apostroflar farq qilmaydi («Moliya Menejeri» = «Moliya menejeri»). Mos rol bo'lmasa — '' (admin o'zi tanlaydi).
+//   «G'aznachi» lavozimidagi xodim — kassir: tizimda «Kassir» roli taklif qilinadi (egasi, 2026-11-17); «G'aznachi» tizim roli
+//   (moliya menejeri darajasidagi huquq) kassa xodimiga berilmaydi.
 const POS_ROLE = { 'direktor':'director', 'mamuriyat rahbari':'admin', 'oibdo':'zavuch', 'hr':'hr', 'moliya menejeri':'finance_mgr',
   'kassir':'kassir', 'marketing menejeri':'marketing_mgr', 'oqituvchi':'teacher', 'kurator':'kurator', 'qabulxona xodimi':'reception',
-  'gaznachi':'treasurer', 'xojalik xodimi':'facilities', 'bosh oshpaz':'head_chef', 'oshxona xodimi':'kitchen', 'tozalov xodimi':'cleaner',
+  'gaznachi':'kassir', 'xojalik xodimi':'facilities', 'bosh oshpaz':'head_chef', 'oshxona xodimi':'kitchen', 'tozalov xodimi':'cleaner',
   'farrosh':'cleaner', 'qorovul':'guard', 'xavfsizlik xodimi':'security', 'hamshira':'nurse' };
 function posToRole(pos){ const k=String(pos==null?'':pos).toLowerCase().replace(/[ʻʼ'‘’`´ʹ′‛]/g,'').replace(/\s+/g,' ').trim();
   return Object.prototype.hasOwnProperty.call(POS_ROLE,k) ? POS_ROLE[k] : ''; }

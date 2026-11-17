@@ -1,7 +1,9 @@
 # «Kassa» bo‘limi: rol bo‘yicha qisqa yo‘riqnomalar (F1.19)
 
 O‘qitishda (sinov stendida) tarqatiladi — 14-dekabrgacha (o‘qitish jadvali taklifi — `ishga-tushirish.md`, 1-bo‘lim); har bo‘lim — bir varaq. Bo‘lim «Moliya» → «Kassa» da. Tugma nomlari ekrandagidek.
-Istisno: 6-bo‘lim (qabulxona) va 3-bo‘limdagi «Ota-ona kodi» paragrafi 16-noyabr haftasidagi yangilanish kuni beriladi (o‘qitishni kutmaydi).
+Istisno: 6-bo‘lim (qabulxona) hamda 3-bo‘limdagi «Ota-ona kodi» va «Xodim kartasi ↔ login va o‘z maoshi» paragraflari 16-noyabr
+haftasidagi yangilanish kuni beriladi (o‘qitishni kutmaydi; deploy chiqishida «… ta maosh vedomosti qatori … Direktor tasdig‘iga
+o‘tkazildi» qatori bo‘lsa — Direktor o‘sha qatorlarni pul berilishidan oldin ko‘radi).
 Hujjat raqamlari: **K-** kirim orderi (KO-1), **Ch-** chiqim orderi (KO-2), **D-** naqdsiz dalolatnoma (boshlang‘ich qoldiq,
 kamomad qarori), **O‘H-** o‘zaro hisob dalolatnomasi, **A-** avans hisoboti (chop etishda kirillcha: К-, Ч-, Д-, ЎҲ-, А-). Har
 turning o‘z raqami bor; raqamni tizim beradi, har yili 1 dan boshlanadi, bo‘shliq va takror bo‘lmaydi. To‘liq tartib: `docs/moliya/ishga-tushirish.md`; shakllar: `docs/moliya/shakllar.md`.
@@ -22,11 +24,14 @@ turning o‘z raqami bor; raqamni tizim beradi, har yili 1 dan boshlanadi, bo‘
 
 ---
 
-## 1. Kassir — g‘aznachi (va kassir o‘rinbosari)
+## 1. Kassir (G‘aznachi lavozimi) va kassir o‘rinbosari
 
-Kassir — **G‘aznachi** lavozimidagi xodim (tizimda «G‘aznachi» roli: kassada kassir bilan teng — kassa egasi, kunni ochadi va
-yopadi); o‘rinbosar — buyruq bilan tayinlangan xodim, o‘z roliga qo‘shimcha «Kassir» lavozimi bilan. Naqd pulni faqat shu ikkisi
-oladi va beradi (Direktor — faqat favqulodda holatda). Kassa ish kunlari — dushanba–juma (shanba, yakshanba va bayram kunlari yopiq).
+Kassir — **G‘aznachi** lavozimidagi xodim, tizimda **«Kassir»** roli bilan ishlaydi. U kassa egasi: kirim («💵 To‘lov», «+ Kirim») va chiqim
+(«+ Chiqim so‘rovi» → tasdiq → «Pulni berish») hujjatlarini yozadi, kunni ochadi (birinchi hujjat bilan) va yopadi, kunlik hisobotni
+tayyorlaydi («🖨 Kunlik hisobot», «🖨 KO-4»). O‘rinbosar — buyruq bilan tayinlangan xodim: o‘z roliga qo‘shimcha «Kassir» roli
+beriladi, kassada «Kassir» rolida ishlaydi (sarlavhada «Rol: … ▾» bo‘lsa — undan «Kassir»ni tanlab). «G‘aznachi» tizim roli kassa xodimiga berilmaydi (unda
+moliya huquqlari bor) — hisobingizda shu rol bo‘lsa, Direktorga ayting. Naqd pulni faqat shu ikkisi oladi va beradi (Direktor —
+faqat favqulodda holatda). Kassa ish kunlari — dushanba–juma (shanba, yakshanba va bayram kunlari yopiq).
 
 **Ertalab.** «Kassa» sahifasini oching. Yuqorida kun kartasi: kun boshi, kirim, chiqim, kassadagi qoldiq va kassa egasi
 («kassir: …» — shu kuni birinchi kassa hujjatini yozgan kassir; smena qabul qilinsa — qabul qiluvchi). Qizil eslatma bo‘lsa —
@@ -47,8 +52,8 @@ orqali yoziladi (kirim orderi va fiskal chek bilan): boshqa yo‘l bilan (to‘l
 o‘zgartirish, «naqd» kanal bilan balansga qo‘llash) tizim qabul qilmaydi — Direktorga ham.
 
 **To‘lov yozuvidagi «[kod]».** «To‘lovlar»da Click / Uzum to‘lovchisi yozgan matnda «[kod]» ko‘rinsa — bu ota-onaning yashirilgan
-maxfiy kodi (kod to‘lov yozuvlarida ko‘rsatilmaydi). Yashirish biriktirishga ta’sir qilmaydi: kod to‘g‘ri bo‘lsa, to‘lov o‘quvchiga
-avtomatik biriktiriladi. «⚠️ Biriktirilmagan to‘lovlar»da «[kod]» bo‘lsa — kodni hech kim (Direktor ham) ko‘rmaydi: to‘lovni
+maxfiy kodi (kod to‘lov yozuvlarida ko‘rsatilmaydi). Yashirish biriktirishga ta’sir qilmaydi: kod to‘g‘ri bo‘lsa va matnda boshqa
+o‘quvchining ID si yoki kodi bo‘lmasa, to‘lov o‘quvchiga avtomatik biriktiriladi. «⚠️ Biriktirilmagan to‘lovlar»da «[kod]» bo‘lsa — kodni hech kim (Direktor ham) ko‘rmaydi: to‘lovni
 matndagi ID, ism yoki telefon bo‘yicha odatdagidek qo‘lda biriktiring («Biriktirish»); aniqlab bo‘lmasa — to‘lovchiga telefon
 qiling yoki Direktorga ayting. Ota-ona kodni so‘rasa — qabulxonaga yuboring (6-bo‘lim).
 
@@ -84,7 +89,7 @@ tizim «… so‘m qabul qilinsinmi?» deb so‘raydi — raqamni qayta tekshiri
 2. Moliya menejeri yoki buxgalter tasdiqlaydi (katta summa, rahbarga berish va qarz — Direktor ham).
 3. «So‘rovlar» ro‘yxatida «Pulni berish» → «🖨 Chiqim orderi» → oluvchi «Oldim» deb summa (so‘z bilan), sana va imzo qo‘yadi;
    shaxsini tasdiqlovchi hujjat ma’lumoti yoziladi. Kassada pul yetmasa tizim chiqimga yo‘l qo‘ymaydi. So‘rovni o‘zi tasdiqlagan xodim
-   (masalan, qo‘shimcha «kassir» lavozimli moliya menejeri) uning pulini bermaydi — boshqa kassir beradi. O‘zingizga (hisobingiz
+   (masalan, qo‘shimcha «Kassir» roli bo‘lgan moliya menejeri) uning pulini bermaydi — boshqa kassir beradi. O‘zingizga (hisobingiz
    bog‘langan xodim kartasiga) boshqa xodim tasdiqlagan avans yoki hisobdorga avansni o‘zingiz berasiz — 2-ro‘yxat tasdig‘i bor, kunni
    boshqa xodim tekshiradi. Direktorga beriladigan pulni (FD-48) va qaytarishni ham kassir beradi. Tasdiqdan keyin kontragent
    turi o‘zgargan bo‘lsa (endi yuridik shaxs hisoblansa) yoki chegara pasaytirilgan bo‘lsa pul berilmaydi: so‘rov o‘zi Direktor
@@ -152,7 +157,7 @@ etsa — doim «НУСХА» (asl nusxa hali chop etilmagan bo‘lib qoladi).
 
 **Oy oxiri** — «KO-3» (kassa orderlari jurnali) va «Statiyalar» (oylik statiya matritsasi): oyni tanlab ko‘ring va chop eting
 («🖨 KO-3», «🖨 Chop etish»). Excel fayllar sizda yo‘q — ularni moliya menejeri, buxgalter yoki Direktor oladi. «Kassir»
-lavozimida ochiladigan «Xodimlar davomati» → «Oylik hisobot» → «🖨 PDF / Hisobot» sizda ismsiz chiqadi (xodim — maosh ID va kamera
+rolida ochiladigan «Xodimlar davomati» → «Oylik hisobot» → «🖨 PDF / Hisobot» sizda ismsiz chiqadi (xodim — maosh ID va kamera
 ID bilan; ismli nusxa — Direktor va HR’da; FD-28).
 
 **Internet yoki tizim ishlamasa** — `ishga-tushirish.md`, 8-bo‘lim («Қ» blankasi to‘lovchiga berilmaydi; dalil — fiskal chek).
@@ -164,7 +169,9 @@ ertalab sahifada biror joyni bosing. «Yuborilmadi — Direktor hal qiladi» yoz
 
 **Kassa ishga tushishidan oldingi pul.** Boshlang‘ich qoldiq sanashidan (30-dekabr kechqurun) oldin qurilmangiz internetga ulangan
 va navbati (⏳) bo‘sh bo‘lsin. **31-dekabr kassa naqd pul qabul qilmaydi va bermaydi** (Click, Uzum, bank ishlaydi); istisno bo‘lsa —
-eski qog‘oz order, tizimga o‘sha kuni kiriting va Direktorga ayting (4-yanvar ertalab pul qayta sanaladi). 1–3-yanvar kassa yopiq. Ishga tushish kunidan oldin olingan pulni keyin **bugungi sana bilan qayta kiritmang** — u sanashga kirgan,
+eski qog‘oz order, tizimga o‘sha kuni kiriting va Direktorga ayting (4-yanvar ertalab pul qayta sanaladi). 1–3-yanvar kassa yopiq.
+**4-yanvar ertalab** birinchi kassa hujjatini Direktor qayta sanash (kerak bo‘lsa) va «31-dekabr holati» suratini tugatganini
+aytmaguncha yozmang. Ishga tushish kunidan oldin olingan pulni keyin **bugungi sana bilan qayta kiritmang** — u sanashga kirgan,
 ikki marta hisoblanadi: bugungi sana bilan kiritilgan to‘lovni tizim oddiy bugungi to‘lov deb qabul qiladi (kirim orderi
 yoziladi), farqini bilmaydi. Navbatda qolib ketgan yozuv internet qaytganda o‘zi o‘tadi (48 soatgacha;
 kirim orderisiz); undan eskisini yoki qog‘ozda topilganini Direktor haqiqiy sanasi bilan kiritadi. Kassa to‘xtatilgan bo‘lsa
@@ -203,7 +210,8 @@ kerak; kasallik sanalari — yo‘q. Excel va A4 hisobot buxgalterda **ismsiz** 
 
 **To‘lovchi matnidagi «[kod]»** (moliya menejeri; buxgalter bu matnni ko‘rmaydi). Click / Uzum to‘lovida to‘lovchi yozgan matnda
 (ism, «sinf», izoh) «[kod]» — ota-onaning yashirilgan maxfiy kodi (kod to‘lov yozuvlarida, eskilarida ham, ko‘rsatilmaydi).
-Yashirish biriktirishga ta’sir qilmaydi: kod to‘g‘ri bo‘lsa, to‘lov o‘quvchiga avtomatik biriktiriladi. «⚠️ Biriktirilmagan to‘lovlar»da
+Yashirish biriktirishga ta’sir qilmaydi: kod to‘g‘ri bo‘lsa va matnda boshqa o‘quvchining ID si yoki kodi bo‘lmasa, to‘lov
+o‘quvchiga avtomatik biriktiriladi. «⚠️ Biriktirilmagan to‘lovlar»da
 «[kod]» bo‘lsa — kodni hech kim (Direktor ham) ko‘rmaydi: to‘lovni matndagi ID, ism yoki telefon bo‘yicha odatdagidek qo‘lda
 biriktiring («Biriktirish»); aniqlab bo‘lmasa — to‘lovchiga telefon qiling yoki Direktorga ayting. Ota-ona kodni so‘rasa —
 qabulxonaga (6-bo‘lim).
@@ -216,7 +224,7 @@ tasdiqlay oladi. Ikkalasi ham yo‘q kuni oddiy chiqim tasdiqlanmaydi — Direkt
 1. **Chiqim so‘rovlarini tasdiqlash:** «Kassa» → «So‘rovlar» → «Ko‘rish»: oluvchi, statiya, asos hujjati to‘g‘rimi → «Tasdiqlash»
    yoki «Rad etish» (sababi). O‘zingiz yuborgan so‘rovni va o‘zingizga (hisobingiz bog‘langan xodim kartasiga, ikkinchi lavozim
    kartasi ham) beriladigan pulni o‘zingiz tasdiqlay olmaysiz — uni boshqa 2-ro‘yxat xodimi yoki Direktor tasdiqlaydi. Tasdiqlagan
-   so‘rovingiz pulini o‘zingiz bermaysiz (qo‘shimcha «kassir» lavozimi bo‘lsa ham).
+   so‘rovingiz pulini o‘zingiz bermaysiz (qo‘shimcha «Kassir» roli bo‘lsa ham).
 2. **Kunni tekshirish:** kassir topshirgan KO-4, orderlar va ilovalarni ekrandagi kun bilan solishtiring → «Kassa kunlari» →
    «Tekshirish» → «qog‘oz va ilovalar olindi» belgisi → «Tekshirdim». Kunlar tartib bilan tekshiriladi; kunni yopgan (qayta ochilishidan
    oldin yopgan ham), shu kuni hujjat
@@ -248,8 +256,8 @@ tasdiqlay oladi. Ikkalasi ham yo‘q kuni oddiy chiqim tasdiqlanmaydi — Direkt
    tasdiqlangan; moliya menejeri turini, nomini yoki STIR’ini o‘zgartirsa — tasdiq bekor bo‘ladi. **«Xodimlar zimmasidagi kamomad»** — Direktor qarori bilan xodimga yozilgan kamomad va qoplangani: kassir
    «Kamomadni qoplash (xodim)» bilan qabul qiladi, qolganini ish haqidan ushlash — buxgalter (4-bosqichgacha qo‘lda). Qaror doim
    **xodim kartasiga** yoziladi (avvalgi «boshqa» tomonga yozilgan qarorlar ro‘yxatda «xodim kartasiga bog‘lanmagan» belgisi bilan
-   qoladi va kassadan qoplanmaydi). **«Xodim kartasiga bog‘lanmagan kassa hisoblari»** (sariq) — kassir, g‘aznachi, moliya
-   menejeri yoki buxgalter hisobi HR yozuviga bog‘lanmagan: kassa hujjatlarida uning ismi foydalanuvchining o‘zi yozgani bo‘ladi va
+   qoladi va kassadan qoplanmaydi). **«Xodim kartasiga bog‘lanmagan kassa hisoblari»** (sariq) — «Kassir» (qo‘shimcha rol bo‘lsa
+   ham), «G‘aznachi», moliya menejeri yoki buxgalter rolidagi hisob HR yozuviga bog‘lanmagan: kassa hujjatlarida uning ismi foydalanuvchining o‘zi yozgani bo‘ladi va
    kamomad qarorida javobgar o‘zi tanlanmaydi — Direktorga ayting («Foydalanuvchilar» → «Tahrirlash»da bog‘laydi). **«Sanash
    farqlari»** — kunni yopishdagi va smena topshirishdagi kamomad / ortiqcha alohida («yopishda −…, smenada +…»). **«Hali kelmagan
    «hali o‘tkazilmagan» yozuvlar»** (sariq) — kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun
@@ -319,7 +327,8 @@ ismsiz (o‘quvchi va xodim faqat ID bilan, fayl nomida «-ismsiz»); ismli to�
 qo‘yiladi. Ismli to‘liq fayllar (davr surati, KO-3, oylik to‘plam) Direktorning xavfsiz arxivida saqlanadi, buxgalterga ismsiz nusxa
 beriladi.
 
-**Boshqa ismsiz fayllar** (FD-28; egasi qarori va kod — 2026-11-16) — Direktordan boshqalarga: izoh, fayl nomi yoki sarlavhada
+**Boshqa ismsiz fayllar** (FD-28; egasi qarori, 2026-11-16) — 16-noyabr haftasidagi yangilanishdan Direktordan boshqalarga: izoh,
+fayl nomi yoki sarlavhada
 «-ismsiz», ism o‘rniga ID (A4 hisobotlarda muallif — rol nomi); jamlar Direktor nusxasidagidek.
 - «Moliya» → qarzdorlar «⬇ CSV» (moliya menejeri) — `qarzdorlar-<oy>-ismsiz.csv`: birinchi qatorda izoh, «O‘quvchi ID» ustuni,
   qolgan ustunlar o‘zgarmagan.
@@ -347,15 +356,18 @@ kamaytirilmaydi va boshqa oy / usulga o‘tkazilmaydi — avval qaytim orderi be
 
 **Bir marta (ishga tushirishda):** «⚙ Sozlamalar» (tashkilot nomi, STIR, joy, chop etish tili, T1, L1, kassa limiti, imzo egalari,
 ishga tushadigan kun) va «Boshlang‘ich qoldiqni kiritish» — 30-dekabr kechqurun; «31-dekabr holati» surati qulf bilan — 4-yanvar
-ertalab, birinchi kassa kuni ochilishidan oldin (`ishga-tushirish.md`, 4-bo‘lim). Oldindan: kassa hisoblarini, HR menejer hisobini
+ertalab, birinchi kassa kuni ochilishidan oldin (`ishga-tushirish.md`, 4-bo‘lim); tugagach kassirga ayting (kassir shungacha kassa
+hujjati yozmaydi). Oldindan: kassa hisoblarini, HR menejer hisobini
 va o‘zingiznikini 30-dekabrgacha xodim kartasiga bog‘lang (kartada F.I.Sh. to‘liq; HR menejer va moliya menejeri hisobini — vedomost
 yuborilishidan oldin, aks holda ularning o‘z maosh qatori sizning tasdig‘ingizni talab qilmaydi); 2 ta takroriy maosh ID — xodim
 kartasida «Yangi noyob ID berish» (aks holda vedomost HR’ga yuborilmaydi); buxgalterga «Buxgalter» roli — yashirin o‘rnatishdan
-keyin; «Bayram / ta’til kunlari»ga yanvar bayram va ta’til kunlari; «Xabarnomalar» → «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju,
+keyin; kassirga (G‘aznachi lavozimidagi xodim) — «Kassir» roli, o‘rinbosarga — qo‘shimcha «Kassir» roli («Foydalanuvchilar» →
+«➕ Lavozim»); «G‘aznachi» rolini kassa xodimiga bermang (unda moliya huquqlari bor): hozir shu roldagi hisob naqd bilan ishlasa —
+«Tahrirlash»da rolini «Kassir»ga almashtiring; «Bayram / ta’til kunlari»ga yanvar bayram va ta’til kunlari; «Xabarnomalar» → «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju,
 soat — kassa yopilgandan keyin (standart 19:00).
 
-**Xodim kartasi ↔ login va o‘z maoshi (16-noyabr haftasidagi yangilanish).** Xodim kartasining login hisobiga bog‘lanishini faqat
-siz o‘zgartirasiz («Foydalanuvchilar» → «Tahrirlash»); HR menejer bu bog‘lanishni o‘zgartira olmaydi va o‘zi bog‘langan kartani
+**Xodim kartasi ↔ login va o‘z maoshi (16-noyabr haftasidagi yangilanish).** Bu paragraf yangilanish kuni beriladi (o‘qitishni
+kutmaydi). Xodim kartasining login hisobiga bog‘lanishini faqat siz o‘zgartirasiz («Foydalanuvchilar» → «Tahrirlash»); HR menejer bu bog‘lanishni o‘zgartira olmaydi va o‘zi bog‘langan kartani
 o‘chira olmaydi, o‘zgarishlar «O‘zgarishlar tarixi»da «Bog‘langan login» bo‘lib ko‘rinadi. HR menejer va moliya menejerining o‘z maosh
 qatori — karta qanday bog‘langan bo‘lmasin — sizning tasdig‘ingizda. Yangilanishda avval yuborilgan yoki tasdiqlangan oylardagi
 shunday qatorlar ham sizning tasdig‘ingizga o‘tkaziladi: deploy chiqishida «… ta maosh vedomosti qatori … Direktor tasdig‘iga
@@ -460,8 +472,9 @@ kuni beriladi (o‘qitishni kutmaydi) va o‘sha kundan amalda.
   ota-ona «Bu kod almashtirilgan — yangi kodni maktabdan oling» xabarini ko‘radi. Kabinetga avval qo‘shilgan farzandlar uzilmaydi.
 - Ota-ona shu xabar bilan kelsa yoki qo‘ng‘iroq qilsa:
   1. Shaxsini tekshiring — kod faqat o‘quvchining ota-onasiga beriladi (har qanday kod so‘rovida shunday): telefon orqali — faqat
-     o‘quvchining «Ota-ona tel.» raqamidan («O‘quvchilar» ro‘yxatida) qo‘ng‘iroq qilganga yoki shu raqamga o‘zingiz qayta qo‘ng‘iroq
-     qilib; boshqa holda — faqat shaxsan, shaxsni tasdiqlovchi hujjat bilan.
+     o‘quvchi kartasidagi «Ota telefoni» yoki «Ona telefoni» raqamidan qo‘ng‘iroq qilganga (ro‘yxatdagi «Ota-ona tel.» ustunida —
+     otaning raqami) yoki shu raqamga o‘zingiz qayta qo‘ng‘iroq qilib; boshqa holda — faqat shaxsan: shaxsni tasdiqlovchi
+     hujjatdagi F.I.Sh. o‘quvchi kartasidagi «Ota (F.I.Sh)» yoki «Ona (F.I.Sh)» bilan mos kelsa.
   2. «O‘quvchilar» ro‘yxatida o‘quvchini toping va «Kod» ustunidagi (telefonda — «Kod (ota-onaga)») joriy kodni bering: 📋 tugmasi
      o‘quvchi ID va kodni birga nusxalaydi.
   3. Ayting: Click / Uzum ilovasida saqlangan to‘lovlar eski kod bilan ham ishlayveradi — ularni o‘zgartirish shart emas; yangi kod

@@ -332,13 +332,14 @@ select app.chlog_attach('config',        '!refundPin,sickRate,sickApprovalFrom,b
 --    kartasidagi havolani uzib (yoki boshqa kartaga ko'chirib) o'z maosh qatorini Direktor tasdig'isiz qoldira olardi. Asosiy havolani
 --    (users."staffRefType" / "staffRefId") users_upd qotiradi; teskari havolani endi ham faqat Direktor («Foydalanuvchilar» → bog'lash)
 --    yoki server (ro'yxatdan o'tish — service_role, migratsiya, psql) o'zgartiradi, boshqa foydalanuvchida — 42501. Havola o'zgarmagan
---    yozuv o'tadi (boshqa maydonlarni tahrirlash, shu qiymat bilan to'liq qator upsert'i); null va '' — bir xil (bog'lanmagan).
+--    yozuv o'tadi (boshqa maydonlarni tahrirlash, shu qiymat bilan to'liq qator upsert'i); null va '' — bir xil (bog'lanmagan):
+--    Direktor / serverdan boshqa yozuvchining null ↔ '' almashtirishi saqlangan qiymatga qaytariladi (tarixda «— → —» qatori chiqmaydi).
 --    O'zi bog'langan kartani (asosiy yoki teskari havola) HR o'chira olmaydi (staff_del HR'ga ochiq; teachers_del — faqat Direktor):
 --    o'chirib, bog'lanmagan yangi karta ochsa ham o'z qatori tasdiqsiz qolardi (bunday kartani Direktor o'chiradi).
 --    O'zgarishlar tarixida — change-log.sql («userUid» ustuni).
 create or replace function app.guard_card_user_link() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_cur text;
+declare v_cur text; v_hit boolean;
 begin
   if app.is_system() or app.is_admin() then return coalesce(new, old); end if;
   if tg_op = 'DELETE' then
@@ -351,13 +352,19 @@ begin
     return old;
   end if;
   if tg_op = 'UPDATE' then
-    if coalesce(new."userUid", '') = coalesce(old."userUid", '') then return new; end if;
+    -- Havola o'zgarmagan — o'tadi; null ↔ '' almashtirishda saqlangan qiymat qoladi (no-op tarix qatori bo'lmasin).
+    if coalesce(new."userUid", '') = coalesce(old."userUid", '') then new."userUid" := old."userUid"; return new; end if;
   else
-    -- INSERT: bo'sh havola — o'tadi; yozish huquqi yo'q rolni RLS (staff_ins / teachers_ins) rad etadi (trigger RLS'dan OLDIN
-    --   ishlaydi — javob farqi yozuv borligini oshkor qilmasin). Upsert (INSERT ... ON CONFLICT DO UPDATE) mavjud qatorga o'sha
-    --   qiymatni yozsa — o'tadi (UPDATE bosqichini shu trigger yana tekshiradi).
-    if coalesce(new."userUid", '') = '' or not app.is_hr() then return new; end if;
-    execute format('select "userUid" from public.%I where id = $1', tg_table_name) into v_cur using new.id;
+    -- INSERT: yozish huquqi yo'q rolni RLS (staff_ins / teachers_ins) rad etadi (trigger RLS'dan OLDIN ishlaydi — javob farqi
+    --   yozuv borligini oshkor qilmasin). Bo'sh havola — o'tadi; upsert (INSERT ... ON CONFLICT DO UPDATE) bog'lanmagan mavjud
+    --   qatorga mos kelsa — saqlangan qiymat (null yoki '') bilan. Mavjud qatorga o'sha qiymatni yozsa — o'tadi (UPDATE bosqichini
+    --   shu trigger yana tekshiradi).
+    if not app.is_hr() then return new; end if;
+    execute format('select "userUid", true from public.%I where id = $1', tg_table_name) into v_cur, v_hit using new.id;
+    if coalesce(new."userUid", '') = '' then
+      if v_hit and coalesce(v_cur, '') = '' then new."userUid" := v_cur; end if;
+      return new;
+    end if;
     if coalesce(v_cur, '') = new."userUid" then return new; end if;
   end if;
   raise exception 'Xodim kartasining login hisobiga bog''lanishini faqat Direktor o''zgartiradi («Foydalanuvchilar» bo''limi)'

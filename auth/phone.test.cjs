@@ -185,7 +185,9 @@ ok('to\'g\'ri raqam -> maslahat yo\'q', AD.pmPhoneHint('+48789706619') === '' &&
 ok('tuzatib bo\'lmaydigan -> bo\'sh', AD.pmPhoneHint('12345') === '' && AD.pmPhoneHint('') === '');
 ok('pmPrettyPhone', AD.pmPrettyPhone('+79031571124') === '+7 903 157 11 24' && AD.pmPrettyPhone('abc') === 'abc');
 ok('posToRole: «Moliya Menejeri» -> finance_mgr', AD.posToRole('Moliya Menejeri') === 'finance_mgr' && AD.posToRole('  moliya   menejeri ') === 'finance_mgr');
-ok('posToRole: apostroflar', AD.posToRole('O‘qituvchi') === 'teacher' && AD.posToRole("O'IBDO'") === 'zavuch' && AD.posToRole('Ma‘muriyat rahbari') === 'admin' && AD.posToRole('G‘aznachi') === 'treasurer');
+ok('posToRole: apostroflar', AD.posToRole('O‘qituvchi') === 'teacher' && AD.posToRole("O'IBDO'") === 'zavuch' && AD.posToRole('Ma‘muriyat rahbari') === 'admin');
+// Egasi (2026-11-17): «G‘aznachi» lavozimidagi xodim — kassir; tizimda «Kassir» roli taklif qilinadi, «G‘aznachi» (treasurer) emas.
+ok('posToRole: «G‘aznachi» lavozimi -> kassir (treasurer emas)', ['G‘aznachi', "G'aznachi", 'Gʻaznachi', '  g‘aznachi '].every(p => AD.posToRole(p) === 'kassir'));
 ok('posToRole: Hamshira -> nurse', AD.posToRole('Hamshira') === 'nurse' && AD.posToRole('  hamshira ') === 'nurse');
 ok('posToRole: mos rol yo\'q / prototip', AD.posToRole('Laborant') === '' && AD.posToRole('constructor') === '' && AD.posToRole('') === '' && AD.posToRole(null) === '');
 

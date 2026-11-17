@@ -74,13 +74,13 @@ E2E_DB=fx_e2e
 ```bash
 cd tests/kassa-e2e
 bash stand.sh setup          # bir marta: local/, JWT siri, dasturlar tekshiruvi → «tayyor: …»
-bash run-all.sh              # to‘liq to‘plam (38 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
+bash run-all.sh              # to‘liq to‘plam (40 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
 ```
 
 `run-all.sh` har o‘tishdan oldin stendni noldan quradi (ssenariylar kunlarni yopadi, hujjat o‘tkazadi — holat
 qayta ishlatilmaydi), oxirida stendni to‘xtatadi. Natija: `local/out/<vaqt>/summary.txt` (har qator:
 `k5.v1: rc=0 | JAMI (v1): 22/22 | fail=0`), har ssenariy chiqishi `local/out/<vaqt>/<teg>.out`, skrinshotlar
-`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 38 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
+`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 40 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
 (chiqish kodi ≠ 0).
 
 Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`).
@@ -123,10 +123,11 @@ shu jadval ham yangilanadi):
 | k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 29, v2 29 |
 | k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | v1 31, v2 31 |
 | k17 | `e2e-kassa17.cjs` | FD-28 fayllari: qarzdorlar CSV («Moliya»), «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti — Direktorga (davomatda HR’ga ham) ismli; Moliya menejeri, buxgalter va kassirga ismsiz (o‘quvchi ID, xodim maosh ID’si — «Kamera ID»siz xodimning ruhsati ham, «-ismsiz», izoh), qolgan ustunlar qatorma-qator va jamlar bir xil; ekrandagi ro‘yxat ism bilan | v1 27, v2 27 |
+| k18 | `e2e-kassa18.cjs` | «Kassir» roli (egasi, 2026-11-17): asosiy rol «Kassir» — ochiq kunda kassa kitobi varag‘i (qoralama), kunni yopish, yopilgan kunning yakuniy kunlik hisoboti va kassa kitobi varag‘i («НУСХА»); Direktor: rol tanlovida yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog‘langan yangi xodimga «Kassir» oldindan tanlanadi (kirim, chiqim so‘rovi, pul berish — k1; ochiq kun hisoboti — k4) | v1 9, v2 9 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
 
-Jami: 38 o‘tish, 1046 tekshiruv (kassa 2 × 495, to‘lov 24, eski oqimlar 32).
+Jami: 40 o‘tish, 1064 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32).
 
 **Holat (2026-11-16).** Oxirgi to‘liq yashil o‘tish — 2026-11-16: 38 o‘tish, 1046 tekshiruv — hammasi o‘tdi (≈ 14 daqiqa).
 Kod — modul relizi 12 va FD-28 fayllari (qarzdorlar CSV, «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti —

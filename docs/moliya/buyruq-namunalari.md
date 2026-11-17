@@ -5,7 +5,8 @@ yozilmaydi (repozitoriy ommaviy) — `[___]` o‘rniga qog‘ozda to‘ldiriladi
 (13, 14, 29-moddalar), IMV 143-buyruq bilan tasdiqlangan Hujjatlar va hujjatlar aylanishi nizomi (ro‘yxat 3538),
 BHMS 19 (inventarizatsiya), BHMS 21 (hisobvaraqlar rejasi). Ish reja: `docs/moliya/buxgalteriya-ish-reja.md`.
 Egasining 2026-11-16 qarorlari kiritilgan: buyruqlar 12-dekabrgacha imzolanadi; tashkilotning tashkiliy-huquqiy shakli va nomi
-ro‘yxatdan o‘tish guvohnomasidagidek yoziladi (buxgalter tekshiradi) — namunada qat’iy shakl yozilmagan.
+ro‘yxatdan o‘tish guvohnomasidagidek yoziladi (buxgalter tekshiradi) — namunada qat’iy shakl yozilmagan. Egasining 2026-11-17
+ko‘rsatmasi: kassir (G‘aznachi lavozimi) tizimda «Kassir» roli bilan ishlaydi (3-buyruq).
 
 ---
 
@@ -45,8 +46,9 @@ BHMS 19 ga muvofiq **BUYURAMAN:**
 
 ## 3-buyruq. Kassir va kassir o‘rinbosarini tayinlash
 **BUYURAMAN:**
-1. Kassa operatsiyalarini bajarish g‘aznachi [F.I.Sh.] zimmasiga yuklansin (kassir; tizimda «G‘aznachi» roli); u yo‘qligida —
-   [lavozim, F.I.Sh.] (o‘rinbosar; moliya menejeri va HR menejer emas; tizimda qo‘shimcha «Kassir» lavozimi).
+1. Kassa operatsiyalarini (kirim va chiqim orderlari, kunni yopish va kunlik kassa hisoboti — KO-4) bajarish g‘aznachi [F.I.Sh.]
+   zimmasiga yuklansin (kassir; tizimda «Kassir» roli, «G‘aznachi» tizim roli berilmaydi); u yo‘qligida — [lavozim, F.I.Sh.]
+   (o‘rinbosar; moliya menejeri va HR menejer emas; tizimda qo‘shimcha «Kassir» roli).
 2. Ikkalasi bilan (zarur bo‘lsa zavxoz bilan ham) **to‘liq moddiy javobgarlik to‘g‘risida shartnoma** tuzilsin (asosiy bandlari —
    7-bo‘lim; matnni yurist yakunlaydi).
 3. Naqd pulni **faqat** kassir (g‘aznachi) yoki o‘rinbosar qabul qiladi va beradi; direktor — faqat favqulodda holatda (kassir
