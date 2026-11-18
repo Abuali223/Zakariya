@@ -40,15 +40,37 @@ function mapErr(e) {
   return err;
 }
 
+// onAuthStateChanged — Firebase'dagidek FAQAT foydalanuvchi almashganda (kirish, chiqish, boshqa hisob) chaqiriladi.
+//   supabase-js esa SHU foydalanuvchi uchun ham hodisa beradi: ilova/tabga har qaytilganda SIGNED_IN (_recoverAndRefresh),
+//   taxminan har soatda TOKEN_REFRESHED, profil o'zgarsa USER_UPDATED, boshqa ochiq tablardan (BroadcastChannel) — xuddi shular.
+//   Avval har biri tinglovchilarni qayta chaqirardi: admin.html panelni boshidan qurardi (Direktordan boshqa xodim birinchi
+//   bo'limga qaytardi, saqlanmagan baho/davomat o'chardi), index.html kabinetni qayta chizardi («Qo'shish» formasi tozalanardi).
+//   Endi shu foydalanuvchi hodisasida joriy obyekt JIM yangilanadi (o'sha obyekt — Firebase'dagidek: displayName, email, _raw).
+//   _listeners: tinglovchi -> unga oxirgi yetkazilgan uid (undefined — hali chaqirilmagan; null — «kirilmagan» yetkazilgan).
 let _currentUser = null;
-const _listeners = new Set();
-let _wired = false;
-function _emit() { for (const cb of _listeners) { try { cb(_currentUser); } catch (_) {} } }
+const _listeners = new Map();
+let _wired = false, _gotEvent = false;
+function _deliver(cb) {
+  if (!_listeners.has(cb)) return;                          // obuna bekor qilingan
+  const uid = _currentUser ? _currentUser.uid : null;
+  if (_listeners.get(cb) === uid) return;                   // shu holat bu tinglovchiga allaqachon yetkazilgan
+  _listeners.set(cb, uid);
+  try { cb(_currentUser); } catch (_) {}
+}
+function _emit() { for (const cb of Array.from(_listeners.keys())) _deliver(cb); }
+function _setUser(raw) {
+  const next = mapUser(raw);
+  if (next && _currentUser && next.uid === _currentUser.uid) { Object.assign(_currentUser, next); return; }   // shu foydalanuvchi
+  _currentUser = next;
+  _emit();
+}
 function _wire() {
   if (_wired) return; _wired = true;
   const sb = supabase();
-  sb.auth.getSession().then(({ data }) => { _currentUser = mapUser(data && data.session ? data.session.user : null); _emit(); });
-  sb.auth.onAuthStateChange((_ev, session) => { _currentUser = mapUser(session ? session.user : null); _emit(); });
+  // Boshlang'ich holat INITIAL_SESSION bilan ham keladi; getSession — zaxira. Hodisa allaqachon kelgan bo'lsa, getSession'ning
+  //   eskirgan surati (masalan, shu orada chiqilgan bo'lsa) yangi holatni bosib o'tmasin.
+  sb.auth.getSession().then(({ data }) => { if (!_gotEvent) _setUser(data && data.session ? data.session.user : null); }, () => {});
+  sb.auth.onAuthStateChange((_ev, session) => { _gotEvent = true; _setUser(session ? session.user : null); });
 }
 
 export function getAuth(_app) {
@@ -74,12 +96,18 @@ export async function createUserWithEmailAndPassword(_auth, email, password) {
 
 export function onAuthStateChanged(_auth, cb) {
   _wire();
-  _listeners.add(cb);
-  Promise.resolve().then(() => { try { cb(_currentUser); } catch (_) {} });
-  return () => _listeners.delete(cb);
+  if (!_listeners.has(cb)) _listeners.set(cb, undefined);
+  Promise.resolve().then(() => _deliver(cb));   // joriy holat bir marta (keyin — faqat foydalanuvchi almashganda)
+  return () => { _listeners.delete(cb); };
 }
-export async function signOut(_auth) {
-  const { error } = await supabase().auth.signOut();
+// Chiqish — FAQAT SHU QURILMA (scope 'local', Firebase signOut semantikasi). supabase-js standarti 'global' — foydalanuvchining
+//   BARCHA qurilmalaridagi seanslarini bekor qiladi: umumiy maktab kompyuterida «Chiqish» bosgan o'qituvchi telefonidan ham
+//   chiqib ketardi; admin.html'ni ochgan ota-onaning kabineti boshqa qurilmalarda ham yopilardi. 'local' seansni avval shu
+//   brauzerdan o'chiradi — tarmoq bo'lmasa ham chiqiladi. Hamma qurilmadan chiqarish faqat ataylab so'ralganda:
+//   signOut(auth, { scope: 'global' }) (masalan, bloklangan hisob — admin.html).
+export async function signOut(_auth, opts) {
+  const scope = (opts && opts.scope === "global") ? "global" : "local";
+  const { error } = await supabase().auth.signOut({ scope });
   if (error) throw mapErr(error);
 }
 

@@ -8,6 +8,7 @@ kaliti faqat shu serverda** saqlanadi (saytga/gitga tushmaydi).
 | `POST /chat` | Sayt uchun ota-onalar chatboti (narx, yo'nalish, qabul — UZ/RU). Faqat ommaviy maktab ma'lumoti (sayt kontakti, tariflar, yo'nalishlar, qabul, FAQ) asosida — o'quvchi/ota-ona ma'lumoti kontekstga QO'SHILMAYDI. |
 | `POST /student-summary` | Bitta o'quvchi bo'yicha ota-onaga oylik xulosa. ⚠️ **Standart holda O'CHIQ** — `410 {"error":"disabled","message":"Bu xizmat vaqtincha o‘chirilgan"}`. |
 | `POST /risk` | Orqada qolayotgan o'quvchilar + AI tavsiya. ⚠️ **Standart holda O'CHIQ** (410). |
+| `POST /sheet` | Admin paneldagi «📊 Google Sheets» importi: ommaviy jadval CSV'sini o'qib beradi (AI chaqirmaydi, bazaga tegmaydi). Faqat **Direktor** tokeni bilan (`Authorization: Bearer …`; tokensiz — 401, boshqa rol — 403). Cheklovi o'zining — `/chat`ning kunlik AI chegarasini (`chatDailyCap`) yemaydi. |
 
 **O'quvchi ma'lumoti tashqi AI xizmatiga ketmaydi.** `/student-summary` va `/risk` o'quvchi ismi, davomati, bahosi va qarzini
 Anthropic'ga yuborardi — shaxsiy ma'lumotni uchinchi tomonga berish uchun huquqiy asos (huquqshunos ruxsati) kerak. Ruxsatdan
@@ -35,6 +36,7 @@ cp config.example.json config.json      # to'ldiring
 | `allowOrigin` | Saytingiz manzili (CORS) — masalan `https://alilazer-cd582.web.app` |
 | `riskAttendance` / `riskScore` | Xavf chegaralari (standart 80% / 60 ball) |
 | `allowStudentData` | `false` (standart) — `/student-summary`, `/risk` o'chiq (410). `true` — faqat huquqshunos ruxsatidan keyin |
+| `sheetIpRateLimit` / `sheetRateLimit` / `sheetDailyCap` | Ixtiyoriy, `/sheet` cheklovlari: IP bo'yicha daqiqasiga (standart 30, token tekshiruvidan oldin), foydalanuvchi bo'yicha daqiqasiga (10), kunlik jami (300). `/chat` cheklovlari (`chatRateLimit` 20/daqiqa, `chatDailyCap` 2000/kun) bilan umumiy emas |
 
 ## 2. Tekshirish va ishga tushirish
 ```bash

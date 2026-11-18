@@ -24,7 +24,11 @@ const DATA = {
   directions: [{ id: 'd1', title_uz: 'IT', desc_uz: 'Dasturlash.' }],
   students: [{ id: 'S1', studentId: 'IQ-0001', name: 'Aliyev Valijon', attendance: 50, score: 40 }],
   student_private: [{ id: 'S1', parentPhone: '+998901112233' }],
+  users: [{ id: 'U_DIR', role: 'director' }, { id: 'U_TCH', role: 'teacher' }],
 };
+// Soxta GoTrue: faqat shu tokenlar yaroqli (qolgani — 401); chaqiruvlar sanaladi (anonim oqim GoTrue'ga yetmasligi uchun).
+const TOKENS = { 'tok-dir': 'U_DIR', 'tok-tch': 'U_TCH' };
+const GETUSER = [];
 const READS = [];
 function fakeClient() {
   const from = t => {
@@ -38,7 +42,8 @@ function fakeClient() {
     };
     return b;
   };
-  return { from, auth: { getUser: async () => ({ data: { user: null }, error: { status: 401, message: 'invalid' } }) } };
+  return { from, auth: { getUser: async jwt => { GETUSER.push(jwt); const id = TOKENS[jwt];
+    return id ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { status: 401, message: 'invalid' } }; } } };
 }
 // ---- soxta Anthropic: yuborilgan so'rovni yozib qo'yadi ----
 const SENT = [];
@@ -133,6 +138,50 @@ async function withServer(mod, fn) {
     r = await call('POST', '/risk', {}, { authorization: 'Bearer bad' });
     ok('/risk yaroqsiz token -> 401', r.status === 401, r.text);
   });
+
+  sec('/sheet (Google Sheets importi) — faqat Direktor tokeni bilan, O‘Z cheklovi: /chat’ning kunlik AI chegarasiga tegmaydi');
+  {
+    // Tarmoqsiz: Google o'rniga soxta CSV (qaysi manzil so'ralgani yoziladi).
+    const realFetch = globalThis.fetch, FETCHED = [];
+    globalThis.fetch = async u => { FETCHED.push(String(u)); return { ok: true, status: 200, text: async () => 'Ism,Sinf\nSinov Bola,5\n' }; };
+    const SHEET = { url: 'https://docs.google.com/spreadsheets/d/abcDEF123/edit#gid=0' };
+    const dir = { authorization: 'Bearer tok-dir' };
+    try {
+      M = load({ chatDailyCap: 2, sheetDailyCap: 3 });
+      await withServer(M, async call => {
+        let r = await call('POST', '/sheet', SHEET);
+        ok('/sheet tokensiz -> 401 auth_required', r.status === 401 && r.json && r.json.error === 'auth_required', r.text);
+        r = await call('POST', '/sheet', SHEET, { authorization: 'Bearer yaroqsiz' });
+        ok('/sheet yaroqsiz token -> 401', r.status === 401, r.text);
+        r = await call('POST', '/sheet', SHEET, { authorization: 'Bearer tok-tch' });
+        ok('/sheet o‘qituvchi tokeni -> 403 forbidden (import faqat Direktorda)', r.status === 403 && r.json && r.json.error === 'forbidden', r.text);
+        ok('ruxsatsiz so‘rovlarda Google’ga murojaat yo‘q', FETCHED.length === 0, JSON.stringify(FETCHED));
+        for (let i = 0; i < 3; i++) r = await call('POST', '/sheet', SHEET, dir);
+        ok('/sheet Direktor tokeni -> 200, CSV', r.status === 200 && r.json && /Sinov Bola/.test(r.json.csv || ''), r.text);
+        ok('so‘rov faqat docs.google.com ga, manzil ichki quriladi', FETCHED.length >= 3 && FETCHED.every(u => u.startsWith('https://docs.google.com/spreadsheets/d/abcDEF123/')), JSON.stringify(FETCHED));
+        r = await call('POST', '/chat', { message: 'Salom' });
+        ok('6 ta /sheet so‘rovi /chat kunlik chegarasini (chatDailyCap=2) yemadi -> /chat 200', r.status === 200 && r.json && r.json.reply === 'Javob.', r.text);
+        r = await call('POST', '/sheet', SHEET, dir);
+        ok('/sheet o‘z kunlik chegarasi (sheetDailyCap=3) -> 429', r.status === 429 && r.json && r.json.error === 'rate_limited', r.text);
+        r = await call('POST', '/chat', { message: 'Salom' });
+        ok('/chat o‘z hisoblagichi bilan ishlayveradi (2-so‘rov) -> 200', r.status === 200, r.text);
+      });
+      M = load({ sheetIpRateLimit: 3, sheetRateLimit: 2 });
+      await withServer(M, async call => {
+        GETUSER.length = 0;
+        let r;
+        for (let i = 0; i < 5; i++) r = await call('POST', '/sheet', SHEET);
+        ok('IP oynasi (sheetIpRateLimit=3): tokensiz oqim 4-so‘rovdan 429, token tekshiruviga (GoTrue) faqat 3 tasi yetdi', r.status === 429 && GETUSER.length === 3, `${r.status} getUser=${GETUSER.length}`);
+        const c = await call('POST', '/chat', { message: 'Salom' });
+        ok('anonim /sheet oqimi /chat’ni to‘xtatmaydi', c.status === 200, c.text);
+      });
+      M = load({ sheetRateLimit: 2 });
+      await withServer(M, async call => {
+        const a = await call('POST', '/sheet', SHEET, dir), b = await call('POST', '/sheet', SHEET, dir), c = await call('POST', '/sheet', SHEET, dir);
+        ok('foydalanuvchi oynasi (sheetRateLimit=2): 3-so‘rov daqiqa ichida -> 429', a.status === 200 && b.status === 200 && c.status === 429, `${a.status} ${b.status} ${c.status}`);
+      });
+    } finally { globalThis.fetch = realFetch; }
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -1533,7 +1533,9 @@ async function renderKabRating(s){
 async function renderKabFeedback(s){
   const t=T[lang], box=$("#kab-feedback");
   if(!box || !(window.IqrorFB&&window.IqrorFB.submitFeedback)) return;
-  const A=window.IqrorAuth, role=(A&&A.getUser&&A.getUser()&&A.getUser().__role)||'parent';
+  // Muallif roli — users.role (IqrorAuth.getRole, reytingdagi kabi), YUBORISH paytida: o'quvchi — 'student', qolgani — 'parent'.
+  //   Avval yo'q maydon (getUser().__role) o'qilardi — o'quvchi yozgan murojaat ham ma'muriyatga «ota-ona» bo'lib borardi.
+  const authorRole=()=>{ const A=window.IqrorAuth, r=(A&&A.getRole&&A.getRole())||null; return r==='student'?'student':'parent'; };
   const draw=(mine)=>{
     const rows=(mine||[]).map(f=>{ const st=f.status==='resolved'?t.fb_st_resolved:(f.status==='read'?t.fb_st_read:t.fb_st_new);
       const stc=f.status==='resolved'?'#1F9982':(f.status==='read'?'#B45309':'#B42318');
@@ -1557,7 +1559,7 @@ async function renderKabFeedback(s){
     if(btn) btn.onclick=async()=>{ const text=(txt&&txt.value.trim())||''; const type=($("#fb-type")&&$("#fb-type").value)||'shikoyat';
       if(!text){ if(msg){ msg.style.display='block'; msg.style.color='#B42318'; msg.textContent=t.fb_empty; } return; }
       btn.disabled=true; btn.textContent='…';
-      const ok=await window.IqrorFB.submitFeedback({ type, text, authorRole:role, studentId:(s&&s.id)||'', studentName:(s&&s.name)||'' });
+      const ok=await window.IqrorFB.submitFeedback({ type, text, authorRole:authorRole(), studentId:(s&&s.id)||'', studentName:(s&&s.name)||'' });
       btn.disabled=false; btn.textContent=t.fb_send;
       if(ok){ if(msg){ msg.style.display='block'; msg.style.color='#1F9982'; msg.textContent=t.fb_sent; } if(txt) txt.value=''; try{ const m=await window.IqrorFB.getMyFeedback(); if($("#kab-feedback")===box) draw(m); }catch(e){} }
       else if(msg){ msg.style.display='block'; msg.style.color='#B42318'; msg.textContent=t.fb_err; } };
@@ -2210,7 +2212,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
       try{ db = fsMod.initializeFirestore(app, { localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }) }); }
       catch(e){ db = fsMod.getFirestore(app); }
     }catch(e){}
-    try{ authMod = await import(`${V}/firebase-auth.js?v=3`); auth = authMod.getAuth(app);
+    try{ authMod = await import(`${V}/firebase-auth.js?v=4`); auth = authMod.getAuth(app);
       // Safari IndexedDB'ni ishonchsiz saqlaydi — localStorage'ga o'tkazamiz (login saqlanadi)
       try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
     }catch(e){}
@@ -2573,7 +2575,13 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
 
       buildAuthUI();
       checkPasswordRecovery();
+      let kabUid;   // kabinet qaysi foydalanuvchi uchun yuklangan (undefined — hali hech kim; null — kirilmagan holat)
       onAuthStateChanged(auth, async (user)=>{
+        // Himoya qatlami (shim ham faqat foydalanuvchi almashganda chaqiradi): SHU foydalanuvchi uchun qayta chaqiruvda farzandlar
+        //   qayta yuklanmaydi va kabinet qayta chizilmaydi — yarim yozilgan «Qo'shish» (ID, kod) va «Arz-shikoyat» matni o'chmasin.
+        const uidNow = user ? user.uid : null;
+        if(uidNow === kabUid){ currentUser = user; return; }
+        kabUid = uidNow;
         currentUser = user;
         if(!user){ childIds=[]; activeChild=''; userRole=null; try{ window.IqrorPublic && window.IqrorPublic.setChildren && window.IqrorPublic.setChildren({}); }catch(e){} setAuthUI(null); kabRefresh(); return; }
         let role=null;
@@ -2836,7 +2844,8 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           try{
             if(mode==='register'){
               const cred=await createUserWithEmailAndPassword(auth,email,pass);
-              const nm=$m('am-name').value.trim(); if(nm){ try{ await updateProfile(cred.user,{displayName:nm}); }catch(e){} }
+              // Ism sarlavhada darhol: profil yangilanishi (USER_UPDATED) kirish tinglovchisini endi qayta ishga tushirmaydi.
+              const nm=$m('am-name').value.trim(); if(nm){ try{ await updateProfile(cred.user,{displayName:nm}); if(currentUser) setAuthUI({ name:nm, role:userRole }); }catch(e){} }
               // Email tasdiqlash havolasi yuborilmaydi (chalkashlik oldini olish uchun) — tekshiruvni admin panelda "Tasdiqlangan" orqali qiladi
             } else { await signInWithEmailAndPassword(auth,email,pass); }
             closeAM();
@@ -2903,6 +2912,9 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         setTimeout(()=>{ try{ bg.querySelector('[data-role]').focus(); }catch(e){} },40);
         bg.querySelectorAll('[data-role]').forEach(btn=>btn.onclick=async()=>{
           try{ await setDoc(doc(db,'users',user.uid), { email:user.email, name:user.displayName||user.email, role:btn.dataset.role, verified:false, createdAt: serverTimestamp() });
+            // Tanlangan rol darhol getRole()'da (murojaat muallifi, reyting): kirish tinglovchisi endi shu foydalanuvchi uchun
+            //   qayta ishlamaydi (avval tabga qaytilganda tasodifan qayta o'qilardi).
+            if(currentUser && currentUser.uid===user.uid) userRole=btn.dataset.role;
             closeRole(); setAuthUI({ name:user.displayName||user.email, role:btn.dataset.role });
             try{ window.IqrorFB && window.IqrorFB.event('role_selected',{role:btn.dataset.role}); }catch(e){}
           }catch(e){ alert('Saqlab bo‘lmadi: '+(e.code||e.message)); }

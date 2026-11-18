@@ -271,6 +271,26 @@ function chatAllowed(req){
   if(_hits.size > 20000) _hits.clear();   // xotira himoyasi (haqiqiy IP -> bitta mijoz shishira olmaydi)
   return arr.length <= LIM && chatGlobalOk();
 }
+// /sheet (Google Sheets importi) — O'Z cheklovlari, /chat'nikidan ALOHIDA. Avval chatAllowed ishlatilardi: CSV o'qish AI
+//   chaqirmasa ham AI xarajati chegarasini (chatDailyCap) yeyardi va token so'ralmasdi — bitta IP kun oxirigacha sayt
+//   chatbotini ham, Direktor importini ham 429 qilib qo'yardi. Endi: IP oynasi (token tekshiruvidan OLDIN — anonim oqim
+//   GoTrue'ga yetmaydi) -> Direktor tokeni -> foydalanuvchi oynasi + alohida kunlik hisoblagich (faqat ruxsatli so'rov sanaladi).
+const _sheetIpHits = new Map(), _sheetUidHits = new Map();
+let _sheetDay = new Date().toISOString().slice(0,10), _sheetDayCount = 0;
+function sheetWindowOk(map, key, lim){
+  const now = Date.now(), arr = (map.get(key)||[]).filter(t => now - t < 60*1000);
+  arr.push(now); map.set(key, arr);
+  if(map.size > 20000) map.clear();       // xotira himoyasi
+  return arr.length <= lim;
+}
+function sheetDayOk(){
+  const d = new Date().toISOString().slice(0,10);
+  if(d !== _sheetDay){ _sheetDay = d; _sheetDayCount = 0; }
+  _sheetDayCount++;
+  return _sheetDayCount <= (Number(CFG.sheetDailyCap) || 300);
+}
+// Import tugmasi faqat Direktorda (admin.html: canDeleteStudents) — server ham shuni talab qiladi.
+const SHEET_ROLES = new Set(['director']);
 
 /* ---------------- HTTP handlerlar ---------------- */
 async function handleChat(body){
@@ -374,8 +394,13 @@ function makeRequestHandler(){
           out = await handleRisk(body);
         }
         else if(req.url.startsWith('/sheet')){
-          // Ommaviy Google Sheets CSV'sini o'qib beradi (import uchun). Bazaga tegmaydi.
-          if(!chatAllowed(req)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          // Ommaviy Google Sheets CSV'sini o'qib beradi (import uchun). Bazaga tegmaydi. Faqat Direktor tokeni bilan, o'z cheklovi
+          //   bilan (yuqorida, sheetWindowOk) — /chat'ning kunlik AI chegarasiga tegmaydi.
+          if(!sheetWindowOk(_sheetIpHits, clientIp(req), Number(CFG.sheetIpRateLimit) || 30)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          const uid = await verifyToken(bearer(req));
+          if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
+          if(!SHEET_ROLES.has(await userRole(uid))){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
+          if(!sheetWindowOk(_sheetUidHits, uid, Number(CFG.sheetRateLimit) || 10) || !sheetDayOk()){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
           out = await handleSheet(body);
         }
         else { res.writeHead(404); return res.end('{"error":"not_found"}'); }

@@ -823,7 +823,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, updateProfile, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, updateProfile, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js?v=2";   // ?v — yangi shim keshdan emas (onAuthStateChanged faqat foydalanuvchi almashganda, signOut — shu qurilma)
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection as fsCollection, getDocs, getDoc, query, where, orderBy, limit, doc, setDoc, updateDoc, addDoc, createDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, onSnapshot, rpc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js?v=4";   // ?v — yangi shim (createDoc) keshdan emas
 
 // /sb shim firebaseConfig'ni e'tiborsiz qoldiradi (Supabase — sb-config.js). Dummy qiymatlar:
@@ -1807,8 +1807,14 @@ $('#google-btn').addEventListener('click', async ()=>{
   catch(err){ $('#login-err').textContent='Google kirishda xatolik: '+(err.code||err.message); $('#login-err').style.display='block'; }
 });
 
+// Panel qaysi foydalanuvchi uchun qurilgan (yoki qurilmoqda). Himoya qatlami: shim (sb/firebase-auth.js) tinglovchini faqat
+//   foydalanuvchi almashganda chaqiradi, lekin keshdagi eski shim yoki boshqa sabab bilan SHU foydalanuvchi uchun qayta chaqiruv
+//   kelsa ham panel boshidan qurilmaydi: avval har qaytishda xodim birinchi bo'limga tushardi va saqlanmagan kiritish o'chardi.
+let bootUid=null;
 onAuthStateChanged(auth, async user=>{
-  if(!user){ show('login'); return; }
+  if(!user){ bootUid=null; show('login'); return; }
+  if(bootUid===user.uid) return;
+  bootUid=user.uid;
   const tok = await user.getIdTokenResult().catch(()=>null);
   // Rol MANBAI — users.role (yagona haqiqat). Eski (legacy) superuser claim'i bo'lsa,
   // endi u DIREKTORga ishora qiladi (superuser 'admin'dan 'director'ga ko'chdi).
@@ -1819,12 +1825,15 @@ onAuthStateChanged(auth, async user=>{
   // Telefon bilan ro'yxatdan o'tgan o'qituvchi admin TASDIG'ini kutadi (status='pending');
   //   bloklangan hisob — kirmaydi. (Mavjud email adminlarда status bo'sh -> ta'sir qilmaydi.)
   if(uStatus==='pending' || uStatus==='blocked'){
-    await signOut(auth);
+    // Chiqish odatda FAQAT SHU QURILMADAN (shim standarti). Bloklangan hisob — ATAYLAB barcha qurilmalardan (scope 'global'):
+    //   «🚫 Bloklash» seanslarni serverda ham yopadi, lekin eski usulda bloklangan (taqiqsiz, seanslari qolgan) hisob boshqa
+    //   qurilmalarda kirgan holda qolmasin. Tasdiq kutayotgan hisob — faqat shu qurilmadan. Tarmoq xatosi bo'lsa ham xabar ko'rinsin.
+    await signOut(auth, uStatus==='blocked' ? { scope:'global' } : undefined).catch(()=>{});
     const msg = (uStatus==='blocked')
       ? 'Hisobingiz bloklangan. Administratorga murojaat qiling.'
       : 'Hisobingiz administrator tasdig‘ini kutmoqda. Tasdiqlangach kirishingiz mumkin.';
     if($('#login-err')){ $('#login-err').textContent=msg; $('#login-err').style.display='block'; }
-    loginAttempted=false; show('login'); return;
+    loginAttempted=false; bootUid=null; show('login'); return;
   }
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
   const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse','accountant'];
@@ -1834,14 +1843,16 @@ onAuthStateChanged(auth, async user=>{
     .filter((r,i,a)=>a.indexOf(r)===i);
   const panelRoles = roles.filter(r=>STAFF.includes(r));
   if(!panelRoles.length){
-    await signOut(auth);
+    // Panel huquqi yo'q (ota-ona, o'quvchi …) — faqat SHU QURILMADAN chiqariladi: avval (supabase standarti 'global') admin.html'ni
+    //   ochgan ota-onaning kabineti telefonida va boshqa qurilmalarida ham yopilardi.
+    await signOut(auth).catch(()=>{});
     // Xabar HAR DOIM ko'rsatiladi (yangi kirishда ham, saqlangan sessiya qayta yuklanganда ham).
     const rl = ROLE_LABEL[role] || role || '—';
     const msg = (role && role!=='parent' && role!=='student')
       ? `«${rl}» roli uchun panelga kirish hali sozlanmagan. Administratorga murojaat qiling.`
       : 'Bu akkaunt panelga kirish huquqiga ega emas. Direktor, administrator, O‘IBDO‘, o‘qituvchi yoki kurator hisobi bilan kiring.';
     if($('#login-err')){ $('#login-err').textContent=msg; $('#login-err').style.display='block'; }
-    loginAttempted=false;
+    loginAttempted=false; bootUid=null;
     show('login'); return;
   }
   // Superuser = FAQAT Direktor. 'admin'/'admin_head' endi ma'muriyat rahbari (cheklangan).
@@ -2938,8 +2949,14 @@ async function importFromSheet(){
     const url=await loadAIUrl(); if(!url){ msg.textContent='AI server sozlanmagan.'; return; }
     load.disabled=true; load.textContent='Yuklanmoqda…'; msg.textContent='';
     try{
-      const r=await fetch(url+'/sheet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u})});
+      // Server faqat Direktor tokeni bilan o'qiydi (anonim so'rovlar AI chatining kunlik chegarasini yeb qo'ymasin).
+      const tk=await (auth.currentUser&&auth.currentUser.getIdToken ? auth.currentUser.getIdToken() : '');
+      const r=await fetch(url+'/sheet',{method:'POST',headers:{'Content-Type':'application/json', ...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({url:u})});
       const j=await r.json();
+      const fail=t=>{ msg.textContent=t; load.disabled=false; load.textContent='Yuklab olish'; };
+      if(j.error==='auth_required'){ fail('Seans eskirgan — sahifani yangilab, qayta kiring.'); return; }
+      if(j.error==='forbidden'){ fail('Google Sheets importi faqat Direktor uchun.'); return; }
+      if(j.error==='rate_limited'){ fail('So‘rovlar juda ko‘p. Bir daqiqadan so‘ng qayta urinib ko‘ring.'); return; }
       if(j.error==='bad_url'){ msg.textContent='Havola noto‘g‘ri (Google Sheets bo‘lishi kerak).'; load.disabled=false; load.textContent='Yuklab olish'; return; }
       if(j.error==='not_public'){ msg.textContent='Jadval ochiq emas. «Havolasi bor har kim ko‘ra oladi» qilib oching.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
       if(j.error==='empty_sheet'){ msg.textContent='Jadval bo‘sh yoki ma’lumot boshqa varaqda. To‘g‘ri varaqni oching va havolani (…#gid=…) shundan nusxa oling.'; load.disabled=false; load.textContent='Yuklab olish'; return; }
