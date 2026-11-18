@@ -98,11 +98,15 @@ test('admin.html: sonlar faol ro‘yxatdan; arxiv sahifasi va ma’lumotnoma ula
   // O'quvchilar sahifasi: jami va ro'yxat faol, arxivga havola
   assert.ok(ADM.includes("act=rows.filter(r=>!stuArchived(r, TD))") && ADM.includes('`Jami: ${act.length} ta o‘quvchi`'), 'O‘quvchilar: jami faol');
   assert.ok(ADM.includes('let filtered = act;'), 'O‘quvchilar: ro‘yxat faol');
-  assert.ok(ADM.includes("$('#stu-arch').addEventListener('click', ()=>renderArchive())"), 'Arxiv tugmasi');
-  // sinf tanlovlari: odatda arxivsiz; jurnallar — o'zlari saralaydi
-  assert.ok(ADM.includes('if(!keepArchived) students=activeRoster(students);'), 'classGroupsMap arxivsiz');
+  assert.ok(ADM.includes("$('#stu-arch').addEventListener('click', ()=>openTab('archive'))"), 'Arxiv tugmasi — «Arxiv» bo‘limi');
+  assert.ok(ADM.includes("if(tab==='archive') return renderArchive();") && ADM.includes("keys:['enrollments','students','archive',"), 'Arxiv — menyu bo‘limi');
+  assert.ok(/zavuch:\[[^\]]*'archive'\]/.test(ADM) && /reception:\['enrollments','students','archive'\]/.test(ADM), 'O‘IBDO‘ va qabulxona — Arxiv bo‘limi');
+  // sinf tanlovlari: shu o'quv yilida o'qiganlar (bitirgan sinf o'quv yili oxirigacha qoladi); jurnallar — o'zlari saralaydi
+  assert.ok(ADM.includes("if(!keepArchived){ const ay=acadYearStart(); students=(students||[]).filter(s=>stuInPeriod(s, ay)); }"), 'classGroupsMap — shu o‘quv yili');
+  assert.ok(ADM.includes('keys.filter(k=>def.has(k) || ((classes[k]&&classes[k].list)||[]).some(s=>stuInPeriod(s, ay)))'), 'liveClassKeys — shu o‘quv yili');
+  assert.equal((ADM.match(/const clsKeysU=\[\.\.\.CLS\.keys, /g) || []).length, 2, 'o‘qituvchi / foydalanuvchi oynasi: biriktirilgan sinf o‘chib ketmaydi');
   assert.equal((ADM.match(/classGroupsMap\(students, true\), keys=liveClassKeys\(classes,_allK\)/g) || []).length, 4, 'davomat, baho, monitoring, xarakteristika');
-  assert.equal((ADM.match(/filter\(s=>stuInPeriod\(s, /g) || []).length, 3, 'baho, monitoring, xarakteristika ro‘yxati davr bo‘yicha');
+  assert.equal((ADM.match(/cls\.list\.filter\(s=>stuInPeriod\(s, /g) || []).length, 3, 'baho, monitoring, xarakteristika ro‘yxati davr bo‘yicha');
   // eski «Ketganlar» oynasi Arxivga qo'shildi
   assert.ok(!ADM.includes('function openLeavers('), 'openLeavers yo‘q');
   assert.ok(ADM.includes("['bitirdi','🎓 Maktabni tugatdi (bitiruvchi)']"), 'bitiruv sababi');
@@ -111,5 +115,7 @@ test('admin.html: sonlar faol ro‘yxatdan; arxiv sahifasi va ma’lumotnoma ula
   assert.ok(a > 0 && b > a, 'ma’lumotnoma bloki');
   const tr = ADM.slice(a, b);
   assert.ok(tr.includes("p_kind:'certificate'"), 'QR turi certificate');
-  for (const k of ["P('parentPhone')", "P('parentPhone2')", "P('health')", 'invRows', 'paidSum', 'dueSum']) assert.ok(!tr.includes(k), 'ma’lumotnomada yo‘q: ' + k);
+  assert.ok(tr.includes("rpc('student_certificate'") && tr.indexOf("rpc('student_certificate'") < tr.indexOf("rpc('issue_doc_token'"), 'o‘zlashtirish — server yig‘masidan, QR dan OLDIN');
+  for (const k of ["P('parentPhone')", "P('parentPhone2')", "P('health')", 'invRows', 'paidSum', 'dueSum', 'arcReasonLbl', 'exitNote']) assert.ok(!tr.includes(k), 'ma’lumotnomada yo‘q: ' + k);
+  assert.ok(tr.includes('(${esc(bd)} yilda tug‘ilgan)'), 'tug‘ilgan sana esc (erkin matn)');
 });

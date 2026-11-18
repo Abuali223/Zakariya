@@ -4,7 +4,9 @@
 //   Direktor: «O‘quvchilar» jami va sinf kartasi faol ro'yxatdan; qidiruvda arxivga havola; ⏯️ «Chiqarish» — son darhol kamayadi;
 //   kelajak sana — «⏳ Chiqadi» bilan ro'yxatda qoladi; bosh sahifa soni; «🗄 Arxiv» (filtrlar, yig'ma); 📨 Ma'lumotnoma (QR 'certificate',
 //   telefon / to'lovsiz); 🎓 Bitiruv (ommaviy); ↩️ qaytarish; jurnallar (baho — shu o'quv yilida chiqqanlar belgi bilan, monitoring —
-//   oldingi oyda chiqqan yo'q). Qabulxona: ⏹️ chiqarish → arxiv, Arxivda ↩️ / 🎓 / CSV yo'q. Kassir: ro'yxat soni (students_billing).
+//   oldingi oyda chiqqan yo'q). Qabulxona: ⏹️ chiqarish → arxiv, 📨 ma'lumotnoma (baho / davomat — student_certificate orqali; qabulxona
+//   jadvallarni o'zi o'qiy olmaydi), Arxivda ↩️ / 🎓 / CSV yo'q. O'IBDO': menyuda «Arxiv». Kassir: ro'yxat soni (students_billing),
+//   qidiruvda arxivdagi o'quvchi haqida eslatma (havolasiz).
 //   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-arxiv.cjs [v1|v2]
 const E = require('../lib/common.cjs'); const fs = require('fs');
 const OUT = E.OUT;
@@ -45,6 +47,11 @@ const st = id => q(`select coalesce("payStatus",'') || '|' || coalesce("exitReas
   const D = await login(ids.R_DIR); const pg = D.pg;
   const today = new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 10);   // Toshkent kuni (sahifadagi tkDay bilan bir xil)
   const plusDays = n => { const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  // o'zlashtirish ma'lumoti (urug'da yo'q): IQ-0001 va IQ-0003 — baho, davomat (bemor jami kunga kirmaydi), xarakteristika
+  const Y = Number(today.slice(0, 4)), AY = Number(today.slice(5, 7)) >= 9 ? `${Y}-${Y + 1}` : `${Y - 1}-${Y}`, M0 = today.slice(0, 7);
+  q(`insert into public.grades (id,"studentId","classKey",year,subjects) values ('IQ-0001__${AY}','IQ-0001','uz-4-A','${AY}','{"Matematika":{"q1":5,"q2":4}}'),('IQ-0003__${AY}','IQ-0003','uz-4-A','${AY}','{"Ona tili":{"q1":4}}') on conflict (id) do update set subjects = excluded.subjects`);
+  q(`insert into public.attendance (id,"studentId","classKey",month,days) values ('IQ-0001__${M0}','IQ-0001','uz-4-A','${M0}','{"01":"present","02":"late","03":"absent","04":"sick"}'),('IQ-0003__${M0}','IQ-0003','uz-4-A','${M0}','{"01":"present","02":"present"}') on conflict (id) do update set days = excluded.days`);
+  q(`insert into public.characteristics (id,"studentId","classKey",year,quarter,term,text) values ('IQ-0003__${AY}-q1','IQ-0003','uz-4-A','${AY}','q1','${AY}-q1','Sinov xarakteristika matni') on conflict (id) do update set text = excluded.text`);
   await D.students();
   ok('O‘quvchilar: jami — faol ro‘yxat (17 dan arxivdagi IQ-0017 siz = 16); «🗄 Arxiv (1)»; IQ-0017 ro‘yxatda yo‘q, muzlatilgan IQ-0016 bor',
     (await D.total()) === 16 && /Arxiv \(1\)/.test(await pg.textContent('#stu-arch')) && !(await D.listed('IQ-0017')) && (await D.listed('IQ-0016')),
@@ -98,9 +105,10 @@ const st = id => q(`select coalesce("payStatus",'') || '|' || coalesce("exitReas
   await pg.fill('#tr-ord', '45-o‘'); await pg.fill('#tr-to', 'Sinov 12-maktab');
   const pr = await D.printOf('#tr-print');
   const phone1 = q(`select "parentPhone" from public.student_private where id='IQ-0001'`);
-  ok('📨 Ma’lumotnoma: «O‘QUVCHI HAQIDA MA’LUMOTNOMA», «boshqa ta’lim muassasasiga», ism, chiqish sanasi va asosi, buyruq va manzil; QR bor',
-    /O‘QUVCHI HAQIDA MA’LUMOTNOMA/.test(pr.text) && /boshqa ta’lim muassasasiga/.test(pr.text) && /Sinov O‘quvchi 0001/.test(pr.text) && /Boshqa maktabga o‘tdi/.test(pr.text)
-    && /№ 45-o‘/.test(pr.text) && /Sinov 12-maktab/.test(pr.text) && pr.qr, pr.text.slice(0, 700));
+  ok('📨 Ma’lumotnoma: «O‘QUVCHI HAQIDA MA’LUMOTNOMA», «boshqa ta’lim muassasasiga», ism, holat «O‘qishdan chiqqan», buyruq va manzil, baho va davomat (jami 3 kun); QR bor',
+    /O‘QUVCHI HAQIDA MA’LUMOTNOMA/.test(pr.text) && /boshqa ta’lim muassasasiga/.test(pr.text) && /Sinov O‘quvchi 0001/.test(pr.text) && /O‘qishdan chiqqan/.test(pr.text)
+    && /№ 45-o‘/.test(pr.text) && /Sinov 12-maktab/.test(pr.text) && /Matematika 5 4/.test(pr.text) && /jami 3 kun/.test(pr.text) && pr.qr, pr.text.slice(0, 900));
+  ok('📨 Ma’lumotnomada ichki ketish sababi yozilmaydi («Boshqa maktabga o‘tdi» — yo‘q; izoh ham yo‘q)', !/Boshqa maktabga o‘tdi|Sinov: ko‘chish/.test(pr.text), pr.text.slice(0, 600));
   ok('📨 Ma’lumotnomada telefon raqami, to‘lov (summa / qarz) va sog‘liq yo‘q', !!phone1 && !pr.text.includes(phone1) && !/Jami to‘langan|Qarz|To‘lovlar|Sog‘liq holati/.test(pr.text), pr.text.slice(0, 400));
   ok('QR — issued_documents: IQ-0001 uchun «certificate» bitta', q(`select count(*) from public.issued_documents where "studentDoc"='IQ-0001' and kind='certificate' and "revokedAt" is null`) === '1');
   await pg.click('#m-x'); await D.modalGone();
@@ -152,12 +160,28 @@ const st = id => q(`select coalesce("payStatus",'') || '|' || coalesce("exitReas
   await R.archive();
   ok('qabulxona Arxivi: 4 ta; 📨 Ma’lumotnoma bor; ↩️, 🎓 Bitiruv va CSV yo‘q',
     (await R.arRows()).length === 4 && !!(await rp.$('[data-arcert="IQ-0003"]')) && !(await rp.$('[data-arback]')) && !(await rp.$('#ar-grad')) && !(await rp.$('#ar-csv')), await R.arRows());
+  await rp.click('[data-arcert="IQ-0003"]'); await rp.waitForSelector('#rep-tr', { state: 'visible', timeout: 20000 });
+  const prR = await R.printOf('#tr-print');
+  ok('qabulxona 📨 Ma’lumotnomasi: baho («Ona tili 4»), davomat (jami 2 kun) va xarakteristika bor (student_certificate orqali); QR bor',
+    /Sinov O‘quvchi 0003/.test(prR.text) && /Ona tili 4/.test(prR.text) && /jami 2 kun/.test(prR.text) && /Sinov xarakteristika matni/.test(prR.text) && prR.qr, prR.text.slice(0, 900));
+  ok('QR — IQ-0003 uchun «certificate» qabulxona nomidan', q(`select count(*) from public.issued_documents where "studentDoc"='IQ-0003' and kind='certificate' and "issuedBy"='${ids.R_REC}'`) === '1');
+  await rp.click('#m-x'); await R.modalGone();
   await R.ctx.close();
 
+  // ===================== O'IBDO' (menyuda «Arxiv») =====================
+  const Z = await login(ids.R_ZAV); const zp = Z.pg;
+  await Z.tab('archive'); await zp.waitForSelector('#ar-list table', { timeout: 20000 }); await zp.waitForTimeout(400);
+  ok('O‘IBDO‘: menyuda «Arxiv» — 4 ta; 📨 Ma’lumotnoma bor; ↩️ / 🎓 / CSV va «← O‘quvchilar» yo‘q',
+    (await Z.arRows()).length === 4 && !!(await zp.$('[data-arcert="IQ-0003"]')) && !(await zp.$('[data-arback]')) && !(await zp.$('#ar-grad')) && !(await zp.$('#ar-back')), await Z.arRows());
+  await Z.ctx.close();
+
   // ===================== KASSIR (students_billing) =====================
-  const K = await login(ids.R_KAS);
+  const K = await login(ids.R_KAS); const kp = K.pg;
   await K.students();
   ok('kassir: «O‘quvchilar» jami ham faol ro‘yxat (13; students_billing — chiqqan kun bilan)', (await K.total()) === 13, await K.total());
+  await kp.fill('#stu-search', '0017'); await kp.dispatchEvent('#stu-search', 'input'); await kp.waitForTimeout(500);
+  const kNote = (await kp.textContent('#cls-groups')).replace(/\s+/g, ' ');
+  ok('kassir qidiruvi «0017»: arxivdagi o‘quvchi haqida eslatma («To‘lovlar»da qidiring), arxiv havolasi yo‘q', /arxivda/.test(kNote) && /To‘lovlar/.test(kNote) && !(await kp.$('#stu-arch-hit')), kNote.slice(0, 300));
   await K.ctx.close();
 
   ok('sahifa xatolari yo‘q', allErrs.length === 0, allErrs.slice(0, 5));

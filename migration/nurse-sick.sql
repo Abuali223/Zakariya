@@ -54,7 +54,9 @@ revoke all on function app.acc_read() from public, anon;
 grant execute on function app.acc_read() to authenticated, service_role;
 create or replace view public.students_billing with (security_barrier = true) as
   select s.id, s."studentId", s.name, s.grade, s."classLetter", s.track, s.lang, s."payStatus", s."activeFrom", s."stopFrom",
-         s.pauses, s."order", s."exitAt", s."exitReason"   -- chiqqan kun va sabab: arxiv (stuArchived) — kassir/buxgalter ro'yxatida ham bir xil
+         s.pauses, s."order", s."exitAt",
+         -- arxiv (stuArchived): chiqqan kun va FAQAT bitiruv belgisi — ichki ketish sababi (sog'liq, moliya…) moliya rollariga ochilmaydi
+         case when s."exitReason" = 'bitirdi' then 'bitirdi' end as "exitReason"
     from public.students s
    where (select app.is_admin()) or (select app.is_zavuch()) or (select app.is_reception())
       or (select app.is_finance()) or (select app.is_cashier()) or (select app.is_nurse())

@@ -1433,9 +1433,9 @@ let SESSION = { role:'', isAdmin:false, assignedClasses:[], assignedSubjects:[],
 const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', accountant:'Buxgalter', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
-const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','announce','profile'],
+const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','announce','profile','archive'],
   hr:['teachers','staff','staffatt'], admin:['enrollments','feedback','canteen'], admin_head:['enrollments','feedback','canteen'],
-  reception:['enrollments','students'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati (FAQAT ko'rish)
+  reception:['enrollments','students','archive'],   // Qabulxona xodimi: arizalar (qabul) + o'quvchilar ro'yxati + arxiv (ma'lumotnoma beradi)
   finance_mgr:['payments','finance','planfact','accounting','pricetable','staffatt','notify'], treasurer:['payments'], kassir:['payments','students','staffatt'], marketing_mgr:['marketing','enrollments'], nurse:['medical','sick'],
   // Buxgalter (2-ro'yxat, moliya rejasi F1.21): bo'limlari allowedTabs()'da qo'shiladi — «Tasdiqlash», «To‘lovlar», «Kassa»,
   //   «Buxgalteriya» (faqat serverda kassa moduli va F1.21 o'qish ro'yxati yoqilgan bo'lsa — accFinOk). «To‘lovlar» va «Buxgalteriya» —
@@ -1989,6 +1989,7 @@ function buildTabs(){
     {k:'dashboard', icon:mi('M520-640v-160q0-17 11.5-28.5T560-840h240q17 0 28.5 11.5T840-800v160q0 17-11.5 28.5T800-600H560q-17 0-28.5-11.5T520-640ZM120-480v-320q0-17 11.5-28.5T160-840h240q17 0 28.5 11.5T440-800v320q0 17-11.5 28.5T400-440H160q-17 0-28.5-11.5T120-480Zm400 320v-320q0-17 11.5-28.5T560-520h240q17 0 28.5 11.5T840-480v320q0 17-11.5 28.5T800-120H560q-17 0-28.5-11.5T520-160ZM120-160v-160q0-17 11.5-28.5T160-360h240q17 0 28.5 11.5T440-320v160q0 17-11.5 28.5T400-120H160q-17 0-28.5-11.5T120-160Z'), t:'Statistika'},
     {k:'weekly', icon:mi('M280-400v-80h400v80H280Zm0 160v-80h280v80H280ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z'), t:'Haftalik hisobot'},
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
+    {k:'archive', icon:mi('M120-840h720v160H120Zm40 200h640v480H160Zm200 80v80h240v-80Z'), t:'Arxiv'},   // chiqarilgan / bitirgan o'quvchilar
     {k:'attendance', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v560q0 33-23.5 56.5T800-120H160Zm0-80h640v-560H160v560Zm40-80h200v-80H200v80Zm382-80 198-198-57-57-141 142-57-57-56 57 113 113Zm-382-80h200v-80H200v80Zm0-160h200v-80H200v80Z'), t:'Davomat'},
     {k:'grades', icon:mi('m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'), t:'Baholar'},
     {k:'monitoring', icon:mi('M160-160v-320h160v320H160Zm240 0v-640h160v640H400Zm240 0v-440h160v440H640Z'), t:'Monitoring'},
@@ -2057,7 +2058,7 @@ const NAV_FLAT_MAX = 8;
 const NAV_TOP = ['approvals'];   // doim eng yuqorida, guruhsiz (navbatda kutayotganlar)
 const NAV_GROUPS = [
   { g:'boshqaruv', t:'Boshqaruv',            icon:'dashboard',  keys:['dashboard','weekly','changelog'] },
-  { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','classes','marketing','feedback'] },
+  { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','archive','classes','marketing','feedback'] },
   { g:'talim',     t:'O‘quv jarayoni',       icon:'grades',     keys:['attendance','grades','monitoring','profile','timetable','homework','exams','olympiads','announce'] },
   { g:'xodimlar',  t:'Xodimlar',             icon:'staff',      keys:['teachers','staff','staffatt','applications'] },
   { g:'moliya',    t:'Moliya',               icon:'finance',    keys:['payments','kassa','finance','accounting','planfact','pricetable'] },
@@ -2221,6 +2222,7 @@ function renderTab(tab){
   if(tab==='approvals') return renderApprovals();
   if(tab==='dashboard') return renderDashboard();
   if(tab==='students') return renderStudents();
+  if(tab==='archive') return renderArchive();
   if(tab==='attendance') return renderAttendance();
   if(tab==='grades') return renderGrades();
   if(tab==='monitoring') return renderMonitoring();
@@ -3291,10 +3293,13 @@ function stuExitPatch(s, dt, reason, note, by){
   return p; }
 // STU-ARCH:END
 const ATT_STATUS=[['present','Keldi','att-present'],['absent','Yo‘q','att-absent'],['late','Kech','att-late'],['excused','Sababli','att-excused'],['sick','Bemor','att-sick']];
-// Sinf -> o'quvchilar. Odatda arxivdagi o'quvchilarsiz (faqat arxivdagilardan iborat sinf — masalan o'tgan yil bitiruvchilari —
-//   tanlovlarda ko'rinmaydi). keepArchived — davomat/baho/monitoring/xarakteristika: o'tgan sana yoki davr uchun o'zlari saralaydi.
+// O'quv yili boshi (1-sentabr): sinf tanlovlarida shu o'quv yilida o'qigan (faol yoki shu yil chiqqan / bitirgan) o'quvchilar.
+function acadYearStart(){ return String(academicYear()).slice(0,4)+'-09-01'; }
+// Sinf -> o'quvchilar. Odatda shu o'quv yilida o'qiganlar bilan: bitirgan sinf o'quv yili oxirigacha tanlovda qoladi (4-chorak
+//   baholari, yakuniy xarakteristika, davomatni tuzatish; o'qituvchi biriktiruvi qayta saqlanganda jim o'chib ketmasin), o'tgan yillar
+//   bitiruvchilaridan iborat sinf esa chiqmaydi. keepArchived — davomat / baho / monitoring / xarakteristika: davr bo'yicha o'zlari saralaydi.
 function classGroupsMap(students, keepArchived){
-  if(!keepArchived) students=activeRoster(students);
+  if(!keepArchived){ const ay=acadYearStart(); students=(students||[]).filter(s=>stuInPeriod(s, ay)); }
   const classes={};
   // Admin «Sinflar» bo'limida qo'lda yaratgan sinflar — o'quvchi bo'lmasa ham ko'rinadi
   (cache.definedClasses||[]).forEach(c=>{ const g=Number(c.grade)||0, lang=c.lang||'uz', grp=c.letter||'-';
@@ -3304,12 +3309,14 @@ function classGroupsMap(students, keepArchived){
   const keys=Object.keys(classes).sort((a,b)=>{ const A=classes[a],B=classes[b]; return (A.g-B.g)||((A.lang==='ru'?1:0)-(B.lang==='ru'?1:0))||String(A.grp).localeCompare(String(B.grp)); });
   return {classes,keys};
 }
-// Tanlovda faqat «tirik» sinflar: kamida bitta faol (arxivda bo'lmagan) o'quvchisi bor yoki «Sinflar»da yaratilgan — keepArchived
-//   bilan olingan ro'yxatda o'tgan yillar bitiruvchilaridan qolgan sinf tanlovga chiqmasin.
+// Tanlovda faqat «tirik» sinflar: shu o'quv yilida o'qigan (faol yoki shu yil chiqqan) o'quvchisi bor yoki «Sinflar»da yaratilgan —
+//   keepArchived bilan olingan ro'yxatda o'tgan yillar bitiruvchilaridan qolgan sinf tanlovga chiqmasin.
 // Jurnallarda arxivdagi o'quvchi belgisi (ism yonida): «Chiqdi 10.11» yoki «🎓 Bitirgan».
 function stuArcChip(s){ if(!stuArchived(s)) return ''; const d=stuExitDay(s), g=stuGraduate(s);
   return ` <span class="chip" style="background:#eef2ee;color:#667;font-size:11px" title="${g?'Maktabni tugatgan':'Chiqarilgan'}${d?' · '+esc(d):''} — arxivda">${g?'🎓 Bitirgan':'Chiqdi'}${d?' '+esc(d.slice(8,10)+'.'+d.slice(5,7)):''}</span>`; }
-function liveClassKeys(classes, keys){ const def=new Set((cache.definedClasses||[]).map(classDocKey)); return keys.filter(k=>def.has(k) || ((classes[k]&&classes[k].list)||[]).some(s=>!stuArchived(s))); }
+function liveClassKeys(classes, keys){ const def=new Set((cache.definedClasses||[]).map(classDocKey)), ay=acadYearStart(); return keys.filter(k=>def.has(k) || ((classes[k]&&classes[k].list)||[]).some(s=>stuInPeriod(s, ay))); }
+// Sinf kalitidan nom (o'quvchisi qolmagan sinf uchun): «uz-11-A» -> «11-sinf «A» · O‘zbek» (oddiy matn — esc chaqiruvchida).
+function classKeyLabel(ck){ const m=String(ck||'').match(/^(uz|ru)-(\d+)-(.+)$/); if(!m) return String(ck||'—'); return `${gradeName(Number(m[2]))} «${m[3]==='-'?'—':m[3]}» · ${m[1]==='ru'?'Rus':'O‘zbek'}`; }
 // «Sinflar» ro'yxatini har safar yangilab yuklaymiz (kichik kolleksiya)
 async function loadDefinedClasses(){ try{ cache.definedClasses = await loadCol('classes','order'); }catch(e){ cache.definedClasses = cache.definedClasses||[]; } return cache.definedClasses; }
 // Sinf hujjatidan (grade+letter+lang) davomat/baho tizimidagi sinf kalitini tuzadi —
@@ -4577,7 +4584,7 @@ async function renderStudents(){
     const bar=$('#stu-bulk'); if(bar) bar.style.display=n?'flex':'none'; const c=$('#stu-selc'); if(c) c.textContent=n; };
   if(canMng){ const ab=$('#add'); if(ab) ab.addEventListener('click',()=>openForm('students',null)); }   // qo'shish — reception ham
   if(canMng){ const dq=$('#stu-dq'); if(dq) dq.addEventListener('click', openDataQuality); }   // Ma'lumot sifati tekshiruvi
-  if($('#stu-arch')) $('#stu-arch').addEventListener('click', ()=>renderArchive());
+  if($('#stu-arch')) $('#stu-arch').addEventListener('click', ()=>openTab('archive'));
   if($('#stu-trash')) $('#stu-trash').addEventListener('click', openDeletedStudents);
   if(canDel){
     $('#stu-bulclr').addEventListener('click',()=>{ $('#cls-groups').querySelectorAll('.stu-sel').forEach(c=>c.checked=false); $('#cls-groups').querySelectorAll('.stu-selall').forEach(c=>c.checked=false); updateBulk(); });
@@ -4651,9 +4658,12 @@ async function renderStudents(){
       return [r.parentPhone,r.parentPhone2].some(v=>String(v==null?'':v).toLowerCase().includes(q)); };
     if(q) filtered = filtered.filter(matchQ);
     // Qidiruvga mos ARXIVDAGI o'quvchilar (chiqarilgan / bitirgan) — ro'yxatga qo'shilmaydi, havola bilan ko'rsatiladi.
-    const archHit = (q && canSeeArchive()) ? rows.filter(r=>stuArchived(r, TD) && matchQ(r)).length : 0;
-    const archNote = archHit ? `<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span class="small">🗄 Arxivda yana <b>${archHit}</b> ta mos o‘quvchi bor (chiqarilgan yoki bitirgan).</span><button type="button" class="btn sm" id="stu-arch-hit">Arxivda ko‘rish</button></div>` : '';
-    const wireArchHit=()=>{ const b=$('#stu-arch-hit'); if(b) b.onclick=()=>renderArchive({ q:($('#stu-search')&&$('#stu-search').value)||'' }); };
+    const archHit = q ? rows.filter(r=>stuArchived(r, TD) && matchQ(r)).length : 0;
+    // Arxivga kira olmaydigan rol (kassir): faqat eslatma — eski qarz «To'lovlar»da (o'quvchi ID bilan qidiriladi).
+    const archNote = !archHit ? '' : canSeeArchive()
+      ? `<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span class="small">🗄 Arxivda yana <b>${archHit}</b> ta mos o‘quvchi bor (chiqarilgan yoki bitirgan).</span><button type="button" class="btn sm" id="stu-arch-hit">Arxivda ko‘rish</button></div>`
+      : `<div class="card" style="padding:12px 16px;margin-bottom:12px"><span class="small">🗄 Qidiruvga mos <b>${archHit}</b> ta o‘quvchi arxivda (chiqarilgan yoki bitirgan) — faol ro‘yxatda ko‘rinmaydi. Eski qarzi bo‘lsa — «To‘lovlar» bo‘limida o‘quvchi ID bilan qidiring.</span></div>`;
+    const wireArchHit=()=>{ const b=$('#stu-arch-hit'); if(b) b.onclick=()=>{ ARCH_Q=($('#stu-search')&&$('#stu-search').value)||''; openTab('archive'); }; };
     // To'lov holati filtri (tanlangan oy bo'yicha): qarzdorlar / to'langanlar. «Faqat qarzdorlar» +
     //   eski oyni tanlab -> o'sha oyning hali to'lanmagan qarzdorlari ko'rinadi (undiruv uchun).
     const fdebt=($('#stu-fdebt')&&$('#stu-fdebt').value)||'';
@@ -4931,6 +4941,15 @@ async function openStatusModal(s, collName, onSaved, opts){
     }catch(e){ btn.disabled=false; toast('Xatolik: '+errMsg(e),true); }
   };
 }
+// Choraklik baholar jadvali (yil bo'yicha) — ichki ma'lumotnoma, rasmiy profil va 📨 Ma'lumotnoma uchun bitta ko'rinish.
+//   list: [{year, subjects:{fan:{q1..q4}}}] (jurnal 'q1'..'q4' yozadi; eski '1'..'4' ham o'qiladi).
+function stuGradesHtml(list){
+  return (list||[]).slice().sort((a,b)=>String(a.year||'').localeCompare(String(b.year||''))).map(gd=>{
+    const subs=(gd&&gd.subjects)||{}; const qs=['q1','q2','q3','q4']; const qv=(q,k)=>(q[k]!=null?q[k]:q[k.slice(1)]);
+    const body=Object.keys(subs).sort().map(sub=>{ const q=subs[sub]||{}; const vals=qs.map(k=>qv(q,k)); const nums=vals.filter(v=>typeof v==='number'); const avg=nums.length?(nums.reduce((x,y)=>x+y,0)/nums.length).toFixed(1):'—'; return `<tr><td>${esc(sub)}</td>${qs.map(k=>`<td style="text-align:center">${qv(q,k)==null?'—':esc(String(qv(q,k)))}</td>`).join('')}<td style="text-align:center"><b>${avg}</b></td></tr>`; }).join('');
+    return body?`<div style="margin-top:8px"><div class="small muted">${esc(String(gd.year||''))}-o‘quv yili</div><table class="rep-t"><thead><tr><th>Fan</th><th>1-ch</th><th>2-ch</th><th>3-ch</th><th>4-ch</th><th>O‘rt.</th></tr></thead><tbody>${body}</tbody></table></div>`:'';
+  }).join('');
+}
 async function openStudentReport(sid, row, opts){
   $('#modal').innerHTML = `<div class="modal-h"><h3>Ma’lumotnoma</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>
@@ -4992,11 +5011,7 @@ async function openStudentReport(sid, row, opts){
     const monRows = Object.keys(monBySub).sort().map(sub=>{ const a=monBySub[sub]; const avg=Math.round(a.reduce((x,y)=>x+y,0)/a.length); return `<tr><td>${esc(sub)}</td><td style="text-align:center">${avg}</td></tr>`; }).join('');
     // Baholar — yil bo'yicha
     const grades = grdSnap.docs.map(d=>d.data()).sort((a,b)=>String(a.year||'').localeCompare(String(b.year||'')));
-    const gradesHtml = grades.map(gd=>{
-      const subs=gd.subjects||{}; const qs=['q1','q2','q3','q4']; const qv=(q,k)=>(q[k]!=null?q[k]:q[k.slice(1)]);   // jurnal 'q1'..'q4' yozadi (eski '1'..'4' ham o'qiladi)
-      const body=Object.keys(subs).sort().map(sub=>{ const q=subs[sub]||{}; const vals=qs.map(k=>qv(q,k)); const nums=vals.filter(v=>typeof v==='number'); const avg=nums.length?(nums.reduce((x,y)=>x+y,0)/nums.length).toFixed(1):'—'; return `<tr><td>${esc(sub)}</td>${qs.map(k=>`<td style="text-align:center">${qv(q,k)==null?'—':esc(String(qv(q,k)))}</td>`).join('')}<td style="text-align:center"><b>${avg}</b></td></tr>`; }).join('');
-      return body?`<div style="margin-top:8px"><div class="small muted">${esc(String(gd.year||''))}-o‘quv yili</div><table class="rep-t"><thead><tr><th>Fan</th><th>1-ch</th><th>2-ch</th><th>3-ch</th><th>4-ch</th><th>O‘rt.</th></tr></thead><tbody>${body}</tbody></table></div>`:'';
-    }).join('');
+    const gradesHtml = stuGradesHtml(grades);
     // To'lovlar (buxgalteriya)
     const inv = invSnap.docs.map(d=>({_id:d.id,...d.data()})).sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
     const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
@@ -5166,6 +5181,18 @@ async function openStudentReport(sid, row, opts){
       $('#rep-transfer').onclick=()=>{ if(trWrap.style.display==='none') trOpen(); else trWrap.style.display='none'; };
       $('#tr-print').onclick=async()=>{
         const pb=$('#tr-print'); if(pb.disabled) return; pb.disabled=true;
+        // O'zlashtirish yig'masi — student_certificate (student-archive.sql): qabulxona baho / davomat jadvallarini o'zi o'qiy olmaydi (D6),
+        //   avval uning ma'lumotnomasi bo'sh chiqib QR esa haqiqiy edi. Funksiya hali o'rnatilmagan (eski baza) bo'lsa — faqat direktor va
+        //   O'IBDO' oynadagi (o'zi o'qigan) ma'lumot bilan chiqaradi; boshqa xato — hujjat chiqmaydi (QR ham berilmaydi).
+        let CD=null, cerr=null; try{ CD=await rpc('student_certificate', { p_sid:String(s._id||s.studentId) }); }catch(e){ CD=null; cerr=e; }
+        if(!CD || typeof CD!=='object'){ const ec=String((cerr&&cerr.code)||''), msg=String((cerr&&cerr.message)||'');
+          const missing=ec==='PGRST202'||ec==='42883'||/student_certificate/.test(msg);
+          if(!(missing && (SESSION.isAdmin || SESSION.role==='zavuch'))){ pb.disabled=false;
+            toast(ec==='42501' ? 'Ma’lumotnoma berish huquqingiz yo‘q — direktorga murojaat qiling'
+                : ec==='P0002' ? 'Ma’lumotnoma chiqmadi: bu o‘quvchi ID’si boshqa o‘quvchi bilan takrorlangan — texnik yordamga murojaat qiling'
+                : (missing ? 'Ma’lumotnoma uchun server yangilanishi kerak (texnik yordam) — hozircha direktor yoki O‘IBDO‘ chop etadi'
+                           : 'Ma’lumotnoma ma’lumotlarini olib bo‘lmadi — internetni tekshirib, qayta urinib ko‘ring'), true); return; }
+          CD=null; }
         let tok=null, terr=null; try{ tok=await rpc('issue_doc_token', { p_sid:String(s._id||s.studentId), p_kind:'certificate' }); }catch(e){ tok=null; terr=e; }
         pb.disabled=false;
         const okTok=/^[0-9a-f]{32}$/.test(String(tok||''));
@@ -5180,13 +5207,15 @@ async function openStudentReport(sid, row, opts){
         const docNo=`IQR-M-${(s.studentId||s._id)}-${tkd.replace(/-/g,'')}`;
         const verifyURL=okTok ? `${SITE_URL}/verify.html?t=${tok}` : '';
         let qrURL=''; try{ if(okTok && typeof qrcode!=='undefined'){ const q=qrcode(0,'M'); q.addData(verifyURL); q.make(); qrURL=q.createDataURL(4,10); } }catch(e){}
-        const bd=fmtBD(P('birthDate')), bdTxt=(bd&&bd!=='—')?` (${bd} yilda tug‘ilgan)`:'';
+        const bd=fmtBD(P('birthDate')), bdTxt=(bd&&bd!=='—')?` (${esc(bd)} yilda tug‘ilgan)`:'';   // matn erkin (YYYY-MM-DD bo'lmasa o'zgarmaydi) — esc
+        // Qabul sanasi: sinovdan to'xtatilganda activeFrom chiqqan kundan KEYINGI kun bo'ladi (to'lov boshlanmagan) — hujjatga yozilmaydi.
+        const afD=String(s.activeFrom||'').slice(0,10), afOk=STU_D.test(afD) && (!exitD || afD<=exitD);
         // Sinf o'zbekcha tabiiy shaklda: «9-«A» sinf» (raqamli sinflar), «Tayyorlov «A»» (boshqalar).
         const nm=esc(s.name||s._id), lt=String(s.classLetter||s.track||'').trim(), lt2=(lt&&lt!=='-'&&lt!=='—')?lt:'';
         const clsNat=(g>=1&&g<=11) ? (lt2?`${g}-«${lt2}» sinf`:`${g}-sinf`) : `${gradeName(g)}${lt2?` «${lt2}»`:''}`;
         const lead = isArc
           ? (grad ? `Ushbu ma’lumotnoma <b>${nm}</b>${bdTxt} Iqror Academy xususiy maktabining <b>${esc((g>=1&&g<=11)?g+'-sinfini':gradeName(g)+' bosqichini')}</b>${exitD?` <b>${fmtD(exitD)}</b> da`:''} tamomlaganini tasdiqlaydi.`
-                  : `Ushbu ma’lumotnoma <b>${nm}</b>${bdTxt} Iqror Academy xususiy maktabida${s.activeFrom?` <b>${fmtD(s.activeFrom)}</b> dan`:''}${exitD?` <b>${fmtD(exitD)}</b> gacha`:''} tahsil olganini tasdiqlaydi (oxirgi sinf: <b>${esc(clsNat)}</b>).`)
+                  : `Ushbu ma’lumotnoma <b>${nm}</b>${bdTxt} Iqror Academy xususiy maktabida${afOk?` <b>${fmtD(afD)}</b> dan`:''}${exitD?` <b>${fmtD(exitD)}</b> gacha`:''} tahsil olganini tasdiqlaydi (oxirgi sinf: <b>${esc(clsNat)}</b>).`)
           : `Ushbu ma’lumotnoma <b>${nm}</b>${bdTxt} hozirda Iqror Academy xususiy maktabida <b>${esc(clsNat)}</b>da tahsil olayotganini tasdiqlaydi.${pending&&exitD?` Chiqish sanasi: <b>${fmtD(exitD)}</b>.`:''}`;
         const persRows=[
           ['O‘quvchi ID',s.studentId||s._id],['Familiya, ism, sharif',s.name||'—'],['Tug‘ilgan sana',bd||'—'],['JSHSHIR',P('pinfl')||'—'],
@@ -5195,18 +5224,28 @@ async function openStudentReport(sid, row, opts){
         ];
         const eduRows=[
           ['Sinf',clsName],['Ta’lim tili',s.lang==='ru'?'Rus':'O‘zbek'],['Yo‘nalish',s.track||'—'],['Qaysi maktabdan kelgan',P('prevSchool')||'—'],
-          ['Qabul qilingan sana',fmtD(s.activeFrom)||'—'],
-          ...((isArc||pending)?[['Chiqqan sana',fmtD(exitD)||'—'],['Chiqish asosi',grad?'Maktabni tamomlagan':(s.exitReason?arcReasonLbl(s.exitReason):'—')]]:[['Holati','Tahsil olmoqda']]),
+          ['Qabul qilingan sana',afOk?fmtD(afD):'—'],
+          // Holat — neytral: ichki ketish sababi (sog'liq, moliya, norozilik…) boshqa muassasaga yozilmaydi; asos — buyruq (ixtiyoriy).
+          ...(isArc?[['Chiqqan sana',fmtD(exitD)||'—'],['Holati',grad?'Maktabni tamomlagan':'O‘qishdan chiqqan']]
+            : pending?[['Holati','Tahsil olmoqda'],['Chiqish sanasi',fmtD(exitD)||'—']]:[['Holati','Tahsil olmoqda']]),
           ...(ord||ordD?[['Buyruq',[ord?'№ '+ord:'', ordD?fmtD(ordD):''].filter(Boolean).join(', ')]]:[]),
           ...(toOrg?[['Taqdim etiladigan joy',toOrg]]:[])
         ];
         const tRows=rows=>`<table class="rep-t"><tbody>${rows.map(x=>`<tr><td style="width:40%;color:#586459">${esc(x[0])}</td><td><b>${esc(x[1])}</b></td></tr>`).join('')}</tbody></table>`;
+        // O'zlashtirish — server yig'masidan (CD); u yo'q (eski baza, direktor / O'IBDO') — oynadagi ma'lumotdan.
+        const A=CD&&CD.att ? { present:Number(CD.att.present)||0, late:Number(CD.att.late)||0, absent:Number(CD.att.absent)||0, total:Number(CD.att.total)||0 } : { present, late, absent, total };
+        const aPct=A.total?Math.round(100*(A.present+A.late)/A.total):null;
+        const gHtml=CD ? stuGradesHtml(Array.isArray(CD.grades)?CD.grades:[]) : gradesHtml;
+        const mRows=CD ? (Array.isArray(CD.mon)?CD.mon:[]).map(x=>`<tr><td>${esc(x.subject||'—')}</td><td style="text-align:center">${esc(String(x.avg==null?'—':x.avg))}</td></tr>`).join('') : monRows;
         // Oxirgi davr xarakteristikasi (umumiy) — ixtiyoriy.
         let charHTML='';
-        if($('#tr-char').checked){ const lastT=allTerms.find(t=>charByTerm[t]); if(lastT){ const c=charByTerm[lastT]; charHTML=`<div class="p-sec">4. Xarakteristika</div><div class="small muted" style="margin-bottom:4px">${esc(termLbl(lastT))}</div><div style="white-space:pre-wrap;line-height:1.5">${esc(c.text)}</div>`; } }
+        if($('#tr-char').checked){ let ch=null;
+          if(CD) ch=(CD.char && String(CD.char.text||'').trim()) ? { term:CD.char.term, text:String(CD.char.text) } : null;
+          else { const lastT=allTerms.find(t=>charByTerm[t]); if(lastT) ch={ term:lastT, text:charByTerm[lastT].text }; }
+          if(ch) charHTML=`<div class="p-sec">4. Xarakteristika</div><div class="small muted" style="margin-bottom:4px">${esc(termLbl(ch.term))}</div><div style="white-space:pre-wrap;line-height:1.5">${esc(ch.text)}</div>`; }
         let achHTML='';
         if($('#tr-ach').checked){ const LV={maktab:'Maktab',tuman:'Tuman/shahar',viloyat:'Viloyat',respublika:'Respublika',xalqaro:'Xalqaro'}, RS={ishtirokchi:'Ishtirokchi','1':'1-o‘rin','2':'2-o‘rin','3':'3-o‘rin',golib:'G‘olib',laureat:'Laureat'};
-          const ach=achSnap.docs.map(d=>d.data()||{}).filter(o=>o.name||o.subject).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+          const ach=(CD ? (Array.isArray(CD.ach)?CD.ach:[]) : achSnap.docs.map(d=>d.data()||{})).filter(o=>o&&(o.name||o.subject)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
           if(ach.length) achHTML=`<div class="p-sec">${charHTML?'5':'4'}. Yutuqlar</div><ul style="margin:4px 0;padding-left:20px">${ach.map(o=>{ const what=[o.name, o.subject&&o.name?`(${o.subject})`:o.subject].filter(Boolean).join(' ');
             const tail=[LV[o.level]||o.level, RS[String(o.result)]||o.result].filter(Boolean).join(' — ');
             return `<li style="margin:3px 0">${o.date?`<b>${esc(String(o.date))}:</b> `:''}${esc(what)}${tail?' — '+esc(tail):''}</li>`; }).join('')}</ul>`; }
@@ -5221,10 +5260,10 @@ async function openStudentReport(sid, row, opts){
           <div class="p-sec">1. Shaxsiy ma’lumotlar</div>${tRows(persRows)}
           <div class="p-sec">2. Ta’lim ma’lumotlari</div>${tRows(eduRows)}
           <div class="p-sec">3. O‘zlashtirish va davomat</div>
-          <table class="rep-t"><tbody><tr><td style="width:40%">Umumiy davomat</td><td><b>${attPct==null?'—':attPct+'%'}</b> <span class="small muted">(kelgan ${present}, kechikkan ${late}, kelmagan ${absent}; jami ${total} kun)</span></td></tr></tbody></table>
+          <table class="rep-t"><tbody><tr><td style="width:40%">Umumiy davomat</td><td><b>${aPct==null?'—':aPct+'%'}</b> <span class="small muted">(kelgan ${A.present}, kechikkan ${A.late}, kelmagan ${A.absent}; jami ${A.total} kun)</span></td></tr></tbody></table>
           <div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Choraklik baholar</div>
-          ${gradesHtml||'<div class="small muted">Ma’lumot yo‘q.</div>'}
-          ${monRows?`<div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Monitoring — fan bo‘yicha o‘rtacha ball</div><table class="rep-t"><thead><tr><th>Fan</th><th style="text-align:center">Ball</th></tr></thead><tbody>${monRows}</tbody></table>`:''}
+          ${gHtml||'<div class="small muted">Ma’lumot yo‘q.</div>'}
+          ${mRows?`<div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Monitoring — fan bo‘yicha o‘rtacha ball</div><table class="rep-t"><thead><tr><th>Fan</th><th style="text-align:center">Ball</th></tr></thead><tbody>${mRows}</tbody></table>`:''}
           ${charHTML}${achHTML}
           <div class="small muted" style="margin-top:12px">Tibbiy ma’lumotlar (tibbiy karta) maktab hamshirasi orqali alohida beriladi. Ma’lumotnoma talab qilingan joyga taqdim etish uchun berildi.</div>
           <div class="p-foot">
@@ -5366,7 +5405,10 @@ async function openTeacherClassPicker(t, onDone){
   if(!u){ alert('Bog‘langan login hisobi topilmadi (o‘chirilgan bo‘lishi mumkin). «Foydalanuvchilar» bo‘limida tekshiring.'); return; }
   let CLS={classes:{},keys:[]};
   try{ const st=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=st; await loadDefinedClasses(); CLS=classGroupsMap(st); }catch(e){}
-  const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
+  // Biriktirilgan, lekin o'quvchisi qolmagan sinf ham ro'yxatda (belgilangan) — saqlanganda biriktiruv jim o'chib ketmasin.
+  const clsKeysU=[...CLS.keys, ...(Array.isArray(u.assignedClasses)?u.assignedClasses:[]).filter(k=>k && !CLS.classes[k])];
+  const clsLblU=k=>CLS.classes[k]?CLS.classes[k].label:`${classKeyLabel(k)} — o‘quvchisiz`;
+  const clsChecks = clsKeysU.length ? clsKeysU.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(clsLblU(k))}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
   const roleNote = (!uHas(u,'teacher')&&!uHas(u,'kurator')) ? `<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Diqqat: bog‘langan login roli — <b>${esc(u.role||'—')}</b>. Sinf/fan to‘liq ishlashi (baho/davomat) uchun «Foydalanuvchilar»da rolni <b>O‘qituvchi</b> yoki <b>Kurator</b> qiling yoki shu lavozimni «➕ Lavozim» orqali qo‘shimcha bering.</div>` : '';
   const ov=document.createElement('div');
@@ -6252,7 +6294,10 @@ function openUserEditor(u, CLS, roleOpts, opts){
   const isBlocked=String(u.status||'')==='blocked';
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
-  const clsChecks = CLS.keys.length ? CLS.keys.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(CLS.classes[k].label)}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
+  // Biriktirilgan, lekin o'quvchisi qolmagan sinf ham ro'yxatda (belgilangan) — saqlanganda biriktiruv jim o'chib ketmasin.
+  const clsKeysU=[...CLS.keys, ...(Array.isArray(u.assignedClasses)?u.assignedClasses:[]).filter(k=>k && !CLS.classes[k])];
+  const clsLblU=k=>CLS.classes[k]?CLS.classes[k].label:`${classKeyLabel(k)} — o‘quvchisiz`;
+  const clsChecks = clsKeysU.length ? clsKeysU.map(k=>`<label class="uchk"><input type="checkbox" data-cls value="${esc(k)}" ${(Array.isArray(u.assignedClasses)&&u.assignedClasses.includes(k))?'checked':''}> ${esc(clsLblU(k))}</label>`).join('') : '<span class="small muted">Avval «O‘quvchilar» bo‘limida o‘quvchi qo‘shing — sinflar shu yerdan chiqadi.</span>';
   const subjChecks = SUBJECTS.map(s=>`<label class="uchk"><input type="checkbox" data-subj value="${esc(s)}" ${(Array.isArray(u.assignedSubjects)&&u.assignedSubjects.includes(s))?'checked':''}> ${esc(s)}</label>`).join('');
   // Davomat/maosh yozuviga BOG'LANISH (staff/teachers). curKey — hozirgi; suggRec — telefon bo'yicha taklif (faqat ko'rsatiladi).
   const lc = opts.linkCtx || {recs:[],byRef:{},byPhone:{}};
@@ -6987,7 +7032,7 @@ function openGlobalSearch(){
     const sec=(t,items)=>items.length?`<div style="margin-bottom:10px"><div class="small muted" style="font-weight:700;margin-bottom:4px">${esc(t)}</div>${items.join('')}</div>`:'';
     const item=(attrs,main,sub)=>`<button type="button" class="btn ghost" style="display:block;width:100%;text-align:left;margin-bottom:4px" ${attrs}><b>${esc(main)}</b>${sub?` <span class="small muted">${esc(sub)}</span>`:''}</button>`;
     const html=[
-      sec('O‘quvchilar', by('stu').map(r=>item(`data-gs-stu="${esc(r.studentId||r._id)}"`, r.name||r._id, [r.studentId, r.grade!=null?gradeName(r.grade):'', r.classLetter||r.track||'', stuArchived(r)?(stuGraduate(r)?'🗄 arxivda (bitirgan)':'🗄 arxivda (chiqarilgan)'):''].filter(Boolean).join(' · ')))),
+      sec('O‘quvchilar', by('stu').map(r=>item(`data-gs-stu="${esc(r.studentId||r._id)}"${stuArchived(r)?' data-gs-arc="1"':''}`, r.name||r._id, [r.studentId, r.grade!=null?gradeName(r.grade):'', r.classLetter||r.track||'', stuArchived(r)?(stuGraduate(r)?'🗄 arxivda (bitirgan)':'🗄 arxivda (chiqarilgan)'):''].filter(Boolean).join(' · ')))),
       sec('O‘qituvchilar', by('tch').map(r=>item(`data-gs-col="teachers" data-gs-v="${esc(r.teacherId||r.name||'')}"`, r.name||r._id, r.teacherId||''))),
       sec('Xodimlar', by('stf').map(r=>item(`data-gs-col="staff" data-gs-v="${esc(r.staffId||r.name||'')}"`, r.name||r._id, [r.staffId, r.position].filter(Boolean).join(' · ')))),
       sec('Hisob-fakturalar', by('inv').map(r=>item(`data-gs-pay="${esc(r.studentId||'')}"`, (r.studentName||stuName[r.studentId]||r.studentId||'')+' — '+(r.month||''), fmtSom(r.amount)+' · '+({paid:'to‘langan',partial:'qisman',pending:'kutilmoqda',canceled:'bekor',reversed:'qaytarilgan'}[r.status]||r.status||'')))),
@@ -6999,7 +7044,9 @@ function openGlobalSearch(){
     const canTab=t=>SESSION.isAdmin||allowedTabs().includes(t);
     const stuTab=canTab('students')?['students','stu-search']:(canTab('payments')?['payments','pm-search']:null);
     const bind=(b,tab,inp,v)=>{ if(!tab||!canTab(tab)){ b.disabled=true; b.style.cursor='default'; b.title='Bu bo‘lim sizning rolingizda yo‘q'; return; } b.onclick=()=>goSearchTab(tab, inp, v); };
-    $('#gs-res').querySelectorAll('[data-gs-stu]').forEach(b=>bind(b, stuTab&&stuTab[0], stuTab&&stuTab[1], b.dataset.gsStu));
+    // Arxivdagi o'quvchi: arxivga kira oladiganlar — «🗄 Arxiv» qidiruviga; boshqalar (kassir) — «To'lovlar»ga (eski qarz shu yerda).
+    const arcTab=canTab('archive')?['archive','ar-q']:(canTab('payments')?['payments','pm-search']:stuTab);
+    $('#gs-res').querySelectorAll('[data-gs-stu]').forEach(b=>{ const t=b.dataset.gsArc==='1'?arcTab:stuTab; bind(b, t&&t[0], t&&t[1], b.dataset.gsStu); });
     $('#gs-res').querySelectorAll('[data-gs-col]').forEach(b=>bind(b, b.dataset.gsCol, 'col-search-'+b.dataset.gsCol, b.dataset.gsV));
     $('#gs-res').querySelectorAll('[data-gs-pay]').forEach(b=>bind(b, 'payments', 'pm-search', b.dataset.gsPay));
   };
@@ -7173,9 +7220,10 @@ async function admEvent(enrollmentId, type, payload){ try{ await addDoc(collecti
 //   bitiruvchilar sabab foiziga kirmaydi), 📄 ichki ma'lumotnoma, 📨 boshqa maktabga ma'lumotnoma (QR bilan), ↩️ qaytarish va
 //   🎓 ommaviy bitiruv (direktor), CSV (direktor — D7: shaxsiy ma'lumot va telefon faqat direktorga).
 function canSeeArchive(){ return SESSION.isAdmin || SESSION.role==='zavuch' || SESSION.role==='reception'; }
+let ARCH_Q='';   // «O'quvchilar» qidiruvidan «Arxivda ko'rish» — Arxiv shu qidiruv bilan ochiladi
 const arcReasonLbl=k=>k?((EXIT_REASONS.find(r=>r[0]===k)||[k,k])[1]):'Sabab yozilmagan';
 async function renderArchive(opts){
-  opts=opts||{};
+  opts=Object.assign({}, opts||{}); if(opts.q==null && ARCH_Q) opts.q=ARCH_Q; ARCH_Q='';
   if(!canSeeArchive()){ toast('«Arxiv» — direktor, O‘IBDO‘ va qabulxona uchun',true); return; }
   VIEW_GEN++; const _g=VIEW_GEN;   // boshqa bo'limga o'tilsa — kech tugagan yuklash bu sahifaga yozmaydi
   const isDir=SESSION.isAdmin, canDoc=SESSION.isAdmin||SESSION.role==='zavuch'||SESSION.role==='reception';
@@ -7185,7 +7233,7 @@ async function renderArchive(opts){
     <p class="small muted" style="margin:-8px 0 14px">Chiqarilgan va maktabni bitirgan o‘quvchilar. Ular faol ro‘yxat va sonlarda hisoblanmaydi; barcha ma’lumoti (baholar, davomat, to‘lovlar, ota-ona bog‘lanishi) saqlanadi. Boshqa maktab so‘rasa — «📨 Ma’lumotnoma» (QR kod bilan tekshiriladi; telefon, sog‘liq va to‘lov ma’lumotisiz).</p>
     <div class="card" style="padding:12px 16px;margin-bottom:12px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-        <input id="ar-q" class="search-inp" placeholder="Qidiruv: ism, ID yoki JSHSHIR…" autocomplete="off" value="${esc(opts.q||'')}">
+        <input id="ar-q" class="search-inp" placeholder="Qidiruv: ism, ID, JSHSHIR yoki telefon…" autocomplete="off" value="${esc(opts.q||'')}">
         <select id="ar-type" class="search-inp" style="max-width:180px"><option value="">Hammasi</option><option value="left">Chiqarilganlar</option><option value="grad">🎓 Bitiruvchilar</option></select>
         <select id="ar-grade" class="search-inp" style="max-width:150px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
         <label class="small" style="display:flex;flex-direction:column;gap:3px">Chiqqan: dan<input type="date" id="ar-f" style="${F}"></label>
@@ -7210,7 +7258,10 @@ async function renderArchive(opts){
       if(fg!=='' && String(Number(s.grade)||0)!==fg) return false;
       const d=stuExitDay(s); if(f && (!d || d<f)) return false; if(t && (!d || d>t)) return false;
       if(fd==='debt' && !(dOf(s)>0)) return false;
-      if(q){ const p=priv[String(s._id)]||{}; if(![s.studentId,s._id,s.name,p.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(q))) return false; }
+      if(q){ const p=priv[String(s._id)]||{}, qd=q.replace(/\D/g,'');   // ism / ID / JSHSHIR yoki ota-ona telefoni (raqamlar, kamida 4 ta)
+        const hit=[s.studentId,s._id,s.name,p.pinfl].some(v=>String(v==null?'':v).toLowerCase().includes(q))
+          || (qd.length>=4 && [p.parentPhone,p.parentPhone2].some(v=>String(v==null?'':v).replace(/\D/g,'').includes(qd)));
+        if(!hit) return false; }
       return true; }).sort((a,b)=>stuExitDay(b).localeCompare(stuExitDay(a)) || String(a.name||'').localeCompare(String(b.name||''),'uz'));
     // Yig'ma: bitiruvchilar alohida; chiqarilganlar — sabablar bo'yicha (bitiruv o'quvchi yo'qotish emas — foizga kirmaydi).
     const grads=list.filter(stuGraduate).length, left=list.filter(s=>!stuGraduate(s)), by={};

@@ -2278,11 +2278,27 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   o'quvchi — «⏯️ Holat» / «⏹️» da yangi sabab «🎓 Maktabni tugatdi (bitiruvchi)».
 - **Baza:** `students_billing` ko'rinishiga `exitAt`, `exitReason` (kassir, hamshira, buxgalter ro'yxatida ham arxiv qoidasi bir xil;
   `staff-d6.sql` va `nurse-sick.sql` — ikkalasida bir xil tartibda, zanjirni qayta ishga tushirish uchun); `test-fin-rights.sql` B3.
-- **Sinovlar:** `assets/js/stu-arch.test.mjs` (8; `run-suites.sh` o'zi ishga tushiradi), `ai-assistant/ai.test.cjs` (+7 isArchived),
-  brauzer ssenariysi `tests/kassa-e2e/scenarios/e2e-arxiv.cjs` (`run-all.sh ar:v1 ar:v2`; 23 tekshiruv: jami va sinf kartasi, qidiruv
-  havolasi, ⏯️ chiqarish — son darhol kamayadi, kelajak sana, bosh sahifa, Arxiv va filtrlar, 📨 ma'lumotnoma (telefon / to'lovsiz, QR),
-  🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️ va huquqlari, kassir soni) — v1 va v2 da 23/23; «arxiv qoidasi
-  o'chirilgan» mutatsiyada ssenariy yiqiladi.
+- **Mustaqil ko'rik (2-raund, shu kuni) — tuzatildi:** (1) qabulxona baho / davomat / monitoring / xarakteristika jadvallarini o'qiy
+  olmaydi (D6) — uning 📨 ma'lumotnomasi bo'sh chiqib, QR esa haqiqiy edi → yangi `migration/student-archive.sql`:
+  `student_certificate(p_sid)` (security definer; direktor, O'IBDO', qabulxona — issue_doc_token bilan bir xil; to'qnash ID — P0002;
+  faqat yig'ma: baholar, davomat soni, tasdiqlangan monitoring o'rtachasi, oxirgi xarakteristika, yutuqlar); ma'lumotnoma avval shu
+  yig'mani oladi, keyin QR (xato bo'lsa hujjat chiqmaydi); (2) ichki ketish sababi (sog'liq, moliya…) hujjatga yozilmaydi — «Holati:
+  O'qishdan chiqqan / Maktabni tamomlagan», asos — ixtiyoriy buyruq; `students_billing` da `exitReason` faqat bitiruv belgisi
+  ('bitirdi' yoki bo'sh); (3) tug'ilgan sana (erkin matn) ma'lumotnoma matnida `esc` siz edi (XSS) — tuzatildi; (4) bitirgan sinf
+  hamma tanlovlardan darhol yo'qolardi (4-chorak baholari, yakuniy xarakteristika, davomatni tuzatish; o'qituvchi biriktiruvi qayta
+  saqlanganda jim o'chardi) → sinf tanlovlari shu o'quv yilida o'qiganlar bo'yicha (`acadYearStart`), o'qituvchi / foydalanuvchi
+  oynasida biriktirilgan sinf o'quvchisiz bo'lsa ham ro'yxatda; (5) sinovdagi o'quvchida qabul sanasi chiqqan kundan keyin chiqardi —
+  bunday sana yozilmaydi; (6) O'IBDO' Arxivga kira olmasdi → «🗄 Arxiv» menyu bo'limi (Direktor, O'IBDO', qabulxona); (7) Arxiv
+  qidiruvi ota-ona telefoni bo'yicha ham; (8) kassir qidiruvda arxivdagi o'quvchini topsa — bo'sh ro'yxat o'rniga eslatma, umumiy
+  qidiruvda — «To'lovlar»ga (arxivga kira oladiganlar — «Arxiv»ga). Audit A1-10 (eski «Ketganlar»dagi soxta qarz: 'paid' + paidAmount
+  0) — Arxivda qarz to'g'ri hisoblanadi.
+- **Sinovlar:** `assets/js/stu-arch.test.mjs` (8 — sof qoidalar va ulanishlar; lokal regressiya skripti `assets/js/*.test.mjs` ni
+  o'zi ishga tushiradi), `migration/test-student-archive.sql` (23: kim chaqira oladi, to'qnash ID, davomat / monitoring / xarakteristika
+  qoidasi, students_billing — dev va jonli zanjirda), `ai-assistant/ai.test.cjs` (+7 isArchived), brauzer ssenariysi
+  `tests/kassa-e2e/scenarios/e2e-arxiv.cjs` (`run-all.sh ar:v1 ar:v2`; 28 tekshiruv: jami va sinf kartasi, qidiruv havolasi, ⏯️
+  chiqarish — son darhol kamayadi, kelajak sana, bosh sahifa, Arxiv va filtrlar, 📨 ma'lumotnoma (holat neytral, telefon / to'lovsiz,
+  QR), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma'lumotnomasida baho / davomat / xarakteristika,
+  O'IBDO' menyusida Arxiv, kassir soni va qidiruv eslatmasi) — v1 va v2 da 28/28; «arxiv qoidasi o'chirilgan» mutatsiyada yiqiladi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
