@@ -112,6 +112,7 @@ create policy mon_ins on monitoring for insert with check (app.is_admin() or app
 drop policy if exists mon_upd on monitoring;
 create policy mon_upd on monitoring for update using (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject))) with check (app.is_admin() or app.is_zavuch() or (app.is_teacher_for_class("classKey") and app.teacher_has_subject(subject) and status='pending'));
 drop policy if exists mon_del on monitoring;
+-- DIQQAT: mon_del ning AMALDAGI ta'rifi — audit-11-talim.sql (o'qituvchi o'zi kiritgan tasdiqlanmagan yozuvni ham o'chiradi).
 create policy mon_del on monitoring for delete using (app.is_admin() or app.is_zavuch());
 
 -- ============ characteristics (umumiy xarakteristika) ============

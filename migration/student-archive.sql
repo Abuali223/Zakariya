@@ -13,6 +13,9 @@
 --   shu yig'ma va faqat shu hujjat uchun. Shaxsiy ma'lumot (student_private) bu yerda YO'Q — uni bu rollar RLS bilan o'qiydi.
 --   Kalit (hujjat id yoki studentId) AYNAN bitta qatorga mos kelishi shart (to'qnash eski import ID — P0002, issue_doc_token kabi).
 --   Davomat — openStudentReport bilan bir xil: «Bemor» va «Sababli» jami kunga kirmaydi; monitoring — faqat tasdiqlangan ball.
+--   🎓 Rasmiy profil ham shu yig'madan (audit A3-04: qabulxona chop etgan profilda baho / davomat / monitoring / xarakteristika bo'sh,
+--   QR esa haqiqiy chiqardi): 'chars' — BARCHA choraklarning umumiy xarakteristikasi, 'notes' — fan izohlari (muallif va sana bilan,
+--   profil avval ham shunday chop etardi). 'char' (oxirgi davr) — 📨 ma'lumotnoma uchun, o'zgarmagan.
 -- =====================================================================
 create or replace function public.student_certificate(p_sid text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -47,6 +50,13 @@ begin
                from public.characteristics c
               where c."studentId" = v_k and btrim(coalesce(c.text, '')) <> ''
               order by c.term desc nulls last limit 1),
+    'chars', coalesce((select jsonb_agg(jsonb_build_object('term', c.term, 'text', c.text, 'by', c."byName", 'at', c."updatedAt") order by c.term desc nulls last, c.id)
+                         from public.characteristics c
+                        where c."studentId" = v_k and btrim(coalesce(c.text, '')) <> ''), '[]'::jsonb),
+    'notes', coalesce((select jsonb_agg(jsonb_build_object('term', n.term, 'subject', n.subject, 'text', n.text, 'by', n."byName", 'at', n."updatedAt")
+                                        order by n.term desc nulls last, n.subject, n.id)
+                         from public.subject_notes n
+                        where n."studentId" = v_k and btrim(coalesce(n.text, '')) <> ''), '[]'::jsonb),
     'ach', coalesce((select jsonb_agg(jsonb_build_object('name', o.name, 'subject', o.subject, 'level', o.level, 'result', o.result, 'date', o.date)
                                       order by o.date desc nulls last)
                        from public.olympiads o where o."studentId" = v_k and (coalesce(o.name, '') <> '' or coalesce(o.subject, '') <> '')), '[]'::jsonb)

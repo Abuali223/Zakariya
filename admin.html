@@ -3708,6 +3708,68 @@ async function renderAttendance(){
   $('#att-date').addEventListener('change',load);
   if(!SESSION.isAdmin && visKeys.length===1){ $('#att-class').value=visKeys[0]; load(); }
 }
+// ACAD-SAVE:BEGIN — jurnal ekranlari (baholar, monitoring, xarakteristika / fan izohi / oylik xulosa) uchun «nima yoziladi» rejasi
+//   (sof; sinovi: assets/js/acad-save.test.mjs — blok shu fayldan o'qiladi). Audit A3-01 / A3-07: avval «Saqlash» sahifa ochilgandagi
+//   nusxadan BARCHA qatorlarni qayta yozardi — shu orada boshqa xodim qilgan o'zgarish (O'IBDO' tasdig'i, boshqa o'qituvchining bahosi,
+//   xarakteristika tuzatishi) jim yo'qolar, tegilmagan xarakteristikalarning muallifi / sanasi ham almashardi. Endi faqat foydalanuvchi
+//   SHU ekranda o'zgartirgan qatorlar yoziladi; saqlash paytida bazadan qayta o'qilgan qiymat ochilgandagidan farq qilsa — ustiga
+//   yozilmaydi, ogohlantiriladi (davomatdagi «touched / kept» qoidasi bilan bir xil).
+// Umumiy reja (baho katagi, matn): r = { id, loaded, val, cur, touched } — qiymatlar solishtirishga tayyor satr ('' — yo'q): loaded —
+//   ochilgandagi, cur — saqlash paytida bazadan qayta o'qilgani, val — ekrandagi. Natija: write — yoziladi; del — bo'shatilgan (bazada
+//   bor); conflict — shu orada boshqa xodim o'zgartirgan (tegilmaydi); same — bazada allaqachon shu qiymat.
+function acadPlan(rows){
+  const out={ write:[], del:[], conflict:[], same:[] };
+  (rows||[]).forEach(r=>{ if(!r || !r.touched || r.val===r.loaded) return;
+    if(r.cur!==r.loaded){ (r.cur===r.val ? out.same : out.conflict).push(r.id); return; }
+    if(r.val===''){ if(r.cur!=='') out.del.push(r.id); } else out.write.push(r.id); });
+  return out;
+}
+// Monitoring balli: bo'sh — yo'q; aks holda 0–100, ko'pi bilan bir kasr xonasi (maydon qadami 0.1). Xato matni ('' — to'g'ri).
+//   Avval tekshirilmasdi: 950 / -40 kabi xato 20% chegirma (eski qoidada 100% grant) va 100 ball nomzodligini berardi (A3-03).
+function monScoreErr(v){ const t=String(v==null?'':v).trim(); if(t==='') return '';
+  if(!/^\d{1,3}(\.\d)?$/.test(t)) return 'son bo‘lsin: 0–100, ko‘pi bilan bir kasr xonasi';
+  return Number(t)<=100 ? '' : '0–100 oralig‘ida bo‘lsin'; }
+function monNum(v){ if(v==null) return null; const t=String(v).trim(); return t==='' ? null : Number(t); }
+function monSameRec(a, b){ if(!a || !b) return !a && !b; return monNum(a.score)===monNum(b.score) && String(a.status||'')===String(b.status||''); }
+// Monitoring rejasi: r = { id, loaded:{score,status,by}|null, cur:{...}|null (saqlash paytida bazadan), val:''|'95.5', bad (brauzer sonni
+//   o'qiy olmadi), touched }; o = { approve («Saqlash va tasdiqlash»), canApprove (Direktor / O'IBDO'), me (uid) }.
+//   * Faqat O'ZGARTIRILGAN qatorlar yoziladi; «Saqlash» — 'pending' (O'IBDO' uchun ham: tasdiq faqat «Saqlash va tasdiqlash» bilan, A3-08).
+//   * «Saqlash va tasdiqlash» — o'zgartirilganlar + ekranda KO'RILGAN kutilayotgan ballar (bazada hamon aynan shu qiymat bo'lsa).
+//   * Shu orada bazada o'zgargan qator (o'qituvchi tuzatgan, O'IBDO' tasdiqlagan, o'chirilgan) — conflict: ustiga yozilmaydi.
+//   * Bo'shatilgan maydon — yozuvni o'chirish (A3-06): Direktor / O'IBDO' — istalganini; o'qituvchi — faqat o'zi kiritgan, tasdiqlanmaganini.
+//   Natija: write [{id, score, status}], del [id], conflict [id], locked [{id, why:'approved'|'notmine'}], errors [{id, msg}], same [id].
+function monPlan(rows, o){
+  o=o||{}; const out={ write:[], del:[], conflict:[], locked:[], errors:[], same:[] };
+  const want=(o.canApprove && o.approve) ? 'approved' : 'pending';
+  (rows||[]).forEach(r=>{ if(!r) return;
+    // Balsiz qator (eski yozuv) — yo'q hisoblanadi (ochilganda ham, hozir ham bir xil).
+    const L=(r.loaded && monNum(r.loaded.score)!=null) ? r.loaded : null, C=(r.cur && monNum(r.cur.score)!=null) ? r.cur : null, v=r.bad ? null : monNum(r.val);
+    const changed=!!r.touched && (!!r.bad || v!==(L ? monNum(L.score) : null));
+    if(changed){
+      const err=r.bad ? 'son bo‘lsin: 0–100, ko‘pi bilan bir kasr xonasi' : monScoreErr(r.val);
+      if(err){ out.errors.push({ id:r.id, msg:err }); return; }
+      if(!monSameRec(C, L)){
+        if(v==null ? !C : (C && monNum(C.score)===v && String(C.status||'')===want)) out.same.push(r.id); else out.conflict.push(r.id);
+        return; }
+      if(v==null){
+        if(o.canApprove) out.del.push(r.id);
+        else if(String(C.status||'')==='approved') out.locked.push({ id:r.id, why:'approved' });
+        else if(String(C.by||'')!==String(o.me||'')) out.locked.push({ id:r.id, why:'notmine' });
+        else out.del.push(r.id);
+        return; }
+      if(!o.canApprove && C && String(C.status||'')==='approved'){ out.locked.push({ id:r.id, why:'approved' }); return; }
+      out.write.push({ id:r.id, score:v, status:want });
+      return;
+    }
+    if(o.canApprove && o.approve && L && String(L.status||'')!=='approved'){
+      if(C && String(C.status||'')==='approved' && monNum(C.score)===monNum(L.score)) out.same.push(r.id);
+      else if(!monSameRec(C, L)) out.conflict.push(r.id);
+      else out.write.push({ id:r.id, score:monNum(L.score), status:'approved' });
+    }
+  });
+  return out;
+}
+// ACAD-SAVE:END
 /* ---- Baholar jurnali (choraklar) ---- */
 const SUBJECTS=['Matematika','Algebra','Geometriya','Ona tili','Adabiyot','Ingliz tili','Rus tili','Fizika','Kimyo','Biologiya','Geografiya','Tarix','Informatika','Jismoniy tarbiya','Chizmachilik','Tarbiya'];
 /* Fan tanlash: to'liq <select> (datalist emas — datalist tanlangandan keyin
@@ -3779,34 +3841,44 @@ async function renderGrades(){
     $('#gr-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${ordered.length} o‘quvchi · ${esc(subject)} · ${esc(qLabel)}</span></div>
       <div id="gr-list">${rowsHtml}</div>
       <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;justify-content:flex-end"><button class="btn gold" id="gr-save">Saqlash</button></div></div>`;
-    $('#gr-list').querySelectorAll('.gr-sel').forEach(sel=>sel.addEventListener('change',()=>{ state[sel.dataset.sid]=sel.value; sel.className='gr-sel '+gradeCls(sel.value); }));
+    const touched=new Set();   // A3-07: foydalanuvchi shu ekranda o'zi o'zgartirgan o'quvchilar — faqat ular yoziladi
+    $('#gr-list').querySelectorAll('.gr-sel').forEach(sel=>sel.addEventListener('change',()=>{ state[sel.dataset.sid]=sel.value; touched.add(sel.dataset.sid); sel.className='gr-sel '+gradeCls(sel.value); }));
     $('#gr-save').addEventListener('click',async()=>{
       const btn=$('#gr-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
       try{
-        const entries=Object.entries(state);
-        // Shim jsonb'ni chuqur birlashtirmaydi (subjects ustunini butunlay almashtiradi) — avval
-        // har o'quvchining mavjud fanlar/choraklarini o'qib, yangi bahoni ustiga qo'shamiz,
-        // aks holda boshqa fan/choraklardagi baholar o'chib ketadi (davomatdagi kabi).
+        const nm=sid=>{ const st=cls.list.find(x=>String(x.studentId||x._id)===String(sid)); return st?(st.name||sid):sid; };
+        const cand=[...touched].filter(sid=>Object.prototype.hasOwnProperty.call(state, sid)), sfx=`__${year}`;
+        // Shim jsonb'ni chuqur birlashtirmaydi (subjects ustunini butunlay almashtiradi) — saqlash paytida har o'quvchining HOZIRGI
+        //   fanlar/choraklarini o'qib, faqat SHU katakni ustiga qo'yamiz: boshqa fan / chorak (shu orada boshqa o'qituvchi qo'ygani ham) saqlanadi.
         const existSubs={}; let readOk=false;
-        try{ const gsnaps=await Promise.all(entries.map(([sid])=>getDoc(doc(db,'grades',`${sid}__${year}`))));
-          gsnaps.forEach((sn,i)=>{ if(sn&&sn.exists()) existSubs[entries[i][0]]=(sn.data().subjects)||{}; }); readOk=true; }catch(e){ readOk=false; }
+        try{ for(let i=0;i<cand.length;i+=50){ const sn=await getDocs(query(collection(db,'grades'), where('id','in',cand.slice(i,i+50).map(sid=>sid+sfx))));
+            sn.docs.forEach(d=>{ existSubs[String(d.id).slice(0,-sfx.length)]=(d.data()||{}).subjects||{}; }); }
+          readOk=true; }catch(e){ readOk=false; }
         // frontend[5]: mavjud baholar O'QILMASA (tarmoq/RLS) subjects ustunini butunlay
         // almashtirmaymiz — boshqa fan/choraklardagi baholar yo'qolmasin. Saqlashni bekor qilamiz.
         if(!readOk) throw new Error("Mavjud baholar o‘qilmadi — saqlash bekor qilindi (baholar yo‘qolmasligi uchun). Qayta urining.");
+        // A3-07: faqat o'zgartirilgan kataklar; ochilgandan beri bazada o'zgargan katak (masalan O'IBDO' tuzatgan) — eski nusxa bilan
+        //   ustiga yozilmaydi. Bo'shatilgan baho — katakka null (yozuv qoladi).
+        const cellOf=sid=>{ const s=existSubs[sid], v=s&&s[subject]&&s[subject][q]; return v==null?'':String(v); };
+        const plan=acadPlan(cand.map(sid=>({ id:sid, loaded:existing[sid]==null?'':String(existing[sid]), val:String(state[sid]==null?'':state[sid]), cur:cellOf(sid), touched:true })));
+        const todo=[...plan.write, ...plan.del];
         // Har o'quvchi ALOHIDA (8 tadan parallel): bitta satr rad etilsa qolganlari saqlanadi va kimlar
         //   saqlanmagani ko'rsatiladi (avval writeBatch birinchi xatoda to'xtab, qolgan baholar jim yo'qolardi).
-        const failed=[];
-        for(let i=0;i<entries.length;i+=8){
-          await Promise.all(entries.slice(i,i+8).map(async([sid,grade])=>{
+        const failed=[]; let okN=0;
+        for(let i=0;i<todo.length;i+=8){
+          await Promise.all(todo.slice(i,i+8).map(async sid=>{ const grade=String(state[sid]==null?'':state[sid]);
             const cur=existSubs[sid]||{};
             const merged=Object.assign({}, cur, {[subject]: Object.assign({}, cur[subject]||{}, {[q]: grade===''?null:Number(grade)})});
-            try{ await setDoc(doc(db,'grades',`${sid}__${year}`),{studentId:sid,classKey:ck,year,subjects:merged},{merge:true}); }
-            catch(e){ failed.push({ sid, err:(e&&(e.code||e.message))||'xato' }); }
+            try{ await setDoc(doc(db,'grades',sid+sfx),{studentId:sid,classKey:ck,year,subjects:merged},{merge:true}); okN++;
+              existing[sid]=grade; if(String(state[sid])===grade) touched.delete(sid); }   // saqlangani — keyingi «Saqlash» uchun yangi asos
+            catch(e){ failed.push({ sid, err:(e&&(e.message||e.code))||'xato' }); }
           }));
         }
-        if(failed.length){ const nm=sid=>{ const st=cls.list.find(x=>String(x.studentId||x._id)===String(sid)); return st?(st.name||sid):sid; };
-          toast(`Saqlandi: ${entries.length-failed.length} ta. SAQLANMADI ${failed.length} ta: ${failed.slice(0,4).map(f=>nm(f.sid)).join(', ')}${failed.length>4?'…':''} (${failed[0].err}).`, true); }
-        else toast('Baholar saqlandi ✓');
+        plan.same.forEach(sid=>{ existing[sid]=String(state[sid]); touched.delete(sid); });
+        const cf=plan.conflict.length ? ` · ${plan.conflict.length} o‘quvchining bahosini shu orada boshqa xodim o‘zgartirgan — uniki saqlandi, sizniki yozilmadi (sahifani yangilang): ${plan.conflict.slice(0,4).map(nm).join(', ')}${plan.conflict.length>4?'…':''}` : '';
+        if(failed.length) toast(`Saqlandi: ${okN} ta. SAQLANMADI ${failed.length} ta: ${failed.slice(0,4).map(f=>nm(f.sid)).join(', ')}${failed.length>4?'…':''} (${failed[0].err}).${cf}`, true);
+        else if(!okN && !cf) toast(cand.length?'Baholar bazada allaqachon shunday ✓':'O‘zgartirilgan baho yo‘q');
+        else toast(`Baholar saqlandi ✓${okN?` (${okN} ta)`:''}${cf}`, !!cf);
       }catch(e){ toast('Xatolik: '+errMsg(e),true); }
       btn.disabled=false; btn.textContent='Saqlash';
     });
@@ -3829,6 +3901,11 @@ function monSlug(s){
   return slug;
 }
 function monBadge(st){ return st==='approved'?`<span class="chip it" style="background:var(--it-bg);color:var(--teal)">Tasdiqlangan</span>`:(st?`<span class="chip" style="background:var(--med-bg);color:var(--med-fg)">Kutilmoqda</span>`:''); }
+// Sahifadagi chegirma qoidasi izohi (A3-08): avval doim «90+ → 20%, 100 → 100%» deyilardi. O'tish oyidan (config/finance.bonusApprovalFrom)
+//   boshlab 20% ham, 100% ham faqat chegirma fanlarining HAMMASIDA tasdiqlangan ball bilan, 100% esa faqat O'IBDO' taklifi va Direktor
+//   tasdig'i bilan (bonus-100.sql). Tanlangan oy uchun aniq qoidani raund kartasi qo'yadi (monitoring_round_status.ruleActive).
+const MON_HINT_NEW='Monitoring HAR OY kiritiladi. Faqat TASDIQLANGAN ball KEYINGI oy to‘loviga ta’sir qiladi: o‘rtacha 90+ → 20% chegirma — chegirma fanlarining hammasida tasdiqlangan ball bo‘lsa (to‘liq qamrov); 100 ball → 100% — faqat O‘IBDO‘ taklifi va Direktor tasdig‘i bilan (to‘liq qamrov ham shart).';
+const MON_HINT_OLD='Monitoring HAR OY kiritiladi. Faqat TASDIQLANGAN ball KEYINGI oy to‘loviga ta’sir qiladi: o‘rtacha 90+ → 20%, 100 → 100% (bu oy — eski qoida: 100 ball tasdiq qoidasi hali boshlanmagan).';
 async function renderMonitoring(){
   const canApprove = SESSION.isAdmin || SESSION.role==='zavuch';
   const canEnter   = SESSION.isAdmin || SESSION.role==='teacher';
@@ -3841,7 +3918,8 @@ async function renderMonitoring(){
         <label>Fan${fanPicker('mon-subject')}</label>
         <label>Oy<input type="month" id="mon-period" value="${curMonth()}"></label>
       </div>
-      <div class="small muted" style="margin-top:6px">Monitoring HAR OY kiritiladi. Tasdiqlangan ball KEYINGI oy to‘loviga chegirma beradi (90+ → 20%, 100 → 100%).</div>
+      <div class="small muted" id="mon-hint" style="margin-top:6px">${esc(MON_HINT_NEW)}</div>
+      <div class="small muted" style="margin-top:4px">${canApprove?'«Saqlash» — o‘zgartirilgan ballarni tasdiqlamasdan saqlaydi; «Saqlash va tasdiqlash» — ularni va ekrandagi kutilayotgan ballarni tasdiqlaydi. ':''}Noto‘g‘ri kiritilgan ballni o‘chirish — maydonni bo‘shatib «Saqlash»${canApprove?'':' (faqat o‘zingiz kiritgan, hali tasdiqlanmagan ball)'}.</div>
     </div>
     <div id="mon-round"></div>
     <div id="mon-body"><div class="cls-empty" style="margin:0">Sinf, fan va oyni tanlang.</div></div>`;
@@ -3865,14 +3943,14 @@ async function renderMonitoring(){
     const existing={};
     try{
       const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,'monitoring',`${s.studentId||s._id}__${period}__${slug}`)).catch(()=>null)));
-      snaps.forEach((sn,i)=>{ const sid=cls.list[i].studentId||cls.list[i]._id; if(sn&&sn.exists()){ const d=sn.data(); existing[sid]={score:d.score,status:d.status||'pending'}; } });
+      snaps.forEach((sn,i)=>{ const sid=cls.list[i].studentId||cls.list[i]._id; if(sn&&sn.exists()){ const d=sn.data(); existing[sid]={score:d.score,status:d.status||'pending',by:d.enteredBy||''}; } });
     }catch(e){}
     if(g!==monGen || !$('#mon-body')) return;
     // Arxivdagi o'quvchi — shu oyda (yoki keyin) chiqqan bo'lsa yoki shu oyga balli bo'lsa.
     const ordered=cls.list.filter(s=>stuInPeriod(s, period+'-01', !!existing[s.studentId||s._id])).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
-    const state={};
+    const state={}, touched=new Set();   // touched — foydalanuvchi shu ekranda o'zi o'zgartirgan maydonlar (A3-01: faqat ular yoziladi)
     const rowsHtml=ordered.map(s=>{ const sid=s.studentId||s._id; const ex=existing[sid]||{}; const st=ex.status||'';
-      state[sid]={score:(ex.score==null?'':String(ex.score)), status:st};
+      state[sid]={score:(ex.score==null?'':String(ex.score)), status:st, bad:false};
       const locked = (canEnter && !canApprove && st==='approved');
       return `<div class="att-row" data-sid="${esc(sid)}"><span class="att-nm">${esc(s.name||sid)}${stuArcChip(s)}</span>
         <span style="display:flex;align-items:center;gap:12px">
@@ -3880,29 +3958,79 @@ async function renderMonitoring(){
           <span class="mon-st" style="min-width:96px">${monBadge(st)}</span>
         </span></div>`;
     }).join('');
+    // A3-08: O'IBDO' «Saqlash» — TASDIQLAMAYDI (avval «Saqlash va tasdiqlash» bilan bir xil edi: dastlabki ballar darhol chegirmaga kirardi).
     const btns = canApprove
-      ? `<button class="btn" id="mon-save">Saqlash</button><button class="btn gold" id="mon-approve">Saqlash va tasdiqlash</button>`
+      ? `<button class="btn" id="mon-save" title="O‘zgartirilgan ballarni saqlaydi — tasdiqlamaydi (kutilmoqda)">Saqlash</button><button class="btn gold" id="mon-approve" title="O‘zgartirilgan va ekrandagi kutilayotgan ballar tasdiqlanadi">Saqlash va tasdiqlash</button>`
       : `<button class="btn gold" id="mon-save">Saqlash (tasdiqlashga yuborish)</button>`;
     $('#mon-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${ordered.length} o‘quvchi · ${esc(subject)} · monitoring</span></div>
       <div id="mon-list">${rowsHtml}</div>
       <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;gap:10px;justify-content:flex-end">${btns}</div></div>`;
-    $('#mon-list').querySelectorAll('.mon-inp').forEach(inp=>inp.addEventListener('input',()=>{ state[inp.dataset.sid].score=inp.value; }));
+    // Saqlangan qator — ekranda yangi holat (maydon foydalanuvchi shu orada qayta o'zgartirmagan bo'lsa yangilanadi).
+    const paint=sid=>{ const box=$('#mon-list'); if(!box) return;   // saqlash paytida boshqa bo'limga o'tilgan
+      const row=[...box.querySelectorAll('.att-row')].find(x=>x.dataset.sid===String(sid)); if(!row) return;
+      const ex=existing[sid]||{}, st=ex.status||'', inp=row.querySelector('.mon-inp'), b=row.querySelector('.mon-st');
+      if(!touched.has(sid)){ state[sid]={ score:ex.score==null?'':String(ex.score), status:st, bad:false }; if(inp){ inp.value=state[sid].score; inp.style.borderColor=''; } }
+      if(inp) inp.disabled=(canEnter && !canApprove && st==='approved');
+      if(b) b.innerHTML=monBadge(st); };
+    $('#mon-list').querySelectorAll('.mon-inp').forEach(inp=>inp.addEventListener('input',()=>{ const v=state[inp.dataset.sid];
+      v.score=inp.value; v.bad=!!(inp.validity && inp.validity.badInput); touched.add(inp.dataset.sid); inp.style.borderColor=''; }));
     const save=async(approve)=>{
-      const status = (approve || canApprove) ? 'approved' : 'pending';
       const b1=$('#mon-save'), b2=$('#mon-approve'); [b1,b2].forEach(b=>{ if(b) b.disabled=true; });
+      const nm=sid=>{ const st=cls.list.find(x=>String(x.studentId||x._id)===String(sid)); return st?(st.name||sid):sid; };
+      const list=a=>`${a.slice(0,4).map(nm).join(', ')}${a.length>4?'…':''}`;
+      const idOf=sid=>`${sid}__${period}__${slug}`, me=(auth.currentUser&&auth.currentUser.uid)||'';
       try{
-        const entries=Object.entries(state).filter(([sid,v])=> v.score!=='' && (canApprove || v.status!=='approved'));
-        if(!entries.length) toast('Kiritilgan baho yo‘q');
-        for(let i=0;i<entries.length;i+=400){
-          const batch=writeBatch(db);
-          entries.slice(i,i+400).forEach(([sid,v])=>batch.set(doc(db,'monitoring',`${sid}__${period}__${slug}`),{studentId:sid,classKey:ck,subject,period,score:Number(v.score),status,updatedAt:serverTimestamp()},{merge:true}));
-          await batch.commit();
+        // Saqlash paytida bazadagi HOZIRGI holat: ochilgandan beri boshqa xodim o'zgartirgan / tasdiqlagan / o'chirgan bo'lishi mumkin
+        //   (A3-01: avval eskirgan sahifa barcha qatorlarni eski holat bilan qayta yozib, O'IBDO' tasdig'ini jim bekor qilardi; O'IBDO'
+        //   tasdig'i esa o'qituvchining yangi tuzatishini eski ball bilan «tasdiqlangan» qilib yozardi).
+        const cand=Object.keys(state).filter(sid=>touched.has(sid) || (approve && canApprove && existing[sid] && existing[sid].status!=='approved'));
+        const cur={}; let readOk=false;
+        try{ for(let i=0;i<cand.length;i+=50){ const part=cand.slice(i,i+50), back={}; part.forEach(sid=>{ back[idOf(sid)]=sid; });
+            const sn=await getDocs(query(collection(db,'monitoring'), where('id','in',part.map(idOf))));
+            sn.docs.forEach(d=>{ const x=d.data()||{}, sid=back[d.id]; if(sid!=null) cur[sid]={ score:x.score, status:x.status||'pending', by:x.enteredBy||'' }; }); }
+          readOk=true; }catch(e){ readOk=false; }
+        if(!readOk) throw new Error('Mavjud monitoring ballari o‘qilmadi — saqlash bekor qilindi. Qayta urining.');
+        const plan=monPlan(cand.map(sid=>({ id:sid, loaded:existing[sid]||null, cur:cur[sid]||null, val:state[sid].score, bad:!!state[sid].bad, touched:touched.has(sid) })),
+                           { approve, canApprove, me });
+        // A3-03: ball 0–100 — noto'g'ri bo'lsa hech narsa saqlanmaydi, o'quvchilar nomi bilan aytiladi (maydon qizil).
+        if(plan.errors.length){ const bad=new Set(plan.errors.map(e=>String(e.id)));
+          ($('#mon-list')||document.createElement('div')).querySelectorAll('.mon-inp').forEach(inp=>{ if(bad.has(inp.dataset.sid)) inp.style.borderColor='#B42318'; });
+          toast(`Ball noto‘g‘ri — hech narsa saqlanmadi: ${plan.errors.slice(0,4).map(e=>`${nm(e.id)} (${e.msg})`).join('; ')}${plan.errors.length>4?'…':''}`, true); return; }
+        // A3-06: bo'shatilgan maydon — yozuvni o'chirish (tasdiq bilan).
+        if(plan.del.length && !confirm(`${plan.del.length} ta o‘quvchining «${subject}» (${period}) monitoring balli O‘CHIRILADI: ${plan.del.slice(0,6).map(nm).join(', ')}${plan.del.length>6?'…':''}.\nDavom etilsinmi?`)) return;
+        // Har yozuv ALOHIDA (8 tadan parallel): biri rad etilsa (raund qulfi, ruxsat) qolganlari saqlanadi va kimlar saqlanmagani aytiladi.
+        const failed=[], done=[], gone=[];
+        const ops=[...plan.write.map(w=>({ w })), ...plan.del.map(sid=>({ d:sid }))];
+        for(let i=0;i<ops.length;i+=8){
+          await Promise.all(ops.slice(i,i+8).map(async op=>{ const sid=op.w ? op.w.id : op.d;
+            try{
+              if(op.w) await setDoc(doc(db,'monitoring',idOf(sid)),{studentId:sid,classKey:ck,subject,period,score:op.w.score,status:op.w.status,updatedAt:serverTimestamp()},{merge:true});
+              else await deleteDoc(doc(db,'monitoring',idOf(sid)));
+              if(op.w) done.push(op.w); else gone.push(sid);
+            }catch(e){ failed.push({ sid, err:(e&&(e.message||e.code))||'xato' }); } }));
         }
-        if(entries.length && status==='approved') await recomputeMonitoringScore(entries.map(e=>e[0]));  // tasdiqlangach «Umumiy ball»ni yangilaymiz
-        if(entries.length) toast((approve||canApprove)?'Saqlandi va tasdiqlandi ✓':'Saqlandi — tasdiqlashga yuborildi ✓');
-        load(); renderMonRound($('#mon-round'), ck, period, students);
+        // O'chirishni RLS xabarsiz 0 qator qilishi mumkin — haqiqatan o'chganini tekshiramiz.
+        if(gone.length){ try{ const sn=await getDocs(query(collection(db,'monitoring'), where('id','in',gone.map(idOf)))); const still=new Set(sn.docs.map(d=>d.id));
+            for(let i=gone.length-1;i>=0;i--){ if(still.has(idOf(gone[i]))){ failed.push({ sid:gone[i], err:'o‘chirishga ruxsat yo‘q' }); gone.splice(i,1); } } }catch(e){} }
+        // Saqlanganlar — shu ekranning yangi asosi (keyingi «Saqlash» ularni qayta yozmaydi; tegilmaganlari soxta «o'zgargan» bo'lmaydi).
+        const wasAppr=sid=>!!(cur[sid] && cur[sid].status==='approved');
+        done.forEach(w=>{ const was=cur[w.id]; existing[w.id]={ score:w.score, status:w.status, by:(was && monNum(was.score)===w.score) ? was.by : me };
+          if(!state[w.id].bad && monNum(state[w.id].score)===w.score) touched.delete(w.id); paint(w.id); });
+        gone.forEach(sid=>{ delete existing[sid]; if(String(state[sid].score).trim()==='') touched.delete(sid); paint(sid); });
+        plan.same.forEach(sid=>{ if(cur[sid]) existing[sid]=cur[sid]; else delete existing[sid]; touched.delete(sid); paint(sid); });
+        const scoreSids=[...done.filter(w=>w.status==='approved' || wasAppr(w.id)).map(w=>w.id), ...gone.filter(wasAppr)];
+        if(scoreSids.length) await recomputeMonitoringScore(scoreSids);   // tasdiqlangan ball o'zgardi — «Umumiy ball»ni yangilaymiz
+        const msg=[], lk=plan.locked;
+        if(done.length) msg.push(`${done.length} ta ${done.every(w=>w.status==='approved')?'saqlandi va tasdiqlandi':(canApprove?'saqlandi (kutilmoqda — hali tasdiqlanmagan)':'saqlandi — tasdiqlashga yuborildi')}`);
+        if(gone.length) msg.push(`${gone.length} ta o‘chirildi`);
+        if(plan.conflict.length) msg.push(`${plan.conflict.length} ta o‘quvchining balini shu orada boshqa xodim o‘zgartirgan yoki tasdiqlagan — tegilmadi, sahifani yangilang: ${list(plan.conflict)}`);
+        if(lk.length) msg.push(`${lk.length} ta o‘zgartirilmadi (${lk.some(x=>x.why==='approved')?'tasdiqlangan ball — O‘IBDO‘ orqali':'boshqa o‘qituvchi kiritgan — o‘chirish O‘IBDO‘ orqali'}): ${list(lk.map(x=>x.id))}`);
+        if(failed.length) msg.push(`SAQLANMADI ${failed.length} ta: ${list(failed.map(f=>f.sid))} (${failed[0].err})`);
+        const warn=!!(failed.length || plan.conflict.length || lk.length);
+        toast(msg.length ? msg.join(' · ')+(warn?'':' ✓') : 'O‘zgartirilgan ball yo‘q', warn);
+        renderMonRound($('#mon-round'), ck, period, students);
       }catch(e){ toast(e.code==='42501'?String(e.message):('Xatolik: '+errMsg(e)),true); }
-      [b1,b2].forEach(b=>{ if(b) b.disabled=false; });
+      finally{ [b1,b2].forEach(b=>{ if(b) b.disabled=false; }); }
     };
     if($('#mon-save')) $('#mon-save').addEventListener('click',()=>save(false));
     if($('#mon-approve')) $('#mon-approve').addEventListener('click',()=>save(true));
@@ -3935,6 +4063,8 @@ async function renderMonRound(box, ck, period, students){
   catch(e){ if(box.__tok!==tok) return; if(rpcMissing(e)){ box.innerHTML=''; return; } box.innerHTML=`<div class="card" style="padding:12px 18px;margin-bottom:12px"><div class="small" style="color:#B42318">Raund: ${esc(e.message||e.code||'')}</div></div>`; return; }
   if(box.__tok!==tok) return;   // boshqa sinf/oy tanlangan — eski javob chizilmaydi
   const rd=(r&&r.round)||{}, list=Array.isArray(r&&r.students)?r.students:null;
+  // Sahifa izohi — tanlangan oy qaysi qoidada (A3-08): yangi qoida — to'liq qamrov va 100% faqat tasdiqli bonus bilan.
+  const hint=document.getElementById('mon-hint'); if(hint && typeof rd.ruleActive==='boolean') hint.textContent=rd.ruleActive ? MON_HINT_NEW : MON_HINT_OLD;
   const byId={}; (students||[]).forEach(s=>{ byId[String(s.studentId||s._id)]=s; });
   const head=`<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
       <div><b>Raund ${esc(period)}</b> · kiritish muddati: <b>${esc(fmtDT(rd.entryDeadline))}</b>${rd.explicit?'':' <span class="small muted">(standart)</span>'}
@@ -4365,19 +4495,24 @@ async function renderProfile(){
   const canAll     = SESSION.isAdmin || SESSION.role==='zavuch';
   if(!canGeneral && !canSubject){ $('#view').innerHTML=`<div class="page-head"><h2>Xarakteristika</h2></div><div class="card"><div class="cls-empty" style="margin:0">Sizga hali sinf/fan biriktirilmagan. Administratorga murojaat qiling.</div></div>`; return; }
   const year=academicYear();
-  const defaultType = canGeneral ? 'general' : 'subject';
-  const typeSel = (canGeneral && canSubject)
-    ? `<label>Tur<select id="pf-type"><option value="general">Umumiy xarakteristika</option><option value="subject">Fan izohi</option></select></label>` : '';
+  // Turlar: umumiy xarakteristika va «Oylik xulosa» (ota-onaga) — sinf rahbari / kurator / O'IBDO' / direktor (bazada char_* va sum_* =
+  //   can_write_general); fan izohi — fan o'qituvchisi o'z fani uchun. Oylik xulosa avval faqat «O'quvchilar» → 📄 ma'lumotnoma ichida edi —
+  //   u bo'lim sinf rahbari, kurator va O'IBDO'ga yopiq (A3-05): ota-ona kabinetidagi «O'qituvchi xulosasi»ni amalda faqat direktor yozardi.
+  const TYPES=[...(canGeneral?[['general','Umumiy xarakteristika']]:[]), ...(canSubject?[['subject','Fan izohi']]:[]), ...(canGeneral?[['summary','Oylik xulosa (ota-onaga)']]:[])];
+  const defaultType = TYPES[0][0];
+  const typeSel = TYPES.length>1
+    ? `<label>Tur<select id="pf-type">${TYPES.map(t=>`<option value="${t[0]}">${esc(t[1])}</option>`).join('')}</select></label>` : '';
   $('#view').innerHTML = `<div class="page-head"><h2>Xarakteristika (o‘quvchi profili)</h2></div>
     <div class="card" style="padding:18px 20px;margin-bottom:16px">
       <div class="gr-year">${year}</div>
       <div class="att-controls">
         <label>Sinf<select id="pf-class"><option value="">— tanlang —</option></select></label>
-        <label>Chorak<select id="pf-quarter">${QUARTERS.map(q=>`<option value="${q[0]}">${esc(q[1])}</option>`).join('')}</select></label>
+        <label id="pf-q-wrap">Chorak<select id="pf-quarter">${QUARTERS.map(q=>`<option value="${q[0]}">${esc(q[1])}</option>`).join('')}</select></label>
+        <label id="pf-m-wrap" style="display:none">Oy<input type="month" id="pf-month" value="${curMonth()}"></label>
         ${typeSel}
         <label id="pf-fan-wrap" style="${defaultType==='subject'?'':'display:none'}">Fan${fanPicker('pf-subject')}</label>
       </div>
-      <p class="small muted" style="margin:10px 0 0">Umumiy xarakteristika — sinf rahbari / kurator / zavuch / direktor. Fan izohi — har fan o‘qituvchisi o‘z fani uchun. Ota-ona kabinetda va ma’lumotnomada ko‘radi.</p>
+      <p class="small muted" style="margin:10px 0 0">Umumiy xarakteristika va oylik xulosa — sinf rahbari / kurator / zavuch / direktor. Fan izohi — har fan o‘qituvchisi o‘z fani uchun. Ota-ona kabinetda ko‘radi (xarakteristika — ma’lumotnomada ham).</p>
     </div>
     <div id="pf-body"><div class="cls-empty" style="margin:0">Sinf va chorakni tanlang.</div></div>`;
   let students;
@@ -4385,70 +4520,98 @@ async function renderProfile(){
   catch(e){ $('#pf-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
   await loadDefinedClasses();
   const {classes,keys:_allK}=classGroupsMap(students, true), keys=liveClassKeys(classes,_allK);
-  const curType = ()=> (canGeneral && canSubject) ? (($('#pf-type')&&$('#pf-type').value)||defaultType) : defaultType;
+  const curType = ()=> TYPES.length>1 ? (($('#pf-type')&&$('#pf-type').value)||defaultType) : defaultType;
   const visibleKeys = ()=>{
     if(canAll) return keys;
-    if(curType()==='general'){ const sup=supervisedClasses(); return keys.filter(k=>sup.has(k)); }
+    if(curType()!=='subject'){ const sup=supervisedClasses(); return keys.filter(k=>sup.has(k)); }
     return keys.filter(k=>(SESSION.assignedClasses||[]).includes(k));
   };
   const fillClasses = ()=>{ const vk=visibleKeys(); $('#pf-class').innerHTML=`<option value="">— tanlang —</option>`+vk.map(k=>`<option value="${esc(k)}">${esc(classes[k].label)}</option>`).join(''); };
   fillClasses();
-  const clear = ()=>{ $('#pf-body').innerHTML=`<div class="cls-empty" style="margin:0">Sinf va chorakni tanlang.</div>`; };
+  const clear = ()=>{ $('#pf-body').innerHTML=`<div class="cls-empty" style="margin:0">${curType()==='summary'?'Sinf va oyni tanlang.':'Sinf va chorakni tanlang.'}</div>`; };
   const load=async()=>{
-    const ck=$('#pf-class').value, quarter=$('#pf-quarter').value, type=curType();
+    const ck=$('#pf-class').value, quarter=$('#pf-quarter').value, type=curType(), month=(($('#pf-month')&&$('#pf-month').value)||'');
     const subject = type==='subject' ? (($('#pf-subject')&&$('#pf-subject').value.trim())||'') : '';
-    if(!ck||!quarter) return clear();
+    if(!ck || (type==='summary' ? !/^\d{4}-\d{2}$/.test(month) : !quarter)) return clear();
     if(type==='subject' && !subject){ $('#pf-body').innerHTML=`<div class="cls-empty" style="margin:0">Fanni tanlang.</div>`; return; }
     const cls=classes[ck], term=`${year}-${quarter}`, slug=subject?monSlug(subject):'';
-    const coll = type==='subject' ? 'subject_notes' : 'characteristics';
-    const docId = (sid)=> type==='subject' ? `${sid}__${term}__${slug}` : `${sid}__${term}`;
+    const coll = type==='subject' ? 'subject_notes' : (type==='summary' ? 'student_summaries' : 'characteristics');
+    const docId = (sid)=> type==='subject' ? `${sid}__${term}__${slug}` : (type==='summary' ? `${sid}__${month}` : `${sid}__${term}`);
     $('#pf-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     const existing={};
     try{
       const snaps=await Promise.all(cls.list.map(s=>getDoc(doc(db,coll,docId(s.studentId||s._id))).catch(()=>null)));
       snaps.forEach((sn,i)=>{ const sid=cls.list[i].studentId||cls.list[i]._id; if(sn&&sn.exists()){ const d=sn.data(); existing[sid]={text:String(d.text||''), when:d.updatedAt, by:d.byName||''}; } });
     }catch(e){}
-    // Arxivdagi o'quvchi — shu o'quv yilida chiqqan bo'lsa (ko'chirish ma'lumotnomasi uchun yakuniy xarakteristika) yoki yozuvi bo'lsa.
-    const ordered=cls.list.filter(s=>stuInPeriod(s, String(year).slice(0,4)+'-09-01', !!existing[s.studentId||s._id])).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
-    const state={};
+    // Arxivdagi o'quvchi — shu o'quv yilida (oylik xulosa — shu oyda) chiqqan bo'lsa (ko'chirish ma'lumotnomasi uchun yakuniy xarakteristika) yoki yozuvi bo'lsa.
+    const from = type==='summary' ? month+'-01' : String(year).slice(0,4)+'-09-01';
+    const ordered=cls.list.filter(s=>stuInPeriod(s, from, !!existing[s.studentId||s._id])).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const state={}, touched=new Set();   // touched — foydalanuvchi shu ekranda o'zgartirgan matnlar (A3-07: faqat ular yoziladi)
     const rows=ordered.map(s=>{ const sid=s.studentId||s._id; const ex=existing[sid]; state[sid]=ex?ex.text:'';
-      const ph = type==='subject' ? esc(subject)+' bo‘yicha izoh…' : 'Umumiy xarakteristika…';
+      const ph = type==='subject' ? esc(subject)+' bo‘yicha izoh…' : (type==='summary' ? 'Oylik xulosa — ota-ona kabinetida «O‘qituvchi xulosasi» bo‘lib ko‘rinadi…' : 'Umumiy xarakteristika…');
       const w=ex?fmtWhen(ex.when):''; const meta = ex && (w||ex.by) ? `<div class="small muted" style="margin-top:4px">✎ ${ex.by?esc(ex.by):''}${ex.by&&w?' · ':''}${esc(w)}</div>` : '';
       return `<div class="pf-row" style="padding:12px 20px;border-bottom:1px solid var(--border-2)">
-        <div style="font-weight:600;margin-bottom:6px">${esc(s.name||sid)}${stuArcChip(s)} <span class="small muted">${esc(sid)}</span></div>
-        <textarea class="pf-inp" data-sid="${esc(sid)}" rows="2" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font:inherit;line-height:1.45;resize:vertical">${esc(state[sid])}</textarea>${meta}
+        <div style="font-weight:600;margin-bottom:6px">${esc(s.name||sid)}${stuArcChip(s)} <span class="small muted">${esc(sid)}</span>${canAll?` <button type="button" class="btn sm ghost2" data-pfrep="${esc(s._id)}" title="Ma’lumotnoma: baholar, davomat, monitoring; 🎓 rasmiy profil">📄</button>`:''}</div>
+        <textarea class="pf-inp" data-sid="${esc(sid)}" rows="${type==='summary'?3:2}" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font:inherit;line-height:1.45;resize:vertical">${esc(state[sid])}</textarea>${meta}
       </div>`;
     }).join('');
-    const head = type==='subject' ? `${esc(subject)} · fan izohi` : 'umumiy xarakteristika';
+    const head = type==='subject' ? `${esc(subject)} · fan izohi` : (type==='summary' ? `${esc(month)} · oylik xulosa (ota-onaga)` : 'umumiy xarakteristika');
     const qLabel=(QUARTERS.find(x=>x[0]===quarter)||['','',''])[1];
-    $('#pf-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${ordered.length} o‘quvchi · ${esc(qLabel)} · ${head}</span></div>
+    $('#pf-body').innerHTML=`<div class="card"><div class="cls-card-head"><h3>${esc(cls.label)}</h3><span class="cls-count">${ordered.length} o‘quvchi · ${type==='summary'?head:`${esc(qLabel)} · ${head}`}</span></div>
       <div id="pf-list">${rows}</div>
       <div style="padding:14px 20px;border-top:1px solid var(--border-2);display:flex;gap:10px;justify-content:flex-end;align-items:center"><span id="pf-status" class="small muted"></span><button class="btn gold" id="pf-save">Saqlash</button></div></div>`;
-    $('#pf-list').querySelectorAll('.pf-inp').forEach(inp=>inp.addEventListener('input',()=>{ state[inp.dataset.sid]=inp.value; }));
+    // 📄 — O'IBDO' (va direktor) uchun o'quvchi ma'lumotnomasi va 🎓 rasmiy profil: «O'quvchilar» bo'limi O'IBDO'ga yopiq (A3-05).
+    $('#pf-list').querySelectorAll('[data-pfrep]').forEach(b=>b.addEventListener('click',()=>{ const st=cls.list.find(x=>String(x._id)===String(b.dataset.pfrep)); openStudentReport(b.dataset.pfrep, st||null); }));
+    $('#pf-list').querySelectorAll('.pf-inp').forEach(inp=>inp.addEventListener('input',()=>{ state[inp.dataset.sid]=inp.value; touched.add(inp.dataset.sid); }));
     $('#pf-save').addEventListener('click',async()=>{
       const btn=$('#pf-save'); btn.disabled=true; $('#pf-status').textContent='Saqlanmoqda…';
       const uid=(auth.currentUser&&auth.currentUser.uid)||'', by=(auth.currentUser&&(auth.currentUser.displayName||auth.currentUser.email))||'';
+      const nm=sid=>{ const st=cls.list.find(x=>String(x.studentId||x._id)===String(sid)); return st?(st.name||sid):sid; };
+      const list=a=>`${a.slice(0,4).map(nm).join(', ')}${a.length>4?'…':''}`;
       try{
-        const entries=Object.entries(state);
-        for(let i=0;i<entries.length;i+=300){
-          const batch=writeBatch(db); let wrote=0;
-          entries.slice(i,i+300).forEach(([sid,txt])=>{
-            const ref=doc(db,coll,docId(sid)), t=String(txt||'').trim(), had=(existing[sid]!==undefined);
-            if(t){ const data={studentId:sid,classKey:ck,year,quarter,term,text:t,byUid:uid,byName:by,updatedAt:serverTimestamp()}; if(type==='subject'){ data.subject=subject; data.slug=slug; } batch.set(ref,data,{merge:true}); wrote++; }
-            else if(had){ batch.delete(ref); wrote++; }   // faqat MAVJUD hujjatni o'chiramiz
-          });
-          if(wrote) await batch.commit();
+        // A3-07: faqat SHU ekranda o'zgartirilgan matnlar yoziladi (avval barcha bo'sh bo'lmagan matnlar qayta yozilib, butun sinfda muallif
+        //   va sana yozuvchiniki bo'lib qolardi); ochilgandan beri bazada o'zgargan matn (boshqa xodim tuzatgan) — ustiga yozilmaydi.
+        const cand=[...touched].filter(sid=>Object.prototype.hasOwnProperty.call(state, sid));
+        const curTxt={}; let readOk=false;
+        try{ for(let i=0;i<cand.length;i+=50){ const part=cand.slice(i,i+50), back={}; part.forEach(sid=>{ back[docId(sid)]=sid; });
+            const sn=await getDocs(query(collection(db,coll), where('id','in',part.map(docId))));
+            sn.docs.forEach(d=>{ const sid=back[d.id]; if(sid!=null) curTxt[sid]=String((d.data()||{}).text||'').trim(); }); }
+          readOk=true; }catch(e){ readOk=false; }
+        if(!readOk) throw new Error('Mavjud yozuvlar o‘qilmadi — saqlash bekor qilindi. Qayta urining.');
+        const plan=acadPlan(cand.map(sid=>({ id:sid, loaded:existing[sid]?String(existing[sid].text||'').trim():'', val:String(state[sid]||'').trim(), cur:curTxt[sid]||'', touched:true })));
+        const extra = type==='summary' ? { month } : Object.assign({ year, quarter, term }, type==='subject' ? { subject, slug } : {});
+        // Har yozuv ALOHIDA (8 tadan parallel): biri rad etilsa qolganlari saqlanadi va kimlar saqlanmagani aytiladi.
+        const failed=[], wrote=[], gone=[];
+        const ops=[...plan.write.map(sid=>['w',sid]), ...plan.del.map(sid=>['d',sid])];
+        for(let i=0;i<ops.length;i+=8){
+          await Promise.all(ops.slice(i,i+8).map(async([k,sid])=>{ const ref=doc(db,coll,docId(sid)), t=String(state[sid]||'').trim();
+            try{
+              if(k==='w'){ await setDoc(ref, Object.assign({ studentId:sid, classKey:ck, text:t, byUid:uid, byName:by, updatedAt:serverTimestamp() }, extra), {merge:true}); wrote.push([sid,t]); }
+              else { await deleteDoc(ref); gone.push(sid); }   // bo'shatilgan — faqat MAVJUD yozuv o'chiriladi
+            }catch(e){ failed.push({ sid, err:(e&&(e.message||e.code))||'xato' }); } }));
         }
-        // keshni yangilaymiz
-        entries.forEach(([sid,txt])=>{ const t=String(txt||'').trim(); if(t){ existing[sid]=Object.assign({},existing[sid],{text:t}); } else delete existing[sid]; });
-        $('#pf-status').textContent='Saqlandi ✓ (o‘zgarishlar keyingi ochilishda sana bilan ko‘rinadi)'; toast('Xarakteristika saqlandi ✓');
+        // O'chirishni RLS xabarsiz 0 qator qilishi mumkin — haqiqatan o'chganini tekshiramiz.
+        if(gone.length){ try{ const sn=await getDocs(query(collection(db,coll), where('id','in',gone.map(docId)))); const still=new Set(sn.docs.map(d=>d.id));
+            for(let i=gone.length-1;i>=0;i--){ if(still.has(docId(gone[i]))){ failed.push({ sid:gone[i], err:'o‘chirishga ruxsat yo‘q' }); gone.splice(i,1); } } }catch(e){} }
+        // Saqlanganlar — keyingi «Saqlash» uchun yangi asos.
+        wrote.forEach(([sid,t])=>{ existing[sid]={ text:t, when:new Date(), by }; if(String(state[sid]||'').trim()===t) touched.delete(sid); });
+        gone.forEach(sid=>{ delete existing[sid]; if(!String(state[sid]||'').trim()) touched.delete(sid); });
+        plan.same.forEach(sid=>{ const t=curTxt[sid]||''; if(t) existing[sid]=Object.assign({}, existing[sid], { text:t }); else delete existing[sid]; touched.delete(sid); });
+        const msg=[];
+        if(wrote.length || gone.length) msg.push(`Saqlandi: ${wrote.length+gone.length} ta`);
+        if(plan.conflict.length) msg.push(`${plan.conflict.length} o‘quvchining matnini shu orada boshqa xodim o‘zgartirgan — uniki saqlandi, sizniki yozilmadi (sahifani yangilang): ${list(plan.conflict)}`);
+        if(failed.length) msg.push(`SAQLANMADI ${failed.length} ta: ${list(failed.map(f=>f.sid))} (${failed[0].err})`);
+        const warn=!!(failed.length || plan.conflict.length), txt=msg.length ? msg.join(' · ') : 'O‘zgartirilgan matn yo‘q';
+        $('#pf-status').textContent=txt+(warn||!msg.length?'':' ✓ (o‘zgarishlar keyingi ochilishda sana bilan ko‘rinadi)'); toast(txt+(warn||!msg.length?'':' ✓'), warn);
       }catch(e){ $('#pf-status').textContent='Xatolik: '+errMsg(e); toast('Saqlashda xatolik: '+errMsg(e),true); }
       btn.disabled=false;
     });
   };
-  ['pf-class','pf-quarter'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change',load); });
+  ['pf-class','pf-quarter','pf-month'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('change',load); });
   wireSubjectPicker('pf-subject', load);
-  if($('#pf-type')) $('#pf-type').addEventListener('change',()=>{ $('#pf-fan-wrap').style.display = curType()==='subject'?'':'none'; fillClasses(); clear(); });
+  if($('#pf-type')) $('#pf-type').addEventListener('change',()=>{ const t=curType();
+    $('#pf-fan-wrap').style.display = t==='subject'?'':'none'; $('#pf-q-wrap').style.display = t==='summary'?'none':''; $('#pf-m-wrap').style.display = t==='summary'?'':'none';
+    fillClasses(); clear(); });
   const vk=visibleKeys(); if(!canAll && vk.length===1){ $('#pf-class').value=vk[0]; load(); }
 }
 /* ---- Dars jadvali ---- */
@@ -5232,13 +5395,16 @@ async function openStudentReport(sid, row, opts){
     charSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()) charByTerm[x.term||'']={text:String(x.text),by:x.byName||'',when:x.updatedAt}; });
     noteSnap.docs.forEach(d=>{ const x=d.data()||{}; if(String(x.text||'').trim()){ (notesByTerm[x.term||'']=notesByTerm[x.term||'']||[]).push({subject:x.subject||'Fan',text:String(x.text),by:x.byName||'',when:x.updatedAt}); } });
     const allTerms=[...new Set([...Object.keys(charByTerm),...Object.keys(notesByTerm)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
-    const charBodyHTML = allTerms.length ? allTerms.map(term=>{
-      const c=charByTerm[term];
+    // Choraklik xarakteristika HTML (davr bo'yicha: umumiy + fan izohlari) — oyna / ichki hisobot va 🎓 rasmiy profil (student_certificate) uchun bitta.
+    const charHTMLOf=(byT, nByT)=>{ const terms=[...new Set([...Object.keys(byT),...Object.keys(nByT)])].filter(Boolean).sort((a,b)=>b.localeCompare(a));
+      return terms.length ? terms.map(term=>{
+      const c=byT[term];
       const gen=c?`<div style="margin:4px 0 8px"><span class="small" style="font-weight:700;color:#586459">Umumiy:</span> <span style="white-space:pre-wrap;line-height:1.5">${esc(c.text)}</span>${stamp(c.by,c.when)}</div>`:'';
-      const notes=(notesByTerm[term]||[]).sort((a,b)=>a.subject.localeCompare(b.subject));
+      const notes=(nByT[term]||[]).slice().sort((a,b)=>String(a.subject).localeCompare(String(b.subject)));
       const notesTbl=notes.length?`<table class="rep-t"><tbody>${notes.map(n=>`<tr><td style="width:32%;color:#586459">${esc(n.subject)}</td><td style="white-space:pre-wrap">${esc(n.text)}${stamp(n.by,n.when)}</td></tr>`).join('')}</tbody></table>`:'';
       return `<div style="margin:8px 0 12px"><div class="small" style="font-weight:700;color:#155A4E;margin-bottom:4px">${esc(termLbl(term))}</div>${gen}${notesTbl}</div>`;
-    }).join('') : '<div class="small muted">Yozuv yo‘q.</div>';
+    }).join('') : '<div class="small muted">Yozuv yo‘q.</div>'; };
+    const charBodyHTML = charHTMLOf(charByTerm, notesByTerm);
     // Davomat
     let present=0,late=0,absent=0,sick=0,total=0;
     attSnap.docs.forEach(d=>{ const days=(d.data()||{}).days||{}; Object.values(days).forEach(st=>{ if(st==='sick'){sick++;return;} if(st==='excused')return; total++; if(st==='present')present++; else if(st==='late')late++; else if(st==='absent')absent++; }); });
@@ -5313,17 +5479,36 @@ async function openStudentReport(sid, row, opts){
     //   direktor, O'IBDO', qabulxona). Kassir va boshqalar uni ko'rmaydi (D6: o'quvchi ma'lumoti ularga emas; ilgari kassir
     //   QR'siz va «Yutuqlar»siz «rasmiy» hujjat olardi).
     const canProf = SESSION.isAdmin || SESSION.role==='zavuch' || SESSION.role==='reception';
+    // 📝 Oylik xulosa — faqat yoza oladiganlarga (bazada sum_ins / sum_upd = can_write_general: direktor, O'IBDO', shu sinf rahbari /
+    //   kuratori). Qabulxona va kassir avval muharrirni ko'rib, «Saqlash»da 42501 olardi (A3-05). Sinf xodimlari — «Xarakteristika» bo'limida.
+    const canSum = SESSION.isAdmin || SESSION.role==='zavuch' || supervisedClasses().has(classKeyOf(s));
     // 📞 To'lov eslatmasi endi ma'lumotnoma ICHIDA emas — «O'quvchilar» ro'yxatidа alohida 📞 tugma
     //   (openPayNote). Bu yerда ko'rsatilmaydi (chop/hisobotга aralashmasin).
-    $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button>${canProf?`<button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-transfer" title="Boshqa maktab so‘rasa yoki o‘qish joyidan — QR kod bilan; telefon, sog‘liq va to‘lov ma’lumotisiz">📨 Ma’lumotnoma</button>`:''}<button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
+    $('#modal .modal-f').innerHTML = `${canPay?`<button type="button" class="btn gold" id="rep-pay" title="Shu o‘quvchiga to‘lov qabul qilish (Naqd/Bank/Terminal)">💵 To‘lov qilish</button>`:`<button type="button" class="btn ghost" id="m-cancel2">Yopish</button>`}${canSum?`<button type="button" class="btn ghost2" id="rep-ts-toggle">📝 Oylik xulosa</button>`:''}${canProf?`<button type="button" class="btn ghost2" id="rep-prof">🎓 Rasmiy profil</button><button type="button" class="btn ghost2" id="rep-transfer" title="Boshqa maktab so‘rasa yoki o‘qish joyidan — QR kod bilan; telefon, sog‘liq va to‘lov ma’lumotisiz">📨 Ma’lumotnoma</button>`:''}<button type="button" class="btn ghost2" id="rep-print">🖨 Ichki hisobot</button>`;
     if($('#m-cancel2')) $('#m-cancel2').onclick=closeModal;
     // reload=renderStudents -> to'lovдан keyin «O'quvchilar» ro'yxatидаги «To'langan» ustuni DARHOL yangilanadi
     //   (bo'lim uzilishi yopiladi: bu yerда qilingan to'lov ro'yxatда ham, To'lovlar bo'limида ham aks etadi).
     if($('#rep-pay')) $('#rep-pay').onclick=()=>openRecordPayment(cache.students||[], renderStudents, { sid:String(s.studentId||s._id), name:s.name||'', amount:dueSum, onDone:()=>openStudentReport(sid, row) });
     $('#rep-print').onclick=()=>{ const live=($('#rep-inner')&&$('#rep-inner').innerHTML)||inner; printHTML(`<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>${esc(s.name||'O‘quvchi')} — ma’lumotnoma</title>${style}</head><body>${live}</body></html>`); };
+    // 🎓 Rasmiy profil uchun o'zlashtirish yig'masi — student_certificate (student-archive.sql; quyidagi 📨 ma'lumotnoma bilan bir xil qoida):
+    //   qabulxona baho / davomat / monitoring / xarakteristika jadvallarini o'zi o'qiy olmaydi (D6) — avval uning profilida bu bo'limlar
+    //   «Ma'lumot yo'q» bo'lib chiqib, QR esa haqiqiy edi (A3-04). Natija: yig'ma; null — funksiya hali o'rnatilmagan (eski baza) va
+    //   direktor / O'IBDO' — oynadagi (o'zi o'qigan) ma'lumot bilan; false — hujjat chiqmaydi (QR ham berilmaydi), sababi aytildi.
+    const certData=async(what)=>{ let CD=null, cerr=null; try{ CD=await rpc('student_certificate', { p_sid:String(s._id||s.studentId) }); }catch(e){ CD=null; cerr=e; }
+      if(CD && typeof CD==='object') return CD;
+      const ec=String((cerr&&cerr.code)||''), msg=String((cerr&&cerr.message)||'');
+      const missing=ec==='PGRST202'||ec==='42883'||/student_certificate/.test(msg);
+      if(missing && (SESSION.isAdmin || SESSION.role==='zavuch')) return null;
+      toast(ec==='42501' ? `${what} berish huquqingiz yo‘q — direktorga murojaat qiling`
+          : ec==='P0002' ? `${what} chiqmadi: bu o‘quvchi ID’si boshqa o‘quvchi bilan takrorlangan — texnik yordamga murojaat qiling`
+          : (missing ? `${what} uchun server yangilanishi kerak (texnik yordam) — hozircha direktor yoki O‘IBDO‘ chop etadi`
+                     : `${what} ma’lumotlarini olib bo‘lmadi — internetni tekshirib, qayta urinib ko‘ring`), true);
+      return false; };
     // 🎓 RASMIY PROFIL — universitetga beriladigan to'liq, muhr/imzo o'rni va QR bilan (to'lov ma'lumoti YO'Q)
     if($('#rep-prof')) $('#rep-prof').onclick=async()=>{
       const pb=$('#rep-prof'); if(pb && pb.disabled) return; if(pb) pb.disabled=true;
+      // O'zlashtirish (davomat, monitoring, baholar, BARCHA choraklar xarakteristikasi, yutuqlar) — 📨 ma'lumotnoma bilan bir xil yig'madan.
+      const CD=await certData('Rasmiy profil'); if(CD===false){ if(pb) pb.disabled=false; return; }
       // QR — o'quvchi ID emas, hujjat tekshirish kodi (issue_doc_token: bir hujjat uchun bitta, ko'p marta tekshiriladi).
       //   Kalit — hujjat id (_id, o'zgarmas): eski importdagi to'qnash studentId boshqa bolaga tushmasin. Kod olinmasa —
       //   hujjat QR'siz chiqadi va SABABI aytiladi (chop etish to'xtamaydi): ruxsat yo'q / ID takrorlangan / internet.
@@ -5336,7 +5521,17 @@ async function openStudentReport(sid, row, opts){
             : 'Tekshirish kodi (QR) olinmadi — rasmiy profil QR’siz chiqdi. Internetni tekshirib, qayta chop eting.', true); }
       const LV={maktab:'Maktab',tuman:'Tuman/shahar',viloyat:'Viloyat',respublika:'Respublika',xalqaro:'Xalqaro'};
       const RS={ishtirokchi:'Ishtirokchi','1':'1-o‘rin','2':'2-o‘rin','3':'3-o‘rin',golib:'G‘olib',laureat:'Laureat'};
-      const ach=achSnap.docs.map(d=>d.data()||{}).filter(o=>o.name||o.subject).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+      const ach=(CD ? (Array.isArray(CD.ach)?CD.ach:[]) : achSnap.docs.map(d=>d.data()||{})).filter(o=>o&&(o.name||o.subject)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+      // Yig'madan (CD) yoki — eski bazada, direktor / O'IBDO' — oynadagi ma'lumotdan.
+      const A=CD&&CD.att ? { present:Number(CD.att.present)||0, late:Number(CD.att.late)||0, absent:Number(CD.att.absent)||0, total:Number(CD.att.total)||0 } : { present, late, absent, total };
+      const aPct=A.total?Math.round(100*(A.present+A.late)/A.total):null;
+      const mRows=CD ? (Array.isArray(CD.mon)?CD.mon:[]).map(x=>`<tr><td>${esc(x.subject||'—')}</td><td style="text-align:center">${esc(String(x.avg==null?'—':x.avg))}</td></tr>`).join('') : monRows;
+      const gHtml=CD ? stuGradesHtml(Array.isArray(CD.grades)?CD.grades:[]) : gradesHtml;
+      let cHtml=charBodyHTML;
+      if(CD){ const byT={}, nByT={}, dt=v=>{ const d=v?new Date(v):null; return d&&!isNaN(d)?d:null; };
+        (Array.isArray(CD.chars)?CD.chars:[]).forEach(c=>{ if(c && String(c.text||'').trim() && !byT[c.term||'']) byT[c.term||'']={ text:String(c.text), by:c.by||'', when:dt(c.at) }; });
+        (Array.isArray(CD.notes)?CD.notes:[]).forEach(n=>{ if(n && String(n.text||'').trim()) (nByT[n.term||'']=nByT[n.term||'']||[]).push({ subject:n.subject||'Fan', text:String(n.text), by:n.by||'', when:dt(n.at) }); });
+        cHtml=charHTMLOf(byT, nByT); }
       const achHTML=ach.length?`<ul style="margin:4px 0;padding-left:20px">${ach.map(o=>{ const what=[o.name, o.subject&&o.name?`(${o.subject})`:o.subject].filter(Boolean).join(' ');
         const tail=[LV[o.level]||o.level, RS[String(o.result)]||o.result].filter(Boolean).join(' — ');
         return `<li style="margin:3px 0">${o.date?`<b>${esc(String(o.date))}:</b> `:''}${esc(what)}${tail?' — '+esc(tail):''}</li>`; }).join('')}</ul>`:'<div class="small muted">Ma’lumot yo‘q.</div>';
@@ -5356,14 +5551,14 @@ async function openStudentReport(sid, row, opts){
         <table class="rep-t"><tbody>${bio.map(x=>`<tr><td style="width:42%;color:#586459">${esc(x[0])}</td><td><b>${esc(x[1])}</b></td></tr>`).join('')}</tbody></table>
         <div class="p-sec">2. O‘zlashtirish ko‘rsatkichlari</div>
         <table class="rep-t"><tbody>
-          <tr><td style="width:42%">Umumiy davomat</td><td><b>${attPct==null?'—':attPct+'%'}</b> <span class="small muted">(kelgan ${present}, kechikkan ${late}, kelmagan ${absent}; jami ${total} kun)</span></td></tr>
+          <tr><td style="width:42%">Umumiy davomat</td><td><b>${aPct==null?'—':aPct+'%'}</b> <span class="small muted">(kelgan ${A.present}, kechikkan ${A.late}, kelmagan ${A.absent}; jami ${A.total} kun)</span></td></tr>
         </tbody></table>
         <div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Monitoring — fan bo‘yicha o‘rtacha ball</div>
-        ${monRows?`<table class="rep-t"><thead><tr><th>Fan</th><th style="text-align:center">Ball</th></tr></thead><tbody>${monRows}</tbody></table>`:'<div class="small muted">Ma’lumot yo‘q.</div>'}
+        ${mRows?`<table class="rep-t"><thead><tr><th>Fan</th><th style="text-align:center">Ball</th></tr></thead><tbody>${mRows}</tbody></table>`:'<div class="small muted">Ma’lumot yo‘q.</div>'}
         <div class="small" style="font-weight:700;color:#155A4E;margin:10px 0 4px">Choraklik baholar</div>
-        ${gradesHtml||'<div class="small muted">Ma’lumot yo‘q.</div>'}
+        ${gHtml||'<div class="small muted">Ma’lumot yo‘q.</div>'}
         <div class="p-sec">3. Xarakteristika (choraklik)</div>
-        ${charBodyHTML}
+        ${cHtml}
         <div class="p-sec">4. Yutuqlar</div>
         ${achHTML}
         <div class="p-foot">
@@ -5537,7 +5732,8 @@ async function openStudentReport(sid, row, opts){
       };
       if(opts && opts.transfer) setTimeout(trOpen, 50);
     }
-    // Oylik xulosa muharriri — o'qituvchi/sinf rahbari QO'LDA yozadi; ota-ona kabinetда ko'radi.
+    // Oylik xulosa muharriri — o'qituvchi/sinf rahbari QO'LDA yozadi; ota-ona kabinetда ko'radi. Faqat yoza oladiganlarga (canSum, A3-05).
+    if(canSum){
     const edWrap=document.createElement('div'); edWrap.id='rep-ts-editor';
     edWrap.style.cssText='display:none;margin-top:16px;border-top:2px solid #1F9982;padding-top:14px';
     edWrap.innerHTML = `<div style="font-weight:700;color:#155A4E;margin-bottom:4px">📝 Oylik xulosa yozish (ota-onaga)</div>
@@ -5571,6 +5767,7 @@ async function openStudentReport(sid, row, opts){
       }catch(e){ $('#ts-status').textContent='Xatolik: '+errMsg(e); toast('Saqlashda xatolik: '+errMsg(e),true); }
       btn.disabled=false;
     };
+    }
   }catch(e){ $('#modal .modal-b').innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; }
 }
 
