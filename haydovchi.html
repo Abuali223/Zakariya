@@ -44,7 +44,7 @@
       <div class="org">IQROR ACADEMY<small>Avtobus — haydovchi paneli</small></div>
     </div>
     <div id="app"></div>
-    <div class="note">🚌 Yo‘lга chiqishda «Yo‘lга chiqdim» bosing. Ekran <b>yoniq</b> tursin — telefonни tutqichга qo‘ying. Yetib borgach «Yetib keldim» bosing.<br><a href="/">iqroacademy.uz</a></div>
+    <div class="note">🚌 Yo‘lga chiqishda «Yo‘lga chiqdim» bosing. Ekran <b>yoniq</b> tursin — telefonni tutqichga qo‘ying. Yetib borgach «Yetib keldim» bosing.<br><a href="/">iqroacademy.uz</a></div>
   </div>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -80,7 +80,7 @@
   function renderSetup(){
     app.innerHTML=`
       <h1>Yo‘nalish tanlanmagan</h1>
-      <p style="color:var(--muted);font-size:14px;margin:0 0 4px">Maxfiy havolani administrator beradi. Yoki qo‘lда kiriting:</p>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 4px">Maxfiy havolani administrator beradi. Yoki qo‘lda kiriting:</p>
       <label>Yo‘nalish kodi</label><input id="f-route" value="${esc(ROUTE)}" placeholder="masalan: asaka">
       <label>Maxfiy kalit</label><input id="f-key" value="${esc(KEY)}" placeholder="kalit">
       <button class="big" id="f-go">Davom etish</button>`;
@@ -104,7 +104,7 @@
       </div>
       <label>Ismingiz (ixtiyoriy)</label>
       <input id="f-name" value="${esc(driverName)}" placeholder="Haydovchi ismi">
-      <button class="big" id="f-start">▶️ Yo‘lга chiqdim</button>
+      <button class="big" id="f-start">▶️ Yo‘lga chiqdim</button>
       <div id="st" class="status" style="display:none"></div>`;
     app.querySelectorAll('.dir button').forEach(b=>b.onclick=()=>{
       direction=b.dataset.d; app.querySelectorAll('.dir button').forEach(x=>x.classList.toggle('on',x===b));
@@ -156,7 +156,7 @@
       if(!lastSentAt) sendNow();   // birinchi fiksni darhol yubor
     }, err=>{
       let m='Joylashuv xatosi';
-      if(err&&err.code===1) m='Ruxsat berilmadi — brauzerда joylashuvni yoqing';
+      if(err&&err.code===1) m='Ruxsat berilmadi — brauzerda joylashuvni yoqing';
       else if(err&&err.code===3) m='Signal kuchsiz — kutilmoqda';
       drawStatus(m);
     }, { enableHighAccuracy:true, maximumAge:4000, timeout:20000 });
@@ -179,7 +179,7 @@
       <div class="route">🚌 ${esc(routeName||ROUTE)}</div>
       <div id="st" class="status"></div>
       <button class="big stop" id="f-stop">⏹️ Yetib keldim (to‘xtatish)</button>
-      <div class="warn">Ekran o‘chib qolmasin — telefonни tutqichда yoniq qoldiring. Ilova yopilса, ulashish to‘xtaydi.</div>`;
+      <div class="warn">Ekran o‘chib qolmasin — telefonni tutqichda yoniq qoldiring. Ilova yopilsa, ulashish to‘xtaydi.</div>`;
     document.getElementById('f-stop').onclick=stopTracking;
     drawStatus('');
   }

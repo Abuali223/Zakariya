@@ -63,7 +63,7 @@ server {
     listen 80;
     server_name api.iqror.uz;
 
-    client_max_body_size 20m;     # rasm/video yuklash uchun
+    client_max_body_size 20m;     # rasm/video yuklash uchun (admin.html VIDEO_MAX_MB = 20 shunga mos; oshirsangiz — ikkalasini va Supabase FILE_SIZE_LIMIT ni birga)
 
     # gzip — REST javoblari (JSON) katta bo'lishi mumkin (o'quvchilar ro'yxati, to'lovlar).
     gzip on;

@@ -247,6 +247,12 @@ create trigger trg_sp_discount_lock before insert or update on public.student_pr
   for each row execute function app.student_private_discount_lock();
 
 -- 4) Meros: mavjud chegirmalar — tasdiqlangan (legacy) yozuvlar (bir marta; qayta ishga tushganda ko'paymaydi).
+--   FAQAT haqiqiy meros: shu guruhda (toifa / aka-uka — app.discount_group) hech qanday oddiy (legacy emas) so'rovi YO'Q o'quvchi.
+--   Sabab (audit A8-01): zanjir har deployda qayta ishlaydi, discount_apply esa tasdiqlangan so'rovni student_private'ga muddatidan
+--   qat'i nazar DARHOL yozadi. Himoyasiz INSERT keyingi deployda o'sha qiymatdan muddatsiz (fromMonth/toMonth bo'sh) «meros» nusxa
+--   yaratardi (haqiqiy so'rov id'si uuid — «on conflict» to'smasdi): vaqtinchalik grant / chegirma doimiy bo'lib, kelajakdagisi
+--   darhol boshlanardi — discountEffective (admin.html) uni eng so'nggi tasdiq deb tanlar, invoice_discount_guard qabul qilardi.
+--   Avvalgi deploylar yaratgan noto'g'ri nusxalar — audit-11-platforma.sql (bekor qilinadi).
 insert into public.discount_requests(id, "studentId", kind, params, reason, status, legacy, "requestedAt", "appliedAt")
 select 'legacy__' || x.sid || '__cat', x.sid,
        case when x.cat = 'olympiad' then 'olympiad' when x.cat = 'contract' then 'contract' else 'teacher_child' end,
@@ -257,6 +263,8 @@ select 'legacy__' || x.sid || '__cat', x.sid,
   from (select coalesce(nullif(s."studentId", ''), p.id) as sid, p."specialCategory" as cat, p."contractAmount" as amt, p."teacherId" as tid
           from public.student_private p left join public.students s on s.id = p.id
          where p."specialCategory" in ('teacher_child', 'olympiad', 'contract')) x
+ where not exists (select 1 from public.discount_requests d
+                    where d."studentId" = x.sid and not d.legacy and app.discount_group(d.kind) = 'category')
 on conflict (id) do nothing;
 insert into public.discount_requests(id, "studentId", kind, params, reason, status, legacy, "requestedAt", "appliedAt")
 select 'legacy__' || coalesce(nullif(s."studentId", ''), p.id) || '__sib', coalesce(nullif(s."studentId", ''), p.id),
@@ -264,6 +272,8 @@ select 'legacy__' || coalesce(nullif(s."studentId", ''), p.id) || '__sib', coale
        'Avvaldan bor (meros) — direktor ko''rib chiqadi', 'approved', true, now(), now()
   from public.student_private p left join public.students s on s.id = p.id
  where p."siblingDiscount" in ('Ha', 'Yoq')
+   and not exists (select 1 from public.discount_requests d
+                    where d."studentId" = coalesce(nullif(s."studentId", ''), p.id) and not d.legacy and app.discount_group(d.kind) = 'sibling')
 on conflict (id) do nothing;
 
 -- 5) Tavsiya (referral)

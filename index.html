@@ -1474,7 +1474,7 @@ function startBusMap(routeId){
     let stale=false; if(p&&p.updatedAt){ try{ const d=p.updatedAt.toDate?p.updatedAt.toDate():new Date(p.updatedAt); stale=(Date.now()-d.getTime())>120000; }catch(e){} }
     const active = p && p.active!==false && p.lat!=null && p.lng!=null && !stale;
     if(!active){
-      if(s2) s2.innerHTML=`⚪️ <b>Avtobus hozir yo‘lда emas.</b>${p&&p.updatedAt?` <span style="color:var(--muted,#6b7d76)">(oxirgi: ${esc(busAgo(p.updatedAt))})</span>`:''}`;
+      if(s2) s2.innerHTML=`⚪️ <b>Avtobus hozir yo‘lda emas.</b>${p&&p.updatedAt?` <span style="color:var(--muted,#6b7d76)">(oxirgi: ${esc(busAgo(p.updatedAt))})</span>`:''}`;
       if(_busMarker){ try{ _busMap.removeLayer(_busMarker); }catch(e){} _busMarker=null; }
       return;
     }
@@ -1485,7 +1485,7 @@ function startBusMap(routeId){
     } else { _busMarker.setLatLng(ll); }
     if(firstFix){ _busMap.setView(ll,15); firstFix=false; }
     const dirLbl = p.direction==='from_school' ? '🏠 Maktabdan' : '🏫 Maktabga';
-    if(s2) s2.innerHTML=`🟢 <b style="color:#137a5f">Avtobus yo‘lда</b> · ${esc(dirLbl)} · <span style="color:var(--muted,#6b7d76)">yangilandi: ${esc(busAgo(p.updatedAt))}</span>`;
+    if(s2) s2.innerHTML=`🟢 <b style="color:#137a5f">Avtobus yo‘lda</b> · ${esc(dirLbl)} · <span style="color:var(--muted,#6b7d76)">yangilandi: ${esc(busAgo(p.updatedAt))}</span>`;
   };
   tick();
   _busTimer=setInterval(tick,7000);
@@ -2868,7 +2868,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           try{ await updatePassword(null, p1);
             try{ history.replaceState(null,'',location.pathname); }catch(e){}
             bg.remove(); alert('✓ Parol yangilandi. Endi hisobingizdan foydalanishingiz mumkin.');
-          }catch(e){ $p('pw-save').disabled=false; perr('Xatolik: '+(e.code||e.message)+'. Havola eskirган bo‘lishi mumkin — qaytadan «Parolni unutdingizmi?» qiling.'); }
+          }catch(e){ $p('pw-save').disabled=false; perr('Xatolik: '+(e.code||e.message)+'. Havola eskirgan bo‘lishi mumkin — qaytadan «Parolni unutdingizmi?» qiling.'); }
         };
         setTimeout(()=>{ try{ $p('pw-new').focus(); }catch(e){} },40);
       }
