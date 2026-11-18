@@ -195,10 +195,17 @@ function assessRisk(s){
   if(score!=null && score>0 && score < RISK_SCORE) reasons.push(`past ball (${score})`);
   return reasons;
 }
+// Arxivdagi o'quvchi (chiqarilgan yoki bitirgan, chiqqan kuni kelgan) xavf tahliliga KIRMAYDI — admin.html stuArchived() bilan
+//   bir xil qoida: holat 'chiqdi' va chiqqan kun (exitAt, bo'lmasa stopFrom) bugun (Toshkent) yoki o'tgan, yoki sana yo'q.
+function isArchived(s, today){
+  if(!s || String(s.payStatus||'')!=='chiqdi') return false;
+  const d=[s.exitAt, s.stopFrom].map(v=>String(v||'').slice(0,10)).find(v=>/^\d{4}-\d{2}-\d{2}$/.test(v));
+  return !d || d <= String(today || new Date(Date.now()+5*3600e3).toISOString().slice(0,10));
+}
 async function riskScan(withAI, lang){
   const snap = await db.collection('students').get();
-  const flagged = [];
-  snap.docs.forEach(d=>{ const s=d.data(); const reasons=assessRisk(s); if(reasons.length) flagged.push({ studentId: s.studentId||d.id, name: s.name||'', grade: s.grade||0, classLetter: s.classLetter||s.track||'', lang: s.lang||'uz', attendance: num(s.attendance), score: num(s.score), reasons }); });
+  const flagged = [], today = new Date(Date.now()+5*3600e3).toISOString().slice(0,10);
+  snap.docs.forEach(d=>{ const s=d.data(); if(isArchived(s, today)) return; const reasons=assessRisk(s); if(reasons.length) flagged.push({ studentId: s.studentId||d.id, name: s.name||'', grade: s.grade||0, classLetter: s.classLetter||s.track||'', lang: s.lang||'uz', attendance: num(s.attendance), score: num(s.score), reasons }); });
   flagged.sort((a,b)=>(a.score||0)-(b.score||0) || (a.attendance||0)-(b.attendance||0));
   if(withAI){ const ai = makeAI();
     for(const f of flagged){
@@ -417,4 +424,4 @@ if(require.main === module){
   })().catch(e=>{ console.error('Xatolik:', e.stack||e.message); process.exit(1); });
 }
 
-module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, riskScan, handleChat, handleStudentSummary, handleRisk, handleSheet, parseSheetRef, makeRequestHandler, dropNonMonthly };
+module.exports = { makeAI, loadKnowledge, loadStudentData, studentDataText, assessRisk, isArchived, riskScan, handleChat, handleStudentSummary, handleRisk, handleSheet, parseSheetRef, makeRequestHandler, dropNonMonthly };

@@ -248,7 +248,7 @@ select zz.chk('K4 claim_child boshqa (ota-ona) hisob uchun ishlaydi', zz.as('U_N
 select zz.chk('B1 buxgalter o''quvchilarni billing ko''rinishidan ko''radi (2)', zz.cnt('U_ACC', 'students_billing'), '^2$');
 select zz.chk('B2 xom students jadvali buxgalterga yopiq', zz.cnt('U_ACC', 'students'), '^0$');
 select zz.chk('B3 students_billing ustunlari o''zgarmagan (telefon / ball / davomat / rasm yo''q)', zz.cols('students_billing'),
-  '^id,studentId,name,grade,classLetter,track,lang,payStatus,activeFrom,stopFrom,pauses,order$');
+  '^id,studentId,name,grade,classLetter,track,lang,payStatus,activeFrom,stopFrom,pauses,order,exitAt,exitReason$');
 select zz.chk('B4 MM va kassir uchun students_billing o''zgarmagan; o''qituvchi — 0', zz.cnt('U_FM', 'students_billing') || zz.cnt('U_KAS', 'students_billing') || zz.cnt('U_TCH', 'students_billing'), '^220$');
 select zz.chk('B5 anon students_billing ni o''qiy olmaydi', zz.cnt(null, 'students_billing'), '^ERR 42501');
 

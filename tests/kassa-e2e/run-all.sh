@@ -2,7 +2,7 @@
 # =====================================================================
 # «Kassa» brauzer ssenariylari — hammasi ketma-ket, har biri YANGI stend bilan (LOKAL; ishga-tushirish.md §3.2, 3-qadam).
 #   bash run-all.sh                     — to'liq to'plam: kassa 1–18 (v1 va v2 dizayn) + to'lov va eski oqimlar (dev va prod zanjir)
-#   bash run-all.sh k5:v1 k3:v2 pay:dev  — tanlanganlari (kN:v1|v2, pay:dev|prod, legacy:dev|prod)
+#   bash run-all.sh k5:v1 k3:v2 pay:dev  — tanlanganlari (kN:v1|v2, pay:dev|prod, legacy:dev|prod, ar:v1|v2 — o'quvchilar arxivi)
 #   Natija: local/out/<vaqt>/summary.txt (har qator: rc, JAMI, fail soni) va har ssenariy chiqishi; oxirida xulosa.
 #   Kutilgan sonlar — README.md («Kutilgan natija»). Hamma qatorda fail=0 va rc=0 bo'lishi kerak.
 # =====================================================================
@@ -22,12 +22,13 @@ run(){   # kN:v1|v2 | pay:dev|prod | legacy:dev|prod
     k1) fresh dev "$spec" && one "$name.$var" e2e-kassa.cjs "$var" ;;
     k[0-9]|k1[0-9]) fresh dev "$spec" && one "$name.$var" "e2e-kassa${name#k}.cjs" "$var" ;;
     pay|legacy) fresh "$var" "$spec" && one "$name.$var" "e2e-$name.cjs" ;;
+    ar) fresh dev "$spec" && one "$name.$var" e2e-arxiv.cjs "$var" ;;   # o'quvchilar arxivi (egasi 2026-11-18)
     *) echo "$spec: noma'lum ssenariy" >> "$SUM" ;;
   esac
 }
 if [ $# -gt 0 ]; then SPECS=("$@"); else
   SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18; do SPECS+=("k$n:v1" "k$n:v2"); done
-  SPECS+=(pay:dev legacy:dev pay:prod legacy:prod)
+  SPECS+=(pay:dev legacy:dev pay:prod legacy:prod ar:v1 ar:v2)
 fi
 for s in "${SPECS[@]}"; do run "$s"; done
 bash "$E2E_DIR/stand.sh" down >/dev/null 2>&1 || true

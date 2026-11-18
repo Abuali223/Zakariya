@@ -113,6 +113,18 @@ async function withServer(mod, fn) {
   ok('aloqasiz matn tegilmaydi (yillik tajriba, choraklik baholar, aka-uka chegirmasi, oldindan ro‘yxat)', D('Ustozlar 10 yillik tajribaga ega. Choraklik baholar kabinetda. Aka-uka chegirmasi 10%. Oldindan ro‘yxatdan o‘ting.') === 'Ustozlar 10 yillik tajribaga ega. Choraklik baholar kabinetda. Aka-uka chegirmasi 10%. Oldindan ro‘yxatdan o‘ting.');
   ok('bo‘sh / null', D('') === '' && D(null) === '');
 
+  sec('isArchived — arxivdagi (chiqarilgan / bitirgan) o‘quvchi xavf tahliliga kirmaydi (admin.html stuArchived bilan bir qoida)');
+  {
+    const A = M.isArchived, T = '2026-11-18';
+    ok('faol — arxivda emas', A({ payStatus: '' }, T) === false && A({ payStatus: 'faol' }, T) === false && A({ payStatus: 'muzlatilgan', stopFrom: '2026-01-01' }, T) === false);
+    ok('chiqdi, sana o‘tgan — arxivda', A({ payStatus: 'chiqdi', exitAt: '2026-11-10' }, T) === true);
+    ok('chiqdi, bugun — arxivda (chiqarilgan kunidan)', A({ payStatus: 'chiqdi', exitAt: T }, T) === true);
+    ok('chiqdi, kelajak sana — hali ro‘yxatda', A({ payStatus: 'chiqdi', exitAt: '2026-12-01' }, T) === false);
+    ok('chiqdi, sanasiz — arxivda', A({ payStatus: 'chiqdi' }, T) === true);
+    ok('eski yozuv: exitAt yo‘q — stopFrom bo‘yicha', A({ payStatus: 'chiqdi', stopFrom: '2026-12-05' }, T) === false && A({ payStatus: 'chiqdi', stopFrom: '2026-10-05' }, T) === true);
+    ok('exitAt stopFrom’dan ustun (muzlatilgandan keyin chiqarilgan)', A({ payStatus: 'chiqdi', stopFrom: '2026-09-15', exitAt: '2026-12-01' }, T) === false);
+  }
+
   sec('allowStudentData: true — yo‘llar qaytadi (kod o‘chirilmagan): avvalgidek ruxsat tekshiruvi');
   M = load({ allowStudentData: true });
   await withServer(M, async call => {

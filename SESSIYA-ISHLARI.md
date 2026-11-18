@@ -2247,6 +2247,43 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
 - **Ochiq (kod, kassa moduli):** «kassa limiti 0» kodda «belgilanmagan» (ogohlantirish yo'q), egasi qarori esa «limit 0 — ortgan pul
   har kuni bankka». Tekshirilgan kunni tuzatish (buxgalter stornosi) — 2-bosqichda; ungacha tartib ochiq.
 
+## 83) O'quvchilar arxivi: chiqarilgan / bitirgan o'quvchi faol sondan chiqadi, «🗄 Arxiv», ma'lumotnoma, bitiruv — 2026-11-18
+
+- **Egasi (2026-11-18):** «Asosiy saytda o'quvchini chiqarishni bossa o'quvchi soni kamaymay turibdi. O'quvchi chiqarilsa yoki maktabni
+  tugatsa arxivga o'tishi kerak. Boshqa maktab ma'lumot so'rasa yubora olish uchun.» Sabab: «O'quvchilar» sahifasi (jami, sinf
+  kartalari), bosh sahifa (klassik va v2) va o'qituvchi jurnallari barcha qatorlarni sanardi — holat «chiqdi» faqat belgi edi.
+- **Qoida (bitta joyda — admin.html `STU-ARCH` bloki, sinovi `assets/js/stu-arch.test.mjs`):** arxivda = holat «chiqdi» VA chiqqan
+  kun (`exitAt`, eski yozuvlarda `stopFrom`) bugun yoki o'tgan, yoki sana yo'q. Chiqarilgan kunining o'zida son kamayadi; kelajak
+  sana bilan chiqarilgan — shu kungacha ro'yxatda («⏳ Chiqadi dd.mm»). Muzlatilgan — arxiv emas. Bitiruvchi — xuddi shu holat,
+  sababi `bitirdi`. Qator bazadan o'chirilmaydi: faktura, to'lov (eski qarz), davomat, baho, ota-ona bog'lanishi ID orqali qoladi.
+  Server hisobotlari (haftalik, Telegram, bo'sh o'rinlar) «chiqdi»ni avvaldan hisobga olmaydi — bitiruvchi ham avtomatik chiqadi.
+- **Faol sonlar:** «O'quvchilar» jami va sinf kartalari, qidiruv (arxivdagi moslar — «🗄 Arxivda yana N ta» havolasi), CSV/PDF eksport,
+  bosh sahifa (ikkala dizayn: son, sinflar bo'yicha, til, ball taqsimoti, xavf ostidagilar), e'lon sinflari, sinf tanlovlari
+  (`classGroupsMap` — arxivsiz; faqat arxivdagilardan iborat sinf tanlovga chiqmaydi), AI yordamchi xavf tahlili (`isArchived`).
+- **Jurnallar:** davomat — avvalgidek sanaga qarab (chiqqan kunigacha); baho va xarakteristika — shu o'quv yilida chiqqan yoki yozuvi
+  bor arxivdagi o'quvchi «Chiqdi dd.mm» / «🎓 Bitirgan» belgisi bilan (o'tgan yillar bitiruvchilari yangi yil ro'yxatiga tushmaydi);
+  monitoring — shu oyda chiqqan yoki shu oyga balli bo'lsa.
+- **«🗄 Arxiv» sahifasi** (Direktor, O'IBDO', qabulxona; avvalgi «📤 Ketganlar» oynasi shunga qo'shildi): qidiruv (ism / ID / JSHSHIR),
+  filtr (chiqarilgan / bitiruvchi, sinf, chiqqan sana oralig'i, qarzdorlar), ketish sabablari yig'masi (bitiruvchilar foizga kirmaydi),
+  qolgan qarz, 📄 ichki ma'lumotnoma, 📨 Ma'lumotnoma, Direktorga — ↩️ qaytarish («⏯️ Holat» → Faollashtirish), 🎓 Bitiruv, CSV
+  (shaxsiy ma'lumot bilan — D7). 300 dan ortiq natija bo'lsa — ogohlantirish bilan cheklanadi.
+- **📨 Ma'lumotnoma** (o'quvchi ma'lumotnomasi oynasida ham; Direktor, O'IBDO', qabulxona): «O'QUVCHI HAQIDA MA'LUMOTNOMA» — arxivdagi
+  uchun «boshqa ta'lim muassasasiga», faol uchun «o'qish joyidan»; shaxsiy ma'lumot, ta'lim ma'lumotlari (qabul, chiqqan sana va
+  asos, ixtiyoriy buyruq № / sana va qabul qiluvchi muassasa), choraklik baholar, davomat, monitoring, ixtiyoriy oxirgi xarakteristika
+  va yutuqlar, QR (`issue_doc_token` 'certificate' — verify.html «Ma'lumotnoma» deb tekshiradi), imzo va muhr o'rni. Telefon
+  raqamlari, sog'liq (D8) va to'lov ma'lumotlari kiritilmaydi.
+- **🎓 Bitiruv** (Direktor, Arxivda): tanlangan sinflar (standart — 11-sinflar) barcha faol o'quvchilari bitta sana bilan «chiqdi» +
+  `bitirdi` (`stuExitPatch` — «⏯️ Holat» oynasidagi qoida: muzlatilganda to'lov ertaroq sanagacha, sinovdagida activeFrom keyingi kun);
+  har o'quvchi bazadagi joriy holatdan yoziladi, allaqachon chiqarilgan o'tkaziladi; oxirida «↻ Qayta hisoblash» eslatmasi. Alohida
+  o'quvchi — «⏯️ Holat» / «⏹️» da yangi sabab «🎓 Maktabni tugatdi (bitiruvchi)».
+- **Baza:** `students_billing` ko'rinishiga `exitAt`, `exitReason` (kassir, hamshira, buxgalter ro'yxatida ham arxiv qoidasi bir xil;
+  `staff-d6.sql` va `nurse-sick.sql` — ikkalasida bir xil tartibda, zanjirni qayta ishga tushirish uchun); `test-fin-rights.sql` B3.
+- **Sinovlar:** `assets/js/stu-arch.test.mjs` (8; `run-suites.sh` o'zi ishga tushiradi), `ai-assistant/ai.test.cjs` (+7 isArchived),
+  brauzer ssenariysi `tests/kassa-e2e/scenarios/e2e-arxiv.cjs` (`run-all.sh ar:v1 ar:v2`; 23 tekshiruv: jami va sinf kartasi, qidiruv
+  havolasi, ⏯️ chiqarish — son darhol kamayadi, kelajak sana, bosh sahifa, Arxiv va filtrlar, 📨 ma'lumotnoma (telefon / to'lovsiz, QR),
+  🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️ va huquqlari, kassir soni) — v1 va v2 da 23/23; «arxiv qoidasi
+  o'chirilgan» mutatsiyada ssenariy yiqiladi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
