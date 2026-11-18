@@ -31,8 +31,8 @@ do $iqror_guard$ begin raise exception 'iqror: invoice-guards.sql ALOHIDA ishga 
 -- =====================================================================
 
 -- ---------- 1) reprice_invoice ----------
--- Faktura summasi/chegirmasini Direktordan boshqasi faqat shu RPC orqali o'zgartiradi (discount-approval.sql himoyasi:
---   bayroq iqror.inv_reprice = '1'). Bayroq FAQAT public.reprice_invoice o'rami ichida qo'yiladi va chiqishda (xato bo'lsa ham)
+-- Faktura summasi/chegirmasini shu RPC qulf ostida o'zgartiradi — chaqiruvchi faqat Direktor yoki server (A4-02, audit-10; discount-
+--   approval.sql himoyasi: bayroq iqror.inv_reprice = '1'). Bayroq FAQAT public.reprice_invoice o'rami ichida qo'yiladi va chiqishda (xato bo'lsa ham)
 --   olib tashlanadi. Avval funksiya darajasidagi «SET iqror.inv_reprice» bandi edi — Supabase'da migratsiya roli (postgres)
 --   superuser emas va maxsus (placeholder) parametr uchun bunday bandga ruxsat yo'q: deploy shu yerda to'xtardi.
 create or replace function app.reprice_invoice_core(p_id text, p_net numeric, p_meta jsonb, p_cancel boolean)
@@ -43,7 +43,10 @@ declare
   v_meta jsonb := coalesce(p_meta, '{}'::jsonb); v_grant boolean; v_nid text; v_refamt numeric := 300000;
 begin
   v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
-  if not (app.is_admin() or app.is_finance() or coalesce(v_claims->>'role','') = 'service_role') then
+  -- A4-02 (audit-10): faqat Direktor yoki server. Narx (p_net) va chegirma maydonlari (p_meta) mijozdan keladi va serverda qayta
+  --   hisoblanmaydi — moliya menejeri / g'aznachi fakturani 1 yoki 0 so'mga tushirib («to'landi»), chegirma tasdig'isiz (D1) qarzni
+  --   yopa olardi. «↻ Qayta hisoblash» tugmasi faqat Direktorda (admin.html); boshqa chaqiruvchi yo'q.
+  if not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
   -- Qulf tartibi apply_payment bilan bir xil: avval o'quvchi (advisory), keyin faktura qatori.
@@ -138,11 +141,16 @@ begin
           on conflict (id) do update set "referrerId" = excluded."referrerId", amount = excluded.amount, month = excluded.month, "appliedAt" = now();
       end loop;
     end if;
-    -- '[holat]' bilan bekor qilingan faktura QAYTA TIKLANDI: bekor qilinganda uning puli avansga o'tgan edi — shu avans
-    --   (eng eski qarzdan boshlab, odatiy waterfall) DARHOL qo'llanadi. Aks holda faktura «kutilmoqda» qarz bo'lib
-    --   ko'rinib (qarz SMS'i ham ketardi), xuddi shu pul avansda turardi. Bir tranzaksiyada; advisory qulf qayta kiriladi.
-    if v_stcancel and coalesce(v_sid,'') <> '' then
-      perform public.apply_payment(v_sid, 0, 'credit', null);
+  end if;
+  -- Avans DARHOL ochiq qarzga (eng eski qarzdan boshlab, odatiy waterfall; bir tranzaksiyada, advisory qulf qayta kiriladi):
+  --   * '[holat]' bilan bekor qilingan faktura QAYTA TIKLANDI — bekor qilinganda uning puli avansga o'tgan edi;
+  --   * A4-03 (audit-10): ortiqcha to'lov hozir avansga o'tdi (holat bo'yicha bekor / narx kamaydi) — oilaning boshqa oyi ochiq bo'lsa;
+  --     holat bo'yicha bekor qilingan (fantom) faktura to'lanmagan bo'lsa ham — u yopilgach, shu sabab to'xtab turgan avans endi qo'llanadi.
+  --   Aks holda faktura «kutilmoqda» qarz bo'lib ko'rinib (qarz SMS'i, «Qarzdorlar», kabinet), xuddi shu pul avansda turardi.
+  --   Holati shubhali o'quvchida (ochiq fakturasi holat bo'yicha «kerak emas» oyda — app.credit_sweep) avans turadi.
+  if (v_excess > 0 or v_stcancel or coalesce(p_cancel, false)) and coalesce(v_sid, '') <> '' then
+    perform app.credit_sweep(v_sid);
+    if not coalesce(p_cancel, false) then
       select coalesce("paidAmount",0), coalesce(status,'') into v_newpaid, v_status from public.invoices where id = p_id;
     end if;
   end if;
@@ -231,7 +239,11 @@ begin
    where id = p_sid or "studentId" = p_sid order by (id = p_sid) desc limit 1;
   if v_sid is null then return jsonb_build_object('ok', false, 'reason', 'student-notfound'); end if;
   update public.payments set "studentId" = v_sid, matched = true, status = 'applied' where id = p_pay_id;
+  -- A4-01 (audit-10): apply_payment musbat summani faqat ichki bayroq bilan qabul qiladi (RF-04). Qator yuqorida qulflangan va
+  --   «unmatched»dan «applied»ga bir marta o'tdi — takror biriktirish rad etiladi. Bayroq faqat shu chaqiruv davomida.
+  perform set_config('iqror.assign_rpc', '1', true);
   v_res := public.apply_payment(v_sid, v_pay.amount, coalesce(nullif(v_pay.provider, ''), 'click'), p_pay_id);
+  perform set_config('iqror.assign_rpc', '', true);
   return jsonb_build_object('ok', true, 'sid', v_sid, 'apply', v_res);
 end $$;
 revoke all on function public.assign_payment(text, text) from public, anon;

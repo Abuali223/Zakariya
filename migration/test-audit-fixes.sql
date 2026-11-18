@@ -160,11 +160,15 @@ select zz.chk('U02 upsert (avvalgi usul) — RLS insert tekshiruvi rad etadi', z
 select zz.chk('U03 ota-ona o''z rolini o''zgartira olmaydi', zz.as('U_PA', $q$with u as (update public.users set role = 'director' where id = 'U_PA' returning 1) select count(*)::text from u$q$), '^(ERR 42501|0$)');
 
 -- ===== (7) reprice_invoice bayrog'i =====
-select zz.chk('P01 Moliya menejeri faktura summasini to''g''ridan-to''g''ri o''zgartira olmaydi', zz.as('U_FM', $q$with u as (update public.invoices set amount = 900000 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^ERR 42501');
-select zz.chk('P02 Moliya menejeri reprice_invoice RPC orqali o''zgartiradi', zz.as('U_FM', $q$select public.reprice_invoice('T-12__2098-01', 800000, '{}'::jsonb, false)->>'ok'$q$), '^true$');
+-- A4-02 (audit-10): moliya menejeri fakturani to'g'ridan-to'g'ri ham (inv_upd — faqat Direktor: 0 qator), reprice_invoice bilan ham
+--   o'zgartira olmaydi (narx va chegirma mijozdan keladi — 0 / 1 so'mga tushirib «to'landi» qilardi). «↻ Qayta hisoblash» — Direktor.
+select zz.chk('P01 Moliya menejeri faktura summasini to''g''ridan-to''g''ri o''zgartira olmaydi (0 qator)', zz.as('U_FM', $q$with u as (update public.invoices set amount = 900000 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^0$');
+select zz.chk('P02 Moliya menejeri reprice_invoice — rad (A4-02), summa o''zgarmadi', zz.as('U_FM', $q$select public.reprice_invoice('T-12__2098-01', 800000, '{}'::jsonb, false)->>'ok'$q$)
+  || '|' || (select amount::bigint::text from public.invoices where id = 'T-12__2098-01'), '^ERR 42501.*\|1000000$');
+select zz.chk('P02a Direktor reprice_invoice RPC orqali o''zgartiradi', zz.as('U_DIR', $q$select public.reprice_invoice('T-12__2098-01', 800000, '{}'::jsonb, false)->>'ok'$q$), '^true$');
 select zz.chk('P02b summa 800 000 bo''ldi', (select amount::bigint::text from public.invoices where id = 'T-12__2098-01'), '^800000$');
 select zz.chk('P03 RPC''dan keyin tranzaksiyada bayroq qolmadi', (select coalesce(current_setting('iqror.inv_reprice', true), '')), '^$');
-select zz.chk('P04 bayroq qolmagani uchun keyingi to''g''ridan-to''g''ri o''zgartirish yana rad etiladi', zz.as('U_FM', $q$with u as (update public.invoices set amount = 1 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^ERR 42501');
+select zz.chk('P04 keyingi to''g''ridan-to''g''ri o''zgartirish (moliya) yana ta''sirsiz', zz.as('U_FM', $q$with u as (update public.invoices set amount = 1 where id = 'T-12__2098-01' returning 1) select count(*)::text from u$q$), '^0$');
 select zz.chk('P05 xato bo''lsa ham bayroq qolmaydi (ruxsatsiz rol: ota-ona)', zz.as('U_PA', $q$select public.reprice_invoice('T-12__2098-01', 1, '{}'::jsonb, false)->>'ok'$q$) || '|' || coalesce(current_setting('iqror.inv_reprice', true), ''), '^ERR 42501.*\|$');
 
 -- ===== (8) maosh vedomosti: o'z qatori Direktor tasdig'ida — asosiy va teskari havola =====

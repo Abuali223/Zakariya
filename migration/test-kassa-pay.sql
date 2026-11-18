@@ -296,26 +296,30 @@ select zz.chk('V5 avansga tushgan to''lov ham bekor qilinadi (Moliya menejeri): 
 
 -- ---------- Orderga bog'langan to'lov qatori: faqat kassa funksiyalari orqali ----------
 select zz.put('LK', (select id from public.payments where "cashDocId" is not null and status = 'applied' and provider = 'cash' order by id limit 1));
+-- A4-01 (audit-10): to'lov qatorini to'g'ridan-to'g'ri (REST) faqat Direktor yangilay oladi (moliya / kassir — 0 qator) — kassa himoyasi
+--   (trg_kassa_pay_guard) Direktorning yozuvida avvalgidek birinchi ishlaydi.
 select zz.chk('LK1 orderga bog''langan to''lov: summa, holat (bekor), o''quvchi, kun, havola va fiskal № ni to''g''ridan-to''g''ri o''zgartirib bo''lmaydi',
+  zz.as('U_DIR', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set status = 'canceled' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set "studentId" = 'T-2' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set raw = raw || '{"date":"2027-01-03"}' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set "cashDocId" = null, "fiscalNo" = null where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
   zz.as('U_FM', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
-  zz.as('U_KAS', format($q$with x as (update public.payments set status = 'canceled' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
-  zz.as('U_FM', format($q$with x as (update public.payments set "studentId" = 'T-2' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
-  zz.as('U_FM', format($q$with x as (update public.payments set raw = raw || '{"date":"2027-01-03"}' where id = %L returning id) select id from x$q$, zz.get('LK'))) || ' | ' ||
-  zz.as('U_DIR', format($q$with x as (update public.payments set "cashDocId" = null, "fiscalNo" = null where id = %L returning id) select id from x$q$, zz.get('LK'))),
-  '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\]');
+  zz.as('U_KAS', format($q$with x as (update public.payments set status = 'canceled' where id = %L returning id) select id from x$q$, zz.get('LK'))),
+  '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| <null> \| <null>$');
 select zz.chk('LK2 havolani faqat kassa qo''yadi: yangi qatorda ham, bog''lanmagan qatorga ham — rad; bog''lanmagan qator va izoh — avvalgidek',
   zz.as('U_FM', format($q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw, "cashDocId") values ('fake_lk', 'T-1', 'cash', 1, 'applied', true, '{}', %L) returning id) select id from x$q$,
                        (select "cashDocId" from public.payments where id = zz.get('LK')))) || ' | ' ||
-  zz.as('U_FM', format($q$with x as (update public.payments set "cashDocId" = %L where id = 'man_j1_0001' returning id) select id from x$q$,
+  zz.as('U_DIR', format($q$with x as (update public.payments set "cashDocId" = %L where id = 'man_j1_0001' returning id) select id from x$q$,
                        (select "cashDocId" from public.payments where id = zz.get('LK')))) || ' | ' ||
-  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"note":"tuzatildi"}' where id = 'man_j1_0001' returning id) select id from x$q$) || ' | ' ||
-  zz.as('U_FM', format($q$with x as (update public.payments set raw = raw || '{"manualReverseDone":true}' where id = %L returning id) select id from x$q$, zz.get('LK'))),
+  zz.as('U_DIR', $q$with x as (update public.payments set raw = raw || '{"note":"tuzatildi"}' where id = 'man_j1_0001' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', format($q$with x as (update public.payments set raw = raw || '{"manualReverseDone":true}' where id = %L returning id) select id from x$q$, zz.get('LK'))),
   '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| man_j1_0001 \| ' || zz.get('LK') || '$');
 savepoint lk3;
 set local iqror.migrating = '1';
 update public.payments set "studentId" = 'kanon-' || "studentId" where id = zz.get('LK');
 select (select count(*)::text from public.payments where id = zz.get('LK') and "studentId" like 'kanon-%')
-  || ' | ' || zz.as('U_FM', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) as lk3 \gset
+  || ' | ' || zz.as('U_DIR', format($q$with x as (update public.payments set amount = amount + 1 where id = %L returning id) select id from x$q$, zz.get('LK'))) as lk3 \gset
 rollback to savepoint lk3;   -- (savepoint ichidagi natija psql o'zgaruvchisida saqlanadi)
 select zz.chk('LK3 deploy paytidagi kalit kanonlash (faqat «studentId») o''tadi; boshqa o''zgarish deploy paytida ham rad', :'lk3', '^1 \| ERR 42501 \[kassa:linked_row\]');
 
@@ -363,9 +367,9 @@ insert into public.payments (id, "studentId", provider, amount, status, "payerNa
   ('bnk_n2', 'T-N1', 'bank', 30000, 'applied', '', true, '{"manual":true}', '2027-01-04 09:40+05'),
   ('clk_n2u', '', 'click', 60000, 'unmatched', 'Noma''lum', false, '{}', '2027-01-04 09:50+05');
 set local session_replication_role = origin;
-select zz.as('U_KAS', $q$with x as (update public.payments set status = 'applied' where id = 'man_n2_old' returning id) select id from x$q$) || ' | '
+select zz.as('U_DIR', $q$with x as (update public.payments set status = 'applied' where id = 'man_n2_old' returning id) select id from x$q$) || ' | '
   || zz.as('U_KAS', $q$select public.apply_payment('T-N1', 40000, 'cash', 'man_n2_old')::text$q$) || ' | '
-  || zz.as('U_FM', $q$with x as (update public.payments set provider = 'cash' where id = 'bnk_n2' returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.payments set provider = 'cash' where id = 'bnk_n2' returning id) select id from x$q$) || ' | '
   || zz.as('U_FM', $q$select public.split_payment('clk_n2u', 'cash', '[{"sid":"T-N1","amount":60000}]')::text$q$) || ' | '
   || (select status || ':' || provider from public.payments where id = 'man_n2_old') || ':' || (select status from public.payments where id = 'clk_n2u')
   || ':' || (select trim_scale("paidAmount")::text from public.invoices where id = 'iN1') as n2 \gset
@@ -376,8 +380,9 @@ select zz.jd(zz.as('U_FM', $q$select public.split_payment('clk_n2u', 'click', '[
 -- (faktura alohida so'rov bilan o'qiladi: yuqoridagi so'rov o'z boshidagi holatni ko'radi)
 select :'n2b' || ':' || (select trim_scale("paidAmount")::text from public.invoices where id = 'iN1') as n2b \gset
 rollback to savepoint n2;
+-- (A4-01, audit-10: kassirning apply_payment''i endi kassa qoidasidan OLDIN — RF-04 bilan rad: «pending» qator pul RPC'si bayrog'i emas)
 select zz.chk('N2 eski 3 bosqichli yo''l: «pending» naqd qatorni «qo''llangan» qilish, uni apply_payment bilan qo''llash, bank qatorini naqdga o''zgartirish, bo''lishda «naqd» bola qator — rad; holat o''zgarmadi',
-  :'n2', '^ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| pending:cash:unmatched:0$');
+  :'n2', '^ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[\] apply_payment: to''lov yozuvisiz.* \| ERR 42501 \[kassa:cash_only_kassa\].* \| ERR 42501 \[kassa:cash_only_kassa\].* \| pending:cash:unmatched:0$');
 select zz.chk('N2b ijobiy: bo''lish (Click), Direktorning naqdsiz apply_payment''i — avvalgidek; eski «pending» naqd qator «💵 To''lov» bilan kirim orderi orqali tugadi (faktura 60 000 + 10 000 + 40 000)',
   :'n2b', '^true:true:posted:110000$');
 -- reverse_payment (eski pul RPC'si): kassa hujjati bilan to'langan qism ayirilmaydi; naqdsiz qismi — avvalgidek; avansdan qaytarib olish — faqat server
@@ -419,7 +424,8 @@ savepoint n4;
 select zz.as('U_KAS', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n4_0001', 'T-1', 'cash', 1000, 'pending', true, '{"manual":true,"date":"2027-01-03"}') returning id) select id from x$q$) || ' | '
   || zz.as('U_DIR', $q$with x as (insert into public.payments (id, "studentId", provider, amount, status, matched, raw) values ('man_n4_0002', 'T-1', 'cash', 1000, 'pending', true, '{"manual":true,"date":"2027-01-03"}') returning id) select id from x$q$) as n4 \gset
 rollback to savepoint n4;
-select zz.chk('N4 kassa ishlamagan kun (03.01) sanali naqd qator: kassir — rad (kassa:pre_live), Direktor — avvalgidek', :'n4', '^ERR 42501 \[kassa:pre_live\] To''lov kuni \(03\.01\.2027\).* \| man_n4_0002$');
+-- (A4-01, audit-10: Direktor ham to'lov qatorini REST orqali yarata olmaydi — kech qog'oz «💵 To'lov» oynasidan haqiqiy sanasi bilan, PL5)
+select zz.chk('N4 kassa ishlamagan kun (03.01) sanali naqd qator: kassir — rad (kassa:pre_live), Direktorning to''g''ridan-to''g''ri qatori — rad (pay:direct)', :'n4', '^ERR 42501 \[kassa:pre_live\] To''lov kuni \(03\.01\.2027\).* \| ERR 42501 \[pay:direct\]');
 -- g8 (tekshiruvchi): kanal yozuvi katta-kichik harf yoki bo'sh joy bilan ('CASH', ' Cash ') ham naqd — to'g'ridan-to'g'ri qator va naqd kanal
 --   bilan apply_payment / apply_to_invoice rad (kassa_pay_guard, audit-7.sql, audit-5.sql)
 select zz.chk('N1d «CASH» / « Cash » kanal yozuvi ham naqd: kassir va Moliya menejeri qatori, Direktorning apply_payment / apply_to_invoice''i — rad, iz yo''q',
@@ -455,7 +461,7 @@ set local session_replication_role = replica;
 insert into public.payments (id, "studentId", provider, amount, status, "payerName", matched, raw, "createdAt") values
   ('man_n7_old', 'T-1', 'cash', 1000, 'applied', '', true, '{}', null);
 set local session_replication_role = origin;
-select zz.as('U_FM', $q$with x as (update public.payments set "payerName" = 'Tuzatildi' where id = 'man_n7_old' returning id) select id from x$q$) as n7 \gset
+select zz.as('U_DIR', $q$with x as (update public.payments set "payerName" = 'Tuzatildi' where id = 'man_n7_old' returning id) select id from x$q$) as n7 \gset
 select :'n7' || ' | ' || coalesce((select "payerName" from public.payments where id = 'man_n7_old'), '-') as n7 \gset
 rollback to savepoint n7;
 select zz.chk('N7 createdAt bo''sh eski naqd to''lov qatorining to''lovchi ismini tuzatish (kassa ishlayapti) — avvalgidek o''tadi', :'n7', '^man_n7_old \| Tuzatildi$');
@@ -580,8 +586,10 @@ select zz.as('U_DIR', $q$with x as (insert into public.payments (id, "studentId"
   || zz.as('U_FM', $q$with x as (insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", amount, month, date, method) values ('adv_n5', 'IQX-T1', 'staff:st1', 'Sinov', 1000, '2027-02', null, 'cash') returning id) select id from x$q$) || ' | '
   || zz.as('U_FM', $q$with x as (update public.expenses set date = null where id = 'e_r4' returning id) select id from x$q$) as n5 \gset
 rollback to savepoint n5;
-select zz.chk('N5 ushlangan kassa: oxirgi kassa kuni sanali naqd qator — Direktorga ham rad; to''xtatilgan davr sanasi — avvalgidek; sanasiz naqd / usulsiz yozuv va sanani bo''shatish — rad (kassa:cash_date)',
-  :'n5', '^ERR 42501 \[kassa:paused_live_day\] To''lov kuni \(01\.02\.2027\) — oxirgi kassa kuni.* \| man_n5_0002 \| ERR 42501 \[kassa:cash_date\] Kassa to''xtatilgan: naqd.* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].*$');
+-- (A4-01, audit-10: to'xtatilgan davr sanasi bilan kassa himoyasi o'tkazadi, lekin to'lov qatorini REST orqali endi hech kim yaratmaydi —
+--   pay:direct; shu davr puli «💵 To'lov» orqali, KO-1 siz — R4a)
+select zz.chk('N5 ushlangan kassa: oxirgi kassa kuni sanali naqd qator — Direktorga ham rad; to''xtatilgan davr sanasi — kassa himoyasidan o''tadi (qator — pay:direct); sanasiz naqd / usulsiz yozuv va sanani bo''shatish — rad (kassa:cash_date)',
+  :'n5', '^ERR 42501 \[kassa:paused_live_day\] To''lov kuni \(01\.02\.2027\) — oxirgi kassa kuni.* \| ERR 42501 \[pay:direct\].* \| ERR 42501 \[kassa:cash_date\] Kassa to''xtatilgan: naqd.* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].* \| ERR 42501 \[kassa:cash_date\].*$');
 select zz.clock('2027-02-02 09:00+05');
 -- Komissiya sanadi: 4 725 000 + 60 000 (o'quv to'lovi) − 25 000 (xarajat) = 4 760 000. Avval xato (4 750 000), keyin qayta sanaldi.
 select zz.chk('R5 qayta ishga tushirish qoldig''ini faqat Direktor kiritadi; kun oxirgi kassa kunidan keyin va bugundan oldin emas',

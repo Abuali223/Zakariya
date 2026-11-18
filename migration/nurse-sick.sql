@@ -684,6 +684,9 @@ begin
   perform set_config('iqror.sick_rpc', '1', true);
   update public.sick_notes set "appliedDays" = "appliedDays" || v_map where id = p_id;
   perform set_config('iqror.sick_rpc', '', true);
+  -- A4-03 (audit-10): qaytarilgan kunlar puli SHU tranzaksiyada ketgan o'quvchining ochiq qarziga (eng eskisidan) — aks holda qarz SMS'i
+  --   va «Qarzdorlar» qarzni ko'rsatib, xuddi shu pul avansda turardi. Holati shubhali (masalan sanasiz «chiqdi») — avans turadi.
+  perform app.credit_sweep(n."studentId");
   return jsonb_build_object('ok', true, 'days', array_length(v_days, 1), 'amount', v_amt);
 end $$;
 revoke all on function public.sick_note_refund(text) from public, anon;

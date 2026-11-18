@@ -151,23 +151,27 @@ insert into public.payments (id, "studentId", provider, amount, status, matched,
   ('man_jan_1', 'T-1', 'bank', 80000, 'applied', true, '{"manual":true,"date":"2027-01-01"}', '2027-01-01 11:00+05'),
   ('man_jan_ph', 'T-1', 'bank', 90000, 'pending', true, '{"manual":true,"date":"2027-01-01"}', '2027-01-01 12:00+05');   -- takror (fantom) yozuv
 set local session_replication_role = origin;
+-- A4-01 (audit-10): to'lov qatorini to'g'ridan-to'g'ri (REST) faqat Direktor o'zgartiradi (moliya / kassir — 0 qator); qulf tekshiruvi
+--   (trg_fin_zlock) Direktorning yozuvida ham avvalgidek BIRINCHI ishlaydi.
 select zz.chk('L1e yopilgan davr to''lovini ochiq kunga ko''chirish, ochiq kun to''lovini yopilgan davrga ko''chirish, summa va kanalni o''zgartirish — rad',
-  zz.as('U_FM', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
-  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"date":"2026-12-29"}' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set raw = raw || '{"date":"2026-12-29"}' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set amount = 1 where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set provider = 'click' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
   zz.as('U_KAS', $q$with x as (update public.payments set amount = 1 where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
   zz.as('U_FM', $q$with x as (update public.payments set provider = 'click' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
   (select string_agg(app.pay_day("createdAt", raw)::text || '/' || trim_scale(amount)::text, ',' order by id) from public.payments where id in ('man_dec_late', 'man_jan_1')),
-  '^ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| 2026-12-30/70000,2027-01-01/80000$');
-select zz.chk('L1f kunga ta''sir qilmaydigan o''zgarish (izoh) va ochiq davr ichida kunni o''zgartirish — avvalgidek; server — mustasno',
-  zz.as('U_FM', $q$with x as (update public.payments set raw = raw || '{"note":"izoh"}' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
-  zz.as('U_FM', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
+  '^ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| <null> \| <null> \| 2026-12-30/70000,2027-01-01/80000$');
+select zz.chk('L1f kunga ta''sir qilmaydigan o''zgarish (izoh, Direktor) — avvalgidek; server — mustasno',
+  zz.as('U_DIR', $q$with x as (update public.payments set raw = raw || '{"note":"izoh"}' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set raw = raw - 'manual' where id = 'man_jan_1' returning id) select id from x$q$) || ' | ' ||
   zz.as('SYSTEM', $q$with x as (update public.payments set amount = 70001 where id = 'man_dec_late' returning id) select id from x$q$),
   '^man_dec_late \| man_jan_1 \| man_dec_late$');
 -- Sahifaning setDoc'i — upsert (INSERT … ON CONFLICT (id) DO UPDATE, faqat berilgan ustunlar): «qo'lda tuzatildi» belgisi, fantom yozuvni bekor qilish.
 select zz.put('L1g',
   zz.as('U_DIR', $q$with x as (insert into public.payments (id, raw) values ('man_dec_late', (select raw from public.payments where id = 'man_dec_late') || '{"manualReverseDone":true}') on conflict (id) do update set raw = excluded.raw returning id) select id from x$q$) || ' | ' ||
   zz.as('U_DIR', $q$with x as (insert into public.payments (id, status) values ('man_dec_late', 'canceled') on conflict (id) do update set status = excluded.status returning id) select id from x$q$) || ' | ' ||
-  zz.as('U_FM', $q$with x as (update public.payments set status = 'canceled' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
+  zz.as('U_DIR', $q$with x as (update public.payments set status = 'canceled' where id = 'man_dec_late' returning id) select id from x$q$) || ' | ' ||
   zz.as('U_DIR', $q$with x as (insert into public.payments (id, status) values ('man_jan_ph', 'canceled') on conflict (id) do update set status = excluded.status returning id) select id from x$q$));
 select zz.chk('L1g upsert bilan belgi qo''yish yopilgan davr to''lovida ham o''tadi; bekor qilish (upsert yoki UPDATE) — rad; ochiq davrda fantom yozuvni bekor qilish — avvalgidek',
   zz.get('L1g') || ' | ' || (select string_agg(id || '/' || status || '/' || coalesce(raw ->> 'manualReverseDone', '-') || '/' || app.pay_day("createdAt", raw)::text, ',' order by id) from public.payments where id in ('man_dec_late', 'man_jan_ph')),
@@ -190,12 +194,14 @@ select zz.chk('L8 yopilgan davr (20.12) biriktirilmagan to''lovini qaytarish (Di
   zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_s1', 250000, 'Egasi topilmadi', false, '', 'rf_l8_0001')::text$q$) || ' | '
   || (select status from public.payments where id = 'pu_s1') || ':' || (select count(*) from public.refunds where "targetId" = 'pu_s1'),
   '^ERR 42501 \[fin:locked\] To‘lov \(20\.12\.2026 kuni\) yopilgan davrga tegishli \(31\.12\.2026 gacha yopilgan\): uning holati yoki o''quvchisi o''zgarsa.*Direktor «Davr»da davrni sababi bilan qayta ochadi.* \| unmatched:0$');
-select zz.chk('L8b yopilgan davr to''lovi holatini to''g''ridan-to''g''ri o''zgartirish: Moliya menejeri «reversed» / «failed», kassir «pending» — rad',
-  zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
-  || zz.as('U_FM', $q$with x as (update public.payments set status = 'failed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+select zz.chk('L8b yopilgan davr to''lovi holatini to''g''ridan-to''g''ri o''zgartirish: Direktor «reversed» / «failed» / «pending» — rad (qulf birinchi); moliya / kassir — 0 qator (A4-01)',
+  zz.as('U_DIR', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.payments set status = 'failed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.payments set status = 'pending' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
   || zz.as('U_KAS', $q$with x as (update public.payments set status = 'pending' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
   || (select status from public.payments where id = 'pc_s1'),
-  '^ERR 42501 \[fin:locked\] To‘lov \(21\.12\.2026 kuni\).* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| applied$');
+  '^ERR 42501 \[fin:locked\] To‘lov \(21\.12\.2026 kuni\).* \| ERR 42501 \[fin:locked\].* \| ERR 42501 \[fin:locked\].* \| <null> \| <null> \| applied$');
 select zz.put('L8c1', zz.as('U_FM', $q$select public.assign_payment('pu_s2', 'T-1')::text$q$));
 select zz.put('L8c2', zz.as('U_FM', $q$select public.split_payment('pu_s3', 'click', '[{"sid":"T-1","amount":90000}]')::text$q$));
 select zz.chk('L8c yopilgan davr biriktirilmagan to''lovini biriktirish (o''quvchi o''zgaradi) — rad; bo''lish (tushum o''zgarmaydi) — avvalgidek; dekabr tushumi o''zgarmadi',
@@ -203,11 +209,14 @@ select zz.chk('L8c yopilgan davr biriktirilmagan to''lovini biriktirish (o''quvc
   || (select status from public.payments where id = 'pu_s2') || ':' || (select status from public.payments where id = 'pu_s3') || ' | '
   || ((select count(*) || ':' || trim_scale(sum(amount)) from app.fin_receipts('2026-12-01', '2026-12-31')) = zz.get('L8r0'))::text,
   '^ERR 42501 \[fin:locked\] To‘lov \(22\.12\.2026 kuni\).* \| true \| unmatched:split \| true$');
-select zz.chk('L8d ochiq davr (02.01): biriktirilmagan to''lovni qaytarish va holatni o''zgartirish — avvalgidek',
+-- A4-01 (audit-10): qo'llangan to'lov holatini to'g'ridan-to'g'ri o'zgartirish ochiq davrda ham yo'q (moliya — 0 qator; Direktor — pay:direct):
+--   qo'llangan to'lov «↩ Qaytarish» (refund_invoice) orqali, faqat qo'llanmagan (fantom) yozuv «🚫 Bekor» qilinadi (L1g).
+select zz.chk('L8d ochiq davr (02.01): biriktirilmagan to''lovni qaytarish — avvalgidek; qo''llangan to''lov holatini to''g''ridan-to''g''ri o''zgartirish — rad',
   (zz.js(zz.as('U_DIR', $q$select public.refund_invoice('payment', 'pu_j1', 40000, 'Egasi topilmadi', false, '', 'rf_l8_0002')::text$q$)) ->> 'ok') || ' | '
   || zz.as('U_FM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_j1' returning status) select status from x$q$) || ' | '
-  || zz.as('U_FM', $q$with x as (update public.payments set status = 'applied' where id = 'pc_j1' returning status) select status from x$q$),
-  '^true \| reversed \| applied$');
+  || zz.as('U_DIR', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_j1' returning status) select status from x$q$) || ' | '
+  || (select status from public.payments where id = 'pc_j1'),
+  '^true \| <null> \| ERR 42501 \[pay:direct\].* \| applied$');
 select zz.chk('L8e server (webhook) yopilgan davr to''lovini qaytara oladi — tizim mustasno',
   zz.as('SYSTEM', $q$with x as (update public.payments set status = 'reversed' where id = 'pc_s1' returning status) select status from x$q$) || ' | '
   || zz.as('SYSTEM', $q$with x as (update public.payments set status = 'applied' where id = 'pc_s1' returning status) select status from x$q$),

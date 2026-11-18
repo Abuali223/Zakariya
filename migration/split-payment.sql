@@ -81,7 +81,12 @@ begin
     insert into public.payments(id, "studentId", provider, amount, status, "payerName", matched, "createdAt")
       values (v_child_id, v_sid, v_provider, v_amt, 'applied', v_pname, true, now())
       on conflict (id) do nothing;
+    -- A4-01 (audit-10): apply_payment musbat summani faqat ichki bayroq bilan qabul qiladi (RF-04) — ota qator yuqorida qulflangan va
+    --   oxirida 'split' bo'ladi (takror bo'lish — dup). Bayroq bola qator yozilgandan KEYIN va faqat shu chaqiruv davomida (kassa
+    --   qoidalari — naqd bola qator — o'zgarmaydi).
+    perform set_config('iqror.assign_rpc', '1', true);
     v_res := public.apply_payment(v_sid, v_amt, v_provider, v_child_id);
+    perform set_config('iqror.assign_rpc', '', true);
     v_results := v_results || jsonb_build_object('sid', v_sid, 'amount', v_amt, 'apply', v_res);
   end loop;
 

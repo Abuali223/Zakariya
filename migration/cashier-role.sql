@@ -9,7 +9,7 @@ do $iqror_guard$ begin raise exception 'iqror: cashier-role.sql ALOHIDA ishga tu
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 --
 -- Kassir: o'quvchini topib to'lov qabul qiladi (invoices/payments/student_credit/
--- applied_payments). MAOSH, XARAJAT, moliya HISOBOTLARI, narx jadvali — YO'Q.
+-- applied_payments; payments'ga yozuv faqat pul RPC'lari orqali — A4-01). MAOSH, XARAJAT, moliya HISOBOTLARI, narx jadvali — YO'Q.
 -- run-all.sql da staff-access.sql/manual-payments.sql DAN KEYIN ishlashi shart
 -- (shu policilar ustiga is_cashier qo'shadi). Idempotent.
 -- =====================================================================
@@ -28,13 +28,18 @@ create policy inv_sel on invoices for select
 drop policy if exists inv_upd on invoices;
 create policy inv_upd on invoices for update using (app.is_admin() or app.is_finance() or app.is_cashier()) with check (app.is_admin() or app.is_finance() or app.is_cashier());
 
--- payments: to'lovni yozish/o'qish/biriktirish
+-- payments: o'qish — to'lov oluvchilar. YOZISH (A4-01, audit-10): to'g'ridan-to'g'ri (REST) — FAQAT Direktor, sahifadagi ikki amali uchun
+--   («🚫 Bekor» — fantom yozuv, «✓ Bajarildi» — qaytarilgan to'lov belgisi; ikkalasi setDoc = upsert, shuning uchun INSERT ham). Kassir va
+--   moliya to'lovni faqat pul RPC'lari orqali yozadi (record_manual_payment, assign_payment, split_payment — SECURITY DEFINER, RLS'ni
+--   chetlab o'tadi). Avval ular REST orqali soxta «Click» qatori yozib biriktira, «pending» qator bilan qarzni pulsiz yopa yoki qabul
+--   qilingan naqd to'lovning summasi / kanalini / holatini o'zgartira olardi (kassa hisobotidan pul yo'qolardi). Direktor ham nimani
+--   o'zgartira olishi — audit-10-tolov.sql (app.pay_direct_guard).
 drop policy if exists pay_sel on payments;
 create policy pay_sel on payments for select using (app.is_admin() or app.is_finance() or app.is_cashier());
 drop policy if exists pay_ins on payments;
-create policy pay_ins on payments for insert with check (app.is_admin() or app.is_finance() or app.is_cashier());
+create policy pay_ins on payments for insert with check (app.is_admin());
 drop policy if exists pay_upd on payments;
-create policy pay_upd on payments for update using (app.is_admin() or app.is_finance() or app.is_cashier()) with check (app.is_admin() or app.is_finance() or app.is_cashier());
+create policy pay_upd on payments for update using (app.is_admin()) with check (app.is_admin());
 
 -- student_credit: avans yozish/o'qish (to'lov biriktirishda)
 drop policy if exists sc_credit_sel on student_credit;

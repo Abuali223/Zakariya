@@ -17,11 +17,14 @@ do $iqror_guard$ begin raise exception 'iqror: audit-9.sql ALOHIDA ishga tushiri
 -- Idempotent — QAYTA ishga tushirishга xavfsiz. run-all.sql + deploy.sh'да.
 -- =====================================================================
 
--- invoices: INSERT/UPDATE -> direktor/moliya (kassir emas). DELETE allaqachon direktor (rls.sql).
+-- invoices: INSERT -> direktor/moliya (kassir emas; moliya menejeri faqat «invoiceCreators» sozlamasi bilan — discount-approval.sql).
+--   DELETE allaqachon direktor (rls.sql). UPDATE -> FAQAT direktor (A4-02, audit-10): fakturani o'zgartiradigan sahifa amallari
+--   (yaratish, «↻ Qayta hisoblash», «🗑 To'lanmaganlarni tozalash») Direktorda; moliya «Bekor»ni cancel_invoice RPC orqali qiladi.
+--   Avval moliya menejeri / g'aznachi REST orqali {status:'paid', paidAmount:…} yozib, qarzni to'lovsiz va tasdiqsiz yopa olardi.
 drop policy if exists inv_ins on public.invoices;
 create policy inv_ins on public.invoices for insert with check (app.is_admin() or app.is_finance());
 drop policy if exists inv_upd on public.invoices;
-create policy inv_upd on public.invoices for update using (app.is_admin() or app.is_finance()) with check (app.is_admin() or app.is_finance());
+create policy inv_upd on public.invoices for update using (app.is_admin()) with check (app.is_admin());
 
 -- student_credit (avans): INSERT/UPDATE -> direktor/moliya (kassir emas).
 drop policy if exists sc_credit_ins on public.student_credit;

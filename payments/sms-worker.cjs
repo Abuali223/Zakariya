@@ -235,13 +235,18 @@ async function runNew(eskiz, phones, dry, o) {
     const amt = Number(inv.amount) || 0;
     if (amt <= 0) continue;                                          // grant/0 so'mlik — xabar yo'q
     if (['paid', 'canceled', 'reversed'].includes(inv.status)) continue;
+    // A4-04 (audit-10): xabarda — QOLGAN summa (summa − to'langan). «Hisob-fakturalar yaratish» avansni shu zahoti qo'llaydi va yangi
+    //   faktura «qisman» bo'ladi: to'liq summa yozilsa, ota-ona uni yana to'lab ortiqcha avans qilardi (kabinetdagi «To'lovga qoldi» va
+    //   qarz eslatmasi — runDebt — qoldiqni ko'rsatadi). Avans to'liq yopgan bo'lsa — xabar yo'q.
+    const due = amt - (Number(inv.paidAmount) || 0);
+    if (due <= 0.5) continue;
     if (AMBIG.has(inv.studentId)) { skip++; log('SMS(new) o\'tkazildi — ID to\'qnashuvi:', inv.studentId); continue; }
     const id = `${inv.id}__new`;
     const dn = await smsDone(id);
     if (dn.skip) { skip++; continue; }
     const tgr = TG ? tgFor(inv.studentId, 'invoice') : [];
     if (tgr.length) {
-      const v = { name: String(inv.studentName || '').trim() || 'o‘quvchi', month: fmtMonth(inv.month), amount: fmtSom(amt), due: fmtSom(amt) };
+      const v = { name: String(inv.studentName || '').trim() || 'o‘quvchi', month: fmtMonth(inv.month), amount: fmtSom(due), due: fmtSom(due) };
       const out = await deliverTg(id, { invoiceId: inv.id, studentId: inv.studentId || '', type: 'new', month: inv.month || '' }, tgr, lang => tgText(o.tgTemplate, 'new', lang, v), dry);
       if (out === 'sent') { sent++; continue; }
       if (out === 'skip') { skip++; continue; }
@@ -249,7 +254,7 @@ async function runNew(eskiz, phones, dry, o) {
     const phone = (phones[inv.studentId] || {}).phone;
     if (!phone) { skip++; continue; }
     if (SENT_TODAY.has(phone)) { later++; continue; }               // bugun shu raqamga SMS ketgan — ertaga (lookback ichida)
-    const msg = smsText(o.template || tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(amt), due: smsSom(amt) });
+    const msg = smsText(o.template || tpl('new', DEF_NEW), { name: smsName(inv.studentName), month: fmtMonth(inv.month), amount: smsSom(due), due: smsSom(due) });
     if (dry) { SENT_TODAY.add(phone); log('[DRY new]', redactPhone(phone), '::', msg); sent++; continue; }
     // CLAIM avval (create) — allaqachon claim qilingan/yuborilgan bo'lsa o'tkazamiz (takror yo'q).
     if (!(await claimSms(id, { invoiceId: inv.id, studentId: inv.studentId || '', phone, type: 'new', message: msg, month: inv.month || '', channel: 'sms' }))) { skip++; continue; }

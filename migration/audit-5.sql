@@ -41,12 +41,12 @@ begin
   if p_amount < 0 then return jsonb_build_object('ok', false, 'reason', 'neg'); end if;
   -- Moliya rejasi 0-bosqich (ko'rik): NaN / Infinity / bema'ni katta summa rad etiladi (apply_payment bilan bir xil).
   if p_amount = 'NaN'::numeric or p_amount >= 1e12 then return jsonb_build_object('ok', false, 'reason', 'bad-amount'); end if;
-  -- RF-04: musbat summa — faqat to'lov serveri (service_role), Direktor, ichki pul RPC'si yoki shu payId'li payments qatori
-  --   bilan (admin ilovasi bu funksiyani chaqirmaydi; kassir REST orqali kvitansiyasiz qo'llay olmasin).
+  -- RF-04: musbat summa — faqat to'lov serveri (service_role), Direktor yoki ichki pul RPC'si bilan (admin ilovasi bu funksiyani
+  --   chaqirmaydi; kassir REST orqali kvitansiyasiz qo'llay olmasin). A4-01 (audit-10): «shu payId'li payments qatori bor» sharti
+  --   olib tashlandi — o'zi yozgan qator yoki allaqachon qo'llangan Click qatori (server posboni click_trans_id kalitida) bilan
+  --   pulsiz qo'llash mumkin edi.
   if p_amount > 0 and not (app.is_admin() or coalesce(v_claims->>'role','') = 'service_role'
-       or coalesce(current_setting('iqror.money_rpc', true), '') = '1'
-       or exists (select 1 from public.payments p where p.id = p_pay_id and p.amount = p_amount
-                   and coalesce(p.status, '') in ('pending', 'applied', 'confirmed', 'paid', 'unmatched'))) then
+       or coalesce(current_setting('iqror.money_rpc', true), '') = '1') then
     raise exception 'apply_to_invoice: to''lov yozuvisiz (payments) pul qo''llanmaydi' using errcode = '42501';
   end if;
   -- Moliya rejasi 1a (state-4): kassa ishga tushgach «naqd» kanal bilan — faqat kassa yo'llari (apply_payment bilan bir xil qoida, audit-7.sql).
@@ -110,6 +110,10 @@ begin
     select name into v_name from public.students where id = v_sid or "studentId" = v_sid limit 1;
     insert into public.credit_ledger(id, "studentId", "studentName", delta, "balanceAfter", reason, provider, "at")
       values (gen_random_uuid()::text, v_sid, coalesce(v_name,''), v_overflow, v_cr + v_overflow, 'overpay', v_provider, now());
+    -- A4-03 (audit-10): ortiqcha SHU tranzaksiyada boshqa ochiq fakturalarga (eng eskisidan) — aks holda bir oyni ortig'i bilan
+    --   to'lagan oilaga keyingi «Hisob-fakturalar yaratish»gacha (bir oygacha) boshqa oy qarzi SMS / «Qarzdorlar» / kabinetda
+    --   ko'rinib turardi, pul esa avansda. Holati shubhali o'quvchida avans turadi (app.credit_sweep, audit-10-tolov.sql).
+    perform app.credit_sweep(v_sid);
   end if;
 
   return jsonb_build_object('ok', true, 'status', case when v_full then 'paid' else 'partial' end,

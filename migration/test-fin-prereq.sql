@@ -95,14 +95,30 @@ select zz.chk('B8 kassir chaqira olmaydi', zz.as('U_KAS', $q$select public.direc
 select zz.chk('B9 fin_receipts mijozga yopiq', zz.as('U_DIR', $q$select count(*)::text from app.fin_receipts('2026-11-09','2026-11-09')$q$), '^ERR 42501');
 
 -- ---------- (C) server vaqti va «kim» ----------
-select zz.chk('C1 kassir payments createdAt yubordi — server vaqti',
-  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, "createdAt") values ('c1','T-2','cash',10,'pending','2020-01-01') returning 1) select count(*)::text from x$q$), '^1$');
+-- A4-01 (audit-10): payments'ga REST orqali to'g'ridan-to'g'ri yozish yopiq — qatorni pul RPC'si (SECURITY DEFINER) yozadi. RPC ichidagi
+--   yozuv: JWT — chaqiruvchiniki, current_user — funksiya egasi (zz.rpc shuni takrorlaydi). Server vaqti qoidasi shu yozuvga ham amal qiladi.
+create or replace function zz.rpc(p_uid text, p_q text) returns text language plpgsql as $$
+declare r text;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  begin execute p_q into r; exception when others then r := 'ERR ' || sqlstate || ' ' || sqlerrm; end;
+  perform set_config('request.jwt.claims', '', true);
+  return coalesce(r, '<null>');
+end $$;
+select zz.chk('C1 kassir payments''ga to''g''ridan-to''g''ri yoza olmaydi (A4-01)',
+  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, "createdAt") values ('c1','T-2','cash',10,'pending','2020-01-01') returning 1) select count(*)::text from x$q$), '^ERR 42501');
+select zz.chk('C1a RPC ichidagi yozuv (kassir nomidan) createdAt yubordi — server vaqti',
+  zz.rpc('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, "createdAt") values ('c1','T-2','cash',10,'pending','2020-01-01') returning 1) select count(*)::text from x$q$), '^1$');
 select zz.chk('C1b createdAt = now()', (select ("createdAt" = now())::text from public.payments where id = 'c1'), '^true$');
 select zz.chk('C2 statusAt qo''yildi', (select ("statusAt" = now())::text from public.payments where id = 'c1'), '^true$');
-select zz.chk('C3 moliya createdAt ni o''zgartira olmaydi',
-  zz.as('U_FM', $q$with x as (update public.payments set "createdAt" = '2020-01-01', "statusAt" = '2020-01-01', amount = 11 where id = 'c1' returning 1) select count(*)::text from x$q$), '^1$');
+select zz.chk('C3 Direktor (sahifadagi tuzatish) createdAt / statusAt ni o''zgartira olmaydi',
+  zz.as('U_DIR', $q$with x as (update public.payments set "createdAt" = '2020-01-01', "statusAt" = '2020-01-01', raw = '{"note":"izoh"}' where id = 'c1' returning 1) select count(*)::text from x$q$), '^1$');
 select zz.chk('C3b createdAt va statusAt (holat o''zgarmadi) saqlandi',
-  (select ("createdAt" = now() and "statusAt" = now() and amount = 11)::text from public.payments where id = 'c1'), '^true$');
+  (select ("createdAt" = now() and "statusAt" = now() and raw ->> 'note' = 'izoh')::text from public.payments where id = 'c1'), '^true$');
+select zz.chk('C3c moliya to''lov qatorini o''zgartira olmaydi (0 qator), Direktor summani ham (A4-01)',
+  zz.as('U_FM', $q$with x as (update public.payments set amount = 11 where id = 'c1' returning 1) select count(*)::text from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.payments set amount = 11 where id = 'c1' returning 1) select count(*)::text from x$q$) || ' | '
+  || (select trim_scale(amount)::text from public.payments where id = 'c1'), '^0 \| ERR 42501 .* \| 10$');
 insert into public.payments(id, "studentId", provider, amount, status, "createdAt") values ('c4','T-2','click',5,'pending','2021-05-05 10:00+05');
 select zz.chk('C4 tizim (server) yozuvi createdAt ni saqlaydi',
   (select ("createdAt" = '2021-05-05 10:00+05')::text from public.payments where id = 'c4'), '^true$');
@@ -138,17 +154,22 @@ select zz.chk('D10 summa 0', zz.as('U_KAS', $q$select public.record_manual_payme
 select zz.chk('D11 noma''lum o''quvchi', zz.as('U_KAS', $q$select public.record_manual_payment('man_1731000000005_abc12','T-404',1000,'cash',null,'','','',null)::text$q$), '^ERR 22023');
 select zz.chk('D12 o''qituvchi — ruxsat yo''q', zz.as('U_TCH', $q$select public.record_manual_payment('man_1731000000006_abc12','T-3',1000,'cash',null,'','','',null)::text$q$), '^ERR 42501');
 select zz.chk('D13 anon — ruxsat yo''q', zz.as(null, $q$select public.record_manual_payment('man_1731000000007_abc12','T-3',1000,'cash',null,'','','',null)::text$q$), '^ERR 42501');
+-- Eski 3 bosqichli mijoz qoldirgan «pending» qatorlar — A4-01 dan oldingi ma'lumot (endi kassir REST orqali yoza olmaydi — C1): baza
+--   yozuvi sifatida qo'yiladi, «💵 To'lov» ularni avvalgidek tugatadi.
+insert into public.payments(id, "studentId", provider, amount, status, raw) values
+  ('man_legacy_00001','T-2','cash',200000,'pending','{"manual":true}'), ('man_legacy_00002','T-2','cash',300000,'pending',null),
+  ('man_legacy_00003','T-2','cash',1000,'pending',null);
 select zz.chk('D14 eski mijozdan qolgan «pending» qator — tugatiladi',
-  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, raw) values ('man_legacy_00001','T-2','cash',200000,'pending','{"manual":true}') returning 1) select count(*)::text from x$q$), '^1$');
+  (select count(*)::text from public.payments where id = 'man_legacy_00001' and status = 'pending'), '^1$');
 select zz.chk('D14b record_manual_payment qo''llaydi',
   zz.as('U_KAS', $q$select (r ->> 'ok') from (select public.record_manual_payment('man_legacy_00001','T-2',200000,'cash',null,'','','',null) r) z$q$), '^true$');
 select zz.chk('D14c holat applied, avans 200000',
   (select p.status || '|' || c.credit::bigint from public.payments p, public.student_credit c where p.id = 'man_legacy_00001' and c.id = 'T-2'), '^applied\|200000$');
 select zz.chk('D15 «pending» qator summasi boshqa — rad (mismatch)',
-  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status) values ('man_legacy_00002','T-2','cash',300000,'pending') returning 1) select (select public.record_manual_payment('man_legacy_00002','T-2',999,'cash',null,'','','',null) ->> 'reason') from x$q$), '^mismatch$');
+  zz.as('U_KAS', $q$select public.record_manual_payment('man_legacy_00002','T-2',999,'cash',null,'','','',null) ->> 'reason'$q$), '^mismatch$');
 -- g8: usul boshqa — kassa moduli yo'q yoki kassa ishlamayapti: avvalgidek tugatiladi (kassa ishlaganda «mismatch» — test-kassa-pay.sql N6)
 select zz.chk('D15b «pending» qatorni boshqa usul bilan tugatish — kassasiz (ishlamayotgan kassa) avvalgidek qo''llanadi',
-  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status) values ('man_legacy_00003','T-2','cash',1000,'pending') returning 1) select (select public.record_manual_payment('man_legacy_00003','T-2',1000,'bank',null,'','','',null) ->> 'status') from x$q$), '^applied$');
+  zz.as('U_KAS', $q$select public.record_manual_payment('man_legacy_00003','T-2',1000,'bank',null,'','','',null) ->> 'status'$q$), '^applied$');
 select zz.chk('D16 G''aznachi ham kirita oladi',
   zz.as('U_TRE', $q$select (public.record_manual_payment('man_1731000000008_abc12','T-3',1000,'cash',null,'','','',null) ->> 'ok')$q$), '^true$');
 
@@ -166,8 +187,12 @@ select zz.chk('A14 NaN summa — tushum emas', app.counts_as_receipt('p6','appli
 select zz.chk('F1 kassir apply_payment — payments qatorisiz rad',
   zz.as('U_KAS', $q$select public.apply_payment('T-3', 500000, 'cash', 'soxta-id-1')::text$q$), '^ERR 42501');
 select zz.chk('F1b moliya ham rad', zz.as('U_FM', $q$select public.apply_payment('T-3', 500000, 'cash', 'soxta-id-2')::text$q$), '^ERR 42501');
-select zz.chk('F2 eski mijoz yo''li (avval pending qator) — ishlaydi',
-  zz.as('U_KAS', $q$with x as (insert into public.payments(id, "studentId", provider, amount, status, raw) values ('man_old_flow_001','T-3','cash',1000,'pending','{"manual":true}') returning 1) select (select public.apply_payment('T-3', 1000, 'cash', 'man_old_flow_001') ->> 'ok') from x$q$), '^true$');
+-- A4-01 (audit-10): eski mijoz yo'li (avval «pending» qator, keyin apply_payment) endi yopiq — o'zi yozgan yoki qolib ketgan qator bilan
+--   kassir qarzni pulsiz yopardi (qator tushum emas). Bunday qatorni «💵 To'lov» tugatadi (D14).
+insert into public.payments(id, "studentId", provider, amount, status, raw) values ('man_old_flow_001','T-3','cash',1000,'pending','{"manual":true}');
+select zz.chk('F2 eski mijoz yo''li («pending» qator + apply_payment) — rad (A4-01), hech narsa qo''llanmadi (posbon yo''q)',
+  zz.as('U_KAS', $q$select public.apply_payment('T-3', 1000, 'cash', 'man_old_flow_001')::text$q$) || ' | '
+  || (select count(*)::text from public.applied_payments where id = 'man_old_flow_001'), '^ERR 42501 .* \| 0$');
 select zz.chk('F3 Direktor NaN — bad-amount', zz.as('U_DIR', $q$select public.apply_payment('T-3', 'NaN'::numeric, 'cash', 'fix_x') ->> 'reason'$q$), '^bad-amount$');
 select zz.chk('F4 kassir summa 0 (avansni qo''llash) — ruxsat', zz.as('U_KAS', $q$select public.apply_payment('T-3', 0, 'credit', null) ->> 'ok'$q$), '^true$');
 select zz.chk('F5 kassir add_credit — rad (manfiy ham)', zz.as('U_KAS', $q$select public.add_credit('T-2', -1000, 'recompute', '', 'f5')::text$q$), '^ERR 42501');
