@@ -479,9 +479,19 @@ revoke all on function app.payer_codes_fix_notice() from public, anon, authentic
 --   uzilmaydi (claim_row), claim_child eski kodga 'code_changed' qaytaradi. Matnni yashirish keyingi app.payer_codes_fix da: tiklash
 --   Direktor sessiyasida ishlaydi — to'lov qatorlariga tegilmaydi (davr qulfi / kassa qo'riqchisi tizimdan boshqa yozuvni rad etadi),
 --   eski kod esa endi ulamaydi. DIQQAT: amaldagi ta'rif SHU yerda (admission-crm.sql dagisi zanjirda almashtiriladi).
+--   SHU O'CHIRISHNIKI (audit-10, A1-11): ID qayta berilgan bo'lsa (eski student_id_high_water o'chirilganlar arxivini hisobga olmasdi)
+--   bitta ID ostida ikki oilaning arxivi bo'ladi. Avval maxfiy ma'lumot va kod «eng oxirgi» arxivdan olinardi — birinchi bolani
+--   tiklaganda IKKINCHI oilaning telefonlari, ota ismi va kodi unga yopishardi. Endi maxfiy ma'lumot / kod arxivi faqat vaqt bo'yicha
+--   eng yaqin o'quvchi arxivi AYNAN shu (a) bo'lsa olinadi (panel o'quvchi, maxfiy ma'lumot va kod qatorlarini ketma-ket, bir necha
+--   soniya ichida o'chiradi); boshqa o'chirishniki — tegilmaydi (tiklangan deb ham belgilanmaydi).
+--   «XODIM FARZANDI» (A1-11): arxivdagi teacherId endi hech bir o'qituvchi/xodimniki bo'lmasa (o'qituvchi o'chirilgan yoki ID'si
+--   tuzatilgan — rekey_payroll_id arxivni o'zgartirmaydi), guard_private_teacher_link butun tiklashni 23503 bilan bekor qilardi —
+--   o'quvchini paneldan umuman tiklab bo'lmasdi. Endi bunday bog'lanish bo'sh qoldiriladi (o'chgan xodimga «xodim farzandi»
+--   chegirmasi yopishmasin) va javobda qaytariladi ('teacherUnlinked') — Direktor kartadan qayta tanlaydi.
 create or replace function public.restore_deleted_student(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare a record; p record; v_code text; v_sid text; v_priv boolean := false; v_rot boolean := false;
+declare a record; p record; v_code text; v_cid text; v_sid text; v_priv boolean := false; v_rot boolean := false;
+        v_pr public.student_private; v_unl text;
 begin
   if not app.is_admin() then raise exception 'Faqat direktor tiklay oladi' using errcode = '42501'; end if;
   select * into a from public.deleted_records where id = p_id and tbl = 'students' for update;
@@ -491,18 +501,27 @@ begin
   if exists (select 1 from public.students s where s.id = a."rowId" or (v_sid is not null and s."studentId" = v_sid)) then
     return jsonb_build_object('ok', false, 'error', 'Shu ID bilan o''quvchi bazada bor — tiklab bo''lmaydi');
   end if;
-  -- Ota-ona kodi: hali bazada bo'lsa — o'sha, o'chirilgan bo'lsa — arxivdagi eng oxirgisi.
+  -- Ota-ona kodi: hali bazada bo'lsa — o'sha, o'chirilgan bo'lsa — arxivdan, faqat SHU o'chirishniki (eng yaqini).
   select sc.code into v_code from public.student_codes sc where sc.id = a."rowId";
   if v_code is null then
-    select d.row->>'code' into v_code from public.deleted_records d
-     where d.tbl = 'student_codes' and d."rowId" = a."rowId" and d."restoredAt" is null order by d."deletedAt" desc limit 1;
+    select d.id, d.row->>'code' into v_cid, v_code from public.deleted_records d
+     where d.tbl = 'student_codes' and d."rowId" = a."rowId" and d."restoredAt" is null
+       and not exists (select 1 from public.deleted_records s
+                        where s.tbl = 'students' and s."rowId" = a."rowId" and s.id <> a.id
+                          and abs(extract(epoch from s."deletedAt" - d."deletedAt")) < abs(extract(epoch from a."deletedAt" - d."deletedAt")))
+     order by abs(extract(epoch from d."deletedAt" - a."deletedAt")), d."deletedAt" desc limit 1;
   end if;
   insert into public.students select * from jsonb_populate_record(null::public.students, a.row);
   if nullif(v_code, '') is not null then
     insert into public.student_codes(id, code, "updatedAt") values (a."rowId", v_code, now())
       on conflict (id) do update set code = excluded.code, "updatedAt" = now();
-    update public.deleted_records set "restoredAt" = now(), "restoredBy" = app.uid()
-     where tbl = 'student_codes' and "rowId" = a."rowId" and "restoredAt" is null;
+    -- Shu o'chirishning kod arxivi tiklangan deb belgilanadi (boshqa oilaniki — yo'q).
+    update public.deleted_records d set "restoredAt" = now(), "restoredBy" = app.uid()
+     where d.tbl = 'student_codes' and d."rowId" = a."rowId" and d."restoredAt" is null
+       and (d.id = v_cid
+            or not exists (select 1 from public.deleted_records s
+                            where s.tbl = 'students' and s."rowId" = a."rowId" and s.id <> a.id
+                              and abs(extract(epoch from s."deletedAt" - d."deletedAt")) < abs(extract(epoch from a."deletedAt" - d."deletedAt"))));
     -- Tiklangan kod to'lovchi matnida ochiq — almashtiriladi. U ota-onaga berilgan (haqiqiy) kod: «shu tranzaksiyada yozilgan» belgisi
     --   olinadi, shunda almashtirish triggeri uni student_code_prev ga yozadi.
     if app.payer_code_exposed(v_code) then
@@ -512,19 +531,31 @@ begin
       v_rot := true;
     end if;
   end if;
-  select * into p from public.deleted_records
-   where tbl = 'student_private' and "rowId" = a."rowId" and "restoredAt" is null
-   order by "deletedAt" desc limit 1 for update;
+  -- Maxfiy ma'lumot — faqat SHU o'chirishniki (kod bilan bir xil qoida): boshqa oilaning telefonlari / ota ismi yopishmaydi.
+  select * into p from public.deleted_records d
+   where d.tbl = 'student_private' and d."rowId" = a."rowId" and d."restoredAt" is null
+     and not exists (select 1 from public.deleted_records s
+                      where s.tbl = 'students' and s."rowId" = a."rowId" and s.id <> a.id
+                        and abs(extract(epoch from s."deletedAt" - d."deletedAt")) < abs(extract(epoch from a."deletedAt" - d."deletedAt")))
+   order by abs(extract(epoch from d."deletedAt" - a."deletedAt")), d."deletedAt" desc limit 1 for update;
   if found and not exists (select 1 from public.student_private sp where sp.id = a."rowId") then
+    v_pr := jsonb_populate_record(null::public.student_private, p.row);
+    -- O'chgan / ID'si o'zgargan xodimga bog'lanish tiklashni to'xtatmaydi (guard_private_teacher_link bilan bir xil tekshiruv).
+    if coalesce(v_pr."teacherId", '') <> ''
+       and not exists (select 1 from public.teachers t where coalesce(nullif(t."teacherId", ''), t.id) = v_pr."teacherId")
+       and not exists (select 1 from public.staff s where coalesce(nullif(s."staffId", ''), s.id) = v_pr."teacherId") then
+      v_unl := v_pr."teacherId";
+      v_pr."teacherId" := null;
+    end if;
     -- Chegirma maydonlari faqat RPC orqali (discount-approval.sql qulfi): tiklash — avvalgi (tasdiqlangan) holatni qaytaradi.
     perform set_config('iqror.discount_rpc', '1', true);
-    insert into public.student_private select * from jsonb_populate_record(null::public.student_private, p.row);
+    insert into public.student_private select v_pr.*;
     perform set_config('iqror.discount_rpc', '', true);
     update public.deleted_records set "restoredAt" = now(), "restoredBy" = app.uid() where id = p.id;
     v_priv := true;
   end if;
   update public.deleted_records set "restoredAt" = now(), "restoredBy" = app.uid() where id = a.id;
-  return jsonb_build_object('ok', true, 'id', a."rowId", 'private', v_priv, 'codeChanged', v_rot);
+  return jsonb_build_object('ok', true, 'id', a."rowId", 'private', v_priv, 'codeChanged', v_rot, 'teacherUnlinked', v_unl);
 end $$;
 revoke all on function public.restore_deleted_student(text) from public, anon;
 grant execute on function public.restore_deleted_student(text) to authenticated, service_role;

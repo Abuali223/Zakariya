@@ -19,6 +19,9 @@ do $iqror_guard$ begin raise exception 'iqror: student-ids.sql ALOHIDA ishga tus
 --   oylik xulosa, olimpiada, avans jurnali, qaytarish, maxfiy ma'lumot ham): ulardan biri tushib qolsa, o'chirilgan bolaning
 --   ID'si (masalan qolgan kodi o'chirilgach) yangi bolaga berilib, YANGI ota-ona eski bolaning yozuvini ko'rardi.
 -- Faqat FAOL xodim chaqira oladi (is_staff). Idempotent (run-all.sql zanjirida).
+-- DIQQAT: student_id_high_water() va student_history() ning AMALDAGI ta'rifi — audit-10-davomat.sql (shu yerdagilarni almashtiradi):
+--   keyin qo'shilgan jadvallar (tibbiyot, chegirma / tavsiya / bonus so'rovlari, o'chirilganlar arxivi) zanjirda shu fayldan KEYIN
+--   yaratiladi. Yangi o'quvchi jadvali qo'shilsa — o'sha fayldagi ro'yxatga ham yozing.
 -- =====================================================================
 
 create or replace function public.student_id_high_water()

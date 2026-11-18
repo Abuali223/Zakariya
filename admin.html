@@ -4780,10 +4780,11 @@ async function renderStudents(){
       if(!ids.length) return;
       const names=ids.map(id=>((cache['students']||[]).find(r=>r._id===id)||{}).name).filter(Boolean);
       if(!confirm(`${ids.length} ta o‘quvchi BUTUNLAY o‘chiriladi:\n\n${names.slice(0,20).join(', ')}${names.length>20?` …yana ${names.length-20}`:''}\n\nBu qaytarilmaydi. Davom etilsinmi?`)) return;
-      // Tarixi (hisob/to'lov/avans/davomat/ota-ona ulanishi) bor o'quvchilar — alohida ogohlantirish.
+      // Tarixi (hisob/to'lov/avans/davomat/ota-ona ulanishi/tibbiy yozuv) bor o'quvchilar — alohida ogohlantirish.
+      //   medical — hamshira yozuvlari (sog'liq kartasi, kasallik ma'lumotnomasi, murojaat; student_history, audit-10-davomat.sql).
       { const withHist=[]; for(const id of ids){ const r=(cache['students']||[]).find(x=>x._id===id)||{}; const sid=String(r.studentId||id);
-          try{ const h=await rpc('student_history',{ p_sid:sid }); if(h && (['invoices','payments','attendance','claims'].some(k=>Number(h[k])>0) || Number(h.credit)>0)) withHist.push(r.name||sid); }catch(e){} }
-        if(withHist.length && !confirm(`⚠️ ${withHist.length} ta o‘quvchida TARIX bor (hisob-faktura/to‘lov/avans/davomat/ota-ona ulanishi):\n${withHist.slice(0,15).join(', ')}${withHist.length>15?' …':''}\n\nKetgan o‘quvchi uchun o‘chirish O‘RNIGA «Chiqarish» (holat: chiqdi) tavsiya etiladi — tarix saqlanadi.\nBaribir hammasi o‘chirilsinmi?`)) return; }
+          try{ const h=await rpc('student_history',{ p_sid:sid }); if(h && (['invoices','payments','attendance','claims','medical'].some(k=>Number(h[k])>0) || Number(h.credit)>0)) withHist.push(r.name||sid); }catch(e){} }
+        if(withHist.length && !confirm(`⚠️ ${withHist.length} ta o‘quvchida TARIX bor (hisob-faktura/to‘lov/avans/davomat/ota-ona ulanishi/tibbiy yozuv):\n${withHist.slice(0,15).join(', ')}${withHist.length>15?' …':''}\n\nKetgan o‘quvchi uchun o‘chirish O‘RNIGA «Chiqarish» (holat: chiqdi) tavsiya etiladi — tarix saqlanadi.\nBaribir hammasi o‘chirilsinmi?`)) return; }
       const btn=$('#stu-buldel'); btn.disabled=true; btn.textContent='O‘chirilmoqda…';
       let done=0; for(const id of ids){ try{ await deleteDoc(doc(db,'students',id)); try{ await deleteDoc(doc(db,'student_private',id)); }catch(e){} try{ await deleteDoc(doc(db,'student_codes',id)); }catch(e){} done++; }catch(e){} }
       cache.students=null;   // o'chirilgan o'quvchilar keshda qolmasin
@@ -6329,7 +6330,8 @@ async function delDoc(name,id,label){
     const row=(cache.students||[]).find(r=>String(r._id)===String(id))||{}; const sid=String(row.studentId||id);
     let h=null; try{ h=await rpc('student_history',{ p_sid:sid }); }catch(e){ h=null; }
     if(h){ const parts=[ Number(h.invoices)?`${h.invoices} hisob-faktura${Number(h.paid)?` (${h.paid} tasi to‘langan)`:''}`:'', Number(h.payments)?`${h.payments} to‘lov`:'',
-        Number(h.credit)>0?`avans ${fmtSom(h.credit)}`:'', Number(h.attendance)?`${h.attendance} oy davomat`:'', Number(h.grades)?'baholar':'', Number(h.claims)?`${h.claims} ota-ona ulanishi`:'' ].filter(Boolean);
+        Number(h.credit)>0?`avans ${fmtSom(h.credit)}`:'', Number(h.attendance)?`${h.attendance} oy davomat`:'', Number(h.grades)?'baholar':'', Number(h.claims)?`${h.claims} ota-ona ulanishi`:'',
+        Number(h.medical)?`${h.medical} ta tibbiy yozuv (hamshira)`:'' ].filter(Boolean);
       if(parts.length && !confirm(`⚠️ Bu o‘quvchida TARIX bor: ${parts.join(', ')}.\n\nO‘chirsangiz bu yozuvlar o‘quvchisiz («yetim») qoladi. Ketgan o‘quvchi uchun o‘chirish O‘RNIGA «⏯️ Holat → Chiqarish» tavsiya etiladi (tarix saqlanadi, hisob-faktura chiqmaydi).\n\nBaribir BUTUNLAY o‘chirilsinmi?`)) return; }
   }
   try{ await deleteDoc(doc(db,name,id));
@@ -7567,7 +7569,9 @@ async function openDeletedStudents(){
         <td>${r.restoredAt?`<span class="chip" style="background:#DCFCE7;color:#15803D">Tiklangan ${esc(String(r.restoredAt).slice(0,10))}</span>`:`<button class="btn sm gold" data-dsres="${esc(r._id)}">↩️ Tiklash</button>`}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="empty">Arxiv bo‘sh.</div>';
     labelTable();
     $('#ds-list').querySelectorAll('[data-dsres]').forEach(b=>b.onclick=async()=>{ if(!confirm('O‘quvchi tiklansinmi?')) return; b.disabled=true;
-      try{ const r=await rpc('restore_deleted_student',{ p_id:b.dataset.dsres }); if(r && r.ok){ toast('O‘quvchi tiklandi ✓'); cache['students']=null; load(); } else { b.disabled=false; toast((r&&r.error)||'Tiklab bo‘lmadi',true); } }
+      // teacherUnlinked — arxivdagi «Xodim farzandi» bog'lanishi endi hech kimniki emas (o'qituvchi o'chirilgan / ID'si o'zgargan):
+      //   baza uni bo'sh qoldirib tiklaydi (audit-10, payer-code-mask.sql) — Direktorga aytiladi, kartadan qayta tanlaydi.
+      try{ const r=await rpc('restore_deleted_student',{ p_id:b.dataset.dsres }); if(r && r.ok){ toast('O‘quvchi tiklandi ✓'+(r.teacherUnlinked?` · «Xodim farzandi» bog‘lanishi («${r.teacherUnlinked}») topilmadi — o‘qituvchi o‘chirilgan yoki ID'si o‘zgargan; kartadan qayta tanlang`:''), !!r.teacherUnlinked); cache['students']=null; load(); } else { b.disabled=false; toast((r&&r.error)||'Tiklab bo‘lmadi',true); } }
       catch(e){ b.disabled=false; toast('Xatolik: '+errMsg(e),true); } }); };
   load();
 }

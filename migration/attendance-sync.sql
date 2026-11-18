@@ -94,7 +94,7 @@ create trigger trg_student_class_rows after update of grade, "classLetter", trac
   for each row execute function app.sync_student_class_rows();
 
 -- ---- 2) «Davomat %» — davomat yozuvi o'zgarganda avtomatik ----
--- Bitta o'quvchi (studentId yoki doc id) bo'yicha foiz. Hisoblanadigan kun bo'lmasa — NULL (tegilmaydi).
+-- Bitta o'quvchi (studentId yoki doc id) bo'yicha foiz. Hisoblanadigan kun bo'lmasa — NULL («Davomat %» ham tozalanadi).
 create or replace function app.student_attendance_pct(p_sid text)
 returns int language sql stable security definer set search_path = public, app, pg_temp as $$
   select case when x.total > 0 then round(100.0 * x.pres / x.total)::int end
@@ -112,8 +112,11 @@ returns trigger language plpgsql security definer set search_path = public, app,
 declare v_pct int;
 begin
   if coalesce(new."studentId", '') = '' then return new; end if;
+  -- Hisoblanadigan kun qolmasa (masalan yagona «Yo'q» ma'lumotnoma bilan «Bemor»/«Sababli»ga tuzatildi) — foiz NULL bo'ladi
+  --   va «Davomat %» ham tozalanadi. Ilgari bu holda trigger qaytib ketardi: eski 0% ota-ona kartasida («Davomat 0%», batafsil
+  --   blokda esa «—») va xavf ro'yxatlarida (bosh sahifa, AI tahlil) qolib ketardi. Davomat satri bor o'quvchida bu maydonni
+  --   faqat shu trigger yuritadi (admin.html saqlashda students.attendance'ga yozmaydi).
   v_pct := app.student_attendance_pct(new."studentId");
-  if v_pct is null then return new; end if;
   -- students'da davomat kaliti: studentId; studentId bo'sh (eski) yozuvlarda — doc id.
   update public.students s set attendance = v_pct
    where (s."studentId" = new."studentId" or (coalesce(s."studentId", '') = '' and s.id = new."studentId"))
@@ -127,16 +130,16 @@ create trigger trg_attendance_pct after insert or update of days on public.atten
   for each row execute function app.sync_student_attendance_pct();
 
 -- Bir martalik (va har deployda xavfsiz) tenglash: davomat yozuvi bor o'quvchilarning «Davomat %»i
---   haqiqiy davomatdan hisoblanadi (faqat farq qilsa yoziladi).
---   MATERIALIZED: aks holda planner `x.pct is not null` ni skanga tushirib, funksiyani har davomat QATORI uchun
+--   haqiqiy davomatdan hisoblanadi (faqat farq qilsa yoziladi). Hisoblanadigan kuni yo'q (faqat «Bemor»/«Sababli») o'quvchida —
+--   NULL (trigger bilan bir xil qoida; avval qolib ketgan eski 0% shu yerda tozalanadi).
+--   MATERIALIZED: aks holda planner shartni skanga tushirib, funksiyani har davomat QATORI uchun
 --   chaqirardi (3000 o'quvchi / 35k qator: ~4.9 s qulf ostida); endi har o'quvchi uchun bir marta.
 with x as materialized (
   select d.sid, app.student_attendance_pct(d.sid) as pct
     from (select distinct a."studentId" as sid from public.attendance a where coalesce(a."studentId", '') <> '') d)
 update public.students s set attendance = x.pct
   from x
- where x.pct is not null
-   and (s."studentId" = x.sid or (coalesce(s."studentId", '') = '' and s.id = x.sid))
+ where (s."studentId" = x.sid or (coalesce(s."studentId", '') = '' and s.id = x.sid))
    and s.attendance is distinct from x.pct;
 
 notify pgrst, 'reload schema';
