@@ -6651,10 +6651,13 @@ async function renderUsers(){
   // HR yozuvlari (staff+teachers) — login hisobini davomat/maosh yozuviga TELEFON bo'yicha
   //   bog'lanishini ko'rsatish va qo'lда boshqarish uchun.
   const linkCtx={ recs:[], byRef:{}, byPhone:{} };
+  // audit-11 (A5-04): karta havolasi mavjud bo'lmagan (o'chirilgan) hisobga qarasa — «band» emas (baza o'chirishda havolani o'zi bo'shatadi;
+  //   bu — eski / yarim qolgan holat uchun): aks holda kartani hech qaysi hisobga bog'lab bo'lmasdi.
+  const userIds=new Set((rows||[]).map(u=>String(u._id)));
   try{
     const stf=(cache.staff&&cache.staff.length)?cache.staff:await loadCol('staff','order'); cache.staff=stf;
     const tch=(cache.teachers&&cache.teachers.length)?cache.teachers:await loadCol('teachers','order'); cache.teachers=tch;
-    const addRec=(type,r,code,pos)=>{ const rec={type,id:String(r._id),code:code||String(r._id),name:r.name||'',pos:pos||'',phone:r.phone||'',userUid:String(r.userUid||'')};
+    const addRec=(type,r,code,pos)=>{ const uu=String(r.userUid||''); const rec={type,id:String(r._id),code:code||String(r._id),name:r.name||'',pos:pos||'',phone:r.phone||'',userUid:(uu && userIds.has(uu))?uu:''};
       linkCtx.recs.push(rec); linkCtx.byRef[type+':'+rec.id]=rec;
       const cp=pmCanonPhone(r.phone); if(cp){ (linkCtx.byPhone[cp]=linkCtx.byPhone[cp]||[]).push(rec); } };   // qat'iy kanonik — server bilan izchil
     (stf||[]).forEach(r=>addRec('staff',r,r.staffId,r.position||'Xodim'));
@@ -6707,7 +6710,7 @@ async function renderUsers(){
       <td data-label="Rol">${roleCell(r)}</td>
       <td data-label="Biriktirilgan">${esc(summaryOf(r))}</td>
       <td data-label="Holat">${statusCell(r)}</td>
-      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}${blockBtn(r)}${xrBtn(r)}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button><button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button></div></td>
+      <td class="td-actions"><div class="row-actions">${isPend?`<button class="btn sm" style="background:var(--teal);color:#fff" data-approve="${esc(r._id)}" title="Rolini belgilab tasdiqlash — hisobni faollashtiradi">✓ Tasdiqlash</button>`:''}${blockBtn(r)}${xrBtn(r)}<button class="btn sm gold" data-edu="${esc(r._id)}">Tahrirlash</button>${String(r._id)===myUid?'':`<button class="btn sm danger" data-delu="${esc(r._id)}">O‘chir</button>`}</div></td>
     </tr>`; }).join('');
     $('#usr-card').innerHTML = banner + `<div class="tablewrap"><table><thead><tr><th>Ism</th><th>Aloqa</th><th>Rol</th><th>Biriktirilgan</th><th>Holat</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     $('#usr-card').querySelectorAll('[data-edu]').forEach(b=>b.addEventListener('click',()=>{ const u=rows.find(x=>x._id===b.dataset.edu); if(u) openUserEditor(u, CLS, roleOpts, {linkCtx}); }));
@@ -6741,6 +6744,8 @@ function openUserEditor(u, CLS, roleOpts, opts){
   opts=opts||{};
   // Bloklangan hisob: bu oynada rol/holat saqlanmaydi (aks holda GoTrue taqig'i olinmay, rol qo'lda qaytib qolardi).
   const isBlocked=String(u.status||'')==='blocked';
+  // audit-11 (A5-05): o'z rolini o'zgartirib bo'lmaydi (baza ham rad etadi) — yagona Direktor o'zini pasaytirib maktab Direktorsiz qolmasin.
+  const isSelf=String(u._id)===String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   // Biriktirilgan, lekin o'quvchisi qolmagan sinf ham ro'yxatda (belgilangan) — saqlanganda biriktiruv jim o'chib ketmasin.
@@ -6791,7 +6796,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
       ${isBlocked?`<div style="background:#FDECEC;border:1px solid #F3C1BC;color:#8F1D14;border-radius:10px;padding:10px 12px;font-size:13px">🚫 Bu hisob <b>bloklangan</b>${u.blockedRole?` (avvalgi rol: <b>${esc((roleOpts.find(o=>o[0]===u.blockedRole)||[])[1]||u.blockedRole)}</b>)`:''}. Rol va holatni bu yerda o‘zgartirib bo‘lmaydi — avval ro‘yxatdagi «Blokdan chiqarish» tugmasini bosing (kirish taqig‘i ham shu tugma bilan olinadi).</div>`:''}
       ${opts.approve?`<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Yangi xodimni faollashtirish uchun <b>aniq rolni</b> (o‘qituvchi, kassir, qorovul va h.k.) tanlang va «Saqlash» bosing.</div>`:''}
       <div><label class="ulbl">Rol</label>
-        <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff">${roleOpts.map(o=>`<option value="${o[0]}" ${(preRole?preRole===o[0]:u.role===o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}</select>${roleHint}</div>
+        <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff"${isSelf?' disabled':''}>${roleOpts.map(o=>`<option value="${o[0]}" ${(preRole?preRole===o[0]:u.role===o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}</select>${roleHint}${isSelf?'<div class="small muted" style="margin-top:6px">O‘z rolingizni o‘zgartira olmaysiz — buni boshqa Direktor qiladi.</div>':''}</div>
       <div id="u-cls-wrap"><label class="ulbl">Biriktirilgan sinflar <span class="small muted" style="font-weight:400">— bir nechtasini belgilang</span></label>
         <div class="uchk-grid">${clsChecks}</div></div>
       <div id="u-subj-wrap"><label class="ulbl">Biriktirilgan fanlar <span class="small muted" style="font-weight:400">— o‘qituvchi baho kiritadigan fan(lar)</span></label>
@@ -6822,7 +6827,7 @@ function openUserEditor(u, CLS, roleOpts, opts){
   ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
   ov.querySelector('#u-save').onclick=async()=>{
     if(isBlocked){ alert('Bu hisob bloklangan. Avval «Foydalanuvchilar» ro‘yxatidagi «Blokdan chiqarish» tugmasini bosing.'); return; }
-    const role=roleSel.value, ver=ov.querySelector('#u-ver').checked;
+    const role=isSelf?String(u.role||''):roleSel.value, ver=ov.querySelector('#u-ver').checked;
     // Rolsiz («staff» — tayinlanmagan) hisobni faollashtirib bo'lmaydi: u hech qanday bo'limга kira olmaydi.
     if(ver && (!role || role==='staff')){ alert('Avval aniq rol tanlang (o‘qituvchi, kassir, qorovul va h.k.).\n\n«Xodim — rol tayinlanmagan» holatida hisobni faollashtirib bo‘lmaydi (u tizimda hech narsani ko‘ra olmaydi).'); return; }
     // --- Bog'lanish: yangi tanlov vs eski ---
@@ -8315,15 +8320,23 @@ function subCredit(absentPerson, month, rec){
   const rate = Number(rec && rec.ratePerLesson) || SUB_LESSON_RATE_DEFAULT;
   return Math.round(lessons * rate);
 }
+// PAY-CARRY:BEGIN — maosh qoldig'i va vedomost yordamchilari (sof funksiyalar; assets/js/pay-carry.test.mjs fayldan o'qib sinaydi).
 // MAOSH QOLDIG'I (carry-over): shu kishiga `beforeMonth`DAN OLDIN qolib ketgan (to'lanmagan) summa.
 //   balans = Σ(net + subBonus − haqiqatda berilgan paid). paid belgilanmagan (eski) yozuv -> to'liq
 //   to'langan deb olinadi (qoldiq 0). pays: salary_payments yozuvlari (bir kishining).
-function carryBalance(pays, beforeMonth){
+//   pr — vedomost tasdig'i (payrollCarryCtx; o'tish oyi belgilanmagan bo'lsa null): audit-11 (A5-01/A5-02) — o'tish oyidan boshlab
+//   oyning qarzi TASDIQLANGAN vedomost qatoridan (maosh − shu oy avanslari − ushlanma + o'rinbosarlik), berilgani — paid yig'indisi;
+//   yozuvdagi gross / ushlanma / avans e'tiborsiz (soxta qator qoldiqni oshirmasin, qayta tasdiqlangan kamroq summa ortiqchani keyingi
+//   oyga o'tkazsin); hozir tasdiqlanmagan oy — hisobga kirmaydi; tasdiqlangan vedomostda qatori yo'q — qarz 0. Baza (app.salary_carry,
+//   payroll-approval.sql) bilan AYNAN bir xil.
+function carryBalance(pays, beforeMonth, pr){
   // OY bo'yicha guruhlaymiz: har oyning «due» (net+subBonus) BIR MARTA hisoblanadi. Bir oyda bir necha
   //   marta to'lov bo'lsa (bo'lib berish) — to'lovlar YIG'ILADI, lekin oylik qarz takror sanalMAYDI
   //   (aks holda ikki payout qarzni ikki barobar ko'rsatardi). Eski (paid yo'q) yozuv to'liq to'langan.
-  const byMonth={};
+  const byMonth={}, gated={};
+  const from=(pr&&pr.from)?String(pr.from):'';
   (pays||[]).forEach(p=>{ const m=String(p.month||''); if(!m) return; if(beforeMonth && m>=String(beforeMonth)) return;
+    if(from && m>=from){ const tid=String(p.teacherId||''); const g=gated[m+'|'+tid]=gated[m+'|'+tid]||{m, tid, paid:0}; g.paid+=Number(p.paid)||0; return; }
     const sb=Number(p.subBonus)||0;
     // Audit M3: oylik haqiqiy majburiyati KOMPONENTLARDAN hisoblanadi — gross − avans − ushlanma +
     //   o'rinbosarlik — QIRQILMAGAN (manfiy bo'lishi mumkin). Saqlangan `net` = max(0, gross−avans−ushlanma)
@@ -8345,8 +8358,34 @@ function carryBalance(pays, beforeMonth){
     // aks holda ERTAROQ sana -> mavjud (kechroq) qarz saqlanadi, bu yozuv e'tiborsiz
     g.paid+=paid; });              // naqd to'lovlar — yig'iladi
   let bal=0; Object.values(byMonth).forEach(g=>{ bal += (g.due - g.paid); });
+  Object.values(gated).forEach(g=>{ if(!(pr.approved||{})[g.m]) return;   // hozir tasdiqlanmagan oy — HR tasdiqlagach qo'shiladi
+    const l=(pr.lines||{})[g.m+'|'+g.tid];
+    const due=l ? ((Number(l.gross)||0) - (Number((pr.adv||{})[g.m+'|'+g.tid])||0) - (Number(l.deduction)||0) + (Number(l.subBonus)||0)) : 0;
+    bal += due - g.paid; });
   return Math.round(bal);
 }
+// pr (carryBalance uchun) — xom yozuvlardan: from — o'tish oyi ('' — tasdiq tartibi yo'q: null), runs — payroll_runs, lines —
+//   payroll_lines, advs — staff_advances (oy: month, bo'lmasa sana; baza app.payroll_adv bilan bir xil).
+function payrollCarryCtx(from, runs, lines, advs){
+  from=String(from||'').trim(); if(!from) return null;
+  const approved={}, L={}, A={};
+  (runs||[]).forEach(r=>{ const id=String(r.id||r._id||''); if(id && String(r.status||'')==='approved') approved[id]=true; });
+  (lines||[]).forEach(l=>{ const k=String(l.runId||'')+'|'+String(l.personId||''); if(l.runId && l.personId) L[k]=l; });
+  (advs||[]).forEach(a=>{ const m=String(a.month||String(a.date||'').slice(0,7)); if(!m) return; const k=m+'|'+String(a.teacherId||''); A[k]=(A[k]||0)+(Number(a.amount)||0); });
+  return { from, approved, lines:L, adv:A };
+}
+// Oy holati (Toshkent oyiga nisbatan): 'past' — tugagan, 'current' — tugamagan (ushlanma «bugungacha»), 'future' — hali boshlanmagan.
+//   audit-11 (A5-03): kelgusi oy vedomosti yuborilmaydi; tugamagan oyni faqat Direktor tasdiqlaydi (baza: payroll_submit / payroll_decide).
+function payMonthState(mon, cur){ mon=String(mon||''); cur=String(cur||''); return mon>cur ? 'future' : (mon===cur ? 'current' : 'past'); }
+// Direktor navbati (A5-07): «Direktor tasdig'i kerak» va hali tasdiqlanmagan qator — faqat vedomosti yuborilgan / tasdiqlangan oydan
+//   (qaytarilgan / qayta ochilgan oy qatorlari navbatda turmaydi — baza ularni 'not_submitted' bilan rad etadi). runs — payroll_runs.
+function prDirPending(lines, runs){
+  const st={}; (runs||[]).forEach(r=>{ st[String(r.id||r._id||'')]=String(r.status||''); });
+  return (lines||[]).filter(l=>l && l.needsDirector && !l.directorOkAt && (st[String(l.runId||'')]==='submitted' || st[String(l.runId||'')]==='approved'));
+}
+// Vedomostni tayyorlagan / tasdiqlagan odam (A5-08): ism (yoki rol), topilmasa «—» — ichki hisob ID'si (UUID) hech qachon ko'rsatilmaydi.
+function prWho(uid, names){ const u=(names||{})[String(uid||'')]; return u ? (u.name||u.role||'—') : '—'; }
+// PAY-CARRY:END
 // ==== YAGONA OYLIK HISOB (D2, payroll-approval.sql) ====
 //   Oylik hisobot (Xodimlar davomati → «Oylik hisobot»), oylik vedomost (Moliya menejeri → HR) va HR'ning qayta tekshiruvi
 //   SHU funksiyani chaqiradi — uchala joyda raqamlar bir xil. Natija: { ok:true, mon, staff, teachers, roster, bodyRows, readFail,
@@ -8391,6 +8430,8 @@ async function payrollComputeMonth(mon){
   let subs=[]; try{ const s=await getDocs(query(collection(db,'staff_substitutions'), where('month','==',mon))); subs=s.docs.map(d=>d.data()||{}); }catch(e){ readFail.push('o‘rinbosarlik'); }
   // Maosh berish jurnali (hammasi) — oldingi oylardan qolgan QOLDIQ (carry-over) uchun.
   let salpays=[]; try{ salpays=await loadCol('salary_payments'); }catch(e){ salpays=[]; readFail.push('maosh berish jurnali (qoldiq)'); }
+  // audit-11 (A5-01/A5-02): o'tish oyidan boshlab qoldiq tasdiqlangan vedomost qatoridan (carryBalance pr) — o'qilmasa ogohlantirish.
+  let prc=null; try{ prc=await payrollCarryLoad(null); }catch(e){ prc=null; readFail.push('vedomost (oldingi qoldiq)'); }
   // Stavkalar ham BAZADAN (maosh berish oynasi bilan bir xil qiymat): o'qilmasa — ogohlantirish (kesh/standart ishlatildi).
   try{ await loadSalaryRates(true); }catch(e){}   // o'qituvchi maoshi bonus stavkalari (kunlik stavka/jarima uchun)
   if(!SALARY_RATES_OK) readFail.push('maosh bonus stavkalari');
@@ -8459,7 +8500,7 @@ async function payrollComputeMonth(mon){
     (coveredByRef[absKey]=coveredByRef[absKey]||[]).push({ name:x.subName||'', day:x.day||'' }); });
   // Oldingi oylardan qolgan qoldiq — teacherId (payId) bo'yicha.
   const payByTid={}; (salpays||[]).forEach(p=>{ const t=String(p.teacherId||''); if(!t) return; (payByTid[t]=payByTid[t]||[]).push(p); });
-  const priorBalByPayId={}; Object.keys(payByTid).forEach(t=>{ priorBalByPayId[t]=carryBalance(payByTid[t], mon); });
+  const priorBalByPayId={}; Object.keys(payByTid).forEach(t=>{ priorBalByPayId[t]=carryBalance(payByTid[t], mon, prc); });
   bodyRows.forEach(o=>{ const key=o.r.refType+':'+o.r.refId;
     o.subBonus = Math.round(subBonusByRef[key]||0);
     o.subDays  = subDaysByRef[key]||0;
@@ -8470,12 +8511,21 @@ async function payrollComputeMonth(mon){
     o.net      = o.baseNet + o.subBonus;         // shu oy to'lanadigan (o'rinbosarlik bilan)
     o.totalDue = o.net + o.priorBalance;         // oldingi qoldiq qo'shilgan jami
   });
-  return { ok:true, mon, staff, teachers, roster, bodyRows, readFail, workSet, camDown, monHol, dupIds, idOwners, leaves, subs, salpays };
+  return { ok:true, mon, staff, teachers, roster, bodyRows, readFail, workSet, camDown, monHol, dupIds, idOwners, leaves, subs, salpays, prc };
 }
 // ==== OYLIK VEDOMOST: Moliya menejeri tayyorlaydi → HR menejer tasdiqlaydi → shundan keyin to'lanadi (D2) ====
 const PR_ST={ draft:['Qoralama','#475467','#F2F4F7'], submitted:['HR tasdig‘ida','#B45309','#FFF7E6'], approved:['Tasdiqlangan','#1F7A4D','#E8F6EE'], returned:['Qaytarilgan','#B42318','#FDECEC'] };
 function canPrepPayroll(){ return SESSION.isAdmin || SESSION.role==='finance_mgr'; }
 async function payrollCutover(){ try{ const c=await getDoc(doc(db,'config','finance')); return c.exists()?String((c.data()||{}).payrollApprovalFrom||'').trim():''; }catch(e){ return ''; } }
+// Oldingi qoldiq uchun vedomost tasdig'i (carryBalance pr; payrollCarryCtx): o'tish oyi, tasdiqlangan oylar, qatorlar, avanslar (advs berilmasa —
+//   o'qiladi). O'QILMASA — xato (qoldiq o'tish oyidan keyingi oylar uchun eski qoidada noto'g'ri hisoblanmasin; chaqiruvchi to'xtaydi / ogohlantiradi).
+async function payrollCarryLoad(advs){
+  const c=await getDoc(doc(db,'config','finance')); const from=c.exists()?String((c.data()||{}).payrollApprovalFrom||'').trim():'';
+  if(!from) return null;
+  const runs=(await getDocs(query(collection(db,'payroll_runs'), where('status','==','approved')))).docs.map(d=>({ id:d.id, ...(d.data()||{}) }));
+  const lines=runs.length ? await loadCol('payroll_lines') : [];
+  return payrollCarryCtx(from, runs, lines, advs || await loadCol('staff_advances'));
+}
 async function payrollRunInfo(mon){
   let run=null, lines=[];
   try{ const r=await getDoc(doc(db,'payroll_runs',mon)); run=r.exists()?({ id:r.id, ...(r.data()||{}) }):null; }catch(e){ return { err:e }; }
@@ -8500,14 +8550,18 @@ async function payrollBuildLines(C){
       det={ camera:true, absent:o.absent||0, late:(o.dm&&o.dm.late)||0, early:(o.dm&&o.dm.early)||0, unpaidLeave:(o.dm&&o.dm.unpaidLeave)||0, ruhsat:o.ruhsat||0, kasallik:o.kasallik||0, mehnat:o.mehnat||0, workedMin:Math.round((o.dm&&o.dm.workedMin)||0) }; }
     else { const bi=billingInterval(p, M); gross=(bi&&bi.skip)?0:Math.round((Number(p.salary)||0)*((bi&&bi.fraction)||1)); ded=0;
       sub=(C.subs||[]).filter(x=>x.subRefType===p.kind && String(x.subRefId)===String(p.refId)).reduce((s,x)=>s+subCredit(payeeByRef[(x.absentRefType||'')+':'+String(x.absentRefId||'')], M, x),0);
-      prior=carryBalance((C.salpays||[]).filter(r=>String(r.teacherId)===String(p.id)), M); det={ camera:false }; }
+      prior=carryBalance((C.salpays||[]).filter(r=>String(r.teacherId)===String(p.id)), M, C.prc); det={ camera:false }; }
     gross=Math.round(gross); sub=Math.round(sub); prior=Math.round(prior);
     return { personType:p.kind, personId:String(p.id), refId:String(p.refId), name:p.name, gross, deduction:ded, subBonus:sub, advance:Math.round(adv), carryIn:prior,
       payable:Math.max(0, Math.round(gross-adv-ded+sub+prior)), workedMin:det.workedMin==null?null:det.workedMin, details:det };
   }).filter(l=>l.gross>0 || l.subBonus>0 || l.carryIn!==0 || l.advance>0);
 }
-function prWho(uid, names){ const u=(names||{})[String(uid||'')]; return u ? (u.name||u.role||uid) : ((uid && !accRO())?String(uid):'—'); }
-async function prUserNames(uids){ const out={}; for(const u of [...new Set((uids||[]).filter(Boolean))]){ try{ const d=await getDoc(doc(db,'users',String(u))); if(d.exists()){ const x=d.data()||{}; out[u]={ name:x.name||x.displayName||'', role:ROLE_LABEL[x.role]||x.role||'' }; } }catch(e){} } return out; }
+// Ismlar (A5-08): HR / Moliya menejeri / kassir users jadvalini o'qiy olmaydi (users_sel — o'z qatori yoki Direktor) — vedomost ishtirokchilari
+//   ismini baza beradi (payroll_actor_names: faqat maoshni ko'radigan rollar, faqat ishtirokchilar). Eski baza (funksiya yo'q) — Direktor uchun
+//   avvalgidek users'dan. Buxgalterga chaqirilmaydi (unga «—»).
+async function prUserNames(uids){ const out={}, list=[...new Set((uids||[]).filter(Boolean).map(String))]; if(!list.length) return out;
+  try{ const r=await rpc('payroll_actor_names',{ p_uids:list }); Object.keys(r||{}).forEach(u=>{ const x=r[u]||{}; out[u]={ name:x.name||'', role:ROLE_LABEL[x.role]||x.role||'' }; }); if(Object.keys(out).length) return out; }catch(e){}
+  for(const u of list){ try{ const d=await getDoc(doc(db,'users',u)); if(d.exists()){ const x=d.data()||{}; out[u]={ name:x.name||x.displayName||'', role:ROLE_LABEL[x.role]||x.role||'' }; } }catch(e){} } return out; }
 // «Xodimlar davomati» → «Oylik hisobot»: vedomost holati va amallar (yuborish / qayta ochish / qatorlar).
 async function renderPayrollCard(box, mon, C, onChange){
   if(!box || !canSeePayroll()) return;
@@ -8525,13 +8579,17 @@ async function renderPayrollCard(box, mon, C, onChange){
       ${st==='returned'&&run.returnNote?`<div class="small" style="margin-top:4px;color:#B42318">↩ ${esc(run.returnNote)}${run.returnedAt?` (${esc(prWho(run.returnedBy,names))}, ${esc(fmtDT(run.returnedAt))})`:''}</div>`:''}
       ${run.prepNote?`<div class="small muted">Izoh: ${esc(run.prepNote)}</div>`:''}`;
   const needDir=(I.lines||[]).filter(l=>l.needsDirector && !l.directorOkAt);
+  // audit-11 (A5-03): kelgusi oy vedomosti yuborilmaydi; tugamagan oy — ushlanma «bugungacha», oy tugaguncha faqat Direktor tasdiqlaydi.
+  const mst=payMonthState(mon, tkDay(Date.now()).slice(0,7));
+  const early = mst==='current' ? `<div class="small" style="margin-top:4px;color:#B45309">⚠ Oy hali tugamagan: ushlanma faqat bugungacha hisoblanadi; tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugaguncha vedomostni faqat Direktor tasdiqlaydi (HR — oy tugagach).</div>`
+    : (mst==='future' ? '<div class="small muted" style="margin-top:4px">Kelgusi oy — vedomost oy boshlangach tayyorlanadi.</div>' : '');
   const btns=[];
-  if(canPrepPayroll() && (!run || st==='draft' || st==='returned')) btns.push(`<button class="btn sm gold" id="pr-submit">📤 HR’ga yuborish</button>`);
+  if(canPrepPayroll() && mst!=='future' && (!run || st==='draft' || st==='returned')) btns.push(`<button class="btn sm gold" id="pr-submit">📤 HR’ga yuborish</button>`);
   if(SESSION.isAdmin && st==='approved') btns.push(`<button class="btn sm ghost" id="pr-reopen">↩ Qayta ochish</button>`);
   if(run && (I.lines||[]).length) btns.push(`<button class="btn sm ghost2" id="pr-lines">👁 Qatorlar (${I.lines.length})</button>`);
   box.innerHTML=`<div class="card" style="margin-bottom:12px;padding:12px 16px;border-left:4px solid ${st==='approved'?'#1F9982':(st==='returned'?'#B42318':'#B45309')}">
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b>📄 Oylik vedomost — ${esc(mon)}</b> ${chip(st)}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${btns.join('')}</div></div>
-    ${info}${needDir.length?`<div class="small" style="margin-top:4px;color:#B45309">⏳ ${needDir.length} ta qator (HR / Moliya menejerining o‘z maoshi) Direktor tasdig‘ini kutmoqda.</div>`:''}${rule}
+    ${info}${needDir.length?`<div class="small" style="margin-top:4px;color:#B45309">⏳ ${needDir.length} ta qator (HR / Moliya menejerining o‘z maoshi) Direktor tasdig‘ini kutmoqda.</div>`:''}${rule}${early}
     <div id="pr-lines-box"></div></div>`;
   const sb=box.querySelector('#pr-submit'); if(sb) sb.addEventListener('click',()=>payrollSubmit(mon, C, ()=>{ renderPayrollCard(box, mon, C, onChange); }));
   const rb=box.querySelector('#pr-reopen'); if(rb) rb.addEventListener('click',async()=>{ const why=prompt('Tasdiqlangan oyni qayta ochish sababi (berilgan maoshlar saqlanadi; Moliya menejeri vedomostni qayta yuboradi):',''); if(why==null) return;
@@ -8556,27 +8614,34 @@ async function payrollSubmit(mon, C, onDone){
   if(C && (C.readFail||[]).length){ toast('Ba’zi ma’lumotlar o‘qilmadi ('+C.readFail.join(', ')+') — sahifani yangilab qayta urining',true); return; }
   let lines; try{ lines=await payrollBuildLines(C); }catch(e){ toast('Xodimlar / avans ma’lumotini o‘qib bo‘lmadi — qayta urining',true); return; }
   if(!lines.length){ toast('Bu oy maosh hisoblangan xodim yo‘q',true); return; }
+  const mst=payMonthState(mon, tkDay(Date.now()).slice(0,7));   // audit-11 (A5-03) — baza ham tekshiradi
+  if(mst==='future'){ toast('Kelgusi oy uchun vedomost yuborilmaydi — oy boshlangach tayyorlang',true); return; }
   const tot=lines.reduce((s,l)=>s+l.payable,0);
   const noCam=lines.filter(l=>l.details && l.details.camera===false).length;
-  if(!confirm(`${mon} oylik vedomost HR menejerga yuborilsinmi?\n\n${lines.length} xodim · to‘lanadigan jami ${fmtSom(tot)}${noCam?`\n${noCam} xodimda Kamera ID yo‘q — davomat ushlanmasisiz`:''}\n\nHR tasdiqlagandan keyin shu summalar bo‘yicha maosh beriladi.`)) return;
+  if(!confirm(`${mon} oylik vedomost HR menejerga yuborilsinmi?\n\n${lines.length} xodim · to‘lanadigan jami ${fmtSom(tot)}${noCam?`\n${noCam} xodimda Kamera ID yo‘q — davomat ushlanmasisiz`:''}${mst==='current'?'\n\n⚠ Oy hali tugamagan: ushlanma faqat bugungacha (bugun kirmaydi) hisoblangan. Tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugaguncha vedomostni faqat Direktor tasdiqlaydi.':''}\n\nHR tasdiqlagandan keyin shu summalar bo‘yicha maosh beriladi.`)) return;
   const note=prompt('Izoh (ixtiyoriy):',''); if(note==null) return;
   try{ const r=await rpc('payroll_submit',{ p_month:mon, p_lines:lines, p_note:note||null });
-    if(r && r.ok){ toast(`Vedomost HR’ga yuborildi ✓ (${r.count} xodim, ${fmtSom(r.payable)})`); if(onDone) onDone(); }
-    else toast(r&&r.reason==='status'?(r.status==='approved'?'Vedomost allaqachon tasdiqlangan':'Vedomost allaqachon HR’da'):'Yuborilmadi',true); }
+    // A5-02: qayta ochilgan oyda allaqachon berilgani yangi summadan ko'p — ortiqchasi keyingi oy vedomostida ushlanadi (baza: app.salary_carry)
+    if(r && r.ok){ toast(`Vedomost HR’ga yuborildi ✓ (${r.count} xodim, ${fmtSom(r.payable)})${Number(r.overpaid)>0?` · ⚠ ${Number(r.overpaid)} xodimga bu oy uchun allaqachon ko‘proq berilgan (jami ${fmtSom(r.overpaidSum)}) — ortiqchasi keyingi oy vedomostida «oldingi qoldiq»dan ushlanadi`:''}`); if(onDone) onDone(); }
+    else toast(r&&r.reason==='future'?'Kelgusi oy uchun vedomost yuborilmaydi':(r&&r.reason==='status'?(r.status==='approved'?'Vedomost allaqachon tasdiqlangan':'Vedomost allaqachon HR’da'):'Yuborilmadi'),true); }
   catch(e){ toast(['42501','22023','23503','23505'].includes(String(e.code))?String(e.message):('Xatolik: '+errMsg(e)),true); }
 }
 // «✅ Tasdiqlash» → «Oylik vedomost»: HR menejer (HR bo'lmasa — Direktor). Qatorlar HR ekranida QAYTA hisoblanadi — farq qizil.
 APPROVAL_QUEUES.push({ key:'payroll', title:'Oylik vedomost (maosh)', roles:['hr','director'],
   count: async()=>{ const uid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
-    const s=await getDocs(query(collection(db,'payroll_runs'), where('status','==','submitted'))); let n=s.docs.filter(d=>String((d.data()||{}).preparedBy||'')!==uid).length;
-    if(SESSION.isAdmin){ try{ const l=await getDocs(query(collection(db,'payroll_lines'), where('needsDirector','==',true))); n+=l.docs.filter(d=>!(d.data()||{}).directorOkAt).length; }catch(e){} }
+    const all=(await getDocs(collection(db,'payroll_runs'))).docs.map(d=>({ id:d.id, ...(d.data()||{}) }));
+    let n=all.filter(r=>r.status==='submitted' && String(r.preparedBy||'')!==uid).length;
+    // A5-07: qaytarilgan / qayta ochilgan oy qatorlari Direktor navbatiga kirmaydi (prDirPending)
+    if(SESSION.isAdmin){ try{ const l=await getDocs(query(collection(db,'payroll_lines'), where('needsDirector','==',true))); n+=prDirPending(l.docs.map(d=>({ id:d.id, ...(d.data()||{}) })), all).length; }catch(e){} }
     return n; },
   render: renderPayrollQueue });
 async function renderPayrollQueue(el){
   const uid=String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
-  const s=await getDocs(query(collection(db,'payroll_runs'), where('status','==','submitted')));
-  const runs=s.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  let dirLines=[]; if(SESSION.isAdmin){ try{ const l=await getDocs(query(collection(db,'payroll_lines'), where('needsDirector','==',true))); dirLines=l.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).filter(x=>!x.directorOkAt); }catch(e){} }
+  const allRuns=(await getDocs(collection(db,'payroll_runs'))).docs.map(d=>({ id:d.id, ...(d.data()||{}) }));
+  const runs=allRuns.filter(r=>r.status==='submitted').sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  // A5-07: faqat yuborilgan / tasdiqlangan oy qatorlari (qaytarilgan oy qatori «allaqachon ko‘rib chiqilgan» xatosiga olib kelardi)
+  let dirLines=[]; if(SESSION.isAdmin){ try{ const l=await getDocs(query(collection(db,'payroll_lines'), where('needsDirector','==',true))); dirLines=prDirPending(l.docs.map(d=>({ id:d.id, ...(d.data()||{}) })), allRuns); }catch(e){} }
+  const curMon=tkDay(Date.now()).slice(0,7);
   if(!runs.length && !dirLines.length){ el.innerHTML='<div class="empty">Tasdiq kutayotgan vedomost yo‘q ✓</div>'; return; }
   const names=await prUserNames(runs.map(r=>r.preparedBy));
   let html='';
@@ -8586,28 +8651,37 @@ async function renderPayrollQueue(el){
     try{ const C=await payrollComputeMonth(r.id); if(C.ok && !(C.readFail||[]).length) fresh=await payrollBuildLines(C); else freshErr=C.ok?('o‘qilmadi: '+C.readFail.join(', ')):'davomat o‘qilmadi'; }catch(e){ freshErr=String(e&&(e.code||e.message)||''); }
     const diffs=fresh?lines.filter(l=>{ const f=fresh.find(x=>x.personId===l.personId); return !f || ['gross','deduction','subBonus','advance','carryIn','payable'].some(k=>Math.abs((Number(f[k])||0)-(Number(l[k])||0))>0.5); }).length+fresh.filter(f=>!lines.some(l=>l.personId===f.personId)).length:null;
     const self=String(r.preparedBy||'')===uid;
+    // A5-03: kelgusi oy — hech kim tasdiqlamaydi (qaytariladi); tugamagan oy — faqat Direktor (baza ham tekshiradi)
+    const mst=payMonthState(r.id, curMon), canOk=mst==='past' || (mst==='current' && SESSION.isAdmin);
+    const mstNote=mst==='future' ? '<span class="small" style="color:#B42318">Kelgusi oy — tasdiqlanmaydi, qaytaring</span>'
+      : (mst==='current' ? (SESSION.isAdmin ? '<span class="small" style="color:#B45309">⚠ Oy hali tugamagan — ushlanma faqat bugungacha; tasdiqlasangiz oyning qolgan kunlari kiritmalari qulflanadi</span>' : '<span class="small" style="color:#B45309">Oy hali tugamagan — tasdiqlash oy tugagach (shoshilinch bo‘lsa — Direktor)</span>') : '');
     html+=`<div class="card" style="padding:12px 16px;margin-bottom:10px" data-prrun="${esc(r.id)}">
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(r.id)} oylik vedomost</b><span class="small muted">Tayyorladi: ${esc(prWho(r.preparedBy,names))} · ${esc(fmtDT(r.preparedAt))}${r.version>1?` · ${Number(r.version)}-versiya`:''}</span></div>
       ${r.prepNote?`<div class="small muted">Izoh: ${esc(r.prepNote)}</div>`:''}
       <div class="small" style="margin-top:4px">${lines.length} xodim · to‘lanadigan jami <b>${fmtSom((r.totals||{}).payable||0)}</b> · ${fresh?(diffs?`<span style="color:#B42318;font-weight:700">⚠ ${diffs} qatorda qayta hisob bilan farq bor</span>`:'<span style="color:#1F7A4D">✓ Qayta hisob bilan farq yo‘q</span>'):`<span style="color:#B45309">qayta hisoblab bo‘lmadi (${esc(freshErr)})</span>`}</div>
       ${payrollLinesTable(lines, fresh)}
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${self?'<span class="small muted">Siz tayyorlagansiz — boshqa odam tasdiqlaydi</span>':`<button class="btn sm gold" data-prok="${esc(r.id)}">✅ Tasdiqlash</button><button class="btn sm ghost" data-prno="${esc(r.id)}">↩ Qaytarish</button>`}</div></div>`;
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">${self?'<span class="small muted">Siz tayyorlagansiz — boshqa odam tasdiqlaydi</span>':`${canOk?`<button class="btn sm gold" data-prok="${esc(r.id)}"${mst==='current'?' data-prearly="1"':''}>✅ Tasdiqlash</button>`:''}<button class="btn sm ghost" data-prno="${esc(r.id)}">↩ Qaytarish</button>`}${mstNote}</div></div>`;
   }
   if(dirLines.length) html+=`<h4 style="margin:12px 0 6px">Direktor tasdig‘i kerak (HR / Moliya menejerining o‘z maoshi)</h4>${dirLines.map(l=>`<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b>${esc(l.name||l.personId)}</b> <span class="small muted">· ${esc(l.runId)} · to‘lanadigan ${fmtSom(l.payable)} (maosh ${fmtSom(l.gross)}, ushlanma ${fmtSom(l.deduction)})</span></div><button class="btn sm gold" data-prline="${esc(l.id)}">✓ Tasdiqlash</button></div>`).join('')}`;
   el.innerHTML=html;
-  const run=async(b, fn, args, okMsg)=>{ b.disabled=true;
+  const run=async(b, fn, args, okMsg, msgs)=>{ b.disabled=true;
     try{ const r=await rpc(fn,args); if(r&&r.ok){ toast(okMsg(r)); renderApprovals(); }
-      else { toast(({self:'O‘zingiz tayyorlagan vedomostni tasdiqlay olmaysiz', note_required:'Qaytarish sababi yozilishi shart', not_submitted:'Vedomost allaqachon ko‘rib chiqilgan', not_found:'Topilmadi', not_needed:'Bu qatorga Direktor tasdig‘i kerak emas'})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
+      else { toast(Object.assign({self:'O‘zingiz tayyorlagan vedomostni tasdiqlay olmaysiz', note_required:'Qaytarish sababi yozilishi shart', not_submitted:'Vedomost allaqachon ko‘rib chiqilgan', not_found:'Topilmadi', not_needed:'Bu qatorga Direktor tasdig‘i kerak emas',
+          not_ended:'Oy hali tugamagan — vedomostni oy tugagach HR (shoshilinch bo‘lsa — Direktor) tasdiqlaydi', future:'Kelgusi oy vedomosti tasdiqlanmaydi — qaytaring'}, msgs||{})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
     catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+(e.message||e.code)),true); b.disabled=false; } };
-  el.querySelectorAll('[data-prok]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm(`${b.dataset.prok} oylik vedomost tasdiqlansinmi? Shundan keyin shu summalar bo‘yicha maosh beriladi; oyning ta’til / avans / o‘rinbosarlik yozuvlari qulflanadi.`)) return;
-    run(b,'payroll_decide',{ p_month:b.dataset.prok, p_approve:true, p_note:null }, ()=>'Vedomost tasdiqlandi ✓'); }));
+  el.querySelectorAll('[data-prok]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm(`${b.dataset.prok} oylik vedomost tasdiqlansinmi? Shundan keyin shu summalar bo‘yicha maosh beriladi; oyning ta’til / avans / o‘rinbosarlik yozuvlari qulflanadi.${b.dataset.prearly?'\n\n⚠ Oy hali tugamagan: ushlanma faqat bugungacha hisoblangan — oyning qolgan kunlari (yo‘qlama, haqsiz ta’til) bu vedomostga kirmaydi; tuzatish faqat oyni qayta ochish bilan.':''}`)) return;
+    // A5-06: tasdiqlash paytida HR / Moliya menejeriga aylangan xodimning qatori Direktor tasdig'iga o'tadi — soni ko'rsatiladi
+    run(b,'payroll_decide',{ p_month:b.dataset.prok, p_approve:true, p_note:null }, r=>Number(r&&r.moved)>0?`Vedomost tasdiqlandi ✓ — ${Number(r.moved)} ta qator (HR / Moliya menejerining o‘z maoshi) Direktor tasdig‘iga o‘tkazildi`:'Vedomost tasdiqlandi ✓'); }));
   el.querySelectorAll('[data-prno]').forEach(b=>b.addEventListener('click',()=>{ const n=prompt('Qaytarish sababi (Moliya menejeri ko‘radi):',''); if(n==null) return; if(!n.trim()){ toast('Sabab yozilishi shart',true); return; }
     run(b,'payroll_decide',{ p_month:b.dataset.prno, p_approve:false, p_note:n.trim() }, ()=>'Vedomost qaytarildi'); }));
-  el.querySelectorAll('[data-prline]').forEach(b=>b.addEventListener('click',()=>run(b,'payroll_approve_line',{ p_line:b.dataset.prline, p_note:null }, ()=>'Qator tasdiqlandi ✓')));
+  el.querySelectorAll('[data-prline]').forEach(b=>b.addEventListener('click',()=>run(b,'payroll_approve_line',{ p_line:b.dataset.prline, p_note:null }, ()=>'Qator tasdiqlandi ✓',
+    { not_submitted:'Vedomost qaytarilgan — Moliya menejeri qayta yuborgach tasdiqlang' })));
 }
 // Maosh berish oynasi uchun: o'tish oyidan boshlab — tasdiqlangan vedomost qatori (summa chegarasi).
 async function payrollGateInfo(mm, tid){
   const from=await payrollCutover();
+  // audit-11 (A5-01): o'tish oyi belgilangach undan oldingi (eski tartibdagi, chegarasiz) oy maoshini faqat Direktor yozadi — baza ham rad etadi.
+  if(from && String(mm)<from && !SESSION.isAdmin) return { newRule:false, blocked:true, msg:`${mm} oy maosh tasdig‘i tartibidan (o‘tish oyi ${from}) oldingi oy — bunday oy maoshini faqat Direktor yozadi` };
   if(!from || String(mm)<from) return { newRule:false };
   let st='', line=null;
   try{ const r=await getDoc(doc(db,'payroll_runs',String(mm))); st=r.exists()?String((r.data()||{}).status||''):''; }catch(e){ return { newRule:true, ok:false, msg:'Vedomost holatini o‘qib bo‘lmadi — qayta urining' }; }
@@ -9882,8 +9956,8 @@ async function openSalaryPayout(opts){
   //   (ko'pincha avans summasicha ORTIQCHA) beriladi. Shuning uchun xato bo'lsa payoutni OCHMAYMIZ.
   //   DIQQAT: bo'sh [] (haqiqatan yozuv yo'q / RLS mos rolga ruxsat bersa-yu qator bo'lmasa) — normal;
   //   faqat EXCEPTION (o'qib bo'lmadi) bloklaydi.
-  let SALL, SUBALL, ADV;
-  try{ SALL=await loadCol('salary_payments'); SUBALL=await loadCol('staff_substitutions'); ADV=await loadCol('staff_advances'); }
+  let SALL, SUBALL, ADV, PRC;
+  try{ SALL=await loadCol('salary_payments'); SUBALL=await loadCol('staff_substitutions'); ADV=await loadCol('staff_advances'); PRC=await payrollCarryLoad(ADV); }
   catch(e){ toast('Maosh ma‘lumotlarini (qoldiq / avans / o‘rinbosarlik) o‘qib bo‘lmadi — qayta urinib ko‘ring. Oylik noto‘g‘ri hisoblanmasin.',true); return; }
   const advOfMonth=M=>ADV.filter(a=>String(a.month||String(a.date||'').slice(0,7))===M);
   const MO=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
@@ -9997,7 +10071,7 @@ async function openSalaryPayout(opts){
     const proNote=(bi&&bi.skip)?` <span style="color:#B45309">(${esc(bi.reason||'faol emas')}: maosh yo‘q)</span>`:((bi&&bi.partial)?` <span style="color:#B45309">(prorata ${bi.actDays}/${bi.fullDays} ish kuni)</span>`:'');
     const paidNote=sameMonthPaidV>0?` · <span style="color:#B45309">Shu oy berilgan: ${fmtSum(sameMonthPaidV)}</span> · <span style="color:#1F9982">Qolgani: <b>${fmtSum(dueNow)}</b></span>`:'';
     const dupNote=isDupId(tid)?`<div style="color:#B42318;margin-top:6px">⛔ «${esc(tid)}» ID ikki (yoki undan ko‘p) xodimda bor — maosh/avans aralashadi. Avval xodim kartochkasida «Tahrir» → «Yangi noyob ID berish» (bir martalik).</div>`:'';
-    const gateNote=(gate && gate.newRule) ? (gate.ok ? `<div style="color:#1F7A4D;margin-top:6px">📄 Tasdiqlangan vedomost: to‘lanadigan ${fmtSum(gate.line.payable)} so‘m · hozir berish mumkin: <b>${fmtSum(gateCap)}</b> so‘m (maosh, ushlanma, o‘rinbosarlik — vedomostdan)</div>` : `<div style="color:#B42318;margin-top:6px">⛔ ${esc(gate.msg)}</div>`) : '';
+    const gateNote=(gate && gate.blocked) ? `<div style="color:#B42318;margin-top:6px">⛔ ${esc(gate.msg)}</div>` : (gate && gate.newRule) ? (gate.ok ? `<div style="color:#1F7A4D;margin-top:6px">📄 Tasdiqlangan vedomost: to‘lanadigan ${fmtSum(gate.line.payable)} so‘m · hozir berish mumkin: <b>${fmtSum(gateCap)}</b> so‘m (maosh, ushlanma, o‘rinbosarlik — vedomostdan)</div>` : `<div style="color:#B42318;margin-top:6px">⛔ ${esc(gate.msg)}</div>`) : '';
     $('#sp-info').innerHTML=gateNote+`Maosh: <b>${fmtSum(gross)}</b>${proNote} · Avans: <b>${fmtSum(adv)}</b> · Ushlanma: <b>${fmtSum(ded)}</b>${sub?` · <span style="color:#1F7A4D">O‘rinbosarlik: +${fmtSum(sub)}</span>`:''}${prior?` · <span style="color:#B45309">Oldingi qoldiq: ${prior>0?'+':'−'}${fmtSum(Math.abs(prior))}</span>`:''} · <span style="color:#1F9982">To‘lanishi kerak: <b>${fmtSum(totalDue)}</b> so‘m</span>${paidNote}${dupNote}`;
     carryShow(); };
   // Poyga himoyasi: xodim/oy tanlovi o'zgarsa, OLDINGI tanlovning kechikkan javobi (ushlanma) yangi
@@ -10013,10 +10087,10 @@ async function openSalaryPayout(opts){
     if(inp) inp.readOnly=!!(gate && gate.newRule);
     const done=()=>{ if(g!==dedGen) return;
       if(gate && gate.newRule && gate.ok){ if(inp) inp.value=String(Math.round(Number(gate.line.deduction)||0)); if($('#sp-sub')) $('#sp-sub').value=String(Math.round(Number(gate.line.subBonus)||0)); }
-      if(doBtn) doBtn.disabled=!!(gate && gate.newRule && !gate.ok); calc(); };
+      if(doBtn) doBtn.disabled=!!(gate && ((gate.newRule && !gate.ok) || gate.blocked)); calc(); };
     const sub=(SUBALL||[]).filter(x=> x.subRefType===p.kind && String(x.subRefId)===String(p.refId) && String(x.month)===String(mm))
       .reduce((s,x)=>{ const ap=payeeByRef[(x.absentRefType||'')+':'+String(x.absentRefId||'')]; return s + subCredit(ap, mm, x); }, 0);   // yangi: lessons×rate; eski: eski mantiq
-    const prior=carryBalance((SALL||[]).filter(r=>String(r.teacherId)===String(tid)), mm);
+    const prior=carryBalance((SALL||[]).filter(r=>String(r.teacherId)===String(tid)), mm, PRC);
     if($('#sp-sub')) $('#sp-sub').value=String(Math.round(sub));
     if($('#sp-prior')) $('#sp-prior').value=String(Math.round(prior));
     if(!p.cameraId){ if(inp) inp.value='0'; if(info) info.textContent='(Kamera ID yo‘q — davomat kuzatilmaydi)'; done(); return; }
@@ -10075,6 +10149,7 @@ async function openSalaryPayout(opts){
     const rawDue=(gross-adv-ded)+sub+prior;
     const carryOut=Math.round(rawDue-sameMonthPaidV-paid);
     if(isDupId(tid)){ toast(`«${tid}» ID bir nechta xodimda bor — avval xodim kartochkasida «Tahrir» → «Yangi noyob ID berish» (bir martalik; maosh boshqa odamga yozilmasin)`,true); return; }
+    if(gate && gate.blocked){ toast(gate.msg,true); return; }
     if(gate && gate.newRule){ if(!gate.ok){ toast(gate.msg,true); return; }
       if(paid>gateCap+0.5){ toast(`Tasdiqlangan vedomostdan oshadi: bu oy berish mumkin ${fmtSum(gateCap)} so‘m`,true); return; } }
     if(gross<=0 && sub<=0 && prior<=0){ toast('Bu xodimga maosh hisoblanmagan — avval maoshini kiriting',true); return; }
@@ -11202,7 +11277,7 @@ async function renderPriceTable(){
     ${SESSION.isAdmin?`<div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Maosh — Moliya menejeri tayyorlaydi, HR tasdiqlaydi: qaysi oy maoshidan<input type="month" id="pt-payfrom" value="${esc(payFrom)}"></label>
       <label>&nbsp;<button class="btn" id="pt-pay-save" style="width:100%">Saqlash</button></label>
-    </div><div class="small muted" style="margin-top:8px">${payFrom?`Hozir: <b>${esc(payFrom)}</b> oy maoshidan boshlab maosh faqat HR menejer tasdiqlagan oylik vedomost bo‘yicha beriladi (tasdiqlangan summadan oshmaydi); HR / Moliya menejerining o‘z maoshi — Direktor tasdig‘i bilan. Oldingi oylar — eski tartib. Shu oydan keyin maosh berilgan bo‘lsa o‘zgartirib bo‘lmaydi.`:'<span style="color:#B45309">⚠ Hali belgilanmagan: maosh tasdiqsiz beriladi.</span> Hali maosh berilmagan oyni tanlang (masalan joriy oy).'}</div></div>`:''}
+    </div><div class="small muted" style="margin-top:8px">${payFrom?`Hozir: <b>${esc(payFrom)}</b> oy maoshidan boshlab maosh faqat HR menejer tasdiqlagan oylik vedomost bo‘yicha beriladi (tasdiqlangan summadan oshmaydi); HR / Moliya menejerining o‘z maoshi — Direktor tasdig‘i bilan. Oldingi oylar — eski tartib (ularning maoshini faqat Direktor yozadi). Shu oydan keyin maosh berilgan bo‘lsa o‘zgartirib bo‘lmaydi.`:'<span style="color:#B45309">⚠ Hali belgilanmagan: maosh tasdiqsiz beriladi.</span> Hali maosh berilmagan oyni tanlang (masalan joriy oy).'}</div></div>`:''}
     ${SESSION.isAdmin?`<div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>«Bemor» kuni ma’lumotnoma bilan — qaysi oy fakturasidan<input type="month" id="pt-sickfrom" value="${esc(sickFrom)}"></label>
       <label>&nbsp;<button class="btn" id="pt-sickfrom-save" style="width:100%">O‘tish oyini saqlash</button></label>
@@ -11225,7 +11300,7 @@ async function renderPriceTable(){
   const psb=$('#pt-pay-save'); if(psb) psb.addEventListener('click',async()=>{ const v=String($('#pt-payfrom').value||'').trim();
     if(!/^\d{4}-\d{2}$/.test(v)){ toast('Oyni tanlang',true); return; }
     if(v===payFrom){ toast('O‘zgarish yo‘q'); return; }
-    if(!confirm(`${v} oy maoshidan boshlab maosh FAQAT HR menejer tasdiqlagan oylik vedomost bo‘yicha beriladi (Moliya menejeri tayyorlaydi). Bu oy uchun hali maosh berilmagan bo‘lishi kerak. Davom etilsinmi?`)) return;
+    if(!confirm(`${v} oy maoshidan boshlab maosh FAQAT HR menejer tasdiqlagan oylik vedomost bo‘yicha beriladi (Moliya menejeri tayyorlaydi). Bu oy uchun hali maosh berilmagan bo‘lishi kerak.\n\nShundan keyin ${v} dan OLDINGI oylar maoshini faqat Direktor yozadi (kassir / HR / moliya — yo‘q): o‘tish oyini birinchi hali maoshi berilmagan oyga qo‘ying. Davom etilsinmi?`)) return;
     psb.disabled=true;
     try{ await setDoc(doc(db,'config','finance'), {payrollApprovalFrom:v, updatedAt:serverTimestamp()}, {merge:true}); toast('Saqlandi ✓'); renderPriceTable(); }
     catch(e){ toast(['23514','22023','42501'].includes(String(e.code))?String(e.message):('Xatolik: '+errMsg(e)),true); psb.disabled=false; } });

@@ -525,7 +525,8 @@ select zz.put('Q5', zz.as('U_FM', $q$select public.payroll_submit('2027-01', '[{
 select zz.chk('Q5 yanvar vedomosti: avans BAZADAN sof 170 000 (qaytgan 80 000 ushlanmaydi)',
   (zz.js(zz.get('Q5')) ->> 'ok') || ' | ' || (select trim_scale(advance) || ':' || (payable = greatest(0, gross - advance - deduction + "subBonus" + "carryIn")) from public.payroll_lines where "runId" = '2027-01'),
   '^true \| 170000:true$');
-select zz.put('Q6', zz.as('U_HR', $q$select public.payroll_decide('2027-01', true)::text$q$));
+-- audit-11 (A5-03): yanvar hali tugamagan (sinov soati 06.01) — tugamagan oyni HR emas, Direktor tasdiqlaydi (Direktor ruxsati)
+select zz.put('Q6', zz.as('U_DIR', $q$select public.payroll_decide('2027-01', true)::text$q$));
 select zz.chk('Q6 vedomost tasdiqlandi: endi avans qaytimi rad («Ish haqi to''lovi» statiyasi yoki oyni qayta ochish); qaytimni bekor qilish ham rad',
   (zz.js(zz.get('Q6')) ->> 'status') || ' | '
   || zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_staff_return","amount":10000,"month":"2027-01","partyType":"employee","partyId":"staff:st1","articleId":"OP-08","basis":"Ortiqcha avans qaytdi","clientRef":"q6-000001"}') || ' | '
@@ -575,7 +576,8 @@ set local session_replication_role = origin;
 select (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'ret') || ':' || (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p5' ->> 'row') as q14 \gset
 rollback to savepoint q14;
 select zz.chk('Q14 moslik buzilishni topadi: yozuvsiz qaytim orderi va ordersiz manfiy maosh yozuvi — «ret» 2 (P5 «row» o''zgarmaydi)', :'q14', '^2:0$');
--- payroll-approval.sql (jonli fayl) darvozasi: manfiy yozuv faqat kassa funksiyasi bayrog'i bilan o'tadi; bayroqsiz — avvalgidek (2027-01 qayta ochilgan)
+-- payroll-approval.sql (jonli fayl) darvozasi: manfiy yozuv faqat kassa funksiyasi bayrog'i bilan o'tadi; bayroqsiz — rad (audit-11, A5-01: har qanday oyda,
+--   tasdiq holatidan oldin — «manfiy bo'lmaydi»)
 savepoint q15;
 do $x$ begin
   begin
@@ -591,8 +593,8 @@ do $x$ begin
 end $x$;
 select zz.get('Q15a') || ' | ' || zz.get('Q15b') as q15 \gset
 rollback to savepoint q15;
-select zz.chk('Q15 maosh darvozasi: bayroqsiz manfiy yozuv — avvalgidek tekshiriladi (oy tasdiqlanmagan — rad); kassa bayrog''i bilan — o''tadi',
-  :'q15', '^ERR 23514 .*tasdiqlanmagan \| ok$');
+select zz.chk('Q15 maosh darvozasi: bayroqsiz manfiy yozuv — rad (manfiy summa faqat kassa funksiyasidan); kassa bayrog''i bilan — o''tadi',
+  :'q15', '^ERR 23514 .*manfiy bo''lmaydi.* \| ok$');
 -- Avans / maosh orderining o'zi qaytimdan oldin bekor qilinmaydi (g1, 2-davra): aks holda oy avansi / berilgan maosh manfiy bo'lib
 --   qolardi (vedomost avans o'rniga maoshga qo'shardi, darvoza chegarasi tasdiqlangandan oshardi) — avval qaytim, keyin order.
 select zz.put('Q16', zz.void('U_KAS', zz.id('Q1'), 'Xato berilgan avans'));

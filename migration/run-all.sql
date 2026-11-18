@@ -135,6 +135,7 @@ set local iqror.migrating = '1';
 \ir audit-11-platforma.sql
 \ir audit-11-elon.sql
 \ir audit-11-talim.sql
+\ir audit-11-maosh.sql
 \ir student-archive.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql

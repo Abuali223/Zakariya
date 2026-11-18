@@ -188,6 +188,9 @@ insert into public.teachers (id, "teacherId", name, "userUid") values
   ('x_tr','IQT-T4','Sinov O''qituvchi','U_TR'), ('x_dup','IQT-T6','Sinov HR 2 (ikkinchi lavozim)','U_HRR');
 update public.config set "payrollApprovalFrom" = '2098-03' where id = 'finance';
 set local session_replication_role = origin;
+-- audit-11 (A5-03): vedomost faqat boshlangan oy uchun yuboriladi, tugamagan oyni faqat Direktor tasdiqlaydi — sinov oyi (2098-03) shu bo'lim
+--   davomida o'tgan oy bo'lsin (sinov soati; faqat sinov bazasida ishlaydi, bo'lim oxirida olib tashlanadi).
+insert into app.fin_clock (id, t) values (1, '2098-04-02 10:00+05') on conflict (id) do update set t = excluded.t;
 create or replace function zz.nd(p_pid text) returns text language sql as $$
   select coalesce((select "needsDirector"::text from public.payroll_lines where "runId" = '2098-03' and "personId" = p_pid), '<qator yo''q>') $$;
 select zz.chk('W00 Moliya menejeri vedomostni yuboradi (11 qator)', zz.as('U_FM', $q$select public.payroll_submit('2098-03', '[
@@ -215,6 +218,7 @@ select zz.chk('W11 Direktor shu qatorni tasdiqlaydi', zz.as('U_DIR', $q$select p
 select zz.chk('W12 Direktor tasdig''idan keyin maosh beriladi (Moliya menejeri)',
   zz.as('U_FM', $q$insert into public.salary_payments (id, "teacherId", month, gross, net, paid, date) values ('w_sp2', 'IQX-T2', '2098-03', 1000000, 1000000, 1000000, '2098-03-28') returning id$q$),
   '^w_sp2$');
+delete from app.fin_clock;
 
 -- ===== (9) xodim kartasining login havolasi (staff / teachers."userUid") — faqat Direktor / server =====
 -- (8)-bo'limdagi kartalar: x_hrr (U_HRR — teskari havola), x_dup o'qituvchi (U_HRR ning ikkinchi lavozimi), x_hrf (U_HRF — asosiy havola),

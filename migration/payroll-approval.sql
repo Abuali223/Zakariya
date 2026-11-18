@@ -98,25 +98,8 @@ create policy pr_sel on public.payroll_runs for select using (app.can_see_salary
 drop policy if exists pl_sel on public.payroll_lines;
 create policy pl_sel on public.payroll_lines for select using (app.can_see_salary());
 
--- Oldingi oylardan qolgan qoldiq — admin.html carryBalance() bilan AYNAN bir xil: oy bo'yicha, oyning qarzi eng so'nggi (date)
---   yozuvidan (teng sanada — eng kattasi), to'lovlar yig'iladi; paid bo'sh (eski yozuv) — to'liq to'langan.
-create or replace function app.salary_carry(p_tid text, p_before text) returns numeric
-language sql stable security definer set search_path = public, app, pg_temp as $$
-  with r as (
-    select month, coalesce(date, '') as ord,
-           case when gross is not null or advance is not null or deduction is not null
-                then coalesce(gross, 0) - coalesce(advance, 0) - coalesce(deduction, 0) + coalesce("subBonus", 0)
-                else coalesce(net, 0) + coalesce("subBonus", 0) end as due,
-           paid
-      from public.salary_payments
-     where "teacherId" = p_tid and coalesce(month, '') <> '' and month < p_before),
-  r2 as (select month, ord, due, coalesce(paid, due) as paidv from r),
-  d as (select month, max(due) as due from r2 x where ord = (select max(ord) from r2 y where y.month = x.month) group by month),
-  p as (select month, sum(paidv) as paid from r2 group by month)
-  select coalesce(round(sum(d.due - p.paid)), 0) from d join p using (month)
-$$;
-revoke all on function app.salary_carry(text, text) from public, anon, authenticated;
-
+-- Shu oy avanslari (bazadan; kassaga qaytarilgani — manfiy yozuv). Quyidagi qoldiq hisobi ham ishlatadi — shuning uchun undan OLDIN
+--   (SQL funksiya tanasi yaratilganda tekshiriladi).
 create or replace function app.payroll_adv(p_tid text, p_month text) returns numeric
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select coalesce(sum(coalesce(a.amount, 0)), 0) from public.staff_advances a
@@ -124,17 +107,57 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.payroll_adv(text, text) from public, anon, authenticated;
 
+-- Oldingi oylardan qolgan qoldiq — admin.html carryBalance() bilan AYNAN bir xil, oy bo'yicha:
+--   * o'tish oyidan OLDINGI oylar (yoki o'tish oyi belgilanmagan) — eski tartib: oyning qarzi eng so'nggi (date) yozuvidan (teng
+--     sanada — eng kattasi), to'lovlar yig'iladi; paid bo'sh (eski yozuv) — to'liq to'langan.
+--   * o'tish oyidan boshlab (audit-11, A5-01 / A5-02) — oyning qarzi TASDIQLANGAN vedomost qatoridan: maosh − shu oy avanslari (bazadan)
+--     − ushlanma + o'rinbosarlik (darvozadagi «hozirgi qarz» bilan bir xil), berilgani — shu oy yozuvlari paid yig'indisi (bo'sh — 0).
+--     Sabab: mijoz yozadigan maosh yozuvidagi gross / ushlanma / avans maydonlariga ishonilardi — kassir (HR / moliya ham) soxta «gross»
+--     yoki manfiy summa bilan keyingi oy «oldingi qoldig'i»ni oshirib, HR tasdiqlagan summadan ko'p pul chiqara olardi (HR ekranidagi
+--     qayta hisob xuddi shu yozuvlardan hisoblagani uchun farq ko'rinmasdi). Oy qayta ochilib kamroq summa bilan qayta tasdiqlansa —
+--     ortiqcha berilgani keyingi oyga MANFIY qoldiq bo'lib o'tadi (eski yozuvdagi eski ushlanma emas, yangi tasdiqlangan qator).
+--     Oy hozir tasdiqlanmagan bo'lsa (qayta ochilgan / qayta yuborilgan, HR hali tasdiqlamagan) — shu oy qoldiqqa kirmaydi (faqat HR
+--     tasdiqlagan qiymatlar), tasdiqlangach o'zi qo'shiladi; tasdiqlangan vedomostda qatori yo'q xodimga berilgani — butunlay ortiqcha.
+--     Eski tartib kabi faqat maosh yozuvi bor oylar hisoblanadi.
+create or replace function app.salary_carry(p_tid text, p_before text) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  with f as (select nullif(btrim(coalesce((select c."payrollApprovalFrom" from public.config c where c.id = 'finance'), '')), '') as v_from),
+  r as (
+    select s.month, coalesce(s.date, '') as ord,
+           case when s.gross is not null or s.advance is not null or s.deduction is not null
+                then coalesce(s.gross, 0) - coalesce(s.advance, 0) - coalesce(s.deduction, 0) + coalesce(s."subBonus", 0)
+                else coalesce(s.net, 0) + coalesce(s."subBonus", 0) end as due,
+           s.paid, (f.v_from is not null and s.month >= f.v_from) as gated
+      from public.salary_payments s cross join f
+     where s."teacherId" = p_tid and coalesce(s.month, '') <> '' and s.month < p_before),
+  r2 as (select month, ord, due, coalesce(paid, due) as paidv from r where not gated),
+  d as (select month, max(due) as due from r2 x where ord = (select max(ord) from r2 y where y.month = x.month) group by month),
+  p as (select month, sum(paidv) as paid from r2 group by month),
+  g as (select month, sum(coalesce(paid, 0)) as paid from r where gated group by month),
+  gd as (select coalesce(l.gross - app.payroll_adv(p_tid, g.month) - l.deduction + l."subBonus", 0) - g.paid as bal
+           from g join public.payroll_runs pr on pr.id = g.month and pr.status = 'approved'
+           left join public.payroll_lines l on l."runId" = g.month and l."personId" = p_tid)
+  select coalesce(round(coalesce((select sum(d.due - p.paid) from d join p using (month)), 0) + coalesce((select sum(gd.bal) from gd), 0)), 0)
+$$;
+revoke all on function app.salary_carry(text, text) from public, anon, authenticated;
+
 -- 3) RPC: yuborish (Moliya menejeri / Direktor)
 create or replace function public.payroll_submit(p_month text, p_lines jsonb, p_note text default null) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); r public.payroll_runs%rowtype; x jsonb; v_type text; v_pid text; v_ref text; v_name text; v_link text;
         v_g numeric; v_d numeric; v_s numeric; v_a numeric; v_c numeric; v_p numeric; v_w numeric; v_nd boolean;
-        n int := 0; t_g numeric := 0; t_d numeric := 0; t_p numeric := 0; v_ids text[] := '{}';
+        n int := 0; t_g numeric := 0; t_d numeric := 0; t_p numeric := 0; v_ids text[] := '{}'; n_over int; s_over numeric;
 begin
   if v_uid is null or not (app.has_role('finance_mgr') or app.has_role('director')) then
     raise exception 'Ruxsat yo''q: oylik vedomostni Moliya menejeri (yoki Direktor) tayyorlaydi' using errcode = '42501';
   end if;
   if coalesce(p_month, '') !~ '^\d{4}-(0[1-9]|1[0-2])$' then raise exception 'Oy YYYY-MM' using errcode = '22023'; end if;
+  -- (audit-11, A5-03) Kelgusi (hali boshlanmagan) oy uchun vedomost yo'q: davomat ushlanmasi va o'rinbosarlik hali yo'q, tasdiqlansa
+  --   o'sha oyning ta'til / avans / o'rinbosarlik kiritmalari oldindan qulflanardi. Joriy (tugamagan) oy — tayyorlash mumkin (ushlanma
+  --   «bugungacha»), lekin oy tugaguncha uni faqat Direktor tasdiqlaydi (payroll_decide). Sana — server (Toshkent) kuni.
+  if p_month > to_char(app.fin_today(), 'YYYY-MM') then
+    return jsonb_build_object('ok', false, 'reason', 'future', 'month', p_month);
+  end if;
   if jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) = 0 then
     return jsonb_build_object('ok', false, 'reason', 'empty');
   end if;
@@ -181,15 +204,29 @@ begin
          "prepNote" = nullif(btrim(coalesce(p_note, '')), ''), "approvedBy" = null, "approvedAt" = null, "decisionNote" = null,
          totals = jsonb_build_object('count', n, 'gross', t_g, 'deduction', t_d, 'payable', t_p), version = version + 1
    where id = p_month;
-  return jsonb_build_object('ok', true, 'count', n, 'payable', t_p, 'version', r.version + 1);
+  -- (audit-11, A5-02) Qayta ochilgan oy: shu oy allaqachon berilgani yangi to'lanadigandan ko'p bo'lsa — ortiqchasi yo'qolmaydi, keyingi
+  --   oy vedomostida «oldingi qoldiq» (manfiy) bo'lib ushlanadi (app.salary_carry); Moliya menejeriga shu yerda ko'rsatiladi.
+  select count(*), coalesce(sum(o.paid - o.payable), 0) into n_over, s_over
+    from (select l.payable, (select coalesce(sum(coalesce(s.paid, 0)), 0) from public.salary_payments s
+                              where s."teacherId" = l."personId" and s.month = p_month) as paid
+            from public.payroll_lines l where l."runId" = p_month) o
+   where o.paid > o.payable + 0.5;
+  return jsonb_build_object('ok', true, 'count', n, 'payable', t_p, 'version', r.version + 1, 'overpaid', n_over, 'overpaidSum', s_over);
 end $$;
 revoke all on function public.payroll_submit(text, jsonb, text) from public, anon;
 grant execute on function public.payroll_submit(text, jsonb, text) to authenticated, service_role;
 
 -- HR menejer (HR bo'lmasa — Direktor) tasdiqlaydi yoki izoh bilan qaytaradi; tayyorlagan odam o'zi tasdiqlay olmaydi.
+--   (audit-11, A5-03) Tugamagan oy: ushlanma faqat «bugungacha» hisoblangan, tasdiqdan keyin oyning qolgan kunlari uchun ta'til /
+--   chiqib-kelish / o'rinbosarlik / avans qulflanadi — shuning uchun joriy oyni (maosh oy tugamasdan beriladigan bo'lsa) faqat Direktor
+--   tasdiqlaydi (Direktor ruxsati), HR — oy tugagach; kelgusi oy — hech kim (reason 'not_ended' / 'future'). Qaytarish — har doim.
+--   (audit-11, A5-06) «Direktor tasdig'i kerak» belgisi TASDIQLASH paytida ham qayta tekshiriladi: vedomost yuborilgandan keyin HR /
+--   Moliya menejeri roli berilgan (qo'shimcha HR ham) yoki kartasi shunday hisobga bog'langan xodimning qatori shu yerda Direktor
+--   tasdig'iga o'tadi (reports-roles.sql 5b himoya to'ri bilan bir xil shart — u faqat keyingi deployda ishlardi): yangi HR o'z maoshini
+--   o'zi tasdiqlab, Direktorsiz ololmaydi. O'tkazilgan qatorlar soni javobda ('moved').
 create or replace function public.payroll_decide(p_month text, p_approve boolean, p_note text default null) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); r public.payroll_runs%rowtype;
+declare v_uid text := app.uid(); r public.payroll_runs%rowtype; v_cur text; v_moved int;
 begin
   if v_uid is null or not (app.has_role('hr') or app.has_role('director')) then
     raise exception 'Ruxsat yo''q: oylik vedomostni HR menejer tasdiqlaydi (yo''q bo''lsa — Direktor)' using errcode = '42501';
@@ -203,9 +240,23 @@ begin
     update public.payroll_runs set status = 'returned', "returnedBy" = v_uid, "returnedAt" = now(), "returnNote" = btrim(p_note) where id = p_month;
     return jsonb_build_object('ok', true, 'status', 'returned');
   end if;
+  v_cur := to_char(app.fin_today(), 'YYYY-MM');
+  if p_month > v_cur then return jsonb_build_object('ok', false, 'reason', 'future', 'status', r.status); end if;
+  if p_month = v_cur and not app.has_role('director') then return jsonb_build_object('ok', false, 'reason', 'not_ended', 'status', r.status); end if;
+  with moved as (
+    update public.payroll_lines l set "needsDirector" = true
+     where l."runId" = p_month and not l."needsDirector" and l."directorOkAt" is null
+       and exists (select 1 from public.users u
+                    where (u.role in ('hr', 'finance_mgr') or app.u_has(u.role, u."extraRoles", 'hr'))
+                      and ((u."staffRefType" = l."personType" and u."staffRefId" = l."refId")
+                           or u.id = nullif(case l."personType"
+                                              when 'teacher' then (select t."userUid" from public.teachers t where t.id = l."refId")
+                                              when 'staff' then (select s."userUid" from public.staff s where s.id = l."refId") end, '')))
+    returning 1)
+  select count(*) into v_moved from moved;
   update public.payroll_runs set status = 'approved', "approvedBy" = v_uid, "approvedAt" = now(),
          "decisionNote" = nullif(btrim(coalesce(p_note, '')), '') where id = p_month;
-  return jsonb_build_object('ok', true, 'status', 'approved');
+  return jsonb_build_object('ok', true, 'status', 'approved', 'moved', v_moved);
 end $$;
 revoke all on function public.payroll_decide(text, boolean, text) from public, anon;
 grant execute on function public.payroll_decide(text, boolean, text) to authenticated, service_role;
@@ -250,15 +301,39 @@ grant execute on function public.payroll_reopen(text, text) to authenticated, se
 --   Kassaga qaytarilgan maosh (moliya moduli, kassa-links.sql «Xodim qaytargan pul») — MANFIY yozuv, faqat kassa funksiyasi ichida
 --   (bayroq iqror.kassa_rpc): berilganni kamaytiradi, chegaradan oshmaydi — darvozadan o'tadi (oy shu orada qayta ochilgan bo'lsa ham).
 --   Kassa moduli o'rnatilmagan bazada bu bayroqni hech narsa qo'ymaydi — darvoza avvalgidek.
+--   (audit-11, A5-01) Darvoza mijoz yozgan maydonlarga ishonmaydi (kassir / HR / moliya PostgREST orqali o'z JWT'si bilan yozadi):
+--     * manfiy summa — faqat kassa funksiyasidan (yuqoridagi istisno), boshqa yo'l bilan HECH QAYSI oyga yozilmaydi (o'tish oyi
+--       belgilanmagan bo'lsa ham): avval manfiy qator chegaraga kirmasdan «berilgan»ni kamaytirib, keyingi to'lovni tasdiqlangan
+--       summadan oshirishga yo'l ochardi;
+--     * o'tish oyi belgilangach undan OLDINGI oy (eski tartib, chegarasiz) maoshini faqat Direktor (yoki server) yozadi: eski oyga soxta
+--       «gross»li qator keyingi oylar «oldingi qoldig'i»ni oshirib, vedomost tasdig'ini chetlab o'tardi (kassa moduli ham bunday oy
+--       uchun naqd maoshni faqat Direktorga beradi — kassa_salary_pay; kassaga qaytgan pul — yuqoridagi istisno). Xodim ID'sini
+--       tuzatish (rekey_payroll_id — faqat kalit o'zgaradi) bu qoidaga kirmaydi;
+--     * o'tish oyidan boshlab yozuvning maosh / ushlanma / o'rinbosarlik / avans / qoldiq maydonlari tasdiqlangan vedomost qatori va
+--       bazadan yoziladi (mijoz yuborgani e'tiborsiz) — chek, hisobot va kassa qaytimi (oy hisob qiymatlari) shu qiymatni ko'radi.
+--   (audit-11, A5-02) Summa chegarasi faqat pul berilganda (paid > 0): oy qayta ochilib kamroq summa bilan qayta tasdiqlangan bo'lsa,
+--     0 so'mlik tuzatish yozuvi pul chiqarmaydi va rad etilmaydi (ortiqcha berilgani app.salary_carry bilan keyingi oyga o'tadi).
 create or replace function app.salary_payment_gate() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_from text; v_st text; l public.payroll_lines%rowtype; v_paid numeric; v_live numeric; v_cap numeric;
+        v_adv numeric; v_carry numeric; v_moved boolean := false;
 begin
   if tg_op = 'INSERT' and coalesce(new.paid, 0) < 0 and coalesce(current_setting('iqror.kassa_rpc', true), '') = '1' then return new; end if;
+  if tg_op = 'UPDATE' and new.paid is not distinct from old.paid and new.month is not distinct from old.month then
+    if new."teacherId" is not distinct from old."teacherId" then return new; end if;
+    v_moved := true;   -- faqat xodim kaliti o'zgardi (ID tuzatish) — summa va oy o'sha
+  end if;
+  if not v_moved and coalesce(new.paid, 0) < 0 then
+    raise exception 'Maosh yozuvi: berilgan summa manfiy bo''lmaydi — xodim qaytargan pul faqat «Kassa» orqali (kirim orderi bilan) yoziladi'
+      using errcode = '23514';
+  end if;
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
-  if v_from is null or coalesce(new.month, '') < v_from then return new; end if;
-  if tg_op = 'UPDATE' and new.paid is not distinct from old.paid and new.month is not distinct from old.month
-     and new."teacherId" is not distinct from old."teacherId" then return new; end if;
+  if v_from is null then return new; end if;
+  if coalesce(new.month, '') < v_from then
+    if v_moved or app.is_system() or app.is_admin() then return new; end if;
+    raise exception 'Maosh berilmaydi: % oy maosh tasdig''i tartibidan (o''tish oyi %) oldingi oy — bunday oy maoshini faqat Direktor yozadi',
+      coalesce(nullif(new.month, ''), '(oysiz)'), v_from using errcode = '42501';
+  end if;
   select status into v_st from public.payroll_runs where id = new.month;
   if coalesce(v_st, '') <> 'approved' then
     raise exception 'Maosh berilmaydi: % oy vedomosti HR menejer tomonidan tasdiqlanmagan', new.month using errcode = '23514';
@@ -274,10 +349,18 @@ begin
   select coalesce(sum(coalesce(p.paid, 0)), 0) into v_paid from public.salary_payments p
    where p."teacherId" = new."teacherId" and p.month = new.month and p.id <> new.id;
   -- Tasdiqlangan summa, lekin hozirgi haqiqiy qarzdan ko'p emas (tasdiqdan keyin oldingi oy ortiqcha to'langan bo'lsa).
-  v_live := greatest(0, l.gross - app.payroll_adv(new."teacherId", new.month) - l.deduction + l."subBonus" + app.salary_carry(new."teacherId", new.month));
+  v_adv := app.payroll_adv(new."teacherId", new.month);
+  v_carry := app.salary_carry(new."teacherId", new.month);
+  v_live := greatest(0, l.gross - v_adv - l.deduction + l."subBonus" + v_carry);
   v_cap := least(l.payable, v_live) - v_paid;
-  if coalesce(new.paid, 0) > v_cap + 0.5 then
+  if coalesce(new.paid, 0) > 0 and new.paid > v_cap + 0.5 then
     raise exception 'Maosh berilmaydi: tasdiqlangan summadan oshadi (berish mumkin: % so''m)', greatest(0, round(v_cap)) using errcode = '23514';
+  end if;
+  if not v_moved then
+    new.gross := l.gross; new.deduction := l.deduction; new."subBonus" := l."subBonus"; new.advance := v_adv;
+    new.net := greatest(0, l.gross - v_adv - l.deduction);
+    new."carryIn" := v_carry;
+    new."carryOut" := round(l.gross - v_adv - l.deduction + l."subBonus" + v_carry - v_paid - coalesce(new.paid, 0));
   end if;
   return new;
 end $$;
