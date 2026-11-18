@@ -19,7 +19,8 @@ do $iqror_guard$ begin raise exception 'iqror: nurse-sick.sql ALOHIDA ishga tush
 --     tasdiqlangan ma'lumotnomadan: invoices."sickNoteRefs" {noteId: [kunlar]} — baza tekshiradi (kunlar soni, summa =
 --     kunlar × sickRate, har kun faqat BIR fakturaga), sick_notes."appliedDays" {kun: fakturaId} shu yerda belgilanadi.
 --     Faktura bekor qilinsa/o'chirilsa — kunlar bo'shaydi. Fakturalar bor oy uchun o'tish oyini o'zgartirib bo'lmaydi.
---   * Ketgan/muzlatilgan o'quvchining kech tasdiqlangan kunlari — sick_note_refund(): avansga (faqat tasdiqlovchi amali).
+--   * Ketgan/muzlatilgan o'quvchining kech tasdiqlangan kunlari — sick_note_refund(): avansga (faqat tasdiqlovchi amali;
+--     xodim farzandi / kontrakt / grant — yo'q, fakturadagi qoida kabi).
 --   * student_health — sog'liq kartasi (hamshira/direktor yozadi, ota-ona o'qiydi); student_private.health bir marta
 --     nusxalanadi (eski ustun qoladi). nurse_visits — hamshira jurnali (murojaat, harorat, ko'rik, chora).
 --   * Ota-ona va sinf rahbari: my_sick_notes / my_nurse_visits ko'rinishlari (fayl yo'li va tibbiy matnsiz).
@@ -635,10 +636,15 @@ create trigger trg_invoice_sick_apply after insert or update or delete on public
 -- 13) Ketgan / muzlatilgan o'quvchi: tasdiqlangan, hali qo'llanmagan kunlar — avansga (faqat tasdiqlovchi amali).
 --     Kun hisoblanadi, agar o'sha oy fakturasi bor, bekor/qaytarilgan/grant emas, asosiy narx > 0, kun hisoblangan
 --     oraliqda (billedFrom..billedTo) va to'xtatilgan davrda emas bo'lsa (fakturadagi qoida bilan bir xil).
+--     Toifa (audit A2-03): fakturada kasal kun faqat ODDIY o'quvchiga ayiriladi (admin.html computeTuition: xodim farzandi 50%,
+--     kontrakt va grant — yo'q). Shu toifadagi o'quvchiga avansga qaytarish ham yo'q — 'not_eligible' (ilgari tekshirilmasdi:
+--     o'qiyotgan xodim farzandiga berilmaydigan pulni ketgan xodim farzandi avansga olardi). Fakturaga sig'magan (keyingi
+--     fakturaga qoldirilgan, A2-08) kunlar ham shu yerda — qo'llanmagan kun sifatida — qaytariladi.
 create or replace function public.sick_note_refund(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); n public.sick_notes%rowtype; s record; v_from text; v_rate numeric; v_min text;
         v_days text[] := '{}'; v_d text; v_inv record; v_amt numeric; v_cr numeric; v_lid text; v_map jsonb := '{}'::jsonb;
+        v_cat text;
 begin
   if v_uid is null or not app.is_finance_mgr() then
     raise exception 'Ruxsat yo''q: faqat Moliya menejeri yoki Direktor' using errcode = '42501';
@@ -653,6 +659,20 @@ begin
   end if;
   select nullif(btrim(coalesce(c."sickApprovalFrom", '')), ''), c."sickRate" into v_from, v_rate from public.config c where c.id = 'finance';
   if v_from is null then return jsonb_build_object('ok', false, 'reason', 'no_cutover'); end if;
+  -- Toifa — o'quvchining OXIRGI amaldagi fakturasidan (ketgan o'quvchining keyingi fakturasi yo'q; shu oxirgi shartlar bilan
+  --   o'qiyotganida ham kunlar ayirilmasdi). Tasnif invoice_discount_guard (discount-approval.sql) bilan bir xil: 50%..<100% —
+  --   xodim farzandi; «Kontrakt…» — kontrakt; 100% grant bonussiz va «Monitoring 100» emas — olimpiada/ijtimoiy grant.
+  --   (Moliya menejeri student_private'ni o'qiy olmaydi — D6; admin.html sickExemptCat ham shu fakturadan aynan shunday ajratadi.)
+  select case
+           when coalesce(i."pctApplied", 0) >= 0.5 and coalesce(i."pctApplied", 0) < 1 then 'teacher_child'
+           when coalesce(i."discountInfo", '') ilike 'Kontrakt%' then 'contract'
+           when (coalesce(i."isGrant", false) or coalesce(i.provider, '') = 'grant') and coalesce(i."pctApplied", 0) >= 1
+                and coalesce(i."bonusRef", '') = '' and coalesce(i."discountInfo", '') not ilike 'Monitoring 100%' then 'olympiad'
+         end into v_cat
+    from public.invoices i
+   where i."studentId" = n."studentId" and coalesce(i.status, '') not in ('canceled', 'reversed')
+   order by i.month desc, (i.id = n."studentId" || '__' || i.month) desc limit 1;
+  if v_cat is not null then return jsonb_build_object('ok', false, 'reason', 'not_eligible', 'category', v_cat); end if;
   v_min := to_char((v_from || '-01')::date - interval '1 month', 'YYYY-MM-DD');
   perform pg_advisory_xact_lock(hashtext('iqror_pay:' || n."studentId"));   -- avans bilan ishlovchi boshqa RPC'lar bilan bir qulf
   for v_d in select x from jsonb_array_elements_text(n."schoolDays") x order by x loop

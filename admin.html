@@ -8421,6 +8421,12 @@ const saAgg=(list)=>{
   let work=null; if(kelgan&&ketgan){ work=Math.max(0, Math.round((Date.parse(ketgan)-Date.parse(kelgan))/60000)-brkMin); }
   return { kelgan, ketgan, brkMin, workMin:work };
 };
+// Xodim shu kuni KELGANMI — yagona qoida (audit A2-06): kunning istalgan skani (saAgg «kelgan»: birinchi 'in', bo'lmasa birinchi
+//   ko'rilgan skan). Qatordagi «Keldi», ushlanma (attMetrics: skani bor kun — yo'qlama emas) va bosh sahifa (dv2StaffToday) shu
+//   qoida bilan; kunlik sarlavhadagi «keldi / kelmadi» soni va oylik «Ishlagan kun» ham shundan. Ilgari bu ikkisi faqat 'in' skanni
+//   sanardi: kunning skani faqat chiqish/tanaffus bo'lsa yoki terminal boshqa holat yuborsa ('undefined' — hikMapStatus) qator
+//   «Keldi» va ushlanma yo'q, lekin sarlavha «kelmadi», «Ishlagan kun» 0 chiqardi.
+const saPresent=list=>!!saAgg(list).kelgan;
 
 const saBuildRoster=(staff,teachers)=>{ const r=[];
   (staff||[]).forEach(s=>{ const cam=String(s.cameraId||'').trim(); if(cam) r.push({ cam, refId:String(s._id), refType:'staff', payId:String(s.staffId||s._id), name:s.name||'', pos:s.position||'Xodim', salary:salaryNum(s.salary)||0, payStatus:s.payStatus||'', activeFrom:s.activeFrom||'', stopFrom:s.stopFrom||'', pauses:s.pauses||[], workStart:s.workStart||'', workEnd:s.workEnd||'', workDays:s.workDays||'', flexibleHours:s.flexibleHours||'' }); });
@@ -8482,7 +8488,7 @@ async function payrollComputeMonth(mon){
     const list=byPerson[r.cam]||[]; const byDay={}; list.forEach(x=>{ if(x.day) (byDay[x.day]=byDay[x.day]||[]).push(x); });
     let workMin=0, brkMin=0, arr=[]; const presentWork=new Set();
     Object.keys(byDay).forEach(day=>{ const a=agg(byDay[day].slice().sort((x,z)=>String(x.ts||'').localeCompare(String(z.ts||'')))); if(a.kelgan){ if(a.workMin!=null) workMin+=a.workMin; brkMin+=a.brkMin; const km=saMin(a.kelgan); if(km!=null) arr.push(km); if(workSet.has(day)) presentWork.add(day); } });
-    const present=Object.keys(byDay).filter(d=>byDay[d].some(x=>x.status==='in')).length;
+    const present=Object.keys(byDay).filter(d=>saPresent(byDay[d])).length;   // «Ishlagan kun» — qatordagi «Keldi» bilan bir qoida (A2-06)
     const lv=lvByRef[r.refType+':'+r.refId]||{ruhsat:new Set(),kasallik:new Set(),mehnat:new Set()};
     // Ruhsat/kasallik — SHAXSIY ish kunlari bo'yicha (attMetrics bilan bir xil baza; Shan/Yak ishlaydiganlar ham to'g'ri).
     const pwd=personRules(r).workDays; const pWorkSet=new Set();
@@ -8871,9 +8877,10 @@ async function renderStaffAttendance(){
         <td style="font-variant-numeric:tabular-nums">${a.kelgan?hhmm(a.kelgan):'—'}</td><td style="font-variant-numeric:tabular-nums">${a.ketgan?hhmm(a.ketgan):'—'}</td>
         <td>${a.brkMin?fmtDur(a.brkMin):'—'}</td><td>${fmtDur(a.workMin)}</td>
         <td><span class="chip" style="background:#FEF3E2;color:#B45309">Bog‘lanmagan</span></td></tr>`); });
-    const came=roster.filter(r=>(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
+    // «keldi» — qatordagi «Keldi» bilan AYNAN bir qoida (saPresent, A2-06; ilgari faqat 'in' skan sanalardi).
+    const came=roster.filter(r=>saPresent(byPerson[r.cam]||[])).length;
     // «Erkin ish soati» xodim kelmasa — «kelmadi» deb SANALMAYDI (qatoridagi belgi bilan mos; davomat kesilmaydi).
-    const flexAbsent=roster.filter(r=>personRules(r).flexible && !(byPerson[r.cam]||[]).some(x=>x.status==='in')).length;
+    const flexAbsent=roster.filter(r=>personRules(r).flexible && !saPresent(byPerson[r.cam]||[])).length;
     const notCame=Math.max(0, roster.length-came-flexAbsent);
     $('#sa-body').innerHTML=`<div class="card">
       <div class="cls-card-head"><h3>${esc(day)}</h3><span class="cls-count">${hol?`${holIsBreak(hol)?'🏖':'🎉'} ${esc(hol)} (dam kuni — ushlanma yo‘q) · `:''}${roster.length} xodim · ${came} keldi · ${notCame} ${hol?'dam oldi':(camOffDay?'skani yo‘q':'kelmadi')}${flexAbsent?` · ${flexAbsent} erkin`:''}${unmatched.length?` · ${unmatched.length} bog‘lanmagan`:''}${studSeen?` · <span title="Kamera ID o‘quvchiga tegishli — o‘quvchi davomati «Davomat» bo‘limida">${studSeen} o‘quvchi kirdi</span>`:''}</span></div>
@@ -11284,7 +11291,7 @@ async function renderPriceTable(){
       <label>O‘rinbosarlik — 1 dars haqi (so‘m)<input type="text" inputmode="numeric" id="pt-lesson" value="${grp(lessonRate)}" style="text-align:right"></label>
       <label>Tushlik/tanaffus (daq/kun)<input type="text" inputmode="numeric" id="pt-brkmin" value="${grp(allowBreak)}" style="text-align:right"></label>
       <label>&nbsp;<button class="btn gold" id="pt-save" style="width:100%">Saqlash</button></label>
-    </div><div class="small muted" id="pt-msg" style="margin-top:8px"><b>Kasal kun stavkasi</b> — «Bemor» belgilangan har bir kun uchun oylikdan ayiriladigan summa (10%/20% chegirmali o‘quvchilarga). <b>Tushlik/tanaffus (daq/kun)</b> — kuniga haq to‘lanmaydigan tanaffus (masalan tushlik, 60 daq); kunlik sof ish soati = (ish vaqti − shu tanaffus). Davomat ushlanmasi SOATBAY hisoblanadi: soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat); kech/erta/«o‘z hisobidan»/yo‘qlama shu stavkada ayiriladi (alohida jarima summasi YO‘Q). Barcha xodim/o‘qituvchilarga amal qiladi; shaxsiy ish vaqti kartochkada belgilanadi.</div></div>
+    </div><div class="small muted" id="pt-msg" style="margin-top:8px"><b>Kasal kun stavkasi</b> — o‘quvchining har bir kasal kuni uchun keyingi oy fakturasidan ayiriladigan summa: ${sickFrom?`${esc(sickFrom)} oy fakturasidan boshlab — faqat hamshira kiritib Moliya menejeri tasdiqlagan ma’lumotnoma kunlari (undan oldingi oylar — davomatdagi «Bemor» belgisi)`:'o‘tish oyi belgilanmaguncha — davomatdagi «Bemor» belgisi, keyin — faqat tasdiqlangan ma’lumotnoma kunlari'}. Faqat to‘lov hisoblangan kunlar uchun; barcha oddiy o‘quvchilarga (chegirmasiz ham, aka-uka 10%, monitoring 20%) qo‘llanadi — grant (100%), kontrakt va xodim farzandiga (50%) qo‘llanmaydi. Ma’lumotnoma kunlaridan fakturaga sig‘maganlari keyingi fakturaga o‘tadi (ketgan o‘quvchiga — «Tasdiqlash» → «Bemor kunlari» → «Avansga qaytarish»). <b>Tushlik/tanaffus (daq/kun)</b> — kuniga haq to‘lanmaydigan tanaffus (masalan tushlik, 60 daq); kunlik sof ish soati = (ish vaqti − shu tanaffus). Davomat ushlanmasi SOATBAY hisoblanadi: soatlik stavka = oylik ÷ (oydagi ish kunlari × kunlik sof soat); kech/erta/«o‘z hisobidan»/yo‘qlama shu stavkada ayiriladi (alohida jarima summasi YO‘Q). Barcha xodim/o‘qituvchilarga amal qiladi; shaxsiy ish vaqti kartochkada belgilanadi.</div></div>
     ${SESSION.isAdmin?`<div class="small" style="font-weight:800;letter-spacing:.3px;margin:6px 0 8px;color:#475467">TASDIQ QOIDALARI — faqat Direktor o‘zgartiradi (o‘tish oyidan boshlab baza fakturani tekshiradi)</div>
     <div class="card" style="margin-bottom:14px;padding:14px 20px"><div class="att-controls">
       <label>Chegirma va grant — Direktor + Moliya menejeri tasdig‘i bilan, qaysi oy fakturasidan<input type="month" id="pt-discfrom" value="${esc(discFrom)}"></label>
@@ -11752,7 +11759,7 @@ function computeTuition(s, priv, ctx){
       //   Zaxira summа ham yo'q bo'lса -> o'tkazamiz (skip) + ogohlantiramiz.
       if(isFinite(fa)&&fa>0){ base=fa; usedFallback=true; }
       else return {skip:true, skipReason:'price_missing', sid, name:s.name, priceKey}; } }
-  let net, pct=0, sickN=0, sickAmt=0, sickRefs={}, info='', isGrant=false, bonusRef='';
+  let net, pct=0, sickN=0, sickAmt=0, sickRefs={}, sickRate=0, info='', isGrant=false, bonusRef='';
   if(cat==='olympiad'){ net=0; pct=1; info='100% grant (olimpiada/ijtimoiy)'; isGrant=true; }
   else if(cat==='teacher_child'){ net=round(base*0.5); pct=0.5; info='Xodim farzandi 50%'; }
   else if(cat==='contract'){ net=base; info='Kontrakt (belgilangan summa)'; }
@@ -11774,7 +11781,7 @@ function computeTuition(s, priv, ctx){
     if(pct<1){ sickN=ctx.sickDaysFn?(Number(ctx.sickDaysFn(sid))||0):0;   // kasal chegirmasi: grant/kontrakt/xodim/100% dan tashqari hammaga (to'liq narxlilar ham)
       sickRefs=ctx.sickRefsFn?(ctx.sickRefsFn(sid)||{}):{};   // o'tish oyidan boshlab: qaysi ma'lumotnomaning qaysi kunlari (baza tekshiradi)
       const rate=(isFinite(ctx.sickRate)&&ctx.sickRate>0)?ctx.sickRate:40000;
-      sickAmt=sickN*rate;
+      sickRate=rate; sickAmt=sickN*rate;
       // DIQQAT: kasal summasi shu yerda AYIRILMAYDI — prorata (oy o'rtasi) dan KEYIN flat ayiriladi
       //   (aks holda net*fraction kasal chegirmasini ham ulushga ko'paytirib, ikki marta kamaytirardi).
       if(sickAmt>0){ info=(info&&info!=='Chegirmasiz'?info+' + ':'')+`${sickN} kasal kun (−${sickAmt})`; } } }
@@ -11789,6 +11796,28 @@ function computeTuition(s, priv, ctx){
     if(bi.partial && net>0){ net=round(net*bi.fraction); info=(info&&info!=='Chegirmasiz'?info+' · ':'')+`${bi.actDays}/${bi.fullDays} ish kuni (prorata)`; proMeta={proratedDays:bi.actDays, monthWorkdays:bi.fullDays}; }
   }
   // Kasal kun chegirmasi — prorataDAN KEYIN, FLAT (kunlik qat'iy summa, ulushga ko'paytirilMAYDI).
+  // FAKTURAGA SIG'MAGAN KASAL KUNLAR JIM YO'QOLMAYDI (audit A2-08). Yagona qoida: har kasal kun faqat BIR marta va TO'LIQ stavkada
+  //   qoplanadi. Kunlar summasi shu fakturadan (chegirma va prorata keyin) katta bo'lsa — masalan 10 kun kasal bo'lib, keyingi oy
+  //   boshida ketgan o'quvchining 2 kunlik fakturasi:
+  //   * yangi qoida (ma'lumotnoma, kunlar kuzatiladi): fakturaga faqat TO'LIQ sig'adigan kunlar yoziladi — eng oldingilari,
+  //     floor(summa / stavka) ta (sickNoteRefs, sickDaysApplied, sickAmount = kunlar × stavka; baza shuni tekshiradi). Qolganlari
+  //     «qo'llanmagan» bo'lib qoladi: keyingi fakturada ayiriladi, o'quvchi ketgan/muzlatilgan bo'lsa — «Tasdiqlash → Bemor kunlari
+  //     → Avansga qaytarish» (sick_note_refund, faqat qo'llanmagan kunlar). Fakturada stavkadan kam qoldiq to'lanadi — u kunlar
+  //     keyin to'liq qoplanadi. (Ilgari hamma kun shu fakturaga «qo'llangan» deb belgilanib, faktura 0 ga tushar, ortig'i yo'qolardi.)
+  //   * eski qoida (davomatdagi «Bemor», kunlar kuzatilmaydi — keyingi oyga o'tkazib bo'lmaydi): faktura 0 gacha kamayadi, qoplanmagan
+  //     qism sickLost bilan qaytariladi — generatsiya / qayta hisoblash xulosasida ogohlantiriladi (o'tish oyini belgilash kerak).
+  let sickCarry=0, sickLost=0;
+  if(sickAmt>0 && sickAmt>net){
+    if(ctx && ctx.sickNewRule){
+      const piece=`${sickN} kasal kun (−${sickAmt})`, days=[];
+      Object.keys(sickRefs||{}).forEach(id=>(Array.isArray(sickRefs[id])?sickRefs[id]:[]).forEach(d=>days.push([String(d), String(id)])));
+      days.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:(a[1]<b[1]?-1:a[1]>b[1]?1:0));
+      const keep=days.slice(0, Math.max(0, Math.floor(net/sickRate)));
+      sickRefs={}; keep.forEach(([d,id])=>{ (sickRefs[id]=sickRefs[id]||[]).push(d); });
+      sickCarry=days.length-keep.length; sickN=keep.length; sickAmt=sickN*sickRate;
+      info=info.replace(piece, sickN?`${sickN} kasal kun (−${sickAmt}; yana ${sickCarry} kun keyingi fakturada)`:`${sickCarry} kasal kun keyingi fakturada`);
+    } else sickLost=sickAmt-Math.max(0, net);
+  }
   if(sickAmt>0){ net=Math.max(0, net-sickAmt); }
   const discount=base-net;
   // DIQQAT: net 0 bo'lsa ham AVTOMATIK «grant» deb belgilaMAYMIZ — «grant» FAQAT haqiqiy stipendiya
@@ -11798,7 +11827,7 @@ function computeTuition(s, priv, ctx){
   const status=(net===0)?'paid':'pending';
   // approvalRefs — chegirma tasdiqlari (discount-approval.sql): pmLoadCtx samarali maxfiy maydonlarga qo'shadi (_approvalRefs).
   const approvalRefs=Array.isArray(pv._approvalRefs)?pv._approvalRefs.slice():[];
-  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, sickRefs, bonusRef, approvalRefs, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
+  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, sickRefs, sickCarry, sickLost, bonusRef, approvalRefs, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
 }
 // Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
@@ -11888,6 +11917,24 @@ function sickNoteDays(notes, invOf, stBySid, month, cutover){
       const o=(out[sid]=out[sid]||{ n:0, refs:{} }); (o.refs[n.id]=o.refs[n.id]||[]).push(d); o.n++; }); });
   return out;
 }
+// KASAL KUN PULI QO'LLANMAYDIGAN TOIFA (audit A2-03) — o'quvchining OXIRGI amaldagi (bekor/qaytarilmagan) fakturasidan:
+//   'teacher_child' (ulush 50%..<100%), 'contract' («Kontrakt…»), 'olympiad' (100% grant: bonussiz va «Monitoring 100» emas);
+//   '' — oddiy o'quvchi (chegirmasiz, aka-uka 10%, monitoring 20% / 100%). computeTuition kasal kunni faqat oddiy o'quvchiga
+//   ayiradi; ketgan o'quvchining keyingi fakturasi yo'q, shuning uchun toifa oxirgi fakturadan olinadi. Bazadagi sick_note_refund
+//   (nurse-sick.sql) AYNAN shu qoida bilan rad etadi (invoice_discount_guard tasnifi) — Moliya menejeri student_private'ni
+//   ko'rmaydi (D6), lekin fakturani ko'radi: «Pul ta'siri» matni va «Avansga qaytarish» tugmasi bazaning javobi bilan mos.
+function sickExemptCat(invs){
+  const act=(invs||[]).filter(i=>i && i.status!=='canceled' && i.status!=='reversed');
+  const canon=i=>(String(i._id||i.id||'')===`${i.studentId}__${i.month}`)?1:0;   // bir oyda ikki faktura — kanonik id ustun (baza bilan bir xil)
+  act.sort((a,b)=>{ const x=String(a.month||''), y=String(b.month||''); return x<y?1:x>y?-1:(canon(b)-canon(a)); });
+  const last=act[0]; if(!last) return '';
+  const pct=Number(last.pctApplied)||0, info=String(last.discountInfo||'');
+  if(pct>=0.5 && pct<1) return 'teacher_child';
+  if(/^kontrakt/i.test(info)) return 'contract';
+  if((last.isGrant || last.provider==='grant') && pct>=1 && !String(last.bonusRef||'') && !/^monitoring 100/i.test(info)) return 'olympiad';
+  return '';
+}
+const SICK_EXEMPT_LBL={ teacher_child:'xodim farzandi (50%)', contract:'kontrakt', olympiad:'grant (olimpiada / ijtimoiy)' };
 async function pmLoadCtx(month, students, amount){
   // KRITIK o'qishlar — xato bo'lsa TASHLAYDI (tashqi try/catch xatoni ko'rsatadi; jimgina noto'g'ri narx/chegirma yo'q).
   const privMap={}; { const ps=await getDocs(collection(db,'student_private')); ps.docs.forEach(d=>{ privMap[d.id]=d.data()||{}; }); }
@@ -12223,10 +12270,18 @@ async function renderSickQueue(el){
   const left=appr.filter(n=>{ const s=byId[String(n.studentId)]; const ap=n.appliedDays||{};
     return s && (s.payStatus==='chiqdi'||s.payStatus==='muzlatilgan') && (n.schoolDays||[]).some(d=>!ap[d]); });
   if(!pend.length && !left.length){ el.innerHTML=cutWarn+'<div class="empty">Kutilayotgan ma’lumotnoma yo‘q ✓</div>'; return; }
+  // A2-03: xodim farzandi / kontrakt / grant — kasal kun puli yo'q (fakturadagi qoida; baza sick_note_refund ham rad etadi).
+  //   Toifa o'quvchining oxirgi amaldagi fakturasidan (sickExemptCat). O'qilmasa — oddiy matn (baza baribir tekshiradi).
+  const exempt={};
+  await Promise.all([...new Set([...pend, ...left].map(n=>String(n.studentId||'')).filter(Boolean))].map(async sid=>{
+    try{ const q=await getDocs(query(collection(db,'invoices'), where('studentId','==',sid)));
+      exempt[sid]=sickExemptCat(q.docs.map(d=>({ _id:d.id, ...(d.data()||{}) }))); }catch(e){} }));
+  const exTxt=sid=>exempt[String(sid)]?`kasal kun puli yo‘q — ${esc(SICK_EXEMPT_LBL[exempt[String(sid)]]||exempt[String(sid)])} (faqat oddiy o‘quvchilarga: grant, kontrakt va xodim farzandiga qo‘llanmaydi)`:'';
   const card=n=>{ const days=Array.isArray(n.schoolDays)?n.schoolDays:[]; const self=n.enteredBy===myUid;
     const months=[...new Set(days.map(d=>String(d).slice(0,7)))];
     const eff = !cfg.from ? 'O‘tish oyi belgilanmagan — tasdiq hozircha to‘lovga ta’sir qilmaydi'
-      : (months.every(m=>m<prevMonthStr(cfg.from)) ? 'Bu kunlar o‘tish oyidan oldin — eski qoida bo‘yicha hisoblangan' : `${days.length} kun × ${fmtSom(cfg.rate)} = <b>${esc(fmtSom(days.length*cfg.rate))}</b> — ${months.map(m=>esc(nextMonthOf(m))).join(', ')} oy fakturasida (yaratilgan bo‘lsa — qayta hisoblashda) ayiriladi`);
+      : (months.every(m=>m<prevMonthStr(cfg.from)) ? 'Bu kunlar o‘tish oyidan oldin — eski qoida bo‘yicha hisoblangan'
+      : (exTxt(n.studentId) || `${days.length} kun × ${fmtSom(cfg.rate)} = <b>${esc(fmtSom(days.length*cfg.rate))}</b> — ${months.map(m=>esc(nextMonthOf(m))).join(', ')} oy fakturasida (yaratilgan bo‘lsa — qayta hisoblashda) ayiriladi; fakturaga sig‘maganlari keyingi fakturaga o‘tadi`));
     return `<div class="card" style="padding:12px 16px;margin-bottom:10px" data-note="${esc(n._id)}">
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div>${nm(n.studentId)}</div><div>${n.late?'<span class="chip" title="O‘quvchi qaytgandan keyin 3 ish kunidan ko‘p o‘tib keltirilgan">kech keltirilgan</span>':''}</div></div>
       <div class="small" style="margin-top:6px">${esc(fmtDayUz(n.fromDay))} – ${esc(fmtDayUz(n.toDay))} · <b>${days.length}</b> maktab kuni: ${days.map(d=>esc(String(d).slice(8,10)+'.'+String(d).slice(5,7))).join(', ')}</div>
@@ -12236,8 +12291,8 @@ async function renderSickQueue(el){
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${self?'<span class="small muted">Siz kiritgansiz — boshqa tasdiqlovchi ko‘rib chiqadi</span>':`<button class="btn sm gold" data-ok="${esc(n._id)}">✅ Tasdiqlash</button><button class="btn sm ghost" data-no="${esc(n._id)}">✖ Rad etish</button>`}
         ${isDir&&n.filePath?`<button class="btn sm" data-file="${esc(n.filePath)}">👁 Nusxani ko‘rish</button>`:''}</div></div>`; };
   const leftHtml=left.length?`<h4 style="margin:14px 0 6px">Ketgan / muzlatilgan o‘quvchilar — tasdiqlangan, lekin keyingi faktura yo‘q</h4>
-    ${left.map(n=>{ const ap=n.appliedDays||{}; const free=(n.schoolDays||[]).filter(d=>!ap[d]);
-      return `<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div>${nm(n.studentId)}<div class="small muted">${free.length} kun hali to‘lovda hisoblanmagan</div></div><button class="btn sm" data-ref="${esc(n._id)}">Avansga qaytarish</button></div>`; }).join('')}`:'';
+    ${left.map(n=>{ const ap=n.appliedDays||{}; const free=(n.schoolDays||[]).filter(d=>!ap[d]); const ex=exTxt(n.studentId);
+      return `<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div>${nm(n.studentId)}<div class="small muted">${free.length} kun hali to‘lovda hisoblanmagan${ex?` · avansga qaytarilmaydi: ${ex}`:''}</div></div>${ex?'':`<button class="btn sm" data-ref="${esc(n._id)}">Avansga qaytarish</button>`}</div>`; }).join('')}`:'';
   el.innerHTML=cutWarn+(pend.length?pend.map(card).join(''):'<div class="empty">Kutilayotgan ma’lumotnoma yo‘q ✓</div>')+leftHtml;
   const reload=()=>renderApprovals();
   el.querySelectorAll('[data-file]').forEach(b=>b.addEventListener('click',()=>openMedicalFile(b.dataset.file)));
@@ -12254,7 +12309,8 @@ async function renderSickQueue(el){
     if(!confirm('Hali to‘lovda hisoblanmagan tasdiqlangan kasal kunlari o‘quvchining avansiga (balansiga) qaytarilsinmi?')) return; b.disabled=true;
     try{ const r=await rpc('sick_note_refund',{ p_id:b.dataset.ref });
       if(r&&r.ok){ toast(`${r.days} kun — ${fmtSom(r.amount)} avansga qaytarildi ✓`); reload(); }
-      else { toast(({not_left:'O‘quvchi o‘qiyapti — kunlar keyingi fakturada ayiriladi', nothing:'Qaytariladigan kun yo‘q (o‘sha oylar uchun to‘langan faktura topilmadi)', no_cutover:'O‘tish oyi belgilanmagan'})[r&&r.reason]||sickReason(r),true); b.disabled=false; } }
+      else { toast(({not_left:'O‘quvchi o‘qiyapti — kunlar keyingi fakturada ayiriladi', nothing:'Qaytariladigan kun yo‘q (o‘sha oylar uchun to‘langan faktura topilmadi)', no_cutover:'O‘tish oyi belgilanmagan',
+        not_eligible:`Qaytarilmaydi: ${SICK_EXEMPT_LBL[r&&r.category]||'toifa'} — kasal kun puli faqat oddiy o‘quvchilarga`})[r&&r.reason]||sickReason(r),true); b.disabled=false; } }
     catch(e){ toast('Xatolik: '+errMsg(e),true); b.disabled=false; } }));
   // Ziddiyatlar: «kasal» kuni davomatda «Keldi»/«Kech» yoki kamera kirishni ko'rgan.
   for(const n of pend){ const box=el.querySelector(`[data-note="${CSS.escape(n._id)}"] .sk-chk`); if(!box) continue;
@@ -12701,13 +12757,16 @@ async function renderPayments(){
       const repairLedger=[];
       snap.docs.forEach(d=>{ const x=d.data()||{}; (Array.isArray(x.referralUsedIds)?x.referralUsedIds:[]).forEach(nid=>{
         if(nid && !ledgerIds.has(String(nid))){ ledgerIds.add(String(nid)); repairLedger.push({id:String(nid), referrerId:String(x.studentId||'')}); } }); });
-      let created=0, discounted=0, referrals=0; const skipped=[], fallbackList=[];
+      let created=0, discounted=0, referrals=0; const skipped=[], fallbackList=[], sickCarryList=[], sickLostList=[];
       for(let i=0;i<students.length;i+=400){
         const batch=writeBatch(db); let wrote=false;
         students.slice(i,i+400).forEach(s=>{ const sid=s.studentId||s._id; const id=`${sid}__${month}`; if(existing.has(id))return;
           const t=computeTuition(s, privOf(sid), ctx);
           if(t.skip){ if(!t.statusSkip) skipped.push(`${s.name||sid}: ${t.skipReason==='contract_amount_missing'?'kontrakt summasi kiritilmagan':('narx topilmadi ['+t.priceKey+']')}`); return; }   // sinov/muzlatilgan/chiqdi -> jim o'tkaziladi
           if(t.fallback) fallbackList.push(`${s.name||sid} [${t.priceKey}]`);   // narx jadvalidа yo'q -> zaxira summа qo'llandi (tekshirilsin)
+          // A2-08: fakturaga sig'magan kasal kunlar — xulosada ko'rinadi (yangi qoida: keyingi fakturaga o'tdi; eski: qoplanmadi)
+          if(t.sickCarry>0) sickCarryList.push(`${s.name||sid} (${t.sickCarry} kun)`);
+          if(t.sickLost>0) sickLostList.push(`${s.name||sid} (−${fmtSom(t.sickLost)})`);
           const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[], refUnit);
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
@@ -12751,6 +12810,8 @@ async function renderPayments(){
       if(phantom.length) html+=`<div style="margin-top:8px;color:#B42318"><b>⚠️ ${phantom.length} o‘quvchining holati bo‘yicha bu oy faktura KERAK EMAS, lekin to‘lanmagan fakturasi bor</b> (sinov / chiqgan / muzlatilgan / keyinroq faollashtirilgan) — avansi qo‘llanmadi. «↻ Qayta hisoblash» bosing — bu fakturalar bekor qilinadi.<div class="small">${phantom.slice(0,25).map(esc).join(' · ')}${phantom.length>25?` …yana ${phantom.length-25}`:''}</div></div>`;
       if(phantomRev.length) html+=`<div style="margin-top:8px;color:#B54708"><b>⚠️ ${phantomRev.length} o‘quvchining holati SHUBHALI (to‘xtatish sanasi yo‘q yoki o‘tgan oy), lekin to‘lanmagan fakturasi bor</b> — avansi qo‘llanmadi. «↻ Qayta hisoblash» ularni BEKOR QILMAYDI: o‘quvchi kartasida (⏯️ Holat) to‘xtatish sanasini kiriting yoki fakturani qatordagi «Bekor» bilan bekor qiling.<div class="small">${phantomRev.slice(0,25).map(esc).join(' · ')}${phantomRev.length>25?` …yana ${phantomRev.length-25}`:''}</div></div>`;
       if(conflicts.length) html+=`<div style="margin-top:8px;color:#B45309"><b>ℹ️ Aka-uka chegirmasi eslatmalari:</b><div class="small">${conflicts.slice(0,15).map(esc).join(' · ')}</div></div>`;
+      if(sickCarryList.length) html+=`<div style="margin-top:8px;color:#475467"><b>ℹ️ ${sickCarryList.length} o‘quvchida kasal kunlarning bir qismi fakturaga sig‘madi</b> — ular keyingi fakturada ayiriladi (o‘quvchi ketgan / muzlatilgan bo‘lsa: «✅ Tasdiqlash» → «Bemor kunlari» → «Avansga qaytarish»).<div class="small">${sickCarryList.slice(0,25).map(esc).join(' · ')}${sickCarryList.length>25?` …yana ${sickCarryList.length-25}`:''}</div></div>`;
+      if(sickLostList.length) html+=`<div style="margin-top:8px;color:#B42318"><b>⚠️ ${sickLostList.length} o‘quvchida kasal kun summasi fakturadan katta — ortig‘i qoplanmadi</b> (eski qoida: davomatdagi «Bemor» kunlari keyingi oyga o‘tmaydi). «Narx jadvali»da «Bemor kuni ma’lumotnoma bilan» o‘tish oyini belgilang; kerak bo‘lsa farqni o‘quvchi avansiga qo‘shing.<div class="small">${sickLostList.slice(0,25).map(esc).join(' · ')}${sickLostList.length>25?` …yana ${sickLostList.length-25}`:''}</div></div>`;
       $('#pm-genmsg').innerHTML = html;
       toast('Tayyor ✓'); load();
     }catch(e){ toast('Xatolik: '+errMsg(e),true); }
@@ -12791,8 +12852,8 @@ async function renderPayments(){
         if(st==='paid' && noCash && grantZero) return true;
         if(st==='paid' && cashPaidOf(x)>0) paidDocs.push(d);
         return false; });
-      let changed=0, skipped=0, avans=0, canceledN=0, guardSkip=0, legacy=false, decN=0, decSum=0;
-      const work=[], toCancel=[], review=[], dec=[];
+      let changed=0, skipped=0, avans=0, canceledN=0, guardSkip=0, legacy=false, decN=0, decSum=0, sickCarryN=0;
+      const work=[], toCancel=[], review=[], dec=[], sickLostL=[];
       const curTM=tkDay(new Date()).slice(0,7);   // joriy oy (Toshkent)
       docs.forEach(d=>{ const inv=d.data()||{}; const sid=inv.studentId; const s=byId[sid]; if(!s){ skipped++; return; }
         const t=computeTuition(s, privOf(sid), ctx);
@@ -12800,6 +12861,8 @@ async function renderPayments(){
           const item={ d, inv, sid, name:s.name||sid, reason:t.statusReason||'faol emas', paid:(inv.status==='paid'?Math.max(Number(inv.paidAmount)||0, (inv.isGrant||inv.provider==='grant')?0:(Number(inv.amount)||0)):(Number(inv.paidAmount)||0)) };
           (statusSkipCertain(t.statusCode, month, curTM) ? toCancel : review).push(item); return; }
         if(t.skip){ skipped++; return; }
+        if(t.sickCarry>0) sickCarryN++;   // A2-08: sig'magan kasal kunlar — keyingi fakturaga (yangi qoida) / qoplanmagan (eski)
+        if(t.sickLost>0) sickLostL.push(`${s.name||sid} (−${fmtSom(t.sickLost)})`);
         const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[], refUnit);
         const rc=reconcileInvoice(inv, t);
         if(!rc.changed && !isStCanceled(inv)) return;   // o'zgarish yo'q
@@ -12867,7 +12930,7 @@ async function renderPayments(){
         catch(e){ if(!rpcMissing(e)) throw e;
           if(x.paid<=0){ await setDoc(doc(db,'invoices',x.d.id), { status:'canceled', discountInfo:`[holat] ${x.reason} — shu oy hisob-faktura talab qilinmaydi` }, {merge:true}); canceledN++; }
           else guardSkip++; } }   // eski bazada to'langan fakturani avansga qaytarish atomik emas — tegmaymiz
-      $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${canceledN?` · ${canceledN} tasi holat bo‘yicha bekor qilindi`:''}${(toCancel.length&&!doCancel)?` · ${toCancel.length} ta holat bo‘yicha bekor qilinmadi (siz rad etdingiz)`:''}${review.length?` · ⚠️ ${review.length} tasiga TEGILMADI — holati shubhali (sana yo‘q yoki o‘tgan oy uchun joriy holat ishonchsiz): ${review.slice(0,6).map(x=>x.name+' — '+x.reason).join('; ')}${review.length>6?' …':''}. Kerak bo‘lsa sanani kiriting yoki qo‘lda bekor qiling`:''}${guardSkip?` · ${guardSkip} tasi o‘tkazildi (shu orada to‘langan/yopilgan — to‘lov saqlandi)`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}${decN?` · ${decN} ta to‘langan fakturada narx kamaydi — ${fmtSom(decSum)} avansga qaytdi`:''}${(dec.length&&!doDec)?` · ${dec.length} ta to‘langan fakturada narx kamaygan, lekin tegilmadi (siz rad etdingiz)`:''}${decInfo.length?` · ℹ️ ${decInfo.length} ta TO‘LANGAN fakturada yangi narx pastroq, lekin avtomatik qaytarilmadi (2 farzandli oila yoki boshqa chegirma o‘zgargan — qo‘lda tekshiring): ${decInfo.slice(0,6).map(x=>`${x.name} ${fmtSom(x.paid)} → ${fmtSom(x.net)}`).join('; ')}${decInfo.length>6?' …':''}`:''}${(conflicts&&conflicts.length)?` · ℹ️ Aka-uka: ${conflicts.slice(0,8).join(' · ')}${conflicts.length>8?' …':''}`:''}.`;
+      $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${canceledN?` · ${canceledN} tasi holat bo‘yicha bekor qilindi`:''}${(toCancel.length&&!doCancel)?` · ${toCancel.length} ta holat bo‘yicha bekor qilinmadi (siz rad etdingiz)`:''}${review.length?` · ⚠️ ${review.length} tasiga TEGILMADI — holati shubhali (sana yo‘q yoki o‘tgan oy uchun joriy holat ishonchsiz): ${review.slice(0,6).map(x=>x.name+' — '+x.reason).join('; ')}${review.length>6?' …':''}. Kerak bo‘lsa sanani kiriting yoki qo‘lda bekor qiling`:''}${guardSkip?` · ${guardSkip} tasi o‘tkazildi (shu orada to‘langan/yopilgan — to‘lov saqlandi)`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}${decN?` · ${decN} ta to‘langan fakturada narx kamaydi — ${fmtSom(decSum)} avansga qaytdi`:''}${(dec.length&&!doDec)?` · ${dec.length} ta to‘langan fakturada narx kamaygan, lekin tegilmadi (siz rad etdingiz)`:''}${decInfo.length?` · ℹ️ ${decInfo.length} ta TO‘LANGAN fakturada yangi narx pastroq, lekin avtomatik qaytarilmadi (2 farzandli oila yoki boshqa chegirma o‘zgargan — qo‘lda tekshiring): ${decInfo.slice(0,6).map(x=>`${x.name} ${fmtSom(x.paid)} → ${fmtSom(x.net)}`).join('; ')}${decInfo.length>6?' …':''}`:''}${(conflicts&&conflicts.length)?` · ℹ️ Aka-uka: ${conflicts.slice(0,8).join(' · ')}${conflicts.length>8?' …':''}`:''}${sickCarryN?` · ℹ️ ${sickCarryN} tasida kasal kunlarning bir qismi fakturaga sig‘madi — keyingi fakturada ayiriladi (o‘quvchi ketgan bo‘lsa: «Tasdiqlash» → «Bemor kunlari» → «Avansga qaytarish»)`:''}${sickLostL.length?` · ⚠️ ${sickLostL.length} tasida kasal kun summasi fakturadan katta — ortig‘i qoplanmadi (eski qoida, «Bemor» kunlari keyingi oyga o‘tmaydi; o‘tish oyini belgilang yoki farqni avansga qo‘shing): ${sickLostL.slice(0,6).join('; ')}${sickLostL.length>6?' …':''}`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+errMsg(e),true); }
     btn.disabled=false; btn.textContent='↻ Qayta hisoblash';
