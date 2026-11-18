@@ -332,13 +332,16 @@ revoke all on function app.tg_status_of(text) from public, anon, authenticated;
 create or replace function public.tg_status(p_uid text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 begin perform app.tg_need_system(); return app.tg_status_of(p_uid); end $$;
+-- Uzish: p_link berilsa — faqat o'sha bog'lanish (admin.html «Sozlamalar» — Direktorning kunlik hisobot havolasi ham shu yo'l bilan);
+--   berilmasa (kabinetdagi «Uzish» — u faqat ota-ona bog'lanishlarini ko'rsatadi) — faqat ota-ona (kind 'parent') bog'lanishlari
+--   (audit-11, A7-09): avval hisobning HAMMA bog'lanishi uzilardi — farzandi bor Direktorning kunlik hisoboti jim to'xtardi.
 create or replace function public.tg_unlink(p_uid text, p_link text default null) returns int
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare n int;
 begin
   perform app.tg_need_system();
   update public.telegram_links set status = 'unlinked', "updatedAt" = now()
-   where uid = p_uid and status <> 'unlinked' and (p_link is null or id = p_link);
+   where uid = p_uid and status <> 'unlinked' and (case when p_link is null then kind = 'parent' else id = p_link end);
   get diagnostics n = row_count; return n;
 end $$;
 -- Mijoz: o'z holati (ota-ona kabineti / Direktor «Sozlamalar») — faqat o'ziniki.
@@ -399,6 +402,9 @@ drop trigger if exists trg_tg_unqueue_announce on public.class_announcements;
 create trigger trg_tg_unqueue_announce after delete on public.class_announcements
   for each row execute function app.tg_unqueue_announce();
 -- Sinf e'loni uchun qabul qiluvchilar (navbat ishlovchisi): e'lon sinflaridagi o'quvchilarning yaroqli bog'lanishlari.
+--   Maktabdan chiqqan bola (arxiv qoidasi — kabinetdagi app.my_child_class_keys bilan BIR XIL, audit-11 A3-09: holati «chiqdi» va chiqqan
+--   kuni — exitAt, bo'lmasa stopFrom — bugun yoki o'tgan, yoki sana yo'q) hisobga olinmaydi; kelajak sana bilan chiqarilgan bola shu kungacha
+--   sinfda — ikkala kanal ham yuboradi/ko'rsatadi (avval Telegram har qanday «chiqdi»ni, kabinet esa hech birini chiqarmasdi).
 create or replace function public.tg_announce_recipients(p_keys jsonb) returns table(chat_id bigint, link_id text, prefs jsonb, lang text)
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 begin
@@ -410,7 +416,10 @@ begin
       cross join lateral jsonb_array_elements_text(l."studentIds") sd(doc)
       join public.students s on s.id = sd.doc
      where l.kind = 'parent' and l.status = 'active'
-       and coalesce(s."payStatus", '') not in ('chiqdi')
+       and not (coalesce(s."payStatus", '') = 'chiqdi'
+                and case when left(coalesce(s."exitAt", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."exitAt", 10)
+                         when left(coalesce(s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."stopFrom", 10)
+                         else '' end <= to_char(app.tashkent_now(), 'YYYY-MM-DD'))
        and (p_keys ? 'all' or p_keys ? app.student_class_key(s.lang, s.grade, s."classLetter", s.track))
        and app.tg_link_ok(l, s.id)
      order by l."chatId", l.id;

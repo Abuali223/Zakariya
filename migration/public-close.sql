@@ -189,6 +189,16 @@ begin
     if v_n <> 1 then raise exception 'ruxsat yo''q' using errcode = '42501'; end if;
   end if;
   select * into v_s from public.students t where t.id = v_doc;
+  -- ARXIV (audit-11, A7-07): maktabdan chiqqan o'quvchiga (admin.html stuArchived bilan bir xil: holati «chiqdi» va chiqqan kuni — exitAt,
+  --   bo'lmasa stopFrom — bugun yoki o'tgan, yoki sana yo'q) EGASI (ota-ona / o'quvchi o'zi) kod olmaydi: avval kabinetdan «RASMIY
+  --   MA'LUMOTNOMA» chop etilib, QR sahifasi uni bugungi sana bilan haqiqiy deb, bola hali o'qiyotgandek tasdiqlardi. Chiqqan o'quvchi
+  --   hujjatini (📨 ma'lumotnoma, «o'qish joyidan») maktab beradi — xodim yo'li o'zgarmagan. hint 'student_left' — kabinet aniq xabar ko'rsatadi.
+  if not v_staff and coalesce(v_s."payStatus", '') = 'chiqdi'
+     and (case when left(coalesce(v_s."exitAt", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(v_s."exitAt", 10)
+               when left(coalesce(v_s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(v_s."stopFrom", 10)
+               else '' end) <= to_char(app.tashkent_now(), 'YYYY-MM-DD') then
+    raise exception 'o''quvchi maktabdan chiqqan — rasmiy hujjatni maktab ma''muriyati beradi' using errcode = '42501', hint = 'student_left';
+  end if;
   v_short := app.short_name(v_s.name);
   select d.token into v_tok from public.issued_documents d
    where d."studentDoc" = v_doc and d.kind = p_kind and d."revokedAt" is null

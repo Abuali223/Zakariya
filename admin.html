@@ -2542,7 +2542,7 @@ function uiV2(){ return document.documentElement.getAttribute('data-ui')==='v2';
 const DV2_MON=['yanvar','fevral','mart','aprel','may','iyun','iyul','avgust','sentabr','oktabr','noyabr','dekabr'];
 const DV2_WD=['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
 const DV2_WD2=['Ya','Du','Se','Ch','Pa','Ju','Sh'];
-const DV2_QSHORT={ bonus:'100 ball', bonus_prop:'100 ball nomzodlari', discount:'Chegirma', referral:'Tavsiya', payroll:'Maosh', sick:'Bemor kunlari' };
+const DV2_QSHORT={ bonus:'100 ball', bonus_prop:'100 ball nomzodlari', discount:'Chegirma', referral:'Tavsiya', payroll:'Maosh', sick:'Bemor kunlari', childlink:'Farzand bog‘lash' };
 const DV2_C={ teal:'#236B5D', teal2:'#4E9A88', mint:'#8FD3C1', warm:'#E58A52', gold:'#D9A441', red:'#C2412D', red2:'#8E2F1F', violet:'#8E6FB8', grey:'#9AA6A1', blue:'#5B8DB8' };
 let DV2_ANIMATED=false;   // kirish animatsiyasi — sessiyada faqat birinchi ochilishda (keyin raqamlar darhol)
 // Ilova kirishda bo'limni bir necha marta qayta chizadi (eski xatti-harakat) — bir necha soniya ichidagi takroriy render
@@ -4301,6 +4301,43 @@ async function renderReferralQueue(el){
     catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+errMsg(e)),true); b.disabled=false; } };
   el.querySelectorAll('[data-rok]').forEach(b=>b.addEventListener('click',()=>run(b, b.dataset.rok, true)));
   el.querySelectorAll('[data-rno]').forEach(b=>b.addEventListener('click',()=>{ const n=prompt('Rad etish sababi:',''); if(n==null) return; if(!n.trim()){ toast('Sabab yozilishi shart',true); return; } run(b, b.dataset.rno, false, n.trim()); }));
+}
+// «✅ Tasdiqlash» → «Xodim hisobiga farzand bog‘lash» (faqat Direktor; audit-11, A7-01): O'IBDO' va qabulxona (asosiy yoki qo'shimcha
+//   lavozim) har o'quvchining kodini ko'radi — kabinetda ID + kod bilan farzand bog'lasa, bog'lanish Direktor tasdig'igacha 'pending'
+//   (claim_child; aks holda istalgan bolaning sog'liq, baho, davomat ma'lumotini «ota-ona» sifatida ochib olardi). Kartadagi ota-ona ismi
+//   va telefoni xodimnikiga solishtiriladi; tasdiq — bog'lanish faollashadi, rad — so'rov o'chadi (child_claim_decide; «O‘zgarishlar tarixi»da).
+APPROVAL_QUEUES.push({ key:'childlink', title:'Xodim hisobiga farzand bog‘lash', roles:['director'],
+  count: async()=>{ const s=await getDocs(query(collection(db,'child_claims'), where('status','==','pending'))); return s.size; },
+  render: renderChildLinkQueue });
+async function renderChildLinkQueue(el){
+  const ps=await getDocs(query(collection(db,'child_claims'), where('status','==','pending')));
+  const rows=ps.docs.map(d=>({ _id:d.id, ...(d.data()||{}) })).sort((a,b)=>String(a.created||'').localeCompare(String(b.created||'')));
+  if(!rows.length){ el.innerHTML='<div class="empty">Kutilayotgan so‘rov yo‘q ✓</div>'; return; }
+  const [students, users]=await Promise.all([ (cache.students&&cache.students.length)?Promise.resolve(cache.students):loadCol('students','order'), loadCol('users',null).catch(()=>[]) ]);
+  cache.students=students;
+  const byS={}; students.forEach(s=>{ byS[String(s._id)]=s; if(s.studentId) byS[String(s.studentId)]=s; });
+  const byU={}; users.forEach(u=>{ byU[String(u._id)]=u; });
+  const priv={}; await Promise.all(rows.map(async r=>{ const s=byS[String(r.studentId)]; if(!s) return;
+    try{ const d=await getDoc(doc(db,'student_private',String(s._id))); if(d.exists()) priv[r._id]=d.data()||{}; }catch(e){} }));
+  const d9=v=>String(v||'').replace(/\D/g,'').slice(-9);
+  const card=r=>{ const u=byU[String(r.uid)]||{}, s=byS[String(r.studentId)], p=priv[r._id]||{};
+    const roles=[u.role].concat(Array.isArray(u.extraRoles)?u.extraRoles:[]).filter(Boolean).map(x=>ROLE_LABEL[x]||x).join(' + ');
+    const ph=[p.parentPhone,p.parentPhone2].filter(Boolean), mine=d9(u.phone), match=!!mine && ph.some(x=>d9(x)===mine);
+    const parents=[p.fatherName?'Ota: '+esc(p.fatherName):'', p.motherName?'Ona: '+esc(p.motherName):''].filter(Boolean).join(' · ');
+    return `<div class="card" style="padding:12px 16px;margin-bottom:10px" data-cl-card="${esc(r._id)}">
+      <div>Xodim: <b>${esc(u.name||u.email||u.phone||r.uid)}</b> <span class="small muted">· ${esc(roles||'—')}${u.phone?' · '+esc(u.phone):''}</span></div>
+      <div class="small" style="margin-top:4px">Farzand: ${s?`<b>${esc(s.name||r.studentId)}</b> · ${esc(classLabelOf(s))} · ${esc(r.studentId)}`:`<b>${esc(r.studentId)}</b>`}</div>
+      <div class="small" style="margin-top:4px">Kartadagi ota-ona: ${parents||'—'}${ph.length?' · tel.: '+ph.map(x=>esc(x)).join(', '):''} ${match?'<span class="chip" style="background:#E7F6EC;color:#1E7B3A">✓ telefon mos</span>':'<span class="chip" style="background:#FDECEC;color:#B42318">telefon mos emas — tekshiring</span>'}</div>
+      <div class="small muted" style="margin-top:4px">So‘ralgan: ${esc(fmtDT(r.created))}</div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm gold" data-clok="${esc(r._id)}">✅ Tasdiqlash</button><button class="btn sm ghost" data-clno="${esc(r._id)}">✖ Rad etish</button></div></div>`; };
+  el.innerHTML='<div class="small muted" style="margin-bottom:8px">O‘IBDO‘ va qabulxona xodimi har o‘quvchining kodini ko‘radi — shuning uchun ularning hisobiga farzand faqat Direktor tasdig‘i bilan bog‘lanadi (tasdiqlansa, farzandning baho, davomat va sog‘liq ma’lumoti kabinetda ochiladi). Haqiqiy farzandi ekanini tekshiring.</div>'+rows.map(card).join('');
+  const run=async(b, id, ok)=>{ b.disabled=true;
+    try{ const r=await rpc('child_claim_decide',{ p_id:id, p_approve:ok });
+      if(r && r.ok){ toast(ok?'Tasdiqlandi ✓ — farzand xodimning kabinetida ko‘rinadi':'Rad etildi — so‘rov o‘chirildi'); renderApprovals(); }
+      else { toast(({not_pending:'Allaqachon ko‘rib chiqilgan', not_found:'Topilmadi (xodim so‘rovni bekor qilgan bo‘lishi mumkin)'})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
+    catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+errMsg(e)),true); b.disabled=false; } };
+  el.querySelectorAll('[data-clok]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm('Bu xodim shu o‘quvchining haqiqiy ota-onasi (vasiysi)mi? Tasdiqlansa, u farzandning baho, davomat va sog‘liq ma’lumotini kabinetda ko‘radi.')) return; run(b, b.dataset.clok, true); }));
+  el.querySelectorAll('[data-clno]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm('So‘rov rad etilsinmi?')) return; run(b, b.dataset.clno, false); }));
 }
 // Faktura yaratish oldidan: shu oyga ta'sir qilishi mumkin bo'lgan TASDIQLANMAGAN so'rovlar (chegirma, to'langan tavsiya).
 async function billingPendingWarn(month, students){

@@ -117,12 +117,20 @@ do $$ begin
   end if;
 end $$;
 -- Ota-onaning faol farzandlari sinf kalitlari (claim_row — owns_child bilan bir xil qoida).
+--   ARXIV (audit-11, A7-04 / A3-09): maktabdan chiqqan bola (admin.html stuArchived bilan bir xil: holati «chiqdi» va chiqqan kuni —
+--   exitAt, bo'lmasa stopFrom — bugun yoki o'tgan, yoki sana yo'q) kalit bermaydi. Bog'lanish chiqishda uzilmaydi va chiqqan bola
+--   sinfi ko'chirilmaydi — avval ota-ona kabinetda eski sinfning (keyingi yil o'sha sinfga kelgan boshqa bolalar uchun ham) va butun
+--   maktabning yangi e'lonlarini ko'raverardi, Telegram esa yubormasdi; tg_announce_recipients (telegram.sql) ham shu qoida bilan.
 create or replace function app.my_child_class_keys() returns text[]
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select coalesce(array_agg(distinct app.student_class_key(s.lang, s.grade, s."classLetter", s.track)), '{}'::text[])
     from public.child_claims cc join public.students s on s.id = app.claim_row(cc."studentId", cc.code)
    where cc.uid = app.uid() and coalesce(nullif(cc.status, ''), 'active') = 'active'
      and not exists (select 1 from public.users u where u.id = cc.uid and u.status = 'blocked')
+     and not (coalesce(s."payStatus", '') = 'chiqdi'
+              and case when left(coalesce(s."exitAt", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."exitAt", 10)
+                       when left(coalesce(s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."stopFrom", 10)
+                       else '' end <= to_char(app.tashkent_now(), 'YYYY-MM-DD'))
 $$;
 -- Xodimning sinflari (sinf rahbarligi + kurator/o'qituvchi biriktirilgan sinflar).
 create or replace function app.my_staff_class_keys() returns jsonb
@@ -130,16 +138,19 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select coalesce((select coalesce(u."homeroomClasses", '[]'::jsonb) || coalesce(u."assignedClasses", '[]'::jsonb)
                      from public.users u where u.id = app.uid() and coalesce(nullif(u.status, ''), 'active') = 'active'), '[]'::jsonb)
 $$;
+-- O'qish: Direktor / O'IBDO' — hammasi; xodim — butun maktab va o'z sinflari (muddati o'tgani ham); ota-ona — farzandi sinfi va butun
+--   maktab (muddati o'tmagan). Ota-ona qoidasi HAMMAGA (audit-11, A7-03): farzandi bog'langan xodim (o'qituvchi, kurator, HR, qabulxona…)
+--   avval faqat xodim qoidasiga tushib, o'z bolasi sinfi e'lonini kabinetda ko'rmasdi (Telegram esa unga yuborardi).
 create or replace function app.ann_visible(p_keys jsonb, p_exp timestamptz) returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select case
     when app.is_admin() or app.is_zavuch() then true
     when jsonb_typeof(p_keys) is distinct from 'array' then false
-    when app.is_staff() then coalesce(p_keys, '[]'::jsonb) ? 'all'
-         or exists (select 1 from jsonb_array_elements_text(coalesce(p_keys, '[]'::jsonb)) k where app.my_staff_class_keys() ? k)
-    else (p_exp is null or p_exp > now()) and cardinality(app.my_child_class_keys()) > 0
-         and (coalesce(p_keys, '[]'::jsonb) ? 'all'
-              or exists (select 1 from jsonb_array_elements_text(coalesce(p_keys, '[]'::jsonb)) k where k = any(app.my_child_class_keys())))
+    else (app.is_staff() and (coalesce(p_keys, '[]'::jsonb) ? 'all'
+                              or exists (select 1 from jsonb_array_elements_text(coalesce(p_keys, '[]'::jsonb)) k where app.my_staff_class_keys() ? k)))
+         or ((p_exp is null or p_exp > now()) and cardinality(app.my_child_class_keys()) > 0
+             and (coalesce(p_keys, '[]'::jsonb) ? 'all'
+                  or exists (select 1 from jsonb_array_elements_text(coalesce(p_keys, '[]'::jsonb)) k where k = any(app.my_child_class_keys()))))
   end
 $$;
 -- Yozish: Direktor / O'IBDO' — istalgan sinf yoki butun maktab; sinf rahbari — faqat o'z sinflari (butun maktab emas).

@@ -46,6 +46,8 @@ create policy students_sel on students for select using (app.is_staff() or app.o
 drop policy if exists teachers_sel on teachers;
 create policy teachers_sel on teachers for select using (app.is_staff());
 
+-- DIQQAT: teachers_public'ning AMALDAGI ta'rifi — audit-11-elon.sql (ishdan ketgan o'qituvchisiz; holat ustunlari staff-status.sql da,
+--   shu fayldan keyin qo'shiladi). Ustun o'zgarsa — ikkalasida ham.
 create or replace view public.teachers_public as
   select id, name, photo, "subject_uz", "subject_ru",
          rating, years, certs, avg, votes, "order"

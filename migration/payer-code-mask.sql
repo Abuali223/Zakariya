@@ -153,9 +153,15 @@ grant execute on function app.claim_row(text, text) to authenticated, service_ro
 
 -- claim_child — parent-link-canon.sql bilan bir xil; yangi: shu o'quvchining ESKI kodi kiritilsa — reason 'code_changed' (ulanmaydi,
 --   urinish muvaffaqiyatsiz deb sanaladi — lockout o'zgarmagan).
+--   KOD KO'RADIGAN XODIM (audit-11, A7-01): O'IBDO' va qabulxona (asosiy yoki qo'shimcha lavozim — student_codes sc_sel) HAR bolaning
+--   kodini ko'radi, shuning uchun to'g'ri kod ularning ota-onaligini isbotlamaydi: avval istalgan bolani o'z hisobiga ulab, uning baho,
+--   davomat, monitoring, sog'liq kartasi va hamshira yozuvlarini «ota-ona» sifatida o'qiy olardi (RLS bu rollarga ularni bermaydi).
+--   Endi ularning bog'lanishi 'pending' yoziladi — owns_child, Telegram va e'lonlar faqat 'active'ni hisoblaydi; Direktor haqiqiy farzandi
+--   ekanini tekshirib «✅ Tasdiqlash»da tasdiqlaydi (child_claim_decide, audit-11-elon.sql). Javob: ok=false, pending=true. Direktor
+--   kutmaydi (u baribir hamma o'quvchini ko'radi — bog'lanish unga yangi huquq bermaydi); oddiy ota-ona va boshqa xodim — avvalgidek.
 create or replace function public.claim_child(p_sid text, p_code text)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
-declare v_uid text := app.uid(); v_fails int; v_ok boolean; v_canon text; v_doc text; v_sidraw text; v_n int;
+declare v_uid text := app.uid(); v_fails int; v_ok boolean; v_canon text; v_doc text; v_sidraw text; v_n int; v_review boolean;
 begin
   if v_uid is null then
     raise exception 'auth required' using errcode = '42501';
@@ -204,9 +210,16 @@ begin
     return jsonb_build_object('ok', false, 'error',
       'Bu o''quvchi ID''si boshqa o''quvchi bilan takrorlangan — maktab ma''muriyatiga murojaat qiling.');
   end if;
-  insert into public.child_claims(id, uid, "studentId", code)
-    values (v_uid || '__' || v_canon, v_uid, v_canon, p_code)
+  -- Kod ko'radigan xodim — Direktor tasdig'igacha 'pending' (yuqoridagi izoh). Javob bog'lanishning HAQIQIY holatidan: avvalgi so'rov
+  --   hali kutilayotgan bo'lsa — yana «kutmoqda» (ikkinchi qator yaratilmaydi), Direktor tasdiqlagan bo'lsa — ok.
+  v_review := app.is_zavuch() or app.is_reception();
+  insert into public.child_claims(id, uid, "studentId", code, status)
+    values (v_uid || '__' || v_canon, v_uid, v_canon, p_code, case when v_review then 'pending' else 'active' end)
     on conflict do nothing;
+  if exists (select 1 from public.child_claims cc where cc.uid = v_uid and cc."studentId" = v_canon and cc.status = 'pending') then
+    return jsonb_build_object('ok', false, 'pending', true, 'studentId', v_canon,
+      'error', 'Farzand bog''lanishi Direktor tasdig''ini kutmoqda (o''quvchi kodlarini ko''radigan xodim hisobi). Tasdiqlangach farzandingiz kabinetda ko''rinadi.');
+  end if;
   return jsonb_build_object('ok', true, 'studentId', v_canon);
 end $$;
 revoke all on function public.claim_child(text, text) from public, anon;
