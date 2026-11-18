@@ -255,9 +255,9 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
 ## Indikatorlar qayerdan hisoblanadi
 | Indikator | Manba / formula | Bugun o'lchanadimi |
 |---|---|---|
-| To'lov yig'ilishi | `invoices` (month=M, bekor/qaytarilganlarsiz): Σmin(paidAmount, amount) / Σamount; 3 nuqtada saqlanadi | ha |
-| Qarz muddati | o'tgan oylar bo'yicha `amount − paidAmount > 0` oylari soni har o'quvchiga: 1 / 2 / 3+ | ha |
-| Davomat kiritilishi | `attendance.days` kalitlari / dars bo'lgan sinf-kunlar (dam olish va `school_holidays`siz); SQL'da (1000 qator cheklovi) | ha |
+| To'lov yig'ilishi | `invoices` (month=M, bekor/qaytarilganlarsiz): Σ to'langan / Σamount (to'langan: holati `paid` — to'liq summa, aks holda min(paidAmount, amount)); 3 nuqtada saqlanadi | ha |
+| Qarz muddati | o'tgan oylar bo'yicha `amount − paidAmount > 0` oylari soni har o'quvchiga: 1 / 2 / 3+ — barcha o'quvchilar (chiqib ketgan / muzlatilganlarning eski qarzi ham; ular alohida ko'rsatiladi) | ha |
+| Davomat kiritilishi | `attendance.days` kalitlari / dars bo'lgan sinf-kunlar (dars kunlari — dushanba–juma, `school_holidays`siz: `app.school_days`); SQL'da (1000 qator cheklovi) | ha |
 | Ota-onalar ulanishi | faol `child_claims` (parent roli, faol) bilan bog'langan o'qiyotgan o'quvchilar / o'qiyotganlar, sinf bo'yicha | ha |
 | Xodimlar hisobi va faolligi | `users.staffRefId` bilan bog'langanlar / faol `teachers`+`staff`; faollik — `auth.users.last_sign_in_at` (server tomonda) | qisman |
 | Muddati o'tgan tasdiqlar | tasdiq jadvallaridagi effektiv holat = muddati o'tgan / 24 soatdan oshgan kutish | yangi vosita |

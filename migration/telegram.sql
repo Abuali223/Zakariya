@@ -106,13 +106,16 @@ end $$;
 alter table public.sms_log add column if not exists channel text default 'sms';
 
 -- Xabarnoma turlari: + to'lov qabul qilindi, sinf e'loni (Telegram), Direktorga kunlik hisobot. Standart — O'CHIQ.
+--   Kunlik hisobot kunlari standarti — Du–Ju (maktab dars kunlari, app.school_days; egasi qarori 2026-11-16: «Telegram kunlik
+--   hisoboti du–ju»). Faqat yangi o'rnatishga (mavjud qator — Direktor tanlagani o'zgarmaydi). Hisobot yuborilmagan kunlarning
+--   to'lovlari keyingi hisobotda «oldingi hisobotdan keyin» qatorida chiqadi (director_daily 'since').
 alter table public.notify_settings drop constraint if exists notify_settings_id_chk;
 alter table public.notify_settings add constraint notify_settings_id_chk
   check (id in ('general', 'new_invoice', 'debt_reminder', 'manual_remind', 'payment_received', 'announce', 'daily_report'));
 insert into public.notify_settings(id, enabled, days, "hourFrom", "hourTo") values
   ('payment_received', false, null, null, null),
   ('announce',         false, null, null, null),
-  ('daily_report',     false, '[1,2,3,4,5,6]', 19, null)
+  ('daily_report',     false, '[1,2,3,4,5]', 19, null)
 on conflict (id) do nothing;
 
 -- 2) Raqam (kanonik raqamlar): '+998 90 111 22 33' -> 998901112233; '90 111 22 33' -> 998901112233; '+7 903 ...' -> 7903...;
@@ -452,17 +455,41 @@ end $$;
 -- Kunlik hisobot ma'lumoti (Toshkent kuni): to'lovlar (soni, summa, usul bo'yicha), qarzdorlar, davomat kiritilishi,
 --   kutilayotgan tasdiqlar (navbatlar bo'yicha; muddati o'tganlari alohida); kassa moduli ishlatilayotgan bo'lsa — 'kassa'
 --   (kun varag'i jamlari va nazorat qatori). Server (tg-daily.cjs) yoki Direktor.
+--   Hisobot oynasi (A6-01): 'asOf' — ma'lumot olingan payt (now()); tg-daily.cjs uni yuborish jurnaliga (sms_log
+--   'daily__<kun>__<bog'lanish>') "createdAt" qilib yozadi. 'since' — OLDINGI muvaffaqiyatli hisobot (sms_log: type 'daily', status
+--   'sent', shu kundan oldin) payti bilan bugun boshi orasida TUSHGAN to'lovlar (kiritilgan vaqti bo'yicha; kassa kuni bo'yicha
+--   guruhlangan): hisobot yuborilgandan keyin (kechqurun) va hisobot yuborilmagan kunlarda (shanba, yakshanba, bayram, hisobot o'chiq
+--   yoki yetkazilmagan kunlar) tushgan pul. Avval ular HECH QAYSI hisobotda chiqmasdi: 'payments' — faqat bugungi kassa kuni, 'late' —
+--   faqat bugun kiritilgan orqa sanali to'lov. Uch blok kiritilgan vaqt bo'yicha kesishmaydi: 'since' — bugundan oldin, 'payments' va
+--   'late' — bugun. Oldingi hisobot yo'q (birinchi hisobot) — 'since' null; 31 kundan eski — oxirgi 31 kun.
+--   'unmatched' (A6-07) — BARCHA biriktirilmagan to'lovlar soni («To'lovlar» → «⚠️ Biriktirilmagan to'lovlar» ro'yxati bilan bir xil),
+--   'unmatchedSum' — summasi, 'unmatchedSince' — eng eskisining kassa kuni. Avval faqat bugungi kassa kunidagilar sanalardi: kechagi
+--   biriktirilmagan to'lov ertasi kuni hisobotdan yo'qolardi (Direktor «ish yo'q» deb o'ylardi).
 create or replace function public.director_daily(p_day date default null) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare d date := coalesce(p_day, (now() at time zone 'Asia/Tashkent')::date); v_from timestamptz; v_to timestamptz; r jsonb; v_k jsonb;
+        v_since timestamptz; v_sj jsonb;
 begin
   if not (app.is_admin() or app.is_system()) then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   v_from := (d::timestamp) at time zone 'Asia/Tashkent'; v_to := ((d + 1)::timestamp) at time zone 'Asia/Tashkent';
+  select max(l."createdAt") into v_since from public.sms_log l
+   where l.type = 'daily' and l.status = 'sent' and l."createdAt" < v_from;
+  if v_since is not null then
+    v_since := greatest(v_since, v_from - interval '31 days');
+    with x as (select p.amount, app.pay_day(p."createdAt", p.raw) as day from public.payments p
+                where p."createdAt" >= v_since and p."createdAt" < v_from
+                  and app.counts_as_receipt(p.id, p.status, p.provider, p.amount))
+    select jsonb_build_object('from', v_since, 'count', (select count(*) from x), 'sum', (select coalesce(sum(x.amount), 0) from x),
+             'byDay', coalesce((select jsonb_agg(jsonb_build_object('day', to_char(z.day, 'YYYY-MM-DD'), 'count', z.n, 'sum', z.s) order by z.day)
+                                  from (select x.day, count(*) as n, sum(x.amount) as s from x group by x.day) z), '[]'::jsonb))
+      into v_sj;
+  end if;
   -- To'lovlar — admin ilovasidagi kassa hisoboti bilan AYNAN bir xil ta'rif (fin-prereq.sql: app.fin_receipts —
   --   admin.html isCashPay/payDay): bo'lingan to'lov bolalari (':s:') va avans ko'chirmasi ('reattr') hisoblanmaydi, kun —
   --   kassa kuni (qo'lda to'lovda kassir tanlagan «Sana»). 'late' — bugun kiritilgan, lekin oldingi kun(lar) uchun yozilgan.
   select jsonb_build_object(
     'day', to_char(d, 'YYYY-MM-DD'),
+    'asOf', now(),
     'payments', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(r.amount), 0),
                    'byProvider', coalesce((select jsonb_object_agg(z.pv, z.s) from (select r2.provider as pv, sum(r2.amount) as s
                        from app.fin_receipts(d, d) r2 group by 1) z), '{}'::jsonb))
@@ -470,7 +497,10 @@ begin
     'late', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(p.amount), 0))
                from public.payments p where p."createdAt" >= v_from and p."createdAt" < v_to
                 and app.counts_as_receipt(p.id, p.status, p.provider, p.amount) and app.pay_day(p."createdAt", p.raw) < d),
-    'unmatched', (select count(*) from app.fin_receipts(d, d) r where coalesce(r.status, '') = 'unmatched'),
+    'since', v_sj,
+    'unmatched', (select count(*) from public.payments p where p.status = 'unmatched'),
+    'unmatchedSum', (select coalesce(sum(p.amount), 0) from public.payments p where p.status = 'unmatched'),
+    'unmatchedSince', (select to_char(min(app.pay_day(p."createdAt", p.raw)), 'YYYY-MM-DD') from public.payments p where p.status = 'unmatched'),
     'debt', app.kpi_debt_aging(least(v_to, now())),
     'attendance', app.kpi_attendance(d, d) - 'byClass',
     'pending', jsonb_build_object(

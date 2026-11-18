@@ -339,6 +339,8 @@ select zz.chk('L3 YOPIQ RO''YXAT: buxgalterni o''tkazadigan ko''rinishlar',
 --   funksiyani (bevosita yoki zanjir bo'ylab) chaqiradi. Zanjir tugunlari — public va app dagi BARCHA sql / plpgsql funksiyalar
 --   (mijozga yopiq ichki yordamchilar va app.* tekshiruvlar ham): ruxsatni kassa_state, ichki «_gate()» yoki app.need_x() orqali
 --   tekshiradigan RPC ham topiladi (STRICT bo'lsa ham, avval qator qidirsa ham).
+--   finance_other_income (audit-11, A6-02): «Buxgalteriya» Kirim / A4 uchun kassadagi o'quv to'lovidan tashqari daromad — faqat oy va
+--   statiya bo'yicha summalar (shaxsiy ma'lumot yo'q; buxgalter kassa hujjatlarini o'zi ham o'qiydi — kassa_reader).
 create temp table zz_l4 on commit drop as
 with recursive node as (
   select p.oid, p.proname, p.prosrc, p.pronamespace = 'public'::regnamespace and p.prosecdef
@@ -354,7 +356,7 @@ with recursive node as (
 ) select distinct c.proname from clo c join node n on n.oid = c.oid where n.rpc;
 select zz.chk('L4 YOPIQ RO''YXAT: buxgalterni o''tkazadigan mijoz RPC''lari (matn + chaqiruvlar zanjiri)',
   (select string_agg(proname, ',' order by proname) from zz_l4),
-  '^claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
+  '^claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
 select zz.chk('L5 rls-initplan: buxgalter siyosatlari o''ralgan (o''ralmagan app.* chaqiruvi — faqat users)',
   (select coalesce(string_agg(distinct tablename, ','), '') from pg_policies where schemaname = 'public'
      and (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '(?<!SELECT )app\.(is_accountant|kassa_reader|fin_list2)\(\)'), '^$');
@@ -393,7 +395,7 @@ select (select count(*) from zz_l4b) || ':' || coalesce((select string_agg(prona
 rollback to savepoint zz_l4b_sp;
 select zz.chk('L4b YOPIQ RO''YXAT (xatti-harakat): buxgalterga boshqacha javob beradigan RPC''lar (oldida — tekshirilgan RPC''lar soni)',
   :'zz_l4b_res',
-  '^[0-9]{2,}:claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
+  '^[0-9]{2,}:claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_adv_report,kassa_adv_report_void,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_pack,kassa_overview,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
 
 -- ---------- (P) pul va yozish RPC'lari: buxgalter (va eski qo'shimchali buxgalter) — 42501 ----------
 create temp table zz_money on commit drop as

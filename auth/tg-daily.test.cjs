@@ -27,9 +27,11 @@ function world(o) {
   };
   const fk = makeFake(state);
   const rpcCalls = [];
-  const sb = { from: fk.from, rpc: async (fn, args) => { rpcCalls.push([fn, args]); if (fn === 'director_daily') return o.rpcErr ? { data: null, error: { message: 'boom' } } : { data: DAILY, error: null }; if (fn === 'tg_blocked') return { data: 1, error: null }; return { data: null, error: { message: 'unknown rpc ' + fn } }; } };
+  // o.daily — director_daily javobi (obyekt yoki chaqiruv tartib raqami bo'yicha funksiya); o.tgRes — Telegram javobi (n-chi yuborish)
+  const dailyOf = () => (typeof o.daily === 'function' ? o.daily(rpcCalls.filter(c => c[0] === 'director_daily').length) : (o.daily || DAILY));
+  const sb = { from: fk.from, rpc: async (fn, args) => { rpcCalls.push([fn, args]); if (fn === 'director_daily') return o.rpcErr ? { data: null, error: { message: 'boom' } } : { data: dailyOf(), error: null }; if (fn === 'tg_blocked') return { data: 1, error: null }; return { data: null, error: { message: 'unknown rpc ' + fn } }; } };
   const sent = [];
-  const tg = { sendMessage: async (chat, text) => { sent.push({ chat, text }); return (o.block || []).includes(chat) ? { ok: false, blocked: true, error: 'blocked: Forbidden' } : { ok: true, id: sent.length }; } };
+  const tg = { sendMessage: async (chat, text) => { sent.push({ chat, text }); if (o.tgRes) return o.tgRes(sent.length, chat); return (o.block || []).includes(chat) ? { ok: false, blocked: true, error: 'blocked: Forbidden' } : { ok: true, id: sent.length }; } };
   const health = { runChecks: async () => o.checks || [{ key: 'db', name: 'Baza', ok: true }, { key: 'ai', name: 'AI yordamchi', ok: false, info: 'ulanib bo‘lmadi' }] };
   return { state, sb, tg, health, sent, rpcCalls, log: () => {} };
 }
@@ -40,6 +42,12 @@ function world(o) {
   ok('18:30 — hali erta', /19:00/.test(dailyPlan({ enabled: true, days: [1], hourFrom: 19 }, T(18)).reason));
   ok('19:30 — yuboriladi', dailyPlan({ enabled: true, days: [1], hourFrom: 19 }, T(19)).run === true);
   ok('qator yo‘q — yo‘q', dailyPlan(null, T(20)).run === false);
+  // A2-02: kunlar tanlanmagan qatorda standart — Du–Ju (dars kunlari): shanba yuborilmaydi, dushanba — yuboriladi
+  {
+    const sat = Date.parse('2026-11-07T15:00:00Z');   // 2026-11-07 shanba, Toshkent 20:00
+    const ps = dailyPlan({ enabled: true, hourFrom: 19 }, sat), pm = dailyPlan({ enabled: true, hourFrom: 19 }, T(20));
+    ok('standart kunlar Du–Ju: shanba — kun emas, dushanba — yuboriladi', ps.run === false && ps.reason === 'bugun yuborish kuni emas' && pm.run === true && JSON.stringify(pm.days) === '[1,2,3,4,5]', JSON.stringify([ps, pm]));
+  }
 
   console.log('\n— matn');
   const txt = composeDaily(DAILY, [{ name: 'Baza', ok: true }, { name: 'AI yordamchi', ok: false, info: 'ulanib bo‘lmadi' }]);
@@ -57,6 +65,29 @@ function world(o) {
     const t2 = composeDaily(Object.assign({}, DAILY, { late: { count: 2, sum: 1500000 }, payments: { count: 1, sum: 300000, byProvider: { terminal: 300000 } } }), null);
     ok('kechikib kiritilgan to‘lovlar alohida qator', /↩ Bugun kiritilgan, oldingi kunlar sanasi bilan: 2 ta · 1 500 000 so‘m/.test(t2), t2);
     ok('terminal nomi', /\(terminal 300 000\)/.test(t2), t2);
+  }
+  // A6-01: sarlavhada «HH:MM holatiga»; oldingi hisobotdan keyin (kechqurun, shanba, yakshanba) tushgan to'lovlar — kassa kuni bo'yicha
+  {
+    const SINCE = { from: '2026-11-13T14:00:05+00:00', count: 3, sum: 1400000,
+      byDay: [{ day: '2026-11-13', count: 1, sum: 200000 }, { day: '2026-11-14', count: 1, sum: 400000 }, { day: '2026-11-15', count: 1, sum: 800000 }] };
+    const ts = composeDaily(Object.assign({}, DAILY, { day: '2026-11-16', asOf: '2026-11-16T14:00:01.123456+00:00', since: SINCE, late: { count: 1, sum: 50000 } }), null);
+    ok('sarlavha: kun va ma’lumot olingan payt (Toshkent)', /kunlik hisobot \(16\.11\.2026, 19:00 holatiga\)/.test(ts), ts);
+    ok('oldingi hisobotdan keyin tushgan: vaqti, soni, summa va kunlar bo‘yicha',
+      /\n   🌙 Oldingi hisobotdan keyin \(13\.11\.2026 19:00 dan\) tushgan: 3 ta · 1 400 000 so‘m \(13\.11 — 200 000 · 14\.11 — 400 000 · 15\.11 — 800 000\)\n/.test(ts), ts);
+    ok('tartib: bugungi to‘lovlar → oldingi hisobotdan keyin → bugun orqa sana bilan', ts.indexOf('💰 To‘lovlar') < ts.indexOf('🌙') && ts.indexOf('🌙') < ts.indexOf('↩ Bugun kiritilgan'), ts);
+    ok('hech narsa tushmagan yoki oldingi hisobot yo‘q — qator yo‘q', !/🌙/.test(composeDaily(Object.assign({}, DAILY, { since: Object.assign({}, SINCE, { count: 0, sum: 0, byDay: [] }) }), null))
+      && !/🌙/.test(composeDaily(Object.assign({}, DAILY, { since: null }), null)) && !/holatiga/.test(txt), txt);
+    const long = Array.from({ length: 9 }, (_, i) => ({ day: `2026-11-0${i + 1}`, count: 1, sum: 1000 }));
+    const tl = composeDaily(Object.assign({}, DAILY, { since: { from: '2026-11-01T00:00:00Z', count: 9, sum: 9000, byDay: long } }), null);
+    ok('7 kundan ko‘p — faqat jami (ro‘yxatsiz)', /🌙 Oldingi hisobotdan keyin \(01\.11\.2026 05:00 dan\) tushgan: 9 ta · 9 000 so‘m\n/.test(tl), tl);
+  }
+  // A6-07: biriktirilmaganlar — BARCHASI, summa va eng eskisi bilan; A6-03: ketgan / muzlatilganlarning eski qarzi alohida yorliq bilan
+  {
+    const tu = composeDaily(Object.assign({}, DAILY, { unmatched: 2, unmatchedSum: 750000, unmatchedSince: '2026-11-10',
+      debt: { m1: 1, m2: 1, m3: 1, inactive: { n: 2, m2plus: 2, sum: 5000000 } } }), null);
+    ok('biriktirilmagan: soni, summa, eng eskisi', /⚠️ O‘quvchiga biriktirilmagan: 2 ta · 750 000 so‘m \(eng eskisi 10\.11\.2026\) — «To‘lovlar»da biriktiring/.test(tu), tu);
+    ok('qarzdorlar: ketgan / muzlatilgan alohida (eski qarz)', /🧾 Qarzdorlar: 1 oy — 1, 2 oy — 1, 3\+ oy — 1 \(shu jumladan ketgan \/ muzlatilgan: 2 · 5 000 000 so‘m — eski qarz, undiriladi\)/.test(tu), tu);
+    ok('ketgan / muzlatilgan qarzdor yo‘q — yorliq yo‘q', !/ketgan/.test(txt) && !/ketgan/.test(composeDaily(Object.assign({}, DAILY, { debt: { m1: 1, m2: 0, m3: 0, inactive: { n: 0, m2plus: 0, sum: 0 } } }), null)), txt);
   }
 
   console.log('\n— kassa bloki va nazorat qatori (RP-05)');
@@ -144,6 +175,50 @@ function world(o) {
     const wn = world(); wn.state.telegram_links.length = 0;
     const rn = await runDaily({ sb: wn.sb, tg: wn.tg, health: wn.health, now: () => T(19), log: wn.log });
     ok('ulangan Direktor yo‘q', rn.reason === 'norecipients', J(rn));
+    const rb2 = await runDaily({ sb: wb.sb, tg: wb.tg, health: wb.health, now: () => T(20), log: wb.log });
+    ok('bloklagan Direktorga keyingi run ham qayta yubormaydi', rb2.sent === 0 && rb2.skipped === 1 && wb.sent.length === 1, J([rb2, wb.state.sms_log]));
+  }
+  console.log('\n— A6-01: jurnal qatori vaqti = ma’lumot olingan payt (keyingi hisobot oynasi shundan)');
+  {
+    const AS = '2026-11-02T14:30:00.654321+00:00';
+    const w = world({ daily: Object.assign({}, DAILY, { asOf: AS }) });
+    await runDaily({ sb: w.sb, tg: w.tg, health: w.health, now: () => T(19), log: w.log });
+    const lg = w.state.sms_log.find(x => x.id === 'daily__2026-11-02__L1');
+    ok('sms_log.createdAt = director_daily.asOf (yuborish payti emas)', lg && lg.createdAt === AS && lg.status === 'sent', J(lg));
+    const w0 = world();
+    await runDaily({ sb: w0.sb, tg: w0.tg, health: w0.health, now: () => T(19), log: w0.log });
+    ok('asOf yo‘q (eski baza) — createdAt baza standarti', !!(w0.state.sms_log[0] && w0.state.sms_log[0].createdAt && w0.state.sms_log[0].createdAt !== AS), J(w0.state.sms_log));
+  }
+  console.log('\n— A6-05: vaqtinchalik xatodan keyin qayta yuborish (takrorsiz)');
+  {
+    // 1-urinish tarmoq xatosi, keyingisi — muvaffaqiyatli; har run yangi ma'lumot (asOf) bilan
+    const asOfN = n => Object.assign({}, DAILY, { asOf: `2026-11-02T14:${String(15 * n).padStart(2, '0')}:00+00:00` });
+    const w = world({ daily: asOfN, tgRes: n => (n === 1 ? { ok: false, status: 0, error: 'network: ECONNREFUSED' } : { ok: true, id: n }) });
+    const r1 = await runDaily({ sb: w.sb, tg: w.tg, health: w.health, now: () => T(19), log: w.log });
+    const lg = () => w.state.sms_log.find(x => x.id === 'daily__2026-11-02__L1');
+    ok('1-run: yetkazilmadi — failed, qayta urinish belgisi bilan', r1.sent === 0 && lg().status === 'failed' && /^retry: network/.test(lg().error) && Number(lg().attempts) === 1, J([r1, lg()]));
+    const r2 = await runDaily({ sb: w.sb, tg: w.tg, health: w.health, now: () => T(19) + 15 * 60e3, log: w.log });
+    ok('2-run (15 daqiqadan keyin): qayta yuborildi — sent, 2-urinish, yangi ma’lumot vaqti', r2.sent === 1 && r2.retried === 1 && lg().status === 'sent' && Number(lg().attempts) === 2 && lg().error === ''
+      && lg().createdAt === asOfN(2).asOf && w.sent.length === 2, J([r2, lg()]));
+    const r3 = await runDaily({ sb: w.sb, tg: w.tg, health: w.health, now: () => T(20), log: w.log });
+    ok('3-run: bugun yuborilgan — takror yo‘q', r3.sent === 0 && r3.skipped === 1 && w.sent.length === 2, J([r3, lg()]));
+    // timeout — xabar yetgan bo'lishi mumkin: qayta yuborilmaydi (Direktorga ikki marta ketmasin)
+    const wt = world({ tgRes: () => ({ ok: false, status: 0, timeout: true, error: 'timeout' }) });
+    await runDaily({ sb: wt.sb, tg: wt.tg, health: wt.health, now: () => T(19), log: wt.log });
+    const rt = await runDaily({ sb: wt.sb, tg: wt.tg, health: wt.health, now: () => T(19) + 15 * 60e3, log: wt.log });
+    ok('timeout (noaniq) — qayta yuborilmaydi', rt.sent === 0 && rt.skipped === 1 && wt.sent.length === 1 && wt.state.sms_log[0].status === 'failed' && !/^retry: /.test(wt.state.sms_log[0].error), J([rt, wt.state.sms_log]));
+    // doim 5xx — jami MAXTRIES (3) urinish, keyin to'xtaydi
+    const wf = world({ tgRes: () => ({ ok: false, status: 502, error: 'Bad Gateway' }) });
+    for (let i = 0; i < 5; i++) await runDaily({ sb: wf.sb, tg: wf.tg, health: wf.health, now: () => T(19) + i * 15 * 60e3, log: wf.log });
+    ok('doim xato (5xx): 3 urinishdan keyin to‘xtaydi', wf.sent.length === 3 && Number(wf.state.sms_log[0].attempts) === 3 && wf.state.sms_log[0].status === 'failed', J([wf.sent.length, wf.state.sms_log]));
+    // eski (tuzatishdan oldingi) prefikssiz 'failed' qator — qayta yuborilmaydi
+    const wo = world(); wo.state.sms_log.push({ id: 'daily__2026-11-02__L1', type: 'daily', status: 'failed', attempts: 1, error: 'network: x', channel: 'telegram', phone: '' });
+    const ro = await runDaily({ sb: wo.sb, tg: wo.tg, health: wo.health, now: () => T(19), log: wo.log });
+    ok('prefikssiz eski xato qatori — o‘tkaziladi', ro.sent === 0 && ro.skipped === 1 && wo.sent.length === 0, J(ro));
+    // 'sending' (boshqa run yuborayotgan yoki uzilgan — noaniq) — o'tkaziladi
+    const ws = world(); ws.state.sms_log.push({ id: 'daily__2026-11-02__L1', type: 'daily', status: 'sending', attempts: 1, error: '', channel: 'telegram', phone: '' });
+    const rs = await runDaily({ sb: ws.sb, tg: ws.tg, health: ws.health, now: () => T(19), log: ws.log });
+    ok('yuborilmoqda (sending) — o‘tkaziladi', rs.sent === 0 && rs.skipped === 1 && ws.sent.length === 0, J(rs));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

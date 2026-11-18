@@ -328,6 +328,9 @@ select app.chlog_attach('canteen_menu', 'breakfast,lunch,snack,note,allergens');
 -- 7) «Reja va tushum» (Direktor, Moliya menejeri): oy × sinf — hisoblangan (bekor/qaytarilganlarsiz), to'langan, qarz,
 --    yig'ilish %; har oy uchun 10-sana / oy oxiri / keyingi oyning 10-sanasi kesimi (shu paytgacha TO'LIQ to'langan
 --    fakturalar summasi — paidAt bo'yicha; qisman to'lov vaqti saqlanmaydi). Serverda yig'iladi (1000 qator cheklovi yo'q).
+--    To'langan qism (A6-04): holati 'paid' — TO'LIQ summa (Moliya, Buxgalteriya, bosh sahifa va «To'lovlar»dagi paidAmt bilan bir
+--    xil), aks holda min(paidAmount, summa). Avval "paidAmount"i bo'sh eski / import 'paid' faktura «to'lanmagan» sanalardi:
+--    to'langan + qarz ≠ hisoblangan, «Yig'ilish» foizi «10-sana» kesimidan past chiqardi.
 create or replace function public.finance_plan_actual(p_from text, p_to text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare v jsonb;
@@ -341,7 +344,8 @@ begin
   end if;
   with inv as (
     select i.month, coalesce(nullif(btrim(i."classKey"), ''), '—') as ck, coalesce(i.amount, 0) as amt,
-           least(greatest(coalesce(i."paidAmount", 0), 0), coalesce(i.amount, 0)) as paid, coalesce(i.status, '') as st, i."paidAt" as pat,
+           case when coalesce(i.status, '') = 'paid' then coalesce(i.amount, 0)
+                else least(greatest(coalesce(i."paidAmount", 0), 0), coalesce(i.amount, 0)) end as paid, coalesce(i.status, '') as st, i."paidAt" as pat,
            coalesce(nullif(i."studentId", ''), i.id) as sid
       from public.invoices i
      where i.month between p_from and p_to and coalesce(i.status, '') not in ('canceled', 'reversed')),
@@ -476,10 +480,12 @@ grant execute on function public.money_rule_violations() to authenticated, servi
 -- 9) Direktorning haftalik ko'rsatkichlari («📊 Haftalik hisobot», faqat Direktor). Har ko'rsatkich — shu hafta va o'tgan
 --    hafta (taqqoslash uchun). Ta'riflar — «Yo'l xaritasi» → «Direktorning haftalik sahifasi» jadvali.
 --   (1) To'lov yig'ilishi: baholanayotgan oy = (sana − 10 kun) oyi (muddati — keyingi oyning 10-sanasi); shu paytgacha TO'LIQ
---       to'langan fakturalar summasi / hisoblangan (bekor/qaytarilganlarsiz); qisman to'lovlar bilan — alohida (hozir).
---   (2) Qarz muddati: o'tgan oylar (va 10-sanadan keyin joriy oy) bo'yicha to'liq to'lanmagan oylar soni har o'quvchiga.
---   (3) Davomat kiritilishi: belgilangan o'quvchi-kunlar / kerakli (Du–Sha, bayramsiz, bugungacha), sinf bo'yicha.
---       Kiritish VAQTI saqlanmaydi — «10:00 gacha» qismi hisoblanmaydi.
+--       to'langan fakturalar summasi / hisoblangan (bekor/qaytarilganlarsiz); qisman to'lovlar bilan — alohida (hozir; holati
+--       'paid' — to'liq summa, A6-04).
+--   (2) Qarz muddati: o'tgan oylar (va 10-sanadan keyin joriy oy) bo'yicha to'liq to'lanmagan oylar soni har o'quvchiga —
+--       BARCHA o'quvchilar, chiqib ketgan / muzlatilganlar ham (A6-03; ular 'inactive' da alohida ham).
+--   (3) Davomat kiritilishi: belgilangan o'quvchi-kunlar / kerakli (dars kunlari — app.school_days: Du–Ju, bayram / ta'tilsiz,
+--       bugungacha; A2-02), sinf bo'yicha. Kiritish VAQTI saqlanmaydi — «10:00 gacha» qismi hisoblanmaydi.
 --   (4) Ota-onalar ulanishi: kamida bitta faol bog'lanishi bor o'quvchilar / o'qiyotganlar, sinf bo'yicha.
 --   (5) O'qituvchilar hisobi (bog'langan faol hisob / ro'yxat) va faolligi (shu hafta tizimda yozuv qilganlar — o'zgarishlar tarixi).
 --   (6) Muddati o'tgan tasdiqlar (hozir): 100 ball (Direktor muddati o'tgan), chegirma/«Bemor» kuni/tavsiya (faktura
@@ -488,7 +494,10 @@ grant execute on function public.money_rule_violations() to authenticated, servi
 create or replace function app.kpi_collection(p_at timestamptz) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   with m as (select to_char((p_at at time zone 'Asia/Tashkent') - interval '10 days', 'YYYY-MM') as mon),
-  inv as (select coalesce(i.amount, 0) as amt, least(greatest(coalesce(i."paidAmount", 0), 0), coalesce(i.amount, 0)) as paid,
+  -- to'langan qism: holati 'paid' — to'liq summa (finance_plan_actual va admin.html paidAmt bilan bir xil, A6-04)
+  inv as (select coalesce(i.amount, 0) as amt,
+                 case when coalesce(i.status, '') = 'paid' then coalesce(i.amount, 0)
+                      else least(greatest(coalesce(i."paidAmount", 0), 0), coalesce(i.amount, 0)) end as paid,
                  coalesce(i.status, '') as st, i."paidAt" as pat
             from public.invoices i, m
            where i.month = m.mon and coalesce(i.status, '') not in ('canceled', 'reversed') and coalesce(i.amount, 0) > 0
@@ -504,25 +513,41 @@ create or replace function app.kpi_debt_aging(p_at timestamptz) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
   with d as (select (p_at at time zone 'Asia/Tashkent')::date as d),
   cur as (select to_char(d, 'YYYY-MM') as mon, extract(day from d)::int as dd from d),
-  st as (select coalesce(nullif(s."studentId", ''), s.id) as sid, s.id as did from public.students s
-          where coalesce(s."payStatus", '') not in ('chiqdi', 'muzlatilgan')),
-  od as (select i."studentId" as k, i.month from public.invoices i, cur
+  -- BARCHA o'quvchilar (A6-03): chiqib ketgan / muzlatilgan / arxivdagi o'quvchining eski qarzi ham undiriladi — 1 / 2 / 3+ oy sonlarida
+  --   bor. Avval faqat faollar sanalardi: eng qiyin undiriladigan qarz yashirinib, Telegram «Qarzdorlar» va haftalik «Qarz muddati»
+  --   bosh sahifa («Qarz 2+ oy») va «Moliya → Qarzdorlar»ga zid edi. Ular 'inactive' da alohida ham («ketgan / muzlatilgan»: soni,
+  --   2+ oy, qolgan qarz). Chiqqandan keyingi oylarga faktura yaratilmaydi — kelajak qarzi paydo bo'lmaydi. 'students' (va 'm1share'
+  --   maxraji) — o'qiyotganlar: «1 oy — 10% dan kam» maqsadi ular uchun.
+  st as (select coalesce(nullif(s."studentId", ''), s.id) as sid, s.id as did,
+                coalesce(s."payStatus", '') in ('chiqdi', 'muzlatilgan') as gone
+           from public.students s),
+  -- rem — p_at paytidagi qolgan qarz: 'paid' (p_at dan keyin to'langan) — o'sha payt to'lanmagan, to'liq summa; aks holda summa − to'langan
+  od as (select i.id as iid, i."studentId" as k, i.month,
+                case when coalesce(i.status, '') = 'paid' then coalesce(i.amount, 0)
+                     else greatest(coalesce(i.amount, 0) - greatest(coalesce(i."paidAmount", 0), 0), 0) end as rem
+           from public.invoices i, cur
           where coalesce(i.status, '') not in ('canceled', 'reversed') and coalesce(i.amount, 0) > 0
             and (i."createdAt" is null or i."createdAt" <= p_at)
             and (i.month < cur.mon or (i.month = cur.mon and cur.dd > 10))
             and not (coalesce(i.status, '') = 'paid' and (i."paidAt" is null or i."paidAt" <= p_at))),
-  per as (select st.sid, count(distinct od.month) as n from st join od on od.k in (st.sid, st.did) group by st.sid)
-  select jsonb_build_object('students', (select count(*) from st),
+  x as (select distinct st.sid, od.iid, od.month, od.rem from st join od on od.k in (st.sid, st.did)),
+  g as (select st.sid, bool_and(st.gone) as gone from st group by st.sid),
+  per as (select x.sid, g.gone, count(distinct x.month) as n, sum(x.rem) as rem from x join g on g.sid = x.sid group by x.sid, g.gone),
+  act as (select count(*) as n from st where not st.gone)
+  select jsonb_build_object('students', (select n from act),
     'm1', count(*) filter (where n = 1), 'm2', count(*) filter (where n = 2), 'm3', count(*) filter (where n >= 3),
     'm2plus', count(*) filter (where n >= 2),
-    'm1share', case when (select count(*) from st) > 0 then round(100.0 * count(*) filter (where n = 1) / (select count(*) from st), 1) end)
+    'm1share', case when (select n from act) > 0 then round(100.0 * count(*) filter (where n = 1 and not gone) / (select n from act), 1) end,
+    'inactive', jsonb_build_object('n', count(*) filter (where gone), 'm2plus', count(*) filter (where gone and n >= 2),
+                                   'sum', coalesce(sum(rem) filter (where gone), 0)))
   from per
 $$;
 create or replace function app.kpi_attendance(p_from date, p_to date) returns jsonb
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  with days as (select g::date as d from generate_series(p_from, greatest(p_from, p_to), interval '1 day') g
-                 where g::date <= p_to and extract(isodow from g) < 7
-                   and not exists (select 1 from public.school_holidays h where h.day = to_char(g, 'YYYY-MM-DD'))),
+  -- Dars kunlari (A2-02) — app.school_days: dushanba–juma, «Bayram / ta'til kunlari»siz. Kasallik ma'lumotnomasi, to'lov prorata
+  --   (admin.html SA_WORKDAYS), bosh sahifa («Bugun dam olish kuni») bilan BITTA qoida. Avval shanba ham dars kuni sanalardi: hamma
+  --   sinf har kuni kiritgan to'liq hafta 83,3% (sariq) chiqardi, shanba kungi Telegram hisobotida «dars kuni emas» o'rniga «0%» edi.
+  with days as (select x::date as d from jsonb_array_elements_text(app.school_days(p_from, p_to)) x),
   st as (select coalesce(nullif(s."studentId", ''), s.id) as sid, app.student_class_key(s.lang, s.grade, s."classLetter", s.track) as ck,
                 nullif(s."activeFrom", '') as af
            from public.students s where coalesce(s."payStatus", '') not in ('chiqdi', 'muzlatilgan')),

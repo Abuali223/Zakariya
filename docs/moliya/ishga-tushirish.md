@@ -272,7 +272,9 @@ fiskal chek paydo bo‘ladi). Tartib:
 - [ ] Kechqurun: NKM Z-hisoboti (naqd + karta, bitta) → «Kunni yopish» — pul sanaladi, summa va Z-hisobot kiritiladi; «🖨 KO-4» ikki nusxa (kassa kitobi varag‘i va kassir hisoboti) va «🖨 Kunlik hisobot».
 - [ ] Buxgalter (u yo‘q kuni — moliya menejeri): qog‘ozlarni olib, «Tekshirish» → «Tekshirdim».
 - [ ] Direktor: Telegram hisobotida kassa bloki (kirim, chiqim, qoldiq, sanash) va nazorat qatori. Hisobot kunlari va soati — «Xabarnomalar» →
-  «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju (standartdagi «Sh» belgisi olib tashlanadi), soat — kassa yopilgandan keyin (standart 19:00).
+  «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju (yangi o‘rnatishda standart shunday; mavjud bazada «Sh» belgilangan bo‘lsa — olib tashlanadi), soat — kassa yopilgandan keyin (standart 19:00).
+  Hisobot yuborilgandan keyin (kechqurun) va hisobot yuborilmagan kunlarda (shanba, yakshanba, bayram) tushgan to‘lovlar keyingi hisobotda
+  «🌙 Oldingi hisobotdan keyin …» qatorida chiqadi; vaqtinchalik xato bilan yetkazilmagan hisobot keyingi tekshiruvda (15 daqiqadan keyin) qayta yuboriladi.
 - [ ] Kassa yopilgach 15 daqiqalik qo‘ng‘iroq: kassir, moliya menejeri, texnik navbatchi (10-bo‘lim).
 
 ## 6. Parallel yuritish (birinchi 5 ish kuni)

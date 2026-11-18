@@ -2,11 +2,18 @@
  * tg-daily.cjs — Direktorga KUNLIK HISOBOT Telegram orqali (PKG-10). CRON bilan (har 15 daqiqada, flock): yuborish vaqti
  *   va kunlari — admin «Xabarnomalar» → «Kunlik hisobot» (notify_settings 'daily_report': enabled, days, hourFrom).
  *   Toshkent vaqti bilan hourFrom'dan keyingi birinchi run'da, bir kunda BIR MARTA (sms_log 'daily__<kun>__<bog'lanish>').
+ *   Kunlar standarti (qator kunlarsiz bo'lsa) — Du–Ju: maktab dars kunlari (app.school_days), egasi qarori «du–ju» (A2-02).
+ *   Yetkazilmasa (A6-05): ANIQ yetkazilmagan urinish (tarmoq xatosi, Telegram 5xx, 429 kutishdan keyin ham) — keyingi run'larda
+ *   qayta yuboriladi (jami MAXTRIES marta, shartli claim — parallel run'dan bittasi); timeout (xabar yetgan bo'lishi mumkin) va
+ *   bloklangan chat — qayta yuborilmaydi: Direktorga ikki marta ketmaydi.
  *   Qabul qiluvchilar — faol Direktorlarning tasdiqlangan Telegram bog'lanishlari (admin «Xabarnomalar»dan bir martalik
  *   havola bilan ulanadi; botdagi /sozlamalar'da o'chirsa — kelmaydi).
- *   Hisobot: bugungi to'lovlar (soni, summa, usul bo'yicha; biriktirilmaganlar), qarzdorlar (1 / 2 / 3+ oy), davomat
+ *   Hisobot: bugungi to'lovlar (soni, summa, usul bo'yicha), OLDINGI hisobotdan keyin tushgan to'lovlar (kechqurun, dam olish va
+ *   hisobot yuborilmagan kunlar — kassa kuni bo'yicha; A6-01: oyna oldingi muvaffaqiyatli hisobot ma'lumoti olingan paytdan —
+ *   director_daily 'asOf' shu yerda jurnal qatori "createdAt"iga yoziladi), bugun orqa sana bilan kiritilganlar, BARCHA
+ *   biriktirilmagan to'lovlar (A6-07), qarzdorlar (1 / 2 / 3+ oy; ketgan / muzlatilganlarning eski qarzi ham — A6-03), davomat
  *   kiritilishi, kutilayotgan tasdiqlar (navbatlar bo'yicha, muddati o'tganlari), kassa (kun jamlari, sanash, nazorat qatori —
- *   kassa moduli ishlatilayotgan bo'lsa), xizmatlar holati («Tizim holati»).
+ *   kassa moduli ishlatilayotgan bo'lsa), xizmatlar holati («Tizim holati»). Sarlavhada — «HH:MM holatiga».
  *
  *   cd ~/iqror-repo/auth && node tg-daily.cjs           # vaqti kelgan bo'lsa yuboradi
  *   node tg-daily.cjs --dry                             # matnni ko'rsatadi, hech narsa yubormaydi
@@ -24,7 +31,12 @@ const tkHour = ms => new Date((ms == null ? Date.now() : ms) + 5 * 3600e3).getUT
 const tkDow = ms => new Date(tkDay(ms) + 'T12:00:00Z').getUTCDay();
 
 const dmy = s => String(s || '').slice(0, 10).split('-').reverse().join('.');
+const dm = s => String(s || '').slice(5, 10).split('-').reverse().join('.');   // 'YYYY-MM-DD' -> 'DD.MM'
+const tkHm = s => { const ms = Date.parse(String(s || '')); return Number.isFinite(ms) ? new Date(ms + 5 * 3600e3).toISOString().slice(11, 16) : ''; };
 const tkDmyHm = s => { const ms = Date.parse(String(s || '')); return Number.isFinite(ms) ? `${dmy(tkDay(ms))} ${new Date(ms + 5 * 3600e3).toISOString().slice(11, 16)}` : ''; };
+// Qayta urinish (A6-05): sms_log.error shu prefiks bilan — urinish ANIQ yetkazilmagan, keyingi run qayta yuboradi (jami MAXTRIES marta).
+const RETRY = 'retry: ';
+const MAXTRIES = 3;
 // Kassa bloki (0–3 qator) va nazorat qatori. k — director_daily().kassa (yo'q bo'lsa — bo'sh ro'yxat).
 //   Smena topshirishdagi sanash farqlari (handoverDiffs — kassa moduli acc-6) kunni yopishdagi farq yonida; bo'lmasa — matn avvalgidek.
 function kassaLines(k) {
@@ -94,14 +106,27 @@ function composeDaily(d, checks) {
   const p = d.payments || {}, db = d.debt || {}, at = d.attendance || {}, pe = d.pending || {}, od = d.overdue || {};
   const day = String(d.day || '').split('-').reverse().join('.');
   const prov = Object.entries(p.byProvider || {}).sort((a, b) => Number(b[1]) - Number(a[1])).map(([k, v]) => `${PROV[k] || k} ${fmtNum(v)}`).join(' · ');
-  const L = [`📊 IQROR Academy — kunlik hisobot (${day})`, ''];
+  // «HH:MM holatiga» — ma'lumot olingan payt (A6-01): shundan keyin tushgan to'lov keyingi hisobotning «oldingi hisobotdan keyin» qatorida
+  const hm = tkHm(d.asOf);
+  const L = [`📊 IQROR Academy — kunlik hisobot (${day}${hm ? `, ${hm} holatiga` : ''})`, ''];
   L.push(`💰 To‘lovlar: ${Number(p.count) || 0} ta · ${fmtNum(p.sum)} so‘m${prov ? ` (${prov})` : ''}`);
+  // Oldingi hisobotdan keyin tushgan to'lovlar (A6-01): kechqurun (hisobot yuborilgandan keyin) va hisobot yuborilmagan kunlarda
+  //   (shanba, yakshanba, bayram, yetkazilmagan kun) — kassa kuni bo'yicha. Avval ular hech qaysi hisobotda chiqmasdi.
+  const sc = d.since;
+  if (sc && typeof sc === 'object' && Number(sc.count) > 0) {
+    const bd = Array.isArray(sc.byDay) ? sc.byDay : [];
+    const byDay = bd.length && bd.length <= 7 ? ` (${bd.map(x => `${dm(x.day)} — ${fmtNum(x.sum)}`).join(' · ')})` : '';
+    L.push(`   🌙 Oldingi hisobotdan keyin${tkDmyHm(sc.from) ? ` (${tkDmyHm(sc.from)} dan)` : ''} tushgan: ${Number(sc.count)} ta · ${fmtNum(sc.sum)} so‘m${byDay}`);
+  }
   // To'lovlar kassa kuni bo'yicha (admin «To‘lovlar → Hisobot» bilan bir xil): bugun kiritilib, oldingi kun sanasi bilan
   //   yozilganlari o'sha kunga tushadi — direktor ularni ko'rishi uchun alohida qator.
   const late = d.late || {};
   if (Number(late.count) > 0) L.push(`   ↩ Bugun kiritilgan, oldingi kunlar sanasi bilan: ${Number(late.count)} ta · ${fmtNum(late.sum)} so‘m`);
-  if (Number(d.unmatched) > 0) L.push(`   ⚠️ O‘quvchiga biriktirilmagan: ${d.unmatched} ta — «To‘lovlar»da biriktiring`);
-  L.push(`🧾 Qarzdorlar: 1 oy — ${Number(db.m1) || 0}, 2 oy — ${Number(db.m2) || 0}, 3+ oy — ${Number(db.m3) || 0}`);
+  // Biriktirilmagan — BARCHASI («To‘lovlar»dagi ro'yxat bilan bir xil; A6-07): avval faqat bugungilar — kechagisi ertasi kuni yo'qolardi
+  if (Number(d.unmatched) > 0) L.push(`   ⚠️ O‘quvchiga biriktirilmagan: ${d.unmatched} ta${Number(d.unmatchedSum) > 0 ? ` · ${fmtNum(d.unmatchedSum)} so‘m` : ''}${d.unmatchedSince ? ` (eng eskisi ${dmy(d.unmatchedSince)})` : ''} — «To‘lovlar»da biriktiring`);
+  // Qarzdorlar — barcha o'quvchilar (A6-03): chiqib ketgan / muzlatilganlarning eski qarzi ham (undiriladi) — soni va summasi alohida
+  const ina = db.inactive && typeof db.inactive === 'object' && Number(db.inactive.n) > 0 ? db.inactive : null;
+  L.push(`🧾 Qarzdorlar: 1 oy — ${Number(db.m1) || 0}, 2 oy — ${Number(db.m2) || 0}, 3+ oy — ${Number(db.m3) || 0}${ina ? ` (shu jumladan ketgan / muzlatilgan: ${Number(ina.n)} · ${fmtNum(ina.sum)} so‘m — eski qarz, undiriladi)` : ''}`);
   L.push(`📋 Davomat kiritilishi: ${at.rate == null ? '— (bugun dars kuni emas)' : `${String(at.rate).replace('.', ',')}% (${at.marked}/${at.required})`}`);
   const names = { bonus: '100 ball', discount: 'chegirma', sick: '«Bemor» kuni', referral: 'tavsiya', payroll: 'maosh' };
   const pend = Object.keys(names).filter(k => Number(pe[k]) > 0).map(k => `${names[k]} ${pe[k]}`).join(' · ');
@@ -121,7 +146,8 @@ function composeDaily(d, checks) {
 function dailyPlan(row, nowMs) {
   if (!row) return { run: false, reason: 'sozlama qatori yo‘q (bash deploy.sh)' };
   const hour = Number.isInteger(Number(row.hourFrom)) && row.hourFrom != null ? Number(row.hourFrom) : 19;
-  const days = Array.isArray(row.days) ? row.days.map(Number) : [1, 2, 3, 4, 5, 6];
+  // kunlar tanlanmagan bo'lsa — Du–Ju (dars kunlari, A2-02; avval shanba ham — davomat «0%» bo'lardi)
+  const days = Array.isArray(row.days) ? row.days.map(Number) : [1, 2, 3, 4, 5];
   if (row.enabled !== true) return { run: false, reason: 'o‘chirilgan', hour, days };
   if (!days.includes(tkDow(nowMs))) return { run: false, reason: 'bugun yuborish kuni emas', hour, days };
   if (tkHour(nowMs) < hour) return { run: false, reason: `soat ${hour}:00 dan keyin`, hour, days };
@@ -155,22 +181,48 @@ async function runDaily({ sb, tg, health, dry, force, now, log }) {
   try { checks = health ? await health.runChecks() : null; } catch (e) { checks = null; }
   const text = composeDaily(d, checks);
   if (dry) { log('[DRY daily] qabul qiluvchilar:', rcpt.length, '\n' + text); return { sent: 0, skipped: 0, dry: true, text }; }
-  let sent = 0, skipped = 0;
+  // Ma'lumot olingan payt (A6-01) — jurnal qatorining "createdAt"i: keyingi hisobotning «oldingi hisobotdan keyin» oynasi aynan shundan
+  //   boshlanadi (ma'lumot olinib, yuborilguncha — masalan «Tizim holati» tekshiruvi paytida — tushgan to'lov ham yo'qolmaydi).
+  const asOf = d && typeof d.asOf === 'string' && Number.isFinite(Date.parse(d.asOf)) ? d.asOf : null;
+  let sent = 0, skipped = 0, retried = 0;
   for (const l of rcpt) {
     const id = `daily__${tkDay(t)}__${l.id}`;
-    // bugun yuborilganmi (yoki yuborilmoqda) — takror yo'q
-    const ins = await sb.from('sms_log').insert({ id, type: 'daily', status: 'sending', attempts: 1, message: text.slice(0, 1000), channel: 'telegram', phone: '' });
-    if (ins.error) { skipped++; continue; }
+    const rec = { type: 'daily', status: 'sending', attempts: 1, message: text.slice(0, 1000), channel: 'telegram', phone: '' };
+    if (asOf) rec.createdAt = asOf;
+    // bugun yuborilganmi (yoki yuborilmoqda / natijasi noaniq) — takror yo'q; oldingi urinish ANIQ yetkazilmagan bo'lsa — qayta (A6-05)
+    const ins = await sb.from('sms_log').insert(Object.assign({ id }, rec));
+    if (ins.error) {
+      if (!(await reclaimDaily(sb, id, rec))) { skipped++; continue; }
+      retried++;
+    }
     const r = await tg.sendMessage(l.chatId, text);
     if (r.ok) { sent++; await sb.from('sms_log').update({ status: 'sent', providerId: 'tg' }).eq('id', id); }
     else {
-      await sb.from('sms_log').update({ status: 'failed', error: String(r.error || '').slice(0, 200) }).eq('id', id);
+      // Bloklangan chat — qayta yuborilmaydi (bog'lanish 'blocked'); timeout — xabar yetgan bo'lishi mumkin (noaniq) — qayta yuborilmaydi
+      //   (Direktorga ikki marta ketmasin). Qolgani (tarmoq xatosi, Telegram 5xx, 429 kutishdan keyin ham) — ANIQ yetkazilmagan: RETRY
+      //   belgisi bilan, keyingi run'da (cron — har 15 daqiqa) qayta yuboriladi. Avval bitta vaqtinchalik xato butun kunlik hisobotni
+      //   yo'qotardi: keyingi run'lar qatorni «bugun yuborilgan» deb o'tkazib yuborardi.
+      const again = !r.blocked && !r.timeout;
+      await sb.from('sms_log').update({ status: 'failed', error: (again ? RETRY : '') + String(r.error || '').slice(0, 200) }).eq('id', id);
       if (r.blocked) { try { await sb.rpc('tg_blocked', { p_chat: l.chatId }); } catch (_) {} }
-      log('Kunlik hisobot yetkazilmadi:', String(r.error || '').slice(0, 120));
+      log('Kunlik hisobot yetkazilmadi:', String(r.error || '').slice(0, 120), again ? '— keyingi run qayta yuboradi' : '');
     }
   }
-  log(`Kunlik hisobot: ${sent} ta Direktorga yuborildi${skipped ? ` · ${skipped} tasiga bugun allaqachon yuborilgan` : ''}`);
-  return { sent, skipped, text };
+  log(`Kunlik hisobot: ${sent} ta Direktorga yuborildi${retried ? ` (shundan qayta urinish: ${retried})` : ''}${skipped ? ` · ${skipped} tasiga bugun yuborilgan yoki yuborilmoqda (takror yo‘q)` : ''}`);
+  return { sent, skipped, retried, text };
+}
+// Shu kun qatori bor (insert — takror kalit). Faqat oldingi urinish ANIQ yetkazilmagan ('failed' + RETRY) va urinishlar MAXTRIES dan
+//   kam bo'lsa — SHARTLI qayta claim (holat va urinishlar soni o'zgarmagan bo'lsa: parallel run'lardan faqat bittasi oladi; payments/
+//   sms-worker.cjs claimSms bilan bir xil usul). 'sent', 'sending', prefikssiz 'failed' (timeout, blok, eski yozuv) — o'tkaziladi.
+async function reclaimDaily(sb, id, rec) {
+  try {
+    const { data, error } = await sb.from('sms_log').select('status,attempts,error').eq('id', id).limit(1);
+    const p = !error && (data || [])[0], n = Number(p && p.attempts) || 0;
+    if (!p || p.status !== 'failed' || n >= MAXTRIES || String(p.error || '').indexOf(RETRY) !== 0) return false;
+    const u = await sb.from('sms_log').update(Object.assign({}, rec, { attempts: n + 1, error: '' }))
+      .eq('id', id).eq('status', 'failed').eq('attempts', n).select('id');
+    return !u.error && (u.data || []).length === 1;
+  } catch (e) { return false; }
 }
 
 if (require.main === module) {

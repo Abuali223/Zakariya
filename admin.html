@@ -2443,20 +2443,54 @@ async function renderDashboardClassic(){
 
 /* ---- Statistika dashboard: MOLIYA bo'limi (oylik sof foyda/zarar + oqim + xarajat taqsimoti) ----
    Faqat moliyani ko'ra oladiganlar (direktor/moliya menejeri/g'aznachi). Boshqalar — bo'sh. */
-// To'lov usuli nomlari/ranglari — klassik «Statistika» va yangi bosh sahifa uchun bir xil.
-const DF_PMLAB={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans','':'Boshqa'};
-const DF_PMCOL={click:'#236B5D',uzum:'#7C4DB8',cash:'#977322',bank:'#1F7A55',terminal:'#7A5C1F',payme:'#2E7CC0',mixed:'#B45309',credit:'#0891B2','':'#8A9691'};
+// FIN-RPT:BEGIN — moliya hisobotlarining sof yordamchilari (assets/js/fin-rpt.test.mjs shu blokni fayldan o'qib sinaydi).
+// To'lov usuli nomlari/ranglari — klassik «Statistika», yangi bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun BITTA manba: nomlar
+//   PROV_LBL dan (A6-08). Avval uch joyda alohida nusxa edi va o'zaro hisob ('offset' — maoshdan farzand to'lovi, kassa_offset) ularda
+//   yo'q edi: bosh sahifa va A4 da «offset» xom kaliti, «Moliya»da «Boshqa» bo'lib ko'rinardi («To'lovlar» va Telegram'da — to'g'ri).
+const DF_PMLAB=Object.assign({}, PROV_LBL, {'':'Boshqa'});
+const DF_PMCOL={click:'#236B5D',uzum:'#7C4DB8',cash:'#977322',bank:'#1F7A55',terminal:'#7A5C1F',payme:'#2E7CC0',mixed:'#B45309',credit:'#0891B2',offset:'#5B6B8C','':'#8A9691'};
+// «Moliya» → «To'lov usuli» guruhi: rangi bor usul — o'zi, qolgani — «Boshqa».
+function finPmKey(k){ k=String(k==null?'':k); return Object.prototype.hasOwnProperty.call(DF_PMCOL,k)?k:''; }
+// Kassa hisoboti «Qaytarilgan (shu davrda)» (A6-06): faktura VA o'quvchi avansi ('credit') qaytarishlari — ikkalasida ham pul kassadan
+//   chiqqan («avans ham 0 ga» belgisi bilan qaytarish yoki kassa orqali avans qaytarish), «Jami tushgan» esa avansga o'tgan qismni ham
+//   o'z ichiga oladi (avval avans qaytarish ayirilmay, davr sof tushumi oshib ko'rinardi). Biriktirilmagan to'lov qaytarilishi
+//   ('payment') — yo'q: o'sha to'lov qatori 'refunded' bo'lib «Jami tushgan»dan o'zi chiqadi (ikki marta ayirilmasin).
+//   «Buxgalteriya»dagi refundOfMonth avans qaytarishni AYIRMAYDI — u yerda Kirim hisob-faktura asosida (avans Kirimda yo'q).
+function cashRefundSums(list){ let total=0, credit=0;
+  (list||[]).forEach(x=>{ if(!x) return; const a=Number(x.amount)||0; if(x.target==='invoice') total+=a; else if(x.target==='credit'){ total+=a; credit+=a; } });
+  return { total, credit }; }
+// Yillik prognoz (A6-09): o'rtacha oylik yig'im — shu yil M gacha hisob-fakturasi BOR oylar bo'yicha (bekor qilingan / qaytarilgansiz).
+//   Avval yil boshidan o'tgan KALENDAR oylariga bo'linardi: tizim yil o'rtasida ishga tushgan (oldingi tarix Google jadvalda qolgan) —
+//   noyabrda 3 oylik yig'im 11 ga bo'linib, «Qolgan oy uchun» ~4 baravar kam chiqardi. 2 oydan kam ma'lumot — prognoz yo'q (ok:false).
+//   Qolgan oylar — kalendar bo'yicha (12 − M oyi).
+function finForecast(INV, M, paidAmt){
+  const year=String(M||'').slice(0,4), mNo=parseInt(String(M||'').slice(5,7),10)||1;
+  const rows=(INV||[]).filter(i=>i && String(i.month||'').startsWith(year+'-') && i.month<=M && i.status!=='canceled' && i.status!=='reversed');
+  const ytd=rows.reduce((s,i)=>s+(Number(paidAmt(i))||0),0), n=new Set(rows.map(i=>i.month)).size;
+  const avgM=n?ytd/n:0, remaining=Math.max(0,12-mNo);
+  return { year, ytd, n, avgM, remaining, projected:ytd+avgM*remaining, ok:n>=2 };
+}
+// FIN-RPT:END
+// Kassadagi O'QUV TO'LOVIDAN TASHQARI daromad (A6-02; migration/audit-11-moliya.sql finance_other_income): { m:{'YYYY-MM':{sum, items}}, err }.
+//   «Forma va tovarlar», «Boshqa kirim» (IN-06) — ularning xaridi (KO-2 «Xarajat») «Buxgalteriya» chiqimiga ko'chadi, shuning uchun
+//   Kirim va Foyda ularsiz noto'g'ri edi. Kassa moduli yo'q — bo'sh; baza yangilanmagan (funksiya yo'q) — bo'sh, xatosiz; boshqa xato — err.
+async function finOtherIncome(){
+  try{ const r=await rpc('finance_other_income',{}); return { m:(r&&r.months&&typeof r.months==='object')?r.months:{}, err:'' }; }
+  catch(e){ return { m:{}, err:rpcMissing(e)?'':String((e&&(e.message||e.code))||'xato') }; }
+}
 // Moliya hisob-kitobi (faqat o'qish) — klassik dashFinance() va yangi bosh sahifa (v2) BIR XIL raqamlarni ko'rsatsin.
 //   So'rovlar parallel (avval ketma-ket 4 ta edi; ishlatilmaydigan «refunds» o'qilmaydi).
 async function dashFinData(){
-  const [INV, EXP, CREDITS, payRes] = await Promise.all([
+  const [INV, EXP, CREDITS, payRes, OTH] = await Promise.all([
     loadCol('invoices').catch(()=>[]), loadCol('expenses').catch(()=>[]), loadCol('student_credit').catch(()=>[]),
-    loadCol('payments').then(v=>({ v }), e=>({ v:[], err:String((e&&(e.code||e.message))||'xato') })) ]);
+    loadCol('payments').then(v=>({ v }), e=>({ v:[], err:String((e&&(e.code||e.message))||'xato') })), finOtherIncome() ]);
   const PAYS=payRes.v||[], PAYERR=payRes.err||'';   // o'qilmasa «0» EMAS — xato ko'rsatiladi
   // Hisob-kitob (renderAccounting bilan bir xil mantiq) — balans-aware.
   const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
   const emonth=e=>e.month||String(e.date||'').slice(0,7);
-  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
+  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);   // o'quv to'lovlari (yig'ilish foizi shundan)
+  // Kirim (Foyda, oqim) = o'quv to'lovlari + kassadagi boshqa daromad (A6-02) — uning xaridi chiqimda bor.
+  const otherOf=k=>Number((OTH.m[k]||{}).sum)||0, OTHERR=OTH.err, kirimOf=k=>monthColl(k)+otherOf(k);
   const expOf=k=>EXP.filter(e=>emonth(e)===k).reduce((s,e)=>s+(Number(e.amount)||0),0);
   const MO=['Yan','Fev','Mar','Apr','May','Iyun','Iyul','Avg','Sen','Okt','Noy','Dek'];
   const mLbl=k=>MO[(parseInt(String(k).slice(5,7),10)||1)-1]||esc(String(k));
@@ -2464,8 +2498,9 @@ async function dashFinData(){
   const S=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   const cur=curMonth();
   const months=(()=>{ const [y,m]=cur.split('-').map(Number); const out=[]; for(let i=5;i>=0;i--){ const d=new Date(y,m-1-i,1); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); } return out; })();
-  const flow=months.map(k=>({ k, inc:monthColl(k), exp:expOf(k) }));
-  const kirim=monthColl(cur), chiqim=expOf(cur), foyda=kirim-chiqim;
+  const flow=months.map(k=>({ k, inc:kirimOf(k), exp:expOf(k) }));
+  const kirimTuition=monthColl(cur), kirimOther=otherOf(cur);
+  const kirim=kirimOf(cur), chiqim=expOf(cur), foyda=kirim-chiqim;
   const marja=kirim>0?Math.round(foyda/kirim*100):0;
   const avans=CREDITS.reduce((s,c)=>s+Math.max(0,Number(c.credit)||0),0);
   const debt=INV.filter(i=>i.month===cur).reduce((s,i)=>s+((i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
@@ -2477,12 +2512,12 @@ async function dashFinData(){
   const byPm=cashByMethod(PAYS, ...monthBounds(cur)).byPm;
   const pmKeys=Object.keys(byPm).sort((a,b)=>byPm[b]-byPm[a]);
   const pmTotal=pmKeys.reduce((s,k)=>s+byPm[k],0);
-  return { INV, EXP, CREDITS, PAYS, PAYERR, paidAmt, emonth, monthColl, expOf, mLbl, fmtC, S, cur, months, flow, kirim, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal };
+  return { INV, EXP, CREDITS, PAYS, PAYERR, OTHERR, paidAmt, emonth, monthColl, otherOf, kirimOf, expOf, mLbl, fmtC, S, cur, months, flow, kirim, kirimTuition, kirimOther, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal };
 }
 async function dashFinance(){
   const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
   if(!canFin) return '';
-  const { PAYERR, mLbl, fmtC, S, cur, flow, kirim, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal } = await dashFinData();
+  const { PAYERR, OTHERR, mLbl, fmtC, S, cur, flow, kirim, kirimOther, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal } = await dashFinData();
   const PMLAB=DF_PMLAB, PMCOL=DF_PMCOL;
   // ---- Moliyaviy oqim: guruhlangan ustun diagrammasi (SVG) — Kirim (yashil) vs Chiqim (sariq), 6 oy ----
   //   Ranglar CVD (rang ko'rlik) uchun tekshirilgan (ΔE>8) + ustunlarда qiymat yorliqlari bor.
@@ -2515,7 +2550,7 @@ async function dashFinance(){
       <div class="cls-card-head"><h3>💰 Moliya — ${mLbl(cur)} ${cur.slice(0,4)}</h3><span class="cls-count">joriy oy</span></div>
       <div class="stat-grid" style="margin:12px 0 2px">
         ${kpi(foyda>=0?'Sof foyda':'Sof zarar', fmtC(foyda), 'kirim − chiqim', foyda>=0?'#1F7A4D':'#B42318')}
-        ${kpi('Kirim', fmtC(kirim), 'yig‘ilgan to‘lov', '#1F7A4D')}
+        ${kpi('Kirim', fmtC(kirim), kirimOther>0?`to‘lov + boshqa daromad ${fmtC(kirimOther)}`:(OTHERR?'yig‘ilgan to‘lov (kassa daromadi o‘qilmadi)':'yig‘ilgan to‘lov'), '#1F7A4D')}
         ${kpi('Chiqim', fmtC(chiqim), 'xarajatlar', '#C2410C')}
         ${kpi('Foyda marjasi', marja+'%', 'har 100 so‘mdan', foyda>=0?'':'#B42318')}
         ${kpi('Qarzdorlik', fmtC(debt), 'shu oy', '#B42318')}
@@ -2819,9 +2854,10 @@ async function renderDashboardV2(){
   { let body;
     if(!fin.ok) body=dv2Err('To‘lovlar', fin.e);
     else { const billed=F.INV.filter(i=>i.month===F.cur && i.status!=='canceled' && i.status!=='reversed').reduce((s,i)=>s+(Number(i.amount)||0),0);
-      const rate=billed?Math.min(100,Math.round(F.kirim/billed*100)):null, segs=40, on=rate==null?0:Math.round(segs*rate/100);
+      // yig'ilish — faqat o'quv to'lovlari / hisoblangan (kassadagi boshqa daromad — Kirim / Foyda'da, bu foizda emas)
+      const rate=billed?Math.min(100,Math.round(F.kirimTuition/billed*100)):null, segs=40, on=rate==null?0:Math.round(segs*rate/100);
       body=`<div class="dv2-h"><h3>To‘lovlar — ${esc(DV2_MON[Number(F.cur.slice(5,7))-1]||F.cur)}</h3>${go('payments','To‘lovlar')}</div>
-        <div class="dv2-num">${dv2Big(F.kirim,{money:true})}<small>so‘m</small></div>
+        <div class="dv2-num">${dv2Big(F.kirimTuition,{money:true})}<small>so‘m</small></div>
         <div class="dv2-stripes" role="img" aria-label="Yig‘ilish ${rate==null?'—':rate+'%'}">${Array.from({length:segs},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div>
         <div class="dv2-foot"><b>${rate==null?'—':rate+'%'}</b> · hisoblangan ${esc(F.fmtC(billed))} · qoldi <b>${esc(F.fmtC(F.debt))}</b>${F.PAYERR?'':` · bugun tushdi: <b>${esc(F.fmtC(cashByMethod(F.PAYS, today, today).total))}</b>`}</div>`; }
     put('dv2-k-pay', body); }
@@ -2846,7 +2882,7 @@ async function renderDashboardV2(){
       const pms=F.pmKeys.map(k=>({ v:F.byPm[k], c:DF_PMCOL[k]||'#8A9691', t:DF_PMLAB[k]||k, lbl:`${F.fmtC(F.byPm[k])} · ${F.pmTotal?Math.round(F.byPm[k]/F.pmTotal*100):0}%` }));
       body=`<div class="dv2-h"><h3>Moliya — ${esc(F.mLbl(F.cur))} ${esc(F.cur.slice(0,4))}</h3>${go('accounting','Buxgalteriya')}</div>
         <div class="dv2-fin3">
-          <div><span>Kirim</span>${dv2Big(F.kirim,{money:true})}</div>
+          <div><span>Kirim</span>${dv2Big(F.kirim,{money:true})}${F.kirimOther>0?`<em class="dv2-hint">shu jumladan boshqa daromad ${esc(F.fmtC(F.kirimOther))}</em>`:(F.OTHERR?'<em class="dv2-hint">kassa daromadi o‘qilmadi</em>':'')}</div>
           <div><span>Chiqim</span>${dv2Big(F.chiqim,{money:true})}${!F.catKeys.length?'<em class="dv2-hint">kiritilmagan</em>':''}</div>
           <div class="${F.foyda>=0?'pos':'neg'}"><span>${F.foyda>=0?'Sof foyda':'Sof zarar'}</span>${dv2Big(F.foyda,{money:true})}</div>
         </div>
@@ -3664,7 +3700,8 @@ async function renderAttendance(){
     const hol=SA_HOLIDAYS.get(date)||'';
     const dow=new Date(date+'T00:00:00').getDay();
     const warn=[ hol?`🎉 ${esc(date)} — maktab bayrami/dam kuni («${esc(hol)}»). Davomat odatda belgilanmaydi.`:'',
-      (dow===0)?'Yakshanba — dam kuni. Davomat odatda belgilanmaydi.':'',
+      // dam kuni — SA_WORKDAYS (Du–Ju) dan tashqari: shanba ham (A2-02; haftalik «Davomat kiritilishi» ham shanbani sanamaydi)
+      (!SA_WORKDAYS.includes(dow))?`${dow===0?'Yakshanba':'Shanba'} — dam kuni (dars kunlari: Du–Ju). Davomat odatda belgilanmaydi.`:'',
       (date>todayStr())?'Kelajakdagi sana tanlangan.':'' ].filter(Boolean);
     const camLine = arrivals===null ? '<span class="muted">Kamera ma’lumoti olinmadi</span>'
       : (withCam.length ? `📷 Kamera: <b>${seenN}</b>/${withCam.length} kirdi${camOk?'':' <span class="muted">(kamera bu kun deyarli ishlamagan — «Yo‘q» avtomatik qo‘yilmadi)</span>'}` : '<span class="muted">Bu sinf o‘quvchilarida «Kamera ID» yo‘q — kamera ishlatilmaydi</span>');
@@ -7221,7 +7258,7 @@ async function ntfTgCard(el, _g){
   if(_g!==VIEW_GEN) return;
   if(!rows.payment_received||!rows.daily_report){ el.innerHTML='<div class="empty">📨 Telegram sozlamalari bazada yo‘q — <b>bash deploy.sh</b> (baza yangilanmagan).</div>'; return; }
   const P=rows.payment_received, A=rows.announce||{}, D=rows.daily_report, N=rows.new_invoice||{}, Q=rows.debt_reminder||{};
-  const dd=Array.isArray(D.days)?D.days.map(Number):[1,2,3,4,5,6];
+  const dd=Array.isArray(D.days)?D.days.map(Number):[1,2,3,4,5];   // standart — Du–Ju (dars kunlari; tg-daily.cjs bilan bir xil, A2-02)
   const hourOpts=(sel)=>Array.from({length:24},(_,h)=>`<option value="${h}" ${Number(sel)===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
   const tgArea=(id,val)=>`<textarea data-tgt="${id}" rows="2" maxlength="2000" placeholder="${esc(TG_DEF[id]||'')}" style="width:100%;box-sizing:border-box">${esc(val||'')}</textarea>`;
   const sw=(id,on)=>`<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" data-tgon="${id}" ${on?'checked':''}> <span>${on?'Yoqilgan':'O‘chiq'}</span></label>`;
@@ -7241,7 +7278,7 @@ async function ntfTgCard(el, _g){
       <div class="small muted" style="margin-top:4px">«E’lonlar» bo‘limida yangi e’lon yozilganda — o‘sha sinf(lar)dagi ulangan ota-onalarga (SMS bilan emas).</div></div>
     <div class="ntf-type" data-tg="daily_report" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>📊 Direktorga kunlik hisobot</b>${sw('daily_report',D.enabled)}</div>
-      <div class="small muted" style="margin:4px 0 8px">To‘lovlar (soni, summa, usul bo‘yicha), qarzdorlar, davomat kiritilishi, kutilayotgan tasdiqlar va tizim holati — tanlangan kunlarda, soat nechadan keyin bir marta.</div>
+      <div class="small muted" style="margin:4px 0 8px">To‘lovlar (soni, summa, usul bo‘yicha), qarzdorlar, davomat kiritilishi, kutilayotgan tasdiqlar va tizim holati — tanlangan kunlarda, soat nechadan keyin bir marta. Oldingi hisobotdan keyin (kechqurun, dam olish va hisobot yuborilmagan kunlarda) tushgan to‘lovlar keyingi hisobotda alohida qatorda; yetkazilmasa — keyingi tekshiruvda qayta yuboriladi.</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="small">Kunlar:</span>${NTF_DOW.map(([n,l])=>`<label class="chip" style="cursor:pointer;margin:0;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-tgdow="${n}" ${dd.includes(n)?'checked':''}>${l}</label>`).join('')}
         <span class="small" style="margin-left:8px">Soat:</span><select id="tg-dh">${hourOpts(D.hourFrom??19)}</select></div>
       ${isDir?'<div id="tg-me" style="margin-top:10px"><div class="loading">Yuklanmoqda…</div></div>':'<div class="small muted" style="margin-top:8px">Telegramga faqat Direktor ulanadi (o‘z hisobidan).</div>'}</div>
@@ -7594,9 +7631,9 @@ async function renderWeekly(){
       ${card('collection',col(cc.rate,90,75),'1. To‘lov yig‘ilishi', pct(cc.rate), `${esc(fmtMonthUz(cc.month))} — ${esc(cc.deadline)} gacha ≥ 90%`,
           `Qisman to‘lovlar bilan: <b>${pct(cc.ratePartial)}</b><br>${delta(cc.rate,(C.prev||{}).rate,'%')}`)}
       ${card('debt',col(dc.m2plus,0,2,true),'2. Qarz muddati', `${esc(dc.m2plus==null?'—':dc.m2plus)} <span class="small">o‘quvchi 2+ oy</span>`, '2+ oy — 0; 1 oy — 10% dan kam',
-          `1 oy: <b>${esc(dc.m1==null?'—':dc.m1)}</b> (${pct(dc.m1share)}) · 2 oy: ${esc(dc.m2==null?'—':dc.m2)} · 3+ oy: ${esc(dc.m3==null?'—':dc.m3)}<br>${delta(dc.m2plus,(D.prev||{}).m2plus,'',true)}`)}
+          `1 oy: <b>${esc(dc.m1==null?'—':dc.m1)}</b> (${pct(dc.m1share)} o‘qiyotganlardan) · 2 oy: ${esc(dc.m2==null?'—':dc.m2)} · 3+ oy: ${esc(dc.m3==null?'—':dc.m3)}${dc.inactive&&Number(dc.inactive.n)>0?`<br>shu jumladan ketgan / muzlatilgan: <b>${esc(dc.inactive.n)}</b> o‘quvchi · ${esc(fmtSom(dc.inactive.sum))} (eski qarz — undiriladi)`:''}<br>${delta(dc.m2plus,(D.prev||{}).m2plus,'',true)}`)}
       ${card('attendance',col(ac.rate,95,80),'3. Davomat kiritilishi', pct(ac.rate), 'Pilotda ≥ 95%',
-          `${esc(ac.marked==null?'—':ac.marked)} / ${esc(ac.required==null?'—':ac.required)} o‘quvchi-kun · «10:00 gacha» — kiritish vaqti saqlanmaydi (—)<br>${delta(ac.rate,(A.prev||{}).rate,'%')}${byClass(ac.byClass,x=>`${esc(x.marked)}/${esc(x.required)}`)}`)}
+          `${esc(ac.marked==null?'—':ac.marked)} / ${esc(ac.required==null?'—':ac.required)} o‘quvchi-kun (dars kunlari: Du–Ju, bayram / ta’tilsiz) · «10:00 gacha» — kiritish vaqti saqlanmaydi (—)<br>${delta(ac.rate,(A.prev||{}).rate,'%')}${byClass(ac.byClass,x=>`${esc(x.marked)}/${esc(x.required)}`)}`)}
       ${card('parents',col(pcu.rate,60,40),'4. Ota-onalar ulanishi', pct(pcu.rate), 'Pilotda ≥ 60%, aprelda ≥ 80%',
           `${esc(pcu.connected==null?'—':pcu.connected)} / ${esc(pcu.students==null?'—':pcu.students)} o‘quvchi<br>${delta(pcu.rate,(P.prev||{}).rate,'%')}${byClass(pcu.byClass,x=>`${esc(x.connected)}/${esc(x.students)}`)}`)}
       ${card('staff',col(sc.rate,95,80),'5. O‘qituvchilar hisobi', pct(sc.rate), 'Hisob ≥ 95%, haftalik faollik ≥ 90%',
@@ -9806,7 +9843,8 @@ async function renderFinance(){
   const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
   const gmap={}; students.forEach(s=>{ gmap[String(s.studentId||s._id)]=s; });
   const gradeOf=i=>{ const s=gmap[String(i.studentId)]; if(s) return Number(s.grade)||0; const p=String(i.classKey||'').split('-'); return Number(p[1])||0; };
-  const PM={click:{l:'Click',c:'#236B5D'},uzum:{l:'Uzum',c:'#7C4DB8'},cash:{l:'Naqd',c:'#977322'},bank:{l:'Bank',c:'#1F7A55'},terminal:{l:'Terminal',c:'#7A5C1F'},payme:{l:'Payme',c:'#2E7CC0'},mixed:{l:'Aralash',c:'#B45309'},credit:{l:'Avans',c:'#0891B2'},'':{l:'Boshqa',c:'#8A9691'}};
+  // to'lov usuli nomi va rangi — umumiy manbadan (DF_PMLAB / DF_PMCOL; A6-08: o'zaro hisob endi «Boshqa» emas)
+  const PM=Object.fromEntries(Object.keys(DF_PMCOL).map(k=>[k,{ l:DF_PMLAB[k]||k, c:DF_PMCOL[k] }]));
 
   const draw=(M)=>{
     const mInv=INV.filter(i=>i.month===M);
@@ -9852,7 +9890,7 @@ async function renderFinance(){
     // ---- To'lov usuli ----
     // KASSA asosida: shu oyda (Toshkent) TUSHGAN to'lovlar usul bo'yicha (payments). Aralash to'lov to'g'ri bo'linadi.
     const pmGroups={}; const cashM=cashByMethod(PAYS, ...monthBounds(M));
-    Object.keys(cashM.byPm).forEach(k0=>{ const key=(k0 in PM)?k0:''; pmGroups[key]=(pmGroups[key]||0)+cashM.byPm[k0]; });
+    Object.keys(cashM.byPm).forEach(k0=>{ const key=finPmKey(k0); pmGroups[key]=(pmGroups[key]||0)+cashM.byPm[k0]; });
     const cashTot=cashM.total;
     const pmKeys=Object.keys(pmGroups).filter(k=>pmGroups[k]>0).sort((a,b)=>pmGroups[b]-pmGroups[a]);
     const pmStack=cashTot>0?pmKeys.map(k=>{ const w=Math.round(pmGroups[k]/cashTot*100); return `<span style="width:${w}%;background:${PM[k].c}">${w>=8?w+'%':''}</span>`; }).join(''):'';
@@ -9861,18 +9899,21 @@ async function renderFinance(){
       ${cashTot>0?`<div class="fin-stack" style="margin-top:16px">${pmStack}</div>`:'<div style="height:8px"></div>'}
       <div class="fin-pm">${PAYERR?`<div class="small" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — usul bo‘yicha taqsimot ko‘rsatilmadi.</div>`:pmLegend}</div></div>`;
 
-    // ---- Yillik prognoz ----
-    const year=String(M).slice(0,4), elapsed=parseInt(String(M).slice(5,7),10)||1;
-    const ytd=INV.filter(i=>String(i.month||'').startsWith(year+'-') && i.month<=M).reduce((s,i)=>s+paidAmt(i),0);
-    const avgM=elapsed?ytd/elapsed:0, remaining=12-elapsed, projected=ytd+avgM*remaining;
+    // ---- Yillik prognoz ---- (A6-09: o'rtacha — shu yil hisob-fakturasi bor oylar bo'yicha, finForecast; 2 oydan kam — prognoz yo'q)
+    const FC=finForecast(INV, M, paidAmt), year=FC.year, ytd=FC.ytd, avgM=FC.avgM, remaining=FC.remaining, projected=FC.projected;
     const prog=pct(ytd, projected);
-    const fcCard=`<div class="card"><div class="cls-card-head"><h3>Yillik prognoz</h3><span class="cls-count">${esc(year)} yil</span></div>
+    const fcCard=FC.ok?`<div class="card"><div class="cls-card-head"><h3>Yillik prognoz</h3><span class="cls-count">${esc(year)} yil</span></div>
       <div class="fin-fc">
         <div class="fc-big">${fmtC(projected)} <small>kutilmoqda</small></div>
-        <div class="fc-sub">joriy o‘rtacha sur‘at bo‘yicha (${fmtC(avgM)}/oy)</div>
+        <div class="fc-sub">joriy o‘rtacha sur‘at bo‘yicha (${fmtC(avgM)}/oy · ${FC.n} oylik ma’lumot)</div>
         <div class="fc-bar"><i style="width:${prog}%"></i></div>
         <div class="fc-meta"><span>Yig‘ildi: <b>${fmtC(ytd)}</b></span><span>${prog}%</span></div>
         ${remaining>0?`<div class="fc-note">Qolgan ${remaining} oy uchun ~${fmtC(avgM*remaining)} kutilmoqda.</div>`:'<div class="fc-note">Yil yakunlandi.</div>'}
+      </div></div>`
+      :`<div class="card"><div class="cls-card-head"><h3>Yillik prognoz</h3><span class="cls-count">${esc(year)} yil</span></div>
+      <div class="fin-fc">
+        <div class="fc-sub">Prognoz uchun kamida 2 oylik ma’lumot kerak (hozir: ${FC.n} oy).</div>
+        <div class="fc-meta"><span>Yig‘ildi: <b>${fmtC(ytd)}</b></span></div>
       </div></div>`;
 
     // ---- Qarzdorlar ro'yxati ----
@@ -10278,7 +10319,7 @@ async function renderAccounting(){
   const CATS=['Maosh','Soliq','Bank','Ijara','Avtobus','Oziq-ovqat','Kommunal','Xo‘jalik tovarlari','Kanselyariya','Boshqa','Ta‘mir','Inventar','Outsource (buxgalteriya)','Marketing','Qaytarilgan','Med chiqim','Korporativ karta','Dasturiy ta‘minot','Kitoblar','IT-PARK','Hayriya'];
   const ERAMP=['#A0331B','#BC4426','#CE6046','#D98A6A','#E6A98F','#B45309','#D97706','#F59E0B','#CA8A04','#65A30D','#16A34A','#059669','#0D9488','#0891B2','#2563EB','#4F46E5','#7C3AED','#9333EA','#C026D3','#DB2777','#9F1239'];
   $('#view').innerHTML = `<div class="page-head"><h2>Buxgalteriya</h2></div>
-    <p class="small muted" style="margin:-8px 0 14px">${accRO()?'<b>Faqat ko‘rish</b> (buxgalter): kirim — «To‘lovlar»dan, chiqim — xarajatlar (kassa orderlari, bank va karta, avans hisobotlari), maosh va avanslar, oylik vedomost. Foyda = kirim − chiqim.':'Kirim — <b>«To\'lovlar»</b>dan avtomatik, chiqim (xarajat) — siz kiritasiz. Foyda = kirim − chiqim.'}</p>
+    <p class="small muted" style="margin:-8px 0 14px">${accRO()?'<b>Faqat ko‘rish</b> (buxgalter): kirim — «To‘lovlar»dan va kassadagi boshqa daromad (forma / tovar sotuvi, «Boshqa kirim»), chiqim — xarajatlar (kassa orderlari, bank va karta, avans hisobotlari), maosh va avanslar, oylik vedomost. Foyda = kirim − chiqim.':'Kirim — <b>«To\'lovlar»</b>dan avtomatik (kassa ishlasa — kassadagi boshqa daromad ham: forma / tovar sotuvi, «Boshqa kirim»; ularning xaridi chiqimda), chiqim (xarajat) — siz kiritasiz. Foyda = kirim − chiqim.'}</p>
     <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>${accRO()?'':`
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
@@ -10288,7 +10329,7 @@ async function renderAccounting(){
     </div>${accRO()?'':`<div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div>`}</div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='';
+  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='', OTH={ m:{}, err:'' };
   const reload=async()=>{
     try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
       try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
@@ -10296,6 +10337,7 @@ async function renderAccounting(){
       try{ REF=await loadCol('refunds'); }catch(e){ REF=[]; }
       try{ SAL=await loadCol('salary_payments'); }catch(e){ SAL=[]; }
       PAYERR=''; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; PAYERR=String((e&&(e.code||e.message))||'xato'); }   // to'lov usuli (kassa asosida) — A4 hisobot
+      OTH=await finOtherIncome();   // kassadagi boshqa daromad (A6-02) — Kirim / Foyda
       return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
@@ -10311,7 +10353,9 @@ async function renderAccounting(){
   const emonth=e=>e.month||String(e.date||'').slice(0,7);
   // Balans-aware kirim: qisman to'lov ham hisobga olinadi.
   const paidAmt=i=>i.status==='paid'?(Number(i.amount)||0):((i.status==='reversed'||i.status==='canceled')?0:(Number(i.paidAmount)||0));
-  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);
+  const monthColl=k=>INV.filter(i=>i.month===k).reduce((s,i)=>s+paidAmt(i),0);   // o'quv to'lovlari
+  // Kirim = o'quv to'lovlari + kassadagi boshqa daromad (A6-02: forma / tovar sotuvi, «Boshqa kirim» — xaridi xarajatda; bosh sahifa bilan bir xil).
+  const otherOf=k=>Number((OTH.m[k]||{}).sum)||0, kirimOf=k=>monthColl(k)+otherOf(k);
   // Qaytarilgan (refund) summasi — invoice oyi bo'yicha (Kirim aynan shu oyda kamaygan); payment-refund uchun createdAt.
   const dtM=v=>tkDay(v).slice(0,7);   // Toshkent oyi
   const refMonth=r=>String(r.month||'')||dtM(r.createdAt);
@@ -10323,7 +10367,7 @@ async function renderAccounting(){
 
   // Direktor uchun A4 moliyaviy hisobot (printHTML — pop-up bloklanmaydi).
   function printAccountingReport(M){
-    const kirim=monthColl(M);
+    const kirim=kirimOf(M), kirimT=monthColl(M), kirimO=otherOf(M), othItems=(OTH.m[M]&&Array.isArray(OTH.m[M].items))?OTH.m[M].items:[];
     const mExp=EXP.filter(e=>emonth(e)===M); const chiqim=sum(mExp); const foyda=kirim-chiqim;
     const marja=kirim>0?Math.round(foyda/kirim*100):0;
     const qaytarilgan=refundOfMonth(M); const av=avansTotal();
@@ -10331,7 +10375,7 @@ async function renderAccounting(){
     const debt=mInv.reduce((s,i)=>s+((i.status==='canceled'||i.status==='reversed')?0:Math.max(0,(Number(i.amount)||0)-paidAmt(i))),0);
     const byCat={}; mExp.forEach(e=>{ const c=e.category||'Boshqa'; byCat[c]=(byCat[c]||0)+(Number(e.amount)||0); });
     const catKeys=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
-    const PMlab={click:'Click',uzum:'Uzum',cash:'Naqd',bank:'Bank',terminal:'Terminal',payme:'Payme',mixed:'Aralash',credit:'Avans','':'Boshqa'};
+    const PMlab=DF_PMLAB;   // umumiy manba (A6-08: o'zaro hisob — «O‘zaro hisob (ish haqidan)», xom «offset» emas)
     // To'lov usuli — KASSA asosida (shu oyda tushgan haqiqiy to'lovlar; aralash to'lov usullarga to'g'ri bo'linadi).
     const cashM=cashByMethod(PAYS, ...monthBounds(M)); const byPm=cashM.byPm;
     const pmKeys=Object.keys(byPm).sort((a,b)=>byPm[b]-byPm[a]);
@@ -10381,7 +10425,7 @@ async function renderAccounting(){
       <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}${NM?'':' · <b>ismsiz nusxa</b>'}</div></div></div>
       ${NM?'':`<div class="fd28">${esc(fd28Note('o‘quvchilar ID bilan, xodimlar maosh ID’si bilan'))}</div>`}
       <h2>Umumiy ko‘rsatkichlar</h2>
-      <table class="kpi big">${row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
+      <table class="kpi big">${kirimO>0?row('Kirim (o‘quv to‘lovlari + boshqa daromad)',S(kirim),'#1F7A4D')+row('— o‘quv to‘lovlari (yig‘ilgan)',S(kirimT))+row('— boshqa daromad (kassa): '+othItems.map(x=>esc(x.nameUz||x.articleId||'')+' '+S(x.sum)).join('; '),S(kirimO)):row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${OTH.err?row('Kassadagi boshqa daromad o‘qilmadi ('+esc(OTH.err)+') — kirim to‘liq emas','—','#B42318'):''}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
       <h2>Shu oyda tushgan to‘lovlar — usul bo‘yicha (${PAYERR?'—':S(cashM.total)})</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
       <div class="muted" style="font-size:11px;margin:-2px 0 6px">Kassa asosida (to‘lov vaqti, Toshkent). «Kirim» — shu oy hisob-fakturalariga to‘langan summa; avans/oldingi oy qarzi tufayli farq qilishi mumkin.</div>
       <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
@@ -10394,7 +10438,7 @@ async function renderAccounting(){
     printHTML(html);
   }
   const draw=(M)=>{
-    const kirim=monthColl(M);
+    const kirim=kirimOf(M), kirimO=otherOf(M);   // A6-02: + kassadagi boshqa daromad
     const qaytarilgan=refundOfMonth(M);
     const mExp=EXP.filter(e=>emonth(e)===M);
     const chiqim=sum(mExp);
@@ -10405,7 +10449,7 @@ async function renderAccounting(){
 
     // ---- KPI ----
     const kpis=`<div class="acc-kpis">
-      <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v num">${fmtC(kirim)}</div><div class="k-d">yig‘ilgan to‘lovlar${qaytarilgan>0?` · qaytarilgan ayirilgan`:''}</div></div></div>
+      <div class="acc-kpi pos"><div><div class="k-l">Kirim</div><div class="k-v num">${fmtC(kirim)}</div><div class="k-d">${kirimO>0?`o‘quv to‘lovlari ${fmtC(kirim-kirimO)} + boshqa daromad (kassa) ${fmtC(kirimO)}`:'yig‘ilgan to‘lovlar'}${qaytarilgan>0?` · qaytarilgan ayirilgan`:''}${OTH.err?` · <span style="color:var(--bad)">kassa daromadi o‘qilmadi</span>`:''}</div></div></div>
       <div class="acc-kpi neg"><div><div class="k-l">Chiqim</div><div class="k-v num">${fmtC(chiqim)}</div><div class="k-d">${mExp.length} ta xarajat</div></div></div>
       ${qaytarilgan>0?`<div class="acc-kpi neg"><div><div class="k-l">Qaytarilgan</div><div class="k-v num">−${fmtC(qaytarilgan)}</div><div class="k-d">daromaddan ayirilgan (chiqim EMAS)</div></div></div>`:''}
       <div class="acc-kpi ${foyda>=0?'teal':'neg'}"><div><div class="k-l">${foyda>=0?'Foyda':'Zarar'}</div><div class="k-v num">${fmtC(foyda)}</div><div class="k-d">kirim − chiqim</div></div></div>
@@ -10414,7 +10458,7 @@ async function renderAccounting(){
 
     // ---- Kirim va chiqim grafigi (6 oy) ----
     const keys=monthList(M,6);
-    const kin=keys.map(k=>monthColl(k));
+    const kin=keys.map(k=>kirimOf(k));
     const kex=keys.map(k=>sum(EXP.filter(e=>emonth(e)===k)));
     const maxV=Math.max(1,...kin,...kex);
     const anyLoss=keys.some((k,i)=>kex[i]>kin[i] && (kin[i]>0||kex[i]>0));
@@ -12496,16 +12540,17 @@ async function renderPayments(){
     const orphColl=anyFilter?0:orphan.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0), orphDebt=anyFilter?0:orphan.reduce((s,r)=>s+debtOf(r),0);
     // KASSA HISOBOTI — haqiqiy to'lov yozuvlari (payments): sana oralig'i (bo'lmasa — tanlangan oy), usul filtri.
     const [mB0,mB1]=monthBounds(month); const cashFrom=_from||mB0, cashTo=_to||mB1;
-    let cashPays=[], cashErr='', cashRef=0;
+    let cashPays=[], cashErr='', cashRef=0, cashRefCr=0;
     try{ const lo=new Date(cashFrom+'T00:00:00+05:00').toISOString(), hi=new Date(cashTo+'T23:59:59.999+05:00').toISOString();
       // Qo'lda kiritilgan to'lov «Sana»si kiritilgan kundan 31 kungacha OLDIN bo'lishi mumkin (payDay) — keyinroq kiritilganlar
       //   ham topilsin deb yuqori chegara 31 kun kengaytiriladi; kun bo'yicha aniq filtr cashByMethod ichida.
       const hiW=new Date(Date.parse(hi)+31*864e5).toISOString();
       const ps=await getDocs(query(collection(db,'payments'), where('createdAt','>=',lo), where('createdAt','<=',hiW))); cashPays=ps.docs.map(d=>({_id:d.id,...d.data()}));
       try{ const rs=await getDocs(query(collection(db,'refunds'), where('createdAt','>=',lo), where('createdAt','<=',hi)));
-        // Faqat FAKTURA qaytarishlari: biriktirilmagan to'lov qaytarilganda to'lov qatori 'refunded' bo'ladi va «Jami tushgan»ga
-        //   umuman kirmaydi (CASH_PAY_ST) — uni yana ayirish ikki marta kamaytirardi (refundOfMonth bilan bir xil qoida).
-        rs.docs.forEach(d=>{ const x=d.data()||{}; if(x.target==='invoice') cashRef+=Number(x.amount)||0; }); }catch(e){} }
+        // Faktura VA o'quvchi avansi qaytarishlari (A6-06, cashRefundSums): avans ham naqd qaytariladi, «Jami tushgan» esa avansga
+        //   o'tgan pulni ham o'z ichiga oladi. Biriktirilmagan to'lov qaytarilganda to'lov qatori 'refunded' bo'ladi va «Jami tushgan»ga
+        //   umuman kirmaydi (CASH_PAY_ST) — uni yana ayirish ikki marta kamaytirardi.
+        const rf=cashRefundSums(rs.docs.map(d=>d.data()||{})); cashRef=rf.total; cashRefCr=rf.credit; }catch(e){} }
     catch(e){ cashErr=String(e.code||e.message||'xato'); }
     if(_g!==VIEW_GEN) return;
     const cash=cashByMethod(cashPays, cashFrom, cashTo, _fm);
@@ -12531,7 +12576,7 @@ async function renderPayments(){
     const repRows=(cashErr?`<tr><td colspan="3" class="small" style="color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(cashErr)}) — kassa hisoboti ko‘rsatilmadi.</td></tr>`:'')
       +Object.keys(groups).sort().map(l=>`<tr><td data-label="Usul">${esc(l)}</td><td data-label="Soni">${groups[l].n} ta</td><td data-label="Summa"><b>${fmtSom(groups[l].sum)}</b></td></tr>`).join('')
       +`<tr><td data-label="Usul"><b>Jami tushgan (${esc(cashLbl)})</b></td><td data-label="Soni">${cash.list.length} ta</td><td data-label="Summa"><b>${fmtSom(cash.total)}</b></td></tr>`
-      +(cashRef>0?`<tr><td data-label="Usul" class="muted">Qaytarilgan (shu davrda)</td><td></td><td data-label="Summa" class="muted">−${fmtSom(cashRef)}</td></tr>`:'')
+      +(cashRef>0?`<tr><td data-label="Usul" class="muted">Qaytarilgan (shu davrda)${cashRefCr>0?` <span class="small">· shu jumladan avans qaytarish ${fmtSom(cashRefCr)}</span>`:''}</td><td></td><td data-label="Summa" class="muted">−${fmtSom(cashRef)}</td></tr>`:'')
       +`<tr id="pm-debt-row" style="cursor:pointer" title="Bosing — faqat qarzdorlar ro‘yxatiga o‘tish"><td data-label="Usul" class="muted"><b>Qarzdorlik ▸</b> <span class="small">(${esc(month)} fakturalari)</span></td><td data-label="Soni" class="muted">${repSet.filter(r=>debtOf(r)>0).length} ta</td><td data-label="Summa" class="muted">${fmtSom(debtTotal)}</td></tr>`;
     const filterLbl = anyFilter ? ' · filtr' : '';
     const reportCard=`<div class="card" style="margin-bottom:14px"><div class="cls-card-head"><h3>Hisobot · ${esc(month)}${esc(filterLbl)}</h3><span class="cls-count">${repSet.length} ${anyFilter?'hisob':'hisob-faktura'} · yig‘ildi (shu oy fakturalari): ${fmtSom(collected)} · qarzdorlik: ${fmtSom(debtTotal)}${(orphColl||orphDebt)?` · shu jumladan o‘quvchisi topilmagan: ${fmtSom(orphColl)} / ${fmtSom(orphDebt)}`:''}</span></div>
