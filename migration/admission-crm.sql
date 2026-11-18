@@ -149,6 +149,9 @@ create policy cs_del on public.class_seats for delete using (app.is_admin() or a
 
 -- Sinf bo'yicha band o'rinlar: faol + sinovdagi o'quvchilar (chiqqan/muzlatilganlarsiz) — FAQAT sonlar (ism yo'q),
 --   qabul bilan ishlaydiganlar uchun (marketing va admin_head o'quvchi ro'yxatini ko'rmasa ham bo'sh o'rinni biladi).
+--   «Sinflar»da yaratilgan, lekin hali (yoki endi) faol o'quvchisi yo'q sinf ham chiqadi (band = 0): yangi o'quv yili sinfiga sig'im
+--   kiritish va uni qabulxonaga «eng ko'p bo'sh o'rin» sifatida ko'rsatish uchun (avval faqat o'quvchili sinflar qaytardi).
+--   Sinf kaliti — admin.html classDocKey (lang-grade-letter) / classKeyOf bilan bir xil.
 create or replace function public.class_seat_stats() returns table("classKey" text, active int, capacity int)
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 begin
@@ -161,7 +164,15 @@ begin
            || coalesce(nullif(s."classLetter", ''), nullif(s.track, ''), '-') as ck
       from public.students s
      where coalesce(s."payStatus", '') not in ('chiqdi', 'muzlatilgan')
-  ), c as (select ck, count(*)::int n from k group by ck)
+  ), d as (
+    select distinct coalesce(nullif(cl.lang, ''), 'uz') || '-' || coalesce(cl.grade, 0)::text || '-'
+           || coalesce(nullif(cl.letter, ''), '-') as ck
+      from public.classes cl
+  ), c as (
+    select a.ck, sum(a.n)::int n
+      from (select ck, 1 as n from k union all select ck, 0 as n from d) a
+     group by a.ck
+  )
   select coalesce(c.ck, cs.id), coalesce(c.n, 0), cs.capacity
     from c full join public.class_seats cs on cs.id = c.ck
    order by 1;

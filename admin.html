@@ -1634,6 +1634,10 @@ function canPaySalary(){ if(SESSION.isAdmin) return true; const r=SESSION.role;
   return r==='hr'||r==='finance_mgr'||r==='treasurer'||r==='kassir'; }
 // O'quvchi yozuvini boshqara oladimi (qo'shish/tahrir/o'chir/import). Kassir — FAQAT ko'rish.
 function canManageStudents(){ return SESSION.isAdmin || SESSION.role==='admin' || SESSION.role==='admin_head' || SESSION.role==='zavuch' || SESSION.role==='reception'; }
+// Yangi o'quvchi KARTASINI yaratish (INSERT) — bazadagi students_ins bilan AYNAN bir xil: direktor yoki qabulxona (asosiy yoki
+//   qo'shimcha lavozim — app.is_reception rol to'plamini ko'radi). Ma'muriyat rahbari / O'IBDO' uchun baza INSERT'ni rad etadi: «Qabul»dagi
+//   «✅ Qabul qilish» ular uchun formani ochmaydi (avval to'liq to'ldirilgan forma saqlashda RLS xatosi bilan yo'qolardi).
+function canCreateStudents(){ return SESSION.isAdmin || (SESSION.roles||[SESSION.role]).includes('reception'); }
 // O'CHIRISH / bulk-o'chirish / Excel-import — reception BUNGA kirmaydi (u faqat KIRITISH+TAHRIR qiladi).
 //   Faqat DIREKTOR: RLS students_del = app.is_admin() (rls.sql), import esa students_ins (direktor/qabulxona) —
 //   avval ma'muriyat/O'IBDO' ham sanalardi, lekin server ularni rad etardi (va ularda «O'quvchilar» bo'limi yo'q).
@@ -2333,8 +2337,8 @@ const pct=(a,b)=>b?Math.round(a/b*100):0;
 /* ---- CSV eksport / import ---- */
 function downloadCSV(filename, headers, rows){
   // CSV formula injeksiyasi (frontend[21]): =,+,-,@,tab,CR bilan boshlanган katak Excel/Sheets'да
-  // FORMULA bo'lib bajarilishi mumkin -> oldiga ' qo'yib zararsizlantiramiz.
-  const q=v=>{ v=String(v==null?'':v); if(/^[=+\-@\t\r]/.test(v)) v="'"+v; return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  // FORMULA bo'lib bajarilishi mumkin -> oldiga ' qo'yib zararsizlantiramiz (csvSafe — STU-IMP bloki; import impCell bilan olib tashlaydi).
+  const q=v=>{ v=csvSafe(v); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const lines=[headers.map(q).join(',')].concat(rows.map(r=>r.map(q).join(',')));
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
@@ -2960,50 +2964,146 @@ function levDist(a,b){ a=a||''; b=b||''; const m=a.length,n=b.length; if(Math.ab
 function tokEq(a,b){ if(a===b) return true; if(a.length<4||b.length<4) return false; return levDist(a,b)<=1; }
 // Kichik ism to'plami kattasiga to'liq kirsa (>=2 umumiy so'z) — mos deb hisoblaymiz
 function namesMatch(A,B){ const small=A.length<=B.length?A:B, big=A.length<=B.length?B:A; if(small.length<2) return false; const used=new Set(); let c=0; small.forEach(t=>{ for(let i=0;i<big.length;i++){ if(!used.has(i)&&tokEq(t,big[i])){ used.add(i); c++; break; } } }); return c>=2 && c===small.length; }
+// STU-IMP:BEGIN — import / sinf harfi / Qabul murojaati / CSV yordamchilari (sof; sinovi: assets/js/stu-import.test.mjs — blok shu fayldan o'qiladi)
+// CSV formula injeksiyasi (frontend[21]): =,+,-,@,tab,CR bilan boshlangan katak Excel/Sheets'da FORMULA bo'lib bajarilishi mumkin —
+//   oldiga ' qo'yiladi. Panelning BARCHA CSV eksportlari shu bitta qoidadan o'tadi (Qabul eksporti avval himoyasiz edi — saytdagi
+//   anonim ariza ismi direktor Excel'ida formula bo'lib ochilardi).
+function csvSafe(v){ v=String(v==null?'':v); return /^[=+\-@\t\r]/.test(v) ? "'"+v : v; }
+function csvLine(cells, sep){ return (cells||[]).map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(sep||','); }
+// Import katagi: panelning o'z eksporti (csvSafe) qo'ygan ' olib tashlanadi — aks holda qayta importda telefon «'+998 …» bo'lib yozilardi.
+function impCell(v){ let s=String(v==null?'':v); if(/^'[=+\-@\t\r]/.test(s)) s=s.slice(1); return s.trim(); }
+// Sarlavha → ustunlar. Lotin VA kirill (o'zbek / rus ro'yxatlari). Har ustun FAQAT bitta maydonga beriladi. «Ota-ona tel.» (panel
+//   eksporti ham) — bitta raqam: Ota telefoni (parentPhone); Ona telefoni (parentPhone2) faqat ALOHIDA «ona» ustunidan — avval bitta
+//   ustun ikkala maydonga tushib, onaning raqami otaniki bilan almashardi (change_log telefonni niqoblab yozadi — qaytarib bo'lmasdi).
+//   ota/ona — so'z BOSHIDA («personal», «работа» ichidagi «ona»/«ота» emas). Ism topilmasa — birinchi bo'sh MATNLI ustun («№» emas).
+function impColumns(rows){
+  const head=((rows&&rows[0])||[]).map(h=>String(h==null?'':h).trim().toLowerCase().replace(/[‘’ʻʼ`´]/g,"'"));
+  const N=head.length, has=(h,ws)=>ws.some(w=>h.includes(w));
+  const W_PH=['tel','phone','telefon','raqam','телефон','тел.','моб','рақам'], W_NOPH=['tartib','№','п/п'];
+  const W_NM1=["o'quvchi",'oquvchi','bola','farzand','fish','f.i.sh','ўқувчи','укувчи','ученик','учащ','ф.и.ш','фиш'];
+  const W_NM2=['ism','name','fio','f.i.o','familiya','фио','ф.и.о','фамилия','имя','исм'];
+  const W_CLS=['sinf','синф','klass','класс','grade','class'], W_GRP=['guruh','group','групп','harf','буква','литер','гурух'];
+  const W_STAFF=['rahbar','руковод','teacher',"o'qituvchi",'учител','kurator','куратор'];
+  const F=/(^|[^a-z])ota|father|отец|отца|папа|(^|[^а-яёўқғҳ])ота/, M=/(^|[^a-z])ona|mother|мать|матер|мама|(^|[^а-яёўқғҳ])она/;
+  const W_G=['vasiy','guardian','опекун','васий'], W_P0=['roditel','родит'];
+  const isF=h=>F.test(h), isM=h=>M.test(h), isG=h=>has(h,W_G), isPar=h=>isF(h)||isM(h)||isG(h)||has(h,W_P0);
+  const ph=h=>has(h,W_PH) && !has(h,W_NOPH), phP=h=>ph(h)||h.includes('номер'), nm=h=>has(h,W_NM1)||has(h,W_NM2);
+  const sample=i=>{ const out=[]; for(let r=1;r<Math.min(rows.length,30);r++){ const v=impCell(((rows[r])||[])[i]); if(v) out.push(v); } return out; };
+  const classRe=/^\s*(tayyorlov|prep|variativ|variant|подгот|вариатив)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яёўқғҳ]/i;
+  const classy=i=>{ const s=sample(i); return s.length>=1 && s.filter(v=>classRe.test(v)).length/s.length>=0.5; };
+  const texty=i=>{ const s=sample(i); return s.length>=1 && s.filter(v=>/[a-zа-яёўқғҳ]/i.test(v) && !classRe.test(v)).length/s.length>=0.5; };
+  const used=new Set(), C={};
+  const pick=pred=>{ for(let i=0;i<N;i++) if(!used.has(i) && pred(head[i],i)){ used.add(i); return i; } return -1; };
+  C.id=pick(h=>h==='id'||/(^|[^a-z0-9])id([^a-z0-9]|$)/.test(h));
+  C.pinfl=pick(h=>has(h,['jshshir','pinfl','жшшир','пинфл']));
+  C.fPh=pick(h=>phP(h) && isF(h)); if(C.fPh<0) C.fPh=pick(h=>phP(h) && (has(h,W_P0)||isG(h)) && !isM(h));
+  C.mPh=pick(h=>phP(h) && isM(h) && !isF(h));
+  C.anyPh=pick(h=>ph(h) && !isPar(h));
+  C.fNm=pick(h=>nm(h) && isF(h)); if(C.fNm<0) C.fNm=pick(h=>nm(h) && has(h,W_P0) && !isM(h));
+  C.mNm=pick(h=>nm(h) && isM(h) && !isF(h));
+  C.guard=pick(h=>isG(h) && !ph(h) && !nm(h));
+  C.cls=pick(h=>has(h,W_CLS) && !has(h,W_STAFF));
+  if(C.cls<0) C.cls=pick((h,i)=>has(h,W_GRP) && !has(h,W_STAFF) && classy(i));   // «Guruh» ustunida «5-A» kabi qiymat
+  if(C.cls<0){ for(let i=0;i<N;i++){ const s=sample(i); if(!used.has(i) && s.length>=3 && classy(i)){ used.add(i); C.cls=i; break; } } }
+  C.grp=pick(h=>has(h,W_GRP) && !has(h,W_STAFF));   // alohida harf ustuni (panel eksportida «Guruh»)
+  C.lang=pick(h=>has(h,['til','lang','язык']));
+  C.track=pick(h=>has(h,['nalish','track',"yo'n",'напр']));
+  C.score=pick(h=>has(h,['ball','score','балл']));
+  C.att=pick(h=>has(h,['davomat','att','посещ']));
+  C.name=pick(h=>has(h,W_NM1) && !isPar(h));
+  if(C.name<0) C.name=pick(h=>has(h,W_NM2) && !isPar(h));
+  if(C.name<0) C.name=pick((h,i)=>!isPar(h) && !has(h,W_STAFF.concat(['manzil','address','адрес','izoh','note','примеч','maktab','school','школ'])) && texty(i));
+  return C;
+}
+// Guruh harfi: chetidagi bo'shliq, qo'shtirnoq/«», tire, nuqta tashlanadi, katta harf. Harfsiz («-», «—», bo'sh) → ''.
+//   Harf ko'rinishida bo'lmasa (masalan «2025-yil qabul») → null (tushunarsiz — taxmin qilinmaydi).
+function impNormLetter(v){ const s=String(v==null?'':v).replace(/[«»"'‘’ʻʼ`´“”„.,:;\/\\_\s–—-]+/g,'').toUpperCase();
+  if(!s) return ''; return /^[A-ZА-ЯЁЎҚҒҲІ]{1,6}\d?$/.test(s) ? s : null; }
+// Sinf katagi: «5-sinf A», «5 «A»», «10-IT», «7-Б», «11 кл. Б», «Tayyorlov» → {grade, letter}. Avval «5-sinf A» harfi «S», «10-IT»
+//   «I» deb o'qilib, mavjud o'quvchilar soxta sinfga ko'chardi. Bo'sh → null (sinf ko'rsatilmagan); tushunarsiz → {bad:true}.
+function impParseClass(v){
+  let s=impCell(v).replace(/[‘’ʻʼ`´]/g,"'"); if(!s) return null;
+  if(/variativ|variant|вариатив/i.test(s)) return {grade:13, letter:''};
+  let grade;
+  if(/tayyorlov|tayyorgarlik|prep|подгот|тайёрлов/i.test(s)){ grade=0; s=s.replace(/tayyorlov\w*|tayyorgarlik\w*|prep\w*|подгот[а-яё]*|тайёрлов[а-яёўқғҳ]*/ig,' '); }
+  else { const m=s.match(/\d{1,2}/); if(!m) return {bad:true}; grade=parseInt(m[0],10); s=s.replace(m[0],' '); }
+  if(!(grade>=0 && grade<=11) && grade!==13) return {bad:true};   // 13 — Variativ (panel eksporti «Sinf» ustuniga raqamni yozadi)
+  s=s.replace(/\([^)]*\)/g,' ').replace(/sinfi?|синфи?|klass\w*|class\w*|grade|guruh\w*|group\w*|yo'?nalish\w*|класс[а-яё]*|групп[а-яё]*|направлен[а-яё]*|(^|[^а-яё])кл\.?(?![а-яё])/ig,' ');
+  const letter=impNormLetter(s);
+  return letter==null ? {bad:true} : {grade, letter};
+}
+// Kirill harf → lotin. Ikki o'qilish: tashqi o'xshashlik («В» ≈ B — telefonda kirill klaviaturada tanlangan) va o'qilishi («В» = V,
+//   rus / o'zbek-kirill ro'yxatida). Qaysi biri — shu til+sinfda MAVJUD sinflar hal qiladi (impResolveLetter).
+const IMP_CYR_LOOK={'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','Х':'X','У':'Y','І':'I'};
+const IMP_CYR_LAT={'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ё':'YO','Ж':'J','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'X','Ц':'TS','Ч':'CH','Ш':'SH','Щ':'SH','Ы':'I','Э':'E','Ю':'YU','Я':'YA','Ў':'O','Қ':'Q','Ғ':'G','Ҳ':'H','І':'I'};
+// Shu til+sinfdagi ma'lum guruh harflari: «Sinflar»da yaratilganlar va (arxivda bo'lmagan) o'quvchilar. Map: KATTA HARF → bazadagi yozuvi.
+function impKnownLetters(lang, grade, students, defined){
+  const m=new Map(), add=v=>{ const k=String(v==null?'':v).trim(); if(!k || k==='-') return; const u=k.toUpperCase(); if(!m.has(u)) m.set(u, k); };
+  (defined||[]).forEach(c=>{ if((c.lang||'uz')===lang && (Number(c.grade)||0)===grade) add(c.letter); });
+  (students||[]).forEach(s=>{ if((s.lang||'uz')===lang && (Number(s.grade)||0)===grade) add(s.classLetter||s.track); });
+  return m;
+}
+// Harfni mavjud sinflarga moslash: «b», «B », kirill «А» → bazadagi «B»/«A» (sinfdoshlardan ajralib, kurator/fan o'qituvchisi
+//   ko'rmaydigan soxta sinf yaratilmasin). Natija {letter} (letter null — tushunarsiz) yoki {letter, unknown:true} (shunday sinf
+//   hali yo'q) yoki {letter, ambiguous:[…]} (kirill «В» — B ham, V ham bo'lishi mumkin: taxmin qilinmaydi).
+function impResolveLetter(raw, known){
+  const s=impNormLetter(raw); if(s==null || s==='') return {letter:s};
+  const K=known||new Map();
+  if(K.has(s)) return {letter:K.get(s)};
+  if(!/[А-ЯЁЎҚҒҲІ]/.test(s)) return {letter:s, unknown:true};
+  const ch=[...s], lat=ch.map(c=>IMP_CYR_LAT[c]!=null?IMP_CYR_LAT[c]:c).join('');
+  const look=ch.every(c=>!/[А-ЯЁЎҚҒҲІ]/.test(c) || IMP_CYR_LOOK[c]) ? ch.map(c=>IMP_CYR_LOOK[c]||c).join('') : null;
+  const cands=[...new Set([lat, look].filter(Boolean))], hit=cands.filter(c=>K.has(c));
+  if(hit.length===1) return {letter:K.get(hit[0])};
+  if(!hit.length && cands.length===1) return {letter:cands[0], unknown:true};
+  return {letter:s, ambiguous:cands};
+}
+// Faqat ISM bo'yicha topilgan o'quvchi: fayldagi sinf bazadagidan 1 darajadan ko'p farq qilsa — bu adash (boshqa bola), jim
+//   yangilanmaydi. Sinf ko'rsatilmagan (null) — tekshirilmaydi. Variativ (13) faqat Variativ bilan.
+function impGradeNear(fileGrade, dbGrade){ if(fileGrade==null) return true; const a=Number(fileGrade), b=Number(dbGrade)||0; if(a===13||b===13) return a===b; return Math.abs(a-b)<=1; }
+// Telefon solishtirish kaliti (faqat raqamlar; 9 xonali lokal — 998 bilan): «+998 90 111 11 11» = «901111111» — o'zgarish emas.
+function impPhoneKey(v){ let d=String(v==null?'':v).replace(/\D/g,''); if(d.slice(0,2)==='00') d=d.slice(2); if(d.length===9) d='998'+d; return d; }
+// Yangi o'quvchi formasi: «Faollashtirish sanasi» bo'sh bo'lsa — bugun (Toshkent). Bo'sh qolsa to'lov OY BOSHIDAN hisoblanardi
+//   (oy o'rtasida qabul qilingan bola butun oy uchun) — qabulxona qo'shganda baza (reception-guard.sql) xuddi shu kunni qo'yadi.
+function newStudentPrefill(prefill, today){ const p=Object.assign({}, prefill||{}); if(p.activeFrom==null || p.activeFrom==='') p.activeFrom=today; return p; }
+// Qabul (murojaat): sayt formasi sinfni MATN sifatida yuboradi («5-sinf», «5 класс», «Tayyorlov», «Подготовка»), xodim — raqam
+//   («5»). Avval Number('5-sinf') = NaN: «✅ Qabul qilish» sinfni yo'qotar, «Jarayonda» ustuni sayt arizalarini sanamasdi. Raqam yoki null.
+function admGradeOf(v){ const s=String(v==null?'':v).trim(); if(!s) return null;
+  if(/^\d{1,2}$/.test(s)){ const n=Number(s); return (n>=0 && n<=11) || n===13 ? n : null; }
+  if(/tayyorlov|подгот|prep/i.test(s)) return 0;
+  if(/variativ|вариатив/i.test(s)) return 13;
+  const m=s.match(/\d{1,2}/); if(m){ const n=Number(m[0]); return n>=1 && n<=11 ? n : null; } return null; }
+// Ta'lim tili: xodim 'uz'/'ru' yozadi, sayt — «Rus sinf» / «Русский класс» / «O‘zbek sinf» / «Узбекский класс» (avval faqat 'ru'
+//   tanilib, rus sinfiga yozilgan oila «o‘zbek» deb ko'rinardi). '' — noma'lum.
+function admLangOf(v){ const s=String(v==null?'':v).trim().toLowerCase(); if(!s) return '';
+  if(s==='ru' || /rus|рус/.test(s)) return 'ru';
+  if(s==='uz' || /o.?zbek|uzbek|узбек|ўзбек/.test(s)) return 'uz';
+  return ''; }
+// STU-IMP:END
 // Qatorlardan (CSV/xlsx/Sheets) yozuvlarni tuzib, oldindan ko'rishni ochadi.
 // MUHIM: loyihada allaqachon bor o'quvchi QAYTA yuklanmaydi — faqat yangilar qo'shiladi.
+// KIM YANGILANADI: ID → JSHSHIR → ism (faqat FAOL o'quvchilar orasida va sinfi ±1). Arxivdagi (chiqarilgan / bitirgan) o'quvchi import
+//   bilan O'ZGARTIRILMAYDI: avval xuddi shu ismli yangi qabul eski bolaning yozuvini egallab (ID, qarz, ota-ona kabineti bilan), uning
+//   maxfiy ma'lumotini yangi oilanikiga almashtirardi — eski oilaning kabineti yangi oilaning telefonini ko'rardi. Har yangilanish
+//   oldindan ko'rishda alohida tasdiqlanadi (openImportPreview).
 async function buildAndPreviewImport(rows){
   rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()));   // bo'sh qatorlarni tashlaymiz
   if(rows.length<2){ toast('Fayl/jadval bo‘sh yoki sarlavha qatori yo‘q',true); return; }
-  const head=rows[0].map(h=>String(h).trim().toLowerCase().replace(/[‘’ʻ`]/g,"'"));
-  const N=head.length;
-  const has=(h,...ks)=>ks.some(k=>h.includes(k));
-  const isPar=h=>has(h,'ota','ona','father','mother','roditel','родит','vasiy','guardian','опекун');
-  const findH=pred=>{ for(let i=0;i<N;i++) if(pred(head[i]))return i; return -1; };
-  // Sinf ustuni: sarlavha bo'yicha, topilmasa qiymat namunasi ("9-b","1-A","Tayyorlov") bo'yicha
-  const classRe=/^\s*(tayyorlov|prep|variativ|variant)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яё]/i;
-  let iClass=findH(h=>has(h,'sinf','klass','grade','класс','guruh','group','групп'));
-  if(iClass<0){ for(let c=0;c<N;c++){ let hit=0,tot=0; for(let r=1;r<Math.min(rows.length,30);r++){ const v=String((rows[r]||[])[c]||'').trim(); if(v){tot++; if(classRe.test(v))hit++;} } if(tot>=3 && hit/tot>=0.5){ iClass=c; break; } } }
-  // Telefon/ism: ota va ona ustunlarini alohida taniymiz
-  const iFatherPh=findH(h=>has(h,'tel','phone','telefon','raqam','номер') && has(h,'ota','father'));
-  const iMotherPh=findH(h=>has(h,'tel','phone','telefon','raqam','номер') && has(h,'ona','mother'));
-  const iAnyPh=findH(h=>has(h,'tel','phone','telefon','raqam') && !isPar(h));
-  const iFatherNm=findH(h=>has(h,'ism','name','fio','familiya','f.i') && has(h,'ota','father'));
-  const iMotherNm=findH(h=>has(h,'ism','name','fio','familiya','f.i') && has(h,'ona','mother'));
-  const iId=findH(h=>h==='id'||/(^|[^a-z0-9])id([^a-z0-9]|$)/.test(h));
-  const iLang=findH(h=>has(h,'til','lang','язык'));
-  const iTrack=findH(h=>has(h,'nalish','track',"yo'n",'напр'));
-  const iScore=findH(h=>has(h,'ball','score','балл'));
-  const iAtt=findH(h=>has(h,'davomat','att','посещ'));
-  const iPinfl=findH(h=>has(h,'jshshir','pinfl','жшшир','пинфл'));
-  const iGuard=findH(h=>has(h,'vasiy','guardian','опекун'));
-  // O'quvchi ismi: nomi bo'yicha (ota/ona ustunlarisiz); topilmasa — birinchi ishlatilmagan ustun (odatda 1-ustun)
-  let iName=findH(h=>has(h,"o'quvchi",'oquvchi','bola','farzand','fish','f.i.sh') && !isPar(h));
-  if(iName<0) iName=findH(h=>has(h,'ism','name','fio','f.i.o','familiya') && !isPar(h));
-  if(iName<0){ const used=new Set([iClass,iFatherPh,iMotherPh,iAnyPh,iFatherNm,iMotherNm,iId,iLang,iTrack,iScore,iAtt,iPinfl,iGuard].filter(x=>x>=0));
-    for(let c=0;c<N;c++){ if(!used.has(c)){ iName=c; break; } } }
-  if(iName<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
-  // "9-b" / "1-A" / "Tayyorlov" → grade + harf
-  const parseClass=v=>{ v=String(v||'').trim(); if(!v) return {grade:0,letter:''};
-    if(/variativ|variant/i.test(v)) return {grade:13, letter:''};   // Variativ = maxsus daraja (sentinel 13)
-    if(/tayyorlov|prep/i.test(v)) return {grade:0, letter:((v.match(/[-–—]\s*([a-zа-яё])/i)||[])[1]||'').toUpperCase()};
-    const m=v.match(/(\d{1,2})\s*[-–—]?\s*([a-zа-яё])?/i); return m?{grade:parseInt(m[1],10)||0, letter:(m[2]||'').toUpperCase()}:{grade:0,letter:''}; };
-  // Mavjud o'quvchilar indekslari: ID, "ism|sinf" tabiiy kalit, va ism bo'yicha (yangilash uchun).
+  const C=impColumns(rows);   // sarlavha → ustunlar (STU-IMP bloki: ota-ona, kirill sarlavhalar, «№» ustuni)
+  if(C.name<0){ toast('“Ism” ustuni topilmadi (sarlavhani tekshiring)',true); return; }
+  const cv=(r,i)=>i>=0?impCell((r||[])[i]):'';
+  // Mavjud o'quvchilar indekslari: ID, JSHSHIR va ism bo'yicha (yangilash uchun).
   //   Ro'yxat BAZADAN yangidan o'qiladi (kesh bo'sh/eskirgan bo'lsa — masalan ro'yxat yuklanmagan sahifada — HAMMA mavjud
   //   o'quvchi «yangi» bo'lib, yangi ID bilan ikkinchi marta yaratilardi). O'qib bo'lmasa — import to'xtatiladi.
   let stu;
   try{ stu=await loadCol('students','order'); cache['students']=stu; }
   catch(e){ toast('O‘quvchilar ro‘yxatini bazadan o‘qib bo‘lmadi — import to‘xtatildi (mavjud o‘quvchilar takror yaratilmasin). Qayta urinib ko‘ring.',true); return; }
+  const TD=tkDay(new Date()), act=stu.filter(r=>!stuArchived(r, TD));   // faol ro'yxat — ism bo'yicha FAQAT shundan moslanadi
+  const defs=await loadDefinedClasses();   // «Sinflar» — guruh harfini mavjud sinfga moslash va «hali yo'q sinf» belgisi uchun
+  // Maxfiy ma'lumot (telefon, ota-ona, JSHSHIR): mavjud o'quvchida ESKI qiymat ko'rsatiladi va faqat O'ZGARGAN maydon yoziladi; JSHSHIR
+  //   bo'yicha moslash ham shundan. O'qib bo'lmasa — mavjud o'quvchilarning maxfiy ma'lumoti yangilanmaydi (ko'r-ko'rona yozilmasin).
+  let privOf=null;
+  try{ const pr=await loadCol('student_private'); privOf={}; pr.forEach(p=>{ privOf[String(p._id)]=p; }); }catch(e){ privOf=null; }
   // Import qilingan (Firebase) qatorlarda doc id ≠ studentId bo'lishi mumkin — IKKALA kalit ham band/izlanadi,
   //   aks holda faylda «IQ-0042» berilgan o'quvchi topilmay, AYNAN shu studentId bilan IKKINCHI o'quvchi yaratilardi.
   const existing=[]; stu.forEach(r=>{ existing.push(String(r._id)); if(r.studentId) existing.push(String(r.studentId)); });
@@ -3014,39 +3114,50 @@ async function buildAndPreviewImport(rows){
   const idK=v=>String(v==null?'':v).trim().toUpperCase();
   const byIdMap=new Map(); stu.forEach(r=>{ byIdMap.set(idK(r._id), r); if(idK(r.studentId) && !byIdMap.has(idK(r.studentId))) byIdMap.set(idK(r.studentId), r); });
   const nkOf=(name,grade,grp)=>normName(name)+'|'+(parseInt(grade,10)||0)+'|'+normGrp(grp);
-  const seenNK=new Set(stu.map(r=>nkOf(r.name, r.grade, r.classLetter||r.track)));
-  const byName={}; stu.forEach(r=>{ const k=normName(r.name); (byName[k]=byName[k]||[]).push(r); });
-  const clsLbl=(g,l)=>gradeName(g)+(l?` «${l}»`:(Number(g)===13?'':' «—»'));
+  const seenNK=new Set();   // fayl ichida takrorlangan YANGI qatorlar
+  const byName={}; act.forEach(r=>{ const k=normName(r.name); (byName[k]=byName[k]||[]).push(r); });
+  const arcByName={}; stu.forEach(r=>{ if(stuArchived(r, TD)){ const k=normName(r.name); (arcByName[k]=arcByName[k]||[]).push(r); } });
+  const byPinfl={}; if(privOf) stu.forEach(r=>{ const p=String((privOf[String(r._id)]||{}).pinfl||'').replace(/\D/g,''); if(p.length===14) (byPinfl[p]=byPinfl[p]||[]).push(r); });
+  const knownKeys=new Set(defs.map(classDocKey).concat(act.map(classKeyOf))), knownCache={};
+  const knownFor=(lang,g)=>{ const k=lang+'|'+g; return knownCache[k]||(knownCache[k]=impKnownLetters(lang, g, act, defs)); };
+  const PRIV_LBL={parentPhone:'Ota tel.', parentPhone2:'Ona tel.', fatherName:'Ota F.I.Sh', motherName:'Ona F.I.Sh', guardian:'Vasiy', pinfl:'JSHSHIR'};
+  const samePriv=(k,a,b)=>(k==='parentPhone'||k==='parentPhone2') ? impPhoneKey(a)===impPhoneKey(b)
+    : k==='pinfl' ? String(a||'').replace(/\D/g,'')===String(b||'').replace(/\D/g,'') : normName(a)===normName(b);
+  const nameTk=x=>normName(x).split(' ').filter(w=>w.length>=3);
   const acc=[]; const toWrite=[]; const toUpdate=[]; const warnings=[]; const skipped=[]; const nameCount={}; const updatedIds=new Set();
+  let noClassNew=0, privSkip=0;
   // Fayldagi (keyingi qatorlardagi ham) YANGI IQ-ID'lar oldindan band qilinadi: aks holda bo'sh ID'li qatorga avtomatik
   //   berilgan ID pastdagi qatorning aniq ID'si bilan bir xil chiqib, ikkalasi bitta hujjatga yozilardi (bitta bola
   //   jim yo'qolar, maxfiy ma'lumotlar aralashardi). Bir xil yangi ID ikki qatorda — ikkinchisi o'tkaziladi.
-  const reservedIds=[]; if(iId>=0) for(let i=1;i<rows.length;i++){ const g=String((rows[i]||[])[iId]||'').trim(); if(/^IQ-\d+$/i.test(g) && !byIdMap.has(g.toUpperCase())) reservedIds.push(g.toUpperCase()); }
+  const reservedIds=[]; if(C.id>=0) for(let i=1;i<rows.length;i++){ const g=cv(rows[i],C.id); if(/^IQ-\d+$/i.test(g) && !byIdMap.has(g.toUpperCase())) reservedIds.push(g.toUpperCase()); }
   const newIds=new Set(), updName={};
   for(let i=1;i<rows.length;i++){
-    const r=rows[i]; const name=String(r[iName]||'').trim(); if(!name) continue;
-    const givenId=iId>=0?String(r[iId]||'').trim():'';
-    const cls=iClass>=0?parseClass(r[iClass]):{grade:0,letter:''};
-    const grade=cls.grade;
-    const grp=cls.letter || (iTrack>=0?String(r[iTrack]||'').trim():'');
-    const track=iTrack>=0?String(r[iTrack]||'').trim():'';
-    const langRaw=(iLang>=0?String(r[iLang]||''):'').toLowerCase();
-    const lang=/rus|^ru|рус/.test(langRaw)?'ru':'uz';
-    const nk=nkOf(name, grade, grp);
+    const r=rows[i]; const name=cv(r,C.name).replace(/\s+/g,' '); if(!name) continue;
+    // Ism o'rnida raqam («№» ustuni: «1», «2»…) — o'quvchi «1» nomi bilan yaratilmasin.
+    if(!/[a-zа-яёўқғҳ]/i.test(name)){ warnings.push(`${i+1}-qator: ism o‘rnida «${name}» — o‘tkazildi (ism ustunini tekshiring)`); skipped.push(name); continue; }
+    const givenId=cv(r,C.id);
+    // Sinf: null — ko'rsatilmagan (mavjud o'quvchining sinfi O'ZGARMAYDI; avval «Tayyorlov»ga ko'chardi). Harf faylda yo'q bo'lsa —
+    //   alohida «Guruh» ustunidan (panel eksporti: Sinf + Guruh), u ham bo'sh bo'lsa mavjud o'quvchida eski harf qoladi.
+    const pc=C.cls>=0?impParseClass((r||[])[C.cls]):null, cBad=!!(pc && pc.bad);
+    const grade=(pc && !cBad) ? pc.grade : null;
+    let letterRaw=(pc && !cBad) ? pc.letter : '';
+    if(grade!=null && !letterRaw && C.grp>=0){ const gl=impNormLetter(cv(r,C.grp)); if(gl) letterRaw=gl; }
+    const track=cv(r,C.track);
+    const langCell=cv(r,C.lang), langFile=langCell ? (/rus|^ru|рус/i.test(langCell)?'ru':'uz') : '';   // bo'sh — til o'zgarmaydi
     // Maxfiy (telefon/ism) — yangi va yangilash uchun bir xil
     const priv={};
-    const fph=iFatherPh>=0?String(r[iFatherPh]||'').trim():'', mph=iMotherPh>=0?String(r[iMotherPh]||'').trim():'', aph=iAnyPh>=0?String(r[iAnyPh]||'').trim():'';
+    const fph=cv(r,C.fPh), mph=cv(r,C.mPh), aph=cv(r,C.anyPh), pinflRaw=cv(r,C.pinfl), pinfl=pinflRaw.replace(/\D/g,'');
     if(fph||aph) priv.parentPhone=fph||aph;
     if(mph) priv.parentPhone2=mph;
-    if(iFatherNm>=0){ const v=String(r[iFatherNm]||'').trim(); if(v) priv.fatherName=v; }
-    if(iMotherNm>=0){ const v=String(r[iMotherNm]||'').trim(); if(v) priv.motherName=v; }
-    if(iGuard>=0){ const v=String(r[iGuard]||'').trim(); if(v) priv.guardian=v; }
-    if(iPinfl>=0){ const v=String(r[iPinfl]||'').trim(); if(v) priv.pinfl=v; }
+    { const v=cv(r,C.fNm); if(v) priv.fatherName=v; }
+    { const v=cv(r,C.mNm); if(v) priv.motherName=v; }
+    { const v=cv(r,C.guard); if(v) priv.guardian=v; }
+    if(pinflRaw) priv.pinfl=pinflRaw;
     const ph=(priv.parentPhone||'').replace(/\D/g,'');
     if(priv.parentPhone && ph.length>0 && ph.length<7) warnings.push(`${name}: telefon to‘liq emas (${priv.parentPhone})`);
-    // Mavjudni topamiz: ID → ism+sinf (aynan, o'zgarishsiz) → ism (sinf boshqa = yangilash)
-    let ex=null;
-    if(givenId && byIdMap.has(givenId.toUpperCase())){ ex=byIdMap.get(givenId.toUpperCase());
+    // Mavjudni topamiz: ID → JSHSHIR → ism (faol, sinfi ±1)
+    let ex=null, how='';
+    if(givenId && byIdMap.has(givenId.toUpperCase())){ ex=byIdMap.get(givenId.toUpperCase()); how='id';
       // Kalit TO'QNASHUVI (eski import: bitta ID bir nechta o'quvchi qatorida — hujjat id yoki studentId sifatida): ism bo'yicha
       //   AYNAN bittasi, ismlar bir xil bo'lsa — hujjat id'si shu ID bo'lgani; aniqlab bo'lmasa qator o'tkaziladi (boshqa bola
       //   jim yangilanmasin).
@@ -3057,12 +3168,29 @@ async function buildAndPreviewImport(rows){
           else { warnings.push(`«${name}»: ID «${givenId}» bazada ${cands.length} o‘quvchida (to‘qnashuv) — o‘tkazildi («⚠️ Ma'lumot sifati»ni ko‘ring)`); skipped.push(name); continue; } } }
       // ID bo'yicha topildi, lekin ism UMUMAN mos emas (birorta umumiy so'z yo'q) — ehtimol ID xato yozilgan: boshqa
       //   bolaning sinfi/telefoni jim almashmasin. Qatorni o'tkazamiz, ogohlantiramiz.
-      const tk=x=>normName(x).split(' ').filter(w=>w.length>=3), a=tk(ex.name), b=tk(name);
+      const a=nameTk(ex.name), b=nameTk(name);
       if(a.length && b.length && !a.some(w=>b.includes(w))){ warnings.push(`«${name}»: ID «${givenId}» bazada «${ex.name||''}» ga tegishli — ism mos emas, o‘tkazildi (ID'ni tekshiring)`); skipped.push(name); continue; } }
-    if(!ex && seenNK.has(nk)){ skipped.push(name + (grp?` («${grp}»)`:'')); continue; }   // aynan bor / fayl ichida takror
-    if(!ex){ const nm=byName[normName(name)]||[];
-      if(nm.length===1) ex=nm[0];
-      else if(nm.length>1){ warnings.push(`«${name}» bazada ${nm.length} marta — qo‘lda tuzating`); skipped.push(name); continue; } }
+    // JSHSHIR (14 raqam) — shaxsga xos: ID bilan topilmasa shu bo'yicha topiladi; ID bilan topilgan BOSHQA bolaga tegishli bo'lsa — to'qnashuv.
+    if(pinfl.length===14 && byPinfl[pinfl]){ const P=byPinfl[pinfl];
+      if(ex){ if(!P.includes(ex)){ warnings.push(`«${name}»: JSHSHIR ${pinfl} bazada boshqa o‘quvchida (${P.map(x=>x.studentId||x._id).join(', ')}) — ID «${givenId}» bilan mos emas, o‘tkazildi`); skipped.push(name); continue; } }
+      else if(P.length>1){ warnings.push(`«${name}»: JSHSHIR ${pinfl} bazada ${P.length} o‘quvchida — o‘tkazildi («⚠️ Sifat»ni ko‘ring)`); skipped.push(name); continue; }
+      else { const a=nameTk(P[0].name), b=nameTk(name);
+        if(a.length && b.length && !a.some(w=>b.includes(w))){ warnings.push(`«${name}»: JSHSHIR ${pinfl} bazada «${P[0].name||''}» (${P[0].studentId||P[0]._id}) ga tegishli — ism mos emas, o‘tkazildi`); skipped.push(name); continue; }
+        ex=P[0]; how='pinfl'; } }
+    let nameNote='';
+    if(!ex){ const nm=byName[normName(name)]||[], near=nm.filter(x=>impGradeNear(grade, x.grade));
+      if(near.length===1){ ex=near[0]; how='name'; }
+      else if(near.length>1){
+        // Bir xil ismli bir nechta faol o'quvchi: fayldagi sinf AYNAN mos kelgani (5-A va 5-B dagi adashlar) — aks holda qo'lda.
+        const same=grade==null ? [] : near.filter(x=>(Number(x.grade)||0)===grade && String(x.classLetter||x.track||'').trim().toUpperCase()===String(letterRaw||'').toUpperCase());
+        if(same.length===1){ ex=same[0]; how='name'; }
+        else { warnings.push(`«${name}» bazada ${near.length} marta — qo‘lda tuzating`); skipped.push(name); continue; } }
+      else if(nm.length) nameNote=`«${name}»: bazada shu ismli o‘quvchi bor (${nm.map(x=>`${x.studentId||x._id}, ${classLabelOf(x)}`).join('; ')}) — sinfi juda farq qiladi, boshqa bola deb YANGI qo‘shiladi`;
+      if(!ex && !nameNote){ const A=arcByName[normName(name)]||[];
+        if(A.length) nameNote=`«${name}»: arxivda shu ismli o‘quvchi bor (${A.map(x=>x.studentId||x._id).join(', ')}) — YANGI o‘quvchi sifatida qo‘shiladi. U qaytgan bo‘lsa — yangi qo‘shmang, «🗄 Arxiv»dan «↩️» bilan qaytaring`; }
+      if(ex && givenId) warnings.push(`«${name}»: fayldagi ID «${givenId}» bazada yo‘q — ism bo‘yicha ${ex.studentId||ex._id} topildi (belgilanmagan; tekshiring)`); }
+    // Arxivdagi o'quvchi (ID / JSHSHIR bilan topilgan) — import uni o'zgartirmaydi (qaytarish — «🗄 Arxiv» → «↩️»).
+    if(ex && stuArchived(ex, TD)){ warnings.push(`«${name}» (${ex.studentId||ex._id}) arxivda (${stuGraduate(ex)?'bitirgan':'chiqarilgan'}) — import arxivdagi o‘quvchini o‘zgartirmaydi; qaytgan bo‘lsa «🗄 Arxiv» → «↩️»`); skipped.push(name); continue; }
     if(ex){   // YANGILASH nomzodi (sinf/telefon o'zgargan bo'lishi mumkin)
       const exId=String(ex._id);
       // Shu o'quvchiga (exId) faylda AVVAL boshqa ismli qator ishora qilgan bo'lsa (avvalgi qator o'zgarishsiz bo'lsa ham) —
@@ -3073,21 +3201,45 @@ async function buildAndPreviewImport(rows){
         warnings.push(`«${name}» va «${updName[exId]}»: ikkalasi ham ID «${givenId||exId}» bilan berilgan — ikkala qator ham o‘tkazildi (ID'ni tuzating)`); skipped.push(name); continue; }
       if(updatedIds.has(exId)) continue;   // shu o'quvchi shu ism bilan yana — birinchi o'zgarish qoladi
       updName[exId]=name;
-      const oldLbl=clsLbl(ex.grade, ex.classLetter||ex.track), newLbl=clsLbl(grade, cls.letter);
-      const classChanged=oldLbl!==newLbl, hasPriv=Object.keys(priv).length>0;
-      if(!classChanged && !hasPriv) continue;   // o'zgarish yo'q
+      const exLang=ex.lang||'uz', exGrade=Number(ex.grade)||0;
+      const tgt={ lang:langFile||exLang, grade:grade==null?exGrade:grade, classLetter:String(ex.classLetter||''), track:track||String(ex.track||'') };
+      if(cBad) warnings.push(`«${name}»: sinf tushunarsiz («${cv(r,C.cls)}») — sinfi o‘zgartirilmadi`);
+      // Fayldagi harf bazadagi bilan bir xil (registr / bo'shliq farqi bilan ham — «a», «A ») — bazadagi yozuv O'ZGARMAYDI: panel eksportini
+      //   qayta import qilish hech narsani o'zgartirmasin (sinf kaliti jim almashsa, sinf rahbari / fan o'qituvchisi biriktiruvi uzilardi).
+      if(grade!=null && letterRaw && !(tgt.grade===exGrade && tgt.lang===exLang && impNormLetter(tgt.classLetter)===impNormLetter(letterRaw))){
+        const L=impResolveLetter(letterRaw, knownFor(tgt.lang, tgt.grade));
+        if(L.letter==null || L.ambiguous){ warnings.push(`«${name}»: guruh harfi «${letterRaw}» ${L.ambiguous?`noaniq (${L.ambiguous.join(' yoki ')}?)`:'tushunarsiz'} — sinfi o‘zgartirilmadi`); tgt.grade=exGrade; tgt.lang=exLang; }
+        else tgt.classLetter=L.letter; }
+      const oldK=classKeyOf(ex), newK=classKeyOf(tgt), classChanged=oldK!==newK, trackChanged=!!track && track!==String(ex.track||'');
+      // Maxfiy: faqat O'ZGARGAN maydonlar (bazadagi bilan bir xil — yozilmaydi); oldindan ko'rishda eski → yangi ko'rinadi.
+      const privPatch={}, privChanges=[];
+      if(Object.keys(priv).length){
+        if(!privOf) privSkip++;
+        else { const cur=privOf[exId]||{};
+          Object.keys(priv).forEach(k=>{ const o=cur[k]==null?'':String(cur[k]); if(o.trim() && samePriv(k,o,priv[k])) return;
+            privPatch[k]=priv[k]; privChanges.push({ k, label:PRIV_LBL[k]||k, old:o, val:priv[k] }); }); } }
+      if(!classChanged && !trackChanged && !privChanges.length){ skipped.push(name); continue; }   // o'zgarish yo'q
       // MAVJUD o'quvchining studentId'si YOZILMAYDI (kalit — hisob/to'lov/davomat/ota-ona ulanishi; keshdagi eski qiymat boshqa
       //   joyda tuzatilgan ID'ni qaytarib yubormasin). Faqat bazada BO'SH bo'lsa — hujjat kaliti bilan to'ldiriladi.
-      const updData={ grade, classLetter:cls.letter };
+      const updData={};
+      if(classChanged){ updData.grade=tgt.grade; updData.classLetter=tgt.classLetter; if(tgt.lang!==exLang) updData.lang=tgt.lang; }
+      if(trackChanged) updData.track=track;
       if(ex.studentId==null || ex.studentId==='') updData.studentId=exId;
-      if(track) updData.track=track;
-      if(iLang>=0) updData.lang=lang;
       updatedIds.add(exId);
-      toUpdate.push({ id:exId, data:updData, priv, oldLbl, newLbl, name, classChanged });
+      toUpdate.push({ id:exId, sid:String(ex.studentId||exId), dbName:String(ex.name||''), name, how, weak:how==='name', st:String(ex.payStatus||''),
+        data:updData, priv:privPatch, privChanges, oldLbl:classLabelOf(ex), newLbl:classLabelOf(tgt), classChanged, trackChanged,
+        oldTrack:String(ex.track||''), track, unknown:classChanged && !knownKeys.has(newK) });
       continue;
     }
     // YANGI o'quvchi
-    seenNK.add(nk);
+    if(cBad){ warnings.push(`«${name}»: sinf tushunarsiz («${cv(r,C.cls)}») — qo‘shilmadi (sinfni tuzating)`); skipped.push(name); continue; }
+    const g=grade==null?0:grade, lang=langFile||'uz';
+    let letter='';
+    if(letterRaw){ const L=impResolveLetter(letterRaw, knownFor(lang, g));
+      if(L.letter==null || L.ambiguous){ warnings.push(`«${name}»: guruh harfi «${letterRaw}» ${L.ambiguous?`noaniq (${L.ambiguous.join(' yoki ')}?) — lotin harfida yozing`:'tushunarsiz'} — qo‘shilmadi`); skipped.push(name); continue; }
+      letter=L.letter; }
+    const nk=nkOf(name, g, letter||track);
+    if(seenNK.has(nk)){ skipped.push(name + (letter?` («${letter}»)`:'')); continue; }   // fayl ichida takror
     let id=givenId || nextId(existing.concat(acc, reservedIds),'IQ-',4);
     if(newIds.has(id.toUpperCase())){ warnings.push(`${name}: ID «${id}» faylda boshqa YANGI o‘quvchiga ham berilgan — o‘tkazildi (ID'ni tuzating yoki bo‘shating)`); skipped.push(name); continue; }
     // Faylda ANIQ berilgan ID avval O'CHIRILGAN o'quvchiga tegishli bo'lsa (davomat/hisob/avans/ota-ona ulanishi qolgan) —
@@ -3096,16 +3248,23 @@ async function buildAndPreviewImport(rows){
       let h=null; try{ h=await rpc('student_history',{ p_sid:givenId }); }catch(_){ h=null; }
       if(h && (['invoices','payments','attendance','grades','claims','other','private'].some(k=>Number(h[k])>0) || Number(h.credit)>0)){
         warnings.push(`${name}: «${givenId}» ID avval O‘CHIRILGAN o‘quvchiga tegishli (davomat/hisob/ota-ona ulanishi qolgan) — qo‘shilmadi. ID katagini bo‘shating (yangi ID beriladi).`); skipped.push(name); continue; } } }
+    seenNK.add(nk);
     newIds.add(id.toUpperCase());
     acc.push(id);
-    const rec={ studentId:id, name, lang, grade, classLetter:cls.letter, track,
-      score:iScore>=0?(Number(r[iScore])||0):0, order:1000+i };
+    if(grade==null) noClassNew++;
+    if(nameNote) warnings.push(nameNote);
+    // Faollashtirish sanasi — bugun (oldindan ko'rishda o'zgartirish / bo'shatish mumkin): bo'sh qolsa oy o'rtasida qabul qilingan
+    //   bola butun oy uchun hisoblanardi (qabulxona qo'shganda baza ham shu kunni qo'yadi — reception-guard.sql).
+    const rec={ studentId:id, name, lang, grade:g, classLetter:letter, track,
+      score:C.score>=0?(Number(cv(r,C.score))||0):0, order:1000+i, activeFrom:TD };
     // Davomat % faqat faylda QIYMAT bo'lsa (aks holda bo'sh qoladi — kabinet «—», davomat kiritilgach trigger hisoblaydi).
-    if(iAtt>=0 && String(r[iAtt]==null?'':r[iAtt]).trim()!=='') rec.attendance=Number(r[iAtt])||0;
-    toWrite.push({id, data:rec, priv, given:!!givenId});
+    if(C.att>=0 && cv(r,C.att)!=='') rec.attendance=Number(cv(r,C.att))||0;
+    toWrite.push({id, data:rec, priv, given:!!givenId, unknown:!knownKeys.has(classKeyOf(rec))});
     nameCount[name]=(nameCount[name]||0)+1;
   }
   Object.entries(nameCount).filter(([n,c])=>c>1).forEach(([n,c])=>warnings.push(`«${n}» faylda ${c} marta (yangi)`));
+  if(noClassNew) warnings.push(`${noClassNew} ta yangi o‘quvchida sinf ko‘rsatilmagan — «Tayyorlov» sifatida qo‘shiladi (keyin tahrirlang)`);
+  if(privSkip) warnings.push(`Maxfiy ma’lumotlarni (telefon, JSHSHIR) bazadan o‘qib bo‘lmadi — ${privSkip} ta mavjud o‘quvchining telefoni/ma’lumoti yangilanmaydi (qayta urinib ko‘ring)`);
   if(!toWrite.length && !toUpdate.length && !warnings.length){
     if(skipped.length){ toast(`Barcha ${skipped.length} o‘quvchi allaqachon to‘g‘ri — o‘zgarish yo‘q ✓`); }
     else toast('Import uchun yozuv topilmadi',true);
@@ -3113,28 +3272,45 @@ async function buildAndPreviewImport(rows){
   }
   openImportPreview(toWrite, warnings, skipped, toUpdate);
 }
-// Import — oldindan ko'rish (saqlashdan oldin tekshiruv)
+// Import — oldindan ko'rish (saqlashdan oldin tekshiruv). Yangilanadigan HAR o'quvchi alohida ko'rsatiladi (bazadagi ism, ID, sinf,
+//   holat; o'zgarishlar: eski → yangi) va alohida belgilanadi. ID / JSHSHIR bo'yicha topilganlar — belgilangan; faqat ISM bo'yicha
+//   topilganlar va hali yo'q sinfga ko'chish — BELGILANMAGAN (adash bolaning yozuvi jim almashmasin). Avval yagona «hammasi» belgisi
+//   oldindan qo'yilgan edi, telefon o'zgarishi esa «telefon/ma’lumot» deb yashirinardi.
 function openImportPreview(toWrite, warnings, skipped, toUpdate){
   skipped=skipped||[]; toUpdate=toUpdate||[];
   const groups={};
   toWrite.forEach(x=>{ const d=x.data, g=Number(d.grade)||0, lang=d.lang||'uz', grp=d.classLetter||d.track||'—';
     const key=`${String(g).padStart(2,'0')}|${lang==='ru'?'1':'0'}|${grp}`; (groups[key]=groups[key]||{g,lang,grp,list:[]}).list.push(x); });
+  // Yangi o'quvchilar ismi ham ko'rinadi (avval faqat soni: ism o'rniga «1», «2» yozilgani saqlashdan oldin bilinmasdi).
   const rowsHtml=Object.keys(groups).sort().map(k=>{ const {g,lang,grp,list}=groups[k];
-    const withPhone=list.filter(x=>x.priv&&x.priv.parentPhone).length;
-    return `<tr><td>${gradeName(g)} «${esc(grp)}»</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td></tr>`; }).join('');
-  const newHtml = toWrite.length ? `<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Til</th><th class="c">Soni</th><th class="c">Tel</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>` : '';
-  // YANGILANADIGANLAR (mavjud o'quvchi — sinf/telefon o'zgargan)
-  const updClass=toUpdate.filter(u=>u.classChanged);
+    const withPhone=list.filter(x=>x.priv&&x.priv.parentPhone).length, unk=list.some(x=>x.unknown);
+    const names=list.slice(0,6).map(x=>x.data.name).join(', ')+(list.length>6?` va yana ${list.length-6} ta`:'');
+    return `<tr><td>${gradeName(g)} «${esc(grp)}»${unk?' <span class="small" style="color:#B45309" title="«Sinflar»da yo‘q va unda hali o‘quvchi yo‘q">⚠️ yangi sinf</span>':''}</td><td>${lang==='ru'?'Rus':'O‘zbek'}</td><td style="text-align:center">${list.length}</td><td style="text-align:center">${withPhone||'—'}</td><td class="small">${esc(names)}</td></tr>`; }).join('');
+  const TD=tkDay(new Date()), FI='padding:6px 8px;border:1px solid var(--border);border-radius:8px;font:inherit';
+  const newHtml = toWrite.length ? `<div class="tablewrap"><table><thead><tr><th>Sinf</th><th>Til</th><th class="c">Soni</th><th class="c">Tel</th><th>O‘quvchilar</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+      <label class="small" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 0;font-weight:700">Yangi o‘quvchilar faollashtirish sanasi (to‘lov shu kundan): <input type="date" id="imp-af" value="${esc(TD)}" style="${FI}"></label>
+      <div class="small muted" style="margin-top:4px">Bo‘sh qoldirilsa — to‘lov oy boshidan hisoblanadi (faqat oy boshidan beri o‘qiyotgan o‘quvchilarni kiritishda).</div>` : '';
+  // YANGILANADIGANLAR (mavjud o'quvchi — sinf / yo'nalish / maxfiy maydon o'zgargan)
+  const ST_LBL={'':'faol', faol:'faol', sinov:'sinov', muzlatilgan:'muzlatilgan', chiqdi:'chiqish sanasi kelmagan'};
+  const HOW={id:'ID bo‘yicha topildi', pinfl:'JSHSHIR bo‘yicha topildi', name:'faqat ISM bo‘yicha topildi — boshqa bola emasligini tekshiring'};
+  const updRows=toUpdate.map((u,k)=>{ const ch=[];
+    if(u.classChanged) ch.push(`Sinf: <b>${esc(u.oldLbl)} → ${esc(u.newLbl)}</b>${u.unknown?' <span style="color:#B45309">⚠️ bunday sinf hali yo‘q</span>':''}`);
+    if(u.trackChanged) ch.push(`Yo‘nalish: ${esc(u.oldTrack||'—')} → <b>${esc(u.track)}</b>`);
+    (u.privChanges||[]).forEach(p=>ch.push(`${esc(p.label)}: ${p.old?`<s class="muted">${esc(p.old)}</s>`:'<span class="muted">(bo‘sh)</span>'} → <b>${esc(p.val)}</b>`));
+    return `<div style="padding:7px 0;border-bottom:1px dashed var(--border)"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="imp-u" data-k="${k}"${(!u.weak && !u.unknown)?' checked':''} style="margin-top:3px">
+      <span><b>${esc(u.dbName||u.name)}</b> <span class="muted">${esc(u.sid)} · ${esc(u.oldLbl)} · ${esc(ST_LBL[u.st]||u.st)}</span>${normName(u.dbName)!==normName(u.name)?` <span class="small muted">(faylda: ${esc(u.name)})</span>`:''}
+      <span class="small" style="display:block;${u.weak?'color:#B45309':''}">${esc(HOW[u.how]||'')}</span><span class="small" style="display:block">${ch.join('<br>')}</span></span></label></div>`; }).join('');
+  const nOff=toUpdate.filter(u=>u.weak||u.unknown).length;
   const updHtml = toUpdate.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#fff7e8;border:1px solid #f0d9a8">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700"><input type="checkbox" id="imp-upd" checked> Mavjud o‘quvchilarni yangilash (${toUpdate.length} ta${updClass.length?` · ${updClass.length} tasida sinf tuzatiladi`:''})</label>
-      <div class="small muted" style="margin:8px 0 0">Ism bo‘yicha topildi — dublikat yaratmay, sinf/telefonini jadvaldan yangilaydi (ball/davomat tegilmaydi):</div>
-      <div class="small" style="margin-top:6px;max-height:180px;overflow:auto">${toUpdate.slice(0,80).map(u=>`<div>${esc(u.name)}: ${u.classChanged?`<b>${esc(u.oldLbl)} → ${esc(u.newLbl)}</b>`:'<span class="muted">telefon/ma’lumot</span>'}</div>`).join('')}${toUpdate.length>80?`<div class="muted">…yana ${toUpdate.length-80} ta</div>`:''}</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700"><input type="checkbox" id="imp-upd"> Mavjud o‘quvchilarni yangilash — belgilangan: <span id="imp-updn">0</span> / ${toUpdate.length}</label>
+      <div class="small muted" style="margin:8px 0 0">Har o‘quvchi alohida belgilanadi (ball/davomat tegilmaydi).${nOff?` <b style="color:#B45309">${nOff} tasi belgilanmagan</b> — faqat ism bo‘yicha topilgan yoki hali yo‘q sinfga ko‘chadi: tekshirib, o‘zingiz belgilang.`:''}</div>
+      <div style="margin-top:6px;max-height:340px;overflow:auto">${updRows}</div>
     </div>` : '';
   const skipHtml = skipped.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#eef6f2;border:1px solid #cfe6da"><b>↩︎ O‘zgarishsiz — o‘tkazildi (${skipped.length} ta):</b><div class="small muted" style="margin-top:6px">${skipped.slice(0,30).map(esc).join(' · ')}${skipped.length>30?` …yana ${skipped.length-30} ta`:''}</div></div>` : '';
   const warnHtml = warnings.length ? `<div class="card" style="margin:12px 0 0;padding:12px 14px;background:#fff7e8;border:1px solid #f0d9a8"><b>⚠️ E’tibor bering (${warnings.length} ta):</b><ul style="margin:8px 0 0;padding-left:20px">${warnings.slice(0,40).map(w=>`<li class="small">${esc(w)}</li>`).join('')}</ul>${warnings.length>40?`<div class="small muted" style="margin-top:4px">…yana ${warnings.length-40} ta</div>`:''}</div>` : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Import — oldindan ko‘rish</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <p class="small muted" style="margin:0 0 10px">${toWrite.length?`<b style="color:var(--brand,#1F9982)">${toWrite.length}</b> ta YANGI · `:''}${toUpdate.length?`<b style="color:#B45309">${toUpdate.length}</b> ta yangilanadi · `:''}${skipped.length?`<b>${skipped.length}</b> ta o‘zgarishsiz`:''}. Tekshiring, so‘ng «Saqlash».</p>
+      <p class="small muted" style="margin:0 0 10px">${toWrite.length?`<b style="color:var(--brand,#1F9982)">${toWrite.length}</b> ta YANGI · `:''}${toUpdate.length?`<b style="color:#B45309">${toUpdate.length}</b> ta yangilanishi mumkin · `:''}${skipped.length?`<b>${skipped.length}</b> ta o‘zgarishsiz`:''}. Tekshiring, so‘ng «Saqlash».</p>
       ${newHtml}
       ${updHtml}
       ${skipHtml}
@@ -3142,9 +3318,16 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="imp-save">Saqlash</button></div>`;
   openModal(); labelTable&&labelTable(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  const boxes=()=>[...document.querySelectorAll('#modal .imp-u')];
+  const syncAll=()=>{ const b=boxes(), on=b.filter(c=>c.checked).length, all=$('#imp-upd'); if($('#imp-updn')) $('#imp-updn').textContent=on;
+    if(all){ all.checked=b.length>0 && on===b.length; all.indeterminate=on>0 && on<b.length; } };
+  if($('#imp-upd')){ $('#imp-upd').onchange=()=>{ const v=$('#imp-upd').checked; boxes().forEach(c=>{ c.checked=v; }); syncAll(); }; boxes().forEach(c=>c.addEventListener('change', syncAll)); syncAll(); }
   $('#imp-save').onclick=async()=>{
-    const doUpd = toUpdate.length ? ($('#imp-upd') && $('#imp-upd').checked) : false;
-    const all = toWrite.concat(doUpd ? toUpdate : []);
+    const sel = boxes().filter(c=>c.checked).map(c=>toUpdate[Number(c.dataset.k)]).filter(Boolean);
+    const afEl=$('#imp-af'), af=afEl ? String(afEl.value||'').trim() : '';
+    if(af && !/^\d{4}-\d{2}-\d{2}$/.test(af)){ toast('Faollashtirish sanasini to‘g‘ri kiriting (yoki bo‘shating)',true); return; }
+    toWrite.forEach(x=>{ if(x.done) return; if(af) x.data.activeFrom=af; else delete x.data.activeFrom; });
+    const all = toWrite.concat(sel);
     if(!all.length){ toast('Saqlash uchun yozuv yo‘q',true); return; }
     const btn=$('#imp-save'); btn.disabled=true; btn.textContent='Saqlanmoqda…';
     try{
@@ -3184,14 +3367,18 @@ function openImportPreview(toWrite, warnings, skipped, toUpdate){
       }
       idSkip=toWrite.filter(x=>x.skip).length;
       let updOk=0, gone=0;
-      if(doUpd) for(const x of toUpdate){
-        try{ await updateDoc(doc(db,'students',x.id), x.data, {mustExist:true}); }
-        catch(e1){ if(e1 && e1.code==='not-found'){ gone++; continue; } throw e1; }
+      for(const x of sel){
+        if(x.data && Object.keys(x.data).length){
+          try{ await updateDoc(doc(db,'students',x.id), x.data, {mustExist:true}); }
+          catch(e1){ if(e1 && e1.code==='not-found'){ gone++; continue; } throw e1; }
+        } else {
+          // Faqat maxfiy maydon o'zgaradi: o'quvchi shu orada o'chirilgan bo'lsa — «yetim» maxfiy qator yaratilmasin.
+          const d=await getDoc(doc(db,'students',x.id)); if(!d.exists()){ gone++; continue; } }
         if(x.priv && Object.keys(x.priv).length) await setDoc(doc(db,'student_private',x.id), x.priv, {merge:true});
         updOk++;
       }
       const nmL=L=>L.slice(0,3).map(x=>`${x.data.name} — ${x.id}`).join(', ')+(L.length>3?` va yana ${L.length-3} ta`:'');
-      toast(`${newOk} yangi${reId?` (${reId} tasiga yangi ID berildi — eski ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.done && x.reId))})`:''}${idSkip?` · ${idSkip} tasi o‘tkazildi (fayldagi ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.skip))})`:''}${doUpd?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!(gone||idSkip)); closeModal(); renderStudents();
+      toast(`${newOk} yangi${reId?` (${reId} tasiga yangi ID berildi — eski ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.done && x.reId))})`:''}${idSkip?` · ${idSkip} tasi o‘tkazildi (fayldagi ID shu orada boshqa o‘quvchida: ${nmL(toWrite.filter(x=>x.skip))})`:''}${sel.length?` · ${updOk} yangilandi`:''}${gone?` · ${gone} tasi bazada topilmadi (o‘chirilgan) — o‘tkazildi`:''} ✓`, !!(gone||idSkip)); closeModal(); renderStudents();
     }catch(e){ toast('Import xatosi: '+(e.code||e.message)+' — qayta «Saqlash» xavfsiz (yozilganlari takror yaratilmaydi)',true); btn.disabled=false; btn.textContent='Saqlash'; }
   };
 }
@@ -5469,6 +5656,9 @@ function openForm(name, row, prefill, afterSaveCb){
 function openFormNow(name, row, prefill, afterSaveCb){
   const s = SCHEMAS[name];
   const isEdit = !!row;
+  // Yangi o'quvchi (forma, «Qabul»dan qabul qilish): «Faollashtirish sanasi» — bugun. Bo'sh qolsa billingInterval to'lovni OY BOSHIDAN
+  //   hisoblardi (20-noyabrda qabul qilingan bola butun noyabr uchun); qabulxonada maydon yashirin — baza (reception-guard.sql) shu kunni qo'yadi.
+  if(name==='students' && !isEdit) prefill=newStudentPrefill(prefill, tkDay(new Date()));
   // Tahrir: forma OCHILGAN paytdagi qiymatlar nusxasi (ro'yxat qatori keyin fonda to'ldirilishi mumkin — masalan maxfiy
   //   maydonlar). Saqlashda faqat SHUNGA nisbatan O'ZGARGAN maydonlar yoziladi: forma yuklamagan (bo'sh ko'rsatgan) maxfiy
   //   maydon tegilmaydi (PII yo'qolmaydi), foydalanuvchi ataylab bo'shatgani esa saqlanadi (chegirma-o'chirish bug'i).
@@ -5594,6 +5784,7 @@ function openFormNow(name, row, prefill, afterSaveCb){
     else { if(inp) inp.placeholder='⏳ ID hisoblanmoqda…'; loadCol(name, s.order).then(list=>{ cache[name]=list; fill(list); }).catch(()=>{}); }
     if(name==='students') rpc('student_id_high_water').then(n=>{ hwm=Number(n)||0; if(hwm>0) fill(); }).catch(()=>{});
   }
+  if(name==='students' && !cache.definedClasses) loadDefinedClasses();   // «Guruh» harfini mavjud sinflarga moslash uchun (saqlashda)
   $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
   if(s.subjects) wireSubjects();
   wireImages(name); wireVideos(name); populateDynselects(name, row); wireWeekdays();
@@ -5614,6 +5805,14 @@ function openFormNow(name, row, prefill, afterSaveCb){
       (s.fields||[]).forEach(f=>{ if(f.bool && (f.k in data)) data[f.k]=(data[f.k]==='1'||data[f.k]===true); });
       // Kamera ID — bo'sh joysiz (nusxa-ko'chirishdagi ' 101 ' skan personId bilan mos kelmay, har kuni «Yo‘q» chiqardi).
       if(typeof data.cameraId==='string') data.cameraId=data.cameraId.trim();
+      // «Guruh» harfi: «b», «A », kirill «А»/«В» kiritilsa — sinfdoshlardan ajralgan soxta sinf paydo bo'lardi (kurator, fan o'qituvchisi
+      //   va RLS sinf kalitini AYNAN solishtiradi). Mavjud sinfga moslanadi (impResolveLetter); kirill harf ikki xil o'qilsa (В — B/V) —
+      //   lotincha yozish so'raladi. Tahrirda faqat foydalanuvchi O'ZGARTIRGAN bo'lsa (eski yozuvli sinfdagi bola boshqa maydon tahririda ajralmasin).
+      if(name==='students' && typeof data.classLetter==='string' && (!isEdit || data.classLetter!==String(_snapRaw.classLetter==null?'':_snapRaw.classLetter))){
+        const L=impResolveLetter(data.classLetter, impKnownLetters(String(data.lang||'uz'), Number(data.grade)||0, activeRoster(cache.students||[]), cache.definedClasses||[]));
+        if(L.ambiguous){ toast(`«Guruh» harfi «${data.classLetter.trim()}» kirill alifbosida — lotin harfida yozing (${L.ambiguous.join(' yoki ')}?)`, true); stop(); return; }
+        data.classLetter = L.letter==null ? data.classLetter.trim() : L.letter;
+      }
       // «Davomat %» — server trigger (attendance-sync.sql) davomatdan hisoblaydi. Forma uni faqat foydalanuvchi
       //   HAQIQATAN o'zgartirgan bo'lsa yozadi: avval har saqlashda keshdagi eski qiymat (yangi o'quvchida 0) qaytib
       //   yozilib, kabinet «0%»/eskirgan raqam ko'rsatardi.
@@ -7209,8 +7408,10 @@ const admChip=k=>{ const s=admStage(k); return `<span class="chip" style="backgr
 const admLbl=(list,k)=>{ const r=list.find(x=>x[0]===k); return r?r[1]:(k||'—'); };
 const admDT=v=>{ if(!v) return ''; const d=new Date(v); if(isNaN(d)) return String(v).slice(0,16); return tkDay(d)+' '+d.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tashkent'}); };
 const admName=r=>r.childName||r.name||'—';
-function canAdmSeats(){ return SESSION.isAdmin || SESSION.role==='admin_head'; }
-function canAdmWrite(){ return SESSION.isAdmin || ['admin_head','reception','marketing_mgr'].includes(SESSION.role); }
+// Bazadagi app.is_admin_head() eski 'admin' rolini ham Ma'muriyat rahbari deb biladi (enr_upd / cs_ins / cs_upd ruxsat beradi) —
+//   avval bu rol «Qabul»ni faqat o'qish rejimida ko'rardi.
+function canAdmSeats(){ return SESSION.isAdmin || ['admin','admin_head'].includes(SESSION.role); }
+function canAdmWrite(){ return SESSION.isAdmin || ['admin','admin_head','reception','marketing_mgr'].includes(SESSION.role); }
 function admClassLabel(ck){ const m=String(ck||'').match(/^(uz|ru)-(\d+)-(.+)$/); if(!m) return esc(ck||'—'); return `${gradeName(Number(m[2]))} «${esc(m[3]==='-'?'—':m[3])}» · ${m[1]==='ru'?'Rus':'O‘zbek'}`; }
 async function admEvent(enrollmentId, type, payload){ try{ await addDoc(collection(db,'enrollment_events'), { enrollmentId:String(enrollmentId), type, payload:payload||{} }); return true; }catch(e){ return false; } }
 
@@ -7390,7 +7591,7 @@ async function renderEnrollments(){
     if(_g!==VIEW_GEN) return;
     st=(Array.isArray(st)?st:[]).filter(x=>x && x.classKey);
     const gr=k=>{ const m=String(k).match(/^(uz|ru)-(\d+)-/); return m?Number(m[2]):0; };
-    const inProc=ck=>{ const g=gr(ck); return rows.filter(r=>['boglanildi','sinov'].includes(r.status||'') && Number(r.grade)===g).length; };
+    const inProc=ck=>{ const g=gr(ck); return rows.filter(r=>['boglanildi','sinov'].includes(r.status||'') && admGradeOf(r.grade)===g).length; };   // sayt arizasi: «5-sinf»
     const trs=st.sort((a,b)=>gr(a.classKey)-gr(b.classKey)||String(a.classKey).localeCompare(String(b.classKey))).map(x=>{ const cap=x.capacity==null?null:Number(x.capacity); const free=cap==null?null:Math.max(0,cap-Number(x.active||0));
       return `<tr><td data-label="Sinf">${admClassLabel(x.classKey)}</td>
         <td data-label="Sig‘im">${canAdmSeats()?`<input type="number" min="0" max="500" data-capk="${esc(x.classKey)}" value="${cap==null?'':cap}" placeholder="—" style="width:76px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;font:inherit">`:(cap==null?'<span class="muted">—</span>':cap)}</td>
@@ -7423,7 +7624,7 @@ async function renderEnrollments(){
       <td data-label="Sana">${esc(String(r.created||r.ts||'').slice(0,10))}</td>
       <td data-label="Murojaat"><b>${esc(admName(r))}</b>${r.parentName?`<div class="small muted">${esc(r.parentName)}</div>`:''}</td>
       <td data-label="Telefon">${esc(r.phone||'')}</td>
-      <td data-label="Sinf">${esc(r.grade||'—')}${r.direction?` · ${r.direction==='ru'?'rus':'o‘zbek'}`:''}</td>
+      <td data-label="Sinf">${esc(admGradeOf(r.grade)!=null?gradeName(admGradeOf(r.grade)):(r.grade||'—'))}${admLangOf(r.direction)?` · ${admLangOf(r.direction)==='ru'?'rus':'o‘zbek'}`:(r.direction?` · ${esc(r.direction)}`:'')}</td>
       <td data-label="Manba">${esc(admLbl(ADM_SOURCES, r.source||'sayt'))}</td>
       <td data-label="Bosqich">${admChip(r.status)}${r.status==='rad'&&r.rejectReason?`<div class="small muted">${esc(admLbl(ADM_REJECT,r.rejectReason))}</div>`:''}</td>
       <td data-label="Keyingi qadam">${r.status==='sinov'&&r.trialAt?`🧪 ${esc(admDT(r.trialAt))}`:(r.nextActionAt?`<span${isOverdue(r)?' style="color:#B42318;font-weight:700"':''}>📞 ${esc(admDT(r.nextActionAt))}</span>`:'<span class="muted">—</span>')}</td></tr>`).join('');
@@ -7435,8 +7636,9 @@ async function renderEnrollments(){
   $('#adm-q').oninput=e=>{ q=e.target.value||''; draw(); };
   if($('#adm-new')) $('#adm-new').onclick=()=>openLeadNew(refresh);
   if($('#adm-export')) $('#adm-export').onclick=()=>{ const head=['Sana','Murojaat','Ota-ona','Telefon','Sinf','Til','Manba','Bosqich','Rad sababi','Sinov darsi','O‘quvchi ID'];
+    // Ism / telefon / sinf — saytdagi anonim formadan keladi: har katak csvSafe (csvLine) orqali — «=HYPERLINK(…)» Excel'da formula bo'lmasin.
     const csv=[head].concat(rows.map(r=>[String(r.created||r.ts||'').slice(0,10),admName(r),r.parentName||'',r.phone||'',r.grade||'',r.direction||'',admLbl(ADM_SOURCES,r.source||'sayt'),admStage(r.status)[1],r.rejectReason?admLbl(ADM_REJECT,r.rejectReason):'',r.trialAt?admDT(r.trialAt):'',r.studentId||'']))
-      .map(a=>a.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+      .map(a=>csvLine(a, ';')).join('\n');
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=`qabul_${todayStr()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
   if(!(await reload())) return; draw(); loadSeats();
 }
@@ -7472,11 +7674,15 @@ function openLeadNew(onDone){
 async function openLead(r, onDone){
   const W=canAdmWrite(), F='padding:9px 11px;border:1px solid var(--border);border-radius:9px;font:inherit;width:100%';
   const closed=['qabul','rad'].includes(r.status||'');
+  // Sayt formasi faqat «Ism-familiya» so'raydi (ota-onaniki yoki bolaniki — noma'lum): u «Bola» deb ko'rsatilmaydi va o'quvchi
+  //   ismi sifatida oldindan yozilmaydi. Sinf va til — sayt matnidan ham (admGradeOf / admLangOf).
+  const web=!r.childName && !r.parentName, lg=admGradeOf(r.grade), ll=admLangOf(r.direction);
   $('#modal').innerHTML=`<div class="modal-h"><h3>${esc(admName(r))} ${admChip(r.status)}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px 14px;margin-bottom:12px">
-        <div><span class="muted">Ota-ona:</span> ${esc(r.parentName||'—')}</div><div><span class="muted">Bola:</span> ${esc(r.childName||r.name||'—')}</div>
-        <div><span class="muted">Telefon:</span> ${esc(r.phone||'—')}</div><div><span class="muted">Sinf:</span> ${esc(r.grade||'—')} · ${r.direction==='ru'?'rus':'o‘zbek'}</div>
+        ${web?`<div style="grid-column:1/-1"><span class="muted">Murojaat qiluvchi (saytda yozilgan ism):</span> ${esc(r.name||'—')}</div>`
+          :`<div><span class="muted">Ota-ona:</span> ${esc(r.parentName||'—')}</div><div><span class="muted">Bola:</span> ${esc(r.childName||'—')}</div>`}
+        <div><span class="muted">Telefon:</span> ${esc(r.phone||'—')}</div><div><span class="muted">Sinf:</span> ${esc(lg!=null?gradeName(lg):(r.grade||'—'))}${ll?` · ${ll==='ru'?'rus':'o‘zbek'}`:(r.direction?` · ${esc(r.direction)}`:'')}</div>
         <div><span class="muted">Manba:</span> ${esc(admLbl(ADM_SOURCES,r.source||'sayt'))}</div><div><span class="muted">Kelgan:</span> ${esc(String(r.created||r.ts||'').slice(0,10))}</div>
         ${r.trialAt?`<div><span class="muted">Sinov darsi:</span> ${esc(admDT(r.trialAt))}${r.trialTeacher?` · ${esc(r.trialTeacher)}`:''}</div>`:''}
         ${r.trialResult?`<div><span class="muted">Sinov natijasi:</span> ${esc(r.trialResult)}</div>`:''}
@@ -7514,7 +7720,9 @@ async function openLead(r, onDone){
       ()=>{ const patch={ nextActionAt: toIso(v('la-next'),'10:00') }; if((r.status||'yangi')==='yangi') patch.status='boglanildi';
         return upd(patch, { type:'call', payload:{ result:v('la-res'), note:v('la-note'), to:patch.status||undefined } }); });
     else if(a==='note') form(`<label>Izoh</label><input id="la-note" style="${F}">`, ()=>{ if(!v('la-note')){ toast('Izoh yozing',true); return false; } return upd({ note:v('la-note') }, { type:'note', payload:{ note:v('la-note') } }); });
-    else if(a==='trial'){ let teachers=[]; try{ teachers=await loadCol('teachers'); }catch(e){}
+    // O'qituvchilar ro'yxati — maoshsiz teachers_public ko'rinishidan: xom «teachers» jadvalini (maosh) faqat maosh ko'radiganlar
+    //   o'qiydi, qabulxona / marketing / ma'muriyat rahbari uchun u BO'SH qaytardi (tanlovda faqat «—»).
+    else if(a==='trial'){ let teachers=[]; try{ teachers=await loadCol('teachers_public'); }catch(e){}
       form(`<div class="grid2"><div><label>Sana</label><input id="la-d" type="date" min="${todayStr()}" style="${F}"></div><div><label>Vaqt</label><input id="la-t" type="time" value="09:00" style="${F}"></div>
         <div style="grid-column:1/-1"><label>O‘qituvchi (ixtiyoriy)</label><select id="la-tch" style="${F}"><option value="">—</option>${teachers.filter(t=>t&&t.name).sort((x,y)=>String(x.name).localeCompare(String(y.name))).map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></div></div>`,
         ()=>{ const at=toIso(v('la-d'), v('la-t')); if(!at){ toast('Sinov darsi sanasini tanlang',true); return false; }
@@ -7525,9 +7733,11 @@ async function openLead(r, onDone){
       ()=>{ if(!v('la-rr')){ toast('Rad etish sababini tanlang',true); return false; } return upd({ status:'rad', rejectReason:v('la-rr'), rejectNote:v('la-note')||null, nextActionAt:null }, { type:'stage', payload:{ to:'rad', reason:v('la-rr'), note:v('la-note') } }); });
     else if(a==='reopen') upd({ status:'boglanildi', rejectReason:null, rejectNote:null }, { type:'stage', payload:{ to:'boglanildi', note:'qayta ochildi' } });
     else if(a==='accept'){
-      if(!canManageStudents()){ toast('O‘quvchi kartasini qabulxona, O‘IBDO‘ yoki direktor ochadi',true); return; }
+      if(!canCreateStudents()){ toast('O‘quvchi kartasini qabulxona yoki direktor ochadi — murojaatni qabulxonaga topshiring',true); return; }
       closeModal();
-      const prefill={ name:r.childName||r.name||'', grade:r.grade?String(Number(r.grade)||''):'', lang:(r.direction==='ru'?'ru':'uz'), parentPhone:r.phone||'' };
+      // Sayt arizasida sinf «5-sinf» / «Tayyorlov», til «Rus sinf» — avval Number('5-sinf') bo'sh berib, bola «Tayyorlov / O‘zbek»da
+      //   yaratilardi. Ism — faqat bola ismi aniq bo'lsa (childName); ota-ona / sayt ismi o'quvchi ismi bo'lib ketmasin.
+      const prefill={ name:r.childName||'', grade:lg!=null?String(lg):'', lang:ll||'uz', parentPhone:r.phone||'' };
       openForm('students', null, prefill, async(savedId, data)=>{
         const sid=String((data&&data.studentId)||savedId||'');
         try{ await updateDoc(doc(db,'enrollments',r._id), { status:'qabul', studentId:sid, nextActionAt:null }, {mustExist:true});
