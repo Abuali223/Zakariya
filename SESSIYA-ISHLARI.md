@@ -2469,8 +2469,10 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   admin.html `uHas`, kirish ro'yxati, «➕ Lavozim» tugmasi ham shunday; eski qatordagi qo'shimchalar zanjirda tozalanadi.
 - **Ma'lumot faqat uchta RPC orqali** (jadvalga to'g'ridan-to'g'ri yo'l yo'q; ruxsat — faol sotuvchi va Direktor, qolganlar — 42501):
   - `sales_contacts(q, limit, offset)` — FAOL o'quvchilar oilalari (arxiv qoidasi — §83 dagi bilan bir xil; o'chirilgan o'quvchi — yo'q),
-    aka-ukalar bitta oila (raqamlar grafi: umumiy raqamli kartalar — bitta oila, raqamlar almashib yozilgan yoki birida ona raqami
-    yo'q bo'lsa ham; ism va raqam — oiladagi kartalarda eng ko'p uchragani, ona raqami — otanikidan farqlisi), har oilada ota va ona —
+    aka-ukalar bitta oila (kartalar grafi: ikki karta bitta oila — umumiy TO'G'RI raqam bo'lsa VA ota yoki ona ismi mos kelsa, ikkinchi
+    ota-ona ismi zid bo'lmasa; raqamlar almashib yozilgan, birida ona raqami / ismi yo'q yoki ism so'zlari boshqa tartibda bo'lsa ham —
+    bitta qator; umumiy «to'ldiruvchi» raqam (maktab raqami, «0») yoki bir ota — ikki ona birlashmaydi, aks holda oila ro'yxatdan jim
+    yo'qolardi; ism va raqam — oiladagi kartalarda eng ko'p uchragani, ona raqami — otanikidan farqlisi), har oilada ota va ona —
     ism, NIQOBLANGAN raqam («+998 00 *** ** 67»; xorij va noto'g'ri raqam — faqat oxirgi 2 raqam) va `valid` belgisi. O'quvchi ismi,
     ID, sinf, manzil va boshqa hech narsa qaytmaydi. Qidiruv — faqat ota / ona ismi bo'yicha (kamida 2 harf — normallashgandan keyin,
     «o'» kabi qisqasi — hech narsa; katta-kichik harf, kirill ham, apostrofsiz). Oila kaliti — maxfiy tuz (`app.sales_secret`, mijozga
@@ -2516,10 +2518,14 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
      aniqlash mumkin edi. Ikkala ta'rif (audit-3.sql, reception-access.sql) tuzatildi.
   6. *Raqam shakli:* bir katakda ikki raqam, qisqa yoki aralash matn — `valid:false`: «+»siz, `tel:` havolasiz, «(raqam noto‘g‘ri
      yozilgan — kartani tekshirish kerak)»; xorij raqami (10–15 xona) — to'g'ri, `tel:` havolasi bilan.
-  7. *Oila grafi, kirill qidiruvi, qisqa qidiruv* — yuqoridagi `sales_contacts` bandida.
-  Sinovlar: `test-sales-role.sql` — 61 + soni tekshiruvi (H01–H10 yangi; G04 ro'yxatida `claim_child` — rad javobi; G05 — rad etuvchi
-  joylar ongli qo'shildi); har yangi tekshiruv mutatsiya bilan tasdiqlandi (11 ta mutatsiya — har birini mos tekshiruv ushladi; masalan
-  `user_unblock` tuzatishisiz H04 «ERR 42501» bilan yiqiladi); eski kodda (b055494) to'plam to'xtamasdan 58/62 yiqiladi.
+  7. *Oila grafi, kirill qidiruvi, qisqa qidiruv* — yuqoridagi `sales_contacts` bandida. Grafning birinchi (faqat raqamga tayangan)
+     varianti o'zim tekshirganda rad etildi: bitta «to'ldiruvchi» raqam («0» yoki maktab raqami) yozilgan barcha kartalarni bitta oilaga
+     birlashtirib, o'sha oilalarni ro'yxatdan jim yo'qotardi — endi faqat to'g'ri raqam va mos ism bog'laydi. Oila kaliti — oiladagi eng
+     kichik o'quvchi hujjat id'si (tuz bilan); Direktor jurnali ismlarni avval faol oilalardan oladi (arxivdagi aka qo'shilsa ham).
+  Sinovlar: `test-sales-role.sql` — 63 + soni tekshiruvi (H01–H12 yangi; G04 ro'yxatida `claim_child` — rad javobi; G05 — rad etuvchi
+  joylar ongli qo'shildi); har yangi tekshiruv mutatsiya bilan tasdiqlandi (16 ta mutatsiya — har birini mos tekshiruv ushladi; masalan
+  `user_unblock` tuzatishisiz H04 «ERR 42501» bilan, ism tasdig'isiz bog'lash — H08 / H11 bilan yiqiladi); eski kodda (b055494)
+  to'plam to'xtamasdan yiqiladi.
   `sales.test.mjs` 13, `kabinet-claim.test.mjs` 5 (ikkalasi ham mutatsiyada yiqiladi). Kengaytirilgan regressiya (`test-sales-role`
   endi dev, qayta ishga tushirilgan dev va jonli zanjirda) — hammasi yashil; brauzer `sl:v1`, `sl:v2` — 14/14.
 
