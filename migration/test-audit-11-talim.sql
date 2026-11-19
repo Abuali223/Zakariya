@@ -12,6 +12,14 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 \pset tuples_only on
+-- Bo'sh baza tekshiruvi — quyidagi ichki deploy seansidan (zz_deploy_out) OLDIN: aks holda u bo'sh bo'lmagan bazada ham o'quvchi va
+--   monitoring yozib, butun audit-11-talim.sql'ni ishga tushirardi (qaytarilsa ham — himoya chetlab o'tilardi). Tranzaksiya ichidagi
+--   tekshiruv (pastda) ham qoladi.
+do $g0$ begin
+  if exists (select 1 from public.students) then
+    raise exception 'test-audit-11-talim.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
+  end if;
+end $g0$;
 -- Deploy xabarlari (D01, pastda tekshiriladi): deploy.sh konsolga faqat «OGOHLANTIRISH|g'ayrioddiy» qatorlarini chiqaradi. Bir martalik
 --   tuzatish xabarini AYNAN shu filtr bilan ko'rish uchun alohida psql seansi (shu baza): o'z tranzaksiyasida boshqa sinf kalitli joriy oy
 --   satri va 0–100 dan tashqari ball yaratadi, audit-11-talim.sql'ni zanjirdagidek ishga tushiradi va ROLLBACK qiladi. Bu sinov

@@ -38,7 +38,7 @@ const CERT = {
   ach: [],
 };
 
-function env({ role = 'reception', isAdmin = false, cert = CERT, certErr = null, rows = { invoices: INV } } = {}) {
+function env({ role = 'reception', isAdmin = false, cert = CERT, certErr = null, rows = { invoices: INV }, roles = null, homeroom = [] } = {}) {
   const els = {}, calls = { rpc: [], reads: [], printed: [] };
   // innerHTML / appendChild bilan qo'shilgan id'lar $('#id') bilan topiladi (haqiqiy DOM kabi).
   const reg = h => { const re = /id="([^"]+)"/g; let m; while ((m = re.exec(h))) els['#' + m[1]] = mk(); };
@@ -50,7 +50,7 @@ function env({ role = 'reception', isAdmin = false, cert = CERT, certErr = null,
   }
   for (const k of ['#modal', '#modal .modal-b', '#modal .modal-f']) els[k] = mk();
   const ctx = vm.createContext({
-    SESSION: { role, isAdmin, roles: [role], homeroomClasses: [], assignedClasses: [] },
+    SESSION: { role, isAdmin, roles: roles || [role], homeroomClasses: homeroom, assignedClasses: [] },
     $: s => els[s] || null, document: { createElement: () => mk() }, openModal: () => {}, closeModal: () => {}, renderMath: () => {},
     db: {}, doc: (_d, c, id) => ({ c, id }), collection: (_d, c) => c, where: (f, op, v) => ({ f, op, v }), query: (c, w) => ({ c, w }),
     getDoc: async ref => { calls.reads.push(ref.c); return ref.c === 'student_private' ? { exists: () => true, data: () => ({ ...PRIV }) } : { exists: () => false, data: () => ({}) }; },
@@ -121,4 +121,29 @@ test('Direktor — avvalgidek o‘zi o‘qigan jadvallardan (yig‘ma chaqirilma
   assert.match(section(h, 'Baholar'), /Ma’lumot yo‘q\./);
   assert.match(section(h, 'O‘qituvchi xulosasi'), /Yozuv yo‘q\./);
   assert.doesNotMatch(h, /ko‘rsatilmaydi/);
+});
+
+test('3-raund: qo‘shimcha «Qabulxona» rolidagi sinf rahbari (faol rol — reception) — o‘zi o‘qiy oladigan oylik xulosa ko‘rsatiladi', async () => {
+  const SUM = [{ id: 'IQ-0701__2026-10', studentId: 'IQ-0701', month: '2026-10', text: 'Sinov: oktyabr xulosasi' }];
+  const E = env({ roles: ['teacher', 'reception'], homeroom: ['uz-7-B'], rows: { invoices: INV, student_summaries: SUM } });
+  await E.open();
+  const h = E.body();
+  assert.match(section(h, 'O‘qituvchi xulosasi'), /2026-10[\s\S]*Sinov: oktyabr xulosasi/, 'avval «Qabulxona uchun ko‘rsatilmaydi.» derdi');
+  assert.doesNotMatch(section(h, 'O‘qituvchi xulosasi'), /ko‘rsatilmaydi/);
+  assert.match(section(h, 'Davomat'), /Umumiy davomat<\/td><td><b>90%<\/b>/, 'qolgan bo‘limlar — yig‘madan, avvalgidek');
+});
+
+test('3-raund: shu foydalanuvchi, yig‘ma olinmadi — o‘qilgan davomat va xarakteristika ko‘rsatiladi; o‘qilmagani — «ko‘rsatilmaydi»', async () => {
+  const E = env({ roles: ['teacher', 'reception'], homeroom: ['uz-7-B'], certErr: new Error('tarmoq'), rows: {
+    invoices: INV,
+    attendance: [{ studentId: 'IQ-0701', month: '2026-10', days: { '01': 'present', '02': 'late', '03': 'absent', '06': 'sick', '07': 'present' } }],
+    characteristics: [{ studentId: 'IQ-0701', term: '2026-2027-q1', text: 'Sinov: kurator yozgan tavsif', byName: 'Sinov Kurator' }],
+  } });
+  await E.open();
+  const h = E.body();
+  assert.match(section(h, 'Davomat'), /Umumiy davomat<\/td><td><b>75%<\/b>[\s\S]*2 \/ 1 \/ 1 \(jami 4 kun\)/, 'avval «ko‘rsatilmaydi» derdi');
+  assert.match(h, /Davomat<\/td><td><b>75%<\/b>/, 'yuqoridagi «Davomat» qatori ham');
+  assert.match(section(h, 'Xarakteristika'), /Sinov: kurator yozgan tavsif/);
+  assert.match(section(h, 'Monitoring'), /Qabulxona uchun ko‘rsatilmaydi \(ma’lumot olinmadi\)\./, 'o‘qilmagan bo‘lim — «Ma’lumot yo‘q» emas');
+  assert.match(section(h, 'O‘qituvchi xulosasi'), /Qabulxona uchun ko‘rsatilmaydi \(ma’lumot olinmadi\)\./);
 });

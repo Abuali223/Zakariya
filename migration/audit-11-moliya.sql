@@ -51,6 +51,13 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 --    emas — kassa-checks.sql trigger soni va barmoq izlari o'zgarmaydi; funksiya nomi ham ^(kassa|fin_|tuition_) emas.
 --    Eski qatorlar (ustun bo'sh) — "createdAt" bo'yicha, avvalgidek (coalesce); deploydan oldin prepare qilinib keyin complete bo'lgani —
 --    complete payti bilan. Oyna sharti coalesce("receivedAt", "createdAt") — indeks shu ifoda bo'yicha.
+--    Tushumga O'TGAN payt — o'sha UPDATE ishlagan haqiqiy soat (clock_timestamp(); sinov bazasida — sinov soati app.fin_now()), tranzaksiya
+--    boshlangan payt (now()) emas: oyna torayadi (3-raund tekshiruvi). MA'LUM QOLDIQ (to'liq yopilmagan): tushumga aylantirgan tranzaksiya
+--    UPDATE'ni hisobot paytidan (asOf) OLDIN bajarib, hisobot ma'lumotni o'qigandan KEYIN commit qilsa — to'lov ikkala hisobotning
+--    «oldingi hisobotdan keyin» qatoridan tushib qolishi mumkin. Oyna — UPDATE'dan commit'gacha (Click / Uzum holat yozuvi —
+--    millisekundlar; qo'lda to'lov + kassa — biroz uzoqroq); tushum holatida YARATILGAN to'lovda ham shunday ("createdAt" — now(),
+--    avval ham shunday edi). To'liq yopish uchun hisobot o'z snapshot'ini saqlashi kerak bo'lardi — kunlik Telegram qatori faqat ma'lumot
+--    uchun, kunlik / oylik moliya hisobotlari (kassa kuni bo'yicha) bundan ta'sirlanmaydi.
 --
 -- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace, add column / create index if not exists, drop trigger if exists;
 --   mavjud ma'lumot o'zgarmaydi — yangi ustun eski qatorlarda bo'sh qoladi).
@@ -103,10 +110,12 @@ begin
     new."receivedAt" := case when app.counts_as_receipt(new.id, new.status, new.provider, new.amount)
                              then coalesce(new."createdAt", app.fin_now()) end;
   else
-    -- Bir marta qo'yilgan — o'zgarmaydi; endi tushumga aylandi (avval emas edi) — hozirgi server payti; qolgan hollarda — avvalgisi.
+    -- Bir marta qo'yilgan — o'zgarmaydi; endi tushumga aylandi (avval emas edi) — shu UPDATE'ning haqiqiy soati (sinov bazasida — sinov
+    --   soati); qolgan hollarda — avvalgisi.
     new."receivedAt" := coalesce(old."receivedAt",
       case when app.counts_as_receipt(new.id, new.status, new.provider, new.amount)
-                and not app.counts_as_receipt(old.id, old.status, old.provider, old.amount) then app.fin_now() end);
+                and not app.counts_as_receipt(old.id, old.status, old.provider, old.amount)
+           then case when app.fin_clock_allowed() then app.fin_now() else clock_timestamp() end end);
   end if;
   return new;
 end $$;

@@ -237,7 +237,7 @@ test('A3-01 qoldig‘i: saqlash paytida fan almashtirildi — eski saqlash yangi
   assert.deepEqual([E.DB.get('IQ-1__2026-11__matematika').status, E.DB.get('IQ-2__2026-11__matematika').status], ['approved', 'approved']);
   assert.deepEqual(E.row('IQ-1'), FIZ[0], 'avval: 70 va «Tasdiqlangan» (Matematika balli Fizika ekranida)');
   assert.deepEqual(E.row('IQ-2'), FIZ[1], 'avval: 80 va «Tasdiqlangan»');
-  assert.equal(E.calls.round.length, roundBefore, 'eski saqlash raund kartasini qayta chizmadi');
+  assert.deepEqual(E.calls.round.slice(roundBefore), ['uz-5-A|2026-11'], 'faqat fan almashdi (sinf va oy o‘sha) — sinf × oy raund kartasi tasdiqdan keyin yangilandi');
   assert.deepEqual(E.calls.recompute, [['IQ-1', 'IQ-2']], '«Umumiy ball» ekran almashganda ham qayta hisoblandi');
   assert.match(E.calls.toast.at(-1)[0], /2 ta saqlandi va tasdiqlandi/, 'natija xabari ko‘rsatildi');
   // Yangi ekranning «Saqlash va tasdiqlash»i aynan ekrandagi qiymatni tasdiqlaydi; ekran almashmagan saqlash joyida bo'yaladi.
@@ -260,6 +260,19 @@ test('A3-01 qoldig‘i: saqlash paytida boshqa bo‘limga o‘tib Monitoringga q
   assert.equal(E.DB.get('IQ-1__2026-11__matematika').status, 'approved', 'eski saqlash bazaga yozildi');
   assert.deepEqual([E.row('IQ-1'), E.row('IQ-2')], FIZ, 'yangi ekran o‘zgarmadi (monGen o‘zgarmagan bo‘lsa ham — ko‘rinish avlodi boshqa)');
   assert.equal(E.calls.round.length, roundBefore);
+});
+
+test('A3-01 qoldig‘i: saqlash paytida OY almashtirildi — eski saqlash yangi ekranga eski sinf × oy raund kartasini chizmaydi', async () => {
+  const E = monEnv(MON_DB);
+  await E.render();
+  E.open('uz-5-A', 'Matematika', '2026-11'); await tickM();
+  E.hold(true); E.click('approve'); await tickM();
+  E.open('uz-5-A', 'Matematika', '2026-10'); await tickM();   // tanlagich «change»: load() + roundUpd() — yangi oy kartasi
+  const roundBefore = E.calls.round.length;
+  assert.equal(E.calls.round.at(-1), 'uz-5-A|2026-10');
+  E.release(); await tickM(); await tickM();
+  assert.equal(E.DB.get('IQ-1__2026-11__matematika').status, 'approved', 'eski saqlash bazaga yozildi');
+  assert.equal(E.calls.round.length, roundBefore, 'eski (2026-11) karta yangi oy ekraniga chizilmadi');
 });
 
 test('kech tugagan yuklash: bo‘limdan chiqib qaytilgandan keyin eski (Matematika) ro‘yxati yangi (Fizika) ekranga yozilmaydi', async () => {

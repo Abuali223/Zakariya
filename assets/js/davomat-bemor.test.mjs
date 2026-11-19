@@ -280,6 +280,20 @@ test('A2-06 (2-raund): oddiy kunlar (kirish → tanaffus → chiqish, avval chiq
   for (const d of ['2026-10-01', '2026-10-02', '2026-10-05']) { const a = P.saAgg(S.filter(x => x.day === d)); assert.equal(a.kelgan, S.find(x => x.day === d && x.status === 'in').ts, d + ' — «Kelgan» birinchi \'in\', avvalgidek'); }
 });
 
+test('A2-06 (3-raund): Hikvision ortiqcha ish skanlari (overtimein / overtimeout) — kelish emas: kech kelish ushlanmasi yo‘q, tungi overtime keyingi kirishni yashirmaydi', async () => {
+  const S = [
+    ...scanDay('2026-10-01', [['overtimeout', '20:00']]),                                       // faqat ortiqcha ishdan chiqish
+    ...scanDay('2026-10-02', [['out', '17:00'], ['overtimein', '17:05'], ['overtimeout', '20:00']]),
+    ...scanDay('2026-10-05', [['overtimeout', '02:00'], ['in', '08:30']]) ];                   // tungi overtime, keyin 08:30 kirish — 20 daq kech
+  const dm = await monthDm(S);
+  assert.equal(dm.late, 1, 'faqat 2026-10-05 dagi \'in\' 08:30 — kech (avval overtimeout 20:00 kunlik haqqa teng kech kelish bo‘lardi)');
+  assert.equal(dm.lateMin, 20, 'tungi overtimeout 02:00 kelish emas — kech kelish 08:30 dagi kirishdan');
+  assert.equal(dm.lateAmt, 4167);
+  assert.deepEqual(['2026-10-01', '2026-10-02', '2026-10-05'].map(d => dash(S, d).late), [0, 0, 1], 'bosh sahifa ham shu qoida bilan');
+  for (const d of ['2026-10-01', '2026-10-02']) { const r = dash(S, d); assert.equal(r.came, 1, d + ' — keldi (istalgan skan)'); assert.equal(P.saAgg(S.filter(x => x.day === d)).arrival, ''); }
+  assert.match(P.saAgg(S.filter(x => x.day === '2026-10-05')).arrival, /T08:30/);
+});
+
 test('A2-06 kunlik sarlavha «keldi / kelmadi» soni qatordagi «Keldi» qoidasi bilan (faqat \'in\' skan emas)', () => {
   assert.equal((ADM.match(/\.some\(x=>x\.status==='in'\)/g) || []).length, 0, 'faqat \'in\' skanni «keldi» deb sanash qolmasin');
   assert.match(ADM, /const came=roster\.filter\(r=>saPresent\(byPerson\[r\.cam\]\|\|\[\]\)\)\.length;/);

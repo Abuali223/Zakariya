@@ -61,10 +61,13 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-maosh.sql ALOHIDA ishga 
 --
 -- 6) DEPLOY OGOHLANTIRISHLARI (faqat o'qiydi, har deployda; r4 — app.payroll_deploy_notice): (a) maosh tasdig'i o'tish oyi
 --    (config/finance."payrollApprovalFrom") belgilangan bo'lsa — o'tish oyidan OLDINGI oylar bo'yicha qoldig'i (to'lanmagan yoki ortiqcha
---    berilgan — app.salary_carry) bor xodimlar maosh ID'lari bilan (20 tagacha): bunday oy maoshini endi faqat Direktor yozadi (kassir /
---    HR / Moliya menejerining, karta orqali to'lov ham — rad), egasi deploy paytida bilsin; (b) oy tugamasdan yuborilib hali
---    tasdiqlanmagan vedomostlar — ularni HR endi tasdiqlamaydi (payroll_decide 'stale': HR qaytaradi, Moliya menejeri oy tugagach qayta
---    yuboradi yoki Direktor tasdiqlaydi).
+--    berilgan — app.salary_carry) bor va u hali TASDIQLANGAN vedomostga kirmagan xodimlar maosh ID'lari bilan (20 tagacha): qoldiq
+--    navbatdagi vedomostga «oldingi qoldiq» bo'lib o'zi qo'shiladi (alohida to'lash shart emas), eski oyning o'ziga yozuvni endi faqat
+--    Direktor kiritadi (kassir / HR / Moliya menejerining, karta orqali to'lov ham — rad), egasi deploy paytida bilsin. Tasdiqlangan
+--    vedomostga kirgan qoldiq ro'yxatdan chiqadi (eski oy qatorlari o'zgarmaydi — aks holda xodim har deployda qolar, Direktor eski oyga
+--    yana to'lasa ortiqchasi keyingi maoshdan ushlanardi); (b) oy tugamasdan yuborilib hali tasdiqlanmagan vedomostlar — ularni HR endi
+--    tasdiqlamaydi (payroll_decide 'stale': HR qaytaradi, Moliya menejeri oy tugagach qayta yuboradi yoki Direktor tasdiqlaydi).
+--    Ogohlantirish matni natijada ham qaytadi ('notice') — sinov deploy ko'rsatadigan matnni tekshiradi.
 --
 -- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace, drop trigger if exists; ma'lumot tuzatish — faqat farq bo'lsa).
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
@@ -161,12 +164,13 @@ drop trigger if exists trg_users_unlink_cards on public.users;
 create trigger trg_users_unlink_cards after delete on public.users
   for each row execute function app.users_unlink_cards();
 --    Tuzatish — app.users_card_link_repair() (deploy har safar chaqiradi; sinov ham shu funksiyani tekshiradi). NOTICE'da eski qiymat ham
---    ('karta→eski hisob ID'): migratsiya paytida o'zgarishlar tarixi yozilmaydi (iqror.migrating), hisob adashib o'chirilgan va keyin
---    o'sha ID bilan tiklangan bo'lsa — kartani qayta bog'lash uchun boshqa iz qolmaydi. UPDATE … RETURNING eski qiymatni bermaydi —
---    shuning uchun qatorlar avval tanlanadi (o). Faqat server / migratsiya (mijoz rollariga ruxsat yo'q).
+--    ('karta→eski hisob ID') — HAMMASI (20 ta bilan cheklanmaydi): migratsiya paytida o'zgarishlar tarixi yozilmaydi (iqror.migrating),
+--    hisob adashib o'chirilgan va keyin o'sha ID bilan tiklangan bo'lsa — kartani qayta bog'lash uchun boshqa iz qolmaydi. UPDATE …
+--    RETURNING eski qiymatni bermaydi — shuning uchun qatorlar avval tanlanadi (o). Matn natijada ham ('notice'). Faqat server /
+--    migratsiya (mijoz rollariga ruxsat yo'q).
 create or replace function app.users_card_link_repair() returns jsonb
 language plpgsql set search_path = public, app, pg_temp as $$
-declare n int; v_list text; v_all jsonb;
+declare n int; v_list text; v_all jsonb; m text;
 begin
   with t as (update public.teachers x set "userUid" = null
                from (select y.id, y."userUid" as old_uid from public.teachers y
@@ -179,16 +183,17 @@ begin
               where x.id = o.id
               returning 'staff/' || x.id || '→' || o.old_uid as k),
        a as (select k from t union all select k from s)
-  select count(*), string_agg(k, ', ' order by k) filter (where rn <= 20), coalesce(jsonb_agg(k order by k), '[]'::jsonb)
+  select count(*), string_agg(k, ', ' order by k), coalesce(jsonb_agg(k order by k), '[]'::jsonb)
     into n, v_list, v_all
-    from (select k, row_number() over (order by k) as rn from a) z;
+    from a;
   if n > 0 then
-    raise notice 'OGOHLANTIRISH: % ta xodim / o''qituvchi kartasidagi login havolasi (userUid) o''chirilgan hisobga qaragan edi — bo''shatildi (karta→eski hisob ID): % (endi «Foydalanuvchilar»da yangi hisobga bog''lash mumkin; hisob adashib o''chirilgan bo''lsa — tiklangach shu kartaga qayta bog''lang)',
-      n, v_list || case when n > 20 then ', … yana ' || (n - 20) else '' end;
+    m := format('OGOHLANTIRISH: %s ta xodim / o''qituvchi kartasidagi login havolasi (userUid) o''chirilgan hisobga qaragan edi — bo''shatildi (karta→eski hisob ID): %s (endi «Foydalanuvchilar»da yangi hisobga bog''lash mumkin; hisob adashib o''chirilgan bo''lsa — tiklangach shu kartaga qayta bog''lang)',
+      n, v_list);
   else
-    raise notice 'Login havolasi: o''chirilgan hisobga qaragan xodim / o''qituvchi kartasi yo''q (0)';
+    m := 'Login havolasi: o''chirilgan hisobga qaragan xodim / o''qituvchi kartasi yo''q (0)';
   end if;
-  return jsonb_build_object('count', n, 'cleared', v_all);
+  raise notice '%', m;
+  return jsonb_build_object('count', n, 'cleared', v_all, 'notice', m);
 end $$;
 revoke all on function app.users_card_link_repair() from public, anon, authenticated;
 do $a504$ begin perform app.users_card_link_repair(); end $a504$;
@@ -240,26 +245,33 @@ revoke all on function public.payroll_actor_names(text[]) from public, anon;
 grant execute on function public.payroll_actor_names(text[]) to authenticated, service_role;
 
 -- 6) Deploy ogohlantirishlari — app.payroll_deploy_notice() (faqat o'qiydi; deploy har safar chaqiradi, sinov ham shu funksiyani
---    tekshiradi). Ism / summa yo'q — faqat maosh ID va oy. Faqat server / migratsiya (mijoz rollariga ruxsat yo'q).
+--    tekshiradi). Ism / summa yo'q — faqat maosh ID va oy. Matn natijada ham ('notice'). Faqat server / migratsiya (mijoz rollariga
+--    ruxsat yo'q).
 create or replace function app.payroll_deploy_notice() returns jsonb
 language plpgsql set search_path = public, app, pg_temp as $$
-declare v_from text; v_carry text[]; v_stale text[]; n int;
+declare v_from text; v_carry text[]; v_stale text[]; n int; m text; v_msg text[] := '{}';
 begin
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
   -- (a) o'tish oyi belgilangan bo'lsa — undan OLDINGI oylar qoldig'i: app.salary_carry(x, o'tish oyi) faqat o'sha oylarni (eski tartib
-  --     bilan) hisoblaydi — maosh darvozasi va vedomostdagi «oldingi qoldiq» bilan bir xil
+  --     bilan) hisoblaydi — maosh darvozasi va vedomostdagi «oldingi qoldiq» bilan bir xil. payroll_submit bu qoldiqni o'tish oyidan
+  --     keyingi vedomost qatoriga «oldingi qoldiq» (carryIn) qilib qo'shadi, u o'sha vedomost bilan to'lanadi, eski oy qatorlari esa
+  --     o'zgarmaydi — shuning uchun tasdiqlangan (o'tish oyi yoki keyingi) vedomostda qatori bor xodim ro'yxatga kirmaydi.
   if v_from is not null then
     select coalesce(array_agg(p.tid order by p.tid), '{}') into v_carry
       from (select distinct s."teacherId" as tid from public.salary_payments s
              where coalesce(s."teacherId", '') <> '' and coalesce(s.month, '') <> '' and s.month < v_from) p
-     where app.salary_carry(p.tid, v_from) <> 0;
+     where app.salary_carry(p.tid, v_from) <> 0
+       and not exists (select 1 from public.payroll_lines l join public.payroll_runs r on r.id = l."runId"
+                        where l."personId" = p.tid and r.status = 'approved' and l."runId" >= v_from);
     n := cardinality(v_carry);
     if n > 0 then
-      raise notice 'OGOHLANTIRISH: % ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan (%) oldingi oylar bo''yicha qoldiq bor (to''lanmagan yoki ortiqcha berilgan) — bunday oy maoshini endi faqat Direktor yozadi (kassir, HR, Moliya menejeri, karta orqali to''lov ham — rad): %',
-        n, v_from, array_to_string(v_carry[1:20], ', ') || case when n > 20 then ', … yana ' || (n - 20) else '' end;
+      m := format('OGOHLANTIRISH: %s ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan (%s) oldingi oylar bo''yicha qoldiq bor (to''lanmagan yoki ortiqcha berilgan) va u hali tasdiqlangan vedomostga kirmagan — navbatdagi oylik vedomostga «oldingi qoldiq» bo''lib o''zi qo''shiladi va o''sha vedomost bilan to''lanadi (alohida to''lash shart emas); eski oyning o''ziga maosh yozuvini endi faqat Direktor kiritadi (kassir, HR, Moliya menejeri, karta orqali to''lov — rad): %s',
+        n, v_from, array_to_string(v_carry[1:20], ', ') || case when n > 20 then ', … yana ' || (n - 20) else '' end);
     else
-      raise notice 'Maosh qoldig''i: o''tish oyidan (%) oldingi oylar bo''yicha qoldig''i bor xodim yo''q (0)', v_from;
+      m := format('Maosh qoldig''i: o''tish oyidan (%s) oldingi oylar bo''yicha vedomostga kirmagan qoldig''i bor xodim yo''q (0)', v_from);
     end if;
+    raise notice '%', m;
+    v_msg := v_msg || m;
   end if;
   -- (b) oy tugamasdan yuborilgan, hali tasdiqlanmagan vedomostlar (payroll_decide dagi 'stale' sharti bilan bir xil; o'tish oyidan
   --     qat'i nazar — vedomostni HR har doim shu qoida bilan tasdiqlaydi)
@@ -268,10 +280,12 @@ begin
    where r.status = 'submitted'
      and coalesce((r."submittedAt" at time zone 'Asia/Tashkent')::date, '-infinity'::date) < ((r.id || '-01')::date + interval '1 month')::date;
   if cardinality(v_stale) > 0 then
-    raise notice 'OGOHLANTIRISH: % ta oylik vedomost oy tugamasdan yuborilgan va hali tasdiqlanmagan — HR uni endi tasdiqlamaydi (ushlanma yuborilgan kungacha): HR qaytarsin, Moliya menejeri oy tugagach qayta yuborsin (shoshilinch bo''lsa — Direktor tasdiqlaydi): %',
-      cardinality(v_stale), array_to_string(v_stale, ', ');
+    m := format('OGOHLANTIRISH: %s ta oylik vedomost oy tugamasdan yuborilgan va hali tasdiqlanmagan — HR uni endi tasdiqlamaydi (ushlanma yuborilgan kungacha): HR qaytarsin, Moliya menejeri oy tugagach qayta yuborsin (shoshilinch bo''lsa — Direktor tasdiqlaydi): %s',
+      cardinality(v_stale), array_to_string(v_stale, ', '));
+    raise notice '%', m;
+    v_msg := v_msg || m;
   end if;
-  return jsonb_build_object('from', v_from, 'carry', to_jsonb(coalesce(v_carry, '{}')), 'stale', to_jsonb(v_stale));
+  return jsonb_build_object('from', v_from, 'carry', to_jsonb(coalesce(v_carry, '{}')), 'stale', to_jsonb(v_stale), 'notice', to_jsonb(v_msg));
 end $$;
 revoke all on function app.payroll_deploy_notice() from public, anon, authenticated;
 do $a5n$ begin perform app.payroll_deploy_notice(); end $a5n$;
