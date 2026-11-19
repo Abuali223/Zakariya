@@ -954,7 +954,7 @@ function cashByMethod(pays, fromDay, toDay, method){
 const monthBounds=M=>{ const [y,m]=String(M).split('-').map(Number); const last=new Date(y,m,0).getDate(); return [`${M}-01`, `${M}-${String(last).padStart(2,'0')}`]; };
 // Lavozim/rol ro'yxati — «Foydalanuvchilar» bo'limidagi rollar bilan BIR XIL (datalist: tanla yoki yoz).
 //   (Ota-ona/O'quvchi — xodim emas, shuning uchun kiritilmadi. Oxirida amaliy xodim lavozimlari ham bor.)
-const STAFF_POSITIONS = ['Direktor','Ma‘muriyat rahbari','O‘IBDO‘','HR','Moliya menejeri','Kassir','Marketing menejeri','O‘qituvchi','Kurator','Qabulxona xodimi','G‘aznachi','Xo‘jalik xodimi','Bosh oshpaz','Oshxona xodimi','Tozalov xodimi','Qorovul','Xavfsizlik xodimi','Hamshira','Laborant','Kutubxonachi','Haydovchi','Farrosh','Bog‘bon'];
+const STAFF_POSITIONS = ['Direktor','Ma‘muriyat rahbari','O‘IBDO‘','HR','Moliya menejeri','Kassir','Marketing menejeri','Sotuvchi','O‘qituvchi','Kurator','Qabulxona xodimi','G‘aznachi','Xo‘jalik xodimi','Bosh oshpaz','Oshxona xodimi','Tozalov xodimi','Qorovul','Xavfsizlik xodimi','Hamshira','Laborant','Kutubxonachi','Haydovchi','Farrosh','Bog‘bon'];
 const SCHEMAS = {
   students: {
     title:'O‘quvchilar', icon:mi('M480-120 200-272v-240L40-600l440-240 440 240v320h-80v-276l-80 44v240L480-120Zm0-332 274-148-274-148-274 148 274 148Zm0 241 200-108v-151L480-360 280-470v151l200 108Z'), docId:'studentId', order:'order',
@@ -1435,7 +1435,7 @@ let cache = {};
 // qatorini o'qib SESSION'ни qayta o'rnatadi; agar biror kod undan oldin o'qisa — admin bo'lib
 // qolmasin (frontend[20], defense-in-depth). Panelga kirish baribir STAFF tekshiruvидан o'tadi.
 let SESSION = { role:'', isAdmin:false, assignedClasses:[], assignedSubjects:[], homeroomClasses:[] };
-const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', accountant:'Buxgalter', marketing_mgr:'Marketing menejeri', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
+const ROLE_LABEL = { director:'Direktor', admin:'Ma‘muriyat rahbari', admin_head:'Ma‘muriyat rahbari', zavuch:'O‘IBDO‘', kurator:'Kurator', teacher:'O‘qituvchi', hr:'HR', finance_mgr:'Moliya menejeri', accountant:'Buxgalter', marketing_mgr:'Marketing menejeri', sales:'Sotuvchi', reception:'Qabulxona xodimi', treasurer:'G‘aznachi', kassir:'Kassir', nurse:'Hamshira', facilities:'Xo‘jalik xodimi', head_chef:'Bosh oshpaz', kitchen:'Oshxona xodimi', cleaner:'Tozalov xodimi', guard:'Qorovul', security:'Xavfsizlik xodimi', parent:'Ota-ona', student:'O‘quvchi' };
 // Har bir xodim roli ko'radigan tab(lar) (Direktor — superuser, hammasi).
 // Ma'muriyat rahbari (admin/admin_head): qabul (arz-shikoyat/kasal keyingi paketlarда qo'shiladi).
 const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitoring','profile'], zavuch:['grades','monitoring','exams','olympiads','announce','profile','archive'],
@@ -1447,17 +1447,23 @@ const ROLE_TABS = { kurator:['attendance','profile'], teacher:['grades','monitor
   //   FAQAT KO'RISH (accRO); «Tasdiqlash» va «Kassa» — 2-ro'yxat nazorati (so'rovni tasdiqlash / rad etish, kunni tekshirish,
   //   hujjatni bekor qilish, avans hisoboti); o'quvchi va xodim kartochkalari, telefonlar, davomat — yo'q (D6/D7);
   //   eksport / chop etish — ismsiz (FD-28).
-  accountant:[] };
+  accountant:[],
+  // Sotuvchi (marketing bo'limi, egasi 2026-11-19; migration/sales-role.sql): FAQAT «📞 Ota-onalar bilan aloqa» — faol o'quvchilar
+  //   ota-onalarining ismi va niqoblangan telefoni, raqam bosilganda ochiladi (jurnal, kuniga 150 oila). Boshqa bo'lim, qo'shimcha lavozim,
+  //   tahrir, eksport / chop etish — yo'q (allowedTabs shu ro'yxatni o'zgartirmaydi; bazada ham faqat sales_* RPC'lar).
+  sales:['sales'] };
 // PKG-11: qo'shimcha (ikkinchi) lavozim bo'la oladigan rollar — bazadagi app.extra_roles_allowed() bilan bir xil.
 //   Direktor, Moliya menejeri, G'aznachi — yo'q (superuser va pul roli faqat asosiy rol bo'ladi).
 const EXTRA_ROLES_OK=['teacher','kurator','reception','hr','kassir','nurse','marketing_mgr','admin_head','zavuch'];
 // Bazadagi app.u_has bilan bir xil: foydalanuvchi qatori r lavozimidami — asosiy rol r, yoki qo'shimcha olish mumkin bo'lgan
-//   asosiy rolda (Direktor/ota-ona/o'quvchi/buxgalter/rolsiz — yo'q) users."extraRoles" ichida r. Sinf/fan biriktirishda shu bilan qaraladi.
+//   asosiy rolda (Direktor/ota-ona/o'quvchi/buxgalter/sotuvchi/rolsiz — yo'q) users."extraRoles" ichida r. Sinf/fan biriktirishda shu bilan qaraladi.
 function uHas(u, r){ if(!u) return false; const p=String(u.role||''); if(p===r) return true;
-  if(['director','parent','student','accountant',''].includes(p) || !EXTRA_ROLES_OK.includes(r)) return false;
+  if(['director','parent','student','accountant','sales',''].includes(p) || !EXTRA_ROLES_OK.includes(r)) return false;
   return Array.isArray(u.extraRoles) && u.extraRoles.includes(r); }
 // Xodim ko'radigan tab(lar): rol tab'lari + sinf rahbari bo'lsa (homeroomClasses) davomat qo'shiladi
 function allowedTabs(){
+  // Sotuvchi — faqat o'z bo'limi: xabarnoma muharriri, tasdiq navbati, kassa va sinf rahbari qo'shimchalari unga ochilmaydi.
+  if(SESSION.role==='sales' && !SESSION.isAdmin) return ROLE_TABS.sales.slice();
   const base = (ROLE_TABS[SESSION.role]||['attendance']).slice();
   // Sinf rahbari bo'limlari — faqat bazadagi app.is_homeroom_for ruxsat beradigan lavozimlarda (admin / O‘IBDO‘ / kurator /
   //   o'qituvchi — asosiy yoki qo'shimcha). Aks holda (masalan, roli o'zgargan sobiq sinf rahbari) bo'lim ochilib, saqlash rad etilardi.
@@ -1839,10 +1845,11 @@ onAuthStateChanged(auth, async user=>{
     loginAttempted=false; bootUid=null; show('login'); return;
   }
   // Panelга kirish huquqiga ega rollar (ma'muriyat rahbari + HR ham qo'shildi).
-  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse','accountant'];
-  // PKG-11: ikkinchi lavozim (users."extraRoles", faqat Direktor beradi). Direktor/ota-ona/o'quvchi/buxgalter — qo'shimchasiz (bazada ham).
+  //   Sotuvchi (sales) — faqat «📞 Ota-onalar bilan aloqa» bo'limi (ROLE_TABS.sales).
+  const STAFF = ['admin','director','kurator','teacher','zavuch','hr','admin_head','finance_mgr','treasurer','kassir','marketing_mgr','reception','nurse','accountant','sales'];
+  // PKG-11: ikkinchi lavozim (users."extraRoles", faqat Direktor beradi). Direktor/ota-ona/o'quvchi/buxgalter/sotuvchi — qo'shimchasiz (bazada ham).
   //   Panelga kirish: asosiy YOKI qo'shimcha lavozimlardan biri panel roli bo'lsa (masalan, qorovul + kassir).
-  const roles = [role].concat(['director','parent','student','accountant',''].includes(role) ? [] : extraRoles.filter(r=>EXTRA_ROLES_OK.includes(r) && r!==role))
+  const roles = [role].concat(['director','parent','student','accountant','sales',''].includes(role) ? [] : extraRoles.filter(r=>EXTRA_ROLES_OK.includes(r) && r!==role))
     .filter((r,i,a)=>a.indexOf(r)===i);
   const panelRoles = roles.filter(r=>STAFF.includes(r));
   if(!panelRoles.length){
@@ -1873,8 +1880,12 @@ onAuthStateChanged(auth, async user=>{
   $('#who').textContent = (user.email || user.displayName || '') + ((SESSION.isAdmin || panelRoles.length>1) ? '' : ' · ' + (ROLE_LABEL[active]||active));
   kassaInit(user.uid);   // «Kassa»: oxirgi ma'lum holat (tarmoqsiz) — pastda kassaProbe() serverdan yangilaydi
   if(!SESSION.isAdmin) currentTab = allowedTabs()[0];
+  // Sotuvchi: 🔍 qidiruv (o'quvchi / xodim jadvallari unga yopiq) va to'lov navbati yo'q — umumiy qurilmada kassirning oflayn navbatini
+  //   sotuvchi seansi bilan yuborib (server rad etadi) «yuborilmadi» holatiga tushirmasin.
+  const salesOnly = SESSION.role==='sales' && !SESSION.isAdmin;
+  { const bs=$('#btn-search'); if(bs) bs.style.display = salesOnly ? 'none' : ''; }
   show('app'); buildTabs(); setupRoleSwitch(user.uid); openTab(currentTab); watchBadges();
-  startOutboxSync();   // offline to'lov navbatini kuzatish + avtomatik yuborish
+  if(!salesOnly) startOutboxSync();   // offline to'lov navbatini kuzatish + avtomatik yuborish
   kassaProbe();        // kutilmaydi: javob kelgach menyu (kerak bo'lsa) o'zi yangilanadi
 });
 function show(which){ const b=$('#boot'); if(b) b.style.display='none'; $('#login').style.display = which==='login'?'grid':'none'; $('#app').style.display = which==='app'?'grid':'none'; }
@@ -2013,6 +2024,7 @@ function buildTabs(){
     {k:'weekly', icon:mi('M280-400v-80h400v80H280Zm0 160v-80h280v80H280ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z'), t:'Haftalik hisobot'},
     ...Object.entries(SCHEMAS).map(([k,s])=>({k, icon:s.icon, t:s.title})),
     {k:'archive', icon:mi('M120-840h720v160H120Zm40 200h640v480H160Zm200 80v80h240v-80Z'), t:'Arxiv'},   // chiqarilgan / bitirgan o'quvchilar
+    {k:'sales', icon:mi('M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-12h162q14 0 25 9.5t13 22.5l26 140q2 16-1 27t-11 19l-97 98q20 37 47.5 71.5T387-386q31 31 65 57.5t72 48.5l94-94q9-9 23.5-13.5T670-390l138 28q14 4 23 14.5t9 23.5v162q0 18-12 30t-30 12ZM241-600l66-66-17-94h-89q5 41 14 81t26 79Zm358 358q39 17 79.5 27t81.5 13v-88l-94-19-67 67ZM241-600Zm358 358Z'), t:'Ota-onalar bilan aloqa'},   // sotuvchi (va Direktor)
     {k:'attendance', icon:mi('M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v560q0 33-23.5 56.5T800-120H160Zm0-80h640v-560H160v560Zm40-80h200v-80H200v80Zm382-80 198-198-57-57-141 142-57-57-56 57 113 113Zm-382-80h200v-80H200v80Zm0-160h200v-80H200v80Z'), t:'Davomat'},
     {k:'grades', icon:mi('m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'), t:'Baholar'},
     {k:'monitoring', icon:mi('M160-160v-320h160v320H160Zm240 0v-640h160v640H400Zm240 0v-440h160v440H640Z'), t:'Monitoring'},
@@ -2081,7 +2093,7 @@ const NAV_FLAT_MAX = 8;
 const NAV_TOP = ['approvals'];   // doim eng yuqorida, guruhsiz (navbatda kutayotganlar)
 const NAV_GROUPS = [
   { g:'boshqaruv', t:'Boshqaruv',            icon:'dashboard',  keys:['dashboard','weekly','changelog'] },
-  { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','archive','classes','marketing','feedback'] },
+  { g:'qabul',     t:'O‘quvchilar',          icon:'students',   keys:['enrollments','students','archive','classes','marketing','sales','feedback'] },
   { g:'talim',     t:'O‘quv jarayoni',       icon:'grades',     keys:['attendance','grades','monitoring','profile','timetable','homework','exams','olympiads','announce'] },
   { g:'xodimlar',  t:'Xodimlar',             icon:'staff',      keys:['teachers','staff','staffatt','applications'] },
   { g:'moliya',    t:'Moliya',               icon:'finance',    keys:['payments','kassa','finance','accounting','planfact','pricetable'] },
@@ -2265,6 +2277,7 @@ function renderTab(tab){
   if(tab==='finance') return renderFinance();
   if(tab==='accounting') return renderAccounting();
   if(tab==='marketing') return renderMarketing();
+  if(tab==='sales') return renderSales();
   if(tab==='bus') return renderBus();
   if(tab==='feedback') return renderFeedback();
   if(tab==='sick') return renderSick();
@@ -6778,6 +6791,7 @@ async function renderUsers(){
     ['staff','Xodim — rol tayinlanmagan (yangi)'],
     ['director','Direktor (superuser)'],['admin','Ma‘muriyat rahbari'],['zavuch','O‘IBDO‘'],
     ['hr','HR'],['finance_mgr','Moliya menejeri'],['kassir',KASSA.on?'Kassir (to‘lov qabul qiladi; «Kassa»da — kirim, chiqim, kunlik hisobot)':'Kassir (to‘lov qabul qiladi)'],['marketing_mgr','Marketing menejeri'],
+    ['sales','Sotuvchi (marketing) — faqat ota-onalar ismi va telefoni, o‘zgartirish yo‘q'],
     ['teacher','O‘qituvchi'],['kurator','Kurator (sinf rahbari)'],
     ['reception','Qabulxona xodimi'],['nurse','Hamshira (tibbiyot)'],['treasurer','G‘aznachi (kassir uchun — «Kassir» roli)'],['facilities','Xo‘jalik xodimi'],['head_chef','Bosh oshpaz'],['kitchen','Oshxona xodimi'],['cleaner','Tozalov xodimi'],['guard','Qorovul'],['security','Xavfsizlik xodimi'],
     ['parent','Ota-ona'],['student','O‘quvchi']
@@ -6806,7 +6820,7 @@ async function renderUsers(){
     const filtered = !q ? rows : rows.filter(r=>[r.name,r.email,r.role,...(Array.isArray(r.extraRoles)?r.extraRoles:[])].some(v=>String(v==null?'':v).toLowerCase().includes(q)));
     if(!filtered.length){ $('#usr-card').innerHTML=`<div class="empty">${rows.length?'Qidiruv bo‘yicha foydalanuvchi topilmadi.':'Hozircha ro‘yxatdan o‘tgan foydalanuvchi yo‘q.'}</div>`; return; }
     // Belgi (chip), qo'shimcha lavozim qatori va bloklash oynasida — qisqa nom: «Kassir» / «G‘aznachi» izohlari faqat tanlash ro'yxatida.
-    const ROLE_SHORT={ kassir:'Kassir', treasurer:'G‘aznachi' };
+    const ROLE_SHORT={ kassir:'Kassir', treasurer:'G‘aznachi', sales:'Sotuvchi' };
     const roleName=rl=>ROLE_SHORT[rl]||(roleOpts.find(o=>o[0]===rl)||['',rl||'—'])[1];
     const homeroomN=r=>(r.homeroomClasses||[]).length;
     const summaryOf=r=> uHas(r,'teacher') ? `${(r.assignedClasses||[]).length} sinf · ${(r.assignedSubjects||[]).length} fan${homeroomN(r)?` · rahbar: ${homeroomN(r)}`:''}`
@@ -6828,8 +6842,8 @@ async function renderUsers(){
     const xrOf=r=>Array.isArray(r.extraRoles)?r.extraRoles:[];
     const roleCell=r=> roleChip(r.role||'') + (xrOf(r).length ? `<div class="small" style="margin-top:3px;color:var(--teal)" data-xr-of="${esc(r._id)}">+ ${xrOf(r).map(x=>esc(roleName(x))).join(', ')}</div>` : '')
       + ((String(r.status||'')==='blocked' && r.blockedRole) ? `<div class="small muted" style="margin-top:3px">avvalgi rol: ${esc(roleName(r.blockedRole))}</div>` : '');
-    // PKG-11: ikkinchi lavozim — faqat Direktor; o'ziga emas; asosiy roli Direktor/ota-ona/o'quvchi/buxgalter/rolsiz, kutilayotgan yoki bloklangan hisobga — yo'q.
-    const xrBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid || ['director','parent','student','accountant','staff',''].includes(String(r.role||'')) || ['pending','blocked'].includes(String(r.status||''))) ? ''
+    // PKG-11: ikkinchi lavozim — faqat Direktor; o'ziga emas; asosiy roli Direktor/ota-ona/o'quvchi/buxgalter/sotuvchi/rolsiz, kutilayotgan yoki bloklangan hisobga — yo'q.
+    const xrBtn=r=> (!SESSION.isAdmin || String(r._id)===myUid || ['director','parent','student','accountant','sales','staff',''].includes(String(r.role||'')) || ['pending','blocked'].includes(String(r.status||''))) ? ''
       : `<button class="btn sm" data-xru="${esc(r._id)}" title="Ikkinchi lavozim (masalan, o‘qituvchi + qabulxona): xodimga o‘sha bo‘limlar ham ochiladi">➕ Lavozim</button>`;
     // HR yozuviga bog'lanish ko'rsatkichi: bog'langan bo'lsa 🔗 kod; aks holda telefon bo'yicha taklif.
     const linkChip=r=>{ if(r.staffRefId){ const rec=linkCtx.byRef[(r.staffRefType||'')+':'+(r.staffRefId||'')];
@@ -6868,9 +6882,9 @@ async function renderUsers(){
 // HR lavozimi («Xodimlar» → Lavozim; STAFF_POSITIONS yoki qo'lda yozilgan) -> tizim roli (Foydalanuvchilar). Katta-kichik
 //   harf va apostroflar farq qilmaydi («Moliya Menejeri» = «Moliya menejeri»). Mos rol bo'lmasa — '' (admin o'zi tanlaydi).
 //   «G'aznachi» lavozimidagi xodim — kassir: tizimda «Kassir» roli taklif qilinadi (egasi, 2026-11-17); «G'aznachi» tizim roli
-//   (moliya menejeri darajasidagi huquq) kassa xodimiga berilmaydi.
+//   (moliya menejeri darajasidagi huquq) kassa xodimiga berilmaydi. «Sotuvchi» lavozimi — «Sotuvchi» roli (faqat ota-onalar ismi va telefoni).
 const POS_ROLE = { 'direktor':'director', 'mamuriyat rahbari':'admin', 'oibdo':'zavuch', 'hr':'hr', 'moliya menejeri':'finance_mgr',
-  'kassir':'kassir', 'marketing menejeri':'marketing_mgr', 'oqituvchi':'teacher', 'kurator':'kurator', 'qabulxona xodimi':'reception',
+  'kassir':'kassir', 'marketing menejeri':'marketing_mgr', 'sotuvchi':'sales', 'oqituvchi':'teacher', 'kurator':'kurator', 'qabulxona xodimi':'reception',
   'gaznachi':'kassir', 'xojalik xodimi':'facilities', 'bosh oshpaz':'head_chef', 'oshxona xodimi':'kitchen', 'tozalov xodimi':'cleaner',
   'farrosh':'cleaner', 'qorovul':'guard', 'xavfsizlik xodimi':'security', 'hamshira':'nurse' };
 function posToRole(pos){ const k=String(pos==null?'':pos).toLowerCase().replace(/[ʻʼ'‘’`´ʹ′‛]/g,'').replace(/\s+/g,' ').trim();
@@ -6949,9 +6963,9 @@ function openUserEditor(u, CLS, roleOpts, opts){
   const roleSel=ov.querySelector('#u-role');
   // PKG-11: ikkinchi lavozim «O‘qituvchi» / «Kurator» bo'lsa ham sinf (va fan) kerak — aks holda asosiy roli boshqa xodimga
   //   sinf biriktirib bo'lmasdi va har saqlashda biriktirilgan sinflar o'chib ketardi. Qo'shimcha lavozim faqat bazadagi
-  //   app.u_has qoidasida hisoblanadigan asosiy rollarda (Direktor/ota-ona/o'quvchi/buxgalter/rolsiz — yo'q).
+  //   app.u_has qoidasida hisoblanadigan asosiy rollarda (Direktor/ota-ona/o'quvchi/buxgalter/sotuvchi/rolsiz — yo'q).
   const xr=(Array.isArray(u.extraRoles)?u.extraRoles:[]).filter(r=>EXTRA_ROLES_OK.includes(r));
-  const xrOk=r=>!['director','parent','student','accountant',''].includes(String(r||''));
+  const xrOk=r=>!['director','parent','student','accountant','sales',''].includes(String(r||''));
   const needsClsFor=r=>(r==='kurator'||r==='teacher') || (xrOk(r) && (xr.includes('kurator')||xr.includes('teacher')));
   const needsSubjFor=r=>(r==='teacher') || (xrOk(r) && xr.includes('teacher'));
   const sync=()=>{ const r=roleSel.value;
@@ -7316,7 +7330,8 @@ async function ntfSettingsCard(el, _g){
 async function ntfEditors(box, G, _g){
   let users=[]; try{ users=await loadCol('users', null); }catch(e){ box.innerHTML=`<div class="empty">Xatolik: ${esc(e.code||e.message)}</div>`; return; }
   if(_g!==VIEW_GEN) return;
-  const NO=new Set(['parent','student','director','']);
+  // Sotuvchi — muharrir bo'lmaydi (faqat ota-onalar ismi va telefoni; boshqa vakolat yo'q).
+  const NO=new Set(['parent','student','director','sales','']);
   const staff=users.filter(u=>!NO.has(String(u.role||'')) && String(u.status||'active')==='active');
   const ed=new Set((Array.isArray(G.editors)?G.editors:[]).map(String));
   const nm=u=>u?(u.name||u.email||u.phone||u.id):'';
@@ -7575,6 +7590,7 @@ async function goSearchTab(tab, inputId, value){
   if(el){ el.value=value; el.dispatchEvent(new Event('input',{ bubbles:true })); }
 }
 function openGlobalSearch(){
+  if(SESSION.role==='sales' && !SESSION.isAdmin) return;   // sotuvchiga qidiruv yo'q (o'quvchi / xodim jadvallari unga yopiq)
   if($('#modal-bg').classList.contains('show')) return;
   $('#modal').innerHTML=`<div class="modal-h"><h3>🔍 Qidiruv</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><input id="gs-q" class="search-inp" style="width:100%;box-sizing:border-box" placeholder="Ism, ID${canSearchFinance()?', oy (2026-10), summa':''}${canSearchPhone()?', telefon':''}…" autocomplete="off">
@@ -10878,6 +10894,110 @@ async function renderAccounting(){
   // Maosh berish (har xodimni tanlab) — payout jurnali (salary_payments) + chek. XARAJATga qo'shilmaydi.
   if($('#ac-paysal')) $('#ac-paysal').addEventListener('click', ()=> openSalaryPayout({ month: ($('#ac-month').value||curMonth()), onDone: reload }) );
 }
+
+/* ==================== «📞 Ota-onalar bilan aloqa» — Sotuvchi (marketing bo'limi) va Direktor ====================
+   Egasi 2026-11-19: sotuvchilar ota-onalarga qo'ng'iroq qilib muammolarni so'raydi va maktabni tavsiya qilishni iltimos qiladi — ularga
+   FAQAT ota-onalar ismi va telefoni kerak, qolgan ma'lumot ko'rinmasin va o'zgartirilmasin (migration/sales-role.sql, SESSIYA-ISHLARI.md §85). */
+// SALES-UI:BEGIN — sinovi: assets/js/sales.test.mjs (blok shu fayldan o'qiladi)
+//   Ro'yxat — sales_contacts (faol o'quvchilar oilalari: ota / ona ismi va NIQOBLANGAN telefon; qidiruv — faqat ota-ona ismi bo'yicha).
+//   «📞 Raqamni ko‘rsatish» — sales_reveal: server jurnalga yozadi (kuniga 150 ta oila; shu oilani shu kuni qayta ochish chegarani yemaydi)
+//   va to'liq raqamni qaytaradi — u tel: havolasi bo'ladi (telefondan bir bosishda qo'ng'iroq). Ochilgan raqamlar faqat shu sahifa xotirasida
+//   (SALES_OPEN; qayta yuklanganda yana niqoblangan). Tahrir, eksport, chop etish, CSV — yo'q. Direktor qo'shimcha «Sotuvchilar jurnali»ni
+//   ko'radi (sales_log — kim, qachon, qaysi oila; telefonsiz).
+const SALES_PAGE=50;
+const SALES_OPEN=new Map();   // oila kaliti -> {father, mother} — shu seansda ochilgan raqamlar
+let SALES_OPEN_UID='';        // kimniki: boshqa hisob shu oynada kirsa (chiqib-kirish, sahifa yangilanmasdan) — tozalanadi, aks holda
+                              //   u oldingi foydalanuvchi ochgan raqamlarni o'z jurnalisiz ko'rardi
+const SALES_REASON={ daily_cap:'Bugungi chegara tugadi — kuniga 150 ta oila. Ertaga davom ettiring.',
+  not_found:'Bu oila endi ro‘yxatda yo‘q (o‘quvchi arxivga o‘tgan yoki raqam o‘zgargan) — ro‘yxatni yangilang.' };
+// Ochilgan raqam — tel: havolasi (telefondan bir bosishda qo'ng'iroq). Ko'rinishi — pmPrettyPhone; operator kodi ro'yxatda bo'lmagan
+//   998… raqam ham guruhlab ko'rsatiladi (aks holda yaxlit raqamlar qatori chiqardi).
+function salesTel(p){ const d=String(p==null?'':p).replace(/\D/g,'');
+  if(!d) return '<span class="muted">raqam yo‘q</span>';
+  const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
+  return `<a href="tel:+${d}" class="sl-tel" style="font-weight:700;white-space:nowrap">${esc(txt)}</a>`; }
+// Ota yoki ona katagi: ism va (ochilgan bo'lsa) tel: havolasi, aks holda niqoblangan raqam.
+function salesParentCell(x, opened){
+  if(!x) return '<span class="muted">—</span>';
+  return `<div style="font-weight:600">${esc(x.name||'—')}</div><div class="small">${opened ? salesTel(x.phone) : (x.phone ? `<span class="muted" style="white-space:nowrap">${esc(x.phone)}</span>` : '<span class="muted">raqam yo‘q</span>')}</div>`; }
+function salesRowHtml(r){
+  const o=SALES_OPEN.get(r.k), f=o?o.father:r.father, m=o?o.mother:r.mother;
+  return `<tr data-slrow="${esc(r.k)}"><td data-label="Ota">${salesParentCell(f, !!o)}</td><td data-label="Ona">${salesParentCell(m, !!o)}</td>
+    <td class="td-actions">${o ? '<span class="small" style="color:var(--teal);font-weight:600">✓ Raqam ochilgan</span>'
+      : `<button type="button" class="btn sm gold" data-slk="${esc(r.k)}">📞 Raqamni ko‘rsatish</button>`}</td></tr>`; }
+function salesUsedTxt(used, cap){ return `Bugun ochilgan: ${Number(used)||0} / ${Number(cap)||150}`; }
+async function renderSales(){
+  const _g=VIEW_GEN, st={ q:'', off:0, seq:0 };
+  const me=String((auth && auth.currentUser && auth.currentUser.uid) || '');
+  if(SALES_OPEN_UID!==me){ SALES_OPEN.clear(); SALES_OPEN_UID=me; }
+  $('#view').innerHTML=`<div class="page-head"><h2>📞 Ota-onalar bilan aloqa</h2>
+      <div class="ph-actions"><input id="sl-q" class="search-inp" placeholder="Ota yoki ona ismi bo‘yicha qidiruv…" autocomplete="off" aria-label="Ota yoki ona ismi bo‘yicha qidiruv"></div></div>
+    <p class="small muted" style="margin:-8px 0 14px">Faol o‘quvchilarning ota-onalari — faqat ism va telefon (aka-ukalar bitta oila bo‘lib chiqadi). Raqam yashirin: <b>«📞 Raqamni ko‘rsatish»</b> bosilganda ochiladi va jurnalga yoziladi — kuniga 150 ta oila. Ma’lumotni o‘zgartirish, yuklab olish yoki chop etish yo‘q.</p>
+    <div class="card" style="padding:10px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <b id="sl-used">${esc(salesUsedTxt(0, 150))}</b><span class="small muted" id="sl-total"></span></div>
+    <div class="card" id="sl-list"><div class="loading">Yuklanmoqda…</div></div>
+    <div id="sl-pager" style="display:flex;gap:8px;justify-content:center;align-items:center;margin:12px 0"></div>
+    ${SESSION.isAdmin ? `<div class="card" style="margin-top:16px;padding:14px 18px"><div class="cls-card-head" style="margin-bottom:8px"><h3>Sotuvchilar jurnali</h3><span class="small muted">oxirgi 30 kun · telefon raqamlarisiz</span></div><div id="sl-log"><div class="loading">Yuklanmoqda…</div></div></div>` : ''}`;
+  const used=(u,c)=>{ const el=$('#sl-used'); if(el && u!=null) el.textContent=salesUsedTxt(u, c); };
+  const load=async()=>{
+    const my=++st.seq, box=$('#sl-list'); if(!box) return;
+    let r;
+    try{ r=await rpc('sales_contacts', { p_q: st.q.length>=2 ? st.q : null, p_limit: SALES_PAGE, p_offset: st.off }); }
+    catch(e){ if(_g!==VIEW_GEN || my!==st.seq) return;
+      box.innerHTML=`<div class="empty">${rpcMissing(e) ? '«Ota-onalar bilan aloqa» bo‘limi serverda hali yoqilmagan — administratorga murojaat qiling.'
+        : String((e&&e.code)||'')==='42501' ? 'Ruxsat yo‘q: bu bo‘lim faqat sotuvchi va Direktor uchun.' : 'Xatolik: '+esc(errMsg(e))}</div>`;
+      const pg=$('#sl-pager'); if(pg) pg.innerHTML=''; return; }
+    if(_g!==VIEW_GEN || my!==st.seq || !$('#sl-list')) return;
+    const rows=Array.isArray(r&&r.rows)?r.rows:[], total=Number(r&&r.total)||0;
+    used(r&&r.todayUsed, r&&r.dailyCap);
+    const tl=$('#sl-total'); if(tl) tl.textContent=`${total} ta oila${st.q.length>=2?' (qidiruv bo‘yicha)':''}`;
+    box.innerHTML = rows.length
+      ? `<div class="tablewrap"><table><thead><tr><th>Ota</th><th>Ona</th><th></th></tr></thead><tbody>${rows.map(salesRowHtml).join('')}</tbody></table></div>`
+      : `<div class="empty">${st.q.length>=2 ? 'Qidiruv bo‘yicha oila topilmadi.' : 'Hozircha ro‘yxatda oila yo‘q.'}</div>`;
+    const pg=$('#sl-pager');
+    if(pg){ const a=total?st.off+1:0, b=Math.min(total, st.off+rows.length);
+      pg.innerHTML = total>SALES_PAGE ? `<button type="button" class="btn sm" id="sl-prev"${st.off>0?'':' disabled'}>‹ Oldingi</button><span class="small muted">${a}–${b} / ${total}</span><button type="button" class="btn sm" id="sl-next"${b<total?'':' disabled'}>Keyingi ›</button>` : '';
+      const pv=$('#sl-prev'), nx=$('#sl-next');
+      if(pv) pv.onclick=()=>{ st.off=Math.max(0, st.off-SALES_PAGE); load(); };
+      if(nx) nx.onclick=()=>{ st.off+=SALES_PAGE; load(); }; }
+    box.querySelectorAll('[data-slk]').forEach(b=>b.onclick=()=>reveal(b.dataset.slk, b, rows));
+  };
+  const reveal=async(k, btn, rows)=>{
+    if(btn) btn.disabled=true;
+    let r;
+    try{ r=await rpc('sales_reveal', { p_k:k }); }
+    catch(e){ if(btn) btn.disabled=false; toast('Xatolik: '+errMsg(e), true); return; }
+    if(_g!==VIEW_GEN) return;
+    if(r && r.todayUsed!=null) used(r.todayUsed, r.dailyCap);
+    if(!r || !r.ok){ if(btn) btn.disabled=false; toast(SALES_REASON[r&&r.reason]||'Raqamni ochib bo‘lmadi', true); return; }
+    SALES_OPEN.set(k, { father:r.father||null, mother:r.mother||null });
+    const tr=$('#sl-list') && [...$('#sl-list').querySelectorAll('tr[data-slrow]')].find(x=>x.dataset.slrow===k);
+    const row=(rows||[]).find(x=>x.k===k)||{ k };
+    if(tr){ const t=document.createElement('tbody'); t.innerHTML=salesRowHtml(row); const nr=t.firstElementChild; if(nr) tr.replaceWith(nr); }
+  };
+  let tmr=null;
+  const qi=$('#sl-q'); if(qi) qi.addEventListener('input',()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ st.q=qi.value.trim(); st.off=0; load(); }, 300); });
+  const jobs=[load()];
+  if(SESSION.isAdmin) jobs.push(renderSalesLog(_g));
+  await Promise.all(jobs);
+}
+// Direktor: «Sotuvchilar jurnali» — kunlar bo'yicha (kim, nechta oila) va oxirgi ochishlar (vaqt, xodim, ota / ona ismi). Telefon yo'q.
+async function renderSalesLog(_g){
+  const box=$('#sl-log'); if(!box) return;
+  let r;
+  try{ r=await rpc('sales_log', { p_days:30 }); }
+  catch(e){ if(_g!==VIEW_GEN) return; const b=$('#sl-log'); if(b) b.innerHTML=`<div class="empty">${rpcMissing(e)?'Jurnal serverda hali yoqilmagan.':'Xatolik: '+esc(errMsg(e))}</div>`; return; }
+  if(_g!==VIEW_GEN || !$('#sl-log')) return;
+  const dmy=d=>{ const s=String(d||''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4) : esc(s); };
+  const who=x=>`${esc(x.name||x.uid||'—')}${x.role?` <span class="small muted">· ${esc(ROLE_LABEL[x.role]||x.role)}</span>`:''}`;
+  const days=Array.isArray(r&&r.days)?r.days:[], rec=Array.isArray(r&&r.recent)?r.recent:[], cap=Number(r&&r.dailyCap)||150;
+  $('#sl-log').innerHTML = (!days.length && !rec.length) ? '<div class="empty">Hozircha hech kim raqam ochmagan.</div>'
+    : `<div class="small" style="font-weight:700;margin:2px 0 6px">Kunlar bo‘yicha</div>
+      <div class="tablewrap"><table><thead><tr><th>Kun</th><th>Xodim</th><th>Ochilgan oilalar</th></tr></thead><tbody>${days.map(d=>`<tr><td data-label="Kun">${dmy(d.day)}</td><td data-label="Xodim">${who(d)}</td><td data-label="Ochilgan oilalar"><b>${Number(d.count)||0}</b> / ${cap}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">—</td></tr>'}</tbody></table></div>
+      <div class="small" style="font-weight:700;margin:14px 0 6px">Oxirgi ochishlar (${rec.length})</div>
+      <div class="tablewrap"><table><thead><tr><th>Vaqt</th><th>Xodim</th><th>Ota</th><th>Ona</th></tr></thead><tbody>${rec.map(x=>`<tr><td data-label="Vaqt">${esc(fmtWhen(new Date(x.at))||dmy(x.day))}</td><td data-label="Xodim">${who(x)}</td><td data-label="Ota">${esc(x.father||'—')}</td><td data-label="Ona">${esc(x.mother||'—')}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">—</td></tr>'}</tbody></table></div>`;
+}
+// SALES-UI:END
 
 /* ==================== Marketing (CRM / CAC / ROI) ====================
    Arizalar (enrollments) — leadlar; holat (status) bilan voronka.

@@ -2455,6 +2455,51 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   (eski kodda) yiqilishi ko'rsatilgan. Brauzer to'plami (`tests/kassa-e2e`, `bash run-all.sh`) — 42 o'tish, 1124 tekshiruv, hammasi
   o'tdi (arxiv ssenariysi endi 30 tekshiruv: qabulxona ichki ma'lumotnomasi yig'madan).
 
+## 85) «Sotuvchi» roli: faqat ota-onalar ismi va telefoni — ko'rish, o'zgartirishsiz — 2026-11-19
+
+- **Egasi (2026-11-19):** «Biz ikkita sotuvchi olgandik, shularga alohida marketing bo'limidagilarga o'quvchilarni ma'lumotiga dostup
+  bersak bo'ladimi. Ular ota-onalarga aloqaga chiqib bizdagi muammolar haqida gaplashishadi va maktabni boshqalarga tavsiya qilishini
+  so'rashadi, buning uchun ota-onalar ismi va telefon raqamini o'zini ko'ra olishi kerak. Qolgan ma'lumotlar ko'rinmasligi va
+  o'zgartira olmasligi kerak.»
+- **Qaror:** yangi rol `sales` — «Sotuvchi». Mavjud «Marketing menejeri» (`marketing_mgr`) EMAS: u xodim darajasida (`app.is_staff()`,
+  arizalarni tahrirlaydi, marketing statistikasi) — sotuvchiga ortiqcha. `sales` hech bir mavjud ruxsat ro'yxatiga (is_staff, rol
+  yordamchilari, RLS siyosatlari, kassa rollari, serverlar) qo'shilmagan: jadvallarni farzandsiz ota-ona hisobidek ko'radi — o'quvchi,
+  xodim, moliya ma'lumotidan hech narsa. Qo'shimcha lavozim olmaydi (buxgalter kabi): `app.u_has`, `app.role_set`,
+  `app.users_extra_roles_guard` yangi `migration/sales-role.sql` da qayta ta'riflangan (`run-all.sql` — `student-archive.sql` dan oldin),
+  admin.html `uHas`, kirish ro'yxati, «➕ Lavozim» tugmasi ham shunday; eski qatordagi qo'shimchalar zanjirda tozalanadi.
+- **Ma'lumot faqat uchta RPC orqali** (jadvalga to'g'ridan-to'g'ri yo'l yo'q; ruxsat — faol sotuvchi va Direktor, qolganlar — 42501):
+  - `sales_contacts(q, limit, offset)` — FAOL o'quvchilar oilalari (arxiv qoidasi — §83 dagi bilan bir xil; o'chirilgan o'quvchi — yo'q),
+    aka-ukalar bitta oila (ota va ona raqamlari juftligi, kanonik ko'rinishda), har oilada ota va ona — ism va NIQOBLANGAN raqam
+    («+998 00 *** ** 67»). O'quvchi ismi, ID, sinf, manzil va boshqa hech narsa qaytmaydi. Qidiruv — faqat ota / ona ismi bo'yicha
+    (kamida 2 belgi; katta-kichik harf va apostrofsiz). Oila kaliti — maxfiy tuz (`app.sales_secret`, mijozga yopiq) bilan SHA-256:
+    undan telefon ham, o'quvchi ID ham chiqmaydi.
+  - `sales_reveal(k)` — «📞 Raqamni ko‘rsatish»: to'liq raqamlar; har ochish `sales_contact_log` jurnaliga yoziladi (RLS, mijozga
+    huquqsiz); bir foydalanuvchiga kuniga **150 ta oila** (Toshkent kuni), shu oilani shu kuni qayta ochish chegarani yemaydi; arxivga
+    o'tgan / raqami o'zgargan oila — «topilmadi». Chegara — ommaviy ko'chirib olishning (butun bazani yig'ib ketish) oldini olish uchun.
+  - `sales_log(days)` — faqat Direktor: kim qaysi kuni nechta oila ochgani va oxirgi 200 ochish (xodim, ota-ona ismi, vaqt — telefonsiz).
+- **Panel:** bo'lim «📞 Ota-onalar bilan aloqa» — sotuvchida YAGONA bo'lim; Direktorda «O‘quvchilar» guruhida + «Sotuvchilar jurnali».
+  Ochilgan raqam `tel:` havolasi (telefondan bir bosishda qo'ng'iroq), hisoblagich «Bugun ochilgan: N / 150», sahifalash (50 tadan).
+  Tahrir, eksport, chop etish, CSV — yo'q. Sotuvchida 🔍 qidiruv yashirin, oflayn to'lov navbati ishga tushmaydi (umumiy qurilmada
+  kassir navbatini o'z seansi bilan yubormasin), xabarnoma muharriri ro'yxatiga tushmaydi. Saytdagi «Admin panel» havolasi unga ham.
+- **Direktor rolni qanday beradi:** sotuvchi telefon + parol bilan ro'yxatdan o'tadi → «Foydalanuvchilar» → «✓ Tasdiqlash» → Rol:
+  «Sotuvchi (marketing) — faqat ota-onalar ismi va telefoni, o‘zgartirish yo‘q» → «Saqlash». HR kartasida lavozimi «Sotuvchi»
+  (lavozimlar ro'yxatiga qo'shildi) bo'lsa — rol oldindan tanlanadi. Ishdan ketsa — «🚫 Bloklash» (kirish va huquq darhol yopiladi).
+- **Serverlar** (auth, Telegram bot va kunlik hisobot, ai-assistant, payments, server/) — tekshirildi, o'zgarish kerak emas: xodim
+  hisobotlari / `/sheet` — faqat Direktor, AI xulosalari — Direktor / O'IBDO' / farzand egasi, SMS eslatma — Direktor / Moliya menejeri.
+- **Sinovlar:** `migration/test-sales-role.sql` (51 + soni tekshiruvi; dev va jonli zanjirda): ruxsat jadvali (sotuvchi, Direktor;
+  o'qituvchi, qabulxona, marketing menejeri, kassir, moliya, buxgalter, HR, O'IBDO', hamshira, ma'muriyat, ota-ona, o'quvchi, rolsiz,
+  kutilayotgan va bloklangan sotuvchi, anonim — 42501), faqat faol oilalar, aka-uka, niqob, javob kalitlari, o'quvchi ma'lumoti
+  yo'qligi, kalit tuzga bog'liqligi, qidiruv, sahifalash, ochish + jurnal + kunlik chegara (ertasi kun — yangidan), Direktor jurnali,
+  qo'shimcha lavozim yo'q, yozish yo'q va **sizish invarianti**: barcha jadvallar urug' bilan to'ldirilib, authenticated o'qiy oladigan
+  har bir jadval / ko'rinishda (dev 105, jonli 83) sotuvchi ko'radigan qatorlar farzandsiz ota-onanikidan oshmaydi; har bir mijoz
+  RPC'sidan (dev 110, jonli 66) sotuvchiga boshqacha javob beradigani — faqat `sales_contacts`, `sales_reveal`; `'sales'` so'zi — yopiq
+  funksiyalar ro'yxatida. `assets/js/sales.test.mjs` (12): kirish (faqat «sales» bo'limi, qo'shimchalarsiz, 🔍 va navbatsiz), niqob,
+  ochish → `tel:`, hisoblagich, chegara / topilmadi xabarlari, qidiruv, sahifalash, eksport / tahrir yo'qligi, Direktor jurnali, rol
+  tanlovi, lavozim → rol, menyu. Brauzer ssenariysi `tests/kassa-e2e/scenarios/e2e-sales.cjs` (`run-all.sh sl:v1 sl:v2`; 14
+  tekshiruv — yagona bo'lim, niqob, ochish → `tel:` va jurnal, qidiruv, kirishda konsol xatosi va RLS rad etgan so'rov yo'q, REST
+  orqali o'quvchi / karta / faktura bo'sh va jurnal rad, Direktor jurnali va rol tanlovi) — v1 va v2 da 14/14. Eski kodda (b055494)
+  SQL to'plami 48/52, JS 12/12 yiqiladi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

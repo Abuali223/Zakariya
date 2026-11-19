@@ -83,7 +83,8 @@ qayta ishlatilmaydi), oxirida stendni to‘xtatadi. Natija: `local/out/<vaqt>/su
 `local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 40 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
 (chiqish kodi ≠ 0).
 
-Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`).
+Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`, `ar:v1|v2`,
+`sl:v1|v2`).
 
 Bitta ssenariyni qo‘lda (tuzatish paytida):
 
@@ -127,8 +128,13 @@ shu jadval ham yangilanadi):
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
 | ar | `e2e-arxiv.cjs` | o‘quvchilar arxivi (egasi, 2026-11-18): chiqarilgan / bitirgan o‘quvchi faol sondan chiqadi (jami, sinf kartasi, bosh sahifa, kassir ro‘yxati), qidiruvda arxivga havola, kelajak sana bilan chiqarish, «🗄 Arxiv» va filtrlar, 📨 ma’lumotnoma (QR, telefon / to‘lovsiz), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma’lumotnomasi (baho / davomat — student_certificate), O‘IBDO‘ menyusida Arxiv, kassir qidiruvi; qabulxona ichki ma’lumotnomasi (oyna va «🖨 Ichki hisobot») — davomat, baho, xarakteristika yig‘madan, oylik xulosa «ko‘rsatilmaydi» | v1 30, v2 30 |
+| sl | `e2e-sales.cjs` | «Sotuvchi» roli (egasi, 2026-11-19): menyuda yagona «Ota-onalar bilan aloqa» bo‘limi, faol oilalar (arxivdagisiz) niqoblangan raqam bilan, «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo‘yicha qidiruv; 🔍 qidiruv, to‘lov navbati, tahrir / eksport tugmasi yo‘q; kirishda konsol xatosi va RLS rad etgan so‘rov yo‘q; REST (sotuvchi seansi): o‘quvchi, shaxsiy karta, faktura — bo‘sh, jurnal va Direktor jurnali — rad, o‘zini Direktor qila olmaydi; Direktor: bo‘lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali», «Foydalanuvchilar»dagi rol tanlovi | v1 14, v2 14 |
 
-Jami: 42 o‘tish, 1124 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32, arxiv 60).
+Jami: 44 o‘tish, 1152 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32, arxiv 60, sotuvchi 28).
+
+**Qo‘shimcha (2026-11-19, keyinroq).** «Sotuvchi» roli ssenariysi (`sl`) qo‘shildi va alohida o‘tkazildi: v1 14/14, v2 14/14
+(yangi stend, dev zanjir). Quyidagi to‘liq yashil o‘tish (42 o‘tish) undan oldingi kod bilan — to‘liq to‘plam (44 o‘tish) hali
+qayta o‘tkazilmagan.
 
 **Holat (2026-11-19).** Oxirgi to‘liq yashil o‘tish — 2026-11-19: 42 o‘tish, 1124 tekshiruv — hammasi o‘tdi (≈ 16 daqiqa).
 Kod — platformaning to‘liq auditi tuzatishlaridan keyingi holat (8 yo‘nalish, 66 topilma, uch raund mustaqil tekshiruv —
