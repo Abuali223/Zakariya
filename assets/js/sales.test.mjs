@@ -217,6 +217,21 @@ test('renderSales: «📞 Raqamni ko‘rsatish» — sales_reveal, raqamlar tel:
   assert.equal(E.ctx.__open.size, 0);
 });
 
+test('renderSales: noto‘g‘ri yozilgan raqam (valid:false) — tel: havolasiz, ogohlantirish bilan; xorij raqami (valid:true) — tel: havolasi', async () => {
+  const R4 = { k: 'd'.repeat(32), father: { name: 'Sinov Ota Sigma', phone: '*** ** 32', valid: false }, mother: { name: 'Sinov Ona Sigma', phone: '*** ** 33', valid: true } };
+  const REV4 = { ok: true, k: R4.k, father: { name: 'Sinov Ota Sigma', phone: '998001110031998001110032', valid: false },
+    mother: { name: 'Sinov Ona Sigma', phone: '+447700900033', valid: true }, todayUsed: 1, dailyCap: 150 };
+  const E = salesEnv({ rows: [R4], reveal: { [R4.k]: REV4 } });
+  await E.render();
+  assert.match(E.list(), /\*\*\* \*\* 32[\s\S]*\*\*\* \*\* 33/, 'ochilmaguncha — niqob');
+  await E.D.els['#sl-list'].querySelectorAll('[data-slk]')[0].onclick();
+  const h = E.list();
+  assert.match(h, /998001110031998001110032<\/span> <span[^>]*>\(raqam noto‘g‘ri yozilgan — kartani tekshirish kerak\)/, 'ota: raqam matn, ogohlantirish');
+  assert.doesNotMatch(h, /tel:\+?998001110031/, 'noto‘g‘ri raqamga qo‘ng‘iroq havolasi yo‘q');
+  assert.match(h, /<a href="tel:\+447700900033"/, 'ona: xorij raqami — qo‘ng‘iroq havolasi');
+  assert.equal((h.match(/href="tel:/g) || []).length, 1);
+});
+
 test('renderSales: kunlik chegara va topilmadi — xabar, raqam ochilmaydi, tugma qayta yoqiladi; tarmoq xatosi — xabar', async () => {
   const E = salesEnv({ rows: [R1, R2], todayUsed: 149, reveal: { [R1.k]: { ok: false, reason: 'daily_cap', todayUsed: 150, dailyCap: 150 }, [R2.k]: { ok: false, reason: 'not_found' } } });
   await E.render();

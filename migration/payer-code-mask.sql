@@ -173,8 +173,11 @@ begin
   end if;
   -- Buxgalter hisobi farzand biriktirmaydi (moliya rejasi F1.21, D6): bu ish hisobi o'quvchi ma'lumotiga ota-ona huquqini olmasin —
   --   maktab buxgalteri ota-ona bo'lsa, alohida ota-ona hisobidan foydalanadi.
-  if app.my_role() = 'accountant' then
-    return jsonb_build_object('ok', false, 'error', 'Buxgalter hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning.');
+  --   «Sotuvchi» (sales-role.sql) — xuddi shunday: ish hisobi faqat ota-onalar ismi va telefonini ko'radi, farzand ma'lumotini emas.
+  if app.my_role() in ('accountant', 'sales') then
+    return jsonb_build_object('ok', false, 'error', case when app.my_role() = 'sales'
+      then 'Sotuvchi hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning.'
+      else 'Buxgalter hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning.' end);
   end if;
   p_sid := btrim(coalesce(p_sid, ''));
   -- Lockout: oxirgi 15 daqiqada 5+ MUVAFFAQIYATSIZ urinish -> bloklash.

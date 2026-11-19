@@ -83,6 +83,14 @@ revoke all on function app.child_claims_review() from public, anon, authenticate
 create or replace function app.child_claim_staff_gate() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 begin
+  -- Ish hisoblari (buxgalter, sotuvchi) farzand biriktirmaydi — claim_child'dagi qoida boshqa har qanday yo'lda ham (Direktor tasdig'i,
+  --   xizmat yozuvi): bunday hisobdagi bog'lanish 'active' holatga o'tmaydi (to'g'ridan-to'g'ri REST yozuvi — cc_ins = false, audit-4.sql).
+  --   Blokdan chiqarish (user_unblock) ish hisobining bog'lanishini qaytarmaydi; allaqachon faol eski bog'lanishga tegilmaydi.
+  if coalesce(nullif(new.status, ''), 'active') = 'active'
+     and (tg_op = 'INSERT' or coalesce(nullif(old.status, ''), 'active') <> 'active')
+     and exists (select 1 from public.users u where u.id = new.uid and u.role in ('accountant', 'sales')) then
+    raise exception 'Bu ish hisobiga (buxgalter / sotuvchi) farzand biriktirilmaydi — ota-ona hisobidan foydalaning' using errcode = '42501';
+  end if;
   if coalesce(nullif(new.status, ''), 'active') = 'active' and new."approvedBy" is null
      and (tg_op = 'INSERT' or coalesce(nullif(old.status, ''), 'active') <> 'active')
      and exists (select 1 from public.users u where u.id = new.uid

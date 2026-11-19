@@ -147,7 +147,8 @@ function makeFake(state) {
       const at = t.blockedAt;
       Object.assign(t, { role, status, blockedRole: null, blockedAt: null, blockedBy: null, updatedAt: now });
       let claims = 0;
-      if (at) (state.child_claims || []).forEach(c => { if (c.uid === uid && c.status === 'revoked' && c.updatedAt === at) { c.status = 'active'; c.updatedAt = now; claims++; } });
+      // ish hisobi (buxgalter, sotuvchi) bog'lanishni qaytarib olmaydi — migration/user-block.sql bilan bir xil
+      if (at && !['accountant', 'sales'].includes(role)) (state.child_claims || []).forEach(c => { if (c.uid === uid && c.status === 'revoked' && c.updatedAt === at) { c.status = 'active'; c.updatedAt = now; claims++; } });
       return { data: { ok: true, already: false, role, status, claims }, error: null };
     }
     return { data: null, error: { message: 'unknown rpc ' + fn } };

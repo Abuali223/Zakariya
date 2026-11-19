@@ -14,7 +14,11 @@
 --   (G) SIZISH INVARIANTI: authenticated o'qiy oladigan HAR BIR public / storage jadval va ko'rinishda sotuvchi ko'radigan qatorlar soni
 --       farzandsiz faol ota-ona ko'radiganidan oshmaydi (barcha jadvallar urug' bilan to'ldiriladi — bo'sh jadval qolmaydi); har bir mijoz
 --       RPC'si (NULL argumentlar bilan) sotuvchiga ota-onadan boshqacha javob beradiganlari — faqat sales_contacts, sales_reveal;
---       'sales' so'zi uchraydigan funksiya / siyosat / ko'rinish — yopiq ro'yxat.
+--       'sales' so'zi uchraydigan funksiya / siyosat / ko'rinish — yopiq ro'yxat;
+--   (H) kuchaytirish (mustaqil tekshiruv): sotuvchi / buxgalter hisobiga farzand biriktirilmaydi (claim_child, Direktor tasdig'i, xizmat
+--       yozuvi), rol «Sotuvchi»ga o'zgarganda bog'lanishlar bekor qilinadi, blokdan chiqarish ish hisobining bog'lanishini qaytarmaydi
+--       (xato bilan to'xtamaydi), o'qituvchiga baho yo'q, xabarnoma muharriri emas, student_phones — security_barrier, oila grafi
+--       (almashib yozilgan / to'liq bo'lmagan aka-uka kartalari — bitta oila, ikkala raqam), noto'g'ri / xorij raqami, kirill qidiruvi.
 --   Har chaqiruv haqiqiy rol bilan (authenticated + JWT sub) — RLS va GRANT haqiqiy. Sana — sinov soati (app.fin_clock; faqat fx_* / sinov /
 --   test nomli bazada): bugun 2026-11-19, R-bandida ertasi kun. Sinov qoidalari: (a) yozuv / RPC o'z so'rovida (\gset bilan), natija
 --   KEYINGI so'rovda o'qiladi; (b) NULL natija — FAIL (hisobdan tushib qolmaydi); (c) savepoint ichidagi qiymat \gset bilan olinadi,
@@ -27,7 +31,7 @@
 \pset format unaligned
 \pset tuples_only on
 -- yozilishi kerak bo'lgan tekshiruvlar soni (ZZ dan tashqari): yangi tekshiruv qo'shilsa — oshiriladi
-\set kutilgan 51
+\set kutilgan 61
 do $g0$ begin
   if exists (select 1 from public.students) then
     raise exception 'test-sales-role.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -114,7 +118,14 @@ insert into public.users (id, email, name, role, status, verified, "extraRoles",
   ('U_PAR','p@example.org','Sinov Ota Farzandli','parent','active',true,'[]',null,'[]','[]'),
   ('U_PAR0','p0@example.org','Sinov Ota Farzandsiz','parent','active',true,'[]',null,'[]','[]'),
   ('U_STU','st@example.org','Sinov Oquvchi Hisobi','student','active',true,'[]',null,'[]','[]'),
-  ('U_NONE','no@example.org','Sinov Rolsiz',null,'active',false,'[]',null,'[]','[]');
+  ('U_NONE','no@example.org','Sinov Rolsiz',null,'active',false,'[]',null,'[]','[]'),
+  -- (H) bandi: farzand bog'lanishi bor hisoblar
+  ('U_SALC','sc@example.org','Sinov Sotuvchi Kutilgan Bog','sales','active',true,'[]',null,'[]','[]'),
+  ('U_PAR2','p2@example.org','Sinov Ota Sotuvchiga','parent','active',true,'[]',null,'[]','[]'),
+  ('U_PAR3','p3@example.org','Sinov Ota Bloklanadi','parent','active',true,'[]',null,'[]','[]'),
+  ('U_ACCB','ab@example.org','Sinov Buxgalter Farzandli','accountant','active',true,'[]',null,'[]','[]');
+insert into public.users (id, email, name, role, status, verified, "extraRoles", "blockedRole", "blockedAt", "homeroomClasses", "assignedClasses") values
+  ('U_SALB2','sb2@example.org','Sinov Sotuvchi Bloklangan Ikki',null,'blocked',true,'[]','sales','2026-11-01 10:00+05','[]','[]');
 -- O'quvchilar (bugun = 2026-11-19): o'quvchi ismlari «Bola», ID'lar «IQ-S…» — sotuvchi javoblarida uchramasligi kerak.
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "exitAt", "stopFrom", "exitReason", "order") values
   ('s1','IQ-S01','Sinov Bola Bir',5,'A','uz','',null,null,null,1),
@@ -152,6 +163,14 @@ insert into public.deleted_records (tbl, "rowId", row, "deletedBy") values
   ('students','s7','{"id":"s7","studentId":"IQ-S07","name":"Sinov Bola Yetti","grade":5,"classLetter":"A","lang":"uz"}','U_DIR');
 insert into public.student_codes (id, code) values ('s1','K7Q2ZP'), ('s2','M4R8TX');
 insert into public.child_claims (id, uid, "studentId", code, status) values ('U_PAR__IQ-S01','U_PAR','IQ-S01','K7Q2ZP','active');
+-- (H) bandi: eski (tuzatishdan oldingi) bog'lanishlar — kutilayotgan sotuvchi bog'lanishi, rol o'zgaradigan ota-ona, bloklanadigan ota-ona va
+--   buxgalter, bloklashda bekor qilingan sotuvchi bog'lanishi (updatedAt = blockedAt — user_unblock uni qaytarishga urinardi).
+insert into public.child_claims (id, uid, "studentId", code, status, "updatedAt") values
+  ('U_SALC__IQ-S02','U_SALC','IQ-S02','M4R8TX','pending',now()), ('U_PAR2__IQ-S02','U_PAR2','IQ-S02','M4R8TX','active',now()),
+  ('U_PAR2__IQ-S08','U_PAR2','IQ-S08','X','pending',now()), ('U_PAR3__IQ-S08','U_PAR3','IQ-S08','X','active',now()),
+  ('U_ACCB__IQ-S02','U_ACCB','IQ-S02','M4R8TX','active',now()), ('U_SALB2__IQ-S02','U_SALB2','IQ-S02','M4R8TX','revoked','2026-11-01 10:00+05');
+insert into public.teacher_ratings (id, "teacherId", uid, "raterRole", stars) values ('U_PAR2__IQT-S01','IQT-S01','U_PAR2','parent',5);
+insert into public.notify_settings (id, editors) values ('general', '["U_SAL","U_REC"]') on conflict (id) do update set editors = excluded.editors;
 insert into public.invoices (id, "studentId", "studentName", "classKey", month, amount, "paidAmount", status) values
   ('i1','IQ-S01','Sinov Bola Bir','uz-5-A','2026-11',2900000,0,'pending'), ('i2','IQ-S02','Sinov Bola Ikki','uz-7-B','2026-11',2900000,2900000,'paid');
 insert into public.payments (id, "studentId", provider, amount, status, raw, "payerName", "payerPhone", matched, "createdAt") values
@@ -263,15 +282,17 @@ select zz.chk('B05 niqob: hamma raqam «+998 00 *** ** NN»; Alfa — ota 01 / o
                 where r -> 'father' ->> 'name' = 'Sinov Ota Alfa')
   || ' | ' || coalesce((regexp_match(regexp_replace(:'b_list', '"k": "[0-9a-f]{32}"', '', 'g'), '\d{5,}'))[1], 'yoq'),
   '^\+998 00 \*\*\* \*\* NN \| \+998 00 \*\*\* \*\* 01 \+998 00 \*\*\* \*\* 01 \| yoq$');
-select zz.chk('B06 ota yoki ona yo''q bo''lsa — null; ismi bor, raqami yo''q — {name, phone:null}',
+select zz.chk('B06 ota yoki ona yo''q bo''lsa — null; ismi bor, raqami yo''q — {name, phone:null, valid:null}; to''g''ri raqam — valid:true',
   (select (r -> 'mother')::text from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r where r -> 'father' ->> 'name' = 'Sinov Ota Epsilon') || ' | '
-  || (select (r -> 'father')::text from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r where r -> 'mother' ->> 'name' = 'Sinov Ona Iota'),
-  '^null \| \{"name": "Sinov Ota Iota", "phone": null\}$');
+  || (select (r -> 'father')::text from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r where r -> 'mother' ->> 'name' = 'Sinov Ona Iota') || ' | '
+  || (select string_agg(distinct p ->> 'valid', ',') from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r,
+             lateral (select r -> 'father' as p union all select r -> 'mother') x where jsonb_typeof(p) = 'object' and p ->> 'phone' is not null),
+  '^null \| \{"name": "Sinov Ota Iota", "phone": null, "valid": null\} \| true$');
 select zz.chk('B07 javob kalitlari — faqat ruxsat etilganlar (yuqori / qator / ota-ona)',
   zz.keys(zz.j(:'b_list')) || ' | ' || (select string_agg(distinct zz.keys(r), ';') from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r) || ' | '
   || (select string_agg(distinct zz.keys(p), ';') from jsonb_array_elements(zz.j(:'b_list') -> 'rows') r,
              lateral (select r -> 'father' as p union all select r -> 'mother') x where jsonb_typeof(p) = 'object'),
-  '^dailyCap,limit,offset,ok,rows,todayUsed,total \| father,k,mother \| name,phone$');
+  '^dailyCap,limit,offset,ok,rows,todayUsed,total \| father,k,mother \| name,phone,valid$');
 select zz.chk('B08 o''quvchi ma''lumoti yo''q: ism, ID, hujjat id, sinf, manzil, JSHSHIR, sog''liq, tug''ilgan sana, ish joyi, kod',
   (zz.j(:'b_list') ->> 'total') || ' ' || coalesce((regexp_match(:'b_list', '(Bola|IQ-S|doc12|"s1"|uz-5|ZZ|2015-|K7Q2ZP|Ota"|grade|class)'))[1], 'yoq'), '^7 yoq$');
 select zz.chk('B09 oila kaliti: 32 ta hex, takrorlanmaydi, qayta so''ralganda o''zgarmaydi, oddiy telefon / ID xeshi emas',
@@ -293,10 +314,11 @@ select zz.chk('B11 qidiruv faqat ota-ona ismi bo''yicha: «alfa», «ONA GAMMA»
   || (zz.list('U_SAL', $a$'saʼdulla'$a$) ->> 'total') || (zz.list('U_SAL', $a$'SADULLA'$a$) ->> 'total')
   || ' ' || (select string_agg(r -> 'father' ->> 'name', ',') from jsonb_array_elements(zz.list('U_SAL', $a$'alfa'$a$) -> 'rows') r),
   '^11111 Sinov Ota Alfa$');
-select zz.chk('B12 qidiruv o''quvchi ismi / ID / telefon raqami / LIKE belgilari bo''yicha — topmaydi; 1 belgi — filtrsiz (hammasi)',
+select zz.chk('B12 qidiruv o''quvchi ismi / ID / telefon raqami / LIKE belgilari bo''yicha — topmaydi; 2 harfdan qisqa («a», «o''») — hech narsa; bo''sh joy — hammasi',
   (zz.list('U_SAL', $a$'Bola'$a$) ->> 'total') || (zz.list('U_SAL', $a$'IQ-S01'$a$) ->> 'total') || (zz.list('U_SAL', $a$'1110001'$a$) ->> 'total')
-  || (zz.list('U_SAL', $a$'%%'$a$) ->> 'total') || (zz.list('U_SAL', $a$'__'$a$) ->> 'total') || ' ' || (zz.list('U_SAL', $a$'a'$a$) ->> 'total'),
-  '^00000 7$');
+  || (zz.list('U_SAL', $a$'%%'$a$) ->> 'total') || (zz.list('U_SAL', $a$'__'$a$) ->> 'total') || ' ' || (zz.list('U_SAL', $a$'a'$a$) ->> 'total')
+  || (zz.list('U_SAL', $a$'o'''$a$) ->> 'total') || ' ' || (zz.list('U_SAL', $a$'   '$a$) ->> 'total'),
+  '^00000 00 7$');
 select zz.chk('B13 sahifalash: 2 ta / 1 ta qoldiq; limit 1000 -> 100, manfiy offset -> 0; jami o''zgarmaydi',
   jsonb_array_length(zz.list('U_SAL', 'null, 2, 0') -> 'rows') || ' ' || jsonb_array_length(zz.list('U_SAL', 'null, 2, 6') -> 'rows') || ' '
   || (zz.list('U_SAL', 'null, 1000, -5') ->> 'limit') || '/' || (zz.list('U_SAL', 'null, 1000, -5') ->> 'offset') || ' '
@@ -319,7 +341,7 @@ select zz.chk('R03 shu oilani shu kuni qayta ochish — chegarani yemaydi (1 / 1
   (zz.j(:'r03') ->> 'ok') || ' ' || (zz.j(:'r03') ->> 'todayUsed') || ' ' || zz.q('select count(*)::text from public.sales_contact_log'), '^true 1 1$');
 select zz.chk('R04 ochish javobi kalitlari — faqat ruxsat etilganlar; o''quvchi ma''lumoti yo''q',
   zz.keys(zz.j(:'r01')) || ' | ' || zz.keys(zz.j(:'r01') -> 'father') || ' | ' || coalesce((regexp_match(:'r01', '(Bola|IQ-S|doc12|ZZ|uz-5|2015-)'))[1], 'yoq'),
-  '^dailyCap,father,k,mother,ok,todayUsed \| name,phone \| yoq$');
+  '^dailyCap,father,k,mother,ok,todayUsed \| name,phone,valid \| yoq$');
 select zz.as('U_SAL', $q$select public.sales_reveal('0123456789abcdef0123456789abcdef')::text$q$) || ' | '
   || zz.as('U_SAL', $q$select public.sales_reveal('abc')::text$q$) || ' | ' || zz.as('U_SAL', 'select public.sales_reveal(null)::text') || ' | '
   || zz.as('U_SAL', $q$select public.sales_reveal($$' or 1=1 --$$)::text$q$) || ' | '
@@ -477,15 +499,93 @@ create temp table zz_rpc as
    where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.prokind = 'f' and has_function_privilege('authenticated', p.oid, 'execute');
 select (select count(*) from zz_rpc) || ':' || coalesce((select string_agg(proname, ',' order by proname) from zz_rpc where r_sal is distinct from r_par), '') as g04 \gset
 rollback to savepoint g04;
-select zz.chk('G04 YOPIQ RO''YXAT (xatti-harakat): sotuvchiga farzandsiz ota-onadan boshqacha javob beradigan RPC''lar (oldida — tekshirilganlar soni)',
-  :'g04', '^[0-9]{2,}:sales_contacts,sales_reveal$');
-select zz.chk('G05 YOPIQ RO''YXAT (matn): ''sales'' so''zi — faqat shu funksiyalarda; siyosat va ko''rinishlarda — yo''q',
+select zz.chk('G04 YOPIQ RO''YXAT (xatti-harakat): sotuvchiga farzandsiz ota-onadan boshqacha javob beradigan RPC''lar (oldida — tekshirilganlar soni; claim_child — rad javobi)',
+  :'g04', '^[0-9]{2,}:claim_child,sales_contacts,sales_reveal$');
+-- G05: ruxsat beruvchi joylar (role_set, u_has, sales_need, oila kaliti) va faqat RAD ETUVCHI qoidalar (farzand bog'lanishi, blokdan chiqarish,
+--   xabarnoma muharriri, o'qituvchi bahosi). Yangi joy paydo bo'lsa — shu ro'yxatga ongli ravishda qo'shiladi.
+select zz.chk('G05 YOPIQ RO''YXAT (matn): ''sales'' so''zi — faqat shu funksiya va siyosatlarda; ko''rinishlarda — yo''q',
   (select string_agg(n.nspname || '.' || p.proname, ',' order by n.nspname, p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname in ('public', 'app') and p.prosrc ~ '\msales\M') || ' | '
-  || coalesce((select string_agg(tablename || '.' || policyname, ',') from pg_policies
+  || coalesce((select string_agg(tablename || '.' || policyname, ',' order by tablename, policyname) from pg_policies
                 where (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '\msales\M'), '-') || ' | '
-  || coalesce((select string_agg(viewname, ',') from pg_views where schemaname in ('public', 'app') and definition ~ '\msales\M'), '-'),
-  '^app.role_set,app.sales_families,app.sales_need,app.u_has,app.users_extra_roles_guard \| - \| -$');
+  || coalesce((select string_agg(viewname, ',' order by viewname) from pg_views where schemaname in ('public', 'app') and definition ~ '\msales\M'), '-'),
+  '^app.child_claim_staff_gate,app.is_notify_editor,app.role_set,app.sales_families,app.sales_need,app.u_has,app.users_extra_roles_guard,app.users_sales_claims,public.claim_child,public.user_unblock \| teacher_ratings.tr_ins,teacher_ratings.tr_upd \| -$');
+
+-- ========== (H) kuchaytirish ==========
+select zz.chk('H01 claim_child: sotuvchi va buxgalter hisobiga farzand biriktirilmaydi (to''g''ri kod bilan ham); bog''lanish yozilmaydi',
+  zz.as('U_SAL', $q$select public.claim_child('IQ-S01', 'K7Q2ZP')::text$q$) || ' | ' || zz.as('U_ACC', $q$select public.claim_child('IQ-S01', 'K7Q2ZP') ->> 'error'$q$)
+  || ' | ' || zz.q($q$select count(*)::text from public.child_claims where uid in ('U_SAL', 'U_ACC')$q$),
+  '^\{"ok": false, "error": "Sotuvchi hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning\."\} \| Buxgalter hisobiga farzand biriktirilmaydi — ota-ona hisobidan foydalaning\. \| 0$');
+select zz.try($q$insert into public.child_claims (id, uid, "studentId", code, status) values ('U_SAL__IQ-S02', 'U_SAL', 'IQ-S02', 'M4R8TX', 'active')$q$) || ' | '
+  || zz.try($q$insert into public.child_claims (id, uid, "studentId", code, status) values ('U_ACC__IQ-S02', 'U_ACC', 'IQ-S02', 'M4R8TX', 'active')$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.child_claim_decide('U_SALC__IQ-S02', true)::text$q$) as h02 \gset
+select zz.chk('H02 qo''riqchi: xizmat yozuvi (baza egasi) va Direktor tasdig''i ham ish hisobidagi bog''lanishni faollashtirmaydi (42501)',
+  :'h02' || ' | ' || coalesce((select status from public.child_claims where id = 'U_SALC__IQ-S02'), '-') || ' '
+  || (select count(*)::text from public.child_claims where uid in ('U_SAL', 'U_ACC')),
+  '^ERR 42501 Bu ish hisobiga \(buxgalter / sotuvchi\) farzand biriktirilmaydi[^|]* \| ERR 42501 Bu ish hisobiga[^|]* \| ERR 42501 Bu ish hisobiga[^|]* \| pending 0$');
+select zz.cnt('U_PAR2', 'public.students') as h03a \gset
+select zz.as('U_DIR', $q$update public.users set role = 'sales' where id = 'U_PAR2' returning role$q$) as h03u \gset
+select zz.chk('H03 rol «Sotuvchi»ga o''zgarganda faol va kutilayotgan bog''lanishlar bekor qilinadi — farzand ma''lumoti yopiladi',
+  :'h03a' || ' ' || :'h03u' || ' | ' || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid = 'U_PAR2'), '-')
+  || ' | ' || zz.cnt('U_PAR2', 'public.students') || zz.cnt('U_PAR2', 'public.student_private') || zz.cnt('U_PAR2', 'public.invoices'),
+  '^1 sales \| U_PAR2__IQ-S02:revoked,U_PAR2__IQ-S08:revoked \| 000$');
+-- H04: bloklash / blokdan chiqarish (auth-server RPC'lari, baza egasi nomidan). Har chaqiruv xatoni matn qilib qaytaradi (sinov to'xtamaydi).
+create temp table zz_h04 (step text primary key, r text) on commit drop;
+insert into zz_h04 select 'block', zz.q($q$select (public.user_block('U_ACCB', 'U_DIR') ->> 'ok') || '/' || (public.user_block('U_PAR3', 'U_DIR') ->> 'ok')$q$);
+insert into zz_h04 select 'unblock', (select string_agg(u || '=' || coalesce((zz.j(r) ->> 'ok') || '/' || (zz.j(r) ->> 'claims') || '/' || (zz.j(r) ->> 'role'), left(r, 90)), ',' order by u)
+                                        from (select u, zz.q(format('select public.user_unblock(%L, %L)::text', u, 'U_DIR')) as r
+                                                from unnest(array['U_ACCB', 'U_PAR3', 'U_SALB2']) u) x);
+do $rs$ begin perform set_config('app.uid', '', true); perform set_config('iqror.user_block', '', true); end $rs$;   -- user_block / user_unblock o'rnatgan qiymatlar
+select zz.chk('H04 blokdan chiqarish: buxgalter va sotuvchi bog''lanishi qaytmaydi, RPC xatosiz (avval qo''riqchi xatosi bilan to''xtardi); ota-onaniki — qaytadi',
+  coalesce((select r from zz_h04 where step = 'block'), '-') || ' | ' || coalesce((select r from zz_h04 where step = 'unblock'), '-') || ' | '
+  || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid in ('U_ACCB', 'U_PAR3', 'U_SALB2')), '-'),
+  '^true/true \| U_ACCB=true/0/accountant,U_PAR3=true/1/parent,U_SALB2=true/0/sales \| U_ACCB__IQ-S02:revoked,U_PAR3__IQ-S08:active,U_SALB2__IQ-S02:revoked$');
+select zz.chk('H05 o''qituvchiga baho: sotuvchi qo''ya olmaydi, ota-ona qo''yadi (nazorat); sotuvchiga aylangan hisob eski bahosini o''zgartira olmaydi',
+  zz.ins('U_SAL', $q$insert into public.teacher_ratings (id, "teacherId", uid, stars) values ('U_SAL__IQT-S01', 'IQT-S01', 'U_SAL', 5) returning id$q$) || ' | '
+  || zz.ins('U_PAR0', $q$insert into public.teacher_ratings (id, "teacherId", uid, stars) values ('U_PAR0__IQT-S01', 'IQT-S01', 'U_PAR0', 4) returning id$q$) || ' | '
+  || zz.as('U_PAR2', $q$update public.teacher_ratings set stars = 1 where id = 'U_PAR2__IQT-S01' returning id$q$),
+  '^ERR 42501 [^|]* \| U_PAR0__IQT-S01 \| ERR 42501 ');
+select zz.chk('H06 xabarnoma muharriri: ro''yxatdagi sotuvchi — emas (o''qiy / o''zgartira olmaydi); ro''yxatdagi qabulxona — muharrir (nazorat)',
+  zz.as('U_SAL', 'select app.is_notify_editor()::text') || ' ' || zz.as('U_REC', 'select app.is_notify_editor()::text') || ' | '
+  || zz.cnt('U_SAL', 'public.notify_settings') || ' ' || zz.as('U_SAL', $q$with u as (update public.notify_settings set "tgText" = 'zz' returning 1) select count(*)::text from u$q$),
+  '^false true \| 0 (0|ERR 42501 .*)$');
+select zz.chk('H07 student_phones — security_barrier (mijoz filtri ruxsat shartidan oldin bajarilmaydi)',
+  (select coalesce(array_to_string(reloptions, ','), '-') from pg_class where oid = to_regclass('public.student_phones')), '^security_barrier=true$');
+-- H08–H10 — savepoint ichida (yangi oilalar; natijalar \gset bilan, savepoint qaytarilgach tekshiriladi). Bugun (sinov soati) — 2026-11-20.
+savepoint h08;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('h1','IQ-H01','Sinov Bola H Bir',4,'A','uz','',101), ('h2','IQ-H02','Sinov Bola H Ikki',6,'A','uz','',102), ('h3','IQ-H03','Sinov Bola H Uch',2,'A','uz','',103),
+  ('h4','IQ-H04','Sinov Bola H Tort',7,'A','uz','',104), ('h5','IQ-H05','Sinov Bola H Besh',8,'A','ru','',105);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('h1','Sinov Ota Omega','Sinov Ona Omega','+998 00 111 00 21','+998 00 222 00 22'),
+  ('h2','Sinov Ota Omega','Sinov Ona Omega','998002220022','998001110021'),                            -- aka-uka kartasida raqamlar almashib yozilgan
+  ('h3','Sinov Ota Omega',null,'+998 (00) 111-00-21',null),                                            -- faqat ota raqami, boshqa yozuv shakli
+  ('h4','Sinov Ota Sigma','Sinov Ona Sigma','+998 00 111 00 31, +998 00 111 00 32','+44 7700 900033'),  -- bir katakda ikki raqam; xorij raqami
+  ('h5','Синов Ота Тау',null,'+998 00 111 00 41',null);                                               -- kirill yozuvi
+set local session_replication_role = origin;
+select coalesce(zz.list('U_SAL')::text, '<NULL>') as h_list \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Omega'))) as h_rv1 \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Sigma'))) as h_rv2 \gset
+select coalesce((zz.list('U_SAL', $a$'тау'$a$) ->> 'total') || (zz.list('U_SAL', $a$'ТАУ'$a$) ->> 'total') || (zz.list('U_SAL', $a$'Тау'$a$) ->> 'total')
+       || (zz.list('U_SAL', $a$'синов ота'$a$) ->> 'total') || ' ' || coalesce((select string_agg(r -> 'father' ->> 'name', ',')
+            from jsonb_array_elements(zz.list('U_SAL', $a$'тау'$a$) -> 'rows') r), '-'), '<NULL>') as h_cyr \gset
+rollback to savepoint h08;
+select zz.chk('H08 oila grafi: almashib yozilgan va to''liq bo''lmagan aka-uka kartalari — bitta oila (10 ta); ikkala raqam ko''rinadi (ota 21, ona 22)',
+  (zz.j(:'h_list') ->> 'total') || ' ' || (select count(*) from jsonb_array_elements(zz.j(:'h_list') -> 'rows') r where r -> 'father' ->> 'name' = 'Sinov Ota Omega')
+  || ' | ' || coalesce((select (r -> 'father' ->> 'phone') || ' ' || (r -> 'mother' ->> 'name') || ' ' || (r -> 'mother' ->> 'phone')
+                          from jsonb_array_elements(zz.j(:'h_list') -> 'rows') r where r -> 'father' ->> 'name' = 'Sinov Ota Omega'), '-')
+  || ' | ' || coalesce((zz.j(:'h_rv1') #>> '{father,phone}') || ' ' || (zz.j(:'h_rv1') #>> '{mother,phone}'), left(:'h_rv1', 90)),
+  '^10 1 \| \+998 00 \*\*\* \*\* 21 Sinov Ona Omega \+998 00 \*\*\* \*\* 22 \| \+998001110021 \+998002220022$');
+select zz.chk('H09 raqam shakli: bir katakda ikki raqam — valid:false, «+»siz, niqob — oxirgi 2 raqam; xorij raqami — valid:true, «+»; ro''yxatda uzun raqam yo''q',
+  coalesce((select (r -> 'father')::text || ' ' || (r -> 'mother')::text from jsonb_array_elements(zz.j(:'h_list') -> 'rows') r
+             where r -> 'father' ->> 'name' = 'Sinov Ota Sigma'), '-')
+  || ' | ' || coalesce((zz.j(:'h_rv2') -> 'father')::text || ' ' || (zz.j(:'h_rv2') -> 'mother')::text, left(:'h_rv2', 90))
+  || ' | ' || coalesce((regexp_match(regexp_replace(:'h_list', '"k": "[0-9a-f]{32}"', '', 'g'), '\d{5,}'))[1], 'yoq'),
+  '^\{"name": "Sinov Ota Sigma", "phone": "\*\*\* \*\* 32", "valid": false\} \{"name": "Sinov Ona Sigma", "phone": "\*\*\* \*\* 33", "valid": true\}'
+  || ' \| \{"name": "Sinov Ota Sigma", "phone": "998001110031998001110032", "valid": false\} \{"name": "Sinov Ona Sigma", "phone": "\+447700900033", "valid": true\} \| yoq$');
+select zz.chk('H10 kirill yozuvidagi ism: kichik / katta / aralash harf bilan topiladi (lotin «Sinov» — boshqa harflar)',
+  :'h_cyr', '^1111 Синов Ота Тау$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

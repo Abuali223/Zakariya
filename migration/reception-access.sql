@@ -32,7 +32,9 @@ create policy enr_sel on public.enrollments for select
 -- Ota-ona telefoni ko'rinishi (student_phones): reception ham ko'rsin (arizadagi/ro'yxatdagi ota-onaга
 --   qo'ng'iroq). PII qolgan qismi (JSHSHIR, passport, vasiy) reception uchun YOPIQ (student_private RLS'i
 --   reception'ni o'z ichiga olmaydi; bu view faqat telefon ustunlarini beradi).
-create or replace view public.student_phones as
+-- security_barrier (sotuvchi roli mustaqil tekshiruvi): aks holda mijoz filtri (masalan PostgREST regex) WHERE'dan oldin barcha qatorlarda
+--   bajarilib, javob vaqti bo'yicha boshqa oilalarning raqamini (tizimga kirmasdan ham) asta-sekin aniqlash mumkin edi.
+create or replace view public.student_phones with (security_barrier = true) as
   select id, "parentPhone", "parentPhone2"
   from public.student_private
   where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.is_reception() or app.owns_student_doc(id);

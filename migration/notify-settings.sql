@@ -51,7 +51,8 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select app.is_admin() or (app.uid() is not null and exists (
     select 1 from public.notify_settings g, public.users u
      where g.id = 'general' and coalesce(g.editors, '[]'::jsonb) ? app.uid()
-       and u.id = app.uid() and coalesce(nullif(u.status, ''), 'active') = 'active'))
+       and u.id = app.uid() and coalesce(nullif(u.status, ''), 'active') = 'active'
+       and coalesce(u.role, '') <> 'sales'))   -- «Sotuvchi» (sales-role.sql) — xabarnoma muharriri bo'lmaydi
 $$;
 revoke all on function app.is_notify_editor() from public;
 grant execute on function app.is_notify_editor() to anon, authenticated, service_role;

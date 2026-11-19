@@ -164,7 +164,9 @@ begin
      set role = v_role, status = v_status, "blockedRole" = null, "blockedAt" = null, "blockedBy" = null, "updatedAt" = v_now
    where id = p_uid;
   perform set_config('iqror.user_block', '', true);
-  if t."blockedAt" is not null then
+  -- Ish hisobi (buxgalter, sotuvchi — sales-role.sql) farzand bog'lanishini qaytarib olmaydi: child_claim_staff_gate uni rad etadi va
+  --   blokdan chiqarish butunlay xato bilan to'xtardi. Bunday hisobning bog'lanishi 'revoked' bo'lib qoladi (ota-ona hisobidan foydalanadi).
+  if t."blockedAt" is not null and coalesce(v_role, '') not in ('accountant', 'sales') then
     update public.child_claims set status = 'active', "updatedAt" = v_now
      where uid = p_uid and status = 'revoked' and "updatedAt" = t."blockedAt";
     get diagnostics v_claims = row_count;

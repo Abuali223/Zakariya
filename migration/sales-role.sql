@@ -17,10 +17,11 @@ do $iqror_guard$ begin raise exception 'iqror: sales-role.sql ALOHIDA ishga tush
 --     app.u_has, app.role_set va app.users_extra_roles_guard shu faylda qayta ta'riflangan — reports-roles.sql dagi bilan AYNAN bir xil +
 --     'sales' (zanjirda oxirgi ta'rif amal qiladi; admin.html uHas / kirish ro'yxati / «➕ Lavozim» tugmasi ham shunday).
 --   * Ma'lumot FAQAT uchta RPC orqali (jadvalga to'g'ridan-to'g'ri yo'l yo'q):
---       sales_contacts(q, limit, offset) — faol o'quvchilar OILALARI: aka-uka bitta oila (ota va ona telefonlari juftligi — kanonik
---         raqam, app.tg_phone — bo'yicha); har oila: ota va ona — ism + NIQOBLANGAN telefon («+998 00 *** ** 67»). Qidiruv — faqat ota /
---         ona ismi bo'yicha (kamida 2 belgi). O'quvchi ismi, ID, sinf, manzil va boshqa hech narsa qaytmaydi. Oila kaliti (k) — maxfiy tuz
---         (app.sales_secret, mijozga yopiq) bilan SHA-256: undan telefon ham, o'quvchi ID ham chiqmaydi.
+--       sales_contacts(q, limit, offset) — faol o'quvchilar OILALARI: aka-uka bitta oila (kanonik raqamlar — app.tg_phone — grafi:
+--         umumiy raqamli kartalar bitta oila, raqamlar almashib yozilgan bo'lsa ham); har oila: ota va ona — ism + NIQOBLANGAN telefon
+--         («+998 00 *** ** 67»; xorij / noto'g'ri raqam — faqat oxirgi 2 raqam) + valid. Qidiruv — faqat ota / ona ismi bo'yicha (kamida
+--         2 harf). O'quvchi ismi, ID, sinf, manzil va boshqa hech narsa qaytmaydi. Oila kaliti (k) — maxfiy tuz (app.sales_secret, mijozga
+--         yopiq) bilan SHA-256: undan telefon ham, o'quvchi ID ham chiqmaydi.
 --       sales_reveal(k) — shu oilaning to'liq raqamlari; har ochish jurnalga (public.sales_contact_log) yoziladi; bir foydalanuvchiga
 --         kuniga 150 ta oila (Toshkent kuni). Shu oilani shu kuni qayta ochish chegaradan qayta yemaydi.
 --       sales_log(days) — faqat Direktor: kim qaysi kuni nechta oila ochgani va oxirgi 200 ochish (ism, ota-ona ismi, vaqt — telefonsiz).
@@ -133,35 +134,48 @@ begin
     raise exception 'Ruxsat yo''q: bu bo''lim faqat sotuvchi (marketing) va Direktor uchun' using errcode = '42501';
   end if;
 end $$;
--- Ism qidiruvi uchun: kichik harf, apostroflarsiz («Sa'dullayev» = «Saʼdullayev» = «Sadullayev»).
+-- Ism qidiruvi uchun: kichik harf, apostroflarsiz («Sa'dullayev» = «Saʼdullayev» = «Sadullayev»). Kirill katta harflari — aniq jadval
+--   bilan (lower() C-ctype bazada faqat lotinni kichraytiradi; mustaqil tekshiruv).
 create or replace function app.sales_norm(p text) returns text
 language sql immutable set search_path = pg_catalog as $$
-  select regexp_replace(lower(coalesce(p, '')), '[''`´‘’ʻʼ]', '', 'g')
+  select regexp_replace(lower(translate(coalesce(p, ''), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯЎҚҒҲ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяўқғҳ')),
+                        '[''`´‘’ʻʼ]', '', 'g')
 $$;
--- Niqob (kanonik raqamdan): 998001234567 -> «+998 00 *** ** 67»; qisqa raqam — faqat oxirgi 2 raqam.
+-- To'g'ri raqam: O'zbekiston (998 + 9 raqam) yoki boshqa mamlakat (10–15 raqam, E.164). Aks holda (bir katakda ikki raqam, qisqa,
+--   aralash matn) — noto'g'ri: «+» va tel: havolasiz ko'rsatiladi (mustaqil tekshiruv).
+create or replace function app.sales_valid(p text) returns boolean
+language sql immutable set search_path = pg_catalog as $$
+  select coalesce(p, '') ~ '^998[0-9]{9}$' or (coalesce(p, '') ~ '^[1-9][0-9]{9,14}$' and left(p, 3) <> '998')
+$$;
+-- Niqob (kanonik raqamdan): O'zbekiston 998001234567 -> «+998 00 *** ** 67»; boshqa mamlakat va noto'g'ri raqam — faqat oxirgi 2 raqam.
 create or replace function app.sales_mask(p text) returns text
 language sql immutable set search_path = pg_catalog as $$
   select case when coalesce(p, '') = '' then null
-              when length(p) >= 11 then '+' || left(p, 3) || ' ' || substr(p, 4, 2) || ' *** ** ' || right(p, 2)
+              when p ~ '^998[0-9]{9}$' then '+' || left(p, 3) || ' ' || substr(p, 4, 2) || ' *** ** ' || right(p, 2)
               when length(p) >= 5 then '*** ** ' || right(p, 2)
               else '***' end
 $$;
--- Ota yoki ona: {name, phone} (ism ham, raqam ham bo'lmasa — null). p_mask — niqoblangan, aks holda «+998001234567».
+-- Ota yoki ona: {name, phone, valid} (ism ham, raqam ham bo'lmasa — null). p_mask — niqoblangan; aks holda to'g'ri raqam «+998001234567»,
+--   noto'g'risi — raqamlarning o'zi («+»siz; sahifa uni tel: havolasiz ko'rsatadi).
 create or replace function app.sales_parent(p_name text, p_phone text, p_mask boolean) returns jsonb
 language sql immutable set search_path = public, app, pg_temp as $$
   select case when p_name is null and coalesce(p_phone, '') = '' then null
               else jsonb_build_object('name', p_name,
                      'phone', case when coalesce(p_phone, '') = '' then null
                                    when p_mask then app.sales_mask(p_phone)
-                                   else '+' || p_phone end) end
+                                   when app.sales_valid(p_phone) then '+' || p_phone
+                                   else p_phone end,
+                     'valid', case when coalesce(p_phone, '') = '' then null else app.sales_valid(p_phone) end) end
 $$;
--- Oilalar: faol o'quvchilar (p_all — arxivdagilar ham: faqat Direktor jurnalidagi ismlar uchun), ota va ona raqamlari juftligi bo'yicha
---   guruhlangan (aka-uka — bitta oila). Raqamsiz oila — yo'q. Ism — oiladagi kartalarda eng ko'p uchragani. Shaxsiy karta — o'quvchi hujjat
---   id'si bilan (eski yozuv — studentId kalitli, boshqa o'quvchining hujjati bo'lmasa; app.tg_card_phones bilan bir xil qoida).
+-- Oilalar: faol o'quvchilar (p_all — arxivdagilar ham: faqat Direktor jurnalidagi ismlar uchun). Oila — raqamlar grafining bog'langan
+--   qismi: bitta kartadagi ota va ona raqami bog'langan, umumiy raqamli kartalar — bitta oila (aka-uka kartalarida raqamlar almashib
+--   yozilgan yoki birida ona raqami yo'q bo'lsa ham — bitta qator, kunlik chegaradan bitta o'rin; mustaqil tekshiruv). Raqamsiz oila — yo'q.
+--   Ism va raqam — oiladagi kartalarda eng ko'p uchragani. Kalit — oiladagi eng kichik raqam (tuz bilan sha256). Shaxsiy karta — o'quvchi
+--   hujjat id'si bilan (eski yozuv — studentId kalitli, boshqa o'quvchining hujjati bo'lmasa; app.tg_card_phones bilan bir xil qoida).
 create or replace function app.sales_families(p_all boolean default false)
 returns table(fkey text, f_name text, f_phone text, m_name text, m_phone text)
 language sql stable set search_path = public, app, pg_temp as $$
-  with st as (
+  with recursive st as (
     select nullif(btrim(coalesce(p."fatherName", '')), '') as fn, app.tg_phone(p."parentPhone") as fp,
            nullif(btrim(coalesce(p."motherName", '')), '') as mn, app.tg_phone(p."parentPhone2") as mp
       from public.students s
@@ -177,12 +191,25 @@ language sql stable set search_path = public, app, pg_temp as $$
                  and case when left(coalesce(s."exitAt", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."exitAt", 10)
                           when left(coalesce(s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."stopFrom", 10)
                           else '' end <= to_char(app.fin_today(), 'YYYY-MM-DD'))
-  )
-  select left(encode(sha256(convert_to(k.salt || '|sales-v1|' || st.fp || '|' || st.mp, 'UTF8')), 'hex'), 32),
-         mode() within group (order by st.fn), st.fp, mode() within group (order by st.mn), st.mp
-    from st cross join (select s.salt from app.sales_secret s where s.id = 1) k
-   where st.fp <> '' or st.mp <> ''
-   group by st.fp, st.mp, k.salt
+  ),
+  cards as (select fn, fp, mn, mp from st where fp <> '' or mp <> ''),
+  edges as (select fp as a, coalesce(nullif(mp, ''), fp) as b from cards where fp <> ''
+            union select mp, coalesce(nullif(fp, ''), mp) from cards where mp <> ''),
+  sym as (select a, b from edges union select b, a from edges),
+  reach (a, b) as (select a, b from sym union select r.a, e.b from reach r join sym e on e.a = r.b),
+  comp as (select a as phone, min(b) as root from reach group by a),
+  fam as (select c.fn, c.fp, c.mn, c.mp, coalesce(cf.root, cm.root) as root
+            from cards c left join comp cf on c.fp <> '' and cf.phone = c.fp left join comp cm on c.mp <> '' and cm.phone = c.mp),
+  agg as (select fam.root,
+                 mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
+                 coalesce(mode() within group (order by fam.fp) filter (where fam.fp <> ''), '') as fp,
+                 mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
+            from fam group by fam.root)
+  -- Ona raqami — otaniki bilan bir xil bo'lmagani (raqamlar almashib yozilgan kartalarda ikkala raqam ham ko'rinsin); boshqasi bo'lmasa — o'zi.
+  select left(encode(sha256(convert_to(k.salt || '|sales-v2|' || a.root, 'UTF8')), 'hex'), 32), a.fn, a.fp, a.mn,
+         coalesce((select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> '' and x.mp <> a.fp),
+                  (select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> ''), '')
+    from agg a cross join (select s.salt from app.sales_secret s where s.id = 1) k
 $$;
 -- Bugun shu foydalanuvchi ochgan oilalar soni.
 create or replace function app.sales_used() returns int
@@ -207,7 +234,9 @@ declare
   v_pat text; v_total int; v_rows jsonb;
 begin
   perform app.sales_need();
-  if length(v_q) >= 2 then v_pat := '%' || replace(replace(replace(v_q, '\', '\\'), '%', '\%'), '_', '\_') || '%'; end if;
+  if length(v_q) >= 2 then v_pat := '%' || replace(replace(replace(v_q, '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  elsif btrim(coalesce(p_q, '')) <> '' then v_pat := '%' || chr(1) || '%';   -- «o'» kabi 2 harfdan qisqa qidiruv — hech narsa (hammasi emas)
+  end if;
   with f as materialized (
     select x.fkey, x.f_name, x.f_phone, x.m_name, x.m_phone,
            (x.f_name is null and x.m_name is null) as o1, app.sales_norm(coalesce(x.f_name, x.m_name)) as o2
@@ -278,8 +307,28 @@ do $$ declare f text; begin
     execute 'revoke all on function ' || f || ' from public, anon';
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;
-  foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_mask(text)',
+  foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_valid(text)', 'app.sales_mask(text)',
                            'app.sales_parent(text, text, boolean)', 'app.sales_families(boolean)', 'app.sales_used()', 'app.sales_user_name(text)'] loop
     execute 'revoke all on function ' || f || ' from public, anon, authenticated';
   end loop;
 end $$;
+
+-- 6) «Sotuvchi» hisobida farzand bog'lanishi bo'lmaydi (mustaqil tekshiruv): rol «Sotuvchi»ga o'zgarganda (yoki shunday yaratilganda) faol /
+--    kutilayotgan bog'lanishlar bekor qilinadi ('revoked' — o'chirilmaydi; rol qaytsa, ota-ona kod bilan qayta bog'laydi). Yangi bog'lanish —
+--    claim_child (payer-code-mask.sql) va child_claim_staff_gate (audit-11-elon.sql) rad etadi. Bir martalik tozalash — idempotent.
+create or replace function app.users_sales_claims() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(new.role, '') = 'sales' and (tg_op = 'INSERT' or coalesce(old.role, '') <> 'sales') then
+    update public.child_claims set status = 'revoked', "updatedAt" = now()
+     where uid = new.id and coalesce(nullif(status, ''), 'active') <> 'revoked';
+  end if;
+  return new;
+end $$;
+revoke all on function app.users_sales_claims() from public, anon, authenticated;
+drop trigger if exists trg_users_sales_claims on public.users;
+create trigger trg_users_sales_claims after insert or update of role on public.users
+  for each row execute function app.users_sales_claims();
+update public.child_claims cc set status = 'revoked', "updatedAt" = now()
+ where coalesce(nullif(cc.status, ''), 'active') <> 'revoked'
+   and exists (select 1 from public.users u where u.id = cc.uid and u.role = 'sales');

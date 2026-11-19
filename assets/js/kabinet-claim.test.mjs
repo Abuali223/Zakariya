@@ -4,6 +4,7 @@
 //      ma'lumoti ochilmaydi (tugma o'chirilgan).
 //   2) Telegram «Uzish» faqat kartada ko'rsatilgan bog'lanishni uzadi (linkId) — bitta oila hisobida ikki ota-onaning Telegrami bo'lsa,
 //      ikkinchisi jim uzilmasin.
+//   3) Ish hisobi (sotuvchi, buxgalter — sales-role.sql, claim_child rad etadi): kabinetda kod kiritish shakli o'rniga eslatma.
 //   Funksiyalar index.html'dan o'qiladi (renderKabinet, renderKabTelegram), DOM — soxta. Ma'lumotlar to'qima.
 //   node --test assets/js/kabinet-claim.test.mjs
 import test from 'node:test';
@@ -33,7 +34,7 @@ function el() {
   };
   return e;
 }
-function ctxFor({ childIds = [], pending = [], links = [] } = {}) {
+function ctxFor({ childIds = [], pending = [], links = [], role = 'parent' } = {}) {
   const els = { '#kabinet-body': el(), '#kab-tg': el(), '#kab-tg-off': el(), '#kab-tg-out': el(), '#kab-msg': el() };
   const calls = { removed: [], tg: [] };
   const T = { uz: new Proxy({}, { get: (o, k) => (typeof k === 'string' ? k : undefined) }) };   // matn o'rniga kalit nomi
@@ -42,7 +43,7 @@ function ctxFor({ childIds = [], pending = [], links = [] } = {}) {
     $: s => els[s] || null, confirm: () => true, findStudent: () => null, studentCardHTML: () => '', renderKabBus: () => {},
     window: {
       IqrorAuth: {
-        getUser: () => ({ uid: 'U_SINOV' }), getChildIds: () => childIds.slice(), getActiveChild: () => childIds[0] || '',
+        getUser: () => ({ uid: 'U_SINOV' }), getRole: () => role, getChildIds: () => childIds.slice(), getActiveChild: () => childIds[0] || '',
         getPendingChildIds: () => pending.slice(), async removeChild(id) { calls.removed.push(id); pending = pending.filter(x => x !== id); },
         async setActiveChild() {}, async addChild() { return { ok: false }; },
       },
@@ -81,6 +82,25 @@ test('A7-01: faol farzand + kutilayotgan — ikkalasi bir qatorda, faoli tanlana
   assert.match(h, /data-sel="IQ-0001"/);
   assert.match(h, /<b>IQ-0009<\/b><span>⏳ kab_pending_chip<\/span>/);
   assert.match(h, /<span class="kab-cnt">1<\/span>/, 'son — faol farzandlar');
+});
+
+test('Ish hisobi (sotuvchi, buxgalter): farzand qo‘shish shakli o‘rniga eslatma; ota-ona va rolsiz — shakl avvalgidek', () => {
+  assert.ok(IDX.includes('kab_noclaim:"Bu ish hisobi — farzand biriktirilmaydi. Farzandingiz bo‘lsa, alohida ota-ona hisobidan foydalaning."'), 'o‘zbekcha');
+  assert.ok(IDX.includes('kab_noclaim:"Это рабочая учётная запись — ребёнка привязать нельзя. Используйте отдельную родительскую учётную запись."'), 'ruscha');
+  for (const role of ['sales', 'accountant']) {
+    const { ctx, els } = ctxFor({ role });
+    ctx.__k();
+    const h = els['#kabinet-body'].innerHTML;
+    assert.match(h, /kab_noclaim/, role + ': eslatma');
+    assert.doesNotMatch(h, /id="kab-input"|id="kab-code"|id="kab-add-btn"/, role + ': kod kiritish shakli yo‘q');
+  }
+  for (const role of ['parent', null]) {
+    const { ctx, els } = ctxFor({ role });
+    ctx.__k();
+    const h = els['#kabinet-body'].innerHTML;
+    assert.match(h, /id="kab-input"/, String(role) + ': shakl bor');
+    assert.doesNotMatch(h, /kab_noclaim/);
+  }
 });
 
 test('A7-09: «Uzish» faqat kartadagi bog‘lanishni uzadi (linkId)', async () => {

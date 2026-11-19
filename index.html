@@ -882,7 +882,7 @@ const T = {
     kab_login:"Kabinetdan foydalanish uchun avval tizimga kiring (Kirish tugmasi).",
     kab_prompt:"Farzandingizning maktab bergan ID raqamini kiriting (bir nechtasini qo‘shishingiz mumkin):",
     kab_ph:"Masalan: IQ-1004",kab_save:"Saqlash",kab_change:"ID ni o‘zgartirish",kab_add:"Qo‘shish",
-    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",kab_code_changed:"Bu kod almashtirilgan — yangi kodni maktabdan oling.",kab_pending:"So‘rov Direktorga yuborildi: siz o‘quvchi kodlarini ko‘radigan xodimsiz, shuning uchun farzand bog‘lanishini Direktor tasdiqlaydi. Tasdiqlangach farzandingiz shu yerda ko‘rinadi.",kab_pending_chip:"Direktor tasdig‘ini kutmoqda",
+    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",kab_code_changed:"Bu kod almashtirilgan — yangi kodni maktabdan oling.",kab_pending:"So‘rov Direktorga yuborildi: siz o‘quvchi kodlarini ko‘radigan xodimsiz, shuning uchun farzand bog‘lanishini Direktor tasdiqlaydi. Tasdiqlangach farzandingiz shu yerda ko‘rinadi.",kab_pending_chip:"Direktor tasdig‘ini kutmoqda",kab_noclaim:"Bu ish hisobi — farzand biriktirilmaydi. Farzandingiz bo‘lsa, alohida ota-ona hisobidan foydalaning.",
     kab_children:"Farzandlaringiz",kab_remove:"Olib tashlash",kab_remove_q:"Bu farzand ro‘yxatdan olib tashlansinmi?",
     kab_dup:"Bu ID allaqachon qo‘shilgan.",
     kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
@@ -986,7 +986,7 @@ const T = {
     kab_login:"Чтобы пользоваться кабинетом, сначала войдите (кнопка «Войти»).",
     kab_prompt:"Введите ID, выданный школой вашему ребёнку (можно добавить несколько):",
     kab_ph:"Например: IQ-1004",kab_save:"Сохранить",kab_change:"Изменить ID",kab_add:"Добавить",
-    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",kab_code_changed:"Этот код заменён — получите новый код в школе.",kab_pending:"Запрос отправлен директору: вы сотрудник, который видит коды учеников, поэтому привязку ребёнка подтверждает директор. После подтверждения ребёнок появится здесь.",kab_pending_chip:"Ожидает подтверждения директора",
+    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",kab_code_changed:"Этот код заменён — получите новый код в школе.",kab_pending:"Запрос отправлен директору: вы сотрудник, который видит коды учеников, поэтому привязку ребёнка подтверждает директор. После подтверждения ребёнок появится здесь.",kab_pending_chip:"Ожидает подтверждения директора",kab_noclaim:"Это рабочая учётная запись — ребёнка привязать нельзя. Используйте отдельную родительскую учётную запись.",
     kab_children:"Ваши дети",kab_remove:"Убрать",kab_remove_q:"Убрать этого ребёнка из списка?",
     kab_dup:"Этот ID уже добавлен.",
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
@@ -1368,7 +1368,9 @@ function renderKabinet(){
   // Direktor tasdig'ini kutayotgan farzand (A7-01: kod ko'radigan xodim hisobi) — o'chiriladigan belgi, ma'lumoti ochilmaydi.
   const pendingIds = A.getPendingChildIds ? A.getPendingChildIds() : [];
   const pendChips = pendingIds.map(id=>`<div class="kab-chip" style="opacity:.75"><button class="kab-chip-main" type="button" disabled style="cursor:default"><b>${esc(id)}</b><span>⏳ ${esc(t.kab_pending_chip)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`).join('');
-  const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><input id="kab-code" type="text" placeholder="${esc(t.kab_code_ph)}" aria-label="${esc(t.kab_code_ph)}" style="max-width:150px"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
+  // Ish hisobi (buxgalter, sotuvchi) farzand biriktirmaydi (claim_child va bazadagi qo'riqchi rad etadi) — shakl o'rniga izoh.
+  const noClaim = ['accountant','sales'].includes(String((A.getRole && A.getRole()) || ''));
+  const addForm = noClaim ? `<div class="kab-add"><div class="small" style="color:#5b6b66">${esc(t.kab_noclaim)}</div></div>` : `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><input id="kab-code" type="text" placeholder="${esc(t.kab_code_ph)}" aria-label="${esc(t.kab_code_ph)}" style="max-width:150px"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
       <div id="kab-msg" class="notfound" style="display:none;margin-top:10px"></div></div>`;
   function wireAdd(){
     const btn=$("#kab-add-btn"), inp=$("#kab-input"); if(!btn||!inp) return;

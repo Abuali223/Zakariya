@@ -10912,14 +10912,16 @@ const SALES_REASON={ daily_cap:'Bugungi chegara tugadi — kuniga 150 ta oila. E
   not_found:'Bu oila endi ro‘yxatda yo‘q (o‘quvchi arxivga o‘tgan yoki raqam o‘zgargan) — ro‘yxatni yangilang.' };
 // Ochilgan raqam — tel: havolasi (telefondan bir bosishda qo'ng'iroq). Ko'rinishi — pmPrettyPhone; operator kodi ro'yxatda bo'lmagan
 //   998… raqam ham guruhlab ko'rsatiladi (aks holda yaxlit raqamlar qatori chiqardi).
-function salesTel(p){ const d=String(p==null?'':p).replace(/\D/g,'');
+// valid === false (baza: bir katakda ikki raqam, qisqa yoki aralash yozuv) — tel: havolasiz, raqam o'zicha va «tekshiring» belgisi bilan.
+function salesTel(p, valid){ const d=String(p==null?'':p).replace(/\D/g,'');
   if(!d) return '<span class="muted">raqam yo‘q</span>';
+  if(valid===false) return `<span style="white-space:nowrap">${esc(String(p))}</span> <span class="small" style="color:#B45309">(raqam noto‘g‘ri yozilgan — kartani tekshirish kerak)</span>`;
   const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
   return `<a href="tel:+${d}" class="sl-tel" style="font-weight:700;white-space:nowrap">${esc(txt)}</a>`; }
 // Ota yoki ona katagi: ism va (ochilgan bo'lsa) tel: havolasi, aks holda niqoblangan raqam.
 function salesParentCell(x, opened){
   if(!x) return '<span class="muted">—</span>';
-  return `<div style="font-weight:600">${esc(x.name||'—')}</div><div class="small">${opened ? salesTel(x.phone) : (x.phone ? `<span class="muted" style="white-space:nowrap">${esc(x.phone)}</span>` : '<span class="muted">raqam yo‘q</span>')}</div>`; }
+  return `<div style="font-weight:600">${esc(x.name||'—')}</div><div class="small">${opened ? salesTel(x.phone, x.valid) : (x.phone ? `<span class="muted" style="white-space:nowrap">${esc(x.phone)}</span>` : '<span class="muted">raqam yo‘q</span>')}</div>`; }
 function salesRowHtml(r){
   const o=SALES_OPEN.get(r.k), f=o?o.father:r.father, m=o?o.mother:r.mother;
   return `<tr data-slrow="${esc(r.k)}"><td data-label="Ota">${salesParentCell(f, !!o)}</td><td data-label="Ona">${salesParentCell(m, !!o)}</td>

@@ -18,12 +18,14 @@ alter table public.config add column if not exists "refundPin" text;
 --    id (= uid__teacherId) ни emas -> bir foydalanuvchi turli id bilan cheksiz ovoz
 --    kiritib reytingни shishirardi. Endi id MAJBURAN uid__teacherId (PK -> 1 ovoz).
 drop policy if exists tr_ins on public.teacher_ratings;
+--    «Sotuvchi» (sales-role.sql) ish hisobi o'qituvchiga baho qo'ymaydi (ko'rish va o'zgartirish — faqat ota-onalar ismi va telefoni).
+--    Rol users qatoridan (app.role_set zanjirda keyinroq — reports-roles.sql — yaratiladi).
 create policy tr_ins on public.teacher_ratings for insert
-  with check (uid = app.uid() and id = uid || '__' || "teacherId");
+  with check (uid = app.uid() and id = uid || '__' || "teacherId" and coalesce((select u.role from public.users u where u.id = app.uid()), '') <> 'sales');
 drop policy if exists tr_upd on public.teacher_ratings;
 create policy tr_upd on public.teacher_ratings for update
   using (uid = app.uid() and id = uid || '__' || "teacherId")
-  with check (uid = app.uid() and id = uid || '__' || "teacherId");
+  with check (uid = app.uid() and id = uid || '__' || "teacherId" and coalesce((select u.role from public.users u where u.id = app.uid()), '') <> 'sales');
 
 -- 3) [P1] teachers xom jadvali (baseSalary/salary/salaryBonus/phone/cameraId) barcha
 --    xodimga (is_staff: teacher/kurator/reception/marketing ham) ochiq edi -> oddiy
@@ -103,7 +105,7 @@ alter table public.staff    add column if not exists email text;
 --    bog'langan view yaratamiz. View egasi (postgres) huquqi bilan ishlaydi
 --    (student_private RLS'ini chetlab o'tadi), ammo WHERE — faqat direktor/zavuch/
 --    moliya/kassir va o'z farzandi bo'yicha ota-ona qatorlarni oladi.
-create or replace view public.student_phones as
+create or replace view public.student_phones with (security_barrier = true) as
   select id, "parentPhone", "parentPhone2"
   from public.student_private
   where app.is_admin() or app.is_zavuch() or app.is_finance() or app.is_cashier() or app.owns_student_doc(id);

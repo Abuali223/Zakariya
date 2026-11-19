@@ -2469,10 +2469,12 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   admin.html `uHas`, kirish ro'yxati, «➕ Lavozim» tugmasi ham shunday; eski qatordagi qo'shimchalar zanjirda tozalanadi.
 - **Ma'lumot faqat uchta RPC orqali** (jadvalga to'g'ridan-to'g'ri yo'l yo'q; ruxsat — faol sotuvchi va Direktor, qolganlar — 42501):
   - `sales_contacts(q, limit, offset)` — FAOL o'quvchilar oilalari (arxiv qoidasi — §83 dagi bilan bir xil; o'chirilgan o'quvchi — yo'q),
-    aka-ukalar bitta oila (ota va ona raqamlari juftligi, kanonik ko'rinishda), har oilada ota va ona — ism va NIQOBLANGAN raqam
-    («+998 00 *** ** 67»). O'quvchi ismi, ID, sinf, manzil va boshqa hech narsa qaytmaydi. Qidiruv — faqat ota / ona ismi bo'yicha
-    (kamida 2 belgi; katta-kichik harf va apostrofsiz). Oila kaliti — maxfiy tuz (`app.sales_secret`, mijozga yopiq) bilan SHA-256:
-    undan telefon ham, o'quvchi ID ham chiqmaydi.
+    aka-ukalar bitta oila (raqamlar grafi: umumiy raqamli kartalar — bitta oila, raqamlar almashib yozilgan yoki birida ona raqami
+    yo'q bo'lsa ham; ism va raqam — oiladagi kartalarda eng ko'p uchragani, ona raqami — otanikidan farqlisi), har oilada ota va ona —
+    ism, NIQOBLANGAN raqam («+998 00 *** ** 67»; xorij va noto'g'ri raqam — faqat oxirgi 2 raqam) va `valid` belgisi. O'quvchi ismi,
+    ID, sinf, manzil va boshqa hech narsa qaytmaydi. Qidiruv — faqat ota / ona ismi bo'yicha (kamida 2 harf — normallashgandan keyin,
+    «o'» kabi qisqasi — hech narsa; katta-kichik harf, kirill ham, apostrofsiz). Oila kaliti — maxfiy tuz (`app.sales_secret`, mijozga
+    yopiq) bilan SHA-256: undan telefon ham, o'quvchi ID ham chiqmaydi.
   - `sales_reveal(k)` — «📞 Raqamni ko‘rsatish»: to'liq raqamlar; har ochish `sales_contact_log` jurnaliga yoziladi (RLS, mijozga
     huquqsiz); bir foydalanuvchiga kuniga **150 ta oila** (Toshkent kuni), shu oilani shu kuni qayta ochish chegarani yemaydi; arxivga
     o'tgan / raqami o'zgargan oila — «topilmadi». Chegara — ommaviy ko'chirib olishning (butun bazani yig'ib ketish) oldini olish uchun.
@@ -2499,6 +2501,27 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   tekshiruv — yagona bo'lim, niqob, ochish → `tel:` va jurnal, qidiruv, kirishda konsol xatosi va RLS rad etgan so'rov yo'q, REST
   orqali o'quvchi / karta / faktura bo'sh va jurnal rad, Direktor jurnali va rol tanlovi) — v1 va v2 da 14/14. Eski kodda (b055494)
   SQL to'plami 48/52, JS 12/12 yiqiladi.
+- **Mustaqil tekshiruv (ikki tekshiruvchi: xavfsizlik va sahifa) va kuchaytirish:**
+  1. *Ish hisobiga farzand biriktirilmaydi* (sotuvchi — buxgalter kabi): `claim_child` rad etadi; `child_claim_staff_gate` (audit-11-elon.sql)
+     ish hisobidagi bog'lanishni boshqa har qanday yo'lda ham (Direktor tasdig'i, xizmat yozuvi) 'active' qilmaydi; rol «Sotuvchi»ga
+     o'zgarganda faol va kutilayotgan bog'lanishlar 'revoked' (`trg_users_sales_claims` + deploydagi bir martalik tozalash). Kabinetda
+     kod kiritish shakli o'rniga eslatma («Bu ish hisobi — farzand biriktirilmaydi…»).
+  2. *Blokdan chiqarish xatosi (yangi qo'riqchi bilan paydo bo'lardi):* eski faol bog'lanishi bor buxgalter bloklanib, keyin blokdan
+     chiqarilsa, `user_unblock` bog'lanishni qaytarishga urinar va qo'riqchi rad etgani uchun butunlay xato bilan to'xtardi. Endi ish
+     hisobi (buxgalter, sotuvchi) bog'lanishi qaytarilmaydi, blokdan chiqarish xatosiz (user-block.sql; auth soxta serveri ham shunday).
+  3. *O'qituvchiga baho:* sotuvchi qo'ya olmaydi va eski bahosini o'zgartira olmaydi (`tr_ins` / `tr_upd`, audit-3.sql).
+  4. *Xabarnoma muharriri:* muharrirlar ro'yxatida qolgan sotuvchi muharrir emas — sozlamalarni o'qiy / o'zgartira olmaydi.
+  5. *`student_phones` — `security_barrier`* (sotuvchidan qat'i nazar, MAVJUD zaiflik): mijoz filtri (masalan PostgREST regex) ruxsat
+     shartidan oldin barcha qatorlarda bajarilib, javob vaqti bo'yicha boshqa oilalar raqamini (tizimga kirmasdan ham) asta-sekin
+     aniqlash mumkin edi. Ikkala ta'rif (audit-3.sql, reception-access.sql) tuzatildi.
+  6. *Raqam shakli:* bir katakda ikki raqam, qisqa yoki aralash matn — `valid:false`: «+»siz, `tel:` havolasiz, «(raqam noto‘g‘ri
+     yozilgan — kartani tekshirish kerak)»; xorij raqami (10–15 xona) — to'g'ri, `tel:` havolasi bilan.
+  7. *Oila grafi, kirill qidiruvi, qisqa qidiruv* — yuqoridagi `sales_contacts` bandida.
+  Sinovlar: `test-sales-role.sql` — 61 + soni tekshiruvi (H01–H10 yangi; G04 ro'yxatida `claim_child` — rad javobi; G05 — rad etuvchi
+  joylar ongli qo'shildi); har yangi tekshiruv mutatsiya bilan tasdiqlandi (11 ta mutatsiya — har birini mos tekshiruv ushladi; masalan
+  `user_unblock` tuzatishisiz H04 «ERR 42501» bilan yiqiladi); eski kodda (b055494) to'plam to'xtamasdan 58/62 yiqiladi.
+  `sales.test.mjs` 13, `kabinet-claim.test.mjs` 5 (ikkalasi ham mutatsiyada yiqiladi). Kengaytirilgan regressiya (`test-sales-role`
+  endi dev, qayta ishga tushirilgan dev va jonli zanjirda) — hammasi yashil; brauzer `sl:v1`, `sl:v2` — 14/14.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
