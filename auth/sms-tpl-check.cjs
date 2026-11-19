@@ -45,6 +45,8 @@ function makeSmsTplCheck(deps) {
     const u = urows && urows[0]; const st = String((u && u.status) || '');
     if (!u || !(st === '' || st === 'active')) return { no: true };
     if (String(u.role || '') === 'director') return { yes: true };
+    // «Sotuvchi» — muharrirlar ro'yxatida qolgan bo'lsa ham muharrir emas (bazadagi app.is_notify_editor bilan bir xil qoida).
+    if (String(u.role || '') === 'sales') return { no: true };
     const g = await sb.from('notify_settings').select('id,editors').eq('id', 'general').limit(1);
     if (g.error) return { err: 'Server xatosi (sozlamalar). Keyinroq urinib ko‘ring.' };
     const ed = g.data && g.data[0] && Array.isArray(g.data[0].editors) ? g.data[0].editors.map(String) : [];

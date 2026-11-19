@@ -170,22 +170,31 @@ update public.users set "extraRoles" = '[]'::jsonb
  where role = 'accountant' and coalesce("extraRoles", '[]'::jsonb) <> '[]'::jsonb;
 
 -- users_upd / users_ins: o'z qatorini tahrirlashda qo'shimcha rol ham O'ZGARMASIN (staff-user-link.sql dagi ro'yxat + extraRoles).
+--   Saqlangan qiymatlar app.users_me() orqali (SECURITY DEFINER, o'z qatori) — policy users jadvalini o'zi SUBSO'ROV bilan o'qimaydi:
+--   aks holda users_sel'ga InitPlan o'rami qo'shib bo'lmasdi (42P17) va users_sel'dagi app.is_admin() har QATOR uchun chaqirilib,
+--   javob vaqti orqali boshqa hisoblar telefoni / emailini aniqlash mumkin edi (rls-timing.sql; ma'no o'zgarmagan).
+create or replace function app.users_me() returns public.users
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select u from public.users u where u.id = app.uid()
+$$;
+revoke all on function app.users_me() from public, anon;
+grant execute on function app.users_me() to authenticated, service_role;
 drop policy if exists users_upd on public.users;
 create policy users_upd on public.users for update using (app.is_admin() or id = app.uid())
   with check (app.is_admin() or (
      id = app.uid()
-     and role     = (select u.role     from public.users u where u.id = app.uid())
-     and verified = (select u.verified from public.users u where u.id = app.uid())
-     and coalesce(status, 'active') = coalesce((select u.status from public.users u where u.id = app.uid()), 'active')
-     and coalesce(phone, '')        = coalesce((select u.phone  from public.users u where u.id = app.uid()), '')
-     and coalesce("staffRefType",'') = coalesce((select u."staffRefType" from public.users u where u.id = app.uid()), '')
-     and coalesce("staffRefId",'')   = coalesce((select u."staffRefId"   from public.users u where u.id = app.uid()), '')
-     and coalesce("staffCode",'')    = coalesce((select u."staffCode"    from public.users u where u.id = app.uid()), '')
-     and coalesce("childIds",        '[]'::jsonb) = coalesce((select u."childIds"        from public.users u where u.id = app.uid()), '[]'::jsonb)
-     and coalesce("homeroomClasses", '[]'::jsonb) = coalesce((select u."homeroomClasses" from public.users u where u.id = app.uid()), '[]'::jsonb)
-     and coalesce("assignedClasses", '[]'::jsonb) = coalesce((select u."assignedClasses" from public.users u where u.id = app.uid()), '[]'::jsonb)
-     and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((select u."assignedSubjects" from public.users u where u.id = app.uid()), '[]'::jsonb)
-     and coalesce("extraRoles",      '[]'::jsonb) = coalesce((select u."extraRoles"      from public.users u where u.id = app.uid()), '[]'::jsonb)
+     and role     = (app.users_me()).role
+     and verified = (app.users_me()).verified
+     and coalesce(status, 'active') = coalesce((app.users_me()).status, 'active')
+     and coalesce(phone, '')        = coalesce((app.users_me()).phone, '')
+     and coalesce("staffRefType",'') = coalesce((app.users_me())."staffRefType", '')
+     and coalesce("staffRefId",'')   = coalesce((app.users_me())."staffRefId", '')
+     and coalesce("staffCode",'')    = coalesce((app.users_me())."staffCode", '')
+     and coalesce("childIds",        '[]'::jsonb) = coalesce((app.users_me())."childIds", '[]'::jsonb)
+     and coalesce("homeroomClasses", '[]'::jsonb) = coalesce((app.users_me())."homeroomClasses", '[]'::jsonb)
+     and coalesce("assignedClasses", '[]'::jsonb) = coalesce((app.users_me())."assignedClasses", '[]'::jsonb)
+     and coalesce("assignedSubjects",'[]'::jsonb) = coalesce((app.users_me())."assignedSubjects", '[]'::jsonb)
+     and coalesce("extraRoles",      '[]'::jsonb) = coalesce((app.users_me())."extraRoles", '[]'::jsonb)
   ));
 drop policy if exists users_ins on public.users;
 create policy users_ins on public.users for insert with check (

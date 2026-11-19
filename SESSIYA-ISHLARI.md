@@ -2515,7 +2515,8 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   4. *Xabarnoma muharriri:* muharrirlar ro'yxatida qolgan sotuvchi muharrir emas — sozlamalarni o'qiy / o'zgartira olmaydi.
   5. *`student_phones` — `security_barrier`* (sotuvchidan qat'i nazar, MAVJUD zaiflik): mijoz filtri (masalan PostgREST regex) ruxsat
      shartidan oldin barcha qatorlarda bajarilib, javob vaqti bo'yicha boshqa oilalar raqamini (tizimga kirmasdan ham) asta-sekin
-     aniqlash mumkin edi. Ikkala ta'rif (audit-3.sql, reception-access.sql) tuzatildi.
+     aniqlash mumkin edi. Ikkala ta'rif (audit-3.sql, reception-access.sql) tuzatildi. *Yetarli emas edi* — 2-mustaqil tekshiruvda
+     topildi va to'liq yopildi (pastdagi «Vaqt bo'yicha sizish» bandi).
   6. *Raqam shakli:* bir katakda ikki raqam, qisqa yoki aralash matn — `valid:false`: «+»siz, `tel:` havolasiz, «(raqam noto‘g‘ri
      yozilgan — kartani tekshirish kerak)»; xorij raqami (10–15 xona) — to'g'ri, `tel:` havolasi bilan.
   7. *Oila grafi, kirill qidiruvi, qisqa qidiruv* — yuqoridagi `sales_contacts` bandida. Grafning birinchi (faqat raqamga tayangan)
@@ -2528,6 +2529,40 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   to'plam to'xtamasdan yiqiladi.
   `sales.test.mjs` 13, `kabinet-claim.test.mjs` 5 (ikkalasi ham mutatsiyada yiqiladi). Kengaytirilgan regressiya (`test-sales-role`
   endi dev, qayta ishga tushirilgan dev va jonli zanjirda) — hammasi yashil; brauzer `sl:v1`, `sl:v2` — 14/14.
+- **2-mustaqil tekshiruv (Workflow: xavfsizlik va to'g'rilik ko'zi + har topilmaga rad etishga urinuvchi tekshiruvchi):** 13 topilma,
+  12 tasdiqlandi, 1 rad etildi (HR lavozimi «Sotuvchi» rolni oldindan tanlashi — Direktor tasdiqlaydi, kutilgan xatti-harakat). Tuzatildi:
+  1. **Vaqt bo'yicha sizish (MAVJUD, butun platforma — sotuvchidan qat'i nazar; jiddiy):** PostgREST filtri (eq / lt / gte …) leakproof
+     — Postgres uni RLS shartidan OLDIN bajaradi; shart har qatorda SECURITY DEFINER funksiya chaqirsa (owns_child, owns_student_doc,
+     is_class_staff …), javob doim «[]», lekin vaqti mos qatorlar soniga proporsional — tekshiruvchi LOKAL stendda (to'qima 400 ta karta)
+     anon kalit bilan (tizimga kirmasdan) HTTP orqali 392 ta raqamni aniq tikladi; o'quvchi ismlari, karta matnlari ham shu usulda. Yangi `migration/rls-timing.sql` +
+     `rls-initplan.sql` kengaytmasi: (a) anon — faqat ochiq sayt kontenti (16 ta jadval / ko'rinish, yopiq ro'yxat), qolganida SELECT /
+     UPDATE / DELETE olindi (ariza INSERT'lari saqlandi); (b) egalik — `app.my_child_sids()` / `app.my_student_docs()` (owns_* bilan
+     AYNAN bir xil to'plam), sinf funksiyalari — `app.rls_class_staff()` darvozasi bilan; rls-initplan har deployda policy'lardagi
+     chaqiruvlarni «ichiga joylanadigan» o'ramlarga almashtiradi — ota-ona / sotuvchi uchun qatorlab funksiya chaqiruvi 0 (sinovda
+     sanaladi); (c) student_private, students, student_phones — oldindan darvoza (ko'radigani yo'q foydalanuvchida jadval ko'rib
+     chiqilmaydi); my_sick_notes / my_nurse_visits — xuddi shunday; (d) users: `users_upd` o'zini subso'rov bilan o'qimaydi
+     (`app.users_me()`), shuning uchun users policy'lari ham InitPlan o'ramida (avval har qatorda is_admin). student_phones'dagi
+     security_barrier qabulxona / kassir telefon qidiruvini ~500 marta sekinlashtirgan edi — rol tekshiruvlari bir marta, tezlik tiklandi.
+     Qoldiq (hujjatlashtirilgan): tasdiqlangan sinf xodimi uchun sinf funksiyalari qatorlab; har so'rovdagi InitPlan'lar «dangasa» —
+     mikrosoniyalik doimiy bitta bit (masofadan amalda o'lchab bo'lmaydi). Tavsiya: nginx'da /rest/ uchun so'rov chegarasi (limit_req).
+  2. **Oila grafi:** ismi bo'sh «ko'prik» karta orqali zid oilalar (bir ota — ikki ona) birlashmaydi (komponent bo'linadi); ota / ona
+     raqami — shu ota-ona ismi yozilgan kartadan (onasi ro'yxatdan o'tkazgan kartada «ota telefoni»ga ona raqami yozilgan bo'lsa ham).
+  3. **claim_child:** bekor qilingan bog'lanish (hisob vaqtincha «Sotuvchi» bo'lgan) joriy to'g'ri kod bilan qayta ochiladi (avval
+     «ok» qaytib, 'revoked' qolardi va kabinet «kod noto'g'ri» derdi).
+  4. **auth sms-tpl-check:** ro'yxatda qolgan sotuvchi muharrir emas (bazadagi qoida bilan bir xil); rol «Sotuvchi»ga o'zgarganda
+     muharrirlar ro'yxatidan ham chiqariladi.
+  5. **O'qituvchi bahosi:** sotuvchi eski bahosini o'chira ham olmaydi (`tr_del`). **Murojaatlar qutisi:** sotuvchi yoza olmaydi
+     (`fb_ins` — ota-ona nomidan soxta shikoyat / javob yo'q).
+  6. **Direktor jurnali — kim ekani aniq:** sotuvchi hisobining ism-familiyasi va emailini faqat Direktor o'zgartiradi
+     (`users_sales_identity_guard`; «Profil»da ism maydoni — faqat ko'rish).
+  7. **Chiqishda tozalash:** ochilgan ota-ona raqamlari va joriy bo'lim chiqish / seans tugashida (boshqa varaqda chiqish ham) o'chadi.
+  8. **Raqam ko'rinishi:** qo'ng'iroq havolasi faqat terib bo'ladigan raqamga (O'zbekiston yoki platformaning phoneCanon qoidasi —
+     davlat kodi va uzunlik; «8 916…», uzunligi noto'g'ri — havolasiz, izoh bilan); noto'g'ri raqam — kartadagi asl yozuv, bir katakda
+     bir nechta raqam bo'lsa — har biri alohida havola.
+  Sinovlar: `test-sales-role.sql` 68 + soni (H13–H17 yangi), yangi `test-rls-timing.sql` 18 + soni (anon yopiq ro'yxati, policy /
+  ko'rinish tuzilmasi, owns_* va sinf o'ramlari barcha kalit / rollarda TENG, qatorlab chaqiruvlar soni 0, egalik to'plami so'rovda
+  doimiy, sotuvchida jadval ko'rib chiqilmaydi, ko'rinish huquqlari o'zgarmagan), `sales.test.mjs` 14, `auth/sms-tpl-check.test.cjs` 23.
+  Mutatsiyalar: vaqt tuzatishlari 7 ta, sotuvchi tuzatishlari 8 ta, sahifa 2 ta — har birini mos tekshiruv ushladi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

@@ -1818,7 +1818,9 @@ $('#google-btn').addEventListener('click', async ()=>{
 //   kelsa ham panel boshidan qurilmaydi: avval har qaytishda xodim birinchi bo'limga tushardi va saqlanmagan kiritish o'chardi.
 let bootUid=null;
 onAuthStateChanged(auth, async user=>{
-  if(!user){ bootUid=null; show('login'); return; }
+  // Chiqish / seans tugashi (boshqa varaqda chiqish ham): ochilgan ota-ona raqamlari va joriy bo'lim tozalanadi — umumiy kompyuterda
+  //   keyingi odam ularni kirish oynasi ortida (DevTools) ko'rmasin; kech kelgan javob ham chizilmaydi (VIEW_GEN).
+  if(!user){ bootUid=null; try{ VIEW_GEN++; }catch(e){} try{ SALES_OPEN.clear(); SALES_OPEN_UID=''; }catch(e){} try{ const v=$('#view'); if(v) v.innerHTML=''; }catch(e){} show('login'); return; }
   if(bootUid===user.uid) return;
   bootUid=user.uid;
   const tok = await user.getIdTokenResult().catch(()=>null);
@@ -1908,6 +1910,8 @@ async function openProfile(){
   const u=auth.currentUser; if(!u){ toast('Avval tizimga kiring',true); return; }
   let ud={}; try{ const d=await getDoc(doc(db,'users',u.uid)); if(d.exists()) ud=d.data()||{}; }catch(e){}
   const curPhone=String(ud.phone||'').replace(/\D/g,'');
+  // «Sotuvchi» — ism-familiyani o'zi o'zgartirmaydi (baza ham rad etadi: sales-role.sql users_sales_identity_guard).
+  const nameLocked=String(ud.role||'')==='sales';
   const pretty=p=>{ const d=String(p||'').replace(/\D/g,''); return d ? pmPrettyPhone('+'+d) : '—'; };   // kanonik (998... / chet el)
   const ov=document.createElement('div'); ov.id='prof-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:130;padding:16px;overflow:auto';
@@ -1920,9 +1924,11 @@ async function openProfile(){
     <div style="padding:18px 22px">
       <div style="${SEC}">
         <div style="font-weight:700;margin-bottom:2px">Ism-familiya</div>
+        ${nameLocked ? `<div style="margin-top:6px">${esc(ud.name||[ud.firstName,ud.lastName].filter(Boolean).join(' ')||'—')}</div>
+        <div class="small muted" style="margin-top:4px">Sotuvchi hisobining ism-familiyasini Direktor o‘zgartiradi (ochishlar jurnalida kim ekani aniq ko‘rinsin).</div>` : `
         <input id="pf-first" placeholder="Ism" value="${esc(ud.firstName||'')}" style="${INP}">
         <input id="pf-last" placeholder="Familiya" value="${esc(ud.lastName||'')}" style="${INP}">
-        <button class="btn gold sm" id="pf-name-save" style="margin-top:10px">Saqlash</button>
+        <button class="btn gold sm" id="pf-name-save" style="margin-top:10px">Saqlash</button>`}
       </div>
       <div style="${SEC}">
         <div style="font-weight:700;margin-bottom:2px">Parolni o‘zgartirish</div>
@@ -1962,7 +1968,7 @@ async function openProfile(){
   const pwLive=()=>{ if(!AuthAPI) return; const v=AuthAPI.validatePassword($p('pf-new').value); $p('pf-pwchk').querySelectorAll('[data-c]').forEach(s=>{ const good=v.checks[s.dataset.c]; s.textContent=(good?'✓ ':'○ ')+s.textContent.slice(2); s.style.color=good?'#1F7A4D':'var(--muted)'; }); };
   $p('pf-new').addEventListener('input',pwLive);
   // ism saqlash
-  $p('pf-name-save').onclick=async()=>{
+  if($p('pf-name-save')) $p('pf-name-save').onclick=async()=>{
     const fn=$p('pf-first').value.trim(), ln=$p('pf-last').value.trim();
     if(!fn||!ln){ msg('Ism va familiyani kiriting.'); return; }
     const b=$p('pf-name-save'); b.disabled=true;
@@ -10912,12 +10918,21 @@ const SALES_REASON={ daily_cap:'Bugungi chegara tugadi — kuniga 150 ta oila. E
   not_found:'Bu oila endi ro‘yxatda yo‘q (o‘quvchi arxivga o‘tgan yoki raqam o‘zgargan) — ro‘yxatni yangilang.' };
 // Ochilgan raqam — tel: havolasi (telefondan bir bosishda qo'ng'iroq). Ko'rinishi — pmPrettyPhone; operator kodi ro'yxatda bo'lmagan
 //   998… raqam ham guruhlab ko'rsatiladi (aks holda yaxlit raqamlar qatori chiqardi).
-// valid === false (baza: bir katakda ikki raqam, qisqa yoki aralash yozuv) — tel: havolasiz, raqam o'zicha va «tekshiring» belgisi bilan.
-function salesTel(p, valid){ const d=String(p==null?'':p).replace(/\D/g,'');
-  if(!d) return '<span class="muted">raqam yo‘q</span>';
-  if(valid===false) return `<span style="white-space:nowrap">${esc(String(p))}</span> <span class="small" style="color:#B45309">(raqam noto‘g‘ri yozilgan — kartani tekshirish kerak)</span>`;
-  const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
+// Qo'ng'iroq qilsa bo'ladimi: O'zbekiston (998 + 9 raqam) yoki platformaning phoneCanon qoidasi (davlat kodi + uzunlik) — «8 916…»
+//   (ichki prefiks), uzunligi noto'g'ri xorijiy raqam — yo'q.
+function salesDialable(d){ d=String(d||''); return /^998\d{9}$/.test(d) || (d.slice(0,3)!=='998' && d.length>=10 && phoneCanon('+'+d)===d); }
+function salesTelLink(d){ const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
   return `<a href="tel:+${d}" class="sl-tel" style="font-weight:700;white-space:nowrap">${esc(txt)}</a>`; }
+// valid === false yoki qo'ng'iroq qilib bo'lmaydigan raqam — kartadagi asl yozuv: bir katakda bir nechta raqam bo'lsa har biri alohida
+//   (to'g'risi — qo'ng'iroq havolasi), qolgani — matn va sotuvchi bajarsa bo'ladigan izoh.
+function salesTel(p, valid){ const raw=String(p==null?'':p), d=raw.replace(/\D/g,'');
+  if(!d) return '<span class="muted">raqam yo‘q</span>';
+  if(valid!==false && salesDialable(d)) return salesTelLink(d);
+  const parts=raw.split(/[,;\/|]|\s{2,}/).map(s=>s.trim()).filter(Boolean);
+  let ok=0; const html=parts.map(s=>{ let c=s.replace(/\D/g,''); if(c.length===9) c='998'+c;
+    if(c && salesDialable(c)){ ok++; return salesTelLink(c); } return `<span style="white-space:nowrap">${esc(s)}</span>`; }).join(', ');
+  const note=(ok && parts.length>1) ? 'bir katakda bir nechta raqam yozilgan' : 'raqam noto‘g‘ri yozilgan bo‘lishi mumkin — ma’muriyatga xabar bering';
+  return `${html} <span class="small" style="color:#B45309">(${note})</span>`; }
 // Ota yoki ona katagi: ism va (ochilgan bo'lsa) tel: havolasi, aks holda niqoblangan raqam.
 function salesParentCell(x, opened){
   if(!x) return '<span class="muted">—</span>';

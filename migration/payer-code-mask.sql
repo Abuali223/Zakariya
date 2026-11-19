@@ -216,6 +216,13 @@ begin
   -- Kod ko'radigan xodim — Direktor tasdig'igacha 'pending' (yuqoridagi izoh). Javob bog'lanishning HAQIQIY holatidan: avvalgi so'rov
   --   hali kutilayotgan bo'lsa — yana «kutmoqda» (ikkinchi qator yaratilmaydi), Direktor tasdiqlagan bo'lsa — ok.
   v_review := app.is_zavuch() or app.is_reception();
+  -- Avval bekor qilingan bog'lanish (masalan, hisob vaqtincha «Sotuvchi» bo'lgan, keyin ota-onaga qaytarilgan) JORIY to'g'ri kod bilan
+  --   yangi so'rovdek qayta ochiladi (aks holda «on conflict do nothing» uni 'revoked' qoldirib, ok qaytarardi va kabinet «kod
+  --   noto'g'ri» derdi). Qo'riqchi (child_claim_staff_gate) ish hisobini rad etadi, kod ko'radigan xodimni 'pending' qiladi.
+  update public.child_claims
+     set status = case when v_review then 'pending' else 'active' end, code = p_code,
+         "approvedBy" = null, "approvedAt" = null, "updatedAt" = now()
+   where uid = v_uid and "studentId" = v_canon and status = 'revoked';
   insert into public.child_claims(id, uid, "studentId", code, status)
     values (v_uid || '__' || v_canon, v_uid, v_canon, p_code, case when v_review then 'pending' else 'active' end)
     on conflict do nothing;

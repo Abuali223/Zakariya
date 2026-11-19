@@ -26,6 +26,10 @@ drop policy if exists tr_upd on public.teacher_ratings;
 create policy tr_upd on public.teacher_ratings for update
   using (uid = app.uid() and id = uid || '__' || "teacherId")
   with check (uid = app.uid() and id = uid || '__' || "teacherId" and coalesce((select u.role from public.users u where u.id = app.uid()), '') <> 'sales');
+--    O'chirish ham: sotuvchiga aylangan hisob eski bahosini o'chira olmaydi (o'qituvchining ochiq reytingi o'zgarardi); Direktor — o'chiradi.
+drop policy if exists tr_del on public.teacher_ratings;
+create policy tr_del on public.teacher_ratings for delete
+  using ((uid = app.uid() and coalesce((select u.role from public.users u where u.id = app.uid()), '') <> 'sales') or app.is_admin());
 
 -- 3) [P1] teachers xom jadvali (baseSalary/salary/salaryBonus/phone/cameraId) barcha
 --    xodimga (is_staff: teacher/kurator/reception/marketing ham) ochiq edi -> oddiy

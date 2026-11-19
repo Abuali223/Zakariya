@@ -161,16 +161,18 @@ language sql immutable set search_path = pg_catalog as $$
               when length(p) >= 5 then '*** ** ' || right(p, 2)
               else '***' end
 $$;
--- Ota yoki ona: {name, phone, valid} (ism ham, raqam ham bo'lmasa — null). p_mask — niqoblangan; aks holda to'g'ri raqam «+998001234567»,
---   noto'g'risi — raqamlarning o'zi («+»siz; sahifa uni tel: havolasiz ko'rsatadi).
-create or replace function app.sales_parent(p_name text, p_phone text, p_mask boolean) returns jsonb
+-- Ota yoki ona: {name, phone, valid} (ism ham, raqam ham bo'lmasa — null). valid — «to'liq raqamga o'xshaydi» (sahifa qo'ng'iroq
+--   havolasidan oldin platformaning phoneCanon qoidasi bilan ham tekshiradi). p_mask — niqoblangan; aks holda to'g'ri raqam
+--   «+998001234567», noto'g'risi — kartadagi ASL yozuv (p_raw; bir katakda ikki raqam bo'lsa sahifa ularni alohida ko'rsatadi).
+drop function if exists app.sales_parent(text, text, boolean);
+create or replace function app.sales_parent(p_name text, p_phone text, p_mask boolean, p_raw text default null) returns jsonb
 language sql immutable set search_path = public, app, pg_temp as $$
   select case when p_name is null and coalesce(p_phone, '') = '' then null
               else jsonb_build_object('name', p_name,
                      'phone', case when coalesce(p_phone, '') = '' then null
                                    when p_mask then app.sales_mask(p_phone)
                                    when app.sales_valid(p_phone) then '+' || p_phone
-                                   else p_phone end,
+                                   else coalesce(nullif(left(btrim(coalesce(p_raw, '')), 100), ''), p_phone) end,
                      'valid', case when coalesce(p_phone, '') = '' then null else app.sales_valid(p_phone) end) end
 $$;
 -- Oilalar: faol o'quvchilar (p_all — arxivdagilar ham: faqat Direktor jurnalidagi ismlar uchun). Oila — kartalar grafining bog'langan
@@ -178,17 +180,20 @@ $$;
 --   va (2) ota yoki ona ismi mos kelsa (app.sales_nkey) hamda ikkinchi ota-ona ismi zid bo'lmasa (ikkalasida bor va har xil — zid).
 --   Shunday qilib aka-uka kartalarida raqamlar almashib yozilgan yoki birida ona raqami / ismi yo'q bo'lsa ham — bitta qator (kunlik
 --   chegaradan bitta o'rin); umumiy «to'ldiruvchi» raqam (maktab raqami, «0») yoki bir ota — ikki ona (boshqa-boshqa oila) esa
---   birlashmaydi (aks holda oila ro'yxatdan jim yo'qolardi; mustaqil tekshiruv). Raqamsiz oila — yo'q. Ism va raqam — oiladagi kartalarda
---   eng ko'p uchragani; ona raqami — otanikidan farqlisi. Kalit — oiladagi eng kichik o'quvchi hujjat id'si (tuz bilan sha256; id ham,
+--   birlashmaydi (aks holda oila ro'yxatdan jim yo'qolardi; mustaqil tekshiruv); ismi bo'sh karta orqali zid ismlar bitta komponentga
+--   tushsa — komponent bo'linadi. Raqamsiz oila — yo'q. Ism — oiladagi kartalarda eng ko'p uchragani; raqam — shu ota-onaning ismi
+--   yozilgan kartalardan (bo'lmasa — qolganlaridan); ona raqami — otanikidan farqlisi. Kalit — oiladagi eng kichik o'quvchi hujjat id'si (tuz bilan sha256; id ham,
 --   telefon ham chiqmaydi). Shaxsiy karta — o'quvchi hujjat id'si bilan (eski yozuv — studentId kalitli, boshqa o'quvchining hujjati
 --   bo'lmasa; app.tg_card_phones bilan bir xil qoida).
+drop function if exists app.sales_families(boolean);
 create or replace function app.sales_families(p_all boolean default false)
-returns table(fkey text, f_name text, f_phone text, m_name text, m_phone text)
+returns table(fkey text, f_name text, f_phone text, m_name text, m_phone text, f_raw text, m_raw text)
 language sql stable set search_path = public, app, pg_temp as $$
   with recursive st as (
     select s.id as cid,
            nullif(btrim(coalesce(p."fatherName", '')), '') as fn, app.tg_phone(p."parentPhone") as fp,
-           nullif(btrim(coalesce(p."motherName", '')), '') as mn, app.tg_phone(p."parentPhone2") as mp
+           nullif(btrim(coalesce(p."motherName", '')), '') as mn, app.tg_phone(p."parentPhone2") as mp,
+           btrim(coalesce(p."parentPhone", '')) as fr, btrim(coalesce(p."parentPhone2", '')) as mr
       from public.students s
       cross join lateral (
         select sp."fatherName", sp."motherName", sp."parentPhone", sp."parentPhone2" from public.student_private sp where sp.id = s.id
@@ -203,7 +208,7 @@ language sql stable set search_path = public, app, pg_temp as $$
                           when left(coalesce(s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."stopFrom", 10)
                           else '' end <= to_char(app.fin_today(), 'YYYY-MM-DD'))
   ),
-  cards as (select st.cid, st.fn, st.fp, st.mn, st.mp, app.sales_nkey(st.fn) as fk, app.sales_nkey(st.mn) as mk
+  cards as (select st.cid, st.fn, st.fp, st.mn, st.mp, st.fr, st.mr, app.sales_nkey(st.fn) as fk, app.sales_nkey(st.mn) as mk
               from st where st.fp <> '' or st.mp <> ''),
   cph as (select c.cid, c.fp as ph from cards c where app.sales_valid(c.fp)
           union select c.cid, c.mp from cards c where app.sales_valid(c.mp)),
@@ -214,17 +219,38 @@ language sql stable set search_path = public, app, pg_temp as $$
              and not (a.fk <> '' and b.fk <> '' and a.fk <> b.fk)
              and not (a.mk <> '' and b.mk <> '' and a.mk <> b.mk)),
   reach (x, y) as (select c.cid, c.cid from cards c union select r.x, l.y from reach r join lnk l on l.x = r.y),
-  comp as (select r.x as cid, min(r.y) as root from reach r group by r.x),
-  fam as (select c.fn, c.fp, c.mn, c.mp, cp.root from cards c join comp cp on cp.cid = c.cid),
+  comp0 as (select r.x as cid, min(r.y) as root from reach r group by r.x),
+  -- Zid komponent: ismi bo'sh «ko'prik» karta orqali ikki xil ota yoki ona ismi bitta komponentga tushgan (masalan, bir ota — ikki ona
+  --   va onasi yozilmagan uchinchi karta). Birlashtirilmaydi: ikkala ismi bor bir xil (ota, ona) kartalar birga, qolgan karta — alohida
+  --   qator (oila ro'yxatdan yashirinmaydi, ism boshqa odamning raqami bilan chiqmaydi; mustaqil tekshiruv).
+  bad as (select cp.root from comp0 cp join cards c on c.cid = cp.cid group by cp.root
+           having count(distinct c.fk) filter (where c.fk <> '') > 1 or count(distinct c.mk) filter (where c.mk <> '') > 1),
+  comp as (select cp.cid,
+                  case when not exists (select 1 from bad b where b.root = cp.root) then cp.root
+                       when c.fk <> '' and c.mk <> '' then min(cp.cid) over (partition by cp.root, c.fk, c.mk)
+                       else cp.cid end as root
+             from comp0 cp join cards c on c.cid = cp.cid),
+  fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root from cards c join comp cp on cp.cid = c.cid),
+  -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam (ota ismi yozilmagan kartaning «ota telefoni»
+  --   katagiga ona raqami yozilgan bo'lsa — u otaniki deb ko'rsatilmaydi).
+  fam as (select f.*, exists (select 1 from fam0 y where y.root = f.root and y.mn is not null and y.mp = f.fp) as fp_mom from fam0 f),
+  -- Raqam — shu ota-onaning ismi yozilgan kartalardan (bo'lmasa — qolganlaridan); ona raqami — otanikidan farqlisi.
   agg as (select fam.root,
                  mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
-                 coalesce(mode() within group (order by fam.fp) filter (where fam.fp <> ''), '') as fp,
+                 coalesce(mode() within group (order by fam.fp) filter (where fam.fp <> '' and fam.fn is not null),
+                          mode() within group (order by fam.fp) filter (where fam.fp <> '' and not fam.fp_mom), '') as fp,
                  mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
-            from fam group by fam.root)
-  select left(encode(sha256(convert_to(k.salt || '|sales-v3|' || a.root, 'UTF8')), 'hex'), 32), a.fn, a.fp, a.mn,
-         coalesce((select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> '' and x.mp <> a.fp),
-                  (select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> ''), '')
-    from agg a cross join (select s.salt from app.sales_secret s where s.id = 1) k
+            from fam group by fam.root),
+  pick as (select a.root, a.fn, a.fp, a.mn,
+                  coalesce((select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> '' and x.mp <> a.fp and x.mn is not null),
+                           (select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> '' and x.mp <> a.fp),
+                           (select mode() within group (order by x.mp) from fam x where x.root = a.root and x.mp <> ''), '') as mp
+             from agg a)
+  -- Asl yozuv (noto'g'ri raqamni ochganda ko'rsatish uchun): tanlangan raqam yozilgan kartalardagi eng ko'p uchragan matn.
+  select left(encode(sha256(convert_to(k.salt || '|sales-v3|' || p.root, 'UTF8')), 'hex'), 32), p.fn, p.fp, p.mn, p.mp,
+         (select mode() within group (order by x.fr) from fam x where x.root = p.root and p.fp <> '' and x.fp = p.fp and x.fr <> ''),
+         (select mode() within group (order by x.mr) from fam x where x.root = p.root and p.mp <> '' and x.mp = p.mp and x.mr <> '')
+    from pick p cross join (select s.salt from app.sales_secret s where s.id = 1) k
 $$;
 -- Bugun shu foydalanuvchi ochgan oilalar soni.
 create or replace function app.sales_used() returns int
@@ -290,8 +316,8 @@ begin
   end if;
   select count(*) into v_used from public.sales_contact_log l where l.uid = v_uid and l.day = v_day;
   return jsonb_build_object('ok', true, 'k', v_k,
-                            'father', app.sales_parent(v_f.f_name, v_f.f_phone, false),
-                            'mother', app.sales_parent(v_f.m_name, v_f.m_phone, false),
+                            'father', app.sales_parent(v_f.f_name, v_f.f_phone, false, v_f.f_raw),
+                            'mother', app.sales_parent(v_f.m_name, v_f.m_phone, false, v_f.m_raw),
                             'todayUsed', v_used, 'dailyCap', v_cap);
 end $$;
 -- Direktor jurnali: {ok, from, to, dailyCap, days:[{day, uid, name, role, count}], recent:[{at, day, uid, name, role, father, mother}]}
@@ -325,7 +351,7 @@ do $$ declare f text; begin
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;
   foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_nkey(text)', 'app.sales_valid(text)', 'app.sales_mask(text)',
-                           'app.sales_parent(text, text, boolean)', 'app.sales_families(boolean)', 'app.sales_used()', 'app.sales_user_name(text)'] loop
+                           'app.sales_parent(text, text, boolean, text)', 'app.sales_families(boolean)', 'app.sales_used()', 'app.sales_user_name(text)'] loop
     execute 'revoke all on function ' || f || ' from public, anon, authenticated';
   end loop;
 end $$;
@@ -339,6 +365,13 @@ begin
   if coalesce(new.role, '') = 'sales' and (tg_op = 'INSERT' or coalesce(old.role, '') <> 'sales') then
     update public.child_claims set status = 'revoked', "updatedAt" = now()
      where uid = new.id and coalesce(nullif(status, ''), 'active') <> 'revoked';
+    -- Xabarnoma muharrirlari ro'yxatidan ham (is_notify_editor / auth sms-tpl-check uni baribir muharrir hisoblamaydi — ro'yxat toza qolsin).
+    --   Ixtiyoriy tozalash: muharrirlar qo'riqchisi (faqat Direktor / tizim) rad etsa — rol o'zgarishi to'xtamaydi.
+    begin
+      update public.notify_settings set editors = editors - new.id
+       where id = 'general' and jsonb_typeof(editors) = 'array' and editors ? new.id;
+    exception when others then null;
+    end;
   end if;
   return new;
 end $$;
@@ -349,3 +382,23 @@ create trigger trg_users_sales_claims after insert or update of role on public.u
 update public.child_claims cc set status = 'revoked', "updatedAt" = now()
  where coalesce(nullif(cc.status, ''), 'active') <> 'revoked'
    and exists (select 1 from public.users u where u.id = cc.uid and u.role = 'sales');
+update public.notify_settings g set editors = (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(g.editors) e
+                                                 where not exists (select 1 from public.users u where u.id = e #>> '{}' and u.role = 'sales'))
+ where g.id = 'general' and jsonb_typeof(g.editors) = 'array'
+   and exists (select 1 from jsonb_array_elements_text(g.editors) x join public.users u on u.id = x where u.role = 'sales');
+-- 7) Sotuvchi hisobining ism-familiyasi va emaili — faqat Direktor (yoki tizim) o'zgartiradi: Direktor jurnali ochishlarni shu nom bilan
+--    ko'rsatadi; sotuvchi o'z ismini boshqa xodimnikiga almashtirib, ochishlarini uning nomiga «yozdira» olmasin (mustaqil tekshiruv).
+create or replace function app.users_sales_identity_guard() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(old.role, '') = 'sales' and not app.is_system() and not app.is_admin()
+     and (new.name is distinct from old.name or new."firstName" is distinct from old."firstName"
+          or new."lastName" is distinct from old."lastName" or new.email is distinct from old.email) then
+    raise exception 'Sotuvchi hisobining ism-familiyasi va emailini faqat Direktor o''zgartiradi' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+revoke all on function app.users_sales_identity_guard() from public, anon, authenticated;
+drop trigger if exists trg_users_sales_identity on public.users;
+create trigger trg_users_sales_identity before update of name, "firstName", "lastName", email on public.users
+  for each row execute function app.users_sales_identity_guard();

@@ -21,6 +21,13 @@ do $iqror_guard$ begin raise exception 'iqror: rls-initplan.sql ALOHIDA ishga tu
 --   funksiyalar argumentsiz va STABLE — natija qatorga emas, faqat KIM so'rayotganiga bog'liq.
 --   Qatorga bog'liq yordamchilar (owns_child(sid), is_kurator_for(ck) ...) TEGILMAYDI.
 --
+--   VAQT BO'YICHA SIZISH (rls-timing.sql, 2026-11-19): qatorga bog'liq egalik / sinf yordamchilari ham har QATOR uchun emas —
+--   app.owns_child(x) / app.owns_student_doc(x) -> app.rls_in((SELECT app.my_child_sids() / my_student_docs()), x) (bir xil
+--   to'plam, massiv a'zoligi); app.is_class_staff / can_write_general / is_teacher_for_class / is_homeroom_for / is_kurator_for /
+--   teacher_has_subject / ann_can_write (x) -> app.rlsg_*((SELECT app.rls_class_staff()), x), ann_visible -> rls_ann_gate bilan.
+--   O'ramlar «ichiga joylanadi» (inline): ota-ona / sotuvchi / boshqa rollar uchun qatorlab SECURITY DEFINER chaqiruvi qolmaydi
+--   (sinf xodimi uchun — avvalgidek). Ma'no o'zgarmaydi (sinov: test-rls-timing.sql — to'plamlar barcha kalitlarda solishtiriladi).
+--
 --   QANDAY: zanjir OXIRIDA (barcha policy'lar o'z fayllarida yaratilgandan keyin) public sxemadagi har
 --   policy ifodasi olinadi va ro'yxatdagi chaqiruvlar o'raladi; allaqachon o'ralganlari qayta o'ralmaydi.
 --
@@ -53,6 +60,42 @@ begin
     v_cat := v_cat || tok;
     if left(tok, 1) in ('''', '"') then v_out := v_out || tok;
     else v_out := v_out || regexp_replace(tok, re, '(SELECT app.\1())', 'g'); end if;
+  end loop;
+  if v_cat is distinct from src then return src; end if;
+  return v_out;
+end $f$;
+-- Qatorga bog'liq egalik / sinf yordamchilarini «bir marta hisoblanadigan» o'ramlarga almashtiradi (faqat kod qismida; o'ramlar
+--   rls-timing.sql da yaratiladi — bo'lmasa matn o'zgarmaydi). Allaqachon almashtirilgani qayta almashtirilmaydi (nom boshqa).
+create or replace function pg_temp.iqror_prefix_calls(src text) returns text
+language plpgsql stable as $f$
+declare tok text; v_out text := ''; v_cat text := ''; m text[];
+  v_map constant text[][] := array[
+    ['owns_child',           'app.rls_in((SELECT app.my_child_sids()), '],
+    ['owns_student_doc',     'app.rls_in((SELECT app.my_student_docs()), '],
+    ['is_class_staff',       'app.rlsg_is_class_staff((SELECT app.rls_class_staff()), '],
+    ['can_write_general',    'app.rlsg_can_write_general((SELECT app.rls_class_staff()), '],
+    ['is_teacher_for_class', 'app.rlsg_is_teacher_for_class((SELECT app.rls_class_staff()), '],
+    ['is_homeroom_for',      'app.rlsg_is_homeroom_for((SELECT app.rls_class_staff()), '],
+    ['is_kurator_for',       'app.rlsg_is_kurator_for((SELECT app.rls_class_staff()), '],
+    ['teacher_has_subject',  'app.rlsg_teacher_has_subject((SELECT app.rls_class_staff()), '],
+    ['ann_can_write',        'app.rlsg_ann_can_write((SELECT app.rls_class_staff()), '],
+    ['ann_visible',          'app.rlsg_ann_visible((SELECT app.rls_ann_gate()), ']];
+  i int;
+begin
+  if src is null then return null; end if;
+  if to_regprocedure('app.rls_in(text[], text)') is null or to_regprocedure('app.rlsg_ann_visible(boolean, jsonb, timestamp with time zone)') is null
+     or to_regprocedure('app.my_child_sids()') is null or to_regprocedure('app.rls_ann_gate()') is null then
+    return src;
+  end if;
+  for tok in select x[1] from regexp_matches(src, '([^''"]+|''(?:[^'']|'''')*''|"(?:[^"]|"")*")', 'g') x loop
+    v_cat := v_cat || tok;
+    if left(tok, 1) in ('''', '"') then v_out := v_out || tok;
+    else
+      for i in 1 .. array_length(v_map, 1) loop
+        tok := regexp_replace(tok, '(?<![A-Za-z0-9_.])app\.' || v_map[i][1] || '\(', replace(v_map[i][2], '\', '\\'), 'g');
+      end loop;
+      v_out := v_out || tok;
+    end if;
   end loop;
   if v_cat is distinct from src then return src; end if;
   return v_out;
@@ -123,8 +166,8 @@ begin
       end;
     end if;
     continue when not v_cur_ok;
-    v_qual := pg_temp.iqror_wrap_calls(r.qual, v_re);
-    v_chk  := pg_temp.iqror_wrap_calls(r.chk,  v_re);
+    v_qual := pg_temp.iqror_prefix_calls(pg_temp.iqror_wrap_calls(r.qual, v_re));
+    v_chk  := pg_temp.iqror_prefix_calls(pg_temp.iqror_wrap_calls(r.chk,  v_re));
     continue when v_qual is not distinct from r.qual and v_chk is not distinct from r.chk;
     v_sql := format('alter policy %I on public.%I', r.polname, r.relname);
     if r.qual is not null then v_sql := v_sql || format(' using (%s)', v_qual); end if;
@@ -185,5 +228,6 @@ begin
 end $$;
 
 drop function if exists pg_temp.iqror_wrap_calls(text, text);
+drop function if exists pg_temp.iqror_prefix_calls(text);
 
 notify pgrst, 'reload schema';

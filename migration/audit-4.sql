@@ -262,8 +262,10 @@ grant execute on function public.apply_payment(text, numeric, text, text) to aut
 --   (uid = app.uid() qoladi) — aks holda admin begona uid nomidan murojaat "yoza" olardi
 --   (mualliflikni soxtalashtirish, revyu m-1). Faqat o'z nomidan insert.
 drop policy if exists fb_ins on public.feedback;
+--   «Sotuvchi» (sales-role.sql) ish hisobi umumiy murojaatlar qutisiga yozmaydi (ota-ona nomidan soxta shikoyat / javob qoldira olmasin;
+--   rol users qatoridan — app.role_set zanjirda keyinroq yaratiladi).
 create policy fb_ins on public.feedback for insert
-  with check (uid = app.uid());
+  with check (uid = app.uid() and coalesce((select u.role from public.users u where u.id = app.uid()), '') <> 'sales');
 
 -- roles[6] expenses: moliya menejeri/g'aznachi xarajatni o'chira olsin (yaratadi ham).
 drop policy if exists exp_del on public.expenses;

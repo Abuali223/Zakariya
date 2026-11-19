@@ -137,7 +137,7 @@ async function bootAs(usersRow) {
     signOut: async () => { rec.signOut++; }, $: s => ui[s] || null, show: w => rec.shown.push(w), loginAttempted: false, localStorage: { getItem: () => null },
     kassaInit: () => { rec.kassaInit++; }, buildTabs: () => {}, setupRoleSwitch: () => {}, openTab: t => rec.open.push(t), watchBadges: () => {},
     startOutboxSync: () => { rec.outbox++; }, kassaProbe: () => { rec.kassaProbe++; }, approvalQueuesForMe: () => [], kassaTabOk: () => false,
-    accFinOk: () => false, canSeeSalary: () => false, currentTab: 'dashboard',
+    accFinOk: () => false, canSeeSalary: () => false, currentTab: 'dashboard', VIEW_GEN: 0, SALES_OPEN: new Map(), SALES_OPEN_UID: '',
     onAuthStateChanged: (_a, cb) => { ctx.__cb = cb; },
   });
   vm.runInContext(ROLE_SRC + '\n' + BOOT_SRC, ctx);
@@ -156,6 +156,19 @@ test('kirish: sotuvchi panelga kiradi — faqat «sales» bo‘limi, qo‘shimch
   assert.equal(rec.outbox, 0, 'oflayn to‘lov navbati ishga tushmadi');
   assert.equal(ui['#btn-search'].style.display, 'none', '🔍 qidiruv yashirin');
   assert.match(ui['#who'].textContent, /Sotuvchi/);
+});
+
+test('chiqish (yoki seans tugashi): ochilgan ota-ona raqamlari va joriy bo‘lim tozalanadi, kech kelgan javob chizilmaydi (VIEW_GEN)', async () => {
+  const { ctx, ui, rec } = await bootAs({ role: 'sales', status: 'active' });
+  ui['#view'] = { innerHTML: '<tr><td><a href="tel:+998001110001">+998 00 111 00 01</a></td></tr>' };
+  ctx.SALES_OPEN.set('a'.repeat(32), { father: { name: 'Sinov Ota', phone: '+998001110001' } }); ctx.SALES_OPEN_UID = 'U_SAL';
+  const g0 = ctx.VIEW_GEN;
+  await ctx.__cb(null);
+  assert.equal(ui['#view'].innerHTML, '', 'sahifada raqam qolmadi');
+  assert.equal(ctx.SALES_OPEN.size, 0, 'xotiradagi ochilgan raqamlar tozalandi');
+  assert.equal(ctx.SALES_OPEN_UID, '');
+  assert.ok(ctx.VIEW_GEN > g0, 'kech kelgan javob eskirgan deb tashlanadi');
+  assert.equal(rec.shown.at(-1), 'login');
 });
 
 test('kirish: boshqa rol — avvalgidek (navbat ishga tushadi, 🔍 ko‘rinadi); bloklangan sotuvchi — kirmaydi', async () => {
@@ -217,19 +230,24 @@ test('renderSales: «📞 Raqamni ko‘rsatish» — sales_reveal, raqamlar tel:
   assert.equal(E.ctx.__open.size, 0);
 });
 
-test('renderSales: noto‘g‘ri yozilgan raqam (valid:false) — tel: havolasiz, ogohlantirish bilan; xorij raqami (valid:true) — tel: havolasi', async () => {
+test('renderSales: bir katakda ikki raqam (valid:false, asl yozuv) — har biri alohida qo‘ng‘iroq havolasi; xorij raqami — havola; «8 916…» va uzunligi noto‘g‘ri — havolasiz, izoh bilan', async () => {
   const R4 = { k: 'd'.repeat(32), father: { name: 'Sinov Ota Sigma', phone: '*** ** 32', valid: false }, mother: { name: 'Sinov Ona Sigma', phone: '*** ** 33', valid: true } };
-  const REV4 = { ok: true, k: R4.k, father: { name: 'Sinov Ota Sigma', phone: '998001110031998001110032', valid: false },
+  const REV4 = { ok: true, k: R4.k, father: { name: 'Sinov Ota Sigma', phone: '+998 00 111 00 31, +998 00 111 00 32', valid: false },
     mother: { name: 'Sinov Ona Sigma', phone: '+447700900033', valid: true }, todayUsed: 1, dailyCap: 150 };
-  const E = salesEnv({ rows: [R4], reveal: { [R4.k]: REV4 } });
+  const R5 = { k: 'e'.repeat(32), father: { name: 'Sinov Ota Rus', phone: '*** ** 67', valid: true }, mother: { name: 'Sinov Ona Xato', phone: '*** ** 78', valid: true } };
+  const REV5 = { ok: true, k: R5.k, father: { name: 'Sinov Ota Rus', phone: '+89161234567', valid: true },
+    mother: { name: 'Sinov Ona Xato', phone: '+9012345678', valid: true }, todayUsed: 2, dailyCap: 150 };
+  const E = salesEnv({ rows: [R4, R5], reveal: { [R4.k]: REV4, [R5.k]: REV5 } });
   await E.render();
   assert.match(E.list(), /\*\*\* \*\* 32[\s\S]*\*\*\* \*\* 33/, 'ochilmaguncha — niqob');
-  await E.D.els['#sl-list'].querySelectorAll('[data-slk]')[0].onclick();
+  const [b4, b5] = E.D.els['#sl-list'].querySelectorAll('[data-slk]');
+  await b4.onclick(); await b5.onclick();
   const h = E.list();
-  assert.match(h, /998001110031998001110032<\/span> <span[^>]*>\(raqam noto‘g‘ri yozilgan — kartani tekshirish kerak\)/, 'ota: raqam matn, ogohlantirish');
-  assert.doesNotMatch(h, /tel:\+?998001110031/, 'noto‘g‘ri raqamga qo‘ng‘iroq havolasi yo‘q');
+  assert.match(h, /<a href="tel:\+998001110031"[^>]*>[^<]*<\/a>, <a href="tel:\+998001110032"[^>]*>[^<]*<\/a> <span[^>]*>\(bir katakda bir nechta raqam yozilgan\)/, 'ota: ikki raqam — ikki havola');
   assert.match(h, /<a href="tel:\+447700900033"/, 'ona: xorij raqami — qo‘ng‘iroq havolasi');
-  assert.equal((h.match(/href="tel:/g) || []).length, 1);
+  assert.doesNotMatch(h, /tel:\+?8916|tel:\+?9012345678/, '«8 916…» va uzunligi noto‘g‘ri — havola yo‘q');
+  assert.match(h, /\+89161234567<\/span> <span[^>]*>\(raqam noto‘g‘ri yozilgan bo‘lishi mumkin — ma’muriyatga xabar bering\)/);
+  assert.equal((h.match(/href="tel:/g) || []).length, 3);
 });
 
 test('renderSales: kunlik chegara va topilmadi — xabar, raqam ochilmaydi, tugma qayta yoqiladi; tarmoq xatosi — xabar', async () => {

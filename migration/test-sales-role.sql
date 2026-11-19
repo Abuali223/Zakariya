@@ -32,7 +32,7 @@
 \pset format unaligned
 \pset tuples_only on
 -- yozilishi kerak bo'lgan tekshiruvlar soni (ZZ dan tashqari): yangi tekshiruv qo'shilsa — oshiriladi
-\set kutilgan 63
+\set kutilgan 68
 do $g0$ begin
   if exists (select 1 from public.students) then
     raise exception 'test-sales-role.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -171,7 +171,7 @@ insert into public.child_claims (id, uid, "studentId", code, status, "updatedAt"
   ('U_PAR2__IQ-S08','U_PAR2','IQ-S08','X','pending',now()), ('U_PAR3__IQ-S08','U_PAR3','IQ-S08','X','active',now()),
   ('U_ACCB__IQ-S02','U_ACCB','IQ-S02','M4R8TX','active',now()), ('U_SALB2__IQ-S02','U_SALB2','IQ-S02','M4R8TX','revoked','2026-11-01 10:00+05');
 insert into public.teacher_ratings (id, "teacherId", uid, "raterRole", stars) values ('U_PAR2__IQT-S01','IQT-S01','U_PAR2','parent',5);
-insert into public.notify_settings (id, editors) values ('general', '["U_SAL","U_REC"]') on conflict (id) do update set editors = excluded.editors;
+insert into public.notify_settings (id, editors) values ('general', '["U_SAL","U_REC","U_PAR2"]') on conflict (id) do update set editors = excluded.editors;
 insert into public.invoices (id, "studentId", "studentName", "classKey", month, amount, "paidAmount", status) values
   ('i1','IQ-S01','Sinov Bola Bir','uz-5-A','2026-11',2900000,0,'pending'), ('i2','IQ-S02','Sinov Bola Ikki','uz-7-B','2026-11',2900000,2900000,'paid');
 insert into public.payments (id, "studentId", provider, amount, status, raw, "payerName", "payerPhone", matched, "createdAt") values
@@ -510,7 +510,7 @@ select zz.chk('G05 YOPIQ RO''YXAT (matn): ''sales'' so''zi — faqat shu funksiy
   || coalesce((select string_agg(tablename || '.' || policyname, ',' order by tablename, policyname) from pg_policies
                 where (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '\msales\M'), '-') || ' | '
   || coalesce((select string_agg(viewname, ',' order by viewname) from pg_views where schemaname in ('public', 'app') and definition ~ '\msales\M'), '-'),
-  '^app.child_claim_staff_gate,app.is_notify_editor,app.role_set,app.sales_families,app.sales_need,app.u_has,app.users_extra_roles_guard,app.users_sales_claims,public.claim_child,public.user_unblock \| teacher_ratings.tr_ins,teacher_ratings.tr_upd \| -$');
+  '^app.child_claim_staff_gate,app.is_notify_editor,app.role_set,app.sales_families,app.sales_need,app.u_has,app.users_extra_roles_guard,app.users_sales_claims,app.users_sales_identity_guard,public.claim_child,public.user_unblock \| feedback.fb_ins,teacher_ratings.tr_del,teacher_ratings.tr_ins,teacher_ratings.tr_upd \| -$');
 
 -- ========== (H) kuchaytirish ==========
 select zz.chk('H01 claim_child: sotuvchi va buxgalter hisobiga farzand biriktirilmaydi (to''g''ri kod bilan ham); bog''lanish yozilmaydi',
@@ -526,10 +526,11 @@ select zz.chk('H02 qo''riqchi: xizmat yozuvi (baza egasi) va Direktor tasdig''i 
   '^ERR 42501 Bu ish hisobiga \(buxgalter / sotuvchi\) farzand biriktirilmaydi[^|]* \| ERR 42501 Bu ish hisobiga[^|]* \| ERR 42501 Bu ish hisobiga[^|]* \| pending 0$');
 select zz.cnt('U_PAR2', 'public.students') as h03a \gset
 select zz.as('U_DIR', $q$update public.users set role = 'sales' where id = 'U_PAR2' returning role$q$) as h03u \gset
-select zz.chk('H03 rol «Sotuvchi»ga o''zgarganda faol va kutilayotgan bog''lanishlar bekor qilinadi — farzand ma''lumoti yopiladi',
+select zz.chk('H03 rol «Sotuvchi»ga o''zgarganda faol va kutilayotgan bog''lanishlar bekor qilinadi — farzand ma''lumoti yopiladi; xabarnoma muharrirlaridan chiqariladi',
   :'h03a' || ' ' || :'h03u' || ' | ' || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid = 'U_PAR2'), '-')
-  || ' | ' || zz.cnt('U_PAR2', 'public.students') || zz.cnt('U_PAR2', 'public.student_private') || zz.cnt('U_PAR2', 'public.invoices'),
-  '^1 sales \| U_PAR2__IQ-S02:revoked,U_PAR2__IQ-S08:revoked \| 000$');
+  || ' | ' || zz.cnt('U_PAR2', 'public.students') || zz.cnt('U_PAR2', 'public.student_private') || zz.cnt('U_PAR2', 'public.invoices')
+  || ' | ' || coalesce((select (editors ? 'U_PAR2')::text || '/' || (editors ? 'U_REC')::text from public.notify_settings where id = 'general'), '-'),
+  '^1 sales \| U_PAR2__IQ-S02:revoked,U_PAR2__IQ-S08:revoked \| 000 \| false/true$');
 -- H04: bloklash / blokdan chiqarish (auth-server RPC'lari, baza egasi nomidan). Har chaqiruv xatoni matn qilib qaytaradi (sinov to'xtamaydi).
 create temp table zz_h04 (step text primary key, r text) on commit drop;
 insert into zz_h04 select 'block', zz.q($q$select (public.user_block('U_ACCB', 'U_DIR') ->> 'ok') || '/' || (public.user_block('U_PAR3', 'U_DIR') ->> 'ok')$q$);
@@ -541,11 +542,13 @@ select zz.chk('H04 blokdan chiqarish: buxgalter va sotuvchi bog''lanishi qaytmay
   coalesce((select r from zz_h04 where step = 'block'), '-') || ' | ' || coalesce((select r from zz_h04 where step = 'unblock'), '-') || ' | '
   || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid in ('U_ACCB', 'U_PAR3', 'U_SALB2')), '-'),
   '^true/true \| U_ACCB=true/0/accountant,U_PAR3=true/1/parent,U_SALB2=true/0/sales \| U_ACCB__IQ-S02:revoked,U_PAR3__IQ-S08:active,U_SALB2__IQ-S02:revoked$');
-select zz.chk('H05 o''qituvchiga baho: sotuvchi qo''ya olmaydi, ota-ona qo''yadi (nazorat); sotuvchiga aylangan hisob eski bahosini o''zgartira olmaydi',
+select zz.as('U_PAR2', $q$with d as (delete from public.teacher_ratings where id = 'U_PAR2__IQT-S01' returning 1) select count(*)::text from d$q$) as h05d \gset
+select zz.chk('H05 o''qituvchiga baho: sotuvchi qo''ya olmaydi, ota-ona qo''yadi (nazorat); sotuvchiga aylangan hisob eski bahosini o''zgartira ham, o''chira ham olmaydi',
   zz.ins('U_SAL', $q$insert into public.teacher_ratings (id, "teacherId", uid, stars) values ('U_SAL__IQT-S01', 'IQT-S01', 'U_SAL', 5) returning id$q$) || ' | '
   || zz.ins('U_PAR0', $q$insert into public.teacher_ratings (id, "teacherId", uid, stars) values ('U_PAR0__IQT-S01', 'IQT-S01', 'U_PAR0', 4) returning id$q$) || ' | '
-  || zz.as('U_PAR2', $q$update public.teacher_ratings set stars = 1 where id = 'U_PAR2__IQT-S01' returning id$q$),
-  '^ERR 42501 [^|]* \| U_PAR0__IQT-S01 \| ERR 42501 ');
+  || zz.as('U_PAR2', $q$update public.teacher_ratings set stars = 1 where id = 'U_PAR2__IQT-S01' returning id$q$) || ' | '
+  || :'h05d' || ' ' || (select count(*)::text from public.teacher_ratings where id = 'U_PAR2__IQT-S01'),
+  '^ERR 42501 [^|]* \| U_PAR0__IQT-S01 \| ERR 42501 [^|]* \| 0 1$');
 select zz.chk('H06 xabarnoma muharriri: ro''yxatdagi sotuvchi — emas (o''qiy / o''zgartira olmaydi); ro''yxatdagi qabulxona — muharrir (nazorat)',
   zz.as('U_SAL', 'select app.is_notify_editor()::text') || ' ' || zz.as('U_REC', 'select app.is_notify_editor()::text') || ' | '
   || zz.cnt('U_SAL', 'public.notify_settings') || ' ' || zz.as('U_SAL', $q$with u as (update public.notify_settings set "tgText" = 'zz' returning 1) select count(*)::text from u$q$),
@@ -586,13 +589,13 @@ select zz.chk('H08 oila grafi: almashib yozilgan, to''liq bo''lmagan, ism so''zl
                           from jsonb_array_elements(zz.j(:'h_list') -> 'rows') r where r -> 'father' ->> 'name' = 'Sinov Ota Omega'), '-')
   || ' | ' || coalesce((zz.j(:'h_rv1') #>> '{father,phone}') || ' ' || (zz.j(:'h_rv1') #>> '{mother,phone}'), left(:'h_rv1', 90)),
   '^16 1 \| \+998 00 \*\*\* \*\* 21 Sinov Ona Omega \+998 00 \*\*\* \*\* 22 \| \+998001110021 \+998002220022$');
-select zz.chk('H09 raqam shakli: bir katakda ikki raqam — valid:false, «+»siz, niqob — oxirgi 2 raqam; xorij raqami — valid:true, «+»; ro''yxatda uzun raqam yo''q',
+select zz.chk('H09 raqam shakli: bir katakda ikki raqam — valid:false, niqob — oxirgi 2 raqam, ochganda — kartadagi ASL yozuv; xorij raqami — valid:true, «+»; ro''yxatda uzun raqam yo''q',
   coalesce((select (r -> 'father')::text || ' ' || (r -> 'mother')::text from jsonb_array_elements(zz.j(:'h_list') -> 'rows') r
              where r -> 'father' ->> 'name' = 'Sinov Ota Sigma'), '-')
   || ' | ' || coalesce((zz.j(:'h_rv2') -> 'father')::text || ' ' || (zz.j(:'h_rv2') -> 'mother')::text, left(:'h_rv2', 90))
   || ' | ' || coalesce((regexp_match(regexp_replace(:'h_list', '"k": "[0-9a-f]{32}"', '', 'g'), '\d{5,}'))[1], 'yoq'),
   '^\{"name": "Sinov Ota Sigma", "phone": "\*\*\* \*\* 32", "valid": false\} \{"name": "Sinov Ona Sigma", "phone": "\*\*\* \*\* 33", "valid": true\}'
-  || ' \| \{"name": "Sinov Ota Sigma", "phone": "998001110031998001110032", "valid": false\} \{"name": "Sinov Ona Sigma", "phone": "\+447700900033", "valid": true\} \| yoq$');
+  || ' \| \{"name": "Sinov Ota Sigma", "phone": "\+998 00 111 00 31, \+998 00 111 00 32", "valid": false\} \{"name": "Sinov Ona Sigma", "phone": "\+447700900033", "valid": true\} \| yoq$');
 select zz.chk('H10 kirill yozuvidagi ism: kichik / katta / aralash harf bilan topiladi (lotin «Sinov» — boshqa harflar)',
   :'h_cyr', '^1111 Синов Ота Тау$');
 select zz.chk('H11 bog''lanmaydi: umumiy «to''ldiruvchi» raqam (ismlar boshqa), faqat noto''g''ri «0» umumiy, bir ota — ikki ona (ona ismi zid)',
@@ -617,6 +620,53 @@ select zz.chk('H12 Direktor jurnali: oilaga arxivdagi aka (kichik id, oila kalit
   :'h12k' || ' | ' || coalesce((select string_agg(coalesce(r ->> 'father', '-') || '/' || (r ->> 'name'), ', ' order by ord)
                                   from jsonb_array_elements(zz.j(:'h12') -> 'recent') with ordinality t(r, ord) where r ->> 'father' is not null), '-'),
   '^1/0 \| Sinov Ota Gamma/Sinov Sotuvchi, Sinov Ota Gamma/Sinov Sotuvchi Ikki, Sinov Ota Gamma/Sinov Direktor, Sinov Ota Alfa/Sinov Sotuvchi$');
+-- H13–H14 — savepoint ichida: (H13) «ko'prik» karta — bir ota, ikki ona va onasi yozilmagan uchinchi karta (umumiy ota raqami);
+--   (H14) ota raqami ota ismi yozilgan kartadan — onasi ro'yxatdan o'tkazgan ikki karta (ota ismi bo'sh, «ota telefoni»da ona raqami).
+savepoint h13;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('k1','IQ-K1','Sinov Bola K1',3,'A','uz','',201), ('k2','IQ-K2','Sinov Bola K2',4,'A','uz','',202), ('k3','IQ-K3','Sinov Bola K3',5,'A','uz','',203),
+  ('b1','IQ-B1','Sinov Bola B1',3,'B','uz','',211), ('b2','IQ-B2','Sinov Bola B2',4,'B','uz','',212), ('b3','IQ-B3','Sinov Bola B3',5,'B','uz','',213);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('k1','Sinov Ota Kappa Ikki','Sinov Ona Zarina','+998 00 111 00 51','+998 00 222 00 51'),
+  ('k2','Sinov Ota Kappa Ikki',null,'+998 00 111 00 51',null),                                        -- «ko'prik»: onasi yozilmagan
+  ('k3','Sinov Ota Kappa Ikki','Sinov Ona Aziza','+998 00 111 00 51','+998 00 333 00 53'),
+  ('b1','Sinov Ota Botir','Sinov Ona Dilnoza','+998 00 111 00 61','+998 00 222 00 62'),
+  ('b2',null,'Sinov Ona Dilnoza','+998 00 222 00 62',null),                                            -- ota ismi bo'sh, «ota telefoni» — ona raqami
+  ('b3',null,'Sinov Ona Dilnoza','+998 00 222 00 62',null);
+set local session_replication_role = origin;
+select coalesce(zz.list('U_SAL', $a$'kappa ikki'$a$)::text, '<NULL>') as h13_list \gset
+select coalesce((zz.list('U_SAL', $a$'zarina'$a$) ->> 'total') || (zz.list('U_SAL', $a$'aziza'$a$) ->> 'total'), '<NULL>') as h13_q \gset
+select coalesce(zz.list('U_SAL', $a$'dilnoza'$a$)::text, '<NULL>') as h14_list \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Botir'))) as h14_rv \gset
+rollback to savepoint h13;
+select zz.chk('H13 «ko''prik» karta: bir ota — ikki ona birlashmaydi (3 qator: Zarina, Aziza, onasi yozilmagani); har ona o''z raqami bilan; ikkalasi qidiruvda topiladi',
+  (zz.j(:'h13_list') ->> 'total') || ' | ' || coalesce((select string_agg(coalesce(r -> 'mother' ->> 'name', '-') || '=' || coalesce(r -> 'mother' ->> 'phone', '-'), ', ' order by coalesce(r -> 'mother' ->> 'name', '-'))
+                                                        from jsonb_array_elements(zz.j(:'h13_list') -> 'rows') r), '-') || ' | ' || :'h13_q',
+  '^3 \| -=-, Sinov Ona Aziza=\+998 00 \*\*\* \*\* 53, Sinov Ona Zarina=\+998 00 \*\*\* \*\* 51 \| 11$');
+select zz.chk('H14 ota raqami — ota ismi yozilgan kartadan (onasi ro''yxatdan o''tkazgan 2 karta ustun bo''lsa ham): ota 61, ona 62; bitta oila',
+  (zz.j(:'h14_list') ->> 'total') || ' | ' || coalesce((zz.j(:'h14_rv') #>> '{father,name}') || ' ' || (zz.j(:'h14_rv') #>> '{father,phone}') || ' '
+  || (zz.j(:'h14_rv') #>> '{mother,name}') || ' ' || (zz.j(:'h14_rv') #>> '{mother,phone}'), left(:'h14_rv', 90)),
+  '^1 \| Sinov Ota Botir \+998001110061 Sinov Ona Dilnoza \+998002220062$');
+select zz.chk('H15 murojaatlar qutisi: sotuvchi yoza olmaydi (ota-ona nomidan soxta shikoyat yo''q); ota-ona yozadi (nazorat)',
+  zz.ins('U_SAL', $q$insert into public.feedback (id, type, uid, "authorName", "authorRole", text) values ('zzfb1', 'shikoyat', 'U_SAL', 'Ota-ona', 'parent', 'ZZ') returning id$q$) || ' | '
+  || zz.ins('U_PAR0', $q$insert into public.feedback (id, type, uid, "authorName", text) values ('zzfb2', 'taklif', 'U_PAR0', 'Sinov Ota', 'ZZ') returning id$q$),
+  '^ERR 42501 [^|]* \| zzfb2$');
+-- H16: rol yana ota-onaga qaytariladi — bekor qilingan bog'lanish JORIY to'g'ri kod bilan qayta ochiladi (avval «ok», lekin 'revoked' qolardi).
+select zz.as('U_DIR', $q$update public.users set role = 'parent' where id = 'U_PAR2' returning role$q$) as h16r \gset
+select zz.as('U_PAR2', $q$select public.claim_child('IQ-S02', 'M4R8TX')::text$q$) as h16c \gset
+select zz.chk('H16 rol qaytgach farzandni to''g''ri kod bilan qayta bog''laydi: bog''lanish faol, o''quvchi ko''rinadi',
+  :'h16r' || ' | ' || (zz.j(:'h16c') ->> 'ok') || ' | ' || coalesce((select status from public.child_claims where id = 'U_PAR2__IQ-S02'), '-')
+  || ' ' || zz.cnt('U_PAR2', 'public.students'),
+  '^parent \| true \| active 1$');
+-- H17: sotuvchi hisobining ism-familiyasi / emaili — faqat Direktor (Direktor jurnalida ochishlar boshqa xodim nomiga «yozilmasin»).
+select zz.as('U_SAL', $q$with u as (update public.users set name = 'Sinov Sotuvchi Ikki' where id = 'U_SAL' returning 1) select count(*)::text from u$q$) || ' | '
+  || zz.as('U_SAL', $q$with u as (update public.users set email = 'zz@example.org' where id = 'U_SAL' returning 1) select count(*)::text from u$q$) || ' | '
+  || zz.as('U_DIR', $q$with u as (update public.users set name = 'Sinov Sotuvchi Yangi' where id = 'U_SAL' returning 1) select count(*)::text from u$q$) || ' | '
+  || zz.as('U_PAR0', $q$with u as (update public.users set name = 'Sinov Ota Yangi' where id = 'U_PAR0' returning 1) select count(*)::text from u$q$) as h17 \gset
+select zz.chk('H17 sotuvchi o''z ismi / emailini o''zgartira olmaydi (42501); Direktor o''zgartiradi; boshqa rol — avvalgidek o''zinikini',
+  :'h17' || ' | ' || (select name || ' ' || email from public.users where id = 'U_SAL'),
+  '^ERR 42501 [^|]* \| ERR 42501 [^|]* \| 1 \| 1 \| Sinov Sotuvchi Yangi s@example.org$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

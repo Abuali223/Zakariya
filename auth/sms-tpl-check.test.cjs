@@ -20,8 +20,9 @@ function setup(o) {
   const state = {};
   const sb = makeFake(state);
   state.users = [{ id: 'uid_dir', role: 'director', status: 'active' }, { id: 'uid_ed', role: 'teacher', status: 'active' },
-    { id: 'uid_fin', role: 'finance_mgr', status: 'active' }, { id: 'uid_edblk', role: 'teacher', status: 'blocked' }];
-  state.notify_settings = [{ id: 'general', editors: ['uid_ed', 'uid_edblk'] }];
+    { id: 'uid_fin', role: 'finance_mgr', status: 'active' }, { id: 'uid_edblk', role: 'teacher', status: 'blocked' },
+    { id: 'uid_sal', role: 'sales', status: 'active' }];
+  state.notify_settings = [{ id: 'general', editors: ['uid_ed', 'uid_edblk', 'uid_sal'] }];
   let calls = 0, sends = 0;
   const list = o.list || [{ id: 11, status: 'service', template: DEBT_PAT, original: DEBT_TPL }, { id: 12, status: 'moderation', template: 'X %w', original: 'X {name}' },
     { id: 13, status: 'service', template: NEW_PAT_LITERAL, original: NEW_PAT_LITERAL }];
@@ -38,6 +39,7 @@ function setup(o) {
     ok('JWT yo‘q -> rad', /Seans/.test((await C({ texts: { debt_reminder: DEBT_TPL } })).error || ''));
     ok('moliya menejeri (muharrir emas) -> rad', /Ruxsat/.test((await C({ jwt: 'uid_fin', texts: { debt_reminder: DEBT_TPL } })).error || ''));
     ok('bloklangan muharrir -> rad', /Ruxsat/.test((await C({ jwt: 'uid_edblk', texts: { debt_reminder: DEBT_TPL } })).error || ''));
+    ok('ro‘yxatda qolgan «Sotuvchi» -> rad (bazadagi is_notify_editor bilan bir xil)', /Ruxsat/.test((await C({ jwt: 'uid_sal', texts: { debt_reminder: DEBT_TPL } })).error || ''));
     ok('Direktor -> ruxsat', (await C({ jwt: 'uid_dir', texts: { debt_reminder: DEBT_TPL } })).ok === true);
     ok('muharrir (editors ro‘yxatida) -> ruxsat', (await C({ jwt: 'uid_ed', texts: { debt_reminder: DEBT_TPL } })).ok === true);
     ok('matn yo‘q -> xato', /matn yo‘q/.test((await C({ jwt: 'uid_dir', texts: {} })).error || ''));
