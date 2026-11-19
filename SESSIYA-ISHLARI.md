@@ -2404,9 +2404,9 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   (qabulxona hisobidagi tasdiqsiz farzand bog'lanishi, boshqa sinf kaliti bilan joriy oy monitoring satri, 950 ball, o'chirilgan
   hisobga qaragan karta, maosh o'tish oyi 2026-09 va undan oldingi qoldiq, oy tugamasdan yuborilgan vedomost, eski Click to'lovlari)
   → yangi zanjir: xato yo'q; deploy.sh ko'rsatadigan OGOHLANTIRISH qatorlari kutilganidek (bog'lanish — kutilmoqda, monitoring satri —
-  haqiqiy sinfga «TUZATILDI», 950 ball — faqat ro'yxat, karta havolasi — eski hisob ID'si bilan bo'shatildi, maosh qoldig'i va
-  eskirgan vedomost — ID'lar bilan); eski to'lovlarda `receivedAt` bo'sh qoladi. Qayta ishga tushirish — xato yo'q, takror tuzatish
-  yo'q (faqat hali hal qilinmagan holatlar eslatmasi: ball, maosh qoldig'i, eskirgan vedomost). Bo'sh bazada xuddi shu yangilanishdan
+  haqiqiy sinfga «TUZATILDI», 950 ball — faqat ro'yxat, karta havolasi — eski hisob ID'si bilan bo'shatildi, maosh qoldig'i, kartasi
+  o'chirilgan maosh ID'si qoldig'i (alohida qator) va eskirgan vedomost — ID'lar bilan); eski to'lovlarda `receivedAt` bo'sh qoladi. Qayta ishga tushirish — xato yo'q, takror tuzatish
+  yo'q (faqat hali hal qilinmagan holatlar eslatmasi: ball, maosh qoldiqlari, eskirgan vedomost). Bo'sh bazada xuddi shu yangilanishdan
   keyin barcha jonli to'plamlar (14 ta) yashil.
 - **Xodimlar uchun o'zgarishlar (egasi bilishi kerak):** (1) to'lov yozuvini hech kim (Direktor ham) REST orqali yarata olmaydi —
   faqat server va pul RPC'lari; (2) moliya rollari fakturani qayta hisoblamaydi; (3) xodim hisobiga farzand bog'lash — Direktor
