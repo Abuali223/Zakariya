@@ -78,8 +78,11 @@ begin
       using errcode = '42501', hint = 'pay:direct';
   end if;
   -- Holat: faqat fakturaga QO'LLANMAGAN (fantom / xato / biriktirilmagan) yozuvni bekor qilish — sahifadagi «🚫 Bekor» bilan bir xil.
+  --   NULL ham holat o'zgarishi (avval NULL'da shart jim o'tib ketardi — 'prepared' Click yozuvi NULL qilinib, kassir uni «tushum» sifatida
+  --   biriktira olardi; mustaqil tekshiruv 2-raund).
   if new.status is distinct from old.status
-     and not (new.status = 'canceled' and coalesce(old.status, '') not in ('applied', 'confirmed', 'paid', 'split', 'refunded', 'reversed', 'canceled')) then
+     and (coalesce(new.status, '') <> 'canceled'
+          or coalesce(old.status, '') in ('applied', 'confirmed', 'paid', 'split', 'refunded', 'reversed', 'canceled')) then
     raise exception 'To''lov holatini to''g''ridan-to''g''ri faqat qo''llanmagan yozuv uchun «bekor» qilish mumkin (qo''llangan to''lov — «↩ Qaytarish» orqali)'
       using errcode = '42501', hint = 'pay:direct';
   end if;
@@ -96,8 +99,17 @@ language plpgsql security invoker set search_path = public, app, pg_temp as $$
 begin
   if current_user::text not in ('authenticated', 'anon') or app.is_system() or app.is_admin() then return new; end if;
   if tg_op = 'INSERT' then
+    -- 0 so'mlik «to'langan» faktura — faqat SABABI bilan (grant, foizli chegirma, tasdiq ishorasi, monitoring bonusi, tavsiya, kasal
+    --   kunlar — generatsiyaning to'liq qoplangan holati); sababsiz 0 so'm — o'quvchi-oyni nolga tushirish (A4-02, 2-raund). Har shart
+    --   coalesce bilan: NULL ustun (approvalRefs yo'q) butun shartni NULL qilib, qo'riqchini jim o'tkazib yubormasin.
     if coalesce(new."paidAmount", 0) <> 0
-       or not (coalesce(new.status, '') in ('', 'pending') or (new.status = 'paid' and coalesce(new.amount, 0) = 0)) then
+       or not (coalesce(new.status, '') in ('', 'pending')
+               or (new.status = 'paid' and coalesce(new.amount, 0) = 0
+                   and (coalesce(new."isGrant", false) or coalesce(new."pctApplied", 0) > 0
+                        or coalesce(jsonb_typeof(new."approvalRefs") = 'array' and jsonb_array_length(new."approvalRefs") > 0, false)
+                        or coalesce(new."bonusRef", '') <> ''
+                        or coalesce(jsonb_typeof(new."referralUsedIds") = 'array' and jsonb_array_length(new."referralUsedIds") > 0, false)
+                        or coalesce(new."sickAmount", 0) > 0))) then
       raise exception 'Hisob-faktura to''lanmagan holda yaratiladi — to''lov faqat «💵 To''lov» yoki to''lov serveri orqali yoziladi'
         using errcode = '42501', hint = 'inv:paid';
     end if;

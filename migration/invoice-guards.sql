@@ -192,6 +192,9 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'has-payment', 'status', v_inv.status, 'paidAmount', v_inv.paid);
   end if;
   update public.invoices set status = 'canceled' where id = p_id;
+  -- Fantom (hisoblanmasligi kerak bo'lgan oy) faktura bekor qilinsa — shu sabab ushlab turilgan avans darhol ochiq qarzga (A4-03,
+  --   mustaqil tekshiruv 2-raund: avval faqat «↻ Qayta hisoblash» bo'shatardi; «Bekor» — generatsiya xabari aytgan yo'l).
+  perform app.credit_sweep(v_sid);
   return jsonb_build_object('ok', true);
 end $$;
 revoke all on function public.cancel_invoice(text) from public, anon;
@@ -214,6 +217,7 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'has-payment', 'status', v_inv.status, 'paidAmount', v_inv.paid);
   end if;
   delete from public.invoices where id = p_id;
+  perform app.credit_sweep(v_sid);   -- yuqoridagi kabi (fantom faktura o'chirilsa — ushlab turilgan avans qarzga)
   return jsonb_build_object('ok', true);
 end $$;
 revoke all on function public.delete_unpaid_invoice(text) from public, anon;

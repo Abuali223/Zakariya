@@ -168,7 +168,9 @@ select zz.chk('C16 faol (oddiy ota-ona) bog''lanishi -> not_pending; yo''q id ->
 -- Himoya to'ri (har deployda): oldin claim_child'dan o'tgan (tasdiqsiz) xodim bog'lanishi -> pending; tasdiqlangan, Direktor, o'qituvchi,
 --   ota-ona bog'lanishiga tegilmaydi; qayta chaqiruv — hech narsa.
 set local iqror.migrating = '1';
+set local session_replication_role = replica;   -- tuzatishdan OLDIN yozilgan bog'lanish (yozish qo'riqchisi hali yo'q edi)
 insert into public.child_claims (id, uid, "studentId", code, status) values ('U_REC2__IQ-1103','U_REC2','IQ-1103','X','active') on conflict (id) do nothing;
+set local session_replication_role = origin;
 set local iqror.migrating = '';
 select zz.chk('C17 himoya to''ri: faqat tasdiqsiz xodim bog''lanishi o''tkaziladi', zz.try($q$select app.child_claims_review()::text$q$), '^\{U_REC2__IQ-1103\}$');
 select zz.chk('C18 o''tkazilgani pending; tasdiqlangan (U_REC), Direktor, o''qituvchi, ota-ona — faol',
@@ -176,6 +178,34 @@ select zz.chk('C18 o''tkazilgani pending; tasdiqlangan (U_REC), Direktor, o''qit
   '^U_DIR__IQ-1104:active,U_PA__IQ-1103:active,U_REC2__IQ-1103:pending,U_REC__IQ-1104:active,U_TP__IQ-1103:active$');
 select zz.chk('C19 himoya to''ri qayta — hech narsa (idempotent)', zz.try($q$select app.child_claims_review()::text$q$), '^\{\}$');
 select zz.chk('C20 himoya to''rini mijoz chaqira olmaydi', zz.as('U_DIR', $q$select app.child_claims_review()::text$q$), '^ERR 42501');
+-- Yozish paytidagi qo'riqchi (mustaqil tekshiruv 2-raund): deploy paytida BLOKLANGAN qabulxona hisobining eski (tasdiqsiz) bog'lanishi
+--   'revoked' — himoya to'ri uni ko'rmaydi, user_unblock esa tasdiqsiz 'active' qilardi -> endi 'pending'. Direktor tasdiqlagani va oddiy
+--   ota-ona bog'lanishi — avvalgidek faol.
+set local iqror.migrating = '1';
+insert into public.users (id, email, role, status) values ('U_REC3','r3@example.org','reception','active'), ('U_PB','pb@example.org','parent','active')
+  on conflict (id) do update set role = excluded.role, status = excluded.status;
+set local session_replication_role = replica;   -- tuzatishdan OLDIN yozilgan bog'lanishlar
+insert into public.child_claims (id, uid, "studentId", code, status, "approvedBy") values
+  ('U_REC3__IQ-1103','U_REC3','IQ-1103','X','active',null), ('U_REC3__IQ-1105','U_REC3','IQ-1105','X','active','U_DIR'),
+  ('U_PB__IQ-1104','U_PB','IQ-1104','X','active',null) on conflict (id) do nothing;
+set local session_replication_role = origin;
+set local iqror.migrating = '';
+-- Amallar alohida buyruqlarda (bitta SELECT ichidagi so'rov shu buyruq boshlanishidagi holatni ko'radi), natijasi zz_blk ga.
+create temp table zz_blk (step text primary key, r text) on commit drop;
+insert into zz_blk select 'block', (public.user_block('U_REC3', 'U_DIR') ->> 'ok') || '/' || (public.user_block('U_PB', 'U_DIR') ->> 'ok');
+select zz.chk('C21 Direktor bloklaydi — bog''lanishlar «revoked», himoya to''ri ularni ko''rmaydi',
+  coalesce((select r from zz_blk where step = 'block'), '-') || ' ' || zz.try($q$select app.child_claims_review()::text$q$) || ' '
+  || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid in ('U_REC3', 'U_PB')), '-'),
+  '^true/true \{\} U_PB__IQ-1104:revoked,U_REC3__IQ-1103:revoked,U_REC3__IQ-1105:revoked$');
+insert into zz_blk select 'unblock', (public.user_unblock('U_REC3', 'U_DIR') ->> 'ok') || '/' || (public.user_unblock('U_PB', 'U_DIR') ->> 'ok');
+do $rs$ begin perform set_config('app.uid', '', true); perform set_config('iqror.user_block', '', true); end $rs$;   -- user_block / user_unblock o'rnatgan sessiya qiymatlari (keyingi tekshiruvlar tizim nomidan)
+select zz.chk('C22 blokdan chiqarilganda qabulxonaning tasdiqsiz bog''lanishi — pending (avval tasdiqsiz faol bo''lardi); tasdiqlangani va ota-ona — faol',
+  coalesce((select r from zz_blk where step = 'unblock'), '-') || ' '
+  || coalesce((select string_agg(id || ':' || status, ',' order by id) from public.child_claims where uid in ('U_REC3', 'U_PB')), '-'),
+  '^true/true U_PB__IQ-1104:active,U_REC3__IQ-1103:pending,U_REC3__IQ-1105:active$');
+insert into zz_blk select 'insert', zz.try($q$insert into public.child_claims (id, uid, "studentId", code, status) values ('U_REC3__IQ-1106','U_REC3','IQ-1106','X','active') returning status$q$);
+select zz.chk('C23 qo''riqchi: kod ko''radigan xodimga tasdiqsiz FAOL bog''lanish hech qaysi yo''l bilan yozilmaydi (to''g''ridan-to''g''ri INSERT — pending)',
+  coalesce((select r from zz_blk where step = 'insert'), '-') || ' ' || coalesce((select status from public.child_claims where id = 'U_REC3__IQ-1106'), '-'), '^pending pending$');
 
 -- ===== A7-03: farzandi bor xodim farzandi sinfi e'lonini ko'radi =====
 select zz.chk('T01 o''qituvchi-ota-ona: o''z sinfi (5-B, xodim qoidasi) + farzandi sinfi (3-A) + butun maktab; muddati o''tgan 3-A — yo''q',

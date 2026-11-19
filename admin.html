@@ -7109,14 +7109,14 @@ function renderSysHealth(box, j, err){
 const NTF_TYPES=[
   {id:'new_invoice', t:'🧾 Yangi faktura xabari', auto:true, vars:['name','month','amount'],
     def:"Hurmatli ota-ona! {name} uchun {month} oy to'lovi shakllantirildi: {amount} so'm. Batafsil: iqroacademy.uz. IQROR Academy",
-    note:'Oylik faktura yaratilganda ota-onaga bir marta. Yoqilgan vaqtdan OLDINGI fakturalarga yuborilmaydi.'},
+    note:'Oylik faktura yaratilganda ota-onaga bir marta. Yoqilgan vaqtdan OLDINGI fakturalarga yuborilmaydi. {amount} — to‘lanadigan qoldiq (avans fakturaning bir qismini yopgan bo‘lsa); to‘liq yopilgan fakturaga xabar yuborilmaydi.'},
   {id:'debt_reminder', t:'⏰ Qarz eslatmasi (avtomatik)', auto:true, vars:['name','month','due'],
     def:"Eslatma: {name} uchun {month} oy to'lovi hali yopilmagan (qarz: {due} so'm). Iltimos, to'lovni amalga oshiring. IQROR Academy",
     note:'Tanlangan hafta kunlarida, oyning belgilangan kunidan keyin to‘lanmagan qarz uchun — har o‘quvchiga bitta SMS (barcha qarz oylari bilan).'},
   {id:'manual_remind', t:'📱 Qo‘lda eslatma («Moliya» → «Qarzdorlar» → «Eslatma»)', auto:false, vars:['name','month','due'], def:'',
     note:'Faol matn bo‘sh bo‘lsa — «Qarz eslatmasi» faol matni ishlatiladi. O‘chirilsa — «Eslatma» tugmasi SMS yubormaydi.'},
 ];
-const NTF_VARS={ name:'o‘quvchi ism-familiyasi', month:'oy(lar): 10.2026 yoki 09.2026,10.2026', amount:'faktura summasi (5800000)', due:'qarz summasi (5800000)' };
+const NTF_VARS={ name:'o‘quvchi ism-familiyasi', month:'oy(lar): 10.2026 yoki 09.2026,10.2026', amount:'to‘lanadigan summa — faktura summasidan avans yopgan qismi ayirilgan (5800000)', due:'qarz summasi (5800000)' };
 const NTF_SAMPLE={ name:'Aliyeva Malika', month:'09.2026,10.2026', amount:'2900000', due:'5800000' };
 const NTF_DOW=[[1,'Du'],[2,'Se'],[3,'Ch'],[4,'Pa'],[5,'Ju'],[6,'Sh'],[0,'Ya']];
 // SMS bo'laklari (server payments/sms.cjs smsParts bilan bir xil): faqat ASCII — GSM-7 160/153, aks holda UCS-2 70/67.

@@ -193,6 +193,10 @@ select zz.chk('B04 moliya menejeri faktura yaratishi mumkin bo''lsa ham (sozlama
   || zz.as('U_FM', $q$with x as (insert into public.invoices (id, "studentId", "studentName", month, amount, "baseAmount", "paidAmount", status) values ('T-2__2027-02', 'T-2', 'Sinov Ikki', '2027-02', 2000000, 2000000, 0, 'paid') returning id) select id from x$q$) || ' | '
   || zz.as('U_FM', $q$with x as (insert into public.invoices (id, "studentId", "studentName", month, amount, "baseAmount", "paidAmount", status) values ('T-2__2027-03', 'T-2', 'Sinov Ikki', '2027-03', 2000000, 2000000, 0, 'pending') returning id) select id from x$q$),
   '^ERR 42501 \[inv:paid\].* \| ERR 42501 \[inv:paid\].* \| T-2__2027-03$');
+select zz.chk('B05 (2-raund) moliya menejeri sababsiz 0 so''mlik «to''langan» faktura yoza olmaydi; grant bilan 0 so''m — mumkin (generatsiyaning to''liq qoplangan holati)',
+  zz.as('U_FM', $q$with x as (insert into public.invoices (id, "studentId", "studentName", month, amount, "baseAmount", "paidAmount", status, "discountInfo") values ('T-2__2027-04', 'T-2', 'Sinov Ikki', '2027-04', 0, 2000000, 0, 'paid', 'Chegirmasiz') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.invoices (id, "studentId", "studentName", month, amount, "baseAmount", "paidAmount", status, "isGrant", "pctApplied", "discountInfo") values ('T-2__2027-05', 'T-2', 'Sinov Ikki', '2027-05', 0, 2000000, 0, 'paid', true, 1, '100% grant') returning id) select id from x$q$),
+  '^ERR 42501 \[inv:paid\].* \| T-2__2027-05$');
 update public.config set "invoiceCreators" = 'director' where id = 'finance';
 
 -- ===== (C) A4-03: avans darhol ochiq qarzga =====
@@ -239,6 +243,32 @@ select zz.chk('C09 stu_bill_skip: sinov / hali boshlanmagan / sanasiz / to''xtat
     coalesce(app.stu_bill_skip('', null, null, '[{"from":"2026-10-05","to":"2026-10-09"}]', '2026-10'), 'null'),
     coalesce(app.stu_bill_skip('faol', null, null, '[]', 'noto''g''ri'), 'null'))$q$),
   '^trial,future,nodate,stopped,empty,paused,null,null,null$');
+
+-- ===== Mustaqil tekshiruv (2-raund) =====
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "activeFrom", "stopFrom", "exitAt", pauses, "order") values
+  ('T-9','T-9','Sinov Toqqiz',6,'A','uz','chiqdi',null,'2026-09-30','2026-09-30','[]',9),      -- arxivda + ochiq fantom (noyabr) faktura
+  ('T-10','T-10','Sinov On',6,'A','uz','chiqdi',null,'2026-09-30','2026-09-30','[]',10);
+insert into public.invoices (id, "studentId", "studentName", month, amount, "baseAmount", "paidAmount", status, provider, "billedFrom", "billedTo") values
+  ('T-9__2026-09','T-9','Sinov Toqqiz','2026-09',2000000,2000000,0,'pending','',null,null),
+  ('T-9__2026-11','T-9','Sinov Toqqiz','2026-11',2000000,2000000,0,'pending','',null,null),
+  ('T-10__2026-09','T-10','Sinov On','2026-09',2000000,2000000,0,'pending','',null,null),
+  ('T-10__2026-11','T-10','Sinov On','2026-11',2000000,2000000,0,'pending','',null,null);
+insert into public.student_credit (id, "studentId", credit) values ('T-9','T-9',2000000), ('T-10','T-10',2000000);   -- fantom tufayli ushlab turilgan avans
+insert into public.payments (id, "studentId", "invoiceId", provider, amount, status, raw, click_trans_id, "payerName", matched, "createdAt") values
+  ('click_9900077','',null,'click',400000,'prepared','{}','9900077','Sinov Ota 4',false,'2026-11-06 10:00+05');   -- server yozgan, pul KELMAGAN
+set local session_replication_role = origin;
+select zz.chk('C10 fantom noyabr «Bekor» (cancel_invoice, moliya menejeri) bilan olib tashlansa ham — ushlab turilgan avans darhol sentyabr qarziga',
+  zz.as('U_FM', $q$select public.cancel_invoice('T-9__2026-11') ->> 'ok'$q$) || ' | ' || zz.inv('T-9__2026-11') || ' | ' || zz.inv('T-9__2026-09') || ' | ' || zz.cr('T-9'),
+  '^true \| T-9__2026-11=canceled:0/2000000 \| T-9__2026-09=paid:2000000/2000000 \| 0$');
+select zz.chk('C11 fantom noyabr «O''chir» (delete_unpaid_invoice, Direktor) — xuddi shunday',
+  zz.as('U_DIR', $q$select public.delete_unpaid_invoice('T-10__2026-11') ->> 'ok'$q$) || ' | ' || zz.inv('T-10__2026-11') || ' | ' || zz.inv('T-10__2026-09') || ' | ' || zz.cr('T-10'),
+  '^true \| T-10__2026-11=yo''q \| T-10__2026-09=paid:2000000/2000000 \| 0$');
+select zz.chk('A17 Direktor ham holatni NULL qila olmaydi (UPDATE va upsert) — pul kelmagan «prepared» Click yozuvi kassirga biriktiriladigan bo''lib qolmaydi',
+  zz.as('U_DIR', $q$with x as (update public.payments set status = null where id = 'click_9900077' returning id) select id from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (insert into public.payments (id, status) values ('click_9900077', null) on conflict (id) do update set status = excluded.status returning id) select id from x$q$) || ' | '
+  || zz.as('U_KAS', $q$select public.assign_payment('click_9900077', 'T-2') ->> 'reason'$q$) || ' | ' || zz.p('click_9900077'),
+  '^ERR 42501 \[pay:direct\].* \| ERR 42501 \[pay:direct\].* \| not-unmatched \| prepared:click:400000:-$');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL' from zz.res;

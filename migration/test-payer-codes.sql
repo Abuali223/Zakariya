@@ -482,10 +482,14 @@ do $dev$ begin
     perform zz.chk('D1 (--dev) urug'': davr 2026-06-30 gacha yopilgan, naqd qator kassa hujjatiga bog''langan — yashirish baribir o''tdi (M8, M8b)',
       (select "lockedThrough"::text from public.fin_org where id = 'main') || '|' || (select "cashDocId" from public.payments where id = 'man_t9'),
       '^2026-06-30\|KO1-sinov-1$');
-    perform zz.chk('D2 (--dev) moliya menejeri yopilgan davrdagi to''lov summasini o''zgartira olmaydi (davr qulfi o''z joyida)',
-      zz.as('U_FIN', $q$update public.payments set amount = 1 where id = 'click_t10' returning id$q$), '^ERR 42501 .*yopilgan davr');
-    perform zz.chk('D3 (--dev) kassa hujjatiga bog''langan qator summasi — rad (kassa qo''riqchisi o''z joyida)',
-      zz.as('U_FIN', $q$update public.payments set amount = 1 where id = 'man_t9' returning id$q$), '^ERR 42501 .*kassa hujjatiga bog');
+    -- audit-10 (A4-01): to'lov qatorini REST orqali faqat Direktor yangilaydi (pay_upd) — moliya menejerida 0 qator; Direktorni ham
+    --   davr qulfi va kassa qo'riqchisi to'xtatadi (ular pul qo'riqchisidan OLDIN ishlaydi).
+    perform zz.chk('D2 (--dev) moliya menejeri to''lov summasini o''zgartira olmaydi (0 qator); Direktorni yopilgan davr qulfi to''xtatadi',
+      zz.as('U_FIN', $q$update public.payments set amount = 1 where id = 'click_t10' returning id$q$) || ' | '
+      || zz.as('U_DIR', $q$update public.payments set amount = 1 where id = 'click_t10' returning id$q$), '^<null> \| ERR 42501 .*yopilgan davr');
+    perform zz.chk('D3 (--dev) kassa hujjatiga bog''langan qator summasi — moliya menejeri 0 qator; Direktor — kassa qo''riqchisi rad etadi',
+      zz.as('U_FIN', $q$update public.payments set amount = 1 where id = 'man_t9' returning id$q$) || ' | '
+      || zz.as('U_DIR', $q$update public.payments set amount = 1 where id = 'man_t9' returning id$q$), '^<null> \| ERR 42501 .*kassa hujjatiga bog');
   end if;
 end $dev$;
 

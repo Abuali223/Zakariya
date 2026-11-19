@@ -75,6 +75,28 @@ begin
 end $$;
 revoke all on function app.child_claims_review() from public, anon, authenticated;
 
+-- Yozish paytidagi qo'riqchi (himoya to'rining davomi; mustaqil tekshiruv 2-raund): kod ko'radigan xodim hisobidagi bog'lanish (O'IBDO' /
+--   qabulxona — asosiy, qo'shimcha yoki bloklashdan OLDINGI lavozim) Direktor tasdig'isiz 'active' holatga O'TMAYDI — 'pending' bo'ladi.
+--   Sabab: himoya to'ri faqat FAOL bog'lanishlarni ko'radi; deploy paytida bloklangan hisobning bog'lanishi 'revoked' (user_block) edi va
+--   user_unblock uni tasdiqsiz yana 'active' qilardi (A7-01 dagi o'zi bog'lagan bola — Direktor tasdig'isiz qaytardi). Direktor tasdiqlagani
+--   (approvedBy), oddiy ota-ona va boshqa xodimlar — o'zgarishsiz; allaqachon faol bog'lanishning boshqa ustunlari yangilanganda tegilmaydi.
+create or replace function app.child_claim_staff_gate() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(nullif(new.status, ''), 'active') = 'active' and new."approvedBy" is null
+     and (tg_op = 'INSERT' or coalesce(nullif(old.status, ''), 'active') <> 'active')
+     and exists (select 1 from public.users u where u.id = new.uid
+                  and (app.u_has(u.role, u."extraRoles", 'zavuch') or app.u_has(u.role, u."extraRoles", 'reception')
+                       or coalesce(u."blockedRole", '') in ('zavuch', 'reception'))) then
+    new.status := 'pending';
+  end if;
+  return new;
+end $$;
+revoke all on function app.child_claim_staff_gate() from public, anon, authenticated;
+drop trigger if exists trg_child_claims_staff_gate on public.child_claims;
+create trigger trg_child_claims_staff_gate before insert or update of status on public.child_claims
+  for each row execute function app.child_claim_staff_gate();
+
 -- HAR DEPLOYDA (bir martalik emas). Zanjirda change_log yozilmaydi (iqror.migrating) — o'tkazilganlar shu NOTICE'da: bog'lanish ID'lari
 --   (uid__studentId; ism / kod yo'q; birinchi 20 tasi, qolgani «… yana N»). > 0 bo'lsa — «OGOHLANTIRISH: » (deploy.sh chiqishida ko'rinadi).
 do $$

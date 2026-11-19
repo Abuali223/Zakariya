@@ -882,7 +882,7 @@ const T = {
     kab_login:"Kabinetdan foydalanish uchun avval tizimga kiring (Kirish tugmasi).",
     kab_prompt:"Farzandingizning maktab bergan ID raqamini kiriting (bir nechtasini qo‘shishingiz mumkin):",
     kab_ph:"Masalan: IQ-1004",kab_save:"Saqlash",kab_change:"ID ni o‘zgartirish",kab_add:"Qo‘shish",
-    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",kab_code_changed:"Bu kod almashtirilgan — yangi kodni maktabdan oling.",kab_pending:"So‘rov Direktorga yuborildi: siz o‘quvchi kodlarini ko‘radigan xodimsiz, shuning uchun farzand bog‘lanishini Direktor tasdiqlaydi. Tasdiqlangach farzandingiz shu yerda ko‘rinadi.",
+    kab_code_ph:"Maxfiy kod",kab_code_need:"Maxfiy kodni kiriting (maktabdan oling).",kab_code_bad:"Kod noto‘g‘ri. Maktab ma’muriyatidan oling.",kab_code_changed:"Bu kod almashtirilgan — yangi kodni maktabdan oling.",kab_pending:"So‘rov Direktorga yuborildi: siz o‘quvchi kodlarini ko‘radigan xodimsiz, shuning uchun farzand bog‘lanishini Direktor tasdiqlaydi. Tasdiqlangach farzandingiz shu yerda ko‘rinadi.",kab_pending_chip:"Direktor tasdig‘ini kutmoqda",
     kab_children:"Farzandlaringiz",kab_remove:"Olib tashlash",kab_remove_q:"Bu farzand ro‘yxatdan olib tashlansinmi?",
     kab_dup:"Bu ID allaqachon qo‘shilgan.",
     kab_saveerr:"Saqlashda xatolik. Keyinroq urinib ko‘ring.",
@@ -986,7 +986,7 @@ const T = {
     kab_login:"Чтобы пользоваться кабинетом, сначала войдите (кнопка «Войти»).",
     kab_prompt:"Введите ID, выданный школой вашему ребёнку (можно добавить несколько):",
     kab_ph:"Например: IQ-1004",kab_save:"Сохранить",kab_change:"Изменить ID",kab_add:"Добавить",
-    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",kab_code_changed:"Этот код заменён — получите новый код в школе.",kab_pending:"Запрос отправлен директору: вы сотрудник, который видит коды учеников, поэтому привязку ребёнка подтверждает директор. После подтверждения ребёнок появится здесь.",
+    kab_code_ph:"Секретный код",kab_code_need:"Введите секретный код (получите в школе).",kab_code_bad:"Неверный код. Обратитесь в администрацию школы.",kab_code_changed:"Этот код заменён — получите новый код в школе.",kab_pending:"Запрос отправлен директору: вы сотрудник, который видит коды учеников, поэтому привязку ребёнка подтверждает директор. После подтверждения ребёнок появится здесь.",kab_pending_chip:"Ожидает подтверждения директора",
     kab_children:"Ваши дети",kab_remove:"Убрать",kab_remove_q:"Убрать этого ребёнка из списка?",
     kab_dup:"Этот ID уже добавлен.",
     kab_saveerr:"Ошибка сохранения. Попробуйте позже.",
@@ -1365,6 +1365,9 @@ function renderKabinet(){
   if(!A || !A.getUser || !A.getUser()){ host.innerHTML=`<div class="kab-narrow"><div class="cls-empty">${esc(t.kab_login)}</div></div>`; return; }
   const childIds = A.getChildIds ? A.getChildIds() : (A.getChildId&&A.getChildId()?[A.getChildId()]:[]);
   const active = A.getActiveChild ? A.getActiveChild() : (childIds[0]||"");
+  // Direktor tasdig'ini kutayotgan farzand (A7-01: kod ko'radigan xodim hisobi) — o'chiriladigan belgi, ma'lumoti ochilmaydi.
+  const pendingIds = A.getPendingChildIds ? A.getPendingChildIds() : [];
+  const pendChips = pendingIds.map(id=>`<div class="kab-chip" style="opacity:.75"><button class="kab-chip-main" type="button" disabled style="cursor:default"><b>${esc(id)}</b><span>⏳ ${esc(t.kab_pending_chip)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`).join('');
   const addForm = `<div class="kab-add"><div class="search-form"><input id="kab-input" type="text" placeholder="${esc(t.kab_ph)}" aria-label="${esc(t.kab_prompt)}"><input id="kab-code" type="text" placeholder="${esc(t.kab_code_ph)}" aria-label="${esc(t.kab_code_ph)}" style="max-width:150px"><button id="kab-add-btn" type="button">${esc(t.kab_add)}</button></div>
       <div id="kab-msg" class="notfound" style="display:none;margin-top:10px"></div></div>`;
   function wireAdd(){
@@ -1376,14 +1379,17 @@ function renderKabinet(){
       if(!code){ if(msg){ msg.style.display="block"; msg.textContent=t.kab_code_need; } return; }
       const r=await A.addChild(val, code);
       if(r&&r.ok){ renderKabinet(); }
+      else if(r&&r.err==='pending'){ renderKabinet(); const m2=$("#kab-msg"); if(m2){ m2.style.display="block"; m2.textContent=t.kab_pending; } }
       else if(msg){ msg.style.display="block"; msg.textContent=(r&&r.err==='changed')?t.kab_code_changed:((r&&r.err==='pending')?t.kab_pending:((r&&r.msg)||((r&&r.err==='code')?t.kab_code_bad:t.kab_saveerr))); }   // r.msg: server xabari (lockout / kod noto'g'ri); pending — kod ko'radigan xodim, Direktor tasdig'i kutilmoqda (A7-01)
     };
     btn.onclick=add;
     inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
   }
   if(!childIds.length){
-    host.innerHTML=`<div class="kab-narrow"><div class="found" style="padding:24px"><p style="margin:0 0 14px;color:var(--muted)">${esc(t.kab_prompt)}</p>${addForm}</div></div>`;
-    wireAdd(); return;
+    host.innerHTML=`<div class="kab-narrow"><div class="found" style="padding:24px">${pendChips?`<div class="kab-chips" style="margin-bottom:12px">${pendChips}</div>`:''}<p style="margin:0 0 14px;color:var(--muted)">${esc(t.kab_prompt)}</p>${addForm}</div></div>`;
+    wireAdd();
+    host.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); if(!confirm(t.kab_remove_q)) return; try{ await A.removeChild(b.dataset.rm); }catch(err){} renderKabinet(); });
+    return;
   }
   const chips = childIds.map(id=>{ const st=findStudent(id); const nm=st?st.name:id;
     return `<div class="kab-chip ${id===active?'on':''}"><button class="kab-chip-main" data-sel="${esc(id)}"><b>${esc(nm)}</b><span>${esc(id)}</span></button><button class="kab-chip-x" data-rm="${esc(id)}" aria-label="${esc(t.kab_remove)}">×</button></div>`;
@@ -1393,7 +1399,7 @@ function renderKabinet(){
   const detail = s ? (studentCardHTML(s)+`<div class="kab-main"><div id="kab-ann"></div><div id="kab-menu"></div><div id="kab-tg"></div><div class="kab-att-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">${s.left?`<div id="kab-dl-left" class="small" style="color:#B45309">${esc(t.kab_dl_left)}</div>`:`<div class="small" style="color:var(--muted)">${esc(t.kab_dl_hint)}</div><button id="kab-dl-btn" class="btn" style="background:var(--brand,#1F9982);color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer">${esc(t.kab_dl)}</button>`}</div><div id="kab-profile"></div><div id="kab-tsummary"></div><div id="kab-invoices"></div><div id="kab-health"></div><div id="kab-att"></div><div id="kab-grades"></div><div id="kab-monitoring"></div><div id="kab-timetable"></div><div id="kab-exams"></div><div id="kab-homework"></div><div id="kab-rating"></div><div id="kab-feedback"></div></div>`)
     : `<div class="cls-empty" style="margin-top:16px">${esc(t.kab_missing)} <b>${esc(active)}</b></div>`;
   host.innerHTML = `<div class="kab-children"><div class="kab-children-l">${esc(t.kab_children)} <span class="kab-cnt">${childIds.length}</span></div>
-      <div class="kab-chips">${chips}</div>${addForm}</div>
+      <div class="kab-chips">${chips}${pendChips}</div>${addForm}</div>
     <div id="kab-bus"></div>
     <div id="kab-detail"${s?' class="kab-2col"':''}>${detail}</div>`;
   renderKabBus();
@@ -1870,7 +1876,8 @@ async function renderKabTelegram(){
         <div style="color:var(--muted);margin-top:6px">${L.hint}</div><button type="button" id="kab-tg-ref" class="small" style="margin-top:6px;border:none;background:transparent;color:var(--teal,#1F9982);cursor:pointer;font-weight:600;padding:0">${L.refresh}</button>`
       :`<span style="color:#B42318">${L.err}: ${esc((r&&r.error)||'')}</span>`;
     const rf=$("#kab-tg-ref"); if(rf) rf.onclick=()=>renderKabTelegram(); };
-  const off=$("#kab-tg-off"); if(off) off.onclick=async()=>{ if(!confirm(L.confirmOff)) return; const r=await window.IqrorFB.tgCall('tg-unlink', {}); if(!(r&&r.ok)){ const out=$("#kab-tg-out"); if(out) out.innerHTML=`<span style="color:#B42318">${L.err}: ${esc((r&&r.error)||'')}</span>`; return; } renderKabTelegram(); };
+  // Faqat kartada ko'rsatilgan bog'lanish (act.id): bitta oila hisobida ikki ota-onaning Telegrami bo'lsa, «Uzish» ikkinchisini jim uzmasin.
+  const off=$("#kab-tg-off"); if(off) off.onclick=async()=>{ if(!confirm(L.confirmOff)) return; const r=await window.IqrorFB.tgCall('tg-unlink', act&&act.id?{ linkId:String(act.id) }:{}); if(!(r&&r.ok)){ const out=$("#kab-tg-out"); if(out) out.innerHTML=`<span style="color:#B42318">${L.err}: ${esc((r&&r.error)||'')}</span>`; return; } renderKabTelegram(); };
 }
 async function renderKabHealth(studentId){
   const box=$("#kab-health"); if(!box || !(window.IqrorFB&&window.IqrorFB.getSickNotes)) return;
@@ -2509,6 +2516,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
               sendPasswordResetEmail, updatePassword } = authMod;
       const { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, addDoc, getDocs, query, where, deleteDoc } = fsMod;
       let justLoggedIn = false, currentUser = null, childIds = [], activeChild = '', userRole = null;
+      let pendingChildIds = [];   // Direktor tasdig'ini kutayotgan bog'lanishlar (A7-01) — faqat belgi; farzand ma'lumoti YUKLANMAYDI
       // Safari/iOS'да popup ishlamaydi (bo'sh sahifa) — shu qurilmalarда redirect ishlatamiz.
       async function googleSignIn(){
         const prov=new GoogleAuthProvider(), ua=navigator.userAgent;
@@ -2530,7 +2538,10 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
       async function persistChildren(){ if(currentUser){ try{ await updateDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild}); }catch(e){} } }
       // Farzandlar endi child_claims jadvalidan (maxfiy kod bilan biriktirilgan) yuklanadi — faqat FAOL bog'lanish (owns_child bilan bir
       //   xil): Direktor tasdig'ini kutayotgan ('pending', A7-01) yoki bekor qilingan bog'lanish farzand ro'yxatida bo'sh karta bo'lib turmasin.
-      async function loadChildIds(uid){ try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',uid))); return snap.docs.map(d=>d.data()||{}).filter(x=>['','active'].includes(String(x.status||''))).map(x=>String(x.studentId||'')).filter(Boolean); }catch(e){ return []; } }
+      // Faol bog'lanishlar (qaytadi) + kutilayotganlari (pendingChildIds — kabinetda «Direktor tasdig'ini kutmoqda» belgisi; avval jim yo'qolardi).
+      async function loadChildIds(uid){ try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',uid))); const rows=snap.docs.map(d=>d.data()||{});
+          pendingChildIds=rows.filter(x=>String(x.status||'')==='pending').map(x=>String(x.studentId||'')).filter(Boolean);
+          return rows.filter(x=>['','active'].includes(String(x.status||''))).map(x=>String(x.studentId||'')).filter(Boolean); }catch(e){ pendingChildIds=[]; return []; } }
       // D6: farzand kartasi faqat O'Z farzandi qatoridan (xom 'students' — owns_student_doc RLS; boshqa bolalar ko'rinmaydi).
       //   Hujjat id'si studentId'dan farq qilishi mumkin (import): avval studentId bo'yicha AYNAN BITTA qator, topilmasa doc id.
       //   Karta kaliti (id) — kanonik studentId (davomat/baho/faktura shu bilan); bog'lanish kaliti (cid) xaritada.
@@ -2551,6 +2562,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         getUser: ()=>currentUser,
         getRole: ()=>userRole,
         getChildIds: ()=>childIds.slice(),
+        getPendingChildIds: ()=>pendingChildIds.filter(x=>!childIds.includes(x)),
         getActiveChild: ()=>activeChild,
         getChildId: ()=>activeChild, // eski API bilan moslik
         async addChild(id, code){ id=String(id||'').trim(); code=String(code||'').trim(); if(!id) return {ok:false};
@@ -2559,6 +2571,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           // serverда majburlanadi. To'g'ridan-to'g'ri child_claims INSERT endi yopiq (cc_ins=false).
           let res; try{ res = await fsMod.rpc('claim_child', { p_sid:id, p_code:code }); }
           catch(e){ return {ok:false, err:'code'}; }
+          if(res && res.pending){ try{ childIds = await loadChildIds(currentUser.uid); }catch(e){} }   // kutilayotgan belgi darhol ko'rinsin
           if(!res || !res.ok){ return {ok:false, err:(res&&res.locked)?'locked':((res&&res.reason==='code_changed')?'changed':((res&&res.pending)?'pending':'code')), msg:(res&&res.error)||'' }; }   // code_changed: eski (almashtirilgan) kod; pending: Direktor tasdig'i (A7-01)
           childIds = await loadChildIds(currentUser.uid);
           // Bog'lanish KANONIK kalit bilan saqlanadi (claim_child -> studentId) — ota-ona doc id kiritgan bo'lsa ham.
@@ -2568,7 +2581,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
           activeChild=cid; await persistChildren(); return {ok:true}; },
         async removeChild(id){ id=String(id||'').trim();
           try{ const snap=await getDocs(query(collection(db,'child_claims'), where('uid','==',currentUser.uid))); for(const dd of snap.docs){ if(String((dd.data()||{}).studentId||'')===id) await deleteDoc(doc(db,'child_claims',dd.id)); } }catch(e){}
-          childIds=childIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
+          childIds=childIds.filter(x=>x!==id); pendingChildIds=pendingChildIds.filter(x=>x!==id); if(activeChild===id) activeChild=childIds[0]||''; await persistChildren(); },
         async setActiveChild(id){ id=String(id||'').trim(); if(childIds.includes(id)){ activeChild=id; if(currentUser){ try{ await updateDoc(doc(db,'users',currentUser.uid),{activeChildId:activeChild,childId:activeChild}); }catch(e){} } } },
         async saveChild(id){ id=String(id||'').trim(); if(id){ if(!childIds.includes(id)) childIds.push(id); activeChild=id; } else { childIds=[]; activeChild=''; } await persistChildren(); }
       };
@@ -2583,7 +2596,7 @@ if(!PUB_DEMO){ TEACHERS=[]; SCHOOL_ACH=[]; STUDENT_ACH=[]; NEWS=[]; EVENTS=[]; P
         if(uidNow === kabUid){ currentUser = user; return; }
         kabUid = uidNow;
         currentUser = user;
-        if(!user){ childIds=[]; activeChild=''; userRole=null; try{ window.IqrorPublic && window.IqrorPublic.setChildren && window.IqrorPublic.setChildren({}); }catch(e){} setAuthUI(null); kabRefresh(); return; }
+        if(!user){ childIds=[]; pendingChildIds=[]; activeChild=''; userRole=null; try{ window.IqrorPublic && window.IqrorPublic.setChildren && window.IqrorPublic.setChildren({}); }catch(e){} setAuthUI(null); kabRefresh(); return; }
         let role=null;
         try{ const ud=await getDoc(doc(db,'users',user.uid)); if(ud.exists()){ const d=ud.data(); role=d.role; userRole=role;
           childIds = await loadChildIds(user.uid);
