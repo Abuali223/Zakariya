@@ -400,7 +400,10 @@ function makeRequestHandler(){
           const uid = await verifyToken(bearer(req));
           if(!uid){ res.writeHead(401, {'Content-Type':'application/json'}); return res.end('{"error":"auth_required"}'); }
           if(!SHEET_ROLES.has(await userRole(uid))){ res.writeHead(403, {'Content-Type':'application/json'}); return res.end('{"error":"forbidden"}'); }
-          if(!sheetWindowOk(_sheetUidHits, uid, Number(CFG.sheetRateLimit) || 10) || !sheetDayOk()){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          if(!sheetWindowOk(_sheetUidHits, uid, Number(CFG.sheetRateLimit) || 10)){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"rate_limited"}'); }
+          // Kunlik chegara — ALOHIDA xato: u daqiqa oynasi kabi bir daqiqada emas, faqat UTC yarim tunda tiklanadi. Avval ikkalasi
+          //   ham 'rate_limited' edi va admin.html «Bir daqiqadan so'ng qayta urinib ko'ring» derdi — Direktor kun bo'yi behuda urinardi.
+          if(!sheetDayOk()){ res.writeHead(429, {'Content-Type':'application/json'}); return res.end('{"error":"daily_cap"}'); }
           out = await handleSheet(body);
         }
         else { res.writeHead(404); return res.end('{"error":"not_found"}'); }

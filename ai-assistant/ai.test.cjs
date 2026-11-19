@@ -162,7 +162,8 @@ async function withServer(mod, fn) {
         r = await call('POST', '/chat', { message: 'Salom' });
         ok('6 ta /sheet so‘rovi /chat kunlik chegarasini (chatDailyCap=2) yemadi -> /chat 200', r.status === 200 && r.json && r.json.reply === 'Javob.', r.text);
         r = await call('POST', '/sheet', SHEET, dir);
-        ok('/sheet o‘z kunlik chegarasi (sheetDailyCap=3) -> 429', r.status === 429 && r.json && r.json.error === 'rate_limited', r.text);
+        // Kunlik chegara — o'z xatosi (daily_cap): admin.html «ertaga qayta urinib ko'ring» deydi (avval 'rate_limited' — «bir daqiqadan so'ng»).
+        ok('/sheet o‘z kunlik chegarasi (sheetDailyCap=3) -> 429 daily_cap (daqiqa oynasi xatosi emas)', r.status === 429 && r.json && r.json.error === 'daily_cap', r.text);
         r = await call('POST', '/chat', { message: 'Salom' });
         ok('/chat o‘z hisoblagichi bilan ishlayveradi (2-so‘rov) -> 200', r.status === 200, r.text);
       });
@@ -171,14 +172,14 @@ async function withServer(mod, fn) {
         GETUSER.length = 0;
         let r;
         for (let i = 0; i < 5; i++) r = await call('POST', '/sheet', SHEET);
-        ok('IP oynasi (sheetIpRateLimit=3): tokensiz oqim 4-so‘rovdan 429, token tekshiruviga (GoTrue) faqat 3 tasi yetdi', r.status === 429 && GETUSER.length === 3, `${r.status} getUser=${GETUSER.length}`);
+        ok('IP oynasi (sheetIpRateLimit=3): tokensiz oqim 4-so‘rovdan 429 rate_limited, token tekshiruviga (GoTrue) faqat 3 tasi yetdi', r.status === 429 && r.json && r.json.error === 'rate_limited' && GETUSER.length === 3, `${r.status} ${r.text} getUser=${GETUSER.length}`);
         const c = await call('POST', '/chat', { message: 'Salom' });
         ok('anonim /sheet oqimi /chat’ni to‘xtatmaydi', c.status === 200, c.text);
       });
       M = load({ sheetRateLimit: 2 });
       await withServer(M, async call => {
         const a = await call('POST', '/sheet', SHEET, dir), b = await call('POST', '/sheet', SHEET, dir), c = await call('POST', '/sheet', SHEET, dir);
-        ok('foydalanuvchi oynasi (sheetRateLimit=2): 3-so‘rov daqiqa ichida -> 429', a.status === 200 && b.status === 200 && c.status === 429, `${a.status} ${b.status} ${c.status}`);
+        ok('foydalanuvchi oynasi (sheetRateLimit=2): 3-so‘rov daqiqa ichida -> 429 rate_limited (kunlik chegara emas)', a.status === 200 && b.status === 200 && c.status === 429 && c.json && c.json.error === 'rate_limited', `${a.status} ${b.status} ${c.status} ${c.text}`);
       });
     } finally { globalThis.fetch = realFetch; }
   }

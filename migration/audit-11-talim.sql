@@ -325,8 +325,11 @@ begin
                 when 'student_summaries' then format('a.month >= %L', v_mon)
                 else format('a.year = %L', v_ay) end)
       into v_n, v_ids;
+    -- 'OGOHLANTIRISH: ' bilan: deploy.sh konsolga faqat shu qatorlarni chiqaradi — avval «TUZATILDI» xabari jurnalda qolib ketardi,
+    --   egasi esa qaysi satrlar (eskirgan sahifa yoki boshqa sinf o'quvchisiga yozish urinishi) ko'chirilganini ko'rmasdi. ID'lar —
+    --   ko'rib chiqish uchun (satr kaliti: o'quvchi ID + davr + fan; ism / telefon yo'q).
     if v_n > 0 then
-      raise notice 'TUZATILDI: %: % ta joriy davr satri o''quvchining haqiqiy sinfiga o''tkazildi (boshqa sinf kaliti bilan yozilgan edi): %', t, v_n, v_ids;
+      raise notice 'OGOHLANTIRISH: TUZATILDI: %: % ta joriy davr satri o''quvchining haqiqiy sinfiga o''tkazildi (boshqa sinf kaliti bilan yozilgan edi): %', t, v_n, v_ids;
     end if;
   end loop;
   -- A3-03: 0–100 dan tashqari ballar — O'ZGARTIRILMAYDI, faqat ro'yxat (O'IBDO' / Direktor tuzatsin; tuzatilmaguncha hisobga kiradi).

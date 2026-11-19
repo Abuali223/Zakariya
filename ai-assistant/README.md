@@ -36,7 +36,7 @@ cp config.example.json config.json      # to'ldiring
 | `allowOrigin` | Saytingiz manzili (CORS) — masalan `https://alilazer-cd582.web.app` |
 | `riskAttendance` / `riskScore` | Xavf chegaralari (standart 80% / 60 ball) |
 | `allowStudentData` | `false` (standart) — `/student-summary`, `/risk` o'chiq (410). `true` — faqat huquqshunos ruxsatidan keyin |
-| `sheetIpRateLimit` / `sheetRateLimit` / `sheetDailyCap` | Ixtiyoriy, `/sheet` cheklovlari: IP bo'yicha daqiqasiga (standart 30, token tekshiruvidan oldin), foydalanuvchi bo'yicha daqiqasiga (10), kunlik jami (300). `/chat` cheklovlari (`chatRateLimit` 20/daqiqa, `chatDailyCap` 2000/kun) bilan umumiy emas |
+| `sheetIpRateLimit` / `sheetRateLimit` / `sheetDailyCap` | Ixtiyoriy, `/sheet` cheklovlari: IP bo'yicha daqiqasiga (standart 30, token tekshiruvidan oldin), foydalanuvchi bo'yicha daqiqasiga (10), kunlik jami (300). Daqiqa oynasi oshsa — 429 `rate_limited`, kunlik jami oshsa — 429 `daily_cap` (UTC yarim tunda tiklanadi). `/chat` cheklovlari (`chatRateLimit` 20/daqiqa, `chatDailyCap` 2000/kun) bilan umumiy emas |
 
 ## 2. Tekshirish va ishga tushirish
 ```bash

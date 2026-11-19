@@ -431,3 +431,37 @@ test('G1-2: alohida «Фамилия | Имя | Отчество» / «Familiya 
   assert.equal(o3.toWrite.length, 1);
   assert.ok(o3.warnings.some(w => /faylda ikkinchi marta/.test(w)), JSON.stringify(o3.warnings));
 });
+
+// ---- Google Sheets importi (importFromSheet): server xatolari xabari. Kunlik chegara (ai-assistant/index.cjs 'daily_cap') daqiqa
+//   oynasidan ('rate_limited') ALOHIDA — avval doim «Bir daqiqadan so'ng qayta urinib ko'ring» derdi, chegara esa ertagacha turadi.
+function sheetEnv(reply) {
+  const els = {}, out = { fetched: [] };
+  for (const id of ['#modal', '#m-x', '#m-cancel', '#sheet-load', '#sheet-url', '#sheet-msg']) els[id] = { value: '', textContent: '', innerHTML: '', disabled: false, style: {}, onclick: null };
+  const ctx = vm.createContext({
+    $: s => els[s] || null, openModal: () => {}, closeModal: () => {}, loadAIUrl: async () => 'https://ai.example.org',
+    auth: { currentUser: { getIdToken: async () => 'tok-sinov' } },
+    fetch: async (u, o) => { out.fetched.push({ u, auth: o && o.headers && o.headers.Authorization }); return { json: async () => reply }; },
+    parseCSV: t => t, buildAndPreviewImport: rows => { out.preview = rows; },
+  });
+  vm.runInContext(fn('importFromSheet') + '\n;this.__imp = importFromSheet;', ctx);
+  return { ctx, els, out };
+}
+async function sheetTry(reply) {
+  const E = sheetEnv(reply);
+  await E.ctx.__imp();
+  E.els['#sheet-url'].value = 'https://docs.google.com/spreadsheets/d/abcSINOV/edit';
+  await E.els['#sheet-load'].onclick();
+  return { msg: E.els['#sheet-msg'].textContent, btn: E.els['#sheet-load'], out: E.out };
+}
+
+test('A7-10 qoldig‘i: Sheets importi — kunlik chegara «ertaga», daqiqa oynasi «bir daqiqadan so‘ng»; tugma qayta yoqiladi', async () => {
+  assert.ok(fn('importFromSheet').length > 0, 'importFromSheet topildi');
+  const d = await sheetTry({ error: 'daily_cap' });
+  assert.equal(d.msg, 'Bugungi import chegarasi tugadi — ertaga qayta urinib ko‘ring.', 'avval: «Bo‘sh javob keldi.» (xato tanilmasdi)');
+  assert.deepEqual([d.btn.disabled, d.btn.textContent], [false, 'Yuklab olish']);
+  const r = await sheetTry({ error: 'rate_limited' });
+  assert.equal(r.msg, 'So‘rovlar juda ko‘p. Bir daqiqadan so‘ng qayta urinib ko‘ring.');
+  assert.deepEqual(plain(r.out.fetched), [{ u: 'https://ai.example.org/sheet', auth: 'Bearer tok-sinov' }], 'Direktor tokeni bilan');
+  const ok = await sheetTry({ csv: 'Ism,Sinf\nSinov Bola,5\n' });
+  assert.equal(ok.out.preview, 'Ism,Sinf\nSinov Bola,5\n', 'CSV oldindan ko‘rishga ketdi');
+});

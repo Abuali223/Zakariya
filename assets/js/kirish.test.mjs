@@ -3,7 +3,9 @@
 //   1) onAuthStateChanged — Firebase'dagidek faqat foydalanuvchi almashganda: supabase-js SHU foydalanuvchi uchun ham hodisa
 //      beradi (tabga qaytish — SIGNED_IN, soatlik TOKEN_REFRESHED, USER_UPDATED) — ular tinglovchini qayta chaqirmasligi kerak
 //      (admin.html panelni boshidan qurardi, index.html kabinetni qayta chizardi); joriy obyekt jim yangilanadi.
-//   2) signOut — standart faqat shu qurilma (scope 'local'); 'global' — faqat aniq so'ralganda.
+//   2) signOut — standart faqat shu qurilma (scope 'local'); 'global' — faqat aniq so'ralganda. admin.html: bloklangan hisobning
+//      'global' chiqishi muvaffaqiyatsiz bo'lsa (tarmoq / 5xx / 429) — zaxira 'local': seans qurilmada qolmaydi (avval qolardi va
+//      shim shu foydalanuvchi hodisalarini yetkazmagani uchun hech narsa qayta urinmasdi).
 //   3) o'quvchi yozgan murojaat 'student' bo'lib yuboriladi (avval doim 'parent').
 //   Tarmoqsiz: esm.sh dagi supabase-js o'rniga bo'sh modul (resolve ilgagi), mijoz — soxta (_setClient). Ma'lumotlar to'qima.
 import test from 'node:test';
@@ -35,7 +37,11 @@ function fakeClient(initial, opt) {
         (async () => { await tick(); await tick(); if (subs.has(cb)) cb(o.initialEvent || 'INITIAL_SESSION', session); })();
         return { data: { subscription: { unsubscribe() { subs.delete(cb); } } } };
       },
-      async signOut(opts) { calls.signOut.push(opts); if (o.signOutError) return { error: { message: o.signOutError } }; session = null; for (const cb of [...subs]) cb('SIGNED_OUT', null); return { error: null }; },
+      // supabase-js 2.119 (GoTrueClient._signOut): 'global' seansni faqat /logout muvaffaqiyatli bo'lgach o'chiradi — tarmoq / 5xx / 429
+      //   xatosida xato qaytaradi va seans QOLADI (globalError); 'local' seansni so'rovdan OLDIN o'chiradi.
+      async signOut(opts) { calls.signOut.push(opts);
+        if (o.globalError && opts && opts.scope === 'global') return { error: { message: o.globalError } };
+        if (o.signOutError) return { error: { message: o.signOutError } }; session = null; for (const cb of [...subs]) cb('SIGNED_OUT', null); return { error: null }; },
     },
     fire(ev, s) { session = s; for (const cb of [...subs]) cb(ev, s); },
   };
@@ -147,6 +153,57 @@ test('signOut: standart — faqat shu qurilma (scope local); global — faqat an
   assert.deepEqual(client.calls.signOut[2], { scope: 'local' }, 'boshqa qiymat — shu qurilma');
   const f = await fresh(S('U1'), { signOutError: 'tarmoq xatosi' });
   await assert.rejects(f.A.signOut(f.auth), /tarmoq xatosi/);
+});
+
+// ---- admin.html: panel kirish ishlovchisi (onAuthStateChanged) — HAQIQIY kod fayldan, HAQIQIY shim bilan; baza va DOM soxta ----
+const ADM = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8');
+const BOOT_SRC = (() => { const a = ADM.indexOf('let bootUid=null;\nonAuthStateChanged(auth, async user=>{'); const b = a >= 0 ? ADM.indexOf('\n});\nfunction show(which)', a) : -1;
+  return a >= 0 && b > a ? ADM.slice(a, b + 4) : ''; })();
+function adminBoot(A, auth, usersRow) {
+  const ui = { err: { textContent: '', style: {} }, shown: [], userReads: 0 };
+  const ctx = vm.createContext({
+    onAuthStateChanged: A.onAuthStateChanged, signOut: A.signOut, auth, db: {}, doc: (_d, c, id) => ({ c, id }),
+    getDoc: async () => { ui.userReads++; return { exists: () => true, data: () => ({ ...usersRow }) }; },
+    $: sel => (sel === '#login-err' ? ui.err : null), show: w => ui.shown.push(w), loginAttempted: false,
+    ROLE_LABEL: {}, EXTRA_ROLES_OK: [], localStorage: { getItem: () => null },
+  });
+  vm.runInContext(BOOT_SRC, ctx);
+  return ui;
+}
+
+test('admin.html: kirish ishlovchisi (onAuthStateChanged) topildi', () => {
+  assert.ok(BOOT_SRC.length > 0, 'onAuthStateChanged ishlovchisi topilmadi');
+  assert.equal((ADM.match(/\nonAuthStateChanged\(auth, async user=>\{/g) || []).length, 1, 'ishlovchi bitta');
+});
+
+test('admin.html: bloklangan hisob, global chiqish so‘rovi xato (tarmoq / 5xx / 429) — seans shu qurilmadan baribir o‘chadi, qayta kirsa xabar yana chiqadi', async () => {
+  const { A, client, auth } = await fresh(S('U_BLK'), { globalError: 'Failed to fetch' });
+  const ui = adminBoot(A, auth, { role: 'teacher', status: 'blocked' });
+  await settle();
+  assert.deepEqual(client.calls.signOut, [{ scope: 'global' }, { scope: 'local' }], 'avval global, u bo‘lmasa — shu qurilmadan (avval faqat global edi)');
+  assert.equal(auth.currentUser, null, 'seans qurilmada qolmadi (avval U_BLK seansi localStorage’da qolardi)');
+  assert.equal(ui.err.textContent, 'Hisobingiz bloklangan. Administratorga murojaat qiling.');
+  assert.equal(ui.shown.at(-1), 'login');
+  // Shu tabda eski usulda bloklangan (taqiqsiz) hisob qayta kirdi: avval shim shu uid hodisasini e'tiborsiz qoldirardi — forma jim turardi.
+  ui.err.textContent = '';
+  client.fire('SIGNED_IN', S('U_BLK'));
+  await settle();
+  assert.equal(ui.userReads, 2, 'qayta kirish ishlovchiga yetdi (users qayta o‘qildi)');
+  assert.equal(ui.err.textContent, 'Hisobingiz bloklangan. Administratorga murojaat qiling.', 'xabar yana ko‘rsatildi');
+  assert.equal(auth.currentUser, null);
+});
+
+test('admin.html: global chiqish muvaffaqiyatli — zaxira chaqirilmaydi; tasdiq kutayotgan hisob — faqat shu qurilmadan', async () => {
+  const f1 = await fresh(S('U_BLK'));
+  adminBoot(f1.A, f1.auth, { role: 'teacher', status: 'blocked' });
+  await settle();
+  assert.deepEqual(f1.client.calls.signOut, [{ scope: 'global' }]);
+  assert.equal(f1.auth.currentUser, null);
+  const f2 = await fresh(S('U_PEN'));
+  const ui = adminBoot(f2.A, f2.auth, { role: 'teacher', status: 'pending' });
+  await settle();
+  assert.deepEqual(f2.client.calls.signOut, [{ scope: 'local' }]);
+  assert.match(ui.err.textContent, /tasdig‘ini kutmoqda/);
 });
 
 // ---- index.html: «Arz-shikoyat» muallifi roli (renderKabFeedback — fayldan o'qib, soxta DOM bilan) ----

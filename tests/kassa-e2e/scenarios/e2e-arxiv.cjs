@@ -5,7 +5,8 @@
 //   kelajak sana — «⏳ Chiqadi» bilan ro'yxatda qoladi; bosh sahifa soni; «🗄 Arxiv» (filtrlar, yig'ma); 📨 Ma'lumotnoma (QR 'certificate',
 //   telefon / to'lovsiz); 🎓 Bitiruv (ommaviy); ↩️ qaytarish; jurnallar (baho — shu o'quv yilida chiqqanlar belgi bilan, monitoring —
 //   oldingi oyda chiqqan yo'q). Qabulxona: ⏹️ chiqarish → arxiv, 📨 ma'lumotnoma (baho / davomat — student_certificate orqali; qabulxona
-//   jadvallarni o'zi o'qiy olmaydi), Arxivda ↩️ / 🎓 / CSV yo'q. O'IBDO': menyuda «Arxiv». Kassir: ro'yxat soni (students_billing),
+//   jadvallarni o'zi o'qiy olmaydi; 📄 ichki ma'lumotnoma va «🖨 Ichki hisobot» ham shu yig'madan), Arxivda ↩️ / 🎓 / CSV yo'q.
+//   O'IBDO': menyuda «Arxiv». Kassir: ro'yxat soni (students_billing),
 //   qidiruvda arxivdagi o'quvchi haqida eslatma (havolasiz).
 //   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-arxiv.cjs [v1|v2]
 const E = require('../lib/common.cjs'); const fs = require('fs');
@@ -161,6 +162,17 @@ const st = id => q(`select coalesce("payStatus",'') || '|' || coalesce("exitReas
   ok('qabulxona Arxivi: 4 ta; 📨 Ma’lumotnoma bor; ↩️, 🎓 Bitiruv va CSV yo‘q',
     (await R.arRows()).length === 4 && !!(await rp.$('[data-arcert="IQ-0003"]')) && !(await rp.$('[data-arback]')) && !(await rp.$('#ar-grad')) && !(await rp.$('#ar-csv')), await R.arRows());
   await rp.click('[data-arcert="IQ-0003"]'); await rp.waitForSelector('#rep-tr', { state: 'visible', timeout: 20000 });
+  // A3-04 qoldig'i: qabulxona jadvallarni o'zi o'qiy olmaydi — ichki ma'lumotnoma (oyna va «🖨 Ichki hisobot») o'zlashtirish bo'limlarini
+  //   student_certificate yig'masidan oladi (avval «Umumiy davomat —», «0 / 0 / 0», baho va xarakteristika «yo'q» deb chiqardi);
+  //   yig'mada yo'q oylik xulosa — «Qabulxona uchun ko'rsatilmaydi».
+  const secR = await rp.evaluate(() => { const o = {}; document.querySelectorAll('#rep-inner h4.rep-h').forEach(h => { let t = '', n = h.nextElementSibling;
+    while (n && n.tagName !== 'H4') { t += ' ' + n.textContent; n = n.nextElementSibling; } o[h.textContent.trim().split(' ')[0]] = t.replace(/\s+/g, ' ').trim(); }); return o; });
+  ok('qabulxona ichki ma’lumotnomasi (oyna): davomat 100% (2 kun), «Ona tili» 4, xarakteristika — yig‘madan; oylik xulosa «ko‘rsatilmaydi»',
+    /Umumiy davomat ?100%/.test(secR.Davomat) && /2 \/ 0 \/ 0 \(jami 2 kun\)/.test(secR.Davomat) && /Ona tili ?4/.test(secR.Baholar) && !/Ma’lumot yo‘q/.test(secR.Baholar)
+      && /Sinov xarakteristika matni/.test(secR.Xarakteristika) && /Qabulxona uchun ko‘rsatilmaydi\./.test(secR['O‘qituvchi']), secR);
+  const ichR = await R.printOf('#rep-print');
+  ok('qabulxona «🖨 Ichki hisobot»: davomat, baho, xarakteristika chop etiladi; oylik xulosa «ko‘rsatilmaydi»',
+    /Umumiy davomat ?100%/.test(ichR.text) && /Ona tili ?4/.test(ichR.text) && /Sinov xarakteristika matni/.test(ichR.text) && /Qabulxona uchun ko‘rsatilmaydi\./.test(ichR.text), ichR.text.slice(0, 900));
   const prR = await R.printOf('#tr-print');
   ok('qabulxona 📨 Ma’lumotnomasi: baho («Ona tili 4»), davomat (jami 2 kun) va xarakteristika bor (student_certificate orqali); QR bor',
     /Sinov O‘quvchi 0003/.test(prR.text) && /Ona tili 4/.test(prR.text) && /jami 2 kun/.test(prR.text) && /Sinov xarakteristika matni/.test(prR.text) && prR.qr, prR.text.slice(0, 900));

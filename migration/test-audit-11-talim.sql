@@ -3,7 +3,7 @@
 --   A3-02 baho / monitoring / xarakteristika / fan izohi / oylik xulosa faqat o'z sinfi o'quvchisiga, o'qituvchi — faqat o'z faniga;
 --   A3-01 tasdiqlangan monitoring balli eskirgan sahifadan jim bekor bo'lmaydi; A3-03 ball 0–100; A3-06 noto'g'ri yozuvni o'chirish;
 --   A3-07 muallif / sana belgisi matn o'zgarmasa saqlanadi; A3-04 rasmiy profil uchun yig'ma (barcha choraklar, fan izohlari);
---   deploydagi bir martalik tuzatish (joriy davr satrlarining sinf kaliti).
+--   deploydagi bir martalik tuzatish (joriy davr satrlarining sinf kaliti) va uning deploy.sh konsolida ko'rinadigan xabari (D01).
 --   Har chaqiruv haqiqiy rol bilan (anon yoki authenticated + JWT sub) — RLS va GRANT haqiqiy.
 --   Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida, kanonik zanjirdan keyin:
 --     bash migration/chain.sh --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-audit-11-talim.sql
@@ -12,6 +12,12 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 \pset tuples_only on
+-- Deploy xabarlari (D01, pastda tekshiriladi): deploy.sh konsolga faqat «OGOHLANTIRISH|g'ayrioddiy» qatorlarini chiqaradi. Bir martalik
+--   tuzatish xabarini AYNAN shu filtr bilan ko'rish uchun alohida psql seansi (shu baza): o'z tranzaksiyasida boshqa sinf kalitli joriy oy
+--   satri va 0–100 dan tashqari ball yaratadi, audit-11-talim.sql'ni zanjirdagidek ishga tushiradi va ROLLBACK qiladi. Bu sinov
+--   tranzaksiyasidan OLDIN — keyin audit-11-talim.sql DDL qulflari shu tranzaksiya qulflari bilan to'qnashardi. Fayl: migration/ ichidan
+--   ham, repo ildizidan ham ishga tushirilganda topiladi.
+\set zz_deploy_out `f=audit-11-talim.sql; [ -f "$f" ] || f=migration/audit-11-talim.sql; psql -X -q -v ON_ERROR_STOP=1 -v iqror_chain=1 -h :'HOST' -p :'PORT' -U :'USER' -d :'DBNAME' -c 'begin' -c 'select set_config($$iqror.migrating$$, $$1$$, true)' -c 'insert into public.students (id, "studentId", name, grade, "classLetter", lang) values ($$IQ-0791$$, $$IQ-0791$$, $$Sinov Xabar$$, 7, $$B$$, $$uz$$)' -c 'insert into public.monitoring (id, "studentId", "classKey", subject, period, score, status) select $$IQ-0791__$$ || m || x.slug, $$IQ-0791$$, x.ck, x.subj, m, x.score, $$pending$$ from (select to_char(app.tashkent_now(), $$YYYY-MM$$) m) t, (values ($$__matematika$$, $$uz-5-A$$, $$Matematika$$, 70), ($$__fizika$$, $$uz-7-B$$, $$Fizika$$, 950)) x(slug, ck, subj, score)' -c 'select set_config($$iqror.migrating$$, $$$$, true)' -f "$f" -c 'rollback' 2>&1 | grep -E "OGOHLANTIRISH|g'ayrioddiy" | sed -E 's/^.*NOTICE: +//'`
 begin;
 do $g$ begin
   if exists (select 1 from public.students) then
@@ -302,6 +308,10 @@ select zz.chk('R03 tuzatilgan satr matni va belgisi o''zgarmadi; endi haqiqiy si
   '^Intizomsiz\|1\|ERR 42501 «IQ-0701»');
 select zz.chk('R04 eski 950 ball deploydan keyin ham o''zgarmagan (faqat ro''yxat bilan ogohlantiriladi)',
   zz.q($q$select score::text from public.monitoring where id = 'IQ-0502__' || current_setting('zz.m') || '__fizika'$q$), '^950$');
+-- zz_deploy_out — fayl boshidagi alohida seans chiqishi, deploy.sh filtridan o'tgani (NOTICE prefiksisiz).
+select zz.chk('D01 deploy konsoli (deploy.sh filtri): ko''chirilgan satrlar xabari ID''lari bilan ko''rinadi — avval «TUZATILDI:» bilan boshlanib faqat jurnalda qolardi; 0–100 dan tashqari ball xabari ham joyida',
+  :'zz_deploy_out',
+  '^OGOHLANTIRISH: TUZATILDI: monitoring: 1 ta joriy davr satri o''quvchining haqiqiy sinfiga o''tkazildi \(boshqa sinf kaliti bilan yozilgan edi\): IQ-0791__[0-9]{4}-[0-9]{2}__matematika\nOGOHLANTIRISH: monitoring: 1 ta ball 0–100 oralig''idan tashqarida \(o''zgartirilmadi — tuzating\): IQ-0791__[0-9]{4}-[0-9]{2}__fizika=950$');
 
 -- ===== A3-04: rasmiy profil uchun yig'ma (student_certificate) =====
 set local iqror.migrating = '1';
