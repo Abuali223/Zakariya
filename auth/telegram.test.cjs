@@ -1,6 +1,7 @@
 // server/telegram.cjs — Telegram Bot API mijozi: tarmoqsiz (soxta fetch) sinov.
 //   429 retry_after bilan qayta urinish, 403 / «chat not found» -> blocked, tarmoq xatosi, muddat (timeout), kalitsiz,
-//   tezlik cheklovi, kalit (token) xato matnida chiqmasligi.
+//   tezlik cheklovi, kalit (token) xato matnida chiqmasligi; A6-05 (2-raund): noaniq natija (2xx tanasi o'qilmagan, ulanishdan keyingi
+//   uzilish) — timeout:true, ulanishdan oldingi xato (undici e.cause.code) — timeout:false.
 const { makeTelegram } = require('../server/telegram.cjs');
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('  ✗ FAIL:', name, extra != null ? '→ ' + extra : ''); } };
@@ -13,6 +14,9 @@ function fakeFetch(script) {
     const step = script.length ? script.shift() : { status: 200, json: { ok: true, result: { message_id: 1 } } };
     if (step.throw) throw step.throw;
     if (step.hang) return new Promise((_, rej) => init.signal.addEventListener('abort', () => { const e = new Error('The operation was aborted'); e.name = 'AbortError'; rej(e); }));
+    // javob keldi, lekin tanasi buzuq (badJson) yoki tana o'qilayotganda muddat tugaydi (hangBody)
+    if (step.badJson) return { status: step.status, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } };
+    if (step.hangBody) return { status: step.status, json: () => new Promise((_, rej) => init.signal.addEventListener('abort', () => { const e = new Error('This operation was aborted'); e.name = 'AbortError'; rej(e); })) };
     return { status: step.status, json: async () => step.json };
   };
   f.calls = calls; return f;
@@ -76,6 +80,33 @@ function fakeFetch(script) {
     const tn = makeTelegram({ token: '', fetchImpl: fakeFetch([]) });
     const rn = await tn.sendMessage(1, 'a');
     ok('kalitsiz -> no_token (so‘rov yo‘q)', !rn.ok && rn.error === 'no_token');
+    ok('kodli tarmoq xatosi (ECONNREFUSED) — aniq ketmagan (timeout emas)', r.timeout === false, J(r));
+  }
+  console.log('\n— A6-05 (2-raund): noaniq natija — timeout:true; ulanishdan oldingi xato — timeout:false');
+  {
+    const one = async step => makeTelegram({ token: TOKEN, fetchImpl: fakeFetch([step]), timeoutMs: 1000, sleep: async () => {} }).sendMessage(1, 'a');
+    // Node (undici) fetch: har tarmoq xatosi TypeError('fetch failed'), asl sabab — e.cause (kodi bilan)
+    const fetchFailed = (code, cause) => { const e = new TypeError('fetch failed'); e.cause = cause || (code ? Object.assign(new Error(`x ${code} https://api.telegram.org/bot${TOKEN}/`), { code }) : undefined); return e; };
+    const b = await one({ status: 200, badJson: true });
+    ok('200, tanasi buzuq — noaniq (Telegram qabul qilgan bo‘lishi mumkin): timeout:true', !b.ok && b.timeout === true && b.status === 200 && /^uncertain: HTTP 200/.test(b.error), J(b));
+    const t0 = Date.now(); const hb = await one({ status: 200, hangBody: true });
+    ok('200, tana o‘qilayotganda muddat tugadi — noaniq: timeout:true', !hb.ok && hb.timeout === true && hb.status === 200 && Date.now() - t0 < 3000, J(hb));
+    const g5 = await one({ status: 502, badJson: true });
+    ok('502, tanasi buzuq — aniq yetkazilmagan (avvalgidek, timeout emas)', !g5.ok && !g5.timeout && g5.status === 502 && g5.error === 'HTTP 502', J(g5));
+    for (const code of ['ECONNRESET', 'EPIPE', 'UND_ERR_SOCKET', 'ETIMEDOUT', 'UND_ERR_HEADERS_TIMEOUT']) {
+      const x = await one({ throw: fetchFailed(code) });
+      ok(`ulanishdan keyingi uzilish (${code}) — noaniq: timeout:true, kod matnda`, !x.ok && x.timeout === true && x.status === 0 && x.error === 'network: ' + code, J(x));
+    }
+    const nc = await one({ throw: fetchFailed(null) });
+    ok('kodi noma’lum (fetch failed, sababsiz) — noaniq: timeout:true', !nc.ok && nc.timeout === true && nc.error === 'network: fetch failed', J(nc));
+    for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT',
+                        'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID']) {
+      const x = await one({ throw: fetchFailed(code) });
+      ok(`ulanishdan oldingi xato (${code}, e.cause.code) — aniq ketmagan: timeout:false`, !x.ok && x.timeout === false && x.error === 'network: ' + code && !J(x).includes('SECRET-TOKEN'), J(x));
+    }
+    // bir necha manzil (IPv4/IPv6) — umumiy xato (AggregateError) ichida kod
+    const ag = await one({ throw: fetchFailed(null, new AggregateError([Object.assign(new Error('a'), { code: 'ECONNREFUSED' }), Object.assign(new Error('b'), { code: 'ENETUNREACH' })], 'all failed')) });
+    ok('AggregateError ichidagi kod (ECONNREFUSED) — aniq ketmagan', !ag.ok && ag.timeout === false && ag.error === 'network: ECONNREFUSED', J(ag));
   }
   console.log('\n— tezlik: soniyasiga perSecond ta (oddiy navbat); xizmat chaqiruvlari navbatsiz');
   {

@@ -5,6 +5,8 @@
 --   (P) «Reja va tushum» va haftalik yig'ilish — holati 'paid' (paidAmount bo'sh) to'liq to'langan (A6-04);
 --   (T) Telegram kunlik hisobot ma'lumoti: oldingi hisobotdan keyin tushgan to'lovlar ('since', 'asOf') (A6-01) va BARCHA
 --       biriktirilmagan to'lovlar (A6-07);
+--   (R) ikki bosqichli onlayn to'lov (Click prepare → complete) hisobot payti bilan kesishsa ham 'since'da: tushumga aylangan payt
+--       payments."receivedAt" (trigger app.pay_received_at; A6-01, 2-raund) — bir marta qo'yiladi, REST orqali o'zgarmaydi;
 --   (K) kassadagi o'quv to'lovidan tashqari daromad finance_other_income (A6-02): --dev zanjirda — kassa hujjatlari bilan; jonli zanjirda
 --       (kassa moduli yo'q) — bo'sh natija. Huquq — har ikkisida.
 --   Har chaqiruv haqiqiy rol bilan (anon yoki authenticated + JWT sub) — RLS va GRANT haqiqiy; ichki app.* yordamchilar — to'g'ridan-to'g'ri.
@@ -38,8 +40,9 @@ begin
 end $$;
 create table if not exists zz.res (n serial, name text, got text, pat text, ok boolean);
 truncate zz.res;
+-- got NULL — '<NULL>' (FAIL qatori bo'sh chiqib, sanoqdan tushib qolmasin)
 create or replace function zz.chk(p_name text, p_got text, p_pat text) returns void language plpgsql as $$
-begin insert into zz.res (name, got, pat, ok) values (p_name, p_got, p_pat, coalesce(p_got ~ p_pat, false)); end $$;
+begin insert into zz.res (name, got, pat, ok) values (p_name, coalesce(p_got, '<NULL>'), p_pat, coalesce(p_got ~ p_pat, false)); end $$;
 
 -- ---------- Urug' (triggerlarsiz) ----------
 set local session_replication_role = replica;
@@ -158,6 +161,76 @@ select zz.chk('T09 biriktirilmagan — BARCHASI («To''lovlar» ro''yxati bilan 
   zz.as('U_DIR', $q$select (d->>'unmatched') || ' ' || (d->>'unmatchedSum') || ' ' || (d->>'unmatchedSince') from (select public.director_daily('2026-11-16') d) x$q$),
   '^2 120000 2026-11-10$');
 select zz.chk('T10 kassir director_daily ni chaqira olmaydi (o''zgarmagan)', zz.as('U_KAS', $q$select public.director_daily('2026-11-16')::text$q$), '^ERR 42501');
+
+-- ===== (R) Ikki bosqichli onlayn to'lov: 'since' — tushumga aylangan payt ("receivedAt") bo'yicha (A6-01, 2-raund) =====
+--   Ko'rib chiquvchi ssenariysi: juma 13-noyabr Click prepare 18:59:50 (hisobotdan OLDIN; qator 'prepared' — tushum emas), kunlik hisobot
+--   19:00:05 (urug'dagi 'sent' qator), complete 19:30 (hisobotdan KEYIN). Avval u HECH QAYSI hisobotda chiqmasdi: jumada hali tushum emas
+--   edi, dushanba 'since' esa juma 19:00:05 dan keyin KIRITILGANlarni olardi ("createdAt" 18:59:50 qolgan).
+--   Triggerlar yoqilgan (server yozuvi: JWT'siz — app.is_system), vaqt — sinov soati (app.fin_clock). Har amal o'z so'rovida, tekshiruv —
+--   keyingisida (bitta so'rov o'z o'zgarishini ko'rmaydi). Ustun to_jsonb(...) orqali o'qiladi: tuzatishsiz bazada ham FAIL (xato emas).
+insert into app.fin_clock (id, t) values (1, '2026-11-13 18:00+05') on conflict (id) do update set t = excluded.t;
+-- hisobotdan OLDIN prepare va complete — juma hisobotida bor edi: dushanba 'since'ga tushmasin
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('click_r2', 'IQ-0301', 'click', 7000, 'prepared', '{"mode":"precise"}', true, '2026-11-13 18:00+05');
+insert into app.fin_clock (id, t) values (1, '2026-11-13 18:30+05') on conflict (id) do update set t = excluded.t;
+update public.payments set status = 'applied', merchant_confirm_id = 'mc_r2' where id = 'click_r2';
+-- biriktirilmagan (tushum) — hisobotdan oldin keldi, shanba biriktiriladi: 'unmatched' → 'applied' ikkalasi ham tushum (qayta sanalmasin)
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('u_r3', null, 'uzum', 9000, 'unmatched', null, false, '2026-11-13 18:40+05');
+insert into app.fin_clock (id, t) values (1, '2026-11-13 18:59:50+05') on conflict (id) do update set t = excluded.t;
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('click_r1', 'IQ-0301', 'click', 500000, 'prepared', '{"mode":"precise"}', true, '2026-11-13 18:59:50+05');
+select zz.chk('R01 prepare — tushum emas: "receivedAt" bo''sh, juma to''lovlari (kassa kuni) orasida yo''q',
+  (select coalesce(to_jsonb(p) ->> 'receivedAt', 'NULL') || ' ' || (select count(*) from app.fin_receipts('2026-11-13', '2026-11-13') r where r.id = 'click_r1')
+     from public.payments p where p.id = 'click_r1'), '^NULL 0$');
+insert into app.fin_clock (id, t) values (1, '2026-11-13 19:30+05') on conflict (id) do update set t = excluded.t;
+update public.payments set status = 'applied', amount = 500000, merchant_confirm_id = 'mc_r1' where id = 'click_r1';
+insert into app.fin_clock (id, t) values (1, '2026-11-14 10:00+05') on conflict (id) do update set t = excluded.t;
+update public.payments set status = 'applied', "studentId" = 'IQ-0301', matched = true where id = 'u_r3';
+-- tarixiy import / server yozuvi tushum holatida va o'z vaqti bilan — "receivedAt" = o'sha vaqt (import payti emas)
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('p_imp_r6', 'IQ-0302', 'bank', 11000, 'applied', null, true, '2026-11-13 12:00+05');
+-- yakshanba 23:59 prepare, dushanba 00:05 complete — dushanba 'since'da (yuqori chegara "createdAt" < bugun boshi; 'payments' va
+--   'late'da yo'q). Yuqori chegara "receivedAt" bo'lsa — hech qaysi hisobotda chiqmasdi.
+insert into app.fin_clock (id, t) values (1, '2026-11-15 23:59+05') on conflict (id) do update set t = excluded.t;
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('click_r7', 'IQ-0301', 'click', 13000, 'prepared', '{"mode":"precise"}', true, '2026-11-15 23:59+05');
+insert into app.fin_clock (id, t) values (1, '2026-11-16 00:05+05') on conflict (id) do update set t = excluded.t;
+update public.payments set status = 'applied', merchant_confirm_id = 'mc_r7' where id = 'click_r7';
+select zz.chk('R02 complete (19:30) — "receivedAt" = tushumga aylangan payt; "createdAt" o''zgarmagan (18:59:50)',
+  (select ((to_jsonb(p) ->> 'receivedAt')::timestamptz = '2026-11-13 19:30+05')::text || ' ' || (p."createdAt" = '2026-11-13 18:59:50+05')::text
+     from public.payments p where p.id = 'click_r1'), '^true true$');
+select zz.chk('R03 dushanba ''since'': juma 18:59:50 da prepare, hisobotdan keyin complete bo''lgan Click ham — 6 ta, 2 213 000 (avval 5 ta, 1 713 000 — yo''qolardi)',
+  zz.as('U_DIR', $q$select (s->>'count') || ' ' || (s->>'sum') from (select public.director_daily('2026-11-16')->'since' s) x$q$), '^6 2213000$');
+select zz.chk('R04 kassa kuni bo''yicha: 13 — 3 ta 1 000 000 (Click o''z kuni — kiritilgan juma), 15 — yakshanba 23:59 dagi bilan 2 ta',
+  zz.as('U_DIR', $q$select string_agg((b->>'day') || ':' || (b->>'count') || ':' || (b->>'sum'), ',' order by b->>'day') from jsonb_array_elements(public.director_daily('2026-11-16')->'since'->'byDay') b$q$),
+  '^2026-11-13:3:1000000,2026-11-14:1:400000,2026-11-15:2:813000$');
+select zz.chk('R05 bloklar kesishmaydi: bugungi to''lovlar va bugun orqa sana bilan — o''zgarmagan (2 ta 1 670 000 | 1 ta 25 000)',
+  zz.as('U_DIR', $q$select (d->'payments'->>'count') || ' ' || (d->'payments'->>'sum') || ' | ' || (d->'late'->>'count') || ' ' || (d->'late'->>'sum') from (select public.director_daily('2026-11-16') d) x$q$),
+  '^2 1670000 \| 1 25000$');
+select zz.chk('R06 bir marta qo''yiladi: hisobotdan oldin complete (18:30), biriktirilgan (tushum 18:40 dan), import (o''z vaqti 12:00) — ''since''ga tushmaydi',
+  (select string_agg(p.id || '=' || to_char((to_jsonb(p) ->> 'receivedAt')::timestamptz at time zone 'Asia/Tashkent', 'DD HH24:MI'), ',' order by p.id)
+     from public.payments p where p.id in ('click_r2', 'u_r3', 'p_imp_r6', 'click_r7')), '^click_r2=13 18:30,click_r7=16 00:05,p_imp_r6=13 12:00,u_r3=13 18:40$');
+select zz.chk('R07 Direktor REST orqali "receivedAt"ni o''zgartira olmaydi (pay_direct_guard: pul ustuni)',
+  zz.as('U_DIR', $q$update public.payments set "receivedAt" = '2026-11-16 08:00+05' where id = 'click_r1' returning id$q$), '^ERR 42501');
+-- Direktorning «🚫 Bekor»i (sahifa setDoc — upsert {status:'canceled'}) qo'llanmagan yozuvda ishlayveradi, "receivedAt" o'zgarmaydi
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched, "createdAt") values
+  ('u_r4', null, 'click', 15000, 'unmatched', null, false, '2026-11-14 09:00+05');
+create temp table zz_r (step text primary key, r text) on commit drop;
+insert into zz_r select 'cancel', zz.as('U_DIR', $q$insert into public.payments (id, status) values ('u_r4', 'canceled') on conflict (id) do update set status = excluded.status returning status$q$);
+select zz.chk('R08 «🚫 Bekor» (upsert) ishlaydi; "receivedAt" (tushgan payt, 14-noyabr 09:00) o''zgarmagan',
+  (select c.r || ' ' || p.status || ' ' || ((to_jsonb(p) ->> 'receivedAt')::timestamptz = '2026-11-14 09:00+05')::text from zz_r c, public.payments p where c.step = 'cancel' and p.id = 'u_r4'),
+  '^canceled canceled true$');
+-- Pul RPC'si (record_manual_payment: 'pending' qator + qo'llash + 'applied' — bitta tranzaksiyada) — "receivedAt" = "createdAt" (server vaqti)
+insert into app.fin_clock (id, t) values (1, '2026-11-16 11:00+05') on conflict (id) do update set t = excluded.t;
+insert into zz_r select 'manual', zz.as('U_FM', $q$select public.record_manual_payment('man_r5_sinov', 'IQ-0301', 1000, 'bank')->>'ok'$q$);
+select zz.chk('R09 qo''lda to''lov (Moliya menejeri): ok, "receivedAt" = "createdAt" = server vaqti (11:00)',
+  (select m.r || ' ' || ((to_jsonb(p) ->> 'receivedAt')::timestamptz = p."createdAt")::text || ' ' || (p."createdAt" = '2026-11-16 11:00+05')::text || ' ' || p.status
+     from zz_r m, public.payments p where m.step = 'manual' and p.id = 'man_r5_sinov'), '^true true true applied$');
+select zz.chk('R10 trigger — BEFORE triggerlarning oxirgisi (pay_direct_guard mijoz yuborgan qiymatni ko''radi), nomi trg_kassa_ / trg_fin_ emas',
+  (select string_agg(t.tgname, ',' order by t.tgname) from pg_trigger t where t.tgrelid = 'public.payments'::regclass and not t.tgisinternal and t.tgtype & 2 = 2),
+  '(^|,)trg_pay_direct_guard,trg_pay_received$');
+delete from app.fin_clock where id = 1;
 
 -- ===== (K) Kassadagi o'quv to'lovidan tashqari daromad (A6-02) =====
 select case when to_regclass('public.cash_docs') is not null then 'true' else 'false' end as has_kassa \gset

@@ -3,7 +3,7 @@
  * -------------------------------------------------------------------
  *   const tg = makeTelegram({ token, apiBase?, timeoutMs?, perSecond?, maxRetries?, fetchImpl? });
  *   await tg.sendMessage(chatId, text, { reply_markup?, parse_mode?, disable_web_page_preview? })
- *     -> { ok:true, id } | { ok:false, blocked?:true, retryAfter?, status, error }
+ *     -> { ok:true, id } | { ok:false, blocked?:true, retryAfter?, timeout?:true, status, error }
  *   tg.setWebhook(url, secret, allowedUpdates) · tg.deleteWebhook() · tg.getWebhookInfo() · tg.getMe()
  *   tg.answerCallbackQuery(id, text) · tg.leaveChat(chatId)
  *
@@ -12,9 +12,25 @@
  *   - 403 (bot bloklangan / chat yo'q): { ok:false, blocked:true } — chaqiruvchi bog'lanishni 'blocked' qiladi va SMS'ga o'tadi;
  *   - tezlik: soniyasiga ~perSecond (standart 20) xabar — oddiy navbat (Telegram umumiy cheklovi ~30/s);
  *   - har so'rov timeoutMs (standart 8000) — javob bo'lmasa { ok:false, timeout:true } (xabar ketgan-ketmagani noaniq).
+ *   - NOANIQ natija ham timeout:true (A6-05, 2-raund): 2xx javob keldi, lekin tanasi o'qilmadi (tana o'qilayotganda uzilish yoki muddat,
+ *     buzuq JSON — Telegram so'rovni QABUL QILGAN, xabar ketgan bo'lishi mumkin) va ULANISHDAN KEYINGI tarmoq xatosi (ECONNRESET, EPIPE,
+ *     UND_ERR_SOCKET, kodi noma'lum — so'rov yuborilgan bo'lishi mumkin). Faqat ulanishdan OLDINGI xato (DNS — ENOTFOUND / EAI_AGAIN,
+ *     ECONNREFUSED, ENETUNREACH / EHOSTUNREACH, UND_ERR_CONNECT_TIMEOUT, sertifikat) — timeout:false: so'rov Telegram'ga yetmagan, xabar
+ *     ANIQ ketmagan, qayta yuborish xavfsiz. Node (undici) har tarmoq xatosini 'fetch failed' deydi — asl kod e.cause.code da.
+ *     Kunlik hisobot (auth/tg-daily.cjs) noaniq natijani qayta yubormaydi — Direktorga takror hisobot ketmasin.
  *   - log'ga TOKEN, matn va raqam yozilmaydi.
  */
 'use strict';
+// Tarmoq xatosining kodi: o'zida (http / soxta fetch), undici 'fetch failed' ning sababida (e.cause), bir necha manzilga ulanish
+//   urinishlarining umumiy xatosida (AggregateError — e.cause.errors) yoki undan ham ichkarida.
+function netErrCode(e) {
+  const pick = x => (x && typeof x.code === 'string' && x.code) || '';
+  const c = e && e.cause;
+  return pick(e) || pick(c) || (c && Array.isArray(c.errors) ? pick(c.errors.find(pick)) : '') || pick(c && c.cause) || '';
+}
+// So'rov Telegram'ga umuman yetib bormagan xatolar (ulanish o'rnatilmagan) — xabar ANIQ ketmagan.
+const PRE_CONNECT = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']);
+const isPreConnect = code => PRE_CONNECT.has(code) || /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER/.test(code);
 function makeTelegram(o) {
   o = o || {};
   const token = String(o.token || '');
@@ -50,10 +66,16 @@ function makeTelegram(o) {
         try { j = await res.json(); } catch (_) { j = null; }
       } catch (e) {
         const aborted = (e && (e.name === 'AbortError' || /abort/i.test(String(e.message || ''))));
-        return { ok: false, status: 0, timeout: !!aborted, error: aborted ? 'timeout' : 'network: ' + scrub((e && (e.code || e.message)) || e).slice(0, 120) };
+        if (aborted) return { ok: false, status: 0, timeout: true, error: 'timeout' };
+        // ulanishdan oldingi xato — aniq ketmagan (timeout:false); qolgani (ulanishdan keyin uzilish, kodi noma'lum) — noaniq
+        const code = netErrCode(e);
+        return { ok: false, status: 0, timeout: !isPreConnect(code), error: 'network: ' + scrub(code || (e && e.message) || e).slice(0, 120) };
       } finally { if (tm) clearTimeout(tm); }
       const status = res ? res.status : 0;
       if (j && j.ok === true) return { ok: true, status, result: j.result };
+      // 2xx, lekin tanasi o'qilmadi — Telegram so'rovni qabul qilgan, xabar ketgan bo'lishi mumkin: noaniq (avval 'HTTP 200' xatosi bo'lib,
+      //   kunlik hisobot uni qayta yuborardi — Direktorga takror)
+      if (!j && status >= 200 && status < 300) return { ok: false, status, timeout: true, error: 'uncertain: HTTP ' + status + ' (javob tanasi o‘qilmadi)' };
       const desc = scrub((j && j.description) || ('HTTP ' + status)).slice(0, 200);
       if (status === 429 || (j && j.error_code === 429)) {
         const ra = Number(j && j.parameters && j.parameters.retry_after) || 1;

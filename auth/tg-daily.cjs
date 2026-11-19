@@ -3,9 +3,11 @@
  *   va kunlari — admin «Xabarnomalar» → «Kunlik hisobot» (notify_settings 'daily_report': enabled, days, hourFrom).
  *   Toshkent vaqti bilan hourFrom'dan keyingi birinchi run'da, bir kunda BIR MARTA (sms_log 'daily__<kun>__<bog'lanish>').
  *   Kunlar standarti (qator kunlarsiz bo'lsa) — Du–Ju: maktab dars kunlari (app.school_days), egasi qarori «du–ju» (A2-02).
- *   Yetkazilmasa (A6-05): ANIQ yetkazilmagan urinish (tarmoq xatosi, Telegram 5xx, 429 kutishdan keyin ham) — keyingi run'larda
- *   qayta yuboriladi (jami MAXTRIES marta, shartli claim — parallel run'dan bittasi); timeout (xabar yetgan bo'lishi mumkin) va
- *   bloklangan chat — qayta yuborilmaydi: Direktorga ikki marta ketmaydi.
+ *   Yetkazilmasa (A6-05): ANIQ yetkazilmagan urinish (ulanishdan OLDINGI tarmoq xatosi — DNS, ulanish rad etildi, tarmoq / manzil
+ *   yo'q, ulanish muddati, sertifikat; Telegram 5xx; 429 kutishdan keyin ham) — keyingi run'larda qayta yuboriladi (jami MAXTRIES
+ *   marta, shartli claim — parallel run'dan bittasi); NOANIQ natija (javob muddati — timeout, ulanishdan keyin uzilgan tarmoq, 2xx
+ *   javobning tanasi o'qilmagan — xabar yetgan bo'lishi mumkin; server/telegram.cjs timeout:true) va bloklangan chat — qayta
+ *   yuborilmaydi: Direktorga ikki marta ketmaydi. Oxirgi (MAXTRIES-) urinish ham yetkazilmasa — log'da shu aytiladi.
  *   Qabul qiluvchilar — faol Direktorlarning tasdiqlangan Telegram bog'lanishlari (admin «Xabarnomalar»dan bir martalik
  *   havola bilan ulanadi; botdagi /sozlamalar'da o'chirsa — kelmaydi).
  *   Hisobot: bugungi to'lovlar (soni, summa, usul bo'yicha), OLDINGI hisobotdan keyin tushgan to'lovlar (kechqurun, dam olish va
@@ -190,22 +192,29 @@ async function runDaily({ sb, tg, health, dry, force, now, log }) {
     const rec = { type: 'daily', status: 'sending', attempts: 1, message: text.slice(0, 1000), channel: 'telegram', phone: '' };
     if (asOf) rec.createdAt = asOf;
     // bugun yuborilganmi (yoki yuborilmoqda / natijasi noaniq) — takror yo'q; oldingi urinish ANIQ yetkazilmagan bo'lsa — qayta (A6-05)
+    let att = 1;   // shu urinishning tartib raqami (qayta claim — oldingisidan bitta ko'p)
     const ins = await sb.from('sms_log').insert(Object.assign({ id }, rec));
     if (ins.error) {
-      if (!(await reclaimDaily(sb, id, rec))) { skipped++; continue; }
+      att = await reclaimDaily(sb, id, rec);
+      if (!att) { skipped++; continue; }
       retried++;
     }
     const r = await tg.sendMessage(l.chatId, text);
     if (r.ok) { sent++; await sb.from('sms_log').update({ status: 'sent', providerId: 'tg' }).eq('id', id); }
     else {
-      // Bloklangan chat — qayta yuborilmaydi (bog'lanish 'blocked'); timeout — xabar yetgan bo'lishi mumkin (noaniq) — qayta yuborilmaydi
-      //   (Direktorga ikki marta ketmasin). Qolgani (tarmoq xatosi, Telegram 5xx, 429 kutishdan keyin ham) — ANIQ yetkazilmagan: RETRY
-      //   belgisi bilan, keyingi run'da (cron — har 15 daqiqa) qayta yuboriladi. Avval bitta vaqtinchalik xato butun kunlik hisobotni
-      //   yo'qotardi: keyingi run'lar qatorni «bugun yuborilgan» deb o'tkazib yuborardi.
-      const again = !r.blocked && !r.timeout;
-      await sb.from('sms_log').update({ status: 'failed', error: (again ? RETRY : '') + String(r.error || '').slice(0, 200) }).eq('id', id);
+      // Bloklangan chat — qayta yuborilmaydi (bog'lanish 'blocked'); NOANIQ natija (timeout:true — javob muddati, ulanishdan keyin uzilish,
+      //   2xx javob tanasi o'qilmagan: xabar yetgan bo'lishi mumkin) — qayta yuborilmaydi (Direktorga ikki marta ketmasin). Qolgani
+      //   (ulanishdan oldingi tarmoq xatosi, Telegram 5xx, 429 kutishdan keyin ham) — ANIQ yetkazilmagan: RETRY belgisi bilan, keyingi
+      //   run'da (cron — har 15 daqiqa) qayta yuboriladi. Avval bitta vaqtinchalik xato butun kunlik hisobotni yo'qotardi: keyingi run'lar
+      //   qatorni «bugun yuborilgan» deb o'tkazib yuborardi. Oxirgi (MAXTRIES-) urinish — belgisiz (reclaimDaily baribir olmaydi) va log'da
+      //   «oxirgi urinish» (avval «keyingi run qayta yuboradi» deyilardi, holbuki qayta urinilmasdi).
+      const again = !r.blocked && !r.timeout, last = again && att >= MAXTRIES;
+      await sb.from('sms_log').update({ status: 'failed', error: (again && !last ? RETRY : '') + String(r.error || '').slice(0, 200) }).eq('id', id);
       if (r.blocked) { try { await sb.rpc('tg_blocked', { p_chat: l.chatId }); } catch (_) {} }
-      log('Kunlik hisobot yetkazilmadi:', String(r.error || '').slice(0, 120), again ? '— keyingi run qayta yuboradi' : '');
+      log('Kunlik hisobot yetkazilmadi:', String(r.error || '').slice(0, 120),
+        last ? `— bu oxirgi (${att}-) urinish edi, bugun qayta yuborilmaydi`
+          : again ? `— keyingi run qayta yuboradi (${att}/${MAXTRIES} urinish)`
+          : r.timeout ? '— natija noaniq (xabar yetgan bo‘lishi mumkin), qayta yuborilmaydi' : '');
     }
   }
   log(`Kunlik hisobot: ${sent} ta Direktorga yuborildi${retried ? ` (shundan qayta urinish: ${retried})` : ''}${skipped ? ` · ${skipped} tasiga bugun yuborilgan yoki yuborilmoqda (takror yo‘q)` : ''}`);
@@ -213,16 +222,17 @@ async function runDaily({ sb, tg, health, dry, force, now, log }) {
 }
 // Shu kun qatori bor (insert — takror kalit). Faqat oldingi urinish ANIQ yetkazilmagan ('failed' + RETRY) va urinishlar MAXTRIES dan
 //   kam bo'lsa — SHARTLI qayta claim (holat va urinishlar soni o'zgarmagan bo'lsa: parallel run'lardan faqat bittasi oladi; payments/
-//   sms-worker.cjs claimSms bilan bir xil usul). 'sent', 'sending', prefikssiz 'failed' (timeout, blok, eski yozuv) — o'tkaziladi.
+//   sms-worker.cjs claimSms bilan bir xil usul). 'sent', 'sending', prefikssiz 'failed' (noaniq, blok, oxirgi urinish, eski yozuv) —
+//   o'tkaziladi. -> olingan bo'lsa shu urinishning tartib raqami (2…MAXTRIES), aks holda 0.
 async function reclaimDaily(sb, id, rec) {
   try {
     const { data, error } = await sb.from('sms_log').select('status,attempts,error').eq('id', id).limit(1);
     const p = !error && (data || [])[0], n = Number(p && p.attempts) || 0;
-    if (!p || p.status !== 'failed' || n >= MAXTRIES || String(p.error || '').indexOf(RETRY) !== 0) return false;
+    if (!p || p.status !== 'failed' || n >= MAXTRIES || String(p.error || '').indexOf(RETRY) !== 0) return 0;
     const u = await sb.from('sms_log').update(Object.assign({}, rec, { attempts: n + 1, error: '' }))
       .eq('id', id).eq('status', 'failed').eq('attempts', n).select('id');
-    return !u.error && (u.data || []).length === 1;
-  } catch (e) { return false; }
+    return (!u.error && (u.data || []).length === 1) ? n + 1 : 0;
+  } catch (e) { return 0; }
 }
 
 if (require.main === module) {

@@ -174,8 +174,10 @@ select zz.chk('V1 buxgalter to''lovlarni payments_acc orqali ko''radi (3), xom p
   zz.cnt('U_ACC', 'payments_acc') || '/' || zz.cnt('U_ACC', 'payments'), '^3/0$');
 select zz.chk('V2 payments_acc ustunlari (to''lovchi matni — ism, «sinf», merchant_trans_id; telefon — yo''q; raw — tozalangan)', zz.cols('payments_acc'),
   '^id,studentId,invoiceId,provider,amount,status,click_trans_id,merchant_prepare_id,merchant_confirm_id,transId,matched,createdAt,statusAt,cashDocId,fiscalNo,raw$');
+-- "receivedAt" (audit-11-moliya.sql, A6-01 2-raund) — faqat Direktorning Telegram kunlik hisoboti oynasi uchun (director_daily 'since');
+--   buxgalter hisoblari "createdAt" / kassa kuni bo'yicha — ko'rinishga qo'shilmaydi (ustun payments_acc dan KEYIN, zanjir oxirida qo'shiladi).
 select zz.chk('V3 payments: yangi ustun ko''rinishda yoki istisnoda bo''lishi shart (sinflanmagan ustun yo''q)',
-  zz.unclassified('payments', 'payments_acc', array['payerName','payerPhone','payerClass','merchant_trans_id']), '^$');
+  zz.unclassified('payments', 'payments_acc', array['payerName','payerPhone','payerClass','merchant_trans_id','receivedAt']), '^$');
 select zz.chk('V4 payments_acc.raw — faqat ruxsat etilgan kalitlar (to''lov kuni, qo''lda, qaytarish belgilari)',
   zz.as('U_ACC', $q$select string_agg(distinct k, ',' order by k) from public.payments_acc, jsonb_object_keys(raw) k$q$),
   '^date,manual,method,needsManualReverse,reverseNote$');

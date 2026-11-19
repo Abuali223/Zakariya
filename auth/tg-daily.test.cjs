@@ -1,8 +1,9 @@
 // tg-daily.cjs — Direktorga kunlik hisobot: reja (yoqilgan / kun / soat), qabul qiluvchilar (faqat faol Direktor, /sozlamalar),
 //   bir kunda bir marta, bloklangan chat -> tg_blocked, matn (to'lovlar, qarzdorlar, davomat, tasdiqlar, kassa bloki va nazorat
-//   qatori, tizim holati).
+//   qatori, tizim holati); A6-05: qayta yuborish faqat ANIQ yetkazilmaganda (haqiqiy server/telegram.cjs mijozi bilan ham), oxirgi urinish.
 const { makeFake } = require('./_fake.cjs');
 const { composeDaily, kassaLines, dailyPlan, runDaily } = require('./tg-daily.cjs');
+const { makeTelegram } = require('../server/telegram.cjs');
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('  ✗ FAIL:', name, extra != null ? '→ ' + extra : ''); } };
 const J = x => JSON.stringify(x);
@@ -219,6 +220,47 @@ function world(o) {
     const ws = world(); ws.state.sms_log.push({ id: 'daily__2026-11-02__L1', type: 'daily', status: 'sending', attempts: 1, error: '', channel: 'telegram', phone: '' });
     const rs = await runDaily({ sb: ws.sb, tg: ws.tg, health: ws.health, now: () => T(19), log: ws.log });
     ok('yuborilmoqda (sending) — o‘tkaziladi', rs.sent === 0 && rs.skipped === 1 && ws.sent.length === 0, J(rs));
+  }
+  console.log('\n— A6-05 (2-raund): haqiqiy Telegram mijozi — Telegram xabarni qabul qilgan bo‘lishi mumkin bo‘lsa qayta yuborilmaydi; oxirgi urinish');
+  {
+    // world() ning soxta tg o'rniga haqiqiy server/telegram.cjs (soxta fetch bilan) — natija tasnifi (timeout) tg-daily qaroriga yetadi
+    const fetchFailed = code => { const e = new TypeError('fetch failed'); e.cause = Object.assign(new Error('x ' + code), { code }); return e; };
+    const realTg = step => { const calls = []; const tg = makeTelegram({ token: '1:T', timeoutMs: 1000, sleep: async () => {}, fetchImpl: async () => {
+      calls.push(1); const s = typeof step === 'function' ? step(calls.length) : step;
+      if (s.throw) throw s.throw;
+      return { status: s.status, json: async () => { if (s.badJson) throw new SyntaxError('Unexpected end of JSON input'); return s.json; } }; } });
+      return { tg, calls }; };
+    const twoRuns = async step => {
+      const w = world(), c = realTg(step);
+      await runDaily({ sb: w.sb, tg: c.tg, health: w.health, now: () => T(19), log: w.log });
+      const lg1 = Object.assign({}, w.state.sms_log.find(x => x.id === 'daily__2026-11-02__L1'));
+      const r2 = await runDaily({ sb: w.sb, tg: c.tg, health: w.health, now: () => T(19) + 15 * 60e3, log: w.log });
+      return { lg1, r2, n: c.calls.length, lg2: w.state.sms_log.find(x => x.id === 'daily__2026-11-02__L1') };
+    };
+    // ulanishdan KEYIN uzilish (Telegram xabarni qabul qilgan bo'lishi mumkin) — avval 'network: fetch failed' bo'lib qayta yuborilardi
+    const a = await twoRuns({ throw: fetchFailed('ECONNRESET') });
+    ok('ECONNRESET (so‘rov yuborilgan bo‘lishi mumkin) — failed, belgisiz; keyingi run qayta YUBORMAYDI', a.lg1.status === 'failed' && !/^retry: /.test(a.lg1.error) && /ECONNRESET/.test(a.lg1.error)
+      && a.r2.sent === 0 && a.r2.skipped === 1 && a.n === 1, J(a));
+    // 200 keldi, lekin tanasi o'qilmadi — Telegram qabul qilgan: avval 'HTTP 200' bo'lib qayta yuborilardi (Direktorga takror hisobot)
+    const b = await twoRuns({ status: 200, badJson: true });
+    ok('200, tanasi o‘qilmadi — failed, belgisiz; keyingi run qayta YUBORMAYDI', b.lg1.status === 'failed' && !/^retry: /.test(b.lg1.error) && b.r2.sent === 0 && b.r2.skipped === 1 && b.n === 1, J(b));
+    // ulanishdan OLDIN (DNS / rad etildi) — aniq ketmagan: qayta yuboriladi (avvalgidek)
+    const c = await twoRuns(n => (n === 1 ? { throw: fetchFailed('ECONNREFUSED') } : { status: 200, json: { ok: true, result: { message_id: 5 } } }));
+    ok('ECONNREFUSED (so‘rov ketmagan) — retry belgisi; keyingi run qayta yuboradi va yetkazadi', /^retry: network: ECONNREFUSED/.test(c.lg1.error) && c.r2.sent === 1 && c.r2.retried === 1
+      && c.lg2.status === 'sent' && Number(c.lg2.attempts) === 2 && c.n === 2, J(c));
+    // doim 5xx: 1- va 2-urinish — «keyingi run qayta yuboradi», 3- (oxirgi) — «oxirgi urinish», belgisiz; 4-run — yubormaydi
+    const logs = [];
+    const wf = world({ tgRes: () => ({ ok: false, status: 502, error: 'Bad Gateway' }) });
+    for (let i = 0; i < 4; i++) await runDaily({ sb: wf.sb, tg: wf.tg, health: wf.health, now: () => T(19) + i * 15 * 60e3, log: (...m) => logs.push(m.join(' ')) });
+    const fl = logs.filter(x => /yetkazilmadi/.test(x));
+    ok('oxirgi (3-) urinish log’da aytiladi; oldingilari — «keyingi run qayta yuboradi»', fl.length === 3 && /keyingi run qayta yuboradi \(1\/3/.test(fl[0]) && /keyingi run qayta yuboradi \(2\/3/.test(fl[1])
+      && /oxirgi \(3-\) urinish edi/.test(fl[2]) && !/keyingi run/.test(fl[2]), J(fl));
+    ok('oxirgi urinishdan keyin: 3 urinish, belgisiz xato, 4-run yubormaydi', wf.sent.length === 3 && Number(wf.state.sms_log[0].attempts) === 3 && wf.state.sms_log[0].error === 'Bad Gateway', J([wf.sent.length, wf.state.sms_log]));
+    // noaniq (timeout) — log'da sababi bilan
+    const lt = [];
+    const wt = world({ tgRes: () => ({ ok: false, status: 0, timeout: true, error: 'timeout' }) });
+    await runDaily({ sb: wt.sb, tg: wt.tg, health: wt.health, now: () => T(19), log: (...m) => lt.push(m.join(' ')) });
+    ok('noaniq natija — log: «qayta yuborilmaydi»', lt.some(x => /yetkazilmadi: timeout — natija noaniq .*qayta yuborilmaydi/.test(x)), J(lt));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

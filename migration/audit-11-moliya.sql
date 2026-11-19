@@ -6,11 +6,12 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 \endif
 -- =====================================================================
 -- AUDIT-11 (to'liq audit, 2026-11-18) — MOLIYA HISOBOTLARI.
---   Shu faylda — faqat YANGI funksiya. Hisobotlarning qolgan tuzatishlari o'z faylidagi amaldagi ta'rifda:
+--   Shu faylda — faqat YANGI obyektlar (funksiya, ustun, trigger). Hisobotlarning qolgan tuzatishlari o'z faylidagi amaldagi ta'rifda:
 --     reports-roles.sql  — kpi_attendance (dars kunlari Du–Ju, A2-02), kpi_debt_aging (barcha o'quvchilar, A6-03), finance_plan_actual va
 --                          kpi_collection (holati 'paid' — to'liq to'langan, A6-04);
---     telegram.sql       — director_daily: oldingi hisobotdan keyin tushgan to'lovlar 'since' va 'asOf' (A6-01), barcha biriktirilmagan
---                          to'lovlar (A6-07); kunlik hisobot kunlari standarti Du–Ju (A2-02).
+--     telegram.sql       — director_daily: oldingi hisobotdan keyin tushgan to'lovlar 'since' va 'asOf' (A6-01; «tushgan» payti —
+--                          shu faylning 2-bandidagi "receivedAt"), barcha biriktirilmagan to'lovlar (A6-07); kunlik hisobot kunlari
+--                          standarti Du–Ju (A2-02).
 --
 -- 1) public.finance_other_income() — kassadagi O'QUV TO'LOVIDAN TASHQARI daromad, oy bo'yicha (A6-02). «Buxgalteriya» (Kirim, Foyda,
 --    marja, A4 hisobot) va bosh sahifa (klassik va yangi) «Kirim» / «Sof foyda»siga qo'shiladi.
@@ -30,7 +31,29 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 --    ham funksiya yaratiladi). O'qish: moliya rollari (Direktor, Moliya menejeri, g'aznachi) va buxgalter — «Buxgalteriya» va bosh
 --    sahifa moliya bo'limini ko'radiganlar; faqat oy va statiya bo'yicha summalar (shaxsiy ma'lumot yo'q).
 --
--- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace; ma'lumot o'zgarmaydi).
+-- 2) payments."receivedAt" — to'lov BIRINCHI MARTA tushumga aylangan payt (A6-01, mustaqil tekshiruv 2-raund). Telegram kunlik
+--    hisobotining «oldingi hisobotdan keyin tushgan» qatori (director_daily 'since', telegram.sql) shu bo'yicha tanlaydi.
+--    Muammo: 'since' to'lovlarni KIRITILGAN vaqti ("createdAt") bo'yicha olardi. Click va Uzum to'lovi IKKI bosqichda yoziladi: qator
+--    birinchi bosqichda yaratiladi (Click prepare — 'prepared', Uzum create — 'created'; tushum emas), tushumga esa ikkinchisida aylanadi
+--    (Click complete — 'applied' / 'unmatched' / 'paid', Uzum confirm — 'confirmed'), "createdAt" esa o'zgarmaydi. Ikki bosqich kunlik
+--    hisobot payti (asOf) bilan kesishsa — masalan juma 18:59:50 da prepare, hisobot 19:00:05, complete 19:30 — to'lov HECH QAYSI
+--    hisobotda chiqmasdi: jumada u hali tushum emas edi, keyingi hisobotning 'since' oynasi esa asOf dan keyin kiritilganlarni olardi.
+--    Yechim: shu ustun. Tushum ta'rifi — hisobotlarnikidek (app.counts_as_receipt). Tushum holatida yaratilgan qator — "createdAt"
+--    (kiritilgan payt = tushgan payt; tarixiy import / server yozuvining o'z vaqti saqlanadi — import payti emas); tushum bo'lmagan
+--    holatdan tushumga o'tgan qator — o'sha payt (server soati app.fin_now(), "createdAt" / "statusAt" bilan bir xil manba).
+--    BIR MARTA qo'yiladi va keyin o'zgarmaydi: biriktirish ('unmatched' → 'applied') — ikkala holat ham tushum, qayta qo'yilmaydi (to'lov
+--    ikki hisobotda sanalmasin; "statusAt" shu sabab yaramaydi — u har holat o'zgarishida yangilanadi), bekor / qaytarish ham uni
+--    o'chirmaydi. Qiymatni FAQAT trigger qo'yadi: server va pul funksiyalari yuborgani e'tiborsiz; REST (Direktor) yuborgani —
+--    app.pay_direct_guard (audit-10-tolov.sql) rad etadi (ustun uning «erkin» ro'yxatida yo'q — pul ustunlari qoidasi).
+--    Trigger nomi «trg_pay_received» — BEFORE triggerlarning OXIRGISI (alifbo tartibi): trg_fin_server_ts "createdAt"ni allaqachon
+--    qo'ygan (serverdan / tiklangan), trg_fin_zlock, trg_kassa_pay_guard va trg_pay_direct_guard esa qatorni mijoz yuborganidek ko'radi
+--    (ularning xabarlari va «Direktor REST yozuvi faqat to'lovchi ma'lumoti / bekor» qoidasi avvalgidek). Nomi «trg_kassa_» / «trg_fin_»
+--    emas — kassa-checks.sql trigger soni va barmoq izlari o'zgarmaydi; funksiya nomi ham ^(kassa|fin_|tuition_) emas.
+--    Eski qatorlar (ustun bo'sh) — "createdAt" bo'yicha, avvalgidek (coalesce); deploydan oldin prepare qilinib keyin complete bo'lgani —
+--    complete payti bilan. Oyna sharti coalesce("receivedAt", "createdAt") — indeks shu ifoda bo'yicha.
+--
+-- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace, add column / create index if not exists, drop trigger if exists;
+--   mavjud ma'lumot o'zgarmaydi — yangi ustun eski qatorlarda bo'sh qoladi).
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
@@ -66,5 +89,29 @@ begin
 end $$;
 revoke all on function public.finance_other_income() from public, anon;
 grant execute on function public.finance_other_income() to authenticated, service_role;
+
+-- ---------- 2) payments."receivedAt" — tushumga aylangan payt (A6-01, 2-raund) ----------
+alter table public.payments add column if not exists "receivedAt" timestamptz;
+create index if not exists payments_received_idx on public.payments ((coalesce("receivedAt", "createdAt")));
+-- SECURITY DEFINER: REST (Direktor) yozuvida ham app.fin_now() chaqiriladi (u mijoz rollariga yopiq — fin-prereq.sql).
+create or replace function app.pay_received_at() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if tg_op = 'INSERT' then
+    -- Tushum holatida yaratilgan — kiritilgan payt (trg_fin_server_ts qo'ygan "createdAt"); aks holda bo'sh. Upsert taklifidagi qator
+    --   (mavjud id) — keyingi UPDATE bosqichida quyidagi qoida bilan qayta hisoblanadi.
+    new."receivedAt" := case when app.counts_as_receipt(new.id, new.status, new.provider, new.amount)
+                             then coalesce(new."createdAt", app.fin_now()) end;
+  else
+    -- Bir marta qo'yilgan — o'zgarmaydi; endi tushumga aylandi (avval emas edi) — hozirgi server payti; qolgan hollarda — avvalgisi.
+    new."receivedAt" := coalesce(old."receivedAt",
+      case when app.counts_as_receipt(new.id, new.status, new.provider, new.amount)
+                and not app.counts_as_receipt(old.id, old.status, old.provider, old.amount) then app.fin_now() end);
+  end if;
+  return new;
+end $$;
+revoke all on function app.pay_received_at() from public, anon, authenticated;
+drop trigger if exists trg_pay_received on public.payments;
+create trigger trg_pay_received before insert or update on public.payments for each row execute function app.pay_received_at();
 
 notify pgrst, 'reload schema';

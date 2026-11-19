@@ -2470,6 +2470,12 @@ function finForecast(INV, M, paidAmt){
   const avgM=n?ytd/n:0, remaining=Math.max(0,12-mNo);
   return { year, ytd, n, avgM, remaining, projected:ytd+avgM*remaining, ok:n>=2 };
 }
+// Kassadagi boshqa daromad qatori nomi (finance_other_income items; «Buxgalteriya» A4 hisoboti, A6-02 — 2-raund): statiyaning to'liq
+//   nomi emas, kassa operatsiyasining qisqa nomi (fin_op_rules: in_sale — «Forma va tovarlar», in_other — «Boshqa kirim»). IN-06 ning
+//   to'liq nomi «Boshqa operatsion daromad (kassa ortiqchasi, hisobdan chiqarilgan qarz, …)» — kassa ortiqchasi (in_surplus) esa
+//   finance_other_income'da HISOBLANMAYDI, hisobot uni manba deb ko'rsatardi. Boshqa statiya (qoida o'zgarsa) — o'z nomi, bo'lmasa kodi.
+const FIN_OTHER_LBL={'IN-04':'Forma va tovarlar','IN-06':'Boshqa kirim'};
+function finOtherLbl(x){ x=x||{}; const id=String(x.articleId||''); return Object.prototype.hasOwnProperty.call(FIN_OTHER_LBL,id)?FIN_OTHER_LBL[id]:String(x.nameUz||id); }
 // FIN-RPT:END
 // Kassadagi O'QUV TO'LOVIDAN TASHQARI daromad (A6-02; migration/audit-11-moliya.sql finance_other_income): { m:{'YYYY-MM':{sum, items}}, err }.
 //   «Forma va tovarlar», «Boshqa kirim» (IN-06) — ularning xaridi (KO-2 «Xarajat») «Buxgalteriya» chiqimiga ko'chadi, shuning uchun
@@ -2570,7 +2576,7 @@ async function dashFinance(){
         <div class="bars fin-cols" style="margin-top:10px">${catKeys.length?catBars:'<div class="empty">Bu oy xarajat kiritilmagan</div>'}</div>
       </div>
     </div>
-    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha — shu oyda tushgan pul</h3><span class="cls-count" title="Kassa asosida: shu oy (Toshkent vaqti) tushgan haqiqiy to‘lovlar. «Kirim» esa shu oy hisob-fakturalariga to‘langan summa — farq qilishi mumkin (avans, oldingi oy qarzi).">${mLbl(cur)}: ${PAYERR?'—':fmtC(pmTotal)}</span></div>
+    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha — shu oyda tushgan pul</h3><span class="cls-count" title="Kassa asosida: shu oy (Toshkent vaqti) tushgan haqiqiy to‘lovlar. «Kirim» esa shu oy hisob-fakturalariga to‘langan summa + kassadagi boshqa daromad (forma / tovar sotuvi, «Boshqa kirim») — farq qilishi mumkin (avans, oldingi oy qarzi).">${mLbl(cur)}: ${PAYERR?'—':fmtC(pmTotal)}</span></div>
       ${PAYERR?`<div class="small" style="padding:14px 20px;color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — usul bo‘yicha taqsimot ko‘rsatilmadi.</div>`:''}${(!PAYERR && pmKeys.length)?`<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 20px">
         <div style="flex:0 0 auto">${donut()}</div>
         <div class="bars" style="flex:1 1 320px;min-width:260px;padding:0">${pmLegend}</div>
@@ -2650,7 +2656,9 @@ function dv2StaffToday(staff, teachers, checkins, leaves, today){
     if(bi&&bi.skip) return; if(bi&&((bi.startStr&&today<bi.startStr)||(bi.endStr&&today>bi.endStr))) return;
     const R=personRules(p); out.total++;
     const a=saAgg(byP[p.cam]||[]);
-    if(a.kelgan){ out.came++; const hm=tzHMParts(a.kelgan), m=hm?hm.h*60+hm.m:null;
+    // keldi — istalgan skan (saPresent qoidasi); kechikdi — faqat KELISH skanidan (a.arrival: oylik ushlanma attMetrics bilan bir xil,
+    //   A2-06): kunning skani faqat chiqish / tanaffus bo'lsa — kechikish yo'q (avval chiqish vaqti «kelgan» deb kechikdi chiqardi)
+    if(a.kelgan){ out.came++; const hm=tzHMParts(a.arrival), m=hm?hm.h*60+hm.m:null;
       if(!R.flexible && m!=null && R.workDays.has(wd) && m>R.workStartMin+R.lateGraceMin){ out.late++; out.lateList.push({ name:p.name||p.cam, pos:p.pos||'', at:`${String(hm.h).padStart(2,'0')}:${String(hm.m).padStart(2,'0')}`, min:m-R.workStartMin }); }
       return; }
     if(lv[p.refType+':'+p.refId]){ out.leave++; return; }
@@ -8247,6 +8255,13 @@ function scanBreakMin(scans){
   for(let i=0;i<io.length-1;i++){ if(io[i].status==='out' && io[i+1].status==='in'){ const d=Date.parse(io[i+1].ts)-Date.parse(io[i].ts); if(d>0) brk+=d; } }
   return brk?Math.round(brk/60000):0;
 }
+// KELISH skani (audit A2-06, 2-raund) — kunning chiqish / tanaffus EMAS birinchi skani (scans vaqt bo'yicha saralangan): 'in' ham,
+//   terminal yuborgan boshqa holat ham (hikMapStatus — payments/index.cjs — tanimagan holatni o'zgartirmay o'tkazadi: 'unknown',
+//   'undefined'). Kech kelish (attMetrics — oylik ushlanma), «Kelgan» vaqti (saAgg) va bosh sahifadagi «kechikdi» (dv2StaffToday) —
+//   shu BITTA qoida bilan. Avval attMetrics faqat 'in' skanni olardi: 'unknown' holatli 09:30 skan bosh sahifada «kechikdi» deb
+//   chiqar, oylik ushlanmada esa kech kelish hech qachon kesilmasdi (ikki hisobot zid). Oddiy kun (kirish → tanaffus → chiqish) — o'zgarmagan.
+const SA_NOT_ARRIVAL=new Set(['out','break_out','break_in']);
+function saArrival(sorted){ return (sorted||[]).find(x=>x && !SA_NOT_ARRIVAL.has(String(x.status||'')))||null; }
 // ts (ISO, mahalliy offsetli) -> kun ichidagi daqiqa (HH*60+MM). Topilmasa null.
 // Asia/Tashkent soat:daqiqa (DOIMO +05:00, DST yo'q). tz-ko'rsatilgan (Z yoki ±offset) vaqtни
 //   mahalliyга o'tkazamiz; offsetsiz (naive) vaqt — allaqachon qurilma-mahalliy deb olinadi.
@@ -8330,15 +8345,16 @@ function attMetrics(byDay, leaveSet, month, salary, person, breakMarks, camDown,
       continue;
     }
     // KELDI. Kech/erta — FAQAT haqiqiy skan STATUSI bo'yicha (adashgan tanaffus/ikkilangan skan
-    //   jarimani BUZMASIN): kech faqat 'in' skan bo'lsa; erta ketish faqat kunning OXIRGI kirish/chiqish
+    //   jarimani BUZMASIN): kech — KELISH skanidan (saArrival: chiqish / tanaffus emas birinchi skan — 'in' yoki
+    //   terminalning boshqa holati; kunning skani faqat chiqish / tanaffus bo'lsa — kech yo'q); erta ketish faqat kunning OXIRGI kirish/chiqish
     //   skani 'out' bo'lsa. Chiqish skani yo'q bo'lsa YOKI oxirgi 'out'dan keyin yana 'in' bo'lsa (masalan
     //   tushlikka chiqib qaytgan, kechqurun checkout'ni unutgan) — ERTA KETISH JARIMASI YO'Q: o'sha
     //   chiqish->kirish oralig'i tanaffus (scanBreakMin), «ketish» emas. Ketgan vaqtni qo'lda «o'z
     //   hisobidan» belgilash mumkin.
-    const ins=scans.filter(x=>x.status==='in');
+    const kel0=saArrival(scans);
     const io=scans.filter(x=>x.status==='in'||x.status==='out'); const lastIO=io.length?io[io.length-1]:null;
     const camOff=!!(camDown && camDown.has(ds));   // kamera shu kuni ishonchsiz — avtomatik kech/erta/tanaffus kesilmaydi (faqat qo'lda belgi)
-    let lm=0; if(!camOff && ins.length){ const kel=saMin(ins[0].ts); if(kel!=null){ lm=Math.max(0, kel - R.workStartMin); lm=Math.max(0, lm - R.lateGraceMin); } }   // kech daqiqa (grace keyin)
+    let lm=0; if(!camOff && kel0){ const kel=saMin(kel0.ts); if(kel!=null){ lm=Math.max(0, kel - R.workStartMin); lm=Math.max(0, lm - R.lateGraceMin); } }   // kech daqiqa (grace keyin)
     let em=0; if(!camOff && lastIO && lastIO.status==='out'){ const ket=saMin(lastIO.ts); if(ket!=null){ em=Math.max(0, R.workEndMin - ket); em=Math.max(0, em - R.earlyGraceMin); } }   // erta ketish daqiqa
     // Ish vaqtidagi chiqib-kelish: «Sababli» -> 0; «O'z hisobidan» -> awayMin; belgisiz -> kamera (oshiqcha tanaffus).
     let bkm=0;
@@ -8487,19 +8503,21 @@ function prWho(uid, names){ const u=(names||{})[String(uid||'')]; return u ? (u.
 //   workSet, camDown, monHol, dupIds, idOwners, leaves, subs, salpays } yoki { ok:false, stage:'roster'|'checkins', error }.
 const saAgg=(list)=>{
   const sorted=(list||[]).slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
-  const ins=sorted.filter(x=>x.status==='in');
+  const kel0=saArrival(sorted);
   const io=sorted.filter(x=>x.status==='in'||x.status==='out'); const lastIO=io.length?io[io.length-1]:null;
-  // kelgan: birinchi 'in' (bo'lmasa kunning birinchi skani — «birinchi ko'rilgan»).
+  // kelgan: KELISH skani (saArrival — chiqish / tanaffus emas birinchi skan; attMetrics kech kelishi bilan bir qoida, A2-06), bo'lmasa
+  //   kunning birinchi skani — «birinchi ko'rilgan» (kun faqat chiqish / tanaffus skanlaridan iborat — xodim baribir kelgan: saPresent).
+  //   arrival — faqat kelish skani (bo'lmasa ''): kech kelish shundan (bosh sahifa «kechikdi» — oylik ushlanma bilan bir xil).
   // ketgan: FAQAT kunning OXIRGI kirish/chiqish skani 'out' bo'lsa (attMetrics bilan bir xil qoida).
   //   Chiqish yo'q yoki 'out'dan keyin yana 'in' (tushlikdan qaytgan) bo'lsa — «—» (tanaffusni «ketgan»
   //   deb ko'rsatmaymiz; aks holda Ish vaqti ham noto'g'ri chiqadi).
-  let kelgan = ins.length ? ins[0].ts : (sorted.length ? sorted[0].ts : '');
+  let kelgan = kel0 ? kel0.ts : (sorted.length ? sorted[0].ts : '');
   let ketgan = (lastIO && lastIO.status==='out') ? lastIO.ts : '';
   const brkMin=scanBreakMin(sorted);
   let work=null; if(kelgan&&ketgan){ work=Math.max(0, Math.round((Date.parse(ketgan)-Date.parse(kelgan))/60000)-brkMin); }
-  return { kelgan, ketgan, brkMin, workMin:work };
+  return { kelgan, ketgan, brkMin, workMin:work, arrival:kel0?kel0.ts:'' };
 };
-// Xodim shu kuni KELGANMI — yagona qoida (audit A2-06): kunning istalgan skani (saAgg «kelgan»: birinchi 'in', bo'lmasa birinchi
+// Xodim shu kuni KELGANMI — yagona qoida (audit A2-06): kunning istalgan skani (saAgg «kelgan»: kelish skani, bo'lmasa birinchi
 //   ko'rilgan skan). Qatordagi «Keldi», ushlanma (attMetrics: skani bor kun — yo'qlama emas) va bosh sahifa (dv2StaffToday) shu
 //   qoida bilan; kunlik sarlavhadagi «keldi / kelmadi» soni va oylik «Ishlagan kun» ham shundan. Ilgari bu ikkisi faqat 'in' skanni
 //   sanardi: kunning skani faqat chiqish/tanaffus bo'lsa yoki terminal boshqa holat yuborsa ('undefined' — hikMapStatus) qator
@@ -10475,9 +10493,9 @@ async function renderAccounting(){
       <div class="hd">${emblem}<div><h1>IQROR ACADEMY</h1><div class="sub">Moliyaviy hisobot · <b>${mLabel(M)} ${M.slice(0,4)}</b> · tuzildi: ${dstr}${who?' · '+esc(who):''}${NM?'':' · <b>ismsiz nusxa</b>'}</div></div></div>
       ${NM?'':`<div class="fd28">${esc(fd28Note('o‘quvchilar ID bilan, xodimlar maosh ID’si bilan'))}</div>`}
       <h2>Umumiy ko‘rsatkichlar</h2>
-      <table class="kpi big">${kirimO>0?row('Kirim (o‘quv to‘lovlari + boshqa daromad)',S(kirim),'#1F7A4D')+row('— o‘quv to‘lovlari (yig‘ilgan)',S(kirimT))+row('— boshqa daromad (kassa): '+othItems.map(x=>esc(x.nameUz||x.articleId||'')+' '+S(x.sum)).join('; '),S(kirimO)):row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${OTH.err?row('Kassadagi boshqa daromad o‘qilmadi ('+esc(OTH.err)+') — kirim to‘liq emas','—','#B42318'):''}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
+      <table class="kpi big">${kirimO>0?row('Kirim (o‘quv to‘lovlari + boshqa daromad)',S(kirim),'#1F7A4D')+row('— o‘quv to‘lovlari (yig‘ilgan)',S(kirimT))+row('— boshqa daromad (kassa): '+othItems.map(x=>esc(finOtherLbl(x))+' '+S(x.sum)).join('; '),S(kirimO)):row('Kirim (yig‘ilgan to‘lovlar)',S(kirim),'#1F7A4D')}${OTH.err?row('Kassadagi boshqa daromad o‘qilmadi ('+esc(OTH.err)+') — kirim to‘liq emas','—','#B42318'):''}${row('Chiqim (xarajatlar)',S(chiqim),'#B42318')}${row((foyda>=0?'Foyda':'Zarar')+' (kirim − chiqim)',S(foyda),foyda>=0?'#1F7A4D':'#B42318')}${row('Foyda marjasi',marja+'%')}${qaytarilgan>0?row('Qaytarilgan (kirimdan ayirilgan)','−'+S(qaytarilgan),'#B42318'):''}${salFromExp>0?row('Oylik maosh — hisoblangan («Maosh» xarajati)',S(salFromExp),'#B45309'):''}${row('Oylik maosh — naqd berilgan',S(salPaid),'#B45309')}${salAdv>0?row('Xodim avanslari (shu oy berilgan)',S(salAdv),'#B45309'):''}${row('Qarzdorlik (shu oy)',S(debt),'#B42318')}${row('Avans (oldindan to‘langan, umumiy)',S(av),'#0891B2')}</table>
       <h2>Shu oyda tushgan to‘lovlar — usul bo‘yicha (${PAYERR?'—':S(cashM.total)})</h2><table><thead><tr><th>Usul</th><th style="text-align:right">Summa</th></tr></thead><tbody>${pmRows}</tbody></table>
-      <div class="muted" style="font-size:11px;margin:-2px 0 6px">Kassa asosida (to‘lov vaqti, Toshkent). «Kirim» — shu oy hisob-fakturalariga to‘langan summa; avans/oldingi oy qarzi tufayli farq qilishi mumkin.</div>
+      <div class="muted" style="font-size:11px;margin:-2px 0 6px">Kassa asosida (to‘lov vaqti, Toshkent). «Kirim» — shu oy hisob-fakturalariga to‘langan summa + kassadagi boshqa daromad (forma / tovar sotuvi, «Boshqa kirim»); avans/oldingi oy qarzi tufayli farq qilishi mumkin.</div>
       <h2>Xarajat toifalari</h2><table><thead><tr><th>Toifa</th><th style="text-align:right">Summa</th></tr></thead><tbody>${catRows}</tbody></table>
       <h2>Oylik maosh — naqd berilgan ${S(salPaid)}${salMonth.length?` · ${salMonth.length} xodim`:''}${salFromExp>0?` · hisoblangan (xarajat) ${S(salFromExp)}`:''}</h2>
       ${salMonth.length?`<table><thead><tr><th>№</th><th>${NM?'Xodim':'Xodim (maosh ID)'}</th><th style="text-align:right">Hisoblangan</th><th style="text-align:right">Avans</th><th style="text-align:right">Davomat ushlanmasi</th><th style="text-align:right">O‘rinbosarlik</th><th style="text-align:right">Naqd berilgan</th></tr></thead><tbody>${salRows}</tbody></table>`:`<table><tbody><tr><td class="muted">Bu oy «Maosh berish (xodimga)» yozuvi yo‘q.${salFromExp>0?` «Maosh» xarajati (hisoblangan): ${S(salFromExp)}.`:''}</td></tr></tbody></table>`}
@@ -11181,7 +11199,10 @@ async function openPayHistory(sid, name){
   pays.sort((a,b)=>String(pDay(b)).localeCompare(String(pDay(a))));
   ledg.sort((a,b)=>String(dstr(b.at)).localeCompare(String(dstr(a.at))));
   const reasonLbl={overpay:'Ortiqcha to‘lov → avans',applied:'Avans qo‘llandi',recompute:'Qayta hisoblash ortiqchasi',reversed:'Qaytarish (reversal)',manual:'Qo‘lda'};
-  const invRows=invs.map(i=>`<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td style="text-align:right">${fmtSom(i.paidAmount||0)}</td><td>${esc(provLbl[i.provider]||i.provider||'—')}</td><td>${esc(dstr(i.paidAt))}</td><td>${esc(i.status||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Hisob-faktura yo‘q</td></tr>';
+  // Fakturaga to'langan — boshqa joylardagi qoida (paidAmt, A6-04): holati 'paid' — to'liq summa ("paidAmount" bo'sh eski import
+  //   yozuvida ham; avval «To‘langan 0» ko'rinardi), aks holda "paidAmount". Jadval ustuni ham, quyidagi diagnostika ham shu bilan.
+  const invPaidOf=i=>(i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0);
+  const invRows=invs.map(i=>`<tr><td>${esc(i.month||'')}</td><td style="text-align:right">${fmtSom(i.amount)}</td><td style="text-align:right">${fmtSom(invPaidOf(i))}</td><td>${esc(provLbl[i.provider]||i.provider||'—')}</td><td>${esc(dstr(i.paidAt))}</td><td>${esc(i.status||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Hisob-faktura yo‘q</td></tr>';
   // Pul fakturaga QO'LLANGAN holatlar — bularni «Bekor» qilib BO'LMAYDI (Bekor yozuvni yashiradi, lekin
   //   fakturani/qarzni tuzatmaydi -> noto'g'ri holat qoladi). Faqat fantom/xato (failed/pending/unmatched…)
   //   yozuvlar Bekor qilinadi. Qo'llangan noto'g'ri to'lovни Moliya bo'limida (fakturani qayta hisoblash) to'g'rilash kerak.
@@ -11193,7 +11214,7 @@ async function openPayHistory(sid, name){
   const body=$('#ph-body'); if(!body) return;
   // Diagnostika: onlayn to'lovlar jami vs joriy avans — takror hisoblanish alomati.
   const paysSum=pays.filter(p=>['canceled','reversed','refunded','failed','pending','prepared','created','split'].indexOf(String(p.status||''))<0).reduce((s,p)=>s+(Number(p.amount)||0),0);
-  const invPaid=invs.reduce((s,i)=>s+((i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0)),0);
+  const invPaid=invs.reduce((s,i)=>s+invPaidOf(i),0);
   const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. ${SESSION.isAdmin?'To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.':'Direktorga xabar bering (tuzatish — Direktorda).'}</div>` : '';
   body.innerHTML=`
     <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}${(SESSION.isAdmin && KASSA.live && credit>0)?` <button class="btn sm ghost2" id="ph-cref" style="margin-left:6px" title="Masalan, ketgan o‘quvchining oldindan to‘lagan puli — kassadan chiqim orderi bilan">↩ Avansni naqd qaytarish</button>`:''}</div>
@@ -12371,6 +12392,15 @@ async function renderSickQueue(el){
     try{ const q=await getDocs(query(collection(db,'invoices'), where('studentId','==',sid)));
       exempt[sid]=sickExemptCat(q.docs.map(d=>({ _id:d.id, ...(d.data()||{}) }))); }catch(e){} }));
   const exTxt=sid=>exempt[String(sid)]?`kasal kun puli yo‘q — ${esc(SICK_EXEMPT_LBL[exempt[String(sid)]]||exempt[String(sid)])} (faqat oddiy o‘quvchilarga: grant, kontrakt va xodim farzandiga qo‘llanmaydi)`:'';
+  // «Ketgan / muzlatilgan» — faqat HARAKAT kerak bo'lganlar (G3, 2-raund). Toifasi kasal kun pulidan chiqarilgan o'quvchi (xodim
+  //   farzandi / kontrakt / grant) tugmasiz kartochka bo'lib ro'yxatda ABADIY qolardi: ma'lumotnomaning qo'llanmagan kunlari saqlanadi,
+  //   «Avansga qaytarish» esa unga yo'q (baza ham rad etadi) — Moliya menejeri ro'yxati vaqt o'tib harakatsiz yozuvlar bilan to'lardi.
+  //   Endi ular bitta yig'iq izoh qatorida; «kutilayotgan yo'q» holati shu filtrdan KEYIN baholanadi. Toifasi o'qilmagan (xato) —
+  //   harakatli qoladi (tugma bor, baza sick_note_refund baribir tekshiradi).
+  const leftAct=left.filter(n=>!exempt[String(n.studentId||'')]), leftEx=left.filter(n=>exempt[String(n.studentId||'')]);
+  const exInfo=leftEx.length?`<details class="small muted" style="margin:12px 0 0" data-sick-exempt="${leftEx.length}"><summary>Ketgan / muzlatilgan, kasal kun puli qo‘llanmaydigan toifa: ${leftEx.length} ta — avansga qaytarilmaydi, harakat kerak emas</summary>
+    ${leftEx.map(n=>`<div style="margin-top:4px">${nm(n.studentId)} — ${esc(SICK_EXEMPT_LBL[exempt[String(n.studentId)]]||exempt[String(n.studentId)])}</div>`).join('')}</details>`:'';
+  if(!pend.length && !leftAct.length){ el.innerHTML=cutWarn+'<div class="empty">Kutilayotgan ma’lumotnoma yo‘q ✓</div>'+exInfo; return; }
   const card=n=>{ const days=Array.isArray(n.schoolDays)?n.schoolDays:[]; const self=n.enteredBy===myUid;
     const months=[...new Set(days.map(d=>String(d).slice(0,7)))];
     const eff = !cfg.from ? 'O‘tish oyi belgilanmagan — tasdiq hozircha to‘lovga ta’sir qilmaydi'
@@ -12384,10 +12414,10 @@ async function renderSickQueue(el){
       <div class="small sk-chk" style="margin-top:4px;color:#475467">Davomat va kamera tekshirilmoqda…</div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${self?'<span class="small muted">Siz kiritgansiz — boshqa tasdiqlovchi ko‘rib chiqadi</span>':`<button class="btn sm gold" data-ok="${esc(n._id)}">✅ Tasdiqlash</button><button class="btn sm ghost" data-no="${esc(n._id)}">✖ Rad etish</button>`}
         ${isDir&&n.filePath?`<button class="btn sm" data-file="${esc(n.filePath)}">👁 Nusxani ko‘rish</button>`:''}</div></div>`; };
-  const leftHtml=left.length?`<h4 style="margin:14px 0 6px">Ketgan / muzlatilgan o‘quvchilar — tasdiqlangan, lekin keyingi faktura yo‘q</h4>
-    ${left.map(n=>{ const ap=n.appliedDays||{}; const free=(n.schoolDays||[]).filter(d=>!ap[d]); const ex=exTxt(n.studentId);
-      return `<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div>${nm(n.studentId)}<div class="small muted">${free.length} kun hali to‘lovda hisoblanmagan${ex?` · avansga qaytarilmaydi: ${ex}`:''}</div></div>${ex?'':`<button class="btn sm" data-ref="${esc(n._id)}">Avansga qaytarish</button>`}</div>`; }).join('')}`:'';
-  el.innerHTML=cutWarn+(pend.length?pend.map(card).join(''):'<div class="empty">Kutilayotgan ma’lumotnoma yo‘q ✓</div>')+leftHtml;
+  const leftHtml=leftAct.length?`<h4 style="margin:14px 0 6px">Ketgan / muzlatilgan o‘quvchilar — tasdiqlangan, lekin keyingi faktura yo‘q</h4>
+    ${leftAct.map(n=>{ const ap=n.appliedDays||{}; const free=(n.schoolDays||[]).filter(d=>!ap[d]);
+      return `<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div>${nm(n.studentId)}<div class="small muted">${free.length} kun hali to‘lovda hisoblanmagan</div></div><button class="btn sm" data-ref="${esc(n._id)}">Avansga qaytarish</button></div>`; }).join('')}`:'';
+  el.innerHTML=cutWarn+(pend.length?pend.map(card).join(''):'<div class="empty">Kutilayotgan ma’lumotnoma yo‘q ✓</div>')+leftHtml+exInfo;
   const reload=()=>renderApprovals();
   el.querySelectorAll('[data-file]').forEach(b=>b.addEventListener('click',()=>openMedicalFile(b.dataset.file)));
   el.querySelectorAll('[data-ok]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;

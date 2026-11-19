@@ -4,8 +4,12 @@
 //           (yangi qoida) / qoplanmagan qism ko'rsatiladi (eski qoida) — jim yo'qolmaydi.
 //   A2-03 — kasal kun puli qo'llanmaydigan toifa (xodim farzandi / kontrakt / grant) oxirgi amaldagi fakturadan — bazadagi
 //           sick_note_refund bilan bir xil tasnif (migration/test-audit-10-bemor.sql shu holatlarni bazada tekshiradi).
-//   A2-06 — xodim «keldi» qoidasi: kunlik sarlavha va oylik «Ishlagan kun» qatordagi «Keldi» / ushlanma bilan bir xil.
+//   A2-06 — xodim «keldi» qoidasi: kunlik sarlavha va oylik «Ishlagan kun» qatordagi «Keldi» / ushlanma bilan bir xil;
+//           2-raund: kech kelish — KELISH skanidan (chiqish / tanaffus emas birinchi skan, terminalning noma'lum holati ham) — oylik
+//           ushlanma (attMetrics), «Kelgan» (saAgg) va bosh sahifa «kechikdi» (dv2StaffToday) bir xil.
 //   A2-07 — «Narx jadvali»dagi kasal kun stavkasi izohi.
+//   G3 (2-raund) — «Bemor kunlari» navbati: «Ketgan / muzlatilgan» ro'yxatida faqat harakat kerak bo'lganlar, toifasi chiqarilganlar —
+//           bitta yig'iq izoh qatorida; «kutilayotgan yo'q» shu filtrdan keyin (haqiqiy renderSickQueue, soxta getDocs bilan).
 //   node --test assets/js/davomat-bemor.test.mjs        Ma'lumotlar to'qima («Sinov …»).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -114,20 +118,86 @@ test('A2-03 sickExemptCat: invoice_discount_guard tasnifi — xodim farzandi, ko
 test('A2-03: «Bemor kunlari» navbati toifani tekshiradi — «Pul ta’siri» yo‘q, «Avansga qaytarish» tugmasi chiqmaydi, baza javobi tushuntiriladi', () => {
   const q = decl('renderSickQueue');
   assert.match(q, /exempt\[sid\]=sickExemptCat\(/);
-  assert.match(q, /\$\{ex\?'':`<button class="btn sm" data-ref=/, 'toifadagi o‘quvchiga tugma yo‘q');
+  // toifadagi o'quvchi tugmali ro'yxatga umuman kirmaydi (G3, 2-raund — quyidagi ish vaqtidagi sinov)
+  assert.match(q, /const leftAct=left\.filter\(n=>!exempt\[String\(n\.studentId\|\|''\)\]\)/, 'tugmali ro‘yxat — faqat toifasi qo‘llanadiganlar');
   assert.match(q, /exTxt\(n\.studentId\) \|\|/, '«Pul ta’siri» — toifa matni');
   assert.match(q, /not_eligible:/, 'baza «not_eligible» javobi uchun xabar');
+});
+
+// ---- G3 (2-raund): «Ketgan / muzlatilgan» — faqat harakat kerak bo'lganlar (haqiqiy renderSickQueue) ----
+const SQ = (() => {
+  const ctx = vm.createContext({ CSS: { escape: s => String(s) } });
+  vm.runInContext(['sickExemptCat', 'SICK_EXEMPT_LBL', 'sickCfg', 'renderSickQueue'].map(decl).join('\n') +
+    '\n;this.__q = { renderSickQueue, set: o => Object.assign(this, o) };', ctx);
+  return ctx.__q;
+})();
+const SQ_STU = [
+  { _id: 'IQ-0901', studentId: 'IQ-0901', name: 'Sinov Xodim Farzandi', payStatus: 'chiqdi' },
+  { _id: 'IQ-0902', studentId: 'IQ-0902', name: 'Sinov Oddiy', payStatus: 'chiqdi' },
+  { _id: 'IQ-0903', studentId: 'IQ-0903', name: 'Sinov Kontrakt', payStatus: 'muzlatilgan' }];
+const SQ_INV = {
+  'IQ-0901': [{ _id: 'IQ-0901__2026-11', studentId: 'IQ-0901', month: '2026-11', status: 'paid', pctApplied: 0.5, discountInfo: 'Xodim farzandi 50%' }],
+  'IQ-0902': [{ _id: 'IQ-0902__2026-11', studentId: 'IQ-0902', month: '2026-11', status: 'paid', pctApplied: 0, discountInfo: 'Chegirmasiz' }],
+  'IQ-0903': [{ _id: 'IQ-0903__2026-11', studentId: 'IQ-0903', month: '2026-11', status: 'pending', pctApplied: 0, discountInfo: 'Kontrakt (belgilangan summa)' }] };
+// tasdiqlangan, kunlari hali qo'llanmagan ma'lumotnoma (ketgan / muzlatilgan o'quvchi — keyingi faktura yo'q)
+const sqNote = (id, sid) => ({ _id: id, studentId: sid, status: 'approved', schoolDays: ['2026-11-03', '2026-11-04'], appliedDays: {}, fromDay: '2026-11-03', toDay: '2026-11-04' });
+async function sickRender({ pending = [], approved = [], invErr = false } = {}) {
+  SQ.set({
+    SESSION: { isAdmin: false }, auth: { currentUser: { uid: 'U_FM' } }, db: {}, cache: { students: SQ_STU }, loadCol: async () => SQ_STU,
+    collection: (_db, name) => ({ name }), where: (f, op, v) => ({ f, op, v }), query: (c, ...w) => ({ name: c.name, w }),
+    getDocs: async q => {
+      const w = q.w[0] || {}; let rows = [];
+      if (q.name === 'sick_notes') rows = w.v === 'pending' ? pending : approved;
+      else if (q.name === 'invoices') { if (invErr) throw new Error('o‘qilmadi'); rows = SQ_INV[w.v] || []; }
+      return { size: rows.length, docs: rows.map(x => ({ id: x._id, data: () => ({ ...x }) })) };
+    },
+    getDoc: async () => ({ exists: () => true, data: () => ({ sickRate: 40000, sickApprovalFrom: '2026-12' }) }), doc: (...a) => a,
+    classLabelOf: () => '5-A', esc: s => String(s == null ? '' : s), fmtSom: n => String(Math.round(Number(n) || 0)),
+    prevMonthStr: m => m, nextMonthOf: m => m, fmtDayUz: d => String(d || ''),
+    renderApprovals: () => {}, openMedicalFile: () => {}, rpc: async () => [], toast: () => {}, errMsg: e => String(e),
+  });
+  const el = { innerHTML: '', querySelectorAll: () => [], querySelector: () => null };
+  await SQ.renderSickQueue(el);
+  return el.innerHTML;
+}
+const SQ_LIST_H = /Ketgan \/ muzlatilgan o‘quvchilar — tasdiqlangan/;
+
+test('G3 (2-raund): faqat toifasi chiqarilgan ketgan o‘quvchi qolsa — «kutilayotgan yo‘q», ro‘yxatda emas, bitta yig‘iq izoh qatorida', async () => {
+  const h = await sickRender({ approved: [sqNote('N1', 'IQ-0901')] });
+  assert.match(h, /Kutilayotgan ma’lumotnoma yo‘q ✓/);
+  assert.ok(!SQ_LIST_H.test(h), 'harakatsiz yozuv «Ketgan / muzlatilgan» ro‘yxatida qolmasin (avval tugmasiz kartochka abadiy turardi)');
+  assert.ok(!/data-ref=/.test(h), 'tugma yo‘q');
+  assert.match(h, /<details[^>]*data-sick-exempt="1"/, 'bitta yig‘iq izoh qatori');
+  assert.match(h, /<summary>[^<]*kasal kun puli qo‘llanmaydigan toifa: 1 ta — avansga qaytarilmaydi, harakat kerak emas<\/summary>/);
+  assert.match(h, /Sinov Xodim Farzandi<\/b>.*— xodim farzandi \(50%\)/s);
+});
+
+test('G3 (2-raund): aralash — tugmali ro‘yxatda faqat oddiy o‘quvchi; xodim farzandi va kontrakt — izoh qatorida', async () => {
+  const h = await sickRender({ approved: [sqNote('N1', 'IQ-0901'), sqNote('N2', 'IQ-0902'), sqNote('N3', 'IQ-0903')] });
+  assert.match(h, SQ_LIST_H);
+  assert.equal((h.match(/data-ref="/g) || []).length, 1); assert.match(h, /data-ref="N2"/);
+  const list = h.split('<details')[0];
+  assert.match(list, /Sinov Oddiy/);
+  assert.ok(!/Sinov Xodim Farzandi|Sinov Kontrakt/.test(list), 'toifasi chiqarilganlar ro‘yxat kartochkasi emas');
+  assert.match(h, /data-sick-exempt="2"/); assert.match(h, /— kontrakt<\/div>/);
+});
+
+test('G3 (2-raund): toifa o‘qilmasa — harakatli (tugma bor, baza tekshiradi); hech narsa yo‘q — avvalgidek', async () => {
+  const h = await sickRender({ approved: [sqNote('N1', 'IQ-0901')], invErr: true });
+  assert.match(h, SQ_LIST_H); assert.match(h, /data-ref="N1"/); assert.ok(!/<details/.test(h));
+  const e = await sickRender({});
+  assert.match(e, /Kutilayotgan ma’lumotnoma yo‘q ✓/); assert.ok(!/<details|data-ref=/.test(e));
 });
 
 // ---- A2-06: xodim «keldi» qoidasi ----
 const P = (() => {
   const T0 = '2026-11-18';
   const ctx = vm.createContext({ todayStr: () => T0, pidKey: v => String(v == null ? '' : v), computeSalary: () => ({ total: 0 }), db: {} });
-  const names = [...BASE, 'scanBreakMin', 'tzHMParts', 'saMin', 'attMetrics', 'leavePaidOf', 'leaveDayMap', 'dailyRateFor', 'dailyWorkMinFor',
+  const names = [...BASE, 'scanBreakMin', 'SA_NOT_ARRIVAL', 'saArrival', 'tzHMParts', 'saMin', 'attMetrics', 'leavePaidOf', 'leaveDayMap', 'dailyRateFor', 'dailyWorkMinFor',
     'SUB_LESSON_RATE_DEFAULT', 'subCredit', 'carryBalance', 'salaryNum', 'CAMDOWN_MIN_RATIO', 'camDownDays', 'saAgg', 'saPresent', 'saBuildRoster', 'saExpandDays',
-    'payrollComputeMonth'];
+    'payrollComputeMonth', 'dv2Dow', 'dv2StaffToday'];
   vm.runInContext('let SA_HOLIDAYS=new Map(), SA_HOLIDAYS_OK=true, SALARY_RATES_OK=true;\n' + names.map(decl).join('\n') +
-    '\n;this.__p = { payrollComputeMonth, saAgg, attMetrics, saPresent: typeof saPresent === "function" ? saPresent : null, set: o => Object.assign(this, o) };', ctx);
+    '\n;this.__p = { payrollComputeMonth, saAgg, attMetrics, dv2StaffToday, saPresent: typeof saPresent === "function" ? saPresent : null, set: o => Object.assign(this, o) };', ctx);
   return ctx.__p;
 })();
 // Bitta xodim (Kamera ID C1), oktyabr 2026 (22 ish kuni, hammasi o'tgan): 4 kun skan bor — biri oddiy (kirish+chiqish), qolganlari
@@ -164,6 +234,50 @@ test('A2-06 oylik «Ishlagan kun» = skani bor kunlar; ushlanmadagi yo‘qlama b
   assert.equal(o.present, 4, 'faqat chiqish / noma’lum holat / tanaffus skani bo‘lgan kun ham — ishlagan kun (ilgari 1)');
   assert.equal(o.dm.absent, 18, 'ushlanma: skani bor kun yo‘qlama emas (22 − 4)');
   assert.equal(o.present + o.dm.absent, 22, 'oydagi ish kunlari — ikkalasi bir qoida bilan');
+});
+
+// ---- A2-06 (2-raund): kech kelish — KELISH skanidan (chiqish / tanaffus emas birinchi skan) ----
+const STAFF1 = [{ _id: 'S1', staffId: 'IQX-001', name: 'Sinov Xodim', position: 'Qorovul', cameraId: 'C1', salary: '2 200 000' }];
+function payrollEnvWith(scans) {
+  P.set({
+    loadCol: async n => (n === 'staff' ? STAFF1 : []),
+    collection: (_db, name) => ({ name }), where: (...a) => a, query: (c, ...w) => ({ name: c.name, w }),
+    getDocs: async q => ({ docs: (q.name === 'staff_checkins' ? scans : []).map((x, i) => ({ id: 'k' + i, data: () => ({ ...x }) })) }),
+    loadSalaryRates: async () => ({}), loadSaRates: async () => true,
+  });
+}
+const scanDay = (d, list) => list.map(([status, hm]) => ({ personId: 'C1', day: d, status, ts: `${d}T${hm}:00+05:00` }));
+const monthDm = async scans => { payrollEnvWith(scans); const r = await P.payrollComputeMonth('2026-10'); assert.equal(r.ok, true); return plain(r.bodyRows[0].dm); };
+const dash = (scans, d) => plain(P.dv2StaffToday(STAFF1, [], scans.filter(x => x.day === d), [], d));
+
+test('A2-06 (2-raund): bitta noma’lum holatli skan 09:30 (ish 08:00) — oylik ushlanmadagi kech kelish \'in\' skan bilan bir xil; bosh sahifa ham «kechikdi»', async () => {
+  const one = st => scanDay('2026-10-07', [[st, '09:30']]);   // 2026-10-07 — chorshanba
+  const inn = await monthDm(one('in')), unk = await monthDm(one('unknown'));
+  assert.equal(inn.late, 1); assert.equal(inn.lateMin, 80, '90 daqiqa − 10 daqiqa grace'); assert.equal(inn.lateAmt, 16667);
+  assert.equal(unk.late, inn.late, 'noma’lum holat — kech kelish sanaladi (avval 0)');
+  assert.equal(unk.lateMin, inn.lateMin); assert.equal(unk.lateAmt, inn.lateAmt); assert.equal(unk.total, inn.total);
+  for (const st of ['in', 'unknown']) { const d = dash(one(st), '2026-10-07'); assert.equal(d.came, 1, st); assert.equal(d.late, 1, st + ' — bosh sahifa ham, oylik hisobot ham kechikkan'); }
+  // «Kelgan» (saAgg) — o'sha kelish skani
+  const a = P.saAgg(one('unknown')); assert.match(a.kelgan, /T09:30/); assert.equal(a.arrival, a.kelgan);
+});
+
+test('A2-06 (2-raund): oddiy kunlar (kirish → tanaffus → chiqish, avval chiqish, adashgan tanaffus) — o‘zgarmagan; faqat chiqish / tanaffus — kech emas, lekin keldi', async () => {
+  const S = [
+    ...scanDay('2026-10-01', [['in', '08:30'], ['break_out', '12:00'], ['break_in', '12:40'], ['out', '17:00']]),   // 20 daq kech (grace keyin)
+    ...scanDay('2026-10-02', [['out', '07:00'], ['in', '08:25']]),                                                  // chiqish kelish emas — 15 daq kech
+    ...scanDay('2026-10-05', [['break_in', '07:50'], ['in', '08:00']]),                                             // adashgan tanaffus — o'z vaqtida
+    ...scanDay('2026-10-06', [['break_out', '12:00'], ['break_in', '12:40']]),                                      // faqat tanaffus
+    ...scanDay('2026-10-07', [['out', '17:01']]) ];                                                                 // faqat chiqish
+  const dm = await monthDm(S);
+  assert.equal(dm.late, 2); assert.equal(dm.lateMin, 35, 'kech kelish — birinchi \'in\' skanidan, avvalgidek');
+  assert.deepEqual(['2026-10-01', '2026-10-02', '2026-10-05'].map(d => dash(S, d).late), [1, 1, 0], 'bosh sahifa — avvalgidek');
+  for (const d of ['2026-10-06', '2026-10-07']) {
+    const r = dash(S, d);
+    assert.equal(r.came, 1, d + ' — keldi (istalgan skan, saPresent)');
+    assert.equal(r.late, 0, d + ' — chiqish / tanaffus vaqti «kelgan» emas: oylik ushlanmada ham kech yo‘q (avval bosh sahifa «kechikdi» derdi)');
+    const a = P.saAgg(S.filter(x => x.day === d)); assert.equal(a.arrival, ''); assert.ok(a.kelgan, 'kelgan — birinchi ko‘rilgan skan (saPresent)');
+  }
+  for (const d of ['2026-10-01', '2026-10-02', '2026-10-05']) { const a = P.saAgg(S.filter(x => x.day === d)); assert.equal(a.kelgan, S.find(x => x.day === d && x.status === 'in').ts, d + ' — «Kelgan» birinchi \'in\', avvalgidek'); }
 });
 
 test('A2-06 kunlik sarlavha «keldi / kelmadi» soni qatordagi «Keldi» qoidasi bilan (faqat \'in\' skan emas)', () => {

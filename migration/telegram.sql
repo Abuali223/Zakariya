@@ -457,11 +457,15 @@ end $$;
 --   (kun varag'i jamlari va nazorat qatori). Server (tg-daily.cjs) yoki Direktor.
 --   Hisobot oynasi (A6-01): 'asOf' — ma'lumot olingan payt (now()); tg-daily.cjs uni yuborish jurnaliga (sms_log
 --   'daily__<kun>__<bog'lanish>') "createdAt" qilib yozadi. 'since' — OLDINGI muvaffaqiyatli hisobot (sms_log: type 'daily', status
---   'sent', shu kundan oldin) payti bilan bugun boshi orasida TUSHGAN to'lovlar (kiritilgan vaqti bo'yicha; kassa kuni bo'yicha
---   guruhlangan): hisobot yuborilgandan keyin (kechqurun) va hisobot yuborilmagan kunlarda (shanba, yakshanba, bayram, hisobot o'chiq
---   yoki yetkazilmagan kunlar) tushgan pul. Avval ular HECH QAYSI hisobotda chiqmasdi: 'payments' — faqat bugungi kassa kuni, 'late' —
---   faqat bugun kiritilgan orqa sanali to'lov. Uch blok kiritilgan vaqt bo'yicha kesishmaydi: 'since' — bugundan oldin, 'payments' va
---   'late' — bugun. Oldingi hisobot yo'q (birinchi hisobot) — 'since' null; 31 kundan eski — oxirgi 31 kun.
+--   'sent', shu kundan oldin) payti bilan bugun boshi orasida TUSHGAN to'lovlar (kassa kuni bo'yicha guruhlangan): hisobot yuborilgandan
+--   keyin (kechqurun) va hisobot yuborilmagan kunlarda (shanba, yakshanba, bayram, hisobot o'chiq yoki yetkazilmagan kunlar) tushgan pul.
+--   Avval ular HECH QAYSI hisobotda chiqmasdi: 'payments' — faqat bugungi kassa kuni, 'late' — faqat bugun kiritilgan orqa sanali to'lov.
+--   «Tushgan» payti — payments."receivedAt" (to'lov birinchi marta tushumga aylangan payt, audit-11-moliya.sql; eski qatorda — "createdAt"):
+--   ikki bosqichli Click / Uzum to'lovi (prepare / create — tushum emas, complete / confirm — tushum) hisobot paytidan OLDIN boshlanib,
+--   KEYIN tugasa ham keyingi hisobotda chiqadi (A6-01, 2-raund; avval "createdAt" bo'yicha tanlanib, hech qaysi hisobotga tushmasdi).
+--   Yuqori chegara — "createdAt" < bugun boshi: uch blok kiritilgan vaqt bo'yicha kesishmaydi ('since' — bugundan oldin kiritilgan,
+--   'payments' va 'late' — bugun); 23:59 da prepare, yarim tundan keyin complete bo'lgan to'lov ertasi kungi 'since'da (o'sha kunning
+--   'payments' / 'late'ida yo'q). Oldingi hisobot yo'q (birinchi hisobot) — 'since' null; 31 kundan eski — oxirgi 31 kun.
 --   'unmatched' (A6-07) — BARCHA biriktirilmagan to'lovlar soni («To'lovlar» → «⚠️ Biriktirilmagan to'lovlar» ro'yxati bilan bir xil),
 --   'unmatchedSum' — summasi, 'unmatchedSince' — eng eskisining kassa kuni. Avval faqat bugungi kassa kunidagilar sanalardi: kechagi
 --   biriktirilmagan to'lov ertasi kuni hisobotdan yo'qolardi (Direktor «ish yo'q» deb o'ylardi).
@@ -477,7 +481,7 @@ begin
   if v_since is not null then
     v_since := greatest(v_since, v_from - interval '31 days');
     with x as (select p.amount, app.pay_day(p."createdAt", p.raw) as day from public.payments p
-                where p."createdAt" >= v_since and p."createdAt" < v_from
+                where coalesce(p."receivedAt", p."createdAt") >= v_since and p."createdAt" < v_from
                   and app.counts_as_receipt(p.id, p.status, p.provider, p.amount))
     select jsonb_build_object('from', v_since, 'count', (select count(*) from x), 'sum', (select coalesce(sum(x.amount), 0) from x),
              'byDay', coalesce((select jsonb_agg(jsonb_build_object('day', to_char(z.day, 'YYYY-MM-DD'), 'count', z.n, 'sum', z.s) order by z.day)
