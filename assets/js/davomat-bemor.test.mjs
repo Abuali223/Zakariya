@@ -294,6 +294,18 @@ test('A2-06 (3-raund): Hikvision ortiqcha ish skanlari (overtimein / overtimeout
   assert.match(P.saAgg(S.filter(x => x.day === '2026-10-05')).arrival, /T08:30/);
 });
 
+test('A2-06 (4-raund): oylik «O‘rt. kelish» — faqat haqiqiy kelish skanlari (faqat chiqish / ortiqcha ish skani bo‘lgan kun o‘rtachaga qo‘shilmaydi)', async () => {
+  payrollEnvWith([
+    ...scanDay('2026-10-01', [['in', '08:00'], ['out', '17:00']]),
+    ...scanDay('2026-10-02', [['in', '08:00'], ['out', '17:00']]),
+    ...scanDay('2026-10-05', [['overtimeout', '20:00']]),
+    ...scanDay('2026-10-06', [['out', '17:30']]) ]);
+  const r = await P.payrollComputeMonth('2026-10'); assert.equal(r.ok, true);
+  const o = r.bodyRows[0];
+  assert.equal(o.avg, '08:00', 'avval 20:00 va 17:30 ham qo‘shilib o‘rtacha kelish 13:22 chiqardi (kech kelish esa 0)');
+  assert.equal(o.present, 4, 'ishlagan kun — istalgan skan (o‘zgarmagan)');
+});
+
 test('A2-06 kunlik sarlavha «keldi / kelmadi» soni qatordagi «Keldi» qoidasi bilan (faqat \'in\' skan emas)', () => {
   assert.equal((ADM.match(/\.some\(x=>x\.status==='in'\)/g) || []).length, 0, 'faqat \'in\' skanni «keldi» deb sanash qolmasin');
   assert.match(ADM, /const came=roster\.filter\(r=>saPresent\(byPerson\[r\.cam\]\|\|\[\]\)\)\.length;/);

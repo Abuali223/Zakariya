@@ -29,7 +29,20 @@
 \pset format unaligned
 \pset tuples_only on
 -- yozilishi kerak bo'lgan tekshiruvlar soni (ZZ dan tashqari): yangi tekshiruv qo'shilsa — oshiriladi
-\set kutilgan 52
+\set kutilgan 56
+-- Bo'sh baza tekshiruvi — quyidagi ichki deploy seansidan (zz_deploy_out) OLDIN: aks holda u bo'sh bo'lmagan bazada ham yozib,
+--   audit-11-maosh.sql'ni ishga tushirardi (qaytarilsa ham — himoya chetlab o'tilardi). Tranzaksiya ichidagi tekshiruv ham qoladi.
+do $g0$ begin
+  if exists (select 1 from public.students) then
+    raise exception 'test-audit-11-maosh.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
+  end if;
+end $g0$;
+-- Deploy konsoli (N07, pastda tekshiriladi): deploy.sh konsolga faqat «OGOHLANTIRISH|g'ayrioddiy» qatorlarini chiqaradi. Maosh
+--   ogohlantirishlarini AYNAN shu filtr bilan ko'rish uchun alohida psql seansi (shu baza): o'z tranzaksiyasida o'tish oyi (2026-09),
+--   o'qituvchi kartasi va uning eski oy qoldig'i (IQT-961), kartasi yo'q maosh ID'si qoldig'i (IQT-962) va oy tugamasdan yuborilgan
+--   vedomost (2026-10) yaratadi, audit-11-maosh.sql'ni zanjirdagidek ishga tushiradi va ROLLBACK qiladi. Bu sinov tranzaksiyasidan
+--   OLDIN — keyin DDL qulflari shu tranzaksiya qulflari bilan to'qnashardi. Fayl: migration/ ichidan ham, repo ildizidan ham topiladi.
+\set zz_deploy_out `f=audit-11-maosh.sql; [ -f "$f" ] || f=migration/audit-11-maosh.sql; psql -X -q -v ON_ERROR_STOP=1 -v iqror_chain=1 -h :'HOST' -p :'PORT' -U :'USER' -d :'DBNAME' -c 'begin' -c 'set local session_replication_role = replica' -c 'insert into public.config (id, "payrollApprovalFrom") values ($$finance$$, $$2026-09$$) on conflict (id) do update set "payrollApprovalFrom" = excluded."payrollApprovalFrom"' -c 'insert into public.teachers (id, "teacherId", name) values ($$t_dep$$, $$IQT-961$$, $$Sinov Deploy$$)' -c 'insert into public.salary_payments (id, "teacherId", month, gross, advance, deduction, "subBonus", net, paid, date) values ($$sp_dep1$$, $$IQT-961$$, $$2026-07$$, 3000000, 0, 0, 0, 3000000, 1000000, $$2026-08-01$$), ($$sp_dep2$$, $$IQT-962$$, $$2026-07$$, 1000000, 0, 0, 0, 1000000, 0, $$2026-08-01$$)' -c 'insert into public.payroll_runs (id, status, "preparedBy", "preparedAt", "submittedAt") values ($$2026-10$$, $$submitted$$, $$U_X$$, $$2026-10-20 10:00+05$$, $$2026-10-20 10:00+05$$)' -c 'set local session_replication_role = origin' -f "$f" -c 'rollback' 2>&1 | grep -E "OGOHLANTIRISH|g'ayrioddiy" | sed -E 's/^.*NOTICE: +//'`
 begin;
 do $g$ begin
   if exists (select 1 from public.students) then
@@ -287,7 +300,7 @@ select zz.chk('N01 deploy: o''tish oyidan (2026-09) oldingi oylar qoldig''i bor 
 -- deploy.sh ko'rsatadigan matn (OGOHLANTIRISH qatorlari) — natijadagi 'notice'
 select zz.q($q$select (j->'notice')::text from (select app.payroll_deploy_notice() as j) q$q$) as n04 \gset
 select zz.chk('N04 deploy matni: qoldiq vedomostga «oldingi qoldiq» bo''lib o''zi qo''shiladi, eski oyga — faqat Direktor; eskirgan vedomost',
-  :'n04', '^\["OGOHLANTIRISH: 2 ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan \(2026-09\) oldingi oylar .*hali tasdiqlangan vedomostga kirmagan — navbatdagi oylik vedomostga «oldingi qoldiq» .*faqat Direktor .*: IQT-901, IQX-902", "OGOHLANTIRISH: 1 ta oylik vedomost oy tugamasdan yuborilgan .*: 2026-12"\]$');
+  :'n04', '^\["OGOHLANTIRISH: 2 ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan \(2026-09\) oldingi oylar .*hali birorta tasdiqlangan vedomostga kirmagan — navbatdagi oylik vedomostga «oldingi qoldiq» .*ortiqcha berilgani — ushlanadi.*faqat Direktor .*: IQT-901, IQX-902", "OGOHLANTIRISH: 1 ta oylik vedomost oy tugamasdan yuborilgan .*: 2026-12"\]$');
 savepoint n2;
 set local session_replication_role = replica;
 update public.config set "payrollApprovalFrom" = null where id = 'finance';
@@ -322,12 +335,40 @@ select zz.chk('C06 oy tugamasdan yuborilgan vedomostni HR tasdiqlamaydi, Direkto
 --   olinadi, tekshiruv savepoint qaytarilgach.
 savepoint n3;
 select zz.as('U_FM', $q$select public.payroll_submit('2027-02', '[{"personType":"teacher","personId":"IQT-901","gross":3000000}]'::jsonb, null)->>'ok'$q$) as n03a \gset
+select zz.q($q$select (j->'carry')::text from (select app.payroll_deploy_notice() as j) q$q$) as n03s \gset
 select zz.as('U_DIR', $q$select public.payroll_decide('2027-02', true, null)->>'status'$q$) as n03b \gset
 select coalesce((select trim_scale("carryIn") || ':' || trim_scale(payable) from public.payroll_lines where "runId" = '2027-02' and "personId" = 'IQT-901'), '-') as n03c \gset
 select zz.q($q$select (j->'carry')::text from (select app.payroll_deploy_notice() as j) q$q$) as n03d \gset
+select zz.as('U_DIR', $q$select public.payroll_reopen('2027-02', 'Sinov: qayta ochildi')->>'status'$q$) as n03e \gset
+select zz.q($q$select (j->'carry')::text from (select app.payroll_deploy_notice() as j) q$q$) as n03f \gset
 rollback to savepoint n3;
-select zz.chk('N03 oldingi qoldiq tasdiqlangan vedomostga kirgach (IQT-901: carryIn 2 000 000) — ogohlantirishda yo''q; vedomostga kirmagan IQX-902 — qoladi',
-  :'n03a' || '|' || :'n03b' || '|' || :'n03c' || '|' || :'n03d', '^true\|approved\|2000000:5000000\|\["IQX-902"\]$');
+select zz.chk('N03 oldingi qoldiq faqat TASDIQLANGAN vedomostga kirgach (IQT-901: carryIn 2 000 000) ogohlantirishdan chiqadi: yuborilgan (hali tasdiqlanmagan) va qayta ochilgan vedomostda — ro''yxatda; IQX-902 — doim',
+  :'n03a' || '|' || :'n03s' || '|' || :'n03b' || '|' || :'n03c' || '|' || :'n03d' || '|' || :'n03e' || '|' || :'n03f',
+  '^true\|\["IQT-901", "IQX-902"\]\|approved\|2000000:5000000\|\["IQX-902"\]\|returned\|\["IQT-901", "IQX-902"\]$');
+-- (4-raund) o'tish oyidan OLDINGI oyning tasdiqlangan vedomosti qoldiqni o'zlashtirmaydi (app.salary_carry eski oylarni eski tartib bilan
+--   hisoblaydi) — xodim ro'yxatda qoladi
+savepoint n5;
+set local session_replication_role = replica;
+insert into public.payroll_runs (id, status) values ('2026-08', 'approved');
+insert into public.payroll_lines (id, "runId", "personType", "personId", gross, payable) values ('2026-08__staff__IQX-902', '2026-08', 'staff', 'IQX-902', 500000, 500000);
+set local session_replication_role = origin;
+select zz.q($q$select (j->'carry')::text from (select app.payroll_deploy_notice() as j) q$q$) as n05 \gset
+rollback to savepoint n5;
+select zz.chk('N05 o''tish oyidan oldingi oy (2026-08) tasdiqlangan vedomostida qatori bor — baribir ro''yxatda (IQX-902)', :'n05', '^\["IQT-901", "IQX-902"\]$');
+-- (4-raund) kartasi yo'q (o'chirilgan) maosh ID'si: qoldig'i vedomostga qo'shilmaydi (payroll_submit kartasiz ID'ni rad etadi) — alohida
+--   ogohlantirish, «o'zi qo'shiladi» deyilmaydi
+savepoint n6;
+set local session_replication_role = replica;
+insert into public.salary_payments (id, "teacherId", month, gross, advance, deduction, "subBonus", net, paid, date)
+  values ('n_orph', 'IQT-977', '2026-07', 1500000, 0, 0, 0, 1500000, 500000, '2026-08-01');
+set local session_replication_role = origin;
+select zz.q($q$select (j->'carry')::text || ' | ' || (j->'orphan')::text || ' | ' || (j->'notice'->>1) from (select app.payroll_deploy_notice() as j) q$q$) as n06 \gset
+rollback to savepoint n6;
+select zz.chk('N06 kartasi yo''q maosh ID''si (IQT-977) — alohida qator: vedomostga qo''shilmaydi, qo''lda hal qilinadi; asosiy ro''yxat o''zgarmagan',
+  :'n06', '^\["IQT-901", "IQX-902"\] \| \["IQT-977"\] \| OGOHLANTIRISH: 1 ta maosh ID''sida o''tish oyidan \(2026-09\) .*kartasi yo''q .*hech qaysi vedomostga qo''shilmaydi.*: IQT-977$');
+-- (4-raund) deploy.sh konsoli: alohida psql seansi (fayl boshida) AYNAN deploy filtri bilan ko'rgan qatorlar
+select zz.chk('N07 deploy.sh konsoli (alohida seans, OGOHLANTIRISH filtri): maosh qoldig''i (IQT-961), kartasi yo''q ID (IQT-962), eskirgan vedomost (2026-10)',
+  :'zz_deploy_out', '^OGOHLANTIRISH: 1 ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan \(2026-09\) oldingi oylar .*: IQT-961\nOGOHLANTIRISH: 1 ta maosh ID''sida .*kartasi yo''q .*: IQT-962\nOGOHLANTIRISH: 1 ta oylik vedomost oy tugamasdan yuborilgan .*: 2026-10$');
 
 -- ===== (A5-08) vedomost ishtirokchilari ismi =====
 select zz.chk('H01 HR: tayyorlagan / tasdiqlagan / qayta ochgan ismi va roli; ishtirok etmagan hisob (kassir) — yo''q',
@@ -361,6 +402,17 @@ select zz.chk('E03 osilib qolgan havola tozalanadi va eski qiymati qaytariladi (
   :'e03a' || ' | ' || coalesce((select "userUid" from public.teachers where id = 't1'), '-') || ' | ' || :'e03b'
   || ' | ' || zz.as('U_DIR', $q$select app.users_card_link_repair()::text$q$),
   '^1 \["teachers/t1→U_LOST"\] OGOHLANTIRISH: 1 ta xodim / o''qituvchi kartasidagi login havolasi .*: teachers/t1→U_LOST \(endi .* \| - \| 0 \[\] Login havolasi: .*\(0\) \| ERR 42501 ');
+
+-- (4-raund) ko'p osilib qolgan havola — hammasi NOTICE matnida («… yana» bilan qisqartirilmaydi: karta→eski hisob ID tiklash uchun kerak)
+savepoint e4;
+set local session_replication_role = replica;
+insert into public.teachers (id, "teacherId", name, "userUid")
+  select 'tz' || lpad(g::text, 2, '0'), 'IQT-8' || lpad(g::text, 2, '0'), 'Sinov Ortiqcha ' || g, 'U_LZ' || lpad(g::text, 2, '0') from generate_series(1, 22) g;
+set local session_replication_role = origin;
+select zz.q($q$select (j->>'count') || ' ' || jsonb_array_length(j->'cleared') || ' ' || ((j->>'notice') like '%teachers/tz01→U_LZ01%')::text || ' '
+                     || ((j->>'notice') like '%teachers/tz22→U_LZ22%')::text || ' ' || ((j->>'notice') like '%yana%')::text from (select app.users_card_link_repair() as j) q$q$) as e04 \gset
+rollback to savepoint e4;
+select zz.chk('E04 22 ta osilib qolgan havola — hammasi (karta→eski hisob ID) NOTICE matnida, «… yana» qisqartirishsiz', :'e04', '^22 22 true true false$');
 
 -- ===== (A5-05) o'z hisobi va oxirgi faol Direktor =====
 select zz.chk('F01 Direktor o''z hisobini o''chira olmaydi va o''z rolini / holatini o''zgartira olmaydi',

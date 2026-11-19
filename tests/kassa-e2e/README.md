@@ -126,11 +126,19 @@ shu jadval ham yangilanadi):
 | k18 | `e2e-kassa18.cjs` | «Kassir» roli (egasi, 2026-11-17): asosiy rol «Kassir» — ochiq kunda kassa kitobi varag‘i (qoralama), kunni yopish, yopilgan kunning yakuniy kunlik hisoboti va kassa kitobi varag‘i («НУСХА»); Direktor: rol tanlovida yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog‘langan yangi xodimga «Kassir» oldindan tanlanadi (kirim, chiqim so‘rovi, pul berish — k1; ochiq kun hisoboti — k4) | v1 9, v2 9 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
-| ar | `e2e-arxiv.cjs` | o‘quvchilar arxivi (egasi, 2026-11-18): chiqarilgan / bitirgan o‘quvchi faol sondan chiqadi (jami, sinf kartasi, bosh sahifa, kassir ro‘yxati), qidiruvda arxivga havola, kelajak sana bilan chiqarish, «🗄 Arxiv» va filtrlar, 📨 ma’lumotnoma (QR, telefon / to‘lovsiz), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma’lumotnomasi (baho / davomat — student_certificate), O‘IBDO‘ menyusida Arxiv, kassir qidiruvi | v1 28, v2 28 |
+| ar | `e2e-arxiv.cjs` | o‘quvchilar arxivi (egasi, 2026-11-18): chiqarilgan / bitirgan o‘quvchi faol sondan chiqadi (jami, sinf kartasi, bosh sahifa, kassir ro‘yxati), qidiruvda arxivga havola, kelajak sana bilan chiqarish, «🗄 Arxiv» va filtrlar, 📨 ma’lumotnoma (QR, telefon / to‘lovsiz), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma’lumotnomasi (baho / davomat — student_certificate), O‘IBDO‘ menyusida Arxiv, kassir qidiruvi; qabulxona ichki ma’lumotnomasi (oyna va «🖨 Ichki hisobot») — davomat, baho, xarakteristika yig‘madan, oylik xulosa «ko‘rsatilmaydi» | v1 30, v2 30 |
 
-Jami: 42 o‘tish, 1120 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32, arxiv 56).
+Jami: 42 o‘tish, 1124 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32, arxiv 60).
 
-**Holat (2026-11-16).** Oxirgi to‘liq yashil o‘tish — 2026-11-16: 38 o‘tish, 1046 tekshiruv — hammasi o‘tdi (≈ 14 daqiqa).
+**Holat (2026-11-19).** Oxirgi to‘liq yashil o‘tish — 2026-11-19: 42 o‘tish, 1124 tekshiruv — hammasi o‘tdi (≈ 16 daqiqa).
+Kod — platformaning to‘liq auditi tuzatishlaridan keyingi holat (8 yo‘nalish, 66 topilma, uch raund mustaqil tekshiruv —
+`SESSIYA-ISHLARI.md` §84): to‘lov yozuvi faqat ishonchli yo‘ldan, moliya rollari fakturani «to‘landi» qila olmaydi, avans darhol
+ochiq qarzga, avans va maosh yozuvini o‘chirish / kamaytirish faqat Direktor — kassa (k1–k18), qo‘lda to‘lov (pay) va eski oqimlar
+(legacy) shu o‘zgarishlardan keyin ham o‘tadi; arxiv ssenariysi (ar) qabulxona ichki ma’lumotnomasi (oyna va «🖨 Ichki hisobot»)
+davomat, baho va xarakteristikani `student_certificate` yig‘masidan ko‘rsatishini ham tekshiradi (30 tekshiruv; audit tuzatishidan
+oldingi admin.html da 28/30).
+
+**Oldingi holat (2026-11-16).** To‘liq yashil o‘tish — 2026-11-16: 38 o‘tish, 1046 tekshiruv — hammasi o‘tdi (≈ 14 daqiqa).
 Kod — modul relizi 12 va FD-28 fayllari (qarzdorlar CSV, «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti —
 Direktordan boshqalarga ismsiz nusxa): ularni yangi k17 tekshiradi — ismsiz nusxa Direktor nusxasi bilan qatorma-qator va
 jamlari bo‘yicha solishtiriladi; k17 tekshiruvlari mahsulot kodini vaqtincha buzib (FD-28 o‘zgarishini qaytarib yoki ismsiz

@@ -39,7 +39,7 @@ const CERT = {
 };
 
 function env({ role = 'reception', isAdmin = false, cert = CERT, certErr = null, rows = { invoices: INV }, roles = null, homeroom = [] } = {}) {
-  const els = {}, calls = { rpc: [], reads: [], printed: [] };
+  const els = {}, calls = { rpc: [], reads: [], printed: [], writes: [] };
   // innerHTML / appendChild bilan qo'shilgan id'lar $('#id') bilan topiladi (haqiqiy DOM kabi).
   const reg = h => { const re = /id="([^"]+)"/g; let m; while ((m = re.exec(h))) els['#' + m[1]] = mk(); };
   function mk() {
@@ -57,6 +57,8 @@ function env({ role = 'reception', isAdmin = false, cert = CERT, certErr = null,
     getDocs: async q => { calls.reads.push(q.c); return { docs: (rows[q.c] || []).map((d, i) => ({ id: d.id || q.c + i, data: () => ({ ...d }) })) }; },
     rpc: async (name, args) => { calls.rpc.push([name, { ...args }]); if (certErr) throw certErr; return cert; },
     printHTML: h => calls.printed.push(h), toast: () => {}, cache: {}, renderStudents: () => {}, openRecordPayment: () => {},
+    setDoc: async ref => { calls.writes.push('set:' + ref.id); }, deleteDoc: async ref => { calls.writes.push('del:' + ref.id); },
+    serverTimestamp: () => 'TS', auth: { currentUser: { uid: 'U_T', displayName: 'Sinov Ustoz' } }, errMsg: e => String((e && e.message) || e),
   });
   vm.runInContext(SRC + '\n;this.__open = openStudentReport;', ctx);
   return { open: () => ctx.__open(ROW._id, { ...ROW }), els, calls, body: () => els['#modal .modal-b'].innerHTML };
@@ -146,4 +148,27 @@ test('3-raund: shu foydalanuvchi, yig‘ma olinmadi — o‘qilgan davomat va xa
   assert.match(section(h, 'Xarakteristika'), /Sinov: kurator yozgan tavsif/);
   assert.match(section(h, 'Monitoring'), /Qabulxona uchun ko‘rsatilmaydi \(ma’lumot olinmadi\)\./, 'o‘qilmagan bo‘lim — «Ma’lumot yo‘q» emas');
   assert.match(section(h, 'O‘qituvchi xulosasi'), /Qabulxona uchun ko‘rsatilmaydi \(ma’lumot olinmadi\)\./);
+});
+
+test('4-raund: shu foydalanuvchi, yig‘ma olinmadi, davomat satri o‘qildi, lekin faqat «Bemor» / «Sababli» — jadval (0 / 0 / 0), «ko‘rsatilmaydi» emas', async () => {
+  const E = env({ roles: ['teacher', 'reception'], homeroom: ['uz-7-B'], certErr: new Error('tarmoq'), rows: {
+    invoices: INV, attendance: [{ studentId: 'IQ-0701', month: '2026-10', days: { '06': 'sick', '07': 'excused' } }] } });
+  await E.open();
+  const h = E.body();
+  assert.match(section(h, 'Davomat'), /Umumiy davomat<\/td><td><b>—<\/b>[\s\S]*0 \/ 0 \/ 0 \(jami 0 kun\)/, 'avval «ko‘rsatilmaydi (ma’lumot olinmadi)»');
+  assert.match(h, /Davomat<\/td><td><b>—<\/b>/);
+  assert.doesNotMatch(section(h, 'Davomat'), /ko‘rsatilmaydi/);
+});
+
+test('4-raund: shu foydalanuvchi 📝 bilan xulosa yozib, keyin o‘chirsa — «Yozuv yo‘q.» (o‘qiy oladi), «ko‘rsatilmaydi» emas', async () => {
+  const E = env({ roles: ['teacher', 'reception'], homeroom: ['uz-7-B'] });
+  await E.open();
+  assert.match(section(E.body(), 'O‘qituvchi xulosasi'), /Qabulxona uchun ko‘rsatilmaydi\./, 'boshida — o‘qilgan xulosa yo‘q');
+  E.els['#ts-month'].value = '2026-11'; E.els['#ts-text'].value = 'Sinov: noyabr xulosasi';
+  await E.els['#ts-save'].onclick();
+  assert.match(E.els['#rep-ts-body'].innerHTML, /2026-11[\s\S]*Sinov: noyabr xulosasi/);
+  E.els['#ts-text'].value = '';
+  await E.els['#ts-save'].onclick();
+  assert.match(E.els['#rep-ts-body'].innerHTML, /Yozuv yo‘q\./, 'avval «Qabulxona uchun ko‘rsatilmaydi (ma’lumot olinmadi)»');
+  assert.deepEqual(E.calls.writes, ['set:IQ-0701__2026-11', 'del:IQ-0701__2026-11']);
 });

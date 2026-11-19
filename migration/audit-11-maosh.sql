@@ -61,13 +61,17 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-maosh.sql ALOHIDA ishga 
 --
 -- 6) DEPLOY OGOHLANTIRISHLARI (faqat o'qiydi, har deployda; r4 — app.payroll_deploy_notice): (a) maosh tasdig'i o'tish oyi
 --    (config/finance."payrollApprovalFrom") belgilangan bo'lsa — o'tish oyidan OLDINGI oylar bo'yicha qoldig'i (to'lanmagan yoki ortiqcha
---    berilgan — app.salary_carry) bor va u hali TASDIQLANGAN vedomostga kirmagan xodimlar maosh ID'lari bilan (20 tagacha): qoldiq
---    navbatdagi vedomostga «oldingi qoldiq» bo'lib o'zi qo'shiladi (alohida to'lash shart emas), eski oyning o'ziga yozuvni endi faqat
---    Direktor kiritadi (kassir / HR / Moliya menejerining, karta orqali to'lov ham — rad), egasi deploy paytida bilsin. Tasdiqlangan
---    vedomostga kirgan qoldiq ro'yxatdan chiqadi (eski oy qatorlari o'zgarmaydi — aks holda xodim har deployda qolar, Direktor eski oyga
---    yana to'lasa ortiqchasi keyingi maoshdan ushlanardi); (b) oy tugamasdan yuborilib hali tasdiqlanmagan vedomostlar — ularni HR endi
---    tasdiqlamaydi (payroll_decide 'stale': HR qaytaradi, Moliya menejeri oy tugagach qayta yuboradi yoki Direktor tasdiqlaydi).
---    Ogohlantirish matni natijada ham qaytadi ('notice') — sinov deploy ko'rsatadigan matnni tekshiradi.
+--    berilgan — app.salary_carry) bor va hali birorta TASDIQLANGAN vedomostda qatori yo'q xodimlar maosh ID'lari bilan (20 tagacha):
+--    qoldiq navbatdagi vedomostga «oldingi qoldiq» bo'lib o'zi qo'shiladi (to'lanmagani — qo'shib to'lanadi, ortiqcha berilgani —
+--    ushlanadi; alohida to'lash shart emas), eski oyning o'ziga yozuvni endi faqat Direktor kiritadi (kassir / HR / Moliya menejerining,
+--    karta orqali to'lov ham — rad), egasi deploy paytida bilsin. O'tish oyi yoki keyingi tasdiqlangan vedomostda qatori bor xodim
+--    ro'yxatga kirmaydi: eski oy qatorlari o'zgarmaydi (aks holda u har deployda qolar, Direktor eski oyga yana to'lasa ortiqchasi keyingi
+--    maoshdan ushlanardi); tasdiqdan keyin Direktor eski oyni o'zgartirsa ham farq keyingi vedomostga o'zi qo'shiladi (app.salary_carry har
+--    safar barcha yozuvlardan hisoblaydi). Qoldig'i bor, lekin bu ID'li o'qituvchi / xodim kartasi yo'q (o'chirilgan) maosh ID'lari —
+--    alohida qator: ularning qoldig'i hech qaysi vedomostga qo'shilmaydi (payroll_submit kartasiz ID'ni rad etadi) — qo'lda hal qilinadi;
+--    (b) oy tugamasdan yuborilib hali tasdiqlanmagan vedomostlar — ularni HR endi tasdiqlamaydi (payroll_decide 'stale': HR qaytaradi,
+--    Moliya menejeri oy tugagach qayta yuboradi yoki Direktor tasdiqlaydi). Ogohlantirish matni natijada ham qaytadi ('notice') — sinov
+--    uni va alohida psql seansida deploy.sh filtri bilan konsolga chiqadigan matnni tekshiradi.
 --
 -- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace, drop trigger if exists; ma'lumot tuzatish — faqat farq bo'lsa).
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
@@ -249,29 +253,42 @@ grant execute on function public.payroll_actor_names(text[]) to authenticated, s
 --    ruxsat yo'q).
 create or replace function app.payroll_deploy_notice() returns jsonb
 language plpgsql set search_path = public, app, pg_temp as $$
-declare v_from text; v_carry text[]; v_stale text[]; n int; m text; v_msg text[] := '{}';
+declare v_from text; v_carry text[]; v_orphan text[]; v_stale text[]; n int; m text; v_msg text[] := '{}';
 begin
   select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_from from public.config c where c.id = 'finance';
   -- (a) o'tish oyi belgilangan bo'lsa — undan OLDINGI oylar qoldig'i: app.salary_carry(x, o'tish oyi) faqat o'sha oylarni (eski tartib
   --     bilan) hisoblaydi — maosh darvozasi va vedomostdagi «oldingi qoldiq» bilan bir xil. payroll_submit bu qoldiqni o'tish oyidan
-  --     keyingi vedomost qatoriga «oldingi qoldiq» (carryIn) qilib qo'shadi, u o'sha vedomost bilan to'lanadi, eski oy qatorlari esa
-  --     o'zgarmaydi — shuning uchun tasdiqlangan (o'tish oyi yoki keyingi) vedomostda qatori bor xodim ro'yxatga kirmaydi.
+  --     keyingi vedomost qatoriga «oldingi qoldiq» (carryIn) qilib qo'shadi, u o'sha vedomost bilan to'lanadi (ortiqchasi — ushlanadi),
+  --     eski oy qatorlari esa o'zgarmaydi — shuning uchun tasdiqlangan (o'tish oyi yoki keyingi) vedomostda qatori bor xodim ro'yxatga
+  --     kirmaydi. Kartasi yo'q maosh ID'si (o'qituvchi / xodim o'chirilgan) — alohida: uning qoldig'i vedomostga qo'shilmaydi.
   if v_from is not null then
-    select coalesce(array_agg(p.tid order by p.tid), '{}') into v_carry
-      from (select distinct s."teacherId" as tid from public.salary_payments s
-             where coalesce(s."teacherId", '') <> '' and coalesce(s.month, '') <> '' and s.month < v_from) p
-     where app.salary_carry(p.tid, v_from) <> 0
-       and not exists (select 1 from public.payroll_lines l join public.payroll_runs r on r.id = l."runId"
-                        where l."personId" = p.tid and r.status = 'approved' and l."runId" >= v_from);
+    with c as (
+      select p.tid,
+             not exists (select 1 from public.teachers t where p.tid in (coalesce(nullif(btrim(t."teacherId"), ''), t.id), coalesce(nullif(t."teacherId", ''), t.id)))
+             and not exists (select 1 from public.staff s where p.tid in (coalesce(nullif(btrim(s."staffId"), ''), s.id), coalesce(nullif(s."staffId", ''), s.id))) as orphan
+        from (select distinct s."teacherId" as tid from public.salary_payments s
+               where coalesce(s."teacherId", '') <> '' and coalesce(s.month, '') <> '' and s.month < v_from) p
+       where app.salary_carry(p.tid, v_from) <> 0
+         and not exists (select 1 from public.payroll_lines l join public.payroll_runs r on r.id = l."runId"
+                          where l."personId" = p.tid and r.status = 'approved' and l."runId" >= v_from))
+    select coalesce(array_agg(c.tid order by c.tid) filter (where not c.orphan), '{}'),
+           coalesce(array_agg(c.tid order by c.tid) filter (where c.orphan), '{}')
+      into v_carry, v_orphan from c;
     n := cardinality(v_carry);
     if n > 0 then
-      m := format('OGOHLANTIRISH: %s ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan (%s) oldingi oylar bo''yicha qoldiq bor (to''lanmagan yoki ortiqcha berilgan) va u hali tasdiqlangan vedomostga kirmagan — navbatdagi oylik vedomostga «oldingi qoldiq» bo''lib o''zi qo''shiladi va o''sha vedomost bilan to''lanadi (alohida to''lash shart emas); eski oyning o''ziga maosh yozuvini endi faqat Direktor kiritadi (kassir, HR, Moliya menejeri, karta orqali to''lov — rad): %s',
+      m := format('OGOHLANTIRISH: %s ta xodim / o''qituvchida maosh tasdig''i o''tish oyidan (%s) oldingi oylar bo''yicha qoldiq bor va u hali birorta tasdiqlangan vedomostga kirmagan — navbatdagi oylik vedomostga «oldingi qoldiq» bo''lib o''zi qo''shiladi (to''lanmagani — qo''shib to''lanadi, ortiqcha berilgani — ushlanadi; alohida to''lash shart emas); eski oyning o''ziga maosh yozuvini endi faqat Direktor kiritadi (kassir, HR, Moliya menejeri, karta orqali to''lov — rad): %s',
         n, v_from, array_to_string(v_carry[1:20], ', ') || case when n > 20 then ', … yana ' || (n - 20) else '' end);
     else
       m := format('Maosh qoldig''i: o''tish oyidan (%s) oldingi oylar bo''yicha vedomostga kirmagan qoldig''i bor xodim yo''q (0)', v_from);
     end if;
     raise notice '%', m;
     v_msg := v_msg || m;
+    if cardinality(v_orphan) > 0 then
+      m := format('OGOHLANTIRISH: %s ta maosh ID''sida o''tish oyidan (%s) oldingi oylar bo''yicha qoldiq bor, lekin bu ID''li o''qituvchi / xodim kartasi yo''q (o''chirilgan) — qoldiq hech qaysi vedomostga qo''shilmaydi va maosh yozuvi bilan yopilmaydi: buxgalter bilan qo''lda hal qiling: %s',
+        cardinality(v_orphan), v_from, array_to_string(v_orphan, ', '));
+      raise notice '%', m;
+      v_msg := v_msg || m;
+    end if;
   end if;
   -- (b) oy tugamasdan yuborilgan, hali tasdiqlanmagan vedomostlar (payroll_decide dagi 'stale' sharti bilan bir xil; o'tish oyidan
   --     qat'i nazar — vedomostni HR har doim shu qoida bilan tasdiqlaydi)
@@ -285,7 +302,8 @@ begin
     raise notice '%', m;
     v_msg := v_msg || m;
   end if;
-  return jsonb_build_object('from', v_from, 'carry', to_jsonb(coalesce(v_carry, '{}')), 'stale', to_jsonb(v_stale), 'notice', to_jsonb(v_msg));
+  return jsonb_build_object('from', v_from, 'carry', to_jsonb(coalesce(v_carry, '{}')), 'orphan', to_jsonb(coalesce(v_orphan, '{}')),
+                            'stale', to_jsonb(v_stale), 'notice', to_jsonb(v_msg));
 end $$;
 revoke all on function app.payroll_deploy_notice() from public, anon, authenticated;
 do $a5n$ begin perform app.payroll_deploy_notice(); end $a5n$;

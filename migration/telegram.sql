@@ -455,7 +455,11 @@ end $$;
 -- Kunlik hisobot ma'lumoti (Toshkent kuni): to'lovlar (soni, summa, usul bo'yicha), qarzdorlar, davomat kiritilishi,
 --   kutilayotgan tasdiqlar (navbatlar bo'yicha; muddati o'tganlari alohida); kassa moduli ishlatilayotgan bo'lsa — 'kassa'
 --   (kun varag'i jamlari va nazorat qatori). Server (tg-daily.cjs) yoki Direktor.
---   Hisobot oynasi (A6-01): 'asOf' — ma'lumot olingan payt (now()); tg-daily.cjs uni yuborish jurnaliga (sms_log
+--   Hisobot oynasi (A6-01): 'asOf' — ma'lumot olingan payt: funksiya boshlangan haqiqiy soat (clock_timestamp(); sinov bazasida — sinov
+--   soati app.fin_now(), payments."receivedAt" bilan bir xil asos). Funksiya STABLE — barcha so'rovlari chaqiruvchi so'rov snapshot'ini
+--   ko'radi, u esa funksiya boshlanishidan OLDIN olingan: shu hisobotda ko'ringan to'lovning "receivedAt"i (tushumga aylantirgan UPDATE
+--   soati < commit < snapshot) doim 'asOf' dan kichik — keyingi hisobotning 'since' blokida qayta sanalmaydi (avval 'asOf' = now(),
+--   tranzaksiya boshi edi; tekshiruv 4-raund). tg-daily.cjs uni yuborish jurnaliga (sms_log
 --   'daily__<kun>__<bog'lanish>') "createdAt" qilib yozadi. 'since' — OLDINGI muvaffaqiyatli hisobot (sms_log: type 'daily', status
 --   'sent', shu kundan oldin) payti bilan bugun boshi orasida TUSHGAN to'lovlar (kassa kuni bo'yicha guruhlangan): hisobot yuborilgandan
 --   keyin (kechqurun) va hisobot yuborilmagan kunlarda (shanba, yakshanba, bayram, hisobot o'chiq yoki yetkazilmagan kunlar) tushgan pul.
@@ -473,6 +477,7 @@ create or replace function public.director_daily(p_day date default null) return
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
 declare d date := coalesce(p_day, (now() at time zone 'Asia/Tashkent')::date); v_from timestamptz; v_to timestamptz; r jsonb; v_k jsonb;
         v_since timestamptz; v_sj jsonb;
+        v_asof timestamptz := case when app.fin_clock_allowed() then app.fin_now() else clock_timestamp() end;
 begin
   if not (app.is_admin() or app.is_system()) then raise exception 'Ruxsat yo''q: faqat Direktor' using errcode = '42501'; end if;
   v_from := (d::timestamp) at time zone 'Asia/Tashkent'; v_to := ((d + 1)::timestamp) at time zone 'Asia/Tashkent';
@@ -493,7 +498,7 @@ begin
   --   kassa kuni (qo'lda to'lovda kassir tanlagan «Sana»). 'late' — bugun kiritilgan, lekin oldingi kun(lar) uchun yozilgan.
   select jsonb_build_object(
     'day', to_char(d, 'YYYY-MM-DD'),
-    'asOf', now(),
+    'asOf', v_asof,
     'payments', (select jsonb_build_object('count', count(*), 'sum', coalesce(sum(r.amount), 0),
                    'byProvider', coalesce((select jsonb_object_agg(z.pv, z.s) from (select r2.provider as pv, sum(r2.amount) as s
                        from app.fin_receipts(d, d) r2 group by 1) z), '{}'::jsonb))

@@ -179,11 +179,12 @@ function monEnv(dbRows, role = 'zavuch') {
     { _id: 'IQ-1', studentId: 'IQ-1', name: 'Sinov Bir', grade: 5, classLetter: 'A', lang: 'uz' },
     { _id: 'IQ-2', studentId: 'IQ-2', name: 'Sinov Ikki', grade: 5, classLetter: 'A', lang: 'uz' },
   ];
+  const studentsB = [{ _id: 'IQ-3', studentId: 'IQ-3', name: 'Sinov Uch', grade: 5, classLetter: 'B', lang: 'uz' }];   // ikkinchi sinf (sinf almashtirish sinovi)
   let subjectCb = null;
   const write = async (id, fn) => { if (hold) await new Promise(r => gates.push(r)); fn(id); };
   const ctx = vm.createContext({
-    VIEW_GEN: 1, SESSION: { isAdmin: false, role, assignedClasses: ['uz-5-A'] }, cache: { students }, loadCol: async () => students, loadDefinedClasses: async () => [],
-    classGroupsMap: () => ({ classes: { 'uz-5-A': { label: '5-A', list: students } }, keys: ['uz-5-A'] }), liveClassKeys: (c, k) => k,
+    VIEW_GEN: 1, SESSION: { isAdmin: false, role, assignedClasses: ['uz-5-A', 'uz-5-B'] }, cache: { students: [...students, ...studentsB] }, loadCol: async () => [...students, ...studentsB], loadDefinedClasses: async () => [],
+    classGroupsMap: () => ({ classes: { 'uz-5-A': { label: '5-A', list: students }, 'uz-5-B': { label: '5-B', list: studentsB } }, keys: ['uz-5-A', 'uz-5-B'] }), liveClassKeys: (c, k) => k,
     academicYear: () => '2026-2027', curMonth: () => '2026-11', fanPicker: id => `<input id="${id}">`, wireSubjectPicker: (id, cb) => { subjectCb = cb; },
     stuInPeriod: () => true, stuArcChip: () => '', esc: v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     $, db: {}, doc: (_d, coll, id) => ({ coll, id }), collection: (_d, c) => c, where: (f, op, v) => ({ f, op, v }), query: (c, w) => ({ c, w }),
@@ -273,6 +274,28 @@ test('A3-01 qoldig‘i: saqlash paytida OY almashtirildi — eski saqlash yangi 
   E.release(); await tickM(); await tickM();
   assert.equal(E.DB.get('IQ-1__2026-11__matematika').status, 'approved', 'eski saqlash bazaga yozildi');
   assert.equal(E.calls.round.length, roundBefore, 'eski (2026-11) karta yangi oy ekraniga chizilmadi');
+});
+
+test('A3-01 qoldig‘i (4-raund): saqlash paytida SINF almashtirildi — eski sinf kartasi yangi sinf ekraniga chizilmaydi; boshqa sinfga o‘tib qaytilsa — bir marta yangilanadi', async () => {
+  const E = monEnv(MON_DB);
+  await E.render();
+  E.open('uz-5-A', 'Matematika', '2026-11'); await tickM();
+  E.hold(true); E.click('approve'); await tickM();
+  E.open('uz-5-B', 'Matematika', '2026-11'); await tickM();   // sinf tanlagichi: load() + roundUpd() — uz-5-B kartasi
+  const before = E.calls.round.length;
+  assert.equal(E.calls.round.at(-1), 'uz-5-B|2026-11');
+  E.release(); await tickM(); await tickM();
+  assert.equal(E.DB.get('IQ-1__2026-11__matematika').status, 'approved', 'eski saqlash bazaga yozildi');
+  assert.equal(E.calls.round.length, before, 'uz-5-A kartasi uz-5-B ekraniga chizilmadi');
+  const E2 = monEnv(MON_DB);
+  await E2.render();
+  E2.open('uz-5-A', 'Matematika', '2026-11'); await tickM();
+  E2.hold(true); E2.click('approve'); await tickM();
+  E2.open('uz-5-B', 'Matematika', '2026-11'); await tickM();
+  E2.open('uz-5-A', 'Matematika', '2026-11'); await tickM();
+  const b2 = E2.calls.round.length;
+  E2.release(); await tickM(); await tickM();
+  assert.deepEqual(E2.calls.round.slice(b2), ['uz-5-A|2026-11'], 'yana o‘sha sinf × oy ko‘rsatilmoqda — karta tasdiqdan keyin bir marta yangilandi');
 });
 
 test('kech tugagan yuklash: bo‘limdan chiqib qaytilgandan keyin eski (Matematika) ro‘yxati yangi (Fizika) ekranga yozilmaydi', async () => {

@@ -2300,6 +2300,151 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   QR), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma'lumotnomasida baho / davomat / xarakteristika,
   O'IBDO' menyusida Arxiv, kassir soni va qidiruv eslatmasi) — v1 va v2 da 28/28; «arxiv qoidasi o'chirilgan» mutatsiyada yiqiladi.
 
+## 84) To'liq audit: platformaning 8 yo'nalishi — 66 topilma, tuzatish, mustaqil tekshiruv — 2026-11-18…19
+
+- **Egasi (2026-11-18):** «Platformani to'liq audit qilib chiq, barcha yo'nalishlar to'g'ri ishlashini tekshir. Kamchilik va xatolarni
+  to'g'rila. Qolgan ishlarni audit yakunlangandan keyin boshlaymiz.»
+- **Usul:** 8 yo'nalish (A1 qabul va o'quvchi, A2 davomat va tibbiyot, A3 o'quv jarayoni, A4 to'lovlar, A5 xodim / maosh / rollar,
+  A6 moliya va buxgalteriya, A7 kabinet / sayt / kirish, A8 platforma) — har biri alohida topuvchi, har topilma qayta tekshirilgan
+  (soxta topilmalar tashlangan) → 66 tasdiqlangan topilma (2 ta jiddiy (critical), 11 ta yuqori, 24 ta o'rta, 29 ta past). Tuzatish
+  10 guruhda (G1–G4, H1–H5), har biri o'z nusxasida: avval topilma joriy kodda qayta tekshirildi, so'ng tuzatish + tuzatishsiz
+  YIQILADIGAN sinov. Har guruh tuzatishini boshqa (mustaqil) tekshiruvchi «buzishga urinib» ko'rdi; u topgan yangi kamchiliklar
+  ham tuzatildi (2-raund); 2-raund tuzatishlarini yana mustaqil tekshiruvchilar ko'rdi va qolgan kamchiliklar 3 guruhda (F1–F3)
+  tuzatilib, uchinchi marta tekshirildi (3-raund). Barcha guruhlar birlashtirilib, to'liq regressiya va brauzer to'plami qayta
+  o'tkazildi.
+- **Jiddiy (critical):**
+  - **A4-01** — kassir (va moliya rollari) REST orqali `payments` jadvaliga to'g'ridan-to'g'ri yozib, soxta Click kvitansiyasi
+    yaratishi yoki pulsiz qarzni yopishi mumkin edi; Click to'lovini boshqa o'quvchiga qayta qo'llash ham mumkin edi. Endi: `pay_ins` /
+    `pay_upd` — faqat Direktor; `apply_payment` / `apply_to_invoice` faqat ishonchli yo'ldan (pul RPC'lari bayrog'i, biriktirish /
+    bo'lish RPC'lari, server); yangi `audit-10-tolov.sql` qo'riqchisi — REST orqali yangi to'lov yaratilmaydi, mavjudining pul
+    maydonlari o'zgarmaydi (Direktorning «🚫 Bekor», «✓ Bajarildi» va to'lovchi ma'lumotini tuzatishi ishlaydi).
+  - **A8-01** — har deploy tasdiq oqimidan o'tgan har o'quvchiga muddatsiz «meros» chegirma nusxasini yaratardi: muddatli / kelajakdagi
+    chegirma va grantlar jim doimiy bo'lardi. Endi nusxa yaratilmaydi; deploy avvalgi noto'g'ri nusxalarni bekor qiladi (o'chirmaydi),
+    summasi to'g'ri fakturalarda ishorani haqiqiy so'rovga ko'chiradi, qolganlarini Direktorga «↻ Qayta hisoblash» ro'yxati sifatida
+    chiqaradi; har bekor qilingan nusxa sababida qaysi faktura bilan nima qilingani saqlanadi.
+- **Yo'nalishlar bo'yicha (asosiy):**
+  - **A1 (G1):** import — ota / ona telefoni va ismi aralashmaydi (rus sarlavhalar «Телефон мамы» ham), sinf katagi to'g'ri o'qiladi
+    («5-sinf A», «10-IT», «7-Б», til so'zi), alohida «Guruh» ustuni, faqat ism bo'yicha moslash faqat FAOL o'quvchilar orasida va sinfi
+    ±1 (arxivdagi adash yangi qabulni egallamaydi), kirill sarlavhali ro'yxat, «Familiya | Ism» ustunlari, fayl ichidagi takror
+    ogohlantiriladi; «Qabul» sayt arizasining sinfi va tili, ma'muriyat rahbari huquqi, Qabul CSV formula himoyasi, «Bo'sh o'rinlar»da
+    yangi sinflar, sinov darsi o'qituvchilari (maoshsiz ko'rinishdan), yangi o'quvchi faollashtirish sanasi — bugun, «Guruh» harfi
+    mavjud sinfga moslanadi.
+  - **A2 (G2, G3, H3):** davomatni faqat o'z sinfiga yozish (server qo'riqchisi; eski '[]' satr Direktorning sinf almashtirishini
+    to'xtatmaydi), o'chirilgan o'quvchi ID'si (tibbiyot, chegirma, arxiv) qayta berilmaydi, «Davomat %» faqat «Bemor / Sababli»
+    qolganda tozalanadi, `student_history` tibbiy yozuvlar sonini faqat Direktorga beradi; kasal kun qaytimi faktura qoidasi bilan bir
+    xil (xodim farzandi, kontrakt, grant — qaytarilmaydi), fakturaga sig'magan kasal kunlar yo'qolmaydi (faqat qoplangan kunlar
+    belgilanadi, qolgani qaytariladi), xodim «Keldi» qoidasi hamma joyda bir xil, «Narx jadvali» izohi; davomat KPI — dars kunlari
+    Du–Ju (shanba emas, bayramlar hisobga olinadi).
+  - **A3 (H1):** baho / monitoring / xarakteristika / fan izohi / oylik xulosa — server faqat o'quvchining HAQIQIY sinfiga va
+    o'qituvchining o'z sinfi va faniga yozishga ruxsat beradi (deployda noto'g'ri sinfga yozilgan joriy davr satrlari to'g'rilanadi);
+    O'IBDO' tasdig'i qayta saqlashda jim bekor bo'lmaydi; ball 0–100; rasmiy profil / ma'lumotnoma to'liq (qabulxona uchun ham);
+    «Oylik xulosa (ota-onaga)» sinf rahbari / kuratorga; monitoring yozuvini o'chirish (o'zi kiritgan, tasdiqlanmagan); baho va
+    xarakteristika ekranlari faqat o'zgargan katakni yozadi (boshqa o'qituvchi yozgani o'chmaydi); «Saqlash» tasdiqlamaydi.
+  - **A4 (G4):** yuqoridagi A4-01; moliya rollari fakturani o'zi nolga tushira / «to'landi» qila olmaydi (qayta hisoblash — faqat
+    Direktor; `inv_upd` — faqat Direktor; moliya «Bekor» — `cancel_invoice` orqali); avans (qayta hisoblash, Click/Uzum ortig'i, kasal
+    kun qaytimi) darhol ochiq qarzga qo'llanadi (shubhali oylarda — kutadi); yangi faktura SMS / Telegram'ida avansdan keyingi QOLDIQ.
+  - **A5 (H2):** maosh darvozasi va oldingi qoldiq bazadagi tasdiqlangan vedomostdan (manfiy / soxta yozuv o'tmaydi); qayta ochilgan oy
+    ortiqchasi keyingi oyga o'tadi; kelgusi oy vedomosti yo'q, tugamagan oyni faqat Direktor tasdiqlaydi; o'chirilgan login karta
+    havolasidan uziladi; oxirgi faol Direktor o'chirilmaydi / rolini yo'qotmaydi, hech kim o'z rolini o'zi almashtirmaydi; «Direktor
+    tasdig'i kerak» belgisi tasdiqlashda qayta hisoblanadi; Direktor navbatida faqat ko'rib chiqiladigan qatorlar; vedomost
+    ishtirokchilari ismi (ID o'rniga).
+  - **A6 (H3):** Telegram kunlik hisobotida oldingi hisobotdan keyingi (kechqurungi / dam olish kuni) to'lovlar; kassadagi o'quvdan
+    tashqari daromad Buxgalteriyada; qarz KPI ketgan / muzlatilganlarni ham ko'rsatadi; 'paid' faktura hamma joyda to'liq to'langan;
+    vaqtinchalik xatoda kunlik hisobot qayta yuboriladi; avans qaytarimi kassa hisobotida; biriktirilmagan to'lovlar — hammasi;
+    «O'zaro hisob» nomi; yillik prognoz ma'lumotli oylar bo'yicha.
+  - **A7 (H4a, H4b):** qabulxona / O'IBDO' kod bilan istalgan bolani o'z hisobiga bog'lay olmaydi — xodim hisobiga farzand faqat Direktor
+    tasdig'i bilan; e'lon tahriri Telegram navbatini yangilaydi; xodim-ota-ona farzandining e'lonlarini ko'radi; chiqqan o'quvchi
+    oilasiga yangi e'lon va rasmiy ma'lumotnoma berilmaydi (kabinet va Telegramda bir xil qoida); ketgan o'qituvchi saytda yo'q;
+    «Uzish» faqat ota-ona Telegram havolasini uzadi; o'quvchi murojaati «o'quvchi» deb yoziladi; tabga qaytish / token yangilanishi
+    panel va kabinetni qayta qurmaydi (kiritilgan ma'lumot o'chmaydi); «Chiqish» faqat shu qurilmadan; `/sheet` o'z cheklovi va
+    Direktor kirishi bilan.
+  - **A8 (H4a, H5):** A8-01; video yuklash chegarasi server bilan bir xil (20 MB); aralash lotin-kirill matnlar tuzatildi.
+- **Mustaqil tekshiruv (2-raund) — tuzatildi:** G1 — import: «Телефон мамы» / «Мамин телефон» ona telefoni (avval otaning raqami
+  ustiga yozilardi), «Telefon №» yana telefon, «Vasiy F.I.Sh» vasiy ismi, sinf katagidagi til so'zi («5-A rus») harf emas (til
+  belgisi), import uchun kirill «В» faqat B sinfi bo'lsa — noaniq (jim B ga emas), alohida «Familiya | Ism | Otchestvo» ustunlari,
+  fayl ichidagi takror — ogohlantirish; G2 — `student_history` tibbiy yozuvlar soni faqat Direktorga, davomat qo'riqchisi kunlarni
+  faqat yozilganda tekshiradi (eski '[]' satr sinf almashtirishni to'xtatmaydi), tiklashda «Xodim farzandi» uzilgani yopilguncha
+  turadigan oynada; H5 — A8-01 izi bekor qilingan nusxa sababida, ko'chgan fakturalar ro'yxati deploy chiqishida; G4 — fantom faktura
+  «Bekor» / «O'chir» qilinsa avans darhol qarzga, to'lov holatini NULL qilib bo'lmaydi, sababsiz 0 so'mlik «to'langan» faktura
+  yo'q (NULL ustun qo'riqchini o'tkazib yubormaydi), «Yangi faktura» `{amount}` izohi; H4b — kod ko'radigan xodimning bog'lanishi
+  blokdan chiqarilganda ham Direktor tasdig'isiz faollashmaydi (yozish qo'riqchisi), «Uzish» faqat kartadagi havolani, kabinetda
+  «⏳ Direktor tasdig'ini kutmoqda» belgisi. Birlashtirishda: kasal kun qaytimi avansga tushgach (G3) `credit_sweep` (G4) chiqqan
+  o'quvchining haqiqiy qoldiq qarzini yopadi — to'g'ri xatti-harakat, sinov moslandi.
+- **Mustaqil tekshiruv (3-raund) — tuzatildi:** F1 (A5) — xodim avansini o'chirish, kamaytirish yoki boshqa oy / xodimga ko'chirish
+  va maosh berish yozuvini o'chirish endi faqat Direktor (kassa orderini bekor qilish, server va «Yangi noyob ID berish» — mustasno):
+  avval Moliya menejeri avansni 1 so'mga tushirib vedomostdagi to'lanadigan summani oshira, HR to'langan maosh yozuvini o'chirib o'sha
+  oyni qayta to'lay olardi; oy tugamasdan yuborilgan vedomostni HR oy tugagach ham tasdiqlamaydi («eskirgan» — HR qaytaradi, Moliya
+  menejeri oy tugagach qayta yuboradi yoki Direktor tasdiqlaydi); maosh sinovi har tekshiruvni sanaydi (yo'qolgan / NULL tekshiruv —
+  FAIL); deploy ogohlantirishlari: o'tish oyidan oldingi qoldiq (hali tasdiqlangan vedomostga kirmagan — navbatdagi vedomostga
+  «oldingi qoldiq» bo'lib o'zi qo'shiladi), eskirgan vedomostlar, uzilgan karta havolasi eski hisob ID'si bilan. F2 (A6, A2) — ikki
+  bosqichli Click / Uzum to'lovi (hisobot paytida boshlanib keyin tugagan) kunlik Telegram hisobotidan yo'qolmaydi
+  (`payments."receivedAt"` — tushumga aylangan payt); javobi noaniq Telegram yuborish (uzilish, qisman javob) qayta yuborilmaydi —
+  ikki marta xabar yo'q; A4 «Kirim» izohi va boshqa daromad nomlari; eski «to'langan» faktura to'lov tarixida to'liq summa bilan;
+  kech kelish — kelish skanidan (chiqish, tanaffus va Hikvision ortiqcha ish skanlari emas; bosh sahifa va oylik ushlanma bir xil);
+  «Bemor kunlari» navbatida toifasi chiqarilgan (xodim farzandi, kontrakt, grant) o'quvchi tugmasiz kartochka bo'lib qolmaydi. F3 (A3,
+  A7) — monitoringda eski saqlash yangi tanlangan fan / sinf / oy ekranini bo'yamaydi (faqat fan almashganda sinf × oy kartasi
+  yangilanadi); qabulxona oynasi va «🖨 Ichki hisobot» davomat, monitoring, baho va xarakteristikani rasmiy yig'madan ko'rsatadi
+  (qo'shimcha «Qabulxona» rolidagi sinf rahbari o'zi o'qiy oladiganini — o'z ma'lumotidan); bloklangan hisobning seansi qurilmada
+  qolmaydi (global chiqish xato bersa — mahalliy chiqish); Google Sheets kunlik chegarasi «bir daqiqadan keyin» emas, alohida xabar
+  bilan; o'quv jarayoni tuzatishi xabari deploy konsolida ko'rinadi. Uchinchi tekshiruvchilar topgan qoldiqlar (maosh ogohlantirishi
+  qoldiq vedomostga kirgach ham qolishi, ortiqcha ish skanlari, qo'shimcha rol hisoboti, raund kartasi, sinov himoyasi tartibi) ham
+  tuzatildi va har biri tuzatishsiz yiqiladigan sinov bilan.
+- **Yakuniy mustaqil tekshiruv (4-raund):** oxirgi tuzatishlarni ikki tekshiruvchi (SQL / deploy va interfeys) yana buzishga urindi —
+  jiddiy topilma yo'q, to'liq regressiya yashil; past darajalilari tuzatildi: maosh deploy ogohlantirishida kartasi o'chirilgan maosh
+  ID'si alohida qatorda (uning qoldig'i vedomostga qo'shilmaydi — «o'zi qo'shiladi» deyilmaydi, qo'lda hal qilinadi), ortiqcha berilgan
+  qoldiq — «ushlanadi»; kunlik Telegram hisobotining `asOf`i — funksiya boshlangan haqiqiy soat (sinov bazasida — sinov soati),
+  `receivedAt` bilan bir xil asos: hisobotda ko'ringan to'lov keyingi hisobotda qayta sanalmaydi; oylik «O'rt. kelish» — faqat haqiqiy
+  kelish skanlaridan (faqat chiqish / ortiqcha ish skani bo'lgan kun o'rtachaga qo'shilmaydi); qo'shimcha «Qabulxona» rolidagi o'qituvchi
+  uchun faqat «Bemor / Sababli» belgili davomat va 📝 bilan o'chirilgan oxirgi xulosa to'g'ri ko'rsatiladi. Sinovlar mutatsiya bilan
+  kuchaytirildi: maosh — yuborilgan / qayta ochilgan vedomost, o'tish oyidan oldingi tasdiqlangan vedomost, kartasiz maosh ID'si,
+  22 ta osilib qolgan havola, deploy konsoli (alohida psql seansi deploy.sh filtri bilan); moliya — ishlab chiqarish yo'li (sinov
+  soatisiz); monitoring — sinf almashtirish. Tasdiqdan keyin Direktor eski oyni o'zgartirsa farq keyingi vedomostga o'zi qo'shiladi
+  (`app.salary_carry` har safar barcha yozuvlardan hisoblaydi) — xodim ogohlantirishga qaytmaydi, bu kutilgan.
+- **Deploy mashqi (yakuniy kod bilan, 2026-11-19):** jonli versiya (`82e605a`) zanjiri bilan qurilgan bazaga sintetik ma'lumot
+  (qabulxona hisobidagi tasdiqsiz farzand bog'lanishi, boshqa sinf kaliti bilan joriy oy monitoring satri, 950 ball, o'chirilgan
+  hisobga qaragan karta, maosh o'tish oyi 2026-09 va undan oldingi qoldiq, oy tugamasdan yuborilgan vedomost, eski Click to'lovlari)
+  → yangi zanjir: xato yo'q; deploy.sh ko'rsatadigan OGOHLANTIRISH qatorlari kutilganidek (bog'lanish — kutilmoqda, monitoring satri —
+  haqiqiy sinfga «TUZATILDI», 950 ball — faqat ro'yxat, karta havolasi — eski hisob ID'si bilan bo'shatildi, maosh qoldig'i va
+  eskirgan vedomost — ID'lar bilan); eski to'lovlarda `receivedAt` bo'sh qoladi. Qayta ishga tushirish — xato yo'q, takror tuzatish
+  yo'q (faqat hali hal qilinmagan holatlar eslatmasi: ball, maosh qoldig'i, eskirgan vedomost). Bo'sh bazada xuddi shu yangilanishdan
+  keyin barcha jonli to'plamlar (14 ta) yashil.
+- **Xodimlar uchun o'zgarishlar (egasi bilishi kerak):** (1) to'lov yozuvini hech kim (Direktor ham) REST orqali yarata olmaydi —
+  faqat server va pul RPC'lari; (2) moliya rollari fakturani qayta hisoblamaydi; (3) xodim hisobiga farzand bog'lash — Direktor
+  tasdig'i bilan («✅ Tasdiqlash» → «Xodim hisobiga farzand bog'lash»); birinchi deployda O'IBDO' / qabulxona hisoblaridagi
+  tasdiqlanmagan bog'lanishlar «kutilmoqda»ga o'tadi (deploy OGOHLANTIRISH bilan ID'larni chiqaradi) — haqiqiy ota-ona xodimni
+  Direktor bir marta tasdiqlaydi; (4) tugamagan oy vedomostini faqat Direktor tasdiqlaydi; (5) o'qituvchi faqat o'z sinfi va faniga
+  baho / monitoring yozadi; (6) e'lon Telegram'da yetkazilgandan keyin tahrir qayta yuborilmaydi (tuzatish — yangi e'lon); (7) xodim
+  avansini o'chirish / kamaytirish / boshqa oy yoki xodimga ko'chirish va maosh berish yozuvini o'chirish — faqat Direktor (kassa orqali
+  berilgani — «Kassa»da orderni bekor qilish bilan; summani oshirish, izoh va shu oy ichida sanani tuzatish — avvalgidek); (8) oy
+  tugamasdan yuborilgan vedomostni HR tasdiqlamaydi — qaytaradi, Moliya menejeri oy tugagach qayta yuboradi (shoshilinch — Direktor).
+- **Deploydan keyin (Direktor):** deploy chiqishidagi «OGOHLANTIRISH» qatorlari: A8-01 (bekor qilingan nusxalar, ishorasi ko'chgan va
+  qayta hisoblanadigan fakturalar — ro'yxatdagi oylar uchun «↻ Qayta hisoblash»; to'langan faktura narxi oshmaydi — qo'lda qaror),
+  A7-01 (kutilmoqdagi xodim-ota-ona bog'lanishlari — tasdiqlash), A3 (0–100 dan tashqari eski ballar ro'yxati), A5-04 (uzilgan
+  karta havolalari — karta→eski hisob ID), maosh (o'tish oyidan oldingi qoldiq — navbatdagi vedomostga o'zi qo'shiladi, alohida
+  to'lamang; kartasi o'chirilgan maosh ID'si qoldig'i — qo'lda hal qilinadi; eskirgan vedomost — HR qaytaradi, Moliya menejeri oy
+  tugagach qayta yuboradi). Kasal kun qoidasi uchun «Narx jadvali»da o'tish oyini belgilash tavsiya etiladi (eski fakturalar — «↻ Qayta
+  hisoblash» bilan). Telegram kunlik hisobot sozlamasida shanba belgilangan bo'lsa — olib tashlang.
+- **Egasi qaroriga qoldirilgan (kod o'zgarmagan):** `/chat` uchun IP bo'yicha kunlik cheklov (mobil operatorlar umumiy IP — faqat
+  suiiste'mol ko'rilsa nginx `limit_req`); kassadagi ortiqcha / kamomadni foyda-zararga kiritish va OP-24 / OP-18 ni operatsion
+  bo'lmagan xarajat deb belgilash (buxgalter qarori); monitoringda fan «o'tkazilgan» deb faqat tasdiqlangan ball bilan sanash
+  (monitoring_avg va admin.html birga); eski qoidadagi (o'tish oyidan oldingi) ortiqcha kasal kunlarni avtomatik avansga o'tkazish;
+  baho / xarakteristika / fan izohi jadvallariga change_log; faqat ortiqcha ish (overtime) skani bo'lgan ish kuni hozir «keldi» (istalgan
+  skan qoidasi) va kunlik haq to'liq — kerak bo'lsa bunday kunni yo'qlama deb hisoblash (terminal hozir faqat kirish / chiqish yuboradi); Direktor / O'IBDO' yozuvi qayta o'qish va yozish oralig'ida o'qituvchining
+  bir vaqtdagi o'zgarishini bosib ketishi (juda kam; o'qituvchilar uchun to'qnashuv tekshiruvi bor); Click / Uzum to'lovni keyin
+  qaytarsa, uning boshqa oyga allaqachon qo'llangan ortig'i qo'lda qaytariladi (ekranda belgilanadi). Ma'lum qoldiq (hujjatlashtirilgan):
+  kunlik Telegram hisobotining «oldingi hisobotdan keyin» qatorida to'lovni tushumga aylantirgan tranzaksiya hisobot paytidan oldin
+  boshlanib keyin tugasa (millisekundlar oynasi), to'lov u qatordan tushib qolishi mumkin — kassa / oylik hisobotlarga ta'sir yo'q.
+- **Sinovlar:** yangi SQL to'plamlar `test-audit-10-qabul` (18), `test-audit-10-davomat` (54), `test-audit-10-tolov` (34),
+  `test-audit-10-bemor` (20), `test-audit-11-platforma` (28), `test-audit-11-elon` (63), `test-audit-11-talim` (46),
+  `test-audit-11-maosh` (57; tekshiruvlar soni kutilgan son bilan solishtiriladi), `test-audit-11-moliya` (43 dev / 41 jonli) — dev va
+  jonli zanjirda, zanjir qayta ishga tushirilgandan keyin ham; JS: `stu-import` (38), `davomat-bemor` (18), `acad-save` (18),
+  `pay-carry` (10), `fin-rpt` (6), `kirish` (11), `disc-legacy` (6), `platforma-ui` (7), `stu-report` (8), `kabinet-claim` (4),
+  `payments/sms-new.test.cjs`, `ai.test.cjs` (42), `telegram.test.cjs` (41), `tg-daily.test.cjs` (75); mavjud to'plamlar (kassa
+  339 / 195 / 163 / 169, fin-period 42, fin-prereq 97, fin-rights 125, kassa-checks 55 — barmoq izlari o'zgarmagan, audit-fixes 64,
+  public-close 92, payer-codes 67 dev / 64 jonli, student-archive 23, poyga 59) — hammasi yashil. Har yangi tekshiruv tuzatishsiz
+  (eski kodda) yiqilishi ko'rsatilgan. Brauzer to'plami (`tests/kassa-e2e`, `bash run-all.sh`) — 42 o'tish, 1124 tekshiruv, hammasi
+  o'tdi (arxiv ssenariysi endi 30 tekshiruv: qabulxona ichki ma'lumotnomasi yig'madan).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

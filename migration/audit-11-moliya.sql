@@ -40,7 +40,7 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 --    hisobotda chiqmasdi: jumada u hali tushum emas edi, keyingi hisobotning 'since' oynasi esa asOf dan keyin kiritilganlarni olardi.
 --    Yechim: shu ustun. Tushum ta'rifi — hisobotlarnikidek (app.counts_as_receipt). Tushum holatida yaratilgan qator — "createdAt"
 --    (kiritilgan payt = tushgan payt; tarixiy import / server yozuvining o'z vaqti saqlanadi — import payti emas); tushum bo'lmagan
---    holatdan tushumga o'tgan qator — o'sha payt (server soati app.fin_now(), "createdAt" / "statusAt" bilan bir xil manba).
+--    holatdan tushumga o'tgan qator — o'sha UPDATE'ning haqiqiy soati (pastda; sinov bazasida — sinov soati app.fin_now()).
 --    BIR MARTA qo'yiladi va keyin o'zgarmaydi: biriktirish ('unmatched' → 'applied') — ikkala holat ham tushum, qayta qo'yilmaydi (to'lov
 --    ikki hisobotda sanalmasin; "statusAt" shu sabab yaramaydi — u har holat o'zgarishida yangilanadi), bekor / qaytarish ham uni
 --    o'chirmaydi. Qiymatni FAQAT trigger qo'yadi: server va pul funksiyalari yuborgani e'tiborsiz; REST (Direktor) yuborgani —
@@ -52,12 +52,16 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 --    Eski qatorlar (ustun bo'sh) — "createdAt" bo'yicha, avvalgidek (coalesce); deploydan oldin prepare qilinib keyin complete bo'lgani —
 --    complete payti bilan. Oyna sharti coalesce("receivedAt", "createdAt") — indeks shu ifoda bo'yicha.
 --    Tushumga O'TGAN payt — o'sha UPDATE ishlagan haqiqiy soat (clock_timestamp(); sinov bazasida — sinov soati app.fin_now()), tranzaksiya
---    boshlangan payt (now()) emas: oyna torayadi (3-raund tekshiruvi). MA'LUM QOLDIQ (to'liq yopilmagan): tushumga aylantirgan tranzaksiya
---    UPDATE'ni hisobot paytidan (asOf) OLDIN bajarib, hisobot ma'lumotni o'qigandan KEYIN commit qilsa — to'lov ikkala hisobotning
---    «oldingi hisobotdan keyin» qatoridan tushib qolishi mumkin. Oyna — UPDATE'dan commit'gacha (Click / Uzum holat yozuvi —
+--    boshlangan payt (now()) emas: oyna torayadi (3-raund tekshiruvi). Hisobotning 'asOf'i ham shu asosda — director_daily boshlangan
+--    haqiqiy soat (telegram.sql; funksiya so'rovlari undan OLDIN olingan snapshot'ni ko'radi): hisobotda ko'ringan to'lovning
+--    "receivedAt"i doim 'asOf' dan kichik — ikki hisobotda sanalmaydi (4-raund tekshiruvi: 'asOf' = now() bo'lganda tranzaksiyasi hisobotdan
+--    oldin boshlanib UPDATE'ni keyin qilgan va hisobot o'qishidan oldin commit qilgan to'lov ikki marta sanalardi). MA'LUM QOLDIQ (to'liq
+--    yopilmagan): tushumga aylantirgan tranzaksiya UPDATE'ni hisobot snapshot'idan (asOf) OLDIN bajarib, KEYIN commit qilsa — to'lov ikkala
+--    hisobotning «oldingi hisobotdan keyin» qatoridan tushib qolishi mumkin. Oyna — UPDATE'dan commit'gacha (Click / Uzum holat yozuvi —
 --    millisekundlar; qo'lda to'lov + kassa — biroz uzoqroq); tushum holatida YARATILGAN to'lovda ham shunday ("createdAt" — now(),
 --    avval ham shunday edi). To'liq yopish uchun hisobot o'z snapshot'ini saqlashi kerak bo'lardi — kunlik Telegram qatori faqat ma'lumot
---    uchun, kunlik / oylik moliya hisobotlari (kassa kuni bo'yicha) bundan ta'sirlanmaydi.
+--    uchun, kunlik / oylik moliya hisobotlari (kassa kuni bo'yicha) bundan ta'sirlanmaydi. Sinov bazalari nomi sinov soatiga mos keladi —
+--    ishlab chiqarish yo'li (clock_timestamp) test-audit-11-moliya R11 da app.fin_clock_allowed() vaqtincha false qilinib tekshiriladi.
 --
 -- Idempotent — QAYTA ishga tushirishga xavfsiz (create or replace, add column / create index if not exists, drop trigger if exists;
 --   mavjud ma'lumot o'zgarmaydi — yangi ustun eski qatorlarda bo'sh qoladi).

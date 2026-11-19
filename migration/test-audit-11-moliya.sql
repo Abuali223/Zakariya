@@ -155,8 +155,12 @@ select zz.chk('T06 oldingi hisobot 31 kundan eski — oyna oxirgi 31 kun (12-okt
   zz.as('U_DIR', $q$select ((public.director_daily('2026-11-12')->'since'->>'from')::timestamptz = '2026-10-12 00:00+05')::text$q$), '^true$');
 select zz.chk('T07 oldingi hisobot yo''q (birinchi hisobot) — since null',
   zz.as('U_DIR', $q$select jsonb_typeof(public.director_daily('2026-09-01')->'since')$q$), '^null$');
-select zz.chk('T08 asOf — ma''lumot olingan payt (now())',
-  zz.as('U_DIR', $q$select ((public.director_daily('2026-11-16')->>'asOf')::timestamptz = now())::text$q$), '^true$');
+-- asOf — "receivedAt" bilan bir xil asos: sinov bazasida sinov soati (ishlab chiqarish yo'li — R11)
+insert into app.fin_clock (id, t) values (1, '2026-11-16 19:00:07+05') on conflict (id) do update set t = excluded.t;
+select zz.as('U_DIR', $q$select public.director_daily('2026-11-16')->>'asOf'$q$) as t08 \gset
+delete from app.fin_clock where id = 1;
+select zz.chk('T08 asOf — ma''lumot olingan payt, "receivedAt" bilan bir xil asosda (sinov bazasida — sinov soati 19:00:07)',
+  ((:'t08')::timestamptz = '2026-11-16 19:00:07+05')::text, '^true$');
 select zz.chk('T09 biriktirilmagan — BARCHASI («To''lovlar» ro''yxati bilan bir xil): 2 ta, 120 000, eng eskisi 10-noyabr; avval faqat bugungi 1 ta',
   zz.as('U_DIR', $q$select (d->>'unmatched') || ' ' || (d->>'unmatchedSum') || ' ' || (d->>'unmatchedSince') from (select public.director_daily('2026-11-16') d) x$q$),
   '^2 120000 2026-11-10$');
@@ -231,6 +235,25 @@ select zz.chk('R10 trigger — BEFORE triggerlarning oxirgisi (pay_direct_guard 
   (select string_agg(t.tgname, ',' order by t.tgname) from pg_trigger t where t.tgrelid = 'public.payments'::regclass and not t.tgisinternal and t.tgtype & 2 = 2),
   '(^|,)trg_pay_direct_guard,trg_pay_received$');
 delete from app.fin_clock where id = 1;
+-- (4-raund) ISHLAB CHIQARISH yo'li: sinov bazalari nomi sinov soatiga mos (app.fin_clock_allowed()) — savepoint ichida vaqtincha false.
+--   "receivedAt" — tushumga aylantirgan UPDATE'ning haqiqiy soati (tranzaksiya boshi now() emas); asOf — director_daily boshlangan haqiqiy
+--   soat (so'rovlari undan oldingi snapshot'ni ko'radi: hisobotda ko'ringan to'lov keyingi hisobotda qayta sanalmaydi).
+savepoint r11;
+create or replace function app.fin_clock_allowed() returns boolean language sql stable set search_path = public, app, pg_temp as $f$ select false $f$;
+insert into public.payments (id, "studentId", provider, amount, status, raw, matched) values
+  ('click_r11', 'IQ-0301', 'click', 21000, 'prepared', '{"mode":"precise"}', true);
+select clock_timestamp() as r11c0 \gset
+update public.payments set status = 'applied', merchant_confirm_id = 'mc_r11' where id = 'click_r11';
+select clock_timestamp() as r11c1 \gset
+select coalesce(to_jsonb(p) ->> 'receivedAt', 'NULL') as r11rcv from public.payments p where p.id = 'click_r11' \gset
+select clock_timestamp() as r11c2 \gset
+select zz.as('U_DIR', $q$select public.director_daily('2026-11-16')->>'asOf'$q$) as r11asof \gset
+select clock_timestamp() as r11c3 \gset
+rollback to savepoint r11;
+select zz.chk('R11 ishlab chiqarish yo''li (sinov soatisiz): "receivedAt" — UPDATE''ning haqiqiy soati (tranzaksiya boshidan keyin); asOf — funksiya boshlangan haqiqiy soat',
+  (case when :'r11rcv' = 'NULL' then 'NULL' else ((:'r11rcv')::timestamptz between (:'r11c0')::timestamptz and (:'r11c1')::timestamptz)::text
+          || ' ' || ((:'r11rcv')::timestamptz > now())::text end)
+  || ' ' || coalesce(((:'r11asof')::timestamptz between (:'r11c2')::timestamptz and (:'r11c3')::timestamptz)::text, 'NULL'), '^true true true$');
 
 -- ===== (K) Kassadagi o'quv to'lovidan tashqari daromad (A6-02) =====
 select case when to_regclass('public.cash_docs') is not null then 'true' else 'false' end as has_kassa \gset
