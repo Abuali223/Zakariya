@@ -466,7 +466,8 @@ end $$;
 --   Avval ular HECH QAYSI hisobotda chiqmasdi: 'payments' — faqat bugungi kassa kuni, 'late' — faqat bugun kiritilgan orqa sanali to'lov.
 --   «Tushgan» payti — payments."receivedAt" (to'lov birinchi marta tushumga aylangan payt, audit-11-moliya.sql; eski qatorda — "createdAt"):
 --   ikki bosqichli Click / Uzum to'lovi (prepare / create — tushum emas, complete / confirm — tushum) hisobot paytidan OLDIN boshlanib,
---   KEYIN tugasa ham keyingi hisobotda chiqadi (A6-01, 2-raund; avval "createdAt" bo'yicha tanlanib, hech qaysi hisobotga tushmasdi).
+--   KEYIN tugasa ham keyingi hisobotda chiqadi (A6-01, 2-raund; avval "createdAt" bo'yicha tanlanib, hech qaysi hisobotga tushmasdi);
+--   ma'lum qoldiq (tushumga aylantirgan tranzaksiya hisobot snapshot'idan keyin commit qilsa) — audit-11-moliya.sql sarlavhasida.
 --   Yuqori chegara — "createdAt" < bugun boshi: uch blok kiritilgan vaqt bo'yicha kesishmaydi ('since' — bugundan oldin kiritilgan,
 --   'payments' va 'late' — bugun); 23:59 da prepare, yarim tundan keyin complete bo'lgan to'lov ertasi kungi 'since'da (o'sha kunning
 --   'payments' / 'late'ida yo'q). Oldingi hisobot yo'q (birinchi hisobot) — 'since' null; 31 kundan eski — oxirgi 31 kun.

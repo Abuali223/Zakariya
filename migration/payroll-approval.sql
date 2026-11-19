@@ -133,7 +133,17 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   r2 as (select month, ord, due, coalesce(paid, due) as paidv from r where not gated),
   d as (select month, max(due) as due from r2 x where ord = (select max(ord) from r2 y where y.month = x.month) group by month),
   p as (select month, sum(paidv) as paid from r2 group by month),
-  g as (select month, sum(coalesce(paid, 0)) as paid from r where gated group by month),
+  g as (select month, sum(coalesce(paid, 0)) as paid from r where gated group by month
+        union all
+        -- (audit, 5-raund) Tasdiqlangan oy, to'lanadigan 0 (oldingi ortiqcha yoki avans uni to'liq yopgan) va maosh yozuvi yo'q: oyning
+        --   o'z summasi qoldiqqa kiradi. To'lanadigan 0 bo'lgani uchun hech kim 0 so'mlik yozuv kiritmaydi — avval bu oy o'zlashtirgan
+        --   ortiqcha qism keyingi oyda yana ushlanardi (masalan 300 000 ortiqcha, dekabr 100 000 ni yopdi, yanvarda yana 300 000).
+        --   To'lanadigan > 0, lekin hali to'lanmagan oy — avvalgidek kiritilmaydi (ikki marta to'lanmasin).
+        select l."runId", 0 from public.payroll_lines l
+          join public.payroll_runs pr0 on pr0.id = l."runId" and pr0.status = 'approved'
+          cross join f
+         where l."personId" = p_tid and f.v_from is not null and l."runId" >= f.v_from and l."runId" < p_before and l.payable <= 0
+           and not exists (select 1 from r where r.gated and r.month = l."runId")),
   gd as (select coalesce(l.gross - app.payroll_adv(p_tid, g.month) - l.deduction + l."subBonus", 0) - g.paid as bal
            from g join public.payroll_runs pr on pr.id = g.month and pr.status = 'approved'
            left join public.payroll_lines l on l."runId" = g.month and l."personId" = p_tid)

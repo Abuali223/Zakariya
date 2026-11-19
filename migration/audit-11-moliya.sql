@@ -56,9 +56,10 @@ do $iqror_guard$ begin raise exception 'iqror: audit-11-moliya.sql ALOHIDA ishga
 --    haqiqiy soat (telegram.sql; funksiya so'rovlari undan OLDIN olingan snapshot'ni ko'radi): hisobotda ko'ringan to'lovning
 --    "receivedAt"i doim 'asOf' dan kichik — ikki hisobotda sanalmaydi (4-raund tekshiruvi: 'asOf' = now() bo'lganda tranzaksiyasi hisobotdan
 --    oldin boshlanib UPDATE'ni keyin qilgan va hisobot o'qishidan oldin commit qilgan to'lov ikki marta sanalardi). MA'LUM QOLDIQ (to'liq
---    yopilmagan): tushumga aylantirgan tranzaksiya UPDATE'ni hisobot snapshot'idan (asOf) OLDIN bajarib, KEYIN commit qilsa — to'lov ikkala
---    hisobotning «oldingi hisobotdan keyin» qatoridan tushib qolishi mumkin. Oyna — UPDATE'dan commit'gacha (Click / Uzum holat yozuvi —
---    millisekundlar; qo'lda to'lov + kassa — biroz uzoqroq); tushum holatida YARATILGAN to'lovda ham shunday ("createdAt" — now(),
+--    yopilmagan): to'lov "receivedAt" < asOf (funksiya boshlangan payt) bo'lib, tranzaksiyasi hisobot so'rovining snapshot'idan KEYIN
+--    commit qilsa — to'lov ikkala hisobotning «oldingi hisobotdan keyin» qatoridan tushib qolishi mumkin. Oyna — UPDATE'dan commit'gacha
+--    (Click / Uzum holat yozuvi — millisekundlar; qo'lda to'lov + kassa — biroz uzoqroq) va snapshot bilan funksiya boshi orasidagi
+--    mikrosekundlar; tushum holatida YARATILGAN to'lovda ham shunday ("createdAt" — now(),
 --    avval ham shunday edi). To'liq yopish uchun hisobot o'z snapshot'ini saqlashi kerak bo'lardi — kunlik Telegram qatori faqat ma'lumot
 --    uchun, kunlik / oylik moliya hisobotlari (kassa kuni bo'yicha) bundan ta'sirlanmaydi. Sinov bazalari nomi sinov soatiga mos keladi —
 --    ishlab chiqarish yo'li (clock_timestamp) test-audit-11-moliya R11 da app.fin_clock_allowed() vaqtincha false qilinib tekshiriladi.

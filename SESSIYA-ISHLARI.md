@@ -2400,6 +2400,15 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   22 ta osilib qolgan havola, deploy konsoli (alohida psql seansi deploy.sh filtri bilan); moliya — ishlab chiqarish yo'li (sinov
   soatisiz); monitoring — sinf almashtirish. Tasdiqdan keyin Direktor eski oyni o'zgartirsa farq keyingi vedomostga o'zi qo'shiladi
   (`app.salary_carry` har safar barcha yozuvlardan hisoblaydi) — xodim ogohlantirishga qaytmaydi, bu kutilgan.
+- **Yakuniy tekshiruv (5-raund):** 4-raund tuzatishlari ham mustaqil tekshirildi — kunlik hisobot `asOf`, «O'rt. kelish», qabulxona
+  hisoboti va sinovlar «buzilmadi». Tuzatildi: (1) maosh deploy ogohlantirishi kalitni `payroll_submit` qidiruvi bilan bir xil tasniflaydi —
+  ID chetida bo'sh joy bilan yozilgan eski kalit ham («o'zi qo'shiladi» emas) qo'lda hal qilinadiganlar qatorida, qo'shtirnoqda; bunday
+  kartalar alohida ogohlantirishda (vedomost orqali maosh berilmaydi — ID'ni texnik tuzatish kerak); (2) **audit oldidan bor bo'lgan
+  (o'rta) xato**: `app.salary_carry` tasdiqlangan oyni faqat maosh yozuvi bo'lsa hisobga olardi — oldingi ortiqcha (yoki katta avans)
+  oyning to'lanadiganini 0 ga tushirib, hech kim 0 so'mlik yozuv kiritmasa, o'sha oy o'zlashtirgan qism keyingi oyda yana ushlanardi
+  (300 000 ortiqcha, dekabr 100 000 ni yopdi — yanvarda yana 300 000; xodim 100 000 kam olardi). Endi to'lanadigan 0 bo'lgan tasdiqlangan
+  oy yozuvsiz ham hisobga kiradi; to'lanmagan (to'lanadigan > 0) oy — avvalgidek kirmaydi (ikki marta to'lanmasin). Sinovlar: N08 (o'tish
+  oyining o'zidagi tasdiqlangan qator), N09 (bo'sh joyli ID), N10 (20 ta cheklov), Q01 (yangi qoldiq qoidasi) — eski kodda yiqiladi.
 - **Deploy mashqi (yakuniy kod bilan, 2026-11-19):** jonli versiya (`82e605a`) zanjiri bilan qurilgan bazaga sintetik ma'lumot
   (qabulxona hisobidagi tasdiqsiz farzand bog'lanishi, boshqa sinf kaliti bilan joriy oy monitoring satri, 950 ball, o'chirilgan
   hisobga qaragan karta, maosh o'tish oyi 2026-09 va undan oldingi qoldiq, oy tugamasdan yuborilgan vedomost, eski Click to'lovlari)
@@ -2421,7 +2430,8 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   qayta hisoblanadigan fakturalar — ro'yxatdagi oylar uchun «↻ Qayta hisoblash»; to'langan faktura narxi oshmaydi — qo'lda qaror),
   A7-01 (kutilmoqdagi xodim-ota-ona bog'lanishlari — tasdiqlash), A3 (0–100 dan tashqari eski ballar ro'yxati), A5-04 (uzilgan
   karta havolalari — karta→eski hisob ID), maosh (o'tish oyidan oldingi qoldiq — navbatdagi vedomostga o'zi qo'shiladi, alohida
-  to'lamang; kartasi o'chirilgan maosh ID'si qoldig'i — qo'lda hal qilinadi; eskirgan vedomost — HR qaytaradi, Moliya menejeri oy
+  to'lamang; vedomost tuzilmaydigan maosh ID'si qoldig'i (kartasi yo'q, ID o'zgargan yoki ID chetida bo'sh joy) — qo'lda hal qilinadi;
+  ID chetida bo'sh joy bor kartalar — ID'ni texnik tuzatish kerak (xabar bering); eskirgan vedomost — HR qaytaradi, Moliya menejeri oy
   tugagach qayta yuboradi). Kasal kun qoidasi uchun «Narx jadvali»da o'tish oyini belgilash tavsiya etiladi (eski fakturalar — «↻ Qayta
   hisoblash» bilan). Telegram kunlik hisobot sozlamasida shanba belgilangan bo'lsa — olib tashlang.
 - **Egasi qaroriga qoldirilgan (kod o'zgarmagan):** `/chat` uchun IP bo'yicha kunlik cheklov (mobil operatorlar umumiy IP — faqat
@@ -2436,7 +2446,7 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   boshlanib keyin tugasa (millisekundlar oynasi), to'lov u qatordan tushib qolishi mumkin — kassa / oylik hisobotlarga ta'sir yo'q.
 - **Sinovlar:** yangi SQL to'plamlar `test-audit-10-qabul` (18), `test-audit-10-davomat` (54), `test-audit-10-tolov` (34),
   `test-audit-10-bemor` (20), `test-audit-11-platforma` (28), `test-audit-11-elon` (63), `test-audit-11-talim` (46),
-  `test-audit-11-maosh` (57; tekshiruvlar soni kutilgan son bilan solishtiriladi), `test-audit-11-moliya` (43 dev / 41 jonli) — dev va
+  `test-audit-11-maosh` (61; tekshiruvlar soni kutilgan son bilan solishtiriladi), `test-audit-11-moliya` (43 dev / 41 jonli) — dev va
   jonli zanjirda, zanjir qayta ishga tushirilgandan keyin ham; JS: `stu-import` (38), `davomat-bemor` (18), `acad-save` (18),
   `pay-carry` (10), `fin-rpt` (6), `kirish` (11), `disc-legacy` (6), `platforma-ui` (7), `stu-report` (8), `kabinet-claim` (4),
   `payments/sms-new.test.cjs`, `ai.test.cjs` (42), `telegram.test.cjs` (41), `tg-daily.test.cjs` (75); mavjud to'plamlar (kassa
