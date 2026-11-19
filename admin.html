@@ -993,7 +993,7 @@ const SCHEMAS = {
       {k:'cameraId',l:'Kamera ID (yuz terminalidagi shaxs ID — «Davomat»da kamera ko‘rganlar avtomatik «Keldi», kirmaganlar «Yo‘q» bo‘lib turadi)',t:'text'},
       // D1: chegirma / grant / kontrakt / aka-uka belgisi / tavsiya — formada faqat ko'rinadi; o'zgartirish «💸 Chegirma so'rash»
       //   orqali (Direktor + Moliya menejeri tasdig'i, discount-approval.sql). Yangi o'quvchida — «kim tavsiya qilgan» (referral_register).
-      {k:'_disc',l:'Chegirma, grant va tavsiya',t:'discinfo',formOnly:true},
+      {k:'_disc',l:'Kontrakt summasi, chegirma, grant va tavsiya',t:'discinfo',formOnly:true},
       {k:'hearAbout',l:'Bizni qayerdan eshitdingiz?',t:'select',opts:[{v:'',l:'—'},{v:'ota_ona',l:'Ota-ona tavsiyasi'},{v:'instagram',l:'Instagram / Facebook'},{v:'telegram',l:'Telegram'},{v:'reklama',l:'Reklama (banner/flayer)'},{v:'dost',l:'Do‘st / tanish'},{v:'qidiruv',l:'Google / qidiruv'},{v:'boshqa',l:'Boshqa'}]},
       {k:'order',l:'Tartib',t:'number'}
     ],
@@ -4409,12 +4409,12 @@ function wireDiscBody(box, sid, p, reload){
 function discPanelHtml(f, isEdit, row){
   if(!isEdit) return `<div style="grid-column:1/-1" class="disc-panel"><label>${esc(f.l)}</label>
     <input name="${f.k}" placeholder="Kim tavsiya qilgan — o‘quvchi ID (ixtiyoriy, masalan IQ-0012)" autocomplete="off">
-    <p class="small muted" style="margin:6px 0 0">Chegirma / grant — o‘quvchi saqlangandan keyin «💸 Chegirma so‘rash» orqali (Direktor va Moliya menejeri tasdiqlaydi). Tavsiya bonusi yangi o‘quvchi birinchi to‘lovni qilgach Moliya menejeri tasdig‘i bilan beriladi.</p></div>`;
+    <p class="small muted" style="margin:6px 0 0">Kontrakt (shartnoma) summasi va chegirma / grant — o‘quvchi saqlangandan keyin uning kartasida «📄 Kontrakt summasi» yoki «💸 Chegirma so‘rash» orqali (Direktor va Moliya menejeri tasdiqlaydi). Tavsiya bonusi yangi o‘quvchi birinchi to‘lovni qilgach Moliya menejeri tasdig‘i bilan beriladi.</p></div>`;
   return `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:12px;padding:10px 14px" class="disc-panel"><label>${esc(f.l)} 🔒</label>
     <div class="disc-body small"><span class="muted">⏳ Yuklanmoqda…</span></div>
-    ${canReqDiscount()?`<div style="margin-top:8px"><button type="button" class="btn sm" data-dreq>💸 Chegirma so‘rash</button></div>`:''}
+    ${canReqDiscount()?`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm" data-dreq-contract title="Shartnoma bo‘yicha belgilangan oylik summa (narx jadvalidagi sinf narxi o‘rniga)">📄 Kontrakt summasi</button><button type="button" class="btn sm" data-dreq>💸 Chegirma so‘rash</button></div>`:''}
     <div class="disc-new"></div>
-    <p class="small muted" style="margin:6px 0 0">Chegirma maydonlari bu formada o‘zgartirilmaydi — faqat so‘rov orqali (ikki tasdiq: Direktor + Moliya menejeri).</p></div>`; }
+    <p class="small muted" style="margin:6px 0 0">Kontrakt (shartnoma) summasi va chegirmalar bu formada to‘g‘ridan-to‘g‘ri yozilmaydi — «📄 Kontrakt summasi» yoki «💸 Chegirma so‘rash» so‘rovi orqali (ikki tasdiq: Direktor + Moliya menejeri, «✅ Tasdiqlash» bo‘limida; tasdiqlangach tanlangan oy fakturasidan qo‘llanadi).</p></div>`; }
 function wireDiscPanel(row){
   const panel=document.querySelector('#m-form .disc-panel'); if(!panel || !row) return;
   const body=panel.querySelector('.disc-body'); if(!body) return;
@@ -4422,9 +4422,15 @@ function wireDiscPanel(row){
   const load=async()=>{ try{ const info=await discStudentInfo(sid); if(!document.body.contains(body)) return; body.innerHTML=discInfoHtml(info, sid, 'dpi'); wireDiscBody(body, sid, 'dpi', load); }
     catch(e){ if(document.body.contains(body)) body.innerHTML=`<span class="muted">Chegirma ma’lumotini o‘qib bo‘lmadi: ${esc(e.code||e.message)}</span>`; } };
   load();
-  const btn=panel.querySelector('[data-dreq]'); if(btn) btn.addEventListener('click',()=>{ const box=panel.querySelector('.disc-new'); if(!box) return;
-    if(box.innerHTML){ box.innerHTML=''; return; }
-    box.innerHTML=discReqBlockHtml('dpf'); wireDiscReqBlock(box, 'dpf', sid, ()=>{ box.innerHTML=''; load(); }); });
+  // «📄 Kontrakt summasi» — xuddi shu so'rov, turi oldindan «Kontrakt» (summa maydoni ochiq); «💸 Chegirma so'rash» — oddiy. Bir xil
+  //   tugma qayta bosilsa — yopiladi, boshqasi bosilsa — o'sha tur bilan qayta ochiladi.
+  const open=kind=>{ const box=panel.querySelector('.disc-new'); if(!box) return;
+    if(box.innerHTML && (box.dataset.kind||'')===(kind||'')){ box.innerHTML=''; box.dataset.kind=''; return; }
+    box.innerHTML=discReqBlockHtml('dpf', kind?{ kind }:{}); box.dataset.kind=kind||'';
+    wireDiscReqBlock(box, 'dpf', sid, ()=>{ box.innerHTML=''; box.dataset.kind=''; load(); });
+    if(kind==='contract'){ const c=box.querySelector('#dpf-camt'); if(c) setTimeout(()=>c.focus(), 0); } };
+  const btn=panel.querySelector('[data-dreq]'); if(btn) btn.addEventListener('click',()=>open(''));
+  const btnC=panel.querySelector('[data-dreq-contract]'); if(btnC) btnC.addEventListener('click',()=>open('contract'));
 }
 // Alohida oyna: ro'yxatdagi «💸», olimpiada «🎓 Grant», «Tasdiqlash» → «+ Yangi so'rov».
 function openDiscountModal(st, opts){
