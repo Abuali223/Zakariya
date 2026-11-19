@@ -417,9 +417,11 @@ function proxyRest(req, res, url) {
   req.on('data', d => { seen += d.length; if (seen > MAX_REST) { pr.destroy(new Error('juda katta so‘rov')); req.destroy(); } });
   req.pipe(pr);
 }
+// Baza / PostgREST tirikligi — anon kalit bilan OCHIQ jadvaldan (rls-timing.sql: anon faqat ochiq sayt kontentini o'qiydi;
+//   users kabi yopiq jadval anon'ga 401 qaytaradi va stend «ishlamayapti» ko'rinardi).
 function restProbe() {
   return new Promise(resolve => {
-    const r = http.request({ host: REST.host, port: REST.port, method: 'GET', path: '/users?select=id&limit=1', timeout: 4000,
+    const r = http.request({ host: REST.host, port: REST.port, method: 'GET', path: '/settings?select=id&limit=1', timeout: 4000,
       headers: { Authorization: 'Bearer ' + ANON_KEY, Accept: 'application/json' } }, up => { up.resume(); up.on('end', () => resolve({ ok: up.statusCode === 200, status: up.statusCode })); });
     r.on('timeout', () => r.destroy(new Error('timeout')));
     r.on('error', e => resolve({ ok: false, status: 0, error: e.code || e.message }));
