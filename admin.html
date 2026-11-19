@@ -8460,8 +8460,18 @@ function payrollCarryCtx(from, runs, lines, advs){
   return { from, approved, lines:L, adv:A };
 }
 // Oy holati (Toshkent oyiga nisbatan): 'past' — tugagan, 'current' — tugamagan (ushlanma «bugungacha»), 'future' — hali boshlanmagan.
-//   audit-11 (A5-03): kelgusi oy vedomosti yuborilmaydi; tugamagan oyni faqat Direktor tasdiqlaydi (baza: payroll_submit / payroll_decide).
+//   audit-11 (A5-03): kelgusi oy vedomosti yuborilmaydi; tugamagan oyni (va oy tugamasdan yuborilgan vedomostni — prStale) faqat Direktor
+//   tasdiqlaydi (baza: payroll_submit / payroll_decide).
 function payMonthState(mon, cur){ mon=String(mon||''); cur=String(cur||''); return mon>cur ? 'future' : (mon===cur ? 'current' : 'past'); }
+// Vedomost oy TUGAMASDAN yuborilganmi (audit-11 r4, A5-03; baza payroll_decide 'stale' bilan bir xil): subDay — yuborilgan kun (Toshkent
+//   sanasi 'YYYY-MM-DD', tkDay(run.submittedAt)) keyingi oyning 1-kunidan oldin. Bunday vedomostning ushlanmasi yuborilgan kungacha qotgan —
+//   oy tugagach ham HR tasdiqlamaydi (HR qaytaradi, Moliya menejeri oy tugagach qayta yuboradi), Direktor — istalgan payt. Kun noma'lum —
+//   eskirgan (baza ham shunday).
+function prStale(mon, subDay){
+  const m=/^(\d{4})-(\d{2})$/.exec(String(mon||'')); if(!m) return false;
+  const y=Number(m[1]), mm=Number(m[2]), next=(mm===12 ? (y+1)+'-01' : y+'-'+String(mm+1).padStart(2,'0'))+'-01';
+  return String(subDay||'') < next;
+}
 // Direktor navbati (A5-07): «Direktor tasdig'i kerak» va hali tasdiqlanmagan qator — faqat vedomosti yuborilgan / tasdiqlangan oydan
 //   (qaytarilgan / qayta ochilgan oy qatorlari navbatda turmaydi — baza ularni 'not_submitted' bilan rad etadi). runs — payroll_runs.
 function prDirPending(lines, runs){
@@ -8672,8 +8682,11 @@ async function renderPayrollCard(box, mon, C, onChange){
   const needDir=(I.lines||[]).filter(l=>l.needsDirector && !l.directorOkAt);
   // audit-11 (A5-03): kelgusi oy vedomosti yuborilmaydi; tugamagan oy — ushlanma «bugungacha», oy tugaguncha faqat Direktor tasdiqlaydi.
   const mst=payMonthState(mon, tkDay(Date.now()).slice(0,7));
-  const early = mst==='current' ? `<div class="small" style="margin-top:4px;color:#B45309">⚠ Oy hali tugamagan: ushlanma faqat bugungacha hisoblanadi; tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugaguncha vedomostni faqat Direktor tasdiqlaydi (HR — oy tugagach).</div>`
-    : (mst==='future' ? '<div class="small muted" style="margin-top:4px">Kelgusi oy — vedomost oy boshlangach tayyorlanadi.</div>' : '');
+  // r4 (A5-03): oy tugamasdan yuborilgan vedomostni oy tugagach ham HR tasdiqlamaydi — Moliya menejeri oy tugagach qayta yuboradi (baza: 'stale')
+  const subDay=(run&&run.submittedAt)?tkDay(run.submittedAt):'';
+  const early = mst==='current' ? `<div class="small" style="margin-top:4px;color:#B45309">⚠ Oy hali tugamagan: ushlanma faqat bugungacha hisoblanadi; tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugamasdan yuborilgan vedomostni faqat Direktor tasdiqlaydi — HR tasdiqlashi uchun Moliya menejeri uni oy tugagach yuboradi (yuborilgan bo‘lsa — HR qaytargach, qayta yuboradi).</div>`
+    : (mst==='future' ? '<div class="small muted" style="margin-top:4px">Kelgusi oy — vedomost oy boshlangach tayyorlanadi.</div>'
+    : (st==='submitted' && prStale(mon, subDay) ? `<div class="small" style="margin-top:4px;color:#B45309">⚠ Vedomost oy tugamasdan${subDay?` (${esc(fmtDayUz(subDay))})`:''} yuborilgan — ushlanma o‘sha kungacha hisoblangan, HR uni tasdiqlamaydi: HR qaytargach, Moliya menejeri qayta yuboradi (shoshilinch bo‘lsa — Direktor shu holicha tasdiqlaydi).</div>` : ''));
   const btns=[];
   if(canPrepPayroll() && mst!=='future' && (!run || st==='draft' || st==='returned')) btns.push(`<button class="btn sm gold" id="pr-submit">📤 HR’ga yuborish</button>`);
   if(SESSION.isAdmin && st==='approved') btns.push(`<button class="btn sm ghost" id="pr-reopen">↩ Qayta ochish</button>`);
@@ -8709,7 +8722,7 @@ async function payrollSubmit(mon, C, onDone){
   if(mst==='future'){ toast('Kelgusi oy uchun vedomost yuborilmaydi — oy boshlangach tayyorlang',true); return; }
   const tot=lines.reduce((s,l)=>s+l.payable,0);
   const noCam=lines.filter(l=>l.details && l.details.camera===false).length;
-  if(!confirm(`${mon} oylik vedomost HR menejerga yuborilsinmi?\n\n${lines.length} xodim · to‘lanadigan jami ${fmtSom(tot)}${noCam?`\n${noCam} xodimda Kamera ID yo‘q — davomat ushlanmasisiz`:''}${mst==='current'?'\n\n⚠ Oy hali tugamagan: ushlanma faqat bugungacha (bugun kirmaydi) hisoblangan. Tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugaguncha vedomostni faqat Direktor tasdiqlaydi.':''}\n\nHR tasdiqlagandan keyin shu summalar bo‘yicha maosh beriladi.`)) return;
+  if(!confirm(`${mon} oylik vedomost HR menejerga yuborilsinmi?\n\n${lines.length} xodim · to‘lanadigan jami ${fmtSom(tot)}${noCam?`\n${noCam} xodimda Kamera ID yo‘q — davomat ushlanmasisiz`:''}${mst==='current'?'\n\n⚠ Oy hali tugamagan: ushlanma faqat bugungacha (bugun kirmaydi) hisoblangan. Tasdiqdan keyin oyning qolgan kunlari uchun ta’til / chiqib-kelish / o‘rinbosarlik / avans kiritilmaydi. Oy tugamasdan yuborilgan vedomostni faqat Direktor tasdiqlaydi — HR tasdiqlashi uchun oy tugagach qayta yuboriladi.':''}\n\nHR tasdiqlagandan keyin shu summalar bo‘yicha maosh beriladi.`)) return;
   const note=prompt('Izoh (ixtiyoriy):',''); if(note==null) return;
   try{ const r=await rpc('payroll_submit',{ p_month:mon, p_lines:lines, p_note:note||null });
     // A5-02: qayta ochilgan oyda allaqachon berilgani yangi summadan ko'p — ortiqchasi keyingi oy vedomostida ushlanadi (baza: app.salary_carry)
@@ -8742,25 +8755,31 @@ async function renderPayrollQueue(el){
     try{ const C=await payrollComputeMonth(r.id); if(C.ok && !(C.readFail||[]).length) fresh=await payrollBuildLines(C); else freshErr=C.ok?('o‘qilmadi: '+C.readFail.join(', ')):'davomat o‘qilmadi'; }catch(e){ freshErr=String(e&&(e.code||e.message)||''); }
     const diffs=fresh?lines.filter(l=>{ const f=fresh.find(x=>x.personId===l.personId); return !f || ['gross','deduction','subBonus','advance','carryIn','payable'].some(k=>Math.abs((Number(f[k])||0)-(Number(l[k])||0))>0.5); }).length+fresh.filter(f=>!lines.some(l=>l.personId===f.personId)).length:null;
     const self=String(r.preparedBy||'')===uid;
-    // A5-03: kelgusi oy — hech kim tasdiqlamaydi (qaytariladi); tugamagan oy — faqat Direktor (baza ham tekshiradi)
-    const mst=payMonthState(r.id, curMon), canOk=mst==='past' || (mst==='current' && SESSION.isAdmin);
+    // A5-03: kelgusi oy — hech kim tasdiqlamaydi (qaytariladi); tugamagan oy — faqat Direktor (baza ham tekshiradi).
+    //   r4: oy tugamasdan yuborilgan vedomost (ushlanma yuborilgan kungacha qotgan) — oy tugagach ham HR tasdiqlamaydi, faqat qaytaradi:
+    //   Moliya menejeri oy tugagach qayta yuboradi (baza: payroll_decide 'stale'); Direktor — istalgan payt (ogohlantirish bilan).
+    const mst=payMonthState(r.id, curMon), subDay=r.submittedAt?tkDay(r.submittedAt):'', stale=prStale(r.id, subDay);
+    const canOk=mst!=='future' && (SESSION.isAdmin || (mst==='past' && !stale));
+    const subTxt=subDay?` (${esc(fmtDayUz(subDay))})`:'';
     const mstNote=mst==='future' ? '<span class="small" style="color:#B42318">Kelgusi oy — tasdiqlanmaydi, qaytaring</span>'
-      : (mst==='current' ? (SESSION.isAdmin ? '<span class="small" style="color:#B45309">⚠ Oy hali tugamagan — ushlanma faqat bugungacha; tasdiqlasangiz oyning qolgan kunlari kiritmalari qulflanadi</span>' : '<span class="small" style="color:#B45309">Oy hali tugamagan — tasdiqlash oy tugagach (shoshilinch bo‘lsa — Direktor)</span>') : '');
+      : (mst==='current' ? (SESSION.isAdmin ? '<span class="small" style="color:#B45309">⚠ Oy hali tugamagan — ushlanma faqat bugungacha; tasdiqlasangiz oyning qolgan kunlari kiritmalari qulflanadi</span>' : '<span class="small" style="color:#B45309">Oy hali tugamagan — oy tugamasdan yuborilgan vedomostni HR tasdiqlamaydi: qaytaring, Moliya menejeri oy tugagach qayta yuboradi (shoshilinch bo‘lsa — Direktor tasdiqlaydi)</span>')
+      : (stale ? (SESSION.isAdmin ? `<span class="small" style="color:#B45309">⚠ Vedomost oy tugamasdan${subTxt} yuborilgan — ushlanma faqat o‘sha kungacha; tasdiqlasangiz oyning qolgan kunlari kirmaydi (yoki qaytaring — Moliya menejeri qayta yuboradi)</span>` : `<span class="small" style="color:#B45309">Vedomost oy tugamasdan${subTxt} yuborilgan — ushlanma o‘sha kungacha hisoblangan, HR tasdiqlamaydi: qaytaring, Moliya menejeri qayta yuboradi (shoshilinch bo‘lsa — Direktor tasdiqlaydi)</span>`) : ''));
     html+=`<div class="card" style="padding:12px 16px;margin-bottom:10px" data-prrun="${esc(r.id)}">
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(r.id)} oylik vedomost</b><span class="small muted">Tayyorladi: ${esc(prWho(r.preparedBy,names))} · ${esc(fmtDT(r.preparedAt))}${r.version>1?` · ${Number(r.version)}-versiya`:''}</span></div>
       ${r.prepNote?`<div class="small muted">Izoh: ${esc(r.prepNote)}</div>`:''}
       <div class="small" style="margin-top:4px">${lines.length} xodim · to‘lanadigan jami <b>${fmtSom((r.totals||{}).payable||0)}</b> · ${fresh?(diffs?`<span style="color:#B42318;font-weight:700">⚠ ${diffs} qatorda qayta hisob bilan farq bor</span>`:'<span style="color:#1F7A4D">✓ Qayta hisob bilan farq yo‘q</span>'):`<span style="color:#B45309">qayta hisoblab bo‘lmadi (${esc(freshErr)})</span>`}</div>
       ${payrollLinesTable(lines, fresh)}
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">${self?'<span class="small muted">Siz tayyorlagansiz — boshqa odam tasdiqlaydi</span>':`${canOk?`<button class="btn sm gold" data-prok="${esc(r.id)}"${mst==='current'?' data-prearly="1"':''}>✅ Tasdiqlash</button>`:''}<button class="btn sm ghost" data-prno="${esc(r.id)}">↩ Qaytarish</button>`}${mstNote}</div></div>`;
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">${self?'<span class="small muted">Siz tayyorlagansiz — boshqa odam tasdiqlaydi</span>':`${canOk?`<button class="btn sm gold" data-prok="${esc(r.id)}"${(mst==='current'||stale)?' data-prearly="1"':''}>✅ Tasdiqlash</button>`:''}<button class="btn sm ghost" data-prno="${esc(r.id)}">↩ Qaytarish</button>`}${mstNote}</div></div>`;
   }
   if(dirLines.length) html+=`<h4 style="margin:12px 0 6px">Direktor tasdig‘i kerak (HR / Moliya menejerining o‘z maoshi)</h4>${dirLines.map(l=>`<div class="card" style="padding:10px 16px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b>${esc(l.name||l.personId)}</b> <span class="small muted">· ${esc(l.runId)} · to‘lanadigan ${fmtSom(l.payable)} (maosh ${fmtSom(l.gross)}, ushlanma ${fmtSom(l.deduction)})</span></div><button class="btn sm gold" data-prline="${esc(l.id)}">✓ Tasdiqlash</button></div>`).join('')}`;
   el.innerHTML=html;
   const run=async(b, fn, args, okMsg, msgs)=>{ b.disabled=true;
     try{ const r=await rpc(fn,args); if(r&&r.ok){ toast(okMsg(r)); renderApprovals(); }
       else { toast(Object.assign({self:'O‘zingiz tayyorlagan vedomostni tasdiqlay olmaysiz', note_required:'Qaytarish sababi yozilishi shart', not_submitted:'Vedomost allaqachon ko‘rib chiqilgan', not_found:'Topilmadi', not_needed:'Bu qatorga Direktor tasdig‘i kerak emas',
-          not_ended:'Oy hali tugamagan — vedomostni oy tugagach HR (shoshilinch bo‘lsa — Direktor) tasdiqlaydi', future:'Kelgusi oy vedomosti tasdiqlanmaydi — qaytaring'}, msgs||{})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
+          not_ended:'Oy hali tugamagan — HR tasdiqlamaydi: oy tugagach Moliya menejeri vedomostni qayta yuboradi (shoshilinch bo‘lsa — Direktor tasdiqlaydi)', future:'Kelgusi oy vedomosti tasdiqlanmaydi — qaytaring',
+          stale:'Vedomost oy tugamasdan yuborilgan (ushlanma o‘sha kungacha) — HR tasdiqlamaydi: qaytaring, Moliya menejeri oy tugagach qayta yuboradi (shoshilinch bo‘lsa — Direktor tasdiqlaydi)'}, msgs||{})[r&&r.reason]||'Bo‘lmadi',true); b.disabled=false; } }
     catch(e){ toast(String(e.code)==='42501'?String(e.message):('Xatolik: '+(e.message||e.code)),true); b.disabled=false; } };
-  el.querySelectorAll('[data-prok]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm(`${b.dataset.prok} oylik vedomost tasdiqlansinmi? Shundan keyin shu summalar bo‘yicha maosh beriladi; oyning ta’til / avans / o‘rinbosarlik yozuvlari qulflanadi.${b.dataset.prearly?'\n\n⚠ Oy hali tugamagan: ushlanma faqat bugungacha hisoblangan — oyning qolgan kunlari (yo‘qlama, haqsiz ta’til) bu vedomostga kirmaydi; tuzatish faqat oyni qayta ochish bilan.':''}`)) return;
+  el.querySelectorAll('[data-prok]').forEach(b=>b.addEventListener('click',()=>{ if(!confirm(`${b.dataset.prok} oylik vedomost tasdiqlansinmi? Shundan keyin shu summalar bo‘yicha maosh beriladi; oyning ta’til / avans / o‘rinbosarlik yozuvlari qulflanadi.${b.dataset.prearly?'\n\n⚠ Vedomost oy tugamasdan yuborilgan: ushlanma faqat yuborilgan kungacha hisoblangan — oyning qolgan kunlari (yo‘qlama, haqsiz ta’til) bu vedomostga kirmaydi; tuzatish faqat oyni qayta ochish bilan.':''}`)) return;
     // A5-06: tasdiqlash paytida HR / Moliya menejeriga aylangan xodimning qatori Direktor tasdig'iga o'tadi — soni ko'rsatiladi
     run(b,'payroll_decide',{ p_month:b.dataset.prok, p_approve:true, p_note:null }, r=>Number(r&&r.moved)>0?`Vedomost tasdiqlandi ✓ — ${Number(r.moved)} ta qator (HR / Moliya menejerining o‘z maoshi) Direktor tasdig‘iga o‘tkazildi`:'Vedomost tasdiqlandi ✓'); }));
   el.querySelectorAll('[data-prno]').forEach(b=>b.addEventListener('click',()=>{ const n=prompt('Qaytarish sababi (Moliya menejeri ko‘radi):',''); if(n==null) return; if(!n.trim()){ toast('Sabab yozilishi shart',true); return; }
@@ -10546,13 +10565,13 @@ async function renderAccounting(){
     const madv=advOfMonth(M).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     const advSum=madv.reduce((s,a)=>s+(Number(a.amount)||0),0);
     const advCard = madv.length ? `<div class="card" style="margin-top:16px;border-left:4px solid #B45309"><div class="cls-card-head"><h3>Xodim avanslari · ${mLabel(M)}</h3><span class="cls-count">${madv.length} ta · ${fmtC(advSum)}</span></div>
-      <p class="small muted" style="margin:0 16px 6px">Oldindan berilgan maosh — «Oylik maoshni yozish»da har xodimning maoshidan ushlab qolinadi (naqd qoldiq = maosh − avans). «Maosh» xarajatiga alohida qo‘shilmaydi.</p>
+      <p class="small muted" style="margin:0 16px 6px">Oldindan berilgan maosh — «Oylik maoshni yozish»da har xodimning maoshidan ushlab qolinadi (naqd qoldiq = maosh − avans). «Maosh» xarajatiga alohida qo‘shilmaydi.${accRO()?'':' Xato yozilgan avansni faqat Direktor o‘chiradi yoki kamaytiradi (vedomost avansni bazadan ayiradi).'}</p>
       <div class="tablewrap"><table><thead><tr><th>Sana</th><th>Xodim</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${madv.map(a=>`<tr>
         <td data-label="Sana" class="num">${esc(String(a.date||'').slice(8,10)+'.'+String(a.date||'').slice(5,7))}</td>
         <td data-label="Xodim">${esc(a.teacherName||a.teacherId||'—')}</td>
         <td data-label="Izoh">${esc(a.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:#B45309;white-space:nowrap">${fmtSum(a.amount)}</td>
-        <td class="td-actions">${(accRO()||Number(a.amount)<0)?'':`<button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`}${a.cashDocId?(Number(a.amount)<0?'<span class="chip" title="Xodim avansni kassaga qaytargan (kirim orderi) — oylik hisobida avansdan ayiriladi; «Kassa» bo‘limidan bekor qilinadi">Kassaga qaytdi</span>':'<span class="chip" title="Kassa chiqim orderi bilan berilgan — «Kassa» bo‘limidan bekor qilinadi">Kassa</span>'):accRO()?'':`<button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+        <td class="td-actions">${(accRO()||Number(a.amount)<0)?'':`<button class="btn sm ghost2" data-arec="${esc(a._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`}${a.cashDocId?(Number(a.amount)<0?'<span class="chip" title="Xodim avansni kassaga qaytargan (kirim orderi) — oylik hisobida avansdan ayiriladi; «Kassa» bo‘limidan bekor qilinadi">Kassaga qaytdi</span>':'<span class="chip" title="Kassa chiqim orderi bilan berilgan — «Kassa» bo‘limidan bekor qilinadi">Kassa</span>'):accRO()?'':SESSION.isAdmin?`<button class="btn sm danger" data-adel="${esc(a._id)}">O‘chir</button>`:'<span class="small muted" title="Avansni o‘chirish yoki summasini kamaytirish — faqat Direktor (baza ham rad etadi): vedomost avansni bazadan ayiradi, o‘chirilsa xodimga to‘lanadigan summa oshadi">o‘chirish — Direktor</span>'}</td></tr>`).join('')}</tbody></table></div></div>` : '';   // audit-11 r4 (A5-01): avansni o'chirish — faqat Direktor (staff_advance_amount_guard)
     // ---- Avans — kimlarda (2,9 mln kimdan iboratini ko'rsatadi) ----
     const nameC={}; (cache.students||[]).forEach(s=>{ nameC[String(s.studentId||s._id)]=s.name; });
     INV.forEach(i=>{ const k=String(i.studentId||''); if(k && !nameC[k] && i.studentName) nameC[k]=i.studentName; });

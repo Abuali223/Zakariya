@@ -630,13 +630,13 @@ select zz.as('U_DIR', $q$with x as (delete from public.staff_advances where id =
   || zz.as('U_FM', $q$with x as (update public.staff_advances set amount = 90000 where id = 'adv_leg_g8' returning id) select id from x$q$) || ' | '
   || zz.as('U_FM', $q$with x as (update public.staff_advances set method = 'card' where id = 'adv_leg_g8' returning id) select id from x$q$) || ' | '
   || zz.as('U_DIR', $q$with x as (delete from public.salary_payments where id = 'sp_leg_g8' returning id) select id from x$q$) || ' | '
-  || zz.as('U_FM', $q$with x as (update public.staff_advances set amount = 110000 where id = 'adv_leg_g8' returning amount) select trim_scale(amount)::text from x$q$) || ' | '
+  || zz.as('U_DIR', $q$with x as (update public.staff_advances set amount = 110000 where id = 'adv_leg_g8' returning amount) select trim_scale(amount)::text from x$q$) || ' | '   -- avansni kamaytirish — faqat Direktor (audit-11 r4)
   || zz.as('U_DIR', $q$with x as (delete from public.staff_advances where id = 'adv_leg_g8b' returning id) select id from x$q$) as q18 \gset
 -- (yig'indi alohida so'rov bilan: yuqoridagi so'rov o'z boshidagi holatni ko'radi)
 select :'q18' || ' | ' || (select trim_scale(sum(amount))::text from public.staff_advances where "teacherId" = 'IQX-T1' and month = '2027-01' and coalesce(method, '') in ('', 'cash'))
   || ':' || (select trim_scale(sum(paid))::text from public.salary_payments where "teacherId" = 'IQT-T1' and month = '2027-01' and coalesce(method, '') in ('', 'cash')) as q18 \gset
 rollback to savepoint q18;
-select zz.chk('Q18 g8: qaytim yozilgan oy (avans 120 000 − 100 000, maosh 150 000 − 100 000) — eski naqd qatorni o''chirish, summasini 90 000 ga tushirish, kartaga o''tkazish — rad (kassa:staff_returned); 110 000 ga — mumkin; qaytimsiz oy qatori — o''chiriladi',
+select zz.chk('Q18 g8: qaytim yozilgan oy (avans 120 000 − 100 000, maosh 150 000 − 100 000) — eski naqd qatorni o''chirish, summasini 90 000 ga tushirish, kartaga o''tkazish — rad (kassa:staff_returned); 110 000 ga — mumkin (Direktor); qaytimsiz oy qatori — o''chiriladi',
   :'q18a' || ' | ' || :'q18',
   '^posted:posted \| ERR 42501 \[kassa:staff_returned\] Bu xodimning 2027-01 oy naqd avansidan kassaga qaytim yozilgan.*\(-100000 so''m\).* \| ERR 42501 \[kassa:staff_returned\].*\(-10000 so''m\).* \| ERR 42501 \[kassa:staff_returned\].* \| ERR 42501 \[kassa:staff_returned\] Bu xodimning 2027-01 oy naqd maoshidan.* \| 110000 \| adv_leg_g8b \| 10000:50000$');
 -- ---------- Ko'rik 2-guruhi: o'quvchi puli, eski «Buxgalteriya» nusxasi (acc-9, acc-2, crit-2, ui-3, acc-7) ----------

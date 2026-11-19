@@ -199,8 +199,10 @@ begin
             v_g, v_d, v_s, v_a, v_c, v_p, v_w, case when jsonb_typeof(x->'details') = 'object' then x->'details' else '{}'::jsonb end, v_nd);
     n := n + 1; t_g := t_g + v_g; t_d := t_d + v_d; t_p := t_p + v_p;
   end loop;
+  -- Yuborilgan vaqt — moliya soati (app.fin_now: jonli bazada now(), sinov bazasida test soati): payroll_decide shu vaqtni yuqoridagi
+  --   «bugun» (app.fin_today) bilan bir soatda solishtiradi (oy tugamasdan yuborilganmi — audit-11 r4, A5-03).
   update public.payroll_runs
-     set status = 'submitted', "preparedBy" = v_uid, "preparedAt" = now(), "submittedAt" = now(),
+     set status = 'submitted', "preparedBy" = v_uid, "preparedAt" = app.fin_now(), "submittedAt" = app.fin_now(),
          "prepNote" = nullif(btrim(coalesce(p_note, '')), ''), "approvedBy" = null, "approvedAt" = null, "decisionNote" = null,
          totals = jsonb_build_object('count', n, 'gross', t_g, 'deduction', t_d, 'payable', t_p), version = version + 1
    where id = p_month;
@@ -220,6 +222,11 @@ grant execute on function public.payroll_submit(text, jsonb, text) to authentica
 --   (audit-11, A5-03) Tugamagan oy: ushlanma faqat «bugungacha» hisoblangan, tasdiqdan keyin oyning qolgan kunlari uchun ta'til /
 --   chiqib-kelish / o'rinbosarlik / avans qulflanadi — shuning uchun joriy oyni (maosh oy tugamasdan beriladigan bo'lsa) faqat Direktor
 --   tasdiqlaydi (Direktor ruxsati), HR — oy tugagach; kelgusi oy — hech kim (reason 'not_ended' / 'future'). Qaytarish — har doim.
+--   (audit-11 r4, A5-03) Oy tugagach ham HR oy TUGAMASDAN yuborilgan vedomostni tasdiqlamaydi (reason 'stale'): uning ushlanmasi
+--   yuborilgan kungacha qotgan — oyning keyingi kunlaridagi yo'qlama / haqsiz ta'til ayrilmay qolardi (avval faqat tasdiqlash sanasi
+--   tekshirilardi: 10-kuni yuborilgan vedomost 1-sanada qayta yuborilmasdan tasdiqlanardi). HR qaytaradi, Moliya menejeri oy tugagach
+--   qayta yuboradi (payroll_submit "submittedAt"ni yangilaydi) — shundan keyin HR tasdiqlaydi. Direktor — istalgan payt (masalan
+--   dekabr maoshi oy tugamasdan beriladigan bo'lsa). Yuborilgan vaqt noma'lum (bo'sh) — eskirgan deb olinadi.
 --   (audit-11, A5-06) «Direktor tasdig'i kerak» belgisi TASDIQLASH paytida ham qayta tekshiriladi: vedomost yuborilgandan keyin HR /
 --   Moliya menejeri roli berilgan (qo'shimcha HR ham) yoki kartasi shunday hisobga bog'langan xodimning qatori shu yerda Direktor
 --   tasdig'iga o'tadi (reports-roles.sql 5b himoya to'ri bilan bir xil shart — u faqat keyingi deployda ishlardi): yangi HR o'z maoshini
@@ -243,6 +250,11 @@ begin
   v_cur := to_char(app.fin_today(), 'YYYY-MM');
   if p_month > v_cur then return jsonb_build_object('ok', false, 'reason', 'future', 'status', r.status); end if;
   if p_month = v_cur and not app.has_role('director') then return jsonb_build_object('ok', false, 'reason', 'not_ended', 'status', r.status); end if;
+  if not app.has_role('director')
+     and coalesce((r."submittedAt" at time zone 'Asia/Tashkent')::date, '-infinity'::date) < ((p_month || '-01')::date + interval '1 month')::date then
+    return jsonb_build_object('ok', false, 'reason', 'stale', 'status', r.status,
+                              'submittedDay', to_char(r."submittedAt" at time zone 'Asia/Tashkent', 'YYYY-MM-DD'));
+  end if;
   with moved as (
     update public.payroll_lines l set "needsDirector" = true
      where l."runId" = p_month and not l."needsDirector" and l."directorOkAt" is null

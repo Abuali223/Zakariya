@@ -12,7 +12,7 @@ const ADM = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8');
 const block = (() => { const a = ADM.indexOf('// PAY-CARRY:BEGIN'), b = ADM.indexOf('// PAY-CARRY:END'); return a >= 0 && b > a ? ADM.slice(a, b) : ''; })();
 const P = (() => {
   const ctx = vm.createContext({});
-  vm.runInContext(block + '\n;this.__p = { carryBalance, payrollCarryCtx, payMonthState, prDirPending, prWho };', ctx);
+  vm.runInContext(block + '\n;this.__p = { carryBalance, payrollCarryCtx, payMonthState, prStale, prDirPending, prWho };', ctx);
   return ctx.__p;
 })();
 const row = (month, paid, gross, extra) => Object.assign({ teacherId: 'IQX-901', month, paid, gross, advance: 0, deduction: 0, subBonus: 0 }, extra || {});
@@ -20,7 +20,7 @@ const row = (month, paid, gross, extra) => Object.assign({ teacherId: 'IQX-901',
 test('blok bitta va yordamchilar bor', () => {
   assert.ok(block.length > 0, 'PAY-CARRY bloki topilmadi');
   assert.equal((ADM.match(/PAY-CARRY:BEGIN/g) || []).length, 1);
-  for (const f of ['carryBalance', 'payrollCarryCtx', 'payMonthState', 'prDirPending', 'prWho']) {
+  for (const f of ['carryBalance', 'payrollCarryCtx', 'payMonthState', 'prStale', 'prDirPending', 'prWho']) {
     assert.equal((ADM.match(new RegExp('function ' + f + '\\(', 'g')) || []).length, 1, f + ' bitta (blok ichida)');
   }
 });
@@ -88,6 +88,24 @@ test('payMonthState: tugagan / joriy / kelgusi oy (A5-03)', () => {
   assert.equal(P.payMonthState('2026-11', '2026-12'), 'past');
   assert.equal(P.payMonthState('2026-12', '2026-12'), 'current');
   assert.equal(P.payMonthState('2027-01', '2026-12'), 'future');
+});
+
+test('prStale: oy tugamasdan yuborilgan vedomostni oy tugagach ham HR tasdiqlamaydi — baza payroll_decide \'stale\' bilan bir xil (A5-03, r4)', () => {
+  // 2026-12 vedomosti 10-dekabrda yuborilgan — ushlanma o'sha kungacha qotgan: 1-yanvarda ham eskirgan (qayta yuborilmaguncha)
+  assert.equal(P.prStale('2026-12', '2026-12-10'), true);
+  assert.equal(P.prStale('2026-12', '2026-12-31'), true);
+  // oy tugagach (keyingi oyning 1-kunidan) yuborilgan — HR tasdiqlaydi; yil chegarasi (dekabr -> yanvar)
+  assert.equal(P.prStale('2026-12', '2027-01-01'), false);
+  assert.equal(P.prStale('2026-12', '2027-02-15'), false);
+  assert.equal(P.prStale('2026-11', '2026-12-01'), false);
+  assert.equal(P.prStale('2026-11', '2026-11-30'), true);
+  assert.equal(P.prStale('2026-09', '2026-10-01'), false);
+  // yuborilgan kun noma'lum — eskirgan (baza: "submittedAt" bo'sh — 'stale')
+  assert.equal(P.prStale('2026-12', ''), true);
+  assert.equal(P.prStale('2026-12', null), true);
+  // oy noto'g'ri — false (tugma holati boshqa tekshiruvlarga qoladi)
+  assert.equal(P.prStale('', '2026-12-10'), false);
+  assert.equal(P.prStale('2026-1', '2026-12-10'), false);
 });
 
 test('prDirPending: faqat yuborilgan / tasdiqlangan oy qatorlari, Direktor hali tasdiqlamagan (A5-07)', () => {

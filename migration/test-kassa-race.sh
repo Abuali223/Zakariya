@@ -224,6 +224,8 @@ chk "7g sof berilgan maosh manfiy emas (0 … 3 000 000) va o'tganlar yig'indisi
 #   mumkin (oy sof summasi 20 000), ikkitasini — yo'q (−40 000, kassa:staff_returned). A seansi o'chirib 2 s kutadi, B 0,5 s keyin boshqa
 #   qatorni o'chiradi: tekshiruv xodim navbati (P) ostida — B navbat kutib, A natijasini ko'radi va rad etiladi (avval ikkalasi ham o'tardi).
 #   Urug' va qoldiq triggerlarsiz (keyingi bo'limlar moslik / qoldiq hisobiga ta'sir qilmasin).
+#   O'chiruvchi — Direktor (audit-11 r4, A5-01: xodim avansi va maosh berish yozuvini endi faqat Direktor o'chiradi — audit-11-maosh.sql;
+#   bu bo'lim kassa qo'riqchisining navbatini sinaydi, u rolga qaramaydi va Direktor qo'riqchisidan OLDIN ishlaydi).
 MON11=${TODAY:0:7}
 q >/dev/null <<SQL
 set session_replication_role = replica;
@@ -231,10 +233,10 @@ insert into public.staff_advances (id, "teacherId", "payeeRef", "teacherName", a
   ('adv_r11a', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null), ('adv_r11b', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null),
   ('adv_r11c', 'IQX-R11', 'staff:r_st11', 'Poyga', 60000, '$MON11', '$TODAY', null), ('adv_r11r', 'IQX-R11', 'staff:r_st11', 'Poyga', -100000, '$MON11', '$TODAY', 'cd_race11_ret');
 SQL
-( { as_sess R_FM; echo "begin;"; echo "delete from public.staff_advances where id = 'adv_r11a';"
+( { as_sess R_DIR; echo "begin;"; echo "delete from public.staff_advances where id = 'adv_r11a';"
     echo "select 'A|' || count(*) from public.staff_advances where id = 'adv_r11a';"; echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11.A" 2>&1 ) &
 sleep 0.5
-{ as_sess R_FM; echo "delete from public.staff_advances where id = 'adv_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11.B" 2>&1
+{ as_sess R_DIR; echo "delete from public.staff_advances where id = 'adv_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11.B" 2>&1
 wait
 chk "11a qaytim yozilgan oyning ikki eski naqd avans qatorini parallel o'chirish: biri o'tdi, ikkinchisi navbatda A natijasini ko'rib rad etildi (kassa:staff_returned); oy sof summasi manfiy emas; deadlock yo'q" \
     "$(grep -c '^A|0$' "$TMP/11.A")/$(grep -c 'kassa:staff_returned' "$TMP/11.B")/$(q -c "select trim_scale(sum(amount)) from public.staff_advances where \"teacherId\" = 'IQX-R11'")/$(cat "$TMP/11.A" "$TMP/11.B" | grep -ci 'deadlock')" "1/1/20000/0"
@@ -250,7 +252,7 @@ SQL
     echo "select 'A|' || (public.kassa_receipt('{\"op\":\"in_staff_return\",\"amount\":10000,\"month\":\"$MON11\",\"partyType\":\"employee\",\"partyId\":\"staff:r_st11\",\"articleId\":\"OP-08\",\"basis\":\"Poyga avans qaytimi 11\",\"clientRef\":\"race-sret-11c\"}'::jsonb) ->> 'status');"
     echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11c.A" 2>&1 ) &
 sleep 0.3
-{ as_sess R_FM; echo "delete from public.staff_advances where id = 'adv_r11c';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11c.B" 2>&1
+{ as_sess R_DIR; echo "delete from public.staff_advances where id = 'adv_r11c';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11c.B" 2>&1
 wait
 chk "11c qaytim orderi (navbat → qatorlar) va eski qatorni o'chirish (qator → navbat) parallel: o'chirish kassa:busy bilan bekor, qaytim o'tdi; oy sof summasi 10 000; deadlock yo'q" \
     "$(grep -c '^A|posted$' "$TMP/11c.A")/$(grep -c 'kassa:busy' "$TMP/11c.B")/$(q -c "select trim_scale(sum(amount)) from public.staff_advances where \"teacherId\" = 'IQX-R11'")/$(cat "$TMP/11c.A" "$TMP/11c.B" | grep -ci 'deadlock')" "1/1/10000/0"
@@ -262,10 +264,10 @@ insert into public.salary_payments (id, "teacherId", "payeeRef", "teacherName", 
   ('sp_r11a', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null), ('sp_r11b', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null),
   ('sp_r11c', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', 60000, '$TODAY', null), ('sp_r11r', 'IQT-R11', 'teachers:r_t11', 'Poyga', '$MON11', -100000, '$TODAY', 'cd_race11_sret');
 SQL
-( { as_sess R_FM; echo "begin;"; echo "delete from public.salary_payments where id = 'sp_r11a';"
+( { as_sess R_DIR; echo "begin;"; echo "delete from public.salary_payments where id = 'sp_r11a';"
     echo "select 'A|' || count(*) from public.salary_payments where id = 'sp_r11a';"; echo "select pg_sleep(2);"; echo "commit;"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11b.A" 2>&1 ) &
 sleep 0.5
-{ as_sess R_FM; echo "delete from public.salary_payments where id = 'sp_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11b.B" 2>&1
+{ as_sess R_DIR; echo "delete from public.salary_payments where id = 'sp_r11b';"; } | $PSQL_CMD -X -q -At -d "$DB" > "$TMP/11b.B" 2>&1
 wait
 chk "11b xuddi shunday eski naqd maosh qatorlari (oy bo'yicha maosh navbati): biri o'tdi, ikkinchisi rad (kassa:staff_returned); oy sof summasi manfiy emas; deadlock yo'q" \
     "$(grep -c '^A|0$' "$TMP/11b.A")/$(grep -c 'kassa:staff_returned' "$TMP/11b.B")/$(q -c "select trim_scale(sum(paid)) from public.salary_payments where \"teacherId\" = 'IQT-R11'")/$(cat "$TMP/11b.A" "$TMP/11b.B" | grep -ci 'deadlock')" "1/1/20000/0"

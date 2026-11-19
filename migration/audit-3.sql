@@ -76,7 +76,8 @@ drop policy if exists salpay_ins on public.salary_payments;
 create policy salpay_ins on public.salary_payments for insert with check (app.is_admin() or app.is_hr() or app.is_finance() or app.is_cashier());
 -- DELETE'da KASSIR YO'Q: maosh payout jurnali kassir uchun faqat-qo'shiladi (append-only). Kassir payoutни
 --   o'chira olsa — qoldiq (carry-over) balansini o'zgartirib, audit izini yo'qotardi. Xatoni direktor/
---   HR/moliya tuzatadi (ular o'chira oladi).
+--   HR/moliya tuzatadi (ular o'chira oladi). (audit-11 r4: endi HR / moliya ham o'chira olmaydi — faqat Direktor va kassa
+--   funksiyalari; qoida audit-11-maosh.sql dagi trg_salpay_delete_guard trigger'ida, siyosat o'zgarmagan — rad aniq xabar bilan.)
 drop policy if exists salpay_del on public.salary_payments;
 create policy salpay_del on public.salary_payments for delete using (app.is_admin() or app.is_hr() or app.is_finance());
 
