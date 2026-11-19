@@ -211,6 +211,10 @@ select zz.chk('B03 noto''g''ri nusxalar bekor qilindi (o''chirilmadi — tarix q
   (select string_agg(id || ':' || status || ':' || (reason like '%A8-01%')::text, ',' order by id) from public.discount_requests
     where legacy and "studentId" not in ('IQ-1103', 'IQ-1105')),
   '^legacy__IQ-1101__cat:canceled:true,legacy__IQ-1102__cat:canceled:true,legacy__IQ-1104__sib:canceled:true,legacy__IQ-1106__cat:canceled:true,legacy__IQ-1106__sib:canceled:true,legacy__IQ-1107__cat:canceled:true$');
+select zz.chk('B03b doimiy iz: bekor qilingan nusxa sababida — qaysi faktura qaysi so''rovga ko''chdi / qayta hisoblanadi',
+  zz.nm((select string_agg(id || '=' || substring(reason from 'fakturalar: ([^]]*)\]'), ' | ' order by id) from public.discount_requests
+          where id in ('legacy__IQ-1101__cat', 'legacy__IQ-1106__sib'))),
+  '^legacy__IQ-1101__cat=IQ-1101__2026-12 → RA, IQ-1101__2027-02 → qayta hisoblash kerak \| legacy__IQ-1106__sib=IQ-1106__2027-01 → qayta hisoblash kerak$');
 select zz.chk('B04 haqiqiy meros (c, e) tegilmadi',
   (select string_agg(id || ':' || status || ':' || reason, ',' order by id) from public.discount_requests where id in ('legacy__IQ-1103__cat', 'legacy__IQ-1105__cat')),
   '^legacy__IQ-1103__cat:approved:Avvaldan bor \(meros\) — direktor ko''rib chiqadi,legacy__IQ-1105__cat:approved:Avvaldan bor \(meros\) — direktor ko''rib chiqadi$');

@@ -129,9 +129,13 @@ select zz.chk('B01 faqat sig''adigan 5 kun yozilgan faktura qabul qilindi va o''
 select zz.chk('B02 qo''riqchi: summa = kunlar × stavka (5 kun bilan 400 000 — rad)',
   zz.try($q$update public.invoices set "sickAmount" = 400000 where id = 'IQ-0904__2026-11'$q$), '^ERR 23514');
 select zz.chk('B03 qolgan 5 kun (ketgan o''quvchi) — avansga: 5 × 40 000', zz.refund('U_FM', 'N904'), '^true/5/200000$');
-select zz.chk('B04 avans va jurnal (sick_refund)',
+-- Avansga tushgan 200 000 darhol ochiq qarzni yopadi (audit-10-tolov.sql app.credit_sweep, A4-03): noyabr fakturasidagi 28 571 qoldiq
+--   (3-noyabrgacha o'qigan kunlari — haqiqiy qarz) to'lanadi, qolgani avansda.
+select zz.chk('B04 avans va jurnal: sick_refund 200 000, shundan 28 571 noyabr qarziga; faktura to''landi',
   (select credit::text from public.student_credit where id = 'IQ-0904') || '/' ||
-  (select string_agg(reason || ':' || delta::text, ',') from public.credit_ledger where "studentId" = 'IQ-0904'), '^200000(\.0+)?/sick_refund:200000(\.0+)?$');
+  (select string_agg(reason || ':' || delta::text, ',' order by delta desc) from public.credit_ledger where "studentId" = 'IQ-0904') || '/' ||
+  (select status || ':' || "paidAmount"::text from public.invoices where id = 'IQ-0904__2026-11'),
+  '^171429(\.0+)?/sick_refund:200000(\.0+)?,applied:-28571(\.0+)?/paid:28571(\.0+)?$');
 select zz.chk('B05 10 kunning hammasi bir marta: 5 — faktura, 5 — avans',
   (select count(*) filter (where e.value = to_jsonb('IQ-0904__2026-11'::text)) || '/' || count(*) filter (where e.value #>> '{}' like 'credit:%')
      from public.sick_notes n, jsonb_each(n."appliedDays") e where n.id = 'N904'), '^5/5$');

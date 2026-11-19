@@ -49,6 +49,7 @@ $$;
 create or replace function app.discount_legacy_repair() returns jsonb
 language plpgsql volatile set search_path = public, app, pg_temp as $$
 declare v_bogus text[]; v_sids text[]; i record; v_new jsonb; v_moved text[] := '{}'; v_left text[] := '{}';
+        v_map jsonb := '{}'::jsonb;   -- doimiy iz: bekor qilinadigan nusxa → [«faktura → yangi so'rov» | «faktura → qayta hisoblash kerak»]
 begin
   select coalesce(array_agg(l.id order by l.id), '{}'), coalesce(array_agg(distinct l."studentId"), '{}')
     into v_bogus, v_sids
@@ -86,21 +87,33 @@ begin
               from jsonb_array_elements_text(i.refs) with ordinality e(ref, n)) x;
     if v_new is null then
       v_left := v_left || i.id;
+      select v_map || coalesce(jsonb_object_agg(o.ref, coalesce(v_map -> o.ref, '[]'::jsonb) || to_jsonb(i.id || ' → qayta hisoblash kerak')), '{}'::jsonb)
+        into v_map from jsonb_array_elements_text(i.refs) o(ref) where o.ref = any(v_bogus);
     else
       begin
         update public.invoices set "approvalRefs" = v_new where id = i.id;
         v_moved := v_moved || i.id;
+        -- Eski → yangi ishora (o'sha o'rindagi): deploy logi o'chadi, change_log migratsiyada yozilmaydi — iz nusxaning sababida qoladi.
+        select v_map || coalesce(jsonb_object_agg(o.ref, coalesce(v_map -> o.ref, '[]'::jsonb) || to_jsonb(i.id || ' → ' || n.ref)), '{}'::jsonb)
+          into v_map
+          from jsonb_array_elements_text(i.refs) with ordinality o(ref, k)
+          join jsonb_array_elements_text(v_new) with ordinality n(ref, k) on n.k = o.k
+         where o.ref = any(v_bogus);
       exception when others then
         -- Qo'riqchi (yoki boshqa trigger) rad etsa — faktura tegilmaydi, Direktor ro'yxatiga tushadi; deploy to'xtamaydi.
-        raise notice 'chegirma (A8-01): % fakturasining ishorasini ko''chirib bo''lmadi (%) — qayta hisoblash ro''yxatida', i.id, sqlerrm;
+        raise notice 'OGOHLANTIRISH: chegirma (A8-01): % fakturasining ishorasini ko''chirib bo''lmadi (%) — qayta hisoblash ro''yxatida', i.id, sqlerrm;
         v_left := v_left || i.id;
+        select v_map || coalesce(jsonb_object_agg(o.ref, coalesce(v_map -> o.ref, '[]'::jsonb) || to_jsonb(i.id || ' → qayta hisoblash kerak')), '{}'::jsonb)
+          into v_map from jsonb_array_elements_text(i.refs) o(ref) where o.ref = any(v_bogus);
       end;
     end if;
   end loop;
-  update public.discount_requests
+  -- Sabab matniga — shu nusxa ishora qilgan har faktura bilan nima qilingani (doimiy iz: keyingi deploy hech narsa chiqarmaydi).
+  update public.discount_requests d
      set status = 'canceled',
-         reason = coalesce(reason, '') || ' [A8-01: deploy nusxasi — shu guruhda tasdiqlangan haqiqiy so''rov bor; bekor qilindi]'
-   where id = any(v_bogus);
+         reason = coalesce(d.reason, '') || ' [A8-01: deploy nusxasi — shu guruhda tasdiqlangan haqiqiy so''rov bor; bekor qilindi'
+                  || coalesce('; fakturalar: ' || (select string_agg(x, ', ') from jsonb_array_elements_text(v_map -> d.id) x), '') || ']'
+   where d.id = any(v_bogus);
   return jsonb_build_object('canceled', cardinality(v_bogus), 'students', to_jsonb(v_sids), 'moved', to_jsonb(v_moved), 'reprice', to_jsonb(v_left));
 end $$;
 
@@ -114,12 +127,14 @@ begin
       r ->> 'canceled', jsonb_array_length(r -> 'students'), (select string_agg(x, ', ') from jsonb_array_elements_text(r -> 'students') x),
       jsonb_array_length(r -> 'moved');
   end if;
-  if jsonb_array_length(r -> 'moved') > 0 then   -- iz uchun (SQL logida qoladi): qaysi fakturalarda faqat ishora almashdi
-    raise notice 'chegirma (A8-01): ishorasi ko''chirilgan fakturalar (summa o''zgarmagan): %',
+  -- Deploy chiqishida ko'rinsin (deploy.sh faqat OGOHLANTIRISH qatorlarini ko'rsatadi; SQL logi muvaffaqiyatli deploydan keyin o'chadi).
+  --   Doimiy iz — bekor qilingan nusxaning sababi matnida (qaysi faktura qaysi so'rovga ko'chdi / qayta hisoblanadi).
+  if jsonb_array_length(r -> 'moved') > 0 then
+    raise notice 'OGOHLANTIRISH: chegirma (A8-01): ishorasi ko''chirilgan fakturalar (summa o''zgarmagan): %',
       (select string_agg(x, ', ') from jsonb_array_elements_text(r -> 'moved') x);
   end if;
   if jsonb_array_length(r -> 'reprice') > 0 then
-    raise notice 'OGOHLANTIRISH: chegirma (A8-01): % ta hisob-faktura tasdiqsiz chegirma / grant bilan chiqqan — Direktor shu oylar uchun «↻ Qayta hisoblash» qilsin (to''langanini qo''lda tekshirsin; ro''yxat «Pul qoidalari buzilishi»da ham): %',
+    raise notice 'OGOHLANTIRISH: chegirma (A8-01): % ta hisob-faktura tasdiqsiz chegirma / grant bilan chiqqan — Direktor shu oylar uchun «↻ Qayta hisoblash» qilsin (to''langanini qo''lda tekshirsin). Ro''yxat bekor qilingan nusxaning sababida saqlanadi; «Pul qoidalari buzilishi» faqat chegirma tasdig''i boshlangan oydan keyingilarini ko''rsatadi: %',
       jsonb_array_length(r -> 'reprice'), (select string_agg(x, ', ') from jsonb_array_elements_text(r -> 'reprice') x);
   end if;
   return r;

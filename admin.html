@@ -3037,15 +3037,19 @@ function impCell(v){ let s=String(v==null?'':v); if(/^'[=+\-@\t\r]/.test(s)) s=s
 function impColumns(rows){
   const head=((rows&&rows[0])||[]).map(h=>String(h==null?'':h).trim().toLowerCase().replace(/[‘’ʻʼ`´]/g,"'"));
   const N=head.length, has=(h,ws)=>ws.some(w=>h.includes(w));
-  const W_PH=['tel','phone','telefon','raqam','телефон','тел.','моб','рақам'], W_NOPH=['tartib','№','п/п'];
+  // Telefon: aniq so'z (tel / phone / телефон / моб) bo'lsa — doim telefon («Telefon №», «Ota telefon №» ham). Faqat «raqam» / «рақам»
+  //   bo'lsa — tartib raqami («Tartib raqami», «Raqam (№)», «Т/р») emasligi tekshiriladi (avval «№» har qanday telefon ustunini jim rad etardi).
+  const W_PH=['tel','phone','telefon','телефон','тел.','моб'], W_PH2=['raqam','рақам'], W_NOPH=['tartib','тартиб','№','п/п','t/r','т/р'];
   const W_NM1=["o'quvchi",'oquvchi','bola','farzand','fish','f.i.sh','ўқувчи','укувчи','ученик','учащ','ф.и.ш','фиш'];
   const W_NM2=['ism','name','fio','f.i.o','familiya','фио','ф.и.о','фамилия','имя','исм'];
   const W_CLS=['sinf','синф','klass','класс','grade','class'], W_GRP=['guruh','group','групп','harf','буква','литер','гурух'];
   const W_STAFF=['rahbar','руковод','teacher',"o'qituvchi",'учител','kurator','куратор'];
-  const F=/(^|[^a-z])ota|father|отец|отца|папа|(^|[^а-яёўқғҳ])ота/, M=/(^|[^a-z])ona|mother|мать|матер|мама|(^|[^а-яёўқғҳ])она/;
+  //   Rus sarlavhalarda kelishik bilan ham: «Телефон мамы», «Мамин телефон», «Тел. папы», «Телефон отцу» — so'z boshidagi «мам» / «пап»
+  //   o'zagi (avval faqat «мама» / «папа» tanilib, «Телефон мамы» umumiy telefon bo'lib OTANING raqami ustiga yozilardi).
+  const F=/(^|[^a-z])ota|father|отец|отц|(^|[^а-яёўқғҳ])пап|(^|[^а-яёўқғҳ])ота/, M=/(^|[^a-z])ona|mother|мать|матер|(^|[^а-яёўқғҳ])мам|(^|[^а-яёўқғҳ])она/;
   const W_G=['vasiy','guardian','опекун','васий'], W_P0=['roditel','родит'];
   const isF=h=>F.test(h), isM=h=>M.test(h), isG=h=>has(h,W_G), isPar=h=>isF(h)||isM(h)||isG(h)||has(h,W_P0);
-  const ph=h=>has(h,W_PH) && !has(h,W_NOPH), phP=h=>ph(h)||h.includes('номер'), nm=h=>has(h,W_NM1)||has(h,W_NM2);
+  const ph=h=>has(h,W_PH) || (has(h,W_PH2) && !has(h,W_NOPH)), phP=h=>ph(h)||h.includes('номер'), nm=h=>has(h,W_NM1)||has(h,W_NM2);
   const sample=i=>{ const out=[]; for(let r=1;r<Math.min(rows.length,30);r++){ const v=impCell(((rows[r])||[])[i]); if(v) out.push(v); } return out; };
   const classRe=/^\s*(tayyorlov|prep|variativ|variant|подгот|вариатив)|^\s*\d{1,2}\s*[-–—]?\s*[a-zа-яёўқғҳ]/i;
   const classy=i=>{ const s=sample(i); return s.length>=1 && s.filter(v=>classRe.test(v)).length/s.length>=0.5; };
@@ -3059,7 +3063,7 @@ function impColumns(rows){
   C.anyPh=pick(h=>ph(h) && !isPar(h));
   C.fNm=pick(h=>nm(h) && isF(h)); if(C.fNm<0) C.fNm=pick(h=>nm(h) && has(h,W_P0) && !isM(h));
   C.mNm=pick(h=>nm(h) && isM(h) && !isF(h));
-  C.guard=pick(h=>isG(h) && !ph(h) && !nm(h));
+  C.guard=pick(h=>isG(h) && !ph(h));   // «Vasiy», «Vasiy F.I.Sh», «Опекун ФИО» (vasiy telefoni yuqorida — fPh)
   C.cls=pick(h=>has(h,W_CLS) && !has(h,W_STAFF));
   if(C.cls<0) C.cls=pick((h,i)=>has(h,W_GRP) && !has(h,W_STAFF) && classy(i));   // «Guruh» ustunida «5-A» kabi qiymat
   if(C.cls<0){ for(let i=0;i<N;i++){ const s=sample(i); if(!used.has(i) && s.length>=3 && classy(i)){ used.add(i); C.cls=i; break; } } }
@@ -3068,27 +3072,46 @@ function impColumns(rows){
   C.track=pick(h=>has(h,['nalish','track',"yo'n",'напр']));
   C.score=pick(h=>has(h,['ball','score','балл']));
   C.att=pick(h=>has(h,['davomat','att','посещ']));
-  C.name=pick(h=>has(h,W_NM1) && !isPar(h));
-  if(C.name<0) C.name=pick(h=>has(h,W_NM2) && !isPar(h));
-  if(C.name<0) C.name=pick((h,i)=>!isPar(h) && !has(h,W_STAFF.concat(['manzil','address','адрес','izoh','note','примеч','maktab','school','школ'])) && texty(i));
+  // Alohida «Familiya | Ism (| Otchestvo)» ustunlari: ism shulardan yig'iladi (C.sur + C.first + C.pat — impRowName). Avval faqat
+  //   birinchisi (familiya) olinib, bir sinfdagi aka-uka / egizaklar fayl ichidagi «takror» deb jim tushib qolardi. «Ism, familiya» kabi
+  //   bitta ustun — to'liq ism (pastdagi oddiy tanlov). «Ismi sharifi» — ism + otasining ismi (bitta ustun).
+  const isSur=h=>/familiya|фамилия|surname|last ?name/.test(h), isPat=h=>/отчеств|sharif|шариф|patronym|middle ?name/.test(h);
+  const isFst=h=>/(^|[^a-zа-яёўқғҳ'])(ism|ismi|имя|исм|исми|first ?name)(?![a-zа-яёўқғҳ])/.test(h);
+  { const si=head.findIndex((h,i)=>!used.has(i) && isSur(h) && !isFst(h) && !isPar(h)),
+          fi=head.findIndex((h,i)=>!used.has(i) && i!==si && isFst(h) && !isSur(h) && !isPar(h));
+    if(si>=0 && fi>=0){ used.add(si); used.add(fi); C.sur=si; C.first=fi; C.name=si;
+      if(!isPat(head[fi])){ const pi=head.findIndex((h,i)=>!used.has(i) && isPat(h) && !isFst(h) && !isSur(h) && !isPar(h)); if(pi>=0){ used.add(pi); C.pat=pi; } } } }
+  if(!(C.first>=0)){
+    C.name=pick(h=>has(h,W_NM1) && !isPar(h));
+    if(C.name<0) C.name=pick(h=>has(h,W_NM2) && !isPar(h));
+    if(C.name<0) C.name=pick((h,i)=>!isPar(h) && !has(h,W_STAFF.concat(['manzil','address','адрес','izoh','note','примеч','maktab','school','школ'])) && texty(i));
+  }
   return C;
 }
+// Qatordagi o'quvchi ismi: alohida familiya + ism (+ otchestvo) ustunlari bo'lsa — birlashtiriladi, aks holda ism ustuni.
+function impRowName(C, r){ const cv=i=>(i!=null && i>=0) ? impCell((r||[])[i]) : '';
+  return (C.first>=0 ? [cv(C.sur), cv(C.first), cv(C.pat)].filter(Boolean).join(' ') : cv(C.name)).replace(/\s+/g,' ').trim(); }
 // Guruh harfi: chetidagi bo'shliq, qo'shtirnoq/«», tire, nuqta tashlanadi, katta harf. Harfsiz («-», «—», bo'sh) → ''.
 //   Harf ko'rinishida bo'lmasa (masalan «2025-yil qabul») → null (tushunarsiz — taxmin qilinmaydi).
 function impNormLetter(v){ const s=String(v==null?'':v).replace(/[«»"'‘’ʻʼ`´“”„.,:;\/\\_\s–—-]+/g,'').toUpperCase();
   if(!s) return ''; return /^[A-ZА-ЯЁЎҚҒҲІ]{1,6}\d?$/.test(s) ? s : null; }
 // Sinf katagi: «5-sinf A», «5 «A»», «10-IT», «7-Б», «11 кл. Б», «Tayyorlov» → {grade, letter}. Avval «5-sinf A» harfi «S», «10-IT»
 //   «I» deb o'qilib, mavjud o'quvchilar soxta sinfga ko'chardi. Bo'sh → null (sinf ko'rsatilmagan); tushunarsiz → {bad:true}.
+//   Til so'zi («5-A rus», «5 A ruscha», «7-Б рус.», «9-B o'zbek», «5-A (rus)») harf emas — avval «ARUS» degan soxta sinf yaratilardi;
+//   u {lang:'ru'|'uz'} bo'lib qaytadi (faylda «Til» ustuni bo'lmasa — o'quvchi tili shundan).
 function impParseClass(v){
   let s=impCell(v).replace(/[‘’ʻʼ`´]/g,"'"); if(!s) return null;
   if(/variativ|variant|вариатив/i.test(s)) return {grade:13, letter:''};
+  let lang;
+  s=s.replace(/(^|[^a-zа-яёўқғҳ])(rus(?:cha|ча)?|рус(?:ча|ский|ская|ск)?\.?|o'?zbek(?:cha)?|узбек(?:ча|ский|ская)?|ўзбек(?:ча)?|uzb?)(?![a-zа-яёўқғҳ])/ig,
+    (m0,p,w)=>{ lang=/^(rus|рус)/i.test(w)?'ru':'uz'; return p+' '; });
   let grade;
   if(/tayyorlov|tayyorgarlik|prep|подгот|тайёрлов/i.test(s)){ grade=0; s=s.replace(/tayyorlov\w*|tayyorgarlik\w*|prep\w*|подгот[а-яё]*|тайёрлов[а-яёўқғҳ]*/ig,' '); }
   else { const m=s.match(/\d{1,2}/); if(!m) return {bad:true}; grade=parseInt(m[0],10); s=s.replace(m[0],' '); }
   if(!(grade>=0 && grade<=11) && grade!==13) return {bad:true};   // 13 — Variativ (panel eksporti «Sinf» ustuniga raqamni yozadi)
   s=s.replace(/\([^)]*\)/g,' ').replace(/sinfi?|синфи?|klass\w*|class\w*|grade|guruh\w*|group\w*|yo'?nalish\w*|класс[а-яё]*|групп[а-яё]*|направлен[а-яё]*|(^|[^а-яё])кл\.?(?![а-яё])/ig,' ');
   const letter=impNormLetter(s);
-  return letter==null ? {bad:true} : {grade, letter};
+  return letter==null ? {bad:true} : (lang ? {grade, letter, lang} : {grade, letter});
 }
 // Kirill harf → lotin. Ikki o'qilish: tashqi o'xshashlik («В» ≈ B — telefonda kirill klaviaturada tanlangan) va o'qilishi («В» = V,
 //   rus / o'zbek-kirill ro'yxatida). Qaysi biri — shu til+sinfda MAVJUD sinflar hal qiladi (impResolveLetter).
@@ -3104,7 +3127,10 @@ function impKnownLetters(lang, grade, students, defined){
 // Harfni mavjud sinflarga moslash: «b», «B », kirill «А» → bazadagi «B»/«A» (sinfdoshlardan ajralib, kurator/fan o'qituvchisi
 //   ko'rmaydigan soxta sinf yaratilmasin). Natija {letter} (letter null — tushunarsiz) yoki {letter, unknown:true} (shunday sinf
 //   hali yo'q) yoki {letter, ambiguous:[…]} (kirill «В» — B ham, V ham bo'lishi mumkin: taxmin qilinmaydi).
-function impResolveLetter(raw, known){
+//   mode='import' (rus / o'zbek-kirill ro'yxati): kirill harf o'qilishi bo'yicha («В» = V). Faqat TASHQI o'xshash sinf (B) mavjud bo'lsa —
+//   bu taxmin (Б sinfi allaqachon B; «В» yangi V sinfi bo'lishi mumkin): jim B ga qo'shilmaydi, noaniq deb ko'rsatiladi. Forma (qo'lda,
+//   kirill klaviaturada tanlangan harf) — avvalgidek o'xshash harfga moslanadi.
+function impResolveLetter(raw, known, mode){
   const s=impNormLetter(raw); if(s==null || s==='') return {letter:s};
   const K=known||new Map();
   if(K.has(s)) return {letter:K.get(s)};
@@ -3112,7 +3138,7 @@ function impResolveLetter(raw, known){
   const ch=[...s], lat=ch.map(c=>IMP_CYR_LAT[c]!=null?IMP_CYR_LAT[c]:c).join('');
   const look=ch.every(c=>!/[А-ЯЁЎҚҒҲІ]/.test(c) || IMP_CYR_LOOK[c]) ? ch.map(c=>IMP_CYR_LOOK[c]||c).join('') : null;
   const cands=[...new Set([lat, look].filter(Boolean))], hit=cands.filter(c=>K.has(c));
-  if(hit.length===1) return {letter:K.get(hit[0])};
+  if(hit.length===1){ if(mode==='import' && look && look!==lat && hit[0]===look) return {letter:s, ambiguous:cands}; return {letter:K.get(hit[0])}; }
   if(!hit.length && cands.length===1) return {letter:cands[0], unknown:true};
   return {letter:s, ambiguous:cands};
 }
@@ -3190,7 +3216,7 @@ async function buildAndPreviewImport(rows){
   const reservedIds=[]; if(C.id>=0) for(let i=1;i<rows.length;i++){ const g=cv(rows[i],C.id); if(/^IQ-\d+$/i.test(g) && !byIdMap.has(g.toUpperCase())) reservedIds.push(g.toUpperCase()); }
   const newIds=new Set(), updName={};
   for(let i=1;i<rows.length;i++){
-    const r=rows[i]; const name=cv(r,C.name).replace(/\s+/g,' '); if(!name) continue;
+    const r=rows[i]; const name=impRowName(C, r); if(!name) continue;
     // Ism o'rnida raqam («№» ustuni: «1», «2»…) — o'quvchi «1» nomi bilan yaratilmasin.
     if(!/[a-zа-яёўқғҳ]/i.test(name)){ warnings.push(`${i+1}-qator: ism o‘rnida «${name}» — o‘tkazildi (ism ustunini tekshiring)`); skipped.push(name); continue; }
     const givenId=cv(r,C.id);
@@ -3201,7 +3227,8 @@ async function buildAndPreviewImport(rows){
     let letterRaw=(pc && !cBad) ? pc.letter : '';
     if(grade!=null && !letterRaw && C.grp>=0){ const gl=impNormLetter(cv(r,C.grp)); if(gl) letterRaw=gl; }
     const track=cv(r,C.track);
-    const langCell=cv(r,C.lang), langFile=langCell ? (/rus|^ru|рус/i.test(langCell)?'ru':'uz') : '';   // bo'sh — til o'zgarmaydi
+    // Til: «Til» ustuni; u yo'q / bo'sh bo'lsa — sinf katagidagi til so'zi («5-A rus»); ikkalasi ham bo'lmasa — til o'zgarmaydi.
+    const langCell=cv(r,C.lang), langFile=langCell ? (/rus|^ru|рус/i.test(langCell)?'ru':'uz') : ((pc && !cBad && pc.lang) || '');
     // Maxfiy (telefon/ism) — yangi va yangilash uchun bir xil
     const priv={};
     const fph=cv(r,C.fPh), mph=cv(r,C.mPh), aph=cv(r,C.anyPh), pinflRaw=cv(r,C.pinfl), pinfl=pinflRaw.replace(/\D/g,'');
@@ -3265,7 +3292,7 @@ async function buildAndPreviewImport(rows){
       // Fayldagi harf bazadagi bilan bir xil (registr / bo'shliq farqi bilan ham — «a», «A ») — bazadagi yozuv O'ZGARMAYDI: panel eksportini
       //   qayta import qilish hech narsani o'zgartirmasin (sinf kaliti jim almashsa, sinf rahbari / fan o'qituvchisi biriktiruvi uzilardi).
       if(grade!=null && letterRaw && !(tgt.grade===exGrade && tgt.lang===exLang && impNormLetter(tgt.classLetter)===impNormLetter(letterRaw))){
-        const L=impResolveLetter(letterRaw, knownFor(tgt.lang, tgt.grade));
+        const L=impResolveLetter(letterRaw, knownFor(tgt.lang, tgt.grade), 'import');
         if(L.letter==null || L.ambiguous){ warnings.push(`«${name}»: guruh harfi «${letterRaw}» ${L.ambiguous?`noaniq (${L.ambiguous.join(' yoki ')}?)`:'tushunarsiz'} — sinfi o‘zgartirilmadi`); tgt.grade=exGrade; tgt.lang=exLang; }
         else tgt.classLetter=L.letter; }
       const oldK=classKeyOf(ex), newK=classKeyOf(tgt), classChanged=oldK!==newK, trackChanged=!!track && track!==String(ex.track||'');
@@ -3293,11 +3320,12 @@ async function buildAndPreviewImport(rows){
     if(cBad){ warnings.push(`«${name}»: sinf tushunarsiz («${cv(r,C.cls)}») — qo‘shilmadi (sinfni tuzating)`); skipped.push(name); continue; }
     const g=grade==null?0:grade, lang=langFile||'uz';
     let letter='';
-    if(letterRaw){ const L=impResolveLetter(letterRaw, knownFor(lang, g));
+    if(letterRaw){ const L=impResolveLetter(letterRaw, knownFor(lang, g), 'import');
       if(L.letter==null || L.ambiguous){ warnings.push(`«${name}»: guruh harfi «${letterRaw}» ${L.ambiguous?`noaniq (${L.ambiguous.join(' yoki ')}?) — lotin harfida yozing`:'tushunarsiz'} — qo‘shilmadi`); skipped.push(name); continue; }
       letter=L.letter; }
     const nk=nkOf(name, g, letter||track);
-    if(seenNK.has(nk)){ skipped.push(name + (letter?` («${letter}»)`:'')); continue; }   // fayl ichida takror
+    // Fayl ichida takror (shu ism, shu sinf): o'tkaziladi VA ogohlantiriladi — aka-uka / egizak bo'lsa jim yo'qolmasin.
+    if(seenNK.has(nk)){ warnings.push(`«${name}» (${g}${letter?'-'+letter:''}) faylda ikkinchi marta — ikkinchisi o‘tkazildi. Boshqa bola (aka-uka / egizak) bo‘lsa — ismini to‘liq yozing yoki ID bering`); skipped.push(name + (letter?` («${letter}»)`:'')); continue; }
     let id=givenId || nextId(existing.concat(acc, reservedIds),'IQ-',4);
     if(newIds.has(id.toUpperCase())){ warnings.push(`${name}: ID «${id}» faylda boshqa YANGI o‘quvchiga ham berilgan — o‘tkazildi (ID'ni tuzating yoki bo‘shating)`); skipped.push(name); continue; }
     // Faylda ANIQ berilgan ID avval O'CHIRILGAN o'quvchiga tegishli bo'lsa (davomat/hisob/avans/ota-ona ulanishi qolgan) —
@@ -7877,8 +7905,11 @@ async function openDeletedStudents(){
     labelTable();
     $('#ds-list').querySelectorAll('[data-dsres]').forEach(b=>b.onclick=async()=>{ if(!confirm('O‘quvchi tiklansinmi?')) return; b.disabled=true;
       // teacherUnlinked — arxivdagi «Xodim farzandi» bog'lanishi endi hech kimniki emas (o'qituvchi o'chirilgan / ID'si o'zgargan):
-      //   baza uni bo'sh qoldirib tiklaydi (audit-10, payer-code-mask.sql) — Direktorga aytiladi, kartadan qayta tanlaydi.
-      try{ const r=await rpc('restore_deleted_student',{ p_id:b.dataset.dsres }); if(r && r.ok){ toast('O‘quvchi tiklandi ✓'+(r.teacherUnlinked?` · «Xodim farzandi» bog‘lanishi («${r.teacherUnlinked}») topilmadi — o‘qituvchi o‘chirilgan yoki ID'si o‘zgargan; kartadan qayta tanlang`:''), !!r.teacherUnlinked); cache['students']=null; load(); } else { b.disabled=false; toast((r&&r.error)||'Tiklab bo‘lmadi',true); } }
+      //   baza uni bo'sh qoldirib tiklaydi (audit-10, payer-code-mask.sql) — Direktorga YOPILGUNCHA turadigan oynada aytiladi (2,6 soniyalik
+      //   toast'ni o'tkazib yuborish oson edi). Bog'lanish formada tahrirlanmaydi — faqat «💸 Chegirma so'rash» → «Xodim farzandi» orqali.
+      try{ const r=await rpc('restore_deleted_student',{ p_id:b.dataset.dsres }); if(r && r.ok){ toast('O‘quvchi tiklandi ✓');
+          if(r.teacherUnlinked) alert(`O‘quvchi tiklandi, lekin «Xodim farzandi» bog‘lanishi («${r.teacherUnlinked}») topilmadi — o‘qituvchi o‘chirilgan yoki ID’si o‘zgargan, shuning uchun bog‘lanish bo‘sh qoldirildi.\n\nQayta bog‘lash: o‘quvchi kartasi → «💸 Chegirma so‘rash» → «Xodim farzandi — 50%» (xodimni tanlang; Direktor va Moliya menejeri tasdiqlaydi).`);
+          cache['students']=null; load(); } else { b.disabled=false; toast((r&&r.error)||'Tiklab bo‘lmadi',true); } }
       catch(e){ b.disabled=false; toast('Xatolik: '+errMsg(e),true); } }); };
   load();
 }

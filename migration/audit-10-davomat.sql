@@ -92,18 +92,23 @@ begin
         using errcode = '42501';
     end if;
   end if;
-  if new.days is not null and jsonb_typeof(new.days) <> 'object' then
-    raise exception 'Davomat: kunlar {"DD": "belgi"} ko''rinishida bo''lsin' using errcode = '22023';
-  end if;
-  select e.key into v_bad
-    from jsonb_each(coalesce(new.days, '{}'::jsonb)) e
-   where (v_old -> e.key) is distinct from e.value
-     and not (e.key ~ '^(0[1-9]|[12][0-9]|3[01])$' and jsonb_typeof(e.value) = 'string'
-              and (e.value #>> '{}') in ('present', 'absent', 'late', 'excused', 'sick'))
-   limit 1;
-  if found then
-    raise exception 'Davomat: «%» kuni yoki belgisi noto''g''ri (kun 01–31; belgi: present, absent, late, excused, sick)', v_bad
-      using errcode = '22023';
+  -- Kunlar faqat YOZILGANDA tekshiriladi (yangi satr yoki days o'zgargan). Sinf o'zgarganda sync_student_class_rows faqat classKey'ni
+  --   yangilaydi: eski (obyekt bo'lmagan, masalan '[]') satr Direktorning sinf almashtirishini butunlay to'xtatardi (qabulxonada bu
+  --   tekshiruv ishlamaydi; student_attendance_pct ham bunday satrlarga chidaydi).
+  if tg_op = 'INSERT' or new.days is distinct from old.days then
+    if new.days is not null and jsonb_typeof(new.days) <> 'object' then
+      raise exception 'Davomat: kunlar {"DD": "belgi"} ko''rinishida bo''lsin' using errcode = '22023';
+    end if;
+    select e.key into v_bad
+      from jsonb_each(coalesce(new.days, '{}'::jsonb)) e
+     where (v_old -> e.key) is distinct from e.value
+       and not (e.key ~ '^(0[1-9]|[12][0-9]|3[01])$' and jsonb_typeof(e.value) = 'string'
+                and (e.value #>> '{}') in ('present', 'absent', 'late', 'excused', 'sick'))
+     limit 1;
+    if found then
+      raise exception 'Davomat: «%» kuni yoki belgisi noto''g''ri (kun 01–31; belgi: present, absent, late, excused, sick)', v_bad
+        using errcode = '22023';
+    end if;
   end if;
   return new;
 end $$;
@@ -191,7 +196,9 @@ grant execute on function public.student_id_high_water() to authenticated, servi
 -- ---------- 3) Bitta ID tarixi (student-ids.sql dagi ta'rifni almashtiradi) ----------
 --   'other' — ota-ona ko'radigan / hisobga ta'sir qiladigan boshqa yozuvlar: endi tibbiyot va chegirma / tavsiya / bonus so'rovlari
 --   ham (admin.html YANGI ID tekshiruvi 'other'ga qaraydi — eski sahifa keshida ham shu ID rad etiladi).
---   'medical' — tibbiy yozuvlar soni alohida: o'chirish oynasi «tibbiy yozuv bor» deb ogohlantiradi.
+--   'medical' — tibbiy yozuvlar soni alohida: o'chirish oynasi «tibbiy yozuv bor» deb ogohlantiradi. FAQAT Direktorga (o'quvchini faqat u
+--   o'chiradi — students_del); boshqa xodimga null: tibbiy jadvallarni hamshira va Direktor ko'radi, o'qituvchi / marketing har qanday
+--   bolaning tibbiy yozuvlari sonini bilmasin. 'other'da tibbiyot — faqat «bor / yo'q» (1 / 0), soni emas.
 --   'private' — maxfiy ma'lumot qatori + o'chirilganlar arxividagi (tiklanmagan) shu ID: o'chirilgan bolaning ID'si qo'lda ham
 --   yangi bolaga berilmasin (aks holda tiklash rad etilardi yoki ikki oila arxivi aralashardi).
 create or replace function public.student_history(p_sid text)
@@ -214,12 +221,13 @@ returns jsonb language sql stable security definer set search_path = public, app
                 + (select count(*) from public.referral_requests where id = p_sid or "referrerId" = p_sid)
                 + (select count(*) from public.referral_ledger where id = p_sid or "referrerId" = p_sid)
                 + (select count(*) from public.monitoring_bonus where "studentId" = p_sid)
-                + (select count(*) from public.student_health where id = p_sid or "studentId" = p_sid)
-                + (select count(*) from public.sick_notes where "studentId" = p_sid)
-                + (select count(*) from public.nurse_visits where "studentId" = p_sid),
-    'medical',    (select count(*) from public.student_health where id = p_sid or "studentId" = p_sid)
-                + (select count(*) from public.sick_notes where "studentId" = p_sid)
-                + (select count(*) from public.nurse_visits where "studentId" = p_sid),
+                + (exists (select 1 from public.student_health where id = p_sid or "studentId" = p_sid)
+                   or exists (select 1 from public.sick_notes where "studentId" = p_sid)
+                   or exists (select 1 from public.nurse_visits where "studentId" = p_sid))::int,
+    'medical',    case when app.is_admin() then
+                    (select count(*) from public.student_health where id = p_sid or "studentId" = p_sid)
+                  + (select count(*) from public.sick_notes where "studentId" = p_sid)
+                  + (select count(*) from public.nurse_visits where "studentId" = p_sid) end,
     'private',    (select count(*) from public.student_private where id = p_sid)
                 + (select count(*) from public.deleted_records d
                     where d."restoredAt" is null

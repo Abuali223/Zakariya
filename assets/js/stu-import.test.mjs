@@ -346,3 +346,88 @@ test('A1-10: Arxiv sahifasi qarzi — status «paid» to‘liq to‘langan', () 
   assert.ok(src('renderArchive').includes("paid=x.status==='paid'?amt:(Number(x.paidAmount)||0)"));
   assert.ok(!ADM.includes('function openLeavers('));
 });
+
+// ===== Mustaqil tekshiruv (G1 2-raund): sarlavha / sinf / harf chekka holatlari =====
+test('G1-2: «Телефон мамы» / «Мамин телефон» — ona telefoni; «Тел. папы» — ota; ota raqami ustiga yozilmaydi', async () => {
+  need();
+  const c = h => plain(H.impColumns([h, h.map(() => 'x')]));
+  assert.equal(c(['ФИО', 'Телефон мамы']).mPh, 1);
+  assert.equal(c(['ФИО', 'Телефон мамы']).anyPh, -1, 'umumiy telefon emas');
+  assert.equal(c(['ФИО', 'Мамин телефон']).mPh, 1);
+  assert.equal(c(['ФИО', 'Тел. мамы']).mPh, 1);
+  assert.equal(c(['ФИО', 'Телефон папы']).fPh, 1);
+  assert.equal(c(['ФИО', 'Телефон отцу']).fPh, 1);
+  const r = c(['ФИО', 'Телефон отца', 'Телефон мамы']);
+  assert.deepEqual([r.fPh, r.mPh], [1, 2], 'ikkalasi — o‘z maydoniga');
+  assert.equal(c(['ФИО', 'Отчество']).fNm, -1, '«Отчество» ota ustuni emas');
+  // ID bilan topilgan o'quvchi: fayldagi ona raqami otaning (parentPhone) ustiga yozilmaydi
+  const o = await imp({ students: S1, priv: P1 }, [['ID', 'ФИО', 'Класс', 'Телефон мамы'], ['IQ-0001', 'Sinov Alijon', '5-А', '+998 00 999 00 01']]);
+  assert.equal((o.toUpdate || []).length, 1, JSON.stringify(o.toUpdate || o.toast));
+  assert.deepEqual(o.toUpdate[0].priv, { parentPhone2: '+998 00 999 00 01' });
+});
+
+test('G1-2: «Telefon №», «Ota telefon №», «Tel. №» — telefon; «Tartib raqami», «Raqam (№)», «Т/р», «№ п/п» — telefon emas', () => {
+  need();
+  const c = h => plain(H.impColumns([h, h.map(() => 'x')]));
+  assert.equal(c(['Ism', 'Telefon №']).anyPh, 1);
+  assert.equal(c(['Ism', 'Tel. №']).anyPh, 1);
+  assert.equal(c(['Ism', 'Ota telefon №']).fPh, 1);
+  assert.equal(c(['Ism', 'Raqam']).anyPh, 1, '«raqam» yolg‘iz — avvalgidek telefon');
+  for (const h of ['Tartib raqami', 'Raqam (№)', 'Тартиб рақами', '№ п/п', 'Т/р']) assert.equal(c(['Ism', h]).anyPh, -1, h);
+});
+
+test('G1-2: vasiy F.I.Sh ustuni — guardian («Vasiy F.I.Sh», «Vasiy ismi», «Опекун ФИО»)', async () => {
+  need();
+  const c = h => plain(H.impColumns([h, h.map(() => 'x')]));
+  for (const h of ['Vasiy F.I.Sh', 'Vasiy ismi', 'Опекун ФИО', 'Vasiy']) assert.equal(c(['Ism', 'Sinf', h]).guard, 2, h);
+  assert.equal(c(['Ism', 'Vasiy telefoni']).guard, -1, 'telefon — vasiy ismi emas');
+  const o = await imp({}, [['Ism', 'Sinf', 'Vasiy F.I.Sh'], ['Sinov Vasiyli', '5-A', 'Sinov Vasiy']]);
+  assert.equal(o.toWrite[0].priv.guardian, 'Sinov Vasiy');
+});
+
+test('G1-2: sinf katagidagi til so‘zi harf emas — «5-A rus» → 5-A (rus); «Til» ustuni bo‘lmasa til shundan', async () => {
+  need();
+  const p = v => plain(H.impParseClass(v));
+  assert.deepEqual(p('5-A rus'), { grade: 5, letter: 'A', lang: 'ru' });
+  assert.deepEqual(p('5 A ruscha'), { grade: 5, letter: 'A', lang: 'ru' });
+  assert.deepEqual(p('5-sinf rus'), { grade: 5, letter: '', lang: 'ru' });
+  assert.deepEqual(p('7-Б рус.'), { grade: 7, letter: 'Б', lang: 'ru' });
+  assert.deepEqual(p("9-B o'zbek"), { grade: 9, letter: 'B', lang: 'uz' });
+  assert.deepEqual(p('5-A (rus)'), { grade: 5, letter: 'A', lang: 'ru' });
+  assert.deepEqual(p('5-A'), { grade: 5, letter: 'A' }, 'til so‘zisiz — avvalgidek');
+  const o = await imp({}, [['Ism', 'Sinf'], ['Sinov Rus', '5-A rus']]);
+  assert.deepEqual([o.toWrite[0].data.grade, o.toWrite[0].data.classLetter, o.toWrite[0].data.lang], [5, 'A', 'ru']);
+  const o2 = await imp({}, [['Ism', 'Sinf', 'Til'], ['Sinov Uz', '5-A rus', "o'zbek"]]);
+  assert.equal(o2.toWrite[0].data.lang, 'uz', '«Til» ustuni ustun turadi');
+});
+
+test('G1-2: import — kirill «В» faqat B mavjud bo‘lsa jim B ga qo‘shilmaydi (noaniq); forma — avvalgidek B', async () => {
+  need();
+  const K = (...l) => new Map(l.map(x => [x.toUpperCase(), x]));
+  const r = (v, k, m) => plain(H.impResolveLetter(v, k, m));
+  assert.deepEqual(r('В', K('A', 'B'), 'import').ambiguous, ['V', 'B']);
+  assert.equal(r('В', K('A', 'B')).letter, 'B', 'forma — kirill klaviatura');
+  assert.equal(r('В', K('A', 'V'), 'import').letter, 'V', 'o‘qilishi bo‘yicha (V) — taxmin emas');
+  assert.equal(r('Б', K('A', 'B'), 'import').letter, 'B');
+  assert.equal(r('А', K('A'), 'import').letter, 'A', 'o‘xshash = o‘qilishi');
+  const st = [{ _id: 'IQ-0061', studentId: 'IQ-0061', name: 'Sinov Bkl', grade: 7, classLetter: 'B', lang: 'ru', payStatus: '' }];
+  const o = await imp({ students: st }, [['ФИО', 'Класс', 'Язык'], ['Sinov Yangi Vkl', '7-В', 'rus']]);
+  assert.equal((o.toWrite || []).length, 0, 'jim 7-B ga qo‘shilmadi');
+  assert.ok(o.warnings.some(w => /noaniq \(V yoki B\?\)/.test(w)), JSON.stringify(o.warnings));
+});
+
+test('G1-2: alohida «Фамилия | Имя | Отчество» / «Familiya | Ism» — ism birlashtiriladi; aka-ukalar yo‘qolmaydi; fayl ichidagi takror — ogohlantirish', async () => {
+  need();
+  const c = h => plain(H.impColumns([h, h.map(() => 'x')]));
+  const r = c(['№', 'Фамилия', 'Имя', 'Отчество', 'Класс']);
+  assert.deepEqual([r.sur, r.first, r.pat, r.cls], [1, 2, 3, 4]);
+  assert.equal(c(['Ism, familiya', 'Sinf']).name, 0, 'bitta ustun — to‘liq ism');
+  assert.equal(c(['Ism, familiya', 'Sinf']).first, undefined);
+  const o = await imp({}, [['№', 'Фамилия', 'Имя', 'Класс'], ['1', 'Sinovov', 'Ivan', '5-А'], ['2', 'Sinovov', 'Pyotr', '5-А']]);
+  assert.deepEqual(o.toWrite.map(x => x.data.name), ['Sinovov Ivan', 'Sinovov Pyotr']);
+  const o2 = await imp({}, [['Familiya', 'Ismi', 'Sinf'], ['Sinova', 'Laylo', '3-B']]);
+  assert.equal(o2.toWrite[0].data.name, 'Sinova Laylo');
+  const o3 = await imp({}, [['Ism', 'Sinf'], ['Sinov Takror', '5-A'], ['Sinov Takror', '5-A']]);
+  assert.equal(o3.toWrite.length, 1);
+  assert.ok(o3.warnings.some(w => /faylda ikkinchi marta/.test(w)), JSON.stringify(o3.warnings));
+});

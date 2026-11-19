@@ -161,6 +161,17 @@ select zz.chk('D24 yangi sinf (5-B) kuratori saqlaydi; eski (5-A) kuratori shu o
 select zz.chk('D25 o''tgan oy tarixi o''sha (5-A) sinfida qoladi: 5-A kuratori tuzatadi, sinf kaliti o''zgarmaydi',
   zz.as('U_K5A', format($q$with x as (update public.attendance set days = '{"03":"present","04":"late"}' where id = %L returning "classKey") select string_agg("classKey", ',') from x$q$, 'IQ-0502__' || current_setting('zz.pm'))), '^uz-5-A$');
 
+-- Mustaqil tekshiruv (G2 2-raund): eski (obyekt bo'lmagan) kunlar satri Direktorning sinf almashtirishini to'xtatmaydi; kunlar YOZILSA — tekshiriladi
+set local iqror.migrating = '1';
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus") values ('IQ-0509','IQ-0509','Sinov Eski Massiv',5,'A','uz','') on conflict (id) do nothing;
+insert into public.attendance (id, "studentId", "classKey", month, days) values ('IQ-0509__' || current_setting('zz.m'), 'IQ-0509', 'uz-5-A', current_setting('zz.m'), '[]');
+set local iqror.migrating = '';
+select zz.chk('D26 eski satr (days = []) — Direktor sinfni almashtiradi, shu oy satri yangi sinfga ko''chadi (avval 22023 bilan to''xtardi)',
+  zz.as('U_DIR', $q$with x as (update public.students set "classLetter" = 'B' where id = 'IQ-0509' returning 1) select count(*)::text from x$q$)
+  || '|' || zz.q($q$select "classKey" from public.attendance where id = 'IQ-0509__' || current_setting('zz.m')$q$), '^1\|uz-5-B$');
+select zz.chk('D27 kunlar yozilganda baribir tekshiriladi: obyekt bo''lmagan qiymat — rad',
+  zz.as('U_K5B', format($q$with x as (update public.attendance set days = '"x"' where id = %L returning 1) select count(*)::text from x$q$, 'IQ-0509__' || current_setting('zz.m'))), '^ERR 22023');
+
 -- ===== A2-01: deploydagi bir martalik tuzatish (avvalgi soxta / eskirgan satrlar) =====
 -- qo'riqchidan OLDIN yaratilgan holatni tiklaymiz (baza nomidan — qo'riqchi tizimni tekshirmaydi)
 set local iqror.migrating = '1';
@@ -223,8 +234,10 @@ select zz.chk('H02 Direktor o''chiradi', zz.as('U_DIR', $q$with a as (delete fro
   select (select count(*) from a)::text$q$), '^2$');
 select zz.chk('H03 yuqori chegara o''chirilgan ID''lardan past tushmaydi (o''chirilganlar arxivi + tibbiyot): 2160 — keyingi yangi ID IQ-2161 (avval 2149 -> IQ-2150 qayta berilardi)',
   zz.as('U_DIR', $q$select public.student_id_high_water()::text$q$), '^2160$');
-select zz.chk('H04 tarix: tibbiy 3 ta (karta, murojaat, ma''lumotnoma), other ≥ 3, arxiv (private) ≥ 1 — yangi ID tekshiruvi rad etadi',
-  zz.as('U_DIR', $q$select (h ->> 'medical') || '|' || ((h ->> 'other')::int >= 3)::text || '|' || ((h ->> 'private')::int >= 1)::text from (select public.student_history('IQ-2160') h) x$q$), '^3\|true\|true$');
+select zz.chk('H04 tarix: tibbiy 3 ta (karta, murojaat, ma''lumotnoma) — Direktorga; other ≥ 1 (tibbiyot — bor/yo''q), arxiv (private) ≥ 1 — yangi ID tekshiruvi rad etadi',
+  zz.as('U_DIR', $q$select (h ->> 'medical') || '|' || ((h ->> 'other')::int >= 1)::text || '|' || ((h ->> 'private')::int >= 1)::text from (select public.student_history('IQ-2160') h) x$q$), '^3\|true\|true$');
+select zz.chk('H04b boshqa xodim (o''qituvchi) — tibbiy yozuvlar soni ko''rinmaydi (null), «other»da tibbiyot faqat bor/yo''q (1)',
+  zz.as('U_H7B', $q$select coalesce(h ->> 'medical', 'null') || '|' || (h ->> 'other') from (select public.student_history('IQ-2149') h) x$q$), '^null\|1$');
 select zz.chk('H05 tarixsiz (xato yaratilgan) o''chirilgan o''quvchi — arxiv tufayli «private» ≥ 1 (ID qo''lda ham berilmaydi)',
   zz.as('U_DIR', $q$select ((public.student_history('IQ-2150') ->> 'private')::int >= 1)::text$q$), '^true$');
 -- har bir yangi manba alohida: raqam har safar kattaroq, har qo'shilgandan keyin funksiya (Direktor nomidan) shu raqamni qaytarishi kerak
