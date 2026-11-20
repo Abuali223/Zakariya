@@ -12,7 +12,10 @@
 --       can_write_general, teacher_has_subject, ann_visible) — 0 marta; egalik to'plami — ko'pi bilan 1 marta (InitPlan);
 --   (R) REJA: sotuvchida student_phones / my_sick_notes / my_nurse_visits — jadval ko'rib chiqilmaydi (One-Time Filter, «never
 --       executed»); student_private / students — darvoza filtrning BIRINCHI sharti (foydalanuvchi filtri hech qachon baholanmaydi);
---   (F) ko'rinish huquqlari o'zgarmagan: Direktor, qabulxona, moliya, kassir, sinf xodimi, farzandli / farzandsiz ota-ona, sotuvchi.
+--   (F) ko'rinish huquqlari o'zgarmagan: Direktor, qabulxona, moliya, kassir, sinf xodimi, farzandli / farzandsiz ota-ona, sotuvchi;
+--   (G) darvozalar va plpgsql (3-mustaqil tekshiruv, 2026-11-20): yordamchilar plpgsql; o'ramli har SELECT policy darvoza bilan
+--       boshlanadi; darvoza yolg'on => policy'ning har InitPlan'i yolg'on (darvoza qatorni yashirmaydi); rollar bo'yicha darvoza
+--       matritsasi; huquqsiz foydalanuvchida filtr mos / mos emas — chaqiruvlar soni bir xil; har darvoza — 2 chaqiruv (arzon).
 --   Har chaqiruv haqiqiy rol bilan (authenticated / anon + JWT sub). Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida,
 --   kanonik zanjirdan keyin (dev va jonli zanjir), migration/ papkasidan:
 --     bash migration/chain.sh --no-lock-timeout | psql -d fx_sinov -q && (cd migration && psql -d fx_sinov -X -f test-rls-timing.sql)
@@ -21,7 +24,7 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 \pset tuples_only on
-\set kutilgan 18
+\set kutilgan 24
 do $g0$ begin
   if exists (select 1 from public.students) or exists (select 1 from public.users) then
     raise exception 'test-rls-timing.sql: baza bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -185,7 +188,8 @@ create temp table zz_ck on commit drop as
 create temp table zz_ann on commit drop as
   select u, k, e,
          zz.as(u, format('select (coalesce(app.ann_can_write(%1$L::jsonb), false) = coalesce(app.rlsg_ann_can_write(app.rls_class_staff(), %1$L::jsonb), false)
-                           and coalesce(app.ann_visible(%1$L::jsonb, %2$L::timestamptz), false) = coalesce(app.rlsg_ann_visible(app.rls_ann_gate(), %1$L::jsonb, %2$L::timestamptz), false))::text', k, e)) as r
+                           and coalesce(app.ann_visible(%1$L::jsonb, %2$L::timestamptz), false)
+                             = coalesce(app.rlsg_ann_visible5(app.is_admin() or app.is_zavuch(), app.rls_ann_staff_keys(), app.rls_ann_child_keys(), %1$L::jsonb, %2$L::timestamptz), false))::text', k, e)) as r
     from unnest(array['U_DIR','U_SAL','U_PAR0','U_PA','U_TCH','U_HM','U_KUR','U_ZAV','U_ADM','U_HRT','U_REC','U_NUR','U_BL']) u,
          unnest(array['["all"]','["uz-5-A"]','["uz-6-B"]','["uz-9-Z"]','[]']) k, unnest(array[null, '2026-01-01 00:00+05', '2027-01-01 00:00+05']) e;
 select zz.chk('E03 sinf o''ramlari (darvoza bilan) — asl funksiyalar bilan barcha rol va sinf kalitlarida bir xil; kimdir haqiqatan rost (oldida — juftlar / rostlar)',
@@ -225,7 +229,7 @@ insert into zz_c select 'par0', zz.rowcalls(), zz.setcalls();
 select zz.as('U_PA', $q$select (select count(*) from public.attendance where "studentId" >= 'A') + (select count(*) from public.grades where "studentId" >= 'A')
   + (select count(*) from public.students where name >= 'S') + (select count(*) from public.student_private where "parentPhone" >= '+9')
   + (select count(*) from public.student_phones where "parentPhone" >= '+9') + (select count(*) from public.my_sick_notes where "studentId" >= 'A')
-  + (select count(*) from public.my_nurse_visits where "studentId" >= 'A')$q$) as c_pa \gset
+  + (select count(*) from public.my_nurse_visits where "studentId" >= 'A') + (select count(*) from public.class_announcements where title >= 'S')$q$) as c_pa \gset
 insert into zz_c select 'pa', zz.rowcalls(), zz.setcalls();
 select zz.chk('C01 sotuvchi (8 so''rov, hammasi filtr bilan): hech narsa ko''rmaydi; qatorga bog''liq funksiya — 0 marta; egalik to''plami — har so''rovda ko''pi bilan 1',
   :'c_sal' || ' | ' || ((select rowc from zz_c where step = 'sal') - (select rowc from zz_c where step = 'base'))::text,
@@ -251,10 +255,11 @@ select zz.chk('C04 egalik to''plami — har so''rovda doimiy (100 ta yangi qator
 select zz.plan('U_SAL', $q$select id from public.student_phones where "parentPhone" >= '+9'$q$) as r_ph \gset
 select zz.plan('U_SAL', $q$select id from public.my_sick_notes where "studentId" >= 'A'$q$) as r_sn \gset
 select zz.plan('U_SAL', $q$select id from public.my_nurse_visits where "studentId" >= 'A'$q$) as r_nv \gset
+-- Skan turi (Seq / Index / Bitmap Heap) statistikaga bog'liq — muhimi: darvoza One-Time Filter va jadval skani bajarilmagan.
 select zz.chk('R01 sotuvchi: student_phones / my_sick_notes / my_nurse_visits — darvoza (One-Time Filter), jadval ko''rib chiqilmaydi',
-  (:'r_ph' ~ 'One-Time Filter' and :'r_ph' ~ 'Seq Scan on student_private \(never executed\)')::text || ' '
-  || (:'r_sn' ~ 'One-Time Filter' and :'r_sn' ~ 'Scan on sick_notes[^\n]*\(never executed\)')::text || ' '
-  || (:'r_nv' ~ 'One-Time Filter' and :'r_nv' ~ 'Scan on nurse_visits[^\n]*\(never executed\)')::text,
+  (:'r_ph' ~ 'One-Time Filter' and :'r_ph' ~ 'Scan (using [a-z0-9_]+ )?on student_private[^\n]*\(never executed\)')::text || ' '
+  || (:'r_sn' ~ 'One-Time Filter' and :'r_sn' ~ 'Scan (using [a-z0-9_]+ )?on sick_notes[^\n]*\(never executed\)')::text || ' '
+  || (:'r_nv' ~ 'One-Time Filter' and :'r_nv' ~ 'Scan (using [a-z0-9_]+ )?on nurse_visits[^\n]*\(never executed\)')::text,
   '^true true true$');
 select zz.plan('U_SAL', $q$select id from public.student_private where "parentPhone" >= '+9'$q$) as r_pr \gset
 select zz.plan('U_SAL', $q$select id from public.students where name >= 'S'$q$) as r_st \gset
@@ -273,6 +278,91 @@ select zz.chk('F02 davomat / baho / tibbiy / e''lon: ota-ona — farzandlari, fa
                      || '/' || zz.as(u, 'select count(*)::text from public.class_announcements'), ' ' order by u)
      from unnest(array['U_PA','U_TCH','U_HM','U_KUR','U_SAL','U_PAR0']) u),
   '^U_HM=1/0/1/1/[0-9]+ U_KUR=1/0/1/1/[0-9]+ U_PA=2/2/2/2/2 U_PAR0=0/0/0/0/0 U_SAL=0/0/0/0/0 U_TCH=0/2/0/0/[0-9]+$');
+
+-- ========== (G) darvozalar va plpgsql (3-mustaqil tekshiruv, 2026-11-20) ==========
+select zz.chk('G01 policy / ko''rinishlardagi SECURITY DEFINER yordamchilar plpgsql (reja keshlanadi; SQL qolgani — faqat users_me: UPDATE, o''z qatori) | o''girilganlar >= 25 | namunalar',
+  coalesce((with e as (select coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') as t
+                         from pg_policy p join pg_class c on c.oid = p.polrelid where c.relnamespace = 'public'::regnamespace
+                       union all
+                       select pg_get_viewdef(c.oid) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('v', 'm')),
+                 n as (select distinct m[1] as f from e, regexp_matches(e.t, 'app\.([a-z_0-9]+)\(', 'g') m)
+            select string_agg(distinct p.proname, ',' order by p.proname) from n join pg_proc p on p.proname = n.f and p.pronamespace = 'app'::regnamespace
+             where p.prosecdef and p.prolang = (select oid from pg_language where lanname = 'sql')), '-')
+  || ' | ' || (select (count(*) >= 25)::text from pg_proc p
+                where p.pronamespace = 'app'::regnamespace and p.prosecdef and p.prolang = (select oid from pg_language where lanname = 'plpgsql')
+                  and p.prosrc ~ '^\s*#variable_conflict use_column\s+begin\s+return \(')
+  || ' | ' || (select string_agg(l.lanname, ',' order by p.proname) from pg_proc p join pg_language l on l.oid = p.prolang
+                where p.oid in ('app.rls_acl()'::regprocedure, 'app.rls_gate_any()'::regprocedure, 'app.my_child_sids()'::regprocedure,
+                                'app.is_teacher_for_class(text)'::regprocedure)),
+  '^users_me \| true \| plpgsql,plpgsql,plpgsql,plpgsql$');
+select zz.chk('G02 rol / to''plam yordamchilari va o''ramlardan (rls_in / rlsg_*) iborat har SELECT policy darvoza bilan BOSHLANADI (darvozasizlar | umumiy darvozalilardan namunalar)',
+  coalesce((select string_agg(c.relname || '.' || p.polname, ',' order by c.relname, p.polname) from pg_policy p join pg_class c on c.oid = p.polrelid
+             where c.relnamespace = 'public'::regnamespace and p.polcmd in ('r', '*') and pg_get_expr(p.polqual, p.polrelid) ~ 'app\.(rls_in|rlsg_[a-z0-9_]+)\('
+               and pg_get_expr(p.polqual, p.polrelid) !~ '^\(\( SELECT app\.rls_gate_[a-z]+\(\) AS rls_gate_[a-z]+\) AND '), '-')
+  || ' | ' || (select string_agg(c.relname, ',' order by c.relname) from pg_policy p join pg_class c on c.oid = p.polrelid
+                where c.relnamespace = 'public'::regnamespace and pg_get_expr(p.polqual, p.polrelid) ~ '^\(\( SELECT app\.rls_gate_any\(\) AS rls_gate_any\) AND '
+                  and c.relname in ('attendance', 'grades', 'class_announcements', 'student_health', 'subject_notes', 'characteristics', 'student_summaries', 'monitoring')),
+  '^- \| attendance,characteristics,class_announcements,grades,monitoring,student_health,student_summaries,subject_notes$');
+-- G03: darvoza faqat USTMA-UST to'plam: darvozali har policy'ning har InitPlan'i (rol yordamchisi, to'plam) darvozasi yolg'on bo'lgan
+--   har foydalanuvchida yolg'on / bo'sh / NULL — demak darvoza hech qachon ko'rinadigan qatorni yashirmaydi (qolgan shart faqat AND / OR).
+create temp table zz_gp on commit drop as
+  select distinct substring(pg_get_expr(p.polqual, p.polrelid) from '^\(\( SELECT app\.(rls_gate_[a-z]+)\(\)') as gate, m[1] as expr
+    from pg_policy p join pg_class c on c.oid = p.polrelid,
+         regexp_matches(pg_get_expr(p.polqual, p.polrelid), '\( SELECT ((?:app\.[a-z_0-9]+\(\)|\(app\.is_admin\(\) OR app\.is_zavuch\(\)\)))(?: AS [a-z_0-9]+)?\)', 'g') m
+   where c.relnamespace = 'public'::regnamespace and p.polcmd in ('r', '*') and pg_get_expr(p.polqual, p.polrelid) ~ '^\(\( SELECT app\.rls_gate_[a-z]+\(\)';
+delete from zz_gp where expr = 'app.' || gate || '()';
+create temp table zz_gv on commit drop as
+  select u, g.gate, g.expr, zz.as(u, format('select app.%s()::text', g.gate)) as gv, zz.as(u, format('select coalesce((%s)::text, ''NULL'')', g.expr)) as ev
+    from unnest(array['U_DIR','U_SAL','U_PAR0','U_PA','U_PB','U_BL','U_TCH','U_HM','U_KUR','U_ZAV','U_ADM','U_HRT','U_REC','U_FM','U_KAS','U_NUR','U_ACC','U_GHOST']) u,
+         zz_gp g;
+select zz.chk('G03 darvoza yolg''on => policy''ning har InitPlan''i yolg''on / bo''sh (buzilishlar | juft / darvoza yolg''on | asosiy to''plamlar qamralgan)',
+  (select count(*) filter (where gv = 'false' and ev not in ('false', '{}', 'NULL')) || ':'
+          || coalesce(string_agg(case when gv = 'false' and ev not in ('false', '{}', 'NULL') then u || '/' || gate || '/' || expr || '=' || ev end, ',' order by u, gate, expr), '')
+          || ' | ' || count(*) || '/' || count(*) filter (where gv = 'false')
+          || ' | ' || (select count(distinct expr) from zz_gp where expr ~ '^app\.(my_child_sids|my_student_docs|rls_class_staff|rls_ann_child_keys|rls_ann_staff_keys|is_admin|is_reception|is_nurse|is_finance|is_cashier)\(\)$')
+     from zz_gv),
+  '^0: \| [0-9]{3,}/[0-9]{2,} \| 10$');
+select zz.chk('G04 darvozalar (any / private / students / phones / health): huquqsiz — 00000; farzandli ota-ona, Direktor, O''IBDO'' — 11111; qabulxona — 11110; sinf xodimi — 10101; moliya / kassir — 10010; hamshira / buxgalter — 10000',
+  (select string_agg(u || '=' || zz.as(u, $q$select app.rls_gate_any()::int::text || app.rls_gate_private()::int::text || app.rls_gate_students()::int::text
+                                                     || app.rls_gate_phones()::int::text || app.rls_gate_health()::int::text$q$), ' ' order by u)
+     from unnest(array['U_ACC','U_ADM','U_BL','U_DIR','U_FM','U_GHOST','U_HM','U_HRT','U_KAS','U_KUR','U_NUR','U_PA','U_PAR0','U_PB','U_REC','U_SAL','U_TCH','U_ZAV']) u),
+  '^U_ACC=10000 U_ADM=10101 U_BL=00000 U_DIR=11111 U_FM=10010 U_GHOST=00000 U_HM=10101 U_HRT=10101 U_KAS=10010 U_KUR=10101 U_NUR=10000 U_PA=11111 U_PAR0=00000 U_PB=11111 U_REC=11110 U_SAL=00000 U_TCH=10101 U_ZAV=11111$');
+-- G05: huquqsiz foydalanuvchida (sotuvchi, farzandsiz ota-ona, bloklangan, users yozuvi yo'q) filtr yashirin qatorga MOS kelsa ham, kelmasa
+--   ham — app funksiyalari chaqiruvlari soni AYNAN bir xil (telefon / ism / matn ustunlari: indeks yo'q). Indeksli kalit (studentId) bo'yicha
+--   farq — faqat darvoza (rls_gate_any + rls_acl = 2 chaqiruv; seq scan bo'lsa 0) — hujjatlashtirilgan qoldiq (~40 mks).
+create or replace function zz.allcalls() returns bigint language sql as $$
+  select coalesce(sum(pg_stat_get_xact_function_calls(p.oid)), 0)::bigint from pg_proc p where p.pronamespace = 'app'::regnamespace $$;
+create or replace function zz.det(p_uid text) returns text language plpgsql as $$
+declare c0 bigint; c1 bigint; c2 bigint; c3 bigint; c4 bigint; rh text; rm text; ih text; im text;
+begin
+  c0 := zz.allcalls();
+  rh := zz.as(p_uid, $q$select ((select count(*) from public.students where name = 'Sinov Bola A') + (select count(*) from public.student_private where "parentPhone" = '+998001110001')
+    + (select count(*) from public.student_phones where "parentPhone" = '+998001110001') + (select count(*) from public.attendance where month = '2026-11')
+    + (select count(*) from public.grades where year = '2026-2027') + (select count(*) from public.class_announcements where title = 'Sinov')
+    + (select count(*) from public.my_sick_notes where "fromDay" = '2026-11-10') + (select count(*) from public.my_nurse_visits where complaint = 'ZZ'))::text$q$);
+  c1 := zz.allcalls();
+  rm := zz.as(p_uid, $q$select ((select count(*) from public.students where name = 'Sinov Bola Q') + (select count(*) from public.student_private where "parentPhone" = '+998001119999')
+    + (select count(*) from public.student_phones where "parentPhone" = '+998001119999') + (select count(*) from public.attendance where month = '2026-12')
+    + (select count(*) from public.grades where year = '2025-2026') + (select count(*) from public.class_announcements where title = 'Yoq')
+    + (select count(*) from public.my_sick_notes where "fromDay" = '2026-11-12') + (select count(*) from public.my_nurse_visits where complaint = 'YY'))::text$q$);
+  c2 := zz.allcalls();
+  ih := zz.as(p_uid, $q$select count(*)::text from public.attendance where "studentId" = 'IQ-A'$q$);
+  c3 := zz.allcalls();
+  im := zz.as(p_uid, $q$select count(*)::text from public.attendance where "studentId" = 'IQ-NO'$q$);
+  c4 := zz.allcalls();
+  return rh || '/' || rm || ' ' || ((c1 - c0) = (c2 - c1))::text || ' ' || ih || '/' || im || ' ' || ((c3 - c2) - (c4 - c3))::text;
+end $$;
+select zz.chk('G05 huquqsizlar: filtr mos / mos emas — chaqiruvlar soni bir xil (0 qator); indeksli kalit — farq faqat darvoza (0 yoki 2)',
+  (select string_agg(u || '=' || zz.det(u), ' ' order by u) from unnest(array['U_BL','U_GHOST','U_PAR0','U_SAL']) u),
+  '^U_BL=0/0 true 0/0 (0|2) U_GHOST=0/0 true 0/0 (0|2) U_PAR0=0/0 true 0/0 (0|2) U_SAL=0/0 true 0/0 (0|2)$');
+-- G06: darvoza arzon — har darvoza AYNAN 2 chaqiruv (o'zi + app.rls_acl, bitta so'rov); avval 6–12 ta ichma-ich chaqiruv edi (~150 mks).
+create or replace function zz.gcost(p_uid text, p_gate text) returns bigint language plpgsql as $$
+declare c0 bigint; v text;
+begin c0 := zz.allcalls(); v := zz.as(p_uid, format('select app.%s()::text', p_gate)); return zz.allcalls() - c0; end $$;
+select zz.chk('G06 har darvoza (5 ta) har rolda (sotuvchi, farzandli ota-ona, o''qituvchi, Direktor, users yozuvi yo''q) — 2 chaqiruv',
+  (select string_agg(distinct zz.gcost(u, g)::text, ',') from unnest(array['U_SAL','U_PA','U_TCH','U_DIR','U_GHOST']) u,
+          unnest(array['rls_gate_any','rls_gate_private','rls_gate_students','rls_gate_phones','rls_gate_health']) g),
+  '^2$');
 
 select count(*)::text as yozilgan from zz.res \gset
 select zz.chk('ZZ yozilgan tekshiruvlar soni = kutilgan', :'yozilgan', '^' || :'kutilgan' || '$');

@@ -250,6 +250,25 @@ test('renderSales: bir katakda ikki raqam (valid:false, asl yozuv) — har biri 
   assert.equal((h.match(/href="tel:/g) || []).length, 3);
 });
 
+test('salesTel: «+» / 00 bilan boshlangan 9 xonali qism O‘zbekiston raqamiga aylanmaydi (chala xorijiy raqam — begona odamga havola yo‘q); 00 — xalqaro prefiks; raqamsiz qism (izoh qoldig‘i) ko‘rsatilmaydi', () => {
+  const E = salesEnv();
+  const t = (p, v) => E.ctx.salesTel(p, v);
+  const h1 = t('+44 7700 900', false);
+  assert.doesNotMatch(h1, /tel:/, 'chala xorijiy (9 raqam, «+» bilan) — havola yo‘q (avval tel:+998447700900 bo‘lardi)');
+  assert.match(h1, /\+44 7700 900<\/span> <span[^>]*>\(raqam noto‘g‘ri yozilgan bo‘lishi mumkin — ma’muriyatga xabar bering\)/);
+  const h2 = t('+998 00 111 00 31, +44 7700 900', false);
+  assert.equal((h2.match(/href="tel:/g) || []).length, 1, 'bir katakda: to‘g‘ri raqam — havola, chala xorijiy — matn');
+  assert.match(h2, /href="tel:\+998001110031"/);
+  assert.doesNotMatch(h2, /tel:\+?998447700900/);
+  assert.match(h2, /\(bir katakda bir nechta raqam yozilgan, biri noto‘g‘ri bo‘lishi mumkin — ma’muriyatga xabar bering\)/, 'havolasiz qism bor — ogohlantirish');
+  assert.match(t('00 44 7700 900033', false), /href="tel:\+447700900033"/, '00 — xalqaro chiqish prefiksi');
+  assert.doesNotMatch(t('00 44 7700 9', false), /tel:/, '00 bilan chala raqam — havola yo‘q');
+  const h5 = t('+998 00 888 00 05, +998 00 888 00 06 (         ,                )', false);   // raqamsiz qism (server endi bunday qismni yubormaydi — sahifa ham ko'rsatmaydi)
+  assert.equal((h5.match(/href="tel:/g) || []).length, 2);
+  assert.doesNotMatch(h5, /<span style="white-space:nowrap">\)<\/span>/, 'raqamsiz qism («)») ko‘rsatilmaydi');
+  assert.match(h5, /\(bir katakda bir nechta raqam yozilgan\)/);
+});
+
 test('renderSales: kunlik chegara va topilmadi — xabar, raqam ochilmaydi, tugma qayta yoqiladi; tarmoq xatosi — xabar', async () => {
   const E = salesEnv({ rows: [R1, R2], todayUsed: 149, reveal: { [R1.k]: { ok: false, reason: 'daily_cap', todayUsed: 150, dailyCap: 150 }, [R2.k]: { ok: false, reason: 'not_found' } } });
   await E.render();

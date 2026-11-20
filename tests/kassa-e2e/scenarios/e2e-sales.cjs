@@ -5,7 +5,7 @@
 //   «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo'yicha qidiruv; 🔍 qidiruv va to'lov navbati
 //   yo'q, tahrir / eksport tugmasi yo'q; REST orqali o'quvchi va shaxsiy karta jadvallari bo'sh, jurnal va Direktor jurnali — rad;
 //   sahifa va konsol xatolari yo'q. Direktor: bo'lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali»da sotuvchining ochishi;
-//   «Foydalanuvchilar» → rol tanlovida «Sotuvchi …».
+//   «Foydalanuvchilar» → rol tanlovida «Sotuvchi …», sotuvchi ism-familiyasini Direktor oynada o'zgartiradi.
 //   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-sales.cjs [v1|v2]
 const E = require('../lib/common.cjs'); const fs = require('fs'); const crypto = require('crypto');
 const OUT = E.OUT;
@@ -120,6 +120,13 @@ const SALES_OPT = 'Sotuvchi (marketing) — faqat ota-onalar ismi va telefoni, o
   const opt = await pd.evaluate(() => { const o = document.querySelector('#u-role option[value="sales"]'); return o ? { t: o.textContent, sel: o.selected } : null; });
   ok('Foydalanuvchilar: sotuvchida «➕ Lavozim» tugmasi yo‘q; rol tanlovida «Sotuvchi (marketing) — …» va u tanlangan',
     !xrb && opt && opt.t === SALES_OPT && opt.sel, [!!xrb, opt]);
+  // Sotuvchi ism-familiyasini o'zi o'zgartira olmaydi («Profil» — faqat ko'rish) — Direktor shu oynada tuzatadi (3-mustaqil tekshiruv)
+  await pd.fill('#u-first', 'Sinov'); await pd.fill('#u-last', 'Sotuvchi Tuzatildi');
+  await pd.click('#u-save');
+  let nmNew = ''; for (let i = 0; i < 40 && nmNew !== 'Sinov Sotuvchi Tuzatildi'; i++) { await pd.waitForTimeout(250); nmNew = q(`select name from public.users where id = '${SAL}'`); }
+  const after = q(`select "firstName" || '|' || "lastName" || '|' || role || '|' || status from public.users where id = '${SAL}'`);
+  ok('Foydalanuvchilar: Direktor sotuvchi ism-familiyasini oynada o‘zgartiradi (rol va holat o‘zgarmaydi)',
+    nmNew === 'Sinov Sotuvchi Tuzatildi' && after === 'Sinov|Sotuvchi Tuzatildi|sales|active', [nmNew, after]);
   await D.ctx.close();
 
   ok('sahifa xatolari yo‘q', allErrs.length === 0, allErrs.slice(0, 5));

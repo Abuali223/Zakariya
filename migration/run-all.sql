@@ -140,6 +140,7 @@ set local iqror.migrating = '1';
 \ir sales-role.sql
 \ir student-archive.sql
 \ir rls-timing.sql
+\ir rls-plpgsql.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;

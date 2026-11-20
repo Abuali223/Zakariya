@@ -1925,7 +1925,7 @@ async function openProfile(){
       <div style="${SEC}">
         <div style="font-weight:700;margin-bottom:2px">Ism-familiya</div>
         ${nameLocked ? `<div style="margin-top:6px">${esc(ud.name||[ud.firstName,ud.lastName].filter(Boolean).join(' ')||'—')}</div>
-        <div class="small muted" style="margin-top:4px">Sotuvchi hisobining ism-familiyasini Direktor o‘zgartiradi (ochishlar jurnalida kim ekani aniq ko‘rinsin).</div>` : `
+        <div class="small muted" style="margin-top:4px">Sotuvchi hisobining ism-familiyasini Direktor o‘zgartiradi («Foydalanuvchilar» → «Tahrirlash» → «Ism-familiya») — ochishlar jurnalida kim ekani aniq ko‘rinsin.</div>` : `
         <input id="pf-first" placeholder="Ism" value="${esc(ud.firstName||'')}" style="${INP}">
         <input id="pf-last" placeholder="Familiya" value="${esc(ud.lastName||'')}" style="${INP}">
         <button class="btn gold sm" id="pf-name-save" style="margin-top:10px">Saqlash</button>`}
@@ -6904,6 +6904,13 @@ function openUserEditor(u, CLS, roleOpts, opts){
   const isBlocked=String(u.status||'')==='blocked';
   // audit-11 (A5-05): o'z rolini o'zgartirib bo'lmaydi (baza ham rad etadi) — yagona Direktor o'zini pasaytirib maktab Direktorsiz qolmasin.
   const isSelf=String(u._id)===String((auth&&auth.currentUser&&auth.currentUser.uid)||'');
+  // Ism-familiya maydonlari: firstName / lastName bo'sh (eski yoki server yaratgan hisob) bo'lsa — to'liq ismdan (birinchi bo'sh joygacha —
+  //   ism, qolgani — familiya). «O'zgardi»mi — shu KO'RSATILGAN qiymatga nisbatan (tegmasa hech narsa yozilmaydi, bir so'zli ism ham
+  //   rol / sinf saqlashni to'smaydi).
+  const fnSt=String(u.firstName||'').trim(), lnSt=String(u.lastName||'').trim(), nmSt=String(u.name||'').trim();
+  const nmSp=nmSt.search(/\s/);
+  const fnPre=(fnSt||lnSt) ? fnSt : (nmSp>0 ? nmSt.slice(0,nmSp) : nmSt);
+  const lnPre=(fnSt||lnSt) ? lnSt : (nmSp>0 ? nmSt.slice(nmSp).trim() : '');
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(9,40,30,.5);display:grid;place-items:center;z-index:120;padding:16px;overflow:auto';
   // Biriktirilgan, lekin o'quvchisi qolmagan sinf ham ro'yxatda (belgilangan) — saqlanganda biriktiruv jim o'chib ketmasin.
@@ -6953,6 +6960,11 @@ function openUserEditor(u, CLS, roleOpts, opts){
     <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px">
       ${isBlocked?`<div style="background:#FDECEC;border:1px solid #F3C1BC;color:#8F1D14;border-radius:10px;padding:10px 12px;font-size:13px">🚫 Bu hisob <b>bloklangan</b>${u.blockedRole?` (avvalgi rol: <b>${esc((roleOpts.find(o=>o[0]===u.blockedRole)||[])[1]||u.blockedRole)}</b>)`:''}. Rol va holatni bu yerda o‘zgartirib bo‘lmaydi — avval ro‘yxatdagi «Blokdan chiqarish» tugmasini bosing (kirish taqig‘i ham shu tugma bilan olinadi).</div>`:''}
       ${opts.approve?`<div style="background:#FEF3E2;border:1px solid #F6C77E;color:#92500E;border-radius:10px;padding:10px 12px;font-size:13px">Yangi xodimni faollashtirish uchun <b>aniq rolni</b> (o‘qituvchi, kassir, qorovul va h.k.) tanlang va «Saqlash» bosing.</div>`:''}
+      <div><label class="ulbl">Ism-familiya</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="u-first" placeholder="Ism" value="${esc(fnPre)}" style="flex:1 1 160px;min-width:0;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px">
+          <input id="u-last" placeholder="Familiya" value="${esc(lnPre)}" style="flex:1 1 160px;min-width:0;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px"></div>
+        <div class="small muted" style="margin-top:5px">${String(u.role||'')==='sales'?'Sotuvchi ism-familiyasini faqat siz o‘zgartirasiz — ochishlar jurnalida shu nom ko‘rinadi.':'O‘zgartirmasangiz — avvalgicha qoladi.'}</div></div>
       <div><label class="ulbl">Rol</label>
         <select id="u-role" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:#fff"${isSelf?' disabled':''}>${roleOpts.map(o=>`<option value="${o[0]}" ${(preRole?preRole===o[0]:u.role===o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}</select>${roleHint}${isSelf?'<div class="small muted" style="margin-top:6px">O‘z rolingizni o‘zgartira olmaysiz — buni boshqa Direktor qiladi.</div>':''}</div>
       <div id="u-cls-wrap"><label class="ulbl">Biriktirilgan sinflar <span class="small muted" style="font-weight:400">— bir nechtasini belgilang</span></label>
@@ -6986,6 +6998,10 @@ function openUserEditor(u, CLS, roleOpts, opts){
   ov.querySelector('#u-save').onclick=async()=>{
     if(isBlocked){ alert('Bu hisob bloklangan. Avval «Foydalanuvchilar» ro‘yxatidagi «Blokdan chiqarish» tugmasini bosing.'); return; }
     const role=isSelf?String(u.role||''):roleSel.value, ver=ov.querySelector('#u-ver').checked;
+    // Ism-familiya: faqat o'zgargan bo'lsa yoziladi (ikkalasi ham kerak — «Profil»dagi qoida bilan bir xil).
+    const fn=String((ov.querySelector('#u-first')||{}).value??fnPre).trim(), ln=String((ov.querySelector('#u-last')||{}).value??lnPre).trim();
+    const nameChanged=(fn!==fnPre || ln!==lnPre);
+    if(nameChanged && (!fn || !ln)){ alert('Ism va familiyani kiriting (ikkalasi ham).'); return; }
     // Rolsiz («staff» — tayinlanmagan) hisobni faollashtirib bo'lmaydi: u hech qanday bo'limга kira olmaydi.
     if(ver && (!role || role==='staff')){ alert('Avval aniq rol tanlang (o‘qituvchi, kassir, qorovul va h.k.).\n\n«Xodim — rol tayinlanmagan» holatida hisobni faollashtirib bo‘lmaydi (u tizimda hech narsani ko‘ra olmaydi).'); return; }
     // --- Bog'lanish: yangi tanlov vs eski ---
@@ -7005,7 +7021,8 @@ function openUserEditor(u, CLS, roleOpts, opts){
     const b=ov.querySelector('#u-save'); b.disabled=true; b.textContent='Saqlanmoqda…';
     // Tasdiqlansa (verified) -> status 'active' (pending holatdan chiqadi). Aks holda eski status saqlanadi.
     const newStatus = ver ? 'active' : (String(u.status||'')||'active');
-    const patch={role,verified:ver,status:newStatus,assignedClasses,assignedSubjects};
+    const patch={role,verified:ver,status:newStatus,assignedClasses,assignedSubjects,updatedAt:serverTimestamp()};
+    if(nameChanged){ patch.firstName=fn; patch.lastName=ln; patch.name=(fn+' '+ln).trim(); }
     if(changedLink){
       if(nId){ const rec=lc.byRef[nType+':'+nId]; patch.staffRefType=nType; patch.staffRefId=nId; patch.staffCode=(rec&&rec.code)||''; patch.linkedAt=serverTimestamp(); patch.linkedVia='admin'; }
       else { patch.staffRefType=''; patch.staffRefId=''; patch.staffCode=''; }   // uzish (bo'sh satr — RLS/indeks bo'shni e'tiborsiz qoldiradi)
@@ -10923,15 +10940,24 @@ const SALES_REASON={ daily_cap:'Bugungi chegara tugadi — kuniga 150 ta oila. E
 function salesDialable(d){ d=String(d||''); return /^998\d{9}$/.test(d) || (d.slice(0,3)!=='998' && d.length>=10 && phoneCanon('+'+d)===d); }
 function salesTelLink(d){ const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
   return `<a href="tel:+${d}" class="sl-tel" style="font-weight:700;white-space:nowrap">${esc(txt)}</a>`; }
-// valid === false yoki qo'ng'iroq qilib bo'lmaydigan raqam — kartadagi asl yozuv: bir katakda bir nechta raqam bo'lsa har biri alohida
-//   (to'g'risi — qo'ng'iroq havolasi), qolgani — matn va sotuvchi bajarsa bo'ladigan izoh.
+// Katakdagi bitta raqam yozuvi -> raqamlar: '+' yoki 00 bilan boshlangan — xalqaro (00 tashlanadi), aks holda 9 xonali — O'zbekiston
+//   (998 qo'shiladi). '+7 903 157 11' (chala xorijiy, 9 raqam) O'zbekiston raqamiga aylanib, begona odamga havola bo'lmasin (phoneCanon
+//   qoidasi; mustaqil tekshiruv).
+function salesPartDigits(s){ s=String(s||''); let c=s.replace(/\D/g,''); const intl=/^[^0-9]*\+/.test(s) || c.slice(0,2)==='00';
+  if(c.slice(0,2)==='00') c=c.slice(2);
+  if(!intl && c.length===9) c='998'+c;
+  return c; }
+// valid === false yoki qo'ng'iroq qilib bo'lmaydigan raqam — kartadagi yozuv (server faqat raqamga o'xshagan qismlarini qaytaradi): bir katakda
+//   bir nechta raqam bo'lsa har biri alohida (to'g'risi — qo'ng'iroq havolasi), qolgani — matn va sotuvchi bajarsa bo'ladigan izoh.
 function salesTel(p, valid){ const raw=String(p==null?'':p), d=raw.replace(/\D/g,'');
   if(!d) return '<span class="muted">raqam yo‘q</span>';
   if(valid!==false && salesDialable(d)) return salesTelLink(d);
-  const parts=raw.split(/[,;\/|]|\s{2,}/).map(s=>s.trim()).filter(Boolean);
-  let ok=0; const html=parts.map(s=>{ let c=s.replace(/\D/g,''); if(c.length===9) c='998'+c;
+  const parts=raw.split(/[,;\/|]|\s{2,}/).map(s=>s.trim()).filter(s=>/\d/.test(s));
+  let ok=0; const html=parts.map(s=>{ const c=salesPartDigits(s);
     if(c && salesDialable(c)){ ok++; return salesTelLink(c); } return `<span style="white-space:nowrap">${esc(s)}</span>`; }).join(', ');
-  const note=(ok && parts.length>1) ? 'bir katakda bir nechta raqam yozilgan' : 'raqam noto‘g‘ri yozilgan bo‘lishi mumkin — ma’muriyatga xabar bering';
+  const note=(ok && parts.length>1) ? (ok<parts.length ? 'bir katakda bir nechta raqam yozilgan, biri noto‘g‘ri bo‘lishi mumkin — ma’muriyatga xabar bering'
+                                                     : 'bir katakda bir nechta raqam yozilgan')
+                                    : 'raqam noto‘g‘ri yozilgan bo‘lishi mumkin — ma’muriyatga xabar bering';
   return `${html} <span class="small" style="color:#B45309">(${note})</span>`; }
 // Ota yoki ona katagi: ism va (ochilgan bo'lsa) tel: havolasi, aks holda niqoblangan raqam.
 function salesParentCell(x, opened){
@@ -11006,7 +11032,8 @@ async function renderSalesLog(_g){
   catch(e){ if(_g!==VIEW_GEN) return; const b=$('#sl-log'); if(b) b.innerHTML=`<div class="empty">${rpcMissing(e)?'Jurnal serverda hali yoqilmagan.':'Xatolik: '+esc(errMsg(e))}</div>`; return; }
   if(_g!==VIEW_GEN || !$('#sl-log')) return;
   const dmy=d=>{ const s=String(d||''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4) : esc(s); };
-  const who=x=>`${esc(x.name||x.uid||'—')}${x.role?` <span class="small muted">· ${esc(ROLE_LABEL[x.role]||x.role)}</span>`:''}`;
+  // name — ochish paytidagi nom (jurnalga yozilgan); hisobning hozirgi nomi boshqacha bo'lsa — «(hozir: …)».
+  const who=x=>`${esc(x.name||x.uid||'—')}${x.nameNow?` <span class="small muted">(hozir: ${esc(x.nameNow)})</span>`:''}${x.role?` <span class="small muted">· ${esc(ROLE_LABEL[x.role]||x.role)}</span>`:''}`;
   const days=Array.isArray(r&&r.days)?r.days:[], rec=Array.isArray(r&&r.recent)?r.recent:[], cap=Number(r&&r.dailyCap)||150;
   $('#sl-log').innerHTML = (!days.length && !rec.length) ? '<div class="empty">Hozircha hech kim raqam ochmagan.</div>'
     : `<div class="small" style="font-weight:700;margin:2px 0 6px">Kunlar bo‘yicha</div>

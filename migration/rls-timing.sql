@@ -24,12 +24,21 @@ do $iqror_guard$ begin raise exception 'iqror: rls-timing.sql ALOHIDA ishga tush
 --      app.owns_child( / app.owns_student_doc( / sinf funksiyalarini shu yerdagi «ichiga joylanadigan» o'ramlarga almashtiradi:
 --      Postgres ularni ifodaga ochib yuboradi (inline), natijada «InitPlan (bir marta) + massiv a'zoligi / mantiqiy AND» qoladi —
 --      ota-ona va sotuvchi uchun qatorlab funksiya chaqiruvi yo'q.
---   3) Eng maxfiy uchta joy (student_private, students, student_phones) — oldindan darvoza: ko'ra oladigan hech narsasi yo'q
---      foydalanuvchi uchun (sotuvchi, farzandsiz ota-ona, boshqa rollar) jadval umuman ko'rib chiqilmaydi («One-Time Filter»).
+--   3) Darvozalar: ko'ra oladigan hech narsasi yo'q foydalanuvchi (sotuvchi, farzandsiz ota-ona, users yozuvi yo'q seans, boshqa rollar)
+--      uchun policy'ning BIRINCHI sharti yolg'on — qolgan shartlar hisoblanmaydi. student_private / students — o'z darvozasi
+--      (rls_gate_private / rls_gate_students); qolgan, faqat rol / to'plam yordamchilaridan iborat SELECT policy'lar — umumiy
+--      app.rls_gate_any() (rls-initplan har deployda qo'yadi). Ko'rinishlarda (student_phones, my_sick_notes, my_nurse_visits)
+--      darvoza «One-Time Filter» — jadval umuman ko'rib chiqilmaydi. Barcha darvozalar BITTA so'rovli app.rls_acl() ustida (arzon).
 --   4) my_sick_notes / my_nurse_visits (tibbiy ma'lumot) — xuddi shu o'ramlar bilan (sinf kaliti subso'rovi faqat sinf xodimi uchun).
---   Qoldiq (hujjatlashtirilgan): sinf xodimlari (tasdiqlangan o'qituvchi / kurator) uchun sinf funksiyalari qatorlab qoladi; har
---   so'rovdagi InitPlan'lar «dangasa» hisoblanadi — juda kichik (mikrosoniyalar), doimiy bitta bitlik farq (masofadan amalda
---   o'lchab bo'lmaydi). users jadvali — reports-roles.sql (users_upd o'ziga subso'rovsiz) + rls-initplan o'ramlari.
+--   5) rls-plpgsql.sql (keyingi fayl) — shu yordamchilar SQL dan plpgsql ga: reja seans davomida keshlanadi (3–7 marta tezroq).
+--   Qoldiq (hujjatlashtirilgan, o'lchangan — 3-mustaqil tekshiruv, 2026-11-20): Postgres RLS shartidagi o'zgaruvchisiz shartni ham
+--   qator filtri sifatida qoldiradi (One-Time Filter qilmaydi), InitPlan'lar esa «dangasa» — foydalanuvchi filtridan biror qator
+--   o'tganda hisoblanadi. Shu sabab: (a) huquqsiz foydalanuvchi — telefon / ism / matn ustunlari (indeks yo'q) bo'yicha farq yo'q
+--   (shovqin, ±10 mks); INDEKSLI kalit (studentId / hujjat id) bo'yicha «shu kalitli qator bormi?» — faqat darvoza narxi (~30–40 mks);
+--   (b) farzandi bog'langan ota-ona va xodimlar — darvozadan o'tadi, policy'ning qolgan InitPlan'lari faqat mos qator bo'lsa
+--   hisoblanadi: ~0,3 ms farq (avval 0,6–2,5 ms va har qanday hisob uchun). Masofadan o'lchash uchun ko'p ming so'rov kerak —
+--   nginx'da so'rov chegarasi (limit_req) tavsiya etiladi. Sinf xodimlari uchun sinf funksiyalari qatorlab qoladi.
+--   users jadvali — reports-roles.sql (users_upd o'ziga subso'rovsiz) + rls-initplan o'ramlari.
 -- Idempotent — QAYTA ishga tushirishga xavfsiz. Zanjirda rls-initplan.sql dan OLDIN.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
@@ -81,22 +90,58 @@ create or replace function app.rls_ann_gate() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
   select app.uid() is not null and (app.is_admin() or app.is_zavuch() or app.is_staff() or cardinality(app.my_child_class_keys()) > 0)
 $$;
+-- Darvozalar uchun foydalanuvchi «imkoniyatlari» — BITTA so'rov (darvoza har so'rovda birinchi hisoblanadi, shuning uchun arzon bo'lishi
+--   shart; avvalgi darvozalar 6 ta ichma-ich funksiya chaqirib ~150 mks olardi, indeksli kalit bo'yicha shu farq ko'rinardi):
+--     'director*' — is_admin (role = 'director', holatdan qat'i nazar, app.is_admin bilan bir xil);
+--     faol hisobning rollari — app.role_set() qoidasi (asosiy rol; director / parent / student / accountant / sales dan boshqa asosiy
+--       rolda extraRoles ham — bu yerda ruxsat ro'yxatisiz, ya'ni kengroq);
+--     'child*' — faol, bloklanmagan hisobning faol bog'lanishi bor (my_child_sids / my_student_docs / my_child_class_keys bo'sh
+--       bo'lmasligining zaruriy sharti — kengroq).
+--   Darvoza faqat USTMA-UST to'plam bo'lishi kerak (kengroq bo'lsa — faqat qolgan shartlar hisoblanadi; tor bo'lsa — qator yo'qoladi):
+--   test-rls-timing G03 har policy'ning har InitPlan'i uchun «darvoza yolg'on => InitPlan yolg'on / bo'sh» ni barcha rollarda tekshiradi.
+create or replace function app.rls_acl() returns text[]
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when app.uid() is null then '{}'::text[] else
+    coalesce((select case when u.role = 'director' then array['director*'] else '{}'::text[] end
+                     || case when coalesce(nullif(u.status, ''), 'active') <> 'active' or coalesce(u.role, '') = '' then '{}'::text[]
+                             when u.role in ('director', 'parent', 'student', 'accountant', 'sales') then array[u.role]
+                             else array[u.role] || array(select e from jsonb_array_elements_text(
+                                    case when jsonb_typeof(u."extraRoles") = 'array' then u."extraRoles" else '[]'::jsonb end) e) end
+                from public.users u where u.id = app.uid()), '{}'::text[])
+    || case when exists (select 1 from public.child_claims cc
+                          where cc.uid = app.uid() and coalesce(nullif(cc.status, ''), 'active') = 'active'
+                            and not exists (select 1 from public.users b where b.id = cc.uid and b.status = 'blocked'))
+            then array['child*'] else '{}'::text[] end
+  end
+$$;
 -- Oldindan darvozalar (3-band): policy'ning har bir tarmog'i rost bo'la oladigan foydalanuvchilar (ustma-ust to'plam).
+--   rls_gate_private: Direktor, O'IBDO', qabulxona, farzand bog'lanishi (my_student_docs);
+--   rls_gate_students: + sinf xodimlari (rls_class_staff: Direktor, ma'muriyat, O'IBDO', kurator, o'qituvchi);
+--   rls_gate_phones: + moliya (is_finance: Direktor, moliya menejeri, g'aznachi) va kassir;
+--   rls_gate_health: farzand bog'lanishi (my_child_sids) yoki sinf xodimi.
 create or replace function app.rls_gate_private() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select app.uid() is not null and (app.is_admin() or app.is_zavuch() or app.is_reception() or cardinality(app.my_student_docs()) > 0)
+  select app.rls_acl() && array['director*', 'zavuch', 'reception', 'child*']::text[]
 $$;
 create or replace function app.rls_gate_students() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select app.rls_gate_private() or app.rls_class_staff()
+  select app.rls_acl() && array['director*', 'zavuch', 'reception', 'child*', 'director', 'admin', 'kurator', 'teacher']::text[]
 $$;
 create or replace function app.rls_gate_phones() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select app.rls_gate_private() or app.is_finance() or app.is_cashier()
+  select app.rls_acl() && array['director*', 'zavuch', 'reception', 'child*', 'director', 'finance_mgr', 'treasurer', 'kassir']::text[]
 $$;
 create or replace function app.rls_gate_health() returns boolean
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select app.uid() is not null and (cardinality(app.my_child_sids()) > 0 or app.rls_class_staff())
+  select app.rls_acl() && array['child*', 'director*', 'director', 'admin', 'zavuch', 'kurator', 'teacher']::text[]
+$$;
+-- Umumiy oldindan darvoza (3-mustaqil tekshiruv; rls-initplan har deployda qo'yadi): policy faqat rol yordamchilari, app.rls_in va
+--   app.rlsg_* dan iborat bo'lsa — hech qanday huquqi yo'q foydalanuvchi (sotuvchi, farzandsiz ota-ona, users yozuvi yo'q yangi / anonim
+--   seans) uchun YOLG'ON: qolgan shartlar hisoblanmaydi. Ustma-ust to'plam: Direktor (holatdan qat'i nazar), ota-ona / sotuvchi /
+--   o'quvchidan boshqa har qanday faol rol, farzand bog'lanishi.
+create or replace function app.rls_gate_any() returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select exists (select 1 from unnest(app.rls_acl()) r where r not in ('parent', 'sales', 'student'))
 $$;
 -- «Ichiga joylanadigan» o'ramlar (LANGUAGE sql, SECURITY DEFINER ham, SET ham YO'Q — aks holda Postgres ochib yubormaydi).
 --   Birinchi argument — chaqiruvchi yozadigan «(SELECT …)» (InitPlan, so'rovda bir marta); qatorga faqat massiv a'zoligi / AND qoladi.
@@ -118,13 +163,38 @@ create or replace function app.rlsg_ann_can_write(p_gate boolean, p_keys jsonb) 
 language sql stable as $$ select $1 and app.ann_can_write($2) $$;
 create or replace function app.rlsg_ann_visible(p_gate boolean, p_keys jsonb, p_exp timestamptz) returns boolean
 language sql stable as $$ select $1 and app.ann_visible($2, $3) $$;
+-- ann_visible (e'lon kimga ko'rinadi) — QATORLAB funksiyasiz (3-mustaqil tekshiruv): avvalgi o'ram (rls_ann_gate bilan) farzandli ota-ona va
+--   har qanday xodim uchun har qatorda SECURITY DEFINER ann_visible() chaqirardi — javob vaqti boshqa sinflarning yashirin e'lonlari
+--   soniga proporsional edi (va minglab e'lon bo'lsa — sekinlashardi). Endi foydalanuvchi to'plamlari so'rov boshida bir marta:
+--   Direktor / O'IBDO' (rost / yolg'on), xodim sinflari va farzand sinflari ('all' bilan; huquq yo'q — bo'sh) — qatorga faqat jsonb ?|
+--   qoladi. Ma'no app.ann_visible bilan bir xil (classKeys satr elementlari; test-rls-timing E04 barcha rol / kalitda solishtiradi).
+create or replace function app.rls_ann_staff_keys() returns text[]
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when app.is_staff() then array['all'] || (
+           select case jsonb_typeof(j)
+                    when 'array'  then array(select e #>> '{}' from jsonb_array_elements(j) e where jsonb_typeof(e) = 'string')
+                    when 'object' then array(select jsonb_object_keys(j))
+                    when 'string' then array[j #>> '{}']
+                    else '{}'::text[] end
+             from (select app.my_staff_class_keys() as j) s)
+         else '{}'::text[] end
+$$;
+create or replace function app.rls_ann_child_keys() returns text[]
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when cardinality(k) > 0 then array['all'] || k else '{}'::text[] end from (select app.my_child_class_keys() as k) s
+$$;
+-- $1 … $3 — chaqiruvchi yozadigan «(SELECT …)» (InitPlan): har biri tanada BIR marta (ikki marta bo'lsa Postgres ichiga joylamaydi).
+create or replace function app.rlsg_ann_visible5(p_adm boolean, p_staff text[], p_child text[], p_keys jsonb, p_exp timestamptz) returns boolean
+language sql stable as $$ select $1 or (jsonb_typeof($4) = 'array' and ($4 ?| $2 or (($5 is null or $5 > now()) and $4 ?| $3))) $$;
 do $$ declare f text; begin
   foreach f in array array['app.my_child_sids()', 'app.my_student_docs()', 'app.rls_class_staff()', 'app.rls_ann_gate()',
                            'app.rls_gate_private()', 'app.rls_gate_students()', 'app.rls_gate_phones()', 'app.rls_gate_health()',
-                           'app.rls_in(text[], text)', 'app.rlsg_is_class_staff(boolean, text)', 'app.rlsg_can_write_general(boolean, text)',
+                           'app.rls_gate_any()', 'app.rls_acl()', 'app.rls_in(text[], text)', 'app.rlsg_is_class_staff(boolean, text)', 'app.rlsg_can_write_general(boolean, text)',
                            'app.rlsg_is_teacher_for_class(boolean, text)', 'app.rlsg_is_homeroom_for(boolean, text)',
                            'app.rlsg_is_kurator_for(boolean, text)', 'app.rlsg_teacher_has_subject(boolean, text)',
-                           'app.rlsg_ann_can_write(boolean, jsonb)', 'app.rlsg_ann_visible(boolean, jsonb, timestamp with time zone)'] loop
+                           'app.rlsg_ann_can_write(boolean, jsonb)', 'app.rlsg_ann_visible(boolean, jsonb, timestamp with time zone)',
+                           'app.rls_ann_staff_keys()', 'app.rls_ann_child_keys()',
+                           'app.rlsg_ann_visible5(boolean, text[], text[], jsonb, timestamp with time zone)'] loop
     execute 'revoke all on function ' || f || ' from public, anon';
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;

@@ -2455,7 +2455,7 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   (eski kodda) yiqilishi ko'rsatilgan. Brauzer to'plami (`tests/kassa-e2e`, `bash run-all.sh`) — 42 o'tish, 1124 tekshiruv, hammasi
   o'tdi (arxiv ssenariysi endi 30 tekshiruv: qabulxona ichki ma'lumotnomasi yig'madan).
 
-## 85) «Sotuvchi» roli: faqat ota-onalar ismi va telefoni — ko'rish, o'zgartirishsiz — 2026-11-19
+## 85) «Sotuvchi» roli: faqat ota-onalar ismi va telefoni — ko'rish, o'zgartirishsiz — 2026-11-19…20
 
 - **Egasi (2026-11-19):** «Biz ikkita sotuvchi olgandik, shularga alohida marketing bo'limidagilarga o'quvchilarni ma'lumotiga dostup
   bersak bo'ladimi. Ular ota-onalarga aloqaga chiqib bizdagi muammolar haqida gaplashishadi va maktabni boshqalarga tavsiya qilishini
@@ -2544,7 +2544,8 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
      (`app.users_me()`), shuning uchun users policy'lari ham InitPlan o'ramida (avval har qatorda is_admin). student_phones'dagi
      security_barrier qabulxona / kassir telefon qidiruvini ~500 marta sekinlashtirgan edi — rol tekshiruvlari bir marta, tezlik tiklandi.
      Qoldiq (hujjatlashtirilgan): tasdiqlangan sinf xodimi uchun sinf funksiyalari qatorlab; har so'rovdagi InitPlan'lar «dangasa» —
-     mikrosoniyalik doimiy bitta bit (masofadan amalda o'lchab bo'lmaydi). Tavsiya: nginx'da /rest/ uchun so'rov chegarasi (limit_req).
+     mikrosoniyalik doimiy bitta bit deb baholangan edi (3-tekshiruvda o'lchandi: aslida 0,6–2,5 ms — tuzatildi, quyida 3-tekshiruv
+     7-band). Tavsiya: nginx'da /rest/ uchun so'rov chegarasi (limit_req).
   2. **Oila grafi:** ismi bo'sh «ko'prik» karta orqali zid oilalar (bir ota — ikki ona) birlashmaydi (komponent bo'linadi); ota / ona
      raqami — shu ota-ona ismi yozilgan kartadan (onasi ro'yxatdan o'tkazgan kartada «ota telefoni»ga ona raqami yozilgan bo'lsa ham).
   3. **claim_child:** bekor qilingan bog'lanish (hisob vaqtincha «Sotuvchi» bo'lgan) joriy to'g'ri kod bilan qayta ochiladi (avval
@@ -2563,6 +2564,57 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   ko'rinish tuzilmasi, owns_* va sinf o'ramlari barcha kalit / rollarda TENG, qatorlab chaqiruvlar soni 0, egalik to'plami so'rovda
   doimiy, sotuvchida jadval ko'rib chiqilmaydi, ko'rinish huquqlari o'zgarmagan), `sales.test.mjs` 14, `auth/sms-tpl-check.test.cjs` 23.
   Mutatsiyalar: vaqt tuzatishlari 7 ta, sotuvchi tuzatishlari 8 ta, sahifa 2 ta — har birini mos tekshiruv ushladi.
+- **3-mustaqil tekshiruv (2026-11-20; Workflow: xavfsizlik va «Sotuvchi» ko'zlari + har topilmaga rad etishga urinuvchi tekshiruvchi):**
+  0. *Sinov stendi sog'lik tekshiruvi (anon cheklovining yon ta'siri; o'zim topdim, 161ea79):* `sinov/server.cjs` restProbe() anon
+     kalit bilan `/users` ni so'rardi — rls-timing.sql dan keyin 401, `/__sinov/health` 503, «Tizim holati»da «Sinov bazasi — javob
+     yo'q» va o'rnatish skriptining yakuniy tekshiruvi yiqilardi. Endi `/settings` (ochiq ro'yxatda); `sinov/probe.test.cjs` — tekshiruv
+     jadvali ochiq ro'yxatda ekanini tekshiradi. Ochiq sayt anon sifatida bazada tekshirildi: 16 ta ochiq jadval o'qiladi, ariza va
+     imtihon shakllari (INSERT), `verify_doc`, avtobus RPC'lari ishlaydi, yopiq jadvallar — rad; asosiy saytning sog'lik tekshiruvi
+     xizmat kaliti bilan — o'zgarish kerak emas.
+  1. *Qo'ng'iroq havolasi (o'rta):* bir katakdagi «+» (yoki 00) bilan boshlangan 9 xonali qism — chala xorijiy raqam — O'zbekiston
+     raqamiga aylanib, begona odamga havola bo'lardi. Endi `salesPartDigits` — phoneCanon qoidasi (00 — xalqaro prefiks); katakdagi
+     raqamlardan biri havolasiz qolsa — «biri noto'g'ri bo'lishi mumkin» ogohlantirishi.
+  2. *Oila raqami:* ota / ona ismi yozilgan kartadagi «0» boshqa kartadagi to'g'ri raqamni yashirardi; aka-uka kartalarida raqamlar
+     almashib yozilgan va ota ismi yo'q bo'lsa — bitta raqam yo'qolardi; ota ismi bor kartalarda «ota telefoni»ga ona raqami yozilgan
+     bo'lsa — ota ona raqami bilan chiqardi. Endi darajalar (`fpt` / `mpt` / `fpf`): foydalanib bo'ladigan katak (to'g'ri raqam yoki
+     ikki raqamli katak) → shu ota-onaning ismi yozilgan karta → ona raqami ota katagida emas; ota raqami bo'sh qolsa — tanlangan ona
+     raqamidan boshqa raqam (ona raqami otaniki bo'lib takrorlanmaydi). Tekshiruvchi taklif qilgan sof «to'g'ri raqam birinchi»
+     qoidasidagi ikki kamchilik (ismli ikki raqamli katakni yutqazish, ona raqamini otaga qaytarish) ham hisobga olindi (H24).
+  3. *Takror qator:* bo'lingan (zid) komponentda ismi va ikkala raqami bir xil bitta ismli kartalar — bitta qator.
+  4. *Izoh matni (tekshiruvchi misollari: oila holati, bolaning ismi, sog'lig'i):* noto'g'ri raqam ochilganda katakdagi yozuvdan faqat
+     raqamga o'xshagan qismlar qaytadi (harflar — bo'sh joy, katak «,» «;» «/» «|» yoki ikki bo'sh joy bo'yicha bo'linadi, kamida 7
+     raqamli qismlar qoladi) — izoh va undagi «3-», «2020» kabi bo'laklar sotuvchiga chiqmaydi; sahifa ham raqamsiz qismni ko'rsatmaydi.
+  5. *Jurnalda kim ochgani:* hisobning roli keyin o'zgarsa (masalan vaqtincha sotuvchi bo'lgan ota-ona) u ismini o'zgartirib, Direktor
+     jurnalidagi o'tgan ochishlarni boshqa xodim nomiga ko'rsata olardi. Endi har ochishda ism nusxasi saqlanadi
+     (`sales_contact_log."actorName"`, eski yozuvlar — joriy ism bilan to'ldirildi); jurnal o'sha paytdagi ismni ko'rsatadi, hozirgi
+     ism boshqacha bo'lsa — «(hozir: …)». Ism qulfi (`users_sales_identity_guard`) avvalgidek faqat amaldagi sotuvchiga.
+  6. *Direktor oynasi:* «Foydalanuvchilar» → «Tahrirlash»da «Ism-familiya» (faqat o'zgarsa yoziladi, ikkalasi ham kerak; ism / familiya
+     bo'sh eski hisoblarda to'liq ismdan bo'lib ko'rsatiladi) — sotuvchi «Profil»da o'zgartira olmaydi, endi Direktor UI'dan tuzatadi.
+  7. *Kirish vaqti orqali sizish (RLS, o'rta):* policy yordamchilari SECURITY DEFINER + SET search_path li SQL funksiyalar edi — ichiga
+     joylanmaydi va HAR chaqiruvda qaytadan rejalanadi (0,1–2 ms); InitPlan'lar «dangasa» (foydalanuvchi filtridan qator o'tgandagina),
+     shuning uchun tizimga kirgan istalgan hisob (sotuvchi, yangi ro'yxatdan o'tgan) telefon / ism ustunida «mos yashirin qator bormi»ni
+     0,6–2,5 ms farq bilan bilardi. Tuzatma: (a) yangi `migration/rls-plpgsql.sql` — 39 ta RLS yordamchisi har deployda plpgsql'ga
+     o'giriladi (o'sha tana, reja keshlanadi; 3–7 marta tezroq); (b) umumiy darvoza `app.rls_gate_any()` — rls-initplan faqat rol /
+     to'plam yordamchilari va o'ramlardan iborat har SELECT policy boshiga qo'yadi (15 ta jadval; student_private / students — o'z
+     darvozasi); (c) barcha darvozalar BITTA so'rovli `app.rls_acl()` ustida (har darvoza — 2 chaqiruv). O'lchov (pgbench, PostgREST
+     so'rovi, «mos» − «mos emas»): huquqsiz foydalanuvchi — telefon / ism / matn ustunlarida shovqin (±7 mks; avval 0,6–1,1 ms),
+     indeksli kalit (studentId / hujjat id) bo'yicha — faqat darvoza, 26–36 mks; farzandi bog'langan ota-ona — ~0,33 ms (avval 2,4–2,5 ms;
+     policy'ning qolgan InitPlan'lari, eng og'iri — o'z to'plamlari). Bu qoldiq hujjatlashtirildi (Postgres RLS shartini qator filtri
+     sifatida qoldiradi — One-Time Filter qilmaydi; to'liq yo'qotish so'rov boshida kontekstni majburan hisoblashni talab qiladi);
+     tavsiya: nginx'da /rest/ uchun so'rov chegarasi (limit_req).
+  8. *E'lonlar (RLS):* `ann_visible` har qatorda SECURITY DEFINER chaqirardi — vaqt boshqa sinflarning yashirin e'lonlari soniga
+     proporsional edi. Endi foydalanuvchi to'plamlari (Direktor / O'IBDO', xodim sinflari, farzand sinflari) so'rov boshida bir marta,
+     qatorga faqat jsonb `?|` qoladi (`app.rlsg_ann_visible5`); ma'no asl funksiya bilan barcha rol / kalitda bir xil (E04, 195 juft).
+  9. *Oilalar ro'yxati tezligi:* bog'lanish komponentlari — rekursiv qidiruv o'rniga union-find (`app.sales_uf`, telefon bo'yicha «yulduz»
+     qirralari), korrelyatsiyali subso'rovlar — guruhlangan birikma. Odatiy maktab (1 400 o'quvchi): ~2,2 s → 0,11–0,13 s; 3 000 —
+     ~0,24 s; bitta katta bog'langan oila (400 karta): 8 s → 40 ms, 3 000 karta — 0,23–0,31 s (avval 2 daqiqadan oshardi). Natija eski
+     variant bilan 10 ta tasodifiy zich ma'lumotda AYNAN bir xil.
+  Sinovlar: `test-sales-role.sql` 76 + soni (H18–H25), `test-rls-timing.sql` 24 + soni (G01–G06: plpgsql, darvoza qamrovi, «darvoza
+  yolg'on => policy'ning har InitPlan'i yolg'on» 18 rol × barcha darvozali policy, rollar matritsasi, huquqsizda chaqiruvlar soni
+  filtrga bog'liq emas, darvoza narxi), `sales.test.mjs` 15, `e2e-sales.cjs` 15 (v1, v2), `sinov/probe.test.cjs` 5. Mutatsiyalar —
+  sotuvchi SQL 14 ta, RLS darvoza / plpgsql 7 ta, JS 1, sinov stendi 1 — har birini mos tekshiruv ushladi; eski kodda (161ea79) yangi
+  tekshiruvlar yiqiladi. Ko'rinish huquqlari: 23 foydalanuvchi × barcha o'qiladigan jadval (count + id md5) — 0a3f681 (vaqt
+  ishlaridan oldin), 161ea79 va yangi kod dev va jonli zanjirda AYNAN bir xil.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

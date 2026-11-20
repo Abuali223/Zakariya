@@ -24,7 +24,8 @@ do $iqror_guard$ begin raise exception 'iqror: rls-initplan.sql ALOHIDA ishga tu
 --   VAQT BO'YICHA SIZISH (rls-timing.sql, 2026-11-19): qatorga bog'liq egalik / sinf yordamchilari ham har QATOR uchun emas —
 --   app.owns_child(x) / app.owns_student_doc(x) -> app.rls_in((SELECT app.my_child_sids() / my_student_docs()), x) (bir xil
 --   to'plam, massiv a'zoligi); app.is_class_staff / can_write_general / is_teacher_for_class / is_homeroom_for / is_kurator_for /
---   teacher_has_subject / ann_can_write (x) -> app.rlsg_*((SELECT app.rls_class_staff()), x), ann_visible -> rls_ann_gate bilan.
+--   teacher_has_subject / ann_can_write (x) -> app.rlsg_*((SELECT app.rls_class_staff()), x), ann_visible -> app.rlsg_ann_visible5 (bir martalik
+--   to'plamlar: admin / O'IBDO', xodim sinflari, farzand sinflari — qatorlab funksiya yo'q).
 --   O'ramlar «ichiga joylanadi» (inline): ota-ona / sotuvchi / boshqa rollar uchun qatorlab SECURITY DEFINER chaqiruvi qolmaydi
 --   (sinf xodimi uchun — avvalgidek). Ma'no o'zgarmaydi (sinov: test-rls-timing.sql — to'plamlar barcha kalitlarda solishtiriladi).
 --
@@ -79,12 +80,12 @@ declare tok text; v_out text := ''; v_cat text := ''; m text[];
     ['is_kurator_for',       'app.rlsg_is_kurator_for((SELECT app.rls_class_staff()), '],
     ['teacher_has_subject',  'app.rlsg_teacher_has_subject((SELECT app.rls_class_staff()), '],
     ['ann_can_write',        'app.rlsg_ann_can_write((SELECT app.rls_class_staff()), '],
-    ['ann_visible',          'app.rlsg_ann_visible((SELECT app.rls_ann_gate()), ']];
+    ['ann_visible',          'app.rlsg_ann_visible5((SELECT app.is_admin() OR app.is_zavuch()), (SELECT app.rls_ann_staff_keys()), (SELECT app.rls_ann_child_keys()), ']];
   i int;
 begin
   if src is null then return null; end if;
-  if to_regprocedure('app.rls_in(text[], text)') is null or to_regprocedure('app.rlsg_ann_visible(boolean, jsonb, timestamp with time zone)') is null
-     or to_regprocedure('app.my_child_sids()') is null or to_regprocedure('app.rls_ann_gate()') is null then
+  if to_regprocedure('app.rls_in(text[], text)') is null or to_regprocedure('app.rlsg_ann_visible5(boolean, text[], text[], jsonb, timestamp with time zone)') is null
+     or to_regprocedure('app.my_child_sids()') is null or to_regprocedure('app.rls_ann_child_keys()') is null then
     return src;
   end if;
   for tok in select x[1] from regexp_matches(src, '([^''"]+|''(?:[^'']|'''')*''|"(?:[^"]|"")*")', 'g') x loop
@@ -112,6 +113,12 @@ declare
   v_skip text[]; r record; v_qual text; v_chk text; v_sql text;
   v_done text[] := '{}'; v_orig jsonb := '{}'; v_probe boolean; t text; c1 text; p jsonb;
   v_cur text; v_cur_ok boolean;
+  -- Umumiy darvoza (app.rls_gate_any) qo'yiladigan policy: faqat shu yordamchilardan tuzilgan (rol / to'plam InitPlan'lari, rls_in, rlsg_*).
+  v_gp text := '\(\s*SELECT\s+(?:app\.(?:is_admin|is_zavuch|is_finance|is_finance_mgr|is_cashier|is_reception|is_nurse|is_staff|rls_class_staff'
+               || '|rls_ann_staff_keys|rls_ann_child_keys|my_child_sids|my_student_docs)\(\)'
+               || '|\(app\.is_admin\(\) OR app\.is_zavuch\(\)\)|app\.is_admin\(\) OR app\.is_zavuch\(\))(?:\s+AS\s+[a-z_]+)?\s*\)';
+  v_gc text := '(?:"(?:[^"]|"")+"|[a-z_][a-z0-9_]*)';
+  v_rest text;
 begin
   -- Faqat haqiqatan argumentsiz va VOLATILE bo'lmagan funksiyalar (volatile'ni bir marta hisoblash ma'noni o'zgartirardi).
   select array_agg(p.proname order by p.proname) into v_ok
@@ -142,7 +149,7 @@ begin
   select coalesce(array_agg(distinct src), '{}') into v_skip from reach where src = dst;
 
   for r in
-    select p.polname, c.relname,
+    select p.polname, c.relname, p.polcmd,
            pg_get_expr(p.polqual, p.polrelid) as qual, pg_get_expr(p.polwithcheck, p.polrelid) as chk
       from pg_policy p join pg_class c on c.oid = p.polrelid
      where c.relnamespace = 'public'::regnamespace
@@ -168,6 +175,21 @@ begin
     continue when not v_cur_ok;
     v_qual := pg_temp.iqror_prefix_calls(pg_temp.iqror_wrap_calls(r.qual, v_re));
     v_chk  := pg_temp.iqror_prefix_calls(pg_temp.iqror_wrap_calls(r.chk,  v_re));
+    -- Umumiy oldindan darvoza (3-mustaqil tekshiruv): SELECT / ALL policy'si FAQAT yuqoridagi yordamchilardan va kamida bitta qatorga
+    --   bog'liq o'ramdan (rls_in / rlsg_*) iborat bo'lsa — «(SELECT app.rls_gate_any()) AND (…)». Darvoza nol narxli birinchi shart:
+    --   huquqi yo'q foydalanuvchida qolgan shartlar (InitPlan'lar) hisoblanmaydi. Postgres RLS shartini One-Time Filter qilmaydi —
+    --   darvoza birinchi qatorda bir marta hisoblanadi (indeksli kalit bo'yicha — faqat darvoza narxi, rls-timing.sql qoldiq izohi).
+    --   Darvoza faqat AND / OR dan iborat policy'ga qo'yiladi (NOT / CASE bo'lsa — yo'q), shuning uchun u hech qachon qatorni yashirmaydi
+    --   (test-rls-timing G03). Allaqachon darvozasi bor (rls_gate_) yoki boshqa shartli policy — tegilmaydi.
+    if r.polcmd in ('r', '*') and v_qual is not null and v_qual !~ 'rls_gate_' and to_regprocedure('app.rls_gate_any()') is not null
+       and v_qual ~ 'app\.(rls_in|rlsg_[a-z0-9_]+)\(' then
+      v_rest := regexp_replace(v_qual, 'app\.rlsg_ann_visible5\(' || v_gp || ',\s*' || v_gp || ',\s*' || v_gp || ',\s*' || v_gc || ',\s*' || v_gc || '\)', ' X ', 'g');
+      v_rest := regexp_replace(v_rest, 'app\.(?:rls_in|rlsg_[a-z0-9_]+)\(' || v_gp || ',\s*' || v_gc || '\)', ' X ', 'g');
+      v_rest := regexp_replace(v_rest, v_gp, ' X ', 'g');
+      if v_rest ~ '^(?:\s|\(|\)|X|\mOR\M|\mAND\M)*$' then
+        v_qual := '(SELECT app.rls_gate_any()) AND (' || v_qual || ')';
+      end if;
+    end if;
     continue when v_qual is not distinct from r.qual and v_chk is not distinct from r.chk;
     v_sql := format('alter policy %I on public.%I', r.polname, r.relname);
     if r.qual is not null then v_sql := v_sql || format(' using (%s)', v_qual); end if;
