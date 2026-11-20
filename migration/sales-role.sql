@@ -148,8 +148,10 @@ $$;
 --   yapon, xitoy, koreys. «-», «—», «0», «.», «?», «№», ««»», bo'sh joy — ism EMAS (registrator to'ldiruvchisi; aks holda bir xil
 --   «-» ismli begona oilalar maktab raqami orqali bitta qatorga qo'shilib, qolganlari ro'yxatdan yo'qolardi — mustaqil tekshiruv).
 --   Diapazonlar — kod nuqtasi bo'yicha (C, C.UTF-8 va ICU collation'larida bir xil; UTF8 baza).
+--   SET search_path YO'Q (app.rls_in o'ramlari kabi): Postgres uni chaqiruvchi so'rov ichiga joylaydi — har so'z / karta uchun funksiya
+--   chaqiruvi bo'lmaydi (oilalar ro'yxati tezligi); tanada faqat pg_catalog operatori, SECURITY DEFINER emas.
 create or replace function app.sales_hasletter(p text) returns boolean
-language sql immutable set search_path = pg_catalog as $$
+language sql immutable as $$
   select coalesce(p, '') ~ '[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣]'
 $$;
 -- Ism kaliti (oilani bog'lash uchun): normallashgan so'zlar — takrorsiz, alifbo tartibida («Karimov Akmal» = «Akmal Karimov»); harfsiz
@@ -170,9 +172,10 @@ $$;
 --   phoneCanon qoidasi. «+»siz 10–15 raqam (JSHSHIR, karta raqami bo'lagi, yopishib qolgan raqamlar) — telefon EMAS (mustaqil tekshiruv).
 create or replace function app.sales_dialable(p text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
-  select app.sales_valid(app.tg_phone(p))
-     and (left(app.tg_phone(p), 3) = '998' or btrim(coalesce(p, '')) ~ '^[^0-9]*\+'
+  select app.sales_valid(x.c)
+     and (left(x.c, 3) = '998' or btrim(coalesce(p, '')) ~ '^[^0-9]*\+'
           or regexp_replace(coalesce(p, ''), '\D', '', 'g') like '00%')
+    from (select app.tg_phone(p) as c) x
 $$;
 -- Katak yozuvining qismlari (sahifadagi salesTel bilan bir xil bo'linish): raqam, «+», bo'sh joy, «,;/|()-» dan boshqa belgi — bo'sh
 --   joy; «,» «;» «/» «|» yoki ikki va undan ortiq bo'sh joy — ajratuvchi; qism chetidagi « ()-» olib tashlanadi.
@@ -318,10 +321,12 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
              from comp0 cp join cards c on c.cid = cp.cid),
   -- fok / mok — katakdan foydalanib bo'ladi (app.sales_usable): butun katak yoki uning biror qismi qo'ng'iroq qilib bo'ladigan raqam
   --   (bir nechta raqamli katakni sahifa alohida havolalarga ajratadi); karta raqami, JSHSHIR, yopishgan raqamlar — yo'q.
+  --   9 raqamdan kam katak — qo'ng'iroq qilib bo'ladigan qismi bo'lmaydi (eng qisqasi — 9 xonali mahalliy raqam): tekshirilmaydi (tezlik).
   --   fnd / mnd — ko'rsatiladigan (tozalangan) ism (app.sales_pname).
   fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root,
                   app.sales_pname(c.fn) as fnd, app.sales_pname(c.mn) as mnd,
-                  (c.fp ~ '^998[0-9]{9}$' or app.sales_usable(c.fr)) as fok, (c.mp ~ '^998[0-9]{9}$' or app.sales_usable(c.mr)) as mok
+                  (c.fp ~ '^998[0-9]{9}$' or (length(regexp_replace(c.fr, '\D', '', 'g')) >= 9 and app.sales_usable(c.fr))) as fok,
+                  (c.mp ~ '^998[0-9]{9}$' or (length(regexp_replace(c.mr, '\D', '', 'g')) >= 9 and app.sales_usable(c.mr))) as mok
              from cards c join comp cp on cp.cid = c.cid),
   -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam. «Ota telefoni» katagidagi bunday raqam: ota ismi
   --   yozilmagan kartada — otaniki emas; ota ismi yozilgan kartada — faqat boshqa kartalarda otaning o'z raqami bo'lmasa (masalan

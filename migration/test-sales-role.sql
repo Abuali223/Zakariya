@@ -916,8 +916,11 @@ insert into public.students (id, "studentId", name, grade, "classLetter", lang, 
   ('u3','IQ-U3','Sinov Bola U3',3,'G','uz','',2303), ('u4','IQ-U4','Sinov Bola U4',4,'G','uz','',2304),
   ('u5','IQ-U5','Sinov Bola U5',3,'G','uz','',2305), ('u6','IQ-U6','Sinov Bola U6',4,'G','uz','',2306),
   ('u7','IQ-U7','Sinov Bola U7',3,'G','uz','',2307), ('u8','IQ-U8','Sinov Bola U8',4,'G','uz','',2308),
-  ('u9','IQ-U9','Sinov Bola U9',3,'G','uz','',2309), ('u10','IQ-U10','Sinov Bola U10',4,'G','uz','',2310);
+  ('u9','IQ-U9','Sinov Bola U9',3,'G','uz','',2309), ('u10','IQ-U10','Sinov Bola U10',4,'G','uz','',2310),
+  ('u11','IQ-U11','Sinov Bola U11',3,'G','uz','',2311), ('u12','IQ-U12','Sinov Bola U12',4,'G','uz','',2312);
 insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('u11','Sinov Ota Nolli','Sinov Ona Nolli','0, 01 234 56 78','+998 00 333 00 43'),                     -- kanonik shakli qisqa (8 raqam),
+  ('u12',null,'Sinov Ona Nolli','+998 00 444 00 75','+998 00 333 00 43'),                                --   lekin qismi — mahalliy raqam
   ('u1','Sinov Ota Karta','Sinov Ona Karta','8600 1234 5678 9012','+998 00 333 00 03'),                 -- karta raqami (16 raqam)
   ('u2','Sinov Ota Karta','Sinov Ona Karta','+998 00 444 00 04','+998 00 333 00 03'),
   ('u3','Sinov Ota Jshr','Sinov Ona Jshr','31234567890123','+998 00 333 00 13'),                        -- JSHSHIR (14 raqam, «+»siz)
@@ -931,10 +934,10 @@ insert into public.student_private (id, "fatherName", "motherName", "parentPhone
 set local session_replication_role = origin;
 select (zz.rv('Sinov Ota Karta') #>> '{father,phone}') || ' | ' || (zz.rv('Sinov Ota Jshr') #>> '{father,phone}') || ' | '
        || (zz.rv('Sinov Ota Bosh') #>> '{father,phone}') || ' | ' || (zz.rv('Sinov Ona Mkarta') #>> '{mother,phone}') || ' | '
-       || (zz.rv('Sinov Ota Xorij') #>> '{father,phone}') as h29 \gset
+       || (zz.rv('Sinov Ota Xorij') #>> '{father,phone}') || ' | ' || (zz.rv('Sinov Ota Nolli') #>> '{father,phone}') as h29 \gset
 rollback to savepoint h29;
-select zz.chk('H29 karta raqami / JSHSHIR / bitta bo''sh joy bilan yopishgan ikki raqam aka-uka kartasidagi to''g''ri raqamni yashirmaydi (ota ham, ona ham); «+» bilan xorijiy raqam — foydalanib bo''ladi',
-  :'h29', '^\+998004440004 \| \+998004440014 \| \+998004440024 \| \+998008880054 \| \+447700900038$');
+select zz.chk('H29 karta raqami / JSHSHIR / bitta bo''sh joy bilan yopishgan ikki raqam aka-uka kartasidagi to''g''ri raqamni yashirmaydi (ota ham, ona ham); «+» bilan xorijiy raqam va «0, <mahalliy raqam>» katagi — foydalanib bo''ladi',
+  :'h29', '^\+998004440004 \| \+998004440014 \| \+998004440024 \| \+998008880054 \| \+447700900038 \| 01 234 56 78$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

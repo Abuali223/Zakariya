@@ -2641,6 +2641,9 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
      asl yozuv, jurnal «nameNow», sotuvchi faqat firstName / lastName ni ham o'zgartira olmaydi), H25 (500 ismli + 500 «-» karta), H26–H29;
      sales.test.mjs — jurnal va raqam matni ekranlanishi, Direktor oynasida tegilmagan ism yozilmasligi. Eski kodda (212da72) yangi
      sotuvchi tekshiruvlaridan 6 tasi yiqiladi.
+  8. *Tezlik (o'lchov, bir xil ma'lumot):* oddiy maktab (2 066 karta, 1 400 oila) — oilalar ro'yxati ~225 ms (212da72 da 187 ms);
+     6 000 kartali katta bog'langan oila — ~0,5 s (avvalgidek). `app.sales_hasletter` SET'siz (ichiga joylanadi — har so'z uchun
+     funksiya chaqiruvi yo'q), 9 raqamdan kam katak «foydalanib bo'ladimi» tekshirilmaydi (H29 — «0, <mahalliy raqam>» katagi).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
