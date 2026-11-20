@@ -357,3 +357,80 @@ test('Foydalanuvchilar / HR / menyu / qidiruv / muharrirlar / sayt: sotuvchi rol
   assert.match(IDX, /let adminOk = \[[^\]]*'accountant','sales'\]\.includes\(role\)/);
   assert.match(BOOT_SRC, /const STAFF = \[[^\]]*'accountant','sales'\];/);
 });
+
+// ---------------- 4-mustaqil tekshiruv: jurnal / raqam matni ekranlanishi, Direktor oynasida ism yozilishi ----------------
+test('Jurnal (4-tekshiruv): jurnal: ism / hozirgi ism / ota ismi — matn sifatida (ekranlangan); «(hozir: …)» ko‘rinadi', async () => {
+  const bad = '<img src=x onerror=alert(1)>';
+  const log = { ok: true, dailyCap: 150,
+    days: [{ day: '2026-11-19', uid: 'U_SAL', name: bad, nameNow: '<b>x</b>', role: 'sales', count: 1 }],
+    recent: [{ at: '2026-11-19T10:15:00+05:00', day: '2026-11-19', uid: 'U_SAL', name: bad, nameNow: '<b>x</b>', role: 'sales', father: '<i>f</i>', mother: null }] };
+  const E = salesEnv({ isAdmin: true, rows: [], log });
+  await E.render();
+  const lg = E.D.els['#sl-log']._h;
+  assert.doesNotMatch(lg, /<img|<b>x|<i>f/, 'xom HTML yo‘q');
+  assert.equal((lg.match(/&lt;img src=x onerror=alert\(1\)&gt; <span class="small muted">\(hozir: &lt;b&gt;x&lt;\/b&gt;\)<\/span>/g) || []).length, 2, 'kunlar va oxirgi ochishlar: «(hozir: …)»');
+  assert.match(lg, /&lt;i&gt;f&lt;\/i&gt;/);
+});
+
+test('salesTel (4-tekshiruv): salesTel: havolasiz matn qismi ekranlanadi', () => {
+  const E = salesEnv();
+  const h = E.ctx.salesTel('<img src=x onerror=alert(1)> 1234567', false);
+  assert.doesNotMatch(h, /<img/);
+  assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt; 1234567<\/span>/);
+});
+
+// openUserEditor — haqiqiy kod (admin.html), soxta DOM va baza.
+function editorEnv(u) {
+  const alerts = [], writes = [], byId = {};
+  const unesc = s => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const mkEl = id => ({ id, value: '', checked: false, disabled: false, textContent: '', style: {}, onclick: null, addEventListener() {}, remove() {} });
+  const ov = { style: {}, _h: '', addEventListener() {}, remove() {}, querySelector: s => byId[s] || null, querySelectorAll: () => [] };
+  Object.defineProperty(ov, 'innerHTML', { get: () => ov._h, set: h => { ov._h = String(h);
+    for (const m of ov._h.matchAll(/<(input|select|button|div)\b[^>]*?\bid="([^"]+)"[^>]*>/g)) {
+      const e = mkEl(m[2]); const v = /\bvalue="([^"]*)"/.exec(m[0]);
+      if (m[1] === 'input' && v) e.value = unesc(v[1]);
+      if (m[1] === 'input' && /\schecked\b/.test(m[0])) e.checked = true;
+      byId['#' + m[2]] = e;
+    }
+    const sel = /<select id="u-role"[\s\S]*?<\/select>/.exec(ov._h); if (sel) { const o = /<option value="([^"]*)" selected>/.exec(sel[0]); byId['#u-role'].value = o ? o[1] : ''; }
+  } });
+  const ctx = vm.createContext({
+    auth: { currentUser: { uid: 'U_DIR' } }, alert: m => alerts.push(String(m)), toast: () => {}, cache: {}, renderUsers: () => {},
+    document: { createElement: () => ov, body: { appendChild() {} }, addEventListener() {}, removeEventListener() {} },
+    db: {}, doc: (...a) => a, getDoc: async () => ({ exists: () => true, data: () => ({ status: 'active' }) }),
+    setDoc: async (_r, p) => { writes.push({ ...p }); }, updateDoc: async () => {}, serverTimestamp: () => 'TS',
+  });
+  vm.runInContext([topConst('esc'), topConst('EXTRA_ROLES_OK'), topConst('SUBJECTS'), PHONE, fn('pmCanonStored'), fn('classKeyLabel'),
+    block('// HR lavozimi', '// Rol + sinf/fan biriktirish oynasi'), fn('openUserEditor'), ';this.__ed = openUserEditor;'].join('\n'), ctx);
+  ctx.__ed(u, { keys: [], classes: {} }, [['teacher', 'O‘qituvchi'], ['guard', 'Qorovul'], ['sales', 'Sotuvchi']], {});
+  return { byId, alerts, writes, save: () => byId['#u-save'].onclick() };
+}
+
+test('Direktor oynasi (4-tekshiruv): openUserEditor: ismga tegilmasa — ism yozilmaydi (bir so‘zli ism rol saqlashni to‘smaydi); bo‘sh / faqat probel — ogohlantirish; o‘zgarsa — yoziladi', async () => {
+  const base = { _id: 'U1', role: 'teacher', status: 'active', verified: true };
+  // bir so'zli ism, firstName/lastName yo'q — faqat rol o'zgaradi
+  const A = editorEnv({ ...base, name: 'Madonna' });
+  assert.equal(A.byId['#u-first'].value, 'Madonna'); assert.equal(A.byId['#u-last'].value, '');
+  A.byId['#u-role'].value = 'guard';
+  await A.save();
+  assert.deepEqual(A.alerts, []);
+  assert.equal(A.writes.length, 1);
+  assert.equal(A.writes[0].role, 'guard');
+  for (const k of ['name', 'firstName', 'lastName']) assert.ok(!(k in A.writes[0]), 'tegilmagan ism yozildi: ' + k);
+  // ikki so'zli ism (firstName/lastName yo'q): oldindan bo'lingan, tegilmasa yozilmaydi
+  const B = editorEnv({ ...base, name: 'Sinov  Sotuvchi Ikki' });
+  assert.equal(B.byId['#u-first'].value, 'Sinov'); assert.equal(B.byId['#u-last'].value, 'Sotuvchi Ikki');
+  await B.save();
+  assert.equal(B.writes.length, 1); assert.ok(!('name' in B.writes[0]));
+  // faqat probel — ogohlantirish, yozuv yo'q
+  const C = editorEnv({ ...base, name: 'Madonna' });
+  C.byId['#u-first'].value = '   '; C.byId['#u-last'].value = '  ';
+  await C.save();
+  assert.equal(C.alerts.length, 1); assert.match(C.alerts[0], /Ism va familiyani kiriting/); assert.equal(C.writes.length, 0);
+  // o'zgardi — ikkalasi ham yoziladi
+  const D = editorEnv({ ...base, name: 'Madonna' });
+  D.byId['#u-first'].value = ' Ali '; D.byId['#u-last'].value = 'Valiyev';
+  await D.save();
+  assert.equal(D.writes.length, 1);
+  assert.deepEqual([D.writes[0].firstName, D.writes[0].lastName, D.writes[0].name], ['Ali', 'Valiyev', 'Ali Valiyev']);
+});

@@ -2615,6 +2615,32 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   sotuvchi SQL 14 ta, RLS darvoza / plpgsql 7 ta, JS 1, sinov stendi 1 — har birini mos tekshiruv ushladi; eski kodda (161ea79) yangi
   tekshiruvlar yiqiladi. Ko'rinish huquqlari: 23 foydalanuvchi × barcha o'qiladigan jadval (count + id md5) — 0a3f681 (vaqt
   ishlaridan oldin), 161ea79 va yangi kod dev va jonli zanjirda AYNAN bir xil.
+- **4-mustaqil tekshiruv (2026-11-20; 212da72 ga Workflow: RLS va «Sotuvchi» ko'zlari + har topilmaga rad etuvchi; 9 tasdiqlandi, 1 rad):**
+  1. *Kassa himoya izlari (o'rta; mening xatoim — regressiya chiqishini qisqartirib o'qiganim uchun ko'rmay qolganman):* rls-plpgsql
+     `app.kassa_reader()` / `app.kassa_operator()` ni ham o'giradi — `kassa-checks.sql` 23-bandi ularni «o'zgargan» deb ko'rsatardi
+     (dev zanjirda `test-kassa-checks` 55 dan 13, sinov stendi sog'lik tekshiruvi va kelgusida deploy oxiri — soxta «buzilish»
+     ogohlantirishi). Izlar `migration/kassa-fingerprints.sh` bilan qayta yozildi (aynan 2 qator; zanjir qayta ishga tushirilganda barqaror).
+  2. *Zanjir tartibi:* yangi migratsiya `rls-plpgsql.sql` dan keyin qo'shilsa, u qayta ta'riflagan RLS yordamchisi SQL bo'lib qolib,
+     vaqt orqali sizish jim qaytardi. Endi `chain.sh` oxirgi IKKI fayl «rls-plpgsql.sql rls-initplan.sql» ekanini tekshiradi (aks holda
+     to'xtaydi); run-all.sql / deploy.sh ko'rsatmalari yangilandi; G01 ichki yordamchilar namunasini ham tekshiradi.
+  3. *«-» — ism emas (o'rta):* «-», «—», «0» kabi to'ldiruvchi ism kalit hisoblanib, maktab raqamini bo'lishgan begona oilalar bitta
+     qatorga qo'shilardi (boshqa onalar ro'yxatdan yo'qolardi), aka-uka kartalari esa («-» va haqiqiy ism) ikki qatorga bo'linardi. Endi
+     ism — harf bor bo'lsa (`app.sales_hasletter`: lotin, kirill, yunon, arman, ivrit, arab, gruzin, yapon, xitoy, koreys); ismsiz
+     kartalar faqat ikkala raqami bir xil bo'lsa birlashadi.
+  4. *Ochilgan raqam (o'rta):* katakdagi 7+ raqamli har qanday guruh (sana, pasport / karta raqami) ko'rsatilardi, «+»siz 14 raqamli
+     JSHSHIR esa «to'g'ri xorijiy raqam» bo'lib chiqardi. Endi faqat qo'ng'iroq qilib bo'ladigan qismlar (`app.sales_dialable` —
+     O'zbekiston raqami yoki «+» / 00 bilan yozilgan xorijiy raqam, sahifaning phoneCanon qoidasi bilan bir xil), bo'lmasa — niqob.
+  5. *Ism katagidagi izoh (past):* niqoblangan ro'yxatda (jurnalsiz, chegarasiz) ism katagidagi telefon / izoh to'liq chiqardi. Endi
+     ko'rsatiladigan va qidiriladigan ism tozalanadi (`app.sales_pname`: qavs ichidagi matn, raqamli so'z, faqat tinish belgisi — olib
+     tashlanadi, 60 belgi); oilani bog'lash kaliti o'zgarmaydi.
+  6. *Foydalanib bo'ladigan katak (past):* karta raqami, JSHSHIR, yopishib qolgan raqamlar ham «foydalanib bo'ladigan» hisoblanib, aka-uka
+     kartasidagi to'g'ri raqamni yashirishi mumkin edi. Endi `app.sales_usable` — butun katak yoki uning biror qismi qo'ng'iroq qilib
+     bo'ladigan bo'lsa (ochishda ko'rsatiladigan qoida bilan bir xil).
+  7. *Sinovlar:* test-rls-timing — kutilayotgan / holatsiz hisob va bog'lanish, g'aznachi, darvozali ko'rinishlar (G03), G07 (rls-initplan
+     NOT / CASE / IS NULL / COALESCE / = false policy'ga darvoza qo'ymaydi); test-sales-role — HX1–HX7 (union-find zanjiri, darajalar,
+     asl yozuv, jurnal «nameNow», sotuvchi faqat firstName / lastName ni ham o'zgartira olmaydi), H25 (500 ismli + 500 «-» karta), H26–H29;
+     sales.test.mjs — jurnal va raqam matni ekranlanishi, Direktor oynasida tegilmagan ism yozilmasligi. Eski kodda (212da72) yangi
+     sotuvchi tekshiruvlaridan 6 tasi yiqiladi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

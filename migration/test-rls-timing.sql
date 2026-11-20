@@ -15,7 +15,8 @@
 --   (F) ko'rinish huquqlari o'zgarmagan: Direktor, qabulxona, moliya, kassir, sinf xodimi, farzandli / farzandsiz ota-ona, sotuvchi;
 --   (G) darvozalar va plpgsql (3-mustaqil tekshiruv, 2026-11-20): yordamchilar plpgsql; o'ramli har SELECT policy darvoza bilan
 --       boshlanadi; darvoza yolg'on => policy'ning har InitPlan'i yolg'on (darvoza qatorni yashirmaydi); rollar bo'yicha darvoza
---       matritsasi; huquqsiz foydalanuvchida filtr mos / mos emas — chaqiruvlar soni bir xil; har darvoza — 2 chaqiruv (arzon).
+--       matritsasi (kutilayotgan / holatsiz hisob va bog'lanish ham — 4-tekshiruv); huquqsiz foydalanuvchida filtr mos / mos emas —
+--       chaqiruvlar soni bir xil; har darvoza — 2 chaqiruv (arzon); rls-initplan darvozani faqat monoton (AND / OR) policy'ga qo'yadi (G07).
 --   Har chaqiruv haqiqiy rol bilan (authenticated / anon + JWT sub). Migratsiya EMAS (run-all.sql'da yo'q). FAQAT BO'SH sinov bazasida,
 --   kanonik zanjirdan keyin (dev va jonli zanjir), migration/ papkasidan:
 --     bash migration/chain.sh --no-lock-timeout | psql -d fx_sinov -q && (cd migration && psql -d fx_sinov -X -f test-rls-timing.sql)
@@ -24,7 +25,7 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 \pset tuples_only on
-\set kutilgan 24
+\set kutilgan 25
 do $g0$ begin
   if exists (select 1 from public.students) or exists (select 1 from public.users) then
     raise exception 'test-rls-timing.sql: baza bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -88,7 +89,13 @@ insert into public.users (id, email, name, role, status, verified, "extraRoles",
   ('U_FM','f@example.org','Sinov Moliyachi','finance_mgr','active',true,'[]','[]','[]','[]',null),
   ('U_KAS','ka@example.org','Sinov Kassir','kassir','active',true,'[]','[]','[]','[]',null),
   ('U_NUR','n@example.org','Sinov Hamshira','nurse','active',true,'[]','[]','[]','[]',null),
-  ('U_ACC','ac@example.org','Sinov Buxgalter','accountant','active',true,'[]','[]','[]','[]',null);
+  ('U_ACC','ac@example.org','Sinov Buxgalter','accountant','active',true,'[]','[]','[]','[]',null),
+  ('U_TRE','tr@example.org','Sinov Gaznachi','treasurer','active',true,'[]','[]','[]','[]',null),
+  ('U_DIRP','dp@example.org','Sinov Direktor Kutilmoqda','director','pending',false,'[]','[]','[]','[]',null),
+  ('U_PARP','pp@example.org','Sinov Ota Kutilmoqda','parent','pending',false,'[]','[]','[]','[]',null),
+  ('U_STP','sp@example.org','Sinov Xodim Kutilmoqda',null,'pending',false,'[]','[]','[]','[]',null),
+  ('U_PARN','pn@example.org','Sinov Ota Holatsiz','parent','active',true,'[]','[]','[]','[]',null),
+  ('U_PARE','pe@example.org','Sinov Ota Bosh holat','parent','active',true,'[]','[]','[]','[]',null);
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus") values
   ('sa','IQ-A','Sinov Bola A',5,'A','uz',''), ('sb','IQ-B','Sinov Bola B',6,'B','uz',''), ('sc','IQ-C','Sinov Bola C',7,'C','uz',''),
   ('sl','IQ-L','Sinov Bola L',5,'A','uz',''),                     -- eski karta: student_private.id = 'IQ-L'
@@ -102,7 +109,9 @@ insert into public.student_private (id, "fatherName", "parentPhone") values
 insert into public.child_claims (id, uid, "studentId", code, status) values
   ('U_PA__IQ-A','U_PA','IQ-A','CODEA','active'), ('U_PA__IQ-L','U_PA','IQ-L','','active'), ('U_PA__IQ-ORPH','U_PA','IQ-ORPH','','active'),
   ('U_PA__IQ-B','U_PA','IQ-B','','pending'), ('U_PA__IQ-C','U_PA','IQ-C','','revoked'),
-  ('U_PB__IQ-DUP','U_PB','IQ-DUP','CODEX2','active'), ('U_BL__IQ-A','U_BL','IQ-A','CODEA','active');
+  ('U_PB__IQ-DUP','U_PB','IQ-DUP','CODEX2','active'), ('U_BL__IQ-A','U_BL','IQ-A','CODEA','active'),
+  ('U_PARP__IQ-B','U_PARP','IQ-B','','active'), ('U_STP__IQ-B','U_STP','IQ-B','','active'),
+  ('U_PARN__IQ-C','U_PARN','IQ-C','',null), ('U_PARE__IQ-C','U_PARE','IQ-C','','');
 insert into public.attendance (id, "studentId", "classKey", month, days)
   select s."studentId" || '__2026-11', s."studentId", 'uz-' || s.grade || '-' || s."classLetter", '2026-11', '{}' from public.students s where s.id <> 'sx2';
 insert into public.grades (id, "studentId", "classKey", year, subjects)
@@ -291,10 +300,14 @@ select zz.chk('G01 policy / ko''rinishlardagi SECURITY DEFINER yordamchilar plpg
   || ' | ' || (select (count(*) >= 25)::text from pg_proc p
                 where p.pronamespace = 'app'::regnamespace and p.prosecdef and p.prolang = (select oid from pg_language where lanname = 'plpgsql')
                   and p.prosrc ~ '^\s*#variable_conflict use_column\s+begin\s+return \(')
-  || ' | ' || (select string_agg(l.lanname, ',' order by p.proname) from pg_proc p join pg_language l on l.oid = p.prolang
-                where p.oid in ('app.rls_acl()'::regprocedure, 'app.rls_gate_any()'::regprocedure, 'app.my_child_sids()'::regprocedure,
-                                'app.is_teacher_for_class(text)'::regprocedure)),
-  '^users_me \| true \| plpgsql,plpgsql,plpgsql,plpgsql$');
+  -- namunalar: policy'da bevosita ko'rinmaydigan ichki yordamchilar ham (rls-plpgsql zanjir oxirida bo'lmasa, ular SQL bo'lib qolardi)
+  || ' | ' || (select coalesce(string_agg(case when l.lanname <> 'plpgsql' then p.proname end, ',' order by p.proname), '-') || '/' || count(*)
+                 from pg_proc p join pg_language l on l.oid = p.prolang
+                where p.oid in (select to_regprocedure(f) from unnest(array['app.rls_acl()', 'app.rls_gate_any()', 'app.rls_gate_private()', 'app.my_child_sids()',
+                                  'app.my_student_docs()', 'app.my_child_class_keys()', 'app.my_staff_class_keys()', 'app.claim_row(text,text)',
+                                  'app.is_teacher_for_class(text)', 'app.is_homeroom_for(text)', 'app.is_kurator_for(text)', 'app.teacher_has_subject(text)',
+                                  'app.ann_can_write(jsonb)', 'app.role_set()', 'app.is_admin()']) f)),
+  '^users_me \| true \| -/15$');
 select zz.chk('G02 rol / to''plam yordamchilari va o''ramlardan (rls_in / rlsg_*) iborat har SELECT policy darvoza bilan BOSHLANADI (darvozasizlar | umumiy darvozalilardan namunalar)',
   coalesce((select string_agg(c.relname || '.' || p.polname, ',' order by c.relname, p.polname) from pg_policy p join pg_class c on c.oid = p.polrelid
              where c.relnamespace = 'public'::regnamespace and p.polcmd in ('r', '*') and pg_get_expr(p.polqual, p.polrelid) ~ 'app\.(rls_in|rlsg_[a-z0-9_]+)\('
@@ -310,10 +323,17 @@ create temp table zz_gp on commit drop as
     from pg_policy p join pg_class c on c.oid = p.polrelid,
          regexp_matches(pg_get_expr(p.polqual, p.polrelid), '\( SELECT ((?:app\.[a-z_0-9]+\(\)|\(app\.is_admin\(\) OR app\.is_zavuch\(\)\)))(?: AS [a-z_0-9]+)?\)', 'g') m
    where c.relnamespace = 'public'::regnamespace and p.polcmd in ('r', '*') and pg_get_expr(p.polqual, p.polrelid) ~ '^\(\( SELECT app\.rls_gate_[a-z]+\(\)';
+-- darvozali ko'rinishlar (student_phones, my_sick_notes, my_nurse_visits) — ularning darvozasi uchun ham xuddi shu ustma-ust to'plam qoidasi
+insert into zz_gp
+  select distinct substring(v.d from '\( SELECT app\.(rls_gate_[a-z]+)\(\) AS rls_gate_[a-z]+\)'), m[1]
+    from (select pg_get_viewdef(c.oid) as d from pg_class c
+           where c.relnamespace = 'public'::regnamespace and c.relkind in ('v', 'm') and pg_get_viewdef(c.oid) ~ '\( SELECT app\.rls_gate_[a-z]+\(\) AS rls_gate_[a-z]+\)') v,
+         regexp_matches(v.d, '\( SELECT ((?:app\.[a-z_0-9]+\(\)|\(app\.is_admin\(\) OR app\.is_zavuch\(\)\)))(?: AS [a-z_0-9]+)?\)', 'g') m;
 delete from zz_gp where expr = 'app.' || gate || '()';
 create temp table zz_gv on commit drop as
   select u, g.gate, g.expr, zz.as(u, format('select app.%s()::text', g.gate)) as gv, zz.as(u, format('select coalesce((%s)::text, ''NULL'')', g.expr)) as ev
-    from unnest(array['U_DIR','U_SAL','U_PAR0','U_PA','U_PB','U_BL','U_TCH','U_HM','U_KUR','U_ZAV','U_ADM','U_HRT','U_REC','U_FM','U_KAS','U_NUR','U_ACC','U_GHOST']) u,
+    from unnest(array['U_DIR','U_SAL','U_PAR0','U_PA','U_PB','U_BL','U_TCH','U_HM','U_KUR','U_ZAV','U_ADM','U_HRT','U_REC','U_FM','U_KAS','U_NUR','U_ACC','U_GHOST',
+                      'U_TRE','U_DIRP','U_PARP','U_STP','U_PARN','U_PARE']) u,
          zz_gp g;
 select zz.chk('G03 darvoza yolg''on => policy''ning har InitPlan''i yolg''on / bo''sh (buzilishlar | juft / darvoza yolg''on | asosiy to''plamlar qamralgan)',
   (select count(*) filter (where gv = 'false' and ev not in ('false', '{}', 'NULL')) || ':'
@@ -325,8 +345,9 @@ select zz.chk('G03 darvoza yolg''on => policy''ning har InitPlan''i yolg''on / b
 select zz.chk('G04 darvozalar (any / private / students / phones / health): huquqsiz — 00000; farzandli ota-ona, Direktor, O''IBDO'' — 11111; qabulxona — 11110; sinf xodimi — 10101; moliya / kassir — 10010; hamshira / buxgalter — 10000',
   (select string_agg(u || '=' || zz.as(u, $q$select app.rls_gate_any()::int::text || app.rls_gate_private()::int::text || app.rls_gate_students()::int::text
                                                      || app.rls_gate_phones()::int::text || app.rls_gate_health()::int::text$q$), ' ' order by u)
-     from unnest(array['U_ACC','U_ADM','U_BL','U_DIR','U_FM','U_GHOST','U_HM','U_HRT','U_KAS','U_KUR','U_NUR','U_PA','U_PAR0','U_PB','U_REC','U_SAL','U_TCH','U_ZAV']) u),
-  '^U_ACC=10000 U_ADM=10101 U_BL=00000 U_DIR=11111 U_FM=10010 U_GHOST=00000 U_HM=10101 U_HRT=10101 U_KAS=10010 U_KUR=10101 U_NUR=10000 U_PA=11111 U_PAR0=00000 U_PB=11111 U_REC=11110 U_SAL=00000 U_TCH=10101 U_ZAV=11111$');
+     from unnest(array['U_ACC','U_ADM','U_BL','U_DIR','U_FM','U_GHOST','U_HM','U_HRT','U_KAS','U_KUR','U_NUR','U_PA','U_PAR0','U_PB','U_REC','U_SAL','U_TCH','U_ZAV',
+                       'U_TRE','U_DIRP','U_PARP','U_STP','U_PARN','U_PARE']) u),
+  '^U_ACC=10000 U_ADM=10101 U_BL=00000 U_DIR=11111 U_DIRP=11111 U_FM=10010 U_GHOST=00000 U_HM=10101 U_HRT=10101 U_KAS=10010 U_KUR=10101 U_NUR=10000 U_PA=11111 U_PAR0=00000 U_PARE=11111 U_PARN=11111 U_PARP=11111 U_PB=11111 U_REC=11110 U_SAL=00000 U_STP=11111 U_TCH=10101 U_TRE=10010 U_ZAV=11111$');
 -- G05: huquqsiz foydalanuvchida (sotuvchi, farzandsiz ota-ona, bloklangan, users yozuvi yo'q) filtr yashirin qatorga MOS kelsa ham, kelmasa
 --   ham — app funksiyalari chaqiruvlari soni AYNAN bir xil (telefon / ism / matn ustunlari: indeks yo'q). Indeksli kalit (studentId) bo'yicha
 --   farq — faqat darvoza (rls_gate_any + rls_acl = 2 chaqiruv; seq scan bo'lsa 0) — hujjatlashtirilgan qoldiq (~40 mks).
@@ -364,6 +385,22 @@ select zz.chk('G06 har darvoza (5 ta) har rolda (sotuvchi, farzandli ota-ona, o'
           unnest(array['rls_gate_any','rls_gate_private','rls_gate_students','rls_gate_phones','rls_gate_health']) g),
   '^2$');
 
+-- G07: rls-initplan darvozani FAQAT monoton shartga qo'yadi (taniqli atomlarning AND / OR i); NOT / CASE / IS NULL / COALESCE / = false —
+--   darvozasiz (aks holda darvoza ko'rinadigan qatorni yashirishi mumkin edi). Sinov jadvali tranzaksiya ichida, oxirida ROLLBACK.
+create table public.zz_np (id text primary key, sid text);
+alter table public.zz_np enable row level security;
+create policy np_not  on public.zz_np for select using (app.owns_child(sid) or not app.is_staff());
+create policy np_case on public.zz_np for select using (case when app.is_staff() then false else app.owns_child(sid) end);
+create policy np_null on public.zz_np for select using (app.owns_child(sid) or (app.is_staff() is null));
+create policy np_coal on public.zz_np for select using (coalesce(app.owns_child(sid) and app.is_staff(), true));
+create policy np_eqf  on public.zz_np for select using (app.owns_child(sid) = false);
+create policy np_pos  on public.zz_np for select using (app.owns_child(sid) or app.is_staff());
+\set iqror_chain 1
+\ir rls-initplan.sql
+select zz.chk('G07 rls-initplan: darvoza faqat monoton policy''ga (NOT / CASE / IS NULL / COALESCE / = false — darvozasiz; AND / OR — darvozali)',
+  (select string_agg(polname || '=' || (pg_get_expr(polqual, polrelid) ~ '^\(\( SELECT app\.rls_gate_')::text, ',' order by polname)
+     from pg_policy where polrelid = 'public.zz_np'::regclass),
+  '^np_case=false,np_coal=false,np_eqf=false,np_not=false,np_null=false,np_pos=true$');
 select count(*)::text as yozilgan from zz.res \gset
 select zz.chk('ZZ yozilgan tekshiruvlar soni = kutilgan', :'yozilgan', '^' || :'kutilgan' || '$');
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;

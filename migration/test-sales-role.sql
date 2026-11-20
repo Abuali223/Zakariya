@@ -35,7 +35,7 @@
 \pset format unaligned
 \pset tuples_only on
 -- yozilishi kerak bo'lgan tekshiruvlar soni (ZZ dan tashqari): yangi tekshiruv qo'shilsa — oshiriladi
-\set kutilgan 76
+\set kutilgan 87
 do $g0$ begin
   if exists (select 1 from public.students) then
     raise exception 'test-sales-role.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -673,6 +673,11 @@ select zz.as('U_SAL', $q$with u as (update public.users set name = 'Sinov Sotuvc
 select zz.chk('H17 sotuvchi o''z ismi / emailini o''zgartira olmaydi (42501); Direktor o''zgartiradi; boshqa rol — avvalgidek o''zinikini',
   :'h17' || ' | ' || (select name || ' ' || email from public.users where id = 'U_SAL'),
   '^ERR 42501 [^|]* \| ERR 42501 [^|]* \| 1 \| 1 \| Sinov Sotuvchi Yangi s@example.org$');
+select zz.chk('HX6 sotuvchi faqat firstName / lastName ni ham o''zgartira olmaydi (42501)',
+  zz.as('U_SAL', $q$with u as (update public.users set "firstName" = 'Boshqa' where id = 'U_SAL' returning 1) select count(*)::text from u$q$) || ' | '
+  || zz.as('U_SAL', $q$with u as (update public.users set "lastName" = 'Xodim' where id = 'U_SAL' returning 1) select count(*)::text from u$q$),
+  '^ERR 42501 [^|]* \| ERR 42501 ');
+select zz.chk('HX7 (nazorat) H18 savepointi tashqarisida firstName o''zgarmagan', coalesce((select coalesce("firstName", '<null>') from public.users where id = 'U_SAL'), '-'), '^<null>$');
 
 -- H18–H22 — savepoint ichida (3-mustaqil tekshiruv): oila raqamini tanlash darajalari (to'g'ri raqam, ismli karta, ona raqami ota
 --   katagida), bo'lingan komponentda bir xil bitta ismli kartalar, noto'g'ri raqamni ochganda katakdagi izoh matni.
@@ -687,7 +692,13 @@ insert into public.students (id, "studentId", name, grade, "classLetter", lang, 
   ('q12','IQ-Q12','Sinov Bola Q12',7,'D','uz','',312), ('q13','IQ-Q13','Sinov Bola Q13',3,'E','uz','',313), ('q14','IQ-Q14','Sinov Bola Q14',4,'E','uz','',314),
   ('q15','IQ-Q15','Sinov Bola Q15',5,'E','uz','',315), ('q16','IQ-Q16','Sinov Bola Q16',6,'E','uz','',316), ('q17','IQ-Q17','Sinov Bola Q17',7,'E','uz','',317),
   ('q18','IQ-Q18','Sinov Bola Q18',3,'F','uz','',318), ('q19','IQ-Q19','Sinov Bola Q19',4,'F','uz','',319),
-  ('q20','IQ-Q20','Sinov Bola Q20',5,'F','uz','',320), ('q21','IQ-Q21','Sinov Bola Q21',6,'F','uz','',321);
+  ('q20','IQ-Q20','Sinov Bola Q20',5,'F','uz','',320), ('q21','IQ-Q21','Sinov Bola Q21',6,'F','uz','',321),
+  ('q22','IQ-Q22','Sinov Bola Q22',3,'G','uz','',322), ('q23','IQ-Q23','Sinov Bola Q23',4,'G','uz','',323), ('q24','IQ-Q24','Sinov Bola Q24',5,'G','uz','',324),
+  ('q25','IQ-Q25','Sinov Bola Q25',3,'G','uz','',325), ('q26','IQ-Q26','Sinov Bola Q26',4,'G','uz','',326),
+  ('q27','IQ-Q27','Sinov Bola Q27',3,'H','uz','',327), ('q28','IQ-Q28','Sinov Bola Q28',4,'H','uz','',328), ('q29','IQ-Q29','Sinov Bola Q29',5,'H','uz','',329),
+  ('q30','IQ-Q30','Sinov Bola Q30',3,'H','uz','',330), ('q31','IQ-Q31','Sinov Bola Q31',4,'H','uz','',331),
+  ('q32','IQ-Q32','Sinov Bola Q32',3,'J','uz','',332), ('q33','IQ-Q33','Sinov Bola Q33',4,'J','uz','',333), ('q34','IQ-Q34','Sinov Bola Q34',5,'J','uz','',334),
+  ('q35','IQ-Q35','Sinov Bola Q35',6,'J','uz','',335);
 insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
   ('q1','Sinov Ota Nol','Sinov Ona Nol','0','+998 00 888 00 01'),                          -- H18: ota ismi yozilgan kartada «0»,
   ('q2',null,'Sinov Ona Nol','+998 00 777 00 01','+998 00 888 00 01'),                      --      to'g'ri ota raqami — ota ismisiz kartada
@@ -709,7 +720,21 @@ insert into public.student_private (id, "fatherName", "motherName", "parentPhone
   ('q12','Sinov Ota Izoh','Sinov Ona Izoh','+998 00 777 00 05, 3-guruh','+998 00 888 00 05, +998 00 888 00 06 (ona ishda, faqat kechqurun)'),  -- H22
   ('q15',null,'Sinov Ona Zet','+998 00 888 00 10','+998 00 888 00 10'),                     -- H24: ona raqami ikkala katakda, ota ismi yo'q
   ('q16','Sinov Ota Vee','Sinov Ona Vee','+998 00 777 00 08, +998 00 777 00 09','+998 00 888 00 08'),   -- H24: ismli kartada ikki raqamli
-  ('q17',null,'Sinov Ona Vee','+998 00 999 00 08','+998 00 888 00 08');                      --      katak, ota ismisiz kartada bitta raqam
+  ('q17',null,'Sinov Ona Vee','+998 00 999 00 08','+998 00 888 00 08'),                      --      katak, ota ismisiz kartada bitta raqam
+  ('q22','Sinov Ota Zanjir','Sinov Ona Zanjir','+998 00 222 00 42',null),                     -- HX1: zanjir (union-find yakuniy siqish)
+  ('q23','Sinov Ota Zanjir',null,'+998 00 111 00 41',null),
+  ('q24','Sinov Ota Zanjir','Sinov Ona Zanjir','+998 00 111 00 41','+998 00 222 00 42'),
+  ('q25','Sinov Ota Daraja','Sinov Ona Daraja','+998 00 888 00 43','+998 00 888 00 43'),       -- HX2: fpt 2-daraja (ota ismisiz, ona raqami emas) > 3-daraja
+  ('q26',null,'Sinov Ona Daraja','+998 00 777 00 43','+998 00 888 00 43'),
+  ('q27','Sinov Ota Chastota','Sinov Ona Chastota','+998 00 777 00 44','+998 00 888 00 44'),   -- HX3: ona raqami — eng ko'p uchragani
+  ('q28','Sinov Ota Chastota','Sinov Ona Chastota','+998 00 777 00 44','+998 00 888 00 44'),
+  ('q29','Sinov Ota Chastota','Sinov Ona Chastota','+998 00 777 00 44','+998 00 666 00 44'),
+  ('q30','Sinov Ota Ikkiraqam','Sinov Ona Ikkiraqam','+998 00 777 00 45','+998 00 888 00 45, +998 00 888 00 46'),  -- HX3: mok (>15)
+  ('q31','Sinov Ota Ikkiraqam',null,'+998 00 777 00 45','+998 00 999 00 45'),
+  ('q32','Sinov Ota Yozuv',null,'12 34 567','+998 00 888 00 47'),                             -- HX4: asl yozuv — eng ko'p uchragani, 7 raqamli qism
+  ('q33','Sinov Ota Yozuv',null,'12 34 567','+998 00 888 00 47'),
+  ('q34','Sinov Ota Yozuv',null,'1234567','+998 00 888 00 47'),
+  ('q35','Sinov Ota Bosh',null,'+998 00 777 00 48  uy 12',null);                              -- HX4: ikki bo'sh joy bo'yicha bo'linadi
 set local session_replication_role = origin;
 select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Nol'))) as h18_rv \gset
 select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Nolb'))) as h18b_rv \gset
@@ -722,6 +747,12 @@ select coalesce(zz.list('U_SAL', $a$'lambda'$a$)::text, '<NULL>') as h21_list \g
 select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Izoh'))) as h22_rv \gset
 select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ona Zet'))) as h24z_rv \gset
 select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Vee'))) as h24v_rv \gset
+select coalesce(zz.list('U_SAL') ->> 'total', '<NULL>') || ' ' || coalesce(zz.list('U_SAL', $a$'zanjir'$a$)::text, '<NULL>') as hx1 \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Daraja'))) as hx2 \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Chastota'))) as hx3a \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Ikkiraqam'))) as hx3b \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Yozuv'))) as hx4a \gset
+select zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.key('Sinov Ota Bosh'))) as hx4b \gset
 rollback to savepoint h18;
 select zz.chk('H18 ota / ona ismi yozilgan kartadagi «0» boshqa kartadagi to''g''ri raqamni yashirmaydi (ota ham, ona ham)',
   coalesce((zz.j(:'h18_rv') #>> '{father,name}') || ' ' || (zz.j(:'h18_rv') #>> '{father,phone}') || ' ' || (zz.j(:'h18_rv') #>> '{father,valid}') || ' '
@@ -760,27 +791,150 @@ select zz.chk('H23 rol o''zgargach o''z ismini o''zgartirgan / o''chirilgan hiso
   || ' | ' || :'h23_del' || ' | '
   || coalesce((select string_agg(distinct r ->> 'name', ',') from jsonb_array_elements(zz.j(:'h23_log2') -> 'recent') r where r ->> 'uid' = 'U_SAL' and r ->> 'father' is not null), '-'),
   '^parent \| 1 \| Sinov Sotuvchi / Sinov Sotuvchi / Sinov Boshqa Xodim \| 1 \| Sinov Sotuvchi$');
+select zz.chk('HX5 jurnal kunlari: hozirgi nom (nameNow) ham',
+  coalesce((select string_agg(distinct d ->> 'nameNow', ',') from jsonb_array_elements(zz.j(:'h23_log') -> 'days') d where d ->> 'uid' = 'U_SAL'), '-'), '^Sinov Boshqa Xodim$');
 select zz.chk('H24 ona raqami ikkala katakda, ota ismi yo''q — otaniki bo''lib takrorlanmaydi; ismli kartadagi ikki raqamli «ota telefoni» — ota ismisiz kartadagi raqamdan ustun',
   coalesce(coalesce(zz.j(:'h24z_rv') ->> 'father', 'null') || ' ' || (zz.j(:'h24z_rv') #>> '{mother,phone}'), left(:'h24z_rv', 120)) || ' | '
   || coalesce((zz.j(:'h24v_rv') #>> '{father,name}') || ' ' || (zz.j(:'h24v_rv') #>> '{father,phone}') || ' ' || (zz.j(:'h24v_rv') #>> '{mother,phone}'), left(:'h24v_rv', 120)),
   '^null \+998008880010 \| Sinov Ota Vee \+998 00 777 00 08, \+998 00 777 00 09 \+998008880008$');
+select zz.chk('HX1 zanjir: oxirgi qirra ildizni boshqa ildizga ulasa ham — bitta oila (savepointda jami 25; «zanjir» — 1 qator, ota 41, ona 42)',
+  split_part(:'hx1', ' ', 1) || ' | ' || (zz.j(substr(:'hx1', strpos(:'hx1', ' ') + 1)) ->> 'total') || ' | '
+  || coalesce((select (r -> 'father' ->> 'phone') || ' ' || (r -> 'mother' ->> 'phone') from jsonb_array_elements(zz.j(substr(:'hx1', strpos(:'hx1', ' ') + 1)) -> 'rows') r limit 1), '-'),
+  '^25 \| 1 \| \+998 00 \*\*\* \*\* 41 \+998 00 \*\*\* \*\* 42$');
+select zz.chk('HX2 fpt: ota ismisiz kartadagi (ona raqami emas) raqam — ota ismli kartadagi oilaning umumiy raqamidan ustun',
+  coalesce((zz.j(:'hx2') #>> '{father,phone}') || ' ' || (zz.j(:'hx2') #>> '{mother,phone}'), left(:'hx2', 120)), '^\+998007770043 \+998008880043$');
+select zz.chk('HX3 ona raqami: eng ko''p uchragani; ona ismli kartadagi ikki raqamli katak — ona ismisiz kartadagi bitta raqamdan ustun',
+  coalesce(zz.j(:'hx3a') #>> '{mother,phone}', left(:'hx3a', 120)) || ' | ' || coalesce(zz.j(:'hx3b') #>> '{mother,phone}', left(:'hx3b', 120)),
+  '^\+998008880044 \| \+998 00 888 00 45, \+998 00 888 00 46$');
+select zz.chk('HX4 7 raqamli shahar raqami (kodsiz) — qo''ng''iroq qilib bo''lmaydi: niqob (raqam ochilmaydi); ikki bo''sh joydan keyingi izoh raqami chiqmaydi',
+  coalesce(zz.j(:'hx4a') #>> '{father,phone}', left(:'hx4a', 120)) || ' ' || coalesce(zz.j(:'hx4a') #>> '{father,valid}', '-') || ' | '
+  || coalesce(zz.j(:'hx4b') #>> '{father,phone}', left(:'hx4b', 120)),
+  '^\*\*\* \*\* 67 false \| \+998 00 777 00 48$');
 
--- H25 — savepoint ichida: bitta umumiy raqamli 500 karta (ota ismi «-», ona ismi yo'q, maktab raqami) — hammasi o'zaro bog'langan bitta
---   katta qism (bitta oila). Oilalar ro'yxati chiziqli vaqtda (union-find): avvalgi juftlik + to'liq tutashuv usuli kub vaqt oldi
---   (400 kartada ~8 s, 500 da ~16 s, 1000 da ~2 daqiqa — sotuvchi ro'yxati va Direktor jurnali ochilmay qolardi).
+-- H25 — savepoint ichida: bitta umumiy raqamli 500 ta ismli karta (bir xil ota ismi, ona ismi yo'q) va bitta umumiy raqamli 500 ta
+--   «-» karta (ismsiz) — har biri bitta oila. Oilalar ro'yxati chiziqli vaqtda (union-find): avvalgi juftlik + to'liq tutashuv usuli
+--   kub vaqt oldi (400 kartada ~8 s, 500 da ~16 s, 1000 da ~2 daqiqa — sotuvchi ro'yxati va Direktor jurnali ochilmay qolardi).
 savepoint h25;
 set local session_replication_role = replica;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order")
-  select 'zb' || g, 'IQ-ZB' || g, 'Sinov Bola ZB' || g, 1 + g % 11, 'Z', 'uz', '', 1000 + g from generate_series(1, 500) g;
+  select 'zb' || g, 'IQ-ZB' || g, 'Sinov Bola ZB' || g, 1 + g % 11, 'Z', 'uz', '', 1000 + g from generate_series(1, 1000) g;
 insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2")
-  select 'zb' || g, '-', null, '+998 00 555 55 55', null from generate_series(1, 500) g;
+  select 'zb' || g, case when g <= 500 then 'Sinov Ota Umumiy' else '-' end, null,
+         case when g <= 500 then '+998 00 555 55 55' else '+998 00 555 55 56' end, null from generate_series(1, 1000) g;
 set local session_replication_role = origin;
 set local statement_timeout = '90s';
-select zz.q($q$select (select count(*) from app.sales_families(false) f where f.f_name = '-')::text || ' ' || (extract(epoch from clock_timestamp() - t0) * 1000 < 5000)::text
+select zz.q($q$select (select count(*) from app.sales_families(false) f where f.f_phone = '998005555555' and f.f_name = 'Sinov Ota Umumiy')::text || ' '
+                   || (select count(*) from app.sales_families(false) f where f.f_phone = '998005555556' and f.f_name is null)::text || ' '
+                   || (extract(epoch from clock_timestamp() - t0) * 1000 < 5000)::text
                 from (select clock_timestamp() as t0) z$q$) as h25 \gset
 rollback to savepoint h25;
-select zz.chk('H25 bitta umumiy raqamli 500 karta (ota ismi «-», ona ismi yo''q) — bitta oila, ro''yxat tez hisoblanadi (5 s dan kam)',
-  :'h25', '^1 true$');
+select zz.chk('H25 bitta umumiy raqamli 500 ta ismli karta — bitta oila; 500 ta «-» karta (ismsiz, raqamlari bir xil) — bitta oila; ro''yxat tez (5 s dan kam)',
+  :'h25', '^1 1 true$');
+
+-- H26–H29 (4-mustaqil tekshiruv): oilani nom bo'yicha qidiruv orqali topib ochish (birinchi sahifaga bog'liq emas).
+create or replace function zz.rk(p_name text) returns text language sql as $$
+  select r ->> 'k' from jsonb_array_elements(coalesce(zz.list('U_SAL', quote_literal(p_name)) -> 'rows', '[]'::jsonb)) r
+   where r -> 'father' ->> 'name' = p_name or r -> 'mother' ->> 'name' = p_name limit 1 $$;
+create or replace function zz.rv(p_name text) returns jsonb language sql as $$
+  select zz.j(zz.as('U_SAL2', format('select public.sales_reveal(%L)::text', zz.rk(p_name)))) $$;
+
+-- H26 — savepoint ichida: «-» / «—» — ism emas. Umumiy maktab raqami + ota ismi «-», har kartada boshqa ona raqami — uch oila (hech
+--   bir ona yo'qolmaydi; avval «-» ism hisoblanib, uchala karta bitta qatorga qo'shilardi); aka-uka kartalari: birida ota ismi «-» —
+--   bitta oila, ota ismi haqiqiy ismdan (avval «-» bilan «Akmal» zid ism hisoblanib, ikki qator chiqardi).
+savepoint h26;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('zp1','IQ-ZP1','Sinov Bola ZP1',5,'A','uz','',2001), ('zp2','IQ-ZP2','Sinov Bola ZP2',6,'A','uz','',2002), ('zp3','IQ-ZP3','Sinov Bola ZP3',7,'A','uz','',2003),
+  ('zs1','IQ-ZS1','Sinov Bola ZS1',5,'B','uz','',2004), ('zs2','IQ-ZS2','Sinov Bola ZS2',8,'B','uz','',2005);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('zp1','-',null,'+998 00 555 55 55','+998 00 111 70 01'),
+  ('zp2','-',null,'+998 00 555 55 55','+998 00 111 70 02'),
+  ('zp3','—',null,'+998 00 555 55 55','+998 00 111 70 03'),
+  ('zs1','Sinov Ota Akmal','Sinov Ona Zarina','+998 00 111 70 11','+998 00 111 70 12'),
+  ('zs2','-','Sinov Ona Zarina','+998 00 111 70 11','+998 00 111 70 12');
+set local session_replication_role = origin;
+select zz.q($q$select string_agg(coalesce(f.f_name, '0') || ' ' || f.f_phone || ' ' || coalesce(f.m_name, '0') || ' ' || f.m_phone, ', ' order by f.m_phone)
+                from app.sales_families(false) f where f.f_phone in ('998005555555', '998001117011')$q$) as h26 \gset
+rollback to savepoint h26;
+select zz.chk('H26 «-» ism emas: umumiy maktab raqami + ota ismi «-» — har ona alohida (3 qator); aka-uka (birida ota «-») — bitta oila',
+  :'h26', '^0 998005555555 0 998001117001, 0 998005555555 0 998001117002, 0 998005555555 0 998001117003, Sinov Ota Akmal 998001117011 Sinov Ona Zarina 998001117012$');
+
+-- H27 — savepoint ichida: ochilgan katakdan faqat qo'ng'iroq qilib bo'ladigan qismlar: pasport / karta raqami, sana, JSHSHIR (14 raqam,
+--   «+»siz — avval «to'g'ri xorijiy raqam» bo'lib chiqardi), izohdagi raqamlar — chiqmaydi; bunday qism bo'lmasa — niqob (avval katakdagi
+--   barcha raqamlar qo'shilib chiqardi). Bir katakdagi bir nechta to'g'ri raqam, 9 xonali mahalliy raqam va «+» bilan yozilgan xorijiy
+--   raqam — avvalgidek.
+savepoint h27;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('r1','IQ-R1','Sinov Bola R1',5,'K','uz','',2101), ('r2','IQ-R2','Sinov Bola R2',6,'K','uz','',2102), ('r3','IQ-R3','Sinov Bola R3',7,'K','uz','',2103),
+  ('r4','IQ-R4','Sinov Bola R4',8,'K','uz','',2104), ('r5','IQ-R5','Sinov Bola R5',9,'K','uz','',2105);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('r1','Sinov Ota Pasport','Sinov Ona Pasport','+998 00 111 00 61, pasport AA 1234567','tug''ilgan 31.12.2015, karta 8600 1234 5678 9012'),
+  ('r2','Sinov Ota Guruh',null,'3-guruh, 2020 yil, 15-uy',null),
+  ('r3',null,'Sinov Ona Jshr',null,'JSHSHIR 31203456789012'),
+  ('r4','Sinov Ota Ikki','Sinov Ona Ikki','+44 7700 900036, +998 00 444 00 65','01 234 56 78, 02 345 67 89'),
+  ('r5','Sinov Ota Xorijiy',null,'+44 7700 900037',null);
+set local session_replication_role = origin;
+select zz.rv('Sinov Ota Pasport')::text as h27a, zz.rv('Sinov Ota Guruh')::text as h27b, zz.rv('Sinov Ona Jshr')::text as h27c,
+       zz.rv('Sinov Ota Ikki')::text as h27d, zz.rv('Sinov Ota Xorijiy')::text as h27e \gset
+rollback to savepoint h27;
+select zz.chk('H27 ochilgan katak: faqat qo''ng''iroq qilib bo''ladigan qismlar (pasport / karta / sana / JSHSHIR / izoh raqami — yo''q, bo''lmasa niqob); bir nechta to''g''ri raqam, mahalliy va «+» xorijiy raqam — avvalgidek',
+  coalesce((zz.j(:'h27a') #>> '{father,phone}') || ' / ' || (zz.j(:'h27a') #>> '{mother,phone}') || ' ' || (zz.j(:'h27a') #>> '{mother,valid}'), left(:'h27a', 120)) || ' | '
+  || coalesce((zz.j(:'h27b') #>> '{father,phone}') || ' ' || (zz.j(:'h27b') #>> '{father,valid}'), left(:'h27b', 120)) || ' | '
+  || coalesce((zz.j(:'h27c') #>> '{mother,phone}') || ' ' || (zz.j(:'h27c') #>> '{mother,valid}'), left(:'h27c', 120)) || ' | '
+  || coalesce((zz.j(:'h27d') #>> '{father,phone}') || ' / ' || (zz.j(:'h27d') #>> '{mother,phone}'), left(:'h27d', 120)) || ' | '
+  || coalesce((zz.j(:'h27e') #>> '{father,phone}') || ' ' || (zz.j(:'h27e') #>> '{father,valid}'), left(:'h27e', 120)),
+  '^\+998 00 111 00 61 / \*\*\* \*\* 12 false \| \*\*\* \*\* 15 false \| \*\*\* \*\* 12 false \| \+44 7700 900036, \+998 00 444 00 65 / 01 234 56 78, 02 345 67 89 \| \+447700900037 true$');
+
+-- H28 — savepoint ichida: ism katagiga ism bilan birga yozilgan telefon / izoh sotuvchiga chiqmaydi — ro'yxatda (niqoblangan, jurnalsiz),
+--   qidiruvda va ochishda faqat ism; ism katagidagi raqam bo'yicha qidiruv hech narsa topmaydi; ro'yxat jurnalga yozilmaydi.
+savepoint h28;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('n1','IQ-N1','Sinov Bola N1',5,'L','uz','',2201);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('n1','Sinov Ota Raqamli (tel 00 765 43 21, Rossiyada)','Sinov Ona Raqamli 00-765-43-21 [astma]','+998 00 111 00 71','+998 00 111 00 72');
+set local session_replication_role = origin;
+select (select count(*) from public.sales_contact_log)::text as h28_log0 \gset
+select zz.list('U_SAL', quote_literal('Raqamli'))::text as h28_list, zz.list('U_SAL', quote_literal('765'))::text as h28_q \gset
+select (select count(*) from public.sales_contact_log)::text as h28_log1 \gset
+select zz.rv('Sinov Ota Raqamli')::text as h28_rv \gset
+rollback to savepoint h28;
+select zz.chk('H28 ism katagidagi telefon / izoh: ro''yxatda, qidiruvda va ochishda faqat ism; raqam bo''yicha qidiruv — 0; ro''yxat jurnalga yozilmaydi',
+  coalesce((select (r #>> '{father,name}') || ' / ' || (r #>> '{mother,name}') from jsonb_array_elements(zz.j(:'h28_list') -> 'rows') r limit 1), '-') || ' | '
+  || coalesce(zz.j(:'h28_q') ->> 'total', '-') || ' | ' || (:'h28_log1'::int - :'h28_log0'::int)::text || ' | '
+  || coalesce((zz.j(:'h28_rv') #>> '{father,name}') || ' / ' || (zz.j(:'h28_rv') #>> '{mother,name}'), left(:'h28_rv', 120)),
+  '^Sinov Ota Raqamli / Sinov Ona Raqamli \| 0 \| 0 \| Sinov Ota Raqamli / Sinov Ona Raqamli$');
+
+-- H29 — savepoint ichida: «foydalanib bo'ladigan» katak — sahifa qo'ng'iroq havolasi bera oladigan raqam: karta raqami (16 raqam), JSHSHIR
+--   (14 raqam, «+»siz), bitta bo'sh joy bilan yopishgan ikki raqam aka-uka kartasidagi to'g'ri raqamni yashirmaydi (ota ham, ona ham;
+--   avval ular «foydalanib bo'ladigan» hisoblanib, satr tartibida to'g'ri raqamdan oldin tushardi); «+» bilan xorijiy raqam — foydalanib bo'ladi.
+savepoint h29;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('u1','IQ-U1','Sinov Bola U1',3,'G','uz','',2301), ('u2','IQ-U2','Sinov Bola U2',4,'G','uz','',2302),
+  ('u3','IQ-U3','Sinov Bola U3',3,'G','uz','',2303), ('u4','IQ-U4','Sinov Bola U4',4,'G','uz','',2304),
+  ('u5','IQ-U5','Sinov Bola U5',3,'G','uz','',2305), ('u6','IQ-U6','Sinov Bola U6',4,'G','uz','',2306),
+  ('u7','IQ-U7','Sinov Bola U7',3,'G','uz','',2307), ('u8','IQ-U8','Sinov Bola U8',4,'G','uz','',2308),
+  ('u9','IQ-U9','Sinov Bola U9',3,'G','uz','',2309), ('u10','IQ-U10','Sinov Bola U10',4,'G','uz','',2310);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('u1','Sinov Ota Karta','Sinov Ona Karta','8600 1234 5678 9012','+998 00 333 00 03'),                 -- karta raqami (16 raqam)
+  ('u2','Sinov Ota Karta','Sinov Ona Karta','+998 00 444 00 04','+998 00 333 00 03'),
+  ('u3','Sinov Ota Jshr','Sinov Ona Jshr','31234567890123','+998 00 333 00 13'),                        -- JSHSHIR (14 raqam, «+»siz)
+  ('u4','Sinov Ota Jshr','Sinov Ona Jshr','+998 00 444 00 14','+998 00 333 00 13'),
+  ('u5','Sinov Ota Bosh','Sinov Ona Bosh','+998 00 111 00 01 +998 00 111 00 02','+998 00 333 00 23'),  -- bitta bo'sh joy: ajratib bo'lmaydi
+  ('u6','Sinov Ota Bosh','Sinov Ona Bosh','+998 00 444 00 24','+998 00 333 00 23'),
+  ('u7','Sinov Ota Mkarta','Sinov Ona Mkarta','+998 00 777 00 53','8600 1234 5678 9053'),               -- ona katagida karta raqami
+  ('u8','Sinov Ota Mkarta','Sinov Ona Mkarta','+998 00 777 00 53','+998 00 888 00 54'),
+  ('u9','Sinov Ota Xorij','Sinov Ona Xorij','+44 7700 900038','+998 00 333 00 33'),                     -- «+» bilan xorijiy raqam —
+  ('u10','Sinov Ota Xorij','Sinov Ona Xorij','8600 1234 5678 9031','+998 00 333 00 33');                --   foydalanib bo'ladi
+set local session_replication_role = origin;
+select (zz.rv('Sinov Ota Karta') #>> '{father,phone}') || ' | ' || (zz.rv('Sinov Ota Jshr') #>> '{father,phone}') || ' | '
+       || (zz.rv('Sinov Ota Bosh') #>> '{father,phone}') || ' | ' || (zz.rv('Sinov Ona Mkarta') #>> '{mother,phone}') || ' | '
+       || (zz.rv('Sinov Ota Xorij') #>> '{father,phone}') as h29 \gset
+rollback to savepoint h29;
+select zz.chk('H29 karta raqami / JSHSHIR / bitta bo''sh joy bilan yopishgan ikki raqam aka-uka kartasidagi to''g''ri raqamni yashirmaydi (ota ham, ona ham); «+» bilan xorijiy raqam — foydalanib bo''ladi',
+  :'h29', '^\+998004440004 \| \+998004440014 \| \+998004440024 \| \+998008880054 \| \+447700900038$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

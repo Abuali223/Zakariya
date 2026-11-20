@@ -539,7 +539,7 @@ func|app.kassa_names(p_uids text[])|87ee55d6d6808a42
 func|app.kassa_next_no(p_desk text, p_series text, p_year integer)|80a68d07a41b7b43
 func|app.kassa_num(p jsonb, p_key text)|a410a52fbbcfc99b
 func|app.kassa_op_user(p_uid text)|cd748347796953d5
-func|app.kassa_operator()|41e97e64e44b4a77
+func|app.kassa_operator()|76132a0c877c1c02
 func|app.kassa_org_due(p_doc cash_docs)|a81036df4022afea
 func|app.kassa_party(p_type text, p_id text, p_name text, OUT o_id text, OUT o_name text)|6c8ff2c8c20098fe
 func|app.kassa_party_label(p_type text, p_id text)|420c44cb60b52498
@@ -551,7 +551,7 @@ func|app.kassa_pending_parse(p jsonb)|29242948e205b99f
 func|app.kassa_period_bal(p_desk text, p_from date, p_to date, OUT o_open numeric, OUT o_close numeric, OUT o_adj numeric, OUT o_ref date)|ea334c823ac1b1f6
 func|app.kassa_periods(p_desk text)|bb7d288361ea5c39
 func|app.kassa_pre_day(p_desk text, p_day date)|7555f89f12002d06
-func|app.kassa_reader()|6bddd741878a9b8b
+func|app.kassa_reader()|aff598995ce3d9ba
 func|app.kassa_reconcile(p_from date, p_to date)|3d726ad7c5e34a30
 func|app.kassa_reconcile_range(p_from date, p_to date)|ca7a268a5c01c4b7
 func|app.kassa_refund_resplit(p_doc_id text, p_uid text)|6b438097ecb4ddc5

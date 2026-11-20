@@ -4,7 +4,7 @@
 --
 --   * deploy.sh SHU ro'yxatni (\ir qatorlarini) o'qib, butun zanjirni BITTA tranzaksiyada qo'llaydi —
 --     prod holati = toza o'rnatish holati (drift yo'q). YANGI migratsiya qo'shish: faqat shu yerga \ir
---     (oxirgi rls-initplan.sql qatoridan OLDIN — u doim oxirgi bo'lishi shart, chain.sh tekshiradi).
+--     (oxirgi ikki qator — rls-plpgsql.sql va rls-initplan.sql — dan OLDIN; ular doim oxirgi bo'lishi shart, chain.sh tekshiradi).
 --   * Har bir fayl IDEMPOTENT va ma'lumot uchun XAVFSIZ bo'lishi SHART: qayta ishga tushirilganda xato
 --     bermaydi va mavjud ma'lumotni o'zgartirmaydi (policy: drop if exists + create; ustun: add column
 --     if not exists; funksiya: create or replace; bir martalik ma'lumot ko'chirish — guard bilan).
@@ -140,8 +140,8 @@ set local iqror.migrating = '1';
 \ir sales-role.sql
 \ir student-archive.sql
 \ir rls-timing.sql
+-- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-plpgsql.sql va rls-initplan.sql doim OXIRGI ikki fayl (chain.sh tekshiradi).
 \ir rls-plpgsql.sql
--- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-initplan.sql doim OXIRGI (chain.sh tekshiradi).
 \ir rls-initplan.sql
 commit;
 \echo '✅ To''liq baza qurildi (barcha migratsiyalar qo''llandi).'
