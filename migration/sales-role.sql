@@ -155,11 +155,19 @@ language sql immutable as $$
   select coalesce(p, '') ~ '[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣]'
 $$;
 -- Ism kaliti (oilani bog'lash uchun): normallashgan so'zlar — takrorsiz, alifbo tartibida («Karimov Akmal» = «Akmal Karimov»); harfsiz
---   so'z (raqam, tinish belgisi) hisobga olinmaydi («Akmal -» = «Akmal»; «-» — kalitsiz, ya'ni ism yozilmagan).
+--   so'z (raqam, tinish belgisi) hisobga olinmaydi («Akmal -» = «Akmal»; «-» — kalitsiz, ya'ni ism yozilmagan). Ism o'rniga yoziladigan
+--   so'zlar («yo'q», «Нет», «noma'lum», «vafot etgan», «ajrashgan», «ma'lumot yo'q» …) ham — kalitsiz: aks holda shunday yozilgan begona
+--   oilalar umumiy (maktab) raqami orqali bitta qatorga qo'shilib, qolganlarining raqami yo'qolardi (mustaqil tekshiruv). Kalit tozalangan
+--   ismdan (app.sales_pname) olinadi — sales_families.
 create or replace function app.sales_nkey(p text) returns text
 language sql immutable set search_path = pg_catalog as $$
   select coalesce((select string_agg(x.t, ' ' order by x.t)
-                     from (select distinct w as t from regexp_split_to_table(app.sales_norm(p), '\s+') w where app.sales_hasletter(w)) x), '')
+                     from (select distinct w as t from regexp_split_to_table(app.sales_norm(p), '\s+') w
+                            where app.sales_hasletter(w)
+                              and w not in ('yoq', 'yok', 'yuq', 'йук', 'йўқ', 'йок', 'нет', 'нету', 'nomalum', 'номаълум', 'номалум', 'неизвестно',
+                                            'otasi', 'onasi', 'отаси', 'онаси', 'vafot', 'etgan', 'вафот', 'этган', 'olgan', 'ўлган', 'marhum', 'марҳум',
+                                            'умер', 'умерла', 'ajrashgan', 'ажрашган', 'mavjud', 'мавжуд', 'emas', 'эмас', 'malumot', 'маълумот',
+                                            'aniq', 'аниқ', 'указано', 'данных')) x), '')
 $$;
 -- To'g'ri raqam: O'zbekiston (998 + 9 raqam) yoki boshqa mamlakat (10–15 raqam, E.164). Aks holda (bir katakda ikki raqam, qisqa,
 --   aralash matn) — noto'g'ri: «+» va tel: havolasiz ko'rsatiladi (mustaqil tekshiruv).
@@ -168,8 +176,10 @@ language sql immutable set search_path = pg_catalog as $$
   select coalesce(p, '') ~ '^998[0-9]{9}$' or (coalesce(p, '') ~ '^[1-9][0-9]{9,14}$' and left(p, 3) <> '998')
 $$;
 -- Qo'ng'iroq qilib bo'ladigan BITTA yozuv (katak yoki uning bir qismi): kanonik shakli (app.tg_phone — «+» / 00 / 9 xonali mahalliy
---   raqam qoidasi) to'g'ri va O'zbekiston raqami (998…) yoki «+» / 00 bilan yozilgan xorijiy raqam — sahifaning salesPartDigits /
---   phoneCanon qoidasi. «+»siz 10–15 raqam (JSHSHIR, karta raqami bo'lagi, yopishib qolgan raqamlar) — telefon EMAS (mustaqil tekshiruv).
+--   raqam qoidasi) to'g'ri va O'zbekiston raqami (998…) yoki «+» / 00 bilan yozilgan xorijiy raqam — sahifaning salesPartDigits qoidasi.
+--   «+»siz 10–15 raqam (JSHSHIR, karta raqami bo'lagi, yopishib qolgan raqamlar) — telefon EMAS (mustaqil tekshiruv). Sahifa xorijiy
+--   raqamni havola qilishdan oldin davlat kodi va uzunligini ham tekshiradi (phoneCanon): mos kelmasa — havolasiz, «raqam noto'g'ri
+--   yozilgan bo'lishi mumkin — ma'muriyatga xabar bering» izohi bilan ko'rsatadi.
 create or replace function app.sales_dialable(p text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select app.sales_valid(x.c)
@@ -178,17 +188,32 @@ language sql immutable set search_path = pg_catalog as $$
     from (select app.tg_phone(p) as c) x
 $$;
 -- Katak yozuvining qismlari (sahifadagi salesTel bilan bir xil bo'linish): raqam, «+», bo'sh joy, «,;/|()-» dan boshqa belgi — bo'sh
---   joy; «,» «;» «/» «|» yoki ikki va undan ortiq bo'sh joy — ajratuvchi; qism chetidagi « ()-» olib tashlanadi.
+--   joy; «,» «;» «/» «|», qator uzilishi / TAB (Excel'da Alt+Enter bilan yozilgan katak) yoki ikki va undan ortiq bo'sh joy — ajratuvchi;
+--   qism chetidagi « ()-» olib tashlanadi.
 create or replace function app.sales_segs(p text) returns table (seg text, n bigint)
 language sql immutable set search_path = pg_catalog as $$
   select btrim(x.seg, ' ()-'), x.n
-    from regexp_split_to_table(regexp_replace(left(coalesce(p, ''), 100), '[^0-9+ ,;/|()-]', ' ', 'g'), '[,;/|]|\s{2,}') with ordinality x(seg, n)
+    from regexp_split_to_table(regexp_replace(translate(left(coalesce(p, ''), 100), E'\r\n\t\v\f', ',,,,,'), '[^0-9+ ,;/|()-]', ' ', 'g'),
+                               '[,;/|]|\s{2,}') with ordinality x(seg, n)
+$$;
+-- Butun katak — qo'ng'iroq qilib bo'ladigan BITTA raqammi: katak qo'ng'iroq qilib bo'ladigan va (raqamli qismi bitta yoki — bir nechta
+--   raqamli qismdan hech biri qo'ng'iroq qilib bo'lmasa — katakda faqat raqam, «+», qavs, nuqta, chiziqcha va bo'sh joy: «+998 00  123 45 67»).
+--   Aks holda katakdagi barcha raqamlar qo'shilib, izohdagi raqam bilan noto'g'ri raqam («+44 7700 900121, 2-uy» -> +4477009001212) yoki
+--   pasport / uy raqamidan «O'zbekiston raqami» («pasport AA1234567, 15-uy» -> +998123456715) chiqardi (mustaqil tekshiruv): bunday katakdan
+--   faqat qo'ng'iroq qilib bo'ladigan QISMLAR olinadi (sales_parent).
+create or replace function app.sales_whole(p_raw text) returns boolean
+language sql immutable set search_path = pg_catalog as $$
+  select case when not app.sales_dialable(p_raw) then false
+              when (select count(*) from app.sales_segs(p_raw) s where s.seg ~ '[0-9]') <= 1 then true
+              when exists (select 1 from app.sales_segs(p_raw) s where app.sales_dialable(s.seg)) then false
+              else coalesce(p_raw, '') ~ '^[0-9+()\s.-]*$' end
 $$;
 -- Katakdan foydalanib bo'ladimi (oila raqamini tanlash darajalari — fok / mok): butun katak yoki uning biror qismi qo'ng'iroq qilib
---   bo'ladigan raqam. Karta raqami, JSHSHIR, bitta bo'sh joy bilan yopishgan ikki raqam — yo'q (boshqa kartadagi to'g'ri raqamni yashirmasin).
+--   bo'ladigan raqam (ochilganda sales_parent aynan shuni ko'rsatadi). Karta raqami, JSHSHIR, bitta bo'sh joy bilan yopishgan ikki raqam,
+--   izoh raqami bilan qo'shilgan raqam — yo'q (boshqa kartadagi to'g'ri raqamni yashirmasin).
 create or replace function app.sales_usable(p_raw text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
-  select app.sales_dialable(p_raw) or exists (select 1 from app.sales_segs(p_raw) s where app.sales_dialable(s.seg))
+  select app.sales_whole(p_raw) or exists (select 1 from app.sales_segs(p_raw) s where app.sales_dialable(s.seg))
 $$;
 -- Niqob (kanonik raqamdan): O'zbekiston 998001234567 -> «+998 00 *** ** 67»; boshqa mamlakat va noto'g'ri raqam — faqat oxirgi 2 raqam.
 create or replace function app.sales_mask(p text) returns text
@@ -211,22 +236,26 @@ language sql immutable set search_path = pg_catalog as $$
                    '\s+', ' ', 'g'), ' ,;:./-'), 60)) as v) x
 $$;
 -- Ota yoki ona: {name, phone, valid} (ism ham, raqam ham bo'lmasa — null). valid — butun katak qo'ng'iroq qilib bo'ladigan bitta raqam
---   (sahifa havoladan oldin phoneCanon bilan ham tekshiradi). p_mask — niqoblangan; aks holda to'g'ri raqam «+998001234567»; bir katakda
---   bir nechta raqam yoki izoh bo'lsa — faqat qo'ng'iroq qilib bo'ladigan QISMLAR (app.sales_dialable; sahifa har birini alohida havola
---   qiladi); bunday qism bo'lmasa — niqob («*** ** 67», sahifa «raqam noto'g'ri — ma'muriyatga xabar bering» deydi). Katakka yozilgan
---   izoh (ism, oila holati, sog'lig'i …), sana, hujjat / karta raqami, JSHSHIR sotuvchiga chiqmaydi (mustaqil tekshiruv).
+--   (app.sales_whole; sahifa havoladan oldin phoneCanon bilan ham tekshiradi). Ochilganda (p_mask = false): to'g'ri raqam «+998001234567»;
+--   bir katakda bir nechta raqam yoki raqamli izoh bo'lsa — faqat qo'ng'iroq qilib bo'ladigan QISMLAR (app.sales_dialable; sahifa har
+--   birini alohida havola qiladi); bunday qism bo'lmasa — niqob («*** ** 67», sahifa «raqam noto'g'ri — ma'muriyatga xabar bering» deydi).
+--   Ro'yxatda (p_mask) — niqob: butun katak to'g'ri raqam bo'lsa «+998 00 *** ** 67», aks holda birinchi qo'ng'iroq qilib bo'ladigan qismning
+--   niqobi, u ham bo'lmasa — faqat oxirgi 2 raqam (pasport / uy raqamidan yig'ilgan «+998 12 …» O'zbekiston raqami ko'rinishida chiqmaydi).
+--   Katakka yozilgan izoh (ism, oila holati, sog'lig'i …), sana, hujjat / karta raqami, JSHSHIR sotuvchiga chiqmaydi (mustaqil tekshiruv).
 drop function if exists app.sales_parent(text, text, boolean);
 create or replace function app.sales_parent(p_name text, p_phone text, p_mask boolean, p_raw text default null) returns jsonb
 language sql immutable set search_path = public, app, pg_temp as $$
   select case when p_name is null and coalesce(p_phone, '') = '' then null
               else jsonb_build_object('name', p_name,
                      'phone', case when coalesce(p_phone, '') = '' then null
-                                   when p_mask then app.sales_mask(p_phone)
-                                   when app.sales_valid(p_phone) and (p_raw is null or app.sales_dialable(p_raw)) then '+' || p_phone
+                                   when w.whole then case when p_mask then app.sales_mask(p_phone) else '+' || p_phone end
+                                   when p_mask then coalesce((select app.sales_mask(app.tg_phone(s.seg)) from app.sales_segs(p_raw) s
+                                                               where app.sales_dialable(s.seg) order by s.n limit 1), w.mz)
                                    else coalesce((select string_agg(s.seg, ', ' order by s.n) from app.sales_segs(p_raw) s where app.sales_dialable(s.seg)),
-                                                 app.sales_mask(p_phone)) end,
-                     'valid', case when coalesce(p_phone, '') = '' then null
-                                   else app.sales_valid(p_phone) and (p_raw is null or app.sales_dialable(p_raw)) end) end
+                                                 w.mz) end,
+                     'valid', case when coalesce(p_phone, '') = '' then null else w.whole end) end
+    from (select app.sales_valid(p_phone) and (p_raw is null or app.sales_whole(p_raw)) as whole,
+                 case when length(coalesce(p_phone, '')) >= 5 then '*** ** ' || right(p_phone, 2) else '***' end as mz) w
 $$;
 -- Oilalar: faol o'quvchilar (p_all — arxivdagilar ham: faqat Direktor jurnalidagi ismlar uchun). Oila — kartalar grafining bog'langan
 --   qismi. Ikki karta bitta oila, agar (1) umumiy TO'G'RI raqami bo'lsa (app.sales_valid; «0», qisqa yoki ikki raqamli katak — bog'lamaydi)
@@ -265,8 +294,8 @@ returns table(fkey text, f_name text, f_phone text, m_name text, m_phone text, f
 language sql stable set search_path = public, app, pg_temp set jit = off as $$
   with recursive st as (
     select s.id as cid,
-           case when app.sales_hasletter(p."fatherName") then btrim(p."fatherName") end as fn, app.tg_phone(p."parentPhone") as fp,
-           case when app.sales_hasletter(p."motherName") then btrim(p."motherName") end as mn, app.tg_phone(p."parentPhone2") as mp,
+           case when n.fk <> '' then n.fn end as fn, app.tg_phone(p."parentPhone") as fp, n.fk,
+           case when n.mk <> '' then n.mn end as mn, app.tg_phone(p."parentPhone2") as mp, n.mk,
            btrim(coalesce(p."parentPhone", '')) as fr, btrim(coalesce(p."parentPhone2", '')) as mr
       from public.students s
       cross join lateral (
@@ -277,19 +306,32 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
            and not exists (select 1 from public.student_private x where x.id = s.id)
            and not exists (select 1 from public.students s2 where s2.id = s."studentId")
         limit 1) p
+      -- Ism bir marta tozalanadi (app.sales_pname: qavsdagi izoh, raqamli so'z, tinish belgisi olib tashlanadi) va kalit shu tozalangan
+      --   ismdan olinadi: «Akmal (ota)» = «Akmal»; kalit bo'sh bo'lsa («-», «yo'q», «- (vafot etgan)» …) — ism yozilmagan. OFFSET 0 — ifodalar
+      --   so'rov ichida qayta hisoblanmasin (tezlik).
+      cross join lateral (select v.fn, app.sales_nkey(v.fn) as fk, v.mn, app.sales_nkey(v.mn) as mk
+                            from (select app.sales_pname(p."fatherName") as fn, app.sales_pname(p."motherName") as mn offset 0) v offset 0) n
      where p_all or not (coalesce(s."payStatus", '') = 'chiqdi'
                  and case when left(coalesce(s."exitAt", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."exitAt", 10)
                           when left(coalesce(s."stopFrom", ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(s."stopFrom", 10)
                           else '' end <= to_char(app.fin_today(), 'YYYY-MM-DD'))
   ),
-  cards as (select st.cid, st.fn, st.fp, st.mn, st.mp, st.fr, st.mr, app.sales_nkey(st.fn) as fk, app.sales_nkey(st.mn) as mk
+  cards as (select st.cid, st.fn, st.fp, st.mn, st.mp, st.fr, st.mr, st.fk, st.mk
               from st where st.fp <> '' or st.mp <> ''),
   -- Bog'lanish qoidasi (ikki karta): umumiy TO'G'RI raqam va (ota ismi teng yoki ona ismi teng), zid ism yo'q (ikkalasida bor va har xil).
   --   Juftlarni sanab chiqish (n²) va to'liq tutashuv (n³) o'rniga — teng kuchli «yulduz» qirralar va birlashtirish-topish (union-find):
   --   bir raqamda (ota, ona) sinfi ichidagi kartalar — sinf vakiliga; (ota, —) vakili — shu raqam va shu otali (ota, ona) vakillariga;
   --   (—, ona) vakili — shu raqam va shu onali (ota, ona) vakillariga. Bog'langan qismlar aynan juftlik qoidasi bilan bir xil, lekin bitta
   --   umumiy raqamli yuzlab karta (masalan ota ismi «-» va maktab raqami) ham ro'yxatni sekinlashtirmaydi (mustaqil tekshiruv).
-  cph as (select c.cid, c.fp as ph, c.fk, c.mk from cards c where app.sales_valid(c.fp) and (c.fk <> '' or c.mk <> '')
+  --   Faqat ona ismi yozilgan karta (ota ismi yo'q / «-») «ota telefoni»dagi raqam orqali faqat shu raqam shu ismli onaning raqami bo'lsa
+  --   bog'lanadi: kartada onaning boshqa to'g'ri raqami yo'q yoki bu raqam biror kartada shu ismli onaning «ona telefoni»da turadi (aka-uka
+  --   kartalarida raqamlar almashib yozilgan). Aks holda — faqat onasining raqami orqali: otasiz kartalarda «ota telefoni»ga ko'pincha
+  --   maktab yoki qarindosh raqami yoziladi va keng tarqalgan ona ismi (Zarina, Dilnoza …) bilan begona oilalar bitta qatorga qo'shilib,
+  --   bir onaning raqami yo'qolardi (mustaqil tekshiruv).
+  mph as (select distinct c.mp as ph, c.mk from cards c where c.mk <> '' and app.sales_valid(c.mp)),
+  cph as (select c.cid, c.fp as ph, c.fk, c.mk from cards c
+           where app.sales_valid(c.fp) and (c.fk <> '' or c.mk <> '')
+             and (c.fk <> '' or not app.sales_valid(c.mp) or c.mp = c.fp or exists (select 1 from mph m where m.ph = c.fp and m.mk = c.mk))
           union select c.cid, c.mp, c.fk, c.mk from cards c where app.sales_valid(c.mp) and (c.fk <> '' or c.mk <> '')),
   cls as (select p.ph, p.fk, p.mk, min(p.cid) as rep from cph p group by p.ph, p.fk, p.mk),
   e0 as (select p.cid as x, k.rep as y from cph p join cls k on k.ph = p.ph and k.fk = p.fk and k.mk = p.mk where p.cid <> k.rep
@@ -321,22 +363,24 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
              from comp0 cp join cards c on c.cid = cp.cid),
   -- fok / mok — katakdan foydalanib bo'ladi (app.sales_usable): butun katak yoki uning biror qismi qo'ng'iroq qilib bo'ladigan raqam
   --   (bir nechta raqamli katakni sahifa alohida havolalarga ajratadi); karta raqami, JSHSHIR, yopishgan raqamlar — yo'q.
-  --   9 raqamdan kam katak — qo'ng'iroq qilib bo'ladigan qismi bo'lmaydi (eng qisqasi — 9 xonali mahalliy raqam): tekshirilmaydi (tezlik).
-  --   fnd / mnd — ko'rsatiladigan (tozalangan) ism (app.sales_pname).
+  --   Tezlik uchun: faqat raqam / «+» / qavs / nuqta / chiziqcha / bo'sh joydan iborat katak, butunligicha qo'ng'iroq qilib bo'ladigan
+  --   (O'zbekiston raqami yoki «+» / 00 bilan xorijiy) — darhol «ha» (sales_usable ham shunday deydi); 9 raqamdan kam katak — qo'ng'iroq
+  --   qilib bo'ladigan qismi bo'lmaydi (eng qisqasi — 9 xonali mahalliy raqam).
   fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root,
-                  app.sales_pname(c.fn) as fnd, app.sales_pname(c.mn) as mnd,
-                  (c.fp ~ '^998[0-9]{9}$' or (length(regexp_replace(c.fr, '\D', '', 'g')) >= 9 and app.sales_usable(c.fr))) as fok,
-                  (c.mp ~ '^998[0-9]{9}$' or (length(regexp_replace(c.mr, '\D', '', 'g')) >= 9 and app.sales_usable(c.mr))) as mok
+                  ((c.fr ~ '^[0-9+()\s.-]*$' and (c.fp ~ '^998[0-9]{9}$' or app.sales_dialable(c.fr)))
+                   or (length(regexp_replace(c.fr, '\D', '', 'g')) >= 9 and app.sales_usable(c.fr))) as fok,
+                  ((c.mr ~ '^[0-9+()\s.-]*$' and (c.mp ~ '^998[0-9]{9}$' or app.sales_dialable(c.mr)))
+                   or (length(regexp_replace(c.mr, '\D', '', 'g')) >= 9 and app.sales_usable(c.mr))) as mok
              from cards c join comp cp on cp.cid = c.cid),
   -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam. «Ota telefoni» katagidagi bunday raqam: ota ismi
   --   yozilmagan kartada — otaniki emas; ota ismi yozilgan kartada — faqat boshqa kartalarda otaning o'z raqami bo'lmasa (masalan
   --   oilaning umumiy raqami) ishlatiladi (fpt darajalari).
   mom as (select distinct y.root, y.mp from fam0 y where y.mn is not null),
   fam as (select f.*, (m.root is not null) as fp_mom from fam0 f left join mom m on m.root = f.root and m.mp = f.fp),
-  -- Ism — oiladagi kartalarda eng ko'p uchragan tozalangan ism (izoh, raqam, qavs ichidagi matn — olib tashlangan).
+  -- Ism — oiladagi kartalarda eng ko'p uchragan tozalangan ism (izoh, raqam, qavs ichidagi matn — olib tashlangan; st).
   nm as (select fam.root,
-                mode() within group (order by fam.fnd) filter (where fam.fnd is not null) as fn,
-                mode() within group (order by fam.mnd) filter (where fam.mnd is not null) as mn
+                mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
+                mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
            from fam group by fam.root),
   -- Ota raqami — eng yaxshi darajadagi kartalardan, daraja ichida eng ko'p uchragani (teng bo'lsa — kichigi): foydalanib bo'ladigan
   --   katak (fok) — (1) ota ismi yozilgan karta, ona raqami emas; (2) ona raqami emas; (3) ota ismi yozilgan karta, ona raqami bilan
@@ -370,10 +414,14 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
            order by x.root, x.n desc, x.fp),
   pick as materialized (select nm.root, nm.fn, coalesce(fpc.fp, fpf.fp, '') as fp, nm.mn, coalesce(mpc.mp, '') as mp
              from nm left join fpc on fpc.root = nm.root left join mpc on mpc.root = nm.root left join fpf on fpf.root = nm.root),
-  -- Asl yozuv (noto'g'ri raqamni ochganda ko'rsatish uchun): tanlangan raqam yozilgan kartalardagi eng ko'p uchragan matn — har oila
-  --   uchun alohida so'rov emas, bitta guruhlash (katta maktabda ham tez; mustaqil tekshiruv).
-  frw as (select f.root, f.fp, mode() within group (order by f.fr) as fr from fam f where f.fp <> '' and f.fr <> '' group by f.root, f.fp),
-  mrw as (select f.root, f.mp, mode() within group (order by f.mr) as mr from fam f where f.mp <> '' and f.mr <> '' group by f.root, f.mp)
+  -- Asl yozuv (ochganda qaysi qismlar ko'rsatilishini aniqlaydi): tanlangan raqam yozilgan kartalardagi foydalanib bo'ladigan (fok / mok)
+  --   yozuvlardan eng ko'p uchragani, bunday yozuv bo'lmasa — umuman eng ko'p uchragani. Aks holda bir kartada «+44 7700 900120», ikkitasida
+  --   «447700900120» bo'lsa, «+»siz yozuv tanlanib, raqam niqoblanardi (mustaqil tekshiruv). Har oila uchun alohida so'rov emas, bitta
+  --   guruhlash (katta maktabda ham tez).
+  frw as (select f.root, f.fp, coalesce(mode() within group (order by f.fr) filter (where f.fok), mode() within group (order by f.fr)) as fr
+            from fam f where f.fp <> '' and f.fr <> '' group by f.root, f.fp),
+  mrw as (select f.root, f.mp, coalesce(mode() within group (order by f.mr) filter (where f.mok), mode() within group (order by f.mr)) as mr
+            from fam f where f.mp <> '' and f.mr <> '' group by f.root, f.mp)
   select left(encode(sha256(convert_to(k.salt || '|sales-v3|' || p.root, 'UTF8')), 'hex'), 32), p.fn, p.fp, p.mn, p.mp, frw.fr, mrw.mr
     from pick p
     left join frw on frw.root = p.root and frw.fp = p.fp
@@ -410,7 +458,7 @@ begin
   elsif btrim(coalesce(p_q, '')) <> '' then v_pat := '%' || chr(1) || '%';   -- «o'» kabi 2 harfdan qisqa qidiruv — hech narsa (hammasi emas)
   end if;
   with f as materialized (
-    select x.fkey, x.f_name, x.f_phone, x.m_name, x.m_phone,
+    select x.fkey, x.f_name, x.f_phone, x.m_name, x.m_phone, x.f_raw, x.m_raw,
            (x.f_name is null and x.m_name is null) as o1, app.sales_norm(coalesce(x.f_name, x.m_name)) as o2
       from app.sales_families(false) x
      where v_pat is null or app.sales_norm(x.f_name) like v_pat or app.sales_norm(x.m_name) like v_pat
@@ -419,8 +467,8 @@ begin
   )
   select (select count(*) from f)::int,
          coalesce((select jsonb_agg(jsonb_build_object('k', pg.fkey,
-                                                       'father', app.sales_parent(pg.f_name, pg.f_phone, true),
-                                                       'mother', app.sales_parent(pg.m_name, pg.m_phone, true))
+                                                       'father', app.sales_parent(pg.f_name, pg.f_phone, true, pg.f_raw),
+                                                       'mother', app.sales_parent(pg.m_name, pg.m_phone, true, pg.m_raw))
                                     order by pg.o1, pg.o2, pg.fkey) from pg), '[]'::jsonb)
     into v_total, v_rows;
   return jsonb_build_object('ok', true, 'rows', v_rows, 'total', v_total, 'limit', v_lim, 'offset', v_off,
@@ -488,7 +536,8 @@ do $$ declare f text; begin
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;
   foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_nkey(text)', 'app.sales_valid(text)', 'app.sales_mask(text)',
-                           'app.sales_hasletter(text)', 'app.sales_dialable(text)', 'app.sales_segs(text)', 'app.sales_usable(text)', 'app.sales_pname(text)',
+                           'app.sales_hasletter(text)', 'app.sales_dialable(text)', 'app.sales_segs(text)', 'app.sales_whole(text)', 'app.sales_usable(text)',
+                           'app.sales_pname(text)',
                            'app.sales_parent(text, text, boolean, text)', 'app.sales_uf(integer, integer[], integer[])', 'app.sales_families(boolean)',
                            'app.sales_used()', 'app.sales_user_live(text)',
                            'app.sales_user_name(text)'] loop

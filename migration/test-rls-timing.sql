@@ -25,7 +25,7 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 \pset tuples_only on
-\set kutilgan 25
+\set kutilgan 26
 do $g0$ begin
   if exists (select 1 from public.students) or exists (select 1 from public.users) then
     raise exception 'test-rls-timing.sql: baza bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -172,16 +172,16 @@ create temp table zz_eq on commit drop as
          zz.as(u, format('select (app.owns_child(%L) is not distinct from app.rls_in(app.my_child_sids(), %L))::text', k, k)) as e_child,
          zz.as(u, format('select (app.owns_student_doc(%L) is not distinct from app.rls_in(app.my_student_docs(), %L))::text', k, k)) as e_doc,
          zz.as(u, format('select app.owns_child(%L)::text || app.owns_student_doc(%L)::text', k, k)) as orig
-    from unnest(array['U_PA','U_PB','U_BL','U_PAR0','U_SAL','U_DIR','U_TCH']) u, zz_keys;
+    from unnest(array['U_PA','U_PB','U_BL','U_PAR0','U_SAL','U_DIR','U_TCH','U_PARN','U_PARE','U_PARP','U_STP','U_DIRP']) u, zz_keys;
 select zz.chk('E01 my_child_sids / my_student_docs — owns_child / owns_student_doc bilan barcha foydalanuvchi va kalitlarda AYNAN bir xil (oldida — tekshirilgan juftlar)',
   (select count(*) || ':' || coalesce(string_agg(case when e_child <> 'true' or e_doc <> 'true' then u || '/' || k || '=' || e_child || e_doc end, ',' order by u, k), '')
      from zz_eq), '^[0-9]{2,}:$');
 select zz.chk('E02 urug'' qiyin holatlarni qamraydi: owns_child — studentId, eski karta, yetim (hujjat «sa» — boshqa o''quvchining studentId''si, yo''q); takroriy studentId — faqat hujjat id; bloklangan — hech narsa | owns_student_doc',
   (select string_agg(u || ':' || (select coalesce(string_agg(k, ',' order by k), '-') from zz_eq e where e.u = x.u and e.orig ~ '^true'), ' ' order by u)
-     from (select distinct u from zz_eq where u in ('U_PA', 'U_PB', 'U_BL')) x) || ' | '
+     from (select distinct u from zz_eq where u in ('U_PA', 'U_PB', 'U_BL', 'U_PARN', 'U_PARE')) x) || ' | '
   || (select string_agg(u || ':' || (select coalesce(string_agg(k, ',' order by k), '-') from zz_eq e where e.u = x.u and e.orig ~ 'true$'), ' ' order by u)
-     from (select distinct u from zz_eq where u in ('U_PA', 'U_PB')) x),
-  '^U_BL:- U_PA:IQ-A,IQ-L,IQ-ORPH,sl U_PB:sx2 \| U_PA:IQ-A,IQ-L,IQ-ORPH,sa,sl U_PB:sx2$');
+     from (select distinct u from zz_eq where u in ('U_PA', 'U_PB', 'U_PARN', 'U_PARE')) x),
+  '^U_BL:- U_PA:IQ-A,IQ-L,IQ-ORPH,sl U_PARE:IQ-C,sc U_PARN:IQ-C,sc U_PB:sx2 \| U_PA:IQ-A,IQ-L,IQ-ORPH,sa,sl U_PARE:IQ-C,sc U_PARN:IQ-C,sc U_PB:sx2$');
 create temp table zz_ck on commit drop as
   select u, ck,
          zz.as(u, format('select (coalesce(app.is_class_staff(%1$L), false) = coalesce(app.rlsg_is_class_staff(app.rls_class_staff(), %1$L), false)
@@ -385,8 +385,21 @@ select zz.chk('G06 har darvoza (5 ta) har rolda (sotuvchi, farzandli ota-ona, o'
           unnest(array['rls_gate_any','rls_gate_private','rls_gate_students','rls_gate_phones','rls_gate_health']) g),
   '^2$');
 
+-- G08: oxirgi ta'riflar o'z darvozasi bilan (rls-timing.sql zanjirda barcha boshqa migratsiyalardan keyin; keyingi migratsiya ularni qayta
+--   yaratsa — umumiy rls_gate_any yoki darvozasiz bo'lib, vaqt orqali sizish qaytardi; 5-mustaqil tekshiruv).
+select zz.chk('G08 priv_sel / students_sel — rls_gate_private / rls_gate_students; student_phones — phones; my_sick_notes / my_nurse_visits — health',
+  (select string_agg(c.relname || '.' || p.polname || '=' || coalesce(substring(pg_get_expr(p.polqual, p.polrelid) from '^\(\( SELECT app\.(rls_gate_[a-z]+)\(\)'), '-'), ',' order by c.relname)
+     from pg_policy p join pg_class c on c.oid = p.polrelid
+    where c.relnamespace = 'public'::regnamespace and (c.relname, p.polname) in (('student_private', 'priv_sel'), ('students', 'students_sel')))
+  || ' | ' || (select string_agg(c.relname || '=' || coalesce(substring(pg_get_viewdef(c.oid) from 'SELECT app\.(rls_gate_[a-z]+)\(\)'), '-'), ',' order by c.relname)
+                from pg_class c where c.relnamespace = 'public'::regnamespace and c.relname in ('student_phones', 'my_sick_notes', 'my_nurse_visits')),
+  '^student_private\.priv_sel=rls_gate_private,students\.students_sel=rls_gate_students \| my_nurse_visits=rls_gate_health,my_sick_notes=rls_gate_health,student_phones=rls_gate_phones$');
+
 -- G07: rls-initplan darvozani FAQAT monoton shartga qo'yadi (taniqli atomlarning AND / OR i); NOT / CASE / IS NULL / COALESCE / = false —
 --   darvozasiz (aks holda darvoza ko'rinadigan qatorni yashirishi mumkin edi). Sinov jadvali tranzaksiya ichida, oxirida ROLLBACK.
+--   Fayl qayta ishga tushirilganda boshqa hech bir policy o'zgarmaydi (idempotent — oxirgi qism; 5-mustaqil tekshiruv).
+create temp table zz_pol0 on commit drop as
+  select polrelid, polname, pg_get_expr(polqual, polrelid) as q, pg_get_expr(polwithcheck, polrelid) as w from pg_policy;
 create table public.zz_np (id text primary key, sid text);
 alter table public.zz_np enable row level security;
 create policy np_not  on public.zz_np for select using (app.owns_child(sid) or not app.is_staff());
@@ -397,10 +410,13 @@ create policy np_eqf  on public.zz_np for select using (app.owns_child(sid) = fa
 create policy np_pos  on public.zz_np for select using (app.owns_child(sid) or app.is_staff());
 \set iqror_chain 1
 \ir rls-initplan.sql
-select zz.chk('G07 rls-initplan: darvoza faqat monoton policy''ga (NOT / CASE / IS NULL / COALESCE / = false — darvozasiz; AND / OR — darvozali)',
+select zz.chk('G07 rls-initplan: darvoza faqat monoton policy''ga (NOT / CASE / IS NULL / COALESCE / = false — darvozasiz; AND / OR — darvozali); qayta ishga tushirish boshqa policy''ni o''zgartirmaydi',
   (select string_agg(polname || '=' || (pg_get_expr(polqual, polrelid) ~ '^\(\( SELECT app\.rls_gate_')::text, ',' order by polname)
-     from pg_policy where polrelid = 'public.zz_np'::regclass),
-  '^np_case=false,np_coal=false,np_eqf=false,np_not=false,np_null=false,np_pos=true$');
+     from pg_policy where polrelid = 'public.zz_np'::regclass)
+  || ' | ' || coalesce((select string_agg(o.polrelid::regclass::text || '.' || o.polname, ',' order by 1)
+                          from zz_pol0 o join pg_policy p on p.polrelid = o.polrelid and p.polname = o.polname
+                         where pg_get_expr(p.polqual, p.polrelid) is distinct from o.q or pg_get_expr(p.polwithcheck, p.polrelid) is distinct from o.w), '-'),
+  '^np_case=false,np_coal=false,np_eqf=false,np_not=false,np_null=false,np_pos=true \| -$');
 select count(*)::text as yozilgan from zz.res \gset
 select zz.chk('ZZ yozilgan tekshiruvlar soni = kutilgan', :'yozilgan', '^' || :'kutilgan' || '$');
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;

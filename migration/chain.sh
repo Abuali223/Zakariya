@@ -13,10 +13,15 @@
 # =====================================================================
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Zanjirning OXIRGI ikki fayli — rls-plpgsql.sql va rls-initplan.sql (shu tartibda) bo'lishi shart: rls-plpgsql RLS yordamchilarining
-#   zanjirdagi oxirgi ta'rifini plpgsql'ga o'giradi (undan keyin qayta ta'riflangan yordamchi SQL bo'lib qolib, vaqt orqali sizish
-#   qaytardi — 4-mustaqil tekshiruv); rls-initplan barcha policy'larni o'raydi (tezlik) va 42P17 halqasini sinaydi — undan keyin
-#   qo'shilgan migratsiya policy'lari o'ralmay qolardi yoki yangi halqa profil/kartochka saqlashni buzardi.
+# Zanjirning OXIRGI uch fayli — rls-timing.sql, rls-plpgsql.sql va rls-initplan.sql (shu tartibda) bo'lishi shart:
+#   * rls-timing.sql barcha boshqa migratsiyalardan KEYIN: anon cheklovi faqat o'sha paytda MAVJUD jadvallarga qo'yiladi (keyin
+#     yaratilgan jadval anon uchun ochiq qolardi), priv_sel / students_sel policy'lariga o'z darvozasini qo'shadi (keyin qayta
+#     yaratilsa — umumiy darvoza, vaqt orqali sizish qaytardi) va student_phones / my_sick_notes / my_nurse_visits ning oxirgi
+#     ta'rifini beradi (5-mustaqil tekshiruv);
+#   * rls-plpgsql RLS yordamchilarining zanjirdagi oxirgi ta'rifini plpgsql'ga o'giradi (undan keyin qayta ta'riflangan yordamchi SQL
+#     bo'lib qolib, vaqt orqali sizish qaytardi — 4-mustaqil tekshiruv);
+#   * rls-initplan barcha policy'larni o'raydi (tezlik) va 42P17 halqasini sinaydi — undan keyin qo'shilgan migratsiya policy'lari
+#     o'ralmay qolardi yoki yangi halqa profil/kartochka saqlashni buzardi.
 # --dev : run-all.sql'dagi «--dev \ir fayl.sql» qatorlari ham (o'z o'rnida) qo'shiladi — hali ishga tushirilmagan, ishlab
 #   chiqilayotgan migratsiyalar (masalan «Kassa» 1a bosqichi). FAQAT lokal sinov bazalari uchun: deploy.sh va verify-db.sh bu
 #   bayroqni ishlatmaydi, shuning uchun prod'ga tayyor bo'lmagan sxema chiqmaydi. Tayyor bo'lganda qatordan «--dev » olinadi.
@@ -26,8 +31,8 @@ chain_files(){
   if [ "$DEV" = 1 ]; then grep -oE '^(--dev )?\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | sed 's/^--dev //' | awk '{print $2}'
   else grep -oE '^\\ir [A-Za-z0-9._-]+\.sql' "$HERE/run-all.sql" | awk '{print $2}'; fi
 }
-TAIL=$(chain_files | tail -2 | paste -sd' ' -)
-[ "$TAIL" = "rls-plpgsql.sql rls-initplan.sql" ] || { echo "chain.sh: run-all.sql'dagi OXIRGI ikki fayl «rls-plpgsql.sql rls-initplan.sql» bo'lishi shart (hozir: ${TAIL:-topilmadi}) — yangi migratsiyani rls-plpgsql.sql dan OLDIN qo'shing" >&2; exit 1; }
+TAIL=$(chain_files | tail -3 | paste -sd' ' -)
+[ "$TAIL" = "rls-timing.sql rls-plpgsql.sql rls-initplan.sql" ] || { echo "chain.sh: run-all.sql'dagi OXIRGI uch fayl «rls-timing.sql rls-plpgsql.sql rls-initplan.sql» bo'lishi shart (hozir: ${TAIL:-topilmadi}) — yangi migratsiyani rls-timing.sql dan OLDIN qo'shing" >&2; exit 1; }
 echo "\\set ON_ERROR_STOP on"
 # Zanjir belgisi: har bir fayl boshidagi qo'riqchi (\if :{?iqror_chain}) faylni ALOHIDA ishga tushirishni rad etadi.
 echo "\\set iqror_chain 1"

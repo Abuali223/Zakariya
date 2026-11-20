@@ -126,8 +126,10 @@ begin
    where p.pronamespace = 'app'::regnamespace and p.proname = any(v_fns)
      and p.pronargs = 0 and p.provolatile in ('s', 'i');
   if v_ok is null then return; end if;
-  -- (?<!SELECT ) — allaqachon o'ralgani ( «( SELECT app.is_admin() AS is_admin)» ) qayta o'ralmasin.
-  v_re := '(?<!SELECT )app\.(' || array_to_string(v_ok, '|') || ')\(\)';
+  -- (?<!SELECT ) — allaqachon o'ralgani ( «( SELECT app.is_admin() AS is_admin)» ) qayta o'ralmasin; rlsg_ann_visible5 ning admin
+  --   argumenti «( SELECT (app.is_admin() OR app.is_zavuch()))» ham allaqachon InitPlan — ikkinchi o'tishda ham o'zgarmaydi (fayl haqiqatan
+  --   idempotent: 2- va 3-o'tish hech bir policy'ni o'zgartirmaydi — test-rls-timing G07; 5-mustaqil tekshiruv).
+  v_re := '(?<!SELECT )(?<!SELECT \()(?<!SELECT \(app\.is_admin\(\) OR )app\.(' || array_to_string(v_ok, '|') || ')\(\)';
 
   -- Ifodalar TO'LIQ nomlar bilan (public./app.) chiqsin va shunday qayta o'qilsin — search_path'ga bog'liq emas.
   perform set_config('search_path', 'pg_catalog', true);

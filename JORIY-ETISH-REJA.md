@@ -7,7 +7,7 @@ Sana: 2026-10-30. Direktor uchun qisqa versiya — Claude hujjatining «Yo'l xar
   umumiy o'lchovlar (faqat sonlar; ism/telefon olinmagan).
 - **Hajm:** S — 1 kundan kam, M — 1–3 kun, L — 3 kundan ko'p (bitta dasturchi, testlar bilan). Jami ≈ 210 kun
   (0: ~30, 1: ~80, 2: ~40, 3: ~35, 4: ~25). Bu muddat emas — tezlikni maktab tomonidagi sinov, deploy va o'qitish belgilaydi.
-- **Qoidalar:** yangi migratsiya `run-all.sql`da `rls-initplan.sql`dan YUQORIGA, zanjir himoya sarlavhasi bilan; yangi
+- **Qoidalar:** yangi migratsiya `run-all.sql`da `rls-timing.sql`dan YUQORIGA (oxirgi uch fayl — `rls-timing.sql`, `rls-plpgsql.sql`, `rls-initplan.sql`), zanjir himoya sarlavhasi bilan; yangi
   `SECURITY DEFINER` funksiya `search_path`ni o'zi belgilaydi; har tasdiq roli **aniq rol** bilan tekshiriladi
   (`is_finance()` g'aznachi va direktorni ham o'z ichiga oladi — ikki kishilik tasdiq bitta odamga aylanib qolmasin).
 

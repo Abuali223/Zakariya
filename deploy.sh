@@ -149,7 +149,7 @@ echo "==> 3/7 SQL migratsiyalar (kanonik run-all.sql zanjiri — BITTA tranzaksi
 #   - butun zanjir BITTA tranzaksiyada: yo hammasi qo'llanadi, yo HECH NARSA (yarim holat yo'q, oraliq
 #     RLS holati hech kimga ko'rinmaydi);
 #   - har bir fayl idempotent (qayta ishga tushirishga xavfsiz, ma'lumotni o'zgartirmaydi);
-#   - YANGI migratsiya qo'shish: faqat run-all.sql'ga \ir qatori, oxirgi ikki fayl (rls-plpgsql.sql, rls-initplan.sql) dan OLDIN
+#   - YANGI migratsiya qo'shish: faqat run-all.sql'ga \ir qatori, oxirgi uch fayl (rls-timing.sql, rls-plpgsql.sql, rls-initplan.sql) dan OLDIN
 #     (deploy.sh'ni o'zgartirish SHART EMAS; tartib buzilsa chain.sh to'xtatadi).
 if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT"; then
   # migration/chain.sh — run-all.sql tartibidagi fayllarni bitta tranzaksiyali oqimga ulaydi (\ir stdin'da ishlamaydi).

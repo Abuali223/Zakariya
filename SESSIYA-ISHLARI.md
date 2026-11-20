@@ -2644,6 +2644,44 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   8. *Tezlik (o'lchov, bir xil ma'lumot):* oddiy maktab (2 066 karta, 1 400 oila) — oilalar ro'yxati ~225 ms (212da72 da 187 ms);
      6 000 kartali katta bog'langan oila — ~0,5 s (avvalgidek). `app.sales_hasletter` SET'siz (ichiga joylanadi — har so'z uchun
      funksiya chaqiruvi yo'q), 9 raqamdan kam katak «foydalanib bo'ladimi» tekshirilmaydi (H29 — «0, <mahalliy raqam>» katagi).
+- **5-mustaqil tekshiruv (2026-11-20; b50debd ga integratsion Workflow + har topilmaga rad etuvchi; 8 tasdiqlandi, 0 rad):**
+  1. *Izohli / pasportli katak (o'rta, avvaldan bor):* ochishda avval butun katak tekshirilardi — katakdagi barcha raqamlar qo'shilib,
+     «+44 7700 900121, 2-uy» -> «+4477009001212» valid:true, «pasport AA1234567, 15-uy» -> «+998123456715» (havola) chiqardi va bunday
+     katak «foydalanib bo'ladigan» bo'lib, aka-uka kartasidagi to'g'ri raqamni yashirishi mumkin edi. Endi `app.sales_whole`: butun katak
+     faqat raqamli qismi bitta bo'lsa yoki (qismlardan hech biri qo'ng'iroq qilib bo'lmasa) katak faqat raqam / «+» / qavs / nuqta /
+     chiziqcha / bo'sh joydan iborat bo'lsa («+998 00  123 45 67») bitta raqam; aks holda — faqat qo'ng'iroq qilib bo'ladigan qismlar.
+     `sales_usable` va `fam0` tez yo'li ham shu qoida bilan. Ro'yxat niqobi ham: butun katak to'g'ri raqam bo'lsa «+998 00 *** ** 67»,
+     aks holda birinchi qo'ng'iroq qilib bo'ladigan qismniki, u ham bo'lmasa — oxirgi 2 raqam (pasport / uy raqamidan «+998 12 …»
+     ko'rinishi chiqmaydi). Sahifa xorijiy raqamni havola qilishdan oldin davlat kodi / uzunligini ham tekshiradi — 4-tekshiruvdagi
+     «phoneCanon bilan bir xil» izohi to'g'rilandi.
+  2. *Qator uzilishi (o'rta, 4-tekshiruv tuzatishidan):* Excel'da Alt+Enter bilan bir katakka yozilgan ikki raqam (qator uzilishi / TAB)
+     ajratilmay, ochishda niqob chiqardi. Endi qator uzilishi va TAB — ajratuvchi (`app.sales_segs`).
+  3. *Asl yozuv (past):* bir xil raqam aka-uka kartalarida «+» bilan va «+»siz yozilgan bo'lsa (ko'pchiligi «+»siz), «+»siz yozuv tanlanib
+     raqam niqoblanardi. Endi foydalanib bo'ladigan yozuv ustun (`frw` / `mrw`).
+  4. *Ism o'rniga yozilgan so'z (past):* «yo'q», «Нет», «noma'lum», «vafot etgan», «ajrashgan» … ism kaliti bo'lib, maktab raqamini
+     bo'lishgan begona oilalar qo'shilardi; «Akmal (ota)» va «Akmal» — ikki xil kalit edi. Endi bunday so'zlar kalitsiz, kalit — tozalangan
+     ismdan (`app.sales_pname`; 4-tekshiruvdagi «kalit o'zgarmaydi» endi amal qilmaydi), kalit bo'sh bo'lsa ism yo'q. Faqat ona ismi yozilgan
+     karta «ota telefoni»dagi raqam orqali faqat bu raqam shu ismli onaniki bo'lishi mumkin bo'lsa bog'lanadi (kartada onaning boshqa raqami
+     yo'q yoki bu raqam biror kartada shu onaning «ona telefoni»da) — aks holda keng tarqalgan ona ismi (Zarina, Dilnoza) va otasiz kartalardagi
+     umumiy raqam bilan begona oilalar qo'shilib, bir onaning raqami yo'qolardi. Aka-uka holatlari (raqamlar almashib yozilgan — H19, ota
+     ismisiz kartada faqat ota raqami, bir ota — onasiz karta) — avvalgidek bitta oila.
+  5. *Sinovlar:* test-sales-role — H30 (izohli / pasportli / 00 / ikki bo'sh joyli katak, ro'yxat niqobi), H31 (qator uzilishi, TAB),
+     H32 (asl yozuv), H33 (to'ldiruvchi so'z, qavsli izoh, otasiz karta), HX8 («+» xorijiy raqam JSHSHIRdan ustun, 00, «—» va 60 belgi);
+     H29 raqibi «44…» dan oldin saralanadigan JSHSHIR; H09 niqobi — birinchi raqamniki. 88 -> 93. Eski kodda (b50debd) H30–H33 yiqiladi.
+     Mutatsiyalar: yangi qoidalar 14 ta + ko'rikdagi 4 ta (MU1, MU16, MU18, MU20) — har birini mos tekshiruv ushladi.
+  6. *Zanjir tartibi (o'rta):* belgi qatori `rls-timing.sql` dan KEYIN turardi — keyingi migratsiya shu yerga qo'shilsa, rls-timing'ning
+     anon cheklovi yangi jadvalga qo'yilmasdi, priv_sel / students_sel qayta yaratilsa umumiy darvoza olib, vaqt orqali sizish qaytardi.
+     Endi `chain.sh` oxirgi UCH faylni tekshiradi («rls-timing.sql rls-plpgsql.sql rls-initplan.sql»), belgi `rls-timing.sql` dan oldin;
+     run-all.sql, deploy.sh, JORIY-ETISH-REJA.md, rls-timing.sql sarlavhasi yangilandi. test-rls-timing G08 — priv_sel / students_sel va
+     student_phones / my_sick_notes / my_nurse_visits o'z darvozasi bilan.
+  7. *rls-initplan idempotentligi (past):* ikkinchi o'tishda e'lonlar policy'si (ann_sel) qayta o'ralardi (ma'no o'zgarmasdi, matn
+     o'zgarardi). Endi 2- va 3-o'tish hech bir policy'ni o'zgartirmaydi; G07 buni tekshiradi (eski faylda yiqiladi).
+  8. *Sinov qamrovi (past):* E01 — kutilayotgan / holatsiz / bo'sh holatli bog'lanishlar va yangi hisoblar ham; E02 — NULL / '' holatli
+     bog'lanish ma'nosi (my_child_sids NULL holatni faol emas desa — E01 yiqiladi). 26 -> 27.
+  9. *Tezlik (statistika yangilangan bazada, bir xil ma'lumot):* oddiy maktab (1 400 oila) ~0,23 s (b50debd ~0,24 s); 6 000 kartali katta
+     oila ~0,28 s (avval ~0,53 s); sun'iy eng yomon holat (hamma raqam xorijiy, ona katagida izoh) ~0,75 s (avval ~0,68 s). Izohsiz xorijiy
+     raqam uchun ham tez yo'l. Eslatma: sinov bazasida orqaga qaytarilgan yozuvlardan keyin autovacuum jadvalni «bo'sh» deb belgilasa,
+     rejalashtiruvchi sekin reja tanlaydi (eski va yangi kodda bir xil, 7–35 s) — jonli bazada statistika haqiqiy, bu holat bo'lmaydi.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

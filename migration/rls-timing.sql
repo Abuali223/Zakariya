@@ -39,7 +39,8 @@ do $iqror_guard$ begin raise exception 'iqror: rls-timing.sql ALOHIDA ishga tush
 --   hisoblanadi: ~0,3 ms farq (avval 0,6–2,5 ms va har qanday hisob uchun). Masofadan o'lchash uchun ko'p ming so'rov kerak —
 --   nginx'da so'rov chegarasi (limit_req) tavsiya etiladi. Sinf xodimlari uchun sinf funksiyalari qatorlab qoladi.
 --   users jadvali — reports-roles.sql (users_upd o'ziga subso'rovsiz) + rls-initplan o'ramlari.
--- Idempotent — QAYTA ishga tushirishga xavfsiz. Zanjirda rls-initplan.sql dan OLDIN.
+-- Idempotent — QAYTA ishga tushirishga xavfsiz. Zanjirda barcha boshqa migratsiyalardan KEYIN, rls-plpgsql.sql va rls-initplan.sql dan
+--   OLDIN (chain.sh tekshiradi): anon cheklovi faqat mavjud jadvallarga qo'yiladi, darvozalar oxirgi policy / ko'rinish ta'riflariga.
 --   (ALOHIDA ishga tushirilmaydi — faqat butun zanjir ichida: bash deploy.sh yoki migration/chain.sh | psql)
 -- =====================================================================
 
