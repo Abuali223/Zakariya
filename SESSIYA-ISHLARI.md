@@ -2785,6 +2785,52 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     kichigi; oilalar ro'yxati): oddiy maktab ~0,30 s (2ea2b95 ~0,29), hammasi xorijiy ~0,36 s (~0,36), hamma katak izohli ~0,56 s (~0,57), katta
     oila ~0,37 s (~0,37) — «+» / 00 yozuvining kanonik raqami app.tg_phone ni qayta chaqirmasdan olinadi (aks holda hammasi xorijiy ~+12%).
     To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil; jonli versiyadan yangilash mashqi — 0 xato.
+- **9-mustaqil tekshiruv (1c08011 ga; 2026-11-23; katakni o'qish + sahifa, oila raqami, RPC / huquqlar / zanjir; 5 topilma — har biri
+  alohida tekshiruvchida tasdiqlandi; 1 tasi tekshirilmay qoldi — o'zim tasdiqladim):**
+  1. *(o'rtacha) 8-qoida har qanday 1–3 raqamni davlat kodi deb olardi:* «+10 — 01 234 56 78», «01 234 56 78⏎+10⏎02 345 67 89»,
+     «+3⏎01 234 56 78⏎02 345 67 89», «0044-1._01…» — yozilmagan davlat raqamiga valid=true / tel: havola (2ea2b95 da ko'pi niqoblanardi).
+     Endi qo'shilgan raqamning davlat kodi (yangi app.sales_cc — sales_intl_ok jadvali bilan aynan bir xil, sales.test.mjs solishtiradi)
+     yozilgan kod yoki kod + keyingi bo'lakchaning birinchi raqam guruhi («+99⏎8 00 …», «+4. 4) - 7700 …») bo'lishi shart; bo'lakcha o'zi
+     to'liq 9 xonali mahalliy raqam bo'lsa — faqat yozilgan kod (mutatsiya sinovi ochgan teshik: tasodifiy «+5» va «02 …» 3 xonali davlat
+     kodiga aylanardi); nollardan iborat kod — xalqaro prefiks. Aks holda o'sha bo'lakcha ham, butun bo'lak ham o'qilmaydi.
+  2. *(o'rtacha, avvaldan bor) «+2 998 00 765 43 21 (15)»:* 8-raund qoidasi «$» bilan cheklangani uchun izoh raqami bilan yozilgan katak
+     chetlab o'tardi — valid=true begona «+299 … 15» havolasi, aka-uka kartasidagi toza raqamni ham yashirardi. Endi 1–3 raqam + to'liq
+     O'zbekiston raqami bilan boshlangan kanonik raqam o'qilmaydi (PHONE_LEN dagi davlatlar raqami 13 xonadan oshmaydi — o'zgarmaydi).
+  3. *(yuqori) Oila: barcha kartalar soni daraja ichidagi sondan oldin edi (8-raunddagi fcn):* onasi ro'yxatdan o'tkazgan kartalardagi
+     (ota ustunida) ona raqami, otasiz kartalardagi maktab / qarindosh raqami, onaning ikkinchi telefoni ismli kartalardagi ko'pchilikni
+     bosib o'tib, ota va ona almashardi yoki maktab raqami otaniki bo'lardi (2ea2b95 da to'g'ri; H14 qoidasiga zid). Endi daraja ichida
+     avval shu darajadagi kartalar soni (fct), so'ng barcha kartalar soni (fcn).
+  4. *(o'rtacha) Oila: ona katagiga ikkala raqami yozilgan:* «kamroq ona katagida» (fmn) otaning raqamini 2 ta ona katagida (bitta almashgan
+     karta + bitta ikkala katakda), onanikini 1 ta deb sanab (qolgani ikki raqamli katakda), ota va ona almashardi (2ea2b95 da to'g'ri).
+     Tekshiruvchi taklif qilgan tuzatish (ikki raqamli ona kataklarini ham sanash) tasodifiy oilalarda yangi xato berdi (ona katagiga
+     ikkala ota-onaning raqami yozilganda maktab raqami otaniki bo'lardi) — o'rniga 3- / 6-darajada avval «ona katagidagi soni minus shu
+     darajadagi ota katagidagi soni» (otaning raqami ota ustunida ko'proq), teng bo'lsa — fmn (8-raund qoidasi).
+  5. *(past) Oila: ismsiz kartalar barcha darajada sanalardi* — 3-band bilan bir xil sabab, ota tomonida tuzatildi.
+  6. *(past; tekshirilmay qolgan — o'zim tasdiqladim) «998 +00 123 45 67», «(998) +01 234 56 78»:* 8-raunddagi «+» keyingi bo'lakcha
+     qoidasi «+»siz yozilgan 998 kodidan keyin ham butun bo'lakni to'sardi (2ea2b95 o'qigan). Endi bundan mustasno; boshqa 1–3 raqamli
+     bo'lakcha («15 +00 …», «— (15). +(44)⏎00 999» — 2ea2b95 da begona +998 15 … havolasi) — qo'shilmaydi.
+  - *Ona tomoni ataylab o'zgartirilmadi (ma'lum chegara):* 3-band ona uchun ham taklif qilingan (onasiz kartalarning ona katagidagi maktab
+    raqami ona ismli kartalardagidan ko'p bo'lsa — maktab raqami tanlanadi, ona raqami yo'qoladi). Lekin ona tomonida shu darajadagi
+    kartalar sonini ustun qo'yish otaning raqamini onaniki qilib chiqaradi («(otasi)» izohli yoki ikkala katakka yozilgan ona katagidagi
+    ota raqami; eng og'ir xato) — buni tekshiruvchining o'zi ham ko'rsatgan. Ota ustunida ko'proq turgan raqamni pasaytirish (ismli /
+    barcha kartalar, daraja yoki tenglik hal qiluvchi sifatida — 10 ta variant) bir generatorda yaxshilab, ikkinchisida yangi eng og'ir
+    xatolar berdi — raqam yo'qolishi (ikkinchi daraja) tanlandi.
+  - *Ma'lum chegara (qo'shildi):* ota ismi yozilgan kartalarning ko'pchiligida raqamlar almashgan bo'lsa (ona raqami ota katagida
+    otanikidan ko'p) — ota ismli kartalar bo'yicha hal qilib bo'lmaydi (1c08011 bunday oilalarni ismsiz kartalar soni tufayli to'g'ri
+    chiqarardi — 3-band tuzatishining narxi).
+  - *Solishtirish:* 64 310 to'qima katak — har bir katak bo'yicha o'zgarmadi; 40 000 adversar katakdan 5 tasi o'zgardi — hammasi begona
+    havola olib tashlandi; tezkor yo'l = sales_nums (58 446 + 92 000 + 38 792 katak), server qaytargan har bir raqam = sahifa havolasi
+    (haqiqiy admin.html salesTel, 59 563 + 38 824 qator) — farq 0. Oila: topilmalardagi barcha oilalar + nazorat (38 ta) — onasiz
+    kartalardagi maktab raqami (3 ta, yuqoridagi chegara) dan boshqasi to'g'ri; tekshiruvchilar generatorlari bilan 20 dan ortiq variant
+    solishtirildi: katta oilalar (36 korpus, 54 000 oila) — 17 yaxshilanish, 0 regressiya; andozali oilalar (10 korpus, 20 000) — 30
+    yaxshilanish, 15 regressiya (12 tasi eng og'ir — hammasi yuqoridagi chegara: ismli kartalarda ko'pchilik almashgan).
+  - *Sinovlar:* H44 (+7 katak), H45 (+3 oila: Ikkiona, Qatorona, Plyusd), H46 (8-qoida kodi, «998 +00 …», 23 katak), H47 (11 oila) —
+    105 -> 107; 1c08011 da 4 tekshiruv yiqiladi. Mutatsiyalar: SQL 104 ta (yangi qoidalarning har bir qismi + avvalgilari) — 103 tasini mos
+    tekshiruv ushladi, qolgani — 8-raunddagi ekvivalent. Tezlik (toza bazada, 6 marta navbatma-navbat,
+    eng kichigi; oilalar ro'yxati): oddiy maktab ~0,29 s (1c08011 ~0,29), hammasi xorijiy ~0,37 s (~0,38), hamma katak izohli ~0,58 s
+    (~0,58), katta oila ~0,38 s (~0,37) — daraja ichidagi son guruhlangan yozuvlar ustida oyna yig'indisi bilan olinadi (alohida CTE bilan
+    katta oilada ~+25% edi). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil; jonli versiyadan yangilash mashqi —
+    0 xato (OGOHLANTIRISH qatorlari 8-raunddagidek).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

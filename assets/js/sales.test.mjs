@@ -449,6 +449,11 @@ test('Raqam qoidasi (5-tekshiruv): migration/sales-role.sql (app.sales_intl_ok) 
   assert.deepEqual(arrs.map(x => x.n), [3, 2, 1], 'davlat kodi eng uzunidan boshlab tekshirilsin (phoneCc kabi)');
   for (const x of arrs) for (const k of x.keys) assert.equal(k.length, x.n, `${k} — ${x.n} xonali ro‘yxatda`);
   assert.deepEqual(arrs.flatMap(x => x.keys).sort(), Object.keys(ctx.PHONE_CC).sort());
+  // app.sales_cc (9-tekshiruv, 8-qoida: yozilgan kod o‘qilgan raqamning davlat kodi bilan solishtiriladi) — xuddi shu davlat kodlari jadvali
+  const c0 = SQL.indexOf('create or replace function app.sales_cc'), c1 = c0 >= 0 ? SQL.indexOf('$$;', c0) : -1;
+  assert.ok(c0 >= 0 && c1 > c0, 'app.sales_cc topilmadi');
+  assert.deepEqual([...SQL.slice(c0, c1).matchAll(/left\(d, (\d)\) = any\('\{([0-9,]+)\}'::text\[\]\)/g)].map(m => ({ n: +m[1], keys: m[2].split(',') })), arrs,
+                   'app.sales_cc jadvali app.sales_intl_ok bilan bir xil');
 });
 
 test('salesTel (7-tekshiruv): «+» / 00 dan keyingi nollar tashlanadi (server app.tg_phone va phoneCanon kabi) — server qo‘ng‘iroq qilsa bo‘ladi degan qism havolasiz qolmaydi; chala raqam — havolasiz', () => {

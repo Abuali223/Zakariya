@@ -175,8 +175,9 @@ create or replace function app.sales_valid(p text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select coalesce(p, '') ~ '^998[0-9]{9}$' or (coalesce(p, '') ~ '^[1-9][0-9]{9,14}$' and left(p, 3) <> '998')
 $$;
--- Katak yozuvini o'qiydigan yordamchilar (sales_intl_ok, sales_dialable, sales_part_ok, sales_nums, sales_usable) — plpgsql: ichma-ich chaqirilgan SQL
---   funksiya har tashqi chaqiruvda qayta rejalashtirilib, oilalar ro'yxatini bir necha baravar sekinlashtirardi (plpgsql rejani keshlaydi).
+-- Katak yozuvini o'qiydigan yordamchilar (sales_intl_ok, sales_cc, sales_dialable, sales_part_ok, sales_nums, sales_usable) — plpgsql:
+--   ichma-ich chaqirilgan SQL funksiya har tashqi chaqiruvda qayta rejalashtirilib, oilalar ro'yxatini bir necha baravar sekinlashtirardi
+--   (plpgsql rejani keshlaydi).
 -- Xorijiy raqam (kanonik, «+» / 00 bilan yozilgan) qo'ng'iroq qilib bo'ladimi — sahifaning phoneCanon qoidasi bilan AYNAN bir xil: davlat
 --   kodi (eng uzuni: 3 -> 2 -> 1 raqam) ma'lum va jami uzunlik shu davlatniki (PHONE_LEN; ro'yxatda yo'q davlat — 10–15 raqam). Jadvallar
 --   admin.html PHONE_CC / PHONE_LEN bilan bir xil (assets/js/sales.test.mjs solishtiradi). Aks holda katakdagi raqamning kesilgan bo'lagi
@@ -192,6 +193,16 @@ begin
   if cc is null then return false; end if;
   lens := '{"1":[11],"7":[11],"20":[12],"33":[11],"34":[11],"39":[11,12],"44":[12],"48":[11],"49":[12,13],"61":[11],"81":[12],"82":[11,12],"86":[13],"90":[12],"91":[12],"92":[12],"370":[11],"371":[11],"372":[10,11],"373":[11],"374":[11],"375":[12],"380":[12],"420":[12],"421":[12],"965":[11],"966":[12],"971":[12],"972":[12],"974":[11],"992":[12],"993":[11],"994":[12],"995":[12],"996":[12],"998":[12]}'::jsonb -> cc;
   return case when lens is not null then lens @> to_jsonb(length(d)) else length(d) >= 10 end;
+end $$;
+-- Kanonik raqamning davlat kodi (eng uzuni: 3 -> 2 -> 1 raqam) yoki NULL — app.sales_intl_ok jadvali bilan AYNAN bir xil
+--   (assets/js/sales.test.mjs solishtiradi). 8-qoida birlashtirishida yozilgan kod o'qilgan raqamning davlat kodi bilan solishtiriladi
+--   (app.sales_nums).
+create or replace function app.sales_cc(d text) returns text
+language plpgsql immutable set search_path = pg_catalog as $$
+begin
+  return case when left(d, 3) = any('{211,212,213,216,218,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,248,249,250,251,252,253,254,255,256,257,258,260,261,262,263,264,265,266,267,268,269,290,291,297,298,299,350,351,352,353,354,355,356,357,358,359,370,371,372,373,374,375,376,377,378,380,381,382,383,385,386,387,389,420,421,423,500,501,502,503,504,505,506,507,508,509,590,591,592,593,594,595,596,597,598,599,670,672,673,674,675,676,677,678,679,680,681,682,683,685,686,687,688,689,690,691,692,850,852,853,855,856,880,886,960,961,962,963,964,965,966,967,968,970,971,972,973,974,975,976,977,992,993,994,995,996,998}'::text[]) then left(d, 3)
+              when left(d, 2) = any('{20,27,30,31,32,33,34,36,39,40,41,43,44,45,46,47,48,49,51,52,53,54,55,56,57,58,60,61,62,63,64,65,66,81,82,84,86,90,91,92,93,94,95,98}'::text[]) then left(d, 2)
+              when left(d, 1) = any('{1,7}'::text[]) then left(d, 1) end;
 end $$;
 -- Qo'ng'iroq qilib bo'ladigan BITTA yozuv (katak yoki uning bir qismi) — sahifaning salesPartDigits + salesDialable qoidasi: kanonik shakli
 --   (app.tg_phone — «+» / 00 / 9 xonali mahalliy raqam qoidasi) O'zbekiston raqami (998 + 9 raqam) yoki «+» / 00 bilan yozilgan, davlat kodi
@@ -213,9 +224,10 @@ end $$;
 --   tekshiruv). «+» / 00 bilan yozilgan xorijiy kanonik raqam (998 emas) esa o'qilmaydi, agar: «+» dan keyingi birinchi guruh «0» va raqam
 --   bilan boshlansa (mahalliy operator kodi «02», «012»; davlat kodi noldan boshlanmaydi — faqat «+0998 …» xatosi O'zbekiston raqami):
 --   «01 234 56 78 + 02 345 67 89 (15)» dagi «+ 02 345 67 89 15» nol tashlanib begona «+234 …» bo'lmaydi; yoki kanonigi 1–3 raqam
---   va to'liq O'zbekiston raqami (998 + 9 raqam) bo'lsa: «+2 998 00 765 43 21» — tasodifiy raqam yopishgan O'zbekiston raqami, ro'yxatda
---   yo'q davlat kodi (10–15 raqam) bilan begona «+299 …» bo'lib o'qilmaydi (mustaqil tekshiruv). Oilalar ro'yxatining tezkor yo'li
---   (sales_families, rawok) ham shu funksiyani chaqiradi.
+--   va to'liq O'zbekiston raqami (998 + 9 raqam) bilan boshlansa (oxirida izoh raqami bo'lsa ham): «+2 998 00 765 43 21»,
+--   «+2 998 00 765 43 21 (15)» — tasodifiy raqam yopishgan O'zbekiston raqami, ro'yxatda yo'q davlat kodi (10–15 raqam) bilan begona
+--   «+299 …» bo'lib o'qilmaydi (mustaqil tekshiruv; PHONE_LEN dagi davlatlar raqami 13 xonadan oshmaydi, ya'ni ular o'zgarmaydi).
+--   Oilalar ro'yxatining tezkor yo'li (sales_families, rawok) ham shu funksiyani chaqiradi.
 create or replace function app.sales_part_ok(p text) returns boolean
 language plpgsql immutable set search_path = pg_catalog as $$
 declare d text; c text;
@@ -225,7 +237,7 @@ begin
   if coalesce(p, '') ~ '^[^0-9]*\+' or d like '00%' then
     -- kanonik raqam — app.tg_phone bilan aynan bir xil («+» / 00 yozuvi: boshidagi nollarsiz raqamlar), qayta chaqiruvsiz (tezlik)
     c := ltrim(d, '0');
-    return c ~ '^998' or (c !~ '^[1-9][0-9]{0,2}998[0-9]{9}$' and p !~ '^[^0-9]*\+[^0-9]*0[1-9]');
+    return c ~ '^998' or (c !~ '^[1-9][0-9]{0,2}998[0-9]{9}' and p !~ '^[^0-9]*\+[^0-9]*0[1-9]');
   end if;
   if length(d) <> 9 then return true; end if;
   return p !~ '[0-9][^0-9]+[0-9]' or p ~ '^[^0-9]*[0-9]{2}([^0-9]|$)' or (p ~ '^[^0-9]*[0-9]{3}([^0-9]|$)' and d !~ '000$');
@@ -252,16 +264,22 @@ end $$;
 --      raqam, «+», qavs, nuqta, chiziqcha va bo'sh joydan boshqa belgi yo'q («12 — 01 234 56», «12 № 01 234 56» — qo'shilmaydi) va bo'lak «+»
 --      bilan boshlangan (to'liq yozilgan raqam) yoki hech bir raqam guruhi 4 xonadan uzun emas (telefon guruhlari) — bir-biriga aloqasi yo'q
 --      guruhlar («15  0123456» — uy va shahar raqami) bitta 9 xonali «O'zbekiston raqami» bo'lib qo'shilmaydi (mustaqil tekshiruv);
---      keyingi bo'lakchalardan biri «+» bilan boshlansa (4-qoida: yangi raqam; yolg'iz davlat kodidan keyingisi bundan mustasno —
---      «+998 + 02-111-22-33») — butun bo'lak ham qo'shilmaydi: kesilgan raqam va «+7» («+998 00 123 45 6⏎+7», «+998 00 123 45 6 +1»)
---      begona valid=true raqam bo'lib o'qilmaydi (mustaqil tekshiruv);
+--      keyingi bo'lakchalardan biri «+» bilan boshlansa (4-qoida: yangi raqam; yolg'iz davlat kodidan — «+998 + 02-111-22-33» — yoki
+--      «+»siz yozilgan 998 kodidan keyingisi — «998 +00 123 45 67», «(998) +01 234 56 78» — bundan mustasno) — butun bo'lak ham
+--      qo'shilmaydi: kesilgan raqam va «+7» («+998 00 123 45 6⏎+7», «+998 00 123 45 6 +1») begona valid=true raqam bo'lib o'qilmaydi
+--      (mustaqil tekshiruv);
 --   8) yolg'iz davlat kodi («+999», «00 999») va undan keyin (yumshoq ajratuvchi bilan) «+»siz bo'lakcha — bitta bo'lakcha, ya'ni bitta
 --      xalqaro raqam: bo'lakcha alohida O'zbekiston raqami bo'lib o'qilmaydi («+999  01 234 56 78» -> +999 012345678, kodi noma'lum — raqam
 --      yo'q); katakda boshqa raqam bo'lsa ham, kod va raqam orasida «:» / «—» bo'lsa ham, kod «00» bilan yozilgan bo'lsa ham — o'sha raqam
 --      («+998⏎01 234 56 78⏎+998⏎01 234 56 79» — ikki raqam, «00998⏎012345678», «+998:⏎01 234 56 78», «0044  7700900123»; avval kod
 --      bo'lakchasi tashlanib, raqam yo'qolardi — mustaqil tekshiruv); «00» bilan boshlangan yoki o'zi to'liq O'zbekiston raqami (998 + 9
 --      raqam) bo'lgan bo'lakcha qo'shilmaydi — alohida o'qiladi («+2⏎998 00 765 43 21» -> 998 00 765 43 21, begona +299 … emas);
---      qo'shilgan bo'lakcha keyingisiga yana qo'shilmaydi («+4. 4) — 7700 900123» -> raqam yo'q);
+--      qo'shilgan bo'lakcha keyingisiga yana qo'shilmaydi («+4. 4) — 7700 900123» -> raqam yo'q); qo'shilgan raqamning davlat kodi
+--      (app.sales_cc) yozilgan kod yoki kod va bo'lakchaning birinchi raqam guruhi («+99⏎8 00 …», «+4. 4) - 7700 …»; bo'lakcha o'zi
+--      to'liq 9 xonali mahalliy raqam bo'lsa — faqat yozilgan kod) bo'lishi shart (nollardan iborat kod — «+0», «000» — xalqaro prefiks,
+--      tekshirilmaydi): aks holda o'sha bo'lakcha ham, butun bo'lak ham o'qilmaydi —
+--      tasodifiy «+10» / «+3» / «+440» mahalliy raqamga qo'shilib boshqa davlat raqami bo'lmaydi («+10 — 01 234 56 78» -> +1 001 …,
+--      «+3⏎01 234 56 78» -> +30 … emas; mustaqil tekshiruv);
 --   9) «+» / 00 siz, 9 xonali, bir necha guruhda yozilgan bo'lakcha — birinchi guruhi 2 xonali (operator kodi) yoki 3 xonali (oxiri «000»
 --      emas) bo'lsagina raqam (app.sales_part_ok): «pasport AA 1234567 15 uy», «0671712 12», «120 000 000 so'm» — raqam emas.
 --   Ma'lum chegara: operator kodidek 2–3 xonali guruh bilan boshlanib, bitta bo'sh joy bilan yozilgan raqamlar («15 0123456» — uy va
@@ -277,7 +295,7 @@ declare
   s text := coalesce(p, '');
   cut boolean := length(coalesce(p, '')) > 100;
   items text[]; parts text[]; item text; part text; prev text; dps text[]; dds boolean[]; anyd boolean; pure boolean; d boolean;
-  tail boolean; plus2 boolean; lone boolean; i int; k int; res text[] := '{}';
+  tail boolean; plus2 boolean; lone boolean; nojoin boolean; cd text; fg text; i int; k int; res text[] := '{}';
 begin
   -- Oddiy yozuv (100 belgigacha, faqat raqam / qavs / chiziqcha / bitta bo'sh joylar, boshida «+» bo'lishi mumkin) — bitta bo'lak, bitta
   --   bo'lakcha: pastdagi to'liq yo'l ham aynan shu natijani beradi (eng ko'p uchraydigan yozuvlar uchun tezlik).
@@ -313,29 +331,37 @@ begin
     item := regexp_replace(item, '[^0-9+ ()-]', ' ', 'g');
     parts := regexp_split_to_array(item, '\s{2,}');
     if tail then parts := parts[1 : cardinality(parts) - 1]; end if;
-    dps := '{}'; dds := '{}'; anyd := false; prev := ''; plus2 := false;
+    dps := '{}'; dds := '{}'; anyd := false; prev := ''; plus2 := false; nojoin := false;
     foreach part in array parts loop
       continue when part !~ '[0-9]';
       -- oldingi bo'lakcha — yolg'iz davlat kodi («+999», «00 44», «(+998)»)
       lone := prev <> '' and regexp_replace(prev, '[\s()-]', '', 'g') ~ '^(\+|00)[0-9]{1,3}$';
+      cd := '';
       if lone and part !~ '^[^0-9]*\+' and regexp_replace(part, '\D', '', 'g') !~ '^(00|998[0-9]{9}$)' then
-        -- 8-qoida: yolg'iz davlat kodi + «+»siz bo'lakcha — bitta bo'lakcha (kod yozuvi o'rniga); keyingisiga yana qo'shilmaydi
+        -- 8-qoida: yolg'iz davlat kodi + «+»siz bo'lakcha — bitta bo'lakcha (kod yozuvi o'rniga); keyingisiga yana qo'shilmaydi.
+        --   cd — yozilgan kod (xalqaro prefiks nollarisiz), fg — bo'lakchaning birinchi raqam guruhi (bo'lingan kod: «+99⏎8 00 …»);
+        --   bo'lakcha o'zi to'liq 9 xonali mahalliy raqam bo'lsa — faqat yozilgan kod (tasodifiy «+5» va «02 …» -> 3 xonali kod emas)
+        cd := ltrim(regexp_replace(prev, '\D', '', 'g'), '0');
+        fg := case when length(regexp_replace(part, '\D', '', 'g')) = 9 then '' else substring(part from '[0-9]+') end;
         part := prev || ' ' || part;
         dps := dps[1 : cardinality(dps) - 1]; dds := dds[1 : cardinality(dds) - 1];
         prev := '';
       else
-        -- 4-qoida: «+» bilan boshlangan keyingi bo'lakcha (yolg'iz davlat kodidan keyin emas) — yangi raqam: butun bo'lak qo'shilmaydi
-        plus2 := plus2 or (cardinality(dps) > 0 and not lone and part ~ '^[^0-9]*\+');
+        -- 4-qoida: «+» bilan boshlangan keyingi bo'lakcha (yolg'iz davlat kodidan yoki «+»siz 998 kodidan keyin emas) — yangi raqam:
+        --   butun bo'lak qo'shilmaydi
+        plus2 := plus2 or (cardinality(dps) > 0 and not lone and part ~ '^[^0-9]*\+' and regexp_replace(prev, '\D', '', 'g') <> '998');
         prev := part;
       end if;
       d := app.sales_part_ok(part);
+      -- 8-qoida: qo'shilgan raqamning davlat kodi ma'lum, lekin yozilgan kod emas — bo'lakcha ham, butun bo'lak ham o'qilmaydi
+      if cd <> '' and app.sales_cc(app.tg_phone(part)) not in (cd, cd || fg) then d := false; nojoin := true; end if;
       dps := dps || part; dds := dds || d; anyd := anyd or d;
     end loop;
     if (cardinality(dps) >= 2 or tail) and anyd then
       for i in 1 .. cardinality(dps) loop
         if dds[i] then res := res || btrim(regexp_replace(regexp_replace(dps[i], '[()]', ' ', 'g'), '\s+', ' ', 'g'), ' -'); end if;
       end loop;
-    elsif not tail and (cardinality(dps) = 1 or (pure and not plus2 and (item ~ '^[^0-9]*\+' or item !~ '[0-9]{5}')))
+    elsif not tail and not nojoin and (cardinality(dps) = 1 or (pure and not plus2 and (item ~ '^[^0-9]*\+' or item !~ '[0-9]{5}')))
           and app.sales_part_ok(item) then
       res := res || btrim(regexp_replace(regexp_replace(item, '[()]', ' ', 'g'), '\s+', ' ', 'g'), ' -');
     end if;
@@ -542,12 +568,18 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                 mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
                 mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
            from fam group by fam.root),
-  -- Ota raqami — eng yaxshi darajadagi kartalardan; daraja ichida: kamroq ona katagida turgani (fmn — faqat 3- va 6-darajada farq qiladi),
-  --   so'ng shu ustunda ko'proq kartada yozilgani (qo'ng'iroq raqami bo'yicha, har qanday yozuv va darajada — fcn), so'ng shu yozuvi ko'p
-  --   uchragani; teng bo'lsa — toza yozilgani (butun katak bitta to'g'ri raqam, ya'ni katak kanonigi qo'ng'iroq kanonigiga teng: izohli
-  --   yoki tasodifiy raqam yopishgan katakdan ajratib olingan raqam emas); yana teng bo'lsa — kichigi. Aks holda bitta kartada raqamlar
-  --   almashib, ota raqami izohli («(2-uy)», «kv 5») yozilganda ota raqami ham ona katagida turib (fp_mom), otaning turli izohli yozuvlari
-  --   alohida sanalib, toza yozilgan ona raqami ustun chiqib, ota bilan ona to'liq almashardi (mustaqil tekshiruv). Darajalar: foydalanib
+  -- Ota raqami — eng yaxshi darajadagi kartalardan; daraja ichida (qo'ng'iroq raqami bo'yicha): ona katagidagi soni minus shu darajadagi
+  --   ota katagidagi soni kamrog'i (fmn − fct; boshqa darajalarda fmn = 0, ya'ni shu darajadagi kartalar soni ko'prog'i; 3- va 6-darajada —
+  --   ona raqami bilan bir xil raqamlarda — otaning raqami ota ustunida ko'proq, ona ustunida kamroq turadi), teng bo'lsa — kamroq ona
+  --   katagida turgani (fmn), so'ng barcha kartalarda ko'proq yozilgani (har qanday yozuv va darajada — fcn), so'ng shu yozuvi ko'p uchragani;
+  --   teng bo'lsa — toza yozilgani (butun katak bitta to'g'ri raqam, ya'ni katak kanonigi qo'ng'iroq kanonigiga teng: izohli yoki tasodifiy
+  --   raqam yopishgan katakdan ajratib olingan raqam emas); yana teng bo'lsa — kichigi. Aks holda: bitta kartada raqamlar almashib, ota
+  --   raqami izohli («(2-uy)», «kv 5») yozilganda otaning turli izohli yozuvlari alohida sanalib, toza yozilgan ona raqami ustun chiqib, ota
+  --   bilan ona to'liq almashardi (8-mustaqil tekshiruv); otasiz kartalardagi maktab / qarindosh raqami yoki onasi ro'yxatdan o'tkazgan
+  --   kartalardagi ona raqami ismli kartalardagi ko'pchilikni bosib o'tardi (barcha kartalar soni daraja ichidagi sondan oldin edi), ona
+  --   katagiga ikkala raqami yozilgan yoki bitta karta almashgan oilada «kamroq ona katagida» qoidasi otaning ota ustunidagi kartalarini
+  --   hisobga olmay, ota va ona almashardi (9-mustaqil tekshiruv). Ma'lum chegara: ota ismi yozilgan kartalarning ko'pchiligida raqamlar
+  --   almashgan bo'lsa (ona raqami ota katagida otanikidan ko'p) — ota ismli kartalar bo'yicha hal qilib bo'lmaydi. Darajalar: foydalanib
   --   bo'ladigan katak (fok) — (1) ota ismi yozilgan karta, ona raqami emas; (2) ona raqami emas; (3) ota ismi yozilgan karta, ona raqami bilan
   --   bir xil (oilaning umumiy raqami); (4–6) noto'g'ri katak — xuddi shu tartibda. Ota ismi yozilmagan kartaning «ota telefoni»dagi ona
   --   raqami — nomzod emas. Shunday qilib ismli kartadagi «0» boshqa kartadagi to'g'ri raqamni yashirmaydi, ona raqami ota ismi yozilgan
@@ -556,18 +588,25 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                  case when fam.fn is not null and not fam.fp_mom then 1 when not fam.fp_mom then 2 else 3 end
                  + case when fam.fok then 0 else 3 end as t
             from fam where fam.fp <> '' and (fam.fn is not null or not fam.fp_mom)),
-  -- fcn / mcn — shu ustunda shu qo'ng'iroq raqami (fc / mc) yozilgan kartalar soni (yozilish shakli va darajadan qat'i nazar).
+  -- fcn / mcn — shu ustunda shu qo'ng'iroq raqami (fc / mc) yozilgan kartalar soni (yozilish shakli va darajadan qat'i nazar); fct — shu
+  --   darajadagi ota nomzodi kartalari soni (qo'ng'iroq raqami bo'yicha; fmn va fmn − fct teng bo'lsa — fct ham teng, alohida kalit emas).
+  --   fct — guruhlangan yozuvlar ustida oyna yig'indisi: fpt ikkinchi marta o'qilsa, Postgres uni materiallashtirib, katta oilada ro'yxatni
+  --   ~25% sekinlashtirardi.
   fcn as (select fam.root, fam.fc, count(*) as nc from fam where fam.fp <> '' group by fam.root, fam.fc),
   mcn as (select fam.root, fam.mc, count(*) as nc from fam where fam.mp <> '' group by fam.root, fam.mc),
   fpc as (select distinct on (x.root) x.root, x.fp, x.fc
-            from (select fpt.root, fpt.fp, fpt.t, min(fpt.fc) as fc, min(fpt.fmn) as fmn, count(*) as n
-                    from fpt group by fpt.root, fpt.fp, fpt.t) x
+            from (select g.*, sum(g.n) over (partition by g.root, g.fc, g.t) as fct
+                    from (select fpt.root, fpt.fp, fpt.t, min(fpt.fc) as fc, min(fpt.fmn) as fmn, count(*) as n
+                            from fpt group by fpt.root, fpt.fp, fpt.t) g) x
             left join fcn on fcn.root = x.root and fcn.fc = x.fc
-           order by x.root, x.t, x.fmn, fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
+           order by x.root, x.t, x.fmn - x.fct, x.fmn, fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
   -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan;
   --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki
-  --   qo'ng'iroq kanonigi bo'yicha). Daraja ichida — ona ustunida ko'proq kartada yozilgani (mcn; «(otasi)» izohli bitta ona katagidagi
-  --   ota raqami ikki kartada yozilgan ona raqamidan ustun chiqmaydi), so'ng xuddi otanikidek.
+  --   qo'ng'iroq kanonigi bo'yicha). Daraja ichida — ona ustunida ko'proq kartada yozilgani (mcn, barcha kartalar; «(otasi)» izohli yoki
+  --   ikkala katakka yozilgan ona katagidagi ota raqami ona ismsiz kartalarda ham yozilgan ona raqamidan ustun chiqmaydi), so'ng xuddi
+  --   otanikidek. Ma'lum chegara: onasiz kartalarning ona katagidagi maktab / qarindosh raqami ona ismli kartalardagi raqamdan ko'p kartada
+  --   bo'lsa, u tanlanadi (ona raqami yo'qoladi) — ona tomonida shu darajadagi kartalar sonini ustun qo'yish otaning raqamini onaniki qilib
+  --   chiqarardi (9-mustaqil tekshiruv: eng og'ir xato o'rniga raqam yo'qolishi tanlangan).
   mpt as (select fam.root, fam.mp, fam.mc,
                  case when fam.mp = coalesce(fpc.fp, '') or fam.mc = coalesce(fpc.fc, '') then 5
                       when fam.mok and fam.mn is not null then 1
@@ -712,8 +751,8 @@ do $$ declare f text; begin
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;
   foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_nkey(text)', 'app.sales_valid(text)', 'app.sales_mask(text)',
-                           'app.sales_hasletter(text)', 'app.sales_intl_ok(text)', 'app.sales_dialable(text)', 'app.sales_part_ok(text)', 'app.sales_nums(text)', 'app.sales_usable(text)',
-                           'app.sales_pname(text)',
+                           'app.sales_hasletter(text)', 'app.sales_intl_ok(text)', 'app.sales_cc(text)', 'app.sales_dialable(text)', 'app.sales_part_ok(text)', 'app.sales_nums(text)',
+                           'app.sales_usable(text)', 'app.sales_pname(text)',
                            'app.sales_parent(text, text, boolean, text)', 'app.sales_uf(integer, integer[], integer[])', 'app.sales_families(boolean)',
                            'app.sales_used()', 'app.sales_user_live(text)',
                            'app.sales_user_name(text)'] loop
