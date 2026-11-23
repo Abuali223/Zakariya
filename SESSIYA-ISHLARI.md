@@ -2856,6 +2856,53 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     havolasi (59 563 + 38 824 qator) — farq 0. Katakni o'qish tezligi (64 310 + 40 000 katak, 5 marta navbatma-navbat, eng kichigi) —
     e34959a bilan bir xil (~5,2 s va ~3,8 s). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil, sonlar 9-raunddagidek;
     jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari avvalgidek).
+- **10-mustaqil tekshiruv, 2-o'tish (44e1049 ga; 2026-11-23):** uch yo'nalish qayta ishga tushirildi; RPC / huquqlar / zanjir / tezlik —
+  topilma yo'q; 3 topilma tasdiqlandi (har birini ikkinchi tekshiruvchi va men yangi bazalarda aynan qayta chiqardik):
+  1. *(o'rtacha, e34959a regressiyasi) raqam o'rtasidagi «00X» guruhi:* «01  003  45  67», «01⏎003⏎45⏎67», «+998⏎00 476⏎47 55» — ikki
+     bo'sh joy / qator uzilishidan keyingi «00» bilan boshlangan guruh yolg'iz davlat kodi deb olinib, 8-qoida kod tekshiruvi o'tmasdi va
+     butun bo'lak ham to'silardi — to'g'ri yozilgan raqam niqoblanardi (1c08011 o'qirdi). Endi kod tekshiruvi o'tmasa ham butun bo'lak
+     to'liq O'zbekiston raqami (998 + 9 raqam, 998998 emas) bo'lsa o'qiladi — barcha raqamlari yozilgan tartibda, boshqa davlat raqami
+     bo'lib chiqmaydi; shu bilan bo'lingan 998 kodi («+99⏎8001234567») ham o'qiladi (ma'lum chegara torayadi). Xorijiy raqam ichidagi
+     shunday guruh («+44 7700 9  003  21») — niqob (ma'lum chegara: begona havola yo'q).
+  2. *(o'rtacha, avvaldan bor — 1c08011 va undan oldingi barcha versiyalarda) «+4⏎00 123 45 67»:* yolg'iz koddan keyingi «00» bilan
+     boshlangan bo'lakcha 8-qoidada qo'shilmaydi, lekin butun bo'lak bo'lib o'qilganda kod tekshirilmasdi — begona +40 … / +1 000 … /
+     +44 000 … / +30 … valid=true havola. Endi bo'lak boshidagi yolg'iz koddan keyin shunday bo'lakcha bo'lsa («+00 …» ham), butun
+     bo'lakning davlat kodi yozilgan kod bo'lishi shart; «(+998)⏎00 123 45 67», «998⏎00 4⏎00 45 67», «+0⏎00 44 …» — o'qiladi.
+  3. *(o'rtacha, e34959a regressiyasi) Oila: otaning raqami qo'ng'iroq qilib bo'lmaydigan yozuvda:* «447700900141» («+»siz xorijiy),
+     «… 43dadasi», «tel998…» — kanonigi otaning raqami, lekin 9-raunddagi daraja ichidagi son (fct) faqat qo'ng'iroq qilinadigan
+     yozuvlarni sanab, ota ismli ikki kartadagi bobosi yoki ona raqami otaniki bo'lardi (ota ham, ona ham bir raqam — eng og'ir; 1c08011
+     to'g'ri edi). Endi fct shu ism sinfidagi kartalarni har qanday yozuvda sanaydi (1+4, 2+5, 3+6 darajalar birga; faqat to'g'ri bitta
+     raqam uchun — ikki raqamli katakning kanonigi qo'shilmaydi), 2-darajada esa avval ota ismli kartalarda (har qanday yozuvda) ko'proq
+     turgan raqam (fnm) — ota ismli kartalarda faqat «+»siz yozilgan ota raqami otasiz kartalardagi qarindosh raqamidan keyin qolmaydi.
+  - *O'zim topgan qo'shimcha (avvaldan bor, 1c08011 da ham):* «998 001 234⏎567» — 998 va 6 raqamdan iborat birinchi qator 9 xonali
+    mahalliy raqam deb o'qilib, begona havola bo'lardi. Endi 3 xonali birinchi guruh «998» operator kodi emas (chala yoki
+    qatorga bo'lingan xalqaro raqam); butun bo'lak to'liq bo'lsa — o'sha raqam. To'qima korpuslarda (64 310 katak) natija o'zgarmadi.
+  - *Ma'lum chegara (qo'shildi):* xorijiy raqam ichidagi ikki bo'sh joyli «00X» guruhi — niqob; «+» bilan boshlangan bo'lakda qavs
+    ichidagi guruh ham raqamning davomi (7-qoida, uzunligi to'g'ri bo'lsa); bir necha bo'lakchaga bo'lingan kod — birga o'qiladi
+    (tasodifiy kod va yolg'iz «0» bo'lakchasidan keyingi raqam ham); oila: ikkala raqam ikkala ustunda ko'p yozilib, net (ona katagi −
+    ota katagi) teng chiqsa — kamroq ona katagidagi raqam otaniki (9-raund qoidasi; 1c08011 da ham shunday); ona raqami ota ismli
+    kartalarda otanikidan ko'p bo'lsa — 14-chegara (endi «+»siz yozuvlar ham sanaladi, 1c08011 dagidek).
+  - *Sinovlar:* H48 (28 katak), H49 (11 oila) — 107 -> 109; 44e1049 da H48 va H49, 1c08011 da H44–H49 yiqiladi. Mutatsiyalar: 127 ta
+    (avvalgi 108 tasi + yangi shartlarning har biri: 998 + 9 butun bo'lak, 998998, «00» bo'lakcha, «+00», kod bo'lak boshida, nolli kod,
+    fct darajalari va to'g'ri raqam sharti, fnm, «998» guruhi) — birinchi yurishda 7 tasi omon qoldi; ikkitasi (fnm to'g'ri raqam sharti,
+    fnm faqat ota ismli kartalar) uchun H49 ga 2 oila qo'shildi; endi 122 tasi ushlanadi, 5 tasi ekvivalent: 8-raunddagisi, «998 +…»
+    istisnosidagi 12 raqam sharti («998» guruhi qoidasi bilan ortiqcha — uni ajratadigan katak faqat haqiqiyga o'xshash raqam
+    beradi, sinovga yozilmaydi), «is distinct from» o'rniga «<>» (kod noma'lum bo'lsa butun bo'lak baribir qo'ng'iroq qilib bo'lmaydi), fnm boshqa
+    darajalarda / faqat 4-daraja (2-darajadan boshqa joyda fnm fct ga teng yoki 0).
+  - *Solishtirish:* 64 310 to'qima katak — 44e1049 bilan har bir katak bo'yicha bir xil (fp_cells 241, found_n 60 044); 40 000 adversar
+    katak — 44e1049 dan 0 farq; tezkor yo'l = sales_nums (58 446 + 92 000 + 38 792 katak), server qaytargan har bir raqam = sahifa
+    havolasi (39 103 + 20 790 raqamli katak) — farq 0. 8-qoida generatori (576 296 katak) — 44e1049 ga nisbatan yangi havola 0,
+    valid=true bo'lib qolgan katak 0, yo'qolgan 4 885 havolaning hammasi yozilgan koddan boshqa davlat kodli begona raqam («+3⏎00 …»,
+    «+10⏎00 …», «+440⏎00 …»). Haqiqati ma'lum yangi generator (120 000 katak, 138 597 yozilgan raqam): 44e1049
+    ga nisbatan yozilgan raqam havolasi +1 652, begona havola −51 (998998 …), yozilgan raqam yo'qolmadi; qolgan begona havolalar 44e1049 va
+    1c08011 da ham bor (hujjatlashtirilgan chegaralar). Oila: 9-raund korpuslari (46 ta, 74 000 oila) — 44e1049 bilan har bir oila bo'yicha
+    bir xil (1c08011 ga nisbatan avvalgidek +17 / −0 va +30 / −15); tekshiruvchilarning yozuv shakliga atalgan korpuslari (36 ta, 42 624
+    oila) — 44e1049 ga nisbatan eng og'ir xato 10 963 -> 10 949, yo'qolgan raqam 2 606 -> 2 601; yangi xatolar — 14-chegara (ona raqami ota
+    ismli kartalarda ko'p) va teng net holatlari, ota raqami ota ismli kartalarda ko'p bo'lib noto'g'ri chiqqan oila 1c08011 ga nisbatan
+    qolmadi. Tezlik (toza bazada, 5 marta navbatma-navbat, eng kichigi): oilalar ro'yxati — oddiy ~0,30 s, hammasi xorijiy ~0,39 s,
+    izohli ~0,59 s, katta oila ~0,39 s (44e1049 bilan farq 0–3%); katakni o'qish — to'qima korpus ~5,3 s (bir xil), adversar ~4,1 s
+    (+5%). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 109/109, qolgan sonlar avvalgidek);
+    jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari avvalgidek).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

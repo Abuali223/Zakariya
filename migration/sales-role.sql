@@ -221,8 +221,11 @@ end $$;
 --   9 xonali, bir necha guruhda yozilgan bo'lsa — birinchi guruhi 2 xonali (operator kodi: «01 234 56 78», «(01) 234-56-78», «01 2345678»)
 --   yoki 3 xonali («012 345 678»), lekin oxiri «000» emas (summa: «120 000 000», «150.500.000»): «1234567 15» (pasport + uy), «0671712 12»
 --   (shahar raqami + kvartira), «120 000 000 so'm» — telefon emas, bitta 9 xonali «O'zbekiston raqami» bo'lib o'qilmaydi (mustaqil
---   tekshiruv). «+» / 00 bilan yozilgan xorijiy kanonik raqam (998 emas) esa o'qilmaydi, agar: «+» dan keyingi birinchi guruh «0» va raqam
---   bilan boshlansa (mahalliy operator kodi «02», «012»; davlat kodi noldan boshlanmaydi — faqat «+0998 …» xatosi O'zbekiston raqami):
+--   tekshiruv); 3 xonali birinchi guruh «998» ham operator kodi emas: «998 001 234⏎567» dagi birinchi qator — 998 kodi va 6 raqam (chala
+--   yoki qatorga bo'lingan xalqaro raqam), 9 xonali mahalliy raqam bo'lib begona havola bermaydi (butun bo'lak to'liq bo'lsa — o'sha
+--   raqam; 10-mustaqil tekshiruv, 2-o'tish). «+» / 00 bilan yozilgan xorijiy kanonik raqam (998 emas) esa o'qilmaydi, agar:
+--   «+» dan keyingi birinchi guruh «0» va raqam bilan boshlansa (mahalliy operator kodi «02», «012»; davlat kodi noldan boshlanmaydi —
+--   faqat «+0998 …» xatosi O'zbekiston raqami):
 --   «01 234 56 78 + 02 345 67 89 (15)» dagi «+ 02 345 67 89 15» nol tashlanib begona «+234 …» bo'lmaydi; yoki kanonigi 1–3 raqam
 --   va to'liq O'zbekiston raqami (998 + 9 raqam) bilan boshlansa (oxirida izoh raqami bo'lsa ham): «+2 998 00 765 43 21»,
 --   «+2 998 00 765 43 21 (15)» — tasodifiy raqam yopishgan O'zbekiston raqami, ro'yxatda yo'q davlat kodi (10–15 raqam) bilan begona
@@ -240,7 +243,7 @@ begin
     return c ~ '^998' or (c !~ '^[1-9][0-9]{0,2}998[0-9]{9}' and p !~ '^[^0-9]*\+[^0-9]*0[1-9]');
   end if;
   if length(d) <> 9 then return true; end if;
-  return p !~ '[0-9][^0-9]+[0-9]' or p ~ '^[^0-9]*[0-9]{2}([^0-9]|$)' or (p ~ '^[^0-9]*[0-9]{3}([^0-9]|$)' and d !~ '000$');
+  return p !~ '[0-9][^0-9]+[0-9]' or p ~ '^[^0-9]*[0-9]{2}([^0-9]|$)' or (p ~ '^[^0-9]*[0-9]{3}([^0-9]|$)' and d !~ '000$' and d !~ '^998');
 end $$;
 -- Katakdagi qo'ng'iroq qilib bo'ladigan raqamlar — yozilganidek (bo'sh joylar bittaga keltirilgan), katakdagi tartibda. Qoidalar:
 --   1) birinchi 100 belgi; 100-belgi biror bo'lak (pastda, 6) o'rtasiga tushsa — shu bo'lak oxirigacha, ya'ni keyingi qat'iy chegaragacha
@@ -279,7 +282,12 @@ end $$;
 --      to'liq 9 xonali mahalliy raqam bo'lsa yoki «0» bilan boshlansa — faqat yozilgan kod) bo'lishi shart (nollardan iborat kod — «+0»,
 --      «000» — xalqaro prefiks, tekshirilmaydi): aks holda o'sha bo'lakcha ham, butun bo'lak ham o'qilmaydi —
 --      tasodifiy «+10» / «+3» / «+440» mahalliy raqamga qo'shilib boshqa davlat raqami bo'lmaydi («+10 — 01 234 56 78» -> +1 001 …,
---      «+3⏎01 234 56 78» -> +30 … emas; mustaqil tekshiruv);
+--      «+3⏎01 234 56 78» -> +30 … emas; mustaqil tekshiruv); butun bo'lak faqat to'liq O'zbekiston raqami (998 + 9 raqam, 998998
+--      emas) bo'lsa baribir o'qiladi — barcha raqamlari yozilgan tartibda, boshqa davlat raqami bo'lib chiqmaydi: raqam o'rtasidagi
+--      «00X» guruhi davlat kodi emas («01  003  45  67», «+998⏎00 476⏎47 55» -> o'sha raqam), bo'lingan 998 kodi («+99⏎8001234567»;
+--      10-mustaqil tekshiruv, 2-o'tish: avval niqoblanardi); bo'lak boshidagi yolg'iz koddan keyingi «00» bilan boshlangan bo'lakcha
+--      (unga qo'shilmaydi) butun bo'lak bo'lib ham faqat yozilgan kod bilan o'qiladi («+998⏎00 123 45 67» -> +998 00 …;
+--      «+4⏎00 123 45 67», «+10⏎00 …» -> raqam yo'q, begona +40 … / +1 000 … emas — 10-mustaqil tekshiruv, 2-o'tish);
 --   9) «+» / 00 siz, 9 xonali, bir necha guruhda yozilgan bo'lakcha — birinchi guruhi 2 xonali (operator kodi) yoki 3 xonali (oxiri «000»
 --      emas) bo'lsagina raqam (app.sales_part_ok): «pasport AA 1234567 15 uy», «0671712 12», «120 000 000 so'm» — raqam emas.
 --   Ma'lum chegara: operator kodidek 2–3 xonali guruh bilan boshlanib, bitta bo'sh joy bilan yozilgan raqamlar («15 0123456» — uy va
@@ -288,7 +296,11 @@ end $$;
 --   «+»siz) — ajratilmaydi (qo'ng'iroq qilib bo'lmaydi, niqob); harfga yopishgan raqam («tel998…», «tel00…») — so'z bilan birga tashlanadi;
 --   «+» doim xalqaro raqam boshlaydi: undan keyingi raqamlar to'g'ri xorijiy raqam bo'lsa, boshqa raqamdan keyin bo'lsa ham shunday o'qiladi
 --   («01 234 56 78 + 44 7700 900123» -> +44 7700 900123, yozilganidek); yolg'iz davlat kodi va «+» bilan boshlangan bo'lakcha birga o'qilishi
---   mumkin («+44⏎+7700 900123» -> +44 7700 900123).
+--   mumkin («+44⏎+7700 900123» -> +44 7700 900123); xorijiy raqam ichida ikki bo'sh joy / qator uzilishi bilan ajratilgan «00X» guruhi
+--   («+44 7700 9  003  21») — niqob (raqam o'qilmaydi, begona havola ham yo'q); «+» bilan boshlangan bo'lakda qavs ichidagi guruh ham
+--   raqamning davomi (7-qoida: «+44 7700 9001  (23)» -> +44 7700 900123, uzunligi to'g'ri bo'lsa); kod bir necha bo'lakchaga bo'lingan
+--   bo'lsa («+9⏎9⏎8 00 …») — bo'lakchalar raqamlari birga bitta xalqaro raqam: tasodifiy kod va yolg'iz «0» bo'lakchasidan keyingi
+--   raqam ham shunday o'qilishi mumkin.
 create or replace function app.sales_nums(p text) returns text[]
 language plpgsql immutable set search_path = pg_catalog as $$
 declare
@@ -354,11 +366,24 @@ begin
         plus2 := plus2 or (cardinality(dps) > 0 and not lone and part ~ '^[^0-9]*\+'
                            and not (cardinality(dps) = 1 and regexp_replace(prev, '\D', '', 'g') = '998' and item !~ '\+.*\+'
                                     and length(regexp_replace(item, '\D', '', 'g')) = 12));
+        -- 8-qoida: bo'lak boshidagi (oldida faqat nolli bo'lakchalar) yolg'iz koddan keyingi «00» bilan boshlangan bo'lakcha («+00 …»
+        --   ham) qo'shilmadi — butun bo'lak bo'lib o'qilsa, uning davlat kodi yozilgan kod bo'lishi shart, aks holda butun bo'lak o'qilmaydi
+        --   («+4⏎00 123 45 67», «+4⏎+00 123 45 67» -> begona +40 … emas; «+998⏎00 123 45 67» — o'qiladi)
+        if lone and regexp_replace(part, '\D', '', 'g') ~ '^00'
+           and array_to_string(dps[1 : cardinality(dps) - 1], '') !~ '[1-9]' and ltrim(regexp_replace(prev, '\D', '', 'g'), '0') <> ''
+           and app.sales_cc(app.tg_phone(item)) is distinct from ltrim(regexp_replace(prev, '\D', '', 'g'), '0') then
+          nojoin := true;
+        end if;
         prev := part;
       end if;
       d := app.sales_part_ok(part);
-      -- 8-qoida: qo'shilgan raqamning davlat kodi ma'lum, lekin yozilgan kod emas — bo'lakcha ham, butun bo'lak ham o'qilmaydi
-      if cd <> '' and app.sales_cc(app.tg_phone(part)) not in (cd, cd || fg) then d := false; nojoin := true; end if;
+      -- 8-qoida: qo'shilgan raqamning davlat kodi ma'lum, lekin yozilgan kod emas — bo'lakcha ham, butun bo'lak ham o'qilmaydi;
+      --   butun bo'lak faqat to'liq O'zbekiston raqami (998 + 9 raqam, 998998 emas) bo'lsa o'qiladi — barcha raqamlari yozilgan tartibda:
+      --   raqam o'rtasidagi «00X» guruhi («01  003  45  67») davlat kodi emas, «+99⏎8001234567» — bo'lingan 998 kodi
+      if cd <> '' and app.sales_cc(app.tg_phone(part)) not in (cd, cd || fg) then
+        d := false;
+        nojoin := nojoin or app.tg_phone(item) !~ '^998[0-9]{9}$' or app.tg_phone(item) ~ '^998998';
+      end if;
       dps := dps || part; dds := dds || d; anyd := anyd or d;
     end loop;
     if (cardinality(dps) >= 2 or tail) and anyd then
@@ -572,8 +597,9 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                 mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
                 mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
            from fam group by fam.root),
-  -- Ota raqami — eng yaxshi darajadagi kartalardan; daraja ichida (qo'ng'iroq raqami bo'yicha): ona katagidagi soni minus shu darajadagi
-  --   ota katagidagi soni kamrog'i (fmn − fct; boshqa darajalarda fmn = 0, ya'ni shu darajadagi kartalar soni ko'prog'i; 3- va 6-darajada —
+  -- Ota raqami — eng yaxshi darajadagi kartalardan; daraja ichida (qo'ng'iroq raqami bo'yicha): ona katagidagi soni minus shu ism sinfidagi
+  --   ota katagidagi soni (har qanday yozuvda) kamrog'i (fmn − fct; boshqa darajalarda fmn = 0, ya'ni shu sinfdagi kartalar soni ko'prog'i;
+  --   2-darajada — avval ota ismi yozilgan kartalarda, «+»siz / izohli bo'lsa ham, ko'proq turgani; 3- va 6-darajada —
   --   ona raqami bilan bir xil raqamlarda — otaning raqami ota ustunida ko'proq, ona ustunida kamroq turadi), teng bo'lsa — kamroq ona
   --   katagida turgani (fmn), so'ng barcha kartalarda ko'proq yozilgani (har qanday yozuv va darajada — fcn), so'ng shu yozuvi ko'p uchragani;
   --   teng bo'lsa — toza yozilgani (butun katak bitta to'g'ri raqam, ya'ni katak kanonigi qo'ng'iroq kanonigiga teng: izohli yoki tasodifiy
@@ -593,17 +619,25 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                  + case when fam.fok then 0 else 3 end as t
             from fam where fam.fp <> '' and (fam.fn is not null or not fam.fp_mom)),
   -- fcn / mcn — shu ustunda shu qo'ng'iroq raqami (fc / mc) yozilgan kartalar soni (yozilish shakli va darajadan qat'i nazar); fct — shu
-  --   darajadagi ota nomzodi kartalari soni (qo'ng'iroq raqami bo'yicha; fmn va fmn − fct teng bo'lsa — fct ham teng, alohida kalit emas).
-  --   fct — guruhlangan yozuvlar ustida oyna yig'indisi: fpt ikkinchi marta o'qilsa, Postgres uni materiallashtirib, katta oilada ro'yxatni
-  --   ~25% sekinlashtirardi.
+  --   ism sinfidagi ota nomzodi kartalari soni (qo'ng'iroq raqami bo'yicha, har qanday yozuvda: 1- va 4-, 2- va 5-, 3- va 6-darajalar birga,
+  --   fmn kabi; fmn va fmn − fct teng bo'lsa — fct ham teng, alohida kalit emas); fnm — shu raqam ota ismi yozilgan (ona raqami bo'lmagan)
+  --   kartalarning ota katagida necha marta turgani (1- va 4-daraja). Aks holda «+»siz yozilgan xorijiy raqam yoki so'zga yopishgan raqam
+  --   («447700900141», «… 43dadasi» — qo'ng'iroq qilib bo'lmaydi, 4-daraja) otaning raqami sifatida sanalmay, ota ismli kamroq kartadagi
+  --   bobosi / ona raqami otaniki bo'lardi, ota ismli kartalarda faqat shunday yozilgan raqam esa otasiz kartalardagi qarindosh raqamidan
+  --   keyin qolardi (10-mustaqil tekshiruv, 2-o'tish). Ikkalasi faqat to'g'ri (bitta) raqam uchun: ikki raqamli katakning kanonigi shu
+  --   raqamlardan iborat boshqa katak bilan qo'shilmaydi.
+  --   fct / fnm — guruhlangan yozuvlar ustida oyna yig'indisi: fpt ikkinchi marta o'qilsa, Postgres uni materiallashtirib, katta oilada
+  --   ro'yxatni ~25% sekinlashtirardi.
   fcn as (select fam.root, fam.fc, count(*) as nc from fam where fam.fp <> '' group by fam.root, fam.fc),
   mcn as (select fam.root, fam.mc, count(*) as nc from fam where fam.mp <> '' group by fam.root, fam.mc),
   fpc as (select distinct on (x.root) x.root, x.fp, x.fc
-            from (select g.*, sum(g.n) over (partition by g.root, g.fc, g.t) as fct
+            from (select g.*, sum(g.n) over (partition by g.root, g.fc, case when app.sales_valid(g.fc) then g.t % 3 else g.t end) as fct,
+                         sum(case when g.t in (1, 4) then g.n else 0 end) over (partition by g.root, g.fc) as fnm
                     from (select fpt.root, fpt.fp, fpt.t, min(fpt.fc) as fc, min(fpt.fmn) as fmn, count(*) as n
                             from fpt group by fpt.root, fpt.fp, fpt.t) g) x
             left join fcn on fcn.root = x.root and fcn.fc = x.fc
-           order by x.root, x.t, x.fmn - x.fct, x.fmn, fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
+           order by x.root, x.t, case when x.t = 2 and app.sales_valid(x.fc) then -x.fnm else 0 end, x.fmn - x.fct, x.fmn,
+                    fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
   -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan;
   --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki
   --   qo'ng'iroq kanonigi bo'yicha). Daraja ichida — ona ustunida ko'proq kartada yozilgani (mcn, barcha kartalar; «(otasi)» izohli yoki
