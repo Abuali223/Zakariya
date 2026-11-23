@@ -175,7 +175,7 @@ create or replace function app.sales_valid(p text) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select coalesce(p, '') ~ '^998[0-9]{9}$' or (coalesce(p, '') ~ '^[1-9][0-9]{9,14}$' and left(p, 3) <> '998')
 $$;
--- Katak yozuvini o'qiydigan yordamchilar (sales_intl_ok, sales_dialable, sales_nums, sales_usable) — plpgsql: ichma-ich chaqirilgan SQL
+-- Katak yozuvini o'qiydigan yordamchilar (sales_intl_ok, sales_dialable, sales_part_ok, sales_nums, sales_usable) — plpgsql: ichma-ich chaqirilgan SQL
 --   funksiya har tashqi chaqiruvda qayta rejalashtirilib, oilalar ro'yxatini bir necha baravar sekinlashtirardi (plpgsql rejani keshlaydi).
 -- Xorijiy raqam (kanonik, «+» / 00 bilan yozilgan) qo'ng'iroq qilib bo'ladimi — sahifaning phoneCanon qoidasi bilan AYNAN bir xil: davlat
 --   kodi (eng uzuni: 3 -> 2 -> 1 raqam) ma'lum va jami uzunlik shu davlatniki (PHONE_LEN; ro'yxatda yo'q davlat — 10–15 raqam). Jadvallar
@@ -206,43 +206,106 @@ begin
   if btrim(coalesce(p, '')) ~ '^[^0-9]*\+' or regexp_replace(coalesce(p, ''), '\D', '', 'g') like '00%' then return app.sales_intl_ok(c); end if;
   return false;
 end $$;
+-- Katakdagi bitta raqam yozuvi (bo'lakcha) raqam sifatida o'qiladimi: qo'ng'iroq qilib bo'ladigan (app.sales_dialable) va — «+» / 00 siz,
+--   9 xonali, bir necha guruhda yozilgan bo'lsa — birinchi guruhi 2 xonali (operator kodi: «01 234 56 78», «(01) 234-56-78», «01 2345678»)
+--   yoki 3 xonali («012 345 678»), lekin oxiri «000» emas (summa: «120 000 000», «150.500.000»): «1234567 15» (pasport + uy), «0671712 12»
+--   (shahar raqami + kvartira), «120 000 000 so'm» — telefon emas, bitta 9 xonali «O'zbekiston raqami» bo'lib o'qilmaydi (mustaqil
+--   tekshiruv). Oilalar ro'yxatining tezkor yo'li (sales_families, rawok) ham shu funksiyani chaqiradi.
+create or replace function app.sales_part_ok(p text) returns boolean
+language plpgsql immutable set search_path = pg_catalog as $$
+declare d text;
+begin
+  if not app.sales_dialable(p) then return false; end if;
+  d := regexp_replace(coalesce(p, ''), '\D', '', 'g');
+  if length(d) <> 9 or coalesce(p, '') ~ '^[^0-9]*\+' or d like '00%' then return true; end if;
+  return p !~ '[0-9][^0-9]+[0-9]' or p ~ '^[^0-9]*[0-9]{2}([^0-9]|$)' or (p ~ '^[^0-9]*[0-9]{3}([^0-9]|$)' and d !~ '000$');
+end $$;
 -- Katakdagi qo'ng'iroq qilib bo'ladigan raqamlar — yozilganidek (bo'sh joylar bittaga keltirilgan), katakdagi tartibda. Qoidalar:
---   1) birinchi 100 belgi; qator uzilishi / TAB / VT / FF (Excel'da Alt+Enter) — ikki bo'sh joy, ya'ni «yumshoq» ajratuvchi;
---   2) harfdan keyin «:» «.» «=» — bo'sh joy («tel:+998…», «тел.998…» -> «tel +998…»);
---   3) harf va raqam aralash so'z (pasport «AA1234567», «2-uy», «15-уй», «3-guruh») — izoh: «,» bilan almashtiriladi (uning raqamlari hech bir
---      raqamga qo'shilmaydi; so'z chegarasi — bo'sh joy va «,;/|»);
---   4) qolgan harf va belgilar (raqam, «+», «()», «-», bo'sh joy va «,;/|» dan boshqasi) — bo'sh joy;
---   5) «,» «;» «/» «|» — qat'iy ajratuvchi: bo'laklar hech qachon qo'shilmaydi («pasport AA 1234567, 15» -> raqam yo'q);
---   6) bo'lak ichida ikki va undan ortiq bo'sh joy — yumshoq ajratuvchi: bo'lakchalardan biri qo'ng'iroq qilib bo'ladigan bo'lsa — faqat shunday
---      bo'lakchalar («+998 … 07⏎+998 … 08», «+44 7700 900121  2»); aks holda butun bo'lak (raqam ichida tasodifiy ikki bo'sh joy yoki qator
---      uzilishi: «+998 00 123  45 67 (otasi)», «+44 7700 9001  21»).
---   Ma'lum chegara: harf alohida so'zda, raqam guruhlari bitta bo'sh joy bilan yozilgan hujjat raqami («pasport AA 1234567 15 uy») bitta
---   9 xonali raqamdek o'qiladi; bitta bo'sh joy bilan yopishgan ikki raqam — ajratilmaydi (qo'ng'iroq qilib bo'lmaydi, niqob).
+--   1) birinchi 100 belgi; 100-belgi biror bo'lak (pastda, 6) o'rtasiga tushsa — shu bo'lak oxirigacha, ya'ni keyingi qat'iy chegaragacha
+--      («,;/|» yoki harfli so'z; ko'pi bilan yana 100 belgi) o'qiladi, chegaradan keyingisi — yo'q; chegara topilmasa — kesilgan bo'lakning
+--      oxirgi bo'lakchasi (7) o'qilmaydi, qolgan bo'lakchalari faqat alohida: kesilgan raqam («… +44 7700 900123|4») boshqa raqam bo'lib
+--      o'qilmasin (mustaqil tekshiruv), qator-qator yozilgan raqamlar esa yo'qolmasin;
+--   2) qator uzilishi / TAB / VT / FF (Excel'da Alt+Enter), Unicode qator va xatboshi ajratuvchisi — ikki bo'sh joy, ya'ni «yumshoq» ajratuvchi;
+--      ko'rinadigan Unicode bo'sh joylar (NBSP, ingichka bo'sh joy …) — oddiy bo'sh joy (Excel / Word'dan nusxalangan katak); ko'rinmas
+--      (eni nol) belgi — bo'sh joy emas: katak qanday ko'rinsa, shunday o'qiladi;
+--   3) harfdan keyin «:» «.» «=» — bo'sh joy («tel:+998…», «тел.998…» -> «tel +998…»);
+--   4) «+» doim yangi raqam boshlaydi: oldidagi belgi (raqam va «,;/|» dan boshqasi) bilan orasiga yumshoq ajratuvchi (ikki bo'sh joy)
+--      qo'yiladi («tel+44 …», «ota-+44 …» -> «+44 …»; «01 234 56 78 +44 7700 900123» — ikki raqam), aks holda «+» harfli so'z bilan birga
+--      tashlanib, qolgan 9 raqam O'zbekiston raqamidek o'qilardi (mustaqil tekshiruv);
+--   5) harfli so'z (izoh «otasi», «kv», «ichki»; pasport «AA1234567», «2-uy», «15-уй») — «,» bilan almashtiriladi, ya'ni qat'iy ajratuvchi:
+--      uning ikki tomonidagi raqamlar hech qachon qo'shilmaydi («0123456 kv 12», «ish: 123-45-67 (ichki 12)» -> raqam yo'q; so'z chegarasi —
+--      bo'sh joy va «,;/|»);
+--   6) «,» «;» «/» «|» — qat'iy ajratuvchi: bo'laklar hech qachon qo'shilmaydi («pasport AA 1234567, 15» -> raqam yo'q);
+--   7) bo'lak ichida ikki va undan ortiq bo'sh joy — yumshoq ajratuvchi: bo'lakchalardan biri qo'ng'iroq qilib bo'ladigan bo'lsa — faqat shunday
+--      bo'lakchalar («+998 … 07⏎+998 … 08», «+44 7700 900121  2»); aks holda — butun bo'lak (raqam ichida tasodifiy ikki bo'sh joy yoki
+--      qator uzilishi: «+998 00 123  45 67 (otasi)», «+44 7700 9001  21», «01 234  56 78»), faqat: uning birinchi va oxirgi raqami orasida
+--      raqam, «+», qavs, nuqta, chiziqcha va bo'sh joydan boshqa belgi yo'q («12 — 01 234 56», «12 № 01 234 56» — qo'shilmaydi) va bo'lak «+»
+--      bilan boshlangan (to'liq yozilgan raqam) yoki hech bir raqam guruhi 4 xonadan uzun emas (telefon guruhlari) — bir-biriga aloqasi yo'q
+--      guruhlar («15  0123456» — uy va shahar raqami) bitta 9 xonali «O'zbekiston raqami» bo'lib qo'shilmaydi (mustaqil tekshiruv);
+--   8) yolg'iz davlat kodi («+999», «00 999») va undan keyin (yumshoq ajratuvchi bilan) «+»siz bo'lakcha — bitta xalqaro raqam: bo'lakcha
+--      alohida O'zbekiston raqami bo'lib o'qilmaydi («+999  01 234 56 78» -> +999 012345678, kodi noma'lum — raqam yo'q);
+--   9) «+» / 00 siz, 9 xonali, bir necha guruhda yozilgan bo'lakcha — birinchi guruhi 2 xonali (operator kodi) yoki 3 xonali (oxiri «000»
+--      emas) bo'lsagina raqam (app.sales_part_ok): «pasport AA 1234567 15 uy», «0671712 12», «120 000 000 so'm» — raqam emas.
+--   Ma'lum chegara: operator kodidek 2–3 xonali guruh bilan boshlanib, bitta bo'sh joy bilan yozilgan raqamlar («15 0123456» — uy va
+--   shahar raqami) bitta 9 xonali raqamdek o'qiladi (operator kodi tekshirilmaydi); «00» bilan boshlangan yozuv — xalqaro raqam (davlat
+--   kodi va uzunligi tekshiriladi, ro'yxatda yo'q davlat — 10–15 raqam); bitta bo'sh joy bilan yopishgan ikki raqam (ikkinchisi
+--   «+»siz) — ajratilmaydi (qo'ng'iroq qilib bo'lmaydi, niqob); harfga yopishgan raqam («tel998…», «tel00…») — so'z bilan birga tashlanadi.
 create or replace function app.sales_nums(p text) returns text[]
 language plpgsql immutable set search_path = pg_catalog as $$
 declare
-  s text := left(coalesce(p, ''), 100);
-  item text; part text; dps text[]; dds boolean[]; anyd boolean; i int; res text[] := '{}';
+  s text := coalesce(p, '');
+  cut boolean := length(coalesce(p, '')) > 100;
+  items text[]; parts text[]; item text; part text; prev text; dps text[]; dds boolean[]; anyd boolean; pure boolean; d boolean;
+  tail boolean; i int; k int; res text[] := '{}';
 begin
+  -- Oddiy yozuv (100 belgigacha, faqat raqam / qavs / chiziqcha / bitta bo'sh joylar, boshida «+» bo'lishi mumkin) — bitta bo'lak, bitta
+  --   bo'lakcha: pastdagi to'liq yo'l ham aynan shu natijani beradi (eng ko'p uchraydigan yozuvlar uchun tezlik).
+  if length(s) <= 100 and s ~ '^[+]?[0-9() -]*$' and strpos(s, '  ') = 0 then
+    if s ~ '[0-9]' and app.sales_part_ok(s) then
+      return array[btrim(regexp_replace(regexp_replace(s, '[()]', ' ', 'g'), '\s+', ' ', 'g'), ' -')];
+    end if;
+    return res;
+  end if;
+  if cut then
+    s := left(s, 100) || coalesce(substring(substr(s, 101, 100)
+           from '^[^,;/|A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣]*(?:[,;/|]|[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣][^\s,;/|]*)'), '');
+  end if;
   if s !~ '[0-9]' then return res; end if;
-  s := regexp_replace(s, '[\r\n\t\v\f]', '  ', 'g');
+  -- (faqat ASCII belgili katakda — Unicode almashtirishlar kerak emas: tezlik)
+  if octet_length(s) = length(s) then
+    s := regexp_replace(s, '[\r\n\t\v\f]', '  ', 'g');
+  else
+    s := regexp_replace(s, '[\r\n\t\v\f\u0085\u2028\u2029]', '  ', 'g');
+    s := regexp_replace(s, '[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]', ' ', 'g');
+  end if;
   s := regexp_replace(s, '([A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣])[:.=]', '\1 ', 'g');
-  s := regexp_replace(s, '[^\s,;/|]*(?:[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣][^\s,;/|]*[0-9]|[0-9][^\s,;/|]*[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣])[^\s,;/|]*', ',', 'g');
-  s := regexp_replace(s, '[^0-9+ ,;/|()-]', ' ', 'g');
-  foreach item in array regexp_split_to_array(s, '[,;/|]') loop
+  s := regexp_replace(s, '([^0-9+,;/|])[+]', '\1  +', 'g');
+  s := regexp_replace(s, '[^\s,;/|]*[A-Za-zÀ-ÖØ-öø-ɏͰ-ϿЀ-ҁҊ-ԯԱ-Ֆա-ևא-תؠ-يႠ-ჿぁ-ヿ一-鿿가-힣][^\s,;/|]*', ',', 'g');
+  items := regexp_split_to_array(s, '[,;/|]');
+  for k in 1 .. cardinality(items) loop
+    item := items[k];
     continue when item !~ '[0-9]';
-    dps := '{}'; dds := '{}'; anyd := false;
-    foreach part in array regexp_split_to_array(item, '\s{2,}') loop
+    -- 100 belgidan uzun katakning oxirgi bo'lagi (chegaradan keyingi yoki chegara topilmagan qism) kesilgan bo'lishi mumkin: uning oxirgi
+    --   bo'lakchasi o'qilmaydi, qolganlari — faqat alohida (butun bo'lak qo'shilmaydi): qator-qator yozilgan raqamlar yo'qolmaydi
+    tail := cut and k = cardinality(items);
+    pure := regexp_replace(item, '^[^0-9+(]+|[^0-9)]+$', '', 'g') ~ '^[0-9+()\s.-]*$';
+    item := regexp_replace(item, '[^0-9+ ()-]', ' ', 'g');
+    parts := regexp_split_to_array(item, '\s{2,}');
+    if tail then parts := parts[1 : cardinality(parts) - 1]; end if;
+    dps := '{}'; dds := '{}'; anyd := false; prev := '';
+    foreach part in array parts loop
       continue when part !~ '[0-9]';
-      dps := dps || part;
-      dds := dds || app.sales_dialable(part);
-      anyd := anyd or dds[cardinality(dds)];
+      d := app.sales_part_ok(part)
+           and not (regexp_replace(prev, '[\s()-]', '', 'g') ~ '^(\+|00)[0-9]{1,3}$'
+                    and part !~ '^[^0-9]*\+' and regexp_replace(part, '\D', '', 'g') !~ '^00');
+      dps := dps || part; dds := dds || d; anyd := anyd or d; prev := part;
     end loop;
-    if cardinality(dps) >= 2 and anyd then
+    if (cardinality(dps) >= 2 or tail) and anyd then
       for i in 1 .. cardinality(dps) loop
         if dds[i] then res := res || btrim(regexp_replace(regexp_replace(dps[i], '[()]', ' ', 'g'), '\s+', ' ', 'g'), ' -'); end if;
       end loop;
-    elsif app.sales_dialable(item) then
+    elsif not tail and (cardinality(dps) = 1 or (pure and (item ~ '^[^0-9]*\+' or item !~ '[0-9]{5}')))
+          and app.sales_part_ok(item) then
       res := res || btrim(regexp_replace(regexp_replace(item, '[()]', ' ', 'g'), '\s+', ' ', 'g'), ' -');
     end if;
   end loop;
@@ -407,58 +470,78 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                        when c.fk <> '' or c.mk <> '' then min(cp.cid) over (partition by cp.root, c.fk, c.mk, c.fp, c.mp)
                        else cp.cid end as root
              from comp0 cp join cards c on c.cid = cp.cid),
-  -- fok / mok — katakdan foydalanib bo'ladi (app.sales_usable): butun katak yoki uning biror qismi qo'ng'iroq qilib bo'ladigan raqam
+  -- fok / mok — katakdan foydalanib bo'ladi (app.sales_nums bo'sh emas): butun katak yoki uning biror qismi qo'ng'iroq qilib bo'ladigan raqam
   --   (bir nechta raqamli katakni sahifa alohida havolalarga ajratadi); karta raqami, JSHSHIR, yopishgan raqamlar — yo'q.
-  --   Har bir NOYOB yozuv uchun bir marta (aka-uka kartalarida bir xil yozuv takror hisoblanmaydi). Tezlik uchun: faqat raqam / «+» / qavs /
-  --   nuqta / chiziqcha / bo'sh joydan iborat, butunligicha qo'ng'iroq qilib bo'ladigan katak — darhol «ha» (sales_usable ham shunday deydi);
-  --   9 raqamdan kam katak — qo'ng'iroq qilib bo'ladigan raqami bo'lmaydi (eng qisqasi — 9 xonali mahalliy raqam).
+  --   cc — katakdagi qo'ng'iroq qilinadigan raqamning kanonigi (katakda bitta shunday raqam bo'lsa — uniki: «+998 00 300 00 02 (2-uy)» ->
+  --   998003000002; aks holda butun katakniki): «bu ikkinchi ota-onaning raqamimi» (fp_mom, mpt 5-daraja, fpf) shu bilan solishtiriladi —
+  --   aks holda izohli katakdagi ona raqami otaning haqiqiy raqami bilan teng darajada turib, uni yashirardi (mustaqil tekshiruv). Guruhlash,
+  --   asl yozuv va valid — butun katak kanonigi (fp / mp) bo'yicha, o'zgarmaydi.
+  --   Har bir NOYOB yozuv uchun bir marta (aka-uka kartalarida bir xil yozuv takror hisoblanmaydi). Tezlik uchun: 100 belgigacha, faqat
+  --   raqam / qavs / chiziqcha / bitta bo'sh joylardan iborat (boshida «+» bo'lishi mumkin), butunligicha raqam sifatida o'qiladigan
+  --   (app.sales_part_ok) katak — darhol «ha»: sales_nums bunday katakni bitta bo'lak, bitta bo'lakcha deb o'qib, aynan shu raqamni beradi
+  --   (nuqta, ikki bo'sh joy, o'rtadagi «+» — yumshoq ajratuvchi bo'lishi mumkin, shuning uchun ular sales_nums orqali). Kanonigi 998 + 9
+  --   raqam va «+» bilan boshlangan yoki faqat raqamdan iborat katak uchun sales_part_ok chaqirilmaydi — uning javobi baribir «ha» (eng
+  --   ko'p uchraydigan yozuvlar, tezlik). 9 raqamdan kam katak — qo'ng'iroq qilib bo'ladigan raqami bo'lmaydi (eng qisqasi — 9 xonali
+  --   mahalliy raqam).
   rawok as materialized (
-    select r.raw, (r.raw ~ '^[0-9+()\s.-]*$' and (r.canon ~ '^998[0-9]{9}$' or app.sales_dialable(r.raw)))
-                  or (length(regexp_replace(r.raw, '\D', '', 'g')) >= 9 and app.sales_usable(r.raw)) as ok
-      from (select c.fr as raw, c.fp as canon from cards c where c.fr <> '' union select c.mr, c.mp from cards c where c.mr <> '') r),
-  fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root, coalesce(fo.ok, false) as fok, coalesce(mo.ok, false) as mok
+    select q.raw, q.fast or cardinality(q.nums) > 0 as ok,
+           case when not q.fast and cardinality(q.nums) = 1 then app.tg_phone(q.nums[1]) else q.canon end as cc
+      from (select r.raw, r.canon, r.fast,
+                   case when r.fast or length(regexp_replace(r.raw, '\D', '', 'g')) < 9 then '{}'::text[] else app.sales_nums(r.raw) end as nums
+              from (select u.raw, u.canon,
+                           (length(u.raw) <= 100 and u.raw ~ '^[+]?[0-9() -]*$' and strpos(u.raw, '  ') = 0
+                            and ((u.canon ~ '^998[0-9]{9}$' and (left(u.raw, 1) = '+' or u.raw !~ '[^0-9]')) or app.sales_part_ok(u.raw))) as fast
+                      from (select c.fr as raw, c.fp as canon from cards c where c.fr <> ''
+                            union select c.mr, c.mp from cards c where c.mr <> '') u
+                    offset 0) r
+            offset 0) q),
+  fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root, coalesce(fo.ok, false) as fok, coalesce(mo.ok, false) as mok,
+                  coalesce(fo.cc, c.fp) as fc, coalesce(mo.cc, c.mp) as mc
              from cards c join comp cp on cp.cid = c.cid
              left join rawok fo on fo.raw = c.fr left join rawok mo on mo.raw = c.mr),
-  -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam. «Ota telefoni» katagidagi bunday raqam: ota ismi
-  --   yozilmagan kartada — otaniki emas; ota ismi yozilgan kartada — faqat boshqa kartalarda otaning o'z raqami bo'lmasa (masalan
-  --   oilaning umumiy raqami) ishlatiladi (fpt darajalari).
-  mom as (select distinct y.root, y.mp from fam0 y where y.mn is not null),
-  fam as (select f.*, (m.root is not null) as fp_mom from fam0 f left join mom m on m.root = f.root and m.mp = f.fp),
+  -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam (qo'ng'iroq kanonigi bo'yicha). «Ota telefoni» katagidagi
+  --   bunday raqam: ota ismi yozilmagan kartada — otaniki emas; ota ismi yozilgan kartada — faqat boshqa kartalarda otaning o'z raqami
+  --   bo'lmasa (masalan oilaning umumiy raqami) ishlatiladi (fpt darajalari).
+  mom as (select distinct y.root, y.mc from fam0 y where y.mn is not null),
+  fam as (select f.*, (m.root is not null) as fp_mom from fam0 f left join mom m on m.root = f.root and m.mc = f.fc),
   -- Ism — oiladagi kartalarda eng ko'p uchragan tozalangan ism (izoh, raqam, qavs ichidagi matn — olib tashlangan; st).
   nm as (select fam.root,
                 mode() within group (order by fam.fn) filter (where fam.fn is not null) as fn,
                 mode() within group (order by fam.mn) filter (where fam.mn is not null) as mn
            from fam group by fam.root),
-  -- Ota raqami — eng yaxshi darajadagi kartalardan, daraja ichida eng ko'p uchragani (teng bo'lsa — kichigi): foydalanib bo'ladigan
+  -- Ota raqami — eng yaxshi darajadagi kartalardan, daraja ichida eng ko'p uchragani (teng bo'lsa — butun katagi to'g'ri raqam bo'lgani,
+  --   ya'ni izohli katakdan ajratib olingan raqamdan toza yozilgani; yana teng bo'lsa — kichigi): foydalanib bo'ladigan
   --   katak (fok) — (1) ota ismi yozilgan karta, ona raqami emas; (2) ona raqami emas; (3) ota ismi yozilgan karta, ona raqami bilan
   --   bir xil (oilaning umumiy raqami); (4–6) noto'g'ri katak — xuddi shu tartibda. Ota ismi yozilmagan kartaning «ota telefoni»dagi ona
   --   raqami — nomzod emas. Shunday qilib ismli kartadagi «0» boshqa kartadagi to'g'ri raqamni yashirmaydi, ona raqami ota ismi yozilgan
   --   kartada bo'lsa ham boshqa kartadagi haqiqiy ota raqamidan ustun emas (mustaqil tekshiruv).
-  fpt as (select fam.root, fam.fp,
+  fpt as (select fam.root, fam.fp, fam.fc,
                  case when fam.fn is not null and not fam.fp_mom then 1 when not fam.fp_mom then 2 else 3 end
                  + case when fam.fok then 0 else 3 end as t
             from fam where fam.fp <> '' and (fam.fn is not null or not fam.fp_mom)),
-  fpc as (select distinct on (x.root) x.root, x.fp
-            from (select fpt.root, fpt.fp, fpt.t, count(*) as n from fpt group by fpt.root, fpt.fp, fpt.t) x
-           order by x.root, x.t, x.n desc, x.fp),
+  fpc as (select distinct on (x.root) x.root, x.fp, x.fc
+            from (select fpt.root, fpt.fp, fpt.t, min(fpt.fc) as fc, count(*) as n from fpt group by fpt.root, fpt.fp, fpt.t) x
+           order by x.root, x.t, x.n desc, not app.sales_valid(x.fp), x.fp),
   -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan;
-  --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami).
-  mpt as (select fam.root, fam.mp,
-                 case when fam.mp = coalesce(fpc.fp, '') then 5
+  --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki
+  --   qo'ng'iroq kanonigi bo'yicha).
+  mpt as (select fam.root, fam.mp, fam.mc,
+                 case when fam.mp = coalesce(fpc.fp, '') or fam.mc = coalesce(fpc.fc, '') then 5
                       when fam.mok and fam.mn is not null then 1
                       when fam.mok then 2
                       when fam.mn is not null then 3
                       else 4 end as t
             from fam left join fpc on fpc.root = fam.root where fam.mp <> ''),
-  mpc as (select distinct on (x.root) x.root, x.mp
-            from (select mpt.root, mpt.mp, mpt.t, count(*) as n from mpt group by mpt.root, mpt.mp, mpt.t) x
-           order by x.root, x.t, x.n desc, x.mp),
+  mpc as (select distinct on (x.root) x.root, x.mp, x.mc
+            from (select mpt.root, mpt.mp, mpt.t, min(mpt.mc) as mc, count(*) as n from mpt group by mpt.root, mpt.mp, mpt.t) x
+           order by x.root, x.t, x.n desc, not app.sales_valid(x.mp), x.mp),
   -- Ota raqami hali bo'sh (masalan aka-uka kartalarida raqamlar almashib yozilgan, ota ismi yo'q): tanlangan ona raqamidan boshqa
-  --   foydalanib bo'ladigan «ota telefoni» — ikkala raqam ham chiqsin, ona raqami otaniki bo'lib takrorlanmasin.
+  --   foydalanib bo'ladigan «ota telefoni» — ikkala raqam ham chiqsin, ona raqami (butun katak yoki qo'ng'iroq kanonigi bo'yicha)
+  --   otaniki bo'lib takrorlanmasin.
   fpf as (select distinct on (x.root) x.root, x.fp
             from (select fam.root, fam.fp, count(*) as n from fam left join mpc on mpc.root = fam.root
-                   where fam.fok and fam.fp <> coalesce(mpc.mp, '') group by fam.root, fam.fp) x
-           order by x.root, x.n desc, x.fp),
+                   where fam.fok and fam.fp <> coalesce(mpc.mp, '') and fam.fc <> coalesce(mpc.mc, '') group by fam.root, fam.fp) x
+           order by x.root, x.n desc, not app.sales_valid(x.fp), x.fp),
   pick as materialized (select nm.root, nm.fn, coalesce(fpc.fp, fpf.fp, '') as fp, nm.mn, coalesce(mpc.mp, '') as mp
              from nm left join fpc on fpc.root = nm.root left join mpc on mpc.root = nm.root left join fpf on fpf.root = nm.root),
   -- Asl yozuv (ochganda qaysi qismlar ko'rsatilishini aniqlaydi): tanlangan raqam yozilgan kartalardagi foydalanib bo'ladigan (fok / mok)
@@ -584,7 +667,7 @@ do $$ declare f text; begin
     execute 'grant execute on function ' || f || ' to authenticated, service_role';
   end loop;
   foreach f in array array['app.sales_cap()', 'app.sales_need()', 'app.sales_norm(text)', 'app.sales_nkey(text)', 'app.sales_valid(text)', 'app.sales_mask(text)',
-                           'app.sales_hasletter(text)', 'app.sales_intl_ok(text)', 'app.sales_dialable(text)', 'app.sales_nums(text)', 'app.sales_usable(text)',
+                           'app.sales_hasletter(text)', 'app.sales_intl_ok(text)', 'app.sales_dialable(text)', 'app.sales_part_ok(text)', 'app.sales_nums(text)', 'app.sales_usable(text)',
                            'app.sales_pname(text)',
                            'app.sales_parent(text, text, boolean, text)', 'app.sales_uf(integer, integer[], integer[])', 'app.sales_families(boolean)',
                            'app.sales_used()', 'app.sales_user_live(text)',

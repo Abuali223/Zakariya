@@ -450,3 +450,17 @@ test('Raqam qoidasi (5-tekshiruv): migration/sales-role.sql (app.sales_intl_ok) 
   for (const x of arrs) for (const k of x.keys) assert.equal(k.length, x.n, `${k} — ${x.n} xonali ro‘yxatda`);
   assert.deepEqual(arrs.flatMap(x => x.keys).sort(), Object.keys(ctx.PHONE_CC).sort());
 });
+
+test('salesTel (7-tekshiruv): «+» / 00 dan keyingi nollar tashlanadi (server app.tg_phone va phoneCanon kabi) — server qo‘ng‘iroq qilsa bo‘ladi degan qism havolasiz qolmaydi; chala raqam — havolasiz', () => {
+  const E = salesEnv();
+  const t = (p, v) => E.ctx.salesTel(p, v);
+  const h1 = t('+0998 00 123 45 67, +998 00 765 43 21', false);
+  assert.match(h1, /href="tel:\+998001234567"/, '«+0998 …» — havola (avval matn bo‘lib qolardi)');
+  assert.match(h1, /href="tel:\+998007654321"/);
+  assert.match(h1, /\(bir katakda bir nechta raqam yozilgan\)/, 'ikkala qism ham havola — «biri noto‘g‘ri» deyilmaydi');
+  for (const p of ['+0 44 7700 900123', '00 0 44 7700 900123', '0000 44 7700 900123'])
+    assert.match(t(p, false), /href="tel:\+447700900123"/, p);
+  assert.match(t('+0998 00 123 45 67', false), /href="tel:\+998001234567"/);
+  assert.doesNotMatch(t('+0 44 7700 9001', false), /tel:/, 'chala xorijiy raqam — havola yo‘q');
+  assert.doesNotMatch(t('+0 01 234 56 78', false), /tel:/, '«+0» bilan 8 raqam — O‘zbekiston raqamiga aylanmaydi');
+});

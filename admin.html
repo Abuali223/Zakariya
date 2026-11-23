@@ -10940,11 +10940,13 @@ const SALES_REASON={ daily_cap:'Bugungi chegara tugadi — kuniga 150 ta oila. E
 function salesDialable(d){ d=String(d||''); return /^998\d{9}$/.test(d) || (d.slice(0,3)!=='998' && d.length>=10 && phoneCanon('+'+d)===d); }
 function salesTelLink(d){ const pr=pmPrettyPhone('+'+d), txt=(pr==='+'+d && /^998\d{9}$/.test(d)) ? `+998 ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : pr;
   return `<a href="tel:+${d}" class="sl-tel" style="font-weight:700;white-space:nowrap">${esc(txt)}</a>`; }
-// Katakdagi bitta raqam yozuvi -> raqamlar: '+' yoki 00 bilan boshlangan — xalqaro (00 tashlanadi), aks holda 9 xonali — O'zbekiston
-//   (998 qo'shiladi). '+7 903 157 11' (chala xorijiy, 9 raqam) O'zbekiston raqamiga aylanib, begona odamga havola bo'lmasin (phoneCanon
-//   qoidasi; mustaqil tekshiruv).
+// Katakdagi bitta raqam yozuvi -> raqamlar: '+' yoki 00 bilan boshlangan — xalqaro (00 va undan keyingi nollar tashlanadi: davlat kodi
+//   noldan boshlanmaydi — server app.tg_phone va phoneCanon bilan bir xil, aks holda server qo'ng'iroq qilsa bo'ladi degan «+0998 …»
+//   havolasiz qolardi; mustaqil tekshiruv), aks holda 9 xonali — O'zbekiston (998 qo'shiladi). '+7 903 157 11' (chala xorijiy, 9 raqam)
+//   O'zbekiston raqamiga aylanib, begona odamga havola bo'lmasin (phoneCanon qoidasi; mustaqil tekshiruv).
 function salesPartDigits(s){ s=String(s||''); let c=s.replace(/\D/g,''); const intl=/^[^0-9]*\+/.test(s) || c.slice(0,2)==='00';
   if(c.slice(0,2)==='00') c=c.slice(2);
+  if(intl) c=c.replace(/^0+/,'');
   if(!intl && c.length===9) c='998'+c;
   return c; }
 // valid === false yoki qo'ng'iroq qilib bo'lmaydigan raqam — kartadagi yozuv (server faqat raqamga o'xshagan qismlarini qaytaradi): bir katakda

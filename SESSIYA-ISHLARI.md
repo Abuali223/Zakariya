@@ -2710,6 +2710,41 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
      jadvallar sinovi (18 -> 19). Mutatsiyalar: 22 ta (yangi qoidaning har bir qismi + avvalgi qoidalar) — har birini mos tekshiruv ushladi.
   6. *Muhit hodisasi:* tekshiruvchilardan biri o'z yordamchi funksiyasida xato bilan `rm -f /dev/null` ishlatgan — brauzer to'plami (16 o'tish
      yashil, 526/526) shu joyda to'xtadi; /dev/null tiklandi (mknod), to'plam qayta ishga tushiriladi. Kod bilan bog'liq emas.
+- **7-mustaqil tekshiruv (44c8dc5 ga; 2026-11-23; katakni o'qish + sahifa, RPC / oila raqami / huquqlar / rls-initplan; 7 topilma tasdiqlandi,
+  rad etilgani yo'q):**
+  1. *(jiddiy) Harfli so'z ikki raqam guruhini ajratmasdi:* «ish: 123-45-67 (ichki 12)», «pasport AA 0123456 kv 12», «12 yosh 0123456» — valid=true
+     «+998…» (sahifada ogohlantirishsiz tel: havolasi); aka-uka kartalarida pasport katagi to'g'ri raqamni yashirardi. Endi harfli so'z —
+     qat'iy ajratuvchi («,» kabi); butun bo'lakni qo'shish (ikki bo'sh joy / qator uzilishi orqali) faqat «sof» bo'lakda (raqamlar orasida
+     «—», «№» kabi belgi yo'q) va bo'lak «+» bilan boshlansa yoki hech bir raqam guruhi 4 xonadan uzun bo'lmasa («15  0123456» — qo'shilmaydi).
+  2. *(o'rtacha) So'zga yopishgan «+CC»:* «tel+999 …», «ota-+44 …» — so'z bilan birga tashlanib, qolgan 9 raqam +998 havolasi bo'lardi (begona
+     abonent). Endi «+» doim yangi raqam boshlaydi (oldidagi belgi bilan orasi — yumshoq ajratuvchi; «01 234 56 78 +44 …» — ikki raqam);
+     yolg'iz davlat kodi («+999  01 234 56 78») keyingi «+»siz bo'lakcha bilan bitta xalqaro raqam deb o'qiladi.
+  3. *(o'rtacha) NBSP / ingichka bo'sh joy:* raqam va izoh orasida bo'lsa raqam yo'qolardi. Endi ko'rinadigan Unicode bo'sh joylar — bo'sh joy,
+     Unicode qator / xatboshi ajratuvchisi — qator uzilishi; eni nol belgi — bo'sh joy emas (katak qanday ko'rinsa, shunday).
+  4. *(kichik) 100 belgi chegarasi raqam o'rtasiga tushsa:* kesilgan bo'lak boshqa raqam bo'lib havola qilinardi. Endi kesilgan bo'lak keyingi
+     qat'iy chegaragacha (ko'pi bilan yana 100 belgi) o'qiladi; chegara topilmasa — oxirgi bo'lakcha tashlanadi, qolganlari faqat alohida
+     (qator-qator yozilgan raqamlar yo'qolmaydi).
+  5. *(kichik) Sahifa «+0998 …» / «00 0 44 …» qismini havola qilmasdi* (server qo'ng'iroq qilsa bo'ladi degan): salesPartDigits endi «+» / 00
+     dan keyingi nollarni ham tashlaydi (app.tg_phone va phoneCanon kabi).
+  6. *(o'rtacha) Oila raqami:* izohli katakdagi ikkinchi ota-onaning raqami («+998 00 300 00 02 (2-uy)») butun katak kanonigi bilan
+     solishtirilgani uchun tanilmay, haqiqiy raqamni yashirardi. Endi «bu ikkinchi ota-onaning raqamimi» (fp_mom, mpt 5-daraja, fpf) —
+     katakdagi qo'ng'iroq qilinadigan raqam kanonigi (cc) bo'yicha; daraja va soni teng ikki raqamdan toza yozilgani ustun.
+  7. *(kichik) Tezkor yo'l 100 belgi chegarasini bilmasdi* — o'qilmaydigan uzun katak aka-uka kartasidagi raqamni yashirardi. Endi tezkor yo'l
+     sales_nums bilan aynan bir xil: 100 belgigacha, faqat raqam / qavs / chiziqcha / bitta bo'sh joy, `app.sales_part_ok`.
+  - *O'zim topgan qo'shimchalar (tuzatishlarni tekshirishda):* (a) «+»siz 9 xonali, bir necha guruhli raqam — birinchi guruhi 2 xonali yoki
+    3 xonali (oxiri «000» emas) bo'lsagina (`app.sales_part_ok`): «pasport AA 1234567 15 uy» (avvalgi «ma'lum chegara»), «0671712 12»,
+    «120 000 000 so'm» — endi raqam emas; (b) butun bo'lakni qo'shish cheklangach, tezkor yo'l bilan sales_nums o'rtasida farq paydo bo'lardi
+    («15  0123456» ro'yxatda «foydalanib bo'ladi», ochilganda — niqob) — tezkor yo'l toraytirildi; (c) tahrir vositasi «U+2028» kabi
+    belgilarni faylga ko'rinmas belgi qilib yozgan edi — ASCII ko'rinishiga qaytarildi.
+  - *Solishtirish (tekshiruvchilarning 64 310 ta to'qima katagi, kutilgan raqamlar bilan):* noto'g'ri havola qilingan katak 665 -> 241,
+    topilgan to'g'ri raqam 50 820 -> 60 044 (44c8dc5 -> yangi). Qolgan noto'g'ri holatlar — ma'lum chegara turlari: «15 0123456» (operator
+    kodi tekshirilmaydi), «00» bilan boshlangan qism (to'qima ma'lumotdagi «(00) …» soxta operatori xalqaro prefiks bilan to'qnashadi),
+    ataylab tuzilgan «12:34:56:789» / «№ 012 345 678». Oilalar ro'yxatining tezkor yo'li va sales_nums — 58 446 + 92 000 katakda farq 0;
+    server qaytargan har bir raqam haqiqiy sahifa kodida (salesTel) havola — 59 563 katakda yetishmagan / ortiqcha havola 0.
+  - *Sinovlar:* test-sales-role H36–H42 (harfli so'z, «+», Unicode, 100 belgi, oila raqami, tezkor yo'l, teng daraja) — 95 -> 102; 44c8dc5
+    da yangi tekshiruvlar yiqiladi. sales.test.mjs 19 -> 20 («+0…» havola). Mutatsiyalar: SQL 55 ta + sahifa 1 ta — har birini mos
+    tekshiruv ushladi. Tezlik (statistika yangilangan toza bazada; oilalar ro'yxati): oddiy maktab ~0,30 s (44c8dc5 ~0,29), hammasi
+    xorijiy ~0,38 s (~0,36), hamma katak izohli ~0,64 s (~0,53), katta oila ~0,41 s (~0,38).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
