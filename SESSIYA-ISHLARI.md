@@ -2903,6 +2903,53 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     izohli ~0,59 s, katta oila ~0,39 s (44e1049 bilan farq 0–3%); katakni o'qish — to'qima korpus ~5,3 s (bir xil), adversar ~4,1 s
     (+5%). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 109/109, qolgan sonlar avvalgidek);
     jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari avvalgidek).
+- **11-mustaqil tekshiruv (67b0e73 ga; 2026-11-23):** uch yo'nalish (katakni o'qish, oila raqami, RPC / huquqlar / zanjir / tezlik);
+  katakni o'qish va RPC — topilma yo'q; oila bo'yicha 2 topilma tasdiqlandi (har birini ikkinchi tekshiruvchi va men yangi bazalarda
+  aynan qayta chiqardik):
+  1. *(o'rtacha; qisman 67b0e73 regressiyasi) otaning raqami faqat qo'ng'iroq qilib bo'lmaydigan yozuvda:* ota ismli 2–3 kartada otaning
+     raqami «447700900198» («+»siz xorijiy) yoki «… 99dadasi» (so'zga yopishgan) — 4-daraja; ona raqami esa ona ismli barcha kartalarda va
+     bitta kartaning ota katagida — «foydalanib bo'ladigan» 3-daraja oldin turib, ota ham, ona ham ona raqami bo'lardi (eng og'ir).
+     67b0e73 dagi 8-qoida tuzatishi «+998⏎00 006⏎22 98», «02  003  01  99» kataklarini to'g'ri o'qiy boshlagani uchun shunday oilalar
+     ko'paydi (44e1049 bu katakni niqoblab, otaning raqamini ko'rsatardi); ona raqami odatdagi yozuvda bo'lsa — barcha versiyalarda. Endi
+     telefon ko'rinishidagi (998 + 9 raqam yoki ma'lum davlat kodi va uzunligi), kamida ikki ota ismli kartadagi 4-daraja raqami 3-darajaga
+     qo'shiladi va ona ismli barcha kartalarning (bo'sh ona katagi sanalmaydi) ona katagida turgan, ona ustunida ko'proq raqam (aniq ona
+     raqami) bilan avval ota ismli kartalardagi soni (har qanday yozuvda), so'ng net bo'yicha raqobat qiladi; boshqa 3-daraja raqamlari
+     (umumiy raqam, ona ustunini to'liq egallamagan) — avvalgidek oldin; 6-daraja (ona ismli katakda ham turgan) ko'tarilmaydi.
+  2. *(past; avvaldan bor — 1c08011, 44e1049, 67b0e73) ochilganda ko'rsatiladigan asl yozuv:* raqamlar ketma-ketligi bir xil, lekin
+     turlicha o'qiladigan kataklar («+44 7700 900193; +998 01 483 17 93» — ikki raqam, «(44) 7700 900193; 998014831793» — faqat ona
+     raqami, «… 93dadasi» — faqat ota raqami) bo'lsa, asl yozuv faqat butun katak kanonigi bo'yicha (eng ko'p uchragani, teng bo'lsa
+     alifbo bo'yicha birinchisi) olinib, ota qatorida faqat ona raqami tel: havola (ro'yxat niqobi ham onaniki), ona qatorida — ota raqami
+     chiqardi. Endi tanlangan raqamning kataklaridan avval barcha raqamlari qo'ng'iroq qilinadigan katak, so'ng qo'ng'iroq raqami tanlangan
+     raqamniki bo'lgan katak (foydalanib bo'ladigan, keyin har qanday — qo'ng'iroq qilinmaydigan g'olib niqoblanadi, ikkinchi ota-onaga
+     havola bo'lmaydi) ko'rsatiladi.
+  - *Ma'lum chegara (qo'shildi):* (1) dagi ko'tarish faqat ona ustunini to'liq egallagan raqamga qarshi: ona ismi yozilmagan, otaning
+    raqami ona ismli katakda ham turgan, ona ismli katakda boshqa raqam (izohli yozuv ham) bor yoki ota raqami bitta ota ismli kartada
+    bo'lsa — avvalgidek; kartalarning ko'pchiligida raqamlar almashib, otaning raqami ona ismli barcha kataklarda turgan bo'lsa — u ona
+    raqami deb olinadi (14-chegaraning ona tomoni). (2) da guruh vakili — eng kichik qo'ng'iroq kanonigi: bir xil raqamlar ketma-ketligi
+    turli raqamlarga o'qiladigan kataklar guruhida ko'rsatiladigan yozuv shu raqamniki — ota-onaning ikkinchi raqami yoki kamdan-kam
+    ikkinchi ota-onaning raqami bo'lishi mumkin (guruhni qo'ng'iroq kanonigi bo'yicha bo'lish yoki eng ko'p uchragan raqamni olish
+    tekshiruvchilar korpuslarida yangi eng og'ir xato berdi).
+  - *Sinovlar:* H50 (11 oila: 4 xato + 7 qo'riqlovchi — otaning qo'ng'iroq raqami ko'p kartada, ona ustunini to'liq egallamagan raqam,
+    «0», bitta karta, 2:2 umumiy raqam, bo'sh ona katagi, 6-daraja), H51 (8 oila: 5 xato + 3 qo'riqlovchi — guruh vakili bo'yicha
+    tanlashning ikki xatosi, zaxira tanlovi; ro'yxat niqobi) — 109 -> 111 (kutilgan 110); 67b0e73 da H50 va H51 yiqiladi. Mutatsiyalar:
+    166 ta (avvalgi 127 tasi + yangi shartlarning har biri: ko'tarish, fct > 1, telefon ko'rinishi, 6-daraja, pasaytirish kaliti va uning
+    har bir sharti, mt, A9 varianti; asl yozuv qoidalari (1)–(4), pick fc / mc, fpf) — birinchi yurishda 15 tasi omon qoldi; uchtasi
+    (bo'sh ona katagi, 6-daraja, zaxira tanlovi) uchun H50 / H51 ga 3 oila qo'shildi; endi 154 tasi ushlanadi, 10 tasi ekvivalent
+    (avvalgi 4 tasi; «998» sharti sales_intl_ok ichida; asl yozuvning (2) qoidasi (3) bilan bir xil — qo'ng'iroq qilinmaydigan katakning
+    qo'ng'iroq kanonigi butun katak kanonigiga teng — ota va ona tomonida 2 tadan; (4) qoidaga yetib bo'lmaydi), 2 tasi natijani
+    o'zgartirmaydi: telefon ko'rinishi o'rniga sales_valid (36 korpusda ham baytma-bayt bir xil — hujjat raqamiga o'xshash uzun raqamni
+    ko'tarmaslik uchun ehtiyot sharti) va fpf guruhida min o'rniga max (zaxira guruhida turli qo'ng'iroq raqamlari bo'lishi kerak).
+  - *Solishtirish (67b0e73 ga nisbatan, yangi toza bazalarda):* 9-raund korpuslari (46 ta, 74 000 oila) — 45 tasi baytma-bayt bir xil,
+    1 eng og'ir xato tuzaldi, yangi xato 0; yozuv shakliga atalgan korpuslar (36 ta, 42 624 oila) — eng og'ir 10 949 -> 10 892,
+    yo'qolgan 2 601 -> 2 598 (56 eng og'ir va 4 yo'qolgan -> to'g'ri, 1 eng og'ir -> yo'qolgan), yangi xato 0; 11-raund tekshiruvchisining
+    korpuslari (115 ta, 124 322 oila) — eng og'ir 25 141 -> 24 966, yo'qolgan 5 261 -> 5 271 (166 eng og'ir va 7 yo'qolgan -> to'g'ri,
+    13 eng og'ir -> yo'qolgan); yangi 5 eng og'ir — 3 tasi raqamlar almashgan oila (otaning raqami ona ismli barcha kataklarda), 1 tasi
+    bo'lingan ildizda 14-chegara, 1 tasi 1:1 teng; yangi 5 yo'qolgan raqam (biri eng og'ir bo'lib qolgan oilada) va 1 yo'qolgan -> eng
+    og'ir — 3 tasi guruh vakili (yuqoridagi chegara), 1 tasi avvaldan uchinchi raqam tanlangan oila (otaning raqami ona ismli katakda
+    ham — 3-daraja; eski asl yozuv tasodifan otaning katagini ko'rsatardi), 2 tasi 14-chegara. Tezlik (toza bazada, 5 marta navbatma-navbat, eng kichigi): oilalar ro'yxati oddiy
+    ~0,31 s, xorijiy ~0,40 s, izohli ~0,61 s, katta oila ~0,40 s — 67b0e73 dan 0–5% farq. To'liq regressiya (dev, qayta zanjir, jonli,
+    poyga, node) — yashil (test-sales-role 111/111, qolgan sonlar avvalgidek); jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH
+    qatorlari avvalgidek).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

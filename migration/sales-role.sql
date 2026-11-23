@@ -561,7 +561,7 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
   --   cc — katakdagi qo'ng'iroq qilinadigan raqamning kanonigi (katakda bitta shunday raqam bo'lsa — uniki: «+998 00 300 00 02 (2-uy)» ->
   --   998003000002; aks holda butun katakniki): «bu ikkinchi ota-onaning raqamimi» (fp_mom, mpt 5-daraja, fpf) shu bilan solishtiriladi —
   --   aks holda izohli katakdagi ona raqami otaning haqiqiy raqami bilan teng darajada turib, uni yashirardi (mustaqil tekshiruv). Guruhlash,
-  --   asl yozuv va valid — butun katak kanonigi (fp / mp) bo'yicha, o'zgarmaydi.
+  --   valid — butun katak kanonigi (fp / mp) bo'yicha, o'zgarmaydi; asl yozuv — shu kanonikli kataklardan, qo'ng'iroq kanonigi bilan (frw / mrw).
   --   Har bir NOYOB yozuv uchun bir marta (aka-uka kartalarida bir xil yozuv takror hisoblanmaydi). Tezlik uchun: 100 belgigacha, faqat
   --   raqam / qavs / chiziqcha / bitta bo'sh joylardan iborat (boshida «+» bo'lishi mumkin), butunligicha raqam sifatida o'qiladigan
   --   (app.sales_part_ok) katak — darhol «ha»: sales_nums bunday katakni bitta bo'lak, bitta bo'lakcha deb o'qib, aynan shu raqamni beradi
@@ -628,6 +628,16 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
   --   raqamlardan iborat boshqa katak bilan qo'shilmaydi.
   --   fct / fnm — guruhlangan yozuvlar ustida oyna yig'indisi: fpt ikkinchi marta o'qilsa, Postgres uni materiallashtirib, katta oilada
   --   ro'yxatni ~25% sekinlashtirardi.
+  --   4-darajadagi raqam telefon ko'rinishida (998 + 9 raqam yoki ma'lum davlat kodi va uzunligi) va kamida ikki ota ismli kartada (fct > 1)
+  --   bo'lsa — 3-darajaga qo'shiladi: ona ismli BARCHA kartalarning ona katagida turgan va ona ustunida ko'proq (fmn > fct) raqam — aniq ona
+  --   raqami (mt — ona ismli, ona katagi bo'sh bo'lmagan kartalar soni) — undan avval ota ismli kartalarda ko'proq turgani (fct), so'ng
+  --   fmn − fct bo'yicha. Aks holda «447700900198» ota ismli ikki kartada, ona raqami bitta kartaning ota katagida bo'lsa ham
+  --   «foydalanib bo'ladigan» 3-daraja oldin turib, ota ham, ona ham ona raqami bo'lardi (eng og'ir; 8-qoida bilan endi o'qiladigan
+  --   «+998⏎00 006⏎22 98», «02  003  01  99» kataklarida 44e1049 ga nisbatan regressiya — 11-mustaqil tekshiruv). Ona ismli kartada boshqa
+  --   raqam ham bo'lsa yoki raqam ota ustunida ona ustunidagidan kam bo'lmasa — o'zgarmaydi (ism dalili bir tomonlama emas); ona ismi umuman
+  --   yozilmagan, otaning raqami ona ismli katakda ham turgan (6-daraja — ko'tarilmaydi) yoki bitta ota ismli kartada bo'lsa ham o'zgarmaydi.
+  --   Ma'lum chegara: kartalarning ko'pchiligida raqamlar almashib, otaning raqami ona ismli barcha kataklarda turgan bo'lsa — u ona raqami
+  --   deb olinadi (14-chegaraning ona tomoni).
   fcn as (select fam.root, fam.fc, count(*) as nc from fam where fam.fp <> '' group by fam.root, fam.fc),
   mcn as (select fam.root, fam.mc, count(*) as nc from fam where fam.mp <> '' group by fam.root, fam.mc),
   fpc as (select distinct on (x.root) x.root, x.fp, x.fc
@@ -636,7 +646,10 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
                     from (select fpt.root, fpt.fp, fpt.t, min(fpt.fc) as fc, min(fpt.fmn) as fmn, count(*) as n
                             from fpt group by fpt.root, fpt.fp, fpt.t) g) x
             left join fcn on fcn.root = x.root and fcn.fc = x.fc
-           order by x.root, x.t, case when x.t = 2 and app.sales_valid(x.fc) then -x.fnm else 0 end, x.fmn - x.fct, x.fmn,
+            left join (select mom.root, sum(mom.nm) as nm from mom where mom.mc <> '' group by mom.root) mt on mt.root = x.root
+           order by x.root, case when x.t = 4 and x.fct > 1 and (x.fc ~ '^998[0-9]{9}$' or app.sales_intl_ok(x.fc)) then 3 else x.t end,
+                    case when x.t = 4 or (x.t = 3 and x.fmn > x.fct and x.fmn >= mt.nm) then -x.fct end nulls first,
+                    case when x.t = 2 and app.sales_valid(x.fc) then -x.fnm else 0 end, x.fmn - x.fct, x.fmn,
                     fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
   -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan;
   --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki
@@ -659,25 +672,36 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
   -- Ota raqami hali bo'sh (masalan aka-uka kartalarida raqamlar almashib yozilgan, ota ismi yo'q): tanlangan ona raqamidan boshqa
   --   foydalanib bo'ladigan «ota telefoni» — ikkala raqam ham chiqsin, ona raqami (butun katak yoki qo'ng'iroq kanonigi bo'yicha)
   --   otaniki bo'lib takrorlanmasin.
-  fpf as (select distinct on (x.root) x.root, x.fp
+  fpf as (select distinct on (x.root) x.root, x.fp, x.fc
             from (select fam.root, fam.fp, min(fam.fc) as fc, count(*) as n from fam left join mpc on mpc.root = fam.root
                    where fam.fok and fam.fp <> coalesce(mpc.mp, '') and fam.fc <> coalesce(mpc.mc, '') group by fam.root, fam.fp) x
             left join fcn on fcn.root = x.root and fcn.fc = x.fc
            order by x.root, fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
-  pick as materialized (select nm.root, nm.fn, coalesce(fpc.fp, fpf.fp, '') as fp, nm.mn, coalesce(mpc.mp, '') as mp
+  pick as materialized (select nm.root, nm.fn, coalesce(fpc.fp, fpf.fp, '') as fp, coalesce(fpc.fc, fpf.fc, '') as fc,
+                                nm.mn, coalesce(mpc.mp, '') as mp, coalesce(mpc.mc, '') as mc
              from nm left join fpc on fpc.root = nm.root left join mpc on mpc.root = nm.root left join fpf on fpf.root = nm.root),
-  -- Asl yozuv (ochganda qaysi qismlar ko'rsatilishini aniqlaydi): tanlangan raqam yozilgan kartalardagi foydalanib bo'ladigan (fok / mok)
-  --   yozuvlardan eng ko'p uchragani, bunday yozuv bo'lmasa — umuman eng ko'p uchragani. Aks holda bir kartada «+44 7700 900120», ikkitasida
-  --   «447700900120» bo'lsa, «+»siz yozuv tanlanib, raqam niqoblanardi (mustaqil tekshiruv). Har oila uchun alohida so'rov emas, bitta
-  --   guruhlash (katta maktabda ham tez).
-  frw as (select f.root, f.fp, coalesce(mode() within group (order by f.fr) filter (where f.fok), mode() within group (order by f.fr)) as fr
-            from fam f where f.fp <> '' and f.fr <> '' group by f.root, f.fp),
-  mrw as (select f.root, f.mp, coalesce(mode() within group (order by f.mr) filter (where f.mok), mode() within group (order by f.mr)) as mr
-            from fam f where f.mp <> '' and f.mr <> '' group by f.root, f.mp)
+  -- Asl yozuv (ochganda qaysi qismlar ko'rsatilishini aniqlaydi): tanlangan raqam (butun katak kanonigi fp / mp) yozilgan kartalardan —
+  --   (1) katakdagi barcha raqamlar qo'ng'iroq qilinadigan katak (katak kanonigi = qo'ng'iroq kanonigi: toza yoki ikki raqamli), (2) qo'ng'iroq
+  --   kanonigi tanlangan raqamniki (fc / mc) bo'lgan foydalanib bo'ladigan katak, (3) shu kanonikli har qanday katak; har birida eng ko'p
+  --   uchragani. Aks holda bir kartada «+44 7700 900120», ikkitasida «447700900120» bo'lsa, «+»siz yozuv tanlanib, raqam niqoblanardi
+  --   (mustaqil tekshiruv); raqamlar ketma-ketligi bir xil, lekin turlicha o'qiladigan kataklardan (so'zga yopishgan / «+»siz qism, boshqa
+  --   darajadagi katak) alifbo bo'yicha birinchisi olinib, ota qatorida faqat ona raqami (ona qatorida — ota raqami) chiqardi (11-mustaqil
+  --   tekshiruv). Har oila uchun alohida so'rov emas, bitta guruhlash (katta maktabda ham tez). Ma'lum chegara: guruh vakili (fc / mc) —
+  --   guruhdagi eng kichik qo'ng'iroq kanonigi; bir xil raqamlar ketma-ketligi turli raqamlarga o'qiladigan kataklar guruhida ko'rsatiladigan
+  --   yozuv shu raqamniki — u ota-onaning ikkinchi raqami yoki (kamdan-kam) ikkinchi ota-onaning raqami bo'lishi mumkin; guruhni qo'ng'iroq
+  --   kanonigi bo'yicha bo'lish yoki eng ko'p uchragan raqamni olish boshqa oilalarda yangi eng og'ir xato berdi (11-mustaqil tekshiruv).
+  frw as (select p.root, coalesce(mode() within group (order by f.fr) filter (where f.fok and f.fc = f.fp),
+                                  mode() within group (order by f.fr) filter (where f.fok and f.fc = p.fc),
+                                  mode() within group (order by f.fr) filter (where f.fc = p.fc), mode() within group (order by f.fr)) as fr
+            from pick p join fam f on f.root = p.root and f.fp = p.fp where f.fp <> '' and f.fr <> '' group by p.root),
+  mrw as (select p.root, coalesce(mode() within group (order by f.mr) filter (where f.mok and f.mc = f.mp),
+                                  mode() within group (order by f.mr) filter (where f.mok and f.mc = p.mc),
+                                  mode() within group (order by f.mr) filter (where f.mc = p.mc), mode() within group (order by f.mr)) as mr
+            from pick p join fam f on f.root = p.root and f.mp = p.mp where f.mp <> '' and f.mr <> '' group by p.root)
   select left(encode(sha256(convert_to(k.salt || '|sales-v3|' || p.root, 'UTF8')), 'hex'), 32), p.fn, p.fp, p.mn, p.mp, frw.fr, mrw.mr
     from pick p
-    left join frw on frw.root = p.root and frw.fp = p.fp
-    left join mrw on mrw.root = p.root and mrw.mp = p.mp
+    left join frw on frw.root = p.root
+    left join mrw on mrw.root = p.root
     cross join (select s.salt from app.sales_secret s where s.id = 1) k
 $$;
 -- Bugun shu foydalanuvchi ochgan oilalar soni.
