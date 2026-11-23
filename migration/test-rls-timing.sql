@@ -408,15 +408,19 @@ create policy np_null on public.zz_np for select using (app.owns_child(sid) or (
 create policy np_coal on public.zz_np for select using (coalesce(app.owns_child(sid) and app.is_staff(), true));
 create policy np_eqf  on public.zz_np for select using (app.owns_child(sid) = false);
 create policy np_pos  on public.zz_np for select using (app.owns_child(sid) or app.is_staff());
+-- bog'liq subso'rov ichidagi rol funksiyasi (Supabase uslubi) — o'raladi (har qator uchun chaqirilmaydi)
+create policy np_corr on public.zz_np for select using ((select app.is_staff() or app.owns_child(sid)));
 \set iqror_chain 1
 \ir rls-initplan.sql
-select zz.chk('G07 rls-initplan: darvoza faqat monoton policy''ga (NOT / CASE / IS NULL / COALESCE / = false — darvozasiz; AND / OR — darvozali); qayta ishga tushirish boshqa policy''ni o''zgartirmaydi',
+select zz.chk('G07 rls-initplan: darvoza faqat monoton policy''ga (NOT / CASE / IS NULL / COALESCE / = false — darvozasiz; AND / OR — darvozali); bog''liq subso''rovdagi rol funksiyasi o''raladi; qayta ishga tushirish boshqa policy''ni o''zgartirmaydi',
   (select string_agg(polname || '=' || (pg_get_expr(polqual, polrelid) ~ '^\(\( SELECT app\.rls_gate_')::text, ',' order by polname)
-     from pg_policy where polrelid = 'public.zz_np'::regclass)
-  || ' | ' || coalesce((select string_agg(o.polrelid::regclass::text || '.' || o.polname, ',' order by 1)
+     from pg_policy where polrelid = 'public.zz_np'::regclass and polname <> 'np_corr')
+  || ' | np_corr: ' || coalesce((select (pg_get_expr(polqual, polrelid) ~ '\( SELECT app\.is_staff\(\) AS is_staff\)')::text
+                                   from pg_policy where polrelid = 'public.zz_np'::regclass and polname = 'np_corr'), '-')
+  || ' | ' || coalesce((select string_agg(o.polrelid::regclass::text || '.' || o.polname, ',' order by o.polrelid::regclass::text, o.polname)
                           from zz_pol0 o join pg_policy p on p.polrelid = o.polrelid and p.polname = o.polname
                          where pg_get_expr(p.polqual, p.polrelid) is distinct from o.q or pg_get_expr(p.polwithcheck, p.polrelid) is distinct from o.w), '-'),
-  '^np_case=false,np_coal=false,np_eqf=false,np_not=false,np_null=false,np_pos=true \| -$');
+  '^np_case=false,np_coal=false,np_eqf=false,np_not=false,np_null=false,np_pos=true \| np_corr: true \| -$');
 select count(*)::text as yozilgan from zz.res \gset
 select zz.chk('ZZ yozilgan tekshiruvlar soni = kutilgan', :'yozilgan', '^' || :'kutilgan' || '$');
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || got || ' | want~' || pat end from zz.res order by n;

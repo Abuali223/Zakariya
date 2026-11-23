@@ -434,3 +434,19 @@ test('Direktor oynasi (4-tekshiruv): openUserEditor: ismga tegilmasa — ism yoz
   assert.equal(D.writes.length, 1);
   assert.deepEqual([D.writes[0].firstName, D.writes[0].lastName, D.writes[0].name], ['Ali', 'Valiyev', 'Ali Valiyev']);
 });
+
+test('Raqam qoidasi (5-tekshiruv): migration/sales-role.sql (app.sales_intl_ok) davlat kodlari va uzunliklari — admin.html PHONE_CC / PHONE_LEN bilan AYNAN bir xil', () => {
+  const SQL = readFileSync(new URL('../../migration/sales-role.sql', import.meta.url), 'utf8');
+  const a = SQL.indexOf('create or replace function app.sales_intl_ok'), b = a >= 0 ? SQL.indexOf('$$;', a) : -1;
+  assert.ok(a >= 0 && b > a, 'app.sales_intl_ok topilmadi');
+  const src = SQL.slice(a, b);
+  const ctx = {}; vm.runInNewContext(PHONE, ctx);
+  assert.ok(ctx.PHONE_CC && ctx.PHONE_LEN, 'admin.html PHONE-CANON bloki o‘qilmadi');
+  const lenM = src.match(/'(\{"[^']*\})'::jsonb/);
+  assert.ok(lenM, 'PHONE_LEN jsonb topilmadi');
+  assert.deepEqual(JSON.parse(lenM[1]), JSON.parse(JSON.stringify(ctx.PHONE_LEN)));
+  const arrs = [...src.matchAll(/left\(d, (\d)\) = any\('\{([0-9,]+)\}'::text\[\]\)/g)].map(m => ({ n: +m[1], keys: m[2].split(',') }));
+  assert.deepEqual(arrs.map(x => x.n), [3, 2, 1], 'davlat kodi eng uzunidan boshlab tekshirilsin (phoneCc kabi)');
+  for (const x of arrs) for (const k of x.keys) assert.equal(k.length, x.n, `${k} — ${x.n} xonali ro‘yxatda`);
+  assert.deepEqual(arrs.flatMap(x => x.keys).sort(), Object.keys(ctx.PHONE_CC).sort());
+});

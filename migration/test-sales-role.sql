@@ -35,7 +35,7 @@
 \pset format unaligned
 \pset tuples_only on
 -- yozilishi kerak bo'lgan tekshiruvlar soni (ZZ dan tashqari): yangi tekshiruv qo'shilsa — oshiriladi
-\set kutilgan 92
+\set kutilgan 94
 do $g0$ begin
   if exists (select 1 from public.students) then
     raise exception 'test-sales-role.sql: o''quvchilar jadvali bo''sh emas — faqat bo''sh sinov bazasida ishga tushiring';
@@ -1083,6 +1083,44 @@ select coalesce(zz.rv('Sinov Ota Xorijb') #>> '{father,phone}', '-') || ' | ' ||
 rollback to savepoint hx8;
 select zz.chk('HX8 «+» xorijiy raqam JSHSHIRdan ustun; asl yozuv — foydalanib bo''ladiganlardan; 00 bilan xorijiy raqam; ismdagi «—» va 60 belgi', :'hx8',
   '^\+447700900039 \| \+447700900040 \| \+447700900041 true \| Sinov Ota Tire Uzunism Uzunism Uzunism Uzunism Uzunism Uzuni$');
+
+-- H34 (5-tekshiruvdan keyingi qayta ko'rik): katakni o'qish qoidasi (app.sales_nums) — raqam ichida tasodifiy ikki bo'sh joy / qator uzilishi
+--   va izoh (yoki oxirida vergul) — butun raqam (avval niqob chiqardi); xorijiy raqam ichida ikki bo'sh joy — kesilgan bo'lak emas, butun
+--   raqam; VT ham ajratuvchi, «v» harfi — yo'q; vergulsiz «pasport AA1234567 15-uy» va vergulli «AA 1234567, 15» — raqam emas; «(2-uy)» izohli
+--   raqam — raqam qismi; «tel:+998…» — raqam; uzunligi noto'g'ri / davlat kodi noma'lum xorijiy raqam — niqob; ro'yxat niqobi.
+select string_agg(t.n || '=' || coalesce(app.sales_parent('S', app.tg_phone(t.x), false, t.x) ->> 'phone', '-') || '/'
+                  || coalesce(app.sales_parent('S', app.tg_phone(t.x), false, t.x) ->> 'valid', '-'), ' | ' order by t.n)
+       || ' || ' || (select string_agg(coalesce(app.sales_parent('S', app.tg_phone(y), true, y) ->> 'phone', '-'), ' | ' order by k)
+                       from unnest(array['+998 00 123 45 67 (2-uy)', '+44 7700 9001  21', 'pasport AA1234567 15-uy']) with ordinality u(y, k)) as h34
+  from unnest(array['+998 00 123  45 67 (otasi)', '+998 00 123  45 67,', E'+998 00 100\n20 47 otasi', '+44 7700 9001  21', '+44 7700 900121  2',
+                    E'+998 00 111 00 31\x0B+998 00 111 00 32', '+998 00 111 00 31 v +998 00 111 00 32', 'pasport AA1234567 15-uy', '+998 00 123 45 67 (2-uy)',
+                    'tel:+998001234567', '+44 7700 90012', '+999 123 456 7890', '(01) 234-56-78, 2-uy', 'pasport AA 1234567, 15',
+                    '(01) 234-56-78  (02) 345-67-89']) with ordinality t(x, n) \gset
+select zz.chk('H34 katakni o''qish: ikki bo''sh joy / qator uzilishi + izoh — butun raqam; xorijiy raqam bo''lagi chiqmaydi; VT ajratadi, «v» — yo''q; pasport — raqam emas; uzunligi / kodi noto''g''ri xorijiy — niqob',
+  :'h34', '^1=\+998001234567/true \| 2=\+998001234567/true \| 3=\+998001002047/true \| 4=\+447700900121/true \| 5=\+44 7700 900121/false \| '
+       || '6=\+998 00 111 00 31, \+998 00 111 00 32/false \| 7=\+998 00 111 00 31, \+998 00 111 00 32/false \| 8=\*\*\* \*\* 15/false \| '
+       || '9=\+998 00 123 45 67/false \| 10=\+998001234567/true \| 11=\*\*\* \*\* 12/false \| 12=\*\*\* \*\* 90/false \| 13=01 234-56-78/false \| '
+       || '14=\*\*\* \*\* 15/false \| 15=01 234-56-78, 02 345-67-89/false \|\| \+998 00 \*\*\* \*\* 67 \| \*\*\* \*\* 21 \| \*\*\* \*\* 15$');
+
+-- H35 — savepoint ichida: aka-uka kartalarida vergulsiz pasport yozuvi («pasport AA0222222 22-uy» — raqamlari 9 ta, avval «+998022222222»
+--   bo'lib «foydalanib bo'ladigan» hisoblanardi va saralashda to'g'ri raqamdan oldin tushardi) — to'g'ri raqamni yashirmaydi; raqam ichida
+--   ikki bo'sh joy va izohli katak — foydalanib bo'ladi (aka-uka kartasidagi «+»siz xorijiy raqamdan ustun).
+savepoint h35;
+set local session_replication_role = replica;
+insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order") values
+  ('t21','IQ-T21','Sinov Bola T21',3,'M','uz','',2461), ('t22','IQ-T22','Sinov Bola T22',4,'M','uz','',2462),
+  ('t23','IQ-T23','Sinov Bola T23',3,'M','uz','',2463), ('t24','IQ-T24','Sinov Bola T24',4,'M','uz','',2464);
+insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2") values
+  ('t21','Sinov Ota Hujjatb','Sinov Ona Hujjatb','pasport AA0222222 22-uy','+998 00 333 00 61'),
+  ('t22','Sinov Ota Hujjatb','Sinov Ona Hujjatb','02 345 67 82','+998 00 333 00 61'),
+  ('t23','Sinov Ota Bostir','Sinov Ona Bostir','+44 7700 9001  23 (otasi)','+998 00 333 00 62'),
+  ('t24','Sinov Ota Bostir','Sinov Ona Bostir','447700900123','+998 00 333 00 62');
+set local session_replication_role = origin;
+select coalesce(zz.rv('Sinov Ota Hujjatb') #>> '{father,phone}', '-') || ' | '
+       || coalesce((zz.rv('Sinov Ota Bostir') #>> '{father,phone}') || ' ' || (zz.rv('Sinov Ota Bostir') #>> '{father,valid}'), '-') as h35 \gset
+rollback to savepoint h35;
+select zz.chk('H35 aka-uka: vergulsiz pasport yozuvi to''g''ri raqamni yashirmaydi; ikki bo''sh joyli izohli xorijiy raqam — «+»siz yozuvdan ustun',
+  :'h35', '^\+998023456782 \| \+447700900123 true$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

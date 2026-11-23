@@ -2682,6 +2682,34 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
      oila ~0,28 s (avval ~0,53 s); sun'iy eng yomon holat (hamma raqam xorijiy, ona katagida izoh) ~0,75 s (avval ~0,68 s). Izohsiz xorijiy
      raqam uchun ham tez yo'l. Eslatma: sinov bazasida orqaga qaytarilgan yozuvlardan keyin autovacuum jadvalni «bo'sh» deb belgilasa,
      rejalashtiruvchi sekin reja tanlaydi (eski va yangi kodda bir xil, 7–35 s) — jonli bazada statistika haqiqiy, bu holat bo'lmaydi.
+- **5-tekshiruv tuzatishlarining qayta ko'rigi (2026-11-20…23; 255c825 ga ikki tekshiruvchi — sotuvchi va zanjir / RLS; haftalik limit
+  tufayli yakuniy hisobot bermay to'xtagan, oraliq natijalari qayta ishlab chiqildi va har biri qayta tasdiqlandi):**
+  1. *Katakni o'qish qoidasi qayta tuzildi (5-tekshiruvdagi 1–2-band o'rniga; app.sales_whole / app.sales_segs olib tashlandi):* 255c825 da
+     (a) raqam ichida tasodifiy ikki bo'sh joy / qator uzilishi va izoh (yoki oxirida vergul) bo'lsa raqam niqoblanardi (b50debd ko'rsatardi);
+     (b) xorijiy raqam ichida ikki bo'sh joy bo'lsa uning kesilgan bo'lagi («+44 7700 9001») «raqam» bo'lib chiqardi; (c) vergulsiz «pasport
+     AA1234567 15-uy» baribir «+998123456715» (havola) bo'lardi; (d) `E'\v'` Postgres'da VT emas, «v» harfi — «v» ajratuvchi bo'lib, VT
+     ajratilmasdi (mening xatoim). Endi `app.sales_nums(katak)` — qo'ng'iroq qilib bo'ladigan raqamlar ro'yxati: qator uzilishi / TAB / VT / FF —
+     yumshoq ajratuvchi; harfdan keyingi «:» «.» «=» — bo'sh joy («tel:+998…»); harf va raqam aralash so'z (pasport, «2-uy», «15-уй») — izoh,
+     raqamlari hech qayerga qo'shilmaydi; «,» «;» «/» «|» — qat'iy ajratuvchi (bo'laklar hech qachon qo'shilmaydi); bo'lak ichida ikki bo'sh
+     joy — bo'lakchalardan biri raqam bo'lsa faqat shular, aks holda butun bo'lak. valid — katakda bitta raqam va katakdagi barcha raqamlar
+     shuniki. Ma'lum chegara: harf alohida so'zda, raqam guruhlari bitta bo'sh joy bilan yozilgan hujjat raqami («pasport AA 1234567 15 uy»).
+  2. *Xorijiy raqam — sahifa bilan bir xil qoida:* `app.sales_intl_ok` — davlat kodi (3 -> 2 -> 1 raqam) va uzunlik (PHONE_LEN; ro'yxatda yo'q
+     davlat — 10–15 raqam), jadvallar admin.html PHONE_CC / PHONE_LEN bilan aynan bir xil (sales.test.mjs solishtiradi; bitta qiymat
+     o'zgartirilsa — yiqiladi). Uzunligi noto'g'ri yoki kodi noma'lum xorijiy raqam — niqob.
+  3. *Tezlik:* ichma-ich chaqirilgan SQL funksiyalar (sales_nums -> sales_dialable -> tg_phone / sales_intl_ok) har tashqi chaqiruvda qayta
+     rejalashtirilardi va RPC'larda JIT har chaqiruvda kompilyatsiya qilardi (sinovda ro'yxat sahifasi 3–4 s). Endi to'rt yordamchi —
+     plpgsql (reja keshlanadi, rls-plpgsql.sql kabi), uchala RPC — `set jit = off`, sales_parent'da sales_nums bir marta (OFFSET 0), katak bahosi
+     har NOYOB yozuv uchun bir marta (rawok). Natija (statistika yangilangan bazada; oilalar ro'yxati): oddiy maktab ~0,3 s (255c825 ~0,32,
+     b50debd ~0,33); hammasi xorijiy ~0,4 s (1,05 / ~1,0); hamma katak izohli ~0,53 s (1,74 / 0,65); 6 000 kartali katta oila ~0,4 s (~0,38 /
+     ~0,8). test-sales-role 1 daq 49 s -> 2,8 s.
+  4. *rls-initplan:* yangi istisno faqat rlsg_ann_visible5 ning admin argumentiga — boshqa policy'dagi «( SELECT (app.is_admin() OR …))» (bog'liq
+     subso'rov) avvalgidek o'raladi (aks holda rol funksiyasi har qator uchun chaqirilardi). Policy matnlari 255c825 bilan aynan bir xil
+     (dev 283, jonli 260), 2- va 3-o'tish — 0 o'zgarish. G07 — np_corr; G07 dagi «order by 1» (agregatda doimiy bo'yicha saralardi) tuzatildi.
+  5. *Sinovlar:* test-sales-role H34 (15 holat: katakni o'qish, xorijiy raqam qoidasi, ro'yxat niqobi), H35 (aka-uka: vergulsiz pasport yozuvi
+     to'g'ri raqamni yashirmaydi; ikki bo'sh joyli izohli xorijiy raqam ustun) — 93 -> 95; 255c825 da ikkalasi yiqiladi. sales.test.mjs —
+     jadvallar sinovi (18 -> 19). Mutatsiyalar: 22 ta (yangi qoidaning har bir qismi + avvalgi qoidalar) — har birini mos tekshiruv ushladi.
+  6. *Muhit hodisasi:* tekshiruvchilardan biri o'z yordamchi funksiyasida xato bilan `rm -f /dev/null` ishlatgan — brauzer to'plami (16 o'tish
+     yashil, 526/526) shu joyda to'xtadi; /dev/null tiklandi (mknod), to'plam qayta ishga tushiriladi. Kod bilan bog'liq emas.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).

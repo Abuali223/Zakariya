@@ -127,9 +127,12 @@ begin
      and p.pronargs = 0 and p.provolatile in ('s', 'i');
   if v_ok is null then return; end if;
   -- (?<!SELECT ) — allaqachon o'ralgani ( «( SELECT app.is_admin() AS is_admin)» ) qayta o'ralmasin; rlsg_ann_visible5 ning admin
-  --   argumenti «( SELECT (app.is_admin() OR app.is_zavuch()))» ham allaqachon InitPlan — ikkinchi o'tishda ham o'zgarmaydi (fayl haqiqatan
-  --   idempotent: 2- va 3-o'tish hech bir policy'ni o'zgartirmaydi — test-rls-timing G07; 5-mustaqil tekshiruv).
-  v_re := '(?<!SELECT )(?<!SELECT \()(?<!SELECT \(app\.is_admin\(\) OR )app\.(' || array_to_string(v_ok, '|') || ')\(\)';
+  --   argumenti «rlsg_ann_visible5(( SELECT (app.is_admin() OR app.is_zavuch()))» ham allaqachon InitPlan — ikkinchi o'tishda ham o'zgarmaydi
+  --   (fayl haqiqatan idempotent: 2- va 3-o'tish hech bir policy'ni o'zgartirmaydi — test-rls-timing G07; 5-mustaqil tekshiruv). Istisno faqat
+  --   shu argumentga: boshqa policy'dagi «( SELECT (app.is_admin() OR owner = app.uid()))» (bog'liq subso'rov) avvalgidek o'raladi — aks holda
+  --   rol funksiyasi har qator uchun chaqirilardi (G07 np_corr).
+  v_re := '(?<!SELECT )(?<!rlsg_ann_visible5\(\( SELECT \()(?<!rlsg_ann_visible5\(\( SELECT \(app\.is_admin\(\) OR )app\.('
+          || array_to_string(v_ok, '|') || ')\(\)';
 
   -- Ifodalar TO'LIQ nomlar bilan (public./app.) chiqsin va shunday qayta o'qilsin — search_path'ga bog'liq emas.
   perform set_config('search_path', 'pg_catalog', true);
