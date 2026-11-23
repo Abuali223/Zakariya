@@ -2745,6 +2745,46 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     da yangi tekshiruvlar yiqiladi. sales.test.mjs 19 -> 20 («+0…» havola). Mutatsiyalar: SQL 55 ta + sahifa 1 ta — har birini mos
     tekshiruv ushladi. Tezlik (statistika yangilangan toza bazada; oilalar ro'yxati): oddiy maktab ~0,30 s (44c8dc5 ~0,29), hammasi
     xorijiy ~0,38 s (~0,36), hamma katak izohli ~0,64 s (~0,53), katta oila ~0,41 s (~0,38).
+- **8-mustaqil tekshiruv (2ea2b95 ga; 2026-11-23; katakni o'qish + sahifa, oila raqami / RPC / huquqlar / zanjir; 5 topilma — har biri
+  alohida tekshiruvchida tasdiqlandi, rad etilgani yo'q):**
+  1. *(o'rtacha) 8-qoida to'liq O'zbekiston raqamiga yopishardi:* «+2⏎998 00 765 43 21» — valid=true begona «+299 …» havolasi (+299 — PHONE_LEN da
+     yo'q kod, 10–15 raqam qabul qilinadi: begona abonent; aka-uka kartasida toza yozilgan raqamni ham yashirardi), «+1⏎998 …», «+998⏎998 …» —
+     raqam yo'qolardi (44c8dc5 da o'qilardi). Endi o'zi to'liq O'zbekiston raqami (998 + 9 raqam) bo'lgan bo'lakcha yolg'iz kodga qo'shilmaydi.
+  2. *(o'rtacha) 8-qoida raqamni yo'qotardi:* kod bo'lakchasi «bostirilib», butun bo'lakni qo'shish esa boshqa raqam, «:» / «—» yoki «00» li kod
+     bilan to'silgani uchun «+998⏎01 234 56 78⏎+998⏎01 234 56 79», «00998⏎012345678», «0044  7700900123», «+998:⏎01 234 56 78» — raqam yo'q edi
+     (44c8dc5 da o'qilardi). Endi yolg'iz kod va keyingi «+»siz bo'lakcha bitta bo'lakchaga birlashtiriladi (kod yozuvi o'rniga); birlashgan
+     bo'lakcha keyingisiga qo'shilmaydi («+4. 4) — 7700 900123» — raqam yo'q, zanjir emas).
+  3. *(o'rtacha) «+» dan keyingi «0…» mahalliy raqam:* «01 234 56 78 + 02 345 67 89 (15)» — 7-raund tuzatishlaridan keyin sahifa
+     begona «+234 …» havolasini berardi (nol tashlanib). Endi «+» dan keyingi birinchi guruh «0» va raqam bilan boshlansa — faqat
+     «+0998 …» xatosi raqam (app.sales_part_ok); «+0 44 …», «+00 44 …» — avvalgidek o'qiladi.
+  4. *(kichik, avvaldan bor) Kesilgan raqam + «+7»:* «+998 00 123 45 6⏎+7», «+998 00 123 45 6 +1», «+44 7700 90012⏎+1» — butun bo'lak qo'shilib
+     valid=true begona raqam bo'lardi (4-qoidaga zid; 100 belgi oynasida 44c8dc5 dan keyin paydo bo'lgan shakli ham bor). Endi keyingi
+     bo'lakchalardan biri «+» bilan boshlansa (yolg'iz koddan keyingisi bundan mustasno: «+998 + 02-111-22-33») — butun bo'lak qo'shilmaydi;
+     aka-uka kartasida bunday katak to'g'ri raqamni ham yashirmaydi.
+  5. *(o'rtacha) Oila: bitta kartada raqamlar almashgan, ota raqami izohli:* 7-raunddagi qo'ng'iroq kanonigi bilan otaning izohli raqami ham
+     «ona raqami» (fp_mom) bo'lib, 3-darajada otaning har bir izohli yozuvi alohida sanalar, toza yozilgan ona raqami esa «toza» deb ustun chiqib,
+     ota va ona to'liq almashardi (valid=true havola boshqa ota-onaga; 44c8dc5 da to'g'ri edi). Endi daraja ichida: ota uchun — kamroq ona
+     katagida turgani (fmn), so'ng shu ustunda ko'proq kartada yozilgani (fcn, har qanday yozuv), so'ng shu yozuv soni; ona uchun — ona
+     ustunidagi soni (mcn). Ikki kartali 1:1 almashuvni hech qaysi qoida hal qila olmaydi (ma'lum chegara).
+  - *O'zim topgan qo'shimchalar:* (a) «+2 998 00 765 43 21» (bitta bo'sh joy; uchala commitda ham) — valid=true «+299 …» havolasi; endi
+    kanonigi 1–3 raqam + to'liq O'zbekiston raqami bo'lgan xorijiy yozuv raqam emas (niqob); (b) teng darajadagi «toza yozilgan» raqam — endi
+    butun katak bitta to'g'ri raqam (katak kanonigi qo'ng'iroq kanonigiga teng): «+2⏎998 …» kabi katakning kanonigi ham «to'g'ri» ko'rinib,
+    alifbo tartibida toza yozilgan raqamdan oldin tushardi; (c) ota raqami ikki kartada ikki xil izoh bilan, maktab raqami bitta kartada toza —
+    endi ota raqami (fcn) ustun (44c8dc5 da ham maktab raqami chiqardi).
+  - *Ma'lum chegara (qo'shildi):* «+» doim xalqaro raqam boshlaydi — undan keyingi raqamlar to'g'ri xorijiy raqam bo'lsa, boshqa raqamdan
+    keyin ham shunday o'qiladi («01 234 56 78 + 44 7700 900123» -> +44 7700 900123, yozilganidek); yolg'iz kod va «+» bilan boshlangan bo'lakcha
+    birga o'qilishi mumkin («+44⏎+7700 900123»).
+  - *Solishtirish:* tekshiruvchilarning 64 310 ta to'qima katagida natija har bir katak bo'yicha o'zgarmadi (241 / 60 044 — bu shakllar
+    korpusda yo'q); tekshiruvchilar yozgan adversar generatorlarda (40 000 katak) yig'ma tuzatish ularning alohida tasdiqlagan tuzatishlari
+    bilan aynan bir xil (farq 0), 2ea2b95 dan 171 katakda farq qiladi — tuzatilgan holatlar. Tezkor yo'l = sales_nums (58 446 + 92 000 katak,
+    farq 0); server qaytargan raqam = sahifa havolasi (59 563 + 38 824 katak, yetishmagan / ortiqcha havola 0).
+  - *Sinovlar:* test-sales-role H37 (+16 holat), H42 (+1 oila), H43 (8-qoida birlashtirish, 12 holat), H44 («+0…», «+2 998 …», 14 holat),
+    H45 (oila almashuvi va teng daraja, 9 oila) — 102 -> 105; 2ea2b95 da 5 ta tekshiruv yiqiladi. Mutatsiyalar: SQL 82 ta (yangi qoidalarning
+    har bir qismi + avvalgi qoidalar) — 81 tasini mos tekshiruv ushladi; qolgan bittasi (birlashtirishda kod yozuvini ro'yxatdan olib
+    tashlamaslik) ekvivalent: chiqishda baribir faqat o'qiladigan bo'lakchalar olinadi. Tezlik (toza bazada, 5 marta navbatma-navbat, eng
+    kichigi; oilalar ro'yxati): oddiy maktab ~0,30 s (2ea2b95 ~0,29), hammasi xorijiy ~0,36 s (~0,36), hamma katak izohli ~0,56 s (~0,57), katta
+    oila ~0,37 s (~0,37) — «+» / 00 yozuvining kanonik raqami app.tg_phone ni qayta chaqirmasdan olinadi (aks holda hammasi xorijiy ~+12%).
+    To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil; jonli versiyadan yangilash mashqi — 0 xato.
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
