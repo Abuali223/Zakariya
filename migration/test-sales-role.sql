@@ -1450,9 +1450,13 @@ select zz.chk('H45 aka-uka: bitta kartada raqamlar almashgan, ota raqami izohli 
 --   keyingi bo'lakchaning birinchi raqam guruhi bilan davom etadi: «+99⏎8 00 …», «+4. 4) - 7700 …»; nollardan iborat kod — xalqaro prefiks).
 --   Aks holda tasodifiy «+10» / «+3» / «+440» / «00 10» mahalliy raqamga qo'shilib boshqa davlat raqami (+1 001 …, +30 …, +44 0…) valid=true
 --   yoki tel: havolasi bo'lardi; butun bo'lak ham qayta qo'shilmaydi («+10⏎01 234 56⏎78»); bo'lakcha to'liq 9 xonali mahalliy raqam bo'lsa,
---   kod uning birinchi guruhi bilan davom etmaydi («+5⏎02 345 67 89» — 3 xonali kod emas); «+44⏎+7700 900123» — ma'lum chegara (birga). 7-qoida: «+»siz yozilgan 998 kodidan keyingi «+»
---   bo'lakcha («998 +00 123 45 67», «(998) +01 234 56 78») — butun bo'lak qo'shiladi (2ea2b95 o'qigan, 1c08011 niqoblardi); kesilgan raqam
---   va «+7», boshqa 1–3 raqamli bo'lakcha («15 +00 …», «— (15). +(44)⏎00 999» — 2ea2b95 da begona +998 15 … havolasi) — qo'shilmaydi.
+--   yoki «0» bilan boshlansa, kod uning birinchi guruhi bilan davom etmaydi («+5⏎02 345 67 89» — 3 xonali kod emas, «+4⏎0 12 …» — 40 emas,
+--   «+2⏎44 7700 900» — 244 emas);
+--   «+44⏎+7700 900123» — ma'lum chegara (birga). 7-qoida: «+»siz yozilgan 998 kodidan keyingi «+»
+--   bo'lakcha («998 +00 123 45 67», «(998) +01 234 56 78») — 998 birinchi bo'lakcha, bitta «+» va jami 12 raqam bo'lsa — butun bo'lak
+--   qo'shiladi (2ea2b95 o'qigan, 1c08011 niqoblardi); kesilgan «998 +00 12 34» va «998⏎998 +00 12 34» (998 birinchi bo'lakcha emas) — oldiga
+--   yana 998 qo'shilib begona raqam bo'lardi (e34959a, 10-mustaqil tekshiruv), kesilgan raqam va «+7», boshqa 1–3 raqamli bo'lakcha
+--   («15 +00 …», «99 +8 00 …», «— (15). +(44)⏎00 999» — 2ea2b95 da begona +998 15 … havolasi) — qo'shilmaydi.
 select string_agg(t.n || '=' || coalesce(app.sales_parent('S', app.tg_phone(t.x), false, t.x) ->> 'phone', '-') || '/'
                   || coalesce(app.sales_parent('S', app.tg_phone(t.x), false, t.x) ->> 'valid', '-'), ' | ' order by t.n)
        || ' || ' || coalesce(app.sales_parent('S', app.tg_phone('+10 ' || chr(8212) || ' 01 234 56 78'), true, '+10 ' || chr(8212) || ' 01 234 56 78') ->> 'phone', '-') as h46
@@ -1463,13 +1467,18 @@ select string_agg(t.n || '=' || coalesce(app.sales_parent('S', app.tg_phone(t.x)
                     '+0' || E'\n' || '44 7700 900123', '+9' || E'\n' || '9' || E'\n' || '8 00 123 45 67',
                     '998 +00 123 45 67', '(998) +01 234 56 78', '998  +00 123 45 67', '998 + 00 123 45 67', '998 +44 7700 900123',
                     '+998 00 123 45 6' || E'\n' || '+7', chr(8212) || ' (15). +(44)' || chr(8232) || '00 999', '15 +00 123 45 67',
-                    '+44' || E'\n' || '+7700 900123', '+5' || E'\n' || '02 345 67 89']) with ordinality t(x, n) \gset
+                    '+44' || E'\n' || '+7700 900123', '+5' || E'\n' || '02 345 67 89', '998 +00 12 34', '(998)' || E'\n' || '+01 23 45',
+                    '01' || E'\n' || '998' || E'\n' || '+00 12', '(998). + 998. +00 12 34', '+4' || E'\n' || '0 12 345 67 89',
+                    '998' || E'\n' || '+00 123' || E'\n' || '45 67', '99 +8 00 123 45 67', '998' || E'\n' || '998 +00 12 34',
+                    '+2' || E'\n' || '44 7700 900']) with ordinality t(x, n) \gset
 select zz.chk('H46 8-qoida: yozilgan kod — raqamning davlat kodi (tasodifiy «+10» / «+3» / «+440» mahalliy raqam bilan begona xorijiy raqam bo''lmaydi); bo''lingan kod, «+0» — o''qiladi; «998 +00 …» — o''qiladi',
   :'h46', '^1=\*\*\* \*\* 78/false \| 2=01 234 56 78/false \| 3=02 345 67 89/false \| 4=\*\*\* \*\* 78/false \| 5=\*\*\* \*\* 78/false \| '
        || '6=\*\*\* \*\* 78/false \| 7=\*\*\* \*\* 78/false \| 8=\*\*\* \*\* 78/false \| 9=\+998012345678/true \| 10=\+998001234567/true \| '
        || '11=\+447700900123/true \| 12=\+447700900123/true \| 13=\+998001234567/true \| 14=\+998001234567/true \| 15=\+998012345678/true \| '
        || '16=\+998001234567/true \| 17=\+998001234567/true \| 18=\+44 7700 900123/false \| 19=\*\*\* \*\* 67/false \| '
-       || '20=\*\*\* \*\* 99/false \| 21=\*\*\* \*\* 67/false \| 22=\+447700900123/true \| 23=\*\*\* \*\* 89/false \|\| \*\*\* \*\* 78$');
+       || '20=\*\*\* \*\* 99/false \| 21=\*\*\* \*\* 67/false \| 22=\+447700900123/true \| 23=\*\*\* \*\* 89/false \| '
+       || '24=\*\*\* \*\* 34/false \| 25=\*\*\* \*\* 45/false \| 26=\*\*\* \*\* 12/false \| 27=\*\*\* \*\* 34/false \| 28=\*\*\* \*\* 89/false \| '
+       || '29=\+998001234567/true \| 30=\*\*\* \*\* 67/false \| 31=\*\*\* \*\* 34/false \| 32=\*\*\* \*\* 00/false \|\| \*\*\* \*\* 78$');
 
 -- H47 — savepoint ichida (aka-uka kartalari, 9-mustaqil tekshiruv, 1c08011 ga). Ota raqami: daraja ichida avval shu darajadagi kartalar
 --   soni (ona raqami bilan bir xil raqamlarda — ona katagidagi soni minus ota katagidagi soni, teng bo'lsa kamroq ona katagida turgani),

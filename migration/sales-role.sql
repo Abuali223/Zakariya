@@ -264,10 +264,10 @@ end $$;
 --      raqam, «+», qavs, nuqta, chiziqcha va bo'sh joydan boshqa belgi yo'q («12 — 01 234 56», «12 № 01 234 56» — qo'shilmaydi) va bo'lak «+»
 --      bilan boshlangan (to'liq yozilgan raqam) yoki hech bir raqam guruhi 4 xonadan uzun emas (telefon guruhlari) — bir-biriga aloqasi yo'q
 --      guruhlar («15  0123456» — uy va shahar raqami) bitta 9 xonali «O'zbekiston raqami» bo'lib qo'shilmaydi (mustaqil tekshiruv);
---      keyingi bo'lakchalardan biri «+» bilan boshlansa (4-qoida: yangi raqam; yolg'iz davlat kodidan — «+998 + 02-111-22-33» — yoki
---      «+»siz yozilgan 998 kodidan keyingisi — «998 +00 123 45 67», «(998) +01 234 56 78» — bundan mustasno) — butun bo'lak ham
---      qo'shilmaydi: kesilgan raqam va «+7» («+998 00 123 45 6⏎+7», «+998 00 123 45 6 +1») begona valid=true raqam bo'lib o'qilmaydi
---      (mustaqil tekshiruv);
+--      keyingi bo'lakchalardan biri «+» bilan boshlansa (4-qoida: yangi raqam; yolg'iz davlat kodidan keyingisi — «+998 + 02-111-22-33»
+--      — bundan mustasno; «+»siz yozilgan 998 kodidan keyingisi faqat 998 birinchi bo'lakcha, bo'lakda bitta «+» va jami 12 raqam
+--      bo'lsa — «998 +00 123 45 67», «(998) +01 234 56 78») — butun bo'lak ham qo'shilmaydi: kesilgan raqam va «+7»
+--      («+998 00 123 45 6⏎+7», «+998 00 123 45 6 +1», «998 +00 12 34») begona valid=true raqam bo'lib o'qilmaydi (mustaqil tekshiruv);
 --   8) yolg'iz davlat kodi («+999», «00 999») va undan keyin (yumshoq ajratuvchi bilan) «+»siz bo'lakcha — bitta bo'lakcha, ya'ni bitta
 --      xalqaro raqam: bo'lakcha alohida O'zbekiston raqami bo'lib o'qilmaydi («+999  01 234 56 78» -> +999 012345678, kodi noma'lum — raqam
 --      yo'q); katakda boshqa raqam bo'lsa ham, kod va raqam orasida «:» / «—» bo'lsa ham, kod «00» bilan yozilgan bo'lsa ham — o'sha raqam
@@ -276,8 +276,8 @@ end $$;
 --      raqam) bo'lgan bo'lakcha qo'shilmaydi — alohida o'qiladi («+2⏎998 00 765 43 21» -> 998 00 765 43 21, begona +299 … emas);
 --      qo'shilgan bo'lakcha keyingisiga yana qo'shilmaydi («+4. 4) — 7700 900123» -> raqam yo'q); qo'shilgan raqamning davlat kodi
 --      (app.sales_cc) yozilgan kod yoki kod va bo'lakchaning birinchi raqam guruhi («+99⏎8 00 …», «+4. 4) - 7700 …»; bo'lakcha o'zi
---      to'liq 9 xonali mahalliy raqam bo'lsa — faqat yozilgan kod) bo'lishi shart (nollardan iborat kod — «+0», «000» — xalqaro prefiks,
---      tekshirilmaydi): aks holda o'sha bo'lakcha ham, butun bo'lak ham o'qilmaydi —
+--      to'liq 9 xonali mahalliy raqam bo'lsa yoki «0» bilan boshlansa — faqat yozilgan kod) bo'lishi shart (nollardan iborat kod — «+0»,
+--      «000» — xalqaro prefiks, tekshirilmaydi): aks holda o'sha bo'lakcha ham, butun bo'lak ham o'qilmaydi —
 --      tasodifiy «+10» / «+3» / «+440» mahalliy raqamga qo'shilib boshqa davlat raqami bo'lmaydi («+10 — 01 234 56 78» -> +1 001 …,
 --      «+3⏎01 234 56 78» -> +30 … emas; mustaqil tekshiruv);
 --   9) «+» / 00 siz, 9 xonali, bir necha guruhda yozilgan bo'lakcha — birinchi guruhi 2 xonali (operator kodi) yoki 3 xonali (oxiri «000»
@@ -340,16 +340,20 @@ begin
       if lone and part !~ '^[^0-9]*\+' and regexp_replace(part, '\D', '', 'g') !~ '^(00|998[0-9]{9}$)' then
         -- 8-qoida: yolg'iz davlat kodi + «+»siz bo'lakcha — bitta bo'lakcha (kod yozuvi o'rniga); keyingisiga yana qo'shilmaydi.
         --   cd — yozilgan kod (xalqaro prefiks nollarisiz), fg — bo'lakchaning birinchi raqam guruhi (bo'lingan kod: «+99⏎8 00 …»);
-        --   bo'lakcha o'zi to'liq 9 xonali mahalliy raqam bo'lsa — faqat yozilgan kod (tasodifiy «+5» va «02 …» -> 3 xonali kod emas)
+        --   bo'lakcha o'zi to'liq 9 xonali mahalliy raqam bo'lsa yoki «0» bilan boshlansa — faqat yozilgan kod (tasodifiy «+5» va «02 …» ->
+        --   3 xonali kod emas, «+4» va «0 12 …» -> 40 emas)
         cd := ltrim(regexp_replace(prev, '\D', '', 'g'), '0');
-        fg := case when length(regexp_replace(part, '\D', '', 'g')) = 9 then '' else substring(part from '[0-9]+') end;
+        fg := case when length(regexp_replace(part, '\D', '', 'g')) = 9 or part ~ '^[^0-9]*0' then '' else substring(part from '[0-9]+') end;
         part := prev || ' ' || part;
         dps := dps[1 : cardinality(dps) - 1]; dds := dds[1 : cardinality(dds) - 1];
         prev := '';
       else
-        -- 4-qoida: «+» bilan boshlangan keyingi bo'lakcha (yolg'iz davlat kodidan yoki «+»siz 998 kodidan keyin emas) — yangi raqam:
-        --   butun bo'lak qo'shilmaydi
-        plus2 := plus2 or (cardinality(dps) > 0 and not lone and part ~ '^[^0-9]*\+' and regexp_replace(prev, '\D', '', 'g') <> '998');
+        -- 4-qoida: «+» bilan boshlangan keyingi bo'lakcha (yolg'iz davlat kodidan keyin emas) — yangi raqam: butun bo'lak qo'shilmaydi;
+        --   faqat «+»siz 998 kodi bo'lakning birinchi bo'lakchasi, bo'lakda bitta «+» va jami 12 raqam (998 + 9) bo'lsa — qo'shiladi
+        --   («998 +00 123 45 67»; «998 +00 12 34» — kesilgan raqam, oldiga yana 998 qo'shilib begona raqam bo'lmaydi)
+        plus2 := plus2 or (cardinality(dps) > 0 and not lone and part ~ '^[^0-9]*\+'
+                           and not (cardinality(dps) = 1 and regexp_replace(prev, '\D', '', 'g') = '998' and item !~ '\+.*\+'
+                                    and length(regexp_replace(item, '\D', '', 'g')) = 12));
         prev := part;
       end if;
       d := app.sales_part_ok(part);

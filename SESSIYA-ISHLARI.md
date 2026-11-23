@@ -2831,6 +2831,31 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     (~0,58), katta oila ~0,38 s (~0,37) — daraja ichidagi son guruhlangan yozuvlar ustida oyna yig'indisi bilan olinadi (alohida CTE bilan
     katta oilada ~+25% edi). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil; jonli versiyadan yangilash mashqi —
     0 xato (OGOHLANTIRISH qatorlari 8-raunddagidek).
+- **10-mustaqil tekshiruv (e34959a ga; 2026-11-23; birinchi o'tish):** katakni o'qish tekshiruvchisi 1 topilma berdi; oila va RPC
+  tekshiruvchilarining ishi konteyner qayta ishga tushganda yo'qoldi — tuzatishdan keyin uchala yo'nalish yangi commit ustida qayta
+  ishga tushirildi (natijasi quyida).
+  1. *(o'rtacha, e34959a regressiyasi) «998 +00 12 34»:* 9-raunddagi istisno (6-band) «+»siz 998 bo'lakchasidan keyingi har qanday «+»
+     bo'lakchani butun bo'lakka qo'shardi — kesilgan raqam oldiga yana 998 qo'shilib, yozilmagan raqamga valid=true / tel: havola bo'lardi
+     (1c08011 niqoblardi). Endi istisno faqat hujjatlashtirilgan shaklda: 998 — bo'lakning birinchi raqamli bo'lakchasi, bo'lakda bitta «+»
+     va jami 12 raqam (998 + 9): «998 +00 123 45 67», «(998) +01 234 56 78», «998⏎+00 123⏎45 67» o'qiladi; «998 +00 12 34»,
+     «998⏎998 +00 12 34», «(998). + 998. +00 12 34», «01⏎998⏎+00 12», «99 +8 00 123 45 67» niqoblanadi.
+  2. *(past, avvaldan bor — 1c08011 da ham; tuzatishni tekshirishda topildi) «+4⏎0 12 345 67 89»:* 8-qoida kod mosligida keyingi
+     bo'lakcha «0» bilan boshlansa ham uning birinchi guruhi kodga qo'shilardi («+4» va «0 …» -> 40 kodi, «+2⏎0 7700 900123» -> 20 kodi) —
+     begona valid=true raqam. Endi «0» bilan boshlangan bo'lakchada ham (to'liq 9 xonali bo'lakcha kabi) faqat yozilgan kod hisoblanadi;
+     bo'lingan kod («+99⏎8 00 …», «+4. 4) - 7700 …») o'zgarmadi.
+  - *Sinovlar:* H46 +9 katak (32 ta), test soni o'zgarmadi (107); e34959a da va 1c08011 da H46 yiqiladi. Mutatsiyalar: 108 ta (yangi
+    shartlarning har biri: 998 birinchi bo'lakcha, faqat 998, bitta «+», 12 raqam, «0» bilan boshlangan bo'lakcha, 9 xonali bo'lakcha) —
+    birinchi yurishda 3 tasi omon qoldi (998 birinchi bo'lakcha / faqat 998 / 9 xonali bo'lakcha shartisiz) — ular uchun H46 ga 3 katak
+    qo'shildi («998⏎998 +00 12 34», «99 +8 00 123 45 67», «+2⏎44 7700 900»); endi 107 tasi ushlanadi, qolgani — 8-raunddagi ekvivalent.
+  - *Solishtirish:* 8-qoida generatori (576 296 katak: kod yozuvi × ajratuvchi × bo'lakcha × qo'shimcha) — 1c08011 ga nisbatan yangi
+    havola 0, valid=true bo'lib qolgan katak 0, yo'qolgan 49 489 havolaning hech biri yozilgan raqam emas (kod va mahalliy raqamdan yasalgan
+    begona raqam); e34959a ga nisbatan yangi havola 0, yo'qolgani 5 217 — hammasi «0» bilan boshlangan bo'lakchadan yasalgan begona raqam
+    (20, 30, 40, 90, 290, 501 kodlari). «998 va «+» bo'lakcha» generatori (32 508 katak) — 1c08011 ga nisbatan 1 080 yangi havola, hammasi
+    yozilgan 998 + to'liq 9 raqam; boshqa yangi havola va yo'qolgani yo'q. 64 310 to'qima katak — 1c08011 bilan har bir katak bo'yicha bir
+    xil; 40 000 adversar katak — 1c08011 dan 5 tasi (9-raunddagi), e34959a dan 0; tezkor yo'l = sales_nums, server qaytargan raqam = sahifa
+    havolasi (59 563 + 38 824 qator) — farq 0. Katakni o'qish tezligi (64 310 + 40 000 katak, 5 marta navbatma-navbat, eng kichigi) —
+    e34959a bilan bir xil (~5,2 s va ~3,8 s). To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil, sonlar 9-raunddagidek;
+    jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari avvalgidek).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
