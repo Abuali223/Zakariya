@@ -569,27 +569,38 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
   --   raqam va «+» bilan boshlangan yoki faqat raqamdan iborat katak uchun sales_part_ok chaqirilmaydi — uning javobi baribir «ha» (eng
   --   ko'p uchraydigan yozuvlar, tezlik). 9 raqamdan kam katak — qo'ng'iroq qilib bo'ladigan raqami bo'lmaydi (eng qisqasi — 9 xonali
   --   mahalliy raqam).
+  --   ccs — katakda bir nechta qo'ng'iroq raqami bo'lsa, har birining kanonigi (fxo). fw — katakda ota so'zi bor («ota», «otasi», «otam», «dada»,
+  --   «dadasi», «dadam», «papa», «papasi», «papam», ularning qaratqich shakllari — «otaning», «otasining», «otasiniki» …, kirillchasi, ruscha
+  --   «отец», «отца», «папы», «папин»; «ota-ona», «ona-ota», «onasi otasi», «o'ta» (juda) — emas) va katakdagi raqamlar shu bitta raqamdan iborat
+  --   (katak kanonigi qo'ng'iroq kanonigiga teng: boshqa raqam yoki izohdagi raqam yo'q) — «+998 00 111 21 31 (otasi)», «otasi 998001112131»:
+  --   raqam otaniki deb yozilgan. Ikki raqamli yoki so'z boshqa raqamga yopishgan katak («+998 02 544 84 25, +998 00 111 22 35dadasi»)
+  --   sanalmaydi: so'z qaysi raqamniki ekani noma'lum. Raqamli (tezkor) katak — so'zsiz.
   rawok as materialized (
-    select q.raw, q.fast or cardinality(q.nums) > 0 as ok,
-           case when not q.fast and cardinality(q.nums) = 1 then app.tg_phone(q.nums[1]) else q.canon end as cc
-      from (select r.raw, r.canon, r.fast,
-                   case when r.fast or length(regexp_replace(r.raw, '\D', '', 'g')) < 9 then '{}'::text[] else app.sales_nums(r.raw) end as nums
-              from (select u.raw, u.canon,
-                           (length(u.raw) <= 100 and u.raw ~ '^[+]?[0-9() -]*$' and strpos(u.raw, '  ') = 0
-                            and ((u.canon ~ '^998[0-9]{9}$' and (left(u.raw, 1) = '+' or u.raw !~ '[^0-9]')) or app.sales_part_ok(u.raw))) as fast
-                      from (select c.fr as raw, c.fp as canon from cards c where c.fr <> ''
-                            union select c.mr, c.mp from cards c where c.mr <> '') u
-                    offset 0) r
-            offset 0) q),
+    select z.raw, z.ok, z.cc, z.ccs,
+           case when z.fast or z.n > 1 or z.cc <> z.canon then false
+                else lower(translate(z.raw, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯЎҚҒҲ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяўқғҳ')) ~ '(^|[^a-zа-яёўқғҳ])(?<!(ona|она)(si|си)?[ -]*)((ota|dada|papa)(si|m)?(ning|niki)?|(ота|дада|папа)(си|м)?(нинг|ники)?|отец|отца|папин|папы)(?![ -]*(ona|она))([^a-zа-яёўқғҳ]|$)' end as fw
+      from (select q.raw, q.fast, q.canon, cardinality(q.nums) as n, q.fast or cardinality(q.nums) > 0 as ok,
+                   case when not q.fast and cardinality(q.nums) = 1 then app.tg_phone(q.nums[1]) else q.canon end as cc,
+                   case when not q.fast and cardinality(q.nums) > 1 then array(select app.tg_phone(x) from unnest(q.nums) x) end as ccs
+            from (select r.raw, r.canon, r.fast,
+                         case when r.fast or length(regexp_replace(r.raw, '\D', '', 'g')) < 9 then '{}'::text[] else app.sales_nums(r.raw) end as nums
+                    from (select u.raw, u.canon,
+                                 (length(u.raw) <= 100 and u.raw ~ '^[+]?[0-9() -]*$' and strpos(u.raw, '  ') = 0
+                                  and ((u.canon ~ '^998[0-9]{9}$' and (left(u.raw, 1) = '+' or u.raw !~ '[^0-9]')) or app.sales_part_ok(u.raw))) as fast
+                            from (select c.fr as raw, c.fp as canon from cards c where c.fr <> ''
+                                  union select c.mr, c.mp from cards c where c.mr <> '') u
+                          offset 0) r
+                  offset 0) q
+            offset 0) z),
   fam0 as (select c.fn, c.fp, c.mn, c.mp, c.fr, c.mr, cp.root, coalesce(fo.ok, false) as fok, coalesce(mo.ok, false) as mok,
-                  coalesce(fo.cc, c.fp) as fc, coalesce(mo.cc, c.mp) as mc
+                  coalesce(fo.cc, c.fp) as fc, coalesce(mo.cc, c.mp) as mc, mo.ccs as mcs, coalesce(mo.fw, false) as mfw
              from cards c join comp cp on cp.cid = c.cid
              left join rawok fo on fo.raw = c.fr left join rawok mo on mo.raw = c.mr),
   -- fp_mom: shu oilada ona ismi yozilgan kartada ona raqami bo'lib turgan raqam (qo'ng'iroq kanonigi bo'yicha). «Ota telefoni» katagidagi
   --   bunday raqam: ota ismi yozilmagan kartada — otaniki emas; ota ismi yozilgan kartada — faqat boshqa kartalarda otaning o'z raqami
   --   bo'lmasa (masalan oilaning umumiy raqami) ishlatiladi (fpt darajalari).
   --   fmn — shu raqam ona ismi yozilgan nechta kartaning «ona telefoni»da turgani (pastda, fpc).
-  mom as (select y.root, y.mc, count(*) as nm from fam0 y where y.mn is not null group by y.root, y.mc),
+  mom as (select y.root, y.mc, count(*) as nm, bool_or(y.mfw) as fw from fam0 y where y.mn is not null group by y.root, y.mc),
   fam as (select f.*, (m.root is not null) as fp_mom, coalesce(m.nm, 0) as fmn
             from fam0 f left join mom m on m.root = f.root and m.mc = f.fc),
   -- Ism — oiladagi kartalarda eng ko'p uchragan tozalangan ism (izoh, raqam, qavs ichidagi matn — olib tashlangan; st).
@@ -636,40 +647,52 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
   --   «+998⏎00 006⏎22 98», «02  003  01  99» kataklarida 44e1049 ga nisbatan regressiya — 11-mustaqil tekshiruv). Ona ismli kartada boshqa
   --   raqam ham bo'lsa yoki raqam ota ustunida ona ustunidagidan kam bo'lmasa — o'zgarmaydi (ism dalili bir tomonlama emas); ona ismi umuman
   --   yozilmagan, otaning raqami ona ismli katakda ham turgan (6-daraja — ko'tarilmaydi) yoki bitta ota ismli kartada bo'lsa ham o'zgarmaydi.
-  --   fxo — shu raqam ota katagida, ona katagida esa boshqa telefon ko'rinishidagi raqam turgan ota ismli kartalar soni (ona katagidagi raqam
-  --   biror ota ismli kartaning ota katagida ham tursa — raqamlari almashgan karta, sanalmaydi; «0044 7700 900705 (2)» kabi izohli 13 xonali
-  --   yozuv ham emas): bunday karta raqamni otaniki deb ajratadi, u «aniq ona raqami» sifatida pasaytirilmaydi. Aks holda ona ismli
-  --   kataklarga otaning raqami yozilgan («+998 00 111 21 31 (otasi)»), onaning o'z raqami onasiz kartada bo'lgan oilada ota ismli
-  --   kartalardagi «+»siz uchinchi raqam otaniki, ota raqami esa onaniki bo'lib chiqardi (67b0e73 to'g'ri edi — 12-mustaqil tekshiruv).
-  --   Ma'lum chegara: ona ismli barcha kataklarda otaning raqami, onaning raqami faqat onasiz kartalarda va ajratuvchi karta yo'q bo'lsa,
-  --   ota katagida otanikidan kam bo'lmagan uchinchi («+»siz) raqam otaniki deb olinadi — ism dalili ikki tomonga ham ishora qiladi;
-  --   kartalarning ko'pchiligida raqamlar almashgan bo'lsa ham — otaning raqami ona raqami deb olinadi (14-chegaraning ona tomoni).
+  --   fxo — shu raqam ota katagida, ona katagida esa boshqa telefon ko'rinishidagi raqam turgan ota ismli kartalar soni (ajratuvchi karta;
+  --   ona katagida bir nechta raqam bo'lsa — har biri: kamida bittasi telefon ko'rinishida, hech biri biror ota ismli kartaning ota
+  --   katagida turmaydi, aks holda raqamlari almashgan karta; «0044 7700 900705 (2)» kabi izohli 13 xonali yozuv ham emas). Ajratuvchi
+  --   karta raqamni «aniq ona raqami» sifatida pasaytirishdan faqat biror ona ismli katakda shu raqam ota so'zi bilan yozilgan bo'lsa
+  --   himoyalaydi (mom.fw: «+998 00 111 21 31 (otasi)»). Aks holda ona ismli kataklarga otaning raqami yozilgan, onaning o'z raqami onasiz
+  --   kartada bo'lgan oilada ota ismli kartalardagi «+»siz uchinchi raqam otaniki, ota raqami esa onaniki bo'lib chiqardi (8f9925d,
+  --   12-mustaqil tekshiruv). So'zsiz ajratuvchi karta himoya emas: u doim ona ismsiz (ona ismli bo'lsa, raqam ona ustunini to'liq
+  --   egallamaydi) va ona katagida maktab yoki qarindosh raqami ham turadi — onaning raqamini ham himoyalab, ota qatorida onaning raqamini
+  --   chiqarardi (025c023; 8f9925d to'g'ri edi); ota so'zining o'zi ham himoya emas: kataklardagi tasodifiy izoh onaning raqamini himoyalab
+  --   qo'yardi; ikki raqamli ona katagi sanalmasa — «(otasi)» izohli oilada ota qatorida «+»siz uchinchi raqam, ona qatorida otaning raqami
+  --   chiqardi (13-mustaqil tekshiruv). fna — oiladagi ota ismli kartalarning ota katagidagi raqamlari (jsonb kalitlari: har karta uchun
+  --   ikkilik qidiruv; massiv bilan solishtirish ota kataklarida turli raqamlar ko'p bo'lgan katta oilada n² edi — 13-mustaqil tekshiruv;
+  --   fam bilan anti-join emas — Postgres CTE hajmini millionlab qator deb baholab, diskka bo'lingan hash qurardi); fxo faqat ona ismli
+  --   kataklarda turgan raqamlar (fp_mom) uchun — u faqat 3-darajada o'qiladi. Ma'lum chegara: ona ismli barcha kataklarda otaning raqami,
+  --   onaning raqami faqat onasiz kartalarda bo'lib, ajratuvchi karta yoki ota so'zi bo'lmasa — ota katagida otanikidan kam bo'lmagan
+  --   uchinchi («+»siz) raqam otaniki, otaning raqami ona raqami deb olinadi (ism dalili shunday; 14-chegaraning ona tomoni); kartalarning
+  --   ko'pchiligida raqamlar almashgan bo'lsa ham — shunday.
   fcn as (select fam.root, fam.fc, count(*) as nc from fam where fam.fp <> '' group by fam.root, fam.fc),
   mcn as (select fam.root, fam.mc, count(*) as nc from fam where fam.mp <> '' group by fam.root, fam.mc),
-  --   fna — oiladagi ota ismli kartalarning ota katagidagi noyob raqamlari (massiv): fam bilan anti-join emas — Postgres CTE hajmini
-  --   millionlab qator deb baholab, 2 ming kartalik ro'yxatni diskka bo'lingan hash bilan ~2 baravar sekinlashtirardi; noyob — bir xil
-  --   raqamli katta oilada har karta uchun minglab taqqoslash bo'lmasin.
-  fna as (select fam.root, array_agg(distinct fam.fc) as fcs from fam where fam.fn is not null and fam.fp <> '' group by fam.root),
+  fna as (select fam.root, jsonb_object_agg(fam.fc, true) as fcs from fam where fam.fn is not null and fam.fp <> '' group by fam.root),
   fxo as (select fam.root, fam.fc, count(*) as n from fam join fna on fna.root = fam.root
-           where fam.fn is not null and fam.fp <> '' and (fam.mc ~ '^998[0-9]{9}$' or app.sales_intl_ok(fam.mc)) and fam.mc <> fam.fc
-             and fam.mc <> all (fna.fcs)
+           where fam.fn is not null and fam.fp <> '' and fam.fp_mom
+             and exists (select 1 from unnest(coalesce(fam.mcs, array[fam.mc])) y where (y ~ '^998[0-9]{9}$' or app.sales_intl_ok(y)) and y <> fam.fc)
+             and not exists (select 1 from unnest(coalesce(fam.mcs, array[fam.mc])) y where y <> fam.fc and fna.fcs ? y)
            group by fam.root, fam.fc),
-  -- fpr / mpr — tanlangan guruhning ko'rsatiladigan raqami (guruh vakili; asl yozuv, ikkinchi tomondagi istisno va zaxira tanlov shu bilan):
-  --   bir xil raqamlar ketma-ketligi turlicha o'qiladigan kataklar guruhida (so'zga yopishgan / «+»siz qism) — ikkinchi ota-ona ustunida
-  --   (ona guruhi uchun — ota nomzodi kataklarida, fpn: otasiz kartaning ota katagidagi ona raqami sanalmaydi, fpt dagidek) kamroq
-  --   uchraydigan o'qish; ona guruhida bu teng bo'lsa — barcha kartalarning ota katagidagi soni (fcn) minus ona ismli kartalarning ona
-  --   katagidagi soni (mom) kamrog'i; so'ng guruhda ko'proq uchragani, so'ng kichigi; tartiblash (fct, fnm, fcn) — avvalgidek guruhdagi
-  --   eng kichik qo'ng'iroq kanonigi bo'yicha. Aks holda (eng kichigi ko'rsatilganda) ona ustunidagi 4:1 guruhda ham ozchilikdagi otaning
-  --   raqami ona qatorida chiqardi; faqat eng ko'p uchragani olinsa — otaning «+»siz qismi o'qilmagan ota guruhida ona raqami ota qatorida
-  --   chiqardi; ota ismi yozilmagan oilada (ota kataklarida otaning raqami, ona kataklarida ikkala raqam: «tel01 909 46 28; +998005556681»)
-  --   otaning raqami ona katagida ham bo'lgani uchun fpn da sanalmay, ona qatorida otaning raqami chiqardi; ona raqami ko'p ona ismli
-  --   kataklarda so'zga yopishgan oilada ona qatorida uchinchi raqam chiqardi (67b0e73 to'g'ri edi); ona ustunidagi barcha kartalar sanalsa
-  --   — ona ismli kartalarda ona raqami, onasiz kartalarda uchinchi raqam ko'p yozilgan oilada uchinchi raqam chiqardi (12-mustaqil
-  --   tekshiruv).
+  -- fpr / mpr — tanlangan guruhning ko'rsatiladigan raqami (guruh vakili; asl yozuv, ikkinchi tomondagi istisno va zaxira tanlov shu
+  --   bilan): bir xil raqamlar ketma-ketligi turlicha o'qiladigan kataklar guruhida (so'zga yopishgan / «+»siz qism) — ota guruhida ona
+  --   ustunidagi soni (mcn) minus ota nomzodi kataklaridagi soni (fpn: otasiz kartaning ota katagidagi ona raqami sanalmaydi, fpt dagidek)
+  --   kamrog'i; ona guruhida — ota nomzodi kataklarida kamroq uchraydigan o'qish, bu teng bo'lsa — barcha kartalarning ota katagidagi soni
+  --   (fcn) minus ona ismli kartalarning ona katagidagi soni (mom) kamrog'i; so'ng guruhda ko'proq uchragani, so'ng kichigi; tartiblash
+  --   (fct, fnm, fcn) — avvalgidek guruhdagi eng kichik qo'ng'iroq kanonigi bo'yicha. Aks holda (eng kichigi ko'rsatilganda) ona ustunidagi
+  --   4:1 guruhda ham ozchilikdagi otaning raqami ona qatorida chiqardi; faqat eng ko'p uchragani olinsa — otaning «+»siz qismi o'qilmagan
+  --   ota guruhida ona raqami ota qatorida chiqardi; ota ismi yozilmagan oilada (ota kataklarida otaning raqami, ona kataklarida ikkala
+  --   raqam: «tel01 909 46 28; +998005556681») otaning raqami ona katagida ham bo'lgani uchun fpn da sanalmay, ona qatorida otaning raqami
+  --   chiqardi; ona raqami ko'p ona ismli kataklarda so'zga yopishgan oilada ona qatorida uchinchi raqam chiqardi (67b0e73 to'g'ri edi);
+  --   ona ustunidagi barcha kartalar sanalsa — ona ismli kartalarda ona raqami, onasiz kartalarda uchinchi raqam ko'p yozilgan oilada
+  --   uchinchi raqam chiqardi (12-mustaqil tekshiruv); ota guruhida faqat ona ustunidagi soni solishtirilsa — otaning raqami «(otasi)»
+  --   izohi bilan ona kataklarida (onasiz kartalarda ham) onaning o'z raqamidan ko'p yozilgan oilada ota qatorida onaning, ona qatorida
+  --   otaning raqami chiqardi (13-mustaqil tekshiruv; 67b0e73 to'g'ri edi), barcha ota kataklari (fcn) sanalsa — onasi ro'yxatdan o'tkazgan
+  --   kartalarning «ota telefoni»dagi ona raqami ota qatoriga chiqardi.
+  fpn as (select fpt.root, fpt.fc, count(*) as nc from fpt group by fpt.root, fpt.fc),
   fpr as (select distinct on (r.root, r.fp, r.t) r.root, r.fp, r.t, r.fc
             from (select fpt.root, fpt.fp, fpt.t, fpt.fc, count(*) as k from fpt group by fpt.root, fpt.fp, fpt.t, fpt.fc) r
             left join mcn on mcn.root = r.root and mcn.mc = r.fc
-           order by r.root, r.fp, r.t, coalesce(mcn.nc, 0), r.k desc, r.fc),
+            left join fpn on fpn.root = r.root and fpn.fc = r.fc
+           order by r.root, r.fp, r.t, coalesce(mcn.nc, 0) - coalesce(fpn.nc, 0), r.k desc, r.fc),
   fpc as (select distinct on (x.root) x.root, x.fp, x.fc, fpr.fc as dfc
             from (select g.*, sum(g.n) over (partition by g.root, g.fc, case when app.sales_valid(g.fc) then g.t % 3 else g.t end) as fct,
                          sum(case when g.t in (1, 4) then g.n else 0 end) over (partition by g.root, g.fc) as fnm
@@ -679,25 +702,32 @@ language sql stable set search_path = public, app, pg_temp set jit = off as $$
             left join fpr on fpr.root = x.root and fpr.fp = x.fp and fpr.t = x.t
             left join (select mom.root, sum(mom.nm) as nm from mom where mom.mc <> '' group by mom.root) mt on mt.root = x.root
             left join fxo on fxo.root = x.root and fxo.fc = x.fc
+            left join mom mw on mw.root = x.root and mw.mc = x.fc
            order by x.root, case when x.t = 4 and x.fct > 1 and (x.fc ~ '^998[0-9]{9}$' or app.sales_intl_ok(x.fc)) then 3 else x.t end,
-                    case when x.t = 4 or (x.t = 3 and x.fmn > x.fct and x.fmn >= mt.nm and fxo.n is null) then -x.fct end nulls first,
+                    case when x.t = 4 or (x.t = 3 and x.fmn > x.fct and x.fmn >= mt.nm and (fxo.n is null or not coalesce(mw.fw, false))) then -x.fct end nulls first,
                     case when x.t = 2 and app.sales_valid(x.fc) then -x.fnm else 0 end, x.fmn - x.fct, x.fmn,
                     fcn.nc desc nulls last, x.n desc, not (app.sales_valid(x.fp) and x.fp = x.fc), x.fp),
-  -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan;
-  --   (3) noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki ota
-  --   qatorida ko'rsatiladigan qo'ng'iroq kanonigi bo'yicha). Daraja ichida — ona ustunida ko'proq kartada yozilgani (mcn, barcha
-  --   kartalar; «(otasi)» izohli yoki ikkala katakka yozilgan ona katagidagi ota raqami ona ismsiz kartalarda ham yozilgan ona raqamidan
-  --   ustun chiqmaydi), so'ng xuddi otanikidek. Ma'lum chegara: onasiz kartalarning ona katagidagi maktab / qarindosh raqami ona ismli
-  --   kartalardagi raqamdan ko'p kartada bo'lsa, u tanlanadi (ona raqami yo'qoladi) — ona tomonida shu darajadagi kartalar sonini ustun
-  --   qo'yish otaning raqamini onaniki qilib chiqarardi (9-mustaqil tekshiruv: eng og'ir xato o'rniga raqam yo'qolishi tanlangan).
+  -- Ona raqami — otanikidan farqlisi, xuddi shunday: (1) foydalanib bo'ladigan, ona ismi yozilgan karta; (2) foydalanib bo'ladigan; (3)
+  --   noto'g'ri, ona ismi yozilgan; (4) noto'g'ri; (5) otaniki bilan bir xil (oilaning yagona umumiy raqami; butun katak yoki ota qatorida
+  --   ko'rsatiladigan qo'ng'iroq kanonigi bo'yicha; ota qatorida ikki raqamli katak ko'rsatilsa — guruhning eng kichik qo'ng'iroq kanonigi
+  --   ham, 67b0e73 kabi: aks holda «(otasi)» izohli ona kataklaridagi otaning raqami ona qatoriga chiqardi; ota so'zi bu yerda hisobga
+  --   olinmaydi: kataklardagi tasodifiy izohda onaning raqami 5-darajaga tushib, ona qatorida otaning raqami chiqardi — 13-mustaqil
+  --   tekshiruv). Daraja ichida — ona ustunida ko'proq kartada yozilgani (mcn, barcha kartalar; «(otasi)» izohli yoki ikkala katakka
+  --   yozilgan ona katagidagi ota raqami ona ismsiz kartalarda ham yozilgan ona raqamidan ustun chiqmaydi), so'ng xuddi otanikidek. Ma'lum
+  --   chegara: onasiz kartalarning ona katagidagi maktab / qarindosh raqami ona ismli kartalardagi raqamdan ko'p kartada bo'lsa, u
+  --   tanlanadi (ona raqami yo'qoladi) — ona tomonida shu darajadagi kartalar sonini ustun qo'yish otaning raqamini onaniki qilib
+  --   chiqarardi (9-mustaqil tekshiruv: eng og'ir xato o'rniga raqam yo'qolishi tanlangan). Ma'lum chegara: ota qatoridagi ikki raqamli
+  --   katak guruhida eng kichik o'qish onaniki (otaning raqami so'zga yopishgan kataklarda) bo'lsa, ona qatorida otaning raqami chiqishi
+  --   mumkin (67b0e73 va 8f9925d kabi; 025c023 bunda to'g'ri edi, lekin ko'zgu ko'rinishida ona qatorida otaning raqamini ko'rsatardi —
+  --   ikkalasini farqlab bo'lmaydi).
   mpt as (select fam.root, fam.mp, fam.mc,
-                 case when fam.mp = coalesce(fpc.fp, '') or fam.mc = coalesce(fpc.dfc, '') then 5
+                 case when fam.mp = coalesce(fpc.fp, '') or fam.mc = coalesce(fpc.dfc, '')
+                           or (fpc.dfc = fpc.fp and not app.sales_valid(fpc.dfc) and fam.mc = fpc.fc) then 5
                       when fam.mok and fam.mn is not null then 1
                       when fam.mok then 2
                       when fam.mn is not null then 3
                       else 4 end as t
             from fam left join fpc on fpc.root = fam.root where fam.mp <> ''),
-  fpn as (select fpt.root, fpt.fc, count(*) as nc from fpt group by fpt.root, fpt.fc),
   mpr as (select distinct on (r.root, r.mp, r.t) r.root, r.mp, r.t, r.mc
             from (select mpt.root, mpt.mp, mpt.t, mpt.mc, count(*) as k from mpt group by mpt.root, mpt.mp, mpt.t, mpt.mc) r
             left join fpn on fpn.root = r.root and fpn.fc = r.mc

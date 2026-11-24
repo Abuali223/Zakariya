@@ -3022,6 +3022,80 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     (fxo, fpr / mpr, fpd) hisobiga; 4-tuzatishdan oldin 2,5–4 baravar edi. To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) —
     yashil (test-sales-role 111/111, qolgan sonlar avvalgidek); jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va
     holat 11-raunddagidek).
+- **13-mustaqil tekshiruv (025c023 ga; 2026-11-24):** ikki yo'nalish (oila: C2 — ajratuvchi karta, E2 — guruh vakili), har topilma
+  alohida tekshiruvchi tomonidan yangi bazalarda qayta tasdiqlandi; 4 topilma:
+  1. *(yuqori; 025c023 regressiyasi, C2) ikki raqamli ona katagi:* ajratuvchi kartaning ona katagida ikki raqam bo'lsa
+     («+998 00 222 42 37, +998 00 999 00 31», ona ikkala raqamni yozgan «M; F» yoki bitta raqam ikki marta), uning kanonigi 24 xonali
+     bo'lib, telefon ko'rinishi tekshiruvidan o'tmasdi — «(otasi)» izohli oilada ota qatorida «+»siz uchinchi raqam, ona qatorida
+     otaning raqami chiqardi (67b0e73 to'g'ri edi; tekshiruvchi generatorida 3 438 oiladan 1 578 tasi). Endi bunday katakning har bir
+     qo'ng'iroq raqami tekshiriladi: kamida bittasi telefon ko'rinishida, hech biri biror ota ismli kartaning ota katagida turmaydi.
+  2. *(o'rtacha; 025c023 regressiyasi, C2) ajratuvchi karta onaning raqamini ham himoyalardi:* ota ismli, ona ismsiz kartaning ota
+     katagida onaning raqami, ona katagida maktab / qarindosh / boshqa raqam (hatto JSHSHIR) bo'lsa — onaning raqami «aniq ona raqami»
+     sifatida pasaytirilmay, ota qatorida chiqardi (8f9925d to'g'ri edi; 3 622 tadan 2 095 oila). Ajratuvchi karta doim ona ismsiz (ona
+     ismli bo'lsa, raqam ona ustunini to'liq egallamaydi), uning ona katagida esa istalgan raqam turishi mumkin. Endi ajratuvchi karta faqat
+     biror ona ismli katakda shu raqam ota so'zi bilan yozilgan bo'lsa himoya qiladi («(otasi)», «ota», «otam», «dadasi», «papa», «papasi»,
+     qaratqich shakllari «otasining», «otaning», «otasiniki» — kirillchasi ham, ruscha «отец», «отца», «папы», «папин»; «ota-ona»,
+     «ona-ota», «onasi otasi», «o'ta» (juda) — emas; katakda boshqa raqam yoki izohdagi raqam bo'lmasa — so'z boshqa raqamga yopishgan «+998
+     02 544 84 25, +998 00 111 22 35dadasi» sanalmaydi). Ota so'zi yolg'iz ham himoya emas (ona kataklaridagi tasodifiy izoh onaning
+     raqamini himoyalardi); raqamlari almashgan yoki telefon ko'rinishida bo'lmagan ona katagi ajratmaydi.
+  3. *(yuqori; 025c023 regressiyasi, E2) ota guruhi vakili:* otaning raqami «(otasi)» izohi bilan ona kataklarida (onasiz kartalarda ham)
+     onaning o'z raqamidan ko'p yozilgan oilada vakil — ona ustunida kamroq turgan o'qish — onaning raqami bo'lib, ota qatorida onaning, ona
+     qatorida otaning raqami chiqardi; ota qatorida ikki raqamli katak bo'lsa, ona tomonida faqat shu ikki raqamli kanonik istisno qilinib,
+     «(otasi)» kataklaridagi otaning raqami ona qatoriga chiqardi (67b0e73 va 8f9925d to'g'ri edi). Endi ota guruhida — ona ustunidagi
+     soni minus ota nomzodi kataklaridagi soni kamrog'i (rad etilgan: greatest(…, 0) — Xorota ko'rinishida ikkala qator almashardi;
+     ota nomzodi kataklari o'rniga barcha ota kataklari — onasi ro'yxatdan o'tkazgan kartalarning «ota telefoni»dagi ona raqami ota
+     qatoriga chiqardi); ota qatorida ikki raqamli katak bo'lsa, guruhning eng kichik o'qishi ham ona tomonida 5-darajada (67b0e73 kabi).
+  4. *(o'rtacha; 025c023, tezlik):* fxo dagi massiv bilan solishtirish ota kataklarida turli raqamlar ko'p bo'lgan katta oilada n² edi —
+     bitta oilada 1 500 / 3 000 / 6 000 karta: 67b0e73 ga nisbatan +40% / +72% / +141%. Endi fna — jsonb kalitlari (ikkilik qidiruv),
+     fxo faqat ona ismli kataklarda turgan raqamlar uchun hisoblanadi (u faqat 3-darajada o'qiladi; natija o'zgarmaydi).
+  - *Rad etilgan variantlar (korpuslarda):* ajratuvchi kartani butunlay ota so'zi bilan almashtirish (ona kataklaridagi tasodifiy izoh
+    onaning raqamini himoyalab, 124 322 oilalik korpusda 52 yangi eng og'ir); ona tomonida ota so'zi bilan yozilgan raqamni 5-darajaga
+    tushirish — har qanday oilada (74 000 va 124 322 oilalik korpuslarda 324 / 727 yangi eng og'ir) va faqat ota qatorida ikki raqamli
+    katak bo'lganda (147 / 177); ota so'zini ona ismsiz kartalarning ona katagida yoki ota ustunida ham sanash (deyarli farqsiz: +1 / +6 −2).
+  - *Ma'lum chegara (yangilandi):* (24) ona ismli barcha kataklarda otaning raqami, onaning raqami faqat onasiz kartalarda bo'lsa —
+    ajratuvchi karta va biror katakdagi ota so'zi birga bo'lmasa — u onaniki deb olinadi (ism dalili shunday; C ga atalgan korpusda
+    025c023 ga nisbatan 27 oila, tekshiruvchilar generatorlarida 193 va 40 oila — hammasi ona ismli kataklar otaning raqamini
+    ko'rsatadigan «mFmaj» sinfi);
+    (23) ota qatoridagi ikki raqamli katak guruhida eng kichik o'qish onaniki bo'lsa (otaning raqami so'zga yopishgan kataklarda), ona
+    qatorida otaning raqami chiqishi mumkin (67b0e73 va 8f9925d kabi; 025c023 bunda to'g'ri, lekin ko'zgu ko'rinishida xato edi —
+    ikkalasini farqlab bo'lmaydi; ota so'zi bilan ajratish tasodifiy izohli korpuslarda yuzlab yangi xato berdi).
+  - *Sinovlar:* H50 +3 oila (Ikkimc, Ikkimd — ikki raqamli ajratuvchi ona katagi; Ajrat — ota so'zisiz, ajratuvchi kartada maktab raqami,
+    ona kataklarida «o'ta muhim», «Otabek», «Shota» — ota so'zi emas) va ota so'zining boshqa shakllari (Otasib «(otasining)», Xorsep
+    «(ОТАСИНИНГ)», Ikkimc «(отца)», Ikkimd «(Papasi)»); yangi H52 (7 oila: Volti, Vtort — ota guruhi vakili; Xorc, Nsb — vakil
+    kalitining variantlariga qarshi himoya; Vtob, Vtom — ikki raqamli ota katagida ona tomoni; Otaonc — «(ota-onasi)», «(onasi-otasi)» ota
+    so'zi emas); yangi H53 (6 oila: Fwsiz — ota so'zi bor, ajratuvchi karta yo'q; Fwswap — ajratuvchi bo'lishi mumkin bo'lgan kartaning ikki
+    raqamli ona katagidagi raqam ota ismli kartaning ota katagida; Fwizoh — izohli 13 xonali ona katagi; Fwyop — ota so'zi boshqa, yopishgan
+    raqamniki; Fwfp — ajratuvchi kartaning izohli ota katagi; Vtorm — Vtort ko'zgusi, ona raqami kichikroq) — test soni 113; 025c023 da
+    H50, H52, H53; 8f9925d da H50, H51, H53; 67b0e73 da H50–H53 yiqiladi.
+    Mutatsiyalar (240): 212 tasi sinovlar bilan ushlandi; 15 tasi ekvivalent (11-raunddagi 10 ta; X_fxo_shape_intl — sales_intl_ok
+    998 + 9 raqamni ham qamraydi; X_fxo_fpmom_off — fxo faqat 3-darajada o'qiladi, u fp_mom ni bildiradi; X_pj_array — bo'sh kalit
+    yo'q; H_h2_eqfp_off — qo'ng'iroq o'qishi doim valid, eng qisqa xorijiy uzunlik 10; A_fw_multi_ok — ikki raqamli ona katagining
+    kanonigi hech bir yakka ota raqamiga teng emas, amalda ekvivalent); 13 tasini hech bir sinov ajratmaydi: 13-raunddagi 10 tasi
+    (C_promo_valid, E_fpf_max, D_fpf_dfc_min, D_fpf_dfc_cross, D_fpd_mx_off, D_fpd_mc, X_fxo_fn_off, D_mpr_cross_off, D_mpr_net_first,
+    D_mpr_k_off), D_fpr_k_off (ota guruhida net kaliti teng bo'lgandagi chastota — kamdan-kam hal qiladi), H_h2_valid_off va H_h2_mp
+    (izohli raqamli ona kataklari — bunday kataklar oilaga faqat boshqa katak orqali bog'lanadi, sinov oilasi qurib bo'lmadi). Avvalgi
+    yugurishda tirik qolgan qo'riqchi shartlari (ota so'zi yolg'iz, almashuv / shakl tekshiruvi, ikki raqamli katakda almashuv, yopishgan
+    so'z, ota katagi izohli, H2 doim, so'z chegaralari, apostrof, katta harf) — endi H50 / H52 / H53 bilan ushlanadi.
+  - *Solishtirish (yangi toza bazalarda, 025c023 ga nisbatan):* 9-raund korpuslari (46 ta, 74 000 oila), yozuv shakli (36 ta, 42 624),
+    11-raund korpuslari (115 ta, 124 322) — baytma-bayt bir xil; C ga atalgan (71 ta, 28 400) — eng og'ir 8 823 -> 8 850 (27 to'g'ri ->
+    eng og'ir, yuqoridagi 24-chegara); 13-raund tekshiruvchilarining generatorlari: genD (60 ta, 24 000) — eng og'ir 15 099 -> 11 718
+    (3 574 eng og'ir -> to'g'ri; 193 -> eng og'ir, 24-chegara), genT (30 ta, 12 000) — 3 672 -> 3 661, k1m (30 ta, 12 000) — 3 783 -> 3 823
+    (40, 24-chegara). Tekshiruvchilarning 17 ta aniq oilasidan 14 tasi to'g'ri, 3 tasi (K1, 23-chegara) 67b0e73 va 8f9925d dagidek;
+    ularning RPC oilalari (Otasik, Ikkimc…Ikkime — 67b0e73 javobi; Ajrat va 4 varianti — 8f9925d javobi; K2 ko'zgulari) — to'g'ri.
+    8f9925d ga nisbatan: 9-raund va yozuv shakli korpuslari baytma-bayt bir xil; 11-raund — eng og'ir 24 966 -> 24 963; C ga atalgan —
+    8 857 -> 8 850; genD — 15 299 -> 11 718; genT — 3 657 -> 3 661 (4 oila 025c023 dan beri: otaning raqami hech qayerda yozilmagan,
+    onaning raqamiga generator tasodifan «ota» / «dadasi» so'zini yopishtirgan — ota so'zi bilan yozilgan deb olinadi); k1m —
+    3 835 -> 3 823. 67b0e73 ga nisbatan: 9-raund 11 340 -> 11 339; yozuv shakli 10 949 -> 10 892; 11-raund 25 141 -> 24 963; C ga
+    atalgan 8 870 -> 8 850; genD 13 630 -> 11 718 (4 019 eng og'ir -> to'g'ri; 2 524 yangi eng og'ir — hammasi 24-chegara, «mFmaj»);
+    genT 3 744 -> 3 661; k1m 3 783 -> 3 823 (58 yangi, 24-chegara). Ota so'zi kengaytmasi (qaratqich shakllari, ruscha, «onasi otasi»,
+    apostrof) yetti to'plamning hech birida (388 fayl) natijani o'zgartirmadi.
+    Tezlik (toza bazada, 5 marta navbatma-navbat, eng kichigi; 67b0e73 ga nisbatan): oilalar ro'yxati oddiy +2–10%, xorijiy +12%,
+    izohli +4–7%, katta oila +22–23%; sotuvchi ro'yxati +9–19%, raqam ochish +7–17%; bitta oilada 3 000 / 6 000 karta va turli ota
+    raqamlari — +12–24% (025c023 da +64–129%), raqamlari almashgan katta oila +19–23% (025c023 da +44–46%). Ota so'zi kengaytmasining
+    o'zi farqsiz (kengaytirishdan oldingi variant bilan navbatma-navbat: −9…+7%, shovqin).
+    To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 113/113, qolgan sonlar 12-raunddagidek);
+    jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 12-raunddagidek); brauzer sinovlari — 44 ta
+    o'tish, hammasi o'tdi (sotuvchi ssenariysi 15/15, ikkala dizaynda).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
