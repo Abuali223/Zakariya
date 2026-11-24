@@ -3096,6 +3096,63 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 113/113, qolgan sonlar 12-raunddagidek);
     jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 12-raunddagidek); brauzer sinovlari — 44 ta
     o'tish, hammasi o'tdi (sotuvchi ssenariysi 15/15, ikkala dizaynda).
+- **14-mustaqil tekshiruv (2a91fa9 ga; 2026-11-24):** uch yo'nalish (ajratuvchi karta va ota so'zi qo'riqchisi; ota so'zi aniqlagichining
+  o'zi; guruh vakili va ona tomonidagi istisno), har topilma alohida tekshiruvchi tomonidan yangi bazalarda qayta tasdiqlandi; 3 topilma:
+  1. *(yuqori; 2a91fa9 regressiyasi) ota haqidagi izoh ota yorlig'i deb o'qilardi:* ona ismli katakdagi «(onasi; otasi chet elda)»,
+     «(otasi vafot etgan)», «(мама, папа в России)», «(отец за границей)» kabi izohlar va boshqa yozuvdagi «ota-ona» («ota – ona» en tire
+     bilan, «ona/ota», bo'linmas bo'sh joyli «ota ona», «onasi, otasi») ota so'zi deb sanalib, ikki raqamli ajratuvchi karta bilan onaning
+     raqami pasaytirilmay, ota qatorida onaning raqami chiqardi (025c023 va 8f9925d to'g'ri edi). Endi katak sof yorliq bo'lishi kerak: ota
+     so'zidan boshqa so'z faqat «tel», «telefon», «raqami», «nomeri», «mob», «ish», «uy» kabi telefon yorlig'i (kirillchasi va ruschasi
+     ham). Haqiqiy yorliqdan keyin boshqa so'z bo'lsa ham («(otasi, ishda)», «(otasi Akmal)») — yorliq emas (ehtiyotkor tanlov: 24-chegara).
+  2. *(o'rtacha; 2a91fa9) so'zlashuvdagi «-ni» qaratqich:* «(dadasini nomeri)», «(otasini tel)», «(ДАДАСИНИ НОМЕРИ)» ota so'zi deb
+     topilmay, ajratuvchi karta himoya qilmay, ota qatorida «+»siz uchinchi raqam, ona qatorida otaning raqami chiqardi (025c023 va 67b0e73
+     to'g'ri edi). Endi «-ni» / «-ни» shakli ham ota so'zi («ota-onasini» — yo'q).
+  3. *(yuqori; 2a91fa9 regressiyasi) guruh vakili onasi ro'yxatdan o'tkazgan kartalar bilan:* onasi o'z raqamini faqat kartalarning «ota
+     telefoni»ga yozgan oilada (ona ismli kartaning ona katagida yozilmagan — fp_mom emas, shuning uchun otasiz kartalar 2-darajadagi ota
+     nomzodi) fpn ularni ham sanab, ota ismli guruhning vakili onaning raqami bo'lardi: ota qatorida onaning, ona qatorida otaning raqami
+     (025c023, 8f9925d va 67b0e73 to'g'ri edi). Endi fpr da avval shu ism sinfidagi ota nomzodi kataklari (fct kabi), teng bo'lsa — barchasi.
+  - *Rad etilgan topilma:* ona raqamiga bitta katakda ota so'zi yozilgan va ajratuvchi kartaning ona katagi ikki raqamli oila — ota so'zi
+    «bu otaning raqami» degan yozuv sifatida qabul qilinadi; xuddi shu ko'rinish teskari haqiqat bilan 13-raund korpusida bor va 2a91fa9 uni
+    tuzatgan (hujjatlangan murosa).
+  - *Ma'lum chegara (yangi / yangilandi):* (24) haqiqiy ota yorlig'idan keyin boshqa so'z bo'lsa yoki so'z aralash alifboda yozilgan bo'lsa
+    («Оtasi» — kirillcha «О» bilan) — yorliq emas, oila 24-chegaradagidek; (26) ota guruhida ikkala ota-onaning o'qishi aralash va onaning
+    ismi yozilgan barcha kartalarda faqat otaning raqami bo'lsa (ism dalili qarama-qarshi), shu ism sinfi bo'yicha tanlov 025c023 dagidek
+    onaning o'qishini olishi mumkin (2a91fa9 va 8f9925d bunda to'g'ri edi; korpuslarda bunday oila yo'q).
+  - *O'z mutatsiya tahlili (tuzatishlardan keyin):* yorliq qoidasi ota so'zi yonidagi alohida «ona» tekshiruvlarini ortiqcha
+    qildi, lekin ulardan biri «ishxona» so'zining oxirini «ona» deb o'qirdi: «(ishxona otasi)» yorliq emas, «(otasi ishxona)»
+    esa yorliq edi (so'zlar tartibiga qarab ajratuvchi karta himoya qilmay, ota qatorida onaning raqami chiqardi) — alohida tekshiruvlar
+    olib tashlandi («ona» so'zini yorliq qoidasining o'zi chiqarib tashlaydi); kirill yozuvidagi yorliqlar lotinchasiga
+    tenglashtirildi («мобил», «уяли», «ишхона»). Guruh vakilining ikki yangi kaliti (shu ism sinfida teng bo'lsa — barcha ota
+    kataklari; ota ismsiz kartalarning noto'g'ri, masalan so'zga yopishgan kataklari ham ota ismsiz sinfda) sinov bilan qoplanmagan edi —
+    H58. Korpuslarda (423 fayl) natija o'zgarmaydi.
+  - *Sinovlar:* yangi H54 (4 oila: Fwizn — «(onasi; otasi chet elda)», Fwtir — «ota – ona» en tire bilan, Fwver — «(otasi, chet elda)» —
+    yorliq emas; Fwtel — «(otasi tel)» yorliq, himoya qoladi), H55 (4 oila: Dadni — «dadasini nomeri», Otni — «otasini tel», Kirni —
+    «ДАДАСИНИ НОМЕРИ»; Otona — «ota-onasini nomeri» ota so'zi emas), H56 (2 oila: Dqs, Dqc — onasi ro'yxatdan o'tkazgan kartalar), H57 (3
+    oila: Fwish — «(ishxona - otasi)», Fwkir — «(ИШХОНА, ОТАСИ)» — yorliq; Fwapo — «(o'ta)» ota so'zi emas), H58 (2 oila: Dtie — shu ism
+    sinfida teng o'qishlar, Dqg — onasi ro'yxatdan o'tkazgan kartalarda so'zga yopishgan ona raqami) — test soni 118; 2a91fa9 da H54–H58,
+    025c023 da H50, H52–H55, H57, H58, 8f9925d da H50, H51, H53–H55, H57, H58, 67b0e73 da H50–H55, H57, H58 yiqiladi.
+    Mutatsiyalar (251): 220 tasi sinovlar bilan ushlandi; 18 tasi ekvivalent (13-raunddagi 15 ta; A_fw_bound_left va
+    A_fw_bound_right — sof yorliq qoidasida katakdagi har bir harf ketma-ketligi butun yorliq so'zi, ota so'zi faqat uning boshida turadi va
+    ota shakllari ikkala ifodada bir xil, shuning uchun so'z chegaralari ortiqcha; D_fpr_nn_t2 — 4–6-darajada (katak qo'ng'iroq
+    qilinmaydi) qo'ng'iroq kanonigi butun katak kanonigiga teng, guruhda bitta o'qish, kalit ahamiyatsiz); 13 tasini hech bir sinov
+    ajratmaydi — 13-raunddagi 13 ta. 14-raund tuzatishlarining har bir sharti (sof yorliq, yorliqlar ro'yxati, langar, «-ni» ikkala
+    ifodada va kirillchada, shu ism sinfi, barcha sinf bilan teng holat, noto'g'ri katak sinfi, alohida «ona» tekshiruvini qaytarish,
+    apostrofni olib tashlash, yangi kirill yorliqlari) — H54–H58 bilan ushlanadi.
+  - *Solishtirish (yangi toza bazalarda):* yetti korpus to'plamining (388 fayl, ~360 ming oila) hammasi 2a91fa9 bilan baytma-bayt bir xil
+    (13-raund raqamlari o'zgarmadi; yorliq qoidasi korpuslardagi ota so'zli ona kataklarining bir qismini yorliq emas qiladi, lekin birorta
+    oila natijasi o'zgarmaydi). 14-raund tekshiruvchisining generatorlari: genF (10 ta, 4 000 oila) — eng og'ir 2 269 -> 2 235 (34 eng og'ir
+    -> to'g'ri, yangi xato yo'q; 025c023 ga nisbatan qolgan 8 tasi — bo'lingan komponent yoki shu ism sinfida aniq teng, 14- / 25-chegara),
+    genE (25 ta, 10 000) — eng og'ir o'zgarmadi, 1 oila to'g'ri -> yo'qolgan (025c023 dagidek); 025c023 ga nisbatan qolganlari tekshiruvchi
+    tasnifida 23- / 14- / 25-chegara. Natijalar tekshiruvchining alohida D2 tuzatishi bilan baytma-bayt bir xil. O'z tahlilidan keyingi
+    tuzatish (alohida «ona» tekshiruvlari, kirill yorliqlari) barcha 423 faylda natijani o'zgartirmaydi.
+    Tezlik: (toza bazalarda, ikki marta 5 martadan navbatma-navbat, eng kichigi) 2a91fa9 ga nisbatan farq shovqin chegarasida
+    (to'g'ridan-to'g'ri navbatma-navbat o'lchovda −8…+9%, 14-raundning oraliq varianti ham shunday); 67b0e73 ga nisbatan — oilalar ro'yxati
+    +3–21%, sotuvchi ro'yxati +13–18%, raqam ochish +8–21%, bitta oilada 3 000 / 6 000 karta va turli ota raqamlari +17–26%, raqamlari
+    almashgan katta oila +17–26% (2a91fa9 ning o'zi shu o'lchovda +4–25%). Yorliq qoidasi faqat ota so'zi topilgan katakda tekshiriladi
+    (raqamli katak — so'zsiz).
+    To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 118/118, qolgan sonlar 13-raunddagidek);
+    jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 13-raunddagidek); brauzer sinovlari — 44 ta
+    o'tish, hammasi o'tdi (sotuvchi ssenariysi 15/15, ikkala dizaynda).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
