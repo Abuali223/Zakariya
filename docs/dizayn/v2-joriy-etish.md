@@ -69,15 +69,15 @@ Sahifa **faqat o‘qiydi**: yozuv, SMS yoki holat o‘zgarishi yo‘q; tugmalar 
 | Salomlashuv, sana, bayram/ta’til belgisi | `users` (ism), `school_holidays` (`loadHolidays`, `holIsBreak`) |
 | Bugun e’tibor talab qiladi | «Tasdiqlash» navbatlari `count()`; bugungi davomat; xodimlar kelishi; 2+ oy qarz; so‘nggi 7 kun arizalari |
 | Davomat | `attendance` jurnali (oy hujjatlari, `days[DD]`): bugun belgilangan bo‘lsa — bugungi foiz, aks holda — shu oydagi foiz. Formula bazadagi «Davomat %» bilan bir xil: (keldi + kech) / (jami − bemor − sababli). O‘quvchi kartochkasidagi «Davomat %» (butun davr) bosh sahifada ishlatilmaydi |
-| O‘quvchilar, Sinflar, Foydalanuvchilar | klassik sahifa bilan **bir xil hisob** — `dashCoreStats()` |
+| O‘quvchilar, Sinflar, Foydalanuvchilar | `dashCoreStats()` (faqat faol ro‘yxat) |
 | O‘rtacha ball | faqat bahosi bor o‘quvchilar bo‘yicha (baho yo‘qlar «0» deb hisoblanmaydi); umuman yo‘q bo‘lsa «—» |
-| To‘lovlar — joriy oy | `dashFinData()` (klassik moliya bilan bir xil): kirim, hisoblangan, qolgan; «bugun tushdi» — kassa asosida (`cashByMethod`) |
+| To‘lovlar — joriy oy | `dashFinData()`: kirim, hisoblangan, qolgan; «bugun tushdi» — kassa asosida (`cashByMethod`) |
 | Qarzdorlik | katta raqam — **muddati o‘tgan** qarz (o‘tgan oylar: 1 / 2 / 3+ oy); shu oy hali to‘lanmagani va jami alohida. Jami — «Moliya → Qarzdorlar» bilan bir xil qoida (joriy oygacha qolgan qism) |
 | Moliya, Moliyaviy oqim (6 oy) | `dashFinData()`: kirim, chiqim, sof foyda, marja, avans, xarajat va to‘lov usuli taqsimoti |
 | Xodimlar bugun | `staff`, `teachers`, `staff_checkins`, `staff_leaves` — «Xodimlar davomati» qoidalari (Kamera ID, ish kunlari, kechikish chegarasi) |
 | Tasdiqlash kutmoqda | `approvalQueuesForMe()` — Direktor navbatlari |
 | Hafta kalendari | `school_holidays` (🎉 bayram, 🏖 ta’til) + «O‘quv taqvimi (tadbirlar)» (`events`: sana, nomi) — nuqta va tanlangan kun ro‘yxati |
-| Xavf ostidagi o‘quvchilar | klassik ro‘yxat (eng past 60 tasi; tepada 4 tasi, «Hammasi» — to‘liq jadval) |
+| Xavf ostidagi o‘quvchilar | `dashCoreStats()` → `risky` (eng past 60 tasi; tepada 4 tasi, «Hammasi» — to‘liq jadval) |
 
 Kirishda ilova bo‘limni bir necha marta chizadi (eski xatti-harakat) — v2 bir necha soniya ichidagi takroriy so‘rovlarni
 birlashtiradi (`dv2Once`), shuning uchun har bir manba bir marta o‘qiladi. Animatsiya (raqamlar sanog‘i, kartalarning

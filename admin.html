@@ -2647,7 +2647,7 @@ async function renderDashboardV2(){
     getDocs(query(collection(db,'staff_checkins'), where('day','==',today))).then(s=>s.docs.map(d=>d.data()||{})),
     getDocs(query(collection(db,'staff_leaves'), where('startDay','<=',today), where('endDay','>=',today))).then(s=>s.docs.map(d=>d.data()||{})).catch(()=>[]) ])));
 
-  // ---- 1) O'quvchilar / foydalanuvchilar (klassik sahifa bilan bir xil) ----
+  // ---- 1) O'quvchilar / foydalanuvchilar (dashCoreStats) ----
   const core=await pCore; if(!alive()) return;
   if(!core.ok){ view.innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(core.e&&(core.e.code||core.e.message)||'')}</div></div>`; return; }
   const [students, teachers, enrollments, users]=core.v; cache.students=students; cache.teachers=teachers;
@@ -2677,17 +2677,17 @@ async function renderDashboardV2(){
   const kpiEl=put('dv2-kpis', `<div class="card dv2-card" id="dv2-k-att">${dv2Skel(118)}</div><div class="card dv2-card">${kScore}</div><div class="card dv2-card" id="dv2-k-pay">${dv2Skel(118)}</div><div class="card dv2-card">${kStu}</div>`);
   if(!kpiEl) return;
 
-  // Sinflar bo'yicha (klassik «Sinflar bo'yicha o'quvchilar» ma'lumoti)
+  // Sinflar bo'yicha
   put('dv2-classes', `<div class="dv2-h"><h3>Sinflar bo‘yicha</h3><span class="dv2-chip">${dv2N(C.n)} o‘quvchi · ${dv2N(C.grades.length)} parallel</span>${go('classes','Sinflar')}</div>
     ${C.grades.length?`<div class="dv2-gbars">${C.grades.map(g=>`<div class="dv2-gbar"><span>${esc(gradeName(g))}</span><div class="dv2-track"><i style="width:${pct(C.byGrade[g],C.maxG)}%"></i></div><b>${dv2N(C.byGrade[g])}</b></div>`).join('')}</div>`:'<div class="empty">Ma’lumot yo‘q</div>'}
     <div class="dv2-foot">Ta’lim tili: o‘zbek <b>${dv2N(C.uz)}</b>, rus <b>${dv2N(C.ru)}</b> · arizalar (jami): <b>${dv2N(enrollments.length)}</b></div>`);
 
-  // Foydalanuvchilar (klassik «rol bo'yicha»)
+  // Foydalanuvchilar (rol bo'yicha)
   const roleRow=(l,v)=>`<div class="dv2-gbar"><span>${esc(l)}</span><div class="dv2-track"><i style="width:${pct(v,Math.max(1,users.length))}%"></i></div><b>${dv2N(v)}</b></div>`;
   put('dv2-users', `<div class="dv2-h"><h3>Foydalanuvchilar</h3><span class="dv2-chip">${dv2N(users.length)} ta</span>${go('users','Boshqarish')}</div>
     <div class="dv2-gbars">${roleRow('Ota-ona',C.roles.parent)}${roleRow('O‘quvchi',C.roles.student)}${roleRow('O‘qituvchi',C.roles.teacher)}${roleRow('Administrator',C.roles.admin)}</div>`);
 
-  // Xavf ostidagi o'quvchilar (klassik ro'yxat: eng past 60 tasi; tepada 4 tasi, «Hammasi» — to'liq jadval)
+  // Xavf ostidagi o'quvchilar (dashCoreStats().risky: eng past 60 tasi; tepada 4 tasi, «Hammasi» — to'liq jadval)
   { const top=C.risky.slice(0,4), rest=C.risky.slice(0,60);
     const row=r=>{ const g=Number(r.s.grade)||0; return `<div class="dv2-li"><span class="dv2-av">${esc(String(r.s.name||'?').trim().charAt(0).toUpperCase()||'?')}</span><div class="dv2-li-m"><b>${esc(r.s.name||'')}</b><span>${esc(gradeName(g))} ${esc(r.s.classLetter||r.s.track||'')} · ${esc(r.rs.join(', '))}</span></div><button type="button" class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></div>`; };
     const full=rest.map(r=>{ const g=Number(r.s.grade)||0; return `<tr><td data-label="ID">${esc(r.s.studentId||r.s._id)}</td><td data-label="Ism">${esc(r.s.name||'')}</td><td data-label="Sinf">${gradeName(g)} ${esc(r.s.classLetter||r.s.track||'')}</td><td data-label="Sabab">${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
@@ -2787,7 +2787,7 @@ async function renderDashboardV2(){
         <div class="dv2-foot">Shu oy hali to‘lanmagan: <b>${esc(F.fmtC(B.m0.sum))}</b> (${dv2N(B.m0.ids.size)} o‘quvchi) · jami: <b>${esc(F.fmtC(AG.total))}</b> — «Moliya → Qarzdorlar» bilan bir xil · avans: <b>${esc(F.fmtC(F.avans))}</b></div>`; }
     put('dv2-debt', body); }
 
-  // Moliya — joriy oy (klassik moliya KPI'lari + xarajat va to'lov usuli taqsimoti)
+  // Moliya — joriy oy (dashFinData: moliya KPI'lari + xarajat va to'lov usuli taqsimoti)
   { let body;
     if(!fin.ok) body=dv2Err('Moliya', fin.e);
     else { const cats=F.catKeys.map((k,i)=>({ v:F.byCat[k], c:['#C2412D','#E58A52','#D9A441','#8E6FB8','#5B8DB8','#4E9A88','#9AA6A1'][i%7], t:k, lbl:F.fmtC(F.byCat[k]) }));

@@ -940,7 +940,7 @@ orqaga qaytarish), `test-fin-prereq.sql` 95, `test-kassa-race.sh` 59 (8 × 200 p
 katta chiqim, ikki tasdiq, hisobdor va maosh qaytimlari, kunni yopish, smena topshirish, fiskal chek takrori, kassani qayta
 to‘xtatish, qaytarish oynasi kaliti), `fin-print.test.mjs` 38, `fin-words.test.mjs` 7, `fin-kassa.test.mjs` 42, `tg-daily.test.cjs` 50. Brauzer ssenariylari repo’da — `tests/kassa-e2e` (lokal stend, sintetik
 urug‘; ishga tushirish va kutilgan sonlar — o‘sha papkadagi README): o‘n olti kassa ssenariysi (468 tekshiruv) eski va yangi
-dizaynda, 1440 va 390 px; qo‘lda to‘lov va eski oqimlar kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda (56
+dizaynda (2026-11-24 dan — faqat yangi dizayn; to‘liq to‘plam 25 o‘tish, 647 tekshiruv — `SESSIYA-ISHLARI.md` §86), 1440 va 390 px; qo‘lda to‘lov va eski oqimlar kassasiz va «kassa o‘rnatilgan, ishga tushmagan» holatda (56
 tekshiruv); oxirgi to‘liq o‘tish — 2026-11-15, reliz 12: 36 o‘tish, 992 tekshiruv — hammasi o‘tdi. Yakka chuqur ko‘rik ikki marta o‘tkazildi (topilmalar
 va tuzatishlar — `SESSIYA-ISHLARI.md`, 62- va 64-bo‘limlar); buxgalter ko‘zi bilan ko‘rik — 2026-11-12 (Claude Docs
 hisoboti, `SESSIYA-ISHLARI.md` 66-bo‘lim): to‘sib qo‘yuvchi topilma yo‘q, 6 ta muhim (M1–M6; M1–M4 va M6 bajarildi —
