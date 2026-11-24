@@ -1,11 +1,11 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): «Kassa» bo'limi — to'liq kun sikli brauzerda.
 //   Direktor: boshlang'ich qoldiq, sozlamalar (ishga tushirish) → kassir: kirim, chiqim so'rovi → moliya menejeri: tasdiq →
 //   kassir: pulni berish, naqd o'quv to'lovi (fiskal № bilan), bekor qilish, kunni yopish → moliya menejeri: tekshirish, qayta chop etish.
-//   Chop etish: printHTML() iframe yaratadi — uning matni tekshiriladi.  node scenarios/e2e-kassa.cjs [v1|v2]
+//   Chop etish: printHTML() iframe yaratadi — uning matni tekshiriladi.  node scenarios/e2e-kassa.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 // onlayn kassa Z-hisoboti (F1.26): kassir Z dagi raqamlarni yozadi — sinovda tizimdagi kutilgan summalar bilan (Z mos; e2e-kassa2.cjs dagi kabi)
 const zFill = async pg => { if (!(await pg.$('#kz-no'))) return false; const t = q(`select coalesce(app.kassa_z_state(id), '{}')::text from public.cash_days where desk='main' and status='open'`); const z = t ? JSON.parse(t) : {};

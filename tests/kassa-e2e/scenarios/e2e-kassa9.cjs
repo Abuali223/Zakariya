@@ -4,12 +4,12 @@
 //   Kontragent turi (sec-3, ui-13): kassir «+ yangi» bilan qo'shgan «Jismoniy shaxs» — «Qo'shish» ikki marta bosilsa ham bitta; turi
 //   tasdiqlanguncha yuridik shaxs hisoblanadi (ogohlantirish); yaratgan kassir (va Moliya menejeri) tasdiqlay olmaydi — buxgalter
 //   nazorat ro'yxatida tasdiqlaydi, shundan keyin ogohlantirish yo'q.
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa9.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa9.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
 const sp = s => String(s || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 // server rad etish matni (psql stderr dagi ERROR qatori; rad etilmasa — bo'sh)

@@ -1,10 +1,10 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): o'zaro hisob (nc_offset) — xodimning ish haqidan farzandining o'quv to'lovi.
 //   Direktor «Maosh berish» oynasida rasmiylashtiradi → naqdsiz dalolatnoma; «Kassa»da dalolatnomalar ro'yxati; shu kuni bekor qilish.
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa5.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa5.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };

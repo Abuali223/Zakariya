@@ -8,11 +8,11 @@
 //   jadvallarni o'zi o'qiy olmaydi; 📄 ichki ma'lumotnoma va «🖨 Ichki hisobot» ham shu yig'madan), Arxivda ↩️ / 🎓 / CSV yo'q.
 //   O'IBDO': menyuda «Arxiv». Kassir: ro'yxat soni (students_billing),
 //   qidiruvda arxivdagi o'quvchi haqida eslatma (havolasiz).
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-arxiv.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-arxiv.cjs
 const E = require('../lib/common.cjs'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };
 fs.mkdirSync(OUT, { recursive: true });
@@ -85,7 +85,6 @@ const st = id => q(`select coalesce("payStatus",'') || '|' || coalesce("exitReas
   // bosh sahifa — faol ro'yxat soni
   await D.tab('dashboard'); await pg.waitForTimeout(2500);
   const dashN = await pg.evaluate(ui => {
-    if (ui === 'v1') { const c = [...document.querySelectorAll('#dash .stat-card')].find(x => /O‘quvchi$/.test(x.textContent.trim())); return c ? c.querySelector('b').textContent : ''; }
     const card = [...document.querySelectorAll('.dv2-card')].find(x => { const h = x.querySelector('.dv2-h h3'); return h && h.textContent.trim() === 'O‘quvchilar'; });
     return card ? (card.querySelector('.dv2-num') || {}).textContent || '' : ''; }, UI);
   ok(`bosh sahifa (${UI}): «O‘quvchi» soni 15 (arxivdagi 2 tasi hisoblanmaydi)`, String(dashN).replace(/\D+/g, '').startsWith('15'), dashN);

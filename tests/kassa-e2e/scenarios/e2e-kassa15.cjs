@@ -10,11 +10,11 @@
 //   (f) kassa to'xtatilganda «Buxgalteriya» oynalarida usul tanlovi (#sp-hmethod, #e-method, #av-hmethod).
 //   (a) live-1 oddiy yo'l (kassa ishga tushmagan / o'rnatilmagan) — e2e-legacy.cjs da (dev va prod zanjir).
 //   «Javob yo'qoldi» — Playwright route: so'rov serverga yetib bajariladi (route.fetch), brauzer esa javob o'rniga tarmoq xatosini oladi.
-//   node scenarios/e2e-kassa15.cjs [v1|v2]   (oldin: bash stand.sh reset dev)
+//   node scenarios/e2e-kassa15.cjs   (oldin: bash stand.sh reset dev)
 const E = require('../lib/common.cjs'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 // Foydalanuvchi nomidan funksiya chaqirish (bitta tranzaksiya; natija — oxirgi so'rovniki)
 const asUser = (uid, sql) => q(`select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}`);

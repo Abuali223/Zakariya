@@ -92,8 +92,8 @@ test('stuExitPatch: «⏯️ Holat» oynasidagi direktor qoidasi bilan bir xil',
 });
 
 test('admin.html: sonlar faol ro‘yxatdan; arxiv sahifasi va ma’lumotnoma ulangan', () => {
-  // bosh sahifa (ikkala dizayn) — faol ro'yxat
-  assert.ok(ADM.includes('dashCoreStats(activeRoster(students), users)'), 'klassik bosh sahifa');
+  // bosh sahifa (yagona dizayn; klassik sahifa 2026-11-24 da olib tashlandi) — faol ro'yxat
+  assert.ok(!ADM.includes('renderDashboardClassic'), 'klassik bosh sahifa yo‘q');
   assert.ok(/const roster=activeRoster\(students, today\);[^\n]*\n\s*const C=dashCoreStats\(roster, users\);/.test(ADM), 'v2 bosh sahifa');
   // O'quvchilar sahifasi: jami va ro'yxat faol, arxivga havola
   assert.ok(ADM.includes("act=rows.filter(r=>!stuArchived(r, TD))") && ADM.includes('`Jami: ${act.length} ta o‘quvchi`'), 'O‘quvchilar: jami faol');

@@ -6,11 +6,11 @@
 //   yo'q, tahrir / eksport tugmasi yo'q; REST orqali o'quvchi va shaxsiy karta jadvallari bo'sh, jurnal va Direktor jurnali — rad;
 //   sahifa va konsol xatolari yo'q. Direktor: bo'lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali»da sotuvchining ochishi;
 //   «Foydalanuvchilar» → rol tanlovida «Sotuvchi …», sotuvchi ism-familiyasini Direktor oynada o'zgartiradi.
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-sales.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-sales.cjs
 const E = require('../lib/common.cjs'); const fs = require('fs'); const crypto = require('crypto');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };
 fs.mkdirSync(OUT, { recursive: true });

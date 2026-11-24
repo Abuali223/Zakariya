@@ -4,11 +4,11 @@
 //   yuborilmagan (navbatdagi) naqd to'lov — yopish oynasida (kaliti bilan e'lon qilinadi); kamomad → Direktor qarori → tekshirish;
 //   ertasi kun: kun boshi = kecha oxiri; «oldingi kun yopilmagan» to'sig'i; ortiqcha → qayta ochish → komissiya bilan yopish →
 //   qayta ochgan Direktor tekshira olmaydi (crit-4), buxgalter tekshiradi.
-//   node scenarios/e2e-kassa2.cjs [v1|v2]
+//   node scenarios/e2e-kassa2.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 // onlayn kassa Z-hisoboti (F1.26): kassir Z dagi raqamlarni yozadi — sinovda tizimdagi kutilgan summalar bilan (Z mos)
 const zFill = async pg => { if (!(await pg.$('#kz-no'))) return; const t = q(`select coalesce(app.kassa_z_state(id), '{}')::text from public.cash_days where desk='main' and status='open'`); const z = t ? JSON.parse(t) : {};

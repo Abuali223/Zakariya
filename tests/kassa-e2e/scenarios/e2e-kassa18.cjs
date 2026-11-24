@@ -6,11 +6,11 @@
 //   oynasidan YAKUNIY «🖨 Kunlik hisobot» (qoralamasiz, sanalgan summa, farq) va «🖨 Kassa kitobi varag‘i» («НУСХА»);
 //   Direktor: rol tanlovidagi yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog'langan yangi xodimni
 //   tasdiqlashda «Kassir» oldindan tanlanadi.
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa18.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa18.cjs
 const E = require('../lib/common.cjs'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };

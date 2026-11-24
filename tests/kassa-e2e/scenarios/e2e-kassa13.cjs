@@ -1,11 +1,11 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): F1.21 — to'liq Buxgalter roli: «To‘lovlar» va «Buxgalteriya» FAQAT
 //   KO'RISH (yozish tugmalari yo'q), to'lovlar payments_acc dan (telefon yo'q), o'quvchi ismi students_billing dan, oylik vedomost,
 //   A4 hisobot ismsiz (FD-28), qo'shimcha lavozim yo'q; Direktor ko'rinishi o'zgarmagan.  Yangi stend bilan (bash stand.sh reset dev):
-//   node scenarios/e2e-kassa13.cjs [v1|v2]
+//   node scenarios/e2e-kassa13.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };

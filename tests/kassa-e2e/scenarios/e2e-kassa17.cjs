@@ -4,11 +4,11 @@
 //   maosh ID'si, fayl nomida / sarlavhada «-ismsiz», «Ismsiz nusxa (FD-28)» izohi; qolgan ustunlar (qatorma-qator) va jamlar Direktor
 //   nusxasi bilan bir xil, har qatordagi ID — Direktor nusxasidagi o'sha shaxsniki (ism → maosh ID bazadan); davomat ro'yxatida yo'q
 //   xodimning ruhsati ham maosh ID'si bilan; ekrandagi qarzdorlar ro'yxati ism bilan qoladi.
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa17.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa17.cjs
 const E = require('../lib/common.cjs'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };

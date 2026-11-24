@@ -17,7 +17,7 @@ komissiya sanash dalolatnomasi (egasi qarori, 2026-11-16); **1b** — yanvarda q
 qulfi (fevral); **3** — bank va yo‘ldagi pul (mart); **4** — 2027-01-01 dan bosh kitob (aprel); **5** — hisobotlar
 (may–iyun); **6** — muvofiqlik kengaytmalari. Ishga tushirish 6 ta darvozaga bog‘langan (§5); biri bajarilmasa sana
 fevralning birinchi kassa kuniga suriladi, qamrov qisqarmaydi. Dizayn ishlari to‘xtatilgan: faqat mavjud komponentlar,
-v1 va v2 ko‘rinishlarida. Jami mehnat ≈ 161 dasturchi-kun.
+v1 va v2 ko‘rinishlarida (2026-11-24 dan — faqat yangi dizayn, v2: eski dizayn olib tashlandi). Jami mehnat ≈ 161 dasturchi-kun.
 
 ### Egasi uchun qisqa ko‘rinish
 | Bosqich | Qachon | Nima o‘zgaradi |

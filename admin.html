@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="uz" data-ui="v2">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -21,10 +21,10 @@
 <script defer src="/vendor/xlsx/xlsx.mini.min.js"></script>
 <script defer src="/vendor/qr/qrcode.js"></script>
 <script>
-  // YANGI DIZAYN (v2) bayrog'i — standart: yangi. Eski ko'rinish: ?ui=v1 (yoki «Profil» → «Ko'rinish»); qurilmada eslab qolinadi.
-  //   Barcha v2 uslublari html[data-ui="v2"] ostida (pastdagi «ui-v2» uslublar bloki) — bayroq yo'q bo'lsa sahifa avvalgidek.
-  (function(){ var v='v2'; try{ var q=new URLSearchParams(location.search).get('ui'); if(q==='v1'||q==='v2') localStorage.setItem('iqror_ui',q); v=localStorage.getItem('iqror_ui')||'v2'; }catch(e){}
-    if(v!=='v1') document.documentElement.setAttribute('data-ui','v2'); })();
+  // Yagona dizayn — yangi (v2): bayroq <html data-ui="v2"> da doim turadi (pastdagi «ui-v2» uslublar bloki shu bayroq ostida).
+  //   Eski dizayn (v1) va uning almashtirgichi (?ui=v1, «Profil» → «Ko'rinish») egasining qarori bilan 2026-11-24 da olib tashlandi;
+  //   qurilmada qolgan eski tanlov o'chiriladi (u endi hech narsaga ta'sir qilmaydi).
+  try{ localStorage.removeItem('iqror_ui'); }catch(e){}
 </script>
 <style>
   :root{
@@ -396,9 +396,9 @@
   @media(max-width:820px){ .mkt-cols{grid-template-columns:1fr} }
 </style>
 <style id="ui-v2">
-  /* ===================== YANGI DIZAYN (v2) — faqat html[data-ui="v2"] da ishlaydi =====================
+  /* ===================== YANGI DIZAYN (v2) — yagona dizayn (eski dizayn 2026-11-24 da olib tashlandi) =====================
      Manba: docs/dizayn/iqror-boshqaruv-maket.html (tasdiqlangan maket). Shrift (Roboto Condensed) va logotiplar o'zgarmaydi.
-     Eski ko'rinishga qaytish: ?ui=v1 yoki «Profil» → «Ko'rinish». Bu blokdagi har bir qoida html[data-ui="v2"] bilan boshlanadi. */
+     Bu blokdagi har bir qoida html[data-ui="v2"] bilan boshlanadi (bayroq <html> da doim bor; asosiy CSS ustidan aniqroq qoida). */
   html[data-ui="v2"]{
     --bg:#EEF3F0; --ink:#1C2723; --muted:#55615A; --teal:#236B5D; --teal-2:#2B8270; --teal-d:#16453B;
     --border:#E1E7E3; --border-2:#EBF0EC; --it-bg:#E1F2EA; --it-fg:#1B5E4F;
@@ -1602,7 +1602,7 @@ function navRebuild(){
   nav.querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
   const ab=nav.querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');
   nav.querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
-  if(uiV2()) v2NavAfterOpen(tab); else if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true);
+  v2NavAfterOpen(tab);
   setTabBadge('enrollments', BADGES.enrollments||0); setTabBadge('applications', BADGES.applications||0);
 }
 // Modullarga beriladigan yordamchilar (modul admin.html ichki funksiyalarini shu orqali ishlatadi).
@@ -1942,14 +1942,6 @@ async function openProfile(){
         <div class="small muted">Joriy: <b>${esc(pretty(curPhone))}</b></div>
         <div id="pf-ph-area"><button class="btn sm" id="pf-ph-start" style="margin-top:10px">Telefonni o‘zgartirish</button></div>
       </div>`:''}
-      <div style="${SEC}">
-        <div style="font-weight:700;margin-bottom:2px">Ko‘rinish</div>
-        <div class="small muted">Panel dizayni — faqat shu qurilmada saqlanadi. «Eski» — avvalgi ko‘rinishga vaqtincha qaytish.</div>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap" role="group" aria-label="Ko‘rinish">
-          <button type="button" class="btn sm${uiV2()?' gold':''}" data-uiset="v2" aria-pressed="${uiV2()}">Yangi dizayn</button>
-          <button type="button" class="btn sm${uiV2()?'':' gold'}" data-uiset="v1" aria-pressed="${!uiV2()}">Eski dizayn</button>
-        </div>
-      </div>
       <div id="pf-msg" style="display:none;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:12px"></div>
     </div></div>`;
   document.body.appendChild(ov);
@@ -1958,10 +1950,6 @@ async function openProfile(){
   const onKey=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',onKey);
   $p('pf-x').onclick=close; ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
-  // Ko'rinish (v2/v1) — localStorage; URL'dagi ?ui= olib tashlanadi (aks holda u tanlovni bosib ketadi). Faqat ko'rinish, ruxsatlarga ta'sir yo'q.
-  ov.querySelectorAll('[data-uiset]').forEach(b=>b.onclick=()=>{ const v=b.dataset.uiset; if((v==='v2')===uiV2()) return;
-    try{ localStorage.setItem('iqror_ui', v); }catch(e){}
-    try{ const u2=new URL(location.href); u2.searchParams.delete('ui'); location.replace(u2.toString()); }catch(e){ location.reload(); } });
   ov.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{ const i=$p(b.dataset.eye); if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } });
   const msg=(m,ok)=>{ const e=$p('pf-msg'); e.textContent=m; e.style.display='block'; e.style.cssText+=ok?';background:#e9f8f0;border:1px solid #bfe6d4;color:#1F7A4D':';background:#fdece3;border:1px solid #f0d3c4;color:#C2410C'; };
   // parol jonli checklist
@@ -2092,7 +2080,7 @@ function buildTabs(){
   }
   nav.querySelectorAll('button[data-tab]').forEach(b=>b.addEventListener('click',()=>openTab(b.dataset.tab)));
   navGroupBadges();
-  if(uiV2()) v2NavSetup(nav, grouped);   // yangi dizayn: ikonali panel / pastki menyu (shu #tabs ustida)
+  v2NavSetup(nav, grouped);   // ikonali panel / pastki menyu (shu #tabs ustida)
 }
 // Menyu guruhlari (tartib — menyudagi tartib). Kalitlar buildTabs'dagi bo'lim kalitlari; rolga ko'rinmaydiganlari o'zi tushib qoladi.
 const NAV_FLAT_MAX = 8;
@@ -2136,16 +2124,16 @@ function navGroupBadges(){
     const gb=gr.querySelector('.nav-gb'); if(!gb) return;
     if(n>0){ gb.textContent = n>99?'99+':String(n); gb.hidden=false; } else { gb.textContent=''; gb.hidden=true; }
   });
-  if(uiV2()) v2TabbarBadges();
+  v2TabbarBadges();
 }
 // ===== YANGI DIZAYN (v2), 2-bosqich — MENYU =====
 //   Kompyuter (≥821px): to'q yashil ikonali tor panel; guruh bosilsa yonida bo'limlar ro'yxati (flyout) ochiladi.
 //   Telefon (≤820px): pastki menyu (Asosiy + 3 guruh + «Menyu») va «Menyu» oynasi (barcha bo'limlar).
 //   Hammasi MAVJUD #tabs tuzilmasi ustida: tugmalar, guruhlar, belgilar (badge) va ruxsatlar (allowedTabs) o'zgarmaydi —
-//   faqat joylashuv va ko'rinish. Eski ko'rinish (v1) — avvalgi guruhlangan menyu.
+//   faqat joylashuv va ko'rinish. Yagona menyu (eski guruhlangan menyu — v1 — 2026-11-24 da olib tashlandi).
 const V2_DESK_MQ='(min-width:821px)';
-function v2Desk(){ return uiV2() && !!(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
-function v2Mob(){ return uiV2() && !(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
+function v2Desk(){ return !!(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
+function v2Mob(){ return !(window.matchMedia && matchMedia(V2_DESK_MQ).matches); }
 const V2_GSHORT={ boshqaruv:'Boshqaruv', qabul:'O‘quvchilar', talim:'Ta’lim', xodimlar:'Xodimlar', moliya:'Moliya', xizmat:'Xizmatlar', sayt:'Sayt', tizim:'Tizim' };
 let V2_NAV_WIRED=false, V2_SHEET_OPENER=null;
 // Ochilgan guruh ro'yxatini (flyout) panel yoniga, sarlavhasi ro'parasiga joylaydi (ekrandan chiqmasin).
@@ -2226,10 +2214,10 @@ function v2NavSetup(nav, grouped){
   if(!V2_NAV_WIRED){ V2_NAV_WIRED=true;
     // Panel tashqarisiga bosilsa ochiq guruh ro'yxati yopiladi (boshqa guruh sarlavhasi bosilsa — o'sha ochiladi)
     document.addEventListener('click', e=>{ if(!v2Desk()) return; const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && !op.contains(e.target)) v2FlyCloseAll(); }, true);
-    document.addEventListener('keydown', e=>{ if(e.key!=='Escape' || !uiV2()) return;
+    document.addEventListener('keydown', e=>{ if(e.key!=='Escape') return;
       if(document.documentElement.classList.contains('v2-sheet-open')){ v2SheetClose(); return; }
       const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && v2Desk()){ const h=op.querySelector('.nav-gh'); v2FlyCloseAll(); if(h) try{ h.focus(); }catch(_){} } });
-    window.addEventListener('resize', ()=>{ if(!uiV2()) return; if(v2Desk()) v2SheetClose(); else v2FlyCloseAll(); const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && v2Desk()) v2FlyPlace(op); });
+    window.addEventListener('resize', ()=>{ if(v2Desk()) v2SheetClose(); else v2FlyCloseAll(); const nav2=$('#tabs'), op=nav2&&nav2.querySelector('.nav-grp.open'); if(op && v2Desk()) v2FlyPlace(op); });
   }
   v2TabbarBadges();
   if(typeof currentTab==='string' && currentTab) v2NavAfterOpen(currentTab);
@@ -2241,8 +2229,7 @@ function openTab(tab){
   $('#tabs').querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi ochiq turadi
     $('#tabs').querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
-    if(uiV2()) v2NavAfterOpen(tab);
-    else if(grp && !grp.classList.contains('open')) navToggleGroup(grp.dataset.grp, true); }
+    v2NavAfterOpen(tab); }
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
   // Tez almashganda ESKI bo'limning kech tugagan renderi endi yo'q elementga yozib TypeError otardi (jonli tekshiruvda
   //   «Imtihonlar»da ko'rindi) — eski ko'rinish xatosi jim o'tadi; JORIY bo'lim xatosi avvalgidek konsolda ko'rinadi.
@@ -2399,9 +2386,9 @@ function parseCSV(text){
 }
 
 /* ---- Statistika (dashboard) ---- */
-// Yangi dizayn (v2) — renderDashboardV2() (Direktor bosh sahifasi); eski ko'rinish (v1) — klassik sahifa, o'zgarmagan.
-async function renderDashboard(){ return uiV2() ? renderDashboardV2() : renderDashboardClassic(); }
-// O'quvchi/foydalanuvchi statistikasi — klassik va yangi sahifa uchun BIR XIL hisob (raqamlar ikkalasida teng chiqsin).
+// Bosh sahifa — renderDashboardV2() (yagona dizayn; klassik sahifa — v1 — 2026-11-24 da olib tashlandi).
+async function renderDashboard(){ return renderDashboardV2(); }
+// O'quvchi/foydalanuvchi statistikasi — bosh sahifa hisobi (faqat faol ro'yxat; «Xavf ostidagi o'quvchilar» qoidasi shu yerda).
 function dashCoreStats(students, users){
   const n=students.length;
   const avg=n?Math.round(students.reduce((s,x)=>s+(Number(x.score)||0),0)/n):0;
@@ -2422,49 +2409,8 @@ function dashCoreStats(students, users){
     .sort((a,b)=>(Number(a.s.score)||0)-(Number(b.s.score)||0)||(Number(a.s.attendance)||0)-(Number(b.s.attendance)||0));
   return { n, avg, avgAtt, uz, ru, byGrade, grades, maxG, roles, RISK_ATT, RISK_SCORE, risky };
 }
-async function renderDashboardClassic(){
-  $('#view').innerHTML = `<div class="page-head"><h2>Statistika</h2></div><div id="dash"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
-  const _g=VIEW_GEN;   // yuklanguncha boshqa bo'limga o'tilsa — eski natija yozilmaydi (ilgari #dash yo'q bo'lib TypeError chiqardi)
-  let students=[],teachers=[],enrollments=[],users=[];
-  try{ [students,teachers,enrollments,users] = await Promise.all([
-    loadCol('students','order'), loadCol('teachers','order'),
-    loadCol('enrollments',null).catch(()=>[]), loadCol('users',null).catch(()=>[])
-  ]); cache.students=students; cache.teachers=teachers; }
-  catch(e){ if(_g!==VIEW_GEN||!$('#dash')) return; $('#dash').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return; }
-  if(_g!==VIEW_GEN||!$('#dash')) return;
-  // Sonlar — faqat FAOL ro'yxat: chiqarilgan / bitirgan (arxivdagi) o'quvchi hisoblanmaydi.
-  const { n, avg, avgAtt, uz, ru, byGrade, grades, maxG, roles, RISK_ATT, RISK_SCORE, risky } = dashCoreStats(activeRoster(students), users);
-  const bars=grades.map(g=>`<div class="bar-row"><span class="bar-lbl">${gradeName(g)}</span><div class="bar"><i style="width:${pct(byGrade[g],maxG)}%"></i></div><b>${byGrade[g]}</b></div>`).join('');
-  const stat=(v,l)=>`<div class="stat-card"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
-  const roleBar=(l,v)=>`<div class="bar-row"><span class="bar-lbl">${l}</span><div class="bar"><i style="width:${pct(v,Math.max(1,users.length))}%"></i></div><b>${v}</b></div>`;
-  const riskRows=risky.slice(0,60).map(r=>{ const g=Number(r.s.grade)||0;
-    return `<tr><td>${esc(r.s.studentId||r.s._id)}</td><td>${esc(r.s.name||'')}</td><td>${gradeName(g)} ${esc(r.s.classLetter||r.s.track||'')}</td><td>${esc(r.rs.join(', '))}</td><td class="td-actions"><button class="btn sm" data-risk-report="${esc(r.s._id)}">📄 Hisobot</button></td></tr>`; }).join('');
-  const riskCard=`<div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>⚠️ Xavf ostidagi o‘quvchilar</h3><span class="cls-count">${risky.length} ta · past davomat (&lt;${RISK_ATT}%) yoki past ball (&lt;${RISK_SCORE})</span></div>
-    ${risky.length?`<div class="tablewrap"><table><thead><tr><th>ID</th><th>Ism</th><th>Sinf</th><th>Sabab</th><th></th></tr></thead><tbody>${riskRows}</tbody></table></div>`:'<div class="empty">Hozircha xavf ostidagi o‘quvchi yo‘q ✓</div>'}</div>`;
-  // ---- MOLIYA DASHBOARDI (faqat direktor/moliya) — oylik sof foyda/zarar + moliyaviy oqim + xarajat taqsimoti ----
-  //   Bloklamaydi: o'quvchi statistikasi DARHOL chiqadi, moliya (barcha invoice/xarajat) fonда yuklanadi.
-  const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
-  $('#dash').innerHTML = `
-    <div class="stat-grid">
-      ${stat(n,'O‘quvchi')}${stat(teachers.length,'O‘qituvchi')}${stat(avg,'O‘rtacha ball')}${stat(avgAtt==null?'—':avgAtt+'%','O‘rtacha davomat')}
-      ${stat(uz,'O‘zbek sinf')}${stat(ru,'Rus sinf')}${stat(enrollments.length,'Arizalar')}${stat(users.length,'Foydalanuvchi')}
-    </div>
-    ${canFin?'<div id="dash-fin"><div class="card" style="margin-top:16px;padding:22px"><div class="loading">Moliya ma’lumoti yuklanmoqda…</div></div></div>':''}
-    <div class="dash2">
-      <div class="card"><div class="cls-card-head"><h3>Sinflar bo‘yicha o‘quvchilar</h3></div><div class="bars">${bars||'<div class="empty">Ma’lumot yo‘q</div>'}</div></div>
-      <div class="card"><div class="cls-card-head"><h3>Foydalanuvchilar (rol bo‘yicha)</h3></div><div class="bars">
-        ${roleBar('Ota-ona',roles.parent)}${roleBar('O‘quvchi',roles.student)}${roleBar('O‘qituvchi',roles.teacher)}${roleBar('Administrator',roles.admin)}
-      </div></div>
-    </div>
-    ${riskCard}`;
-  $('#dash').querySelectorAll('[data-risk-report]').forEach(b=>b.addEventListener('click',()=>openStudentReport(b.dataset.riskReport, students.find(r=>r._id===b.dataset.riskReport))));
-  // Moliya bo'limini FONDA yuklab, joyiga qo'yamiz (dashboard'ni kutib turmaydi).
-  if(canFin) dashFinance().then(h=>{ const el=$('#dash-fin'); if(el) el.innerHTML=h||'<div class="card" style="margin-top:16px;padding:18px"><div class="empty">Moliya ma’lumoti topilmadi.</div></div>'; })
-    .catch(e=>{ const el=$('#dash-fin'); if(el) el.innerHTML=`<div class="card" style="margin-top:16px;padding:18px"><div class="empty">Moliyani yuklashda xato: ${esc(e.code||e.message||'')}</div></div>`; });
-}
 
-/* ---- Statistika dashboard: MOLIYA bo'limi (oylik sof foyda/zarar + oqim + xarajat taqsimoti) ----
-   Faqat moliyani ko'ra oladiganlar (direktor/moliya menejeri/g'aznachi). Boshqalar — bo'sh. */
+/* ---- Moliya hisob-kitobi (faqat o'qish): bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun yordamchilar ---- */
 // FIN-RPT:BEGIN — moliya hisobotlarining sof yordamchilari (assets/js/fin-rpt.test.mjs shu blokni fayldan o'qib sinaydi).
 // To'lov usuli nomlari/ranglari — klassik «Statistika», yangi bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun BITTA manba: nomlar
 //   PROV_LBL dan (A6-08). Avval uch joyda alohida nusxa edi va o'zaro hisob ('offset' — maoshdan farzand to'lovi, kassa_offset) ularda
@@ -2506,7 +2452,7 @@ async function finOtherIncome(){
   try{ const r=await rpc('finance_other_income',{}); return { m:(r&&r.months&&typeof r.months==='object')?r.months:{}, err:'' }; }
   catch(e){ return { m:{}, err:rpcMissing(e)?'':String((e&&(e.message||e.code))||'xato') }; }
 }
-// Moliya hisob-kitobi (faqat o'qish) — klassik dashFinance() va yangi bosh sahifa (v2) BIR XIL raqamlarni ko'rsatsin.
+// Moliya hisob-kitobi (faqat o'qish) — bosh sahifadagi moliya bloklari uchun (kirim, chiqim, qarz, oqim, to'lov usullari).
 //   So'rovlar parallel (avval ketma-ket 4 ta edi; ishlatilmaydigan «refunds» o'qilmaydi).
 async function dashFinData(){
   const [INV, EXP, CREDITS, payRes, OTH] = await Promise.all([
@@ -2542,77 +2488,13 @@ async function dashFinData(){
   const pmTotal=pmKeys.reduce((s,k)=>s+byPm[k],0);
   return { INV, EXP, CREDITS, PAYS, PAYERR, OTHERR, paidAmt, emonth, monthColl, otherOf, kirimOf, expOf, mLbl, fmtC, S, cur, months, flow, kirim, kirimTuition, kirimOther, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal };
 }
-async function dashFinance(){
-  const canFin = SESSION.isAdmin || SESSION.role==='finance_mgr' || SESSION.role==='treasurer';
-  if(!canFin) return '';
-  const { PAYERR, OTHERR, mLbl, fmtC, S, cur, flow, kirim, kirimOther, chiqim, foyda, marja, avans, debt, byCat, catKeys, maxCat, byPm, pmKeys, pmTotal } = await dashFinData();
-  const PMLAB=DF_PMLAB, PMCOL=DF_PMCOL;
-  // ---- Moliyaviy oqim: guruhlangan ustun diagrammasi (SVG) — Kirim (yashil) vs Chiqim (sariq), 6 oy ----
-  //   Ranglar CVD (rang ko'rlik) uchun tekshirilgan (ΔE>8) + ustunlarда qiymat yorliqlari bor.
-  const CIN='#1F7A4D', CEX='#E08A2E';
-  const flowChart=(data)=>{ const W=640,H=210,padL=10,padR=10,padT=26,padB=30;
-    const maxV=Math.max(1,...data.flatMap(d=>[d.inc,d.exp])); const nn=data.length||1; const gw=(W-padL-padR)/nn;
-    const bw=Math.max(8,Math.min(24,(gw-12)/2)); const plotH=H-padT-padB; const yOf=v=>padT+plotH*(1-v/maxV);
-    const base=padT+plotH; let s=`<line x1="${padL}" y1="${base}" x2="${W-padR}" y2="${base}" stroke="#E3E8E6" stroke-width="1"/>`;
-    data.forEach((d,i)=>{ const cx=padL+gw*i+gw/2; const ix=cx-bw-1, ex=cx+1; const iy=yOf(d.inc), ey=yOf(d.exp); const net=d.inc-d.exp;
-      s+=`<rect x="${ix.toFixed(1)}" y="${iy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-iy).toFixed(1)}" rx="3" fill="${CIN}"><title>${mLbl(d.k)}: Kirim ${S(d.inc)} so‘m</title></rect>`;
-      s+=`<rect x="${ex.toFixed(1)}" y="${ey.toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-ey).toFixed(1)}" rx="3" fill="${CEX}"><title>${mLbl(d.k)}: Chiqim ${S(d.exp)} so‘m</title></rect>`;
-      s+=`<text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#5a6b66">${mLbl(d.k)}</text>`;
-      s+=`<text x="${cx.toFixed(1)}" y="16" text-anchor="middle" font-size="10.5" font-weight="700" fill="${net>=0?'#1F7A4D':'#B42318'}"><title>Sof foyda ${S(net)} so‘m</title>${fmtC(net)}</text>`;
-    });
-    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block" role="img" aria-label="Oylik kirim va chiqim diagrammasi">${s}</svg>`;
-  };
-  const catBars=catKeys.map(c=>{ const v=byCat[c], p=Math.round(v/maxCat*100), pp=chiqim?Math.round(v/chiqim*100):0;
-    return `<div class="bar-row"><span class="bar-lbl" title="${esc(c)}">${esc(c)}</span><div class="bar"><i style="width:${p}%;background:${CEX}"></i></div><b>${S(v)} <small style="color:#8a948f;font-weight:600">${pp}%</small></b></div>`; }).join('');
-  // ---- To'lov usuli donut diagrammasi (SVG) + izoh (usul · summa · %) ----
-  const donut=()=>{ const R=58,CX=72,CY=72,SW=24,C=2*Math.PI*R; let off=0,segs='';
-    pmKeys.forEach(k=>{ const frac=pmTotal?byPm[k]/pmTotal:0; const len=frac*C; const gap=pmKeys.length>1?3:0;
-      segs+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${PMCOL[k]||'#8A9691'}" stroke-width="${SW}" stroke-dasharray="${Math.max(0,len-gap).toFixed(2)} ${(C-Math.max(0,len-gap)).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"><title>${PMLAB[k]||k}: ${S(byPm[k])} so‘m (${Math.round(frac*100)}%)</title></circle>`;
-      off+=len; });
-    return `<svg viewBox="0 0 144 144" width="144" height="144" role="img" aria-label="To‘lov usuli bo‘yicha kirim">${segs}<text x="${CX}" y="${CY-4}" text-anchor="middle" font-size="11" fill="#8a948f">Jami</text><text x="${CX}" y="${CY+13}" text-anchor="middle" font-size="13" font-weight="700" fill="#1C2723">${fmtC(pmTotal)}</text></svg>`; };
-  const pmLegend=pmKeys.map(k=>{ const pp=pmTotal?Math.round(byPm[k]/pmTotal*100):0;
-    return `<div class="bar-row" style="grid-template-columns:16px 120px 1fr auto;gap:10px"><span style="width:12px;height:12px;border-radius:3px;background:${PMCOL[k]||'#8A9691'};align-self:center"></span><span class="bar-lbl">${esc(PMLAB[k]||k)}</span><div class="bar"><i style="width:${pp}%;background:${PMCOL[k]||'#8A9691'}"></i></div><b>${S(byPm[k])} <small style="color:#8a948f;font-weight:600">${pp}%</small></b></div>`; }).join('');
-  const kpi=(label,val,sub,color)=>`<div class="stat-card"><b${color?` style="color:${color}"`:''}>${esc(val)}</b><span>${esc(label)}${sub?` · ${esc(sub)}`:''}</span></div>`;
-  return `
-    <div class="card" style="margin-top:16px">
-      <div class="cls-card-head"><h3>💰 Moliya — ${mLbl(cur)} ${cur.slice(0,4)}</h3><span class="cls-count">joriy oy</span></div>
-      <div class="stat-grid" style="margin:12px 0 2px">
-        ${kpi(foyda>=0?'Sof foyda':'Sof zarar', fmtC(foyda), 'kirim − chiqim', foyda>=0?'#1F7A4D':'#B42318')}
-        ${kpi('Kirim', fmtC(kirim), kirimOther>0?`to‘lov + boshqa daromad ${fmtC(kirimOther)}`:(OTHERR?'yig‘ilgan to‘lov (kassa daromadi o‘qilmadi)':'yig‘ilgan to‘lov'), '#1F7A4D')}
-        ${kpi('Chiqim', fmtC(chiqim), 'xarajatlar', '#C2410C')}
-        ${kpi('Foyda marjasi', marja+'%', 'har 100 so‘mdan', foyda>=0?'':'#B42318')}
-        ${kpi('Qarzdorlik', fmtC(debt), 'shu oy', '#B42318')}
-        ${kpi('Avans', fmtC(avans), 'ortiqcha to‘lov (avans)', '#0891B2')}
-      </div>
-    </div>
-    <div class="dash2" style="margin-top:16px">
-      <div class="card"><div class="cls-card-head"><h3>Moliyaviy oqim — kirim va chiqim</h3><span class="cls-count">so‘nggi 6 oy</span></div>
-        <div style="display:flex;gap:18px;align-items:center;font-size:12.5px;margin:10px 2px 2px;flex-wrap:wrap">
-          <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${CIN};vertical-align:-1px;margin-right:6px"></i>Kirim</span>
-          <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${CEX};vertical-align:-1px;margin-right:6px"></i>Chiqim</span>
-          <span style="color:#8a948f">· ustun ustidagi raqam — o‘sha oyning sof foydasi</span>
-        </div>
-        ${flowChart(flow)}
-      </div>
-      <div class="card"><div class="cls-card-head"><h3>Xarajat taqsimoti — nimaga sarflangani</h3><span class="cls-count">${mLbl(cur)}: ${fmtC(chiqim)}</span></div>
-        <div class="bars fin-cols" style="margin-top:10px">${catKeys.length?catBars:'<div class="empty">Bu oy xarajat kiritilmagan</div>'}</div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px"><div class="cls-card-head"><h3>To‘lov usuli bo‘yicha — shu oyda tushgan pul</h3><span class="cls-count" title="Kassa asosida: shu oy (Toshkent vaqti) tushgan haqiqiy to‘lovlar. «Kirim» esa shu oy hisob-fakturalariga to‘langan summa + kassadagi boshqa daromad (forma / tovar sotuvi, «Boshqa kirim») — farq qilishi mumkin (avans, oldingi oy qarzi).">${mLbl(cur)}: ${PAYERR?'—':fmtC(pmTotal)}</span></div>
-      ${PAYERR?`<div class="small" style="padding:14px 20px;color:#B42318">To‘lov yozuvlari o‘qilmadi (${esc(PAYERR)}) — usul bo‘yicha taqsimot ko‘rsatilmadi.</div>`:''}${(!PAYERR && pmKeys.length)?`<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 20px">
-        <div style="flex:0 0 auto">${donut()}</div>
-        <div class="bars" style="flex:1 1 320px;min-width:260px;padding:0">${pmLegend}</div>
-      </div>`:'<div class="empty" style="padding:18px">Bu oy to‘lov yo‘q</div>'}
-    </div>`;
-}
 
 /* ===================== YANGI DIZAYN (v2): Direktor bosh sahifasi («Statistika») =====================
    Faqat O'QIYDI: yozuv, SMS yoki holat o'zgarishi yo'q — tugmalar faqat tegishli bo'limni (yoki mavjud oynani) ochadi.
    Manbalar — ilova boshqa bo'limlarda allaqachon ishlatadigan so'rovlar (ruxsatlar o'zgarmagan): o'quvchilar/o'qituvchilar/
-   arizalar/foydalanuvchilar (klassik sahifa bilan bir xil), dashFinData() (klassik moliya bilan bir xil), «Tasdiqlash»
+   arizalar/foydalanuvchilar (dashCoreStats), dashFinData(), «Tasdiqlash»
    navbatlari (count), bugungi davomat (attendance, «Davomat» bo'limi kabi), xodimlar kelishi (staff_checkins/staff_leaves,
-   «Xodimlar davomati» kabi), bayram/ta'til kunlari (school_holidays). Eski ko'rinish (v1) — renderDashboardClassic(). */
-function uiV2(){ return document.documentElement.getAttribute('data-ui')==='v2'; }
+   «Xodimlar davomati» kabi), bayram/ta'til kunlari (school_holidays). Yagona bosh sahifa (klassik sahifa 2026-11-24 da olib tashlandi). */
 const DV2_MON=['yanvar','fevral','mart','aprel','may','iyun','iyul','avgust','sentabr','oktabr','noyabr','dekabr'];
 const DV2_WD=['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
 const DV2_WD2=['Ya','Du','Se','Ch','Pa','Ju','Sh'];

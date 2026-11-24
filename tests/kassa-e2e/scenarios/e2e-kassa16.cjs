@@ -5,11 +5,11 @@
 //   (e) ishdan ketgan xodim: ro'yxatda «(ketgan)», yangi avans berilmaydi (kassa:emp_left), yakuniy hisob-kitob — mumkin.
 //   (c) kassani almashtirish (asosiy ↔ SINOV): har kassa holati alohida, kech kelgan eski javob olinmaydi (ui-11); sinov kassasida
 //       qurilma navbati ko'rsatilmaydi va server ham rad etadi (g11 js-3, kassa:pending_test).
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa16.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa16.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 // server rad etishi: { msg, hint } — psql stderr dagi ERROR va HINT qatorlari (rad etilmasa — bo'sh)

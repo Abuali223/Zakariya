@@ -1,11 +1,11 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): kassaga bog'langan oqimlar (F1.5, F1.6, F1.13) brauzerda.
 //   naqd maosh (KO-2 bilan), karta orqali maosh; ish haqi avansi (so'rov → tasdiq → pul berish → avans yoziladi);
 //   qaytarish (Direktor tasdig'i → kassir pulni beradi → balans o'zgaradi); kassa xarajati «Buxgalteriya»ga ko'chadi;
-//   naqdsiz xarajat va avans shakllari.  node scenarios/e2e-kassa3.cjs [v1|v2]
+//   naqdsiz xarajat va avans shakllari.  node scenarios/e2e-kassa3.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 // Foydalanuvchi nomidan funksiya chaqirish (bitta tranzaksiya)
 const asUser = (uid, sql) => q(`select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}`);

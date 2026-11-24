@@ -3154,6 +3154,29 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 13-raunddagidek); brauzer sinovlari — 44 ta
     o'tish, hammasi o'tdi (sotuvchi ssenariysi 15/15, ikkala dizaynda).
 
+## 86) Eski dizayn (v1) to'xtatildi — faqat yangi dizayn — 2026-11-24
+
+- **Egasi (2026-11-24):** «Eski dizaynni to'xtat. Bundan keyin faqat yangi dizaynda ishlaymiz.»
+- **`admin.html`:** `<html lang="uz" data-ui="v2">` doim turadi; `<head>` dagi almashtirgich skripti (manzildagi `?ui=v1`,
+  `localStorage` → `iqror_ui`) olib tashlandi — o'rnida qurilmada qolgan eski tanlovni o'chiruvchi bitta qator (u endi hech narsaga
+  ta'sir qilmaydi). «Profil» oynasidagi «Ko'rinish» → «Eski dizayn» / «Yangi dizayn» bloki va uning ishlovchisi olib tashlandi.
+  `uiV2()` va uning barcha tarmoqlari olib tashlandi: menyu faqat yangi (`v2NavSetup`, `v2NavAfterOpen`, `v2TabbarBadges`, `v2Desk` /
+  `v2Mob`, Esc va oyna o'lchami ishlovchilari — shartsiz), bosh sahifa faqat `renderDashboardV2()`: klassik sahifa
+  (`renderDashboardClassic`) va faqat u ishlatgan `dashFinance` olib tashlandi (`dashCoreStats`, `dashFinData` — yangi sahifa ishlatadi,
+  qoldi). Uslublar bloki (`<style id="ui-v2">`, `html[data-ui="v2"]` prefiksi) o'zgarmadi: bayroq doim bor, prefiks esa asosiy CSS
+  ustidan aniqroq qoida bo'lib qoladi (uni olib tashlash qoidalar ustuvorligini o'zgartirib, ko'rinishni buzishi mumkin edi). Ruxsatlar,
+  bo'limlar, SQL o'zgarmagan. Ota-ona kabineti (`index.html`) va boshqa sahifalarda dizayn almashtirgichi bo'lmagan — tegilmadi.
+- **Sinovlar:** `assets/js/stu-arch.test.mjs` — klassik sahifa tekshiruvi o'rniga «klassik sahifa yo'q». Brauzer to'plami
+  (`tests/kassa-e2e`) — faqat yangi dizayn: `run-all.sh` standart ro'yxati `kN`, `pay`, `legacy`, `ar`, `sl` va yangi `ui` («kN:v2» yozuvi
+  ham qabul qilinadi, «:v1» — rad); har ssenariyda `UI = 'v2'`; `e2e-arxiv.cjs` dagi klassik bosh sahifa tarmog'i olib tashlandi; yangi
+  `e2e-ui.cjs` — qurilmada eski tanlov (`iqror_ui = 'v1'`) va manzilda `?ui=v1` bo'lsa ham yangi dizayn ochiladi, eski tanlov o'chiriladi,
+  kompyuterda ikonali panel / telefonda pastki menyu, Direktor bosh sahifasi yangi (klassik bloklar yo'q), «Profil»da almashtirgich yo'q,
+  sahifa xatolari yo'q — 5 rol (Direktor, Moliya menejeri, kassir, o'qituvchi, hamshira) × 1440 / 390 piksel, 42 tekshiruv.
+- **Tekshiruv:** tugun sinovlari — 16 fayl, hammasi o'tdi; brauzer to'plami (faqat yangi dizayn) — 25 o'tish, 647 tekshiruv, hammasi
+  o'tdi (≈ 10 daqiqa; avval 44 o'tish — har ssenariy ikkala dizaynda). Mustaqil ko'rik (kod; sinov va hujjatlar) natijasi — quyida.
+- **Hujjatlar:** `docs/dizayn/v2-joriy-etish.md` («Qanday ishlaydi», «Holat»), `docs/moliya/buxgalteriya-ish-reja.md`,
+  `tests/kassa-e2e/README.md`.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

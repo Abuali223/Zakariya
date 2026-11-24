@@ -8,11 +8,11 @@
 //   (d) g11 js-3: SINOV kassasini yopishda qurilma navbati ko'rsatilmaydi, pendingRefs bo'sh, navbat yozuvlari o'chirilmaydi / o'zgartirilmaydi;
 //   (e) o'tgan (server ishlamagan) kunni yopishda «Қ» blankalari; #kc-ho, #kc-skip qatorlari; «… sig'madi — ayirilmaydi» izohi;
 //   (f) kamomad qarori: «xodim zimmasiga» — Direktor javobgar xodim kartasini tanlaydi (#kd-party).
-//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa14.cjs [v1|v2]
+//   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa14.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const fs = require('fs');
 const OUT = E.OUT;
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const sqlErr = (uid, sql) => cp.spawnSync(E.PSQL[0], [...E.PSQL.slice(1), '-q', '-At', '-d', E.DB, '-c',

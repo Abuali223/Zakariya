@@ -74,23 +74,24 @@ E2E_DB=fx_e2e
 ```bash
 cd tests/kassa-e2e
 bash stand.sh setup          # bir marta: local/, JWT siri, dasturlar tekshiruvi → «tayyor: …»
-bash run-all.sh              # to‘liq to‘plam (40 o‘tish, ≈ 15 daqiqa) — reliz oldidan shu buyruq
+bash run-all.sh              # to‘liq to‘plam (25 o‘tish, ≈ 10 daqiqa) — reliz oldidan shu buyruq
 ```
 
 `run-all.sh` har o‘tishdan oldin stendni noldan quradi (ssenariylar kunlarni yopadi, hujjat o‘tkazadi — holat
 qayta ishlatilmaydi), oxirida stendni to‘xtatadi. Natija: `local/out/<vaqt>/summary.txt` (har qator:
-`k5.v1: rc=0 | JAMI (v1): 22/22 | fail=0`), har ssenariy chiqishi `local/out/<vaqt>/<teg>.out`, skrinshotlar
-`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 40 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
+`k5.v2: rc=0 | JAMI (v2): 22/22 | fail=0`), har ssenariy chiqishi `local/out/<vaqt>/<teg>.out`, skrinshotlar
+`local/out/<vaqt>/shots/`. Oxirgi qator: `NATIJA: 25 ta o'tish — hammasi o'tdi (…)` — aks holda muammoli qatorlar soni
 (chiqish kodi ≠ 0).
 
-Tanlab ishga tushirish: `bash run-all.sh k5:v1 k3:v2 pay:prod legacy:dev` (`kN:v1|v2`, `pay:dev|prod`, `legacy:dev|prod`, `ar:v1|v2`,
-`sl:v1|v2`).
+Tanlab ishga tushirish: `bash run-all.sh k5 k3 pay:prod legacy:dev ui` (`kN`, `pay:dev|prod`, `legacy:dev|prod`, `ar`, `sl`, `ui`).
+Dizayn bitta — yangi (v2): eski dizayn (v1) egasining qarori bilan 2026-11-24 da olib tashlangan; «k5:v2» kabi eski yozuv ham
+qabul qilinadi, «:v1» — rad (qator muammo deb sanaladi).
 
 Bitta ssenariyni qo‘lda (tuzatish paytida):
 
 ```bash
 bash stand.sh reset dev                  # baza noldan (dev zanjir — kassa moduli bilan) + urug‘ + xizmatlar
-node scenarios/e2e-kassa5.cjs v2         # v1 — eski dizayn, v2 — yangi dizayn (ikkalasi ham o‘tishi kerak)
+node scenarios/e2e-kassa5.cjs            # yagona — yangi dizayn (v2)
 bash stand.sh reset prod                 # jonli zanjir (kassasiz) — to‘lov va eski oqimlar uchun
 node scenarios/e2e-pay.cjs
 bash stand.sh down                       # xizmatlarni to‘xtatish
@@ -107,32 +108,34 @@ shu jadval ham yangilanadi):
 
 | Teg | Fayl | Nimani tekshiradi | Tekshiruvlar |
 |---|---|---|---|
-| k1 | `e2e-kassa.cjs` | to‘liq kun sikli: boshlang‘ich qoldiq, sozlamalar, kirim, chiqim so‘rovi → tasdiq → pul berish, naqd o‘quv to‘lovi, bekor qilish, kunni yopish va tekshirish, qayta chop etish | v1 39, v2 39 |
-| k2 | `e2e-kassa2.cjs` | limit, asos hujjatisiz xarid, 2-ro‘yxat + Direktor, rad etish, ikki bosqichli smena topshirish, navbatdagi to‘lov, kamomad / ortiqcha, qayta ochish | v1 40, v2 40 |
-| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga; to‘xtatilgan kassada usul tanlovi | v1 28, v2 28 |
-| k4 | `e2e-kassa4.cjs` | kunlik hisobot (RP-02), nazorat ro‘yxati (RP-06: eskirgan smena topshirish), dalolatnomalar va «НУСХА», kutilayotgan smena kartasi | v1 36, v2 36 |
-| k5 | `e2e-kassa5.cjs` | o‘zaro hisob (maosh hisobidan farzand to‘lovi), dalolatnoma, bekor qilish | v1 22, v2 22 |
-| k6 | `e2e-kassa6.cjs` | davr surati va qulfi, maosh berish huquqi | v1 31, v2 31 |
-| k7 | `e2e-kassa7.cjs` | Buxgalter (2-ro‘yxat): tasdiq, kunni tekshirish (qayta ochilishidan oldin yopgan xodim — yo‘q), chop etish faqat «НУСХА», nazorat ro‘yxati, «Davr» | v1 32, v2 32 |
-| k8 | `e2e-kassa8.cjs` | onlayn kassa Z-hisoboti bilan solishtirish; kech kirim — NKM smenasi kuniga, Z tuzatilgani nazoratda | v1 35, v2 35 |
-| k9 | `e2e-kassa9.cjs` | yuridik shaxsga naqd to‘lov: ogohlantirish, Direktor tasdig‘i, chegara; kontragent turini tasdiqlash, ikki marta bosish | v1 18, v2 18 |
-| k10 | `e2e-kassa10.cjs` | KO-3 jurnali, chop etish, Excel (FD-28) | v1 17, v2 17 |
-| k11 | `e2e-kassa11.cjs` | RP-08 statiya matritsasi, oylik kassa to‘plami (Excel) | v1 17, v2 17 |
-| k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | v1 13, v2 13 |
-| k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | v1 39, v2 39 |
-| k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | v1 41, v2 41 |
-| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | v1 29, v2 29 |
-| k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | v1 31, v2 31 |
-| k17 | `e2e-kassa17.cjs` | FD-28 fayllari: qarzdorlar CSV («Moliya»), «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti — Direktorga (davomatda HR’ga ham) ismli; Moliya menejeri, buxgalter va kassirga ismsiz (o‘quvchi ID, xodim maosh ID’si — «Kamera ID»siz xodimning ruhsati ham, «-ismsiz», izoh), qolgan ustunlar qatorma-qator va jamlar bir xil; ekrandagi ro‘yxat ism bilan | v1 27, v2 27 |
-| k18 | `e2e-kassa18.cjs` | «Kassir» roli (egasi, 2026-11-17): asosiy rol «Kassir» — ochiq kunda kassa kitobi varag‘i (qoralama), kunni yopish, yopilgan kunning yakuniy kunlik hisoboti va kassa kitobi varag‘i («НУСХА»); Direktor: rol tanlovida yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog‘langan yangi xodimga «Kassir» oldindan tanlanadi (kirim, chiqim so‘rovi, pul berish — k1; ochiq kun hisoboti — k4) | v1 9, v2 9 |
+| k1 | `e2e-kassa.cjs` | to‘liq kun sikli: boshlang‘ich qoldiq, sozlamalar, kirim, chiqim so‘rovi → tasdiq → pul berish, naqd o‘quv to‘lovi, bekor qilish, kunni yopish va tekshirish, qayta chop etish | 39 |
+| k2 | `e2e-kassa2.cjs` | limit, asos hujjatisiz xarid, 2-ro‘yxat + Direktor, rad etish, ikki bosqichli smena topshirish, navbatdagi to‘lov, kamomad / ortiqcha, qayta ochish | 40 |
+| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga; to‘xtatilgan kassada usul tanlovi | 28 |
+| k4 | `e2e-kassa4.cjs` | kunlik hisobot (RP-02), nazorat ro‘yxati (RP-06: eskirgan smena topshirish), dalolatnomalar va «НУСХА», kutilayotgan smena kartasi | 36 |
+| k5 | `e2e-kassa5.cjs` | o‘zaro hisob (maosh hisobidan farzand to‘lovi), dalolatnoma, bekor qilish | 22 |
+| k6 | `e2e-kassa6.cjs` | davr surati va qulfi, maosh berish huquqi | 31 |
+| k7 | `e2e-kassa7.cjs` | Buxgalter (2-ro‘yxat): tasdiq, kunni tekshirish (qayta ochilishidan oldin yopgan xodim — yo‘q), chop etish faqat «НУСХА», nazorat ro‘yxati, «Davr» | 32 |
+| k8 | `e2e-kassa8.cjs` | onlayn kassa Z-hisoboti bilan solishtirish; kech kirim — NKM smenasi kuniga, Z tuzatilgani nazoratda | 35 |
+| k9 | `e2e-kassa9.cjs` | yuridik shaxsga naqd to‘lov: ogohlantirish, Direktor tasdig‘i, chegara; kontragent turini tasdiqlash, ikki marta bosish | 18 |
+| k10 | `e2e-kassa10.cjs` | KO-3 jurnali, chop etish, Excel (FD-28) | 17 |
+| k11 | `e2e-kassa11.cjs` | RP-08 statiya matritsasi, oylik kassa to‘plami (Excel) | 17 |
+| k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | 13 |
+| k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | 39 |
+| k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | 41 |
+| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | 29 |
+| k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | 31 |
+| k17 | `e2e-kassa17.cjs` | FD-28 fayllari: qarzdorlar CSV («Moliya»), «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti — Direktorga (davomatda HR’ga ham) ismli; Moliya menejeri, buxgalter va kassirga ismsiz (o‘quvchi ID, xodim maosh ID’si — «Kamera ID»siz xodimning ruhsati ham, «-ismsiz», izoh), qolgan ustunlar qatorma-qator va jamlar bir xil; ekrandagi ro‘yxat ism bilan | 27 |
+| k18 | `e2e-kassa18.cjs` | «Kassir» roli (egasi, 2026-11-17): asosiy rol «Kassir» — ochiq kunda kassa kitobi varag‘i (qoralama), kunni yopish, yopilgan kunning yakuniy kunlik hisoboti va kassa kitobi varag‘i («НУСХА»); Direktor: rol tanlovida yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog‘langan yangi xodimga «Kassir» oldindan tanlanadi (kirim, chiqim so‘rovi, pul berish — k1; ochiq kun hisoboti — k4) | 9 |
 | pay | `e2e-pay.cjs` | kassirning qo‘lda to‘lovi (onlayn va oflayn navbat) | dev 12, prod 12 |
 | legacy | `e2e-legacy.cjs` | kassa ishga tushmagan / o‘rnatilmagan holatda eski oqimlar; qaytarish oynasi (oddiy yo‘l): javob yo‘qolgach o‘zgartirilgan qayta yuborish rad | dev 17, prod 15 |
-| ar | `e2e-arxiv.cjs` | o‘quvchilar arxivi (egasi, 2026-11-18): chiqarilgan / bitirgan o‘quvchi faol sondan chiqadi (jami, sinf kartasi, bosh sahifa, kassir ro‘yxati), qidiruvda arxivga havola, kelajak sana bilan chiqarish, «🗄 Arxiv» va filtrlar, 📨 ma’lumotnoma (QR, telefon / to‘lovsiz), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma’lumotnomasi (baho / davomat — student_certificate), O‘IBDO‘ menyusida Arxiv, kassir qidiruvi; qabulxona ichki ma’lumotnomasi (oyna va «🖨 Ichki hisobot») — davomat, baho, xarakteristika yig‘madan, oylik xulosa «ko‘rsatilmaydi» | v1 30, v2 30 |
-| sl | `e2e-sales.cjs` | «Sotuvchi» roli (egasi, 2026-11-19): menyuda yagona «Ota-onalar bilan aloqa» bo‘limi, faol oilalar (arxivdagisiz) niqoblangan raqam bilan, «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo‘yicha qidiruv; 🔍 qidiruv, to‘lov navbati, tahrir / eksport tugmasi yo‘q; kirishda konsol xatosi va RLS rad etgan so‘rov yo‘q; REST (sotuvchi seansi): o‘quvchi, shaxsiy karta, faktura — bo‘sh, jurnal va Direktor jurnali — rad, o‘zini Direktor qila olmaydi; Direktor: bo‘lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali», «Foydalanuvchilar»dagi rol tanlovi, «Tahrirlash» oynasida sotuvchi ism-familiyasini o‘zgartirish (rol va holat o‘zgarmaydi) | v1 15, v2 15 |
+| ar | `e2e-arxiv.cjs` | o‘quvchilar arxivi (egasi, 2026-11-18): chiqarilgan / bitirgan o‘quvchi faol sondan chiqadi (jami, sinf kartasi, bosh sahifa, kassir ro‘yxati), qidiruvda arxivga havola, kelajak sana bilan chiqarish, «🗄 Arxiv» va filtrlar, 📨 ma’lumotnoma (QR, telefon / to‘lovsiz), 🎓 bitiruv, baho va monitoring jurnallari, ↩️ qaytarish, qabulxona ⏹️, uning ma’lumotnomasi (baho / davomat — student_certificate), O‘IBDO‘ menyusida Arxiv, kassir qidiruvi; qabulxona ichki ma’lumotnomasi (oyna va «🖨 Ichki hisobot») — davomat, baho, xarakteristika yig‘madan, oylik xulosa «ko‘rsatilmaydi» | 30 |
+| sl | `e2e-sales.cjs` | «Sotuvchi» roli (egasi, 2026-11-19): menyuda yagona «Ota-onalar bilan aloqa» bo‘limi, faol oilalar (arxivdagisiz) niqoblangan raqam bilan, «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo‘yicha qidiruv; 🔍 qidiruv, to‘lov navbati, tahrir / eksport tugmasi yo‘q; kirishda konsol xatosi va RLS rad etgan so‘rov yo‘q; REST (sotuvchi seansi): o‘quvchi, shaxsiy karta, faktura — bo‘sh, jurnal va Direktor jurnali — rad, o‘zini Direktor qila olmaydi; Direktor: bo‘lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali», «Foydalanuvchilar»dagi rol tanlovi, «Tahrirlash» oynasida sotuvchi ism-familiyasini o‘zgartirish (rol va holat o‘zgarmaydi) | 15 |
+| ui | `e2e-ui.cjs` | yagona dizayn (egasi, 2026-11-24): qurilmada eski tanlov (`iqror_ui = 'v1'`) va manzilda `?ui=v1` bo‘lsa ham yangi dizayn ochiladi, eski tanlov o‘chiriladi; kompyuterda ikonali panel, telefonda pastki menyu; Direktor bosh sahifasi yangi (klassik bloklar yo‘q); «Profil»da dizayn almashtirgichi yo‘q; sahifa xatolari yo‘q — 5 rol × 1440 / 390 | 42 |
 
-Jami: 44 o‘tish, 1154 tekshiruv (kassa 2 × 504, to‘lov 24, eski oqimlar 32, arxiv 60, sotuvchi 30).
+Jami: 25 o‘tish, 647 tekshiruv (kassa 504, to‘lov 24, eski oqimlar 32, arxiv 30, sotuvchi 15, yagona dizayn 42).
 
-**Holat (2026-11-20).** Oxirgi to‘liq yashil o‘tish — 2026-11-20: 44 o‘tish, 1154 tekshiruv — hammasi o‘tdi (≈ 15 daqiqa).
+**Holat (2026-11-24).** Oxirgi to‘liq yashil o‘tish — 2026-11-24 (faqat yangi dizayn): 25 o‘tish, 647 tekshiruv — hammasi o‘tdi
+(≈ 10 daqiqa). 2026-11-20 gacha har ssenariy ikkala dizaynda (v1 va v2) o‘tardi: 44 o‘tish, 1154 tekshiruv.
 Kod — «Sotuvchi» roli va uning uch raund mustaqil tekshiruvi tuzatishlari hamda RLS orqali vaqt bo‘yicha sizishni yopish (anon
 yopiq ro‘yxati, RLS yordamchilari plpgsql, policy darvozalari — `SESSIYA-ISHLARI.md` §85): kassa (k1–k18), qo‘lda to‘lov (pay),
 eski oqimlar (legacy) va arxiv (ar) shu o‘zgarishlardan keyin ham o‘tadi; `sl` — Direktor «Foydalanuvchilar» → «Tahrirlash»
@@ -175,7 +178,7 @@ await pg.goto(E.BASE + '/admin.html');
 
 * Rollar: `ids.R_DIR` (Direktor), `ids.R_MOL` (moliya menejeri), `ids.R_KAS` (kassir), `ids.R_REC`, `ids.R_TCH` va
   boshqalar — `local/ids.json` (urug‘ generatori yaratadi, keyingi qurishlarda o‘sha id’lar).
-* Tekshiruv: `ok(nom, shart, tafsilot)` → `PASS …` / `FAIL …` qatori; oxirida `JAMI (v1|v2): o‘tgan/jami` va chiqish kodi
+* Tekshiruv: `ok(nom, shart, tafsilot)` → `PASS …` / `FAIL …` qatori; oxirida `JAMI (v2): o‘tgan/jami` va chiqish kodi
   (0 — faqat hammasi o‘tsa). `run-all.sh` oxirgi `JAMI` qatorini va `FAIL` / `XATO` qatorlar sonini yig‘adi.
 * Sana: ilova `app.fin_today()` ga tayanadi; kunni surish — `app.fin_clock` (`k2`, `k8`, `k12` dagi kabi), oxirida
   albatta o‘chiriladi.

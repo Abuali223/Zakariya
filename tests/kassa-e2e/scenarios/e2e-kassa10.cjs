@@ -1,12 +1,12 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): KO-3 — kassa orderlari jurnali (F1.22, buxgalter ko'rigi M4).
 //   Moliya menejeri «KO-3» oynasi: jamlar, qoldiqlar, ro'yxat (bekor qilingani bilan), chop etish (KO-3 shakli), Excel (XLSX) — fayl
 //   o'qilib tekshiriladi; Excel FD-28 bo'yicha: Moliya menejeriga ismsiz, Direktorga to'liq, kassirda tugma yo'q (chop etadi);
-//   telefonda oyna sig'adi.  Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa10.cjs [v1|v2]
+//   telefonda oyna sig'adi.  Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa10.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const XLSX = require(E.REPO + '/vendor/xlsx/xlsx.mini.min.js');
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const res = []; const ok = (n, c, x) => { res.push({ n, ok: !!c }); console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  ' + JSON.stringify(x === undefined ? null : x).slice(0, 900))); };

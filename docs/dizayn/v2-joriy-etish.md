@@ -7,12 +7,15 @@ tuzilishi (guruhlar, bo‘limlar, ruxsatlar) o‘zgarmagan — faqat joylashuvi 
 
 ## Qanday ishlaydi
 
-- `admin.html` `<head>` dagi kichik skript `<html data-ui="v2">` ni qo‘yadi (standart — yangi dizayn).
+- **Yagona dizayn (egasi, 2026-11-24: «Eski dizaynni to‘xtat. Bundan keyin faqat yangi dizaynda ishlaymiz»).**
+  `admin.html` da `<html lang="uz" data-ui="v2">` doim turadi; eski dizayn (v1) va uning almashtirgichi — manzildagi `?ui=v1`
+  va «Profil» → «Ko‘rinish» → «Eski dizayn» — olib tashlandi. Qurilmada qolgan eski tanlov (`localStorage` → `iqror_ui`)
+  sahifa ochilganda o‘chiriladi va hech narsaga ta’sir qilmaydi. Klassik bosh sahifa (`renderDashboardClassic`, `dashFinance`)
+  va menyuning v1 tarmoqlari ham olib tashlandi — bosh sahifa faqat `renderDashboardV2()`, menyu faqat ikonali panel / pastki menyu.
 - Barcha yangi uslublar bitta blokda: `<style id="ui-v2">` (asosiy CSS'dan keyin). **Har bir qoida
-  `html[data-ui="v2"]` bilan boshlanadi** — bayroq bo‘lmasa sahifa piksel-piksel avvalgidek.
-- Eski ko‘rinishga qaytish (shu qurilmada eslab qolinadi):
-  - manzilga `?ui=v1` qo‘shish (qaytarish: `?ui=v2`), yoki
-  - «Profil» → «Ko‘rinish» → «Eski dizayn» / «Yangi dizayn».
+  `html[data-ui="v2"]` bilan boshlanadi** (bayroq doim bor; prefiks asosiy CSS ustidan aniqroq qoida bo‘lib qoladi).
+- Yangi ekranlar faqat yangi dizaynda quriladi va tekshiriladi (brauzer sinovlari — faqat v2; `tests/kassa-e2e` → `ui` ssenariysi
+  eski tanlov va `?ui=v1` bilan ham yangi dizayn ochilishini tekshiradi).
 - Hech qanday SQL, RLS, rol yoki bo‘lim ro‘yxati o‘zgarmagan. Chop etiladigan hisobotlar (PDF) o‘z uslubida — tegilmagan.
 
 ## 1-bosqich — umumiy ko‘rinish (barcha rollar)
@@ -98,8 +101,12 @@ kelmagan fakturalari ham qo'shilgan). Tuzatildi: davomat jurnaldan; ball — bah
 bo'lmasa `name`/`displayName`; xarajat yo'q bo'lsa «kiritilmagan» va marja «—»; qarz — muddati o'tgani alohida;
 «bugun tushdi»; kalendarda tadbirlar. «Tasdiqlash» bo'limi navbatlari endi PARALLEL yuklanadi (productionda ~7 s edi).
 
-## Holat: to‘xtatilgan (2026-11-09)
-Egasining qarori: dizayn ishlari vaqtincha to‘xtatildi, ustuvorlik — moliya (`docs/moliya/buxgalteriya-ish-reja.md`).
+## Holat
+**2026-11-09:** egasining qarori — dizayn ishlari vaqtincha to‘xtatildi, ustuvorlik — moliya (`docs/moliya/buxgalteriya-ish-reja.md`).
 1-, 2- va 3-bosqichlar bajarilgan (2-bosqich — 6446f57, deployni egasi qiladi). Ota-ona kabinetini (`index.html`) shu
-uslubga o‘tkazish boshlanmagan — egasi so‘raganda davom etadi. Yangi moliya ekranlari faqat mavjud komponentlardan
-quriladi va ikkala ko‘rinishda (v1, v2) ishlaydi.
+uslubga o‘tkazish boshlanmagan — egasi so‘raganda davom etadi.
+
+**2026-11-24:** egasining qarori — eski dizayn (v1) to‘xtatildi, bundan keyin faqat yangi dizayn: almashtirgich, klassik bosh
+sahifa va v1 tarmoqlari olib tashlandi (yuqorida, «Qanday ishlaydi»). Yangi ekranlar mavjud komponentlardan, faqat yangi dizaynda
+quriladi. Yuqoridagi 2026-11-09 tekshiruv yozuvlaridagi «`?ui=v1` nazorat rasmlari», «eski menyu sinovi (v1)» — tarixiy.
+SESSIYA-ISHLARI.md §86.

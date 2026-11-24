@@ -1,11 +1,11 @@
 // LOCAL ONLY (lokal stend — tests/kassa-e2e/README.md; sintetik ma'lumot, «--dev» zanjiri): RP-08 oylik statiya matritsasi va buxgalter uchun oylik kassa to'plami (F1.22).
 //   Moliya menejeri «Statiyalar» oynasi: jamlar (ichki o'tkazmasiz ham), haftalik jadval, chop etish, oylik to'plam (Excel, 4 varaq, ismsiz) —
-//   fayl o'qilib tekshiriladi; Direktor to'plami to'liq; kassirda Excel yo'q; telefonda oyna sig'adi.  Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa11.cjs [v1|v2]
+//   fayl o'qilib tekshiriladi; Direktor to'plami to'liq; kassirda Excel yo'q; telefonda oyna sig'adi.  Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa11.cjs
 const E = require('../lib/common.cjs'); const cp = require('child_process'); const { chromium } = E; const fs = require('fs');
 const OUT = E.OUT;
 const XLSX = require(E.REPO + '/vendor/xlsx/xlsx.mini.min.js');
 const { session, ids } = E;
-const UI = process.argv[2] === 'v1' ? 'v1' : 'v2';
+const UI = 'v2';   // yagona dizayn (eski dizayn — v1 — 2026-11-24 da olib tashlangan)
 const q = E.q;
 const asUser = (uid, sql) => q(`begin; select set_config('request.jwt.claims', '{"sub":"${uid}","role":"authenticated"}', true); set local role authenticated; ${sql}; commit;`).split('\n').pop();
 const sqlErr = (uid, sql) => cp.spawnSync(E.PSQL[0], [...E.PSQL.slice(1), '-q', '-At', '-d', E.DB, '-c',
