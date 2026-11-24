@@ -3138,7 +3138,7 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     ajratmaydi — 13-raunddagi 13 ta. 14-raund tuzatishlarining har bir sharti (sof yorliq, yorliqlar ro'yxati, langar, «-ni» ikkala
     ifodada va kirillchada, shu ism sinfi, barcha sinf bilan teng holat, noto'g'ri katak sinfi, alohida «ona» tekshiruvini qaytarish,
     apostrofni olib tashlash, yangi kirill yorliqlari) — H54–H58 bilan ushlanadi.
-  - *Solishtirish (yangi toza bazalarda):* yetti korpus to'plamining (388 fayl, ~360 ming oila) hammasi 2a91fa9 bilan baytma-bayt bir xil
+  - *Solishtirish (yangi toza bazalarda):* yetti korpus to'plamining (388 fayl, ~317 ming oila) hammasi 2a91fa9 bilan baytma-bayt bir xil
     (13-raund raqamlari o'zgarmadi; yorliq qoidasi korpuslardagi ota so'zli ona kataklarining bir qismini yorliq emas qiladi, lekin birorta
     oila natijasi o'zgarmaydi). 14-raund tekshiruvchisining generatorlari: genF (10 ta, 4 000 oila) — eng og'ir 2 269 -> 2 235 (34 eng og'ir
     -> to'g'ri, yangi xato yo'q; 025c023 ga nisbatan qolgan 8 tasi — bo'lingan komponent yoki shu ism sinfida aniq teng, 14- / 25-chegara),
@@ -3153,6 +3153,64 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 118/118, qolgan sonlar 13-raunddagidek);
     jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 13-raunddagidek); brauzer sinovlari — 44 ta
     o'tish, hammasi o'tdi (sotuvchi ssenariysi 15/15, ikkala dizaynda).
+- **15-mustaqil tekshiruv (735cae3 ga; 2026-11-24):** ikki yo'nalish (sof yorliq qoidasi va uning ro'yxati; guruh vakilining shu ism
+  sinfi kaliti), har topilma alohida tekshiruvchi tomonidan yangi bazalarda (735cae3, 2a91fa9, 025c023, 8f9925d, 67b0e73) qayta
+  tasdiqlandi; 2 topilma, rad etilgani yo'q:
+  1. *(o'rtacha; 735cae3 regressiyasi) ota yorlig'idagi telefon so'zining odatiy yozuvlari ro'yxatda yo'q edi:* «(otasining teli)»,
+     «(ОТАСИНИНГ РАКАМИ)» (rus klaviaturasida «қ» yo'q — «к» bilan), «(отец, раб.)», «(сот. отца)», «(дом. тел. отца)», «(dadasini teli)»,
+     «(otasining ishxonasi)», «(otasining uyi)» kabi yorliqlar sof yorliq deb topilmay, ajratuvchi karta himoya qilmay, ota qatorida «+»siz
+     uchinchi raqam, ona qatorida otaning raqami chiqardi (2a91fa9, 025c023 va 67b0e73 to'g'ri edi; tekshiruvchining 44 ta yorliqli
+     oilasidan 29 tasi). Endi ro'yxatda: ro'yxatdagi so'zlarning egalik shakli («teli», «mobili», «ishi», «ishxonasi», «uyi»), «k» / «к»
+     bilan yozuvi («rakam», «rakami», «ракам», «раками»), so'zlashuvdagi «sotka», «sotkasi», «мобильник», ruscha qisqartma va qaratqich
+     («сот», «раб», «дом», «телефона») — o'zbekchasi lotin va kirill yozuvida bir xil (tekshiruvchi taklif qilgan 14 so'zga shu turdagi
+     «mobili», «ishi», «sotka», «sotkasi» va kirillchasi, «мобильник» qo'shildi). «номер телефона отца» 2a91fa9 da ham yorliq emas edi
+     (eski «она» tekshiruvi «телефона» oxirini «она» deb o'qirdi). Yangi so'zlarning birortasi 423 korpus faylida uchramaydi.
+  2. *(yuqori; 735cae3 regressiyasi — D3) guruh vakili ota va onani almashtirardi:* otaning raqami ota ismli onasiz kartalarning ikkinchi
+     ustunida ham turgan, onasi ro'yxatdan o'tkazgan kartalarda esa ota katagida yozilgan oilada (ona ismli kartalar ona katagiga onaning
+     o'z raqamlarini yozgan bo'lsa ham) shu ism sinfi bo'yicha kalit onaning o'qishini tanlab, ota qatorida onaning raqami, ba'zan ikkala
+     qator almashib chiqardi; ota ismsiz guruhda ham (2a91fa9, 8f9925d va 67b0e73 to'g'ri edi; 025c023 — 735cae3 dagidek). Endi ikki kalit
+     (shu ism sinfi va barcha ota nomzodi kataklari bo'yicha) turli o'qishni tanlasa — ota ismi yozilgan ota kataklarida ko'proq turgani,
+     bu ham teng bo'lsa — shu ism sinfi bo'yicha tanlov (14-chegaradagi «ism dalili hal qiladi» qoidasi, faqat kalitlar farq qilganda).
+     Tekshiruvchi sinab rad etgan variantlar: ism dalilini birinchi kalit qilish — H52 Xorc buziladi; teng holatda barcha sinf tanlovi —
+     3:3 teng oila (V4R) tuzaladi, lekin genF dagi 12 ta D3 tuzatishi qaytadi.
+  - *Ma'lum chegara (yangilandi):* (24) ro'yxatda yo'q so'z (boshqa so'z, yozuv xatosi, «qo'l telefoni» — apostrof so'zni bo'ladi) yoki
+    aralash alifbo — yorliq emas; (26) ikki kalit farq qilib, ota ismli ota kataklarida ikkala o'qish teng uchrasa — shu ism sinfi bo'yicha
+    tanlov onaning o'qishini olishi mumkin (2a91fa9 va 8f9925d bunda to'g'ri edi; tekshiruvchining V4R oilasi); onaniki ko'p uchrasa —
+    onaniki (14-chegara: genF da 5 oila 735cae3 da tasodifan to'g'ri edi, endi 2a91fa9 dagidek eng og'ir).
+  - *Sinovlar:* yangi H59 (24 oila — har yangi yorliq so'zi alohida oilada, so'z ro'yxatdan olib tashlansa shu oila yiqiladi: «otasining
+    teli», «otasi tel rakam», «otasi rakami», «otasining mobili», «dadasining ishi», «otasining ishxonasi», «otasining uyi», «dadasi sotka»,
+    «otasining sotkasi», «dadasini teli», kirillchasi — «отасининг тели», «отаси тел ракам», «ОТАСИНИНГ РАКАМИ», «отасининг мобили»,
+    «отасининг иши», «отасининг ишхонаси», «отасининг уйи», «дадаси сотка», «отасининг соткаси», ruschasi — «сот. отца», «отец, раб.»,
+    «дом. тел. отца», «номер телефона отца», «папин мобильник»), H60 (2 oila: Rgl — H56 Dqs ko'zgusi; Ruc — onasi ro'yxatdan o'tkazgan
+    kartalarning ko'pchiligida otaning raqami), H61 (2 oila, o'z mutatsiya tahlilidan: Rtie — ikki kalit turli o'qishni tanlaydi, ota
+    ismli ota kataklarida ikkalasi teng — shu ism sinfi tanlovi qoladi; Rfrq — shu ism sinfi kalitlari teng, guruhdagi chastota hal qiladi;
+    ikkalasi genF generatoridan) — test soni 121; 735cae3 da H59, H60; 2a91fa9 da H54–H59, H61; 025c023 da H50, H52–H55, H57, H58, H60;
+    8f9925d da H50, H51, H53–H55, H57–H59, H61; 67b0e73 da H50–H55, H57, H58, H61 yiqiladi. Tekshiruvchilarning aniq oilalari (R2, R2o,
+    R2min, R3, T2, to'qqizta W1 varianti, V1, V2, H2a–d) — ota qatori to'g'ri; H56 / H58 va tekshiruvchining D3 tuzatishlari (Dqs, Dqc,
+    Dtie, Dqg, DqsFX, DqsFXo, DqsMF) saqlandi.
+    Mutatsiyalar (289: 14-raunddagi 251 tasidan 238 tasi o'zgarishsiz, 13 tasi yangi tuzilishga moslashtirildi; yangi 38 ta — 24 ta
+    yorliq (har yangi so'z alohida va hammasi birdan) va 14 ta M2 sharti): 258 tasi sinovlar bilan ushlandi; 18 tasi ekvivalent
+    (14-raunddagi 18 ta); 13 tasini hech bir sinov ajratmaydi — 14-raunddagi 13 tasidan 12 tasi (genF va genE da birorta oila natijasini
+    o'zgartirmaydi) va D_fpr_o2_k_off (barcha sinf tanlovidagi chastota: korpuslarda foydali holat yo'q — olib tashlansa genF dagi 2 ta
+    14-chegara oilasi tasodifan to'g'rilanadi; sinov bilan qotirilmadi). O'z mutatsiya tahlilida ikki kalit sinov bilan qoplanmagani
+    topildi: teng holatda shu ism sinfi tanlovi (D_fpr_arb_tie_o2 — barcha sinf tanlovi olinsa genF da 12 oila to'g'ri -> eng og'ir) va
+    shu ism sinfi tanlovidagi chastota (D_fpr_o3_k_off — olib tashlansa genF da 6 oila to'g'ri -> eng og'ir, 2 tasi aksincha) — yangi H61;
+    14-raunddan beri tirik qolgan D_fpr_k_off ham endi shu sinov bilan ushlanadi. Har bir yangi yorliq so'zi H59 bilan, M2 ning qolgan
+    shartlari (ikki nomzod, hakam kaliti, uning yo'nalishi, where sharti) H52 / H56 / H58 / H60 bilan ushlanadi.
+  - *Solishtirish (yangi toza bazalarda, 735cae3 ga nisbatan):* yetti korpus to'plami (388 fayl, ~317 ming oila) va genE (25 fayl, 10 000
+    oila) — baytma-bayt bir xil; genF (10 fayl, 4 000 oila) — eng og'ir 2 235 -> 2 240: 5 oila to'g'ri -> eng og'ir, hammasi 14-chegara
+    (ota ismli ota kataklarida onaning o'qishi ko'p — shu kartalarda otaning raqami asosan so'zga yopishgan yoki «+»siz; bittasi bo'lingan
+    komponent); 2a91fa9 ga nisbatan — 29 eng og'ir -> to'g'ri, yangi xato yo'q; 025c023 ga nisbatan qolgan 13 eng og'ir va 2 yo'qolgan —
+    14-chegara (bo'lingan komponentda — har komponentning o'z ism dalili) va bitta aniq teng holat (25-chegara). Natijalar
+    tekshiruvchilarning alohida tuzatishlari bilan bir xil.
+    Tezlik (toza bazalarda, VACUUM FULL ANALYZE; ikki seriya 5 martadan navbatma-navbat, eng kichigi): 735cae3 ga nisbatan −3…+6% (shovqin
+    chegarasida; ikki nomzodning oyna funksiyalari kichik guruhlarda ishlaydi); 67b0e73 ga nisbatan — oilalar ro'yxati +10–24%, sotuvchi
+    ro'yxati +10–18%, raqam ochish +9–22%, bitta oilada 3 000 / 6 000 karta va turli ota raqamlari +19–29%, raqamlari almashgan katta oila
+    +24–27% (735cae3 ning o'zi shu o'lchovda +8–30%).
+    To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) — yashil (test-sales-role 121/121, qolgan sonlar 14-raunddagidek);
+    jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va holat 14-raunddagidek); brauzer sinovlari (faqat yangi
+    dizayn) — 25 ta o'tish, 647 tekshiruv, hammasi o'tdi (sotuvchi ssenariysi 15/15). 16-raund mustaqil tekshiruvi o'tkazilmadi: egasi
+    keyingi vazifaga (Google Sheets) o'tishni so'radi.
 
 ## 86) Eski dizayn (v1) to'xtatildi — faqat yangi dizayn — 2026-11-24
 
