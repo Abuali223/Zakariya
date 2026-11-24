@@ -59,7 +59,8 @@ ekranlar: 1366×625, 1280×560, 1024×600, 1093×500 — panel to‘liq sig‘ad
 
 ## 3-bosqich — Direktor bosh sahifasi («Statistika»)
 
-`renderDashboard()` → v2 da `renderDashboardV2()`, v1 da `renderDashboardClassic()` (eski sahifa, o‘zgarmagan).
+`renderDashboard()` → `renderDashboardV2()` (2026-11-24 gacha v1 da eski — klassik — sahifa `renderDashboardClassic()` ham bor edi;
+u olib tashlandi).
 Sahifa **faqat o‘qiydi**: yozuv, SMS yoki holat o‘zgarishi yo‘q; tugmalar faqat tegishli bo‘limni ochadi
 («+ Yangi o‘quvchi» — mavjud qo‘shish oynasini ochadi, saqlash avvalgi tekshiruvlar bilan).
 

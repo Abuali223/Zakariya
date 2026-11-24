@@ -2227,7 +2227,7 @@ function openTab(tab){
   if(!tab){ currentTab=''; VIEW_GEN++; noTabsView(); return; }   // rolga hozircha bo'lim yo'q (masalan Buxgalter — kassa holati kelguncha)
   currentTab=tab; VIEW_GEN++;   // yangi ko'rinish — eski renderlarning kech yozuvi bekor bo'ladi
   $('#tabs').querySelectorAll('button[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
-  { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi ochiq turadi
+  { const ab=$('#tabs').querySelector(`button[data-tab="${tab}"]`), grp=ab&&ab.closest('.nav-grp');   // faol bo'lim guruhi belgilanadi (has-on); ochiq ro'yxat / oyna — v2NavAfterOpen yopadi
     $('#tabs').querySelectorAll('.nav-grp').forEach(el=>el.classList.toggle('has-on', el===grp));
     v2NavAfterOpen(tab); }
   const v=$('#view'); if(v){ v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
@@ -2412,7 +2412,7 @@ function dashCoreStats(students, users){
 
 /* ---- Moliya hisob-kitobi (faqat o'qish): bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun yordamchilar ---- */
 // FIN-RPT:BEGIN — moliya hisobotlarining sof yordamchilari (assets/js/fin-rpt.test.mjs shu blokni fayldan o'qib sinaydi).
-// To'lov usuli nomlari/ranglari — klassik «Statistika», yangi bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun BITTA manba: nomlar
+// To'lov usuli nomlari/ranglari — bosh sahifa, «Moliya» va «Buxgalteriya» A4 uchun BITTA manba (klassik «Statistika» — 2026-11-24 gacha): nomlar
 //   PROV_LBL dan (A6-08). Avval uch joyda alohida nusxa edi va o'zaro hisob ('offset' — maoshdan farzand to'lovi, kassa_offset) ularda
 //   yo'q edi: bosh sahifa va A4 da «offset» xom kaliti, «Moliya»da «Boshqa» bo'lib ko'rinardi («To'lovlar» va Telegram'da — to'g'ri).
 const DF_PMLAB=Object.assign({}, PROV_LBL, {'':'Boshqa'});

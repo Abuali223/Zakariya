@@ -964,7 +964,7 @@ F1.20 (RLS relizi) — 1b-bosqichda.
 | F1.9 | L | 4 | Kun sikli: ochish, yopish (farq → 5910/9390, qat’iy qatorli varaqlar, xesh), topshirish-qabul, tekshirish, qayta ochish, kamomad qarori, o‘qish RPC lari | F1.4–F1.8; FD-18, 21, 22 | Zanjir; 31.12 testi; KO-4 = sanalgan |
 | F1.10 | M | 2,5 | KO-2 oldindan tasdiq (2-ro‘yxat, > T1 direktor); navbatlar admin.html da | F1.1, F1.4; FD-08, 17 | Tasdiqsiz KO-2 o‘tmaydi |
 | F1.11 | S | 0,5 | RF-08 UI: to‘lovlar faqat RPC orqali, `canPaySalary` toraytiriladi | F1.5 | HR/MM rad |
-| F1.12 | L | 6 | «Kassa» bo‘limi: kun kartasi, hujjatlar, shakllar, tomon tanlash, oynalar, sozlamalar | F1.9, F1.10 | v1/v2, 1440/390 px; yangi CSS yo‘q |
+| F1.12 | L | 6 | «Kassa» bo‘limi: kun kartasi, hujjatlar, shakllar, tomon tanlash, oynalar, sozlamalar | F1.9, F1.10 | yangi dizayn (2026-11-24 gacha v1/v2), 1440/390 px; yangi CSS yo‘q |
 | F1.13 | M | 3 | Mavjud oqimlarni ulash (to‘lov shakli fiskal № bilan, maosh/avans usuli, qaytarish, Buxgalteriya: usul + statiya + kontragent; termal chek to‘lovchiga yo‘q) | F1.4–F1.6, F1.12 | RPC ni chetlab o‘tadigan naqd yo‘l yo‘q |
 | F1.14 | L | 5 | Chop etish: KO-1 + patta, KO-2, KO-4, dalolatnomalar; `fin-words.js` | F1.9; FD-05, 07, 08 | Matn suratlari; ≥ 30 misol |
 | F1.15 | M | 2 | RP-02, RP-06, Telegram bloki va nazorat qatori | F1.9, F0.12 | RP-02 = KO-4; `--dry` = RP-02 |
@@ -983,7 +983,7 @@ barcha rekvizitlar bilan; varaq raqamlari qayta chop etishda bir xil. AC1.9 o‘
 AC1.10 naqdsiz va o‘zaro hisob KO-4 da yo‘q. AC1.11 rol matritsasi UI va RPC da; anon hech narsa ko‘rmaydi. AC1.12
 oflaynda to‘lovchiga varaqa yo‘q, ikki marta sanash va qotish yo‘q, «Қ» faqat ruxsat bilan. AC1.13 `director_daily`
 to‘g‘ri; prod tekshiruvi `--dry`. AC1.14 har KO-2 2-ro‘yxat tasdig‘idan keyin; T1/L1 — direktor. AC1.15 tomon majburiy,
-RP-02 kalit bo‘yicha guruhlaydi. AC1.16 ruxsat ro‘yxati, xodimga `out_expense` yo‘q, L1. AC1.17 v1 va v2, kompyuter va
+RP-02 kalit bo‘yicha guruhlaydi. AC1.16 ruxsat ro‘yxati, xodimga `out_expense` yo‘q, L1. AC1.17 yangi dizayn (2026-11-24 gacha — v1 va v2), kompyuter va
 telefon, yangi CSS yo‘q. AC1.18 har o‘zgarish `change_log` da, sabablar bilan. AC1.19 parallel yuritishdan chiqish:
 3 ish kuni sanash = tizim, har KO qog‘oz manbasi bilan belgilangan, Click/Uzum kabinet = kanal bloki, bank = o‘tkazmalar,
 tushuntirilmagan farq yo‘q. AC1.20 webhook’lar tegilmagan (payments `npm test`, service_role testlari). AC1.21 31.12
@@ -1231,7 +1231,7 @@ ROLLBACK, test soati; raqamlash, idempotentlik, bekor qilish, I1–I6, triggerla
 / tomon / ruxsat / L1, davr qulfi); `test-kassa-race.sh` (8 × 200 ROLLBACK bilan; `apply_payment` bilan 500 aralashuv;
 ikki katta KO-2; yopish paytida o‘tkazish; yil chegarasi; yarim tundan keyingi sinxronlash); PostgREST rad etish testlari;
 `node --test` (so‘zlar, shablonlar, XLSX); statik UI (`_setClient`); Playwright — repo’dagi `tests/kassa-e2e` (lokal stend,
-`run-all.sh`, kutilgan sonlar README’da) va sinov stendida (v1/v2, 1440/390: 3 to‘lov —
+`run-all.sh`, kutilgan sonlar README’da) va sinov stendida (yangi dizayn, 1440/390: 3 to‘lov —
 biri ortiqcha, biri kelgusi oyga; qaytim; T1 dan katta xarajat; topshirish; bekor qilish; farq bilan yopish; tekshirish);
 regressiya (payments `npm test`, test-audit-fixes, test-public-close, test-auth-rls). Moslik: P1 KO-1 = naqd to‘lovlar;
 P2 KO-4 zanjiri; P3 hisoblagichlar; P4 naqd xarajat = KO-2; P5 maosh/avans = KO-2; P6 bosh kitob 5010 = KO-4; P7 mavjud

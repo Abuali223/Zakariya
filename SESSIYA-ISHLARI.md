@@ -3173,7 +3173,12 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   kompyuterda ikonali panel / telefonda pastki menyu, Direktor bosh sahifasi yangi (klassik bloklar yo'q), «Profil»da almashtirgich yo'q,
   sahifa xatolari yo'q — 5 rol (Direktor, Moliya menejeri, kassir, o'qituvchi, hamshira) × 1440 / 390 piksel, 42 tekshiruv.
 - **Tekshiruv:** tugun sinovlari — 16 fayl, hammasi o'tdi; brauzer to'plami (faqat yangi dizayn) — 25 o'tish, 647 tekshiruv, hammasi
-  o'tdi (≈ 10 daqiqa; avval 44 o'tish — har ssenariy ikkala dizaynda). Mustaqil ko'rik (kod; sinov va hujjatlar) natijasi — quyida.
+  o'tdi (≈ 10 daqiqa; avval 44 o'tish — har ssenariy ikkala dizaynda).
+- **Mustaqil ko'rik (ikki yo'nalish — kod; sinov va hujjatlar — har topilma alohida raqib tekshiruvchi bilan):** kodda nuqson
+  topilmadi — barcha rollar (guruhsiz, bo'limsiz Buxgalter, bitta bo'limli sotuvchi ham) uchun yangi dizayn yo'li avvalgidek, olib
+  tashlangan funksiyalarga havola qolmagan, chop etish oynalari bayroqqa bog'liq emas, skriptlar sintaksis tekshiruvidan o'tdi,
+  `run-all.sh` standart ro'yxati har ssenariyni bir marta ishga tushiradi. 5 ta past darajali topilma — eskirgan izoh va hujjat jumlalari
+  (`admin.html` dagi ikki izoh, `v2-joriy-etish.md` «3-bosqich», moliya rejasining qabul mezonlari, sinovlar README'si holati) — tuzatildi.
 - **Hujjatlar:** `docs/dizayn/v2-joriy-etish.md` («Qanday ishlaydi», «Holat»), `docs/moliya/buxgalteriya-ish-reja.md`,
   `tests/kassa-e2e/README.md`.
 

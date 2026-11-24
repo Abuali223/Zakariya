@@ -135,7 +135,11 @@ shu jadval ham yangilanadi):
 Jami: 25 o‘tish, 647 tekshiruv (kassa 504, to‘lov 24, eski oqimlar 32, arxiv 30, sotuvchi 15, yagona dizayn 42).
 
 **Holat (2026-11-24).** Oxirgi to‘liq yashil o‘tish — 2026-11-24 (faqat yangi dizayn): 25 o‘tish, 647 tekshiruv — hammasi o‘tdi
-(≈ 10 daqiqa). 2026-11-20 gacha har ssenariy ikkala dizaynda (v1 va v2) o‘tardi: 44 o‘tish, 1154 tekshiruv.
+(≈ 10 daqiqa). Kod — eski dizayn (v1) olib tashlangandan keyingi holat (`SESSIYA-ISHLARI.md` §86; «Sotuvchi» oilalari — §85, 14-raund
+tuzatishlari): kassa, to‘lov, eski oqimlar, arxiv va sotuvchi ssenariylari faqat yangi dizaynda; yangi `ui` — eski tanlov va `?ui=v1`
+bilan ham yangi dizayn ochilishi.
+
+**Oldingi holat (2026-11-20).** To‘liq yashil o‘tish — 2026-11-20: har ssenariy ikkala dizaynda (v1 va v2), 44 o‘tish, 1154 tekshiruv.
 Kod — «Sotuvchi» roli va uning uch raund mustaqil tekshiruvi tuzatishlari hamda RLS orqali vaqt bo‘yicha sizishni yopish (anon
 yopiq ro‘yxati, RLS yordamchilari plpgsql, policy darvozalari — `SESSIYA-ISHLARI.md` §85): kassa (k1–k18), qo‘lda to‘lov (pay),
 eski oqimlar (legacy) va arxiv (ar) shu o‘zgarishlardan keyin ham o‘tadi; `sl` — Direktor «Foydalanuvchilar» → «Tahrirlash»
