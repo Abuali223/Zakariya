@@ -1654,12 +1654,21 @@ select zz.chk('H49 aka-uka: ota raqamining soni — shu ism sinfidagi kartalar h
 --   o'zgarmaydi (oilaning yagona umumiy raqami); Umumt — ikkala katakdagi umumiy raqam ota katagida ona katagidan kam emas (2:2 teng) —
 --   o'zgarmaydi; Boshkat — ona ismli kartaning bo'sh ona katagi «ona ismli barcha kartalar»ga sanalmaydi (dalil emas); Oltinchi — ona
 --   raqami ota ismli kartalarda qo'ng'iroq qilib bo'lmaydigan yozuvda (6-daraja) — 3-darajaga ko'tarilmaydi, otaning 4-darajadagi raqami
---   oldin.
+--   oldin. 12-mustaqil tekshiruv (8f9925d ga): Otasib / Oltita — ona ismli barcha kataklarda otaning raqami «(otasi)», onaning raqami
+--   onasiz kartada (ota katagida — ota raqami, ona katagida — boshqa raqam: ajratuvchi karta) — ota raqami otaniki qoladi (8f9925d da ota
+--   ismli kartalardagi «+»siz uchinchi raqam otaniki, ota raqami onaniki bo'lardi; 67b0e73 to'g'ri edi), uchinchi raqam ikki (teng) va uch
+--   kartada; Almash — raqamlari almashgan bitta karta (ota katagida ona raqami, ona katagida ota raqami) ajratuvchi emas (67b0e73 ota va
+--   onani almashtirardi); Boshkat — bo'sh ona katagi ham ajratuvchi emas; Otasib dagi otasiz ('-') kartaning ota katagidagi ona raqami
+--   almashuv belgisi emas (faqat ota ismli kartaning ota katagi); Famfsb — ona ustunini to'liq egallagan raqam ota ismli kartalarda
+--   «+»siz raqamdan ko'proq bo'lsa — otaniki qoladi (avval ota ismli kartalardagi soni, net emas); Xorsep — ajratuvchi kartaning ona
+--   katagida xorijiy telefon raqami («+44 7700 900 243») ham ajratadi; Izohsep — izohli 13 xonali yozuv («0044 7700 900752 (2)»,
+--   hujjat raqamiga o'xshash) ajratuvchi emas: ona raqami ota ismli kartaning ota katagida bo'lsa ham otaniki bo'lmaydi, «+»siz / so'zga
+--   yopishgan ota raqami otaniki.
 savepoint h50;
 set local session_replication_role = replica;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order")
   select 'x50' || lpad(g::text, 2, '0'), 'IQ-X50' || lpad(g::text, 2, '0'), 'Sinov Bola X50' || lpad(g::text, 2, '0'), 3 + g % 5, 'M', 'uz', '', 2900 + g
-    from generate_series(1, 43) g;
+    from generate_series(1, 69) g;
 insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2")
   select 'x50' || lpad(v.g::text, 2, '0'), v.fn, v.mn, v.fp, v.mp from (values
   (1,'Sinov Ota Nolguruhm','Sinov Ona Nolguruhm','447700900198','+998 00 006 22 98'),
@@ -1700,11 +1709,37 @@ insert into public.student_private (id, "fatherName", "motherName", "parentPhone
   (36,'Sinov Ota Boshkat','Sinov Ona Boshkat','447700900176','+998 00 006 22 76'),
   (37,'Sinov Ota Boshkat','Sinov Ona Boshkat','447700900176','+998 00 006 22 76'),
   (38,'Sinov Ota Boshkat','Sinov Ona Boshkat','+998 00 006 22 76','+998 00 006 22 76'),
-  (39,'Sinov Ota Boshkat','Sinov Ona Boshkat','447700900176',''),
+  (39,'Sinov Ota Boshkat','Sinov Ona Boshkat','+998 00 006 22 76',''),
   (40,'Sinov Ota Oltinchi','Sinov Ona Oltinchi','447700900178','+998 00 006 22 79'),
   (41,'Sinov Ota Oltinchi','Sinov Ona Oltinchi','447700900178','+998 00 006 22 79'),
   (42,'Sinov Ota Oltinchi','Sinov Ona Oltinchi','+998 00 006 22 79oyisi','+998 00 006 22 79'),
-  (43,'Sinov Ota Oltinchi','Sinov Ona Oltinchi','+998 00 006 22 79oyisi','+998 00 006 22 79')) v(g, fn, mn, fp, mp);
+  (43,'Sinov Ota Oltinchi','Sinov Ona Oltinchi','+998 00 006 22 79oyisi','+998 00 006 22 79'),
+  (44,'Sinov Ota Otasib','Sinov Ona Otasib','+998 00 111 21 31','+998 00 111 21 31 (otasi)'),
+  (45,'Sinov Ota Otasib','Sinov Ona Otasib','447700900131','+998 00 111 21 31 (otasi)'),
+  (46,'Sinov Ota Otasib','Sinov Ona Otasib','447700900131','+998 00 111 21 31 (otasi)'),
+  (47,'Sinov Ota Otasib',null,'+998 00 111 21 31','+998 00 222 42 37'),
+  (48,'Sinov Ota Oltita','Sinov Ona Oltita','447700900136','+998 00 111 21 36 (otasi)'),
+  (49,'Sinov Ota Oltita','Sinov Ona Oltita','447700900136','+998 00 111 21 36 (otasi)'),
+  (50,'Sinov Ota Oltita','Sinov Ona Oltita','447700900136','+998 00 111 21 36 (otasi)'),
+  (51,'Sinov Ota Oltita',null,'+998 00 111 21 36','+998 00 222 42 42'),
+  (52,null,'Sinov Ona Almash','447700900139','+998 00 222 42 43'),
+  (53,'Sinov Ota Almash','Sinov Ona Almash','44 7700 900139 (otasi)','+998 00 222 42 43'),
+  (54,'Sinov Ota Almash','Sinov Ona Almash','447700900139','+998 00 222 42 43'),
+  (55,'Sinov Ota Almash',null,'+998 00 222 42 43','44-7700-900139'),
+  (56,'-','Sinov Ona Otasib','+998 00 222 42 37ona','+998 00 111 21 31 (otasi)'),
+  (57,'Sinov Ota Famfsb','Sinov Ona Famfsb','+998 00 333 44 91','+998 00 333 44 91'),
+  (58,'Sinov Ota Famfsb','Sinov Ona Famfsb','+998 00 333 44 91','+998 00 333 44 91'),
+  (59,'Sinov Ota Famfsb','Sinov Ona Famfsb','+998 00 333 44 91','+998 00 333 44 91'),
+  (60,'Sinov Ota Famfsb','Sinov Ona Famfsb','447700900191','+998 00 333 44 91'),
+  (61,'Sinov Ota Famfsb','Sinov Ona Famfsb','447700900191','+998 00 333 44 91'),
+  (62,'Sinov Ota Xorsep','Sinov Ona Xorsep','447700900137','+998 00 111 21 37 (otasi)'),
+  (63,'Sinov Ota Xorsep','Sinov Ona Xorsep','447700900137','+998 00 111 21 37 (otasi)'),
+  (64,'Sinov Ota Xorsep','Sinov Ona Xorsep','447700900137','+998 00 111 21 37 (otasi)'),
+  (65,'Sinov Ota Xorsep',null,'+998 00 111 21 37','+44 7700 900 243'),
+  (66,'Sinov Ota Izohsep','Sinov Ona Izohsep','447700900651','44 7700 900752'),
+  (67,'Sinov Ota Izohsep','Sinov Ona Izohsep','-','+44 7700 900 752'),
+  (68,'Sinov Ota Izohsep','-','+44 7700 900752','0044 7700 900752 (2)'),
+  (69,'Sinov Ota Izohsep','-','+44 7700 900651ota','+447700900752')) v(g, fn, mn, fp, mp);
 set local session_replication_role = origin;
 select string_agg(coalesce(zz.rv(x.n) #>> '{father,phone}', '-') || ' ' || coalesce(zz.rv(x.n) #>> '{father,valid}', '-') || ' '
                   || coalesce(zz.rv(x.n) #>> '{mother,phone}', '-') || ' ' || coalesce(zz.rv(x.n) #>> '{mother,valid}', '-'), ' | ' order by x.o)
@@ -1713,13 +1748,17 @@ select string_agg(coalesce(zz.rv(x.n) #>> '{father,phone}', '-') || ' ' || coale
                                where r -> 'father' ->> 'name' = 'Sinov Ota Nolguruhm' limit 1), '-') as h50
   from (values (1, 'Sinov Ota Nolguruhm'), (2, 'Sinov Ota Nolguruhl'), (3, 'Sinov Ota Plusiz'), (4, 'Sinov Ota Yopishf'),
                (5, 'Sinov Ota Famfs'), (6, 'Sinov Ota Gtierc'), (7, 'Sinov Ota Nolj'), (8, 'Sinov Ota Birkarta'), (9, 'Sinov Ota Umumt'),
-               (10, 'Sinov Ota Boshkat'), (11, 'Sinov Ota Oltinchi')) x(o, n) \gset
+               (10, 'Sinov Ota Boshkat'), (11, 'Sinov Ota Oltinchi'), (12, 'Sinov Ota Otasib'), (13, 'Sinov Ota Oltita'), (14, 'Sinov Ota Almash'),
+               (15, 'Sinov Ota Famfsb'), (16, 'Sinov Ota Xorsep'), (17, 'Sinov Ota Izohsep')) x(o, n) \gset
 rollback to savepoint h50;
 select zz.chk('H50 aka-uka: ota ismli kartalarda faqat qo''ng''iroq qilib bo''lmaydigan yozuvdagi ota raqami — ona ustunini to''liq egallagan ona raqami (ota katagidagi «00X» guruhli ham) otaniki bo''lib chiqmaydi; ota ismli kartalarda ko''proq turgan qo''ng''iroq raqami, «0», bitta karta — o''zgarmaydi; umumiy raqam ota katagida kam bo''lmasa — o''zgarmaydi',
   :'h50', '^\*\*\* \*\* 98 false \+998000062298 true \| \*\*\* \*\* 99 false \+998020030199 true \| \*\*\* \*\* 84 false \+998002223384 true \| '
        || '\*\*\* \*\* 86 false \+998023456786 true \| \+998003334481 true \+998007778881 true \| \+998025674452 true \+447700900877 true \| '
        || '\+998004445572 true \+998004445572 true \| \+998006667774 true \+998006667774 true \| \+998005556683 true \+998005556683 true \| '
-       || '\*\*\* \*\* 76 false \+998000062276 true \| \*\*\* \*\* 78 false \+998000062279 true \|\| '
+       || '\*\*\* \*\* 76 false \+998000062276 true \| \*\*\* \*\* 78 false \+998000062279 true \| '
+       || '\+998001112131 true \+998002224237 true \| \+998001112136 true \+998002224242 true \| \*\*\* \*\* 39 false \+998002224243 true \| '
+       || '\+998003334491 true \+998003334491 true \| '
+       || '\+998001112137 true \+447700900243 true \| \*\*\* \*\* 51 false \+447700900752 true \|\| '
        || '\*\*\* \*\* 98 \+998 00 \*\*\* \*\* 98$');
 
 -- H51 — savepoint ichida (aka-uka kartalari, 11-mustaqil tekshiruv, 67b0e73 ga). Ochilganda ko'rsatiladigan asl yozuv (frw / mrw):
@@ -1731,12 +1770,29 @@ select zz.chk('H50 aka-uka: ota ismli kartalarda faqat qo''ng''iroq qilib bo''lm
 --   qo'ng'iroq raqami. Yozuvg / Yozuvh — faqat qo'ng'iroq kanonigi bo'yicha tanlash (guruhning min(fc) / min(mc)) xatosi: ona qatorida
 --   faqat ota raqami / ota qatorida faqat ikkinchi raqami (asosiy raqam yo'qolardi) — chiqmaydi. Zaxira — ota nomzodi yo'q (otasiz
 --   kartalardagi raqamlar ona ismli kataklarda ham bor), zaxira tanlovi (fpf) guruhida izohli qo'ng'iroq yozuvi va shu raqamlardan
---   iborat qo'ng'iroq qilib bo'lmaydigan yozuv: qo'ng'iroq yozuvi ko'rsatiladi.
+--   iborat qo'ng'iroq qilib bo'lmaydigan yozuv: qo'ng'iroq yozuvi ko'rsatiladi. 12-mustaqil tekshiruv (8f9925d ga; guruh vakili — ikkinchi
+--   ota-ona ustunida kamroq uchraydigan, so'ng ko'proq uchragan o'qish): Uchona / Tortona — ona guruhida 2:1 / 4:1, ozchilikdagi o'qish —
+--   otaning raqami (8f9925d eng kichigini olib, ona qatorida otaning raqamini ko'rsatardi) — ona qatorida onaning, ota qatorida (zaxira)
+--   otaning raqami; Ikkiota — ota guruhida ozchilikdagi o'qish ona raqami; Mosl — ona tomonidagi istisno ota qatorida ko'rsatiladigan raqam
+--   bilan (67b0e73 da ikkala qatorda ham otaning raqami); Xorota — ota guruhida ko'pchilik o'qish ona raqami (otaning «+»siz qismi
+--   o'qilmaydi) — faqat ko'proq uchragani olinganda ota qatorida ona raqami chiqardi; Ikkiona — ona guruhida 2:1, ikkala o'qish ota
+--   ustunida yo'q — ko'proq uchragani (eng kichigi emas); Otasiz — ota ismi yozilmagan oila: ota kataklarida otaning raqami, ona
+--   kataklarida ikkala raqam (biri so'zga yopishgan; otaning raqami ikki katakda qo'ng'iroq qilinadigan) — ikkala o'qish ota nomzodi
+--   kataklarida yo'q (otaning raqami ona katagida ham bo'lgani uchun otasiz kartalar nomzod emas), shunda ota ustunida ko'proq, ona ismli
+--   kartalarda kamroq turgan o'qish guruhda ko'p bo'lsa ham ona qatorida ko'rsatilmaydi: ona qatorida onaning, ota qatorida (zaxira)
+--   otaning raqami (8f9925d ona qatorida otaning raqamini ko'rsatardi, 67b0e73 da ota qatori bo'sh edi); Yozuvg da ham shu sababli ota
+--   qatorida endi otaning raqami; Yopish — ona ismli ikki kartada ona raqami, bittasida va onasiz uch kartada uchinchi raqam qo'ng'iroq
+--   qilinadigan (ikkinchisi so'zga yopishgan) — ona ustunidagi umumiy son emas, ona ismli kartalardagi soni (67b0e73 ona qatorida uchinchi
+--   raqamni ko'rsatardi); Kopyop — ona ismli besh kartadan ikkitasida ikkala raqam (birida ona raqami, ikkinchisida uchinchi raqam so'zga
+--   yopishgan), uchtasida faqat so'zga yopishgan ona raqami — ona guruhida 1:1, ona ismli kartalarda ona raqami ko'p: ona qatorida onaning
+--   raqami (8f9925d eng kichigini — uchinchi raqamni ko'rsatardi; 67b0e73 to'g'ri edi); Otaona — ona raqami ikki otasiz kartaning ota
+--   katagida (ota nomzodi emas), ona guruhida ona raqami va uchinchi raqam 1:1 — barcha ota kataklari bo'yicha birinchi sanalsa ona raqami
+--   jazolanib, uchinchi raqam chiqardi (67b0e73 ham uchinchi raqamni ko'rsatardi).
 savepoint h51;
 set local session_replication_role = replica;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order")
   select 'x51' || lpad(g::text, 2, '0'), 'IQ-X51' || lpad(g::text, 2, '0'), 'Sinov Bola X51' || lpad(g::text, 2, '0'), 3 + g % 5, 'M', 'uz', '', 3000 + g
-    from generate_series(1, 28) g;
+    from generate_series(1, 74) g;
 insert into public.student_private (id, "fatherName", "motherName", "parentPhone", "parentPhone2")
   select 'x51' || lpad(v.g::text, 2, '0'), v.fn, v.mn, v.fp, v.mp from (values
   (1,'Sinov Ota Yozuvd','Sinov Ona Yozuvd','+44 7700 900193','+998 01 483 17 93'),
@@ -1766,20 +1822,74 @@ insert into public.student_private (id, "fatherName", "motherName", "parentPhone
   (25,null,'Sinov Ona Zaxira','9980011122392','+998 00 888 99 39'),
   (26,null,'Sinov Ona Zaxira','9980011122392','+998 00 888 99 39'),
   (27,null,'Sinov Ona Zaxira','+998 00 888 99 39','+998 00 111 22 39'),
-  (28,null,'Sinov Ona Zaxira','+998 00 888 99 39','9980011122392')) v(g, fn, mn, fp, mp);
+  (28,null,'Sinov Ona Zaxira','+998 00 888 99 39','9980011122392'),
+  (29,null,'Sinov Ona Uchona','+998 00 111 22 35','+998 02 544 84 25, +998 00 111 22 35dadasi'),
+  (30,null,'Sinov Ona Uchona','+998 00 111 22 35','+998 02 544 84 25, +998 00 111 22 35dadasi'),
+  (31,null,'Sinov Ona Uchona','+998 00 111 22 35','+998 02 544 84 25oyisi, +998 00 111 22 35'),
+  (32,'yo''q','Sinov Ona Tortona','+998 00 111 22 45','+998 02 544 84 45, +998 00 111 22 45dadasi'),
+  (33,'yo''q','Sinov Ona Tortona','+998 00 111 22 45','+998 02 544 84 45, +998 00 111 22 45dadasi'),
+  (34,'yo''q','Sinov Ona Tortona','+998 00 111 22 45','+998 02 544 84 45, +998 00 111 22 45dadasi'),
+  (35,'yo''q','Sinov Ona Tortona','+998 00 111 22 45','+998 02 544 84 45, +998 00 111 22 45dadasi'),
+  (36,'yo''q','Sinov Ona Tortona','+998 00 111 22 45','+998 02 544 84 45oyisi, +998 00 111 22 45'),
+  (37,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24dadasi','+998 00 111 22 34, +998 00 444 55 67'),
+  (38,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24dadasi','+998 00 111 22 34, +998 00 444 55 67'),
+  (39,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24, +998 00 111 22 34oyisi','+998 00 444 55 67'),
+  (40,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24, +998 00 111 22 34oyisi','+998 00 444 55 67'),
+  (41,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24dadasi, +998 00 111 22 34','+998 00 444 55 67'),
+  (42,'Sinov Ota Ikkiota','Sinov Ona Ikkiota','+998 02 544 84 24dadasi','+998 00 444 55 67'),
+  (43,'Sinov Ota Mosl','Sinov Ona Mosl','+998 02 544 84 28, +998 00 111 22 48oyisi','+998 02 544 84 28'),
+  (44,'Sinov Ota Mosl','Sinov Ona Mosl','+998 02 544 84 28, +998 00 111 22 48oyisi','+998 00 111 22 48'),
+  (45,'Sinov Ota Mosl','Sinov Ona Mosl','+998 02 544 84 28dadasi, +998 00 111 22 48','+998 00 111 22 48'),
+  (46,'Sinov Ota Mosl','Sinov Ona Mosl','+998 02 544 84 28','+998 00 111 22 48'),
+  (47,'Sinov Ota Xorota',null,'44-7700-900145; 998028614645','998028614645'),
+  (48,'Sinov Ota Xorota',null,'44 7700 900145, 998028614645','998028614645'),
+  (49,'Sinov Ota Xorota',null,'+44 7700 900145','998028614645'),
+  (50,'Sinov Ota Xorota',null,'0044 7700 900145, 998028614645mob','998028614645'),
+  (51,'Sinov Ota Ikkiona','Sinov Ona Ikkiona','+998 01 333 22 51','+998 02 544 84 51, +998 00 111 22 51dadasi'),
+  (52,'Sinov Ota Ikkiona','Sinov Ona Ikkiona','+998 01 333 22 51','+998 02 544 84 51, +998 00 111 22 51dadasi'),
+  (53,'Sinov Ota Ikkiona','Sinov Ona Ikkiona','+998 01 333 22 51','+998 02 544 84 51oyisi, +998 00 111 22 51'),
+  (54,null,'Sinov Ona Otasiz','998005556681','tel01 909 46 28; +998005556681'),
+  (55,null,'Sinov Ona Otasiz','+998 00 555 66 81','tel01 909 46 28; +998005556681'),
+  (56,null,'Sinov Ona Otasiz','+998 00 555 66 81','01 909 46 28  ota998 00 555 66 81'),
+  (57,'Sinov Ota Yopish','Sinov Ona Yopish','+998 00 111 33 05','+998 00 333 44 05; 998007778805uy'),
+  (58,'Sinov Ota Yopish','Sinov Ona Yopish','+998 00 111 33 05','+998 00 333 44 05; 998007778805uy'),
+  (59,'Sinov Ota Yopish','Sinov Ona Yopish','+998 00 111 33 05','998003334405tel, +998 00 777 88 05'),
+  (60,'Sinov Ota Yopish',null,'+998 00 111 33 05','998003334405tel, +998 00 777 88 05'),
+  (61,'Sinov Ota Yopish',null,'+998 00 111 33 05','998003334405tel, +998 00 777 88 05'),
+  (62,'Sinov Ota Yopish',null,'+998 00 111 33 05','998003334405tel, +998 00 777 88 05'),
+  (63,'Sinov Ota Kopyop','Sinov Ona Kopyop','+998 00 794 06 11','+998 (00) 333-44-06 / 998002224406onasi'),
+  (64,'Sinov Ota Kopyop','Sinov Ona Kopyop','+998 00 794 06 11','+998 00 333 44 06onasi  +998 (00) 222-44-06'),
+  (65,'Sinov Ota Kopyop','Sinov Ona Kopyop','+998 00 794 06 11','998003334406tel'),
+  (66,'Sinov Ota Kopyop','Sinov Ona Kopyop','+998 00 794 06 11','998003334406oyisi'),
+  (67,'Sinov Ota Kopyop','Sinov Ona Kopyop','+998 00 794 06 11','tel998003334406'),
+  (68,'Sinov Ota Otaona','Sinov Ona Otaona','+44 7700 900781','447700900582'),
+  (69,null,'Sinov Ona Otaona','447700900582',null),
+  (70,'Sinov Ota Otaona','Sinov Ona Otaona','+44 7700 900781','44 7700 900582'),
+  (71,null,'Sinov Ona Otaona','44-7700-900582',null),
+  (72,'Sinov Ota Otaona','Sinov Ona Otaona','+44 7700 900781','+44 7700 900 582'),
+  (73,'-','Sinov Ona Otaona','+44 7700 900 781','+44 7700 900582ota, +998 00 555 25 82'),
+  (74,'-','Sinov Ona Otaona','+447700900781','+447700900582 ona  998005552582tel')) v(g, fn, mn, fp, mp);
 set local session_replication_role = origin;
 select string_agg(coalesce(zz.rv(x.n) #>> '{father,phone}', '-') || ' ' || coalesce(zz.rv(x.n) #>> '{father,valid}', '-') || ' '
                   || coalesce(zz.rv(x.n) #>> '{mother,phone}', '-') || ' ' || coalesce(zz.rv(x.n) #>> '{mother,valid}', '-'), ' | ' order by x.o)
        || ' || ' || coalesce((select r -> 'father' ->> 'phone' from jsonb_array_elements(coalesce(zz.list('U_SAL', quote_literal('Sinov Ota Yozuvd')) -> 'rows', '[]'::jsonb)) r
                                where r -> 'father' ->> 'name' = 'Sinov Ota Yozuvd' limit 1), '-') as h51
   from (values (1, 'Sinov Ota Yozuvd'), (2, 'Sinov Ota Yozuve'), (3, 'Sinov Ota Yozuvf'), (4, 'Sinov Ona Yozuvi'), (5, 'Sinov Ota Yozuvj'),
-               (6, 'Sinov Ona Yozuvg'), (7, 'Sinov Ota Yozuvh'), (8, 'Sinov Ona Zaxira')) x(o, n) \gset
+               (6, 'Sinov Ona Yozuvg'), (7, 'Sinov Ota Yozuvh'), (8, 'Sinov Ona Zaxira'), (9, 'Sinov Ona Uchona'), (10, 'Sinov Ona Tortona'),
+               (11, 'Sinov Ota Ikkiota'), (12, 'Sinov Ota Mosl'), (13, 'Sinov Ota Xorota'), (14, 'Sinov Ota Ikkiona'),
+               (15, 'Sinov Ona Otasiz'), (16, 'Sinov Ota Yopish'), (17, 'Sinov Ota Kopyop'),
+               (18, 'Sinov Ota Otaona')) x(o, n) \gset
 rollback to savepoint h51;
 select zz.chk('H51 aka-uka: ochilgan asl yozuv — bir xil butun katak kanonigidagi turlicha o''qiladigan kataklardan tanlangan raqamniki (ikki raqamli katak, so''ng qo''ng''iroq kanonigi); ota qatorida faqat ona raqami / ona qatorida faqat ota raqami chiqmaydi',
   :'h51', '^\+44 7700 900193, \+998 01 483 17 93 false \+998014831793 true \| \+44 7700 900194, \+998 01 483 17 94 false \+998014831794 true \| '
        || '\+447700900195 true 998 01 483 17 95, \+44 7700 900195 false \| \*\*\* \*\* 15 false \+447700900198 true \| '
-       || '\+998024569498 true \*\*\* \*\* 15 false \| - - \+998 01 483 17 96, \+44 7700 900196 false \| '
-       || '\+998 00 723-74-97, \+998 00 614-39-97 false \+998024831797 true \| \+998 00 111 22 39 false \+998008889939 true \|\| \*\*\* \*\* 93$');
+       || '\+998024569498 true \*\*\* \*\* 15 false \| \+447700900196 true \+998 01 483 17 96, \+44 7700 900196 false \| '
+       || '\+998 00 723-74-97, \+998 00 614-39-97 false \+998024831797 true \| \+998 00 111 22 39 false \+998008889939 true \| '
+       || '\+998001112235 true \+998 02 544 84 25 false \| \+998001112245 true \+998 02 544 84 45 false \| '
+       || '\+998 02 544 84 24 false \+998004445567 true \| \+998 02 544 84 28 false \+998001112248 true \| '
+       || '0044 7700 900145 false \+998028614645 true \| \+998013332251 true \+998 02 544 84 51 false \| '
+       || '\+998005556681 true 01 909 46 28 false \| \+998001113305 true \+998 00 333 44 05 false \| '
+       || '\+998007940611 true \+998 00 333-44-06 false \| \+447700900781 true \+447700900582 false \|\| \*\*\* \*\* 93$');
 
 -- har tekshiruv yozildimi (savepoint ichida yo'qolgan yoki bajarilmay qolgan tekshiruv — FAIL)
 select count(*)::text as yozilgan from zz.res \gset

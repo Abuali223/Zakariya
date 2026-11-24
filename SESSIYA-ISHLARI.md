@@ -2950,6 +2950,78 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
     ~0,31 s, xorijiy ~0,40 s, izohli ~0,61 s, katta oila ~0,40 s — 67b0e73 dan 0–5% farq. To'liq regressiya (dev, qayta zanjir, jonli,
     poyga, node) — yashil (test-sales-role 111/111, qolgan sonlar avvalgidek); jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH
     qatorlari avvalgidek).
+- **12-mustaqil tekshiruv (8f9925d ga; 2026-11-23…24):** ikki yo'nalish (oila: C — ota raqamini ko'tarish, E — ko'rsatiladigan yozuv);
+  server qayta ishga tushgani uchun tekshiruv yarim yo'lda to'xtadi — tekshiruvchilarning qisman ishidan (to'qima oilalar, C ga atalgan
+  generator: 71 korpus, 28 400 oila, tuzatish variantlari) davom ettirdim. 2 regressiya topildi (ikkalasi 8f9925d dagi o'zgarishlarim),
+  uchinchisini 11-raund korpusida «teng holat» deb tasniflangan oilani qayta ko'rib, to'rtinchisini (tezlik) yakuniy o'lchovda topdim:
+  1. *(o'rtacha; 8f9925d regressiyasi, C) ona ismli kataklarda otaning raqami:* ona ismli barcha kataklarga otaning raqami yozilgan
+     («+998 00 111 21 31 (otasi)» yoki izohsiz), onaning o'z raqami onasiz kartada, ota ismli kartalarda esa «+»siz uchinchi raqam (bobosi,
+     maktab) — C otaning raqamini «aniq ona raqami» deb pasaytirib, uchinchi raqamni otaniki, otaning raqamini onaniki qilardi (67b0e73
+     to'g'ri edi); C ga atalgan generatorda 67b0e73 ga nisbatan 55 yangi eng og'ir. Endi raqam ota katagida, ona katagida esa boshqa
+     telefon ko'rinishidagi raqam turgan ota ismli karta (ajratuvchi karta) bo'lsa, u pasaytirilmaydi; ona katagidagi raqam biror ota ismli
+     kartaning ota katagida ham tursa (raqamlari almashgan karta) — sanalmaydi (aks holda bitta almashgan karta C tuzatishini bekor qilib,
+     42 624 va 124 322 oilalik korpuslarda 3 va 11 yangi eng og'ir berardi), izohli raqam («0044 7700 900705 (2)» — 13 xona) ham
+     ajratuvchi emas.
+  2. *(o'rtacha; 8f9925d regressiyasi, E) guruh vakili:* bir xil raqamlar ketma-ketligi turlicha o'qiladigan kataklar guruhida (ona
+     katagida «+998 02 544 84 25, +998 00 111 22 35dadasi» — ona raqami, «+998 02 544 84 25oyisi, +998 00 111 22 35» — ota raqami)
+     8f9925d eng kichik raqamni ko'rsatib, 4:1 guruhda ham ona qatorida otaning raqamini chiqarardi (67b0e73 ko'pchilik yozuvni
+     ko'rsatardi). Endi ko'rsatiladigan raqam — ikkinchi ota-ona ustunida kamroq uchraydigan o'qish (ona guruhi uchun — ota nomzodi
+     kataklarida: otasiz kartaning ota katagidagi ona raqami sanalmaydi), so'ng guruhda ko'proq uchragani, so'ng kichigi (faqat ko'proq
+     uchragani olinsa — otaning «+»siz qismi o'qilmagan ota guruhida ona raqami ota qatorida chiqardi); ona tomonidagi 5-daraja va zaxira
+     tanlov ham ko'rsatiladigan raqam bilan solishtiriladi (aks holda ota qatori bir raqamni ko'rsatib, ona tomoni guruhning boshqa raqamini
+     chiqarib, ikkala qatorda bir raqam chiqishi mumkin edi — 67b0e73 da ham shunday edi).
+  3. *(o'rtacha; 8f9925d regressiyasi, E) ona guruhi vakili — ota ismsiz va «yopishgan» oilalarda:* (a) ota ismi yozilmagan oila: ota
+     kataklarida otaning raqami, ona kataklarida ikkala raqam («tel01 909 46 28; +998005556681» — otaning raqami qo'ng'iroq qilinadigan,
+     «01 909 46 28  ota998 00 555 66 81» — onaniki); otaning raqami ona katagida ham bo'lgani uchun otasiz kartalar ota nomzodi emas, ikkala
+     o'qish ota nomzodi kataklarida teng (0) — guruhda ko'proq uchragani / kichigi, ya'ni otaning raqami ona qatorida chiqardi (eng og'ir;
+     11-raundda 124 322 oilalik korpusdagi shunday oila «bitta raqamlar qatori ichida 1:1 teng» deb noto'g'ri tasniflangan edi); (b) ona
+     raqami ko'p ona ismli kataklarda so'zga yopishgan, ikki kartada ikkala raqam (1:1) — eng kichigi, ya'ni uchinchi raqam ko'rsatilardi
+     (67b0e73 to'g'ri edi; 11-raundda «guruh vakili chegarasi» deb yozilgan). Endi ona guruhida ota nomzodi kataklaridagi soni teng bo'lsa —
+     barcha kartalarning ota katagidagi soni minus ona ismli kartalarning ona katagidagi soni kamrog'i: ona qatorida onaning, ota qatorida
+     (zaxira) otaning raqami.
+  4. *(o'rtacha; shu raunddagi tuzatishlar regressiyasi, yakuniy tezlik o'lchovida topildi) tezlik:* fxo dagi fam bilan anti-join (Postgres
+     CTE hajmini ~47 million qator deb baholab, 2 ming kartalik ro'yxat uchun diskka bo'lingan 1024 bo'lakli hash qurardi) va zaxira
+     tanlovning har oila uchun alohida ichki so'rovi oilalar ro'yxatini va raqam ochishni 2,5–4 baravar sekinlashtirgan edi. Endi ota ismli
+     kartalarning noyob raqamlari oila bo'yicha massivga yig'iladi (fna; bir xil raqamli katta oilada har karta uchun minglab taqqoslash
+     bo'lmaydi), zaxira tanlovning ko'rsatiladigan raqami — bitta guruhlash (fpd); natija to'rttala korpus to'plamida baytma-bayt bir xil.
+  - *Rad etilgan variantlar (korpuslarda va sinovlarda):* teng sonda qo'ng'iroq qilinadigan raqamni oldin olish (C ga atalgan korpusda 14
+    yangi eng og'ir); ajratuvchi kartani almashuv tekshiruvisiz sanash (3 / 11 yangi eng og'ir); guruh vakili — faqat eng ko'p uchragani
+    (42 624 oilada 1–2 yangi eng og'ir); ona guruhi vakili barcha ota kataklaridagi soni bo'yicha (otasiz kartalarning ota katagidagi ona
+    raqami uni jazolab, 124 322 oilalik korpusda ona raqami yo'qolardi); ona ustunidagi barcha kartalar bilan farq (ona ismli kartalarda
+    ona raqami, onasiz kartalarda uchinchi raqam ko'p yozilgan oilada uchinchi raqam ona qatorida chiqardi — 67b0e73 dagi kabi; C ga
+    atalgan korpusda bir oilaning asosiy qatorida ham); faqat ota ustunidagi ortiqcha bo'yicha ((b) tuzalmasdi).
+  - *Ma'lum chegara (yangilandi):* ona ismli barcha kataklarda otaning raqami, onaning raqami faqat onasiz kartalarda va ajratuvchi karta
+    yo'q bo'lsa, ota katagida otanikidan kam bo'lmagan uchinchi («+»siz) raqam otaniki deb olinadi (C ga atalgan korpusda 67b0e73 ga
+    nisbatan 21 oila — ism dalili ikki tomonga ham ishora qiladi); guruhda o'qishlar ikkinchi ustunda (ona guruhida — ota nomzodi
+    kataklarida va ota kataklari / ona ismli kataklar farqida) ham, guruhda ham teng uchrasa — kichigi (tasodifiy teng holat).
+  - *Sinovlar:* H50 +6 oila (Otasib — ajratuvchi karta va otasiz kartadagi ona raqami, Oltita, Almash — almashgan karta, Famfsb; Boshkat
+    kartasi bo'sh ona katagi ajratuvchi emasligini ham tekshiradi; Xorsep — xorijiy raqamli ajratuvchi karta, Izohsep — izohli 13 xonali
+    yozuv ajratuvchi emas), H51 +10 oila (Uchona, Tortona, Ikkiota, Mosl, Xorota, Ikkiona, Otasiz, Yopish, Kopyop, Otaona; Yozuvg — ota
+    qatorida endi otaning raqami) — test soni o'zgarmadi (111); 8f9925d va 67b0e73 da H50 va H51 yiqiladi.
+    Mutatsiyalar: 200 ta (11-raunddagi 166 tasi + 12-raund: fxo va uning har bir sharti — telefon ko'rinishi, faqat 998 / faqat xorijiy /
+    sales_valid, almashuv tekshiruvi va undagi ism sharti, ota ismi, ≠; fpr / mpr kalitlari — fpn, ota kataklari − ona ismli kataklar va
+    uning variantlari (barcha ona kataklari, ortiqcha, faqat ota / faqat ona kataklari, tartibi), guruhda ko'proq uchragani; fpd; 5-daraja;
+    pick) — 177 tasi ushlanadi (birinchi yurishda omon qolgan uchtasi uchun Xorsep, Izohsep, Otaona qo'shildi), 12 tasi ekvivalent
+    (11-raunddagi 10 tasi; fxo dagi «998» sharti sales_intl_ok ichida; ≠ sharti almashuv tekshiruvi bilan bir xil), 11 tasi sinovlarda
+    natijani o'zgartirmaydi: ko'tarishda telefon ko'rinishi o'rniga sales_valid va fpf guruhida min o'rniga max (11-raunddagidek);
+    zaxira tanlovning ko'rsatiladigan raqami (4 ta: tartibi va ona ko'rsatgan raqamni chiqarib tashlash — ikkinchi ustun tartibi uni
+    baribir oxirga qo'yadi); fxo da ismsiz karta; ona guruhida fpn birinchi kalit (3 ta: olib tashlash, keyinga surish, faqat ota ismli
+    kartalar) — ehtiyot kaliti: ota nomzodi katagida turgan o'qish ona ismli kataklarda ko'p bo'lsa ham ona qatoriga chiqmaydi; guruhda
+    ko'proq uchragani (endi ota / ona ismli kataklar farqidan keyin, kamdan-kam hal qiladi).
+  - *Solishtirish (yangi toza bazalarda):* 8f9925d ga nisbatan — 9-raund korpuslari (46 ta, 74 000 oila) va yozuv shakliga atalgan
+    korpuslar (36 ta, 42 624 oila) baytma-bayt bir xil; C ga atalgan korpus (71 ta, 28 400 oila) — eng og'ir 8 857 -> 8 823, yo'qolgan
+    1 824 -> 1 823 (34 eng og'ir va 1 yo'qolgan -> to'g'ri); 11-raund tekshiruvchisining korpuslari (115 ta, 124 322 oila) — eng og'ir
+    24 966 -> 24 963, yo'qolgan 5 271 -> 5 270 (3 eng og'ir va 1 yo'qolgan -> to'g'ri, yana 2 oilada bo'sh ota qatori to'g'ri raqam bilan
+    to'ldi); yangi xato hech birida yo'q. 67b0e73 ga nisbatan — 9-raund: 45 tasi bir xil, 1 eng og'ir tuzaldi; yozuv shakli: eng og'ir
+    10 949 -> 10 892, yo'qolgan 2 601 -> 2 598 (11-raunddagidek); C ga atalgan: eng og'ir 8 870 -> 8 823 (65 eng og'ir -> to'g'ri, 3 ->
+    yo'qolgan; 21 to'g'ri -> eng og'ir va 1 to'g'ri -> yo'qolgan — yuqoridagi chegara, oxirgisida onaning raqami umuman yozilmagan);
+    11-raund korpuslari: eng og'ir 25 141 -> 24 963, yo'qolgan 5 261 -> 5 270 (168 eng og'ir va 7 yo'qolgan -> to'g'ri, 13 eng og'ir ->
+    yo'qolgan; 3 yangi eng og'ir — raqamlari almashgan oilalar, 14-chegaraning ona tomoni; 3 yangi yo'qolgan — 11-raundda tasniflangan).
+    Tezlik (toza bazada, 5 marta navbatma-navbat, eng kichigi; 67b0e73 ga nisbatan): oilalar ro'yxati oddiy ~0,29 s (+12%), xorijiy
+    ~0,37 s (+11%), izohli ~0,56 s (+7%), katta oila ~0,37 s (+11%); sotuvchi ro'yxati +10–15%, raqam ochish +6–14% — yangi guruhlashlar
+    (fxo, fpr / mpr, fpd) hisobiga; 4-tuzatishdan oldin 2,5–4 baravar edi. To'liq regressiya (dev, qayta zanjir, jonli, poyga, node) —
+    yashil (test-sales-role 111/111, qolgan sonlar avvalgidek); jonli versiyadan yangilash mashqi — 0 xato (OGOHLANTIRISH qatorlari va
+    holat 11-raunddagidek).
 
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
