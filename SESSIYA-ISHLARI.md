@@ -3240,6 +3240,69 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
 - **Hujjatlar:** `docs/dizayn/v2-joriy-etish.md` («Qanday ishlaydi», «Holat»), `docs/moliya/buxgalteriya-ish-reja.md`,
   `tests/kassa-e2e/README.md`.
 
+## 87) Google Sheets'ga avtomatik yozish (`iqror-sheets`) — 2026-11-25
+
+- **Egasi (2026-11-25):** «Ma'lumotlarni Google Sheets'ga avtomatik yoziladigan qilish kerak.» Savollarga javob: «1. O'quvchi
+  ma'lumotlari va qarzdorlik va oylik to'lovlar, barcha hisobotlar. 2. Platformadagi o'zgarishlar barchasi jadvalga yoziladi.
+  3. Har bir o'zgarish o'sha zahoti yangilansin. 4. Buni direktor hal qiladi» (jadvalga kirish huquqi).
+- **Yo'nalish — faqat platforma → jadval.** Jadvaldagi tahrir platformaga qaytmaydi (keyingi yozishda platforma qiymati bilan
+  almashadi); varaqlar «ogohlantirish bilan» himoyalangan; hisob-kitob uchun alohida varaq va formulalar tavsiya etiladi.
+- **Baza (`migration/sheets-sync.sql`, zanjirda `student-archive.sql` dan keyin):**
+  - `app.sheets_outbox` — o'zgarishlar navbati; `app.sheets_mark()` triggeri (o'quvchi va maxfiy karta — faqat varaqda ko'rinadigan
+    ustunlar o'zgarganda, `WHEN`; hisob-faktura, to'lov, qaytarish, xarajat, avans — har o'zgarishda; Kassa moduli bo'lsa `cash_docs` /
+    `cash_doc_lines` — oylik hisobotdagi «boshqa kirim» uchun). Yozuv o'zgarish bilan bir tranzaksiyada, faqat INSERT (parallel to'lovlar
+    kutmaydi). Navbatga faqat xizmat oxirgi 15 daqiqada tirik bo'lsa yoziladi (`app.sheets_state.beat`) — xizmat o'rnatilmaguncha
+    ta'sir yo'q; 7 kundan eski yozuvlar tozalanadi (bunday uzilishdan keyin xizmat baribir to'liq yozadi).
+  - Ijara (`app.sheets_state.holder`): bir vaqtda faqat bitta xizmat nusxasi yozadi; navbatni o'qish / o'chirish faqat ijara egasiga;
+    3 daqiqa yangilanmasa boshqa nusxa oladi; xizmat to'xtaganda bo'shatadi (`sheets_release`).
+  - To'liq yozish belgisi (`sheets_full_begin` / `sheets_full_end`): boshida ko'rinib turgan navbat belgilanadi, oxirida faqat u
+    o'chiriladi — uzoq uzilishdan keyingi katta navbat id tashimasdan tozalanadi, o'rtada kelgani qoladi.
+  - `public.sheets_tab(varaq, kalitlar, o'quvchilar, boshlang'ich oy)` — 7 varaq: O'quvchilar, Oylik to'lovlar (kalitli), To'lovlar
+    (kalitli), Qarzdorlik, Oylik hisobot, Xarajatlar, Qaytarishlar; har biri sarlavha, pul ustunlari (`money`) va qatorlar. Hisob admin
+    panel bilan bir xil (agent inventarizatsiyasi bo'yicha): `paidOf` / `debtOf`, `stuArchived`, kassaga tushgan pul —
+    `app.counts_as_receipt` + `app.pay_day` (`cashByMethod`), oy kirimi — shu oy fakturalari bo'yicha to'langan + kassadagi boshqa kirim
+    (`finance_other_income` qoidasi), xarajat oyi — `month`, bo'lmasa sana, qaytarilgan — `month`, bo'lmasa yaratilgan kun, yig'im foizi —
+    to'langan / (to'langan + qarz) («Moliya»). Kassa moduli qo'shadigan ustunlar (`fiscalNo`, `method`, `cashDocId` — hozir `--dev`)
+    `to_jsonb(qator)` orqali — jonli zanjirda katak bo'sh, funksiya yiqilmaydi.
+  - Varaqqa yozilmaydi: JSHSHIR, metrika, salomatlik, ketish sababi (faqat «bitirgan» belgisi), to'lovchi telefoni, alohida maosh,
+    kassa hujjatlari jurnali. Hammasi faqat `service_role` uchun (anon / authenticated, Direktor ham — 42501), jadvallar va ichki
+    funksiyalar hech bir mijoz roliga ochiq emas.
+- **Xizmat (`sheets/`):** `index.cjs` (asosiy sikl: yurak urishi va ijara, navbatni har 2 s tekshirish, xatoda kutib qayta urinish,
+  `config.json` o'zgarsa qayta ulanish, SIGTERM — ijarani bo'shatib chiqish, `--once` — bitta to'liq yozish; sozlanmagan bo'lsa jim
+  kutadi), `sync.cjs` (navbat → varaqlar: to'liq varaq — farq bo'lsa; kalitli — A ustunidan qator topilib o'z joyida, yangisi oxiriga,
+  o'chgani o'chiriladi; o'quvchi o'zgarsa — uning qatorlari; to'liq qayta yozish — ishga tushganda, har kecha 03:00 dan keyin, har
+  xatodan keyin, katta navbatda), `google.cjs` (Sheets API v4: JWT RS256 bilan token, 429 / 5xx / tarmoq — kutib qayta urinish,
+  401 — token yangilash, kvota — daqiqasiga 50 so'rov, har so'rovga vaqt chegarasi, 403 / 404 / kalit xatosi — tushunarli matn),
+  `fake-google.cjs` (faqat sinov uchun). Kalit — `sheets/google-key.json`, sozlama — `sheets/config.json` (ikkalasi gitignore, 600).
+- **Deploy:** `deploy.sh` — `sheets/` kod ro'yxatlarida, `iqror-sheets` xizmatlar tsiklida (o'rnatilmagan bo'lsa faqat eslatma);
+  `migration/deploy/iqror-sheets.service` (yangi), `full-deploy.sh` holat qatorlari, `backup.sh` sirlar fayliga `sheets/config.json` va
+  `google-key.json`. O'rnatish yo'riqnomasi (Google Cloud loyihasi, Sheets API, xizmat hisobi va kalit, jadvalni ulashish, serverdagi
+  sozlama, `--once` sinovi, systemd, holat va muammolar jadvali) — `sheets/README.md`.
+- **Kassa moduli izi:** `cash_docs` / `cash_doc_lines` dagi yangi trigger `kassa-checks.sql` 23-bandi (himoya mantig'i barmoq izi)
+  farqini berdi (`test-kassa-checks` 13/55) — modul tartibiga ko'ra izlar `migration/kassa-fingerprints.sh` bilan toza zanjirdan qayta
+  yozildi (+2 qator, reliz raqami o'zgarmaydi — server shartnomasi o'zgarmagan); endi 55/55.
+- **Sinov jarayonida topilib tuzatilgan:** (1) birinchi variant har varaqqa alohida so'rov yuborardi — ketma-ket o'zgarishlarda Google
+  kvotasiga (50/daq.) yetib, bir daqiqagacha to'xtab qolardi (uchdan-uchga sinovda ko'rindi). Endi bir aylanishdagi barcha varaqlar
+  birga yoziladi (A ustunlari — 1 so'rov, qiymatlar — 1, o'chirish / format — 1, tozalash — faqat qisqarganda), o'zgarmagan varaq
+  yozilmaydi: 7 varaqni to'liq yozish — 6 so'rov, oddiy o'zgarish — 2 so'rov, o'zgarishsiz — 0; (2) jonli zanjirda `payments."fiscalNo"`
+  yo'qligi sabab zanjir yiqilardi — `to_jsonb` orqali; (3) noto'g'ri sinf kaliti yoki cheksiz summa varaqni yiqitmaydi.
+- **Sinovlar:** `migration/test-sheets-sync.sql` — `--dev` 58, jonli 56 (huquqlar, har varaq qiymatlari qo'lda hisoblangan kutilgan
+  sonlar bilan, sezgir maydonlar yo'qligi, kalitli tanlov, boshlang'ich oy, navbat va triggerlar, bekor qilingan o'zgarish, xizmat
+  jimligi, ijara, to'liq yozish belgisi, tozalash; `--dev` da kassadagi boshqa kirim `finance_other_income` bilan bir xil);
+  `sheets/sheets.test.cjs` — 60 (JWT imzosi, token keshi, qayta urinish va Retry-After, kvota, vaqt chegarasi, xato matnlari, to'liq /
+  kalitli yozish, qo'lda tartiblangan varaq, o'chirilgan varaq, xatodan tiklanish, kechki yozish, katta navbat, so'rovlar soni,
+  `readConfig`); lokal uchdan-uchga sinov (haqiqiy `sheets/index.cjs` + PostgREST 12.2.3 + soxta Google HTTP serveri) — 37 tekshiruv:
+  jadval bazadagi bilan bir xil, o'zgarish 0,5–1 soniyada jadvalda, `--once` xizmat ishlayotganda rad etiladi, Google 503 — ichki qayta
+  urinish, ulashuv olib qo'yilsa (403) navbat saqlanib, qaytgach to'liq yozish bilan yetkaziladi, SIGTERM — ijara bo'shaydi, qayta ishga
+  tushgan xizmat kutmaydi. To'liq regressiya (dev, qayta zanjir, poyga, jonli, tugun sinovlari) — yashil; brauzer to'plami (faqat yangi dizayn) — 25 o'tish, 647 tekshiruv, hammasi o'tdi.
+- **Ma'lum chegaralar:** kalitli varaqlarda (Oylik to'lovlar, To'lovlar) yangi qator oxiriga qo'shiladi — tartib kechki to'liq yozishda
+  tiklanadi; jadvaldagi qo'lda tahrir keyingi yozishda (to'liq varaqda — ma'lumot o'zgarganda yoki kechasi) almashadi; xizmat to'xtagach
+  15 daqiqadan keyin navbat yig'ilmaydi — qayta yoqilganda to'liq yozadi; Google chegarasi 10 mln katak — `fromMonth`; kassa hujjatlari
+  jurnali varaqqa chiqmaydi (maosh to'lovlari kabi sezgir ma'lumot — kerak bo'lsa alohida qaror).
+- **Egasi uchun qadamlar:** Google Cloud'da xizmat hisobi va kalit, jadvalni xizmat hisobiga «Muharrir» qilib ulashish, serverda
+  `sheets/config.json` va `google-key.json`, `--once` sinovi, `iqror-sheets` xizmatini yoqish — `sheets/README.md` (deploy buyrug'i:
+  `bash ~/iqror-repo/deploy.sh`).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

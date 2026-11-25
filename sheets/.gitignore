@@ -1,0 +1,7 @@
+# Maxfiy: Supabase kaliti (config.json) va Google xizmat hisobi kaliti — faqat serverda, repoga va chatga yozilmaydi.
+config.json
+google-key.json
+*-key.json
+*.pem
+node_modules/
+*.log

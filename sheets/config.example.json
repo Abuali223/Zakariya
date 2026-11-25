@@ -1,0 +1,13 @@
+{
+  "_izoh": "Nusxa: cp sheets/config.example.json sheets/config.json && chmod 600 sheets/config.json (egasi — xizmat foydalanuvchisi). Kalitlarni repoga va chatga yozmang. Batafsil: sheets/README.md",
+  "backend": "supabase",
+  "supabaseUrl": "https://api.iqror.uz",
+  "serviceRoleKey": "PASTE_SERVICE_ROLE_KEY (Supabase .env) — MAXFIY",
+  "sheets": {
+    "enabled": true,
+    "spreadsheetId": "PASTE_JADVAL_ID (jadval havolasidagi /d/ va /edit orasidagi qism)",
+    "keyFile": "google-key.json",
+    "pollMs": 2000,
+    "fromMonth": ""
+  }
+}

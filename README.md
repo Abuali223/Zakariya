@@ -46,6 +46,7 @@ Supabase/PostgreSQL'ga ko‘chirilgan):
 | `payments/index.cjs` (`/hik`) | Yuz-terminal (Hikvision) hodisalari → `staff_checkins` (xodim + o‘quvchi). O‘quvchi davomati: kurator «Davomat»da kamera ko‘rganlar avtomatik «Keldi» bo‘lib turadi (`class_arrivals`). (Eski `camera-bridge/` olib tashlangan.) |
 | `payments/` | To‘lov provayderlari (Click; Uzum — kelishuv tayyor bo‘lguncha qo‘lda kiritiladi) webhook serveri + xabarnoma ishchisi (`sms-worker.cjs auto`: avval Telegram, yetkazilmasa SMS; sozlama — admin «Xabarnomalar»). |
 | `auth/` | Telefon + parol + OTP auth serveri, «Eslatma» SMS, hisobni bloklash, «🩺 Tizim holati», **Telegram bot** (`telegram-bot.cjs`: ota-ona raqami kartadagi raqam bilan tasdiqlanib ulanadi) va Direktorga kunlik hisobot (`tg-daily.cjs`). |
+| `sheets/` | **Google Sheets'ga avtomatik yozish** (`iqror-sheets`, ixtiyoriy): o‘quvchilar, oylik to‘lovlar, to‘lovlar, qarzdorlik, oylik hisobot, xarajatlar, qaytarishlar — har o‘zgarish bir necha soniyada jadvalda (faqat platforma → jadval). O‘rnatish: `sheets/README.md`. |
 
 Har bir xizmatning maxfiy sozlamalari (`config.json`, kalitlar) va `sb/sb-config.js`
 `.gitignore` bilan himoyalangan — repozitoriyaga qo‘shilmaydi.

@@ -139,6 +139,7 @@ set local iqror.migrating = '1';
 \ir audit-11-moliya.sql
 \ir sales-role.sql
 \ir student-archive.sql
+\ir sheets-sync.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-timing.sql, rls-plpgsql.sql va rls-initplan.sql doim OXIRGI uch fayl (chain.sh tekshiradi).
 \ir rls-timing.sql
 \ir rls-plpgsql.sql

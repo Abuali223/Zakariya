@@ -34,8 +34,8 @@ if [ "${IQROR_DEPLOY_REEXEC:-}" != "1" ] && ! git diff --quiet FETCH_HEAD -- dep
 fi
 # Server/backend + migratsiya + shim + AUTH kodi (config.json/sb-config.js tegilmaydi — gitignore).
 #   auth/ ham: avval ro'yxatda yo'q edi — frontend (index.html, sb/auth-api.js) va umumiy modullar (server/,
-#   payments/sms.cjs) yangilanib, auth serveri ESKI kod bilan qolardi.
-git checkout FETCH_HEAD -- ai-assistant payments server migration sb auth
+#   payments/sms.cjs) yangilanib, auth serveri ESKI kod bilan qolardi. sheets/ — Google Sheets xizmati (iqror-sheets, ixtiyoriy).
+git checkout FETCH_HEAD -- ai-assistant payments server migration sb auth sheets
 # Vaqtinchalik fayllar — har ishga tushishda YANGI shaxsiy papkada. (Avval qat'iy /tmp/iqror-sql.log edi: avvalgi
 #   `sudo` ishga tushirishdan qolgan root egali fayl soxta «migratsiya xato» ko'rsatardi.) Faqat yo'li chiqishda
 #   aytilganda (SQL xatosi — KEEP=1) qoldiriladi, aks holda o'chiriladi.
@@ -50,10 +50,16 @@ npm install --no-save @supabase/supabase-js @anthropic-ai/sdk ws >/dev/null 2>&1
 #   tasdiqlanmagan auth; avval masklangan iqror-ai/iqror-pay deployni soxta «BOSHLANMADI» yoki restart xatosi bilan to'xtatardi).
 #   O'rnatilmagan unit (masalan iqror-ai yo'q) — ogohlantirib o'tkaziladi (avval `systemctl restart` xatosi deployni
 #   baza va sayt yangilangandan KEYIN uzib qo'yardi).
+#   iqror-sheets (Google Sheets'ga avtomatik yozish) — ixtiyoriy: o'rnatilmagan bo'lsa faqat eslatma (sheets/README.md).
 SERVICES=""
-for s in iqror-ai iqror-pay iqror-auth; do
+for s in iqror-ai iqror-pay iqror-auth iqror-sheets; do
   if ! systemctl cat "$s" >/dev/null 2>&1; then
-    [ "$s" = iqror-auth ] || echo "⚠️  $s xizmati o'rnatilmagan — qayta ishga tushirilmaydi"; continue
+    case "$s" in
+      iqror-auth) ;;
+      iqror-sheets) echo "ℹ️  iqror-sheets (Google Sheets'ga avtomatik yozish) o'rnatilmagan — ixtiyoriy, o'rnatish: sheets/README.md" ;;
+      *) echo "⚠️  $s xizmati o'rnatilmagan — qayta ishga tushirilmaydi" ;;
+    esac
+    continue
   fi
   if [ "$(systemctl is-enabled "$s" 2>/dev/null || true)" = masked ]; then echo "⚠️  $s xizmati masklangan — tegilmaydi"; continue; fi
   if systemctl is-enabled --quiet "$s" 2>/dev/null || systemctl is-active --quiet "$s" 2>/dev/null; then SERVICES="$SERVICES $s"
@@ -71,7 +77,7 @@ SERVICES="${SERVICES# }"
 #   o'xshamasa — deploy BOSHLANMAYDI (avval yarim yo'lda tar xatosi bilan to'xtab, /opt aralash qolardi yoki jim
 #   o'tkazib yuborilib, xizmatlar ESKI kod bilan qayta ishga tushardi).
 REPO_REAL=$(realpath -m "$REPO"); SYNC=""   # SYNC: "papka:uid:gid" qatorlari (6-bosqich uchun)
-CODE_DIRS=$(git ls-tree -r -t FETCH_HEAD ai-assistant payments server sb auth | awk '$2=="tree"{print $4}')
+CODE_DIRS=$(git ls-tree -r -t FETCH_HEAD ai-assistant payments server sb auth sheets | awk '$2=="tree"{print $4}')
 # WorkingDirectory yo'q unit (masalan ExecStart=/usr/bin/node /srv/x/payments/index.cjs) — kod papkasi ExecStart'dagi
 #   absolyut yo'llardan yuqoriga qarab topiladi (payments/, ai-assistant/ yoki auth/ bor papka). Avval jim o'tkazilardi.
 exec_code_dir(){
@@ -118,7 +124,7 @@ for svc in $SERVICES; do
   ref="$wd/payments"; sudo test -e "$ref" || ref="$wd"
   own=$(sudo stat -c %u "$ref"); grp=$(sudo stat -c %g "$ref")
   if ! getent passwd "$own" >/dev/null; then
-    echo "❌ $ref egasi (uid $own) tizimda yo'q — deploy BOSHLANMADI. Papka egasini mavjud foydalanuvchiga o'zgartiring: sudo chown -R <user> $wd/{ai-assistant,payments,server,sb,auth}"; exit 1
+    echo "❌ $ref egasi (uid $own) tizimda yo'q — deploy BOSHLANMADI. Papka egasini mavjud foydalanuvchiga o'zgartiring: sudo chown -R <user> $wd/{ai-assistant,payments,server,sb,auth,sheets}"; exit 1
   fi
   oname=$(getent passwd "$own" | cut -d: -f1); gname=$(getent group "$grp" | cut -d: -f1 || true)
   # Mavjud kod papkalari (root ko'radi) — egasi ularga yoza olishi SHART; yo'qlari 6-bosqichda egasi nomiga yaratiladi.
@@ -235,11 +241,11 @@ while IFS=: read -r wd own grp; do
   echo "    xizmatlar kodi $wd dan ishlaydi — server kodi o'sha yerga ham yozilmoqda (config.json tegilmaydi)"
   # Yo'q yuqori papkalar (birinchi marta: auth/, sb/) — root sifatida, payments/ egasi nomiga yaratiladi (aks holda egasi
   #   root'ga tegishli /opt/iqror ichida papka yarata olmay deploy yarim yo'lda to'xtardi).
-  for d in ai-assistant payments server sb auth; do sudo test -d "$wd/$d" || sudo install -d -o "$own" -g "$grp" -m 0755 "$wd/$d"; done
+  for d in ai-assistant payments server sb auth sheets; do sudo test -d "$wd/$d" || sudo install -d -o "$own" -g "$grp" -m 0755 "$wd/$d"; done
   # Fayl ruxsatlari ARXIVDAGIdek (0644/0755) — tizim umask'iga bog'liq emas (UMASK 027'da 0640 bo'lib, xizmat kodni o'qiy olmasdi).
   #   `tar -C` papkani ochadi (o'qish huquqi kerak) — 0751 root:root /opt/iqror'da 2-bosqich o'tib, shu yerda yiqilardi.
   #   cd bilan faqat kirish (x) kerak — 2-bosqichdagi tekshiruv bilan AYNAN bir xil.
-  if ! git -c tar.umask=0022 archive FETCH_HEAD ai-assistant payments server sb auth \
+  if ! git -c tar.umask=0022 archive FETCH_HEAD ai-assistant payments server sb auth sheets \
       | sudo -u "#$own" sh -c 'cd "$1" && exec tar -x --no-same-owner --same-permissions --no-overwrite-dir' _ "$wd"; then
     echo "❌ $wd ga kod yozishda xato (yuqoridagi tar xabarlari). Baza va sayt allaqachon YANGI; xizmatlar qayta"
     echo "   ishga tushirilMADI (eski kod ishlab turibdi). Sababni tuzatib, deploy'ni qayta ishga tushiring."; exit 1

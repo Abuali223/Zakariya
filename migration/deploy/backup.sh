@@ -13,6 +13,7 @@
 #   Saqlash muddati: KEEP_DAYS (standart 60 kun) — faqat shu skript yaratgan fayllar o'chiriladi.
 #
 #   SIRLAR (secrets_<vaqt>.tar.gz, 600): Supabase .env, auth/payments/ai-assistant config.json, sb/sb-config.js (bor bo'lsa),
+#     sheets/config.json va sheets/google-key.json (Google Sheets xizmati o'rnatilgan bo'lsa),
 #     nginx sayt sozlamasi, iqror-*.service. Topilmagan fayl JIM o'tkazilmaydi — NOMI logga yoziladi (ichidagi qiymatlar
 #     hech qachon logga chiqmaydi). Yo'llar o'zgaruvchi bilan (standartlari — server tuzilishi, migration/deploy/README.md):
 #       SUPA_ENV=/opt/iqror/supabase/docker/.env  SRV_DIR=/opt/iqror  WEB_DIR=/var/www/iqror
@@ -134,7 +135,7 @@ else rm -f "$SM$P"; echo "⚠️ [$(date)] storage metama'lumoti (buckets/object
 #   Fayl NOMLARI logga yoziladi, ICHIDAGI qiymatlar hech qachon chiqarilmaydi.
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
 SEC_REQ=("$SUPA_ENV" "$SRV_DIR/auth/config.json" "$SRV_DIR/payments/config.json" "$SRV_DIR/ai-assistant/config.json" "$NGINX_SITE")
-SEC_OPT=("$WEB_DIR/sb/sb-config.js" "$SRV_DIR/sb/sb-config.js")
+SEC_OPT=("$WEB_DIR/sb/sb-config.js" "$SRV_DIR/sb/sb-config.js" "$SRV_DIR/sheets/config.json" "$SRV_DIR/sheets/google-key.json")
 [ -n "$REPO_DIR" ] && SEC_OPT+=("$REPO_DIR/sb/sb-config.js")
 for f in $SECRETS_EXTRA; do SEC_REQ+=("$f"); done
 SEC_HAVE=(); SEC_MISS=()

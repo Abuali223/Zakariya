@@ -58,7 +58,7 @@ git log -1 --format='    yangi versiya: %h %s (%cd)' --date=format:'%F %H:%M' FE
   || { echo "❌ FETCH_HEAD yo'q — avval: git fetch origin claude/iqror-med-school-impl-iqdntl"; exit 1; }
 sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONT" || { echo "❌ '$DB_CONT' baza konteyneri ishlamayapti (boshqa nom bo'lsa: DB_CONT=<nomi> ...)"; exit 1; }
 declare -A NR0   # deploy'dan oldingi NRestarts (keyingi tekshiruvda yiqilish/qayta ishga tushishni aniqlash uchun)
-for s in iqror-ai iqror-pay iqror-auth; do
+for s in iqror-ai iqror-pay iqror-auth iqror-sheets; do
   if systemctl cat "$s" >/dev/null 2>&1; then
     NR0[$s]=$(systemctl show -p NRestarts --value "$s" 2>/dev/null); case "${NR0[$s]}" in ''|*[!0-9]*) NR0[$s]=0;; esac
     echo "    $s: papka=$(systemctl show -p WorkingDirectory --value "$s") yoqilgan=$(systemctl is-enabled "$s" 2>/dev/null) holat=$(systemctl is-active "$s")"
@@ -190,14 +190,14 @@ fi
 #   tushiradi — systemd bunda NRestarts'ni 0 qiladi; shundan keyin 0 dan katta qiymat = xizmat yiqilib, o'zi qayta
 #   ko'tarilgan (3 s kutib yana qaraladi). /health — port config.json'da boshqacha bo'lsa javob bo'lmasligi mumkin, bu xato emas.
 sleep 3
-for p in "iqror-pay 8790" "iqror-ai 8791" "iqror-auth 8792"; do
+for p in "iqror-pay 8790" "iqror-ai 8791" "iqror-auth 8792" "iqror-sheets -"; do
   set -- $p
   systemctl cat "$1" >/dev/null 2>&1 || continue
   st=$(systemctl is-active "$1" 2>/dev/null); nr=$(systemctl show -p NRestarts --value "$1" 2>/dev/null)
   case "$nr" in ''|*[!0-9]*) nr=0;; esac; n0=${NR0[$1]:-0}
-  hl=$(curl -s -m 5 "http://127.0.0.1:$2/health" 2>/dev/null | head -c 80 || true)
+  hl=""; [ "$2" = - ] || hl=$(curl -s -m 5 "http://127.0.0.1:$2/health" 2>/dev/null | head -c 80 || true)   # iqror-sheets — HTTP'siz
   if [ "$st" = active ] && [ "$nr" = 0 ]; then
-    echo "    $1: active  /health: $hl"
+    if [ "$2" = - ]; then echo "    $1: active"; else echo "    $1: active  /health: $hl"; fi
   elif ! systemctl is-enabled --quiet "$1" 2>/dev/null && [ "$st" != active ]; then
     echo "    $1: $st (o'chirilgan/masklangan — deploy unga tegmaydi)"
   else
