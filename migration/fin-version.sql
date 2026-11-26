@@ -49,8 +49,12 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          fin_exp_void (statiya qatorlari, kontragent, hujjat №, ilova, server muallif; tuzatish — replaces, bekor qilish — sabab bilan;
 --          takror: clientRef, fin:exp_dup); expenses."expDocId"; trg_fin_exp_guard (hujjat qatori to'g'ridan-to'g'ri o'zgarmaydi),
 --          trg_fin_exp_doc_guard (hujjat — faqat bekor qilinadi); app.kassa_exp_category — OP-12 / OP-13 «Soliq».
+--     14 — 2-bosqich F2.2: kontragent kartasi to'liq (fin-core.sql ustunlari: hisob raqami, MFO, bank nomi, shartnoma №, sanasi va
+--          muddati, rev, updatedAt / updatedBy; cheklovlar fin_counterparties_bank_chk / _contract_chk; STIR — 9 raqam,
+--          app.fin_cp_stir_check) va fin-cp.sql: fin_cp_save (karta, versiya bilan; fin:cp_dup, fin:cp_stir_dup, fin:cp_changed),
+--          fin_cp_statement (RP-10 kontragent ko'chirmasi; faylda FD-28 bo'yicha ismsiz).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 13 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 14 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

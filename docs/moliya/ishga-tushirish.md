@@ -160,6 +160,12 @@ Keyin, hali hech narsa kiritmasdan:
   bilan); oylik maosh hisobi qatori — avvalgidek. Moliya menejeri va Direktorga birinchi kunda qisqa ko‘rsatiladi (statiya tanlash,
   kontragent qo‘shish). Keshdagi eski sahifa ham ishlaydi (hujjatsiz to‘g‘ridan-to‘g‘ri yozish huquqi — F2.9 da, detektor haftasidan
   keyin olinadi); sahifa yangilanganda hujjat oynasi ochiladi.
+- «Buxgalteriya» → «🏢 Kontragentlar» (F2.2, modul relizi 14+; Direktor, Moliya menejeri, buxgalter) — kontragentlar ro‘yxati (qidiruv,
+  tur va holat bo‘yicha), karta: STIR (9 raqam), bank hisob raqami (20 raqam) va MFO kodi (5 raqam), bank nomi, shartnoma (raqami,
+  sanasi, amal qilish muddati); «Ko‘chirma» (RP-10) — kontragent bilan barcha to‘lovlar (kassa orderlari, bank va karta), davr jamlari,
+  chop etish va Excel (jismoniy shaxs ko‘chirmasi Direktordan boshqaga — ismsiz, FD-28). Mavjud kontragentlarning rekvizitlari
+  o‘rnatishdan keyin bo‘sh — buxgalter hujjatlardan (shartnoma, hisob-faktura) to‘ldiradi; eski kartadagi noto‘g‘ri STIR o‘zgartirilmaguncha
+  qoladi (o‘zgartirilsa — 9 raqam talab qilinadi). Hisob raqami o‘zgarishlari o‘zgarishlar tarixida (Direktor ko‘radi).
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
   «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa

@@ -3353,6 +3353,50 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
 - **Egasi uchun:** kassa moduli hali `--dev` — F2.1 prod'da jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr; `ishga-tushirish.md`
   3.3 ga yangi eslatma). Hozirgi deploy (`bash ~/iqror-repo/deploy.sh`) prod'dagi xarajat oynasini o'zgartirmaydi.
 
+## 89) F2.2 — kontragentlar to'liq (STIR, hisob raqami, MFO, shartnoma) va RP-10 «Kontragent ko'chirmasi» — 2026-11-26
+
+- **Egasi (2026-11-26):** «Davom et, F2.2 ni boshla». Reja: «Kontragentlar to'liq (STIR, hisob, MFO, shartnoma); RP-10», qabul — «Seed'da
+  shaxsiy ma'lumot yo'q».
+- **Baza — karta (`migration/fin-core.sql`, kontragent jadvali yonida):** yangi ustunlar — bank hisob raqami (20 raqam), MFO kodi
+  (5 raqam), bank nomi, shartnoma raqami, sanasi va amal qilish muddati, versiya (`rev`), kim / qachon oxirgi marta o'zgartirgan. Jadval
+  cheklovlari: hisob raqami MFO'siz bo'lmaydi (MFO yolg'iz — bank filialida mumkin); shartnoma raqami va sanasi birga, muddat sanadan oldin
+  emas. STIR — 9 raqam (bo'shliqlar olib tashlanadi): jadval cheklovi emas — eski kartalarda boshqacha yozilgan bo'lishi mumkin, ular
+  boshqa maydon o'zgarganda saqlanaveradi; yangi yoki o'zgargan STIR'ni ikkala saqlash funksiyasi tekshiradi (`app.fin_cp_stir_check`).
+  Jismoniy shaxsning JShShIR'i (14 raqam) saqlanmaydi — shaxsiy ma'lumot, YaTT — STIR bilan. Eski `fin_counterparty_save` (KO va xarajat
+  oynalaridagi «+ yangi») rekvizitlarga tegmaydi, mavjud kartani o'zgartirsa versiyani oshiradi; takror kaliti va qulfi yangi funksiya bilan
+  umumiy (`app.fin_cp_name_key`). O'zgarishlar jurnalida rekvizitlar va shartnoma ham (hisob raqami o'zgarishi Direktorga ko'rinadi).
+- **Baza — funksiyalar (`migration/fin-cp.sql`, `--dev`, zanjirda `fin-exp.sql` dan keyin; modul relizi 14):**
+  - `fin_cp_save(p)` — kartani saqlash: yangi — kassa operatori, Moliya menejeri, buxgalter, Direktor; mavjud — Moliya menejeri, buxgalter,
+    Direktor. Tur tasdig'i — avvalgi qoida (buxgalter / Direktor saqlasa — tasdiqlangan; boshqalar turini, nomini yoki STIR'ini
+    o'zgartirsa — bekor; rekvizitlar tasdiqqa ta'sir qilmaydi). Takror: shu tur + nom + STIR faol kartada bor — o'sha karta qaytadi;
+    mavjud kartani boshqa faol karta nomiga o'tkazish — rad; shu STIR boshqa kartada — ogohlantirish (bank filiallari uchun tasdiqlab
+    yoziladi). Bir vaqtda tahrirlash: oynadagi versiya bilan — shu orada boshqa birov saqlagan bo'lsa rad, javob yo'qolib o'sha ma'lumot
+    qayta yuborilsa — o'sha karta.
+  - `fin_cp_statement(id, dan, gacha, fayl)` — RP-10, pul harakati: kassa orderlari (KO-1 / KO-2; tomon — kontragent, bank yoki
+    ta'sischi; o'tkazilgan; sinov kassasi va bekor qilinganlari — yo'q), «Buxgalteriya» xarajat hujjatlari (bank, karta, orderisiz naqd;
+    bekor qilinganlari — yo'q), hujjatsiz eski yozuvlar (noto'g'ri yozilgan sana — oydan yoki yozilgan kundan). Kassadan «Buxgalteriya»ga
+    ko'chgan qator qayta sanalmaydi. Davr boshigacha / davr / davr oxirigacha (olindi, berildi), qatorlar (hujjat, operatsiya, statiyalar,
+    usul, asos), statiya nomlari (o'zbekcha va ruscha), tashkilot, bosh buxgalter, tuzuvchi (ism — xodim kartasidan). Kim: Moliya
+    menejeri, buxgalter, Direktor; davr — 3 yilgacha. Fayl (chop etish, Excel) — FD-28: jismoniy shaxs / ta'sischi / «boshqa» turidagi
+    kontragent ko'chirmasi Direktordan boshqaga ismsiz (ID; STIR, hisob raqami, asos matni yo'q), yuridik shaxs — to'liq.
+  - Kassa yaxlitlik tekshiruvi: kutilgan sonlar 49 ochiq / 111 ichki funksiya; barmoq izlari qayta yozildi (330 obyekt); reliz 14
+    (`fin-version.sql`, `fin-kassa.js` SERVER_VER, `kassa-checks.sql`).
+- **Sahifa:** `assets/js/fin-cp.js` (yangi modul): ro'yxat (qidiruv — nom, STIR, hisob raqami, shartnoma №; tur va holat filtri;
+  «turi tasdiqlanmagan», «nofaol», shartnoma muddati o'tgan / 30 kun ichida tugaydi belgilari), karta (oynaning o'z tekshiruvlari —
+  server qoidalari bilan bir xil; hisob raqami guruhlab ko'rsatiladi; shu STIR ogohlantirishi — tasdiq bilan; shu orada o'zgargan karta
+  yangi ma'lumot bilan qayta ochiladi), ko'chirma (davr — yil boshidan, jamlar, yig'ma sof, chop etish va Excel). `fin-print.js` —
+  `cpStatementHtml` (ichki hisobot, o'zbek lotin / rus — chop etish tiliga qarab), `cpStatementSheet` (Excel: sana — Excel sanasi, summa —
+  son). `admin.html` «Buxgalteriya» → «🏢 Kontragentlar» (reliz 14+; Direktor, Moliya menejeri, buxgalter — buxgalter bo'lim faqat ko'rish
+  bo'lsa ham kartani yuritadi). Telefonda ro'yxat tugmalari nom katagida (jadvalni surish shart emas).
+- **Sinovlar:** `test-fin-cp.sql` — 35 (huquqlar, kiritish tekshiruvlari, takror va versiya, tur tasdig'i, eski funksiya bilan moslik,
+  ko'chirma manbalari va jamlari, nima kirmasligi, davr tekshiruvi, FD-28, o'zgarishlar jurnali, jadval cheklovlari); mutatsiya — 27 ta
+  ataylab kiritilgan xato, hammasini sinov ushladi; `assets/js/fin-cp.test.mjs` — 16 (shu jumladan chop etish va Excel varag'i);
+  `test-kassa-race.sh` (16) — o'sha kontragent 8 seansdan (karta va eski yo'l aralash), o'sha STIR 8 nomdan, o'sha karta o'sha versiya bilan
+  8 seansdan; yangilangan: `test-kassa-checks` (reliz 14), `test-fin-rights` (buxgalter yopiq ro'yxatlari). Brauzer: yangi `k20`
+  (26 tekshiruv). Natija: to'liq regressiya (dev, qayta zanjir, poyga 66/66, jonli zanjir, tugun sinovlari) — hammasi yashil.
+- **Egasi uchun:** kassa moduli hali `--dev` — F2.2 prod'da jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr; `ishga-tushirish.md`
+  3.3 ga eslatma). Mavjud kontragentlarning rekvizitlarini buxgalter hujjatlardan to'ldiradi. Hozirgi deploy prod'ni o'zgartirmaydi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

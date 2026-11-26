@@ -129,6 +129,7 @@ set local iqror.migrating = '1';
 --dev \ir fin-period.sql
 --dev \ir fin-rights.sql
 --dev \ir fin-exp.sql
+--dev \ir fin-cp.sql
 --dev \ir fin-version.sql
 \ir payer-code-mask.sql
 \ir audit-10-davomat.sql

@@ -995,3 +995,112 @@ export function reportHtml(book, ctx, W) {
     <div class="ft">${esc(ft.join(' · '))}</div>`;
   return `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS_RP}</style></head><body>${body}</body></html>`;
 }
+
+// ---------------------------------------------------------------- RP-10: kontragent ko'chirmasi (F2.2)
+// Ichki hisobot (RP-02 kabi, qat'iy shakl emas): ilova tilida — o'zbek lotin; chop etish tili rus bo'lsa — ruscha. st — fin_cp_statement()
+//   javobi; fayl va chop etish uchun p_file bilan olinadi (FD-28: jismoniy shaxs / ta'sischi / «boshqa» turidagi kontragent ko'chirmasi
+//   Direktordan boshqaga ismsiz — buni server qiladi, bu yerda faqat izoh). Faqat pul harakati: kassa orderlari, bank va karta to'lovlari,
+//   eski yozuvlar; hisob-kitob qoldig'i (qarz) — bosh kitob bilan (4-bosqich). Sof = berildi − olindi (davr oxirigacha, yig'ma).
+const R10 = {
+  uz: {
+    title: 'KONTRAGENT KO‘CHIRMASI', sub: 'Pul harakati: kassa orderlari, bank o‘tkazmalari va korporativ karta to‘lovlari (RP-10)',
+    per: (a, b) => `Davr: ${a} – ${b}`, cp: 'Kontragent', kind: 'Turi', stir: 'STIR', acc: 'Hisob raqami', mfo: 'MFO', bank: 'Bank',
+    contract: 'Shartnoma', cNo: (n, d) => `№ ${n}${d ? ' (' + d + ')' : ''}`, cUntil: d => `amal qilish muddati — ${d}`, inactive: 'nofaol',
+    kinds: { supplier: 'yetkazib beruvchi', org: 'tashkilot', person: 'jismoniy shaxs', bank: 'bank', founder: 'ta’sischi', other: 'boshqa' },
+    cols: ['№', 'Sana', 'Hujjat', 'Operatsiya, statiya, asos', 'Usul', 'Olindi, so‘m', 'Berildi, so‘m', 'Sof (yig‘ma), so‘m'],
+    m: { cash: 'naqd', bank: 'bank', card: 'karta' }, legacy: 'eski yozuv',
+    open: 'Davr boshigacha', tot: 'Davr jami', close: 'Davr oxirigacha', net: 'Sof: berildi − olindi', none: 'Davrda operatsiya yo‘q.',
+    ops: n => `${n} ta operatsiya`,
+    note: 'Faqat pul harakati: hisob-kitob qoldig‘i (qarz) bosh kitob bilan aniqlanadi.',
+    masked: 'Ismsiz nusxa (FD-28): kontragent ID bilan, rekvizitlari va asos matni chiqmaydi; to‘liq nusxa — Direktorda',
+    made: 'Tuzdi', chief: 'Bosh buxgalter', printed: 'chop etildi', sheet: 'RP-10', id: 'ID',
+  },
+  ru: {
+    title: 'ВЫПИСКА ПО КОНТРАГЕНТУ', sub: 'Движение денежных средств: кассовые ордера, банковские переводы и платежи корпоративной картой (RP-10)',
+    per: (a, b) => `Период: ${a} – ${b}`, cp: 'Контрагент', kind: 'Тип', stir: 'ИНН', acc: 'Расчётный счёт', mfo: 'МФО', bank: 'Банк',
+    contract: 'Договор', cNo: (n, d) => `№ ${n}${d ? ' от ' + d : ''}`, cUntil: d => `срок действия — до ${d}`, inactive: 'неактивен',
+    kinds: { supplier: 'поставщик', org: 'организация', person: 'физическое лицо', bank: 'банк', founder: 'учредитель', other: 'прочее' },
+    cols: ['№', 'Дата', 'Документ', 'Операция, статья, основание', 'Способ', 'Получено, сум', 'Выдано, сум', 'Сальдо (нараст.), сум'],
+    m: { cash: 'наличные', bank: 'банк', card: 'карта' }, legacy: 'старая запись',
+    open: 'До начала периода', tot: 'Итого за период', close: 'На конец периода', net: 'Сальдо: выдано − получено', none: 'Операций за период нет.',
+    ops: n => `операций: ${n}`,
+    note: 'Только движение денежных средств: сальдо расчётов (задолженность) определяется по главной книге.',
+    masked: 'Обезличенная копия (FD-28): контрагент по ID, реквизиты и основание не выводятся; полная копия — у директора',
+    made: 'Составил', chief: 'Главный бухгалтер', printed: 'напечатано', sheet: 'RP-10', id: 'ID',
+  },
+};
+const r10Of = (st, ctx) => {
+  const o = (ctx && ctx.org) || (st && st.org) || {};
+  const ru = langOf(Object.assign({}, ctx || {}, { org: o })) === 'ru';
+  return { ru, r: ru ? R10.ru : R10.uz, lang: ru ? 'ru' : 'uz-latn', o };
+};
+const r10Art = (st, ids, ru) => (ids || []).map(id => { const a = (st.articles || {})[id]; const nm = a ? ((ru && a.ru) || a.uz || '') : ''; return nm ? `${id} ${nm}` : String(id); }).join('; ');
+const r10Op = (x, ru) => ((ru && x.opNameRu) || x.opName || x.op || '');
+const r10Doc = (x, r) => x.doc || (x.src === 'legacy' ? r.legacy : '');
+const r10Cp = (st, r) => {
+  const c = st.cp || {}, out = [];
+  out.push([r.cp, st.masked || !c.name ? `${r.id} ${c.id || ''}` : c.name + (c.active === false ? ` (${r.inactive})` : '')]);
+  out.push([r.kind, r.kinds[c.kind] || c.kind || '']);
+  if (c.stir) out.push([r.stir, c.stir]);
+  if (c.account || c.mfo) out.push([r.acc, [c.account, c.mfo ? `${r.mfo} ${c.mfo}` : '', c.bankName || ''].filter(Boolean).join(' · ')]);
+  if (c.contractNo) out.push([r.contract, r.cNo(c.contractNo, dmy(c.contractDate)) + (c.contractUntil ? '; ' + r.cUntil(dmy(c.contractUntil)) : '')]);
+  return out;
+};
+// Qatorlar va yig'ma sof (berildi − olindi): davr boshigacha qiymatdan boshlanadi.
+export function cpStatementRows(st) {
+  st = st || {};
+  const op = st.opening || {}; let bal = Math.round((num(op.out) - num(op.in)) * 100) / 100;
+  return (st.rows || []).map(x => { bal = Math.round((bal + num(x.out) - num(x.in)) * 100) / 100; return Object.assign({}, x, { bal }); });
+}
+export function cpStatementHtml(st, ctx, W) {
+  ctx = ctx || {}; st = st || {};
+  const { ru, r, lang, o } = r10Of(st, ctx), t = T[lang], m = v => esc(money(W, v));
+  const op = st.opening || {}, tt = st.totals || {}, cl = st.closing || {};
+  const rows = cpStatementRows(st);
+  const body = rows.length ? rows.map((x, i) => {
+    const arts = r10Art(st, x.arts, ru);
+    return `<tr><td class="c">${i + 1}</td><td class="c">${esc(dmy(x.day))}</td><td>${esc(r10Doc(x, r))}</td><td>${esc(r10Op(x, ru))}${arts ? `<div class="sm">${esc(arts)}</div>` : ''}${x.text ? `<div class="sm">${esc(x.text)}</div>` : ''}</td>
+      <td class="c">${esc(r.m[x.method] || x.method || '—')}</td><td class="r">${num(x.in) ? m(x.in) : ''}</td><td class="r">${num(x.out) ? m(x.out) : ''}</td><td class="r">${m(x.bal)}</td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="c">${esc(r.none)}</td></tr>`;
+  const kv = (k, a, b, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(k)}</td><td class="r" style="width:34mm">${a}</td><td class="r" style="width:34mm">${b}</td></tr>`;
+  const sum = `<table><thead><tr><th></th><th>${esc(r.cols[5])}</th><th>${esc(r.cols[6])}</th></tr></thead><tbody>
+      ${kv(r.open, m(op.in), m(op.out))}${kv(`${r.tot} (${r.ops(num(tt.n))})`, m(tt.in), m(tt.out))}${kv(r.close, `<b>${m(cl.in)}</b>`, `<b>${m(cl.out)}</b>`)}
+      <tr><td>${esc(r.net)}</td><td class="r" colspan="2"><b>${m(num(cl.out) - num(cl.in))}</b></td></tr></tbody></table>`;
+  const cpRows = r10Cp(st, r).map(([k, v]) => `<tr><td style="width:36mm">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+  const per = r.per(dmy(st.from), dmy(st.to));
+  const at = stamp(ctx.printedAt), ft = [`${r.cp} ${r.id}: ${(st.cp && st.cp.id) || ''} · ${iso(st.from)}…${iso(st.to)}`];
+  if (at || ctx.printedBy) ft.push(`${r.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
+  const marks = ctx.isTest ? marksHtml([t.mTest || 'SINOV']) : '';
+  const html = `<div class="hd">${orgBlock(o, t, lang)}${marks}</div>
+    <h1>${esc(r.title)}</h1><div class="dt">${esc(per)}</div><div class="dt sm">${esc(r.sub)}</div>
+    ${st.masked ? `<p class="warn">${esc(r.masked)}</p>` : ''}
+    <table style="margin-top:3mm"><tbody>${cpRows}</tbody></table>
+    <h2>${esc(r.tot)}</h2>${sum}
+    <h2>${esc(r.ops(rows.length))}</h2>
+    <table><thead><tr>${r.cols.map((c, i) => `<th${i === 0 ? ' style="width:8mm"' : i === 1 ? ' style="width:17mm"' : i === 4 ? ' style="width:14mm"' : i >= 5 ? ' style="width:24mm"' : ''}>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${body}</tbody></table>
+    <p class="sm">${esc(r.note)}</p>
+    <div class="sigs">${sig(r.made, ctx.printedBy || '')}${sig(r.chief, st.chief || '')}</div>
+    <div class="ft">${esc(ft.join(' · '))}</div>`;
+  return `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(`${r.title} — ${per}`)}</title><style>${CSS_RP}</style></head><body>${html}</body></html>`;
+}
+// XLSX varag'i (SheetJS aoa_to_sheet): sana — Excel sanasi, summa — son; ismsiz nusxada izoh qatori.
+export function cpStatementSheet(st, ctx) {
+  ctx = ctx || {}; st = st || {};
+  const { ru, r, o } = r10Of(st, ctx);
+  const op = st.opening || {}, tt = st.totals || {}, cl = st.closing || {};
+  const rows = [[xlOrgName(o, ru)], [r.title + ' (RP-10)'], [r.per(dmy(st.from), dmy(st.to))]];
+  if (st.masked) rows.push([r.masked]);
+  r10Cp(st, r).forEach(([k, v]) => rows.push([k, v]));
+  rows.push([]);
+  rows.push(r.cols);
+  cpStatementRows(st).forEach((x, i) => rows.push([i + 1, xlDate(x.day), r10Doc(x, r), [r10Op(x, ru), r10Art(st, x.arts, ru), x.text || ''].filter(Boolean).join(' — '),
+    r.m[x.method] || x.method || '', num(x.in) ? xlMoney(x.in) : '', num(x.out) ? xlMoney(x.out) : '', xlMoney(x.bal)]));
+  rows.push([]);
+  rows.push(['', '', '', r.open, '', xlMoney(op.in), xlMoney(op.out)]);
+  rows.push(['', '', '', `${r.tot} (${r.ops(num(tt.n))})`, '', xlMoney(tt.in), xlMoney(tt.out)]);
+  rows.push(['', '', '', r.close, '', xlMoney(cl.in), xlMoney(cl.out)]);
+  rows.push(['', '', '', r.net, '', '', '', xlMoney(num(cl.out) - num(cl.in))]);
+  rows.push([r.note]);
+  return { name: r.sheet, rows, cols: [{ wch: 5 }, { wch: 11 }, { wch: 22 }, { wch: 48 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 17 }] };
+}

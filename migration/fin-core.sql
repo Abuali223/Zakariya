@@ -133,6 +133,33 @@ create table if not exists public.fin_counterparties (
 --   yuridik shaxs hisoblanadi (Direktor tasdig'i kerak).
 alter table public.fin_counterparties add column if not exists "kindConfirmedBy" text;
 alter table public.fin_counterparties add column if not exists "kindConfirmedAt" timestamptz;
+-- Kontragent kartasi to'liq (F2.2; kartani saqlash va RP-10 ko'chirmasi — fin-cp.sql): bank rekvizitlari (hisob raqami — 20 raqam,
+--   bank MFO kodi — 5 raqam; hisob raqami MFO'siz bo'lmaydi, MFO yolg'iz — bank kontragentida bo'lishi mumkin), shartnoma (raqami va
+--   sanasi birga; amal qilish muddati — ixtiyoriy, sanasidan oldin emas); rev — karta versiyasi (har saqlashda +1: bir vaqtda ikki
+--   kishi tahrirlasa, keyingisi eskirgan karta bilan yozmaydi — fin:cp_changed); kim va qachon oxirgi marta o'zgartirgan.
+--   STIR — 9 raqam: jadval cheklovi emas (eski kartalarda boshqacha yozilgan bo'lishi mumkin — ular boshqa maydoni o'zgarganda ham
+--   saqlanadi), saqlash funksiyalari yangi yoki o'zgargan STIR'ni tekshiradi (app.fin_cp_stir_check).
+alter table public.fin_counterparties add column if not exists account         text not null default '';
+alter table public.fin_counterparties add column if not exists mfo             text not null default '';
+alter table public.fin_counterparties add column if not exists "bankName"      text not null default '';
+alter table public.fin_counterparties add column if not exists "contractNo"    text not null default '';
+alter table public.fin_counterparties add column if not exists "contractDate"  date;
+alter table public.fin_counterparties add column if not exists "contractUntil" date;
+alter table public.fin_counterparties add column if not exists rev             int not null default 0;
+alter table public.fin_counterparties add column if not exists "updatedAt"     timestamptz;
+alter table public.fin_counterparties add column if not exists "updatedBy"     text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'fin_counterparties_bank_chk' and conrelid = 'public.fin_counterparties'::regclass) then
+    alter table public.fin_counterparties add constraint fin_counterparties_bank_chk
+      check ((mfo = '' or mfo ~ '^[0-9]{5}$') and (account = '' or (account ~ '^[0-9]{20}$' and mfo <> '')) and length("bankName") <= 200);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'fin_counterparties_contract_chk' and conrelid = 'public.fin_counterparties'::regclass) then
+    alter table public.fin_counterparties add constraint fin_counterparties_contract_chk
+      check (("contractNo" = '' and "contractDate" is null and "contractUntil" is null)
+             or ("contractNo" <> '' and length("contractNo") <= 60 and "contractDate" is not null
+                 and ("contractUntil" is null or "contractUntil" >= "contractDate")));
+  end if;
+end $$;
 create table if not exists public.cash_desks (
   id       text primary key,
   name     text not null,
@@ -242,20 +269,48 @@ grant execute on function public.fin_org_set(jsonb) to authenticated;
 --   Takror (ui-13): yangi kontragent shu tur, me'yorlangan nom (bo'shliqlar, katta-kichik harf, apostrof turlari) va STIR bilan faol
 --   kontragent bor bo'lsa yaratilmaydi — mavjudi qaytadi ("dup": true; «Qo'shish»ni ikki marta bosish, javob yo'qolib qayta yuborish).
 --   Bir vaqtdagi ikki chaqiruv shu kalit bo'yicha navbatga turadi (qulf) — ikkinchisi birinchisi yozganini ko'radi.
+--   F2.2: STIR — bo'shliqlarsiz, 9 raqam (yangi yoki o'zgargan qiymat; app.fin_cp_stir_check); mavjudini o'zgartirish karta versiyasini
+--   oshiradi (rev) va kim / qachon o'zgartirganini yozadi. Bank rekvizitlari va shartnoma bu funksiyada o'zgarmaydi — kartani saqlash
+--   (fin-cp.sql: fin_cp_save; takror kaliti va qulfi — shu funksiya bilan bir xil).
+
+-- Kontragent rekvizitlari uchun yordamchilar (F2.2): kiritilgan raqamdan bo'shliqlar (oddiy, bo'linmas, tor) olib tashlanadi — boshqa
+--   belgi qolsa, tekshiruv rad etadi; nom kaliti — takrorni aniqlash (bo'shliqlar, katta-kichik harf, apostrof turlari).
+create or replace function app.fin_cp_digits(p text) returns text
+language sql immutable set search_path = public, app, pg_temp as $$
+  select regexp_replace(translate(coalesce(p, ''), chr(160) || chr(8199) || chr(8239), '   '), '[[:space:]]+', '', 'g')
+$$;
+create or replace function app.fin_cp_name_key(p text) returns text
+language sql immutable set search_path = public, app, pg_temp as $$
+  select lower(regexp_replace(translate(btrim(coalesce(p, '')), '‘’ʻʼ`´', repeat(chr(39), 6)), '\s+', ' ', 'g'))
+$$;
+-- STIR: bo'sh yoki 9 raqam (yuridik shaxs, YaTT). Jismoniy shaxsning JShShIR'i (14 raqam) saqlanmaydi — shaxsiy ma'lumot. p_old —
+--   kartadagi hozirgi qiymat: o'zgarmagan eski qiymat (bu tekshiruvdan oldin yozilgan) rad etilmaydi.
+create or replace function app.fin_cp_stir_check(p_new text, p_old text) returns void
+language plpgsql immutable set search_path = public, app, pg_temp as $$
+begin
+  if coalesce(p_new, '') <> '' and p_new !~ '^[0-9]{9}$' and p_new is distinct from p_old then
+    raise exception 'STIR — 9 ta raqam (yuridik shaxs yoki YaTT); jismoniy shaxsning JShShIR''i (14 raqam) kiritilmaydi'
+      using errcode = '22023', hint = 'fin:cp_stir';
+  end if;
+end $$;
+revoke all on function app.fin_cp_digits(text) from public, anon, authenticated;
+revoke all on function app.fin_cp_name_key(text) from public, anon, authenticated;
+revoke all on function app.fin_cp_stir_check(text, text) from public, anon, authenticated;
+
 create or replace function public.fin_counterparty_save(p_id text, p_kind text, p_name text, p_stir text default '', p_note text default '', p_active boolean default true)
 returns jsonb language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_id text := nullif(btrim(coalesce(p_id, '')), ''); v_conf boolean := app.is_admin() or app.is_accountant();
-        v_name text := btrim(coalesce(p_name, '')); v_stir text := left(btrim(coalesce(p_stir, '')), 20); v_key text; v_ex text;
+        v_name text := btrim(coalesce(p_name, '')); v_stir text := app.fin_cp_digits(p_stir); v_key text; v_ex text; v_old text;
 begin
   if not (app.is_admin() or app.fin_list2() or app.kassa_operator()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if coalesce(p_kind, '') not in ('supplier', 'org', 'person', 'bank', 'founder', 'other') then raise exception 'Kontragent turi noto''g''ri' using errcode = '22023'; end if;
   if length(v_name) not between 2 and 200 then raise exception 'Kontragent nomi 2–200 belgi bo''lsin' using errcode = '22023'; end if;
   if v_id is null then
-    v_key := lower(regexp_replace(translate(v_name, '‘’ʻʼ`´', repeat(chr(39), 6)), '\s+', ' ', 'g'));
+    perform app.fin_cp_stir_check(v_stir, null);
+    v_key := app.fin_cp_name_key(v_name);
     perform pg_advisory_xact_lock(hashtext('iqror_cp:' || p_kind || '|' || v_key || '|' || v_stir));
     select c.id into v_ex from public.fin_counterparties c
-     where c.active and c.kind = p_kind and c.stir = v_stir
-       and lower(regexp_replace(translate(btrim(c.name), '‘’ʻʼ`´', repeat(chr(39), 6)), '\s+', ' ', 'g')) = v_key
+     where c.active and c.kind = p_kind and c.stir = v_stir and app.fin_cp_name_key(c.name) = v_key
      order by c."createdAt", c.id limit 1;
     if v_ex is not null then
       return (select to_jsonb(c) from public.fin_counterparties c where c.id = v_ex) || jsonb_build_object('dup', true);
@@ -266,6 +321,9 @@ begin
               case when v_conf then app.uid() end, case when v_conf then now() end);
   else
     if not (app.is_admin() or app.fin_list2()) then raise exception 'Ruxsat yo''q: mavjud kontragentni Moliya menejeri, buxgalter yoki Direktor o''zgartiradi' using errcode = '42501'; end if;
+    select c.stir into v_old from public.fin_counterparties c where c.id = v_id for update;
+    if not found then raise exception 'Kontragent topilmadi' using errcode = '22023'; end if;
+    perform app.fin_cp_stir_check(v_stir, v_old);
     update public.fin_counterparties
        set kind = p_kind, name = v_name, stir = v_stir, note = left(coalesce(p_note, ''), 500), active = coalesce(p_active, true),
            "kindConfirmedBy" = case when v_conf then app.uid()
@@ -273,9 +331,9 @@ begin
                                     else "kindConfirmedBy" end,
            "kindConfirmedAt" = case when v_conf then now()
                                     when kind is distinct from p_kind or name is distinct from v_name or stir is distinct from v_stir then null
-                                    else "kindConfirmedAt" end
+                                    else "kindConfirmedAt" end,
+           rev = rev + 1, "updatedAt" = now(), "updatedBy" = app.uid()
      where id = v_id;
-    if not found then raise exception 'Kontragent topilmadi' using errcode = '22023'; end if;
   end if;
   return (select to_jsonb(c) from public.fin_counterparties c where c.id = v_id);
 end $$;
@@ -331,7 +389,7 @@ grant execute on function public.fin_signatory_save(text, int, text, text, text,
 -- O'zgarishlar tarixi (Direktor ko'radi).
 select app.chlog_attach('fin_org', 'nameUz,nameRu,stir,place,printLang,t1,l1,cashLimit,kassaGoLive');
 select app.chlog_attach('fin_signatories', 'list,uid,title,fullName,active');
-select app.chlog_attach('fin_counterparties', 'kind,name,stir,active,kindConfirmedBy');   -- tur o'zgarishlari — nazorat ro'yxatida ham (sec-3)
+select app.chlog_attach('fin_counterparties', 'kind,name,stir,active,kindConfirmedBy,account,mfo,bankName,contractNo,contractDate,contractUntil');   -- tur o'zgarishlari — nazorat ro'yxatida ham (sec-3); bank rekvizitlari va shartnoma (F2.2) — hisob raqami o'zgarishi tarixda ko'rinadi
 select app.chlog_attach('fin_articles', 'kind,nameUz,accountCode,cashOutAllowed,active');
 select app.chlog_attach('fin_op_rules', 'debit,credit,articleMode,articleId,allowedArticles,accountByParty,partyTypes,needsApproval,directorAlways,fiscalRequired,fiscalParties,active');
 

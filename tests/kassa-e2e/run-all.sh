@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================
 # «Kassa» brauzer ssenariylari — hammasi ketma-ket, har biri YANGI stend bilan (LOKAL; ishga-tushirish.md §3.2, 3-qadam).
-#   bash run-all.sh                     — to'liq to'plam: kassa 1–19 + to'lov va eski oqimlar (dev va prod zanjir) + arxiv, sotuvchi, dizayn
+#   bash run-all.sh                     — to'liq to'plam: kassa 1–20 + to'lov va eski oqimlar (dev va prod zanjir) + arxiv, sotuvchi, dizayn
 #   bash run-all.sh k5 k3 pay:dev ui     — tanlanganlari (kN, pay:dev|prod, legacy:dev|prod, ar — o'quvchilar arxivi, sl — «Sotuvchi» roli,
 #                                          ui — yagona dizayn). Dizayn bitta — yangi (v2); eski dizayn (v1) 2026-11-24 da olib tashlangan,
 #                                          «kN:v2» kabi eski yozuv ham qabul qilinadi, «:v1» — rad.
@@ -24,7 +24,7 @@ run(){   # kN | pay:dev|prod | legacy:dev|prod | ar | sl | ui
   case "$name:$var" in *:v1) echo "$spec: eski dizayn (v1) olib tashlangan — faqat v2" >> "$SUM"; return ;; esac
   case "$name" in
     k1) fresh dev "$spec" && one "$name.$var" e2e-kassa.cjs "$var" ;;
-    k[0-9]|k1[0-9]) fresh dev "$spec" && one "$name.$var" "e2e-kassa${name#k}.cjs" "$var" ;;
+    k[0-9]|k[12][0-9]) fresh dev "$spec" && one "$name.$var" "e2e-kassa${name#k}.cjs" "$var" ;;
     pay|legacy) fresh "$var" "$spec" && one "$name.$var" "e2e-$name.cjs" ;;
     ar) fresh dev "$spec" && one "$name.$var" e2e-arxiv.cjs "$var" ;;   # o'quvchilar arxivi (egasi 2026-11-18)
     sl) fresh dev "$spec" && one "$name.$var" e2e-sales.cjs "$var" ;;   # «Sotuvchi» roli (egasi 2026-11-19)
@@ -33,7 +33,7 @@ run(){   # kN | pay:dev|prod | legacy:dev|prod | ar | sl | ui
   esac
 }
 if [ $# -gt 0 ]; then SPECS=("$@"); else
-  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19; do SPECS+=("k$n"); done
+  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do SPECS+=("k$n"); done
   SPECS+=(pay:dev legacy:dev pay:prod legacy:prod ar sl ui)
 fi
 for s in "${SPECS[@]}"; do run "$s"; done

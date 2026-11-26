@@ -683,7 +683,7 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
 - **Migratsiyalar** (`rls-initplan.sql` dan yuqorida, zanjir himoyasi, qayta bajariladigan, o‘z revoke’lari bilan):
   `fin-prereq.sql` (0), `fin-core.sql` + `kassa.sql` (1a), `fin-rights.sql` (1b / 2; orqaga qaytarish — faylning o‘zida:
   `fin_rights_on = off` va deploy, reliz o‘zgarmaydi: tozalash bo‘limi siyosat va ko‘rinishlarni o‘chiradi, `app.acc_read()` kaliti
-  o‘chadi — `students_billing` va sahifadagi buxgalter bo‘limlari ham; ✅ 1b: F1.21 buxgalter o‘qish ro‘yxati), `fin-exp.sql` (2; ✅ F2.1 — xarajatlar reyestri),
+  o‘chadi — `students_billing` va sahifadagi buxgalter bo‘limlari ham; ✅ 1b: F1.21 buxgalter o‘qish ro‘yxati), `fin-exp.sql` (2; ✅ F2.1 — xarajatlar reyestri), `fin-cp.sql` (2; ✅ F2.2 — kontragent kartasi, RP-10),
   `fin-bank.sql` (3), `fin-gl.sql` (4). Mavjud
   funksiyalar o‘z faylida tahrirlanadi. Yordamchilar `is_accountant`, `fin_list2`, `kassa_reader`, `kassa_operator` —
   `v_fns` ga (alohida `fin_reader` kerak bo‘lmadi: buxgalter o‘qishi — `is_accountant` siyosatlari va `*_acc` ko‘rinishlari).
@@ -723,7 +723,7 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
 | RP-06 | Nazorat ro‘yxati (ochiq / tekshirilmagan kunlar, bekor qilish, qayta ochish, farq va 5910, KO-1 siz naqd, tasdiq kutayotgan KO-2, eski qaytarishlar, oflayn, fiskal istisno, «boshqa» tomonlar, limit, raqamlash, 4230/4290 muddati) | 1a |
 | RP-07 | Hisobdor kartochkasi (yosh — 2) | 1a–2 |
 | RP-08 / 09 | Oy statiya matritsasi (kassa — ✅ 1b, `kassa_matrix`); barcha usullar bo‘yicha matritsa (o‘quv va kalendar yili, maosh taqsimoti) | 1b / 2 |
-| RP-10 / 11 / 12 | Kontragent ko‘chirmasi; kanallar bo‘yicha pul; bank reyestri va 5710 qoldiqlari | 2 / 3 |
+| RP-10 / 11 / 12 | Kontragent ko‘chirmasi (✅ 2, F2.2 — `fin_cp_statement`: pul harakati; qarz qoldig‘i — bosh kitob bilan, 4-bosqich); kanallar bo‘yicha pul; bank reyestri va 5710 qoldiqlari | 2 / 3 |
 | RP-13…16 | Jurnal, OSV, kartochka va tahlillar; oylik eksport to‘plami E1–E8: kassa qismi E1–E4 (✅ 1b, F1.22 — KO-3, statiya matritsasi, kassa kunlari, hisobdorlar), bosh kitob qismi E5–E8 (jurnal, OSV, kartochkalar, tahlillar) | 4 |
 | RP-17…21 | 1/2-shakl (FD-45 bo‘yicha 3/4 ham); BHMS 9 pul oqimi (230 + 220 + 221 = 240); hisoblash asosidagi matritsa; ota-ona ma’lumotnomasi; nazorat hisobotlari | 5 |
 | RP-22 | Haftalik KPI (o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar) — ✅ 1b, `kassa_kpi` | 1b |
@@ -1011,7 +1011,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 | ID | H | kun | Vazifa | Bog‘liq | Qabul |
 |---|---|---|---|---|---|
 | F2.1 | M | 2 | ✅ `expense_save`: naqdsiz reyestr (usul, statiya qatorlari, kontragent, hujjat №, ilova, server muallif; bekor qilish) — reliz 13, `fin-exp.sql`: hujjat `fin_exp_docs`, bazada `fin_exp_save` (tuzatish — `replaces`: eski hujjat / eski yozuv shu tranzaksiyada bekor), `fin_exp_void` (sabab majburiy), `fin_exp_refs`; har statiya qatori «Buxgalteriya»ga alohida yozuv (`expenses."expDocId"`); bank — kontragent va № majburiy; statiya usulga qarab (CT-23); takror — oyna kaliti va «usul + kontragent + № + yil» ogohlantirishi; hujjat qatorlari va hujjat o‘zgarmaydi (triggerlar); sahifa xarajatni faqat shu funksiyalar orqali yozadi (hujjatsiz to‘g‘ridan-to‘g‘ri yozish huquqini olish — F2.9); oyna — `assets/js/fin-exp.js` | F1.1 | Takror yo‘q; har qatorda statiya |
-| F2.2 | M | 2 | Kontragentlar to‘liq (STIR, hisob, MFO, shartnoma); RP-10 | F1.1 | Seed’da shaxsiy ma’lumot yo‘q |
+| F2.2 | M | 2 | ✅ Kontragentlar to‘liq (STIR, hisob, MFO, shartnoma); RP-10 — reliz 14. Karta (`fin-core.sql`): bank hisob raqami (20 raqam) va MFO kodi (5 raqam; hisob raqami MFO’siz bo‘lmaydi, MFO yolg‘iz — bank filialida), bank nomi, shartnoma (raqami va sanasi birga, amal qilish muddati — ixtiyoriy), versiya `rev`, kim / qachon o‘zgartirgan; jadval cheklovlari `fin_counterparties_bank_chk` / `_contract_chk`; STIR — 9 raqam (yangi yoki o‘zgargan qiymat — `app.fin_cp_stir_check`; eski kartadagi boshqacha qiymat o‘zgarmaguncha qoladi); jismoniy shaxsning JShShIR’i saqlanmaydi (shaxsiy ma’lumot; YaTT — STIR bilan); o‘zgarishlar jurnalida rekvizitlar va shartnoma ham. `fin-cp.sql`: `fin_cp_save` (karta — yangi yoki mavjud; tur tasdig‘i qoidasi `fin_counterparty_save` bilan bir xil; takror — o‘sha karta, umumiy qulf kaliti bilan; boshqa faol karta nomiga o‘tkazish — `fin:cp_dup`; shu STIR boshqa kartada — ogohlantirish `fin:cp_stir_dup`, bank filiali uchun tasdiqlab yoziladi; bir vaqtda tahrirlash — `fin:cp_changed`), `fin_cp_statement` (RP-10 — pul harakati: kassa orderlari KO-1 / KO-2 — tomon kontragent, bank yoki ta’sischi; «Buxgalteriya» xarajat hujjatlari; hujjatsiz eski yozuvlar; kassadan ko‘chgan qator qayta sanalmaydi; davr boshigacha, davr, davr oxirigacha, yig‘ma sof; qarz qoldig‘i — 4-bosqich bosh kitob bilan; faylda FD-28: jismoniy shaxs / ta’sischi / «boshqa» ko‘chirmasi Direktordan boshqaga ismsiz). «Buxgalteriya» → «🏢 Kontragentlar»: ro‘yxat, karta, ko‘chirma, chop etish (RP-02 kabi ichki hisobot), Excel — Direktor, Moliya menejeri, buxgalter. Keyingi qadam (3-bosqich, FD-36): bank to‘lov reyestri eksportida hisob raqami yaqinda o‘zgargan kontragent — buxgalter tasdig‘igacha ogohlantirish | F1.1 | ✅ Urug‘da kontragent yo‘q; sinov ma’lumoti to‘qima (STIR va hisob raqamlari 0 bilan boshlanadi) |
 | F2.3 | S | 0,5 | Noyabr–yanvar xarajatlariga statiya (sinov ishga tushirishi → buxgalter RPC si) | F1.1; FD-10 | Buxgalter imzolaydi |
 | F2.4 | M | 2 | `expenses.kind = 'accrual'` va o‘quvchi kodlar | — | Naqd ko‘rinishda hisoblash yo‘q |
 | F2.5 | M | 2,5 | RP-09 (maosh taqsimoti, XLSX) | F2.1, F2.3 | Jami = Σ hujjatlar |
@@ -1304,7 +1304,7 @@ Sheet funksiyalari inventari (F0.19): har varaq — kim, nima uchun, o‘rnini n
 | REQ-04 Qoldiq | KO-4 kun oxiri (F1.9); KPI (F1.12); Telegram (F1.15) |
 | REQ-05 Hujjat raqami | F1.3; FD-05; chop etish F1.14 |
 | REQ-06 / 07 Kun boshi va oxiridagi kassa | I3, sanash dalolatnomasi, farq shu kun (F1.9, FD-21, §8.4) |
-| REQ-08 / 09 Kimga / kimdan qancha | KO-2 «Берилсин», KO-1 «Олинди», tomon majburiy (CT-22), RP-02 (F1.15), kontragentlar (F1.1, F2.2) |
+| REQ-08 / 09 Kimga / kimdan qancha | KO-2 «Берилсин», KO-1 «Олинди», tomon majburiy (CT-22), RP-02 (F1.15), kontragentlar (F1.1; ✅ F2.2 — karta va RP-10 kontragent ko‘chirmasi) |
 | REQ-10 Hammasi avtomatik | §4.16 (avtomatik hujjatlar, qo‘lda qoladigan qadamlar); F3.3, F4.3, F4.5 |
 | REQ-11 Har xarajat statiya bo‘yicha | CT-23, F1.4, F1.13, F2.1, F2.6, §4.4, F2.3, RP-08/09, F4.3, F5.1; to‘liqlik jadvali §4.16 |
 | REQ-12 Ish rejasi | §5, §5.9, §6 |

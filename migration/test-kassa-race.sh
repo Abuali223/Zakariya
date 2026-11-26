@@ -31,6 +31,9 @@
 #       rad (kassa:ref_mismatch / ref_mismatch via cash) — bitta qaytarish ikki usulda yozilmaydi; deadlock yo'q.
 #   (15) F2.1 «Buxgalteriya» xarajatlari reyestri: o'sha oyna kaliti 8 seansdan — bitta hujjat; o'sha kontragent + hujjat № 8 ta oynadan —
 #       bittasi, qolganlari fin:exp_dup; o'sha hujjatni bekor qilish va tuzatish parallel (ikkala tartibda) — faqat bittasi, yetim qator yo'q.
+#   (16) F2.2 kontragent kartasi: o'sha tur + nom + STIR 8 seansdan (karta va eski «+ yangi» yo'li aralash) — bitta karta; o'sha STIR,
+#       8 xil nom — bittasi, qolganlari fin:cp_stir_dup; o'sha kartani o'sha versiya bilan 8 seans o'zgartiradi — bittasi, qolganlari
+#       fin:cp_changed.
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -582,6 +585,33 @@ wait
 chk "15d tuzatish (A) avval, bekor qilish (B) kutadi: tuzatildi (yangi hujjat — o'rnida), bekor qilish «allaqachon bekor» (dup); yetim qator yo'q, deadlock yo'q" \
     "$(grep -c '^A|posted$' "$TMP/15d.A")/$(tail -1 "$TMP/15d.B")/$(q -c "select status || ':' || (\"replacedBy\" is not null) from public.fin_exp_docs where id = '$P15'")/$(q -c "select count(*) from public.expenses e where e.\"expDocId\" is not null and not exists (select 1 from public.fin_exp_docs d where d.id = e.\"expDocId\" and d.status = 'posted')")/$(cat "$TMP"/15?.? | grep -ci 'deadlock')" \
     "1/true/void:true/0/0"
+# ---------- (16) F2.2: kontragent kartasi (fin_cp_save) va eski «+ yangi» yo'li (fin_counterparty_save) ----------
+#   (a) o'sha tur + nom kaliti + STIR: 4 seans — karta (Moliya menejeri), 4 seans — eski yo'l (kassir): bitta karta, hammasi o'shani
+#       qaytaradi (umumiy qulf kaliti), xato yo'q;
+#   (b) o'sha STIR, 8 xil nom (karta, dupOk'siz): bittasi yoziladi, 7 tasi fin:cp_stir_dup (STIR qulfi), deadlock yo'q;
+#   (c) o'sha kartani o'sha versiya (rev 0) bilan 8 seans o'zgartiradi (har biri boshqa izoh): bittasi o'tadi, 7 tasi fin:cp_changed.
+fc16(){ echo "public.fin_cp_save('{\"kind\":\"supplier\",\"name\":\"$1\",\"stir\":\"$2\"}'::jsonb)"; }
+for i in 1 2 3 4; do
+  ( call_as R_FM "$(fc16 'Poyga  MChJ' 000000901) ->> 'id'" > "$TMP/16a.c$i" ) &
+  ( call_as R_KAS "public.fin_counterparty_save(null, 'supplier', 'poyga mchj', '000000901') ->> 'id'" > "$TMP/16a.o$i" ) &
+done
+wait
+chk "16a o'sha kontragent 8 seansdan (karta va eski yo'l): bitta karta, hammasi o'sha id, xato yo'q" \
+    "$(cat "$TMP"/16a.* | sort -u | grep -c '^cp_')/$(cat "$TMP"/16a.* | grep -vc '^cp_')/$(q -c "select count(*) from public.fin_counterparties where stir = '000000901'")" \
+    "1/0/1"
+for i in $(seq 1 8); do ( call_raw R_FM "$(fc16 "Poyga filial $i" 000000902) ->> 'dup'" > "$TMP/16b.$i" ) & done
+wait
+chk "16b o'sha STIR, 8 xil nom: bittasi yozildi, 7 tasi fin:cp_stir_dup; bazada bitta karta; deadlock yo'q" \
+    "$(cat "$TMP"/16b.* | grep -c '^false$')/$(cat "$TMP"/16b.* | grep -c 'fin:cp_stir_dup')/$(q -c "select count(*) from public.fin_counterparties where stir = '000000902'")/$(cat "$TMP"/16b.* | grep -ci 'deadlock')" \
+    "1/7/1/0"
+C16=$(q -c "select id from public.fin_counterparties where stir = '000000901'")
+for i in $(seq 1 8); do
+  ( call_raw R_FM "public.fin_cp_save(jsonb_build_object('id', '$C16', 'rev', 0, 'kind', 'supplier', 'name', 'Poyga  MChJ', 'stir', '000000901', 'note', 'poyga $i')) ->> 'rev'" > "$TMP/16c.$i" ) &
+done
+wait
+chk "16c o'sha karta, o'sha versiya, 8 seans: bittasi o'tdi (versiya 1), 7 tasi fin:cp_changed; deadlock yo'q" \
+    "$(cat "$TMP"/16c.* | grep -c '^1$')/$(cat "$TMP"/16c.* | grep -c 'fin:cp_changed')/$(q -c "select rev from public.fin_counterparties where id = '$C16'")/$(cat "$TMP"/16?.* | grep -ci 'deadlock')" \
+    "1/7/1/0"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]
