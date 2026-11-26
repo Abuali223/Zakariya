@@ -3393,7 +3393,8 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   ataylab kiritilgan xato, hammasini sinov ushladi; `assets/js/fin-cp.test.mjs` — 16 (shu jumladan chop etish va Excel varag'i);
   `test-kassa-race.sh` (16) — o'sha kontragent 8 seansdan (karta va eski yo'l aralash), o'sha STIR 8 nomdan, o'sha karta o'sha versiya bilan
   8 seansdan; yangilangan: `test-kassa-checks` (reliz 14), `test-fin-rights` (buxgalter yopiq ro'yxatlari). Brauzer: yangi `k20`
-  (26 tekshiruv). Natija: to'liq regressiya (dev, qayta zanjir, poyga 66/66, jonli zanjir, tugun sinovlari) — hammasi yashil.
+  (26 tekshiruv). Natija: to'liq regressiya (dev, qayta zanjir, poyga 66/66, jonli zanjir, tugun sinovlari) — hammasi yashil; brauzer
+  to'plami — 27 o'tish, 694 tekshiruv, hammasi o'tdi.
 - **Egasi uchun:** kassa moduli hali `--dev` — F2.2 prod'da jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr; `ishga-tushirish.md`
   3.3 ga eslatma). Mavjud kontragentlarning rekvizitlarini buxgalter hujjatlardan to'ldiradi. Hozirgi deploy prod'ni o'zgartirmaydi.
 

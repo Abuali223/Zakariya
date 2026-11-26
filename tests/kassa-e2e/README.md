@@ -136,9 +136,11 @@ shu jadval ham yangilanadi):
 
 Jami: 27 o‘tish, 694 tekshiruv (kassa 552, to‘lov 24, eski oqimlar 31, arxiv 30, sotuvchi 15, yagona dizayn 42).
 
-**Holat (2026-11-26).** Oxirgi to‘liq yashil o‘tish — 2026-11-26: 26 o‘tish, 668 tekshiruv — hammasi o‘tdi. Kod — F2.1 «Buxgalteriya»
-xarajatlari reyestri (`SESSIYA-ISHLARI.md` §88; modul relizi 13): yangi `k19`, xarajat oynasi o‘zgargan `k3`, `k6`, `k7`, `k15` va eski
-oqim (dev) moslashtirilgan. F2.2 (`k20`, modul relizi 14) bilan to‘liq o‘tish natijasi — keyingi yozuvda.
+**Holat (2026-11-26, F2.2).** Oxirgi to‘liq yashil o‘tish — 2026-11-26: 27 o‘tish, 694 tekshiruv — hammasi o‘tdi. Kod — F2.2
+kontragentlar va RP-10 kontragent ko‘chirmasi (`SESSIYA-ISHLARI.md` §89; modul relizi 14): yangi `k20`; qolgan ssenariylar o‘zgarishsiz.
+
+**Oldingi holat (2026-11-26, F2.1).** To‘liq yashil o‘tish: 26 o‘tish, 668 tekshiruv. Kod — F2.1 «Buxgalteriya» xarajatlari reyestri
+(`SESSIYA-ISHLARI.md` §88; modul relizi 13): yangi `k19`, xarajat oynasi o‘zgargan `k3`, `k6`, `k7`, `k15` va eski oqim (dev) moslashtirilgan.
 
 **Oldingi holat (2026-11-24).** To‘liq yashil o‘tish — 2026-11-24 (faqat yangi dizayn): 25 o‘tish, 647 tekshiruv — hammasi o‘tdi
 (≈ 10 daqiqa). Kod — eski dizayn (v1) olib tashlangandan keyingi holat (`SESSIYA-ISHLARI.md` §86; «Sotuvchi» oilalari — §85, 14-raund
