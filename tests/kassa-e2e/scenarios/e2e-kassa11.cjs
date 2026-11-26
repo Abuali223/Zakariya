@@ -69,8 +69,14 @@ const book = file => { const wb = XLSX.read(fs.readFileSync(file), { type: 'buff
       && /\(ички ўтказма\)/.test(pr) && /Ички ўтказмаларсиз \(банк\): кирим 70 000=00, чиқим 75 000=00/.test(pr) && /Бош бухгалтер/.test(pr), pr.slice(0, 600));
     const [dl] = await Promise.all([m.pg.waitForEvent('download', { timeout: 20000 }), m.pg.click('#km-pack')]);
     const nm = dl.suggestedFilename(), B = book(await dl.path()), flat = JSON.stringify(B.S);
-    ok('oylik to‘plam yuklandi: nomi Kassa_main_<oy>-ismsiz.xlsx, 7 varaq E1–E7 (Sh-8: E5 o‘zaro hisob, E6 xodim farzandi, E7 vedomost)', nm === `Kassa_main_${month}-ismsiz.xlsx`
-      && B.names.join(',') === 'E1 KO-3,E2 Statiyalar,E3 Kassa kunlari,E4 Hisobdorlar,E5 O‘zaro hisob,E6 Xodim farzandi,E7 Vedomost', [nm, B.names]);
+    ok('oylik to‘plam yuklandi: nomi Kassa_main_<oy>-ismsiz.xlsx, 8 varaq E1–E8 (Sh-8: E5 o‘zaro hisob, E6 xodim farzandi, E7 vedomost; F2.15: E8 provodkalar — 1C)', nm === `Kassa_main_${month}-ismsiz.xlsx`
+      && B.names.join(',') === 'E1 KO-3,E2 Statiyalar,E3 Kassa kunlari,E4 Hisobdorlar,E5 O‘zaro hisob,E6 Xodim farzandi,E7 Vedomost,E8 Provodkalar', [nm, B.names]);
+    // F2.15: E8 — 1-qator ustun nomlari (1C «Загрузка данных из табличного документа»), qatorlar — provodkalar; Dt 5010 = kirim, Kt 5010 = chiqim
+    const e8 = B.S['E8 Provodkalar'], e8d = e8.slice(1, e8.findIndex((r, i) => i > 0 && r.every(c => c === '')));
+    ok('E8 provodkalar: sarlavha 1-qatorda; Dt 5010 jami = oy kirimi (570 000), Kt 5010 jami = chiqim (75 000); sana — Excel sanasi, hisobvaraq — matn',
+      e8[0].slice(0, 5).join('|') === 'Sana|Hujjat №|Dt hisobvaraq|Kt hisobvaraq|Summa' && e8d.length > 0
+      && e8d.filter(r => r[2] === '5010').reduce((a, r) => a + r[4], 0) === 570000 && e8d.filter(r => r[3] === '5010').reduce((a, r) => a + r[4], 0) === 75000
+      && e8d.every(r => typeof r[0] === 'number' && typeof r[2] === 'string' && typeof r[4] === 'number'), e8.slice(0, 8));
     // Sh-8 (B19 / B20): stend urug'ida o'zaro hisob, xodim farzandi chegirmasi va shu oy vedomosti yo'q — varaqlar «yo'q» qatori bilan;
     //   ismsiz nusxada ism ustunlari yo'q (FD-28). Mazmun — test-kassa-sh8.sql va fin-sh8.test.mjs da.
     const e5 = B.S['E5 O‘zaro hisob'], e6 = B.S['E6 Xodim farzandi'], e7 = B.S['E7 Vedomost'];
@@ -100,7 +106,8 @@ const book = file => { const wb = XLSX.read(fs.readFileSync(file), { type: 'buff
     ok('Direktor to‘plami: nomi «-ismsiz»siz; KO-3 da ism, E4 da F.I.Sh. ustuni va ism; E5–E7 da ism ustunlari', nm === `Kassa_main_${month}.xlsx` && JSON.stringify(B.S['E1 KO-3']).includes('Sinov Mehmon')
       && e4[4][1] === 'F.I.Sh.' && e4.some(r => r[0] === stCode && r[1] === stName && r[3] === 30000)
       && B.S['E5 O‘zaro hisob'][4].includes('Xodim F.I.Sh.') && B.S['E5 O‘zaro hisob'][4].includes('O‘quvchi F.I.Sh.')
-      && B.S['E6 Xodim farzandi'][4][1] === 'Xodim F.I.Sh.' && B.S['E7 Vedomost'][4][2] === 'F.I.Sh.', [nm, e4.slice(3, 7), B.names]);
+      && B.S['E6 Xodim farzandi'][4][1] === 'Xodim F.I.Sh.' && B.S['E7 Vedomost'][4][2] === 'F.I.Sh.' && B.S['E8 Provodkalar'][0][8] === 'Nomi'
+      && JSON.stringify(B.S['E8 Provodkalar']).includes(stName), [nm, e4.slice(3, 7), B.names]);
     await d.ctx.close();
   }
   // ---------------- 3) Kassir: oyna va chop etish bor, Excel yo'q; telefonda oyna sig'adi

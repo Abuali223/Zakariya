@@ -63,8 +63,11 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          limiti tavsiyasi — bankka ariza uchun), kassa_state.deposit (topshirish kuni eslatmasi), kassa_checks.deposit / depositMissed30;
 --          B19 / B20 — kassa_month_pack: offsets (E5 o'zaro hisob — JShDS imtiyozi), staffDiscounts (E6 xodim farzandi chegirmasi),
 --          payroll (E7 vedomost va to'lovlar — ish haqi fondi bilan solishtirish); FD-28 bo'yicha 2-ro'yxatga ismsiz.
+--     17 — 2-bosqich F2.14 va F2.15 (Sh-8 B17, B1): kassa_pay_sheet — xodimning o'quv yili ish haqi to'lov qaydnomasi (shu xodimning
+--          naqd maosh, avans va qaytim orderlari; boshqa xodimlar summalarisiz; kassagacha naqd yozuvlar — ma'lumot); kassa_month_pack —
+--          postings (E8 provodkalar, 1C ga yuklash uchun: hujjatlar asl holatda, qayta tasnif — alohida tuzatish yozuvi).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 16 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 17 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

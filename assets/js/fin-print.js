@@ -340,6 +340,7 @@ table{border-collapse:collapse;width:100%}
 .bk .ft{position:absolute;left:20mm;right:10mm;bottom:4mm;margin:0}
 .act{font-size:10.5pt}.act .ttl{font-size:12.5pt}.act p{margin:2.5mm 0 0}.act .t td{font-size:10pt}
 .act .ln{border-bottom:.4pt solid #000;height:6mm}
+.ps .t td{height:6.5mm}.ps tr.em td{color:#555}.ps .small{font-size:8.5pt}.ps .two .sig{flex:1}
 .jr .t th{font-size:7pt}.jr .t td{font-size:8.5pt;padding:.6mm 1mm}.jr td.jn{font-size:7.5pt;overflow-wrap:anywhere}
 .jr .t td.sep,.jr .t th.sep{border-left:1.2pt solid #000}
 .jr .sumj{margin-top:2.5mm;font-size:9.5pt}.jr .sumj div{margin-top:.8mm}
@@ -759,8 +760,47 @@ export function payrollSheet(p, ctx) {
   return { name: ru ? 'E7 Ведомость' : 'E7 Vedomost', rows,
     cols: [{ wch: 14 }, { wch: 12 }, ...(masked ? [] : [{ wch: 28 }]), ...Array.from({ length: 11 }, () => ({ wch: 15 }))] };
 }
+// Oylik to'plam (E8; F2.15, Sh-8 B1 — 1C ga yuklash): provodkalar — 1C «Загрузка данных из табличного документа» uchun: 1-qator —
+//   ustun nomlari, keyin har provodka bir qator (sana — Excel sanasi, hisobvaraqlar — matn, summa — son); jamlar va izoh — bo'sh qatordan
+//   keyin (yuklashda qatorlar oralig'i shu yergacha belgilanadi). Hujjatlar ASL holatda; qayta tasnif dalolatnomasi (QT) — alohida
+//   tuzatish yozuvi (Dt yangi — Kt eski). Ismsiz nusxada (FD-28) shaxslar — kod bilan, tashkilot / yetkazib beruvchi nomi qoladi.
+const PT_KIND = { uz: { student: 'o‘quvchi', employee: 'xodim', counterparty: 'kontragent', bank: 'bank', founder: 'ta’sischi', other: 'boshqa' },
+                  ru: { student: 'ученик', employee: 'сотрудник', counterparty: 'контрагент', bank: 'банк', founder: 'учредитель', other: 'прочее' } };
+export function postingsSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', lang = ru ? 'ru' : 'uz-latn', t = T[lang], fx = FX[lang], a = p.postings || [], masked = !!p.masked, pk = PT_KIND[ru ? 'ru' : 'uz'];
+  const H = ru ? ['Дата', 'Номер документа', 'Счёт Дт', 'Счёт Кт', 'Сумма', 'Статья', 'Вид субконто', 'Код субконто', masked ? 'Наименование (организации)' : 'Наименование', 'Содержание', 'ID документа']
+               : ['Sana', 'Hujjat №', 'Dt hisobvaraq', 'Kt hisobvaraq', 'Summa', 'Statiya', 'Tomon turi', 'Tomon kodi', masked ? 'Nomi (tashkilotlar)' : 'Nomi', 'Mazmun', 'Hujjat ID'];
+  const no = x => x.series === 'FIX' ? `${fx.pre}-${x.no}` : docNo(x, t);
+  const what = x => x.op === 'fix'
+    ? (ru ? `${fx.pre}-${x.no}: исправление ${docNo({ series: x.srcSeries, no: x.srcNo }, t)} от ${dmy(x.srcDay)}, статья ${x.fromArticle || '—'} → ${x.articleId || '—'}`
+          : `${fx.pre}-${x.no}: ${docNo({ series: x.srcSeries, no: x.srcNo }, t)} (${dmy(x.srcDay)}) tuzatish, statiya ${x.fromArticle || '—'} → ${x.articleId || '—'}`)
+    : (x.basis || '');
+  const rows = [H];
+  a.forEach(x => rows.push([xlDate(x.day), no(x), String(x.debit || ''), String(x.credit || ''), xlMoney(x.amount), x.articleId || '',
+    pk[x.partyType] || x.partyType || '', x.code || '', x.partyName || '', what(x), x.docId || '']));
+  if (!a.length) rows.push([ru ? 'Проводок за месяц нет' : 'Shu oyda provodka yo‘q']);
+  rows.push([]);
+  rows.push([t.total, '', '', '', xlMoney(a.reduce((s, x) => s + num(x.amount), 0))]);
+  // kassa aylanmasi (KO-3 bilan solishtirish uchun) va hisobvaraqlar juftligi bo'yicha jamlar
+  const cashIn = a.filter(x => x.debit === '5010').reduce((s, x) => s + num(x.amount), 0), cashOut = a.filter(x => x.credit === '5010').reduce((s, x) => s + num(x.amount), 0);
+  rows.push([ru ? 'Дт 5010 (приход в кассу)' : 'Dt 5010 (kassaga kirim)', '', '', '', xlMoney(cashIn)], [ru ? 'Кт 5010 (расход из кассы)' : 'Kt 5010 (kassadan chiqim)', '', '', '', xlMoney(cashOut)]);
+  const pairs = new Map();
+  a.forEach(x => { const k = `${x.debit}|${x.credit}`; pairs.set(k, (pairs.get(k) || 0) + num(x.amount)); });
+  if (pairs.size) {
+    rows.push([], [ru ? 'Обороты по корреспонденции счетов' : 'Hisobvaraqlar korrespondensiyasi bo‘yicha aylanma'], ru ? ['Счёт Дт', 'Счёт Кт', 'Сумма'] : ['Dt', 'Kt', 'Summa']);
+    [...pairs.entries()].sort((x, y) => x[0].localeCompare(y[0])).forEach(([k, v]) => { const [d, c] = k.split('|'); rows.push([d, c, xlMoney(v)]); });
+  }
+  rows.push([], [ru ? 'Документы — в исходном виде на дату документа; акты переклассификации (QT) — отдельной исправительной записью (Дт новый — Кт прежний счёт) на дату акта. Акты начальных остатков и перезапуска кассы не включены (начальные остатки вводятся в 1С отдельно).'
+                    : 'Hujjatlar — asl holatda, hujjat sanasi bilan; qayta tasnif dalolatnomalari (QT) — alohida tuzatish yozuvi (Dt yangi — Kt eski hisobvaraq), dalolatnoma sanasi bilan. Boshlang‘ich qoldiq va kassani qayta ishga tushirish dalolatnomalari kiritilmagan (1C da boshlang‘ich qoldiq alohida kiritiladi).'],
+    [ru ? '1С: «Загрузка данных из табличного документа» — строка 1 — заголовки; диапазон загрузки — до первой пустой строки.' : '1C: «Загрузка данных из табличного документа» — 1-qator — ustun nomlari; yuklash oralig‘i — birinchi bo‘sh qatorgacha.']);
+  if (masked) rows.push([ru ? 'Обезличенная копия (FD-28): физические лица — по коду; полная копия — у директора' : 'Ismsiz nusxa (FD-28): jismoniy shaxslar kod bilan; to‘liq nusxa — Direktorda']);
+  return { name: ru ? 'E8 Проводки' : 'E8 Provodkalar', rows,
+    cols: [{ wch: 11 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 16 }, { wch: 9 }, { wch: 12 }, { wch: 16 }, { wch: 28 }, { wch: 50 }, { wch: 24 }] };
+}
 // Buxgalter uchun oylik kassa to'plami — bitta XLSX kitob: E1 KO-3, E2 statiyalar, E3 kassa kunlari, E4 hisobdorlar; Sh-8 (2026-11-26):
-//   E5 o'zaro hisob, E6 xodim farzandi chegirmasi, E7 vedomost va to'lovlar (server 16-reliz va undan keyin — eski javobda bu varaqlar yo'q).
+//   E5 o'zaro hisob, E6 xodim farzandi chegirmasi, E7 vedomost va to'lovlar (server 16-reliz va undan keyin — eski javobda bu varaqlar yo'q);
+//   E8 provodkalar — 1C ga yuklash uchun (F2.15; server 17-reliz va undan keyin).
 //   p — kassa_month_pack() javobi (2-ro'yxatga ismsiz, FD-28).
 export function packSheets(p, ctx) {
   p = p || {}; const ru = langOf(ctx || {}) === 'ru';
@@ -768,6 +808,7 @@ export function packSheets(p, ctx) {
   if (Array.isArray(p.offsets)) out.push(offsetSheet(p, ctx));
   if (Array.isArray(p.staffDiscounts) && !(p.desk && p.desk.isTest)) out.push(staffDiscSheet(p, ctx));
   if ('payroll' in p && !(p.desk && p.desk.isTest)) out.push(payrollSheet(p, ctx));
+  if (Array.isArray(p.postings)) out.push(postingsSheet(p, ctx));   // F2.15 — server 17-reliz va undan keyin
   return out;
 }
 
@@ -1274,4 +1315,76 @@ export function fixActHtml(f, ctx, W) {
     <div class="two" style="display:flex;gap:8mm">${sig(x.made, f.requestedByName || '')}${sig(x.approved, f.status === 'approved' ? (f.decidedByName || '') : '')}</div>
     <div class="ft">${esc(ft.join(' · '))}</div></div>`;
   return page(`${x.title} ${t.no} ${fixNo(f, ctx)}`, t, body);
+}
+
+// ---------------------------------------------------------------- F2.14: xodimning o'quv yili ish haqi to'lov qaydnomasi (Sh-8 B17)
+//   Buxgalter (2026-11-26): naqd maosh vedomost va imzo bilan; xodimlar bir-birining maoshini ko'rmasligi uchun har xodimga o'quv yili
+//   (sentyabr – avgust) davomida bitta qaydnoma. Ma'lumot — kassa_pay_sheet (shu xodimning o'tkazilgan KO-2 «Ish haqi» / «Ish haqi
+//   avansi» va KO-1 «Xodim qaytargan pul»); 12 oy qatori (to'lovsiz oy — bo'sh qator), har to'lov — alohida qator imzo bilan.
+const PS = {
+  'uz-cyrl': { title: 'ИШ ҲАҚИ ТЎЛОВ ҚАЙДНОМАСИ', year: (a, b) => `${a}/${b} ўқув йили (сентябрь – август)`, emp: 'Ходим', code: 'Табел рақами',
+    pos: 'Лавозими', teacher: 'Ўқитувчи', cols: ['№', 'Ой', 'Тўлов тури', 'Ҳужжат', 'Сана', 'Сумма', 'Олувчи имзоси'],
+    kinds: { salary: 'Иш ҳақи', advance: 'Иш ҳақи аванси', salaryReturn: 'Иш ҳақи кассага қайтарилди', advanceReturn: 'Аванс кассага қайтарилди' },
+    months: ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'],
+    paid: 'Жами берилди (чиқим касса ордерлари)', returned: 'Кассага қайтарилди (кирим касса ордерлари)', net: 'Соф тўланди', words: 'сўз билан',
+    legacy: (n, sum) => `Касса ишга тушгунга қадар касса ҳужжатисиз ёзилган нақд тўловлар: ${n} та, ${sum} — бу қайдномага киритилмаган.`,
+    note: 'Қайднома фақат шу ходимга тегишли; бошқа ходимларнинг суммалари кўрсатилмайди.', cashier: 'Кассир', acq: 'Танишдим: ходим', printed: 'чоп этилди' },
+  'uz-latn': { title: 'ISH HAQI TO‘LOV QAYDNOMASI', year: (a, b) => `${a}/${b} o‘quv yili (sentyabr – avgust)`, emp: 'Xodim', code: 'Tabel raqami',
+    pos: 'Lavozimi', teacher: 'O‘qituvchi', cols: ['№', 'Oy', 'To‘lov turi', 'Hujjat', 'Sana', 'Summa', 'Oluvchi imzosi'],
+    kinds: { salary: 'Ish haqi', advance: 'Ish haqi avansi', salaryReturn: 'Ish haqi kassaga qaytarildi', advanceReturn: 'Avans kassaga qaytarildi' },
+    months: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'],
+    paid: 'Jami berildi (chiqim kassa orderlari)', returned: 'Kassaga qaytarildi (kirim kassa orderlari)', net: 'Sof to‘landi', words: 'so‘z bilan',
+    legacy: (n, sum) => `Kassa ishga tushgunga qadar kassa hujjatisiz yozilgan naqd to‘lovlar: ${n} ta, ${sum} — bu qaydnomaga kiritilmagan.`,
+    note: 'Qaydnoma faqat shu xodimga tegishli; boshqa xodimlarning summalari ko‘rsatilmaydi.', cashier: 'Kassir', acq: 'Tanishdim: xodim', printed: 'chop etildi' },
+  ru: { title: 'ПЛАТЁЖНАЯ ВЕДОМОСТЬ ПО ЗАРАБОТНОЙ ПЛАТЕ', year: (a, b) => `${a}/${b} учебный год (сентябрь – август)`, emp: 'Сотрудник', code: 'Табельный номер',
+    pos: 'Должность', teacher: 'Учитель', cols: ['№', 'Месяц', 'Вид выплаты', 'Документ', 'Дата', 'Сумма', 'Подпись получателя'],
+    kinds: { salary: 'Заработная плата', advance: 'Аванс по заработной плате', salaryReturn: 'Возврат заработной платы в кассу', advanceReturn: 'Возврат аванса в кассу' },
+    months: ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'],
+    paid: 'Итого выдано (расходные кассовые ордера)', returned: 'Возвращено в кассу (приходные кассовые ордера)', net: 'Чистая выплата', words: 'прописью',
+    legacy: (n, sum) => `Наличные выплаты, записанные без кассовых документов до запуска кассы: ${n} шт., ${sum} — в ведомость не включены.`,
+    note: 'Ведомость относится только к этому сотруднику; суммы других сотрудников не показываются.', cashier: 'Кассир', acq: 'Ознакомлен: сотрудник', printed: 'напечатано' },
+};
+// O'quv yili (sentyabrdan boshlanadigan yil): '2027-01' / '2027-01-15' → 2026; '2026-09' → 2026. Noto'g'ri qiymat — null.
+export function eduYearOf(v) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(v || '')); if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]); if (!(mo >= 1 && mo <= 12)) return null;
+  return mo >= 9 ? y : y - 1;
+}
+// O'quv yili oylari: 2026 → ['2026-09', …, '2027-08']
+export function eduMonths(y) { return Array.from({ length: 12 }, (_, i) => { const mo = (8 + i) % 12 + 1, yy = mo >= 9 ? y : y + 1; return `${yy}-${String(mo).padStart(2, '0')}`; }); }
+export function paySheetHtml(sh, ctx, W) {
+  ctx = ctx || {}; sh = sh || {};
+  const lang = langOf(ctx), t = T[lang], x = PS[lang] || PS['uz-cyrl'], o = ctx.org || {}, p = sh.party || {}, tot = sh.totals || {};
+  const y = Number(sh.year) || eduYearOf(new Date().toISOString()) || 0, rows = sh.rows || [];
+  const mName = m => `${x.months[Number(m.slice(5, 7)) - 1] || m} ${m.slice(0, 4)}`;
+  const neg = k => k === 'salaryReturn' || k === 'advanceReturn';
+  let n = 0;
+  const body = eduMonths(y).map(m => {
+    const rs = rows.filter(r => r.month === m);
+    if (!rs.length) return `<tr class="em"><td></td><td>${esc(mName(m))}</td><td class="c">—</td><td class="c">—</td><td class="c">—</td><td class="r">—</td><td></td></tr>`;
+    return rs.map((r, i) => `<tr><td class="c">${++n}</td><td>${i ? '' : esc(mName(m))}</td><td>${esc(x.kinds[r.kind] || r.kind || '')}</td>
+      <td class="c">${esc(docNo(r, t))}</td><td class="c">${esc(dmy(r.day))}</td><td class="r">${neg(r.kind) ? '−' : ''}${esc(money(W, r.amount))}</td><td></td></tr>`).join('');
+  }).join('');
+  const lg = sh.legacy && num(sh.legacy.n) > 0 ? `<p class="small">${esc(x.legacy(num(sh.legacy.n), money(W, sh.legacy.sum)))}</p>` : '';
+  const at = stamp(ctx.printedAt), ft = [`${p.code || p.id || ''} · ${y}/${y + 1}`];
+  if (at || ctx.printedBy) ft.push(`${x.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
+  const chief = pickSign(ctx, 2, null, t.chief);
+  const html = `<div class="pg act ps">
+    <div class="hd">${orgBlock(o, t, lang)}</div>
+    <div class="ttl">${esc(x.title)}</div>
+    <div class="dt">${esc(x.year(y, y + 1))}</div>
+    ${fld(x.emp, `<b>${esc(p.name || '')}</b>`)}
+    ${fld(x.code, esc(p.code || '—'))}
+    ${fld(x.pos, esc(p.kind === 'teacher' ? x.teacher : (p.position || '—')))}
+    <table class="t"><thead><tr><th style="width:8mm">${esc(x.cols[0])}</th><th style="width:28mm">${esc(x.cols[1])}</th><th>${esc(x.cols[2])}</th>
+      <th style="width:20mm">${esc(x.cols[3])}</th><th style="width:20mm">${esc(x.cols[4])}</th><th style="width:28mm">${esc(x.cols[5])}</th><th style="width:30mm">${esc(x.cols[6])}</th></tr></thead>
+      <tbody>${body}</tbody></table>
+    ${fld(x.paid, esc(money(W, tot.paid)))}
+    ${num(tot.returned) ? fld(x.returned, '−' + esc(money(W, tot.returned))) : ''}
+    ${fld(x.net, `<b>${esc(money(W, tot.net))}</b> (${esc(x.words)}: ${esc(W.sumWords(num(tot.net), lang))})`)}
+    ${lg}<p class="small">${esc(x.note)}</p>
+    <div class="two" style="display:flex;gap:8mm">${sig(x.cashier, '')}${sig(chief.title, chief.name)}</div>
+    ${sig(x.acq, p.name || '')}
+    <div class="ft">${esc(ft.join(' · '))}</div></div>`;
+  return page(`${x.title} — ${p.name || ''} — ${y}/${y + 1}`, t, html);
 }

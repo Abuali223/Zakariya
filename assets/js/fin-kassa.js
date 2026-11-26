@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 16;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 17;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -369,6 +369,7 @@ function draw() {
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
   if (started && (m.director || m.list2) && Number(s.version) >= 15) acts.push(`<button class="btn ghost2" id="ks-fix" title="Qayta tasnif dalolatnomalari (QT): yopilgan kundagi xarajat orderidagi statiya, oluvchi yoki asos xatosini tuzatish — Direktor tasdig‘i bilan">QT${num(s.pending.fixToApprove) && m.director ? ` (${num(s.pending.fixToApprove)})` : ''}</button>`);
+  if (started && (m.operator || m.director || m.list2) && Number(s.version) >= 17) acts.push(`<button class="btn ghost2" id="ks-psheet" title="Xodimning o‘quv yili ish haqi to‘lov qaydnomasi (Sh-8 B17): shu xodimning naqd maosh, avans va qaytimlari — imzo uchun, boshqa xodimlar summalarisiz">Qaydnoma</button>`);
   if (started && (m.director || m.list2)) acts.push(`<button class="btn ghost2" id="ks-kpi" title="Haftalik ko‘rsatkichlar (RP-22): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar">KPI</button>`);
   // (tayyorlangan, hali boshlanmagan qayta ishga tushirishda ham — qayta sanash uchun, g4v-2)
   if (ready && (paused || rs) && m.director) acts.push(`<button class="btn gold" id="ks-restart" title="Komissiya sanashi bo‘yicha qayta ishga tushirish qoldig‘i (ishga-tushirish §9)">Qayta ishga tushirish</button>`);
@@ -440,7 +441,7 @@ function draw() {
       <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? (d.status === 'void' ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>') : ''}</td>
       <td data-label="Chiqim" style="text-align:right;white-space:nowrap">${!isIn ? (d.status === 'void' ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>') : ''}</td>
       <td data-label="Holat">${stChip(d.status)}${d.status === 'void' && d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : ''}<div class="small muted">${d.isSystem ? 'tizim' : esc(d.postedByName || nameOf(d.postedBy))}</div></td>
-      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Orderni chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-void="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`;
+      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Orderni chop etish">🖨</button>${psheetBtn(d, s)}${canVoid ? ` <button class="btn sm danger" data-void="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`;
   }).join('');
   const docsHtml = ready ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b>${od ? 'Ochiq kun hujjatlari — ' + esc(dmy(od.day)) : 'Ochiq kun yo‘q'}</b>${od ? `<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-report="${esc(od.day)}" title="Kunlik hisobot: kimdan / kimga qancha">🖨 Kunlik hisobot</button><button class="btn sm" data-book="${esc(od.day)}">🖨 Kassa kitobi varag‘i (qoralama)</button></span>` : ''}</div>
     ${docs.length ? `<div class="tablewrap"><table><thead><tr><th>№</th><th>Operatsiya</th><th>Kimdan / kimga</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th><th>Holat</th><th></th></tr></thead><tbody>${docRows}</tbody></table></div>`
@@ -548,6 +549,8 @@ function bind() {
   on('#ks-mx', openMatrix);
   on('#ks-kpi', openKpi);
   on('#ks-fix', () => openFixList('pending'));
+  on('#ks-psheet', () => openPaySheet());
+  each('data-psheet', (ref, b) => printPaySheet(ref, Number(b.dataset.psyear) || null));
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   on('#ks-restart', openRestartForm);
@@ -1750,7 +1753,7 @@ async function openDayView(day) {
       <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
       <td data-label="Chiqim" style="text-align:right;white-space:nowrap">${!isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
       <td data-label="Holat">${v ? stChip('void') : '<span class="small muted">' + (x.isSystem ? 'tizim' : esc(x.postedByName || nm(x.postedBy))) + '</span>'}${num(x.prints) ? `<div class="small muted">chop etilgan: ${esc(String(x.prints))}</div>` : ''}</td>
-      <td data-label=""><button class="btn sm" data-dprint="${esc(x.id)}" title="Orderni chop etish">🖨</button></td></tr>`; }).join('');
+      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-dprint="${esc(x.id)}" title="Orderni chop etish">🖨</button>${psheetBtn(x, ST.ov && ST.ov.state)}</td></tr>`; }).join('');
   // sanashlar: ismlar — sanash paytidagi (sec-4); kassa egasi va sanagan xodim alohida (sec-2); smenada — topshirdi → qabul qildi
   const cn = (c, u) => (u && c.names && c.names[u]) || nm(u);
   const cnts = (book.counts || []).map(c => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-2)">
@@ -1797,6 +1800,7 @@ async function openDayView(day) {
   $('#kdv-book').onclick = () => printBook(day, back);
   $('#kdv-report').onclick = () => printReport(day, book);
   $('#modal').querySelectorAll('[data-dprint]').forEach(b => b.onclick = () => printDoc(b.dataset.dprint, back));
+  $('#modal').querySelectorAll('[data-psheet]').forEach(b => b.onclick = () => printPaySheet(b.dataset.psheet, Number(b.dataset.psyear) || null));
   $('#modal').querySelectorAll('[data-kfix]').forEach(b => b.onclick = () => openFixForm(b.dataset.kfix, back));
   $('#modal').querySelectorAll('[data-cprint]').forEach(b => b.onclick = () => printCount(book, b.dataset.cprint));
 }
@@ -1821,6 +1825,46 @@ export function limitHintTxt(h) {   // kassa limiti tavsiyasi (kassa_state.depos
 export function depositTxt(dep, balance) {   // topshirish kuni ogohlantirishi (dep — kassa_state.deposit)
   const keep = num(dep && dep.keep), amt = num(dep && dep.amount);
   return `Bugun — bankka topshirish (inkassatsiya) kuni: kassada ${som(balance)}${keep > 0 ? `, ${som(keep)} maydalik qoldirib` : ''} — ${som(amt)} bankka topshiriladi («+ Chiqim so‘rovi» → «Bankka topshirish»).`;
+}
+
+// ---------------------------------------------------------------- F2.14: xodimning o'quv yili ish haqi to'lov qaydnomasi (Sh-8 B17)
+//   Buxgalter (2026-11-26): naqd maosh vedomost va imzo bilan; xodimlar bir-birining maoshini ko'rmasligi uchun har xodimga o'quv yili
+//   davomida bitta qaydnoma. Sarlavhadagi «Qaydnoma» (xodim va o'quv yili tanlanadi) yoki maosh / avans / qaytim orderi yonidagi tugma;
+//   server — kassa_pay_sheet (17-reliz va undan keyin), bosma — fin-print.js: paySheetHtml.
+const PSHEET_OPS = ['out_salary', 'out_advance', 'in_staff_return'];
+export function paySheetRef(d) {   // order → [xodim kaliti, o'quv yili] (maosh / avans / qaytim; o'tkazilgan; xodim tomoni) yoki null
+  if (!d || d.status !== 'posted' || !PSHEET_OPS.includes(d.op) || d.partyType !== 'employee' || !/^(teachers|staff):.+$/.test(String(d.partyId || ''))) return null;
+  const snap = d.sourceSnapshot || {}, m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(snap.month || '')) ? snap.month : String(d.businessDay || '').slice(0, 7);
+  const y = /^(\d{4})-(\d{2})$/.exec(m); if (!y) return null;
+  return [d.partyId, Number(y[2]) >= 9 ? Number(y[1]) : Number(y[1]) - 1];
+}
+function psheetBtn(d, st) {
+  const m = me(), r = paySheetRef(d);
+  if (!r || !(m.operator || m.director || m.list2) || Number((st && st.version) || 0) < 17) return '';
+  return ` <button class="btn sm ghost2" data-psheet="${esc(r[0])}" data-psyear="${r[1]}" title="Shu xodimning ${r[1]}/${r[1] + 1} o‘quv yili ish haqi to‘lov qaydnomasi">Qaydnoma</button>`;
+}
+async function printPaySheet(ref, year) {
+  try {
+    const [pm, wm, sh] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), call('kassa_pay_sheet', { p_party: ref, p_year: year || null }), loadRefs()]);
+    C.printHTML(pm.paySheetHtml(sh, printCtx({}, false, null), wm));
+  } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+}
+async function openPaySheet() {
+  let ppl;
+  try { ppl = await loadPeople(); } catch (e) { C.toast(errText(e), true); return; }
+  const today = String((ST.ov && ST.ov.state && ST.ov.state.today) || new Date().toISOString().slice(0, 10));
+  const y0 = Number(today.slice(5, 7)) >= 9 ? Number(today.slice(0, 4)) : Number(today.slice(0, 4)) - 1;
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Ish haqi to‘lov qaydnomasi</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small muted">Xodimning o‘quv yili (sentyabr – avgust) davomidagi naqd maosh, avans va kassaga qaytargan pullari — har to‘lov alohida qatorda, imzo uchun; boshqa xodimlarning summalari ko‘rsatilmaydi (buxgalter, Sh-8 B17).</div>
+      ${lbl('Xodim', `<select id="ps-emp" style="${FLD}"><option value="">— tanlang —</option>${(ppl || []).map(x => `<option value="${esc(x.ref)}">${esc(x.name || '—')}${x.code ? ' · ' + esc(x.code) : ''}${x.pos ? ' · ' + esc(x.pos) : ''}${x.left ? ' (ketgan)' : ''}</option>`).join('')}</select>`)}
+      ${lbl('O‘quv yili', `<select id="ps-year" style="${FLD}">${[0, 1, 2].map(i => `<option value="${y0 - i}">${y0 - i}/${y0 - i + 1}</option>`).join('')}</select>`)}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="ps-print">🖨 Chop etish</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  $('#ps-print').onclick = async () => {
+    const ref = $('#ps-emp').value; if (!ref) { C.toast('Xodimni tanlang', true); $('#ps-emp').focus(); return; }
+    $('#ps-print').disabled = true; await printPaySheet(ref, Number($('#ps-year').value) || null); $('#ps-print').disabled = false;
+  };
 }
 
 // ---------------------------------------------------------------- F2.13: qayta tasnif dalolatnomasi («QT-», bosmada «ҚТ-»)

@@ -288,6 +288,11 @@ Buxgalter imzo paytida (12-dekabrgacha; B19 — 19-dekabrgacha) «Tuzatish» ust
   summa; xodim bo‘yicha jami — daromad solig‘i imtiyozi uchun; F2.16) va **«E6 Xodim farzandi»** (chegirma bilan hisob-fakturalar:
   asosiy narx, chegirma, hisoblangan) — chegirma moddiy naf hisoblanadimi va soliq bazasiga kiritiladimi, buxgalter xulosasi bilan
   (tizim soliq hisoblamaydi). Direktor faylida ismlar bilan, Moliya menejeri va buxgalterga — ismsiz (FD-28).
+- B17 — xodimning o‘quv yili ish haqi to‘lov qaydnomasi tizimda (modul relizi 17): «Kassa» → «Qaydnoma» (yoki maosh / avans
+  orderi yonidagi «Qaydnoma» tugmasi) — xodim va o‘quv yili tanlanadi; varaqda 12 oy, har naqd to‘lov (maosh, avans, kassaga
+  qaytarilgan pul) alohida qatorda imzo uchun; boshqa xodimlar summalari yo‘q.
+- B1 — 1C ga yuklash: oylik kassa to‘plamida «E8 Provodkalar» (sana, hujjat №, Dt, Kt, summa, statiya, tomon kodi, mazmun);
+  buxgalter birinchi oy bo‘yicha sinov yuklashini o‘tkazib, ustunlar mosligini tasdiqlaydi.
 
 21-noyabrdagi vaqtincha ko‘rik (B1–B13, buyruq namunalari, shakllar): ☐ o‘tkazildi, sana [___]; tuzatishlar: ☐ yo‘q ☐ ilovada, [___] varaq
 

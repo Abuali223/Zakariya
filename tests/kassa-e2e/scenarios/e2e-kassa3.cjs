@@ -198,6 +198,32 @@ const allErrs = [];
     await s.pg.waitForFunction(() => /avansi yozildi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
     ok('karta orqali avans yozildi (kassa hujjatisiz)', q(`select method || ':' || coalesce("cashDocId",'-') || ':' || trim_scale(amount) from public.staff_advances where "teacherId"='IQX-001'`) === 'card:-:250000', q(`select "teacherId", method, amount from public.staff_advances`));
     await s.pg.click('#av-close').catch(() => {});
+    // F2.14 (Sh-8 B17): xodimning o'quv yili ish haqi to'lov qaydnomasi — maosh orderi yonidagi «Qaydnoma» va sarlavhadagi «Qaydnoma» oynasi
+    await s.kassaReady();
+    const eduY = Number(month.slice(5, 7)) >= 9 ? Number(month.slice(0, 4)) : Number(month.slice(0, 4)) - 1;
+    const salRef = doc(`op='out_salary' and status='posted'`, `"partyId"`), advRef = doc(`op='out_advance' and status='posted'`, `"partyId"`);
+    const advAmt = String(doc(`op='out_advance' and status='posted'`, 'trim_scale(amount)')).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '=00';
+    const waitSheet = n => s.pg.waitForFunction(k => [...document.querySelectorAll('iframe')].slice(k).some(f => { try { return /ТЎЛОВ ҚАЙДНОМАСИ/.test(f.contentDocument.body.innerText); } catch (e) { return false; } }), n, { timeout: 20000 }).catch(() => {});
+    await s.pg.waitForSelector(`#ks-body [data-psheet="${salRef}"]`, { timeout: 15000 });
+    let pb = (await s.printed()).length;
+    await s.pg.click(`#ks-body [data-psheet="${salRef}"]`); await waitSheet(pb);
+    const ps1 = (await s.printed()).slice(pb).join(' || ');
+    ok('F2.14: maosh orderi yonida «Qaydnoma» — o‘quv yili, xodim va tabel raqami, «Иш ҳақи Ч-1 … 1 500 000», sof to‘langan; boshqa xodimning karta orqali maoshi va avansi yo‘q',
+      /ИШ ҲАҚИ ТЎЛОВ ҚАЙДНОМАСИ/.test(ps1) && ps1.includes(`${eduY}/${eduY + 1} ўқув йили`) && ps1.includes('Ходим: ' + tname) && ps1.includes('Табел рақами: IQT-001')
+      && /Иш ҳақи Ч-1 \d\d\.\d\d\.\d{4} 1 500 000=00/.test(ps1) && ps1.includes('Соф тўланди: 1 500 000=00') && !ps1.includes('700 000') && !ps1.includes('Иш ҳақи аванси Ч-'),
+      ps1.slice(0, 700));
+    await s.pg.click('#ks-psheet'); await s.pg.waitForSelector('#ps-emp', { timeout: 15000 });
+    const psOpts = await s.pg.$$eval('#ps-emp option', o => o.map(x => x.value)), psYear = await s.pg.$eval('#ps-year', e => e.value);
+    await s.pg.click('#ps-print'); await s.pg.waitForTimeout(400);
+    const psNoEmp = await s.toasts();
+    await s.pg.selectOption('#ps-emp', advRef);
+    pb = (await s.printed()).length;
+    await s.pg.click('#ps-print'); await waitSheet(pb);
+    const ps2 = (await s.printed()).slice(pb).join(' || ');
+    ok('«Qaydnoma» oynasi: xodim tanlanmasa — rad; joriy o‘quv yili tanlangan; avans oluvchining qaydnomasi — «Иш ҳақи аванси» va summasi, maosh yo‘q',
+      psOpts.includes(salRef) && psOpts.includes(advRef) && psYear === String(eduY) && psNoEmp.includes('Xodimni tanlang')
+      && new RegExp('Иш ҳақи аванси Ч-\\d+ \\d\\d\\.\\d\\d\\.\\d{4} ' + advAmt.replace(/ /g, ' ')).test(ps2) && !ps2.includes('1 500 000'), [psYear, psNoEmp, ps2.slice(0, 600)]);
+    await s.pg.click('#m-cancel').catch(() => {}); await s.modalGone().catch(() => {});
     // maosh orderini shu kunda bekor qilish — maosh to'lovi ham olib tashlanadi
     await s.kassaReady();
     const salId = doc(`op='out_salary'`, 'id');

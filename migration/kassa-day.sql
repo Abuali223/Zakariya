@@ -1875,12 +1875,12 @@ end $$;
 revoke all on function public.kassa_matrix(text, text) from public, anon;
 grant execute on function public.kassa_matrix(text, text) to authenticated;
 
--- ---------- O'qish: buxgalter uchun oylik kassa to'plami (F1.22; E1–E7 — eksport to'plamining kassa va ish haqi qismi) ----------
+-- ---------- O'qish: buxgalter uchun oylik kassa to'plami (F1.22; E1–E8 — eksport to'plamining kassa va ish haqi qismi) ----------
 --   Bitta javob — bitta XLSX kitob: E1 KO-3 (kassa_journal_export, FD-28), E2 statiya matritsasi (kassa_matrix), E3 kassa kunlari
 --   (KO-4 jamlari, sanash va farq — yopishdagi va smena topshirishdagi (acc-6), tekshirilganmi, Z-hisobot), E4 hisobdorlar (oy boshi,
 --   berildi, qaytdi, hisobot, oy oxiri); Sh-8 qarorlari (2026-11-26): E5 o'zaro hisob — JShDS imtiyozi uchun (B20, F2.16), E6 xodim
 --   farzandi chegirmasi — moddiy naf bo'yicha buxgalter xulosasi uchun ma'lumot (B20), E7 vedomost va to'lovlar — ish haqi fondi bilan
---   solishtirish (B19).
+--   solishtirish (B19); E8 provodkalar — 1C ga yuklash uchun (F2.15, Sh-8 B1).
 --   Moliya menejeri / buxgalter va Direktor; 2-ro'yxatga ismsiz (xodim — tabel kodi bilan), Direktorga to'liq. Kassir — yo'q.
 create or replace function public.kassa_month_pack(p_desk text, p_month text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -1986,10 +1986,108 @@ begin
                                                             sum(coalesce(x.paid, 0)) filter (where coalesce(x.method, 'cash') not in ('cash', 'card', 'offset')) as oth
                                                        from public.salary_payments x where x.month = p_month and x."teacherId" = l."personId") sp on true
                                  where l."runId" = r.id), '[]'::jsonb))
-                           from public.payroll_runs r where r.id = p_month) end);
+                           from public.payroll_runs r where r.id = p_month) end,
+    -- E8 (F2.15; Sh-8 B1 — 1C ga yuklash, «Загрузка данных из табличного документа»): shu oy provodkalari — shu kassaning o'tkazilgan
+    --   KO-1 / KO-2 va dalolatnomalari qatorlari ASL holatda, hujjat kuni bilan (boshlang'ich qoldiq / qayta ishga tushirish dalolatnomasi —
+    --   yo'q: 1C da boshlang'ich qoldiq kiritiladi); shu oy tasdiqlangan qayta tasnif dalolatnomalari (F2.13) — alohida tuzatish yozuvi
+    --   (Dt yangi — Kt eski hisobvaraq, dalolatnoma kuni bilan; hisobvaraq o'zgarmagan qator — yozuvsiz): import qilingan oy keyin
+    --   o'zgarmaydi. Tomon — kod; 2-ro'yxatga ismsiz (FD-28: tashkilot, yetkazib beruvchi va bank nomi va asos qoladi — KO-3 eksporti kabi).
+    'postings', coalesce((select jsonb_agg(z.j order by z.d, z.o1, z.o2, z.ln) from (
+        select c."businessDay" as d, 1 as o1, (case c.form when 'KO1' then 1 when 'KO2' then 2 else 3 end) * 1000000 + c.no as o2, l."lineNo" as ln,
+               jsonb_build_object('day', c."businessDay", 'form', c.form, 'series', c.series, 'no', c.no, 'op', c.op, 'docId', c.id, 'lineNo', l."lineNo",
+                                  'debit', l.debit, 'credit', l.credit, 'amount', l.amount, 'articleId', l."articleId", 'cash', l.cash,
+                                  'partyType', c."partyType", 'code', mm.m ->> 'partyId',
+                                  'partyName', case when v_dir or coalesce((mm.m ->> 'partyKept')::boolean, false) then nullif(c."partyName", '') end,
+                                  'basis', case when v_dir or coalesce((mm.m ->> 'partyKept')::boolean, false) then nullif(c.basis, '') end) as j
+          from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+          cross join lateral (select app.kassa_mask_party(c."partyType", c."partyId", c."partyName", c."isSystem") as m) mm
+         where c.desk = v_desk and c.status = 'posted' and c.op <> 'nc_opening' and c."businessDay" between v_from and v_to
+        union all
+        select f."actDay", 2, f.no, (x ->> 'lineNo')::int,
+               jsonb_build_object('day', f."actDay", 'form', 'FIX', 'series', 'FIX', 'no', f.no, 'op', 'fix', 'docId', f."docId", 'fixId', f.id,
+                                  'lineNo', (x ->> 'lineNo')::int, 'debit', x ->> 'debit', 'credit', b.y ->> 'debit', 'amount', (x ->> 'amount')::numeric,
+                                  'articleId', x ->> 'articleId', 'fromArticle', b.y ->> 'articleId', 'cash', false,
+                                  'srcSeries', c.series, 'srcNo', c.no, 'srcDay', c."businessDay",
+                                  'partyType', f.after ->> 'partyType', 'code', mm.m ->> 'partyId',
+                                  'partyName', case when v_dir or coalesce((mm.m ->> 'partyKept')::boolean, false) then nullif(f.after ->> 'partyName', '') end)
+          from public.cash_doc_fixes f
+          join public.cash_docs c on c.id = f."docId"
+          cross join lateral jsonb_array_elements(f.after -> 'lines') x
+          cross join lateral (select y from jsonb_array_elements(f.before -> 'lines') y where (y ->> 'lineNo') = (x ->> 'lineNo') limit 1) b
+          cross join lateral (select app.kassa_mask_party(f.after ->> 'partyType', f.after ->> 'partyId', f.after ->> 'partyName', false) as m) mm
+         where f.desk = v_desk and f.status = 'approved' and f."actDay" between v_from and v_to
+           and (x ->> 'debit') is distinct from (b.y ->> 'debit')) z), '[]'::jsonb));
 end $$;
 revoke all on function public.kassa_month_pack(text, text) from public, anon;
 grant execute on function public.kassa_month_pack(text, text) to authenticated;
+
+-- ---------- O'qish: xodimning o'quv yili ish haqi to'lov qaydnomasi (F2.14; Sh-8 B17) ----------
+--   Buxgalter (2026-11-26): naqd maosh vedomost va imzo bilan; xodimlar bir-birining maoshini ko'rmasligi uchun har xodimga o'quv yili
+--   (sentyabr – avgust) davomida bitta to'lov qaydnomasi. Qatorlar — SHU xodimning o'tkazilgan kassa hujjatlari (sinov kassalarisiz):
+--   naqd ish haqi (KO-2 «Ish haqi»), ish haqi avansi (KO-2 «Ish haqi avansi») va xodim qaytargan pul (KO-1; birinchi qator statiyasi
+--   OP-08 — avans, aks holda ish haqi qaytdi — kassa-links.sql dagi kabi). Oy — qaysi oy uchun (hujjat suratidagi oy; yo'q bo'lsa —
+--   hujjat kuni oyi); o'quv yili oylari bo'yicha. Kassa ishga tushgunga qadar kassa hujjatisiz yozilgan naqd to'lovlar (maosh va avans
+--   yozuvlari) — alohida ma'lumot (legacy; qaydnoma jamiga kirmaydi). Bekor qilinganlar — yo'q. Boshqa xodim summalari yo'q.
+--   p_year — o'quv yili boshlanadigan yil (2026 — 2026-09 … 2027-08); bo'sh — joriy o'quv yili. Kassa operatori, 2-ro'yxat va Direktor.
+create or replace function public.kassa_pay_sheet(p_party text, p_year int default null) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_pid text; v_name text; v_code text; v_coll text; v_row text; v_pos text; v_today date := app.fin_today(); v_y int; v_from text; v_to text;
+  v_rows jsonb; v_legacy jsonb;
+begin
+  if not app.kassa_reader() then
+    raise exception 'Ruxsat yo''q: to''lov qaydnomasi — kassa xodimlari, 2-ro''yxat va Direktor' using errcode = '42501';
+  end if;
+  v_y := coalesce(p_year, extract(year from v_today)::int - case when extract(month from v_today) < 9 then 1 else 0 end);
+  if v_y < 2000 or v_y > 2100 then raise exception 'O''quv yili noto''g''ri' using errcode = '22023', hint = 'kassa:bad_input'; end if;
+  select k.o_id, k.o_name into v_pid, v_name from app.kassa_party('employee', p_party, null) k;   -- kalit noto'g'ri yoki topilmasa — kassa:party
+  v_code := app.kassa_payee_code(v_pid);
+  v_coll := split_part(v_pid, ':', 1); v_row := substr(v_pid, length(v_coll) + 2);
+  if v_coll = 'staff' then select nullif(btrim(coalesce(x.position, '')), '') into v_pos from public.staff x where x.id = v_row; end if;
+  v_from := v_y || '-09'; v_to := (v_y + 1) || '-08';
+  with d as (
+    select c.id, c.form, c.series, c.op, c.no, c."businessDay" as day, c.amount,
+           coalesce(case when (c."sourceSnapshot" ->> 'month') ~ '^\d{4}-(0[1-9]|1[0-2])$' then c."sourceSnapshot" ->> 'month' end,
+                    to_char(c."businessDay", 'YYYY-MM')) as m,
+           case c.op when 'out_salary' then 'salary' when 'out_advance' then 'advance'
+                else case when (select x."articleId" from public.cash_doc_lines x where x."docId" = c.id order by x."lineNo" limit 1) = 'OP-08'
+                          then 'advanceReturn' else 'salaryReturn' end end as kind
+      from public.cash_docs c
+     where c."partyType" = 'employee' and c."partyId" = v_pid and c.status = 'posted'
+       and c.op in ('out_salary', 'out_advance', 'in_staff_return')
+       and not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest"))
+  select coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'form', d.form, 'series', d.series, 'op', d.op, 'no', d.no, 'day', d.day,
+                                               'month', d.m, 'kind', d.kind, 'amount', d.amount)
+                            order by d.m, d.day, d.form desc, d.no), '[]'::jsonb)
+    into v_rows
+    from d where d.m between v_from and v_to;
+  -- kassa hujjatisiz (kassagacha) naqd yozuvlar: maosh (berilgani — «paid», eski yozuvda — «net») va avans (qaytimlar — minus)
+  select jsonb_build_object('n', count(*), 'sum', coalesce(sum(z.a), 0))
+    into v_legacy
+    from (select coalesce(x.paid, x.net, 0) as a from public.salary_payments x
+           where v_code is not null and x."teacherId" = v_code and x.month between v_from and v_to
+             and coalesce(x.method, '') in ('', 'cash') and x."cashDocId" is null and coalesce(x.paid, x.net, 0) <> 0
+          union all
+          select coalesce(a.amount, 0) from public.staff_advances a
+           where v_code is not null and a."teacherId" = v_code and coalesce(nullif(a.month, ''), left(coalesce(a.date, ''), 7)) between v_from and v_to
+             and coalesce(a.method, '') in ('', 'cash') and a."cashDocId" is null and coalesce(a.amount, 0) <> 0) z;
+  return jsonb_build_object('ok', true, 'year', v_y, 'from', v_from, 'to', v_to,
+    'party', jsonb_build_object('id', v_pid, 'code', v_code, 'name', v_name, 'kind', case when v_coll = 'teachers' then 'teacher' else 'staff' end,
+                                'position', v_pos),
+    'rows', v_rows,
+    'totals', (select jsonb_build_object(
+                 'salary', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' = 'salary'), 0),
+                 'advance', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' = 'advance'), 0),
+                 'salaryReturn', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' = 'salaryReturn'), 0),
+                 'advanceReturn', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' = 'advanceReturn'), 0),
+                 'paid', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' in ('salary', 'advance')), 0),
+                 'returned', coalesce(sum((r ->> 'amount')::numeric) filter (where r ->> 'kind' in ('salaryReturn', 'advanceReturn')), 0),
+                 'net', coalesce(sum(case when r ->> 'kind' in ('salary', 'advance') then (r ->> 'amount')::numeric else -(r ->> 'amount')::numeric end), 0))
+                 from jsonb_array_elements(v_rows) r),
+    'legacy', v_legacy);
+end $$;
+revoke all on function public.kassa_pay_sheet(text, int) from public, anon;
+grant execute on function public.kassa_pay_sheet(text, int) to authenticated;
 
 -- Hisobdorlardagi pul (4230) p_asof sanasi holatiga: berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan
 --   eng eski berilgan sana (FIFO); "workDays" — o'shandan p_asof gacha o'tgan ish kunlari (du–ju; g9: maktabning «Bayram / ta'til

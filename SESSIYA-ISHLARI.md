@@ -3495,6 +3495,40 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   yozma tasdiq; B20 — E6 varag'i bo'yicha moddiy naf xulosasi. Bank bilan kassa limitini kelishish — «⚙ Sozlamalar»dagi tavsiya bilan.
 
 
+## 93) F2.14 — xodimning o'quv yili ish haqi to'lov qaydnomasi (Sh-8 B17) va F2.15 — 1C ga yuklash: E8 provodkalar (Sh-8 B1) — 2026-11-26
+
+- **Egasi (2026-11-26):** «Davom eting» — rejadagi navbatdagi vazifalar (buxgalterning Sh-8 so'rovlari): B17 — naqd maosh vedomost va
+  imzo bilan, xodimlar bir-birining maoshini ko'rmasligi uchun har xodimga o'quv yili davomida bitta to'lov qaydnomasi; B1 — tizim
+  ma'lumoti 1C ga yuklanadi.
+- **F2.14 — server:** `kassa-day.sql` — `kassa_pay_sheet(p_party, p_year)`: SHU xodimning o'tkazilgan kassa hujjatlari (sinov
+  kassalarisiz): KO-2 «Ish haqi» va «Ish haqi avansi», KO-1 «Xodim qaytargan pul» (birinchi qator statiyasi OP-08 — avans, aks holda ish
+  haqi qaytdi; minus bilan); oy — hujjat suratidagi oy (yo'q bo'lsa — hujjat kuni oyi), o'quv yili oylari bo'yicha (avgust maoshi
+  sentyabrda berilsa ham — avgust qatori); jamlar (berildi, qaytdi, sof); kassa ishga tushgunga qadar kassa hujjatisiz yozilgan naqd
+  maosh va avans yozuvlari — alohida ma'lumot (jamga kirmaydi); xodim kodi, ismi, lavozimi. Bekor qilingan, hisobdorga avans, o'zaro
+  hisob va boshqa xodimlar — yo'q. Huquq — kassa o'quvchilari (kassir, 2-ro'yxat, Direktor); o'qituvchi va anon — yo'q.
+- **F2.14 — sahifa va bosma:** «Kassa» sarlavhasida «Qaydnoma» (xodim va o'quv yili tanlanadi) va maosh / avans / qaytim orderi yonidagi
+  «Qaydnoma» tugmasi (ochiq kun ro'yxati va kun oynasi); `fin-print.js: paySheetHtml` — 3 tilda: sarlavha, o'quv yili, xodim, 12 oy
+  qatori (to'lovsiz oy — bo'sh qator), har to'lov — turi, hujjat (Ч- / К-), sana, summa, imzo joyi; jamlar, sof summa so'z bilan,
+  kassagacha yozuvlar izohi, «Кассир», «Бош бухгалтер», «Танишдим: ходим».
+- **F2.15 — server va Excel:** `kassa_month_pack.postings` — shu kassaning o'tkazilgan KO-1 / KO-2 va dalolatnomalari qatorlari asl
+  holatda hujjat sanasi bilan (boshlang'ich qoldiq / qayta ishga tushirish dalolatnomasi — yo'q: 1C da boshlang'ich qoldiq alohida),
+  shu oy tasdiqlangan qayta tasnif dalolatnomalari (F2.13) — alohida tuzatish yozuvi (Dt yangi — Kt eski, dalolatnoma sanasi bilan;
+  hisobvaraq o'zgarmagan qator — yozuvsiz): import qilingan oy keyin o'zgarmaydi. Tomon — kod; 2-ro'yxatga ismsiz (tashkilot,
+  yetkazib beruvchi va bank nomi va asos qoladi — KO-3 eksporti qoidasi). Oylik to'plamda «E8 Provodkalar»: 1-qator — ustun nomlari
+  (1C «Загрузка данных из табличного документа»), sana — Excel sanasi, hisobvaraqlar — matn, summa — son; bo'sh qatordan keyin jami,
+  Dt / Kt 5010 (KO-3 bilan solishtirish), korrespondensiya bo'yicha aylanma va izoh.
+- **Reliz 17:** `fin-version.sql`, `SERVER_VER`, `kassa-checks.sql` (ochiq funksiyalar 55, himoya izlari 360), `test-kassa-checks` (A0),
+  `test-fin-rights` (buxgalter yopiq ro'yxatiga `kassa_pay_sheet`).
+- **Sinovlar:** yangi `test-kassa-paysheet.sql` (21 tekshiruv; mutatsiya — 29/29 ushlandi; ortiqcha takroriy tekshiruv olib tashlandi:
+  xodim kaliti `app.kassa_party` da tekshiriladi), `fin-paysheet.test.mjs` (6); brauzer: `k3` — maosh orderi yonidagi «Qaydnoma» va
+  «Qaydnoma» oynasi (30 tekshiruv), `k11` — oylik to'plam 8 varaq, E8 jamlari KO-3 bilan (19).
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir, tugun va server sinovlari) — hammasi yashil;
+  brauzer to'plami — 28 o'tish, 720 tekshiruv (kassa 578), hammasi o'tdi.
+- **Egasi va buxgalter uchun:** kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi (≈ 21-dekabr). Buxgalter: birinchi
+  oy bo'yicha E8 ni 1C ga sinov yuklashi (ustunlar mosligi; kerak bo'lsa tartib o'zgartiriladi); qaydnoma — naqd maosh berilgan har
+  xodimga o'quv yili bo'yicha bitta varaq (kassada saqlanadi).
+
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

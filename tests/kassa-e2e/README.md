@@ -110,7 +110,7 @@ shu jadval ham yangilanadi):
 |---|---|---|---|
 | k1 | `e2e-kassa.cjs` | to‘liq kun sikli: boshlang‘ich qoldiq, sozlamalar, kirim, chiqim so‘rovi → tasdiq → pul berish, naqd o‘quv to‘lovi, bekor qilish, kunni yopish va tekshirish, qayta chop etish | 39 |
 | k2 | `e2e-kassa2.cjs` | limit, asos hujjatisiz xarid, 2-ro‘yxat + Direktor, rad etish, ikki bosqichli smena topshirish, navbatdagi to‘lov, kamomad / ortiqcha, qayta ochish | 40 |
-| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga (bank xarajati — F2.1 hujjat oynasi); to‘xtatilgan kassada usul tanlovi | 28 |
+| k3 | `e2e-kassa3.cjs` | naqd va karta orqali maosh, ish haqi avansi, qaytarish (Direktor tasdig‘i), xarajat «Buxgalteriya»ga (bank xarajati — F2.1 hujjat oynasi); to‘xtatilgan kassada usul tanlovi; xodimning o‘quv yili to‘lov qaydnomasi (F2.14: order yonidagi tugma va «Qaydnoma» oynasi) | 30 |
 | k4 | `e2e-kassa4.cjs` | kunlik hisobot (RP-02), nazorat ro‘yxati (RP-06: eskirgan smena topshirish), dalolatnomalar va «НУСХА», kutilayotgan smena kartasi; «⚙ Sozlamalar»da bankka topshirish (inkassatsiya) kunlari va maydalik, kassirga topshirish kuni eslatmasi (Sh-8 B15) | 38 |
 | k5 | `e2e-kassa5.cjs` | o‘zaro hisob (maosh hisobidan farzand to‘lovi), dalolatnoma, bekor qilish | 22 |
 | k6 | `e2e-kassa6.cjs` | davr surati va qulfi, maosh berish huquqi | 31 |
@@ -118,7 +118,7 @@ shu jadval ham yangilanadi):
 | k8 | `e2e-kassa8.cjs` | onlayn kassa Z-hisoboti bilan solishtirish; kech kirim — NKM smenasi kuniga, Z tuzatilgani nazoratda | 35 |
 | k9 | `e2e-kassa9.cjs` | yuridik shaxsga naqd to‘lov: ogohlantirish, Direktor tasdig‘i, chegara; kontragent turini tasdiqlash, ikki marta bosish | 18 |
 | k10 | `e2e-kassa10.cjs` | KO-3 jurnali, chop etish, Excel (FD-28) | 17 |
-| k11 | `e2e-kassa11.cjs` | RP-08 statiya matritsasi, oylik kassa to‘plami (Excel; E1–E7 — Sh-8: o‘zaro hisob, xodim farzandi, vedomost; ismsiz nusxada ism ustunlari yo‘q) | 18 |
+| k11 | `e2e-kassa11.cjs` | RP-08 statiya matritsasi, oylik kassa to‘plami (Excel; E1–E8 — Sh-8: o‘zaro hisob, xodim farzandi, vedomost; F2.15: provodkalar — 1C; ismsiz nusxada ism ustunlari yo‘q) | 19 |
 | k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | 13 |
 | k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | 39 |
 | k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | 41 |
@@ -135,9 +135,14 @@ shu jadval ham yangilanadi):
 | sl | `e2e-sales.cjs` | «Sotuvchi» roli (egasi, 2026-11-19): menyuda yagona «Ota-onalar bilan aloqa» bo‘limi, faol oilalar (arxivdagisiz) niqoblangan raqam bilan, «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo‘yicha qidiruv; 🔍 qidiruv, to‘lov navbati, tahrir / eksport tugmasi yo‘q; kirishda konsol xatosi va RLS rad etgan so‘rov yo‘q; REST (sotuvchi seansi): o‘quvchi, shaxsiy karta, faktura — bo‘sh, jurnal va Direktor jurnali — rad, o‘zini Direktor qila olmaydi; Direktor: bo‘lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali», «Foydalanuvchilar»dagi rol tanlovi, «Tahrirlash» oynasida sotuvchi ism-familiyasini o‘zgartirish (rol va holat o‘zgarmaydi) | 15 |
 | ui | `e2e-ui.cjs` | yagona dizayn (egasi, 2026-11-24): qurilmada eski tanlov (`iqror_ui = 'v1'`) va manzilda `?ui=v1` bo‘lsa ham yangi dizayn ochiladi, eski tanlov o‘chiriladi; kompyuterda ikonali panel, telefonda pastki menyu; Direktor bosh sahifasi yangi (klassik bloklar yo‘q); «Profil»da dizayn almashtirgichi yo‘q; sahifa xatolari yo‘q — 5 rol × 1440 / 390 | 42 |
 
-Jami: 28 o‘tish, 717 tekshiruv (kassa 575, to‘lov 24, eski oqimlar 31, arxiv 30, sotuvchi 15, yagona dizayn 42).
+Jami: 28 o‘tish, 720 tekshiruv (kassa 578, to‘lov 24, eski oqimlar 31, arxiv 30, sotuvchi 15, yagona dizayn 42).
 
-**Holat (2026-11-26, Sh-8 qarorlari).** Oxirgi to‘liq o‘tish — 2026-11-26: 28 o‘tish, 717 tekshiruv — hammasi o‘tdi. Kod — buxgalter
+**Holat (2026-11-26, F2.14 / F2.15).** Oxirgi to‘liq o‘tish — 2026-11-26: 28 o‘tish, 720 tekshiruv — hammasi o‘tdi. Kod — xodimning
+o‘quv yili ish haqi to‘lov qaydnomasi va oylik to‘plamda «E8 Provodkalar» (`SESSIYA-ISHLARI.md` §93; modul relizi 17). `k3` — maosh
+orderi yonidagi «Qaydnoma» va «Qaydnoma» oynasi (30 tekshiruv); `k11` — oylik to‘plam 8 varaq, E8 sarlavhasi va Dt / Kt 5010 jamlari
+KO-3 bilan, Direktorga nomlar ustuni (19).
+
+**Oldingi holat (2026-11-26, Sh-8 qarorlari).** To‘liq o‘tish — 28 o‘tish, 717 tekshiruv — hammasi o‘tdi. Kod — buxgalter
 javobini kutmasdan egasi qarori (`SESSIYA-ISHLARI.md` §92; modul relizi 16): bankka topshirish (inkassatsiya) jadvali va oylik
 to‘plamda E5–E7. `k4` — «⚙ Sozlamalar»da jadval va maydalik, kassirga topshirish kuni eslatmasi, nazorat ro‘yxati 31 → 32 qator
 (38 tekshiruv); `k11` — oylik to‘plam 7 varaq (18). Stend urug‘ida jadval bo‘sh (`gen-seed.cjs`): ssenariylar hafta kuniga bog‘liq

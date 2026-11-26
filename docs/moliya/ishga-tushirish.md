@@ -178,6 +178,11 @@ Keyin, hali hech narsa kiritmasdan:
 - Oylik kassa to‘plami («Statiyalar» → «⬇ Oylik to‘plam (Excel)»; modul relizi 16): E1–E4 dan tashqari E5 «O‘zaro hisob» (daromad solig‘i
   imtiyozi uchun), E6 «Xodim farzandi» (chegirma — moddiy naf bo‘yicha buxgalter xulosasi uchun), E7 «Vedomost» (ish haqi fondi bilan
   solishtirish, Sh-8 B19). Moliya menejeri va buxgalterga — ismsiz (FD-28).
+  Modul relizi 17 dan — E8 «Provodkalar» (1C «Загрузка данных из табличного документа» uchun: 1-qator — ustun nomlari, yuklash
+  oralig‘i — birinchi bo‘sh qatorgacha; qayta tasnif dalolatnomasi — alohida tuzatish yozuvi). Birinchi oyda buxgalter sinov yuklashi.
+- Ish haqi to‘lov qaydnomasi (Sh-8 B17; modul relizi 17): «Kassa» → «Qaydnoma» (xodim va o‘quv yili) yoki maosh / avans / qaytim
+  orderi yonidagi «Qaydnoma» — xodimning o‘quv yili davomidagi naqd to‘lovlari, har biri imzo uchun alohida qatorda; varaq kassada
+  xodim bo‘yicha saqlanadi (boshqa xodimlar summalari yo‘q).
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
   «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa
