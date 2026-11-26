@@ -125,6 +125,9 @@ insert into public.applied_payments(id,"studentId",amount,result,"createdAt") va
 sql += `insert into public.student_credit(id,"studentId",credit) values ('IQ-0003','IQ-0003',100000),('IQ-0010','IQ-0010',0);
 insert into public.refunds(id,target,"targetId","studentId","studentName",amount,reason,"byEmail",month,"createdAt") values ('rf_e2e_1','invoice',${q('IQ-0010__' + PREV)},'IQ-0010','Sinov O‘quvchi 0010',50000,'Sinov: ortiqcha to‘lov qaytarildi','direktor@example.org',${q(PREV)},${q(PREV + '-20T09:00:00Z')});
 insert into public.expenses(id,date,month,category,amount,note) values ('exp_e2e_1',${q(P + '-02')},${q(P)},'kanselyariya',150000,'Sinov: qog‘oz'),('exp_e2e_2',${q(P + '-02')},${q(P)},'kommunal',2400000,'Sinov: elektr energiyasi');
+-- Sh-8 B15: stendda bankka topshirish jadvali yo'q (standart — juma): ssenariylar hafta kuniga bog'liq bo'lmasin; jadvalni k4 «⚙ Sozlamalar»da
+--   bugungi hafta kuniga qo'yib sinaydi. Kassa moduli bo'lmagan («prod») zanjirda — o'tkazib yuboriladi.
+do $$ begin if to_regclass('public.fin_org') is not null then update public.fin_org set extra = extra || '{"depositDays": []}'::jsonb where id = 'main'; end if; end $$;
 commit;
 select 'urug'' yuklandi: users='||(select count(*) from public.users)||' students='||(select count(*) from public.students)||' invoices='||(select count(*) from public.invoices)||' payments='||(select count(*) from public.payments);
 `;

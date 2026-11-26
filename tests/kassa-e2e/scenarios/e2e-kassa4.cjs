@@ -15,6 +15,8 @@ const allErrs = [];
   const b = await E.launch();
   const today = q('select app.fin_today()');
   const dm = today.slice(8, 10) + '.' + today.slice(5, 7) + '.' + today.slice(0, 4);
+  const dow = Number(q('select extract(isodow from app.fin_today())::int'));   // Sh-8 B15: inkassatsiya jadvali — bugungi hafta kuni
+  const DOW = { 1: 'dushanba', 2: 'seshanba', 3: 'chorshanba', 4: 'payshanba', 5: 'juma', 6: 'shanba', 7: 'yakshanba' }[dow];
   async function login(uid, vp, role) {   // role — bir nechta lavozimli xodimning faol roli (sarlavhadagi «Rol: …» tanlovi kabi)
     const email = q(`select email from public.users where id='${uid}'`);
     const ctx = await b.newContext({ timezoneId: 'Asia/Tashkent', viewport: vp || { width: 1440, height: 900 } });
@@ -56,7 +58,16 @@ const allErrs = [];
     await s.pg.waitForSelector('#ks-set'); await s.pg.click('#ks-set'); await s.pg.waitForSelector('#kx-name');
     await s.pg.fill('#kx-name', '«SINOV MAKTAB» МЧЖ'); await s.pg.fill('#kx-t1', '500 000'); await s.pg.fill('#kx-l1', '200 000'); await s.pg.fill('#kx-orgmax', '1 000 000 000');
     await s.pg.fill('#kx-limit', '2 000 000'); await s.pg.fill('#kx-live', today);
+    // Sh-8 B15: bankka topshirish (inkassatsiya) — stend urug'ida jadval yo'q; bugungi hafta kuni belgilanadi, maydalik 100 000;
+    //   kassa hali ishlamagan — limit tavsiyasi o'rnida izoh
+    const dep0 = await s.pg.$$eval('#kx-dep [data-dep]', xs => xs.map(x => x.dataset.dep + (x.checked ? '+' : '')).join(','));
+    const hint0 = await s.pg.$eval('#kx-limhint', e => e.textContent.trim());
+    await s.pg.check(`#kx-dep [data-dep="${dow}"]`); await s.pg.fill('#kx-keep', '100 000');
     await s.pg.click('#kx-save'); await s.modalGone();
+    const ex = JSON.parse(q(`select extra::text from public.fin_org where id = 'main'`));
+    ok('Sozlamalar (Sh-8 B15): inkassatsiya kunlari — 7 ta belgi (urug‘da hech biri belgilanmagan), maydalik maydoni, limit tavsiyasi izohi; saqlangach — bugungi hafta kuni va 100 000',
+      dep0 === '1,2,3,4,5,6,7' && /^Kassa limiti bank bilan kelishiladi; tavsiya kassa kamida bir necha kun ishlagach hisoblanadi\.$/.test(hint0)
+      && JSON.stringify(ex.depositDays) === `[${dow}]` && Number(ex.depositKeep) === 100000 && Number(ex.orgCashMax) === 1e9, [dep0, hint0, ex]);
     // sahifa yangi sozlamalar bilan qayta chizilguncha kutamiz (aks holda oldingi yuklashdagi karta o'qiladi)
     await s.pg.waitForFunction(() => !/deb belgilanmagan/.test(document.querySelector('#ks-body').textContent), null, { timeout: 15000 });
     const c = await s.ctl();
@@ -68,12 +79,13 @@ const allErrs = [];
     const [preN, preS] = q(`select count(*) || ':' || coalesce(sum(amount), 0)::bigint from public.expenses e where e.date between to_char(date '${today}' - 400, 'YYYY-MM-DD') and to_char(date '${today}' - 1, 'YYYY-MM-DD')
       and coalesce(e.method, '') in ('', 'cash') and e."cashDocId" is null and coalesce(e.id, '') not like 'payroll\\_\\_%' and e."createdAt" >= ('${today}'::timestamp at time zone 'Asia/Tashkent')`).split(':');
     const notOk = Object.entries(c).filter(x => x[1].level !== 'ok').map(([k, x]) => k + ':' + x.level).sort().join(',');
-    ok('direktor: nazorat ro‘yxati ko‘rinadi — 31 tekshiruv (F2.13: «QT so‘rovlari» qatori bilan); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
-      Object.keys(c).length === 31 && c.fixPending && c.fixPending.level === 'ok' && notOk === 'preLive:info,unlinked:warn' && c.unlinked.text.endsWith(`diqqat ${mmName} (moliya menejeri)`)
+    ok('direktor: nazorat ro‘yxati ko‘rinadi — 32 tekshiruv (F2.13: «QT so‘rovlari»; Sh-8 B15: «Bankka topshirish» — bugungi kun jadvalda, o‘tkazib yuborilgani yo‘q); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
+      Object.keys(c).length === 32 && c.fixPending && c.fixPending.level === 'ok' && c.deposit && c.deposit.level === 'ok' && c.deposit.text.includes(`har ${DOW} — o‘z vaqtida`)
+      && notOk === 'preLive:info,unlinked:warn' && c.unlinked.text.endsWith(`diqqat ${mmName} (moliya menejeri)`)
       && Number(preN) > 0 && c.preLive.text.endsWith(`ma’lumot xarajat: ${preN} ta · ${fmt(preS)} so‘m`) && c.preLive.text.includes(`ishga tushgan kundan (${dm}) oldin`)
       && ['staleHandover', 'zChanged', 'cpKinds', 'pending', 'damage', 'restart', 'zreport', 'orgCash'].every(k => c[k] && c[k].level === 'ok')
       && /E’tibor talab qiladi: 1 ta/.test(await s.pg.$eval('#ks-ctl-card', e => e.innerText)),
-      [Object.keys(c).length, notOk, c.unlinked, c.preLive, [preN, preS]]);
+      [Object.keys(c).length, notOk, c.unlinked, c.preLive, c.deposit, [preN, preS]]);
     ok('nazorat: moslik — «hammasi mos», limit — oshmagan', /hammasi mos/.test(c.reconcile.text) && /limit 2 000 000 so‘m — oshmagan/.test(c.limit.text), [c.reconcile, c.limit]);
     // chop etilgan dalolatnoma (boshlang'ich qoldiq, «Д-» seriya): birinchisi — asl nusxa; qayta chop etish — «avval chop etilgan» oynasi va «НУСХА»
     const actId = q(`select id from public.cash_docs where op = 'nc_opening' and status = 'posted'`);
@@ -123,6 +135,13 @@ const allErrs = [];
     await s.kassaReady();
     await s.pg.click(`[data-pay="${exId}"]`); await s.pg.waitForTimeout(1500);
     ok('chiqim orderi berildi (Ch-1)', q(`select status || ':' || no from public.cash_docs where id='${exId}'`) === 'posted:1', q(`select status, no from public.cash_docs where id='${exId}'`));
+    // Sh-8 B15: bugun — jadvaldagi topshirish kuni: kassirga eslatma — qoldiq, maydalik va topshiriladigan summa (bazadan)
+    await s.kassaReady();
+    const bal = Number(q(`select app.kassa_desk_balance('main')::bigint`));
+    const bodyTxt = await s.pg.$eval('#ks-body', e => e.innerText.replace(/\s+/g, ' '));
+    ok('kassir: topshirish kuni eslatmasi — «kassada X, 100 000 maydalik qoldirib — X − 100 000 bankka topshiriladi»',
+      bal > 100000 && bodyTxt.includes(`Bugun — bankka topshirish (inkassatsiya) kuni: kassada ${fmt(bal)} so‘m, 100 000 so‘m maydalik qoldirib — ${fmt(bal - 100000)} so‘m bankka topshiriladi`),
+      [bal, (bodyTxt.match(/Bugun — bankka[^.]*\./) || [''])[0]]);
     // yana bir so'rov — tasdiq kutadi («kutilayotganlar»)
     asUser(ids.R_KAS, `select public.kassa_payout_request('{"op":"out_expense","amount":70000,"partyType":"other","partyName":"Sinov Usta","basis":"Shartnoma № 3","clientRef":"e4-w1-0001","lines":[{"articleId":"${arts[0]}","amount":70000}]}'::jsonb)::text`);
     await s.kassaReady();

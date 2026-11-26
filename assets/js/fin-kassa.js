@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 15;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 16;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -403,6 +403,10 @@ function draw() {
   if (s.accOverdue && num(s.accOverdue.n) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Avans hisoboti muddati o‘tgan hisobdorlar: ${num(s.accOverdue.n)} ta (${som(s.accOverdue.sum)}) — «Avans hisoboti» yoki qaytim; ismlar — nazorat ro‘yxatida.`]);
   if (s.lockedThrough && (m.director || m.list2)) warn.push(['#475467', '#F2F4F7', `Davr ${dmy(s.lockedThrough)} gacha yopilgan: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.`]);
   if (s.limit && s.limit.exceeded) warn.push(['#B54708', '#FEF3E2', `Kassa qoldig‘i limitdan (${som(s.limit.cashLimit)}) oshgan — ortiqchasini bankka topshiring.`]);
+  // Sh-8 B15: bankka topshirish (inkassatsiya) kuni — jadval «⚙ Sozlamalar»da (standart — juma); sinov kassasida va hujjat yozib
+  //   bo'lmaydigan holatda (kun yopilgan, kecha yopilmagan, smena topshirilmoqda …) — yo'q: o'tkazib yuborilgani — nazorat ro'yxatida
+  const dep = s.deposit;
+  if (started && !paused && !s.blockReason && !(s.desk && s.desk.isTest) && dep && dep.today && !dep.doneToday && num(dep.amount) > 0 && (m.operator || m.director || m.list2)) warn.push(['#175CD3', '#E8F1FD', depositTxt(dep, s.balance)]);
   const warnHtml = warn.map(w => `<div class="small" style="margin-bottom:8px;color:${w[0]};background:${w[1]};border-radius:10px;padding:10px 12px;font-weight:600">${esc(w[2])}</div>`).join('');
 
   // ---- kun kartasi
@@ -1204,7 +1208,9 @@ function sigRows() {
     <button type="button" class="btn ghost2" data-sdel="${esc(x.id)}" style="flex:none">O‘chirish</button></div>`).join('');
 }
 function openSettings() {
-  const o = ST.refs.org || {};
+  const o = ST.refs.org || {}, ex = o.extra || {};
+  const depDays = Array.isArray(ex.depositDays) ? ex.depositDays.map(Number) : [5];   // kalit yo'q — juma (server bilan bir xil)
+  const depOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 16;      // inkassatsiya jadvali — server 16-reliz va undan keyin
   const v = k => esc(o[k] == null ? '' : String(o[k]));
   const nv = k => esc(num(o[k]) ? String(num(o[k])).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa sozlamalari</h3><button class="x" id="m-x">×</button></div>
@@ -1215,6 +1221,10 @@ function openSettings() {
       ${lbl('Chop etish tili', `<select id="kx-lang" style="${FLD}">${[['uz-cyrl', 'O‘zbek (kirill)'], ['uz-latn', 'O‘zbek (lotin)'], ['ru', 'Rus']].map(x => `<option value="${x[0]}"${o.printLang === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>`)}
       <div class="grid2">${lbl('T1 — shundan katta chiqimga Direktor tasdig‘i (0 — har doim)', `<input id="kx-t1" type="text" inputmode="numeric" value="${nv('t1')}" placeholder="0" style="${FLD}">`)}${lbl('L1 — asos hujjatisiz naqd xarid chegarasi (0 — mumkin emas)', `<input id="kx-l1" type="text" inputmode="numeric" value="${nv('l1')}" placeholder="0" style="${FLD}">`)}</div>
       <div class="grid2">${lbl('Kassa limiti (0 — belgilanmagan)', `<input id="kx-limit" type="text" inputmode="numeric" value="${nv('cashLimit')}" placeholder="0" style="${FLD}">`)}${lbl('Kassa ishga tushadigan kun', `<input id="kx-live" type="date" value="${v('kassaGoLive')}" style="${FLD}">`)}</div>
+      ${depOk ? `<div class="small" style="font-weight:700;margin-top:12px">Bankka topshirish (inkassatsiya) kunlari</div>
+      <div id="kx-dep" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">${WEEKDAYS.map(([d, t]) => `<label class="small" style="display:flex;gap:4px;align-items:center"><input type="checkbox" data-dep="${d}" style="${CHK}"${depDays.includes(d) ? ' checked' : ''}> ${t}</label>`).join('')}</div>
+      ${lbl('Topshirilgandan keyin kassada qoldiriladigan summa (maydalik)', `<input id="kx-keep" type="text" inputmode="numeric" value="${esc(num(ex.depositKeep) ? String(num(ex.depositKeep)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}" placeholder="0" style="${FLD}">`)}
+      <div class="small muted" style="margin-top:4px" id="kx-limhint">${esc(limitHintTxt(((ST.ov && ST.ov.state && ST.ov.state.deposit) || {}).limitHint))}</div>` : ''}
       ${lbl('Yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd to‘lov — Direktor tasdig‘isiz chegara (0 — har doim Direktor)', `<input id="kx-orgmax" type="text" inputmode="numeric" value="${esc(num((o.extra || {}).orgCashMax) ? String(num(o.extra.orgCashMax)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}" placeholder="0" style="${FLD}">`)}
       <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
       <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun, qurilma navbatida qolgan yozuvlar bilan yopilgan oxirgi kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
@@ -1226,7 +1236,14 @@ function openSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kx-sadd">+ Imzo egasini qo‘shish</button></div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kx-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  ['#kx-t1', '#kx-l1', '#kx-limit', '#kx-orgmax'].forEach(s => fmtInput($(s)));
+  ['#kx-t1', '#kx-l1', '#kx-limit', '#kx-orgmax'].concat(depOk ? ['#kx-keep'] : []).forEach(s => fmtInput($(s)));
+  // kassa limiti tavsiyasi — asosiy kassa bo'yicha (sahifada sinov kassasi tanlangan bo'lsa — asosiy kassa holatidan)
+  const hintBox = $('#kx-limhint');
+  if (hintBox && ST.desk && ST.desk !== 'main') {
+    hintBox.textContent = 'Kassa limiti tavsiyasi asosiy kassa bo‘yicha hisoblanmoqda…';
+    call('kassa_state', { p_desk: 'main' }).then(sm => { if (hintBox.isConnected) hintBox.textContent = limitHintTxt(sm && sm.deposit && sm.deposit.limitHint); })
+      .catch(() => { if (hintBox.isConnected) hintBox.textContent = limitHintTxt(null); });
+  }
   const sigSave = (x, active) => call('fin_signatory_save', { p_id: x.id || null, p_list: Number(x.list), p_uid: x.uid || null, p_title: x.title || '', p_full_name: x.fullName, p_active: active });
   const drawSigs = () => {
     const box = $('#kx-sigs'); if (!box) return;
@@ -1251,7 +1268,7 @@ function openSettings() {
   };
   $('#kx-save').onclick = async () => {
     const nums = {};   // ui-6: chegaralar — amtRead qoidasi bilan (ajratkich jim tashlanmaydi)
-    for (const [k, sel] of [['t1', '#kx-t1'], ['l1', '#kx-l1'], ['cashLimit', '#kx-limit'], ['orgCashMax', '#kx-orgmax']]) {
+    for (const [k, sel] of [['t1', '#kx-t1'], ['l1', '#kx-l1'], ['cashLimit', '#kx-limit'], ['orgCashMax', '#kx-orgmax']].concat(depOk ? [['depositKeep', '#kx-keep']] : [])) {
       const r = amtRead($(sel).value); if (r.err) { C.toast(r.err, true); $(sel).focus(); return; } nums[k] = num(r.v); }
     const live = $('#kx-live').value || null;
     // ui-5: kelgan sanani bo'shatish / surish — kassani to'xtatish (alohida, oqibatlari yozilgan tasdiq); to'xtatilgan kassada — qayta
@@ -1265,7 +1282,10 @@ function openSettings() {
     }
     $('#kx-save').disabled = true;
     try { await call('fin_org_set', { p: { nameUz: $('#kx-name').value.trim(), nameRu: $('#kx-name-ru').value.trim(), stir: digits($('#kx-stir').value), place: $('#kx-place').value.trim(), printLang: $('#kx-lang').value,
-        t1: nums.t1, l1: nums.l1, cashLimit: nums.cashLimit, orgCashMax: nums.orgCashMax, kassaGoLive: live } });
+        t1: nums.t1, l1: nums.l1, cashLimit: nums.cashLimit, orgCashMax: nums.orgCashMax, kassaGoLive: live,
+        // Sh-8 B15: inkassatsiya jadvali (server 16-reliz va undan keyin; eski serverga yuborilmaydi — «noma'lum maydon»)
+        ...(depOk
+          ? { depositDays: [...$('#modal').querySelectorAll('[data-dep]')].filter(x => x.checked).map(x => Number(x.dataset.dep)), depositKeep: nums.depositKeep } : {}) } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
@@ -1616,6 +1636,12 @@ export function controlRows(c) {
     po.length ? po.slice(0, 6).map(x => `${dmy(x.day)}${x.status === 'verified' ? ' (tekshirilgan)' : ''}: ${pendingText(x)}`).join('; ') + (po.length > 6 ? ' …' : '') : 'yo‘q',
     'Kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun (48 soat) ichida kelmagan — navbat yo‘qolgan, o‘chirilgan yoki yozuv o‘ylab topilgan bo‘lishi mumkin (kassir bilan aniqlang); «Қ» blankalari — yozuvlar «Қ» raqami bilan kiritilib, kun izoh bilan tekshirilguncha');
   add('reissues', 'Asl nusxani qayta chop etish', num(c.reissues30) ? 'warn' : 'ok', num(c.reissues30) ? cnt(c.reissues30, 'marta') : 'yo‘q', '«Avvalgisi qog‘ozga chiqmadi» deb qayta chiqarilgan');
+  // Sh-8 B15: bankka topshirish kunlari (server 16-reliz va undan keyin) — o'tkazib yuborilgan kunlar (kun oxirida qoldiriladigandan ko'p pul,
+  //   «Bankka topshirish» orderi yo'q)
+  if (c.deposit) { const dm = c.depositMissed30 || [], dd = c.deposit.days || [];
+    add('deposit', 'Bankka topshirish (inkassatsiya)', !dd.length ? 'info' : dm.length ? 'warn' : 'ok',
+      !dd.length ? 'jadval belgilanmagan' : dm.length ? `${dm.length} ta kun topshirilmagan: ${days(dm)}` : `${depositDaysText(dd)} — o‘z vaqtida`,
+      'Jadvaldagi kunda kun oxiridagi qoldiq (maydalikdan ortig‘i) bankka topshiriladi; jadval va kassa limiti — «⚙ Sozlamalar» (limit bank bilan kelishiladi)'); }
   add('gateOff', 'Vedomost tasdig‘isiz naqd maosh', num(c.salaryGateOff30) ? 'warn' : 'ok', num(c.salaryGateOff30) ? cnt(c.salaryGateOff30) : 'yo‘q', 'Direktor ruxsati bilan berilgan');
   // F2.13: qayta tasnif dalolatnomalari (server 15-reliz va undan keyin) — Direktor qarorini kutayotganlar; 30 kunda tasdiqlanganlari (ma'lumot)
   if (c.fixPending != null) add('fixPending', 'Qaror kutayotgan qayta tasnif (QT) so‘rovlari', num(c.fixPending) ? 'warn' : 'ok', num(c.fixPending) ? cnt(c.fixPending) : 'yo‘q',
@@ -1773,6 +1799,28 @@ async function openDayView(day) {
   $('#modal').querySelectorAll('[data-dprint]').forEach(b => b.onclick = () => printDoc(b.dataset.dprint, back));
   $('#modal').querySelectorAll('[data-kfix]').forEach(b => b.onclick = () => openFixForm(b.dataset.kfix, back));
   $('#modal').querySelectorAll('[data-cprint]').forEach(b => b.onclick = () => printCount(book, b.dataset.cprint));
+}
+
+// ---------------------------------------------------------------- Sh-8 B15: bankka topshirish (inkassatsiya) jadvali
+//   Buxgalter (2026-11-26): naqd pul har juma bankka topshiriladi; egasi qarori (2026-11-26): shu tartib standart, kassa limiti bank bilan
+//   kelishiladi (Sozlamalar). Jadval kunlari — ISO hafta kunlari (1 — dushanba … 7 — yakshanba); server: kassa-day.sql app.kassa_deposit_cfg.
+export const WEEKDAYS = [[1, 'Du'], [2, 'Se'], [3, 'Ch'], [4, 'Pa'], [5, 'Ju'], [6, 'Sh'], [7, 'Ya']];
+const WD_LONG = { 1: 'dushanba', 2: 'seshanba', 3: 'chorshanba', 4: 'payshanba', 5: 'juma', 6: 'shanba', 7: 'yakshanba' };
+export function depositDaysText(days) {   // [5] → «har juma»; [2, 5] → «har seshanba va juma»; [] → «jadval yo‘q»
+  const xs = (days || []).map(Number).filter(d => WD_LONG[d]).sort((a, b) => a - b);
+  if (!xs.length) return 'jadval yo‘q';
+  if (xs.length === 7) return 'har kuni';
+  if (xs.length === 5 && [1, 2, 3, 4, 5].every(d => xs.includes(d))) return 'har ish kuni';
+  const n = xs.map(d => WD_LONG[d]);
+  return 'har ' + (n.length === 1 ? n[0] : n.slice(0, -1).join(', ') + ' va ' + n[n.length - 1]);
+}
+export function limitHintTxt(h) {   // kassa limiti tavsiyasi (kassa_state.deposit.limitHint) — bankka ariza uchun
+  if (!h || !num(h.days)) return 'Kassa limiti bank bilan kelishiladi; tavsiya kassa kamida bir necha kun ishlagach hisoblanadi.';
+  return `Kassa limiti bank bilan kelishiladi. Tavsiya (bankka ariza uchun): oxirgi ${num(h.days)} ish kunida o‘rtacha kunlik naqd tushum ${som(h.avgDaily)} × topshirish oralig‘i ${num(h.interval)} ish kuni ≈ ${som(h.suggest)}.`;
+}
+export function depositTxt(dep, balance) {   // topshirish kuni ogohlantirishi (dep — kassa_state.deposit)
+  const keep = num(dep && dep.keep), amt = num(dep && dep.amount);
+  return `Bugun — bankka topshirish (inkassatsiya) kuni: kassada ${som(balance)}${keep > 0 ? `, ${som(keep)} maydalik qoldirib` : ''} — ${som(amt)} bankka topshiriladi («+ Chiqim so‘rovi» → «Bankka topshirish»).`;
 }
 
 // ---------------------------------------------------------------- F2.13: qayta tasnif dalolatnomasi («QT-», bosmada «ҚТ-»)

@@ -58,8 +58,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          kassa-fix.sql — kassa_fix_request (2-ro'yxat), kassa_fix_decide (Direktor; «Buxgalteriya» qatori yangilanadi),
 --          kassa_fix_cancel, kassa_fix_list, kassa_fix_get; kassa_doc_json — fixes / eff; kassa_matrix va fin_cp_statement — amaldagi
 --          statiya va tomon; kassa_checks — fixPending / fixes30; kassa_state — pending.fixToApprove.
+--     16 — buxgalter savollari (Sh-8) bo'yicha egasi qarorlari (2026-11-26): B15 — bankka topshirish (inkassatsiya) jadvali: fin_org_set
+--          depositDays / depositKeep (fin_org.extra; kalit yo'q — juma), kassa-day.sql app.kassa_deposit_cfg, app.kassa_limit_hint (kassa
+--          limiti tavsiyasi — bankka ariza uchun), kassa_state.deposit (topshirish kuni eslatmasi), kassa_checks.deposit / depositMissed30;
+--          B19 / B20 — kassa_month_pack: offsets (E5 o'zaro hisob — JShDS imtiyozi), staffDiscounts (E6 xodim farzandi chegirmasi),
+--          payroll (E7 vedomost va to'lovlar — ish haqi fondi bilan solishtirish); FD-28 bo'yicha 2-ro'yxatga ismsiz.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 15 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 16 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

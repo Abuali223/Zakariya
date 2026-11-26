@@ -3457,6 +3457,44 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   Direktorga qisqa ko'rsatma: xato yopilgan kunda topilsa — «QT» (KO-3 jurnalidagi order yonida), Direktor «QT» ro'yxatida tasdiqlaydi;
   dalolatnoma chop etilib imzolanadi. Hozirgi deploy prod'ni o'zgartirmaydi.
 
+## 92) Buxgalter javobini kutmasdan — Sh-8 qolgan bandlari bo'yicha egasi qarori: inkassatsiya jadvali (B15), oylik to'plamda E5–E7 (B19 / B20) — 2026-11-26
+
+- **Egasi (2026-11-26):** «Buxgalterning javobini kutmay eng qulay va foydali tarafini qilib bera olasanmi?» — javobsiz bandlar (B3, B6,
+  B10, B18, B19, B20 ikkinchi qismi) va B15 dagi zidlik (buxgalter: inkassatsiya har juma; FD-22: limit 0 — har kuni bankka) bo'yicha
+  qaror egasining topshirig'i bilan qabul qilindi; buxgalter imzo paytida (12-dekabr, B19 — 19-dekabr) boshqacha yozsa — tuzatiladi.
+- **Qarorlar:** B3, B6, B10, B18 — tizimdagi tavsiya amalda (FD-05, FD-10, FD-14 L1 = 0, FD-48). B15 — buxgalter tartibi: standart
+  jadval — har juma, kunlar va maydalik «⚙ Sozlamalar»da; kassa limiti bank bilan kelishiladi (tizim tavsiya beradi, faqat ogohlantiradi);
+  «limit 0 — har kuni bankka» bekor. B19 — oylik to'plamda vedomost varag'i (buxgalter 1C dagi ish haqi fondi bilan solishtiradi).
+  B20 — o'zaro hisob ro'yxati (daromad solig'i imtiyozi; F2.16) va xodim farzandi chegirmasi ro'yxati (moddiy naf — buxgalter xulosasi
+  uchun ma'lumot; tizim soliq hisoblamaydi).
+- **Server (modul relizi 16):** `fin-core.sql` — `fin_org_set`: `depositDays` (ISO hafta kunlari 1–7, takrorsiz, tartiblanib saqlanadi;
+  bo'sh — jadval yo'q) va `depositKeep` (maydalik); `kassa-day.sql` — `app.kassa_deposit_cfg` (kalit yo'q — juma), `app.kassa_limit_hint`
+  (oxirgi 92 kundagi naqd tushum — bankdan olingan naqd, yo'ldagi pul, o'z hisoblaridan o'tkazma, bekor qilingan, bugungi va boshqa
+  kassa hujjatlarisiz — / shu davrdagi kassa kunlari × topshirish oralig'i, mingga yuqoriga); `kassa_state.deposit` (bugun topshirish
+  kunimi, topshiriladigan summa = qoldiq − maydalik, bugun «Bankka topshirish» orderi o'tkazilganmi, limit tavsiyasi); `kassa_checks` —
+  `deposit`, `depositMissed30` (jadvaldagi yopilgan kun, qoldiq maydalikdan ko'p, o'sha kuni o'tkazilgan topshirish orderi yo'q; sinov
+  kassasida — yo'q); `kassa_month_pack` — `offsets` (E5), `staffDiscounts` (E6; ikkala yorliq — «Xodim farzandi» va 2026-08 gacha
+  «O'qituvchi farzandi»; xodim — o'qituvchi yoki xodim ID'si bo'yicha), `payroll` (E7; to'langani — maosh yozuvlarining «paid»
+  yig'indisi usul bo'yicha, vedomost darvozasi bilan bir xil); 2-ro'yxatga ismsiz (FD-28), sinov kassasi to'plamida E6 / E7 yo'q.
+  `kassa-checks.sql` — ichki funksiyalar 120, himoya izlari 359.
+- **Sahifa:** «⚙ Sozlamalar» — inkassatsiya kunlari (Du–Ya belgilari), maydalik, kassa limiti tavsiyasi (asosiy kassa bo'yicha);
+  topshirish kunida kassir / Direktor / 2-ro'yxatga eslatma (qoldiq, maydalik, topshiriladigan summa; topshirilgach yo'qoladi; sinov
+  kassasida yo'q); nazorat ro'yxatida «Bankka topshirish (inkassatsiya)» qatori; oylik Excel to'plamda E5 «O'zaro hisob» (xodim bo'yicha
+  jami bilan), E6 «Xodim farzandi» (bog'lanishsiz hisoblar — ogohlantirish), E7 «Vedomost» (to'lanmagan qoldiq, ortiqcha to'lov —
+  ogohlantirish) — 3 tilda.
+- **Sinovlar:** yangi `test-kassa-sh8.sql` (46 tekshiruv; mutatsiya — 39/39 ushlandi), `fin-sh8.test.mjs` (8); `test-kassa-checks` —
+  reliz 16; brauzer: `k4` — Sozlamalarda jadval va maydalik, kassirga topshirish kuni eslatmasi, nazorat ro'yxati 31 → 32 qator (38
+  tekshiruv); `k11` — oylik to'plam 7 varaq, ismsiz nusxada ism ustunlari yo'q (18). Stend urug'ida jadval bo'sh (ssenariylar hafta
+  kuniga bog'liq bo'lmasin; k4 jadvalni bugungi kunga qo'yib sinaydi). Ko'rikda topilib tuzatildi: xodim (o'qituvchi emas) farzandida
+  xodim ismi chiqmasdi; eski chegirma yorlig'i; sinov kassasida eslatma / nazorat qatori; limit tavsiyasi sinov kassasi tanlanganda;
+  kun yopilgan yoki hujjat yozib bo'lmaydigan holatda eslatma chiqmaydi; 6 kunlik jadval «har kuni» deb yozilmaydi.
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir, tugun va server sinovlari) — hammasi yashil;
+  brauzer to'plami — 28 o'tish, 717 tekshiruv (kassa 575), hammasi o'tdi.
+- **Egasi uchun:** kassa moduli hali `--dev` — bu o'zgarishlar prod'ga jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr).
+  Buxgalterga: Sh-8 varag'idagi «Egasi qarori» bandini ko'rib, 12-dekabrgacha imzolash; B19 — E7 varag'i bo'yicha 19-dekabrgacha
+  yozma tasdiq; B20 — E6 varag'i bo'yicha moddiy naf xulosasi. Bank bilan kassa limitini kelishish — «⚙ Sozlamalar»dagi tavsiya bilan.
+
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

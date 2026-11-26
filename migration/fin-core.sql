@@ -196,6 +196,9 @@ end $$;
 -- Tashkilot sozlamalari — FAQAT Direktor (T1, L1, limit, kassaGoLive va rekvizitlar). Faqat berilgan maydonlar o'zgaradi.
 --   orgCashMax (extra) — yuridik shaxs kontragentga (yetkazib beruvchi / tashkilot) kassadan naqd to'lovda Direktor tasdig'isiz
 --   chegara (so'm; 0 yoki yo'q — har doim Direktor). Hisob siyosati qarori (F1.27, buxgalter ko'rigi M3).
+--   depositDays / depositKeep (extra; Sh-8 B15 — buxgalter: inkassatsiya har juma; egasi qarori 2026-11-26): naqd pulni bankka
+--   topshirish kunlari (ISO hafta kunlari 1–7, takrorsiz; bo'sh massiv — jadval yo'q; kalit yo'q — juma) va topshirilgandan keyin
+--   kassada qoldiriladigan summa (maydalik). Eslatma, nazorat va limit tavsiyasi — kassa-day.sql: app.kassa_deposit_cfg.
 --   kassaGoLive o'zgarsa — kassa-day.sql: app.kassa_golive_guard (modulning shu qismi o'rnatilgan bo'lsa): ishlagan kassada kelgan sanani
 --   bo'shatish / surish — kassani TO'XTATISH (ochiq kun va pul berilmagan so'rovlar bo'lmasa; sana bo'sh saqlanadi), to'xtatilgan kassada —
 --   faqat qayta ishga tushirish kuniga (ishga-tushirish §9; ui-5). O'zgarish kun jurnaliga yoziladi.
@@ -211,11 +214,21 @@ begin
       if length(coalesce(p ->> k, '')) > 300 then raise exception 'fin_org_set: % juda uzun', k using errcode = '22023'; end if;
     elsif k = 'printLang' then
       if coalesce(p ->> k, '') not in ('uz-cyrl', 'uz-latn', 'ru') then raise exception 'fin_org_set: printLang noto''g''ri' using errcode = '22023'; end if;
-    elsif k in ('t1', 'l1', 'cashLimit', 'orgCashMax') then
+    elsif k in ('t1', 'l1', 'cashLimit', 'orgCashMax', 'depositKeep') then
       begin v_num := (p ->> k)::numeric; exception when others then raise exception 'fin_org_set: % son emas', k using errcode = '22023'; end;
       if v_num is null or v_num = 'NaN'::numeric or v_num < 0 or v_num >= 1e12 then raise exception 'fin_org_set: % noto''g''ri', k using errcode = '22023'; end if;
     elsif k = 'kassaGoLive' then
       if p -> k <> 'null'::jsonb and coalesce(p ->> k, '') !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'fin_org_set: kassaGoLive sana emas' using errcode = '22023'; end if;
+    elsif k = 'depositDays' then
+      -- (ikki bosqichda: massiv emas qiymatda jsonb_array_* xato beradi, SQL'da «or» tartibi kafolatlanmagan)
+      if jsonb_typeof(p -> k) is distinct from 'array' then
+        raise exception 'fin_org_set: depositDays — hafta kunlari ro''yxati (1–7, takrorsiz)' using errcode = '22023';
+      end if;
+      if jsonb_array_length(p -> k) > 7
+         or exists (select 1 from jsonb_array_elements(p -> k) x where jsonb_typeof(x) <> 'number' or (x #>> '{}') !~ '^[1-7]$')
+         or (select count(distinct x #>> '{}') from jsonb_array_elements(p -> k) x) <> jsonb_array_length(p -> k) then
+        raise exception 'fin_org_set: depositDays — hafta kunlari ro''yxati (1–7, takrorsiz)' using errcode = '22023';
+      end if;
     else
       raise exception 'fin_org_set: noma''lum maydon %', k using errcode = '22023';
     end if;
@@ -236,7 +249,11 @@ begin
     l1            = case when p ? 'l1' then (p ->> 'l1')::numeric else l1 end,
     "cashLimit"   = case when p ? 'cashLimit' then (p ->> 'cashLimit')::numeric else "cashLimit" end,
     "kassaGoLive" = case when p ? 'kassaGoLive' then v_new else "kassaGoLive" end,
-    extra         = case when p ? 'orgCashMax' then extra || jsonb_build_object('orgCashMax', (p ->> 'orgCashMax')::numeric) else extra end,
+    extra         = extra
+                    || case when p ? 'orgCashMax' then jsonb_build_object('orgCashMax', (p ->> 'orgCashMax')::numeric) else '{}'::jsonb end
+                    || case when p ? 'depositKeep' then jsonb_build_object('depositKeep', (p ->> 'depositKeep')::numeric) else '{}'::jsonb end
+                    || case when p ? 'depositDays' then jsonb_build_object('depositDays', (select coalesce(jsonb_agg((x #>> '{}')::int order by (x #>> '{}')::int), '[]'::jsonb)
+                                                                                             from jsonb_array_elements(p -> 'depositDays') x)) else '{}'::jsonb end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';
   -- Ishga tushadigan kun bugungi yoki o'tgan kunga qo'yilsa: shu kundan beri kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat,

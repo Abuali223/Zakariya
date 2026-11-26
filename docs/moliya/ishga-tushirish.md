@@ -91,8 +91,9 @@ o‘zgartiradi. Hammasi sinov stendida, dushanba–juma; kassirlar — kassa yop
 - [ ] **Qabul sinovi:** kassir, moliya menejeri, buxgalter va direktor stendda o‘z ssenariylarini bajarib, varaqni imzolagan (`shakllar.md`, Sh-5).
   Stendda kassir — «Kassir» hisobi bilan (stenddagi «G‘aznachi» hisobi bilan emas); o‘rinbosar sinovi uchun bitta stend hisobiga
   qo‘shimcha «Kassir» roli beriladi («Foydalanuvchilar» → «➕ Lavozim»).
-- [ ] **Kassa limiti:** bankdan yozma javob (limit xati) kelguncha limit 0 — ortgan naqd pul har kuni bankka topshiriladi; bank
-  kontragentlar ro‘yxatida «Bank» turi bilan.
+- [ ] **Kassa limiti va inkassatsiya** (egasi qarori 2026-11-26 — buxgalter tartibi, Sh-8 B15): naqd pul har juma bankka topshiriladi;
+  kassa limiti bank bilan kelishiladi — bankka arizada «⚙ Sozlamalar»dagi tavsiyadan foydalaniladi, kelishilgan limit «Kassa limiti»
+  maydoniga kiritiladi; bank kontragentlar ro‘yxatida «Bank» turi bilan.
 - [ ] **Kassa joyi va printer** — hammasi 30-dekabrdagi sanashgacha (printer sanash kechasi D-1 dalolatnomasini chop etish uchun kerak):
   A4 printer (KO-1 + patta, KO-2, KO-4, dalolatnomalar), sinov varag‘i chop etilgan; seyf, «Olindi» / «To‘landi» shtamplari, hujjat jildlari.
 - [ ] **Hisobdorlar qoldig‘i:** zavxoz, oshpaz va boshqa hisobdorlar qo‘lidagi eski pul **30-dekabrgacha** (kassa naqd ishlaydigan oxirgi
@@ -171,6 +172,12 @@ Keyin, hali hech narsa kiritmasdan:
   so‘rov yozadi, Direktor «QT» ro‘yxatida yoki «Tasdiqlash» bo‘limida tasdiqlaydi (rad etsa — sabab bilan). Order o‘zi o‘zgarmaydi
   (KO-3, KO-4 — asl); statiya matritsasi, kontragent ko‘chirmasi va «Buxgalteriya» tuzatilgan holatni ko‘rsatadi; dalolatnoma chop
   etilib imzolanadi (tuzdi — buxgalter, tasdiqladi — Direktor). Ochiq kundagi xato — avvalgidek: kassir bekor qilib, to‘g‘risini yozadi.
+- Bankka topshirish kuni (modul relizi 16; jadval — «⚙ Sozlamalar»): kassir sahifasida eslatma — kassadagi qoldiq, maydalik va
+  topshiriladigan summa; pul «+ Chiqim so‘rovi» → «Bankka topshirish» orderi bilan topshiriladi (eslatma shundan keyin yo‘qoladi).
+  O‘tkazib yuborilgan kunlar — nazorat ro‘yxatidagi «Bankka topshirish (inkassatsiya)» qatorida.
+- Oylik kassa to‘plami («Statiyalar» → «⬇ Oylik to‘plam (Excel)»; modul relizi 16): E1–E4 dan tashqari E5 «O‘zaro hisob» (daromad solig‘i
+  imtiyozi uchun), E6 «Xodim farzandi» (chegirma — moddiy naf bo‘yicha buxgalter xulosasi uchun), E7 «Vedomost» (ish haqi fondi bilan
+  solishtirish, Sh-8 B19). Moliya menejeri va buxgalterga — ismsiz (FD-28).
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
   «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa
@@ -216,9 +223,11 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
 4. **«Kassa» → «⚙ Sozlamalar»** (egasi qarorlari, 2026-11-16): tashkilot nomi va tashkiliy-huquqiy shakli — ro‘yxatdan o‘tish
    guvohnomasidagidek (buxgalter tekshiradi), STIR, joy, chop etish tili; T1 (shundan katta chiqimga Direktor tasdig‘i) — summa
    buyruqdagi bilan bir xil (Direktor o‘zi yozadi; 0 qolsa har chiqim Direktor tasdig‘ini kutadi); L1 (asos hujjatisiz naqd xarid
-   chegarasi) — **0**, hujjatsiz xarid yo‘q (juda kerak bo‘lsa keyin kichik chegara va faqat bitta statiya); kassa limiti — bankdan yozma
-   javob kelguncha **0**; **yuridik shaxsga kassadan naqd to‘lov chegarasi** (yetkazib beruvchi / tashkilotga shu summagacha Direktor
-   tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida tasdiqlaydi) — **0**: har biri Direktor tasdig‘i bilan,
+   chegarasi) — **0**, hujjatsiz xarid yo‘q (juda kerak bo‘lsa keyin kichik chegara va faqat bitta statiya); kassa limiti — bank bilan
+   kelishilgani (kelishilguncha **0** — limit ogohlantirishi yo‘q); **bankka topshirish (inkassatsiya) kunlari** — standart **juma**
+   (modul relizi 16; kunni o‘zgartirish yoki bir nechta kun — belgilar bilan; hech biri belgilanmasa — jadval yo‘q) va topshirilgandan
+   keyin kassada qoldiriladigan maydalik; shu yerda kassa limiti tavsiyasi (bankka ariza uchun); **yuridik shaxsga kassadan naqd
+   to‘lov chegarasi** (yetkazib beruvchi / tashkilotga shu summagacha Direktor tasdig‘isiz; bo‘sh yoki 0 — har doim Direktor; buxgalter hisob siyosatida tasdiqlaydi) — **0**: har biri Direktor tasdig‘i bilan,
    asosiy yo‘l — bank o‘tkazmasi; **imzo egalari** (1-ro‘yxat — Direktor va buyruq bilan tayinlangan o‘rinbosar, moliya menejeri emas;
    2-ro‘yxat — bosh buxgalter / moliya menejeri; to‘liq F.I.Sh., lavozimi, tizimdagi hisobi). Kontragentlar turi to‘g‘ri bo‘lsin: korxona (MChJ, AJ va b.) — «Yetkazib beruvchi» yoki «Tashkilot», yakka
    tadbirkor va fuqaro — «Jismoniy shaxs», bank — «Bank». «Jismoniy shaxs» va «Boshqa» turini buxgalter yoki Direktor kiritadi yoki tasdiqlaydi

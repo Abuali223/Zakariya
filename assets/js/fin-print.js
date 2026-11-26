@@ -671,11 +671,104 @@ export function advSheet(p, ctx) {
                                      : 'Diqqat: oy oxiriga manfiy qoldiq (qaytim yoki avans hisoboti berilgan avansdan ko‘p) — tekshiring: ') + neg.join(', ')]);
   return { name: ru ? 'E4 Подотчётные' : 'E4 Hisobdorlar', rows, cols: [{ wch: 20 }, ...(masked ? [] : [{ wch: 30 }]), ...Array.from({ length: 5 }, () => ({ wch: 17 }))] };
 }
-// Buxgalter uchun oylik kassa to'plami — bitta XLSX kitob: E1 KO-3, E2 statiyalar, E3 kassa kunlari, E4 hisobdorlar.
+// Ismsiz nusxa izohi (FD-28) — E4–E7 varaqlarida bir xil
+const maskNote = ru => [ru ? 'Обезличенная копия (FD-28): сотрудники — по табельному номеру, ученики — по ID; полная копия — у директора'
+                           : 'Ismsiz nusxa (FD-28): xodimlar tabel kodi, o‘quvchilar ID bilan; to‘liq nusxa — Direktorda'];
+const sumOf = (a, k) => a.reduce((s, x) => s + num(x[k]), 0);
+// Oylik to'plam (E5; Sh-8 B20, F2.16): o'zaro hisob — xodimning ish haqidan farzandining o'quv to'lovi («ЎҲ-» dalolatnomalari, shu oy sanasi
+//   bilan). O'z farzandining o'qishi uchun ish haqidan to'langan summa daromad solig'idan ozod (buxgalter, 2026-11-26): ro'yxat va xodim
+//   bo'yicha jami — imtiyozni hisobga olish uchun. Jami = shu oydagi o'zaro hisob dalolatnomalari.
+export function offsetSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, a = p.offsets || [], masked = !!p.masked;
+  const pre = t.pre.OFS + '-';
+  const H = (ru ? ['Дата', 'Акт №', 'Месяц зарплаты', 'Сотрудник (табельный №)', 'ФИО сотрудника', 'Ученик (ID)', 'ФИО ученика', 'Сумма']
+                : ['Sana', 'Dalolatnoma №', 'Ish haqi oyi', 'Xodim (tabel kodi)', 'Xodim F.I.Sh.', 'O‘quvchi (ID)', 'O‘quvchi F.I.Sh.', 'Summa'])
+    .filter((_, i) => !masked || (i !== 4 && i !== 6));
+  const rows = [[xlOrgName(o, ru)], [ru ? 'ВЗАИМОЗАЧЁТ: ОПЛАТА ОБУЧЕНИЯ РЕБЁНКА СОТРУДНИКА ИЗ ЗАРПЛАТЫ' : 'O‘ZARO HISOB: XODIM FARZANDINING O‘QISHI UCHUN ISH HAQIDAN TO‘LOV'],
+    [mxPerOf(p, t)], masked ? maskNote(ru) : [], H];
+  a.forEach(x => rows.push([xlDate(x.day), x.no ? pre + x.no : '', x.month || '', x.code || '', ...(masked ? [] : [x.partyName || '']),
+    x.studentId || '', ...(masked ? [] : [x.studentName || '']), xlMoney(x.amount)]));
+  if (!a.length) rows.push([ru ? 'Взаимозачётов за месяц нет' : 'Shu oyda o‘zaro hisob yo‘q']);
+  rows.push([]);
+  rows.push([t.total, ...Array.from({ length: H.length - 2 }, () => ''), xlMoney(sumOf(a, 'amount'))]);
+  if (a.length) {   // xodim bo'yicha jami — imtiyoz xodim kesimida hisobga olinadi
+    const by = new Map();
+    a.forEach(x => { const k = x.code || '—', g = by.get(k) || { code: k, name: x.partyName || '', n: 0, sum: 0 }; g.n++; g.sum += num(x.amount); by.set(k, g); });
+    rows.push([], [ru ? 'Итого по сотрудникам' : 'Xodim bo‘yicha jami'],
+      ru ? ['Сотрудник (табельный №)', ...(masked ? [] : ['ФИО сотрудника']), 'Актов', 'Сумма'] : ['Xodim (tabel kodi)', ...(masked ? [] : ['Xodim F.I.Sh.']), 'Dalolatnomalar', 'Summa']);
+    [...by.values()].sort((x, y) => String(x.code).localeCompare(String(y.code))).forEach(g => rows.push([g.code, ...(masked ? [] : [g.name]), g.n, xlMoney(g.sum)]));
+  }
+  rows.push([], [ru ? 'Оплата обучения собственного ребёнка из заработной платы освобождается от НДФЛ (бухгалтер, Ш-8 B20): учитывается по сотруднику и месяцу; основание — акт взаимозачёта, заявление сотрудника и решение директора.'
+                    : 'O‘z farzandining o‘qishi uchun ish haqidan to‘langan summa daromad solig‘idan ozod (buxgalter, Sh-8 B20): xodim va oy bo‘yicha hisobga olinadi; asos — o‘zaro hisob dalolatnomasi, xodim arizasi va Direktor qarori.']);
+  return { name: ru ? 'E5 Взаимозачёт' : 'E5 O‘zaro hisob', rows,
+    cols: [{ wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 20 }, ...(masked ? [] : [{ wch: 28 }]), { wch: 14 }, ...(masked ? [] : [{ wch: 28 }]), { wch: 16 }] };
+}
+// Oylik to'plam (E6; Sh-8 B20, 2-qism): xodim farzandi chegirmasi (50 %) bilan shu oy hisob-fakturalari — asosiy narx, chegirma, hisoblangan.
+//   Chegirma moddiy naf (SK 376-modda) hisoblanadimi va soliq bazasiga kiritiladimi — buxgalter xulosasi; tizim soliq hisoblamaydi.
+const INV_ST = { uz: { pending: 'to‘lanmagan', partial: 'qisman to‘langan', paid: 'to‘langan' }, ru: { pending: 'не оплачен', partial: 'оплачен частично', paid: 'оплачен' } };
+export function staffDiscSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, a = p.staffDiscounts || [], masked = !!p.masked, st = INV_ST[ru ? 'ru' : 'uz'];
+  const H = (ru ? ['Сотрудник (табельный №)', 'ФИО сотрудника', 'Ученик (ID)', 'ФИО ученика', 'Полная стоимость', 'Скидка', 'Начислено', 'Статус счёта']
+                : ['Xodim (tabel kodi)', 'Xodim F.I.Sh.', 'O‘quvchi (ID)', 'O‘quvchi F.I.Sh.', 'Asosiy narx', 'Chegirma', 'Hisoblangan', 'Hisob holati'])
+    .filter((_, i) => !masked || (i !== 1 && i !== 3));
+  const rows = [[xlOrgName(o, ru)], [ru ? 'СКИДКА «РЕБЁНОК СОТРУДНИКА» (50 %)' : 'XODIM FARZANDI CHEGIRMASI (50 %)'], [mxPerOf(p, t)], masked ? maskNote(ru) : [], H];
+  a.forEach(x => rows.push([x.employee || '—', ...(masked ? [] : [x.employeeName || '']), x.studentId || '', ...(masked ? [] : [x.studentName || '']),
+    xlMoney(x.base), xlMoney(x.discount), xlMoney(x.amount), st[x.status] || x.status || '']));
+  if (!a.length) rows.push([ru ? 'Счетов со скидкой «ребёнок сотрудника» за месяц нет' : 'Shu oyda xodim farzandi chegirmali hisob yo‘q']);
+  rows.push([]);
+  rows.push([t.total, ...Array.from({ length: H.length - 5 }, () => ''), xlMoney(sumOf(a, 'base')), xlMoney(sumOf(a, 'discount')), xlMoney(sumOf(a, 'amount'))]);
+  const nolink = a.filter(x => !x.employee).length;
+  if (nolink) rows.push([], [(ru ? 'Внимание: у счетов без табельного № связь «ребёнок сотрудника» не указана — проверьте карточку ученика: ' : 'Diqqat: tabel kodisiz hisoblarda «xodim farzandi» bog‘lanishi yo‘q — o‘quvchi kartasini tekshiring: ') + nolink]);
+  rows.push([], [ru ? 'Является ли скидка материальной выгодой сотрудника (НК, ст. 376) и включается ли в налоговую базу — по заключению бухгалтера (Ш-8 B20, 2-я часть); система налог не рассчитывает.'
+                    : 'Chegirma xodimning moddiy nafi (SK 376-modda) hisoblanadimi va soliq bazasiga kiritiladimi — buxgalter xulosasi bo‘yicha (Sh-8 B20, 2-qism); tizim soliq hisoblamaydi.']);
+  return { name: ru ? 'E6 Скидка сотрудникам' : 'E6 Xodim farzandi', rows,
+    cols: [{ wch: 20 }, ...(masked ? [] : [{ wch: 28 }]), { wch: 14 }, ...(masked ? [] : [{ wch: 28 }]), { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }] };
+}
+// Oylik to'plam (E7; Sh-8 B19): shu oy vedomosti va to'lovlari — buxgalter 1C dagi ish haqi fondi bilan solishtiradi (FD-44). To'landi —
+//   maosh yozuvlari («paid»; avanslar «Avans» ustunida, vedomostda ayrilgan): naqd (kassa), karta, o'zaro hisob, boshqa. Qoldiq = to'lanadigan − to'langan.
+const RUN_ST = { uz: { draft: 'qoralama', submitted: 'tasdiqqa yuborilgan', approved: 'tasdiqlangan', returned: 'qaytarilgan' },
+                 ru: { draft: 'черновик', submitted: 'на утверждении', approved: 'утверждена', returned: 'возвращена' } };
+export function payrollSheet(p, ctx) {
+  ctx = ctx || {}; p = p || {};
+  const ru = langOf(ctx) === 'ru', t = T[ru ? 'ru' : 'uz-latn'], o = ctx.org || {}, pr = p.payroll || null, masked = !!p.masked;
+  const a = (pr && pr.lines) || [];
+  const H = (ru ? ['Таб. №', 'Категория', 'ФИО', 'Начислено', 'Удержание', 'Замещение', 'Аванс', 'Остаток прошлых месяцев', 'К выплате',
+                   'Выплачено: наличные', 'Выплачено: карта', 'Выплачено: взаимозачёт', 'Выплачено: прочее', 'Остаток к выплате']
+                : ['Tabel kodi', 'Toifa', 'F.I.Sh.', 'Hisoblangan', 'Ushlanma', 'O‘rinbosarlik', 'Avans', 'Oldingi oylar qoldig‘i', 'To‘lanadigan',
+                   'To‘landi: naqd', 'To‘landi: karta', 'To‘landi: o‘zaro hisob', 'To‘landi: boshqa', 'To‘lanmagan qoldiq'])
+    .filter((_, i) => !masked || i !== 2);
+  const typ = v => v === 'teacher' ? (ru ? 'учитель' : 'o‘qituvchi') : v === 'staff' ? (ru ? 'сотрудник' : 'xodim') : (v || '');
+  const paid = x => num(x.paidCash) + num(x.paidCard) + num(x.paidOffset) + num(x.paidOther);
+  const rows = [[xlOrgName(o, ru)], [ru ? 'ВЕДОМОСТЬ И ВЫПЛАТЫ ЗАРАБОТНОЙ ПЛАТЫ (сверка с фондом оплаты труда)' : 'ISH HAQI VEDOMOSTI VA TO‘LOVLAR (ish haqi fondi bilan solishtirish)'],
+    [mxPerOf(p, t) + (pr ? ` · ${ru ? 'ведомость' : 'vedomost'}: ${RUN_ST[ru ? 'ru' : 'uz'][pr.status] || pr.status || ''}${pr.approvedAt && stamp(pr.approvedAt) ? ` (${stamp(pr.approvedAt).slice(0, 10)})` : ''}` : '')],
+    masked ? maskNote(ru) : [], H];
+  if (!pr) rows.push([ru ? 'Ведомость за этот месяц не составлена' : 'Shu oy vedomosti tuzilmagan']);
+  a.forEach(x => rows.push([x.code || '', typ(x.type), ...(masked ? [] : [x.name || '']), xlMoney(x.gross), xlMoney(x.deduction), xlMoney(x.subBonus), xlMoney(x.advance),
+    xlMoney(x.carryIn), xlMoney(x.payable), xlMoney(x.paidCash), xlMoney(x.paidCard), xlMoney(x.paidOffset), xlMoney(x.paidOther), xlMoney(num(x.payable) - paid(x))]));
+  if (pr && !a.length) rows.push([ru ? 'В ведомости нет строк' : 'Vedomostda qator yo‘q']);
+  rows.push([]);
+  rows.push([t.total, '', ...(masked ? [] : ['']), xlMoney(sumOf(a, 'gross')), xlMoney(sumOf(a, 'deduction')), xlMoney(sumOf(a, 'subBonus')), xlMoney(sumOf(a, 'advance')),
+    xlMoney(sumOf(a, 'carryIn')), xlMoney(sumOf(a, 'payable')), xlMoney(sumOf(a, 'paidCash')), xlMoney(sumOf(a, 'paidCard')), xlMoney(sumOf(a, 'paidOffset')),
+    xlMoney(sumOf(a, 'paidOther')), xlMoney(a.reduce((s, x) => s + num(x.payable) - paid(x), 0))]);
+  const over = a.filter(x => paid(x) > num(x.payable) + 0.5).map(x => x.code || '—');
+  if (over.length) rows.push([], [(ru ? 'Внимание: выплачено больше суммы «к выплате» (переплата переходит в следующий месяц): ' : 'Diqqat: to‘langani «To‘lanadigan»dan ko‘p (ortiqchasi keyingi oyga o‘tadi): ') + over.join(', ')]);
+  rows.push([], [ru ? 'Начислено — фонд оплаты труда по системе; бухгалтер сверяет с ФОТ в 1С и подтверждает письменно (Ш-8 B19, FD-44). Аванс — выданный за месяц (вычтен в ведомости).'
+                    : 'Hisoblangan — tizimdagi ish haqi fondi; buxgalter 1C dagi fond bilan solishtirib, yozma tasdiqlaydi (Sh-8 B19, FD-44). Avans — shu oy berilgani (vedomostda ayrilgan).']);
+  return { name: ru ? 'E7 Ведомость' : 'E7 Vedomost', rows,
+    cols: [{ wch: 14 }, { wch: 12 }, ...(masked ? [] : [{ wch: 28 }]), ...Array.from({ length: 11 }, () => ({ wch: 15 }))] };
+}
+// Buxgalter uchun oylik kassa to'plami — bitta XLSX kitob: E1 KO-3, E2 statiyalar, E3 kassa kunlari, E4 hisobdorlar; Sh-8 (2026-11-26):
+//   E5 o'zaro hisob, E6 xodim farzandi chegirmasi, E7 vedomost va to'lovlar (server 16-reliz va undan keyin — eski javobda bu varaqlar yo'q).
 //   p — kassa_month_pack() javobi (2-ro'yxatga ismsiz, FD-28).
 export function packSheets(p, ctx) {
   p = p || {}; const ru = langOf(ctx || {}) === 'ru';
-  return [Object.assign(journalSheet(p.journal || {}, ctx), { name: ru ? 'E1 КО-3' : 'E1 KO-3' }), matrixSheet(p.matrix || {}, ctx), daysSheet(p, ctx), advSheet(p, ctx)];
+  const out = [Object.assign(journalSheet(p.journal || {}, ctx), { name: ru ? 'E1 КО-3' : 'E1 KO-3' }), matrixSheet(p.matrix || {}, ctx), daysSheet(p, ctx), advSheet(p, ctx)];
+  if (Array.isArray(p.offsets)) out.push(offsetSheet(p, ctx));
+  if (Array.isArray(p.staffDiscounts) && !(p.desk && p.desk.isTest)) out.push(staffDiscSheet(p, ctx));
+  if ('payroll' in p && !(p.desk && p.desk.isTest)) out.push(payrollSheet(p, ctx));
+  return out;
 }
 
 export function bookRows(v) { const n = parseInt(v, 10); return Math.min(Math.max(Number.isFinite(n) && n > 0 ? n : 30, 10), 60); }

@@ -27,7 +27,7 @@ set default_transaction_read_only = on;
 \pset null ''
 \set bad 0
 \set err 0
-\set want_ver 15
+\set want_ver 16
 \set ver 0
 -- har band bo'yicha muammo qatorlari soni (c1 … c24) — sinov (test-kassa-checks.sql) shularni o'qiydi
 \set c1 0 \set c2 0 \set c3 0 \set c4 0 \set c5 0 \set c6 0 \set c7 0 \set c8 0 \set c9 0 \set c10 0 \set c11 0
@@ -106,7 +106,7 @@ select '!!' as belgi, x.nima, x.bor, case when x.aniq then '' else 'kamida ' end
   from (values
     ('moliya jadvallari', (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname = any(:'fin_tables'::text[])), 20, true),   -- +1: cash_handovers (state-6, ikki bosqichli smena topshirish); +1: fin_exp_docs (F2.1, xarajatlar reyestri); +1: cash_doc_fixes (F2.13, qayta tasnif dalolatnomasi)
     ('ochiq (public) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname ~ :'fn_re'), 54, true),   -- +1: kassa_staff_open (acc-1); +1: fin_counterparty_confirm (sec-3); +2: kassa_handover_accept, kassa_handover_cancel (state-6); +3: fin_exp_refs, fin_exp_save, fin_exp_void (F2.1); +2: fin_cp_save, fin_cp_statement (F2.2); +5: kassa_fix_request, kassa_fix_decide, kassa_fix_cancel, kassa_fix_list, kassa_fix_get (F2.13)
-    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 118, true),   -- +8: fin_exp_article_ok, fin_exp_docno_key, fin_exp_who, fin_exp_json, fin_exp_legacy_void, fin_exp_legacy_check, fin_exp_guard, fin_exp_doc_guard (F2.1); +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7); +4: kassa_golive_guard, kassa_restart_adj, kassa_desk_balance (ui-5, §9 qayta ishga tushirish), kassa_cash_rows (crit-1); +4: kassa_periods, kassa_pre_day (g4v-1), kassa_restart_stale (g4v-2), kassa_reconcile_range (g4v-4); +2: kassa_user_cards (sec-1), kassa_org_due (sec-3); +4: kassa_handover_guard, kassa_handover_pending, kassa_handover_block (state-6), kassa_op_user (sec-2); +1: kassa_shortage_default (sec-2 / sec-4); +1: kassa_shortage_why (g6v-3); +3: kassa_pending_parse, kassa_pending_open, kassa_day_pending (state-2, crit-3); +2: kassa_z_day (g7v-1), kassa_pending_merge (g7v-3); +1: fin_lock_receipt (state-1); +2: kassa_emp_left (g9: ketgan xodimga yangi avans yo'q), kassa_handover_stale (g9: qabul qilinmay qolgan smena topshirish); +4: fin_cp_digits, fin_cp_name_key, fin_cp_stir_check, fin_cp_day (F2.2); +7: kassa_fix_guard, kassa_eff_art, kassa_eff_doc, kassa_fix_target, kassa_fix_state, kassa_fix_article, kassa_fix_json (F2.13)
+    ('ichki (app) funksiyalar', (select count(*) from pg_proc p where p.pronamespace = 'app'::regnamespace and p.proname ~ :'fn_re'), 120, true),   -- +8: fin_exp_article_ok, fin_exp_docno_key, fin_exp_who, fin_exp_json, fin_exp_legacy_void, fin_exp_legacy_check, fin_exp_guard, fin_exp_doc_guard (F2.1); +1: kassa_user_label (F1.21); +1: kassa_damage_open (acc-4); +3: kassa_adv_article (acc-5), kassa_exp_category (acc-9), kassa_refund_resplit (acc-7); +4: kassa_golive_guard, kassa_restart_adj, kassa_desk_balance (ui-5, §9 qayta ishga tushirish), kassa_cash_rows (crit-1); +4: kassa_periods, kassa_pre_day (g4v-1), kassa_restart_stale (g4v-2), kassa_reconcile_range (g4v-4); +2: kassa_user_cards (sec-1), kassa_org_due (sec-3); +4: kassa_handover_guard, kassa_handover_pending, kassa_handover_block (state-6), kassa_op_user (sec-2); +1: kassa_shortage_default (sec-2 / sec-4); +1: kassa_shortage_why (g6v-3); +3: kassa_pending_parse, kassa_pending_open, kassa_day_pending (state-2, crit-3); +2: kassa_z_day (g7v-1), kassa_pending_merge (g7v-3); +1: fin_lock_receipt (state-1); +2: kassa_emp_left (g9: ketgan xodimga yangi avans yo'q), kassa_handover_stale (g9: qabul qilinmay qolgan smena topshirish); +4: fin_cp_digits, fin_cp_name_key, fin_cp_stir_check, fin_cp_day (F2.2); +7: kassa_fix_guard, kassa_eff_art, kassa_eff_doc, kassa_fix_target, kassa_fix_state, kassa_fix_article, kassa_fix_json (F2.13); +2: kassa_deposit_cfg, kassa_limit_hint (Sh-8 B15)
     ('himoya triggerlari (trg_kassa_*, trg_fin_*)', (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
                                                       where not t.tgisinternal and c.relnamespace = 'public'::regnamespace and t.tgname ~ '^trg_(kassa|fin)_'), 28, true),   -- +1: trg_kassa_handover_guard (state-6); +2: trg_fin_exp_guard (expenses), trg_fin_exp_doc_guard (F2.1); +1: trg_kassa_fix_guard (F2.13)
     ('o''qish siyosatlari (RLS)', (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = any(:'fin_tables'::text[])), 19, true),   -- +1: cash_handovers_sel (state-6); +1: fin_exp_docs_sel (F2.1); +1: cash_doc_fixes_sel (F2.13)
@@ -375,7 +375,7 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 
 -- <barmoq-izlari> Shu reliz toza zanjiridan olingan himoya mantig'i izlari (23-band). Qo'lda tahrirlanmaydi — qayta yozish:
 --   bash migration/kassa-fingerprints.sh   (lokal PostgreSQL'da vaqtinchalik bazaga --dev zanjirni quradi va shu blokni almashtiradi)
-\set fp_rel 15
+\set fp_rel 16
 \set fp_pg 16
 select $fp$
 constraint|cash_counts.cash_counts_counted_check|4771070363f33300
@@ -547,6 +547,7 @@ func|app.kassa_day_hash(p_day_id text)|b4282d860efa2abe
 func|app.kassa_day_json(p_day_id text)|9ca7121f58ba4494
 func|app.kassa_day_pending(p_day_id text)|dd20f40c49a8dda0
 func|app.kassa_denoms_check(p_denoms jsonb, p_counted numeric)|28ec036da759e4b5
+func|app.kassa_deposit_cfg(OUT days integer[], OUT keep numeric)|2889540af3ff9e00
 func|app.kassa_desk_balance(p_desk text)|9d7cf8a3ad593b5b
 func|app.kassa_desk_guard()|3cc432899ef14193
 func|app.kassa_doc_after()|01a4fe37a1af50a2
@@ -571,6 +572,7 @@ func|app.kassa_handover_guard()|06886cf0d564e479
 func|app.kassa_handover_pending(p_desk text)|576708a6230b8640
 func|app.kassa_handover_stale(p_desk text)|663654fcf3f1965a
 func|app.kassa_is_org(p_cp text)|304a009463af2dff
+func|app.kassa_limit_hint(p_desk text, p_days integer[])|c73bf835bde238b6
 func|app.kassa_line_guard()|551b384bb7536672
 func|app.kassa_link_paid(p_doc_id text, p_uid text)|cc729cdd44225ad4
 func|app.kassa_link_prelock(p_doc_id text)|ca0cdf03537d44da
@@ -609,7 +611,7 @@ func|app.kassa_tuition_info(p_pay_id text)|bc91bdae2f75c015
 func|app.kassa_tuition_post(p_pay_id text, p_amount numeric, p_payer_name text, p_captured timestamp with time zone, p_extra jsonb, p_before jsonb, p_apply_dup boolean)|13bcb0807603b2a5
 func|app.kassa_user_cards(p_uid text)|2fecd501adbfa623
 func|app.kassa_user_label(p_name text, p_ref_type text, p_ref_id text, p_uid text)|1619d01296fbe3b6
-func|app.kassa_version()|81f1ed0978b5afbe
+func|app.kassa_version()|f3672d2f0706b28b
 func|app.kassa_week_kpi(p_desk text, p_from date, p_to date)|23dc58b8b45d39cc
 func|app.kassa_z_day(p_desk text, p_day date, p_late boolean, p_captured timestamp with time zone)|e388c6c761abaa22
 func|app.kassa_z_put(p_day_id text, p_z jsonb, p_uid text, p_after boolean)|50bfdd09bc7cec0c
@@ -622,7 +624,7 @@ func|public.fin_cp_statement(p_id text, p_from date, p_to date, p_file boolean)|
 func|public.fin_exp_refs()|540c6e4d1e621bbd
 func|public.fin_exp_save(p jsonb)|017d2513c9144b79
 func|public.fin_exp_void(p_id text, p_reason text)|280881af432f98e7
-func|public.fin_org_set(p jsonb)|aaeff99d5abbd285
+func|public.fin_org_set(p jsonb)|481bc025b89bda36
 func|public.fin_period_lock(p_through date, p_note text)|41051d1fe5b0971c
 func|public.fin_signatory_save(p_id text, p_list integer, p_uid text, p_title text, p_full_name text, p_active boolean)|57c06fa6ae46d25c
 func|public.fin_snapshot_get(p_id text)|3d2b401ee33bd279
@@ -630,7 +632,7 @@ func|public.fin_snapshot_take(p jsonb)|cab5e32bc98752ac
 func|public.fin_snapshots_list()|3a2eceffe9c6adb6
 func|public.kassa_adv_report(p jsonb)|04f8d32694894e7b
 func|public.kassa_adv_report_void(p_id text, p_reason text)|e07212fd3b10e0d5
-func|public.kassa_checks(p_desk text)|ce8cd1715c68b219
+func|public.kassa_checks(p_desk text)|d85fa9dc3b1e28ab
 func|public.kassa_day_book(p_desk text, p_day date)|e659308b98324e16
 func|public.kassa_day_close(p jsonb)|033da9bf08cc7299
 func|public.kassa_day_reopen(p_desk text, p_day date, p_reason text)|552711197fee976c
@@ -654,7 +656,7 @@ func|public.kassa_journal(p_desk text, p_from date, p_to date)|d67fb5f5d01b22c1
 func|public.kassa_journal_export(p_desk text, p_from date, p_to date)|c2fe36b38ee75f88
 func|public.kassa_kpi(p_desk text, p_weeks integer)|dad4c51aa918bc20
 func|public.kassa_matrix(p_desk text, p_month text)|973e1ce48052cd3a
-func|public.kassa_month_pack(p_desk text, p_month text)|204bdeac201ba0ef
+func|public.kassa_month_pack(p_desk text, p_month text)|f52769c0eee6fbd3
 func|public.kassa_offset(p jsonb)|4f7a62400fbf8314
 func|public.kassa_offset_void(p_id text, p_reason text)|9897bfc090c5c6c8
 func|public.kassa_opening_set(p jsonb)|a4d8417f8195ebb1
@@ -668,7 +670,7 @@ func|public.kassa_refund_request(p jsonb)|bed1742f518f983d
 func|public.kassa_salary_pay(p jsonb)|8890bd4d4e196092
 func|public.kassa_shortage_decide(p_doc_id text, p_decision text, p_note text, p_party text)|bcc0d451b2182306
 func|public.kassa_staff_open(p_desk text, p_party text, p_month text)|8c672068449b6d79
-func|public.kassa_state(p_desk text)|0610edb4c4bb4473
+func|public.kassa_state(p_desk text)|3dc1dd4e61d0b95c
 policy|cash_counts.cash_counts_sel|c7bb2ccc4a83a1b4
 policy|cash_day_events.cash_day_events_sel|c7bb2ccc4a83a1b4
 policy|cash_days.cash_days_sel|c7bb2ccc4a83a1b4

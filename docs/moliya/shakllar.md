@@ -272,6 +272,23 @@ tomonida, EX-40), B12. Tanlovlar: B1 — dastur 1C; B15 — kassadagi tushumdan;
   nazorat ro‘yxati («Kontragent turi», «✓ Tasdiqlash»).
 Javobsiz: B3, B6, B10, B18 (izohsiz), B19 (19-dekabrgacha), B20 ikkinchi qismi.
 
+**Egasi qarori (2026-11-26): buxgalter javobini kutmasdan — eng qulay va foydali variant tizimda ishga tushirildi (modul relizi 16).**
+Buxgalter imzo paytida (12-dekabrgacha; B19 — 19-dekabrgacha) «Tuzatish» ustunida boshqacha yozsa — tuzatiladi.
+- B3, B6, B10, B18 — «Tizimda hozir» ustunidagi tavsiya amalda qoldi (FD-05, FD-10, FD-14 — L1 = 0, FD-48).
+- B15 (inkassatsiya) — buxgalter tartibi qabul qilindi: naqd pul **har juma** bankka topshiriladi (standart jadval); kunlar va
+  topshirilgandan keyin kassada qoldiriladigan maydalik — «Kassa» → «⚙ Sozlamalar» → «Bankka topshirish (inkassatsiya) kunlari».
+  Jadvaldagi kunda kassirga eslatma (kassadagi qoldiq, maydalik va topshiriladigan summa; «Bankka topshirish» orderi yozilgach
+  yo‘qoladi), nazorat ro‘yxatida — oxirgi 30 kunda o‘tkazib yuborilgan topshirish kunlari. Kassa limiti bank bilan kelishiladi:
+  «⚙ Sozlamalar»da bankka ariza uchun tavsiya (oxirgi 92 kundagi o‘rtacha kunlik naqd tushum × topshirish oralig‘i); kelishilgan
+  limit «Kassa limiti» maydoniga kiritiladi (tizim faqat ogohlantiradi). «Limit 0 — har kuni bankka» (FD-22) bekor.
+- B19 — oylik kassa to‘plamida (Excel) **«E7 Vedomost»** varag‘i: har xodim bo‘yicha hisoblangan, ushlanma, o‘rinbosarlik, avans,
+  oldingi qoldiq, to‘lanadigan va to‘langan (naqd, karta, o‘zaro hisob, boshqa) — buxgalter 1C dagi ish haqi fondi bilan solishtiradi
+  va yozma tasdiqlaydi (19-dekabr; FD-44).
+- B20 — oylik to‘plamda **«E5 O‘zaro hisob»** (ish haqidan farzandining o‘quv to‘lovi: dalolatnoma, ish haqi oyi, xodim, o‘quvchi,
+  summa; xodim bo‘yicha jami — daromad solig‘i imtiyozi uchun; F2.16) va **«E6 Xodim farzandi»** (chegirma bilan hisob-fakturalar:
+  asosiy narx, chegirma, hisoblangan) — chegirma moddiy naf hisoblanadimi va soliq bazasiga kiritiladimi, buxgalter xulosasi bilan
+  (tizim soliq hisoblamaydi). Direktor faylida ismlar bilan, Moliya menejeri va buxgalterga — ismsiz (FD-28).
+
 21-noyabrdagi vaqtincha ko‘rik (B1–B13, buyruq namunalari, shakllar): ☐ o‘tkazildi, sana [___]; tuzatishlar: ☐ yo‘q ☐ ilovada, [___] varaq
 
 Umumiy xulosa: ☐ hammasiga roziman ☐ «Tuzatish» ustunidagi o‘zgarishlar bilan roziman

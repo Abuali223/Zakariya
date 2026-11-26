@@ -1433,6 +1433,40 @@ end $$;
 revoke all on function public.kassa_shortage_decide(text, text, text, text) from public, anon;
 grant execute on function public.kassa_shortage_decide(text, text, text, text) to authenticated;
 
+-- ---------- Bankka topshirish (inkassatsiya) jadvali va kassa limiti tavsiyasi (Sh-8 B15) ----------
+--   Buxgalter (2026-11-26): naqd pul har kuni emas, har juma bankka topshiriladi; egasi qarori (2026-11-26): shu tartib — standart, kassa
+--   limiti bank bilan kelishiladi (⚙ Sozlamalar — «Kassa limiti»; tizim faqat ogohlantiradi, FD-22). Jadval — fin_org.extra:
+--   depositDays — ISO hafta kunlari (1 — dushanba … 7 — yakshanba; kalit yo'q — [5], juma; bo'sh massiv — jadval yo'q), depositKeep —
+--   topshirilgandan keyin kassada qoldiriladigan summa (maydalik; yo'q — 0). Topshirish — «Bankka topshirish» chiqim orderi (out_bank).
+create or replace function app.kassa_deposit_cfg(out days int[], out keep numeric)
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select array_agg((x #>> '{}')::int order by (x #>> '{}')::int)
+                     from jsonb_array_elements(case when jsonb_typeof(o.extra -> 'depositDays') = 'array' then o.extra -> 'depositDays' else '[5]'::jsonb end) x
+                    where (x #>> '{}') ~ '^[1-7]$'), '{}'::int[]),
+         coalesce(case when (o.extra ->> 'depositKeep') ~ '^[0-9]+(\.[0-9]+)?$' then (o.extra ->> 'depositKeep')::numeric end, 0)
+    from public.fin_org o where o.id = 'main'
+$$;
+revoke all on function app.kassa_deposit_cfg() from public, anon, authenticated;
+-- Kassa limiti tavsiyasi (bankka ariza uchun; faqat tavsiya — limitni bank belgilaydi): oxirgi 92 kundagi (bugungisiz) naqd tushum (kirim
+--   orderlarining naqd qatorlari; bankdan olingan naqd, yo'ldagi pul va o'z hisoblaridan o'tkazma — yo'q) / shu davrdagi kassa kunlari
+--   (tushum qaysi kunlardan olingan bo'lsa — o'sha kunlar; kecha yopilmay qolgan kun ham) × topshirish oralig'i (5 ish kunlik hafta /
+--   jadvaldagi kunlar soni, yuqoriga; jadval yo'q — 1 kun), mingga yuqoriga yaxlitlangan.
+create or replace function app.kassa_limit_hint(p_desk text, p_days int[]) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  with r as (select coalesce(sum(l.amount), 0) as s
+               from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
+              where c.desk = p_desk and c.form = 'KO1' and c.status = 'posted' and l.cash and l.credit not in ('5110', '5710', '5530')
+                and c."businessDay" between app.fin_today() - 92 and app.fin_today() - 1),
+       d as (select count(*) as n from public.cash_days x
+              where x.desk = p_desk and x.day between app.fin_today() - 92 and app.fin_today() - 1),
+       v as (select r.s, d.n, case when d.n > 0 then round(r.s / d.n) else 0 end as avg_,
+                    case when cardinality(coalesce(p_days, '{}'::int[])) = 0 then 1 else ceil(5.0 / cardinality(p_days))::int end as iv
+               from r, d)
+  select jsonb_build_object('receipts', v.s, 'days', v.n, 'avgDaily', v.avg_, 'interval', v.iv, 'suggest', ceil(v.avg_ * v.iv / 1000.0) * 1000)
+    from v
+$$;
+revoke all on function app.kassa_limit_hint(text, int[]) from public, anon, authenticated;
+
 -- ---------- O'qish: «Kassa» kun kartasi ----------
 create or replace function public.kassa_state(p_desk text default 'main') returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -1514,6 +1548,15 @@ begin
     'undecidedShortages', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null),
     'accOverdue', app.kassa_acc_overdue(v_desk, v_today),   -- eslatma (F1.24): avans hisoboti muddati o'tgan hisobdorlar
     'limit', jsonb_build_object('cashLimit', v_o."cashLimit", 'set', v_o."cashLimit" > 0, 'exceeded', v_o."cashLimit" > 0 and coalesce(v_bal, 0) > v_o."cashLimit"),
+    -- Sh-8 B15: bankka topshirish kuni (bugun jadvalda bo'lsa — eslatma; bugun topshirilgan bo'lsa — yo'q), topshiriladigan summa (qoldiq −
+    --   qoldiriladigan), kassa limiti tavsiyasi (bankka ariza uchun)
+    'deposit', (select jsonb_build_object('days', to_jsonb(coalesce(dc.days, '{}'::int[])), 'keep', coalesce(dc.keep, 0),
+                                          'today', extract(isodow from v_today)::int = any(coalesce(dc.days, '{}'::int[])),
+                                          'amount', greatest(0, coalesce(v_bal, 0) - coalesce(dc.keep, 0)),
+                                          'doneToday', exists (select 1 from public.cash_docs c where c.desk = v_desk and c.op = 'out_bank'
+                                                                  and c.status = 'posted' and c."businessDay" = v_today),
+                                          'limitHint', app.kassa_limit_hint(v_desk, dc.days))
+                  from app.kassa_deposit_cfg() dc),
     't1', v_o.t1, 'l1', v_o.l1, 'kassaGoLive', v_o."kassaGoLive", 'printLang', v_o."printLang", 'lockedThrough', v_o."lockedThrough",
     'counters', (select coalesce(jsonb_object_agg(k.series, k."lastNo"), '{}'::jsonb) from public.doc_counters k
                   where k.desk = v_desk and k.year = extract(year from v_today)::int),
@@ -1832,10 +1875,12 @@ end $$;
 revoke all on function public.kassa_matrix(text, text) from public, anon;
 grant execute on function public.kassa_matrix(text, text) to authenticated;
 
--- ---------- O'qish: buxgalter uchun oylik kassa to'plami (F1.22; E1–E4 — eksport to'plamining kassa qismi) ----------
+-- ---------- O'qish: buxgalter uchun oylik kassa to'plami (F1.22; E1–E7 — eksport to'plamining kassa va ish haqi qismi) ----------
 --   Bitta javob — bitta XLSX kitob: E1 KO-3 (kassa_journal_export, FD-28), E2 statiya matritsasi (kassa_matrix), E3 kassa kunlari
 --   (KO-4 jamlari, sanash va farq — yopishdagi va smena topshirishdagi (acc-6), tekshirilganmi, Z-hisobot), E4 hisobdorlar (oy boshi,
---   berildi, qaytdi, hisobot, oy oxiri).
+--   berildi, qaytdi, hisobot, oy oxiri); Sh-8 qarorlari (2026-11-26): E5 o'zaro hisob — JShDS imtiyozi uchun (B20, F2.16), E6 xodim
+--   farzandi chegirmasi — moddiy naf bo'yicha buxgalter xulosasi uchun ma'lumot (B20), E7 vedomost va to'lovlar — ish haqi fondi bilan
+--   solishtirish (B19).
 --   Moliya menejeri / buxgalter va Direktor; 2-ro'yxatga ismsiz (xodim — tabel kodi bilan), Direktorga to'liq. Kassir — yo'q.
 create or replace function public.kassa_month_pack(p_desk text, p_month text) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
@@ -1882,7 +1927,66 @@ begin
                                      and case when v_test then c.desk = v_desk
                                               else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
                                    group by c."partyId") a
-                           where a.op <> 0 or a.iss <> 0 or a.ret <> 0 or a.rep <> 0), '[]'::jsonb));
+                           where a.op <> 0 or a.iss <> 0 or a.ret <> 0 or a.rep <> 0), '[]'::jsonb),
+    -- E5 (Sh-8 B20; F2.16): o'zaro hisob — xodimning ish haqidan farzandining o'quv to'lovi (o'zaro hisob dalolatnomalari «ЎҲ-», o'tkazilgan,
+    --   shu oy sanasi bilan): daromad solig'i (JShDS) imtiyozi uchun xodim, oy (qaysi oy ish haqi hisobidan) va summa bo'yicha
+    'offsets', coalesce((select jsonb_agg(jsonb_build_object(
+                                'day', c."businessDay", 'no', c.no, 'month', c."sourceSnapshot" ->> 'month',
+                                'code', app.kassa_mask_party('employee', c."partyId", null, false) ->> 'partyId',
+                                'partyName', case when v_dir then app.kassa_party_label('employee', c."partyId") end,
+                                'studentId', c."sourceSnapshot" ->> 'studentId',
+                                'studentName', case when v_dir then c."sourceSnapshot" ->> 'studentName' end,
+                                'amount', c.amount)
+                              order by c."businessDay", c.no)
+                         from public.cash_docs c
+                        where c.op = 'nc_offset' and c.status = 'posted' and c."businessDay" between v_from and v_to
+                          and case when v_test then c.desk = v_desk
+                                   else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end), '[]'::jsonb),
+    -- E6 (Sh-8 B20, 2-qism — moddiy naf, SK 376): xodim farzandi chegirmasi bilan shu oy hisob-fakturalari (bekor qilinmagan): asosiy
+    --   narx, chegirma, hisoblangan summa; xodim — «xodim farzandi» bog'lanishidagi kod. Soliq bazasiga kiritish — buxgalter xulosasi
+    --   bo'yicha (tizim hisoblamaydi). Sinov kassasi to'plamida — yo'q (kassa ma'lumoti emas).
+    'staffDiscounts', case when v_test then '[]'::jsonb else coalesce((select jsonb_agg(jsonb_build_object(
+                                'studentId', coalesce(nullif(st.sid, ''), i."studentId"),
+                                'studentName', case when v_dir then coalesce(nullif(st.nm, ''), i."studentName") end,
+                                'employee', nullif(btrim(coalesce(pv."teacherId", '')), ''),
+                                -- bog'lanish kaliti — o'qituvchi yoki xodim ID'si (id-guards.sql 9: coalesce(teacherId / staffId, id))
+                                'employeeName', case when v_dir then coalesce(
+                                    (select nullif(btrim(t.name), '') from public.teachers t
+                                      where coalesce(nullif(t."teacherId", ''), t.id) = pv."teacherId" order by t.id limit 1),
+                                    (select nullif(btrim(x.name), '') from public.staff x
+                                      where coalesce(nullif(x."staffId", ''), x.id) = pv."teacherId" order by x.id limit 1)) end,
+                                'base', coalesce(i."baseAmount", i.amount), 'discount', coalesce(i.discount, coalesce(i."baseAmount", i.amount) - i.amount),
+                                'amount', i.amount, 'status', i.status)
+                              order by nullif(btrim(coalesce(pv."teacherId", '')), ''), coalesce(nullif(st.sid, ''), i."studentId"))
+                         from public.invoices i
+                         left join lateral (select s.id, s."studentId" as sid, s.name as nm from public.students s
+                                             where s.id = i."studentId" or s."studentId" = i."studentId"
+                                             order by (s.id = i."studentId") desc limit 1) st on true
+                         left join public.student_private pv on pv.id = st.id
+                        -- (yorliq 2026-08-20 gacha «O'qituvchi farzandi 50%», keyin «Xodim farzandi 50%» — admin.html; ikkalasi ham)
+                        where i.month = p_month and coalesce(i."discountInfo", '') ~* '(xodim|o.qituvchi) farzandi'
+                          and coalesce(i.status, '') not in ('canceled', 'reversed')), '[]'::jsonb) end,
+    -- E7 (Sh-8 B19 — tizim vedomosti = ish haqi fondi): shu oy vedomosti (holati) va har xodim bo'yicha hisoblangan, ushlanma, o'rinbosarlik,
+    --   avans, oldingi qoldiq, to'lanadigan va to'langan (naqd — kassa, karta, o'zaro hisob, hisobdor orqali) — buxgalter 1C dagi ish haqi
+    --   fondi bilan solishtiradi. Sinov kassasi to'plamida — yo'q.
+    'payroll', case when v_test then null else (select jsonb_build_object('status', r.status, 'approvedAt', r."approvedAt",
+                                'lines', coalesce((select jsonb_agg(jsonb_build_object(
+                                    'code', l."personId", 'type', l."personType", 'name', case when v_dir then l.name end,
+                                    'gross', l.gross, 'deduction', l.deduction, 'subBonus', l."subBonus", 'advance', l.advance,
+                                    'carryIn', l."carryIn", 'payable', l.payable,
+                                    'paidCash', coalesce(sp.cash, 0), 'paidCard', coalesce(sp.card, 0), 'paidOffset', coalesce(sp.ofs, 0),
+                                    'paidOther', coalesce(sp.oth, 0))
+                                  order by l."personType", l."personId")
+                                  from public.payroll_lines l
+                                  -- berilgani — yozuvlarning «paid» yig'indisi (bo'sh — 0): vedomost darvozasi va payroll_submit dagi ortiqcha
+                                  --   to'lov hisobi bilan bir xil (payroll-approval.sql); usuli bo'sh — kassagacha yozilgan naqd
+                                  left join lateral (select sum(coalesce(x.paid, 0)) filter (where coalesce(x.method, 'cash') = 'cash') as cash,
+                                                            sum(coalesce(x.paid, 0)) filter (where x.method = 'card') as card,
+                                                            sum(coalesce(x.paid, 0)) filter (where x.method = 'offset') as ofs,
+                                                            sum(coalesce(x.paid, 0)) filter (where coalesce(x.method, 'cash') not in ('cash', 'card', 'offset')) as oth
+                                                       from public.salary_payments x where x.month = p_month and x."teacherId" = l."personId") sp on true
+                                 where l."runId" = r.id), '[]'::jsonb))
+                           from public.payroll_runs r where r.id = p_month) end);
 end $$;
 revoke all on function public.kassa_month_pack(text, text) from public, anon;
 grant execute on function public.kassa_month_pack(text, text) to authenticated;
@@ -2105,6 +2209,17 @@ begin
                                   and (u.role in ('treasurer', 'finance_mgr', 'accountant') or app.u_has(u.role, u."extraRoles", 'kassir'))
                                   and cardinality(app.kassa_user_cards(u.id)) = 0), '[]'::jsonb),
     'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
+    -- Sh-8 B15: bankka topshirish jadvali va oxirgi 30 kunda o'tkazib yuborilgan topshirish kunlari — jadvaldagi (yopilgan) kun oxirida
+    --   qoldiq qoldiriladigan summadan ko'p bo'lgan, o'sha kuni «Bankka topshirish» orderi yo'q. Sinov kassasida — yo'q (bankka topshirilmaydi)
+    'deposit', case when not v_test then (select jsonb_build_object('days', to_jsonb(coalesce(dc.days, '{}'::int[])), 'keep', coalesce(dc.keep, 0))
+                                            from app.kassa_deposit_cfg() dc) end,
+    'depositMissed30', case when v_test then '[]'::jsonb else coalesce((select jsonb_agg(d.day order by d.day)
+                                   from public.cash_days d cross join app.kassa_deposit_cfg() dc
+                                  where d.desk = v_desk and d.status <> 'open' and d.day between v_today - 30 and v_today - 1
+                                    and extract(isodow from d.day)::int = any(coalesce(dc.days, '{}'::int[]))
+                                    and coalesce(d.closing, 0) > coalesce(dc.keep, 0)
+                                    and not exists (select 1 from public.cash_docs c where c.desk = d.desk and c.op = 'out_bank'
+                                                       and c.status = 'posted' and c."businessDay" = d.day)), '[]'::jsonb) end,
     -- F2.13: Direktor qarorini kutayotgan qayta tasnif so'rovlari va oxirgi 30 kunda tasdiqlanganlari (kassa-fix.sql)
     'fixPending', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'pending'),
     'fixes30', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'approved' and f."actDay" >= v_today - 30),
