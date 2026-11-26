@@ -752,7 +752,10 @@ async function openDocForm(form) {
       ${STAFF_OPS.includes(r.op) ? `<div class="small" id="kf-staff" style="display:none;margin-top:8px;background:#eef3f1;border-radius:10px;padding:10px 12px"></div>` : ''}
       ${multi ? `<div class="small" style="font-weight:700;margin-top:10px">Statiya va summa <span class="muted" style="font-weight:500">— bir hujjatda bir nechta statiya bo‘lishi mumkin</span></div><div id="kf-lines"></div><button type="button" class="btn sm" id="kf-addline" style="margin-top:6px">+ qator</button>`
         : lbl('Summa (so‘m)', `<input id="kf-amt" type="text" inputmode="numeric" placeholder="0" style="${FLD}">`)}
-      ${lbl('Asos <span class="muted" style="font-weight:500">— hujjat nomi, raqami, sanasi</span>', `<input id="kf-basis" type="text" maxlength="300" style="${FLD}">`)}
+      ${r.op === 'out_handover'
+        ? lbl('Asos va maqsadi <span class="muted" style="font-weight:500">— buyruq yoki ariza; nima uchun berilmoqda (masalan: qaytariladigan qarz, xizmat xarajati — hisobot bilan)</span>', `<input id="kf-basis" type="text" maxlength="300" style="${FLD}">`)
+          + `<div class="small" style="margin-top:6px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px">Rahbar / ta’sischiga berilgan pul xarajat emas — qarz (4290 / 4890): o‘sha oy ichida qaytariladi yoki hisobot bilan yopiladi. <b>Dividend (foyda ulushi) kassadan berilmaydi</b> — faqat bank hisob raqamidan (buxgalter qarori, Sh-8 B7 / B13).</div>`
+        : lbl('Asos <span class="muted" style="font-weight:500">— hujjat nomi, raqami, sanasi</span>', `<input id="kf-basis" type="text" maxlength="300" style="${FLD}">`)}
       ${r.op === 'out_expense' ? `<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="kf-nobasis" style="${CHK}"> Asos hujjati yo‘q (bozordan naqd xarid) — faqat ${esc(som(ST.ov.state.l1))}gacha va bitta statiya</label>` : ''}
       ${lbl('Ilova <span class="muted" style="font-weight:500">— ixtiyoriy</span>', `<input id="kf-attach" type="text" maxlength="300" style="${FLD}">`)}
       ${lbl('Izoh' + (r.op === 'in_other' ? ' <span style="color:#B42318">(majburiy)</span>' : ''), `<input id="kf-note" type="text" maxlength="300" style="${FLD}">`)}

@@ -27,7 +27,9 @@ Buxgalteriya hisobi to‘g‘risidagi qonunning 13-moddasiga muvofiq **BUYURAMAN
    qarorni direktor qabul qiladi.
 4. 2-ro‘yxat imzosi bo‘lmagan pul hujjati haqiqiy emas (3-banddagi istisnolar bundan mustasno — ularning asosi o‘sha bandda
    ko‘rsatilgan va hujjatga ilova qilinadi).
-5. Buyruq ijrosini nazorat qilish o‘z zimmamda qoladi.
+5. Kassa kirim orderi (KO-1) va unga pattadagi «Bosh buxgalter» qatorini pulni qabul qilgan kassir (g‘aznachi) yoki uning
+   o‘rinbosari imzolaydi (bosh buxgalter qarori, 2026-11-26; tizim bu qatorga kassir ismini chop etadi).
+6. Buyruq ijrosini nazorat qilish o‘z zimmamda qoladi.
 
 ## 2-buyruq. Doimiy inventarizatsiya komissiyasini tuzish
 BHMS 19 ga muvofiq **BUYURAMAN:**

@@ -66,10 +66,13 @@ test('KO-1 + patta: o‘zbek kirill — barcha rekvizitlar', () => {
     'Олинди: Sinov Ota Onaevich (ўқувчи: IQS-0042)', 'Асоси: Ўқув тўлови: 01.2027 + аванс',
     'Сумма: 2 350 000=00 — Икки миллион уч юз эллик минг сўм 00 тийин', 'Иловаси:', 'Фискал чек №: 000123456789',
     'Маълумот учун, нақд пулсиз ёзув: Дебет 6310 — Кредит 4010: 150 000=00',
-    'Бош бухгалтер Синов Б.Б.', 'Қабул қилди: кассир Sinov Kassir', 'Тўловчи',
+    'Бош бухгалтер Sinov Kassir', 'Қабул қилди: кассир Sinov Kassir', 'Тўловчи',
     'Ҳужжат: cd_0001 · чоп этилди: 04.01.2027 10:11, Sinov Kassir',
     'ПАТТА кирим касса ордерига № 12', 'М.Ў.', 'Фискал чек эмас']) assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
   assert.equal(count(t, 'Олинди:'), 2, 'order va pattada');
+  // Sh-8 B16 (buxgalter, 2026-11-26): «Бош бухгалтер» qatorini kassir imzolaydi — order va pattada kassir ismi, 2-ro'yxat ismi yo'q
+  assert.equal(count(t, 'Sinov Kassir'), 5, 'order: «Бош бухгалтер», «Қабул қилди» va pastki «чоп этилди»; patta: «Бош бухгалтер» va «Кассир»');
+  assert.ok(!t.includes('Синов Б.Б.'), 'kirim orderida 2-ro‘yxat ismi chiqmaydi');
   assert.equal(count(t, 'НУСХА'), 0); assert.equal(count(t, 'СИНОВ'), 0); assert.equal(count(t, 'БЕКОР ҚИЛИНГАН'), 0);
   assert.ok(!t.includes('O‘quv to‘lovi'), 'tizim matni chop etish tilida qayta tuziladi');
 });
@@ -88,7 +91,7 @@ test('KO-1: rus va lotin', () => {
   const r = text(docHtml(ko1, ctx({ lang: 'ru' }), W));
   for (const must of ['ООО «SINOV MAKTAB»', 'ИНН: 123456789', 'ПРИХОДНЫЙ КАССОВЫЙ ОРДЕР № 12', '4 января 2027 г.', 'Принято от: Sinov Ota Onaevich (учащийся: IQS-0042)',
     'Основание: Оплата за обучение: 01.2027 + аванс', 'Сумма: 2 350 000=00 — Два миллиона триста пятьдесят тысяч сумов 00 тийин', 'Приложение:', 'Фискальный чек №: 000123456789',
-    'Код целевого назначения', 'Главный бухгалтер Синов Б.Б.', 'Получил кассир Sinov Kassir', 'Плательщик', 'КВИТАНЦИЯ к приходному кассовому ордеру № 12', 'М.П.', 'Не является фискальным чеком'])
+    'Код целевого назначения', 'Главный бухгалтер Sinov Kassir', 'Получил кассир Sinov Kassir', 'Плательщик', 'КВИТАНЦИЯ к приходному кассовому ордеру № 12', 'М.П.', 'Не является фискальным чеком'])
     assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
   const l = text(docHtml(ko1, ctx({ lang: 'uz-latn' }), W));
   for (const must of ['KIRIM KASSA ORDERI № 12', '2027-yil 4-yanvar', 'Olindi: Sinov Ota Onaevich (o‘quvchi: IQS-0042)', 'Asosi: O‘quv to‘lovi: 01.2027 + avans',

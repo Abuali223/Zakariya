@@ -229,7 +229,7 @@ buyruq va «⚙ Sozlamalar»da); hisob siyosati to‘plami repozitoriyga kiritil
 
 | № | Nima qaror qilinadi | Tizimda hozir (tavsiya) | Muddat | Roziman | Tuzatish (yozing) |
 |---|---|---|---|---|---|
-| B1 | Kassa qismi (hisobvaraqlar, statiyalar, operatsiyalar), buyruq namunalari, qog‘oz shakllar (Sh-1…Sh-7); ish rejimi; buxgalteriya dasturi | Ish rejimi A: tizim kassa hujjatlari va boshqaruv hisobini yuritadi, rasmiy registrlar buxgalter dasturida qoladi (FD-03); oylik Excel to‘plam buxgalter dasturiga moslanadi — dastur nomi: [___] | 21.11 vaqtincha / 12.12 | ☐ | |
+| B1 | Kassa qismi (hisobvaraqlar, statiyalar, operatsiyalar), buyruq namunalari, qog‘oz shakllar (Sh-1…Sh-7); ish rejimi; buxgalteriya dasturi | Ish rejimi A: tizim kassa hujjatlari va boshqaruv hisobini yuritadi, rasmiy registrlar buxgalter dasturida qoladi (FD-03); oylik Excel to‘plam buxgalter dasturiga moslanadi — dastur nomi: **1C** (buxgalter, 2026-11-26; 1C ga yuklash — reja F2.15) | 21.11 vaqtincha / 12.12 | ☐ | |
 | B2 | Kassa kitobi (KO-4) tarkibi | Faqat naqd pul (5010); naqdsiz to‘lov va o‘zaro hisob — varaqda faqat ma’lumot blokida (FD-04) | 21.11 / 12.12 | ☐ | |
 | B3 | Hujjatlarni raqamlash | KO-1 va KO-2 alohida; har yili 1-yanvardan 1 dan, uzilishsiz, raqamni server beradi; KO-4 varaqlari ham 1 dan; dalolatnoma, o‘zaro hisob va avans hisobotining o‘z raqamlari (FD-05) | 21.11 / 12.12 | ☐ | |
 | B4 | Chop etish ko‘rinishi | O‘zbek kirill (rus va lotin ham bor; tilni Direktor «⚙ Sozlamalar»da tanlaydi); summa «1 234 567=89»; KO-4 ikki nusxa; pul harakati bo‘lmagan kunga varaq chiqmaydi (FD-07) | 21.11 / 12.12 | ☐ | |
@@ -243,13 +243,34 @@ buyruq va «⚙ Sozlamalar»da); hisob siyosati to‘plami repozitoriyga kiritil
 | B12 | Kechki sanashdagi farq | Ruxsat etilgan farqsiz; o‘sha kuni hujjat: kamomad — 5910, ortiqcha — 9390; kamomad bo‘yicha Direktor qarori: xodimdan undirish (4730 — yozma rozilik yoki moddiy javobgarlik shartnomasi bilan) yoki xarajatga (9430) (FD-21) | 21.11 / 12.12 | ☐ | |
 | B13 | Rahbar yoki ta’sischiga kassadan pul | Xarajat emas — qarz: xodim — 4290, ta’sischi — 4890; o‘sha oy ichida tasniflanadi (dividend, ish haqi yoki hisobdan chiqarish); har doim Direktor tasdig‘i; iloji boricha bank orqali (FD-26) | 21.11 / 12.12 | ☐ | |
 | B14 | Kassadan olingan oziq-ovqat | 1010 (materiallar) + oy oxirida chiqim dalolatnomasi + har chorakda inventarizatsiya; oziq-ovqat statiyasi tizimda hozir 1010 ga bog‘langan — yanvar orderlariga shu yoziladi; variant — darhol xarajat; oshxona idishlari va kitoblar — 1080 + 014 (FD-31) | 12.12 | ☐ | |
-| B15 | Ota-onaga naqd qaytarish puli manbai | Tavsiya yo‘q — buxgalter tanlaydi. Qolgan tartib belgilangan: Direktor tasdiqlaydi va usulni tanlaydi, kassir chiqim orderi bilan beradi; 1 bank kunidan ko‘p kechiksa ogohlantirish (FD-25) | 12.12 | — | ☐ kassadagi tushumdan ☐ avval bankdan olinadi |
-| B16 | Imzo tartibi; kirim orderi (KO-1) va pattadagi «Bosh buxgalter» qatori | 1-ro‘yxat — Direktor va buyruq bilan tayinlangan o‘rinbosar (moliya menejeri emas); 2-ro‘yxat — bosh buxgalter va moliya menejeri; har chiqim orderiga ikki xil shaxs imzo qo‘yadi, 2-ro‘yxat tasdig‘i pul berilishidan oldin (FD-08). «Bosh buxgalter» qatori bo‘yicha tavsiya yo‘q | 12.12 | ☐ | «Bosh buxgalter» qatori: ☐ buxgalter ☐ moliya menejeri |
+| B15 | Ota-onaga naqd qaytarish puli manbai | Buxgalter tanlovi (2026-11-26): **kassadagi tushumdan** (bankdan naqd olish — 1 % xizmat haqi va vaqt). Qolgan tartib belgilangan: Direktor tasdiqlaydi va usulni tanlaydi, kassir chiqim orderi bilan beradi; 1 bank kunidan ko‘p kechiksa ogohlantirish (FD-25) | 12.12 | — | ☑ kassadagi tushumdan ☐ avval bankdan olinadi |
+| B16 | Imzo tartibi; kirim orderi (KO-1) va pattadagi «Bosh buxgalter» qatori | 1-ro‘yxat — Direktor va buyruq bilan tayinlangan o‘rinbosar (moliya menejeri emas); 2-ro‘yxat — bosh buxgalter va moliya menejeri; har chiqim orderiga ikki xil shaxs imzo qo‘yadi, 2-ro‘yxat tasdig‘i pul berilishidan oldin (FD-08). KO-1 va pattadagi «Bosh buxgalter» qatori — buxgalter tanlovi (2026-11-26): **kassir** (pul bilan kassir ishlaydi); tizim shu qatorga kassir ismini chop etadi, 1-buyruq 5-band | 12.12 | ☐ | «Bosh buxgalter» qatori: ☑ kassir ☐ buxgalter ☐ moliya menejeri |
 | B17 | Naqd maosh | Faqat kassir beradi — har xodimga alohida chiqim orderi va oylik to‘lov qaydnomasi bilan; tasdiqlangan vedomost (qaytarishda — Direktor tasdig‘i) orderdagi rahbar tasdig‘i o‘rnini bosadi; karta orqali to‘lovni moliya menejeri yozadi; o‘zaro hisobni (ish haqidan farzandining o‘quv to‘lovi) — Direktor, xodimning yozma arizasi bilan (FD-15) | 12.12 | ☐ | |
 | B18 | Direktorga beriladigan pul (avans, naqd maosh, rahbarga berish) | Direktor bosqichini Direktor o‘zi imzolaydi, 2-ro‘yxat tasdig‘i baribir kerak, pulni faqat kassir beradi; 2-ro‘yxat xodimi o‘ziga beriladigan pulni o‘zi tasdiqlamaydi; vedomost tasdig‘iga o‘tishdan oldingi oy uchun Direktor maoshi faqat karta orqali (FD-48) | 12.12 | ☐ | |
 | B19 | Tizim vedomosti = ish haqi fondi | Buxgalter tizimdagi vedomost o‘z hisobotidagi ish haqi fondiga mosligini yozma tasdiqlaydi; mos kelmasa — tuzatish rejasi bilan (FD-44, G3) | 19.12 | ☐ | |
 | B20 | O‘zaro hisob va moddiy naf | Xodim farzandining o‘quv to‘lovini ish haqidan ushlash — dalolatnoma + yozma ariza + Direktor tasdig‘i; xodim farzandiga chegirma moddiy naf (SK 376-modda) hisoblanadimi — buxgalterning yozma xulosasi (FD-24) | 12.12 | ☐ | Xulosa: |
 | B21 | Kontragentlar turi va STIR | Ishga tushishdan oldin doimiy kontragentlar turi va STIR tekshiriladi: korxona — «Yetkazib beruvchi» yoki «Tashkilot», yakka tadbirkor va fuqaro — «Jismoniy shaxs», bank — «Bank»; yuridik shaxsga kassadan naqd to‘lov chegarasi — 0 (har biri Direktor tasdig‘i bilan; egasi qarori; FD-47) | 12.12 | ☐ | |
+
+**Buxgalterning yozma izohlari (2026-11-26, imzodan oldin; varaq 12-dekabrgacha imzolanadi).** Rozi: B2 (naqdsiz — bank hisob raqami
+5110 va korporativ karta 5530; o‘zaro hisob — pulsiz yozuv), B4, B5, B8, B9 (bankdan naqd olishda bank 1 % xizmat haqi oladi — bank
+tomonida, EX-40), B12. Tanlovlar: B1 — dastur 1C; B15 — kassadagi tushumdan; B16 — «Bosh buxgalter» qatori — kassir. Izoh bilan:
+- B7 / B13 — kassadan soliq to‘lanmaydi; dividend (foyda ulushi) kassadan emas, faqat bank hisob raqamidan; rahbar / ta’sischiga
+  berilgan pulning maqsadi o‘sha joyning o‘zida yozilsin (tizimda «Asos va maqsadi» maydoni majburiy, dividend haqida ogohlantirish).
+- B11 — 1 kundan keyin tuzatib bo‘lmasligi hisobda xato qoldiradi, Direktor ruxsati bilan tuzatish kerak. Javob: kassa hujjatining
+  o‘zi (summa, sana, imzolar) Nizom 143 (25-band) bo‘yicha o‘zgartirilmaydi; hisobdagi xato (statiya, hisobvaraq, tomon, asos izohi)
+  — qayta tasnif dalolatnomasi bilan, buxgalter kiritadi, Direktor tasdiqlaydi (reja F2.13; F4.8 dan oldinga tortildi). Summa xatosi
+  kun yakunidagi sanashda kamomad / ortiqcha bo‘lib chiqadi (B12).
+- B14 — oziq-ovqat 1010 ga kiradi; sarf — oy yakunida kalkulyatsiya (ishlatilgan mahsulotlar) bo‘yicha, oy keyingi oyning
+  10-sanasigacha yopiladi.
+- B15 — naqd pul har kuni bankka topshirilmaydi, inkassatsiya — har juma (egasining FD-22 qaroriga zid: limit 0 — ortgan naqd pul
+  har kuni bankka; bank bilan kassa limiti kelishilishi kerak — egasi qarori).
+- B17 — naqd maosh vedomost bilan, imzo bilan; bir-birining maoshini ko‘rmasligi uchun har xodimga bitta qaydnoma, o‘quv yili davomida
+  (reja F2.14); karta — bank-mijoz orqali, buxgalter.
+- B20 — o‘z farzandining o‘qishi uchun ish haqidan to‘langan summa daromad solig‘idan (12 %) ozod qilinadi (o‘zaro hisob ro‘yxati —
+  reja F2.16); chegirma moddiy naf hisoblanadimi — javob kutilmoqda.
+- B21 — tekshirish joyi: «Buxgalteriya» → «🏢 Kontragentlar» (karta: tur, STIR; buxgalter saqlasa — tur tasdiqlanadi) va «Kassa» →
+  nazorat ro‘yxati («Kontragent turi», «✓ Tasdiqlash»).
+Javobsiz: B3, B6, B10, B18 (izohsiz), B19 (19-dekabrgacha), B20 ikkinchi qismi.
 
 21-noyabrdagi vaqtincha ko‘rik (B1–B13, buyruq namunalari, shakllar): ☐ o‘tkazildi, sana [___]; tuzatishlar: ☐ yo‘q ☐ ilovada, [___] varaq
 

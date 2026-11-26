@@ -3398,6 +3398,28 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
 - **Egasi uchun:** kassa moduli hali `--dev` — F2.2 prod'da jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr; `ishga-tushirish.md`
   3.3 ga eslatma). Mavjud kontragentlarning rekvizitlarini buxgalter hujjatlardan to'ldiradi. Hozirgi deploy prod'ni o'zgartirmaydi.
 
+## 90) Buxgalterning Sh-8 izohlari (B1–B21) — qarorlar, kichik o'zgarishlar, F2.3 keyinga — 2026-11-26
+
+- **Egasi (2026-11-26):** buxgalterning Sh-8 varag'i bo'yicha yozma javoblari va savollari; «F2.3 ni keyinga olib qo'y».
+- **Qabul qilindi va hujjatlarga yozildi** (`docs/moliya/shakllar.md` Sh-8 — izohlar bloki, tanlovlar; ish rejasi — FD-03, 04, 08,
+  11, 13, 15, 20, 22, 24, 25, 26, 31, 47 ga «2026-11-26 — buxgalter» izohi): dastur — 1C; B2, B4, B5, B8, B9, B12 — rozi; B15 —
+  qaytarish puli kassadagi tushumdan; B16 — KO-1 va pattadagi «Bosh buxgalter» qatorini kassir imzolaydi; B7 / B13 — dividend
+  kassadan emas, maqsad joyida yoziladi; B14 — oziq-ovqat sarfi oy yakunida kalkulyatsiya bilan, keyingi oyning 10-sanasigacha;
+  B17 — har xodimga o'quv yili davomida bitta to'lov qaydnomasi; B20 — farzand o'qishi uchun ish haqidan to'lov daromad solig'idan ozod.
+- **Kodda (darhol):** `fin-print.js` — KO-1 va pattadagi «Бош бухгалтер» qatorida kassir ismi (KO-2 va dalolatnomalarda — 2-ro'yxat,
+  avvalgidek; `fin-print.test.mjs` yangilandi); `fin-kassa.js` — «Rahbar / ta'sischiga» chiqim so'rovida «Asos va maqsadi» va
+  ogohlantirish (xarajat emas — qarz; dividend kassadan berilmaydi). Buyruq namunasi — 1-buyruq 5-band (kassir imzosi).
+- **B11 qarori:** kassa hujjatini tahrirlash yo'q (Nizom 143, 25-band — kassa hujjatida tuzatish taqiqlanadi); buxgalter so'ragan
+  «Direktor ruxsati bilan tuzatish» — qayta tasnif dalolatnomasi sifatida (statiya, hisobvaraq, tomon, asos izohi; summa va sana —
+  o'zgarmaydi), reja F2.13 (F4.8 dan oldinga tortildi).
+- **Rejaga:** F2.3 — ⏸ keyinga surildi; yangi F2.13 (qayta tasnif dalolatnomasi), F2.14 (o'quv yili to'lov qaydnomasi), F2.15 (1C ga
+  yuklash), F2.16 (o'zaro hisob ro'yxati — daromad solig'i imtiyozi uchun); 2-bosqich ≈ 33 dasturchi-kun.
+- **Egasi qarori kerak:** B15 — naqd pul har juma inkassatsiya qilinadi, FD-22 esa «limit 0 — har kuni bankka»: bank bilan kassa limiti
+  kelishilishi (va «⚙ Sozlamalar»ga kiritilishi) yoki har kungi ogohlantirishga rozilik. **Buxgalterdan kutiladi:** B3, B6, B10, B18
+  (izohsiz), B19 (19-dekabrgacha), B20 ikkinchi qismi; varaq imzosi — 12-dekabrgacha.
+- **Sinovlar:** tugun sinovlari — hammasi o'tdi (fin-print 80 bilan birga); brauzer — kirim orderini chop etadigan va chiqim so'rovi
+  oynasini ishlatadigan 9 ssenariy (k1, k2, k3, k4, k7, k9, k14, k15, k16) — hammasi o'tdi. SQL o'zgarmagan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

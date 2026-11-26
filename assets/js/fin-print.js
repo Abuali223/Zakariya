@@ -354,7 +354,10 @@ function ko1Html(doc, ctx, W, t, lang) {
   const o = ctx.org || {}, tx = texts(doc, t), marks = marksOf(doc, ctx, t);
   const cash = (doc.lines || []).filter(l => l.cash !== false), nonCash = (doc.lines || []).filter(l => l.cash === false);
   const amount = money(W, doc.amount), words = W.sumWords(doc.amount, lang), date = W.fmtDateLong(iso(doc.businessDay), lang);
-  const chief = pickSign(ctx, 2, null, t.chief), cashier = doc.isSystem ? '' : (doc.postedByName || nameOf(ctx, doc.postedBy));   // sec-4: o'tkazish paytidagi ism
+  const cashier = doc.isSystem ? '' : (doc.postedByName || nameOf(ctx, doc.postedBy));   // sec-4: o'tkazish paytidagi ism
+  // KO-1 va pattadagi «Бош бухгалтер» qatorini kassada pulni qabul qilgan kassir imzolaydi (buxgalter qarori 2026-11-26, Sh-8 B16;
+  //   1-buyruq 5-band) — qatorda kassir ismi; KO-2 va dalolatnomalarda — 2-ro'yxat (pickSign) avvalgidek.
+  const chief = { title: t.chief, name: cashier };
   const fiscal = doc.fiscalNo ? esc(doc.fiscalNo) : (doc.fiscalExempt ? esc(t.fiscalExempt) : '');
   const wm = doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : '';
   const rows = (cash.length ? cash : [{ debit: '5010', credit: '', amount: doc.amount }]).map(l =>
