@@ -43,13 +43,30 @@ const errs = [];
   ok('avans yozildi', q(`select trim_scale(amount)::text from public.staff_advances where "teacherId"='IQX-001'`) === '150000', q(`select * from public.staff_advances`));
   await pg.click('#av-close').catch(() => {}); await pg.waitForTimeout(700);
   // xarajat
-  await pg.waitForSelector('#ac-add'); await pg.click('#ac-add'); await pg.waitForSelector('#e-save', { timeout: 10000 });
-  ok('xarajat oynasi: to‘lov usuli so‘ralmaydi (avvalgidek)', !(await pg.$('#e-method')) && !(await pg.$('#e-kassa')));
-  await pg.selectOption('#e-cat', 'Kommunal'); await pg.fill('#e-amt', '900 000'); await pg.fill('#e-note', 'Sinov kommunal (eski yo‘l)'); await pg.click('#e-save');
-  await pg.waitForFunction(() => /Xarajat saqlandi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
-  ok('xarajat saqlandi', q(`select category || ':' || trim_scale(amount) from public.expenses where note='Sinov kommunal (eski yo‘l)'`) === 'Kommunal:900000');
-  if (col('expenses', 'articleId')) ok('… statiya toifadan o‘zi qo‘yildi, usul bo‘sh', q(`select coalesce("articleId",'-') || ':' || coalesce(method,'-') from public.expenses where note='Sinov kommunal (eski yo‘l)'`) === 'EX-11:-');
-  await pg.click('#e-close').catch(() => {}); await pg.waitForTimeout(500);
+  // Kassa moduli yo'q (jonli zanjir) — avvalgi oyna (toifa; usul so'ralmaydi). Kassa moduli bor, kassa ishga tushmagan — F2.1 xarajatlar
+  //   reyestri (fin-exp.sql): hujjat oynasi, usul (naqd — orderisiz, avvalgidek / bank / karta), statiya qatori; toifa statiyadan.
+  const hasReg = q(`select (to_regclass('public.fin_exp_docs') is not null)::text`) === 'true';
+  await pg.waitForSelector('#ac-add'); await pg.click('#ac-add');
+  if (!hasReg) {
+    await pg.waitForSelector('#e-save', { timeout: 10000 });
+    ok('xarajat oynasi: to‘lov usuli so‘ralmaydi (avvalgidek)', !(await pg.$('#e-method')) && !(await pg.$('#e-kassa')));
+    await pg.selectOption('#e-cat', 'Kommunal'); await pg.fill('#e-amt', '900 000'); await pg.fill('#e-note', 'Sinov kommunal (eski yo‘l)'); await pg.click('#e-save');
+    await pg.waitForFunction(() => /Xarajat saqlandi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
+    ok('xarajat saqlandi', q(`select category || ':' || trim_scale(amount) from public.expenses where note='Sinov kommunal (eski yo‘l)'`) === 'Kommunal:900000');
+    if (col('expenses', 'articleId')) ok('… statiya toifadan o‘zi qo‘yildi, usul bo‘sh', q(`select coalesce("articleId",'-') || ':' || coalesce(method,'-') from public.expenses where note='Sinov kommunal (eski yo‘l)'`) === 'EX-11:-');
+    await pg.click('#e-close').catch(() => {}); await pg.waitForTimeout(500);
+  } else {
+    await pg.waitForSelector('#xe-save', { timeout: 15000 });
+    const em = await pg.$$eval('#xe-method option', o => o.map(x => x.value)).catch(() => []);
+    ok('xarajat oynasi (F2.1 reyestri, kassa ishga tushmagan): usul — naqd (orderisiz), bank, karta; boshlang‘ichi naqd; «Kassa» yo‘llanmasi yo‘q',
+      em.join(',') === 'cash,bank,card' && (await pg.$eval('#xe-method', e => e.value)) === 'cash' && !(await pg.$('#xe-kassa')), em);
+    await pg.selectOption('#xe-lines [data-f="articleId"]', 'EX-11'); await pg.fill('#xe-lines [data-f="amount"]', '900 000'); await pg.fill('#xe-note', 'Sinov kommunal (eski yo‘l)'); await pg.click('#xe-save');
+    await pg.waitForFunction(() => /Xarajat saqlandi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
+    ok('xarajat saqlandi (naqd, orderisiz, hujjat bilan): toifa statiyadan, usul — naqd',
+      q(`select e.category || ':' || trim_scale(e.amount) || ':' || e."articleId" || ':' || e.method from public.expenses e join public.fin_exp_docs d on d.id = e."expDocId" where d.note='Sinov kommunal (eski yo‘l)'`) === 'Kommunal:900000:EX-11:cash',
+      q(`select e.category, e.amount, e."articleId", e.method from public.expenses e`));
+    await pg.click('#xe-close').catch(() => {}); await pg.waitForTimeout(500);
+  }
   // qaytarish
   await tab('payments'); await pg.waitForSelector('#pm-body [data-refund]', { timeout: 30000 });
   const inv = (await pg.$$eval('#pm-body [data-refund]', bs => bs.map(x => x.dataset.refund)))[0];

@@ -29,6 +29,8 @@
 #       kassa ochiq kun bilan to'xtatilgan bo'lib qolmaydi.
 #   (14) o'sha qaytarish oynasi kaliti bilan naqdsiz qaytarish va naqd qaytarish so'rovi parallel (g11 live-1b): ikkinchisi qulf ostida
 #       rad (kassa:ref_mismatch / ref_mismatch via cash) — bitta qaytarish ikki usulda yozilmaydi; deadlock yo'q.
+#   (15) F2.1 «Buxgalteriya» xarajatlari reyestri: o'sha oyna kaliti 8 seansdan — bitta hujjat; o'sha kontragent + hujjat № 8 ta oynadan —
+#       bittasi, qolganlari fin:exp_dup; o'sha hujjatni bekor qilish va tuzatish parallel (ikkala tartibda) — faqat bittasi, yetim qator yo'q.
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -546,6 +548,40 @@ wait
 chk "13b sanani bo'shatish (B) avval — birinchi hujjat (A) kassa:paused: kun ochilmadi, hujjat yozilmadi, kassa to'xtatilgan; deadlock yo'q" \
     "$S13B/$(grep -c "^A|bo'sh" "$TMP/13b.B")/$(grep -c 'kassa:paused' "$TMP/13b.A")/$(q -c "select (\"pausedAt\" is not null)::text from public.cash_desks where id = 'main'")/$(q -c "select count(*) from public.cash_days where desk = 'main' and day = '$DAY5'")/$(q -c "select count(*) from public.cash_docs where \"clientRef\" = 'race-g13-b'")/$(cat "$TMP"/13?.? | grep -ci 'deadlock')" \
     "true/bo'sh/true/$DAY5/1/1/true/0/0/0"
+# ---------- (15) F2.1: «Buxgalteriya» xarajatlari reyestri (fin_exp_save / fin_exp_void) ----------
+#   (a) o'sha oyna kaliti (clientRef) 8 seansdan — bitta hujjat, qolganlari «takror» (dup), xato yo'q (L0 qulfi);
+#   (b) 8 ta turli oyna, o'sha kontragent + hujjat № — takror tekshiruvi navbat ostida (usul + kontragent qulfi): faqat bittasi
+#       yoziladi, qolganlari fin:exp_dup;
+#   (c) o'sha hujjatni bekor qilish (A, 2 s ushlab turadi) va tuzatish (B) parallel — B kutib, «allaqachon bekor qilingan» deb rad;
+#       teskari tartibda (tuzatish avval) — bekor qilish «allaqachon bekor qilingan» (dup); yetim qator yo'q, deadlock yo'q.
+D15=$(q -c "select app.fin_today()")
+fx15(){ echo "public.fin_exp_save('{\"clientRef\":\"$1\",\"method\":\"bank\",\"date\":\"$D15\",\"counterpartyId\":\"cp_rbank\",\"docNo\":\"$2\",${4:-}\"lines\":[{\"articleId\":\"EX-40\",\"amount\":$3}]}'::jsonb)"; }
+for i in $(seq 1 8); do ( call_as R_FM "$(fx15 race-x15-same-0001 R15-A 5000) ->> 'dup'" > "$TMP/15a.$i" ) & done
+wait
+chk "15a o'sha oyna kaliti 8 seansdan: bitta hujjat (dup=false), 7 takror (dup=true), xato yo'q; «Buxgalteriya»da bitta qator" \
+    "$(cat "$TMP"/15a.* | grep -c '^false$')/$(cat "$TMP"/15a.* | grep -c '^true$')/$(cat "$TMP"/15a.* | grep -vc '^\(true\|false\)$')/$(q -c "select count(*) from public.fin_exp_docs where \"clientRef\" = 'race-x15-same-0001'")/$(q -c "select count(*) from public.expenses e join public.fin_exp_docs d on d.id = e.\"expDocId\" where d.\"clientRef\" = 'race-x15-same-0001'")" \
+    "1/7/0/1/1"
+for i in $(seq 1 8); do ( call_raw R_FM "$(fx15 race-x15-b-000$i R15-B 7000) ->> 'dup'" > "$TMP/15b.$i" ) & done
+wait
+chk "15b 8 ta turli oyna, o'sha kontragent va № R15-B: bittasi yozildi, 7 tasi fin:exp_dup; bazada bitta hujjat; deadlock yo'q" \
+    "$(cat "$TMP"/15b.* | grep -c '^false$')/$(cat "$TMP"/15b.* | grep -c 'fin:exp_dup')/$(q -c "select count(*) from public.fin_exp_docs where \"docNo\" = 'R15-B'")/$(cat "$TMP"/15b.* | grep -ci 'deadlock')" \
+    "1/7/1/0"
+O15=$(q -c "select id from public.fin_exp_docs where \"docNo\" = 'R15-B'")
+( slow_tx R_FM "public.fin_exp_void('$O15', 'Poyga: bekor') ->> 'status'" "$TMP/15c.A" ) &
+sleep 0.5
+call_raw R_DIR "$(fx15 race-x15-c-0001 R15-B 6000 "\"replaces\":\"$O15\",") ->> 'status'" > "$TMP/15c.B"
+wait
+chk "15c bekor qilish (A) va tuzatish (B) parallel: bekor qilindi, tuzatish kutib rad (fin:exp_replace); yangi hujjat va yetim qator yo'q" \
+    "$(grep -c '^A|void$' "$TMP/15c.A")/$(grep -c 'fin:exp_replace' "$TMP/15c.B")/$(q -c "select status from public.fin_exp_docs where id = '$O15'")/$(q -c "select count(*) from public.fin_exp_docs where \"clientRef\" = 'race-x15-c-0001'")/$(q -c "select count(*) from public.expenses e where e.\"expDocId\" is not null and not exists (select 1 from public.fin_exp_docs d where d.id = e.\"expDocId\" and d.status = 'posted')")" \
+    "1/1/void/0/0"
+P15=$(q -c "select id from public.fin_exp_docs where \"clientRef\" = 'race-x15-same-0001'")
+( slow_tx R_DIR "$(fx15 race-x15-d-0001 R15-A 4000 "\"replaces\":\"$P15\",") ->> 'status'" "$TMP/15d.A" ) &
+sleep 0.5
+call_raw R_FM "public.fin_exp_void('$P15', 'Poyga: bekor') ->> 'dup'" > "$TMP/15d.B"
+wait
+chk "15d tuzatish (A) avval, bekor qilish (B) kutadi: tuzatildi (yangi hujjat — o'rnida), bekor qilish «allaqachon bekor» (dup); yetim qator yo'q, deadlock yo'q" \
+    "$(grep -c '^A|posted$' "$TMP/15d.A")/$(tail -1 "$TMP/15d.B")/$(q -c "select status || ':' || (\"replacedBy\" is not null) from public.fin_exp_docs where id = '$P15'")/$(q -c "select count(*) from public.expenses e where e.\"expDocId\" is not null and not exists (select 1 from public.fin_exp_docs d where d.id = e.\"expDocId\" and d.status = 'posted')")/$(cat "$TMP"/15?.? | grep -ci 'deadlock')" \
+    "1/true/void:true/0/0"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]

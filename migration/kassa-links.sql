@@ -81,12 +81,13 @@ revoke all on function app.kassa_payee_code(text) from public, anon, authenticat
 
 -- «Buxgalteriya»ga (expenses) ko'chiriladigan xarajat qatorining eski toifasi — KO-2 «Xarajat» ham, avans hisoboti (АО-1) ham shu
 --   bitta qoida bilan (acc-9): avval fin_category_map; xaritada yo'q statiya — OP-18 (asosiy vosita) «Inventar» (reja §4.4: «Inventar
---   EX-21/EX-16 yoki OP-18»), qolganlari «Boshqa». Toifa xaritadan olinmagan bo'lsa o_label — statiya nomi: ko'chgan yozuv izohi shu
+--   EX-21/EX-16 yoki OP-18»), soliqlar OP-12 / OP-13 (faqat bank — «Buxgalteriya» reyestri, fin-exp.sql) — «Soliq», qolganlari «Boshqa».
+--   Toifa xaritadan olinmagan bo'lsa o_label — statiya nomi: ko'chgan yozuv izohi shu
 --   bilan boshlanadi (Direktor «Boshqa» ichida nima ekanini ko'radi: «Sotish uchun tovar xaridi: …», «Yetkazib beruvchilar bilan
 --   hisob-kitob: …»). Eski «Buxgalteriya» — barcha naqd chiqimlarning to'liq ro'yxati bo'lib qoladi (asosiy vosita va tovar ham).
 create or replace function app.kassa_exp_category(p_article text, out o_category text, out o_label text)
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce(m.category, case when p_article = 'OP-18' then 'Inventar' else 'Boshqa' end),
+  select coalesce(m.category, case when p_article = 'OP-18' then 'Inventar' when p_article in ('OP-12', 'OP-13') then 'Soliq' else 'Boshqa' end),
          case when m.category is null then (select a."nameUz" from public.fin_articles a where a.id = p_article) end
     from (select (select x.category from public.fin_category_map x where x."articleId" = p_article order by x.category limit 1) as category) m
 $$;

@@ -79,8 +79,8 @@ const allErrs = [];
     const min = await s.pg.$eval('#rp-date', e => e.min).catch(() => null);
     ok('«To‘lov» shakli: eng erta sana — qulfdan keyingi kun', min === lockNext, [opened, min, lockNext]);
     await s.pg.click('#m-cancel').catch(() => {}); await s.pg.waitForTimeout(300);
-    await s.tab('accounting'); await s.pg.waitForSelector('#ac-add', { timeout: 30000 }); await s.pg.click('#ac-add'); await s.pg.waitForSelector('#e-date', { timeout: 15000 });
-    ok('«Xarajat» shakli: eng erta sana — qulfdan keyingi kun', (await s.pg.$eval('#e-date', e => e.min)) === lockNext, await s.pg.$eval('#e-date', e => e.min));
+    await s.tab('accounting'); await s.pg.waitForSelector('#ac-add', { timeout: 30000 }); await s.pg.click('#ac-add'); await s.pg.waitForSelector('#xe-date', { timeout: 15000 });   // F2.1 hujjat oynasi
+    ok('«Xarajat» shakli: eng erta sana — qulfdan keyingi kun', (await s.pg.$eval('#xe-date', e => e.min)) === lockNext, await s.pg.$eval('#xe-date', e => e.min));
     await s.pg.click('#m-cancel').catch(() => {}); await s.pg.waitForTimeout(300);
     let msg = ''; try { asUser(ids.R_KAS, `select public.record_manual_payment('man_e6_0001', 'IQ-0003', 100000, 'bank', '${pme}', '', '', 'Sinov Ota', null, null)::text`); } catch (e) { msg = String(e.stderr || e.message); }
     ok('server: yopilgan davr sanasi bilan to‘lov rad etiladi (tushunarli matn bilan), iz qolmaydi', /yopilgan davr/.test(msg) && msg.includes(dm(pme)) && q(`select count(*) from public.payments where id='man_e6_0001'`) === '0', msg.slice(0, 300));

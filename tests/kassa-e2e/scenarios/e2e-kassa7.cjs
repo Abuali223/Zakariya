@@ -181,9 +181,9 @@ const allErrs = [];
     await d.pg.keyboard.press('Escape').catch(() => {});
     await d.pg.evaluate(() => { const bg = document.querySelector('#modal-bg'); if (bg) bg.classList.remove('show'); });
     await d.tab('accounting'); await d.pg.waitForSelector('#ac-add', { state: 'attached', timeout: 20000 });
-    for (let i = 0; i < 6 && !(await d.pg.$('#e-date')); i++) { await d.pg.waitForTimeout(700); await d.pg.$eval('#ac-add', x => x.click()).catch(() => {}); }   // ro'yxat yuklanib, tugma ulangach ochiladi
-    await d.pg.waitForSelector('#e-method', { state: 'attached', timeout: 15000 }).catch(() => {});
-    const meth = await d.pg.$$eval('#e-method option', os => os.map(o => o.value + '|' + o.textContent)).catch(() => []);
+    for (let i = 0; i < 6 && !(await d.pg.$('#xe-date')); i++) { await d.pg.waitForTimeout(700); await d.pg.$eval('#ac-add', x => x.click()).catch(() => {}); }   // ro'yxat yuklanib, tugma ulangach ochiladi (F2.1 hujjat oynasi)
+    await d.pg.waitForSelector('#xe-method', { state: 'attached', timeout: 15000 }).catch(() => {});
+    const meth = await d.pg.$$eval('#xe-method option', os => os.map(o => o.value + '|' + o.textContent)).catch(() => []);
     const hint = await d.pg.$eval('#modal', e => e.innerText).catch(() => '');
     // crit-1: Direktorda «Naqd» usuli ham bor — faqat kassa ishga tushishidan oldingi sana bilan (kechikib topilgan qog'oz, orderisiz)
     const gl = today.slice(8, 10) + '.' + today.slice(5, 7) + '.' + today.slice(0, 4);
@@ -192,10 +192,11 @@ const allErrs = [];
       && hint.includes(`Bu yerda naqd — faqat sanasi kassa ishga tushishidan (${gl}) oldin bo‘lgan, kechikib topilgan xarajat`), [meth, hint.slice(-700)]);
     // bugungi (ishga tushgan kun) sana bilan «Naqd» — oynaning o'zi to'xtatadi, yozuv yo'q
     const nExp = q(`select count(*) from public.expenses`);
-    await d.pg.selectOption('#e-method', 'cash').catch(() => {}); await d.pg.fill('#e-date', today).catch(() => {}); await d.pg.fill('#e-amt', '30 000').catch(() => {}); await d.pg.fill('#e-note', 'Sinov: bugungi naqd').catch(() => {});
-    await d.pg.click('#e-save').catch(() => {}); await d.pg.waitForTimeout(700);
+    await d.pg.selectOption('#xe-method', 'cash').catch(() => {}); await d.pg.fill('#xe-date', today).catch(() => {});
+    await d.pg.selectOption('#xe-lines [data-f="articleId"]', 'EX-32').catch(() => {}); await d.pg.fill('#xe-lines [data-f="amount"]', '30 000').catch(() => {}); await d.pg.fill('#xe-note', 'Sinov: bugungi naqd').catch(() => {});
+    await d.pg.click('#xe-save').catch(() => {}); await d.pg.waitForTimeout(700);
     ok('ishga tushgan kun sanasi bilan «Naqd» xarajat yozilmaydi — «Kassa» → «+ Chiqim so‘rovi» ga yo‘llaydi', (await d.toasts()).includes(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat sanasi kassa ishga tushishidan (${gl}) oldin bo‘lsa`)
-      && q(`select count(*) from public.expenses`) === nExp && !!(await d.pg.$('#e-save')), [await d.toasts(), nExp]);
+      && q(`select count(*) from public.expenses`) === nExp && !!(await d.pg.$('#xe-save')), [await d.toasts(), nExp]);
     await d.pg.keyboard.press('Escape').catch(() => {});
     await d.pg.evaluate(() => { const bg = document.querySelector('#modal-bg'); if (bg) bg.classList.remove('show'); });
     // M2: hisobotsiz qoldig'i (200 000) bor xodimga yangi avans so'rovi (T1 dan kichik) — Direktor tasdig'i ham; sahifa buni aytadi

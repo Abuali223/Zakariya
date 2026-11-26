@@ -153,7 +153,13 @@ cd ~/iqror-repo && git fetch origin claude/iqror-med-school-impl-iqdntl && git c
 Deploy chiqishida tekshiriladi: «7/7 baza tekshiruvi — BIR XIL»; «✓ Kassa tekshiruvi: muammo topilmadi (modul relizi N)».
 Keyin, hali hech narsa kiritmasdan:
 - Direktor hisobida «Moliya» → «Kassa» ochiladi: «Kassa hali ishga tushirilmagan» kartasi va «ishga tushirilgan deb belgilanmagan» eslatmasi ko‘rinadi.
-- «💵 To‘lov», «Maosh berish», «Xarajat», «Qaytarish» oynalari avvalgidek ishlaydi (fiskal chek maydoni yo‘q) — bitta haqiqiy to‘lovni kutib kuzatish kifoya, sinov to‘lovi kiritilmaydi.
+- «💵 To‘lov», «Maosh berish», «Qaytarish» oynalari avvalgidek ishlaydi (fiskal chek maydoni yo‘q) — bitta haqiqiy to‘lovni kutib kuzatish kifoya, sinov to‘lovi kiritilmaydi.
+- «Buxgalteriya» → «+ Xarajat qo‘shish» (F2.1, modul relizi 13+) — endi hujjat oynasi: to‘lov usuli (kassa ishga tushguncha naqd —
+  avvalgidek orderisiz; bank; korporativ karta), statiya qatorlari (eski toifa statiyadan o‘zi qo‘yiladi), bank o‘tkazmasida kontragent
+  va to‘lov topshiriqnomasi № majburiy, ilova va izoh. Eski yozuvlar — «Tuzatish» (hujjat bilan qayta yoziladi) va «Bekor» (sabab
+  bilan); oylik maosh hisobi qatori — avvalgidek. Moliya menejeri va Direktorga birinchi kunda qisqa ko‘rsatiladi (statiya tanlash,
+  kontragent qo‘shish). Keshdagi eski sahifa ham ishlaydi (hujjatsiz to‘g‘ridan-to‘g‘ri yozish huquqi — F2.9 da, detektor haftasidan
+  keyin olinadi); sahifa yangilanganda hujjat oynasi ochiladi.
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
   «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa

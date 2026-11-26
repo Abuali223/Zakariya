@@ -332,10 +332,10 @@ const dmy = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
       q(`select method || ':' || coalesce("cashDocId",'-') || ':' || trim_scale(paid) from public.salary_payments where "teacherId"='IQT-002'`) === 'card:-:100000',
       q(`select method, "cashDocId", paid from public.salary_payments where "teacherId"='IQT-002'`));
     await s.closeAny();
-    await s.pg.click('#ac-add'); await s.pg.waitForSelector('#e-save', { timeout: 15000 });
-    const em = await s.pg.$$eval('#e-method option', o => o.map(x => x.value + '=' + x.textContent)).catch(() => []);
+    await s.pg.click('#ac-add'); await s.pg.waitForSelector('#xe-save', { timeout: 15000 });   // F2.1 hujjat oynasi
+    const em = await s.pg.$$eval('#xe-method option', o => o.map(x => x.value + '=' + x.textContent)).catch(() => []);
     ok('… xarajat oynasi: usul tanlovi (naqd — to‘xtatilgan davr sanasi bilan / bank / karta)',
-      em.join('|') === 'cash=Naqd — to‘xtatilgan davr sanasi bilan (orderisiz)|bank=Bank o‘tkazmasi|card=Korporativ karta' && !(await s.pg.$('#e-kassa')), em);
+      em.join('|') === 'cash=Naqd — to‘xtatilgan davr sanasi bilan (orderisiz)|bank=Bank o‘tkazmasi|card=Korporativ karta' && !(await s.pg.$('#xe-kassa')), em);
     await s.closeAny();
     await s.pg.click('#ac-adv'); await s.pg.waitForSelector('#av-save', { timeout: 30000 });
     const am = await s.pg.$$eval('#av-hmethod option', o => o.map(x => x.value + '=' + x.textContent)).catch(() => []);

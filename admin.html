@@ -1552,6 +1552,12 @@ function kassaPreLiveTxt(){ const dm=g=>g.slice(8,10)+'.'+g.slice(5,7)+'.'+g.sli
 //   sana bilan: «Buxgalteriya» xarajat, maosh va avans oynalarida to'lov usuli tanlovi ko'rinadi (usulsiz yozuv naqd hisoblanadi).
 //   Kassa moduli yo'q yoki kassa ishlayotgan bo'lsa — false (oynalar avvalgidek).
 function kassaHold(){ const d=KASSA.state&&KASSA.state.desk; return !KASSA.live && !!d && !!(d.pausedAt||d.restart); }
+// F2.1 (moliya rejasi 2-bosqich): «Buxgalteriya» xarajatlari reyestri — serverda bo'lsa (modul relizi 13+, migration/fin-exp.sql) xarajat
+//   faqat hujjat bilan kiritiladi (statiya qatorlari, kontragent, hujjat №, ilova; tuzatish va bekor qilish — server funksiyalari orqali;
+//   oyna — assets/js/fin-exp.js); hujjatga bog'langan qatorni server to'g'ridan-to'g'ri o'zgartirishga yo'l qo'ymaydi. Hujjatsiz yozuvni
+//   to'g'ridan-to'g'ri yozish huquqi qaytarib olinishi — reja F2.9 (detektor haftasidan keyin). Eski server (modulsiz) — avvalgi oyna.
+function expReg(){ return !!KASSA.on && Number(KASSA.ver)>=13; }
+const EXP_MCHIP={ bank:'Bank', card:'Karta', cash:'Naqd' };
 const KASSA_HOLD_TXT='<b>Kassa to‘xtatilgan</b> (yoki qayta ishga tushirish kunini kutmoqda). Naqd — faqat to‘xtatilgan davr sanasi bilan, kassa orderisiz (oxirgi kassa kuni va undan oldingi sana bilan naqd yozilmaydi); bank / karta orqali — istalgan sana bilan.';
 // Davr qulfi (moliya rejasi F1.16): Direktor yopgan sanagacha pul yozuvlari kiritilmaydi — shakllarda eng erta sana = qulfdan
 //   keyingi kun ('' — qulf yo'q yoki kassa moduli yo'q). Server ham rad etadi (42501) — bu faqat qulaylik uchun.
@@ -10371,7 +10377,7 @@ async function renderAccounting(){
     </div>${accRO()?'':`<div class="small muted" style="margin-top:6px">«Oylik maoshni yozish» — hisoblangan maoshlar yig‘indisini shu oyning «Maosh» xarajati qiladi (bir oyga bir marta). «Xodim avansi» — oy ichida oldindan berilgan maosh: oy oxirida naqd beriladigan qoldiq = maosh − avans.</div>`}</div>
     <div id="ac-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='', OTH={ m:{}, err:'' };
+  let INV=[], EXP=[], CREDITS=[], ADV=[], REF=[], SAL=[], PAYS=[], PAYERR='', OTH={ m:{}, err:'' }, DOCS=[];
   const reload=async()=>{
     try{ [INV,EXP]=await Promise.all([loadCol('invoices'),loadCol('expenses')]);
       try{ CREDITS=await loadCol('student_credit'); }catch(e){ CREDITS=[]; }
@@ -10380,6 +10386,7 @@ async function renderAccounting(){
       try{ SAL=await loadCol('salary_payments'); }catch(e){ SAL=[]; }
       PAYERR=''; try{ PAYS=await loadCol('payments'); }catch(e){ PAYS=[]; PAYERR=String((e&&(e.code||e.message))||'xato'); }   // to'lov usuli (kassa asosida) — A4 hisobot
       OTH=await finOtherIncome();   // kassadagi boshqa daromad (A6-02) — Kirim / Foyda
+      DOCS=[]; if(expReg()){ try{ DOCS=await loadCol('fin_exp_docs'); }catch(e){ DOCS=[]; } }   // F2.1: xarajat hujjatlari (usul, kontragent, №, statiya qatorlari)
       return true; }
     catch(e){ $('#ac-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}<br><span class="small">«expenses» jadvali bazada yaratilganini tekshiring (migration/expenses-setup.sql).</span></div></div>`; return false; }
   };
@@ -10535,13 +10542,28 @@ async function renderAccounting(){
 
     // ---- Xarajatlar ro'yxati ----
     const rows=mExp.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    // Qator amallari: kassa orderidan ko'chgan — «Kassa»da; F2.1 reyestrida — hujjat (ko'rish, tuzatish, bekor qilish; buxgalterga — faqat
+    //   ko'rish); oylik maosh hisobi qatori — «💼 Oylik maoshni yozish» (o'chirish — avvalgidek); eski (hujjatsiz) yozuv — tuzatish (hujjat bilan
+    //   qayta yoziladi) yoki bekor qilish (sabab bilan). Eski server — avvalgi «Tahrir» / «O‘chir».
+    const DM=new Map(DOCS.map(d=>[d.id,d]));
+    const expActions=e=>{
+      if(e.cashDocId) return '<span class="chip" title="Kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi">Kassa</span>';
+      const rec=`<button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`;
+      if(!expReg()) return accRO()?'':rec+`<button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`;
+      if(e.expDocId){ const d=DM.get(e.expDocId), m=(d&&d.method)||e.method;
+        return `<span class="chip" title="Xarajat hujjati: ${esc(EXP_MCHIP[m]||m||'')}${d&&d.docNo?' № '+esc(d.docNo):''}">${esc(EXP_MCHIP[m]||m||'Hujjat')}${d&&d.docNo?' № '+esc(d.docNo):''}</span>`
+          +`<button class="btn sm ghost2" data-xdoc="${esc(e.expDocId)}" title="Hujjatni ko‘rish (kontragent, №, ilova, statiyalar, kim kiritgan)">Hujjat</button>`
+          +(accRO()?'':rec+`<button class="btn sm" data-xfixd="${esc(e.expDocId)}" title="Eski hujjat bekor qilinadi, o‘rniga yangisi yoziladi">Tuzatish</button><button class="btn sm danger" data-xvoidd="${esc(e.expDocId)}">Bekor</button>`); }
+      if(String(e._id||'').startsWith('payroll__')) return accRO()?'':`<span class="chip" title="«💼 Oylik maoshni yozish» qatori — tugma qayta bosilsa yangilanadi">Maosh hisobi</span><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`;
+      return accRO()?'':rec+`<button class="btn sm" data-xfixr="${esc(e._id)}" title="Eski yozuv: hujjat bilan (statiya, usul, kontragent) qayta yoziladi">Tuzatish</button><button class="btn sm danger" data-xvoidr="${esc(e._id)}">Bekor</button>`;
+    };
     const trs=rows.map(e=>{ const dd=String(e.date||'').slice(8,10), mm=String(e.date||'').slice(5,7);
       return `<tr>
         <td data-label="Sana" class="num">${dd&&mm?dd+'.'+mm:esc(emonth(e))}</td>
         <td data-label="Toifa"><span class="acc-cat-chip">${esc(e.category||'—')}</span></td>
         <td data-label="Izoh">${esc(e.note||'')}</td>
         <td data-label="Summa" style="text-align:right;font-weight:700;color:var(--bad);white-space:nowrap">${fmtSum(e.amount)}</td>
-        <td class="td-actions"><div class="row-actions">${e.cashDocId?'<span class="chip" title="Kassa chiqim orderidan ko‘chgan — «Kassa» bo‘limidan boshqariladi">Kassa</span>':accRO()?'':`<button class="btn sm ghost2" data-erec="${esc(e._id)}" title="Chek chop etish (80/58 mm)">🧾</button><button class="btn sm" data-eedit="${esc(e._id)}">Tahrir</button><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`}</div></td></tr>`;
+        <td class="td-actions"><div class="row-actions">${expActions(e)}</div></td></tr>`;
     }).join('');
     const tableCard=`<div class="card"><div class="cls-card-head"><h3>Xarajatlar · ${mLabel(M)}</h3><span class="cls-count">${rows.length} ta · ${fmtC(chiqim)}</span></div>
       ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Toifa</th><th>Izoh</th><th>Summa</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`:(accRO()?'<div class="empty">Bu oy uchun xarajat yo‘q.</div>':'<div class="empty">Bu oy uchun xarajat yo‘q. Yuqorida «+ Xarajat qo‘shish» tugmasini bosing.</div>')}</div>`;
@@ -10582,6 +10604,16 @@ async function renderAccounting(){
     $('#ac-body').querySelectorAll('[data-erec]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.erec); if(!e) return;
       printReceipt({ kind:'expense', amount:e.amount, reason:`${e.category||''}${e.note?' · '+e.note:''}`, period:e.month, date:e.date||tkDay(new Date()) }); }));
     $('#ac-body').querySelectorAll('[data-edel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xarajat o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'expenses',b.dataset.edel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+errMsg(err),true); } }));
+    // F2.1 reyestri: hujjatni ko'rish / tuzatish / bekor qilish; eski yozuvni tuzatish / bekor qilish
+    $('#ac-body').querySelectorAll('[data-xdoc]').forEach(b=>b.addEventListener('click',()=>{ const d=DM.get(b.dataset.xdoc); if(!d){ toast('Hujjat topilmadi — sahifani yangilang',true); return; }
+      finMod('fin-exp').then(m=>m.showExpenseDoc(finCtx(), d)).catch(err=>toast('Xatolik: '+errMsg(err),true)); }));
+    $('#ac-body').querySelectorAll('[data-xfixd]').forEach(b=>b.addEventListener('click',()=>{ const d=DM.get(b.dataset.xfixd); if(!d){ toast('Hujjat topilmadi — sahifani yangilang',true); return; } expOpen({ doc:d }); }));
+    $('#ac-body').querySelectorAll('[data-xfixr]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.xfixr); if(e) expOpen({ row:e }); }));
+    $('#ac-body').querySelectorAll('[data-xvoidd]').forEach(b=>b.addEventListener('click',()=>{ const d=DM.get(b.dataset.xvoidd); if(!d){ toast('Hujjat topilmadi — sahifani yangilang',true); return; }
+      const n=Array.isArray(d.lines)?d.lines.length:1, dm=String(d.date||'');
+      expVoid(d.id, `${dm.slice(8,10)}.${dm.slice(5,7)}.${dm.slice(0,4)} · ${fmtSum(d.amount)} so‘m${d.partyName?' · '+d.partyName:''}${d.docNo?' · № '+d.docNo:''}${n>1?` · hujjatning barcha ${n} qatori`:''}`); }));
+    $('#ac-body').querySelectorAll('[data-xvoidr]').forEach(b=>b.addEventListener('click',()=>{ const e=EXP.find(x=>x._id===b.dataset.xvoidr); if(!e) return;
+      expVoid(e._id, `${e.category||'Xarajat'} · ${fmtSum(e.amount)} so‘m${e.note?' · '+e.note:''}`); }));
     $('#ac-body').querySelectorAll('[data-adel]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Xodim avansi o‘chirilsinmi?'))return; try{ await deleteDoc(doc(db,'staff_advances',b.dataset.adel)); toast('O‘chirildi'); if(await reload()) draw($('#ac-month').value||curMonth()); }catch(err){ toast('Xatolik: '+errMsg(err),true); } }));   // izohli rad etish (kassa:staff_returned, kassa:busy, fin:locked …) — o'zbekcha matni bilan
     $('#ac-body').querySelectorAll('[data-arec]').forEach(b=>b.addEventListener('click',()=>{ const a=madv.find(x=>x._id===b.dataset.arec); if(!a) return;
       printReceipt({ kind:'expense', who:a.teacherName||a.teacherId||'', amount:a.amount, reason:`Xodim avansi${a.note?' · '+a.note:''}`, period:a.month, date:a.date||tkDay(new Date()) }); }));
@@ -10649,10 +10681,17 @@ async function renderAccounting(){
     };
   }
 
+  // F2.1: reyestr oynasi (assets/js/fin-exp.js) — kassa holati (usullar), davr qulfi; saqlangach / bekor qilingach ro'yxat yangilanadi
+  const expK=()=>({ live:KASSA.live, hold:kassaHold(), preLiveOk:kassaPreLiveOk(), preLiveTxt:kassaPreLiveOk()?kassaPreLiveTxt():'', cashDay:kassaPreLiveDay, lockMin:finLockMin(), today:tkDay(new Date()) });
+  const expDone=async()=>{ if(await reload()) draw($('#ac-month').value||curMonth()); };
+  function expOpen(o){ finMod('fin-exp').then(m=>m.openExpenseDoc(finCtx(), Object.assign({ k:expK(), onSaved:expDone, printReceipt, openKassa:()=>openTab('kassa') }, o||{})))
+    .catch(err=>toast('Xatolik: '+errMsg(err),true)); }
+  function expVoid(id, what){ finMod('fin-exp').then(m=>m.voidExpense(finCtx(), { id, what, onDone:expDone })).catch(err=>toast('Xatolik: '+errMsg(err),true)); }
+
   if(!(await reload())) return;
   draw($('#ac-month').value||curMonth());
   $('#ac-month').addEventListener('change',()=>draw($('#ac-month').value||curMonth()));
-  if($('#ac-add')) $('#ac-add').addEventListener('click',()=>openExpenseForm(null));   // buxgalterda (faqat ko'rish) bu tugmalar yo'q
+  if($('#ac-add')) $('#ac-add').addEventListener('click',()=>expReg()?expOpen({}):openExpenseForm(null));   // buxgalterda (faqat ko'rish) bu tugmalar yo'q
   // Oylik maosh -> «Maosh» xarajati (bir oyga bir marta: id=payroll__oy, qayta bossa yangilanadi)
   if($('#ac-payroll')) $('#ac-payroll').addEventListener('click', async ()=>{
     const M=$('#ac-month').value||curMonth();

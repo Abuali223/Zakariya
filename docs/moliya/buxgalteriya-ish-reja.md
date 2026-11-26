@@ -663,7 +663,7 @@ pastda hujjat ID, vaqt, foydalanuvchi; to‘lovchi hujjati termal printerda chiq
 | Qaytarish (admin.html:11913-11967) | tasdiq → naqd bo‘lsa KO-2 | naqd | F1.6 |
 | Maosh va avans (admin.html:8847-9084, 9423-9479) | naqd → KO-2; karta → yo‘q; o‘zaro hisob → `nc_offset` | naqd | F1.5 |
 | Maosh hisoblash qatori (admin.html:9350-9420) | naqd emas; `kind = 'accrual'`; bosh kitob | yo‘q | F1.15, F2.4, F4.7 |
-| Buxgalteriya xarajat shakli (admin.html:9305-9343) | naqd — faqat «Kassa» KO-2; naqdsiz — usul + statiya + kontragent | naqd | F1.13, F2.1 |
+| Buxgalteriya xarajat shakli (admin.html:9305-9343) | naqd — faqat «Kassa» KO-2; naqdsiz — usul + statiya + kontragent (✅ F2.1: hujjat oynasi, statiya qatorlari, server funksiyasi) | naqd | F1.13, F2.1 |
 | Zavxoz puli; bankdan / bankka; rahbarga; forma; qarz | `out_accountable` / `in_acc_return`; `in_bank` / `out_bank`; `out_handover`; `in_sale`; `out_loan_repay` | ha | F1.4 |
 | Biriktirish, bo‘lish, avans ko‘chirish | kassa hujjati yo‘q (bosh kitobda — 4) | yo‘q | F4.3 |
 | Moliya auditi «Qo‘llash»; korporativ karta | naqd emas, provider `fix`; to‘ldirish + avans hisoboti | yo‘q | F2.9, F3.5 |
@@ -683,7 +683,7 @@ davr — 4-bosqich; 2026-yil noyabr–dekabr — F2.3 orqali, «qisman» belgisi
 - **Migratsiyalar** (`rls-initplan.sql` dan yuqorida, zanjir himoyasi, qayta bajariladigan, o‘z revoke’lari bilan):
   `fin-prereq.sql` (0), `fin-core.sql` + `kassa.sql` (1a), `fin-rights.sql` (1b / 2; orqaga qaytarish — faylning o‘zida:
   `fin_rights_on = off` va deploy, reliz o‘zgarmaydi: tozalash bo‘limi siyosat va ko‘rinishlarni o‘chiradi, `app.acc_read()` kaliti
-  o‘chadi — `students_billing` va sahifadagi buxgalter bo‘limlari ham; ✅ 1b: F1.21 buxgalter o‘qish ro‘yxati), `fin-exp.sql` (2),
+  o‘chadi — `students_billing` va sahifadagi buxgalter bo‘limlari ham; ✅ 1b: F1.21 buxgalter o‘qish ro‘yxati), `fin-exp.sql` (2; ✅ F2.1 — xarajatlar reyestri),
   `fin-bank.sql` (3), `fin-gl.sql` (4). Mavjud
   funksiyalar o‘z faylida tahrirlanadi. Yordamchilar `is_accountant`, `fin_list2`, `kassa_reader`, `kassa_operator` —
   `v_fns` ga (alohida `fin_reader` kerak bo‘lmadi: buxgalter o‘qishi — `is_accountant` siyosatlari va `*_acc` ko‘rinishlari).
@@ -1010,7 +1010,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 ### 2-bosqich — Statiyalar hamma joyda, hisobdorlar, oy qulfi (25-yanvar – 27-fevral)
 | ID | H | kun | Vazifa | Bog‘liq | Qabul |
 |---|---|---|---|---|---|
-| F2.1 | M | 2 | `expense_save`: naqdsiz reyestr (usul, statiya qatorlari, kontragent, hujjat №, ilova, server muallif; bekor qilish) | F1.1 | Takror yo‘q; har qatorda statiya |
+| F2.1 | M | 2 | ✅ `expense_save`: naqdsiz reyestr (usul, statiya qatorlari, kontragent, hujjat №, ilova, server muallif; bekor qilish) — reliz 13, `fin-exp.sql`: hujjat `fin_exp_docs`, bazada `fin_exp_save` (tuzatish — `replaces`: eski hujjat / eski yozuv shu tranzaksiyada bekor), `fin_exp_void` (sabab majburiy), `fin_exp_refs`; har statiya qatori «Buxgalteriya»ga alohida yozuv (`expenses."expDocId"`); bank — kontragent va № majburiy; statiya usulga qarab (CT-23); takror — oyna kaliti va «usul + kontragent + № + yil» ogohlantirishi; hujjat qatorlari va hujjat o‘zgarmaydi (triggerlar); sahifa xarajatni faqat shu funksiyalar orqali yozadi (hujjatsiz to‘g‘ridan-to‘g‘ri yozish huquqini olish — F2.9); oyna — `assets/js/fin-exp.js` | F1.1 | Takror yo‘q; har qatorda statiya |
 | F2.2 | M | 2 | Kontragentlar to‘liq (STIR, hisob, MFO, shartnoma); RP-10 | F1.1 | Seed’da shaxsiy ma’lumot yo‘q |
 | F2.3 | S | 0,5 | Noyabr–yanvar xarajatlariga statiya (sinov ishga tushirishi → buxgalter RPC si) | F1.1; FD-10 | Buxgalter imzolaydi |
 | F2.4 | M | 2 | `expenses.kind = 'accrual'` va o‘quvchi kodlar | — | Naqd ko‘rinishda hisoblash yo‘q |
@@ -1018,7 +1018,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 | F2.6 | L | 5 | Avans hisobotlari: ortiqcha sarf (6970 va qaytarish orderi), suratlar, tasdiq, RP-07 yoshi; zavxoz maqsadlaridan statiya taklifi (minimal qism — 1a da, `nc_adv_report`) | F1.4; FD-14, 31 | Qoldiq formulasi; yanvar qulfdan oldin |
 | F2.7 | M | 2,5 | Faktura tarkibi (`grossAmount`, `discountParts`), noyabrdan backfill | FD-32 | 100 % fakturada mos (±1 so‘m) |
 | F2.8 | M | 3 | Oylik sanash dalolatnomasi, topshirish-qabul, oy oxiri ro‘yxati; barcha pul jadvallari uchun oy qulfi (tizim mustasno) | F1.9, F1.16 | Qulflangan oyga yozuv rad; webhook’lar ishlaydi |
-| F2.9 | L | 5 | Huquqlar II (RF-09…12): detektor → revoke; provider `fix`; barcha pul RPC larida bayroq | F1.13 | 7 kun 0 yozuv, keyin revoke |
+| F2.9 | L | 5 | Huquqlar II (RF-09…12): detektor → revoke; provider `fix`; barcha pul RPC larida bayroq; xarajatlar (F2.1 dan keyin) — `expenses` ga hujjatsiz to‘g‘ridan-to‘g‘ri yozish o‘zgarishlar jurnalidan kuzatiladi, keyin `exp_ins` / `exp_upd` / `exp_del` faqat «payroll__» qatoriga | F1.13 | 7 kun 0 yozuv, keyin revoke |
 | F2.10 | M | 2 | 10 rol (buxgalter bilan) + anon REST RLS matritsasi | F2.9 | Barcha rad etishlar |
 | F2.11 | S | 0,5 | `refund_credit` (FD-25 talab qilsa) | F1.6 | — |
 | F2.12 | S | 0,5 | KO-3 A4; yil muqovasi va guvohnoma; patta QR | F1.14 | — |

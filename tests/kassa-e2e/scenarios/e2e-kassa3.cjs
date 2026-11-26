@@ -158,29 +158,40 @@ const allErrs = [];
     const at = await s.pg.$eval('#ac-body', e => e.textContent);
     ok('«Buxgalteriya»: kassadan ko‘chgan xarajat va avans «Kassa» belgisi bilan (tahrir / o‘chirish tugmasiz)', /Kanselyariya/.test(at) && (await s.pg.$$eval('#ac-body .chip', c => c.filter(x => x.textContent.trim() === 'Kassa').length)) >= 3
       && !(await s.pg.$(`[data-edel="kx_${expId}_1"]`)), at.slice(0, 200));
-    await s.pg.click('#ac-add'); await s.pg.waitForSelector('#e-method', { timeout: 10000 });
+    await s.pg.click('#ac-add'); await s.pg.waitForSelector('#xe-method', { timeout: 10000 });   // F2.1: xarajat hujjati oynasi (fin-exp.js)
     // g3 (crit-1): Direktorga «Naqd» ham bor — faqat kassa ishga tushishidan oldingi sana bilan kechikib topilgan xarajat (orderisiz);
     //   bugungi naqd xarajat — baribir «Kassa» → «+ Chiqim so‘rovi»
     const dmyT = `${today.slice(8, 10)}.${today.slice(5, 7)}.${today.slice(0, 4)}`;
-    const em = await s.pg.$$eval('#e-method option', o => o.map(x => x.value + '=' + x.textContent)), emt = await s.pg.$eval('#modal', e => e.textContent);
+    const em = await s.pg.$$eval('#xe-method option', o => o.map(x => x.value + '=' + x.textContent)), emt = await s.pg.$eval('#modal', e => e.textContent);
     ok('xarajat shakli: naqdsiz usullar + Direktorga ishga tushishdan oldingi naqd (orderisiz), naqd xarajat — «Kassa»ga yo‘llanma, hisobdor — «Avans hisoboti»',
       em.map(x => x.split('=')[0]).join(',') === 'bank,card,cash' && em[2] === `cash=Naqd — kassa ishga tushishidan (${dmyT}) oldin berilgan (orderisiz)`
       && emt.includes('Naqd xarajat — «Kassa» bo‘limida: «+ Chiqim so‘rovi» → «Xarajat»') && emt.includes(`Bu yerda naqd — faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lgan, kechikib topilgan xarajat`)
-      && emt.includes('«Kassa» → «Avans hisoboti»') && !!(await s.pg.$('#e-kassa')), [em, emt.slice(0, 400)]);
-    await s.pg.selectOption('#e-cat', 'Ijara'); await s.pg.fill('#e-amt', '5 000 000'); await s.pg.fill('#e-note', 'Sinov ijara, bank orqali');
+      && emt.includes('«Kassa» → «Avans hisoboti»') && !!(await s.pg.$('#xe-kassa')), [em, emt.slice(0, 400)]);
+    await s.pg.selectOption('#xe-lines [data-f="articleId"]', 'EX-10'); await s.pg.fill('#xe-lines [data-f="amount"]', '5 000 000'); await s.pg.fill('#xe-note', 'Sinov ijara, bank orqali');
     {   // «Naqd» + bugungi sana — oynaning o'zi rad etadi, yozuv yo'q
       const ex0 = q(`select count(*) from public.expenses`);
-      await s.pg.selectOption('#e-method', 'cash'); await s.pg.click('#e-save'); await s.pg.waitForTimeout(600);
+      await s.pg.selectOption('#xe-method', 'cash');
+      const hint = await s.pg.$eval('#xe-mhint', e => e.textContent);
+      await s.pg.click('#xe-save'); await s.pg.waitForTimeout(600);
       const tt = await s.toasts();
       ok('xarajat shakli: «Naqd» bugungi sana bilan — rad («Kassa» → «+ Chiqim so‘rovi»), yozuv yo‘q, oyna ochiq',
-        tt.includes(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lsa`) && q(`select count(*) from public.expenses`) === ex0 && !!(await s.pg.$('#e-save')), tt);
-      await s.pg.selectOption('#e-method', 'bank');
+        tt.includes(`Naqd xarajat — «Kassa» → «+ Chiqim so‘rovi». Bu yerda faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lsa`) && hint.includes(`Naqd — faqat sanasi kassa ishga tushishidan (${dmyT}) oldin bo‘lgan, kechikib topilgan xarajat`)
+        && q(`select count(*) from public.expenses`) === ex0 && !!(await s.pg.$('#xe-save')), [tt, hint]);
+      await s.pg.selectOption('#xe-method', 'bank');
     }
-    await s.pg.waitForFunction(() => document.querySelectorAll('#e-cp option').length > 1, null, { timeout: 10000 }).catch(() => {});
-    await s.pg.click('#e-save');
+    // bank o'tkazmasi: kontragent va to'lov topshiriqnomasi raqami majburiy (F2.1)
+    await s.pg.waitForFunction(() => document.querySelectorAll('#xe-cp option').length > 1, null, { timeout: 10000 }).catch(() => {});
+    await s.pg.click('#xe-save'); await s.pg.waitForTimeout(400);
+    const tNoCp = await s.toasts();
+    await s.pg.selectOption('#xe-cp', await s.pg.$eval('#xe-cp', el => [...el.options].map(o => o.value).find(v => v)));
+    await s.pg.fill('#xe-no', '№ PP-1');
+    await s.pg.click('#xe-save');
     await s.pg.waitForFunction(() => /Xarajat saqlandi/.test((document.querySelector('#modal .modal-h h3') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
-    ok('naqdsiz xarajat saqlandi: usul va statiya (toifadan) bilan', q(`select method || ':' || "articleId" || ':' || trim_scale(amount) from public.expenses where note='Sinov ijara, bank orqali'`) === 'bank:EX-10:5000000', q(`select method, "articleId", amount from public.expenses where note='Sinov ijara, bank orqali'`));
-    await s.pg.click('#e-close').catch(() => {}); await s.pg.waitForTimeout(500);
+    ok('naqdsiz xarajat saqlandi (hujjat bilan): kontragentsiz — rad; usul, statiya, summa, № (tozalangan), kontragent',
+      tNoCp.includes('Bank o‘tkazmasida kontragent (kimga to‘langani) majburiy')
+      && q(`select d.method || ':' || e."articleId" || ':' || trim_scale(e.amount) || ':' || d."docNo" || ':' || (e."counterpartyId" = d."counterpartyId") from public.fin_exp_docs d join public.expenses e on e."expDocId" = d.id where d.note='Sinov ijara, bank orqali'`) === 'bank:EX-10:5000000:PP-1:true',
+      [tNoCp, q(`select d.method, d."docNo", e."articleId", e.amount from public.fin_exp_docs d join public.expenses e on e."expDocId" = d.id`)]);
+    await s.pg.click('#xe-close').catch(() => {}); await s.pg.waitForTimeout(500);
     await s.pg.click('#ac-adv'); await s.pg.waitForSelector('#av-save', { timeout: 30000 });
     ok('avans shakli: faqat karta / bank orqali, naqd — «Kassa»ga yo‘llanma', /Naqd avans — «Kassa» bo‘limida/.test(await s.pg.$eval('#modal', e => e.textContent)) && /karta \/ bank/.test(await s.pg.$eval('#av-save', e => e.textContent)));
     await s.pg.selectOption('#av-t', 'IQX-001'); await s.pg.fill('#av-amt', '250 000'); await s.pg.click('#av-save');

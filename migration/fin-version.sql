@@ -45,8 +45,12 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          (kassa:self_recipient, FD-48); kunni qayta ochilishidan oldin yopgan xodim tekshirmaydi; qaytarish oynasi kaliti — naqd so'rov va
 --          naqdsiz qaytarish bir-birini rad etadi (kassa:ref_mismatch; refund_invoice — ref_mismatch, so'rov posbonda saqlanadi); sinov
 --          kassasida navbat yozuvlari rad (kassa:pending_test); 24-band — ikki yangi qator.
+--     13 — 2-bosqich F2.1: «Buxgalteriya» xarajatlari reyestri (fin-exp.sql) — fin_exp_docs jadvali, fin_exp_refs / fin_exp_save /
+--          fin_exp_void (statiya qatorlari, kontragent, hujjat №, ilova, server muallif; tuzatish — replaces, bekor qilish — sabab bilan;
+--          takror: clientRef, fin:exp_dup); expenses."expDocId"; trg_fin_exp_guard (hujjat qatori to'g'ridan-to'g'ri o'zgarmaydi),
+--          trg_fin_exp_doc_guard (hujjat — faqat bekor qilinadi); app.kassa_exp_category — OP-12 / OP-13 «Soliq».
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 12 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 13 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

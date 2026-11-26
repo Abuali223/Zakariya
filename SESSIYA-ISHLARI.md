@@ -3303,6 +3303,56 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   `sheets/config.json` va `google-key.json`, `--once` sinovi, `iqror-sheets` xizmatini yoqish — `sheets/README.md` (deploy buyrug'i:
   `bash ~/iqror-repo/deploy.sh`).
 
+## 88) F2.1 — «Buxgalteriya» xarajatlari reyestri (`fin_exp_save` / `fin_exp_void`) — 2026-11-26
+
+- **Egasi (2026-11-26):** «Rejadagi ishlarga qayta olasanmi?» Joriy etish rejasi va moliya rejasining 0, 1a, 1b bosqichlari tayyor —
+  moliya rejasining 2-bosqichi boshlandi; birinchi vazifa — F2.1 (naqdsiz reyestr: usul, statiya qatorlari, kontragent, hujjat №, ilova,
+  server muallif, bekor qilish; qabul: takror yo'q, har qatorda statiya).
+- **Baza (`migration/fin-exp.sql`, `--dev`, zanjirda `fin-rights.sql` dan keyin, `fin-version.sql` dan oldin; modul relizi 13):**
+  - `public.fin_exp_docs` — xarajat hujjati: usul (bank / korporativ karta / naqd — faqat kassa ishlamagan kun sanasi bilan, orderisiz),
+    to'lov sanasi, kontragent (+ nomi surati), hujjat № («№ 145» → «145») va sanasi, ilova, izoh, statiya qatorlari (1–20), jami, holat
+    (kiritilgan / bekor qilingan), oyna kaliti (`clientRef`) va so'rov izi, tuzatish zanjiri (`replaces` / `replacedBy`), kim kiritgan /
+    bekor qilgan (nomi — email emas), sabab. O'qish — kassa o'quvchilari (Direktor, Moliya menejeri, kassir, buxgalter), yozish — faqat
+    funksiyalar orqali.
+  - Har statiya qatori «Buxgalteriya»ga (`expenses`) alohida yozuv: `<hujjat>_<qator>`, `"expDocId"`; toifa va izoh boshi — kassa bilan
+    bir xil qoida (`app.kassa_exp_category`; OP-12 / OP-13 soliqlari endi «Soliq»). Shu sababli mavjud hisobotlar (oylik hisobot,
+    toifalar, Google jadvali, Telegram) o'zgarishsiz to'g'ri sanaydi.
+  - `fin_exp_save(p)` — kiritish va tuzatish (`replaces`: eski hujjat yoki eski hujjatsiz yozuv shu tranzaksiyada bekor qilinadi, o'rniga
+    yangisi yoziladi; eski yozuv reyestrga «eski yozuv» surati bo'lib tushadi), `fin_exp_void(id, sabab)` (qayta bosish — xatosiz),
+    `fin_exp_refs()` (statiyalar — qaysi usulda ruxsat, faol kontragentlar).
+  - Qoidalar: kim — Direktor yoki Moliya menejeri (avvalgi «Buxgalteriya» huquqi). Statiya usulga qarab: naqd — kassa «Xarajat»
+    ro'yxati (CT-23); bank / karta — EX (ish haqi EX-01…05, ijtimoiy soliq hisoblash EX-06, eskirish, hisobdan chiqarish, imtiyoz solig'i —
+    yo'q), OP-17 / 18 / 24; soliqlar OP-12 / 13 / 14 — faqat bank; ichki o'tkazma, korporativ kartani to'ldirish, maosh to'lovi,
+    qaytarish, qarz va ta'sischi — xarajat emas. Bank o'tkazmasida kontragent va № majburiy; EX-49 — izoh majburiy; sana — bugundan keyin
+    emas, 2 yildan eski emas; yopilgan davr — rad (trigger); naqd — kassa trigeri qoidalari o'zgarmagan.
+  - Takror yo'q: oyna kaliti bilan qayta yuborish — o'sha hujjat (dup); boshqa ma'lumot yoki boshqa xodim — rad (`fin:ref_mismatch`);
+    shu usul + kontragent + № + yil (№ bo'lmasa — + sana + summa) — ogohlantirish (qachon, kimga, qancha, kim kiritgan), tasdiqlansa
+    yoziladi; tekshiruv usul va kontragent bo'yicha navbat ostida (parallel oynalardan ham faqat bittasi).
+  - Himoya: hujjat qatori to'g'ridan-to'g'ri o'zgarmaydi va o'chirilmaydi, havola qo'lda qo'yilmaydi (`trg_fin_exp_guard`); hujjat —
+    faqat bekor qilinadi (`trg_fin_exp_doc_guard`). Hujjatsiz yozuvni to'g'ridan-to'g'ri (REST) yozish huquqi hozircha o'zgarmadi — reja
+    F2.9 (avval detektor haftasi, keyin qaytarib olish). Birinchi variantda huquq darhol yopilgan edi: to'liq regressiyada kassa himoyasi
+    sinovlari (to'g'ridan-to'g'ri yozuv orqali) yiqildi va keshdagi eski sahifa ham ishlamay qolardi — rejadagi bosqichga qaytarildi.
+  - Kassa yaxlitlik tekshiruvi: `fin_exp_docs` moliya jadvallari ro'yxatida; kutilgan sonlar 19 jadval / 47 ochiq / 107 ichki funksiya /
+    27 himoya triggeri / 18 o'qish siyosati; 8-bandga ikki trigger, 9-bandga oyna kaliti indeksi; barmoq izlari qayta yozildi; reliz 13
+    (`fin-version.sql`, `fin-kassa.js` SERVER_VER, `kassa-checks.sql`).
+- **Sahifa:** `assets/js/fin-exp.js` (yangi modul) — hujjat oynasi: sana, usul (kassa holatiga qarab: ishlamagan — naqd / bank / karta;
+  ishlayotgan — bank / karta, Direktorga kassa ishlamagan kun sanasi bilan naqd; to'xtatilgan — to'xtatilgan davr naqdi), kontragent
+  (shu oynadan yangisini qo'shish), hujjat № va sanasi, statiya qatorlari (usulga mos ro'yxat, summa mingliklar bilan, jami), ilova,
+  izoh; takror ogohlantirishi — tasdiq bilan; «Hujjat» oynasi (buxgalter ham ko'radi); «Bekor» (sabab bilan); natija oynasi va chek.
+  `admin.html` «Buxgalteriya»: modul relizi 13+ bo'lsa «+ Xarajat qo'shish» — hujjat oynasi; ro'yxatda usul belgisi («Bank № 77»),
+  «Hujjat» / «Tuzatish» / «Bekor»; eski yozuv — «Tuzatish» (hujjat bilan qayta yoziladi) / «Bekor»; oylik maosh hisobi qatori — «Maosh
+  hisobi» belgisi va «O'chir» (avvalgidek); buxgalterda — faqat «Hujjat». Kassa modulisiz server — avvalgi oyna.
+- **Sinovlar:** `test-fin-exp.sql` — 53 (huquqlar, ma'lumotnoma, bank / karta / naqd, takror, kiritish tekshiruvlari va atomarlik, kassa
+  ishlaganda naqd, bekor qilish, tuzatish, davr qulfi, triggerlar — REST va jadval egasi orqali, o'qish, o'zgarishlar jurnali); mutatsiya —
+  17 ta ataylab kiritilgan xato, hammasini sinov ushladi; `assets/js/fin-exp.test.mjs` — 15; `test-kassa-race.sh` (15) — o'sha oyna
+  kaliti 8 seansdan, o'sha to'lov 8 oynadan, bekor qilish ↔ tuzatish ikkala tartibda; yangilangan: `test-kassa-checks` (reliz 13),
+  `test-fin-rights` (buxgalter yopiq ro'yxatlari, pul RPC'lari), `test-sales-role` (jadval to'ldirgich). Brauzer: yangi `k19` (22
+  tekshiruv: Moliya menejeri bank hujjati, yangi kontragent, takror, ko'rish, bekor qilish, tuzatish, eski yozuvlar, 390 px, buxgalter),
+  moslashtirilgan `k3`, `k6`, `k7`, `k15`, eski oqim (dev). Natija: to'liq regressiya (dev, qayta zanjir, poyga 63/63, jonli zanjir,
+  tugun sinovlari) — hammasi yashil; brauzer to'plami — 26 o'tish, 668 tekshiruv, hammasi o'tdi.
+- **Egasi uchun:** kassa moduli hali `--dev` — F2.1 prod'da jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr; `ishga-tushirish.md`
+  3.3 ga yangi eslatma). Hozirgi deploy (`bash ~/iqror-repo/deploy.sh`) prod'dagi xarajat oynasini o'zgartirmaydi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.
