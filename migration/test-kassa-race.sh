@@ -34,6 +34,8 @@
 #   (16) F2.2 kontragent kartasi: o'sha tur + nom + STIR 8 seansdan (karta va eski «+ yangi» yo'li aralash) — bitta karta; o'sha STIR,
 #       8 xil nom — bittasi, qolganlari fin:cp_stir_dup; o'sha kartani o'sha versiya bilan 8 seans o'zgartiradi — bittasi, qolganlari
 #       fin:cp_changed.
+#   (17) F2.13 qayta tasnif dalolatnomasi: o'sha hujjatga 8 seans so'rov — bittasi, qolganlari kassa:fix_pending; tasdiq va bekor qilish
+#       parallel — faqat bitta o'tish (raqam va «Buxgalteriya» qatori holatga mos); ikki hujjat parallel tasdiqlansa — raqamlar takrorsiz.
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -612,6 +614,54 @@ wait
 chk "16c o'sha karta, o'sha versiya, 8 seans: bittasi o'tdi (versiya 1), 7 tasi fin:cp_changed; deadlock yo'q" \
     "$(cat "$TMP"/16c.* | grep -c '^1$')/$(cat "$TMP"/16c.* | grep -c 'fin:cp_changed')/$(q -c "select rev from public.fin_counterparties where id = '$C16'")/$(cat "$TMP"/16?.* | grep -ci 'deadlock')" \
     "1/7/1/0"
+# ---------- (17) F2.13: qayta tasnif dalolatnomasi (kassa_fix_request / kassa_fix_decide / kassa_fix_cancel) ----------
+#   Alohida sinov kassasi (r17), kechagi YOPILGAN kun va unda uchta o'tkazilgan «Xarajat» KO-2 (urug' — triggerlarsiz; davr qulfi olinadi).
+#   (a) o'sha hujjat bo'yicha 8 seans (8 xil oyna kaliti) so'rov yozadi: bittasi yoziladi, 7 tasi kassa:fix_pending (hujjat qatori qulfi);
+#   (b) o'sha so'rovni Direktor tasdiqlaydi (4 seans) va so'ragan bekor qiladi (4 seans) parallel: faqat bitta o'tish (tasdiq yoki bekor),
+#       qolganlari «takror» yoki kassa:bad_status; tasdiq bo'lsa — raqam 1 va «Buxgalteriya» qatori yangilangan, bekor bo'lsa — raqam yo'q;
+#   (c) ikki hujjatning so'rovini Direktor parallel tasdiqlaydi (o'sha kassa): raqamlar ketma-ket, takrorsiz (kassa qulfi + hisoblagich).
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.cash_desks (id, name, "isTest") values ('r17', 'Poyga 17', true) on conflict (id) do nothing;
+update public.fin_org set "lockedThrough" = null where id = 'main';
+insert into public.cash_days (id, desk, day, status, opening, receipts, payouts, closing, counted, hash, "closedBy", "closedAt", "openedAt")
+  values ('cd_r17', 'r17', app.fin_today() - 1, 'closed', 900000, 0, 300000, 600000, 600000, 'h17', 'R_KAS', now(), now());
+insert into public.cash_docs (id, desk, form, op, status, year, no, "businessDay", "dayId", amount, "partyType", "partyId", "partyName", basis,
+                              "clientRef", "postedAt", "postedBy", "createdAt")
+  select 'r17d' || i, 'r17', 'KO2', 'out_expense', 'posted', extract(year from app.fin_today() - 1)::int, i, app.fin_today() - 1, 'cd_r17', 100000,
+         'counterparty', 'cp_rsup', 'Poyga Yetkazuvchi', 'Poyga xaridi', 'r17-ref-' || i, now(), 'R_KAS', now()
+    from generate_series(1, 3) i;
+insert into public.cash_doc_lines (id, "docId", "lineNo", debit, credit, amount, "articleId", cash)
+  select 'r17l' || i, 'r17d' || i, 1, '9420', '5010', 100000, 'EX-32', true from generate_series(1, 3) i;
+insert into public.expenses (id, date, month, category, amount, note, method, "cashDocId", "articleId", "counterpartyId")
+  select 'kx_r17d' || i || '_1', to_char(app.fin_today() - 1, 'YYYY-MM-DD'), to_char(app.fin_today() - 1, 'YYYY-MM'), 'Boshqa', 100000,
+         'poyga (KO-2 № ' || i || ')', 'cash', 'r17d' || i, 'EX-32', 'cp_rsup' from generate_series(1, 3) i;
+SQL
+fr17(){ echo "public.kassa_fix_request(jsonb_build_object('docId', '$1', 'clientRef', '$2', 'reason', 'Poyga: statiya xato', 'lines', '[{\"lineNo\":1,\"articleId\":\"EX-16\"}]'::jsonb))"; }
+for i in $(seq 1 8); do ( call_raw R_FM "$(fr17 r17d1 "r17a-ref-$i") ->> 'status'" > "$TMP/17a.$i" ) & done
+wait
+chk "17a o'sha hujjat, 8 seans: bitta so'rov yozildi, 7 tasi kassa:fix_pending; deadlock yo'q" \
+    "$(cat "$TMP"/17a.* | grep -c '^pending$')/$(cat "$TMP"/17a.* | grep -c 'kassa:fix_pending')/$(q -c "select count(*) from public.cash_doc_fixes where \"docId\" = 'r17d1'")/$(cat "$TMP"/17a.* | grep -ci 'deadlock')" \
+    "1/7/1/0"
+F17=$(q -c "select id from public.cash_doc_fixes where \"docId\" = 'r17d1'")
+for i in 1 2 3 4; do
+  ( call_raw R_DIR "public.kassa_fix_decide('$F17', true, '') ->> 'status'" > "$TMP/17b.d$i" ) &
+  ( call_raw R_FM "public.kassa_fix_cancel('$F17', 'Poyga bekor') ->> 'status'" > "$TMP/17b.c$i" ) &
+done
+wait
+ST17=$(q -c "select status from public.cash_doc_fixes where id = '$F17'")
+if [ "$ST17" = "approved" ]; then EXP17="approved/4/0/1/EX-16"; else EXP17="cancelled/0/4/0/EX-32"; fi
+chk "17b tasdiq (4) va bekor (4) parallel: bitta o'tish, raqam va «Buxgalteriya» qatori holatga mos; deadlock yo'q ($ST17)" \
+    "$ST17/$(cat "$TMP"/17b.d* | grep -c '^approved$')/$(cat "$TMP"/17b.c* | grep -c '^cancelled$')/$(q -c "select coalesce(max(\"lastNo\"), 0) from public.doc_counters where desk = 'r17' and series = 'FIX'")/$(q -c "select \"articleId\" from public.expenses where id = 'kx_r17d1_1'")$(cat "$TMP"/17b.* | grep -ci 'deadlock' | sed 's/^0$//')" \
+    "$EXP17"
+N17=$(q -c "select coalesce(max(\"lastNo\"), 0) from public.doc_counters where desk = 'r17' and series = 'FIX'")
+A17=$(call_as R_FM "$(fr17 r17d2 r17c-ref-2) ->> 'id'"); B17=$(call_as R_FM "$(fr17 r17d3 r17c-ref-3) ->> 'id'")
+( call_raw R_DIR "public.kassa_fix_decide('$A17', true, '') ->> 'no'" > "$TMP/17c.a" ) &
+( call_raw R_DIR "public.kassa_fix_decide('$B17', true, '') ->> 'no'" > "$TMP/17c.b" ) &
+wait
+chk "17c ikki hujjat, parallel tasdiq: raqamlar ketma-ket va takrorsiz, hisoblagich mos; deadlock yo'q" \
+    "$(cat "$TMP"/17c.a "$TMP"/17c.b | grep -E '^[0-9]+$' | sort -n | paste -sd, -)/$(q -c "select \"lastNo\" from public.doc_counters where desk = 'r17' and series = 'FIX'")/$(cat "$TMP"/17c.* | grep -ci 'deadlock')" \
+    "$((N17 + 1)),$((N17 + 2))/$((N17 + 2))/0"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]

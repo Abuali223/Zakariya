@@ -3420,6 +3420,43 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
 - **Sinovlar:** tugun sinovlari — hammasi o'tdi (fin-print 80 bilan birga); brauzer — kirim orderini chop etadigan va chiqim so'rovi
   oynasini ishlatadigan 9 ssenariy (k1, k2, k3, k4, k7, k9, k14, k15, k16) — hammasi o'tdi. SQL o'zgarmagan.
 
+## 91) F2.13 — qayta tasnif dalolatnomasi («QT», bosmada «ҚТ-»): hisobdagi xatoni Direktor ruxsati bilan tuzatish — 2026-11-26
+
+- **Egasi (2026-11-26):** «Agar yakunlangan bo'lsa F2.13 dan boshla» (Sh-8 B11: buxgalter — «1 kundan keyin tuzatib bo'lmasa hisobda
+  xato qoladi, Direktor ruxsati bilan tuzatish kerak»).
+- **Qaror (FD-20 bilan):** kassa hujjatining o'zi (summa, sana, raqam, qatorlar, imzolar) o'zgarmaydi (Nizom 143, 25-band; CL-03).
+  Hisobdagi xato — alohida dalolatnoma: buxgalter yoki Moliya menejeri so'raydi, Direktor tasdiqlaydi yoki sabab bilan rad etadi
+  (so'ragan o'zi qaror qilmaydi); kutilayotgan so'rovni so'ragan yoki Direktor bekor qiladi. Doira (1-versiya): yopilgan kundagi
+  o'tkazilgan «Xarajat» chiqim orderi (KO-2) — qator statiyasi (debet hisobvarag'i statiyadan qayta aniqlanadi), oluvchi (kontragent yoki
+  «boshqa»), asos izohi. Boshqa operatsiyalar (maosh, avans, qaytarish, o'quv to'lovi) o'z hisob-kitob jadvallariga bog'langan — storno
+  (F4.8). Summa xatosi — sanashdagi kamomad / ortiqcha (FD-21).
+- **Server:** `kassa.sql` — `cash_doc_fixes` (oldingi va yangi holat, sabab, raqam va sana tasdiqda, bitta orderda bitta kutilayotgan
+  so'rov — noyob indeks; o'z so'rovi bo'yicha qaror va sababsiz rad — jadval cheklovlari), `trg_kassa_fix_guard` (faqat kassa
+  funksiyalari ichida; o'chirilmaydi; qarordan keyin o'zgarmaydi), `app.kassa_eff_doc` / `app.kassa_eff_art` (amaldagi holat: oxirgi
+  tasdiqlangan dalolatnoma); yangi `kassa-fix.sql` — `kassa_fix_request`, `kassa_fix_decide`, `kassa_fix_cancel`, `kassa_fix_list`,
+  `kassa_fix_get`. Ochiq kunda — rad (kassir bekor qilib qayta yozadi), yopilgan davrda — rad (fin:locked); tasdiqda shartlar qayta
+  tekshiriladi (kun qayta ochilgan, davr yopilgan, statiya hisobvarag'i o'zgargan yoki faol emas — rad). Tasdiqda «Buxgalteriya»dagi
+  ko'chgan xarajat qatori (statiya, toifa, kontragent, izoh «QT-n») yangilanadi; statiya matritsasi (RP-08) va kontragent ko'chirmasi
+  (RP-10) — amaldagi holat; KO-3, KO-4, kunlik hisobot, KO-2 bosmasi — asl. `kassa_doc_json` — `fixes` / `eff`; `kassa_checks` —
+  `fixPending` / `fixes30`; `kassa_state` — `pending.fixToApprove`. Qulf tartibi: so'rov — L0 → hujjat qatori; tasdiq — L4 → dalolatnoma →
+  L5 → «Buxgalteriya» qatorlari. Reliz 15 (`fin-version.sql`, `kassa-checks.sql` sonlari va himoya izlari — 357 obyekt, `SERVER_VER`).
+- **Sahifa:** «Kassa» sarlavhasida «QT» (Direktorga — kutilayotganlar soni bilan) — ro'yxat (qaror kutayotganlar / hammasi); KO-3
+  jurnali va yopilgan kun oynasida orderda «QT» tugmasi va «QT-n» / «QT kutilmoqda» belgisi; tuzatish oynasi (amaldagi holat, qatorlar
+  statiyasi, oluvchi, asos, sabab; dalolatnomalar tarixi, qaror va bekor qilish tugmalari); «Tasdiqlash» bo'limida Direktorga QT
+  jadvali; nazorat ro'yxatida ikki qator; dalolatnoma bosmasi (`fin-print.js: fixActHtml` — 3 tilda: avval / keyin jadvali, tuzatish
+  yozuvi «Dt yangi — Kt eski», sabab, imzolar).
+- **Sinovlar:** yangi `test-kassa-fix.sql` (98 tekshiruv; mutatsiya — 43/43 ushlandi), `test-kassa-race.sh` 17a–c (o'sha orderga 8 seans
+  so'rov; tasdiq va bekor qilish parallel; ikki order parallel tasdiq — raqamlar takrorsiz), `fin-fix.test.mjs` (7), `test-fin-rights`
+  (buxgalter yopiq ro'yxatlari: `cash_doc_fixes`, so'rov / bekor / ro'yxat; qaror — 42501), `test-kassa-checks` (reliz 15), brauzer —
+  yangi `k21` (20 tekshiruv); `k4` — nazorat ro'yxati qatorlari soni 30 → 31. Tuzatildi: KO-3 tugmasi bosilganda hodisa obyekti davr deb
+  olinmasin (davrni saqlab qaytish uchun `openJournal(dan, gacha)`); `test-sales-role` umumiy to'ldirish qoidasi — yangi jadval uchun holat.
+- **Natija:** to'liq regressiya (dev zanjir, qayta zanjir, poyga 69/69, jonli zanjir, tugun va server sinovlari) — hammasi yashil
+  (`test-sales-role` G01 va `test-kassa-checks` himoya izlari yangilangach — 121/121 va 55/55); brauzer to'plami — 28 o'tish, 714 tekshiruv,
+  hammasi o'tdi.
+- **Egasi uchun:** kassa moduli hali `--dev` — F2.13 prod'ga jonli zanjirga o'tkazish bilan birga chiqadi (≈ 21-dekabr). Buxgalter va
+  Direktorga qisqa ko'rsatma: xato yopilgan kunda topilsa — «QT» (KO-3 jurnalidagi order yonida), Direktor «QT» ro'yxatida tasdiqlaydi;
+  dalolatnoma chop etilib imzolanadi. Hozirgi deploy prod'ni o'zgartirmaydi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

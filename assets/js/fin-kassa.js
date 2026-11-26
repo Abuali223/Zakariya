@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 14;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 15;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -368,6 +368,7 @@ function draw() {
   if (m.director || m.list2) acts.push(`<button class="btn ghost2" id="ks-period" title="Davr surati (yil / oy yakuni) va yopilgan davr qulfi">Davr</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-ko3" title="KO-3: kirim va chiqim orderlari jurnali — chop etish va Excel">KO-3</button>`);
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
+  if (started && (m.director || m.list2) && Number(s.version) >= 15) acts.push(`<button class="btn ghost2" id="ks-fix" title="Qayta tasnif dalolatnomalari (QT): yopilgan kundagi xarajat orderidagi statiya, oluvchi yoki asos xatosini tuzatish — Direktor tasdig‘i bilan">QT${num(s.pending.fixToApprove) && m.director ? ` (${num(s.pending.fixToApprove)})` : ''}</button>`);
   if (started && (m.director || m.list2)) acts.push(`<button class="btn ghost2" id="ks-kpi" title="Haftalik ko‘rsatkichlar (RP-22): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar">KPI</button>`);
   // (tayyorlangan, hali boshlanmagan qayta ishga tushirishda ham — qayta sanash uchun, g4v-2)
   if (ready && (paused || rs) && m.director) acts.push(`<button class="btn gold" id="ks-restart" title="Komissiya sanashi bo‘yicha qayta ishga tushirish qoldig‘i (ishga-tushirish §9)">Qayta ishga tushirish</button>`);
@@ -393,6 +394,7 @@ function draw() {
   if (s.desk && s.desk.isTest) warn.push(['#175CD3', '#E8F1FD', 'Bu — SINOV kassasi: hujjatlari va raqamlari asosiy kassadan alohida, hisobotlarga kirmaydi.']);
   if (!s.kassaGoLive && !paused && !rs) warn.push(['#B54708', '#FEF3E2', 'Kassa hali «ishga tushirilgan» deb belgilanmagan: naqd o‘quv to‘lovlari kassa orderisiz yozilmoqda' + (m.director ? ' («⚙ Sozlamalar» → ishga tushirish sanasi).' : '.')]);
   if (num(s.pending.toApprove) > 0) warn.push(['#175CD3', '#E8F1FD', `Sizning tasdig‘ingizni kutayotgan so‘rovlar: ${s.pending.toApprove} ta.`]);
+  if (num(s.pending.fixToApprove) > 0) warn.push(['#175CD3', '#E8F1FD', `Qayta tasnif (QT) so‘rovlari qaroringizni kutmoqda: ${s.pending.fixToApprove} ta — «QT» tugmasi.`]);
   if (num(s.pending.toPay) > 0 && (m.operator || m.director)) warn.push(['#175CD3', '#E8F1FD', `Tasdiqlangan, pul berilishi / qabul qilinishi kerak: ${s.pending.toPay} ta (${som(s.pending.toPaySum)}).`]);
   if (num(s.pending.refundsLate) > 0) warn.push(['#B42318', '#FDECEC', `Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi: ${s.pending.refundsLate} ta.`]);
   if (num(s.unverifiedDays) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Tekshirilmagan (yopilgan) kunlar: ${s.unverifiedDays} ta.`]);
@@ -538,9 +540,10 @@ function bind() {
   on('#ks-hand', openHandoverForm);
   on('#ks-set', openSettings);
   on('#ks-period', openPeriodForm);
-  on('#ks-ko3', openJournal);
+  on('#ks-ko3', () => openJournal());
   on('#ks-mx', openMatrix);
   on('#ks-kpi', openKpi);
+  on('#ks-fix', () => openFixList('pending'));
   on('#ks-adv', openAdvForm);
   on('#ks-opening', ev => { if (ev && ev.preventDefault) ev.preventDefault(); openOpeningForm(); });
   on('#ks-restart', openRestartForm);
@@ -1401,12 +1404,13 @@ async function printReport(day, bookOrNull) {
 }
 // ---------------------------------------------------------------- KO-3: kirim va chiqim orderlari jurnali (F1.22)
 //   Davr (oy yoki chorak) bo'yicha barcha orderlar, bekor qilinganlari bilan; chop etish (KO-3 shakli) va Excel (buxgalter dasturi uchun).
-async function openJournal() {
-  const today = String(ST.ov.state.today || ''), m0 = today.slice(0, 8) + '01', m = me();
+async function openJournal(pFrom, pTo) {   // pFrom / pTo — qaytishda saqlangan davr (tugma bosilganda — hodisa obyekti, e'tiborsiz)
+  const isDay = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const today = String(ST.ov.state.today || ''), m0 = isDay(pFrom) ? pFrom : today.slice(0, 8) + '01', m = me();
   const canX = !!(m.director || m.list2);   // Excel eksporti (FD-28): kassirga yo'q — jurnalni chop etadi; 2-ro'yxatga — ismsiz
   $('#modal').innerHTML = `<div class="modal-h"><h3>KO-3 — kassa orderlari jurnali</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b"><div class="small muted">Kirim va chiqim kassa orderlari (bekor qilinganlari raqami bilan) — oy yoki chorak bo‘yicha. Chop etilib, bosh buxgalter imzolaydi; Excel — buxgalter dasturi uchun${canX && !m.director ? ' (ismsiz: shaxslar ID bilan; ismli nusxa — Direktorda)' : ''}.</div>
-      <div class="grid2">${lbl('Davr boshi', `<input id="kj-from" type="date" value="${esc(m0)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Davr oxiri', `<input id="kj-to" type="date" value="${esc(today)}" max="${esc(today)}" style="${FLD}">`)}</div>
+      <div class="grid2">${lbl('Davr boshi', `<input id="kj-from" type="date" value="${esc(m0)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Davr oxiri', `<input id="kj-to" type="date" value="${esc(isDay(pTo) ? pTo : today)}" max="${esc(today)}" style="${FLD}">`)}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost2" id="kj-load">Ko‘rsatish</button></div>
       <div id="kj-body" style="margin-top:10px"></div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${canX ? '<button type="button" class="btn ghost2" id="kj-xlsx" disabled>⬇ Excel (XLSX)</button>' : ''}<button type="button" class="btn gold" id="kj-print" disabled>🖨 KO-3</button></div>`;
@@ -1422,11 +1426,12 @@ async function openJournal() {
     const t = J.totals || {}, docs = J.docs || [];
     const row = x => { const isIn = x.form === 'KO1', v = x.status === 'void', a = v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount));
       return `<tr${v ? ' style="opacity:.55"' : ''}><td data-label="Sana">${esc(dmy(x.businessDay))}</td><td data-label="№"><b>${isIn ? 'K' : 'Ch'}-${esc(String(x.no))}</b></td>
-        <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}${v ? ' — bekor qilingan' + (x.voidReason ? ': ' + esc(x.voidReason) : '') : ''}</div></td>
+        <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}${v ? ' — bekor qilingan' + (x.voidReason ? ': ' + esc(x.voidReason) : '') : ''}</div>${fixCell(x, m, today)}</td>
         <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? a : ''}</td><td data-label="Chiqim" style="text-align:right;white-space:nowrap">${isIn ? '' : a}</td></tr>`; };
     $('#kj-body').innerHTML = `<div class="small" id="kj-sum" style="background:#eef3f1;border-radius:10px;padding:10px 12px">Davr boshi <b>${esc(som(J.opening))}</b> · kirim <b>${esc(som(t.in))}</b> (${esc(String(num(t.nIn)))} ta) · chiqim <b>${esc(som(t.out))}</b> (${esc(String(num(t.nOut)))} ta)${restartAdjTxt(J.restartAdj)} · davr oxiri <b>${esc(som(J.closing))}</b>${num(t.voids) ? ` · bekor qilingan: ${esc(String(num(t.voids)))} ta` : ''}${J.balanced === false ? ' · <b style="color:#B42318">qoldiqlar mos emas — Direktorga xabar bering</b>' : ''}</div>
       ${docs.length ? `<div class="tablewrap" style="max-height:340px;overflow:auto;margin-top:8px"><table id="kj-tbl"><thead><tr><th>Sana</th><th>№</th><th>Operatsiya / tomon</th><th style="text-align:right">Kirim</th><th style="text-align:right">Chiqim</th></tr></thead><tbody>${docs.map(row).join('')}</tbody></table></div>` : '<div class="empty" style="margin-top:8px">Bu davrda order yo‘q.</div>'}`;
     $('#kj-print').disabled = false; if (xb()) xb().disabled = false;
+    $('#kj-body').querySelectorAll('[data-kfix]').forEach(b => b.onclick = () => openFixForm(b.dataset.kfix, () => openJournal(from, to)));
   };
   $('#kj-load').onclick = load;
   $('#kj-print').onclick = async () => {
@@ -1612,6 +1617,10 @@ export function controlRows(c) {
     'Kunni yopishda e’lon qilingan qurilma navbati yozuvining kech kirim orderi 2 kun (48 soat) ichida kelmagan — navbat yo‘qolgan, o‘chirilgan yoki yozuv o‘ylab topilgan bo‘lishi mumkin (kassir bilan aniqlang); «Қ» blankalari — yozuvlar «Қ» raqami bilan kiritilib, kun izoh bilan tekshirilguncha');
   add('reissues', 'Asl nusxani qayta chop etish', num(c.reissues30) ? 'warn' : 'ok', num(c.reissues30) ? cnt(c.reissues30, 'marta') : 'yo‘q', '«Avvalgisi qog‘ozga chiqmadi» deb qayta chiqarilgan');
   add('gateOff', 'Vedomost tasdig‘isiz naqd maosh', num(c.salaryGateOff30) ? 'warn' : 'ok', num(c.salaryGateOff30) ? cnt(c.salaryGateOff30) : 'yo‘q', 'Direktor ruxsati bilan berilgan');
+  // F2.13: qayta tasnif dalolatnomalari (server 15-reliz va undan keyin) — Direktor qarorini kutayotganlar; 30 kunda tasdiqlanganlari (ma'lumot)
+  if (c.fixPending != null) add('fixPending', 'Qaror kutayotgan qayta tasnif (QT) so‘rovlari', num(c.fixPending) ? 'warn' : 'ok', num(c.fixPending) ? cnt(c.fixPending) : 'yo‘q',
+    'Direktor «QT» ro‘yxatida yoki «Tasdiqlash» bo‘limida tasdiqlaydi yoki rad etadi');
+  if (num(c.fixes30)) add('fixes30', 'Qayta tasniflangan orderlar', 'info', cnt(c.fixes30), 'Statiya, oluvchi yoki asos dalolatnoma bilan tuzatilgan — statiya matritsasi, kontragent ko‘chirmasi va «Buxgalteriya» tuzatilgan holatni ko‘rsatadi');
   const ub = c.unprintedBooks30 || [];
   add('unprinted', 'Kassa kitobi varag‘i chop etilmagan kunlar', ub.length ? 'warn' : 'ok', ub.length ? `${ub.length} ta: ${days(ub)}` : 'yo‘q', 'KO-4 ikki nusxada chop etilib imzolanadi');
   const lim = c.limit || {};
@@ -1711,7 +1720,7 @@ async function openDayView(day) {
   const docs = book.docs || [];
   const rows = docs.map(x => { const isIn = x.form === 'KO1', v = x.status === 'void';
     return `<tr${v ? ' style="opacity:.55"' : ''}><td data-label="№"><b>${isIn ? 'K' : 'Ch'}-${esc(String(x.no))}</b><div class="small muted">${esc(hm(x.postedAt))}</div></td>
-      <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}</div></td>
+      <td data-label="Operatsiya">${esc(opName(x.op))}<div class="small muted">${esc(x.partyName || '')}</div>${fixCell(x, me(), String((ST.ov && ST.ov.state && ST.ov.state.today) || ''))}</td>
       <td data-label="Kirim" style="text-align:right;white-space:nowrap">${isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
       <td data-label="Chiqim" style="text-align:right;white-space:nowrap">${!isIn ? (v ? '<s>' + esc(som(x.amount)) + '</s>' : esc(som(x.amount))) : ''}</td>
       <td data-label="Holat">${v ? stChip('void') : '<span class="small muted">' + (x.isSystem ? 'tizim' : esc(x.postedByName || nm(x.postedBy))) + '</span>'}${num(x.prints) ? `<div class="small muted">chop etilgan: ${esc(String(x.prints))}</div>` : ''}</td>
@@ -1762,27 +1771,215 @@ async function openDayView(day) {
   $('#kdv-book').onclick = () => printBook(day, back);
   $('#kdv-report').onclick = () => printReport(day, book);
   $('#modal').querySelectorAll('[data-dprint]').forEach(b => b.onclick = () => printDoc(b.dataset.dprint, back));
+  $('#modal').querySelectorAll('[data-kfix]').forEach(b => b.onclick = () => openFixForm(b.dataset.kfix, back));
   $('#modal').querySelectorAll('[data-cprint]').forEach(b => b.onclick = () => printCount(book, b.dataset.cprint));
+}
+
+// ---------------------------------------------------------------- F2.13: qayta tasnif dalolatnomasi («QT-», bosmada «ҚТ-»)
+//   Yopilgan kundagi o'tkazilgan «Xarajat» chiqim orderidagi HISOB xatosi — statiya (hisobvaraq statiyadan), oluvchi, asos. Buxgalter /
+//   Moliya menejeri so'raydi, Direktor tasdiqlaydi yoki rad etadi; order o'zi (summa, sana, raqam, imzolar) o'zgarmaydi (Nizom 143,
+//   25-band; server — kassa-fix.sql). Kirish: KO-3 jurnali va yopilgan kun oynasidagi «QT» tugmasi (hujjat yonida «QT-n» / «QT kutilmoqda»
+//   belgisi), sarlavhadagi «QT» (ro'yxat) va «Tasdiqlash» bo'limi (Direktor). Statiya matritsasi, kontragent ko'chirmasi va
+//   «Buxgalteriya» xarajati — tuzatilgan holat bo'yicha; KO-2 bosmasi va KO-3 — asl.
+export const fixable = (d, m, today) => !!(d && m && m.list2 && d.status === 'posted' && d.form === 'KO2' && d.op === 'out_expense'
+  && /^\d{4}-\d{2}-\d{2}/.test(String(d.businessDay || '')) && String(d.businessDay).slice(0, 10) < String(today || ''));
+export function fixBadge(d) {   // hujjat yonidagi belgi: tasdiqlangan dalolatnomalar raqami va kutilayotgan so'rov
+  const fx = (d && d.fixes) || [], parts = fx.filter(f => f.status === 'approved' && f.no).map(f => 'QT-' + f.no);
+  if (fx.some(f => f.status === 'pending')) parts.push('QT kutilmoqda');
+  return parts.join(' · ');
+}
+// Amaldagi holat: oxirgi tasdiqlangan dalolatnoma (server: doc.eff) yoki asl order (naqd qatorlar)
+export const fixCurrent = d => (d && d.eff) ? d.eff : { partyType: (d && d.partyType) || '', partyId: (d && d.partyId) || null,
+  partyName: (d && d.partyName) || '', basis: (d && d.basis) || '',
+  lines: ((d && d.lines) || []).filter(l => l.cash !== false).map(l => ({ lineNo: l.lineNo, articleId: l.articleId, debit: l.debit, amount: l.amount })) };
+// So'rov mazmuni — faqat o'zgargan qismlar (ko'rsatilmaganini server amaldagi holatdan oladi).
+//   v: { arts: {qator: statiya}, ptype, pid, pname, basis, reason }
+export function fixPayload(cur, v) {
+  cur = cur || {}; v = v || {};
+  const p = {}, lines = [];
+  (cur.lines || []).forEach(l => { const a = v.arts && v.arts[l.lineNo]; if (a && a !== l.articleId) lines.push({ lineNo: l.lineNo, articleId: a }); });
+  if (lines.length) p.lines = lines;
+  const pt = v.ptype || cur.partyType, nm = String(v.pname == null ? '' : v.pname).trim();
+  if (pt !== cur.partyType || (pt === 'counterparty' ? (v.pid || '') !== (cur.partyId || '') : nm !== String(cur.partyName || '').trim()))
+    p.party = pt === 'counterparty' ? { type: pt, id: v.pid || '' } : { type: pt, name: nm };
+  const b = String(v.basis == null ? '' : v.basis).trim();
+  if (b !== String(cur.basis || '').trim()) p.basis = b;
+  p.reason = String(v.reason == null ? '' : v.reason).trim();
+  return p;
+}
+export const fixChanged = p => !!(p && (p.lines || p.party || Object.prototype.hasOwnProperty.call(p, 'basis')));
+// Ro'yxat katagi: belgi («QT-n», «QT kutilmoqda») va tugma — so'rash mumkin bo'lsa (2-ro'yxat) yoki dalolatnoma bor bo'lsa (ko'rish)
+function fixCell(x, m, today) {
+  const bd = fixBadge(x), can = fixable(x, m, today), has = ((x && x.fixes) || []).length > 0;
+  if (!bd && !can) return '';
+  return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">${bd ? chip(bd, '#175CD3', '#E8F1FD') : ''}${can || (has && (m.director || m.list2))
+    ? `<button type="button" class="btn sm" data-kfix="${esc(x.id)}" title="Qayta tasnif dalolatnomasi: statiya, oluvchi yoki asos xatosini tuzatish (Direktor tasdig‘i bilan)">QT</button>` : ''}</div>`;
+}
+const FIX_ST = { pending: ['Direktor qarorini kutmoqda', '#B54708', '#FEF3E2'], approved: ['Tasdiqlangan', '#157347', '#E7F6EC'],
+  rejected: ['Rad etilgan', '#B42318', '#FDECEC'], cancelled: ['Bekor qilingan', '#667085', '#F2F4F7'] };
+const fixChip = st => { const x = FIX_ST[st] || [st, '#475467', '#F2F4F7']; return chip(x[0], x[1], x[2]); };
+const fixArtLbl = s => { const n = artName(s.articleId); return `${s.articleId || '—'}${n && n !== s.articleId ? ' · ' + n : ''}${s.debit ? ' (Dt ' + s.debit + ')' : ''}`; };
+const fixDiffHtml = (pm, f) => pm.fixDiff(f).map(c => c.kind === 'article'
+  ? `Statiya (${c.lineNo}-qator, ${esc(som(c.amount))}): ${esc(fixArtLbl(c.from))} → <b>${esc(fixArtLbl(c.to))}</b>`
+  : c.kind === 'party' ? `Oluvchi: ${esc(c.from.name || '—')} → <b>${esc(c.to.name || '—')}</b>`
+    : `Asos: ${esc(c.from || '—')} → <b>${esc(c.to || '—')}</b>`).join('<br>');
+const fixDocLbl = f => { const d = (f && f.doc) || {}; return `Ch-${d.no || '—'} · ${dmy(d.businessDay)} · ${som(d.amount)}`; };
+async function printFix(id) {
+  try {
+    const [pm, wm, g] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), call('kassa_fix_get', { p_id: id }), loadRefs()]);
+    C.printHTML(pm.fixActHtml(g.fix, Object.assign(printCtx({}, g.isTest, null), { articles: (ST.refs && ST.refs.articles) || [] }), wm));
+  } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+}
+// Qaror va bekor qilish — tasdiqlar bo'limi, ro'yxat va hujjat oynasi uchun bitta yo'l; after — keyingi ko'rinish
+async function fixAct(kind, f, after) {
+  const fin = async () => { if (C.onChange) C.onChange(); if (after) await after(); };
+  if (kind === 'ok') {
+    if (!confirm(`${fixDocLbl(f)}: qayta tasnif tasdiqlansinmi? «Buxgalteriya»dagi xarajat qatori va hisobotlar tuzatilgan holatga o‘tadi.`)) return;
+    try { const r = await call('kassa_fix_decide', { p_id: f.id, p_approve: true, p_note: '' }); C.toast(`Tasdiqlandi ✓ QT-${r.no}`); } catch (e) { C.toast(errText(e), true); }
+    await fin(); return;
+  }
+  ask(kind === 'no' ? 'Qayta tasnifni rad etish' : 'So‘rovni bekor qilish', kind === 'no' ? 'Rad etish sababi (buxgalter ko‘radi)' : 'Bekor qilish sababi', 3, async r => {
+    try {
+      if (kind === 'no') await call('kassa_fix_decide', { p_id: f.id, p_approve: false, p_note: r });
+      else await call('kassa_fix_cancel', { p_id: f.id, p_reason: r });
+      C.toast(kind === 'no' ? 'Rad etildi ✓' : 'Bekor qilindi ✓');
+    } catch (e) { C.toast(errText(e), true); }
+    C.closeModal(); await fin();
+  });
+}
+const fixActs = (f, m) => [
+  f.status === 'approved' ? `<button type="button" class="btn sm" data-fxprint="${esc(f.id)}">🖨 Dalolatnoma</button>` : '',
+  f.status === 'pending' && m.director && f.requestedBy !== m.uid ? `<button type="button" class="btn sm gold" data-fxok="${esc(f.id)}">Tasdiqlash</button><button type="button" class="btn sm danger" data-fxno="${esc(f.id)}">Rad etish</button>` : '',
+  f.status === 'pending' && (m.director || f.requestedBy === m.uid) ? `<button type="button" class="btn sm ghost" data-fxcancel="${esc(f.id)}">So‘rovni bekor qilish</button>` : ''].join('');
+function fixBind(root, list, after) {
+  const by = id => list.find(f => f.id === id);
+  root.querySelectorAll('[data-fxprint]').forEach(b => b.onclick = () => printFix(b.dataset.fxprint));
+  root.querySelectorAll('[data-fxok]').forEach(b => b.onclick = () => fixAct('ok', by(b.dataset.fxok), after));
+  root.querySelectorAll('[data-fxno]').forEach(b => b.onclick = () => fixAct('no', by(b.dataset.fxno), after));
+  root.querySelectorAll('[data-fxcancel]').forEach(b => b.onclick = () => fixAct('cancel', by(b.dataset.fxcancel), after));
+}
+async function openFixForm(docId, back) {
+  const done = () => { if (back) back(); else C.closeModal(); };
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Qayta tasnif (QT)</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
+  C.openModal(); $('#m-x').onclick = done;
+  let got, hist, pm;
+  try { [got, hist, pm] = await Promise.all([call('kassa_doc_get', { p_id: docId }), call('kassa_fix_list', { p_desk: ST.desk, p_status: 'all', p_doc: docId }), C.finMod('fin-print'), loadRefs()]); }
+  catch (e) { C.toast(errText(e), true); done(); return; }
+  const d = got.doc || {}, m = me(), cur = fixCurrent(d), fixes = (hist && hist.fixes) || [];
+  const pend = fixes.find(f => f.status === 'pending');
+  const canReq = !pend && fixable(d, m, (ST.ov && ST.ov.state && ST.ov.state.today) || '');
+  const r = rule('out_expense') || {};
+  const arts = (ST.refs.articles || []).filter(a => (r.allowedArticles || []).length ? r.allowedArticles.includes(a.id) : a.cashOutAllowed);
+  const cps = (ST.refs.counterparties || []).filter(c => c.kind !== 'bank' && c.kind !== 'founder');
+  const opts = v => (arts.some(a => a.id === v) ? '' : `<option value="${esc(v || '')}" selected>${esc((v || '—') + ' · ' + (artName(v) || '') + ' (hozirgi)')}</option>`)
+    + arts.map(a => `<option value="${esc(a.id)}"${a.id === v ? ' selected' : ''}>${esc(a.id + ' · ' + a.nameUz)}</option>`).join('');
+  const hist1 = f => `<div class="card" style="padding:10px 12px;margin-top:8px" data-fix="${esc(f.id)}">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b>${f.no ? 'QT-' + esc(String(f.no)) : 'So‘rov'}</b>${fixChip(f.status)}</div>
+      <div class="small muted">${esc(dmy(tkDate(f.requestedAt)))} · so‘radi: ${esc(f.requestedByName || '—')}${f.decidedByName ? ` · ${f.status === 'approved' ? 'tasdiqladi' : 'rad etdi'}: ${esc(f.decidedByName)}` : ''}${f.actDay ? ` · dalolatnoma sanasi ${esc(dmy(f.actDay))}` : ''}</div>
+      <div class="small" style="margin-top:4px">${fixDiffHtml(pm, f)}</div>
+      <div class="small muted" style="margin-top:4px">Sabab: ${esc(f.reason || '')}${f.decisionNote ? ` · Direktor: ${esc(f.decisionNote)}` : ''}${f.cancelReason ? ` · bekor qilish sababi: ${esc(f.cancelReason)}` : ''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${fixActs(f, m)}</div></div>`;
+  const form = canReq ? `<div class="small" style="font-weight:700;margin-top:14px">Yangi so‘rov</div>
+      <div class="tablewrap"><table id="fx-lines"><thead><tr><th>Qator</th><th style="text-align:right">Summa</th><th>Statiya</th></tr></thead><tbody>
+        ${(cur.lines || []).map(l => `<tr><td data-label="Qator">${esc(String(l.lineNo))}</td><td data-label="Summa" style="text-align:right;white-space:nowrap">${esc(som(l.amount))}</td>
+          <td data-label="Statiya"><select data-fxart="${esc(String(l.lineNo))}" style="${FLD}">${opts(l.articleId)}</select><div class="small muted">hozir: ${esc(fixArtLbl(l))}</div></td></tr>`).join('')}</tbody></table></div>
+      ${lbl('Kimga', `<select id="fx-ptype" style="${FLD}">${(r.partyTypes || ['counterparty', 'other']).map(t => `<option value="${esc(t)}"${t === cur.partyType ? ' selected' : ''}>${esc(t === 'counterparty' ? 'Kontragent' : t === 'other' ? 'Boshqa (F.I.Sh. yoki nomi)' : t)}</option>`).join('')}</select><div id="fx-party"></div>`)}
+      ${lbl('Asos <span class="muted" style="font-weight:500">— hujjat nomi, raqami, sanasi</span>', `<input id="fx-basis" type="text" maxlength="300" value="${esc(cur.basis || '')}" style="${FLD}">`)}
+      ${lbl('Tuzatish sababi <span style="color:#B42318">(majburiy)</span>', `<textarea id="fx-reason" rows="2" maxlength="500" placeholder="Qanday xato va qaysi hujjatga asoslanib (masalan: hisob-faktura № … — asosiy vosita, kanselyariya emas)" style="${FLD}"></textarea>`)}`
+    : pend ? `<div class="small" style="margin-top:12px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:10px 12px">Bu order bo‘yicha so‘rov Direktor qarorini kutmoqda — yangi so‘rov u hal bo‘lgach yoziladi.</div>`
+      : m.list2 ? `<div class="small muted" style="margin-top:12px">Qayta tasnif faqat yopilgan kundagi o‘tkazilgan «Xarajat» chiqim orderida qilinadi (ochiq kunda kassir orderni bekor qilib, to‘g‘risini yozadi).</div>` : '';
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Qayta tasnif (QT) — Ch-${esc(String(d.no || '—'))}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b">
+      <div class="small" style="background:#eef3f1;border-radius:10px;padding:10px 12px"><b>Chiqim orderi Ch-${esc(String(d.no || '—'))}</b> · ${esc(dmy(d.businessDay))} · ${esc(som(d.amount))} · ${esc(opName(d.op))}${d.postedByName ? ' · kassir: ' + esc(d.postedByName) : ''}
+        <div class="muted" style="margin-top:4px">Order o‘zi (summa, sana, raqam, imzolar) o‘zgarmaydi — hisobdagi tasnif (statiya, oluvchi, asos) dalolatnoma bilan tuzatiladi (Nizom 143, 25-band). Dalolatnomani Direktor tasdiqlaydi; statiya matritsasi, kontragent ko‘chirmasi va «Buxgalteriya» tuzatilgan holatni ko‘rsatadi.</div></div>
+      <div class="small" style="margin-top:8px">Amaldagi holat${d.eff ? ` (QT-${esc(String(d.eff.fixNo))} dan keyin)` : ' (asl order)'}: oluvchi <b>${esc(cur.partyName || '—')}</b> · asos: ${esc(cur.basis || '—')}</div>
+      ${fixes.length ? `<div class="small" style="font-weight:700;margin-top:12px">Dalolatnomalar va so‘rovlar</div>${fixes.slice().reverse().map(hist1).join('')}` : ''}
+      ${form}
+    </div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${canReq ? '<button type="button" class="btn gold" id="fx-send">So‘rov yuborish</button>' : ''}</div>`;
+  $('#m-x').onclick = done; $('#m-cancel').onclick = done;
+  const again = () => openFixForm(docId, back);
+  fixBind($('#modal'), fixes, again);
+  if (!canReq) return;
+  const F = { ref: newRef() };
+  const drawParty = () => {
+    const t = $('#fx-ptype').value, box = $('#fx-party');
+    if (t === 'counterparty') {
+      const sel = cur.partyType === 'counterparty' ? cur.partyId : '';
+      box.innerHTML = `<select id="fx-pc" style="${FLD};margin-top:6px"><option value="">— kontragent —</option>${cps.map(c => `<option value="${esc(c.id)}"${c.id === sel ? ' selected' : ''}>${esc(cpLabel(c))}</option>`).join('')}</select>`;
+    } else box.innerHTML = `<input id="fx-po" type="text" maxlength="200" placeholder="F.I.Sh. yoki nomi (to‘liq)" value="${esc(cur.partyType === 'other' ? cur.partyName || '' : '')}" style="${FLD};margin-top:6px">`;
+  };
+  $('#fx-ptype').onchange = drawParty; drawParty();
+  $('#fx-send').onclick = async () => {
+    const v = { arts: {}, ptype: $('#fx-ptype').value, pid: $('#fx-pc') ? $('#fx-pc').value : '', pname: $('#fx-po') ? $('#fx-po').value : '', basis: $('#fx-basis').value, reason: $('#fx-reason').value };
+    $('#modal').querySelectorAll('[data-fxart]').forEach(x => { v.arts[x.dataset.fxart] = x.value; });
+    const p = fixPayload(cur, v);
+    if (!fixChanged(p)) { C.toast('O‘zgarish yo‘q — statiya, oluvchi yoki asosni o‘zgartiring', true); return; }
+    if (p.reason.length < 5) { C.toast('Tuzatish sababini yozing (kamida 5 belgi)', true); return; }
+    const b = $('#fx-send'); b.disabled = true;
+    try { await call('kassa_fix_request', { p: Object.assign({ docId, clientRef: F.ref }, p) }); C.toast('So‘rov yuborildi ✓ — Direktor tasdiqlaydi'); if (C.onChange) C.onChange(); await again(); }
+    catch (e) { if (b.isConnected) b.disabled = false; C.toast(errText(e), true); }
+  };
+}
+async function openFixList(status) {
+  status = status === 'all' ? 'all' : 'pending';
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Qayta tasnif dalolatnomalari (QT)</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal;
+  let L, pm;
+  try { [L, pm] = await Promise.all([call('kassa_fix_list', { p_desk: ST.desk, p_status: status }), C.finMod('fin-print'), loadRefs()]); }
+  catch (e) { C.toast(errText(e), true); C.closeModal(); return; }
+  const m = me(), xs = (L && L.fixes) || [];
+  const row = f => `<tr data-fixrow="${esc(f.id)}"><td data-label="Dalolatnoma"><b>${f.no ? 'QT-' + esc(String(f.no)) : '—'}</b><div>${fixChip(f.status)}</div></td>
+      <td data-label="Order">${esc(fixDocLbl(f))}<div class="small muted">so‘radi: ${esc(f.requestedByName || '—')}, ${esc(dmy(tkDate(f.requestedAt)))}</div></td>
+      <td data-label="O‘zgarish"><div class="small">${fixDiffHtml(pm, f)}</div><div class="small muted">Sabab: ${esc(f.reason || '')}</div></td>
+      <td data-label="" style="white-space:nowrap"><button type="button" class="btn sm" data-fxopen="${esc(f.docId)}">Ko‘rish</button> ${fixActs(f, m)}</td></tr>`;
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Qayta tasnif dalolatnomalari (QT)</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Yopilgan kundagi «Xarajat» orderidagi statiya, oluvchi yoki asos xatosi shu dalolatnoma bilan tuzatiladi: buxgalter / Moliya menejeri so‘raydi (KO-3 jurnali yoki kun oynasida «QT»), Direktor tasdiqlaydi. Order o‘zi o‘zgarmaydi.</div>
+      <div style="display:flex;gap:6px;margin:10px 0"><button type="button" class="btn sm${status === 'pending' ? ' gold' : ''}" id="fxl-p">Qaror kutayotganlar</button><button type="button" class="btn sm${status === 'all' ? ' gold' : ''}" id="fxl-a">Hammasi</button></div>
+      ${xs.length ? `<div class="tablewrap"><table id="fxl-tbl"><thead><tr><th>Dalolatnoma</th><th>Order</th><th>O‘zgarish</th><th></th></tr></thead><tbody>${xs.map(row).join('')}</tbody></table></div>`
+        : `<div class="empty">${status === 'pending' ? 'Qaror kutayotgan so‘rov yo‘q.' : 'Dalolatnoma yo‘q.'}</div>`}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
+  $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  const again = () => openFixList(status);
+  $('#fxl-p').onclick = () => openFixList('pending'); $('#fxl-a').onclick = () => openFixList('all');
+  $('#modal').querySelectorAll('[data-fxopen]').forEach(b => b.onclick = () => openFixForm(b.dataset.fxopen, again));
+  fixBind($('#modal'), xs, again);
 }
 
 // ---------------------------------------------------------------- «Tasdiqlash» bo'limi uchun navbat
 export async function approvalCount(ctx) {
   C = ctx;
-  try { const s = await call('kassa_state', { p_desk: 'main' }); return num(s && s.pending && s.pending.toApprove); } catch (_) { return 0; }
+  try { const s = await call('kassa_state', { p_desk: 'main' }); return num(s && s.pending && s.pending.toApprove) + num(s && s.pending && s.pending.fixToApprove); } catch (_) { return 0; }
 }
 export async function approvalRender(ctx, el) {
   C = ctx; ST.desk = 'main';
   try { await Promise.all([loadOverview(), loadRefs()]); } catch (e) { el.innerHTML = `<div class="empty">O‘qib bo‘lmadi: ${esc(errText(e))}</div>`; return; }
   const m = me();
   const mineToDo = (ST.ov.requests || []).filter(d => d.status === 'draft' && (canApproveList2(d, m) || (m.director && d.needsDirector && !d.dirApprovedBy)));
-  if (!mineToDo.length) { el.innerHTML = '<div class="small muted">Tasdiq kutayotgan kassa so‘rovi yo‘q.</div>'; return; }
-  el.innerHTML = `<div class="tablewrap"><table><thead><tr><th>Operatsiya</th><th>Kimga / kimdan</th><th style="text-align:right">Summa</th><th>So‘radi</th><th></th></tr></thead><tbody>${mineToDo.map(d => `<tr>
+  // F2.13: Direktorga — qayta tasnif (QT) so'rovlari (so'ragan o'zi qaror qilmaydi)
+  let fx = [], pm = null;
+  const st0 = (ST.ov && ST.ov.state) || {};
+  if (m.director && num(st0.pending && st0.pending.fixToApprove) > 0) {
+    try { [fx, pm] = await Promise.all([call('kassa_fix_list', { p_desk: 'main', p_status: 'pending' }).then(r => ((r && r.fixes) || []).filter(f => f.requestedBy !== m.uid)), C.finMod('fin-print')]); }
+    catch (_) { fx = []; }
+  }
+  if (!mineToDo.length && !fx.length) { el.innerHTML = '<div class="small muted">Tasdiq kutayotgan kassa so‘rovi yo‘q.</div>'; return; }
+  const fxTbl = fx.length ? `<div class="small" style="font-weight:700;margin:${mineToDo.length ? 12 : 0}px 0 6px">Qayta tasnif (QT) so‘rovlari</div><div class="tablewrap"><table data-fxappr="1"><thead><tr><th>Order</th><th>O‘zgarish</th><th>So‘radi</th><th></th></tr></thead><tbody>${fx.map(f => `<tr>
+    <td data-label="Order">${esc(fixDocLbl(f))}</td>
+    <td data-label="O‘zgarish"><div class="small">${fixDiffHtml(pm, f)}</div><div class="small muted">Sabab: ${esc(f.reason || '')}</div></td>
+    <td data-label="So‘radi">${esc(f.requestedByName || '—')}</td>
+    <td data-label="" style="white-space:nowrap"><button class="btn sm" data-fxopen="${esc(f.docId)}">Ko‘rish</button> ${fixActs(f, m)}</td></tr>`).join('')}</tbody></table></div>` : '';
+  el.innerHTML = (mineToDo.length ? `<div class="tablewrap"><table><thead><tr><th>Operatsiya</th><th>Kimga / kimdan</th><th style="text-align:right">Summa</th><th>So‘radi</th><th></th></tr></thead><tbody>${mineToDo.map(d => `<tr>
     <td data-label="Operatsiya">${esc(opName(d.op))}<div class="small muted">${esc((d.lines || []).map(l => artName(l.articleId)).filter((v, i, a) => v && a.indexOf(v) === i).join('; '))}</div></td>
     <td data-label="Kimga">${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || (d.noBasis ? 'asos hujjatisiz' : ''))}</div></td>
     <td data-label="Summa" style="text-align:right;white-space:nowrap"><b>${esc(som(d.amount))}</b></td>
     <td data-label="So‘radi">${esc(nameOf(d.requestedBy))}</td>
-    <td data-label="" style="white-space:nowrap"><button class="btn sm gold" data-kappr="${esc(d.id)}">Tasdiqlash</button> <button class="btn sm danger" data-krej="${esc(d.id)}">Rad etish</button></td></tr>`).join('')}</tbody></table></div>`;
+    <td data-label="" style="white-space:nowrap"><button class="btn sm gold" data-kappr="${esc(d.id)}">Tasdiqlash</button> <button class="btn sm danger" data-krej="${esc(d.id)}">Rad etish</button></td></tr>`).join('')}</tbody></table></div>` : '') + fxTbl;
   const again = () => approvalRender(ctx, el);
+  if (fx.length) {
+    el.querySelectorAll('[data-fxopen]').forEach(b => b.onclick = () => openFixForm(b.dataset.fxopen, async () => { C.closeModal(); await again(); }));
+    fixBind(el, fx, again);
+  }
   el.querySelectorAll('[data-kappr]').forEach(b => b.onclick = async () => { if (!confirm('Bu so‘rov tasdiqlansinmi?')) return; b.disabled = true;
     try { await call('kassa_doc_approve', { p_id: b.dataset.kappr }); C.toast('Tasdiqlandi ✓'); } catch (e) { C.toast(errText(e), true); } await again(); if (C.onChange) C.onChange(); });
   el.querySelectorAll('[data-krej]').forEach(b => b.onclick = () => ask('So‘rovni rad etish', 'Rad etish sababi', 3, async r => {

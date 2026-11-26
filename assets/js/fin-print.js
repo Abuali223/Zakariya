@@ -3,6 +3,7 @@
 //   docHtml(doc, ctx, W)            — KO-1 kirim orderi + «ПАТТА» yoki KO-2 chiqim orderi (ACT — qisqa dalolatnoma);
 //   bookHtml(book, ctx, W)          — KO-4: kassa kitobi varag'i va «Kassir hisoboti» (2 nusxa; varaqda qatorlar soni qat'iy);
 //   countHtml(count, book, ctx, W)  — kassadagi naqd pulni sanash / smena topshirish-qabul dalolatnomasi;
+//   fixActHtml(fix, ctx, W)         — qayta tasnif dalolatnomasi («ҚТ-», F2.13): kassa hujjati o'zgarmaydi, hisobdagi tasnif tuzatiladi;
 //   reportHtml(book, ctx, W)        — kassirning kunlik hisoboti (RP-02, «kimdan / kimga qancha»): kun yakuni, kirim va chiqim
 //                                     orderlari, tomon va statiya bo'yicha jamlar, ichki o'tkazmalar, kanallar, kutilayotganlar, limit.
 //                                     Ichki hisobot: ilova tilida (o'zbek lotin); chop etish tili rus bo'lsa — ruscha.
@@ -1106,4 +1107,78 @@ export function cpStatementSheet(st, ctx) {
   rows.push(['', '', '', r.net, '', '', '', xlMoney(num(cl.out) - num(cl.in))]);
   rows.push([r.note]);
   return { name: r.sheet, rows, cols: [{ wch: 5 }, { wch: 11 }, { wch: 22 }, { wch: 48 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 17 }] };
+}
+
+// ---------------------------------------------------------------- F2.13: qayta tasnif dalolatnomasi («ҚТ-», seriya 'FIX')
+// Kassa hujjati (KO-2) o'zgarmaydi (Nizom 143, 25-band) — hisobdagi tasnif (statiya va undan hisobvaraq, oluvchi, asos) shu dalolatnoma
+//   bilan tuzatiladi: buxgalter / Moliya menejeri tuzadi, Direktor tasdiqlaydi. f — kassa_fix_get().fix yoki kassa_fix_list() elementi:
+//   { no, year, actDay, status, reason, decisionNote, before, after, requestedByName, decidedByName, doc: { no, businessDay, amount,
+//   postedByName } }; before / after — { partyType, partyId, partyName, basis, lines: [{ lineNo, articleId, debit, amount }] }.
+//   ctx.articles — kassa_refs().articles (statiya nomlari); til — org.printLang (KO shakllari kabi).
+//   Tuzatish yozuvi (buxgalter dasturi uchun): hisobvaraq o'zgargan har qator — Dt yangi, Kt eski, qator summasi; faqat statiya yoki
+//   oluvchi o'zgargan bo'lsa — hisobvaraq o'zgarmaydi (tahliliy tasnif).
+const FX = {
+  'uz-cyrl': { pre: 'ҚТ', title: 'ҚАЙТА ТАСНИФ ДАЛОЛАТНОМАСИ', sub: 'бухгалтерия маълумотномаси — ҳисобдаги хатони тузатиш',
+    doc: 'Тузатилаётган ҳужжат', ko2: n => `чиқим касса ордери № Ч-${n}`, of: 'сана', sum: 'сумма', cashier: 'кассир',
+    keep: 'Касса ҳужжатининг ўзи (сумма, сана, рақам, имзолар) ўзгармайди (Низом 143, 25-банд); ҳисобдаги тасниф қуйидагича тузатилади:',
+    cols: ['Кўрсаткич', 'Аввал', 'Тузатилгандан кейин'], art: (n, a) => `Статья (${n}-қатор, ${a})`, party: 'Олувчи', basis: 'Асоси',
+    entries: 'Тузатиш ёзуви', entry: (dr, cr, a) => `Дт ${dr} — Кт ${cr}: ${a}`, entryNone: 'Ҳисобварақ ўзгармади — фақат таҳлилий тасниф (статья, олувчи).',
+    reason: 'Тузатиш сабаби', dirNote: 'Директор изоҳи', made: 'Тузди', approved: 'Тасдиқлади: Директор', printed: 'чоп этилди',
+    mTest: 'СИНОВ', mDraft: 'ҚОРАЛАМА', none: '—' },
+  'uz-latn': { pre: 'QT', title: 'QAYTA TASNIF DALOLATNOMASI', sub: 'buxgalteriya ma’lumotnomasi — hisobdagi xatoni tuzatish',
+    doc: 'Tuzatilayotgan hujjat', ko2: n => `chiqim kassa orderi № Ch-${n}`, of: 'sana', sum: 'summa', cashier: 'kassir',
+    keep: 'Kassa hujjatining o‘zi (summa, sana, raqam, imzolar) o‘zgarmaydi (Nizom 143, 25-band); hisobdagi tasnif quyidagicha tuzatiladi:',
+    cols: ['Ko‘rsatkich', 'Avval', 'Tuzatilgandan keyin'], art: (n, a) => `Statiya (${n}-qator, ${a})`, party: 'Oluvchi', basis: 'Asosi',
+    entries: 'Tuzatish yozuvi', entry: (dr, cr, a) => `Dt ${dr} — Kt ${cr}: ${a}`, entryNone: 'Hisobvaraq o‘zgarmadi — faqat tahliliy tasnif (statiya, oluvchi).',
+    reason: 'Tuzatish sababi', dirNote: 'Direktor izohi', made: 'Tuzdi', approved: 'Tasdiqladi: Direktor', printed: 'chop etildi',
+    mTest: 'SINOV', mDraft: 'QORALAMA', none: '—' },
+  ru: { pre: 'АП', title: 'АКТ ПЕРЕКЛАССИФИКАЦИИ', sub: 'бухгалтерская справка — исправление ошибки в учёте',
+    doc: 'Исправляемый документ', ko2: n => `расходный кассовый ордер № Р-${n}`, of: 'дата', sum: 'сумма', cashier: 'кассир',
+    keep: 'Сам кассовый документ (сумма, дата, номер, подписи) не изменяется (Положение 143, п. 25); учётная классификация исправляется следующим образом:',
+    cols: ['Показатель', 'Было', 'Стало'], art: (n, a) => `Статья (строка ${n}, ${a})`, party: 'Получатель', basis: 'Основание',
+    entries: 'Исправительная запись', entry: (dr, cr, a) => `Дт ${dr} — Кт ${cr}: ${a}`, entryNone: 'Счёт не изменился — только аналитическая классификация (статья, получатель).',
+    reason: 'Причина исправления', dirNote: 'Комментарий директора', made: 'Составил', approved: 'Утвердил: директор', printed: 'напечатано',
+    mTest: 'ТЕСТ', mDraft: 'ЧЕРНОВИК', none: '—' },
+};
+// O'zgarishlar ro'yxati (sof funksiya; sahifa va bosma — bir xil): [{ kind: 'article', lineNo, amount, from: {articleId, debit},
+//   to: {articleId, debit} } | { kind: 'party', from: {type, id, name}, to } | { kind: 'basis', from, to }]
+export function fixDiff(f) {
+  const b = (f && f.before) || {}, a = (f && f.after) || {}, out = [], bl = b.lines || [];
+  (a.lines || []).forEach(l => { const o = bl.find(x => Number(x.lineNo) === Number(l.lineNo)) || {};
+    if ((o.articleId || '') !== (l.articleId || '') || (o.debit || '') !== (l.debit || ''))
+      out.push({ kind: 'article', lineNo: Number(l.lineNo), amount: num(l.amount), from: { articleId: o.articleId || '', debit: o.debit || '' }, to: { articleId: l.articleId || '', debit: l.debit || '' } }); });
+  if ((b.partyType || '') !== (a.partyType || '') || (b.partyId || '') !== (a.partyId || '') || (b.partyName || '') !== (a.partyName || ''))
+    out.push({ kind: 'party', from: { type: b.partyType || '', id: b.partyId || '', name: b.partyName || '' }, to: { type: a.partyType || '', id: a.partyId || '', name: a.partyName || '' } });
+  if ((b.basis || '') !== (a.basis || '')) out.push({ kind: 'basis', from: b.basis || '', to: a.basis || '' });
+  return out;
+}
+export function fixNo(f, ctx) { const x = FX[langOf(ctx)] || FX['uz-cyrl']; return f && f.no ? `${x.pre}-${f.no}` : '—'; }
+export function fixActHtml(f, ctx, W) {
+  ctx = ctx || {}; f = f || {};
+  const lang = langOf(ctx), t = T[lang], x = FX[lang] || FX['uz-cyrl'], o = ctx.org || {}, d = f.doc || {}, m = v => esc(money(W, v));
+  const arts = ctx.articles || [], ru = lang === 'ru', dt = lang === 'uz-latn' ? 'Dt' : 'Дт';
+  const artTxt = s => { const a = arts.find(z => z.id === s.articleId); const nm = a ? ((ru && a.nameRu) || a.nameUz || '') : '';
+    return `${s.articleId || x.none}${nm ? ' ' + nm : ''}${s.debit ? ` (${dt} ${s.debit})` : ''}`; };
+  const diff = fixDiff(f);
+  const rows = diff.map(c => c.kind === 'article' ? [x.art(c.lineNo, money(W, c.amount)), artTxt(c.from), artTxt(c.to)]
+    : c.kind === 'party' ? [x.party, c.from.name || x.none, c.to.name || x.none] : [x.basis, c.from || x.none, c.to || x.none]);
+  const ent = diff.filter(c => c.kind === 'article' && c.from.debit && c.to.debit && c.from.debit !== c.to.debit);
+  const marks = [].concat(ctx.isTest ? [x.mTest] : [], f.status !== 'approved' ? [x.mDraft] : []);
+  const at = stamp(ctx.printedAt), ft = [`${fixNo(f, ctx)} · ${f.id || ''}`];
+  if (at || ctx.printedBy) ft.push(`${x.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
+  const body = `<div class="pg act">
+    <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <div class="ttl">${esc(x.title)} ${t.no} <span class="nob">${esc(fixNo(f, ctx))}</span></div>
+    <div class="dt">${esc(f.actDay ? W.fmtDateLong(iso(f.actDay), lang) : '')}</div>
+    <div class="dt">${esc(x.sub)}</div>
+    ${fld(x.doc, `${esc(x.ko2(d.no || '—'))}; ${esc(x.of)} ${esc(dmy(d.businessDay))}; ${esc(x.sum)} <b>${m(d.amount)}</b>${d.postedByName ? `; ${esc(x.cashier)} ${esc(d.postedByName)}` : ''}`)}
+    <p>${esc(x.keep)}</p>
+    <table class="t"><thead><tr><th style="width:42mm">${esc(x.cols[0])}</th><th>${esc(x.cols[1])}</th><th>${esc(x.cols[2])}</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td><b>${esc(r[2])}</b></td></tr>`).join('')}</tbody></table>
+    ${fld(x.entries, ent.length ? ent.map(c => esc(x.entry(c.to.debit, c.from.debit, money(W, c.amount)))).join('; ') : esc(x.entryNone))}
+    ${fld(x.reason, esc(f.reason || ''))}
+    ${f.decisionNote ? fld(x.dirNote, esc(f.decisionNote)) : ''}
+    <div class="two" style="display:flex;gap:8mm">${sig(x.made, f.requestedByName || '')}${sig(x.approved, f.status === 'approved' ? (f.decidedByName || '') : '')}</div>
+    <div class="ft">${esc(ft.join(' · '))}</div></div>`;
+  return page(`${x.title} ${t.no} ${fixNo(f, ctx)}`, t, body);
 }

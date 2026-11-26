@@ -217,18 +217,26 @@ begin
   v_mask := coalesce(p_file, false) and not app.is_admin() and v_cp.kind not in ('supplier', 'org', 'bank');
 
   with src as (
-    -- kassa orderlari (naqd): tomon — shu kontragent (kontragent / bank / ta'sischi sifatida)
+    -- kassa orderlari (naqd): tomon — shu kontragent (kontragent / bank / ta'sischi sifatida). Tomon, statiyalar va asos — AMALDAGI
+    --   (F2.13: qayta tasnif dalolatnomasidan keyingi — kassa.sql: app.kassa_eff_doc / app.kassa_eff_art; hujjat raqami yonida «QT-n»);
+    --   nomzodlar: asl tomoni shu kontragent yoki tasdiqlangan dalolatnomada shu kontragentga o'tkazilgan hujjatlar
     select d."businessDay" as day, d."postedAt" as ts, 'cash'::text as src, d.id as ref,
-           case d.form when 'KO1' then 'KO-1' else 'KO-2' end || ' № ' || d.no as doc,
+           case d.form when 'KO1' then 'KO-1' else 'KO-2' end || ' № ' || d.no
+             || case when e.eff is not null then ' (QT-' || (e.eff ->> 'fixNo') || ')' else '' end as doc,
            'cash'::text as method, d.op as op, coalesce(r."nameUz", d.op) as op_name, coalesce(nullif(r."nameRu", ''), r."nameUz", d.op) as op_ru,
-           coalesce((select jsonb_agg(distinct l."articleId") from public.cash_doc_lines l where l."docId" = d.id and l."articleId" is not null), '[]'::jsonb) as arts,
-           d.basis as txt,
+           coalesce((select jsonb_agg(distinct z.a) from (select app.kassa_eff_art(d.id, l."lineNo", l."articleId") as a
+                                                             from public.cash_doc_lines l where l."docId" = d.id) z where z.a is not null), '[]'::jsonb) as arts,
+           case when e.eff is not null then coalesce(e.eff ->> 'basis', '') else d.basis end as txt,
            case when d.form = 'KO1' then d.amount else 0 end as amt_in,
            case when d.form = 'KO2' then d.amount else 0 end as amt_out
       from public.cash_docs d
       join public.cash_desks k on k.id = d.desk and not k."isTest"
       left join public.fin_op_rules r on r.op = d.op
-     where d."partyType" in ('counterparty', 'bank', 'founder') and d."partyId" = v_cp.id
+      cross join lateral (select app.kassa_eff_doc(d.id) as eff) e
+     where ((d."partyType" in ('counterparty', 'bank', 'founder') and d."partyId" = v_cp.id)
+            or d.id in (select f."docId" from public.cash_doc_fixes f where f.status = 'approved' and f.after ->> 'partyId' = v_cp.id))
+       and (case when e.eff is not null then e.eff ->> 'partyType' else d."partyType" end) in ('counterparty', 'bank', 'founder')
+       and (case when e.eff is not null then e.eff ->> 'partyId' else d."partyId" end) = v_cp.id
        and d.status = 'posted' and d.form in ('KO1', 'KO2')
     union all
     -- «Buxgalteriya» xarajat hujjatlari (bank, karta, orderisiz naqd)

@@ -577,7 +577,12 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select to_jsonb(c) || jsonb_build_object('lines', coalesce((
            select jsonb_agg(to_jsonb(l) - 'docId' order by l."lineNo") from public.cash_doc_lines l where l."docId" = c.id), '[]'::jsonb),
            'prints', (select count(*) from public.cash_prints x where x."docId" = c.id),   -- necha marta chop etishga yuborilgan
-           'printsOrig', (select count(*) from public.cash_prints x where x."docId" = c.id and x.mode <> 'copy'))
+           'printsOrig', (select count(*) from public.cash_prints x where x."docId" = c.id and x.mode <> 'copy'),
+           -- F2.13: qayta tasnif dalolatnomalari (kutilayotgan va tasdiqlangan) va amaldagi (tuzatilgan) holat — asl ustunlar o'zgarmaydi
+           'fixes', coalesce((select jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'no', f.no, 'year', f.year, 'actDay', f."actDay")
+                                               order by f."requestedAt", f.id)
+                                from public.cash_doc_fixes f where f."docId" = c.id and f.status in ('pending', 'approved')), '[]'::jsonb),
+           'eff', app.kassa_eff_doc(c.id))
     from public.cash_docs c where c.id = p_id
 $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;

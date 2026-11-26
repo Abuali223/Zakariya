@@ -53,8 +53,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          muddati, rev, updatedAt / updatedBy; cheklovlar fin_counterparties_bank_chk / _contract_chk; STIR — 9 raqam,
 --          app.fin_cp_stir_check) va fin-cp.sql: fin_cp_save (karta, versiya bilan; fin:cp_dup, fin:cp_stir_dup, fin:cp_changed),
 --          fin_cp_statement (RP-10 kontragent ko'chirmasi; faylda FD-28 bo'yicha ismsiz).
+--     15 — 2-bosqich F2.13: qayta tasnif dalolatnomasi («ҚТ-», seriya 'FIX'; Sh-8 B11): kassa.sql — cash_doc_fixes (holat, before /
+--          after, raqam tasdiqda; bitta kutilayotgan so'rov), trg_kassa_fix_guard, app.kassa_eff_art / app.kassa_eff_doc (amaldagi holat);
+--          kassa-fix.sql — kassa_fix_request (2-ro'yxat), kassa_fix_decide (Direktor; «Buxgalteriya» qatori yangilanadi),
+--          kassa_fix_cancel, kassa_fix_list, kassa_fix_get; kassa_doc_json — fixes / eff; kassa_matrix va fin_cp_statement — amaldagi
+--          statiya va tomon; kassa_checks — fixPending / fixes30; kassa_state — pending.fixToApprove.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 14 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 15 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

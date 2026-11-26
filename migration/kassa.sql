@@ -355,10 +355,52 @@ create table if not exists public.cash_prints (
 create index if not exists cash_prints_doc_idx on public.cash_prints ("docId") where "docId" is not null;
 create index if not exists cash_prints_day_idx on public.cash_prints ("dayId") where "dayId" is not null;
 
+-- Qayta tasnif dalolatnomasi («ҚТ-», seriya 'FIX'; F2.13 — Sh-8 B11, FD-20): o'tkazilgan kassa hujjatidagi HISOB xatosini tuzatish —
+--   qator statiyasi (debet hisobvarag'i statiyadan), tomon (kimga), asos izohi. Kassa hujjatining o'zi (summa, sana, raqam, qatorlar,
+--   imzolar) o'zgarmaydi (Nizom 143, 25-band; CL-03): tuzatish shu alohida hujjatda. Hujjatning AMALDAGI holati — oxirgi tasdiqlangan
+--   dalolatnomaning «after» qismi (raqami eng kattasi: yil, so'ng raqam), yo'q bo'lsa — asl hujjat. Statiya matritsasi (RP-08),
+--   kontragent ko'chirmasi (RP-10) va «Buxgalteriya»dagi xarajat qatori amaldagi holatni ko'rsatadi; registrlar (KO-3, KO-4, kunlik
+--   hisobot, KO-2 bosmasi) — asl hujjat bo'yicha. «before» — so'rov paytidagi amaldagi holat; ikkalasi ham bir xil tuzilishda:
+--   {partyType, partyId, partyName, basis, lines: [{lineNo, articleId, debit}]} (faqat naqd qatorlar).
+--   Buxgalter yoki Moliya menejeri (2-ro'yxat) so'raydi, Direktor tasdiqlaydi yoki rad etadi (so'ragan o'zi qaror qilmaydi); kutilayotgan
+--   so'rovni so'ragan yoki Direktor bekor qiladi. Raqam va sana — tasdiqda. Bitta hujjatda bir vaqtda bitta kutilayotgan so'rov.
+--   O'chirilmaydi; qarordan keyin o'zgarmaydi. RPC'lar va qoidalar — kassa-fix.sql.
+create table if not exists public.cash_doc_fixes (
+  id                text primary key,
+  "docId"           text not null references public.cash_docs(id) on delete restrict,
+  desk              text not null references public.cash_desks(id),
+  status            text not null check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  year              int,
+  no                int check (no is null or no > 0),
+  "actDay"          date,
+  reason            text not null check (length(btrim(reason)) between 5 and 500),
+  before            jsonb not null,
+  after             jsonb not null,
+  "baseFixId"       text,
+  "clientRef"       text not null,
+  "reqHash"         text not null,
+  "requestedBy"     text not null,
+  "requestedAt"     timestamptz not null default now(),
+  "requestedByName" text not null default '',
+  "decidedBy"       text, "decidedAt" timestamptz, "decidedByName" text, "decisionNote" text not null default '',
+  "cancelledBy"     text, "cancelledAt" timestamptz, "cancelReason" text,
+  constraint cash_doc_fixes_client_ref unique ("clientRef"),
+  constraint cash_doc_fixes_no check ((no is not null) = (status = 'approved')
+                                      and (no is null or (year is not null and "actDay" is not null and year = extract(year from "actDay")::int))),
+  constraint cash_doc_fixes_decided check ((status in ('approved', 'rejected')) = ("decidedBy" is not null and "decidedAt" is not null)),
+  constraint cash_doc_fixes_not_self check ("decidedBy" is null or "decidedBy" <> "requestedBy"),
+  constraint cash_doc_fixes_reject_note check (status <> 'rejected' or length(btrim("decisionNote")) >= 3),
+  constraint cash_doc_fixes_cancel check ((status = 'cancelled') = ("cancelledAt" is not null))
+);
+create unique index if not exists cash_doc_fixes_one_pending on public.cash_doc_fixes ("docId") where status = 'pending';
+create unique index if not exists cash_doc_fixes_number on public.cash_doc_fixes (desk, year, no) where no is not null;
+create index if not exists cash_doc_fixes_doc_idx on public.cash_doc_fixes ("docId", year desc, no desc) where status = 'approved';
+create index if not exists cash_doc_fixes_pending_idx on public.cash_doc_fixes (desk) where status = 'pending';
+
 -- ---------- RLS: faqat o'qish; yozish — kassa funksiyalari ----------
 do $$ declare t text; begin
   foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints',
-                           'cash_handovers'] loop
+                           'cash_handovers', 'cash_doc_fixes'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from public, anon, authenticated', t);
     execute format('grant select on table public.%I to authenticated', t);
@@ -706,6 +748,58 @@ drop trigger if exists trg_kassa_handover_guard on public.cash_handovers;
 create trigger trg_kassa_handover_guard before insert or update or delete on public.cash_handovers
   for each row execute function app.kassa_handover_guard();
 
+-- Qayta tasnif dalolatnomasi (F2.13): faqat kassa funksiyalari ichida; o'chirilmaydi; yangi yozuv — «kutilmoqda»; «kutilmoqda» →
+--   «tasdiqlandi» (raqam, sana, kim) / «rad etildi» (kim, sabab) / «bekor qilindi» (kim, sabab) — bir marta; so'rov mazmuni
+--   (hujjat, oldingi va yangi holat, sabab, so'ragan) o'zgarmaydi.
+create or replace function app.kassa_fix_guard() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  c_dec constant text[] := array['status', 'year', 'no', 'actDay', 'decidedBy', 'decidedAt', 'decidedByName', 'decisionNote',
+                                 'cancelledBy', 'cancelledAt', 'cancelReason'];
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Qayta tasnif dalolatnomasi o''chirilmaydi' using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  if coalesce(current_setting('iqror.kassa_rpc', true), '') <> '1' then
+    raise exception 'Kassa hujjatlari faqat kassa funksiyalari orqali yoziladi' using errcode = '42501', hint = 'kassa:rpc_only';
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status <> 'pending' or new.no is not null or new."decidedBy" is not null or new."cancelledAt" is not null then
+      raise exception 'Dalolatnoma avval so''rov sifatida yaratiladi (raqam tasdiqda beriladi)' using errcode = '22023', hint = 'kassa:bad_doc';
+    end if;
+    new."requestedAt" := clock_timestamp();   -- tartib uchun haqiqiy payt (bitta tranzaksiyadagi so'rovlar ham ketma-ket)
+    return new;
+  end if;
+  if old.status <> 'pending' or new.status = 'pending' then
+    raise exception 'Bu dalolatnoma endi o''zgarmaydi (holati: %)', old.status using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  if (to_jsonb(new) - c_dec) is distinct from (to_jsonb(old) - c_dec) then
+    raise exception 'Dalolatnoma mazmuni o''zgartirilmaydi' using errcode = '42501', hint = 'kassa:immutable';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_kassa_fix_guard on public.cash_doc_fixes;
+create trigger trg_kassa_fix_guard before insert or update or delete on public.cash_doc_fixes
+  for each row execute function app.kassa_fix_guard();
+
+-- Hujjat qatorining AMALDAGI statiyasi (F2.13): oxirgi tasdiqlangan qayta tasnif dalolatnomasidan, bo'lmasa — qatorning o'zi.
+--   Statiya matritsasi (kassa-day.sql: kassa_matrix) va kontragent ko'chirmasi (fin-cp.sql) shundan.
+create or replace function app.kassa_eff_art(p_doc text, p_line int, p_art text) returns text
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select x ->> 'articleId'
+                     from public.cash_doc_fixes f cross join lateral jsonb_array_elements(f.after -> 'lines') x
+                    where f."docId" = p_doc and f.status = 'approved' and (x ->> 'lineNo')::int = p_line
+                    order by f.year desc, f.no desc limit 1), p_art)
+$$;
+revoke all on function app.kassa_eff_art(text, int, text) from public, anon, authenticated;
+-- Hujjatning amaldagi holati (oxirgi tasdiqlangan dalolatnoma «after» qismi) — yo'q bo'lsa NULL.
+create or replace function app.kassa_eff_doc(p_doc text) returns jsonb
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select f.after || jsonb_build_object('fixId', f.id, 'fixNo', f.no, 'fixYear', f.year, 'fixDay', f."actDay")
+    from public.cash_doc_fixes f where f."docId" = p_doc and f.status = 'approved' order by f.year desc, f.no desc limit 1
+$$;
+revoke all on function app.kassa_eff_doc(text) from public, anon, authenticated;
+
 -- Kassa: boshlang'ich qoldiq faqat kassa funksiyasi orqali va faqat birinchi kun ochilguncha.
 create or replace function app.kassa_desk_guard() returns trigger
 language plpgsql security definer set search_path = public, app, pg_temp as $$
@@ -754,10 +848,12 @@ revoke all on function app.kassa_line_guard() from public, anon, authenticated;
 revoke all on function app.kassa_append_only() from public, anon, authenticated;
 revoke all on function app.kassa_desk_guard() from public, anon, authenticated;
 revoke all on function app.kassa_handover_guard() from public, anon, authenticated;
+revoke all on function app.kassa_fix_guard() from public, anon, authenticated;
 
 -- O'zgarishlar tarixi (Direktor ko'radi): holat o'zgarishlari, bekor qilish, qarorlar, kun yopish / tekshirish / qayta ochish.
 select app.chlog_attach('cash_docs', 'status,no,year,businessDay,amount,op,partyType,partyId,approvedBy,dirApprovedBy,rejectReason,voidReason,decision,fiscalExempt,late');
 select app.chlog_attach('cash_days', 'status,opening,closing,counted,diff,pendingSum,closedBy,verifiedBy,reopenCount,reopenReason');
 select app.chlog_attach('cash_desks', 'name,active,startDay,openingAmount,pausedAt,restartDay,restartAmount');
+select app.chlog_attach('cash_doc_fixes', 'status,no,year,actDay,decidedBy,decisionNote,cancelledBy,cancelReason');
 
 notify pgrst, 'reload schema';

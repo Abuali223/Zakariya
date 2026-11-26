@@ -166,6 +166,11 @@ Keyin, hali hech narsa kiritmasdan:
   chop etish va Excel (jismoniy shaxs ko‘chirmasi Direktordan boshqaga — ismsiz, FD-28). Mavjud kontragentlarning rekvizitlari
   o‘rnatishdan keyin bo‘sh — buxgalter hujjatlardan (shartnoma, hisob-faktura) to‘ldiradi; eski kartadagi noto‘g‘ri STIR o‘zgartirilmaguncha
   qoladi (o‘zgartirilsa — 9 raqam talab qilinadi). Hisob raqami o‘zgarishlari o‘zgarishlar tarixida (Direktor ko‘radi).
+- «Kassa» → «QT» (F2.13, modul relizi 15+) — qayta tasnif dalolatnomasi: yopilgan kundagi «Xarajat» chiqim orderida statiya, oluvchi
+  yoki asos xato bo‘lsa, buxgalter yoki Moliya menejeri KO-3 jurnalidan (yoki yopilgan kun oynasidan) orderdagi «QT» tugmasi bilan
+  so‘rov yozadi, Direktor «QT» ro‘yxatida yoki «Tasdiqlash» bo‘limida tasdiqlaydi (rad etsa — sabab bilan). Order o‘zi o‘zgarmaydi
+  (KO-3, KO-4 — asl); statiya matritsasi, kontragent ko‘chirmasi va «Buxgalteriya» tuzatilgan holatni ko‘rsatadi; dalolatnoma chop
+  etilib imzolanadi (tuzdi — buxgalter, tasdiqladi — Direktor). Ochiq kundagi xato — avvalgidek: kassir bekor qilib, to‘g‘risini yozadi.
 - Sinash kerak bo‘lsa — faqat **sinov kassasida** («Kassa» sahifasidagi kassa tanlovi → «Sinov kassasi»): boshlang‘ich qoldiq,
   «+ Kirim» → «Boshqa kirim», «+ Chiqim so‘rovi» → «Xarajat» → tasdiq → «Pulni berish», chop etish («СИНОВ» belgisi bilan), kunni yopish.
   «Boshqa kirim»da kimdan — kontragent yoki xodim tanlanadi (fiskal chek so‘ralmaydi); o‘quvchi yoki «Boshqa» shaxs tanlansa

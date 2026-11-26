@@ -1502,6 +1502,9 @@ begin
                         or (v_dir and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid
                             and c."partyType" = 'employee' and c."partyId" = any(v_l2cards)))),
       'waiting', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'),
+      -- F2.13: Direktor qarorini kutayotgan qayta tasnif so'rovlari (so'ragan o'zi emas — kassa-fix.sql: kassa_fix_decide)
+      'fixToApprove', case when v_dir then (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'pending'
+                                                                                              and f."requestedBy" is distinct from v_uid) else 0 end,
       'toPay', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'approved'),
       'toPaySum', (select coalesce(sum(c.amount), 0) from public.cash_docs c where c.desk = v_desk and c.status = 'approved' and c.form = 'KO2'),
       -- CT-26: Direktor tasdiqlagan qaytarish 1 kundan ortiq berilmay turibdi
@@ -1780,8 +1783,9 @@ begin
   if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:bad_desk'; end if;
   v_from := to_date(p_month || '-01', 'YYYY-MM-DD'); v_to := (v_from + interval '1 month')::date - 1; v_n := v_to - v_from + 1;
   select b.o_open, b.o_close, b.o_adj, b.o_ref into v_open, v_close, v_adj, v_ref from app.kassa_period_bal(v_desk, v_from, v_to) b;
+  -- statiya — AMALDAGI (F2.13: qayta tasnif dalolatnomasidan keyingi; kassa.sql: app.kassa_eff_art); summa va kun — asl hujjatniki
   with l as (
-         select c.form, coalesce(l."articleId", '') as art, c."businessDay" as d, sum(l.amount) as amount,
+         select c.form, coalesce(app.kassa_eff_art(c.id, l."lineNo", l."articleId"), '') as art, c."businessDay" as d, sum(l.amount) as amount,
                 bool_or((case when c.form = 'KO1' then l.credit else l.debit end) in ('5110', '5710')) as transfer
            from public.cash_docs c join public.cash_doc_lines l on l."docId" = c.id
           where c.desk = v_desk and c.status = 'posted' and c.form in ('KO1', 'KO2') and l.cash
@@ -2101,6 +2105,9 @@ begin
                                   and (u.role in ('treasurer', 'finance_mgr', 'accountant') or app.u_has(u.role, u."extraRoles", 'kassir'))
                                   and cardinality(app.kassa_user_cards(u.id)) = 0), '[]'::jsonb),
     'reissues30', (select count(*) from public.cash_prints x where x.desk = v_desk and x.mode = 'reissue' and x.at >= app.fin_now() - interval '30 days'),
+    -- F2.13: Direktor qarorini kutayotgan qayta tasnif so'rovlari va oxirgi 30 kunda tasdiqlanganlari (kassa-fix.sql)
+    'fixPending', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'pending'),
+    'fixes30', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'approved' and f."actDay" >= v_today - 30),
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
     'salaryGateOff30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_salary' and c.status = 'posted'
